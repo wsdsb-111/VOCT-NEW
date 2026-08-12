@@ -1,0 +1,6 @@
+owner: Voices-of-the-Court
+repo: VOTC
+provider: github
+private: false
+releaseType: release
+updaterCacheDirName: voices-of-the-court-updater
