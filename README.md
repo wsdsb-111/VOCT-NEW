@@ -118,6 +118,20 @@ voices-of-the-court/
 - DeepSeek 等服务商的上下文缓存由服务端管理，命中率会受到请求前缀、模型、账号隔离和缓存生命周期影响。
 - 旧摘要不会自动重写；清理或迁移摘要前请先备份用户数据。
 
+## API 用量统计（v6.2 第一阶段）
+
+应用会在每次对话、行动判定、摘要或信件请求完成后，将匿名化用量写入：
+
+`%APPDATA%\Voices of the Court\votc_data\usage-analytics.json`
+
+记录包含请求类型、服务商、模型、输入/输出 token、DeepSeek 缓存命中与未命中 token，以及对话提示词各区块的估算 token；不会保存提示词正文、模型回复或 API Key。主进程同时暴露 `usageAPI.getReport()` 和 `usageAPI.clear()`，便于后续设置页或调试工具读取与清空统计。
+
+## 缓存前缀优化（v6.2 第二阶段）
+
+对话请求现在会在动态角色卡、历史摘要和对话历史之前加入固定的 `VOTC_CACHE_ANCHOR_v1` 系统消息。它不包含日期、角色名或游戏状态，因此不会因切换角色或推进日期而变化；原有记忆摘要、历史系统和角色扮演区块仍按原逻辑生成。缓存命中率应以实际 API 返回的 `prompt_cache_hit_tokens` 与 `prompt_cache_miss_tokens` 为准。
+
+动作模型同样使用固定的 `VOTC_ACTION_CACHE_ANCHOR_v1`。更重要的是，只有最近对话明确叙述了会改变 CK3 状态的动作时才会调用动作模型，例如付款、囚禁、伤害或处决、建立或解除关系、任免与雇佣、改宗或臣属关系、离开对话或移动、脱衣或发生亲密行为。普通交谈、计划、威胁、情绪、诗词与历史讨论不会触发动作请求；同一段动作叙述只会处理一次，避免多名 NPC 连续回复时重复扣费或重复执行。
+
 ## 许可证
 
 模组文件遵循项目原有许可证。Voices of the Court 2.0 Mod © 2026 Durond 与 MrAndroPC，采用 [CC BY-SA 4.0](https://creativecommons.org/licenses/by-sa/4.0/) 授权。

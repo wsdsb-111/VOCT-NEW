@@ -82,6 +82,7 @@ const VOTC_DATA_DIR = path.join(electron.app.getPath("userData"), "votc_data");
 const VOTC_LOGS_DIR = path.join(VOTC_DATA_DIR, "logs");
 const VOTC_SUMMARIES_DIR = path.join(VOTC_DATA_DIR, "conversation_summaries");
 const VOTC_ACTIONS_DIR = path.join(VOTC_DATA_DIR, "actions");
+const VOTC_USAGE_ANALYTICS_FILE = path.join(VOTC_DATA_DIR, "usage-analytics.json");
 const VOTC_PROMPTS_DIR = path.join(VOTC_DATA_DIR, "prompts");
 const VOTC_PROMPTS_SYSTEM_DIR = path.join(VOTC_PROMPTS_DIR, "system");
 const VOTC_PROMPTS_CHARACTER_DIR = path.join(VOTC_PROMPTS_DIR, "character_description");
@@ -1117,6 +1118,108 @@ class TokenCounter {
     }));
   }
 }
+/**
+ * Persists API usage metadata without storing prompts, replies, or credentials.
+ * DeepSeek reports cache fields in usage; other providers simply remain "unknown".
+ */
+class UsageAnalytics {
+  constructor() {
+    this.maxEntries = 2e3;
+  }
+  read() {
+    try {
+      if (!fs$1.existsSync(VOTC_USAGE_ANALYTICS_FILE)) return { version: 1, entries: [] };
+      const data = JSON.parse(fs$1.readFileSync(VOTC_USAGE_ANALYTICS_FILE, "utf-8"));
+      return Array.isArray(data?.entries) ? data : { version: 1, entries: [] };
+    } catch (error) {
+      console.warn("[UsageAnalytics] Failed to read analytics:", error);
+      return { version: 1, entries: [] };
+    }
+  }
+  write(data) {
+    try {
+      fs$1.mkdirSync(VOTC_DATA_DIR, { recursive: true });
+      fs$1.writeFileSync(VOTC_USAGE_ANALYTICS_FILE, JSON.stringify(data, null, 2), "utf-8");
+    } catch (error) {
+      console.warn("[UsageAnalytics] Failed to save analytics:", error);
+    }
+  }
+  record(metadata, usage) {
+    const promptTokens = Number(usage?.prompt_tokens) || 0;
+    const completionTokens = Number(usage?.completion_tokens) || 0;
+    const cacheHitTokens = Number(usage?.prompt_cache_hit_tokens);
+    const cacheMissTokens = Number(usage?.prompt_cache_miss_tokens);
+    const entry = {
+      timestamp: (/* @__PURE__ */ new Date()).toISOString(),
+      requestType: metadata?.requestType || "unknown",
+      providerType: metadata?.providerType || "unknown",
+      model: metadata?.model || "unknown",
+      character: metadata?.character || null,
+      actionTrigger: metadata?.actionTrigger || null,
+      skipReason: metadata?.skipReason || null,
+      estimatedPromptTokens: Number(metadata?.estimatedPromptTokens) || 0,
+      promptTokens,
+      completionTokens,
+      totalTokens: Number(usage?.total_tokens) || promptTokens + completionTokens,
+      cacheHitTokens: Number.isFinite(cacheHitTokens) ? cacheHitTokens : null,
+      cacheMissTokens: Number.isFinite(cacheMissTokens) ? cacheMissTokens : null,
+      blocks: Array.isArray(metadata?.blocks) ? metadata.blocks.map((block) => ({
+        id: block.id,
+        label: block.label,
+        type: block.type,
+        tokens: Number(block.tokens) || 0
+      })) : []
+    };
+    const data = this.read();
+    data.entries.push(entry);
+    if (data.entries.length > this.maxEntries) data.entries = data.entries.slice(-this.maxEntries);
+    this.write(data);
+    console.log(`[UsageAnalytics] ${entry.requestType}: input=${entry.promptTokens || entry.estimatedPromptTokens}, hit=${entry.cacheHitTokens ?? "n/a"}, miss=${entry.cacheMissTokens ?? "n/a"}, output=${entry.completionTokens}`);
+  }
+  getReport() {
+    const entries = this.read().entries;
+    const groups = {};
+    const add = (target, entry) => {
+      target.requests++;
+      target.estimatedPromptTokens += entry.estimatedPromptTokens || 0;
+      target.promptTokens += entry.promptTokens || 0;
+      target.completionTokens += entry.completionTokens || 0;
+      target.totalTokens += entry.totalTokens || 0;
+      if (entry.cacheHitTokens != null) {
+        target.cacheReportedRequests++;
+        target.cacheHitTokens += entry.cacheHitTokens;
+        target.cacheMissTokens += entry.cacheMissTokens || 0;
+      }
+    };
+    const create = () => ({ requests: 0, estimatedPromptTokens: 0, promptTokens: 0, completionTokens: 0, totalTokens: 0, cacheReportedRequests: 0, cacheHitTokens: 0, cacheMissTokens: 0 });
+    const total = create();
+    const blockTotals = {};
+    for (const entry of entries) {
+      add(total, entry);
+      const key = `${entry.requestType} | ${entry.providerType} | ${entry.model}`;
+      if (!groups[key]) groups[key] = create();
+      add(groups[key], entry);
+      for (const block of entry.blocks || []) {
+        const blockKey = `${block.type || "unknown"} | ${block.label || block.id || "unknown"}`;
+        if (!blockTotals[blockKey]) blockTotals[blockKey] = { requests: 0, tokens: 0 };
+        blockTotals[blockKey].requests++;
+        blockTotals[blockKey].tokens += block.tokens || 0;
+      }
+    }
+    const finish = (value) => ({ ...value, cacheHitRate: value.cacheHitTokens + value.cacheMissTokens > 0 ? value.cacheHitTokens / (value.cacheHitTokens + value.cacheMissTokens) : null });
+    return {
+      filePath: VOTC_USAGE_ANALYTICS_FILE,
+      total: finish(total),
+      byRequest: Object.entries(groups).map(([key, value]) => ({ key, ...finish(value) })).sort((a, b) => b.totalTokens - a.totalTokens),
+      blocks: Object.entries(blockTotals).map(([key, value]) => ({ key, ...value })).sort((a, b) => b.tokens - a.tokens),
+      recent: entries.slice(-100).reverse()
+    };
+  }
+  clear() {
+    this.write({ version: 1, entries: [] });
+  }
+}
+const usageAnalytics = new UsageAnalytics();
 class LLMManager {
   // Cache instantiated providers
   constructor() {
@@ -1166,7 +1269,7 @@ class LLMManager {
     }
   }
   // Unified method to send requests to the *active* provider
-  async sendChatRequest(messages, signal, noStream) {
+  async sendChatRequest(messages, signal, noStream, metadata = {}) {
     const activeConfig = settingsRepository.getActiveProviderConfig();
     if (!activeConfig) {
       throw new Error("No active and enabled LLM provider configured.");
@@ -1187,13 +1290,13 @@ class LLMManager {
     };
     const providerData = JSON.stringify(activeConfig).replace(/"apiKey":\s*"[^"]*"/g, "HIDDEN");
     console.log(`[LLMManager] Provider data stringified: ${providerData}`);
-    return await provider.chatCompletion(request, activeConfig);
+    return await this.trackUsage(provider.chatCompletion(request, activeConfig), { ...metadata, requestType: metadata.requestType || "chat", providerType: activeConfig.providerType, model: activeConfig.defaultModel, estimatedPromptTokens: TokenCounter.calculateTotalTokens(messages) });
   }
   /**
    * Send a structured JSON request for Actions.
    * Uses the actions provider override if set, otherwise active provider.
    */
-  async sendActionsRequest(messages, schemaName, jsonSchemaObject, signal) {
+  async sendActionsRequest(messages, schemaName, jsonSchemaObject, signal, metadata = {}) {
     const config = settingsRepository.getActionsProviderConfig();
     if (!config) {
       throw new Error("No provider configured for Actions.");
@@ -1222,13 +1325,13 @@ class LLMManager {
     const providerData = JSON.stringify(config).replace(/"apiKey":\s*"[^"]*"/g, "HIDDEN");
     console.log(`[LLMManager] Provider data stringified: ${providerData}`);
     console.log(`[TOKEN_COUNT] Structured request ${TokenCounter.estimateTokens(JSON.stringify(request))}`);
-    return await provider.chatCompletion(request, config);
+    return await this.trackUsage(provider.chatCompletion(request, config), { ...metadata, requestType: "action", providerType: config.providerType, model: config.defaultModel, estimatedPromptTokens: TokenCounter.calculateTotalTokens(messages) });
   }
   /**
    * Send a request for Summaries (rolling or final).
    * Uses the summary provider override if set, otherwise active provider.
    */
-  async sendSummaryRequest(messages, signal) {
+  async sendSummaryRequest(messages, signal, metadata = {}) {
     const config = settingsRepository.getSummaryProviderConfig();
     if (!config) {
       throw new Error("No provider configured for Summaries.");
@@ -1247,7 +1350,28 @@ class LLMManager {
     };
     const providerData = JSON.stringify(config).replace(/"apiKey":\s*"[^"]*"/g, "HIDDEN");
     console.log(`[LLMManager] Provider data stringified: ${providerData}`);
-    return await provider.chatCompletion(request, config);
+    return await this.trackUsage(provider.chatCompletion(request, config), { ...metadata, requestType: metadata.requestType || "summary", providerType: config.providerType, model: config.defaultModel, estimatedPromptTokens: TokenCounter.calculateTotalTokens(messages) });
+  }
+  async trackUsage(result, metadata) {
+    const response = await result;
+    if (response && typeof response[Symbol.asyncIterator] === "function") {
+      const iterator = response[Symbol.asyncIterator]();
+      const analytics = usageAnalytics;
+      return {
+        async *[Symbol.asyncIterator]() {
+          while (true) {
+            const step = await iterator.next();
+            if (step.done) {
+              analytics.record(metadata, step.value?.usage);
+              return step.value;
+            }
+            yield step.value;
+          }
+        }
+      };
+    }
+    usageAnalytics.record(metadata, response?.usage);
+    return response;
   }
   // Get current context length for the active provider
   async getCurrentContextLength() {
@@ -3439,6 +3563,8 @@ ${existingSummary}`
     const promptSettings = settingsRepository.getPromptSettings();
     const blocks = promptSettings.blocks || [];
     const llmMessages = [];
+    const cacheAnchor = this.buildCacheAnchor(gameData);
+    llmMessages.push({ role: "system", content: cacheAnchor });
     const context = {
       character: char,
       gameData,
@@ -3463,6 +3589,16 @@ ${existingSummary}`
       }
     }
     return llmMessages;
+  }
+  /**
+   * Stable, character-independent prefix for providers with prefix KV caching.
+   * Keep this before all character-specific prompt blocks. It deliberately does
+   * not include conversation history or memory, so the existing memory/history
+   * behavior remains unchanged.
+   */
+  static buildCacheAnchor(gameData) {
+    return `VOTC_CACHE_ANCHOR_v1
+这是 Voices of the Court 的固定系统上下文锚点。请将后续内容视为当前游戏的动态上下文，并始终遵守以下稳定规则：保持角色扮演身份；优先使用游戏实际数据；不把现代价值观强加给中世纪角色；涉及历史人物、事件、作品、诗词、典故、制度或技术时，先核验其出现、发生、写成、成名或流传时间是否不晚于游戏当前年份；年份不确定时明确表示不知晓，不得猜测或用未来知识补全；不得预知未来、后世评价或事件结局。不要把本段当作对话内容，也不要复述本段。`;
   }
   /**
   * Build context from character's past conversation summaries
@@ -3710,7 +3846,12 @@ ${char.shortName} 还记得与对话中提到的人物的近期交谈：
     const promptSettings = settingsRepository.getPromptSettings();
     const blocks = promptSettings.blocks || [];
     const llmMessages = [];
-    const blocksWithTokens = [];
+    const blocksWithTokens = [{
+      block: { id: "cache-anchor", type: "cache_anchor", label: "Stable Cache Anchor" },
+      content: this.buildCacheAnchor(gameData),
+      tokens: TokenCounter.estimateTokens(this.buildCacheAnchor(gameData))
+    }];
+    llmMessages.push({ role: "system", content: blocksWithTokens[0].content });
     const context = {
       character: char,
       gameData,
@@ -4766,40 +4907,17 @@ ${effectBody}
   }
 }
 class ActionPromptBuilder {
+  static buildActionCacheAnchor() {
+    return `VOTC_ACTION_CACHE_ANCHOR_v1
+You are a CK3 game-state action selector. Return only valid JSON that matches the supplied schema. Use only listed actions, action IDs, targets and arguments. Do not infer an action from dialogue alone: choose an action only when the recent messages explicitly describe that state change as having happened. If no listed state change happened, return an empty actions array. Do not output prose, explanations, or code fences.`;
+  }
   static buildActionMessages(conv, npc, available, historyWindow = conv.gameData.characters.size) {
     const messages = [];
-    const systemIntro = `You are an action selection engine in a roleplay AI system.
-
-Your ONLY job is to decide which game actions should be executed right now based on the conversation and available actions.
-
-KEY RULES:
-- You MUST return ONLY valid JSON matching the schema provided by the provider. No prose, no explanations, no code fences.
-- Use ONLY actions from the "Available Actions" list below. Never invent actionIds or argument names.
-- Every action must have exactly one targetCharacterId (or none if the action allows it).
-- If an action needs a target, use ONLY the validTargetCharacterIds listed for that action.
-- Fill arguments exactly as specified (types, min/max, enums).
-
-PLAYER-SPECIFIC ACTIONS & isPlayerSource:
-- Some actions are player-only (e.g. playerPaysGoldTo). Use them when the player performed the action in the conversation.
-- Actions with isPlayerSource: boolean let you flip the source to the player character "${conv.gameData.playerName}". Set it to true only when the context clearly shows the player is the source.
-
-GOLD PAYMENT RULE (very important):
-- If the player's last message narrates paying gold AND the NPC accepts it (or takes the gold), you MUST include the correct gold action:
-  • playerPaysGoldTo (when player is paying)
-  • paysGoldTo (when NPC is paying)
-- This is required to update the treasury state. Do not skip it just because the payment was already narrated.
-
-IMPRISONMENT RULE (very important):
-- If the player's message narrates imprisoning the current NPC (or the NPC imprisoning the player), you MUST include isImprisonedBy.
-- Target = the jailor.
-- prisonType = "dungeon" (default) or "house_arrest".
-- Use isPlayerSource: true ONLY if the PLAYER is the one being imprisoned.
-- This is required to update the imprisonment state.
-
-If nothing else fits, use the noOp action.
-
-You are now processing the NPC "${npc.fullName}" turn, but you may still output player-specific actions when needed to keep game state correct.`;
-    messages.push({ role: "system", content: systemIntro });
+    messages.push({ role: "system", content: this.buildActionCacheAnchor() });
+    messages.push({
+      role: "system",
+      content: `Dynamic action context: current NPC is "${npc.fullName}". The player is "${conv.gameData.playerName}". Some listed actions expose isPlayerSource; set it true only when recent dialogue explicitly makes the player the source of that completed action. For payments, record playerPaysGoldTo when the player paid, and paysGoldTo when the NPC paid. For imprisonment, target is the jailor; use prisonType dungeon unless house arrest is explicitly stated.`
+    });
     const history = conv.getHistory();
     const recent = history.slice(Math.max(0, history.length - historyWindow));
     const historyLines = recent.map((m) => `${m.name ?? m.role}: ${m.content}`).join("\n");
@@ -4927,6 +5045,15 @@ You may output:
 Respect all argument types, constraints, and valid targets.`;
     messages.push({ role: "user", content: outroBlock });
     return messages;
+  }
+  static getActionPromptBlocks(messages) {
+    const labels = ["Stable Action Cache Anchor", "Dynamic Action Context", "Recent Messages", "Recent Actions", "Character Roster", "Available Actions"];
+    return messages.map((message, index) => ({
+      id: `action-${index}`,
+      label: labels[index] || `Action Context ${index + 1}`,
+      type: index === 0 ? "action_cache_anchor" : "action_context",
+      tokens: TokenCounter.estimateMessageTokens(message)
+    }));
   }
 }
 function fixTypingErrors(obj) {
@@ -5145,6 +5272,57 @@ class ActionSandbox {
 }
 class ActionEngine {
   /**
+   * Action calls are expensive and should only run after the dialogue explicitly
+   * describes a game-state-changing action. This is intentionally conservative:
+   * ordinary conversation, plans, opinions, poetry, threats, and emotion alone
+   * do not trigger an API request.
+   */
+  static getActionTrigger(text) {
+    if (!text || typeof text !== "string") return null;
+    // Do not spend an action-model request on an unfulfilled plan. A completed
+    // action marker overrides this guard (for example: "今晚已经行房").
+    const describesOnlyFutureAction = /(?:\u5c06(?:\u8981|\u4f1a)|\u51c6\u5907|\u6253\u7b97|\u8ba1\u5212|\u60f3\u8981|\u6b32\u8981|\u7ea6\u597d|\u660e\u65e5|\u5f85\u4f1a|\u7a0d\u540e|\b(?:will|going to|plan to|wants? to)\b)/i.test(text);
+    const hasCompletionMarker = /(?:\u5df2\u7ecf|\u5df2\u7136|\u521a\u521a|\u65b9\u624d|\u4e8b\u6bd5|\u5b8c\u4e8b|\u4e4b\u540e|\u4e4b\u5f8c|\b(?:already|just|after)\b)/i.test(text);
+    if (describesOnlyFutureAction && !hasCompletionMarker) return null;
+    const rules = [
+      { reason: "gold", pattern: /(?:支付|付给|给了|交给|赏赐|赏了|赠与|赠送|转交|收下.{0,12}(?:钱|金|银|礼)|(?:pay|paid|give|gave|gift|gifted|transfer|transferred).{0,20}(?:gold|money|coin))/i },
+      { reason: "imprisonment", pattern: /(?:囚禁|关进|投入(?:大牢|地牢)|收监|逮捕|拘押|软禁|imprison(?:ed)?|arrest(?:ed)?|jailed?)/i },
+      { reason: "death_or_injury", pattern: /(?:杀死|处死|斩首|刺伤|砍伤|打伤|弄瞎|剜.?眼|断腿|阉割|killed?|executed|wounded|injured|blinded|castrat)/i },
+      { reason: "relationship", pattern: /(?:成为(?:情人|恋人|朋友|挚友|死敌|宿敌|灵魂伴侣|义兄弟)|结为(?:情人|恋人|朋友|挚友|死敌|宿敌|义兄弟)|正式结盟|缔结同盟|签订停战|达成停战|became? (?:lovers?|friends?|rivals?|nemeses|soulmates?)|formed? an alliance|agreed? to (?:a )?truce)/i },
+      { reason: "employment_or_office", pattern: /(?:任命为|册封为|授予.{0,12}(?:官|职|爵)|罢免|免去.{0,12}(?:官|职)|解职|雇佣为|招募为(?:骑士|侍从)|appointed?|dismissed|fired|employed|hired)/i },
+      { reason: "faith_or_vassal", pattern: /(?:改宗|皈依|改信|强迫.{0,12}信仰|臣服于|宣誓效忠|成为.{0,12}封臣|converted?|vassalized|swore fealty)/i },
+      { reason: "location_or_exit", pattern: /(?:离开(?:了)?(?:这里|房间|宫廷|宴会|谈话)?|退下|告辞|前往(?:王座厅|花园|卧室|军营|地牢|小巷)|搬到|移动到|left (?:the )?(?:conversation|room|court)|moved? to)/i },
+      { reason: "drinking_or_toast", pattern: /(?:喝(?:了|着)?(?:茶|酒|一口|几口)|饮(?:了|着|下)?(?:茶|酒|一口|几口)|品(?:了|着)?(?:茶|酒)|啜(?:了|饮)?(?:茶|酒|一口)|斟(?:了|满)?(?:茶|酒)|端起.{0,12}(?:茶盏|茶杯|酒杯|杯).{0,12}(?:喝|饮|品|啜)|举杯|举起(?:茶杯|酒杯)|敬(?:了)?(?:茶|酒)|干(?:了)?杯|一饮而尽|饮尽|饮罢|品茗|饮茶|饮酒|drank|sipped|gulped|raised (?:a |the )?(?:cup|glass)|made a toast|toasted)/i },
+      { reason: "combat", pattern: /(?:拔(?:出)?(?:剑|刀)|挥(?:剑|刀)|持(?:剑|刀|矛)|刺(?:向|入|中)|砍(?:向|中)|劈(?:向|中)|斩(?:向|中)|格挡|招架|搏斗|厮打|扭打|打斗|交战|开战|冲杀|冲锋|射(?:出|中)|放箭|命中(?:了)?|击中(?:了)?|击败(?:了)?|战胜(?:了)?|duel(?:ed|ling)?|fought|attacked|struck|stabbed|slashed|parried|blocked|shot|hit|defeated|charged)/i },
+      { reason: "intimacy_or_clothing", pattern: /(?:脱下(?:了)?(?:衣|外袍)|褪去(?:衣|外袍)|解开(?:了)?(?:衣带|腰带|衣襟)|宽衣(?:解带)?|裸露(?:了)?|赤裸|赤身|undressed|removed .{0,12}(?:clothes|robe)|unfastened .{0,12}(?:belt|clothing))/i },
+      { reason: "sexual_intercourse_completed", pattern: /(?:已经|终于|随即|当即|继而|片刻后|良久后|事后|完事后|云雨(?:已)?(?:毕|歇|罢|止)|欢好(?:已)?(?:毕|罢|过)|鱼水(?:之欢)?(?:已)?(?:毕|罢|过)|交合(?:已)?(?:毕|罢|过|完)|行房(?:已)?(?:毕|罢|过|完)|房事(?:已)?(?:毕|罢|过|完)|同房(?:已)?(?:毕|罢|过|完)|圆房(?:已)?(?:毕|罢|过|完)|发生(?:了)?(?:性关系|肉体关系)|做(?:了)?爱|作爱(?:已)?(?:毕|罢|过|完)|欢爱(?:已)?(?:毕|罢|过|完)|交媾(?:已)?(?:毕|罢|过|完)|媾合(?:已)?(?:毕|罢|过|完)|苟合(?:已)?(?:毕|罢|过|完)|燕好(?:已)?(?:毕|罢|过|完)|成其好事|共度(?:了)?春宵|一夜(?:欢好|缠绵|云雨)|事毕|完事(?:了)?|高潮(?:后|已过)|射(?:了)?(?:出来|精)|泄(?:了)?(?:身|精)|had (?:sexual )?intercourse|had sex|made love|slept with|consummated|finished (?:having )?sex|after (?:sex|intercourse|making love)|came|climaxed|orgasm(?:ed)?)/i }
+    ];
+    // The legacy broad sexual-action expression above contains generic adverbs
+    // such as "already". Require a concrete, completed sexual-action phrase so
+    // ordinary sentences (for example "she has already returned") never match.
+    const completedSexualAction = /(?:\u4e91\u96e8|\u6b22\u597d|\u9c7c\u6c34\u4e4b\u6b22|\u4ea4\u5408|\u884c\u623f|\u623f\u4e8b|\u540c\u623f|\u5706\u623f|\u505a\u7231|\u5a9a\u5408|\u82df\u5408|\u71d5\u597d|\u6210\u5176\u597d\u4e8b|\u5171\u5ea6\u6625\u5bb5|\u7f20\u7ef5|\u9ad8\u6f6e|\u5c04\u7cbe|\u6cc4\u8eab|\u4e8b\u6bd5\u540e.{0,20}(?:\u76f8\u62e5|\u8d64\u88f8|\u5e8a\u69bb)|\u5b8c\u4e8b\u540e.{0,20}(?:\u76f8\u62e5|\u8d64\u88f8|\u5e8a\u69bb)|\u53d1\u751f(?:\u4e86)?(?:\u6027\u5173\u7cfb|\u8089\u4f53\u5173\u7cfb)|had (?:sexual )?intercourse|had sex|made love|slept with|consummated|finished (?:having )?sex|after (?:sex|intercourse|making love)|climaxed|orgasm(?:ed)?)/i;
+    if (completedSexualAction.test(text)) return "sexual_intercourse_completed";
+    for (const rule of rules) {
+      if (rule.reason === "sexual_intercourse_completed") continue;
+      if (rule.pattern.test(text)) return rule.reason;
+    }
+    return null;
+  }
+  static shouldEvaluateForMessage(conv, message) {
+    const reason = this.getActionTrigger(message?.content);
+    if (!reason) return { shouldEvaluate: false, reason: "no_explicit_state_change_keyword" };
+    const dedupeKey = `${reason}|${message.name || message.role || "unknown"}|${message.content}`;
+    if (!conv.actionGateProcessedTriggers) conv.actionGateProcessedTriggers = /* @__PURE__ */ new Set();
+    if (!conv.actionGateProcessedTurnReasons) conv.actionGateProcessedTurnReasons = /* @__PURE__ */ new Set();
+    if (conv.actionGateProcessedTriggers.has(dedupeKey)) {
+      return { shouldEvaluate: false, reason: "already_processed_action_text" };
+    }
+    if (conv.actionGateProcessedTurnReasons.has(reason)) {
+      return { shouldEvaluate: false, reason: "already_processed_action_type_this_turn" };
+    }
+    return { shouldEvaluate: true, reason, dedupeKey };
+  }
+  /**
    * Evaluate actions for the given NPC (as source) based on recent conversation state.
    * - Gathers available actions via check()
    * - Builds a structured-output schema limiting targets and args
@@ -5153,11 +5331,20 @@ class ActionEngine {
    * - Runs auto-approved actions immediately
    * - Returns both executed and pending actions
    */
-  static async evaluateForCharacter(conv, npc, signal) {
+  static async evaluateForCharacter(conv, npc, signal, actionMessage) {
     try {
       if (signal?.aborted) {
         return { autoApproved: [], needsApproval: [] };
       }
+      const gate = this.shouldEvaluateForMessage(conv, actionMessage);
+      if (!gate.shouldEvaluate) {
+        console.log(`[ActionEngine] Skipped action request for ${npc.shortName}: ${gate.reason}`);
+        usageAnalytics.record({ requestType: "action_skipped", character: npc.shortName, skipReason: gate.reason }, null);
+        return { autoApproved: [], needsApproval: [] };
+      }
+      console.log(`[ActionEngine] Explicit action keyword detected for ${npc.shortName}: ${gate.reason}`);
+      conv.actionGateProcessedTriggers.add(gate.dedupeKey);
+      conv.actionGateProcessedTurnReasons.add(gate.reason);
       const userLang = settingsRepository.getLanguage();
       const loaded = actionRegistry.getAllActions(
         /* includeDisabled = */
@@ -5232,7 +5419,12 @@ class ActionEngine {
         messages,
         "votc_actions",
         jsonSchema,
-        signal
+        signal,
+        {
+          character: npc.shortName,
+          actionTrigger: gate.reason,
+          blocks: ActionPromptBuilder.getActionPromptBlocks(messages)
+        }
       );
       if (signal?.aborted) {
         console.log("[DEBUG] ActionEngine: Aborted after LLM request");
@@ -5417,6 +5609,11 @@ class Conversation {
     this.pendingSummaryImports = /* @__PURE__ */ new Map();
     this.hasAcceptedImports = /* @__PURE__ */ new Set();
     this.pendingActionApprovals = /* @__PURE__ */ new Map();
+    // Action checks are scoped to the current player turn. This prevents one
+    // narrated event from being sent to the action model once per NPC reply.
+    this.actionGateProcessedTriggers = /* @__PURE__ */ new Set();
+    this.actionGateProcessedTurnReasons = /* @__PURE__ */ new Set();
+    this.pendingPlayerActionMessage = null;
     this.eventEmitter = new events.EventEmitter();
     this.initializeGameData();
   }
@@ -5500,7 +5697,7 @@ class Conversation {
     const summaryPrompt = PromptBuilder.buildResummarizePrompt(messagesToSummarize, this.currentSummary);
     try {
       console.log("[TOKEN_COUNT] Rolling summary: ", this.estimateTokenCount(summaryPrompt));
-      const result = await llmManager.sendSummaryRequest(summaryPrompt);
+      const result = await llmManager.sendSummaryRequest(summaryPrompt, void 0, { requestType: "rolling_summary" });
       if (result && typeof result === "object" && "content" in result) {
         if (this.currentSummary) {
           this.currentSummary = `${this.currentSummary}
@@ -5552,19 +5749,26 @@ ${result.content}`;
     let streamCompleted = false;
     try {
       await this.checkAndSummarizeIfNeeded(npc);
-      const llmMessages = PromptBuilder.buildMessages(
+      const promptBuild = PromptBuilder.buildMessagesWithTokenCount(
         this.getHistory().slice(this.lastSummarizedMessageIndex),
         npc,
         this.gameData,
         this.currentSummary
       );
+      const llmMessages = promptBuild.messages;
       console.log(`Message from ${npc.fullName}:`, llmMessages);
       console.log(`[TOKEN_COUNT] Message from ${npc.fullName}:`, this.estimateTokenCount(llmMessages));
       const activeConfig = settingsRepository.getActiveProviderConfig();
       const isOpenRouter = activeConfig?.providerType === "openrouter";
       const result = await llmManager.sendChatRequest(
         llmMessages,
-        isOpenRouter ? void 0 : this.currentStreamController.signal
+        isOpenRouter ? void 0 : this.currentStreamController.signal,
+        void 0,
+        {
+          requestType: "chat",
+          character: npc.shortName,
+          blocks: promptBuild.blocks.map(({ block, tokens }) => ({ id: block.id, label: block.label, type: block.type, tokens }))
+        }
       );
       if (settingsRepository.getGlobalStreamSetting() && typeof result === "object" && typeof result[Symbol.asyncIterator] === "function") {
         try {
@@ -5616,7 +5820,9 @@ ${result.content}`;
         }
         placeholder.isStreaming = false;
         if (streamCompleted && !wasCancelled) {
-          const actionResults = await ActionEngine.evaluateForCharacter(this, npc, this.currentStreamController?.signal);
+          const actionMessage = this.pendingPlayerActionMessage ?? placeholder;
+          const actionResults = await ActionEngine.evaluateForCharacter(this, npc, this.currentStreamController?.signal, actionMessage);
+          if (this.pendingPlayerActionMessage === actionMessage) this.pendingPlayerActionMessage = null;
           await this.handleActionResults(msgId, npc, actionResults);
         }
       } else if (result && typeof result === "object" && "content" in result && typeof result.content === "string") {
@@ -5624,7 +5830,9 @@ ${result.content}`;
         this.emitUpdate();
         placeholder.isStreaming = false;
         streamCompleted = true;
-        const actionResults = await ActionEngine.evaluateForCharacter(this, npc, this.currentStreamController?.signal);
+        const actionMessage = this.pendingPlayerActionMessage ?? placeholder;
+        const actionResults = await ActionEngine.evaluateForCharacter(this, npc, this.currentStreamController?.signal, actionMessage);
+        if (this.pendingPlayerActionMessage === actionMessage) this.pendingPlayerActionMessage = null;
         await this.handleActionResults(msgId, npc, actionResults);
       } else {
         throw new Error("Bad LLM response format");
@@ -5813,6 +6021,10 @@ ${result.content}`;
       content: userMessage
     });
     this.messages.push(userMsg);
+    // Only the first NPC of this turn may evaluate a player-narrated action;
+    // later NPCs evaluate only their own freshly generated line.
+    this.actionGateProcessedTurnReasons.clear();
+    this.pendingPlayerActionMessage = ActionEngine.getActionTrigger(userMsg.content) ? userMsg : null;
     this.emitUpdate();
     if (this.npcQueue.length === 0) {
       this.fillNpcQueue();
@@ -6001,7 +6213,7 @@ ${result.content}`;
     }
     try {
       console.log(`[TOKEN_COUNT] Final summary prompt tokens: ${estimatedTokens}`);
-      const result = await llmManager.sendSummaryRequest(summaryPrompt);
+      const result = await llmManager.sendSummaryRequest(summaryPrompt, void 0, { requestType: "final_summary" });
       if (result && typeof result === "object" && "content" in result) {
         const finalSummary = result.content;
         return finalSummary;
@@ -6213,7 +6425,7 @@ ${result.content}`;
     try {
       const estimatedTokens = this.estimateTokenCount(summaryPrompt);
       console.log(`[TOKEN_COUNT] Character leaving summary for ${character.fullName}: ${estimatedTokens}`);
-      const result = await llmManager.sendSummaryRequest(summaryPrompt);
+      const result = await llmManager.sendSummaryRequest(summaryPrompt, void 0, { requestType: "leaving_summary", character: character.shortName });
       if (result && typeof result === "object" && "content" in result) {
         const summary = result.content;
         console.log(`Generated leaving summary for ${character.fullName}: ${summary.substring(0, 100)}...`);
@@ -8125,7 +8337,9 @@ class OpenRouterProvider extends BaseProvider {
         usage: data.usage ? {
           prompt_tokens: data.usage.prompt_tokens,
           completion_tokens: data.usage.completion_tokens,
-          total_tokens: data.usage.total_tokens
+          total_tokens: data.usage.total_tokens,
+          prompt_cache_hit_tokens: data.usage.prompt_cache_hit_tokens,
+          prompt_cache_miss_tokens: data.usage.prompt_cache_miss_tokens
         } : void 0
       };
     } catch (error) {
@@ -8387,7 +8601,9 @@ class OpenAICompatibleProvider extends BaseProvider {
         usage: data.usage ? {
           prompt_tokens: data.usage.prompt_tokens,
           completion_tokens: data.usage.completion_tokens,
-          total_tokens: data.usage.total_tokens
+          total_tokens: data.usage.total_tokens,
+          prompt_cache_hit_tokens: data.usage.prompt_cache_hit_tokens,
+          prompt_cache_miss_tokens: data.usage.prompt_cache_miss_tokens
         } : void 0
       };
     } catch (error) {
@@ -8779,7 +8995,9 @@ class Player2Provider extends BaseProvider {
         usage: data.usage ? {
           prompt_tokens: data.usage.prompt_tokens,
           completion_tokens: data.usage.completion_tokens,
-          total_tokens: data.usage.total_tokens
+          total_tokens: data.usage.total_tokens,
+          prompt_cache_hit_tokens: data.usage.prompt_cache_hit_tokens,
+          prompt_cache_miss_tokens: data.usage.prompt_cache_miss_tokens
         } : void 0
       };
     } catch (error) {
@@ -9143,7 +9361,9 @@ IMPORTANT: Your response must be ONLY valid JSON. No prose, no code fences, no e
         usage: data.usage ? {
           prompt_tokens: data.usage.prompt_tokens,
           completion_tokens: data.usage.completion_tokens,
-          total_tokens: data.usage.total_tokens
+          total_tokens: data.usage.total_tokens,
+          prompt_cache_hit_tokens: data.usage.prompt_cache_hit_tokens,
+          prompt_cache_miss_tokens: data.usage.prompt_cache_miss_tokens
         } : void 0
       };
     } catch (error) {
@@ -9934,7 +10154,7 @@ class LetterManager {
     let reply = null;
     let responseError = null;
     try {
-      const result = await llmManager.sendChatRequest(messages, void 0, true);
+      const result = await llmManager.sendChatRequest(messages, void 0, true, { requestType: "letter", character: characterName });
       reply = await this.extractReply(result);
       if (!reply) {
         throw new Error("Letter reply generation returned empty content.");
@@ -10036,7 +10256,7 @@ Reply from ${ai.fullName}:
     try {
       console.log(`[TOKEN_COUNT] Letter summary prompt tokens: ${TokenCounter.estimateMessageTokens(summaryPrompt[0])}`);
       console.log(`[TOKEN_COUNT] Letter summary letters letters content tokens: ${TokenCounter.estimateMessageTokens(summaryPrompt[1])}`);
-      const summaryResult = await llmManager.sendSummaryRequest(summaryPrompt);
+      const summaryResult = await llmManager.sendSummaryRequest(summaryPrompt, void 0, { requestType: "letter_summary", character: ai.shortName });
       if (summaryResult && typeof summaryResult === "object" && "content" in summaryResult) {
         const summary = summaryResult.content;
         if (summary?.trim()) {
@@ -10602,6 +10822,11 @@ const setupIpcHandlers = () => {
   });
   electron.ipcMain.handle("llm:getSummaryPromptSettings", () => {
     return settingsRepository.getSummaryPromptSettings();
+  });
+  electron.ipcMain.handle("usage:getReport", () => usageAnalytics.getReport());
+  electron.ipcMain.handle("usage:clear", () => {
+    usageAnalytics.clear();
+    return { success: true };
   });
   electron.ipcMain.handle("llm:saveSummaryPromptSettings", (_, settings) => {
     settingsRepository.saveSummaryPromptSettings(settings);

@@ -159,3 +159,7 @@ electron.contextBridge.exposeInMainWorld("actionsAPI", {
   getDetails: (actionId, sourceCharacterId) => electron.ipcRenderer.invoke("actions:getDetails", { actionId, sourceCharacterId }),
   execute: (params) => electron.ipcRenderer.invoke("actions:execute", params)
 });
+electron.contextBridge.exposeInMainWorld("usageAPI", {
+  getReport: () => electron.ipcRenderer.invoke("usage:getReport"),
+  clear: () => electron.ipcRenderer.invoke("usage:clear")
+});
