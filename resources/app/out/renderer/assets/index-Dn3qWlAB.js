@@ -21288,6 +21288,113 @@ const SummariesView = () => {
     /* @__PURE__ */ jsxRuntimeExports.jsx(SummariesManager, {})
   ] });
 };
+
+const OptimizationView = () => {
+  const { i18n } = useTranslation();
+  const [report, setReport] = reactExports.useState(null);
+  const [isLoading, setIsLoading] = reactExports.useState(true);
+  const [isClearing, setIsClearing] = reactExports.useState(false);
+  const [error, setError] = reactExports.useState(null);
+  const isChinese = (i18n.language || "").toLowerCase().startsWith("zh");
+  const text = (zh, en) => isChinese ? zh : en;
+  const formatTokens = (value) => new Intl.NumberFormat(isChinese ? "zh-CN" : "en-US").format(Math.round(Number(value) || 0));
+  const formatNullableTokens = (value) => value == null ? "—" : formatTokens(value);
+  const formatPercent = (value) => typeof value === "number" && Number.isFinite(value) ? `${(value * 100).toFixed(1)}%` : "—";
+  const loadReport = async () => {
+    if (!window.usageAPI?.getReport) {
+      setError(text("当前客户端未提供用量统计接口。请重启到已更新版本后再试。", "Usage analytics are unavailable. Restart the updated client and try again."));
+      setIsLoading(false);
+      return;
+    }
+    try {
+      setIsLoading(true);
+      setError(null);
+      setReport(await window.usageAPI.getReport());
+    } catch (loadError) {
+      console.error("Failed to load usage analytics:", loadError);
+      setError(loadError?.message || text("无法读取用量统计。", "Failed to load usage analytics."));
+    } finally {
+      setIsLoading(false);
+    }
+  };
+  reactExports.useEffect(() => {
+    loadReport();
+  }, []);
+  const clearReport = async () => {
+    if (!window.confirm(text("清空全部本地用量统计？此操作不会影响摘要、对话或游戏数据。", "Clear all local usage analytics? This does not affect summaries, conversations, or game data."))) return;
+    try {
+      setIsClearing(true);
+      await window.usageAPI.clear();
+      await loadReport();
+    } catch (clearError) {
+      console.error("Failed to clear usage analytics:", clearError);
+      setError(clearError?.message || text("无法清空用量统计。", "Failed to clear usage analytics."));
+    } finally {
+      setIsClearing(false);
+    }
+  };
+  const renderTable = (headers, rows, keyPrefix) => /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "optimization-table-wrap", children: /* @__PURE__ */ jsxRuntimeExports.jsxs("table", { children: [
+    /* @__PURE__ */ jsxRuntimeExports.jsx("thead", { children: /* @__PURE__ */ jsxRuntimeExports.jsx("tr", { children: headers.map((header) => /* @__PURE__ */ jsxRuntimeExports.jsx("th", { children: header }, header)) }) }),
+    /* @__PURE__ */ jsxRuntimeExports.jsx("tbody", { children: rows.map((row, rowIndex) => /* @__PURE__ */ jsxRuntimeExports.jsx("tr", { children: row.map((cell, cellIndex) => /* @__PURE__ */ jsxRuntimeExports.jsx("td", { children: cell }, `${keyPrefix}-${rowIndex}-${cellIndex}`)) }, `${keyPrefix}-${rowIndex}`)) })
+  ] }) });
+  const total = report?.total;
+  const byRequest = report?.byRequest || [];
+  const missAttribution = report?.missAttribution || [];
+  const changesSincePrevious = report?.changesSincePrevious || [];
+  const recent = report?.recent || [];
+  const actionSkipped = byRequest.filter((item) => item.key.startsWith("action_skipped | ")).reduce((sum, item) => sum + (item.requests || 0), 0);
+  const metrics = [
+    [text("总请求", "Requests"), formatTokens(total?.requests), ""],
+    [text("总输入 Token", "Input tokens"), formatTokens(total?.promptTokens || total?.estimatedPromptTokens), ""],
+    [text("缓存命中率", "Cache hit rate"), formatPercent(total?.cacheHitRate), "success"],
+    [text("未命中 Token", "Cache misses"), formatTokens(total?.cacheMissTokens), "warning"],
+    [text("动作判定已跳过", "Actions skipped"), formatTokens(actionSkipped), ""]
+  ];
+  const capabilities = [
+    [text("动态历史边界", "Historical boundary"), text("按 CK3 当前年份限制未来人物、事件与作品。", "Limits future people, events, and works by the current CK3 year.")],
+    [text("多人摘要", "Group summaries"), text("最多玩家 + 4 名 NPC，参与者之间双向保存摘要。", "Up to the player plus four NPCs; summaries are saved for each participant pair.")],
+    [text("关系上下文", "Relationship context"), text("第三方角色按亲属和年龄解析，不加入发言队列。", "Mentioned third parties are resolved from kinship and age data without joining the speaker queue.")],
+    [text("动作门控", "Action gate"), text("仅明确已发生的状态变化才调用动作模型。", "Calls the action model only for explicit completed state changes.")]
+  ];
+  return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "optimization-view", children: [
+    /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "optimization-header", children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsx("h3", { children: text("系统优化与用量", "System Optimization & Usage") }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "muted-text", children: text("缓存统计只记录 Token 和匿名区块指纹，不保存对话或提示词正文。", "Cache analytics stores token counts and anonymous block fingerprints only; no prompt or conversation text is saved.") })
+      ] }),
+      /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "optimization-header-actions", children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsx("button", { type: "button", onClick: loadReport, disabled: isLoading, children: isLoading ? text("读取中…", "Loading…") : text("刷新", "Refresh") }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx("button", { type: "button", className: "danger-button", onClick: clearReport, disabled: isClearing || isLoading, children: isClearing ? text("清空中…", "Clearing…") : text("清空统计", "Clear analytics") })
+      ] })
+    ] }),
+    error && /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "optimization-error", children: error }),
+    isLoading && !report && /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "optimization-loading", children: text("正在读取本地统计…", "Reading local analytics…") }),
+    report && /* @__PURE__ */ jsxRuntimeExports.jsxs(React.Fragment, { children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "optimization-metrics", children: metrics.map(([label, value, tone]) => /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: `optimization-metric ${tone}`, children: [/* @__PURE__ */ jsxRuntimeExports.jsx("span", { children: label }), /* @__PURE__ */ jsxRuntimeExports.jsx("strong", { children: value })] }, label)) }),
+      /* @__PURE__ */ jsxRuntimeExports.jsxs("section", { className: "optimization-capabilities", children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsx("h4", { children: text("当前 Mod 适配状态", "Current mod integration") }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "optimization-capability-grid", children: capabilities.map(([title, detail]) => /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "optimization-capability", children: [/* @__PURE__ */ jsxRuntimeExports.jsx("strong", { children: title }), /* @__PURE__ */ jsxRuntimeExports.jsx("span", { children: detail })] }, title)) })
+      ] }),
+      /* @__PURE__ */ jsxRuntimeExports.jsxs("section", { className: "optimization-section", children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsx("h4", { children: text("按请求类型", "Requests by type") }),
+        renderTable([text("类型 / 模型", "Type / model"), text("请求", "Requests"), text("输入", "Input"), text("命中率", "Hit rate")], byRequest.slice(0, 12).map((item) => [item.key, formatTokens(item.requests), formatTokens(item.promptTokens || item.estimatedPromptTokens), formatPercent(item.cacheHitRate)]), "request")
+      ] }),
+      /* @__PURE__ */ jsxRuntimeExports.jsxs("section", { className: "optimization-section", children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsx("h4", { children: text("未命中归因", "Cache-miss attribution") }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "muted-text", children: text("断点根据服务商返回的聚合 Token 估算；连带未命中表示该断点之后无法继续复用的 Token。", "Breakpoints are estimated from provider-reported aggregate tokens; downstream misses cannot be reused after that breakpoint.") }),
+        missAttribution.length === 0 ? /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "optimization-empty", children: text("暂无可归因的缓存数据。完成两次同类请求后再刷新。", "No cache data to attribute yet. Run two similar requests, then refresh.") }) : renderTable([text("首个断点", "First breakpoint"), text("次数", "Count"), text("未命中", "Misses"), text("连带未命中", "Downstream")], missAttribution.slice(0, 8).map((item) => [item.key, formatTokens(item.requests), formatTokens(item.cacheMissTokens), formatTokens(item.downstreamMissTokens)]), "miss")
+      ] }),
+      changesSincePrevious.length > 0 && /* @__PURE__ */ jsxRuntimeExports.jsxs("section", { className: "optimization-section", children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsx("h4", { children: text("相邻请求的最早变化", "Earliest change since the previous request") }),
+        renderTable([text("区块", "Block"), text("次数", "Count"), text("对应未命中", "Associated misses")], changesSincePrevious.slice(0, 8).map((item) => [item.key, formatTokens(item.requests), formatTokens(item.cacheMissTokens)]), "change")
+      ] }),
+      recent.length > 0 && /* @__PURE__ */ jsxRuntimeExports.jsxs("section", { className: "optimization-section", children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsx("h4", { children: text("最近请求", "Recent requests") }),
+        renderTable([text("时间", "Time"), text("类型", "Type"), text("命中 / 未命中", "Hit / miss"), text("首个断点", "First breakpoint")], recent.slice(0, 12).map((item) => [item.timestamp ? new Date(item.timestamp).toLocaleString(isChinese ? "zh-CN" : "en-US") : "—", item.requestType, `${formatNullableTokens(item.cacheHitTokens)} / ${formatNullableTokens(item.cacheMissTokens)}`, item.cacheAttribution?.coldStart ? text("冷启动", "Cold start") : item.cacheAttribution?.breakpoint?.label || "—"]), "recent")
+      ] })
+    ] })
+  ] });
+};
 const discordIcon = "data:image/svg+xml,%3c?xml%20version='1.0'%20encoding='UTF-8'?%3e%3c!--%20Uploaded%20to:%20SVG%20Repo,%20www.svgrepo.com,%20Generator:%20SVG%20Repo%20Mixer%20Tools%20--%3e%3csvg%20width='800px'%20height='800px'%20viewBox='0%20-28.5%20256%20256'%20version='1.1'%20xmlns='http://www.w3.org/2000/svg'%20xmlns:xlink='http://www.w3.org/1999/xlink'%20preserveAspectRatio='xMidYMid'%3e%3cg%3e%3cpath%20d='M216.856339,16.5966031%20C200.285002,8.84328665%20182.566144,3.2084988%20164.041564,0%20C161.766523,4.11318106%20159.108624,9.64549908%20157.276099,14.0464379%20C137.583995,11.0849896%20118.072967,11.0849896%2098.7430163,14.0464379%20C96.9108417,9.64549908%2094.1925838,4.11318106%2091.8971895,0%20C73.3526068,3.2084988%2055.6133949,8.86399117%2039.0420583,16.6376612%20C5.61752293,67.146514%20-3.4433191,116.400813%201.08711069,164.955721%20C23.2560196,181.510915%2044.7403634,191.567697%2065.8621325,198.148576%20C71.0772151,190.971126%2075.7283628,183.341335%2079.7352139,175.300261%20C72.104019,172.400575%2064.7949724,168.822202%2057.8887866,164.667963%20C59.7209612,163.310589%2061.5131304,161.891452%2063.2445898,160.431257%20C105.36741,180.133187%20151.134928,180.133187%20192.754523,160.431257%20C194.506336,161.891452%20196.298154,163.310589%20198.110326,164.667963%20C191.183787,168.842556%20183.854737,172.420929%20176.223542,175.320965%20C180.230393,183.341335%20184.861538,190.991831%20190.096624,198.16893%20C211.238746,191.588051%20232.743023,181.531619%20254.911949,164.955721%20C260.227747,108.668201%20245.831087,59.8662432%20216.856339,16.5966031%20Z%20M85.4738752,135.09489%20C72.8290281,135.09489%2062.4592217,123.290155%2062.4592217,108.914901%20C62.4592217,94.5396472%2072.607595,82.7145587%2085.4738752,82.7145587%20C98.3405064,82.7145587%20108.709962,94.5189427%20108.488529,108.914901%20C108.508531,123.290155%2098.3405064,135.09489%2085.4738752,135.09489%20Z%20M170.525237,135.09489%20C157.88039,135.09489%20147.510584,123.290155%20147.510584,108.914901%20C147.510584,94.5396472%20157.658606,82.7145587%20170.525237,82.7145587%20C183.391518,82.7145587%20193.761324,94.5189427%20193.539891,108.914901%20C193.539891,123.290155%20183.391518,135.09489%20170.525237,135.09489%20Z'%20fill='%235865F2'%20fill-rule='nonzero'%3e%3c/path%3e%3c/g%3e%3c/svg%3e";
 const logsIcon = "data:image/svg+xml,%3csvg%20class='svg-icon'%20style='width:%201em;%20height:%201em;vertical-align:%20middle;fill:%20currentColor;overflow:%20hidden;'%20viewBox='0%200%201024%201024'%20version='1.1'%20xmlns='http://www.w3.org/2000/svg'%3e%3cpath%20d='M426.666667%20170.666667H170.666667c-47.146667%200-84.906667%2038.186667-84.906667%2085.333333L85.333333%20768c0%2047.146667%2038.186667%2085.333333%2085.333334%2085.333333h682.666666c47.146667%200%2085.333333-38.186667%2085.333334-85.333333V341.333333c0-47.146667-38.186667-85.333333-85.333334-85.333333H512l-85.333333-85.333333z'%20/%3e%3c/svg%3e";
 const languageIcon = "data:image/svg+xml,%3csvg%20width='512'%20height='512'%20viewBox='0%200%20512%20512'%20fill='none'%20xmlns='http://www.w3.org/2000/svg'%3e%3cg%20clip-path='url(%23clip0_78_5)'%3e%3cpath%20d='M256%200C397.385%200%20512%20114.615%20512%20256C512%20397.385%20397.385%20512%20256%20512C114.615%20512%200%20397.385%200%20256C0%20114.615%20114.615%200%20256%200ZM350.315%20193.31C346.63%20193.31%20343.027%20194.404%20339.964%20196.453C336.901%20198.502%20334.515%20201.415%20333.108%20204.821L256.951%20389.291C256.004%20391.553%20255.514%20393.98%20255.508%20396.433C255.502%20398.885%20255.98%20401.314%20256.915%20403.581C257.851%20405.848%20259.225%20407.908%20260.959%20409.643C262.693%20411.377%20264.753%20412.751%20267.02%20413.687C269.286%20414.622%20271.717%20415.102%20274.169%20415.096C276.621%20415.09%20279.048%20414.599%20281.311%20413.652C283.573%20412.706%20285.626%20411.322%20287.352%20409.579C289.077%20407.837%20290.442%20405.769%20291.366%20403.498L306.877%20365.937H393.755L409.266%20403.498C410.672%20406.906%20413.058%20409.821%20416.122%20411.871C419.186%20413.921%20422.79%20415.015%20426.477%20415.015C429.536%20415.013%20432.548%20414.258%20435.245%20412.815C437.943%20411.373%20440.242%20409.287%20441.942%20406.744C443.642%20404.201%20444.69%20401.278%20444.991%20398.233C445.293%20395.189%20444.84%20392.118%20443.672%20389.291H443.68L367.523%20204.821C366.117%20201.415%20363.73%20198.502%20360.667%20196.453C357.604%20194.404%20354.001%20193.31%20350.315%20193.31ZM201.391%2063C196.453%2063%20191.718%2064.961%20188.227%2068.4521C184.735%2071.9434%20182.774%2076.6789%20182.774%2081.6162V98.54H84.6162C79.6789%2098.54%2074.9434%20100.501%2071.4521%20103.992C67.961%20107.483%2066%20112.219%2066%20117.156C66%20122.093%2067.9612%20126.828%2071.4521%20130.319C74.9434%20133.811%2079.6789%20135.772%2084.6162%20135.772H251.527C243.472%20158.577%20228.638%20194.582%20206.011%20227.465C179.44%20192.206%20169.562%20169.388%20169.48%20169.188C167.535%20164.692%20163.895%20161.143%20159.35%20159.312C154.805%20157.482%20149.721%20157.518%20145.202%20159.411C140.683%20161.304%20137.092%20164.903%20135.209%20169.426C133.326%20173.949%20133.302%20179.032%20135.143%20183.573C135.633%20184.741%20147.455%20212.538%20179.872%20254.594C180.651%20255.601%20181.42%20256.583%20182.19%20257.564C148.986%20295.093%20116.407%20318.372%20102.775%20325.886C98.4407%20328.25%2095.2224%20332.24%2093.8291%20336.977C92.4359%20341.713%2092.9815%20346.81%2095.3457%20351.145C97.71%20355.479%20101.7%20358.698%20106.437%20360.091C111.173%20361.484%20116.27%20360.938%20120.604%20358.574C122.432%20357.576%20161.729%20335.82%20206.603%20286.148C225.659%20306.525%20238.758%20316.138%20239.545%20316.696C241.525%20318.134%20243.77%20319.168%20246.149%20319.738C248.529%20320.308%20250.998%20320.403%20253.415%20320.018C255.832%20319.632%20258.149%20318.775%20260.233%20317.493C262.318%20316.212%20264.13%20314.532%20265.565%20312.55V312.559C268.458%20308.564%20269.646%20303.583%20268.87%20298.713C268.094%20293.842%20265.418%20289.479%20261.428%20286.58C261.258%20286.453%20248.734%20277.162%20230.55%20257.192C264.101%20211.769%20283.106%20160.092%20290.857%20135.772H318.164C323.101%20135.772%20327.837%20133.811%20331.328%20130.319C334.819%20126.828%20336.78%20122.093%20336.78%20117.156C336.78%20112.219%20334.819%20107.483%20331.328%20103.992C327.837%20100.501%20323.101%2098.54%20318.164%2098.54H220.007V81.6162C220.007%2076.6789%20218.045%2071.9434%20214.554%2068.4521C211.063%2064.9612%20206.328%2063.0001%20201.391%2063ZM378.388%20328.704H322.252L350.32%20260.713L378.388%20328.704Z'%20fill='%23D9D9D9'/%3e%3c/g%3e%3cdefs%3e%3cclipPath%20id='clip0_78_5'%3e%3crect%20width='512'%20height='512'%20fill='white'/%3e%3c/clipPath%3e%3c/defs%3e%3c/svg%3e";
@@ -21684,6 +21791,15 @@ function ConfigPanel({ onClose }) {
               children: t("config.summaries")
             }
           ),
+          /* @__PURE__ */ jsxRuntimeExports.jsx(
+            "button",
+            {
+              onClick: () => setCurrentTab("optimization"),
+              className: currentTab === "optimization" ? "active" : "",
+              style: { zIndex: 12 },
+              children: "优化"
+            }
+          ),
           /* @__PURE__ */ jsxRuntimeExports.jsx("button", { className: "config-close-button", onClick: onClose, children: "✕" })
         ] }),
         /* @__PURE__ */ jsxRuntimeExports.jsxs("main", { className: "config-main-content", children: [
@@ -21691,7 +21807,8 @@ function ConfigPanel({ onClose }) {
           currentTab === "settings" && /* @__PURE__ */ jsxRuntimeExports.jsx(SettingsView, {}),
           currentTab === "actions" && /* @__PURE__ */ jsxRuntimeExports.jsx(ActionsView, {}),
           currentTab === "prompts" && /* @__PURE__ */ jsxRuntimeExports.jsx(PromptsView, {}),
-          currentTab === "summaries" && /* @__PURE__ */ jsxRuntimeExports.jsx(SummariesView, {})
+          currentTab === "summaries" && /* @__PURE__ */ jsxRuntimeExports.jsx(SummariesView, {}),
+          currentTab === "optimization" && /* @__PURE__ */ jsxRuntimeExports.jsx(OptimizationView, {})
         ] }),
         /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "app-version", children: [
           "v",

@@ -116,7 +116,11 @@ module.exports = {
             const summaryPrompt = [
                 {
                     role: 'system',
-                    content: `You are summarizing a conversation from the perspective of ${targetCharacter.fullName} who is leaving the conversation. Focus on their experiences, interactions, and key events they participated in. The summary should be comprehensive but concise, written from their point of view.`
+                    content: `Stable leaving-summary instructions:\nSummarize the conversation from the leaving character's perspective. Focus on their experiences, interactions, important events, decisions, promises, conflicts, and relationship changes. Be comprehensive but concise, and write from that character's point of view.`
+                },
+                {
+                    role: 'system',
+                    content: `Dynamic leaving character: ${targetCharacter.fullName}. Player: ${gameData.playerName}.`
                 },
                 // Include current rolling summary if it exists
                 ...(conversation.currentSummary ? [{
@@ -129,7 +133,7 @@ module.exports = {
                 },
                 {
                     role: 'user',
-                    content: `Create a comprehensive summary of this conversation from ${targetCharacter.fullName}'s perspective. Include their interactions with ${gameData.playerName} and other characters, key events they participated in, and their overall experience. This summary will be saved as their personal record of this conversation.`
+                    content: `Generate ${targetCharacter.fullName}'s personal conversation summary now.`
                 }
             ];
             

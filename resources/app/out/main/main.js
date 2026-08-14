@@ -2,6 +2,7 @@
 const electron = require("electron");
 const fs$1 = require("fs");
 const path = require("path");
+const crypto = require("node:crypto");
 const Store = require("electron-store");
 const uuid = require("uuid");
 const Handlebars = require("handlebars");
@@ -1118,6 +1119,10 @@ class TokenCounter {
     }));
   }
 }
+function createPromptFingerprint(value) {
+  if (value === null || value === void 0) return null;
+  return crypto.createHash("sha256").update(String(value), "utf8").digest("hex").slice(0, 16);
+}
 /**
  * Persists API usage metadata without storing prompts, replies, or credentials.
  * DeepSeek reports cache fields in usage; other providers simply remain "unknown".
@@ -1163,14 +1168,17 @@ class UsageAnalytics {
       totalTokens: Number(usage?.total_tokens) || promptTokens + completionTokens,
       cacheHitTokens: Number.isFinite(cacheHitTokens) ? cacheHitTokens : null,
       cacheMissTokens: Number.isFinite(cacheMissTokens) ? cacheMissTokens : null,
-      blocks: Array.isArray(metadata?.blocks) ? metadata.blocks.map((block) => ({
+      blocks: Array.isArray(metadata?.blocks) ? metadata.blocks.map((block, index) => ({
         id: block.id,
         label: block.label,
         type: block.type,
-        tokens: Number(block.tokens) || 0
+        position: Number.isFinite(Number(block.position)) ? Number(block.position) : index,
+        tokens: Number(block.tokens) || 0,
+        fingerprint: block.fingerprint || createPromptFingerprint(block.content)
       })) : []
     };
     const data = this.read();
+    data.version = 2;
     data.entries.push(entry);
     if (data.entries.length > this.maxEntries) data.entries = data.entries.slice(-this.maxEntries);
     this.write(data);
@@ -1194,6 +1202,10 @@ class UsageAnalytics {
     const create = () => ({ requests: 0, estimatedPromptTokens: 0, promptTokens: 0, completionTokens: 0, totalTokens: 0, cacheReportedRequests: 0, cacheHitTokens: 0, cacheMissTokens: 0 });
     const total = create();
     const blockTotals = {};
+    const missAttributionTotals = {};
+    const changesSincePreviousTotals = {};
+    const previousByRequest = /* @__PURE__ */ new Map();
+    const recentWithAttribution = [];
     for (const entry of entries) {
       add(total, entry);
       const key = `${entry.requestType} | ${entry.providerType} | ${entry.model}`;
@@ -1205,6 +1217,40 @@ class UsageAnalytics {
         blockTotals[blockKey].requests++;
         blockTotals[blockKey].tokens += block.tokens || 0;
       }
+      const previousKey = `${entry.requestType} | ${entry.providerType} | ${entry.model}`;
+      const previousEntry = previousByRequest.get(previousKey);
+      const cacheAttribution = this.attributeCacheMiss(entry, previousEntry);
+      previousByRequest.set(previousKey, entry);
+      recentWithAttribution.push({ ...entry, cacheAttribution });
+      if (cacheAttribution?.cacheMissTokens > 0) {
+        const breakpoint = cacheAttribution.breakpoint;
+        const attributionKey = cacheAttribution.coldStart ? `${entry.requestType} | cold_start | No reusable prefix` : breakpoint ? `${entry.requestType} | ${breakpoint.type || "unknown"} | ${breakpoint.label || breakpoint.id || "unknown"}` : `${entry.requestType} | unattributed | No block metadata`;
+        if (!missAttributionTotals[attributionKey]) {
+          missAttributionTotals[attributionKey] = {
+            requests: 0,
+            cacheMissTokens: 0,
+            breakpointMissTokens: 0,
+            downstreamMissTokens: 0,
+            changedSincePreviousRequests: 0
+          };
+        }
+        const target = missAttributionTotals[attributionKey];
+        target.requests++;
+        target.cacheMissTokens += cacheAttribution.cacheMissTokens;
+        target.breakpointMissTokens += breakpoint?.attributedMissTokens || 0;
+        target.downstreamMissTokens += cacheAttribution.downstreamMissTokens || 0;
+        if (cacheAttribution.firstChangedBlock) target.changedSincePreviousRequests++;
+        const changedBlock = cacheAttribution.firstChangedBlock;
+        if (changedBlock) {
+          const changeKey = `${entry.requestType} | ${changedBlock.type || "unknown"} | ${changedBlock.label || changedBlock.id || "unknown"}`;
+          if (!changesSincePreviousTotals[changeKey]) {
+            changesSincePreviousTotals[changeKey] = { requests: 0, cacheMissTokens: 0, agreesWithBreakpointRequests: 0 };
+          }
+          changesSincePreviousTotals[changeKey].requests++;
+          changesSincePreviousTotals[changeKey].cacheMissTokens += cacheAttribution.cacheMissTokens;
+          if (cacheAttribution.fingerprintAgreesWithBreakpoint) changesSincePreviousTotals[changeKey].agreesWithBreakpointRequests++;
+        }
+      }
     }
     const finish = (value) => ({ ...value, cacheHitRate: value.cacheHitTokens + value.cacheMissTokens > 0 ? value.cacheHitTokens / (value.cacheHitTokens + value.cacheMissTokens) : null });
     return {
@@ -1212,11 +1258,93 @@ class UsageAnalytics {
       total: finish(total),
       byRequest: Object.entries(groups).map(([key, value]) => ({ key, ...finish(value) })).sort((a, b) => b.totalTokens - a.totalTokens),
       blocks: Object.entries(blockTotals).map(([key, value]) => ({ key, ...value })).sort((a, b) => b.tokens - a.tokens),
-      recent: entries.slice(-100).reverse()
+      missAttribution: Object.entries(missAttributionTotals).map(([key, value]) => ({ key, ...value })).sort((a, b) => b.cacheMissTokens - a.cacheMissTokens),
+      changesSincePrevious: Object.entries(changesSincePreviousTotals).map(([key, value]) => ({ key, ...value })).sort((a, b) => b.cacheMissTokens - a.cacheMissTokens),
+      recent: recentWithAttribution.slice(-100).reverse()
+    };
+  }
+  attributeCacheMiss(entry, previousEntry = null) {
+    if (entry?.cacheHitTokens == null || entry?.cacheMissTokens == null) return null;
+    const cacheHitTokens = Number(entry?.cacheHitTokens);
+    const cacheMissTokens = Number(entry?.cacheMissTokens);
+    if (!Number.isFinite(cacheHitTokens) || !Number.isFinite(cacheMissTokens)) return null;
+    const cacheTotal = cacheHitTokens + cacheMissTokens;
+    const blocks = Array.isArray(entry?.blocks) ? entry.blocks : [];
+    if (cacheTotal <= 0 || blocks.length === 0) {
+      return {
+        method: "ordered_prefix_estimate_v1",
+        cacheHitTokens,
+        cacheMissTokens,
+        coldStart: cacheHitTokens === 0 && cacheMissTokens > 0,
+        breakpoint: null,
+        downstreamMissTokens: cacheMissTokens,
+        firstChangedBlock: null,
+        blocks: []
+      };
+    }
+    const estimatedTotal = blocks.reduce((sum, block) => sum + (Number(block.tokens) || 0), 0);
+    if (estimatedTotal <= 0) return null;
+    let estimatedCursor = 0;
+    let actualCursor = 0;
+    const attributedBlocks = blocks.map((block, index) => {
+      estimatedCursor += Number(block.tokens) || 0;
+      const actualEnd = index === blocks.length - 1 ? cacheTotal : Math.round(estimatedCursor / estimatedTotal * cacheTotal);
+      const actualTokens = Math.max(0, actualEnd - actualCursor);
+      const attributedHitTokens = Math.max(0, Math.min(actualEnd, cacheHitTokens) - Math.min(actualCursor, cacheHitTokens));
+      const attributedMissTokens = Math.max(0, actualTokens - attributedHitTokens);
+      actualCursor = actualEnd;
+      return {
+        id: block.id,
+        label: block.label,
+        type: block.type,
+        position: Number.isFinite(Number(block.position)) ? Number(block.position) : index,
+        estimatedTokens: Number(block.tokens) || 0,
+        attributedTokens: actualTokens,
+        attributedHitTokens,
+        attributedMissTokens
+      };
+    });
+    const breakpoint = attributedBlocks.find((block) => block.attributedMissTokens > 0) || null;
+    const breakpointIndex = breakpoint ? attributedBlocks.indexOf(breakpoint) : -1;
+    const downstreamMissTokens = breakpointIndex >= 0 ? attributedBlocks.slice(breakpointIndex + 1).reduce((sum, block) => sum + block.attributedMissTokens, 0) : 0;
+    let firstChangedBlock = null;
+    const previousBlocks = Array.isArray(previousEntry?.blocks) ? previousEntry.blocks : [];
+    if (previousBlocks.length > 0) {
+      const maxLength = Math.max(blocks.length, previousBlocks.length);
+      for (let index = 0; index < maxLength; index++) {
+        const current = blocks[index];
+        const previous = previousBlocks[index];
+        if (!current || !previous || current.id !== previous.id) {
+          if (current) {
+            firstChangedBlock = { id: current.id, label: current.label, type: current.type, position: index };
+          }
+          break;
+        }
+        // Older analytics entries have no fingerprints. Their token breakpoint
+        // remains usable, but an exact content-change comparison is unavailable.
+        if (!current.fingerprint || !previous.fingerprint) break;
+        if (current.fingerprint !== previous.fingerprint) {
+          firstChangedBlock = { id: current.id, label: current.label, type: current.type, position: index };
+          break;
+        }
+      }
+    }
+    return {
+      method: "ordered_prefix_estimate_v1",
+      cacheHitTokens,
+      cacheMissTokens,
+      estimatedBlockTokens: estimatedTotal,
+      scale: cacheTotal / estimatedTotal,
+      coldStart: cacheHitTokens === 0 && cacheMissTokens > 0,
+      breakpoint,
+      downstreamMissTokens,
+      firstChangedBlock,
+      fingerprintAgreesWithBreakpoint: !!(breakpoint && firstChangedBlock && breakpoint.id === firstChangedBlock.id),
+      blocks: attributedBlocks
     };
   }
   clear() {
-    this.write({ version: 1, entries: [] });
+    this.write({ version: 2, entries: [] });
   }
 }
 const usageAnalytics = new UsageAnalytics();
@@ -1340,9 +1468,11 @@ class LLMManager {
       throw new Error(`Provider '${config.customName || config.providerType}' has no default model selected.`);
     }
     const provider = this.getProviderInstance(config);
+    const preparedMessages = PromptBuilder.prepareSummaryMessages(messages);
+    const summaryBlocks = Array.isArray(metadata?.blocks) && metadata.blocks.length > 0 ? metadata.blocks : PromptBuilder.getSummaryPromptBlocks(preparedMessages, metadata?.requestType || "summary");
     const request = {
       model: config.defaultModel,
-      messages,
+      messages: preparedMessages,
       stream: false,
       // summaries don't need streaming
       ...config.defaultParameters,
@@ -1350,7 +1480,7 @@ class LLMManager {
     };
     const providerData = JSON.stringify(config).replace(/"apiKey":\s*"[^"]*"/g, "HIDDEN");
     console.log(`[LLMManager] Provider data stringified: ${providerData}`);
-    return await this.trackUsage(provider.chatCompletion(request, config), { ...metadata, requestType: metadata.requestType || "summary", providerType: config.providerType, model: config.defaultModel, estimatedPromptTokens: TokenCounter.calculateTotalTokens(messages) });
+    return await this.trackUsage(provider.chatCompletion(request, config), { ...metadata, blocks: summaryBlocks, requestType: metadata.requestType || "summary", providerType: config.providerType, model: config.defaultModel, estimatedPromptTokens: TokenCounter.calculateTotalTokens(preparedMessages) });
   }
   async trackUsage(result, metadata) {
     const response = await result;
@@ -1879,9 +2009,10 @@ class GameData {
       return dynamicMemories;
     }
     
-    // PERFORMANCE: Cache key based on last 3 player messages
-    // Only re-scan if player messages have changed
-    const recentPlayerMessages = history.slice(-3).filter(m => m.role === 'user');
+    // Cache and scan the latest player messages, not merely the last array
+    // entries. In a multi-NPC turn the player's line is quickly followed by
+    // several assistant replies and would otherwise fall out of the window.
+    const recentPlayerMessages = history.filter((m) => m.role === "user").slice(-3);
     const cacheKey = recentPlayerMessages.map(m => m.content || '').join('|');
     
     // Check if we've already processed this exact set of messages
@@ -1889,6 +2020,15 @@ class GameData {
       console.log(`[Performance] Using cached dynamic memories (no new player messages)`);
       
       // Still need to update mentionedCharactersInContext for character info
+      if (character.dynamicMemoryCache.mentionedCharacterIds) {
+        if (!this.mentionedCharactersInContext) {
+          this.mentionedCharactersInContext = new Set();
+        }
+        const mentionableProfiles = this.getMentionableCharacterProfiles();
+        for (const id of character.dynamicMemoryCache.mentionedCharacterIds) {
+          if (mentionableProfiles.has(id)) this.mentionedCharactersInContext.add(id);
+        }
+      }
       if (character.dynamicMemoryCache.mentionedNames) {
         if (!this.mentionedCharactersInContext) {
           this.mentionedCharactersInContext = new Set();
@@ -1945,20 +2085,30 @@ class GameData {
     
     // If no relevant characters found, cache and return early
     if (relevantCharacterNames.length === 0) {
-      // Cache empty result
+      // No conversation memories are available, but a mentioned third person
+      // can still have useful CK3 family/relationship data.
+      const mentionedCharacterIds = this.findMentionedCharacterIdsInHistory(history, character);
+      if (!this.mentionedCharactersInContext) {
+        this.mentionedCharactersInContext = new Set();
+      }
+      for (const id of mentionedCharacterIds) {
+        this.mentionedCharactersInContext.add(id);
+      }
       if (!character.dynamicMemoryCache) {
         character.dynamicMemoryCache = {};
       }
       character.dynamicMemoryCache = {
         key: cacheKey,
         memories: [],
-        mentionedNames: []
+        mentionedNames: [],
+        mentionedCharacterIds: Array.from(mentionedCharacterIds)
       };
       return dynamicMemories;
     }
     
-    // Performance optimization: Only check the last 3 messages (reduced from 5)
-    const recentMessages = history.slice(-3);
+    // Check the latest player messages. This keeps third-party mentions
+    // available to every NPC responding in the same turn.
+    const recentMessages = recentPlayerMessages;
     const mentionedCharacters = new Set();
     
     for (const message of recentMessages) {
@@ -2014,13 +2164,25 @@ class GameData {
     }
     
     // PERFORMANCE: Cache the result
+    // Relationship context must not depend on whether this third character has
+    // an existing conversation-summary file. Memories stay selectively loaded
+    // above, while game-data relationships are detected from all loaded CK3
+    // characters here.
+    const mentionedCharacterIds = this.findMentionedCharacterIdsInHistory(history, character);
+    if (!this.mentionedCharactersInContext) {
+      this.mentionedCharactersInContext = new Set();
+    }
+    for (const id of mentionedCharacterIds) {
+      this.mentionedCharactersInContext.add(id);
+    }
     if (!character.dynamicMemoryCache) {
       character.dynamicMemoryCache = {};
     }
     character.dynamicMemoryCache = {
       key: cacheKey,
       memories: dynamicMemories,
-      mentionedNames: Array.from(mentionedCharacters)
+      mentionedNames: Array.from(mentionedCharacters),
+      mentionedCharacterIds: Array.from(mentionedCharacterIds)
     };
     
     return dynamicMemories;
@@ -2079,27 +2241,151 @@ class GameData {
     }
     return null;
   }
+  /**
+   * Build lightweight profiles for both active participants and their directly
+   * logged parents, children, and siblings. Relatives do not become speakers or
+   * action targets; their profiles are used only for mentioned-person context.
+   */
+  getMentionableCharacterProfiles() {
+    const profiles = /* @__PURE__ */ new Map(this.characters);
+    const addRelative = (entry) => {
+      const id = Number(entry?.id);
+      if (!Number.isFinite(id) || profiles.has(id) || !entry?.name) return;
+      const birthDateTotalDays = Number(entry.birthDateTotalDays);
+      const age = Number.isFinite(birthDateTotalDays) && Number.isFinite(this.totalDays) ? Math.max(0, Math.floor((this.totalDays - birthDateTotalDays) / 365.2425)) : null;
+      const gender = entry.gender || (entry.sheHe ? inferGenderFromPronoun(entry.sheHe) : "unknown");
+      profiles.set(id, {
+        id,
+        shortName: entry.name,
+        fullName: entry.name,
+        firstName: entry.name,
+        age,
+        gender,
+        primaryTitle: "",
+        traits: Array.isArray(entry.traits) ? entry.traits : [],
+        relationsToCharacters: [],
+        relationsToPlayer: [],
+        parents: [],
+        children: [],
+        siblings: [],
+        consort: "",
+        liege: "",
+        isMentionedRelativeProfile: true
+      });
+    };
+    for (const participant of this.characters.values()) {
+      for (const parent of participant.parents || []) addRelative(parent);
+      for (const child of participant.children || []) addRelative(child);
+      for (const sibling of participant.siblings || []) addRelative(sibling);
+    }
+    return profiles;
+  }
+  /**
+   * Find third-party characters mentioned by the player. This intentionally
+   * scans active CK3 characters and their directly logged relatives instead of
+   * only summary-file names: relationship data exists even when nobody has
+   * previously talked to the mentioned person.
+   */
+  findMentionedCharacterIdsInHistory(history, activeCharacter) {
+    const mentioned = /* @__PURE__ */ new Set();
+    if (!Array.isArray(history) || history.length === 0) return mentioned;
+    const ignoredIds = /* @__PURE__ */ new Set([this.playerID, activeCharacter?.id]);
+    const candidates = [];
+    for (const char of this.getMentionableCharacterProfiles().values()) {
+      if (ignoredIds.has(char.id)) continue;
+      const names = /* @__PURE__ */ new Set([char.fullName, char.shortName, char.firstName]);
+      for (const name of names) {
+        // One-character names are too ambiguous for substring matching.
+        if (typeof name === "string" && name.trim().length >= 2) {
+          candidates.push({ id: char.id, name: name.trim() });
+        }
+      }
+    }
+    // Prefer a full/title name over a shorter name that is part of it.
+    candidates.sort((a, b) => b.name.length - a.name.length);
+    const recentPlayerMessages = history.filter((message) => message?.role === "user").slice(-3);
+    for (const message of recentPlayerMessages) {
+      if (!message.content) continue;
+      for (const candidate of candidates) {
+        if (message.content.includes(candidate.name)) {
+          mentioned.add(candidate.id);
+          if (mentioned.size >= 2) return mentioned;
+        }
+      }
+    }
+    return mentioned;
+  }
+  findFamilyEntry(entries, characterId) {
+    return Array.isArray(entries) ? entries.find((entry) => entry?.id === characterId) : void 0;
+  }
+  /** Return a precise sibling title for subject relative to other. */
+  getSiblingRelation(subject, other) {
+    const subjectSiblingEntry = this.findFamilyEntry(subject?.siblings, other?.id);
+    const otherSiblingEntry = this.findFamilyEntry(other?.siblings, subject?.id);
+    if (!subjectSiblingEntry && !otherSiblingEntry) return null;
+    const subjectBirth = Number(otherSiblingEntry?.birthDateTotalDays);
+    const otherBirth = Number(subjectSiblingEntry?.birthDateTotalDays);
+    let subjectIsOlder = null;
+    if (Number.isFinite(subjectBirth) && Number.isFinite(otherBirth) && subjectBirth !== otherBirth) {
+      subjectIsOlder = subjectBirth < otherBirth;
+    } else if (Number.isFinite(subject?.age) && Number.isFinite(other?.age) && subject.age !== other.age) {
+      subjectIsOlder = subject.age > other.age;
+    }
+    if (subjectIsOlder === null) return "同胞手足（长幼不详）";
+    if (subject?.gender === "male") return subjectIsOlder ? "哥哥" : "弟弟";
+    if (subject?.gender === "female") return subjectIsOlder ? "姐姐" : "妹妹";
+    return subjectIsOlder ? "年长的手足" : "年幼的手足";
+  }
+  /**
+   * Describe subject's relationship to other using parsed family data first.
+   * CK3's plain relation string often only says "brother", so siblings are
+   * resolved with birth date (and age as a fallback) before using that string.
+   */
+  describeCharacterRelationship(subject, other) {
+    if (!subject || !other || subject.id === other.id) return null;
+    const siblingRelation = this.getSiblingRelation(subject, other);
+    if (siblingRelation) return `${subject.fullName}是${other.fullName}的${siblingRelation}`;
+    const subjectIsChild = !!this.findFamilyEntry(subject.parents, other.id) || !!this.findFamilyEntry(other.children, subject.id);
+    if (subjectIsChild) {
+      const label = subject.gender === "male" ? "儿子" : subject.gender === "female" ? "女儿" : "子女";
+      return `${subject.fullName}是${other.fullName}的${label}`;
+    }
+    const subjectIsParent = !!this.findFamilyEntry(subject.children, other.id) || !!this.findFamilyEntry(other.parents, subject.id);
+    if (subjectIsParent) {
+      const label = subject.gender === "male" ? "父亲" : subject.gender === "female" ? "母亲" : "父母";
+      return `${subject.fullName}是${other.fullName}的${label}`;
+    }
+    const direct = subject.relationsToCharacters?.find((relation) => relation.id === other.id)?.relations || [];
+    if (direct.length > 0) return `${subject.fullName}与${other.fullName}的游戏关系：${direct.join("、")}`;
+    if (other.id === this.playerID && subject.relationsToPlayer?.length > 0) {
+      return `${subject.fullName}与${other.fullName}的游戏关系：${subject.relationsToPlayer.join("、")}`;
+    }
+    const reverse = other.relationsToCharacters?.find((relation) => relation.id === subject.id)?.relations || [];
+    if (reverse.length > 0) return `${other.fullName}与${subject.fullName}的游戏关系：${reverse.join("、")}`;
+    return null;
+  }
   
   /**
    * 获取提到的角色的详细信息（用于添加到prompt上下文）
    * @returns {string} - 格式化的角色信息字符串
    */
-  getMentionedCharactersInfo() {
+  getMentionedCharactersInfo(activeCharacter) {
     if (!this.mentionedCharactersInContext || this.mentionedCharactersInContext.size === 0) {
       return '';
     }
     
     const player = this.characters.get(this.playerID);
-    const ai = this.characters.get(this.aiID);
+    const dialoguePartner = activeCharacter || this.characters.get(this.aiID);
+    const mentionableProfiles = this.getMentionableCharacterProfiles();
     
     let info = '\n=== 对话中提到的其他角色信息 ===\n\n';
     
     for (const charId of this.mentionedCharactersInContext) {
-      const char = this.characters.get(charId);
-      if (!char || charId === this.playerID || charId === this.aiID) continue;
+      const char = mentionableProfiles.get(charId);
+      if (!char || charId === this.playerID || charId === dialoguePartner?.id) continue;
       
       info += `【${char.fullName}】\n`;
-      info += `- 年龄：${char.age}岁\n`;
+      if (Number.isFinite(char.age)) info += `- 年龄：${char.age}岁\n`;
       info += `- 性别：${char.gender === 'male' ? '男性' : char.gender === 'female' ? '女性' : '未知'}\n`;
       
       if (char.primaryTitle) {
@@ -2112,21 +2398,16 @@ class GameData {
         info += `- 性格特质：${traitNames}\n`;
       }
       
-      // 与对话双方的关系
+      // With both participants. Do not assume GameData.aiID is the current
+      // responder: one conversation can generate replies for several NPCs.
       if (player) {
-        const relToPlayer = char.relationsToCharacters.find(r => r.id === player.id);
-        if (relToPlayer && relToPlayer.relations.length > 0) {
-          info += `- 与${player.fullName}的关系：${relToPlayer.relations.join('、')}\n`;
-        } else if (char.relationsToPlayer && char.relationsToPlayer.length > 0) {
-          info += `- 与${player.fullName}的关系：${char.relationsToPlayer.join('、')}\n`;
-        }
+        const relation = this.describeCharacterRelationship(char, player);
+        if (relation) info += `- 与${player.fullName}的关系：${relation}\n`;
       }
       
-      if (ai && ai.id !== this.playerID) {
-        const relToAI = char.relationsToCharacters.find(r => r.id === ai.id);
-        if (relToAI && relToAI.relations.length > 0) {
-          info += `- 与${ai.fullName}的关系：${relToAI.relations.join('、')}\n`;
-        }
+      if (dialoguePartner && dialoguePartner.id !== this.playerID) {
+        const relation = this.describeCharacterRelationship(char, dialoguePartner);
+        if (relation) info += `- 与${dialoguePartner.fullName}的关系：${relation}\n`;
       }
       
       // 配偶
@@ -2196,57 +2477,77 @@ class GameData {
     fs$1.writeFileSync(targetFile, JSON.stringify(swappedSummaries, null, "\t"));
   }
   
-  saveCharactersSummaries(finalSummary) {
-    const player = this.characters.get(this.playerID);
-    const playerName = player ? player.shortName : null;
-    
-    for (const character of this.characters.values()) {
-      // Skip saving summaries for the player character itself
-      if (character.id === this.playerID) continue;
-      
-      const summaryWithMetadata = {
+  readConversationSummariesFile(filePath) {
+    try {
+      if (!fs$1.existsSync(filePath)) return [];
+      const parsed = JSON.parse(fs$1.readFileSync(filePath, "utf8"));
+      return Array.isArray(parsed) ? parsed : [];
+    } catch (error) {
+      console.error(`[Summary] Failed to read ${filePath}; existing file was left untouched:`, error);
+      return null;
+    }
+  }
+  saveSummaryForDirectedPair(owner, other, finalSummary, participantMetadata) {
+    const filePath = this.getConversationFilePath(owner.id, owner.shortName, other.id, other.shortName);
+    fs$1.mkdirSync(path.dirname(filePath), { recursive: true });
+    const summaries = this.readConversationSummariesFile(filePath);
+    if (!summaries) return null;
+    const alreadySaved = summaries.some((summary) => summary.totalDays === this.totalDays && summary.content === finalSummary && summary.playerId === owner.id && summary.characterId === other.id);
+    if (!alreadySaved) {
+      summaries.unshift({
         date: this.date,
         totalDays: this.totalDays,
         content: finalSummary,
-        characterName: character.shortName,
-        playerName: playerName || `角色 ${this.playerID}`,
-        playerId: this.playerID,
-        characterId: character.id
-      };
-      
-      character.conversationSummaries.unshift(summaryWithMetadata);
-      
-      // Save to BOTH character folders for memory sharing
-      // 1. Save to player's folder
-      const playerFile = this.getConversationFilePath(
-        this.playerID,
-        playerName,
-        character.id,
-        character.shortName
-      );
-      fs$1.mkdirSync(path.dirname(playerFile), { recursive: true });
-      character.saveSummaries(playerFile);
-      
-      // 2. Save to target character's folder (swap perspective)
-      const targetFile = this.getConversationFilePath(
-        character.id,
-        character.shortName,
-        this.playerID,
-        playerName
-      );
-      fs$1.mkdirSync(path.dirname(targetFile), { recursive: true });
-      
-      // Create a swapped version for target's perspective
-      const swappedSummaries = character.conversationSummaries.map(s => ({
-        ...s,
-        playerName: s.characterName,
-        characterName: s.playerName,
-        playerId: s.characterId,
-        characterId: s.playerId
-      }));
-      
-      fs$1.writeFileSync(targetFile, JSON.stringify(swappedSummaries, null, "\t"));
+        playerName: owner.shortName,
+        playerId: owner.id,
+        characterName: other.shortName,
+        characterId: other.id,
+        conversationType: participantMetadata.length > 2 ? "group" : "pair",
+        participants: participantMetadata
+      });
+      fs$1.writeFileSync(filePath, JSON.stringify(summaries, null, "\t"));
     }
+    return summaries;
+  }
+  /**
+   * Save one generated summary to every directed participant pair. This keeps
+   * A↔B compatibility while adding A↔C, B↔C, and all other group pair files
+   * without making extra LLM summary requests.
+   */
+  saveCharactersSummaries(finalSummary, participantIds = null) {
+    const orderedIds = [];
+    const seenIds = /* @__PURE__ */ new Set();
+    const addParticipant = (id) => {
+      const numericId = Number(id);
+      if (!Number.isFinite(numericId) || seenIds.has(numericId) || !this.characters.has(numericId)) return;
+      seenIds.add(numericId);
+      orderedIds.push(numericId);
+    };
+    addParticipant(this.playerID);
+    const requestedIds = Array.isArray(participantIds) ? participantIds : Array.from(this.characters.keys());
+    for (const id of requestedIds) addParticipant(id);
+    const participants = orderedIds.slice(0, 5).map((id) => this.characters.get(id)).filter(Boolean);
+    if (participants.length < 2) return;
+    const participantMetadata = participants.map((character) => ({
+      id: character.id,
+      name: character.shortName,
+      fullName: character.fullName
+    }));
+    let directedFilesWritten = 0;
+    for (let leftIndex = 0; leftIndex < participants.length; leftIndex++) {
+      for (let rightIndex = leftIndex + 1; rightIndex < participants.length; rightIndex++) {
+        const left = participants[leftIndex];
+        const right = participants[rightIndex];
+        const leftSummaries = this.saveSummaryForDirectedPair(left, right, finalSummary, participantMetadata);
+        const rightSummaries = this.saveSummaryForDirectedPair(right, left, finalSummary, participantMetadata);
+        directedFilesWritten += 2;
+        // conversationSummaries remains the current player↔NPC memory used by
+        // the existing prompt path; cross-NPC files are loaded dynamically.
+        if (left.id === this.playerID && leftSummaries) right.conversationSummaries = leftSummaries;
+        if (right.id === this.playerID && rightSummaries) left.conversationSummaries = rightSummaries;
+      }
+    }
+    console.log(`[Summary] Saved group summary for ${participants.length} participants across ${directedFilesWritten} directed pair files`);
   }
   /**
    * Check for conversation summaries for current AI characters from old storage format
@@ -3514,11 +3815,66 @@ class PromptBuilder {
   static {
     this.scriptLoader = new PromptScriptLoader();
   }
+  static buildSummaryCacheAnchor() {
+    return `VOTC_SUMMARY_CACHE_ANCHOR_v1
+You summarize CK3 roleplay records. Preserve concrete names, relationships, dates, places, amounts, decisions, promises, conflicts, emotional changes and unresolved plans that appear in the supplied material. Do not invent facts, merge different people, add later historical knowledge, or turn a proposal into a completed event. Follow the requested language and format. Output only the requested summary.`;
+  }
+  static prepareSummaryMessages(messages) {
+    const prepared = Array.isArray(messages) ? messages.map((message) => ({ ...message })) : [];
+    const alreadyAnchored = prepared.some((message) => typeof message.content === "string" && message.content.startsWith("VOTC_SUMMARY_CACHE_ANCHOR_"));
+    if (!alreadyAnchored) prepared.unshift({ role: "system", content: this.buildSummaryCacheAnchor() });
+    return prepared;
+  }
+  static getSummaryPromptBlocks(messages, requestType = "summary") {
+    return messages.map((message, index) => {
+      const content = typeof message.content === "string" ? message.content : "";
+      let label = "Summary Dynamic Context";
+      let type = "summary_dynamic";
+      if (content.startsWith("VOTC_SUMMARY_CACHE_ANCHOR_")) {
+        label = "Stable Summary Cache Anchor";
+        type = "summary_cache_anchor";
+      } else if (content.startsWith("Stable rolling-summary instructions:")) {
+        label = "Stable Rolling Summary Instructions";
+        type = "summary_stable";
+      } else if (content.startsWith("Stable final-summary instructions:")) {
+        label = "Stable Final Summary Instructions";
+        type = "summary_stable";
+      } else if (content.startsWith("Stable letter-summary instructions:")) {
+        label = "Stable Letter Summary Instructions";
+        type = "summary_stable";
+      } else if (content.startsWith("Stable leaving-summary instructions:")) {
+        label = "Stable Leaving Summary Instructions";
+        type = "summary_stable";
+      } else if (content.startsWith("Previous summary") || content.startsWith("此对话的先前摘要：")) {
+        label = "Previous Summary";
+      } else if (content.startsWith("New messages") || content.startsWith("完整对话：") || content.startsWith("最近的对话：") || content.startsWith("Full conversation:")) {
+        label = "Summary Conversation Content";
+      } else if (content.startsWith("Conversation participants:")) {
+        label = "Summary Participant Context";
+      } else if (content.startsWith("Dynamic leaving character:")) {
+        label = "Leaving Character Context";
+      } else if (message.role === "user" && index === messages.length - 1) {
+        label = "Summary Generation Request";
+      }
+      return {
+        id: `${requestType}-${index}`,
+        label,
+        type,
+        position: index,
+        tokens: TokenCounter.estimateMessageTokens(message),
+        fingerprint: createPromptFingerprint(content)
+      };
+    });
+  }
   /**
   * Build prompt for resummarization
   */
   static buildResummarizePrompt(messagesToSummarize, existingSummary) {
-    const prompt = [];
+    const summarySettings = settingsRepository.getSummaryPromptSettings();
+    const prompt = [{
+      role: "system",
+      content: `Stable rolling-summary instructions:\n${summarySettings.rollingPrompt}`
+    }];
     if (existingSummary) {
       prompt.push({
         role: "system",
@@ -3531,10 +3887,9 @@ ${existingSummary}`
       role: "system",
       content: "New messages to incorporate into the summary:\n\n" + messagesToSummarize.map((m) => `${m.name}: ${m.content}`).join("\n")
     });
-    const summarySettings = settingsRepository.getSummaryPromptSettings();
     prompt.push({
       role: "user",
-      content: summarySettings.rollingPrompt
+      content: "Generate the updated rolling summary now."
     });
     return prompt;
   }
@@ -3575,10 +3930,20 @@ ${existingSummary}`
       name: m.name,
       content: m.content
     })).filter((m) => !!m.content);
+    const mentionedCharactersContext = this.buildMentionedCharactersContext(char, gameData, workingHistory);
+    let mentionedContextInserted = false;
+    const insertMentionedContext = () => {
+      if (!mentionedContextInserted && mentionedCharactersContext) {
+        llmMessages.push({ role: "system", content: mentionedCharactersContext });
+      }
+      mentionedContextInserted = true;
+    };
     for (const block of blocks) {
       if (!block.enabled) continue;
+      if (block.type === "history" || block.type === "instruction") insertMentionedContext();
       this.applyBlock(block, llmMessages, workingHistory, context, promptSettings);
     }
+    insertMentionedContext();
     if (promptSettings.suffix?.enabled && promptSettings.suffix.template) {
       try {
         const suffixContent = this.templateEngine.renderTemplateString(promptSettings.suffix.template, context);
@@ -3601,32 +3966,23 @@ ${existingSummary}`
 这是 Voices of the Court 的固定系统上下文锚点。请将后续内容视为当前游戏的动态上下文，并始终遵守以下稳定规则：保持角色扮演身份；优先使用游戏实际数据；不把现代价值观强加给中世纪角色；涉及历史人物、事件、作品、诗词、典故、制度或技术时，先核验其出现、发生、写成、成名或流传时间是否不晚于游戏当前年份；年份不确定时明确表示不知晓，不得猜测或用未来知识补全；不得预知未来、后世评价或事件结局。不要把本段当作对话内容，也不要复述本段。`;
   }
   /**
-  * Build context from character's past conversation summaries
-  * Includes the 3 most recent summaries from the current conversation (A ↔ B)
-  * Dynamically includes summaries when other characters are mentioned in conversation
-  * This allows characters to remember their conversations with mentioned people
-  * 
-  * PERFORMANCE NOTE (v5.1 revised):
-  * - Does NOT cache the built context (needs to reflect current conversation state)
-  * - But benefits from caching in loadDynamicMemoriesFromHistory()
-  * - Building context is fast (<5ms), mainly string concatenation
-  * 
+  * Build the stable portion of a character's past conversation summaries.
+  * Third-party memories and relationship data are deliberately built by
+  * buildMentionedCharactersContext() and placed near conversation history, so
+  * changing the mentioned person does not invalidate this earlier cache prefix.
+  *
   * @param {Character} char - The character
   * @param {GameData} gameData - The game data
-  * @param {Array} history - Conversation history (optional, for dynamic loading)
   */
-  static buildPastSummariesContext(char, gameData, history = null) {
+  static buildPastSummariesContext(char, gameData) {
     if (!char.conversationSummaries || char.conversationSummaries.length === 0) {
       return null;
     }
     
-    // Build context fresh each time to reflect current conversation state
-    // This is necessary because the conversation history changes with each message
     let context = `以下是 ${char.shortName}、${gameData.playerName} 及其他角色之间最近的对话摘要：
 
 `;
     
-    // Part 1: Summaries from current conversation (A ↔ B)
     const recentSummaries = char.conversationSummaries.slice(0, 3);
     for (const summary of recentSummaries) {
       const timeAgo = this.getRelativeTime(summary.totalDays, gameData.totalDays);
@@ -3639,63 +3995,63 @@ ${existingSummary}`
       }
     }
     
-    // Part 2: Dynamically load summaries when other characters are mentioned
-    // Only load if conversation history is provided
-    // NOTE: loadDynamicMemoriesFromHistory() uses caching internally for performance
-    if (history && history.length > 0) {
-      const dynamicMemories = gameData.loadDynamicMemoriesFromHistory(history, char);
-      
-      if (dynamicMemories.length > 0) {
-        context += `
-${char.shortName} 还记得与对话中提到的人物的近期交谈：
+    return context;
+  }
+  /**
+   * Build volatile third-party memory and relationship context. The content is
+   * unchanged in meaning, but is emitted immediately before conversation
+   * history rather than inside the earlier stable summaries block.
+   */
+  static buildMentionedCharactersContext(char, gameData, history = null) {
+    if (!history || history.length === 0) return null;
+    let context = "";
+    const dynamicMemories = gameData.loadDynamicMemoriesFromHistory(history, char);
+    if (dynamicMemories.length > 0) {
+      context += `${char.shortName} 还记得与对话中提到的人物的近期交谈：
 
 `;
-        
-        for (const summary of dynamicMemories) {
-          const timeAgo = this.getRelativeTime(summary.totalDays, gameData.totalDays);
-          const conversationWith = summary.conversationWith || summary.characterName || '某人';
-          
-          if (!timeAgo) {
-            context += `${summary.date}（与 ${conversationWith}）：${summary.content}
+      for (const summary of dynamicMemories) {
+        const timeAgo = this.getRelativeTime(summary.totalDays, gameData.totalDays);
+        const conversationWith = summary.conversationWith || summary.characterName || "某人";
+        if (!timeAgo) {
+          context += `${summary.date}（与 ${conversationWith}）：${summary.content}
 `;
-          } else {
-            context += `${summary.date}（${timeAgo}，与 ${conversationWith}）：${summary.content}
+        } else {
+          context += `${summary.date}（${timeAgo}，与 ${conversationWith}）：${summary.content}
 `;
-          }
         }
       }
-      
-      // Part 3: Add detailed information about mentioned characters
-      // This allows AI to accurately describe their age, traits, relationships, etc.
-      const mentionedCharsInfo = gameData.getMentionedCharactersInfo();
-      if (mentionedCharsInfo) {
-        context += mentionedCharsInfo;
-      }
     }
-    
-    return context;
+    const mentionedCharsInfo = gameData.getMentionedCharactersInfo(char);
+    if (mentionedCharsInfo) context += mentionedCharsInfo;
+    return context.trim() ? context : null;
   }
   /**
    * Build a final, comprehensive summary using all roleplay messages.
    */
   static buildFinalSummary(gameData, history, currentSummary, lastSummarizedMessageIndex) {
     const characters = Array.from(gameData.characters.values()).map((c) => c.shortName).join("、");
+    const summarySettings = settingsRepository.getSummaryPromptSettings();
+    const stableInstructions = {
+      role: "system",
+      content: `Stable final-summary instructions:\n${summarySettings.finalPrompt}`
+    };
     const baseSystem = {
       role: "system",
-      content: `你正在总结这些角色之间的中世纪角色扮演对话：${characters}。`
+      content: `Conversation participants: ${characters}. This is a medieval roleplay conversation.`
     };
     const buildConversationText = (msgs, title) => ({
       role: "system",
       content: `${title}
 ` + msgs.map((m) => `${m.name}：${m.content}`).join("\n")
     });
-    const summarySettings = settingsRepository.getSummaryPromptSettings();
     const userPrompt = {
       role: "user",
-      content: summarySettings.finalPrompt
+      content: "Generate the final conversation summary now."
     };
     if (lastSummarizedMessageIndex == null) {
       return [
+        stableInstructions,
         baseSystem,
         buildConversationText(history, "完整对话："),
         userPrompt
@@ -3703,6 +4059,7 @@ ${char.shortName} 还记得与对话中提到的人物的近期交谈：
     }
     const newMessages = history.slice(lastSummarizedMessageIndex);
     return [
+      stableInstructions,
       baseSystem,
       { role: "system", content: "此对话的先前摘要：\n" + currentSummary },
       buildConversationText(newMessages, "最近的对话："),
@@ -3798,7 +4155,7 @@ ${char.shortName} 还记得与对话中提到的人物的近期交谈：
         break;
       }
       case "past_summaries": {
-        const pastSummaries = this.buildPastSummariesContext(character, gameData, history);
+        const pastSummaries = this.buildPastSummariesContext(character, gameData);
         if (pastSummaries) {
           const content = block.template ? renderTemplate(block.template, { ...baseContext, pastSummaries }) : pastSummaries;
           messages.push({ role: block.role || "system", content });
@@ -3862,13 +4219,35 @@ ${char.shortName} 还记得与对话中提到的人物的近期交谈：
       name: m.name,
       content: m.content
     })).filter((m) => !!m.content);
+    const mentionedCharactersContext = this.buildMentionedCharactersContext(char, gameData, workingHistory);
+    const mentionedContextBlock = {
+      id: "mentioned-character-context",
+      type: "mentioned_context",
+      label: "Mentioned Character Context",
+      enabled: true,
+      role: "system"
+    };
+    let mentionedContextInserted = false;
+    const insertMentionedContext = () => {
+      if (!mentionedContextInserted && mentionedCharactersContext) {
+        llmMessages.push({ role: "system", content: mentionedCharactersContext });
+        blocksWithTokens.push({
+          block: mentionedContextBlock,
+          content: mentionedCharactersContext,
+          tokens: TokenCounter.estimateTokens(mentionedCharactersContext)
+        });
+      }
+      mentionedContextInserted = true;
+    };
     for (const block of blocks) {
       if (!block.enabled) continue;
+      if (block.type === "history" || block.type === "instruction") insertMentionedContext();
       const result = this.applyBlockWithTokenCount(block, llmMessages, workingHistory, context, promptSettings);
       if (result) {
         blocksWithTokens.push(result);
       }
     }
+    insertMentionedContext();
     if (promptSettings.suffix?.enabled && promptSettings.suffix.template) {
       const suffixBlock = {
         id: "suffix",
@@ -3971,7 +4350,7 @@ ${char.shortName} 还记得与对话中提到的人物的近期交谈：
         break;
       }
       case "past_summaries": {
-        const pastSummaries = this.buildPastSummariesContext(character, gameData, history);
+        const pastSummaries = this.buildPastSummariesContext(character, gameData);
         if (pastSummaries) {
           const content = block.template ? renderTemplate(block.template, { ...baseContext, pastSummaries }) : pastSummaries;
           if (content === null) {
@@ -4908,24 +5287,53 @@ ${effectBody}
 }
 class ActionPromptBuilder {
   static buildActionCacheAnchor() {
-    return `VOTC_ACTION_CACHE_ANCHOR_v1
+    return `VOTC_ACTION_CACHE_ANCHOR_v2
 You are a CK3 game-state action selector. Return only valid JSON that matches the supplied schema. Use only listed actions, action IDs, targets and arguments. Do not infer an action from dialogue alone: choose an action only when the recent messages explicitly describe that state change as having happened. If no listed state change happened, return an empty actions array. Do not output prose, explanations, or code fences.`;
   }
   static buildActionMessages(conv, npc, available, historyWindow = conv.gameData.characters.size) {
     const messages = [];
     messages.push({ role: "system", content: this.buildActionCacheAnchor() });
-    messages.push({
-      role: "system",
-      content: `Dynamic action context: current NPC is "${npc.fullName}". The player is "${conv.gameData.playerName}". Some listed actions expose isPlayerSource; set it true only when recent dialogue explicitly makes the player the source of that completed action. For payments, record playerPaysGoldTo when the player paid, and paysGoldTo when the NPC paid. For imprisonment, target is the jailor; use prisonType dungeon unless house arrest is explicitly stated.`
-    });
+    const stableRulesBlock = `Stable action selection rules:
+- Treat example character IDs and values as formatting examples only; never copy them unless they are valid in the current roster and action definition.
+- Some listed actions expose isPlayerSource. Set it true only when recent dialogue explicitly makes the player the source of that completed action.
+- For payments, use playerPaysGoldTo when the player paid, and paysGoldTo when the NPC paid.
+- For imprisonment, target is the jailor. Use prisonType dungeon unless house arrest is explicitly stated.
+- A proposal, plan, threat, question, wish, or hypothetical statement is not a completed action.`;
+    const fewShot = `Examples of correct JSON output:
+
+Example 1 — Normal NPC reaction:
+{
+  "actions": [
+    {
+      "actionId": "changeOpinionOf",
+      "targetCharacterId": 47903,
+      "args": { "value": -2 }
+    },
+    {
+      "actionId": "setEmotion",
+      "targetCharacterId": 55376,
+      "args": { "emotion": "anger" }
+    }
+  ]
+}
+
+Example 2 — Player just paid gold and NPC accepted it:
+{
+  "actions": [
+    {
+      "actionId": "playerPaysGoldTo",
+      "targetCharacterId": 55376,
+      "args": { "amount": 200 }
+    }
+  ]
+}
+
+Follow this exact structure.`;
     const history = conv.getHistory();
     const recent = history.slice(Math.max(0, history.length - historyWindow));
     const historyLines = recent.map((m) => `${m.name ?? m.role}: ${m.content}`).join("\n");
-    messages.push({
-      role: "system",
-      content: `Recent messages:
-${historyLines}`
-    });
+    const recentMessagesBlock = `Recent messages:
+${historyLines}`;
     const actionHistoryLines = [];
     const allMessages = conv.messages;
     if (allMessages) {
@@ -4946,13 +5354,8 @@ ${historyLines}`
         }
       }
     }
-    if (actionHistoryLines.length > 0) {
-      messages.push({
-        role: "system",
-        content: `Recent actions (last ${actionHistoryLines.length}):
-${actionHistoryLines.join("\n")}`
-      });
-    }
+    const recentActionsBlock = actionHistoryLines.length > 0 ? `Recent actions (last ${actionHistoryLines.length}):
+${actionHistoryLines.join("\n")}` : null;
     const characterRosterLines = [];
     const idsInOrder = Array.from(conv.gameData.characters.keys());
     idsInOrder.forEach((id, index) => {
@@ -4960,13 +5363,10 @@ ${actionHistoryLines.join("\n")}`
       const playerTag = c.id === conv.gameData.playerID ? " (PLAYER)" : "";
       characterRosterLines.push(`${index}: ${c.fullName} (id=${c.id})${playerTag}`);
     });
-    messages.push({
-      role: "system",
-      content: `Characters in this conversation (order matches CK3 global list):
+    const characterRosterBlock = `Characters in this conversation (order matches CK3 global list):
 ${characterRosterLines.join("\n")}
 
-You are now selecting actions for the current turn.`
-    });
+You are now selecting actions for the current turn.`;
     const actionLines = [];
     for (const action of available) {
       const argDescs = action.args.length ? action.args.map((a) => {
@@ -5004,38 +5404,7 @@ ${argDescs}
 ${actionLines.join("\n\n")}
 
 Return JSON only. No extra text.`;
-    messages.push({ role: "system", content: actionsBlock });
-    const fewShot = `Examples of correct JSON output:
-
-Example 1 — Normal NPC reaction:
-{
-  "actions": [
-    {
-      "actionId": "changeOpinionOf",
-      "targetCharacterId": 47903,
-      "args": { "value": -2 }
-    },
-    {
-      "actionId": "setEmotion",
-      "targetCharacterId": 55376,
-      "args": { "emotion": "anger" }
-    }
-  ]
-}
-
-Example 2 — Player just paid gold and NPC accepted it:
-{
-  "actions": [
-    {
-      "actionId": "playerPaysGoldTo",
-      "targetCharacterId": 55376,
-      "args": { "amount": 200 }
-    }
-  ]
-}
-
-Follow this exact structure.`;
-    messages.push({ role: "system", content: fewShot });
+    const dynamicActionBlock = `Dynamic action source: current NPC is "${npc.fullName}" (id=${npc.id}). The player is "${conv.gameData.playerName}" (id=${conv.gameData.playerID}). Interpret the recent messages from this current source context.`;
     const outroBlock = `Given everything above, select the actions (if any) that should be executed right now.
 
 You may output:
@@ -5043,17 +5412,78 @@ You may output:
 • OR player-specific actions (e.g. playerPaysGoldTo) when the conversation shows the player performed them
 
 Respect all argument types, constraints, and valid targets.`;
+    // Keep the prompt prefix ordered from most reusable to most volatile.
+    // DeepSeek inserts the matching structured schema beside Available Actions,
+    // while current-source and recent-message context intentionally stay last.
+    messages.push({ role: "system", content: stableRulesBlock });
+    messages.push({ role: "system", content: fewShot });
+    messages.push({ role: "system", content: characterRosterBlock });
+    messages.push({ role: "system", content: actionsBlock });
+    messages.push({ role: "system", content: dynamicActionBlock });
+    if (recentActionsBlock) {
+      messages.push({ role: "system", content: recentActionsBlock });
+    }
+    messages.push({ role: "system", content: recentMessagesBlock });
     messages.push({ role: "user", content: outroBlock });
     return messages;
   }
-  static getActionPromptBlocks(messages) {
-    const labels = ["Stable Action Cache Anchor", "Dynamic Action Context", "Recent Messages", "Recent Actions", "Character Roster", "Available Actions"];
-    return messages.map((message, index) => ({
-      id: `action-${index}`,
-      label: labels[index] || `Action Context ${index + 1}`,
-      type: index === 0 ? "action_cache_anchor" : "action_context",
-      tokens: TokenCounter.estimateMessageTokens(message)
-    }));
+  static getActionPromptBlocks(messages, jsonSchemaObject = null) {
+    const blocks = messages.map((message, index) => {
+      const content = typeof message.content === "string" ? message.content : "";
+      let label = `Action Context ${index + 1}`;
+      let type = "action_context";
+      if (content.startsWith("VOTC_ACTION_CACHE_ANCHOR_")) {
+        label = "Stable Action Cache Anchor";
+        type = "action_cache_anchor";
+      } else if (content.startsWith("Stable action selection rules:")) {
+        label = "Stable Action Rules";
+        type = "action_stable";
+      } else if (content.startsWith("Examples of correct JSON output:")) {
+        label = "Stable JSON Examples";
+        type = "action_stable";
+      } else if (content.startsWith("Characters in this conversation")) {
+        label = "Character Roster";
+        type = "action_conversation_static";
+      } else if (content.startsWith("Available Actions:")) {
+        label = "Available Actions";
+        type = "action_available";
+      } else if (content.startsWith("Dynamic action source:")) {
+        label = "Dynamic Action Source";
+        type = "action_dynamic";
+      } else if (content.startsWith("Recent actions")) {
+        label = "Recent Actions";
+        type = "action_dynamic";
+      } else if (content.startsWith("Recent messages:")) {
+        label = "Recent Messages";
+        type = "action_dynamic";
+      } else if (content.startsWith("Given everything above")) {
+        label = "Action Selection Request";
+        type = "action_dynamic";
+      }
+      return {
+        id: `action-${index}`,
+        label,
+        type,
+        position: index,
+        tokens: TokenCounter.estimateMessageTokens(message),
+        fingerprint: createPromptFingerprint(content)
+      };
+    });
+    if (jsonSchemaObject) {
+      const availableIndex = blocks.findIndex((block) => block.label === "Available Actions");
+      const schemaBlock = {
+        id: "action-schema",
+        label: "Structured Action Schema (estimated)",
+        type: "action_available",
+        tokens: TokenCounter.estimateTokens(JSON.stringify(jsonSchemaObject)),
+        fingerprint: createPromptFingerprint(JSON.stringify(jsonSchemaObject))
+      };
+      blocks.splice(availableIndex >= 0 ? availableIndex + 1 : blocks.length, 0, schemaBlock);
+    }
+    blocks.forEach((block, index) => {
+      block.position = index;
+    });
+    return blocks;
   }
 }
 function fixTypingErrors(obj) {
@@ -5423,7 +5853,7 @@ class ActionEngine {
         {
           character: npc.shortName,
           actionTrigger: gate.reason,
-          blocks: ActionPromptBuilder.getActionPromptBlocks(messages)
+          blocks: ActionPromptBuilder.getActionPromptBlocks(messages, jsonSchema)
         }
       );
       if (signal?.aborted) {
@@ -5602,6 +6032,7 @@ class Conversation {
     this.lastSummarizedMessageIndex = 0;
     this.CONTEXT_LIMIT_PERCENTAGE = 0.75;
     this.MESSAGES_TO_SUMMARIZE_PERCENTAGE = 0.4;
+    this.MAX_CONVERSATION_PARTICIPANTS = 5;
     this.npcQueue = [];
     this.customQueue = null;
     this.isPaused = false;
@@ -5723,7 +6154,8 @@ ${result.content}`;
   }
   // Get list of all NPCs (characters except the player)
   getNpcList() {
-    return [...this.gameData.characters.values()].filter((c) => c.id !== this.gameData.playerID);
+    const maxNpcSpeakers = Math.max(0, this.MAX_CONVERSATION_PARTICIPANTS - 1);
+    return [...this.gameData.characters.values()].filter((c) => c.id !== this.gameData.playerID).slice(0, maxNpcSpeakers);
   }
   // Handle response for a single NPC
   async respondAs(npc) {
@@ -5767,7 +6199,7 @@ ${result.content}`;
         {
           requestType: "chat",
           character: npc.shortName,
-          blocks: promptBuild.blocks.map(({ block, tokens }) => ({ id: block.id, label: block.label, type: block.type, tokens }))
+          blocks: promptBuild.blocks.map(({ block, content, tokens }, index) => ({ id: block.id, label: block.label, type: block.type, position: index, tokens, fingerprint: createPromptFingerprint(content) }))
         }
       );
       if (settingsRepository.getGlobalStreamSetting() && typeof result === "object" && typeof result[Symbol.asyncIterator] === "function") {
@@ -5968,7 +6400,8 @@ ${result.content}`;
   // Fill NPC queue with shuffled characters or custom queue
   fillNpcQueue() {
     if (this.customQueue && this.customQueue.length > 0) {
-      this.npcQueue = [...this.customQueue];
+      const maxNpcSpeakers = Math.max(0, this.MAX_CONVERSATION_PARTICIPANTS - 1);
+      this.npcQueue = [...this.customQueue].slice(0, maxNpcSpeakers);
       console.log("Using custom queue:", this.npcQueue.map((c) => c.shortName));
       if (!this.persistCustomQueue) {
         this.customQueue = null;
@@ -6152,6 +6585,19 @@ ${result.content}`;
       this.emitUpdate();
     }
   }
+  getSummaryParticipantIds() {
+    const participantIds = [this.gameData.playerID];
+    const seen = /* @__PURE__ */ new Set(participantIds);
+    for (const message of this.getHistory()) {
+      if (message.role !== "assistant" || !message.name) continue;
+      const character = [...this.gameData.characters.values()].find((candidate) => candidate.fullName === message.name || candidate.shortName === message.name || candidate.firstName === message.name);
+      if (!character || seen.has(character.id)) continue;
+      seen.add(character.id);
+      participantIds.push(character.id);
+      if (participantIds.length >= this.MAX_CONVERSATION_PARTICIPANTS) break;
+    }
+    return participantIds;
+  }
   // Create final comprehensive summary and save to characters
   async finalizeConversation() {
     runFileManager.write(`
@@ -6187,7 +6633,8 @@ ${result.content}`;
     console.log("Creating final conversation summary...");
     const finalSummary = await this.createFinalSummary();
     if (finalSummary) {
-      this.gameData.saveCharactersSummaries(finalSummary);
+      const participantIds = this.getSummaryParticipantIds();
+      this.gameData.saveCharactersSummaries(finalSummary, participantIds);
       console.log("Final conversation summary saved to all participants");
     }
     this.end();
@@ -9242,7 +9689,20 @@ class DeepseekProvider extends BaseProvider {
       const schemaDescription = this.buildSchemaDescription(schemaName, schemaObj);
       const messages = [...request.messages];
       let schemaInjected = false;
-      for (let i = messages.length - 1; i >= 0; i--) {
+      // The action list and its schema change together. Keeping the schema beside
+      // Available Actions lets DeepSeek cache both before volatile recent dialogue.
+      // Other structured requests retain the original last-system-message behavior.
+      if (schemaName === "votc_actions") {
+        const actionListIndex = messages.findIndex((message) => message.role === "system" && typeof message.content === "string" && message.content.startsWith("Available Actions:"));
+        if (actionListIndex >= 0) {
+          messages[actionListIndex] = {
+            ...messages[actionListIndex],
+            content: messages[actionListIndex].content + "\n\n" + schemaDescription
+          };
+          schemaInjected = true;
+        }
+      }
+      for (let i = messages.length - 1; i >= 0 && !schemaInjected; i--) {
         if (messages[i].role === "system") {
           messages[i] = {
             ...messages[i],
@@ -10242,15 +10702,19 @@ class LetterManager {
     const summaryPrompt = [
       {
         role: "system",
-        content: summarySettings.letterSummaryPrompt
+        content: `Stable letter-summary instructions:\n${summarySettings.letterSummaryPrompt}`
       },
       {
-        role: "user",
+        role: "system",
         content: `${gameData.playerName} letter to ${ai.fullName}:
 "${letter.content}"
 
 Reply from ${ai.fullName}:
 "${reply}"`
+      },
+      {
+        role: "user",
+        content: "Generate the concise letter summary now."
       }
     ];
     try {
