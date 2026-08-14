@@ -92,31 +92,88 @@ const VOTC_PROMPTS_HELPERS_DIR = path.join(VOTC_PROMPTS_DIR, "helpers");
 const DEFAULT_USERDATA_DIR$1 = path.join(electron.app.getAppPath(), "default_userdata", "prompts");
 const DEFAULT_MAIN_TEMPLATE_PATH = "system/default.hbs";
 const DEFAULT_LETTER_TEMPLATE_PATH = "system/letter.hbs";
+const PROMPT_DEFAULTS_MANIFEST_NAME = ".bundled-defaults-manifest.json";
+const PROMPT_DEFAULTS_MANIFEST_PATH = path.join(VOTC_PROMPTS_DIR, PROMPT_DEFAULTS_MANIFEST_NAME);
+const PROMPT_DEFAULTS_MANIFEST_VERSION = 1;
+const LEGACY_BUNDLED_PROMPT_HASHES = {
+  // The same legacy template shipped with CRLF in installed Windows builds and
+  // LF in source checkouts. Both hashes are safe because only exact matches are
+  // migrated; any user edit produces a different hash and is preserved.
+  "system/default.hbs": [
+    "68f942300135fac99e11d7ddfde52e90a7372fb07f6475dd97709ec44226b2d2",
+    "da530c8c3d08482fa1ee683086faaaa4753e956e6b5bbf0f01e599edc8639f9c"
+  ]
+};
+const DEBUG_VERBOSE_LLM = /^(?:1|true|yes|on)$/i.test(process.env.DEBUG_VERBOSE_LLM || "");
+const hashPromptAsset = (content) => crypto.createHash("sha256").update(content).digest("hex");
+const logVerboseLLM = (...args) => {
+  if (DEBUG_VERBOSE_LLM) console.log(...args);
+};
 class PromptConfigManager {
   ensurePromptDirs() {
     [VOTC_PROMPTS_DIR, VOTC_PROMPTS_SYSTEM_DIR, VOTC_PROMPTS_CHARACTER_DIR, VOTC_PROMPTS_EXAMPLES_DIR, VOTC_PROMPTS_HELPERS_DIR].forEach((dir) => fs$1.mkdirSync(dir, { recursive: true }));
   }
   /**
-   * Copy default prompt assets into user data, always updating existing files.
+   * Seed bundled prompt assets without overwriting user customizations.
+   * Files are copied when missing, or when their current hash still matches the
+   * bundled hash recorded by the previous release. A modified file is treated
+   * as a user override and is preserved.
    */
   seedDefaults() {
     this.ensurePromptDirs();
     if (!fs$1.existsSync(DEFAULT_USERDATA_DIR$1)) {
       return;
     }
-    const copyRecursive = (src, dest) => {
+    let previousManifest = { version: 0, files: {} };
+    try {
+      if (fs$1.existsSync(PROMPT_DEFAULTS_MANIFEST_PATH)) {
+        const parsed = JSON.parse(fs$1.readFileSync(PROMPT_DEFAULTS_MANIFEST_PATH, "utf-8"));
+        if (parsed && typeof parsed === "object" && parsed.files && typeof parsed.files === "object") {
+          previousManifest = parsed;
+        }
+      }
+    } catch (error) {
+      console.warn("[PromptConfig] Could not read bundled-default manifest; preserving existing prompt files:", error);
+    }
+    const nextManifest = {
+      version: PROMPT_DEFAULTS_MANIFEST_VERSION,
+      generatedAt: (/* @__PURE__ */ new Date()).toISOString(),
+      files: {}
+    };
+    const copyRecursive = (src, dest, relativePath = "") => {
       if (!fs$1.existsSync(src)) return;
       const stat = fs$1.statSync(src);
       if (stat.isDirectory()) {
         fs$1.mkdirSync(dest, { recursive: true });
         for (const entry of fs$1.readdirSync(src)) {
-          copyRecursive(path.join(src, entry), path.join(dest, entry));
+          const childRelativePath = relativePath ? `${relativePath}/${entry}` : entry;
+          copyRecursive(path.join(src, entry), path.join(dest, entry), childRelativePath);
         }
       } else {
-        fs$1.copyFileSync(src, dest);
+        const normalizedPath = relativePath.replace(/\\/g, "/");
+        const bundledContent = fs$1.readFileSync(src);
+        const bundledHash = hashPromptAsset(bundledContent);
+        nextManifest.files[normalizedPath] = bundledHash;
+        if (!fs$1.existsSync(dest)) {
+          fs$1.mkdirSync(path.dirname(dest), { recursive: true });
+          fs$1.copyFileSync(src, dest);
+          return;
+        }
+        const installedHash = hashPromptAsset(fs$1.readFileSync(dest));
+        const previousBundledHash = previousManifest.files?.[normalizedPath];
+        const knownLegacyHashes = LEGACY_BUNDLED_PROMPT_HASHES[normalizedPath] || [];
+        const canSafelyMigrate = previousBundledHash ? installedHash === previousBundledHash : knownLegacyHashes.includes(installedHash);
+        if (canSafelyMigrate && installedHash !== bundledHash) {
+          fs$1.copyFileSync(src, dest);
+        }
       }
     };
     copyRecursive(DEFAULT_USERDATA_DIR$1, VOTC_PROMPTS_DIR);
+    try {
+      fs$1.writeFileSync(PROMPT_DEFAULTS_MANIFEST_PATH, JSON.stringify(nextManifest, null, 2), "utf-8");
+    } catch (error) {
+      console.warn("[PromptConfig] Could not write bundled-default manifest:", error);
+    }
   }
   listFiles(category) {
     let base = VOTC_PROMPTS_DIR;
@@ -128,7 +185,7 @@ class PromptConfigManager {
     const walk = (dir) => {
       if (!fs$1.existsSync(dir)) return;
       for (const entry of fs$1.readdirSync(dir)) {
-        if (entry === ".gitkeep") continue;
+        if (entry === ".gitkeep" || entry === PROMPT_DEFAULTS_MANIFEST_NAME) continue;
         const full = path.join(dir, entry);
         const stat = fs$1.statSync(full);
         if (stat.isDirectory()) {
@@ -777,7 +834,29 @@ class SettingsRepository {
   }
   // --- Prompt settings ---
   getPromptSettings() {
-    const stored = this.store.get("promptSettings", this.getDefaultPromptSettings());
+    let stored = this.store.get("promptSettings", this.getDefaultPromptSettings());
+    const storedMainTemplateHash = typeof stored?.mainTemplate === "string" ? hashPromptAsset(stored.mainTemplate) : null;
+    if (storedMainTemplateHash && (LEGACY_BUNDLED_PROMPT_HASHES[DEFAULT_MAIN_TEMPLATE_PATH] || []).includes(storedMainTemplateHash)) {
+      const bundledMainTemplatePath = path.join(DEFAULT_USERDATA_DIR$1, "system", "default.hbs");
+      const installedMainTemplatePath = path.join(VOTC_PROMPTS_DIR, DEFAULT_MAIN_TEMPLATE_PATH);
+      const bundledMainTemplate = fs$1.existsSync(bundledMainTemplatePath) ? fs$1.readFileSync(bundledMainTemplatePath, "utf-8") : promptConfigManager.getDefaultMainTemplateContent();
+      let migratedMainTemplate = bundledMainTemplate;
+      if (fs$1.existsSync(installedMainTemplatePath)) {
+        const installedMainTemplate = fs$1.readFileSync(installedMainTemplatePath, "utf-8");
+        const installedMainTemplateHash = hashPromptAsset(installedMainTemplate);
+        const installedIsLegacyDefault = (LEGACY_BUNDLED_PROMPT_HASHES[DEFAULT_MAIN_TEMPLATE_PATH] || []).includes(installedMainTemplateHash);
+        // Prefer a current installed template or a direct user file override.
+        // Only fall back to bundled content when the installed file is the
+        // unchanged legacy default waiting to be migrated.
+        if (!installedIsLegacyDefault) migratedMainTemplate = installedMainTemplate;
+      }
+      stored = {
+        ...stored,
+        mainTemplate: migratedMainTemplate
+      };
+      this.store.set("promptSettings", stored);
+      console.log("[PromptConfig] Migrated unchanged legacy main template to the segmented cache layout.");
+    }
     return promptConfigManager.normalizeSettings(stored, {
       defaultBlocks: promptConfigManager.getDefaultBlocks(),
       defaultMainTemplatePath: "system/default.hbs",
@@ -1023,7 +1102,8 @@ class SettingsRepository {
   }
   saveSummaryPromptSettings(settings) {
     this.store.set("summaryPromptSettings", settings);
-    console.log("Summary prompt settings saved:", settings);
+    console.log("Summary prompt settings saved.");
+    logVerboseLLM("[Settings][verbose] Summary prompt settings:", settings);
   }
 }
 const settingsRepository = new SettingsRepository();
@@ -1416,9 +1496,13 @@ class LLMManager {
       signal
       // ...params,
     };
-    const providerData = JSON.stringify(activeConfig).replace(/"apiKey":\s*"[^"]*"/g, "HIDDEN");
-    console.log(`[LLMManager] Provider data stringified: ${providerData}`);
-    return await this.trackUsage(provider.chatCompletion(request, activeConfig), { ...metadata, requestType: metadata.requestType || "chat", providerType: activeConfig.providerType, model: activeConfig.defaultModel, estimatedPromptTokens: TokenCounter.calculateTotalTokens(messages) });
+    const estimatedPromptTokens = TokenCounter.calculateTotalTokens(messages);
+    console.log(`[LLMManager] Chat request: provider=${activeConfig.providerType}, model=${activeConfig.defaultModel}, messages=${messages.length}, estimatedPromptTokens=${estimatedPromptTokens}`);
+    if (DEBUG_VERBOSE_LLM) {
+      logVerboseLLM("[LLMManager][verbose] Chat messages:", messages);
+      logVerboseLLM("[LLMManager][verbose] Provider config:", JSON.stringify(activeConfig).replace(/"apiKey":\s*"[^"]*"/g, "HIDDEN"));
+    }
+    return await this.trackUsage(provider.chatCompletion(request, activeConfig), { ...metadata, requestType: metadata.requestType || "chat", providerType: activeConfig.providerType, model: activeConfig.defaultModel, estimatedPromptTokens });
   }
   /**
    * Send a structured JSON request for Actions.
@@ -1449,11 +1533,13 @@ class LLMManager {
         }
       }
     };
-    console.log(`[LLMManager] Sending structured request: ${JSON.stringify(request)}`);
-    const providerData = JSON.stringify(config).replace(/"apiKey":\s*"[^"]*"/g, "HIDDEN");
-    console.log(`[LLMManager] Provider data stringified: ${providerData}`);
-    console.log(`[TOKEN_COUNT] Structured request ${TokenCounter.estimateTokens(JSON.stringify(request))}`);
-    return await this.trackUsage(provider.chatCompletion(request, config), { ...metadata, requestType: "action", providerType: config.providerType, model: config.defaultModel, estimatedPromptTokens: TokenCounter.calculateTotalTokens(messages) });
+    const estimatedPromptTokens = TokenCounter.calculateTotalTokens(messages);
+    console.log(`[LLMManager] Action request: provider=${config.providerType}, model=${config.defaultModel}, messages=${messages.length}, schema=${schemaName}, estimatedPromptTokens=${estimatedPromptTokens}`);
+    if (DEBUG_VERBOSE_LLM) {
+      logVerboseLLM("[LLMManager][verbose] Structured action request:", JSON.stringify(request));
+      logVerboseLLM("[LLMManager][verbose] Provider config:", JSON.stringify(config).replace(/"apiKey":\s*"[^"]*"/g, "HIDDEN"));
+    }
+    return await this.trackUsage(provider.chatCompletion(request, config), { ...metadata, requestType: "action", providerType: config.providerType, model: config.defaultModel, estimatedPromptTokens });
   }
   /**
    * Send a request for Summaries (rolling or final).
@@ -1478,9 +1564,13 @@ class LLMManager {
       ...config.defaultParameters,
       signal
     };
-    const providerData = JSON.stringify(config).replace(/"apiKey":\s*"[^"]*"/g, "HIDDEN");
-    console.log(`[LLMManager] Provider data stringified: ${providerData}`);
-    return await this.trackUsage(provider.chatCompletion(request, config), { ...metadata, blocks: summaryBlocks, requestType: metadata.requestType || "summary", providerType: config.providerType, model: config.defaultModel, estimatedPromptTokens: TokenCounter.calculateTotalTokens(preparedMessages) });
+    const estimatedPromptTokens = TokenCounter.calculateTotalTokens(preparedMessages);
+    console.log(`[LLMManager] Summary request: provider=${config.providerType}, model=${config.defaultModel}, messages=${preparedMessages.length}, estimatedPromptTokens=${estimatedPromptTokens}`);
+    if (DEBUG_VERBOSE_LLM) {
+      logVerboseLLM("[LLMManager][verbose] Summary messages:", preparedMessages);
+      logVerboseLLM("[LLMManager][verbose] Provider config:", JSON.stringify(config).replace(/"apiKey":\s*"[^"]*"/g, "HIDDEN"));
+    }
+    return await this.trackUsage(provider.chatCompletion(request, config), { ...metadata, blocks: summaryBlocks, requestType: metadata.requestType || "summary", providerType: config.providerType, model: config.defaultModel, estimatedPromptTokens });
   }
   async trackUsage(result, metadata) {
     const response = await result;
@@ -3985,14 +4075,9 @@ ${existingSummary}`
     
     const recentSummaries = char.conversationSummaries.slice(0, 3);
     for (const summary of recentSummaries) {
-      const timeAgo = this.getRelativeTime(summary.totalDays, gameData.totalDays);
-      if (!timeAgo) {
-        context += `${summary.date}：${summary.content}
+      const absoluteDate = summary.date || "日期不详";
+      context += `${absoluteDate}：${summary.content}
 `;
-      } else {
-        context += `${summary.date}（${timeAgo}）：${summary.content}
-`;
-      }
     }
     
     return context;
@@ -4101,6 +4186,44 @@ ${existingSummary}`
     const tpl = template || "相关记忆：\n{{#each memories}}- {{this.creationDate}}：{{this.desc}}\n{{/each}}";
     return this.templateEngine.renderTemplateString(tpl, { ...context, memories: selected });
   }
+  /**
+   * Split the bundled main template into cache-aware system messages. Custom
+   * templates without VOTC_SEGMENT markers remain a single backwards-compatible
+   * main block. Markers are Handlebars comments, so they are harmless in the
+   * prompt editor and in older builds.
+   */
+  static splitMainTemplateSegments(template) {
+    const markerPattern = /\{\{!\s*VOTC_SEGMENT:([a-z0-9_-]+)\s*\}\}/gi;
+    const labels = {
+      stable_global: "Stable Global Rules",
+      stable_history_rp: "Stable History and Roleplay Rules",
+      world_context: "World and Historical Context",
+      character_base: "Character Base Profile",
+      character_state: "Character State, Relations and Scene"
+    };
+    const segments = [];
+    let currentId = "main";
+    let contentStart = 0;
+    let markerFound = false;
+    let match;
+    while ((match = markerPattern.exec(template)) !== null) {
+      markerFound = true;
+      const content = template.slice(contentStart, match.index);
+      if (content.trim()) {
+        segments.push({ id: currentId, label: labels[currentId] || "Main Prompt Preamble", template: content });
+      }
+      currentId = match[1].toLowerCase();
+      contentStart = markerPattern.lastIndex;
+    }
+    const remaining = template.slice(contentStart);
+    if (remaining.trim()) {
+      segments.push({ id: currentId, label: labels[currentId] || currentId, template: remaining });
+    }
+    if (!markerFound) {
+      return [{ id: "main", label: "Main System Prompt", template }];
+    }
+    return segments;
+  }
   static applyBlock(block, messages, history, baseContext, promptSettings) {
     const { character, gameData, summary } = baseContext;
     const renderTemplate = (template, context) => {
@@ -4115,9 +4238,12 @@ ${existingSummary}`
     switch (block.type) {
       case "main": {
         const template = promptSettings.mainTemplate || promptConfigManager.getDefaultMainTemplateContent();
-        const content = renderTemplate(template, baseContext);
-        if (content?.trim()) {
-          messages.push({ role: block.role || "system", content });
+        const segments = this.splitMainTemplateSegments(template);
+        for (const segment of segments) {
+          const content = renderTemplate(segment.template, baseContext);
+          if (content?.trim()) {
+            messages.push({ role: block.role || "system", content });
+          }
         }
         break;
       }
@@ -4243,7 +4369,9 @@ ${existingSummary}`
       if (!block.enabled) continue;
       if (block.type === "history" || block.type === "instruction") insertMentionedContext();
       const result = this.applyBlockWithTokenCount(block, llmMessages, workingHistory, context, promptSettings);
-      if (result) {
+      if (Array.isArray(result)) {
+        blocksWithTokens.push(...result);
+      } else if (result) {
         blocksWithTokens.push(result);
       }
     }
@@ -4293,13 +4421,30 @@ ${existingSummary}`
     switch (block.type) {
       case "main": {
         const template = promptSettings.mainTemplate || promptConfigManager.getDefaultMainTemplateContent();
-        const content = renderTemplate(template, baseContext);
-        if (content === null) {
+        const segments = this.splitMainTemplateSegments(template);
+        const renderedSegments = segments.map((segment) => ({ ...segment, content: renderTemplate(segment.template, baseContext) }));
+        if (renderedSegments.some((segment) => segment.content === null)) {
           return { block, content: "", tokens: 0, error: `Template error in "${block.label || "Main Prompt"}" block. Check Handlebars syntax.` };
         }
-        if (content?.trim()) {
-          messages.push({ role: block.role || "system", content });
+        const nonEmptySegments = renderedSegments.filter((segment) => segment.content?.trim());
+        for (const segment of nonEmptySegments) {
+          messages.push({ role: block.role || "system", content: segment.content });
+        }
+        if (nonEmptySegments.length === 1 && nonEmptySegments[0].id === "main") {
+          const content = nonEmptySegments[0].content;
           return { block, content, tokens: TokenCounter.estimateTokens(content) };
+        }
+        if (nonEmptySegments.length > 0) {
+          return nonEmptySegments.map((segment) => ({
+            block: {
+              ...block,
+              id: `${block.id || "main"}-${segment.id}`,
+              type: "main_segment",
+              label: segment.label
+            },
+            content: segment.content,
+            tokens: TokenCounter.estimateTokens(segment.content)
+          }));
         }
         break;
       }
@@ -5581,7 +5726,7 @@ function healJsonResponseWithLogging(content, context = "JSON") {
     return healed;
   }
   console.error(`[${context}] Failed to heal JSON response`);
-  console.error(`[${context}] Original content:`, content?.substring(0, 500));
+  logVerboseLLM(`[${context}][verbose] Original content:`, content?.substring(0, 500));
   return null;
 }
 function resolveI18nString(value, lang) {
@@ -5709,11 +5854,25 @@ class ActionEngine {
    */
   static getActionTrigger(text) {
     if (!text || typeof text !== "string") return null;
-    // Do not spend an action-model request on an unfulfilled plan. A completed
-    // action marker overrides this guard (for example: "今晚已经行房").
-    const describesOnlyFutureAction = /(?:\u5c06(?:\u8981|\u4f1a)|\u51c6\u5907|\u6253\u7b97|\u8ba1\u5212|\u60f3\u8981|\u6b32\u8981|\u7ea6\u597d|\u660e\u65e5|\u5f85\u4f1a|\u7a0d\u540e|\b(?:will|going to|plan to|wants? to)\b)/i.test(text);
-    const hasCompletionMarker = /(?:\u5df2\u7ecf|\u5df2\u7136|\u521a\u521a|\u65b9\u624d|\u4e8b\u6bd5|\u5b8c\u4e8b|\u4e4b\u540e|\u4e4b\u5f8c|\b(?:already|just|after)\b)/i.test(text);
-    if (describesOnlyFutureAction && !hasCompletionMarker) return null;
+    // Judge future tense only inside the clause that contains the candidate
+    // action. This prevents a later plan ("明日再谈") from cancelling an
+    // already-completed action in an earlier clause ("我给了他100金币").
+    const futureMarker = /(?:\u5c06(?:\u8981|\u4f1a)|\u51c6\u5907|\u6253\u7b97|\u8ba1\u5212|\u60f3\u8981|\u6b32\u8981|\u7ea6\u597d|\u660e\u65e5|\u660e\u5929|\u5f85\u4f1a|\u5f85\u4f1a\u513f|\u7a0d\u540e|\u4e4b\u540e\u518d|\u4e4b\u5f8c\u518d|\b(?:will|going to|plan to|wants? to|tomorrow|later)\b)/i;
+    const completionMarker = /(?:\u5df2\u7ecf|\u5df2\u7136|\u521a\u521a|\u65b9\u624d|\u4e8b\u6bd5|\u5b8c\u4e8b|\b(?:already|just|completed?|finished)\b)/i;
+    const futureLeadIn = /(?:\u51c6\u5907|\u6253\u7b97|\u8ba1\u5212|\u60f3\u8981|\u6b32\u8981|\u5c06\u8981|\u5c06\u4f1a|\u660e\u65e5|\u660e\u5929|\u5f85\u4f1a|\u5f85\u4f1a\u513f|\u7a0d\u540e|\b(?:will|going to|plan to|tomorrow|later)\b)\s*$/i;
+    const clauses = text.split(/[\u3002\uff01\uff1f\uff1b\uff0c.!?;,\n]+/).map((clause) => clause.trim()).filter(Boolean);
+    if (clauses.length === 0) clauses.push(text);
+    const describesCompletedOrCurrentAction = (pattern) => clauses.some((clause, clauseIndex) => {
+      const actionMatch = pattern.exec(clause);
+      if (!actionMatch) return false;
+      const futureMatch = futureMarker.exec(clause);
+      const inheritsFuture = clauseIndex > 0 && futureLeadIn.test(clauses[clauseIndex - 1]);
+      if ((!futureMatch && !inheritsFuture) || completionMarker.test(clause)) return true;
+      if (inheritsFuture && !futureMatch) return false;
+      // A future marker appearing after the matched action normally modifies a
+      // later thought, even if the writer omitted punctuation.
+      return futureMatch.index > actionMatch.index + actionMatch[0].length;
+    });
     const rules = [
       { reason: "gold", pattern: /(?:支付|付给|给了|交给|赏赐|赏了|赠与|赠送|转交|收下.{0,12}(?:钱|金|银|礼)|(?:pay|paid|give|gave|gift|gifted|transfer|transferred).{0,20}(?:gold|money|coin))/i },
       { reason: "imprisonment", pattern: /(?:囚禁|关进|投入(?:大牢|地牢)|收监|逮捕|拘押|软禁|imprison(?:ed)?|arrest(?:ed)?|jailed?)/i },
@@ -5731,10 +5890,10 @@ class ActionEngine {
     // such as "already". Require a concrete, completed sexual-action phrase so
     // ordinary sentences (for example "she has already returned") never match.
     const completedSexualAction = /(?:\u4e91\u96e8|\u6b22\u597d|\u9c7c\u6c34\u4e4b\u6b22|\u4ea4\u5408|\u884c\u623f|\u623f\u4e8b|\u540c\u623f|\u5706\u623f|\u505a\u7231|\u5a9a\u5408|\u82df\u5408|\u71d5\u597d|\u6210\u5176\u597d\u4e8b|\u5171\u5ea6\u6625\u5bb5|\u7f20\u7ef5|\u9ad8\u6f6e|\u5c04\u7cbe|\u6cc4\u8eab|\u4e8b\u6bd5\u540e.{0,20}(?:\u76f8\u62e5|\u8d64\u88f8|\u5e8a\u69bb)|\u5b8c\u4e8b\u540e.{0,20}(?:\u76f8\u62e5|\u8d64\u88f8|\u5e8a\u69bb)|\u53d1\u751f(?:\u4e86)?(?:\u6027\u5173\u7cfb|\u8089\u4f53\u5173\u7cfb)|had (?:sexual )?intercourse|had sex|made love|slept with|consummated|finished (?:having )?sex|after (?:sex|intercourse|making love)|climaxed|orgasm(?:ed)?)/i;
-    if (completedSexualAction.test(text)) return "sexual_intercourse_completed";
+    if (describesCompletedOrCurrentAction(completedSexualAction)) return "sexual_intercourse_completed";
     for (const rule of rules) {
       if (rule.reason === "sexual_intercourse_completed") continue;
-      if (rule.pattern.test(text)) return rule.reason;
+      if (describesCompletedOrCurrentAction(rule.pattern)) return rule.reason;
     }
     return null;
   }
@@ -5862,7 +6021,8 @@ class ActionEngine {
       }
       const result = await output;
       const content = result && typeof result === "object" ? result.content : null;
-      console.log("[DEBUG] ActionEngine: Received LLM response", content);
+      console.log(`[ActionEngine] Received structured response (${typeof content === "string" ? content.length : 0} characters)`);
+      logVerboseLLM("[ActionEngine][verbose] Structured response:", content);
       if (!content || typeof content !== "string") {
         return { autoApproved: [], needsApproval: [] };
       }
@@ -6137,7 +6297,8 @@ ${result.content}`;
         } else {
           this.currentSummary = result.content;
         }
-        console.log("Updated rolling summary:", this.currentSummary.substring(0, 100) + "...");
+        console.log(`Updated rolling summary (${this.currentSummary.length} characters)`);
+        logVerboseLLM("[Summary][verbose] Updated rolling summary:", this.currentSummary);
       }
     } catch (error) {
       console.error("Failed to create rolling summary:", error);
@@ -6188,7 +6349,7 @@ ${result.content}`;
         this.currentSummary
       );
       const llmMessages = promptBuild.messages;
-      console.log(`Message from ${npc.fullName}:`, llmMessages);
+      logVerboseLLM(`[Conversation][verbose] Prompt for ${npc.fullName}:`, llmMessages);
       console.log(`[TOKEN_COUNT] Message from ${npc.fullName}:`, this.estimateTokenCount(llmMessages));
       const activeConfig = settingsRepository.getActiveProviderConfig();
       const isOpenRouter = activeConfig?.providerType === "openrouter";
@@ -6435,7 +6596,8 @@ ${result.content}`;
   }
   // Send a user message and trigger responses from all NPCs
   async sendMessage(userMessage) {
-    console.log("Conversation.sendMessage called with:", userMessage);
+    console.log(`Conversation.sendMessage called (characters=${typeof userMessage === "string" ? userMessage.length : 0})`);
+    logVerboseLLM("[Conversation][verbose] User message:", userMessage);
     console.log("Conversation active:", this.isActive);
     console.log("Characters in conversation:", this.gameData.characters.size);
     const user = this.gameData.characters.get(this.gameData.playerID);
@@ -6456,6 +6618,7 @@ ${result.content}`;
     this.messages.push(userMsg);
     // Only the first NPC of this turn may evaluate a player-narrated action;
     // later NPCs evaluate only their own freshly generated line.
+    this.actionGateProcessedTriggers.clear();
     this.actionGateProcessedTurnReasons.clear();
     this.pendingPlayerActionMessage = ActionEngine.getActionTrigger(userMsg.content) ? userMsg : null;
     this.emitUpdate();
@@ -6875,7 +7038,8 @@ ${result.content}`;
       const result = await llmManager.sendSummaryRequest(summaryPrompt, void 0, { requestType: "leaving_summary", character: character.shortName });
       if (result && typeof result === "object" && "content" in result) {
         const summary = result.content;
-        console.log(`Generated leaving summary for ${character.fullName}: ${summary.substring(0, 100)}...`);
+        console.log(`Generated leaving summary for ${character.fullName} (${summary.length} characters)`);
+        logVerboseLLM(`[Summary][verbose] Leaving summary for ${character.fullName}:`, summary);
         return summary;
       }
       console.error("Invalid response format for character leaving summary");
@@ -6974,7 +7138,8 @@ class ConversationManager {
    * Send a message in the current conversation
    */
   async sendMessage(userMessage, streaming = false) {
-    console.log("ConversationManager.sendMessage called with:", userMessage, "streaming:", streaming);
+    console.log(`ConversationManager.sendMessage called (characters=${typeof userMessage === "string" ? userMessage.length : 0}, streaming=${streaming})`);
+    logVerboseLLM("[ConversationManager][verbose] User message:", userMessage);
     console.log("Current conversation exists:", !!this.currentConversation);
     console.log("Current conversation active:", this.currentConversation?.isActive);
     if (!this.currentConversation) {
@@ -10362,7 +10527,8 @@ class LetterPromptBuilder {
       const suffixContent = this.templateEngine.renderTemplateString(settings.suffix.template, context);
       messages.push({ role: "system", content: suffixContent });
     }
-    console.log(messages);
+    console.log(`[LetterPromptBuilder] Built ${messages.length} messages (${TokenCounter.calculateTotalTokens(messages)} estimated tokens)`);
+    logVerboseLLM("[LetterPromptBuilder][verbose] Messages:", messages);
     return messages;
   }
   buildPreview(gameData, letter) {
