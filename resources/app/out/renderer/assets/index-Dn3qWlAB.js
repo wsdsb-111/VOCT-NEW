@@ -21508,6 +21508,10 @@ function ConfigPanel({ onClose }) {
   const appSettings = useConfigStore((state) => state.appSettings);
   const [currentTab, setCurrentTab] = reactExports.useState("connection");
   const [appVersion, setAppVersion] = reactExports.useState("");
+  const [courtTheme, setCourtTheme] = reactExports.useState(() => {
+    const savedTheme = window.localStorage.getItem("votc-ui-theme");
+    return ["parchment", "knight", "ink"].includes(savedTheme) ? savedTheme : "knight";
+  });
   const {
     position,
     size,
@@ -21534,6 +21538,10 @@ function ConfigPanel({ onClose }) {
     };
     loadAppVersion();
   }, [loadSettings]);
+  reactExports.useEffect(() => {
+    document.documentElement.setAttribute("data-votc-theme", courtTheme);
+    window.localStorage.setItem("votc-ui-theme", courtTheme);
+  }, [courtTheme]);
   if (!appSettings) {
     return /* @__PURE__ */ jsxRuntimeExports.jsx("div", { children: t("settings.loadingSettings") });
   }
@@ -21800,6 +21808,41 @@ function ConfigPanel({ onClose }) {
               children: "优化"
             }
           ),
+          /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "court-theme-switcher", role: "group", "aria-label": "界面风格", children: [
+            /* @__PURE__ */ jsxRuntimeExports.jsx(
+              "button",
+              {
+                className: `court-theme-button ${courtTheme === "parchment" ? "active" : ""}`,
+                onClick: () => setCourtTheme("parchment"),
+                title: "羊皮卷风格",
+                "aria-label": "切换为羊皮卷风格",
+                "aria-pressed": courtTheme === "parchment",
+                children: /* @__PURE__ */ jsxRuntimeExports.jsx("img", { src: "./assets/theme-parchment-v1.png", alt: "" })
+              }
+            ),
+            /* @__PURE__ */ jsxRuntimeExports.jsx(
+              "button",
+              {
+                className: `court-theme-button ${courtTheme === "knight" ? "active" : ""}`,
+                onClick: () => setCourtTheme("knight"),
+                title: "骑士纹章风格",
+                "aria-label": "切换为骑士纹章风格",
+                "aria-pressed": courtTheme === "knight",
+                children: /* @__PURE__ */ jsxRuntimeExports.jsx("img", { src: "./assets/theme-knight-v1.png", alt: "" })
+              }
+            ),
+            /* @__PURE__ */ jsxRuntimeExports.jsx(
+              "button",
+              {
+                className: `court-theme-button ${courtTheme === "ink" ? "active" : ""}`,
+                onClick: () => setCourtTheme("ink"),
+                title: "水墨画卷风格",
+                "aria-label": "切换为水墨画卷风格",
+                "aria-pressed": courtTheme === "ink",
+                children: /* @__PURE__ */ jsxRuntimeExports.jsx("img", { src: "./assets/theme-ink-v1.png", alt: "" })
+              }
+            )
+          ] }),
           /* @__PURE__ */ jsxRuntimeExports.jsx("button", { className: "config-close-button", onClick: onClose, children: "✕" })
         ] }),
         /* @__PURE__ */ jsxRuntimeExports.jsxs("main", { className: "config-main-content", children: [
@@ -21824,6 +21867,11 @@ function App() {
   const [isOverlayVisible, setIsOverlayVisible] = reactExports.useState(true);
   const loadSettings = useConfigStore((state) => state.loadSettings);
   const appSettings = useAppSettings();
+  reactExports.useEffect(() => {
+    const savedTheme = window.localStorage.getItem("votc-ui-theme");
+    const initialTheme = ["parchment", "knight", "ink"].includes(savedTheme) ? savedTheme : "knight";
+    document.documentElement.setAttribute("data-votc-theme", initialTheme);
+  }, []);
   reactExports.useEffect(() => {
     loadSettings();
   }, [loadSettings]);

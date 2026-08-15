@@ -1,0 +1,86 @@
+<!DOCTYPE html>
+<html lang="zh-CN" data-votc-theme="knight">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>VOTC 2.0.3 主题预览</title>
+  <link rel="stylesheet" href="resources/app/out/renderer/assets/index-WtJH_nua.css">
+  <style>
+    html, body { overflow: auto; min-width: 1080px; background: #242326; }
+    body { padding: 24px; box-sizing: border-box; }
+    .preview-toolbar { width: 1040px; margin: 0 auto 18px; padding: 10px 14px; display: flex; align-items: center; gap: 10px; color: #eee3cd; background: #161416; border: 1px solid #8d7449; border-radius: 8px; box-sizing: border-box; }
+    .preview-toolbar strong { margin-right: auto; }
+    .preview-stage { width: 1040px; margin: 0 auto; display: grid; grid-template-columns: 610px 410px; gap: 20px; align-items: stretch; }
+    .preview-stage .chat-box, .preview-stage .config-panel-container { position: relative !important; inset: auto !important; width: 100% !important; height: 720px !important; box-sizing: border-box; }
+    .preview-stage .config-panel-container { right: auto; top: auto; }
+    .preview-stage .messages-container { height: calc(100% - 196px); box-sizing: border-box; }
+    .preview-stage .config-main-content { height: calc(100% - 66px); box-sizing: border-box; }
+    .preview-stage .chat-controls-container { height: 170px; }
+    .preview-stage .config-header { overflow: visible; flex-wrap: wrap; }
+    .preview-stage .config-header button { font-size: 12px; }
+    .preview-card-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin: 12px 0; }
+    .preview-card-grid .optimization-metric { min-height: 74px; }
+    .preview-label { font-size: 12px; color: inherit; opacity: .7; }
+  </style>
+</head>
+<body>
+  <div class="preview-toolbar">
+    <strong>VOTC 2.0.3 · 完整主题视觉验证</strong>
+    <button type="button" data-theme="parchment">羊皮卷</button>
+    <button type="button" data-theme="knight">骑士纹章</button>
+    <button type="button" data-theme="ink">水墨画卷</button>
+  </div>
+  <main class="preview-stage">
+    <section class="chat-box">
+      <div class="panel-drag-handle"></div>
+      <div class="messages-container">
+        <div class="messages">
+          <article class="message"><div class="system-message"><div class="message-header"><span class="message-role">系统</span></div><p>公元1013年10月16日 · 汴京宫廷 · 私人书房</p></div></article>
+          <article class="message"><div class="player-message"><div class="message-header"><span class="message-role">你</span><div class="message-actions"><button class="message-action-btn">✎</button></div></div><p>今日朝中议论纷纷，你对此事如何看待？</p></div></article>
+          <article class="message"><div class="ai-message"><div class="message-header"><span class="message-role">赵从绍</span><div class="message-actions"><button class="message-action-btn">↻</button></div></div><p>臣以为此事不可操之过急。<em>他把手中的茶盏轻轻放回案上，略作沉吟。</em></p><p>若先查清各方意图，再作决断，或许更为稳妥。</p></div></article>
+          <div class="action-feedback-container"><div class="action-feedback-item positive"><span class="action-feedback-message">已记录动作：放下茶盏</span></div></div>
+        </div>
+      </div>
+      <div class="chat-controls-container">
+        <div class="action-command-input-wrapper"><textarea class="chat-input" placeholder="写下你想说的话……"></textarea></div>
+        <div class="buttons-container"><button>发送</button><button class="execute-button ready">执行动作</button><button>设置</button></div>
+      </div>
+    </section>
+    <aside class="config-panel-container">
+      <div class="panel-drag-handle"></div>
+      <header class="config-header">
+        <button class="active">连接</button><button>设置</button><button>动作</button><button>摘要</button>
+        <div class="court-theme-switcher" role="group" aria-label="界面风格">
+          <button class="court-theme-button" data-theme="parchment" title="羊皮卷"><img src="resources/app/out/renderer/assets/theme-parchment-v1.png" alt=""></button>
+          <button class="court-theme-button active" data-theme="knight" title="骑士纹章"><img src="resources/app/out/renderer/assets/theme-knight-v1.png" alt=""></button>
+          <button class="court-theme-button" data-theme="ink" title="水墨画卷"><img src="resources/app/out/renderer/assets/theme-ink-v1.png" alt=""></button>
+        </div>
+      </header>
+      <div class="config-main-content">
+        <h3>宫廷记录设置</h3>
+        <p class="help-text">配置角色对话、动态历史和动作执行方式。</p>
+        <label>模型服务</label><select><option>DeepSeek</option></select>
+        <label>角色扮演模型</label><input type="text" value="deepseek-chat">
+        <div class="preview-card-grid">
+          <div class="optimization-metric"><span>缓存命中率</span><strong>81.4%</strong></div>
+          <div class="optimization-metric"><span>今日请求</span><strong>126</strong></div>
+        </div>
+        <div class="actions-view">
+          <div class="action-item"><strong>日常动作</strong><div class="action-meta">拿取、饮茶、行走与观察</div></div>
+          <div class="action-item"><strong>人物关系</strong><div class="action-meta">最多加载五名参与者</div></div>
+        </div>
+        <label>系统提示</label><textarea rows="5">角色只能了解当前年份以前已经出现的人物、事件和诗词。</textarea>
+        <div class="preview-label">主题选择会自动保存。</div>
+      </div>
+      <div class="app-version">v2.0.3</div>
+    </aside>
+  </main>
+  <script>
+    const applyTheme = (theme) => {
+      document.documentElement.setAttribute('data-votc-theme', theme);
+      document.querySelectorAll('[data-theme]').forEach((button) => button.classList.toggle('active', button.dataset.theme === theme));
+    };
+    document.querySelectorAll('[data-theme]').forEach((button) => button.addEventListener('click', () => applyTheme(button.dataset.theme)));
+  </script>
+</body>
+</html>

@@ -9274,7 +9274,7 @@ class OpenAICompatibleProvider extends BaseProvider {
     const headers = {
       "Content-Type": "application/json",
       "X-Title": "Voices of the Court 2.0",
-      "User-Agent": "VOTC/2.0.0",
+      "User-Agent": "VOTC/2.0.3",
       // Custom User-Agent to avoid Cloudflare blocking
       ...this.getAPIKey(config) && { "Authorization": `Bearer ${this.getAPIKey(config)}` }
     };
@@ -9326,7 +9326,7 @@ class OpenAICompatibleProvider extends BaseProvider {
     const headers = {
       "Content-Type": "application/json",
       "X-Title": "Voices of the Court 2.0",
-      "User-Agent": "VOTC/2.0.0",
+      "User-Agent": "VOTC/2.0.3",
       // Custom User-Agent to avoid Cloudflare blocking
       ...config.apiKey && { "Authorization": `Bearer ${config.apiKey}` }
     };
