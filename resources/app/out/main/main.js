@@ -5684,8 +5684,8 @@ Respect all argument types, constraints, and valid targets.`;
       } else if (content.startsWith("Stable action selection rules:")) {
         label = "Stable Action Rules";
         type = "action_stable";
-      } else if (content.startsWith("Examples of correct JSON output:")) {
-        label = "Stable JSON Examples";
+      } else if (content.startsWith("Stable output contract:")) {
+        label = "Stable Output Contract";
         type = "action_stable";
       } else if (content.startsWith("Characters in this conversation")) {
         label = "Character Roster";
@@ -5693,8 +5693,8 @@ Respect all argument types, constraints, and valid targets.`;
       } else if (content.startsWith("Available Actions:")) {
         label = "Available Actions";
         type = "action_available";
-      } else if (content.startsWith("Dynamic action source:")) {
-        label = "Dynamic Action Source";
+      } else if (content.startsWith("Dynamic evaluation context:")) {
+        label = "Dynamic Evaluation Context";
         type = "action_dynamic";
       } else if (content.startsWith("Recent actions")) {
         label = "Recent Actions";
@@ -5966,7 +5966,9 @@ class ActionEngine {
     const failedAttemptMarker = /(?:试图|尝试|企图|没能|未能|没有(?:成功|得逞|做到|碰到|伤到|亲到|打中)|躲开|避开|闪开|挣脱|拒绝|推开|落空|被.{0,8}挡|挡下|missed|failed to|did not|didn't|dodged|avoided|refused)/i;
     const hypotheticalMarker = /(?:如果|假如|倘若|若是|要是|也许|或许|可能会|不妨考虑|\b(?:if|maybe|perhaps|might|could)\b)/i;
     const futureLeadIn = /(?:\u51c6\u5907|\u6253\u7b97|\u8ba1\u5212|\u60f3\u8981|\u6b32\u8981|\u5c06\u8981|\u5c06\u4f1a|(?:我|你|他|她|它|我们|你们|他们|她们)会|\u660e\u65e5|\u660e\u5929|\u5f85\u4f1a|\u5f85\u4f1a\u513f|\u7a0d\u540e|\b(?:will|going to|plan to|tomorrow|later)\b)\s*$/i;
-    const clauses = text.split(/[\u3002\uff01\uff1f\uff1b\uff0c.!?;,\n]+/).map((clause) => clause.trim()).filter(Boolean);
+    // 保留每个分句末尾的问号；否则 split 会让“你拔剑？”变成“你拔剑”，
+    // 导致下方的疑问句门控无法识别。
+    const clauses = (text.match(/[^。！？；，.!?;,\n]+[？?]?/g) || []).map((clause) => clause.trim()).filter(Boolean);
     if (clauses.length === 0) clauses.push(text);
     // Requests and questions often contain the same verb as an action report
     // ("拿起剑吧", "你会拔剑吗？") but have not changed CK3 state.
