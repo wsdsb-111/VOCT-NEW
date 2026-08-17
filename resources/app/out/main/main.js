@@ -6567,7 +6567,10 @@ ${result.content}`;
       role: "assistant",
       name: npc.fullName,
       content: "",
-      isStreaming: true
+      isStreaming: true,
+      // DeepSeek can stream hidden reasoning before visible dialogue. The UI
+      // receives only its state, never the reasoning text.
+      streamStatus: "thinking"
     });
     this.messages.push(placeholder);
     this.emitUpdate();
@@ -6606,7 +6609,12 @@ ${result.content}`;
                 if (wasCancelled) {
                   continue;
                 }
+                if (chunk.delta?.reasoning) {
+                  placeholder.streamStatus = "thinking";
+                  this.emitUpdate();
+                }
                 if (chunk.delta?.content) {
+                  placeholder.streamStatus = "generating";
                   placeholder.content += chunk.delta.content;
                   this.emitUpdate();
                 }
@@ -6631,7 +6639,12 @@ ${result.content}`;
                 wasCancelled = true;
                 throw new Error("AbortError: Message cancelled");
               }
+              if (chunk.delta?.reasoning) {
+                placeholder.streamStatus = "thinking";
+                this.emitUpdate();
+              }
               if (chunk.delta?.content) {
+                placeholder.streamStatus = "generating";
                 placeholder.content += chunk.delta.content;
                 this.emitUpdate();
               }
@@ -6646,6 +6659,7 @@ ${result.content}`;
           throw streamError;
         }
         placeholder.isStreaming = false;
+        delete placeholder.streamStatus;
         if (streamCompleted && !wasCancelled) {
           const actionMessage = this.pendingPlayerActionMessage ?? placeholder;
           const actionResults = await ActionEngine.evaluateForCharacter(this, npc, this.currentStreamController?.signal, actionMessage);
@@ -6654,8 +6668,10 @@ ${result.content}`;
         }
       } else if (result && typeof result === "object" && "content" in result && typeof result.content === "string") {
         placeholder.content = result.content;
+        placeholder.streamStatus = "generating";
         this.emitUpdate();
         placeholder.isStreaming = false;
+        delete placeholder.streamStatus;
         streamCompleted = true;
         const actionMessage = this.pendingPlayerActionMessage ?? placeholder;
         const actionResults = await ActionEngine.evaluateForCharacter(this, npc, this.currentStreamController?.signal, actionMessage);
@@ -7415,7 +7431,8 @@ class ConversationManager {
           content: entry.content,
           datetime: entry.datetime,
           name: entry.name,
-          isStreaming: entry.isStreaming
+          isStreaming: entry.isStreaming,
+          streamStatus: entry.streamStatus
         };
       } else if (entry.type === "action-feedback") {
         return {
@@ -9244,6 +9261,10 @@ class OpenRouterProvider extends BaseProvider {
           id: chunk.id,
           delta: delta ? {
             content: delta.content || void 0,
+            // Some providers emit hidden reasoning before the visible answer.
+            // Forward only a presence marker; the reasoning text is never
+            // shown in the UI or retained in the conversation history.
+            reasoning: delta.reasoning_content || delta.reasoning || void 0,
             role: delta.role,
             tool_calls: delta.tool_calls
           } : void 0,
@@ -9492,6 +9513,7 @@ class OpenAICompatibleProvider extends BaseProvider {
           id: chunk.id,
           delta: delta ? {
             content: delta.content || void 0,
+            reasoning: delta.reasoning_content || delta.reasoning || void 0,
             role: delta.role,
             tool_calls: delta.tool_calls
           } : void 0,
@@ -9901,6 +9923,7 @@ class Player2Provider extends BaseProvider {
           id: chunk.id,
           delta: delta ? {
             content: delta.content || void 0,
+            reasoning: delta.reasoning_content || delta.reasoning || void 0,
             role: delta.role,
             tool_calls: delta.tool_calls
           } : void 0,
@@ -10268,6 +10291,7 @@ IMPORTANT: Your response must be ONLY valid JSON. No prose, no code fences, no e
           id: chunk.id,
           delta: delta ? {
             content: delta.content || void 0,
+            reasoning: delta.reasoning_content || delta.reasoning || void 0,
             role: delta.role,
             tool_calls: delta.tool_calls
           } : void 0,

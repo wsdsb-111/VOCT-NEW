@@ -16010,6 +16010,7 @@ const MessageItem = ({ entry }) => {
           isAnimating: message.isStreaming ? true : false
         }
       ),
+      message.isStreaming && /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "stream-status", children: message.streamStatus === "generating" ? "正在生成回复" : "正在思考" }),
       message.isStreaming && /* @__PURE__ */ jsxRuntimeExports.jsxs("span", { className: "loading-dots", children: [
         /* @__PURE__ */ jsxRuntimeExports.jsx("span", { children: "." }),
         /* @__PURE__ */ jsxRuntimeExports.jsx("span", { children: "." }),

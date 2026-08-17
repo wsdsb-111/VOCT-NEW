@@ -4151,6 +4151,16 @@ select option {
   }
 }
 
+/* Visible progress while a reasoning-capable model has not emitted prose yet. */
+.stream-status {
+  display: inline-block;
+  margin-top: 6px;
+  margin-right: 4px;
+  color: #806d4c;
+  font-size: 0.9em;
+  font-style: italic;
+}
+
 /* Theme completeness: navigation, feedback, modals and status components. */
 :root[data-votc-theme="parchment"] .config-header {
   padding: 6px 8px 11px;
