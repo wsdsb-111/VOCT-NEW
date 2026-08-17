@@ -2041,8 +2041,8 @@ class GameData {
             const match = file.match(/^与(.+)的对话\.json$/);
             const otherCharacterName = match ? match[1] : '未知角色';
             
-            // Add recent summaries (last 2 from each conversation)
-            const recentSummaries = summaries.slice(0, 2).map(s => ({
+            // Add recent summaries (last 5 from each conversation).
+            const recentSummaries = summaries.slice(0, 5).map(s => ({
               ...s,
               conversationWith: otherCharacterName,
               sourceFile: file
@@ -2106,8 +2106,8 @@ class GameData {
         const summaries = JSON.parse(fileContent);
         
         if (Array.isArray(summaries) && summaries.length > 0) {
-          // Take the 2 most recent summaries
-          const recentSummaries = summaries.slice(0, 2).map(s => ({
+          // Take the 5 most recent summaries for a directly mentioned person.
+          const recentSummaries = summaries.slice(0, 5).map(s => ({
             ...s,
             conversationWith: mentionedCharacterName,
             sourceFile: conversationFile,
@@ -2503,6 +2503,20 @@ class GameData {
     if (reverse.length > 0) return `${other.fullName}与${subject.fullName}的游戏关系：${reverse.join("、")}`;
     return null;
   }
+  /**
+   * The age-resolved sibling wording was previously emitted only for a third
+   * character mentioned in the dialogue. The active pair therefore still saw
+   * CK3's ambiguous raw `brother` / `sister` relation in the main prompt.
+   */
+  getActiveParticipantRelationshipInfo(activeCharacter) {
+    const player = this.characters.get(this.playerID);
+    if (!player || !activeCharacter || player.id === activeCharacter.id) return "";
+    const activeToPlayer = this.describeCharacterRelationship(activeCharacter, player);
+    const playerToActive = this.describeCharacterRelationship(player, activeCharacter);
+    const relations = [activeToPlayer, playerToActive].filter(Boolean);
+    if (relations.length === 0) return "";
+    return `=== 当前对话双方的精确关系（高优先级游戏数据） ===\n${relations.map((relation) => `- ${relation}`).join("\n")}\n称谓必须服从上述关系与长幼：不得把哥哥称为弟弟、把姐姐称为妹妹，也不得仅因 CK3 的原始 brother/sister 标签而忽略出生日期或年龄。`;
+  }
   
   /**
    * 获取提到的角色的详细信息（用于添加到prompt上下文）
@@ -2665,7 +2679,7 @@ class GameData {
     addParticipant(this.playerID);
     const requestedIds = Array.isArray(participantIds) ? participantIds : Array.from(this.characters.keys());
     for (const id of requestedIds) addParticipant(id);
-    const participants = orderedIds.slice(0, 5).map((id) => this.characters.get(id)).filter(Boolean);
+    const participants = orderedIds.map((id) => this.characters.get(id)).filter(Boolean);
     if (participants.length < 2) return;
     const participantMetadata = participants.map((character) => ({
       id: character.id,
@@ -4054,45 +4068,10 @@ ${existingSummary}`
     return "You are characters in a medieval strategy game. Engage in conversation naturally.";
   }
   static buildMessages(history, char, gameData, currentSessionSummary) {
-    const promptSettings = settingsRepository.getPromptSettings();
-    const blocks = promptSettings.blocks || [];
-    const llmMessages = [];
-    const cacheAnchor = this.buildCacheAnchor(gameData);
-    llmMessages.push({ role: "system", content: cacheAnchor });
-    const context = {
-      character: char,
-      gameData,
-      summary: currentSessionSummary
-    };
-    const workingHistory = history.map((m) => ({
-      role: m.role,
-      name: m.name,
-      content: m.content
-    })).filter((m) => !!m.content);
-    const mentionedCharactersContext = this.buildMentionedCharactersContext(char, gameData, workingHistory);
-    let mentionedContextInserted = false;
-    const insertMentionedContext = () => {
-      if (!mentionedContextInserted && mentionedCharactersContext) {
-        llmMessages.push({ role: "system", content: mentionedCharactersContext });
-      }
-      mentionedContextInserted = true;
-    };
-    for (const block of blocks) {
-      if (!block.enabled) continue;
-      if (block.type === "history" || block.type === "instruction") insertMentionedContext();
-      this.applyBlock(block, llmMessages, workingHistory, context, promptSettings);
-    }
-    insertMentionedContext();
-    if (promptSettings.suffix?.enabled && promptSettings.suffix.template) {
-      try {
-        const suffixContent = this.templateEngine.renderTemplateString(promptSettings.suffix.template, context);
-        llmMessages.push({ role: "system", content: suffixContent });
-      } catch (error) {
-        const errorMsg = error instanceof Error ? error.message : String(error);
-        throw new Error(`Template error in Suffix block: ${errorMsg}`);
-      }
-    }
-    return llmMessages;
+    // Keep context-length checks and actual requests byte-for-byte aligned.
+    // The token-counting builder owns cache-aware ordering and still returns
+    // the same message data used by this legacy convenience method.
+    return this.buildMessagesWithTokenCount(history, char, gameData, currentSessionSummary).messages;
   }
   /**
    * Stable, character-independent prefix for providers with prefix KV caching.
@@ -4122,7 +4101,7 @@ ${existingSummary}`
 
 `;
     
-    const recentSummaries = char.conversationSummaries.slice(0, 3);
+    const recentSummaries = char.conversationSummaries.slice(0, 5);
     for (const summary of recentSummaries) {
       const absoluteDate = summary.date || "日期不详";
       context += `${absoluteDate}：${summary.content}
@@ -4394,6 +4373,14 @@ ${existingSummary}`
       name: m.name,
       content: m.content
     })).filter((m) => !!m.content);
+    const activeParticipantRelationshipContext = gameData.getActiveParticipantRelationshipInfo(char);
+    const activeParticipantRelationshipBlock = {
+      id: "active-participant-relationship",
+      type: "participant_relationship",
+      label: "Active Participant Relationship",
+      enabled: true,
+      role: "system"
+    };
     const mentionedCharactersContext = this.buildMentionedCharactersContext(char, gameData, workingHistory);
     const mentionedContextBlock = {
       id: "mentioned-character-context",
@@ -4414,17 +4401,47 @@ ${existingSummary}`
       }
       mentionedContextInserted = true;
     };
+    const deferredMainSegments = [];
+    const deferredDescriptionBlocks = [];
+    let preHistoryContextInserted = false;
+    const insertPreHistoryContext = () => {
+      if (preHistoryContextInserted) return;
+      preHistoryContextInserted = true;
+      // Relationship and long-lived summaries are normally unchanged for a
+      // responder. Keep them before date/scene state so a date advance does
+      // not evict this useful prefix from the provider cache.
+      if (activeParticipantRelationshipContext) {
+        llmMessages.push({ role: "system", content: activeParticipantRelationshipContext });
+        blocksWithTokens.push({
+          block: activeParticipantRelationshipBlock,
+          content: activeParticipantRelationshipContext,
+          tokens: TokenCounter.estimateTokens(activeParticipantRelationshipContext)
+        });
+      }
+      for (const deferred of deferredMainSegments) {
+        llmMessages.push(deferred.message);
+        blocksWithTokens.push(deferred.tokenBlock);
+      }
+      for (const deferred of deferredDescriptionBlocks) {
+        llmMessages.push(deferred.message);
+        blocksWithTokens.push(deferred.tokenBlock);
+      }
+      insertMentionedContext();
+    };
     for (const block of blocks) {
       if (!block.enabled) continue;
-      if (block.type === "history" || block.type === "instruction") insertMentionedContext();
-      const result = this.applyBlockWithTokenCount(block, llmMessages, workingHistory, context, promptSettings);
+      if (block.type === "history" || block.type === "instruction") insertPreHistoryContext();
+      const result = this.applyBlockWithTokenCount(block, llmMessages, workingHistory, context, promptSettings, {
+        deferredMainSegments,
+        deferredDescriptionBlocks
+      });
       if (Array.isArray(result)) {
         blocksWithTokens.push(...result);
       } else if (result) {
         blocksWithTokens.push(result);
       }
     }
-    insertMentionedContext();
+    insertPreHistoryContext();
     if (promptSettings.suffix?.enabled && promptSettings.suffix.template) {
       const suffixBlock = {
         id: "suffix",
@@ -4456,7 +4473,7 @@ ${existingSummary}`
    * Apply a single block with token counting.
    * Template errors are caught and returned as error info in the result rather than thrown.
    */
-  static applyBlockWithTokenCount(block, messages, history, baseContext, promptSettings) {
+  static applyBlockWithTokenCount(block, messages, history, baseContext, promptSettings, options = {}) {
     const { character, gameData, summary } = baseContext;
     const renderTemplate = (template, context) => {
       try {
@@ -4476,15 +4493,10 @@ ${existingSummary}`
           return { block, content: "", tokens: 0, error: `Template error in "${block.label || "Main Prompt"}" block. Check Handlebars syntax.` };
         }
         const nonEmptySegments = renderedSegments.filter((segment) => segment.content?.trim());
+        const immediateBlocks = [];
         for (const segment of nonEmptySegments) {
-          messages.push({ role: block.role || "system", content: segment.content });
-        }
-        if (nonEmptySegments.length === 1 && nonEmptySegments[0].id === "main") {
-          const content = nonEmptySegments[0].content;
-          return { block, content, tokens: TokenCounter.estimateTokens(content) };
-        }
-        if (nonEmptySegments.length > 0) {
-          return nonEmptySegments.map((segment) => ({
+          const message = { role: block.role || "system", content: segment.content };
+          const tokenBlock = {
             block: {
               ...block,
               id: `${block.id || "main"}-${segment.id}`,
@@ -4493,8 +4505,22 @@ ${existingSummary}`
             },
             content: segment.content,
             tokens: TokenCounter.estimateTokens(segment.content)
-          }));
+          };
+          // Date, world state and scene must stay near the history tail. This
+          // leaves character profile, examples and persisted summaries in the
+          // reusable prefix when a game day advances.
+          if (options.deferredMainSegments && (segment.id === "world_context" || segment.id === "character_state")) {
+            options.deferredMainSegments.push({ message, tokenBlock });
+          } else {
+            messages.push(message);
+            immediateBlocks.push(tokenBlock);
+          }
         }
+        if (nonEmptySegments.length === 1 && nonEmptySegments[0].id === "main") {
+          const content = nonEmptySegments[0].content;
+          return { block, content, tokens: TokenCounter.estimateTokens(content) };
+        }
+        if (immediateBlocks.length > 0) return immediateBlocks;
         break;
       }
       case "description": {
@@ -4503,8 +4529,30 @@ ${existingSummary}`
         try {
           const descriptionBlock = this.scriptLoader.executeDescription(descScriptPath, gameData, character.id);
           if (descriptionBlock) {
-            messages.push({ role: "system", content: descriptionBlock });
-            return { block, content: descriptionBlock, tokens: TokenCounter.estimateTokens(descriptionBlock) };
+            const { stableContent, dynamicContent } = this.splitDescriptionForCache(descriptionBlock);
+            const tokenBlocks = [];
+            if (stableContent) {
+              messages.push({ role: "system", content: stableContent });
+              tokenBlocks.push({
+                block: { ...block, id: `${block.id || "description"}-stable`, type: "description", label: `${block.label || "Character Description"} (Stable Profile)` },
+                content: stableContent,
+                tokens: TokenCounter.estimateTokens(stableContent)
+              });
+            }
+            if (dynamicContent) {
+              const tokenBlock = {
+                block: { ...block, id: `${block.id || "description"}-dynamic`, type: "description_dynamic", label: `${block.label || "Character Description"} (Dynamic Scene)` },
+                content: dynamicContent,
+                tokens: TokenCounter.estimateTokens(dynamicContent)
+              };
+              if (options.deferredDescriptionBlocks) {
+                options.deferredDescriptionBlocks.push({ message: { role: "system", content: dynamicContent }, tokenBlock });
+              } else {
+                messages.push({ role: "system", content: dynamicContent });
+                tokenBlocks.push(tokenBlock);
+              }
+            }
+            return tokenBlocks.length === 1 ? tokenBlocks[0] : tokenBlocks;
           }
         } catch (error) {
           const errorMsg = error instanceof Error ? error.message : String(error);
@@ -4751,6 +4799,21 @@ class ActionRegistry extends events.EventEmitter {
     if (fs$1.existsSync(defaultTypeDefsPath)) {
       fs$1.copyFileSync(defaultTypeDefsPath, userTypeDefsPath);
     }
+  }
+  /**
+   * pList-style descriptions end with a date/location/scenario record. Split
+   * only that known volatile tail; all original character information remains
+   * present, merely earlier in the cacheable prefix. Custom scripts without
+   * this marker keep their original single-message behaviour.
+   */
+  static splitDescriptionForCache(description) {
+    if (typeof description !== "string") return { stableContent: "", dynamicContent: "" };
+    const match = /\n(\[date\([^\n]*\)\])\s*$/.exec(description);
+    if (!match || match.index <= 0) return { stableContent: description, dynamicContent: "" };
+    return {
+      stableContent: description.slice(0, match.index).trimEnd(),
+      dynamicContent: match[1]
+    };
   }
   async loadDirectory(subdir, scope) {
     const dirPath = path.join(VOTC_ACTIONS_DIR, subdir);
@@ -5905,9 +5968,17 @@ class ActionEngine {
     const futureLeadIn = /(?:\u51c6\u5907|\u6253\u7b97|\u8ba1\u5212|\u60f3\u8981|\u6b32\u8981|\u5c06\u8981|\u5c06\u4f1a|(?:我|你|他|她|它|我们|你们|他们|她们)会|\u660e\u65e5|\u660e\u5929|\u5f85\u4f1a|\u5f85\u4f1a\u513f|\u7a0d\u540e|\b(?:will|going to|plan to|tomorrow|later)\b)\s*$/i;
     const clauses = text.split(/[\u3002\uff01\uff1f\uff1b\uff0c.!?;,\n]+/).map((clause) => clause.trim()).filter(Boolean);
     if (clauses.length === 0) clauses.push(text);
+    // Requests and questions often contain the same verb as an action report
+    // ("拿起剑吧", "你会拔剑吗？") but have not changed CK3 state.
+    const isNonExecutedActionClause = (clause, actionMatch) => {
+      const prefix = clause.slice(Math.max(0, actionMatch.index - 20), actionMatch.index);
+      if (/[？?]/.test(clause) || /(?:吧|吗|么|呢|如何|可否|能否|好吗)[！!。]?$/.test(clause)) return true;
+      return /(?:请|命令|要求|让|叫|希望|想|要|欲|准备|打算|计划|将|会|能否|可否|是否|别|不要|莫|不许|不准)\s*(?:我|你|他|她|它|我们|你们|他们|她们|众人|侍从|护卫)?\s*$/i.test(prefix);
+    };
     const describesCompletedOrCurrentAction = (pattern, rejectFailedAttempt = false) => clauses.some((clause, clauseIndex) => {
       const actionMatch = pattern.exec(clause);
       if (!actionMatch) return false;
+      if (isNonExecutedActionClause(clause, actionMatch)) return false;
       const actionPrefix = clause.slice(Math.max(0, actionMatch.index - 8), actionMatch.index);
       const adjacentFailure = /(?:没有|并未|不曾|未曾|尚未)/.test(actionPrefix) || failedAttemptMarker.test(clause) || clauseIndex + 1 < clauses.length && failedAttemptMarker.test(clauses[clauseIndex + 1]);
       if (rejectFailedAttempt && adjacentFailure) return false;
@@ -5928,9 +5999,12 @@ class ActionEngine {
       { reason: "faith_or_vassal", pattern: /(?:改宗|皈依|改信|强迫.{0,12}信仰|臣服于|归顺|投降|称臣|纳贡称臣|宣誓效忠|成为.{0,12}封臣|converted?|vassalized|surrendered|swore fealty)/i },
       { reason: "location_or_exit", pattern: /(?:离开(?:了)?(?:这里|房间|宫廷|宴会|谈话)?|走出|退出|离席|离场|转身离去|退下|告辞|踏入|进入|来到|赶往|移步|前往(?:王座厅|花园|卧室|军营|地牢|小巷)|搬到|移动到|left (?:the )?(?:conversation|room|court)|walked out|entered|arrived|moved? to)/i },
       { reason: "drinking_or_toast", pattern: /(?:喝(?:了|着|下)?(?:茶|酒|一口|几口|一杯)|饮(?:了|着|下)?(?:茶|酒|一口|几口|一杯)|品(?:了|着)?(?:茶|酒)|啜|呷|抿(?:了)?一口|小酌|痛饮|畅饮|酌酒|碰杯|斟满|端起.{0,12}(?:茶盏|茶杯|酒杯|杯).{0,12}(?:喝|饮|品|啜)|举杯|举起(?:茶杯|酒杯)|敬(?:了)?(?:茶|酒)|干(?:了)?杯|一饮而尽|饮尽|饮罢|品茗|饮茶|饮酒|drank|sipped|gulped|raised (?:a |the )?(?:cup|glass)|made a toast|toasted)/i },
-      { reason: "daily_movement", pattern: /(?:行走|迈步|踱步|散步|快步(?:走|前行)|小跑|奔跑|奔向|冲过去|(?:^|[我你他她它])(?:走|跑)(?:$|吧|开|起来|了|着|向|到|近|过去|过来|一步|几步)|walked?|walking|ran|running|jogged?|strolled?|paced?)/i },
-      { reason: "daily_object_interaction", pattern: /(?:拿起|拿着|拿过|拿来|拿走|拿住|拿(?:了)?(?:这|那|一|两|三|个|本|把|件|杯|碗|盘|剑|刀|书|东西)|取出|拾起|捡起|接过|摸了|摸着|摸向|摸到|触摸|碰触|轻触|提起|提着|提(?:了)?(?:这|那|一|两|三|个|件|袋|箱|篮|东西)|拎起|拎着|扛起|抱起|穿上|穿好|穿(?:了|着)?(?:衣|袍|裙|裤|鞋|靴|甲)|披上|戴上|套上|换上|吃了|吃下|吃着|吃掉|吃(?:东西|饭|肉|菜|果|糕|面|饼)|咬下|吞下|品尝|看了看|看着|看向|看(?:他|她|你|我|这|那|书|信|画)|望向|注视|凝视|端详|观察|打量|瞧了瞧|picked? up|took|held|carried|touched|lifted|put on|wore|ate|eating|looked at|watched|stared at|examined)/i },
-      { reason: "combat", pattern: /(?:拔(?:出)?(?:剑|刀)|挥(?:剑|刀)|持(?:剑|刀|矛)|挥拳|出拳|打(?!算|听|探|开|扰|赌|猎|水|扫|赏|字|量|招|扮|包|造|卡|工|理|牌|针|伞|鼓)|掌掴|扇了?.{0,8}耳光|推(?:了|向|开|倒|他|她|你|我|$)|踢|踹|撞(?:了|向|上|倒|他|她|你|我|$)|扑向|摔倒|擒住|制服|缴械|刺(?:向|入|中|伤|了|他|她|你|我|$)|砍(?:向|中|下|伤|了|他|她|你|我|$)|劈(?:向|中|下|伤|了|他|她|你|我|$)|斩(?:向|中|下|伤|首|了|他|她|你|我|$)|格挡|招架|搏斗|厮打|扭打|打斗|交战|开战|冲杀|冲锋|射(?:出|中)|放箭|命中(?:了)?|击中(?:了)?|击败(?:了)?|战胜(?:了)?|duel(?:ed|ling)?|fought|attacked|punched|pushed|kicked|rammed|slammed|slapped|struck|stabbed|slashed|chopped|cleaved|parried|blocked|shot|hit|defeated|charged)/i },
+      { reason: "daily_movement", pattern: /(?:行走|迈步|踱步|散步|快步(?:走|前行)|小跑|奔跑|奔向|冲过去|(?:^|[我你他她它])(?:走|跑)(?:了|着|向|到|近|过去|过来|一步|几步)|walked?|walking|ran|running|jogged?|strolled?|paced?)/i },
+      // Looking and other low-impact prose are not game actions. Only a
+      // concrete physical interaction with an object, clothing or food reaches
+      // performDailyAction automatically.
+      { reason: "daily_object_interaction", pattern: /(?:拿起|拿过|拿来|拿走|取出|拾起|捡起|接过|提起|拎起|扛起|抱起|穿上|穿好|穿(?:了|着)?(?:衣|袍|裙|裤|鞋|靴|甲)|披上|戴上|套上|换上|吃了|吃下|吃掉|咬下|吞下|picked? up|took|carried|lifted|put on|wore|ate)/i },
+      { reason: "combat", pattern: /(?:拔(?:出)?(?:长|短|佩|宝|铁)?(?:剑|刀|矛)|挥(?:长|短)?(?:剑|刀)|持(?:长|短)?(?:剑|刀|矛)|挥拳|出拳|打(?!算|听|探|开|扰|赌|猎|水|扫|赏|字|量|招|扮|包|造|卡|工|理|牌|针|伞|鼓)|掌掴|扇了?.{0,8}耳光|推(?:了|向|开|倒|他|她|你|我|$)|踢|踹|撞(?:了|向|上|倒|他|她|你|我|$)|扑向|摔倒|擒住|制服|缴械|刺(?:向|入|中|伤|了|他|她|你|我|$)|砍(?:向|中|下|伤|了|他|她|你|我|$)|劈(?:向|中|下|伤|了|他|她|你|我|$)|斩(?:向|中|下|伤|首|了|他|她|你|我|$)|格挡|招架|搏斗|厮打|扭打|打斗|交战|开战|冲杀|冲锋|射(?:出|中)|放箭|命中(?:了)?|击中(?:了)?|击败(?:了)?|战胜(?:了)?|duel(?:ed|ling)?|fought|attacked|punched|pushed|kicked|rammed|slammed|slapped|struck|stabbed|slashed|chopped|cleaved|parried|blocked|shot|hit|defeated|charged)/i },
       { reason: "intimacy_or_clothing", pattern: /(?:(?:脱下|脱掉|脱去|褪下|褪去|除去|扯开|撕开|解下).{0,8}(?:衣|衣裙|外袍|亵衣|内衫|裤|腰带)|解开(?:了)?(?:衣带|腰带|衣襟)|宽衣(?:解带)?|裸露(?:了)?|赤裸|赤身|undressed|removed .{0,12}(?:clothes|robe|shirt|dress)|unfastened .{0,12}(?:belt|clothing))/i },
       { reason: "intimate_contact", pattern: /(?:抚摸|爱抚|舔舐|舔弄|亲吻|接吻|吻上|吻住|挑逗|撩拨|吮吸|含住|顶入|插入|进入.{0,8}(?:体内|身体)|研磨|摩擦|抽送|抽插|挺动|律动|揉捏|揉搓|caressed?|fondled?|licked?|kissed?|teased?|sucked?|penetrated?|inserted?|thrust(?:ed|ing)?|grind(?:ing)?|ground against|rubbed?)/i },
       { reason: "visible_pose", pattern: /(?:微笑|笑了|大笑|哭泣|流泪|怒视|瞪着|跪下祈祷|祈祷|跳舞|起舞|读书|翻书|写字|执笔|偷听|侧耳倾听|争辩|讲故事|打哈欠|翻白眼|惊呆|后退|举杖|手持权杖|smiled|laughed|cried|wept|glared|prayed|danced|read(?:ing)?|wrote|writing|eavesdropped|rolled .{0,6}eyes)/i },
@@ -6121,12 +6195,11 @@ class ActionEngine {
         triggers: gate.reasons
       });
       const actionsConfig = settingsRepository.getActionsProviderConfig();
-      let useMinimizedSchema;
-      if (actionsConfig?.useMinimizedActionsSchema !== void 0) {
-        useMinimizedSchema = actionsConfig.useMinimizedActionsSchema;
-      } else {
-        useMinimizedSchema = actionsConfig?.defaultModel?.toLowerCase().includes("gemini") ?? false;
-      }
+      // The compact schema still goes through the same strict local Zod
+      // validation, but avoids repeating a large per-action anyOf tree in
+      // every request. It reduces action request input and cache misses; an
+      // explicit provider setting remains an escape hatch.
+      const useMinimizedSchema = actionsConfig?.useMinimizedActionsSchema ?? true;
       console.log(`[DEBUG] ActionEngine: Using minimized schema: ${useMinimizedSchema}`);
       const repeatableSceneCategories = /* @__PURE__ */ new Set(["daily_movement", "daily_object_interaction", "combat", "intimate_contact"]);
       const maxActions = Math.max(1, Math.min(4, gate.reasons.reduce((sum, reason) => sum + (repeatableSceneCategories.has(reason) ? 3 : 1), 0)));
@@ -6353,7 +6426,6 @@ class Conversation {
     this.lastSummarizedMessageIndex = 0;
     this.CONTEXT_LIMIT_PERCENTAGE = 0.75;
     this.MESSAGES_TO_SUMMARIZE_PERCENTAGE = 0.4;
-    this.MAX_CONVERSATION_PARTICIPANTS = 5;
     this.npcQueue = [];
     this.customQueue = null;
     this.isPaused = false;
@@ -6476,8 +6548,7 @@ ${result.content}`;
   }
   // Get list of all NPCs (characters except the player)
   getNpcList() {
-    const maxNpcSpeakers = Math.max(0, this.MAX_CONVERSATION_PARTICIPANTS - 1);
-    return [...this.gameData.characters.values()].filter((c) => c.id !== this.gameData.playerID).slice(0, maxNpcSpeakers);
+    return [...this.gameData.characters.values()].filter((c) => c.id !== this.gameData.playerID);
   }
   // Handle response for a single NPC
   async respondAs(npc) {
@@ -6722,8 +6793,7 @@ ${result.content}`;
   // Fill NPC queue with shuffled characters or custom queue
   fillNpcQueue() {
     if (this.customQueue && this.customQueue.length > 0) {
-      const maxNpcSpeakers = Math.max(0, this.MAX_CONVERSATION_PARTICIPANTS - 1);
-      this.npcQueue = [...this.customQueue].slice(0, maxNpcSpeakers);
+      this.npcQueue = [...this.customQueue];
       console.log("Using custom queue:", this.npcQueue.map((c) => c.shortName));
       if (!this.persistCustomQueue) {
         this.customQueue = null;
@@ -6918,7 +6988,6 @@ ${result.content}`;
       if (!character || seen.has(character.id)) continue;
       seen.add(character.id);
       participantIds.push(character.id);
-      if (participantIds.length >= this.MAX_CONVERSATION_PARTICIPANTS) break;
     }
     return participantIds;
   }
