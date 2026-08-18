@@ -5546,24 +5546,28 @@ ${effectBody}
 }
 class ActionPromptBuilder {
   static buildActionCacheAnchor() {
-    return `VOTC_ACTION_CACHE_ANCHOR_v4
-You are a CK3 game-state action selector. Return only valid JSON that matches the supplied schema. Use only listed actions, action IDs, targets and arguments. The exact candidate message near the end is authoritative; earlier messages are context only. Select an action only when that candidate explicitly describes the corresponding state change or visible pose as happening now or already completed. The sole intention exception is an explicitly initiated operational CK3 scheme when startPersonalScheme is listed. If no listed action exactly matches it, return an empty actions array. Never replace a requested state change with an emotion or pose. Do not output prose, explanations, or code fences.`;
-  }
-  static buildActionMessages(conv, npc, available, actionContext = {}, historyWindow = Math.max(4, conv.gameData.characters.size)) {
-    const messages = [];
-    messages.push({ role: "system", content: this.buildActionCacheAnchor() });
-    const stableRulesBlock = `Stable action selection rules:
+    return `VOTC_ACTION_CACHE_ANCHOR_v6
+You are a CK3 game-state action selector. Return only valid JSON that matches the supplied schema. Use only listed actions, action IDs, targets and arguments. The exact candidate message near the end is authoritative; earlier messages are context only. Select an action only when that candidate explicitly describes the corresponding state change or visible pose as happening now or already completed. The sole intention exception is an explicitly initiated operational CK3 scheme when startPersonalScheme is listed. If no listed action exactly matches it, return an empty actions array. Never replace a requested state change with an emotion or pose. Do not output prose, explanations, or code fences.
+
+Stable action selection rules:
 - Treat example character IDs and values as formatting examples only; never copy them unless they are valid in the current roster and action definition.
-- Some listed actions expose isPlayerSource. Set it true only when recent dialogue explicitly makes the player the source of that completed action.
+- Some listed scene actions expose isPlayerSource. Set it true when the exact candidate says the player performed that completed scene action, even if the current responding NPC is someone else.
 - For payments, use playerPaysGoldTo when the player paid, and paysGoldTo when the NPC paid.
 - For imprisonment, target is the jailor. Use prisonType dungeon unless house arrest is explicitly stated.
 - Scene combat records an attack attempt only; add injury or death actions only when the exact message explicitly states that result.
 - Intimate contact records the described contact only; use intercourse solely when the exact message clearly states that intercourse was completed.
-- A proposal, plan, threat, question, wish, or hypothetical statement is not a completed action. Exception: deliberately beginning a concrete CK3 personal scheme may use startPersonalScheme, but vague threats and hypotheticals may not.`;
-    const fewShot = `Stable output contract:
-- Return {"actions":[]} when the exact candidate message does not complete any listed action.
+- The candidate may include deterministic semantic evidence and an allowed-script shortlist. Treat that shortlist as a hard boundary: select only a listed allowed script, never upgrade or substitute it. It is the second stage after explicit-action detection.
+- A proposal, plan, threat, question, wish, or hypothetical statement is not a completed action. Exception: deliberately beginning a concrete CK3 personal scheme may use startPersonalScheme, but vague threats and hypotheticals may not.
+
+Stable output contract:
+- Return {"actions":[]} only when no listed action can encode any detected category in the exact candidate message.
+- When a detected category has a matching listed scene action, select the smallest matching action; do not treat it as optional merely because its effect is visual or roleplay-only.
 - Otherwise return only the smallest set of listed actions directly completed in that exact candidate message.
 - Do not add a reaction, opinion change, emotion, pose, or no-op as a substitute or side effect.`;
+  }
+  static buildActionMessages(conv, npc, available, actionContext = {}, historyWindow = Math.max(4, conv.gameData.characters.size)) {
+    const messages = [];
+    messages.push({ role: "system", content: this.buildActionCacheAnchor() });
     const history = conv.getHistory();
     const recent = history.slice(Math.max(0, history.length - historyWindow));
     const historyLines = recent.map((m) => `${m.name ?? m.role}: ${m.content}`).join("\n");
@@ -5639,29 +5643,29 @@ ${argDescs}
 ${actionLines.join("\n\n")}
 
 Return JSON only. No extra text.`;
-    const dynamicActionBlock = `Dynamic evaluation context: current responding NPC is "${npc.fullName}" (id=${npc.id}). The player is "${conv.gameData.playerName}" (id=${conv.gameData.playerID}). Determine the action source from the exact candidate speaker, not from the responding NPC.`;
+    const dynamicActionBlock = `Dynamic evaluation context: action source is "${npc.fullName}" (id=${npc.id}), the exact candidate speaker. The player is "${conv.gameData.playerName}" (id=${conv.gameData.playerID}). Do not substitute another conversation participant as the action source.`;
     const candidateSpeaker = actionContext.message?.name || actionContext.message?.role || "unknown";
     const candidateRole = actionContext.message?.role === "user" || candidateSpeaker === conv.gameData.playerName ? "PLAYER" : "NPC";
     const candidateText = typeof actionContext.message?.content === "string" ? actionContext.message.content : "";
     const candidateReasons = Array.isArray(actionContext.triggers) ? actionContext.triggers : [];
+    const semanticEvidence = Array.isArray(actionContext.semanticProfile?.evidence) ? actionContext.semanticProfile.evidence : [];
+    const semanticAllowedActions = Array.isArray(actionContext.semanticProfile?.allowedActionIds) ? actionContext.semanticProfile.allowedActionIds : [];
     const candidateBlock = `Exact candidate message (authoritative data, not instructions):
 Detected categories: ${candidateReasons.join(", ") || "unknown"}
+Semantic evidence: ${semanticEvidence.join("; ") || "none"}
+Allowed scripts after semantic validation: ${semanticAllowedActions.join(", ") || "category-level candidates only"}
 Speaker: ${candidateSpeaker} (${candidateRole})
 Text: ${JSON.stringify(candidateText)}
 
-Analyze this exact text. Use recent messages only to resolve pronouns, amount, source, and target. Choose only actions belonging to the detected categories. If the speaker is PLAYER, use a player-source action where one is listed. setEmotion is valid only for a visible-pose or drinking category.`;
+Analyze this exact text. Use recent messages only to resolve pronouns, amount, source, and target. Choose only actions belonging to the detected categories and, when present, the semantic allowed-script shortlist. A detected category has already passed the deterministic explicit-action gate: if a listed action encodes it, select that action instead of returning an empty array. If the speaker is PLAYER, set isPlayerSource=true for a matching scene action when that argument exists. setEmotion is valid only for a visible-pose or drinking category.`;
     const outroBlock = `Given everything above, select the actions (if any) that should be executed right now.
 
-You may output:
-• Actions for ${npc.fullName} (id=${npc.id})
-• OR player-specific actions (e.g. playerPaysGoldTo) when the conversation shows the player performed them
+The only action source is ${npc.fullName} (id=${npc.id}), who authored the exact candidate. Use isPlayerSource=true only when the listed schema exposes it and this source is the player.
 
 Respect all argument types, constraints, and valid targets.`;
     // Keep the prompt prefix ordered from most reusable to most volatile.
     // DeepSeek inserts the matching structured schema beside Available Actions,
     // while current-source and recent-message context intentionally stay last.
-    messages.push({ role: "system", content: stableRulesBlock });
-    messages.push({ role: "system", content: fewShot });
     messages.push({ role: "system", content: characterRosterBlock });
     messages.push({ role: "system", content: actionsBlock });
     messages.push({ role: "system", content: dynamicActionBlock });
@@ -5975,7 +5979,10 @@ class ActionEngine {
     const isNonExecutedActionClause = (clause, actionMatch) => {
       const prefix = clause.slice(Math.max(0, actionMatch.index - 20), actionMatch.index);
       if (/[？?]/.test(clause) || /(?:吧|吗|么|呢|如何|可否|能否|好吗)[！!。]?$/.test(clause)) return true;
-      return /(?:请|命令|要求|让|叫|希望|想|要|欲|准备|打算|计划|将|会|能否|可否|是否|别|不要|莫|不许|不准)\s*(?:我|你|他|她|它|我们|你们|他们|她们|众人|侍从|护卫)?\s*$/i.test(prefix);
+      // Mentioning an action is not performing it. This keeps lore, rumours,
+      // recollections and dialogue about an event from changing game state.
+      if (/(?:谈论|讨论|提及|讲述|回忆|描述|声称|听说|传闻|假装).{0,12}$/i.test(prefix)) return true;
+      return /(?:请|命令|要求|让|叫|希望|想|要|欲|准备|打算|计划|将(?:要|会)|会|能否|可否|是否|别|不要|莫|不许|不准)\s*(?:我|你|他|她|它|我们|你们|他们|她们|众人|侍从|护卫)?\s*$/i.test(prefix);
     };
     const describesCompletedOrCurrentAction = (pattern, rejectFailedAttempt = false) => clauses.some((clause, clauseIndex) => {
       const actionMatch = pattern.exec(clause);
@@ -5993,37 +6000,38 @@ class ActionEngine {
       return futureMatch.index > actionMatch.index + actionMatch[0].length;
     });
     const rules = [
-      { reason: "gold", pattern: /(?:(?:支付|付给|给(?:了)?|交给|交付|塞给|递给|奉上|献上|打赏|赏赐|赏下|赏了|赠与|赠送|转交|给钱|送钱|付清|结清|赔付|贿赂|行贿|掏出).{0,16}(?:钱|金|银|金币|银币|铜钱|贯|两|文)|(?:赎金|彩礼|聘礼).{0,12}(?:支付|交付|给|付|钱|金|银)|收下.{0,12}(?:钱|金|银|礼金)|(?:pay|paid|give|gave|gift|gifted|transfer|transferred|bribed).{0,20}(?:gold|money|coin))/i },
-      { reason: "imprisonment", pattern: /(?:囚禁|关进|关押|投入(?:大牢|地牢)|收监|逮捕|拘押|软禁|拿下|押下|押入|押进|押往|下狱|入狱|捆起来|绑起来|戴上镣铐|imprison(?:ed)?|arrest(?:ed)?|jailed?|locked up|put in chains)/i },
-      { reason: "death_or_injury", pattern: /(?:杀死|杀了|砍死|刺死|毒死|勒死|掐死|打死|处死|斩首|刺伤|砍伤|打伤|重伤|负伤|受伤|弄瞎|刺瞎|打瞎|剜.?眼|断腿|折断|打断|割下|砍下|阉割|killed?|executed|wounded|injured|blinded|castrat|poisoned|strangled)/i },
-      { reason: "relationship", pattern: /(?:成为(?:情人|恋人|朋友|挚友|死敌|宿敌|灵魂伴侣|义兄弟)|结为(?:情人|恋人|朋友|挚友|死敌|宿敌|义兄弟)|结拜|义结金兰|定情|私定终身|握手言和|化敌为友|正式结盟|缔结同盟|签订停战|达成停战|became? (?:lovers?|friends?|rivals?|nemeses|soulmates?)|formed? an alliance|became? blood brothers?|agreed? to (?:a )?truce)/i },
-      { reason: "employment_or_office", pattern: /(?:任命为|册封为|拜为|擢升|升任|封为|授予.{0,12}(?:官|职|爵)|罢免|免去.{0,12}(?:官|职)|解职|革职|贬职|雇佣为|招募为(?:骑士|侍从)|逐出宫廷|appointed?|promoted?|dismissed|fired|employed|hired)/i },
-      { reason: "faith_or_vassal", pattern: /(?:改宗|皈依|改信|强迫.{0,12}信仰|臣服于|归顺|投降|称臣|纳贡称臣|宣誓效忠|成为.{0,12}封臣|converted?|vassalized|surrendered|swore fealty)/i },
-      { reason: "location_or_exit", pattern: /(?:离开(?:了)?(?:这里|房间|宫廷|宴会|谈话)?|走出|退出|离席|离场|转身离去|退下|告辞|踏入|进入|来到|赶往|移步|前往(?:王座厅|花园|卧室|军营|地牢|小巷)|搬到|移动到|left (?:the )?(?:conversation|room|court)|walked out|entered|arrived|moved? to)/i },
-      { reason: "drinking_or_toast", pattern: /(?:喝(?:了|着|下)?(?:茶|酒|一口|几口|一杯)|饮(?:了|着|下)?(?:茶|酒|一口|几口|一杯)|品(?:了|着)?(?:茶|酒)|啜|呷|抿(?:了)?一口|小酌|痛饮|畅饮|酌酒|碰杯|斟满|端起.{0,12}(?:茶盏|茶杯|酒杯|杯).{0,12}(?:喝|饮|品|啜)|举杯|举起(?:茶杯|酒杯)|敬(?:了)?(?:茶|酒)|干(?:了)?杯|一饮而尽|饮尽|饮罢|品茗|饮茶|饮酒|drank|sipped|gulped|raised (?:a |the )?(?:cup|glass)|made a toast|toasted)/i },
+      { reason: "gold", pattern: /(?:(?:支付|付给|给(?:了)?|交给|交付|塞给|递给|奉上|献上|打赏|赏赐|赏下|赏了|赏给|赠与|赠送|转交|给钱|送钱|付清|结清|赔付|补偿|贿赂|行贿|掏出|奉还|归还).{0,16}(?:钱|金|银|金币|银币|铜钱|贯|两|文|财物)|(?:赎金|彩礼|聘礼|酬金|赏钱).{0,12}(?:支付|交付|给|付|钱|金|银)|收下.{0,12}(?:钱|金|银|礼金|赏钱)|(?:pay|paid|give|gave|gift|gifted|transfer|transferred|compensated|bribed|repaid).{0,20}(?:gold|money|coin))/i },
+      { reason: "imprisonment", pattern: /(?:囚禁|关进|关押|投入(?:大牢|地牢)|收监|逮捕|拘押|软禁|拿下|押下|押入|押进|押往|押送(?:入|至).{0,8}(?:牢|狱)|下狱|入狱|捆(?:起|住)来?|绑(?:起|住)来?|上(?:了)?枷锁|戴上(?:镣铐|枷锁)|锁进(?:牢房|地牢)?|铁链(?:锁住|缚住)|imprison(?:ed)?|arrest(?:ed)?|jailed?|locked up|put in chains)/i },
+      { reason: "death_or_injury", pattern: /(?:杀死|杀了|砍死|刺死|毒死|勒死|掐死|打死|烧死|淹死|处死|斩首|毙命|殒命|气绝|断气|倒地(?:身亡|死去)|刺伤|砍伤|打伤|烧伤|冻伤|摔伤|重创|重伤|负伤|受伤|刺穿|贯穿|流血(?:不止)?|鲜血.{0,8}(?:流出|涌出|喷出)|伤口|骨折|断骨|昏迷|毁容|弄瞎|刺瞎|打瞎|剜.?眼|断腿|折断|打断|割下|砍下|阉割|killed?|executed|wounded|injured|maimed|disfigured|bled|bleeding|blinded|castrat|poisoned|strangled|burned|drowned)/i },
+      { reason: "relationship", pattern: /(?:成为(?:情人|恋人|朋友|挚友|至交|死敌|宿敌|仇敌|灵魂伴侣|义兄弟)|结为(?:情人|恋人|朋友|挚友|至交|死敌|宿敌|义兄弟|夫妻)|(?:彼此|两人|我们).{0,8}(?:相恋|相爱|坠入爱河|成为恋人|成为挚友|成为至交|成为死敌|反目成仇|化敌为友|冰释前嫌)|(?:与|和).{0,12}(?:结为|结成|成为)(?:情人|恋人|朋友|挚友|至交|死敌|宿敌|仇敌|灵魂伴侣|义兄弟|盟友)|结拜|义结金兰|义结兄弟|定情|私定终身|握手言和|和解(?:如初)?|化敌为友|正式结盟|结盟成功|结成同盟|缔结同盟|签订停战|达成停战|became? (?:lovers?|friends?|rivals?|nemeses|soulmates?)|formed? an alliance|became? blood brothers?|agreed? to (?:a )?truce)/i },
+      { reason: "opinion_change", pattern: /(?:(?:对|对于).{0,16}(?:好感|好感度|评价|看法|态度|意见).{0,12}(?:增加|上升|提高|改善|下降|降低|恶化|变差|转好|转坏|大增|大减)|(?:好感|好感度|评价|看法|态度|意见).{0,12}(?:增加|上升|提高|改善|下降|降低|恶化|变差|转好|转坏|大增|大减)|(?:对).{0,12}(?:不再信任|心生好感|心怀感激|心生厌恶|怀恨在心)|(?:更加|变得).{0,8}(?:敬重|钦佩|感激|信任|喜爱|厌恶|憎恨|不满|敌视)|(?:gained?|lost|increased?|decreased?|improved?|worsened?).{0,20}(?:opinion|respect|trust|affection))/i },
+      { reason: "employment_or_office", pattern: /(?:任命(?:为|了)?|册封(?:为|了)?|拜(?:为|了)?|擢升|升任|提拔(?:为|了)?|调任(?:为|至)?|委任(?:为|了)?|委派(?:为|至)?|封为|授予.{0,12}(?:官|职|爵|差事)|授官|授职|罢免|罢官|免去.{0,12}(?:官|职)|撤职|解职|革职|贬职|开除|雇佣(?:为|了)?|招募(?:为|了)?(?:骑士|侍从)?|聘为|入仕|加入.{0,12}(?:宫廷|朝廷)|效力于|逐出宫廷|appointed?|promoted?|assigned?|dismissed|fired|employed|hired|recruited)/i },
+      { reason: "faith_or_vassal", pattern: /(?:改宗|皈依|改信|改奉|弃绝(?:原)?信仰|信奉.{0,12}(?:教|信仰)|奉(?:为|行).{0,12}信仰|强迫.{0,12}信仰|臣服于|归顺(?:于)?|投降(?:于)?|称臣(?:于)?|纳贡称臣|宣誓(?:效忠|臣服)|效忠于|成为.{0,12}封臣|纳为封臣|接受.{0,12}(?:宗主|主君)|converted?|vassalized|surrendered|swore fealty|pledged allegiance)/i },
+      { reason: "location_or_exit", pattern: /(?:离开(?:了)?(?:这里|房间|宫廷|宴会|谈话)?|走出|退出|离席|离场|转身离去|退下|告辞|踏入|进入|来到|赶往|移步|前往(?:王座厅|花园|卧室|军营|地牢|小巷)|返回(?:了)?(?:宫廷|房间|营地|住所|花园|王座厅)|回到(?:宫廷|房间|营地|住所|花园|王座厅)|抵达(?:了)?(?:宫廷|房间|营地|花园|王座厅|军营|地牢|市场)|到达(?:了)?(?:宫廷|房间|营地|花园|王座厅|军营|地牢|市场)|搬到|移动到|left (?:the )?(?:conversation|room|court)|walked out|entered|arrived|returned to|moved? to)/i },
+      { reason: "drinking_or_toast", pattern: /(?:喝(?:了|着|下)?(?:茶|酒|一口|几口|一杯)|饮(?:了|着|下)?(?:茶|酒|一口|几口|一杯)|品(?:了|着)?(?:茶|酒)|啜|呷|抿(?:了)?一口|小酌|痛饮|畅饮|满饮|饮干|酌酒|碰杯|斟满|斟(?:了)?酒|倒(?:了)?酒入杯|端起.{0,12}(?:茶盏|茶杯|酒杯|杯).{0,12}(?:喝|饮|品|啜)|举杯|举起(?:茶杯|酒杯)|向.{0,12}(?:祝酒|敬酒)|敬(?:了)?(?:茶|酒)|干(?:了)?杯|一饮而尽|饮尽|饮罢|品茗|饮茶|饮酒|drank|sipped|gulped|drained (?:the )?(?:cup|glass)|raised (?:a |the )?(?:cup|glass)|made a toast|toasted)/i },
       { reason: "daily_movement", pattern: /(?:行走|迈步|踱步|散步|快步(?:走|前行)|小跑|奔跑|奔向|冲过去|(?:^|[我你他她它])(?:走|跑)(?:了|着|向|到|近|过去|过来|一步|几步)|walked?|walking|ran|running|jogged?|strolled?|paced?)/i },
       // Looking and other low-impact prose are not game actions. Only a
       // concrete physical interaction with an object, clothing or food reaches
       // performDailyAction automatically.
       { reason: "daily_object_interaction", pattern: /(?:拿起|拿过|拿来|拿走|取出|拾起|捡起|接过|提起|拎起|扛起|抱起|穿上|穿好|穿(?:了|着)?(?:衣|袍|裙|裤|鞋|靴|甲)|披上|戴上|套上|换上|吃了|吃下|吃掉|咬下|吞下|picked? up|took|carried|lifted|put on|wore|ate)/i },
       { reason: "combat", pattern: /(?:拔(?:出)?(?:长|短|佩|宝|铁)?(?:剑|刀|矛)|挥(?:长|短)?(?:剑|刀)|持(?:长|短)?(?:剑|刀|矛)|挥拳|出拳|打(?!算|听|探|开|扰|赌|猎|水|扫|赏|字|量|招|扮|包|造|卡|工|理|牌|针|伞|鼓)|掌掴|扇了?.{0,8}耳光|推(?:了|向|开|倒|他|她|你|我|$)|踢|踹|撞(?:了|向|上|倒|他|她|你|我|$)|扑向|摔倒|擒住|制服|缴械|刺(?:向|入|中|伤|了|他|她|你|我|$)|砍(?:向|中|下|伤|了|他|她|你|我|$)|劈(?:向|中|下|伤|了|他|她|你|我|$)|斩(?:向|中|下|伤|首|了|他|她|你|我|$)|格挡|招架|搏斗|厮打|扭打|打斗|交战|开战|冲杀|冲锋|射(?:出|中)|放箭|命中(?:了)?|击中(?:了)?|击败(?:了)?|战胜(?:了)?|duel(?:ed|ling)?|fought|attacked|punched|pushed|kicked|rammed|slammed|slapped|struck|stabbed|slashed|chopped|cleaved|parried|blocked|shot|hit|defeated|charged)/i },
-      { reason: "intimacy_or_clothing", pattern: /(?:(?:脱下|脱掉|脱去|褪下|褪去|除去|扯开|撕开|解下).{0,8}(?:衣|衣裙|外袍|亵衣|内衫|裤|腰带)|解开(?:了)?(?:衣带|腰带|衣襟)|宽衣(?:解带)?|裸露(?:了)?|赤裸|赤身|undressed|removed .{0,12}(?:clothes|robe|shirt|dress)|unfastened .{0,12}(?:belt|clothing))/i },
+      { reason: "intimacy_or_clothing", pattern: /(?:(?:脱下|脱掉|脱去|脱光|褪下|褪去|除去|扯开|撕开|解下|解衣).{0,8}(?:衣|衣裙|衣衫|外袍|亵衣|内衫|裤|腰带)|解开(?:了)?(?:衣带|腰带|衣襟)|宽衣(?:解带)?|衣衫(?:滑落|尽褪)|裸露(?:了)?|裸身|赤裸|赤身|露出.{0,8}(?:胸膛|肌肤|身体)|undressed|removed .{0,12}(?:clothes|robe|shirt|dress)|unfastened .{0,12}(?:belt|clothing))/i },
       { reason: "intimate_contact", pattern: /(?:抚摸|爱抚|舔舐|舔弄|亲吻|接吻|吻上|吻住|挑逗|撩拨|吮吸|含住|顶入|插入|进入.{0,8}(?:体内|身体)|研磨|摩擦|抽送|抽插|挺动|律动|揉捏|揉搓|caressed?|fondled?|licked?|kissed?|teased?|sucked?|penetrated?|inserted?|thrust(?:ed|ing)?|grind(?:ing)?|ground against|rubbed?)/i },
-      { reason: "visible_pose", pattern: /(?:微笑|笑了|大笑|哭泣|流泪|怒视|瞪着|跪下祈祷|祈祷|跳舞|起舞|读书|翻书|写字|执笔|偷听|侧耳倾听|争辩|讲故事|打哈欠|翻白眼|惊呆|后退|举杖|手持权杖|smiled|laughed|cried|wept|glared|prayed|danced|read(?:ing)?|wrote|writing|eavesdropped|rolled .{0,6}eyes)/i },
-      { reason: "rp_status", pattern: /(?:喝醉(?:了)?|醉了|醉醺醺|酩酊大醉|勃然大怒|怒不可遏|气得发抖|暴怒不已|受辱|遭到羞辱|感到羞辱|羞愤不已|蒙羞|心怀感激|感激不尽|惊恐万分|吓得发抖|疑心重重|起了疑心|满怀爱意|深情款款|精疲力尽|疲惫不堪|筋疲力尽|became drunk|is drunk|furious|enraged|humiliated|insulted|grateful|terrified|suspicious|affectionate|exhausted)/i },
-      { reason: "faction_commitment", pattern: /(?:(?:正式|已经|当即|决定|同意)?(?:加入|退出|离开).{0,18}(?:派系|阵营)|(?:明确|公开|正式|决定|同意)?(?:支持|拥护|反对|抵制).{0,18}(?:宣称者|宣称派系|派系|阵营)|(?:joined|left|support(?:ed)?|opposed).{0,20}(?:faction|claimant))/i },
-      { reason: "prisoner_resolution", pattern: /(?:释放(?:了)?|放了|放出|放走|获释|恢复自由|你自由了|逐出|放逐|流放|驱逐出境|released from prison|set .{0,12} free|freed|banished|exiled)/i },
-      { reason: "sexual_intercourse_completed", pattern: /(?:已经|终于|随即|当即|继而|片刻后|良久后|事后|完事后|云雨(?:已)?(?:毕|歇|罢|止)|欢好(?:已)?(?:毕|罢|过)|鱼水(?:之欢)?(?:已)?(?:毕|罢|过)|交合(?:已)?(?:毕|罢|过|完)|行房(?:已)?(?:毕|罢|过|完)|房事(?:已)?(?:毕|罢|过|完)|同房(?:已)?(?:毕|罢|过|完)|圆房(?:已)?(?:毕|罢|过|完)|发生(?:了)?(?:性关系|肉体关系)|做(?:了)?爱|作爱(?:已)?(?:毕|罢|过|完)|欢爱(?:已)?(?:毕|罢|过|完)|交媾(?:已)?(?:毕|罢|过|完)|媾合(?:已)?(?:毕|罢|过|完)|苟合(?:已)?(?:毕|罢|过|完)|燕好(?:已)?(?:毕|罢|过|完)|成其好事|共度(?:了)?春宵|一夜(?:欢好|缠绵|云雨)|事毕|完事(?:了)?|高潮(?:后|已过)|射(?:了)?(?:出来|精)|泄(?:了)?(?:身|精)|had (?:sexual )?intercourse|had sex|made love|slept with|consummated|finished (?:having )?sex|after (?:sex|intercourse|making love)|came|climaxed|orgasm(?:ed)?)/i }
+      { reason: "visible_pose", pattern: /(?:微笑|笑了|轻笑|失笑|大笑|哭泣|流泪|抽泣|哽咽|怒视|怒目而视|瞪着|跪下祈祷|祈祷|诵经|跳舞|起舞|翩翩起舞|读书|翻书|写字|执笔|伏案(?:书写|写字)|偷听|侧耳倾听|争辩|争论|讲故事|打哈欠|翻白眼|惊呆|后退|举杖|手持权杖|smiled|laughed|cried|wept|sobbed|glared|prayed|danced|read(?:ing)?|wrote|writing|eavesdropped|rolled .{0,6}eyes)/i },
+      { reason: "rp_status", pattern: /(?:喝醉(?:了)?|醉了|醉醺醺|酒意上涌|烂醉如泥|酩酊大醉|勃然大怒|怒不可遏|怒火中烧|怒气冲冲|气得发抖|暴怒不已|受辱|遭到羞辱|感到羞辱|羞愧难当|羞愤不已|倍感羞辱|蒙羞|心怀感激|感激不尽|感恩戴德|惊恐万分|心生恐惧|胆战心惊|吓得发抖|疑心重重|疑虑重重|起了疑心|满怀爱意|爱意渐浓|深情款款|精疲力尽|疲惫至极|疲惫不堪|筋疲力尽|became drunk|is drunk|furious|enraged|humiliated|insulted|grateful|terrified|suspicious|affectionate|exhausted)/i },
+      { reason: "faction_commitment", pattern: /(?:(?:正式|已经|当即|决定|同意)?(?:加入|退出|离开|投入|倒向).{0,18}(?:派系|阵营)|站到.{0,12}一边|(?:明确|公开|正式|决定|同意|宣布)?(?:支持|拥护|反对|抵制).{0,18}(?:宣称者|宣称派系|派系|阵营)|拥立.{0,16}(?:宣称者|为王|为君)|(?:joined|left|support(?:ed)?|opposed|backed).{0,20}(?:faction|claimant))/i },
+      { reason: "prisoner_resolution", pattern: /(?:释放(?:了)?|放了|放出|放走|获释|恢复自由|你自由了|赦免(?:了)?|解除囚禁|撤销监禁|解开(?:了)?(?:镣铐|枷锁)|遣返|逐出|逐离宫廷|放逐|流放|驱逐出境|released from prison|set .{0,12} free|freed|pardoned|banished|exiled)/i },
+      { reason: "sexual_intercourse_completed", pattern: /(?:已经|终于|随即|当即|继而|片刻后|良久后|事后|完事后|云雨(?:已)?(?:毕|歇|罢|止)|欢好(?:已)?(?:毕|罢|过)|鱼水(?:之欢)?(?:已)?(?:毕|罢|过)|交合(?:已)?(?:毕|罢|过|完)|行房(?:已)?(?:毕|罢|过|完)|房事(?:已)?(?:毕|罢|过|完)|同房(?:已)?(?:毕|罢|过|完)|圆房(?:已)?(?:毕|罢|过|完)|完成(?:了)?(?:交合|行房|房事|同房|圆房|性事)|发生(?:了)?(?:性关系|肉体关系)|做(?:了)?爱|作爱(?:已)?(?:毕|罢|过|完)|欢爱(?:已)?(?:毕|罢|过|完)|交媾(?:已)?(?:毕|罢|过|完)|媾合(?:已)?(?:毕|罢|过|完)|苟合(?:已)?(?:毕|罢|过|完)|燕好(?:已)?(?:毕|罢|过|完)|成其好事|共度(?:了)?春宵|一夜(?:欢好|缠绵|云雨)|春宵(?:已)?(?:过|尽)|交欢(?:已)?(?:毕|罢|过)|承欢(?:已)?(?:毕|罢|过)|事毕|完事(?:了)?|高潮(?:后|已过)|射(?:了)?(?:出来|精)|泄(?:了)?(?:身|精)|had (?:sexual )?intercourse|had sex|made love|slept with|consummated|finished (?:having )?sex|after (?:sex|intercourse|making love)|came|climaxed|orgasm(?:ed)?)/i }
     ];
     // The legacy broad sexual-action expression above contains generic adverbs
     // such as "already". Require a concrete, completed sexual-action phrase so
     // ordinary sentences (for example "she has already returned") never match.
-    const completedSexualAction = /(?:\u4e91\u96e8|\u6b22\u597d|\u9c7c\u6c34\u4e4b\u6b22|\u4ea4\u5408|\u884c\u623f|\u623f\u4e8b|\u540c\u623f|\u5706\u623f|\u505a\u7231|\u5a9a\u5408|\u82df\u5408|\u71d5\u597d|\u6210\u5176\u597d\u4e8b|\u5171\u5ea6\u6625\u5bb5|\u7f20\u7ef5|\u9ad8\u6f6e|\u5c04\u7cbe|\u6cc4\u8eab|\u4e8b\u6bd5\u540e.{0,20}(?:\u76f8\u62e5|\u8d64\u88f8|\u5e8a\u69bb)|\u5b8c\u4e8b\u540e.{0,20}(?:\u76f8\u62e5|\u8d64\u88f8|\u5e8a\u69bb)|\u53d1\u751f(?:\u4e86)?(?:\u6027\u5173\u7cfb|\u8089\u4f53\u5173\u7cfb)|had (?:sexual )?intercourse|had sex|made love|slept with|consummated|finished (?:having )?sex|after (?:sex|intercourse|making love)|climaxed|orgasm(?:ed)?)/i;
+    const completedSexualAction = /(?:\u4e91\u96e8(?:\u5df2)?(?:\u6bd5|\u6b47|\u7f62|\u6b62)|\u6b22\u597d(?:\u5df2)?(?:\u6bd5|\u7f62|\u8fc7)|\u9c7c\u6c34\u4e4b\u6b22(?:\u5df2)?(?:\u6bd5|\u7f62|\u8fc7)|\u4ea4\u5408(?:\u5df2)?(?:\u6bd5|\u7f62|\u8fc7|\u5b8c)|\u884c\u623f(?:\u5df2)?(?:\u6bd5|\u7f62|\u8fc7|\u5b8c)|\u623f\u4e8b(?:\u5df2)?(?:\u6bd5|\u7f62|\u8fc7|\u5b8c)|\u540c\u623f(?:\u5df2)?(?:\u6bd5|\u7f62|\u8fc7|\u5b8c)|\u5706\u623f(?:\u5df2)?(?:\u6bd5|\u7f62|\u8fc7|\u5b8c)|\u5b8c\u6210(?:\u4e86)?(?:\u4ea4\u5408|\u884c\u623f|\u623f\u4e8b|\u540c\u623f|\u5706\u623f|\u6027\u4e8b)|\u505a(?:\u4e86)?\u7231|\u5a9a\u5408|\u82df\u5408(?:\u5df2)?(?:\u6bd5|\u7f62|\u8fc7|\u5b8c)|\u71d5\u597d(?:\u5df2)?(?:\u6bd5|\u7f62|\u8fc7|\u5b8c)|\u6210\u5176\u597d\u4e8b|\u5171\u5ea6(?:\u4e86)?\u6625\u5bb5|\u4e00\u591c(?:\u6b22\u597d|\u7f20\u7ef5|\u4e91\u96e8)|\u6625\u5bb5(?:\u5df2)?(?:\u8fc7|\u5c3d)|\u4ea4\u6b22(?:\u5df2)?(?:\u6bd5|\u7f62|\u8fc7)|\u627f\u6b22(?:\u5df2)?(?:\u6bd5|\u7f62|\u8fc7)|\u9ad8\u6f6e(?:\u540e|\u5df2\u8fc7)|\u5c04\u7cbe|\u6cc4\u8eab|\u4e8b\u6bd5\u540e.{0,20}(?:\u76f8\u62e5|\u8d64\u88f8|\u5e8a\u69bb)|\u5b8c\u4e8b\u540e.{0,20}(?:\u76f8\u62e5|\u8d64\u88f8|\u5e8a\u69bb)|\u53d1\u751f(?:\u4e86)?(?:\u6027\u5173\u7cfb|\u8089\u4f53\u5173\u7cfb)|had (?:sexual )?intercourse|had sex|made love|slept with|consummated|finished (?:having )?sex|after (?:sex|intercourse|making love)|climaxed|orgasm(?:ed)?)/i;
     const detected = [];
     // Deliberately starting a CK3 scheme is an executable intention, unlike an
     // ordinary future promise. Keep this narrow and require planning/operational
     // language so threats such as "I will kill you" do not start schemes.
-    const schemeIntent = /(?:(?:开始|着手|决定|准备|打算|计划|设法|派人|派刺客|雇凶).{0,18}(?:拉拢|讨好|结交|交友|勾引|诱惑|追求|赢得.{0,6}芳心|谋杀|暗杀|除掉|做掉|绑架|劫持|寻找.{0,6}把柄|制造.{0,6}把柄)|(?:start|begin|plot|plan|send an assassin|hire an assassin).{0,24}(?:sway|befriend|seduce|romance|murder|assassinate|abduct|kidnap|fabricate a hook))/i;
+    const schemeIntent = /(?:(?:开始|着手|决定|准备|打算|计划|部署|布置|实施|启动|设法|派人|派刺客|雇凶).{0,18}(?:拉拢|讨好|结交|交友|勾引|诱惑|追求|赢得.{0,6}芳心|谋杀|暗杀|除掉|做掉|绑架|劫持|寻找.{0,6}把柄|捏造.{0,6}把柄|制造.{0,6}把柄|散布.{0,8}谣言)|(?:start|begin|plot|plan|prepare|deploy|send an assassin|hire an assassin).{0,24}(?:sway|befriend|seduce|romance|murder|assassinate|abduct|kidnap|fabricate a hook))/i;
     if (clauses.some((clause, clauseIndex) => schemeIntent.test(clause) && !failedAttemptMarker.test(clause) && !hypotheticalMarker.test(clause) && !(clauseIndex > 0 && hypotheticalMarker.test(clauses[clauseIndex - 1])))) {
       detected.push("scheme_start");
     }
@@ -6033,6 +6041,88 @@ class ActionEngine {
       if (describesCompletedOrCurrentAction(rule.pattern, rule.reason !== "combat")) detected.push(rule.reason);
     }
     return Array.from(new Set(detected));
+  }
+  /**
+   * Stage two of action detection. Stage one above only establishes that a
+   * concrete action was narrated. This stage combines the resulting category
+   * with descriptive evidence and narrows the script candidates before the
+   * model resolves actor, target, and arguments. Keeping this deterministic
+   * prevents a vivid sentence from becoming an unrelated CK3 state change.
+   */
+  static getSemanticActionProfile(text, initialReasons = []) {
+    const source = typeof text === "string" ? text : "";
+    const reasons = /* @__PURE__ */ new Set(initialReasons);
+    const allowedActionIds = /* @__PURE__ */ new Set();
+    const evidence = [];
+    const matches = (pattern) => pattern.test(source);
+    const allow = (actionId, label) => {
+      allowedActionIds.add(actionId);
+      if (label) evidence.push(label);
+    };
+    if (reasons.has("gold")) {
+      allow("paysGoldTo", "明确完成的财物转移");
+      allow("playerPaysGoldTo");
+    }
+    if (reasons.has("imprisonment")) allow("isImprisonedBy", "明确完成的拘押/监禁");
+    if (reasons.has("death_or_injury")) {
+      if (matches(/(?:杀死|杀了|砍死|刺死|毒死|勒死|掐死|打死|烧死|淹死|处死|斩首|毙命|殒命|气绝|断气|倒地(?:身亡|死去)|killed?|executed|died)/i)) {
+        allow("characterIsKilled", "明确的死亡结果");
+      } else {
+        allow("isInjured", "明确的非致死伤害结果");
+      }
+    }
+    if (reasons.has("relationship")) {
+      if (matches(/(?:灵魂伴侣|灵魂相契|灵魂共鸣|命中注定|命定之人|至死不渝|此生相守|became? soulmates?)/i)) allow("becomeSoulmatesWith", "明确的深度灵魂羁绊");
+      else if (matches(/(?:情人|恋人|相恋|相爱|坠入爱河|定情|私定终身|夫妻|lovers?)/i)) allow("becomeLoversWith", "明确的恋爱关系确认");
+      else if (matches(/(?:至交|挚友|生死之交|best friends?)/i)) allow("becomeBestFriendsWith", "明确的挚友关系确认");
+      else if (matches(/(?:朋友|友人|友谊|friends?)/i)) allow("becomeFriendsWith", "明确的友谊关系确认");
+      else if (matches(/(?:义结|结拜|义兄弟|血盟兄弟|blood brothers?)/i)) allow("becomeBloodBrothersWith", "明确的义兄弟关系确认");
+      else if (matches(/(?:死敌|宿敌|不共戴天|nemeses)/i)) allow("becomeNemesisWith", "明确的宿敌关系确认");
+      else if (matches(/(?:仇敌|冤家|势不两立|rivals?)/i)) allow("becomeRivalsWith", "明确的对立关系确认");
+      else if (matches(/(?:停战|休战|truce)/i)) allow("agreedToTruceWith", "明确达成停战");
+      else if (matches(/(?:结盟|同盟|盟友|alliance)/i)) allow("makeAlliance", "明确结成同盟");
+    }
+    // Descriptive romance can establish a relation even when the author does
+    // not use a relationship noun. A lingering mutual gaze followed by a kiss
+    // is deliberately treated as the stronger, soulmate-tier composition;
+    // a single affectionate contact remains the lower lover-tier composition.
+    const lingeringGaze = matches(/(?:对视|四目相对|凝望|深望).{0,12}(?:许久|良久|久久|片刻|良久不语)|(?:许久|良久|久久).{0,12}(?:对视|四目相对|凝望|深望)/i);
+    const kiss = matches(/(?:亲吻|接吻|吻上|吻住|深吻|kissed?)/i);
+    const affection = matches(/(?:牵住?.{0,8}(?:手|手指)|十指相扣|相拥|拥抱|依偎|抚摸|爱抚|亲吻|接吻|吻上|吻住|深吻|互诉(?:心意|衷肠)|倾诉(?:爱意|心意)|caressed?|embraced|hugged|kissed?)/i);
+    if (reasons.has("intimate_contact") && lingeringGaze && kiss) {
+      reasons.add("relationship");
+      allow("becomeSoulmatesWith", "描述组合：长久对视后亲吻，形成深度亲密羁绊");
+    } else if (reasons.has("intimate_contact") && affection) {
+      reasons.add("relationship");
+      allow("becomeLoversWith", "描述组合：明确的相互亲密接触");
+    }
+    if (reasons.has("opinion_change")) allow("changeOpinionOf", "明确的好感/评价变化");
+    if (reasons.has("employment_or_office")) {
+      if (matches(/(?:罢免|罢官|免去|撤职|解职|革职|贬职|开除|dismissed|fired)/i)) allow("isFiredFromCouncilOf", "明确的撤职/解雇");
+      else if (matches(/(?:骑士|侍从|knight)/i)) allow("isEmployedAsKnightBy", "明确任为骑士或侍从");
+      else if (matches(/(?:议会|内阁|council)/i)) allow("isAssignedToCouncilBy", "明确任入议会");
+      else if (matches(/(?:宫廷职位|宫廷职务|court position)/i)) allow("isAssignedToCourtPositionBy", "明确任为宫廷职位");
+      else allow("isEmployedBy", "明确的雇佣/任用");
+    }
+    if (reasons.has("faith_or_vassal")) {
+      if (matches(/(?:改宗|皈依|改信|改奉|弃绝(?:原)?信仰|信奉.{0,12}(?:教|信仰)|converted?)/i)) allow("convertsToReligionOf", "明确改变信仰");
+      if (matches(/(?:臣服|归顺|投降|称臣|纳贡称臣|宣誓(?:效忠|臣服)|成为.{0,12}封臣|纳为封臣|vassalized|surrendered|swore fealty|pledged allegiance)/i)) allow("isVassalizedBy", "明确成为封臣");
+    }
+    if (reasons.has("location_or_exit")) {
+      if (matches(/(?:离开|走出|退出|离席|离场|转身离去|退下|告辞|left|walked out)/i)) allow("leavesConversation", "明确离开当前对话或场景");
+      if (matches(/(?:踏入|进入|来到|赶往|移步|前往|返回|回到|抵达|到达|搬到|移动到|entered|arrived|returned to|moved? to)/i)) allow("changeLocation", "明确到达或移动至新地点");
+    }
+    if (reasons.has("drinking_or_toast") || reasons.has("visible_pose")) allow("setEmotion", "明确可见姿态或饮酒动作");
+    if (reasons.has("intimacy_or_clothing")) allow("isUndressed", "明确脱衣或裸露状态");
+    if (reasons.has("sexual_intercourse_completed")) allow("intercourse", "明确完成的性交");
+    if (reasons.has("rp_status")) allow("setRoleplayStatus", "明确当前角色状态");
+    if (reasons.has("faction_commitment")) allow("recordFactionCommitment", "明确派系立场或加入结果");
+    if (reasons.has("prisoner_resolution")) allow("resolvePrisoner", "明确囚犯释放或流放结果");
+    if (reasons.has("scheme_start")) {
+      if (matches(/(?:谋杀|暗杀|除掉|做掉|绑架|劫持|捏造.{0,6}把柄|制造.{0,6}把柄|散布.{0,8}谣言|murder|assassinate|abduct|kidnap|fabricate)/i)) allow("startHostileScheme", "明确启动敌对计谋");
+      else allow("startPersonalScheme", "明确启动非敌对人物计谋");
+    }
+    return { reasons: Array.from(reasons), allowedActionIds: Array.from(allowedActionIds), evidence };
   }
   static getActionTrigger(text) {
     return this.getActionTriggers(text)[0] || null;
@@ -6047,7 +6137,12 @@ class ActionEngine {
       faith_or_vassal: ["convertsToReligionOf", "isVassalizedBy"],
       location_or_exit: ["changeLocation", "leavesConversation"],
       drinking_or_toast: ["setEmotion"],
-      combat: ["isInjured", "characterIsKilled"],
+      // A bare attack attempt is handled only by the optional scene module.
+      // Legacy injury/death effects require the separate, explicit
+      // death_or_injury trigger below, so drawing a weapon never becomes an
+      // accidental wound or death action after scene modules are disabled.
+      combat: [],
+      opinion_change: ["changeOpinionOf"],
       intimacy_or_clothing: ["isUndressed"],
       sexual_intercourse_completed: ["intercourse"],
       visible_pose: ["setEmotion"]
@@ -6068,17 +6163,18 @@ class ActionEngine {
   static shouldEvaluateForMessage(conv, message) {
     const detectedReasons = this.getActionTriggers(message?.content);
     if (detectedReasons.length === 0) return { shouldEvaluate: false, reason: "no_explicit_state_change_keyword" };
-    const dedupeKey = `${detectedReasons.join("+")}|${message.name || message.role || "unknown"}|${message.content}`;
+    const semanticProfile = this.getSemanticActionProfile(message?.content, detectedReasons);
+    const semanticReasons = semanticProfile.reasons;
+    const dedupeKey = `${semanticReasons.join("+")}|${message.name || message.role || "unknown"}|${message.content}`;
     if (!conv.actionGateProcessedTriggers) conv.actionGateProcessedTriggers = /* @__PURE__ */ new Set();
-    if (!conv.actionGateProcessedTurnReasons) conv.actionGateProcessedTurnReasons = /* @__PURE__ */ new Set();
     if (conv.actionGateProcessedTriggers.has(dedupeKey)) {
       return { shouldEvaluate: false, reason: "already_processed_action_text" };
     }
-    const reasons = detectedReasons.filter((reason) => !conv.actionGateProcessedTurnReasons.has(reason));
-    if (reasons.length === 0) {
-      return { shouldEvaluate: false, reason: "already_processed_action_type_this_turn" };
-    }
-    return { shouldEvaluate: true, reason: reasons.join("+"), reasons, dedupeKey };
+    // Do not suppress a different character's explicit action merely because
+    // another message in this turn used the same category. The exact-message
+    // key above still prevents a single player line from being evaluated more
+    // than once, while multi-NPC dialogue keeps every distinct action.
+    return { shouldEvaluate: true, reason: semanticReasons.join("+"), reasons: semanticReasons, semanticProfile, dedupeKey };
   }
   /**
    * Evaluate actions for the given NPC (as source) based on recent conversation state.
@@ -6102,7 +6198,6 @@ class ActionEngine {
       }
       console.log(`[ActionEngine] Explicit action keyword detected for ${npc.shortName}: ${gate.reason}`);
       conv.actionGateProcessedTriggers.add(gate.dedupeKey);
-      gate.reasons.forEach((reason) => conv.actionGateProcessedTurnReasons.add(reason));
       const recordOutcome = (actionOutcome, selectedActionIds = [], skipReason = null, details = {}) => usageAnalytics.record({
         requestType: "action_outcome",
         character: npc.shortName,
@@ -6119,6 +6214,10 @@ class ActionEngine {
       const userLang = settingsRepository.getLanguage();
       const relevantActionIds = this.getActionIdsForTriggers(gate.reasons);
       const candidateIsPlayer = actionMessage?.role === "user" || actionMessage?.name === conv.gameData.playerName;
+      // Player-narrated actions used to be checked and executed through the
+      // first randomly queued NPC. That made a clear player action look like a
+      // mismatched source to the selector and often produced an empty result.
+      const actionSource = candidateIsPlayer ? conv.gameData.characters.get(conv.gameData.playerID) || npc : npc;
       if (gate.reasons.includes("gold")) {
         relevantActionIds.delete(candidateIsPlayer ? "paysGoldTo" : "playerPaysGoldTo");
       }
@@ -6126,14 +6225,28 @@ class ActionEngine {
         /* includeDisabled = */
         false
       );
+      // Scene modules are useful only for a line that contains no legacy CK3
+      // state change. When both appear, let the substantive legacy action win
+      // instead of allowing a generic pose/combat/contact record to crowd out
+      // injury, payment, relationship, office, or other game effects.
+      const sceneActionIds = /* @__PURE__ */ new Set(["performCombatAction", "performDailyAction", "performIntimateAction"]);
+      const legacyStateReasons = /* @__PURE__ */ new Set(["gold", "imprisonment", "death_or_injury", "relationship", "opinion_change", "employment_or_office", "faith_or_vassal", "location_or_exit", "drinking_or_toast", "intimacy_or_clothing", "sexual_intercourse_completed", "visible_pose", "faction_commitment", "prisoner_resolution", "rp_status", "scheme_start"]);
+      const hasLegacyStateChange = gate.reasons.some((reason) => legacyStateReasons.has(reason));
       // New action files can declare their gate categories themselves. This
       // keeps future extensions in the registry instead of duplicating every
       // action ID inside ActionEngine.
       for (const action of allLoaded) {
         const categories = Array.isArray(action.definition.triggerCategories) ? action.definition.triggerCategories : [];
+        if (hasLegacyStateChange && sceneActionIds.has(action.id)) continue;
         if (categories.some((category) => gate.reasons.includes(category))) relevantActionIds.add(action.id);
       }
-      const loaded = allLoaded.filter((action) => relevantActionIds.has(action.id));
+      // Stage two supplies a semantic allowlist whenever the wording identifies
+      // a particular script (for example injury rather than death, or a
+      // long mutual gaze followed by a kiss rather than generic intimacy).
+      // The selector can still resolve participants and arguments, but cannot
+      // promote the event into a different game effect.
+      const semanticAllowlist = new Set(gate.semanticProfile?.allowedActionIds || []);
+      const loaded = allLoaded.filter((action) => relevantActionIds.has(action.id) && (semanticAllowlist.size === 0 || semanticAllowlist.has(action.id)));
       const available = [];
       for (const act of loaded) {
         if (signal?.aborted) {
@@ -6142,13 +6255,13 @@ class ActionEngine {
         try {
           const checkResult = await act.definition.check({
             gameData: conv.gameData,
-            sourceCharacter: npc
+            sourceCharacter: actionSource
           });
           if (!checkResult?.canExecute) continue;
           const requiresTarget = typeof checkResult.requiresTarget === "boolean" ? checkResult.requiresTarget : !!(checkResult.validTargetCharacterIds && checkResult.validTargetCharacterIds.length > 0);
           let args;
           if (typeof act.definition.args === "function") {
-            args = act.definition.args({ gameData: conv.gameData, sourceCharacter: npc });
+            args = act.definition.args({ gameData: conv.gameData, sourceCharacter: actionSource });
           } else {
             args = act.definition.args;
           }
@@ -6165,7 +6278,7 @@ class ActionEngine {
           }
           let description;
           if (typeof act.definition.description === "function") {
-            const descResult = act.definition.description({ gameData: conv.gameData, sourceCharacter: npc });
+            const descResult = act.definition.description({ gameData: conv.gameData, sourceCharacter: actionSource });
             description = resolveI18nString(descResult, userLang);
           } else {
             description = resolveI18nString(act.definition.description, userLang);
@@ -6192,9 +6305,10 @@ class ActionEngine {
         console.log("[DEBUG] ActionEngine: Aborted before LLM request");
         return { autoApproved: [], needsApproval: [] };
       }
-      const messages = ActionPromptBuilder.buildActionMessages(conv, npc, available, {
+      const messages = ActionPromptBuilder.buildActionMessages(conv, actionSource, available, {
         message: actionMessage,
-        triggers: gate.reasons
+        triggers: gate.reasons,
+        semanticProfile: gate.semanticProfile
       });
       const actionsConfig = settingsRepository.getActionsProviderConfig();
       // The compact schema still goes through the same strict local Zod
@@ -6308,8 +6422,8 @@ class ActionEngine {
           needsApproval.push({
             actionId: inv.actionId,
             actionTitle,
-            sourceCharacterId: npc.id,
-            sourceCharacterName: npc.shortName,
+            sourceCharacterId: actionSource.id,
+            sourceCharacterName: actionSource.shortName,
             targetCharacterId: targetId ?? void 0,
             targetCharacterName: target?.shortName,
             args: inv.args ?? {},
@@ -6318,7 +6432,7 @@ class ActionEngine {
           });
         } else {
           console.log(`[ActionEngine] Action ${inv.actionId} auto-approved (destructive: ${isDestructive})`);
-          const result2 = await this.runInvocation(conv, npc, inv);
+          const result2 = await this.runInvocation(conv, actionSource, inv);
           autoApproved.push(result2);
         }
       }
@@ -6438,7 +6552,6 @@ class Conversation {
     // Action checks are scoped to the current player turn. This prevents one
     // narrated event from being sent to the action model once per NPC reply.
     this.actionGateProcessedTriggers = /* @__PURE__ */ new Set();
-    this.actionGateProcessedTurnReasons = /* @__PURE__ */ new Set();
     this.pendingPlayerActionMessage = null;
     this.eventEmitter = new events.EventEmitter();
     this.initializeGameData();
@@ -6868,7 +6981,6 @@ ${result.content}`;
     // Only the first NPC of this turn may evaluate a player-narrated action;
     // later NPCs evaluate only their own freshly generated line.
     this.actionGateProcessedTriggers.clear();
-    this.actionGateProcessedTurnReasons.clear();
     this.pendingPlayerActionMessage = ActionEngine.getActionTrigger(userMsg.content) ? userMsg : null;
     this.emitUpdate();
     if (this.npcQueue.length === 0) {

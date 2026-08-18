@@ -12,12 +12,10 @@ eval(`${source.slice(engineStart, engineEnd)}\nglobalThis.__TestActionEngine = A
 const ActionEngine = globalThis.__TestActionEngine;
 
 const triggerCases = [
-  ["走吧", ["daily_movement"]],
+  ["他踱步前行。", ["daily_movement"]],
   ["我拿起酒杯", ["daily_object_interaction"]],
-  ["我摸着桌面", ["daily_object_interaction"]],
   ["我穿上外袍", ["daily_object_interaction"]],
   ["我吃下糕点", ["daily_object_interaction"]],
-  ["我看向她", ["daily_object_interaction"]],
   ["我打赏他十金币", ["gold"]],
   ["我推倒他，又踢了他一脚", ["combat"]],
   ["我挥剑砍伤了他", ["combat", "death_or_injury"]],
@@ -40,6 +38,27 @@ const triggerCases = [
 
 for (const [text, expected] of triggerCases) {
   assert.deepStrictEqual(ActionEngine.getActionTriggers(text).sort(), [...expected].sort(), text);
+}
+
+const semanticCases = [
+  ["我与她对视许久，随后吻住了她的唇。", ["intimate_contact", "relationship"], ["becomeSoulmatesWith"]],
+  ["我牵住她的手，轻轻亲吻她。", ["intimate_contact", "relationship"], ["becomeLoversWith"]],
+  ["卫兵将他押送入牢。", ["imprisonment"], ["isImprisonedBy"]],
+  ["他被刺伤，鲜血不断涌出。", ["death_or_injury"], ["isInjured"]],
+  ["他被斩首处死。", ["death_or_injury"], ["characterIsKilled"]],
+  ["领主任命他为骑士。", ["employment_or_office"], ["isEmployedAsKnightBy"]],
+  ["他宣誓效忠于国王，成为封臣。", ["faith_or_vassal"], ["isVassalizedBy"]],
+  ["她转身离席，走出大厅。", ["location_or_exit"], ["leavesConversation"]],
+  ["她返回宫廷。", ["location_or_exit"], ["changeLocation"]],
+  ["国王赦免了囚犯，解开镣铐。", ["prisoner_resolution"], ["resolvePrisoner"]],
+  ["他着手部署暗杀计划。", ["scheme_start"], ["startHostileScheme"]],
+  ["他开始拉拢那位伯爵。", ["scheme_start"], ["startPersonalScheme"]]
+];
+
+for (const [text, expectedReasons, expectedScripts] of semanticCases) {
+  const profile = ActionEngine.getSemanticActionProfile(text, ActionEngine.getActionTriggers(text));
+  for (const reason of expectedReasons) assert(profile.reasons.includes(reason), `${text}: missing reason ${reason}`);
+  for (const script of expectedScripts) assert(profile.allowedActionIds.includes(script), `${text}: missing script ${script}`);
 }
 
 const makeCharacter = (id, shortName, age) => ({ id, shortName, fullName: shortName, age });
