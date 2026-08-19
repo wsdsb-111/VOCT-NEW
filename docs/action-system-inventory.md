@@ -1,6 +1,12 @@
 # VOTC Action System Inventory
 ## v6.4 Baseline for v6.5 Refactor
 
+> ⚠️ 交接说明：
+> 本 Inventory 用于理解 v6.4 架构和 Action 分布，但部分正文统计仍保留早期分析口径。
+> v6.5 实施前，Action 数量、Gate categories、semantic hardcode、isDestructive、
+> triggerCategories 和测试覆盖必须从当前代码重新机器统计。
+> 当前已确认的顶部统计优先于正文旧统计；真实代码与实际测试结果拥有最高优先级。
+
 > **生成日期**: 2026-08-19 (校正版)  
 > **目的**: 为 v6.5 Event-based / metadata-driven 重构建立可靠基线  
 > **状态**: 基线校正完成，禁止修改生产代码  

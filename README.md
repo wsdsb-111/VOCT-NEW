@@ -219,7 +219,8 @@ voices-of-the-court/
 
 第五阶段的政治与 RP 扩展继续增加五个元数据驱动脚本：
 
-- `startPersonalScheme` / `startHostileScheme`：友好计谋支持拉拢、交友、勾引和追求，敌对计谋支持谋杀、绑架和制造把柄。拆分后只有敌对计谋被标为破坏性动作；生成的 CK3 效果先调用原生 `can_start_scheme`，只有游戏认可前置条件时才执行 `start_scheme`。普通威胁、愿望和假设不会启动计谋，勾引与追求仍保留双方成年校验。
+- `startPersonalScheme` / `startHostileScheme`：友好计谋支持拉拢、交友、勾引和追求，敌对计谋支持谋杀、绑架和制造把柄。拆分后只有敌对计谋被标为破坏性动作；生成的 CK3 效果先调用原生 `can_start_scheme`，只有游戏认可前置条件时才执行 `start_scheme`。普通威胁、愿望和假设不会启动计谋，勾引与追求仍保留双方成年校验。当前 v6.4 已覆盖常见计划、未来、回忆和传闻表达，但部分混合语义、
+假设语境与特殊语序仍存在边界误判；这些问题已进入 v6.5 回归测试与架构重构范围。
 - `setRoleplayStatus`：支持醉酒、暴怒、受辱、蒙羞、感激、惊恐、疑心、亲爱和疲惫，写入带期限的角色 flag 并同步 talk pose，不擅自修改健康、关系或好感。
 - `recordFactionCommitment`：记录加入、退出、支持宣称者或反对派系的已接受政治承诺。当前日志没有导出 faction ID/scope，因此该动作保存角色 flag 与关联人物，但不会虚报 CK3 派系成员关系已经改变。
 - `resolvePrisoner`：支持释放和放逐，使用 CK3 原生 `release_from_prison` / `banish` 效果；无效的囚犯状态仍由游戏原生条件决定。
