@@ -6808,7 +6808,15 @@ class ActionEngine {
           registry: actionRegistry,
           gameData: conv.gameData
         }) : null;
-        if (bindingValidation && !bindingValidation.valid) continue;
+        if (bindingValidation && !bindingValidation.valid) {
+          usageAnalytics.record({
+            requestType: "action_invocation_validation",
+            actionId: inv.actionId,
+            outcome: "rejected",
+            reason: bindingValidation.reason
+          }, null);
+          continue;
+        }
         const invocation = bindingValidation?.invocation || (availableAction.resolvedTargetCharacterId !== void 0 ? {
           ...inv,
           targetCharacterId: availableAction.resolvedTargetCharacterId
@@ -6878,8 +6886,24 @@ class ActionEngine {
         error: "Action not found or invalid"
       };
     }
+    const sourceId = inv.sourceCharacterId ?? npc?.id ?? null;
+    const source = sourceId != null ? conv.gameData.characters.get(sourceId) ?? null : null;
+    if (!source) {
+      return {
+        actionId: inv.actionId,
+        success: false,
+        error: "Resolved source character unavailable"
+      };
+    }
     const targetId = inv.targetCharacterId ?? null;
     const target = targetId != null ? conv.gameData.characters.get(targetId) ?? void 0 : void 0;
+    if (targetId != null && !target) {
+      return {
+        actionId: inv.actionId,
+        success: false,
+        error: "Resolved target character unavailable"
+      };
+    }
     const userLang = settingsRepository.getLanguage();
     const args = inv.args ?? {};
     try {
@@ -6889,7 +6913,7 @@ class ActionEngine {
         action: loaded.definition,
         filePath: loaded.filePath,
         gameData: conv.gameData,
-        sourceCharacter: npc,
+        sourceCharacter: source,
         targetCharacter: target,
         args,
         conversation: conv,
@@ -6897,7 +6921,7 @@ class ActionEngine {
         lang: userLang
       });
       if (!options?.dryRun && inv.actionId === "characterIsKilled") {
-        conv.markParticipantInactive?.(npc.id, "dead");
+        conv.markParticipantInactive?.(source.id, "dead");
       }
       let feedback = void 0;
       if (result) {
@@ -6920,7 +6944,10 @@ class ActionEngine {
       return {
         actionId: inv.actionId,
         success: true,
-        feedback
+        feedback,
+        sourceCharacterId: source.id,
+        targetCharacterId: target?.id,
+        bindingId: inv.bindingId ?? null
       };
     } catch (err) {
       console.error(`Action ${inv.actionId} failed:`, err);
@@ -7081,7 +7108,42 @@ ${result.content}`;
     if (this.referenceContext?.activeParticipantIds) {
       this.referenceContext.activeParticipantIds = this.referenceContext.activeParticipantIds.filter((id) => id !== characterId);
     }
+    this.invalidateApprovalsForCharacter?.(characterId, reason);
     console.log(`[Conversation] Participant ${characterId} marked inactive: ${reason}`);
+  }
+  invalidatePendingActionApproval(approvalId, reason) {
+    const pending = this.pendingActionApprovals.get(approvalId);
+    if (!pending) return false;
+    this.pendingActionApprovals.delete(approvalId);
+    const approvalEntry = this.messages.find((msg) => msg.type === "action-approval" && msg.id === approvalId);
+    if (approvalEntry) {
+      approvalEntry.status = "declined";
+      approvalEntry.resultFeedback = resolveI18nString({
+        zh: "该动作已失效：此前解析的人物当前已不可用。",
+        en: "This action is no longer valid because a resolved participant is unavailable."
+      }, settingsRepository.getLanguage());
+      approvalEntry.resultSentiment = "negative";
+    }
+    usageAnalytics.record({
+      requestType: "action_approval_invalidated",
+      actionId: pending.action?.actionId,
+      sourceCharacterId: pending.sourceCharacterId ?? null,
+      targetCharacterId: pending.targetCharacterId ?? null,
+      bindingId: pending.bindingId ?? null,
+      reason
+    }, null);
+    this.emitUpdate();
+    return true;
+  }
+  invalidateApprovalsForCharacter(characterId, reason) {
+    for (const [approvalId, pending] of this.pendingActionApprovals.entries()) {
+      const sourceId = pending.invocation?.sourceCharacterId ?? pending.sourceCharacterId ?? pending.action?.sourceCharacterId ?? pending.npc?.id ?? null;
+      const targetId = pending.invocation?.targetCharacterId ?? pending.targetCharacterId ?? pending.action?.targetCharacterId ?? null;
+      if (pending.npc?.id === characterId || sourceId === characterId || targetId === characterId) {
+        const invalidationReason = sourceId === characterId ? "stale_approval_source_unavailable" : targetId === characterId ? "stale_approval_target_unavailable" : "approval_binding_invalidated";
+        this.invalidatePendingActionApproval(approvalId, invalidationReason);
+      }
+    }
   }
   // Handle response for a single NPC
   async respondAs(npc) {
@@ -7287,6 +7349,10 @@ ${result.content}`;
       this.pendingActionApprovals.set(approvalEntry.id, {
         npc,
         action,
+        invocation: action.invocation,
+        bindingId: action.invocation?.bindingId ?? null,
+        sourceCharacterId: action.invocation?.sourceCharacterId ?? action.sourceCharacterId ?? null,
+        targetCharacterId: action.invocation?.targetCharacterId ?? action.targetCharacterId ?? null,
         previewFeedback,
         previewSentiment,
         approvalEntryId: approvalEntry.id
@@ -7759,13 +7825,32 @@ ${result.content}`;
     if (approvalEntry.type !== "action-approval") {
       throw new Error(`Entry ${approvalEntryId} is not an action-approval entry`);
     }
+    const invocation = pending.invocation || pending.action.invocation;
+    const sourceId = invocation?.sourceCharacterId ?? pending.sourceCharacterId ?? pending.npc?.id ?? null;
+    const targetId = invocation?.targetCharacterId ?? pending.targetCharacterId ?? null;
+    let invalidationReason = null;
+    if ((pending.bindingId != null && invocation?.bindingId !== pending.bindingId) || (pending.sourceCharacterId != null && sourceId !== pending.sourceCharacterId) || (pending.targetCharacterId != null && targetId !== pending.targetCharacterId)) {
+      invalidationReason = "approval_binding_invalidated";
+    } else {
+      const loaded = actionRegistry.getById(invocation?.actionId);
+      const source = sourceId != null ? this.gameData.characters.get(sourceId) : null;
+      const target = targetId != null ? this.gameData.characters.get(targetId) : null;
+      if (!loaded || !loaded.validation?.valid || actionRegistry.isActionDisabled?.(invocation?.actionId)) invalidationReason = "stale_approval_action_unavailable";
+      else if (!source || !this.isCharacterAvailableForConversation(source)) invalidationReason = "stale_approval_source_unavailable";
+      else if (targetId != null && (!target || !this.isCharacterAvailableForConversation(target))) invalidationReason = "stale_approval_target_unavailable";
+    }
+    if (invalidationReason) {
+      this.invalidatePendingActionApproval(approvalEntryId, invalidationReason);
+      return;
+    }
     approvalEntry.status = "approved";
     approvalEntry.resultFeedback = pending.previewFeedback || pending.action.actionTitle || pending.action.actionId;
     approvalEntry.resultSentiment = pending.previewSentiment || "neutral";
     this.pendingActionApprovals.delete(approvalEntryId);
     this.emitUpdate();
     try {
-      const result = await ActionEngine.runInvocation(this, pending.npc, pending.action.invocation);
+      // Invocation source/target IDs are authoritative; pending.npc is legacy fallback only.
+      const result = await ActionEngine.runInvocation(this, pending.npc, invocation);
       if (result.feedback?.message && result.feedback.message !== approvalEntry.resultFeedback) {
         approvalEntry.resultFeedback = result.feedback.message;
         approvalEntry.resultSentiment = result.feedback.sentiment || "neutral";
@@ -7848,6 +7933,7 @@ ${result.content}`;
       return;
     }
     console.log(`Removing ${character.fullName} from conversation`);
+    this.invalidateApprovalsForCharacter(characterId, "removed");
     this.gameData.characters.delete(characterId);
     const initialQueueLength = this.npcQueue.length;
     this.npcQueue = this.npcQueue.filter((char) => char.id !== characterId);
@@ -7859,22 +7945,6 @@ ${result.content}`;
       this.customQueue = this.customQueue.filter((char) => char.id !== characterId);
       if (this.customQueue.length < initialCustomQueueLength) {
         console.log(`Removed ${character.fullName} from custom queue`);
-      }
-    }
-    const approvalsToRemove = [];
-    for (const [approvalId, pending] of this.pendingActionApprovals.entries()) {
-      if (pending.npc.id === characterId) {
-        approvalsToRemove.push(approvalId);
-      }
-    }
-    for (const approvalId of approvalsToRemove) {
-      this.pendingActionApprovals.delete(approvalId);
-      const entryIndex = this.messages.findIndex(
-        (msg) => msg.type === "action-approval" && msg.id === approvalId
-      );
-      if (entryIndex !== -1) {
-        this.messages.splice(entryIndex, 1);
-        console.log(`Removed pending action approval for ${character.fullName}`);
       }
     }
     console.log(`Character ${character.fullName} successfully removed from conversation`);

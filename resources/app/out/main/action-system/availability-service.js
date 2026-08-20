@@ -10,6 +10,7 @@ function buildAvailableAction({ action, args, checkResult, sourceCharacter, targ
     description,
     sourceCharacterId: sourceCharacter.id,
     sourceCharacterName: sourceCharacter.shortName,
+    sourceLocked: binding?.mode === "resolved" && sourceCharacter != null,
     resolvedTargetCharacterId: targetCharacter?.id,
     targetLocked: binding?.mode === "resolved" && targetCharacter != null,
     participantBinding: binding || null
