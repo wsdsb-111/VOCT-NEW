@@ -8,16 +8,18 @@ const player = { id: 1, fullName: "玩家", shortName: "玩家", gender: "male" 
 const zhangSan = { id: 2, fullName: "张三", shortName: "张三", gender: "male" };
 const liSi = { id: 3, fullName: "李四", shortName: "李四", gender: "male" };
 const wangShi = { id: 4, fullName: "王氏", shortName: "王氏", gender: "female" };
-const gameData = { characters: new Map([[1, player], [2, zhangSan], [3, liSi], [4, wangShi]]) };
-const injury = { semantic: { evidencePatterns: [/刺伤|伤了/], participantRoles: { source: "actor", target: "patient" } } };
+const unknownGenderNpc = { id: 5, fullName: "阿史那", shortName: "阿史那" };
+const gameData = { characters: new Map([[1, player], [2, zhangSan], [3, liSi], [4, wangShi], [5, unknownGenderNpc]]) };
+const injury = { semantic: { evidencePatterns: [/刺伤|伤了/], participantRoles: { source: "actor", target: "patient" }, riskLevel: "high" } };
 const knight = { semantic: { evidencePatterns: [/任命.{0,16}骑士|骑士/], participantRoles: { source: "patient", target: "actor" } } };
+const opinion = { semantic: { evidencePatterns: [/好感/], participantRoles: { source: "actor", target: "patient" }, riskLevel: "low" } };
 
 function resolveMessage({ text, speaker = player, context, definition = injury, messageId = 2, primaryAddresseeId = null }) {
   const message = { id: messageId, content: text, primaryAddresseeId };
   context.observeMessage({ message, speaker, characters: gameData.characters.values(), primaryAddresseeId });
   const event = { eventId: `evt_${messageId}`, evidence: { text, start: 0, end: text.length } };
-  const references = ReferenceResolver.resolveEventReferences({ message, event, speaker, gameData, referenceContext: context, primaryAddresseeId });
-  return { references, result: ParticipantResolver.resolve({ event, message, speaker, gameData, actionDefinition: definition, actionId: "isInjured", references }) };
+  const references = ReferenceResolver.resolveEventReferences({ message, event, speaker, gameData, referenceContext: context, primaryAddresseeId, actionDefinition: definition });
+  return { references, result: ParticipantResolver.resolve({ event, message, speaker, gameData, actionDefinition: definition, actionId: "isInjured", references, activeParticipantIds: context.activeParticipantIds }) };
 }
 
 let context = new ConversationReferenceContext({ activeParticipantIds: [1, 2, 3, 4] });
@@ -56,6 +58,16 @@ context = new ConversationReferenceContext({ activeParticipantIds: [1, 4] });
 outcome = resolveMessage({ text: "我刺伤了她。", context });
 assert.strictEqual(outcome.result.mode, "resolved", "strict female 1v1 third person must resolve");
 assert.strictEqual(outcome.result.targetCharacter.id, wangShi.id, "1v1 她 must bind to the only interlocutor");
+
+context = new ConversationReferenceContext({ activeParticipantIds: [1, 5] });
+outcome = resolveMessage({ text: "我刺伤了他。", context });
+assert.strictEqual(outcome.result.mode, "unresolved", "high-risk action must not guess a gendered pronoun when gender is unknown");
+assert.strictEqual(outcome.references.find((reference) => reference.surface === "他").reason, "unknown_gender_high_risk", "unknown-gender high-risk refusal must preserve a diagnostic");
+
+context = new ConversationReferenceContext({ activeParticipantIds: [1, 5] });
+outcome = resolveMessage({ text: "我因好感增加而赞赏他。", context, definition: opinion });
+assert.strictEqual(outcome.result.mode, "resolved", "low-risk action may use the unique 1v1 interlocutor when gender is unknown");
+assert.strictEqual(outcome.result.targetCharacter.id, unknownGenderNpc.id, "low-risk fallback must bind only to the unique interlocutor");
 
 context = new ConversationReferenceContext({ activeParticipantIds: [1, 2, 3] });
 context.observeMessage({ message: { id: 1, content: "张三和李四走了进来。" }, speaker: player, characters: gameData.characters.values() });

@@ -28,11 +28,12 @@ function replaceResolvedPronouns(text, references, gameData) {
 }
 
 class ParticipantResolver {
-  static resolve({ event, message, speaker, gameData, actionDefinition, actionId = null, references = [] }) {
+  static resolve({ event, message, speaker, gameData, actionDefinition, actionId = null, references = [], activeParticipantIds = null }) {
     const participantRoles = actionDefinition?.semantic?.participantRoles;
     if (!participantRoles) return { mode: "speaker", sourceCharacter: speaker, targetCharacter: null, binding: null };
     const originalText = event?.evidence?.text || "";
-    const characters = Array.from(gameData?.characters?.values?.() || []);
+    const activeIds = activeParticipantIds ? new Set(activeParticipantIds) : null;
+    const characters = Array.from(gameData?.characters?.values?.() || []).filter((character) => !activeIds || activeIds.has(character.id));
     const baseInput = { messageId: message?.id, eventId: event?.eventId, actionId, speakerCharacterId: speaker?.id, evidence: event?.evidence, references };
     if (!speaker || !originalText || characters.length === 0) return { mode: "unresolved", reason: "missing_participant_context", binding: createUnresolvedBinding({ ...baseInput, unresolvedReason: "missing_participant_context" }) };
     if (/(?:让|叫|命令).{0,24}(?:杀|刺|砍|关|囚禁|任命|雇佣|招募)/.test(originalText)) return { mode: "unresolved", reason: "unsupported_causative", binding: createUnresolvedBinding({ ...baseInput, unresolvedReason: "unsupported_causative" }) };

@@ -6051,11 +6051,11 @@ class ActionEngine {
     // Judge future tense only inside the clause that contains the candidate
     // action. This prevents a later plan ("明日再谈") from cancelling an
     // already-completed action in an earlier clause ("我给了他100金币").
-    const futureMarker = /(?:\u5c06(?:\u8981|\u4f1a)|(?:我|你|他|她|它|我们|你们|他们|她们)会|\u51c6\u5907|\u6253\u7b97|\u8ba1\u5212|\u60f3\u8981|\u6b32\u8981|\u7ea6\u597d|\u660e\u65e5|\u660e\u5929|\u5f85\u4f1a|\u5f85\u4f1a\u513f|\u7a0d\u540e|\u4e4b\u540e\u518d|\u4e4b\u5f8c\u518d|\b(?:will|going to|plan to|wants? to|tomorrow|later)\b)/i;
+    const futureMarker = /(?:\u5c06(?:\u8981|\u4f1a)|(?:我|你|他|她|它|我们|你们|他们|她们)会|\u51c6\u5907|\u6253\u7b97|\u8ba1\u5212|\u60f3\u8981|\u6b32\u8981|\u7ea6\u597d|\u660e\u65e5|\u660e\u5929|\u5f85\u4f1a|\u5f85\u4f1a\u513f|\u7a0d\u540e|\u8fc7\u4f1a\u513f|\u7b49\u4e0b|\u8fdf\u4e9b\u65f6\u5019|\u6539\u65e5|\u4e4b\u540e\u518d|\u4e4b\u5f8c\u518d|\b(?:will|going to|plan to|wants? to|tomorrow|later)\b)/i;
     const completionMarker = /(?:\u5df2\u7ecf|\u5df2\u7136|\u521a\u521a|\u65b9\u624d|\u4e8b\u6bd5|\u5b8c\u4e8b|\b(?:already|just|completed?|finished)\b)/i;
     const failedAttemptMarker = /(?:试图|尝试|企图|没能|未能|没有(?:成功|得逞|做到|碰到|伤到|亲到|打中)|躲开|避开|闪开|挣脱|拒绝|推开|落空|被.{0,8}挡|挡下|missed|failed to|did not|didn't|dodged|avoided|refused)/i;
     const hypotheticalMarker = /(?:如果|假如|倘若|若是|要是|也许|或许|可能会|不妨考虑|\b(?:if|maybe|perhaps|might|could)\b)/i;
-    const futureLeadIn = /(?:\u51c6\u5907|\u6253\u7b97|\u8ba1\u5212|\u60f3\u8981|\u6b32\u8981|\u5c06\u8981|\u5c06\u4f1a|(?:我|你|他|她|它|我们|你们|他们|她们)会|\u660e\u65e5|\u660e\u5929|\u5f85\u4f1a|\u5f85\u4f1a\u513f|\u7a0d\u540e|\b(?:will|going to|plan to|tomorrow|later)\b)\s*$/i;
+    const futureLeadIn = /(?:\u51c6\u5907|\u6253\u7b97|\u8ba1\u5212|\u60f3\u8981|\u6b32\u8981|\u5c06\u8981|\u5c06\u4f1a|(?:我|你|他|她|它|我们|你们|他们|她们)会|\u660e\u65e5|\u660e\u5929|\u5f85\u4f1a|\u5f85\u4f1a\u513f|\u7a0d\u540e|\u8fc7\u4f1a\u513f|\u7b49\u4e0b|\u8fdf\u4e9b\u65f6\u5019|\u6539\u65e5|\b(?:will|going to|plan to|tomorrow|later)\b)\s*$/i;
     // 保留每个分句末尾的问号；否则 split 会让“你拔剑？”变成“你拔剑”，
     // 导致下方的疑问句门控无法识别。
     const clauses = (text.match(/[^。！？；，.!?;,\n]+[？?]?/g) || []).map((clause) => clause.trim()).filter(Boolean);
@@ -6183,6 +6183,7 @@ class ActionEngine {
     // a plan, request, question, near-miss, or negation regardless of action
     // category so new registry metadata cannot bypass the execution boundary.
     const nonExecutedMarker = /(?:[？?]|(?:^|[，,；;])\s*(?:(?:明天|明日|稍后|待会|待会儿|将来|总有一天)\s*)?(?:我|你|他|她|它|我们|你们|他们|她们|众人)?\s*(?:(?:明天|明日|稍后|待会|待会儿|将来|总有一天)\s*)?(?:请|命令|要求|让|叫|希望|想|要|欲|准备|打算|计划|将(?:要|会)|会|能否|可否|是否|别|不要|莫|不许|不准|差点|险些|几乎))/i;
+    const explicitFutureMarker = /(?:^|[，,；;])\s*(?:我|你|他|她|它|我们|你们|他们|她们|众人)?\s*(?:过会儿|等下|迟些时候|改日)\s*(?:我|你|他|她|它|我们|你们|他们|她们|众人)?\s*(?:就|再)?/i;
     const negatedActionMarker = /(?:^|[，,；;])\s*(?:我|你|他|她|它|我们|你们|他们|她们|众人)?\s*(?:没有|并未|不曾|未曾|尚未)/i;
     const posthocNegationMarker = /(?:——|—|\.\.\.|…|至少).{0,24}(?:不[，,]?|只是做了个梦|也许没有|本来是这么打算)/i;
     const isPostActionQualifier = (clause) => /(?:杀死|杀了|刺伤|砍伤|打伤|关进|关押|囚禁|任命|罢免|雇佣|招募|亲吻|接吻).{0,16}(?:也许|或许|可能会)/i.test(clause);
@@ -6192,7 +6193,7 @@ class ActionEngine {
       const hints = this.getActionTriggers(clause.text, { candidateOnly: true });
       if (hints.length === 0) continue;
       const candidateEvidence = { text: clause.text, start: clause.start, end: clause.start + clause.text.length };
-      if (nonExecutedMarker.test(clause.text)) {
+      if (nonExecutedMarker.test(clause.text) || explicitFutureMarker.test(clause.text)) {
         for (const category of hints) rejectedCandidates.push({ category, evidence: candidateEvidence, rejectionReason: "non_executed" });
         continue;
       }
@@ -6441,14 +6442,14 @@ class ActionEngine {
   }
   static getConversationReferenceContext(conv, message, speaker) {
     const system = globalThis.__V67ActionSystem || actionSystem;
+    const characters = typeof conv.getActiveConversationCharacters === "function" ? conv.getActiveConversationCharacters() : Array.from(conv.gameData?.characters?.values?.() || []).filter((character) => !conv.inactiveParticipantIds?.has(character.id) && character.isDead !== true && character.dead !== true && character.alive !== false);
     if (!conv.referenceContext) {
       conv.referenceContext = new system.ConversationReferenceContext({
         conversationId: conv.id || null,
-        activeParticipantIds: Array.from(conv.gameData?.characters?.keys?.() || [])
+        activeParticipantIds: characters.map((character) => character.id)
       });
     }
     const context = conv.referenceContext;
-    const characters = Array.from(conv.gameData?.characters?.values?.() || []);
     context.activeParticipantIds = characters.map((character) => character.id);
     const findSpeaker = (entry) => {
       if (entry?.role === "user" || entry?.name === conv.gameData?.playerName) return conv.gameData?.characters?.get(conv.gameData?.playerID) || speaker;
@@ -6474,7 +6475,8 @@ class ActionEngine {
       speaker,
       gameData,
       referenceContext,
-      primaryAddresseeId
+      primaryAddresseeId,
+      actionDefinition
     });
     return system.ParticipantResolver.resolve({
       event,
@@ -6483,7 +6485,8 @@ class ActionEngine {
       gameData,
       actionDefinition,
       actionId,
-      references
+      references,
+      activeParticipantIds: referenceContext?.activeParticipantIds
     });
   }
   static shouldEvaluateForMessage(conv, message, actionEvent = null) {
@@ -7062,7 +7065,10 @@ ${result.content}`;
   }
   // Get list of all NPCs (characters except the player)
   getNpcList() {
-    return [...this.gameData.characters.values()].filter((c) => c.id !== this.gameData.playerID && this.isCharacterAvailableForConversation(c));
+    return this.getActiveConversationCharacters().filter((c) => c.id !== this.gameData.playerID);
+  }
+  getActiveConversationCharacters() {
+    return [...this.gameData.characters.values()].filter((character) => this.isCharacterAvailableForConversation(character));
   }
   isCharacterAvailableForConversation(character) {
     if (!character || this.inactiveParticipantIds?.has(character.id)) return false;

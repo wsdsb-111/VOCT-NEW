@@ -14,40 +14,50 @@ function getCharacter(gameData, id) {
   return id != null ? gameData?.characters?.get?.(id) || null : null;
 }
 
-function getExplicitVocativeId(index, source, gameData) {
+function getExplicitVocativeId(index, source, gameData, activeIds) {
   const firstPerson = source.search(/(?:我自己|本人|我)/);
   if (firstPerson < 0) return null;
   const vocative = index.mentions.filter((mention) => !mention.ambiguous && mention.end <= firstPerson && /^[\s，,：:]*$/.test(source.slice(mention.end, firstPerson)));
   if (vocative.length !== 1) return null;
-  return getCharacter(gameData, vocative[0].characterId)?.id ?? null;
+  return activeIds.has(vocative[0].characterId) ? getCharacter(gameData, vocative[0].characterId)?.id ?? null : null;
 }
 
 class ReferenceResolver {
-  static resolveEventReferences({ message, event, speaker, gameData, referenceContext, primaryAddresseeId = null }) {
+  static resolveEventReferences({ message, event, speaker, gameData, referenceContext, primaryAddresseeId = null, actionDefinition = null }) {
     const source = event?.evidence?.text || message?.content || "";
     const characters = Array.from(gameData?.characters?.values?.() || []);
     const index = referenceContext?.indexByMessageId?.get(message?.id) || buildMessageReferenceIndex({ messageId: message?.id, text: message?.content, characters });
-    const activeIds = new Set(referenceContext?.activeParticipantIds?.length ? referenceContext.activeParticipantIds : characters.map((character) => character.id));
+    const activeIds = new Set(Array.isArray(referenceContext?.activeParticipantIds) ? referenceContext.activeParticipantIds : characters.map((character) => character.id));
+    const completeIndex = buildMessageReferenceIndex({ messageId: message?.id, text: message?.content, characters });
+    const isHighRisk = actionDefinition?.isDestructive === true || actionDefinition?.semantic?.riskLevel === "high";
+    const getActiveCharacter = (id) => activeIds.has(id) ? getCharacter(gameData, id) : null;
     const references = [];
+    for (const mention of completeIndex.mentions) {
+      if (!mention.ambiguous && !activeIds.has(mention.characterId) && mention.start >= (event?.evidence?.start ?? 0) && mention.end <= (event?.evidence?.end ?? source.length) && source.includes(mention.surface)) {
+        references.push(unresolved("explicit_name", mention.surface, "unavailable_reference_target"));
+      }
+    }
     for (const mention of index.mentions) {
       if (mention.start >= (event?.evidence?.start ?? 0) && mention.end <= (event?.evidence?.end ?? source.length) && source.includes(mention.surface)) {
-        references.push(mention.ambiguous ? unresolved("explicit_name", mention.surface, "ambiguous_named_character") : resolved("explicit_name", mention.surface, getCharacter(gameData, mention.characterId), "unique_explicit_name"));
+        if (mention.ambiguous) references.push(unresolved("explicit_name", mention.surface, "ambiguous_named_character"));
+        else if (!activeIds.has(mention.characterId)) references.push(unresolved("explicit_name", mention.surface, "unavailable_reference_target"));
+        else references.push(resolved("explicit_name", mention.surface, getCharacter(gameData, mention.characterId), "unique_explicit_name"));
       }
     }
     const localPronouns = source.match(/我自己|本人|我|您|你|对方|他|她|它|自己/g) || [];
-    const explicitVocativeId = getExplicitVocativeId(index, message?.content || source, gameData);
+    const explicitVocativeId = getExplicitVocativeId(index, message?.content || source, gameData, activeIds);
     const configuredAddresseeId = primaryAddresseeId ?? message?.primaryAddresseeId ?? message?.addresseeCharacterId ?? referenceContext?.primaryAddresseeId ?? (referenceContext?.lastDirectedSpeakerId === speaker?.id ? referenceContext.lastDirectedAddresseeId : null);
     const interlocutors = characters.filter((character) => character.id !== speaker?.id && activeIds.has(character.id));
     for (const surface of localPronouns) {
       if (["我", "本人", "我自己"].includes(surface)) {
         references.push(speaker ? resolved("first_person", surface, speaker, "message_speaker") : unresolved("first_person", surface, "missing_speaker"));
       } else if (["你", "您"].includes(surface)) {
-        const addressee = getCharacter(gameData, explicitVocativeId ?? configuredAddresseeId);
+        const addressee = getActiveCharacter(explicitVocativeId ?? configuredAddresseeId);
         if (addressee) references.push(resolved("second_person", surface, addressee, explicitVocativeId != null ? "explicit_vocative" : "primary_addressee"));
         else if (interlocutors.length === 1) references.push(resolved("second_person", surface, interlocutors[0], "unique_interlocutor"));
         else references.push(unresolved("second_person", surface, "unresolved_ambiguous_addressee"));
       } else if (surface === "对方") {
-        const counterpart = getCharacter(gameData, configuredAddresseeId);
+        const counterpart = getActiveCharacter(configuredAddresseeId);
         if (counterpart) references.push(resolved("counterpart", surface, counterpart, "directed_addressee"));
         else if (interlocutors.length === 1) references.push(resolved("counterpart", surface, interlocutors[0], "unique_interlocutor"));
         else references.push(unresolved("counterpart", surface, "unresolved_ambiguous_counterpart"));
@@ -64,6 +74,7 @@ class ReferenceResolver {
           const [interlocutor] = interlocutors;
           const knownGender = getCharacterGender(interlocutor);
           if (knownGender && knownGender !== gender) references.push(unresolved("third_person", surface, "unresolved_gender_mismatch"));
+          else if (!knownGender && isHighRisk) references.push(unresolved("third_person", surface, "unknown_gender_high_risk"));
           else references.push(resolved("third_person", surface, interlocutor, `unique_interlocutor_${gender}`));
         } else references.push(unresolved("third_person", surface, "ambiguous_third_person"));
       } else if (surface === "自己") {
