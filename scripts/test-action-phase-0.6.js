@@ -35,7 +35,7 @@ console.log("========================================\n");
 run("Production independently schedules player and NPC action messages", () => {
   assert(!/pendingPlayerActionMessage\s*\?\?\s*placeholder/.test(source), "obsolete player-or-NPC fallback is still present");
   assert(source.includes("buildTurnEvaluationPlan({"), "Conversation must build an independent turn evaluation plan");
-  assert(source.includes("this.evaluateCompletedActions(npc, msgId, placeholder)"), "NPC reply must enter the independent evaluator");
+  assert(source.includes("this.evaluateCompletedActions(npc, msgId, placeholder, responseState)"), "NPC reply must enter the independent evaluator with generation identity");
 
   const player = { id: 1, shortName: "Player" };
   const npc = { id: 2, shortName: "NPC" };

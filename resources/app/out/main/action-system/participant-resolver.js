@@ -3,8 +3,8 @@
 const { createParticipantBinding, createUnresolvedBinding } = require("./action-types");
 const { getCharacterAliases, escapeRegExp } = require("./reference-context");
 
-function patternFor(character) {
-  return getCharacterAliases(character).map(escapeRegExp).join("|");
+function patternFor(character, referenceSurfaces = []) {
+  return Array.from(new Set([...getCharacterAliases(character), ...referenceSurfaces])).sort((left, right) => right.length - left.length).map(escapeRegExp).join("|");
 }
 
 function getActionPositions(text, definition) {
@@ -14,17 +14,6 @@ function getActionPositions(text, definition) {
     for (const match of text.matchAll(new RegExp(pattern.source, flags))) positions.push(match.index);
   }
   return positions;
-}
-
-function replaceResolvedPronouns(text, references, gameData) {
-  let result = text;
-  for (const reference of references || []) {
-    if (reference.mode !== "resolved" || reference.referenceType === "first_person" || !reference.surface || !reference.characterId) continue;
-    const character = gameData?.characters?.get?.(reference.characterId);
-    if (!character) continue;
-    result = result.replace(reference.surface, character.fullName || character.shortName);
-  }
-  return result;
 }
 
 class ParticipantResolver {
@@ -42,8 +31,16 @@ class ParticipantResolver {
       const legacyReason = ["ambiguous_third_person", "unresolved_ambiguous_addressee", "unresolved_ambiguous_counterpart"].includes(unresolvedReference.reason) ? "ambiguous_pronoun" : unresolvedReference.reason;
       return { mode: "unresolved", reason: legacyReason, binding: createUnresolvedBinding({ ...baseInput, unresolvedReason: unresolvedReference.reason }) };
     }
-    const evidenceText = replaceResolvedPronouns(originalText, references, gameData);
-    const actionPositions = getActionPositions(evidenceText, actionDefinition);
+    const evidenceText = originalText;
+    const referenceSurfacesByCharacter = new Map();
+    for (const reference of references) {
+      if (reference.mode !== "resolved" || reference.referenceType === "first_person" || !reference.characterId || !reference.surface) continue;
+      const surfaces = referenceSurfacesByCharacter.get(reference.characterId) || [];
+      surfaces.push(reference.surface);
+      referenceSurfacesByCharacter.set(reference.characterId, surfaces);
+    }
+    const identityPatternFor = (character) => patternFor(character, referenceSurfacesByCharacter.get(character.id));
+    const actionPositions = getActionPositions(originalText, actionDefinition);
     const actionBetween = (start, end) => actionPositions.some((position) => position >= start && position <= end);
     const matches = (pattern) => new RegExp(pattern).test(evidenceText);
     const resolve = (actor, patient, reason) => {
@@ -61,13 +58,13 @@ class ParticipantResolver {
       });
       return { mode: "resolved", sourceCharacter, targetCharacter, actor, patient, reason, binding };
     };
-    const namedCharacters = characters.filter((character) => character.id !== speaker.id && patternFor(character) && new RegExp(patternFor(character)).test(evidenceText));
+    const namedCharacters = characters.filter((character) => character.id !== speaker.id && identityPatternFor(character) && new RegExp(identityPatternFor(character)).test(evidenceText));
     const speakerIndex = evidenceText.indexOf("我");
     const reflexive = evidenceText.includes("自己");
     if (reflexive && speakerIndex >= 0 && actionPositions.length > 0) return resolve(speaker, speaker, "reflexive_speaker");
     if (namedCharacters.length === 1) {
       const character = namedCharacters[0];
-      const namePattern = patternFor(character);
+      const namePattern = identityPatternFor(character);
       if (matches(`我\\s*(?:被|遭)\\s*(?:${namePattern})`) || matches(`我\\s*为\\s*(?:${namePattern})\\s*所`)) return resolve(character, speaker, "explicit_passive");
       if (matches(`(?:${namePattern})\\s*被\\s*我`)) return resolve(speaker, character, "explicit_passive");
       if (matches(`(?:${namePattern})\\s*(?:把|将)\\s*我`)) return resolve(character, speaker, "explicit_active");
@@ -75,14 +72,16 @@ class ParticipantResolver {
       const nameMatches = Array.from(evidenceText.matchAll(new RegExp(namePattern, "g")));
       const afterSpeaker = nameMatches.find((match) => speakerIndex >= 0 && match.index > speakerIndex && actionBetween(speakerIndex, match.index));
       if (afterSpeaker) return resolve(speaker, character, "explicit_active");
+      const patientBeforeAction = nameMatches.find((match) => speakerIndex >= 0 && match.index > speakerIndex && actionPositions.some((position) => position >= match.index && /(?:手|手臂|手指|肩膀|胸口|胸膛|腹部|背部|腰部|腿|脚|身体|身躯|血肉)(?:上|处)?/.test(evidenceText.slice(match.index, position))) && !matches(`(?:${namePattern})\\s*(?:被|遭)`));
+      if (patientBeforeAction) return resolve(speaker, character, "explicit_active");
       const beforeSpeaker = nameMatches.slice().reverse().find((match) => speakerIndex >= 0 && match.index < speakerIndex && actionBetween(match.index, speakerIndex));
       if (beforeSpeaker) return resolve(character, speaker, "explicit_active");
       if (reflexive && nameMatches.length > 0 && actionPositions.some((position) => position > nameMatches[0].index)) return resolve(character, character, "reflexive_named_subject");
     }
     if (namedCharacters.length === 2) {
-      const [first, second] = namedCharacters.slice().sort((left, right) => evidenceText.search(new RegExp(patternFor(left))) - evidenceText.search(new RegExp(patternFor(right))));
-      const firstPattern = patternFor(first);
-      const secondPattern = patternFor(second);
+      const [first, second] = namedCharacters.slice().sort((left, right) => evidenceText.search(new RegExp(identityPatternFor(left))) - evidenceText.search(new RegExp(identityPatternFor(right))));
+      const firstPattern = identityPatternFor(first);
+      const secondPattern = identityPatternFor(second);
       if (matches(`(?:${firstPattern})\\s*(?:被|遭)\\s*(?:${secondPattern})`) || matches(`(?:${firstPattern})\\s*为\\s*(?:${secondPattern})\\s*所`)) return resolve(second, first, "explicit_passive");
       if (matches(`(?:${firstPattern})\\s*(?:把|将)\\s*(?:${secondPattern})`)) return resolve(first, second, "explicit_active");
       const firstIndex = evidenceText.search(new RegExp(firstPattern));

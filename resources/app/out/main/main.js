@@ -6088,7 +6088,7 @@ class ActionEngine {
     const rules = [
       { reason: "gold", pattern: /(?:(?:支付|付给|给(?:了)?|交给|交付|塞给|递给|奉上|献上|打赏|赏赐|赏下|赏了|赏给|赠与|赠送|转交|给钱|送钱|付清|结清|赔付|补偿|贿赂|行贿|掏出|奉还|归还).{0,16}(?:钱|金|银|金币|银币|铜钱|贯|两|文|财物)|(?:把|将)?.{0,12}(?:钱|金|银|金币|银币|铜钱|贯|两|文|财物).{0,12}(?:交给|交付|付给|递给|给了|奉上|赠与|转交)|(?:赎金|彩礼|聘礼|酬金|赏钱).{0,12}(?:支付|交付|给|付|钱|金|银)|收下.{0,12}(?:钱|金|银|礼金|赏钱)|(?:pay|paid|give|gave|gift|gifted|transfer|transferred|compensated|bribed|repaid).{0,20}(?:gold|money|coin))/i },
       { reason: "imprisonment", pattern: /(?:囚禁|关进|关押|投入(?:大牢|地牢)|收监|逮捕|拘押|软禁|拿下|押下|押入|押进|押往|押送(?:入|至).{0,8}(?:牢|狱)|下狱|入狱|捆(?:起|住)来?|绑(?:起|住)来?|上(?:了)?枷锁|戴上(?:镣铐|枷锁)|锁进(?:牢房|地牢)?|铁链(?:锁住|缚住)|imprison(?:ed)?|arrest(?:ed)?|jailed?|locked up|put in chains)/i },
-      { reason: "death_or_injury", pattern: /(?:杀死|杀了|砍死|刺死|毒死|勒死|掐死|打死|烧死|淹死|处死|斩首|枭首|人头落地|身首异处|毙命|殒命|气绝|断气|倒地(?:身亡|死去)|(?:割|砍|斩|削)(?:了)?(?:下|断|落).{0,4}(?:脑袋|头颅|首级|头)|(?:脑袋|头颅|首级|头).{0,6}(?:被)?(?:割|砍|斩|削)(?:了)?(?:下|断|落)|刺伤|砍伤|打伤|烧伤|冻伤|摔伤|重创|重伤|负伤|受伤|刺穿|贯穿|(?:刺|捅)(?:中|入|进).{0,8}(?:胸(?:口|膛)?|腹(?:部)?|肩(?:膀)?|背(?:部)?|腰(?:部)?|腿|手臂|身体|身躯|血肉)|(?:刀|剑|匕首|枪尖|刀刃|剑刃).{0,6}(?:刺入|刺进|没入|扎进)|(?:手|手臂|手指|腿|脚|耳朵|鼻子).{0,8}(?:被)?(?:割|砍|斩)(?:了)?(?:下|掉|断|落)|(?:手|手臂|肩膀|胸口|腹部|背部|腰部|腿).{0,8}(?:砍|刺|捅)(?:了)?(?:一|两|几)(?:刀|剑|下|记)|捅伤|扎伤|流血(?:不止)?|鲜血.{0,8}(?:流出|涌出|喷出)|伤口|骨折|断骨|昏迷|毁容|弄瞎|刺瞎|打瞎|剜.?眼|断腿|折断|打断|割下|砍下|阉割|killed?|executed|wounded|injured|maimed|disfigured|bled|bleeding|blinded|castrat|poisoned|strangled|burned|drowned)/i },
+      { reason: "death_or_injury", pattern: /(?:杀死|杀了|砍死|刺死|毒死|勒死|掐死|打死|烧死|淹死|处死|斩首|枭首|人头落地|身首异处|毙命|殒命|气绝|断气|倒地(?:身亡|死去)|(?:割|砍|斩|削)(?:了)?(?:下|断|落).{0,4}(?:脑袋|头颅|首级|头)|(?:脑袋|头颅|首级|头).{0,6}(?:被)?(?:割|砍|斩|削)(?:了)?(?:下|断|落)|刺伤|砍伤|打伤|烧伤|冻伤|摔伤|重创|重伤|负伤|受伤|划伤|割伤|划破|割破|刺穿|贯穿|(?:刺|捅)(?:中|入|进).{0,8}(?:胸(?:口|膛)?|腹(?:部)?|肩(?:膀)?|背(?:部)?|腰(?:部)?|腿|手臂|身体|身躯|血肉)|(?:刀|剑|匕首|枪尖|刀刃|剑刃).{0,6}(?:刺入|刺进|没入|扎进)|(?:手|手臂|手指|腿|脚|耳朵|鼻子).{0,8}(?:被)?(?:割|砍|斩)(?:了)?(?:下|掉|断|落)|(?:手|手臂|肩膀|胸口|腹部|背部|腰部|腿).{0,8}(?:砍|刺|捅|划|割)(?:了)?(?:一|两|几)(?:刀|剑|下|记)|捅伤|扎伤|流血(?:不止)?|鲜血.{0,8}(?:流出|涌出|喷出)|伤口|骨折|断骨|昏迷|毁容|弄瞎|刺瞎|打瞎|剜.?眼|断腿|折断|打断|割下|砍下|阉割|killed?|executed|wounded|injured|maimed|disfigured|bled|bleeding|blinded|castrat|poisoned|strangled|burned|drowned)/i },
       { reason: "relationship", pattern: /(?:成为(?:了)?(?:情人|恋人|朋友|挚友|至交|死敌|宿敌|仇敌|灵魂伴侣|义兄弟)|结为(?:了)?(?:情人|恋人|朋友|挚友|至交|死敌|宿敌|义兄弟|夫妻)|(?:彼此|两人|我们).{0,8}(?:相恋|相爱|坠入爱河|成为(?:了)?恋人|成为(?:了)?挚友|成为(?:了)?至交|成为(?:了)?死敌|反目成仇|化敌为友|冰释前嫌)|(?:与|和).{0,12}(?:结为|结成|成为)(?:了)?(?:情人|恋人|朋友|挚友|至交|死敌|宿敌|仇敌|灵魂伴侣|义兄弟|盟友)|结拜|义结金兰|义结兄弟|定情|私定终身|握手言和|和解(?:如初)?|化敌为友|正式结盟|结盟成功|结成同盟|缔结同盟|签订停战|达成停战|became? (?:lovers?|friends?|rivals?|nemeses|soulmates?)|formed? an alliance|became? blood brothers?|agreed? to (?:a )?truce)/i },
       { reason: "opinion_change", pattern: /(?:(?:对|对于).{0,16}(?:好感|好感度|评价|看法|态度|意见).{0,12}(?:增加|上升|提高|改善|下降|降低|恶化|变差|转好|转坏|大增|大减)|(?:好感|好感度|评价|看法|态度|意见).{0,12}(?:增加|上升|提高|改善|下降|降低|恶化|变差|转好|转坏|大增|大减)|(?:对).{0,12}(?:不再信任|心生好感|心怀感激|心生厌恶|怀恨在心)|(?:更加|变得).{0,8}(?:敬重|钦佩|感激|信任|喜爱|厌恶|憎恨|不满|敌视)|(?:gained?|lost|increased?|decreased?|improved?|worsened?).{0,20}(?:opinion|respect|trust|affection))/i },
       { reason: "employment_or_office", pattern: /(?:任命(?:为|了)?|册封(?:为|了)?|拜(?:为|了)?|擢升|升任|提拔(?:为|了)?|调任(?:为|至)?|委任(?:为|了)?|委派(?:为|至)?|封为|授予.{0,12}(?:官|职|爵|差事)|授官|授职|罢免|罢官|免去.{0,12}(?:官|职)|撤职|解职|革职|贬职|开除|雇佣(?:为|了)?|招募(?:为|了)?(?:骑士|侍从)?|聘为|入仕|加入.{0,12}(?:宫廷|朝廷)|效力于|逐出宫廷|appointed?|promoted?|assigned?|dismissed|fired|employed|hired|recruited)/i },
@@ -6966,6 +6966,8 @@ class Conversation {
     this.isActive = false;
     this.nextId = 0;
     this.currentStreamController = null;
+    this.turnEpoch = 0;
+    this.activeResponse = null;
     this.currentSummary = "";
     this.lastSummarizedMessageIndex = 0;
     this.CONTEXT_LIMIT_PERCENTAGE = 0.75;
@@ -7105,6 +7107,9 @@ ${result.content}`;
     if (characterId == null) return;
     this.inactiveParticipantIds.set(characterId, reason);
     this.npcQueue = this.npcQueue.filter((npc) => npc?.id !== characterId);
+    if (this.activeResponse?.npcId === characterId && this.activeResponse.phase === "generating") {
+      this.cancelActiveResponse("inactive_participant_generation");
+    }
     if (this.referenceContext?.activeParticipantIds) {
       this.referenceContext.activeParticipantIds = this.referenceContext.activeParticipantIds.filter((id) => id !== characterId);
     }
@@ -7145,9 +7150,37 @@ ${result.content}`;
       }
     }
   }
+  isResponseCurrent(responseState, npc = null) {
+    return !!responseState && this.activeResponse === responseState && responseState.turnEpoch === this.turnEpoch && responseState.stale !== true && (!npc || this.isCharacterAvailableForConversation(npc));
+  }
+  recordGenerationSkipped(responseState, reason) {
+    if (!responseState || responseState.skipRecorded) return;
+    responseState.skipRecorded = true;
+    usageAnalytics.record({
+      requestType: "generation_skipped",
+      reason,
+      turnEpoch: responseState.turnEpoch,
+      responseId: responseState.responseId,
+      characterId: responseState.npcId
+    }, null);
+  }
+  cancelActiveResponse(reason = "explicit_abort") {
+    const responseState = this.activeResponse;
+    if (!responseState) return false;
+    responseState.stale = true;
+    responseState.staleReason = reason;
+    if (!responseState.controller.signal.aborted) responseState.controller.abort();
+    const placeholder = this.messages.find((message) => message.id === responseState.messageId);
+    if (placeholder?.isStreaming) this.messages = this.messages.filter((message) => message.id !== responseState.messageId);
+    this.recordGenerationSkipped(responseState, reason);
+    if (this.activeResponse === responseState) this.activeResponse = null;
+    if (this.currentStreamController === responseState.controller) this.currentStreamController = null;
+    this.emitUpdate();
+    return true;
+  }
   // Handle response for a single NPC
-  async respondAs(npc) {
-    if (!this.isCharacterAvailableForConversation(npc)) {
+  async respondAs(npc, turnEpoch = this.turnEpoch) {
+    if (turnEpoch !== this.turnEpoch || !this.isCharacterAvailableForConversation(npc)) {
       console.log(`[Conversation] Skipping unavailable NPC response: ${npc?.shortName || npc?.id || "unknown"}`);
       return;
     }
@@ -7169,13 +7202,27 @@ ${result.content}`;
       // receives only its state, never the reasoning text.
       streamStatus: "thinking"
     });
+    const controller = new AbortController();
+    const responseState = {
+      responseId: `${turnEpoch}:${msgId}:${npc.id}`,
+      turnEpoch,
+      npcId: npc.id,
+      messageId: msgId,
+      controller,
+      phase: "generating",
+      stale: false,
+      staleReason: null,
+      skipRecorded: false
+    };
+    this.activeResponse = responseState;
+    this.currentStreamController = controller;
     this.messages.push(placeholder);
     this.emitUpdate();
-    this.currentStreamController = new AbortController();
     let wasCancelled = false;
     let streamCompleted = false;
     try {
       await this.checkAndSummarizeIfNeeded(npc);
+      if (!this.isResponseCurrent(responseState, npc)) throw new Error("AbortError: Message cancelled");
       const promptBuild = PromptBuilder.buildMessagesWithTokenCount(
         this.getHistory().slice(this.lastSummarizedMessageIndex),
         npc,
@@ -7189,7 +7236,7 @@ ${result.content}`;
       const isOpenRouter = activeConfig?.providerType === "openrouter";
       const result = await llmManager.sendChatRequest(
         llmMessages,
-        isOpenRouter ? void 0 : this.currentStreamController.signal,
+        isOpenRouter ? void 0 : controller.signal,
         void 0,
         {
           requestType: "chat",
@@ -7203,7 +7250,8 @@ ${result.content}`;
           if (isOpenRouter) {
             const streamPromise = (async () => {
               for await (const chunk of streamIterator) {
-                if (wasCancelled) {
+                if (wasCancelled || controller.signal.aborted || !this.isResponseCurrent(responseState, npc)) {
+                  wasCancelled = true;
                   continue;
                 }
                 if (chunk.delta?.reasoning) {
@@ -7219,7 +7267,7 @@ ${result.content}`;
             })();
             const checkCancellation = async () => {
               while (!streamCompleted && !wasCancelled) {
-                if (this.currentStreamController?.signal.aborted) {
+                if (controller.signal.aborted || !this.isResponseCurrent(responseState, npc)) {
                   wasCancelled = true;
                   console.log("[OpenRouter] Cancellation detected - stream will continue in background");
                   streamPromise.catch((err) => console.error("[OpenRouter] Background stream error:", err));
@@ -7232,7 +7280,7 @@ ${result.content}`;
             streamCompleted = true;
           } else {
             for await (const chunk of streamIterator) {
-              if (this.currentStreamController?.signal.aborted) {
+              if (controller.signal.aborted || !this.isResponseCurrent(responseState, npc)) {
                 wasCancelled = true;
                 throw new Error("AbortError: Message cancelled");
               }
@@ -7255,47 +7303,60 @@ ${result.content}`;
           }
           throw streamError;
         }
+        if (!this.isResponseCurrent(responseState, npc)) throw new Error("AbortError: Message cancelled");
         placeholder.isStreaming = false;
         delete placeholder.streamStatus;
         if (streamCompleted && !wasCancelled) {
-          await this.evaluateCompletedActions(npc, msgId, placeholder);
+          responseState.phase = "evaluating_actions";
+          await this.evaluateCompletedActions(npc, msgId, placeholder, responseState);
         }
       } else if (result && typeof result === "object" && "content" in result && typeof result.content === "string") {
+        if (!this.isResponseCurrent(responseState, npc)) throw new Error("AbortError: Message cancelled");
         placeholder.content = result.content;
         placeholder.streamStatus = "generating";
         this.emitUpdate();
         placeholder.isStreaming = false;
         delete placeholder.streamStatus;
         streamCompleted = true;
-        await this.evaluateCompletedActions(npc, msgId, placeholder);
+        responseState.phase = "evaluating_actions";
+        await this.evaluateCompletedActions(npc, msgId, placeholder, responseState);
       } else {
         throw new Error("Bad LLM response format");
       }
     } catch (error) {
-      console.error("Failed to get response for", npc.shortName, ":", error);
-      this.messages = this.messages.filter((msg) => msg.id !== msgId);
-      if (error instanceof Error && error.message === "AbortError: Message cancelled") {
+      const staleResponse = responseState.stale || controller.signal.aborted || !this.isResponseCurrent(responseState, npc) || error instanceof Error && error.message === "AbortError: Message cancelled";
+      if (staleResponse) {
         wasCancelled = true;
+        this.messages = this.messages.filter((msg) => msg.id !== msgId || !msg.isStreaming);
+        this.recordGenerationSkipped(responseState, responseState.staleReason || (this.isCharacterAvailableForConversation(npc) ? "stale_generation" : "inactive_participant_generation"));
       } else {
+        console.error("Failed to get response for", npc.shortName, ":", error);
+        this.messages = this.messages.filter((msg) => msg.id !== msgId);
         const err = createError({
           id: this.nextId++,
           content: `Failed to get response from ${npc.shortName}`,
           details: error instanceof Error ? error.message : String(error)
         });
         this.messages.push(err);
-      }
-      if (this.npcQueue.length > 0) {
-        this.pauseConversation();
+        if (this.npcQueue.length > 0) this.pauseConversation();
       }
     } finally {
-      if (wasCancelled && this.npcQueue.length === 0 && this.isPaused) {
+      const ownsActiveResponse = this.activeResponse === responseState;
+      if (ownsActiveResponse && wasCancelled && this.npcQueue.length === 0 && this.isPaused) {
         this.isPaused = false;
       }
-      this.emitUpdate();
-      this.currentStreamController = null;
+      if (ownsActiveResponse) {
+        this.activeResponse = null;
+        if (this.currentStreamController === controller) this.currentStreamController = null;
+        this.emitUpdate();
+      }
     }
   }
-  async evaluateCompletedActions(npc, npcMessageId, npcMessage) {
+  async evaluateCompletedActions(npc, npcMessageId, npcMessage, responseState) {
+    if (!this.isResponseCurrent(responseState, npc)) {
+      this.recordGenerationSkipped(responseState, responseState?.staleReason || "stale_action_evaluation");
+      return;
+    }
     const evaluations = ActionEngine.buildTurnEvaluationPlan({
       playerMessage: null,
       player: null,
@@ -7303,7 +7364,15 @@ ${result.content}`;
       npc
     });
     for (const evaluation of evaluations) {
-      const actionResults = await ActionEngine.evaluateForCharacter(this, evaluation.source, this.currentStreamController?.signal, evaluation.message);
+      if (!this.isResponseCurrent(responseState, npc)) {
+        this.recordGenerationSkipped(responseState, responseState?.staleReason || "stale_action_evaluation");
+        return;
+      }
+      const actionResults = await ActionEngine.evaluateForCharacter(this, evaluation.source, responseState.controller.signal, evaluation.message);
+      if (!this.isResponseCurrent(responseState, npc)) {
+        this.recordGenerationSkipped(responseState, responseState?.staleReason || "stale_action_evaluation");
+        return;
+      }
       await this.handleActionResults(evaluation.associatedMessageId, evaluation.source, actionResults);
     }
   }
@@ -7389,9 +7458,12 @@ ${result.content}`;
     }
   }
   cancelCurrentStream() {
-    if (this.currentStreamController) {
+    if (this.activeResponse) {
       console.log("Cancelling current stream");
+      this.cancelActiveResponse("explicit_abort");
+    } else if (this.currentStreamController) {
       this.currentStreamController.abort();
+      this.currentStreamController = null;
     }
   }
   pauseConversation() {
@@ -7426,15 +7498,15 @@ ${result.content}`;
       console.log("Filled shuffled queue:", this.npcQueue.map((c) => c.shortName));
     }
   }
-  async processQueue() {
-    if (this.npcQueue.length === 0 || this.isPaused) {
+  async processQueue(turnEpoch = this.turnEpoch) {
+    if (turnEpoch !== this.turnEpoch || this.npcQueue.length === 0 || this.isPaused) {
       return;
     }
     console.log("Processing queue with", this.npcQueue.length, "NPCs remaining");
-    while (this.npcQueue.length > 0 && !this.isPaused) {
+    while (turnEpoch === this.turnEpoch && this.npcQueue.length > 0 && !this.isPaused) {
       const npc = this.npcQueue.shift();
       try {
-        await this.respondAs(npc);
+        await this.respondAs(npc, turnEpoch);
       } catch (error) {
         console.error("Unhandled error in respondAs for", npc.shortName, ":", error);
         this.emitUpdate();
@@ -7462,6 +7534,9 @@ ${result.content}`;
       console.error("No characters in conversation");
       return;
     }
+    const turnEpoch = ++this.turnEpoch;
+    this.cancelActiveResponse("superseded_by_new_user_turn");
+    this.npcQueue = [];
     const userMsg = createMessage({
       id: this.nextId++,
       name: user.fullName,
@@ -7472,11 +7547,11 @@ ${result.content}`;
     this.actionGateProcessedTriggers.clear();
     this.emitUpdate();
     const playerActionResults = await ActionEngine.evaluateForCharacter(this, user, null, userMsg);
+    if (turnEpoch !== this.turnEpoch) return;
     await this.handleActionResults(userMsg.id, user, playerActionResults);
+    if (turnEpoch !== this.turnEpoch) return;
     if (this.isPaused) return;
-    if (this.npcQueue.length === 0) {
-      this.fillNpcQueue();
-    }
+    this.fillNpcQueue();
     this.resumeConversation();
   }
   // Regenerate assistant message and refill queue
@@ -7492,6 +7567,9 @@ ${result.content}`;
       console.error("Can only regenerate assistant messages:", targetMessage.role);
       return;
     }
+    this.turnEpoch += 1;
+    this.cancelActiveResponse("superseded_by_regeneration");
+    this.npcQueue = [];
     for (let i = this.messages.length - 1; i >= targetIndex; i--) {
       this.messages.splice(i, 1);
     }

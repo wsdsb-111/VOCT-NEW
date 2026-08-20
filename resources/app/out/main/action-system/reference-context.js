@@ -7,9 +7,18 @@ function escapeRegExp(value) {
   return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
 
+function getDerivedNameAliases(value) {
+  if (typeof value !== "string" || !/[·•\s]/.test(value.trim())) return [];
+  const parts = value.trim().split(/[·•\s]+/).filter(Boolean);
+  if (parts.length !== 2) return [];
+  const separator = value.match(/[·•]/)?.[0] || " ";
+  return [parts.join(""), parts.slice().reverse().join(""), parts.slice().reverse().join(separator)];
+}
+
 function getCharacterAliases(character) {
-  const aliases = [character.fullName, character.shortName, ...(Array.isArray(character.aliases) ? character.aliases : [])];
-  return aliases.filter((alias, index) => typeof alias === "string" && alias.trim() && aliases.indexOf(alias) === index);
+  const baseAliases = [character.fullName, character.shortName, ...(Array.isArray(character.aliases) ? character.aliases : [])];
+  const aliases = baseAliases.flatMap((alias) => [alias, ...getDerivedNameAliases(alias)]);
+  return Array.from(new Set(aliases.filter((alias) => typeof alias === "string" && alias.trim())));
 }
 
 function getCharacterGender(character) {
@@ -110,6 +119,7 @@ module.exports = {
   ConversationReferenceContext,
   buildMessageReferenceIndex,
   getCharacterAliases,
+  getDerivedNameAliases,
   getCharacterGender,
   escapeRegExp,
   MAX_RECENT_MESSAGES,

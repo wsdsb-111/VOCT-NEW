@@ -21,7 +21,10 @@ const scripts = [
   "test-action-v6.8-chinese-completion.js",
   "test-action-v6.8-death-lifecycle.js",
   "test-action-v6.8.2-run-invocation-binding.js",
-  "test-action-v6.8.2-approval-lifecycle.js"
+  "test-action-v6.8.2-approval-lifecycle.js",
+  "test-action-v6.8.3-natural-injury.js",
+  "test-action-v6.8.3-reference-offsets.js",
+  "test-conversation-v6.8.3-turn-concurrency.js"
 ];
 
 for (const script of scripts) {
@@ -36,4 +39,4 @@ for (const script of scripts) {
   }
 }
 
-console.log(`\nVOTC v6.8.2 action regression: PASS (${scripts.length} scripts)`);
+console.log(`\nVOTC v6.8.3 action regression: PASS (${scripts.length} scripts)`);
