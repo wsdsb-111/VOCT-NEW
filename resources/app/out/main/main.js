@@ -4659,6 +4659,8 @@ ${existingSummary}`
 const STANDARD_SUBDIR = "standard";
 const CUSTOM_SUBDIR = "custom";
 const DEFAULT_USERDATA_DIR = path.join(electron.app.getAppPath(), "default_userdata", "actions");
+const RETIRED_STANDARD_ACTION_FILES = ["z_performCombatAction.js", "z_performDailyAction.js", "z_performIntimateAction.js"];
+const RETIRED_STANDARD_ACTION_IDS = new Set(["performCombatAction", "performDailyAction", "performIntimateAction"]);
 class ActionRegistry extends events.EventEmitter {
   constructor() {
     super();
@@ -4813,6 +4815,14 @@ class ActionRegistry extends events.EventEmitter {
     };
     const defaultStandardDir = path.join(DEFAULT_USERDATA_DIR, STANDARD_SUBDIR);
     const userStandardDir = path.join(VOTC_ACTIONS_DIR, STANDARD_SUBDIR);
+    for (const filename of RETIRED_STANDARD_ACTION_FILES) {
+      const stalePath = path.join(userStandardDir, filename);
+      try {
+        await fs$1.promises.unlink(stalePath);
+      } catch (error) {
+        if (error?.code !== "ENOENT") console.warn(`[ActionRegistry] Could not remove retired standard action ${filename}:`, error);
+      }
+    }
     if (fs$1.existsSync(defaultStandardDir)) {
       copyRecursive(defaultStandardDir, userStandardDir);
     }
@@ -4863,6 +4873,10 @@ class ActionRegistry extends events.EventEmitter {
       const actionDef = await this.loadActionDefinition(filePath);
       const validation = this.validateCandidate(actionDef);
       const id = actionDef?.signature ?? path.basename(filePath);
+      if (scope === "standard" && RETIRED_STANDARD_ACTION_IDS.has(id)) {
+        console.warn(`[ActionRegistry] Ignoring retired standard action: ${id}`);
+        return null;
+      }
       this.registerValidation(id, validation);
       return {
         definition: actionDef,
@@ -6074,7 +6088,7 @@ class ActionEngine {
     const rules = [
       { reason: "gold", pattern: /(?:(?:支付|付给|给(?:了)?|交给|交付|塞给|递给|奉上|献上|打赏|赏赐|赏下|赏了|赏给|赠与|赠送|转交|给钱|送钱|付清|结清|赔付|补偿|贿赂|行贿|掏出|奉还|归还).{0,16}(?:钱|金|银|金币|银币|铜钱|贯|两|文|财物)|(?:把|将)?.{0,12}(?:钱|金|银|金币|银币|铜钱|贯|两|文|财物).{0,12}(?:交给|交付|付给|递给|给了|奉上|赠与|转交)|(?:赎金|彩礼|聘礼|酬金|赏钱).{0,12}(?:支付|交付|给|付|钱|金|银)|收下.{0,12}(?:钱|金|银|礼金|赏钱)|(?:pay|paid|give|gave|gift|gifted|transfer|transferred|compensated|bribed|repaid).{0,20}(?:gold|money|coin))/i },
       { reason: "imprisonment", pattern: /(?:囚禁|关进|关押|投入(?:大牢|地牢)|收监|逮捕|拘押|软禁|拿下|押下|押入|押进|押往|押送(?:入|至).{0,8}(?:牢|狱)|下狱|入狱|捆(?:起|住)来?|绑(?:起|住)来?|上(?:了)?枷锁|戴上(?:镣铐|枷锁)|锁进(?:牢房|地牢)?|铁链(?:锁住|缚住)|imprison(?:ed)?|arrest(?:ed)?|jailed?|locked up|put in chains)/i },
-      { reason: "death_or_injury", pattern: /(?:杀死|杀了|砍死|刺死|毒死|勒死|掐死|打死|烧死|淹死|处死|斩首|毙命|殒命|气绝|断气|倒地(?:身亡|死去)|刺伤|砍伤|打伤|烧伤|冻伤|摔伤|重创|重伤|负伤|受伤|刺穿|贯穿|流血(?:不止)?|鲜血.{0,8}(?:流出|涌出|喷出)|伤口|骨折|断骨|昏迷|毁容|弄瞎|刺瞎|打瞎|剜.?眼|断腿|折断|打断|割下|砍下|阉割|killed?|executed|wounded|injured|maimed|disfigured|bled|bleeding|blinded|castrat|poisoned|strangled|burned|drowned)/i },
+      { reason: "death_or_injury", pattern: /(?:杀死|杀了|砍死|刺死|毒死|勒死|掐死|打死|烧死|淹死|处死|斩首|枭首|毙命|殒命|气绝|断气|倒地(?:身亡|死去)|(?:割|砍|斩|削)(?:了)?(?:下|断|落).{0,4}(?:脑袋|头颅|首级|头)|(?:脑袋|头颅|首级|头).{0,6}(?:被)?(?:割|砍|斩|削)(?:了)?(?:下|断|落)|刺伤|砍伤|打伤|烧伤|冻伤|摔伤|重创|重伤|负伤|受伤|刺穿|贯穿|(?:刺|捅)(?:中|入|进).{0,8}(?:胸(?:口|膛)?|腹(?:部)?|肩(?:膀)?|背(?:部)?|腰(?:部)?|腿|手臂|身体|身躯|血肉)|(?:刀|剑|匕首|枪尖|刀刃|剑刃).{0,6}(?:刺入|刺进|没入|扎进)|捅伤|扎伤|流血(?:不止)?|鲜血.{0,8}(?:流出|涌出|喷出)|伤口|骨折|断骨|昏迷|毁容|弄瞎|刺瞎|打瞎|剜.?眼|断腿|折断|打断|割下|砍下|阉割|killed?|executed|wounded|injured|maimed|disfigured|bled|bleeding|blinded|castrat|poisoned|strangled|burned|drowned)/i },
       { reason: "relationship", pattern: /(?:成为(?:了)?(?:情人|恋人|朋友|挚友|至交|死敌|宿敌|仇敌|灵魂伴侣|义兄弟)|结为(?:了)?(?:情人|恋人|朋友|挚友|至交|死敌|宿敌|义兄弟|夫妻)|(?:彼此|两人|我们).{0,8}(?:相恋|相爱|坠入爱河|成为(?:了)?恋人|成为(?:了)?挚友|成为(?:了)?至交|成为(?:了)?死敌|反目成仇|化敌为友|冰释前嫌)|(?:与|和).{0,12}(?:结为|结成|成为)(?:了)?(?:情人|恋人|朋友|挚友|至交|死敌|宿敌|仇敌|灵魂伴侣|义兄弟|盟友)|结拜|义结金兰|义结兄弟|定情|私定终身|握手言和|和解(?:如初)?|化敌为友|正式结盟|结盟成功|结成同盟|缔结同盟|签订停战|达成停战|became? (?:lovers?|friends?|rivals?|nemeses|soulmates?)|formed? an alliance|became? blood brothers?|agreed? to (?:a )?truce)/i },
       { reason: "opinion_change", pattern: /(?:(?:对|对于).{0,16}(?:好感|好感度|评价|看法|态度|意见).{0,12}(?:增加|上升|提高|改善|下降|降低|恶化|变差|转好|转坏|大增|大减)|(?:好感|好感度|评价|看法|态度|意见).{0,12}(?:增加|上升|提高|改善|下降|降低|恶化|变差|转好|转坏|大增|大减)|(?:对).{0,12}(?:不再信任|心生好感|心怀感激|心生厌恶|怀恨在心)|(?:更加|变得).{0,8}(?:敬重|钦佩|感激|信任|喜爱|厌恶|憎恨|不满|敌视)|(?:gained?|lost|increased?|decreased?|improved?|worsened?).{0,20}(?:opinion|respect|trust|affection))/i },
       { reason: "employment_or_office", pattern: /(?:任命(?:为|了)?|册封(?:为|了)?|拜(?:为|了)?|擢升|升任|提拔(?:为|了)?|调任(?:为|至)?|委任(?:为|了)?|委派(?:为|至)?|封为|授予.{0,12}(?:官|职|爵|差事)|授官|授职|罢免|罢官|免去.{0,12}(?:官|职)|撤职|解职|革职|贬职|开除|雇佣(?:为|了)?|招募(?:为|了)?(?:骑士|侍从)?|聘为|入仕|加入.{0,12}(?:宫廷|朝廷)|效力于|逐出宫廷|appointed?|promoted?|assigned?|dismissed|fired|employed|hired|recruited)/i },
@@ -6082,9 +6096,8 @@ class ActionEngine {
       { reason: "location_or_exit", pattern: /(?:离开(?:了)?(?:这里|房间|宫廷|宴会|谈话)?|走出|退出|离席|离场|转身离去|退下|告辞|踏入|进入|来到|赶往|移步|前往(?:王座厅|花园|卧室|军营|地牢|小巷)|返回(?:了)?(?:宫廷|房间|营地|住所|花园|王座厅)|回到(?:宫廷|房间|营地|住所|花园|王座厅)|抵达(?:了)?(?:宫廷|房间|营地|花园|王座厅|军营|地牢|市场)|到达(?:了)?(?:宫廷|房间|营地|花园|王座厅|军营|地牢|市场)|搬到|移动到|left (?:the )?(?:conversation|room|court)|walked out|entered|arrived|returned to|moved? to)/i },
       { reason: "drinking_or_toast", pattern: /(?:喝(?:了|着|下)?(?:茶|酒|一口|几口|一杯)|饮(?:了|着|下)?(?:茶|酒|一口|几口|一杯)|品(?:了|着)?(?:茶|酒)|啜|呷|抿(?:了)?一口|小酌|痛饮|畅饮|满饮|饮干|酌酒|碰杯|斟满|斟(?:了)?酒|倒(?:了)?酒入杯|端起.{0,12}(?:茶盏|茶杯|酒杯|杯).{0,12}(?:喝|饮|品|啜)|举杯|举起(?:茶杯|酒杯)|向.{0,12}(?:祝酒|敬酒)|敬(?:了)?(?:茶|酒)|干(?:了)?杯|一饮而尽|饮尽|饮罢|品茗|饮茶|饮酒|drank|sipped|gulped|drained (?:the )?(?:cup|glass)|raised (?:a |the )?(?:cup|glass)|made a toast|toasted)/i },
       { reason: "daily_movement", pattern: /(?:行走|迈步|踱步|散步|快步(?:走|前行)|小跑|奔跑|奔向|冲过去|(?:^|[我你他她它])(?:走|跑)(?:了|着|向|到|近|过去|过来|一步|几步)|walked?|walking|ran|running|jogged?|strolled?|paced?)/i },
-      // Looking and other low-impact prose are not game actions. Only a
-      // concrete physical interaction with an object, clothing or food reaches
-      // performDailyAction automatically.
+      // Low-impact prose remains available to the event parser for analytics
+      // and future narrative features, but does not enter Action Runtime.
       { reason: "daily_object_interaction", pattern: /(?:拿起|拿过|拿来|拿走|取出|拾起|捡起|接过|提起|拎起|扛起|抱起|穿上|穿好|穿(?:了|着)?(?:衣|袍|裙|裤|鞋|靴|甲)|披上|戴上|套上|换上|吃了|吃下|吃掉|咬下|吞下|picked? up|took|carried|lifted|put on|wore|ate)/i },
       { reason: "combat", pattern: /(?:拔(?:出)?(?:长|短|佩|宝|铁)?(?:剑|刀|矛)|挥(?:长|短)?(?:剑|刀)|持(?:长|短)?(?:剑|刀|矛)|挥拳|出拳|打(?!算|听|探|开|扰|赌|猎|水|扫|赏|字|量|招|扮|包|造|卡|工|理|牌|针|伞|鼓)|掌掴|扇了?.{0,8}耳光|推(?:了|向|开|倒|他|她|你|我|$)|踢|踹|撞(?:了|向|上|倒|他|她|你|我|$)|扑向|摔倒|擒住|制服|缴械|刺(?:向|入|中|伤|了|他|她|你|我|$)|砍(?:向|中|下|伤|了|他|她|你|我|$)|劈(?:向|中|下|伤|了|他|她|你|我|$)|斩(?:向|中|下|伤|首|了|他|她|你|我|$)|格挡|招架|搏斗|厮打|扭打|打斗|交战|开战|冲杀|冲锋|射(?:出|中)|放箭|命中(?:了)?|击中(?:了)?|击败(?:了)?|战胜(?:了)?|duel(?:ed|ling)?|fought|attacked|punched|pushed|kicked|rammed|slammed|slapped|struck|stabbed|slashed|chopped|cleaved|parried|blocked|shot|hit|defeated|charged)/i },
       { reason: "intimacy_or_clothing", pattern: /(?:(?:脱下|脱掉|脱去|脱光|褪下|褪去|除去|扯开|撕开|解下|解衣).{0,8}(?:衣|衣裙|衣衫|外袍|亵衣|内衫|裤|腰带)|解开(?:了)?(?:衣带|腰带|衣襟)|宽衣(?:解带)?|衣衫(?:滑落|尽褪)|裸露(?:了)?|裸身|赤裸|赤身|露出.{0,8}(?:胸膛|肌肤|身体)|undressed|removed .{0,12}(?:clothes|robe|shirt|dress)|unfastened .{0,12}(?:belt|clothing))/i },
@@ -6272,7 +6285,7 @@ class ActionEngine {
     }
     if (reasons.has("imprisonment")) allow("isImprisonedBy", "明确完成的拘押/监禁");
     if (reasons.has("death_or_injury")) {
-      if (matches(/(?:杀死|杀了|砍死|刺死|毒死|勒死|掐死|打死|烧死|淹死|处死|斩首|毙命|殒命|气绝|断气|倒地(?:身亡|死去)|killed?|executed|died)/i)) {
+      if (matches(/(?:杀死|杀了|砍死|刺死|毒死|勒死|掐死|打死|烧死|淹死|处死|斩首|枭首|毙命|殒命|气绝|断气|倒地(?:身亡|死去)|(?:割|砍|斩|削)(?:了)?(?:下|断|落).{0,4}(?:脑袋|头颅|首级|头)|(?:脑袋|头颅|首级|头).{0,6}(?:被)?(?:割|砍|斩|削)(?:了)?(?:下|断|落)|killed?|executed|died)/i)) {
         allow("characterIsKilled", "明确的死亡结果");
       } else {
         allow("isInjured", "明确的非致死伤害结果");
@@ -6562,19 +6575,11 @@ class ActionEngine {
         /* includeDisabled = */
         false
       );
-      // Scene modules are useful only for a line that contains no legacy CK3
-      // state change. When both appear, let the substantive legacy action win
-      // instead of allowing a generic pose/combat/contact record to crowd out
-      // injury, payment, relationship, office, or other game effects.
-      const sceneActionIds = /* @__PURE__ */ new Set(["performCombatAction", "performDailyAction", "performIntimateAction"]);
-      const legacyStateReasons = /* @__PURE__ */ new Set(["gold", "imprisonment", "death_or_injury", "relationship", "opinion_change", "employment_or_office", "faith_or_vassal", "location_or_exit", "drinking_or_toast", "intimacy_or_clothing", "sexual_intercourse_completed", "visible_pose", "faction_commitment", "prisoner_resolution", "rp_status", "scheme_start"]);
-      const hasLegacyStateChange = gate.reasons.some((reason) => legacyStateReasons.has(reason));
       // New action files can declare their gate categories themselves. This
       // keeps future extensions in the registry instead of duplicating every
       // action ID inside ActionEngine.
       for (const action of allLoaded) {
         const categories = Array.isArray(action.definition.triggerCategories) ? action.definition.triggerCategories : [];
-        if (hasLegacyStateChange && sceneActionIds.has(action.id)) continue;
         if (categories.some((category) => gate.reasons.includes(category))) relevantActionIds.add(action.id);
       }
       // Stage two supplies a semantic allowlist whenever the wording identifies
@@ -6703,8 +6708,7 @@ class ActionEngine {
       // explicit provider setting remains an escape hatch.
       const useMinimizedSchema = actionsConfig?.useMinimizedActionsSchema ?? true;
       console.log(`[DEBUG] ActionEngine: Using minimized schema: ${useMinimizedSchema}`);
-      const repeatableSceneCategories = /* @__PURE__ */ new Set(["daily_movement", "daily_object_interaction", "combat", "intimate_contact"]);
-      const maxActions = Math.max(1, Math.min(4, gate.reasons.reduce((sum, reason) => sum + (repeatableSceneCategories.has(reason) ? 3 : 1), 0)));
+      const maxActions = Math.max(1, Math.min(4, available.length));
       const jsonSchema = buildStructuredResponseJsonSchema({
         availableActions: available,
         maxActions

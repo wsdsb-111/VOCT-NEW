@@ -20777,8 +20777,9 @@ const SummariesManager = () => {
   const filteredSummaries = summaries2.filter((metadata) => {
     if (!searchQuery) return true;
     const query = searchQuery.toLowerCase();
-    return metadata.characterName.toLowerCase().includes(query) || metadata.characterId.toLowerCase().includes(query) || metadata.playerId.toLowerCase().includes(query) || metadata.summaries.some(
-      (summary) => summary.content.toLowerCase().includes(query) || summary.date.toLowerCase().includes(query)
+    const matchesSearchText = (value) => String(value ?? "").toLowerCase().includes(query);
+    return matchesSearchText(metadata.characterName) || matchesSearchText(metadata.characterId) || matchesSearchText(metadata.playerId) || (metadata.summaries || []).some(
+      (summary) => matchesSearchText(summary.content) || matchesSearchText(summary.date)
     );
   });
   const summariesByPlayer = filteredSummaries.reduce((acc, metadata) => {

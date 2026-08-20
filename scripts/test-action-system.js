@@ -178,41 +178,23 @@ const characters = /* @__PURE__ */ new Map([
   [3, makeCharacter(3, "Minor NPC", 12)]
 ]);
 const gameData = { characters, playerID: 1, playerName: "Player" };
-const daily = require(path.join(actionsDir, "z_performDailyAction.js"));
-const combat = require(path.join(actionsDir, "z_performCombatAction.js"));
-const intimate = require(path.join(actionsDir, "z_performIntimateAction.js"));
 const scheme = require(path.join(actionsDir, "z_startPersonalScheme.js"));
 const hostileScheme = require(path.join(actionsDir, "z_startHostileScheme.js"));
 const rpStatus = require(path.join(actionsDir, "z_setRoleplayStatus.js"));
 const faction = require(path.join(actionsDir, "z_recordFactionCommitment.js"));
 const prisoner = require(path.join(actionsDir, "z_resolvePrisoner.js"));
 
-for (const action of [daily, combat, intimate, scheme, hostileScheme, rpStatus, faction, prisoner]) {
+for (const filename of ["z_performDailyAction.js", "z_performCombatAction.js", "z_performIntimateAction.js"]) {
+  assert(!fs.existsSync(path.join(actionsDir, filename)), `${filename} must be retired from shipped standard actions`);
+}
+
+for (const action of [scheme, hostileScheme, rpStatus, faction, prisoner]) {
   const args = typeof action.args === "function" ? action.args({ gameData, sourceCharacter: characters.get(2) }) : action.args;
   assert(action.signature);
   assert(Array.isArray(action.triggerCategories) && action.triggerCategories.length > 0);
   assert(args.every((arg) => arg.name && arg.type && arg.description));
   assert.strictEqual(typeof action.check({ gameData, sourceCharacter: characters.get(2) }).requiresTarget, "boolean");
 }
-
-assert.doesNotThrow(() => combat.run({
-  gameData,
-  sourceCharacter: characters.get(2),
-  targetCharacter: characters.get(2),
-  args: { action: "slash", weapon: "sword", isPlayerSource: true }
-}));
-assert.doesNotThrow(() => intimate.run({
-  gameData,
-  sourceCharacter: characters.get(2),
-  targetCharacter: characters.get(2),
-  args: { action: "kiss", isPlayerSource: true }
-}));
-assert.throws(() => intimate.run({
-  gameData,
-  sourceCharacter: characters.get(2),
-  targetCharacter: characters.get(3),
-  args: { action: "kiss", isPlayerSource: true }
-}), /adult/);
 
 let schemeEffect = "";
 assert.doesNotThrow(() => hostileScheme.run({

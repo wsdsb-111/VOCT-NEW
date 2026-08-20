@@ -67,8 +67,7 @@ const loadedActions = [
   createRuntimeAction({ signature: "isImprisonedBy", category: "imprisonment", evidencePatterns: [/关进|关押|囚禁/], participantRoles: { source: "patient", target: "actor" }, riskLevel: "high", sourceId: zhangSan.id }),
   createRuntimeAction({ signature: "isEmployedAsKnightBy", category: "employment_or_office", evidencePatterns: [/任命.*骑士|骑士/], participantRoles: { source: "patient", target: "actor" }, riskLevel: "medium", sourceId: zhangSan.id }),
   createRuntimeAction({ signature: "isInjured", category: "death_or_injury", evidencePatterns: [/刺伤|砍伤/], participantRoles: { source: "actor", target: "patient" }, riskLevel: "high", sourceId: player.id }),
-  createRuntimeAction({ signature: "playerPaysGoldTo", category: "gold", evidencePatterns: [], riskLevel: "medium", sourceId: player.id, requiresLegacyResolution: true }),
-  createRuntimeAction({ signature: "performCombatAction", category: "combat", evidencePatterns: [/挥拳/], riskLevel: "low", sourceId: guard.id })
+  createRuntimeAction({ signature: "playerPaysGoldTo", category: "gold", evidencePatterns: [], riskLevel: "medium", sourceId: player.id, requiresLegacyResolution: true })
 ];
 let approvalMode = "non-destructive";
 globalThis.actionRegistry = {
@@ -197,16 +196,6 @@ const Conversation = globalThis.__V66RuntimeConversation;
     content: "我给张三50金币。"
   });
   assert.strictEqual(playerGold.needsApproval[0].sourceCharacterId, player.id, "player gold action must retain the player source");
-  globalThis.__runtimeSelectedActionId = "performCombatAction";
-  const npcCombat = await ActionEngine.evaluateForCharacter({ gameData, actionGateProcessedTriggers: new Set() }, guard, null, {
-    id: 15,
-    name: guard.fullName,
-    role: "assistant",
-    content: "我挥拳打向卫兵。"
-  });
-  assert.strictEqual(npcCombat.needsApproval[0].sourceCharacterId, guard.id, "NPC event must retain its own source");
-  assert.notStrictEqual(playerGold.needsApproval[0].sourceCharacterId, npcCombat.needsApproval[0].sourceCharacterId, "player and NPC events must remain independently scoped");
-
   const lifecycle = [];
   const originalEvaluate = ActionEngine.evaluateForCharacter;
   ActionEngine.evaluateForCharacter = async (_conversation, sourceCharacter, _signal, userMessage) => {
