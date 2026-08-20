@@ -60,7 +60,12 @@ class ReferenceResolver {
           return knownGender ? knownGender === gender : true;
         });
         if (candidates.length === 1) references.push(resolved("third_person", surface, candidates[0], `unique_recent_${gender}_mention`));
-        else references.push(unresolved("third_person", surface, "ambiguous_third_person"));
+        else if (activeIds.size === 2 && interlocutors.length === 1) {
+          const [interlocutor] = interlocutors;
+          const knownGender = getCharacterGender(interlocutor);
+          if (knownGender && knownGender !== gender) references.push(unresolved("third_person", surface, "unresolved_gender_mismatch"));
+          else references.push(resolved("third_person", surface, interlocutor, `unique_interlocutor_${gender}`));
+        } else references.push(unresolved("third_person", surface, "ambiguous_third_person"));
       } else if (surface === "自己") {
         references.push({ mode: "resolved", referenceType: "reflexive", surface, characterId: null, confidenceBasis: ["clause_subject"], reason: null });
       }

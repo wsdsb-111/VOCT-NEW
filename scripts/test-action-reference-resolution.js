@@ -42,6 +42,21 @@ outcome = resolveMessage({ text: "我刺伤了他。", context });
 assert.strictEqual(outcome.result.mode, "resolved", "unique recent third-person mention must resolve");
 assert.strictEqual(outcome.result.targetCharacter.id, zhangSan.id, "他 must bind to the unique recent male mention");
 
+context = new ConversationReferenceContext({ activeParticipantIds: [1, 2] });
+outcome = resolveMessage({ text: "我刺伤了他。", context });
+assert.strictEqual(outcome.result.mode, "resolved", "strict 1v1 third person must resolve without a prior mention");
+assert.strictEqual(outcome.result.targetCharacter.id, zhangSan.id, "1v1 他 must bind to the only interlocutor");
+
+context = new ConversationReferenceContext({ activeParticipantIds: [1, 2] });
+outcome = resolveMessage({ text: "我刺伤了她。", context });
+assert.strictEqual(outcome.result.mode, "unresolved", "1v1 gender mismatch must fail closed");
+assert.strictEqual(outcome.references.find((reference) => reference.surface === "她").reason, "unresolved_gender_mismatch", "gender mismatch must preserve an explicit diagnostic");
+
+context = new ConversationReferenceContext({ activeParticipantIds: [1, 4] });
+outcome = resolveMessage({ text: "我刺伤了她。", context });
+assert.strictEqual(outcome.result.mode, "resolved", "strict female 1v1 third person must resolve");
+assert.strictEqual(outcome.result.targetCharacter.id, wangShi.id, "1v1 她 must bind to the only interlocutor");
+
 context = new ConversationReferenceContext({ activeParticipantIds: [1, 2, 3] });
 context.observeMessage({ message: { id: 1, content: "张三和李四走了进来。" }, speaker: player, characters: gameData.characters.values() });
 outcome = resolveMessage({ text: "我刺伤了他。", context });

@@ -6088,7 +6088,7 @@ class ActionEngine {
     const rules = [
       { reason: "gold", pattern: /(?:(?:支付|付给|给(?:了)?|交给|交付|塞给|递给|奉上|献上|打赏|赏赐|赏下|赏了|赏给|赠与|赠送|转交|给钱|送钱|付清|结清|赔付|补偿|贿赂|行贿|掏出|奉还|归还).{0,16}(?:钱|金|银|金币|银币|铜钱|贯|两|文|财物)|(?:把|将)?.{0,12}(?:钱|金|银|金币|银币|铜钱|贯|两|文|财物).{0,12}(?:交给|交付|付给|递给|给了|奉上|赠与|转交)|(?:赎金|彩礼|聘礼|酬金|赏钱).{0,12}(?:支付|交付|给|付|钱|金|银)|收下.{0,12}(?:钱|金|银|礼金|赏钱)|(?:pay|paid|give|gave|gift|gifted|transfer|transferred|compensated|bribed|repaid).{0,20}(?:gold|money|coin))/i },
       { reason: "imprisonment", pattern: /(?:囚禁|关进|关押|投入(?:大牢|地牢)|收监|逮捕|拘押|软禁|拿下|押下|押入|押进|押往|押送(?:入|至).{0,8}(?:牢|狱)|下狱|入狱|捆(?:起|住)来?|绑(?:起|住)来?|上(?:了)?枷锁|戴上(?:镣铐|枷锁)|锁进(?:牢房|地牢)?|铁链(?:锁住|缚住)|imprison(?:ed)?|arrest(?:ed)?|jailed?|locked up|put in chains)/i },
-      { reason: "death_or_injury", pattern: /(?:杀死|杀了|砍死|刺死|毒死|勒死|掐死|打死|烧死|淹死|处死|斩首|枭首|毙命|殒命|气绝|断气|倒地(?:身亡|死去)|(?:割|砍|斩|削)(?:了)?(?:下|断|落).{0,4}(?:脑袋|头颅|首级|头)|(?:脑袋|头颅|首级|头).{0,6}(?:被)?(?:割|砍|斩|削)(?:了)?(?:下|断|落)|刺伤|砍伤|打伤|烧伤|冻伤|摔伤|重创|重伤|负伤|受伤|刺穿|贯穿|(?:刺|捅)(?:中|入|进).{0,8}(?:胸(?:口|膛)?|腹(?:部)?|肩(?:膀)?|背(?:部)?|腰(?:部)?|腿|手臂|身体|身躯|血肉)|(?:刀|剑|匕首|枪尖|刀刃|剑刃).{0,6}(?:刺入|刺进|没入|扎进)|捅伤|扎伤|流血(?:不止)?|鲜血.{0,8}(?:流出|涌出|喷出)|伤口|骨折|断骨|昏迷|毁容|弄瞎|刺瞎|打瞎|剜.?眼|断腿|折断|打断|割下|砍下|阉割|killed?|executed|wounded|injured|maimed|disfigured|bled|bleeding|blinded|castrat|poisoned|strangled|burned|drowned)/i },
+      { reason: "death_or_injury", pattern: /(?:杀死|杀了|砍死|刺死|毒死|勒死|掐死|打死|烧死|淹死|处死|斩首|枭首|人头落地|身首异处|毙命|殒命|气绝|断气|倒地(?:身亡|死去)|(?:割|砍|斩|削)(?:了)?(?:下|断|落).{0,4}(?:脑袋|头颅|首级|头)|(?:脑袋|头颅|首级|头).{0,6}(?:被)?(?:割|砍|斩|削)(?:了)?(?:下|断|落)|刺伤|砍伤|打伤|烧伤|冻伤|摔伤|重创|重伤|负伤|受伤|刺穿|贯穿|(?:刺|捅)(?:中|入|进).{0,8}(?:胸(?:口|膛)?|腹(?:部)?|肩(?:膀)?|背(?:部)?|腰(?:部)?|腿|手臂|身体|身躯|血肉)|(?:刀|剑|匕首|枪尖|刀刃|剑刃).{0,6}(?:刺入|刺进|没入|扎进)|(?:手|手臂|手指|腿|脚|耳朵|鼻子).{0,8}(?:被)?(?:割|砍|斩)(?:了)?(?:下|掉|断|落)|(?:手|手臂|肩膀|胸口|腹部|背部|腰部|腿).{0,8}(?:砍|刺|捅)(?:了)?(?:一|两|几)(?:刀|剑|下|记)|捅伤|扎伤|流血(?:不止)?|鲜血.{0,8}(?:流出|涌出|喷出)|伤口|骨折|断骨|昏迷|毁容|弄瞎|刺瞎|打瞎|剜.?眼|断腿|折断|打断|割下|砍下|阉割|killed?|executed|wounded|injured|maimed|disfigured|bled|bleeding|blinded|castrat|poisoned|strangled|burned|drowned)/i },
       { reason: "relationship", pattern: /(?:成为(?:了)?(?:情人|恋人|朋友|挚友|至交|死敌|宿敌|仇敌|灵魂伴侣|义兄弟)|结为(?:了)?(?:情人|恋人|朋友|挚友|至交|死敌|宿敌|义兄弟|夫妻)|(?:彼此|两人|我们).{0,8}(?:相恋|相爱|坠入爱河|成为(?:了)?恋人|成为(?:了)?挚友|成为(?:了)?至交|成为(?:了)?死敌|反目成仇|化敌为友|冰释前嫌)|(?:与|和).{0,12}(?:结为|结成|成为)(?:了)?(?:情人|恋人|朋友|挚友|至交|死敌|宿敌|仇敌|灵魂伴侣|义兄弟|盟友)|结拜|义结金兰|义结兄弟|定情|私定终身|握手言和|和解(?:如初)?|化敌为友|正式结盟|结盟成功|结成同盟|缔结同盟|签订停战|达成停战|became? (?:lovers?|friends?|rivals?|nemeses|soulmates?)|formed? an alliance|became? blood brothers?|agreed? to (?:a )?truce)/i },
       { reason: "opinion_change", pattern: /(?:(?:对|对于).{0,16}(?:好感|好感度|评价|看法|态度|意见).{0,12}(?:增加|上升|提高|改善|下降|降低|恶化|变差|转好|转坏|大增|大减)|(?:好感|好感度|评价|看法|态度|意见).{0,12}(?:增加|上升|提高|改善|下降|降低|恶化|变差|转好|转坏|大增|大减)|(?:对).{0,12}(?:不再信任|心生好感|心怀感激|心生厌恶|怀恨在心)|(?:更加|变得).{0,8}(?:敬重|钦佩|感激|信任|喜爱|厌恶|憎恨|不满|敌视)|(?:gained?|lost|increased?|decreased?|improved?|worsened?).{0,20}(?:opinion|respect|trust|affection))/i },
       { reason: "employment_or_office", pattern: /(?:任命(?:为|了)?|册封(?:为|了)?|拜(?:为|了)?|擢升|升任|提拔(?:为|了)?|调任(?:为|至)?|委任(?:为|了)?|委派(?:为|至)?|封为|授予.{0,12}(?:官|职|爵|差事)|授官|授职|罢免|罢官|免去.{0,12}(?:官|职)|撤职|解职|革职|贬职|开除|雇佣(?:为|了)?|招募(?:为|了)?(?:骑士|侍从)?|聘为|入仕|加入.{0,12}(?:宫廷|朝廷)|效力于|逐出宫廷|appointed?|promoted?|assigned?|dismissed|fired|employed|hired|recruited)/i },
@@ -6179,8 +6179,11 @@ class ActionEngine {
     const recalledOrReportedMarker = /(?:想起|回忆|昨天|曾(?:经)?|听说|传闻|据说|声称|讲述|描述|\b(?:yesterday|remember|heard|rumou?r(?:ed)?)\b)/i;
     const failedBeforeExecutionMarker = /(?:试图|尝试|企图).{0,30}(?:没能|未能|卡在|失败|落空|无法|没有成功|\b(?:failed|stuck|could not)\b)/i;
     const failedResultMarker = /(?:躲开|避开|闪开|格挡|招架|挡下|未命中|落空|\b(?:dodged|avoided|blocked|missed)\b)/i;
-    const nonExecutedMarker = /(?:[？?]|(?:请|命令|要求|让|叫|希望|想|要|欲|准备|打算|计划|将(?:要|会)|会|能否|可否|是否|别|不要|莫|不许|不准|差点|险些|几乎).{0,16}(?:杀|刺|砍|关|囚禁|任命|罢免|雇佣|招募|改宗|皈依|离开|进入|喝|亲吻|接吻|脱))/i;
-    const negatedActionMarker = /(?:没有|并未|不曾|未曾|尚未).{0,12}(?:杀|刺|砍|打|关|囚禁|任命|罢免|雇佣|招募|改宗|皈依|离开|进入|喝|亲吻|接吻|脱)/i;
+    // Hints are already concrete action candidates. Reject any clause led by
+    // a plan, request, question, near-miss, or negation regardless of action
+    // category so new registry metadata cannot bypass the execution boundary.
+    const nonExecutedMarker = /(?:[？?]|(?:^|[，,；;])\s*(?:(?:明天|明日|稍后|待会|待会儿|将来|总有一天)\s*)?(?:我|你|他|她|它|我们|你们|他们|她们|众人)?\s*(?:(?:明天|明日|稍后|待会|待会儿|将来|总有一天)\s*)?(?:请|命令|要求|让|叫|希望|想|要|欲|准备|打算|计划|将(?:要|会)|会|能否|可否|是否|别|不要|莫|不许|不准|差点|险些|几乎))/i;
+    const negatedActionMarker = /(?:^|[，,；;])\s*(?:我|你|他|她|它|我们|你们|他们|她们|众人)?\s*(?:没有|并未|不曾|未曾|尚未)/i;
     const posthocNegationMarker = /(?:——|—|\.\.\.|…|至少).{0,24}(?:不[，,]?|只是做了个梦|也许没有|本来是这么打算)/i;
     const isPostActionQualifier = (clause) => /(?:杀死|杀了|刺伤|砍伤|打伤|关进|关押|囚禁|任命|罢免|雇佣|招募|亲吻|接吻).{0,16}(?:也许|或许|可能会)/i.test(clause);
     const events = [];
@@ -6529,6 +6532,10 @@ class ActionEngine {
   static async evaluateForCharacter(conv, npc, signal, actionMessage, actionEvent = null) {
     try {
       if (signal?.aborted) {
+        return { autoApproved: [], needsApproval: [] };
+      }
+      if (conv.inactiveParticipantIds?.has(npc?.id)) {
+        usageAnalytics.record({ requestType: "action_skipped", character: npc?.shortName, skipReason: "inactive_participant" }, null);
         return { autoApproved: [], needsApproval: [] };
       }
       const gate = this.shouldEvaluateForMessage(conv, actionMessage, actionEvent);
@@ -6886,6 +6893,9 @@ class ActionEngine {
         dryRun: options?.dryRun,
         lang: userLang
       });
+      if (!options?.dryRun && inv.actionId === "characterIsKilled") {
+        conv.markParticipantInactive?.(npc.id, "dead");
+      }
       let feedback = void 0;
       if (result) {
         if (typeof result === "string") {
@@ -6937,6 +6947,7 @@ class Conversation {
     this.pendingSummaryImports = /* @__PURE__ */ new Map();
     this.hasAcceptedImports = /* @__PURE__ */ new Set();
     this.pendingActionApprovals = /* @__PURE__ */ new Map();
+    this.inactiveParticipantIds = /* @__PURE__ */ new Map();
     // Action checks are scoped to the current player turn. This prevents one
     // narrated event from being sent to the action model once per NPC reply.
     this.actionGateProcessedTriggers = /* @__PURE__ */ new Set();
@@ -7051,10 +7062,27 @@ ${result.content}`;
   }
   // Get list of all NPCs (characters except the player)
   getNpcList() {
-    return [...this.gameData.characters.values()].filter((c) => c.id !== this.gameData.playerID);
+    return [...this.gameData.characters.values()].filter((c) => c.id !== this.gameData.playerID && this.isCharacterAvailableForConversation(c));
+  }
+  isCharacterAvailableForConversation(character) {
+    if (!character || this.inactiveParticipantIds?.has(character.id)) return false;
+    return character.isDead !== true && character.dead !== true && character.alive !== false;
+  }
+  markParticipantInactive(characterId, reason) {
+    if (characterId == null) return;
+    this.inactiveParticipantIds.set(characterId, reason);
+    this.npcQueue = this.npcQueue.filter((npc) => npc?.id !== characterId);
+    if (this.referenceContext?.activeParticipantIds) {
+      this.referenceContext.activeParticipantIds = this.referenceContext.activeParticipantIds.filter((id) => id !== characterId);
+    }
+    console.log(`[Conversation] Participant ${characterId} marked inactive: ${reason}`);
   }
   // Handle response for a single NPC
   async respondAs(npc) {
+    if (!this.isCharacterAvailableForConversation(npc)) {
+      console.log(`[Conversation] Skipping unavailable NPC response: ${npc?.shortName || npc?.id || "unknown"}`);
+      return;
+    }
     // Clear mentioned characters from previous message
     // NOTE: We don't clear the cache here because we want to reuse it
     // within the same conversation if the player hasn't sent new messages
