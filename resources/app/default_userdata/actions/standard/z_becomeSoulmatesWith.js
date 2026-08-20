@@ -59,6 +59,7 @@ function getLocalizedSoulmate(lang) {
 
 module.exports = {
   signature: "becomeSoulmatesWith",
+  triggerCategories: ["relationship", "intimate_contact"], semantic: { evidencePatterns: [/(?:灵魂伴侣|灵魂相契|灵魂共鸣|命中注定|命定之人|至死不渝|此生相守|became? soulmates?)/i], exclusiveGroup: "relationship_tier", priority: 60, riskLevel: "medium" },
   title: {
     en: "Become Soulmates",
     ru: "Стать душами-сородичами",

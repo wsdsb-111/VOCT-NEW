@@ -15,6 +15,10 @@ const STATUSES = {
 module.exports = {
   signature: "setRoleplayStatus",
   triggerCategories: ["rp_status"],
+  semantic: {
+    evidencePatterns: [/.+/],
+    riskLevel: "low"
+  },
   title: { en: "Set Roleplay Status", zh: "设置 RP 状态" },
 
   args: [

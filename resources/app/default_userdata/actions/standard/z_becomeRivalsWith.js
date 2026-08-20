@@ -60,6 +60,7 @@ function getLocalizedRival(lang) {
 
 module.exports = {
   signature: "becomeRivalsWith",
+  triggerCategories: ["relationship"], semantic: { evidencePatterns: [/(?:仇敌|冤家|势不两立|rivals?)/i], exclusiveGroup: "relationship_tier", priority: 35, riskLevel: "medium" },
   title: {
     en: "Become Rivals",
     ru: "Стать соперниками",

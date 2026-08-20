@@ -1,6 +1,7 @@
 /** @import { GameData, Character } from '../../gamedata_typedefs.js' */
 module.exports = {
   signature: "agreedToTruceWith",
+  triggerCategories: ["relationship"], semantic: { evidencePatterns: [/(?:停战|休战|truce)/i], exclusiveGroup: "relationship_tier", priority: 40, riskLevel: "medium" },
   title: {
     en: "Mutual Truce",
     ru: "Взаимное перемирие",

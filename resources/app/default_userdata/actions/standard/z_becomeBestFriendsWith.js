@@ -56,6 +56,7 @@ function getLocalizedBestFriend(lang) {
 
 module.exports = {
   signature: "becomeBestFriendsWith",
+  triggerCategories: ["relationship"], semantic: { evidencePatterns: [/(?:至交|挚友|生死之交|best friends?)/i], exclusiveGroup: "relationship_tier", priority: 30, riskLevel: "medium" },
   title: {
     en: "Become Best Friends",
     ru: "Стать лучшими друзьями",

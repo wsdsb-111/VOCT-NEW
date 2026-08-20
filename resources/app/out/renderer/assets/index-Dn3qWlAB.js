@@ -19814,6 +19814,17 @@ const ActionsView = () => {
       console.error("Failed to save action approval settings:", error2);
     }
   };
+  const getRiskLabel = (riskLevel) => {
+    if (riskLevel === "high") return t("actions.riskHigh");
+    if (riskLevel === "medium") return t("actions.riskMedium");
+    if (riskLevel === "low") return t("actions.riskLow");
+    return t("actions.riskUnknown");
+  };
+  const getSemanticModeLabel = (semanticMode) => {
+    if (semanticMode === "legacy") return t("actions.legacyResolution");
+    if (semanticMode === "fallback") return t("actions.fallbackAction");
+    return t("actions.eventResolver");
+  };
   return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "actions-view", children: [
     /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "form-group", children: [
       /* @__PURE__ */ jsxRuntimeExports.jsx("h4", { children: t("settings.actionApprovalSettings") }),
@@ -19903,6 +19914,7 @@ const ActionsView = () => {
       visibleActions.map((a) => {
         const isHovered = hoveredAction === a.id;
         const titleClass = `action-title ${a.disabled ? "disabled" : ""} ${!a.validation.valid ? "invalid" : ""}`;
+        const triggerCategories = Array.isArray(a.triggerCategories) ? a.triggerCategories : [];
         return /* @__PURE__ */ jsxRuntimeExports.jsxs(
           "div",
           {
@@ -19930,20 +19942,31 @@ const ActionsView = () => {
                   children: /* @__PURE__ */ jsxRuntimeExports.jsx("img", { src: AlertIcon, alt: "Destructive indicator" })
                 }
               ),
-              /* @__PURE__ */ jsxRuntimeExports.jsx(
-                "span",
-                {
-                  className: titleClass,
-                  onClick: () => !a.validation.valid && copyValidationMessage(a.validation.message),
-                  style: { cursor: !a.validation.valid ? "pointer" : "default" },
-                  children: a.title
-                }
-              ),
-              isHovered && /* @__PURE__ */ jsxRuntimeExports.jsxs("span", { className: "action-meta", children: [
-                "[",
-                a.scope,
-                "] ",
-                a.id
+              /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "action-title-group", children: [
+                /* @__PURE__ */ jsxRuntimeExports.jsx(
+                  "span",
+                  {
+                    className: titleClass,
+                    onClick: () => !a.validation.valid && copyValidationMessage(a.validation.message),
+                    style: { cursor: !a.validation.valid ? "pointer" : "default" },
+                    children: a.title
+                  }
+                ),
+                /* @__PURE__ */ jsxRuntimeExports.jsxs("span", { className: "action-semantic-meta", children: [
+                  /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: `semantic-badge risk-${a.riskLevel || "unknown"}`, children: getRiskLabel(a.riskLevel) }),
+                  /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "semantic-badge mode", children: getSemanticModeLabel(a.semanticMode) }),
+                  triggerCategories.length > 0 ? /* @__PURE__ */ jsxRuntimeExports.jsxs("span", { className: "semantic-badge categories", children: [
+                    t("actions.triggerCategories"),
+                    ": ",
+                    triggerCategories.join(" · ")
+                  ] }) : /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "semantic-badge categories", children: t("actions.noTriggerCategory") }),
+                  isHovered && /* @__PURE__ */ jsxRuntimeExports.jsxs("span", { className: "action-meta", children: [
+                    "[",
+                    a.scope,
+                    "] ",
+                    a.id
+                  ] })
+                ] })
               ] }),
               /* @__PURE__ */ jsxRuntimeExports.jsxs(
                 "button",
@@ -22367,7 +22390,7 @@ class Browser {
   }
 }
 Browser.type = "languageDetector";
-const actions$8 = { "disableAction": "Disable action", "enableAction": "Enable action", "failedToLoadActions": "Failed to load actions.", "failedToOpenActionsFile": "Failed to open action file: {{error}}", "failedToOpenActionsFolder": "Failed to open actions folder: {{error}}", "failedToReloadActions": "Failed to reload actions.", "failedToUpdateActionState": "Failed to update action state: {{error}}", "hideDisabled": "Hide disabled", "invalidAction": "Invalid action", "loadingActions": "Loading actions...", "noActionsToDisplay": "No actions to display with the current filters.", "openActionsFile": "Open File", "openActionsFolder": "Open Actions Folder", "reloadActions": "Reload", "showOnlyInvalid": "Show only invalid", "validAction": "Valid action", "enableAllActions": "Enable All", "disableAllActions": "Disable All", "destructive": "Destructive action - requires approval", "nonDestructive": "Non-destructive action", "destructiveOverridden": "Destructive state overridden: {{state}}", "openFile": "Open File" };
+const actions$8 = { "disableAction": "Disable action", "enableAction": "Enable action", "failedToLoadActions": "Failed to load actions.", "failedToOpenActionsFile": "Failed to open action file: {{error}}", "failedToOpenActionsFolder": "Failed to open actions folder: {{error}}", "failedToReloadActions": "Failed to reload actions.", "failedToUpdateActionState": "Failed to update action state: {{error}}", "hideDisabled": "Hide disabled", "invalidAction": "Invalid action", "loadingActions": "Loading actions...", "noActionsToDisplay": "No actions to display with the current filters.", "openActionsFile": "Open File", "openActionsFolder": "Open Actions Folder", "reloadActions": "Reload", "showOnlyInvalid": "Show only invalid", "validAction": "Valid action", "enableAllActions": "Enable All", "disableAllActions": "Disable All", "destructive": "Destructive action - requires approval", "nonDestructive": "Non-destructive action", "destructiveOverridden": "Destructive state overridden: {{state}}", "openFile": "Open File", "eventResolver": "Event resolver", "legacyResolution": "Legacy direction resolver", "fallbackAction": "Fallback action", "riskHigh": "Risk: High", "riskMedium": "Risk: Medium", "riskLow": "Risk: Low", "riskUnknown": "Risk: Unknown", "triggerCategories": "Triggers", "noTriggerCategory": "Fallback only" };
 const chat$8 = { "args": "Args", "cancelStream": "Cancel Stream", "details": "Details", "endConversation": "End Conversation", "from": "From", "loadingDots": "Loading...", "maximize": "+", "minimize": "-", "noParameters": "No parameters", "pauseConversation": "Pause Conversation", "pendingApproval": "Pending approval", "regenerate": "Regenerate", "resumeConversation": "Resume Conversation", "system": "System", "to": "To", "writeMessage": "Write a message...", "you": "You" };
 const common$8 = { "apply": "Apply", "approve": "Approve", "back": "Back", "cancel": "Cancel", "close": "Close", "collapseAll": "Collapse All", "confirm": "Confirm", "decline": "Decline", "delete": "Delete", "disabled": "Disabled", "edit": "Edit", "enabled": "Enabled", "error": "Error", "expandAll": "Expand All", "filter": "Filter", "folder": "Folder", "hide": "Hide", "loading": "Loading...", "next": "Next", "no": "No", "ok": "OK", "open": "Open", "pause": "Pause", "previous": "Previous", "refresh": "Refresh", "reset": "Reset", "save": "Save", "search": "Search", "settings": "Settings", "show": "Show", "success": "Success", "tokens": "tokens", "yes": "Yes" };
 const config$8 = { "actions": "Actions", "collectLogs": "Collect all logs for bug report", "configuration": "Configuration", "connection": "Connection", "default": "Default", "help": "Help section", "joinDiscord": "Join our Discord", "manageActions": "Manage detected Actions", "noPresetsYet": "No presets saved yet", "npcActions": "NPC Actions", "npcMessages": "NPC Messages", "npcSummaries": "NPC Summaries", "preset": "Preset", "prompts": "Prompts", "selectProviderOrPreset": "Select a provider or preset from the sidebar to configure", "settings": "Settings", "summaries": "Summaries", "type": "Type", "unnamedPreset": "Unnamed Preset" };
@@ -22535,7 +22558,7 @@ const pl = {
   summaries: summaries$3,
   summariesManager: summariesManager$3
 };
-const actions$2 = { "disableAction": "禁用操作", "enableAction": "启用操作", "failedToLoadActions": "加载操作失败。", "failedToOpenActionsFolder": "打开操作文件夹失败：{{error}}", "failedToReloadActions": "重新加载操作失败。", "failedToUpdateActionState": "更新操作状态失败：{{error}}", "hideDisabled": "隐藏已禁用", "invalidAction": "无效操作", "loadingActions": "加载操作中...", "noActionsToDisplay": "当前筛选条件下无可显示的操作。", "openActionsFolder": "打开操作文件夹", "reloadActions": "重新加载", "showOnlyInvalid": "仅显示无效", "validAction": "有效操作", "enableAllActions": "全部启用", "disableAllActions": "全部禁用", "openFile": "打开文件", "destructiveOverridden": "危险状态已覆盖：{{state}}", "destructive": "危险操作 - 需要批准", "nonDestructive": "安全操作" };
+const actions$2 = { "disableAction": "禁用操作", "enableAction": "启用操作", "failedToLoadActions": "加载操作失败。", "failedToOpenActionsFolder": "打开操作文件夹失败：{{error}}", "failedToReloadActions": "重新加载操作失败。", "failedToUpdateActionState": "更新操作状态失败：{{error}}", "hideDisabled": "隐藏已禁用", "invalidAction": "无效操作", "loadingActions": "加载操作中...", "noActionsToDisplay": "当前筛选条件下无可显示的操作。", "openActionsFolder": "打开操作文件夹", "reloadActions": "重新加载", "showOnlyInvalid": "仅显示无效", "validAction": "有效操作", "enableAllActions": "全部启用", "disableAllActions": "全部禁用", "openFile": "打开文件", "destructiveOverridden": "危险状态已覆盖：{{state}}", "destructive": "危险操作 - 需要批准", "nonDestructive": "安全操作", "eventResolver": "事件解析", "legacyResolution": "方向兼容解析", "fallbackAction": "无动作回退", "riskHigh": "风险：高", "riskMedium": "风险：中", "riskLow": "风险：低", "riskUnknown": "风险：未标注", "triggerCategories": "触发类别", "noTriggerCategory": "仅作回退" };
 const chat$2 = { "args": "参数", "cancelStream": "取消流式输出", "details": "详情", "endConversation": "结束对话", "from": "来自", "loadingDots": "加载中...", "maximize": "+", "minimize": "-", "noParameters": "无参数", "pauseConversation": "暂停对话", "pendingApproval": "等待批准", "regenerate": "重新生成", "resumeConversation": "恢复对话", "system": "系统", "to": "发送至", "writeMessage": "输入消息...", "you": "你" };
 const common$2 = { "apply": "应用", "approve": "批准", "back": "返回", "cancel": "取消", "close": "关闭", "collapseAll": "全部折叠", "confirm": "确认", "decline": "拒绝", "delete": "删除", "disabled": "已禁用", "edit": "编辑", "enabled": "已启用", "error": "错误", "expandAll": "全部展开", "filter": "筛选", "folder": "文件夹", "hide": "隐藏", "loading": "加载中...", "next": "下一步", "no": "否", "ok": "确定", "open": "打开", "pause": "暂停", "previous": "上一步", "refresh": "刷新", "reset": "重置", "save": "保存", "search": "搜索", "settings": "设置", "show": "显示", "success": "成功", "tokens": "Token", "yes": "是" };
 const config$2 = { "actions": "操作", "collectLogs": "收集所有日志以便提交错误报告", "configuration": "配置", "connection": "连接", "default": "默认", "help": "帮助", "joinDiscord": "加入我们的 Discord", "manageActions": "管理检测到的操作", "noPresetsYet": "尚未保存预设", "npcActions": "NPC 操作", "npcMessages": "NPC 消息", "npcSummaries": "NPC 摘要", "preset": "预设", "prompts": "提示词", "selectProviderOrPreset": "从侧边栏选择服务商或预设进行配置", "settings": "设置", "summaries": "摘要", "type": "类型", "unnamedPreset": "未命名预设" };

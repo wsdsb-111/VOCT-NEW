@@ -1,6 +1,7 @@
 /** @import { GameData, Character } from '../../gamedata_typedefs.js' */
 module.exports = {
   signature: "intercourse",
+  triggerCategories: ["sexual_intercourse_completed"], semantic: { evidencePatterns: [/(?:云雨|欢好|交合|行房|房事|同房|圆房|完成(?:了)?(?:交合|行房|房事|同房|圆房|性事)|发生(?:了)?(?:性关系|肉体关系)|做(?:了)?爱|had sex|made love|consummated)/i], priority: 80, riskLevel: "high" },
   title: {
     en: "Sexual Intercourse Concluded",
     ru: "Сексуальный акт завершен",

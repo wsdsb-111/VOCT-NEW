@@ -1,6 +1,13 @@
 /** @import { GameData, Character } from '../../gamedata_typedefs.js' */
 module.exports = {
   signature: "isEmployedAsKnightBy",
+  triggerCategories: ["employment_or_office"],
+  semantic: {
+    evidencePatterns: [/(?:任命(?:为|了)?骑士|任为骑士|骑士|侍从|knight)/i],
+    exclusiveGroup: "employment_change",
+    priority: 80,
+    riskLevel: "medium"
+  },
   title: {
     en: "Source Joins Target's Court as Knight",
     ru: "Исходный персонаж вступает в двор цели как рыцарь",

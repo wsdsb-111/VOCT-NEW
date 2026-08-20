@@ -10,6 +10,10 @@ const OPERATIONS = {
 module.exports = {
   signature: "recordFactionCommitment",
   triggerCategories: ["faction_commitment"],
+  semantic: {
+    evidencePatterns: [/(?:加入|退出|离开|投入|倒向).{0,18}(?:派系|阵营)|(?:支持|拥护|反对|抵制).{0,18}(?:宣称者|宣称派系|派系|阵营)|拥立.{0,16}(?:宣称者|为王|为君)|(?:joined|left|support(?:ed)?|opposed|backed).{0,20}(?:faction|claimant)/i],
+    riskLevel: "high"
+  },
   title: { en: "Record Faction Commitment", zh: "记录派系承诺" },
   isDestructive: true,
 

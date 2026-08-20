@@ -1,6 +1,11 @@
 /** @import { GameData, Character } from '../../gamedata_typedefs.js' */
 module.exports = {
   signature: "setEmotion",
+  triggerCategories: ["drinking_or_toast", "visible_pose"],
+  semantic: {
+    evidencePatterns: [/.+/],
+    riskLevel: "low"
+  },
   title: {
     en: "Set Target Emotion",
     ru: "Установить эмоцию цели",

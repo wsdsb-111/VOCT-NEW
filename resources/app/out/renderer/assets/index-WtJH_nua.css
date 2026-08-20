@@ -1602,6 +1602,50 @@ hr {
   overflow: hidden;
   text-overflow: ellipsis;
 }
+.actions-view .action-item .action-title-group {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+.actions-view .action-item .action-title-group .action-title {
+  flex: none;
+}
+.actions-view .action-item .action-semantic-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  align-items: center;
+  min-height: 16px;
+}
+.actions-view .action-item .semantic-badge {
+  padding: 1px 5px;
+  border: 1px solid rgba(204, 184, 137, 0.45);
+  border-radius: 3px;
+  color: #cfc3aa;
+  background: rgba(0, 0, 0, 0.24);
+  font-size: 10px;
+  line-height: 13px;
+  white-space: nowrap;
+}
+.actions-view .action-item .semantic-badge.risk-high {
+  color: #ffb0a0;
+  border-color: rgba(205, 73, 62, 0.75);
+}
+.actions-view .action-item .semantic-badge.risk-medium {
+  color: #f2ce83;
+  border-color: rgba(201, 150, 47, 0.75);
+}
+.actions-view .action-item .semantic-badge.risk-low {
+  color: #a7d7b6;
+  border-color: rgba(77, 151, 101, 0.75);
+}
+.actions-view .action-item .semantic-badge.categories {
+  max-width: 290px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
 .actions-view .action-item .action-title.disabled {
   opacity: 0.5;
 }
@@ -3504,7 +3548,7 @@ button:active {
 }
 
 /* ========================================================================== */
-/* VOTC 2.0.3 — Court Chronicle visual system                                 */
+/* VOTC 2.0.4 — Court Chronicle visual system                                 */
 /* A non-functional theme layer for clearer hierarchy and CK3-style cohesion. */
 /* ========================================================================== */
 :root {
@@ -4641,7 +4685,7 @@ select option {
 }
 
 /* ========================================================================== */
-/* VOTC 2.0.3 full themes — structure, materials and control language differ. */
+/* VOTC 2.0.4 full themes — structure, materials and control language differ. */
 /* ========================================================================== */
 
 .chat-box,

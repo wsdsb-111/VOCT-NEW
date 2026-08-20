@@ -62,6 +62,13 @@ function getLocalizedFriend(lang) {
 
 module.exports = {
   signature: "becomeFriendsWith",
+  triggerCategories: ["relationship"],
+  semantic: {
+    evidencePatterns: [/(?:成为(?:了)?朋友|结为(?:了)?朋友|成为好友|建立友谊|朋友|友人|友谊|friends?)/i],
+    exclusiveGroup: "relationship_tier",
+    priority: 20,
+    riskLevel: "medium"
+  },
   title: {
     en: "Become Friends",
     ru: "Стать друзьями",

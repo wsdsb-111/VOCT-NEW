@@ -31,6 +31,10 @@ const isAdult = (character) => !!character && Number.isFinite(Number(character.a
 module.exports = {
   signature: "performIntimateAction",
   triggerCategories: ["intimate_contact"],
+  semantic: {
+    evidencePatterns: [/.+/],
+    riskLevel: "low"
+  },
   title: {
     en: "Perform Intimate Scene Action",
     zh: "执行亲密场景动作"

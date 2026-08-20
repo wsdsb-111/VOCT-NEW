@@ -4,6 +4,13 @@
 /** @import { GameData, Character } from '../../gamedata_typedefs.js' */
 module.exports = {
     signature: "makeAlliance",
+    triggerCategories: ["relationship"],
+    semantic: {
+      evidencePatterns: [/(?:正式结盟|结盟成功|结成同盟|缔结同盟|formed? an alliance)/i],
+      exclusiveGroup: "relationship_tier",
+      priority: 50,
+      riskLevel: "high"
+    },
     title: {
         en: "Characters Agree On Mutual Military Alliance",
         ru: "Персонажи согласились на взаимный военный союз",

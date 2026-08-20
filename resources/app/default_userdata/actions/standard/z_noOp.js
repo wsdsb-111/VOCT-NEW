@@ -3,6 +3,11 @@
 
 module.exports = {
   signature: "noOp",
+  triggerCategories: [],
+  semantic: {
+    riskLevel: "low",
+    fallback: true
+  },
   title: {
     en: "No executed actions fallback",
     ru: "Отсутствие выполненных действий",

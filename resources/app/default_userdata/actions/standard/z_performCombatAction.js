@@ -25,6 +25,10 @@ const LABELS = {
 module.exports = {
   signature: "performCombatAction",
   triggerCategories: ["combat"],
+  semantic: {
+    evidencePatterns: [/.+/],
+    riskLevel: "low"
+  },
   title: {
     en: "Perform Combat Scene Action",
     zh: "执行战斗场景动作"

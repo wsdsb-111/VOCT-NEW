@@ -1,6 +1,13 @@
 /** @import { GameData, Character } from '../../gamedata_typedefs.js' */
 module.exports = {
     signature: "leavesConversation",
+    triggerCategories: ["location_or_exit"],
+    semantic: {
+        evidencePatterns: [/(?:离开|走出|退出|离席|离场|转身离去|退下|告辞|left|walked out)/i],
+        exclusiveGroup: "location_change",
+        priority: 50,
+        riskLevel: "high"
+    },
     title: {
         en: "Character Leaves Conversation",
         ru: "Персонаж уходит из разговора",

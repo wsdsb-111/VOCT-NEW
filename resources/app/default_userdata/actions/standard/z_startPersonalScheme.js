@@ -12,6 +12,12 @@ const isAdult = (character) => !!character && Number.isFinite(Number(character.a
 module.exports = {
   signature: "startPersonalScheme",
   triggerCategories: ["scheme_start"],
+  semantic: {
+    evidencePatterns: [/(?:拉拢|讨好|结交|交友|勾引|诱惑|追求|赢得.{0,6}芳心|sway|befriend|seduce|romance)/i],
+    exclusiveGroup: "scheme_start",
+    priority: 50,
+    riskLevel: "medium"
+  },
   title: { en: "Start Personal Scheme", zh: "启动人物计谋" },
 
   args: ({ gameData, sourceCharacter }) => [

@@ -13,6 +13,13 @@ module.exports = {
     zh: "角色被杀害"
   },
   isDestructive: true,
+  triggerCategories: ["death_or_injury"],
+  semantic: {
+    evidencePatterns: [/(?:杀死|杀了|砍死|刺死|毒死|勒死|掐死|打死|烧死|淹死|处死|斩首|毙命|殒命|气绝|断气|倒地(?:身亡|死去)|killed?|executed|died)/i],
+    exclusiveGroup: "physical_outcome",
+    priority: 100,
+    riskLevel: "high"
+  },
 
   /**
    * @param {object} params

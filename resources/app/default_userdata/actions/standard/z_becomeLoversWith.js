@@ -42,6 +42,7 @@ function getLocalizedLover(lang) {
 
 module.exports = {
   signature: "becomeLoversWith",
+  triggerCategories: ["relationship", "intimate_contact"], semantic: { evidencePatterns: [/(?:情人|恋人|相恋|相爱|坠入爱河|定情|私定终身|夫妻|lovers?)/i], exclusiveGroup: "relationship_tier", priority: 40, riskLevel: "medium" },
   title: {
     en: "Become Lovers",
     ru: "Стать любовниками",

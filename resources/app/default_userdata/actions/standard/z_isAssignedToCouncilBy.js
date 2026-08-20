@@ -17,6 +17,7 @@ const COUNCIL_POSITION_ZH = {
 
 module.exports = {
   signature: "isAssignedToCouncilBy",
+  triggerCategories: ["employment_or_office"], semantic: { evidencePatterns: [/(?:议会|内阁|council)/i], exclusiveGroup: "employment_change", priority: 70, riskLevel: "medium" },
   title: {
     en: "Source Assigned to Target's Council",
     ru: "Исходный персонаж назначен в совет цели",

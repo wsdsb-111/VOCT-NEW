@@ -27,6 +27,10 @@ const LABELS = {
 module.exports = {
   signature: "performDailyAction",
   triggerCategories: ["daily_movement", "daily_object_interaction"],
+  semantic: {
+    evidencePatterns: [/.+/],
+    riskLevel: "low"
+  },
   title: {
     en: "Perform Daily Scene Action",
     zh: "执行日常场景动作"

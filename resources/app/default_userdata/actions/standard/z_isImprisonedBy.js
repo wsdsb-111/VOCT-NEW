@@ -1,6 +1,12 @@
 /** @import { GameData, Character } from '../../gamedata_typedefs.js' */
 module.exports = {
   signature: "isImprisonedBy",
+  triggerCategories: ["imprisonment"],
+  semantic: {
+    evidencePatterns: [/(?:囚禁|关进|关押|投入(?:大牢|地牢)|收监|逮捕|拘押|软禁|拿下|押下|押入|押进|押往|押送(?:入|至).{0,8}(?:牢|狱)|下狱|入狱|捆(?:起|住)来?|绑(?:起|住)来?|上(?:了)?枷锁|戴上(?:镣铐|枷锁)|锁进(?:牢房|地牢)?|铁链(?:锁住|缚住)|imprison(?:ed)?|arrest(?:ed)?|jailed?|locked up|put in chains)/i],
+    priority: 80,
+    riskLevel: "high"
+  },
   title: {
     en: "Source Is Imprisoned By Target",
     ru: "Исходный персонаж заключен в тюрьму целью",

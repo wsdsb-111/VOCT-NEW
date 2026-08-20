@@ -1,6 +1,11 @@
 /** @import { GameData, Character } from '../../gamedata_typedefs.js' */
 module.exports = {
   signature: "paysGoldTo",
+  triggerCategories: ["gold"],
+  semantic: {
+    riskLevel: "medium",
+    requiresLegacyResolution: true
+  },
   title: {
     en: "Source Pays Gold to Target",
     ru: "Исходный персонаж платит золотом цели",

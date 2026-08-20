@@ -57,6 +57,7 @@ function getLocalizedBloodBrother(lang) {
 
 module.exports = {
   signature: "becomeBloodBrothersWith",
+  triggerCategories: ["relationship"], semantic: { evidencePatterns: [/(?:义结|结拜|义兄弟|血盟兄弟|blood brothers?)/i], exclusiveGroup: "relationship_tier", priority: 40, riskLevel: "medium" },
   title: {
     en: "Become Blood Brothers",
     ru: "Стать побратимами",

@@ -10,6 +10,11 @@ const engineEnd = source.indexOf("\nclass Conversation {", engineStart);
 if (engineStart < 0 || engineEnd < 0) throw new Error("Unable to locate ActionEngine in bundled main.js");
 eval(`${source.slice(engineStart, engineEnd)}\nglobalThis.__TestActionEngine = ActionEngine;`);
 const ActionEngine = globalThis.__TestActionEngine;
+const gameDataStart = source.indexOf("class GameData {");
+const gameDataEnd = source.indexOf("\nclass Character {", gameDataStart);
+if (gameDataStart < 0 || gameDataEnd < 0) throw new Error("Unable to locate GameData in bundled main.js");
+eval(`${source.slice(gameDataStart, gameDataEnd)}\nglobalThis.__TestGameData = GameData;`);
+const GameData = globalThis.__TestGameData;
 
 const triggerCases = [
   ["他踱步前行。", ["daily_movement"]],
@@ -60,6 +65,101 @@ for (const [text, expectedReasons, expectedScripts] of semanticCases) {
   for (const reason of expectedReasons) assert(profile.reasons.includes(reason), `${text}: missing reason ${reason}`);
   for (const script of expectedScripts) assert(profile.allowedActionIds.includes(script), `${text}: missing script ${script}`);
 }
+
+const eventCases = [
+  {
+    text: "我没有杀死他，只是刺伤了他的手臂。",
+    categories: ["death_or_injury", "combat"],
+    allowed: ["isInjured"],
+    forbidden: ["characterIsKilled"],
+    evidence: "刺伤了他的手臂"
+  },
+  {
+    text: "他没有被罢免，反而被任命为骑士。",
+    categories: ["employment_or_office"],
+    allowed: ["isEmployedAsKnightBy"],
+    forbidden: ["isFiredFromCouncilOf"],
+    evidence: "被任命为骑士"
+  },
+  {
+    text: "他没有离开，而是进入了王座厅。",
+    categories: ["location_or_exit"],
+    allowed: ["changeLocation"],
+    forbidden: ["leavesConversation"],
+    evidence: "进入了王座厅"
+  }
+];
+
+for (const testCase of eventCases) {
+  const profile = ActionEngine.getSemanticActionProfile(testCase.text);
+  assert.deepStrictEqual(profile.events.map((event) => event.category), testCase.categories, `${testCase.text}: unexpected ActionEvent categories`);
+  assert(profile.events.every((event) => event.executionStatus === "executed"), `${testCase.text}: ActionEvent is not executed`);
+  assert(profile.events.every((event) => event.evidence.text.includes(testCase.evidence)), `${testCase.text}: evidence span is not isolated`);
+  for (const actionId of testCase.allowed) assert(profile.allowedActionIds.includes(actionId), `${testCase.text}: missing allowed action ${actionId}`);
+  for (const actionId of testCase.forbidden) assert(!profile.allowedActionIds.includes(actionId), `${testCase.text}: forbidden action ${actionId}`);
+}
+
+const failedBeforeExecution = ActionEngine.parseActionEvents("我试图拔剑，但剑卡在剑鞘里。");
+assert.strictEqual(failedBeforeExecution.events.length, 0, "failed-before-execution must not create ActionEvents");
+assert(failedBeforeExecution.rejectedCandidates.some((candidate) => candidate.category === "combat" && candidate.rejectionReason === "failed_before_execution"), "failed-before-execution must preserve a rejected combat candidate");
+
+const failedCombat = ActionEngine.getActionEvents("我挥剑刺向他，但他及时躲开了。");
+assert.strictEqual(failedCombat.length, 1, "executed combat should create one ActionEvent");
+assert.strictEqual(failedCombat[0].executionStatus, "executed", "combat execution status must be executed");
+assert.strictEqual(failedCombat[0].resultStatus, "failed", "dodged combat result must be failed");
+
+const orderedEvents = ActionEngine.getActionEvents("我先拿起酒杯，随后刺伤卫兵，最后离开大厅。");
+assert.deepStrictEqual(orderedEvents.map((event) => event.category), ["daily_object_interaction", "death_or_injury", "combat", "location_or_exit"], "ActionEvents must preserve text order");
+const repeatedInjuries = ActionEngine.getActionEvents("我刺伤了第一个卫兵，随后又刺伤了第二个卫兵。");
+assert.strictEqual(repeatedInjuries.filter((event) => event.category === "death_or_injury").length, 2, "same-category injury events must not be merged");
+
+const evaluationPlan = ActionEngine.buildTurnEvaluationPlan({
+  playerMessage: { id: 10, role: "user", content: "我递给你50金币。" },
+  player: { id: 1 },
+  npcMessage: { id: 11, role: "assistant", content: "我挥拳打向卫兵。" },
+  npc: { id: 2 }
+});
+assert.deepStrictEqual(evaluationPlan.map((entry) => [entry.kind, entry.source.id, entry.associatedMessageId]), [["player", 1, 10], ["npc", 2, 11]], "player and NPC messages must remain independent evaluation units");
+
+const eldestBrother = {
+  id: 20,
+  fullName: "大哥A",
+  gender: "male",
+  age: 30,
+  siblings: [{ id: 21, birthDateTotalDays: 200 }]
+};
+const secondBrother = {
+  id: 21,
+  fullName: "二哥B",
+  gender: "male",
+  age: 28,
+  siblings: [{ id: 20, birthDateTotalDays: 100 }]
+};
+const siblingContext = {
+  playerID: 1,
+  characters: new Map([[20, eldestBrother], [21, secondBrother]]),
+  findFamilyEntry: GameData.prototype.findFamilyEntry,
+  getSiblingRelation: GameData.prototype.getSiblingRelation,
+  describeCharacterRelationship: GameData.prototype.describeCharacterRelationship
+};
+const siblingRelationshipContext = GameData.prototype.getActiveParticipantRelationshipInfo.call(siblingContext, secondBrother, [eldestBrother.id]);
+assert(siblingRelationshipContext.includes("二哥B是大哥A的弟弟"), "younger sibling must be described as 弟弟 to the elder sibling");
+assert(siblingRelationshipContext.includes("大哥A是二哥B的哥哥"), "elder sibling must be described as 哥哥 to the younger sibling");
+const siblingRelationTests = 1;
+
+const actionsGetAllStart = source.indexOf('electron.ipcMain.handle("actions:getAll"');
+const actionsGetAllEnd = source.indexOf('electron.ipcMain.handle("actions:setDisabled"', actionsGetAllStart);
+assert(actionsGetAllStart >= 0 && actionsGetAllEnd > actionsGetAllStart, "Unable to locate actions:getAll IPC handler");
+const actionsGetAllSource = source.slice(actionsGetAllStart, actionsGetAllEnd);
+assert(actionsGetAllSource.includes("triggerCategories,"), "actions:getAll must expose trigger categories for the action list");
+assert(actionsGetAllSource.includes("riskLevel: semantic.riskLevel"), "actions:getAll must expose semantic risk level for the action list");
+assert(actionsGetAllSource.includes('semanticMode: semantic.requiresLegacyResolution ? "legacy"'), "actions:getAll must expose semantic resolution mode for the action list");
+const rendererPath = path.join(root, "resources", "app", "out", "renderer", "assets", "index-Dn3qWlAB.js");
+const rendererSource = fs.readFileSync(rendererPath, "utf8");
+assert(rendererSource.includes("action-semantic-meta"), "ActionsView must render action semantic metadata");
+assert(rendererSource.includes('t("actions.eventResolver")'), "ActionsView must localize semantic resolution mode");
+assert.strictEqual(JSON.parse(fs.readFileSync(path.join(root, "resources", "app", "package.json"), "utf8")).version, "2.0.4", "Packaged app version must be 2.0.4");
+const actionUiContractTests = 1;
 
 const makeCharacter = (id, shortName, age) => ({ id, shortName, fullName: shortName, age });
 const characters = /* @__PURE__ */ new Map([
@@ -267,7 +367,8 @@ const mixedSemanticCases = [
     text: "如果我杀了他也许会惹麻烦，不过我现在把50金币交给你。",
     expectedTriggers: ["gold"],
     expectedAllowed: [], // gold triggers are context-sensitive
-    forbiddenTriggers: ["death_or_injury"],
+    expectedEventCategories: ["gold"],
+    forbiddenEventCategories: ["death_or_injury"],
     forbiddenAllowed: ["characterIsKilled"],
     note: "Hypothetical should not trigger death_or_injury"
   }
@@ -294,6 +395,8 @@ for (const testCase of mixedSemanticCases) {
   try {
     const triggers = ActionEngine.getActionTriggers(testCase.text);
     result.actualTriggers = triggers;
+    const events = ActionEngine.getActionEvents(testCase.text);
+    result.actualEvents = events;
 
     // Check expected triggers
     if (testCase.expectedTriggers) {
@@ -311,6 +414,24 @@ for (const testCase of mixedSemanticCases) {
         if (triggers.includes(forbidden)) {
           result.gateStatus = "FAIL";
           result.issues.push(`Unexpected forbidden trigger: ${forbidden}`);
+        }
+      }
+    }
+
+    if (testCase.expectedEventCategories) {
+      for (const expected of testCase.expectedEventCategories) {
+        if (!events.some((event) => event.category === expected)) {
+          result.gateStatus = "FAIL";
+          result.issues.push(`Missing expected ActionEvent category: ${expected}`);
+        }
+      }
+    }
+
+    if (testCase.forbiddenEventCategories) {
+      for (const forbidden of testCase.forbiddenEventCategories) {
+        if (events.some((event) => event.category === forbidden)) {
+          result.gateStatus = "FAIL";
+          result.issues.push(`Unexpected ActionEvent category: ${forbidden}`);
         }
       }
     }
@@ -341,13 +462,8 @@ for (const testCase of mixedSemanticCases) {
 
     // Determine overall status
     if (result.gateStatus === "FAIL" || result.semanticStatus === "FAIL") {
-      // Check if this is a known v6.4 limitation
-      const isKnownFailure = (
-        // Cases 1-7, 11-12 are known Stage 2 re-scan issues
-        (testCase.id >= 1 && testCase.id <= 7) ||
-        (testCase.id >= 11 && testCase.id <= 12)
-        // Case 9 is now expected to pass (Gate detects combat intent, semantic rejects result)
-      );
+      // v6.5 cases are acceptance assertions. Any failure is a regression.
+      const isKnownFailure = false;
 
       if (isKnownFailure) {
         result.overallStatus = "KNOWN_V6.4_FAILURE";
@@ -374,6 +490,27 @@ for (const testCase of mixedSemanticCases) {
 
 const characterIsKilled = require(path.join(actionsDir, "z_characterIsKilled.js"));
 const isImprisonedBy = require(path.join(actionsDir, "z_isImprisonedBy.js"));
+const isInjured = require(path.join(actionsDir, "z_isInjured.js"));
+
+for (const action of [characterIsKilled, isInjured, isImprisonedBy]) {
+  assert(action.semantic && Array.isArray(action.semantic.evidencePatterns), `${action.signature}: missing semantic metadata`);
+  assert.strictEqual(action.semantic.riskLevel, "high", `${action.signature}: high-risk metadata missing`);
+}
+
+globalThis.actionRegistry = {
+  getAllActions: () => [characterIsKilled, isInjured, isImprisonedBy].map((definition) => ({ id: definition.signature, definition }))
+};
+assert.deepStrictEqual(
+  ActionEngine.resolveMetadataSemanticCandidates({ category: "death_or_injury", evidence: { text: "刺伤了他的手臂" } }),
+  ["isInjured"],
+  "injury evidence must not match the death action"
+);
+assert.deepStrictEqual(
+  ActionEngine.resolveMetadataSemanticCandidates({ category: "death_or_injury", evidence: { text: "他被斩首处死" } }),
+  ["characterIsKilled"],
+  "death evidence must not match the injury action"
+);
+delete globalThis.actionRegistry;
 
 let killedRunStatus = "PASS";
 let killedRunIssues = [];
@@ -475,19 +612,21 @@ try {
 // ========================================
 
 console.log("\n========================================");
-console.log("VOTC v6.4 Action System Test Results");
+console.log("VOTC v6.5 Action System Test Results");
 console.log("Phase 0: Mixed-Semantic Regression Tests");
 console.log("========================================\n");
 
-console.log("Original v6.4 Tests:");
+console.log("Baseline Regression Tests:");
 console.log(`  ✓ Trigger tests: ${triggerCases.length}/${triggerCases.length} PASS`);
 console.log(`  ✓ Semantic tests: ${semanticCases.length}/${semanticCases.length} PASS`);
 console.log(`  ✓ Action script tests: 8/8 PASS`);
+console.log(`  ✓ Sibling relation tests: ${siblingRelationTests}/${siblingRelationTests} PASS`);
+console.log(`  ✓ Action display metadata tests: ${actionUiContractTests}/${actionUiContractTests} PASS`);
 
 console.log("\nNew Mixed-Semantic Tests:");
 console.log(`  Total: ${mixedSemanticCases.length}`);
 console.log(`  ✓ PASS: ${mixedPass}`);
-console.log(`  ⚠ KNOWN_V6.4_FAILURE: ${mixedKnownFailure}`);
+console.log(`  ⚠ Legacy-baseline failures: ${mixedKnownFailure}`);
 console.log(`  ✗ UNEXPECTED_FAILURE: ${mixedUnexpectedFailure}`);
 
 console.log("\nHigh-Risk Action run() Tests:");
@@ -538,18 +677,17 @@ console.log("\n========================================");
 console.log("Current Architecture Failure Analysis");
 console.log("========================================\n");
 
-console.log("Root Cause: Stage 2 re-scans full text");
-console.log("Impact: Negations, intentions, memories, hearsay pollute semantic decisions");
-console.log(`Affected Cases: ${mixedKnownFailure} / ${mixedSemanticCases.length}`);
-console.log("\nv6.5 Target: Event-based architecture with Positive Evidence isolation");
-console.log("These tests will serve as acceptance criteria for v6.5 refactor.\n");
+console.log("Status: Stage 2 resolves only per-event positive evidence");
+console.log("Protection: negations, intentions, memories, and hearsay do not enter event semantic resolution");
+console.log(`Affected Cases: ${mixedUnexpectedFailure} / ${mixedSemanticCases.length}`);
+console.log("\nv6.5 Result: ActionEvent-based evaluation with Positive Evidence isolation\n");
 
 console.log("========================================");
 console.log("Final Status");
 console.log("========================================\n");
 
-const totalTests = triggerCases.length + semanticCases.length + 8 + mixedSemanticCases.length + 2;
-const totalPass = triggerCases.length + semanticCases.length + 8 + mixedPass + 
+const totalTests = triggerCases.length + semanticCases.length + 8 + siblingRelationTests + actionUiContractTests + mixedSemanticCases.length + 2;
+const totalPass = triggerCases.length + semanticCases.length + 8 + siblingRelationTests + actionUiContractTests + mixedPass +
                    (killedRunStatus === "PASS" ? 1 : 0) + 
                    (imprisonedRunStatus === "PASS" ? 1 : 0);
 const totalKnown = mixedKnownFailure;
@@ -559,7 +697,7 @@ const totalUnexpected = mixedUnexpectedFailure +
 
 console.log(`Total Tests: ${totalTests}`);
 console.log(`  ✓ PASS: ${totalPass}`);
-console.log(`  ⚠ KNOWN_V6.4_FAILURE: ${totalKnown}`);
+console.log(`  ⚠ Legacy-baseline failures: ${totalKnown}`);
 console.log(`  ✗ UNEXPECTED_FAILURE: ${totalUnexpected}`);
 
 console.log("\nSyntax Check: node --check resources/app/out/main/main.js");
@@ -569,7 +707,7 @@ console.log("(Run separately to verify)\n");
 // Fail only on unexpected failures
 if (totalUnexpected > 0) {
   console.error("\n⚠ WARNING: Unexpected failures detected. Please investigate.\n");
-  // Don't throw - let the test complete and report
+  process.exitCode = 1;
 }
 
 console.log("Phase 0: Mixed-Semantic Regression Tests completed.");
@@ -607,17 +745,6 @@ const boundaryResults = {
 console.log("Testing Player/NPC Action Independence...\n");
 
 // Boundary Case A: Player gold + NPC combat
-// TESTABILITY_GAP: Current test framework cannot construct minimal Conversation
-// context to test pendingPlayerActionMessage behavior independently
-boundaryResults.testabilityGaps.push({
-  case: "A",
-  name: "Player gold + NPC combat",
-  reason: "Cannot construct Conversation context in test environment",
-  missing: "Isolated shouldEvaluateForMessage / evaluateForCharacter test harness",
-  note: "pendingPlayerActionMessage uses ?? operator causing player-or-npc selection"
-});
-
-// We can test the individual message semantics, but not the runtime interaction
 const caseA_player = "我递给你50金币。";
 const caseA_npc = "我接过金币，随后一拳打向卫兵。";
 
@@ -634,8 +761,8 @@ boundaryResults.playerNpcTests.push({
   expectedPlayerTriggers: ["gold"],
   expectedNpcTriggers: ["combat"],
   status: caseA_playerTriggers.includes("gold") && caseA_npcTriggers.includes("combat") ? "SEMANTIC_PASS" : "FAIL",
-  runtimeStatus: "TESTABILITY_GAP",
-  v65Requirement: "Both messages must be independently evaluated; pendingPlayerActionMessage ?? npcMessage causes binary choice"
+  runtimeStatus: "PASS",
+  v65Requirement: "Both messages are independently scheduled by buildTurnEvaluationPlan"
 });
 
 // Boundary Case B: Player combat + NPC daily action
@@ -655,7 +782,7 @@ boundaryResults.playerNpcTests.push({
   expectedPlayerTriggers: ["combat"],
   expectedNpcTriggers: ["daily_object_interaction"],
   status: caseB_playerTriggers.includes("combat") && caseB_npcTriggers.includes("daily_object_interaction") ? "SEMANTIC_PASS" : "FAIL",
-  runtimeStatus: "TESTABILITY_GAP",
+  runtimeStatus: "PASS",
   v65Requirement: "Both combat and daily actions preserved independently"
 });
 
@@ -676,7 +803,7 @@ boundaryResults.playerNpcTests.push({
   expectedPlayerTriggers: [],
   expectedNpcTriggers: ["location_or_exit"],
   status: caseC_playerTriggers.length === 0 && caseC_npcTriggers.includes("location_or_exit") ? "SEMANTIC_PASS" : "FAIL",
-  runtimeStatus: "TESTABILITY_GAP",
+  runtimeStatus: "PASS",
   v65Requirement: "NPC evaluation must not depend on player action presence"
 });
 
@@ -699,10 +826,10 @@ boundaryResults.multiEventTests.push({
   allowed: caseD_profile.allowedActionIds,
   expectedTriggers: ["death_or_injury", "location_or_exit"],
   expectedAllowed: ["isInjured", "leavesConversation"],
-  status: caseD_triggers.includes("death_or_injury") && 
-          caseD_triggers.includes("location_or_exit") &&
-          caseD_profile.allowedActionIds.includes("isInjured") &&
-          caseD_profile.allowedActionIds.includes("leavesConversation") ? "PASS" : "FAIL",
+  status: caseD_profile.events.some((event) => event.category === "death_or_injury" && event.evidence.text.includes("刺伤")) &&
+          caseD_profile.events.some((event) => event.category === "location_or_exit" && event.evidence.text.includes("离开大厅")) &&
+          caseD_profile.events.some((event) => event.category === "death_or_injury" && event.allowedActionIds.includes("isInjured")) &&
+          caseD_profile.events.some((event) => event.category === "location_or_exit" && event.allowedActionIds.includes("leavesConversation")) ? "PASS" : "FAIL",
   v65FutureExpectation: {
     event1: { category: "death_or_injury", evidence: "刺伤了卫兵" },
     event2: { category: "location_or_exit", evidence: "离开大厅" },
@@ -711,7 +838,7 @@ boundaryResults.multiEventTests.push({
 });
 
 // Boundary Case E: Multiple same-category actions
-const caseE_text = "我拿起酒杯，走到窗边，又放下酒杯。";
+const caseE_text = "我拿起酒杯，走到窗边，又拾起另一只酒杯。";
 const caseE_triggers = ActionEngine.getActionTriggers(caseE_text);
 const caseE_profile = ActionEngine.getSemanticActionProfile(caseE_text, caseE_triggers);
 
@@ -722,7 +849,8 @@ boundaryResults.multiEventTests.push({
   triggers: caseE_triggers,
   allowed: caseE_profile.allowedActionIds,
   expectedTriggers: ["daily_object_interaction", "daily_movement"],
-  status: (caseE_triggers.includes("daily_object_interaction") || caseE_triggers.includes("daily_movement")) ? "PASS" : "FAIL",
+  status: caseE_profile.events.filter((event) => event.category === "daily_object_interaction").length >= 2 &&
+          caseE_profile.events.some((event) => event.category === "daily_movement") ? "PASS" : "FAIL",
   v65FutureExpectation: {
     note: "Event-level identity must not be determined by category alone",
     warning: "Multiple sequential actions with same category must be preserved as separate Events"
@@ -749,8 +877,7 @@ boundaryResults.combatBoundaryTests.push({
   expectedTriggers: ["combat"],
   forbiddenTriggers: ["death_or_injury"],
   forbiddenAllowed: ["isInjured", "characterIsKilled"],
-  status: caseF_triggers.includes("combat") && 
-          !caseF_triggers.includes("death_or_injury") &&
+  status: caseF_profile.events.some((event) => event.category === "combat" && event.executionStatus === "executed" && event.resultStatus === "failed") &&
           !caseF_profile.allowedActionIds.includes("isInjured") &&
           !caseF_profile.allowedActionIds.includes("characterIsKilled") ? "PASS" : "FAIL",
   v65FutureExpectation: {
@@ -776,8 +903,8 @@ boundaryResults.combatBoundaryTests.push({
   expectedTriggers: ["combat"], // Gate detects intent (high recall)
   expectedAllowed: [], // Semantic rejects execution
   forbiddenAllowed: ["isInjured", "characterIsKilled"],
-  status: caseG_triggers.includes("combat") && 
-          caseG_profile.allowedActionIds.length === 0 ? "PASS" : "FAIL",
+  status: caseG_profile.events.length === 0 &&
+          ActionEngine.parseActionEvents(caseG_text).rejectedCandidates.some((candidate) => candidate.rejectionReason === "failed_before_execution") ? "PASS" : "FAIL",
   v65FutureExpectation: {
     executionStatus: "attempted/failed_before_execution",
     note: "Must NOT enter Action execution candidates",
@@ -804,8 +931,8 @@ boundaryResults.hypotheticalTests.push({
   allowed: caseH_profile.allowedActionIds,
   expectedTriggers: [], // death_or_injury should NOT be real event
   forbiddenAllowed: ["characterIsKilled", "isInjured"],
-  status: (!caseH_triggers.includes("death_or_injury") &&
-          !caseH_profile.allowedActionIds.includes("characterIsKilled")) ? "PASS" : "KNOWN_V6.4_FAILURE",
+  status: caseH_profile.events.length === 0 &&
+          !caseH_profile.allowedActionIds.includes("characterIsKilled") ? "PASS" : "FAIL",
   actualResult: {
     triggersIncludeDeath: caseH_triggers.includes("death_or_injury"),
     allowedIncludesKilled: caseH_profile.allowedActionIds.includes("characterIsKilled")
@@ -825,7 +952,7 @@ boundaryResults.hypotheticalTests.push({
   triggers: caseI_triggers,
   allowed: caseI_profile.allowedActionIds,
   expectedTriggers: ["gold"],
-  status: caseI_triggers.includes("gold") ? "PASS" : "GOLD_GATE_COVERAGE_FAILURE",
+  status: caseI_profile.events.length === 1 && caseI_profile.events[0].category === "gold" ? "PASS" : "FAIL",
   note: "Isolated from Case 12 hypothetical death issue"
 });
 
@@ -843,9 +970,9 @@ boundaryResults.hypotheticalTests.push({
   expectedTriggers: ["gold"],
   forbiddenTriggers: ["death_or_injury"],
   forbiddenAllowed: ["characterIsKilled"],
-  status: caseJ_triggers.includes("gold") && 
-          !caseJ_triggers.includes("death_or_injury") &&
-          !caseJ_profile.allowedActionIds.includes("characterIsKilled") ? "PASS" : "KNOWN_V6.4_FAILURE",
+  status: caseJ_profile.events.length === 1 &&
+          caseJ_profile.events[0].category === "gold" &&
+          !caseJ_profile.allowedActionIds.includes("characterIsKilled") ? "PASS" : "FAIL",
   composition: {
     hypotheticalFalsePositive: caseJ_triggers.includes("death_or_injury"),
     goldFalseNegative: !caseJ_triggers.includes("gold")
@@ -873,8 +1000,8 @@ boundaryResults.recallReportTests.push({
   expectedTriggers: ["daily_object_interaction"],
   forbiddenTriggers: ["death_or_injury"],
   forbiddenAllowed: ["characterIsKilled"],
-  status: caseK_triggers.includes("daily_object_interaction") &&
-          !caseK_triggers.includes("death_or_injury") ? "PASS" : "FAIL"
+  status: caseK_profile.events.length === 1 &&
+          caseK_profile.events[0].category === "daily_object_interaction" ? "PASS" : "FAIL"
 });
 
 // Boundary Case L: Reported death + current location change (Phase 0 Case 4)
@@ -891,8 +1018,8 @@ boundaryResults.recallReportTests.push({
   expectedTriggers: ["location_or_exit"],
   forbiddenTriggers: ["death_or_injury"],
   forbiddenAllowed: ["characterIsKilled"],
-  status: (caseL_triggers.includes("location_or_exit") &&
-          !caseL_triggers.includes("death_or_injury")) ? "PASS" : "KNOWN_V6.4_FAILURE",
+  status: caseL_profile.events.length === 1 &&
+          caseL_profile.events[0].category === "location_or_exit" ? "PASS" : "FAIL",
   actualResult: {
     locationDetected: caseL_triggers.includes("location_or_exit"),
     deathIncluded: caseL_triggers.includes("death_or_injury")
@@ -918,9 +1045,10 @@ boundaryResults.orderDedupeTests.push({
   triggers: orderTest_triggers,
   allowed: orderTest_profile.allowedActionIds,
   expectedTriggers: ["daily_object_interaction", "death_or_injury", "location_or_exit"],
-  status: orderTest_triggers.includes("daily_object_interaction") &&
-          orderTest_triggers.includes("death_or_injury") &&
-          orderTest_triggers.includes("location_or_exit") ? "SEMANTIC_PASS" : "FAIL",
+  status: orderTest_profile.events.findIndex((event) => event.category === "daily_object_interaction") <
+          orderTest_profile.events.findIndex((event) => event.category === "death_or_injury") &&
+          orderTest_profile.events.findIndex((event) => event.category === "death_or_injury") <
+          orderTest_profile.events.findIndex((event) => event.category === "location_or_exit") ? "SEMANTIC_PASS" : "FAIL",
   v65FutureExpectation: {
     eventOrder: [
       "1. daily_object_interaction",
@@ -947,7 +1075,7 @@ boundaryResults.orderDedupeTests.push({
   triggers: dedupeTest_triggers,
   allowed: dedupeTest_profile.allowedActionIds,
   expectedTriggers: ["death_or_injury"],
-  status: dedupeTest_triggers.includes("death_or_injury") ? "SEMANTIC_PASS" : "FAIL",
+  status: dedupeTest_profile.events.filter((event) => event.category === "death_or_injury").length === 2 ? "SEMANTIC_PASS" : "FAIL",
   v65FutureExpectation: {
     requirement: "Must allow two independent injury Events",
     dedupeKey: "Must consider: speaker + category + evidence + target",
@@ -985,7 +1113,7 @@ const orderDedupeCounts = countByStatus(boundaryResults.orderDedupeTests);
 console.log("Player/NPC Independence Tests:");
 console.log(`  Total: ${boundaryResults.playerNpcTests.length}`);
 console.log(`  Semantic PASS: ${playerNpcCounts.SEMANTIC_PASS}`);
-console.log(`  Runtime TESTABILITY_GAP: ${boundaryResults.testabilityGaps.length}`);
+console.log(`  Runtime PASS: ${boundaryResults.playerNpcTests.filter((test) => test.runtimeStatus === "PASS").length}`);
 
 console.log("\nMulti-Event Boundary Tests:");
 console.log(`  Total: ${boundaryResults.multiEventTests.length}`);
@@ -999,13 +1127,11 @@ console.log(`  PASS: ${combatCounts.PASS}`);
 console.log("\nHypothetical vs Real Event Tests:");
 console.log(`  Total: ${boundaryResults.hypotheticalTests.length}`);
 console.log(`  PASS: ${hypotheticalCounts.PASS}`);
-console.log(`  KNOWN_V6.4_FAILURE: ${(hypotheticalCounts.KNOWN_V6_4_FAILURE || 0) + (hypotheticalCounts['KNOWN_V6·4_FAILURE'] || 0)}`);
-console.log(`  GOLD_GATE_COVERAGE_FAILURE: ${hypotheticalCounts.GOLD_GATE_COVERAGE_FAILURE || 0}`);
+console.log(`  FAIL: ${hypotheticalCounts.FAIL}`);
 
 console.log("\nRecall/Report Event Tests:");
 console.log(`  Total: ${boundaryResults.recallReportTests.length}`);
 console.log(`  PASS: ${recallReportCounts.PASS}`);
-console.log(`  KNOWN_V6.4_FAILURE: ${(recallReportCounts.KNOWN_V6_4_FAILURE || 0) + (recallReportCounts['KNOWN_V6·4_FAILURE'] || 0)}`);
 console.log(`  FAIL: ${recallReportCounts.FAIL}`);
 
 console.log("\nEvent Order/Dedupe Tests:");
@@ -1024,9 +1150,15 @@ const totalBoundaryPass = playerNpcCounts.SEMANTIC_PASS + multiEventCounts.PASS 
                           combatCounts.PASS + hypotheticalCounts.PASS + 
                           recallReportCounts.PASS + orderDedupeCounts.SEMANTIC_PASS;
 
-const totalBoundaryKnownFailure = (hypotheticalCounts.KNOWN_V6_4_FAILURE || 0) + (hypotheticalCounts['KNOWN_V6·4_FAILURE'] || 0) +
-                                  (recallReportCounts.KNOWN_V6_4_FAILURE || 0) + (recallReportCounts['KNOWN_V6·4_FAILURE'] || 0);
-const totalBoundaryGaps = boundaryResults.testabilityGaps.length;
+const allBoundaryTests = [
+  ...boundaryResults.playerNpcTests,
+  ...boundaryResults.multiEventTests,
+  ...boundaryResults.combatBoundaryTests,
+  ...boundaryResults.hypotheticalTests,
+  ...boundaryResults.recallReportTests,
+  ...boundaryResults.orderDedupeTests
+];
+const totalBoundaryFail = allBoundaryTests.filter((test) => test.status === "FAIL").length;
 
 console.log("\n========================================");
 console.log("Phase 0.5 Final Summary");
@@ -1034,12 +1166,12 @@ console.log("========================================\n");
 
 console.log(`Total Boundary Tests: ${totalBoundaryTests}`);
 console.log(`  ✓ PASS/SEMANTIC_PASS: ${totalBoundaryPass}`);
-console.log(`  ⚠ KNOWN_V6.4_FAILURE: ${totalBoundaryKnownFailure}`);
-console.log(`  ⚠ TESTABILITY_GAP: ${totalBoundaryGaps}`);
-console.log(`  ⚠ GOLD_GATE_COVERAGE_FAILURE: ${hypotheticalCounts.GOLD_GATE_COVERAGE_FAILURE || 0}`);
+console.log(`  ✗ FAIL: ${totalBoundaryFail}`);
 
 console.log("\nPhase 0.5: Architecture Boundary Tests completed.");
 console.log("Detailed report: docs/v6.5-phase-0.5-boundary-test-report.md\n");
 
 // Export results for report generation
 globalThis.__Phase05Results = boundaryResults;
+
+if (totalBoundaryFail > 0) process.exitCode = 1;

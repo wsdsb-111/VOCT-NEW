@@ -3,6 +3,10 @@
 module.exports = {
   signature: "resolvePrisoner",
   triggerCategories: ["prisoner_resolution"],
+  semantic: {
+    evidencePatterns: [/(?:释放(?:了)?|放了|放出|放走|获释|恢复自由|赦免(?:了)?|解除囚禁|放逐|流放|驱逐出境|released from prison|set .{0,12} free|freed|pardoned|banished|exiled)/i],
+    riskLevel: "high"
+  },
   title: { en: "Release or Banish Prisoner", zh: "释放或放逐囚犯" },
   isDestructive: true,
 

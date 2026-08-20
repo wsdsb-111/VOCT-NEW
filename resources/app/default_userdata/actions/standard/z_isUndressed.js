@@ -1,6 +1,7 @@
 /** @import { GameData, Character } from '../../gamedata_typedefs.js' */
 module.exports = {
     signature: "isUndressed",
+    triggerCategories: ["intimacy_or_clothing"], semantic: { evidencePatterns: [/(?:脱下|脱掉|脱去|脱光|褪下|褪去|除去|扯开|撕开|解下|解衣|宽衣|裸露|裸身|赤裸|undressed|removed .{0,12}(?:clothes|robe|shirt|dress))/i], priority: 40, riskLevel: "low" },
     title: {
         en: "Undress Character",
         ru: "Раздеть персонажа",

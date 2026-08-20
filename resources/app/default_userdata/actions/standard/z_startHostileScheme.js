@@ -9,6 +9,12 @@ const SCHEMES = {
 module.exports = {
   signature: "startHostileScheme",
   triggerCategories: ["scheme_start"],
+  semantic: {
+    evidencePatterns: [/(?:谋杀|暗杀|除掉|做掉|绑架|劫持|寻找.{0,6}把柄|捏造.{0,6}把柄|制造.{0,6}把柄|murder|assassinate|abduct|kidnap|fabricate a hook)/i],
+    exclusiveGroup: "scheme_start",
+    priority: 80,
+    riskLevel: "high"
+  },
   title: { en: "Start Hostile Scheme", zh: "启动敌对计谋" },
   isDestructive: true,
 
