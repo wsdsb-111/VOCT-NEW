@@ -4716,6 +4716,14 @@ class ActionRegistry extends events.EventEmitter {
   }
   setDestructiveOverride(signature, isDestructive) {
     const overrides = { ...this.settings.destructiveOverrides };
+    if (this.getEffectiveRiskLevel(signature) === "high" && isDestructive === false) {
+      delete overrides[signature];
+      this.settings = {
+        ...this.settings,
+        destructiveOverrides: overrides
+      };
+      return;
+    }
     if (isDestructive === null) {
       delete overrides[signature];
     } else {
@@ -4729,10 +4737,29 @@ class ActionRegistry extends events.EventEmitter {
   getEffectiveDestructive(signature) {
     const action = this.actions.get(signature);
     if (!action) return false;
+    if (this.getEffectiveRiskLevel(signature) === "high") return true;
     if (this.settings.destructiveOverrides && signature in this.settings.destructiveOverrides) {
       return this.settings.destructiveOverrides[signature];
     }
     return action.definition.isDestructive ?? false;
+  }
+  getEffectiveRiskLevel(signature) {
+    const action = this.actions.get(signature);
+    const riskLevel = action?.definition?.semantic?.riskLevel;
+    if (["low", "medium", "high"].includes(riskLevel)) return riskLevel;
+    return action?.definition?.isDestructive ? "high" : "low";
+  }
+  shouldRequireApproval(signature, approvalMode) {
+    switch (approvalMode) {
+      case "none":
+        return true;
+      case "non-destructive":
+        return this.getEffectiveDestructive(signature);
+      case "all":
+        return false;
+      default:
+        return true;
+    }
   }
   hasDestructiveOverride(signature) {
     return !!(this.settings.destructiveOverrides && signature in this.settings.destructiveOverrides);
@@ -4958,7 +4985,7 @@ class ActionRegistry extends events.EventEmitter {
         };
       }
       const isRegExp = (value) => Object.prototype.toString.call(value) === "[object RegExp]";
-      for (const field of ["evidencePatterns", "excludePatterns"]) {
+      for (const field of ["candidatePatterns", "evidencePatterns", "excludePatterns"]) {
         if (action.semantic[field] !== void 0 && (!Array.isArray(action.semantic[field]) || action.semantic[field].some((pattern) => !isRegExp(pattern)))) {
           return {
             valid: false,
@@ -4974,6 +5001,13 @@ class ActionRegistry extends events.EventEmitter {
       }
       if (action.semantic.riskLevel !== void 0 && !["low", "medium", "high"].includes(action.semantic.riskLevel)) {
         return { valid: false, message: "Action semantic riskLevel must be low, medium, or high." };
+      }
+      if (action.semantic.participantRoles !== void 0) {
+        const participantRoles = action.semantic.participantRoles;
+        const allowedRoles = ["actor", "patient", "speaker"];
+        if (!participantRoles || typeof participantRoles !== "object" || Array.isArray(participantRoles) || ["source", "target"].some((slot) => !allowedRoles.includes(participantRoles[slot]))) {
+          return { valid: false, message: "Action semantic participantRoles must define source and target as actor, patient, or speaker." };
+        }
       }
     }
     return { valid: true };
@@ -5662,9 +5696,11 @@ You are now selecting actions for the current turn.`;
         }
         return `- ${a.name}: ${a.type} ${a.required ? "(required)" : "(optional)"}`;
       }).join("\n") : "- (no args)";
+      const sourceLine = action.sourceCharacterId !== void 0 ? `Source: ${action.sourceCharacterName || "unknown"} (id=${action.sourceCharacterId})` : null;
       const targetLine = action.validTargetCharacterIds?.length ? `Targets: one of { ${action.validTargetCharacterIds.join(", ")} }` : action.requiresTarget ? "Targets: required (any valid character id in roster)" : "Targets: none (omit or use null)";
       actionLines.push(
         `${action.signature}
+${sourceLine ? `${sourceLine}\n` : ""}
 Description: ${action.description || "—"}
 ${targetLine}
 Args:
@@ -5677,7 +5713,7 @@ ${argDescs}
 ${actionLines.join("\n\n")}
 
 Return JSON only. No extra text.`;
-    const dynamicActionBlock = `Dynamic evaluation context: action source is "${npc.fullName}" (id=${npc.id}), the exact candidate speaker. The player is "${conv.gameData.playerName}" (id=${conv.gameData.playerID}). Do not substitute another conversation participant as the action source.`;
+    const dynamicActionBlock = `Dynamic evaluation context: the candidate speaker is "${npc.fullName}" (id=${npc.id}). Each action lists its already resolved source; do not substitute another conversation participant as that action source. The player is "${conv.gameData.playerName}" (id=${conv.gameData.playerID}).`;
     const actionEvent = actionContext.actionEvent || null;
     const candidateSpeaker = actionContext.message?.name || actionContext.message?.role || "unknown";
     const candidateRole = actionContext.message?.role === "user" || candidateSpeaker === conv.gameData.playerName ? "PLAYER" : "NPC";
@@ -6005,7 +6041,7 @@ class ActionEngine {
    * ordinary conversation, plans, opinions, poetry, threats, and emotion alone
    * do not trigger an API request.
    */
-  static getActionTriggers(text) {
+  static getActionTriggers(text, { candidateOnly = false } = {}) {
     if (!text || typeof text !== "string") return [];
     // Judge future tense only inside the clause that contains the candidate
     // action. This prevents a later plan ("明日再谈") from cancelling an
@@ -6077,13 +6113,24 @@ class ActionEngine {
     // ordinary future promise. Keep this narrow and require planning/operational
     // language so threats such as "I will kill you" do not start schemes.
     const schemeIntent = /(?:(?:开始|着手|决定|准备|打算|计划|部署|布置|实施|启动|设法|派人|派刺客|雇凶).{0,18}(?:拉拢|讨好|结交|交友|勾引|诱惑|追求|赢得.{0,6}芳心|谋杀|暗杀|除掉|做掉|绑架|劫持|寻找.{0,6}把柄|捏造.{0,6}把柄|制造.{0,6}把柄|散布.{0,8}谣言)|(?:start|begin|plot|plan|prepare|deploy|send an assassin|hire an assassin).{0,24}(?:sway|befriend|seduce|romance|murder|assassinate|abduct|kidnap|fabricate a hook))/i;
-    if (clauses.some((clause, clauseIndex) => schemeIntent.test(clause) && !failedAttemptMarker.test(clause) && !hypotheticalMarker.test(clause) && !(clauseIndex > 0 && hypotheticalMarker.test(clauses[clauseIndex - 1])))) {
+    if (clauses.some((clause, clauseIndex) => schemeIntent.test(clause) && (candidateOnly || !failedAttemptMarker.test(clause) && !hypotheticalMarker.test(clause) && !(clauseIndex > 0 && hypotheticalMarker.test(clauses[clauseIndex - 1]))))) {
       detected.push("scheme_start");
     }
-    if (describesCompletedOrCurrentAction(completedSexualAction, true)) detected.push("sexual_intercourse_completed");
+    if ((candidateOnly ? completedSexualAction.test(text) : describesCompletedOrCurrentAction(completedSexualAction, true))) detected.push("sexual_intercourse_completed");
     for (const rule of rules) {
       if (rule.reason === "sexual_intercourse_completed") continue;
-      if (describesCompletedOrCurrentAction(rule.pattern, rule.reason !== "combat")) detected.push(rule.reason);
+      if ((candidateOnly ? rule.pattern.test(text) : describesCompletedOrCurrentAction(rule.pattern, rule.reason !== "combat"))) detected.push(rule.reason);
+    }
+    if (candidateOnly && typeof actionRegistry !== "undefined") {
+      for (const action of actionRegistry.getAllActions()) {
+        const patterns = action.definition?.semantic?.candidatePatterns;
+        const categories = action.definition?.triggerCategories;
+        if (!Array.isArray(patterns) || !Array.isArray(categories)) continue;
+        if (patterns.some((pattern) => {
+          pattern.lastIndex = 0;
+          return pattern.test(text);
+        })) detected.push(...categories);
+      }
     }
     return Array.from(new Set(detected));
   }
@@ -6101,7 +6148,7 @@ class ActionEngine {
     let baseMatch;
     while ((baseMatch = basePattern.exec(source)) !== null) {
       const baseText = baseMatch[0];
-      const splitPattern = /(?:只是|反而|而是|但最终|不过|但是|然而|随后|然后|接着|最后)/g;
+      const splitPattern = /(?:只是|反而|而是|但最终|不过|但是|然而|随后|然后|接着|最后|但(?=(?:我|你|他|她|它|众人|这|那|此|可)))/g;
       let cursor = 0;
       let splitMatch;
       while ((splitMatch = splitPattern.exec(baseText)) !== null) {
@@ -6123,13 +6170,24 @@ class ActionEngine {
     const recalledOrReportedMarker = /(?:想起|回忆|昨天|曾(?:经)?|听说|传闻|据说|声称|讲述|描述|\b(?:yesterday|remember|heard|rumou?r(?:ed)?)\b)/i;
     const failedBeforeExecutionMarker = /(?:试图|尝试|企图).{0,30}(?:没能|未能|卡在|失败|落空|无法|没有成功|\b(?:failed|stuck|could not)\b)/i;
     const failedResultMarker = /(?:躲开|避开|闪开|格挡|招架|挡下|未命中|落空|\b(?:dodged|avoided|blocked|missed)\b)/i;
+    const nonExecutedMarker = /(?:[？?]|(?:请|命令|要求|让|叫|希望|想|要|欲|准备|打算|计划|将(?:要|会)|会|能否|可否|是否|别|不要|莫|不许|不准)\s*(?:我|你|他|她|它|我们|你们|他们|她们|众人|侍从|护卫)?\s*(?:杀|刺|砍|关|囚禁|任命|罢免|雇佣|招募|改宗|皈依|离开|进入|喝|亲吻|接吻|脱))/i;
+    const negatedActionMarker = /(?:没有|并未|不曾|未曾|尚未).{0,12}(?:杀|刺|砍|打|关|囚禁|任命|罢免|雇佣|招募|改宗|皈依|离开|进入|喝|亲吻|接吻|脱)/i;
+    const isPostActionQualifier = (clause) => /(?:杀死|杀了|刺伤|砍伤|打伤|关进|关押|囚禁|任命|罢免|雇佣|招募|亲吻|接吻).{0,16}(?:也许|或许|可能会)/i.test(clause);
     const events = [];
     for (let index = 0; index < clauses.length; index++) {
       const clause = clauses[index];
-      const hints = this.getActionTriggers(clause.text);
+      const hints = this.getActionTriggers(clause.text, { candidateOnly: true });
       if (hints.length === 0) continue;
       const candidateEvidence = { text: clause.text, start: clause.start, end: clause.start + clause.text.length };
-      if (hypotheticalMarker.test(clause.text)) {
+      if (nonExecutedMarker.test(clause.text)) {
+        for (const category of hints) rejectedCandidates.push({ category, evidence: candidateEvidence, rejectionReason: "non_executed" });
+        continue;
+      }
+      if (negatedActionMarker.test(clause.text)) {
+        for (const category of hints) rejectedCandidates.push({ category, evidence: candidateEvidence, rejectionReason: "negated" });
+        continue;
+      }
+      if (hypotheticalMarker.test(clause.text) && (/^\s*(?:如果|假如|倘若|若是|要是|\bif\b)/i.test(clause.text) || !isPostActionQualifier(clause.text))) {
         for (const category of hints) rejectedCandidates.push({ category, evidence: candidateEvidence, rejectionReason: "hypothetical" });
         continue;
       }
@@ -6158,8 +6216,11 @@ class ActionEngine {
     const intimateEvent = events.find((event) => event.category === "intimate_contact");
     const gazePattern = /(?:对视|四目相对|凝望|深望).{0,12}(?:许久|良久|久久|片刻)|(?:许久|良久|久久).{0,12}(?:对视|四目相对|凝望|深望)/i;
     const gazeMatch = gazePattern.exec(source);
-    if (intimateEvent && gazeMatch && gazeMatch.index < intimateEvent.evidence.end) {
-      const evidenceStart = gazeMatch.index;
+    const affectionPattern = /(?:牵住?.{0,8}(?:手|手指)|十指相扣|相拥|拥抱|依偎|抚摸|爱抚|亲吻|接吻|吻上|吻住|深吻|互诉(?:心意|衷肠)|倾诉(?:爱意|心意)|caressed?|embraced|hugged|kissed?)/i;
+    const affectionMatch = affectionPattern.exec(source);
+    const relationshipMatch = gazeMatch || affectionMatch;
+    if (intimateEvent && relationshipMatch && relationshipMatch.index < intimateEvent.evidence.end) {
+      const evidenceStart = relationshipMatch.index;
       const evidenceEnd = intimateEvent.evidence.end;
       const evidenceText = source.slice(evidenceStart, evidenceEnd);
       if (!/(?:没有|不是|如果|假如|倘若|听说|传闻|想起|回忆)/.test(evidenceText)) {
@@ -6296,6 +6357,30 @@ class ActionEngine {
     winners.push(...groups.values());
     return winners.map((candidate) => candidate.action.id);
   }
+  static resolveSemanticEvent(event) {
+    const reasons = Array.isArray(event.categories) ? event.categories : [event.category];
+    const metadataAllowedActionIds = this.resolveMetadataSemanticCandidates(event);
+    if (metadataAllowedActionIds.length > 0) {
+      return {
+        mode: "resolved",
+        reasons,
+        allowedActionIds: metadataAllowedActionIds,
+        evidence: ["metadata_positive_evidence"]
+      };
+    }
+    const legacyActionIds = typeof actionRegistry === "undefined" ? [] : actionRegistry.getAllActions(false).filter((action) => {
+      const categories = Array.isArray(action.definition?.triggerCategories) ? action.definition.triggerCategories : [];
+      return action.definition?.semantic?.requiresLegacyResolution && categories.some((category) => reasons.includes(category));
+    }).map((action) => action.id);
+    if (legacyActionIds.length > 0) {
+      const legacyProfile = this.getLegacySemanticProfileForEvidence(event.evidence.text, reasons);
+      const allowedActionIds = legacyProfile.allowedActionIds.filter((actionId) => legacyActionIds.includes(actionId));
+      if (allowedActionIds.length > 0) {
+        return { mode: "legacy", reasons: legacyProfile.reasons, allowedActionIds, evidence: legacyProfile.evidence };
+      }
+    }
+    return { mode: "unresolved", reasons, allowedActionIds: [], evidence: [] };
+  }
   /**
    * Compatibility aggregate for callers still expecting a message-level
    * profile. Every semantic decision is nevertheless made per ActionEvent
@@ -6304,18 +6389,13 @@ class ActionEngine {
   static getSemanticActionProfile(text, initialReasons = []) {
     const events = this.getActionEvents(text);
     const resolvedEvents = events.map((event) => {
-      const eventReasons = Array.isArray(event.categories) ? event.categories : [event.category];
-      const legacyProfile = this.getLegacySemanticProfileForEvidence(event.evidence.text, eventReasons);
-      const metadataAllowedActionIds = this.resolveMetadataSemanticCandidates(event);
-      const profile = metadataAllowedActionIds.length > 0 ? {
-        ...legacyProfile,
-        allowedActionIds: metadataAllowedActionIds
-      } : legacyProfile;
+      const profile = this.resolveSemanticEvent(event);
       return {
         ...event,
         reasons: profile.reasons,
         allowedActionIds: profile.allowedActionIds,
-        semanticEvidence: profile.evidence
+        semanticEvidence: profile.evidence,
+        resolutionMode: profile.mode
       };
     });
     const reasons = [];
@@ -6332,32 +6412,14 @@ class ActionEngine {
         if (!evidence.includes(label)) evidence.push(label);
       }
     }
-    return { reasons, allowedActionIds, evidence, events: resolvedEvents };
+    const resolutionModes = Array.from(new Set(resolvedEvents.map((event) => event.resolutionMode)));
+    return { reasons, allowedActionIds, evidence, events: resolvedEvents, resolutionMode: resolutionModes.length === 1 ? resolutionModes[0] : resolutionModes.length === 0 ? "unresolved" : "mixed" };
   }
   static getActionTrigger(text) {
     return this.getActionTriggers(text)[0] || null;
   }
   static getActionIdsForTriggers(reasons) {
-    const byReason = {
-      gold: ["paysGoldTo", "playerPaysGoldTo"],
-      imprisonment: ["isImprisonedBy"],
-      death_or_injury: ["isInjured", "characterIsKilled"],
-      relationship: ["becomeSoulmatesWith", "becomeRivalsWith", "becomeNemesisWith", "becomeLoversWith", "becomeFriendsWith", "becomeBloodBrothersWith", "becomeBestFriendsWith", "makeAlliance", "agreedToTruceWith"],
-      employment_or_office: ["isFiredFromCouncilOf", "isEmployedBy", "isEmployedAsKnightBy", "isAssignedToCourtPositionBy", "isAssignedToCouncilBy"],
-      faith_or_vassal: ["convertsToReligionOf", "isVassalizedBy"],
-      location_or_exit: ["changeLocation", "leavesConversation"],
-      drinking_or_toast: ["setEmotion"],
-      // A bare attack attempt is handled only by the optional scene module.
-      // Legacy injury/death effects require the separate, explicit
-      // death_or_injury trigger below, so drawing a weapon never becomes an
-      // accidental wound or death action after scene modules are disabled.
-      combat: [],
-      opinion_change: ["changeOpinionOf"],
-      intimacy_or_clothing: ["isUndressed"],
-      sexual_intercourse_completed: ["intercourse"],
-      visible_pose: ["setEmotion"]
-    };
-    return new Set((reasons || []).flatMap((reason) => byReason[reason] || []));
+    return /* @__PURE__ */ new Set();
   }
   static getAllowedPoseOptions(reasons) {
     const options = /* @__PURE__ */ new Set();
@@ -6370,6 +6432,41 @@ class ActionEngine {
     }
     return options;
   }
+  static resolveEventParticipants({ event, speaker, gameData, actionDefinition }) {
+    const participantRoles = actionDefinition?.semantic?.participantRoles;
+    if (!participantRoles) return { mode: "speaker", sourceCharacter: speaker, targetCharacter: null };
+    const evidenceText = event?.evidence?.text || "";
+    const characters = Array.from(gameData?.characters?.values?.() || []);
+    if (!speaker || !evidenceText || characters.length === 0) return { mode: "unresolved", reason: "missing_participant_context" };
+    const escapeRegExp = (value) => value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+    const characterNames = (character) => [character.fullName, character.shortName].filter((name, index, names) => typeof name === "string" && name.length > 0 && names.indexOf(name) === index);
+    const patternFor = (character) => characterNames(character).map(escapeRegExp).join("|");
+    const namedCharacters = characters.filter((character) => character.id !== speaker.id && new RegExp(patternFor(character)).test(evidenceText));
+    let actor = null;
+    let patient = null;
+    for (const character of namedCharacters) {
+      const namePattern = patternFor(character);
+      if (new RegExp(`(?:${namePattern}).{0,6}被.{0,3}我`).test(evidenceText)) {
+        actor = speaker;
+        patient = character;
+        break;
+      }
+      if (new RegExp(`(?:${namePattern}).{0,8}(?:把|将).{0,4}我`).test(evidenceText) || new RegExp(`(?:${namePattern}).{0,16}(?:杀死|杀了|刺伤|砍伤|打伤|关进|关押|囚禁|任命|罢免|开除|撤职|撤去|解职|革职|雇佣|招募|委任|委派).{0,4}我`).test(evidenceText)) {
+        actor = character;
+        patient = speaker;
+        break;
+      }
+    }
+    if (!actor && !patient && namedCharacters.length === 1 && /我/.test(evidenceText)) {
+      actor = speaker;
+      patient = namedCharacters[0];
+    }
+    const byRole = { actor, patient, speaker };
+    const sourceCharacter = byRole[participantRoles.source];
+    const targetCharacter = byRole[participantRoles.target];
+    if (!sourceCharacter || !targetCharacter) return { mode: "unresolved", reason: "unresolved_participants" };
+    return { mode: "resolved", sourceCharacter, targetCharacter, actor, patient };
+  }
   static shouldEvaluateForMessage(conv, message, actionEvent = null) {
     const detectedReasons = actionEvent ? actionEvent.reasons : this.getActionTriggers(message?.content);
     if (detectedReasons.length === 0) return { shouldEvaluate: false, reason: "no_action_candidate" };
@@ -6377,11 +6474,13 @@ class ActionEngine {
       reasons: actionEvent.reasons,
       allowedActionIds: actionEvent.allowedActionIds,
       evidence: actionEvent.semanticEvidence,
-      events: [actionEvent]
+      events: [actionEvent],
+      resolutionMode: actionEvent.resolutionMode
     } : this.getSemanticActionProfile(message?.content, detectedReasons);
     if (!actionEvent && semanticProfile.events.length === 0) return { shouldEvaluate: false, reason: "no_executed_action_event" };
+    if (actionEvent && semanticProfile.resolutionMode === "unresolved") return { shouldEvaluate: false, reason: "unresolved_action_semantics" };
     const semanticReasons = semanticProfile.reasons;
-    const dedupeKey = actionEvent ? `${actionEvent.eventId}|${message.name || message.role || "unknown"}|${actionEvent.evidence.start}|${actionEvent.evidence.end}` : `${semanticReasons.join("+")}|${message.name || message.role || "unknown"}|${message.content}`;
+    const dedupeKey = actionEvent ? `${message.id ?? "unknown"}|${actionEvent.category}|${message.name || message.role || "unknown"}|${actionEvent.evidence.start}|${actionEvent.evidence.end}` : `${message.id ?? "unknown"}|${semanticReasons.join("+")}|${message.name || message.role || "unknown"}|${message.content}`;
     if (!conv.actionGateProcessedTriggers) conv.actionGateProcessedTriggers = /* @__PURE__ */ new Set();
     if (conv.actionGateProcessedTriggers.has(dedupeKey)) {
       return { shouldEvaluate: false, reason: "already_processed_action_text" };
@@ -6483,20 +6582,34 @@ class ActionEngine {
       const semanticAllowlist = new Set(gate.semanticProfile?.allowedActionIds || []);
       const loaded = allLoaded.filter((action) => relevantActionIds.has(action.id) && (semanticAllowlist.size === 0 || semanticAllowlist.has(action.id)));
       const available = [];
+      let hadUnresolvedParticipants = false;
       for (const act of loaded) {
         if (signal?.aborted) {
           return { autoApproved: [], needsApproval: [] };
         }
         try {
+          const participantResolution = this.resolveEventParticipants({
+            event: actionEvent,
+            speaker: actionSource,
+            gameData: conv.gameData,
+            actionDefinition: act.definition
+          });
+          if (participantResolution.mode === "unresolved") {
+            hadUnresolvedParticipants = true;
+            continue;
+          }
+          const resolvedSource = participantResolution.sourceCharacter || actionSource;
+          const resolvedTarget = participantResolution.targetCharacter || null;
           const checkResult = await act.definition.check({
             gameData: conv.gameData,
-            sourceCharacter: actionSource
+            sourceCharacter: resolvedSource
           });
           if (!checkResult?.canExecute) continue;
           const requiresTarget = typeof checkResult.requiresTarget === "boolean" ? checkResult.requiresTarget : !!(checkResult.validTargetCharacterIds && checkResult.validTargetCharacterIds.length > 0);
+          if (resolvedTarget && Array.isArray(checkResult.validTargetCharacterIds) && !checkResult.validTargetCharacterIds.includes(resolvedTarget.id)) continue;
           let args;
           if (typeof act.definition.args === "function") {
-            args = act.definition.args({ gameData: conv.gameData, sourceCharacter: actionSource });
+            args = act.definition.args({ gameData: conv.gameData, sourceCharacter: resolvedSource });
           } else {
             args = act.definition.args;
           }
@@ -6513,7 +6626,7 @@ class ActionEngine {
           }
           let description;
           if (typeof act.definition.description === "function") {
-            const descResult = act.definition.description({ gameData: conv.gameData, sourceCharacter: actionSource });
+            const descResult = act.definition.description({ gameData: conv.gameData, sourceCharacter: resolvedSource });
             description = resolveI18nString(descResult, userLang);
           } else {
             description = resolveI18nString(act.definition.description, userLang);
@@ -6521,9 +6634,12 @@ class ActionEngine {
           available.push({
             signature: act.id,
             args: resolvedArgs,
-            requiresTarget,
-            validTargetCharacterIds: checkResult.validTargetCharacterIds,
-            description
+            requiresTarget: resolvedTarget ? true : requiresTarget,
+            validTargetCharacterIds: resolvedTarget ? [resolvedTarget.id] : checkResult.validTargetCharacterIds,
+            description,
+            sourceCharacterId: resolvedSource.id,
+            sourceCharacterName: resolvedSource.shortName,
+            resolvedTargetCharacterId: resolvedTarget?.id
           });
         } catch (err) {
           actionRegistry.registerValidation(act.id, {
@@ -6533,7 +6649,7 @@ class ActionEngine {
         }
       }
       if (available.length === 0) {
-        recordOutcome("no_available_action", [], "no_available_action_for_trigger");
+        recordOutcome("no_available_action", [], hadUnresolvedParticipants ? "unresolved_action_participants" : "no_available_action_for_trigger");
         return { autoApproved: [], needsApproval: [] };
       }
       if (signal?.aborted) {
@@ -6635,40 +6751,38 @@ class ActionEngine {
         if (!loaded2 || !loaded2.validation.valid) {
           continue;
         }
+        const availableAction = available.find((action) => action.signature === inv.actionId);
+        if (!availableAction) continue;
+        const invocation = availableAction.resolvedTargetCharacterId !== void 0 ? {
+          ...inv,
+          targetCharacterId: availableAction.resolvedTargetCharacterId
+        } : inv;
+        const invocationSource = conv.gameData.characters.get(availableAction.sourceCharacterId) || actionSource;
         const isDestructive = actionRegistry.getEffectiveDestructive(inv.actionId);
+        const riskLevel = actionRegistry.getEffectiveRiskLevel(inv.actionId);
         console.log(`[ActionEngine] Action ${inv.actionId} isDestructive: ${isDestructive}, hasOverride: ${actionRegistry.hasDestructiveOverride(inv.actionId)}`);
-        let needsUserApproval = false;
-        switch (approvalSettings.approvalMode) {
-          case "none":
-            needsUserApproval = true;
-            break;
-          case "non-destructive":
-            needsUserApproval = isDestructive;
-            break;
-          case "all":
-            needsUserApproval = false;
-            break;
-        }
+        const needsUserApproval = actionRegistry.shouldRequireApproval(inv.actionId, approvalSettings.approvalMode);
         console.log(`[ActionEngine] Action ${inv.actionId} isDestructive property: ${loaded2.definition.isDestructive}, computed: ${isDestructive}, needsApproval: ${needsUserApproval}`);
         if (needsUserApproval) {
-          const targetId = inv.targetCharacterId ?? null;
+          const targetId = invocation.targetCharacterId ?? null;
           const target = targetId != null ? conv.gameData.characters.get(targetId) ?? void 0 : void 0;
           const actionTitle = loaded2.definition.title ? resolveI18nString(loaded2.definition.title, userLang) : void 0;
           console.log(`[ActionEngine] Action ${inv.actionId} needs approval (destructive: ${isDestructive})`);
           needsApproval.push({
             actionId: inv.actionId,
             actionTitle,
-            sourceCharacterId: actionSource.id,
-            sourceCharacterName: actionSource.shortName,
+            sourceCharacterId: invocationSource.id,
+            sourceCharacterName: invocationSource.shortName,
             targetCharacterId: targetId ?? void 0,
             targetCharacterName: target?.shortName,
-            args: inv.args ?? {},
+            args: invocation.args ?? {},
             isDestructive,
-            invocation: inv
+            riskLevel,
+            invocation
           });
         } else {
           console.log(`[ActionEngine] Action ${inv.actionId} auto-approved (destructive: ${isDestructive})`);
-          const result2 = await this.runInvocation(conv, actionSource, inv);
+          const result2 = await this.runInvocation(conv, invocationSource, invocation);
           autoApproved.push(result2);
         }
       }
@@ -6788,7 +6902,6 @@ class Conversation {
     // Action checks are scoped to the current player turn. This prevents one
     // narrated event from being sent to the action model once per NPC reply.
     this.actionGateProcessedTriggers = /* @__PURE__ */ new Set();
-    this.pendingPlayerActionMessage = null;
     this.eventEmitter = new events.EventEmitter();
     this.initializeGameData();
   }
@@ -7048,12 +7161,9 @@ ${result.content}`;
     }
   }
   async evaluateCompletedActions(npc, npcMessageId, npcMessage) {
-    const playerMessage = this.pendingPlayerActionMessage;
-    this.pendingPlayerActionMessage = null;
-    const player = this.gameData.characters.get(this.gameData.playerID);
     const evaluations = ActionEngine.buildTurnEvaluationPlan({
-      playerMessage,
-      player,
+      playerMessage: null,
+      player: null,
       npcMessage: { ...npcMessage, id: npcMessageId },
       npc
     });
@@ -7223,11 +7333,11 @@ ${result.content}`;
       content: userMessage
     });
     this.messages.push(userMsg);
-    // Only the first NPC of this turn may evaluate a player-narrated action;
-    // later NPCs evaluate only their own freshly generated line.
     this.actionGateProcessedTriggers.clear();
-    this.pendingPlayerActionMessage = ActionEngine.getActionTrigger(userMsg.content) ? userMsg : null;
     this.emitUpdate();
+    const playerActionResults = await ActionEngine.evaluateForCharacter(this, user, null, userMsg);
+    await this.handleActionResults(userMsg.id, user, playerActionResults);
+    if (this.isPaused) return;
     if (this.npcQueue.length === 0) {
       this.fillNpcQueue();
     }

@@ -3,10 +3,12 @@ module.exports = {
   signature: "isEmployedAsKnightBy",
   triggerCategories: ["employment_or_office"],
   semantic: {
+    candidatePatterns: [/(?:任命(?:为|了)?骑士|任为骑士|骑士|侍从|knight)/i],
     evidencePatterns: [/(?:任命(?:为|了)?骑士|任为骑士|骑士|侍从|knight)/i],
     exclusiveGroup: "employment_change",
     priority: 80,
-    riskLevel: "medium"
+    riskLevel: "medium",
+    participantRoles: { source: "patient", target: "actor" }
   },
   title: {
     en: "Source Joins Target's Court as Knight",

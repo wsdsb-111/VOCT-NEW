@@ -5,6 +5,13 @@ const path = require("path");
 const root = path.resolve(__dirname, "..");
 const mainPath = path.join(root, "resources", "app", "out", "main", "main.js");
 const source = fs.readFileSync(mainPath, "utf8");
+const actionsDir = path.join(root, "resources", "app", "default_userdata", "actions", "standard");
+globalThis.actionRegistry = {
+  getAllActions: () => fs.readdirSync(actionsDir).filter((file) => file.endsWith(".js")).map((file) => {
+    const definition = require(path.join(actionsDir, file));
+    return { id: definition.signature, definition };
+  })
+};
 const engineStart = source.indexOf("class ActionEngine {");
 const engineEnd = source.indexOf("\nclass Conversation {", engineStart);
 if (engineStart < 0 || engineEnd < 0) throw new Error("Unable to locate ActionEngine in bundled main.js");
@@ -168,7 +175,6 @@ const characters = /* @__PURE__ */ new Map([
   [3, makeCharacter(3, "Minor NPC", 12)]
 ]);
 const gameData = { characters, playerID: 1, playerName: "Player" };
-const actionsDir = path.join(root, "resources", "app", "default_userdata", "actions", "standard");
 const daily = require(path.join(actionsDir, "z_performDailyAction.js"));
 const combat = require(path.join(actionsDir, "z_performCombatAction.js"));
 const intimate = require(path.join(actionsDir, "z_performIntimateAction.js"));
@@ -510,7 +516,12 @@ assert.deepStrictEqual(
   ["characterIsKilled"],
   "death evidence must not match the injury action"
 );
-delete globalThis.actionRegistry;
+globalThis.actionRegistry = {
+  getAllActions: () => fs.readdirSync(actionsDir).filter((file) => file.endsWith(".js")).map((file) => {
+    const definition = require(path.join(actionsDir, file));
+    return { id: definition.signature, definition };
+  })
+};
 
 let killedRunStatus = "PASS";
 let killedRunIssues = [];

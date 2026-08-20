@@ -42,7 +42,7 @@ function getLocalizedLover(lang) {
 
 module.exports = {
   signature: "becomeLoversWith",
-  triggerCategories: ["relationship", "intimate_contact"], semantic: { evidencePatterns: [/(?:情人|恋人|相恋|相爱|坠入爱河|定情|私定终身|夫妻|lovers?)/i], exclusiveGroup: "relationship_tier", priority: 40, riskLevel: "medium" },
+  triggerCategories: ["relationship", "intimate_contact"], semantic: { evidencePatterns: [/(?:情人|恋人|相恋|相爱|坠入爱河|定情|私定终身|夫妻|lovers?)/i], match: ({ evidence }) => /(?:牵住?.{0,8}(?:手|手指)|十指相扣|相拥|拥抱|依偎|抚摸|爱抚|亲吻|接吻|吻上|吻住|深吻|互诉(?:心意|衷肠)|倾诉(?:爱意|心意)|caressed?|embraced|hugged|kissed?)/i.test(evidence.text), exclusiveGroup: "relationship_tier", priority: 40, riskLevel: "medium" },
   title: {
     en: "Become Lovers",
     ru: "Стать любовниками",

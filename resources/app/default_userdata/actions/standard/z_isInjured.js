@@ -153,11 +153,13 @@ module.exports = {
   signature: "isInjured",
   triggerCategories: ["death_or_injury"],
   semantic: {
+    candidatePatterns: [/(?:刺伤|砍伤|打伤|烧伤|冻伤|摔伤|重创|重伤|负伤|受伤|刺穿|贯穿|流血(?:不止)?|鲜血.{0,8}(?:流出|涌出|喷出)|伤口|骨折|断骨|昏迷|毁容|弄瞎|刺瞎|打瞎|剜.?眼|断腿|折断|打断|割下|砍下|阉割|wounded|injured|maimed|disfigured|bled|bleeding|blinded|castrat|poisoned|strangled|burned|drowned)/i],
     evidencePatterns: [/(?:刺伤|砍伤|打伤|烧伤|冻伤|摔伤|重创|重伤|负伤|受伤|刺穿|贯穿|流血(?:不止)?|鲜血.{0,8}(?:流出|涌出|喷出)|伤口|骨折|断骨|昏迷|毁容|弄瞎|刺瞎|打瞎|剜.?眼|断腿|折断|打断|割下|砍下|阉割|wounded|injured|maimed|disfigured|bled|bleeding|blinded|castrat|poisoned|strangled|burned|drowned)/i],
     excludePatterns: [/(?:杀死|杀了|砍死|刺死|毒死|勒死|掐死|打死|烧死|淹死|处死|斩首|毙命|殒命|气绝|断气|killed?|executed|died)/i],
     exclusiveGroup: "physical_outcome",
     priority: 50,
-    riskLevel: "high"
+    riskLevel: "high",
+    participantRoles: { source: "actor", target: "patient" }
   },
   title: {
     en: "Target Is Injured",

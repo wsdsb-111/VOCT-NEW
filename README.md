@@ -268,6 +268,13 @@ voices-of-the-court/
 - 标准动作脚本均声明 `triggerCategories` 与 `semantic` metadata；注册表加载时校验 metadata 的结构、正则模式、优先级和风险等级。高风险脚本保持本地 `check()` 与 CK3 原生前置条件校验。
 - 回归覆盖 58 个基础/混合语义断言、14 个事件边界断言和 5 个运行路径/metadata 断言；均为静态或隔离逻辑验证，尚未替代 CK3 实机与模型提供商的手动冒烟测试。
 
+### 第九阶段：v6.6 首轮动作系统收口
+
+- **参与者角色映射**：死亡、囚禁、骑士任命和伤害动作在 metadata 中声明 actor/patient 对应的 Script source/target；未能从 Positive Evidence 解析出明确人物时安全跳过，避免将发言者错误当成受害者、囚犯或被任命者。
+- **统一高风险审批**：`riskLevel = high` 现在强制进入危险动作策略；`isInjured`、`isImprisonedBy` 等不会因缺少旧 `isDestructive` 标记而在“自动接受非危险操作”模式中静默执行。
+- **运行时与解析器收口**：新增生产 `ActionEngine` / `Conversation` 可注入 Harness，覆盖 CK3 effect scope、玩家/NPC 独立调度与 NPC 调度失败；Gate 的候选模式已与 Event Parser 的事实判断分离，并补充无标点、因果、后置语气、否定和复合事件回归。
+- **语义与生命周期收口**：metadata 未匹配的状态事件标记为 `unresolved` 并跳过动作模型；只有金币方向保留显式 Legacy 兼容解析。玩家动作在消息提交后立即评估，不再依赖任何 NPC 回复或 API 成功。
+
 ## 许可证
 
 模组文件遵循项目原有许可证。Voices of the Court 2.0 Mod © 2026 Durond 与 MrAndroPC，采用 [CC BY-SA 4.0](https://creativecommons.org/licenses/by-sa/4.0/) 授权。
