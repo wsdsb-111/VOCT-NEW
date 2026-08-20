@@ -7320,10 +7320,6 @@ ${result.content}`;
         if (previewResult.feedback?.message) {
           previewFeedback = previewResult.feedback.message;
           previewSentiment = previewResult.feedback.sentiment || "neutral";
-        } else {
-          const executed = await ActionEngine.runInvocation(this, npc, action.invocation);
-          autoFeedbackResults.push(executed);
-          continue;
         }
       } catch (err) {
         console.error("[Conversation] Preview action failed:", err);
@@ -7851,7 +7847,11 @@ ${result.content}`;
     try {
       // Invocation source/target IDs are authoritative; pending.npc is legacy fallback only.
       const result = await ActionEngine.runInvocation(this, pending.npc, invocation);
-      if (result.feedback?.message && result.feedback.message !== approvalEntry.resultFeedback) {
+      if (!result?.success) {
+        approvalEntry.resultFeedback = `Failed: ${result?.error || "Action execution failed"}`;
+        approvalEntry.resultSentiment = "negative";
+        this.emitUpdate();
+      } else if (result.feedback?.message && result.feedback.message !== approvalEntry.resultFeedback) {
         approvalEntry.resultFeedback = result.feedback.message;
         approvalEntry.resultSentiment = result.feedback.sentiment || "neutral";
         this.emitUpdate();

@@ -114,7 +114,33 @@ function pendingAction() {
   assert.strictEqual(executions.length, executionsBeforeApproval, "stale source must be rejected before final execution");
   assert(analytics.some((entry) => entry.reason === "stale_approval_source_unavailable"), "approval-time stale validation must record its reason");
 
-  console.log("VOTC v6.8.2 approval lifecycle: PASS (binding snapshots and stale source/target invalidation)");
+  const previewWithoutFeedback = createConversation();
+  let realExecutionCount = 0;
+  globalThis.ActionEngine.runInvocation = async (_conversation, _caller, invocation, options) => {
+    if (options?.dryRun) return { actionId: invocation.actionId, success: true, feedback: undefined };
+    realExecutionCount += 1;
+    return { actionId: invocation.actionId, success: true };
+  };
+  await previewWithoutFeedback.handleActionResults(9, player, { autoApproved: [], needsApproval: [pendingAction()] });
+  assert.strictEqual(realExecutionCount, 0, "preview without feedback must not bypass manual approval");
+  assert.strictEqual(previewWithoutFeedback.pendingActionApprovals.size, 1, "preview without feedback must still create a pending approval");
+  assert.strictEqual(previewWithoutFeedback.messages[0].status, "pending", "preview without feedback must keep approval pending");
+
+  const executionFailure = createConversation();
+  let effectWriteCount = 0;
+  globalThis.ActionEngine.runInvocation = async (_conversation, _caller, invocation, options) => {
+    if (options?.dryRun) return { actionId: invocation.actionId, success: true, feedback: { message: "preview", sentiment: "neutral" } };
+    return { actionId: invocation.actionId, success: false, error: "Resolved target character unavailable" };
+  };
+  await executionFailure.handleActionResults(10, player, { autoApproved: [], needsApproval: [pendingAction()] });
+  const failedApprovalId = Array.from(executionFailure.pendingActionApprovals.keys())[0];
+  await executionFailure.approveActions(failedApprovalId);
+  const failedApprovalEntry = executionFailure.messages.find((entry) => entry.id === failedApprovalId);
+  assert.strictEqual(failedApprovalEntry.resultSentiment, "negative", "approved action execution failure must surface a negative result");
+  assert(failedApprovalEntry.resultFeedback.includes("Resolved target character unavailable"), "approved action execution failure must show the local execution error");
+  assert.strictEqual(effectWriteCount, 0, "failed approved action must not write a CK3 effect");
+
+  console.log("VOTC v6.8.2 approval lifecycle: PASS (binding snapshots, stale participants and execution failures)");
 })().catch((error) => {
   console.error(error);
   process.exitCode = 1;
