@@ -33,7 +33,7 @@ module.exports = {
    * @param {Character} params.sourceCharacter
    */
   description: ({ sourceCharacter }) =>
-    `Execute when ${sourceCharacter.shortName} (who is not a ruler or knight) decides to join the target character's court as a knight.`,
+    `Execute when ${sourceCharacter.shortName} is the appointee and the target is the employer/court owner. Both participants are already bound from the narrated appointment; do not choose a different target.`,
 
   /**
    * @param {object} params

@@ -192,7 +192,7 @@ module.exports = {
    * @param {Character} params.sourceCharacter
    */
   description: ({ sourceCharacter }) =>
-    `Execute when the target character is injured in various ways. The injury happens generally, not from a specific source. Choose the target and injury type.`,
+    `Execute when ${sourceCharacter.shortName} is the actor who injured the already-bound target patient. Do not choose or replace the target; choose only the injury type.`,
 
   /**
    * @param {object} params

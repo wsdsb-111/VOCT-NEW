@@ -5697,7 +5697,7 @@ You are now selecting actions for the current turn.`;
         return `- ${a.name}: ${a.type} ${a.required ? "(required)" : "(optional)"}`;
       }).join("\n") : "- (no args)";
       const sourceLine = action.sourceCharacterId !== void 0 ? `Source: ${action.sourceCharacterName || "unknown"} (id=${action.sourceCharacterId})` : null;
-      const targetLine = action.validTargetCharacterIds?.length ? `Targets: one of { ${action.validTargetCharacterIds.join(", ")} }` : action.requiresTarget ? "Targets: required (any valid character id in roster)" : "Targets: none (omit or use null)";
+      const targetLine = action.resolvedTargetCharacterId !== void 0 ? `Target: ${action.resolvedTargetCharacterId} (already bound from narration; do not change it)` : action.validTargetCharacterIds?.length ? `Targets: one of { ${action.validTargetCharacterIds.join(", ")} }` : action.requiresTarget ? "Targets: required (any valid character id in roster)" : "Targets: none (omit or use null)";
       actionLines.push(
         `${action.signature}
 ${sourceLine ? `${sourceLine}\n` : ""}
@@ -6170,8 +6170,9 @@ class ActionEngine {
     const recalledOrReportedMarker = /(?:想起|回忆|昨天|曾(?:经)?|听说|传闻|据说|声称|讲述|描述|\b(?:yesterday|remember|heard|rumou?r(?:ed)?)\b)/i;
     const failedBeforeExecutionMarker = /(?:试图|尝试|企图).{0,30}(?:没能|未能|卡在|失败|落空|无法|没有成功|\b(?:failed|stuck|could not)\b)/i;
     const failedResultMarker = /(?:躲开|避开|闪开|格挡|招架|挡下|未命中|落空|\b(?:dodged|avoided|blocked|missed)\b)/i;
-    const nonExecutedMarker = /(?:[？?]|(?:请|命令|要求|让|叫|希望|想|要|欲|准备|打算|计划|将(?:要|会)|会|能否|可否|是否|别|不要|莫|不许|不准)\s*(?:我|你|他|她|它|我们|你们|他们|她们|众人|侍从|护卫)?\s*(?:杀|刺|砍|关|囚禁|任命|罢免|雇佣|招募|改宗|皈依|离开|进入|喝|亲吻|接吻|脱))/i;
+    const nonExecutedMarker = /(?:[？?]|(?:请|命令|要求|让|叫|希望|想|要|欲|准备|打算|计划|将(?:要|会)|会|能否|可否|是否|别|不要|莫|不许|不准|差点|险些|几乎).{0,16}(?:杀|刺|砍|关|囚禁|任命|罢免|雇佣|招募|改宗|皈依|离开|进入|喝|亲吻|接吻|脱))/i;
     const negatedActionMarker = /(?:没有|并未|不曾|未曾|尚未).{0,12}(?:杀|刺|砍|打|关|囚禁|任命|罢免|雇佣|招募|改宗|皈依|离开|进入|喝|亲吻|接吻|脱)/i;
+    const posthocNegationMarker = /(?:——|—|\.\.\.|…|至少).{0,24}(?:不[，,]?|只是做了个梦|也许没有|本来是这么打算)/i;
     const isPostActionQualifier = (clause) => /(?:杀死|杀了|刺伤|砍伤|打伤|关进|关押|囚禁|任命|罢免|雇佣|招募|亲吻|接吻).{0,16}(?:也许|或许|可能会)/i.test(clause);
     const events = [];
     for (let index = 0; index < clauses.length; index++) {
@@ -6185,6 +6186,10 @@ class ActionEngine {
       }
       if (negatedActionMarker.test(clause.text)) {
         for (const category of hints) rejectedCandidates.push({ category, evidence: candidateEvidence, rejectionReason: "negated" });
+        continue;
+      }
+      if (posthocNegationMarker.test(clause.text) || clauses.slice(index + 1, index + 2).some((nextClause) => /^(?:也许|或许)?\s*(?:没有|并未|不曾|未曾|不是)/.test(nextClause.text))) {
+        for (const category of hints) rejectedCandidates.push({ category, evidence: candidateEvidence, rejectionReason: "posthoc_negation" });
         continue;
       }
       if (hypotheticalMarker.test(clause.text) && (/^\s*(?:如果|假如|倘若|若是|要是|\bif\b)/i.test(clause.text) || !isPostActionQualifier(clause.text))) {
@@ -6441,31 +6446,62 @@ class ActionEngine {
     const escapeRegExp = (value) => value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
     const characterNames = (character) => [character.fullName, character.shortName].filter((name, index, names) => typeof name === "string" && name.length > 0 && names.indexOf(name) === index);
     const patternFor = (character) => characterNames(character).map(escapeRegExp).join("|");
-    const namedCharacters = characters.filter((character) => character.id !== speaker.id && new RegExp(patternFor(character)).test(evidenceText));
-    let actor = null;
-    let patient = null;
-    for (const character of namedCharacters) {
+    const namedCharacters = characters.filter((character) => character.id !== speaker.id && patternFor(character) && new RegExp(patternFor(character)).test(evidenceText));
+    const actionPositions = [];
+    for (const pattern of actionDefinition?.semantic?.evidencePatterns || []) {
+      const flags = pattern.flags.replace("g", "").replace("y", "") + "g";
+      for (const match of evidenceText.matchAll(new RegExp(pattern.source, flags))) actionPositions.push(match.index);
+    }
+    const actionBetween = (start, end) => actionPositions.some((position) => position >= start && position <= end);
+    const matches = (pattern) => new RegExp(pattern).test(evidenceText);
+    const interlocutors = characters.filter((character) => character.id !== speaker.id);
+    const resolve = (actor, patient, reason) => {
+      const byRole = { actor, patient, speaker };
+      const sourceCharacter = byRole[participantRoles.source];
+      const targetCharacter = byRole[participantRoles.target];
+      if (!sourceCharacter || !targetCharacter) return { mode: "unresolved", reason: "unresolved_participants" };
+      return { mode: "resolved", sourceCharacter, targetCharacter, actor, patient, reason };
+    };
+    // Causative wording distinguishes an issuer from an executor. Do not infer
+    // either role until the action metadata has an explicit executor model.
+    if (/(?:让|叫|命令).{0,24}(?:杀|刺|砍|关|囚禁|任命|雇佣|招募)/.test(evidenceText)) {
+      return { mode: "unresolved", reason: "unsupported_causative" };
+    }
+    if (/[他她它]/.test(evidenceText)) return { mode: "unresolved", reason: "ambiguous_pronoun" };
+    const speakerIndex = evidenceText.indexOf("我");
+    const hasYou = evidenceText.includes("你");
+    if (hasYou && interlocutors.length !== 1) return { mode: "unresolved", reason: "ambiguous_pronoun" };
+    const uniqueInterlocutor = hasYou ? interlocutors[0] : null;
+    if (namedCharacters.length === 1) {
+      const character = namedCharacters[0];
       const namePattern = patternFor(character);
-      if (new RegExp(`(?:${namePattern}).{0,6}被.{0,3}我`).test(evidenceText)) {
-        actor = speaker;
-        patient = character;
-        break;
-      }
-      if (new RegExp(`(?:${namePattern}).{0,8}(?:把|将).{0,4}我`).test(evidenceText) || new RegExp(`(?:${namePattern}).{0,16}(?:杀死|杀了|刺伤|砍伤|打伤|关进|关押|囚禁|任命|罢免|开除|撤职|撤去|解职|革职|雇佣|招募|委任|委派).{0,4}我`).test(evidenceText)) {
-        actor = character;
-        patient = speaker;
-        break;
-      }
+      if (matches(`我\\s*(?:被|遭)\\s*(?:${namePattern})`) || matches(`我\\s*为\\s*(?:${namePattern})\\s*所`)) return resolve(character, speaker, "explicit_passive");
+      if (matches(`(?:${namePattern})\\s*被\\s*我`)) return resolve(speaker, character, "explicit_passive");
+      if (matches(`(?:${namePattern})\\s*(?:把|将)\\s*我`)) return resolve(character, speaker, "explicit_active");
+      if (matches(`我\\s*(?:把|将)\\s*(?:${namePattern})`)) return resolve(speaker, character, "explicit_active");
+      const nameIndex = evidenceText.search(new RegExp(namePattern));
+      if (speakerIndex >= 0 && nameIndex >= 0 && actionBetween(speakerIndex, nameIndex)) return resolve(speaker, character, "explicit_active");
+      if (speakerIndex >= 0 && nameIndex >= 0 && actionBetween(nameIndex, speakerIndex)) return resolve(character, speaker, "explicit_active");
     }
-    if (!actor && !patient && namedCharacters.length === 1 && /我/.test(evidenceText)) {
-      actor = speaker;
-      patient = namedCharacters[0];
+    if (namedCharacters.length === 2) {
+      const [first, second] = namedCharacters.slice().sort((left, right) => evidenceText.search(new RegExp(patternFor(left))) - evidenceText.search(new RegExp(patternFor(right))));
+      const firstPattern = patternFor(first);
+      const secondPattern = patternFor(second);
+      if (matches(`(?:${firstPattern})\\s*(?:被|遭)\\s*(?:${secondPattern})`) || matches(`(?:${firstPattern})\\s*为\\s*(?:${secondPattern})\\s*所`)) return resolve(second, first, "explicit_passive");
+      if (matches(`(?:${firstPattern})\\s*(?:把|将)\\s*(?:${secondPattern})`)) return resolve(first, second, "explicit_active");
+      const firstIndex = evidenceText.search(new RegExp(firstPattern));
+      const secondIndex = evidenceText.search(new RegExp(secondPattern));
+      if (firstIndex >= 0 && secondIndex >= 0 && actionBetween(firstIndex, secondIndex)) return resolve(first, second, "explicit_active");
     }
-    const byRole = { actor, patient, speaker };
-    const sourceCharacter = byRole[participantRoles.source];
-    const targetCharacter = byRole[participantRoles.target];
-    if (!sourceCharacter || !targetCharacter) return { mode: "unresolved", reason: "unresolved_participants" };
-    return { mode: "resolved", sourceCharacter, targetCharacter, actor, patient };
+    if (uniqueInterlocutor) {
+      if (matches(`我\\s*(?:被|遭)\\s*你`) || matches("我\\s*为\\s*你\\s*所")) return resolve(uniqueInterlocutor, speaker, "unique_interlocutor");
+      if (matches("你\\s*被\\s*我")) return resolve(speaker, uniqueInterlocutor, "unique_interlocutor");
+      const youIndex = evidenceText.indexOf("你");
+      if (speakerIndex >= 0 && youIndex >= 0 && actionBetween(speakerIndex, youIndex)) return resolve(speaker, uniqueInterlocutor, "unique_interlocutor");
+      if (speakerIndex >= 0 && youIndex >= 0 && actionBetween(youIndex, speakerIndex)) return resolve(uniqueInterlocutor, speaker, "unique_interlocutor");
+    }
+    if (namedCharacters.length > 2) return { mode: "unresolved", reason: "multiple_possible_targets" };
+    return { mode: "unresolved", reason: namedCharacters.length === 0 && !hasYou ? "missing_named_patient" : "ambiguous_participant_direction" };
   }
   static shouldEvaluateForMessage(conv, message, actionEvent = null) {
     const detectedReasons = actionEvent ? actionEvent.reasons : this.getActionTriggers(message?.content);
@@ -6596,7 +6632,21 @@ class ActionEngine {
           });
           if (participantResolution.mode === "unresolved") {
             hadUnresolvedParticipants = true;
+            usageAnalytics.record({
+              requestType: "action_participant_resolution",
+              actionId: act.id,
+              outcome: "unresolved",
+              reason: participantResolution.reason || "unresolved_participants"
+            }, null);
             continue;
+          }
+          if (participantResolution.mode === "resolved") {
+            usageAnalytics.record({
+              requestType: "action_participant_resolution",
+              actionId: act.id,
+              outcome: "resolved",
+              reason: participantResolution.reason || "explicit_participants"
+            }, null);
           }
           const resolvedSource = participantResolution.sourceCharacter || actionSource;
           const resolvedTarget = participantResolution.targetCharacter || null;
@@ -7204,7 +7254,8 @@ ${result.content}`;
           targetCharacterId: action.targetCharacterId,
           targetCharacterName: action.targetCharacterName,
           args: action.args,
-          isDestructive: action.isDestructive
+          isDestructive: action.isDestructive,
+          riskLevel: action.riskLevel
         },
         previewFeedback,
         previewSentiment

@@ -15861,6 +15861,7 @@ const ActionApprovalItem = ({ entry }) => {
   const sentiment = entry.resultSentiment || entry.previewSentiment || "neutral";
   const message = entry.resultFeedback || entry.previewFeedback || action.actionTitle || action.actionId;
   const argsDisplay = action.args && Object.keys(action.args).length > 0 ? JSON.stringify(action.args) : t("chat.noParameters");
+  const riskLabel = action.riskLevel === "high" ? t("actions.riskHigh") : action.riskLevel === "medium" ? t("actions.riskMedium") : action.riskLevel === "low" ? t("actions.riskLow") : null;
   return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: `action-feedback-container approval ${isPending ? "pending" : "resolved"}`, children: [
     /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "action-feedback-list", children: /* @__PURE__ */ jsxRuntimeExports.jsxs(
       "div",
@@ -15903,6 +15904,10 @@ const ActionApprovalItem = ({ entry }) => {
       hasTarget && /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "hover-row", children: [
         /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "label", children: t("chat.to") }),
         /* @__PURE__ */ jsxRuntimeExports.jsx("span", { children: action.targetCharacterName })
+      ] }),
+      riskLabel && /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "hover-row", children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "label", children: "Risk" }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx("span", { children: riskLabel })
       ] }),
       /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "hover-row", children: [
         /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "label", children: t("chat.args") }),

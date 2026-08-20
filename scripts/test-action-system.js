@@ -165,6 +165,8 @@ const rendererPath = path.join(root, "resources", "app", "out", "renderer", "ass
 const rendererSource = fs.readFileSync(rendererPath, "utf8");
 assert(rendererSource.includes("action-semantic-meta"), "ActionsView must render action semantic metadata");
 assert(rendererSource.includes('t("actions.eventResolver")'), "ActionsView must localize semantic resolution mode");
+assert(rendererSource.includes("const riskLabel = action.riskLevel"), "action approval must display its resolved risk level");
+assert(source.includes("riskLevel: action.riskLevel"), "action approval payload must preserve risk level");
 assert.strictEqual(JSON.parse(fs.readFileSync(path.join(root, "resources", "app", "package.json"), "utf8")).version, "2.0.4", "Packaged app version must be 2.0.4");
 const actionUiContractTests = 1;
 
@@ -555,7 +557,7 @@ try {
   assert.match(killedEffect, /death/, "Should contain death effect");
   assert.match(killedEffect, /killer/, "Should reference killer");
 
-  // Test 3: isPlayerSource=true path
+  // Test 3: stale isPlayerSource must not redirect the resolved victim
   let killedEffectPlayer = "";
   assert.doesNotThrow(() => characterIsKilled.run({
     gameData,
@@ -564,7 +566,8 @@ try {
     args: { isPlayerSource: true },
     runGameEffect: (effect) => { killedEffectPlayer = effect; }
   }));
-  assert.match(killedEffectPlayer, /death/, "Player-source should also contain death effect");
+  assert.match(killedEffectPlayer, /global_var:votc_action_source/, "stale source override must retain the resolved victim scope");
+  assert.doesNotMatch(killedEffectPlayer, /^root\s*=/m, "stale source override must not redirect death to the player root");
 
 } catch (error) {
   killedRunStatus = "FAIL";
@@ -612,6 +615,17 @@ try {
     runGameEffect: (effect) => { houseArrestEffect = effect; }
   }));
   assert.match(houseArrestEffect, /imprison/, "House arrest should also contain imprison effect");
+
+  // Test 4: stale isPlayerSource must not redirect the resolved prisoner
+  let legacyOverrideEffect = "";
+  assert.doesNotThrow(() => isImprisonedBy.run({
+    gameData,
+    sourceCharacter: characters.get(1),
+    targetCharacter: characters.get(2),
+    args: { prisonType: "dungeon", isPlayerSource: true },
+    runGameEffect: (effect) => { legacyOverrideEffect = effect; }
+  }));
+  assert.match(legacyOverrideEffect, /TARGET = global_var:votc_action_source/, "stale source override must retain the resolved prisoner scope");
 
 } catch (error) {
   imprisonedRunStatus = "FAIL";

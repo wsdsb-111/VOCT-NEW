@@ -33,12 +33,6 @@ module.exports = {
       description: `Type of prison ${sourceCharacter.shortName} is sent to. Possible values: house_arrest, dungeon.`,
       required: false,
       options: ["house_arrest", "dungeon"],
-    },
-    {
-      name: "isPlayerSource",
-      type: "boolean",
-      description: `If true, ${gameData.playerName} is the one being imprisoned instead of ${sourceCharacter.shortName}.`,
-      required: false,
     }
   ],
 
@@ -47,9 +41,8 @@ module.exports = {
    * @param {GameData} params.gameData
    * @param {Character} params.sourceCharacter
    */
-  description: ({ gameData, sourceCharacter }) =>
-    `Execute when ${sourceCharacter.shortName} is imprisoned by the target (the jailor). Specify prisonType if needed (house_arrest or dungeon; defaults to dungeon).
-    If isPlayerSource is true, ${gameData.playerName} will be imprisoned instead.`,
+  description: ({ sourceCharacter }) =>
+    `Execute when ${sourceCharacter.shortName} is the prisoner and the target is the jailor. Both participants are already bound from the narrated action; only choose prisonType (house_arrest or dungeon; defaults to dungeon).`,
 
   /**
    * @param {object} params
@@ -93,7 +86,9 @@ module.exports = {
     }
 
     const raw = (args && typeof args.prisonType === "string") ? args.prisonType.trim().toLowerCase() : "default";
-    const isPlayerSource = args && typeof args.isPlayerSource === "boolean" ? args.isPlayerSource : false;
+    // Participant binding is fixed before this action is invoked. Ignore the
+    // old override path so a stale argument cannot imprison a different role.
+    const isPlayerSource = false;
     const prisonType = ["default", "house_arrest", "dungeon"].includes(raw) ? raw : "default";
 
     if (!isPlayerSource) {

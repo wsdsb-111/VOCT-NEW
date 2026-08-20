@@ -18,6 +18,7 @@ const gameData = {
   playerName: player.fullName,
   characters: new Map([[player.id, player], [zhangSan.id, zhangSan], [guard.id, guard]])
 };
+const runtimeExpectedSources = new Map();
 const deathAction = {
   signature: "characterIsKilled",
   triggerCategories: ["death_or_injury"],
@@ -31,7 +32,7 @@ const deathAction = {
   args: [],
   async check({ gameData: checkedGameData, sourceCharacter }) {
     return {
-      canExecute: sourceCharacter?.id === zhangSan.id,
+      canExecute: sourceCharacter?.id === (runtimeExpectedSources.get("characterIsKilled") ?? zhangSan.id),
       requiresTarget: true,
       validTargetCharacterIds: Array.from(checkedGameData.characters.keys())
     };
@@ -51,7 +52,7 @@ const createRuntimeAction = ({ signature, category, evidencePatterns, participan
     async check({ gameData: checkedGameData, sourceCharacter }) {
       checkedSources.push({ signature, sourceId: sourceCharacter?.id });
       return {
-        canExecute: sourceCharacter?.id === sourceId,
+        canExecute: sourceCharacter?.id === (runtimeExpectedSources.get(signature) ?? sourceId),
         requiresTarget: !!participantRoles,
         validTargetCharacterIds: Array.from(checkedGameData.characters.keys())
       };
@@ -63,7 +64,7 @@ const createRuntimeAction = ({ signature, category, evidencePatterns, participan
 const loadedActions = [
   loadedDeathAction,
   createRuntimeAction({ signature: "isImprisonedBy", category: "imprisonment", evidencePatterns: [/关进|关押|囚禁/], participantRoles: { source: "patient", target: "actor" }, riskLevel: "high", sourceId: zhangSan.id }),
-  createRuntimeAction({ signature: "isEmployedAsKnightBy", category: "employment_or_office", evidencePatterns: [/骑士/], participantRoles: { source: "patient", target: "actor" }, riskLevel: "medium", sourceId: zhangSan.id }),
+  createRuntimeAction({ signature: "isEmployedAsKnightBy", category: "employment_or_office", evidencePatterns: [/任命.*骑士|骑士/], participantRoles: { source: "patient", target: "actor" }, riskLevel: "medium", sourceId: zhangSan.id }),
   createRuntimeAction({ signature: "isInjured", category: "death_or_injury", evidencePatterns: [/刺伤|砍伤/], participantRoles: { source: "actor", target: "patient" }, riskLevel: "high", sourceId: player.id }),
   createRuntimeAction({ signature: "playerPaysGoldTo", category: "gold", evidencePatterns: [], riskLevel: "medium", sourceId: player.id, requiresLegacyResolution: true }),
   createRuntimeAction({ signature: "performCombatAction", category: "combat", evidencePatterns: [/挥拳/], riskLevel: "low", sourceId: guard.id })
@@ -145,6 +146,7 @@ const Conversation = globalThis.__V66RuntimeConversation;
 
   const runParticipantCase = async ({ actionId, messageId, text, sourceId, targetId, mode = "non-destructive" }) => {
     approvalMode = mode;
+    runtimeExpectedSources.set(actionId, sourceId);
     globalThis.__runtimeSelectedActionId = actionId;
     globalThis.__runtimeAvailableActions = [];
     const caseResult = await ActionEngine.evaluateForCharacter({ gameData, actionGateProcessedTriggers: new Set() }, player, null, {
@@ -160,10 +162,27 @@ const Conversation = globalThis.__V66RuntimeConversation;
     assert.strictEqual(caseResult.needsApproval.length, 1, `${actionId}: action must wait for the configured approval policy`);
     assert.strictEqual(caseResult.needsApproval[0].sourceCharacterId, sourceId, `${actionId}: approval source must remain stable`);
     assert.strictEqual(caseResult.needsApproval[0].targetCharacterId, targetId, `${actionId}: approval target must ignore the model mismatch`);
+    return caseResult.needsApproval[0];
   };
-  await runParticipantCase({ actionId: "isImprisonedBy", messageId: 11, text: "我把张三关进地牢。", sourceId: zhangSan.id, targetId: player.id });
-  await runParticipantCase({ actionId: "isEmployedAsKnightBy", messageId: 12, text: "我任命张三为骑士。", sourceId: zhangSan.id, targetId: player.id, mode: "none" });
-  await runParticipantCase({ actionId: "isInjured", messageId: 13, text: "我刺伤张三。", sourceId: player.id, targetId: zhangSan.id });
+  const assertEffectScope = async (pending) => {
+    const before = effectScopes.length;
+    await ActionEngine.runInvocation({ gameData }, gameData.characters.get(pending.sourceCharacterId), pending.invocation);
+    assert.deepStrictEqual(effectScopes[before], { sourceId: pending.sourceCharacterId, targetId: pending.targetCharacterId, effectBody: "runtime_test_effect" }, `${pending.actionId}: execution must preserve approval participant binding`);
+  };
+  const imprisonment = await runParticipantCase({ actionId: "isImprisonedBy", messageId: 11, text: "我把张三关进地牢。", sourceId: zhangSan.id, targetId: player.id });
+  const knight = await runParticipantCase({ actionId: "isEmployedAsKnightBy", messageId: 12, text: "我任命张三为骑士。", sourceId: zhangSan.id, targetId: player.id, mode: "none" });
+  const injury = await runParticipantCase({ actionId: "isInjured", messageId: 13, text: "我刺伤张三。", sourceId: player.id, targetId: zhangSan.id });
+  await assertEffectScope(imprisonment);
+  await assertEffectScope(knight);
+  await assertEffectScope(injury);
+  const passiveDeath = await runParticipantCase({ actionId: "characterIsKilled", messageId: 17, text: "我被张三杀死。", sourceId: player.id, targetId: zhangSan.id });
+  const passiveImprisonment = await runParticipantCase({ actionId: "isImprisonedBy", messageId: 18, text: "我被张三关进地牢。", sourceId: player.id, targetId: zhangSan.id });
+  const passiveKnight = await runParticipantCase({ actionId: "isEmployedAsKnightBy", messageId: 19, text: "我被张三任命为骑士。", sourceId: player.id, targetId: zhangSan.id, mode: "none" });
+  const passiveInjury = await runParticipantCase({ actionId: "isInjured", messageId: 20, text: "我被张三刺伤。", sourceId: zhangSan.id, targetId: player.id });
+  await assertEffectScope(passiveDeath);
+  await assertEffectScope(passiveImprisonment);
+  await assertEffectScope(passiveKnight);
+  await assertEffectScope(passiveInjury);
   assert(checkedSources.some((entry) => entry.signature === "isImprisonedBy" && entry.sourceId === zhangSan.id), "imprisonment check must execute against the prisoner");
   assert(checkedSources.some((entry) => entry.signature === "isEmployedAsKnightBy" && entry.sourceId === zhangSan.id), "knight check must execute against the appointee");
   assert(checkedSources.some((entry) => entry.signature === "isInjured" && entry.sourceId === player.id), "injury check must execute against the actor");

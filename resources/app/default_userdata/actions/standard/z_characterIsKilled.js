@@ -28,22 +28,14 @@ module.exports = {
    * @param {GameData} params.gameData
    * @param {Character} params.sourceCharacter
    */
-  args: ({ gameData, sourceCharacter }) => [
-    {
-      name: "isPlayerSource",
-      type: "boolean",
-      description: `If true, ${gameData.playerName} is the one being killed`,
-      required: false,
-    }
-  ],
+  args: [],
 
   /**
    * @param {object} params
    * @param {Character} params.sourceCharacter
    */
-  description: ({ gameData, sourceCharacter }) =>
-    `Execute ONLY when ${sourceCharacter.shortName} (id=${sourceCharacter.id}) is killed. Target must be the killer of the source.
-    If isPlayerSource is true, the ${gameData.playerName} will be killed instead of ${sourceCharacter.shortName}.`,
+  description: ({ sourceCharacter }) =>
+    `Execute ONLY when ${sourceCharacter.shortName} (id=${sourceCharacter.id}) is the victim. The target is the killer and is already bound from the narrated action; do not change either participant.`,
 
   /**
    * @param {object} params
@@ -86,7 +78,10 @@ module.exports = {
       };
     }
 
-    const isPlayerSource = args && typeof args.isPlayerSource === "boolean" ? args.isPlayerSource : false;
+    // Participant binding is fixed before this action is invoked. Keep this
+    // legacy variable false so a stale external isPlayerSource argument cannot
+    // redirect a resolved death to the player.
+    const isPlayerSource = false;
 
     if (isPlayerSource) {
       runGameEffect(`

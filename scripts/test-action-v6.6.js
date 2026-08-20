@@ -35,8 +35,8 @@ const gameData = {
 };
 
 const definitions = {
-  victimSource: { semantic: { participantRoles: { source: "patient", target: "actor" } } },
-  actorSource: { semantic: { participantRoles: { source: "actor", target: "patient" } } }
+  victimSource: { semantic: { evidencePatterns: [/(?:杀死|关进|任命|罢免|撤去)/], participantRoles: { source: "patient", target: "actor" } } },
+  actorSource: { semantic: { evidencePatterns: [/(?:刺伤)/], participantRoles: { source: "actor", target: "patient" } } }
 };
 
 const resolve = (text, speaker, actionDefinition) => ActionEngine.resolveEventParticipants({
@@ -110,6 +110,16 @@ for (const file of ["z_isInjured.js", "z_isImprisonedBy.js"]) {
   registry.actions.set(action.signature, { definition: action });
   assert.strictEqual(registry.getEffectiveDestructive(action.signature), true, `${file}: high risk must enter destructive approval policy`);
 }
+const highRiskActions = fs.readdirSync(actionsDir).filter((file) => file.endsWith(".js")).map((file) => require(path.join(actionsDir, file))).filter((action) => action.semantic?.riskLevel === "high");
+assert(highRiskActions.length > 0, "standard actions must declare high-risk cases");
+for (const action of highRiskActions) {
+  registry.actions.set(action.signature, { definition: action });
+  registry.setDestructiveOverride(action.signature, false);
+  assert.strictEqual(registry.getEffectiveDestructive(action.signature), true, `${action.signature}: high risk cannot be downgraded`);
+  assert.strictEqual(registry.shouldRequireApproval(action.signature, "non-destructive"), true, `${action.signature}: high risk requires approval`);
+}
+assert(source.includes("riskLevel: action.riskLevel"), "approval payload must preserve the resolved risk level");
+assert(source.includes("action_participant_resolution"), "participant outcomes must be recorded without message text");
 
 const parserCases = [
   ["我刺向他但他躲开了。", 0],
@@ -120,13 +130,27 @@ const parserCases = [
   ["听说他杀了人，但我现在只是把门关上。", 0],
   ["我没有杀他不过我确实刺伤了他。", 1],
   ["我想杀他，但现在只是离开。", 0],
-  ["我杀了第一个人然后又刺伤第二个人。", 2]
+  ["我杀了第一个人然后又刺伤第二个人。", 2],
+  ["我没有杀张三只是刺伤了他。", 1],
+  ["张三想刺我但最后没有动手。", 0],
+  ["我刺向张三但被他躲开了。", 0],
+  ["我试图杀死张三但失败了。", 0],
+  ["我差点杀了张三。", 0],
+  ["我要杀了你。", 0],
+  ["总有一天我会杀了你。", 0],
+  ["我杀了他——不，我只是做了个梦。", 0]
 ];
 for (const [text, expectedCount] of parserCases) {
   const parsed = ActionEngine.parseActionEvents(text);
   const stateEvents = parsed.events.filter((event) => event.category === "death_or_injury");
   assert.strictEqual(stateEvents.length, expectedCount, `${text}: unexpected accepted state-action count`);
 }
+for (const text of ["我准备把张三关起来。", "我把他关起来……至少我本来是这么打算的。"] ) {
+  assert.strictEqual(ActionEngine.parseActionEvents(text).events.length, 0, `${text}: plan or posthoc negation must not execute`);
+}
+const separateEvents = ActionEngine.parseActionEvents("我刺伤张三，然后把李四关进地牢。").events;
+assert.deepStrictEqual(separateEvents.map((event) => event.category), ["death_or_injury", "combat", "imprisonment"], "multiple actions must retain independent event categories");
+assert(separateEvents[0].evidence.text.includes("刺伤张三") && separateEvents[2].evidence.text.includes("李四关进地牢"), "multiple actions must retain isolated evidence spans");
 
 const originalRegistry = globalThis.actionRegistry;
 globalThis.actionRegistry = {
