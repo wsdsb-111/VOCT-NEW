@@ -7,6 +7,7 @@ const fs = require("fs");
 const path = require("path");
 
 const root = path.resolve(__dirname, "..");
+globalThis.__V67ActionSystem = require(path.join(root, "resources", "app", "out", "main", "action-system"));
 const mainPath = path.join(root, "resources", "app", "out", "main", "main.js");
 const actionsDir = path.join(root, "resources", "app", "default_userdata", "actions", "standard");
 const source = fs.readFileSync(mainPath, "utf8");

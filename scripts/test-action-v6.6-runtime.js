@@ -3,6 +3,7 @@ const fs = require("fs");
 const path = require("path");
 
 const root = path.resolve(__dirname, "..");
+globalThis.__V67ActionSystem = require(path.join(root, "resources", "app", "out", "main", "action-system"));
 const source = fs.readFileSync(path.join(root, "resources", "app", "out", "main", "main.js"), "utf8");
 const actionEngineStart = source.indexOf("class ActionEngine {");
 const actionEngineEnd = source.indexOf("\nclass Conversation {", actionEngineStart);

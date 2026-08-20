@@ -8,6 +8,8 @@ const uuid = require("uuid");
 const Handlebars = require("handlebars");
 const vm = require("vm");
 const events = require("events");
+const actionSystem = require("./action-system");
+globalThis.__V67ActionSystem = actionSystem;
 const zod = require("zod");
 const log = require("electron-log");
 const electronUpdater = require("electron-updater");
@@ -4737,29 +4739,14 @@ class ActionRegistry extends events.EventEmitter {
   getEffectiveDestructive(signature) {
     const action = this.actions.get(signature);
     if (!action) return false;
-    if (this.getEffectiveRiskLevel(signature) === "high") return true;
-    if (this.settings.destructiveOverrides && signature in this.settings.destructiveOverrides) {
-      return this.settings.destructiveOverrides[signature];
-    }
-    return action.definition.isDestructive ?? false;
+    return (globalThis.__V67ActionSystem || actionSystem).riskPolicy.getEffectiveDestructive(action, this.settings);
   }
   getEffectiveRiskLevel(signature) {
     const action = this.actions.get(signature);
-    const riskLevel = action?.definition?.semantic?.riskLevel;
-    if (["low", "medium", "high"].includes(riskLevel)) return riskLevel;
-    return action?.definition?.isDestructive ? "high" : "low";
+    return (globalThis.__V67ActionSystem || actionSystem).riskPolicy.getEffectiveRiskLevel(action, this.settings);
   }
   shouldRequireApproval(signature, approvalMode) {
-    switch (approvalMode) {
-      case "none":
-        return true;
-      case "non-destructive":
-        return this.getEffectiveDestructive(signature);
-      case "all":
-        return false;
-      default:
-        return true;
-    }
+    return (globalThis.__V67ActionSystem || actionSystem).riskPolicy.requiresApproval(this.actions.get(signature), this.settings, approvalMode);
   }
   hasDestructiveOverride(signature) {
     return !!(this.settings.destructiveOverrides && signature in this.settings.destructiveOverrides);
@@ -5076,7 +5063,10 @@ function buildStructuredResponseJsonSchema(input, useMinimizedSchema = false) {
       args: buildArgsObjectSchema(action.args)
     };
     const required = ["actionId", "args"];
-    if (action.requiresTarget) {
+    if (action.targetLocked) {
+      // Deterministic ParticipantBinding owns this target. Do not expose it to
+      // the model as a selectable field.
+    } else if (action.requiresTarget) {
       if (action.validTargetCharacterIds && action.validTargetCharacterIds.length > 0) {
         properties.targetCharacterId = {
           type: "integer",
@@ -5129,7 +5119,7 @@ function buildStructuredResponseJsonSchema(input, useMinimizedSchema = false) {
 function buildGeminiCompatibleSchema(input) {
   const allTargetIds = /* @__PURE__ */ new Set();
   for (const action of input.availableActions) {
-    if (action.validTargetCharacterIds) {
+    if (!action.targetLocked && action.validTargetCharacterIds) {
       action.validTargetCharacterIds.forEach((id) => allTargetIds.add(id));
     }
   }
@@ -5221,7 +5211,7 @@ function buildGeminiCompatibleSchema(input) {
       const: action.signature,
       description: action.description || action.signature
     };
-    if (action.validTargetCharacterIds && action.validTargetCharacterIds.length > 0) {
+    if (!action.targetLocked && action.validTargetCharacterIds && action.validTargetCharacterIds.length > 0) {
       variant.validTargetCharacterIds = action.validTargetCharacterIds;
     }
     if (action.args && action.args.length > 0) {
@@ -5421,7 +5411,7 @@ function buildActionInvocationSchema(input) {
     const argsObjectSchema = Object.keys(argsShape).length === 0 ? zod.z.object({}).strict() : zod.z.object(argsShape).strict();
     const variant = zod.z.object({
       actionId: zod.z.literal(action.signature),
-      targetCharacterId: targetSchema,
+      ...(action.targetLocked ? {} : { targetCharacterId: targetSchema }),
       args: argsObjectSchema.optional().default({})
     }).strict();
     return variant;
@@ -5614,11 +5604,12 @@ ${effectBody}
 }
 class ActionPromptBuilder {
   static buildActionCacheAnchor() {
-    return `VOTC_ACTION_CACHE_ANCHOR_v6
+    return `VOTC_ACTION_CACHE_ANCHOR_v7
 You are a CK3 game-state action selector. Return only valid JSON that matches the supplied schema. Use only listed actions, action IDs, targets and arguments. The exact candidate message near the end is authoritative; earlier messages are context only. Select an action only when that candidate explicitly describes the corresponding state change or visible pose as happening now or already completed. The sole intention exception is an explicitly initiated operational CK3 scheme when startPersonalScheme is listed. If no listed action exactly matches it, return an empty actions array. Never replace a requested state change with an emotion or pose. Do not output prose, explanations, or code fences.
 
 Stable action selection rules:
 - Treat example character IDs and values as formatting examples only; never copy them unless they are valid in the current roster and action definition.
+- When an action says its target is already bound from narration, do not output a target field. Source and target are immutable runtime facts, not model choices.
 - Some listed scene actions expose isPlayerSource. Set it true when the exact candidate says the player performed that completed scene action, even if the current responding NPC is someone else.
 - For payments, use playerPaysGoldTo when the player paid, and paysGoldTo when the NPC paid.
 - For imprisonment, target is the jailor. Use prisonType dungeon unless house arrest is explicitly stated.
@@ -6041,7 +6032,7 @@ class ActionEngine {
    * ordinary conversation, plans, opinions, poetry, threats, and emotion alone
    * do not trigger an API request.
    */
-  static getActionTriggers(text, { candidateOnly = false } = {}) {
+  static legacyGetActionTriggers(text, { candidateOnly = false } = {}) {
     if (!text || typeof text !== "string") return [];
     // Judge future tense only inside the clause that contains the candidate
     // action. This prevents a later plan ("明日再谈") from cancelling an
@@ -6134,12 +6125,17 @@ class ActionEngine {
     }
     return Array.from(new Set(detected));
   }
+  static getActionTriggers(text, options = {}) {
+    return (globalThis.__V67ActionSystem || actionSystem).candidateGate.detect(text, options, {
+      legacyDetect: (candidateText, candidateOptions) => this.legacyGetActionTriggers(candidateText, candidateOptions)
+    });
+  }
   /**
    * Convert broad Gate matches into independently actionable events. The Gate
    * remains a cheap candidate recall layer; this parser is the only source of
    * truth for whether a current action actually occurred.
    */
-  static parseActionEvents(text) {
+  static legacyParseActionEvents(text) {
     const source = typeof text === "string" ? text : "";
     if (!source.trim()) return { events: [], rejectedCandidates: [] };
     const rejectedCandidates = [];
@@ -6245,6 +6241,11 @@ class ActionEngine {
       rejectedCandidates
     };
   }
+  static parseActionEvents(text) {
+    return (globalThis.__V67ActionSystem || actionSystem).eventParser.parse(text, {
+      legacyParse: (candidateText) => this.legacyParseActionEvents(candidateText)
+    });
+  }
   static getActionEvents(text) {
     return this.parseActionEvents(text).events;
   }
@@ -6330,7 +6331,7 @@ class ActionEngine {
     }
     return { reasons: Array.from(reasons), allowedActionIds: Array.from(allowedActionIds), evidence };
   }
-  static resolveMetadataSemanticCandidates(event) {
+  static legacyResolveMetadataSemanticCandidates(event) {
     const evidenceText = event?.evidence?.text || "";
     if (!evidenceText || typeof actionRegistry === "undefined") return [];
     const matchesPatterns = (patterns) => Array.isArray(patterns) && patterns.some((pattern) => {
@@ -6362,29 +6363,14 @@ class ActionEngine {
     winners.push(...groups.values());
     return winners.map((candidate) => candidate.action.id);
   }
+  static resolveMetadataSemanticCandidates(event) {
+    return (globalThis.__V67ActionSystem || actionSystem).semanticResolver.resolveMetadataCandidates(event, actionRegistry);
+  }
   static resolveSemanticEvent(event) {
-    const reasons = Array.isArray(event.categories) ? event.categories : [event.category];
-    const metadataAllowedActionIds = this.resolveMetadataSemanticCandidates(event);
-    if (metadataAllowedActionIds.length > 0) {
-      return {
-        mode: "resolved",
-        reasons,
-        allowedActionIds: metadataAllowedActionIds,
-        evidence: ["metadata_positive_evidence"]
-      };
-    }
-    const legacyActionIds = typeof actionRegistry === "undefined" ? [] : actionRegistry.getAllActions(false).filter((action) => {
-      const categories = Array.isArray(action.definition?.triggerCategories) ? action.definition.triggerCategories : [];
-      return action.definition?.semantic?.requiresLegacyResolution && categories.some((category) => reasons.includes(category));
-    }).map((action) => action.id);
-    if (legacyActionIds.length > 0) {
-      const legacyProfile = this.getLegacySemanticProfileForEvidence(event.evidence.text, reasons);
-      const allowedActionIds = legacyProfile.allowedActionIds.filter((actionId) => legacyActionIds.includes(actionId));
-      if (allowedActionIds.length > 0) {
-        return { mode: "legacy", reasons: legacyProfile.reasons, allowedActionIds, evidence: legacyProfile.evidence };
-      }
-    }
-    return { mode: "unresolved", reasons, allowedActionIds: [], evidence: [] };
+    return (globalThis.__V67ActionSystem || actionSystem).semanticResolver.resolve(event, {
+      registry: actionRegistry,
+      legacyResolver: (text, reasons) => this.getLegacySemanticProfileForEvidence(text, reasons)
+    });
   }
   /**
    * Compatibility aggregate for callers still expecting a message-level
@@ -6437,71 +6423,52 @@ class ActionEngine {
     }
     return options;
   }
-  static resolveEventParticipants({ event, speaker, gameData, actionDefinition }) {
-    const participantRoles = actionDefinition?.semantic?.participantRoles;
-    if (!participantRoles) return { mode: "speaker", sourceCharacter: speaker, targetCharacter: null };
-    const evidenceText = event?.evidence?.text || "";
-    const characters = Array.from(gameData?.characters?.values?.() || []);
-    if (!speaker || !evidenceText || characters.length === 0) return { mode: "unresolved", reason: "missing_participant_context" };
-    const escapeRegExp = (value) => value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-    const characterNames = (character) => [character.fullName, character.shortName].filter((name, index, names) => typeof name === "string" && name.length > 0 && names.indexOf(name) === index);
-    const patternFor = (character) => characterNames(character).map(escapeRegExp).join("|");
-    const namedCharacters = characters.filter((character) => character.id !== speaker.id && patternFor(character) && new RegExp(patternFor(character)).test(evidenceText));
-    const actionPositions = [];
-    for (const pattern of actionDefinition?.semantic?.evidencePatterns || []) {
-      const flags = pattern.flags.replace("g", "").replace("y", "") + "g";
-      for (const match of evidenceText.matchAll(new RegExp(pattern.source, flags))) actionPositions.push(match.index);
+  static getConversationReferenceContext(conv, message, speaker) {
+    const system = globalThis.__V67ActionSystem || actionSystem;
+    if (!conv.referenceContext) {
+      conv.referenceContext = new system.ConversationReferenceContext({
+        conversationId: conv.id || null,
+        activeParticipantIds: Array.from(conv.gameData?.characters?.keys?.() || [])
+      });
     }
-    const actionBetween = (start, end) => actionPositions.some((position) => position >= start && position <= end);
-    const matches = (pattern) => new RegExp(pattern).test(evidenceText);
-    const interlocutors = characters.filter((character) => character.id !== speaker.id);
-    const resolve = (actor, patient, reason) => {
-      const byRole = { actor, patient, speaker };
-      const sourceCharacter = byRole[participantRoles.source];
-      const targetCharacter = byRole[participantRoles.target];
-      if (!sourceCharacter || !targetCharacter) return { mode: "unresolved", reason: "unresolved_participants" };
-      return { mode: "resolved", sourceCharacter, targetCharacter, actor, patient, reason };
+    const context = conv.referenceContext;
+    const characters = Array.from(conv.gameData?.characters?.values?.() || []);
+    context.activeParticipantIds = characters.map((character) => character.id);
+    const findSpeaker = (entry) => {
+      if (entry?.role === "user" || entry?.name === conv.gameData?.playerName) return conv.gameData?.characters?.get(conv.gameData?.playerID) || speaker;
+      return characters.find((character) => character.fullName === entry?.name || character.shortName === entry?.name) || null;
     };
-    // Causative wording distinguishes an issuer from an executor. Do not infer
-    // either role until the action metadata has an explicit executor model.
-    if (/(?:让|叫|命令).{0,24}(?:杀|刺|砍|关|囚禁|任命|雇佣|招募)/.test(evidenceText)) {
-      return { mode: "unresolved", reason: "unsupported_causative" };
+    const recentMessages = [...(conv.messages || []).slice(-4), message].filter((entry, index, list) => entry && list.findIndex((candidate) => candidate.id === entry.id) === index);
+    for (const entry of recentMessages) {
+      context.observeMessage({
+        message: entry,
+        speaker: entry === message ? speaker : findSpeaker(entry),
+        characters,
+        primaryAddresseeId: entry.primaryAddresseeId ?? entry.addresseeCharacterId ?? conv.primaryAddresseeId ?? null
+      });
     }
-    if (/[他她它]/.test(evidenceText)) return { mode: "unresolved", reason: "ambiguous_pronoun" };
-    const speakerIndex = evidenceText.indexOf("我");
-    const hasYou = evidenceText.includes("你");
-    if (hasYou && interlocutors.length !== 1) return { mode: "unresolved", reason: "ambiguous_pronoun" };
-    const uniqueInterlocutor = hasYou ? interlocutors[0] : null;
-    if (namedCharacters.length === 1) {
-      const character = namedCharacters[0];
-      const namePattern = patternFor(character);
-      if (matches(`我\\s*(?:被|遭)\\s*(?:${namePattern})`) || matches(`我\\s*为\\s*(?:${namePattern})\\s*所`)) return resolve(character, speaker, "explicit_passive");
-      if (matches(`(?:${namePattern})\\s*被\\s*我`)) return resolve(speaker, character, "explicit_passive");
-      if (matches(`(?:${namePattern})\\s*(?:把|将)\\s*我`)) return resolve(character, speaker, "explicit_active");
-      if (matches(`我\\s*(?:把|将)\\s*(?:${namePattern})`)) return resolve(speaker, character, "explicit_active");
-      const nameIndex = evidenceText.search(new RegExp(namePattern));
-      if (speakerIndex >= 0 && nameIndex >= 0 && actionBetween(speakerIndex, nameIndex)) return resolve(speaker, character, "explicit_active");
-      if (speakerIndex >= 0 && nameIndex >= 0 && actionBetween(nameIndex, speakerIndex)) return resolve(character, speaker, "explicit_active");
-    }
-    if (namedCharacters.length === 2) {
-      const [first, second] = namedCharacters.slice().sort((left, right) => evidenceText.search(new RegExp(patternFor(left))) - evidenceText.search(new RegExp(patternFor(right))));
-      const firstPattern = patternFor(first);
-      const secondPattern = patternFor(second);
-      if (matches(`(?:${firstPattern})\\s*(?:被|遭)\\s*(?:${secondPattern})`) || matches(`(?:${firstPattern})\\s*为\\s*(?:${secondPattern})\\s*所`)) return resolve(second, first, "explicit_passive");
-      if (matches(`(?:${firstPattern})\\s*(?:把|将)\\s*(?:${secondPattern})`)) return resolve(first, second, "explicit_active");
-      const firstIndex = evidenceText.search(new RegExp(firstPattern));
-      const secondIndex = evidenceText.search(new RegExp(secondPattern));
-      if (firstIndex >= 0 && secondIndex >= 0 && actionBetween(firstIndex, secondIndex)) return resolve(first, second, "explicit_active");
-    }
-    if (uniqueInterlocutor) {
-      if (matches(`我\\s*(?:被|遭)\\s*你`) || matches("我\\s*为\\s*你\\s*所")) return resolve(uniqueInterlocutor, speaker, "unique_interlocutor");
-      if (matches("你\\s*被\\s*我")) return resolve(speaker, uniqueInterlocutor, "unique_interlocutor");
-      const youIndex = evidenceText.indexOf("你");
-      if (speakerIndex >= 0 && youIndex >= 0 && actionBetween(speakerIndex, youIndex)) return resolve(speaker, uniqueInterlocutor, "unique_interlocutor");
-      if (speakerIndex >= 0 && youIndex >= 0 && actionBetween(youIndex, speakerIndex)) return resolve(uniqueInterlocutor, speaker, "unique_interlocutor");
-    }
-    if (namedCharacters.length > 2) return { mode: "unresolved", reason: "multiple_possible_targets" };
-    return { mode: "unresolved", reason: namedCharacters.length === 0 && !hasYou ? "missing_named_patient" : "ambiguous_participant_direction" };
+    return context;
+  }
+  static resolveEventParticipants(input) {
+    const { event, message, speaker, gameData, actionDefinition, actionId, referenceContext, primaryAddresseeId } = input;
+    const system = globalThis.__V67ActionSystem || actionSystem;
+    const references = system.ReferenceResolver.resolveEventReferences({
+      message,
+      event,
+      speaker,
+      gameData,
+      referenceContext,
+      primaryAddresseeId
+    });
+    return system.ParticipantResolver.resolve({
+      event,
+      message,
+      speaker,
+      gameData,
+      actionDefinition,
+      actionId,
+      references
+    });
   }
   static shouldEvaluateForMessage(conv, message, actionEvent = null) {
     const detectedReasons = actionEvent ? actionEvent.reasons : this.getActionTriggers(message?.content);
@@ -6516,7 +6483,7 @@ class ActionEngine {
     if (!actionEvent && semanticProfile.events.length === 0) return { shouldEvaluate: false, reason: "no_executed_action_event" };
     if (actionEvent && semanticProfile.resolutionMode === "unresolved") return { shouldEvaluate: false, reason: "unresolved_action_semantics" };
     const semanticReasons = semanticProfile.reasons;
-    const dedupeKey = actionEvent ? `${message.id ?? "unknown"}|${actionEvent.category}|${message.name || message.role || "unknown"}|${actionEvent.evidence.start}|${actionEvent.evidence.end}` : `${message.id ?? "unknown"}|${semanticReasons.join("+")}|${message.name || message.role || "unknown"}|${message.content}`;
+    const dedupeKey = actionEvent ? (globalThis.__V67ActionSystem || actionSystem).eventTracker.getEventKey(message, actionEvent) : `${message.id ?? "unknown"}|${semanticReasons.join("+")}|${message.name || message.role || "unknown"}|${message.content}`;
     if (!conv.actionGateProcessedTriggers) conv.actionGateProcessedTriggers = /* @__PURE__ */ new Set();
     if (conv.actionGateProcessedTriggers.has(dedupeKey)) {
       return { shouldEvaluate: false, reason: "already_processed_action_text" };
@@ -6619,6 +6586,7 @@ class ActionEngine {
       const loaded = allLoaded.filter((action) => relevantActionIds.has(action.id) && (semanticAllowlist.size === 0 || semanticAllowlist.has(action.id)));
       const available = [];
       let hadUnresolvedParticipants = false;
+      const referenceContext = this.getConversationReferenceContext(conv, actionMessage, actionSource);
       for (const act of loaded) {
         if (signal?.aborted) {
           return { autoApproved: [], needsApproval: [] };
@@ -6626,10 +6594,22 @@ class ActionEngine {
         try {
           const participantResolution = this.resolveEventParticipants({
             event: actionEvent,
+            message: actionMessage,
             speaker: actionSource,
             gameData: conv.gameData,
-            actionDefinition: act.definition
+            actionDefinition: act.definition,
+            actionId: act.id,
+            referenceContext,
+            primaryAddresseeId: actionMessage?.primaryAddresseeId ?? actionMessage?.addresseeCharacterId ?? conv.primaryAddresseeId ?? null
           });
+          for (const reference of participantResolution.binding?.references || []) {
+            usageAnalytics.record({
+              requestType: "reference_resolution",
+              referenceType: reference.referenceType,
+              outcome: reference.mode,
+              reason: reference.reason || reference.confidenceBasis?.[0] || null
+            }, null);
+          }
           if (participantResolution.mode === "unresolved") {
             hadUnresolvedParticipants = true;
             usageAnalytics.record({
@@ -6647,6 +6627,12 @@ class ActionEngine {
               outcome: "resolved",
               reason: participantResolution.reason || "explicit_participants"
             }, null);
+            usageAnalytics.record({
+              requestType: "participant_binding",
+              actionId: act.id,
+              outcome: "resolved",
+              basis: participantResolution.binding?.resolutionBasis?.join("|") || participantResolution.reason || "explicit_participants"
+            }, null);
           }
           const resolvedSource = participantResolution.sourceCharacter || actionSource;
           const resolvedTarget = participantResolution.targetCharacter || null;
@@ -6655,7 +6641,6 @@ class ActionEngine {
             sourceCharacter: resolvedSource
           });
           if (!checkResult?.canExecute) continue;
-          const requiresTarget = typeof checkResult.requiresTarget === "boolean" ? checkResult.requiresTarget : !!(checkResult.validTargetCharacterIds && checkResult.validTargetCharacterIds.length > 0);
           if (resolvedTarget && Array.isArray(checkResult.validTargetCharacterIds) && !checkResult.validTargetCharacterIds.includes(resolvedTarget.id)) continue;
           let args;
           if (typeof act.definition.args === "function") {
@@ -6681,16 +6666,15 @@ class ActionEngine {
           } else {
             description = resolveI18nString(act.definition.description, userLang);
           }
-          available.push({
-            signature: act.id,
+          available.push((globalThis.__V67ActionSystem || actionSystem).availabilityService.buildAvailableAction({
+            action: act,
             args: resolvedArgs,
-            requiresTarget: resolvedTarget ? true : requiresTarget,
-            validTargetCharacterIds: resolvedTarget ? [resolvedTarget.id] : checkResult.validTargetCharacterIds,
+            checkResult,
+            sourceCharacter: resolvedSource,
+            targetCharacter: resolvedTarget,
             description,
-            sourceCharacterId: resolvedSource.id,
-            sourceCharacterName: resolvedSource.shortName,
-            resolvedTargetCharacterId: resolvedTarget?.id
-          });
+            binding: participantResolution.binding
+          }));
         } catch (err) {
           actionRegistry.registerValidation(act.id, {
             valid: false,
@@ -6803,10 +6787,18 @@ class ActionEngine {
         }
         const availableAction = available.find((action) => action.signature === inv.actionId);
         if (!availableAction) continue;
-        const invocation = availableAction.resolvedTargetCharacterId !== void 0 ? {
+        const bindingValidation = availableAction.participantBinding ? (globalThis.__V67ActionSystem || actionSystem).invocationValidator.validateInvocation({
+          modelInvocation: inv,
+          availableAction,
+          binding: availableAction.participantBinding,
+          registry: actionRegistry,
+          gameData: conv.gameData
+        }) : null;
+        if (bindingValidation && !bindingValidation.valid) continue;
+        const invocation = bindingValidation?.invocation || (availableAction.resolvedTargetCharacterId !== void 0 ? {
           ...inv,
           targetCharacterId: availableAction.resolvedTargetCharacterId
-        } : inv;
+        } : inv);
         const invocationSource = conv.gameData.characters.get(availableAction.sourceCharacterId) || actionSource;
         const isDestructive = actionRegistry.getEffectiveDestructive(inv.actionId);
         const riskLevel = actionRegistry.getEffectiveRiskLevel(inv.actionId);
@@ -6875,24 +6867,16 @@ class ActionEngine {
     const targetId = inv.targetCharacterId ?? null;
     const target = targetId != null ? conv.gameData.characters.get(targetId) ?? void 0 : void 0;
     const userLang = settingsRepository.getLanguage();
-    const runGameEffect = (effectBody) => {
-      if (options?.dryRun) {
-        return;
-      }
-      ActionEffectWriter.writeEffect(
-        conv.gameData,
-        npc.id,
-        targetId,
-        effectBody
-      );
-    };
     const args = inv.args ?? {};
     try {
-      const result = await ActionSandbox.executeAction(loaded.filePath, {
+      const result = await (globalThis.__V67ActionSystem || actionSystem).actionExecutor.execute({
+        actionSandbox: ActionSandbox,
+        effectWriter: ActionEffectWriter,
+        action: loaded.definition,
+        filePath: loaded.filePath,
         gameData: conv.gameData,
         sourceCharacter: npc,
         targetCharacter: target,
-        runGameEffect,
         args,
         conversation: conv,
         dryRun: options?.dryRun,
@@ -6952,6 +6936,7 @@ class Conversation {
     // Action checks are scoped to the current player turn. This prevents one
     // narrated event from being sent to the action model once per NPC reply.
     this.actionGateProcessedTriggers = /* @__PURE__ */ new Set();
+    this.referenceContext = new actionSystem.ConversationReferenceContext({ conversationId: this.id });
     this.eventEmitter = new events.EventEmitter();
     this.initializeGameData();
   }
