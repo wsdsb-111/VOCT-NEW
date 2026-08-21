@@ -22,6 +22,7 @@ let logVerboseLLM = null;
 let events = null;
 let uuid = null;
 let path = null;
+let memoryEngine = null;
 
 class Conversation {
   static configure(dependencies = {}) {
@@ -47,6 +48,7 @@ class Conversation {
     events = dependencies.events || events;
     uuid = dependencies.uuid || uuid;
     path = dependencies.path || path;
+    memoryEngine = dependencies.memoryEngine || memoryEngine;
     return this;
   }
   constructor() {
@@ -56,6 +58,7 @@ class Conversation {
     this.nextId = 0;
     this.currentSummary = "";
     this.lastSummarizedMessageIndex = 0;
+    this.memoryState = memoryEngine?.createConversationState(this.id) || null;
     this.CONTEXT_LIMIT_PERCENTAGE = 0.75;
     this.MESSAGES_TO_SUMMARIZE_PERCENTAGE = 0.4;
     this.customQueue = null;
@@ -140,6 +143,7 @@ class Conversation {
       this.gameData = await parseLog(ck3DebugPath);
       console.log("GameData initialized with", this.gameData.characters.size, "characters");
       this.gameData.loadCharactersSummaries();
+      await this.recoverPendingMemories();
       await this.checkForOtherPlayerSummaries();
       this.isActive = true;
     } catch (error) {
@@ -155,11 +159,15 @@ class Conversation {
     }
   }
   async checkAndSummarizeIfNeeded(npc) {
+    memoryEngine?.syncRollingStateFromLegacyFields(this);
+    memoryEngine?.syncLegacyRollingFields(this);
+    const memoryContext = await this.getMemoryContextFor(npc);
     const currentMessages = PromptBuilder.buildMessages(
       this.getHistory().slice(this.lastSummarizedMessageIndex),
       npc,
       this.gameData,
-      this.currentSummary
+      this.currentSummary,
+      memoryContext
     );
     const estimatedTokens = this.estimateTokenCount(currentMessages);
     const contextLimit = await llmManager.getCurrentContextLength() || 1e4;
@@ -167,49 +175,47 @@ class Conversation {
       console.log(`Context approaching limit (${estimatedTokens}/${contextLimit}), creating rolling summary`);
       await this.createRollingSummary(contextLimit);
     }
+    return memoryContext;
   }
   /**
    * Create a rolling summary of older messages to compress context
    */
   async createRollingSummary(contextLimit) {
-    const history = this.getHistory().slice(this.lastSummarizedMessageIndex);
-    const tokensToSummarize = Math.floor(
-      contextLimit * this.MESSAGES_TO_SUMMARIZE_PERCENTAGE
-    );
-    let tokenCount = 0;
-    const messagesToSummarize = [];
-    for (let i = this.lastSummarizedMessageIndex; i < history.length; i++) {
-      const msg = history[i];
-      const msgTokens = this.estimateMessageTokens(msg);
-      if (tokenCount + msgTokens > tokensToSummarize) {
-        break;
+    if (!memoryEngine) throw new Error("memory_engine_not_configured");
+    const result = await memoryEngine.maybeCreateRollingCheckpoint({
+      conversation: this,
+      history: this.getHistory(),
+      contextLimit,
+      percentage: this.MESSAGES_TO_SUMMARIZE_PERCENTAGE,
+      estimateMessageTokens: (message) => this.estimateMessageTokens(message),
+      buildPrompt: (messages, previousSummary) => PromptBuilder.buildResummarizePrompt(messages, previousSummary),
+      requestSummary: async (summaryPrompt) => {
+        console.log("[TOKEN_COUNT] Rolling summary: ", this.estimateTokenCount(summaryPrompt));
+        return llmManager.sendSummaryRequest(summaryPrompt, void 0, { requestType: "rolling_summary" });
       }
-      messagesToSummarize.push(msg);
-      tokenCount += msgTokens;
-      this.lastSummarizedMessageIndex = i + 1;
+    });
+    if (result.committed) {
+      console.log(`Updated rolling summary v${this.memoryState.rollingState.summaryVersion} (${this.currentSummary.length} characters)`);
+      logVerboseLLM("[Summary][verbose] Updated rolling summary:", this.currentSummary);
+    } else if (result.reason !== "no_messages") {
+      console.error(`Failed to create rolling summary: ${result.reason}`);
     }
-    if (messagesToSummarize.length === 0) {
-      console.log("No new messages to summarize");
-      return;
-    }
-    const summaryPrompt = PromptBuilder.buildResummarizePrompt(messagesToSummarize, this.currentSummary);
-    try {
-      console.log("[TOKEN_COUNT] Rolling summary: ", this.estimateTokenCount(summaryPrompt));
-      const result = await llmManager.sendSummaryRequest(summaryPrompt, void 0, { requestType: "rolling_summary" });
-      if (result && typeof result === "object" && "content" in result) {
-        if (this.currentSummary) {
-          this.currentSummary = `${this.currentSummary}
-
-${result.content}`;
-        } else {
-          this.currentSummary = result.content;
-        }
-        console.log(`Updated rolling summary (${this.currentSummary.length} characters)`);
-        logVerboseLLM("[Summary][verbose] Updated rolling summary:", this.currentSummary);
-      }
-    } catch (error) {
-      console.error("Failed to create rolling summary:", error);
-    }
+    return result;
+  }
+  async getMemoryContextFor(npc, contextLimit = null) {
+    if (!memoryEngine || !npc || !this.gameData) return null;
+    const limit = contextLimit || await llmManager.getCurrentContextLength() || 1e4;
+    const latestUser = [...this.getHistory()].reverse().find((entry) => entry.role === "user");
+    const mentionedCharacterIds = [...this.gameData.findMentionedCharacterIdsInHistory(this.getHistory(), npc)];
+    return memoryEngine.retrieveForCharacter({
+      characterId: npc.id,
+      query: latestUser?.content || "",
+      entityIds: mentionedCharacterIds,
+      participantIds: this.getActiveConversationCharacters().map((character) => character.id),
+      currentTotalDays: this.gameData.totalDays,
+      tokenBudget: Math.max(160, Math.floor(limit * 0.12)),
+      estimateTokens: (text) => TokenCounter.estimateTokens(text)
+    });
   }
   /**
    * Estimate token count (simple approximation)
@@ -232,6 +238,7 @@ ${result.content}`;
     return character.isDead !== true && character.dead !== true && character.alive !== false;
   }
   markParticipantInactive(characterId, reason) {
+    memoryEngine?.markParticipantLeft(this, characterId, this.nextId);
     return actionSystem.participantLifecycle.deactivate(this, characterId, reason);
   }
   invalidatePendingActionApproval(approvalId, reason) {
@@ -289,13 +296,14 @@ ${result.content}`;
     let wasCancelled = false;
     let streamCompleted = false;
     try {
-      await this.checkAndSummarizeIfNeeded(npc);
+      const memoryContext = await this.checkAndSummarizeIfNeeded(npc);
       if (!this.isResponseCurrent(responseState, npc)) throw new Error("AbortError: Message cancelled");
       const promptBuild = PromptBuilder.buildMessagesWithTokenCount(
         this.getHistory().slice(this.lastSummarizedMessageIndex),
         npc,
         this.gameData,
-        this.currentSummary
+        this.currentSummary,
+        memoryContext
       );
       const llmMessages = promptBuild.messages;
       logVerboseLLM(`[Conversation][verbose] Prompt for ${npc.fullName}:`, llmMessages);
@@ -532,6 +540,7 @@ ${result.content}`;
     });
     const turnEpoch = turnState.epoch;
     this.messages.push(userMsg);
+    memoryEngine?.observeParticipants(this, turnState.activeParticipantIds, userMsg.id);
     this.actionGateProcessedTriggers.clear();
     this.emitUpdate();
     const playerActionResults = await ActionEngine.evaluateForCharacter(this, user, null, userMsg);
@@ -708,46 +717,50 @@ ${result.content}`;
       this.end();
       return;
     }
-    console.log("Creating final conversation summary...");
-    const finalSummary = await this.createFinalSummary();
-    if (finalSummary) {
+    console.log("Creating final conversation memory extraction...");
+    const finalResult = await this.createFinalSummary();
+    if (finalResult?.success && finalResult.finalSummary) {
       const participantIds = this.getSummaryParticipantIds();
-      this.gameData.saveCharactersSummaries(finalSummary, participantIds);
+      this.gameData.saveCharactersSummaries(finalResult.finalSummary, participantIds);
       console.log("Final conversation summary saved to all participants");
+    } else if (finalResult?.recoveryPath) {
+      console.error(`Final summary failed; recovery snapshot preserved at ${finalResult.recoveryPath}`);
     }
     this.end();
   }
   //  Create final comprehensive summary using ALL messages
   async createFinalSummary() {
+    if (!memoryEngine) throw new Error("memory_engine_not_configured");
     const allMessages = this.getHistory();
-    const estimatedTokens = this.estimateTokenCount(allMessages);
-    const contextLimit = await llmManager.getCurrentContextLength() || 1e4;
-    let summaryPrompt;
-    if (
-      // TODO: settingsRepository.compressSummarySetting ||
-      estimatedTokens > contextLimit * this.CONTEXT_LIMIT_PERCENTAGE
-    ) {
-      summaryPrompt = PromptBuilder.buildFinalSummary(
-        this.gameData,
-        allMessages,
-        this.currentSummary,
-        this.lastSummarizedMessageIndex
-      );
-    } else {
-      summaryPrompt = PromptBuilder.buildFinalSummary(this.gameData, allMessages);
-    }
-    try {
-      console.log(`[TOKEN_COUNT] Final summary prompt tokens: ${estimatedTokens}`);
-      const result = await llmManager.sendSummaryRequest(summaryPrompt, void 0, { requestType: "final_summary" });
-      if (result && typeof result === "object" && "content" in result) {
-        const finalSummary = result.content;
-        return finalSummary;
+    const participantIds = this.getSummaryParticipantIds();
+    const participants = participantIds.map((id) => this.gameData.characters.get(id)).filter(Boolean).map((character) => ({ id: character.id, name: character.shortName, fullName: character.fullName }));
+    const state = memoryEngine.ensureConversationState(this);
+    return memoryEngine.finalizeConversation({
+      conversationId: this.id,
+      date: this.gameData.date,
+      totalDays: this.gameData.totalDays,
+      messages: allMessages,
+      participants,
+      participantPresence: state.participantPresence,
+      rollingState: state.rollingState,
+      finalInstructions: PromptBuilder.getFinalSummaryInstructions(),
+      buildPrompt: (context) => memoryEngine.buildFinalizationPrompt(context),
+      requestSummary: async (summaryPrompt) => {
+        console.log(`[TOKEN_COUNT] Final memory prompt tokens: ${this.estimateTokenCount(summaryPrompt)}`);
+        return llmManager.sendSummaryRequest(summaryPrompt, void 0, { requestType: "final_summary" });
       }
-      console.error("Invalid response format for final summary");
-      return null;
-    } catch (error) {
-      console.error("Failed to create final summary:", error);
-      return null;
+    });
+  }
+  async recoverPendingMemories() {
+    if (!memoryEngine || !this.gameData) return;
+    const results = await memoryEngine.recoverPendingFinalizations({
+      buildPrompt: (context) => memoryEngine.buildFinalizationPrompt({ ...context, finalInstructions: PromptBuilder.getFinalSummaryInstructions() }),
+      requestSummary: (summaryPrompt) => llmManager.sendSummaryRequest(summaryPrompt, void 0, { requestType: "memory_recovery" })
+    });
+    for (const result of results) {
+      if (!result.success || !result.finalSummary) continue;
+      const participantIds = (result.participants || []).map((entry) => entry.id);
+      this.gameData.saveCharactersSummaries(result.finalSummary, participantIds);
     }
   }
   // Get conversation history
@@ -898,6 +911,15 @@ ${result.content}`;
       const result = await llmManager.sendSummaryRequest(summaryPrompt, void 0, { requestType: "leaving_summary", character: character.shortName });
       if (result && typeof result === "object" && "content" in result) {
         const summary = result.content;
+        const state = memoryEngine?.ensureConversationState(this);
+        memoryEngine?.recordLeavingMemory({
+          characterId,
+          participantIds: state?.participantPresence?.filter((window) => window.joinedAtMessageId <= this.nextId && (window.leftAtMessageId == null || window.leftAtMessageId >= this.nextId)).map((window) => window.characterId) || [this.gameData.playerID, characterId],
+          content: summary,
+          conversationId: this.id,
+          date: this.gameData.date,
+          totalDays: this.gameData.totalDays
+        });
         console.log(`Generated leaving summary for ${character.fullName} (${summary.length} characters)`);
         logVerboseLLM(`[Summary][verbose] Leaving summary for ${character.fullName}:`, summary);
         return summary;

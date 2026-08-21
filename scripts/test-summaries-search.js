@@ -6,8 +6,10 @@ const root = path.resolve(__dirname, "..");
 const rendererPath = path.join(root, "resources", "app", "out", "renderer", "assets", "index-Dn3qWlAB.js");
 const source = fs.readFileSync(rendererPath, "utf8");
 
-assert(source.includes('const matchesSearchText = (value) => String(value ?? "").toLowerCase().includes(query);'), "summary search must normalize numeric and missing values");
+assert(source.includes('const includes = (value) => String(value ?? "").toLocaleLowerCase().includes(normalizedSearchQuery);'), "summary search must normalize numeric and missing values");
 assert(!source.includes("metadata.characterId.toLowerCase()"), "summary search must not call toLowerCase on a numeric character ID");
+assert(source.includes("metadata.ownerName"), "summary search must include the folder owner name");
+assert(source.includes("metadata.participantNames"), "summary search must include third-party participant names");
 
 const matchesSearchText = (value, query) => String(value ?? "").toLowerCase().includes(query);
 const metadata = {

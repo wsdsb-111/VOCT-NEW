@@ -142,6 +142,8 @@ electron.contextBridge.exposeInMainWorld("conversationAPI", {
   declineActions: (approvalEntryId) => electron.ipcRenderer.invoke("conversation:declineActions", { approvalEntryId }),
   // Summaries manager methods
   listAllSummaries: () => electron.ipcRenderer.invoke("conversation:listAllSummaries"),
+  getMemoryOverview: () => electron.ipcRenderer.invoke("conversation:getMemoryOverview"),
+  getSummariesDashboardData: () => electron.ipcRenderer.invoke("conversation:getSummariesDashboardData"),
   getSummariesForCharacter: (playerId, characterId) => electron.ipcRenderer.invoke("conversation:getSummariesForCharacter", { playerId, characterId }),
   updateSummary: (playerId, characterId, summaryIndex, newContent) => electron.ipcRenderer.invoke("conversation:updateSummary", { playerId, characterId, summaryIndex, newContent }),
   deleteSummary: (playerId, characterId, summaryIndex) => electron.ipcRenderer.invoke("conversation:deleteSummary", { playerId, characterId, summaryIndex }),

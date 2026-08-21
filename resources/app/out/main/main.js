@@ -9,6 +9,7 @@ const Handlebars = require("handlebars");
 const vm = require("vm");
 const events = require("events");
 const actionSystem = require("./action-system");
+const memorySystem = require("./memory-system");
 const zod = require("zod");
 const log = require("electron-log");
 const electronUpdater = require("electron-updater");
@@ -83,6 +84,8 @@ function isOpenRouterErrorResponse(e) {
 const VOTC_DATA_DIR = path.join(electron.app.getPath("userData"), "votc_data");
 const VOTC_LOGS_DIR = path.join(VOTC_DATA_DIR, "logs");
 const VOTC_SUMMARIES_DIR = path.join(VOTC_DATA_DIR, "conversation_summaries");
+const VOTC_MEMORY_DIR = path.join(VOTC_DATA_DIR, "memory");
+const VOTC_MEMORY_RECOVERY_DIR = path.join(VOTC_DATA_DIR, "memory_recovery");
 const VOTC_ACTIONS_DIR = path.join(VOTC_DATA_DIR, "actions");
 const VOTC_USAGE_ANALYTICS_FILE = path.join(VOTC_DATA_DIR, "usage-analytics.json");
 const VOTC_PROMPTS_DIR = path.join(VOTC_DATA_DIR, "prompts");
@@ -90,6 +93,7 @@ const VOTC_PROMPTS_SYSTEM_DIR = path.join(VOTC_PROMPTS_DIR, "system");
 const VOTC_PROMPTS_CHARACTER_DIR = path.join(VOTC_PROMPTS_DIR, "character_description");
 const VOTC_PROMPTS_EXAMPLES_DIR = path.join(VOTC_PROMPTS_DIR, "example_messages");
 const VOTC_PROMPTS_HELPERS_DIR = path.join(VOTC_PROMPTS_DIR, "helpers");
+const memoryEngine = new memorySystem.MemoryEngine({ baseDir: VOTC_MEMORY_DIR, legacySummariesDir: VOTC_SUMMARIES_DIR, recoveryDir: VOTC_MEMORY_RECOVERY_DIR });
 const DEFAULT_USERDATA_DIR$1 = path.join(electron.app.getAppPath(), "default_userdata", "prompts");
 const DEFAULT_MAIN_TEMPLATE_PATH = "system/default.hbs";
 const DEFAULT_LETTER_TEMPLATE_PATH = "system/letter.hbs";
@@ -2278,14 +2282,6 @@ class GameData {
         // Try loading from character's folder first
         let summaries = this.loadConversationWithMentionedCharacter(character, mentionedName);
         
-        // If not found, try loading from player's folder
-        if (summaries.length === 0 && player) {
-          summaries = this.loadConversationWithMentionedCharacter(player, mentionedName);
-          if (summaries.length > 0) {
-            console.log(`Loaded ${summaries.length} summaries from player's folder: ${player.shortName} ↔ ${mentionedName}`);
-          }
-        }
-        
         if (summaries.length > 0) {
           dynamicMemories.push(...summaries);
         }
@@ -4056,6 +4052,9 @@ ${existingSummary}`
     });
     return prompt;
   }
+  static getFinalSummaryInstructions() {
+    return settingsRepository.getSummaryPromptSettings().finalPrompt;
+  }
   /**
    * Generate a system prompt based on the characters in the conversation
    */
@@ -4077,11 +4076,11 @@ ${existingSummary}`
     }
     return "You are characters in a medieval strategy game. Engage in conversation naturally.";
   }
-  static buildMessages(history, char, gameData, currentSessionSummary) {
+  static buildMessages(history, char, gameData, currentSessionSummary, memoryContext = null) {
     // Keep context-length checks and actual requests byte-for-byte aligned.
     // The token-counting builder owns cache-aware ordering and still returns
     // the same message data used by this legacy convenience method.
-    return this.buildMessagesWithTokenCount(history, char, gameData, currentSessionSummary).messages;
+    return this.buildMessagesWithTokenCount(history, char, gameData, currentSessionSummary, memoryContext).messages;
   }
   /**
    * Character-description scripts can be customized or disabled. Keep exact
@@ -4231,13 +4230,8 @@ ${existingSummary}`
     }
     return `${Math.floor(timeDifference / 365)}年前`;
   }
-  static buildMemoriesBlock(gameData, limit = 5, template, context = {}) {
-    const allMemories = [];
-    gameData.characters.forEach((value) => {
-      if (value?.memories) {
-        allMemories.push(...value.memories);
-      }
-    });
+  static buildMemoriesBlock(gameData, character, limit = 5, template, context = {}) {
+    const allMemories = Array.isArray(character?.memories) ? [...character.memories] : [];
     if (allMemories.length === 0) return null;
     const sorted = allMemories.sort((a, b) => (b.relevanceWeight ?? 0) - (a.relevanceWeight ?? 0));
     const selected = sorted.slice(0, limit);
@@ -4332,7 +4326,7 @@ ${existingSummary}`
         break;
       }
       case "memories": {
-        const memoriesBlock = this.buildMemoriesBlock(gameData, block.limit ?? 5, block.template, baseContext);
+        const memoriesBlock = this.buildMemoriesBlock(gameData, character, block.limit ?? 5, block.template, baseContext);
         if (memoriesBlock) {
           messages.push({ role: block.role || "system", content: memoriesBlock });
         }
@@ -4383,7 +4377,7 @@ ${existingSummary}`
   /**
    * Build messages with token counting for preview
    */
-  static buildMessagesWithTokenCount(history, char, gameData, currentSessionSummary) {
+  static buildMessagesWithTokenCount(history, char, gameData, currentSessionSummary, memoryContext = null) {
     const promptSettings = settingsRepository.getPromptSettings();
     const blocks = promptSettings.blocks || [];
     const llmMessages = [];
@@ -4396,7 +4390,8 @@ ${existingSummary}`
     const context = {
       character: char,
       gameData,
-      summary: currentSessionSummary
+      summary: currentSessionSummary,
+      memoryContext
     };
     const workingHistory = history.map((m) => ({
       role: m.role,
@@ -4428,6 +4423,20 @@ ${existingSummary}`
       enabled: true,
       role: "system"
     };
+    const stableMemoryBlock = {
+      id: "memory-stable",
+      type: "memory_stable",
+      label: "Stable Long-term Memory",
+      enabled: true,
+      role: "system"
+    };
+    const relevantMemoryBlock = {
+      id: "memory-retrieval",
+      type: "memory_retrieval",
+      label: "Query-specific Retrieved Memory",
+      enabled: true,
+      role: "system"
+    };
     let mentionedContextInserted = false;
     const insertMentionedContext = () => {
       if (!mentionedContextInserted && mentionedCharactersContext) {
@@ -4449,6 +4458,14 @@ ${existingSummary}`
       // Relationship and long-lived summaries are normally unchanged for a
       // responder. Keep them before date/scene state so a date advance does
       // not evict this useful prefix from the provider cache.
+      if (memoryContext?.stableText) {
+        llmMessages.push({ role: "system", content: memoryContext.stableText });
+        blocksWithTokens.push({
+          block: stableMemoryBlock,
+          content: memoryContext.stableText,
+          tokens: TokenCounter.estimateTokens(memoryContext.stableText)
+        });
+      }
       if (activeParticipantRelationshipContext) {
         llmMessages.push({ role: "system", content: activeParticipantRelationshipContext });
         blocksWithTokens.push({
@@ -4471,6 +4488,14 @@ ${existingSummary}`
           block: responderGameFactsBlock,
           content: responderGameFacts,
           tokens: TokenCounter.estimateTokens(responderGameFacts)
+        });
+      }
+      if (memoryContext?.relevantText) {
+        llmMessages.push({ role: "system", content: memoryContext.relevantText });
+        blocksWithTokens.push({
+          block: relevantMemoryBlock,
+          content: memoryContext.relevantText,
+          tokens: TokenCounter.estimateTokens(memoryContext.relevantText)
         });
       }
       insertMentionedContext();
@@ -4627,7 +4652,7 @@ ${existingSummary}`
       }
       case "memories": {
         try {
-          const memoriesBlock = this.buildMemoriesBlock(gameData, block.limit ?? 5, block.template, baseContext);
+          const memoriesBlock = this.buildMemoriesBlock(gameData, character, block.limit ?? 5, block.template, baseContext);
           if (memoriesBlock) {
             messages.push({ role: block.role || "system", content: memoriesBlock });
             return { block, content: memoriesBlock, tokens: TokenCounter.estimateTokens(memoriesBlock) };
@@ -5131,7 +5156,8 @@ const Conversation = actionSystem.Conversation.configure({
   logVerboseLLM,
   events,
   uuid,
-  path
+  path,
+  memoryEngine
 });
 class ConversationManager {
   constructor() {
@@ -5618,43 +5644,12 @@ class SummariesManager {
               if (!Array.isArray(summaries) || summaries.length === 0) {
                 continue;
               }
-              
-              // Extract character names from the first summary
-              let playerName = characterFolderName;  // Folder name is the character name
-              let characterName = null;
-              let playerId = null;
-              let characterId = null;
-              
-              if (summaries[0]) {
-                if (summaries[0].characterName) {
-                  characterName = summaries[0].characterName;
-                }
-                if (summaries[0].playerName) {
-                  playerName = summaries[0].playerName;
-                }
-                if (summaries[0].playerId) {
-                  playerId = summaries[0].playerId;
-                }
-                if (summaries[0].characterId) {
-                  characterId = summaries[0].characterId;
-                }
-              }
-              
-              // Extract the other character name from filename: "与XXX的对话.json"
-              const match = conversationFile.match(/^与(.+)的对话\.json$/);
-              if (match && !characterName) {
-                characterName = match[1];
-              }
-              
-              results.push({
-                playerId: playerId || characterFolderName,
-                playerName: playerName,
-                characterId: characterId || characterName,
-                characterName: characterName || '未知角色',
+              results.push(memorySystem.buildSummaryCatalogEntry({
+                folderName: characterFolderName,
+                conversationFile,
                 summaries,
-                filePath,
-                isNewFormat: true
-              });
+                filePath
+              }));
             } catch (error) {
               console.error(`Failed to read summaries from ${filePath}:`, error);
             }
@@ -5705,6 +5700,14 @@ class SummariesManager {
             playerName: displayName,
             characterId: id2,
             characterName: characterName || `角色 ${id2}`,
+            ownerId: Number(id1) || id1,
+            ownerName: playerName || `角色 ${id1}`,
+            counterpartId: Number(id2) || id2,
+            counterpartName: characterName || `角色 ${id2}`,
+            folderName: "旧格式",
+            conversationFile: file.name,
+            participantIds: [Number(id1), Number(id2)].filter(Number.isFinite),
+            participantNames: [playerName, characterName].filter(Boolean),
             summaries,
             filePath,
             isOldPairedFormat: true
@@ -8571,8 +8574,23 @@ class LetterPromptBuilder {
       gameData,
       letter
     };
+    const memoryContext = memoryEngine.retrieveForCharacter({
+      characterId: ai.id,
+      query: letter.content || "",
+      participantIds: [player.id],
+      currentTotalDays: gameData.totalDays,
+      tokenBudget: 600,
+      estimateTokens: (text) => TokenCounter.estimateTokens(text)
+    });
+    let memoryInserted = false;
     for (const block of settings.blocks || []) {
       if (!block.enabled) continue;
+      if (!memoryInserted && block.type === "instruction") {
+        for (const content of [memoryContext.stableText, memoryContext.relevantText].filter(Boolean)) {
+          messages.push({ role: "system", content });
+        }
+        memoryInserted = true;
+      }
       this.applyBlock(block, messages, context, settings);
     }
     if (settings.suffix?.enabled && settings.suffix.template) {
@@ -8669,10 +8687,7 @@ class LetterPromptBuilder {
     return context;
   }
   buildAllMemoriesBlock(player, ai, template, context = {}) {
-    const memories = [
-      ...(player.memories || []).map((m) => ({ ...m, character: player.shortName })),
-      ...(ai.memories || []).map((m) => ({ ...m, character: ai.shortName }))
-    ];
+    const memories = (ai.memories || []).map((memory) => ({ ...memory, character: ai.shortName }));
     if (memories.length === 0) return null;
     const tpl = template || `所有相关角色的记忆：
 {{#each memories}}- {{this.character}} | {{this.creationDate}}（{{this.creationDateTotalDays}}）：{{this.desc}} [相关性：{{this.relevanceWeight}}]
@@ -8952,6 +8967,14 @@ Reply from ${ai.fullName}:
             totalDays: gameData.totalDays,
             content: summary.trim()
           });
+          memoryEngine.recordLetterMemory({
+            senderId: gameData.playerID,
+            recipientId: ai.id,
+            content: summary.trim(),
+            date: gameData.date,
+            totalDays: gameData.totalDays,
+            letterId: letter.letterId
+          });
           this.updateLetterStatus(letter.letterId, {
             summaryStatus: LetterSummaryStatus.SAVED
           });
@@ -9179,8 +9202,10 @@ const exportPromptsZip = (destination, settings, presets) => {
 };
 const createWindow = () => {
   const primaryDisplay = electron.screen.getPrimaryDisplay();
-  const { width, height } = primaryDisplay.workAreaSize;
+  const { x, y, width, height } = primaryDisplay.workArea;
   const chatWindow2 = new electron.BrowserWindow({
+    x,
+    y,
     width,
     height,
     show: true,
@@ -9191,7 +9216,7 @@ const createWindow = () => {
     // Remove window frame
     // alwaysOnTop: true, // Keep window on top
     // skipTaskbar: true, // Don't show in taskbar
-    fullscreen: true,
+    fullscreen: false,
     thickFrame: false,
     hasShadow: false,
     resizable: false,
@@ -9932,6 +9957,24 @@ const setupIpcHandlers = () => {
     } catch (error) {
       console.error("Failed to list all summaries:", error);
       return [];
+    }
+  });
+  electron.ipcMain.handle("conversation:getMemoryOverview", async () => {
+    try {
+      const summaryCatalog = await SummariesManager.listAllSummaries();
+      return memoryEngine.getUiOverview({ summaryCatalog });
+    } catch (error) {
+      console.error("Failed to get Memory Engine overview:", error);
+      return { engineVersion: "2.0", totals: {}, boundaries: [], characters: [], error: error.message || "Unknown error" };
+    }
+  });
+  electron.ipcMain.handle("conversation:getSummariesDashboardData", async () => {
+    try {
+      const summaries = await SummariesManager.listAllSummaries();
+      return { summaries, memoryOverview: memoryEngine.getUiOverview({ summaryCatalog: summaries }) };
+    } catch (error) {
+      console.error("Failed to get summaries dashboard data:", error);
+      return { summaries: [], memoryOverview: { engineVersion: "2.0", totals: {}, boundaries: [], characters: [], error: error.message || "Unknown error" } };
     }
   });
   electron.ipcMain.handle("conversation:getSummariesForCharacter", async (_, { playerId, characterId }) => {

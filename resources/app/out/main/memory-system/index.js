@@ -1,0 +1,25 @@
+"use strict";
+
+const memoryTypes = require("./memory-types");
+const { MemoryStore } = require("./memory-store");
+const { MemoryExtractor } = require("./memory-extractor");
+const { MemoryRanker } = require("./memory-ranker");
+const { KnowledgeService } = require("./knowledge-service");
+const { RollingSummaryManager } = require("./rolling-summary-manager");
+const { MemoryConsolidator } = require("./memory-consolidator");
+const { MemoryTrace } = require("./memory-trace");
+const { MemoryEngine } = require("./memory-engine");
+const summaryCatalog = require("./summary-catalog");
+
+module.exports = {
+  ...memoryTypes,
+  MemoryStore,
+  MemoryExtractor,
+  MemoryRanker,
+  KnowledgeService,
+  RollingSummaryManager,
+  MemoryConsolidator,
+  MemoryTrace,
+  MemoryEngine,
+  ...summaryCatalog
+};

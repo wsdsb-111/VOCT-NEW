@@ -9,6 +9,10 @@ const checks = [
   { group: "architecture-health", args: [path.join(__dirname, "test-v6.9.1-architecture-health.js")] },
   { group: "v6.9.1-followup-contracts", args: [path.join(__dirname, "test-v6.9.1-followup-contracts.js")] },
   { group: "action-semantic-binding-runtime-conversation-approval-registry", args: [path.join(__dirname, "test-action-regression.js")] },
+  { group: "memory-health", args: [path.join(__dirname, "test-v7-memory-health.js")] },
+  { group: "memory-regression", args: [path.join(__dirname, "test-memory-regression.js")] },
+  { group: "memory-ui", args: [path.join(__dirname, "test-memory-ui.js")] },
+  { group: "window-layout", args: [path.join(__dirname, "test-window-layout.js")] },
   { group: "character-game-facts", args: [path.join(__dirname, "test-character-game-facts.js")] }
 ];
 
@@ -21,4 +25,4 @@ for (const check of checks) {
   }
 }
 
-console.log(`\nVOTC v6.9.1 Release Regression: PASS (${checks.length} groups)`);
+console.log(`\nVOTC v7.0 Release Regression: PASS (${checks.length} groups)`);

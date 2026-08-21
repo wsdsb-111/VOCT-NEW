@@ -1,0 +1,115 @@
+"use strict";
+
+const assert = require("assert");
+const fs = require("fs");
+const os = require("os");
+const path = require("path");
+
+const root = path.resolve(__dirname, "..");
+const memoryDir = path.join(root, "resources", "app", "out", "main", "memory-system");
+const rendererPath = path.join(root, "resources", "app", "out", "renderer", "assets", "index-Dn3qWlAB.js");
+const preloadPath = path.join(root, "resources", "app", "out", "preload", "preload.js");
+const mainPath = path.join(root, "resources", "app", "out", "main", "main.js");
+const enginePath = path.join(memoryDir, "memory-engine.js");
+const conversationPath = path.join(root, "resources", "app", "out", "main", "action-system", "conversation.js");
+const { buildSummaryCatalogEntry, classifySummaryMatch } = require(path.join(memoryDir, "summary-catalog"));
+const { MemoryEngine } = require(path.join(memoryDir, "memory-engine"));
+
+const ownFolder = buildSummaryCatalogEntry({
+  folderName: "3_丙",
+  conversationFile: "与玩家的对话.json",
+  filePath: "C:/summaries/3_丙/与玩家的对话.json",
+  summaries: [{ playerId: 3, playerName: "丙", characterId: 1, characterName: "玩家", content: "丙记得玩家问过旧事。" }]
+});
+const otherFolder = buildSummaryCatalogEntry({
+  folderName: "2_乙",
+  conversationFile: "与丙的对话.json",
+  filePath: "C:/summaries/2_乙/与丙的对话.json",
+  summaries: [{
+    playerId: 2,
+    playerName: "乙",
+    characterId: 3,
+    characterName: "丙",
+    participants: [{ id: 1, name: "玩家" }, { id: 2, name: "乙" }, { id: 3, name: "丙" }],
+    content: "玩家与乙谈到丙。"
+  }]
+});
+const mentionedElsewhere = buildSummaryCatalogEntry({
+  folderName: "4_丁",
+  conversationFile: "与乙的对话.json",
+  filePath: "C:/summaries/4_丁/与乙的对话.json",
+  summaries: [{ playerId: 4, playerName: "丁", characterId: 2, characterName: "乙", participants: [{ id: 3, name: "丙" }], content: "丁也提到了丙。" }]
+});
+
+assert.strictEqual(ownFolder.ownerId, 3, "folder ID must define the summary owner");
+assert.strictEqual(ownFolder.ownerName, "丙", "folder name must define the summary owner name");
+assert.strictEqual(otherFolder.counterpartName, "丙", "conversation filename/metadata must define the counterpart");
+assert(otherFolder.participantNames.includes("丙"), "participant names must be indexed");
+assert.strictEqual(classifySummaryMatch(ownFolder, "丙").kind, "owner", "exact owner folder must be the highest-priority hit");
+assert.strictEqual(classifySummaryMatch(otherFolder, "丙").kind, "counterpart", "another person's direct conversation with the target must be found");
+assert.strictEqual(classifySummaryMatch(mentionedElsewhere, "丙").kind, "related", "third-party mentions in another folder must be found");
+
+const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "votc-memory-ui-"));
+try {
+  const legacyDir = path.join(tempDir, "conversation_summaries");
+  const ownerDir = path.join(legacyDir, "2_乙");
+  fs.mkdirSync(ownerDir, { recursive: true });
+  fs.writeFileSync(path.join(ownerDir, "与丙的对话.json"), JSON.stringify(otherFolder.summaries), "utf8");
+  const engine = new MemoryEngine({
+    baseDir: path.join(tempDir, "memory"),
+    legacySummariesDir: legacyDir,
+    trace: { record() {} }
+  });
+  const privateKnown = engine.store.saveMemory({
+    memoryId: "memory_known", type: "event", participants: [2, 3], subjects: [3], content: "乙亲历了丙的到访。",
+    visibility: "known_group", knownBy: [2], importance: 0.8, confidence: 1
+  });
+  engine.store.markKnownBy(2, privateKnown.memoryId);
+  engine.store.saveMemory({
+    memoryId: "memory_public", type: "fact", participants: [3], subjects: [3], content: "丙的公开身份。",
+    visibility: "public", knownBy: [], importance: 0.7, confidence: 1
+  });
+  engine.store.saveMemory({
+    memoryId: "memory_restricted", type: "secret", participants: [3, 4], subjects: [4], content: "乙不知道的秘密。",
+    visibility: "known_group", knownBy: [3, 4], importance: 0.9, confidence: 1
+  });
+  const overview = engine.getUiOverview({ summaryCatalog: [ownFolder, otherFolder, mentionedElsewhere] });
+  const npcB = overview.characters.find((entry) => entry.characterId === 2);
+  assert(npcB, "Memory Engine overview must include NPC B");
+  assert.strictEqual(npcB.structuredAccessibleCount, 2, "NPC B may access known and public structured memories");
+  assert.strictEqual(npcB.structuredRestrictedCount, 1, "NPC B must not access an unknown secret");
+  assert.strictEqual(npcB.legacyAdaptedCount, 1, "NPC B's own legacy folder must remain readable");
+  assert.strictEqual(npcB.ownedSummaryRecordCount, 1, "overview must count records in NPC B's folder");
+  assert(npcB.accessibleMemories.some((memory) => memory.memoryId === "memory_known"), "overview must expose readable structured records without restricted content");
+  assert(!npcB.accessibleMemories.some((memory) => memory.memoryId === "memory_restricted"), "overview must not expose a memory outside NPC B's knowledge boundary");
+  const recalled = engine.retrieveForCharacter({ characterId: 2, query: "丙", entityIds: [3], tokenBudget: 500, estimateTokens: (text) => String(text).length });
+  assert([...recalled.stable, ...recalled.relevant].some((entry) => entry.memory.content.includes("玩家与乙谈到丙")), "NPC B must recall the prior B-C summary from B's own folder when C is mentioned");
+} finally {
+  fs.rmSync(tempDir, { recursive: true, force: true });
+}
+
+const rendererSource = fs.readFileSync(rendererPath, "utf8");
+const preloadSource = fs.readFileSync(preloadPath, "utf8");
+const mainSource = fs.readFileSync(mainPath, "utf8");
+const engineSource = fs.readFileSync(enginePath, "utf8");
+const conversationSource = fs.readFileSync(conversationPath, "utf8");
+assert(rendererSource.includes("memory-engine-overview"), "summary UI must render the Memory Engine overview");
+assert(rendererSource.includes("metadata.ownerName"), "summary search must index folder owners");
+assert(rendererSource.includes("metadata.participantNames"), "summary search must index third-party participants");
+assert(rendererSource.includes("summary-match-badge"), "summary UI must explain why a search result matched");
+assert(rendererSource.includes("character.accessibleMemories"), "summary UI must display readable structured memory records");
+assert(preloadSource.includes("getMemoryOverview"), "preload must expose the read-only Memory Engine overview");
+assert(conversationSource.includes("entityIds: mentionedCharacterIds"), "conversation retrieval must bind mentioned third-party IDs");
+assert(preloadSource.includes("getSummariesDashboardData"), "preload must expose the single-read summaries dashboard endpoint");
+assert(mainSource.includes('"conversation:getSummariesDashboardData"'), "main process must provide combined catalog and overview data");
+assert(rendererSource.includes("reactExports.useDeferredValue(searchQuery)"), "summary search must defer expensive filtering while typing");
+assert(rendererSource.includes("const topMatch = filteredSummaries[0]"), "search must limit automatic content expansion to the top result");
+assert(rendererSource.includes("const summaryGroups = reactExports.useMemo"), "summary groups must preserve ranked insertion order");
+assert(rendererSource.includes("const groups = new Map()"), "numeric character IDs must not reorder matched folder groups");
+assert(!rendererSource.includes("Object.entries(summariesByPlayer)"), "search result groups must not use numeric object-key enumeration");
+assert(rendererSource.includes("showMemoryCoverage"), "the large per-character coverage list must be collapsed initially");
+assert(!rendererSource.includes("Promise.all([listAllSummaries(), getMemoryOverview()])"), "summary dashboard must not parse every JSON file twice");
+const overviewSource = engineSource.slice(engineSource.indexOf("getUiOverview("), engineSource.indexOf("formatMemoryBlock("));
+assert(!overviewSource.includes("loadLegacyForCharacter"), "UI coverage counts must reuse the catalog instead of rereading every legacy file");
+
+console.log("VOTC Memory UI: PASS (owner folders, cross-folder mentions, knowledge boundary and coverage)");
