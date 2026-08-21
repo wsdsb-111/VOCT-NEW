@@ -29,6 +29,7 @@ function getConversationClass() {
   return actionSystem.Conversation.configure({
     actionSystem,
     ActionEngine: globalProxy("ActionEngine"),
+    actionRegistry: globalProxy("actionRegistry"),
     settingsRepository: globalProxy("settingsRepository"),
     usageAnalytics: globalProxy("usageAnalytics"),
     llmManager: globalProxy("llmManager"),
@@ -39,8 +40,6 @@ function getConversationClass() {
     createActionApproval: globalFunction("createActionApproval"),
     createActionFeedback: globalFunction("createActionFeedback"),
     createSummaryImport: globalFunction("createSummaryImport"),
-    createCharacterLeavingSummary: globalFunction("createCharacterLeavingSummary"),
-    createFinalSummary: globalFunction("createFinalSummary"),
     createPromptFingerprint: globalFunction("createPromptFingerprint"),
     cleanLogFile: globalFunction("cleanLogFile"),
     resolveI18nString: globalFunction("resolveI18nString"),

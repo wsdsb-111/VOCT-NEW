@@ -38,6 +38,14 @@ assert(engineSource.includes("actionSystem.semanticResolver.resolve"), "ActionEn
 assert(!engineSource.includes("globalThis.__V67ActionSystem"), "ActionEngine production path must not use the test façade global");
 assert(conversationRuntimeSource.includes("new ConversationTurnManager") && conversationRuntimeSource.includes("new GenerationManager"), "conversation-runtime must own service wiring");
 assert(!conversationSource.includes("new ConversationTurnManager") && !conversationSource.includes("new GenerationManager"), "Conversation must consume runtime services instead of constructing them directly");
+assert(conversationSource.includes("let actionRegistry = null;"), "Conversation must declare actionRegistry as an injected dependency");
+assert(conversationSource.includes("actionRegistry = dependencies.actionRegistry || actionRegistry;"), "Conversation.configure must inject actionRegistry");
+assert(/Conversation\.configure\(\{[\s\S]{0,160}actionRegistry,/.test(mainSource), "main.js must pass actionRegistry to Conversation.configure");
+assert(!conversationSource.includes("new (this.getActionSystem()"), "Conversation getters must not rebuild runtime managers");
+assert(!/getApprovalManager\(\) \{[\s\S]{0,220}createApprovalManager\(\)/.test(conversationSource), "getApprovalManager must not create a fallback manager");
+for (const method of ["createCharacterLeavingSummary", "createFinalSummary"]) {
+  assert(!mainSource.includes(`${method},`), `Conversation instance method ${method} must not be injected as an undefined main-process global`);
+}
 
 const missingResolver = system.actionRuleRegistry.validateActionRules({
   signature: "missingResolver",

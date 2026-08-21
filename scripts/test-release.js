@@ -7,6 +7,7 @@ const root = path.resolve(__dirname, "..");
 const checks = [
   { group: "syntax", args: ["--check", path.join(root, "resources", "app", "out", "main", "main.js")] },
   { group: "architecture-health", args: [path.join(__dirname, "test-v6.9.1-architecture-health.js")] },
+  { group: "v6.9.1-followup-contracts", args: [path.join(__dirname, "test-v6.9.1-followup-contracts.js")] },
   { group: "action-semantic-binding-runtime-conversation-approval-registry", args: [path.join(__dirname, "test-action-regression.js")] },
   { group: "character-game-facts", args: [path.join(__dirname, "test-character-game-facts.js")] }
 ];

@@ -610,7 +610,6 @@ class ActionEngine {
         } else {
           console.log(`[ActionEngine] Action ${inv.actionId} auto-approved (destructive: ${isDestructive})`);
           const result2 = await this.runInvocation(conv, invocationSource, invocation);
-          this.traceDecision(inv.actionId, "execution", result2.success ? "success" : "failed", { eventId: invocation.eventId || actionEvent.eventId, traceId: actionEvent.traceId, reason: result2.error || null });
           autoApproved.push(result2);
         }
       }

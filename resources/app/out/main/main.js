@@ -5112,6 +5112,7 @@ const ActionEngine = actionSystem.ActionEngine.configure({
 const Conversation = actionSystem.Conversation.configure({
   actionSystem,
   ActionEngine,
+  actionRegistry,
   settingsRepository,
   usageAnalytics,
   llmManager,
@@ -5122,8 +5123,6 @@ const Conversation = actionSystem.Conversation.configure({
   createActionApproval,
   createActionFeedback,
   createSummaryImport,
-  createCharacterLeavingSummary,
-  createFinalSummary,
   createPromptFingerprint,
   cleanLogFile,
   resolveI18nString,

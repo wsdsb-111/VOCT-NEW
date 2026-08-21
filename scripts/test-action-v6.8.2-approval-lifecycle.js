@@ -49,6 +49,9 @@ function createConversation() {
   for (const method of ["getActionSystem", "createApprovalManager", "getApprovalManager", "isCharacterAvailableForConversation", "invalidatePendingActionApproval", "invalidateApprovalsForCharacter", "markParticipantInactive", "handleActionResults", "approveActions", "removeCharacterFromConversation"]) {
     conversation[method] = Conversation.prototype[method];
   }
+  const approvalManager = conversation.createApprovalManager();
+  conversation.runtime = { approvalManager };
+  conversation.approvalManager = approvalManager;
   return conversation;
 }
 

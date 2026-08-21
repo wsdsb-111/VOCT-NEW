@@ -3,7 +3,8 @@ const fs = require("fs");
 const path = require("path");
 
 const root = path.resolve(__dirname, "..");
-globalThis.__V67ActionSystem = require(path.join(root, "resources", "app", "out", "main", "action-system"));
+const actionSystem = require(path.join(root, "resources", "app", "out", "main", "action-system"));
+globalThis.__V67ActionSystem = actionSystem;
 const source = fs.readFileSync(path.join(root, "resources", "app", "out", "main", "main.js"), "utf8");
 const { getActionEngine } = require("./action-engine-test-helper");
 const { getConversationClass } = require("./conversation-test-helper");
@@ -226,12 +227,20 @@ const Conversation = getConversationClass();
     fillNpcQueue: () => lifecycle.push("fill"),
     resumeConversation: () => lifecycle.push("resume")
   };
+  const wireRuntime = (target) => {
+    const turnManager = new actionSystem.ConversationTurnManager(target);
+    const generationManager = new actionSystem.GenerationManager(target, {
+      recordSkipped: () => {}
+    });
+    target.runtime = { turnManager, generationManager, approvalManager: null };
+    target.turnManager = turnManager;
+    target.generationManager = generationManager;
+  };
+  wireRuntime(conversation);
   await Conversation.prototype.sendMessage.call(conversation, "我做出了行动。");
   const failedNpcLifecycle = [];
   const failedNpcConversation = {
     ...conversation,
-    turnManager: null,
-    generationManager: null,
     messages: [],
     nextId: 21,
     __failedNpcTrace: failedNpcLifecycle,
@@ -244,6 +253,7 @@ const Conversation = getConversationClass();
       throw new Error("NPC API failed");
     }
   };
+  wireRuntime(failedNpcConversation);
   await assert.rejects(() => Conversation.prototype.sendMessage.call(failedNpcConversation, "我仍应先处理动作。"), /NPC API failed/);
   ActionEngine.evaluateForCharacter = originalEvaluate;
   assert.deepStrictEqual(lifecycle.slice(0, 5), ["update", "evaluate:1:20", "results", "fill", "resume"], "production conversation must evaluate player actions before NPC scheduling");

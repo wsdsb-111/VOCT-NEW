@@ -2,6 +2,7 @@
 
 let actionSystem = null;
 let ActionEngine = null;
+let actionRegistry = null;
 let settingsRepository = null;
 let usageAnalytics = null;
 let llmManager = null;
@@ -12,8 +13,6 @@ let createMessage = null;
 let createActionApproval = null;
 let createActionFeedback = null;
 let createSummaryImport = null;
-let createCharacterLeavingSummary = null;
-let createFinalSummary = null;
 let createPromptFingerprint = null;
 let cleanLogFile = null;
 let resolveI18nString = null;
@@ -28,6 +27,7 @@ class Conversation {
   static configure(dependencies = {}) {
     actionSystem = dependencies.actionSystem || actionSystem;
     ActionEngine = dependencies.ActionEngine || ActionEngine;
+    actionRegistry = dependencies.actionRegistry || actionRegistry;
     settingsRepository = dependencies.settingsRepository || settingsRepository;
     usageAnalytics = dependencies.usageAnalytics || usageAnalytics;
     llmManager = dependencies.llmManager || llmManager;
@@ -38,8 +38,6 @@ class Conversation {
     createActionApproval = dependencies.createActionApproval || createActionApproval;
     createActionFeedback = dependencies.createActionFeedback || createActionFeedback;
     createSummaryImport = dependencies.createSummaryImport || createSummaryImport;
-    createCharacterLeavingSummary = dependencies.createCharacterLeavingSummary || createCharacterLeavingSummary;
-    createFinalSummary = dependencies.createFinalSummary || createFinalSummary;
     createPromptFingerprint = dependencies.createPromptFingerprint || createPromptFingerprint;
     cleanLogFile = dependencies.cleanLogFile || cleanLogFile;
     resolveI18nString = dependencies.resolveI18nString || resolveI18nString;
@@ -84,16 +82,14 @@ class Conversation {
     return actionSystem;
   }
   getTurnManager() {
-    if (!this.turnManager) this.turnManager = new (this.getActionSystem().ConversationTurnManager)(this);
-    return this.turnManager;
+    const manager = this.runtime?.turnManager || this.turnManager;
+    if (!manager) throw new Error("conversation_turn_manager_not_initialized");
+    return manager;
   }
   getGenerationManager() {
-    if (!this.generationManager) {
-      this.generationManager = new (this.getActionSystem().GenerationManager)(this, {
-        recordSkipped: (responseState, reason) => this.recordGenerationSkippedAnalytics(responseState, reason)
-      });
-    }
-    return this.generationManager;
+    const manager = this.runtime?.generationManager || this.generationManager;
+    if (!manager) throw new Error("conversation_generation_manager_not_initialized");
+    return manager;
   }
   createApprovalManager() {
     const system = this.getActionSystem();
@@ -115,8 +111,9 @@ class Conversation {
     });
   }
   getApprovalManager() {
-    if (!this.approvalManager) this.approvalManager = this.createApprovalManager();
-    return this.approvalManager;
+    const manager = this.runtime?.approvalManager || this.approvalManager;
+    if (!manager) throw new Error("conversation_approval_manager_not_initialized");
+    return manager;
   }
   async initializeGameData() {
     const ck3DebugPath = settingsRepository.getCK3DebugLogPath();

@@ -5,7 +5,8 @@ const fs = require("fs");
 const path = require("path");
 
 const root = path.resolve(__dirname, "..");
-globalThis.__V67ActionSystem = require(path.join(root, "resources", "app", "out", "main", "action-system"));
+const actionSystem = require(path.join(root, "resources", "app", "out", "main", "action-system"));
+globalThis.__V67ActionSystem = actionSystem;
 const source = fs.readFileSync(path.join(root, "resources", "app", "out", "main", "main.js"), "utf8");
 const { getConversationClass } = require("./conversation-test-helper");
 
@@ -70,6 +71,9 @@ function createConversation() {
   conversation.evaluateCompletedActions = async (npc, messageId, message, responseState) => {
     if (conversation.isResponseCurrent(responseState, npc)) conversation.actionEvaluations.push({ npcId: npc.id, messageId, content: message.content });
   };
+  const generationManager = new actionSystem.GenerationManager(conversation, { recordSkipped: () => {} });
+  conversation.runtime = { generationManager, turnManager: null, approvalManager: null };
+  conversation.generationManager = generationManager;
   return conversation;
 }
 
