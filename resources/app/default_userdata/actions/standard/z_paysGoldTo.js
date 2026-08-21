@@ -4,7 +4,7 @@ module.exports = {
   triggerCategories: ["gold"],
   semantic: {
     riskLevel: "medium",
-    requiresLegacyResolution: true
+    evidencePatterns: [/(?:给|给予|交给|递给|支付|付给|打赏|赏给|赠予|转给|赔给|偿还).{0,12}(?:金|金币|钱|财物)|(?:金|金币|钱|财物).{0,12}(?:给|给予|交给|递给|支付|付给|打赏|赏给|赠予|转给|赔给|偿还)/i]
   },
   title: {
     en: "Source Pays Gold to Target",

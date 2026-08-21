@@ -9,11 +9,8 @@ globalThis.__V67ActionSystem = require(path.join(root, "resources", "app", "out"
 const killed = require(path.join(actionsDir, "z_characterIsKilled.js"));
 const injured = require(path.join(actionsDir, "z_isInjured.js"));
 globalThis.actionRegistry = { getAllActions: () => [{ id: killed.signature, definition: killed }, { id: injured.signature, definition: injured }] };
-const engineStart = source.indexOf("class ActionEngine {");
-const engineEnd = source.indexOf("\nclass Conversation {", engineStart);
-assert(engineStart >= 0 && engineEnd > engineStart, "Cannot extract ActionEngine");
-eval(`${source.slice(engineStart, engineEnd)}\nglobalThis.__V68CompletionEngine = ActionEngine;`);
-const ActionEngine = globalThis.__V68CompletionEngine;
+const { getActionEngine } = require("./action-engine-test-helper");
+const ActionEngine = getActionEngine();
 
 for (const [text, actionId] of [
   ["我将张三的手砍了下来。", "isInjured"],

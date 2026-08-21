@@ -10,6 +10,9 @@ const deterministicResolvers = new Map([
   ["intercourse", () => ({ resolved: true, args: {}, details: { reason: "no_action_arguments" } })]
 ]);
 const ALLOWED_ACTION_IDS = new Set(deterministicResolvers.keys());
+function hasResolver(actionId) {
+  return deterministicResolvers.has(actionId);
+}
 function buildDeterministicInvocation({ actionId, binding, args = {} }) {
   if (!ALLOWED_ACTION_IDS.has(actionId)) return { mode: "unsupported", invocation: null, reason: "action_not_deterministic" };
   if (!binding || binding.mode !== "resolved" || binding.sourceCharacterId == null || binding.targetCharacterId == null) {
@@ -46,4 +49,4 @@ function resolve({ availableAction, evidenceText }) {
   };
 }
 
-module.exports = { resolve, buildDeterministicInvocation, deterministicResolvers, ALLOWED_ACTION_IDS };
+module.exports = { resolve, buildDeterministicInvocation, hasResolver, deterministicResolvers, ALLOWED_ACTION_IDS };

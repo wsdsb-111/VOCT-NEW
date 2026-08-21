@@ -7,6 +7,8 @@ const root = path.resolve(__dirname, "..");
 globalThis.__V67ActionSystem = require(path.join(root, "resources", "app", "out", "main", "action-system"));
 const mainPath = path.join(root, "resources", "app", "out", "main", "main.js");
 const source = fs.readFileSync(mainPath, "utf8");
+const conversationSource = fs.readFileSync(path.join(root, "resources", "app", "out", "main", "action-system", "conversation.js"), "utf8");
+const engineSource = fs.readFileSync(path.join(root, "resources", "app", "out", "main", "action-system", "action-engine.js"), "utf8");
 const approvalManagerSource = fs.readFileSync(path.join(root, "resources", "app", "out", "main", "action-system", "approval-manager.js"), "utf8");
 const actionsDir = path.join(root, "resources", "app", "default_userdata", "actions", "standard");
 globalThis.actionRegistry = {
@@ -15,17 +17,10 @@ globalThis.actionRegistry = {
     return { id: definition.signature, definition };
   })
 };
-const actionEngineStart = source.indexOf("class ActionEngine {");
-const actionEngineEnd = source.indexOf("\nclass Conversation {", actionEngineStart);
-assert(actionEngineStart >= 0 && actionEngineEnd > actionEngineStart, "Cannot extract ActionEngine from bundled main.js");
-eval(`${source.slice(actionEngineStart, actionEngineEnd)}\nglobalThis.__V66ActionEngine = ActionEngine;`);
-const ActionEngine = globalThis.__V66ActionEngine;
+const { getActionEngine } = require("./action-engine-test-helper");
+const ActionEngine = getActionEngine();
 
-const registryStart = source.indexOf("class ActionRegistry extends events.EventEmitter {");
-const registryEnd = source.indexOf("\nconst actionRegistry = ActionRegistry.getInstance();", registryStart);
-assert(registryStart >= 0 && registryEnd > registryStart, "Cannot extract ActionRegistry from bundled main.js");
-eval(`${source.slice(registryStart, registryEnd)}\nglobalThis.__V66ActionRegistry = ActionRegistry;`);
-const ActionRegistry = globalThis.__V66ActionRegistry;
+const ActionRegistry = globalThis.__V67ActionSystem.ActionRegistry;
 
 const player = { id: 1, fullName: "玩家", shortName: "玩家" };
 const zhangSan = { id: 2, fullName: "张三", shortName: "张三" };
@@ -78,12 +73,12 @@ assert.deepStrictEqual(resolvedSemantic, {
   allowedActionIds: ["characterIsKilled"],
   evidence: ["metadata_positive_evidence"]
 }, "metadata must be the primary semantic resolver");
-const legacySemantic = ActionEngine.resolveSemanticEvent({ category: "gold", evidence: { text: "我把50金币交给张三。" } });
-assert.strictEqual(legacySemantic.mode, "legacy", "only explicitly marked gold actions may use legacy resolution");
+const goldSemantic = ActionEngine.resolveSemanticEvent({ category: "gold", evidence: { text: "我把50金币交给张三。" } });
+assert.strictEqual(goldSemantic.mode, "resolved", "gold actions must resolve from metadata evidence");
 const unresolvedSemantic = ActionEngine.resolveSemanticEvent({ category: "death_or_injury", evidence: { text: "发生了一些事情。" } });
 assert.strictEqual(unresolvedSemantic.mode, "unresolved", "unmatched state categories must fail closed");
-assert(source.includes("const playerActionResults = await ActionEngine.evaluateForCharacter(this, user, null, userMsg);"), "player actions must be evaluated before NPC generation");
-assert(!source.includes("pendingPlayerActionMessage"), "player actions must not wait for an NPC reply");
+assert(conversationSource.includes("const playerActionResults = await ActionEngine.evaluateForCharacter(this, user, null, userMsg);"), "player actions must be evaluated before NPC generation");
+assert(!conversationSource.includes("pendingPlayerActionMessage"), "player actions must not wait for an NPC reply");
 
 const registry = new ActionRegistry();
 registry.actions.set("highRisk", { definition: { semantic: { riskLevel: "high" } } });
@@ -91,7 +86,7 @@ registry.actions.set("mediumRisk", { definition: { semantic: { riskLevel: "mediu
 registry.setDestructiveOverride("highRisk", false);
 assert.strictEqual(registry.getEffectiveDestructive("highRisk"), true, "high risk cannot be downgraded by destructive override");
 assert.strictEqual(registry.getEffectiveRiskLevel("highRisk"), "high", "high risk must be exposed by registry policy");
-assert.strictEqual(registry.getEffectiveDestructive("mediumRisk"), false, "medium risk keeps legacy destructive behavior by default");
+assert.strictEqual(registry.getEffectiveDestructive("mediumRisk"), false, "medium risk keeps the existing destructive behavior by default");
 assert.strictEqual(registry.shouldRequireApproval("mediumRisk", "non-destructive"), false, "medium risk may proceed in non-destructive mode");
 assert.strictEqual(registry.shouldRequireApproval("highRisk", "non-destructive"), true, "high risk must require approval in non-destructive mode");
 assert.strictEqual(registry.shouldRequireApproval("mediumRisk", "none"), true, "none mode must require approval for every action");
@@ -121,7 +116,7 @@ for (const action of highRiskActions) {
   assert.strictEqual(registry.shouldRequireApproval(action.signature, "non-destructive"), true, `${action.signature}: high risk requires approval`);
 }
 assert(approvalManagerSource.includes("riskLevel: action.riskLevel"), "approval payload must preserve the resolved risk level");
-assert(source.includes("action_participant_resolution"), "participant outcomes must be recorded without message text");
+assert(engineSource.includes("action_participant_resolution"), "participant outcomes must be recorded without message text");
 
 const parserCases = [
   ["我刺向他但他躲开了。", 0],

@@ -7,6 +7,8 @@ const path = require("path");
 const root = path.resolve(__dirname, "..");
 const system = require(path.join(root, "resources", "app", "out", "main", "action-system"));
 const mainSource = fs.readFileSync(path.join(root, "resources", "app", "out", "main", "main.js"), "utf8");
+const conversationSource = fs.readFileSync(path.join(root, "resources", "app", "out", "main", "action-system", "conversation.js"), "utf8");
+const runtimeSource = fs.readFileSync(path.join(root, "resources", "app", "out", "main", "action-system", "conversation-runtime.js"), "utf8");
 
 (async () => {
 const responders = [{ id: 2, shortName: "甲" }, { id: 3, shortName: "乙" }, { id: 4, shortName: "丙" }];
@@ -53,9 +55,10 @@ assert.deepStrictEqual(skipped, [["1:9:2", "superseded_by_new_user_turn"]]);
 assert.strictEqual(generationConversation.messages.length, 0, "stale streaming placeholder must be removed");
 
 assert(!mainSource.includes("new AbortController()"), "Conversation must not construct AbortController directly");
-assert(mainSource.includes("new actionSystem.ConversationTurnManager(this)"), "Conversation must own a turn-manager boundary");
-assert(mainSource.includes("new actionSystem.GenerationManager(this"), "Conversation must own a generation-manager boundary");
-assert(mainSource.includes("this.approvalManager = this.createApprovalManager()"), "Conversation must own an approval-manager boundary");
+assert(conversationSource.includes("actionSystem.createConversationRuntime(this"), "Conversation must delegate service wiring to its runtime");
+assert(runtimeSource.includes("new ConversationTurnManager(conversation)"), "Conversation runtime must own the turn-manager boundary");
+assert(runtimeSource.includes("new GenerationManager(conversation"), "Conversation runtime must own the generation-manager boundary");
+assert(runtimeSource.includes("approvalManager: createApprovalManager()"), "Conversation runtime must own the approval-manager boundary");
 
 console.log("VOTC v6.9-C managers: PASS (30 turns, responder queue, generation cancellation and service ownership)");
 })().catch((error) => {

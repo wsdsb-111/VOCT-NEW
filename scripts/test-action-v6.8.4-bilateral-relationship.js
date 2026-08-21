@@ -24,20 +24,13 @@ for (const definition of definitions) {
   assert.strictEqual(definition.semantic?.bilateralPersistentEffect, true, `${definition.signature}: bilateral contract marker is required`);
   assert.deepStrictEqual(definition.semantic?.participantRoles, { source: "actor", target: "patient" }, `${definition.signature}: actor/patient roles are required`);
 }
-globalThis.events = require("events");
-const registryStart = mainSource.indexOf("class ActionRegistry extends");
-const registryEnd = mainSource.indexOf("\nconst actionRegistry =", registryStart);
-assert(registryStart >= 0 && registryEnd > registryStart, "Cannot extract ActionRegistry");
-eval(`${mainSource.slice(registryStart, registryEnd)}\nglobalThis.__V684ActionRegistry = ActionRegistry;`);
+globalThis.__V684ActionRegistry = actionSystem.ActionRegistry;
 const invalidBilateral = { ...definitions[0], semantic: { ...definitions[0].semantic } };
 delete invalidBilateral.semantic.participantRoles;
 assert.strictEqual(globalThis.__V684ActionRegistry.prototype.validateCandidate.call({}, invalidBilateral).valid, false, "registry must reject bilateral metadata without participantRoles");
 globalThis.actionRegistry = { getAllActions: () => definitions.map((definition) => ({ id: definition.signature, definition })) };
-const engineStart = mainSource.indexOf("class ActionEngine {");
-const engineEnd = mainSource.indexOf("\nclass Conversation {", engineStart);
-assert(engineStart >= 0 && engineEnd > engineStart, "Cannot extract ActionEngine");
-eval(`${mainSource.slice(engineStart, engineEnd)}\nglobalThis.__V684RelationshipEngine = ActionEngine;`);
-const ActionEngine = globalThis.__V684RelationshipEngine;
+const { getActionEngine } = require("./action-engine-test-helper");
+const ActionEngine = getActionEngine();
 for (const text of [
   "B向C表白，说自己深爱着她。",
   "B说愿与C成为恋人。",

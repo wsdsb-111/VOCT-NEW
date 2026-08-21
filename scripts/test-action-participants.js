@@ -5,12 +5,8 @@ const path = require("path");
 const root = path.resolve(__dirname, "..");
 globalThis.__V67ActionSystem = require(path.join(root, "resources", "app", "out", "main", "action-system"));
 const source = fs.readFileSync(path.join(root, "resources", "app", "out", "main", "main.js"), "utf8");
-const start = source.indexOf("class ActionEngine {");
-const end = source.indexOf("\nclass Conversation {", start);
-assert(start >= 0 && end > start, "Cannot extract ActionEngine from main.js");
-globalThis.actionRegistry = { getAllActions: () => [] };
-eval(`${source.slice(start, end)}\nglobalThis.__ParticipantActionEngine = ActionEngine;`);
-const ActionEngine = globalThis.__ParticipantActionEngine;
+const { getActionEngine } = require("./action-engine-test-helper");
+const ActionEngine = getActionEngine();
 
 const player = { id: 1, fullName: "玩家", shortName: "玩家" };
 const zhangSan = { id: 2, fullName: "张三", shortName: "张三" };

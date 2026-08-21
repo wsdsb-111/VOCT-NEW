@@ -90,9 +90,9 @@ class ApprovalManager {
 
   invalidateForCharacter(characterId) {
     for (const [approvalId, pending] of this.pending.entries()) {
-      const sourceId = pending.invocation?.sourceCharacterId ?? pending.sourceCharacterId ?? pending.action?.sourceCharacterId ?? pending.npc?.id ?? null;
+      const sourceId = pending.invocation?.sourceCharacterId ?? pending.sourceCharacterId ?? pending.action?.sourceCharacterId ?? null;
       const targetId = pending.invocation?.targetCharacterId ?? pending.targetCharacterId ?? pending.action?.targetCharacterId ?? null;
-      if (pending.npc?.id === characterId || sourceId === characterId || targetId === characterId) {
+      if (sourceId === characterId || targetId === characterId) {
         const reason = sourceId === characterId ? "stale_approval_source_unavailable" : targetId === characterId ? "stale_approval_target_unavailable" : "approval_binding_invalidated";
         this.invalidate(approvalId, reason);
       }
@@ -107,7 +107,7 @@ class ApprovalManager {
     const approvalEntry = conversation.messages.find((message) => message.type === "action-approval" && message.id === approvalEntryId);
     if (!approvalEntry) throw new Error(`Approval entry not found for ID ${approvalEntryId}`);
     const invocation = pending.invocation || pending.action.invocation;
-    const sourceId = invocation?.sourceCharacterId ?? pending.sourceCharacterId ?? pending.npc?.id ?? null;
+    const sourceId = invocation?.sourceCharacterId ?? pending.sourceCharacterId ?? null;
     const targetId = invocation?.targetCharacterId ?? pending.targetCharacterId ?? null;
     let invalidationReason = null;
     if ((pending.bindingId != null && invocation?.bindingId !== pending.bindingId) || (pending.sourceCharacterId != null && sourceId !== pending.sourceCharacterId) || (pending.targetCharacterId != null && targetId !== pending.targetCharacterId)) {

@@ -19,14 +19,17 @@ assert.strictEqual(event.traceId, "action:evt_1");
 
 const reference = system.createReferenceResolution({ referenceType: "third_person", surface: "他", start: 1, end: 2, mode: "resolved", characterId: 2, confidenceBasis: ["unique_interlocutor"] });
 assert(Object.isFrozen(reference) && Object.isFrozen(reference.confidenceBasis));
-const binding = system.createParticipantBinding({ messageId: 1, eventId: event.eventId, actionId: "isInjured", sourceCharacterId: 1, targetCharacterId: 2, references: [reference] });
+const binding = system.createParticipantBinding({ messageId: 1, eventId: event.eventId, traceId: event.traceId, actionId: "isInjured", sourceCharacterId: 1, targetCharacterId: 2, references: [reference] });
 assert(Object.isFrozen(binding) && Object.isFrozen(binding.references));
 const available = system.createAvailableAction({ signature: "isInjured", sourceCharacterId: 1, sourceLocked: true, resolvedTargetCharacterId: 2, targetLocked: true, validTargetCharacterIds: [2], args: [], participantBinding: binding });
 assert(Object.isFrozen(available) && Object.isFrozen(available.validTargetCharacterIds));
-const invocation = system.createValidatedInvocation({ actionId: "isInjured", sourceCharacterId: 1, targetCharacterId: 2, bindingId: binding.bindingId, eventId: event.eventId, args: { injuryType: "wounded" } });
+const invocation = system.createValidatedInvocation({ actionId: "isInjured", sourceCharacterId: 1, targetCharacterId: 2, bindingId: binding.bindingId, eventId: event.eventId, traceId: binding.traceId, args: { injuryType: "wounded" } });
 assert(Object.isFrozen(invocation) && Object.isFrozen(invocation.args));
-const result = system.createExecutionResult({ actionId: "isInjured", success: true, sourceCharacterId: 1, targetCharacterId: 2, bindingId: binding.bindingId });
+const result = system.createExecutionResult({ actionId: "isInjured", success: true, effectWritten: true, sourceCharacterId: 1, targetCharacterId: 2, bindingId: binding.bindingId, eventId: invocation.eventId, traceId: invocation.traceId });
 assert(Object.isFrozen(result));
+assert.deepStrictEqual([event.traceId, binding.traceId, invocation.traceId, result.traceId], Array(4).fill("action:evt_1"));
+assert.strictEqual(result.eventId, event.eventId);
+assert.strictEqual(result.effectWritten, true);
 
 const analytics = [];
 const originalLog = console.log;

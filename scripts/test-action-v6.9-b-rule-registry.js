@@ -17,7 +17,8 @@ const index = system.actionRuleRegistry.buildCategoryIndex(loaded);
 assert.deepStrictEqual([...system.actionRuleRegistry.getActionIdsForCategories(index, ["physical"])], ["injury", "death"]);
 assert.deepStrictEqual([...system.actionRuleRegistry.getActionIdsForCategories(index, ["death", "physical"])], ["death", "injury"]);
 
-assert.strictEqual(system.actionRuleRegistry.validateActionRules({ triggerCategories: ["physical"], semantic: { riskLevel: "high", deterministicInvocation: true } }).valid, true);
+assert.strictEqual(system.actionRuleRegistry.validateActionRules({ signature: "isInjured", triggerCategories: ["physical"], semantic: { riskLevel: "high", deterministicInvocation: true } }).valid, true);
+assert.deepStrictEqual(system.actionRuleRegistry.validateActionRules({ signature: "missingResolver", triggerCategories: ["physical"], semantic: { deterministicInvocation: true } }), { valid: false, message: "Deterministic action is missing registered resolver." });
 assert.strictEqual(system.actionRuleRegistry.validateActionRules({ triggerCategories: [""], semantic: {} }).valid, false);
 assert.strictEqual(system.actionRuleRegistry.validateActionRules({ triggerCategories: ["physical"], semantic: { deterministicInvocation: "yes" } }).valid, false);
 assert.strictEqual(system.actionRuleRegistry.validateActionRules({ triggerCategories: ["relationship"], semantic: { bilateralPersistentEffect: true } }).valid, false);

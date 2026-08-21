@@ -14,11 +14,8 @@ globalThis.actionRegistry = {
     { id: injured.signature, definition: injured }
   ]
 };
-const engineStart = source.indexOf("class ActionEngine {");
-const engineEnd = source.indexOf("\nclass Conversation {", engineStart);
-assert(engineStart >= 0 && engineEnd > engineStart, "Cannot extract ActionEngine");
-eval(`${source.slice(engineStart, engineEnd)}\nglobalThis.__V671ActionEngine = ActionEngine;`);
-const ActionEngine = globalThis.__V671ActionEngine;
+const { getActionEngine } = require("./action-engine-test-helper");
+const ActionEngine = getActionEngine();
 
 const outcomes = [
   ["我拿匕首刺中了张三的肩膀。", "isInjured"],

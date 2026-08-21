@@ -11,11 +11,17 @@ globalThis.__V67ActionSystem = require(path.join(root, "resources", "app", "out"
 const mainPath = path.join(root, "resources", "app", "out", "main", "main.js");
 const actionsDir = path.join(root, "resources", "app", "default_userdata", "actions", "standard");
 const source = fs.readFileSync(mainPath, "utf8");
+const engineSource = fs.readFileSync(path.join(root, "resources", "app", "out", "main", "action-system", "action-engine.js"), "utf8");
+const conversationSource = fs.readFileSync(path.join(root, "resources", "app", "out", "main", "action-system", "conversation.js"), "utf8");
+globalThis.actionRegistry = {
+  getAllActions: () => fs.readdirSync(actionsDir).filter((file) => file.endsWith(".js")).map((file) => {
+    const definition = require(path.join(actionsDir, file));
+    return { id: definition.signature, definition };
+  })
+};
 
-const actionEngineStart = source.indexOf("class ActionEngine {");
-const actionEngineEnd = source.indexOf("\nclass Conversation {", actionEngineStart);
-assert(actionEngineStart >= 0 && actionEngineEnd > actionEngineStart, "Cannot extract ActionEngine from bundled main.js");
-eval(`${source.slice(actionEngineStart, actionEngineEnd)}\nglobalThis.ActionEngine = ActionEngine;`);
+const { getActionEngine } = require("./action-engine-test-helper");
+const ActionEngine = getActionEngine();
 
 const failures = [];
 const run = (name, test) => {
@@ -34,8 +40,8 @@ console.log("========================================\n");
 
 run("Production independently schedules player and NPC action messages", () => {
   assert(!/pendingPlayerActionMessage\s*\?\?\s*placeholder/.test(source), "obsolete player-or-NPC fallback is still present");
-  assert(source.includes("buildTurnEvaluationPlan({"), "Conversation must build an independent turn evaluation plan");
-  assert(source.includes("this.evaluateCompletedActions(npc, msgId, placeholder, responseState)"), "NPC reply must enter the independent evaluator with generation identity");
+  assert(engineSource.includes("buildTurnEvaluationPlan({"), "ActionEngine must build an independent turn evaluation plan");
+  assert(conversationSource.includes("this.evaluateCompletedActions(npc, msgId, placeholder, responseState)"), "NPC reply must enter the independent evaluator with generation identity");
 
   const player = { id: 1, shortName: "Player" };
   const npc = { id: 2, shortName: "NPC" };
@@ -86,7 +92,7 @@ run("Every shipped standard action declares valid semantic metadata", () => {
     assert(action.semantic && typeof action.semantic === "object", `${file}: semantic metadata is missing`);
     assert(["low", "medium", "high"].includes(action.semantic.riskLevel), `${file}: invalid semantic riskLevel`);
     const hasMatcher = Array.isArray(action.semantic.evidencePatterns) && action.semantic.evidencePatterns.length > 0;
-    assert(hasMatcher || action.semantic.requiresLegacyResolution || action.semantic.fallback, `${file}: semantic metadata needs evidencePatterns, legacy resolution, or fallback role`);
+    assert(hasMatcher || action.semantic.fallback, `${file}: semantic metadata needs evidencePatterns, match(), or a fallback role`);
   }
 });
 

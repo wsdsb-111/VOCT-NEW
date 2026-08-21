@@ -5,8 +5,21 @@ on:
   pull_request:
 
 jobs:
+  architecture-health:
+    name: Architecture Health
+    runs-on: windows-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Run architecture health gate
+        run: node scripts/test-v6.9.1-architecture-health.js
   release-regression:
     name: Release Regression
+    needs: architecture-health
     runs-on: windows-latest
     steps:
       - name: Checkout

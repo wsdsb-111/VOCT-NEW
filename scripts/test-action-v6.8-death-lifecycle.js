@@ -4,18 +4,15 @@ const path = require("path");
 
 const root = path.resolve(__dirname, "..");
 const source = fs.readFileSync(path.join(root, "resources", "app", "out", "main", "main.js"), "utf8");
+const engineSource = fs.readFileSync(path.join(root, "resources", "app", "out", "main", "action-system", "action-engine.js"), "utf8");
 const actionSystem = require(path.join(root, "resources", "app", "out", "main", "action-system"));
 globalThis.__V67ActionSystem = actionSystem;
-const engineStart = source.indexOf("class ActionEngine {");
-const engineEnd = source.indexOf("\nclass Conversation {", engineStart);
-assert(engineStart >= 0 && engineEnd > engineStart, "Cannot extract ActionEngine");
-eval(`${source.slice(engineStart, engineEnd)}\nglobalThis.__V681ActionEngine = ActionEngine;`);
-const ActionEngine = globalThis.__V681ActionEngine;
-const conversationStart = source.indexOf("class Conversation {");
-const conversationEnd = source.indexOf("\nclass ConversationManager {", conversationStart);
-assert(conversationStart >= 0 && conversationEnd > conversationStart, "Cannot extract Conversation");
-eval(`${source.slice(conversationStart, conversationEnd)}\nglobalThis.__V68Conversation = Conversation;`);
-const Conversation = globalThis.__V68Conversation;
+const { getActionEngine } = require("./action-engine-test-helper");
+const { getConversationClass } = require("./conversation-test-helper");
+globalThis.actionRegistry = { getAllActions: () => [] };
+const ActionEngine = getActionEngine();
+globalThis.ActionEngine = ActionEngine;
+const Conversation = getConversationClass();
 
 const player = { id: 1, fullName: "玩家", shortName: "玩家", gender: "male" };
 const deadNpc = { id: 2, fullName: "张三", shortName: "张三", gender: "male" };
@@ -78,8 +75,8 @@ await Conversation.prototype.respondAs.call({
   emitUpdate: () => { generated = true; }
 }, deadNpc);
 assert.strictEqual(generated, false, "pre-generation availability guard must skip a dead queued NPC");
-assert(source.includes('conv.markParticipantInactive?.(source.id, "dead")'), "successful death execution must inactivate the resolved victim");
-assert(source.includes('normalizeActionSkipReason("inactive_participant")'), "inactive players and NPCs must not execute further actions");
+assert(engineSource.includes('conv.markParticipantInactive?.(source.id, "dead")'), "successful death execution must inactivate the resolved victim");
+assert(engineSource.includes('normalizeActionSkipReason("inactive_participant")'), "inactive players and NPCs must not execute further actions");
 
 console.log("VOTC v6.8.1 death lifecycle: PASS (context rebuild, target binding, queue and action guards)");
 })().catch((error) => {

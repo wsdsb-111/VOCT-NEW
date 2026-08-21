@@ -20,6 +20,12 @@ const { GenerationManager } = require("./generation-manager");
 const { ApprovalManager } = require("./approval-manager");
 const participantLifecycle = require("./participant-lifecycle");
 const actionDecisionTrace = require("./action-decision-trace");
+const { ActionEngine } = require("./action-engine");
+const { Conversation } = require("./conversation");
+const actionSchema = require("./action-schema");
+const { ActionRegistry } = require("./action-registry");
+const { createConversationRuntime } = require("./conversation-runtime");
+const { ActionPromptBuilder } = require("./action-prompt-builder");
 
 module.exports = {
   ConversationReferenceContext,
@@ -42,5 +48,11 @@ module.exports = {
   GenerationManager,
   ApprovalManager,
   participantLifecycle,
-  actionDecisionTrace
+  actionDecisionTrace,
+  ActionEngine,
+  Conversation,
+  actionSchema,
+  ActionRegistry,
+  createConversationRuntime,
+  ActionPromptBuilder
 };

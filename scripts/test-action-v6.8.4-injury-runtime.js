@@ -7,9 +7,7 @@ const actionSystem = require(path.join(root, "resources", "app", "out", "main", 
 globalThis.__V67ActionSystem = actionSystem;
 const source = fs.readFileSync(path.join(root, "resources", "app", "out", "main", "main.js"), "utf8");
 const injured = require(path.join(root, "resources", "app", "default_userdata", "actions", "standard", "z_isInjured.js"));
-const engineStart = source.indexOf("class ActionEngine {");
-const engineEnd = source.indexOf("\nclass Conversation {", engineStart);
-assert(engineStart >= 0 && engineEnd > engineStart, "Cannot extract ActionEngine");
+const { getActionEngine } = require("./action-engine-test-helper");
 for (const [text, expected] of [
   ["我在他的手臂上划了一剑。", "wounded"],
   ["我在他的腿上砍了一刀。", "wounded"],
@@ -65,8 +63,7 @@ globalThis.healJsonResponseWithLogging = (content) => JSON.parse(content);
 const effects = [];
 globalThis.ActionEffectWriter = { writeEffect: (_gameData, sourceId, targetId, effectBody) => effects.push({ sourceId, targetId, effectBody }) };
 globalThis.ActionSandbox = { executeAction: async (_filePath, context) => injured.run(context) };
-eval(`${source.slice(engineStart, engineEnd)}\nglobalThis.__V684InjuryEngine = ActionEngine;`);
-const ActionEngine = globalThis.__V684InjuryEngine;
+const ActionEngine = getActionEngine();
 assert.deepStrictEqual(ActionEngine.getSemanticActionProfile("我砍断了张三的腿。").allowedActionIds, ["isInjured"], "explicit leg loss must reach Injury before local type resolution");
 (async () => {
   const conversation = { gameData, messages: [], actionGateProcessedTriggers: new Set(), inactiveParticipantIds: new Map() };

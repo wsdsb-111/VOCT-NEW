@@ -8,10 +8,7 @@ const root = path.resolve(__dirname, "..");
 const actionSystem = require(path.join(root, "resources", "app", "out", "main", "action-system"));
 globalThis.__V67ActionSystem = actionSystem;
 const source = fs.readFileSync(path.join(root, "resources", "app", "out", "main", "main.js"), "utf8");
-const engineStart = source.indexOf("class ActionEngine {");
-const engineEnd = source.indexOf("\nclass Conversation {", engineStart);
-assert(engineStart >= 0 && engineEnd > engineStart, "Cannot extract ActionEngine");
-
+const { getActionEngine } = require("./action-engine-test-helper");
 const player = { id: 1, fullName: "玩家", shortName: "玩家" };
 const zhangSan = { id: 2, fullName: "张三", shortName: "张三" };
 const gameData = { characters: new Map([[player.id, player], [zhangSan.id, zhangSan]]) };
@@ -41,9 +38,7 @@ globalThis.ActionSandbox = {
     return { message: "ok", sentiment: "neutral" };
   }
 };
-
-eval(`${source.slice(engineStart, engineEnd)}\nglobalThis.__V682ActionEngine = ActionEngine;`);
-const ActionEngine = globalThis.__V682ActionEngine;
+const ActionEngine = getActionEngine();
 const invocation = Object.freeze({
   actionId: "characterIsKilled",
   args: { reason: "execution" },

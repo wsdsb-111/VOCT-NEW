@@ -15,7 +15,7 @@ function resolveMetadataCandidates(event, registry) {
     const definition = action.definition;
     const semantic = definition?.semantic;
     const categories = Array.isArray(definition?.triggerCategories) ? definition.triggerCategories : [];
-    if (!semantic || semantic.requiresLegacyResolution || !categories.includes(event.category)) continue;
+    if (!semantic || !categories.includes(event.category)) continue;
     const excluded = matchesPatterns(semantic.excludePatterns, evidenceText);
     const matched = matchesPatterns(semantic.evidencePatterns, evidenceText);
     const customMatched = typeof semantic.match === "function" && semantic.match({ event, evidence: event.evidence });
@@ -32,19 +32,10 @@ function resolveMetadataCandidates(event, registry) {
   return winners.map((candidate) => candidate.action.id);
 }
 
-function resolve(event, { registry, legacyResolver } = {}) {
+function resolve(event, { registry } = {}) {
   const reasons = Array.isArray(event?.categories) ? event.categories : [event?.category].filter(Boolean);
   const metadataAllowedActionIds = resolveMetadataCandidates(event, registry);
   if (metadataAllowedActionIds.length > 0) return { mode: "resolved", reasons, allowedActionIds: metadataAllowedActionIds, evidence: ["metadata_positive_evidence"] };
-  const legacyActionIds = registry ? registry.getAllActions(false).filter((action) => {
-    const categories = Array.isArray(action.definition?.triggerCategories) ? action.definition.triggerCategories : [];
-    return action.definition?.semantic?.requiresLegacyResolution && categories.some((category) => reasons.includes(category));
-  }).map((action) => action.id) : [];
-  if (legacyActionIds.length > 0 && typeof legacyResolver === "function") {
-    const legacyProfile = legacyResolver(event?.evidence?.text || "", reasons);
-    const allowedActionIds = legacyProfile.allowedActionIds.filter((actionId) => legacyActionIds.includes(actionId));
-    if (allowedActionIds.length > 0) return { mode: "legacy", reasons: legacyProfile.reasons, allowedActionIds, evidence: legacyProfile.evidence };
-  }
   return { mode: "unresolved", reasons, allowedActionIds: [], evidence: [] };
 }
 

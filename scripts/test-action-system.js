@@ -13,11 +13,8 @@ globalThis.actionRegistry = {
     return { id: definition.signature, definition };
   })
 };
-const engineStart = source.indexOf("class ActionEngine {");
-const engineEnd = source.indexOf("\nclass Conversation {", engineStart);
-if (engineStart < 0 || engineEnd < 0) throw new Error("Unable to locate ActionEngine in bundled main.js");
-eval(`${source.slice(engineStart, engineEnd)}\nglobalThis.__TestActionEngine = ActionEngine;`);
-const ActionEngine = globalThis.__TestActionEngine;
+const { getActionEngine } = require("./action-engine-test-helper");
+const ActionEngine = getActionEngine();
 const gameDataStart = source.indexOf("class GameData {");
 const gameDataEnd = source.indexOf("\nclass Character {", gameDataStart);
 if (gameDataStart < 0 || gameDataEnd < 0) throw new Error("Unable to locate GameData in bundled main.js");
@@ -165,7 +162,7 @@ assert(actionsGetAllStart >= 0 && actionsGetAllEnd > actionsGetAllStart, "Unable
 const actionsGetAllSource = source.slice(actionsGetAllStart, actionsGetAllEnd);
 assert(actionsGetAllSource.includes("triggerCategories,"), "actions:getAll must expose trigger categories for the action list");
 assert(actionsGetAllSource.includes("riskLevel: semantic.riskLevel"), "actions:getAll must expose semantic risk level for the action list");
-assert(actionsGetAllSource.includes('semanticMode: semantic.requiresLegacyResolution ? "legacy"'), "actions:getAll must expose semantic resolution mode for the action list");
+assert(actionsGetAllSource.includes('semanticMode: semantic.fallback ? "fallback" : "event"'), "actions:getAll must expose metadata semantic resolution mode for the action list");
 const rendererPath = path.join(root, "resources", "app", "out", "renderer", "assets", "index-Dn3qWlAB.js");
 const rendererSource = fs.readFileSync(rendererPath, "utf8");
 const approvalManagerSource = fs.readFileSync(path.join(root, "resources", "app", "out", "main", "action-system", "approval-manager.js"), "utf8");

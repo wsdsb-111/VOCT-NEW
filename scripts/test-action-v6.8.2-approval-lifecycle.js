@@ -7,9 +7,7 @@ const path = require("path");
 const root = path.resolve(__dirname, "..");
 globalThis.__V67ActionSystem = require(path.join(root, "resources", "app", "out", "main", "action-system"));
 const source = fs.readFileSync(path.join(root, "resources", "app", "out", "main", "main.js"), "utf8");
-const conversationStart = source.indexOf("class Conversation {");
-const conversationEnd = source.indexOf("\nclass ConversationManager {", conversationStart);
-assert(conversationStart >= 0 && conversationEnd > conversationStart, "Cannot extract Conversation");
+const { getConversationClass } = require("./conversation-test-helper");
 
 const player = { id: 1, fullName: "玩家", shortName: "玩家" };
 const zhangSan = { id: 2, fullName: "张三", shortName: "张三" };
@@ -32,8 +30,7 @@ globalThis.ActionEngine = {
 };
 globalThis.createActionApproval = (params) => ({ ...params, type: "action-approval", status: "pending" });
 
-eval(`${source.slice(conversationStart, conversationEnd)}\nglobalThis.__V682Conversation = Conversation;`);
-const Conversation = globalThis.__V682Conversation;
+const Conversation = getConversationClass();
 
 function createConversation() {
   const conversation = {

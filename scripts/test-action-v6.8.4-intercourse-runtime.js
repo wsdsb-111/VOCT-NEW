@@ -7,9 +7,7 @@ const actionSystem = require(path.join(root, "resources", "app", "out", "main", 
 globalThis.__V67ActionSystem = actionSystem;
 const source = fs.readFileSync(path.join(root, "resources", "app", "out", "main", "main.js"), "utf8");
 const intercourse = require(path.join(root, "resources", "app", "default_userdata", "actions", "standard", "z_intercourse.js"));
-const engineStart = source.indexOf("class ActionEngine {");
-const engineEnd = source.indexOf("\nclass Conversation {", engineStart);
-assert(engineStart >= 0 && engineEnd > engineStart, "Cannot extract ActionEngine");
+const { getActionEngine } = require("./action-engine-test-helper");
 function character(id, name, age) {
   return { id, fullName: name, shortName: name, age, gender: id === 3 ? "female" : "male", traits: [], relationsToCharacters: [], addTrait(trait) { this.traits.push(trait); } };
 }
@@ -52,8 +50,7 @@ globalThis.healJsonResponseWithLogging = (content) => JSON.parse(content);
 const effects = [];
 globalThis.ActionEffectWriter = { writeEffect: (_gameData, sourceId, targetId, effectBody) => effects.push({ sourceId, targetId, effectBody }) };
 globalThis.ActionSandbox = { executeAction: async (_filePath, context) => intercourse.run(context) };
-eval(`${source.slice(engineStart, engineEnd)}\nglobalThis.__V684IntercourseEngine = ActionEngine;`);
-const ActionEngine = globalThis.__V684IntercourseEngine;
+const ActionEngine = getActionEngine();
 (async () => {
   const conversation = { gameData, messages: [], actionGateProcessedTriggers: new Set(), inactiveParticipantIds: new Map(), primaryAddresseeId: npcC.id };
   const message = { id: 8401, role: "assistant", name: npcB.fullName, content: "我与NPCC已经行过房事。", primaryAddresseeId: npcC.id };

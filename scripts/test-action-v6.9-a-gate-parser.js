@@ -15,11 +15,8 @@ globalThis.actionRegistry = {
     return { id: definition.signature, definition };
   })
 };
-const engineStart = source.indexOf("class ActionEngine {");
-const engineEnd = source.indexOf("\nclass Conversation {", engineStart);
-assert(engineStart >= 0 && engineEnd > engineStart, "Unable to locate ActionEngine");
-eval(`${source.slice(engineStart, engineEnd)}\nglobalThis.__V69ActionEngine = ActionEngine;`);
-const ActionEngine = globalThis.__V69ActionEngine;
+const { getActionEngine } = require("./action-engine-test-helper");
+const ActionEngine = getActionEngine();
 
 const gateCases = [
   ["我在他的手臂上划了一剑。", ["death_or_injury"]],

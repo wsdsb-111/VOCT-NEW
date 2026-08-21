@@ -1,5 +1,7 @@
 "use strict";
 
+const deterministicInvocation = require("./deterministic-invocation");
+
 function validateActionRules(action) {
   if (action.triggerCategories !== undefined && (!Array.isArray(action.triggerCategories) || action.triggerCategories.some((category) => typeof category !== "string" || category.length === 0))) {
     return { valid: false, message: "Action triggerCategories must be an array of non-empty strings." };
@@ -16,8 +18,8 @@ function validateActionRules(action) {
     }
   }
   if (semantic.match !== undefined && typeof semantic.match !== "function") return { valid: false, message: "Action semantic match must be a function." };
-  if (semantic.requiresLegacyResolution !== undefined && typeof semantic.requiresLegacyResolution !== "boolean") return { valid: false, message: "Action semantic requiresLegacyResolution must be a boolean." };
   if (semantic.deterministicInvocation !== undefined && typeof semantic.deterministicInvocation !== "boolean") return { valid: false, message: "Action semantic deterministicInvocation must be a boolean." };
+  if (semantic.deterministicInvocation === true && !deterministicInvocation.hasResolver(action.signature)) return { valid: false, message: "Deterministic action is missing registered resolver." };
   if (semantic.exclusiveGroup !== undefined && typeof semantic.exclusiveGroup !== "string") return { valid: false, message: "Action semantic exclusiveGroup must be a string." };
   if (semantic.priority !== undefined && !Number.isFinite(semantic.priority)) return { valid: false, message: "Action semantic priority must be a finite number." };
   if (semantic.riskLevel !== undefined && !["low", "medium", "high"].includes(semantic.riskLevel)) return { valid: false, message: "Action semantic riskLevel must be low, medium, or high." };

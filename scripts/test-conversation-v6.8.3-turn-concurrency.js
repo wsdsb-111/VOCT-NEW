@@ -7,9 +7,7 @@ const path = require("path");
 const root = path.resolve(__dirname, "..");
 globalThis.__V67ActionSystem = require(path.join(root, "resources", "app", "out", "main", "action-system"));
 const source = fs.readFileSync(path.join(root, "resources", "app", "out", "main", "main.js"), "utf8");
-const conversationStart = source.indexOf("class Conversation {");
-const conversationEnd = source.indexOf("\nclass ConversationManager {", conversationStart);
-assert(conversationStart >= 0 && conversationEnd > conversationStart, "Cannot extract Conversation");
+const { getConversationClass } = require("./conversation-test-helper");
 
 globalThis.createMessage = (message) => ({ type: "message", ...message });
 globalThis.createError = (message) => ({ type: "error", ...message });
@@ -28,8 +26,7 @@ const streams = [];
 globalThis.llmManager = {
   sendChatRequest: async () => streams.shift()
 };
-eval(`${source.slice(conversationStart, conversationEnd)}\nglobalThis.__V683Conversation = Conversation;`);
-const Conversation = globalThis.__V683Conversation;
+const Conversation = getConversationClass();
 
 function deferredStream() {
   const pending = [];

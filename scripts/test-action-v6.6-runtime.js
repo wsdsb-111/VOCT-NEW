@@ -5,11 +5,8 @@ const path = require("path");
 const root = path.resolve(__dirname, "..");
 globalThis.__V67ActionSystem = require(path.join(root, "resources", "app", "out", "main", "action-system"));
 const source = fs.readFileSync(path.join(root, "resources", "app", "out", "main", "main.js"), "utf8");
-const actionEngineStart = source.indexOf("class ActionEngine {");
-const actionEngineEnd = source.indexOf("\nclass Conversation {", actionEngineStart);
-const conversationStart = actionEngineEnd + 1;
-const conversationEnd = source.indexOf("\nclass ConversationManager {", conversationStart);
-assert(actionEngineStart >= 0 && actionEngineEnd > actionEngineStart && conversationEnd > conversationStart, "Cannot extract production action runtime classes");
+const { getActionEngine } = require("./action-engine-test-helper");
+const { getConversationClass } = require("./conversation-test-helper");
 
 const player = { id: 1, fullName: "玩家", shortName: "玩家" };
 const zhangSan = { id: 2, fullName: "张三", shortName: "张三" };
@@ -41,12 +38,12 @@ const deathAction = {
 };
 const loadedDeathAction = { id: deathAction.signature, definition: deathAction, validation: { valid: true }, filePath: "runtime-test" };
 const checkedSources = [];
-const createRuntimeAction = ({ signature, category, evidencePatterns, participantRoles, riskLevel, sourceId, requiresLegacyResolution = false }) => ({
+const createRuntimeAction = ({ signature, category, evidencePatterns, participantRoles, riskLevel, sourceId }) => ({
   id: signature,
   definition: {
     signature,
     triggerCategories: [category],
-    semantic: { evidencePatterns, participantRoles, riskLevel, requiresLegacyResolution },
+    semantic: { evidencePatterns, participantRoles, riskLevel },
     title: { zh: signature },
     description: signature,
     args: [],
@@ -67,7 +64,7 @@ const loadedActions = [
   createRuntimeAction({ signature: "isImprisonedBy", category: "imprisonment", evidencePatterns: [/关进|关押|囚禁/], participantRoles: { source: "patient", target: "actor" }, riskLevel: "high", sourceId: zhangSan.id }),
   createRuntimeAction({ signature: "isEmployedAsKnightBy", category: "employment_or_office", evidencePatterns: [/任命.*骑士|骑士/], participantRoles: { source: "patient", target: "actor" }, riskLevel: "medium", sourceId: zhangSan.id }),
   createRuntimeAction({ signature: "isInjured", category: "death_or_injury", evidencePatterns: [/刺伤|砍伤/], participantRoles: { source: "actor", target: "patient" }, riskLevel: "high", sourceId: player.id }),
-  createRuntimeAction({ signature: "playerPaysGoldTo", category: "gold", evidencePatterns: [], riskLevel: "medium", sourceId: player.id, requiresLegacyResolution: true })
+  createRuntimeAction({ signature: "playerPaysGoldTo", category: "gold", evidencePatterns: [/给.*金币|金币.*给/], riskLevel: "medium", sourceId: player.id })
 ];
 let approvalMode = "non-destructive";
 globalThis.actionRegistry = {
@@ -120,10 +117,9 @@ globalThis.llmManager = {
 globalThis.logVerboseLLM = () => {};
 globalThis.createMessage = (message) => message;
 
-eval(`${source.slice(actionEngineStart, actionEngineEnd)}\nglobalThis.__V66RuntimeActionEngine = ActionEngine;`);
-eval(`${source.slice(conversationStart, conversationEnd)}\nglobalThis.__V66RuntimeConversation = Conversation;`);
-const ActionEngine = globalThis.__V66RuntimeActionEngine;
-const Conversation = globalThis.__V66RuntimeConversation;
+const ActionEngine = getActionEngine();
+globalThis.ActionEngine = ActionEngine;
+const Conversation = getConversationClass();
 
 (async () => {
   const conv = { gameData, actionGateProcessedTriggers: new Set() };

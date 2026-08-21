@@ -7,14 +7,15 @@ const root = path.resolve(__dirname, "..");
 const mainPath = path.join(root, "resources", "app", "out", "main", "main.js");
 const actionsDir = path.join(root, "resources", "app", "default_userdata", "actions", "standard");
 const source = fs.readFileSync(mainPath, "utf8");
+const engineSource = fs.readFileSync(path.join(root, "resources", "app", "out", "main", "action-system", "action-engine.js"), "utf8");
 const retiredFiles = ["z_performCombatAction.js", "z_performDailyAction.js", "z_performIntimateAction.js"];
 const retiredIds = ["performCombatAction", "performDailyAction", "performIntimateAction"];
 
 for (const filename of retiredFiles) {
   assert(!fs.existsSync(path.join(actionsDir, filename)), `${filename} must not ship in standard actions`);
 }
-assert(!source.includes("sceneActionIds"), "ActionEngine must not keep Scene Action candidate handling");
-assert(!source.includes("repeatableSceneCategories"), "Scene Event categories must not expand maxActions");
+assert(!engineSource.includes("sceneActionIds"), "ActionEngine must not keep Scene Action candidate handling");
+assert(!engineSource.includes("repeatableSceneCategories"), "Scene Event categories must not expand maxActions");
 
 const fixtureRoot = fs.mkdtempSync(path.join(os.tmpdir(), "votc-v671-scene-"));
 try {
@@ -23,15 +24,13 @@ try {
   const DEFAULT_USERDATA_DIR = path.join(fixtureRoot, "defaults");
   const STANDARD_SUBDIR = "standard";
   const CUSTOM_SUBDIR = "custom";
-  const RETIRED_STANDARD_ACTION_FILES = retiredFiles;
-  const RETIRED_STANDARD_ACTION_IDS = new Set(retiredIds);
-  const fs$1 = fs;
-  const events = require("events");
-  const registryStart = source.indexOf("class ActionRegistry extends events.EventEmitter {");
-  const registryEnd = source.indexOf("const actionRegistry = ActionRegistry.getInstance();", registryStart);
-  assert(registryStart >= 0 && registryEnd > registryStart, "Cannot extract ActionRegistry");
-  eval(`${source.slice(registryStart, registryEnd)}\nglobalThis.__V671ActionRegistry = ActionRegistry;`);
-  const registry = new globalThis.__V671ActionRegistry();
+  const actionSystem = require(path.join(root, "resources", "app", "out", "main", "action-system"));
+  const ActionRegistry = actionSystem.ActionRegistry.configure({
+    actionsDir: VOTC_ACTIONS_DIR,
+    dataDir: VOTC_DATA_DIR,
+    defaultUserdataDir: DEFAULT_USERDATA_DIR
+  });
+  const registry = new ActionRegistry();
   const userStandardDir = path.join(VOTC_ACTIONS_DIR, STANDARD_SUBDIR);
   const userCustomDir = path.join(VOTC_ACTIONS_DIR, CUSTOM_SUBDIR);
   fs.mkdirSync(userStandardDir, { recursive: true });
@@ -53,11 +52,8 @@ try {
       actionRequestCount += 1;
       throw new Error("Scene Event must not call Action LLM");
     } };
-    const engineStart = source.indexOf("class ActionEngine {");
-    const engineEnd = source.indexOf("\nclass Conversation {", engineStart);
-    assert(engineStart >= 0 && engineEnd > engineStart, "Cannot extract ActionEngine");
-    eval(`${source.slice(engineStart, engineEnd)}\nglobalThis.__V671SceneActionEngine = ActionEngine;`);
-    const ActionEngine = globalThis.__V671SceneActionEngine;
+const { getActionEngine } = require("./action-engine-test-helper");
+const ActionEngine = getActionEngine();
     const player = { id: 1, shortName: "玩家", fullName: "玩家" };
     const zhangSan = { id: 2, shortName: "张三", fullName: "张三" };
     const gameData = { playerID: player.id, playerName: player.fullName, characters: new Map([[player.id, player], [zhangSan.id, zhangSan]]) };

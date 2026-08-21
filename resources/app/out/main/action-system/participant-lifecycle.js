@@ -1,6 +1,6 @@
 "use strict";
 
-function setParticipantState(conversation, characterId, state) {
+function deactivate(conversation, characterId, state) {
   if (characterId == null) return false;
   conversation.inactiveParticipantIds.set(characterId, state);
   conversation.npcQueue = conversation.npcQueue.filter((npc) => npc?.id !== characterId);
@@ -15,4 +15,4 @@ function setParticipantState(conversation, characterId, state) {
   return true;
 }
 
-module.exports = { setParticipantState };
+module.exports = { deactivate };

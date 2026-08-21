@@ -28,12 +28,13 @@ function createReferenceResolution(input) {
 }
 
 function createParticipantBinding(input) {
+  const eventId = input.eventId ?? null;
   const binding = {
     bindingId: `${input.messageId ?? "message"}:${input.eventId ?? "event"}:${input.actionId ?? "action"}`,
     mode: input.mode || "resolved",
     messageId: input.messageId ?? null,
-    eventId: input.eventId ?? null,
-    traceId: input.traceId ?? null,
+    eventId,
+    traceId: input.traceId || (eventId ? `action:${eventId}` : null),
     actionId: input.actionId ?? null,
     speakerCharacterId: input.speakerCharacterId ?? null,
     actorCharacterId: input.actorCharacterId ?? null,
@@ -66,26 +67,31 @@ function createAvailableAction(input) {
 }
 
 function createValidatedInvocation(input) {
+  const eventId = input.eventId ?? null;
   return Object.freeze({
     actionId: input.actionId,
     sourceCharacterId: input.sourceCharacterId ?? null,
     targetCharacterId: input.targetCharacterId ?? null,
     bindingId: input.bindingId ?? null,
-    eventId: input.eventId ?? null,
-    traceId: input.traceId ?? null,
+    eventId,
+    traceId: input.traceId || (eventId ? `action:${eventId}` : null),
     args: Object.freeze({ ...(input.args || {}) })
   });
 }
 
 function createExecutionResult(input) {
+  const eventId = input.eventId ?? null;
   return Object.freeze({
     actionId: input.actionId,
     success: input.success === true,
+    effectWritten: input.effectWritten === true,
     error: input.error ?? null,
     feedback: input.feedback,
     sourceCharacterId: input.sourceCharacterId ?? null,
     targetCharacterId: input.targetCharacterId ?? null,
-    bindingId: input.bindingId ?? null
+    bindingId: input.bindingId ?? null,
+    eventId,
+    traceId: input.traceId || (eventId ? `action:${eventId}` : null)
   });
 }
 

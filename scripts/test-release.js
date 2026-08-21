@@ -6,6 +6,7 @@ const { spawnSync } = require("child_process");
 const root = path.resolve(__dirname, "..");
 const checks = [
   { group: "syntax", args: ["--check", path.join(root, "resources", "app", "out", "main", "main.js")] },
+  { group: "architecture-health", args: [path.join(__dirname, "test-v6.9.1-architecture-health.js")] },
   { group: "action-semantic-binding-runtime-conversation-approval-registry", args: [path.join(__dirname, "test-action-regression.js")] },
   { group: "character-game-facts", args: [path.join(__dirname, "test-character-game-facts.js")] }
 ];
@@ -19,4 +20,4 @@ for (const check of checks) {
   }
 }
 
-console.log(`\nVOTC v6.9 Release Regression: PASS (${checks.length} groups)`);
+console.log(`\nVOTC v6.9.1 Release Regression: PASS (${checks.length} groups)`);
