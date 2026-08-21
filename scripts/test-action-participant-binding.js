@@ -30,8 +30,17 @@ const availableAction = {
 
 assert(Object.isFrozen(binding), "ParticipantBinding must be immutable");
 assert(Object.isFrozen(binding.references), "ParticipantBinding references must be immutable");
-const validated = invocationValidator.validateInvocation({
+const rejectedMismatch = invocationValidator.validateInvocation({
   modelInvocation: { actionId: "isInjured", targetCharacterId: 999, args: { injuryType: "wounded" } },
+  availableAction,
+  binding,
+  registry,
+  gameData
+});
+assert.strictEqual(rejectedMismatch.valid, false, "a model target that conflicts with a locked binding must be rejected");
+assert.strictEqual(rejectedMismatch.reason, "binding_target_mismatch");
+const validated = invocationValidator.validateInvocation({
+  modelInvocation: { actionId: "isInjured", targetCharacterId: zhangSan.id, args: { injuryType: "wounded" } },
   availableAction,
   binding,
   registry,
@@ -39,7 +48,7 @@ const validated = invocationValidator.validateInvocation({
 });
 assert.strictEqual(validated.valid, true, "a known action with binding must validate");
 assert.strictEqual(validated.invocation.sourceCharacterId, player.id, "binding source must be preserved");
-assert.strictEqual(validated.invocation.targetCharacterId, zhangSan.id, "model target must not override binding");
+assert.strictEqual(validated.invocation.targetCharacterId, zhangSan.id, "validated target must preserve binding");
 assert.strictEqual(validated.invocation.bindingId, binding.bindingId, "invocation must retain binding identity");
 
 assert.strictEqual(invocationValidator.validateInvocation({

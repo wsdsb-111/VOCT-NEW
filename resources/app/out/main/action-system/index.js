@@ -3,7 +3,7 @@
 const { ConversationReferenceContext, buildMessageReferenceIndex } = require("./reference-context");
 const { ReferenceResolver } = require("./reference-resolver");
 const { ParticipantResolver } = require("./participant-resolver");
-const { createParticipantBinding, createUnresolvedBinding } = require("./action-types");
+const actionTypes = require("./action-types");
 const riskPolicy = require("./risk-policy");
 const invocationValidator = require("./invocation-validator");
 const eventTracker = require("./event-tracker");
@@ -12,14 +12,21 @@ const candidateGate = require("./candidate-gate");
 const eventParser = require("./event-parser");
 const semanticResolver = require("./semantic-resolver");
 const availabilityService = require("./availability-service");
+const injuryTypeResolver = require("./injury-type-resolver");
+const deterministicInvocation = require("./deterministic-invocation");
+const actionRuleRegistry = require("./action-rule-registry");
+const { ConversationTurnManager } = require("./conversation-turn-manager");
+const { GenerationManager } = require("./generation-manager");
+const { ApprovalManager } = require("./approval-manager");
+const participantLifecycle = require("./participant-lifecycle");
+const actionDecisionTrace = require("./action-decision-trace");
 
 module.exports = {
   ConversationReferenceContext,
   buildMessageReferenceIndex,
   ReferenceResolver,
   ParticipantResolver,
-  createParticipantBinding,
-  createUnresolvedBinding,
+  ...actionTypes,
   riskPolicy,
   invocationValidator,
   eventTracker,
@@ -27,5 +34,13 @@ module.exports = {
   candidateGate,
   eventParser,
   semanticResolver,
-  availabilityService
+  availabilityService,
+  injuryTypeResolver,
+  deterministicInvocation,
+  actionRuleRegistry,
+  ConversationTurnManager,
+  GenerationManager,
+  ApprovalManager,
+  participantLifecycle,
+  actionDecisionTrace
 };

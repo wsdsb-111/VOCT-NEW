@@ -9,7 +9,9 @@ module.exports = {
       evidencePatterns: [/(?:正式结盟|结盟成功|结成同盟|缔结同盟|formed? an alliance)/i],
       exclusiveGroup: "relationship_tier",
       priority: 50,
-      riskLevel: "high"
+      riskLevel: "high",
+      bilateralPersistentEffect: true,
+      participantRoles: { source: "actor", target: "patient" }
     },
     title: {
         en: "Characters Agree On Mutual Military Alliance",

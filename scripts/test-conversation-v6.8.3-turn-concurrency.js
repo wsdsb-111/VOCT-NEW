@@ -5,6 +5,7 @@ const fs = require("fs");
 const path = require("path");
 
 const root = path.resolve(__dirname, "..");
+globalThis.__V67ActionSystem = require(path.join(root, "resources", "app", "out", "main", "action-system"));
 const source = fs.readFileSync(path.join(root, "resources", "app", "out", "main", "main.js"), "utf8");
 const conversationStart = source.indexOf("class Conversation {");
 const conversationEnd = source.indexOf("\nclass ConversationManager {", conversationStart);

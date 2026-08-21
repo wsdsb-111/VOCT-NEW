@@ -78,7 +78,7 @@ function buildCharacterItems(char, gameData, isCurrent) {
   }
 
   items.push(houseAndStatus(char));
-  if (char.primaryTitle !== "None of" || char.primaryTitle !== "None" || char.primaryTitle !== "None von" || char.primaryTitle !== "None de") items.push(`主要头衔：${char.primaryTitle}`);
+  if (char.primaryTitle && !["None of", "None", "None von", "None de"].includes(char.primaryTitle)) items.push(`主要头衔：${char.primaryTitle}`);
   if (char.titleRankConcept !== "concept_none") items.push(`头衔等级：${char.titleRankConcept}`);
   if (char.capitalLocation) items.push(`首都：${char.capitalLocation}`);
   if (char.location) items.push(`当前位置：${char.location}`);

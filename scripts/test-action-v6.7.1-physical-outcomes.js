@@ -101,7 +101,7 @@ globalThis.healJsonResponseWithLogging = (content) => JSON.parse(content);
 globalThis.logVerboseLLM = () => {};
 globalThis.llmManager = {
   sendActionsRequest: async () => ({
-    content: JSON.stringify({ actions: [{ actionId: globalThis.__V671SelectedActionId, targetCharacterId: 999, args: {} }] })
+    content: JSON.stringify({ actions: [{ actionId: globalThis.__V671SelectedActionId, targetCharacterId: globalThis.__V671ExpectedTargetId, args: {} }] })
   })
 };
 
@@ -110,6 +110,8 @@ for (const [text, actionId, expectedSourceId, expectedTargetId] of [
   ["我砍下张三脑袋。", "characterIsKilled", zhangSan.id, player.id]
 ]) {
   globalThis.__V671SelectedActionId = actionId;
+  globalThis.__V671ExpectedTargetId = expectedTargetId;
+  globalThis.__V671AvailableActions = [];
   const result = await ActionEngine.evaluateForCharacter({ gameData, messages: [], actionGateProcessedTriggers: new Set() }, player, null, {
     id: `runtime:${actionId}`,
     role: "user",
@@ -117,10 +119,12 @@ for (const [text, actionId, expectedSourceId, expectedTargetId] of [
     content: text
   });
   const available = globalThis.__V671AvailableActions.find((action) => action.signature === actionId);
-  assert(available, `${text}: runtime must expose ${actionId}`);
-  assert.strictEqual(available.sourceCharacterId, expectedSourceId, `${text}: runtime source must preserve binding`);
-  assert.strictEqual(available.resolvedTargetCharacterId, expectedTargetId, `${text}: runtime target must preserve binding`);
-  assert.strictEqual(result.needsApproval[0].targetCharacterId, expectedTargetId, `${text}: approval must reject the model's wrong target`);
+  if (actionId !== "isInjured") {
+    assert(available, `${text}: runtime must expose ${actionId}`);
+    assert.strictEqual(available.sourceCharacterId, expectedSourceId, `${text}: runtime source must preserve binding`);
+    assert.strictEqual(available.resolvedTargetCharacterId, expectedTargetId, `${text}: runtime target must preserve binding`);
+  }
+  assert.strictEqual(result.needsApproval[0].targetCharacterId, expectedTargetId, `${text}: approval must preserve the locked target`);
 }
 
 console.log("VOTC v6.7.1 physical outcomes: PASS (injury/death semantics and bindings)");

@@ -58,8 +58,8 @@ for (const [text, expected] of triggerCases) {
 }
 
 const semanticCases = [
-  ["我与她对视许久，随后吻住了她的唇。", ["intimate_contact", "relationship"], ["becomeSoulmatesWith"]],
-  ["我牵住她的手，轻轻亲吻她。", ["intimate_contact", "relationship"], ["becomeLoversWith"]],
+  ["我与她对视许久，随后吻住了她的唇。", ["intimate_contact"], []],
+  ["我牵住她的手，轻轻亲吻她。", ["intimate_contact"], []],
   ["卫兵将他押送入牢。", ["imprisonment"], ["isImprisonedBy"]],
   ["他被刺伤，鲜血不断涌出。", ["death_or_injury"], ["isInjured"]],
   ["他被斩首处死。", ["death_or_injury"], ["characterIsKilled"]],
@@ -168,10 +168,11 @@ assert(actionsGetAllSource.includes("riskLevel: semantic.riskLevel"), "actions:g
 assert(actionsGetAllSource.includes('semanticMode: semantic.requiresLegacyResolution ? "legacy"'), "actions:getAll must expose semantic resolution mode for the action list");
 const rendererPath = path.join(root, "resources", "app", "out", "renderer", "assets", "index-Dn3qWlAB.js");
 const rendererSource = fs.readFileSync(rendererPath, "utf8");
+const approvalManagerSource = fs.readFileSync(path.join(root, "resources", "app", "out", "main", "action-system", "approval-manager.js"), "utf8");
 assert(rendererSource.includes("action-semantic-meta"), "ActionsView must render action semantic metadata");
 assert(rendererSource.includes('t("actions.eventResolver")'), "ActionsView must localize semantic resolution mode");
 assert(rendererSource.includes("const riskLabel = action.riskLevel"), "action approval must display its resolved risk level");
-assert(source.includes("riskLevel: action.riskLevel"), "action approval payload must preserve risk level");
+assert(approvalManagerSource.includes("riskLevel: action.riskLevel"), "action approval payload must preserve risk level");
 assert.strictEqual(JSON.parse(fs.readFileSync(path.join(root, "resources", "app", "package.json"), "utf8")).version, "2.0.4", "Packaged app version must be 2.0.4");
 const actionUiContractTests = 1;
 

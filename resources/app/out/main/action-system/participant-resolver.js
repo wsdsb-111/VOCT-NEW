@@ -23,7 +23,7 @@ class ParticipantResolver {
     const originalText = event?.evidence?.text || "";
     const activeIds = activeParticipantIds ? new Set(activeParticipantIds) : null;
     const characters = Array.from(gameData?.characters?.values?.() || []).filter((character) => !activeIds || activeIds.has(character.id));
-    const baseInput = { messageId: message?.id, eventId: event?.eventId, actionId, speakerCharacterId: speaker?.id, evidence: event?.evidence, references };
+    const baseInput = { messageId: message?.id, eventId: event?.eventId, traceId: event?.traceId, actionId, speakerCharacterId: speaker?.id, evidence: event?.evidence, references };
     if (!speaker || !originalText || characters.length === 0) return { mode: "unresolved", reason: "missing_participant_context", binding: createUnresolvedBinding({ ...baseInput, unresolvedReason: "missing_participant_context" }) };
     if (/(?:让|叫|命令).{0,24}(?:杀|刺|砍|关|囚禁|任命|雇佣|招募)/.test(originalText)) return { mode: "unresolved", reason: "unsupported_causative", binding: createUnresolvedBinding({ ...baseInput, unresolvedReason: "unsupported_causative" }) };
     const unresolvedReference = references.find((reference) => reference.mode === "unresolved");
@@ -62,6 +62,13 @@ class ParticipantResolver {
     const speakerIndex = evidenceText.indexOf("我");
     const reflexive = evidenceText.includes("自己");
     if (reflexive && speakerIndex >= 0 && actionPositions.length > 0) return resolve(speaker, speaker, "reflexive_speaker");
+    if (actionDefinition?.semantic?.bilateralPersistentEffect === true && namedCharacters.length === 1 && actionPositions.length > 0) {
+      return resolve(speaker, namedCharacters[0], "bilateral_explicit_counterpart");
+    }
+    if (actionDefinition?.semantic?.bilateralPersistentEffect === true && namedCharacters.length === 2 && actionPositions.length > 0) {
+      const [first, second] = namedCharacters.slice().sort((left, right) => evidenceText.search(new RegExp(identityPatternFor(left))) - evidenceText.search(new RegExp(identityPatternFor(right))));
+      return resolve(first, second, "bilateral_explicit_pair");
+    }
     if (namedCharacters.length === 1) {
       const character = namedCharacters[0];
       const namePattern = identityPatternFor(character);
@@ -72,7 +79,8 @@ class ParticipantResolver {
       const nameMatches = Array.from(evidenceText.matchAll(new RegExp(namePattern, "g")));
       const afterSpeaker = nameMatches.find((match) => speakerIndex >= 0 && match.index > speakerIndex && actionBetween(speakerIndex, match.index));
       if (afterSpeaker) return resolve(speaker, character, "explicit_active");
-      const patientBeforeAction = nameMatches.find((match) => speakerIndex >= 0 && match.index > speakerIndex && actionPositions.some((position) => position >= match.index && /(?:手|手臂|手指|肩膀|胸口|胸膛|腹部|背部|腰部|腿|脚|身体|身躯|血肉)(?:上|处)?/.test(evidenceText.slice(match.index, position))) && !matches(`(?:${namePattern})\\s*(?:被|遭)`));
+      const omittedSpeakerContinuation = /^(?:只是|仅仅|只不过)?\s*在/.test(evidenceText);
+      const patientBeforeAction = nameMatches.find((match) => (speakerIndex >= 0 && match.index > speakerIndex || omittedSpeakerContinuation) && actionPositions.some((position) => position >= match.index && /(?:手|手臂|手指|肩膀|胸口|胸膛|腹部|背部|腰部|腿|脚|身体|身躯|血肉)(?:上|处)?/.test(evidenceText.slice(match.index, position + 8))) && !matches(`(?:${namePattern})\\s*(?:被|遭)`));
       if (patientBeforeAction) return resolve(speaker, character, "explicit_active");
       const beforeSpeaker = nameMatches.slice().reverse().find((match) => speakerIndex >= 0 && match.index < speakerIndex && actionBetween(match.index, speakerIndex));
       if (beforeSpeaker) return resolve(character, speaker, "explicit_active");

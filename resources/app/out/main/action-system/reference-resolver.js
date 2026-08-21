@@ -1,13 +1,14 @@
 "use strict";
 
 const { buildMessageReferenceIndex, getCharacterGender } = require("./reference-context");
+const { createReferenceResolution } = require("./action-types");
 
 function unresolved(referenceType, surface, reason, start = null, end = null) {
-  return { mode: "unresolved", referenceType, surface, characterId: null, confidenceBasis: [], reason, start, end };
+  return createReferenceResolution({ mode: "unresolved", referenceType, surface, characterId: null, confidenceBasis: [], reason, start, end });
 }
 
 function resolved(referenceType, surface, character, basis, start = null, end = null) {
-  return { mode: "resolved", referenceType, surface, characterId: character.id, confidenceBasis: [basis], reason: null, start, end };
+  return createReferenceResolution({ mode: "resolved", referenceType, surface, characterId: character.id, confidenceBasis: [basis], reason: null, start, end });
 }
 
 function getCharacter(gameData, id) {
@@ -84,7 +85,7 @@ class ReferenceResolver {
           else references.push(resolved("third_person", surface, interlocutor, `unique_interlocutor_${gender}`, start, end));
         } else references.push(unresolved("third_person", surface, "ambiguous_third_person", start, end));
       } else if (surface === "自己") {
-        references.push({ mode: "resolved", referenceType: "reflexive", surface, characterId: null, confidenceBasis: ["clause_subject"], reason: null, start, end });
+        references.push(createReferenceResolution({ mode: "resolved", referenceType: "reflexive", surface, characterId: null, confidenceBasis: ["clause_subject"], reason: null, start, end }));
       }
     }
     return Object.freeze(references);

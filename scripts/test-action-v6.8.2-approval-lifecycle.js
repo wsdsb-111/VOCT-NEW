@@ -5,6 +5,7 @@ const fs = require("fs");
 const path = require("path");
 
 const root = path.resolve(__dirname, "..");
+globalThis.__V67ActionSystem = require(path.join(root, "resources", "app", "out", "main", "action-system"));
 const source = fs.readFileSync(path.join(root, "resources", "app", "out", "main", "main.js"), "utf8");
 const conversationStart = source.indexOf("class Conversation {");
 const conversationEnd = source.indexOf("\nclass ConversationManager {", conversationStart);
@@ -48,7 +49,7 @@ function createConversation() {
     resumeConversation: () => {},
     pauseConversation: () => {}
   };
-  for (const method of ["isCharacterAvailableForConversation", "invalidatePendingActionApproval", "invalidateApprovalsForCharacter", "markParticipantInactive", "handleActionResults", "approveActions", "removeCharacterFromConversation"]) {
+  for (const method of ["getActionSystem", "createApprovalManager", "getApprovalManager", "isCharacterAvailableForConversation", "invalidatePendingActionApproval", "invalidateApprovalsForCharacter", "markParticipantInactive", "handleActionResults", "approveActions", "removeCharacterFromConversation"]) {
     conversation[method] = Conversation.prototype[method];
   }
   return conversation;
@@ -92,7 +93,7 @@ function pendingAction() {
   sourceInactive.markParticipantInactive(zhangSan.id, "dead");
   assert(!sourceInactive.pendingActionApprovals.has(sourceApprovalId), "source inactivity must invalidate pending approval immediately");
   assert.strictEqual(sourceInactive.messages.find((entry) => entry.id === sourceApprovalId).status, "declined", "invalidated approval must leave a non-pending UI entry");
-  assert(analytics.some((entry) => entry.reason === "stale_approval_source_unavailable"), "source invalidation must be observable");
+  assert(analytics.some((entry) => entry.reason === "approval.stale_approval_source_unavailable"), "source invalidation must be observable");
 
   const targetRemoved = createConversation();
   const targetAction = pendingAction();
@@ -103,7 +104,7 @@ function pendingAction() {
   const targetApprovalId = Array.from(targetRemoved.pendingActionApprovals.keys())[0];
   targetRemoved.removeCharacterFromConversation(zhangSan.id);
   assert(!targetRemoved.pendingActionApprovals.has(targetApprovalId), "target removal must invalidate pending approval");
-  assert(analytics.some((entry) => entry.reason === "stale_approval_target_unavailable"), "target invalidation must be observable");
+  assert(analytics.some((entry) => entry.reason === "approval.stale_approval_target_unavailable"), "target invalidation must be observable");
 
   const staleAtClick = createConversation();
   await staleAtClick.handleActionResults(8, player, { autoApproved: [], needsApproval: [pendingAction()] });
@@ -112,7 +113,7 @@ function pendingAction() {
   const executionsBeforeApproval = executions.length;
   await staleAtClick.approveActions(staleApprovalId);
   assert.strictEqual(executions.length, executionsBeforeApproval, "stale source must be rejected before final execution");
-  assert(analytics.some((entry) => entry.reason === "stale_approval_source_unavailable"), "approval-time stale validation must record its reason");
+  assert(analytics.some((entry) => entry.reason === "approval.stale_approval_source_unavailable"), "approval-time stale validation must record its reason");
 
   const previewWithoutFeedback = createConversation();
   let realExecutionCount = 0;

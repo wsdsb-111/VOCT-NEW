@@ -7,6 +7,7 @@ const root = path.resolve(__dirname, "..");
 globalThis.__V67ActionSystem = require(path.join(root, "resources", "app", "out", "main", "action-system"));
 const mainPath = path.join(root, "resources", "app", "out", "main", "main.js");
 const source = fs.readFileSync(mainPath, "utf8");
+const approvalManagerSource = fs.readFileSync(path.join(root, "resources", "app", "out", "main", "action-system", "approval-manager.js"), "utf8");
 const actionsDir = path.join(root, "resources", "app", "default_userdata", "actions", "standard");
 globalThis.actionRegistry = {
   getAllActions: () => fs.readdirSync(actionsDir).filter((file) => file.endsWith(".js")).map((file) => {
@@ -119,7 +120,7 @@ for (const action of highRiskActions) {
   assert.strictEqual(registry.getEffectiveDestructive(action.signature), true, `${action.signature}: high risk cannot be downgraded`);
   assert.strictEqual(registry.shouldRequireApproval(action.signature, "non-destructive"), true, `${action.signature}: high risk requires approval`);
 }
-assert(source.includes("riskLevel: action.riskLevel"), "approval payload must preserve the resolved risk level");
+assert(approvalManagerSource.includes("riskLevel: action.riskLevel"), "approval payload must preserve the resolved risk level");
 assert(source.includes("action_participant_resolution"), "participant outcomes must be recorded without message text");
 
 const parserCases = [

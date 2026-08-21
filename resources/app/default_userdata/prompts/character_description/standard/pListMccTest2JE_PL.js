@@ -78,7 +78,7 @@ function buildCharacterItems(char, gameData, isCurrent) {
   }
 
   items.push(houseAndStatus(char));
-  if (char.primaryTitle !== "None of" || char.primaryTitle !== "None" || char.primaryTitle !== "None von" || char.primaryTitle !== "None de") items.push(`główny tytuł: ${char.primaryTitle}`);
+  if (char.primaryTitle && !["None of", "None", "None von", "None de"].includes(char.primaryTitle)) items.push(`główny tytuł: ${char.primaryTitle}`);
   if (char.titleRankConcept !== "concept_none") items.push(`ranga tytułu: ${char.titleRankConcept}`);
   if (char.capitalLocation) items.push(`stolica: ${char.capitalLocation}`);
   if (char.location) items.push(`obecna lokalizacja: ${char.location}`);

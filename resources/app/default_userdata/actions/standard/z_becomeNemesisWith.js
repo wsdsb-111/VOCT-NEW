@@ -56,7 +56,7 @@ function getLocalizedNemesis(lang) {
 
 module.exports = {
   signature: "becomeNemesisWith",
-  triggerCategories: ["relationship"], semantic: { evidencePatterns: [/(?:死敌|宿敌|不共戴天|nemeses)/i], exclusiveGroup: "relationship_tier", priority: 40, riskLevel: "medium" },
+  triggerCategories: ["relationship"], semantic: { evidencePatterns: [/(?:正式|已经|已)?(?:成为|结为)(?:了)?(?:死敌|宿敌)|不共戴天|became? nemeses/i], exclusiveGroup: "relationship_tier", priority: 40, riskLevel: "medium", bilateralPersistentEffect: true, participantRoles: { source: "actor", target: "patient" } },
   title: {
     en: "Become Nemesis",
     ru: "Стать заклятыми врагами",

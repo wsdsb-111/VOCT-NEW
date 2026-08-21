@@ -64,10 +64,13 @@ module.exports = {
   signature: "becomeFriendsWith",
   triggerCategories: ["relationship"],
   semantic: {
-    evidencePatterns: [/(?:成为(?:了)?朋友|结为(?:了)?朋友|成为好友|建立友谊|朋友|友人|友谊|friends?)/i],
+    evidencePatterns: [/(?:正式|已经|已)?(?:成为|结为)(?:了)?(?:朋友|好友)|建立(?:了)?友谊|became? friends?/i],
+    excludePatterns: [/(?:请求|希望|想要|愿意|愿).{0,10}(?:成为|结为)(?:朋友|好友)/i],
     exclusiveGroup: "relationship_tier",
     priority: 20,
-    riskLevel: "medium"
+    riskLevel: "medium",
+    bilateralPersistentEffect: true,
+    participantRoles: { source: "actor", target: "patient" }
   },
   title: {
     en: "Become Friends",

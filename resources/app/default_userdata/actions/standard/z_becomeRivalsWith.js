@@ -60,7 +60,7 @@ function getLocalizedRival(lang) {
 
 module.exports = {
   signature: "becomeRivalsWith",
-  triggerCategories: ["relationship"], semantic: { evidencePatterns: [/(?:仇敌|冤家|势不两立|rivals?)/i], exclusiveGroup: "relationship_tier", priority: 35, riskLevel: "medium" },
+  triggerCategories: ["relationship"], semantic: { evidencePatterns: [/(?:正式|已经|已)?(?:成为|结为)(?:了)?(?:仇敌|冤家)|反目成仇|势不两立|became? rivals?/i], exclusiveGroup: "relationship_tier", priority: 35, riskLevel: "medium", bilateralPersistentEffect: true, participantRoles: { source: "actor", target: "patient" } },
   title: {
     en: "Become Rivals",
     ru: "Стать соперниками",

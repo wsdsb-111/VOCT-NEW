@@ -1,7 +1,7 @@
 /** @import { GameData, Character } from '../../gamedata_typedefs.js' */
 module.exports = {
   signature: "intercourse",
-  triggerCategories: ["sexual_intercourse_completed"], semantic: { evidencePatterns: [/(?:云雨|欢好|交合|行房|房事|同房|圆房|完成(?:了)?(?:交合|行房|房事|同房|圆房|性事)|发生(?:了)?(?:性关系|肉体关系)|做(?:了)?爱|had sex|made love|consummated)/i], priority: 80, riskLevel: "high" },
+  triggerCategories: ["sexual_intercourse_completed"], semantic: { evidencePatterns: [/(?:(?:已经|已)(?:同房|圆房|行房|完成房事)|完成(?:了)?(?:交合|行房|房事|同房|圆房|性事)|发生(?:了)?(?:性关系|肉体关系)|一番云雨之后|行过房事|共度(?:了)?春宵之后|鱼水之欢已毕|had sex|made love|consummated)/i], priority: 80, riskLevel: "high", deterministicInvocation: true, bilateralPersistentEffect: true, participantRoles: { source: "actor", target: "patient" } },
   title: {
     en: "Sexual Intercourse Concluded",
     ru: "Сексуальный акт завершен",
@@ -33,22 +33,16 @@ module.exports = {
    * @param {Character} params.sourceCharacter
    */
   check: ({ gameData, sourceCharacter }) => {
-    const allIds = Array.from(gameData.characters.keys());
-    const validTargets = allIds.filter((id) => id !== sourceCharacter.id);
-
-    // Exclude targets with whom source had intercourse recently
-    const recentlyWithIds = new Set();
-    for (const t of sourceCharacter.traits) {
-      if (t && typeof t.name === "string" && t.name.toLowerCase() === "hadsex" && typeof t.desc === "string") {
-        const m = t.desc.match(/\[withId=(\d+)\]/);
-        if (m) {
-          recentlyWithIds.add(Number(m[1]));
-        }
-      }
+    if (!Number.isFinite(sourceCharacter.age) || sourceCharacter.age < 16) {
+      return { canExecute: false, validTargetCharacterIds: [] };
     }
-
-    const filtered = validTargets.filter((id) => !recentlyWithIds.has(id));
-    if (filtered.length === 0) {
+    const allIds = Array.from(gameData.characters.keys());
+    const validTargets = allIds.filter((id) => {
+      if (id === sourceCharacter.id) return false;
+      const target = gameData.characters.get(id);
+      return Number.isFinite(target?.age) && target.age >= 16;
+    });
+    if (validTargets.length === 0) {
       return {
         canExecute: false,
         validTargetCharacterIds: [],
@@ -56,7 +50,7 @@ module.exports = {
     }
     return {
       canExecute: true,
-      validTargetCharacterIds: filtered,
+      validTargetCharacterIds: validTargets,
     };
   },
 
@@ -113,15 +107,6 @@ global_var:votc_action_source = {
         PREGNANCY_CHANCE = pregnancy_chance
     }
 }`);
-
-    try {
-      sourceCharacter.addTrait({
-        category: "flag",
-        name: "HadSex",
-        desc: `${sourceCharacter.shortName} had sex recently with ${targetCharacter.shortName} [withId=${targetCharacter.id}]`,
-      });
-    } catch (e) {
-    }
 
     return {
       message: {

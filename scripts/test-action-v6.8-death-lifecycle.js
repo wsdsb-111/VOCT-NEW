@@ -79,7 +79,7 @@ await Conversation.prototype.respondAs.call({
 }, deadNpc);
 assert.strictEqual(generated, false, "pre-generation availability guard must skip a dead queued NPC");
 assert(source.includes('conv.markParticipantInactive?.(source.id, "dead")'), "successful death execution must inactivate the resolved victim");
-assert(source.includes('skipReason: "inactive_participant"'), "inactive players and NPCs must not execute further actions");
+assert(source.includes('normalizeActionSkipReason("inactive_participant")'), "inactive players and NPCs must not execute further actions");
 
 console.log("VOTC v6.8.1 death lifecycle: PASS (context rebuild, target binding, queue and action guards)");
 })().catch((error) => {

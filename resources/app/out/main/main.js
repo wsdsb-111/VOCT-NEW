@@ -2840,7 +2840,9 @@ function inferGenderFromPronoun(value) {
 class Character {
   constructor(data) {
     this.conversationSummaries = [];
-    this.id = Number(data[0]), this.shortName = data[1], this.fullName = data[2], this.primaryTitle = data[3], this.sheHe = data[4], this.gender = inferGenderFromPronoun(data[4]), this.age = Number(data[5]), this.gold = Math.floor(Number(data[6])), this.opinionOfPlayer = Number(data[7]), this.sexuality = removeTooltip$1(data[8]), this.personality = data[9], this.greed = Number(data[10]), this.boldness = 0, this.compassion = 0, this.energy = 0, this.honor = 0, this.rationality = 0, this.sociability = 0, this.vengefulness = 0, this.zeal = 0, this.isIndependentRuler = !!Number(data[11]), this.liege = data[12], this.consort = data[13], this.culture = data[14], this.faith = data[15], this.house = data[16], this.isRuler = !!Number(data[17]), this.firstName = data[18], this.capitalLocation = data[19], this.topLiege = data[20], this.prowess = Number(data[21]), this.isKnight = !!Number(data[22]), this.liegeRealmLaw = data[23], this.isLandedRuler = !!Number(data[24]), this.heldCourtAndCouncilPositions = data[25], this.titleRankConcept = data[26], this.secrets = [], this.knownSecrets = [], this.modifiers = [], this.laws = [], this.memories = [], this.traits = [], this.relationsToPlayer = [], this.relationsToCharacters = [], this.opinionBreakdowns = [], this.opinions = [], this.parents = [], this.children = [], this.siblings = [];
+    const ageText = String(data[5] ?? "").replace(/<[^>]*>/g, "").trim();
+    const parsedAge = Number(ageText);
+    this.id = Number(data[0]), this.shortName = data[1], this.fullName = data[2], this.primaryTitle = String(data[3] ?? "").replace(/<[^>]*>/g, "").trim(), this.sheHe = data[4], this.gender = inferGenderFromPronoun(data[4]), this.age = Number.isFinite(parsedAge) ? Math.floor(parsedAge) : Number.parseInt(ageText.match(/\d+/)?.[0] || "", 10), this.gold = Math.floor(Number(data[6])), this.opinionOfPlayer = Number(data[7]), this.sexuality = removeTooltip$1(data[8]), this.personality = data[9], this.greed = Number(data[10]), this.boldness = 0, this.compassion = 0, this.energy = 0, this.honor = 0, this.rationality = 0, this.sociability = 0, this.vengefulness = 0, this.zeal = 0, this.isIndependentRuler = !!Number(data[11]), this.liege = data[12], this.consort = data[13], this.culture = data[14], this.faith = data[15], this.house = data[16], this.isRuler = !!Number(data[17]), this.firstName = data[18], this.capitalLocation = data[19], this.topLiege = data[20], this.prowess = Number(data[21]), this.isKnight = !!Number(data[22]), this.liegeRealmLaw = data[23], this.isLandedRuler = !!Number(data[24]), this.heldCourtAndCouncilPositions = data[25], this.titleRankConcept = data[26], this.secrets = [], this.knownSecrets = [], this.modifiers = [], this.laws = [], this.memories = [], this.traits = [], this.relationsToPlayer = [], this.relationsToCharacters = [], this.opinionBreakdowns = [], this.opinions = [], this.parents = [], this.children = [], this.siblings = [];
   }
   /**
    * Check if the character has a trait with a given name.
@@ -4083,6 +4085,26 @@ ${existingSummary}`
     return this.buildMessagesWithTokenCount(history, char, gameData, currentSessionSummary).messages;
   }
   /**
+   * Character-description scripts can be customized or disabled. Keep exact
+   * responder facts close to history so direct factual questions use CK3 data.
+   */
+  static buildResponderGameFacts(char) {
+    if (!char) return null;
+    const age = Number(char.age);
+    const primaryTitle = typeof char.primaryTitle === "string" ? char.primaryTitle.trim() : "";
+    const title = primaryTitle && !["None", "None of", "None von", "None de"].includes(primaryTitle) ? primaryTitle : "无主要头衔";
+    const courtPosition = typeof char.heldCourtAndCouncilPositions === "string" && char.heldCourtAndCouncilPositions.trim() ? char.heldCourtAndCouncilPositions.trim() : "无";
+    const titleRank = typeof char.titleRankConcept === "string" && char.titleRankConcept !== "concept_none" ? char.titleRankConcept : "无";
+    return `=== 当前回应角色的权威游戏资料（本轮 CK3 数据） ===
+- 游戏姓名／称号：${char.fullName || char.shortName || "未知"}
+- 姓名：${char.shortName || char.firstName || "未知"}
+- 年龄：${Number.isFinite(age) ? `${Math.floor(age)}岁` : "游戏未提供"}
+- 主要头衔：${title}
+- 宫廷／议会职位：${courtPosition}
+- 头衔等级：${titleRank}
+当被问及自己的姓名、称号、头衔、官职或年龄时，必须逐项以以上本轮游戏数据直接回答；不得根据历史、对话记忆或常识猜测，也不得用年龄阶段替代具体岁数。`;
+  }
+  /**
    * Stable, character-independent prefix for providers with prefix KV caching.
    * Keep this before all character-specific prompt blocks. It deliberately does
    * not include conversation history or memory, so the existing memory/history
@@ -4399,6 +4421,14 @@ ${existingSummary}`
       enabled: true,
       role: "system"
     };
+    const responderGameFacts = this.buildResponderGameFacts(char);
+    const responderGameFactsBlock = {
+      id: "responder-game-facts",
+      type: "responder_game_facts",
+      label: "Responder Authoritative Game Facts",
+      enabled: true,
+      role: "system"
+    };
     let mentionedContextInserted = false;
     const insertMentionedContext = () => {
       if (!mentionedContextInserted && mentionedCharactersContext) {
@@ -4435,6 +4465,14 @@ ${existingSummary}`
       for (const deferred of deferredDescriptionBlocks) {
         llmMessages.push(deferred.message);
         blocksWithTokens.push(deferred.tokenBlock);
+      }
+      if (responderGameFacts) {
+        llmMessages.push({ role: "system", content: responderGameFacts });
+        blocksWithTokens.push({
+          block: responderGameFactsBlock,
+          content: responderGameFacts,
+          tokens: TokenCounter.estimateTokens(responderGameFacts)
+        });
       }
       insertMentionedContext();
     };
@@ -4665,6 +4703,7 @@ class ActionRegistry extends events.EventEmitter {
   constructor() {
     super();
     this.actions = /* @__PURE__ */ new Map();
+    this.categoryIndex = /* @__PURE__ */ new Map();
     this.settings = {
       disabledActions: [],
       validation: {}
@@ -4697,6 +4736,11 @@ class ActionRegistry extends events.EventEmitter {
       }
       return !disabled.has(action.id) && action.validation.valid;
     });
+  }
+  getActionIdsForCategories(categories, includeDisabled = false) {
+    const indexed = (globalThis.__V67ActionSystem || actionSystem).actionRuleRegistry.getActionIdsForCategories(this.categoryIndex, categories);
+    const availableIds = new Set(this.getAllActions(includeDisabled).map((action) => action.id));
+    return new Set([...indexed].filter((actionId) => availableIds.has(actionId)));
   }
   isActionDisabled(signature) {
     return this.settings.disabledActions.includes(signature);
@@ -4777,6 +4821,7 @@ class ActionRegistry extends events.EventEmitter {
       this.actions.set(action.id, action);
       loaded.push(action);
     }
+    this.categoryIndex = (globalThis.__V67ActionSystem || actionSystem).actionRuleRegistry.buildCategoryIndex(loaded);
     this.emit("actions-reloaded", loaded);
   }
   on(event, listener) {
@@ -4978,39 +5023,8 @@ class ActionRegistry extends events.EventEmitter {
         message: "Action must provide a run(context) function."
       };
     }
-    if (action.semantic !== void 0) {
-      if (!action.semantic || typeof action.semantic !== "object" || Array.isArray(action.semantic)) {
-        return {
-          valid: false,
-          message: "Action semantic metadata must be an object."
-        };
-      }
-      const isRegExp = (value) => Object.prototype.toString.call(value) === "[object RegExp]";
-      for (const field of ["candidatePatterns", "evidencePatterns", "excludePatterns"]) {
-        if (action.semantic[field] !== void 0 && (!Array.isArray(action.semantic[field]) || action.semantic[field].some((pattern) => !isRegExp(pattern)))) {
-          return {
-            valid: false,
-            message: `Action semantic ${field} must be an array of regular expressions.`
-          };
-        }
-      }
-      if (action.semantic.exclusiveGroup !== void 0 && typeof action.semantic.exclusiveGroup !== "string") {
-        return { valid: false, message: "Action semantic exclusiveGroup must be a string." };
-      }
-      if (action.semantic.priority !== void 0 && !Number.isFinite(action.semantic.priority)) {
-        return { valid: false, message: "Action semantic priority must be a finite number." };
-      }
-      if (action.semantic.riskLevel !== void 0 && !["low", "medium", "high"].includes(action.semantic.riskLevel)) {
-        return { valid: false, message: "Action semantic riskLevel must be low, medium, or high." };
-      }
-      if (action.semantic.participantRoles !== void 0) {
-        const participantRoles = action.semantic.participantRoles;
-        const allowedRoles = ["actor", "patient", "speaker"];
-        if (!participantRoles || typeof participantRoles !== "object" || Array.isArray(participantRoles) || ["source", "target"].some((slot) => !allowedRoles.includes(participantRoles[slot]))) {
-          return { valid: false, message: "Action semantic participantRoles must define source and target as actor, patient, or speaker." };
-        }
-      }
-    }
+    const ruleValidation = (globalThis.__V67ActionSystem || actionSystem).actionRuleRegistry.validateActionRules(action);
+    if (!ruleValidation.valid) return ruleValidation;
     return { valid: true };
   }
   validateArguments(args) {
@@ -6046,222 +6060,16 @@ class ActionEngine {
    * ordinary conversation, plans, opinions, poetry, threats, and emotion alone
    * do not trigger an API request.
    */
-  static legacyGetActionTriggers(text, { candidateOnly = false } = {}) {
-    if (!text || typeof text !== "string") return [];
-    // Judge future tense only inside the clause that contains the candidate
-    // action. This prevents a later plan ("明日再谈") from cancelling an
-    // already-completed action in an earlier clause ("我给了他100金币").
-    const futureMarker = /(?:\u5c06(?:\u8981|\u4f1a)|(?:我|你|他|她|它|我们|你们|他们|她们)会|\u51c6\u5907|\u6253\u7b97|\u8ba1\u5212|\u60f3\u8981|\u6b32\u8981|\u7ea6\u597d|\u660e\u65e5|\u660e\u5929|\u5f85\u4f1a|\u5f85\u4f1a\u513f|\u7a0d\u540e|\u8fc7\u4f1a\u513f|\u7b49\u4e0b|\u8fdf\u4e9b\u65f6\u5019|\u6539\u65e5|\u4e4b\u540e\u518d|\u4e4b\u5f8c\u518d|\b(?:will|going to|plan to|wants? to|tomorrow|later)\b)/i;
-    const completionMarker = /(?:\u5df2\u7ecf|\u5df2\u7136|\u521a\u521a|\u65b9\u624d|\u4e8b\u6bd5|\u5b8c\u4e8b|\b(?:already|just|completed?|finished)\b)/i;
-    const failedAttemptMarker = /(?:试图|尝试|企图|没能|未能|没有(?:成功|得逞|做到|碰到|伤到|亲到|打中)|躲开|避开|闪开|挣脱|拒绝|推开|落空|被.{0,8}挡|挡下|missed|failed to|did not|didn't|dodged|avoided|refused)/i;
-    const hypotheticalMarker = /(?:如果|假如|倘若|若是|要是|也许|或许|可能会|不妨考虑|\b(?:if|maybe|perhaps|might|could)\b)/i;
-    const futureLeadIn = /(?:\u51c6\u5907|\u6253\u7b97|\u8ba1\u5212|\u60f3\u8981|\u6b32\u8981|\u5c06\u8981|\u5c06\u4f1a|(?:我|你|他|她|它|我们|你们|他们|她们)会|\u660e\u65e5|\u660e\u5929|\u5f85\u4f1a|\u5f85\u4f1a\u513f|\u7a0d\u540e|\u8fc7\u4f1a\u513f|\u7b49\u4e0b|\u8fdf\u4e9b\u65f6\u5019|\u6539\u65e5|\b(?:will|going to|plan to|tomorrow|later)\b)\s*$/i;
-    // 保留每个分句末尾的问号；否则 split 会让“你拔剑？”变成“你拔剑”，
-    // 导致下方的疑问句门控无法识别。
-    const clauses = (text.match(/[^。！？；，.!?;,\n]+[？?]?/g) || []).map((clause) => clause.trim()).filter(Boolean);
-    if (clauses.length === 0) clauses.push(text);
-    // Requests and questions often contain the same verb as an action report
-    // ("拿起剑吧", "你会拔剑吗？") but have not changed CK3 state.
-    const isNonExecutedActionClause = (clause, actionMatch) => {
-      const prefix = clause.slice(Math.max(0, actionMatch.index - 20), actionMatch.index);
-      if (/[？?]/.test(clause) || /(?:吧|吗|么|呢|如何|可否|能否|好吗)[！!。]?$/.test(clause)) return true;
-      // Mentioning an action is not performing it. This keeps lore, rumours,
-      // recollections and dialogue about an event from changing game state.
-      if (/(?:谈论|讨论|提及|讲述|回忆|描述|声称|听说|传闻|假装).{0,12}$/i.test(prefix)) return true;
-      return /(?:请|命令|要求|让|叫|希望|想|要|欲|准备|打算|计划|将(?:要|会)|会|能否|可否|是否|别|不要|莫|不许|不准)\s*(?:我|你|他|她|它|我们|你们|他们|她们|众人|侍从|护卫)?\s*$/i.test(prefix);
-    };
-    const describesCompletedOrCurrentAction = (pattern, rejectFailedAttempt = false) => clauses.some((clause, clauseIndex) => {
-      const actionMatch = pattern.exec(clause);
-      if (!actionMatch) return false;
-      if (isNonExecutedActionClause(clause, actionMatch)) return false;
-      const actionPrefix = clause.slice(Math.max(0, actionMatch.index - 8), actionMatch.index);
-      const adjacentFailure = /(?:没有|并未|不曾|未曾|尚未)/.test(actionPrefix) || failedAttemptMarker.test(clause) || clauseIndex + 1 < clauses.length && failedAttemptMarker.test(clauses[clauseIndex + 1]);
-      if (rejectFailedAttempt && adjacentFailure) return false;
-      const futureMatch = futureMarker.exec(clause);
-      const inheritsFuture = clauseIndex > 0 && futureLeadIn.test(clauses[clauseIndex - 1]);
-      if ((!futureMatch && !inheritsFuture) || completionMarker.test(clause)) return true;
-      if (inheritsFuture && !futureMatch) return false;
-      // A future marker appearing after the matched action normally modifies a
-      // later thought, even if the writer omitted punctuation.
-      return futureMatch.index > actionMatch.index + actionMatch[0].length;
-    });
-    const rules = [
-      { reason: "gold", pattern: /(?:(?:支付|付给|给(?:了)?|交给|交付|塞给|递给|奉上|献上|打赏|赏赐|赏下|赏了|赏给|赠与|赠送|转交|给钱|送钱|付清|结清|赔付|补偿|贿赂|行贿|掏出|奉还|归还).{0,16}(?:钱|金|银|金币|银币|铜钱|贯|两|文|财物)|(?:把|将)?.{0,12}(?:钱|金|银|金币|银币|铜钱|贯|两|文|财物).{0,12}(?:交给|交付|付给|递给|给了|奉上|赠与|转交)|(?:赎金|彩礼|聘礼|酬金|赏钱).{0,12}(?:支付|交付|给|付|钱|金|银)|收下.{0,12}(?:钱|金|银|礼金|赏钱)|(?:pay|paid|give|gave|gift|gifted|transfer|transferred|compensated|bribed|repaid).{0,20}(?:gold|money|coin))/i },
-      { reason: "imprisonment", pattern: /(?:囚禁|关进|关押|投入(?:大牢|地牢)|收监|逮捕|拘押|软禁|拿下|押下|押入|押进|押往|押送(?:入|至).{0,8}(?:牢|狱)|下狱|入狱|捆(?:起|住)来?|绑(?:起|住)来?|上(?:了)?枷锁|戴上(?:镣铐|枷锁)|锁进(?:牢房|地牢)?|铁链(?:锁住|缚住)|imprison(?:ed)?|arrest(?:ed)?|jailed?|locked up|put in chains)/i },
-      { reason: "death_or_injury", pattern: /(?:杀死|杀了|砍死|刺死|毒死|勒死|掐死|打死|烧死|淹死|处死|斩首|枭首|人头落地|身首异处|毙命|殒命|气绝|断气|倒地(?:身亡|死去)|(?:割|砍|斩|削)(?:了)?(?:下|断|落).{0,4}(?:脑袋|头颅|首级|头)|(?:脑袋|头颅|首级|头).{0,6}(?:被)?(?:割|砍|斩|削)(?:了)?(?:下|断|落)|刺伤|砍伤|打伤|烧伤|冻伤|摔伤|重创|重伤|负伤|受伤|划伤|割伤|划破|割破|刺穿|贯穿|(?:刺|捅)(?:中|入|进).{0,8}(?:胸(?:口|膛)?|腹(?:部)?|肩(?:膀)?|背(?:部)?|腰(?:部)?|腿|手臂|身体|身躯|血肉)|(?:刀|剑|匕首|枪尖|刀刃|剑刃).{0,6}(?:刺入|刺进|没入|扎进)|(?:手|手臂|手指|腿|脚|耳朵|鼻子).{0,8}(?:被)?(?:割|砍|斩)(?:了)?(?:下|掉|断|落)|(?:手|手臂|肩膀|胸口|腹部|背部|腰部|腿).{0,8}(?:砍|刺|捅|划|割)(?:了)?(?:一|两|几)(?:刀|剑|下|记)|捅伤|扎伤|流血(?:不止)?|鲜血.{0,8}(?:流出|涌出|喷出)|伤口|骨折|断骨|昏迷|毁容|弄瞎|刺瞎|打瞎|剜.?眼|断腿|折断|打断|割下|砍下|阉割|killed?|executed|wounded|injured|maimed|disfigured|bled|bleeding|blinded|castrat|poisoned|strangled|burned|drowned)/i },
-      { reason: "relationship", pattern: /(?:成为(?:了)?(?:情人|恋人|朋友|挚友|至交|死敌|宿敌|仇敌|灵魂伴侣|义兄弟)|结为(?:了)?(?:情人|恋人|朋友|挚友|至交|死敌|宿敌|义兄弟|夫妻)|(?:彼此|两人|我们).{0,8}(?:相恋|相爱|坠入爱河|成为(?:了)?恋人|成为(?:了)?挚友|成为(?:了)?至交|成为(?:了)?死敌|反目成仇|化敌为友|冰释前嫌)|(?:与|和).{0,12}(?:结为|结成|成为)(?:了)?(?:情人|恋人|朋友|挚友|至交|死敌|宿敌|仇敌|灵魂伴侣|义兄弟|盟友)|结拜|义结金兰|义结兄弟|定情|私定终身|握手言和|和解(?:如初)?|化敌为友|正式结盟|结盟成功|结成同盟|缔结同盟|签订停战|达成停战|became? (?:lovers?|friends?|rivals?|nemeses|soulmates?)|formed? an alliance|became? blood brothers?|agreed? to (?:a )?truce)/i },
-      { reason: "opinion_change", pattern: /(?:(?:对|对于).{0,16}(?:好感|好感度|评价|看法|态度|意见).{0,12}(?:增加|上升|提高|改善|下降|降低|恶化|变差|转好|转坏|大增|大减)|(?:好感|好感度|评价|看法|态度|意见).{0,12}(?:增加|上升|提高|改善|下降|降低|恶化|变差|转好|转坏|大增|大减)|(?:对).{0,12}(?:不再信任|心生好感|心怀感激|心生厌恶|怀恨在心)|(?:更加|变得).{0,8}(?:敬重|钦佩|感激|信任|喜爱|厌恶|憎恨|不满|敌视)|(?:gained?|lost|increased?|decreased?|improved?|worsened?).{0,20}(?:opinion|respect|trust|affection))/i },
-      { reason: "employment_or_office", pattern: /(?:任命(?:为|了)?|册封(?:为|了)?|拜(?:为|了)?|擢升|升任|提拔(?:为|了)?|调任(?:为|至)?|委任(?:为|了)?|委派(?:为|至)?|封为|授予.{0,12}(?:官|职|爵|差事)|授官|授职|罢免|罢官|免去.{0,12}(?:官|职)|撤职|解职|革职|贬职|开除|雇佣(?:为|了)?|招募(?:为|了)?(?:骑士|侍从)?|聘为|入仕|加入.{0,12}(?:宫廷|朝廷)|效力于|逐出宫廷|appointed?|promoted?|assigned?|dismissed|fired|employed|hired|recruited)/i },
-      { reason: "faith_or_vassal", pattern: /(?:改宗|皈依|改信|改奉|弃绝(?:原)?信仰|信奉.{0,12}(?:教|信仰)|奉(?:为|行).{0,12}信仰|强迫.{0,12}信仰|臣服于|归顺(?:于)?|投降(?:于)?|称臣(?:于)?|纳贡称臣|宣誓(?:效忠|臣服)|效忠于|成为.{0,12}封臣|纳为封臣|接受.{0,12}(?:宗主|主君)|converted?|vassalized|surrendered|swore fealty|pledged allegiance)/i },
-      { reason: "location_or_exit", pattern: /(?:离开(?:了)?(?:这里|房间|宫廷|宴会|谈话)?|走出|退出|离席|离场|转身离去|退下|告辞|踏入|进入|来到|赶往|移步|前往(?:王座厅|花园|卧室|军营|地牢|小巷)|返回(?:了)?(?:宫廷|房间|营地|住所|花园|王座厅)|回到(?:宫廷|房间|营地|住所|花园|王座厅)|抵达(?:了)?(?:宫廷|房间|营地|花园|王座厅|军营|地牢|市场)|到达(?:了)?(?:宫廷|房间|营地|花园|王座厅|军营|地牢|市场)|搬到|移动到|left (?:the )?(?:conversation|room|court)|walked out|entered|arrived|returned to|moved? to)/i },
-      { reason: "drinking_or_toast", pattern: /(?:喝(?:了|着|下)?(?:茶|酒|一口|几口|一杯)|饮(?:了|着|下)?(?:茶|酒|一口|几口|一杯)|品(?:了|着)?(?:茶|酒)|啜|呷|抿(?:了)?一口|小酌|痛饮|畅饮|满饮|饮干|酌酒|碰杯|斟满|斟(?:了)?酒|倒(?:了)?酒入杯|端起.{0,12}(?:茶盏|茶杯|酒杯|杯).{0,12}(?:喝|饮|品|啜)|举杯|举起(?:茶杯|酒杯)|向.{0,12}(?:祝酒|敬酒)|敬(?:了)?(?:茶|酒)|干(?:了)?杯|一饮而尽|饮尽|饮罢|品茗|饮茶|饮酒|drank|sipped|gulped|drained (?:the )?(?:cup|glass)|raised (?:a |the )?(?:cup|glass)|made a toast|toasted)/i },
-      { reason: "daily_movement", pattern: /(?:行走|迈步|踱步|散步|快步(?:走|前行)|小跑|奔跑|奔向|冲过去|(?:^|[我你他她它])(?:走|跑)(?:了|着|向|到|近|过去|过来|一步|几步)|walked?|walking|ran|running|jogged?|strolled?|paced?)/i },
-      // Low-impact prose remains available to the event parser for analytics
-      // and future narrative features, but does not enter Action Runtime.
-      { reason: "daily_object_interaction", pattern: /(?:拿起|拿过|拿来|拿走|取出|拾起|捡起|接过|提起|拎起|扛起|抱起|穿上|穿好|穿(?:了|着)?(?:衣|袍|裙|裤|鞋|靴|甲)|披上|戴上|套上|换上|吃了|吃下|吃掉|咬下|吞下|picked? up|took|carried|lifted|put on|wore|ate)/i },
-      { reason: "combat", pattern: /(?:拔(?:出)?(?:长|短|佩|宝|铁)?(?:剑|刀|矛)|挥(?:长|短)?(?:剑|刀)|持(?:长|短)?(?:剑|刀|矛)|挥拳|出拳|打(?!算|听|探|开|扰|赌|猎|水|扫|赏|字|量|招|扮|包|造|卡|工|理|牌|针|伞|鼓)|掌掴|扇了?.{0,8}耳光|推(?:了|向|开|倒|他|她|你|我|$)|踢|踹|撞(?:了|向|上|倒|他|她|你|我|$)|扑向|摔倒|擒住|制服|缴械|刺(?:向|入|中|伤|了|他|她|你|我|$)|砍(?:向|中|下|伤|了|他|她|你|我|$)|劈(?:向|中|下|伤|了|他|她|你|我|$)|斩(?:向|中|下|伤|首|了|他|她|你|我|$)|格挡|招架|搏斗|厮打|扭打|打斗|交战|开战|冲杀|冲锋|射(?:出|中)|放箭|命中(?:了)?|击中(?:了)?|击败(?:了)?|战胜(?:了)?|duel(?:ed|ling)?|fought|attacked|punched|pushed|kicked|rammed|slammed|slapped|struck|stabbed|slashed|chopped|cleaved|parried|blocked|shot|hit|defeated|charged)/i },
-      { reason: "intimacy_or_clothing", pattern: /(?:(?:脱下|脱掉|脱去|脱光|褪下|褪去|除去|扯开|撕开|解下|解衣).{0,8}(?:衣|衣裙|衣衫|外袍|亵衣|内衫|裤|腰带)|解开(?:了)?(?:衣带|腰带|衣襟)|宽衣(?:解带)?|衣衫(?:滑落|尽褪)|裸露(?:了)?|裸身|赤裸|赤身|露出.{0,8}(?:胸膛|肌肤|身体)|undressed|removed .{0,12}(?:clothes|robe|shirt|dress)|unfastened .{0,12}(?:belt|clothing))/i },
-      { reason: "intimate_contact", pattern: /(?:抚摸|爱抚|舔舐|舔弄|亲吻|接吻|吻上|吻住|挑逗|撩拨|吮吸|含住|顶入|插入|进入.{0,8}(?:体内|身体)|研磨|摩擦|抽送|抽插|挺动|律动|揉捏|揉搓|caressed?|fondled?|licked?|kissed?|teased?|sucked?|penetrated?|inserted?|thrust(?:ed|ing)?|grind(?:ing)?|ground against|rubbed?)/i },
-      { reason: "visible_pose", pattern: /(?:微笑|笑了|轻笑|失笑|大笑|哭泣|流泪|抽泣|哽咽|怒视|怒目而视|瞪着|跪下祈祷|祈祷|诵经|跳舞|起舞|翩翩起舞|读书|翻书|写字|执笔|伏案(?:书写|写字)|偷听|侧耳倾听|争辩|争论|讲故事|打哈欠|翻白眼|惊呆|后退|举杖|手持权杖|smiled|laughed|cried|wept|sobbed|glared|prayed|danced|read(?:ing)?|wrote|writing|eavesdropped|rolled .{0,6}eyes)/i },
-      { reason: "rp_status", pattern: /(?:喝醉(?:了)?|醉了|醉醺醺|酒意上涌|烂醉如泥|酩酊大醉|勃然大怒|怒不可遏|怒火中烧|怒气冲冲|气得发抖|暴怒不已|受辱|遭到羞辱|感到羞辱|羞愧难当|羞愤不已|倍感羞辱|蒙羞|心怀感激|感激不尽|感恩戴德|惊恐万分|心生恐惧|胆战心惊|吓得发抖|疑心重重|疑虑重重|起了疑心|满怀爱意|爱意渐浓|深情款款|精疲力尽|疲惫至极|疲惫不堪|筋疲力尽|became drunk|is drunk|furious|enraged|humiliated|insulted|grateful|terrified|suspicious|affectionate|exhausted)/i },
-      { reason: "faction_commitment", pattern: /(?:(?:正式|已经|当即|决定|同意)?(?:加入|退出|离开|投入|倒向).{0,18}(?:派系|阵营)|站到.{0,12}一边|(?:明确|公开|正式|决定|同意|宣布)?(?:支持|拥护|反对|抵制).{0,18}(?:宣称者|宣称派系|派系|阵营)|拥立.{0,16}(?:宣称者|为王|为君)|(?:joined|left|support(?:ed)?|opposed|backed).{0,20}(?:faction|claimant))/i },
-      { reason: "prisoner_resolution", pattern: /(?:释放(?:了)?|放了|放出|放走|获释|恢复自由|你自由了|赦免(?:了)?|解除囚禁|撤销监禁|解开(?:了)?(?:镣铐|枷锁)|遣返|逐出|逐离宫廷|放逐|流放|驱逐出境|released from prison|set .{0,12} free|freed|pardoned|banished|exiled)/i },
-      { reason: "sexual_intercourse_completed", pattern: /(?:已经|终于|随即|当即|继而|片刻后|良久后|事后|完事后|云雨(?:已)?(?:毕|歇|罢|止)|欢好(?:已)?(?:毕|罢|过)|鱼水(?:之欢)?(?:已)?(?:毕|罢|过)|交合(?:已)?(?:毕|罢|过|完)|行房(?:已)?(?:毕|罢|过|完)|房事(?:已)?(?:毕|罢|过|完)|同房(?:已)?(?:毕|罢|过|完)|圆房(?:已)?(?:毕|罢|过|完)|完成(?:了)?(?:交合|行房|房事|同房|圆房|性事)|发生(?:了)?(?:性关系|肉体关系)|做(?:了)?爱|作爱(?:已)?(?:毕|罢|过|完)|欢爱(?:已)?(?:毕|罢|过|完)|交媾(?:已)?(?:毕|罢|过|完)|媾合(?:已)?(?:毕|罢|过|完)|苟合(?:已)?(?:毕|罢|过|完)|燕好(?:已)?(?:毕|罢|过|完)|成其好事|共度(?:了)?春宵|一夜(?:欢好|缠绵|云雨)|春宵(?:已)?(?:过|尽)|交欢(?:已)?(?:毕|罢|过)|承欢(?:已)?(?:毕|罢|过)|事毕|完事(?:了)?|高潮(?:后|已过)|射(?:了)?(?:出来|精)|泄(?:了)?(?:身|精)|had (?:sexual )?intercourse|had sex|made love|slept with|consummated|finished (?:having )?sex|after (?:sex|intercourse|making love)|came|climaxed|orgasm(?:ed)?)/i }
-    ];
-    // The legacy broad sexual-action expression above contains generic adverbs
-    // such as "already". Require a concrete, completed sexual-action phrase so
-    // ordinary sentences (for example "she has already returned") never match.
-    const completedSexualAction = /(?:\u4e91\u96e8(?:\u5df2)?(?:\u6bd5|\u6b47|\u7f62|\u6b62)|\u6b22\u597d(?:\u5df2)?(?:\u6bd5|\u7f62|\u8fc7)|\u9c7c\u6c34\u4e4b\u6b22(?:\u5df2)?(?:\u6bd5|\u7f62|\u8fc7)|\u4ea4\u5408(?:\u5df2)?(?:\u6bd5|\u7f62|\u8fc7|\u5b8c)|\u884c\u623f(?:\u5df2)?(?:\u6bd5|\u7f62|\u8fc7|\u5b8c)|\u623f\u4e8b(?:\u5df2)?(?:\u6bd5|\u7f62|\u8fc7|\u5b8c)|\u540c\u623f(?:\u5df2)?(?:\u6bd5|\u7f62|\u8fc7|\u5b8c)|\u5706\u623f(?:\u5df2)?(?:\u6bd5|\u7f62|\u8fc7|\u5b8c)|\u5b8c\u6210(?:\u4e86)?(?:\u4ea4\u5408|\u884c\u623f|\u623f\u4e8b|\u540c\u623f|\u5706\u623f|\u6027\u4e8b)|\u505a(?:\u4e86)?\u7231|\u5a9a\u5408|\u82df\u5408(?:\u5df2)?(?:\u6bd5|\u7f62|\u8fc7|\u5b8c)|\u71d5\u597d(?:\u5df2)?(?:\u6bd5|\u7f62|\u8fc7|\u5b8c)|\u6210\u5176\u597d\u4e8b|\u5171\u5ea6(?:\u4e86)?\u6625\u5bb5|\u4e00\u591c(?:\u6b22\u597d|\u7f20\u7ef5|\u4e91\u96e8)|\u6625\u5bb5(?:\u5df2)?(?:\u8fc7|\u5c3d)|\u4ea4\u6b22(?:\u5df2)?(?:\u6bd5|\u7f62|\u8fc7)|\u627f\u6b22(?:\u5df2)?(?:\u6bd5|\u7f62|\u8fc7)|\u9ad8\u6f6e(?:\u540e|\u5df2\u8fc7)|\u5c04\u7cbe|\u6cc4\u8eab|\u4e8b\u6bd5\u540e.{0,20}(?:\u76f8\u62e5|\u8d64\u88f8|\u5e8a\u69bb)|\u5b8c\u4e8b\u540e.{0,20}(?:\u76f8\u62e5|\u8d64\u88f8|\u5e8a\u69bb)|\u53d1\u751f(?:\u4e86)?(?:\u6027\u5173\u7cfb|\u8089\u4f53\u5173\u7cfb)|had (?:sexual )?intercourse|had sex|made love|slept with|consummated|finished (?:having )?sex|after (?:sex|intercourse|making love)|climaxed|orgasm(?:ed)?)/i;
-    const detected = [];
-    // Deliberately starting a CK3 scheme is an executable intention, unlike an
-    // ordinary future promise. Keep this narrow and require planning/operational
-    // language so threats such as "I will kill you" do not start schemes.
-    const schemeIntent = /(?:(?:开始|着手|决定|准备|打算|计划|部署|布置|实施|启动|设法|派人|派刺客|雇凶).{0,18}(?:拉拢|讨好|结交|交友|勾引|诱惑|追求|赢得.{0,6}芳心|谋杀|暗杀|除掉|做掉|绑架|劫持|寻找.{0,6}把柄|捏造.{0,6}把柄|制造.{0,6}把柄|散布.{0,8}谣言)|(?:start|begin|plot|plan|prepare|deploy|send an assassin|hire an assassin).{0,24}(?:sway|befriend|seduce|romance|murder|assassinate|abduct|kidnap|fabricate a hook))/i;
-    if (clauses.some((clause, clauseIndex) => schemeIntent.test(clause) && (candidateOnly || !failedAttemptMarker.test(clause) && !hypotheticalMarker.test(clause) && !(clauseIndex > 0 && hypotheticalMarker.test(clauses[clauseIndex - 1]))))) {
-      detected.push("scheme_start");
-    }
-    if ((candidateOnly ? completedSexualAction.test(text) : describesCompletedOrCurrentAction(completedSexualAction, true))) detected.push("sexual_intercourse_completed");
-    for (const rule of rules) {
-      if (rule.reason === "sexual_intercourse_completed") continue;
-      if ((candidateOnly ? rule.pattern.test(text) : describesCompletedOrCurrentAction(rule.pattern, rule.reason !== "combat"))) detected.push(rule.reason);
-    }
-    if (candidateOnly && typeof actionRegistry !== "undefined") {
-      for (const action of actionRegistry.getAllActions()) {
-        const patterns = action.definition?.semantic?.candidatePatterns;
-        const categories = action.definition?.triggerCategories;
-        if (!Array.isArray(patterns) || !Array.isArray(categories)) continue;
-        if (patterns.some((pattern) => {
-          pattern.lastIndex = 0;
-          return pattern.test(text);
-        })) detected.push(...categories);
-      }
-    }
-    return Array.from(new Set(detected));
-  }
   static getActionTriggers(text, options = {}) {
-    return (globalThis.__V67ActionSystem || actionSystem).candidateGate.detect(text, options, {
-      legacyDetect: (candidateText, candidateOptions) => this.legacyGetActionTriggers(candidateText, candidateOptions)
-    });
+    return (globalThis.__V67ActionSystem || actionSystem).candidateGate.detect(text, options, { registry: typeof actionRegistry !== "undefined" ? actionRegistry : null });
   }
   /**
    * Convert broad Gate matches into independently actionable events. The Gate
    * remains a cheap candidate recall layer; this parser is the only source of
    * truth for whether a current action actually occurred.
    */
-  static legacyParseActionEvents(text) {
-    const source = typeof text === "string" ? text : "";
-    if (!source.trim()) return { events: [], rejectedCandidates: [] };
-    const rejectedCandidates = [];
-    const clauses = [];
-    const basePattern = /[^。！？；，.!?;,\n]+[。！？；，.!?;,\n]?/g;
-    let baseMatch;
-    while ((baseMatch = basePattern.exec(source)) !== null) {
-      const baseText = baseMatch[0];
-      const splitPattern = /(?:只是|反而|而是|但最终|不过|但是|然而|随后|然后|接着|最后|但(?=(?:我|你|他|她|它|众人|这|那|此|可)))/g;
-      let cursor = 0;
-      let splitMatch;
-      while ((splitMatch = splitPattern.exec(baseText)) !== null) {
-        const before = baseText.slice(cursor, splitMatch.index);
-        if (before.trim()) {
-          const offset = before.search(/\S/);
-          clauses.push({ text: before.trim(), start: baseMatch.index + cursor + offset });
-        }
-        cursor = splitMatch.index + splitMatch[0].length;
-      }
-      const remaining = baseText.slice(cursor);
-      if (remaining.trim()) {
-        const offset = remaining.search(/\S/);
-        clauses.push({ text: remaining.trim(), start: baseMatch.index + cursor + offset });
-      }
-    }
-    if (clauses.length === 0) clauses.push({ text: source.trim(), start: source.search(/\S/) });
-    const hypotheticalMarker = /(?:如果|假如|倘若|若是|要是|也许|或许|可能会|\b(?:if|maybe|perhaps|might|could)\b)/i;
-    const recalledOrReportedMarker = /(?:想起|回忆|昨天|曾(?:经)?|听说|传闻|据说|声称|讲述|描述|\b(?:yesterday|remember|heard|rumou?r(?:ed)?)\b)/i;
-    const failedBeforeExecutionMarker = /(?:试图|尝试|企图).{0,30}(?:没能|未能|卡在|失败|落空|无法|没有成功|\b(?:failed|stuck|could not)\b)/i;
-    const failedResultMarker = /(?:躲开|避开|闪开|格挡|招架|挡下|未命中|落空|\b(?:dodged|avoided|blocked|missed)\b)/i;
-    // Hints are already concrete action candidates. Reject any clause led by
-    // a plan, request, question, near-miss, or negation regardless of action
-    // category so new registry metadata cannot bypass the execution boundary.
-    const nonExecutedMarker = /(?:[？?]|(?:^|[，,；;])\s*(?:(?:明天|明日|稍后|待会|待会儿|将来|总有一天)\s*)?(?:我|你|他|她|它|我们|你们|他们|她们|众人)?\s*(?:(?:明天|明日|稍后|待会|待会儿|将来|总有一天)\s*)?(?:请|命令|要求|让|叫|希望|想|要|欲|准备|打算|计划|将(?:要|会)|会|能否|可否|是否|别|不要|莫|不许|不准|差点|险些|几乎))/i;
-    const explicitFutureMarker = /(?:^|[，,；;])\s*(?:我|你|他|她|它|我们|你们|他们|她们|众人)?\s*(?:过会儿|等下|迟些时候|改日)\s*(?:我|你|他|她|它|我们|你们|他们|她们|众人)?\s*(?:就|再)?/i;
-    const negatedActionMarker = /(?:^|[，,；;])\s*(?:我|你|他|她|它|我们|你们|他们|她们|众人)?\s*(?:没有|并未|不曾|未曾|尚未)/i;
-    const posthocNegationMarker = /(?:——|—|\.\.\.|…|至少).{0,24}(?:不[，,]?|只是做了个梦|也许没有|本来是这么打算)/i;
-    const isPostActionQualifier = (clause) => /(?:杀死|杀了|刺伤|砍伤|打伤|关进|关押|囚禁|任命|罢免|雇佣|招募|亲吻|接吻).{0,16}(?:也许|或许|可能会)/i.test(clause);
-    const events = [];
-    for (let index = 0; index < clauses.length; index++) {
-      const clause = clauses[index];
-      const hints = this.getActionTriggers(clause.text, { candidateOnly: true });
-      if (hints.length === 0) continue;
-      const candidateEvidence = { text: clause.text, start: clause.start, end: clause.start + clause.text.length };
-      if (nonExecutedMarker.test(clause.text) || explicitFutureMarker.test(clause.text)) {
-        for (const category of hints) rejectedCandidates.push({ category, evidence: candidateEvidence, rejectionReason: "non_executed" });
-        continue;
-      }
-      if (negatedActionMarker.test(clause.text)) {
-        for (const category of hints) rejectedCandidates.push({ category, evidence: candidateEvidence, rejectionReason: "negated" });
-        continue;
-      }
-      if (posthocNegationMarker.test(clause.text) || clauses.slice(index + 1, index + 2).some((nextClause) => /^(?:也许|或许)?\s*(?:没有|并未|不曾|未曾|不是)/.test(nextClause.text))) {
-        for (const category of hints) rejectedCandidates.push({ category, evidence: candidateEvidence, rejectionReason: "posthoc_negation" });
-        continue;
-      }
-      if (hypotheticalMarker.test(clause.text) && (/^\s*(?:如果|假如|倘若|若是|要是|\bif\b)/i.test(clause.text) || !isPostActionQualifier(clause.text))) {
-        for (const category of hints) rejectedCandidates.push({ category, evidence: candidateEvidence, rejectionReason: "hypothetical" });
-        continue;
-      }
-      if (recalledOrReportedMarker.test(clause.text)) {
-        for (const category of hints) rejectedCandidates.push({ category, evidence: candidateEvidence, rejectionReason: "recalled_or_reported" });
-        continue;
-      }
-      const failedBeforeExecution = failedBeforeExecutionMarker.test(clause.text) || /(?:试图|尝试|企图)/.test(clause.text) && clauses.slice(index + 1, index + 2).some((nextClause) => /(?:没能|未能|卡在|失败|落空|无法|没有成功|\b(?:failed|stuck|could not)\b)/i.test(nextClause.text));
-      if (failedBeforeExecution) {
-        for (const category of hints) rejectedCandidates.push({ category, evidence: candidateEvidence, rejectionReason: "failed_before_execution" });
-        continue;
-      }
-      for (const category of hints) {
-        const resultFailed = category === "combat" && clauses.slice(index + 1, index + 2).some((nextClause) => failedResultMarker.test(nextClause.text));
-        events.push({
-          category,
-          evidence: candidateEvidence,
-          executionStatus: "executed",
-          resultStatus: resultFailed ? "failed" : "succeeded",
-          sourceClauseIndex: index
-        });
-      }
-    }
-    // Relationship compositions are execution parsing, not a later semantic
-    // scan. The resolver receives only this validated positive span.
-    const intimateEvent = events.find((event) => event.category === "intimate_contact");
-    const gazePattern = /(?:对视|四目相对|凝望|深望).{0,12}(?:许久|良久|久久|片刻)|(?:许久|良久|久久).{0,12}(?:对视|四目相对|凝望|深望)/i;
-    const gazeMatch = gazePattern.exec(source);
-    const affectionPattern = /(?:牵住?.{0,8}(?:手|手指)|十指相扣|相拥|拥抱|依偎|抚摸|爱抚|亲吻|接吻|吻上|吻住|深吻|互诉(?:心意|衷肠)|倾诉(?:爱意|心意)|caressed?|embraced|hugged|kissed?)/i;
-    const affectionMatch = affectionPattern.exec(source);
-    const relationshipMatch = gazeMatch || affectionMatch;
-    if (intimateEvent && relationshipMatch && relationshipMatch.index < intimateEvent.evidence.end) {
-      const evidenceStart = relationshipMatch.index;
-      const evidenceEnd = intimateEvent.evidence.end;
-      const evidenceText = source.slice(evidenceStart, evidenceEnd);
-      if (!/(?:没有|不是|如果|假如|倘若|听说|传闻|想起|回忆)/.test(evidenceText)) {
-        events.push({
-          category: "relationship",
-          categories: ["relationship", "intimate_contact"],
-          evidence: { text: evidenceText, start: evidenceStart, end: evidenceEnd },
-          executionStatus: "executed",
-          resultStatus: "succeeded",
-          sourceClauseIndex: intimateEvent.sourceClauseIndex
-        });
-      }
-    }
-    events.sort((left, right) => left.evidence.start - right.evidence.start || left.sourceClauseIndex - right.sourceClauseIndex);
-    return {
-      events: events.map((event, index) => ({ ...event, eventId: `evt_${index + 1}` })),
-      rejectedCandidates
-    };
-  }
   static parseActionEvents(text) {
-    return (globalThis.__V67ActionSystem || actionSystem).eventParser.parse(text, {
-      legacyParse: (candidateText) => this.legacyParseActionEvents(candidateText)
-    });
+    return (globalThis.__V67ActionSystem || actionSystem).eventParser.parse(text, { registry: typeof actionRegistry !== "undefined" ? actionRegistry : null });
   }
   static getActionEvents(text) {
     return this.parseActionEvents(text).events;
@@ -6305,20 +6113,6 @@ class ActionEngine {
       else if (matches(/(?:仇敌|冤家|势不两立|rivals?)/i)) allow("becomeRivalsWith", "明确的对立关系确认");
       else if (matches(/(?:停战|休战|truce)/i)) allow("agreedToTruceWith", "明确达成停战");
       else if (matches(/(?:结盟|同盟|盟友|alliance)/i)) allow("makeAlliance", "明确结成同盟");
-    }
-    // Descriptive romance can establish a relation even when the author does
-    // not use a relationship noun. A lingering mutual gaze followed by a kiss
-    // is deliberately treated as the stronger, soulmate-tier composition;
-    // a single affectionate contact remains the lower lover-tier composition.
-    const lingeringGaze = matches(/(?:对视|四目相对|凝望|深望).{0,12}(?:许久|良久|久久|片刻|良久不语)|(?:许久|良久|久久).{0,12}(?:对视|四目相对|凝望|深望)/i);
-    const kiss = matches(/(?:亲吻|接吻|吻上|吻住|深吻|kissed?)/i);
-    const affection = matches(/(?:牵住?.{0,8}(?:手|手指)|十指相扣|相拥|拥抱|依偎|抚摸|爱抚|亲吻|接吻|吻上|吻住|深吻|互诉(?:心意|衷肠)|倾诉(?:爱意|心意)|caressed?|embraced|hugged|kissed?)/i);
-    if (reasons.has("intimate_contact") && lingeringGaze && kiss) {
-      reasons.add("relationship");
-      allow("becomeSoulmatesWith", "描述组合：长久对视后亲吻，形成深度亲密羁绊");
-    } else if (reasons.has("intimate_contact") && affection) {
-      reasons.add("relationship");
-      allow("becomeLoversWith", "描述组合：明确的相互亲密接触");
     }
     if (reasons.has("opinion_change")) allow("changeOpinionOf", "明确的好感/评价变化");
     if (reasons.has("employment_or_office")) {
@@ -6426,9 +6220,6 @@ class ActionEngine {
   static getActionTrigger(text) {
     return this.getActionTriggers(text)[0] || null;
   }
-  static getActionIdsForTriggers(reasons) {
-    return /* @__PURE__ */ new Set();
-  }
   static getAllowedPoseOptions(reasons) {
     const options = /* @__PURE__ */ new Set();
     if (reasons.includes("drinking_or_toast")) {
@@ -6532,19 +6323,31 @@ class ActionEngine {
     }
     return evaluations;
   }
+  static traceDecision(actionId, stage, outcome, details = {}) {
+    const { eventId = null, traceId = null, ...traceDetails } = details;
+    return (globalThis.__V67ActionSystem || actionSystem).actionDecisionTrace.record({
+      analytics: typeof usageAnalytics !== "undefined" ? usageAnalytics : null,
+      actionId,
+      eventId,
+      traceId,
+      stage,
+      outcome,
+      details: traceDetails
+    });
+  }
   static async evaluateForCharacter(conv, npc, signal, actionMessage, actionEvent = null) {
     try {
       if (signal?.aborted) {
         return { autoApproved: [], needsApproval: [] };
       }
       if (conv.inactiveParticipantIds?.has(npc?.id)) {
-        usageAnalytics.record({ requestType: "action_skipped", character: npc?.shortName, skipReason: "inactive_participant" }, null);
+        usageAnalytics.record({ requestType: "action_skipped", character: npc?.shortName, skipReason: (globalThis.__V67ActionSystem || actionSystem).actionDecisionTrace.normalizeActionSkipReason("inactive_participant") }, null);
         return { autoApproved: [], needsApproval: [] };
       }
       const gate = this.shouldEvaluateForMessage(conv, actionMessage, actionEvent);
       if (!gate.shouldEvaluate) {
         console.log(`[ActionEngine] Skipped action request for ${npc.shortName}: ${gate.reason}`);
-        usageAnalytics.record({ requestType: "action_skipped", character: npc.shortName, skipReason: gate.reason }, null);
+        usageAnalytics.record({ requestType: "action_skipped", character: npc.shortName, skipReason: (globalThis.__V67ActionSystem || actionSystem).actionDecisionTrace.normalizeActionSkipReason(gate.reason) }, null);
         return { autoApproved: [], needsApproval: [] };
       }
       if (!actionEvent) {
@@ -6556,6 +6359,8 @@ class ActionEngine {
         }
         return combined;
       }
+      this.traceDecision(null, "candidate", "pass", { eventId: actionEvent.eventId, traceId: actionEvent.traceId, category: actionEvent.category });
+      this.traceDecision(null, "semantic", gate.semanticProfile.resolutionMode || "resolved", { eventId: actionEvent.eventId, traceId: actionEvent.traceId, category: actionEvent.category });
       console.log(`[ActionEngine] Explicit action keyword detected for ${npc.shortName}: ${gate.reason}`);
       conv.actionGateProcessedTriggers.add(gate.dedupeKey);
       const recordOutcome = (actionOutcome, selectedActionIds = [], skipReason = null, details = {}) => usageAnalytics.record({
@@ -6569,10 +6374,13 @@ class ActionEngine {
         pendingActionIds: details.pendingActionIds || [],
         failedActionIds: details.failedActionIds || [],
         actionFinishReason: details.actionFinishReason || null,
-        skipReason
+        skipReason: skipReason ? (globalThis.__V67ActionSystem || actionSystem).actionDecisionTrace.normalizeActionSkipReason(skipReason) : null
       }, null);
       const userLang = settingsRepository.getLanguage();
-      const relevantActionIds = this.getActionIdsForTriggers(gate.reasons);
+      const relevantActionIds = typeof actionRegistry.getActionIdsForCategories === "function" ? actionRegistry.getActionIdsForCategories(gate.reasons) : (globalThis.__V67ActionSystem || actionSystem).actionRuleRegistry.getActionIdsForCategories(
+        (globalThis.__V67ActionSystem || actionSystem).actionRuleRegistry.buildCategoryIndex(actionRegistry.getAllActions(false)),
+        gate.reasons
+      );
       const candidateIsPlayer = actionMessage?.role === "user" || actionMessage?.name === conv.gameData.playerName;
       // Player-narrated actions used to be checked and executed through the
       // first randomly queued NPC. That made a clear player action look like a
@@ -6585,13 +6393,6 @@ class ActionEngine {
         /* includeDisabled = */
         false
       );
-      // New action files can declare their gate categories themselves. This
-      // keeps future extensions in the registry instead of duplicating every
-      // action ID inside ActionEngine.
-      for (const action of allLoaded) {
-        const categories = Array.isArray(action.definition.triggerCategories) ? action.definition.triggerCategories : [];
-        if (categories.some((category) => gate.reasons.includes(category))) relevantActionIds.add(action.id);
-      }
       // Stage two supplies a semantic allowlist whenever the wording identifies
       // a particular script (for example injury rather than death, or a
       // long mutual gaze followed by a kiss rather than generic intimacy).
@@ -6626,6 +6427,7 @@ class ActionEngine {
             }, null);
           }
           if (participantResolution.mode === "unresolved") {
+            this.traceDecision(act.id, "reference", "unresolved", { eventId: actionEvent.eventId, traceId: actionEvent.traceId, reason: participantResolution.reason || "unresolved_participants" });
             hadUnresolvedParticipants = true;
             usageAnalytics.record({
               requestType: "action_participant_resolution",
@@ -6636,6 +6438,12 @@ class ActionEngine {
             continue;
           }
           if (participantResolution.mode === "resolved") {
+            this.traceDecision(act.id, "reference", "resolved", {
+              eventId: actionEvent.eventId,
+              traceId: actionEvent.traceId,
+              source: participantResolution.sourceCharacter?.id ?? null,
+              target: participantResolution.targetCharacter?.id ?? null
+            });
             usageAnalytics.record({
               requestType: "action_participant_resolution",
               actionId: act.id,
@@ -6681,7 +6489,7 @@ class ActionEngine {
           } else {
             description = resolveI18nString(act.definition.description, userLang);
           }
-          available.push((globalThis.__V67ActionSystem || actionSystem).availabilityService.buildAvailableAction({
+          const availableAction = (globalThis.__V67ActionSystem || actionSystem).availabilityService.buildAvailableAction({
             action: act,
             args: resolvedArgs,
             checkResult,
@@ -6689,7 +6497,14 @@ class ActionEngine {
             targetCharacter: resolvedTarget,
             description,
             binding: participantResolution.binding
-          }));
+          });
+          available.push(availableAction);
+          this.traceDecision(act.id, "binding", participantResolution.binding?.mode || "speaker", {
+            eventId: actionEvent.eventId,
+            traceId: actionEvent.traceId,
+            sourceLocked: availableAction.sourceLocked,
+            targetLocked: availableAction.targetLocked
+          });
         } catch (err) {
           actionRegistry.registerValidation(act.id, {
             valid: false,
@@ -6705,69 +6520,89 @@ class ActionEngine {
         console.log("[DEBUG] ActionEngine: Aborted before LLM request");
         return { autoApproved: [], needsApproval: [] };
       }
-      const messages = ActionPromptBuilder.buildActionMessages(conv, actionSource, available, {
-        message: actionMessage,
-        triggers: gate.reasons,
-        semanticProfile: gate.semanticProfile,
-        actionEvent
-      });
-      const actionsConfig = settingsRepository.getActionsProviderConfig();
-      // The compact schema still goes through the same strict local Zod
-      // validation, but avoids repeating a large per-action anyOf tree in
-      // every request. It reduces action request input and cache misses; an
-      // explicit provider setting remains an escape hatch.
-      const useMinimizedSchema = actionsConfig?.useMinimizedActionsSchema ?? true;
-      console.log(`[DEBUG] ActionEngine: Using minimized schema: ${useMinimizedSchema}`);
       const maxActions = Math.max(1, Math.min(4, available.length));
-      const jsonSchema = buildStructuredResponseJsonSchema({
-        availableActions: available,
-        maxActions
-      }, useMinimizedSchema);
-      const zodSchema = buildStructuredResponseSchema({
-        availableActions: available,
-        maxActions
-      });
-      const output = await llmManager.sendActionsRequest(
-        messages,
-        "votc_actions",
-        jsonSchema,
-        signal,
-        {
-          character: npc.shortName,
-          actionTrigger: gate.reason,
-          actionCandidateReasons: gate.reasons,
-          blocks: ActionPromptBuilder.getActionPromptBlocks(messages, jsonSchema)
-        }
-      );
-      if (signal?.aborted) {
-        console.log("[DEBUG] ActionEngine: Aborted after LLM request");
-        return { autoApproved: [], needsApproval: [] };
-      }
-      const result = await output;
-      const content = result && typeof result === "object" ? result.content : null;
-      const actionFinishReason = result && typeof result === "object" ? result.finish_reason || null : null;
-      console.log(`[ActionEngine] Received structured response (${typeof content === "string" ? content.length : 0} characters)`);
-      logVerboseLLM("[ActionEngine][verbose] Structured response:", content);
-      if (!content || typeof content !== "string") {
-        recordOutcome("empty_response", [], actionFinishReason === "length" ? "output_token_limit_reached" : "empty_model_response", { actionFinishReason });
-        return { autoApproved: [], needsApproval: [] };
-      }
-      if (signal?.aborted) {
-        console.log("[DEBUG] ActionEngine: Aborted before parsing response");
-        return { autoApproved: [], needsApproval: [] };
-      }
       let parsed;
-      try {
-        const maybeJson = healJsonResponseWithLogging(content, "ActionEngine");
-        if (!maybeJson) {
-          recordOutcome("invalid_json", [], "unparseable_model_response", { actionFinishReason });
+      let actionFinishReason = null;
+      let invocationOrigin = "model";
+      const deterministicAvailable = semanticAllowlist.size === 1 ? available.find((action) => semanticAllowlist.has(action.signature)) : null;
+      const localCandidate = deterministicAvailable ? (globalThis.__V67ActionSystem || actionSystem).deterministicInvocation.resolve({
+        availableAction: deterministicAvailable,
+        evidenceText: actionEvent?.evidence?.text
+      }) : null;
+      if (localCandidate?.details?.injuryType) {
+        this.traceDecision(deterministicAvailable.signature, "invocation", "args_resolved", { eventId: actionEvent.eventId, traceId: actionEvent.traceId, injuryType: localCandidate.details.injuryType, reason: localCandidate.details.reason });
+      }
+      if (localCandidate?.mode === "local") {
+        invocationOrigin = "local";
+        parsed = { actions: [localCandidate.invocation] };
+        this.traceDecision(deterministicAvailable.signature, "invocation", "local", {
+          eventId: actionEvent.eventId,
+          traceId: actionEvent.traceId,
+          source: localCandidate.invocation.sourceCharacterId,
+          target: localCandidate.invocation.targetCharacterId
+        });
+      } else {
+        const messages = ActionPromptBuilder.buildActionMessages(conv, actionSource, available, {
+          message: actionMessage,
+          triggers: gate.reasons,
+          semanticProfile: gate.semanticProfile,
+          actionEvent
+        });
+        const actionsConfig = settingsRepository.getActionsProviderConfig();
+        // The compact schema still goes through the same strict local Zod
+        // validation, but avoids repeating a large per-action anyOf tree in
+        // every request. It reduces action request input and cache misses; an
+        // explicit provider setting remains an escape hatch.
+        const useMinimizedSchema = actionsConfig?.useMinimizedActionsSchema ?? true;
+        console.log(`[DEBUG] ActionEngine: Using minimized schema: ${useMinimizedSchema}`);
+        const jsonSchema = buildStructuredResponseJsonSchema({
+          availableActions: available,
+          maxActions
+        }, useMinimizedSchema);
+        const zodSchema = buildStructuredResponseSchema({
+          availableActions: available,
+          maxActions
+        });
+        const output = await llmManager.sendActionsRequest(
+          messages,
+          "votc_actions",
+          jsonSchema,
+          signal,
+          {
+            character: npc.shortName,
+            actionTrigger: gate.reason,
+            actionCandidateReasons: gate.reasons,
+            blocks: ActionPromptBuilder.getActionPromptBlocks(messages, jsonSchema)
+          }
+        );
+        if (signal?.aborted) {
+          console.log("[DEBUG] ActionEngine: Aborted after LLM request");
           return { autoApproved: [], needsApproval: [] };
         }
-        const validated = zodSchema.parse(maybeJson);
-        parsed = validated;
-      } catch (err) {
-        recordOutcome("invalid_schema", [], "schema_validation_failed", { actionFinishReason });
-        return { autoApproved: [], needsApproval: [] };
+        const result = await output;
+        const content = result && typeof result === "object" ? result.content : null;
+        actionFinishReason = result && typeof result === "object" ? result.finish_reason || null : null;
+        console.log(`[ActionEngine] Received structured response (${typeof content === "string" ? content.length : 0} characters)`);
+        logVerboseLLM("[ActionEngine][verbose] Structured response:", content);
+        if (!content || typeof content !== "string") {
+          recordOutcome("empty_response", [], actionFinishReason === "length" ? "output_token_limit_reached" : "empty_model_response", { actionFinishReason });
+          return { autoApproved: [], needsApproval: [] };
+        }
+        if (signal?.aborted) {
+          console.log("[DEBUG] ActionEngine: Aborted before parsing response");
+          return { autoApproved: [], needsApproval: [] };
+        }
+        try {
+          const maybeJson = healJsonResponseWithLogging(content, "ActionEngine");
+          if (!maybeJson) {
+            recordOutcome("invalid_json", [], "unparseable_model_response", { actionFinishReason });
+            return { autoApproved: [], needsApproval: [] };
+          }
+          parsed = zodSchema.parse(maybeJson);
+        } catch (err) {
+          recordOutcome("invalid_schema", [], "schema_validation_failed", { actionFinishReason });
+          return { autoApproved: [], needsApproval: [] };
+        }
       }
       if (!parsed || !Array.isArray(parsed.actions) || parsed.actions.length === 0) {
         console.log("[ActionEngine] No actions to process");
@@ -6781,7 +6616,7 @@ class ActionEngine {
         seenInvocations.add(key);
         return true;
       }).slice(0, maxActions);
-      console.log(`[ActionEngine] Processing ${parsed.actions.length} actions from LLM`);
+      console.log(`[ActionEngine] Processing ${parsed.actions.length} actions from ${invocationOrigin}`);
       if (signal?.aborted) {
         console.log("[DEBUG] ActionEngine: Aborted before processing actions");
         return { autoApproved: [], needsApproval: [] };
@@ -6809,6 +6644,13 @@ class ActionEngine {
           gameData: conv.gameData
         }) : null;
         if (bindingValidation && !bindingValidation.valid) {
+          this.traceDecision(inv.actionId, "validation", "rejected", {
+            eventId: actionEvent.eventId,
+            traceId: actionEvent.traceId,
+            reason: bindingValidation.reason,
+            expectedTarget: availableAction.participantBinding?.targetCharacterId ?? null,
+            modelTarget: inv.targetCharacterId ?? null
+          });
           usageAnalytics.record({
             requestType: "action_invocation_validation",
             actionId: inv.actionId,
@@ -6817,6 +6659,7 @@ class ActionEngine {
           }, null);
           continue;
         }
+        this.traceDecision(inv.actionId, "validation", "pass", { eventId: actionEvent.eventId, traceId: actionEvent.traceId });
         const invocation = bindingValidation?.invocation || (availableAction.resolvedTargetCharacterId !== void 0 ? {
           ...inv,
           targetCharacterId: availableAction.resolvedTargetCharacterId
@@ -6832,6 +6675,7 @@ class ActionEngine {
           const target = targetId != null ? conv.gameData.characters.get(targetId) ?? void 0 : void 0;
           const actionTitle = loaded2.definition.title ? resolveI18nString(loaded2.definition.title, userLang) : void 0;
           console.log(`[ActionEngine] Action ${inv.actionId} needs approval (destructive: ${isDestructive})`);
+          this.traceDecision(inv.actionId, "approval", "pending", { eventId: actionEvent.eventId, traceId: actionEvent.traceId });
           needsApproval.push({
             actionId: inv.actionId,
             actionTitle,
@@ -6847,6 +6691,7 @@ class ActionEngine {
         } else {
           console.log(`[ActionEngine] Action ${inv.actionId} auto-approved (destructive: ${isDestructive})`);
           const result2 = await this.runInvocation(conv, invocationSource, invocation);
+          this.traceDecision(inv.actionId, "execution", result2.success ? "success" : "failed", { eventId: invocation.eventId || actionEvent.eventId, traceId: actionEvent.traceId, reason: result2.error || null });
           autoApproved.push(result2);
         }
       }
@@ -6880,29 +6725,38 @@ class ActionEngine {
   static async runInvocation(conv, npc, inv, options) {
     const loaded = actionRegistry.getById(inv.actionId);
     if (!loaded || !loaded.validation.valid) {
-      return {
+      return (globalThis.__V67ActionSystem || actionSystem).createExecutionResult({
         actionId: inv.actionId,
         success: false,
-        error: "Action not found or invalid"
-      };
+        error: "Action not found or invalid",
+        sourceCharacterId: inv.sourceCharacterId,
+        targetCharacterId: inv.targetCharacterId,
+        bindingId: inv.bindingId
+      });
     }
     const sourceId = inv.sourceCharacterId ?? npc?.id ?? null;
     const source = sourceId != null ? conv.gameData.characters.get(sourceId) ?? null : null;
     if (!source) {
-      return {
+      return (globalThis.__V67ActionSystem || actionSystem).createExecutionResult({
         actionId: inv.actionId,
         success: false,
-        error: "Resolved source character unavailable"
-      };
+        error: "Resolved source character unavailable",
+        sourceCharacterId: sourceId,
+        targetCharacterId: inv.targetCharacterId,
+        bindingId: inv.bindingId
+      });
     }
     const targetId = inv.targetCharacterId ?? null;
     const target = targetId != null ? conv.gameData.characters.get(targetId) ?? void 0 : void 0;
     if (targetId != null && !target) {
-      return {
+      return (globalThis.__V67ActionSystem || actionSystem).createExecutionResult({
         actionId: inv.actionId,
         success: false,
-        error: "Resolved target character unavailable"
-      };
+        error: "Resolved target character unavailable",
+        sourceCharacterId: source.id,
+        targetCharacterId: targetId,
+        bindingId: inv.bindingId
+      });
     }
     const userLang = settingsRepository.getLanguage();
     const args = inv.args ?? {};
@@ -6941,21 +6795,28 @@ class ActionEngine {
           }
         }
       }
-      return {
+      const executionResult = (globalThis.__V67ActionSystem || actionSystem).createExecutionResult({
         actionId: inv.actionId,
         success: true,
         feedback,
         sourceCharacterId: source.id,
         targetCharacterId: target?.id,
         bindingId: inv.bindingId ?? null
-      };
+      });
+      this.traceDecision(inv.actionId, "execution", "success", { eventId: inv.eventId, traceId: inv.traceId, source: source.id, target: target?.id ?? null });
+      this.traceDecision(inv.actionId, "execution", "effect_written", { eventId: inv.eventId, traceId: inv.traceId, source: source.id, target: target?.id ?? null });
+      return executionResult;
     } catch (err) {
+      this.traceDecision(inv.actionId, "execution", "failed", { eventId: inv.eventId, traceId: inv.traceId, reason: err instanceof Error ? err.message : String(err) });
       console.error(`Action ${inv.actionId} failed:`, err);
-      return {
+      return (globalThis.__V67ActionSystem || actionSystem).createExecutionResult({
         actionId: inv.actionId,
         success: false,
-        error: err instanceof Error ? err.message : String(err)
-      };
+        error: err instanceof Error ? err.message : String(err),
+        sourceCharacterId: source.id,
+        targetCharacterId: target?.id,
+        bindingId: inv.bindingId
+      });
     }
   }
 }
@@ -6965,27 +6826,65 @@ class Conversation {
     this.messages = [];
     this.isActive = false;
     this.nextId = 0;
-    this.currentStreamController = null;
-    this.turnEpoch = 0;
-    this.activeResponse = null;
+    this.turnManager = new actionSystem.ConversationTurnManager(this);
+    this.generationManager = new actionSystem.GenerationManager(this, {
+      recordSkipped: (responseState, reason) => this.recordGenerationSkippedAnalytics(responseState, reason)
+    });
     this.currentSummary = "";
     this.lastSummarizedMessageIndex = 0;
     this.CONTEXT_LIMIT_PERCENTAGE = 0.75;
     this.MESSAGES_TO_SUMMARIZE_PERCENTAGE = 0.4;
-    this.npcQueue = [];
     this.customQueue = null;
     this.isPaused = false;
     this.persistCustomQueue = false;
     this.pendingSummaryImports = /* @__PURE__ */ new Map();
     this.hasAcceptedImports = /* @__PURE__ */ new Set();
-    this.pendingActionApprovals = /* @__PURE__ */ new Map();
     this.inactiveParticipantIds = /* @__PURE__ */ new Map();
     // Action checks are scoped to the current player turn. This prevents one
     // narrated event from being sent to the action model once per NPC reply.
     this.actionGateProcessedTriggers = /* @__PURE__ */ new Set();
     this.referenceContext = new actionSystem.ConversationReferenceContext({ conversationId: this.id });
     this.eventEmitter = new events.EventEmitter();
+    this.approvalManager = this.createApprovalManager();
     this.initializeGameData();
+  }
+  getActionSystem() {
+    return globalThis.__V67ActionSystem || actionSystem;
+  }
+  getTurnManager() {
+    if (!this.turnManager) this.turnManager = new (this.getActionSystem().ConversationTurnManager)(this);
+    return this.turnManager;
+  }
+  getGenerationManager() {
+    if (!this.generationManager) {
+      this.generationManager = new (this.getActionSystem().GenerationManager)(this, {
+        recordSkipped: (responseState, reason) => this.recordGenerationSkippedAnalytics(responseState, reason)
+      });
+    }
+    return this.generationManager;
+  }
+  createApprovalManager() {
+    const system = this.getActionSystem();
+    return new system.ApprovalManager(this, {
+      runInvocation: (conversation, npc, invocation, options) => ActionEngine.runInvocation(conversation, npc, invocation, options),
+      createApproval: (input) => createActionApproval(input),
+      addFeedback: (associatedMessageId, results) => this.addActionFeedback(associatedMessageId, results),
+      getApprovalSettings: () => settingsRepository.getActionApprovalSettings(),
+      invalidationFeedback: () => resolveI18nString({
+        zh: "该动作已失效：此前解析的人物当前已不可用。",
+        en: "This action is no longer valid because a resolved participant is unavailable."
+      }, settingsRepository.getLanguage()),
+      recordInvalidation: (entry) => usageAnalytics.record({
+        ...entry,
+        reason: system.actionDecisionTrace.normalizeSkipReason("approval", entry.reason)
+      }, null),
+      getAction: (actionId) => actionRegistry.getById(actionId),
+      isActionDisabled: (actionId) => actionRegistry.isActionDisabled?.(actionId) === true
+    });
+  }
+  getApprovalManager() {
+    if (!this.approvalManager) this.approvalManager = this.createApprovalManager();
+    return this.approvalManager;
   }
   async initializeGameData() {
     const ck3DebugPath = settingsRepository.getCK3DebugLogPath();
@@ -7104,79 +7003,31 @@ ${result.content}`;
     return character.isDead !== true && character.dead !== true && character.alive !== false;
   }
   markParticipantInactive(characterId, reason) {
-    if (characterId == null) return;
-    this.inactiveParticipantIds.set(characterId, reason);
-    this.npcQueue = this.npcQueue.filter((npc) => npc?.id !== characterId);
-    if (this.activeResponse?.npcId === characterId && this.activeResponse.phase === "generating") {
-      this.cancelActiveResponse("inactive_participant_generation");
-    }
-    if (this.referenceContext?.activeParticipantIds) {
-      this.referenceContext.activeParticipantIds = this.referenceContext.activeParticipantIds.filter((id) => id !== characterId);
-    }
-    this.invalidateApprovalsForCharacter?.(characterId, reason);
-    console.log(`[Conversation] Participant ${characterId} marked inactive: ${reason}`);
+    return (globalThis.__V67ActionSystem || actionSystem).participantLifecycle.setParticipantState(this, characterId, reason);
   }
   invalidatePendingActionApproval(approvalId, reason) {
-    const pending = this.pendingActionApprovals.get(approvalId);
-    if (!pending) return false;
-    this.pendingActionApprovals.delete(approvalId);
-    const approvalEntry = this.messages.find((msg) => msg.type === "action-approval" && msg.id === approvalId);
-    if (approvalEntry) {
-      approvalEntry.status = "declined";
-      approvalEntry.resultFeedback = resolveI18nString({
-        zh: "该动作已失效：此前解析的人物当前已不可用。",
-        en: "This action is no longer valid because a resolved participant is unavailable."
-      }, settingsRepository.getLanguage());
-      approvalEntry.resultSentiment = "negative";
-    }
-    usageAnalytics.record({
-      requestType: "action_approval_invalidated",
-      actionId: pending.action?.actionId,
-      sourceCharacterId: pending.sourceCharacterId ?? null,
-      targetCharacterId: pending.targetCharacterId ?? null,
-      bindingId: pending.bindingId ?? null,
-      reason
-    }, null);
-    this.emitUpdate();
-    return true;
+    return this.getApprovalManager().invalidate(approvalId, reason);
   }
-  invalidateApprovalsForCharacter(characterId, reason) {
-    for (const [approvalId, pending] of this.pendingActionApprovals.entries()) {
-      const sourceId = pending.invocation?.sourceCharacterId ?? pending.sourceCharacterId ?? pending.action?.sourceCharacterId ?? pending.npc?.id ?? null;
-      const targetId = pending.invocation?.targetCharacterId ?? pending.targetCharacterId ?? pending.action?.targetCharacterId ?? null;
-      if (pending.npc?.id === characterId || sourceId === characterId || targetId === characterId) {
-        const invalidationReason = sourceId === characterId ? "stale_approval_source_unavailable" : targetId === characterId ? "stale_approval_target_unavailable" : "approval_binding_invalidated";
-        this.invalidatePendingActionApproval(approvalId, invalidationReason);
-      }
-    }
+  invalidateApprovalsForCharacter(characterId) {
+    this.getApprovalManager().invalidateForCharacter(characterId);
   }
   isResponseCurrent(responseState, npc = null) {
-    return !!responseState && this.activeResponse === responseState && responseState.turnEpoch === this.turnEpoch && responseState.stale !== true && (!npc || this.isCharacterAvailableForConversation(npc));
+    return this.getGenerationManager().isCurrent(responseState, npc);
   }
-  recordGenerationSkipped(responseState, reason) {
-    if (!responseState || responseState.skipRecorded) return;
-    responseState.skipRecorded = true;
+  recordGenerationSkippedAnalytics(responseState, reason) {
     usageAnalytics.record({
       requestType: "generation_skipped",
-      reason,
+      reason: this.getActionSystem().actionDecisionTrace.normalizeSkipReason("generation", reason),
       turnEpoch: responseState.turnEpoch,
       responseId: responseState.responseId,
       characterId: responseState.npcId
     }, null);
   }
+  recordGenerationSkipped(responseState, reason) {
+    this.getGenerationManager().recordSkipped(responseState, reason);
+  }
   cancelActiveResponse(reason = "explicit_abort") {
-    const responseState = this.activeResponse;
-    if (!responseState) return false;
-    responseState.stale = true;
-    responseState.staleReason = reason;
-    if (!responseState.controller.signal.aborted) responseState.controller.abort();
-    const placeholder = this.messages.find((message) => message.id === responseState.messageId);
-    if (placeholder?.isStreaming) this.messages = this.messages.filter((message) => message.id !== responseState.messageId);
-    this.recordGenerationSkipped(responseState, reason);
-    if (this.activeResponse === responseState) this.activeResponse = null;
-    if (this.currentStreamController === responseState.controller) this.currentStreamController = null;
-    this.emitUpdate();
-    return true;
+    return this.getGenerationManager().cancel(reason);
   }
   // Handle response for a single NPC
   async respondAs(npc, turnEpoch = this.turnEpoch) {
@@ -7202,20 +7053,8 @@ ${result.content}`;
       // receives only its state, never the reasoning text.
       streamStatus: "thinking"
     });
-    const controller = new AbortController();
-    const responseState = {
-      responseId: `${turnEpoch}:${msgId}:${npc.id}`,
-      turnEpoch,
-      npcId: npc.id,
-      messageId: msgId,
-      controller,
-      phase: "generating",
-      stale: false,
-      staleReason: null,
-      skipRecorded: false
-    };
-    this.activeResponse = responseState;
-    this.currentStreamController = controller;
+    const responseState = this.getGenerationManager().start({ turnEpoch, messageId: msgId, npcId: npc.id });
+    const controller = responseState.controller;
     this.messages.push(placeholder);
     this.emitUpdate();
     let wasCancelled = false;
@@ -7307,7 +7146,7 @@ ${result.content}`;
         placeholder.isStreaming = false;
         delete placeholder.streamStatus;
         if (streamCompleted && !wasCancelled) {
-          responseState.phase = "evaluating_actions";
+          this.getGenerationManager().markPhase(responseState, "evaluating_actions");
           await this.evaluateCompletedActions(npc, msgId, placeholder, responseState);
         }
       } else if (result && typeof result === "object" && "content" in result && typeof result.content === "string") {
@@ -7318,7 +7157,7 @@ ${result.content}`;
         placeholder.isStreaming = false;
         delete placeholder.streamStatus;
         streamCompleted = true;
-        responseState.phase = "evaluating_actions";
+        this.getGenerationManager().markPhase(responseState, "evaluating_actions");
         await this.evaluateCompletedActions(npc, msgId, placeholder, responseState);
       } else {
         throw new Error("Bad LLM response format");
@@ -7330,6 +7169,7 @@ ${result.content}`;
         this.messages = this.messages.filter((msg) => msg.id !== msgId || !msg.isStreaming);
         this.recordGenerationSkipped(responseState, responseState.staleReason || (this.isCharacterAvailableForConversation(npc) ? "stale_generation" : "inactive_participant_generation"));
       } else {
+        this.getGenerationManager().fail(responseState);
         console.error("Failed to get response for", npc.shortName, ":", error);
         this.messages = this.messages.filter((msg) => msg.id !== msgId);
         const err = createError({
@@ -7341,15 +7181,7 @@ ${result.content}`;
         if (this.npcQueue.length > 0) this.pauseConversation();
       }
     } finally {
-      const ownsActiveResponse = this.activeResponse === responseState;
-      if (ownsActiveResponse && wasCancelled && this.npcQueue.length === 0 && this.isPaused) {
-        this.isPaused = false;
-      }
-      if (ownsActiveResponse) {
-        this.activeResponse = null;
-        if (this.currentStreamController === controller) this.currentStreamController = null;
-        this.emitUpdate();
-      }
+      this.getGenerationManager().finish(responseState, { wasCancelled });
     }
   }
   async evaluateCompletedActions(npc, npcMessageId, npcMessage, responseState) {
@@ -7380,59 +7212,7 @@ ${result.content}`;
    * Handle action results from ActionEngine - separate auto-approved from needs-approval
    */
   async handleActionResults(associatedMessageId, npc, actionResults) {
-    const autoFeedbackResults = [...actionResults.autoApproved];
-    for (const action of actionResults.needsApproval) {
-      let previewFeedback;
-      let previewSentiment;
-      try {
-        const previewResult = await ActionEngine.runInvocation(this, npc, action.invocation, { dryRun: true });
-        if (previewResult.feedback?.message) {
-          previewFeedback = previewResult.feedback.message;
-          previewSentiment = previewResult.feedback.sentiment || "neutral";
-        }
-      } catch (err) {
-        console.error("[Conversation] Preview action failed:", err);
-      }
-      const approvalEntry = createActionApproval({
-        id: this.nextId++,
-        associatedMessageId,
-        action: {
-          actionId: action.actionId,
-          actionTitle: action.actionTitle,
-          sourceCharacterId: action.sourceCharacterId,
-          sourceCharacterName: action.sourceCharacterName,
-          targetCharacterId: action.targetCharacterId,
-          targetCharacterName: action.targetCharacterName,
-          args: action.args,
-          isDestructive: action.isDestructive,
-          riskLevel: action.riskLevel
-        },
-        previewFeedback,
-        previewSentiment
-      });
-      this.messages.push(approvalEntry);
-      this.pendingActionApprovals.set(approvalEntry.id, {
-        npc,
-        action,
-        invocation: action.invocation,
-        bindingId: action.invocation?.bindingId ?? null,
-        sourceCharacterId: action.invocation?.sourceCharacterId ?? action.sourceCharacterId ?? null,
-        targetCharacterId: action.invocation?.targetCharacterId ?? action.targetCharacterId ?? null,
-        previewFeedback,
-        previewSentiment,
-        approvalEntryId: approvalEntry.id
-      });
-    }
-    if (autoFeedbackResults.length > 0) {
-      this.addActionFeedback(associatedMessageId, autoFeedbackResults);
-    }
-    const approvalSettings = settingsRepository.getActionApprovalSettings();
-    if (this.pendingActionApprovals.size > 0 && approvalSettings.pauseOnApproval && this.npcQueue.length > 0) {
-      this.pauseConversation();
-    }
-    if (this.pendingActionApprovals.size > 0) {
-      this.emitUpdate();
-    }
+    return this.getApprovalManager().handleActionResults(associatedMessageId, npc, actionResults);
   }
   addActionFeedback(associatedMessageId, actionResults) {
     console.log("[Conversation] addActionFeedback called with results:", actionResults);
@@ -7458,13 +7238,8 @@ ${result.content}`;
     }
   }
   cancelCurrentStream() {
-    if (this.activeResponse) {
-      console.log("Cancelling current stream");
-      this.cancelActiveResponse("explicit_abort");
-    } else if (this.currentStreamController) {
-      this.currentStreamController.abort();
-      this.currentStreamController = null;
-    }
+    console.log("Cancelling current stream");
+    this.getGenerationManager().cancelCurrent("explicit_abort");
   }
   pauseConversation() {
     console.log("Pausing conversation");
@@ -7486,38 +7261,20 @@ ${result.content}`;
   // }
   // Fill NPC queue with shuffled characters or custom queue
   fillNpcQueue() {
-    if (this.customQueue && this.customQueue.length > 0) {
-      this.npcQueue = [...this.customQueue];
+    const result = this.getTurnManager().fillQueue({
+      customQueue: this.customQueue,
+      npcs: this.getNpcList(),
+      persistCustomQueue: this.persistCustomQueue
+    });
+    if (result.mode === "custom") {
       console.log("Using custom queue:", this.npcQueue.map((c) => c.shortName));
-      if (!this.persistCustomQueue) {
-        this.customQueue = null;
-      }
+      if (result.consumeCustomQueue) this.customQueue = null;
     } else {
-      const npcs = this.getNpcList();
-      this.npcQueue = [...npcs].sort(() => Math.random() - 0.5);
       console.log("Filled shuffled queue:", this.npcQueue.map((c) => c.shortName));
     }
   }
   async processQueue(turnEpoch = this.turnEpoch) {
-    if (turnEpoch !== this.turnEpoch || this.npcQueue.length === 0 || this.isPaused) {
-      return;
-    }
-    console.log("Processing queue with", this.npcQueue.length, "NPCs remaining");
-    while (turnEpoch === this.turnEpoch && this.npcQueue.length > 0 && !this.isPaused) {
-      const npc = this.npcQueue.shift();
-      try {
-        await this.respondAs(npc, turnEpoch);
-      } catch (error) {
-        console.error("Unhandled error in respondAs for", npc.shortName, ":", error);
-        this.emitUpdate();
-      }
-    }
-    if (this.npcQueue.length === 0 && this.isPaused) {
-      this.isPaused = false;
-    }
-    if (this.npcQueue.length === 0) {
-      this.emitUpdate();
-    }
+    return this.getTurnManager().processQueue(turnEpoch);
   }
   // Send a user message and trigger responses from all NPCs
   async sendMessage(userMessage) {
@@ -7534,15 +7291,17 @@ ${result.content}`;
       console.error("No characters in conversation");
       return;
     }
-    const turnEpoch = ++this.turnEpoch;
-    this.cancelActiveResponse("superseded_by_new_user_turn");
-    this.npcQueue = [];
     const userMsg = createMessage({
       id: this.nextId++,
       name: user.fullName,
       role: "user",
       content: userMessage
     });
+    const turnState = this.getTurnManager().startUserTurn({
+      playerMessageId: userMsg.id,
+      activeParticipantIds: this.getActiveConversationCharacters().map((character) => character.id)
+    });
+    const turnEpoch = turnState.epoch;
     this.messages.push(userMsg);
     this.actionGateProcessedTriggers.clear();
     this.emitUpdate();
@@ -7567,9 +7326,7 @@ ${result.content}`;
       console.error("Can only regenerate assistant messages:", targetMessage.role);
       return;
     }
-    this.turnEpoch += 1;
-    this.cancelActiveResponse("superseded_by_regeneration");
-    this.npcQueue = [];
+    this.getTurnManager().supersede("superseded_by_regeneration");
     for (let i = this.messages.length - 1; i >= targetIndex; i--) {
       this.messages.splice(i, 1);
     }
@@ -7885,91 +7642,13 @@ ${result.content}`;
    * Approve actions for pending approval
    */
   async approveActions(approvalEntryId) {
-    const pending = this.pendingActionApprovals.get(approvalEntryId);
-    if (!pending) {
-      throw new Error(`No pending approval found for ID ${approvalEntryId}`);
-    }
-    const entryIndex = this.messages.findIndex(
-      (msg) => msg.type === "action-approval" && msg.id === approvalEntryId
-    );
-    if (entryIndex === -1) {
-      throw new Error(`Approval entry not found for ID ${approvalEntryId}`);
-    }
-    const approvalEntry = this.messages[entryIndex];
-    if (approvalEntry.type !== "action-approval") {
-      throw new Error(`Entry ${approvalEntryId} is not an action-approval entry`);
-    }
-    const invocation = pending.invocation || pending.action.invocation;
-    const sourceId = invocation?.sourceCharacterId ?? pending.sourceCharacterId ?? pending.npc?.id ?? null;
-    const targetId = invocation?.targetCharacterId ?? pending.targetCharacterId ?? null;
-    let invalidationReason = null;
-    if ((pending.bindingId != null && invocation?.bindingId !== pending.bindingId) || (pending.sourceCharacterId != null && sourceId !== pending.sourceCharacterId) || (pending.targetCharacterId != null && targetId !== pending.targetCharacterId)) {
-      invalidationReason = "approval_binding_invalidated";
-    } else {
-      const loaded = actionRegistry.getById(invocation?.actionId);
-      const source = sourceId != null ? this.gameData.characters.get(sourceId) : null;
-      const target = targetId != null ? this.gameData.characters.get(targetId) : null;
-      if (!loaded || !loaded.validation?.valid || actionRegistry.isActionDisabled?.(invocation?.actionId)) invalidationReason = "stale_approval_action_unavailable";
-      else if (!source || !this.isCharacterAvailableForConversation(source)) invalidationReason = "stale_approval_source_unavailable";
-      else if (targetId != null && (!target || !this.isCharacterAvailableForConversation(target))) invalidationReason = "stale_approval_target_unavailable";
-    }
-    if (invalidationReason) {
-      this.invalidatePendingActionApproval(approvalEntryId, invalidationReason);
-      return;
-    }
-    approvalEntry.status = "approved";
-    approvalEntry.resultFeedback = pending.previewFeedback || pending.action.actionTitle || pending.action.actionId;
-    approvalEntry.resultSentiment = pending.previewSentiment || "neutral";
-    this.pendingActionApprovals.delete(approvalEntryId);
-    this.emitUpdate();
-    try {
-      // Invocation source/target IDs are authoritative; pending.npc is legacy fallback only.
-      const result = await ActionEngine.runInvocation(this, pending.npc, invocation);
-      if (!result?.success) {
-        approvalEntry.resultFeedback = `Failed: ${result?.error || "Action execution failed"}`;
-        approvalEntry.resultSentiment = "negative";
-        this.emitUpdate();
-      } else if (result.feedback?.message && result.feedback.message !== approvalEntry.resultFeedback) {
-        approvalEntry.resultFeedback = result.feedback.message;
-        approvalEntry.resultSentiment = result.feedback.sentiment || "neutral";
-        this.emitUpdate();
-      }
-    } catch (err) {
-      console.error("[Conversation] Background action execution failed:", err);
-      approvalEntry.resultFeedback = `Failed: ${err instanceof Error ? err.message : String(err)}`;
-      approvalEntry.resultSentiment = "negative";
-      this.emitUpdate();
-    }
-    const approvalSettings = settingsRepository.getActionApprovalSettings();
-    if (approvalSettings.pauseOnApproval && this.isPaused && this.npcQueue.length > 0) {
-      this.resumeConversation();
-    }
+    return this.getApprovalManager().approve(approvalEntryId);
   }
   /**
    * Decline actions for pending approval
    */
   async declineActions(approvalEntryId) {
-    const pending = this.pendingActionApprovals.get(approvalEntryId);
-    if (!pending) {
-      throw new Error(`No pending approval found for ID ${approvalEntryId}`);
-    }
-    const entryIndex = this.messages.findIndex(
-      (msg) => msg.type === "action-approval" && msg.id === approvalEntryId
-    );
-    if (entryIndex === -1) {
-      throw new Error(`Approval entry not found for ID ${approvalEntryId}`);
-    }
-    const approvalEntry = this.messages[entryIndex];
-    if (approvalEntry.type !== "action-approval") {
-      throw new Error(`Entry ${approvalEntryId} is not an action-approval entry`);
-    }
-    this.messages.splice(entryIndex, 1);
-    this.pendingActionApprovals.delete(approvalEntryId);
-    this.emitUpdate();
-    const approvalSettings = settingsRepository.getActionApprovalSettings();
-    if (approvalSettings.pauseOnApproval && this.isPaused && this.npcQueue.length > 0) {
-      this.resumeConversation();
-    }
+    return this.getApprovalManager().decline(approvalEntryId);
   }
   /**
    * Create a summary for a character that is leaving the conversation

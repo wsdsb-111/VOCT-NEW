@@ -78,7 +78,7 @@ function buildCharacterItems(char, gameData, isCurrent) {
   }
 
   items.push(houseAndStatus(char));
-  if (char.primaryTitle !== "None of" || char.primaryTitle !== "None" || char.primaryTitle !== "None von" || char.primaryTitle !== "None de") items.push(`주요 작위: ${char.primaryTitle}`);
+  if (char.primaryTitle && !["None of", "None", "None von", "None de"].includes(char.primaryTitle)) items.push(`주요 작위: ${char.primaryTitle}`);
   if (char.titleRankConcept !== "concept_none") items.push(`작위 등급: ${char.titleRankConcept}`);
   if (char.capitalLocation) items.push(`수도: ${char.capitalLocation}`);
   if (char.location) items.push(`현재 위치: ${char.location}`);

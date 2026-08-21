@@ -18,16 +18,24 @@ const binding = createParticipantBinding({
   sourceCharacterId: player.id,
   targetCharacterId: zhangSan.id
 });
-const availableAction = { signature: "isInjured", targetLocked: true, validTargetCharacterIds: [zhangSan.id] };
-const validated = invocationValidator.validateInvocation({
+const availableAction = { signature: "isInjured", sourceCharacterId: player.id, sourceLocked: true, resolvedTargetCharacterId: zhangSan.id, targetLocked: true, validTargetCharacterIds: [zhangSan.id] };
+const rejected = invocationValidator.validateInvocation({
   modelInvocation: { actionId: "isInjured", targetCharacterId: player.id, args: {} },
   availableAction,
   binding,
   registry: { getById: () => loaded },
   gameData
 });
+assert.strictEqual(rejected.reason, "binding_target_mismatch", "incorrect model target must be rejected");
+const validated = invocationValidator.validateInvocation({
+  modelInvocation: { actionId: "isInjured", targetCharacterId: zhangSan.id, args: {} },
+  availableAction,
+  binding,
+  registry: { getById: () => loaded },
+  gameData
+});
 assert(validated.valid, "bound invocation must validate");
-assert.strictEqual(validated.invocation.targetCharacterId, zhangSan.id, "runtime must ignore an incorrect model target");
+assert.strictEqual(validated.invocation.targetCharacterId, zhangSan.id, "runtime must preserve the locked target");
 assert.strictEqual(riskPolicy.requiresApproval(loaded, {}, "non-destructive"), true, "high-risk binding must still require approval");
 
 const effects = [];

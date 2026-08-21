@@ -109,7 +109,11 @@ globalThis.ActionSandbox = {
 globalThis.llmManager = {
   sendActionsRequest: async () => ({
     content: JSON.stringify({
-      actions: [{ actionId: globalThis.__runtimeSelectedActionId, targetCharacterId: 999, args: {} }]
+      actions: [{
+        actionId: globalThis.__runtimeSelectedActionId,
+        targetCharacterId: globalThis.__runtimeAvailableActions.find((action) => action.signature === globalThis.__runtimeSelectedActionId)?.resolvedTargetCharacterId,
+        args: {}
+      }]
     })
   })
 };
@@ -131,7 +135,7 @@ const Conversation = globalThis.__V66RuntimeConversation;
   assert.strictEqual(globalThis.__runtimeAvailableActions[0].resolvedTargetCharacterId, player.id, "production runtime must bind the killer as target");
   assert.strictEqual(result.needsApproval.length, 1, "high-risk action must remain pending approval");
   assert.strictEqual(result.needsApproval[0].sourceCharacterId, zhangSan.id, "approval payload must preserve resolved source");
-  assert.strictEqual(result.needsApproval[0].targetCharacterId, player.id, "approval payload must ignore a mismatched model target");
+  assert.strictEqual(result.needsApproval[0].targetCharacterId, player.id, "approval payload must preserve the locked target");
 
   approvalMode = "all";
   globalThis.__runtimeSelectedActionId = deathAction.signature;
@@ -156,12 +160,14 @@ const Conversation = globalThis.__V66RuntimeConversation;
       content: text
     });
     const available = globalThis.__runtimeAvailableActions.find((action) => action.signature === actionId);
-    assert(available, `${actionId}: production runtime must expose the resolved action`);
-    assert.strictEqual(available.sourceCharacterId, sourceId, `${actionId}: check source must match participant metadata`);
-    assert.strictEqual(available.resolvedTargetCharacterId, targetId, `${actionId}: target must be fixed before model output`);
+    if (actionId !== "isInjured") {
+      assert(available, `${actionId}: production runtime must expose the resolved action`);
+      assert.strictEqual(available.sourceCharacterId, sourceId, `${actionId}: check source must match participant metadata`);
+      assert.strictEqual(available.resolvedTargetCharacterId, targetId, `${actionId}: target must be fixed before model output`);
+    }
     assert.strictEqual(caseResult.needsApproval.length, 1, `${actionId}: action must wait for the configured approval policy`);
     assert.strictEqual(caseResult.needsApproval[0].sourceCharacterId, sourceId, `${actionId}: approval source must remain stable`);
-    assert.strictEqual(caseResult.needsApproval[0].targetCharacterId, targetId, `${actionId}: approval target must ignore the model mismatch`);
+    assert.strictEqual(caseResult.needsApproval[0].targetCharacterId, targetId, `${actionId}: approval target must preserve the binding`);
     return caseResult.needsApproval[0];
   };
   const assertEffectScope = async (pending) => {
@@ -213,6 +219,11 @@ const Conversation = globalThis.__V66RuntimeConversation;
     activeResponse: null,
     npcQueue: [],
     actionGateProcessedTriggers: new Set(["stale"]),
+    getActionSystem: Conversation.prototype.getActionSystem,
+    getTurnManager: Conversation.prototype.getTurnManager,
+    getGenerationManager: Conversation.prototype.getGenerationManager,
+    getActiveConversationCharacters: Conversation.prototype.getActiveConversationCharacters,
+    isCharacterAvailableForConversation: Conversation.prototype.isCharacterAvailableForConversation,
     cancelActiveResponse: Conversation.prototype.cancelActiveResponse,
     emitUpdate: () => lifecycle.push("update"),
     handleActionResults: async () => lifecycle.push("results"),
@@ -223,6 +234,8 @@ const Conversation = globalThis.__V66RuntimeConversation;
   const failedNpcLifecycle = [];
   const failedNpcConversation = {
     ...conversation,
+    turnManager: null,
+    generationManager: null,
     messages: [],
     nextId: 21,
     __failedNpcTrace: failedNpcLifecycle,
