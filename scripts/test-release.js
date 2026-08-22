@@ -16,6 +16,9 @@ const checks = [
   { group: "v7.1-memory-editor", args: [path.join(__dirname, "test-v7.0.1-memory-editor.js")] },
   { group: "memory-ui", args: [path.join(__dirname, "test-memory-ui.js")] },
   { group: "v7.1-memory-engine", args: [path.join(__dirname, "test-v7.1-memory-engine.js")] },
+  { group: "v7.2-memory-routing", args: [path.join(__dirname, "test-v7.2-memory-routing.js")] },
+  { group: "v7.2-sequential-finalization", args: [path.join(__dirname, "test-v7.2-sequential-finalization.js")] },
+  { group: "v7.2-action-memory-integration", args: [path.join(__dirname, "test-v7.2-action-memory-integration.js")] },
   { group: "structured-episode-migration", args: [path.join(__dirname, "test-migrate-structured-episodes-to-summary-folders.js")] },
   { group: "window-layout", args: [path.join(__dirname, "test-window-layout.js")] },
   { group: "character-game-facts", args: [path.join(__dirname, "test-character-game-facts.js")] }
@@ -30,4 +33,4 @@ for (const check of checks) {
   }
 }
 
-console.log(`\nVOTC v7.1 Release Regression: PASS (${checks.length} groups)`);
+console.log(`\nVOTC v7.2 Release Regression: PASS (${checks.length} groups)`);

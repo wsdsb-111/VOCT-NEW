@@ -9,6 +9,8 @@ const { RollingSummaryManager } = require("./rolling-summary-manager");
 const { MemoryConsolidator } = require("./memory-consolidator");
 const { MemoryTrace } = require("./memory-trace");
 const { MemoryEngine } = require("./memory-engine");
+const { MentionTracker } = require("./mention-tracker");
+const { FinalizationCoordinator } = require("./finalization-coordinator");
 const summaryCatalog = require("./summary-catalog");
 
 module.exports = {
@@ -21,5 +23,7 @@ module.exports = {
   MemoryConsolidator,
   MemoryTrace,
   MemoryEngine,
+  MentionTracker,
+  FinalizationCoordinator,
   ...summaryCatalog
 };

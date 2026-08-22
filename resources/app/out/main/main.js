@@ -2413,15 +2413,15 @@ class GameData {
     return profiles;
   }
   /**
-   * Find third-party characters mentioned by the player. This intentionally
+   * Find third-party characters mentioned by any speaker. This intentionally
    * scans active CK3 characters and their directly logged relatives instead of
    * only summary-file names: relationship data exists even when nobody has
    * previously talked to the mentioned person.
    */
-  findMentionedCharacterIdsInHistory(history, activeCharacter) {
+  findMentionedCharacterIdsInHistory(history, activeCharacter, excludedCharacterIds = []) {
     const mentioned = /* @__PURE__ */ new Set();
     if (!Array.isArray(history) || history.length === 0) return mentioned;
-    const ignoredIds = /* @__PURE__ */ new Set([this.playerID, activeCharacter?.id]);
+    const ignoredIds = /* @__PURE__ */ new Set([this.playerID, activeCharacter?.id, ...this.characters.keys(), ...excludedCharacterIds].map(Number).filter(Number.isFinite));
     const candidates = [];
     for (const char of this.getMentionableCharacterProfiles().values()) {
       if (ignoredIds.has(char.id)) continue;
@@ -2435,8 +2435,7 @@ class GameData {
     }
     // Prefer a full/title name over a shorter name that is part of it.
     candidates.sort((a, b) => b.name.length - a.name.length);
-    const recentPlayerMessages = history.filter((message) => message?.role === "user").slice(-3);
-    for (const message of recentPlayerMessages) {
+    for (const message of history) {
       if (!message.content) continue;
       for (const candidate of candidates) {
         if (message.content.includes(candidate.name)) {
@@ -2649,7 +2648,7 @@ class GameData {
     const filePath = this.getConversationFilePath(owner.id, owner.shortName, other.id, other.shortName);
     fs$1.mkdirSync(path.dirname(filePath), { recursive: true });
     const summaries = this.readConversationSummariesFile(filePath);
-    if (!summaries) return null;
+    if (!summaries) throw new Error(`summary_file_read_failed:${filePath}`);
     const alreadySaved = summaries.some((summary) => options.finalizationId ? summary.finalizationId === options.finalizationId : summary.totalDays === this.totalDays && summary.content === finalSummary && summary.playerId === owner.id && summary.characterId === other.id);
     if (!alreadySaved) {
       summaries.unshift({
@@ -2701,12 +2700,13 @@ class GameData {
         const rightSummaries = this.saveSummaryForDirectedPair(right, left, finalSummary, participantMetadata, options);
         directedFilesWritten += 2;
         // Keep the in-memory compatibility field synchronized for extensions;
-        // Engine 2.1 reads the canonical owner folders directly for prompts.
+        // Engine 2.2 reads the canonical owner folders directly for prompts.
         if (left.id === this.playerID && leftSummaries) right.conversationSummaries = leftSummaries;
         if (right.id === this.playerID && rightSummaries) left.conversationSummaries = rightSummaries;
       }
     }
     console.log(`[Summary] Saved finalization ${options.finalizationId || "legacy"} for ${participants.length} participants across ${directedFilesWritten} directed pair files`);
+    return { success: true, participantCount: participants.length, directedFilesWritten };
   }
   /**
    * Check for conversation summaries for current AI characters from old storage format
@@ -4323,7 +4323,7 @@ ${existingSummary}`
         break;
       }
       case "past_summaries": {
-        if (baseContext.memoryContext?.engineVersion === "2.1") break;
+        if (baseContext.memoryContext?.engineVersion?.startsWith("2.")) break;
         const pastSummaries = this.buildPastSummariesContext(character, gameData);
         if (pastSummaries) {
           const content = block.template ? renderTemplate(block.template, { ...baseContext, pastSummaries }) : pastSummaries;
@@ -4655,7 +4655,7 @@ ${existingSummary}`
         break;
       }
       case "past_summaries": {
-        if (baseContext.memoryContext?.engineVersion === "2.1") break;
+        if (baseContext.memoryContext?.engineVersion?.startsWith("2.")) break;
         const pastSummaries = this.buildPastSummariesContext(character, gameData);
         if (pastSummaries) {
           const content = block.template ? renderTemplate(block.template, { ...baseContext, pastSummaries }) : pastSummaries;
@@ -5155,6 +5155,7 @@ class ConversationManager {
   constructor() {
     this.currentConversation = null;
     this.eventEmitter = new events.EventEmitter();
+    this.finalizationCoordinator = new memorySystem.FinalizationCoordinator({ logger: console });
   }
   static getInstance() {
     if (!ConversationManager.instance) {
@@ -5298,11 +5299,20 @@ class ConversationManager {
    * End current conversation
    */
   endCurrentConversation() {
-    if (this.currentConversation) {
-      this.currentConversation.finalizeConversation();
-      console.log("Conversation ended");
-    }
+    const conversation = this.currentConversation;
     this.currentConversation = null;
+    if (!conversation) return Promise.resolve(null);
+    console.log(`Conversation ${conversation.id} detached; finalization queued`);
+    return this.finalizationCoordinator.enqueue(conversation.id, () => conversation.finalizeConversation()).catch((error) => {
+      console.error(`Conversation ${conversation.id} finalization failed:`, error);
+      return { success: false, error };
+    });
+  }
+  flushFinalizations() {
+    return this.finalizationCoordinator.drain();
+  }
+  hasPendingFinalizations() {
+    return this.finalizationCoordinator.pendingCount > 0;
   }
   /**
    * Cancel the current stream in the active conversation
@@ -5440,6 +5450,8 @@ class ConversationManager {
   }
 }
 const conversationManager = ConversationManager.getInstance();
+let quitAfterFinalizations = false;
+let quitDrainStarted = false;
 class ClipboardListener extends events.EventEmitter {
   constructor() {
     super();
@@ -8638,7 +8650,7 @@ class LetterPromptBuilder {
         break;
       }
       case "past_summaries": {
-        if (context.memoryContext?.engineVersion === "2.1") break;
+        if (context.memoryContext?.engineVersion?.startsWith("2.")) break;
         const summaries = this.buildPastSummariesContext(character, gameData);
         if (summaries) {
           const content = block.template ? this.templateEngine.renderTemplateString(block.template, { ...context, pastSummaries: summaries }) : summaries;
@@ -9977,7 +9989,7 @@ const setupIpcHandlers = () => {
       return memoryEngine.getUiOverview({ summaryCatalog });
     } catch (error) {
       console.error("Failed to get Memory Engine overview:", error);
-      return { engineVersion: "2.1", totals: {}, boundaries: [], characters: [], error: error.message || "Unknown error" };
+      return { engineVersion: "2.2", totals: {}, boundaries: [], routingPolicy: {}, characters: [], error: error.message || "Unknown error" };
     }
   });
   electron.ipcMain.handle("conversation:getSummariesDashboardData", async () => {
@@ -9986,7 +9998,7 @@ const setupIpcHandlers = () => {
       return { summaries, memoryOverview: memoryEngine.getUiOverview({ summaryCatalog: summaries }) };
     } catch (error) {
       console.error("Failed to get summaries dashboard data:", error);
-      return { summaries: [], memoryOverview: { engineVersion: "2.1", totals: {}, boundaries: [], characters: [], error: error.message || "Unknown error" } };
+      return { summaries: [], memoryOverview: { engineVersion: "2.2", totals: {}, boundaries: [], routingPolicy: {}, characters: [], error: error.message || "Unknown error" } };
     }
   });
   electron.ipcMain.handle("conversation:updateStructuredMemory", async (_, { memoryId, content }) => {
@@ -10213,7 +10225,19 @@ electron.app.on("window-all-closed", () => {
     electron.app.quit();
   }
 });
-electron.app.on("before-quit", () => {
+electron.app.on("before-quit", (event) => {
+  if (!quitAfterFinalizations && (conversationManager.getCurrentConversation() || conversationManager.hasPendingFinalizations())) {
+    event.preventDefault();
+    if (!quitDrainStarted) {
+      quitDrainStarted = true;
+      conversationManager.endCurrentConversation();
+      conversationManager.flushFinalizations().finally(() => {
+        quitAfterFinalizations = true;
+        electron.app.quit();
+      });
+    }
+    return;
+  }
   tray?.destroy();
   letterManager.stopLogTailing();
   focusMonitor.stop();

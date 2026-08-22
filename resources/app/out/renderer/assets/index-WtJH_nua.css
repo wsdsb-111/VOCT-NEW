@@ -1785,7 +1785,7 @@ hr {
 }
 .summaries-manager .memory-health-grid {
   display: grid;
-  grid-template-columns: repeat(6, minmax(72px, 1fr));
+  grid-template-columns: repeat(3, minmax(90px, 1fr));
   gap: 8px;
   margin-top: 12px;
 }
@@ -1807,6 +1807,36 @@ hr {
   color: #bdb7ad;
   font-size: 10px;
   text-align: center;
+}
+.summaries-manager .memory-routing-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 7px;
+  margin-top: 10px;
+}
+.summaries-manager .memory-routing-card {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  padding: 8px 10px;
+  border-left: 2px solid rgba(239, 177, 106, 0.72);
+  background: rgba(239, 177, 106, 0.06);
+}
+.summaries-manager .memory-routing-card strong {
+  color: #efc98f;
+  font-size: 11px;
+}
+.summaries-manager .memory-routing-card span {
+  color: #bbb4aa;
+  font-size: 10px;
+  line-height: 1.45;
+}
+.summaries-manager .summary-route-label {
+  display: block;
+  margin-top: 2px;
+  color: #b9b2a8;
+  font-size: 10px;
+  font-weight: 400;
 }
 .summaries-manager .memory-boundary-details {
   margin-top: 10px;

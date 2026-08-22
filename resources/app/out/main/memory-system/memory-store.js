@@ -278,6 +278,8 @@ class MemoryStore {
             existing.subjects = uniqueIds([...existing.subjects, ...participants.filter((id) => id !== ownerId)]);
             existing.tags = [...new Set([...existing.tags, counterpartName, ...participantNames].filter(Boolean))];
             existing.provenance.conversationFiles = [...new Set([...existing.provenance.conversationFiles, file])];
+            existing.provenance.counterpartIds = uniqueIds([...existing.provenance.counterpartIds, counterpartId]);
+            existing.provenance.counterpartNames = [...new Set([...existing.provenance.counterpartNames, counterpartName].filter(Boolean))];
             continue;
           }
           sessions.set(sessionKey, createMemoryRecord({
@@ -305,6 +307,8 @@ class MemoryStore {
               conversationFiles: [file],
               counterpartId,
               counterpartName,
+              counterpartIds: [counterpartId],
+              counterpartNames: [counterpartName],
               extractionMode: "folder_summary_v2_1",
               messageIds: [],
               speakerIds: []
@@ -314,6 +318,36 @@ class MemoryStore {
       }
     }
     return [...sessions.values()];
+  }
+
+  loadDirectPairSummaries(ownerId, counterpartId, ownerMemories = null) {
+    const numericCounterpartId = Number(counterpartId);
+    if (!Number.isFinite(numericCounterpartId)) return [];
+    const memories = Array.isArray(ownerMemories) ? ownerMemories : this.loadFolderSummariesForCharacter(ownerId);
+    return memories.filter((memory) => {
+      const ids = uniqueIds([memory.provenance?.counterpartId, ...(memory.provenance?.counterpartIds || [])]);
+      return ids.includes(numericCounterpartId);
+    });
+  }
+
+  searchOwnerFolderForEntity(ownerId, entityId, entityNames = [], ownerMemories = null) {
+    const numericEntityId = Number(entityId);
+    const names = [...new Set((entityNames || []).map((name) => String(name || "").trim()).filter(Boolean))];
+    const memories = Array.isArray(ownerMemories) ? ownerMemories : this.loadFolderSummariesForCharacter(ownerId);
+    return memories.filter((memory) => {
+      const counterpartIds = uniqueIds([memory.provenance?.counterpartId, ...(memory.provenance?.counterpartIds || [])]);
+      if (Number.isFinite(numericEntityId) && (counterpartIds.includes(numericEntityId) || memory.participants.includes(numericEntityId) || memory.subjects.includes(numericEntityId))) return true;
+      if (names.length === 0) return false;
+      const searchable = [
+        memory.content,
+        memory.canonicalText,
+        ...(memory.tags || []),
+        memory.provenance?.counterpartName,
+        ...(memory.provenance?.counterpartNames || []),
+        ...(memory.provenance?.conversationFiles || [])
+      ].filter(Boolean).join("\n");
+      return names.some((name) => searchable.includes(name));
+    });
   }
 
   loadLegacyForCharacter(characterId) {

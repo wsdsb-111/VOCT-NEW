@@ -59,7 +59,9 @@ function createMemoryRecord(input = {}) {
       conversationFile: provenance.conversationFile || null,
       conversationFiles: Array.isArray(provenance.conversationFiles) ? [...new Set(provenance.conversationFiles.map(String))] : [],
       counterpartId: Number.isFinite(Number(provenance.counterpartId)) ? Number(provenance.counterpartId) : null,
-      counterpartName: provenance.counterpartName || null
+      counterpartName: provenance.counterpartName || null,
+      counterpartIds: uniqueIds(provenance.counterpartIds),
+      counterpartNames: Array.isArray(provenance.counterpartNames) ? [...new Set(provenance.counterpartNames.map(String).filter(Boolean))] : []
     },
     relationshipImpact: input.relationshipImpact && typeof input.relationshipImpact === "object" ? input.relationshipImpact : null,
     unresolved: input.unresolved === true || type === "unresolved",

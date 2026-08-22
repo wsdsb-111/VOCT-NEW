@@ -204,22 +204,32 @@ class Conversation {
   }
   async getMemoryContextFor(npc, contextLimit = null) {
     if (!memoryEngine || !npc || !this.gameData) return null;
+    if (Number(npc.id) === Number(this.gameData.playerID)) return null;
     const limit = contextLimit || await llmManager.getCurrentContextLength() || 1e4;
-    const latestUser = [...this.getHistory()].reverse().find((entry) => entry.role === "user");
-    const mentionedCharacterIds = [...this.gameData.findMentionedCharacterIdsInHistory(this.getHistory(), npc)];
+    const history = this.getHistory();
+    const activeParticipantIds = this.getActiveConversationCharacters().map((character) => character.id);
     const mentionableProfiles = this.gameData.getMentionableCharacterProfiles();
-    const entityNames = mentionedCharacterIds.flatMap((characterId) => {
-      const character = mentionableProfiles.get(characterId);
-      return character ? [character.fullName, character.shortName, character.firstName].filter(Boolean) : [];
+    const mentionedCharacterIds = memoryEngine.findMentionedOutOfSceneCharacters({
+      conversation: this,
+      history,
+      candidates: [...mentionableProfiles.values()],
+      excludedIds: activeParticipantIds
     });
-    return memoryEngine.retrieveForCharacter({
+    if (!this.gameData.mentionedCharactersInContext) this.gameData.mentionedCharactersInContext = /* @__PURE__ */ new Set();
+    for (const characterId of mentionedCharacterIds) this.gameData.mentionedCharactersInContext.add(characterId);
+    const mentionedEntityNames = Object.fromEntries(mentionedCharacterIds.map((characterId) => {
+      const character = mentionableProfiles.get(characterId);
+      return [characterId, character ? [...new Set([character.fullName, character.shortName, character.firstName].filter(Boolean))] : []];
+    }));
+    const query = history.slice(-4).map((entry) => entry.content || "").filter(Boolean).join("\n");
+    return memoryEngine.retrieveForResponder({
       characterId: npc.id,
-      query: latestUser?.content || "",
-      entityIds: mentionedCharacterIds,
-      entityNames: [...new Set(entityNames)],
-      participantIds: this.getActiveConversationCharacters().map((character) => character.id).filter((characterId) => characterId !== npc.id),
+      query,
+      mentionedEntityIds: mentionedCharacterIds,
+      mentionedEntityNames,
+      directCounterpartIds: activeParticipantIds.filter((characterId) => characterId !== npc.id),
       currentTotalDays: this.gameData.totalDays,
-      tokenBudget: Math.max(160, Math.floor(limit * 0.12)),
+      tokenBudget: Math.min(2400, Math.max(800, Math.floor(limit * 0.08))),
       estimateTokens: (text) => TokenCounter.estimateTokens(text)
     });
   }
@@ -756,8 +766,7 @@ class Conversation {
       finalInstructions: PromptBuilder.getFinalSummaryInstructions(),
       buildPrompt: (context) => memoryEngine.buildFinalizationPrompt(context),
       persistCharacterFolders: async (finalSummary, context) => {
-        this.gameData.saveCharactersSummaries(finalSummary, participantIds, { finalizationId: context.finalizationId });
-        return { success: true };
+        return this.gameData.saveCharactersSummaries(finalSummary, participantIds, { finalizationId: context.finalizationId }) || { success: true, skipped: true };
       },
       requestSummary: async (summaryPrompt) => {
         console.log(`[TOKEN_COUNT] Final memory prompt tokens: ${this.estimateTokenCount(summaryPrompt)}`);
@@ -772,8 +781,7 @@ class Conversation {
       requestSummary: (summaryPrompt) => llmManager.sendSummaryRequest(summaryPrompt, void 0, { requestType: "memory_recovery" }),
       persistCharacterFolders: async (finalSummary, context) => {
         const participantIds = (context.participants || []).map((entry) => entry.id);
-        this.gameData.saveCharactersSummaries(finalSummary, participantIds, { finalizationId: context.finalizationId });
-        return { success: true };
+        return this.gameData.saveCharactersSummaries(finalSummary, participantIds, { finalizationId: context.finalizationId }) || { success: true, skipped: true };
       }
     });
     return results;

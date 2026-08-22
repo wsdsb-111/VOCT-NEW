@@ -11,6 +11,7 @@ const { KnowledgeService } = require("./knowledge-service");
 const { RollingSummaryManager } = require("./rolling-summary-manager");
 const { MemoryConsolidator } = require("./memory-consolidator");
 const { MemoryTrace } = require("./memory-trace");
+const { MentionTracker } = require("./mention-tracker");
 
 const FINAL_SUMMARY_MAX_ATTEMPTS = 2;
 const RECOVERY_MAX_ATTEMPTS = 3;
@@ -24,17 +25,31 @@ class MemoryEngine {
     this.knowledge = new KnowledgeService({ store: this.store, trace: this.trace });
     this.rolling = new RollingSummaryManager({ trace: this.trace });
     this.consolidator = new MemoryConsolidator({ store: this.store, trace: this.trace });
+    this.mentionTracker = new MentionTracker();
   }
 
   createConversationState(conversationId) {
-    return { conversationId, rollingState: this.rolling.createState(), participantPresence: [] };
+    return { conversationId, rollingState: this.rolling.createState(), participantPresence: [], mentionState: this.mentionTracker.createState() };
   }
 
   ensureConversationState(conversation) {
     if (!conversation.memoryState) conversation.memoryState = this.createConversationState(conversation.id);
     if (!conversation.memoryState.rollingState) conversation.memoryState.rollingState = this.rolling.createState();
     if (!Array.isArray(conversation.memoryState.participantPresence)) conversation.memoryState.participantPresence = [];
+    if (!conversation.memoryState.mentionState) conversation.memoryState.mentionState = this.mentionTracker.createState();
     return conversation.memoryState;
+  }
+
+  findMentionedOutOfSceneCharacters({ conversation, history = [], candidates = [], excludedIds = [] } = {}) {
+    if (!conversation) return [];
+    const state = this.ensureConversationState(conversation);
+    const characterIds = this.mentionTracker.update(state.mentionState, { history, candidates, excludedIds });
+    this.trace.record("mention_scan", {
+      conversationId: conversation.id,
+      processedMessageCount: state.mentionState.processedMessageKeys.length,
+      mentionedCharacterCount: characterIds.length
+    });
+    return characterIds;
   }
 
   observeParticipants(conversation, characterIds, messageId) {
@@ -453,42 +468,170 @@ class MemoryEngine {
     return results;
   }
 
-  retrieveForCharacter({ characterId, query = "", entityIds = [], entityNames = [], participantIds = [], currentTotalDays = null, tokenBudget = 800, estimateTokens } = {}) {
-    const startedAt = Date.now();
-    const memories = this.store.queryMemories({ characterId, includeFolderSummaries: true });
-    const retrievalQuery = [query, ...(entityNames || [])].filter(Boolean).join(" ");
-    const ranked = this.ranker.rank(memories, { query: retrievalQuery, entityIds, participantIds, currentTotalDays });
-    for (const entry of ranked.slice(0, 20)) {
-      this.trace.record("rank", { memoryId: entry.memory.memoryId, type: entry.memory.type, score: entry.score, characterId, reason: "hybrid_local_score" });
+  getRouteMemoryKey(memory) {
+    const finalizationId = memory.provenance?.finalizationId;
+    return finalizationId ? `${memory.provenance?.folderOwnerId ?? "internal"}|${finalizationId}` : memory.memoryId;
+  }
+
+  getMemoryRecency(memory) {
+    const totalDays = Number(memory.totalDays);
+    if (Number.isFinite(totalDays)) return totalDays;
+    const timestamp = Date.parse(memory.updatedAt || memory.createdAt || memory.eventDate || "");
+    return Number.isFinite(timestamp) ? timestamp : 0;
+  }
+
+  selectRoutedMemories(routeGroups, { tokenBudget, estimateTokens, mode } = {}) {
+    const groups = [...routeGroups.entries()].filter(([, entries]) => entries.length > 0);
+    if (groups.length === 0 || tokenBudget <= 0) return [];
+    const selected = [];
+    const selectedByKey = new Map();
+    let usedTokens = 0;
+    const add = (entry, routeCharacterId, allowance = tokenBudget - usedTokens) => {
+      if (!entry || allowance <= 0) return { added: false, merged: false };
+      const key = this.getRouteMemoryKey(entry.memory);
+      const existing = selectedByKey.get(key);
+      if (existing) {
+        existing.routeCharacterIds = [...new Set([...existing.routeCharacterIds, Number(routeCharacterId)])];
+        return { added: false, merged: true };
+      }
+      const [fitted] = this.ranker.selectWithinBudget([entry], {
+        tokenBudget: Math.min(allowance, tokenBudget - usedTokens),
+        estimateTokens,
+        allowTruncate: true
+      });
+      if (!fitted) return { added: false, merged: false };
+      const routed = { ...fitted, routeKind: mode, routeCharacterIds: [Number(routeCharacterId)] };
+      selected.push(routed);
+      selectedByKey.set(key, routed);
+      usedTokens += fitted.tokens;
+      return { added: true, merged: false };
+    };
+
+    const recentByRoute = new Map(groups.map(([routeId, entries]) => [routeId, [...entries].sort((left, right) => this.getMemoryRecency(right.memory) - this.getMemoryRecency(left.memory))]));
+    const baselineRounds = mode === "direct" && groups.length === 1 ? 2 : 1;
+    const baselineAllowance = Math.max(1, Math.floor(tokenBudget / Math.max(1, groups.length * baselineRounds)));
+    for (let round = 0; round < baselineRounds; round++) {
+      for (const [routeId] of groups) add(recentByRoute.get(routeId)?.[round], routeId, baselineAllowance);
     }
-    const stableCandidates = ranked.filter((entry) => entry.memory.importance >= 0.9 || entry.memory.status === "open" || entry.memory.unresolved);
-    const stable = this.ranker.selectWithinBudget(stableCandidates, { tokenBudget: Math.floor(tokenBudget * 0.3), estimateTokens });
-    const stableIds = new Set(stable.map((entry) => entry.memory.memoryId));
-    const relevant = this.ranker.selectWithinBudget(ranked.filter((entry) => !stableIds.has(entry.memory.memoryId)), { tokenBudget: Math.floor(tokenBudget * 0.5), estimateTokens });
+
+    if (mode === "direct") {
+      const extraLimit = groups.length === 1 ? Math.max(0, 3 - selected.length) : 2;
+      const pool = groups.flatMap(([routeId, entries]) => entries.map((entry) => ({ routeId, entry })))
+        .sort((left, right) => right.entry.score - left.entry.score);
+      let extrasAdded = 0;
+      for (const candidate of pool) {
+        if (extrasAdded >= extraLimit || usedTokens >= tokenBudget) break;
+        const result = add(candidate.entry, candidate.routeId);
+        if (result.added) extrasAdded++;
+      }
+    } else if (mode === "mentioned") {
+      for (let index = 0; index < groups.length; index++) {
+        const [routeId, entries] = groups[index];
+        const candidate = entries.find((entry) => !selectedByKey.has(this.getRouteMemoryKey(entry.memory)));
+        const routesRemaining = Math.max(1, groups.length - index);
+        add(candidate, routeId, Math.max(1, Math.floor((tokenBudget - usedTokens) / routesRemaining)));
+      }
+    }
+    return selected;
+  }
+
+  retrieveForResponder({ characterId, query = "", directCounterpartIds = [], mentionedEntityIds = [], mentionedEntityNames = {}, currentTotalDays = null, tokenBudget = 800, estimateTokens } = {}) {
+    const startedAt = Date.now();
+    const ownerId = Number(characterId);
+    const directIds = uniqueIds(directCounterpartIds).filter((id) => id !== ownerId);
+    const mentionedIds = uniqueIds(mentionedEntityIds).filter((id) => id !== ownerId && !directIds.includes(id));
+    const budget = Math.max(0, Number(tokenBudget) || 0);
+    const stableBudget = Math.floor(budget * 0.15);
+    let directBudget = directIds.length > 0 ? Math.floor(budget * 0.55) : 0;
+    let mentionedBudget = mentionedIds.length > 0 ? Math.floor(budget * 0.30) : 0;
+    if (directIds.length > 0 && mentionedIds.length === 0) directBudget = budget - stableBudget;
+    if (mentionedIds.length > 0 && directIds.length === 0) mentionedBudget = budget - stableBudget;
+    const ownerFolderMemories = directIds.length > 0 || mentionedIds.length > 0 ? this.store.loadFolderSummariesForCharacter(ownerId) : [];
+    const directGroups = new Map();
+    for (const counterpartId of directIds) {
+      const memories = this.store.loadDirectPairSummaries(ownerId, counterpartId, ownerFolderMemories);
+      directGroups.set(counterpartId, this.ranker.rank(memories, { query, participantIds: [counterpartId], currentTotalDays }));
+    }
+    const direct = this.selectRoutedMemories(directGroups, { tokenBudget: directBudget, estimateTokens, mode: "direct" });
+    const namesForEntity = (entityId) => {
+      if (Array.isArray(mentionedEntityNames)) return mentionedEntityNames;
+      return mentionedEntityNames?.[entityId] || mentionedEntityNames?.[String(entityId)] || [];
+    };
+    const mentionedGroups = new Map();
+    for (const entityId of mentionedIds) {
+      const names = namesForEntity(entityId);
+      const memories = this.store.searchOwnerFolderForEntity(ownerId, entityId, names, ownerFolderMemories);
+      mentionedGroups.set(entityId, this.ranker.rank(memories, { query: [query, ...names].filter(Boolean).join(" "), entityIds: [entityId], currentTotalDays }));
+    }
+    let mentioned = this.selectRoutedMemories(mentionedGroups, { tokenBudget: mentionedBudget, estimateTokens, mode: "mentioned" });
+    const directByKey = new Map(direct.map((entry) => [this.getRouteMemoryKey(entry.memory), entry]));
+    mentioned = mentioned.filter((entry) => {
+      const directEntry = directByKey.get(this.getRouteMemoryKey(entry.memory));
+      if (!directEntry) return true;
+      directEntry.mentionedCharacterIds = [...new Set([...(directEntry.mentionedCharacterIds || []), ...entry.routeCharacterIds])];
+      return false;
+    });
+    const selectedFolderKeys = new Set([...direct, ...mentioned].map((entry) => this.getRouteMemoryKey(entry.memory)));
+    const internalMemories = this.store.queryMemories({ characterId: ownerId, includeFolderSummaries: false });
+    const stableRanked = this.ranker.rank(internalMemories, { query, entityIds: mentionedIds, participantIds: directIds, currentTotalDays })
+      .filter((entry) => entry.memory.importance >= 0.9 || entry.memory.status === "open" || entry.memory.unresolved)
+      .filter((entry) => !selectedFolderKeys.has(this.getRouteMemoryKey(entry.memory)));
+    const stable = this.ranker.selectWithinBudget(stableRanked, { tokenBudget: stableBudget, estimateTokens });
+    const relevant = [...direct, ...mentioned];
     for (const entry of [...stable, ...relevant]) {
-      this.trace.record("retrieve", { memoryId: entry.memory.memoryId, type: entry.memory.type, score: entry.score, characterId, reason: "ranked_in_budget" });
-      this.trace.record("inject", { memoryId: entry.memory.memoryId, type: entry.memory.type, score: entry.score, characterId, reason: stableIds.has(entry.memory.memoryId) ? "stable_memory" : "query_relevant" });
+      const reason = entry.routeKind === "direct" ? "direct_pair_route" : entry.routeKind === "mentioned" ? "mentioned_entity_route" : "stable_memory";
+      this.trace.record("rank", { memoryId: entry.memory.memoryId, type: entry.memory.type, score: entry.score, characterId: ownerId, reason });
+      this.trace.record("retrieve", { memoryId: entry.memory.memoryId, type: entry.memory.type, score: entry.score, characterId: ownerId, reason });
+      this.trace.record("inject", { memoryId: entry.memory.memoryId, type: entry.memory.type, score: entry.score, characterId: ownerId, reason });
     }
     const selectedTokens = [...stable, ...relevant].reduce((total, entry) => total + Number(entry.tokens || 0), 0);
+    const folderCandidateCount = new Set([...directGroups.values(), ...mentionedGroups.values()].flat().map((entry) => this.getRouteMemoryKey(entry.memory))).size;
     this.trace.record("retrieval_metrics", {
-      characterId: Number(characterId),
+      characterId: ownerId,
       durationMs: Date.now() - startedAt,
-      candidateCount: memories.length,
+      candidateCount: folderCandidateCount + internalMemories.length,
       selectedCount: stable.length + relevant.length,
       selectedTokens,
-      tokenBudget,
+      tokenBudget: budget,
+      directRouteCount: directIds.length,
+      mentionedRouteCount: mentionedIds.length,
       indexSize: Object.keys(this.store.index.memories || {}).length
     });
     return {
-      engineVersion: "2.1",
-      respondingCharacterId: Number(characterId),
+      engineVersion: "2.2",
+      respondingCharacterId: ownerId,
       stable,
       relevant,
+      direct,
+      mentioned,
       stableText: this.formatMemoryBlock("长期稳定记忆", stable),
+      directText: this.formatMemoryBlock("与当前在场人物的直接记忆", direct),
+      mentionedText: this.formatMemoryBlock("与被提及场外人物有关的记忆", mentioned),
       relevantText: this.formatMemoryBlock("与当前话题相关的记忆", relevant),
-      tokenBudget,
-      folderCandidateCount: memories.filter((memory) => memory.type === "folder_summary").length
+      tokenBudget: budget,
+      selectedTokens,
+      folderCandidateCount,
+      routing: {
+        ownerId,
+        directCounterpartIds: directIds,
+        mentionedOutOfSceneIds: mentionedIds,
+        budgets: { direct: directBudget, mentioned: mentionedBudget, stable: stableBudget }
+      }
     };
+  }
+
+  retrieveForCharacter({ characterId, query = "", entityIds = [], entityNames = [], participantIds = [], currentTotalDays = null, tokenBudget = 800, estimateTokens } = {}) {
+    const mentionedEntityNames = Object.fromEntries(uniqueIds(entityIds).map((entityId) => [entityId, entityNames || []]));
+    return this.retrieveForResponder({
+      characterId,
+      query,
+      directCounterpartIds: participantIds,
+      mentionedEntityIds: entityIds,
+      mentionedEntityNames,
+      currentTotalDays,
+      tokenBudget,
+      estimateTokens
+    });
   }
 
   retrieveMentionedCharacterMemories(options = {}) {
@@ -610,7 +753,7 @@ class MemoryEngine {
 
   getUiOverview({ summaryCatalog = [] } = {}) {
     return {
-      engineVersion: "2.1",
+      engineVersion: "2.2",
       totals: {
         structuredMemories: Object.keys(this.store.index.memories || {}).length,
         episodes: Object.keys(this.store.index.episodes || {}).length,
@@ -620,11 +763,17 @@ class MemoryEngine {
         summaryRecords: summaryCatalog.reduce((total, metadata) => total + (metadata.summaries?.length || 0), 0)
       },
       boundaries: [
-        "每名回应角色只读取自己的 ID_姓名目录，以及 knowledge 索引中自己已知的内部结构化记忆；不会借用其他角色的私人目录。",
-        "直接对话参与者与被提及第三者均按当前回应角色的目录独立检索；参与者和提及人物没有固定数量上限。",
-        "同一场群聊写入多个配对文件时，召回会按 finalizationId 去重，避免一段摘要重复注入。",
-        "每次注入使用动态令牌预算：长期稳定记忆约 30%，当前话题相关记忆约 50%。"
+        "每名 NPC 只读取自己的 ID_姓名目录；玩家目录保存摘要但玩家不执行提示词记忆召回。",
+        "直接参与者按“自己的目录 → 与对方的对话文件”精确召回，不再先扫描整个目录统一竞争排名。",
+        "玩家或任一 NPC 提到场外人物后，所有后续 NPC 都分别从自己的目录检索该人物；人物数量不做固定截断。",
+        "同一场群聊写入多个关系文件时按 finalizationId 去重；内容长度由每次 800–2400 token 的动态预算约束。"
       ],
+      routingPolicy: {
+        directPair: "一对一：最近 2 条 + 当前话题最相关 1 条",
+        group: "多人：每名在场对象至少 1 条，再补充全局最相关 2 条",
+        mentioned: "场外人物：每人最近 1 条，预算允许时补充相关 1 条",
+        tokenBudget: "每名 NPC 每次回复使用上下文约 8%，最少 800、最多 2400 token"
+      },
       characters: []
     };
   }

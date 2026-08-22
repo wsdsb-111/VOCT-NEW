@@ -75,7 +75,7 @@ try {
     visibility: "known_group", knownBy: [3, 4], importance: 0.9, confidence: 1
   });
   const overview = engine.getUiOverview({ summaryCatalog: [ownFolder, otherFolder, mentionedElsewhere] });
-  assert.strictEqual(overview.engineVersion, "2.1");
+  assert.strictEqual(overview.engineVersion, "2.2");
   assert.strictEqual(overview.totals.summaryFolders, 3, "overview must count canonical character folders");
   assert.strictEqual(overview.totals.summaryFiles, 3, "overview must count visible conversation files");
   assert.strictEqual(overview.totals.summaryRecords, 3, "overview must count player-editable summaries");
@@ -129,7 +129,7 @@ assert(!rendererSource.includes("可访问的结构化记忆（可编辑）"), "
 assert(preloadSource.includes("updateStructuredMemory"), "preload must expose structured-memory editing");
 assert(mainSource.includes('"conversation:updateStructuredMemory"'), "main process must provide structured-memory editing IPC");
 assert(conversationSource.includes("participantPresence"), "final summary participants must include observed session participants");
-assert(conversationSource.includes("entityIds: mentionedCharacterIds"), "conversation retrieval must bind mentioned third-party IDs");
+assert(conversationSource.includes("mentionedEntityIds: mentionedCharacterIds"), "conversation retrieval must bind mentioned third-party IDs");
 assert(preloadSource.includes("getSummariesDashboardData"), "preload must expose the single-read summaries dashboard endpoint");
 assert(mainSource.includes('"conversation:getSummariesDashboardData"'), "main process must provide combined catalog and overview data");
 assert(rendererSource.includes("reactExports.useDeferredValue(searchQuery)"), "summary search must defer expensive filtering while typing");
@@ -139,6 +139,10 @@ assert(rendererSource.includes("const groups = new Map()"), "numeric character I
 assert(!rendererSource.includes("Object.entries(summariesByPlayer)"), "search result groups must not use numeric object-key enumeration");
 assert(!rendererSource.includes('className: "memory-character-coverage"'), "the duplicate per-character structured-memory tree must be removed");
 assert(!rendererSource.includes("Promise.all([listAllSummaries(), getMemoryOverview()])"), "summary dashboard must not parse every JSON file twice");
+assert(rendererSource.includes("Memory Engine 2.2 · V7.2"), "summary UI must expose the V7.2 routing engine version");
+assert(rendererSource.includes("memory-routing-grid"), "summary UI must explain direct, group and mentioned-person recall policies");
+assert(rendererSource.includes("summary-route-label"), "conversation files must display owner-to-counterpart routing");
+assert(rendererSource.includes("editingEntry.ownerName"), "summary editor must identify the folder owner");
 const overviewSource = engineSource.slice(engineSource.indexOf("getUiOverview("), engineSource.indexOf("formatMemoryBlock("));
 assert(!overviewSource.includes("loadLegacyForCharacter"), "UI coverage counts must reuse the catalog instead of rereading every legacy file");
 

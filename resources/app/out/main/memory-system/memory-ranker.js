@@ -40,7 +40,7 @@ class MemoryRanker {
     });
   }
 
-  selectWithinBudget(ranked, { tokenBudget, estimateTokens } = {}) {
+  selectWithinBudget(ranked, { tokenBudget, estimateTokens, allowTruncate = false } = {}) {
     const budget = Math.max(0, Number(tokenBudget) || 0);
     const estimate = estimateTokens || ((text) => Math.ceil(String(text || "").length / 2));
     const selected = [];
@@ -53,7 +53,7 @@ class MemoryRanker {
       let memory = entry.memory;
       let tokens = Math.max(1, estimate(memory.content));
       const remaining = budget - used;
-      if (tokens > remaining && memory.importance >= 0.9 && remaining > 0) {
+      if (tokens > remaining && (allowTruncate || memory.importance >= 0.9) && remaining > 0) {
         let low = 1;
         let high = memory.content.length;
         let fitted = "";
