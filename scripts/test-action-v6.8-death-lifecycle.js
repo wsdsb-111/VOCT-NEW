@@ -13,6 +13,13 @@ globalThis.actionRegistry = { getAllActions: () => [] };
 const ActionEngine = getActionEngine();
 globalThis.ActionEngine = ActionEngine;
 const Conversation = getConversationClass();
+const removedSummaryOwners = [];
+Conversation.configure({
+  memoryEngine: {
+    markParticipantLeft() {},
+    deleteOwnedSummaryFolders: (characterId) => removedSummaryOwners.push(characterId)
+  }
+});
 
 const player = { id: 1, fullName: "玩家", shortName: "玩家", gender: "male" };
 const deadNpc = { id: 2, fullName: "张三", shortName: "张三", gender: "male" };
@@ -30,11 +37,21 @@ conversation.getActiveConversationCharacters = Conversation.prototype.getActiveC
 conversation.referenceContext.observeMessage({ message: conversation.messages[0], speaker: deadNpc, characters: conversation.gameData.characters.values() });
 
 Conversation.prototype.markParticipantInactive.call(conversation, deadNpc.id, "dead");
+assert.deepStrictEqual(removedSummaryOwners, [deadNpc.id], "dead NPC lifecycle must delete only that NPC's owned summary folder");
 assert(!conversation.npcQueue.some((npc) => npc.id === deadNpc.id), "dead participant must be removed from an already-built responder queue");
 assert(!conversation.referenceContext.activeParticipantIds.includes(deadNpc.id), "dead participant must leave reference resolution candidates");
 assert.deepStrictEqual(Conversation.prototype.getNpcList.call(conversation).map((npc) => npc.id), [liveNpc.id], "only the dead NPC must stop participating");
 assert.strictEqual(Conversation.prototype.isCharacterAvailableForConversation.call(conversation, deadNpc), false, "dead NPC must be unavailable");
 assert.strictEqual(Conversation.prototype.isCharacterAvailableForConversation.call(conversation, liveNpc), true, "living NPC must remain available");
+Conversation.prototype.markParticipantInactive.call({
+  gameData: conversation.gameData,
+  inactiveParticipantIds: new Map(),
+  npcQueue: [],
+  referenceContext: null,
+  nextId: 0,
+  invalidateApprovalsForCharacter() {}
+}, player.id, "dead");
+assert.deepStrictEqual(removedSummaryOwners, [deadNpc.id], "player death must not delete the player's summary directory");
 
 const explicitDeadMessage = { id: 2, role: "user", content: "我刺伤张三。" };
 const rebuiltContext = ActionEngine.getConversationReferenceContext(conversation, explicitDeadMessage, player);

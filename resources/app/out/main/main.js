@@ -1948,69 +1948,25 @@ class GameData {
     // Remove or replace characters that are invalid in filenames
     return name.replace(/[<>:"/\\|?*]/g, '_').trim();
   }
+  getCharacterPersonalName(characterId, fallbackName = "") {
+    const character = this.characters?.get(Number(characterId)) || { id: characterId, shortName: fallbackName };
+    return memorySystem.getCharacterPersonalName(character, fallbackName);
+  }
   
   // Helper function to get character folder path
   // IMPORTANT: Use character ID + short name (pure name without titles)
   // This ensures the same person always uses the same folder, even when titles change
   // Example: "62984_赵光义" (stable) instead of "宋淳祐皇帝，赵光义" (changes with title)
   getCharacterFolderPath(characterId, characterName) {
-    // Prefer shortName (pure name) over fullName (includes titles)
-    // Note: characterName here might be fullName, shortName, or firstName
-    // We need to extract the pure name
-    
-    let pureName = characterName;
-    
-    if (characterName) {
-      // Remove common title prefixes and suffixes
-      // Pattern 1: "Title, Name" or "Title Name" -> extract Name
-      // Pattern 2: "Name 『Nickname" -> extract Name
-      
-      // Remove nicknames in『』
-      pureName = pureName.replace(/『[^』]*』?/g, '').trim();
-      
-      // Remove common separators and take the last part
-      pureName = pureName.replace(/[,，、]/g, ' ').trim();
-      
-      // Split by spaces and take meaningful parts
-      const parts = pureName.split(/\s+/).filter(p => p.length > 0);
-      
-      if (parts.length > 0) {
-        // Take the last part (usually the actual name)
-        // Example: "宋淳祐皇帝 赵光义" -> "赵光义"
-        pureName = parts[parts.length - 1];
-      }
-    }
-    
-    // Use ID_pureName format for maximum stability
-    const folderName = `${characterId}_${this.sanitizeFileName(pureName || 'unknown')}`;
+    const character = this.characters?.get(Number(characterId)) || { id: characterId, shortName: characterName };
+    const folderName = memorySystem.getCharacterStorageDirectoryName(character, characterName);
     return path.join(VOTC_SUMMARIES_DIR, folderName);
   }
   
   // Helper function to get summary file path for a conversation
   getConversationFilePath(fromCharId, fromCharName, toCharId, toCharName) {
     const fromFolder = this.getCharacterFolderPath(fromCharId, fromCharName);
-    
-    // Extract pure name from toCharName (remove titles and nicknames)
-    let pureName = toCharName || toCharId.toString();
-    
-    if (toCharName) {
-      // Remove nicknames in『』
-      pureName = pureName.replace(/『[^』]*』?/g, '').trim();
-      
-      // Remove common separators and take the last part
-      pureName = pureName.replace(/[,，、]/g, ' ').trim();
-      
-      // Split by spaces and take meaningful parts
-      const parts = pureName.split(/\s+/).filter(p => p.length > 0);
-      
-      if (parts.length > 0) {
-        // Take the last part (usually the actual name)
-        // Example: "宋淳祐皇帝 赵光义" -> "赵光义"
-        pureName = parts[parts.length - 1];
-      }
-    }
-    
-    const toName = this.sanitizeFileName(pureName);
+    const toName = this.sanitizeFileName(this.getCharacterPersonalName(toCharId, toCharName));
     const fileName = `与${toName}的对话.json`;
     return path.join(fromFolder, fileName);
   }
@@ -2418,32 +2374,20 @@ class GameData {
    * only summary-file names: relationship data exists even when nobody has
    * previously talked to the mentioned person.
    */
-  findMentionedCharacterIdsInHistory(history, activeCharacter, excludedCharacterIds = []) {
-    const mentioned = /* @__PURE__ */ new Set();
-    if (!Array.isArray(history) || history.length === 0) return mentioned;
-    const ignoredIds = /* @__PURE__ */ new Set([this.playerID, activeCharacter?.id, ...this.characters.keys(), ...excludedCharacterIds].map(Number).filter(Number.isFinite));
-    const candidates = [];
-    for (const char of this.getMentionableCharacterProfiles().values()) {
-      if (ignoredIds.has(char.id)) continue;
-      const names = /* @__PURE__ */ new Set([char.fullName, char.shortName, char.firstName]);
-      for (const name of names) {
-        // One-character names are too ambiguous for substring matching.
-        if (typeof name === "string" && name.trim().length >= 2) {
-          candidates.push({ id: char.id, name: name.trim() });
-        }
-      }
-    }
-    // Prefer a full/title name over a shorter name that is part of it.
-    candidates.sort((a, b) => b.name.length - a.name.length);
-    for (const message of history) {
-      if (!message.content) continue;
-      for (const candidate of candidates) {
-        if (message.content.includes(candidate.name)) {
-          mentioned.add(candidate.id);
-        }
-      }
-    }
-    return mentioned;
+  getMentionExclusionIds(activeParticipantIds = null) {
+    const participantIds = Array.isArray(activeParticipantIds) ? activeParticipantIds : [...this.characters.keys()];
+    return [...new Set([this.playerID, ...participantIds].map(Number).filter(Number.isFinite))];
+  }
+  findMentionedCharacterIdsInHistory(history, activeCharacter, excludedCharacterIds = null) {
+    if (!Array.isArray(history) || history.length === 0) return /* @__PURE__ */ new Set();
+    const exclusions = this.getMentionExclusionIds(
+      Array.isArray(excludedCharacterIds) ? [activeCharacter?.id, ...excludedCharacterIds] : null
+    );
+    return new Set(memoryEngine.findMentionedCharactersInHistory({
+      history,
+      candidates: [...this.getMentionableCharacterProfiles().values()],
+      excludedIds: exclusions
+    }));
   }
   findFamilyEntry(entries, characterId) {
     return Array.isArray(entries) ? entries.find((entry) => entry?.id === characterId) : void 0;
@@ -2646,6 +2590,8 @@ class GameData {
   }
   saveSummaryForDirectedPair(owner, other, finalSummary, participantMetadata, options = {}) {
     const filePath = this.getConversationFilePath(owner.id, owner.shortName, other.id, other.shortName);
+    const ownerName = this.getCharacterPersonalName(owner.id, owner.shortName);
+    const otherName = this.getCharacterPersonalName(other.id, other.shortName);
     fs$1.mkdirSync(path.dirname(filePath), { recursive: true });
     const summaries = this.readConversationSummariesFile(filePath);
     if (!summaries) throw new Error(`summary_file_read_failed:${filePath}`);
@@ -2655,9 +2601,9 @@ class GameData {
         date: this.date,
         totalDays: this.totalDays,
         content: finalSummary,
-        playerName: owner.shortName,
+        playerName: ownerName,
         playerId: owner.id,
-        characterName: other.shortName,
+        characterName: otherName,
         characterId: other.id,
         conversationType: participantMetadata.length > 2 ? "group" : "pair",
         participants: participantMetadata,
@@ -2673,6 +2619,7 @@ class GameData {
    * without making extra LLM summary requests.
    */
   saveCharactersSummaries(finalSummary, participantIds = null, options = {}) {
+    const excludedOwnerIds = new Set((options.excludedOwnerIds || []).map(Number).filter(Number.isFinite));
     const orderedIds = [];
     const seenIds = /* @__PURE__ */ new Set();
     const addParticipant = (id) => {
@@ -2685,20 +2632,34 @@ class GameData {
     const requestedIds = Array.isArray(participantIds) ? participantIds : Array.from(this.characters.keys());
     for (const id of requestedIds) addParticipant(id);
     const participants = orderedIds.map((id) => this.characters.get(id)).filter(Boolean);
-    if (participants.length < 2) return;
+    if (participants.length < 2) {
+      return { success: false, error: "insufficient_summary_participants", participantCount: participants.length };
+    }
     const participantMetadata = participants.map((character) => ({
       id: character.id,
-      name: character.shortName,
-      fullName: character.fullName
+      name: this.getCharacterPersonalName(character.id, character.shortName),
+      firstName: character.firstName,
+      shortName: this.getCharacterPersonalName(character.id, character.shortName),
+      fullName: character.fullName,
+      primaryTitle: character.primaryTitle,
+      heldCourtAndCouncilPositions: character.heldCourtAndCouncilPositions,
+      titleRankConcept: character.titleRankConcept
     }));
     let directedFilesWritten = 0;
     for (let leftIndex = 0; leftIndex < participants.length; leftIndex++) {
       for (let rightIndex = leftIndex + 1; rightIndex < participants.length; rightIndex++) {
         const left = participants[leftIndex];
         const right = participants[rightIndex];
-        const leftSummaries = this.saveSummaryForDirectedPair(left, right, finalSummary, participantMetadata, options);
-        const rightSummaries = this.saveSummaryForDirectedPair(right, left, finalSummary, participantMetadata, options);
-        directedFilesWritten += 2;
+        let leftSummaries = null;
+        let rightSummaries = null;
+        if (!excludedOwnerIds.has(left.id)) {
+          leftSummaries = this.saveSummaryForDirectedPair(left, right, finalSummary, participantMetadata, options);
+          directedFilesWritten++;
+        }
+        if (!excludedOwnerIds.has(right.id)) {
+          rightSummaries = this.saveSummaryForDirectedPair(right, left, finalSummary, participantMetadata, options);
+          directedFilesWritten++;
+        }
         // Keep the in-memory compatibility field synchronized for extensions;
         // Engine 2.2 reads the canonical owner folders directly for prompts.
         if (left.id === this.playerID && leftSummaries) right.conversationSummaries = leftSummaries;
@@ -5308,8 +5269,8 @@ class ConversationManager {
       return { success: false, error };
     });
   }
-  flushFinalizations() {
-    return this.finalizationCoordinator.drain();
+  flushFinalizations(options = {}) {
+    return this.finalizationCoordinator.drain(options);
   }
   hasPendingFinalizations() {
     return this.finalizationCoordinator.pendingCount > 0;
@@ -8592,12 +8553,29 @@ class LetterPromptBuilder {
       gameData,
       letter
     };
-    const memoryContext = memoryEngine.retrieveForCharacter({
+    const mentionableProfiles = gameData.getMentionableCharacterProfiles();
+    const ownerFolderMemories = memoryEngine.loadOwnerFolderMemories(ai.id);
+    for (const [characterId, profile] of memoryEngine.getMentionableProfilesFromFolderMemories(ownerFolderMemories)) {
+      if (!mentionableProfiles.has(characterId)) mentionableProfiles.set(characterId, profile);
+    }
+    const mentionedEntityIds = memoryEngine.findMentionedCharactersInHistory({
+      history: [{ id: letter.id || "letter", role: "user", content: letter.content || "" }],
+      candidates: [...mentionableProfiles.values()],
+      excludedIds: gameData.getMentionExclusionIds([ai.id, player.id])
+    });
+    const mentionedEntityNames = Object.fromEntries(mentionedEntityIds.map((characterId) => {
+      const character = mentionableProfiles.get(characterId);
+      return [characterId, character ? memorySystem.getCharacterMentionAliases(character) : []];
+    }));
+    const memoryContext = memoryEngine.retrieveForResponder({
       characterId: ai.id,
       query: letter.content || "",
-      participantIds: [player.id],
+      directCounterpartIds: [player.id],
+      mentionedEntityIds,
+      mentionedEntityNames,
+      ownerFolderMemories,
       currentTotalDays: gameData.totalDays,
-      tokenBudget: 600,
+      tokenBudget: 800,
       estimateTokens: (text) => TokenCounter.estimateTokens(text)
     });
     context.memoryContext = memoryContext;
@@ -10231,7 +10209,9 @@ electron.app.on("before-quit", (event) => {
     if (!quitDrainStarted) {
       quitDrainStarted = true;
       conversationManager.endCurrentConversation();
-      conversationManager.flushFinalizations().finally(() => {
+      conversationManager.flushFinalizations({ timeoutMs: 15000 }).then((result) => {
+        if (result?.timedOut) console.warn(`[Finalization] Quit drain timed out with ${result.pendingCount} task(s); recovery snapshots will resume next launch.`);
+      }).finally(() => {
         quitAfterFinalizations = true;
         electron.app.quit();
       });

@@ -7,6 +7,7 @@ const path = require("path");
 const root = path.resolve(__dirname, "..");
 const actionsDir = path.join(root, "resources", "app", "default_userdata", "actions", "standard");
 globalThis.__V67ActionSystem = require(path.join(root, "resources", "app", "out", "main", "action-system"));
+const { createParticipantBinding, availabilityService, invocationValidator } = globalThis.__V67ActionSystem;
 globalThis.actionRegistry = {
   getAllActions: () => fs.readdirSync(actionsDir).filter((file) => file.endsWith(".js")).map((file) => {
     const definition = require(path.join(actionsDir, file));
@@ -35,9 +36,52 @@ for (let index = 0; index < 100; index++) {
   assert.strictEqual(ActionEngine.shouldEvaluateForMessage(conversation, { ...explicitReply, id: 2000 + index }).shouldEvaluate, true, `current-response action stress ${index}`);
 }
 
+const player = { id: 1, shortName: "玩家甲" };
+const source = { id: 2, shortName: "乙" };
+const target = { id: 3, shortName: "丙" };
+const binding = createParticipantBinding({
+  messageId: explicitReply.id,
+  eventId: "injury-event",
+  actionId: "isInjured",
+  speakerCharacterId: source.id,
+  actorCharacterId: source.id,
+  patientCharacterId: target.id,
+  sourceCharacterId: source.id,
+  targetCharacterId: target.id,
+  resolutionBasis: ["explicit_subject", "explicit_object"]
+});
+const availableAction = availabilityService.buildAvailableAction({
+  action: { id: "isInjured", definition: { semantic: {} } },
+  args: [],
+  checkResult: { requiresTarget: true, validTargetCharacterIds: [target.id] },
+  sourceCharacter: source,
+  targetCharacter: target,
+  description: "乙使丙受伤",
+  binding
+});
+const validationContext = {
+  availableAction,
+  binding,
+  registry: { getById: () => ({ validation: { valid: true } }) },
+  gameData: { characters: new Map([[player.id, player], [source.id, source], [target.id, target]]) }
+};
+const validBinding = invocationValidator.validateInvocation({
+  ...validationContext,
+  modelInvocation: { actionId: "isInjured", sourceCharacterId: source.id, targetCharacterId: target.id, args: {} }
+});
+assert.strictEqual(validBinding.valid, true, "the resolved CK3 source/target binding must survive memory-context isolation");
+assert.strictEqual(validBinding.invocation.sourceCharacterId, source.id);
+assert.strictEqual(validBinding.invocation.targetCharacterId, target.id);
+const wrongTarget = invocationValidator.validateInvocation({
+  ...validationContext,
+  modelInvocation: { actionId: "isInjured", sourceCharacterId: source.id, targetCharacterId: player.id, args: {} }
+});
+assert.strictEqual(wrongTarget.valid, false, "the validator must reject a model-proposed target that differs from the resolved CK3 target");
+assert.strictEqual(wrongTarget.reason, "binding_target_mismatch");
+
 const conversationSource = fs.readFileSync(path.join(root, "resources", "app", "out", "main", "action-system", "conversation.js"), "utf8");
 const evaluationBlock = conversationSource.slice(conversationSource.indexOf("async evaluateCompletedActions"), conversationSource.indexOf("async handleActionResults"));
 assert(evaluationBlock.includes("evaluation.message"), "completed action evaluation must use the response message boundary");
 assert(!evaluationBlock.includes("memoryContext"), "retrieved memory must not be concatenated into action evaluation text");
 
-console.log("VOTC v7.2 action-memory integration: PASS (100 memory-isolated current-response action checks)");
+console.log("VOTC v7.2.1 action-memory integration: PASS (100 isolated gates + resolved CK3 source/target binding)");

@@ -114,7 +114,8 @@ try {
     excludedIds: [A.id, B.id, C.id]
   });
   assert.deepStrictEqual(second, [X.id, Y.id], "active participants must not enter the out-of-scene set");
-  assert.strictEqual(mentionState.processedMessageKeys.length, 3, "each conversation message must be processed only once");
+  assert.strictEqual(mentionState.processedThroughIndex, 3, "each conversation message must be processed only once");
+  assert(!Object.prototype.hasOwnProperty.call(mentionState, "processedMessageKeys"), "mention state must remain constant-size");
 
   console.log("VOTC v7.2 memory routing: PASS (exact pairs, owner isolation, fair routes, all-speaker mentions)");
 } finally {

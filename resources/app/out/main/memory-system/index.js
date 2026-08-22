@@ -12,6 +12,7 @@ const { MemoryEngine } = require("./memory-engine");
 const { MentionTracker } = require("./mention-tracker");
 const { FinalizationCoordinator } = require("./finalization-coordinator");
 const summaryCatalog = require("./summary-catalog");
+const characterIdentity = require("./character-identity");
 
 module.exports = {
   ...memoryTypes,
@@ -25,5 +26,6 @@ module.exports = {
   MemoryEngine,
   MentionTracker,
   FinalizationCoordinator,
+  ...characterIdentity,
   ...summaryCatalog
 };

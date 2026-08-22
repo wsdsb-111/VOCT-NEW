@@ -61,7 +61,17 @@ function createMemoryRecord(input = {}) {
       counterpartId: Number.isFinite(Number(provenance.counterpartId)) ? Number(provenance.counterpartId) : null,
       counterpartName: provenance.counterpartName || null,
       counterpartIds: uniqueIds(provenance.counterpartIds),
-      counterpartNames: Array.isArray(provenance.counterpartNames) ? [...new Set(provenance.counterpartNames.map(String).filter(Boolean))] : []
+      counterpartNames: Array.isArray(provenance.counterpartNames) ? [...new Set(provenance.counterpartNames.map(String).filter(Boolean))] : [],
+      participantProfiles: Array.isArray(provenance.participantProfiles) ? provenance.participantProfiles.map((profile) => ({
+        id: Number(profile?.id ?? profile?.characterId),
+        name: profile?.name || null,
+        shortName: profile?.shortName || null,
+        firstName: profile?.firstName || null,
+        fullName: profile?.fullName || null,
+        primaryTitle: profile?.primaryTitle || null,
+        heldCourtAndCouncilPositions: profile?.heldCourtAndCouncilPositions || null,
+        titleRankConcept: profile?.titleRankConcept || null
+      })).filter((profile) => Number.isFinite(profile.id)) : []
     },
     relationshipImpact: input.relationshipImpact && typeof input.relationshipImpact === "object" ? input.relationshipImpact : null,
     unresolved: input.unresolved === true || type === "unresolved",

@@ -4,7 +4,12 @@ const { createMemoryRecord } = require("./memory-types");
 
 class MemoryExtractor {
   buildPrompt({ messages, participants, date, totalDays, rollingSummary = "", finalInstructions = "" } = {}) {
-    const participantText = (participants || []).map((entry) => `${entry.id}: ${entry.name || entry.fullName || "未知"}`).join("\n");
+    const participantText = (participants || []).map((entry) => {
+      const details = [`姓名=${entry.name || entry.fullName || "未知"}`];
+      if (entry.fullName && entry.fullName !== entry.name) details.push(`游戏称号=${entry.fullName}`);
+      if (entry.primaryTitle) details.push(`头衔=${entry.primaryTitle}`);
+      return `${entry.id}: ${details.join("；")}`;
+    }).join("\n");
     const conversationText = (messages || []).map((entry) => `[messageId=${entry.id}] ${entry.name || entry.role}: ${entry.content}`).join("\n");
     return [
       {

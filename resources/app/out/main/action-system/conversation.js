@@ -208,18 +208,33 @@ class Conversation {
     const limit = contextLimit || await llmManager.getCurrentContextLength() || 1e4;
     const history = this.getHistory();
     const activeParticipantIds = this.getActiveConversationCharacters().map((character) => character.id);
-    const mentionableProfiles = this.gameData.getMentionableCharacterProfiles();
+    const mentionExcludedIds = this.gameData.getMentionExclusionIds(activeParticipantIds);
+    const memoryState = memoryEngine.ensureConversationState(this);
+    const participantKey = [...new Set(activeParticipantIds.map(Number))].sort((left, right) => left - right).join(",");
+    if (memoryState.mentionProfileCache?.participantKey !== participantKey) {
+      const profiles = new Map(this.gameData.getMentionableCharacterProfiles());
+      const ownerFolderMemoriesById = new Map();
+      for (const ownerId of activeParticipantIds) {
+        const folderMemories = memoryEngine.loadOwnerFolderMemories(ownerId);
+        ownerFolderMemoriesById.set(Number(ownerId), folderMemories);
+        for (const [characterId, profile] of memoryEngine.getMentionableProfilesFromFolderMemories(folderMemories)) {
+          if (!profiles.has(characterId)) profiles.set(characterId, profile);
+        }
+      }
+      memoryState.mentionProfileCache = { participantKey, profiles, ownerFolderMemoriesById };
+    }
+    const mentionableProfiles = memoryState.mentionProfileCache.profiles;
     const mentionedCharacterIds = memoryEngine.findMentionedOutOfSceneCharacters({
       conversation: this,
       history,
       candidates: [...mentionableProfiles.values()],
-      excludedIds: activeParticipantIds
+      excludedIds: mentionExcludedIds
     });
     if (!this.gameData.mentionedCharactersInContext) this.gameData.mentionedCharactersInContext = /* @__PURE__ */ new Set();
     for (const characterId of mentionedCharacterIds) this.gameData.mentionedCharactersInContext.add(characterId);
     const mentionedEntityNames = Object.fromEntries(mentionedCharacterIds.map((characterId) => {
       const character = mentionableProfiles.get(characterId);
-      return [characterId, character ? [...new Set([character.fullName, character.shortName, character.firstName].filter(Boolean))] : []];
+      return [characterId, character ? memoryEngine.getCharacterMentionAliases(character) : []];
     }));
     const query = history.slice(-4).map((entry) => entry.content || "").filter(Boolean).join("\n");
     return memoryEngine.retrieveForResponder({
@@ -228,6 +243,7 @@ class Conversation {
       mentionedEntityIds: mentionedCharacterIds,
       mentionedEntityNames,
       directCounterpartIds: activeParticipantIds.filter((characterId) => characterId !== npc.id),
+      ownerFolderMemories: memoryState.mentionProfileCache.ownerFolderMemoriesById.get(Number(npc.id)) || [],
       currentTotalDays: this.gameData.totalDays,
       tokenBudget: Math.min(2400, Math.max(800, Math.floor(limit * 0.08))),
       estimateTokens: (text) => TokenCounter.estimateTokens(text)
@@ -255,7 +271,15 @@ class Conversation {
   }
   markParticipantInactive(characterId, reason) {
     memoryEngine?.markParticipantLeft(this, characterId, this.nextId);
-    return actionSystem.participantLifecycle.deactivate(this, characterId, reason);
+    const deactivated = actionSystem.participantLifecycle.deactivate(this, characterId, reason);
+    if (reason === "dead" && Number(characterId) !== Number(this.gameData?.playerID)) {
+      try {
+        memoryEngine?.deleteOwnedSummaryFolders(characterId);
+      } catch (error) {
+        console.error(`[Memory] Failed to remove summary folders owned by dead NPC ${characterId}:`, error);
+      }
+    }
+    return deactivated;
   }
   invalidatePendingActionApproval(approvalId, reason) {
     return this.getApprovalManager().invalidate(approvalId, reason);
@@ -753,7 +777,15 @@ class Conversation {
     if (!memoryEngine) throw new Error("memory_engine_not_configured");
     const allMessages = this.getHistory();
     const participantIds = this.getSummaryParticipantIds();
-    const participants = participantIds.map((id) => this.gameData.characters.get(id)).filter(Boolean).map((character) => ({ id: character.id, name: character.shortName, fullName: character.fullName }));
+    const participants = participantIds.map((id) => this.gameData.characters.get(id)).filter(Boolean).map((character) => ({
+      id: character.id,
+      name: this.gameData.getCharacterPersonalName(character.id, character.shortName),
+      fullName: character.fullName,
+      primaryTitle: character.primaryTitle
+    }));
+    const excludedSummaryOwnerIds = [...this.inactiveParticipantIds.entries()]
+      .filter(([characterId, stateValue]) => stateValue === "dead" && Number(characterId) !== Number(this.gameData.playerID))
+      .map(([characterId]) => Number(characterId));
     const state = memoryEngine.ensureConversationState(this);
     return memoryEngine.finalizeConversation({
       conversationId: this.id,
@@ -761,12 +793,16 @@ class Conversation {
       totalDays: this.gameData.totalDays,
       messages: allMessages,
       participants,
+      excludedSummaryOwnerIds,
       participantPresence: state.participantPresence,
       rollingState: state.rollingState,
       finalInstructions: PromptBuilder.getFinalSummaryInstructions(),
       buildPrompt: (context) => memoryEngine.buildFinalizationPrompt(context),
       persistCharacterFolders: async (finalSummary, context) => {
-        return this.gameData.saveCharactersSummaries(finalSummary, participantIds, { finalizationId: context.finalizationId }) || { success: true, skipped: true };
+        return this.gameData.saveCharactersSummaries(finalSummary, participantIds, {
+          finalizationId: context.finalizationId,
+          excludedOwnerIds: context.excludedSummaryOwnerIds
+        });
       },
       requestSummary: async (summaryPrompt) => {
         console.log(`[TOKEN_COUNT] Final memory prompt tokens: ${this.estimateTokenCount(summaryPrompt)}`);
@@ -781,7 +817,10 @@ class Conversation {
       requestSummary: (summaryPrompt) => llmManager.sendSummaryRequest(summaryPrompt, void 0, { requestType: "memory_recovery" }),
       persistCharacterFolders: async (finalSummary, context) => {
         const participantIds = (context.participants || []).map((entry) => entry.id);
-        return this.gameData.saveCharactersSummaries(finalSummary, participantIds, { finalizationId: context.finalizationId }) || { success: true, skipped: true };
+        return this.gameData.saveCharactersSummaries(finalSummary, participantIds, {
+          finalizationId: context.finalizationId,
+          excludedOwnerIds: context.excludedSummaryOwnerIds
+        });
       }
     });
     return results;

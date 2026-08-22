@@ -20894,7 +20894,7 @@ const SummariesManager = () => {
     /* @__PURE__ */ jsxRuntimeExports.jsxs("section", { className: "memory-engine-overview", children: [
       /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "memory-engine-title", children: [
         /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
-          /* @__PURE__ */ jsxRuntimeExports.jsx("h5", { children: "Memory Engine 2.2 · V7.2" }),
+          /* @__PURE__ */ jsxRuntimeExports.jsx("h5", { children: "Memory Engine 2.2 · V7.3" }),
           /* @__PURE__ */ jsxRuntimeExports.jsx("p", { children: "每名 NPC 按自己的角色目录精确召回直接关系与场外人物记忆" })
         ] }),
         /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: `memory-engine-status ${memoryOverview.error ? "is-error" : ""}`, children: memoryOverview.error ? "读取异常" : "运行中" })

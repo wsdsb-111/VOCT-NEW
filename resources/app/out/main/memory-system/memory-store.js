@@ -5,6 +5,30 @@ const fs = require("fs");
 const path = require("path");
 const { createMemoryRecord, uniqueIds } = require("./memory-types");
 
+function removeDirectoryTree(directory) {
+  for (const entry of fs.readdirSync(directory, { withFileTypes: true })) {
+    const child = path.join(directory, entry.name);
+    if (entry.isDirectory() && !entry.isSymbolicLink()) removeDirectoryTree(child);
+    else fs.unlinkSync(child);
+  }
+  fs.rmdirSync(directory);
+}
+
+function mergeCharacterProfiles(...groups) {
+  const profiles = new Map();
+  for (const profile of groups.flat()) {
+    const id = Number(profile?.id ?? profile?.characterId);
+    if (!Number.isFinite(id)) continue;
+    const previous = profiles.get(id) || { id };
+    const next = { ...previous };
+    for (const key of ["name", "shortName", "firstName", "fullName", "primaryTitle", "heldCourtAndCouncilPositions", "titleRankConcept"]) {
+      if (profile?.[key]) next[key] = profile[key];
+    }
+    profiles.set(id, next);
+  }
+  return [...profiles.values()];
+}
+
 class MemoryStore {
   constructor({ baseDir, summaryFoldersDir = null, legacySummariesDir = null, recoveryDir = null } = {}) {
     if (!baseDir) throw new Error("memory_store_base_dir_required");
@@ -240,6 +264,22 @@ class MemoryStore {
     return this.readJson(path.join(this.paths.characters, `${Number(characterId)}.json`), null);
   }
 
+  deleteOwnedSummaryFolders(characterId) {
+    const numericId = Number(characterId);
+    if (!Number.isFinite(numericId)) throw new Error("character_id_required");
+    if (!this.summaryFoldersDir || !fs.existsSync(this.summaryFoldersDir)) return { removedFolderCount: 0 };
+    const root = path.resolve(this.summaryFoldersDir);
+    const prefix = `${numericId}_`;
+    const folders = fs.readdirSync(root, { withFileTypes: true })
+      .filter((entry) => entry.isDirectory() && entry.name.startsWith(prefix));
+    for (const folder of folders) {
+      const target = path.resolve(root, folder.name);
+      if (path.dirname(target) !== root) throw new Error("unsafe_summary_folder_target");
+      removeDirectoryTree(target);
+    }
+    return { removedFolderCount: folders.length };
+  }
+
   loadFolderSummariesForCharacter(characterId) {
     if (!this.summaryFoldersDir || !fs.existsSync(this.summaryFoldersDir)) return [];
     const prefix = `${Number(characterId)}_`;
@@ -261,6 +301,11 @@ class MemoryStore {
           const filenameMatch = file.match(/^与(.+)的对话\.json$/);
           const counterpartName = filenameMatch?.[1] || summary.characterName || null;
           const participantProfiles = Array.isArray(summary.participants) ? summary.participants : [];
+          const summaryProfiles = mergeCharacterProfiles(
+            participantProfiles,
+            [{ id: playerId, name: summary.playerName, shortName: summary.playerName }],
+            [{ id: summaryCharacterId, name: summary.characterName, shortName: summary.characterName }]
+          );
           const participants = uniqueIds([
             ownerId,
             counterpartId,
@@ -280,6 +325,7 @@ class MemoryStore {
             existing.provenance.conversationFiles = [...new Set([...existing.provenance.conversationFiles, file])];
             existing.provenance.counterpartIds = uniqueIds([...existing.provenance.counterpartIds, counterpartId]);
             existing.provenance.counterpartNames = [...new Set([...existing.provenance.counterpartNames, counterpartName].filter(Boolean))];
+            existing.provenance.participantProfiles = mergeCharacterProfiles(existing.provenance.participantProfiles || [], summaryProfiles);
             continue;
           }
           sessions.set(sessionKey, createMemoryRecord({
@@ -309,6 +355,7 @@ class MemoryStore {
               counterpartName,
               counterpartIds: [counterpartId],
               counterpartNames: [counterpartName],
+              participantProfiles: summaryProfiles,
               extractionMode: "folder_summary_v2_1",
               messageIds: [],
               speakerIds: []

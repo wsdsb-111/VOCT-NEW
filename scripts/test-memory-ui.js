@@ -139,7 +139,7 @@ assert(rendererSource.includes("const groups = new Map()"), "numeric character I
 assert(!rendererSource.includes("Object.entries(summariesByPlayer)"), "search result groups must not use numeric object-key enumeration");
 assert(!rendererSource.includes('className: "memory-character-coverage"'), "the duplicate per-character structured-memory tree must be removed");
 assert(!rendererSource.includes("Promise.all([listAllSummaries(), getMemoryOverview()])"), "summary dashboard must not parse every JSON file twice");
-assert(rendererSource.includes("Memory Engine 2.2 · V7.2"), "summary UI must expose the V7.2 routing engine version");
+assert(rendererSource.includes("Memory Engine 2.2 · V7.3"), "summary UI must expose the V7.3 identity lifecycle version");
 assert(rendererSource.includes("memory-routing-grid"), "summary UI must explain direct, group and mentioned-person recall policies");
 assert(rendererSource.includes("summary-route-label"), "conversation files must display owner-to-counterpart routing");
 assert(rendererSource.includes("editingEntry.ownerName"), "summary editor must identify the folder owner");
