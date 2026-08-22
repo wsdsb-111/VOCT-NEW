@@ -93,7 +93,7 @@ const VOTC_PROMPTS_SYSTEM_DIR = path.join(VOTC_PROMPTS_DIR, "system");
 const VOTC_PROMPTS_CHARACTER_DIR = path.join(VOTC_PROMPTS_DIR, "character_description");
 const VOTC_PROMPTS_EXAMPLES_DIR = path.join(VOTC_PROMPTS_DIR, "example_messages");
 const VOTC_PROMPTS_HELPERS_DIR = path.join(VOTC_PROMPTS_DIR, "helpers");
-const memoryEngine = new memorySystem.MemoryEngine({ baseDir: VOTC_MEMORY_DIR, legacySummariesDir: VOTC_SUMMARIES_DIR, recoveryDir: VOTC_MEMORY_RECOVERY_DIR });
+const memoryEngine = new memorySystem.MemoryEngine({ baseDir: VOTC_MEMORY_DIR, summaryFoldersDir: VOTC_SUMMARIES_DIR, recoveryDir: VOTC_MEMORY_RECOVERY_DIR });
 const DEFAULT_USERDATA_DIR$1 = path.join(electron.app.getAppPath(), "default_userdata", "prompts");
 const DEFAULT_MAIN_TEMPLATE_PATH = "system/default.hbs";
 const DEFAULT_LETTER_TEMPLATE_PATH = "system/letter.hbs";
@@ -2265,12 +2265,8 @@ class GameData {
       for (const charName of relevantCharacterNames) {
         if (message.content.includes(charName)) {
           mentionedCharacters.add(charName);
-          // Performance optimization: Limit to 2 mentioned characters max
-          if (mentionedCharacters.size >= 2) break;
         }
       }
-      
-      if (mentionedCharacters.size >= 2) break;
     }
     
     // Load summaries for each mentioned character
@@ -2445,7 +2441,6 @@ class GameData {
       for (const candidate of candidates) {
         if (message.content.includes(candidate.name)) {
           mentioned.add(candidate.id);
-          if (mentioned.size >= 2) return mentioned;
         }
       }
     }
@@ -2644,6 +2639,12 @@ class GameData {
       return null;
     }
   }
+  writeConversationSummariesFile(filePath, summaries) {
+    fs$1.mkdirSync(path.dirname(filePath), { recursive: true });
+    const tempPath = `${filePath}.${process.pid}.${Date.now()}.tmp`;
+    fs$1.writeFileSync(tempPath, JSON.stringify(summaries, null, "\t"), "utf8");
+    fs$1.renameSync(tempPath, filePath);
+  }
   saveSummaryForDirectedPair(owner, other, finalSummary, participantMetadata, options = {}) {
     const filePath = this.getConversationFilePath(owner.id, owner.shortName, other.id, other.shortName);
     fs$1.mkdirSync(path.dirname(filePath), { recursive: true });
@@ -2663,7 +2664,7 @@ class GameData {
         participants: participantMetadata,
         finalizationId: options.finalizationId || null
       });
-      fs$1.writeFileSync(filePath, JSON.stringify(summaries, null, "\t"));
+      this.writeConversationSummariesFile(filePath, summaries);
     }
     return summaries;
   }
@@ -2699,8 +2700,8 @@ class GameData {
         const leftSummaries = this.saveSummaryForDirectedPair(left, right, finalSummary, participantMetadata, options);
         const rightSummaries = this.saveSummaryForDirectedPair(right, left, finalSummary, participantMetadata, options);
         directedFilesWritten += 2;
-        // conversationSummaries remains the current player↔NPC memory used by
-        // the existing prompt path; cross-NPC files are loaded dynamically.
+        // Keep the in-memory compatibility field synchronized for extensions;
+        // Engine 2.1 reads the canonical owner folders directly for prompts.
         if (left.id === this.playerID && leftSummaries) right.conversationSummaries = leftSummaries;
         if (right.id === this.playerID && rightSummaries) left.conversationSummaries = rightSummaries;
       }
@@ -4147,24 +4148,12 @@ ${existingSummary}`
    */
   static buildMentionedCharactersContext(char, gameData, history = null) {
     if (!history || history.length === 0) return null;
-    let context = "";
-    const dynamicMemories = gameData.loadDynamicMemoriesFromHistory(history, char);
-    if (dynamicMemories.length > 0) {
-      context += `${char.shortName} 还记得与对话中提到的人物的近期交谈：
-
-`;
-      for (const summary of dynamicMemories) {
-        const timeAgo = this.getRelativeTime(summary.totalDays, gameData.totalDays);
-        const conversationWith = summary.conversationWith || summary.characterName || "某人";
-        if (!timeAgo) {
-          context += `${summary.date}（与 ${conversationWith}）：${summary.content}
-`;
-        } else {
-          context += `${summary.date}（${timeAgo}，与 ${conversationWith}）：${summary.content}
-`;
-        }
-      }
+    const mentionedCharacterIds = gameData.findMentionedCharacterIdsInHistory(history, char);
+    if (!gameData.mentionedCharactersInContext) gameData.mentionedCharactersInContext = /* @__PURE__ */ new Set();
+    for (const characterId of mentionedCharacterIds) {
+      gameData.mentionedCharactersInContext.add(characterId);
     }
+    let context = "";
     const mentionedCharsInfo = gameData.getMentionedCharactersInfo(char);
     if (mentionedCharsInfo) context += mentionedCharsInfo;
     return context.trim() ? context : null;
@@ -4334,6 +4323,7 @@ ${existingSummary}`
         break;
       }
       case "past_summaries": {
+        if (baseContext.memoryContext?.engineVersion === "2.1") break;
         const pastSummaries = this.buildPastSummariesContext(character, gameData);
         if (pastSummaries) {
           const content = block.template ? renderTemplate(block.template, { ...baseContext, pastSummaries }) : pastSummaries;
@@ -4665,6 +4655,7 @@ ${existingSummary}`
         break;
       }
       case "past_summaries": {
+        if (baseContext.memoryContext?.engineVersion === "2.1") break;
         const pastSummaries = this.buildPastSummariesContext(character, gameData);
         if (pastSummaries) {
           const content = block.template ? renderTemplate(block.template, { ...baseContext, pastSummaries }) : pastSummaries;
@@ -5609,6 +5600,12 @@ class SummariesManager {
     // Always use the smaller ID first to ensure consistency
     return id1 < id2 ? `${id1}_${id2}` : `${id2}_${id1}`;
   }
+  static writeSummaryJsonAtomic(filePath, summaries) {
+    fs$1.mkdirSync(path.dirname(filePath), { recursive: true });
+    const tempPath = `${filePath}.${process.pid}.${Date.now()}.tmp`;
+    fs$1.writeFileSync(tempPath, JSON.stringify(summaries, null, "\t"), "utf8");
+    fs$1.renameSync(tempPath, filePath);
+  }
   
   /**
    * List all summaries across all character folders with metadata
@@ -5901,7 +5898,7 @@ class SummariesManager {
           return { success: false, error: "Invalid summary index" };
         }
         summaries[summaryIndex].content = newContent;
-        fs$1.writeFileSync(filePath, JSON.stringify(summaries, null, "\t"));
+        this.writeSummaryJsonAtomic(filePath, summaries);
         return { success: true };
       } catch (error) {
         console.error(`Failed to update summary in old format ${filePath}:`, error);
@@ -5925,22 +5922,30 @@ class SummariesManager {
       return { success: false, error: "Summary file not found" };
     }
     
+    const pending = [];
     try {
+      const primaryPath = paths.playerPerspectivePath || filesToUpdate[0];
+      const primarySummaries = JSON.parse(fs$1.readFileSync(primaryPath, "utf8"));
+      if (!Array.isArray(primarySummaries) || summaryIndex < 0 || summaryIndex >= primarySummaries.length) return { success: false, error: "Invalid summary index" };
+      const finalizationId = primarySummaries[summaryIndex]?.finalizationId || null;
       for (const filePath of filesToUpdate) {
-        const fileContent = fs$1.readFileSync(filePath, "utf8");
-        const summaries = JSON.parse(fileContent);
-        
-        if (!Array.isArray(summaries) || summaryIndex < 0 || summaryIndex >= summaries.length) {
-          return { success: false, error: "Invalid summary index" };
+        const original = fs$1.readFileSync(filePath, "utf8");
+        const summaries = JSON.parse(original);
+        if (!Array.isArray(summaries)) return { success: false, error: "Invalid summary file" };
+        const targetIndex = finalizationId ? summaries.findIndex((summary) => summary?.finalizationId === finalizationId) : summaryIndex;
+        if (targetIndex < 0 || targetIndex >= summaries.length) return { success: false, error: "Matching summary not found in mirror file" };
+        summaries[targetIndex].content = newContent;
+        pending.push({ filePath, original, summaries });
+      }
+      const committed = [];
+      try {
+        for (const entry of pending) {
+          this.writeSummaryJsonAtomic(entry.filePath, entry.summaries);
+          committed.push(entry);
         }
-        
-        summaries[summaryIndex].content = newContent;
-        
-        const dirPath = path.dirname(filePath);
-        if (!fs$1.existsSync(dirPath)) {
-          fs$1.mkdirSync(dirPath, { recursive: true });
-        }
-        fs$1.writeFileSync(filePath, JSON.stringify(summaries, null, "\t"));
+      } catch (error) {
+        for (const entry of committed.reverse()) this.writeSummaryJsonAtomic(entry.filePath, JSON.parse(entry.original));
+        throw error;
       }
       return { success: true };
     } catch (error) {
@@ -8583,6 +8588,7 @@ class LetterPromptBuilder {
       tokenBudget: 600,
       estimateTokens: (text) => TokenCounter.estimateTokens(text)
     });
+    context.memoryContext = memoryContext;
     let memoryInserted = false;
     for (const block of settings.blocks || []) {
       if (!block.enabled) continue;
@@ -8632,6 +8638,7 @@ class LetterPromptBuilder {
         break;
       }
       case "past_summaries": {
+        if (context.memoryContext?.engineVersion === "2.1") break;
         const summaries = this.buildPastSummariesContext(character, gameData);
         if (summaries) {
           const content = block.template ? this.templateEngine.renderTemplateString(block.template, { ...context, pastSummaries: summaries }) : summaries;
@@ -9970,7 +9977,7 @@ const setupIpcHandlers = () => {
       return memoryEngine.getUiOverview({ summaryCatalog });
     } catch (error) {
       console.error("Failed to get Memory Engine overview:", error);
-      return { engineVersion: "2.0", totals: {}, boundaries: [], characters: [], error: error.message || "Unknown error" };
+      return { engineVersion: "2.1", totals: {}, boundaries: [], characters: [], error: error.message || "Unknown error" };
     }
   });
   electron.ipcMain.handle("conversation:getSummariesDashboardData", async () => {
@@ -9979,7 +9986,7 @@ const setupIpcHandlers = () => {
       return { summaries, memoryOverview: memoryEngine.getUiOverview({ summaryCatalog: summaries }) };
     } catch (error) {
       console.error("Failed to get summaries dashboard data:", error);
-      return { summaries: [], memoryOverview: { engineVersion: "2.0", totals: {}, boundaries: [], characters: [], error: error.message || "Unknown error" } };
+      return { summaries: [], memoryOverview: { engineVersion: "2.1", totals: {}, boundaries: [], characters: [], error: error.message || "Unknown error" } };
     }
   });
   electron.ipcMain.handle("conversation:updateStructuredMemory", async (_, { memoryId, content }) => {

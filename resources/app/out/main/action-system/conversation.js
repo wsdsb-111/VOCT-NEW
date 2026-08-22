@@ -207,11 +207,17 @@ class Conversation {
     const limit = contextLimit || await llmManager.getCurrentContextLength() || 1e4;
     const latestUser = [...this.getHistory()].reverse().find((entry) => entry.role === "user");
     const mentionedCharacterIds = [...this.gameData.findMentionedCharacterIdsInHistory(this.getHistory(), npc)];
+    const mentionableProfiles = this.gameData.getMentionableCharacterProfiles();
+    const entityNames = mentionedCharacterIds.flatMap((characterId) => {
+      const character = mentionableProfiles.get(characterId);
+      return character ? [character.fullName, character.shortName, character.firstName].filter(Boolean) : [];
+    });
     return memoryEngine.retrieveForCharacter({
       characterId: npc.id,
       query: latestUser?.content || "",
       entityIds: mentionedCharacterIds,
-      participantIds: this.getActiveConversationCharacters().map((character) => character.id),
+      entityNames: [...new Set(entityNames)],
+      participantIds: this.getActiveConversationCharacters().map((character) => character.id).filter((characterId) => characterId !== npc.id),
       currentTotalDays: this.gameData.totalDays,
       tokenBudget: Math.max(160, Math.floor(limit * 0.12)),
       estimateTokens: (text) => TokenCounter.estimateTokens(text)
@@ -749,7 +755,7 @@ class Conversation {
       rollingState: state.rollingState,
       finalInstructions: PromptBuilder.getFinalSummaryInstructions(),
       buildPrompt: (context) => memoryEngine.buildFinalizationPrompt(context),
-      persistLegacySummary: async (finalSummary, context) => {
+      persistCharacterFolders: async (finalSummary, context) => {
         this.gameData.saveCharactersSummaries(finalSummary, participantIds, { finalizationId: context.finalizationId });
         return { success: true };
       },
@@ -764,7 +770,7 @@ class Conversation {
     const results = await memoryEngine.recoverPendingFinalizations({
       buildPrompt: (context) => memoryEngine.buildFinalizationPrompt({ ...context, finalInstructions: PromptBuilder.getFinalSummaryInstructions() }),
       requestSummary: (summaryPrompt) => llmManager.sendSummaryRequest(summaryPrompt, void 0, { requestType: "memory_recovery" }),
-      persistLegacySummary: async (finalSummary, context) => {
+      persistCharacterFolders: async (finalSummary, context) => {
         const participantIds = (context.participants || []).map((entry) => entry.id);
         this.gameData.saveCharactersSummaries(finalSummary, participantIds, { finalizationId: context.finalizationId });
         return { success: true };

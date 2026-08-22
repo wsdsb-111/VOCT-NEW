@@ -16,9 +16,9 @@ const FINAL_SUMMARY_MAX_ATTEMPTS = 2;
 const RECOVERY_MAX_ATTEMPTS = 3;
 
 class MemoryEngine {
-  constructor({ baseDir, legacySummariesDir = null, recoveryDir = null, store = null, trace = null } = {}) {
+  constructor({ baseDir, summaryFoldersDir = null, legacySummariesDir = null, recoveryDir = null, store = null, trace = null } = {}) {
     this.trace = trace || new MemoryTrace();
-    this.store = store || new MemoryStore({ baseDir, legacySummariesDir, recoveryDir });
+    this.store = store || new MemoryStore({ baseDir, summaryFoldersDir: summaryFoldersDir || legacySummariesDir, recoveryDir });
     this.extractor = new MemoryExtractor();
     this.ranker = new MemoryRanker();
     this.knowledge = new KnowledgeService({ store: this.store, trace: this.trace });
@@ -161,14 +161,19 @@ class MemoryEngine {
     const prompt = context.buildPrompt(context);
     let lastError = null;
     for (let attempt = 1; attempt <= FINAL_SUMMARY_MAX_ATTEMPTS; attempt++) {
+      const startedAt = Date.now();
       try {
         const result = await context.requestSummary(prompt);
         const content = typeof result?.content === "string" ? result.content.trim() : "";
-        if (content) return content;
+        if (content) {
+          this.trace.record("summary_provider", { conversationId: context.conversationId, attempt, success: true, durationMs: Date.now() - startedAt });
+          return content;
+        }
         lastError = new Error("invalid_final_summary_response");
       } catch (error) {
         lastError = error;
       }
+      this.trace.record("summary_provider", { conversationId: context.conversationId, attempt, success: false, durationMs: Date.now() - startedAt, error: lastError?.message || "unknown" });
       if (attempt < FINAL_SUMMARY_MAX_ATTEMPTS) {
         this.trace.record("recover", { conversationId: context.conversationId, reason: "final_summary_retry" });
       }
@@ -247,16 +252,17 @@ class MemoryEngine {
       memoryCount: details.memoryCount ?? null,
       episodeSaved: details.episodeSaved === true,
       knowledgeSaved: details.knowledgeSaved === true,
-      legacySummarySaved: details.legacySummarySaved === true,
+      summaryFoldersSaved: details.summaryFoldersSaved === true,
       recoveryState: details.recoveryState || null,
       errorCode: details.errorCode || null
     });
   }
 
-  async persistLegacySummary(context, finalSummary) {
-    if (typeof context.persistLegacySummary !== "function") return { saved: false, skipped: true };
-    const result = await context.persistLegacySummary(finalSummary, context);
-    if (result === false || result?.success === false) throw new Error(result?.error || "legacy_summary_persist_failed");
+  async persistCharacterFolders(context, finalSummary) {
+    const persist = context.persistCharacterFolders || context.persistLegacySummary;
+    if (typeof persist !== "function") return { saved: false, skipped: true };
+    const result = await persist(finalSummary, context);
+    if (result === false || result?.success === false) throw new Error(result?.error || "summary_folder_persist_failed");
     return { saved: true };
   }
 
@@ -308,10 +314,12 @@ class MemoryEngine {
       this.traceFinalization(context, "parse", { providerSuccess: true, recoveryState: "pending", errorCode: error.message });
       return { success: false, error, recoveryPath: failedPath };
     }
+    const persistStartedAt = Date.now();
     try {
       const persisted = this.persistExtraction(context, extraction);
-      const legacy = await this.persistLegacySummary(context, extraction.sessionSummary || content);
+      const folderPersistence = await this.persistCharacterFolders(context, extraction.sessionSummary || content);
       this.commitFinalization(context, extraction);
+      this.trace.record("summary_persist", { conversationId: context.conversationId, finalizationId: context.finalizationId, success: true, durationMs: Date.now() - persistStartedAt, memoryCount: extraction.memories.length });
       if (fs.existsSync(snapshotPath)) fs.unlinkSync(snapshotPath);
       this.traceFinalization(context, "committed", {
         providerSuccess: true,
@@ -319,11 +327,12 @@ class MemoryEngine {
         memoryCount: extraction.memories.length,
         episodeSaved: !!persisted.episode,
         knowledgeSaved: true,
-        legacySummarySaved: legacy.saved === true,
+        summaryFoldersSaved: folderPersistence.saved === true,
         recoveryState: "committed"
       });
       return { success: true, finalSummary: extraction.sessionSummary || content, extraction };
     } catch (error) {
+      this.trace.record("summary_persist", { conversationId: context.conversationId, finalizationId: context.finalizationId, success: false, durationMs: Date.now() - persistStartedAt, memoryCount: extraction.memories.length, error: error.message || String(error) });
       const failedPath = this.writeRecoverySnapshot(context, {
         finalizationStage: "persist",
         finalizationStatus: "pending",
@@ -381,7 +390,7 @@ class MemoryEngine {
     return fs.readdirSync(this.store.paths.recovery).filter((name) => name.endsWith(".json")).map((name) => path.join(this.store.paths.recovery, name));
   }
 
-  async recoverFailedFinalization(filePath, { requestSummary, buildPrompt, persistLegacySummary, automatic = false } = {}) {
+  async recoverFailedFinalization(filePath, { requestSummary, buildPrompt, persistCharacterFolders, persistLegacySummary, automatic = false } = {}) {
     const snapshot = this.store.readJson(filePath, null);
     if (!snapshot) return { success: false, reason: "invalid_recovery_snapshot" };
     const context = this.prepareFinalizationContext({
@@ -397,7 +406,7 @@ class MemoryEngine {
       retryCount: Number(snapshot.retryCount || 0) + 1,
       requestSummary,
       buildPrompt,
-      persistLegacySummary
+      persistCharacterFolders: persistCharacterFolders || persistLegacySummary
     });
     if (this.isCommitted(context)) {
       fs.unlinkSync(filePath);
@@ -430,7 +439,7 @@ class MemoryEngine {
     return { ...result, recoveryPath: filePath };
   }
 
-  async recoverPendingFinalizations({ requestSummary, buildPrompt, persistLegacySummary } = {}) {
+  async recoverPendingFinalizations({ requestSummary, buildPrompt, persistCharacterFolders, persistLegacySummary } = {}) {
     const results = [];
     for (const filePath of this.listRecoverySnapshots()) {
       const snapshot = this.store.readJson(filePath, null);
@@ -439,14 +448,16 @@ class MemoryEngine {
         if (snapshot.finalizationStatus !== "failed_manual") this.writeRecoverySnapshot(this.prepareFinalizationContext(snapshot), { finalizationStatus: "failed_manual", retryCount: snapshot.retryCount });
         continue;
       }
-      results.push(await this.recoverFailedFinalization(filePath, { requestSummary, buildPrompt, persistLegacySummary, automatic: true }));
+      results.push(await this.recoverFailedFinalization(filePath, { requestSummary, buildPrompt, persistCharacterFolders: persistCharacterFolders || persistLegacySummary, automatic: true }));
     }
     return results;
   }
 
-  retrieveForCharacter({ characterId, query = "", entityIds = [], participantIds = [], currentTotalDays = null, tokenBudget = 800, estimateTokens } = {}) {
-    const memories = this.store.queryMemories({ characterId, includeLegacy: true });
-    const ranked = this.ranker.rank(memories, { query, entityIds, participantIds, currentTotalDays });
+  retrieveForCharacter({ characterId, query = "", entityIds = [], entityNames = [], participantIds = [], currentTotalDays = null, tokenBudget = 800, estimateTokens } = {}) {
+    const startedAt = Date.now();
+    const memories = this.store.queryMemories({ characterId, includeFolderSummaries: true });
+    const retrievalQuery = [query, ...(entityNames || [])].filter(Boolean).join(" ");
+    const ranked = this.ranker.rank(memories, { query: retrievalQuery, entityIds, participantIds, currentTotalDays });
     for (const entry of ranked.slice(0, 20)) {
       this.trace.record("rank", { memoryId: entry.memory.memoryId, type: entry.memory.type, score: entry.score, characterId, reason: "hybrid_local_score" });
     }
@@ -458,12 +469,25 @@ class MemoryEngine {
       this.trace.record("retrieve", { memoryId: entry.memory.memoryId, type: entry.memory.type, score: entry.score, characterId, reason: "ranked_in_budget" });
       this.trace.record("inject", { memoryId: entry.memory.memoryId, type: entry.memory.type, score: entry.score, characterId, reason: stableIds.has(entry.memory.memoryId) ? "stable_memory" : "query_relevant" });
     }
+    const selectedTokens = [...stable, ...relevant].reduce((total, entry) => total + Number(entry.tokens || 0), 0);
+    this.trace.record("retrieval_metrics", {
+      characterId: Number(characterId),
+      durationMs: Date.now() - startedAt,
+      candidateCount: memories.length,
+      selectedCount: stable.length + relevant.length,
+      selectedTokens,
+      tokenBudget,
+      indexSize: Object.keys(this.store.index.memories || {}).length
+    });
     return {
+      engineVersion: "2.1",
+      respondingCharacterId: Number(characterId),
       stable,
       relevant,
       stableText: this.formatMemoryBlock("长期稳定记忆", stable),
       relevantText: this.formatMemoryBlock("与当前话题相关的记忆", relevant),
-      tokenBudget
+      tokenBudget,
+      folderCandidateCount: memories.filter((memory) => memory.type === "folder_summary").length
     };
   }
 
@@ -509,16 +533,69 @@ class MemoryEngine {
       for (const key of ["knownBy", "participants", "subjects"]) if (has(key)) next[key] = uniqueIds(updates[key]);
     }
     if (Object.keys(next).length === 0) return { success: false, error: "no_editable_memory_fields" };
-    const memory = this.store.updateMemory(memoryId, next);
-    this.store.removeKnowledgeForMemory(memoryId, memory.knownBy);
-    for (const characterId of memory.knownBy) {
-      this.store.markKnownBy(characterId, memory.memoryId, { awareness: "edited", acquiredAt: memory.totalDays, confidence: memory.confidence });
+    const changedFields = Object.keys(next);
+    next.updatedBy = advanced ? "player_advanced" : "player";
+    next.editHistory = [...(existing.editHistory || []), {
+      version: existing.version,
+      updatedAt: existing.updatedAt,
+      updatedBy: existing.updatedBy,
+      changedFields,
+      content: existing.content,
+      type: existing.type,
+      subtype: existing.subtype,
+      importance: existing.importance,
+      confidence: existing.confidence,
+      status: existing.status,
+      unresolved: existing.unresolved,
+      tags: existing.tags,
+      visibility: existing.visibility,
+      knownBy: existing.knownBy,
+      participants: existing.participants,
+      subjects: existing.subjects
+    }].slice(-20);
+    const affectedCharacterIds = uniqueIds([
+      ...existing.knownBy,
+      ...(next.knownBy || existing.knownBy),
+      ...existing.participants,
+      ...existing.subjects,
+      ...(next.participants || existing.participants),
+      ...(next.subjects || existing.subjects),
+      ...this.store.listKnowledgeCharacterIds()
+    ]);
+    const capture = (filePath) => fs.existsSync(filePath) ? this.store.readJson(filePath, null) : null;
+    const knowledgeBackup = new Map(affectedCharacterIds.map((characterId) => [characterId, capture(this.store.knowledgePath(characterId))]));
+    const consolidationBackup = new Map(affectedCharacterIds.map((characterId) => [characterId, capture(path.join(this.store.paths.characters, `${characterId}.json`))]));
+    const restore = (filePath, value) => {
+      if (value === null) {
+        if (fs.existsSync(filePath)) fs.unlinkSync(filePath);
+      } else {
+        this.store.writeJson(filePath, value);
+      }
+    };
+    try {
+      const memory = this.store.updateMemory(memoryId, next);
+      if (!memory) throw new Error("memory_update_failed");
+      this.store.removeKnowledgeForMemory(memoryId, memory.knownBy);
+      for (const characterId of memory.knownBy) {
+        this.store.markKnownBy(characterId, memory.memoryId, { awareness: "edited", acquiredAt: memory.totalDays, confidence: memory.confidence });
+      }
+      for (const characterId of uniqueIds([...existing.participants, ...existing.subjects, ...memory.participants, ...memory.subjects])) {
+        this.consolidator.consolidateCharacter(characterId);
+      }
+      this.trace.record("memory_update", { memoryId, advanced, changedFields, version: memory.version, updatedBy: memory.updatedBy });
+      return { success: true, memory };
+    } catch (error) {
+      try {
+        this.store.saveMemory(existing);
+        for (const [characterId, value] of knowledgeBackup) restore(this.store.knowledgePath(characterId), value);
+        for (const [characterId, value] of consolidationBackup) restore(path.join(this.store.paths.characters, `${characterId}.json`), value);
+        this.trace.record("memory_update_rollback", { memoryId, changedFields, error: error.message || String(error) });
+      } catch (rollbackError) {
+        this.trace.record("memory_update_rollback_failed", { memoryId, error: rollbackError.message || String(rollbackError) });
+        return { success: false, error: "memory_update_rollback_failed", details: rollbackError.message || String(rollbackError) };
+      }
+      return { success: false, error: error.message || "memory_update_failed" };
     }
-    for (const characterId of uniqueIds([...existing.participants, ...existing.subjects, ...memory.participants, ...memory.subjects])) {
-      this.consolidator.consolidateCharacter(characterId);
-    }
-    this.trace.record("memory_update", { memoryId, advanced, changedFields: Object.keys(next) });
-    return { success: true, memory };
   }
 
   deleteMemory(memoryId) {
@@ -532,96 +609,29 @@ class MemoryEngine {
   }
 
   getUiOverview({ summaryCatalog = [] } = {}) {
-    const memories = this.store.listAllMemories();
-    const episodes = this.store.listAllEpisodes();
-    const characterIds = new Set(this.store.listKnowledgeCharacterIds());
-    const namesById = new Map();
-    const rememberName = (idValue, name, replace = false) => {
-      const id = Number(idValue);
-      if (!Number.isFinite(id)) return;
-      characterIds.add(id);
-      if (name && (replace || !namesById.has(id))) namesById.set(id, String(name));
-    };
-    for (const episode of episodes) {
-      for (const participant of episode.participants || []) rememberName(participant?.id, participant?.name || participant?.fullName);
-    }
-    for (const memory of memories) {
-      for (const id of [...memory.participants, ...memory.subjects, ...memory.knownBy]) rememberName(id, null);
-    }
-    for (const metadata of summaryCatalog) {
-      rememberName(metadata.ownerId, metadata.ownerName);
-    }
-    for (const metadata of summaryCatalog) {
-      rememberName(metadata.counterpartId, metadata.counterpartName);
-      for (const participant of metadata.participantProfiles || []) rememberName(participant.id, participant.name);
-    }
-    for (const metadata of summaryCatalog) rememberName(metadata.ownerId, metadata.ownerName, true);
-    const characters = [...characterIds].sort((left, right) => left - right).map((characterId) => {
-      const accessible = this.store.queryMemories({ characterId, includeLegacy: false });
-      const accessibleIds = new Set(accessible.map((memory) => memory.memoryId));
-      const ownedFiles = summaryCatalog.filter((metadata) => Number(metadata.ownerId) === characterId);
-      const legacyAdaptedCount = ownedFiles.reduce((total, metadata) => total + (metadata.summaries || []).filter((summary) => typeof summary?.content === "string").length, 0);
-      const characterName = namesById.get(characterId) || ownedFiles[0]?.ownerName || `角色 ${characterId}`;
-      const normalizedName = String(characterName).toLocaleLowerCase();
-      const relatedFiles = summaryCatalog.filter((metadata) => {
-        if (Number(metadata.ownerId) === characterId) return false;
-        return Number(metadata.counterpartId) === characterId || (metadata.participantIds || []).some((id) => Number(id) === characterId) || (metadata.participantNames || []).some((name) => String(name).toLocaleLowerCase() === normalizedName);
-      });
-      const typeCounts = {};
-      for (const memory of accessible) typeCounts[memory.type] = (typeCounts[memory.type] || 0) + 1;
-      return {
-        characterId,
-        characterName,
-        structuredAccessibleCount: accessible.length,
-        structuredRestrictedCount: memories.filter((memory) => !accessibleIds.has(memory.memoryId)).length,
-        legacyAdaptedCount,
-        ownedSummaryFolderCount: new Set(ownedFiles.map((metadata) => metadata.folderName)).size,
-        ownedSummaryFileCount: ownedFiles.length,
-        ownedSummaryRecordCount: ownedFiles.reduce((total, metadata) => total + (metadata.summaries?.length || 0), 0),
-        relatedSummaryFileCount: relatedFiles.length,
-        relatedSummaryRecordCount: relatedFiles.reduce((total, metadata) => total + (metadata.summaries?.length || 0), 0),
-        typeCounts,
-        accessibleMemories: accessible.map((memory) => ({
-          memoryId: memory.memoryId,
-          type: memory.type,
-          subtype: memory.subtype,
-          eventDate: memory.eventDate,
-          content: memory.content,
-          importance: memory.importance,
-          confidence: memory.confidence,
-          unresolved: memory.unresolved,
-          tags: memory.tags,
-          status: memory.status,
-          visibility: memory.visibility,
-          participants: memory.participants,
-          subjects: memory.subjects,
-          knownBy: memory.knownBy
-        }))
-      };
-    });
     return {
-      engineVersion: "2.0",
+      engineVersion: "2.1",
       totals: {
-        structuredMemories: memories.length,
-        episodes: episodes.length,
+        structuredMemories: Object.keys(this.store.index.memories || {}).length,
+        episodes: Object.keys(this.store.index.episodes || {}).length,
         knowledgeCharacters: this.store.listKnowledgeCharacterIds().length,
         summaryFolders: new Set(summaryCatalog.map((metadata) => metadata.folderName)).size,
         summaryFiles: summaryCatalog.length,
         summaryRecords: summaryCatalog.reduce((total, metadata) => total + (metadata.summaries?.length || 0), 0)
       },
       boundaries: [
-        "角色只能读取 knowledge 索引中自己已知的结构化记忆；公开/世界记忆对所有角色可见。",
-        "旧摘要按回应角色自己的 ID_姓名目录惰性适配，不会回退读取玩家或其他角色的私人目录。",
-        "当前话题提到第三者时，只在回应角色可访问的记忆范围内按人物、参与者与语义排序。",
+        "每名回应角色只读取自己的 ID_姓名目录，以及 knowledge 索引中自己已知的内部结构化记忆；不会借用其他角色的私人目录。",
+        "直接对话参与者与被提及第三者均按当前回应角色的目录独立检索；参与者和提及人物没有固定数量上限。",
+        "同一场群聊写入多个配对文件时，召回会按 finalizationId 去重，避免一段摘要重复注入。",
         "每次注入使用动态令牌预算：长期稳定记忆约 30%，当前话题相关记忆约 50%。"
       ],
-      characters
+      characters: []
     };
   }
 
   formatMemoryBlock(title, entries) {
     if (!entries || entries.length === 0) return null;
-    return `${title}（仅包含当前回应角色应当知道的内容）：\n${entries.map((entry) => `- [${entry.memory.type}/${entry.memory.epistemicStatus}] ${entry.memory.eventDate || "日期不详"}：${entry.memory.content}`).join("\n")}`;
+    return `${title}（仅包含当前回应角色应当知道的内容）：\n${entries.map((entry) => `- [${entry.memory.type === "folder_summary" ? "人物目录摘要" : `${entry.memory.type}/${entry.memory.epistemicStatus}`}] ${entry.memory.eventDate || "日期不详"}：${entry.memory.content}`).join("\n")}`;
   }
 
   recordLetterMemory({ senderId, recipientId, content, date = null, totalDays = null, letterId = null }) {

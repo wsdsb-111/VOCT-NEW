@@ -6,10 +6,12 @@ const path = require("path");
 const { createMemoryRecord, uniqueIds } = require("./memory-types");
 
 class MemoryStore {
-  constructor({ baseDir, legacySummariesDir = null, recoveryDir = null } = {}) {
+  constructor({ baseDir, summaryFoldersDir = null, legacySummariesDir = null, recoveryDir = null } = {}) {
     if (!baseDir) throw new Error("memory_store_base_dir_required");
     this.baseDir = baseDir;
-    this.legacySummariesDir = legacySummariesDir;
+    this.summaryFoldersDir = summaryFoldersDir || legacySummariesDir;
+    // Kept as an internal alias for older callers and migration tools.
+    this.legacySummariesDir = this.summaryFoldersDir;
     this.paths = {
       episodes: path.join(baseDir, "episodes"),
       characters: path.join(baseDir, "characters"),
@@ -199,7 +201,7 @@ class MemoryStore {
     return record;
   }
 
-  queryMemories({ characterId = null, type = null, subjectIds = [], participantIds = [], includeLegacy = false } = {}) {
+  queryMemories({ characterId = null, type = null, subjectIds = [], participantIds = [], includeFolderSummaries = false, includeLegacy = false } = {}) {
     const knownIds = characterId == null ? null : new Set(this.getCharacterKnowledge(characterId).map((entry) => entry.memoryId));
     const subjects = new Set(uniqueIds(subjectIds));
     const participants = new Set(uniqueIds(participantIds));
@@ -214,7 +216,7 @@ class MemoryStore {
       if (participants.size > 0 && !memory.participants.some((id) => participants.has(id))) continue;
       results.push(memory);
     }
-    if (includeLegacy && characterId != null) results.push(...this.loadLegacyForCharacter(characterId));
+    if ((includeFolderSummaries || includeLegacy) && characterId != null) results.push(...this.loadFolderSummariesForCharacter(characterId));
     const deduped = new Map(results.map((entry) => [entry.memoryId, entry]));
     return [...deduped.values()];
   }
@@ -238,43 +240,84 @@ class MemoryStore {
     return this.readJson(path.join(this.paths.characters, `${Number(characterId)}.json`), null);
   }
 
-  loadLegacyForCharacter(characterId) {
-    if (!this.legacySummariesDir || !fs.existsSync(this.legacySummariesDir)) return [];
+  loadFolderSummariesForCharacter(characterId) {
+    if (!this.summaryFoldersDir || !fs.existsSync(this.summaryFoldersDir)) return [];
     const prefix = `${Number(characterId)}_`;
-    const folders = fs.readdirSync(this.legacySummariesDir, { withFileTypes: true })
+    const folders = fs.readdirSync(this.summaryFoldersDir, { withFileTypes: true })
       .filter((entry) => entry.isDirectory() && entry.name.startsWith(prefix));
-    const results = [];
+    const sessions = new Map();
     for (const folder of folders) {
-      const folderPath = path.join(this.legacySummariesDir, folder.name);
+      const folderPath = path.join(this.summaryFoldersDir, folder.name);
       for (const file of fs.readdirSync(folderPath).filter((name) => name.endsWith(".json"))) {
         const summaries = this.readJson(path.join(folderPath, file), []);
         if (!Array.isArray(summaries)) continue;
         for (let index = 0; index < summaries.length; index++) {
           const summary = summaries[index];
           if (!summary || typeof summary.content !== "string") continue;
-          const digest = crypto.createHash("sha1").update(`${characterId}|${file}|${index}|${summary.content}`).digest("hex").slice(0, 16);
-          results.push(createMemoryRecord({
-            schemaVersion: 1,
-            memoryId: `legacy_${digest}`,
-            type: "legacy_summary",
+          const ownerId = Number(characterId);
+          const playerId = Number(summary.playerId);
+          const summaryCharacterId = Number(summary.characterId);
+          const counterpartId = playerId === ownerId && Number.isFinite(summaryCharacterId) ? summaryCharacterId : summaryCharacterId === ownerId && Number.isFinite(playerId) ? playerId : Number.isFinite(summaryCharacterId) ? summaryCharacterId : null;
+          const filenameMatch = file.match(/^与(.+)的对话\.json$/);
+          const counterpartName = filenameMatch?.[1] || summary.characterName || null;
+          const participantProfiles = Array.isArray(summary.participants) ? summary.participants : [];
+          const participants = uniqueIds([
+            ownerId,
+            counterpartId,
+            playerId,
+            summaryCharacterId,
+            ...participantProfiles.map((participant) => participant && typeof participant === "object" ? participant.id ?? participant.characterId : participant)
+          ]);
+          const participantNames = participantProfiles.flatMap((participant) => participant && typeof participant === "object" ? [participant.name, participant.shortName, participant.fullName] : []).filter(Boolean);
+          const finalizationId = summary.finalizationId || null;
+          const sessionKey = finalizationId ? `${ownerId}|${finalizationId}` : `${ownerId}|${summary.date || ""}|${summary.totalDays ?? ""}|${summary.content}`;
+          const digest = crypto.createHash("sha1").update(sessionKey).digest("hex").slice(0, 16);
+          const existing = sessions.get(sessionKey);
+          if (existing) {
+            existing.participants = uniqueIds([...existing.participants, ...participants]);
+            existing.subjects = uniqueIds([...existing.subjects, ...participants.filter((id) => id !== ownerId)]);
+            existing.tags = [...new Set([...existing.tags, counterpartName, ...participantNames].filter(Boolean))];
+            existing.provenance.conversationFiles = [...new Set([...existing.provenance.conversationFiles, file])];
+            continue;
+          }
+          sessions.set(sessionKey, createMemoryRecord({
+            schemaVersion: 2,
+            memoryId: `folder_${digest}`,
+            type: "folder_summary",
             subtype: "conversation_summary",
             eventDate: summary.date || null,
             totalDays: summary.totalDays,
-            participants: [characterId, summary.characterId, summary.playerId],
-            subjects: [summary.characterId],
+            participants,
+            subjects: participants.filter((id) => id !== ownerId),
             content: summary.content,
             canonicalText: summary.content,
-            importance: 0.45,
-            confidence: 0.7,
+            importance: 0.65,
+            confidence: 0.9,
             source: "imported",
             visibility: "known_group",
-            knownBy: [characterId],
-            provenance: { extractionMode: "legacy_adapter", messageIds: [], speakerIds: [] }
+            knownBy: [ownerId],
+            tags: [counterpartName, ...participantNames].filter(Boolean),
+            provenance: {
+              finalizationId,
+              folderOwnerId: ownerId,
+              folderName: folder.name,
+              conversationFile: file,
+              conversationFiles: [file],
+              counterpartId,
+              counterpartName,
+              extractionMode: "folder_summary_v2_1",
+              messageIds: [],
+              speakerIds: []
+            }
           }));
         }
       }
     }
-    return results;
+    return [...sessions.values()];
+  }
+
+  loadLegacyForCharacter(characterId) {
+    return this.loadFolderSummariesForCharacter(characterId);
   }
 }
 

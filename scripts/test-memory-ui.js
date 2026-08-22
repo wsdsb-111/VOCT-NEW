@@ -75,14 +75,11 @@ try {
     visibility: "known_group", knownBy: [3, 4], importance: 0.9, confidence: 1
   });
   const overview = engine.getUiOverview({ summaryCatalog: [ownFolder, otherFolder, mentionedElsewhere] });
-  const npcB = overview.characters.find((entry) => entry.characterId === 2);
-  assert(npcB, "Memory Engine overview must include NPC B");
-  assert.strictEqual(npcB.structuredAccessibleCount, 2, "NPC B may access known and public structured memories");
-  assert.strictEqual(npcB.structuredRestrictedCount, 1, "NPC B must not access an unknown secret");
-  assert.strictEqual(npcB.legacyAdaptedCount, 1, "NPC B's own legacy folder must remain readable");
-  assert.strictEqual(npcB.ownedSummaryRecordCount, 1, "overview must count records in NPC B's folder");
-  assert(npcB.accessibleMemories.some((memory) => memory.memoryId === "memory_known"), "overview must expose readable structured records without restricted content");
-  assert(!npcB.accessibleMemories.some((memory) => memory.memoryId === "memory_restricted"), "overview must not expose a memory outside NPC B's knowledge boundary");
+  assert.strictEqual(overview.engineVersion, "2.1");
+  assert.strictEqual(overview.totals.summaryFolders, 3, "overview must count canonical character folders");
+  assert.strictEqual(overview.totals.summaryFiles, 3, "overview must count visible conversation files");
+  assert.strictEqual(overview.totals.summaryRecords, 3, "overview must count player-editable summaries");
+  assert.deepStrictEqual(overview.characters, [], "the UI overview must not duplicate the folder tree with a structured-memory tree");
   const updated = engine.updateMemoryContent("memory_known", "乙亲历了丙的再次到访。");
   assert.strictEqual(updated.success, true, "players must be able to edit a readable structured memory");
   const updatedMemory = engine.store.getMemory("memory_known");
@@ -127,8 +124,8 @@ assert(rendererSource.includes("memory-engine-overview"), "summary UI must rende
 assert(rendererSource.includes("metadata.ownerName"), "summary search must index folder owners");
 assert(rendererSource.includes("metadata.participantNames"), "summary search must index third-party participants");
 assert(rendererSource.includes("summary-match-badge"), "summary UI must explain why a search result matched");
-assert(rendererSource.includes("handleEditStructuredMemory"), "summary UI must provide structured-memory editing");
-assert(rendererSource.includes("可访问的结构化记忆（可编辑）"), "structured-memory UI must no longer be marked read-only");
+assert(!rendererSource.includes("handleEditStructuredMemory"), "summary UI must expose only the canonical folder editing surface");
+assert(!rendererSource.includes("可访问的结构化记忆（可编辑）"), "summary UI must not duplicate structured and folder records");
 assert(preloadSource.includes("updateStructuredMemory"), "preload must expose structured-memory editing");
 assert(mainSource.includes('"conversation:updateStructuredMemory"'), "main process must provide structured-memory editing IPC");
 assert(conversationSource.includes("participantPresence"), "final summary participants must include observed session participants");
@@ -140,9 +137,9 @@ assert(rendererSource.includes("const topMatch = filteredSummaries[0]"), "search
 assert(rendererSource.includes("const summaryGroups = reactExports.useMemo"), "summary groups must preserve ranked insertion order");
 assert(rendererSource.includes("const groups = new Map()"), "numeric character IDs must not reorder matched folder groups");
 assert(!rendererSource.includes("Object.entries(summariesByPlayer)"), "search result groups must not use numeric object-key enumeration");
-assert(rendererSource.includes("showMemoryCoverage"), "the large per-character coverage list must be collapsed initially");
+assert(!rendererSource.includes('className: "memory-character-coverage"'), "the duplicate per-character structured-memory tree must be removed");
 assert(!rendererSource.includes("Promise.all([listAllSummaries(), getMemoryOverview()])"), "summary dashboard must not parse every JSON file twice");
 const overviewSource = engineSource.slice(engineSource.indexOf("getUiOverview("), engineSource.indexOf("formatMemoryBlock("));
 assert(!overviewSource.includes("loadLegacyForCharacter"), "UI coverage counts must reuse the catalog instead of rereading every legacy file");
 
-console.log("VOTC Memory UI: PASS (owner folders, cross-folder mentions, knowledge boundary and coverage)");
+console.log("VOTC Memory UI: PASS (canonical owner folders, search, editing and unified coverage)");

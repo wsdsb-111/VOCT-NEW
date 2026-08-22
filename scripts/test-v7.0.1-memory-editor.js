@@ -20,7 +20,24 @@ try {
   assert.strictEqual(engine.store.queryMemories({ characterId: 2 }).length, 0, "removed knowledge must not leak");
   assert.strictEqual(engine.store.queryMemories({ characterId: 3 }).length, 1, "edited knowledge boundary must persist");
   assert.strictEqual(engine.store.getMemory("editable").canonicalText, "甲取消了承诺");
-  console.log("VOTC v7.0.1 memory editor: PASS (fields, index cleanup, knowledge boundary)");
+  assert.strictEqual(engine.store.getMemory("editable").updatedBy, "player_advanced");
+  assert.strictEqual(engine.store.getMemory("editable").editHistory.length, 1, "an editable prior version must be retained");
+
+  const beforeFailure = engine.store.getMemory("editable");
+  const originalMarkKnownBy = engine.store.markKnownBy.bind(engine.store);
+  engine.store.markKnownBy = () => { throw new Error("simulated_knowledge_write_failure"); };
+  const failed = engine.updateMemory("editable", {
+    content: "不应提交的内容",
+    participants: [1, 4],
+    subjects: [4],
+    knownBy: [1, 4]
+  }, { advanced: true });
+  engine.store.markKnownBy = originalMarkKnownBy;
+  assert.strictEqual(failed.success, false);
+  assert.deepStrictEqual(engine.store.getMemory("editable"), beforeFailure, "a knowledge/index failure must roll the Memory record back completely");
+  assert.strictEqual(engine.store.getPairMemories(1, 4).length, 0, "a rolled-back edit must not leave a stale pair index");
+  assert.strictEqual(engine.store.queryMemories({ characterId: 4 }).length, 0, "a rolled-back edit must not leak knowledge to the failed target");
+  console.log("VOTC v7.1 memory editor: PASS (history, version, index/knowledge transaction rollback)");
 } finally {
   fs.rmSync(tempDir, { recursive: true, force: true });
 }

@@ -33,4 +33,4 @@ assert(/Conversation\.configure\(\{[\s\S]{0,900}memoryEngine[\s\S]{0,40}\}\);/.t
 assert(!mainSource.includes("summaries = this.loadConversationWithMentionedCharacter(player, mentionedName)"), "player-summary fallback must not leak memories to responders");
 assert(/buildMemoriesBlock\(gameData, character,/.test(mainSource), "CK3 memories must be scoped to the responder");
 
-console.log("VOTC v7.0 Memory Health: PASS (ownership, knowledge boundary, CK3 scope)");
+console.log("VOTC v7.1 Memory Health: PASS (ownership, knowledge boundary, CK3 scope)");

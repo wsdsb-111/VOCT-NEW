@@ -242,7 +242,7 @@ async function testFinalizationRecoveryAndStructuredExtraction() {
   testRankingCriticalRecallAndBudget();
   await testLegacyLazyAdapterDoesNotLeakPlayerFallback();
   await testFinalizationRecoveryAndStructuredExtraction();
-  console.log("VOTC v7.0 Memory Regression: PASS (durability, recovery, knowledge, retrieval, legacy)");
+  console.log("VOTC v7.1 Memory Regression: PASS (durability, recovery, knowledge, folder retrieval)");
 })().catch((error) => {
   console.error(error);
   process.exitCode = 1;

@@ -4,7 +4,7 @@ const crypto = require("crypto");
 
 const MEMORY_TYPES = new Set([
   "event", "promise", "relationship", "secret", "belief", "plan",
-  "conflict", "information", "rumor", "unresolved", "letter", "legacy_summary"
+  "conflict", "information", "rumor", "unresolved", "letter", "folder_summary", "legacy_summary"
 ]);
 const VISIBILITIES = new Set(["private", "participants", "known_group", "public", "world"]);
 const SOURCES = new Set(["witnessed", "spoken", "letter", "game_fact", "reported", "rumor", "inferred", "imported"]);
@@ -33,6 +33,8 @@ function createMemoryRecord(input = {}) {
     schemaVersion: input.schemaVersion === 1 ? 1 : 2,
     memoryId: input.memoryId || createMemoryId(),
     version: Number.isFinite(Number(input.version)) ? Number(input.version) : 1,
+    updatedBy: String(input.updatedBy || "system"),
+    editHistory: Array.isArray(input.editHistory) ? input.editHistory.slice(-20).map((entry) => ({ ...entry })) : [],
     type,
     subtype: String(input.subtype || "").trim(),
     eventDate: input.eventDate || null,
@@ -50,7 +52,14 @@ function createMemoryRecord(input = {}) {
       messageIds: Array.isArray(provenance.messageIds) ? [...new Set(provenance.messageIds)] : [],
       speakerIds: uniqueIds(provenance.speakerIds),
       extractionMode: provenance.extractionMode || "structured",
-      summaryRequestId: provenance.summaryRequestId || null
+      summaryRequestId: provenance.summaryRequestId || null,
+      finalizationId: provenance.finalizationId || null,
+      folderOwnerId: Number.isFinite(Number(provenance.folderOwnerId)) ? Number(provenance.folderOwnerId) : null,
+      folderName: provenance.folderName || null,
+      conversationFile: provenance.conversationFile || null,
+      conversationFiles: Array.isArray(provenance.conversationFiles) ? [...new Set(provenance.conversationFiles.map(String))] : [],
+      counterpartId: Number.isFinite(Number(provenance.counterpartId)) ? Number(provenance.counterpartId) : null,
+      counterpartName: provenance.counterpartName || null
     },
     relationshipImpact: input.relationshipImpact && typeof input.relationshipImpact === "object" ? input.relationshipImpact : null,
     unresolved: input.unresolved === true || type === "unresolved",
