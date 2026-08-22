@@ -555,14 +555,16 @@ class ActionEngine {
         }
         const availableAction = available.find((action) => action.signature === inv.actionId);
         if (!availableAction) continue;
-        const bindingValidation = availableAction.participantBinding ? actionSystem.invocationValidator.validateInvocation({
+        const bindingValidation = actionSystem.invocationValidator.validateInvocation({
           modelInvocation: inv,
           availableAction,
           binding: availableAction.participantBinding,
           registry: actionRegistry,
-          gameData: conv.gameData
-        }) : null;
-        if (bindingValidation && !bindingValidation.valid) {
+          gameData: conv.gameData,
+          eventId: actionEvent.eventId,
+          traceId: actionEvent.traceId
+        });
+        if (!bindingValidation.valid) {
           this.traceDecision(inv.actionId, "validation", "rejected", {
             eventId: actionEvent.eventId,
             traceId: actionEvent.traceId,
@@ -579,11 +581,16 @@ class ActionEngine {
           continue;
         }
         this.traceDecision(inv.actionId, "validation", "pass", { eventId: actionEvent.eventId, traceId: actionEvent.traceId });
-        const invocation = bindingValidation?.invocation || (availableAction.resolvedTargetCharacterId !== void 0 ? {
-          ...inv,
-          targetCharacterId: availableAction.resolvedTargetCharacterId
-        } : inv);
-        const invocationSource = conv.gameData.characters.get(availableAction.sourceCharacterId) || actionSource;
+        const invocation = bindingValidation.invocation;
+        const invocationSource = conv.gameData.characters.get(invocation.sourceCharacterId);
+        if (!invocationSource) {
+          this.traceDecision(inv.actionId, "validation", "rejected", {
+            eventId: actionEvent.eventId,
+            traceId: actionEvent.traceId,
+            reason: "source_not_in_game_data"
+          });
+          continue;
+        }
         const isDestructive = actionRegistry.getEffectiveDestructive(inv.actionId);
         const riskLevel = actionRegistry.getEffectiveRiskLevel(inv.actionId);
         console.log(`[ActionEngine] Action ${inv.actionId} isDestructive: ${isDestructive}, hasOverride: ${actionRegistry.hasDestructiveOverride(inv.actionId)}`);

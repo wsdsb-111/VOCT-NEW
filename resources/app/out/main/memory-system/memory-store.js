@@ -69,6 +69,7 @@ class MemoryStore {
 
   saveMemory(input) {
     const record = createMemoryRecord(input);
+    const previous = this.getMemory(record.memoryId);
     this.writeJson(this.memoryPath(record.memoryId), record);
     this.index.memories[record.memoryId] = {
       type: record.type,
@@ -78,6 +79,10 @@ class MemoryStore {
       visibility: record.visibility
     };
     this.saveIndex();
+    // A corrected memory may change participants/subjects. Remove its old
+    // pair references first so edits and recovery retries never leave stale
+    // entries that would make an unrelated pair recall it.
+    if (previous) this.removeMemoryFromPairIndexes(previous);
     this.updatePairIndexes(record);
     return record;
   }
@@ -111,6 +116,18 @@ class MemoryStore {
     return this.updateMemory(memoryId, { status });
   }
 
+  deleteMemory(memoryId) {
+    const existing = this.getMemory(memoryId);
+    if (!existing) return false;
+    this.removeMemoryFromPairIndexes(existing);
+    this.removeKnowledgeForMemory(memoryId);
+    const filePath = this.memoryPath(memoryId);
+    if (fs.existsSync(filePath)) fs.unlinkSync(filePath);
+    delete this.index.memories[memoryId];
+    this.saveIndex();
+    return true;
+  }
+
   updatePairIndexes(memory) {
     const ids = uniqueIds([...memory.participants, ...memory.subjects]).sort((a, b) => a - b);
     for (let left = 0; left < ids.length; left++) {
@@ -123,6 +140,34 @@ class MemoryStore {
         }
       }
     }
+  }
+
+  removeMemoryFromPairIndexes(memory) {
+    const ids = uniqueIds([...memory.participants, ...memory.subjects]).sort((a, b) => a - b);
+    for (let left = 0; left < ids.length; left++) {
+      for (let right = left + 1; right < ids.length; right++) {
+        const pairPath = path.join(this.paths.pairs, `${ids[left]}_${ids[right]}.json`);
+        const memoryIds = this.readJson(pairPath, []);
+        if (!Array.isArray(memoryIds) || !memoryIds.includes(memory.memoryId)) continue;
+        const remaining = memoryIds.filter((memoryId) => memoryId !== memory.memoryId);
+        this.writeJson(pairPath, remaining);
+      }
+    }
+  }
+
+  removeKnowledgeForMemory(memoryId, keepCharacterIds = []) {
+    const keep = new Set(uniqueIds(keepCharacterIds));
+    for (const characterId of this.listKnowledgeCharacterIds()) {
+      if (keep.has(characterId)) continue;
+      const records = this.getCharacterKnowledge(characterId);
+      const remaining = records.filter((entry) => entry.memoryId !== memoryId);
+      if (remaining.length !== records.length) this.writeJson(this.knowledgePath(characterId), remaining);
+    }
+  }
+
+  findEpisodeByFinalization(conversationId, finalizationId) {
+    if (!conversationId || !finalizationId) return null;
+    return this.listAllEpisodes().find((episode) => episode.conversationId === conversationId && episode.finalizationId === finalizationId) || null;
   }
 
   knowledgePath(characterId) {

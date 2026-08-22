@@ -2,7 +2,8 @@
 
 const fs = require("fs");
 const path = require("path");
-const { createMemoryId, createMemoryRecord, uniqueIds } = require("./memory-types");
+const crypto = require("crypto");
+const { MEMORY_TYPES, VISIBILITIES, createMemoryId, createMemoryRecord, uniqueIds } = require("./memory-types");
 const { MemoryStore } = require("./memory-store");
 const { MemoryExtractor } = require("./memory-extractor");
 const { MemoryRanker } = require("./memory-ranker");
@@ -10,6 +11,9 @@ const { KnowledgeService } = require("./knowledge-service");
 const { RollingSummaryManager } = require("./rolling-summary-manager");
 const { MemoryConsolidator } = require("./memory-consolidator");
 const { MemoryTrace } = require("./memory-trace");
+
+const FINAL_SUMMARY_MAX_ATTEMPTS = 2;
+const RECOVERY_MAX_ATTEMPTS = 3;
 
 class MemoryEngine {
   constructor({ baseDir, legacySummariesDir = null, recoveryDir = null, store = null, trace = null } = {}) {
@@ -88,8 +92,11 @@ class MemoryEngine {
     }
     return {
       schemaVersion: 2,
-      episodeId: context.episodeId || `episode_${context.conversationId}`,
+      episodeId: context.episodeId || `episode_${context.conversationId}_${context.finalizationId}`,
       conversationId: context.conversationId,
+      finalizationId: context.finalizationId,
+      summaryRequestId: context.summaryRequestId,
+      commitMarker: context.commitMarker || null,
       date: context.date || null,
       totalDays: context.totalDays ?? null,
       participants: context.participants || [],
@@ -137,33 +144,199 @@ class MemoryEngine {
       });
       const knownBy = this.knowledge.resolveKnownBy(candidate, episodeContext);
       const memory = this.store.saveMemory({ ...candidate, knownBy });
+      this.store.removeKnowledgeForMemory(memory.memoryId, knownBy);
       this.knowledge.markKnownBy(memory.memoryId, knownBy, { awareness: memory.source === "letter" ? "told" : "witnessed", acquiredAt: memory.totalDays, confidence: memory.confidence });
       saved.push(this.store.getMemory(memory.memoryId));
       this.trace.record("persist", { memoryId: memory.memoryId, type: memory.type, conversationId: context.conversationId });
     }
     extraction.memories = saved;
-    this.store.saveEpisode(this.buildEpisode(context, extraction));
+    const episode = this.store.saveEpisode(this.buildEpisode(context, extraction));
     for (const characterId of uniqueIds((context.participants || []).map((entry) => entry.id))) {
       this.consolidator.consolidateCharacter(characterId);
     }
+    return { extraction, episode };
+  }
+
+  async requestFinalSummary(context) {
+    const prompt = context.buildPrompt(context);
+    let lastError = null;
+    for (let attempt = 1; attempt <= FINAL_SUMMARY_MAX_ATTEMPTS; attempt++) {
+      try {
+        const result = await context.requestSummary(prompt);
+        const content = typeof result?.content === "string" ? result.content.trim() : "";
+        if (content) return content;
+        lastError = new Error("invalid_final_summary_response");
+      } catch (error) {
+        lastError = error;
+      }
+      if (attempt < FINAL_SUMMARY_MAX_ATTEMPTS) {
+        this.trace.record("recover", { conversationId: context.conversationId, reason: "final_summary_retry" });
+      }
+    }
+    throw lastError || new Error("invalid_final_summary_response");
+  }
+
+  getFinalizationId(context) {
+    if (context.finalizationId) return String(context.finalizationId);
+    const source = JSON.stringify({
+      conversationId: context.conversationId || "unknown",
+      messages: (context.messages || []).map((message) => [message.id ?? null, message.name || message.role || "", message.content || ""])
+    });
+    return `fin_${crypto.createHash("sha256").update(source).digest("hex").slice(0, 20)}`;
+  }
+
+  prepareFinalizationContext(context) {
+    const finalizationId = this.getFinalizationId(context);
+    return {
+      ...context,
+      finalizationId,
+      summaryRequestId: context.summaryRequestId || finalizationId,
+      episodeId: context.episodeId || `episode_${context.conversationId}_${finalizationId}`
+    };
+  }
+
+  assignStableMemoryIds(context, extraction) {
+    extraction.memories = (extraction.memories || []).map((memory, index) => {
+      const fingerprint = JSON.stringify({
+        finalizationId: context.finalizationId,
+        index,
+        type: memory.type,
+        content: memory.content,
+        messageIds: memory.provenance?.messageIds || []
+      });
+      const memoryId = `memory_${crypto.createHash("sha256").update(fingerprint).digest("hex").slice(0, 24)}`;
+      return createMemoryRecord({
+        ...memory,
+        memoryId,
+        provenance: { ...memory.provenance, conversationId: context.conversationId, summaryRequestId: context.summaryRequestId }
+      });
+    });
     return extraction;
   }
 
-  async finalizeConversation(context) {
+  serializeExtraction(extraction) {
+    return {
+      structured: extraction.structured === true,
+      sessionSummary: extraction.sessionSummary || "",
+      memories: (extraction.memories || []).map((memory) => ({ ...memory }))
+    };
+  }
+
+  restoreExtraction(serialized) {
+    if (!serialized || !Array.isArray(serialized.memories)) return null;
+    return {
+      structured: serialized.structured === true,
+      sessionSummary: String(serialized.sessionSummary || ""),
+      memories: serialized.memories.map((memory) => createMemoryRecord(memory))
+    };
+  }
+
+  isCommitted(context) {
+    const episode = this.store.findEpisodeByFinalization(context.conversationId, context.finalizationId);
+    return episode?.commitMarker ? episode : null;
+  }
+
+  traceFinalization(context, stage, details = {}) {
+    this.trace.record("finalization", {
+      conversationId: context.conversationId,
+      finalizationId: context.finalizationId,
+      stage,
+      requestType: details.requestType || "final_summary",
+      providerSuccess: details.providerSuccess === true,
+      parseMode: details.parseMode || null,
+      memoryCount: details.memoryCount ?? null,
+      episodeSaved: details.episodeSaved === true,
+      knowledgeSaved: details.knowledgeSaved === true,
+      legacySummarySaved: details.legacySummarySaved === true,
+      recoveryState: details.recoveryState || null,
+      errorCode: details.errorCode || null
+    });
+  }
+
+  async persistLegacySummary(context, finalSummary) {
+    if (typeof context.persistLegacySummary !== "function") return { saved: false, skipped: true };
+    const result = await context.persistLegacySummary(finalSummary, context);
+    if (result === false || result?.success === false) throw new Error(result?.error || "legacy_summary_persist_failed");
+    return { saved: true };
+  }
+
+  commitFinalization(context, extraction) {
+    const commitMarker = `commit_${context.finalizationId}`;
+    const episode = this.store.saveEpisode({
+      ...this.buildEpisode(context, extraction),
+      commitMarker,
+      committedAt: new Date().toISOString()
+    });
+    return episode;
+  }
+
+  async finalizeWithAvailableOutput(context, { providerOutput = null, parsedExtraction = null, recoveryPath = null } = {}) {
+    const committed = this.isCommitted(context);
+    if (committed) {
+      return { success: true, alreadyCommitted: true, finalSummary: committed.sessionSummary || "", extraction: null, recoveryPath };
+    }
+    let content = providerOutput;
+    if (!content) {
+      try {
+        content = await this.requestFinalSummary(context);
+      } catch (error) {
+        const snapshotPath = this.writeRecoverySnapshot(context, { finalizationStage: "request", finalizationStatus: "pending", providerOutput: null }, error);
+        this.traceFinalization(context, "request", { recoveryState: "pending", errorCode: error.message });
+        return { success: false, error, recoveryPath: snapshotPath };
+      }
+    }
+    const snapshotPath = recoveryPath || this.writeRecoverySnapshot(context, {
+      finalizationStage: "parse",
+      finalizationStatus: "pending",
+      providerOutput: content
+    });
+    this.traceFinalization(context, "provider_received", { providerSuccess: true, recoveryState: "pending" });
+    let extraction = this.restoreExtraction(parsedExtraction);
     try {
-      const result = await context.requestSummary(context.buildPrompt(context));
-      const content = typeof result?.content === "string" ? result.content.trim() : "";
-      if (!content) throw new Error("invalid_final_summary_response");
-      const extraction = this.extractor.parseOutput(content, context);
+      if (!extraction) extraction = this.assignStableMemoryIds(context, this.extractor.parseOutput(content, context));
       this.trace.record("extract", { conversationId: context.conversationId, reason: extraction.structured ? "structured" : "prose_fallback" });
       for (const memory of extraction.memories) this.trace.record("classify", { memoryId: memory.memoryId, type: memory.type, conversationId: context.conversationId });
-      this.persistExtraction(context, extraction);
+      this.writeRecoverySnapshot(context, {
+        finalizationStage: "persist",
+        finalizationStatus: "pending",
+        providerOutput: content,
+        parsedExtraction: this.serializeExtraction(extraction)
+      });
+      this.traceFinalization(context, "parsed", { providerSuccess: true, parseMode: extraction.structured ? "structured" : "prose_fallback", memoryCount: extraction.memories.length, recoveryState: "pending" });
+    } catch (error) {
+      const failedPath = this.writeRecoverySnapshot(context, { finalizationStage: "parse", finalizationStatus: "pending", providerOutput: content }, error);
+      this.traceFinalization(context, "parse", { providerSuccess: true, recoveryState: "pending", errorCode: error.message });
+      return { success: false, error, recoveryPath: failedPath };
+    }
+    try {
+      const persisted = this.persistExtraction(context, extraction);
+      const legacy = await this.persistLegacySummary(context, extraction.sessionSummary || content);
+      this.commitFinalization(context, extraction);
+      if (fs.existsSync(snapshotPath)) fs.unlinkSync(snapshotPath);
+      this.traceFinalization(context, "committed", {
+        providerSuccess: true,
+        parseMode: extraction.structured ? "structured" : "prose_fallback",
+        memoryCount: extraction.memories.length,
+        episodeSaved: !!persisted.episode,
+        knowledgeSaved: true,
+        legacySummarySaved: legacy.saved === true,
+        recoveryState: "committed"
+      });
       return { success: true, finalSummary: extraction.sessionSummary || content, extraction };
     } catch (error) {
-      const recoveryPath = this.writeRecoverySnapshot(context, error);
-      this.trace.record("recover", { conversationId: context.conversationId, reason: "pending_retry" });
-      return { success: false, error, recoveryPath };
+      const failedPath = this.writeRecoverySnapshot(context, {
+        finalizationStage: "persist",
+        finalizationStatus: "pending",
+        providerOutput: content,
+        parsedExtraction: this.serializeExtraction(extraction)
+      }, error);
+      this.traceFinalization(context, "persist", { providerSuccess: true, memoryCount: extraction.memories.length, recoveryState: "pending", errorCode: error.message });
+      return { success: false, error, recoveryPath: failedPath };
     }
+  }
+
+  async finalizeConversation(context) {
+    return this.finalizeWithAvailableOutput(this.prepareFinalizationContext(context));
   }
 
   buildFinalizationPrompt(context) {
@@ -173,22 +346,32 @@ class MemoryEngine {
     });
   }
 
-  writeRecoverySnapshot(context, error) {
+  writeRecoverySnapshot(context, state = {}, error = null) {
     const safeId = String(context.conversationId || createMemoryId("conversation")).replace(/[^a-zA-Z0-9_-]/g, "_");
     const filePath = path.join(this.store.paths.recovery, `conversation_${safeId}.json`);
+    const existing = this.store.readJson(filePath, {});
+    const lastError = error instanceof Error ? error.message : error ? String(error) : state.lastError || existing.lastError || null;
     this.store.writeJson(filePath, {
-      schemaVersion: 1,
+      ...existing,
+      schemaVersion: 2,
       conversationId: context.conversationId,
+      finalizationId: context.finalizationId,
+      summaryRequestId: context.summaryRequestId,
       date: context.date || null,
       totalDays: context.totalDays ?? null,
       participants: context.participants || [],
       participantPresence: context.participantPresence || [],
       rollingState: context.rollingState || this.rolling.createState(),
       rawMessages: context.messages || [],
-      finalizationStatus: "pending_retry",
-      retryCount: context.retryCount || 0,
-      error: error instanceof Error ? error.message : String(error),
-      createdAt: new Date().toISOString()
+      finalizationStage: state.finalizationStage || existing.finalizationStage || "request",
+      finalizationStatus: state.finalizationStatus || existing.finalizationStatus || "pending",
+      providerOutput: state.providerOutput ?? existing.providerOutput ?? null,
+      parsedExtraction: state.parsedExtraction ?? existing.parsedExtraction ?? null,
+      retryCount: Number(state.retryCount ?? existing.retryCount ?? context.retryCount ?? 0),
+      lastError,
+      lastTriedAt: state.lastTriedAt || existing.lastTriedAt || null,
+      createdAt: existing.createdAt || new Date().toISOString(),
+      updatedAt: new Date().toISOString()
     });
     return filePath;
   }
@@ -198,11 +381,13 @@ class MemoryEngine {
     return fs.readdirSync(this.store.paths.recovery).filter((name) => name.endsWith(".json")).map((name) => path.join(this.store.paths.recovery, name));
   }
 
-  async recoverFailedFinalization(filePath, { requestSummary, buildPrompt }) {
+  async recoverFailedFinalization(filePath, { requestSummary, buildPrompt, persistLegacySummary, automatic = false } = {}) {
     const snapshot = this.store.readJson(filePath, null);
     if (!snapshot) return { success: false, reason: "invalid_recovery_snapshot" };
-    const context = {
+    const context = this.prepareFinalizationContext({
       conversationId: snapshot.conversationId,
+      finalizationId: snapshot.finalizationId,
+      summaryRequestId: snapshot.summaryRequestId,
       date: snapshot.date,
       totalDays: snapshot.totalDays,
       participants: snapshot.participants,
@@ -211,32 +396,50 @@ class MemoryEngine {
       rollingState: snapshot.rollingState,
       retryCount: Number(snapshot.retryCount || 0) + 1,
       requestSummary,
-      buildPrompt
-    };
-    try {
-      const result = await requestSummary(buildPrompt(context));
-      const content = typeof result?.content === "string" ? result.content.trim() : "";
-      if (!content) throw new Error("invalid_final_summary_response");
-      const extraction = this.extractor.parseOutput(content, context);
-      this.persistExtraction(context, extraction);
+      buildPrompt,
+      persistLegacySummary
+    });
+    if (this.isCommitted(context)) {
       fs.unlinkSync(filePath);
-      this.trace.record("recover", { conversationId: context.conversationId, reason: "recovered" });
-      return { success: true, finalSummary: extraction.sessionSummary || content, extraction, participants: context.participants };
-    } catch (error) {
-      snapshot.retryCount = context.retryCount;
-      snapshot.lastError = error instanceof Error ? error.message : String(error);
-      snapshot.lastTriedAt = new Date().toISOString();
-      this.store.writeJson(filePath, snapshot);
-      return { success: false, error, recoveryPath: filePath };
+      return { success: true, alreadyCommitted: true, participants: context.participants };
     }
+    this.writeRecoverySnapshot(context, {
+      finalizationStage: snapshot.finalizationStage || "request",
+      finalizationStatus: "recovering",
+      providerOutput: snapshot.providerOutput || null,
+      parsedExtraction: snapshot.parsedExtraction || null,
+      retryCount: context.retryCount,
+      lastTriedAt: new Date().toISOString()
+    });
+    const result = await this.finalizeWithAvailableOutput(context, {
+      providerOutput: snapshot.providerOutput || null,
+      parsedExtraction: snapshot.parsedExtraction || null,
+      recoveryPath: filePath
+    });
+    if (result.success) {
+      this.trace.record("recover", { conversationId: context.conversationId, reason: "recovered" });
+      return { ...result, participants: context.participants };
+    }
+    const retryCount = context.retryCount;
+    this.writeRecoverySnapshot(context, {
+      finalizationStage: this.store.readJson(filePath, snapshot)?.finalizationStage || snapshot.finalizationStage || "request",
+      finalizationStatus: automatic && retryCount >= RECOVERY_MAX_ATTEMPTS ? "failed_manual" : "failed_retryable",
+      retryCount,
+      lastTriedAt: new Date().toISOString()
+    }, result.error);
+    return { ...result, recoveryPath: filePath };
   }
 
-  async recoverPendingFinalizations({ requestSummary, buildPrompt }) {
+  async recoverPendingFinalizations({ requestSummary, buildPrompt, persistLegacySummary } = {}) {
     const results = [];
     for (const filePath of this.listRecoverySnapshots()) {
       const snapshot = this.store.readJson(filePath, null);
-      if (!snapshot || Number(snapshot.retryCount || 0) >= 1) continue;
-      results.push(await this.recoverFailedFinalization(filePath, { requestSummary, buildPrompt }));
+      if (!snapshot) continue;
+      if (Number(snapshot.retryCount || 0) >= RECOVERY_MAX_ATTEMPTS) {
+        if (snapshot.finalizationStatus !== "failed_manual") this.writeRecoverySnapshot(this.prepareFinalizationContext(snapshot), { finalizationStatus: "failed_manual", retryCount: snapshot.retryCount });
+        continue;
+      }
+      results.push(await this.recoverFailedFinalization(filePath, { requestSummary, buildPrompt, persistLegacySummary, automatic: true }));
     }
     return results;
   }
@@ -266,6 +469,66 @@ class MemoryEngine {
 
   retrieveMentionedCharacterMemories(options = {}) {
     return this.retrieveForCharacter(options);
+  }
+
+  updateMemoryContent(memoryId, content) {
+    return this.updateMemory(memoryId, { content });
+  }
+
+  updateMemory(memoryId, updates = {}, { advanced = false } = {}) {
+    const existing = this.store.getMemory(memoryId);
+    if (!existing) return { success: false, error: "memory_not_found" };
+    const next = {};
+    const has = (key) => Object.prototype.hasOwnProperty.call(updates, key);
+    if (has("content")) {
+      const content = String(updates.content || "").trim();
+      if (!content) return { success: false, error: "memory_content_required" };
+      next.content = content;
+      // Keep the retrieval representation correct unless advanced editing
+      // explicitly supplies a different canonical form.
+      next.canonicalText = has("canonicalText") && advanced ? String(updates.canonicalText || "").trim() || content : content;
+    }
+    if (has("type")) {
+      if (!MEMORY_TYPES.has(updates.type)) return { success: false, error: "invalid_memory_type" };
+      next.type = updates.type;
+    }
+    for (const key of ["subtype", "status"]) if (has(key)) next[key] = updates[key] == null ? null : String(updates[key]).trim();
+    for (const key of ["importance", "confidence"]) {
+      if (!has(key)) continue;
+      const value = Number(updates[key]);
+      if (!Number.isFinite(value) || value < 0 || value > 1) return { success: false, error: `invalid_${key}` };
+      next[key] = value;
+    }
+    if (has("unresolved")) next.unresolved = updates.unresolved === true;
+    if (has("tags")) next.tags = Array.isArray(updates.tags) ? [...new Set(updates.tags.map((tag) => String(tag).trim()).filter(Boolean))] : [];
+    if (advanced) {
+      if (has("visibility")) {
+        if (!VISIBILITIES.has(updates.visibility)) return { success: false, error: "invalid_visibility" };
+        next.visibility = updates.visibility;
+      }
+      for (const key of ["knownBy", "participants", "subjects"]) if (has(key)) next[key] = uniqueIds(updates[key]);
+    }
+    if (Object.keys(next).length === 0) return { success: false, error: "no_editable_memory_fields" };
+    const memory = this.store.updateMemory(memoryId, next);
+    this.store.removeKnowledgeForMemory(memoryId, memory.knownBy);
+    for (const characterId of memory.knownBy) {
+      this.store.markKnownBy(characterId, memory.memoryId, { awareness: "edited", acquiredAt: memory.totalDays, confidence: memory.confidence });
+    }
+    for (const characterId of uniqueIds([...existing.participants, ...existing.subjects, ...memory.participants, ...memory.subjects])) {
+      this.consolidator.consolidateCharacter(characterId);
+    }
+    this.trace.record("memory_update", { memoryId, advanced, changedFields: Object.keys(next) });
+    return { success: true, memory };
+  }
+
+  deleteMemory(memoryId) {
+    const memory = this.store.getMemory(memoryId);
+    if (!memory) return { success: false, error: "memory_not_found" };
+    const deleted = this.store.deleteMemory(memoryId);
+    if (!deleted) return { success: false, error: "memory_delete_failed" };
+    for (const characterId of uniqueIds([...memory.participants, ...memory.subjects])) this.consolidator.consolidateCharacter(characterId);
+    this.trace.record("memory_delete", { memoryId });
+    return { success: true };
   }
 
   getUiOverview({ summaryCatalog = [] } = {}) {
@@ -325,8 +588,14 @@ class MemoryEngine {
           eventDate: memory.eventDate,
           content: memory.content,
           importance: memory.importance,
+          confidence: memory.confidence,
+          unresolved: memory.unresolved,
+          tags: memory.tags,
           status: memory.status,
-          visibility: memory.visibility
+          visibility: memory.visibility,
+          participants: memory.participants,
+          subjects: memory.subjects,
+          knownBy: memory.knownBy
         }))
       };
     });

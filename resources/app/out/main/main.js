@@ -2644,12 +2644,12 @@ class GameData {
       return null;
     }
   }
-  saveSummaryForDirectedPair(owner, other, finalSummary, participantMetadata) {
+  saveSummaryForDirectedPair(owner, other, finalSummary, participantMetadata, options = {}) {
     const filePath = this.getConversationFilePath(owner.id, owner.shortName, other.id, other.shortName);
     fs$1.mkdirSync(path.dirname(filePath), { recursive: true });
     const summaries = this.readConversationSummariesFile(filePath);
     if (!summaries) return null;
-    const alreadySaved = summaries.some((summary) => summary.totalDays === this.totalDays && summary.content === finalSummary && summary.playerId === owner.id && summary.characterId === other.id);
+    const alreadySaved = summaries.some((summary) => options.finalizationId ? summary.finalizationId === options.finalizationId : summary.totalDays === this.totalDays && summary.content === finalSummary && summary.playerId === owner.id && summary.characterId === other.id);
     if (!alreadySaved) {
       summaries.unshift({
         date: this.date,
@@ -2660,7 +2660,8 @@ class GameData {
         characterName: other.shortName,
         characterId: other.id,
         conversationType: participantMetadata.length > 2 ? "group" : "pair",
-        participants: participantMetadata
+        participants: participantMetadata,
+        finalizationId: options.finalizationId || null
       });
       fs$1.writeFileSync(filePath, JSON.stringify(summaries, null, "\t"));
     }
@@ -2671,7 +2672,7 @@ class GameData {
    * A↔B compatibility while adding A↔C, B↔C, and all other group pair files
    * without making extra LLM summary requests.
    */
-  saveCharactersSummaries(finalSummary, participantIds = null) {
+  saveCharactersSummaries(finalSummary, participantIds = null, options = {}) {
     const orderedIds = [];
     const seenIds = /* @__PURE__ */ new Set();
     const addParticipant = (id) => {
@@ -2695,8 +2696,8 @@ class GameData {
       for (let rightIndex = leftIndex + 1; rightIndex < participants.length; rightIndex++) {
         const left = participants[leftIndex];
         const right = participants[rightIndex];
-        const leftSummaries = this.saveSummaryForDirectedPair(left, right, finalSummary, participantMetadata);
-        const rightSummaries = this.saveSummaryForDirectedPair(right, left, finalSummary, participantMetadata);
+        const leftSummaries = this.saveSummaryForDirectedPair(left, right, finalSummary, participantMetadata, options);
+        const rightSummaries = this.saveSummaryForDirectedPair(right, left, finalSummary, participantMetadata, options);
         directedFilesWritten += 2;
         // conversationSummaries remains the current player↔NPC memory used by
         // the existing prompt path; cross-NPC files are loaded dynamically.
@@ -2704,7 +2705,7 @@ class GameData {
         if (right.id === this.playerID && rightSummaries) left.conversationSummaries = rightSummaries;
       }
     }
-    console.log(`[Summary] Saved group summary for ${participants.length} participants across ${directedFilesWritten} directed pair files`);
+    console.log(`[Summary] Saved finalization ${options.finalizationId || "legacy"} for ${participants.length} participants across ${directedFilesWritten} directed pair files`);
   }
   /**
    * Check for conversation summaries for current AI characters from old storage format
@@ -9697,8 +9698,12 @@ const setupIpcHandlers = () => {
       }
       const invocation = {
         actionId,
+        sourceCharacterId: sourceCharacter.id,
         targetCharacterId: targetCharacterId ?? null,
-        args
+        args,
+        bindingId: `manual:${sourceCharacter.id}:${targetCharacterId ?? "none"}:${actionId}`,
+        eventId: "manual_action",
+        traceId: `manual:${actionId}`
       };
       const result = await ActionEngine.runInvocation(conv, sourceCharacter, invocation);
       if (result.feedback) {
@@ -9975,6 +9980,30 @@ const setupIpcHandlers = () => {
     } catch (error) {
       console.error("Failed to get summaries dashboard data:", error);
       return { summaries: [], memoryOverview: { engineVersion: "2.0", totals: {}, boundaries: [], characters: [], error: error.message || "Unknown error" } };
+    }
+  });
+  electron.ipcMain.handle("conversation:updateStructuredMemory", async (_, { memoryId, content }) => {
+    try {
+      return memoryEngine.updateMemoryContent(memoryId, content);
+    } catch (error) {
+      console.error("Failed to update structured memory:", error);
+      return { success: false, error: error.message || "Unknown error" };
+    }
+  });
+  electron.ipcMain.handle("memory:updateRecord", async (_, { memoryId, updates, advanced = false }) => {
+    try {
+      return memoryEngine.updateMemory(memoryId, updates, { advanced });
+    } catch (error) {
+      console.error("Failed to update memory record:", error);
+      return { success: false, error: error.message || "Unknown error" };
+    }
+  });
+  electron.ipcMain.handle("memory:deleteRecord", async (_, { memoryId }) => {
+    try {
+      return memoryEngine.deleteMemory(memoryId);
+    } catch (error) {
+      console.error("Failed to delete memory record:", error);
+      return { success: false, error: error.message || "Unknown error" };
     }
   });
   electron.ipcMain.handle("conversation:getSummariesForCharacter", async (_, { playerId, characterId }) => {

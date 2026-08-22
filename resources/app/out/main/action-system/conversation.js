@@ -676,12 +676,18 @@ class Conversation {
   getSummaryParticipantIds() {
     const participantIds = [this.gameData.playerID];
     const seen = /* @__PURE__ */ new Set(participantIds);
+    const addParticipant = (characterId) => {
+      const numericId = Number(characterId);
+      if (!Number.isFinite(numericId) || seen.has(numericId) || !this.gameData.characters.has(numericId)) return;
+      seen.add(numericId);
+      participantIds.push(numericId);
+    };
+    const participantPresence = memoryEngine?.ensureConversationState(this).participantPresence || [];
+    for (const participant of participantPresence) addParticipant(participant.characterId);
     for (const message of this.getHistory()) {
       if (message.role !== "assistant" || !message.name) continue;
       const character = [...this.gameData.characters.values()].find((candidate) => candidate.fullName === message.name || candidate.shortName === message.name || candidate.firstName === message.name);
-      if (!character || seen.has(character.id)) continue;
-      seen.add(character.id);
-      participantIds.push(character.id);
+      if (character) addParticipant(character.id);
     }
     return participantIds;
   }
@@ -720,9 +726,7 @@ class Conversation {
     console.log("Creating final conversation memory extraction...");
     const finalResult = await this.createFinalSummary();
     if (finalResult?.success && finalResult.finalSummary) {
-      const participantIds = this.getSummaryParticipantIds();
-      this.gameData.saveCharactersSummaries(finalResult.finalSummary, participantIds);
-      console.log("Final conversation summary saved to all participants");
+      console.log("Final conversation summary committed to structured memory and participant folders");
     } else if (finalResult?.recoveryPath) {
       console.error(`Final summary failed; recovery snapshot preserved at ${finalResult.recoveryPath}`);
     }
@@ -745,6 +749,10 @@ class Conversation {
       rollingState: state.rollingState,
       finalInstructions: PromptBuilder.getFinalSummaryInstructions(),
       buildPrompt: (context) => memoryEngine.buildFinalizationPrompt(context),
+      persistLegacySummary: async (finalSummary, context) => {
+        this.gameData.saveCharactersSummaries(finalSummary, participantIds, { finalizationId: context.finalizationId });
+        return { success: true };
+      },
       requestSummary: async (summaryPrompt) => {
         console.log(`[TOKEN_COUNT] Final memory prompt tokens: ${this.estimateTokenCount(summaryPrompt)}`);
         return llmManager.sendSummaryRequest(summaryPrompt, void 0, { requestType: "final_summary" });
@@ -755,13 +763,14 @@ class Conversation {
     if (!memoryEngine || !this.gameData) return;
     const results = await memoryEngine.recoverPendingFinalizations({
       buildPrompt: (context) => memoryEngine.buildFinalizationPrompt({ ...context, finalInstructions: PromptBuilder.getFinalSummaryInstructions() }),
-      requestSummary: (summaryPrompt) => llmManager.sendSummaryRequest(summaryPrompt, void 0, { requestType: "memory_recovery" })
+      requestSummary: (summaryPrompt) => llmManager.sendSummaryRequest(summaryPrompt, void 0, { requestType: "memory_recovery" }),
+      persistLegacySummary: async (finalSummary, context) => {
+        const participantIds = (context.participants || []).map((entry) => entry.id);
+        this.gameData.saveCharactersSummaries(finalSummary, participantIds, { finalizationId: context.finalizationId });
+        return { success: true };
+      }
     });
-    for (const result of results) {
-      if (!result.success || !result.finalSummary) continue;
-      const participantIds = (result.participants || []).map((entry) => entry.id);
-      this.gameData.saveCharactersSummaries(result.finalSummary, participantIds);
-    }
+    return results;
   }
   // Get conversation history
   getHistory() {

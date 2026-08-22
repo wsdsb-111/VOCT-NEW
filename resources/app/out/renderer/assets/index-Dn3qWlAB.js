@@ -18153,6 +18153,22 @@ const useConfigStore = create()(
           return { summaries: [], memoryOverview: { engineVersion: "2.0", totals: {}, boundaries: [], characters: [] } };
         }
       },
+      updateStructuredMemory: async (memoryId, content) => {
+        try {
+          return await window.conversationAPI.updateStructuredMemory(memoryId, content);
+        } catch (error) {
+          console.error("Failed to update structured memory:", error);
+          return { success: false, error: error instanceof Error ? error.message : "Unknown error" };
+        }
+      },
+      updateMemoryRecord: async (memoryId, updates, advanced = false) => {
+        try {
+          return await window.conversationAPI.updateMemoryRecord(memoryId, updates, advanced);
+        } catch (error) {
+          console.error("Failed to update memory record:", error);
+          return { success: false, error: error instanceof Error ? error.message : "Unknown error" };
+        }
+      },
       getSummariesForCharacter: async (playerId, characterId) => {
         try {
           return await window.conversationAPI.getSummariesForCharacter(playerId, characterId);
@@ -20703,6 +20719,8 @@ const SummariesManager = () => {
   const { t } = useTranslation();
   const getSummariesDashboardData = useConfigStore((state) => state.getSummariesDashboardData);
   const updateSummary = useConfigStore((state) => state.updateSummary);
+  const updateStructuredMemory = useConfigStore((state) => state.updateStructuredMemory);
+  const updateMemoryRecord = useConfigStore((state) => state.updateMemoryRecord);
   const deleteSummary = useConfigStore((state) => state.deleteSummary);
   const deleteCharacterSummaries = useConfigStore((state) => state.deleteCharacterSummaries);
   const [summaries2, setSummaries] = reactExports.useState([]);
@@ -20742,10 +20760,36 @@ const SummariesManager = () => {
   const handleEditSummary = (playerId, characterId, index, content) => {
     setEditingEntry({ playerId, characterId, index, content });
   };
+  const handleEditStructuredMemory = (memory) => {
+    const editableFields = {
+      type: memory.type,
+      subtype: memory.subtype,
+      importance: memory.importance,
+      confidence: memory.confidence,
+      status: memory.status,
+      unresolved: memory.unresolved,
+      tags: memory.tags,
+      visibility: memory.visibility,
+      knownBy: memory.knownBy,
+      participants: memory.participants,
+      subjects: memory.subjects
+    };
+    setEditingEntry({ type: "structured-memory", memoryId: memory.memoryId, content: memory.content, metadataJson: JSON.stringify(editableFields, null, 2) });
+  };
   const handleSaveEdit = async () => {
     if (!editingEntry) return;
     try {
-      const result = await updateSummary(
+      let result;
+      if (editingEntry.type === "structured-memory") {
+        let updates = { content: editingEntry.content };
+        try {
+          updates = { ...updates, ...JSON.parse(editingEntry.metadataJson || "{}") };
+        } catch (_error) {
+          alert("结构化记忆字段必须是有效 JSON。");
+          return;
+        }
+        result = await updateMemoryRecord(editingEntry.memoryId, updates, true);
+      } else result = await updateSummary(
         editingEntry.playerId,
         editingEntry.characterId,
         editingEntry.index,
@@ -20945,11 +20989,14 @@ const SummariesManager = () => {
           /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { children: [/* @__PURE__ */ jsxRuntimeExports.jsx("strong", { children: "其他人物目录中与其相关：" }), character.relatedSummaryFileCount, " 个文件 / ", character.relatedSummaryRecordCount, " 条记录（仅供管理搜索，不越权注入对话）"] }),
           Object.keys(character.typeCounts || {}).length > 0 && /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "memory-type-tags", children: Object.entries(character.typeCounts).map(([type, count]) => /* @__PURE__ */ jsxRuntimeExports.jsxs("span", { children: [type, " ", count] }, type)) })
           ,(character.accessibleMemories || []).length > 0 && /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "structured-memory-list", children: [
-            /* @__PURE__ */ jsxRuntimeExports.jsx("h6", { children: "可访问的结构化记忆（只读）" }),
+            /* @__PURE__ */ jsxRuntimeExports.jsx("h6", { children: "可访问的结构化记忆（可编辑）" }),
             (character.accessibleMemories || []).map((memory) => /* @__PURE__ */ jsxRuntimeExports.jsxs("article", { className: "structured-memory-item", children: [
               /* @__PURE__ */ jsxRuntimeExports.jsxs("header", { children: [
                 /* @__PURE__ */ jsxRuntimeExports.jsxs("span", { children: [memory.type, memory.subtype ? ` / ${memory.subtype}` : ""] }),
-                /* @__PURE__ */ jsxRuntimeExports.jsx("time", { children: memory.eventDate || "日期不详" })
+                /* @__PURE__ */ jsxRuntimeExports.jsxs("span", { className: "summary-actions", children: [
+                  /* @__PURE__ */ jsxRuntimeExports.jsx("time", { children: memory.eventDate || "日期不详" }),
+                  /* @__PURE__ */ jsxRuntimeExports.jsx("button", { type: "button", onClick: () => handleEditStructuredMemory(memory), children: t("common.edit") })
+                ] })
               ] }),
               /* @__PURE__ */ jsxRuntimeExports.jsx("p", { children: memory.content }),
               /* @__PURE__ */ jsxRuntimeExports.jsxs("small", { children: ["重要度 ", Number(memory.importance || 0).toFixed(2), " · ", memory.visibility, " · ", memory.status] })
@@ -20988,6 +21035,7 @@ const SummariesManager = () => {
         isPlayerExpanded && /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "player-characters", children: playerSummaries.map((metadata) => {
           const characterKey = `${metadata.playerId}-${metadata.characterId}`;
           const isExpanded = expandedCharacters.has(characterKey);
+          const conversationLabel = metadata.conversationFile?.replace(/\.json$/i, "") || `与${metadata.characterName}的对话`;
           return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "character-summary-group", children: [
             /* @__PURE__ */ jsxRuntimeExports.jsxs(
               "div",
@@ -20999,7 +21047,7 @@ const SummariesManager = () => {
                 },
                 children: [
                   /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "expand-icon", children: isExpanded ? "▼" : "▶" }),
-                  /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "character-name", children: metadata.characterName }),
+                  /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "character-name", children: conversationLabel }),
                   normalizedSearchQuery && metadata.searchMatch.kind !== "all" && /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: `summary-match-badge is-${metadata.searchMatch.kind}`, children: metadata.searchMatch.label }),
                   /* @__PURE__ */ jsxRuntimeExports.jsxs("span", { className: "character-id", children: [
                     "ID: ",
@@ -21068,7 +21116,7 @@ const SummariesManager = () => {
     }) }),
     editingEntry && /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "modal-overlay", children: /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "modal-content summary-edit-modal", children: [
       /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "modal-header", children: [
-        /* @__PURE__ */ jsxRuntimeExports.jsx("h4", { children: t("summariesManager.editSummary") }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx("h4", { children: editingEntry.type === "structured-memory" ? "编辑结构化记忆" : t("summariesManager.editSummary") }),
         /* @__PURE__ */ jsxRuntimeExports.jsx(
           "button",
           {
@@ -21079,7 +21127,7 @@ const SummariesManager = () => {
         )
       ] }),
       /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "modal-body", children: [
-        /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "edit-info", children: [
+        editingEntry.type === "structured-memory" ? /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "edit-info", children: /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { children: [/* @__PURE__ */ jsxRuntimeExports.jsx("strong", { children: "记忆 ID：" }), editingEntry.memoryId] }) }) : /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "edit-info", children: [
           /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { children: [
             /* @__PURE__ */ jsxRuntimeExports.jsxs("strong", { children: [
               t("summariesManager.playerId"),
@@ -21113,7 +21161,11 @@ const SummariesManager = () => {
             rows: 10,
             style: { width: "100%", fontFamily: "monospace" }
           }
-        )
+        ),
+        editingEntry.type === "structured-memory" && /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "edit-info", children: [
+          /* @__PURE__ */ jsxRuntimeExports.jsx("p", { children: "高级字段（type、重要度、知识边界等）。修改 visibility、knownBy、participants 或 subjects 会改变角色知识边界。" }),
+          /* @__PURE__ */ jsxRuntimeExports.jsx("textarea", { value: editingEntry.metadataJson || "{}", onChange: (e) => setEditingEntry({ ...editingEntry, metadataJson: e.target.value }), rows: 12, style: { width: "100%", fontFamily: "monospace" } })
+        ] })
       ] }),
       /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "modal-footer", children: [
         /* @__PURE__ */ jsxRuntimeExports.jsx("button", { onClick: () => setEditingEntry(null), children: t("common.cancel") }),

@@ -172,7 +172,8 @@ async function testFinalizationRecoveryAndStructuredExtraction() {
     const recoveryFiles = engine.listRecoverySnapshots();
     assert.strictEqual(recoveryFiles.length, 1);
     const recovery = JSON.parse(fs.readFileSync(recoveryFiles[0], "utf8"));
-    assert.strictEqual(recovery.finalizationStatus, "pending_retry");
+    assert.strictEqual(recovery.finalizationStatus, "pending");
+    assert.strictEqual(recovery.finalizationStage, "request");
     assert.strictEqual(recovery.rawMessages.length, 2);
 
     const payload = JSON.stringify({
@@ -205,7 +206,9 @@ async function testFinalizationRecoveryAndStructuredExtraction() {
         speakerIds: [999]
       }]
     });
-    const recovered = await engine.recoverFailedFinalization(recoveryFiles[0], {
+    recovery.retryCount = 1;
+    store.writeJson(recoveryFiles[0], recovery);
+    const [recovered] = await engine.recoverPendingFinalizations({
       requestSummary: async () => ({ content: payload }),
       buildPrompt: () => []
     });
@@ -217,6 +220,19 @@ async function testFinalizationRecoveryAndStructuredExtraction() {
     assert.strictEqual(recoveredSecret.visibility, "known_group", "model cannot promote a secret to world visibility");
     assert(!recoveredSecret.participants.includes(999) && !recoveredSecret.subjects.includes(999), "model IDs must be constrained to actual participants");
     assert.strictEqual(store.queryMemories({ characterId: 999 }).length, 0);
+
+    let attempts = 0;
+    const retried = await engine.finalizeConversation({
+      ...context,
+      conversationId: "conversation-immediate-retry",
+      requestSummary: async () => {
+        attempts++;
+        return attempts === 1 ? { content: "" } : { content: payload };
+      },
+      buildPrompt: () => []
+    });
+    assert.strictEqual(retried.success, true, "a transient empty final-summary response must be retried immediately");
+    assert.strictEqual(attempts, 2, "final-summary generation must retry exactly once after an empty response");
   });
 }
 

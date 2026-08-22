@@ -14,6 +14,7 @@ const enginePath = path.join(memoryDir, "memory-engine.js");
 const conversationPath = path.join(root, "resources", "app", "out", "main", "action-system", "conversation.js");
 const { buildSummaryCatalogEntry, classifySummaryMatch } = require(path.join(memoryDir, "summary-catalog"));
 const { MemoryEngine } = require(path.join(memoryDir, "memory-engine"));
+const { Conversation } = require(path.join(root, "resources", "app", "out", "main", "action-system", "conversation"));
 
 const ownFolder = buildSummaryCatalogEntry({
   folderName: "3_丙",
@@ -82,11 +83,40 @@ try {
   assert.strictEqual(npcB.ownedSummaryRecordCount, 1, "overview must count records in NPC B's folder");
   assert(npcB.accessibleMemories.some((memory) => memory.memoryId === "memory_known"), "overview must expose readable structured records without restricted content");
   assert(!npcB.accessibleMemories.some((memory) => memory.memoryId === "memory_restricted"), "overview must not expose a memory outside NPC B's knowledge boundary");
+  const updated = engine.updateMemoryContent("memory_known", "乙亲历了丙的再次到访。");
+  assert.strictEqual(updated.success, true, "players must be able to edit a readable structured memory");
+  const updatedMemory = engine.store.getMemory("memory_known");
+  assert.strictEqual(updatedMemory.content, "乙亲历了丙的再次到访。");
+  assert.strictEqual(updatedMemory.canonicalText, "乙亲历了丙的再次到访。");
+  assert.deepStrictEqual(updatedMemory.knownBy, [2], "editing memory text must not change its knowledge boundary");
   const recalled = engine.retrieveForCharacter({ characterId: 2, query: "丙", entityIds: [3], tokenBudget: 500, estimateTokens: (text) => String(text).length });
   assert([...recalled.stable, ...recalled.relevant].some((entry) => entry.memory.content.includes("玩家与乙谈到丙")), "NPC B must recall the prior B-C summary from B's own folder when C is mentioned");
 } finally {
   fs.rmSync(tempDir, { recursive: true, force: true });
 }
+
+Conversation.configure({
+  memoryEngine: {
+    ensureConversationState: (conversation) => conversation.memoryState
+  }
+});
+const participantTestConversation = Object.create(Conversation.prototype);
+participantTestConversation.memoryState = {
+  participantPresence: [
+    { characterId: 1, joinedAtMessageId: 0, leftAtMessageId: null },
+    { characterId: 2, joinedAtMessageId: 0, leftAtMessageId: null }
+  ]
+};
+participantTestConversation.gameData = {
+  playerID: 1,
+  characters: new Map([[1, { id: 1 }], [2, { id: 2, fullName: "未匹配的全名" }]])
+};
+participantTestConversation.getHistory = () => [{ role: "assistant", name: "流式响应中未保留的别名" }];
+assert.deepStrictEqual(
+  participantTestConversation.getSummaryParticipantIds(),
+  [1, 2],
+  "observed NPC participants must still receive a dedicated summary file when message-name matching fails"
+);
 
 const rendererSource = fs.readFileSync(rendererPath, "utf8");
 const preloadSource = fs.readFileSync(preloadPath, "utf8");
@@ -97,8 +127,11 @@ assert(rendererSource.includes("memory-engine-overview"), "summary UI must rende
 assert(rendererSource.includes("metadata.ownerName"), "summary search must index folder owners");
 assert(rendererSource.includes("metadata.participantNames"), "summary search must index third-party participants");
 assert(rendererSource.includes("summary-match-badge"), "summary UI must explain why a search result matched");
-assert(rendererSource.includes("character.accessibleMemories"), "summary UI must display readable structured memory records");
-assert(preloadSource.includes("getMemoryOverview"), "preload must expose the read-only Memory Engine overview");
+assert(rendererSource.includes("handleEditStructuredMemory"), "summary UI must provide structured-memory editing");
+assert(rendererSource.includes("可访问的结构化记忆（可编辑）"), "structured-memory UI must no longer be marked read-only");
+assert(preloadSource.includes("updateStructuredMemory"), "preload must expose structured-memory editing");
+assert(mainSource.includes('"conversation:updateStructuredMemory"'), "main process must provide structured-memory editing IPC");
+assert(conversationSource.includes("participantPresence"), "final summary participants must include observed session participants");
 assert(conversationSource.includes("entityIds: mentionedCharacterIds"), "conversation retrieval must bind mentioned third-party IDs");
 assert(preloadSource.includes("getSummariesDashboardData"), "preload must expose the single-read summaries dashboard endpoint");
 assert(mainSource.includes('"conversation:getSummariesDashboardData"'), "main process must provide combined catalog and overview data");
