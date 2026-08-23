@@ -40,7 +40,7 @@ Use JavaScript with two-space indentation, semicolons, and `camelCase` for varia
 
 ## Testing Guidelines
 
-Add deterministic cases to `scripts/test-action-system.js` for every new trigger, including positive, question/future, failed-attempt, and descriptive-dialogue cases. Run the regression script and `node --check` before submitting. Manual testing should cover the relevant CK3 log/data path and the configured model provider.
+Add deterministic cases to `scripts/test-action-system.js` for every new trigger, including positive, question/future, failed-attempt, and descriptive-dialogue cases. Run the regression script and `node --check` before submitting. Use `node scripts\test-release.js` as the release gate; `scripts\test-manifest.js` is the single inventory for direct and nested checks, and CI executes the same entry point. Manual testing should cover the relevant CK3 log/data path and the configured model provider.
 
 ## Commit & Pull Request Guidelines
 

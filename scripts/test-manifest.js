@@ -1,0 +1,70 @@
+"use strict";
+
+const actionChecks = [
+  "test-action-system.js",
+  "test-action-phase-0.6.js",
+  "test-action-participants.js",
+  "test-action-participant-binding.js",
+  "test-action-v6.6.js",
+  "test-action-v6.6-runtime.js",
+  "test-action-v6.7-baseline.js",
+  "test-action-v6.7-modules.js",
+  "test-action-reference-resolution.js",
+  "test-action-v6.7-runtime.js",
+  "test-action-v6.7-fuzz.js",
+  "test-action-v6.7.1-scene-retirement.js",
+  "test-action-v6.7.1-physical-outcomes.js",
+  "test-action-v6.8-action-contract.js",
+  "test-action-v6.8-chinese-completion.js",
+  "test-action-v6.8-death-lifecycle.js",
+  "test-action-v6.8.2-run-invocation-binding.js",
+  "test-action-v6.8.2-approval-lifecycle.js",
+  "test-action-v6.8.3-natural-injury.js",
+  "test-action-v6.8.3-reference-offsets.js",
+  "test-conversation-v6.8.3-turn-concurrency.js",
+  "test-action-v6.8.4-bilateral-relationship.js",
+  "test-action-v6.8.4-injury-runtime.js",
+  "test-action-v6.8.4-intercourse-runtime.js",
+  "test-action-v6.9-a-gate-parser.js",
+  "test-action-v6.9-b-rule-registry.js",
+  "test-conversation-v6.9-c-managers.js",
+  "test-action-v6.9-d-contracts-trace.js"
+];
+
+const followupChecks = [
+  "test-v6.9.1-followup-conversation-di.js",
+  "test-v6.9.1-followup-runtime-ownership.js",
+  "test-v6.9.1-followup-trace-dedup.js"
+];
+
+const releaseChecks = [
+  { group: "syntax", args: ["--check", "resources/app/out/main/main.js"] },
+  { group: "architecture-health", script: "test-v6.9.1-architecture-health.js" },
+  { group: "v6.9.1-followup-contracts", script: "test-v6.9.1-followup-contracts.js" },
+  { group: "action-semantic-binding-runtime-conversation-approval-registry", script: "test-action-regression.js" },
+  { group: "memory-health", script: "test-v7-memory-health.js" },
+  { group: "memory-regression", script: "test-memory-regression.js" },
+  { group: "v7.0.1-finalization-runtime", script: "test-v7.0.1-finalization-runtime.js" },
+  { group: "v7.0.1-action-source-runtime", script: "test-v7.0.1-action-source-runtime.js" },
+  { group: "v7.1-memory-editor", script: "test-v7.0.1-memory-editor.js" },
+  { group: "memory-ui", script: "test-memory-ui.js" },
+  { group: "summaries-search", script: "test-summaries-search.js" },
+  { group: "v7.1-memory-engine", script: "test-v7.1-memory-engine.js" },
+  { group: "v7.2-memory-routing", script: "test-v7.2-memory-routing.js" },
+  { group: "v7.2-sequential-finalization", script: "test-v7.2-sequential-finalization.js" },
+  { group: "v7.2-action-memory-integration", script: "test-v7.2-action-memory-integration.js" },
+  { group: "v7.2.1-stability", script: "test-v7.2.1-stability.js" },
+  { group: "v7.3-identity-lifecycle", script: "test-v7.3-identity-lifecycle.js" },
+  { group: "v7.3.1-summary-recovery", script: "test-v7.3.1-summary-recovery.js" },
+  { group: "v7.4-dialogue-action-cache", script: "test-v7.4-dialogue-action-cache.js" },
+  { group: "v7.5-memory-action-retirement", script: "test-v7.5-memory-action-retirement.js" },
+  { group: "v7.6-architecture-security", script: "test-v7.6-architecture-security.js" },
+  { group: "v7.6-semantic-golden-set", script: "test-v7.6-semantic-golden-set.js" },
+  { group: "test-manifest-coverage", script: "test-test-manifest.js" },
+  { group: "release-assets", script: "test-release-assets.js" },
+  { group: "structured-episode-migration", script: "test-migrate-structured-episodes-to-summary-folders.js" },
+  { group: "window-layout", script: "test-window-layout.js" },
+  { group: "character-game-facts", script: "test-character-game-facts.js" }
+];
+
+module.exports = { actionChecks, followupChecks, releaseChecks };

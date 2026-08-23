@@ -20778,7 +20778,7 @@ const SummariesManager = () => {
     /* @__PURE__ */ jsxRuntimeExports.jsxs("section", { className: "memory-engine-overview", children: [
       /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "memory-engine-title", children: [
         /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
-          /* @__PURE__ */ jsxRuntimeExports.jsx("h5", { children: "Memory Engine 2.2 · V7.5" }),
+          /* @__PURE__ */ jsxRuntimeExports.jsx("h5", { children: "Memory Engine 2.2 · V7.6" }),
           /* @__PURE__ */ jsxRuntimeExports.jsx("p", { children: "同场对话固定长期稳定记忆前缀；场外人物首次提及时建立快照，并按每名 NPC 自己的角色目录召回" })
         ] }),
         /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: `memory-engine-status ${memoryOverview.error ? "is-error" : ""}`, children: memoryOverview.error ? "读取异常" : "运行中" })
@@ -21339,6 +21339,8 @@ const OptimizationView = () => {
     [text("稳定记忆前缀", "Stable memory prefix"), text("同一场对话每轮保持一致；对话结束后的新摘要在下一场读取。", "It stays unchanged throughout one conversation; new final summaries are loaded in the next conversation.")],
     [text("场外人物快照", "Mentioned-character snapshot"), text("首次提及时按每名 NPC 的目录召回，本场后续回复复用；新增人物时扩展一次。", "Each NPC recalls from their own folder on first mention, then reuses that snapshot until another person is introduced.")],
     [text("统一摘要系统", "Unified summary system"), text("旧摘要导入与旧格式运行路径已退休，人物目录是 Memory Engine 2.2 的唯一摘要来源。", "Legacy import and runtime paths are retired; character folders are the sole summary source for Memory Engine 2.2.")],
+    [text("安全配置", "Secure configuration"), text("Provider API Key 使用 Electron safeStorage 加密落盘；明文旧配置在可用时自动迁移。", "Provider API keys are encrypted at rest with Electron safeStorage; plaintext settings migrate when encryption is available.")],
+    [text("统一发布门禁", "Unified release gate"), text("本地与 CI 共用一份 27 组测试清单，并加入 36 条轻量语义金标样例。", "Local and CI validation share one 27-group manifest plus 36 lightweight semantic golden cases.")],
     [text("DeepSeek 思考对话", "DeepSeek thinking chat"), text("普通对话启用思考模式并使用 4096 Token；动作和终局摘要保持非思考。", "Normal chat uses thinking mode with 4096 tokens; actions and final summaries remain non-thinking.")],
     [text("动作语义直通", "Semantic action routing"), text("本地关键词门控已关闭，每条当前回复均交由动作模型作语义判定。", "The local keyword gate is disabled; every current reply reaches model semantic selection.")]
   ];
@@ -21346,7 +21348,7 @@ const OptimizationView = () => {
     /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "optimization-header", children: [
       /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
         /* @__PURE__ */ jsxRuntimeExports.jsx("h3", { children: text("系统优化与用量", "System Optimization & Usage") }),
-        /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "muted-text", children: text("V7.5 已统一 Memory Engine 2.2、场外人物会话快照、4096 Token 思考对话和两阶段动作语义判定。缓存统计只记录 Token 和匿名区块指纹，不保存正文。", "V7.5 unifies Memory Engine 2.2, session snapshots for mentioned characters, 4096-token thinking chat, and two-stage semantic action selection. Analytics stores only token counts and anonymous fingerprints, never message text.") })
+        /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "muted-text", children: text("V7.6 完成主进程健康化第一阶段、API Key 加密、统一脚本沙箱、Memory 数据契约和统一测试门禁。缓存统计只记录 Token 和匿名区块指纹，不保存正文。", "V7.6 completes the first main-process health phase, API-key encryption, a shared script sandbox, a Memory data contract, and a unified test gate. Analytics stores only token counts and anonymous fingerprints, never message text.") })
       ] }),
       /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "optimization-header-actions", children: [
         /* @__PURE__ */ jsxRuntimeExports.jsx("button", { type: "button", onClick: loadReport, disabled: isLoading, children: isLoading ? text("读取中…", "Loading…") : text("刷新", "Refresh") }),
@@ -21358,7 +21360,7 @@ const OptimizationView = () => {
     report && /* @__PURE__ */ jsxRuntimeExports.jsxs(React.Fragment, { children: [
       /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "optimization-metrics", children: metrics.map(([label, value, tone]) => /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: `optimization-metric ${tone}`, children: [/* @__PURE__ */ jsxRuntimeExports.jsx("span", { children: label }), /* @__PURE__ */ jsxRuntimeExports.jsx("strong", { children: value })] }, label)) }),
       /* @__PURE__ */ jsxRuntimeExports.jsxs("section", { className: "optimization-capabilities", children: [
-        /* @__PURE__ */ jsxRuntimeExports.jsx("h4", { children: text("V7.5 适配状态", "V7.5 integration status") }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx("h4", { children: text("V7.6 适配状态", "V7.6 integration status") }),
         /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "optimization-capability-grid", children: capabilities.map(([title, detail]) => /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "optimization-capability", children: [/* @__PURE__ */ jsxRuntimeExports.jsx("strong", { children: title }), /* @__PURE__ */ jsxRuntimeExports.jsx("span", { children: detail })] }, title)) })
       ] }),
       /* @__PURE__ */ jsxRuntimeExports.jsxs("section", { className: "optimization-section", children: [

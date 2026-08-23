@@ -4,6 +4,7 @@ const crypto = require("crypto");
 const fs = require("fs");
 const path = require("path");
 const { createMemoryRecord, uniqueIds } = require("./memory-types");
+const { CURRENT_MEMORY_SCHEMA_VERSION } = require("./memory-schema");
 
 function removeDirectoryTree(directory) {
   for (const entry of fs.readdirSync(directory, { withFileTypes: true })) {
@@ -43,7 +44,7 @@ class MemoryStore {
       index: path.join(baseDir, "index.json")
     };
     this.ensureDirectories();
-    this.index = this.readJson(this.paths.index, { schemaVersion: 2, memories: {}, episodes: {} });
+    this.index = this.readJson(this.paths.index, { schemaVersion: CURRENT_MEMORY_SCHEMA_VERSION, memories: {}, episodes: {} });
   }
 
   ensureDirectories() {
@@ -83,7 +84,7 @@ class MemoryStore {
 
   saveEpisode(episode) {
     if (!episode?.episodeId) throw new Error("episode_id_required");
-    const record = { schemaVersion: 2, ...episode };
+    const record = { schemaVersion: CURRENT_MEMORY_SCHEMA_VERSION, ...episode };
     const filePath = this.episodePath(record.episodeId);
     this.writeJson(filePath, record);
     this.index.episodes[record.episodeId] = { file: path.basename(filePath), conversationId: record.conversationId || null };
@@ -209,7 +210,7 @@ class MemoryStore {
     const records = this.getCharacterKnowledge(numericId);
     const existingIndex = records.findIndex((entry) => entry.memoryId === memoryId);
     const record = {
-      schemaVersion: 2,
+      schemaVersion: CURRENT_MEMORY_SCHEMA_VERSION,
       characterId: numericId,
       memoryId,
       awareness: details.awareness || "witnessed",
@@ -254,7 +255,7 @@ class MemoryStore {
 
   saveCharacterConsolidation(characterId, consolidation) {
     const filePath = path.join(this.paths.characters, `${Number(characterId)}.json`);
-    this.writeJson(filePath, { schemaVersion: 2, characterId: Number(characterId), ...consolidation, updatedAt: new Date().toISOString() });
+    this.writeJson(filePath, { schemaVersion: CURRENT_MEMORY_SCHEMA_VERSION, characterId: Number(characterId), ...consolidation, updatedAt: new Date().toISOString() });
     return filePath;
   }
 
@@ -339,7 +340,7 @@ class MemoryStore {
             continue;
           }
           sessions.set(sessionKey, createMemoryRecord({
-            schemaVersion: 2,
+            schemaVersion: CURRENT_MEMORY_SCHEMA_VERSION,
             memoryId: `folder_${digest}`,
             type: "folder_summary",
             subtype: "conversation_summary",

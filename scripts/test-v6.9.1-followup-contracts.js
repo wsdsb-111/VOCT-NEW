@@ -2,12 +2,7 @@
 
 const path = require("path");
 const { spawnSync } = require("child_process");
-
-const checks = [
-  "test-v6.9.1-followup-conversation-di.js",
-  "test-v6.9.1-followup-runtime-ownership.js",
-  "test-v6.9.1-followup-trace-dedup.js"
-];
+const { followupChecks: checks } = require("./test-manifest");
 
 for (const check of checks) {
   const result = spawnSync(process.execPath, [path.join(__dirname, check)], { stdio: "inherit" });

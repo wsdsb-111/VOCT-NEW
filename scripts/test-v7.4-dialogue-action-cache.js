@@ -66,10 +66,10 @@ assert(defaultPromptSource.includes("不得展示思维过程"), "thinking chat 
 assert(mainSource.includes('thinking: { type: "disabled" }, response_format: { type: "json_object" }'), "final summaries must keep the non-thinking P0 safeguard");
 assert(actionPromptSource.includes("VOTC_ACTION_CACHE_ANCHOR_v10"), "the action prompt anchor must change with the V7.5 two-stage semantic boundary");
 assert(actionPromptSource.includes("they never prove that an action happened in the current turn"), "action selection must not treat recalled memory as current evidence");
-assert(rendererSource.includes("Memory Engine 2.2 · V7.5"));
+assert(rendererSource.includes("Memory Engine 2.2 · V7.6"));
 assert(rendererSource.includes("动作语义直通"));
 assert(rendererSource.includes("稳定记忆前缀"));
 assert(rendererSource.includes("DeepSeek 思考对话"));
-assert(rendererSource.includes("V7.5 适配状态"));
+assert(rendererSource.includes("V7.6 适配状态"));
 
 console.log("VOTC v7.4 dialogue/action/cache: PASS (UI, prompt migration, thinking chat, stable memory prefix, semantic-direct action routing)");

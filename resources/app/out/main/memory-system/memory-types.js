@@ -1,6 +1,7 @@
 "use strict";
 
 const crypto = require("crypto");
+const { CURRENT_MEMORY_SCHEMA_VERSION, upgradeMemoryRecord } = require("./memory-schema");
 
 const MEMORY_TYPES = new Set([
   "event", "promise", "relationship", "secret", "belief", "plan",
@@ -23,6 +24,7 @@ function createMemoryId(prefix = "memory") {
 }
 
 function createMemoryRecord(input = {}) {
+  input = upgradeMemoryRecord(input);
   const now = new Date().toISOString();
   const type = MEMORY_TYPES.has(input.type) ? input.type : "information";
   const visibility = VISIBILITIES.has(input.visibility) ? input.visibility : "participants";
@@ -30,7 +32,7 @@ function createMemoryRecord(input = {}) {
   const content = String(input.content || "").trim();
   const provenance = input.provenance && typeof input.provenance === "object" ? input.provenance : {};
   return {
-    schemaVersion: input.schemaVersion === 1 ? 1 : 2,
+    schemaVersion: CURRENT_MEMORY_SCHEMA_VERSION,
     memoryId: input.memoryId || createMemoryId(),
     version: Number.isFinite(Number(input.version)) ? Number(input.version) : 1,
     updatedBy: String(input.updatedBy || "system"),

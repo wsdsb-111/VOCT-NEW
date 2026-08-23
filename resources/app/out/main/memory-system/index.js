@@ -13,9 +13,11 @@ const { MentionTracker } = require("./mention-tracker");
 const { FinalizationCoordinator } = require("./finalization-coordinator");
 const summaryCatalog = require("./summary-catalog");
 const characterIdentity = require("./character-identity");
+const memorySchema = require("./memory-schema");
 
 module.exports = {
   ...memoryTypes,
+  ...memorySchema,
   MemoryStore,
   MemoryExtractor,
   MemoryRanker,

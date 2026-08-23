@@ -20,3 +20,5 @@ Run the focused script first, then the action regression suite when action behav
 node scripts\test-action-system.js
 node --check resources\app\out\main\main.js
 ```
+
+Before release, run `node scripts\test-release.js`. The direct release groups and nested action/follow-up checks are declared in `scripts\test-manifest.js`; every `test-*.js` file must be classified there.

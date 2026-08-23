@@ -6,10 +6,12 @@ const crypto = require("node:crypto");
 const Store = require("electron-store");
 const uuid = require("uuid");
 const Handlebars = require("handlebars");
-const vm = require("vm");
 const events = require("events");
 const actionSystem = require("./action-system");
 const memorySystem = require("./memory-system");
+const scriptSandbox = require("./script-sandbox");
+const { createChatWindow } = require("./window-manager");
+const { SecureProviderSecrets } = require("./secure-provider-secrets");
 const zod = require("zod");
 const log = require("electron-log");
 const electronUpdater = require("electron-updater");
@@ -35,7 +37,6 @@ function _interopNamespaceDefault(e) {
   return Object.freeze(n);
 }
 const fs__namespace = /* @__PURE__ */ _interopNamespaceDefault(fs$1);
-const vm__namespace = /* @__PURE__ */ _interopNamespaceDefault(vm);
 const PROVIDER_TYPES = ["player2", "openrouter", "openai-compatible", "ollama", "deepseek", "gemini"];
 const DEFAULT_ACTIVE_PROVIDER = "player2";
 const DEFAULT_PROVIDER_CONFIGS = {
@@ -633,6 +634,8 @@ const schema = {
 class SettingsRepository {
   constructor() {
     this.store = new Store({ schema, name: "votc-llm-config" });
+    this.secretStore = new Store({ name: "votc-llm-secrets" });
+    this.providerSecrets = new SecureProviderSecrets({ safeStorage: electron.safeStorage, store: this.secretStore });
     console.log("SettingsRepository initialized. Settings path:", this.store.path);
     this.initializeDefaultSettings();
   }
@@ -764,11 +767,24 @@ class SettingsRepository {
     };
   }
   getLLMSettings() {
-    return this.store.get("llmSettings");
+    const settings = this.store.get("llmSettings");
+    return this.providerSecrets.isAvailable() ? this.providerSecrets.hydrateSettings(settings) : settings;
   }
   saveLLMSettings(settings) {
-    this.store.set("llmSettings", settings);
+    const sealed = this.providerSecrets.sealSettings(settings);
+    this.store.set("llmSettings", sealed);
     console.log("LLM Settings saved.");
+  }
+  migrateProviderSecrets() {
+    const settings = this.store.get("llmSettings");
+    const result = this.providerSecrets.migratePlaintextSettings(settings);
+    if (result.migrated) {
+      this.store.set("llmSettings", result.settings);
+      console.log("[SettingsRepository] Provider API keys migrated to Electron safeStorage.");
+    } else if (result.deferred) {
+      console.warn("[SettingsRepository] safeStorage unavailable; plaintext provider-key migration deferred without deleting existing data.");
+    }
+    return result;
   }
   getGlobalStreamSetting() {
     return this.store.get("globalStreamEnabled", true);
@@ -2587,7 +2603,7 @@ class GameData {
     try {
       if (!fs$1.existsSync(filePath)) return [];
       const parsed = JSON.parse(fs$1.readFileSync(filePath, "utf8"));
-      return Array.isArray(parsed) ? parsed : [];
+      return Array.isArray(parsed) ? parsed.map((summary) => memorySystem.normalizeSummaryRecord(summary)) : [];
     } catch (error) {
       console.error(`[Summary] Failed to read ${filePath}; existing file was left untouched:`, error);
       return null;
@@ -2609,6 +2625,7 @@ class GameData {
     const alreadySaved = summaries.some((summary) => options.finalizationId ? summary.finalizationId === options.finalizationId : summary.totalDays === this.totalDays && summary.content === finalSummary && summary.playerId === owner.id && summary.characterId === other.id);
     if (!alreadySaved) {
       summaries.unshift({
+        schemaVersion: memorySystem.CURRENT_SUMMARY_SCHEMA_VERSION,
         date: this.date,
         totalDays: this.totalDays,
         content: finalSummary,
@@ -3550,59 +3567,13 @@ class PromptScriptSandbox {
    * Create the base sandbox with safe globals
    */
   static createBaseSandbox() {
-    return {
-      // Safe JavaScript globals
-      console,
-      setTimeout,
-      clearTimeout,
-      setInterval,
-      clearInterval,
-      Promise,
-      // Standard constructors
-      Object,
-      Array,
-      String,
-      Number,
-      Boolean,
-      Date,
-      Math,
-      JSON,
-      RegExp,
-      Error,
-      Map,
-      Set,
-      WeakMap,
-      WeakSet,
-      // Typed arrays (useful for data processing)
-      Int8Array,
-      Uint8Array,
-      Uint8ClampedArray,
-      Int16Array,
-      Uint16Array,
-      Int32Array,
-      Uint32Array,
-      Float32Array,
-      Float64Array,
-      // Block dangerous globals explicitly
-      require: void 0,
-      process: void 0,
-      global: void 0,
-      globalThis: void 0,
-      eval: void 0,
-      Function: void 0,
-      Buffer: void 0,
-      module: void 0,
-      exports: void 0,
-      __dirname: void 0,
-      __filename: void 0
-    };
+    return scriptSandbox.createSandbox();
   }
   /**
    * Execute script in VM context with appropriate wrapper
    * Synchronous execution for compatibility with existing API
    */
   static executeScript(filePath, scriptCode, sandbox, scriptType) {
-    const vmContext = vm__namespace.createContext(sandbox);
     const wrapperCode = `
       (function() {
         // Create a module-like structure for CommonJS style exports
@@ -3626,13 +3597,7 @@ class PromptScriptSandbox {
       })();
     `;
     try {
-      const script = new vm__namespace.Script(wrapperCode, {
-        filename: filePath
-      });
-      const result = script.runInContext(vmContext, {
-        displayErrors: true,
-        breakOnSigint: true
-      });
+      const result = scriptSandbox.runScript(wrapperCode, { filename: filePath, sandbox });
       if (scriptType === "description" && typeof result !== "string") {
         throw new Error(`Description script must return a string, got ${typeof result}`);
       }
@@ -4853,7 +4818,7 @@ class ActionSandbox {
    */
   static async executeAction(actionFilePath, context) {
     const actionCode = fs__namespace.readFileSync(actionFilePath, "utf-8");
-    const sandbox = {
+    const sandbox = scriptSandbox.createSandbox({
       // Provide the context objects (these are references, so modifications work)
       gameData: context.gameData,
       sourceCharacter: context.sourceCharacter,
@@ -4862,43 +4827,8 @@ class ActionSandbox {
       args: context.args,
       conversation: context.conversation,
       dryRun: context.dryRun,
-      lang: context.lang,
-      // Safe JavaScript globals
-      console,
-      setTimeout,
-      clearTimeout,
-      setInterval,
-      clearInterval,
-      Promise,
-      // Standard constructors
-      Object,
-      Array,
-      String,
-      Number,
-      Boolean,
-      Date,
-      Math,
-      JSON,
-      RegExp,
-      Error,
-      Map,
-      Set,
-      WeakMap,
-      WeakSet,
-      // Block dangerous globals explicitly
-      require: void 0,
-      process: void 0,
-      global: void 0,
-      globalThis: void 0,
-      eval: void 0,
-      Function: void 0,
-      Buffer: void 0,
-      module: void 0,
-      exports: void 0,
-      __dirname: void 0,
-      __filename: void 0
-    };
-    const vmContext = vm__namespace.createContext(sandbox);
+      lang: context.lang
+    });
     const wrapperCode = `
       (async function() {
         // Create a module-like structure
@@ -4931,13 +4861,7 @@ class ActionSandbox {
       })();
     `;
     try {
-      const script = new vm__namespace.Script(wrapperCode, {
-        filename: actionFilePath
-      });
-      const result = await script.runInContext(vmContext, {
-        displayErrors: true,
-        breakOnSigint: true
-      });
+      const result = await scriptSandbox.runScript(wrapperCode, { filename: actionFilePath, sandbox });
       return result;
     } catch (error) {
       console.error("[ActionSandbox] Execution error:", error);
@@ -8645,52 +8569,12 @@ const exportPromptsZip = (destination, settings, presets) => {
   });
 };
 const createWindow = () => {
-  const primaryDisplay = electron.screen.getPrimaryDisplay();
-  const { x, y, width, height } = primaryDisplay.workArea;
-  const chatWindow2 = new electron.BrowserWindow({
-    x,
-    y,
-    width,
-    height,
-    show: true,
-    // Start hidden
-    transparent: true,
-    // Enable transparency
-    frame: false,
-    // Remove window frame
-    // alwaysOnTop: true, // Keep window on top
-    // skipTaskbar: true, // Don't show in taskbar
-    fullscreen: false,
-    thickFrame: false,
-    hasShadow: false,
-    resizable: false,
-    roundedCorners: false,
-    webPreferences: {
-      partition: "persist:chat",
-      preload: path.join(__dirname, "../preload/preload.js"),
-      // Adjusted path for Vite output
-      nodeIntegration: false,
-      // Best practice: disable nodeIntegration
-      contextIsolation: true
-      // Best practice: enable contextIsolation
-    }
+  return createChatWindow({
+    electron,
+    preloadPath: path.join(__dirname, "../preload/preload.js"),
+    rendererPath: path.join(__dirname, "../renderer/index.html"),
+    rendererUrl: !electron.app.isPackaged ? process.env["ELECTRON_RENDERER_URL"] || null : null
   });
-  chatWindow2.setIgnoreMouseEvents(true, { forward: true });
-  if (!electron.app.isPackaged && process.env["ELECTRON_RENDERER_URL"]) {
-    chatWindow2.loadURL(process.env["ELECTRON_RENDERER_URL"]);
-  } else {
-    chatWindow2.loadFile(
-      path.join(__dirname, "../renderer/index.html")
-      // see below for prod
-    );
-  }
-  electron.ipcMain.on("set-ignore-mouse-events", (event, ignore) => {
-    const win = electron.BrowserWindow.fromWebContents(event.sender);
-    if (win) {
-      win.setIgnoreMouseEvents(ignore, { forward: true });
-    }
-  });
-  return chatWindow2;
 };
 const setupIpcHandlers = () => {
   electron.ipcMain.handle("toggle-config-panel", () => {
@@ -9498,6 +9382,7 @@ const setupFocusMonitoring = (window) => {
 electron.app.on("ready", () => {
   console.log(electron.app.getPath("userData"));
   clearLog();
+  settingsRepository.migrateProviderSecrets();
   promptConfigManager.seedDefaults();
   setupIpcHandlers();
   chatWindow = createWindow();

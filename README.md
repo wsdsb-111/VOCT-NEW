@@ -54,6 +54,8 @@ Voices of the Court 是一个面向《Crusader Kings III》（CK3）的沉浸式
 
 不要将真实 API Key 提交到 GitHub。建议通过应用设置保存本地配置，并在公开仓库中只保留示例配置或截图。
 
+V7.6 起，Provider API Key 使用 Electron `safeStorage` 加密后写入独立的 `votc-llm-secrets` 配置文件，常规 `votc-llm-config` 只保留空 Key。启动时会在系统加密可用后迁移既有明文 Key；如果系统暂时不能提供加密能力，迁移会延期且不会删除原值，避免不可恢复的数据丢失。
+
 ## 动态历史系统
 
 系统会从 CK3 日期中提取年份，并生成 `gameData` 历史字段，包括：
@@ -75,11 +77,11 @@ Voices of the Court 是一个面向《Crusader Kings III》（CK3）的沉浸式
 
 `推荐模板_动态历史版.hbs`
 
-V7.5 默认模板明确区分长期稳定记忆、当前话题记忆与本轮事实，并要求角色结合性格、关系、好感、地位和情绪自然完整作答。升级后，程序只自动迁移内容仍与旧版默认值完全一致的模板和末尾指令；玩家自行编辑过的提示词不会被覆盖。修改打包目录中的 `main.js` 后，需要完全退出并重启应用。
+V7.6 默认模板明确区分长期稳定记忆、当前话题记忆与本轮事实，并要求角色结合性格、关系、好感、地位和情绪自然完整作答。升级后，程序只自动迁移内容仍与旧版默认值完全一致的模板和末尾指令；玩家自行编辑过的提示词不会被覆盖。修改打包目录中的 `main.js` 后，需要完全退出并重启应用。
 
 ## 对话摘要与记忆
 
-V7.5 完全使用 Memory Engine 2.2。旧摘要导入、跨周目摘要提示和旧格式运行路径已退休；人物目录是唯一摘要正文来源。主要规则是：
+V7.6 完全使用 Memory Engine 2.2。旧摘要导入、跨周目摘要提示和旧格式运行路径已退休；人物目录是唯一摘要正文来源。主要规则是：
 
 - 摘要 Provider 失败时不推进 rolling checkpoint，并用 recovery snapshot 保留最终失败的原始会话；
 - 结构化区分事实、信念、计划、传闻、秘密、承诺和关系变化；
@@ -101,7 +103,7 @@ V7.5 完全使用 Memory Engine 2.2。旧摘要导入、跨周目摘要提示和
 
 维护工具：
 
-- `merge-duplicate-characters.js`：合并重复角色记录。V7.5 不再提供旧摘要导入功能；升级或清理前请自行备份人物目录。
+- `merge-duplicate-characters.js`：合并重复角色记录。V7.6 不再提供旧摘要导入功能；升级或清理前请自行备份人物目录。
 
 详细说明请参考：
 
@@ -114,6 +116,9 @@ V7.5 完全使用 Memory Engine 2.2。旧摘要导入、跨周目摘要提示和
 ```text
 voices-of-the-court/
 ├─ resources/app/out/main/main.js                    # 主程序逻辑
+├─ resources/app/out/main/script-sandbox.js          # 提示词/动作脚本共享 VM 策略
+├─ resources/app/out/main/window-manager.js          # Electron 窗口构造
+├─ resources/app/out/main/secure-provider-secrets.js # safeStorage 密钥落盘
 ├─ resources/app/out/main/memory-system/             # Memory Engine 2.2
 ├─ resources/app/default_userdata/                   # 默认提示词、动作和本地化脚本
 ├─ locales/                                           # Electron 界面语言资源
@@ -124,16 +129,26 @@ voices-of-the-court/
 └─ VOTC.exe                                           # Windows 应用入口
 ```
 
+V7.6 是主进程健康化第一阶段：窗口构造、脚本沙箱和 Provider 密钥存储已经从单体入口拆出，`main.js` 仍保留 Provider 类与 IPC 业务处理。当前仓库保存的是可运行打包产物，没有能够重新生成这些文件的完整 `src` 工程，因此源码/构建产物分离不会在未知源码缺失时伪造实施；待真实源码恢复后再引入轻量构建器。
+
+发布测试统一由 `scripts/test-manifest.js` 声明。本地与 CI 都运行：
+
+```powershell
+node scripts\test-release.js
+```
+
+清单会覆盖全部 `test-*.js`：直接发布组、动作聚合组和 follow-up 聚合组均必须登记。V7.6 还维护 36 条动作/非动作/摘要金标样例，作为 Provider 切换或模型升级时的轻量人工语义复核基线。
+
 ## 版本信息
 
 - 外挂 UI 版本：v2.0.4
-- 当前应用功能基线：v7.5
+- 当前应用功能基线：v7.6
 - CK3 模组版本：Voices of the Court 2.0.4
 - 模组支持版本：CK3 1.18.*
 - UI 主题：宫廷编年史风格（深红、暗金、羊皮纸文本层级）
 - UI 主题切换：羊皮卷、骑士纹章、水墨画卷三套完整历史风格；分别拥有独立背景、边框结构、按钮造型、消息卡片、输入框、字体和滚动条，并可自动保存选择
 - UI 素材生成提示词：参见 `UI_ASSET_PROMPTS_2.0.3.md`
-- 当前重点：V7.5 统一 Memory Engine 2.2、场外人物会话快照、4096 Token 思考对话及两阶段动作语义判定
+- 当前重点：V7.6 主进程健康化、safeStorage、统一 VM 沙箱、Memory 数据契约及统一测试门禁
 
 ## 已知限制
 

@@ -5,6 +5,7 @@ const path = require("path");
 const events = require("events");
 const actionRuleRegistry = require("./action-rule-registry");
 const riskPolicy = require("./risk-policy");
+const scriptSandbox = require("../script-sandbox");
 
 const STANDARD_SUBDIR = "standard";
 const CUSTOM_SUBDIR = "custom";
@@ -277,28 +278,10 @@ class ActionRegistry extends events.EventEmitter {
    */
   async loadActionDefinition(filePath) {
     const actionCode = await fs.promises.readFile(filePath, "utf-8");
-    const sandbox = {
-      module: { exports: {} },
-      exports: {},
-      console,
-      // Block dangerous globals
-      require: void 0,
-      process: void 0,
-      global: void 0,
-      globalThis: void 0,
-      eval: void 0,
-      Function: void 0,
-      Buffer: void 0,
-      __dirname: void 0,
-      __filename: void 0
-    };
-    const vm2 = require("vm");
-    const vmContext = vm2.createContext(sandbox);
+    const moduleObject = { exports: {} };
+    const sandbox = scriptSandbox.createSandbox({ module: moduleObject, exports: moduleObject.exports });
     try {
-      const script = new vm2.Script(actionCode, {
-        filename: filePath
-      });
-      script.runInContext(vmContext);
+      scriptSandbox.runScript(actionCode, { filename: filePath, sandbox });
       return sandbox.module.exports;
     } catch (error) {
       throw new Error(`Failed to parse action: ${error instanceof Error ? error.message : String(error)}`);

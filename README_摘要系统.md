@@ -1,6 +1,6 @@
-# 对话摘要系统：Memory Engine 2.2（V7.5）
+# 对话摘要系统：Memory Engine 2.2（V7.6）
 
-V7.5 以人物摘要文件夹作为唯一可见、可搜索、可编辑的长期记忆层，并用 CK3 数字 ID 将本名归档、动态称谓和死亡生命周期统一起来。旧摘要导入、跨周目导入通知和旧格式运行路径均已退休。结构化 Memory、Episode、Knowledge 与 Pair Index 只在内部维护恢复能力和角色知情边界。
+V7.6 以人物摘要文件夹作为唯一可见、可搜索、可编辑的长期记忆层，并用 CK3 数字 ID 将本名归档、动态称谓和死亡生命周期统一起来。旧摘要导入、跨周目导入通知和旧格式运行路径均已退休。结构化 Memory、Episode、Knowledge 与 Pair Index 只在内部维护恢复能力和角色知情边界。
 
 ## 存储结构
 
@@ -22,6 +22,8 @@ V7.5 以人物摘要文件夹作为唯一可见、可搜索、可编辑的长期
 ```
 
 `conversation_summaries` 是玩家在 UI 中管理的正文；`memory` 是系统内部索引，不应手工混入人物摘要目录。
+
+V7.6 集中定义数据契约：当前 Memory/摘要写入版本均为 `schemaVersion: 2`，最低可读取 Memory 版本为 1。版本 1 Memory 在读取时升级为版本 2；没有版本字段的既有人物摘要按版本 1 读取，并在该文件下一次正常写入时补齐版本 2。高于当前版本的文件失败关闭且保持原文件不动，禁止静默猜测或降级覆盖。
 
 ## 人物身份与动态称谓
 
@@ -76,7 +78,7 @@ C/与B的对话.json
 
 ## 摘要管理 UI
 
-V7.5 状态面板同时展示稳定前缀、一对一、多人、场外人物会话快照和 Token 边界。优化页说明普通 DeepSeek 对话启用思考模式并使用 4096 Token，动作与终局摘要仍保持非思考，并将累计旧数据标为“历史动作跳过记录”。摘要设置页不再显示或调用旧版数据导入。
+V7.6 状态面板同时展示稳定前缀、一对一、多人、场外人物会话快照和 Token 边界。优化页同时展示 safeStorage、统一发布门禁和主进程健康化状态。普通 DeepSeek 对话仍启用思考模式并使用 4096 Token，动作与终局摘要保持非思考。
 
 摘要页只保留一套层级：
 
@@ -122,6 +124,8 @@ node scripts\test-v7.2-sequential-finalization.js
 node scripts\test-v7.2.1-stability.js
 node scripts\test-v7.3-identity-lifecycle.js
 node scripts\test-v7.5-memory-action-retirement.js
+node scripts\test-v7.6-architecture-security.js
+node scripts\test-v7.6-semantic-golden-set.js
 node scripts\test-memory-ui.js
 node scripts\test-release.js
 node --check resources\app\out\main\main.js
