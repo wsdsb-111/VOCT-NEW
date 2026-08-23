@@ -52,13 +52,13 @@ assert.strictEqual(classifySummaryMatch(mentionedElsewhere, "丙").kind, "relate
 
 const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "votc-memory-ui-"));
 try {
-  const legacyDir = path.join(tempDir, "conversation_summaries");
-  const ownerDir = path.join(legacyDir, "2_乙");
+  const summariesDir = path.join(tempDir, "conversation_summaries");
+  const ownerDir = path.join(summariesDir, "2_乙");
   fs.mkdirSync(ownerDir, { recursive: true });
   fs.writeFileSync(path.join(ownerDir, "与丙的对话.json"), JSON.stringify(otherFolder.summaries), "utf8");
   const engine = new MemoryEngine({
     baseDir: path.join(tempDir, "memory"),
-    legacySummariesDir: legacyDir,
+    summaryFoldersDir: summariesDir,
     trace: { record() {} }
   });
   const privateKnown = engine.store.saveMemory({
@@ -79,6 +79,8 @@ try {
   assert.strictEqual(overview.totals.summaryFolders, 3, "overview must count canonical character folders");
   assert.strictEqual(overview.totals.summaryFiles, 3, "overview must count visible conversation files");
   assert.strictEqual(overview.totals.summaryRecords, 3, "overview must count player-editable summaries");
+  assert.strictEqual(overview.routingPolicy.stablePrefix, "同一场对话每轮保持一致；新会话重新读取", "overview must expose the stable-memory cache boundary");
+  assert(overview.boundaries.some((boundary) => boundary.includes("长期稳定记忆不随当前问题或在场名单重排")), "overview must explain when stable memory changes");
   assert.deepStrictEqual(overview.characters, [], "the UI overview must not duplicate the folder tree with a structured-memory tree");
   const updated = engine.updateMemoryContent("memory_known", "乙亲历了丙的再次到访。");
   assert.strictEqual(updated.success, true, "players must be able to edit a readable structured memory");
@@ -139,11 +141,12 @@ assert(rendererSource.includes("const groups = new Map()"), "numeric character I
 assert(!rendererSource.includes("Object.entries(summariesByPlayer)"), "search result groups must not use numeric object-key enumeration");
 assert(!rendererSource.includes('className: "memory-character-coverage"'), "the duplicate per-character structured-memory tree must be removed");
 assert(!rendererSource.includes("Promise.all([listAllSummaries(), getMemoryOverview()])"), "summary dashboard must not parse every JSON file twice");
-assert(rendererSource.includes("Memory Engine 2.2 · V7.3"), "summary UI must expose the V7.3 identity lifecycle version");
+assert(rendererSource.includes("Memory Engine 2.2 · V7.5"), "summary UI must expose the V7.5 runtime version");
+assert(rendererSource.includes('key === "stablePrefix" ? "稳定前缀"'), "summary UI must label the V7.5 stable prefix policy");
 assert(rendererSource.includes("memory-routing-grid"), "summary UI must explain direct, group and mentioned-person recall policies");
 assert(rendererSource.includes("summary-route-label"), "conversation files must display owner-to-counterpart routing");
 assert(rendererSource.includes("editingEntry.ownerName"), "summary editor must identify the folder owner");
 const overviewSource = engineSource.slice(engineSource.indexOf("getUiOverview("), engineSource.indexOf("formatMemoryBlock("));
-assert(!overviewSource.includes("loadLegacyForCharacter"), "UI coverage counts must reuse the catalog instead of rereading every legacy file");
+assert(!overviewSource.includes("loadLegacyForCharacter"), "UI coverage counts must reuse the canonical catalog instead of rereading files");
 
 console.log("VOTC Memory UI: PASS (canonical owner folders, search, editing and unified coverage)");

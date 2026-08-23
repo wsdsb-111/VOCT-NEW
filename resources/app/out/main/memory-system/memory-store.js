@@ -30,12 +30,10 @@ function mergeCharacterProfiles(...groups) {
 }
 
 class MemoryStore {
-  constructor({ baseDir, summaryFoldersDir = null, legacySummariesDir = null, recoveryDir = null } = {}) {
+  constructor({ baseDir, summaryFoldersDir = null, recoveryDir = null } = {}) {
     if (!baseDir) throw new Error("memory_store_base_dir_required");
     this.baseDir = baseDir;
-    this.summaryFoldersDir = summaryFoldersDir || legacySummariesDir;
-    // Kept as an internal alias for older callers and migration tools.
-    this.legacySummariesDir = this.summaryFoldersDir;
+    this.summaryFoldersDir = summaryFoldersDir;
     this.paths = {
       episodes: path.join(baseDir, "episodes"),
       characters: path.join(baseDir, "characters"),
@@ -225,7 +223,7 @@ class MemoryStore {
     return record;
   }
 
-  queryMemories({ characterId = null, type = null, subjectIds = [], participantIds = [], includeFolderSummaries = false, includeLegacy = false } = {}) {
+  queryMemories({ characterId = null, type = null, subjectIds = [], participantIds = [], includeFolderSummaries = false } = {}) {
     const knownIds = characterId == null ? null : new Set(this.getCharacterKnowledge(characterId).map((entry) => entry.memoryId));
     const subjects = new Set(uniqueIds(subjectIds));
     const participants = new Set(uniqueIds(participantIds));
@@ -240,7 +238,7 @@ class MemoryStore {
       if (participants.size > 0 && !memory.participants.some((id) => participants.has(id))) continue;
       results.push(memory);
     }
-    if ((includeFolderSummaries || includeLegacy) && characterId != null) results.push(...this.loadFolderSummariesForCharacter(characterId));
+    if (includeFolderSummaries && characterId != null) results.push(...this.loadFolderSummariesForCharacter(characterId));
     const deduped = new Map(results.map((entry) => [entry.memoryId, entry]));
     return [...deduped.values()];
   }
@@ -278,6 +276,18 @@ class MemoryStore {
       removeDirectoryTree(target);
     }
     return { removedFolderCount: folders.length };
+  }
+
+  getSummaryFolderProfile(characterId) {
+    const numericId = Number(characterId);
+    if (!Number.isFinite(numericId) || !this.summaryFoldersDir || !fs.existsSync(this.summaryFoldersDir)) return null;
+    const prefix = `${numericId}_`;
+    const folders = fs.readdirSync(this.summaryFoldersDir, { withFileTypes: true })
+      .filter((entry) => entry.isDirectory() && entry.name.startsWith(prefix))
+      .map((entry) => entry.name.slice(prefix.length).trim())
+      .filter(Boolean)
+      .sort((left, right) => left.length - right.length || left.localeCompare(right));
+    return folders.length > 0 ? { id: numericId, name: folders[0], shortName: folders[0] } : null;
   }
 
   loadFolderSummariesForCharacter(characterId) {
@@ -397,9 +407,6 @@ class MemoryStore {
     });
   }
 
-  loadLegacyForCharacter(characterId) {
-    return this.loadFolderSummariesForCharacter(characterId);
-  }
 }
 
 module.exports = { MemoryStore };

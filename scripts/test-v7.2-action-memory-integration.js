@@ -28,11 +28,15 @@ const npc = { id: 2, shortName: "乙" };
 const harmlessPlan = ActionEngine.buildTurnEvaluationPlan({ playerMessage: null, player: null, npcMessage: harmlessReply, npc });
 assert.strictEqual(harmlessPlan.length, 1);
 assert.strictEqual(harmlessPlan[0].message, harmlessReply, "action evaluation must receive only the completed response message");
-assert.strictEqual(ActionEngine.shouldEvaluateForMessage({ actionGateProcessedTriggers: new Set(), memoryContext }, harmlessPlan[0].message).shouldEvaluate, false, "action words inside retrieved memory must not create a ghost action");
+const harmlessEvaluation = ActionEngine.shouldEvaluateForMessage({ actionGateProcessedTriggers: new Set(), memoryContext }, harmlessPlan[0].message);
+assert.strictEqual(harmlessEvaluation.shouldEvaluate, true, "v7.4 semantic-direct routing must not discard the current reply at a local keyword gate");
+assert.strictEqual(harmlessEvaluation.semanticProfile.events[0].evidence.text, harmlessReply.content, "retrieved memory must stay outside action evidence");
 assert.strictEqual(ActionEngine.shouldEvaluateForMessage({ actionGateProcessedTriggers: new Set(), memoryContext }, explicitReply).shouldEvaluate, true, "an explicit completed action in the current response must still be evaluated");
 for (let index = 0; index < 100; index++) {
   const conversation = { actionGateProcessedTriggers: new Set(), memoryContext };
-  assert.strictEqual(ActionEngine.shouldEvaluateForMessage(conversation, { ...harmlessReply, id: 1000 + index }).shouldEvaluate, false, `memory isolation stress ${index}`);
+  const harmlessResult = ActionEngine.shouldEvaluateForMessage(conversation, { ...harmlessReply, id: 1000 + index });
+  assert.strictEqual(harmlessResult.shouldEvaluate, true, `semantic-direct routing stress ${index}`);
+  assert.strictEqual(harmlessResult.semanticProfile.events[0].evidence.text, harmlessReply.content, `memory isolation stress ${index}`);
   assert.strictEqual(ActionEngine.shouldEvaluateForMessage(conversation, { ...explicitReply, id: 2000 + index }).shouldEvaluate, true, `current-response action stress ${index}`);
 }
 
@@ -84,4 +88,4 @@ const evaluationBlock = conversationSource.slice(conversationSource.indexOf("asy
 assert(evaluationBlock.includes("evaluation.message"), "completed action evaluation must use the response message boundary");
 assert(!evaluationBlock.includes("memoryContext"), "retrieved memory must not be concatenated into action evaluation text");
 
-console.log("VOTC v7.2.1 action-memory integration: PASS (100 isolated gates + resolved CK3 source/target binding)");
+console.log("VOTC v7.4 action-memory integration: PASS (100 isolated semantic routes + resolved CK3 source/target binding)");

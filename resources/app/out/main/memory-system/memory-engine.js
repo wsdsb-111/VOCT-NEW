@@ -18,9 +18,9 @@ const FINAL_SUMMARY_MAX_ATTEMPTS = 2;
 const RECOVERY_MAX_ATTEMPTS = 3;
 
 class MemoryEngine {
-  constructor({ baseDir, summaryFoldersDir = null, legacySummariesDir = null, recoveryDir = null, store = null, trace = null } = {}) {
+  constructor({ baseDir, summaryFoldersDir = null, recoveryDir = null, store = null, trace = null } = {}) {
     this.trace = trace || new MemoryTrace();
-    this.store = store || new MemoryStore({ baseDir, summaryFoldersDir: summaryFoldersDir || legacySummariesDir, recoveryDir });
+    this.store = store || new MemoryStore({ baseDir, summaryFoldersDir, recoveryDir });
     this.extractor = new MemoryExtractor();
     this.ranker = new MemoryRanker();
     this.knowledge = new KnowledgeService({ store: this.store, trace: this.trace });
@@ -30,7 +30,7 @@ class MemoryEngine {
   }
 
   createConversationState(conversationId) {
-    return { conversationId, rollingState: this.rolling.createState(), participantPresence: [], mentionState: this.mentionTracker.createState() };
+    return { conversationId, rollingState: this.rolling.createState(), participantPresence: [], mentionState: this.mentionTracker.createState(), mentionedRecallCache: new Map() };
   }
 
   ensureConversationState(conversation) {
@@ -38,6 +38,7 @@ class MemoryEngine {
     if (!conversation.memoryState.rollingState) conversation.memoryState.rollingState = this.rolling.createState();
     if (!Array.isArray(conversation.memoryState.participantPresence)) conversation.memoryState.participantPresence = [];
     if (!conversation.memoryState.mentionState) conversation.memoryState.mentionState = this.mentionTracker.createState();
+    if (!(conversation.memoryState.mentionedRecallCache instanceof Map)) conversation.memoryState.mentionedRecallCache = new Map();
     return conversation.memoryState;
   }
 
@@ -109,6 +110,24 @@ class MemoryEngine {
     return profiles;
   }
 
+  resolveRecoveryParticipantProfiles(snapshot = {}, currentProfiles = []) {
+    const profiles = new Map();
+    for (const profile of [...(snapshot.participants || []), ...(currentProfiles || [])]) {
+      const id = Number(profile?.id);
+      if (Number.isFinite(id)) profiles.set(id, { ...(profiles.get(id) || {}), ...profile, id });
+    }
+    const participantIds = uniqueIds([
+      ...(snapshot.participants || []).map((profile) => profile?.id),
+      ...(snapshot.participantPresence || []).map((presence) => presence?.characterId)
+    ]);
+    for (const characterId of participantIds) {
+      if (profiles.has(characterId)) continue;
+      const folderProfile = this.store.getSummaryFolderProfile(characterId);
+      if (folderProfile) profiles.set(characterId, folderProfile);
+    }
+    return participantIds.map((characterId) => profiles.get(characterId)).filter(Boolean);
+  }
+
   observeParticipants(conversation, characterIds, messageId) {
     const state = this.ensureConversationState(conversation);
     for (const characterId of uniqueIds(characterIds)) {
@@ -126,13 +145,13 @@ class MemoryEngine {
     return window || null;
   }
 
-  syncLegacyRollingFields(conversation) {
+  syncConversationRollingFields(conversation) {
     const rollingState = this.ensureConversationState(conversation).rollingState;
     conversation.currentSummary = rollingState.currentSummary;
     conversation.lastSummarizedMessageIndex = rollingState.committedThroughHistoryIndex;
   }
 
-  syncRollingStateFromLegacyFields(conversation) {
+  syncRollingStateFromConversationFields(conversation) {
     const rollingState = this.ensureConversationState(conversation).rollingState;
     if (conversation.currentSummary && !rollingState.currentSummary) rollingState.currentSummary = conversation.currentSummary;
     if (Number(conversation.lastSummarizedMessageIndex) > rollingState.committedThroughHistoryIndex) {
@@ -142,7 +161,7 @@ class MemoryEngine {
   }
 
   async maybeCreateRollingCheckpoint({ conversation, history, contextLimit, percentage = 0.4, estimateMessageTokens, buildPrompt, requestSummary }) {
-    const state = this.syncRollingStateFromLegacyFields(conversation);
+    const state = this.syncRollingStateFromConversationFields(conversation);
     const result = await this.rolling.checkpoint({
       state,
       history,
@@ -151,7 +170,7 @@ class MemoryEngine {
       buildPrompt,
       requestSummary
     });
-    this.syncLegacyRollingFields(conversation);
+    this.syncConversationRollingFields(conversation);
     return result;
   }
 
@@ -332,7 +351,7 @@ class MemoryEngine {
   }
 
   async persistCharacterFolders(context, finalSummary) {
-    const persist = context.persistCharacterFolders || context.persistLegacySummary;
+    const persist = context.persistCharacterFolders;
     if (typeof persist !== "function") return { saved: false, skipped: true };
     const result = await persist(finalSummary, context);
     if (result !== true && result?.success !== true) throw new Error(result?.error || "summary_folder_persist_result_required");
@@ -470,16 +489,17 @@ class MemoryEngine {
     return fs.readdirSync(this.store.paths.recovery).filter((name) => name.endsWith(".json")).map((name) => path.join(this.store.paths.recovery, name));
   }
 
-  async recoverFailedFinalization(filePath, { requestSummary, buildPrompt, persistCharacterFolders, persistLegacySummary, automatic = false } = {}) {
+  async recoverFailedFinalization(filePath, { requestSummary, buildPrompt, persistCharacterFolders, resolveParticipantProfiles, automatic = false } = {}) {
     const snapshot = this.store.readJson(filePath, null);
     if (!snapshot) return { success: false, reason: "invalid_recovery_snapshot" };
+    const participants = typeof resolveParticipantProfiles === "function" ? resolveParticipantProfiles(snapshot) : snapshot.participants;
     const context = this.prepareFinalizationContext({
       conversationId: snapshot.conversationId,
       finalizationId: snapshot.finalizationId,
       summaryRequestId: snapshot.summaryRequestId,
       date: snapshot.date,
       totalDays: snapshot.totalDays,
-      participants: snapshot.participants,
+      participants,
       excludedSummaryOwnerIds: snapshot.excludedSummaryOwnerIds || [],
       participantPresence: snapshot.participantPresence,
       messages: snapshot.rawMessages,
@@ -487,7 +507,7 @@ class MemoryEngine {
       retryCount: Number(snapshot.retryCount || 0) + 1,
       requestSummary,
       buildPrompt,
-      persistCharacterFolders: persistCharacterFolders || persistLegacySummary
+      persistCharacterFolders
     });
     if (this.isCommitted(context)) {
       fs.unlinkSync(filePath);
@@ -520,7 +540,7 @@ class MemoryEngine {
     return { ...result, recoveryPath: filePath };
   }
 
-  async recoverPendingFinalizations({ requestSummary, buildPrompt, persistCharacterFolders, persistLegacySummary } = {}) {
+  async recoverPendingFinalizations({ requestSummary, buildPrompt, persistCharacterFolders, resolveParticipantProfiles } = {}) {
     const results = [];
     for (const filePath of this.listRecoverySnapshots()) {
       const snapshot = this.store.readJson(filePath, null);
@@ -529,7 +549,7 @@ class MemoryEngine {
         if (snapshot.finalizationStatus !== "failed_manual") this.writeRecoverySnapshot(this.prepareFinalizationContext(snapshot), { finalizationStatus: "failed_manual", retryCount: snapshot.retryCount });
         continue;
       }
-      results.push(await this.recoverFailedFinalization(filePath, { requestSummary, buildPrompt, persistCharacterFolders: persistCharacterFolders || persistLegacySummary, automatic: true }));
+      results.push(await this.recoverFailedFinalization(filePath, { requestSummary, buildPrompt, persistCharacterFolders, resolveParticipantProfiles, automatic: true }));
     }
     return results;
   }
@@ -601,7 +621,7 @@ class MemoryEngine {
     return selected;
   }
 
-  retrieveForResponder({ characterId, query = "", directCounterpartIds = [], mentionedEntityIds = [], mentionedEntityNames = {}, ownerFolderMemories = null, currentTotalDays = null, tokenBudget = 800, estimateTokens } = {}) {
+  retrieveForResponder({ characterId, query = "", directCounterpartIds = [], mentionedEntityIds = [], mentionedEntityNames = {}, mentionedRecallCache = null, ownerFolderMemories = null, currentTotalDays = null, tokenBudget = 800, estimateTokens } = {}) {
     const startedAt = Date.now();
     const ownerId = Number(characterId);
     const directIds = uniqueIds(directCounterpartIds).filter((id) => id !== ownerId);
@@ -617,14 +637,28 @@ class MemoryEngine {
       if (Array.isArray(mentionedEntityNames)) return mentionedEntityNames;
       return mentionedEntityNames?.[entityId] || mentionedEntityNames?.[String(entityId)] || [];
     };
+    const cachedMentioned = mentionedRecallCache instanceof Map ? mentionedRecallCache.get(ownerId) : null;
+    const cachedGroups = cachedMentioned?.groups instanceof Map ? cachedMentioned.groups : new Map();
     const mentionedGroups = new Map();
+    let capturedMentioned = false;
     for (const entityId of mentionedIds) {
+      if (cachedGroups.has(entityId)) {
+        mentionedGroups.set(entityId, cachedGroups.get(entityId));
+        continue;
+      }
       const names = namesForEntity(entityId);
       const memories = this.store.searchOwnerFolderForEntity(ownerId, entityId, names, folderMemories);
       mentionedGroups.set(entityId, this.ranker.rank(memories, { query: [query, ...names].filter(Boolean).join(" "), entityIds: [entityId], currentTotalDays }));
+      capturedMentioned = true;
     }
+    if (mentionedRecallCache instanceof Map && (capturedMentioned || !cachedMentioned)) mentionedRecallCache.set(ownerId, { groups: new Map([...cachedGroups, ...mentionedGroups]) });
+    const mentionedCacheHit = mentionedIds.length > 0 && !capturedMentioned && cachedMentioned?.groups instanceof Map;
     const internalMemories = this.store.queryMemories({ characterId: ownerId, includeFolderSummaries: false });
-    const stableRanked = this.ranker.rank(internalMemories, { query, entityIds: mentionedIds, participantIds: directIds, currentTotalDays })
+    // This lane is deliberately query-independent. Re-ranking the so-called
+    // stable block for every line made it the first cache breakpoint in most
+    // long conversations. Direct recall follows the current topic, while each
+    // out-of-scene entity is ranked once on first mention and then reused.
+    const stableRanked = this.ranker.rank(internalMemories, { query: "", entityIds: [], participantIds: [], currentTotalDays })
       .filter((entry) => entry.memory.importance >= 0.9 || entry.memory.status === "open" || entry.memory.unresolved);
     const laneWeights = {
       direct: [...directGroups.values()].some((entries) => entries.length > 0) ? 55 : 0,
@@ -676,6 +710,7 @@ class MemoryEngine {
       tokenBudget: budget,
       directRouteCount: directIds.length,
       mentionedRouteCount: mentionedIds.length,
+      mentionedCacheHit,
       indexSize: Object.keys(this.store.index.memories || {}).length
     });
     return {
@@ -696,6 +731,7 @@ class MemoryEngine {
         ownerId,
         directCounterpartIds: directIds,
         mentionedOutOfSceneIds: mentionedIds,
+        mentionedSnapshot: mentionedIds.length > 0 ? capturedMentioned ? "captured" : "reused" : "empty",
         budgets: { direct: directBudget, mentioned: mentionedBudget, stable: stableBudget }
       }
     };
@@ -845,14 +881,16 @@ class MemoryEngine {
       },
       boundaries: [
         "每名 NPC 只读取自己的 ID_姓名目录；玩家目录保存摘要但玩家不执行提示词记忆召回。",
+        "同一场对话内，长期稳定记忆不随当前问题或在场名单重排；只在新会话读取最新终局记忆。",
         "直接参与者按“自己的目录 → 与对方的对话文件”精确召回，不再先扫描整个目录统一竞争排名。",
-        "玩家或任一 NPC 提到场外人物后，所有后续 NPC 都分别从自己的目录检索该人物；人物数量不做固定截断。",
+        "玩家或任一 NPC 首次提到场外人物时，每名 NPC 分别从自己的目录建立该人物记忆快照；本场后续回复复用，新增场外人物时再扩展一次。",
         "同一场群聊写入多个关系文件时按 finalizationId 去重；内容长度由每次 800–2400 token 的动态预算约束。"
       ],
       routingPolicy: {
+        stablePrefix: "同一场对话每轮保持一致；新会话重新读取",
         directPair: "一对一：最近 2 条 + 当前话题最相关 1 条",
         group: "多人：每名在场对象至少 1 条，再补充全局最相关 2 条",
-        mentioned: "场外人物：每人最近 1 条，预算允许时补充相关 1 条",
+        mentioned: "场外人物：首次提及时锁定 1–2 条，本场后续回复复用",
         tokenBudget: "每名 NPC 每次回复使用上下文约 8%，最少 800、最多 2400 token"
       },
       characters: []

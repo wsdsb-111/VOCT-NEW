@@ -10,13 +10,13 @@ const memorySystem = require(path.join(root, "resources", "app", "out", "main", 
 
 async function withTempStore(run) {
   const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "votc-memory-test-"));
-  const legacyDir = path.join(tempDir, "conversation_summaries");
+  const summariesDir = path.join(tempDir, "conversation_summaries");
   const store = new memorySystem.MemoryStore({
     baseDir: path.join(tempDir, "memory"),
-    legacySummariesDir: legacyDir
+    summaryFoldersDir: summariesDir
   });
   try {
-    return await run({ tempDir, legacyDir, store });
+    return await run({ tempDir, summariesDir, store });
   } finally {
     fs.rmSync(tempDir, { recursive: true, force: true });
   }
@@ -136,15 +136,15 @@ function testRankingCriticalRecallAndBudget() {
   assert(selected.reduce((sum, entry) => sum + entry.tokens, 0) <= 18, "retrieval output must stay within configured token budget");
 }
 
-async function testLegacyLazyAdapterDoesNotLeakPlayerFallback() {
-  return withTempStore(({ legacyDir, store }) => {
-    const playerFolder = path.join(legacyDir, "1_玩家");
-    const npcFolder = path.join(legacyDir, "2_甲");
+async function testCanonicalFoldersDoNotLeakPlayerFallback() {
+  return withTempStore(({ summariesDir, store }) => {
+    const playerFolder = path.join(summariesDir, "1_玩家");
+    const npcFolder = path.join(summariesDir, "2_甲");
     fs.mkdirSync(playerFolder, { recursive: true });
     fs.mkdirSync(npcFolder, { recursive: true });
     fs.writeFileSync(path.join(playerFolder, "与乙的对话.json"), JSON.stringify([{ date: "1000年", totalDays: 10, content: "只有玩家知道的秘密", characterId: 3 }]), "utf8");
     fs.writeFileSync(path.join(npcFolder, "与乙的对话.json"), JSON.stringify([{ date: "1001年", totalDays: 20, content: "甲亲自记得的往来", characterId: 3 }]), "utf8");
-    const npcMemories = store.queryMemories({ characterId: 2, includeLegacy: true });
+    const npcMemories = store.queryMemories({ characterId: 2, includeFolderSummaries: true });
     assert(npcMemories.some((entry) => entry.content === "甲亲自记得的往来"));
     assert(!npcMemories.some((entry) => entry.content === "只有玩家知道的秘密"));
     assert(npcMemories.every((entry) => entry.schemaVersion === 1 || entry.schemaVersion === 2));
@@ -240,7 +240,7 @@ async function testFinalizationRecoveryAndStructuredExtraction() {
   await testRollingCheckpointDurability();
   await testKnowledgeBoundaryAndPresence();
   testRankingCriticalRecallAndBudget();
-  await testLegacyLazyAdapterDoesNotLeakPlayerFallback();
+  await testCanonicalFoldersDoNotLeakPlayerFallback();
   await testFinalizationRecoveryAndStructuredExtraction();
   console.log("VOTC v7.1 Memory Regression: PASS (durability, recovery, knowledge, folder retrieval)");
 })().catch((error) => {

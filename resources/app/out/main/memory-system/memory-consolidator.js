@@ -8,7 +8,7 @@ class MemoryConsolidator {
   }
 
   consolidateCharacter(characterId, memories = null) {
-    const source = memories || this.store.queryMemories({ characterId, includeLegacy: false });
+    const source = memories || this.store.queryMemories({ characterId });
     if (source.length <= this.threshold) return null;
     const criticalMemoryIds = source.filter((memory) => memory.importance >= 0.9).map((memory) => memory.memoryId);
     const openPromiseIds = source.filter((memory) => memory.type === "promise" && memory.status !== "resolved").map((memory) => memory.memoryId);

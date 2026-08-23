@@ -15755,83 +15755,6 @@ const ActionFeedbackItem = ({ entry }) => {
     return /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: itemClass, children: /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "action-feedback-message", children: feedback.message }) }, index);
   }) }) });
 };
-const SummaryImportNotification = ({ entry }) => {
-  const [isProcessing, setIsProcessing] = reactExports.useState(false);
-  const handleAccept = async () => {
-    if (isProcessing) return;
-    setIsProcessing(true);
-    try {
-      await window.conversationAPI.acceptSummaryImport(entry.characterId, entry.sourcePlayerId);
-    } catch (error) {
-      console.error("Failed to accept summary import:", error);
-    } finally {
-      setIsProcessing(false);
-    }
-  };
-  const handleDecline = async () => {
-    if (isProcessing) return;
-    setIsProcessing(true);
-    try {
-      await window.conversationAPI.declineSummaryImport(entry.characterId, entry.sourcePlayerId);
-    } catch (error) {
-      console.error("Failed to decline summary import:", error);
-    } finally {
-      setIsProcessing(false);
-    }
-  };
-  const handleViewFile = async () => {
-    try {
-      await window.conversationAPI.openSummaryFile(entry.sourceFilePath);
-    } catch (error) {
-      console.error("Failed to open summary file:", error);
-    }
-  };
-  return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "summary-import-notification", children: [
-    /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "summary-import-icon", children: "📋" }),
-    /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "summary-import-content", children: [
-      /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "summary-import-title", children: [
-        "Found ",
-        entry.summaryCount,
-        " conversation summaries for ",
-        entry.characterName
-      ] }),
-      /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "summary-import-description", children: [
-        "These summaries are from another playthrough (Player ID: ",
-        entry.sourcePlayerId,
-        "). Would you like to import them to maintain continuity?"
-      ] }),
-      /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "summary-import-actions", children: [
-        /* @__PURE__ */ jsxRuntimeExports.jsx(
-          "button",
-          {
-            className: "summary-import-btn accept",
-            onClick: handleAccept,
-            disabled: isProcessing,
-            children: isProcessing ? "Importing..." : "Accept"
-          }
-        ),
-        /* @__PURE__ */ jsxRuntimeExports.jsx(
-          "button",
-          {
-            className: "summary-import-btn decline",
-            onClick: handleDecline,
-            disabled: isProcessing,
-            children: "Decline"
-          }
-        ),
-        /* @__PURE__ */ jsxRuntimeExports.jsx(
-          "button",
-          {
-            className: "summary-import-btn view-file",
-            onClick: handleViewFile,
-            disabled: isProcessing,
-            children: "View File"
-          }
-        )
-      ] })
-    ] })
-  ] });
-};
 const ActionApprovalItem = ({ entry }) => {
   const { t } = useTranslation();
   const [isProcessing, setIsProcessing] = React.useState(false);
@@ -15977,9 +15900,6 @@ const MessageItem = ({ entry }) => {
   }
   if (entry.type === "action-feedback") {
     return /* @__PURE__ */ jsxRuntimeExports.jsx(ActionFeedbackItem, { entry });
-  }
-  if (entry.type === "summary-import") {
-    return /* @__PURE__ */ jsxRuntimeExports.jsx(SummaryImportNotification, { entry });
   }
   if (entry.type === "action-approval") {
     return /* @__PURE__ */ jsxRuntimeExports.jsx(ActionApprovalItem, { entry });
@@ -16686,18 +16606,6 @@ const useConversationEntries = () => {
               resultSentiment: entry.resultSentiment,
               datetime: new Date(entry.datetime)
             };
-          } else if (entry.type === "summary-import") {
-            return {
-              id: entry.id,
-              type: entry.type,
-              sourcePlayerId: entry.sourcePlayerId,
-              characterId: entry.characterId,
-              characterName: entry.characterName,
-              summaryCount: entry.summaryCount,
-              sourceFilePath: entry.sourceFilePath,
-              status: entry.status,
-              datetime: new Date(entry.datetime)
-            };
           } else {
             return {
               id: entry.id,
@@ -16749,18 +16657,6 @@ const useConversationEntries = () => {
             previewSentiment: entry.previewSentiment,
             resultFeedback: entry.resultFeedback,
             resultSentiment: entry.resultSentiment,
-            datetime: new Date(entry.datetime)
-          };
-        } else if (entry.type === "summary-import") {
-          return {
-            id: entry.id,
-            type: entry.type,
-            sourcePlayerId: entry.sourcePlayerId,
-            characterId: entry.characterId,
-            characterName: entry.characterName,
-            summaryCount: entry.summaryCount,
-            sourceFilePath: entry.sourceFilePath,
-            status: entry.status,
             datetime: new Date(entry.datetime)
           };
         } else {
@@ -17988,18 +17884,6 @@ const useConfigStore = create()(
         if (path2) {
           get2().updateModLocationPath(path2);
         }
-      },
-      importLegacySummaries: async () => {
-        const result = await window.llmConfigAPI.importLegacySummaries();
-        if (result.success) {
-          console.log(`Import successful: ${result.filesCopied} files copied`);
-        } else {
-          console.error("Import failed:", result.message);
-          if (result.errors && result.errors.length > 0) {
-            console.error("Import errors:", result.errors);
-          }
-        }
-        return result;
       },
       openSummariesFolder: async () => {
         try {
@@ -20894,8 +20778,8 @@ const SummariesManager = () => {
     /* @__PURE__ */ jsxRuntimeExports.jsxs("section", { className: "memory-engine-overview", children: [
       /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "memory-engine-title", children: [
         /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
-          /* @__PURE__ */ jsxRuntimeExports.jsx("h5", { children: "Memory Engine 2.2 · V7.3" }),
-          /* @__PURE__ */ jsxRuntimeExports.jsx("p", { children: "每名 NPC 按自己的角色目录精确召回直接关系与场外人物记忆" })
+          /* @__PURE__ */ jsxRuntimeExports.jsx("h5", { children: "Memory Engine 2.2 · V7.5" }),
+          /* @__PURE__ */ jsxRuntimeExports.jsx("p", { children: "同场对话固定长期稳定记忆前缀；场外人物首次提及时建立快照，并按每名 NPC 自己的角色目录召回" })
         ] }),
         /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: `memory-engine-status ${memoryOverview.error ? "is-error" : ""}`, children: memoryOverview.error ? "读取异常" : "运行中" })
       ] }),
@@ -20905,7 +20789,7 @@ const SummariesManager = () => {
         /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "memory-health-card", children: [/* @__PURE__ */ jsxRuntimeExports.jsx("strong", { children: totals.summaryRecords || 0 }), /* @__PURE__ */ jsxRuntimeExports.jsx("span", { children: "可编辑摘要" })] })
       ] }),
       /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "memory-routing-grid", children: Object.entries(memoryOverview.routingPolicy || {}).map(([key, label]) => /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "memory-routing-card", children: [
-        /* @__PURE__ */ jsxRuntimeExports.jsx("strong", { children: key === "directPair" ? "一对一" : key === "group" ? "多人对话" : key === "mentioned" ? "场外人物" : "Token 边界" }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx("strong", { children: key === "stablePrefix" ? "稳定前缀" : key === "directPair" ? "一对一" : key === "group" ? "多人对话" : key === "mentioned" ? "场外人物" : "Token 边界" }),
         /* @__PURE__ */ jsxRuntimeExports.jsx("span", { children: label })
       ] }, key)) }),
       /* @__PURE__ */ jsxRuntimeExports.jsxs("details", { className: "memory-boundary-details", children: [
@@ -21107,7 +20991,6 @@ const SummariesView = () => {
   const setSummaryProvider = useConfigStore((state) => state.setSummaryProvider);
   const updateSummaryPromptSettings = useConfigStore((state) => state.updateSummaryPromptSettings);
   const getSummaryPromptSettings = useConfigStore((state) => state.getSummaryPromptSettings);
-  const importLegacySummaries = useConfigStore((state) => state.importLegacySummaries);
   const openSummariesFolder = useConfigStore((state) => state.openSummariesFolder);
   const clearSummaries = useConfigStore((state) => state.clearSummaries);
   const [localSettings, setLocalSettings] = reactExports.useState({
@@ -21117,8 +21000,6 @@ const SummariesView = () => {
   });
   const [isLoading, setIsLoading] = reactExports.useState(true);
   const saveTimer = reactExports.useRef(null);
-  const [isImporting, setIsImporting] = reactExports.useState(false);
-  const [importResult, setImportResult] = reactExports.useState(null);
   const [isClearing, setIsClearing] = reactExports.useState(false);
   const [clearResult, setClearResult] = reactExports.useState(null);
   reactExports.useEffect(() => {
@@ -21211,21 +21092,6 @@ const SummariesView = () => {
       finalPrompt: settings2.finalPrompt,
       letterSummaryPrompt: settings2.letterSummaryPrompt
     });
-  };
-  const handleImportLegacySummaries = async () => {
-    setIsImporting(true);
-    setImportResult(null);
-    try {
-      const result = await importLegacySummaries();
-      setImportResult(result);
-    } catch (error) {
-      setImportResult({
-        success: false,
-        message: t("summaries.importFailed", { error: error instanceof Error ? error.message : "Unknown error" })
-      });
-    } finally {
-      setIsImporting(false);
-    }
   };
   const handleOpenSummariesFolder = async () => {
     const result = await openSummariesFolder();
@@ -21376,30 +21242,6 @@ const SummariesView = () => {
         }
       )
     ] }),
-    /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "form-group legacy-data-import", children: [
-      /* @__PURE__ */ jsxRuntimeExports.jsx("h4", { children: t("summaries.legacyDataImport") }),
-      /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "help-text", children: t("summaries.legacyDataImportHelp") }),
-      /* @__PURE__ */ jsxRuntimeExports.jsx(
-        "button",
-        {
-          type: "button",
-          onClick: handleImportLegacySummaries,
-          disabled: isImporting,
-          children: isImporting ? t("summaries.importing") : t("summaries.importLegacySummaries")
-        }
-      ),
-      importResult && /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: `import-result ${importResult.success ? "success" : "error"}`, children: [
-        importResult.message,
-        importResult.filesCopied && /* @__PURE__ */ jsxRuntimeExports.jsx("div", { children: t("summaries.filesCopied", { count: importResult.filesCopied }) }),
-        importResult.errors && importResult.errors.length > 0 && /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "error-list", children: [
-          /* @__PURE__ */ jsxRuntimeExports.jsxs("strong", { children: [
-            t("summaries.errors"),
-            ":"
-          ] }),
-          /* @__PURE__ */ jsxRuntimeExports.jsx("ul", { children: importResult.errors.map((error, index) => /* @__PURE__ */ jsxRuntimeExports.jsx("li", { children: error }, index)) })
-        ] })
-      ] })
-    ] }),
     /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "form-group summary-management", children: [
       /* @__PURE__ */ jsxRuntimeExports.jsx("h4", { children: t("summaries.conversationSummaryManagement") }),
       /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "help-text", children: t("summaries.conversationSummaryManagementHelp") }),
@@ -21488,19 +21330,23 @@ const OptimizationView = () => {
     [text("总输入 Token", "Input tokens"), formatTokens(total?.promptTokens || total?.estimatedPromptTokens), ""],
     [text("缓存命中率", "Cache hit rate"), formatPercent(total?.cacheHitRate), "success"],
     [text("未命中 Token", "Cache misses"), formatTokens(total?.cacheMissTokens), "warning"],
-    [text("动作判定已跳过", "Actions skipped"), formatTokens(actionSkipped), ""]
+    [text("历史动作跳过记录", "Historical action skips"), formatTokens(actionSkipped), ""]
   ];
   const capabilities = [
     [text("动态历史边界", "Historical boundary"), text("按 CK3 当前年份限制未来人物、事件与作品。", "Limits future people, events, and works by the current CK3 year.")],
-    [text("多人摘要", "Group summaries"), text("最多玩家 + 4 名 NPC，参与者之间双向保存摘要。", "Up to the player plus four NPCs; summaries are saved for each participant pair.")],
+    [text("多人摘要", "Group summaries"), text("已覆盖 2–6 名参与者；每名角色都生成与其他参与者对应的摘要文件。", "Covered for 2–6 participants; each character receives a summary file for every other participant.")],
     [text("关系上下文", "Relationship context"), text("第三方角色按亲属和年龄解析，不加入发言队列。", "Mentioned third parties are resolved from kinship and age data without joining the speaker queue.")],
-    [text("动作门控", "Action gate"), text("仅明确已发生的状态变化才调用动作模型。", "Calls the action model only for explicit completed state changes.")]
+    [text("稳定记忆前缀", "Stable memory prefix"), text("同一场对话每轮保持一致；对话结束后的新摘要在下一场读取。", "It stays unchanged throughout one conversation; new final summaries are loaded in the next conversation.")],
+    [text("场外人物快照", "Mentioned-character snapshot"), text("首次提及时按每名 NPC 的目录召回，本场后续回复复用；新增人物时扩展一次。", "Each NPC recalls from their own folder on first mention, then reuses that snapshot until another person is introduced.")],
+    [text("统一摘要系统", "Unified summary system"), text("旧摘要导入与旧格式运行路径已退休，人物目录是 Memory Engine 2.2 的唯一摘要来源。", "Legacy import and runtime paths are retired; character folders are the sole summary source for Memory Engine 2.2.")],
+    [text("DeepSeek 思考对话", "DeepSeek thinking chat"), text("普通对话启用思考模式并使用 4096 Token；动作和终局摘要保持非思考。", "Normal chat uses thinking mode with 4096 tokens; actions and final summaries remain non-thinking.")],
+    [text("动作语义直通", "Semantic action routing"), text("本地关键词门控已关闭，每条当前回复均交由动作模型作语义判定。", "The local keyword gate is disabled; every current reply reaches model semantic selection.")]
   ];
   return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "optimization-view", children: [
     /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "optimization-header", children: [
       /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
         /* @__PURE__ */ jsxRuntimeExports.jsx("h3", { children: text("系统优化与用量", "System Optimization & Usage") }),
-        /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "muted-text", children: text("缓存统计只记录 Token 和匿名区块指纹，不保存对话或提示词正文。", "Cache analytics stores token counts and anonymous block fingerprints only; no prompt or conversation text is saved.") })
+        /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "muted-text", children: text("V7.5 已统一 Memory Engine 2.2、场外人物会话快照、4096 Token 思考对话和两阶段动作语义判定。缓存统计只记录 Token 和匿名区块指纹，不保存正文。", "V7.5 unifies Memory Engine 2.2, session snapshots for mentioned characters, 4096-token thinking chat, and two-stage semantic action selection. Analytics stores only token counts and anonymous fingerprints, never message text.") })
       ] }),
       /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "optimization-header-actions", children: [
         /* @__PURE__ */ jsxRuntimeExports.jsx("button", { type: "button", onClick: loadReport, disabled: isLoading, children: isLoading ? text("读取中…", "Loading…") : text("刷新", "Refresh") }),
@@ -21512,7 +21358,7 @@ const OptimizationView = () => {
     report && /* @__PURE__ */ jsxRuntimeExports.jsxs(React.Fragment, { children: [
       /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "optimization-metrics", children: metrics.map(([label, value, tone]) => /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: `optimization-metric ${tone}`, children: [/* @__PURE__ */ jsxRuntimeExports.jsx("span", { children: label }), /* @__PURE__ */ jsxRuntimeExports.jsx("strong", { children: value })] }, label)) }),
       /* @__PURE__ */ jsxRuntimeExports.jsxs("section", { className: "optimization-capabilities", children: [
-        /* @__PURE__ */ jsxRuntimeExports.jsx("h4", { children: text("当前 Mod 适配状态", "Current mod integration") }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx("h4", { children: text("V7.5 适配状态", "V7.5 integration status") }),
         /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "optimization-capability-grid", children: capabilities.map(([title, detail]) => /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "optimization-capability", children: [/* @__PURE__ */ jsxRuntimeExports.jsx("strong", { children: title }), /* @__PURE__ */ jsxRuntimeExports.jsx("span", { children: detail })] }, title)) })
       ] }),
       /* @__PURE__ */ jsxRuntimeExports.jsxs("section", { className: "optimization-section", children: [

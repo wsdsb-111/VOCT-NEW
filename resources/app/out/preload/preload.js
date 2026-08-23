@@ -60,7 +60,6 @@ electron.contextBridge.exposeInMainWorld("llmConfigAPI", {
   getMaxContextLength: () => electron.ipcRenderer.invoke("llm:getMaxContextLength"),
   setCustomContextLength: (contextLength) => electron.ipcRenderer.invoke("llm:setCustomContextLength", contextLength),
   clearCustomContextLength: () => electron.ipcRenderer.invoke("llm:clearCustomContextLength"),
-  importLegacySummaries: () => electron.ipcRenderer.invoke("llm:importLegacySummaries"),
   // Provider override methods
   getActionsProviderId: () => electron.ipcRenderer.invoke("llm:getActionsProviderId"),
   setActionsProviderId: (instanceId) => electron.ipcRenderer.invoke("llm:setActionsProviderId", instanceId),
@@ -131,9 +130,6 @@ electron.contextBridge.exposeInMainWorld("conversationAPI", {
   regenerateError: (messageId) => {
     return electron.ipcRenderer.invoke("conversation:regenerateError", { messageId });
   },
-  acceptSummaryImport: (characterId, sourcePlayerId) => electron.ipcRenderer.invoke("conversation:acceptSummaryImport", { characterId, sourcePlayerId }),
-  declineSummaryImport: (characterId, sourcePlayerId) => electron.ipcRenderer.invoke("conversation:declineSummaryImport", { characterId, sourcePlayerId }),
-  openSummaryFile: (filePath) => electron.ipcRenderer.invoke("conversation:openSummaryFile", { filePath }),
   getActiveConversationData: () => electron.ipcRenderer.invoke("conversation:getActiveConversationData"),
   getPromptPreview: (characterId) => electron.ipcRenderer.invoke("conversation:getPromptPreview", { characterId }),
   openSummariesFolder: () => electron.ipcRenderer.invoke("conversation:openSummariesFolder"),
@@ -150,8 +146,7 @@ electron.contextBridge.exposeInMainWorld("conversationAPI", {
   getSummariesForCharacter: (playerId, characterId) => electron.ipcRenderer.invoke("conversation:getSummariesForCharacter", { playerId, characterId }),
   updateSummary: (playerId, characterId, summaryIndex, newContent) => electron.ipcRenderer.invoke("conversation:updateSummary", { playerId, characterId, summaryIndex, newContent }),
   deleteSummary: (playerId, characterId, summaryIndex) => electron.ipcRenderer.invoke("conversation:deleteSummary", { playerId, characterId, summaryIndex }),
-  deleteCharacterSummaries: (playerId, characterId) => electron.ipcRenderer.invoke("conversation:deleteCharacterSummaries", { playerId, characterId }),
-  migrateSummariesToNewFormat: () => electron.ipcRenderer.invoke("conversation:migrateSummariesToNewFormat")
+  deleteCharacterSummaries: (playerId, characterId) => electron.ipcRenderer.invoke("conversation:deleteCharacterSummaries", { playerId, characterId })
 });
 electron.contextBridge.exposeInMainWorld("actionsAPI", {
   reload: () => electron.ipcRenderer.invoke("actions:reload"),

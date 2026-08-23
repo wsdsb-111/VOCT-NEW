@@ -1,5 +1,7 @@
 "use strict";
 
+const { getCharacterPersonalName } = require("../memory-system/character-identity");
+
 let actionSystem = null;
 let ActionEngine = null;
 let actionRegistry = null;
@@ -12,7 +14,6 @@ let createError = null;
 let createMessage = null;
 let createActionApproval = null;
 let createActionFeedback = null;
-let createSummaryImport = null;
 let createPromptFingerprint = null;
 let cleanLogFile = null;
 let resolveI18nString = null;
@@ -38,7 +39,6 @@ class Conversation {
     createMessage = dependencies.createMessage || createMessage;
     createActionApproval = dependencies.createActionApproval || createActionApproval;
     createActionFeedback = dependencies.createActionFeedback || createActionFeedback;
-    createSummaryImport = dependencies.createSummaryImport || createSummaryImport;
     createPromptFingerprint = dependencies.createPromptFingerprint || createPromptFingerprint;
     cleanLogFile = dependencies.cleanLogFile || cleanLogFile;
     resolveI18nString = dependencies.resolveI18nString || resolveI18nString;
@@ -64,9 +64,8 @@ class Conversation {
     this.customQueue = null;
     this.isPaused = false;
     this.persistCustomQueue = false;
-    this.pendingSummaryImports = /* @__PURE__ */ new Map();
-    this.hasAcceptedImports = /* @__PURE__ */ new Set();
     this.inactiveParticipantIds = /* @__PURE__ */ new Map();
+    this.summaryParticipantProfiles = /* @__PURE__ */ new Map();
     // Action checks are scoped to the current player turn. This prevents one
     // narrated event from being sent to the action model once per NPC reply.
     this.actionGateProcessedTriggers = /* @__PURE__ */ new Set();
@@ -142,9 +141,9 @@ class Conversation {
     try {
       this.gameData = await parseLog(ck3DebugPath);
       console.log("GameData initialized with", this.gameData.characters.size, "characters");
+      this.captureSummaryParticipantProfiles(this.gameData.characters.values());
       this.gameData.loadCharactersSummaries();
       await this.recoverPendingMemories();
-      await this.checkForOtherPlayerSummaries();
       this.isActive = true;
     } catch (error) {
       console.error("Failed to parse log file:", error);
@@ -159,8 +158,8 @@ class Conversation {
     }
   }
   async checkAndSummarizeIfNeeded(npc) {
-    memoryEngine?.syncRollingStateFromLegacyFields(this);
-    memoryEngine?.syncLegacyRollingFields(this);
+    memoryEngine?.syncRollingStateFromConversationFields(this);
+    memoryEngine?.syncConversationRollingFields(this);
     const memoryContext = await this.getMemoryContextFor(npc);
     const currentMessages = PromptBuilder.buildMessages(
       this.getHistory().slice(this.lastSummarizedMessageIndex),
@@ -242,6 +241,7 @@ class Conversation {
       query,
       mentionedEntityIds: mentionedCharacterIds,
       mentionedEntityNames,
+      mentionedRecallCache: memoryState.mentionedRecallCache,
       directCounterpartIds: activeParticipantIds.filter((characterId) => characterId !== npc.id),
       ownerFolderMemories: memoryState.mentionProfileCache.ownerFolderMemoriesById.get(Number(npc.id)) || [],
       currentTotalDays: this.gameData.totalDays,
@@ -264,6 +264,31 @@ class Conversation {
   }
   getActiveConversationCharacters() {
     return [...this.gameData.characters.values()].filter((character) => this.isCharacterAvailableForConversation(character));
+  }
+  captureSummaryParticipantProfiles(characters = []) {
+    if (!this.summaryParticipantProfiles) this.summaryParticipantProfiles = /* @__PURE__ */ new Map();
+    for (const character of characters || []) {
+      const id = Number(character?.id);
+      if (!Number.isFinite(id)) continue;
+      const personalName = getCharacterPersonalName(character, character.shortName || character.name || character.fullName);
+      this.summaryParticipantProfiles.set(id, {
+        id,
+        name: personalName,
+        firstName: character.firstName,
+        shortName: personalName,
+        fullName: character.fullName || character.shortName || personalName,
+        primaryTitle: character.primaryTitle,
+        heldCourtAndCouncilPositions: character.heldCourtAndCouncilPositions,
+        titleRankConcept: character.titleRankConcept
+      });
+    }
+    return this.summaryParticipantProfiles;
+  }
+  getSummaryParticipantProfile(characterId) {
+    const numericId = Number(characterId);
+    const current = this.gameData.characters.get(numericId);
+    if (current) this.captureSummaryParticipantProfiles([current]);
+    return this.summaryParticipantProfiles?.get(numericId) || null;
   }
   isCharacterAvailableForConversation(character) {
     if (!character || this.inactiveParticipantIds?.has(character.id)) return false;
@@ -560,6 +585,7 @@ class Conversation {
     console.log("Conversation active:", this.isActive);
     console.log("Characters in conversation:", this.gameData.characters.size);
     const user = this.gameData.characters.get(this.gameData.playerID);
+    this.captureSummaryParticipantProfiles?.(this.gameData.characters.values());
     if (!this.isActive) {
       console.warn("Conversation is not active");
       return;
@@ -714,11 +740,12 @@ class Conversation {
     }
   }
   getSummaryParticipantIds() {
+    this.captureSummaryParticipantProfiles(this.gameData.characters.values());
     const participantIds = [this.gameData.playerID];
     const seen = /* @__PURE__ */ new Set(participantIds);
     const addParticipant = (characterId) => {
       const numericId = Number(characterId);
-      if (!Number.isFinite(numericId) || seen.has(numericId) || !this.gameData.characters.has(numericId)) return;
+      if (!Number.isFinite(numericId) || seen.has(numericId) || !this.getSummaryParticipantProfile(numericId)) return;
       seen.add(numericId);
       participantIds.push(numericId);
     };
@@ -726,7 +753,7 @@ class Conversation {
     for (const participant of participantPresence) addParticipant(participant.characterId);
     for (const message of this.getHistory()) {
       if (message.role !== "assistant" || !message.name) continue;
-      const character = [...this.gameData.characters.values()].find((candidate) => candidate.fullName === message.name || candidate.shortName === message.name || candidate.firstName === message.name);
+      const character = [...this.summaryParticipantProfiles.values()].find((candidate) => candidate.fullName === message.name || candidate.shortName === message.name || candidate.firstName === message.name);
       if (character) addParticipant(character.id);
     }
     return participantIds;
@@ -777,12 +804,7 @@ class Conversation {
     if (!memoryEngine) throw new Error("memory_engine_not_configured");
     const allMessages = this.getHistory();
     const participantIds = this.getSummaryParticipantIds();
-    const participants = participantIds.map((id) => this.gameData.characters.get(id)).filter(Boolean).map((character) => ({
-      id: character.id,
-      name: this.gameData.getCharacterPersonalName(character.id, character.shortName),
-      fullName: character.fullName,
-      primaryTitle: character.primaryTitle
-    }));
+    const participants = participantIds.map((id) => this.getSummaryParticipantProfile(id)).filter(Boolean);
     const excludedSummaryOwnerIds = [...this.inactiveParticipantIds.entries()]
       .filter(([characterId, stateValue]) => stateValue === "dead" && Number(characterId) !== Number(this.gameData.playerID))
       .map(([characterId]) => Number(characterId));
@@ -801,7 +823,8 @@ class Conversation {
       persistCharacterFolders: async (finalSummary, context) => {
         return this.gameData.saveCharactersSummaries(finalSummary, participantIds, {
           finalizationId: context.finalizationId,
-          excludedOwnerIds: context.excludedSummaryOwnerIds
+          excludedOwnerIds: context.excludedSummaryOwnerIds,
+          participantProfiles: context.participants
         });
       },
       requestSummary: async (summaryPrompt) => {
@@ -815,11 +838,13 @@ class Conversation {
     const results = await memoryEngine.recoverPendingFinalizations({
       buildPrompt: (context) => memoryEngine.buildFinalizationPrompt({ ...context, finalInstructions: PromptBuilder.getFinalSummaryInstructions() }),
       requestSummary: (summaryPrompt) => llmManager.sendSummaryRequest(summaryPrompt, void 0, { requestType: "memory_recovery" }),
+      resolveParticipantProfiles: (snapshot) => memoryEngine.resolveRecoveryParticipantProfiles(snapshot, [...this.summaryParticipantProfiles.values()]),
       persistCharacterFolders: async (finalSummary, context) => {
         const participantIds = (context.participants || []).map((entry) => entry.id);
         return this.gameData.saveCharactersSummaries(finalSummary, participantIds, {
           finalizationId: context.finalizationId,
-          excludedOwnerIds: context.excludedSummaryOwnerIds
+          excludedOwnerIds: context.excludedSummaryOwnerIds,
+          participantProfiles: context.participants
         });
       }
     });
@@ -850,97 +875,6 @@ class Conversation {
   // Unsubscribe from conversation updates
   offConversationUpdate(callback) {
     this.eventEmitter.off("conversation-updated", callback);
-  }
-  /**
-   * Check for conversation summaries from other player characters
-   */
-  async checkForOtherPlayerSummaries() {
-    try {
-      const importResults = await this.gameData.checkForSummariesFromOtherPlayers();
-      for (const result of importResults) {
-        const importKey = `${result.characterId}_${result.sourcePlayerId}`;
-        if (!this.pendingSummaryImports.has(importKey)) {
-          this.pendingSummaryImports.set(importKey, result);
-          const importEntry = createSummaryImport({
-            id: this.nextId++,
-            sourcePlayerId: result.sourcePlayerId,
-            characterId: result.characterId,
-            characterName: result.characterName,
-            summaryCount: result.summaryCount,
-            sourceFilePath: result.sourceFilePath,
-            status: "pending"
-          });
-          this.messages.push(importEntry);
-        }
-      }
-      if (importResults.length > 0) {
-        this.emitUpdate();
-      }
-    } catch (error) {
-      console.error("Error checking for other player summaries:", error);
-    }
-  }
-  /**
-   * Accept summary import for a character
-   */
-  async acceptSummaryImport(characterId, sourcePlayerId) {
-    const importKey = `${characterId}_${sourcePlayerId}`;
-    const importResult = this.pendingSummaryImports.get(importKey);
-    if (!importResult) {
-      throw new Error(`No pending import found for character ${characterId} from player ${sourcePlayerId}`);
-    }
-    try {
-      const character = this.gameData.characters.get(characterId);
-      const mergeWithExisting = character && character.conversationSummaries.length > 0;
-      await this.gameData.importSummariesFromOtherPlayer(
-        characterId,
-        importResult.sourcePlayerId,
-        mergeWithExisting
-      );
-      this.hasAcceptedImports.add(characterId);
-      this.pendingSummaryImports.delete(importKey);
-      const entryIndex = this.messages.findIndex(
-        (msg) => msg.type === "summary-import" && "characterId" in msg && "sourcePlayerId" in msg && msg.characterId === characterId && msg.sourcePlayerId === importResult.sourcePlayerId
-      );
-      if (entryIndex !== -1) {
-        this.messages.splice(entryIndex, 1);
-        this.emitUpdate();
-      }
-      console.log(`Accepted summary import for character ${characterId} from player ${importResult.sourcePlayerId}`);
-    } catch (error) {
-      console.error(`Failed to accept summary import for character ${characterId}:`, error);
-      throw error;
-    }
-  }
-  /**
-   * Decline summary import for a character
-   */
-  async declineSummaryImport(characterId, sourcePlayerId) {
-    const importKey = `${characterId}_${sourcePlayerId}`;
-    const importResult = this.pendingSummaryImports.get(importKey);
-    if (!importResult) {
-      throw new Error(`No pending import found for character ${characterId} from player ${sourcePlayerId}`);
-    }
-    this.pendingSummaryImports.delete(importKey);
-    const entryIndex = this.messages.findIndex(
-      (msg) => msg.type === "summary-import" && "characterId" in msg && "sourcePlayerId" in msg && msg.characterId === characterId && msg.sourcePlayerId === importResult.sourcePlayerId
-    );
-    if (entryIndex !== -1) {
-      this.messages.splice(entryIndex, 1);
-      this.emitUpdate();
-    }
-    console.log(`Declined summary import for character ${characterId} from player ${importResult.sourcePlayerId}`);
-  }
-  /**
-   * Open summary file in default editor
-   */
-  async openSummaryFile(filePath) {
-    try {
-      await electron.shell.openPath(filePath);
-    } catch (error) {
-      console.error("Failed to open summary file:", error);
-      throw error;
-    }
   }
   /**
    * Approve actions for pending approval
@@ -1002,6 +936,7 @@ class Conversation {
       console.warn(`Character ${characterId} not found in conversation`);
       return;
     }
+    this.captureSummaryParticipantProfiles?.([character]);
     console.log(`Removing ${character.fullName} from conversation`);
     this.invalidateApprovalsForCharacter(characterId, "removed");
     this.gameData.characters.delete(characterId);

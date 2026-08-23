@@ -28,7 +28,7 @@ const providerOutput = JSON.stringify({ sessionSummary: "玩家答应帮助甲�
     ...context,
     buildPrompt: () => [],
     requestSummary: async () => ({ content: providerCalls++ === 0 ? providerOutput : "" }),
-    persistLegacySummary: async () => { throw new Error("legacy_disk_offline"); }
+    persistCharacterFolders: async () => { throw new Error("summary_folder_disk_offline"); }
   });
   assert.strictEqual(failed.success, false);
   assert.strictEqual(providerCalls, 1);
@@ -38,14 +38,14 @@ const providerOutput = JSON.stringify({ sessionSummary: "玩家答应帮助甲�
   assert.strictEqual(snapshot.providerOutput, providerOutput);
   assert(snapshot.parsedExtraction, "parsed extraction must survive a persist failure");
 
-  let legacyWrites = 0;
+  let folderWrites = 0;
   const recovered = await engine.recoverFailedFinalization(snapshotPath, {
     buildPrompt: () => { throw new Error("recovery must not rebuild an LLM request after provider success"); },
     requestSummary: async () => { throw new Error("recovery must not call LLM after provider success"); },
-    persistLegacySummary: async () => { legacyWrites++; return { success: true }; }
+    persistCharacterFolders: async () => { folderWrites++; return { success: true }; }
   });
   assert.strictEqual(recovered.success, true);
-  assert.strictEqual(legacyWrites, 1);
+  assert.strictEqual(folderWrites, 1);
   assert.strictEqual(providerCalls, 1);
   assert.strictEqual(engine.listRecoverySnapshots().length, 0);
   assert.strictEqual(store.listAllMemories().length, 1);
@@ -55,7 +55,7 @@ const providerOutput = JSON.stringify({ sessionSummary: "玩家答应帮助甲�
     ...context,
     buildPrompt: () => [],
     requestSummary: async () => { throw new Error("committed finalization must be idempotent"); },
-    persistLegacySummary: async () => { throw new Error("committed finalization must not rewrite legacy summaries"); }
+    persistCharacterFolders: async () => { throw new Error("committed finalization must not rewrite character folders"); }
   });
   assert.strictEqual(repeated.success, true);
   assert.strictEqual(repeated.alreadyCommitted, true);

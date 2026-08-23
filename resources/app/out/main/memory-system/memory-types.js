@@ -4,7 +4,7 @@ const crypto = require("crypto");
 
 const MEMORY_TYPES = new Set([
   "event", "promise", "relationship", "secret", "belief", "plan",
-  "conflict", "information", "rumor", "unresolved", "letter", "folder_summary", "legacy_summary"
+  "conflict", "information", "rumor", "unresolved", "letter", "folder_summary"
 ]);
 const VISIBILITIES = new Set(["private", "participants", "known_group", "public", "world"]);
 const SOURCES = new Set(["witnessed", "spoken", "letter", "game_fact", "reported", "rumor", "inferred", "imported"]);

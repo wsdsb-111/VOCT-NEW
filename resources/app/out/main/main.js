@@ -99,14 +99,18 @@ const DEFAULT_MAIN_TEMPLATE_PATH = "system/default.hbs";
 const DEFAULT_LETTER_TEMPLATE_PATH = "system/letter.hbs";
 const PROMPT_DEFAULTS_MANIFEST_NAME = ".bundled-defaults-manifest.json";
 const PROMPT_DEFAULTS_MANIFEST_PATH = path.join(VOTC_PROMPTS_DIR, PROMPT_DEFAULTS_MANIFEST_NAME);
-const PROMPT_DEFAULTS_MANIFEST_VERSION = 1;
+const PROMPT_DEFAULTS_MANIFEST_VERSION = 2;
+const LEGACY_CHAT_INSTRUCTION = "[仅以 {{character.fullName}} 的身份撰写下一条回复]";
+const DEFAULT_CHAT_INSTRUCTION = "[仅以 {{character.fullName}} 的身份撰写下一条回复；结合性格、关系、好感、地位与当前情绪自然完整表达，不复述提示词或记忆列表]";
 const LEGACY_BUNDLED_PROMPT_HASHES = {
   // The same legacy template shipped with CRLF in installed Windows builds and
   // LF in source checkouts. Both hashes are safe because only exact matches are
   // migrated; any user edit produces a different hash and is preserved.
   "system/default.hbs": [
     "68f942300135fac99e11d7ddfde52e90a7372fb07f6475dd97709ec44226b2d2",
-    "da530c8c3d08482fa1ee683086faaaa4753e956e6b5bbf0f01e599edc8639f9c"
+    "da530c8c3d08482fa1ee683086faaaa4753e956e6b5bbf0f01e599edc8639f9c",
+    "9ef5e409071b1474e460bddbf2002e50420c153414bf53ac4255973c789742c6",
+    "ec5cee04a10b9a451496a3a1b187372c17c05c94d214eba257e98e0355424983"
   ]
 };
 const DEBUG_VERBOSE_LLM = /^(?:1|true|yes|on)$/i.test(process.env.DEBUG_VERBOSE_LLM || "");
@@ -295,7 +299,7 @@ class PromptConfigManager {
         label: "Main Instruction",
         enabled: true,
         role: "user",
-        template: "[仅以 {{character.fullName}} 的身份撰写下一条回复]"
+        template: DEFAULT_CHAT_INSTRUCTION
       }
     ];
   }
@@ -344,6 +348,7 @@ class PromptConfigManager {
     const cleanedIncoming = Array.isArray(incoming) ? incoming : [];
     const normalize = (block) => {
       const base = defaults.find((d) => d.id === block.id) || defaults.find((d) => d.type === block.type) || void 0;
+      const template = block.template ?? base?.template;
       return {
         ...base,
         ...block,
@@ -351,7 +356,7 @@ class PromptConfigManager {
         label: block.label || base?.label || block.type,
         enabled: block.enabled ?? base?.enabled ?? true,
         role: block.role || base?.role,
-        template: block.template ?? base?.template,
+        template: block.type === "instruction" && template === LEGACY_CHAT_INSTRUCTION ? DEFAULT_CHAT_INSTRUCTION : template,
         scriptPath: block.scriptPath ?? base?.scriptPath,
         limit: block.limit ?? base?.limit,
         pinned: block.pinned ?? base?.pinned ?? false
@@ -1535,17 +1540,22 @@ class LLMManager {
     }
     const provider = this.getProviderInstance(activeConfig);
     const stream = settingsRepository.getGlobalStreamSetting() && !noStream;
+    const isDeepseekChat = activeConfig.providerType === "deepseek";
     const request = {
       model: activeConfig.defaultModel,
       messages,
       stream,
       // Merge default parameters from config with specific request params
       ...activeConfig.defaultParameters,
+      ...isDeepseekChat ? {
+        thinking: { type: "enabled" },
+        max_tokens: 4096
+      } : {},
       signal
       // ...params,
     };
     const estimatedPromptTokens = TokenCounter.calculateTotalTokens(messages);
-    console.log(`[LLMManager] Chat request: provider=${activeConfig.providerType}, model=${activeConfig.defaultModel}, messages=${messages.length}, estimatedPromptTokens=${estimatedPromptTokens}`);
+    console.log(`[LLMManager] Chat request: provider=${activeConfig.providerType}, model=${activeConfig.defaultModel}, messages=${messages.length}, estimatedPromptTokens=${estimatedPromptTokens}${isDeepseekChat ? `, maxTokens=${request.max_tokens}, thinking=enabled` : ""}`);
     if (DEBUG_VERBOSE_LLM) {
       logVerboseLLM("[LLMManager][verbose] Chat messages:", messages);
       logVerboseLLM("[LLMManager][verbose] Provider config:", JSON.stringify(activeConfig).replace(/"apiKey":\s*"[^"]*"/g, "HIDDEN"));
@@ -1616,6 +1626,7 @@ class LLMManager {
       stream: false,
       // summaries don't need streaming
       ...config.defaultParameters,
+      ...["final_summary", "memory_recovery"].includes(metadata.requestType) ? { thinking: { type: "disabled" }, response_format: { type: "json_object" } } : {},
       signal
     };
     const estimatedPromptTokens = TokenCounter.calculateTotalTokens(preparedMessages);
@@ -2620,18 +2631,13 @@ class GameData {
    */
   saveCharactersSummaries(finalSummary, participantIds = null, options = {}) {
     const excludedOwnerIds = new Set((options.excludedOwnerIds || []).map(Number).filter(Number.isFinite));
-    const orderedIds = [];
-    const seenIds = /* @__PURE__ */ new Set();
-    const addParticipant = (id) => {
-      const numericId = Number(id);
-      if (!Number.isFinite(numericId) || seenIds.has(numericId) || !this.characters.has(numericId)) return;
-      seenIds.add(numericId);
-      orderedIds.push(numericId);
-    };
-    addParticipant(this.playerID);
     const requestedIds = Array.isArray(participantIds) ? participantIds : Array.from(this.characters.keys());
-    for (const id of requestedIds) addParticipant(id);
-    const participants = orderedIds.map((id) => this.characters.get(id)).filter(Boolean);
+    const participants = memorySystem.resolveSummaryParticipants({
+      playerId: this.playerID,
+      participantIds: requestedIds,
+      currentCharacters: this.characters,
+      participantProfiles: options.participantProfiles
+    });
     if (participants.length < 2) {
       return { success: false, error: "insufficient_summary_participants", participantCount: participants.length };
     }
@@ -2645,143 +2651,16 @@ class GameData {
       heldCourtAndCouncilPositions: character.heldCourtAndCouncilPositions,
       titleRankConcept: character.titleRankConcept
     }));
-    let directedFilesWritten = 0;
-    for (let leftIndex = 0; leftIndex < participants.length; leftIndex++) {
-      for (let rightIndex = leftIndex + 1; rightIndex < participants.length; rightIndex++) {
-        const left = participants[leftIndex];
-        const right = participants[rightIndex];
-        let leftSummaries = null;
-        let rightSummaries = null;
-        if (!excludedOwnerIds.has(left.id)) {
-          leftSummaries = this.saveSummaryForDirectedPair(left, right, finalSummary, participantMetadata, options);
-          directedFilesWritten++;
-        }
-        if (!excludedOwnerIds.has(right.id)) {
-          rightSummaries = this.saveSummaryForDirectedPair(right, left, finalSummary, participantMetadata, options);
-          directedFilesWritten++;
-        }
-        // Keep the in-memory compatibility field synchronized for extensions;
-        // Engine 2.2 reads the canonical owner folders directly for prompts.
-        if (left.id === this.playerID && leftSummaries) right.conversationSummaries = leftSummaries;
-        if (right.id === this.playerID && rightSummaries) left.conversationSummaries = rightSummaries;
-      }
+    const directedPairs = memorySystem.buildDirectedParticipantPairs(participants, excludedOwnerIds);
+    for (const { owner, counterpart } of directedPairs) {
+      const summaries = this.saveSummaryForDirectedPair(owner, counterpart, finalSummary, participantMetadata, options);
+      // Keep the in-memory compatibility field synchronized for extensions;
+      // Engine 2.2 reads the canonical owner folders directly for prompts.
+      if (owner.id === this.playerID) counterpart.conversationSummaries = summaries;
     }
-    console.log(`[Summary] Saved finalization ${options.finalizationId || "legacy"} for ${participants.length} participants across ${directedFilesWritten} directed pair files`);
+    const directedFilesWritten = directedPairs.length;
+    console.log(`[Summary] Saved finalization ${options.finalizationId || "untracked"} for ${participants.length} participants across ${directedFilesWritten} directed pair files`);
     return { success: true, participantCount: participants.length, directedFilesWritten };
-  }
-  /**
-   * Check for conversation summaries for current AI characters from old storage format
-   * This helps migrate from the old playerID/characterID.json format to the new paired format
-   */
-  async checkForSummariesFromOtherPlayers() {
-    const results = [];
-    try {
-      if (!fs$1.existsSync(VOTC_SUMMARIES_DIR)) {
-        return results;
-      }
-      // Check for old format: subdirectories with playerID
-      const entries = fs$1.readdirSync(VOTC_SUMMARIES_DIR, { withFileTypes: true });
-      const playerDirs = entries
-        .filter((dirent) => dirent.isDirectory())
-        .map((dirent) => dirent.name);
-      
-      // For each character in the current conversation
-      for (const character of this.characters.values()) {
-        if (character.id === this.playerID) continue;
-        
-        // Check if there's already a summary in the new format
-        const pairKey = this.getConversationPairKey(this.playerID, character.id);
-        const newFormatFile = path.join(VOTC_SUMMARIES_DIR, `${pairKey}.json`);
-        
-        if (fs$1.existsSync(newFormatFile)) {
-          // Already migrated or has summaries in new format
-          continue;
-        }
-        
-        // Check old format directories
-        for (const otherPlayerId of playerDirs) {
-          const sourceFilePath = path.join(VOTC_SUMMARIES_DIR, otherPlayerId, `${character.id}.json`);
-          if (fs$1.existsSync(sourceFilePath)) {
-            try {
-              const summariesData = fs$1.readFileSync(sourceFilePath, "utf8");
-              const summaries = JSON.parse(summariesData);
-              const summaryCount = Array.isArray(summaries) ? summaries.length : 0;
-              if (summaryCount > 0) {
-                results.push({
-                  sourcePlayerId: otherPlayerId,
-                  characterId: character.id,
-                  characterName: character.shortName,
-                  summaryCount,
-                  sourceFilePath,
-                  targetFilePath: newFormatFile
-                });
-              }
-            } catch (error) {
-              console.warn(`Failed to read summaries for character ${character.id} from player ${otherPlayerId}:`, error);
-            }
-          }
-        }
-      }
-    } catch (error) {
-      console.error("Error checking for summaries from other players:", error);
-    }
-    return results;
-  }
-  /**
-   * Import summaries from another player character (supports both old and new format)
-   */
-  async importSummariesFromOtherPlayer(characterId, sourcePlayerId, mergeWithExisting = false) {
-    const character = this.characters.get(characterId);
-    if (!character) {
-      throw new Error(`Character with ID ${characterId} not found`);
-    }
-    const sourceFilePath = path.join(VOTC_SUMMARIES_DIR, sourcePlayerId, `${characterId}.json`);
-    
-    // Use new paired format for target
-    const pairKey = this.getConversationPairKey(this.playerID, characterId);
-    const targetFilePath = path.join(VOTC_SUMMARIES_DIR, `${pairKey}.json`);
-    
-    try {
-      fs$1.mkdirSync(VOTC_SUMMARIES_DIR, { recursive: true });
-      const sourceData = fs$1.readFileSync(sourceFilePath, "utf8");
-      const sourceSummaries = JSON.parse(sourceData);
-      if (!Array.isArray(sourceSummaries)) {
-        throw new Error("Source summaries file is not in expected format");
-      }
-      let finalSummaries;
-      if (mergeWithExisting && fs$1.existsSync(targetFilePath)) {
-        const existingData = fs$1.readFileSync(targetFilePath, "utf8");
-        const existingSummaries = JSON.parse(existingData);
-        if (Array.isArray(existingSummaries)) {
-          const existingSummaryKeys = /* @__PURE__ */ new Set();
-          existingSummaries.forEach((summary) => {
-            const key = `${summary.date}_${summary.content?.substring(0, 100) || ""}`;
-            existingSummaryKeys.add(key);
-          });
-          const filteredSourceSummaries = sourceSummaries.filter((sourceSummary) => {
-            const sourceKey = `${sourceSummary.date}_${sourceSummary.content?.substring(0, 100) || ""}`;
-            return !existingSummaryKeys.has(sourceKey);
-          });
-          finalSummaries = [...filteredSourceSummaries, ...existingSummaries].sort((a, b) => {
-            if (a.totalDays !== void 0 && b.totalDays !== void 0) {
-              return b.totalDays - a.totalDays;
-            }
-            return b.date.localeCompare(a.date);
-          });
-          console.log(`Merged ${filteredSourceSummaries.length} new summaries with ${existingSummaries.length} existing summaries (filtered out ${sourceSummaries.length - filteredSourceSummaries.length} duplicates)`);
-        } else {
-          finalSummaries = sourceSummaries;
-        }
-      } else {
-        finalSummaries = sourceSummaries;
-      }
-      fs$1.writeFileSync(targetFilePath, JSON.stringify(finalSummaries, null, "	"));
-      character.loadSummaries(targetFilePath);
-      console.log(`Successfully imported ${finalSummaries.length} total summaries for ${character.shortName} from player ${sourcePlayerId}${mergeWithExisting ? " (merged with existing)" : ""}`);
-    } catch (error) {
-      console.error(`Failed to import summaries for character ${characterId} from player ${sourcePlayerId}:`, error);
-      throw error;
-    }
   }
 }
 function removeTooltip$1(text) {
@@ -3632,13 +3511,6 @@ function createActionApproval(params) {
     datetime: /* @__PURE__ */ new Date()
   };
 }
-function createSummaryImport(input) {
-  return {
-    ...input,
-    type: "summary-import",
-    datetime: /* @__PURE__ */ new Date()
-  };
-}
 class PromptScriptSandbox {
   /**
    * Execute a description script (pList) in a sandboxed VM context
@@ -4072,8 +3944,8 @@ ${existingSummary}`
    * behavior remains unchanged.
    */
   static buildCacheAnchor(gameData) {
-    return `VOTC_CACHE_ANCHOR_v1
-这是 Voices of the Court 的固定系统上下文锚点。请将后续内容视为当前游戏的动态上下文，并始终遵守以下稳定规则：保持角色扮演身份；优先使用游戏实际数据；不把现代价值观强加给中世纪角色；涉及历史人物、事件、作品、诗词、典故、制度或技术时，先核验其出现、发生、写成、成名或流传时间是否不晚于游戏当前年份；年份不确定时明确表示不知晓，不得猜测或用未来知识补全；不得预知未来、后世评价或事件结局。不要把本段当作对话内容，也不要复述本段。`;
+    return `VOTC_CACHE_ANCHOR_v3
+这是 Voices of the Court 的固定系统上下文锚点。请将后续内容视为当前游戏的动态上下文，并始终遵守以下稳定规则：保持角色扮演身份；优先使用游戏实际数据；不把现代价值观强加给中世纪角色；涉及历史人物、事件、作品、诗词、典故、制度或技术时，先核验其出现、发生、写成、成名或流传时间是否不晚于游戏当前年份；年份不确定时明确表示不知晓，不得猜测或用未来知识补全；不得预知未来、后世评价或事件结局。角色回复不设固定句数、段落数或人为短回复目标，应按人物性格、关系、情绪和场景完整表达，但避免无意义重复。长期稳定记忆和当前话题记忆只代表过去知情背景，本轮事实与动作必须以当前对话消息及游戏实时数据为准。不要把本段当作对话内容，也不要复述本段。`;
   }
   /**
   * Build the stable portion of a character's past conversation summaries.
@@ -4310,7 +4182,7 @@ ${existingSummary}`
         break;
       }
       case "instruction": {
-        const tpl = block.template || "[仅以 {{character.fullName}} 的身份撰写下一条回复]";
+        const tpl = block.template || DEFAULT_CHAT_INSTRUCTION;
         const content = renderTemplate(tpl, baseContext);
         messages.push({
           role: block.role || "user",
@@ -4650,7 +4522,7 @@ ${existingSummary}`
         return { block, content, tokens: TokenCounter.calculateTotalTokens(historyMessages) };
       }
       case "instruction": {
-        const tpl = block.template || "[仅以 {{character.fullName}} 的身份撰写下一条回复]";
+        const tpl = block.template || DEFAULT_CHAT_INSTRUCTION;
         const content = renderTemplate(tpl, baseContext);
         if (content === null) {
           return { block, content: "", tokens: 0, error: `模板错误："${block.label || "Instruction"}" block。请检查 Handlebars 语法。` };
@@ -5100,7 +4972,6 @@ const Conversation = actionSystem.Conversation.configure({
   createMessage,
   createActionApproval,
   createActionFeedback,
-  createSummaryImport,
   createPromptFingerprint,
   cleanLogFile,
   resolveI18nString,
@@ -5218,18 +5089,6 @@ class ConversationManager {
             message: f.message,
             sentiment: f.sentiment
           })),
-          datetime: entry.datetime
-        };
-      } else if (entry.type === "summary-import") {
-        return {
-          type: "summary-import",
-          id: entry.id,
-          sourcePlayerId: entry.sourcePlayerId,
-          characterId: entry.characterId,
-          characterName: entry.characterName,
-          summaryCount: entry.summaryCount,
-          sourceFilePath: entry.sourceFilePath,
-          status: entry.status,
           datetime: entry.datetime
         };
       } else if (entry.type === "action-approval") {
@@ -5480,99 +5339,7 @@ function clearLog() {
     console.error("Failed to clear log file:", error);
   }
 }
-async function importLegacySummaries() {
-  try {
-    const appDataPath = electron.app.getPath("appData");
-    const legacySummariesPath = path.join(appDataPath, "Voices of the Court", "votc_data", "conversation_summaries");
-    const ceSummariesPath = path.join(appDataPath, "Voices of the Court - Community Edition", "votc_data", "conversation_summaries");
-    if (!fs$1.existsSync(legacySummariesPath) && !fs$1.existsSync(ceSummariesPath)) {
-      return {
-        success: false,
-        message: "Legacy summaries folder not found. Please ensure legay VOTC or Community Edition is installed."
-      };
-    }
-    if (!fs$1.existsSync(VOTC_SUMMARIES_DIR)) {
-      fs$1.mkdirSync(VOTC_SUMMARIES_DIR, { recursive: true });
-    }
-    const result = await copyDirectory(legacySummariesPath, VOTC_SUMMARIES_DIR);
-    const resultCE = await copyDirectory(ceSummariesPath, VOTC_SUMMARIES_DIR);
-    if (!result.success && !resultCE.success) {
-      return {
-        success: false,
-        message: "Legacy summaries import failed. Please check the console for details.",
-        errors: [...result.errors, ...resultCE.errors]
-      };
-    }
-    return {
-      success: true,
-      message: result.success && resultCE.success ? "Legacy summaries imported successfully!" : "Import completed with errors.",
-      filesCopied: result.filesCopied + resultCE.filesCopied,
-      errors: [...result.errors, ...resultCE.errors]
-    };
-  } catch (error) {
-    return {
-      success: false,
-      message: `Import failed: ${error instanceof Error ? error.message : "Unknown error"}`
-    };
-  }
-}
-async function copyDirectory(src, dest) {
-  let filesCopied = 0;
-  const errors = [];
-  try {
-    if (!fs$1.existsSync(dest)) {
-      fs$1.mkdirSync(dest, { recursive: true });
-    }
-    const items = fs$1.readdirSync(src, { withFileTypes: true });
-    for (const item of items) {
-      const srcPath = path.join(src, item.name);
-      const destPath = path.join(dest, item.name);
-      try {
-        if (item.isDirectory()) {
-          const subResult = await copyDirectory(srcPath, destPath);
-          filesCopied += subResult.filesCopied;
-          errors.push(...subResult.errors);
-        } else if (item.isFile() && item.name.endsWith(".json")) {
-          const fileContent = fs$1.readFileSync(srcPath, "utf8");
-          if (fs$1.existsSync(destPath)) {
-            const existingContent = fs$1.readFileSync(destPath, "utf8");
-            if (existingContent !== fileContent) {
-              const backupPath = path.join(dest, `${item.name}.backup`);
-              fs$1.writeFileSync(backupPath, existingContent);
-              console.log(`Created backup: ${backupPath}`);
-            }
-          }
-          fs$1.writeFileSync(destPath, fileContent);
-          filesCopied++;
-        }
-      } catch (error) {
-        errors.push(`Failed to copy ${item.name}: ${error instanceof Error ? error.message : "Unknown error"}`);
-      }
-    }
-    return {
-      success: errors.length === 0,
-      filesCopied,
-      errors
-    };
-  } catch (error) {
-    errors.push(`Directory copy failed: ${error instanceof Error ? error.message : "Unknown error"}`);
-    return {
-      success: false,
-      filesCopied,
-      errors
-    };
-  }
-}
 class SummariesManager {
-  /**
-   * Helper function to generate conversation pair key (consistent with GameData)
-   */
-  static getConversationPairKey(characterId1, characterId2) {
-    const id1 = Number(characterId1);
-    const id2 = Number(characterId2);
-    // Always use the smaller ID first to ensure consistency
-    return id1 < id2 ? `${id1}_${id2}` : `${id2}_${id1}`;
-  }
   static writeSummaryJsonAtomic(filePath, summaries) {
     fs$1.mkdirSync(path.dirname(filePath), { recursive: true });
     const tempPath = `${filePath}.${process.pid}.${Date.now()}.tmp`;
@@ -5630,63 +5397,6 @@ class SummariesManager {
         }
       }
       
-      // Also process old format files (in root directory) for backward compatibility
-      const oldFormatFiles = entries.filter((dirent) => dirent.isFile() && dirent.name.endsWith(".json"));
-      for (const file of oldFormatFiles) {
-        const filePath = path.join(VOTC_SUMMARIES_DIR, file.name);
-        try {
-          const fileContent = fs$1.readFileSync(filePath, "utf8");
-          const summaries = JSON.parse(fileContent);
-          if (!Array.isArray(summaries) || summaries.length === 0) {
-            continue;
-          }
-          
-          // Extract character IDs from filename (format: id1_id2.json)
-          const pairKey = path.basename(file.name, ".json");
-          const [id1, id2] = pairKey.split("_");
-          
-          let playerName = null;
-          let characterName = null;
-          
-          if (summaries[0]) {
-            if (summaries[0].playerName) {
-              playerName = summaries[0].playerName;
-            }
-            if (summaries[0].characterName) {
-              characterName = summaries[0].characterName;
-            }
-          }
-          
-          let displayName;
-          if (playerName && characterName) {
-            displayName = `${playerName} ↔ ${characterName}`;
-          } else if (characterName) {
-            displayName = `${characterName} (旧格式)`;
-          } else {
-            displayName = `对话 ${id1}↔${id2} (旧格式)`;
-          }
-          
-          results.push({
-            playerId: pairKey,
-            playerName: displayName,
-            characterId: id2,
-            characterName: characterName || `角色 ${id2}`,
-            ownerId: Number(id1) || id1,
-            ownerName: playerName || `角色 ${id1}`,
-            counterpartId: Number(id2) || id2,
-            counterpartName: characterName || `角色 ${id2}`,
-            folderName: "旧格式",
-            conversationFile: file.name,
-            participantIds: [Number(id1), Number(id2)].filter(Number.isFinite),
-            participantNames: [playerName, characterName].filter(Boolean),
-            summaries,
-            filePath,
-            isOldPairedFormat: true
-          });
-        } catch (error) {
-          console.error(`Failed to read old format summaries from ${filePath}:`, error);
-        }
-      }
     } catch (error) {
       console.error("Failed to list summaries:", error);
     }
@@ -5699,9 +5409,7 @@ class SummariesManager {
   static findSummaryFilePath(playerId, characterId, playerName = null, characterName = null) {
     const result = {
       playerPerspectivePath: null,
-      characterPerspectivePath: null,
-      foundOldFormat: false,
-      oldFormatPath: null
+      characterPerspectivePath: null
     };
     
     // Try new format: character folders
@@ -5767,23 +5475,11 @@ class SummariesManager {
       }
     }
     
-    // Fall back to old paired format if new format not found
-    if (!result.playerPerspectivePath && !result.characterPerspectivePath) {
-      const pairKey = this.getConversationPairKey(playerId, characterId);
-      const oldPairedPath = path.join(VOTC_SUMMARIES_DIR, `${pairKey}.json`);
-      
-      if (fs$1.existsSync(oldPairedPath)) {
-        result.foundOldFormat = true;
-        result.oldFormatPath = oldPairedPath;
-      }
-    }
-    
     return result;
   }
   
   /**
-   * Get summaries for a specific character conversation
-   * Supports new format (character folders) and old formats for backward compatibility
+   * Get summaries for a specific Memory Engine 2.2 character conversation.
    */
   static async getSummariesForCharacter(playerId, characterId) {
     // Try new format first: look for character folders
@@ -5818,71 +5514,17 @@ class SummariesManager {
       }
     }
     
-    // Try old paired format (id1_id2.json in root)
-    function getConversationPairKey(id1, id2) {
-      const num1 = Number(id1);
-      const num2 = Number(id2);
-      return num1 < num2 ? `${num1}_${num2}` : `${num2}_${num1}`;
-    }
-    
-    const pairKey = getConversationPairKey(playerId, characterId);
-    const oldPairedPath = path.join(VOTC_SUMMARIES_DIR, `${pairKey}.json`);
-    
-    try {
-      if (fs$1.existsSync(oldPairedPath)) {
-        const fileContent = fs$1.readFileSync(oldPairedPath, "utf8");
-        const summaries = JSON.parse(fileContent);
-        return Array.isArray(summaries) ? summaries : [];
-      }
-    } catch (error) {
-      console.error(`Failed to get summaries from old paired format ${oldPairedPath}:`, error);
-    }
-    
-    // Try oldest format (playerId/characterId.json)
-    const oldestFormatPath = path.join(VOTC_SUMMARIES_DIR, playerId, `${characterId}.json`);
-    try {
-      if (fs$1.existsSync(oldestFormatPath)) {
-        const fileContent = fs$1.readFileSync(oldestFormatPath, "utf8");
-        const summaries = JSON.parse(fileContent);
-        return Array.isArray(summaries) ? summaries : [];
-      }
-    } catch (error) {
-      console.error(`Failed to get summaries from oldest format ${oldestFormatPath}:`, error);
-    }
-    
     return [];
   }
   /**
    * Update a specific summary's content
-   * Supports both new character folder format and old format
-   * Updates both mirror files in new format
+   * Updates both canonical owner-folder mirror files.
    */
   static async updateSummary(playerId, characterId, summaryIndex, newContent) {
     // Find the summary file(s)
     const paths = this.findSummaryFilePath(playerId, characterId);
     
-    if (paths.foundOldFormat) {
-      // Handle old format
-      const filePath = paths.oldFormatPath;
-      try {
-        const fileContent = fs$1.readFileSync(filePath, "utf8");
-        const summaries = JSON.parse(fileContent);
-        if (!Array.isArray(summaries) || summaryIndex < 0 || summaryIndex >= summaries.length) {
-          return { success: false, error: "Invalid summary index" };
-        }
-        summaries[summaryIndex].content = newContent;
-        this.writeSummaryJsonAtomic(filePath, summaries);
-        return { success: true };
-      } catch (error) {
-        console.error(`Failed to update summary in old format ${filePath}:`, error);
-        return {
-          success: false,
-          error: error instanceof Error ? error.message : "Unknown error"
-        };
-      }
-    }
-    
-    // Handle new format - need to update BOTH mirror files
+    // Update both owner-folder mirror files.
     const filesToUpdate = [];
     if (paths.playerPerspectivePath) {
       filesToUpdate.push(paths.playerPerspectivePath);
@@ -5931,39 +5573,13 @@ class SummariesManager {
   }
   /**
    * Delete a specific summary
-   * Supports both new character folder format and old format
-   * Deletes from both mirror files in new format
+   * Deletes from both canonical owner-folder mirror files.
    */
   static async deleteSummary(playerId, characterId, summaryIndex) {
     // Find the summary file(s)
     const paths = this.findSummaryFilePath(playerId, characterId);
     
-    if (paths.foundOldFormat) {
-      // Handle old format
-      const filePath = paths.oldFormatPath;
-      try {
-        const fileContent = fs$1.readFileSync(filePath, "utf8");
-        const summaries = JSON.parse(fileContent);
-        if (!Array.isArray(summaries) || summaryIndex < 0 || summaryIndex >= summaries.length) {
-          return { success: false, error: "Invalid summary index" };
-        }
-        summaries.splice(summaryIndex, 1);
-        if (summaries.length === 0) {
-          fs$1.unlinkSync(filePath);
-        } else {
-          fs$1.writeFileSync(filePath, JSON.stringify(summaries, null, "\t"));
-        }
-        return { success: true };
-      } catch (error) {
-        console.error(`Failed to delete summary from old format ${filePath}:`, error);
-        return {
-          success: false,
-          error: error instanceof Error ? error.message : "Unknown error"
-        };
-      }
-    }
-    
-    // Handle new format - need to delete from BOTH mirror files
+    // Delete from both owner-folder mirror files.
     const filesToUpdate = [];
     if (paths.playerPerspectivePath) {
       filesToUpdate.push(paths.playerPerspectivePath);
@@ -6004,8 +5620,7 @@ class SummariesManager {
   }
   /**
    * Delete all summaries for a character conversation
-   * Supports both new character folder format and old format
-   * Deletes both mirror files in new format
+   * Deletes both canonical owner-folder mirror files.
    */
   static async deleteCharacterSummaries(playerId, characterId) {
     let success = false;
@@ -6013,19 +5628,7 @@ class SummariesManager {
     // Find the summary file(s)
     const paths = this.findSummaryFilePath(playerId, characterId);
     
-    if (paths.foundOldFormat) {
-      // Handle old format
-      try {
-        if (fs$1.existsSync(paths.oldFormatPath)) {
-          fs$1.unlinkSync(paths.oldFormatPath);
-          success = true;
-        }
-      } catch (error) {
-        console.error(`Failed to delete old format summaries at ${paths.oldFormatPath}:`, error);
-      }
-    }
-    
-    // Handle new format - delete BOTH mirror files
+    // Delete both owner-folder mirror files.
     if (paths.playerPerspectivePath) {
       try {
         if (fs$1.existsSync(paths.playerPerspectivePath)) {
@@ -6058,8 +5661,7 @@ class SummariesManager {
     }
   }
   /**
-   * Get character name from summary file (with fallback to ID)
-   * Supports both new character folder format and old format
+   * Get a character name from canonical owner-folder summaries.
    */
   static async getCharacterNameFromFile(playerId, characterId) {
     // Find the summary file(s)
@@ -6073,10 +5675,6 @@ class SummariesManager {
     if (paths.characterPerspectivePath) {
       filesToCheck.push(paths.characterPerspectivePath);
     }
-    if (paths.foundOldFormat) {
-      filesToCheck.push(paths.oldFormatPath);
-    }
-    
     for (const filePath of filesToCheck) {
       try {
         if (fs$1.existsSync(filePath)) {
@@ -6094,158 +5692,6 @@ class SummariesManager {
     return `Character ID: ${characterId}`;
   }
   
-  /**
-   * Migrate all old format summaries (playerId/characterId.json) to new format (id1_id2.json)
-   * This function merges summaries for the same character pair regardless of who initiated
-   */
-  static async migrateToNewFormat() {
-    const results = {
-      success: false,
-      migratedFiles: 0,
-      mergedPairs: 0,
-      errors: [],
-      skippedFiles: 0
-    };
-    
-    try {
-      if (!fs$1.existsSync(VOTC_SUMMARIES_DIR)) {
-        results.errors.push("Summaries directory does not exist");
-        return results;
-      }
-      
-      // Get all subdirectories (old format playerID directories)
-      const entries = fs$1.readdirSync(VOTC_SUMMARIES_DIR, { withFileTypes: true });
-      const playerDirs = entries.filter((dirent) => dirent.isDirectory()).map((dirent) => dirent.name);
-      
-      if (playerDirs.length === 0) {
-        results.success = true;
-        results.errors.push("No old format directories found");
-        return results;
-      }
-      
-      console.log(`Found ${playerDirs.length} player directories to migrate`);
-      
-      // Track which pairs we've already processed to avoid duplicates
-      const processedPairs = new Set();
-      const pairSummaries = new Map(); // Map of pairKey -> summaries array
-      
-      // First pass: collect all summaries by pair key
-      for (const playerId of playerDirs) {
-        const playerPath = path.join(VOTC_SUMMARIES_DIR, playerId);
-        
-        try {
-          const characterFiles = fs$1.readdirSync(playerPath).filter((file) => file.endsWith(".json"));
-          
-          for (const characterFile of characterFiles) {
-            const characterId = path.basename(characterFile, ".json");
-            const oldFilePath = path.join(playerPath, characterFile);
-            
-            try {
-              // Read old format file
-              const fileContent = fs$1.readFileSync(oldFilePath, "utf8");
-              const summaries = JSON.parse(fileContent);
-              
-              if (!Array.isArray(summaries) || summaries.length === 0) {
-                results.skippedFiles++;
-                continue;
-              }
-              
-              // Generate pair key
-              const pairKey = this.getConversationPairKey(playerId, characterId);
-              
-              // Collect summaries for this pair
-              if (!pairSummaries.has(pairKey)) {
-                pairSummaries.set(pairKey, []);
-              }
-              
-              // Add summaries with source info
-              for (const summary of summaries) {
-                pairSummaries.get(pairKey).push({
-                  ...summary,
-                  _sourcePlayerId: playerId,
-                  _sourceCharacterId: characterId
-                });
-              }
-              
-              console.log(`Collected ${summaries.length} summaries from ${playerId}/${characterId} for pair ${pairKey}`);
-              
-            } catch (error) {
-              results.errors.push(`Failed to read ${oldFilePath}: ${error.message}`);
-              console.error(`Error reading ${oldFilePath}:`, error);
-            }
-          }
-        } catch (error) {
-          results.errors.push(`Failed to process player directory ${playerId}: ${error.message}`);
-          console.error(`Error processing player directory ${playerId}:`, error);
-        }
-      }
-      
-      // Second pass: merge and write to new format
-      for (const [pairKey, allSummaries] of pairSummaries.entries()) {
-        const newFormatPath = path.join(VOTC_SUMMARIES_DIR, `${pairKey}.json`);
-        
-        try {
-          // Check if new format file already exists
-          let existingSummaries = [];
-          if (fs$1.existsSync(newFormatPath)) {
-            const existingContent = fs$1.readFileSync(newFormatPath, "utf8");
-            existingSummaries = JSON.parse(existingContent);
-            if (!Array.isArray(existingSummaries)) {
-              existingSummaries = [];
-            }
-          }
-          
-          // Create a set of existing summary keys to avoid duplicates
-          const existingKeys = new Set();
-          existingSummaries.forEach((summary) => {
-            const key = `${summary.date}_${summary.totalDays}_${summary.content?.substring(0, 100) || ""}`;
-            existingKeys.add(key);
-          });
-          
-          // Filter out duplicates from old summaries
-          const newSummaries = allSummaries.filter((summary) => {
-            const key = `${summary.date}_${summary.totalDays}_${summary.content?.substring(0, 100) || ""}`;
-            return !existingKeys.has(key);
-          });
-          
-          // Merge and sort by date (most recent first)
-          const mergedSummaries = [...newSummaries, ...existingSummaries].sort((a, b) => {
-            if (a.totalDays !== undefined && b.totalDays !== undefined) {
-              return b.totalDays - a.totalDays;
-            }
-            return b.date.localeCompare(a.date);
-          });
-          
-          // Remove source tracking fields
-          const cleanedSummaries = mergedSummaries.map((summary) => {
-            const { _sourcePlayerId, _sourceCharacterId, ...cleanSummary } = summary;
-            return cleanSummary;
-          });
-          
-          // Write to new format file
-          fs$1.writeFileSync(newFormatPath, JSON.stringify(cleanedSummaries, null, "\t"));
-          
-          results.migratedFiles++;
-          results.mergedPairs++;
-          
-          console.log(`Migrated pair ${pairKey}: ${newSummaries.length} new summaries + ${existingSummaries.length} existing = ${cleanedSummaries.length} total`);
-          
-        } catch (error) {
-          results.errors.push(`Failed to write ${newFormatPath}: ${error.message}`);
-          console.error(`Error writing ${newFormatPath}:`, error);
-        }
-      }
-      
-      results.success = true;
-      console.log(`Migration complete: ${results.migratedFiles} files migrated, ${results.mergedPairs} pairs processed`);
-      
-    } catch (error) {
-      results.errors.push(`Migration failed: ${error.message}`);
-      console.error("Migration error:", error);
-    }
-    
-    return results;
-  }
 }
 const updaterTranslations = {
   en: {
@@ -9537,17 +8983,6 @@ const setupIpcHandlers = () => {
     settingsRepository.saveSummaryPromptSettings(settings);
     return true;
   });
-  electron.ipcMain.handle("llm:importLegacySummaries", async () => {
-    try {
-      return await importLegacySummaries();
-    } catch (error) {
-      console.error("Import legacy summaries error:", error);
-      return {
-        success: false,
-        message: `Import failed: ${error instanceof Error ? error.message : "Unknown error"}`
-      };
-    }
-  });
   console.log("Setting up action system IPC handlers...");
   electron.ipcMain.handle("actions:reload", async () => {
     try {
@@ -9900,22 +9335,6 @@ const setupIpcHandlers = () => {
       };
     }
   });
-  electron.ipcMain.handle("conversation:acceptSummaryImport", async (_, { characterId, sourcePlayerId }) => {
-    const conversation = conversationManager.getCurrentConversation();
-    if (!conversation) throw new Error("No active conversation");
-    await conversation.acceptSummaryImport(characterId, sourcePlayerId);
-    return { success: true };
-  });
-  electron.ipcMain.handle("conversation:declineSummaryImport", async (_, { characterId, sourcePlayerId }) => {
-    const conversation = conversationManager.getCurrentConversation();
-    if (!conversation) throw new Error("No active conversation");
-    await conversation.declineSummaryImport(characterId, sourcePlayerId);
-    return { success: true };
-  });
-  electron.ipcMain.handle("conversation:openSummaryFile", async (_, { filePath }) => {
-    await electron.shell.openPath(filePath);
-    return { success: true };
-  });
   electron.ipcMain.handle("conversation:openSummariesFolder", async () => {
     try {
       await electron.shell.openPath(VOTC_SUMMARIES_DIR);
@@ -10033,23 +9452,6 @@ const setupIpcHandlers = () => {
     } catch (error) {
       console.error("Failed to delete character summaries:", error);
       return { success: false, error: error.message || "Unknown error" };
-    }
-  });
-  electron.ipcMain.handle("conversation:migrateSummariesToNewFormat", async () => {
-    try {
-      console.log("Starting summaries migration to new format...");
-      const result = await SummariesManager.migrateToNewFormat();
-      console.log("Migration completed:", result);
-      return result;
-    } catch (error) {
-      console.error("Failed to migrate summaries:", error);
-      return { 
-        success: false, 
-        migratedFiles: 0,
-        mergedPairs: 0,
-        errors: [error.message || "Unknown error"],
-        skippedFiles: 0
-      };
     }
   });
   electron.ipcMain.handle("conversation:approveActions", async (_, { approvalEntryId }) => {

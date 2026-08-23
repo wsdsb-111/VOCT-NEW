@@ -23,6 +23,44 @@ function getCharacterStorageDirectoryName(character = {}, fallbackName = "") {
   return `${id}_${sanitizeStorageName(getCharacterPersonalName(character, fallbackName)) || "unknown"}`;
 }
 
+function resolveSummaryParticipants({ playerId, participantIds = [], currentCharacters, participantProfiles = [] } = {}) {
+  const profilesById = new Map();
+  for (const profile of participantProfiles || []) {
+    const id = Number(profile?.id);
+    if (Number.isFinite(id)) profilesById.set(id, profile);
+  }
+  const participants = [];
+  const seenIds = new Set();
+  const add = (value) => {
+    const id = Number(value);
+    if (!Number.isFinite(id) || seenIds.has(id)) return;
+    const current = currentCharacters?.get(id);
+    const profile = current || profilesById.get(id);
+    if (!profile) return;
+    seenIds.add(id);
+    participants.push(profile.shortName ? profile : {
+      ...profile,
+      id,
+      shortName: getCharacterPersonalName(profile, profile.name)
+    });
+  };
+  add(playerId);
+  for (const id of participantIds || []) add(id);
+  return participants;
+}
+
+function buildDirectedParticipantPairs(participants = [], excludedOwnerIds = []) {
+  const excluded = excludedOwnerIds instanceof Set ? excludedOwnerIds : new Set((excludedOwnerIds || []).map(Number));
+  const pairs = [];
+  for (let left = 0; left < participants.length; left++) {
+    for (let right = left + 1; right < participants.length; right++) {
+      if (!excluded.has(Number(participants[left].id))) pairs.push({ owner: participants[left], counterpart: participants[right] });
+      if (!excluded.has(Number(participants[right].id))) pairs.push({ owner: participants[right], counterpart: participants[left] });
+    }
+  }
+  return pairs;
+}
+
 function getCharacterMentionAliases(character = {}) {
   const aliases = new Set();
   const add = (value) => {
@@ -55,6 +93,8 @@ function getCharacterMentionAliases(character = {}) {
 module.exports = {
   getCharacterPersonalName,
   getCharacterStorageDirectoryName,
+  resolveSummaryParticipants,
+  buildDirectedParticipantPairs,
   getCharacterMentionAliases,
   sanitizeStorageName
 };

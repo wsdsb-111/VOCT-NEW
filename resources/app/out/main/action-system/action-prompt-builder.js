@@ -10,7 +10,7 @@ class ActionPromptBuilder {
     return this;
   }
   static buildActionCacheAnchor() {
-    return `VOTC_ACTION_CACHE_ANCHOR_v7
+    return `VOTC_ACTION_CACHE_ANCHOR_v10
 You are a CK3 game-state action selector. Return only valid JSON that matches the supplied schema. Use only listed actions, action IDs, targets and arguments. The exact candidate message near the end is authoritative; earlier messages are context only. Select an action only when that candidate explicitly describes the corresponding state change or visible pose as happening now or already completed. The sole intention exception is an explicitly initiated operational CK3 scheme when startPersonalScheme is listed. If no listed action exactly matches it, return an empty actions array. Never replace a requested state change with an emotion or pose. Do not output prose, explanations, or code fences.
 
 Stable action selection rules:
@@ -21,11 +21,14 @@ Stable action selection rules:
 - For imprisonment, target is the jailor. Use prisonType dungeon unless house arrest is explicitly stated.
 - Scene combat records an attack attempt only; add injury or death actions only when the exact message explicitly states that result.
 - Intimate contact records the described contact only; use intercourse solely when the exact message clearly states that intercourse was completed.
-- The candidate may include deterministic semantic evidence and an allowed-script shortlist. Treat that shortlist as a hard boundary: select only a listed allowed script, never upgrade or substitute it. It is the second stage after explicit-action detection.
+- Every current reply reaches semantic selection. Locally detected categories are hints; when an allowed-script shortlist is present, treat it as a hard boundary and never upgrade or substitute it. When no shortlist is present, decide from the exact current reply and return an empty array unless a listed action clearly happened.
+- Memory blocks, summaries and earlier messages may resolve identity and context, but they never prove that an action happened in the current turn. Only the Exact candidate evidence can trigger an action.
 - A proposal, plan, threat, question, wish, or hypothetical statement is not a completed action. Exception: deliberately beginning a concrete CK3 personal scheme may use startPersonalScheme, but vague threats and hypotheticals may not.
+- First classify the exact Positive Evidence as CURRENT_COMPLETED_ACTION or NON_ACTION. Speech about an action, an order to act, remembered/reported action, attempted-but-failed action, and pure emotion without a declared state transition are NON_ACTION.
+- Only after CURRENT_COMPLETED_ACTION is established may you map the smallest exact listed action. Never infer a consequence: attack does not imply injury or death; affection does not imply friendship or lovers; intimate contact does not imply intercourse; an order or threat does not imply imprisonment, payment, war, or title change.
 
 Stable output contract:
-- Return {"actions":[]} only when no listed action can encode any detected category in the exact candidate message.
+- Return {"actions":[]} whenever the Positive Evidence is NON_ACTION or does not itself complete a listed action, even if categories or candidate scripts are supplied.
 - When a detected category has a matching listed scene action, select the smallest matching action; do not treat it as optional merely because its effect is visual or roleplay-only.
 - Otherwise return only the smallest set of listed actions directly completed in that exact candidate message.
 - Do not add a reaction, opinion change, emotion, pose, or no-op as a substitute or side effect.`;
@@ -131,7 +134,10 @@ Allowed scripts after semantic validation: ${semanticAllowedActions.join(", ") |
 Speaker: ${candidateSpeaker} (${candidateRole})
 Positive Evidence: ${JSON.stringify(candidateText)}
 
-Analyze only this Positive Evidence. Use recent messages only to resolve pronouns, amount, source, and target. Choose only actions belonging to the detected categories and, when present, the semantic allowed-script shortlist. A detected category has already passed the deterministic explicit-action gate: if a listed action encodes it, select that action instead of returning an empty array. If the speaker is PLAYER, set isPlayerSource=true for a matching scene action when that argument exists. setEmotion is valid only for a visible-pose or drinking category.`;
+Step 1 — occurrence adjudication: classify only this Positive Evidence as CURRENT_COMPLETED_ACTION or NON_ACTION. Questions, commands, requests, plans, threats, hypotheticals, memories, reports, ordinary dialogue and failed attempts are NON_ACTION. If NON_ACTION, return {"actions":[]} immediately.
+Step 2 — exact mapping: only for CURRENT_COMPLETED_ACTION, choose the smallest listed action that the evidence itself completes. Never infer an unstated result or relationship transition.
+
+Use recent messages only to resolve pronouns, amount, source, and target. Choose only actions belonging to the semantic routing categories and, when present, the semantic allowed-script shortlist. The categories are only search space, never proof. If the speaker is PLAYER, set isPlayerSource=true for a matching scene action when that argument exists. setEmotion is valid only for a visible-pose or drinking category.`;
     const outroBlock = `Given everything above, select the actions (if any) that should be executed right now.
 
 The only action source is ${npc.fullName} (id=${npc.id}), who authored the exact candidate. Use isPlayerSource=true only when the listed schema exposes it and this source is the player.
@@ -219,4 +225,3 @@ Respect all argument types, constraints, and valid targets.`;
 }
 
 module.exports = { ActionPromptBuilder };
-
