@@ -6,7 +6,7 @@
 
 1. [项目 README](../README.md)：运行环境、配置方式和当前版本基线。
 2. [CHANGELOG.md](../CHANGELOG.md)：按版本查看变更入口和对应的详细文档。
-3. [README_摘要系统.md](README_摘要系统.md)：Memory Engine 2.2 的存储、召回、写入和生命周期规则。
+3. [README_摘要系统.md](README_摘要系统.md)：Memory Engine 2.3 的存储、召回、写入和生命周期规则。
 4. [V7阶段优化记录.md](V7阶段优化记录.md)：V7/V7.x 的连续开发记录。
 5. [V6阶段优化记录.md](V6阶段优化记录.md)：V6/V6.x 的动作系统与基础设施记录。
 6. 需要核对具体方案时，再阅读版本设计文档和实施报告。
@@ -16,12 +16,13 @@
 ### 架构与运行规则
 
 - [VOTC_v7.7_main.js架构拆分与迁移清单.md](VOTC_v7.7_main.js架构拆分与迁移清单.md)：V7.7 Provider Service、Provider 与 IPC 分阶段拆分范围、依赖边界和验证清单。
-- [README_摘要系统.md](README_摘要系统.md)：Memory Engine 2.2 和人物目录摘要系统。
+- [README_摘要系统.md](README_摘要系统.md)：Memory Engine 2.3 和人物目录视角摘要系统。
 - [V7阶段优化记录.md](V7阶段优化记录.md)：V7.0 至当前 V7.x 的功能、修复和验收边界。
 - [V6阶段优化记录.md](V6阶段优化记录.md)：V6.2 至 V6.9.1 的动作系统、缓存和架构记录。
 
 ### 版本设计与实施报告
 
+- [VOTC_v7.7.1_Memory_Engine_2.3实施记录.md](VOTC_v7.7.1_Memory_Engine_2.3实施记录.md)
 - [VOTC_v7.7_main.js架构拆分与迁移清单.md](VOTC_v7.7_main.js架构拆分与迁移清单.md)
 - [VOTC_v7.2_人物目录定向召回与P0收口设计方案.md](VOTC_v7.2_人物目录定向召回与P0收口设计方案.md)
 - [VOTC_v7.3_动态称谓身份与死亡记忆生命周期.md](VOTC_v7.3_动态称谓身份与死亡记忆生命周期.md)

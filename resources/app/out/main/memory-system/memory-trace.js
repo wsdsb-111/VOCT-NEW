@@ -15,6 +15,10 @@ class MemoryTrace {
       type: details.type || null,
       score: Number.isFinite(details.score) ? details.score : null,
       reason: details.reason || null,
+      alias: details.alias || null,
+      characterIds: Array.isArray(details.characterIds) ? [...details.characterIds] : [],
+      patchInserted: details.patchInserted === true,
+      firstChangedBlock: details.firstChangedBlock || null,
       characterId: details.characterId ?? null,
       conversationId: details.conversationId || null
     };

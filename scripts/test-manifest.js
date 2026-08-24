@@ -65,6 +65,7 @@ const releaseChecks = [
   { group: "v7.6.1-recovery-race", script: "test-v7.6.1-recovery-race.js" },
   { group: "v7.7-main-modules", script: "test-v7.7-main-modules.js" },
   { group: "v7.7-provider-service", script: "test-v7.7-provider-service.js" },
+  { group: "v7.7.1-memory-engine-2.3", script: "test-v7.7.1-memory-engine-2.3.js" },
   { group: "usage-analytics-retention", script: "test-usage-analytics-retention.js" },
   { group: "usage-analytics-reconciliation", script: "test-usage-analytics-reconciliation.js" },
   { group: "test-manifest-coverage", script: "test-test-manifest.js" },

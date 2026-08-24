@@ -80,7 +80,7 @@ function getCharacterMentionAliases(character = {}) {
   const titleText = [character.primaryTitle, character.shortName, character.fullName, character.titleRankConcept]
     .map(cleanText).join(" ").toLowerCase();
   if (character.allowDerivedHonorifics !== false && /皇帝|天子|帝国|emperor|kaiser|basileus|imperator|concept_emperor/.test(titleText)) {
-    for (const alias of ["陛下", "皇帝", "天子"]) add(alias);
+    for (const alias of ["陛下", "皇帝", "天子", "官家"]) add(alias);
   }
   if (character.allowDerivedHonorifics !== false && /皇后|empress/.test(titleText)) {
     for (const alias of ["陛下", "皇后"]) add(alias);

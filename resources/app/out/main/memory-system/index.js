@@ -15,6 +15,7 @@ const { verifyDirectedSummaryPersistence } = require("./summary-folder-verifier"
 const summaryCatalog = require("./summary-catalog");
 const characterIdentity = require("./character-identity");
 const memorySchema = require("./memory-schema");
+const perspectiveProjector = require("./perspective-projector");
 
 module.exports = {
   ...memoryTypes,
@@ -30,6 +31,7 @@ module.exports = {
   MentionTracker,
   FinalizationCoordinator,
   verifyDirectedSummaryPersistence,
+  ...perspectiveProjector,
   ...characterIdentity,
   ...summaryCatalog
 };

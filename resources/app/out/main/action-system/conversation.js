@@ -204,6 +204,7 @@ class Conversation {
   async getMemoryContextFor(npc, contextLimit = null) {
     if (!memoryEngine || !npc || !this.gameData) return null;
     if (Number(npc.id) === Number(this.gameData.playerID)) return null;
+    if (memoryEngine.isSummaryOwnerDeceased(npc.id)) memoryEngine.reviveSummaryOwner(npc.id);
     const limit = contextLimit || await llmManager.getCurrentContextLength() || 1e4;
     const history = this.getHistory();
     const activeParticipantIds = this.getActiveConversationCharacters().map((character) => character.id);
@@ -242,6 +243,7 @@ class Conversation {
       mentionedEntityIds: mentionedCharacterIds,
       mentionedEntityNames,
       mentionedRecallCache: memoryState.mentionedRecallCache,
+      sessionRecallCache: memoryState.responderRecallCache,
       directCounterpartIds: activeParticipantIds.filter((characterId) => characterId !== npc.id),
       ownerFolderMemories: memoryState.mentionProfileCache.ownerFolderMemoriesById.get(Number(npc.id)) || [],
       currentTotalDays: this.gameData.totalDays,
@@ -299,9 +301,9 @@ class Conversation {
     const deactivated = actionSystem.participantLifecycle.deactivate(this, characterId, reason);
     if (reason === "dead" && Number(characterId) !== Number(this.gameData?.playerID)) {
       try {
-        memoryEngine?.deleteOwnedSummaryFolders(characterId);
+        memoryEngine?.markSummaryOwnerDeceased(characterId, { reason });
       } catch (error) {
-        console.error(`[Memory] Failed to remove summary folders owned by dead NPC ${characterId}:`, error);
+        console.error(`[Memory] Failed to mark summary owner ${characterId} as deceased:`, error);
       }
     }
     return deactivated;
@@ -824,7 +826,8 @@ class Conversation {
         return this.gameData.saveCharactersSummaries(finalSummary, participantIds, {
           finalizationId: context.finalizationId,
           excludedOwnerIds: context.excludedSummaryOwnerIds,
-          participantProfiles: context.participants
+          participantProfiles: context.participants,
+          directedSummaries: context.directedSummaries
         });
       },
       requestSummary: async (summaryPrompt) => {
@@ -844,7 +847,8 @@ class Conversation {
         return this.gameData.saveCharactersSummaries(finalSummary, participantIds, {
           finalizationId: context.finalizationId,
           excludedOwnerIds: context.excludedSummaryOwnerIds,
-          participantProfiles: context.participants
+          participantProfiles: context.participants,
+          directedSummaries: context.directedSummaries
         });
       }
     });

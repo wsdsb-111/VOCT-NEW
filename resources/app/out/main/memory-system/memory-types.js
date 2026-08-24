@@ -73,7 +73,9 @@ function createMemoryRecord(input = {}) {
         primaryTitle: profile?.primaryTitle || null,
         heldCourtAndCouncilPositions: profile?.heldCourtAndCouncilPositions || null,
         titleRankConcept: profile?.titleRankConcept || null
-      })).filter((profile) => Number.isFinite(profile.id)) : []
+      })).filter((profile) => Number.isFinite(profile.id)) : [],
+      perspectiveMemoryIds: Array.isArray(provenance.perspectiveMemoryIds) ? [...new Set(provenance.perspectiveMemoryIds.map(String).filter(Boolean))] : [],
+      projectionHash: provenance.projectionHash || null
     },
     relationshipImpact: input.relationshipImpact && typeof input.relationshipImpact === "object" ? input.relationshipImpact : null,
     unresolved: input.unresolved === true || type === "unresolved",

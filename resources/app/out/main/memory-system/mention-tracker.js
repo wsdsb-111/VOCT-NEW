@@ -2,11 +2,19 @@
 
 const { getCharacterMentionAliases } = require("./character-identity");
 
+const UNIQUE_TITLE_TERMS = new Set(["陛下", "殿下", "阁下", "官家", "皇帝", "皇后", "太上皇", "太子", "国王", "女王"]);
+
 function uniqueNumericIds(values) {
   return [...new Set((values || []).map(Number).filter(Number.isFinite))];
 }
 
 class MentionTracker {
+  constructor({ onUnresolved = null } = {}) {
+    this.onUnresolved = typeof onUnresolved === "function" ? onUnresolved : null;
+    this.lastAmbiguousAliases = [];
+    this.lastScanRecentCharacterId = null;
+  }
+
   createState() {
     return { processedThroughIndex: 0, lastProcessedMessageKey: null, mentionedCharacterIds: [] };
   }
@@ -27,6 +35,10 @@ class MentionTracker {
         ownersByAlias.get(name).add(id);
       }
     }
+    this.lastAmbiguousAliases = [...ownersByAlias.entries()]
+      .filter(([, ids]) => ids.size > 1)
+      .map(([name, ids]) => ({ name, characterIds: [...ids].sort((left, right) => left - right) }))
+      .sort((left, right) => right.name.length - left.name.length || left.name.localeCompare(right.name));
     return [...ownersByAlias.entries()]
       .filter(([, ids]) => ids.size === 1)
       .map(([name, ids]) => ({ name, id: [...ids][0] }))
@@ -40,20 +52,42 @@ class MentionTracker {
     return !/[A-Za-z0-9_]/.test(before) && !/[A-Za-z0-9_]/.test(after);
   }
 
-  findMentionedCharacterIds(history = [], { candidates = [], excludedIds = [] } = {}) {
+  hasValidChineseBoundary(content, start, name) {
+    if (UNIQUE_TITLE_TERMS.has(name)) return true;
+    if (/[A-Za-z0-9]/.test(name)) return this.hasValidBoundary(content, start, name);
+    if (name.length >= 2) return true;
+    const before = start > 0 ? content[start - 1] : "";
+    const after = start + name.length < content.length ? content[start + name.length] : "";
+    const boundary = /[\s，。！？、；：,.!?;:“”‘’（）()【】\[\]…—]/;
+    const beforeCue = /[向问与和同对见请叫称找是乃]/;
+    const afterCue = /[说道问答称来去的啊呀呢吗吧]/;
+    return (!before || boundary.test(before) || beforeCue.test(before)) && (!after || boundary.test(after) || afterCue.test(after));
+  }
+
+  recordUnresolved(alias, reason, characterIds = []) {
+    const entry = { alias, reason, characterIds: uniqueNumericIds(characterIds) };
+    this.onUnresolved?.(entry);
+    return entry;
+  }
+
+  findMentionedCharacterIds(history = [], { candidates = [], excludedIds = [], recentCharacterId = null } = {}) {
     const excluded = new Set(uniqueNumericIds(excludedIds));
     const aliases = this.buildAliases(candidates).filter((alias) => !excluded.has(alias.id));
     const mentioned = [];
     const seen = new Set();
 
+    let recentId = Number.isFinite(Number(recentCharacterId)) ? Number(recentCharacterId) : null;
     for (const message of history || []) {
       const content = typeof message?.content === "string" ? message.content : "";
       if (!content) continue;
+      for (const ambiguous of this.lastAmbiguousAliases) {
+        if (content.includes(ambiguous.name)) this.recordUnresolved(ambiguous.name, "ambiguous_alias", ambiguous.characterIds);
+      }
       const matches = [];
       for (const alias of aliases) {
         let start = content.indexOf(alias.name);
         while (start !== -1) {
-          if (this.hasValidBoundary(content, start, alias.name)) {
+          if (this.hasValidChineseBoundary(content, start, alias.name)) {
             matches.push({ start, end: start + alias.name.length, ...alias });
           }
           start = content.indexOf(alias.name, start + alias.name.length);
@@ -61,6 +95,7 @@ class MentionTracker {
       }
       matches.sort((left, right) => left.start - right.start || right.name.length - left.name.length);
       const occupied = [];
+      let lastMessageMentionId = null;
       for (const match of matches) {
         if (occupied.some(([start, end]) => match.start < end && match.end > start)) continue;
         occupied.push([match.start, match.end]);
@@ -68,8 +103,21 @@ class MentionTracker {
           seen.add(match.id);
           mentioned.push(match.id);
         }
+        lastMessageMentionId = match.id;
+      }
+      if (lastMessageMentionId != null) recentId = lastMessageMentionId;
+      if (/(?:那个人|那人|此人)/.test(content)) {
+        if (recentId != null && !excluded.has(recentId)) {
+          if (!seen.has(recentId)) {
+            seen.add(recentId);
+            mentioned.push(recentId);
+          }
+        } else {
+          this.recordUnresolved("那个人", "recent_third_person_unresolved");
+        }
       }
     }
+    this.lastScanRecentCharacterId = recentId;
     return mentioned;
   }
 
@@ -83,10 +131,11 @@ class MentionTracker {
       target.mentionedCharacterIds = [];
     }
 
-    const newlyMentioned = this.findMentionedCharacterIds(history.slice(cursor), { candidates, excludedIds });
+    const newlyMentioned = this.findMentionedCharacterIds(history.slice(cursor), { candidates, excludedIds, recentCharacterId: target.recentThirdPersonCharacterId });
     target.mentionedCharacterIds = uniqueNumericIds([...(target.mentionedCharacterIds || []), ...newlyMentioned]);
     target.processedThroughIndex = history.length;
     target.lastProcessedMessageKey = history.length > 0 ? this.getMessageKey(history[history.length - 1], history.length - 1) : null;
+    target.recentThirdPersonCharacterId = this.lastScanRecentCharacterId;
     delete target.processedMessageKeys;
 
     const excluded = new Set(uniqueNumericIds(excludedIds));

@@ -40,6 +40,7 @@ class MemoryStore {
       characters: path.join(baseDir, "characters"),
       pairs: path.join(baseDir, "pairs"),
       knowledge: path.join(baseDir, "knowledge"),
+      ownerStatus: path.join(baseDir, "owner-status"),
       recovery: recoveryDir || path.join(baseDir, "recovery"),
       index: path.join(baseDir, "index.json")
     };
@@ -48,7 +49,7 @@ class MemoryStore {
   }
 
   ensureDirectories() {
-    for (const directory of [this.baseDir, this.paths.episodes, this.paths.characters, this.paths.pairs, this.paths.knowledge, this.paths.recovery]) {
+    for (const directory of [this.baseDir, this.paths.episodes, this.paths.characters, this.paths.pairs, this.paths.knowledge, this.paths.ownerStatus, this.paths.recovery]) {
       fs.mkdirSync(directory, { recursive: true });
     }
   }
@@ -279,6 +280,36 @@ class MemoryStore {
     return { removedFolderCount: folders.length };
   }
 
+  summaryOwnerStatusPath(characterId) {
+    return path.join(this.paths.ownerStatus, `${Number(characterId)}.json`);
+  }
+
+  markSummaryOwnerDeceased(characterId, details = {}) {
+    const numericId = Number(characterId);
+    if (!Number.isFinite(numericId)) throw new Error("character_id_required");
+    const record = {
+      schemaVersion: CURRENT_MEMORY_SCHEMA_VERSION,
+      characterId: numericId,
+      status: "deceased",
+      reason: details.reason || "dead",
+      markedAt: details.markedAt || new Date().toISOString()
+    };
+    this.writeJson(this.summaryOwnerStatusPath(numericId), record);
+    return record;
+  }
+
+  reviveSummaryOwner(characterId) {
+    const numericId = Number(characterId);
+    if (!Number.isFinite(numericId)) throw new Error("character_id_required");
+    const filePath = this.summaryOwnerStatusPath(numericId);
+    if (fs.existsSync(filePath)) fs.unlinkSync(filePath);
+    return { characterId: numericId, status: "active" };
+  }
+
+  isSummaryOwnerDeceased(characterId) {
+    return this.readJson(this.summaryOwnerStatusPath(characterId), null)?.status === "deceased";
+  }
+
   getSummaryFolderProfile(characterId) {
     const numericId = Number(characterId);
     if (!Number.isFinite(numericId) || !this.summaryFoldersDir || !fs.existsSync(this.summaryFoldersDir)) return null;
@@ -350,7 +381,7 @@ class MemoryStore {
             subjects: participants.filter((id) => id !== ownerId),
             content: summary.content,
             canonicalText: summary.content,
-            importance: 0.65,
+            importance: summary.pinned === true ? 0.95 : 0.65,
             confidence: 0.9,
             source: "imported",
             visibility: "known_group",
@@ -367,10 +398,13 @@ class MemoryStore {
               counterpartIds: [counterpartId],
               counterpartNames: [counterpartName],
               participantProfiles: summaryProfiles,
-              extractionMode: "folder_summary_v2_1",
+              extractionMode: summary.engineVersion === "2.3" ? "folder_summary_v2_3" : "folder_summary_v2_1",
+              perspectiveMemoryIds: summary.perspectiveMemoryIds || [],
+              projectionHash: summary.projectionHash || null,
               messageIds: [],
               speakerIds: []
-            }
+            },
+            status: summary.open === true ? "open" : null
           }));
         }
       }

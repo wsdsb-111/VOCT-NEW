@@ -13,11 +13,11 @@ globalThis.actionRegistry = { getAllActions: () => [] };
 const ActionEngine = getActionEngine();
 globalThis.ActionEngine = ActionEngine;
 const Conversation = getConversationClass();
-const removedSummaryOwners = [];
+const tombstonedSummaryOwners = [];
 Conversation.configure({
   memoryEngine: {
     markParticipantLeft() {},
-    deleteOwnedSummaryFolders: (characterId) => removedSummaryOwners.push(characterId)
+    markSummaryOwnerDeceased: (characterId) => tombstonedSummaryOwners.push(characterId)
   }
 });
 
@@ -37,7 +37,7 @@ conversation.getActiveConversationCharacters = Conversation.prototype.getActiveC
 conversation.referenceContext.observeMessage({ message: conversation.messages[0], speaker: deadNpc, characters: conversation.gameData.characters.values() });
 
 Conversation.prototype.markParticipantInactive.call(conversation, deadNpc.id, "dead");
-assert.deepStrictEqual(removedSummaryOwners, [deadNpc.id], "dead NPC lifecycle must delete only that NPC's owned summary folder");
+assert.deepStrictEqual(tombstonedSummaryOwners, [deadNpc.id], "dead NPC lifecycle must tombstone only that NPC's summary ownership");
 assert(!conversation.npcQueue.some((npc) => npc.id === deadNpc.id), "dead participant must be removed from an already-built responder queue");
 assert(!conversation.referenceContext.activeParticipantIds.includes(deadNpc.id), "dead participant must leave reference resolution candidates");
 assert.deepStrictEqual(Conversation.prototype.getNpcList.call(conversation).map((npc) => npc.id), [liveNpc.id], "only the dead NPC must stop participating");
@@ -51,7 +51,7 @@ Conversation.prototype.markParticipantInactive.call({
   nextId: 0,
   invalidateApprovalsForCharacter() {}
 }, player.id, "dead");
-assert.deepStrictEqual(removedSummaryOwners, [deadNpc.id], "player death must not delete the player's summary directory");
+assert.deepStrictEqual(tombstonedSummaryOwners, [deadNpc.id], "player death must not tombstone the player's summary directory");
 
 const explicitDeadMessage = { id: 2, role: "user", content: "我刺伤张三。" };
 const rebuiltContext = ActionEngine.getConversationReferenceContext(conversation, explicitDeadMessage, player);

@@ -106,9 +106,9 @@ try {
     estimateTokens: (text) => String(text).length
   });
   assert(titleRecall.mentioned.some((entry) => entry.memory.content.includes("赈济灾民")), "title resolution must route into the same ID-owned memory records without putting the title in the filename");
-  const deletion = engine.deleteOwnedSummaryFolders(emperor.id);
-  assert.strictEqual(deletion.removedFolderCount, 2, "all folders owned by the dead character ID must be removed regardless of old title suffixes");
-  assert(!fs.existsSync(ownedOld) && !fs.existsSync(ownedCanonical));
+  engine.markSummaryOwnerDeceased(emperor.id, { reason: "dead" });
+  assert.strictEqual(engine.isSummaryOwnerDeceased(emperor.id), true, "dead character ID must be tombstoned without deleting its history");
+  assert(fs.existsSync(ownedOld) && fs.existsSync(ownedCanonical), "death tombstones must preserve all historical owner folders");
   assert(fs.existsSync(survivorMemory), "other characters' memories about the dead character must remain intact");
 } finally {
   fs.rmSync(tempDir, { recursive: true, force: true });
@@ -117,8 +117,8 @@ try {
 const mainSource = fs.readFileSync(mainPath, "utf8");
 const conversationSource = fs.readFileSync(conversationPath, "utf8");
 assert(mainSource.includes("getCharacterPersonalName"), "summary paths must use the shared personal-name identity helper");
-assert(conversationSource.includes("memoryEngine?.deleteOwnedSummaryFolders"), "NPC death lifecycle must remove only the dead owner's summary folders");
+assert(conversationSource.includes("memoryEngine?.markSummaryOwnerDeceased"), "NPC death lifecycle must tombstone the dead owner without deleting memories");
 assert(conversationSource.includes("excludedSummaryOwnerIds"), "finalization recovery must remember not to recreate a dead owner's folder");
 assert(mainSource.includes("excludedOwnerIds"), "directed summary persistence must skip dead owners while preserving survivor-owned memories");
 
-console.log("VOTC v7.3 identity lifecycle: PASS (name-only storage, unique-title recall, title-change stability, owner-only death cleanup)");
+console.log("VOTC v7.3 identity lifecycle: PASS (name-only storage, unique-title recall, title-change stability, death tombstones)");

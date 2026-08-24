@@ -239,13 +239,15 @@ class LLMManager {
     const provider = this.getProviderInstance(config);
     const preparedMessages = this.PromptBuilder.prepareSummaryMessages(messages);
     const summaryBlocks = Array.isArray(metadata?.blocks) && metadata.blocks.length > 0 ? metadata.blocks : this.PromptBuilder.getSummaryPromptBlocks(preparedMessages, metadata?.requestType || "summary");
+    const isStructuredSummary = ["final_summary", "memory_recovery"].includes(metadata.requestType);
+    const isDeepseekStructuredSummary = config.providerType === "deepseek" && isStructuredSummary;
     const request = {
       model: config.defaultModel,
       messages: preparedMessages,
       stream: false,
       // summaries don't need streaming
       ...config.defaultParameters,
-      ...["final_summary", "memory_recovery"].includes(metadata.requestType) ? { thinking: { type: "disabled" }, response_format: { type: "json_object" } } : {},
+      ...isDeepseekStructuredSummary ? { thinking: { type: "enabled" }, max_tokens: 4096, response_format: { type: "json_object" } } : isStructuredSummary ? { response_format: { type: "json_object" } } : {},
       signal
     };
     const estimatedPromptTokens = this.TokenCounter.calculateTotalTokens(preparedMessages);

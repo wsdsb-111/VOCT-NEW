@@ -121,7 +121,7 @@ const service = new LLMManager({
   assert.strictEqual(summaryCall.config, summaryConfig, "summaries must use the selected summary provider");
   assert.strictEqual(summaryCall.request.model, "summary-model");
   assert.strictEqual(summaryCall.request.stream, false);
-  assert.deepStrictEqual(summaryCall.request.thinking, { type: "disabled" });
+  assert.strictEqual(summaryCall.request.thinking, undefined, "non-DeepSeek structured summaries must not receive a provider-specific thinking parameter");
   assert.deepStrictEqual(summaryCall.request.response_format, { type: "json_object" });
   assert.strictEqual(summaryCall.request.messages[0].content, "prepared");
 

@@ -75,12 +75,12 @@ try {
     visibility: "known_group", knownBy: [3, 4], importance: 0.9, confidence: 1
   });
   const overview = engine.getUiOverview({ summaryCatalog: [ownFolder, otherFolder, mentionedElsewhere] });
-  assert.strictEqual(overview.engineVersion, "2.2");
+  assert.strictEqual(overview.engineVersion, "2.3");
   assert.strictEqual(overview.totals.summaryFolders, 3, "overview must count canonical character folders");
   assert.strictEqual(overview.totals.summaryFiles, 3, "overview must count visible conversation files");
   assert.strictEqual(overview.totals.summaryRecords, 3, "overview must count player-editable summaries");
   assert.strictEqual(overview.routingPolicy.stablePrefix, "同一场对话每轮保持一致；新会话重新读取", "overview must expose the stable-memory cache boundary");
-  assert(overview.boundaries.some((boundary) => boundary.includes("长期稳定记忆不随当前问题或在场名单重排")), "overview must explain when stable memory changes");
+  assert(overview.boundaries.some((boundary) => boundary.includes("长期稳定记忆") && boundary.includes("不随当前问题重排")), "overview must explain when stable memory changes");
   assert.deepStrictEqual(overview.characters, [], "the UI overview must not duplicate the folder tree with a structured-memory tree");
   const updated = engine.updateMemoryContent("memory_known", "乙亲历了丙的再次到访。");
   assert.strictEqual(updated.success, true, "players must be able to edit a readable structured memory");
@@ -141,8 +141,8 @@ assert(rendererSource.includes("const groups = new Map()"), "numeric character I
 assert(!rendererSource.includes("Object.entries(summariesByPlayer)"), "search result groups must not use numeric object-key enumeration");
 assert(!rendererSource.includes('className: "memory-character-coverage"'), "the duplicate per-character structured-memory tree must be removed");
 assert(!rendererSource.includes("Promise.all([listAllSummaries(), getMemoryOverview()])"), "summary dashboard must not parse every JSON file twice");
-assert(rendererSource.includes("Memory Engine 2.2 · V7.6.1"), "summary UI must expose the V7.6.1 runtime version");
-assert(rendererSource.includes('key === "stablePrefix" ? "稳定前缀"'), "summary UI must label the V7.6.1 stable prefix policy");
+assert(rendererSource.includes("Memory Engine 2.3 · V7.7.1"), "summary UI must expose the V7.7.1 runtime version");
+assert(rendererSource.includes('key === "stablePrefix" ? "稳定前缀"'), "summary UI must label the stable prefix policy");
 assert(rendererSource.includes("memory-routing-grid"), "summary UI must explain direct, group and mentioned-person recall policies");
 assert(rendererSource.includes("summary-route-label"), "conversation files must display owner-to-counterpart routing");
 assert(rendererSource.includes("editingEntry.ownerName"), "summary editor must identify the folder owner");

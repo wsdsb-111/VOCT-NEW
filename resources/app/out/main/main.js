@@ -2086,6 +2086,26 @@ class GameData {
       for (const child of participant.children || []) addRelative(child);
       for (const sibling of participant.siblings || []) addRelative(sibling);
     }
+    const addRelationAliases = (characterId, aliases) => {
+      const profile = profiles.get(Number(characterId));
+      if (!profile) return;
+      profile.mentionAliases = [...new Set([...(profile.mentionAliases || []), ...aliases])];
+    };
+    for (const participant of this.characters.values()) {
+      for (const parent of participant.parents || []) {
+        const gender = parent.gender || (parent.sheHe ? inferGenderFromPronoun(parent.sheHe) : "unknown");
+        addRelationAliases(parent.id, gender === "male" ? ["令尊", "家父", "父亲"] : gender === "female" ? ["令堂", "家母", "母亲"] : ["父母"]);
+      }
+      for (const sibling of participant.siblings || []) {
+        const siblingAge = Number.isFinite(Number(sibling.birthDateTotalDays)) && Number.isFinite(this.totalDays)
+          ? Math.max(0, Math.floor((this.totalDays - Number(sibling.birthDateTotalDays)) / 365.2425))
+          : null;
+        const gender = sibling.gender || (sibling.sheHe ? inferGenderFromPronoun(sibling.sheHe) : "unknown");
+        if (Number.isFinite(siblingAge) && Number.isFinite(participant.age) && siblingAge > participant.age) {
+          addRelationAliases(sibling.id, gender === "male" ? ["家兄", "兄长"] : gender === "female" ? ["家姐", "姐姐"] : ["年长手足"]);
+        }
+      }
+    }
     return profiles;
   }
   /**
@@ -2315,20 +2335,32 @@ class GameData {
     fs$1.mkdirSync(path.dirname(filePath), { recursive: true });
     const summaries = this.readConversationSummariesFile(filePath);
     if (!summaries) throw new Error(`summary_file_read_failed:${filePath}`);
-    const alreadySaved = summaries.some((summary) => options.finalizationId ? summary.finalizationId === options.finalizationId : summary.totalDays === this.totalDays && summary.content === finalSummary && summary.playerId === owner.id && summary.characterId === other.id);
+    const projectionKey = `${Number(owner.id)}->${Number(other.id)}`;
+    const projection = options.directedSummaries instanceof Map
+      ? options.directedSummaries.get(projectionKey)
+      : options.directedSummaries?.[projectionKey];
+    if (options.directedSummaries && !projection) throw new Error(`missing_directed_summary_projection:${projectionKey}`);
+    const directedContent = projection?.content || finalSummary;
+    const alreadySaved = summaries.some((summary) => options.finalizationId ? summary.finalizationId === options.finalizationId : summary.totalDays === this.totalDays && summary.content === directedContent && summary.playerId === owner.id && summary.characterId === other.id);
     if (!alreadySaved) {
       summaries.unshift({
         schemaVersion: memorySystem.CURRENT_SUMMARY_SCHEMA_VERSION,
         date: this.date,
         totalDays: this.totalDays,
-        content: finalSummary,
+        content: directedContent,
         playerName: ownerName,
         playerId: owner.id,
         characterName: otherName,
         characterId: other.id,
         conversationType: participantMetadata.length > 2 ? "group" : "pair",
         participants: participantMetadata,
-        finalizationId: options.finalizationId || null
+        finalizationId: options.finalizationId || null,
+        engineVersion: projection ? "2.3" : "2.2",
+        perspectiveOwnerId: projection?.ownerId ?? owner.id,
+        perspectiveMemoryIds: projection?.memoryIds || [],
+        projectionHash: projection?.projectionHash || null,
+        pinned: projection?.pinned === true,
+        open: projection?.open === true
       });
       this.writeConversationSummariesFile(filePath, summaries);
     }
@@ -2371,6 +2403,7 @@ class GameData {
     const verification = memorySystem.verifyDirectedSummaryPersistence({
       directedPairs,
       finalizationId: options.finalizationId,
+      requirePerspective: options.directedSummaries instanceof Map,
       getFilePath: (owner, counterpart) => this.getConversationFilePath(owner.id, owner.shortName, counterpart.id, counterpart.shortName),
       readSummaries: (filePath) => this.readConversationSummariesFile(filePath)
     });
@@ -3899,13 +3932,6 @@ ${existingSummary}`
       role: "system"
     };
     const mentionedCharactersContext = this.buildMentionedCharactersContext(char, gameData, workingHistory);
-    const mentionedContextBlock = {
-      id: "mentioned-character-context",
-      type: "mentioned_context",
-      label: "Mentioned Character Context",
-      enabled: true,
-      role: "system"
-    };
     const responderGameFacts = this.buildResponderGameFacts(char);
     const responderGameFactsBlock = {
       id: "responder-game-facts",
@@ -3921,24 +3947,19 @@ ${existingSummary}`
       enabled: true,
       role: "system"
     };
-    const relevantMemoryBlock = {
-      id: "memory-retrieval",
-      type: "memory_retrieval",
-      label: "Query-specific Retrieved Memory",
+    const directMemoryBlock = {
+      id: "memory-direct-frozen",
+      type: "memory_direct_frozen",
+      label: "Frozen Direct Relationship Memory",
       enabled: true,
       role: "system"
     };
-    let mentionedContextInserted = false;
-    const insertMentionedContext = () => {
-      if (!mentionedContextInserted && mentionedCharactersContext) {
-        llmMessages.push({ role: "system", content: mentionedCharactersContext });
-        blocksWithTokens.push({
-          block: mentionedContextBlock,
-          content: mentionedCharactersContext,
-          tokens: TokenCounter.estimateTokens(mentionedCharactersContext)
-        });
-      }
-      mentionedContextInserted = true;
+    const mentionedSnapshotBlock = {
+      id: "memory-mentioned-snapshot",
+      type: "memory_mentioned_snapshot",
+      label: "Frozen Mentioned Character Snapshot",
+      enabled: true,
+      role: "system"
     };
     const deferredMainSegments = [];
     const deferredDescriptionBlocks = [];
@@ -3955,6 +3976,22 @@ ${existingSummary}`
           block: stableMemoryBlock,
           content: memoryContext.stableText,
           tokens: TokenCounter.estimateTokens(memoryContext.stableText)
+        });
+      }
+      if (memoryContext?.directStableText) {
+        llmMessages.push({ role: "system", content: memoryContext.directStableText });
+        blocksWithTokens.push({
+          block: directMemoryBlock,
+          content: memoryContext.directStableText,
+          tokens: TokenCounter.estimateTokens(memoryContext.directStableText)
+        });
+      }
+      if (memoryContext?.mentionedSnapshotText) {
+        llmMessages.push({ role: "system", content: memoryContext.mentionedSnapshotText });
+        blocksWithTokens.push({
+          block: mentionedSnapshotBlock,
+          content: memoryContext.mentionedSnapshotText,
+          tokens: TokenCounter.estimateTokens(memoryContext.mentionedSnapshotText)
         });
       }
       if (activeParticipantRelationshipContext) {
@@ -3981,22 +4018,14 @@ ${existingSummary}`
           tokens: TokenCounter.estimateTokens(responderGameFacts)
         });
       }
-      if (memoryContext?.relevantText) {
-        llmMessages.push({ role: "system", content: memoryContext.relevantText });
-        blocksWithTokens.push({
-          block: relevantMemoryBlock,
-          content: memoryContext.relevantText,
-          tokens: TokenCounter.estimateTokens(memoryContext.relevantText)
-        });
-      }
-      insertMentionedContext();
     };
     for (const block of blocks) {
       if (!block.enabled) continue;
       if (block.type === "history" || block.type === "instruction") insertPreHistoryContext();
       const result = this.applyBlockWithTokenCount(block, llmMessages, workingHistory, context, promptSettings, {
         deferredMainSegments,
-        deferredDescriptionBlocks
+        deferredDescriptionBlocks,
+        topicPatchText: [mentionedCharactersContext, memoryContext?.topicPatchText].filter(Boolean).join("\n\n")
       });
       if (Array.isArray(result)) {
         blocksWithTokens.push(...result);
@@ -4184,9 +4213,35 @@ ${existingSummary}`
           role: m.role,
           content: m.name ? `${m.name}: ${m.content}` : m.content
         }));
-        messages.push(...historyMessages);
-        const content = historyMessages.map((m) => `${m.role}: ${m.content}`).join("\n\n");
-        return { block, content, tokens: TokenCounter.calculateTotalTokens(historyMessages) };
+        const hasCurrentUserMessage = historyMessages.at(-1)?.role === "user";
+        const priorHistory = hasCurrentUserMessage ? historyMessages.slice(0, -1) : historyMessages;
+        const currentUserMessage = hasCurrentUserMessage ? historyMessages.at(-1) : null;
+        const tokenBlocks = [];
+        if (priorHistory.length > 0) {
+          messages.push(...priorHistory);
+          tokenBlocks.push({
+            block,
+            content: priorHistory.map((message) => `${message.role}: ${message.content}`).join("\n\n"),
+            tokens: TokenCounter.calculateTotalTokens(priorHistory)
+          });
+        }
+        if (options.topicPatchText) {
+          messages.push({ role: "system", content: options.topicPatchText });
+          tokenBlocks.push({
+            block: { id: "memory-topic-patch", type: "memory_topic_patch", label: "Turn Topic Memory Patch", enabled: true, role: "system" },
+            content: options.topicPatchText,
+            tokens: TokenCounter.estimateTokens(options.topicPatchText)
+          });
+        }
+        if (currentUserMessage) {
+          messages.push(currentUserMessage);
+          tokenBlocks.push({
+            block: { ...block, id: `${block.id || "history"}-current-user`, type: "current_user", label: "Current User Message" },
+            content: `user: ${currentUserMessage.content}`,
+            tokens: TokenCounter.calculateTotalTokens([currentUserMessage])
+          });
+        }
+        return tokenBlocks;
       }
       case "instruction": {
         const tpl = block.template || DEFAULT_CHAT_INSTRUCTION;

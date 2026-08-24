@@ -13,6 +13,7 @@ const { MemoryConsolidator } = require("./memory-consolidator");
 const { MemoryTrace } = require("./memory-trace");
 const { MentionTracker } = require("./mention-tracker");
 const { getCharacterMentionAliases } = require("./character-identity");
+const { buildPerspectiveSummaryMap, validatePerspectiveSummaryMap } = require("./perspective-projector");
 
 const FINAL_SUMMARY_MAX_ATTEMPTS = 2;
 const RECOVERY_MAX_ATTEMPTS = 3;
@@ -26,12 +27,17 @@ class MemoryEngine {
     this.knowledge = new KnowledgeService({ store: this.store, trace: this.trace });
     this.rolling = new RollingSummaryManager({ trace: this.trace });
     this.consolidator = new MemoryConsolidator({ store: this.store, trace: this.trace });
-    this.mentionTracker = new MentionTracker();
+    this.mentionTracker = new MentionTracker({
+      onUnresolved: (entry) => {
+        this.trace.record("mention_unresolved", { reason: entry.reason, alias: entry.alias, characterIds: entry.characterIds });
+        console.warn(`[Memory] 未能唯一绑定：${entry.alias} (${entry.reason})`);
+      }
+    });
     this.activeFinalizationIds = new Set();
   }
 
   createConversationState(conversationId) {
-    return { conversationId, rollingState: this.rolling.createState(), participantPresence: [], mentionState: this.mentionTracker.createState(), mentionedRecallCache: new Map() };
+    return { conversationId, rollingState: this.rolling.createState(), participantPresence: [], mentionState: this.mentionTracker.createState(), mentionedRecallCache: new Map(), responderRecallCache: new Map() };
   }
 
   ensureConversationState(conversation) {
@@ -40,6 +46,7 @@ class MemoryEngine {
     if (!Array.isArray(conversation.memoryState.participantPresence)) conversation.memoryState.participantPresence = [];
     if (!conversation.memoryState.mentionState) conversation.memoryState.mentionState = this.mentionTracker.createState();
     if (!(conversation.memoryState.mentionedRecallCache instanceof Map)) conversation.memoryState.mentionedRecallCache = new Map();
+    if (!(conversation.memoryState.responderRecallCache instanceof Map)) conversation.memoryState.responderRecallCache = new Map();
     return conversation.memoryState;
   }
 
@@ -67,6 +74,22 @@ class MemoryEngine {
     const result = this.store.deleteOwnedSummaryFolders(characterId);
     this.trace.record("summary_owner_cleanup", { characterId: Number(characterId), removedFolderCount: result.removedFolderCount });
     return result;
+  }
+
+  markSummaryOwnerDeceased(characterId, details = {}) {
+    const result = this.store.markSummaryOwnerDeceased(characterId, details);
+    this.trace.record("summary_owner_tombstone", { characterId: Number(characterId), status: result.status });
+    return result;
+  }
+
+  reviveSummaryOwner(characterId) {
+    const result = this.store.reviveSummaryOwner(characterId);
+    this.trace.record("summary_owner_reactivated", { characterId: Number(characterId) });
+    return result;
+  }
+
+  isSummaryOwnerDeceased(characterId) {
+    return this.store.isSummaryOwnerDeceased(characterId);
   }
 
   loadOwnerFolderMemories(characterId) {
@@ -351,10 +374,10 @@ class MemoryEngine {
     });
   }
 
-  async persistCharacterFolders(context, finalSummary) {
+  async persistCharacterFolders(context, finalSummary, directedSummaries = null) {
     const persist = context.persistCharacterFolders;
     if (typeof persist !== "function") return { saved: false, skipped: true };
-    const result = await persist(finalSummary, context);
+    const result = await persist(finalSummary, { ...context, directedSummaries });
     if (result !== true && result?.success !== true) throw new Error(result?.error || "summary_folder_persist_result_required");
     return { saved: true };
   }
@@ -416,7 +439,12 @@ class MemoryEngine {
     const persistStartedAt = Date.now();
     try {
       const persisted = this.persistExtraction(context, extraction);
-      const folderPersistence = await this.persistCharacterFolders(context, extraction.sessionSummary || content);
+      const directedSummaries = buildPerspectiveSummaryMap(context, extraction);
+      const projectionValidation = validatePerspectiveSummaryMap(context, extraction, directedSummaries);
+      if (!projectionValidation.success) {
+        throw new Error(`${projectionValidation.error}:${projectionValidation.invalidPairs.map((pair) => `${pair.ownerId}->${pair.counterpartId}:${pair.reason}`).join(",")}`);
+      }
+      const folderPersistence = await this.persistCharacterFolders(context, extraction.sessionSummary || content, directedSummaries);
       this.commitFinalization(context, extraction);
       this.trace.record("summary_persist", { conversationId: context.conversationId, finalizationId: context.finalizationId, success: true, durationMs: Date.now() - persistStartedAt, memoryCount: extraction.memories.length });
       if (fs.existsSync(snapshotPath)) fs.unlinkSync(snapshotPath);
@@ -429,7 +457,7 @@ class MemoryEngine {
         summaryFoldersSaved: folderPersistence.saved === true,
         recoveryState: "committed"
       });
-      return { success: true, finalSummary: extraction.sessionSummary || content, extraction };
+      return { success: true, finalSummary: extraction.sessionSummary || content, extraction, directedSummaries };
     } catch (error) {
       this.trace.record("summary_persist", { conversationId: context.conversationId, finalizationId: context.finalizationId, success: false, durationMs: Date.now() - persistStartedAt, memoryCount: extraction.memories.length, error: error.message || String(error) });
       const failedPath = this.writeRecoverySnapshot(context, {
@@ -632,7 +660,7 @@ class MemoryEngine {
     return selected;
   }
 
-  retrieveForResponder({ characterId, query = "", directCounterpartIds = [], mentionedEntityIds = [], mentionedEntityNames = {}, mentionedRecallCache = null, ownerFolderMemories = null, currentTotalDays = null, tokenBudget = 800, estimateTokens } = {}) {
+  retrieveForResponder({ characterId, query = "", directCounterpartIds = [], mentionedEntityIds = [], mentionedEntityNames = {}, mentionedRecallCache = null, sessionRecallCache = null, ownerFolderMemories = null, currentTotalDays = null, tokenBudget = 800, estimateTokens } = {}) {
     const startedAt = Date.now();
     const ownerId = Number(characterId);
     const directIds = uniqueIds(directCounterpartIds).filter((id) => id !== ownerId);
@@ -642,7 +670,7 @@ class MemoryEngine {
     const directGroups = new Map();
     for (const counterpartId of directIds) {
       const memories = this.store.loadDirectPairSummaries(ownerId, counterpartId, folderMemories);
-      directGroups.set(counterpartId, this.ranker.rank(memories, { query, participantIds: [counterpartId], currentTotalDays }));
+      directGroups.set(counterpartId, this.ranker.rank(memories, { query: "", participantIds: [counterpartId], currentTotalDays }));
     }
     const namesForEntity = (entityId) => {
       if (Array.isArray(mentionedEntityNames)) return mentionedEntityNames;
@@ -665,12 +693,18 @@ class MemoryEngine {
     if (mentionedRecallCache instanceof Map && (capturedMentioned || !cachedMentioned)) mentionedRecallCache.set(ownerId, { groups: new Map([...cachedGroups, ...mentionedGroups]) });
     const mentionedCacheHit = mentionedIds.length > 0 && !capturedMentioned && cachedMentioned?.groups instanceof Map;
     const internalMemories = this.store.queryMemories({ characterId: ownerId, includeFolderSummaries: false });
+    const responderCache = sessionRecallCache instanceof Map
+      ? sessionRecallCache.get(ownerId) || { mentionedSnapshots: new Map(), topicPatch: null }
+      : { mentionedSnapshots: new Map(), topicPatch: null };
+    if (!(responderCache.mentionedSnapshots instanceof Map)) responderCache.mentionedSnapshots = new Map();
     // This lane is deliberately query-independent. Re-ranking the so-called
     // stable block for every line made it the first cache breakpoint in most
-    // long conversations. Direct recall follows the current topic, while each
-    // out-of-scene entity is ranked once on first mention and then reused.
+    // long conversations. Direct recall and each out-of-scene entity are now
+    // selected once per responder and then reused for the whole conversation.
     const stableRanked = this.ranker.rank(internalMemories, { query: "", entityIds: [], participantIds: [], currentTotalDays })
       .filter((entry) => entry.memory.importance >= 0.9 || entry.memory.status === "open" || entry.memory.unresolved);
+    const patchBudgetLimit = query.trim() ? Math.floor(budget * 0.12) : 0;
+    const frozenBudget = budget;
     const laneWeights = {
       direct: [...directGroups.values()].some((entries) => entries.length > 0) ? 55 : 0,
       mentioned: [...mentionedGroups.values()].some((entries) => entries.length > 0) ? 30 : 0,
@@ -680,32 +714,57 @@ class MemoryEngine {
     const laneBudgets = { direct: 0, mentioned: 0, stable: 0 };
     if (totalWeight > 0) {
       for (const lane of ["direct", "mentioned", "stable"]) {
-        laneBudgets[lane] = Math.floor(budget * laneWeights[lane] / totalWeight);
+        laneBudgets[lane] = Math.floor(frozenBudget * laneWeights[lane] / totalWeight);
       }
-      const remainder = budget - laneBudgets.direct - laneBudgets.mentioned - laneBudgets.stable;
+      const remainder = frozenBudget - laneBudgets.direct - laneBudgets.mentioned - laneBudgets.stable;
       const firstActiveLane = ["direct", "mentioned", "stable"].find((lane) => laneWeights[lane] > 0);
       if (firstActiveLane) laneBudgets[firstActiveLane] += remainder;
     }
     const directBudget = laneBudgets.direct;
     const mentionedBudget = laneBudgets.mentioned;
     const stableBudget = laneBudgets.stable;
-    const direct = this.selectRoutedMemories(directGroups, { tokenBudget: directBudget, estimateTokens, mode: "direct" });
-    let mentioned = this.selectRoutedMemories(mentionedGroups, { tokenBudget: mentionedBudget, estimateTokens, mode: "mentioned" });
+    const direct = Array.isArray(responderCache.direct)
+      ? responderCache.direct
+      : this.selectRoutedMemories(directGroups, { tokenBudget: directBudget, estimateTokens, mode: "direct" });
+    if (!Array.isArray(responderCache.direct)) responderCache.direct = direct;
+    const mentioned = [];
+    for (const entityId of mentionedIds) {
+      let snapshot = responderCache.mentionedSnapshots.get(entityId);
+      if (!Array.isArray(snapshot)) {
+        snapshot = this.selectRoutedMemories(new Map([[entityId, mentionedGroups.get(entityId) || []]]), { tokenBudget: Math.max(1, Math.floor(mentionedBudget / Math.max(1, mentionedIds.length))), estimateTokens, mode: "mentioned" });
+        responderCache.mentionedSnapshots.set(entityId, snapshot);
+      }
+      mentioned.push(...snapshot);
+    }
     const directByKey = new Map(direct.map((entry) => [this.getRouteMemoryKey(entry.memory), entry]));
-    mentioned = mentioned.filter((entry) => {
+    const deduplicatedMentioned = mentioned.filter((entry) => {
       const directEntry = directByKey.get(this.getRouteMemoryKey(entry.memory));
       if (!directEntry) return true;
       directEntry.mentionedCharacterIds = [...new Set([...(directEntry.mentionedCharacterIds || []), ...entry.routeCharacterIds])];
       return false;
     });
-    const selectedFolderKeys = new Set([...direct, ...mentioned].map((entry) => this.getRouteMemoryKey(entry.memory)));
-    const stable = this.ranker.selectWithinBudget(
-      stableRanked.filter((entry) => !selectedFolderKeys.has(this.getRouteMemoryKey(entry.memory))),
-      { tokenBudget: stableBudget, estimateTokens }
-    );
-    const relevant = [...direct, ...mentioned];
+    const selectedFolderKeys = new Set([...direct, ...deduplicatedMentioned].map((entry) => this.getRouteMemoryKey(entry.memory)));
+    const stable = Array.isArray(responderCache.stable)
+      ? responderCache.stable
+      : this.ranker.selectWithinBudget(stableRanked.filter((entry) => !selectedFolderKeys.has(this.getRouteMemoryKey(entry.memory))), { tokenBudget: stableBudget, estimateTokens });
+    if (!Array.isArray(responderCache.stable)) responderCache.stable = stable;
+    const frozenSelectedTokens = [...direct, ...deduplicatedMentioned, ...stable].reduce((total, entry) => total + Number(entry.tokens || 0), 0);
+    const patchBudget = Math.max(0, Math.min(patchBudgetLimit, budget - frozenSelectedTokens));
+    let topicPatch = Array.isArray(responderCache.topicPatch) ? responderCache.topicPatch : [];
+    if (!responderCache.topicPatchLocked && patchBudget > 0) {
+      const rankedPatchCandidates = this.ranker.rank(folderMemories, { query, entityIds: mentionedIds, participantIds: directIds, currentTotalDays })
+        .filter((entry) => !selectedFolderKeys.has(this.getRouteMemoryKey(entry.memory)) && Number(entry.reason?.query) >= 0.28);
+      topicPatch = this.ranker.selectWithinBudget(rankedPatchCandidates.slice(0, 1), { tokenBudget: patchBudget, estimateTokens, allowTruncate: true });
+      if (topicPatch.length > 0) {
+        topicPatch = topicPatch.map((entry) => ({ ...entry, routeKind: "topic_patch", routeCharacterIds: uniqueIds([...directIds, ...mentionedIds]) }));
+        responderCache.topicPatch = topicPatch;
+        responderCache.topicPatchLocked = true;
+      }
+    }
+    if (sessionRecallCache instanceof Map) sessionRecallCache.set(ownerId, responderCache);
+    const relevant = [...direct, ...deduplicatedMentioned, ...topicPatch];
     for (const entry of [...stable, ...relevant]) {
-      const reason = entry.routeKind === "direct" ? "direct_pair_route" : entry.routeKind === "mentioned" ? "mentioned_entity_route" : "stable_memory";
+      const reason = entry.routeKind === "direct" ? "direct_pair_route" : entry.routeKind === "mentioned" ? "mentioned_entity_route" : entry.routeKind === "topic_patch" ? "turn_topic_patch" : "stable_memory";
       this.trace.record("rank", { memoryId: entry.memory.memoryId, type: entry.memory.type, score: entry.score, characterId: ownerId, reason });
       this.trace.record("retrieve", { memoryId: entry.memory.memoryId, type: entry.memory.type, score: entry.score, characterId: ownerId, reason });
       this.trace.record("inject", { memoryId: entry.memory.memoryId, type: entry.memory.type, score: entry.score, characterId: ownerId, reason });
@@ -722,18 +781,23 @@ class MemoryEngine {
       directRouteCount: directIds.length,
       mentionedRouteCount: mentionedIds.length,
       mentionedCacheHit,
+      patchInserted: topicPatch.length > 0,
       indexSize: Object.keys(this.store.index.memories || {}).length
     });
     return {
-      engineVersion: "2.2",
+      engineVersion: "2.3",
       respondingCharacterId: ownerId,
       stable,
       relevant,
       direct,
-      mentioned,
+      mentioned: deduplicatedMentioned,
+      topicPatch,
       stableText: this.formatMemoryBlock("长期稳定记忆", stable),
       directText: this.formatMemoryBlock("与当前在场人物的直接记忆", direct),
-      mentionedText: this.formatMemoryBlock("与被提及场外人物有关的记忆", mentioned),
+      directStableText: this.formatMemoryBlock("冻结的直接关系记忆（钉住项与最近记录）", direct),
+      mentionedText: this.formatMemoryBlock("与被提及场外人物有关的记忆", deduplicatedMentioned),
+      mentionedSnapshotText: this.formatMemoryBlock("冻结的场外人物记忆快照", deduplicatedMentioned),
+      topicPatchText: this.formatMemoryBlock("本轮话题记忆补丁", topicPatch),
       relevantText: this.formatMemoryBlock("与当前话题相关的记忆", relevant),
       tokenBudget: budget,
       selectedTokens,
@@ -743,7 +807,8 @@ class MemoryEngine {
         directCounterpartIds: directIds,
         mentionedOutOfSceneIds: mentionedIds,
         mentionedSnapshot: mentionedIds.length > 0 ? capturedMentioned ? "captured" : "reused" : "empty",
-        budgets: { direct: directBudget, mentioned: mentionedBudget, stable: stableBudget }
+        topicPatch: topicPatch.length > 0 ? "locked" : "empty",
+        budgets: { direct: directBudget, mentioned: mentionedBudget, stable: stableBudget, topicPatch: patchBudget }
       }
     };
   }
@@ -881,7 +946,7 @@ class MemoryEngine {
 
   getUiOverview({ summaryCatalog = [] } = {}) {
     return {
-      engineVersion: "2.2",
+      engineVersion: "2.3",
       totals: {
         structuredMemories: Object.keys(this.store.index.memories || {}).length,
         episodes: Object.keys(this.store.index.episodes || {}).length,
@@ -892,16 +957,17 @@ class MemoryEngine {
       },
       boundaries: [
         "每名 NPC 只读取自己的 ID_姓名目录；玩家目录保存摘要但玩家不执行提示词记忆召回。",
-        "同一场对话内，长期稳定记忆不随当前问题或在场名单重排；只在新会话读取最新终局记忆。",
-        "直接参与者按“自己的目录 → 与对方的对话文件”精确召回，不再先扫描整个目录统一竞争排名。",
-        "玩家或任一 NPC 首次提到场外人物时，每名 NPC 分别从自己的目录建立该人物记忆快照；本场后续回复复用，新增场外人物时再扩展一次。",
+        "同一场对话内，长期稳定记忆、直接关系最近记录和场外人物快照不随当前问题重排；只在新会话读取最新终局记忆。",
+        "直接参与者按自己的目录精确召回最近 2 条，并保留承诺、秘密或未决事项等钉住记忆。",
+        "首次提到场外人物时，每名 NPC 分别从自己的目录建立记忆快照；本场后续回复复用，必要时只追加一个话题补丁。",
+        "终局摘要按每名目录所有者的知情边界生成视角投影；不知情角色不会获得他人的私密内容。",
         "同一场群聊写入多个关系文件时按 finalizationId 去重；内容长度由每次 800–2400 token 的动态预算约束。"
       ],
       routingPolicy: {
         stablePrefix: "同一场对话每轮保持一致；新会话重新读取",
-        directPair: "一对一：最近 2 条 + 当前话题最相关 1 条",
-        group: "多人：每名在场对象至少 1 条，再补充全局最相关 2 条",
-        mentioned: "场外人物：首次提及时锁定 1–2 条，本场后续回复复用",
+        directPair: "直接关系：最近 2 条 + 钉住记忆，整场冻结",
+        group: "多人：分别按每个回应角色的知情视角召回",
+        mentioned: "场外人物：首次提及时锁定快照，整场复用",
         tokenBudget: "每名 NPC 每次回复使用上下文约 8%，最少 800、最多 2400 token"
       },
       characters: []
