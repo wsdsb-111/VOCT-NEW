@@ -19,6 +19,33 @@ function isMemoryRelevantToPair(memory, ownerId, counterpartId) {
   return participants.includes(counterpartId) || speakers.includes(counterpartId);
 }
 
+function isMessageInsidePresenceWindow(window, messageId) {
+  const joined = Number(window?.joinedAtMessageId ?? 0);
+  const left = window?.leftAtMessageId == null ? Infinity : Number(window.leftAtMessageId);
+  return joined <= Number(messageId) && Number(messageId) < left;
+}
+
+function isMemoryInsidePairPresence(context, memory, ownerId, counterpartId) {
+  const presence = Array.isArray(context?.participantPresence) ? context.participantPresence : [];
+  if (presence.length === 0) return true;
+  const ownerWindows = presence.filter((window) => Number(window.characterId) === Number(ownerId));
+  const counterpartWindows = presence.filter((window) => Number(window.characterId) === Number(counterpartId));
+  if (ownerWindows.length === 0 || counterpartWindows.length === 0) return false;
+  let messageIds = uniqueIds(memory?.provenance?.messageIds);
+  if (messageIds.length === 0) {
+    messageIds = uniqueIds((context.messages || []).map((message) => message?.id));
+  }
+  if (messageIds.length > 0) {
+    return messageIds.every((messageId) => ownerWindows.some((window) => isMessageInsidePresenceWindow(window, messageId)) && counterpartWindows.some((window) => isMessageInsidePresenceWindow(window, messageId)));
+  }
+  return ownerWindows.some((ownerWindow) => counterpartWindows.some((counterpartWindow) => {
+    const joined = Math.max(Number(ownerWindow.joinedAtMessageId ?? 0), Number(counterpartWindow.joinedAtMessageId ?? 0));
+    const ownerLeft = ownerWindow.leftAtMessageId == null ? Infinity : Number(ownerWindow.leftAtMessageId);
+    const counterpartLeft = counterpartWindow.leftAtMessageId == null ? Infinity : Number(counterpartWindow.leftAtMessageId);
+    return joined < Math.min(ownerLeft, counterpartLeft);
+  }));
+}
+
 function renderPerspectiveContent(owner, memories) {
   const ownerId = Number(owner.id);
   const ownerName = owner.name || owner.shortName || owner.fullName || `角色${ownerId}`;
@@ -39,7 +66,7 @@ function buildPerspectiveSummaryMap(context = {}, extraction = {}) {
     for (const counterpart of participants) {
       const counterpartId = Number(counterpart.id);
       if (counterpartId === ownerId) continue;
-      const known = memories.filter((memory) => uniqueIds(memory.knownBy).includes(ownerId) && isMemoryRelevantToPair(memory, ownerId, counterpartId));
+      const known = memories.filter((memory) => uniqueIds(memory.knownBy).includes(ownerId) && isMemoryRelevantToPair(memory, ownerId, counterpartId) && isMemoryInsidePairPresence(context, memory, ownerId, counterpartId));
       const memoryIds = known.map((memory) => memory.memoryId).filter(Boolean);
       const pinned = known.some((memory) => PINNED_TYPES.has(memory.type) || memory.status === "open" || memory.unresolved === true || Number(memory.importance) >= 0.9);
       const open = known.some((memory) => memory.status === "open" || memory.unresolved === true);
@@ -79,7 +106,7 @@ function validatePerspectiveSummaryMap(context = {}, extraction = {}, projection
       }
       const leaked = (projection.memoryIds || []).some((memoryId) => {
         const memory = memoriesById.get(memoryId);
-        return !memory || !uniqueIds(memory.knownBy).includes(ownerId) || !isMemoryRelevantToPair(memory, ownerId, counterpartId);
+        return !memory || !uniqueIds(memory.knownBy).includes(ownerId) || !isMemoryRelevantToPair(memory, ownerId, counterpartId) || !isMemoryInsidePairPresence(context, memory, ownerId, counterpartId);
       });
       if (leaked) {
         invalidPairs.push({ ownerId, counterpartId, reason: "knowledge_or_pair_boundary_violation" });
@@ -98,4 +125,4 @@ function validatePerspectiveSummaryMap(context = {}, extraction = {}, projection
     : { success: false, error: "perspective_summary_validation_failed", invalidPairs };
 }
 
-module.exports = { buildPerspectiveSummaryMap, validatePerspectiveSummaryMap, projectionKey, isMemoryRelevantToPair, renderPerspectiveContent, PINNED_TYPES };
+module.exports = { buildPerspectiveSummaryMap, validatePerspectiveSummaryMap, projectionKey, isMemoryRelevantToPair, isMemoryInsidePairPresence, renderPerspectiveContent, PINNED_TYPES };

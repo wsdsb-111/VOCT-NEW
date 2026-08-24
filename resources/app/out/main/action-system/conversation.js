@@ -60,7 +60,7 @@ class Conversation {
       tokens,
       fingerprint: createPromptFingerprint(content)
     }));
-    const firstHistoryIndex = blocks.findIndex((block) => block.type === "history" || block.type === "current_user");
+    const firstHistoryIndex = blocks.findIndex((block) => block.type === "history" || block.type === "presence_roster" || block.type === "current_user");
     const historyStartPosition = firstHistoryIndex >= 0 ? firstHistoryIndex : blocks.length;
     const prefixFingerprint = createPromptFingerprint(JSON.stringify(blocks.slice(0, historyStartPosition).map((block) => [block.id, block.type, block.fingerprint])));
     return { blocks, historyStartPosition, prefixFingerprint };
@@ -80,6 +80,13 @@ class Conversation {
     this.persistCustomQueue = false;
     this.inactiveParticipantIds = /* @__PURE__ */ new Map();
     this.summaryParticipantProfiles = /* @__PURE__ */ new Map();
+    this.selectedCharacterIds = /* @__PURE__ */ new Set();
+    this.presentCharacterIds = /* @__PURE__ */ new Set();
+    this.waitingCharacterIds = /* @__PURE__ */ new Set();
+    this.departedCharacterIds = /* @__PURE__ */ new Set();
+    this.joinEvents = [];
+    this.leaveEvents = [];
+    this.presenceInitialized = false;
     // Action checks are scoped to the current player turn. This prevents one
     // narrated event from being sent to the action model once per NPC reply.
     this.actionGateProcessedTriggers = /* @__PURE__ */ new Set();
@@ -156,6 +163,7 @@ class Conversation {
       this.gameData = await parseLog(ck3DebugPath);
       console.log("GameData initialized with", this.gameData.characters.size, "characters");
       this.captureSummaryParticipantProfiles(this.gameData.characters.values());
+      this.initializePresence();
       this.gameData.loadCharactersSummaries();
       await this.recoverPendingMemories();
       this.isActive = true;
@@ -176,17 +184,17 @@ class Conversation {
     memoryEngine?.syncConversationRollingFields(this);
     const memoryContext = await this.getMemoryContextFor(npc);
     const currentMessages = PromptBuilder.buildMessages(
-      this.getHistory().slice(this.lastSummarizedMessageIndex),
+      this.getPromptHistoryForCharacter(npc.id),
       npc,
       this.gameData,
-      this.currentSummary,
+      this.getPromptSummaryForCharacter(npc.id),
       memoryContext
     );
     const estimatedTokens = this.estimateTokenCount(currentMessages);
     const contextLimit = await llmManager.getCurrentContextLength() || 1e4;
     if (estimatedTokens > contextLimit * this.CONTEXT_LIMIT_PERCENTAGE) {
       console.log(`Context approaching limit (${estimatedTokens}/${contextLimit}), creating rolling summary`);
-      await this.createRollingSummary(contextLimit);
+      if (this.canUseSharedRollingSummary(npc.id)) await this.createRollingSummary(contextLimit);
     }
     return memoryContext;
   }
@@ -220,7 +228,7 @@ class Conversation {
     if (Number(npc.id) === Number(this.gameData.playerID)) return null;
     if (memoryEngine.isSummaryOwnerDeceased(npc.id)) memoryEngine.reviveSummaryOwner(npc.id);
     const limit = contextLimit || await llmManager.getCurrentContextLength() || 1e4;
-    const history = this.getHistory();
+    const history = this.getHistoryForCharacter(npc.id);
     const activeParticipantIds = this.getActiveConversationCharacters().map((character) => character.id);
     const mentionExcludedIds = this.gameData.getMentionExclusionIds(activeParticipantIds);
     const memoryState = memoryEngine.ensureConversationState(this);
@@ -251,7 +259,7 @@ class Conversation {
       return [characterId, character ? memoryEngine.getCharacterMentionAliases(character) : []];
     }));
     const query = history.slice(-4).map((entry) => entry.content || "").filter(Boolean).join("\n");
-    return memoryEngine.retrieveForResponder({
+    const retrieved = memoryEngine.retrieveForResponder({
       characterId: npc.id,
       query,
       mentionedEntityIds: mentionedCharacterIds,
@@ -264,6 +272,11 @@ class Conversation {
       tokenBudget: Math.min(2400, Math.max(800, Math.floor(limit * 0.08))),
       estimateTokens: (text) => TokenCounter.estimateTokens(text)
     });
+    return {
+      ...retrieved,
+      activeParticipantIds,
+      presenceText: this.buildPresenceContext()
+    };
   }
   /**
    * Estimate token count (simple approximation)
@@ -280,6 +293,143 @@ class Conversation {
   }
   getActiveConversationCharacters() {
     return [...this.gameData.characters.values()].filter((character) => this.isCharacterAvailableForConversation(character));
+  }
+  initializePresence(initialPresentIds = null) {
+    const selectedIds = [...this.gameData.characters.keys()].map(Number).filter((characterId) => Number.isFinite(characterId) && characterId !== Number(this.gameData.playerID));
+    this.selectedCharacterIds = new Set(selectedIds);
+    const requested = Array.isArray(initialPresentIds) ? initialPresentIds.map(Number).filter((characterId) => this.selectedCharacterIds.has(characterId)) : selectedIds;
+    const initialIds = requested.length > 0 ? requested : selectedIds;
+    this.presentCharacterIds = new Set(initialIds);
+    this.waitingCharacterIds = new Set(selectedIds.filter((characterId) => !this.presentCharacterIds.has(characterId)));
+    this.departedCharacterIds = new Set();
+    this.joinEvents = [];
+    this.leaveEvents = [];
+    this.presenceInitialized = true;
+    return this.getPresenceState();
+  }
+  canManagePresence() {
+    return !this.activeResponse && this.npcQueue.length === 0 && !this.isPaused;
+  }
+  getPresenceState() {
+    if (!this.presenceInitialized && this.gameData?.characters) this.initializePresence();
+    const participants = [...(this.selectedCharacterIds || [])].map((characterId) => {
+      const character = this.gameData.characters.get(characterId) || this.summaryParticipantProfiles?.get(characterId);
+      const status = this.waitingCharacterIds.has(characterId) ? "waiting" : this.inactiveParticipantIds?.has(characterId) ? this.inactiveParticipantIds.get(characterId) : this.departedCharacterIds.has(characterId) ? "departed" : "present";
+      return {
+        id: characterId,
+        name: character?.shortName || character?.name || character?.fullName || `角色${characterId}`,
+        fullName: character?.fullName || character?.shortName || character?.name || `角色${characterId}`,
+        status
+      };
+    });
+    return {
+      participants,
+      presentIds: [...this.presentCharacterIds],
+      waitingIds: [...this.waitingCharacterIds],
+      departedIds: [...this.departedCharacterIds],
+      canManage: this.canManagePresence(),
+      canLeave: this.presentCharacterIds.size > 1,
+      beforeFirstMessage: !this.getHistory().some((message) => message.role === "user" || message.role === "assistant")
+    };
+  }
+  buildPresenceContext() {
+    const present = this.getPresenceState().participants.filter((participant) => participant.status === "present");
+    if (present.length === 0) return "";
+    return `=== 当前在场人物（仅本轮有效） ===\n${present.map((participant) => `- ${participant.fullName}`).join("\n")}\n只能把当前在场人物视为听见本轮对话并可直接回应的人；候场或已离场人物不在房间内。`;
+  }
+  getPresenceWindows(characterId) {
+    const state = memoryEngine?.ensureConversationState(this);
+    return (state?.participantPresence || []).filter((window) => Number(window.characterId) === Number(characterId));
+  }
+  getHistoryForCharacter(characterId) {
+    const history = this.getHistory();
+    const windows = this.getPresenceWindows(characterId);
+    if (windows.length === 0) return this.presenceInitialized ? [] : history;
+    return history.filter((message) => windows.some((window) => {
+      const messageId = Number(message.id);
+      if (!Number.isFinite(messageId)) return false;
+      const joined = Number(window.joinedAtMessageId ?? 0);
+      const left = window.leftAtMessageId == null ? Infinity : Number(window.leftAtMessageId);
+      return joined <= messageId && messageId < left;
+    }));
+  }
+  canUseSharedRollingSummary(characterId) {
+    const history = this.getHistory();
+    const firstMessageId = history.map((message) => Number(message.id)).filter(Number.isFinite).sort((left, right) => left - right)[0];
+    if (!Number.isFinite(firstMessageId)) return true;
+    return this.getPresenceWindows(characterId).some((window) => Number(window.joinedAtMessageId ?? 0) <= firstMessageId);
+  }
+  getPromptHistoryForCharacter(characterId) {
+    const history = this.getHistoryForCharacter(characterId);
+    return this.canUseSharedRollingSummary(characterId) ? history.slice(this.lastSummarizedMessageIndex) : history;
+  }
+  getPromptSummaryForCharacter(characterId) {
+    return this.canUseSharedRollingSummary(characterId) ? this.currentSummary : "";
+  }
+  buildLeavingSummaryPrompt(character, history) {
+    const prompt = [
+      { role: "system", content: "Stable leaving-summary instructions:\nSummarize only what the leaving character personally heard before leaving. Preserve concrete events, promises, secrets, decisions and relationship changes. Do not include anything after the presence window closes." },
+      { role: "system", content: `Dynamic leaving character: ${character.fullName}. Player: ${this.gameData.playerName}.` },
+      { role: "system", content: `Full conversation:\n${history.map((message) => `${message.name || message.role}: ${message.content}`).join("\n")}` },
+      { role: "user", content: `Generate ${character.fullName}'s personal conversation summary now.` }
+    ];
+    return typeof PromptBuilder.prepareSummaryMessages === "function" ? PromptBuilder.prepareSummaryMessages(prompt) : prompt;
+  }
+  async joinWaitingCharacter(characterId) {
+    const numericId = Number(characterId);
+    if (!this.canManagePresence()) return { success: false, error: "presence_change_busy" };
+    if (this.departedCharacterIds.has(numericId)) return { success: false, error: "departed_character_cannot_rejoin" };
+    if (!this.waitingCharacterIds.has(numericId)) return { success: false, error: "character_not_waiting" };
+    const character = this.gameData.characters.get(numericId);
+    if (!character || this.inactiveParticipantIds.has(numericId) || character.isDead === true || character.dead === true || character.alive === false) {
+      return { success: false, error: "character_unavailable" };
+    }
+    this.captureSummaryParticipantProfiles([character]);
+    this.waitingCharacterIds.delete(numericId);
+    this.presentCharacterIds.add(numericId);
+    const message = createMessage({ id: this.nextId++, role: "system", kind: "presence_join", characterId: numericId, content: `【${character.shortName || character.fullName}入内】` });
+    this.messages.push(message);
+    memoryEngine?.observeParticipants(this, [numericId], message.id);
+    this.joinEvents.push({ characterId: numericId, atMessageId: message.id, atHistoryIndex: this.getHistory().length - 1 });
+    this.emitUpdate();
+    return { success: true, status: "present", messageId: message.id };
+  }
+  async leavePresentCharacter(characterId) {
+    const numericId = Number(characterId);
+    if (!this.canManagePresence()) return { success: false, error: "presence_change_busy" };
+    if (!this.presentCharacterIds.has(numericId)) return { success: false, error: "character_not_present" };
+    if (this.presentCharacterIds.size <= 1) return { success: false, error: "last_present_character_required" };
+    const character = this.gameData.characters.get(numericId);
+    if (!character || numericId === Number(this.gameData.playerID)) return { success: false, error: "character_unavailable" };
+    this.captureSummaryParticipantProfiles([character]);
+    const hasConversation = this.getHistory().some((message) => message.role === "user" || message.role === "assistant");
+    if (!hasConversation && this.getPresenceWindows(numericId).length === 0) {
+      this.presentCharacterIds.delete(numericId);
+      this.waitingCharacterIds.add(numericId);
+      this.emitUpdate();
+      return { success: true, status: "waiting", summaryGenerated: false };
+    }
+    const message = createMessage({ id: this.nextId++, role: "system", kind: "presence_leave", characterId: numericId, content: `【${character.shortName || character.fullName}离场】` });
+    this.messages.push(message);
+    memoryEngine?.markParticipantLeft(this, numericId, message.id);
+    this.presentCharacterIds.delete(numericId);
+    this.departedCharacterIds.add(numericId);
+    this.npcQueue = this.npcQueue.filter((candidate) => Number(candidate?.id) !== numericId);
+    if (this.customQueue) this.customQueue = this.customQueue.filter((candidate) => Number(candidate?.id) !== numericId);
+    this.invalidateApprovalsForCharacter(numericId, "left");
+    this.leaveEvents.push({ characterId: numericId, atMessageId: message.id, atHistoryIndex: this.getHistory().length - 1 });
+    this.emitUpdate();
+    const visibleHistory = this.getHistoryForCharacter(numericId);
+    const visibleMessageIds = new Set(visibleHistory.map((entry) => Number(entry.id)).filter(Number.isFinite));
+    const summaryParticipantIds = new Set([Number(this.gameData.playerID), numericId]);
+    const participantPresence = memoryEngine?.ensureConversationState(this).participantPresence || [];
+    for (const window of participantPresence) {
+      const joined = Number(window.joinedAtMessageId ?? 0);
+      const left = window.leftAtMessageId == null ? Infinity : Number(window.leftAtMessageId);
+      if ([...visibleMessageIds].some((messageId) => joined <= messageId && messageId < left)) summaryParticipantIds.add(Number(window.characterId));
+    }
+    const summary = visibleHistory.length > 0 ? await this.createCharacterLeavingSummary(numericId, this.buildLeavingSummaryPrompt(character, visibleHistory), [...summaryParticipantIds]) : null;
+    return { success: true, status: "departed", messageId: message.id, summaryGenerated: !!summary };
   }
   captureSummaryParticipantProfiles(characters = []) {
     if (!this.summaryParticipantProfiles) this.summaryParticipantProfiles = /* @__PURE__ */ new Map();
@@ -308,10 +458,14 @@ class Conversation {
   }
   isCharacterAvailableForConversation(character) {
     if (!character || this.inactiveParticipantIds?.has(character.id)) return false;
+    if (this.presenceInitialized && Number(character.id) !== Number(this.gameData?.playerID) && !this.presentCharacterIds.has(Number(character.id))) return false;
     return character.isDead !== true && character.dead !== true && character.alive !== false;
   }
   markParticipantInactive(characterId, reason) {
     memoryEngine?.markParticipantLeft(this, characterId, this.nextId);
+    this.presentCharacterIds?.delete(Number(characterId));
+    this.waitingCharacterIds?.delete(Number(characterId));
+    this.departedCharacterIds?.add(Number(characterId));
     const deactivated = actionSystem.participantLifecycle.deactivate(this, characterId, reason);
     if (reason === "dead" && Number(characterId) !== Number(this.gameData?.playerID)) {
       try {
@@ -380,10 +534,10 @@ class Conversation {
       const memoryContext = await this.checkAndSummarizeIfNeeded(npc);
       if (!this.isResponseCurrent(responseState, npc)) throw new Error("AbortError: Message cancelled");
       const promptBuild = PromptBuilder.buildMessagesWithTokenCount(
-        this.getHistory().slice(this.lastSummarizedMessageIndex),
+        this.getPromptHistoryForCharacter(npc.id),
         npc,
         this.gameData,
-        this.currentSummary,
+        this.getPromptSummaryForCharacter(npc.id),
         memoryContext
       );
       const llmMessages = promptBuild.messages;
@@ -771,11 +925,6 @@ class Conversation {
     };
     const participantPresence = memoryEngine?.ensureConversationState(this).participantPresence || [];
     for (const participant of participantPresence) addParticipant(participant.characterId);
-    for (const message of this.getHistory()) {
-      if (message.role !== "assistant" || !message.name) continue;
-      const character = [...this.summaryParticipantProfiles.values()].find((candidate) => candidate.fullName === message.name || candidate.shortName === message.name || candidate.firstName === message.name);
-      if (character) addParticipant(character.id);
-    }
     return participantIds;
   }
   // Create final comprehensive summary and save to characters
@@ -837,6 +986,8 @@ class Conversation {
       participants,
       excludedSummaryOwnerIds,
       participantPresence: state.participantPresence,
+      joinEvents: this.joinEvents,
+      leaveEvents: this.leaveEvents,
       rollingState: state.rollingState,
       finalInstructions: PromptBuilder.getFinalSummaryInstructions(),
       buildPrompt: (context) => memoryEngine.buildFinalizationPrompt(context),
@@ -845,7 +996,9 @@ class Conversation {
           finalizationId: context.finalizationId,
           excludedOwnerIds: context.excludedSummaryOwnerIds,
           participantProfiles: context.participants,
-          directedSummaries: context.directedSummaries
+          directedSummaries: context.directedSummaries,
+          presenceJoins: context.joinEvents || [],
+          presenceLeaves: context.leaveEvents || []
         });
       },
       requestSummary: async (summaryPrompt) => {
@@ -866,7 +1019,9 @@ class Conversation {
           finalizationId: context.finalizationId,
           excludedOwnerIds: context.excludedSummaryOwnerIds,
           participantProfiles: context.participants,
-          directedSummaries: context.directedSummaries
+          directedSummaries: context.directedSummaries,
+          presenceJoins: context.joinEvents || [],
+          presenceLeaves: context.leaveEvents || []
         });
       }
     });
@@ -916,7 +1071,7 @@ class Conversation {
    * @param summaryPrompt - The prompt messages to use for generating the summary
    * @returns The generated summary or null if failed
    */
-  async createCharacterLeavingSummary(characterId, summaryPrompt) {
+  async createCharacterLeavingSummary(characterId, summaryPrompt, participantIds = null) {
     const character = this.gameData.characters.get(characterId);
     if (!character) {
       console.error(`Character ${characterId} not found for leaving summary`);
@@ -932,7 +1087,7 @@ class Conversation {
         const state = memoryEngine?.ensureConversationState(this);
         memoryEngine?.recordLeavingMemory({
           characterId,
-          participantIds: state?.participantPresence?.filter((window) => window.joinedAtMessageId <= this.nextId && (window.leftAtMessageId == null || window.leftAtMessageId >= this.nextId)).map((window) => window.characterId) || [this.gameData.playerID, characterId],
+          participantIds: Array.isArray(participantIds) ? participantIds : state?.participantPresence?.filter((window) => window.joinedAtMessageId <= this.nextId && (window.leftAtMessageId == null || window.leftAtMessageId > this.nextId)).map((window) => window.characterId) || [this.gameData.playerID, characterId],
           content: summary,
           conversationId: this.id,
           date: this.gameData.date,
@@ -953,23 +1108,31 @@ class Conversation {
    * Remove a character from the conversation entirely
    */
   removeCharacterFromConversation(characterId) {
-    const character = this.gameData.characters.get(characterId);
+    const numericId = Number(characterId);
+    const character = this.gameData.characters.get(numericId);
     if (!character) {
       console.warn(`Character ${characterId} not found in conversation`);
       return;
     }
     this.captureSummaryParticipantProfiles?.([character]);
     console.log(`Removing ${character.fullName} from conversation`);
-    this.invalidateApprovalsForCharacter(characterId, "removed");
-    this.gameData.characters.delete(characterId);
+    if (this.presentCharacterIds?.has(numericId)) {
+      memoryEngine?.markParticipantLeft(this, numericId, this.nextId);
+      this.presentCharacterIds.delete(numericId);
+      this.departedCharacterIds?.add(numericId);
+      this.leaveEvents?.push({ characterId: numericId, atMessageId: this.nextId, atHistoryIndex: this.getHistory().length, source: "action" });
+    }
+    this.waitingCharacterIds?.delete(numericId);
+    this.invalidateApprovalsForCharacter(numericId, "removed");
+    this.gameData.characters.delete(numericId);
     const initialQueueLength = this.npcQueue.length;
-    this.npcQueue = this.npcQueue.filter((char) => char.id !== characterId);
+    this.npcQueue = this.npcQueue.filter((char) => Number(char.id) !== numericId);
     if (this.npcQueue.length < initialQueueLength) {
       console.log(`Removed ${character.fullName} from NPC queue`);
     }
     if (this.customQueue) {
       const initialCustomQueueLength = this.customQueue.length;
-      this.customQueue = this.customQueue.filter((char) => char.id !== characterId);
+      this.customQueue = this.customQueue.filter((char) => Number(char.id) !== numericId);
       if (this.customQueue.length < initialCustomQueueLength) {
         console.log(`Removed ${character.fullName} from custom queue`);
       }

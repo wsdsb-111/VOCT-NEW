@@ -2367,6 +2367,8 @@ class GameData {
         perspectiveOwnerId: projection?.ownerId ?? owner.id,
         perspectiveMemoryIds: projection?.memoryIds || [],
         projectionHash: projection?.projectionHash || null,
+        presenceJoins: Array.isArray(options.presenceJoins) ? options.presenceJoins : [],
+        presenceLeaves: Array.isArray(options.presenceLeaves) ? options.presenceLeaves : [],
         pinned: projection?.pinned === true,
         open: projection?.open === true
       });
@@ -3930,7 +3932,8 @@ ${existingSummary}`
       name: m.name,
       content: m.content
     })).filter((m) => !!m.content);
-    const siblingIds = Array.isArray(char.siblings) ? char.siblings.map((sibling) => sibling?.id).filter((id) => id !== void 0) : [];
+    const activeParticipantIds = new Set((memoryContext?.activeParticipantIds || [...gameData.characters.keys()]).map(Number));
+    const siblingIds = Array.isArray(char.siblings) ? char.siblings.map((sibling) => sibling?.id).filter((id) => id !== void 0 && activeParticipantIds.has(Number(id))) : [];
     const activeParticipantRelationshipContext = gameData.getActiveParticipantRelationshipInfo(char, siblingIds);
     const activeParticipantRelationshipBlock = {
       id: "active-participant-relationship",
@@ -4002,14 +4005,6 @@ ${existingSummary}`
           tokens: TokenCounter.estimateTokens(memoryContext.mentionedSnapshotText)
         });
       }
-      if (activeParticipantRelationshipContext) {
-        llmMessages.push({ role: "system", content: activeParticipantRelationshipContext });
-        blocksWithTokens.push({
-          block: activeParticipantRelationshipBlock,
-          content: activeParticipantRelationshipContext,
-          tokens: TokenCounter.estimateTokens(activeParticipantRelationshipContext)
-        });
-      }
       for (const deferred of deferredMainSegments) {
         llmMessages.push(deferred.message);
         blocksWithTokens.push(deferred.tokenBlock);
@@ -4033,6 +4028,7 @@ ${existingSummary}`
       const result = this.applyBlockWithTokenCount(block, llmMessages, workingHistory, context, promptSettings, {
         deferredMainSegments,
         deferredDescriptionBlocks,
+        presenceText: [memoryContext?.presenceText, activeParticipantRelationshipContext].filter(Boolean).join("\n\n"),
         topicPatchText: [mentionedCharactersContext, memoryContext?.topicPatchText].filter(Boolean).join("\n\n")
       });
       if (Array.isArray(result)) {
@@ -4231,6 +4227,14 @@ ${existingSummary}`
             block,
             content: priorHistory.map((message) => `${message.role}: ${message.content}`).join("\n\n"),
             tokens: TokenCounter.calculateTotalTokens(priorHistory)
+          });
+        }
+        if (options.presenceText) {
+          messages.push({ role: "system", content: options.presenceText });
+          tokenBlocks.push({
+            block: { id: "current-presence-roster", type: "presence_roster", label: "Current Presence and Relationships", enabled: true, role: "system" },
+            content: options.presenceText,
+            tokens: TokenCounter.estimateTokens(options.presenceText)
           });
         }
         if (options.topicPatchText) {
@@ -4867,12 +4871,25 @@ class ConversationManager {
    */
   getConversationState() {
     if (!this.currentConversation) {
-      return { isPaused: false, queueLength: 0 };
+      return { isPaused: false, queueLength: 0, presence: null };
     }
     return {
       isPaused: this.currentConversation.isPaused,
-      queueLength: this.currentConversation.npcQueue.length
+      queueLength: this.currentConversation.npcQueue.length,
+      presence: this.currentConversation.getPresenceState()
     };
+  }
+  async joinWaitingCharacter(characterId) {
+    if (!this.currentConversation?.isActive) return { success: false, error: "no_active_conversation" };
+    const result = await this.currentConversation.joinWaitingCharacter(characterId);
+    this.emitConversationUpdate();
+    return result;
+  }
+  async leavePresentCharacter(characterId) {
+    if (!this.currentConversation?.isActive) return { success: false, error: "no_active_conversation" };
+    const result = await this.currentConversation.leavePresentCharacter(characterId);
+    this.emitConversationUpdate();
+    return result;
   }
   /**
    * Regenerate an error message
@@ -4919,7 +4936,8 @@ class ConversationManager {
       characters,
       playerID: this.currentConversation.gameData.playerID,
       aiID: this.currentConversation.gameData.aiID,
-      historyLength: this.currentConversation.getHistory().length
+      historyLength: this.currentConversation.getHistory().length,
+      presence: this.currentConversation.getPresenceState()
     };
   }
   /**
@@ -4933,12 +4951,16 @@ class ConversationManager {
     if (!character) {
       return null;
     }
-    const history = this.currentConversation.getHistory();
+    const history = this.currentConversation.getPromptHistoryForCharacter(characterId);
     const result = PromptBuilder.buildMessagesWithTokenCount(
       history,
       character,
       this.currentConversation.gameData,
-      this.currentConversation.currentSummary
+      this.currentConversation.getPromptSummaryForCharacter(characterId),
+      {
+        activeParticipantIds: this.currentConversation.getActiveConversationCharacters().map((participant) => participant.id),
+        presenceText: this.currentConversation.buildPresenceContext()
+      }
     );
     return {
       characterId,

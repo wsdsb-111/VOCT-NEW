@@ -13,19 +13,19 @@ class KnowledgeService {
     const messageIds = Array.isArray(memory.provenance?.messageIds) ? memory.provenance.messageIds.map(Number).filter(Number.isFinite) : [];
     const eventStart = messageIds.length > 0 ? Math.min(...messageIds) : episode.conversationStartMessageId ?? null;
     const eventEnd = messageIds.length > 0 ? Math.max(...messageIds) : episode.conversationEndMessageId ?? null;
-    const requiresFullWindow = messageIds.length === 0;
     const presentIds = presence.filter((window) => {
       if (eventStart == null) return true;
       const joined = Number(window.joinedAtMessageId ?? 0);
       const left = window.leftAtMessageId == null ? Infinity : Number(window.leftAtMessageId);
-      return requiresFullWindow ? joined <= eventStart && left >= eventEnd : joined <= eventEnd && left >= eventStart;
+      if (messageIds.length > 0) return messageIds.every((messageId) => joined <= messageId && messageId < left);
+      return joined <= eventStart && (eventEnd == null || eventEnd < left);
     }).map((window) => window.characterId);
     let knownBy;
     if (memory.visibility === "private") {
       const presentSet = new Set(presentIds);
       knownBy = [...memory.participants, ...memory.provenance.speakerIds].filter((characterId) => presentSet.has(Number(characterId)));
     } else if (memory.visibility === "public" || memory.visibility === "world") {
-      knownBy = presence.map((window) => window.characterId);
+      knownBy = presentIds;
     } else {
       knownBy = presentIds;
     }

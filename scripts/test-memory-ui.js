@@ -141,7 +141,7 @@ assert(rendererSource.includes("const groups = new Map()"), "numeric character I
 assert(!rendererSource.includes("Object.entries(summariesByPlayer)"), "search result groups must not use numeric object-key enumeration");
 assert(!rendererSource.includes('className: "memory-character-coverage"'), "the duplicate per-character structured-memory tree must be removed");
 assert(!rendererSource.includes("Promise.all([listAllSummaries(), getMemoryOverview()])"), "summary dashboard must not parse every JSON file twice");
-assert(rendererSource.includes("Memory Engine 2.3 · V7.7.1"), "summary UI must expose the V7.7.1 runtime version");
+assert(rendererSource.includes("Memory Engine 2.3 · V7.7.2"), "summary UI must expose the V7.7.2 runtime version");
 assert(rendererSource.includes('key === "stablePrefix" ? "稳定前缀"'), "summary UI must label the stable prefix policy");
 assert(rendererSource.includes("memory-routing-grid"), "summary UI must explain direct, group and mentioned-person recall policies");
 assert(rendererSource.includes("summary-route-label"), "conversation files must display owner-to-counterpart routing");

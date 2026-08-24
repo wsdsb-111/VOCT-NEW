@@ -16885,17 +16885,17 @@ function Chat({ onToggleConfig }) {
   reactExports.useEffect(() => {
     scrollToBottom();
   }, [entries, scrollToBottom]);
+  const refreshConversationState = reactExports.useCallback(async () => {
+    try {
+      const state = await window.conversationAPI.getConversationState();
+      setConversationState(state);
+    } catch (error) {
+      console.error("Failed to fetch conversation state:", error);
+    }
+  }, []);
   reactExports.useEffect(() => {
-    const fetchState = async () => {
-      try {
-        const state = await window.conversationAPI.getConversationState();
-        setConversationState(state);
-      } catch (error) {
-        console.error("Failed to fetch conversation state:", error);
-      }
-    };
-    fetchState();
-  }, [entries]);
+    refreshConversationState();
+  }, [entries, refreshConversationState]);
   const resetChat = () => {
     setInputValue("");
   };
@@ -16974,6 +16974,17 @@ function Chat({ onToggleConfig }) {
       await window.conversationAPI.resumeConversation();
     } catch (error) {
       console.error("Failed to resume conversation:", error);
+    }
+  };
+  const handlePresenceChange = async (characterId, operation) => {
+    try {
+      const result = operation === "join" ? await window.conversationAPI.joinWaitingCharacter(characterId) : await window.conversationAPI.leavePresentCharacter(characterId);
+      if (!result?.success) {
+        console.warn("Presence change rejected:", result?.error || "unknown_error");
+      }
+      await refreshConversationState();
+    } catch (error) {
+      console.error("Failed to change conversation presence:", error);
     }
   };
   reactExports.useEffect(() => {
@@ -17171,6 +17182,19 @@ function Chat({ onToggleConfig }) {
               onScroll: handleScroll
             }
           ),
+          conversationState.presence?.participants?.length > 1 && /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "conversation-presence-panel", children: [
+            /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "conversation-presence-title", children: "在场人物" }),
+            /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "conversation-presence-list", children: conversationState.presence.participants.map((participant) => {
+              const isWaiting = participant.status === "waiting";
+              const isPresent = participant.status === "present";
+              const buttonText = isWaiting ? "请入内" : isPresent ? conversationState.presence.beforeFirstMessage ? "设为候场" : "请离场" : participant.status === "dead" ? "已故" : "已离场";
+              const disabled = !conversationState.presence.canManage || !isWaiting && (!isPresent || !conversationState.presence.canLeave);
+              return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: `conversation-presence-person presence-${participant.status}`, children: [
+                /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "conversation-presence-name", children: participant.name }),
+                /* @__PURE__ */ jsxRuntimeExports.jsx("button", { className: "conversation-presence-button", disabled, onClick: () => handlePresenceChange(participant.id, isWaiting ? "join" : "leave"), children: buttonText })
+              ] }, participant.id);
+            }) })
+          ] }),
           /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "chat-controls-container", children: [
             /* @__PURE__ */ jsxRuntimeExports.jsx(
               ActionCommandInput,
@@ -20778,8 +20802,8 @@ const SummariesManager = () => {
     /* @__PURE__ */ jsxRuntimeExports.jsxs("section", { className: "memory-engine-overview", children: [
       /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "memory-engine-title", children: [
         /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
-          /* @__PURE__ */ jsxRuntimeExports.jsx("h5", { children: "Memory Engine 2.3 · V7.7.1" }),
-          /* @__PURE__ */ jsxRuntimeExports.jsx("p", { children: "每名角色只保存自己知情的视角摘要；直接关系与场外人物快照整场冻结，必要时仅追加一次话题补丁" })
+          /* @__PURE__ */ jsxRuntimeExports.jsx("h5", { children: "Memory Engine 2.3 · V7.7.2" }),
+          /* @__PURE__ */ jsxRuntimeExports.jsx("p", { children: "每名角色只保存自己实际在场且知情的视角摘要；支持候场、请入内和请离场" })
         ] }),
         /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: `memory-engine-status ${memoryOverview.error ? "is-error" : ""}`, children: memoryOverview.error ? "读取异常" : "运行中" })
       ] }),
@@ -21340,8 +21364,9 @@ const OptimizationView = () => {
     [text("稳定记忆前缀", "Stable memory prefix"), text("同一场对话每轮保持一致；对话结束后的新摘要在下一场读取。", "It stays unchanged throughout one conversation; new final summaries are loaded in the next conversation.")],
     [text("场外人物快照", "Mentioned-character snapshot"), text("首次提及时按每名 NPC 的目录召回，本场后续回复复用；新增人物时扩展一次。", "Each NPC recalls from their own folder on first mention, then reuses that snapshot until another person is introduced.")],
     [text("视角摘要", "Perspective summaries"), text("Memory Engine 2.3 按人物知情边界生成目录视图，秘密不会复制给不知情角色。", "Memory Engine 2.3 creates folder views from each character's knowledge boundary so secrets do not leak to unaware characters.")],
+    [text("在场窗口", "Presence windows"), text("候场人物不会回应或获知内容；入内后开始记录，请离场后立即生成其离场前摘要并停止收录后续对话。", "Waiting characters neither respond nor learn content; memory starts on entry and stops when leaving triggers their pre-departure summary.")],
     [text("安全配置", "Secure configuration"), text("Provider API Key 使用 Electron safeStorage 加密落盘；明文旧配置在可用时自动迁移。", "Provider API keys are encrypted at rest with Electron safeStorage; plaintext settings migrate when encryption is available.")],
-    [text("统一发布门禁", "Unified release gate"), text("本地与 CI 共用一份 29 组测试清单，并加入 36 条轻量语义金标样例。", "Local and CI validation share one 29-group manifest plus 36 lightweight semantic golden cases.")],
+    [text("统一发布门禁", "Unified release gate"), text("本地与 CI 共用一份 35 组测试清单，并加入 36 条轻量语义金标样例。", "Local and CI validation share one 35-group manifest plus 36 lightweight semantic golden cases.")],
     [text("DeepSeek 思考与摘要", "DeepSeek thinking and summaries"), text("普通对话和结构化终局摘要启用思考模式并使用 4096 Token；动作判定保持非思考。", "Normal chat and structured final summaries use thinking mode with 4096 tokens; action selection remains non-thinking.")],
     [text("动作语义直通", "Semantic action routing"), text("本地关键词门控已关闭，每条当前回复均交由动作模型作语义判定。", "The local keyword gate is disabled; every current reply reaches model semantic selection.")]
   ];
@@ -21349,7 +21374,7 @@ const OptimizationView = () => {
     /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "optimization-header", children: [
       /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
         /* @__PURE__ */ jsxRuntimeExports.jsx("h3", { children: text("系统优化与用量", "System Optimization & Usage") }),
-        /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "muted-text", children: text("V7.7.1 将摘要升级为按角色知情边界投影的 Memory Engine 2.3，并冻结同场直接关系与场外人物召回。用量仅按服务商返回的 Token 统计。", "V7.7.1 upgrades summaries to Memory Engine 2.3 perspective projections and freezes direct and mentioned-character recall within a session. Usage counts provider-reported tokens only.") })
+        /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "muted-text", children: text("V7.7.2 为 Memory Engine 2.3 增加候场、入内与离场窗口；每名角色只保留实际在场区间的对话。用量仅按服务商返回的 Token 统计。", "V7.7.2 adds waiting, entry, and departure windows to Memory Engine 2.3 so each character retains only dialogue from their actual presence interval. Usage counts provider-reported tokens only.") })
       ] }),
       /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "optimization-header-actions", children: [
         /* @__PURE__ */ jsxRuntimeExports.jsx("button", { type: "button", onClick: loadReport, disabled: isLoading, children: isLoading ? text("读取中…", "Loading…") : text("刷新", "Refresh") }),
@@ -21362,7 +21387,7 @@ const OptimizationView = () => {
       /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "optimization-metrics", children: metrics.map(([label, value, tone]) => /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: `optimization-metric ${tone}`, children: [/* @__PURE__ */ jsxRuntimeExports.jsx("span", { children: label }), /* @__PURE__ */ jsxRuntimeExports.jsx("strong", { children: value })] }, label)) }),
       reconciliation?.aggregates > 0 && /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "muted-text", children: text(`已包含 ${formatTokens(reconciliation.requests)} 次 DeepSeek 官网核对补录、${formatTokens(reconciliation.totalTokens)} Token；缓存细分仅来自本机仍保留的原始响应。`, `Includes a DeepSeek-console reconciliation of ${formatTokens(reconciliation.requests)} requests and ${formatTokens(reconciliation.totalTokens)} tokens; cache details use only locally retained provider responses.`) }),
       /* @__PURE__ */ jsxRuntimeExports.jsxs("section", { className: "optimization-capabilities", children: [
-        /* @__PURE__ */ jsxRuntimeExports.jsx("h4", { children: text("V7.7.1 适配状态", "V7.7.1 integration status") }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx("h4", { children: text("V7.7.2 适配状态", "V7.7.2 integration status") }),
         /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "optimization-capability-grid", children: capabilities.map(([title, detail]) => /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "optimization-capability", children: [/* @__PURE__ */ jsxRuntimeExports.jsx("strong", { children: title }), /* @__PURE__ */ jsxRuntimeExports.jsx("span", { children: detail })] }, title)) })
       ] }),
       /* @__PURE__ */ jsxRuntimeExports.jsxs("section", { className: "optimization-section", children: [

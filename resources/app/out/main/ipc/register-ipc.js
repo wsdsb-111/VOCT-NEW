@@ -591,6 +591,12 @@ function registerIpcHandlers(runtime) {
   electron.ipcMain.handle("conversation:getState", () => {
     return conversationManager.getConversationState();
   });
+  electron.ipcMain.handle("conversation:joinWaitingCharacter", async (_, { characterId }) => {
+    return conversationManager.joinWaitingCharacter(characterId);
+  });
+  electron.ipcMain.handle("conversation:leavePresentCharacter", async (_, { characterId }) => {
+    return conversationManager.leavePresentCharacter(characterId);
+  });
   electron.ipcMain.handle("conversation:regenerateMessage", async (_, requestArgs) => {
     const { messageId } = requestArgs;
     try {

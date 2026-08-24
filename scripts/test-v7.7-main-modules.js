@@ -68,7 +68,7 @@ const runtime = {
   }
 };
 registerIpcHandlers(runtime);
-assert.strictEqual(handlers.size, 92, "all 92 existing IPC channels must remain registered");
+assert.strictEqual(handlers.size, 94, "all 92 existing IPC channels plus the 2 V7.7.2 presence channels must remain registered");
 for (const channel of [
   "toggle-config-panel",
   "llm:getAppSettings",
@@ -80,11 +80,11 @@ for (const channel of [
 }
 assert.strictEqual(handlers.get("llm:getAppSettings")(), settingsSentinel);
 assert.strictEqual(typeof updateCallback, "function", "conversation update forwarding must remain registered");
-assert.strictEqual((ipcSource.match(/electron\.ipcMain\.handle\(/g) || []).length, 92);
+assert.strictEqual((ipcSource.match(/electron\.ipcMain\.handle\(/g) || []).length, 94);
 
 let toggleCount = 0;
 runtime.chatWindow = { webContents: { send(channel) { if (channel === "toggle-settings") toggleCount += 1; } } };
 assert.strictEqual(handlers.get("toggle-config-panel")(), true);
 assert.strictEqual(toggleCount, 1, "IPC callbacks must resolve the current chat window at invocation time");
 
-console.log("VOTC v7.7 main modules: PASS (Provider Service, 6 providers, 92 IPC channels, dynamic window forwarding, main.js < 6700 lines)");
+console.log("VOTC v7.7.2 main modules: PASS (Provider Service, 6 providers, 94 IPC channels, dynamic window forwarding, main.js < 6700 lines)");
