@@ -86,8 +86,9 @@ const profileForwardingCount = conversationSource.match(/participantProfiles:\s*
 assert.strictEqual(profileForwardingCount, 2, "live finalization and recovery must both forward participant snapshots");
 
 const mainSource = fs.readFileSync(path.join(root, "resources", "app", "out", "main", "main.js"), "utf8");
+const providerServiceSource = fs.readFileSync(path.join(root, "resources", "app", "out", "main", "provider-service.js"), "utf8");
 assert(mainSource.includes("memorySystem.resolveSummaryParticipants"), "folder persistence must resolve participants independently of the current scene");
 assert(mainSource.includes("memorySystem.buildDirectedParticipantPairs"), "runtime folder persistence must use the tested all-participant directed pair builder");
-assert(mainSource.includes('{ thinking: { type: "disabled" }, response_format: { type: "json_object" } }'), "final summaries and recovery must prevent hidden reasoning from consuming the response budget");
+assert(providerServiceSource.includes('{ thinking: { type: "disabled" }, response_format: { type: "json_object" } }'), "final summaries and recovery must prevent hidden reasoning from consuming the response budget");
 
 console.log("VOTC v7.3.1 summary recovery: PASS (2-6 participants, scene-independent profiles, complete directed folders)");

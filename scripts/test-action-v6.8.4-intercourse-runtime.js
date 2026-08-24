@@ -53,7 +53,7 @@ globalThis.ActionSandbox = { executeAction: async (_filePath, context) => interc
 const ActionEngine = getActionEngine();
 (async () => {
   const conversation = { gameData, messages: [], actionGateProcessedTriggers: new Set(), inactiveParticipantIds: new Map(), primaryAddresseeId: npcC.id };
-  const message = { id: 8401, role: "assistant", name: npcB.fullName, content: "我与NPCC已经行过房事。", primaryAddresseeId: npcC.id };
+  const message = { id: 8401, role: "assistant", name: npcB.fullName, content: "我与NPCC共度了春宵。", primaryAddresseeId: npcC.id };
   const pending = await ActionEngine.evaluateForCharacter(conversation, npcB, null, message);
   assert.strictEqual(llmRequests, 0, "completed intercourse with exact binding must use local invocation");
   assert.strictEqual(pending.needsApproval.length, 1, "high-risk local invocation must retain approval");

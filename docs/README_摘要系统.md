@@ -1,6 +1,6 @@
-# 对话摘要系统：Memory Engine 2.2（V7.6）
+# 对话摘要系统：Memory Engine 2.2（V7.6.1）
 
-V7.6 以人物摘要文件夹作为唯一可见、可搜索、可编辑的长期记忆层，并用 CK3 数字 ID 将本名归档、动态称谓和死亡生命周期统一起来。旧摘要导入、跨周目导入通知和旧格式运行路径均已退休。结构化 Memory、Episode、Knowledge 与 Pair Index 只在内部维护恢复能力和角色知情边界。
+V7.6.1 以人物摘要文件夹作为唯一可见、可搜索、可编辑的长期记忆层，并用 CK3 数字 ID 将本名归档、动态称谓和死亡生命周期统一起来。旧摘要导入、跨周目导入通知和旧格式运行路径均已退休。结构化 Memory、Episode、Knowledge 与 Pair Index 只在内部维护恢复能力和角色知情边界。
 
 ## 存储结构
 
@@ -78,7 +78,9 @@ C/与B的对话.json
 
 ## 摘要管理 UI
 
-V7.6 状态面板同时展示稳定前缀、一对一、多人、场外人物会话快照和 Token 边界。优化页同时展示 safeStorage、统一发布门禁和主进程健康化状态。普通 DeepSeek 对话仍启用思考模式并使用 4096 Token，动作与终局摘要保持非思考。
+V7.6.1 状态面板同时展示稳定前缀、一对一、多人、场外人物会话快照和 Token 边界。优化页同时展示 safeStorage、统一发布门禁和主进程健康化状态。普通 DeepSeek 对话仍启用思考模式并使用 4096 Token，动作与终局摘要保持非思考。
+
+每场终局写入会逐一核验全部有向人物文件都包含相同的 `finalizationId`。2 人会有 2 个文件，N 人会有 `N × (N−1)` 个文件；缺失任一人物目录或对话文件即进入 recovery，不会把不完整保存标记为成功。人物目录是独立所有权边界：在摘要管理页编辑或删除李师师目录中的“与燕青的对话”，不会修改或删除燕青目录中的“与李师师的对话”。
 
 摘要页只保留一套层级：
 
@@ -126,6 +128,8 @@ node scripts\test-v7.3-identity-lifecycle.js
 node scripts\test-v7.5-memory-action-retirement.js
 node scripts\test-v7.6-architecture-security.js
 node scripts\test-v7.6-semantic-golden-set.js
+node scripts\test-v7.6.1-directed-summary-persistence.js
+node scripts\test-v7.6.1-recovery-race.js
 node scripts\test-memory-ui.js
 node scripts\test-release.js
 node --check resources\app\out\main\main.js

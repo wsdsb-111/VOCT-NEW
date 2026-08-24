@@ -9,7 +9,7 @@ const root = path.resolve(__dirname, "..");
 const memoryDir = path.join(root, "resources", "app", "out", "main", "memory-system");
 const rendererPath = path.join(root, "resources", "app", "out", "renderer", "assets", "index-Dn3qWlAB.js");
 const preloadPath = path.join(root, "resources", "app", "out", "preload", "preload.js");
-const mainPath = path.join(root, "resources", "app", "out", "main", "main.js");
+const ipcPath = path.join(root, "resources", "app", "out", "main", "ipc", "register-ipc.js");
 const enginePath = path.join(memoryDir, "memory-engine.js");
 const conversationPath = path.join(root, "resources", "app", "out", "main", "action-system", "conversation.js");
 const { buildSummaryCatalogEntry, classifySummaryMatch } = require(path.join(memoryDir, "summary-catalog"));
@@ -119,7 +119,7 @@ assert.deepStrictEqual(
 
 const rendererSource = fs.readFileSync(rendererPath, "utf8");
 const preloadSource = fs.readFileSync(preloadPath, "utf8");
-const mainSource = fs.readFileSync(mainPath, "utf8");
+const ipcSource = fs.readFileSync(ipcPath, "utf8");
 const engineSource = fs.readFileSync(enginePath, "utf8");
 const conversationSource = fs.readFileSync(conversationPath, "utf8");
 assert(rendererSource.includes("memory-engine-overview"), "summary UI must render the Memory Engine overview");
@@ -129,11 +129,11 @@ assert(rendererSource.includes("summary-match-badge"), "summary UI must explain 
 assert(!rendererSource.includes("handleEditStructuredMemory"), "summary UI must expose only the canonical folder editing surface");
 assert(!rendererSource.includes("可访问的结构化记忆（可编辑）"), "summary UI must not duplicate structured and folder records");
 assert(preloadSource.includes("updateStructuredMemory"), "preload must expose structured-memory editing");
-assert(mainSource.includes('"conversation:updateStructuredMemory"'), "main process must provide structured-memory editing IPC");
+assert(ipcSource.includes('"conversation:updateStructuredMemory"'), "main process must provide structured-memory editing IPC");
 assert(conversationSource.includes("participantPresence"), "final summary participants must include observed session participants");
 assert(conversationSource.includes("mentionedEntityIds: mentionedCharacterIds"), "conversation retrieval must bind mentioned third-party IDs");
 assert(preloadSource.includes("getSummariesDashboardData"), "preload must expose the single-read summaries dashboard endpoint");
-assert(mainSource.includes('"conversation:getSummariesDashboardData"'), "main process must provide combined catalog and overview data");
+assert(ipcSource.includes('"conversation:getSummariesDashboardData"'), "main process must provide combined catalog and overview data");
 assert(rendererSource.includes("reactExports.useDeferredValue(searchQuery)"), "summary search must defer expensive filtering while typing");
 assert(rendererSource.includes("const topMatch = filteredSummaries[0]"), "search must limit automatic content expansion to the top result");
 assert(rendererSource.includes("const summaryGroups = reactExports.useMemo"), "summary groups must preserve ranked insertion order");
@@ -141,8 +141,8 @@ assert(rendererSource.includes("const groups = new Map()"), "numeric character I
 assert(!rendererSource.includes("Object.entries(summariesByPlayer)"), "search result groups must not use numeric object-key enumeration");
 assert(!rendererSource.includes('className: "memory-character-coverage"'), "the duplicate per-character structured-memory tree must be removed");
 assert(!rendererSource.includes("Promise.all([listAllSummaries(), getMemoryOverview()])"), "summary dashboard must not parse every JSON file twice");
-assert(rendererSource.includes("Memory Engine 2.2 · V7.6"), "summary UI must expose the V7.6 runtime version");
-assert(rendererSource.includes('key === "stablePrefix" ? "稳定前缀"'), "summary UI must label the V7.6 stable prefix policy");
+assert(rendererSource.includes("Memory Engine 2.2 · V7.6.1"), "summary UI must expose the V7.6.1 runtime version");
+assert(rendererSource.includes('key === "stablePrefix" ? "稳定前缀"'), "summary UI must label the V7.6.1 stable prefix policy");
 assert(rendererSource.includes("memory-routing-grid"), "summary UI must explain direct, group and mentioned-person recall policies");
 assert(rendererSource.includes("summary-route-label"), "conversation files must display owner-to-counterpart routing");
 assert(rendererSource.includes("editingEntry.ownerName"), "summary editor must identify the folder owner");

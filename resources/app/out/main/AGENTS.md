@@ -1,10 +1,10 @@
 # Main Process Guidelines
 
-These rules apply to `resources/app/out/main/`, especially `main.js`.
+These rules apply to `resources/app/out/main/`, especially `main.js`, `provider-service.js`, `providers/index.js`, and `ipc/register-ipc.js`.
 
 ## Scope and Editing
 
-`main.js` is the shipped bundled Electron main process. Make targeted patches only; do not reformat, rebundle, or refactor unrelated generated code. Preserve IPC names, persisted settings keys, action IDs, analytics field names, and prompt-block IDs unless the requested change explicitly requires a migration.
+`main.js` is the shipped bundled Electron composition root. Provider implementations live in `providers/index.js`; Provider selection, request shaping and token counting live in `provider-service.js`; IPC registrations live in `ipc/register-ipc.js` and receive their dependencies from `main.js`. Make targeted patches only; do not reformat, rebundle, or refactor unrelated generated code. Preserve IPC names, persisted settings keys, action IDs, analytics field names, and prompt-block IDs unless the requested change explicitly requires a migration.
 
 ## Action and Prompt Changes
 
@@ -24,6 +24,9 @@ For every behavior change, add or update a matching case in `scripts/test-action
 ```powershell
 node scripts\test-action-system.js
 node --check resources\app\out\main\main.js
+node --check resources\app\out\main\provider-service.js
+node --check resources\app\out\main\providers\index.js
+node --check resources\app\out\main\ipc\register-ipc.js
 ```
 
 For changes to IPC, settings, prompts, or streaming, also launch `VOTC.exe` and test the affected flow manually.

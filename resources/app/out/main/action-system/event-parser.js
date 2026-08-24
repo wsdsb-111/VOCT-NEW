@@ -60,7 +60,14 @@ function parse(text, { registry } = {}) {
         for (const category of hints) rejectedCandidates.push({ category, evidence: candidateEvidence, rejectionReason: "posthoc_negation" });
         continue;
       }
-      if (hypotheticalMarker.test(clause.text) && (/^\s*(?:如果|假如|倘若|若是|要是|\bif\b)/i.test(clause.text) || !isPostActionQualifier(clause.text))) {
+      const previousClause = index > 0 ? clauses[index - 1] : null;
+      const connectorText = previousClause
+        ? source.slice(previousClause.start + previousClause.text.length, clause.start)
+        : "";
+      const inheritsHypothetical = previousClause
+        && /^\s*(?:如果|假如|倘若|若是|要是|若|\bif\b)/i.test(previousClause.text)
+        && !/(?:不过|但是|然而|反而|而是|但最终|随后|然后|接着|最后)/.test(connectorText);
+      if (inheritsHypothetical || hypotheticalMarker.test(clause.text) && (/^\s*(?:如果|假如|倘若|若是|要是|若|\bif\b)/i.test(clause.text) || !isPostActionQualifier(clause.text))) {
         for (const category of hints) rejectedCandidates.push({ category, evidence: candidateEvidence, rejectionReason: "hypothetical" });
         continue;
       }
@@ -68,7 +75,7 @@ function parse(text, { registry } = {}) {
         for (const category of hints) rejectedCandidates.push({ category, evidence: candidateEvidence, rejectionReason: "recalled_or_reported" });
         continue;
       }
-      const failedBeforeExecution = failedBeforeExecutionMarker.test(clause.text) || /(?:试图|尝试|企图)/.test(clause.text) && clauses.slice(index + 1, index + 2).some((nextClause) => /(?:没能|未能|卡在|失败|落空|无法|没有成功|\b(?:failed|stuck|could not)\b)/i.test(nextClause.text));
+      const failedBeforeExecution = failedBeforeExecutionMarker.test(clause.text) || /(?:试图|尝试|企图)/.test(clause.text) && clauses.slice(index + 1, index + 2).some((nextClause) => /(?:没能|未能|卡在|失败|落空|无法|没有成功|拒绝|推开|挣脱|\b(?:failed|stuck|could not|refused)\b)/i.test(nextClause.text));
       if (failedBeforeExecution) {
         for (const category of hints) rejectedCandidates.push({ category, evidence: candidateEvidence, rejectionReason: "failed_before_execution" });
         continue;

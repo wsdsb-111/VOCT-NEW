@@ -50,11 +50,12 @@ try {
 }
 
 const mainSource = fs.readFileSync(path.join(root, "resources", "app", "out", "main", "main.js"), "utf8");
+const providerServiceSource = fs.readFileSync(path.join(root, "resources", "app", "out", "main", "provider-service.js"), "utf8");
 const actionPromptSource = fs.readFileSync(path.join(root, "resources", "app", "out", "main", "action-system", "action-prompt-builder.js"), "utf8");
 const rendererSource = fs.readFileSync(path.join(root, "resources", "app", "out", "renderer", "assets", "index-Dn3qWlAB.js"), "utf8");
 const defaultPromptSource = fs.readFileSync(path.join(root, "resources", "app", "default_userdata", "prompts", "system", "default.hbs"), "utf8");
-assert(mainSource.includes('thinking: { type: "enabled" }'), "DeepSeek normal chat must explicitly enable thinking");
-assert(mainSource.includes("max_tokens: 4096"), "DeepSeek normal chat must keep the requested 4096-token budget");
+assert(providerServiceSource.includes('thinking: { type: "enabled" }'), "DeepSeek normal chat must explicitly enable thinking");
+assert(providerServiceSource.includes("max_tokens: 4096"), "DeepSeek normal chat must keep the requested 4096-token budget");
 assert(mainSource.includes("角色回复不设固定句数、段落数或人为短回复目标"), "normal roleplay replies must not be artificially shortened");
 assert(mainSource.includes("VOTC_CACHE_ANCHOR_v3"), "the conversation cache anchor must change with the V7.4 prompt contract");
 assert(mainSource.includes("PROMPT_DEFAULTS_MANIFEST_VERSION = 2"), "the V7.4 bundled prompt update must advance its migration manifest");
@@ -63,13 +64,13 @@ assert(mainSource.includes("LEGACY_CHAT_INSTRUCTION") && mainSource.includes("DE
 assert(defaultPromptSource.includes("不设固定句数或段落数"), "the default prompt must request naturally complete emotional replies");
 assert(defaultPromptSource.includes("长期稳定记忆") && defaultPromptSource.includes("本轮事实只以当前对话消息"), "the default prompt must separate recalled context from current-turn facts");
 assert(defaultPromptSource.includes("不得展示思维过程"), "thinking chat must return only the in-character response");
-assert(mainSource.includes('thinking: { type: "disabled" }, response_format: { type: "json_object" }'), "final summaries must keep the non-thinking P0 safeguard");
+assert(providerServiceSource.includes('thinking: { type: "disabled" }, response_format: { type: "json_object" }'), "final summaries must keep the non-thinking P0 safeguard");
 assert(actionPromptSource.includes("VOTC_ACTION_CACHE_ANCHOR_v10"), "the action prompt anchor must change with the V7.5 two-stage semantic boundary");
 assert(actionPromptSource.includes("they never prove that an action happened in the current turn"), "action selection must not treat recalled memory as current evidence");
-assert(rendererSource.includes("Memory Engine 2.2 · V7.6"));
+assert(rendererSource.includes("Memory Engine 2.2 · V7.6.1"));
 assert(rendererSource.includes("动作语义直通"));
 assert(rendererSource.includes("稳定记忆前缀"));
 assert(rendererSource.includes("DeepSeek 思考对话"));
-assert(rendererSource.includes("V7.6 适配状态"));
+assert(rendererSource.includes("V7.6.1 适配状态"));
 
 console.log("VOTC v7.4 dialogue/action/cache: PASS (UI, prompt migration, thinking chat, stable memory prefix, semantic-direct action routing)");

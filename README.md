@@ -73,15 +73,15 @@ V7.6 起，Provider API Key 使用 Electron `safeStorage` 加密后写入独立�
 
 `resources/app/default_userdata/prompts/system/default.hbs`
 
-推荐的动态历史模板位于：
+动态历史模板位于默认用户数据目录：
 
-`推荐模板_动态历史版.hbs`
+`resources/app/default_userdata/prompts/system/default.hbs`
 
 V7.6 默认模板明确区分长期稳定记忆、当前话题记忆与本轮事实，并要求角色结合性格、关系、好感、地位和情绪自然完整作答。升级后，程序只自动迁移内容仍与旧版默认值完全一致的模板和末尾指令；玩家自行编辑过的提示词不会被覆盖。修改打包目录中的 `main.js` 后，需要完全退出并重启应用。
 
 ## 对话摘要与记忆
 
-V7.6 完全使用 Memory Engine 2.2。旧摘要导入、跨周目摘要提示和旧格式运行路径已退休；人物目录是唯一摘要正文来源。主要规则是：
+V7.6.1 完全使用 Memory Engine 2.2。旧摘要导入、跨周目摘要提示和旧格式运行路径已退休；人物目录是唯一摘要正文来源。主要规则是：
 
 - 摘要 Provider 失败时不推进 rolling checkpoint，并用 recovery snapshot 保留最终失败的原始会话；
 - 结构化区分事实、信念、计划、传闻、秘密、承诺和关系变化；
@@ -92,6 +92,8 @@ V7.6 完全使用 Memory Engine 2.2。旧摘要导入、跨周目摘要提示和
 - 玩家或任一 NPC 首次提到 C/E 等场外人物时，每名 NPC 分别从自己的目录选取该人物 1–2 条摘要并锁定为本场会话快照；后续轮次复用该快照，只有新增场外人物时扩展一次；
 - 参与者和场外人物没有固定数量截断，每名 NPC 每次回复使用上下文约 8%、最少 800 且最多 2400 token 的记忆预算；
 - 一场有效对话结束后，最终摘要按实际参与者写入全部有向人物配对文件；群聊镜像记录在召回时按 `finalizationId` 去重；
+- 每次终局写入后都会核验全部有向文件均含本次 `finalizationId`；任何一位参与者目录缺失文件都会使终局转为可恢复失败，禁止仅部分人物目录写入后报告成功；
+- 摘要编辑、单条删除和“全部删除”只作用于当前打开的人物目录，不会修改或移除其他角色保存的同场对话记忆；
 - 会话结束改由串行终局协调器提交；立即开始第二场对话不会复用上一场状态。请求 Provider 前先保存原始会话快照，退出最多等待 15 秒，超时任务在下次启动恢复；
 - 直接关系、场外人物和稳定记忆只在实际命中候选时占用预算，空通道预算会按现有通道权重回流；
 - 人物提及统一使用同一匹配器：唯一称号可以指代人物、同名或同称号歧义失败关闭、长名优先，并使用常量大小的历史游标；信件也走同一 Engine 2.2 路由；
@@ -103,33 +105,35 @@ V7.6 完全使用 Memory Engine 2.2。旧摘要导入、跨周目摘要提示和
 
 维护工具：
 
-- `merge-duplicate-characters.js`：合并重复角色记录。V7.6 不再提供旧摘要导入功能；升级或清理前请自行备份人物目录。
+- `merge-duplicate-characters.js`：合并重复角色记录。V7.6.1 不再提供旧摘要导入功能；升级或清理前请自行备份人物目录。
 
-详细说明请参考：
+详细说明请参考 [docs/README.md](docs/README.md) 文档索引：
 
-- `README_摘要系统.md`
-- `动态历史认知系统_完整文档.md`
-- `完整更新总结_v6.1.md`
+- [docs/README_摘要系统.md](docs/README_摘要系统.md)
+- [docs/V7阶段优化记录.md](docs/V7阶段优化记录.md)
+- [docs/V6阶段优化记录.md](docs/V6阶段优化记录.md)
 
 ## 项目结构
 
 ```text
 voices-of-the-court/
 ├─ resources/app/out/main/main.js                    # 主程序逻辑
+├─ resources/app/out/main/provider-service.js        # 模型选择、请求参数、Token 与用量编排
+├─ resources/app/out/main/providers/                 # 六种模型 Provider 实现与注册
+├─ resources/app/out/main/ipc/                       # Electron IPC 注册与业务入口
 ├─ resources/app/out/main/script-sandbox.js          # 提示词/动作脚本共享 VM 策略
 ├─ resources/app/out/main/window-manager.js          # Electron 窗口构造
 ├─ resources/app/out/main/secure-provider-secrets.js # safeStorage 密钥落盘
 ├─ resources/app/out/main/memory-system/             # Memory Engine 2.2
 ├─ resources/app/default_userdata/                   # 默认提示词、动作和本地化脚本
 ├─ locales/                                           # Electron 界面语言资源
-├─ merge-duplicate-characters.js                     # 重复角色合并工具
-├─ 推荐模板_动态历史版.hbs                            # 动态历史提示词模板
-├─ 动态历史认知系统_完整文档.md                       # 历史系统文档
-├─ README_摘要系统.md                                 # 摘要系统文档
-└─ VOTC.exe                                           # Windows 应用入口
+├─ docs/                                               # 架构、版本、测试与 UI 文档
+├─ scripts/                                             # 迁移工具和回归测试
+├─ merge-duplicate-characters.js                       # 重复角色合并工具
+└─ VOTC.exe                                             # Windows 应用入口
 ```
 
-V7.6 是主进程健康化第一阶段：窗口构造、脚本沙箱和 Provider 密钥存储已经从单体入口拆出，`main.js` 仍保留 Provider 类与 IPC 业务处理。当前仓库保存的是可运行打包产物，没有能够重新生成这些文件的完整 `src` 工程，因此源码/构建产物分离不会在未知源码缺失时伪造实施；待真实源码恢复后再引入轻量构建器。
+V7.7 在 V7.6 健康化基础上分阶段拆分主进程：第一阶段将六种模型 Provider 迁入 `providers/index.js`、92 个既有 IPC 注册迁入 `ipc/register-ipc.js`；第二阶段把 `ProviderRegistry`、`TokenCounter` 和 `LLMManager` 迁入 `provider-service.js`，通过显式依赖继续读取用户分别选择的对话、摘要和动作模型。`main.js` 由约 9477 行降至约 6612 行。动作语义同时补齐“共度春宵/鱼水之欢已发生”和“从今以后成为情人/认定灵魂伴侣”等自然完成态表达，并继续排除请求、计划、假设、回忆与失败尝试。IPC 名称、模型选择、请求参数、Memory Engine、提示词、设置键和用户数据格式均不改变。当前仓库仍是可运行打包产物，没有能够重新生成这些文件的完整 `src` 工程，因此本阶段不伪造源码构建链。
 
 发布测试统一由 `scripts/test-manifest.js` 声明。本地与 CI 都运行：
 
@@ -142,13 +146,13 @@ node scripts\test-release.js
 ## 版本信息
 
 - 外挂 UI 版本：v2.0.4
-- 当前应用功能基线：v7.6
+- 当前应用功能基线：v7.7
 - CK3 模组版本：Voices of the Court 2.0.4
 - 模组支持版本：CK3 1.18.*
 - UI 主题：宫廷编年史风格（深红、暗金、羊皮纸文本层级）
 - UI 主题切换：羊皮卷、骑士纹章、水墨画卷三套完整历史风格；分别拥有独立背景、边框结构、按钮造型、消息卡片、输入框、字体和滚动条，并可自动保存选择
-- UI 素材生成提示词：参见 `UI_ASSET_PROMPTS_2.0.3.md`
-- 当前重点：V7.6 主进程健康化、safeStorage、统一 VM 沙箱、Memory 数据契约及统一测试门禁
+- UI 素材生成提示词：参见 [docs/UI_ASSET_PROMPTS_2.0.3.md](docs/UI_ASSET_PROMPTS_2.0.3.md)
+- 当前重点：V7.7 第二阶段 Provider Service/Provider/IPC 模块化，同时保持 V7.6.1 摘要可靠性、Memory Engine 2.2、动作系统和模型行为不变
 
 ## 已知限制
 
@@ -158,9 +162,13 @@ node scripts\test-release.js
 - 人物摘要目录是 Memory Engine 2.2 的可见长期记忆数据；清理或迁移前请先备份 `%APPDATA%/VOTC/votc_data/conversation_summaries`。
 - 结构化记忆质量仍受摘要 Provider 的 JSON 遵循能力影响；解析失败时会安全降级为自然语言 session summary。
 
+## 文档入口
+
+版本变更顺序统一维护在 [CHANGELOG.md](CHANGELOG.md)，架构、设计、实施报告和阶段记录统一从 [docs/README.md](docs/README.md) 进入。
+
 ## V6 阶段优化记录
 
-第一至第十阶段的完整优化记录已迁移至 [docs/V6阶段优化记录.md](docs/V6阶段优化记录.md)。
+V6/V6.x 的完整阶段记录统一维护在 [docs/V6阶段优化记录.md](docs/V6阶段优化记录.md)。
 
 后续 V6/V6.x 阶段只在该文档中追加或更新，README 仅保留此索引。
 

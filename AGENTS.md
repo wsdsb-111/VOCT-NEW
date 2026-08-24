@@ -9,7 +9,11 @@ This repository is a Windows-packaged VOTC application for Crusader Kings III.
 - `resources/app/default_userdata/`: default prompts, localization, and action scripts.
 - `scripts/`: migration utilities and regression tests, including `test-action-system.js`.
 - `locales/`: Electron UI translations.
-- `README.md` and `README_摘要系统.md`: architecture, release notes, and summary behavior.
+- `README.md`: project entry point, installation, current baseline, and release notes index.
+- `docs/README.md` and root `CHANGELOG.md`: documentation map and single version-change entry point.
+- `docs/README_摘要系统.md`: Memory Engine summary behavior and data boundaries.
+- `docs/V6阶段优化记录.md` and `docs/V7阶段优化记录.md`: continuous phase records for V6/V7.
+- `docs/AGENTS.md`: documentation-specific maintenance rules.
 - `VOTC.exe`: packaged application entry point.
 
 Prefer editing the smallest relevant packaged file. Preserve existing user-data formats and do not commit API keys or `%APPDATA%\VOTC` data.

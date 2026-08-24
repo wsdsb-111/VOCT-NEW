@@ -20778,7 +20778,7 @@ const SummariesManager = () => {
     /* @__PURE__ */ jsxRuntimeExports.jsxs("section", { className: "memory-engine-overview", children: [
       /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "memory-engine-title", children: [
         /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
-          /* @__PURE__ */ jsxRuntimeExports.jsx("h5", { children: "Memory Engine 2.2 · V7.6" }),
+          /* @__PURE__ */ jsxRuntimeExports.jsx("h5", { children: "Memory Engine 2.2 · V7.6.1" }),
           /* @__PURE__ */ jsxRuntimeExports.jsx("p", { children: "同场对话固定长期稳定记忆前缀；场外人物首次提及时建立快照，并按每名 NPC 自己的角色目录召回" })
         ] }),
         /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: `memory-engine-status ${memoryOverview.error ? "is-error" : ""}`, children: memoryOverview.error ? "读取异常" : "运行中" })
@@ -21320,17 +21320,18 @@ const OptimizationView = () => {
     /* @__PURE__ */ jsxRuntimeExports.jsx("tbody", { children: rows.map((row, rowIndex) => /* @__PURE__ */ jsxRuntimeExports.jsx("tr", { children: row.map((cell, cellIndex) => /* @__PURE__ */ jsxRuntimeExports.jsx("td", { children: cell }, `${keyPrefix}-${rowIndex}-${cellIndex}`)) }, `${keyPrefix}-${rowIndex}`)) })
   ] }) });
   const total = report?.total;
+  const diagnostics = report?.diagnostics;
+  const reconciliation = report?.reconciliation;
   const byRequest = report?.byRequest || [];
   const missAttribution = report?.missAttribution || [];
   const changesSincePrevious = report?.changesSincePrevious || [];
   const recent = report?.recent || [];
-  const actionSkipped = byRequest.filter((item) => item.key.startsWith("action_skipped | ")).reduce((sum, item) => sum + (item.requests || 0), 0);
   const metrics = [
-    [text("总请求", "Requests"), formatTokens(total?.requests), ""],
-    [text("总输入 Token", "Input tokens"), formatTokens(total?.promptTokens || total?.estimatedPromptTokens), ""],
+    [text("API 请求", "API requests"), formatTokens(total?.requests), ""],
+    [text("服务商总 Token", "Provider total tokens"), formatTokens(total?.totalTokens), ""],
     [text("缓存命中率", "Cache hit rate"), formatPercent(total?.cacheHitRate), "success"],
     [text("未命中 Token", "Cache misses"), formatTokens(total?.cacheMissTokens), "warning"],
-    [text("历史动作跳过记录", "Historical action skips"), formatTokens(actionSkipped), ""]
+    [text("诊断记录", "Diagnostic records"), formatTokens(diagnostics?.total), ""]
   ];
   const capabilities = [
     [text("动态历史边界", "Historical boundary"), text("按 CK3 当前年份限制未来人物、事件与作品。", "Limits future people, events, and works by the current CK3 year.")],
@@ -21340,7 +21341,7 @@ const OptimizationView = () => {
     [text("场外人物快照", "Mentioned-character snapshot"), text("首次提及时按每名 NPC 的目录召回，本场后续回复复用；新增人物时扩展一次。", "Each NPC recalls from their own folder on first mention, then reuses that snapshot until another person is introduced.")],
     [text("统一摘要系统", "Unified summary system"), text("旧摘要导入与旧格式运行路径已退休，人物目录是 Memory Engine 2.2 的唯一摘要来源。", "Legacy import and runtime paths are retired; character folders are the sole summary source for Memory Engine 2.2.")],
     [text("安全配置", "Secure configuration"), text("Provider API Key 使用 Electron safeStorage 加密落盘；明文旧配置在可用时自动迁移。", "Provider API keys are encrypted at rest with Electron safeStorage; plaintext settings migrate when encryption is available.")],
-    [text("统一发布门禁", "Unified release gate"), text("本地与 CI 共用一份 27 组测试清单，并加入 36 条轻量语义金标样例。", "Local and CI validation share one 27-group manifest plus 36 lightweight semantic golden cases.")],
+    [text("统一发布门禁", "Unified release gate"), text("本地与 CI 共用一份 29 组测试清单，并加入 36 条轻量语义金标样例。", "Local and CI validation share one 29-group manifest plus 36 lightweight semantic golden cases.")],
     [text("DeepSeek 思考对话", "DeepSeek thinking chat"), text("普通对话启用思考模式并使用 4096 Token；动作和终局摘要保持非思考。", "Normal chat uses thinking mode with 4096 tokens; actions and final summaries remain non-thinking.")],
     [text("动作语义直通", "Semantic action routing"), text("本地关键词门控已关闭，每条当前回复均交由动作模型作语义判定。", "The local keyword gate is disabled; every current reply reaches model semantic selection.")]
   ];
@@ -21348,7 +21349,7 @@ const OptimizationView = () => {
     /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "optimization-header", children: [
       /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
         /* @__PURE__ */ jsxRuntimeExports.jsx("h3", { children: text("系统优化与用量", "System Optimization & Usage") }),
-        /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "muted-text", children: text("V7.6 完成主进程健康化第一阶段、API Key 加密、统一脚本沙箱、Memory 数据契约和统一测试门禁。缓存统计只记录 Token 和匿名区块指纹，不保存正文。", "V7.6 completes the first main-process health phase, API-key encryption, a shared script sandbox, a Memory data contract, and a unified test gate. Analytics stores only token counts and anonymous fingerprints, never message text.") })
+        /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "muted-text", children: text("V7.6.1 在 V7.6 基础上核验每个参与者目录的终局文件；编辑或删除摘要只影响当前人物目录。用量仅按服务商返回的 Token 统计，内部动作诊断不再占用 API 统计容量。", "V7.6.1 verifies every participant folder after finalization; editing or deleting a summary affects only the current character folder. Usage counts provider-reported tokens only; internal action diagnostics no longer consume API analytics capacity.") })
       ] }),
       /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "optimization-header-actions", children: [
         /* @__PURE__ */ jsxRuntimeExports.jsx("button", { type: "button", onClick: loadReport, disabled: isLoading, children: isLoading ? text("读取中…", "Loading…") : text("刷新", "Refresh") }),
@@ -21359,13 +21360,14 @@ const OptimizationView = () => {
     isLoading && !report && /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "optimization-loading", children: text("正在读取本地统计…", "Reading local analytics…") }),
     report && /* @__PURE__ */ jsxRuntimeExports.jsxs(React.Fragment, { children: [
       /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "optimization-metrics", children: metrics.map(([label, value, tone]) => /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: `optimization-metric ${tone}`, children: [/* @__PURE__ */ jsxRuntimeExports.jsx("span", { children: label }), /* @__PURE__ */ jsxRuntimeExports.jsx("strong", { children: value })] }, label)) }),
+      reconciliation?.aggregates > 0 && /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "muted-text", children: text(`已包含 ${formatTokens(reconciliation.requests)} 次 DeepSeek 官网核对补录、${formatTokens(reconciliation.totalTokens)} Token；缓存细分仅来自本机仍保留的原始响应。`, `Includes a DeepSeek-console reconciliation of ${formatTokens(reconciliation.requests)} requests and ${formatTokens(reconciliation.totalTokens)} tokens; cache details use only locally retained provider responses.`) }),
       /* @__PURE__ */ jsxRuntimeExports.jsxs("section", { className: "optimization-capabilities", children: [
-        /* @__PURE__ */ jsxRuntimeExports.jsx("h4", { children: text("V7.6 适配状态", "V7.6 integration status") }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx("h4", { children: text("V7.6.1 适配状态", "V7.6.1 integration status") }),
         /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "optimization-capability-grid", children: capabilities.map(([title, detail]) => /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "optimization-capability", children: [/* @__PURE__ */ jsxRuntimeExports.jsx("strong", { children: title }), /* @__PURE__ */ jsxRuntimeExports.jsx("span", { children: detail })] }, title)) })
       ] }),
       /* @__PURE__ */ jsxRuntimeExports.jsxs("section", { className: "optimization-section", children: [
         /* @__PURE__ */ jsxRuntimeExports.jsx("h4", { children: text("按请求类型", "Requests by type") }),
-        renderTable([text("类型 / 模型", "Type / model"), text("请求", "Requests"), text("输入", "Input"), text("命中率", "Hit rate")], byRequest.slice(0, 12).map((item) => [item.key, formatTokens(item.requests), formatTokens(item.promptTokens || item.estimatedPromptTokens), formatPercent(item.cacheHitRate)]), "request")
+        renderTable([text("类型 / 模型", "Type / model"), text("请求", "Requests"), text("总 Token", "Total tokens"), text("输入", "Input"), text("命中率", "Hit rate")], byRequest.slice(0, 12).map((item) => [item.key, formatTokens(item.requests), formatTokens(item.totalTokens), formatTokens(item.promptTokens || item.estimatedPromptTokens), formatPercent(item.cacheHitRate)]), "request")
       ] }),
       /* @__PURE__ */ jsxRuntimeExports.jsxs("section", { className: "optimization-section", children: [
         /* @__PURE__ */ jsxRuntimeExports.jsx("h4", { children: text("未命中归因", "Cache-miss attribution") }),

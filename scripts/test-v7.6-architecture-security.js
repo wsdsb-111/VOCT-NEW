@@ -13,10 +13,16 @@ const sandboxSource = fs.readFileSync(path.join(root, "resources", "app", "out",
 const { SecureProviderSecrets } = require(path.join(root, "resources", "app", "out", "main", "secure-provider-secrets.js"));
 const memorySchema = require(path.join(root, "resources", "app", "out", "main", "memory-system", "memory-schema.js"));
 
-assert(mainLines <= 9550, `V7.6 main-process health budget exceeded: ${mainLines} lines`);
+assert(mainLines <= 6700, `V7.7 stage-two main-process health budget exceeded: ${mainLines} lines`);
 assert(mainSource.includes('require("./script-sandbox")'));
 assert(mainSource.includes('require("./window-manager")'));
 assert(mainSource.includes('require("./secure-provider-secrets")'));
+assert(mainSource.includes('require("./providers")'));
+assert(mainSource.includes('require("./provider-service")'));
+assert(mainSource.includes('require("./ipc/register-ipc")'));
+assert(!mainSource.includes("class BaseProvider"), "main.js must not inline provider implementations");
+assert(!mainSource.includes("class LLMManager"), "main.js must not inline Provider Service");
+assert(!mainSource.includes("electron.ipcMain.handle("), "main.js must not inline IPC registrations");
 assert(!mainSource.includes('require("vm")') && !mainSource.includes("vm__namespace"), "main.js must not carry a private VM allowlist");
 assert(registrySource.includes('require("../script-sandbox")'));
 assert(!registrySource.includes('require("vm")'), "action registry must use the shared sandbox factory");
@@ -61,4 +67,4 @@ assert.strictEqual(memorySchema.normalizeSummaryRecord({ content: "old summary" 
 assert.throws(() => memorySchema.upgradeMemoryRecord({ schemaVersion: 99 }), /unsupported_schema/);
 assert(mainSource.includes("schemaVersion: memorySystem.CURRENT_SUMMARY_SCHEMA_VERSION"));
 
-console.log(`VOTC v7.6 architecture/security: PASS (main ${mainLines} lines, shared sandbox, encrypted provider keys, schema contract)`);
+console.log(`VOTC v7.7 architecture/security: PASS (main ${mainLines} lines, Provider Service/providers/IPC extracted, shared sandbox, encrypted provider keys, schema contract)`);

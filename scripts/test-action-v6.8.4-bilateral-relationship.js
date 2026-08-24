@@ -42,11 +42,13 @@ for (const text of [
 }
 assert.deepStrictEqual(ActionEngine.getSemanticActionProfile("B与C正式成为了恋人。").allowedActionIds, ["becomeLoversWith"]);
 assert.deepStrictEqual(ActionEngine.getSemanticActionProfile("B与C正式结为了灵魂伴侣。").allowedActionIds, ["becomeSoulmatesWith"]);
+assert.deepStrictEqual(ActionEngine.getSemanticActionProfile("从今以后，你便是我的情人。").allowedActionIds, ["becomeLoversWith"]);
+assert.deepStrictEqual(ActionEngine.getSemanticActionProfile("我认定你就是我此生唯一的灵魂伴侣。").allowedActionIds, ["becomeSoulmatesWith"]);
 const player = { id: 1, fullName: "玩家A", shortName: "玩家A", gender: "male", relationsToCharacters: [] };
 const npcB = { id: 2, fullName: "NPCB", shortName: "NPCB", gender: "male", relationsToCharacters: [] };
 const npcC = { id: 3, fullName: "NPCC", shortName: "NPCC", gender: "female", relationsToCharacters: [] };
 const gameData = { playerID: 1, playerName: player.fullName, characters: new Map([[1, player], [2, npcB], [3, npcC]]) };
-const message = { id: 84, role: "assistant", name: npcB.fullName, content: "NPCC，我与你已经正式成为恋人了。", primaryAddresseeId: npcC.id };
+const message = { id: 84, role: "assistant", name: npcB.fullName, content: "NPCC，从今以后你便是我的情人。", primaryAddresseeId: npcC.id };
 const event = ActionEngine.getSemanticActionProfile(message.content).events.find((item) => item.allowedActionIds.includes("becomeLoversWith"));
 const context = new actionSystem.ConversationReferenceContext({ activeParticipantIds: [1, 2, 3], primaryAddresseeId: npcC.id });
 context.observeMessage({ message, speaker: npcB, characters: gameData.characters.values(), primaryAddresseeId: npcC.id });

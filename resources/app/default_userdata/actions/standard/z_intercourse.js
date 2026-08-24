@@ -1,7 +1,7 @@
 /** @import { GameData, Character } from '../../gamedata_typedefs.js' */
 module.exports = {
   signature: "intercourse",
-  triggerCategories: ["sexual_intercourse_completed"], semantic: { evidencePatterns: [/(?:(?:已经|已)(?:同房|圆房|行房|完成房事)|完成(?:了)?(?:交合|行房|房事|同房|圆房|性事)|发生(?:了)?(?:性关系|肉体关系)|一番云雨之后|行过房事|共度(?:了)?春宵之后|鱼水之欢已毕|had sex|made love|consummated)/i], priority: 80, riskLevel: "high", deterministicInvocation: true, bilateralPersistentEffect: true, participantRoles: { source: "actor", target: "patient" } },
+  triggerCategories: ["sexual_intercourse_completed"], semantic: { evidencePatterns: [/(?:(?:已经|已)(?:同房|圆房|行房|完成房事)|完成(?:了)?(?:交合|行房|房事|同房|圆房|性事)|发生(?:了)?(?:性关系|肉体关系)|(?:行|享|同享)(?:了|过)?(?:一场|一番)?鱼水之欢|(?:鱼水之欢|云雨)(?:已)?(?:毕|罢)|(?:一番云雨|云雨一番)(?:之后|过后)|云雨(?:了|过)?一番|行过房事|共度(?:了|过)?春宵(?:之后|过后)?|春宵一度|(?:已有|有了)夫妻之实|had (?:sexual )?intercourse|had sex|made love|consummated)/i], priority: 80, riskLevel: "high", deterministicInvocation: true, bilateralPersistentEffect: true, participantRoles: { source: "actor", target: "patient" } },
   title: {
     en: "Sexual Intercourse Concluded",
     ru: "Сексуальный акт завершен",

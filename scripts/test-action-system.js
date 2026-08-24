@@ -6,6 +6,7 @@ const root = path.resolve(__dirname, "..");
 globalThis.__V67ActionSystem = require(path.join(root, "resources", "app", "out", "main", "action-system"));
 const mainPath = path.join(root, "resources", "app", "out", "main", "main.js");
 const source = fs.readFileSync(mainPath, "utf8");
+const ipcSource = fs.readFileSync(path.join(root, "resources", "app", "out", "main", "ipc", "register-ipc.js"), "utf8");
 const actionsDir = path.join(root, "resources", "app", "default_userdata", "actions", "standard");
 globalThis.actionRegistry = {
   getAllActions: () => fs.readdirSync(actionsDir).filter((file) => file.endsWith(".js")).map((file) => {
@@ -36,6 +37,9 @@ const triggerCases = [
   ["我抚摸并挑逗她", ["intimate_contact"]],
   ["我顶入后缓缓研磨", ["intimate_contact"]],
   ["我们已经完成了房事", ["sexual_intercourse_completed"]],
+  ["我们共度了春宵", ["sexual_intercourse_completed"]],
+  ["从今以后你便是我的情人", ["relationship"]],
+  ["从此我们便是灵魂伴侣", ["relationship"]],
   ["我计划派刺客暗杀他", ["scheme_start"]],
   ["我会杀了你", []],
   ["我过会儿给张三50金币。", []],
@@ -156,10 +160,10 @@ assert(siblingRelationshipContext.includes("二哥B是大哥A的弟弟"), "young
 assert(siblingRelationshipContext.includes("大哥A是二哥B的哥哥"), "elder sibling must be described as 哥哥 to the younger sibling");
 const siblingRelationTests = 1;
 
-const actionsGetAllStart = source.indexOf('electron.ipcMain.handle("actions:getAll"');
-const actionsGetAllEnd = source.indexOf('electron.ipcMain.handle("actions:setDisabled"', actionsGetAllStart);
+const actionsGetAllStart = ipcSource.indexOf('electron.ipcMain.handle("actions:getAll"');
+const actionsGetAllEnd = ipcSource.indexOf('electron.ipcMain.handle("actions:setDisabled"', actionsGetAllStart);
 assert(actionsGetAllStart >= 0 && actionsGetAllEnd > actionsGetAllStart, "Unable to locate actions:getAll IPC handler");
-const actionsGetAllSource = source.slice(actionsGetAllStart, actionsGetAllEnd);
+const actionsGetAllSource = ipcSource.slice(actionsGetAllStart, actionsGetAllEnd);
 assert(actionsGetAllSource.includes("triggerCategories,"), "actions:getAll must expose trigger categories for the action list");
 assert(actionsGetAllSource.includes("riskLevel: semantic.riskLevel"), "actions:getAll must expose semantic risk level for the action list");
 assert(actionsGetAllSource.includes('semanticMode: semantic.fallback ? "fallback" : "event"'), "actions:getAll must expose metadata semantic resolution mode for the action list");

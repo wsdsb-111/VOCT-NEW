@@ -27,6 +27,7 @@ class MemoryEngine {
     this.rolling = new RollingSummaryManager({ trace: this.trace });
     this.consolidator = new MemoryConsolidator({ store: this.store, trace: this.trace });
     this.mentionTracker = new MentionTracker();
+    this.activeFinalizationIds = new Set();
   }
 
   createConversationState(conversationId) {
@@ -443,7 +444,13 @@ class MemoryEngine {
   }
 
   async finalizeConversation(context) {
-    return this.finalizeWithAvailableOutput(this.prepareFinalizationContext(context));
+    const prepared = this.prepareFinalizationContext(context);
+    this.activeFinalizationIds.add(prepared.finalizationId);
+    try {
+      return await this.finalizeWithAvailableOutput(prepared);
+    } finally {
+      this.activeFinalizationIds.delete(prepared.finalizationId);
+    }
   }
 
   buildFinalizationPrompt(context) {
@@ -545,6 +552,10 @@ class MemoryEngine {
     for (const filePath of this.listRecoverySnapshots()) {
       const snapshot = this.store.readJson(filePath, null);
       if (!snapshot) continue;
+      if (snapshot.finalizationId && this.activeFinalizationIds.has(String(snapshot.finalizationId))) {
+        this.trace.record("recover", { conversationId: snapshot.conversationId, reason: "active_finalization" });
+        continue;
+      }
       if (Number(snapshot.retryCount || 0) >= RECOVERY_MAX_ATTEMPTS) {
         if (snapshot.finalizationStatus !== "failed_manual") this.writeRecoverySnapshot(this.prepareFinalizationContext(snapshot), { finalizationStatus: "failed_manual", retryCount: snapshot.retryCount });
         continue;

@@ -28,7 +28,8 @@ const actionChecks = [
   "test-action-v6.9-a-gate-parser.js",
   "test-action-v6.9-b-rule-registry.js",
   "test-conversation-v6.9-c-managers.js",
-  "test-action-v6.9-d-contracts-trace.js"
+  "test-action-v6.9-d-contracts-trace.js",
+  "test-action-v7.7-romance-trigger-recall.js"
 ];
 
 const followupChecks = [
@@ -60,6 +61,12 @@ const releaseChecks = [
   { group: "v7.5-memory-action-retirement", script: "test-v7.5-memory-action-retirement.js" },
   { group: "v7.6-architecture-security", script: "test-v7.6-architecture-security.js" },
   { group: "v7.6-semantic-golden-set", script: "test-v7.6-semantic-golden-set.js" },
+  { group: "v7.6.1-directed-summary-persistence", script: "test-v7.6.1-directed-summary-persistence.js" },
+  { group: "v7.6.1-recovery-race", script: "test-v7.6.1-recovery-race.js" },
+  { group: "v7.7-main-modules", script: "test-v7.7-main-modules.js" },
+  { group: "v7.7-provider-service", script: "test-v7.7-provider-service.js" },
+  { group: "usage-analytics-retention", script: "test-usage-analytics-retention.js" },
+  { group: "usage-analytics-reconciliation", script: "test-usage-analytics-reconciliation.js" },
   { group: "test-manifest-coverage", script: "test-test-manifest.js" },
   { group: "release-assets", script: "test-release-assets.js" },
   { group: "structured-episode-migration", script: "test-migrate-structured-episodes-to-summary-folders.js" },

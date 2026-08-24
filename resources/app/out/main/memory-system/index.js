@@ -11,6 +11,7 @@ const { MemoryTrace } = require("./memory-trace");
 const { MemoryEngine } = require("./memory-engine");
 const { MentionTracker } = require("./mention-tracker");
 const { FinalizationCoordinator } = require("./finalization-coordinator");
+const { verifyDirectedSummaryPersistence } = require("./summary-folder-verifier");
 const summaryCatalog = require("./summary-catalog");
 const characterIdentity = require("./character-identity");
 const memorySchema = require("./memory-schema");
@@ -28,6 +29,7 @@ module.exports = {
   MemoryEngine,
   MentionTracker,
   FinalizationCoordinator,
+  verifyDirectedSummaryPersistence,
   ...characterIdentity,
   ...summaryCatalog
 };
