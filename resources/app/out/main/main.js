@@ -1177,6 +1177,7 @@ class UsageAnalytics {
       providerType: metadata?.providerType || "unknown",
       model: metadata?.model || "unknown",
       character: metadata?.character || null,
+      characterId: Number.isFinite(Number(metadata?.characterId)) ? Number(metadata.characterId) : null,
       actionTrigger: metadata?.actionTrigger || null,
       actionOutcome: metadata?.actionOutcome || null,
       actionCandidateReasons: Array.isArray(metadata?.actionCandidateReasons) ? metadata.actionCandidateReasons : [],
@@ -1193,6 +1194,8 @@ class UsageAnalytics {
       isUsageRecord: !!usage && typeof usage === "object",
       cacheHitTokens: Number.isFinite(cacheHitTokens) ? cacheHitTokens : null,
       cacheMissTokens: Number.isFinite(cacheMissTokens) ? cacheMissTokens : null,
+      historyStartPosition: Number.isFinite(Number(metadata?.historyStartPosition)) ? Number(metadata.historyStartPosition) : null,
+      prefixFingerprint: metadata?.prefixFingerprint || null,
       blocks: Array.isArray(metadata?.blocks) ? metadata.blocks.map((block, index) => ({
         id: block.id,
         label: block.label,
@@ -1289,7 +1292,8 @@ class UsageAnalytics {
         blockTotals[blockKey].requests++;
         blockTotals[blockKey].tokens += block.tokens || 0;
       }
-      const previousKey = `${entry.requestType} | ${entry.providerType} | ${entry.model}`;
+      const responderKey = entry.characterId ?? entry.character ?? "";
+      const previousKey = `${entry.requestType} | ${entry.providerType} | ${entry.model} | ${responderKey}`;
       const previousEntry = previousByRequest.get(previousKey);
       const cacheAttribution = this.attributeCacheMiss(entry, previousEntry);
       previousByRequest.set(previousKey, entry);
@@ -1408,6 +1412,8 @@ class UsageAnalytics {
         }
       }
     }
+    const prefixFingerprintMatchesPrevious = !!(entry?.prefixFingerprint && previousEntry?.prefixFingerprint && entry.prefixFingerprint === previousEntry.prefixFingerprint);
+    const firstChangedBeforeHistory = !!(firstChangedBlock && Number.isFinite(Number(entry?.historyStartPosition)) && firstChangedBlock.position < Number(entry.historyStartPosition));
     return {
       method: "ordered_prefix_estimate_v1",
       cacheHitTokens,
@@ -1418,6 +1424,8 @@ class UsageAnalytics {
       breakpoint,
       downstreamMissTokens,
       firstChangedBlock,
+      prefixFingerprintMatchesPrevious,
+      firstChangedBeforeHistory,
       fingerprintAgreesWithBreakpoint: !!(breakpoint && firstChangedBlock && breakpoint.id === firstChangedBlock.id),
       blocks: attributedBlocks
     };

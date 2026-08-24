@@ -51,6 +51,20 @@ class Conversation {
     memoryEngine = dependencies.memoryEngine || memoryEngine;
     return this;
   }
+  static buildPromptBlockMetadata(promptBuild = {}) {
+    const blocks = (promptBuild.blocks || []).map(({ block, content, tokens }, index) => ({
+      id: block.id,
+      label: block.label,
+      type: block.type,
+      position: index,
+      tokens,
+      fingerprint: createPromptFingerprint(content)
+    }));
+    const firstHistoryIndex = blocks.findIndex((block) => block.type === "history" || block.type === "current_user");
+    const historyStartPosition = firstHistoryIndex >= 0 ? firstHistoryIndex : blocks.length;
+    const prefixFingerprint = createPromptFingerprint(JSON.stringify(blocks.slice(0, historyStartPosition).map((block) => [block.id, block.type, block.fingerprint])));
+    return { blocks, historyStartPosition, prefixFingerprint };
+  }
   constructor() {
     this.id = uuid.v4();
     this.messages = [];
@@ -373,6 +387,7 @@ class Conversation {
         memoryContext
       );
       const llmMessages = promptBuild.messages;
+      const promptBlockMetadata = Conversation.buildPromptBlockMetadata(promptBuild);
       logVerboseLLM(`[Conversation][verbose] Prompt for ${npc.fullName}:`, llmMessages);
       console.log(`[TOKEN_COUNT] Message from ${npc.fullName}:`, this.estimateTokenCount(llmMessages));
       const activeConfig = settingsRepository.getActiveProviderConfig();
@@ -384,7 +399,10 @@ class Conversation {
         {
           requestType: "chat",
           character: npc.shortName,
-          blocks: promptBuild.blocks.map(({ block, content, tokens }, index) => ({ id: block.id, label: block.label, type: block.type, position: index, tokens, fingerprint: createPromptFingerprint(content) }))
+          characterId: npc.id,
+          blocks: promptBlockMetadata.blocks,
+          historyStartPosition: promptBlockMetadata.historyStartPosition,
+          prefixFingerprint: promptBlockMetadata.prefixFingerprint
         }
       );
       if (settingsRepository.getGlobalStreamSetting() && typeof result === "object" && typeof result[Symbol.asyncIterator] === "function") {

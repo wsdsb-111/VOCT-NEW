@@ -282,10 +282,15 @@ class MemoryEngine {
         const result = await context.requestSummary(prompt);
         const content = typeof result?.content === "string" ? result.content.trim() : "";
         if (content) {
-          this.trace.record("summary_provider", { conversationId: context.conversationId, attempt, success: true, durationMs: Date.now() - startedAt });
-          return content;
+          const parsed = this.extractor.parseOutput(content, context);
+          if (parsed.structured && parsed.sessionSummary) {
+            this.trace.record("summary_provider", { conversationId: context.conversationId, attempt, success: true, durationMs: Date.now() - startedAt });
+            return content;
+          }
+          lastError = new Error(parsed.structured ? "empty_structured_final_summary" : "invalid_structured_final_summary");
+        } else {
+          lastError = new Error("invalid_final_summary_response");
         }
-        lastError = new Error("invalid_final_summary_response");
       } catch (error) {
         lastError = error;
       }

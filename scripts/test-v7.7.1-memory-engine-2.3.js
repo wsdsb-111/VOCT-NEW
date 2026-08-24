@@ -7,7 +7,8 @@ const path = require("path");
 
 const root = path.resolve(__dirname, "..");
 const memorySystem = require(path.join(root, "resources", "app", "out", "main", "memory-system"));
-const { MemoryEngine, MentionTracker, buildPerspectiveSummaryMap, validatePerspectiveSummaryMap } = memorySystem;
+const { MemoryEngine, MemoryExtractor, MentionTracker, buildPerspectiveSummaryMap, validatePerspectiveSummaryMap } = memorySystem;
+const { Conversation } = require(path.join(root, "resources", "app", "out", "main", "action-system", "conversation"));
 
 const participants = [
   { id: 1, name: "甲", shortName: "甲" },
@@ -19,15 +20,22 @@ const extraction = {
   memories: [
     { memoryId: "public", type: "event", content: "三人公开商定明日议事。", participants: [1, 2, 3], subjects: [], knownBy: [1, 2, 3], status: null, importance: 0.6 },
     { memoryId: "private_a", type: "secret", content: "甲心里知道密道位于东门。", participants: [1], subjects: [3], knownBy: [1], status: "open", importance: 0.95 },
+    { memoryId: "private_scene", type: "secret", content: "甲在三人场合想到丙藏着另一把钥匙。", participants: [1, 2, 3], subjects: [3], knownBy: [1], status: "open", importance: 0.95, provenance: { speakerIds: [1] } },
     { memoryId: "promise_b", type: "promise", content: "乙答应替甲守住城门。", participants: [1, 2], subjects: [1], knownBy: [2], status: "open", importance: 0.9 }
   ]
 };
 const projections = buildPerspectiveSummaryMap({ participants, excludedSummaryOwnerIds: [] }, extraction);
 assert.strictEqual(validatePerspectiveSummaryMap({ participants }, extraction, projections).success, true);
-assert(projections.get("1->2").content.includes("密道位于东门"), "甲自己的投影应保留甲知道的秘密");
+assert(!projections.get("1->2").content.includes("密道位于东门"), "甲对乙的档案不得混入只与丙有关的秘密");
+assert(!projections.get("1->2").content.includes("另一把钥匙"), "共同在场不能让只以丙为主题的记忆串入甲对乙档案");
+assert(projections.get("1->3").content.includes("密道位于东门"), "甲对丙的档案应保留甲知道且与丙相关的秘密");
 assert(!projections.get("2->1").content.includes("密道位于东门"), "乙的投影不得出现只有甲知道的秘密");
 assert(!projections.get("3->1").content.includes("密道位于东门"), "丙的投影不得出现只有甲知道的秘密");
 assert(projections.get("2->1").pinned, "承诺、秘密和未决事项必须钉住");
+assert.notStrictEqual(projections.get("1->2").content, projections.get("1->3").content, "同一 owner 的不同 counterpart 文件不得复制同一段全量正文");
+const tampered = new Map(projections);
+tampered.set("1->2", { ...projections.get("1->2"), memoryIds: [...projections.get("1->2").memoryIds, "private_a"], content: `${projections.get("1->2").content}\n- 甲心里知道密道位于东门。` });
+assert.strictEqual(validatePerspectiveSummaryMap({ participants }, extraction, tampered).success, false, "配对校验必须拒绝 owner 已知但与 counterpart 无关的串主题记忆");
 for (let participantCount = 2; participantCount <= 6; participantCount++) {
   const group = Array.from({ length: participantCount }, (_, index) => ({ id: index + 20, name: `人物${index + 1}` }));
   const groupExtraction = {
@@ -121,8 +129,48 @@ try {
 
 const mainSource = fs.readFileSync(path.join(root, "resources", "app", "out", "main", "main.js"), "utf8");
 const providerServiceSource = fs.readFileSync(path.join(root, "resources", "app", "out", "main", "provider-service.js"), "utf8");
+const extractionPrompt = new MemoryExtractor().buildPrompt({ participants })[0].content;
 assert(providerServiceSource.includes('isDeepseekStructuredSummary ? { thinking: { type: "enabled" }, max_tokens: 4096'), "DeepSeek 终局摘要必须恢复思考并保留结构化输出预算");
+assert(extractionPrompt.includes("Do not copy every scene participant into subjects"), "摘要提取必须明确区分参与者与主题人物，避免多人场景把所有人复制为同一主题");
 assert(mainSource.indexOf('label: "Frozen Direct Relationship Memory"') < mainSource.lastIndexOf('case "history"'), "直接关系冻结块必须位于带 Token 统计的 history 前");
 assert(mainSource.includes('label: "Turn Topic Memory Patch"'), "话题补丁必须作为独立可观测块放在 history 后");
+assert(mainSource.includes("prefixFingerprintMatchesPrevious"), "缓存统计必须记录并核验 history 前稳定区块指纹");
+assert(mainSource.includes('entry.characterId ?? entry.character ?? ""'), "缓存前缀比较必须按回应人物 ID 隔离，不能跨 NPC 误判");
+Conversation.configure({ createPromptFingerprint: (value) => require("crypto").createHash("sha256").update(String(value)).digest("hex").slice(0, 16) });
+const prefixBase = [
+  { block: { id: "anchor", label: "Anchor", type: "cache_anchor" }, content: "stable", tokens: 2 },
+  { block: { id: "direct", label: "Frozen Direct Relationship Memory", type: "memory_direct_frozen" }, content: "same direct", tokens: 3 },
+  { block: { id: "history", label: "History", type: "history" }, content: "old turn", tokens: 2 },
+  { block: { id: "current", label: "Current User Message", type: "current_user" }, content: "first question", tokens: 2 }
+];
+const firstPromptContract = Conversation.buildPromptBlockMetadata({ blocks: prefixBase });
+const secondPromptContract = Conversation.buildPromptBlockMetadata({ blocks: prefixBase.map((entry) => entry.block.type === "history" ? { ...entry, content: "old turn plus reply" } : entry.block.type === "current_user" ? { ...entry, content: "second question" } : entry) });
+assert.strictEqual(firstPromptContract.prefixFingerprint, secondPromptContract.prefixFingerprint, "history 和当前问题变化不得改变 history 前区块指纹");
+assert.strictEqual(firstPromptContract.historyStartPosition, 2, "首个允许变化点必须从 history 开始");
+const changedPrefixContract = Conversation.buildPromptBlockMetadata({ blocks: prefixBase.map((entry) => entry.block.id === "direct" ? { ...entry, content: "changed direct" } : entry) });
+assert.notStrictEqual(firstPromptContract.prefixFingerprint, changedPrefixContract.prefixFingerprint, "history 前任一字节变化必须反映到前缀指纹");
 
-console.log("VOTC v7.7.1 Memory Engine 2.3: PASS (perspectives, Chinese mentions, frozen prefix, one patch, tombstones and thinking summaries)");
+(async () => {
+  const strictRoot = fs.mkdtempSync(path.join(os.tmpdir(), "votc-v771-structured-retry-"));
+  try {
+    const strictEngine = new MemoryEngine({ baseDir: path.join(strictRoot, "memory"), summaryFoldersDir: path.join(strictRoot, "summaries"), trace: { record() {} } });
+    let attempts = 0;
+    const strictResult = await strictEngine.finalizeConversation({
+      conversationId: "structured-retry",
+      participants: [{ id: 1, name: "甲" }, { id: 2, name: "乙" }],
+      participantPresence: [{ characterId: 1, joinedAtMessageId: 0 }, { characterId: 2, joinedAtMessageId: 0 }],
+      messages: [{ id: 1, role: "user", name: "甲", content: "记住此事。" }],
+      buildPrompt: () => [],
+      requestSummary: async () => ({ content: ++attempts === 1 ? "非 JSON 思考残片" : JSON.stringify({ sessionSummary: "甲请乙记住此事。", memories: [] }) }),
+      persistCharacterFolders: async () => ({ success: true })
+    });
+    assert.strictEqual(strictResult.success, true);
+    assert.strictEqual(attempts, 2, "非结构化终局正文必须立即重试，不能按 prose fallback 提交");
+    console.log("VOTC v7.7.1 Memory Engine 2.3: PASS (pair perspectives, leak checks, prefix fingerprints, strict summary retry, mentions, snapshots and tombstones)");
+  } finally {
+    fs.rmSync(strictRoot, { recursive: true, force: true });
+  }
+})().catch((error) => {
+  console.error(error);
+  process.exitCode = 1;
+});
