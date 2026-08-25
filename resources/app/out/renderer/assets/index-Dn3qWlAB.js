@@ -18056,7 +18056,7 @@ const useConfigStore = create()(
           return await window.conversationAPI.getMemoryOverview();
         } catch (error) {
           console.error("Failed to get Memory Engine overview:", error);
-          return { engineVersion: "2.3", totals: {}, boundaries: [], routingPolicy: {}, characters: [] };
+          return { engineVersion: "2.4", totals: {}, boundaries: [], routingPolicy: {}, characters: [] };
         }
       },
       getSummariesDashboardData: async () => {
@@ -18064,7 +18064,7 @@ const useConfigStore = create()(
           return await window.conversationAPI.getSummariesDashboardData();
         } catch (error) {
           console.error("Failed to get summaries dashboard data:", error);
-          return { summaries: [], memoryOverview: { engineVersion: "2.3", totals: {}, boundaries: [], routingPolicy: {}, characters: [] } };
+          return { summaries: [], memoryOverview: { engineVersion: "2.4", totals: {}, boundaries: [], routingPolicy: {}, characters: [] } };
         }
       },
       updateStructuredMemory: async (memoryId, content) => {
@@ -20635,12 +20635,16 @@ const SummariesManager = () => {
   const updateSummary = useConfigStore((state) => state.updateSummary);
   const deleteSummary = useConfigStore((state) => state.deleteSummary);
   const deleteCharacterSummaries = useConfigStore((state) => state.deleteCharacterSummaries);
+  const openSummariesFolder = useConfigStore((state) => state.openSummariesFolder);
+  const clearSummaries = useConfigStore((state) => state.clearSummaries);
   const [summaries2, setSummaries] = reactExports.useState([]);
-  const [memoryOverview, setMemoryOverview] = reactExports.useState({ engineVersion: "2.3", totals: {}, boundaries: [], routingPolicy: {}, characters: [] });
+  const [memoryOverview, setMemoryOverview] = reactExports.useState({ engineVersion: "2.4", totals: {}, boundaries: [], routingPolicy: {}, characters: [] });
   const [isLoadingSummaries, setIsLoadingSummaries] = reactExports.useState(false);
   const [expandedCharacters, setExpandedCharacters] = reactExports.useState(/* @__PURE__ */ new Set());
   const [editingEntry, setEditingEntry] = reactExports.useState(null);
   const [searchQuery, setSearchQuery] = reactExports.useState("");
+  const [isClearing, setIsClearing] = reactExports.useState(false);
+  const [clearResult, setClearResult] = reactExports.useState(null);
   reactExports.useEffect(() => {
     loadSummaries();
   }, []);
@@ -20649,11 +20653,29 @@ const SummariesManager = () => {
     try {
       const dashboardData = await getSummariesDashboardData();
       setSummaries(dashboardData.summaries || []);
-      setMemoryOverview(dashboardData.memoryOverview || { engineVersion: "2.3", totals: {}, boundaries: [], routingPolicy: {}, characters: [] });
+      setMemoryOverview(dashboardData.memoryOverview || { engineVersion: "2.4", totals: {}, boundaries: [], routingPolicy: {}, characters: [] });
     } catch (error) {
       console.error("Failed to load summaries:", error);
     } finally {
       setIsLoadingSummaries(false);
+    }
+  };
+  const handleOpenSummariesFolder = async () => {
+    const result = await openSummariesFolder();
+    if (!result.success) console.error("Failed to open summaries folder:", result.error);
+  };
+  const handleClearSummaries = async () => {
+    if (!window.confirm(t("summaries.confirmClearSummaries"))) return;
+    setIsClearing(true);
+    setClearResult(null);
+    try {
+      const result = await clearSummaries();
+      setClearResult({ success: result.success, message: result.success ? t("summaries.clearSuccess") : t("summaries.clearFailed", { error: result.error || "Unknown error" }) });
+      if (result.success) await loadSummaries();
+    } catch (error) {
+      setClearResult({ success: false, message: t("summaries.clearFailed", { error: error instanceof Error ? error.message : "Unknown error" }) });
+    } finally {
+      setIsClearing(false);
     }
   };
   const toggleCharacterExpanded = (key) => {
@@ -20783,33 +20805,16 @@ const SummariesManager = () => {
       ] }),
       /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "header-actions", children: [
         /* @__PURE__ */ jsxRuntimeExports.jsx("button", { onClick: loadSummaries, disabled: isLoadingSummaries, children: isLoadingSummaries ? t("summaries.loadingSummaries") : t("summariesManager.refresh") }),
-        /* @__PURE__ */ jsxRuntimeExports.jsx("button", { 
-          onClick: async () => {
-            if (window.confirm("警告：此操作将删除所有玩家的所有对话摘要！\n\n这个操作不可逆转！\n\n确认要删除吗？")) {
-              try {
-                const result = await window.conversationAPI.clearSummaries();
-                if (result.success) {
-                  alert("所有摘要已成功清除！");
-                  await loadSummaries();
-                } else {
-                  alert("清除失败：" + (result.error || "未知错误"));
-                }
-              } catch (error) {
-                alert("清除失败：" + error.message);
-              }
-            }
-          },
-          disabled: isLoadingSummaries || summaryGroups.length === 0,
-          style: { marginLeft: "8px", backgroundColor: "#d32f2f", color: "white" },
-          children: "清除全部摘要" 
-        })
+        /* @__PURE__ */ jsxRuntimeExports.jsx("button", { type: "button", onClick: handleOpenSummariesFolder, children: t("summaries.openSummariesFolder") }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx("button", { type: "button", onClick: handleClearSummaries, disabled: isLoadingSummaries || isClearing || summaryGroups.length === 0, className: "danger-button", children: isClearing ? t("summaries.clearing") : t("summaries.clearAllSummaries") })
       ] })
     ] }),
+    clearResult && /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: `clear-result ${clearResult.success ? "success" : "error"}`, children: clearResult.message }),
     /* @__PURE__ */ jsxRuntimeExports.jsxs("section", { className: "memory-engine-overview", children: [
       /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "memory-engine-title", children: [
         /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
-          /* @__PURE__ */ jsxRuntimeExports.jsx("h5", { children: "Memory Engine 2.3 · V7.7.2" }),
-          /* @__PURE__ */ jsxRuntimeExports.jsx("p", { children: "每名角色只保存自己实际在场且知情的视角摘要；支持候场、请入内和请离场" })
+          /* @__PURE__ */ jsxRuntimeExports.jsx("h5", { children: "Memory Engine 2.4 · V7.7.3" }),
+          /* @__PURE__ */ jsxRuntimeExports.jsx("p", { children: "人物摘要按需缓存并在写入后失效；来源 messageId 独立核验真实对话" })
         ] }),
         /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: `memory-engine-status ${memoryOverview.error ? "is-error" : ""}`, children: memoryOverview.error ? "读取异常" : "运行中" })
       ] }),
@@ -21021,17 +21026,14 @@ const SummariesView = () => {
   const setSummaryProvider = useConfigStore((state) => state.setSummaryProvider);
   const updateSummaryPromptSettings = useConfigStore((state) => state.updateSummaryPromptSettings);
   const getSummaryPromptSettings = useConfigStore((state) => state.getSummaryPromptSettings);
-  const openSummariesFolder = useConfigStore((state) => state.openSummariesFolder);
-  const clearSummaries = useConfigStore((state) => state.clearSummaries);
   const [localSettings, setLocalSettings] = reactExports.useState({
     rollingPrompt: "",
     finalPrompt: "",
-    letterSummaryPrompt: ""
+    letterSummaryPrompt: "",
+    finalSummaryMaxTokens: 4096
   });
   const [isLoading, setIsLoading] = reactExports.useState(true);
   const saveTimer = reactExports.useRef(null);
-  const [isClearing, setIsClearing] = reactExports.useState(false);
-  const [clearResult, setClearResult] = reactExports.useState(null);
   reactExports.useEffect(() => {
     const loadSettings = async () => {
       try {
@@ -21039,7 +21041,8 @@ const SummariesView = () => {
         setLocalSettings({
           rollingPrompt: settings2.rollingPrompt,
           finalPrompt: settings2.finalPrompt,
-          letterSummaryPrompt: settings2.letterSummaryPrompt
+          letterSummaryPrompt: settings2.letterSummaryPrompt,
+          finalSummaryMaxTokens: settings2.finalSummaryMaxTokens
         });
       } catch (error) {
         console.error("Failed to load summary prompt settings:", error);
@@ -21084,7 +21087,8 @@ const SummariesView = () => {
     setLocalSettings({
       rollingPrompt: settings2.rollingPrompt,
       finalPrompt: settings2.finalPrompt,
-      letterSummaryPrompt: settings2.letterSummaryPrompt
+      letterSummaryPrompt: settings2.letterSummaryPrompt,
+      finalSummaryMaxTokens: settings2.finalSummaryMaxTokens
     });
   };
   const handleResetFinal = async () => {
@@ -21096,7 +21100,8 @@ const SummariesView = () => {
     setLocalSettings({
       rollingPrompt: settings2.rollingPrompt,
       finalPrompt: settings2.finalPrompt,
-      letterSummaryPrompt: settings2.letterSummaryPrompt
+      letterSummaryPrompt: settings2.letterSummaryPrompt,
+      finalSummaryMaxTokens: settings2.finalSummaryMaxTokens
     });
   };
   const handleResetLetterSummary = async () => {
@@ -21108,54 +21113,30 @@ const SummariesView = () => {
     setLocalSettings({
       rollingPrompt: settings2.rollingPrompt,
       finalPrompt: settings2.finalPrompt,
-      letterSummaryPrompt: settings2.letterSummaryPrompt
+      letterSummaryPrompt: settings2.letterSummaryPrompt,
+      finalSummaryMaxTokens: settings2.finalSummaryMaxTokens
     });
   };
   const handleResetAll = async () => {
     const confirm = window.confirm(t("summaries.resetAllPrompts"));
     if (!confirm) return;
-    const resetSettings = { rollingPrompt: "", finalPrompt: "", letterSummaryPrompt: "" };
+    const resetSettings = { rollingPrompt: "", finalPrompt: "", letterSummaryPrompt: "", finalSummaryMaxTokens: 4096 };
     await updateSummaryPromptSettings(resetSettings);
     const settings2 = await getSummaryPromptSettings();
     setLocalSettings({
       rollingPrompt: settings2.rollingPrompt,
       finalPrompt: settings2.finalPrompt,
-      letterSummaryPrompt: settings2.letterSummaryPrompt
+      letterSummaryPrompt: settings2.letterSummaryPrompt,
+      finalSummaryMaxTokens: settings2.finalSummaryMaxTokens
     });
   };
-  const handleOpenSummariesFolder = async () => {
-    const result = await openSummariesFolder();
-    if (!result.success) {
-      console.error("Failed to open summaries folder:", result.error);
-    }
+  const normalizeFinalSummaryMaxTokens = (value) => {
+    const parsed = Number.parseInt(String(value), 10);
+    if (!Number.isInteger(parsed)) return 4096;
+    return Math.min(16384, Math.max(256, parsed));
   };
-  const handleClearSummaries = async () => {
-    if (!window.confirm(t("summaries.confirmClearSummaries"))) {
-      return;
-    }
-    setIsClearing(true);
-    setClearResult(null);
-    try {
-      const result = await clearSummaries();
-      if (result.success) {
-        setClearResult({
-          success: true,
-          message: t("summaries.clearSuccess")
-        });
-      } else {
-        setClearResult({
-          success: false,
-          message: t("summaries.clearFailed", { error: result.error || "Unknown error" })
-        });
-      }
-    } catch (error) {
-      setClearResult({
-        success: false,
-        message: t("summaries.clearFailed", { error: error instanceof Error ? error.message : "Unknown error" })
-      });
-    } finally {
-      setIsClearing(false);
-    }
+  const handleFinalSummaryMaxTokensBlur = () => {
+    persist({ ...localSettings, finalSummaryMaxTokens: normalizeFinalSummaryMaxTokens(localSettings.finalSummaryMaxTokens) }, true);
   };
   if (!appSettings || isLoading) {
     return /* @__PURE__ */ jsxRuntimeExports.jsx("div", { children: t("summaries.loadingSummaries") });
@@ -21200,6 +21181,11 @@ const SummariesView = () => {
           }
         )
       ] })
+    ] }),
+    /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "form-group", children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsx("h4", { children: t("summaries.finalSummaryMaxTokens", { defaultValue: "最终摘要最大输出 Token" }) }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "muted-text", children: t("summaries.finalSummaryMaxTokensHelp", { defaultValue: "范围 256–16384。该值会作为最终摘要模型请求的 max_tokens；输入完成后离开输入框即可保存。" }) }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx("input", { id: "finalSummaryMaxTokens", type: "number", min: 256, max: 16384, step: 1, value: localSettings.finalSummaryMaxTokens, onChange: (e) => setLocalSettings({ ...localSettings, finalSummaryMaxTokens: e.target.value }), onBlur: handleFinalSummaryMaxTokensBlur })
     ] }),
     /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "info-card", children: [
       /* @__PURE__ */ jsxRuntimeExports.jsx("h4", { children: t("summaries.aboutSummaryGeneration") }),
@@ -21271,31 +21257,6 @@ const SummariesView = () => {
           style: { fontFamily: "monospace", fontSize: "0.9rem" }
         }
       )
-    ] }),
-    /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "form-group summary-management", children: [
-      /* @__PURE__ */ jsxRuntimeExports.jsx("h4", { children: t("summaries.conversationSummaryManagement") }),
-      /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "help-text", children: t("summaries.conversationSummaryManagementHelp") }),
-      /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "button-group", children: [
-        /* @__PURE__ */ jsxRuntimeExports.jsx(
-          "button",
-          {
-            type: "button",
-            onClick: handleOpenSummariesFolder,
-            children: t("summaries.openSummariesFolder")
-          }
-        ),
-        /* @__PURE__ */ jsxRuntimeExports.jsx(
-          "button",
-          {
-            type: "button",
-            onClick: handleClearSummaries,
-            disabled: isClearing,
-            className: "danger-button",
-            children: isClearing ? t("summaries.clearing") : t("summaries.clearAllSummaries")
-          }
-        )
-      ] }),
-      clearResult && /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: `clear-result ${clearResult.success ? "success" : "error"}`, children: clearResult.message })
     ] }),
     /* @__PURE__ */ jsxRuntimeExports.jsx(SummariesManager, {})
   ] });
@@ -21369,7 +21330,8 @@ const OptimizationView = () => {
     [text("关系上下文", "Relationship context"), text("第三方角色按亲属和年龄解析，不加入发言队列。", "Mentioned third parties are resolved from kinship and age data without joining the speaker queue.")],
     [text("稳定记忆前缀", "Stable memory prefix"), text("同一场对话每轮保持一致；对话结束后的新摘要在下一场读取。", "It stays unchanged throughout one conversation; new final summaries are loaded in the next conversation.")],
     [text("场外人物快照", "Mentioned-character snapshot"), text("首次提及时按每名 NPC 的目录召回，本场后续回复复用；新增人物时扩展一次。", "Each NPC recalls from their own folder on first mention, then reuses that snapshot until another person is introduced.")],
-    [text("视角摘要", "Perspective summaries"), text("Memory Engine 2.3 按人物知情边界生成目录视图，秘密不会复制给不知情角色。", "Memory Engine 2.3 creates folder views from each character's knowledge boundary so secrets do not leak to unaware characters.")],
+    [text("视角摘要", "Perspective summaries"), text("Memory Engine 2.4 按人物知情边界生成目录视图，秘密不会复制给不知情角色。", "Memory Engine 2.4 creates folder views from each character's knowledge boundary so secrets do not leak to unaware characters.")],
+    [text("摘要读取与可信度", "Summary cache and trust"), text("人物目录按需缓存，写入后精确失效；所有摘要来源 messageId 必须存在于真实对话。", "Character folders are cached on demand and invalidated after writes; every cited messageId must exist in the source conversation.")],
     [text("在场窗口", "Presence windows"), text("候场人物不会回应或获知内容；入内后开始记录，请离场后立即封存可恢复快照并停止收录后续对话，正式摘要在整场结束时统一生成。", "Waiting characters neither respond nor learn content; memory starts on entry, leaving seals a recoverable snapshot, and the final summary is generated once when the conversation ends.")],
     [text("安全配置", "Secure configuration"), text("Provider API Key 使用 Electron safeStorage 加密落盘；明文旧配置在可用时自动迁移。", "Provider API keys are encrypted at rest with Electron safeStorage; plaintext settings migrate when encryption is available.")],
     [text("统一发布门禁", "Unified release gate"), text("本地与 CI 共用一份 35 组测试清单，并加入 36 条轻量语义金标样例。", "Local and CI validation share one 35-group manifest plus 36 lightweight semantic golden cases.")],
@@ -21380,7 +21342,7 @@ const OptimizationView = () => {
     /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "optimization-header", children: [
       /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
         /* @__PURE__ */ jsxRuntimeExports.jsx("h3", { children: text("系统优化与用量", "System Optimization & Usage") }),
-        /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "muted-text", children: text("V7.7.2 为 Memory Engine 2.3 增加候场、入内与离场窗口；每名角色只保留实际在场区间的对话。用量仅按服务商返回的 Token 统计。", "V7.7.2 adds waiting, entry, and departure windows to Memory Engine 2.3 so each character retains only dialogue from their actual presence interval. Usage counts provider-reported tokens only.") })
+        /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "muted-text", children: text("V7.7.3 升级到 Memory Engine 2.4，增加人物目录缓存和来源 messageId 独立校验，并统一摘要管理入口。用量仅按服务商返回的 Token 统计。", "V7.7.3 upgrades to Memory Engine 2.4 with per-character folder caching, independent source-message validation, and one consolidated summary-management entry. Usage counts provider-reported tokens only.") })
       ] }),
       /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "optimization-header-actions", children: [
         /* @__PURE__ */ jsxRuntimeExports.jsx("button", { type: "button", onClick: loadReport, disabled: isLoading, children: isLoading ? text("读取中…", "Loading…") : text("刷新", "Refresh") }),
@@ -21393,7 +21355,7 @@ const OptimizationView = () => {
       /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "optimization-metrics", children: metrics.map(([label, value, tone]) => /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: `optimization-metric ${tone}`, children: [/* @__PURE__ */ jsxRuntimeExports.jsx("span", { children: label }), /* @__PURE__ */ jsxRuntimeExports.jsx("strong", { children: value })] }, label)) }),
       reconciliation?.aggregates > 0 && /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "muted-text", children: text(`已包含 ${formatTokens(reconciliation.requests)} 次 DeepSeek 官网核对补录、${formatTokens(reconciliation.totalTokens)} Token；缓存细分仅来自本机仍保留的原始响应。`, `Includes a DeepSeek-console reconciliation of ${formatTokens(reconciliation.requests)} requests and ${formatTokens(reconciliation.totalTokens)} tokens; cache details use only locally retained provider responses.`) }),
       /* @__PURE__ */ jsxRuntimeExports.jsxs("section", { className: "optimization-capabilities", children: [
-        /* @__PURE__ */ jsxRuntimeExports.jsx("h4", { children: text("V7.7.2 适配状态", "V7.7.2 integration status") }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx("h4", { children: text("V7.7.3 适配状态", "V7.7.3 integration status") }),
         /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "optimization-capability-grid", children: capabilities.map(([title, detail]) => /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "optimization-capability", children: [/* @__PURE__ */ jsxRuntimeExports.jsx("strong", { children: title }), /* @__PURE__ */ jsxRuntimeExports.jsx("span", { children: detail })] }, title)) })
       ] }),
       /* @__PURE__ */ jsxRuntimeExports.jsxs("section", { className: "optimization-section", children: [
@@ -22567,7 +22529,7 @@ const promptPreview$2 = { "character": "角色", "loadingPreview": "加载预览
 const prompts$2 = { "addCustomBlock": "添加自定义块", "conversation": "对话", "customTextBlock": "自定义文本块", "delete": "删除", "deleteBlock": "删除块", "deletePreset": "删除此预设？", "edit": "编辑", "enabled": "已启用", "exportedTo": "已导出到 {{path}}", "exportZip": "导出 ZIP", "failedToExport": "导出提示词失败。", "hide": "隐藏", "label": "标签", "leaveEmptyDefault": "留空则使用默认文本", "letters": "信件", "loadingPromptConfig": "加载提示词配置中...", "mainInstruction": "主要指令（Handlebars）", "mainPrompt": "主提示词（Handlebars）", "memoriesPretext": "记忆前文（Handlebars）", "memoriesToInclude": "要包含的记忆", "openPromptsFolder": "打开提示词文件夹", "pastSummariesPretext": "历史摘要前文（Handlebars）", "pinned": "已固定", "presets": "预设", "promptBuilder": "提示词构建器", "promptBuilderHelp": "拖拽排序、启用/禁用和编辑提示词块。", "promptSet": "提示词集", "refreshFiles": "刷新文件", "resetMainPrompt": "将主提示词重置为默认模板？当前内容将被替换。", "resetToDefault": "重置为默认", "role": "角色", "rollingSummaryPretext": "滚动摘要前文（Handlebars）", "saveAsNew": "另存为新预设", "savePreset": "保存预设", "selectPreset": "选择预设...", "suffix": "后缀", "template": "模板（Handlebars）", "updatePreset": "更新预设" };
 const settings$2 = { "actionApprovalHelp": "配置哪些操作在执行前需要用户批准。危险操作（如杀死角色）无论如何都始终需要批准。", "actionApprovalSettings": "操作批准设置", "approvalMode": "批准模式", "approvalModeAll": "自动接受所有操作（无需批准）", "approvalModeNonDestructive": "自动接受安全操作（仅危险操作需要批准）", "approvalModeNone": "不自动接受（所有操作都需要批准）", "ck3UserFolder": "CK3 用户文件夹", "currentPath": "当前路径", "enableStreamingGlobally": "全局启用流式输出", "generateFollowingMessages": "生成后续消息", "globalApplicationSettings": "全局应用设置", "letterStatusHelp": "查看生成和送达流程中所有信件的状态。", "letterStatusManagement": "信件状态管理", "loadingSettings": "加载设置中...", "messageFontSize": "消息字体大小", "pauseOnApproval": "需要批准时暂停对话", "pauseOnApprovalHelp": "启用后，当操作需要批准时对话将暂停，允许您在继续之前审核。", "pauseOnRegeneration": "重新生成时暂停", "selectFolder": "选择文件夹", "showSettingsOnStartup": "启动时显示设置", "viewLettersStatus": "查看信件状态", "votcModLocation": "VOTC 模组位置", "ck3UserFolderHelp": '点击下方字段以选择/更改 CK3 文件夹路径。\n通常位于"文档"文件夹中。\nOneDrive 定位可能会失败！', "ck3UserFolderExample": "用户名", "selectedCK3FolderTitle": "已选择的 CK3 文档路径", "selectCK3UserFolderTitle": "选择 CK3 文档文件夹", "allowPrerelease": "接收测试版更新", "allowPrereleaseHelp": "启用后，您将收到测试版和预发布版本。这些版本可能不太稳定，但包含最新功能。", "egline": "如：", "ck3UserFolderClickToSelect": "点击以选择" };
 const summaries$2 = { "aboutSummaryGeneration": "关于摘要生成", "aboutSummaryGenerationHelp": "摘要在两种情况下自动生成：", "clearAllSummaries": "清除所有摘要", "clearFailed": "清除失败：{{error}}", "clearing": "清除中...", "clearSuccess": "所有摘要已清除。", "configureSummaries": "配置对话摘要的生成方式。", "confirmClearSummaries": "您确定要清除所有对话摘要吗？此操作无法撤消。", "conversationSummaryManagement": "对话摘要管理", "conversationSummaryManagementHelp": "管理角色的对话摘要。", "errors": "错误", "filesCopied": "已复制 {{count}} 个文件。", "finalSummaries": "最终摘要", "finalSummariesHelp": "在对话结束时生成。这些综合摘要保存到角色文件中，并在后续对话中用作上下文。", "finalSummaryPrompt": "最终摘要提示词", "finalSummaryPromptHelp": "在对话结束时使用此提示词创建综合摘要，并保存以供后续参考。", "importFailed": "导入失败：{{error}}", "importing": "导入中...", "importLegacySummaries": "导入旧版摘要", "importSuccess": "导入成功！", "legacyDataImport": "旧版数据导入", "legacyDataImportHelp": "从旧版 VOTC 导入对话摘要。现有摘要将被备份。", "letterSummaryPrompt": "信件摘要提示词", "letterSummaryPromptHelp": "此提示词用于生成角色之间信件交流的摘要。这些摘要保存到角色文件中，并在后续对话中用作上下文。", "loadingSummaries": "加载摘要中...", "noSummaries": "没有可用的摘要", "openSummariesFolder": "打开摘要文件夹", "promptsActiveInfo": "下方显示当前使用中的提示词。更改会在停止输入后自动保存。", "providerOverride": "指定服务商", "providerOverrideHelp": "选择用于生成对话摘要的特定服务商。默认使用当前服务商。", "resetAllDefaults": "全部重置为默认", "resetAllPrompts": "将所有摘要提示词重置为默认？当前内容将被替换。", "resetFinalPrompt": "将最终摘要提示词重置为默认？当前内容将被替换。", "resetLetterSummaryPrompt": "将信件摘要提示词重置为默认？当前内容将被替换。", "resetRollingPrompt": "将滚动摘要提示词重置为默认？当前内容将被替换。", "rollingSummaries": "滚动摘要", "rollingSummariesHelp": "当长对话接近上下文限制时自动创建，用于压缩旧消息并保留重要信息。", "rollingSummaryPrompt": "滚动摘要提示词", "rollingSummaryPromptHelp": "当对话过长需要压缩时使用此提示词，在对话过程中创建增量摘要。", "summariesView": "摘要", "summaryGenerationSettings": "摘要生成设置", "summaryProvider": "摘要服务商", "useActiveProvider": "使用当前服务商" };
-const summariesManager$2 = { "characterId": "对话人物 ID", "characters": "对话文件", "confirmDeleteCharacterSummaries": "您确定要删除此角色的所有摘要吗？此操作无法撤消。", "confirmDeleteSummary": "您确定要删除此摘要吗？", "deleteAll": "全部删除", "editSummary": "编辑摘要", "failedDeleteCharacterSummaries": "删除角色摘要失败：{{error}}", "failedDeleteSummary": "删除摘要失败：{{error}}", "failedUpdateSummary": "更新摘要失败：{{error}}", "noSearchResults": "未找到匹配的摘要。", "noSummariesFound": "未找到摘要。结束一场有效对话后，Memory Engine 2.3 会为每名参与者创建人物视角摘要目录。", "playerId": "目录人物 ID", "refresh": "刷新", "searchPlaceholder": "输入人物姓名或 ID，定位本人目录及相关摘要...", "summariesCount": "摘要", "summariesManager": "摘要与记忆管理器", "summariesManagerHelp": "通过 Memory Engine 2.3 搜索人物视角摘要目录、查看不同人物间的对话文件，并直接编辑摘要内容。", "summaryIndex": "摘要索引" };
+const summariesManager$2 = { "characterId": "对话人物 ID", "characters": "对话文件", "confirmDeleteCharacterSummaries": "您确定要删除此角色的所有摘要吗？此操作无法撤消。", "confirmDeleteSummary": "您确定要删除此摘要吗？", "deleteAll": "全部删除", "editSummary": "编辑摘要", "failedDeleteCharacterSummaries": "删除角色摘要失败：{{error}}", "failedDeleteSummary": "删除摘要失败：{{error}}", "failedUpdateSummary": "更新摘要失败：{{error}}", "noSearchResults": "未找到匹配的摘要。", "noSummariesFound": "未找到摘要。结束一场有效对话后，Memory Engine 2.4 会为每名参与者创建人物视角摘要目录。", "playerId": "目录人物 ID", "refresh": "刷新", "searchPlaceholder": "输入人物姓名或 ID，定位本人目录及相关摘要...", "summariesCount": "摘要", "summariesManager": "摘要与记忆管理器", "summariesManagerHelp": "通过 Memory Engine 2.4 搜索人物视角摘要目录、查看不同人物间的对话文件，并直接编辑摘要内容。", "summaryIndex": "摘要索引" };
 const zh = {
   actions: actions$2,
   chat: chat$2,

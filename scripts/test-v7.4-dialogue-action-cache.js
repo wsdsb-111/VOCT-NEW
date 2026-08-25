@@ -63,13 +63,13 @@ assert(defaultPromptSource.includes("不设固定句数或段落数"), "the defa
 assert(defaultPromptSource.includes("长期稳定记忆") && defaultPromptSource.includes("本轮事实只以当前对话消息"), "the default prompt must separate recalled context from current-turn facts");
 assert(defaultPromptSource.includes("不得展示思维过程"), "thinking chat must return only the in-character response");
 assert(!providerServiceSource.includes('thinking: { type: "enabled" }, max_tokens: 12288'), "DeepSeek final summaries must not use thinking after the P0 empty-output regression");
-assert(providerServiceSource.includes('thinking: { type: "disabled" }, max_tokens: 4096'), "DeepSeek final summaries and recovery must remain non-thinking");
+assert(providerServiceSource.includes('thinking: { type: "disabled" }, max_tokens: structuredSummaryMaxTokens'), "DeepSeek final summaries and recovery must remain non-thinking while using the configured output limit");
 assert(actionPromptSource.includes("VOTC_ACTION_CACHE_ANCHOR_v11"), "the action prompt anchor must change with local no-action filtering");
 assert(actionPromptSource.includes("they never prove that an action happened in the current turn"), "action selection must not treat recalled memory as current evidence");
-assert(rendererSource.includes("Memory Engine 2.3 · V7.7.2"));
+assert(rendererSource.includes("Memory Engine 2.4 · V7.7.3"));
 assert(rendererSource.includes("动作候选预筛"));
 assert(rendererSource.includes("稳定记忆前缀"));
 assert(rendererSource.includes("DeepSeek 思考与摘要"));
-assert(rendererSource.includes("V7.7.2 适配状态"));
+assert(rendererSource.includes("V7.7.3 适配状态"));
 
 console.log("VOTC v7.4 dialogue/action/cache: PASS (UI, prompt migration, thinking chat, stable memory prefix, candidate-filtered action routing)");

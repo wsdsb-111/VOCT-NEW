@@ -241,17 +241,19 @@ class LLMManager {
     const summaryBlocks = Array.isArray(metadata?.blocks) && metadata.blocks.length > 0 ? metadata.blocks : this.PromptBuilder.getSummaryPromptBlocks(preparedMessages, metadata?.requestType || "summary");
     const isStructuredSummary = ["final_summary", "memory_recovery"].includes(metadata.requestType);
     const useDeepseekNonThinking = config.providerType === "deepseek" && isStructuredSummary;
+    const requestedMaxTokens = Number(metadata?.maxTokens);
+    const structuredSummaryMaxTokens = Number.isInteger(requestedMaxTokens) && requestedMaxTokens >= 256 && requestedMaxTokens <= 16384 ? requestedMaxTokens : 4096;
     const request = {
       model: config.defaultModel,
       messages: preparedMessages,
       stream: false,
       // summaries don't need streaming
       ...config.defaultParameters,
-      ...useDeepseekNonThinking ? { thinking: { type: "disabled" }, max_tokens: 4096, response_format: { type: "json_object" } } : isStructuredSummary ? { response_format: { type: "json_object" } } : {},
+      ...useDeepseekNonThinking ? { thinking: { type: "disabled" }, max_tokens: structuredSummaryMaxTokens, response_format: { type: "json_object" } } : isStructuredSummary ? { max_tokens: structuredSummaryMaxTokens, response_format: { type: "json_object" } } : {},
       signal
     };
     const estimatedPromptTokens = this.TokenCounter.calculateTotalTokens(preparedMessages);
-    const deepseekMode = useDeepseekNonThinking ? ", maxTokens=4096, thinking=disabled" : "";
+    const deepseekMode = useDeepseekNonThinking ? `, maxTokens=${structuredSummaryMaxTokens}, thinking=disabled` : "";
     console.log(`[LLMManager] Summary request: provider=${config.providerType}, model=${config.defaultModel}, messages=${preparedMessages.length}, estimatedPromptTokens=${estimatedPromptTokens}${deepseekMode}`);
     if (this.debugVerboseLLM) {
       this.logVerboseLLM("[LLMManager][verbose] Summary messages:", preparedMessages);

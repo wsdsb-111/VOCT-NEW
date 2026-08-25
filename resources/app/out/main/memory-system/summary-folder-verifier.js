@@ -9,7 +9,7 @@ function verifyDirectedSummaryPersistence({ directedPairs = [], finalizationId, 
     const filePath = getFilePath(owner, counterpart);
     const summaries = readSummaries(filePath);
     const persisted = Array.isArray(summaries) ? summaries.find((summary) => summary?.finalizationId === finalizationId) : null;
-    const perspectiveValid = !requirePerspective || persisted?.engineVersion === "2.3" && Number(persisted?.perspectiveOwnerId) === Number(owner?.id) && typeof persisted?.projectionHash === "string" && persisted.projectionHash.length > 0;
+    const perspectiveValid = !requirePerspective || ["2.3", "2.4"].includes(persisted?.engineVersion) && Number(persisted?.perspectiveOwnerId) === Number(owner?.id) && typeof persisted?.projectionHash === "string" && persisted.projectionHash.length > 0;
     if (!persisted || !perspectiveValid) {
       missingPairs.push({ ownerId: Number(owner?.id), counterpartId: Number(counterpart?.id), filePath });
     }

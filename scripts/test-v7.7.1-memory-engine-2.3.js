@@ -39,6 +39,20 @@ assert(!projections.get("2->1").content.includes("密道位于东门"), "乙的�
 assert(!projections.get("3->1").content.includes("密道位于东门"), "丙的投影不得出现只有甲知道的秘密");
 assert(projections.get("2->1").pinned, "承诺、秘密和未决事项必须钉住");
 assert.notStrictEqual(projections.get("1->2").content, projections.get("1->3").content, "同一 owner 的不同 counterpart 文件不得复制同一段全量正文");
+const sleepBoundaryExtraction = {
+  sessionSummary: "甲睡着前与乙交谈；甲睡着后，乙独自为甲掖被并在心中决定继续照顾甲。",
+  summarySegments: [
+    { segmentId: "before_sleep", content: "甲睡着前与乙共同谈到夜间休息。", participants: [1, 2], knownBy: [1, 2], provenance: { messageIds: [10], speakerIds: [1, 2] } },
+    { segmentId: "after_sleep_private", content: "甲睡着后，乙独自为甲掖被并在心中决定继续照顾甲。", participants: [2], knownBy: [2], provenance: { messageIds: [11], speakerIds: [2] } }
+  ],
+  memories: [
+    { memoryId: "private_after_sleep_plan", type: "plan", content: "乙在甲睡着后独自决定继续照顾甲。", participants: [2], subjects: [1], knownBy: [2], status: "open", importance: 0.9, provenance: { messageIds: [11], speakerIds: [2] } }
+  ]
+};
+const sleepBoundaryProjections = buildPerspectiveSummaryMap({ participants: participants.slice(0, 2) }, sleepBoundaryExtraction);
+assert(sleepBoundaryProjections.get("1->2").content.includes("共同谈到夜间休息"), "睡着前共同知情的内容必须保留");
+assert(!sleepBoundaryProjections.get("1->2").content.includes("独自为甲掖被"), "睡着者视角不得获得睡着后的私密行动和内心决定");
+assert(sleepBoundaryProjections.get("2->1").content.includes("独自决定继续照顾甲"), "知情者自己的有向摘要必须保留睡着后的私密长期事项");
 const tampered = new Map(projections);
 tampered.set("1->2", { ...projections.get("1->2"), memoryIds: [...projections.get("1->2").memoryIds, "private_a"], content: `${projections.get("1->2").content}\n- 甲心里知道密道位于东门。` });
 assert.strictEqual(validatePerspectiveSummaryMap({ participants }, extraction, tampered).success, false, "配对校验必须拒绝 owner 已知但与 counterpart 无关的串主题记忆");
@@ -114,7 +128,7 @@ try {
   };
   const first = engine.retrieveForResponder({ ...common, query: "诸葛亮北伐" });
   const second = engine.retrieveForResponder({ ...common, query: "粮草运输" });
-  assert.strictEqual(first.engineVersion, "2.3");
+  assert.strictEqual(first.engineVersion, "2.4");
   assert.strictEqual(first.stableText, second.stableText, "稳定长期记忆必须整场字节冻结");
   assert.strictEqual(first.directStableText, second.directStableText, "直接关系最近两条与钉住记忆必须整场冻结");
   assert.strictEqual(first.mentionedSnapshotText, second.mentionedSnapshotText, "场外人物快照的内容和顺序必须整场冻结");
@@ -137,7 +151,8 @@ const mainSource = fs.readFileSync(path.join(root, "resources", "app", "out", "m
 const providerServiceSource = fs.readFileSync(path.join(root, "resources", "app", "out", "main", "provider-service.js"), "utf8");
 const extractionPrompt = new MemoryExtractor().buildPrompt({ participants })[0].content;
 assert(!providerServiceSource.includes('thinking: { type: "enabled" }, max_tokens: 12288'), "DeepSeek 终局摘要必须彻底关闭思考");
-assert(providerServiceSource.includes('thinking: { type: "disabled" }, max_tokens: 4096'), "终局摘要、重试与恢复必须统一关闭思考");
+assert(providerServiceSource.includes('thinking: { type: "disabled" }, max_tokens: structuredSummaryMaxTokens'), "终局摘要、重试与恢复必须统一关闭思考并使用配置的输出上限");
+assert(providerServiceSource.includes('metadata?.maxTokens') && providerServiceSource.includes('requestedMaxTokens >= 256 && requestedMaxTokens <= 16384'), "终局摘要输出上限必须由受限的用户配置传入请求");
 assert(extractionPrompt.includes("Do not copy every scene participant into subjects"), "摘要提取必须明确区分参与者与主题人物，避免多人场景把所有人复制为同一主题");
 assert(extractionPrompt.includes("There is no fixed character or word count"), "终局摘要不得再设置固定字数范围");
 assert(extractionPrompt.includes("attribute every action, statement, belief and emotion to the correct named character"), "摘要必须逐人归属言行、观点和情绪");
@@ -145,11 +160,15 @@ assert(extractionPrompt.includes("Never replace concrete details with generic ph
 assert(extractionPrompt.includes("exact numbers, dates, locations, titles, objects and quoted terms"), "摘要必须保留可核验的数字、日期、地点、头衔、物件和关键措辞");
 assert(extractionPrompt.includes("at most 10 high-value durable memories"), "结构化记忆条目必须限制为最多 10 条以保护 4096 Token JSON");
 assert(extractionPrompt.includes("as concise as possible without losing substantive content"), "终局摘要必须要求精简表达但不得丢失实质内容");
+assert(extractionPrompt.includes("knowledge audience materially changes"), "终局摘要必须在知情范围变化时拆分叙事片段");
+assert(extractionPrompt.includes("asleep, unconscious, absent or has left"), "睡着、昏迷、不在场或离场人物不得获得无法感知的内容");
+assert(extractionPrompt.includes("private thoughts, silent intentions, self-talk and unobserved actions"), "私密想法、自言自语和未被观察的行动必须与共享事件分段");
 assert(extractionPrompt.includes("Do not impose a fixed character count on an individual memory"), "单条长期记忆也不得设置固定字数范围");
 assert(extractionPrompt.includes('"summarySegments"'), "终局输出必须包含可按在场窗口投影的详细叙事片段");
 assert(extractionPrompt.toLowerCase().includes("do not repeat the same narrative in a separate sessionsummary"), "叙事正文不得在 JSON 中重复占用输出预算");
 assert(mainSource.includes("摘要不设置固定字数或段落数量"), "默认终局摘要提示词必须取消固定字数限制");
 assert(mainSource.includes("在不遗漏实质内容、人物归属、因果关系和关键细节的前提下尽量精简"), "默认终局摘要提示词必须要求精简但不失内容");
+assert(mainSource.includes("知情范围发生变化时必须分段"), "默认终局摘要提示词必须防止睡着或独处内容泄漏给不知情角色");
 assert(mainSource.includes("不得笼统写成“双方讨论了某事”"), "默认终局摘要提示词必须禁止泛化压缩");
 assert(mainSource.indexOf('label: "Frozen Direct Relationship Memory"') < mainSource.lastIndexOf('case "history"'), "直接关系冻结块必须位于带 Token 统计的 history 前");
 assert(mainSource.includes('label: "Turn Topic Memory Patch"'), "话题补丁必须作为独立可观测块放在 history 后");

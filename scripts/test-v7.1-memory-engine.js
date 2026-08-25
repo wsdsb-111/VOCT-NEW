@@ -79,7 +79,7 @@ try {
       estimateTokens: (text) => String(text).length
     });
     const selected = [...recalled.stable, ...recalled.relevant].map((entry) => entry.memory);
-    assert.strictEqual(recalled.engineVersion, "2.3");
+    assert.strictEqual(recalled.engineVersion, "2.4");
     assert(selected.some((memory) => memory.content.includes(`${speaker.name}只在自己的`)), `${speaker.name} must recall E from ${speaker.name}'s own folder`);
     assert(selected.filter((memory) => memory.type === "folder_summary").every((memory) => memory.provenance.folderOwnerId === speaker.id), `${speaker.name} must never read another owner's folder`);
     assert(!selected.some((memory) => memory.content.includes("己的私人目录")), "another character's private folder must not leak");
@@ -97,7 +97,7 @@ try {
   assert(!mentionedContext.includes("loadDynamicMemoriesFromHistory"), "the old dynamic-summary prompt path must be disconnected");
   assert(conversationSource.includes("mentionedEntityNames"), "Engine 2.2 retrieval must receive mentioned-person names for owner-folder matching");
   assert(mainSource.includes('memoryContext?.engineVersion?.startsWith("2.")'), "past_summaries must be suppressed when Memory Engine 2.x is active");
-  assert(rendererSource.includes("Memory Engine 2.3"), "summary UI must identify the current Memory Engine 2.3 runtime");
+  assert(rendererSource.includes("Memory Engine 2.4"), "summary UI must identify the current Memory Engine 2.4 runtime");
   assert(!rendererSource.includes('className: "memory-character-coverage"'), "summary UI must not render the duplicate structured-memory coverage tree");
   assert(!rendererSource.includes("可访问的结构化记忆（可编辑）"), "summary UI must expose one folder-based editing surface");
   assert(rendererSource.includes("handleEditSummary"), "folder summary content must remain player-editable");

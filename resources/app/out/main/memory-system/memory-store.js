@@ -46,6 +46,7 @@ class MemoryStore {
     };
     this.ensureDirectories();
     this.index = this.readJson(this.paths.index, { schemaVersion: CURRENT_MEMORY_SCHEMA_VERSION, memories: {}, episodes: {} });
+    this.folderSummaryCache = new Map();
   }
 
   ensureDirectories() {
@@ -267,6 +268,7 @@ class MemoryStore {
   deleteOwnedSummaryFolders(characterId) {
     const numericId = Number(characterId);
     if (!Number.isFinite(numericId)) throw new Error("character_id_required");
+    this.invalidateFolderSummaryCache([numericId]);
     if (!this.summaryFoldersDir || !fs.existsSync(this.summaryFoldersDir)) return { removedFolderCount: 0 };
     const root = path.resolve(this.summaryFoldersDir);
     const prefix = `${numericId}_`;
@@ -322,9 +324,23 @@ class MemoryStore {
     return folders.length > 0 ? { id: numericId, name: folders[0], shortName: folders[0] } : null;
   }
 
+  invalidateFolderSummaryCache(characterIds = null) {
+    if (characterIds == null) {
+      this.folderSummaryCache.clear();
+      return;
+    }
+    for (const characterId of uniqueIds(characterIds)) this.folderSummaryCache.delete(characterId);
+  }
+
   loadFolderSummariesForCharacter(characterId) {
-    if (!this.summaryFoldersDir || !fs.existsSync(this.summaryFoldersDir)) return [];
-    const prefix = `${Number(characterId)}_`;
+    const ownerId = Number(characterId);
+    if (!Number.isFinite(ownerId)) return [];
+    if (this.folderSummaryCache.has(ownerId)) return this.folderSummaryCache.get(ownerId).slice();
+    if (!this.summaryFoldersDir || !fs.existsSync(this.summaryFoldersDir)) {
+      this.folderSummaryCache.set(ownerId, []);
+      return [];
+    }
+    const prefix = `${ownerId}_`;
     const folders = fs.readdirSync(this.summaryFoldersDir, { withFileTypes: true })
       .filter((entry) => entry.isDirectory() && entry.name.startsWith(prefix));
     const sessions = new Map();
@@ -336,7 +352,6 @@ class MemoryStore {
         for (let index = 0; index < summaries.length; index++) {
           const summary = summaries[index];
           if (!summary || typeof summary.content !== "string") continue;
-          const ownerId = Number(characterId);
           const playerId = Number(summary.playerId);
           const summaryCharacterId = Number(summary.characterId);
           const counterpartId = playerId === ownerId && Number.isFinite(summaryCharacterId) ? summaryCharacterId : summaryCharacterId === ownerId && Number.isFinite(playerId) ? playerId : Number.isFinite(summaryCharacterId) ? summaryCharacterId : null;
@@ -398,7 +413,7 @@ class MemoryStore {
               counterpartIds: [counterpartId],
               counterpartNames: [counterpartName],
               participantProfiles: summaryProfiles,
-              extractionMode: summary.engineVersion === "2.3" ? "folder_summary_v2_3" : "folder_summary_v2_1",
+              extractionMode: summary.engineVersion === "2.4" ? "folder_summary_v2_4" : summary.engineVersion === "2.3" ? "folder_summary_v2_3" : "folder_summary_v2_1",
               perspectiveMemoryIds: summary.perspectiveMemoryIds || [],
               projectionHash: summary.projectionHash || null,
               messageIds: [],
@@ -409,7 +424,9 @@ class MemoryStore {
         }
       }
     }
-    return [...sessions.values()];
+    const memories = [...sessions.values()];
+    this.folderSummaryCache.set(ownerId, memories);
+    return memories.slice();
   }
 
   loadDirectPairSummaries(ownerId, counterpartId, ownerMemories = null) {

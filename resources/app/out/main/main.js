@@ -620,11 +620,12 @@ const schema = {
   },
   summaryPromptSettings: {
     type: "object",
-    default: { rollingPrompt: "", finalPrompt: "", letterSummaryPrompt: "" },
+    default: { rollingPrompt: "", finalPrompt: "", letterSummaryPrompt: "", finalSummaryMaxTokens: 4096 },
     properties: {
       rollingPrompt: { type: "string", default: "" },
       finalPrompt: { type: "string", default: "" },
-      letterSummaryPrompt: { type: "string", default: "" }
+      letterSummaryPrompt: { type: "string", default: "" },
+      finalSummaryMaxTokens: { type: "number", minimum: 256, maximum: 16384, default: 4096 }
     }
   },
   allowPrerelease: {
@@ -710,7 +711,8 @@ class SettingsRepository {
       this.store.set("summaryPromptSettings", {
         rollingPrompt: "",
         finalPrompt: "",
-        letterSummaryPrompt: ""
+        letterSummaryPrompt: "",
+        finalSummaryMaxTokens: 4096
       });
     }
     if (currentAppSettings.allowPrerelease === void 0) {
@@ -1072,13 +1074,14 @@ class SettingsRepository {
   getDefaultFinalSummaryPrompt() {
     return `为这次对话创建高信息密度的中文最终摘要。
 
-摘要不设置固定字数或段落数量；应根据原始对话的信息量，在 4096 Token 输出上限内完整保留细节。请在不遗漏实质内容、人物归属、因果关系和关键细节的前提下尽量精简，删去重复和低信息量措辞，不得为了凑长度虚构内容，也不得任意压缩成几句概述。按实际发生顺序组织连贯内容，并做到：
+摘要不设置固定字数或段落数量；应根据原始对话的信息量，在当前配置的输出 Token 上限内完整保留细节。请在不遗漏实质内容、人物归属、因果关系和关键细节的前提下尽量精简，删去重复和低信息量措辞，不得为了凑长度虚构内容，也不得任意压缩成几句概述。按实际发生顺序组织连贯内容，并做到：
 
 1. 每项言论、行动、观点、情绪和决定都明确归属于具体人物，不混淆多人视角。
 2. 写清对话背景、时间、地点、事件先后及因果关系；保留确切人名、头衔、数字、日期、物件和关键措辞。
 3. 记录每个人提出、接受、拒绝、隐瞒或计划的内容，包括请求、条件、承诺、协议、秘密、冲突与未决事项。
 4. 描述语气和情绪如何变化，以及这些变化对信任、亲密、敌意、权力关系或后续行动的影响。
 5. 只在措辞本身影响含义时保留简短原话；不要大段抄写，也不要重复同一事实。
+6. 知情范围发生变化时必须分段；角色睡着、昏迷、离场、独处、自言自语、默想或实施未被他人察觉的行为时，不得把相关内容写成所有在场者共同知情。
 
 不得笼统写成“双方讨论了某事”“关系有所发展”或“交换了意见”；必须说明谁说了什么、为何这样说、对方如何回应，以及最终达成或尚未解决的结果。`;
   }
@@ -1097,16 +1100,24 @@ class SettingsRepository {
     const stored = this.store.get("summaryPromptSettings", {
       rollingPrompt: "",
       finalPrompt: "",
-      letterSummaryPrompt: ""
+      letterSummaryPrompt: "",
+      finalSummaryMaxTokens: 4096
     });
+    const configuredMaxTokens = Number(stored.finalSummaryMaxTokens);
+    const finalSummaryMaxTokens = Number.isInteger(configuredMaxTokens) && configuredMaxTokens >= 256 && configuredMaxTokens <= 16384 ? configuredMaxTokens : 4096;
     return {
       rollingPrompt: stored.rollingPrompt || this.getDefaultRollingSummaryPrompt(),
       finalPrompt: stored.finalPrompt || this.getDefaultFinalSummaryPrompt(),
-      letterSummaryPrompt: stored.letterSummaryPrompt || this.getDefaultLetterSummaryPrompt()
+      letterSummaryPrompt: stored.letterSummaryPrompt || this.getDefaultLetterSummaryPrompt(),
+      finalSummaryMaxTokens
     };
   }
   saveSummaryPromptSettings(settings) {
-    this.store.set("summaryPromptSettings", settings);
+    const configuredMaxTokens = Number(settings?.finalSummaryMaxTokens);
+    this.store.set("summaryPromptSettings", {
+      ...settings,
+      finalSummaryMaxTokens: Number.isInteger(configuredMaxTokens) && configuredMaxTokens >= 256 && configuredMaxTokens <= 16384 ? configuredMaxTokens : 4096
+    });
     console.log("Summary prompt settings saved.");
     logVerboseLLM("[Settings][verbose] Summary prompt settings:", settings);
   }
@@ -2341,7 +2352,7 @@ class GameData {
         conversationType: participantMetadata.length > 2 ? "group" : "pair",
         participants: participantMetadata,
         finalizationId: options.finalizationId || null,
-        engineVersion: projection ? "2.3" : "2.2",
+        engineVersion: projection ? "2.4" : "2.2",
         perspectiveOwnerId: projection?.ownerId ?? owner.id,
         perspectiveMemoryIds: projection?.memoryIds || [],
         perspectiveSummarySegmentIds: projection?.summarySegmentIds || [],
@@ -2352,6 +2363,7 @@ class GameData {
         open: projection?.open === true
       });
       this.writeConversationSummariesFile(filePath, summaries);
+      memoryEngine.invalidateSummaryFolderCache([owner.id]);
     }
     return summaries;
   }
@@ -3577,7 +3589,11 @@ ${existingSummary}`
     return prompt;
   }
   static getFinalSummaryInstructions() {
-    return settingsRepository.getSummaryPromptSettings().finalPrompt;
+    const summarySettings = settingsRepository.getSummaryPromptSettings();
+    return `${summarySettings.finalPrompt}\n\n本次最终摘要最多输出 ${summarySettings.finalSummaryMaxTokens} Token；请在该上限内优先保留具体事实。`;
+  }
+  static getFinalSummaryMaxTokens() {
+    return settingsRepository.getSummaryPromptSettings().finalSummaryMaxTokens;
   }
   /**
    * Generate a system prompt based on the characters in the conversation
@@ -5230,6 +5246,7 @@ class SummariesManager {
       if (!Array.isArray(summaries) || summaryIndex < 0 || summaryIndex >= summaries.length) return { success: false, error: "Invalid summary index" };
       summaries[summaryIndex].content = newContent;
       this.writeSummaryJsonAtomic(filePath, summaries);
+      memoryEngine.invalidateSummaryFolderCache([playerId]);
       return { success: true };
     } catch (error) {
       console.error(`Failed to update summary for character ${characterId} from player ${playerId}:`, error);
@@ -5260,6 +5277,7 @@ class SummariesManager {
       } else {
         this.writeSummaryJsonAtomic(filePath, summaries);
       }
+      memoryEngine.invalidateSummaryFolderCache([playerId]);
       return { success: true };
     } catch (error) {
       console.error(`Failed to delete summary for character ${characterId} from player ${playerId}:`, error);
@@ -5281,6 +5299,7 @@ class SummariesManager {
     }
     try {
       fs$1.unlinkSync(filePath);
+      memoryEngine.invalidateSummaryFolderCache([playerId]);
       return { success: true };
     } catch (error) {
       console.error(`Failed to delete owner summary file at ${filePath}:`, error);

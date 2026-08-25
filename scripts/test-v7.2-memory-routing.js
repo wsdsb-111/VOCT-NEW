@@ -73,7 +73,7 @@ try {
     estimateTokens: (text) => String(text).length
   });
 
-  assert.strictEqual(recalled.engineVersion, "2.3");
+  assert.strictEqual(recalled.engineVersion, "2.4");
   assert.strictEqual(ownerFolderLoads, 1, "one NPC response must parse the owner folder only once regardless of participant count");
   assert.deepStrictEqual(recalled.routing.directCounterpartIds, [A.id, C.id]);
   assert.deepStrictEqual(recalled.routing.mentionedOutOfSceneIds, [X.id]);

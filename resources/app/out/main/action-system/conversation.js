@@ -999,9 +999,11 @@ class Conversation {
       },
       requestSummary: async (summaryPrompt, requestOptions = {}) => {
         console.log(`[TOKEN_COUNT] Final memory prompt tokens: ${this.estimateTokenCount(summaryPrompt)}`);
+        const maxTokens = typeof PromptBuilder.getFinalSummaryMaxTokens === "function" ? PromptBuilder.getFinalSummaryMaxTokens() : 4096;
         return llmManager.sendSummaryRequest(summaryPrompt, void 0, {
           requestType: "final_summary",
-          summaryAttempt: requestOptions.attempt
+          summaryAttempt: requestOptions.attempt,
+          maxTokens
         });
       }
     });
@@ -1010,7 +1012,7 @@ class Conversation {
     if (!memoryEngine || !this.gameData) return;
     const results = await memoryEngine.recoverPendingFinalizations({
       buildPrompt: (context) => memoryEngine.buildFinalizationPrompt({ ...context, finalInstructions: PromptBuilder.getFinalSummaryInstructions() }),
-      requestSummary: (summaryPrompt) => llmManager.sendSummaryRequest(summaryPrompt, void 0, { requestType: "memory_recovery" }),
+      requestSummary: (summaryPrompt) => llmManager.sendSummaryRequest(summaryPrompt, void 0, { requestType: "memory_recovery", maxTokens: typeof PromptBuilder.getFinalSummaryMaxTokens === "function" ? PromptBuilder.getFinalSummaryMaxTokens() : 4096 }),
       resolveParticipantProfiles: (snapshot) => memoryEngine.resolveRecoveryParticipantProfiles(snapshot, [...this.summaryParticipantProfiles.values()]),
       persistCharacterFolders: async (finalSummary, context) => {
         const participantIds = (context.participants || []).map((entry) => entry.id);

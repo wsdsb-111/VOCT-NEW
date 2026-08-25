@@ -96,6 +96,10 @@ class MemoryEngine {
     return this.store.loadFolderSummariesForCharacter(characterId);
   }
 
+  invalidateSummaryFolderCache(characterIds = null) {
+    this.store.invalidateFolderSummaryCache(characterIds);
+  }
+
   getMentionableProfilesFromFolderMemories(memories = []) {
     const profiles = new Map();
     const ordered = [...(memories || [])].sort((left, right) => Number(left?.totalDays ?? -1) - Number(right?.totalDays ?? -1));
@@ -301,22 +305,43 @@ class MemoryEngine {
     const substantiveConversation = messageCount >= 2 && sourceChars > 0;
     const narrativeChars = String(extraction?.sessionSummary || "").replace(/\s/g, "").length;
     const segments = Array.isArray(extraction?.summarySegments) ? extraction.summarySegments : [];
-    const sourceMessageIds = new Set(messages.map((message) => Number(message?.id)).filter(Number.isFinite));
     const reasons = [];
     if (!extraction?.structured) reasons.push("structured JSON was not returned");
     if (narrativeChars === 0) reasons.push("detailed narrative is empty");
     if (substantiveConversation && segments.length === 0) reasons.push("summarySegments are missing");
-    if (segments.some((segment) => {
-      const ids = uniqueIds(segment.provenance?.messageIds);
-      return ids.length === 0 || ids.some((messageId) => !sourceMessageIds.has(messageId));
-    })) reasons.push("every summary segment needs valid supporting messageIds");
+    reasons.push(...this.validateExtractionMessageIds(context, extraction).reasons);
     return { success: reasons.length === 0, reasons, sourceChars, messageCount, narrativeChars };
+  }
+
+  validateExtractionMessageIds(context, extraction) {
+    const sourceIds = (context.messages || []).map((message) => Number(message?.id)).filter(Number.isFinite);
+    const sourceSet = new Set(sourceIds);
+    const minId = sourceIds.length > 0 ? Math.min(...sourceIds) : null;
+    const maxId = sourceIds.length > 0 ? Math.max(...sourceIds) : null;
+    const reasons = [];
+    const validateItems = (items, label) => {
+      if (!Array.isArray(items)) return;
+      for (let index = 0; index < items.length; index++) {
+        const rawIds = items[index]?.provenance?.messageIds;
+        if (!Array.isArray(rawIds) || rawIds.length === 0) {
+          reasons.push(`${label}[${index}] needs supporting messageIds`);
+          continue;
+        }
+        const ids = rawIds.map(Number);
+        if (ids.some((messageId) => !Number.isFinite(messageId) || messageId < minId || messageId > maxId || !sourceSet.has(messageId))) {
+          reasons.push(`${label}[${index}] contains messageIds outside the source conversation`);
+        }
+      }
+    };
+    validateItems(extraction?.summarySegments, "summarySegments");
+    validateItems(extraction?.memories, "memories");
+    return { success: reasons.length === 0, reasons, minId, maxId };
   }
 
   buildSummaryQualityRetryPrompt(prompt, quality) {
     const correction = {
       role: "system",
-      content: `Final-summary quality correction: the previous response was rejected (${quality.reasons.join("; ")}). Regenerate the complete JSON from the supplied conversation. Put the full chronological narrative in summarySegments, preserve concrete details, and meet the stated length without inventing facts. Do not return a shortened overview.`
+      content: `Final-summary quality correction: the previous response was rejected (${quality.reasons.join("; ")}). Regenerate the complete JSON from the supplied conversation. Put the full chronological narrative in summarySegments, preserve concrete details and exact source messageIds without inventing facts. Do not return a shortened overview.`
     };
     const sourcePrompt = Array.isArray(prompt) ? [...prompt] : [];
     const finalUser = sourcePrompt.at(-1)?.role === "user" ? sourcePrompt.pop() : null;
@@ -457,6 +482,7 @@ class MemoryEngine {
     if (typeof persist !== "function") return { saved: false, skipped: true };
     const result = await persist(finalSummary, { ...context, directedSummaries });
     if (result !== true && result?.success !== true) throw new Error(result?.error || "summary_folder_persist_result_required");
+    this.invalidateSummaryFolderCache((context.participants || []).map((participant) => participant.id));
     return { saved: true };
   }
 
@@ -902,7 +928,7 @@ class MemoryEngine {
       indexSize: Object.keys(this.store.index.memories || {}).length
     });
     return {
-      engineVersion: "2.3",
+      engineVersion: "2.4",
       respondingCharacterId: ownerId,
       stable,
       relevant,
@@ -1063,7 +1089,7 @@ class MemoryEngine {
 
   getUiOverview({ summaryCatalog = [] } = {}) {
     return {
-      engineVersion: "2.3",
+      engineVersion: "2.4",
       totals: {
         structuredMemories: Object.keys(this.store.index.memories || {}).length,
         episodes: Object.keys(this.store.index.episodes || {}).length,

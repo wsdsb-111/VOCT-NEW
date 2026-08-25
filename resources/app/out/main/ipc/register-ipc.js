@@ -678,6 +678,7 @@ function registerIpcHandlers(runtime) {
         }
         console.log(`Cleared ${totalFilesDeleted} summary files and removed ${playerDirs.length} player directories`);
       }
+      memoryEngine.invalidateSummaryFolderCache();
       const conversation = conversationManager.getCurrentConversation();
       if (conversation) {
         conversation.gameData.loadCharactersSummaries();

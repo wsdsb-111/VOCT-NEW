@@ -99,17 +99,17 @@ const service = new LLMManager({
   await service.sendSummaryRequest(
     [{ role: "user", content: "摘要" }],
     undefined,
-    { requestType: "final_summary", character: "丙" }
+    { requestType: "final_summary", character: "丙", maxTokens: 8192 }
   );
   await service.sendSummaryRequest(
     [{ role: "user", content: "摘要兜底" }],
     undefined,
-    { requestType: "final_summary", character: "丙", summaryAttempt: 2 }
+    { requestType: "final_summary", character: "丙", summaryAttempt: 2, maxTokens: 8192 }
   );
   await service.sendSummaryRequest(
     [{ role: "user", content: "摘要恢复" }],
     undefined,
-    { requestType: "memory_recovery", character: "丙" }
+    { requestType: "memory_recovery", character: "丙", maxTokens: 2048 }
   );
 
   assert.strictEqual(calls.length, 5);
@@ -132,13 +132,13 @@ const service = new LLMManager({
   assert.strictEqual(summaryCall.request.model, "summary-model");
   assert.strictEqual(summaryCall.request.stream, false);
   assert.deepStrictEqual(summaryCall.request.thinking, { type: "disabled" }, "DeepSeek final summaries must disable thinking to protect structured output");
-  assert.strictEqual(summaryCall.request.max_tokens, 4096);
+  assert.strictEqual(summaryCall.request.max_tokens, 8192, "final summaries must use the configured output token limit");
   assert.deepStrictEqual(summaryCall.request.response_format, { type: "json_object" });
   assert.strictEqual(summaryCall.request.messages[0].content, "prepared");
   assert.deepStrictEqual(fallbackSummaryCall.request.thinking, { type: "disabled" }, "final-summary retries must remain non-thinking");
-  assert.strictEqual(fallbackSummaryCall.request.max_tokens, 4096);
+  assert.strictEqual(fallbackSummaryCall.request.max_tokens, 8192, "final-summary retries must retain the configured output token limit");
   assert.deepStrictEqual(recoverySummaryCall.request.thinking, { type: "disabled" }, "memory recovery must remain deterministic and non-thinking");
-  assert.strictEqual(recoverySummaryCall.request.max_tokens, 4096);
+  assert.strictEqual(recoverySummaryCall.request.max_tokens, 2048, "memory recovery must use the configured final-summary output token limit");
 
   assert.deepStrictEqual(usageRecords.map((entry) => entry.metadata.requestType), ["chat", "action", "final_summary", "final_summary", "memory_recovery"]);
   assert.deepStrictEqual(usageRecords.map((entry) => entry.metadata.providerType), ["deepseek", "openrouter", "deepseek", "deepseek", "deepseek"]);
