@@ -81,7 +81,7 @@ try {
   }
 
   const actionPromptSource = fs.readFileSync(actionPromptPath, "utf8");
-  assert(actionPromptSource.includes("VOTC_ACTION_CACHE_ANCHOR_v10"));
+  assert(actionPromptSource.includes("VOTC_ACTION_CACHE_ANCHOR_v11"));
   assert(actionPromptSource.includes("CURRENT_COMPLETED_ACTION or NON_ACTION"));
   assert(actionPromptSource.includes('If NON_ACTION, return {"actions":[]} immediately'));
   assert(actionPromptSource.includes("Never infer an unstated result or relationship transition"));

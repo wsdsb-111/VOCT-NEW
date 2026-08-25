@@ -17,6 +17,10 @@ const participants = [
 ];
 const extraction = {
   sessionSummary: "全知摘要不得直接复制。",
+  summarySegments: [
+    { segmentId: "shared_scene", content: "甲、乙共同听见丙说明城中粮草只够三日，三人随后逐项商定守门、运粮和次日复核账册的安排。", participants: [1, 2, 3], knownBy: [1, 2, 3], provenance: { messageIds: [1, 2, 3], speakerIds: [3] } },
+    { segmentId: "private_scene_segment", content: "甲独自想到丙可能另藏了一把钥匙，但没有把这项猜测告诉乙。", participants: [1], knownBy: [1], provenance: { messageIds: [4], speakerIds: [1] } }
+  ],
   memories: [
     { memoryId: "public", type: "event", content: "三人公开商定明日议事。", participants: [1, 2, 3], subjects: [], knownBy: [1, 2, 3], status: null, importance: 0.6 },
     { memoryId: "private_a", type: "secret", content: "甲心里知道密道位于东门。", participants: [1], subjects: [3], knownBy: [1], status: "open", importance: 0.95 },
@@ -28,6 +32,8 @@ const projections = buildPerspectiveSummaryMap({ participants, excludedSummaryOw
 assert.strictEqual(validatePerspectiveSummaryMap({ participants }, extraction, projections).success, true);
 assert(!projections.get("1->2").content.includes("密道位于东门"), "甲对乙的档案不得混入只与丙有关的秘密");
 assert(!projections.get("1->2").content.includes("另一把钥匙"), "共同在场不能让只以丙为主题的记忆串入甲对乙档案");
+assert(projections.get("1->2").content.includes("粮草只够三日"), "共同知晓的多人场景细节必须进入共同在场人物的有向摘要");
+assert(!projections.get("1->2").content.includes("没有把这项猜测告诉乙"), "仅 owner 知道的叙事片段不得写入与不知情 counterpart 的共同摘要");
 assert(projections.get("1->3").content.includes("密道位于东门"), "甲对丙的档案应保留甲知道且与丙相关的秘密");
 assert(!projections.get("2->1").content.includes("密道位于东门"), "乙的投影不得出现只有甲知道的秘密");
 assert(!projections.get("3->1").content.includes("密道位于东门"), "丙的投影不得出现只有甲知道的秘密");
@@ -130,8 +136,21 @@ try {
 const mainSource = fs.readFileSync(path.join(root, "resources", "app", "out", "main", "main.js"), "utf8");
 const providerServiceSource = fs.readFileSync(path.join(root, "resources", "app", "out", "main", "provider-service.js"), "utf8");
 const extractionPrompt = new MemoryExtractor().buildPrompt({ participants })[0].content;
-assert(providerServiceSource.includes('isDeepseekStructuredSummary ? { thinking: { type: "enabled" }, max_tokens: 4096'), "DeepSeek 终局摘要必须恢复思考并保留结构化输出预算");
+assert(!providerServiceSource.includes('thinking: { type: "enabled" }, max_tokens: 12288'), "DeepSeek 终局摘要必须彻底关闭思考");
+assert(providerServiceSource.includes('thinking: { type: "disabled" }, max_tokens: 4096'), "终局摘要、重试与恢复必须统一关闭思考");
 assert(extractionPrompt.includes("Do not copy every scene participant into subjects"), "摘要提取必须明确区分参与者与主题人物，避免多人场景把所有人复制为同一主题");
+assert(extractionPrompt.includes("There is no fixed character or word count"), "终局摘要不得再设置固定字数范围");
+assert(extractionPrompt.includes("attribute every action, statement, belief and emotion to the correct named character"), "摘要必须逐人归属言行、观点和情绪");
+assert(extractionPrompt.includes("Never replace concrete details with generic phrases"), "摘要不得用泛化措辞替代具体对话事实");
+assert(extractionPrompt.includes("exact numbers, dates, locations, titles, objects and quoted terms"), "摘要必须保留可核验的数字、日期、地点、头衔、物件和关键措辞");
+assert(extractionPrompt.includes("at most 10 high-value durable memories"), "结构化记忆条目必须限制为最多 10 条以保护 4096 Token JSON");
+assert(extractionPrompt.includes("as concise as possible without losing substantive content"), "终局摘要必须要求精简表达但不得丢失实质内容");
+assert(extractionPrompt.includes("Do not impose a fixed character count on an individual memory"), "单条长期记忆也不得设置固定字数范围");
+assert(extractionPrompt.includes('"summarySegments"'), "终局输出必须包含可按在场窗口投影的详细叙事片段");
+assert(extractionPrompt.toLowerCase().includes("do not repeat the same narrative in a separate sessionsummary"), "叙事正文不得在 JSON 中重复占用输出预算");
+assert(mainSource.includes("摘要不设置固定字数或段落数量"), "默认终局摘要提示词必须取消固定字数限制");
+assert(mainSource.includes("在不遗漏实质内容、人物归属、因果关系和关键细节的前提下尽量精简"), "默认终局摘要提示词必须要求精简但不失内容");
+assert(mainSource.includes("不得笼统写成“双方讨论了某事”"), "默认终局摘要提示词必须禁止泛化压缩");
 assert(mainSource.indexOf('label: "Frozen Direct Relationship Memory"') < mainSource.lastIndexOf('case "history"'), "直接关系冻结块必须位于带 Token 统计的 history 前");
 assert(mainSource.includes('label: "Turn Topic Memory Patch"'), "话题补丁必须作为独立可观测块放在 history 后");
 assert(mainSource.includes("prefixFingerprintMatchesPrevious"), "缓存统计必须记录并核验 history 前稳定区块指纹");
@@ -155,17 +174,110 @@ assert.notStrictEqual(firstPromptContract.prefixFingerprint, changedPrefixContra
   try {
     const strictEngine = new MemoryEngine({ baseDir: path.join(strictRoot, "memory"), summaryFoldersDir: path.join(strictRoot, "summaries"), trace: { record() {} } });
     let attempts = 0;
+    const requestOptions = [];
+    const requestPrompts = [];
+    const longMessages = Array.from({ length: 18 }, (_, index) => ({
+      id: index + 1,
+      role: index % 2 === 0 ? "user" : "assistant",
+      name: index % 2 === 0 ? "甲" : "乙",
+      content: `第${index + 1}轮围绕粮草、守门、家人安危和次日安排展开了具体交谈。`.repeat(3)
+    }));
+    const detailedSegment = "甲先说明粮草不足和城门守备的风险，乙逐项回应并提出运粮、换岗与次日核对账册的办法；两人还谈到家人安危、彼此顾虑和未决条件，最后明确了执行顺序与再次确认的时间。".repeat(7);
     const strictResult = await strictEngine.finalizeConversation({
       conversationId: "structured-retry",
       participants: [{ id: 1, name: "甲" }, { id: 2, name: "乙" }],
       participantPresence: [{ characterId: 1, joinedAtMessageId: 0 }, { characterId: 2, joinedAtMessageId: 0 }],
-      messages: [{ id: 1, role: "user", name: "甲", content: "记住此事。" }],
+      messages: longMessages,
       buildPrompt: () => [],
-      requestSummary: async () => ({ content: ++attempts === 1 ? "非 JSON 思考残片" : JSON.stringify({ sessionSummary: "甲请乙记住此事。", memories: [] }) }),
+      requestSummary: async (prompt, options) => {
+        requestPrompts.push(prompt);
+        requestOptions.push(options);
+        attempts += 1;
+        return attempts === 1
+          ? { content: JSON.stringify({ sessionSummary: "虽然请求没有截断，但只给出三句话的过短摘要。", memories: [] }), finish_reason: "stop" }
+          : { content: JSON.stringify({
+            summarySegments: [{ content: detailedSegment, participants: [1, 2], visibility: "participants", messageIds: longMessages.map((message) => message.id), speakerIds: [1, 2] }],
+            memories: [{ type: "plan", content: "甲乙商定先运粮换岗，次日再核对账册并确认家人安置。", participants: [1, 2], subjects: [1, 2], messageIds: [1, 2, 17, 18], speakerIds: [1, 2] }]
+          }), finish_reason: "stop" };
+      },
       persistCharacterFolders: async () => ({ success: true })
     });
     assert.strictEqual(strictResult.success, true);
-    assert.strictEqual(attempts, 2, "非结构化终局正文必须立即重试，不能按 prose fallback 提交");
+    assert.strictEqual(attempts, 2, "未截断但严重过短的终局正文也必须重试，不能提交低质量结果");
+    assert.deepStrictEqual(requestOptions.map((options) => options.attempt), [1, 2], "终局摘要应保留两次非思考重试机会");
+    assert(requestPrompts[1].some((message) => String(message.content || "").includes("quality correction")), "第二次请求必须明确告知模型修复详细度和分段结构");
+    assert(strictResult.finalSummary.includes("执行顺序"), "修复重试后的终局摘要必须保留具体事件细节");
+    assert(strictResult.directedSummaries.get("1->2").content.includes("执行顺序"), "详细叙事片段必须真正进入人物有向摘要文件");
+    assert(requestOptions.every((options) => !("forceNonThinking" in options)), "Memory Engine 不应再请求思考摘要");
+
+    const pairRoot = path.join(strictRoot, "two-person-boundary");
+    const pairSummaryRoot = path.join(pairRoot, "summaries");
+    const pairEngine = new MemoryEngine({ baseDir: path.join(pairRoot, "memory"), summaryFoldersDir: pairSummaryRoot, trace: { record() {} } });
+    const pairMessages = Array.from({ length: 10 }, (_, index) => ({
+      id: index,
+      role: index % 2 === 0 ? "user" : "assistant",
+      name: index % 2 === 0 ? "甲" : "乙",
+      content: "双方围绕具体事件、人物态度、承诺条件与后续安排继续交谈。".repeat(4).slice(0, 120)
+    }));
+    let pairRequests = 0;
+    const pairResult = await pairEngine.finalizeConversation({
+      conversationId: "two-person-1200-char-boundary",
+      participants: [{ id: 1, name: "甲" }, { id: 2, name: "乙" }],
+      participantPresence: [{ characterId: 1, joinedAtMessageId: 0 }, { characterId: 2, joinedAtMessageId: 0 }],
+      messages: pairMessages,
+      buildPrompt: () => [],
+      requestSummary: async () => {
+        pairRequests += 1;
+        return {
+          content: JSON.stringify({
+            summarySegments: [{ content: "详".repeat(452), participants: [1, 2], visibility: "participants", messageIds: pairMessages.map((message) => message.id), speakerIds: [1, 2] }],
+            memories: [{ type: "plan", content: "甲乙确认后续安排。", participants: [1, 2], subjects: [1, 2], messageIds: [8, 9], speakerIds: [1, 2] }]
+          }),
+          finish_reason: "stop"
+        };
+      },
+      persistCharacterFolders: async (_summary, context) => {
+        assert.strictEqual(context.directedSummaries.size, 2, "双人终局必须产生 A→B 与 B→A 两份投影");
+        for (const [key, projection] of context.directedSummaries) {
+          const filePath = path.join(pairSummaryRoot, `${key.replace("->", "_to_")}.json`);
+          fs.mkdirSync(path.dirname(filePath), { recursive: true });
+          fs.writeFileSync(filePath, JSON.stringify(projection), "utf8");
+        }
+        return { success: true };
+      }
+    });
+    assert.strictEqual(pairResult.success, true, `双人有效结构化摘要不得因任何固定字数门槛丢失全部人物目录: ${pairResult.error?.message || "unknown"}`);
+    assert.strictEqual(pairRequests, 1, "达到自适应质量底线的双人摘要不应白白重复请求 Provider");
+    assert(fs.existsSync(path.join(pairSummaryRoot, "1_to_2.json")) && fs.existsSync(path.join(pairSummaryRoot, "2_to_1.json")), "双人摘要必须实际生成两个方向的角色文件");
+
+    const recoveryRoot = path.join(strictRoot, "obsolete-length-recovery");
+    const recoveryEngine = new MemoryEngine({ baseDir: path.join(recoveryRoot, "memory"), summaryFoldersDir: path.join(recoveryRoot, "summaries"), trace: { record() {} } });
+    const recoveryContext = recoveryEngine.prepareFinalizationContext({
+      conversationId: "obsolete-fixed-length-failure",
+      participants: [{ id: 1, name: "甲" }, { id: 2, name: "乙" }],
+      participantPresence: [{ characterId: 1, joinedAtMessageId: 0 }, { characterId: 2, joinedAtMessageId: 0 }],
+      messages: pairMessages
+    });
+    recoveryEngine.writeRecoverySnapshot(recoveryContext, {
+      finalizationStage: "request",
+      finalizationStatus: "failed_manual",
+      retryCount: 3,
+      lastError: "final_summary_quality_failed:detailed narrative has 452 chars; require at least 500"
+    });
+    const recovered = await recoveryEngine.recoverPendingFinalizations({
+      buildPrompt: () => [],
+      requestSummary: async () => ({
+        content: JSON.stringify({
+          summarySegments: [{ content: "恢复后的双人详细摘要。", participants: [1, 2], visibility: "participants", messageIds: pairMessages.map((message) => message.id), speakerIds: [1, 2] }],
+          memories: []
+        }),
+        finish_reason: "stop"
+      }),
+      persistCharacterFolders: async (_summary, context) => ({ success: context.directedSummaries.size === 2 }),
+      resolveParticipantProfiles: (snapshot) => snapshot.participants
+    });
+    assert.strictEqual(recovered.length, 1, "旧固定字数门槛造成的 failed_manual 双人快照必须自动恢复一次");
+    assert.strictEqual(recovered[0].success, true, "取消字数门槛后旧双人失败快照必须完成双向提交");
     console.log("VOTC v7.7.1 Memory Engine 2.3: PASS (pair perspectives, leak checks, prefix fingerprints, strict summary retry, mentions, snapshots and tombstones)");
   } finally {
     fs.rmSync(strictRoot, { recursive: true, force: true });

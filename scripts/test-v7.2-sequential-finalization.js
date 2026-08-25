@@ -94,7 +94,7 @@ const { FinalizationCoordinator, MemoryEngine } = require(path.join(root, "resou
         buildPrompt: () => [],
         requestSummary: async () => {
           providerCalls++;
-          return { content: JSON.stringify({ sessionSummary: `第 ${index + 1} 场摘要`, memories: [] }) };
+          return { content: JSON.stringify({ summarySegments: [{ content: `第 ${index + 1} 场中，玩家与${participantsById.get(npcId)}交谈，对方回应会记住这次谈话。`, participants: [1, npcId], visibility: "participants", messageIds: [1, 2], speakerIds: [1, npcId] }], memories: [] }) };
         },
         persistCharacterFolders: persistFolders
       })));

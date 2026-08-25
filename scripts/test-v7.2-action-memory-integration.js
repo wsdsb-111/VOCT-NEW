@@ -16,6 +16,14 @@ globalThis.actionRegistry = {
 };
 const { getActionEngine } = require("./action-engine-test-helper");
 const ActionEngine = getActionEngine();
+let actionModelCalls = 0;
+globalThis.usageAnalytics = { record() {} };
+globalThis.llmManager = {
+  async sendActionsRequest() {
+    actionModelCalls++;
+    throw new Error("ordinary dialogue reached the action model");
+  }
+};
 
 const memoryContext = {
   engineVersion: "2.2",
@@ -29,14 +37,13 @@ const harmlessPlan = ActionEngine.buildTurnEvaluationPlan({ playerMessage: null,
 assert.strictEqual(harmlessPlan.length, 1);
 assert.strictEqual(harmlessPlan[0].message, harmlessReply, "action evaluation must receive only the completed response message");
 const harmlessEvaluation = ActionEngine.shouldEvaluateForMessage({ actionGateProcessedTriggers: new Set(), memoryContext }, harmlessPlan[0].message);
-assert.strictEqual(harmlessEvaluation.shouldEvaluate, true, "v7.4 semantic-direct routing must not discard the current reply at a local keyword gate");
-assert.strictEqual(harmlessEvaluation.semanticProfile.events[0].evidence.text, harmlessReply.content, "retrieved memory must stay outside action evidence");
+assert.strictEqual(harmlessEvaluation.shouldEvaluate, false, "ordinary dialogue must not spend an action-model request");
+assert.strictEqual(harmlessEvaluation.reason, "no_executed_action_event");
 assert.strictEqual(ActionEngine.shouldEvaluateForMessage({ actionGateProcessedTriggers: new Set(), memoryContext }, explicitReply).shouldEvaluate, true, "an explicit completed action in the current response must still be evaluated");
 for (let index = 0; index < 100; index++) {
   const conversation = { actionGateProcessedTriggers: new Set(), memoryContext };
   const harmlessResult = ActionEngine.shouldEvaluateForMessage(conversation, { ...harmlessReply, id: 1000 + index });
-  assert.strictEqual(harmlessResult.shouldEvaluate, true, `semantic-direct routing stress ${index}`);
-  assert.strictEqual(harmlessResult.semanticProfile.events[0].evidence.text, harmlessReply.content, `memory isolation stress ${index}`);
+  assert.strictEqual(harmlessResult.shouldEvaluate, false, `local no-action filtering stress ${index}`);
   assert.strictEqual(ActionEngine.shouldEvaluateForMessage(conversation, { ...explicitReply, id: 2000 + index }).shouldEvaluate, true, `current-response action stress ${index}`);
 }
 
@@ -88,4 +95,17 @@ const evaluationBlock = conversationSource.slice(conversationSource.indexOf("asy
 assert(evaluationBlock.includes("evaluation.message"), "completed action evaluation must use the response message boundary");
 assert(!evaluationBlock.includes("memoryContext"), "retrieved memory must not be concatenated into action evaluation text");
 
-console.log("VOTC v7.4 action-memory integration: PASS (100 isolated semantic routes + resolved CK3 source/target binding)");
+(async () => {
+  const skipped = await ActionEngine.evaluateForCharacter(
+    { actionGateProcessedTriggers: new Set(), memoryContext, inactiveParticipantIds: new Set() },
+    npc,
+    null,
+    harmlessReply
+  );
+  assert.deepStrictEqual(skipped, { autoApproved: [], needsApproval: [] });
+  assert.strictEqual(actionModelCalls, 0, "ordinary dialogue must produce zero action provider calls");
+  console.log("VOTC v7.4 action-memory integration: PASS (100 local no-action filters + zero empty provider calls + resolved CK3 bindings)");
+})().catch((error) => {
+  console.error(error);
+  process.exitCode = 1;
+});

@@ -3267,6 +3267,12 @@ select {
   font-weight: 700;
 }
 
+.conversation-presence-busy {
+  margin: -2px 0 7px;
+  color: #c7b79b;
+  font-size: 0.88rem;
+}
+
 .conversation-presence-list {
   display: flex;
   flex-wrap: wrap;

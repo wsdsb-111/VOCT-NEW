@@ -194,6 +194,25 @@ for (const filename of ["z_performDailyAction.js", "z_performCombatAction.js", "
   assert(!fs.existsSync(path.join(actionsDir, filename)), `${filename} must be retired from shipped standard actions`);
 }
 
+const shippedActions = globalThis.actionRegistry.getAllActions().filter((action) => action.id !== "noOp");
+assert(shippedActions.length >= 30, "the local candidate layer must cover all shipped action modules");
+for (const action of shippedActions) {
+  const semantic = action.definition.semantic || {};
+  assert(Array.isArray(action.definition.triggerCategories) && action.definition.triggerCategories.length > 0, `${action.id}: missing local trigger categories`);
+  assert(Array.isArray(semantic.candidatePatterns) || Array.isArray(semantic.evidencePatterns) || typeof semantic.match === "function", `${action.id}: missing local semantic recall metadata`);
+}
+const registryPatternProbe = {
+  getAllActions: () => [
+    { definition: { triggerCategories: ["probe_precise"], semantic: { evidencePatterns: [/已经完成苍龙旗交接/] } } },
+    { definition: { triggerCategories: ["probe_broad"], semantic: { evidencePatterns: [/.+/] } } }
+  ]
+};
+assert.deepStrictEqual(
+  globalThis.__V67ActionSystem.candidateGate.detect("已经完成苍龙旗交接", { candidateOnly: true }, { registry: registryPatternProbe }),
+  ["probe_precise"],
+  "narrow script evidence must extend local candidate recall without allowing catch-all metadata to trigger ordinary dialogue"
+);
+
 for (const action of [scheme, hostileScheme, rpStatus, faction, prisoner]) {
   const args = typeof action.args === "function" ? action.args({ gameData, sourceCharacter: characters.get(2) }) : action.args;
   assert(action.signature);

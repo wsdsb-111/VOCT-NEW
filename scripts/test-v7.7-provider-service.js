@@ -48,7 +48,7 @@ const actionConfig = {
   defaultParameters: { temperature: 0.8, max_tokens: 999 }
 };
 const summaryConfig = {
-  providerType: "gemini",
+  providerType: "deepseek",
   customName: "Summary Provider",
   defaultModel: "summary-model",
   defaultParameters: { temperature: 0.4 }
@@ -101,9 +101,19 @@ const service = new LLMManager({
     undefined,
     { requestType: "final_summary", character: "丙" }
   );
+  await service.sendSummaryRequest(
+    [{ role: "user", content: "摘要兜底" }],
+    undefined,
+    { requestType: "final_summary", character: "丙", summaryAttempt: 2 }
+  );
+  await service.sendSummaryRequest(
+    [{ role: "user", content: "摘要恢复" }],
+    undefined,
+    { requestType: "memory_recovery", character: "丙" }
+  );
 
-  assert.strictEqual(calls.length, 3);
-  const [chatCall, actionCall, summaryCall] = calls;
+  assert.strictEqual(calls.length, 5);
+  const [chatCall, actionCall, summaryCall, fallbackSummaryCall, recoverySummaryCall] = calls;
 
   assert.strictEqual(chatCall.config, chatConfig, "chat must use the active conversation provider");
   assert.strictEqual(chatCall.request.model, "chat-model");
@@ -121,13 +131,18 @@ const service = new LLMManager({
   assert.strictEqual(summaryCall.config, summaryConfig, "summaries must use the selected summary provider");
   assert.strictEqual(summaryCall.request.model, "summary-model");
   assert.strictEqual(summaryCall.request.stream, false);
-  assert.strictEqual(summaryCall.request.thinking, undefined, "non-DeepSeek structured summaries must not receive a provider-specific thinking parameter");
+  assert.deepStrictEqual(summaryCall.request.thinking, { type: "disabled" }, "DeepSeek final summaries must disable thinking to protect structured output");
+  assert.strictEqual(summaryCall.request.max_tokens, 4096);
   assert.deepStrictEqual(summaryCall.request.response_format, { type: "json_object" });
   assert.strictEqual(summaryCall.request.messages[0].content, "prepared");
+  assert.deepStrictEqual(fallbackSummaryCall.request.thinking, { type: "disabled" }, "final-summary retries must remain non-thinking");
+  assert.strictEqual(fallbackSummaryCall.request.max_tokens, 4096);
+  assert.deepStrictEqual(recoverySummaryCall.request.thinking, { type: "disabled" }, "memory recovery must remain deterministic and non-thinking");
+  assert.strictEqual(recoverySummaryCall.request.max_tokens, 4096);
 
-  assert.deepStrictEqual(usageRecords.map((entry) => entry.metadata.requestType), ["chat", "action", "final_summary"]);
-  assert.deepStrictEqual(usageRecords.map((entry) => entry.metadata.providerType), ["deepseek", "openrouter", "gemini"]);
-  assert.deepStrictEqual(usageRecords.map((entry) => entry.metadata.model), ["chat-model", "action-model", "summary-model"]);
+  assert.deepStrictEqual(usageRecords.map((entry) => entry.metadata.requestType), ["chat", "action", "final_summary", "final_summary", "memory_recovery"]);
+  assert.deepStrictEqual(usageRecords.map((entry) => entry.metadata.providerType), ["deepseek", "openrouter", "deepseek", "deepseek", "deepseek"]);
+  assert.deepStrictEqual(usageRecords.map((entry) => entry.metadata.model), ["chat-model", "action-model", "summary-model", "summary-model", "summary-model"]);
   assert(usageRecords.every((entry) => entry.usage.total_tokens === 15));
 
   assert.strictEqual(await service.getCurrentContextLength(), 131072);

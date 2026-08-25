@@ -46,10 +46,15 @@ function isMemoryInsidePairPresence(context, memory, ownerId, counterpartId) {
   }));
 }
 
-function renderPerspectiveContent(owner, memories) {
+function renderPerspectiveContent(owner, memories, summarySegments = []) {
   const ownerId = Number(owner.id);
   const ownerName = owner.name || owner.shortName || owner.fullName || `角色${ownerId}`;
+  const narrative = summarySegments.map((segment) => String(segment.content || "").trim()).filter(Boolean);
   const lines = memories.map((memory) => `- ${memory.content}`).filter((line) => line.length > 2);
+  if (narrative.length > 0) {
+    const durable = lines.length > 0 ? `\n\n【需要长期记住的事项】\n${lines.join("\n")}` : "";
+    return `【${ownerName}能够知道并记住的本场经过】\n${narrative.join("\n\n")}${durable}`;
+  }
   return lines.length > 0
     ? `【${ownerName}能够知道并记住的本场内容】\n${lines.join("\n")}`
     : `【${ownerName}的本场记忆】\n- 本场对话没有形成该人物能够确认并长期保存的明确事件。`;
@@ -59,6 +64,7 @@ function buildPerspectiveSummaryMap(context = {}, extraction = {}) {
   const participants = (context.participants || []).filter((entry) => Number.isFinite(Number(entry?.id)));
   const excludedOwners = new Set(uniqueIds(context.excludedSummaryOwnerIds));
   const memories = Array.isArray(extraction.memories) ? extraction.memories : [];
+  const summarySegments = Array.isArray(extraction.summarySegments) ? extraction.summarySegments : [];
   const projections = new Map();
   for (const owner of participants) {
     const ownerId = Number(owner.id);
@@ -67,16 +73,22 @@ function buildPerspectiveSummaryMap(context = {}, extraction = {}) {
       const counterpartId = Number(counterpart.id);
       if (counterpartId === ownerId) continue;
       const known = memories.filter((memory) => uniqueIds(memory.knownBy).includes(ownerId) && isMemoryRelevantToPair(memory, ownerId, counterpartId) && isMemoryInsidePairPresence(context, memory, ownerId, counterpartId));
+      const sharedSegments = summarySegments.filter((segment) => {
+        const knownBy = uniqueIds(segment.knownBy);
+        return knownBy.includes(ownerId) && knownBy.includes(counterpartId) && isMemoryInsidePairPresence(context, segment, ownerId, counterpartId);
+      });
       const memoryIds = known.map((memory) => memory.memoryId).filter(Boolean);
+      const summarySegmentIds = sharedSegments.map((segment) => segment.segmentId).filter(Boolean);
       const pinned = known.some((memory) => PINNED_TYPES.has(memory.type) || memory.status === "open" || memory.unresolved === true || Number(memory.importance) >= 0.9);
       const open = known.some((memory) => memory.status === "open" || memory.unresolved === true);
-      const content = renderPerspectiveContent(owner, known);
-      const projectionHash = crypto.createHash("sha256").update(JSON.stringify({ ownerId, counterpartId, memoryIds, content })).digest("hex");
+      const content = renderPerspectiveContent(owner, known, sharedSegments);
+      const projectionHash = crypto.createHash("sha256").update(JSON.stringify({ ownerId, counterpartId, memoryIds, summarySegmentIds, content })).digest("hex");
       projections.set(projectionKey(ownerId, counterpartId), {
         ownerId,
         counterpartId,
         content,
         memoryIds: [...memoryIds],
+        summarySegmentIds: [...summarySegmentIds],
         pinned,
         open,
         projectionHash
@@ -91,6 +103,7 @@ function validatePerspectiveSummaryMap(context = {}, extraction = {}, projection
   const excludedOwners = new Set(uniqueIds(context.excludedSummaryOwnerIds));
   const participants = (context.participants || []).filter((entry) => Number.isFinite(Number(entry?.id)));
   const memoriesById = new Map((extraction.memories || []).map((memory) => [memory.memoryId, memory]));
+  const segmentsById = new Map((extraction.summarySegments || []).map((segment) => [segment.segmentId, segment]));
   const invalidPairs = [];
   for (const owner of participants) {
     const ownerId = Number(owner.id);
@@ -112,9 +125,19 @@ function validatePerspectiveSummaryMap(context = {}, extraction = {}, projection
         invalidPairs.push({ ownerId, counterpartId, reason: "knowledge_or_pair_boundary_violation" });
         continue;
       }
+      const leakedSegment = (projection.summarySegmentIds || []).some((segmentId) => {
+        const segment = segmentsById.get(segmentId);
+        const knownBy = uniqueIds(segment?.knownBy);
+        return !segment || !knownBy.includes(ownerId) || !knownBy.includes(counterpartId) || !isMemoryInsidePairPresence(context, segment, ownerId, counterpartId);
+      });
+      if (leakedSegment) {
+        invalidPairs.push({ ownerId, counterpartId, reason: "summary_segment_knowledge_or_presence_violation" });
+        continue;
+      }
       const expectedMemories = (projection.memoryIds || []).map((memoryId) => memoriesById.get(memoryId)).filter(Boolean);
-      const expectedContent = renderPerspectiveContent(owner, expectedMemories);
-      const expectedHash = crypto.createHash("sha256").update(JSON.stringify({ ownerId, counterpartId, memoryIds: projection.memoryIds || [], content: expectedContent })).digest("hex");
+      const expectedSegments = (projection.summarySegmentIds || []).map((segmentId) => segmentsById.get(segmentId)).filter(Boolean);
+      const expectedContent = renderPerspectiveContent(owner, expectedMemories, expectedSegments);
+      const expectedHash = crypto.createHash("sha256").update(JSON.stringify({ ownerId, counterpartId, memoryIds: projection.memoryIds || [], summarySegmentIds: projection.summarySegmentIds || [], content: expectedContent })).digest("hex");
       if (projection.content !== expectedContent || projection.projectionHash !== expectedHash) {
         invalidPairs.push({ ownerId, counterpartId, reason: "projection_content_integrity_violation" });
       }

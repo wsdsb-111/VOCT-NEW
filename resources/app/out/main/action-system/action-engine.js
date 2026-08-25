@@ -130,23 +130,6 @@ class ActionEngine {
     const resolutionModes = Array.from(new Set(resolvedEvents.map((event) => event.resolutionMode)));
     return { reasons, allowedActionIds, evidence, events: resolvedEvents, resolutionMode: resolutionModes.length === 1 ? resolutionModes[0] : resolutionModes.length === 0 ? "unresolved" : "mixed" };
   }
-  static getModelSemanticFallbackProfile(text) {
-    const source = typeof text === "string" ? text : "";
-    const reasons = Array.from(new Set(actionRegistry.getAllActions(false).flatMap((action) => action.definition?.triggerCategories || [])));
-    const event = {
-      eventId: "evt_semantic_fallback",
-      traceId: "action:evt_semantic_fallback",
-      category: "semantic_fallback",
-      reasons,
-      allowedActionIds: [],
-      semanticEvidence: ["model_semantic_fallback"],
-      executionStatus: "unknown",
-      resultStatus: "unknown",
-      evidence: { text: source, start: 0, end: source.length },
-      resolutionMode: "model_fallback"
-    };
-    return { reasons, allowedActionIds: [], evidence: event.semanticEvidence, events: [event], resolutionMode: "model_fallback" };
-  }
   static getActionTrigger(text) {
     return this.getActionTriggers(text)[0] || null;
   }
@@ -212,16 +195,15 @@ class ActionEngine {
   }
   static shouldEvaluateForMessage(conv, message, actionEvent = null) {
     const detectedReasons = actionEvent ? actionEvent.reasons : this.getActionTriggers(message?.content);
-    let semanticProfile = actionEvent ? {
+    const semanticProfile = actionEvent ? {
       reasons: actionEvent.reasons,
       allowedActionIds: actionEvent.allowedActionIds,
       evidence: actionEvent.semanticEvidence,
       events: [actionEvent],
       resolutionMode: actionEvent.resolutionMode
     } : this.getSemanticActionProfile(message?.content, detectedReasons);
-    if (!actionEvent && semanticProfile.events.length === 0) semanticProfile = this.getModelSemanticFallbackProfile(message?.content);
-    if (actionEvent && semanticProfile.resolutionMode === "unresolved") {
-      semanticProfile = { ...semanticProfile, evidence: ["model_semantic_fallback"], resolutionMode: "model_fallback" };
+    if (!actionEvent && semanticProfile.events.length === 0) {
+      return { shouldEvaluate: false, reason: "no_executed_action_event" };
     }
     const semanticReasons = semanticProfile.reasons;
     const dedupeKey = actionEvent ? actionSystem.eventTracker.getEventKey(message, actionEvent) : `${message.id ?? "unknown"}|${semanticReasons.join("+")}|${message.name || message.role || "unknown"}|${message.content}`;

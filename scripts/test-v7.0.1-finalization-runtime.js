@@ -20,7 +20,7 @@ const context = {
   messages: [{ id: 1, role: "user", name: "玩家", content: "我答应帮助甲。" }, { id: 2, role: "assistant", name: "甲", content: "我会记得。" }],
   rollingState: {}
 };
-const providerOutput = JSON.stringify({ sessionSummary: "玩家答应帮助甲。", memories: [{ type: "promise", participants: [1, 2], subjects: [2], content: "玩家答应帮助甲", importance: 0.9, confidence: 1, visibility: "participants", source: "spoken", messageIds: [1], speakerIds: [1] }] });
+const providerOutput = JSON.stringify({ summarySegments: [{ content: "玩家答应帮助甲，甲回应自己会记住这项承诺。", participants: [1, 2], visibility: "participants", messageIds: [1, 2], speakerIds: [1, 2] }], memories: [{ type: "promise", participants: [1, 2], subjects: [2], content: "玩家答应帮助甲", importance: 0.9, confidence: 1, visibility: "participants", source: "spoken", messageIds: [1], speakerIds: [1] }] });
 
 (async () => {
   let providerCalls = 0;

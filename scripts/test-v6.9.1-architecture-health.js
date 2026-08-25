@@ -43,7 +43,7 @@ assert(conversationSource.includes("actionRegistry = dependencies.actionRegistry
 assert(/Conversation\.configure\(\{[\s\S]{0,160}actionRegistry,/.test(mainSource), "main.js must pass actionRegistry to Conversation.configure");
 assert(!conversationSource.includes("new (this.getActionSystem()"), "Conversation getters must not rebuild runtime managers");
 assert(!/getApprovalManager\(\) \{[\s\S]{0,220}createApprovalManager\(\)/.test(conversationSource), "getApprovalManager must not create a fallback manager");
-for (const method of ["createCharacterLeavingSummary", "createFinalSummary"]) {
+for (const method of ["checkpointFinalization", "createFinalSummary"]) {
   assert(!mainSource.includes(`${method},`), `Conversation instance method ${method} must not be injected as an undefined main-process global`);
 }
 

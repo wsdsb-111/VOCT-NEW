@@ -1070,39 +1070,17 @@ class SettingsRepository {
 保持简洁但务必保留重要细节。使用中文撰写。`;
   }
   getDefaultFinalSummaryPrompt() {
-    return `为这次对话创建一个详细的结构化摘要。
+    return `为这次对话创建高信息密度的中文最终摘要。
 
-请按以下格式组织（使用中文）：
+摘要不设置固定字数或段落数量；应根据原始对话的信息量，在 4096 Token 输出上限内完整保留细节。请在不遗漏实质内容、人物归属、因果关系和关键细节的前提下尽量精简，删去重复和低信息量措辞，不得为了凑长度虚构内容，也不得任意压缩成几句概述。按实际发生顺序组织连贯内容，并做到：
 
-**对话概况**
-- 参与者：[列出所有参与对话的角色]
-- 主题：[对话的核心主题]
-- 背景：[对话发生的情境]
+1. 每项言论、行动、观点、情绪和决定都明确归属于具体人物，不混淆多人视角。
+2. 写清对话背景、时间、地点、事件先后及因果关系；保留确切人名、头衔、数字、日期、物件和关键措辞。
+3. 记录每个人提出、接受、拒绝、隐瞒或计划的内容，包括请求、条件、承诺、协议、秘密、冲突与未决事项。
+4. 描述语气和情绪如何变化，以及这些变化对信任、亲密、敌意、权力关系或后续行动的影响。
+5. 只在措辞本身影响含义时保留简短原话；不要大段抄写，也不要重复同一事实。
 
-**关键内容**
-1. 重要事件和决策
-   - [具体描述每个重要事件，包含人名、地点、时间等细节]
-   
-2. 角色互动与关系发展
-   - [描述角色之间的互动，情感变化，关系进展]
-   
-3. 揭示的信息或秘密
-   - [记录对话中揭示的重要信息、秘密或真相]
-   
-4. 达成的协议与承诺
-   - [列出明确的承诺、协议或约定，包括具体条件]
-   
-5. 冲突与分歧
-   - [记录任何冲突、争执或未解决的分歧]
-
-**后续影响**
-- 未来计划：[讨论的后续行动]
-- 潜在后果：[对话可能带来的影响]
-- 悬而未决：[尚未解决的问题]
-
-**关键引用**（如有特别重要的原话，请标注）
-
-使用中文撰写，保持简洁但确保关键信息完整。`;
+不得笼统写成“双方讨论了某事”“关系有所发展”或“交换了意见”；必须说明谁说了什么、为何这样说、对方如何回应，以及最终达成或尚未解决的结果。`;
   }
   getDefaultLetterSummaryPrompt() {
     return `简洁总结这封信件的内容。
@@ -2366,6 +2344,7 @@ class GameData {
         engineVersion: projection ? "2.3" : "2.2",
         perspectiveOwnerId: projection?.ownerId ?? owner.id,
         perspectiveMemoryIds: projection?.memoryIds || [],
+        perspectiveSummarySegmentIds: projection?.summarySegmentIds || [],
         projectionHash: projection?.projectionHash || null,
         presenceJoins: Array.isArray(options.presenceJoins) ? options.presenceJoins : [],
         presenceLeaves: Array.isArray(options.presenceLeaves) ? options.presenceLeaves : [],

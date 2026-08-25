@@ -220,6 +220,7 @@ class MemoryEngine {
       joinEvents: context.joinEvents || [],
       leaveEvents: context.leaveEvents || [],
       sessionSummary: extraction.sessionSummary,
+      summarySegments: (extraction.summarySegments || []).map((segment) => ({ ...segment })),
       memoryIds: extraction.memories.map((memory) => memory.memoryId),
       perspectives,
       createdAt: new Date().toISOString()
@@ -243,6 +244,24 @@ class MemoryEngine {
       for (const name of [participant.name, participant.fullName].filter(Boolean)) participantByName.set(name, Number(participant.id));
     }
     const messageById = new Map((context.messages || []).map((message) => [Number(message.id), message]));
+    extraction.summarySegments = (extraction.summarySegments || []).map((rawSegment) => {
+      const segmentMessageIds = uniqueIds(rawSegment.provenance?.messageIds).filter((messageId) => messageById.has(messageId));
+      const derivedSpeakerIds = segmentMessageIds.map((messageId) => participantByName.get(messageById.get(messageId)?.name)).filter(Number.isFinite);
+      const participants = uniqueIds(rawSegment.participants).filter((characterId) => allowedIds.has(characterId));
+      const visibility = VISIBILITIES.has(rawSegment.visibility) ? rawSegment.visibility : "participants";
+      const segment = {
+        ...rawSegment,
+        participants: participants.length > 0 ? participants : derivedSpeakerIds,
+        visibility: ["public", "world"].includes(visibility) ? "participants" : visibility,
+        knownBy: [],
+        provenance: {
+          ...rawSegment.provenance,
+          messageIds: segmentMessageIds,
+          speakerIds: derivedSpeakerIds.length > 0 ? derivedSpeakerIds : uniqueIds(rawSegment.provenance?.speakerIds).filter((characterId) => allowedIds.has(characterId))
+        }
+      };
+      return { ...segment, knownBy: this.knowledge.resolveKnownBy(segment, episodeContext) };
+    });
     const saved = [];
     for (const rawCandidate of extraction.memories) {
       const candidateMessageIds = rawCandidate.provenance.messageIds.map(Number).filter((messageId) => messageById.has(messageId));
@@ -275,21 +294,58 @@ class MemoryEngine {
     return { extraction, episode };
   }
 
+  evaluateFinalSummaryQuality(context, extraction) {
+    const messages = Array.isArray(context.messages) ? context.messages : [];
+    const sourceChars = messages.reduce((total, message) => total + String(message?.content || "").trim().length, 0);
+    const messageCount = messages.filter((message) => String(message?.content || "").trim()).length;
+    const substantiveConversation = messageCount >= 2 && sourceChars > 0;
+    const narrativeChars = String(extraction?.sessionSummary || "").replace(/\s/g, "").length;
+    const segments = Array.isArray(extraction?.summarySegments) ? extraction.summarySegments : [];
+    const sourceMessageIds = new Set(messages.map((message) => Number(message?.id)).filter(Number.isFinite));
+    const reasons = [];
+    if (!extraction?.structured) reasons.push("structured JSON was not returned");
+    if (narrativeChars === 0) reasons.push("detailed narrative is empty");
+    if (substantiveConversation && segments.length === 0) reasons.push("summarySegments are missing");
+    if (segments.some((segment) => {
+      const ids = uniqueIds(segment.provenance?.messageIds);
+      return ids.length === 0 || ids.some((messageId) => !sourceMessageIds.has(messageId));
+    })) reasons.push("every summary segment needs valid supporting messageIds");
+    return { success: reasons.length === 0, reasons, sourceChars, messageCount, narrativeChars };
+  }
+
+  buildSummaryQualityRetryPrompt(prompt, quality) {
+    const correction = {
+      role: "system",
+      content: `Final-summary quality correction: the previous response was rejected (${quality.reasons.join("; ")}). Regenerate the complete JSON from the supplied conversation. Put the full chronological narrative in summarySegments, preserve concrete details, and meet the stated length without inventing facts. Do not return a shortened overview.`
+    };
+    const sourcePrompt = Array.isArray(prompt) ? [...prompt] : [];
+    const finalUser = sourcePrompt.at(-1)?.role === "user" ? sourcePrompt.pop() : null;
+    sourcePrompt.push(correction);
+    if (finalUser) sourcePrompt.push(finalUser);
+    return sourcePrompt;
+  }
+
   async requestFinalSummary(context) {
     const prompt = context.buildPrompt(context);
     let lastError = null;
+    let retryQuality = null;
     for (let attempt = 1; attempt <= FINAL_SUMMARY_MAX_ATTEMPTS; attempt++) {
       const startedAt = Date.now();
       try {
-        const result = await context.requestSummary(prompt);
+        const requestPrompt = retryQuality ? this.buildSummaryQualityRetryPrompt(prompt, retryQuality) : prompt;
+        const result = await context.requestSummary(requestPrompt, { attempt });
         const content = typeof result?.content === "string" ? result.content.trim() : "";
-        if (content) {
+        if (result?.finish_reason === "length") {
+          lastError = new Error("truncated_final_summary_response");
+        } else if (content) {
           const parsed = this.extractor.parseOutput(content, context);
-          if (parsed.structured && parsed.sessionSummary) {
+          const quality = this.evaluateFinalSummaryQuality(context, parsed);
+          if (quality.success) {
             this.trace.record("summary_provider", { conversationId: context.conversationId, attempt, success: true, durationMs: Date.now() - startedAt });
             return content;
           }
-          lastError = new Error(parsed.structured ? "empty_structured_final_summary" : "invalid_structured_final_summary");
+          retryQuality = quality;
+          lastError = new Error(`final_summary_quality_failed:${quality.reasons.join("|")}`);
         } else {
           lastError = new Error("invalid_final_summary_response");
         }
@@ -324,6 +380,19 @@ class MemoryEngine {
   }
 
   assignStableMemoryIds(context, extraction) {
+    extraction.summarySegments = (extraction.summarySegments || []).map((segment, index) => {
+      const fingerprint = JSON.stringify({
+        finalizationId: context.finalizationId,
+        index,
+        content: segment.content,
+        messageIds: segment.provenance?.messageIds || []
+      });
+      return {
+        ...segment,
+        segmentId: `segment_${crypto.createHash("sha256").update(fingerprint).digest("hex").slice(0, 24)}`,
+        provenance: { ...segment.provenance, conversationId: context.conversationId, summaryRequestId: context.summaryRequestId }
+      };
+    });
     extraction.memories = (extraction.memories || []).map((memory, index) => {
       const fingerprint = JSON.stringify({
         finalizationId: context.finalizationId,
@@ -346,6 +415,7 @@ class MemoryEngine {
     return {
       structured: extraction.structured === true,
       sessionSummary: extraction.sessionSummary || "",
+      summarySegments: (extraction.summarySegments || []).map((segment) => ({ ...segment })),
       memories: (extraction.memories || []).map((memory) => ({ ...memory }))
     };
   }
@@ -355,6 +425,7 @@ class MemoryEngine {
     return {
       structured: serialized.structured === true,
       sessionSummary: String(serialized.sessionSummary || ""),
+      summarySegments: Array.isArray(serialized.summarySegments) ? serialized.summarySegments.map((segment) => ({ ...segment })) : [],
       memories: serialized.memories.map((memory) => createMemoryRecord(memory))
     };
   }
@@ -429,6 +500,13 @@ class MemoryEngine {
     let extraction = this.restoreExtraction(parsedExtraction);
     try {
       if (!extraction) extraction = this.assignStableMemoryIds(context, this.extractor.parseOutput(content, context));
+      let quality = this.evaluateFinalSummaryQuality(context, extraction);
+      if (!quality.success && typeof context.requestSummary === "function") {
+        content = await this.requestFinalSummary(context);
+        extraction = this.assignStableMemoryIds(context, this.extractor.parseOutput(content, context));
+        quality = this.evaluateFinalSummaryQuality(context, extraction);
+      }
+      if (!quality.success) throw new Error(`final_summary_quality_failed:${quality.reasons.join("|")}`);
       this.trace.record("extract", { conversationId: context.conversationId, reason: extraction.structured ? "structured" : "prose_fallback" });
       for (const memory of extraction.memories) this.trace.record("classify", { memoryId: memory.memoryId, type: memory.type, conversationId: context.conversationId });
       this.writeRecoverySnapshot(context, {
@@ -488,6 +566,20 @@ class MemoryEngine {
     }
   }
 
+  checkpointConversation(context, { reason = "conversation_active" } = {}) {
+    const prepared = this.prepareFinalizationContext(context);
+    const recoveryPath = this.writeRecoverySnapshot(prepared, {
+      finalizationStage: "request",
+      finalizationStatus: "conversation_active",
+      providerOutput: null,
+      parsedExtraction: null,
+      lastError: null,
+      checkpointReason: reason
+    });
+    this.traceFinalization(prepared, "checkpoint", { recoveryState: "conversation_active" });
+    return recoveryPath;
+  }
+
   buildFinalizationPrompt(context) {
     return this.extractor.buildPrompt({
       ...context,
@@ -519,6 +611,7 @@ class MemoryEngine {
       finalizationStatus: state.finalizationStatus || existing.finalizationStatus || "pending",
       providerOutput: state.providerOutput ?? existing.providerOutput ?? null,
       parsedExtraction: state.parsedExtraction ?? existing.parsedExtraction ?? null,
+      checkpointReason: state.checkpointReason || existing.checkpointReason || null,
       retryCount: Number(state.retryCount ?? existing.retryCount ?? context.retryCount ?? 0),
       lastError,
       lastTriedAt: state.lastTriedAt || existing.lastTriedAt || null,
@@ -589,8 +682,21 @@ class MemoryEngine {
   async recoverPendingFinalizations({ requestSummary, buildPrompt, persistCharacterFolders, resolveParticipantProfiles } = {}) {
     const results = [];
     for (const filePath of this.listRecoverySnapshots()) {
-      const snapshot = this.store.readJson(filePath, null);
+      let snapshot = this.store.readJson(filePath, null);
       if (!snapshot) continue;
+      const obsoleteFixedLengthFailure = snapshot.finalizationStatus === "failed_manual"
+        && /^final_summary_quality_failed:detailed narrative has \d+ chars; require at least \d+$/.test(String(snapshot.lastError || ""));
+      if (obsoleteFixedLengthFailure) {
+        snapshot = {
+          ...snapshot,
+          finalizationStatus: "failed_retryable",
+          retryCount: 0,
+          lastError: null,
+          updatedAt: new Date().toISOString()
+        };
+        this.store.writeJson(filePath, snapshot);
+        this.trace.record("recover", { conversationId: snapshot.conversationId, reason: "obsolete_fixed_length_quality_gate" });
+      }
       if (snapshot.finalizationId && this.activeFinalizationIds.has(String(snapshot.finalizationId))) {
         this.trace.record("recover", { conversationId: snapshot.conversationId, reason: "active_finalization" });
         continue;
@@ -1001,16 +1107,6 @@ class MemoryEngine {
     return memory;
   }
 
-  recordLeavingMemory({ characterId, participantIds, content, conversationId, date = null, totalDays = null }) {
-    const memory = this.store.saveMemory(createMemoryRecord({
-      type: "event", subtype: "participant_leaving_summary", eventDate: date, totalDays,
-      participants: participantIds, subjects: [characterId], content,
-      importance: 0.5, confidence: 0.75, source: "inferred", visibility: "participants",
-      knownBy: participantIds, provenance: { conversationId, extractionMode: "leaving_summary", messageIds: [], speakerIds: [] }
-    }));
-    this.knowledge.markKnownBy(memory.memoryId, participantIds, { awareness: "witnessed", acquiredAt: totalDays });
-    return memory;
-  }
 }
 
 module.exports = { MemoryEngine };

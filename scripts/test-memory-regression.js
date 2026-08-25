@@ -177,7 +177,13 @@ async function testFinalizationRecoveryAndStructuredExtraction() {
     assert.strictEqual(recovery.rawMessages.length, 2);
 
     const payload = JSON.stringify({
-      sessionSummary: "一号承诺照顾二号。",
+      summarySegments: [{
+        content: "一号承诺照顾二号，二号回应自己已经记住这项承诺。",
+        participants: [1, 2],
+        visibility: "participants",
+        messageIds: [0, 1],
+        speakerIds: [1, 2]
+      }],
       memories: [{
         type: "promise",
         subtype: "care",

@@ -26,10 +26,8 @@ for (const content of [
   "我试图推开他，但没能成功。"
 ]) {
   const result = ActionEngine.shouldEvaluateForMessage(conversation, { id: content, role: "assistant", name: "乙", content });
-  assert.strictEqual(result.shouldEvaluate, true, `local gate must not skip current reply: ${content}`);
-  assert(result.semanticProfile.events.length > 0, "model semantic fallback must supply one current-message event");
-  assert.strictEqual(result.semanticProfile.events[0].evidence.text, content, "fallback evidence must contain only the current reply");
-  assert.strictEqual(result.semanticProfile.resolutionMode, "model_fallback");
+  assert.strictEqual(result.shouldEvaluate, false, `non-action text must not call the action model: ${content}`);
+  assert.strictEqual(result.reason, "no_executed_action_event");
 }
 
 const explicit = ActionEngine.shouldEvaluateForMessage({ actionGateProcessedTriggers: new Set() }, { id: 5, role: "assistant", name: "乙", content: "我已经把丙关进地牢。" });
@@ -64,13 +62,14 @@ assert(mainSource.includes("LEGACY_CHAT_INSTRUCTION") && mainSource.includes("DE
 assert(defaultPromptSource.includes("不设固定句数或段落数"), "the default prompt must request naturally complete emotional replies");
 assert(defaultPromptSource.includes("长期稳定记忆") && defaultPromptSource.includes("本轮事实只以当前对话消息"), "the default prompt must separate recalled context from current-turn facts");
 assert(defaultPromptSource.includes("不得展示思维过程"), "thinking chat must return only the in-character response");
-assert(providerServiceSource.includes('isDeepseekStructuredSummary ? { thinking: { type: "enabled" }, max_tokens: 4096'), "DeepSeek final summaries must restore thinking with a bounded structured-output budget");
-assert(actionPromptSource.includes("VOTC_ACTION_CACHE_ANCHOR_v10"), "the action prompt anchor must change with the V7.5 two-stage semantic boundary");
+assert(!providerServiceSource.includes('thinking: { type: "enabled" }, max_tokens: 12288'), "DeepSeek final summaries must not use thinking after the P0 empty-output regression");
+assert(providerServiceSource.includes('thinking: { type: "disabled" }, max_tokens: 4096'), "DeepSeek final summaries and recovery must remain non-thinking");
+assert(actionPromptSource.includes("VOTC_ACTION_CACHE_ANCHOR_v11"), "the action prompt anchor must change with local no-action filtering");
 assert(actionPromptSource.includes("they never prove that an action happened in the current turn"), "action selection must not treat recalled memory as current evidence");
 assert(rendererSource.includes("Memory Engine 2.3 · V7.7.2"));
-assert(rendererSource.includes("动作语义直通"));
+assert(rendererSource.includes("动作候选预筛"));
 assert(rendererSource.includes("稳定记忆前缀"));
 assert(rendererSource.includes("DeepSeek 思考与摘要"));
 assert(rendererSource.includes("V7.7.2 适配状态"));
 
-console.log("VOTC v7.4 dialogue/action/cache: PASS (UI, prompt migration, thinking chat, stable memory prefix, semantic-direct action routing)");
+console.log("VOTC v7.4 dialogue/action/cache: PASS (UI, prompt migration, thinking chat, stable memory prefix, candidate-filtered action routing)");

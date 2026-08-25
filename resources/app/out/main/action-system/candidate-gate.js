@@ -78,9 +78,18 @@ function detect(text, { candidateOnly = false } = {}, { registry } = {}) {
     }
     if (candidateOnly && registry) {
       for (const action of registry.getAllActions()) {
-        const patterns = action.definition?.semantic?.candidatePatterns;
+        const semantic = action.definition?.semantic;
+        const patterns = [
+          ...Array.isArray(semantic?.candidatePatterns) ? semantic.candidatePatterns : [],
+          ...Array.isArray(semantic?.evidencePatterns) ? semantic.evidencePatterns.filter((pattern) => ![".+", ".*", "[\\s\\S]+", "[\\s\\S]*"].includes(pattern.source)) : []
+        ];
         const categories = action.definition?.triggerCategories;
-        if (!Array.isArray(patterns) || !Array.isArray(categories)) continue;
+        if (patterns.length === 0 || !Array.isArray(categories)) continue;
+        const excluded = Array.isArray(semantic?.excludePatterns) && semantic.excludePatterns.some((pattern) => {
+          pattern.lastIndex = 0;
+          return pattern.test(text);
+        });
+        if (excluded) continue;
         if (patterns.some((pattern) => {
           pattern.lastIndex = 0;
           return pattern.test(text);

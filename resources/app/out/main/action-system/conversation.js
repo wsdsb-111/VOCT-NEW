@@ -167,6 +167,7 @@ class Conversation {
       this.gameData.loadCharactersSummaries();
       await this.recoverPendingMemories();
       this.isActive = true;
+      this.emitUpdate();
     } catch (error) {
       console.error("Failed to parse log file:", error);
       this.isActive = false;
@@ -297,8 +298,10 @@ class Conversation {
   initializePresence(initialPresentIds = null) {
     const selectedIds = [...this.gameData.characters.keys()].map(Number).filter((characterId) => Number.isFinite(characterId) && characterId !== Number(this.gameData.playerID));
     this.selectedCharacterIds = new Set(selectedIds);
-    const requested = Array.isArray(initialPresentIds) ? initialPresentIds.map(Number).filter((characterId) => this.selectedCharacterIds.has(characterId)) : selectedIds;
-    const initialIds = requested.length > 0 ? requested : selectedIds;
+    const primaryCharacterId = Number(this.gameData.aiID);
+    const defaultPresentIds = this.selectedCharacterIds.has(primaryCharacterId) ? [primaryCharacterId] : selectedIds.slice(0, 1);
+    const requested = Array.isArray(initialPresentIds) ? initialPresentIds.map(Number).filter((characterId) => this.selectedCharacterIds.has(characterId)) : defaultPresentIds;
+    const initialIds = requested.length > 0 ? requested : defaultPresentIds;
     this.presentCharacterIds = new Set(initialIds);
     this.waitingCharacterIds = new Set(selectedIds.filter((characterId) => !this.presentCharacterIds.has(characterId)));
     this.departedCharacterIds = new Set();
@@ -366,15 +369,6 @@ class Conversation {
   getPromptSummaryForCharacter(characterId) {
     return this.canUseSharedRollingSummary(characterId) ? this.currentSummary : "";
   }
-  buildLeavingSummaryPrompt(character, history) {
-    const prompt = [
-      { role: "system", content: "Stable leaving-summary instructions:\nSummarize only what the leaving character personally heard before leaving. Preserve concrete events, promises, secrets, decisions and relationship changes. Do not include anything after the presence window closes." },
-      { role: "system", content: `Dynamic leaving character: ${character.fullName}. Player: ${this.gameData.playerName}.` },
-      { role: "system", content: `Full conversation:\n${history.map((message) => `${message.name || message.role}: ${message.content}`).join("\n")}` },
-      { role: "user", content: `Generate ${character.fullName}'s personal conversation summary now.` }
-    ];
-    return typeof PromptBuilder.prepareSummaryMessages === "function" ? PromptBuilder.prepareSummaryMessages(prompt) : prompt;
-  }
   async joinWaitingCharacter(characterId) {
     const numericId = Number(characterId);
     if (!this.canManagePresence()) return { success: false, error: "presence_change_busy" };
@@ -419,17 +413,8 @@ class Conversation {
     this.invalidateApprovalsForCharacter(numericId, "left");
     this.leaveEvents.push({ characterId: numericId, atMessageId: message.id, atHistoryIndex: this.getHistory().length - 1 });
     this.emitUpdate();
-    const visibleHistory = this.getHistoryForCharacter(numericId);
-    const visibleMessageIds = new Set(visibleHistory.map((entry) => Number(entry.id)).filter(Number.isFinite));
-    const summaryParticipantIds = new Set([Number(this.gameData.playerID), numericId]);
-    const participantPresence = memoryEngine?.ensureConversationState(this).participantPresence || [];
-    for (const window of participantPresence) {
-      const joined = Number(window.joinedAtMessageId ?? 0);
-      const left = window.leftAtMessageId == null ? Infinity : Number(window.leftAtMessageId);
-      if ([...visibleMessageIds].some((messageId) => joined <= messageId && messageId < left)) summaryParticipantIds.add(Number(window.characterId));
-    }
-    const summary = visibleHistory.length > 0 ? await this.createCharacterLeavingSummary(numericId, this.buildLeavingSummaryPrompt(character, visibleHistory), [...summaryParticipantIds]) : null;
-    return { success: true, status: "departed", messageId: message.id, summaryGenerated: !!summary };
+    const recoveryPath = this.checkpointFinalization("participant_left");
+    return { success: true, status: "departed", messageId: message.id, summaryCheckpointed: !!recoveryPath, recoveryPath };
   }
   captureSummaryParticipantProfiles(characters = []) {
     if (!this.summaryParticipantProfiles) this.summaryParticipantProfiles = /* @__PURE__ */ new Map();
@@ -927,6 +912,31 @@ class Conversation {
     for (const participant of participantPresence) addParticipant(participant.characterId);
     return participantIds;
   }
+  buildFinalizationBaseContext() {
+    const participantIds = this.getSummaryParticipantIds();
+    const participants = participantIds.map((id) => this.getSummaryParticipantProfile(id)).filter(Boolean);
+    const excludedSummaryOwnerIds = [...this.inactiveParticipantIds.entries()]
+      .filter(([characterId, stateValue]) => stateValue === "dead" && Number(characterId) !== Number(this.gameData.playerID))
+      .map(([characterId]) => Number(characterId));
+    const state = memoryEngine.ensureConversationState(this);
+    return {
+      conversationId: this.id,
+      date: this.gameData.date,
+      totalDays: this.gameData.totalDays,
+      messages: this.getHistory(),
+      participants,
+      excludedSummaryOwnerIds,
+      participantPresence: state.participantPresence,
+      joinEvents: this.joinEvents,
+      leaveEvents: this.leaveEvents,
+      rollingState: state.rollingState,
+      __conversation: this
+    };
+  }
+  checkpointFinalization(reason = "conversation_active") {
+    if (!memoryEngine || this.getHistory().length === 0) return null;
+    return memoryEngine.checkpointConversation(this.buildFinalizationBaseContext(), { reason });
+  }
   // Create final comprehensive summary and save to characters
   async finalizeConversation() {
     runFileManager.write(`
@@ -971,24 +981,10 @@ class Conversation {
   //  Create final comprehensive summary using ALL messages
   async createFinalSummary() {
     if (!memoryEngine) throw new Error("memory_engine_not_configured");
-    const allMessages = this.getHistory();
-    const participantIds = this.getSummaryParticipantIds();
-    const participants = participantIds.map((id) => this.getSummaryParticipantProfile(id)).filter(Boolean);
-    const excludedSummaryOwnerIds = [...this.inactiveParticipantIds.entries()]
-      .filter(([characterId, stateValue]) => stateValue === "dead" && Number(characterId) !== Number(this.gameData.playerID))
-      .map(([characterId]) => Number(characterId));
-    const state = memoryEngine.ensureConversationState(this);
+    const baseContext = this.buildFinalizationBaseContext();
+    const participantIds = baseContext.participants.map((entry) => entry.id);
     return memoryEngine.finalizeConversation({
-      conversationId: this.id,
-      date: this.gameData.date,
-      totalDays: this.gameData.totalDays,
-      messages: allMessages,
-      participants,
-      excludedSummaryOwnerIds,
-      participantPresence: state.participantPresence,
-      joinEvents: this.joinEvents,
-      leaveEvents: this.leaveEvents,
-      rollingState: state.rollingState,
+      ...baseContext,
       finalInstructions: PromptBuilder.getFinalSummaryInstructions(),
       buildPrompt: (context) => memoryEngine.buildFinalizationPrompt(context),
       persistCharacterFolders: async (finalSummary, context) => {
@@ -1001,9 +997,12 @@ class Conversation {
           presenceLeaves: context.leaveEvents || []
         });
       },
-      requestSummary: async (summaryPrompt) => {
+      requestSummary: async (summaryPrompt, requestOptions = {}) => {
         console.log(`[TOKEN_COUNT] Final memory prompt tokens: ${this.estimateTokenCount(summaryPrompt)}`);
-        return llmManager.sendSummaryRequest(summaryPrompt, void 0, { requestType: "final_summary" });
+        return llmManager.sendSummaryRequest(summaryPrompt, void 0, {
+          requestType: "final_summary",
+          summaryAttempt: requestOptions.attempt
+        });
       }
     });
   }
@@ -1066,45 +1065,6 @@ class Conversation {
     return this.getApprovalManager().decline(approvalEntryId);
   }
   /**
-   * Create a summary for a character that is leaving the conversation
-   * @param characterId - The ID of the character leaving
-   * @param summaryPrompt - The prompt messages to use for generating the summary
-   * @returns The generated summary or null if failed
-   */
-  async createCharacterLeavingSummary(characterId, summaryPrompt, participantIds = null) {
-    const character = this.gameData.characters.get(characterId);
-    if (!character) {
-      console.error(`Character ${characterId} not found for leaving summary`);
-      return null;
-    }
-    console.log(`Creating leaving summary for ${character.fullName}`);
-    try {
-      const estimatedTokens = this.estimateTokenCount(summaryPrompt);
-      console.log(`[TOKEN_COUNT] Character leaving summary for ${character.fullName}: ${estimatedTokens}`);
-      const result = await llmManager.sendSummaryRequest(summaryPrompt, void 0, { requestType: "leaving_summary", character: character.shortName });
-      if (result && typeof result === "object" && "content" in result) {
-        const summary = result.content;
-        const state = memoryEngine?.ensureConversationState(this);
-        memoryEngine?.recordLeavingMemory({
-          characterId,
-          participantIds: Array.isArray(participantIds) ? participantIds : state?.participantPresence?.filter((window) => window.joinedAtMessageId <= this.nextId && (window.leftAtMessageId == null || window.leftAtMessageId > this.nextId)).map((window) => window.characterId) || [this.gameData.playerID, characterId],
-          content: summary,
-          conversationId: this.id,
-          date: this.gameData.date,
-          totalDays: this.gameData.totalDays
-        });
-        console.log(`Generated leaving summary for ${character.fullName} (${summary.length} characters)`);
-        logVerboseLLM(`[Summary][verbose] Leaving summary for ${character.fullName}:`, summary);
-        return summary;
-      }
-      console.error("Invalid response format for character leaving summary");
-      return null;
-    } catch (error) {
-      console.error(`Failed to create leaving summary for ${character.fullName}:`, error);
-      return null;
-    }
-  }
-  /**
    * Remove a character from the conversation entirely
    */
   removeCharacterFromConversation(characterId) {
@@ -1116,15 +1076,18 @@ class Conversation {
     }
     this.captureSummaryParticipantProfiles?.([character]);
     console.log(`Removing ${character.fullName} from conversation`);
+    let closedPresence = false;
     if (this.presentCharacterIds?.has(numericId)) {
       memoryEngine?.markParticipantLeft(this, numericId, this.nextId);
       this.presentCharacterIds.delete(numericId);
       this.departedCharacterIds?.add(numericId);
       this.leaveEvents?.push({ characterId: numericId, atMessageId: this.nextId, atHistoryIndex: this.getHistory().length, source: "action" });
+      closedPresence = true;
     }
     this.waitingCharacterIds?.delete(numericId);
     this.invalidateApprovalsForCharacter(numericId, "removed");
     this.gameData.characters.delete(numericId);
+    if (closedPresence) this.checkpointFinalization("action_participant_left");
     const initialQueueLength = this.npcQueue.length;
     this.npcQueue = this.npcQueue.filter((char) => Number(char.id) !== numericId);
     if (this.npcQueue.length < initialQueueLength) {

@@ -116,34 +116,6 @@ module.exports = {
 
         // Actual execution (only when approved)
         try {
-            // Get all conversation messages
-            const allMessages = conversation.getHistory();
-            
-            // Build summary prompt for the leaving character
-            const summaryPrompt = [
-                {
-                    role: 'system',
-                    content: `Stable leaving-summary instructions:\nSummarize the conversation from the leaving character's perspective. Focus on their experiences, interactions, important events, decisions, promises, conflicts, and relationship changes. Be comprehensive but concise, and write from that character's point of view.`
-                },
-                {
-                    role: 'system',
-                    content: `Dynamic leaving character: ${targetCharacter.fullName}. Player: ${gameData.playerName}.`
-                },
-                // Include current rolling summary if it exists
-                ...(conversation.currentSummary ? [{
-                    role: 'system',
-                    content: `Previous summary of this conversation:\n\n${conversation.currentSummary}`
-                }] : []),
-                {
-                    role: 'system',
-                    content: `Full conversation:\n` + allMessages.map(m => `${m.name}: ${m.content}`).join('\n')
-                },
-                {
-                    role: 'user',
-                    content: `Generate ${targetCharacter.fullName}'s personal conversation summary now.`
-                }
-            ];
-            
             runGameEffect(`
 remove_list_global_variable = {
     name = mcc_characters_list_v2
@@ -283,22 +255,6 @@ if ={
 }`);
 
                 
-            // Generate summary for leaving character
-            console.log(`[leavesConversation] Starting summary generation for ${targetCharacter.fullName}`);
-            const summary = await conversation.createCharacterLeavingSummary(targetCharacter.id, summaryPrompt);
-            console.log(`[leavesConversation] Summary generation completed, summary exists: ${!!summary}`);
-            
-            if (summary) {
-                // Save summary to character's file
-                console.log(`[leavesConversation] Saving summary for ${targetCharacter.fullName}`);
-                gameData.saveCharacterSummary(targetCharacter.id, {
-                    date: gameData.date,
-                    totalDays: gameData.totalDays,
-                    content: summary
-                });
-                console.log(`[leavesConversation] Summary saved successfully`);
-            }
-            
             // Remove character from conversation
             console.log(`[leavesConversation] Removing ${targetCharacter.fullName} from conversation`);
             conversation.removeCharacterFromConversation(targetCharacter.id);
