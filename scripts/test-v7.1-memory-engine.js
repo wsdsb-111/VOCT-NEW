@@ -89,14 +89,16 @@ try {
   assert.strictEqual(ownerAMemories.filter((memory) => memory.provenance.finalizationId === "fin_group_dedup").length, 1, "one group finalization mirrored across pair files must be deduplicated within the owner folder");
 
   const mainSource = fs.readFileSync(path.join(root, "resources", "app", "out", "main", "main.js"), "utf8");
+  const gameDataSource = fs.readFileSync(path.join(root, "resources", "app", "out", "main", "game-data", "game-data.js"), "utf8");
+  const promptBuilderSource = fs.readFileSync(path.join(root, "resources", "app", "out", "main", "prompts", "prompt-builder.js"), "utf8");
   const conversationSource = fs.readFileSync(path.join(root, "resources", "app", "out", "main", "action-system", "conversation.js"), "utf8");
   const rendererSource = fs.readFileSync(path.join(root, "resources", "app", "out", "renderer", "assets", "index-Dn3qWlAB.js"), "utf8");
-  const mentionedFinder = mainSource.slice(mainSource.indexOf("findMentionedCharacterIdsInHistory("), mainSource.indexOf("findFamilyEntry(", mainSource.indexOf("findMentionedCharacterIdsInHistory(")));
-  const mentionedContext = mainSource.slice(mainSource.indexOf("static buildMentionedCharactersContext("), mainSource.indexOf("static buildFinalSummary(", mainSource.indexOf("static buildMentionedCharactersContext(")));
+  const mentionedFinder = gameDataSource.slice(gameDataSource.indexOf("findMentionedCharacterIdsInHistory("), gameDataSource.indexOf("findFamilyEntry(", gameDataSource.indexOf("findMentionedCharacterIdsInHistory(")));
+  const mentionedContext = promptBuilderSource.slice(promptBuilderSource.indexOf("static buildMentionedCharactersContext("), promptBuilderSource.indexOf("static buildFinalSummary(", promptBuilderSource.indexOf("static buildMentionedCharactersContext(")));
   assert(!mentionedFinder.includes("mentioned.size >= 2"), "third-party detection must have no two-character cap");
   assert(!mentionedContext.includes("loadDynamicMemoriesFromHistory"), "the old dynamic-summary prompt path must be disconnected");
   assert(conversationSource.includes("mentionedEntityNames"), "Engine 2.2 retrieval must receive mentioned-person names for owner-folder matching");
-  assert(mainSource.includes('memoryContext?.engineVersion?.startsWith("2.")'), "past_summaries must be suppressed when Memory Engine 2.x is active");
+  assert(promptBuilderSource.includes('memoryContext?.engineVersion?.startsWith("2.")'), "past_summaries must be suppressed when Memory Engine 2.x is active");
   assert(rendererSource.includes("Memory Engine 2.4"), "summary UI must identify the current Memory Engine 2.4 runtime");
   assert(!rendererSource.includes('className: "memory-character-coverage"'), "summary UI must not render the duplicate structured-memory coverage tree");
   assert(!rendererSource.includes("可访问的结构化记忆（可编辑）"), "summary UI must expose one folder-based editing surface");

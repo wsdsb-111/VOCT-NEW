@@ -1,5 +1,32 @@
 "use strict";
 
+const path = require("path");
+
+function requireInteger(value, label, { min = 0, max = Number.MAX_SAFE_INTEGER } = {}) {
+  if (!Number.isInteger(value) || value < min || value > max) throw new Error(`${label}_must_be_an_integer_between_${min}_and_${max}`);
+  return value;
+}
+
+function validateExternalHttpUrl(value) {
+  if (typeof value !== "string") throw new Error("external_url_must_be_a_string");
+  let parsed;
+  try {
+    parsed = new URL(value);
+  } catch (_error) {
+    throw new Error("external_url_must_be_valid");
+  }
+  if (!["http:", "https:"].includes(parsed.protocol)) throw new Error("external_url_protocol_not_allowed");
+  return parsed.toString();
+}
+
+function validateActionFilePath(filePath, actionsRoot) {
+  if (typeof filePath !== "string" || !filePath) throw new Error("action_file_path_required");
+  const root = path.resolve(actionsRoot);
+  const relative = path.relative(root, path.resolve(filePath));
+  if (!relative || relative.startsWith("..") || path.isAbsolute(relative)) throw new Error("action_file_path_outside_actions_root");
+  return path.join(root, relative);
+}
+
 function registerIpcHandlers(runtime) {
   const { electron, settingsRepository, promptConfigManager, uuid, VOTC_PROMPTS_DIR, TemplateEngine, exportPromptsZip, letterManager, llmManager, providerRegistry, usageAnalytics, actionRegistry, VOTC_ACTIONS_DIR, resolveI18nString, conversationManager, ActionEngine, VOTC_SUMMARIES_DIR, SummariesManager, memoryEngine } = runtime;
 
@@ -290,6 +317,8 @@ function registerIpcHandlers(runtime) {
     return { success: true };
   });
   electron.ipcMain.handle("llm:saveSummaryPromptSettings", (_, settings) => {
+    if (!settings || typeof settings !== "object" || Array.isArray(settings)) throw new Error("summary_prompt_settings_must_be_an_object");
+    requireInteger(Number(settings.finalSummaryMaxTokens), "final_summary_max_tokens", { min: 256, max: 16384 });
     settingsRepository.saveSummaryPromptSettings(settings);
     return true;
   });
@@ -371,9 +400,9 @@ function registerIpcHandlers(runtime) {
       throw error;
     }
   });
-  electron.ipcMain.handle("actions:openFile", async (_, { filePath }) => {
+  electron.ipcMain.handle("actions:openFile", async (_, request = {}) => {
     try {
-      await electron.shell.openPath(filePath);
+      await electron.shell.openPath(validateActionFilePath(request.filePath, VOTC_ACTIONS_DIR));
       return { success: true };
     } catch (error) {
       console.error("Failed to open action file:", error);
@@ -478,7 +507,7 @@ function registerIpcHandlers(runtime) {
   });
   electron.ipcMain.handle("shell:openExternal", async (_, url) => {
     try {
-      await electron.shell.openExternal(url);
+      await electron.shell.openExternal(validateExternalHttpUrl(url));
       return { success: true };
     } catch (error) {
       console.error("Failed to open external URL:", error);
@@ -597,8 +626,8 @@ function registerIpcHandlers(runtime) {
   electron.ipcMain.handle("conversation:leavePresentCharacter", async (_, { characterId }) => {
     return conversationManager.leavePresentCharacter(characterId);
   });
-  electron.ipcMain.handle("conversation:regenerateMessage", async (_, requestArgs) => {
-    const { messageId } = requestArgs;
+  electron.ipcMain.handle("conversation:regenerateMessage", async (_, requestArgs = {}) => {
+    const messageId = requireInteger(requestArgs.messageId, "message_id", { min: 0, max: 2147483647 });
     try {
       console.log("IPC: Regenerating message:", messageId);
       const conversation = conversationManager.getCurrentConversation();
@@ -706,8 +735,9 @@ function registerIpcHandlers(runtime) {
       return { engineVersion: "2.2", totals: {}, boundaries: [], routingPolicy: {}, characters: [], error: error.message || "Unknown error" };
     }
   });
-  electron.ipcMain.handle("conversation:getSummariesDashboardData", async () => {
+  electron.ipcMain.handle("conversation:getSummariesDashboardData", async (_, options = {}) => {
     try {
+      if (options?.refresh === true) memoryEngine.invalidateSummaryFolderCache();
       const summaries = await SummariesManager.listAllSummaries();
       return { summaries, memoryOverview: memoryEngine.getUiOverview({ summaryCatalog: summaries }) };
     } catch (error) {
@@ -720,6 +750,15 @@ function registerIpcHandlers(runtime) {
       return memoryEngine.updateMemoryContent(memoryId, content);
     } catch (error) {
       console.error("Failed to update structured memory:", error);
+      return { success: false, error: error.message || "Unknown error" };
+    }
+  });
+  electron.ipcMain.handle("shell:openPlayer2", async () => {
+    try {
+      await electron.shell.openExternal("player2://");
+      return { success: true };
+    } catch (error) {
+      console.error("Failed to open Player2 app:", error);
       return { success: false, error: error.message || "Unknown error" };
     }
   });
@@ -739,33 +778,34 @@ function registerIpcHandlers(runtime) {
       return { success: false, error: error.message || "Unknown error" };
     }
   });
-  electron.ipcMain.handle("conversation:getSummariesForCharacter", async (_, { playerId, characterId }) => {
+  electron.ipcMain.handle("conversation:getSummariesForCharacter", async (_, request = {}) => {
     try {
-      return await SummariesManager.getSummariesForCharacter(playerId, characterId);
+      return await SummariesManager.getSummariesForCharacter(requireInteger(request.playerId, "player_id", { max: 2147483647 }), requireInteger(request.characterId, "character_id", { max: 2147483647 }));
     } catch (error) {
       console.error("Failed to get summaries for character:", error);
       return [];
     }
   });
-  electron.ipcMain.handle("conversation:updateSummary", async (_, { playerId, characterId, summaryIndex, newContent }) => {
+  electron.ipcMain.handle("conversation:updateSummary", async (_, request = {}) => {
     try {
-      return await SummariesManager.updateSummary(playerId, characterId, summaryIndex, newContent);
+      if (typeof request.newContent !== "string" || request.newContent.length > 1048576) throw new Error("summary_content_must_be_a_string_up_to_1048576_chars");
+      return await SummariesManager.updateSummary(requireInteger(request.playerId, "player_id", { max: 2147483647 }), requireInteger(request.characterId, "character_id", { max: 2147483647 }), requireInteger(request.summaryIndex, "summary_index", { max: 1000000 }), request.newContent);
     } catch (error) {
       console.error("Failed to update summary:", error);
       return { success: false, error: error.message || "Unknown error" };
     }
   });
-  electron.ipcMain.handle("conversation:deleteSummary", async (_, { playerId, characterId, summaryIndex }) => {
+  electron.ipcMain.handle("conversation:deleteSummary", async (_, request = {}) => {
     try {
-      return await SummariesManager.deleteSummary(playerId, characterId, summaryIndex);
+      return await SummariesManager.deleteSummary(requireInteger(request.playerId, "player_id", { max: 2147483647 }), requireInteger(request.characterId, "character_id", { max: 2147483647 }), requireInteger(request.summaryIndex, "summary_index", { max: 1000000 }));
     } catch (error) {
       console.error("Failed to delete summary:", error);
       return { success: false, error: error.message || "Unknown error" };
     }
   });
-  electron.ipcMain.handle("conversation:deleteCharacterSummaries", async (_, { playerId, characterId }) => {
+  electron.ipcMain.handle("conversation:deleteCharacterSummaries", async (_, request = {}) => {
     try {
-      return await SummariesManager.deleteCharacterSummaries(playerId, characterId);
+      return await SummariesManager.deleteCharacterSummaries(requireInteger(request.playerId, "player_id", { max: 2147483647 }), requireInteger(request.characterId, "character_id", { max: 2147483647 }));
     } catch (error) {
       console.error("Failed to delete character summaries:", error);
       return { success: false, error: error.message || "Unknown error" };
@@ -798,4 +838,4 @@ function registerIpcHandlers(runtime) {
   console.log("Conversation IPC handlers registered successfully");
 }
 
-module.exports = { registerIpcHandlers };
+module.exports = { registerIpcHandlers, requireInteger, validateExternalHttpUrl, validateActionFilePath };

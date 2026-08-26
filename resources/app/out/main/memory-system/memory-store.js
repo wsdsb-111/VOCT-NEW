@@ -5,6 +5,7 @@ const fs = require("fs");
 const path = require("path");
 const { createMemoryRecord, uniqueIds } = require("./memory-types");
 const { CURRENT_MEMORY_SCHEMA_VERSION } = require("./memory-schema");
+const { MEMORY_ENGINE_VERSION } = require("../version");
 
 function removeDirectoryTree(directory) {
   for (const entry of fs.readdirSync(directory, { withFileTypes: true })) {
@@ -47,6 +48,7 @@ class MemoryStore {
     this.ensureDirectories();
     this.index = this.readJson(this.paths.index, { schemaVersion: CURRENT_MEMORY_SCHEMA_VERSION, memories: {}, episodes: {} });
     this.folderSummaryCache = new Map();
+    this.folderSummaryCacheMetrics = { hits: 0, misses: 0, invalidations: 0 };
   }
 
   ensureDirectories() {
@@ -249,9 +251,10 @@ class MemoryStore {
   getPairMemories(leftId, rightId, options = {}) {
     const ids = [Number(leftId), Number(rightId)].sort((a, b) => a - b);
     const memoryIds = this.readJson(path.join(this.paths.pairs, `${ids[0]}_${ids[1]}.json`), []);
+    const knownMemoryIds = options.characterId == null ? null : new Set(this.getCharacterKnowledge(options.characterId).map((entry) => entry.memoryId));
     return memoryIds.map((memoryId) => this.getMemory(memoryId)).filter(Boolean).filter((memory) => {
       if (options.characterId == null || memory.visibility === "public" || memory.visibility === "world") return true;
-      return this.getCharacterKnowledge(options.characterId).some((entry) => entry.memoryId === memory.memoryId);
+      return knownMemoryIds.has(memory.memoryId);
     });
   }
 
@@ -326,16 +329,27 @@ class MemoryStore {
 
   invalidateFolderSummaryCache(characterIds = null) {
     if (characterIds == null) {
+      this.folderSummaryCacheMetrics.invalidations += this.folderSummaryCache.size;
       this.folderSummaryCache.clear();
       return;
     }
-    for (const characterId of uniqueIds(characterIds)) this.folderSummaryCache.delete(characterId);
+    for (const characterId of uniqueIds(characterIds)) {
+      if (this.folderSummaryCache.delete(characterId)) this.folderSummaryCacheMetrics.invalidations++;
+    }
+  }
+
+  getFolderSummaryCacheMetrics() {
+    return { ...this.folderSummaryCacheMetrics, entries: this.folderSummaryCache.size };
   }
 
   loadFolderSummariesForCharacter(characterId) {
     const ownerId = Number(characterId);
     if (!Number.isFinite(ownerId)) return [];
-    if (this.folderSummaryCache.has(ownerId)) return this.folderSummaryCache.get(ownerId).slice();
+    if (this.folderSummaryCache.has(ownerId)) {
+      this.folderSummaryCacheMetrics.hits++;
+      return this.folderSummaryCache.get(ownerId).map((memory) => createMemoryRecord(memory));
+    }
+    this.folderSummaryCacheMetrics.misses++;
     if (!this.summaryFoldersDir || !fs.existsSync(this.summaryFoldersDir)) {
       this.folderSummaryCache.set(ownerId, []);
       return [];
@@ -413,7 +427,7 @@ class MemoryStore {
               counterpartIds: [counterpartId],
               counterpartNames: [counterpartName],
               participantProfiles: summaryProfiles,
-              extractionMode: summary.engineVersion === "2.4" ? "folder_summary_v2_4" : summary.engineVersion === "2.3" ? "folder_summary_v2_3" : "folder_summary_v2_1",
+              extractionMode: summary.engineVersion === MEMORY_ENGINE_VERSION ? "folder_summary_v2_4" : summary.engineVersion === "2.3" ? "folder_summary_v2_3" : "folder_summary_v2_1",
               perspectiveMemoryIds: summary.perspectiveMemoryIds || [],
               projectionHash: summary.projectionHash || null,
               messageIds: [],
@@ -426,7 +440,7 @@ class MemoryStore {
     }
     const memories = [...sessions.values()];
     this.folderSummaryCache.set(ownerId, memories);
-    return memories.slice();
+    return memories.map((memory) => createMemoryRecord(memory));
   }
 
   loadDirectPairSummaries(ownerId, counterpartId, ownerMemories = null) {

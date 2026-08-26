@@ -27,6 +27,7 @@ electron.contextBridge.exposeInMainWorld("electronAPI", {
     return () => electron.ipcRenderer.removeListener("toggle-minimize", callback);
   },
   openExternal: (url) => electron.ipcRenderer.invoke("shell:openExternal", url),
+  openPlayer2: () => electron.ipcRenderer.invoke("shell:openPlayer2"),
   collectAndOpenLogs: () => electron.ipcRenderer.invoke("logs:collectAndOpen"),
   getAppVersion: () => electron.ipcRenderer.invoke("app:getVersion"),
   onOverlayVisibilityChange: (callback) => {
@@ -141,7 +142,7 @@ electron.contextBridge.exposeInMainWorld("conversationAPI", {
   // Summaries manager methods
   listAllSummaries: () => electron.ipcRenderer.invoke("conversation:listAllSummaries"),
   getMemoryOverview: () => electron.ipcRenderer.invoke("conversation:getMemoryOverview"),
-  getSummariesDashboardData: () => electron.ipcRenderer.invoke("conversation:getSummariesDashboardData"),
+  getSummariesDashboardData: (options = {}) => electron.ipcRenderer.invoke("conversation:getSummariesDashboardData", options),
   updateStructuredMemory: (memoryId, content) => electron.ipcRenderer.invoke("conversation:updateStructuredMemory", { memoryId, content }),
   updateMemoryRecord: (memoryId, updates, advanced = false) => electron.ipcRenderer.invoke("memory:updateRecord", { memoryId, updates, advanced }),
   deleteMemoryRecord: (memoryId) => electron.ipcRenderer.invoke("memory:deleteRecord", { memoryId }),

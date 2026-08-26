@@ -113,9 +113,10 @@ const { FinalizationCoordinator, MemoryEngine } = require(path.join(root, "resou
   }
 
   const mainSource = fs.readFileSync(path.join(root, "resources", "app", "out", "main", "main.js"), "utf8");
-  assert(mainSource.includes("finalizationCoordinator.enqueue"), "ConversationManager must enqueue detached conversations");
-  assert(mainSource.includes("flushFinalizations"), "ConversationManager must expose an application-quit drain");
-  assert(!/endCurrentConversation\(\)\s*\{[\s\S]{0,220}currentConversation\.finalizeConversation\(\)/.test(mainSource), "endCurrentConversation must not fire-and-forget finalize directly");
+  const conversationManagerSource = fs.readFileSync(path.join(root, "resources", "app", "out", "main", "conversation", "conversation-manager.js"), "utf8");
+  assert(conversationManagerSource.includes("finalizationCoordinator.enqueue"), "ConversationManager must enqueue detached conversations");
+  assert(conversationManagerSource.includes("flushFinalizations"), "ConversationManager must expose an application-quit drain");
+  assert(!/endCurrentConversation\(\)\s*\{[\s\S]{0,220}currentConversation\.finalizeConversation\(\)/.test(conversationManagerSource), "endCurrentConversation must not fire-and-forget finalize directly");
 
   console.log("VOTC v7.2 sequential finalization: PASS (dedupe, serialization, 50/50 directed persistence)");
 })().catch((error) => {

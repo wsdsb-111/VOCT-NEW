@@ -115,10 +115,11 @@ try {
 }
 
 const mainSource = fs.readFileSync(mainPath, "utf8");
+const gameDataSource = fs.readFileSync(path.join(root, "resources", "app", "out", "main", "game-data", "game-data.js"), "utf8");
 const conversationSource = fs.readFileSync(conversationPath, "utf8");
-assert(mainSource.includes("getCharacterPersonalName"), "summary paths must use the shared personal-name identity helper");
+assert(gameDataSource.includes("getCharacterPersonalName"), "summary paths must use the shared personal-name identity helper");
 assert(conversationSource.includes("memoryEngine?.markSummaryOwnerDeceased"), "NPC death lifecycle must tombstone the dead owner without deleting memories");
 assert(conversationSource.includes("excludedSummaryOwnerIds"), "finalization recovery must remember not to recreate a dead owner's folder");
-assert(mainSource.includes("excludedOwnerIds"), "directed summary persistence must skip dead owners while preserving survivor-owned memories");
+assert(gameDataSource.includes("excludedOwnerIds"), "directed summary persistence must skip dead owners while preserving survivor-owned memories");
 
 console.log("VOTC v7.3 identity lifecycle: PASS (name-only storage, unique-title recall, title-change stability, death tombstones)");

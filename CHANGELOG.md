@@ -4,6 +4,8 @@
 
 | 版本 | 重点 | 详细记录 |
 | --- | --- | --- |
+| v7.8 | Pre-V8 主进程第一轮模块化：游戏数据、日志解析、Prompt、摘要、信件、设置与运行服务迁出 `main.js`，保持 Memory Engine 2.4 和运行合同不变 | [V7.8 实施记录](docs/VOTC_v7.8_main.js第一轮模块化拆分实施记录.md) |
+| v7.7.4 | Memory Engine 2.4 稳定性收口：缓存刷新与指标、CJK Token 估算、来源 ID 严格校验、Git LFS CI 与高风险 IPC 边界 | [V7.7.4 实施记录](docs/VOTC_v7.7.4_稳定性与基础设施实施记录.md) |
 | v7.7.3 | Memory Engine 2.4：人物目录读取缓存与写入失效、来源 `messageId` 第四层可信校验、摘要管理按钮合并 | [V7.7.3 实施记录](docs/VOTC_v7.7.3_Memory_Engine_2.4实施记录.md) |
 | v7.7.2 | 多人对话候场、请入内与请离场；按人物半开在场窗口限制回应、知情和配对视角摘要 | [V7.7.2 实施记录](docs/VOTC_v7.7.2_候场加入与主动离场实施记录.md) |
 | v7.7.1 | Memory Engine 2.3：按 `owner × counterpart` 隔离知情与主题；冻结直接关系与场外人物召回；前缀指纹、结构化摘要重试、死亡墓碑和 DeepSeek 思考摘要 | [V7.7.1 实施记录](docs/VOTC_v7.7.1_Memory_Engine_2.3实施记录.md) |

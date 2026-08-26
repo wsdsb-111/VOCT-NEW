@@ -7,6 +7,7 @@ const path = require("path");
 const root = path.resolve(__dirname, "..");
 const mainPath = path.join(root, "resources", "app", "out", "main", "main.js");
 const mainSource = fs.readFileSync(mainPath, "utf8");
+const gameDataSource = fs.readFileSync(path.join(root, "resources", "app", "out", "main", "game-data", "game-data.js"), "utf8");
 const mainLines = mainSource.split(/\r?\n/).length;
 const registrySource = fs.readFileSync(path.join(root, "resources", "app", "out", "main", "action-system", "action-registry.js"), "utf8");
 const sandboxSource = fs.readFileSync(path.join(root, "resources", "app", "out", "main", "script-sandbox.js"), "utf8");
@@ -65,6 +66,6 @@ assert.strictEqual(memorySchema.MIN_READABLE_MEMORY_SCHEMA_VERSION, 1);
 assert.strictEqual(memorySchema.upgradeMemoryRecord({ schemaVersion: 1, memoryId: "old" }).schemaVersion, 2);
 assert.strictEqual(memorySchema.normalizeSummaryRecord({ content: "old summary" }).schemaVersion, 2);
 assert.throws(() => memorySchema.upgradeMemoryRecord({ schemaVersion: 99 }), /unsupported_schema/);
-assert(mainSource.includes("schemaVersion: memorySystem.CURRENT_SUMMARY_SCHEMA_VERSION"));
+assert(gameDataSource.includes("schemaVersion: memorySystem.CURRENT_SUMMARY_SCHEMA_VERSION"));
 
 console.log(`VOTC v7.7 architecture/security: PASS (main ${mainLines} lines, Provider Service/providers/IPC extracted, shared sandbox, encrypted provider keys, schema contract)`);

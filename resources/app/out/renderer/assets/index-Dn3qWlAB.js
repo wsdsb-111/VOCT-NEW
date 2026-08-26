@@ -18059,9 +18059,9 @@ const useConfigStore = create()(
           return { engineVersion: "2.4", totals: {}, boundaries: [], routingPolicy: {}, characters: [] };
         }
       },
-      getSummariesDashboardData: async () => {
+      getSummariesDashboardData: async (options = {}) => {
         try {
-          return await window.conversationAPI.getSummariesDashboardData();
+          return await window.conversationAPI.getSummariesDashboardData(options);
         } catch (error) {
           console.error("Failed to get summaries dashboard data:", error);
           return { summaries: [], memoryOverview: { engineVersion: "2.4", totals: {}, boundaries: [], routingPolicy: {}, characters: [] } };
@@ -18585,7 +18585,7 @@ const Player2OpenAppButton = () => {
   const { t } = useTranslation();
   const handleOpenPlayer2 = async () => {
     try {
-      const result = await window.electronAPI.openExternal("player2://");
+      const result = await window.electronAPI.openPlayer2();
       if (!result.success) {
         console.error("Failed to open Player2 app:", result.error);
       }
@@ -20648,10 +20648,10 @@ const SummariesManager = () => {
   reactExports.useEffect(() => {
     loadSummaries();
   }, []);
-  const loadSummaries = async () => {
+  const loadSummaries = async (refresh = false) => {
     setIsLoadingSummaries(true);
     try {
-      const dashboardData = await getSummariesDashboardData();
+      const dashboardData = await getSummariesDashboardData({ refresh });
       setSummaries(dashboardData.summaries || []);
       setMemoryOverview(dashboardData.memoryOverview || { engineVersion: "2.4", totals: {}, boundaries: [], routingPolicy: {}, characters: [] });
     } catch (error) {
@@ -20804,7 +20804,7 @@ const SummariesManager = () => {
         /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "help-text", children: t("summariesManager.summariesManagerHelp") })
       ] }),
       /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "header-actions", children: [
-        /* @__PURE__ */ jsxRuntimeExports.jsx("button", { onClick: loadSummaries, disabled: isLoadingSummaries, children: isLoadingSummaries ? t("summaries.loadingSummaries") : t("summariesManager.refresh") }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx("button", { onClick: () => loadSummaries(true), disabled: isLoadingSummaries, children: isLoadingSummaries ? t("summaries.loadingSummaries") : t("summariesManager.refresh") }),
         /* @__PURE__ */ jsxRuntimeExports.jsx("button", { type: "button", onClick: handleOpenSummariesFolder, children: t("summaries.openSummariesFolder") }),
         /* @__PURE__ */ jsxRuntimeExports.jsx("button", { type: "button", onClick: handleClearSummaries, disabled: isLoadingSummaries || isClearing || summaryGroups.length === 0, className: "danger-button", children: isClearing ? t("summaries.clearing") : t("summaries.clearAllSummaries") })
       ] })
@@ -20813,8 +20813,8 @@ const SummariesManager = () => {
     /* @__PURE__ */ jsxRuntimeExports.jsxs("section", { className: "memory-engine-overview", children: [
       /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "memory-engine-title", children: [
         /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
-          /* @__PURE__ */ jsxRuntimeExports.jsx("h5", { children: "Memory Engine 2.4 · V7.7.3" }),
-          /* @__PURE__ */ jsxRuntimeExports.jsx("p", { children: "人物摘要按需缓存并在写入后失效；来源 messageId 独立核验真实对话" })
+          /* @__PURE__ */ jsxRuntimeExports.jsx("h5", { children: "Memory Engine 2.4 · V7.8" }),
+          /* @__PURE__ */ jsxRuntimeExports.jsx("p", { children: "人物摘要缓存可观测，刷新与已验证写入后失效；来源 messageId 严格核验真实对话" })
         ] }),
         /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: `memory-engine-status ${memoryOverview.error ? "is-error" : ""}`, children: memoryOverview.error ? "读取异常" : "运行中" })
       ] }),
@@ -21342,7 +21342,7 @@ const OptimizationView = () => {
     /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "optimization-header", children: [
       /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
         /* @__PURE__ */ jsxRuntimeExports.jsx("h3", { children: text("系统优化与用量", "System Optimization & Usage") }),
-        /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "muted-text", children: text("V7.7.3 升级到 Memory Engine 2.4，增加人物目录缓存和来源 messageId 独立校验，并统一摘要管理入口。用量仅按服务商返回的 Token 统计。", "V7.7.3 upgrades to Memory Engine 2.4 with per-character folder caching, independent source-message validation, and one consolidated summary-management entry. Usage counts provider-reported tokens only.") })
+        /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "muted-text", children: text("V7.8 将 main.js 的游戏数据、提示词、摘要、信件、设置和运行服务拆分为独立模块，保持 Memory Engine 2.4、IPC、设置键与数据格式不变。", "V7.8 splits game data, prompts, summaries, letters, settings, and runtime services out of main.js while preserving Memory Engine 2.4, IPC, settings keys, and data formats.") })
       ] }),
       /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "optimization-header-actions", children: [
         /* @__PURE__ */ jsxRuntimeExports.jsx("button", { type: "button", onClick: loadReport, disabled: isLoading, children: isLoading ? text("读取中…", "Loading…") : text("刷新", "Refresh") }),
@@ -21355,7 +21355,7 @@ const OptimizationView = () => {
       /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "optimization-metrics", children: metrics.map(([label, value, tone]) => /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: `optimization-metric ${tone}`, children: [/* @__PURE__ */ jsxRuntimeExports.jsx("span", { children: label }), /* @__PURE__ */ jsxRuntimeExports.jsx("strong", { children: value })] }, label)) }),
       reconciliation?.aggregates > 0 && /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "muted-text", children: text(`已包含 ${formatTokens(reconciliation.requests)} 次 DeepSeek 官网核对补录、${formatTokens(reconciliation.totalTokens)} Token；缓存细分仅来自本机仍保留的原始响应。`, `Includes a DeepSeek-console reconciliation of ${formatTokens(reconciliation.requests)} requests and ${formatTokens(reconciliation.totalTokens)} tokens; cache details use only locally retained provider responses.`) }),
       /* @__PURE__ */ jsxRuntimeExports.jsxs("section", { className: "optimization-capabilities", children: [
-        /* @__PURE__ */ jsxRuntimeExports.jsx("h4", { children: text("V7.7.3 适配状态", "V7.7.3 integration status") }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx("h4", { children: text("V7.8 适配状态", "V7.8 integration status") }),
         /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "optimization-capability-grid", children: capabilities.map(([title, detail]) => /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "optimization-capability", children: [/* @__PURE__ */ jsxRuntimeExports.jsx("strong", { children: title }), /* @__PURE__ */ jsxRuntimeExports.jsx("span", { children: detail })] }, title)) })
       ] }),
       /* @__PURE__ */ jsxRuntimeExports.jsxs("section", { className: "optimization-section", children: [

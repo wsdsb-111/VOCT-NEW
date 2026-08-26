@@ -93,9 +93,11 @@ function writeOwnerSummary(summaryRoot, content) {
     assert.strictEqual(engine.store.listAllEpisodes().length, 0, "rejected extraction must not create a committed episode");
 
     const mainSource = fs.readFileSync(path.join(__dirname, "..", "resources", "app", "out", "main", "main.js"), "utf8");
+    const summaryWriteSource = ["game-data/game-data.js", "summaries/summaries-manager.js"].map((relativePath) => fs.readFileSync(path.join(__dirname, "..", "resources", "app", "out", "main", ...relativePath.split("/")), "utf8")).join("\n");
     const ipcSource = fs.readFileSync(path.join(__dirname, "..", "resources", "app", "out", "main", "ipc", "register-ipc.js"), "utf8");
-    assert(mainSource.includes("memoryEngine.invalidateSummaryFolderCache([owner.id])"), "generated owner-folder writes must invalidate their cache");
-    assert(mainSource.match(/memoryEngine\.invalidateSummaryFolderCache\(\[playerId\]\)/g)?.length >= 3, "edit and delete paths must invalidate the selected owner cache");
+    assert(!summaryWriteSource.includes("memoryEngine.invalidateSummaryFolderCache([owner.id])"), "partial directed writes must not invalidate cache before final persistence verification");
+    assert(fs.readFileSync(path.join(__dirname, "..", "resources", "app", "out", "main", "memory-system", "memory-engine.js"), "utf8").includes("this.invalidateSummaryFolderCache((context.participants || []).map((participant) => participant.id))"), "verified folder persistence must invalidate owner caches after the transaction succeeds");
+    assert(summaryWriteSource.match(/memoryEngine\.invalidateSummaryFolderCache\(\[playerId\]\)/g)?.length >= 3, "edit and delete paths must invalidate the selected owner cache");
     assert(ipcSource.includes("memoryEngine.invalidateSummaryFolderCache();"), "clear-all must invalidate every owner cache");
 
     console.log("VOTC v7.7.3 Memory Engine 2.4: PASS (folder cache, write invalidation, source messageId trust and recovery)");

@@ -21,5 +21,6 @@ const ciSource = fs.readFileSync(path.join(scriptsDir, "..", ".github", "workflo
 assert(releaseSource.includes('require("./test-manifest")'));
 assert(actionSource.includes('require("./test-manifest")'));
 assert(ciSource.includes("node scripts/test-release.js"), "CI must execute the same release manifest as local validation");
+assert(/uses: actions\/checkout@v4\s+with:\s+lfs: true/.test(ciSource), "CI checkout must fetch Git LFS release assets");
 
 console.log(`VOTC test manifest: PASS (${allTests.length} test files classified; ${releaseChecks.length} release groups)`);

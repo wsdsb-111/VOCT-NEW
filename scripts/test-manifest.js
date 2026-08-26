@@ -68,6 +68,8 @@ const releaseChecks = [
   { group: "v7.7.1-memory-engine-2.3", script: "test-v7.7.1-memory-engine-2.3.js" },
   { group: "v7.7.2-staged-presence", script: "test-v7.7.2-staged-presence.js" },
   { group: "v7.7.3-memory-cache-message-id", script: "test-v7.7.3-memory-cache-message-id.js" },
+  { group: "v7.7.4-stability-infrastructure", script: "test-v7.7.4-stability-infrastructure.js" },
+  { group: "v7.8-main-modularization", script: "test-v7.8-main-modularization.js" },
   { group: "usage-analytics-retention", script: "test-usage-analytics-retention.js" },
   { group: "usage-analytics-reconciliation", script: "test-usage-analytics-reconciliation.js" },
   { group: "test-manifest-coverage", script: "test-test-manifest.js" },

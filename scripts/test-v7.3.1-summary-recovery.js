@@ -86,9 +86,10 @@ const profileForwardingCount = conversationSource.match(/participantProfiles:\s*
 assert.strictEqual(profileForwardingCount, 2, "live finalization and recovery must both forward participant snapshots");
 
 const mainSource = fs.readFileSync(path.join(root, "resources", "app", "out", "main", "main.js"), "utf8");
+const gameDataSource = fs.readFileSync(path.join(root, "resources", "app", "out", "main", "game-data", "game-data.js"), "utf8");
 const providerServiceSource = fs.readFileSync(path.join(root, "resources", "app", "out", "main", "provider-service.js"), "utf8");
-assert(mainSource.includes("memorySystem.resolveSummaryParticipants"), "folder persistence must resolve participants independently of the current scene");
-assert(mainSource.includes("memorySystem.buildDirectedParticipantPairs"), "runtime folder persistence must use the tested all-participant directed pair builder");
+assert(gameDataSource.includes("memorySystem.resolveSummaryParticipants"), "folder persistence must resolve participants independently of the current scene");
+assert(gameDataSource.includes("memorySystem.buildDirectedParticipantPairs"), "runtime folder persistence must use the tested all-participant directed pair builder");
 assert(!providerServiceSource.includes('thinking: { type: "enabled" }, max_tokens: 12288'), "DeepSeek final summaries must not use thinking after the P0 empty-output regression");
 assert(providerServiceSource.includes('thinking: { type: "disabled" }, max_tokens: structuredSummaryMaxTokens'), "DeepSeek final summaries and recovery must use non-thinking structured output");
 assert(providerServiceSource.includes('requestedMaxTokens >= 256 && requestedMaxTokens <= 16384'), "DeepSeek recovery must keep the configured output limit within the supported range");

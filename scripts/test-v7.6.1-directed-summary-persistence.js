@@ -77,10 +77,12 @@ try {
 }
 
 const mainSource = fs.readFileSync(path.join(root, "resources", "app", "out", "main", "main.js"), "utf8");
-assert(mainSource.includes("verifyDirectedSummaryPersistence"), "runtime must verify every directed folder after saving");
-const updateSummarySource = mainSource.slice(mainSource.indexOf("static async updateSummary"), mainSource.indexOf("static async deleteSummary"));
-const deleteSummarySource = mainSource.slice(mainSource.indexOf("static async deleteSummary"), mainSource.indexOf("static async deleteCharacterSummaries"));
-const deleteConversationSource = mainSource.slice(mainSource.indexOf("static async deleteCharacterSummaries"), mainSource.indexOf("static async getCharacterNameFromFile"));
+const gameDataSource = fs.readFileSync(path.join(root, "resources", "app", "out", "main", "game-data", "game-data.js"), "utf8");
+const summariesSource = fs.readFileSync(path.join(root, "resources", "app", "out", "main", "summaries", "summaries-manager.js"), "utf8");
+assert(gameDataSource.includes("verifyDirectedSummaryPersistence"), "runtime must verify every directed folder after saving");
+const updateSummarySource = summariesSource.slice(summariesSource.indexOf("static async updateSummary"), summariesSource.indexOf("static async deleteSummary"));
+const deleteSummarySource = summariesSource.slice(summariesSource.indexOf("static async deleteSummary"), summariesSource.indexOf("static async deleteCharacterSummaries"));
+const deleteConversationSource = summariesSource.slice(summariesSource.indexOf("static async deleteCharacterSummaries"), summariesSource.indexOf("static async getCharacterNameFromFile"));
 assert(!updateSummarySource.includes("characterPerspectivePath"), "editing one owner folder must not update the counterpart folder");
 assert(!deleteSummarySource.includes("characterPerspectivePath"), "deleting one owner summary must not delete the counterpart folder");
 assert(!deleteConversationSource.includes("characterPerspectivePath"), "deleting one owner conversation must not delete the counterpart folder");

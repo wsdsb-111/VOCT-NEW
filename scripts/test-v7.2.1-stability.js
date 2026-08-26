@@ -104,13 +104,13 @@ function writePair(folderRoot, owner, counterpart, summaries) {
     assert.strictEqual(boundedState.processedThroughIndex, 1000, "mention state must advance with a constant-size cursor");
     assert(!Object.prototype.hasOwnProperty.call(boundedState, "processedMessageKeys"), "mention state must not retain an unbounded message-key array");
 
-    const mainSource = fs.readFileSync(mainPath, "utf8");
-    assert(mainSource.includes("memoryEngine.findMentionedCharactersInHistory"), "GameData and Conversation mention detection must share one matcher");
-    const letterBlock = mainSource.slice(mainSource.indexOf("class LetterPromptBuilder"), mainSource.indexOf("class LetterManager"));
+    const gameDataSource = fs.readFileSync(path.join(root, "resources", "app", "out", "main", "game-data", "game-data.js"), "utf8");
+    const letterBlock = fs.readFileSync(path.join(root, "resources", "app", "out", "main", "prompts", "letter-prompt-builder.js"), "utf8");
+    assert(gameDataSource.includes("memoryEngine.findMentionedCharactersInHistory"), "GameData and Conversation mention detection must share one matcher");
     assert(letterBlock.includes("retrieveForResponder"), "letters must use the Engine 2.2 routed retrieval entrypoint");
     assert(letterBlock.includes("mentionedEntityIds"), "letters must route mentioned out-of-scene characters");
     assert(!letterBlock.includes("tokenBudget: 600"), "letters must not keep the old 600-token recall path");
-    assert(mainSource.includes('error: "insufficient_summary_participants"'), "insufficient participant persistence must return an explicit failure");
+    assert(gameDataSource.includes('error: "insufficient_summary_participants"'), "insufficient participant persistence must return an explicit failure");
 
     console.log("VOTC v7.2.1 stability: PASS (budget return, bounded exit, durable snapshot, precise mentions, letter routes)");
   } finally {

@@ -148,6 +148,11 @@ try {
 }
 
 const mainSource = fs.readFileSync(path.join(root, "resources", "app", "out", "main", "main.js"), "utf8");
+const promptRuntimeSource = [
+  "config/settings-repository.js",
+  "prompts/prompt-builder.js",
+  "analytics/usage-analytics.js"
+].map((relativePath) => fs.readFileSync(path.join(root, "resources", "app", "out", "main", ...relativePath.split("/")), "utf8")).join("\n");
 const providerServiceSource = fs.readFileSync(path.join(root, "resources", "app", "out", "main", "provider-service.js"), "utf8");
 const extractionPrompt = new MemoryExtractor().buildPrompt({ participants })[0].content;
 assert(!providerServiceSource.includes('thinking: { type: "enabled" }, max_tokens: 12288'), "DeepSeek 终局摘要必须彻底关闭思考");
@@ -166,14 +171,14 @@ assert(extractionPrompt.includes("private thoughts, silent intentions, self-talk
 assert(extractionPrompt.includes("Do not impose a fixed character count on an individual memory"), "单条长期记忆也不得设置固定字数范围");
 assert(extractionPrompt.includes('"summarySegments"'), "终局输出必须包含可按在场窗口投影的详细叙事片段");
 assert(extractionPrompt.toLowerCase().includes("do not repeat the same narrative in a separate sessionsummary"), "叙事正文不得在 JSON 中重复占用输出预算");
-assert(mainSource.includes("摘要不设置固定字数或段落数量"), "默认终局摘要提示词必须取消固定字数限制");
-assert(mainSource.includes("在不遗漏实质内容、人物归属、因果关系和关键细节的前提下尽量精简"), "默认终局摘要提示词必须要求精简但不失内容");
-assert(mainSource.includes("知情范围发生变化时必须分段"), "默认终局摘要提示词必须防止睡着或独处内容泄漏给不知情角色");
-assert(mainSource.includes("不得笼统写成“双方讨论了某事”"), "默认终局摘要提示词必须禁止泛化压缩");
-assert(mainSource.indexOf('label: "Frozen Direct Relationship Memory"') < mainSource.lastIndexOf('case "history"'), "直接关系冻结块必须位于带 Token 统计的 history 前");
-assert(mainSource.includes('label: "Turn Topic Memory Patch"'), "话题补丁必须作为独立可观测块放在 history 后");
-assert(mainSource.includes("prefixFingerprintMatchesPrevious"), "缓存统计必须记录并核验 history 前稳定区块指纹");
-assert(mainSource.includes('entry.characterId ?? entry.character ?? ""'), "缓存前缀比较必须按回应人物 ID 隔离，不能跨 NPC 误判");
+assert(promptRuntimeSource.includes("摘要不设置固定字数或段落数量"), "默认终局摘要提示词必须取消固定字数限制");
+assert(promptRuntimeSource.includes("在不遗漏实质内容、人物归属、因果关系和关键细节的前提下尽量精简"), "默认终局摘要提示词必须要求精简但不失内容");
+assert(promptRuntimeSource.includes("知情范围发生变化时必须分段"), "默认终局摘要提示词必须防止睡着或独处内容泄漏给不知情角色");
+assert(promptRuntimeSource.includes("不得笼统写成“双方讨论了某事”"), "默认终局摘要提示词必须禁止泛化压缩");
+assert(promptRuntimeSource.indexOf('label: "Frozen Direct Relationship Memory"') < promptRuntimeSource.lastIndexOf('case "history"'), "直接关系冻结块必须位于带 Token 统计的 history 前");
+assert(promptRuntimeSource.includes('label: "Turn Topic Memory Patch"'), "话题补丁必须作为独立可观测块放在 history 后");
+assert(promptRuntimeSource.includes("prefixFingerprintMatchesPrevious"), "缓存统计必须记录并核验 history 前稳定区块指纹");
+assert(promptRuntimeSource.includes('entry.characterId ?? entry.character ?? ""'), "缓存前缀比较必须按回应人物 ID 隔离，不能跨 NPC 误判");
 Conversation.configure({ createPromptFingerprint: (value) => require("crypto").createHash("sha256").update(String(value)).digest("hex").slice(0, 16) });
 const prefixBase = [
   { block: { id: "anchor", label: "Anchor", type: "cache_anchor" }, content: "stable", tokens: 2 },

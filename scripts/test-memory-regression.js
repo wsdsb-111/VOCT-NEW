@@ -209,7 +209,7 @@ async function testFinalizationRecoveryAndStructuredExtraction() {
         visibility: "world",
         source: "spoken",
         messageIds: [1],
-        speakerIds: [999]
+        speakerIds: [2]
       }]
     });
     recovery.retryCount = 1;

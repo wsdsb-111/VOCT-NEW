@@ -3,6 +3,7 @@
 const fs = require("fs");
 const path = require("path");
 const crypto = require("crypto");
+const { MEMORY_ENGINE_VERSION } = require("../version");
 const { MEMORY_TYPES, VISIBILITIES, createMemoryId, createMemoryRecord, uniqueIds } = require("./memory-types");
 const { MemoryStore } = require("./memory-store");
 const { MemoryExtractor } = require("./memory-extractor");
@@ -318,6 +319,7 @@ class MemoryEngine {
     const sourceSet = new Set(sourceIds);
     const minId = sourceIds.length > 0 ? Math.min(...sourceIds) : null;
     const maxId = sourceIds.length > 0 ? Math.max(...sourceIds) : null;
+    const participantIds = new Set((context.participants || []).map((participant) => Number(participant?.id)).filter(Number.isFinite));
     const reasons = [];
     const validateItems = (items, label) => {
       if (!Array.isArray(items)) return;
@@ -327,10 +329,12 @@ class MemoryEngine {
           reasons.push(`${label}[${index}] needs supporting messageIds`);
           continue;
         }
-        const ids = rawIds.map(Number);
-        if (ids.some((messageId) => !Number.isFinite(messageId) || messageId < minId || messageId > maxId || !sourceSet.has(messageId))) {
+        if (rawIds.some((messageId) => !Number.isInteger(messageId) || messageId < minId || messageId > maxId || !sourceSet.has(messageId))) {
           reasons.push(`${label}[${index}] contains messageIds outside the source conversation`);
         }
+        if (new Set(rawIds).size !== rawIds.length || rawIds.some((messageId, messageIndex) => messageIndex > 0 && messageId <= rawIds[messageIndex - 1])) reasons.push(`${label}[${index}] messageIds must be unique and chronological`);
+        const speakerIds = items[index]?.provenance?.speakerIds;
+        if (Array.isArray(speakerIds) && speakerIds.some((speakerId) => !Number.isInteger(speakerId) || !participantIds.has(speakerId))) reasons.push(`${label}[${index}] contains speakerIds outside the participants`);
       }
     };
     validateItems(extraction?.summarySegments, "summarySegments");
@@ -928,7 +932,8 @@ class MemoryEngine {
       indexSize: Object.keys(this.store.index.memories || {}).length
     });
     return {
-      engineVersion: "2.4",
+      engineVersion: MEMORY_ENGINE_VERSION,
+      folderSummaryCache: this.store.getFolderSummaryCacheMetrics(),
       respondingCharacterId: ownerId,
       stable,
       relevant,
@@ -1089,7 +1094,8 @@ class MemoryEngine {
 
   getUiOverview({ summaryCatalog = [] } = {}) {
     return {
-      engineVersion: "2.4",
+      engineVersion: MEMORY_ENGINE_VERSION,
+      folderSummaryCache: this.store.getFolderSummaryCacheMetrics(),
       totals: {
         structuredMemories: Object.keys(this.store.index.memories || {}).length,
         episodes: Object.keys(this.store.index.episodes || {}).length,

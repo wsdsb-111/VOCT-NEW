@@ -39,10 +39,11 @@ assert(retainedDiagnostics.some((entry) => entry.marker === "diagnostic-3500"), 
 assert(!retainedDiagnostics.some((entry) => entry.marker === "diagnostic-3499"), "only the oldest diagnostics may be trimmed");
 
 const mainSource = fs.readFileSync(mainPath, "utf8");
+const analyticsSource = fs.readFileSync(path.join(root, "resources", "app", "out", "main", "analytics", "usage-analytics.js"), "utf8");
 const rendererSource = fs.readFileSync(rendererPath, "utf8");
 assert(mainSource.includes('require("./usage-analytics-retention")'), "main process must use the dedicated retention policy");
-assert(mainSource.includes("data.version = 4"), "usage analytics must migrate to the split-retention schema");
-assert(mainSource.includes("diagnostics = { total: 0, actionSkipped: 0, byType: {} }"), "reports must separate diagnostics from provider usage");
+assert(analyticsSource.includes("data.version = 4"), "usage analytics must migrate to the split-retention schema");
+assert(analyticsSource.includes("diagnostics = { total: 0, actionSkipped: 0, byType: {} }"), "reports must separate diagnostics from provider usage");
 assert(rendererSource.includes("服务商总 Token"), "UI must label provider-reported total tokens explicitly");
 assert(rendererSource.includes("API 请求"), "UI must exclude diagnostics from the request total label");
 assert(rendererSource.includes("诊断记录"), "UI must display diagnostic volume separately");

@@ -4,8 +4,6 @@ const path = require("path");
 
 const root = path.resolve(__dirname, "..");
 globalThis.__V67ActionSystem = require(path.join(root, "resources", "app", "out", "main", "action-system"));
-const mainPath = path.join(root, "resources", "app", "out", "main", "main.js");
-const source = fs.readFileSync(mainPath, "utf8");
 const ipcSource = fs.readFileSync(path.join(root, "resources", "app", "out", "main", "ipc", "register-ipc.js"), "utf8");
 const actionsDir = path.join(root, "resources", "app", "default_userdata", "actions", "standard");
 globalThis.actionRegistry = {
@@ -16,11 +14,15 @@ globalThis.actionRegistry = {
 };
 const { getActionEngine } = require("./action-engine-test-helper");
 const ActionEngine = getActionEngine();
-const gameDataStart = source.indexOf("class GameData {");
-const gameDataEnd = source.indexOf("\nclass Character {", gameDataStart);
-if (gameDataStart < 0 || gameDataEnd < 0) throw new Error("Unable to locate GameData in bundled main.js");
-eval(`${source.slice(gameDataStart, gameDataEnd)}\nglobalThis.__TestGameData = GameData;`);
-const GameData = globalThis.__TestGameData;
+const { createGameData } = require(path.join(root, "resources", "app", "out", "main", "game-data", "game-data"));
+const GameData = createGameData({
+  fs,
+  path,
+  memorySystem: require(path.join(root, "resources", "app", "out", "main", "memory-system")),
+  memoryEngine: {},
+  summariesDir: path.join(root, ".test-summaries"),
+  getHistoricalReferenceByYear: () => ({})
+});
 
 const triggerCases = [
   ["他踱步前行。", ["daily_movement"]],

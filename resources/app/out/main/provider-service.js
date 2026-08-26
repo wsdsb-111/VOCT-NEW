@@ -1,5 +1,7 @@
 "use strict";
 
+const { estimateTokens } = require("./token-estimator");
+
 class ProviderRegistry {
   constructor() {
     this.providers = /* @__PURE__ */ new Map();
@@ -66,8 +68,7 @@ class TokenCounter {
    * This matches the existing logic in Conversation.ts
    */
   static estimateTokens(text) {
-    if (!text) return 0;
-    return Math.ceil(text.length / 4);
+    return estimateTokens(text);
   }
   /**
    * Estimate token count for a message object
@@ -321,6 +322,9 @@ class LLMManager {
   }
   // Set custom context length for the active provider
   setCustomContextLength(contextLength) {
+    if (!Number.isInteger(contextLength) || contextLength < 256 || contextLength > 2e6) {
+      throw new Error("custom_context_length_must_be_an_integer_between_256_and_2000000");
+    }
     const activeConfig = this.settingsRepository.getActiveProviderConfig();
     if (!activeConfig) {
       throw new Error("No active and enabled LLM provider configured.");
