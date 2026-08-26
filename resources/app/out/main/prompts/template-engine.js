@@ -1,6 +1,6 @@
 "use strict";
 
-function createTemplateEngine({ Handlebars, fs, path, promptsHelpersDir, defaultPromptsDir }) {
+function createTemplateEngine({ Handlebars, fs, path, promptsHelpersDir, defaultPromptsDir, PromptScriptSandbox }) {
   const fs$1 = fs;
   const VOTC_PROMPTS_HELPERS_DIR = promptsHelpersDir;
   const DEFAULT_USERDATA_DIR$1 = defaultPromptsDir;
@@ -105,7 +105,7 @@ function createTemplateEngine({ Handlebars, fs, path, promptsHelpersDir, default
       }
     }
     loadCustomHelpers() {
-      const defaultHelpersDir = path.join(electron.app.getAppPath(), "default_userdata", "prompts", "helpers");
+      const defaultHelpersDir = path.join(DEFAULT_USERDATA_DIR$1, "prompts", "helpers");
       const userHelpersDir = VOTC_PROMPTS_HELPERS_DIR;
       const loadHelpersFromDir = (helpersDir) => {
         if (!fs$1.existsSync(helpersDir)) return;

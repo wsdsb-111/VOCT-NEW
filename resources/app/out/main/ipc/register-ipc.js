@@ -626,6 +626,12 @@ function registerIpcHandlers(runtime) {
   electron.ipcMain.handle("conversation:leavePresentCharacter", async (_, { characterId }) => {
     return conversationManager.leavePresentCharacter(characterId);
   });
+  electron.ipcMain.handle("conversation:temporarilyLeaveCharacter", async (_, { characterId, mode }) => {
+    return conversationManager.temporarilyLeaveCharacter(characterId, mode);
+  });
+  electron.ipcMain.handle("conversation:returnTemporaryCharacter", async (_, { characterId }) => {
+    return conversationManager.returnTemporaryCharacter(characterId);
+  });
   electron.ipcMain.handle("conversation:regenerateMessage", async (_, requestArgs = {}) => {
     const messageId = requireInteger(requestArgs.messageId, "message_id", { min: 0, max: 2147483647 });
     try {

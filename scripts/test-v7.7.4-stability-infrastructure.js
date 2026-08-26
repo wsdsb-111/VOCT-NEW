@@ -18,7 +18,7 @@ function writeOwnerSummary(summaryRoot, content) {
 (async () => {
   const tempRoot = fs.mkdtempSync(path.join(os.tmpdir(), "votc-v774-"));
   try {
-    assert.strictEqual(VOTC_CORE_VERSION, "7.8");
+    assert.strictEqual(VOTC_CORE_VERSION, "7.8.1");
     assert.strictEqual(MEMORY_ENGINE_VERSION, "2.4");
     assert.strictEqual(TokenCounter.estimateTokens("你好世界"), 4, "CJK text must not use the old four-characters-per-token estimate");
     assert.strictEqual(TokenCounter.estimateTokens("abcdefgh"), 2);

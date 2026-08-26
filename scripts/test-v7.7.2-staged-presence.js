@@ -152,6 +152,63 @@ function makeConversation() {
   busyConversation.activeResponse = {};
   assert.deepStrictEqual(await busyConversation.joinWaitingCharacter(npcB.id), { success: false, error: "presence_change_busy" }, "正在回复时请入内必须失败关闭");
 
+  const temporaryConversation = makeConversation();
+  temporaryConversation.initializePresence([npcA.id, npcB.id]);
+  temporaryConversation.messages.push(
+    { id: 0, role: "user", name: "玩家", content: "暂离前的共同内容" },
+    { id: 1, role: "assistant", name: "乙", content: "我在场" }
+  );
+  temporaryConversation.nextId = 2;
+  memoryStub.observeParticipants(temporaryConversation, [1, 2, 3], 0);
+  const temporaryLeave = await temporaryConversation.temporarilyLeaveCharacter(npcB.id, "unconscious");
+  assert.deepStrictEqual({ success: temporaryLeave.success, status: temporaryLeave.status, mode: temporaryLeave.mode, summaryGenerated: temporaryLeave.summaryGenerated }, { success: true, status: "temporarily_absent", mode: "unconscious", summaryGenerated: false });
+  assert.strictEqual(temporaryConversation.messages.at(-1).kind, "presence_temporary_leave");
+  assert(temporaryConversation.messages.at(-1).content.includes("昏迷"));
+  assert.strictEqual(temporaryConversation.getPresenceState().participants.find((entry) => entry.id === npcB.id).returnLabel, "唤醒");
+  temporaryConversation.messages.push(
+    { id: 3, role: "user", name: "玩家", content: "乙昏迷时的秘密" },
+    { id: 4, role: "assistant", name: "甲", content: "这件事不能让乙知道" }
+  );
+  temporaryConversation.nextId = 5;
+  const temporaryReturn = await temporaryConversation.returnTemporaryCharacter(npcB.id);
+  assert.strictEqual(temporaryReturn.success, true);
+  assert.strictEqual(temporaryConversation.messages.at(-1).kind, "presence_temporary_return");
+  assert(temporaryConversation.messages.at(-1).content.includes("没有记忆"), "昏迷返回提示必须明确人物不知道缺席期间内容");
+  temporaryConversation.messages.push({ id: 6, role: "user", name: "玩家", content: "乙醒来后的共同内容" });
+  temporaryConversation.nextId = 7;
+  assert((await temporaryConversation.temporarilyLeaveCharacter(npcB.id, "asleep")).success, "同一人物返回后必须可以再次暂离");
+  temporaryConversation.messages.push({ id: 8, role: "user", name: "玩家", content: "乙睡着时的秘密" });
+  temporaryConversation.nextId = 9;
+  assert((await temporaryConversation.returnTemporaryCharacter(npcB.id)).success);
+  assert(temporaryConversation.messages.at(-1).content.includes("醒来"));
+  assert((await temporaryConversation.temporarilyLeaveCharacter(npcB.id, "away")).success, "同一人物必须可以第三次暂离并切换模式");
+  temporaryConversation.messages.push({ id: 11, role: "user", name: "玩家", content: "乙离开现场时的秘密" });
+  temporaryConversation.nextId = 12;
+  assert((await temporaryConversation.returnTemporaryCharacter(npcB.id)).success);
+  assert(temporaryConversation.messages.at(-1).content.includes("回到现场"));
+  const visibleIds = temporaryConversation.getHistoryForCharacter(npcB.id).map((message) => message.id);
+  assert.deepStrictEqual(visibleIds, [0, 1, 5, 6, 9, 12], "多次暂离人物只能看到每段在场窗口和对应返回状态提示");
+  assert.strictEqual(temporaryConversation.canUseSharedRollingSummary(npcB.id), false, "多段在场窗口不得复用可能包含缺席内容的共享滚动摘要");
+  assert.deepStrictEqual(temporaryConversation.memoryState.participantPresence.filter((window) => window.characterId === npcB.id), [
+    { characterId: 3, joinedAtMessageId: 0, leftAtMessageId: 2 },
+    { characterId: 3, joinedAtMessageId: 5, leftAtMessageId: 7 },
+    { characterId: 3, joinedAtMessageId: 9, leftAtMessageId: 10 },
+    { characterId: 3, joinedAtMessageId: 12, leftAtMessageId: null }
+  ]);
+
+  for (const [mode, leaveWord, returnWord] of [["unconscious", "昏迷", "恢复意识"], ["asleep", "睡着", "醒来"], ["away", "暂时离开", "回到现场"]]) {
+    const modeConversation = makeConversation();
+    modeConversation.initializePresence([npcA.id, npcB.id]);
+    modeConversation.messages.push({ id: 0, role: "user", name: "玩家", content: "开始" });
+    modeConversation.nextId = 1;
+    memoryStub.observeParticipants(modeConversation, [1, 2, 3], 0);
+    assert((await modeConversation.temporarilyLeaveCharacter(npcB.id, mode)).success);
+    assert(modeConversation.messages.at(-1).content.includes(leaveWord), `${mode} 必须使用对应离场提示`);
+    assert((await modeConversation.returnTemporaryCharacter(npcB.id)).success);
+    assert(modeConversation.messages.at(-1).content.includes(returnWord), `${mode} 必须使用对应返回提示`);
+  }
+  assert.deepStrictEqual(await makeConversation().temporarilyLeaveCharacter(npcB.id, "invalid"), { success: false, error: "invalid_temporary_absence_mode" });
+
   const knowledge = new KnowledgeService({ store: {} });
   const presence = [
     { characterId: 1, joinedAtMessageId: 0, leftAtMessageId: null },
@@ -164,6 +221,15 @@ function makeConversation() {
   assert.deepStrictEqual(knowledge.resolveKnownBy({ ...baseMemory, provenance: { messageIds: [6] } }, episode), [1, 2, 3], "入场后且离场前消息应对该角色可见");
   assert.deepStrictEqual(knowledge.resolveKnownBy({ ...baseMemory, provenance: { messageIds: [10] } }, episode), [1, 2], "离场后的消息不得写入离场角色 knownBy");
   assert.deepStrictEqual(knowledge.resolveKnownBy({ ...baseMemory, visibility: "public", provenance: { messageIds: [10] } }, episode), [1, 2], "public 记忆也必须服从在场窗口");
+  const splitPresence = [
+    { characterId: 1, joinedAtMessageId: 0, leftAtMessageId: null },
+    { characterId: 2, joinedAtMessageId: 0, leftAtMessageId: null },
+    { characterId: 3, joinedAtMessageId: 0, leftAtMessageId: 3 },
+    { characterId: 3, joinedAtMessageId: 6, leftAtMessageId: null }
+  ];
+  const splitEpisode = { participantPresence: splitPresence, conversationStartMessageId: 0, conversationEndMessageId: 8 };
+  assert.deepStrictEqual(knowledge.resolveKnownBy({ ...baseMemory, provenance: { messageIds: [1, 7] } }, splitEpisode), [1, 2, 3], "人物缺席前后均在场的来源消息应跨多段窗口正确知情");
+  assert.deepStrictEqual(knowledge.resolveKnownBy({ ...baseMemory, provenance: { messageIds: [1, 4] } }, splitEpisode), [1, 2], "只要来源包含缺席窗口消息就不得向暂离人物泄漏摘要");
 
   const participants = [player, npcA, npcB];
   const extraction = {
@@ -330,9 +396,9 @@ function makeConversation() {
   const rendererSource = fs.readFileSync(path.join(root, "resources", "app", "out", "renderer", "assets", "index-Dn3qWlAB.js"), "utf8");
   const conversationSource = fs.readFileSync(path.join(root, "resources", "app", "out", "main", "action-system", "conversation.js"), "utf8");
   const leavesActionSource = fs.readFileSync(path.join(root, "resources", "app", "default_userdata", "actions", "standard", "z_leavesConversation.js"), "utf8");
-  assert(preloadSource.includes("joinWaitingCharacter") && preloadSource.includes("leavePresentCharacter"), "preload 必须公开入内和离场操作");
-  assert(ipcSource.includes("conversation:joinWaitingCharacter") && ipcSource.includes("conversation:leavePresentCharacter"), "主进程必须注册入内和离场 IPC");
-  assert(rendererSource.includes("请入内") && rendererSource.includes("请离场") && rendererSource.includes("设为候场"), "聊天 UI 必须提供候场、入内和离场按钮");
+  assert(preloadSource.includes("joinWaitingCharacter") && preloadSource.includes("leavePresentCharacter") && preloadSource.includes("temporarilyLeaveCharacter") && preloadSource.includes("returnTemporaryCharacter"), "preload 必须公开入内、永久离场、暂离和返回操作");
+  assert(ipcSource.includes("conversation:joinWaitingCharacter") && ipcSource.includes("conversation:leavePresentCharacter") && ipcSource.includes("conversation:temporarilyLeaveCharacter") && ipcSource.includes("conversation:returnTemporaryCharacter"), "主进程必须注册完整人物状态 IPC");
+  assert(rendererSource.includes("请入内") && rendererSource.includes("请离场") && rendererSource.includes("设为候场") && rendererSource.includes("暂时离场…") && rendererSource.includes("昏迷") && rendererSource.includes("睡着") && rendererSource.includes("暂时离开"), "聊天 UI 必须兼容候场、入内、永久离场和三种暂离模式");
   assert(rendererSource.includes("正在生成回复或处理队列"), "忙碌时 UI 必须明确解释人物按钮为何禁用");
   assert(rendererSource.includes("presenceOperationPending || !conversationState.presence.canManage"), "忙碌和 IPC 处理中人物按钮必须实际禁用");
   assert(/this\.isActive = true;\s*this\.emitUpdate\(\);/.test(conversationSource), "日志解析完成后必须立即推送首句前的候场按钮状态");

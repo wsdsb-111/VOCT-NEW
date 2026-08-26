@@ -1,6 +1,6 @@
 "use strict";
 
-function createLetterPromptBuilder({ TemplateEngine, PromptScriptLoader, settingsRepository, memoryEngine, memorySystem, PromptBuilder, TokenCounter, promptConfigManager }) {
+function createLetterPromptBuilder({ TemplateEngine, PromptScriptLoader, settingsRepository, memoryEngine, memorySystem, PromptBuilder, TokenCounter, promptConfigManager, logVerboseLLM }) {
   class LetterPromptBuilder {
     constructor() {
       this.templateEngine = new TemplateEngine();

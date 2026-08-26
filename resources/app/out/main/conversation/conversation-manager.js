@@ -207,6 +207,18 @@ function createConversationManager({ events, memorySystem, Conversation, PromptB
       this.emitConversationUpdate();
       return result;
     }
+    async temporarilyLeaveCharacter(characterId, mode) {
+      if (!this.currentConversation?.isActive) return { success: false, error: "no_active_conversation" };
+      const result = await this.currentConversation.temporarilyLeaveCharacter(characterId, mode);
+      this.emitConversationUpdate();
+      return result;
+    }
+    async returnTemporaryCharacter(characterId) {
+      if (!this.currentConversation?.isActive) return { success: false, error: "no_active_conversation" };
+      const result = await this.currentConversation.returnTemporaryCharacter(characterId);
+      this.emitConversationUpdate();
+      return result;
+    }
     /**
      * Regenerate an error message
      */

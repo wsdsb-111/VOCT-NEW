@@ -124,6 +124,8 @@ electron.contextBridge.exposeInMainWorld("conversationAPI", {
   },
   joinWaitingCharacter: (characterId) => electron.ipcRenderer.invoke("conversation:joinWaitingCharacter", { characterId }),
   leavePresentCharacter: (characterId) => electron.ipcRenderer.invoke("conversation:leavePresentCharacter", { characterId }),
+  temporarilyLeaveCharacter: (characterId, mode) => electron.ipcRenderer.invoke("conversation:temporarilyLeaveCharacter", { characterId, mode }),
+  returnTemporaryCharacter: (characterId) => electron.ipcRenderer.invoke("conversation:returnTemporaryCharacter", { characterId }),
   regenerateMessage: (messageId) => {
     return electron.ipcRenderer.invoke("conversation:regenerateMessage", { messageId });
   },

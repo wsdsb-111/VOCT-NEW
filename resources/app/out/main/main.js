@@ -408,7 +408,8 @@ const TemplateEngine = createTemplateEngine({
   fs: fs$1,
   path,
   promptsHelpersDir: VOTC_PROMPTS_HELPERS_DIR,
-  defaultPromptsDir: DEFAULT_USERDATA_DIR$1
+  defaultPromptsDir: DEFAULT_USERDATA_DIR$1,
+  PromptScriptSandbox
 });
 const { PromptScriptLoader } = require("./prompts/prompt-script-loader");
 const { createPromptBuilder } = require("./prompts/prompt-builder");
@@ -1076,7 +1077,7 @@ const focusMonitor = new FocusMonitor();
 const appIcon = path.join(__dirname, "./chunks/icon-BljXrxwL.ico");
 registerProviderImplementations(providerRegistry);
 const { createLetterPromptBuilder } = require("./prompts/letter-prompt-builder");
-const LetterPromptBuilder = createLetterPromptBuilder({ TemplateEngine, PromptScriptLoader, settingsRepository, memoryEngine, memorySystem, PromptBuilder, TokenCounter, promptConfigManager });
+const LetterPromptBuilder = createLetterPromptBuilder({ TemplateEngine, PromptScriptLoader, settingsRepository, memoryEngine, memorySystem, PromptBuilder, TokenCounter, promptConfigManager, logVerboseLLM });
 const letterPromptBuilder = new LetterPromptBuilder();
 const { createLetterManager } = require("./letters/letter-manager");
 const { LetterManager, LetterResponseStatus, LetterSummaryStatus } = createLetterManager({

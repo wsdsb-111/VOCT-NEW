@@ -3294,8 +3294,35 @@ select {
 }
 
 .presence-waiting .conversation-presence-name,
+.presence-temporarily_absent .conversation-presence-name,
 .presence-departed .conversation-presence-name {
   color: #a89f91;
+}
+
+.conversation-presence-actions {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+}
+
+.conversation-presence-status {
+  color: #c7b79b;
+  font-size: 0.86rem;
+}
+
+.conversation-presence-select {
+  min-width: 96px;
+  padding: 4px 6px;
+  border: 1px solid #c88c43;
+  border-radius: 5px;
+  background: rgba(48, 28, 24, 0.96);
+  color: #f7d898;
+  cursor: pointer;
+}
+
+.conversation-presence-select:disabled {
+  opacity: 0.45;
+  cursor: default;
 }
 
 .conversation-presence-button {

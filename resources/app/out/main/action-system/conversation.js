@@ -25,6 +25,27 @@ let uuid = null;
 let path = null;
 let memoryEngine = null;
 
+const TEMPORARY_ABSENCE_MODES = Object.freeze({
+  unconscious: {
+    statusLabel: "昏迷中",
+    returnLabel: "唤醒",
+    leaveText: (name) => `【${name}突然昏迷，暂时无法感知或参与接下来的对话】`,
+    returnText: (name) => `【${name}恢复意识。${name}清楚自己刚才曾经昏迷，但对昏迷期间发生的对话和事件没有记忆，也不得据此作出反应。】`
+  },
+  asleep: {
+    statusLabel: "睡着了",
+    returnLabel: "叫醒",
+    leaveText: (name) => `【${name}睡着了，暂时无法感知或参与接下来的对话】`,
+    returnText: (name) => `【${name}醒来。${name}知道自己刚才睡着了，但没有听见睡着期间的对话，也不知道期间发生的事件。】`
+  },
+  away: {
+    statusLabel: "暂时离开",
+    returnLabel: "请回来",
+    leaveText: (name) => `【${name}暂时离开现场，无法感知或参与接下来的对话】`,
+    returnText: (name) => `【${name}回到现场。${name}知道自己刚才暂时离开过，但不知道离开期间发生的对话和事件。】`
+  }
+});
+
 class Conversation {
   static configure(dependencies = {}) {
     actionSystem = dependencies.actionSystem || actionSystem;
@@ -83,6 +104,7 @@ class Conversation {
     this.selectedCharacterIds = /* @__PURE__ */ new Set();
     this.presentCharacterIds = /* @__PURE__ */ new Set();
     this.waitingCharacterIds = /* @__PURE__ */ new Set();
+    this.temporarilyAbsentCharacterIds = /* @__PURE__ */ new Map();
     this.departedCharacterIds = /* @__PURE__ */ new Set();
     this.joinEvents = [];
     this.leaveEvents = [];
@@ -304,6 +326,7 @@ class Conversation {
     const initialIds = requested.length > 0 ? requested : defaultPresentIds;
     this.presentCharacterIds = new Set(initialIds);
     this.waitingCharacterIds = new Set(selectedIds.filter((characterId) => !this.presentCharacterIds.has(characterId)));
+    this.temporarilyAbsentCharacterIds = new Map();
     this.departedCharacterIds = new Set();
     this.joinEvents = [];
     this.leaveEvents = [];
@@ -317,28 +340,37 @@ class Conversation {
     if (!this.presenceInitialized && this.gameData?.characters) this.initializePresence();
     const participants = [...(this.selectedCharacterIds || [])].map((characterId) => {
       const character = this.gameData.characters.get(characterId) || this.summaryParticipantProfiles?.get(characterId);
-      const status = this.waitingCharacterIds.has(characterId) ? "waiting" : this.inactiveParticipantIds?.has(characterId) ? this.inactiveParticipantIds.get(characterId) : this.departedCharacterIds.has(characterId) ? "departed" : "present";
+      const temporaryAbsence = this.temporarilyAbsentCharacterIds?.get(characterId) || null;
+      const status = this.waitingCharacterIds.has(characterId) ? "waiting" : this.inactiveParticipantIds?.has(characterId) ? this.inactiveParticipantIds.get(characterId) : temporaryAbsence ? "temporarily_absent" : this.departedCharacterIds.has(characterId) ? "departed" : "present";
       return {
         id: characterId,
         name: character?.shortName || character?.name || character?.fullName || `角色${characterId}`,
         fullName: character?.fullName || character?.shortName || character?.name || `角色${characterId}`,
-        status
+        status,
+        temporaryAbsenceMode: temporaryAbsence?.mode || null,
+        temporaryAbsenceLabel: temporaryAbsence ? TEMPORARY_ABSENCE_MODES[temporaryAbsence.mode]?.statusLabel || "暂时离场" : null,
+        returnLabel: temporaryAbsence ? TEMPORARY_ABSENCE_MODES[temporaryAbsence.mode]?.returnLabel || "请回来" : null
       };
     });
     return {
       participants,
       presentIds: [...this.presentCharacterIds],
       waitingIds: [...this.waitingCharacterIds],
+      temporarilyAbsentIds: [...(this.temporarilyAbsentCharacterIds?.keys() || [])],
       departedIds: [...this.departedCharacterIds],
       canManage: this.canManagePresence(),
       canLeave: this.presentCharacterIds.size > 1,
+      canTemporarilyLeave: this.presentCharacterIds.size > 0,
       beforeFirstMessage: !this.getHistory().some((message) => message.role === "user" || message.role === "assistant")
     };
   }
   buildPresenceContext() {
-    const present = this.getPresenceState().participants.filter((participant) => participant.status === "present");
+    const participants = this.getPresenceState().participants;
+    const present = participants.filter((participant) => participant.status === "present");
+    const temporarilyAbsent = participants.filter((participant) => participant.status === "temporarily_absent");
     if (present.length === 0) return "";
-    return `=== 当前在场人物（仅本轮有效） ===\n${present.map((participant) => `- ${participant.fullName}`).join("\n")}\n只能把当前在场人物视为听见本轮对话并可直接回应的人；候场或已离场人物不在房间内。`;
+    const absenceText = temporarilyAbsent.length > 0 ? `\n暂时缺席：${temporarilyAbsent.map((participant) => `${participant.fullName}（${participant.temporaryAbsenceLabel}）`).join("、")}。这些人物不能感知缺席期间的内容。` : "";
+    return `=== 当前在场人物（仅本轮有效） ===\n${present.map((participant) => `- ${participant.fullName}`).join("\n")}\n只能把当前在场人物视为听见本轮对话并可直接回应的人；候场、暂时缺席或已离场人物不在当前对话现场。${absenceText}`;
   }
   getPresenceWindows(characterId) {
     const state = memoryEngine?.ensureConversationState(this);
@@ -360,7 +392,8 @@ class Conversation {
     const history = this.getHistory();
     const firstMessageId = history.map((message) => Number(message.id)).filter(Number.isFinite).sort((left, right) => left - right)[0];
     if (!Number.isFinite(firstMessageId)) return true;
-    return this.getPresenceWindows(characterId).some((window) => Number(window.joinedAtMessageId ?? 0) <= firstMessageId);
+    const windows = this.getPresenceWindows(characterId);
+    return windows.length === 1 && windows[0].leftAtMessageId == null && Number(windows[0].joinedAtMessageId ?? 0) <= firstMessageId;
   }
   getPromptHistoryForCharacter(characterId) {
     const history = this.getHistoryForCharacter(characterId);
@@ -416,6 +449,62 @@ class Conversation {
     const recoveryPath = this.checkpointFinalization("participant_left");
     return { success: true, status: "departed", messageId: message.id, summaryCheckpointed: !!recoveryPath, recoveryPath };
   }
+  async temporarilyLeaveCharacter(characterId, mode) {
+    const numericId = Number(characterId);
+    const absenceMode = TEMPORARY_ABSENCE_MODES[mode];
+    if (!this.canManagePresence()) return { success: false, error: "presence_change_busy" };
+    if (!absenceMode) return { success: false, error: "invalid_temporary_absence_mode" };
+    if (!this.presentCharacterIds.has(numericId)) return { success: false, error: "character_not_present" };
+    const character = this.gameData.characters.get(numericId);
+    if (!character || numericId === Number(this.gameData.playerID)) return { success: false, error: "character_unavailable" };
+    this.captureSummaryParticipantProfiles([character]);
+    const name = character.shortName || character.fullName;
+    const message = createMessage({
+      id: this.nextId++,
+      role: "system",
+      kind: "presence_temporary_leave",
+      characterId: numericId,
+      absenceMode: mode,
+      content: absenceMode.leaveText(name)
+    });
+    this.messages.push(message);
+    memoryEngine?.markParticipantLeft(this, numericId, message.id);
+    this.presentCharacterIds.delete(numericId);
+    this.temporarilyAbsentCharacterIds.set(numericId, { mode, leftAtMessageId: message.id });
+    this.npcQueue = this.npcQueue.filter((candidate) => Number(candidate?.id) !== numericId);
+    if (this.customQueue) this.customQueue = this.customQueue.filter((candidate) => Number(candidate?.id) !== numericId);
+    this.invalidateApprovalsForCharacter(numericId, "temporarily_absent");
+    this.leaveEvents.push({ characterId: numericId, atMessageId: message.id, atHistoryIndex: this.getHistory().length - 1, temporary: true, mode });
+    this.emitUpdate();
+    return { success: true, status: "temporarily_absent", mode, messageId: message.id, summaryGenerated: false };
+  }
+  async returnTemporaryCharacter(characterId) {
+    const numericId = Number(characterId);
+    if (!this.canManagePresence()) return { success: false, error: "presence_change_busy" };
+    const temporaryAbsence = this.temporarilyAbsentCharacterIds?.get(numericId);
+    if (!temporaryAbsence) return { success: false, error: "character_not_temporarily_absent" };
+    const character = this.gameData.characters.get(numericId);
+    if (!character || this.inactiveParticipantIds.has(numericId) || character.isDead === true || character.dead === true || character.alive === false) {
+      return { success: false, error: "character_unavailable" };
+    }
+    const absenceMode = TEMPORARY_ABSENCE_MODES[temporaryAbsence.mode];
+    const name = character.shortName || character.fullName;
+    this.temporarilyAbsentCharacterIds.delete(numericId);
+    this.presentCharacterIds.add(numericId);
+    const message = createMessage({
+      id: this.nextId++,
+      role: "system",
+      kind: "presence_temporary_return",
+      characterId: numericId,
+      absenceMode: temporaryAbsence.mode,
+      content: absenceMode.returnText(name)
+    });
+    this.messages.push(message);
+    memoryEngine?.observeParticipants(this, [numericId], message.id);
+    this.joinEvents.push({ characterId: numericId, atMessageId: message.id, atHistoryIndex: this.getHistory().length - 1, temporaryReturn: true, mode: temporaryAbsence.mode });
+    this.emitUpdate();
+    return { success: true, status: "present", mode: temporaryAbsence.mode, messageId: message.id };
+  }
   captureSummaryParticipantProfiles(characters = []) {
     if (!this.summaryParticipantProfiles) this.summaryParticipantProfiles = /* @__PURE__ */ new Map();
     for (const character of characters || []) {
@@ -450,6 +539,7 @@ class Conversation {
     memoryEngine?.markParticipantLeft(this, characterId, this.nextId);
     this.presentCharacterIds?.delete(Number(characterId));
     this.waitingCharacterIds?.delete(Number(characterId));
+    this.temporarilyAbsentCharacterIds?.delete(Number(characterId));
     this.departedCharacterIds?.add(Number(characterId));
     const deactivated = actionSystem.participantLifecycle.deactivate(this, characterId, reason);
     if (reason === "dead" && Number(characterId) !== Number(this.gameData?.playerID)) {
@@ -1087,6 +1177,7 @@ class Conversation {
       closedPresence = true;
     }
     this.waitingCharacterIds?.delete(numericId);
+    this.temporarilyAbsentCharacterIds?.delete(numericId);
     this.invalidateApprovalsForCharacter(numericId, "removed");
     this.gameData.characters.delete(numericId);
     if (closedPresence) this.checkpointFinalization("action_participant_left");

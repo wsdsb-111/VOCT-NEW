@@ -18,6 +18,15 @@ function createPromptBuilder({
     static {
       this.scriptLoader = new PromptScriptLoader();
     }
+    static splitDescriptionForCache(description) {
+      if (typeof description !== "string") return { stableContent: "", dynamicContent: "" };
+      const match = /\n(\[date\([^\n]*\)\])\s*$/.exec(description);
+      if (!match || match.index <= 0) return { stableContent: description, dynamicContent: "" };
+      return {
+        stableContent: description.slice(0, match.index).trimEnd(),
+        dynamicContent: match[1]
+      };
+    }
     static buildSummaryCacheAnchor() {
       return `VOTC_SUMMARY_CACHE_ANCHOR_v1
   You summarize CK3 roleplay records. Preserve concrete names, relationships, dates, places, amounts, decisions, promises, conflicts, emotional changes and unresolved plans that appear in the supplied material. Do not invent facts, merge different people, add later historical knowledge, or turn a proposal into a completed event. Follow the requested language and format. Output only the requested summary.`;
