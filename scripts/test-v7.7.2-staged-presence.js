@@ -196,6 +196,19 @@ function makeConversation() {
     { characterId: 3, joinedAtMessageId: 12, leftAtMessageId: null }
   ]);
 
+  const singleNpcConversation = makeConversation();
+  singleNpcConversation.initializePresence([npcA.id]);
+  singleNpcConversation.messages.push({ id: 0, role: "user", name: "玩家", content: "甲睡着前的共同内容" });
+  singleNpcConversation.nextId = 1;
+  memoryStub.observeParticipants(singleNpcConversation, [player.id, npcA.id], 0);
+  assert((await singleNpcConversation.temporarilyLeaveCharacter(npcA.id, "asleep")).success, "唯一在场 NPC 必须允许暂时离场");
+  assert.deepStrictEqual(singleNpcConversation.getNpcList(), [], "唯一 NPC 暂离期间不得产生任何 NPC 回复候选");
+  singleNpcConversation.messages.push({ id: 2, role: "user", name: "玩家", content: "甲睡着期间无人回应的独白" });
+  singleNpcConversation.nextId = 3;
+  assert((await singleNpcConversation.returnTemporaryCharacter(npcA.id)).success, "唯一 NPC 必须可以从暂离状态返回");
+  assert.deepStrictEqual(singleNpcConversation.getNpcList().map((character) => character.id), [npcA.id]);
+  assert.deepStrictEqual(singleNpcConversation.getHistoryForCharacter(npcA.id).map((message) => message.id), [0, 3], "唯一 NPC 返回后不得获知暂离期间的玩家独白");
+
   for (const [mode, leaveWord, returnWord] of [["unconscious", "昏迷", "恢复意识"], ["asleep", "睡着", "醒来"], ["away", "暂时离开", "回到现场"]]) {
     const modeConversation = makeConversation();
     modeConversation.initializePresence([npcA.id, npcB.id]);
@@ -245,6 +258,31 @@ function makeConversation() {
   assert(!projections.get("1->3").content.includes("入场前"), "player→B 不得包含 B 入场前内容");
   assert(projections.get("1->3").content.includes("共同议事"));
   assert(!projections.get("3->1").content.includes("离场后"), "B→player 不得包含 B 离场后内容，即使 knownBy 被错误标记");
+
+  const repeatedAbsencePresence = [
+    { characterId: 1, joinedAtMessageId: 0, leftAtMessageId: null },
+    { characterId: 2, joinedAtMessageId: 0, leftAtMessageId: null },
+    { characterId: 3, joinedAtMessageId: 0, leftAtMessageId: 2 },
+    { characterId: 3, joinedAtMessageId: 5, leftAtMessageId: 7 },
+    { characterId: 3, joinedAtMessageId: 9, leftAtMessageId: null }
+  ];
+  const repeatedAbsenceExtraction = {
+    sessionSummary: "多段暂离终局测试",
+    memories: [
+      { memoryId: "gap_one", type: "secret", content: "乙第一次暂离期间的秘密。", participants: [1, 2], subjects: [3], knownBy: [1, 2, 3], provenance: { messageIds: [3], speakerIds: [1] } },
+      { memoryId: "gap_one_shared", type: "event", content: "玩家与甲在第一次暂离期间共同确认此事。", participants: [1, 2], subjects: [], knownBy: [1, 2], provenance: { messageIds: [3], speakerIds: [1, 2] } },
+      { memoryId: "shared_window", type: "event", content: "乙返回后共同确认的事件。", participants: [1, 2, 3], subjects: [3], knownBy: [1, 2, 3], provenance: { messageIds: [6], speakerIds: [1, 3] } },
+      { memoryId: "gap_two", type: "secret", content: "乙第二次暂离期间的秘密。", participants: [1, 2], subjects: [3], knownBy: [1, 2, 3], provenance: { messageIds: [8], speakerIds: [2] } },
+      { memoryId: "gap_two_shared", type: "event", content: "玩家与甲在第二次暂离期间共同确认此事。", participants: [1, 2], subjects: [], knownBy: [1, 2], provenance: { messageIds: [8], speakerIds: [1, 2] } }
+    ]
+  };
+  const repeatedAbsenceContext = { participants, participantPresence: repeatedAbsencePresence };
+  const repeatedAbsenceProjections = buildPerspectiveSummaryMap(repeatedAbsenceContext, repeatedAbsenceExtraction);
+  assert.strictEqual(validatePerspectiveSummaryMap(repeatedAbsenceContext, repeatedAbsenceExtraction, repeatedAbsenceProjections).success, true);
+  assert(repeatedAbsenceProjections.get("1->3").content.includes("共同确认"), "多次暂离人物在共同窗口内的事件必须进入终局摘要");
+  assert(!repeatedAbsenceProjections.get("1->3").content.includes("第一次暂离"), "终局摘要不得向多次暂离人物泄漏第一段缺席内容");
+  assert(!repeatedAbsenceProjections.get("3->1").content.includes("第二次暂离"), "终局摘要不得向多次暂离人物泄漏第二段缺席内容");
+  assert(repeatedAbsenceProjections.get("1->2").content.includes("第一次暂离") && repeatedAbsenceProjections.get("2->1").content.includes("第二次暂离"), "始终在场人物之间必须保留暂离窗口中的真实内容");
 
   for (let participantCount = 2; participantCount <= 6; participantCount++) {
     const group = Array.from({ length: participantCount }, (_, index) => ({ id: index + 20, name: `人物${index + 1}` }));

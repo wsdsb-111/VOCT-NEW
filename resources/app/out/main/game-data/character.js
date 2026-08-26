@@ -37,7 +37,7 @@ class Character {
     this.traits.push(trait);
   }
   removeTrait(name) {
-    this.traits.filter((trait) => {
+    this.traits = this.traits.filter((trait) => {
       return trait.name.toLowerCase() !== name.toLowerCase();
     });
   }

@@ -105,7 +105,7 @@ function createTemplateEngine({ Handlebars, fs, path, promptsHelpersDir, default
       }
     }
     loadCustomHelpers() {
-      const defaultHelpersDir = path.join(DEFAULT_USERDATA_DIR$1, "prompts", "helpers");
+      const defaultHelpersDir = path.join(DEFAULT_USERDATA_DIR$1, "helpers");
       const userHelpersDir = VOTC_PROMPTS_HELPERS_DIR;
       const loadHelpersFromDir = (helpersDir) => {
         if (!fs$1.existsSync(helpersDir)) return;

@@ -20841,7 +20841,7 @@ const SummariesManager = () => {
     /* @__PURE__ */ jsxRuntimeExports.jsxs("section", { className: "memory-engine-overview", children: [
       /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "memory-engine-title", children: [
         /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
-          /* @__PURE__ */ jsxRuntimeExports.jsx("h5", { children: "Memory Engine 2.4 · V7.8.1" }),
+          /* @__PURE__ */ jsxRuntimeExports.jsx("h5", { children: "Memory Engine 2.4 · V7.8.2" }),
           /* @__PURE__ */ jsxRuntimeExports.jsx("p", { children: "多段在场窗口隔离暂离期间内容；人物摘要缓存与来源 messageId 继续严格校验" })
         ] }),
         /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: `memory-engine-status ${memoryOverview.error ? "is-error" : ""}`, children: memoryOverview.error ? "读取异常" : "运行中" })
@@ -21362,7 +21362,7 @@ const OptimizationView = () => {
     [text("摘要读取与可信度", "Summary cache and trust"), text("人物目录按需缓存，写入后精确失效；所有摘要来源 messageId 必须存在于真实对话。", "Character folders are cached on demand and invalidated after writes; every cited messageId must exist in the source conversation.")],
     [text("在场窗口", "Presence windows"), text("候场、入内和永久离场保持原语义；昏迷、睡着或暂时离开会关闭当前窗口，返回后开启新窗口，缺席期间不回应、不召回也不生成该人物的摘要内容。", "Waiting, joining, and permanent departure keep their original semantics. Unconsciousness, sleep, or temporary absence closes the current window and returning opens a new one; absent content is excluded from that character's replies, recall, and summary.")],
     [text("安全配置", "Secure configuration"), text("Provider API Key 使用 Electron safeStorage 加密落盘；明文旧配置在可用时自动迁移。", "Provider API keys are encrypted at rest with Electron safeStorage; plaintext settings migrate when encryption is available.")],
-    [text("统一发布门禁", "Unified release gate"), text("本地与 CI 共用一份 39 组测试清单，并加入 36 条轻量语义金标样例。", "Local and CI validation share one 39-group manifest plus 36 lightweight semantic golden cases.")],
+    [text("统一发布门禁", "Unified release gate"), text("本地与 CI 共用一份 41 组测试清单，并加入 36 条轻量语义金标样例。", "Local and CI validation share one 41-group manifest plus 36 lightweight semantic golden cases.")],
     [text("DeepSeek 思考与摘要", "DeepSeek thinking and summaries"), text("普通对话使用 4096 Token 思考；终局摘要、失败重试与恢复摘要使用摘要页配置的 Token 上限进行非思考结构化输出。", "Normal chat uses 4096-token thinking. Final summaries, retries, and recovery use the token ceiling configured on the summary page for non-thinking structured output.")],
     [text("动作候选预筛", "Action candidate prefilter"), text("普通对话不请求动作模型；仅当当前发言包含本地验证的已发生动作事件时，才对相关模组进行一次受限语义判定。", "Ordinary dialogue does not call the action model. Only locally validated current action events trigger constrained semantic selection for relevant modules.")]
   ];
@@ -21370,7 +21370,7 @@ const OptimizationView = () => {
     /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "optimization-header", children: [
       /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
         /* @__PURE__ */ jsxRuntimeExports.jsx("h3", { children: text("系统优化与用量", "System Optimization & Usage") }),
-        /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "muted-text", children: text("V7.8.1 修复模块拆分后的 Prompt 依赖，并为 Memory Engine 2.4 增加可返回的三模式暂时离场。", "V7.8.1 fixes prompt dependencies after modularization and adds three returnable temporary-absence modes compatible with Memory Engine 2.4.") })
+        /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "muted-text", children: text("V7.8.2 完成 V7 最终收尾：修正默认 helper 路径和人物特质移除，并以真实模板链路覆盖完整 Prompt。", "V7.8.2 completes the final V7 hotfixes: correcting the default helper path and trait removal, with full prompt coverage through the real template pipeline.") })
       ] }),
       /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "optimization-header-actions", children: [
         /* @__PURE__ */ jsxRuntimeExports.jsx("button", { type: "button", onClick: loadReport, disabled: isLoading, children: isLoading ? text("读取中…", "Loading…") : text("刷新", "Refresh") }),
@@ -21383,7 +21383,7 @@ const OptimizationView = () => {
       /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "optimization-metrics", children: metrics.map(([label, value, tone]) => /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: `optimization-metric ${tone}`, children: [/* @__PURE__ */ jsxRuntimeExports.jsx("span", { children: label }), /* @__PURE__ */ jsxRuntimeExports.jsx("strong", { children: value })] }, label)) }),
       reconciliation?.aggregates > 0 && /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "muted-text", children: text(`已包含 ${formatTokens(reconciliation.requests)} 次 DeepSeek 官网核对补录、${formatTokens(reconciliation.totalTokens)} Token；缓存细分仅来自本机仍保留的原始响应。`, `Includes a DeepSeek-console reconciliation of ${formatTokens(reconciliation.requests)} requests and ${formatTokens(reconciliation.totalTokens)} tokens; cache details use only locally retained provider responses.`) }),
       /* @__PURE__ */ jsxRuntimeExports.jsxs("section", { className: "optimization-capabilities", children: [
-        /* @__PURE__ */ jsxRuntimeExports.jsx("h4", { children: text("V7.8.1 适配状态", "V7.8.1 integration status") }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx("h4", { children: text("V7.8.2 适配状态", "V7.8.2 integration status") }),
         /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "optimization-capability-grid", children: capabilities.map(([title, detail]) => /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "optimization-capability", children: [/* @__PURE__ */ jsxRuntimeExports.jsx("strong", { children: title }), /* @__PURE__ */ jsxRuntimeExports.jsx("span", { children: detail })] }, title)) })
       ] }),
       /* @__PURE__ */ jsxRuntimeExports.jsxs("section", { className: "optimization-section", children: [

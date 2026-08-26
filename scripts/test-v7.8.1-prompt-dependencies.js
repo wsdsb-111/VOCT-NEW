@@ -14,8 +14,8 @@ const { createLetterPromptBuilder } = require(path.join(mainDir, "prompts", "let
 
 const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "votc-v781-prompt-"));
 try {
-  const defaultUserdataDir = path.join(tempDir, "default_userdata");
-  const defaultHelpersDir = path.join(defaultUserdataDir, "prompts", "helpers");
+  const defaultPromptsDir = path.join(tempDir, "default_userdata", "prompts");
+  const defaultHelpersDir = path.join(defaultPromptsDir, "helpers");
   const userHelpersDir = path.join(tempDir, "user_helpers");
   fs.mkdirSync(defaultHelpersDir, { recursive: true });
   fs.mkdirSync(userHelpersDir, { recursive: true });
@@ -26,7 +26,7 @@ try {
     fs,
     path,
     promptsHelpersDir: userHelpersDir,
-    defaultPromptsDir: defaultUserdataDir,
+    defaultPromptsDir,
     PromptScriptSandbox: { executeHelper() { helperExecutions += 1; } }
   });
   const engine = new TemplateEngine();
