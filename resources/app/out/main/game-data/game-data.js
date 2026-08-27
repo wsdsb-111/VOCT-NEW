@@ -1,5 +1,8 @@
 "use strict";
 
+const { inferGenderFromPronoun } = require("./character");
+const { MEMORY_ENGINE_VERSION } = require("../version");
+
 function createGameData({ fs, path, memorySystem, memoryEngine, summariesDir, getHistoricalReferenceByYear }) {
   const fs$1 = fs;
   const VOTC_SUMMARIES_DIR = summariesDir;

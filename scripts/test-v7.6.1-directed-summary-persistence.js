@@ -6,12 +6,15 @@ const os = require("os");
 const path = require("path");
 
 const root = path.resolve(__dirname, "..");
+const memorySystem = require(path.join(root, "resources", "app", "out", "main", "memory-system"));
 const {
   buildDirectedParticipantPairs,
   getCharacterPersonalName,
   getCharacterStorageDirectoryName,
   verifyDirectedSummaryPersistence
-} = require(path.join(root, "resources", "app", "out", "main", "memory-system"));
+} = memorySystem;
+const { createGameData } = require(path.join(root, "resources", "app", "out", "main", "game-data", "game-data"));
+const { MEMORY_ENGINE_VERSION } = require(path.join(root, "resources", "app", "out", "main", "version"));
 
 function summaryPath(summaryRoot, owner, counterpart) {
   return path.join(
@@ -72,6 +75,46 @@ try {
   });
   assert.strictEqual(incomplete.success, false, "a missing owner file must fail finalization instead of reporting success");
   assert.deepStrictEqual(incomplete.missingPairs.map((pair) => [pair.ownerId, pair.counterpartId]), [[3, 1]]);
+
+  const runtimeSummaryRoot = path.join(temporaryRoot, "runtime-persistence");
+  const GameData = createGameData({
+    fs,
+    path,
+    memorySystem,
+    memoryEngine: {},
+    summariesDir: runtimeSummaryRoot,
+    getHistoricalReferenceByYear: () => ({ period: "测试", context: "", notableEvents: [], notableFigures: [] })
+  });
+  const runtimeGameData = new GameData(["1", "玩家", "2", "甲", "1000年1月1日", "scene_type_court", "测试地", "玩家", "100"]);
+  const runtimeParticipants = [
+    { id: 1, firstName: "玩家", shortName: "玩家", fullName: "玩家" },
+    { id: 2, firstName: "甲", shortName: "甲", fullName: "甲" },
+    { id: 3, firstName: "乙", shortName: "乙", fullName: "乙" }
+  ];
+  runtimeGameData.characters = new Map(runtimeParticipants.map((participant) => [participant.id, participant]));
+  const runtimeFinalizationId = "fin_v782_runtime_persistence";
+  const runtimeProjections = new Map(buildDirectedParticipantPairs(runtimeParticipants).map(({ owner, counterpart }) => {
+    const key = `${owner.id}->${counterpart.id}`;
+    return [key, {
+      ownerId: owner.id,
+      counterpartId: counterpart.id,
+      content: `投影 ${key}`,
+      memoryIds: [],
+      summarySegmentIds: [],
+      projectionHash: `hash_${key}`
+    }];
+  }));
+  const runtimeResult = runtimeGameData.saveCharactersSummaries("回退摘要", runtimeParticipants.map((participant) => participant.id), {
+    participantProfiles: runtimeParticipants,
+    finalizationId: runtimeFinalizationId,
+    directedSummaries: runtimeProjections
+  });
+  assert.deepStrictEqual(runtimeResult, { success: true, participantCount: 3, directedFilesWritten: 6 }, "生产 GameData 路径必须完成三人有向摘要落盘");
+  for (const { owner, counterpart } of buildDirectedParticipantPairs(runtimeParticipants)) {
+    const records = JSON.parse(fs.readFileSync(summaryPath(runtimeSummaryRoot, owner, counterpart), "utf8"));
+    assert.strictEqual(records[0].finalizationId, runtimeFinalizationId);
+    assert.strictEqual(records[0].engineVersion, MEMORY_ENGINE_VERSION, "人物目录投影必须写入当前 Memory Engine 版本");
+  }
 } finally {
   fs.rmSync(temporaryRoot, { recursive: true, force: true });
 }

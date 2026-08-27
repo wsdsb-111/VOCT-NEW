@@ -72,6 +72,7 @@ const releaseChecks = [
   { group: "v7.8-main-modularization", script: "test-v7.8-main-modularization.js" },
   { group: "v7.8.1-prompt-dependencies", script: "test-v7.8.1-prompt-dependencies.js" },
   { group: "v7.8.2-final-v7-hotfix", script: "test-v7.8.2-final-v7-hotfix.js" },
+  { group: "v7.8.2-letter-delivery", script: "test-v7.8.2-letter-delivery.js" },
   { group: "full-prompt-smoke", script: "test-v7.8.2-full-prompt-smoke.js" },
   { group: "usage-analytics-retention", script: "test-usage-analytics-retention.js" },
   { group: "usage-analytics-reconciliation", script: "test-usage-analytics-reconciliation.js" },

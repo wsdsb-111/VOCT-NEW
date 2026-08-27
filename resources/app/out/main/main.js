@@ -1082,7 +1082,7 @@ const letterPromptBuilder = new LetterPromptBuilder();
 const { createLetterManager } = require("./letters/letter-manager");
 const { LetterManager, LetterResponseStatus, LetterSummaryStatus } = createLetterManager({
   settingsRepository, fs: fs$1, path, TailFile, readline: readline$1, parseLog,
-  letterPromptBuilder, llmManager, PromptBuilder, TokenCounter, memoryEngine
+  letterPromptBuilder, llmManager, PromptBuilder, TokenCounter, memoryEngine, dataDir: VOTC_DATA_DIR
 });
 const letterManager = new LetterManager();
 initLogger();

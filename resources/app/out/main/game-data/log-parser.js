@@ -2,6 +2,7 @@
 
 const fs = require("fs");
 const readline = require("readline");
+const { inferGenderFromPronoun } = require("./character");
 
 function createLogParser({ GameData, Character }) {
   async function parseLog(debugLogPath) {

@@ -1,6 +1,6 @@
 "use strict";
 
-function createLetterManager({ settingsRepository, fs, path, TailFile, readline, parseLog, letterPromptBuilder, llmManager, PromptBuilder, TokenCounter, memoryEngine }) {
+function createLetterManager({ settingsRepository, fs, path, TailFile, readline, parseLog, letterPromptBuilder, llmManager, PromptBuilder, TokenCounter, memoryEngine, dataDir }) {
   const fs$1 = fs;
   const readline$1 = readline;
   var LetterResponseStatus = /* @__PURE__ */ ((LetterResponseStatus2) => {
@@ -27,10 +27,11 @@ function createLetterManager({ settingsRepository, fs, path, TailFile, readline,
       this.currentTotalDays = 0;
       this.storedLetters = /* @__PURE__ */ new Map();
       this.letterStatuses = /* @__PURE__ */ new Map();
+      this.deliveryInProgress = /* @__PURE__ */ new Set();
       this.tailFile = null;
       this.readline = null;
-      this.lastCleanTime = 0;
-      this.CLEAN_INTERVAL_MS = 3e5;
+      this.pendingLettersFile = dataDir ? path.join(dataDir, "pending-letters.json") : null;
+      this.loadPendingLetters();
       const ck3UserPath = settingsRepository.getCK3UserFolderPath();
       if (ck3UserPath) {
         this.startLogTailing();
@@ -62,7 +63,7 @@ function createLetterManager({ settingsRepository, fs, path, TailFile, readline,
         console.log(`Started tailing debug log: ${debugLogPath}`);
         this.readline = readline$1.createInterface({ input: this.tailFile });
         this.readline.on("line", (line) => {
-          this.processLogLine(line, debugLogPath);
+          this.processLogLine(line);
         });
       } catch (error) {
         console.error("Failed to start log tailing:", error);
@@ -71,18 +72,14 @@ function createLetterManager({ settingsRepository, fs, path, TailFile, readline,
     /**
      * Process a single log line looking for VOTC:DATE
      */
-    processLogLine(line, debugLogPath) {
+    processLogLine(line) {
       const dateRegex = /VOTC:DATE\/;\/(\d+)/;
       const match = line.match(dateRegex);
       if (match) {
         const newTotalDays = Number(match[1]);
-        this.updateCurrentDate(newTotalDays);
+        return this.updateCurrentDate(newTotalDays);
       }
-      const now = Date.now();
-      if (now - this.lastCleanTime >= this.CLEAN_INTERVAL_MS) {
-        this.lastCleanTime = now;
-        cleanLogFile(debugLogPath);
-      }
+      return Promise.resolve();
     }
     /**
      * Update current date and handle time travel detection
@@ -97,7 +94,7 @@ function createLetterManager({ settingsRepository, fs, path, TailFile, readline,
         this.removeLettersAfterDate(oldTotalDays);
       }
       this.currentTotalDays = newTotalDays;
-      this.checkAndDeliverLetters();
+      return this.checkAndDeliverLetters();
     }
     /**
      * Remove letters that were generated after a certain date (time travel cleanup)
@@ -113,16 +110,27 @@ function createLetterManager({ settingsRepository, fs, path, TailFile, readline,
         console.log(`Removing letter ${letterId} due to time travel`);
         this.storedLetters.delete(letterId);
       }
+      if (lettersToRemove.length > 0) {
+        this.savePendingLetters();
+      }
     }
     /**
      * Check stored letters and deliver any that are ready
      */
-    checkAndDeliverLetters() {
+    async checkAndDeliverLetters() {
       for (const [letterId, storedLetter] of this.storedLetters.entries()) {
-        if (this.currentTotalDays >= storedLetter.expectedDeliveryDay) {
+        if (this.currentTotalDays >= storedLetter.expectedDeliveryDay && !this.deliveryInProgress.has(letterId)) {
           console.log(`Delivering letter ${letterId} (current: ${this.currentTotalDays}, expected: ${storedLetter.expectedDeliveryDay})`);
-          this.deliverLetter(storedLetter);
-          this.storedLetters.delete(letterId);
+          this.deliveryInProgress.add(letterId);
+          try {
+            const delivered = await this.deliverLetter(storedLetter);
+            if (delivered) {
+              this.storedLetters.delete(letterId);
+              this.savePendingLetters();
+            }
+          } finally {
+            this.deliveryInProgress.delete(letterId);
+          }
         }
       }
     }
@@ -130,7 +138,7 @@ function createLetterManager({ settingsRepository, fs, path, TailFile, readline,
      * Deliver a letter by writing the effect file and updating localization
      */
     async deliverLetter(storedLetter) {
-      await this.writeLetterEffect(storedLetter.reply, storedLetter.letter);
+      return this.writeLetterEffect(storedLetter.reply, storedLetter.letter);
     }
     /**
      * Process a new letter: generate response immediately but store it for delayed delivery
@@ -147,6 +155,10 @@ function createLetterManager({ settingsRepository, fs, path, TailFile, readline,
       const context = await this.loadLatestGameDataWithLetter();
       if (!context) return null;
       const { gameData, letter } = context;
+      const letterTotalDays = Number(letter.totalDays);
+      if (Number.isFinite(letterTotalDays)) {
+        this.currentTotalDays = Math.max(this.currentTotalDays, letterTotalDays);
+      }
       const characterName = gameData.getAi()?.fullName || "Unknown";
       this.createLetterStatus(letter, characterName);
       this.updateLetterStatus(letter.letterId, { responseStatus: LetterResponseStatus.GENERATING });
@@ -178,7 +190,8 @@ function createLetterManager({ settingsRepository, fs, path, TailFile, readline,
       const storedLetter = {
         letter,
         reply,
-        expectedDeliveryDay
+        expectedDeliveryDay,
+        characterName
       };
       this.storedLetters.set(letter.letterId, storedLetter);
       this.updateLetterStatus(letter.letterId, {
@@ -187,11 +200,15 @@ function createLetterManager({ settingsRepository, fs, path, TailFile, readline,
         daysUntilDelivery: expectedDeliveryDay - this.currentTotalDays,
         isLate: this.currentTotalDays > expectedDeliveryDay
       });
+      this.savePendingLetters();
       console.log(`Letter ${letter.letterId} generated and stored. Will deliver on day ${expectedDeliveryDay} (current: ${this.currentTotalDays})`);
       if (this.currentTotalDays >= expectedDeliveryDay) {
         console.log(`Letter ${letter.letterId} is ready for immediate delivery`);
-        await this.deliverLetter(storedLetter);
-        this.storedLetters.delete(letter.letterId);
+        const delivered = await this.deliverLetter(storedLetter);
+        if (delivered) {
+          this.storedLetters.delete(letter.letterId);
+          this.savePendingLetters();
+        }
       }
       return reply;
     }
@@ -305,7 +322,7 @@ function createLetterManager({ settingsRepository, fs, path, TailFile, readline,
           responseStatus: LetterResponseStatus.SEND_FAILED,
           responseError: "CK3 user folder not configured"
         });
-        return;
+        return false;
       }
       const runFolder = path.join(ck3Folder, "run");
       console.log(`LetterManager.writeLetterEffect: Run folder path: ${runFolder}`);
@@ -319,7 +336,7 @@ function createLetterManager({ settingsRepository, fs, path, TailFile, readline,
           responseStatus: LetterResponseStatus.SEND_FAILED,
           responseError: errorMessage
         });
-        return;
+        return false;
       }
       const letterFilePath = path.join(runFolder, `letters.txt`);
       console.log(`LetterManager.writeLetterEffect: Letter file path: ${letterFilePath}`);
@@ -350,6 +367,7 @@ function createLetterManager({ settingsRepository, fs, path, TailFile, readline,
           responseStatus: LetterResponseStatus.SENT,
           responseError: null
         });
+        return true;
       } catch (error) {
         const errorMessage = `Failed to write letter effect: ${error instanceof Error ? error.message : "Unknown error"}`;
         console.error(`LetterManager.writeLetterEffect: ${errorMessage}`);
@@ -357,6 +375,47 @@ function createLetterManager({ settingsRepository, fs, path, TailFile, readline,
           responseStatus: LetterResponseStatus.SEND_FAILED,
           responseError: errorMessage
         });
+        return false;
+      }
+    }
+    loadPendingLetters() {
+      if (!this.pendingLettersFile || !fs$1.existsSync(this.pendingLettersFile)) return;
+      try {
+        const state = JSON.parse(fs$1.readFileSync(this.pendingLettersFile, "utf8"));
+        for (const storedLetter of Array.isArray(state?.letters) ? state.letters : []) {
+          const letterId = storedLetter?.letter?.letterId;
+          if (!letterId || typeof storedLetter.reply !== "string" || !Number.isFinite(storedLetter.expectedDeliveryDay)) continue;
+          this.storedLetters.set(letterId, storedLetter);
+          if (storedLetter.status) {
+            this.letterStatuses.set(letterId, storedLetter.status);
+          } else {
+            this.createLetterStatus(storedLetter.letter, storedLetter.characterName || "Unknown");
+            this.updateLetterStatus(letterId, {
+              responseContent: storedLetter.reply,
+              responseStatus: LetterResponseStatus.PENDING_DELIVERY,
+              summaryStatus: LetterSummaryStatus.SAVED,
+              expectedDeliveryDay: storedLetter.expectedDeliveryDay
+            });
+          }
+        }
+        if (this.storedLetters.size > 0) {
+          console.log(`LetterManager: Restored ${this.storedLetters.size} pending letter(s)`);
+        }
+      } catch (error) {
+        console.error("LetterManager: Failed to load pending letters:", error);
+      }
+    }
+    savePendingLetters() {
+      if (!this.pendingLettersFile) return;
+      try {
+        fs$1.mkdirSync(path.dirname(this.pendingLettersFile), { recursive: true });
+        const letters = Array.from(this.storedLetters.entries()).map(([letterId, storedLetter]) => ({
+          ...storedLetter,
+          status: this.letterStatuses.get(letterId) || null
+        }));
+        fs$1.writeFileSync(this.pendingLettersFile, JSON.stringify({ version: 1, letters }, null, 2), "utf8");
+      } catch (error) {
+        console.error("LetterManager: Failed to save pending letters:", error);
       }
     }
     /**

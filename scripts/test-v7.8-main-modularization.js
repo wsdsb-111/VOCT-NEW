@@ -97,6 +97,12 @@ assert.strictEqual(character.id, 2);
 assert.strictEqual(character.gender, "female");
 assert.strictEqual(character.age, 24);
 
+const profileGameData = new GameData(["1", "玩家", "2", "李师师", "976年5月3日", "scene_type_court", "开封", "玩家", "100"]);
+const profileCharacter = new Character(rawCharacter);
+profileCharacter.children.push({ id: 4, name: "女儿", sheHe: "她", birthDateTotalDays: 50, traits: [] });
+profileGameData.characters.set(profileCharacter.id, profileCharacter);
+assert.strictEqual(profileGameData.getMentionableCharacterProfiles().get(4).gender, "female", "GameData 必须能为亲属资料解析代词性别");
+
 const { createLogParser } = require(path.join(mainDir, "game-data", "log-parser"));
 const parseLog = createLogParser({ GameData, Character });
 const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "votc-v78-parser-"));
@@ -104,12 +110,16 @@ try {
   const fixturePath = path.join(tempDir, "debug.log");
   const init = ["VOTC:IN", "init", "1", "玩家", "2", "李师师", "976年5月3日", "scene_type_court", "开封", "玩家", "100"].join("/;/");
   const characterLine = ["VOTC:IN", "character", ...rawCharacter].join("/;/");
-  fs.writeFileSync(fixturePath, `${init}\n${characterLine}\n`, "utf8");
+  const childLine = ["VOTC:IN", "kids", "2", "4", "女儿", "她", "50", "975年1月1日"].join("/;/");
+  const siblingLine = ["VOTC:IN", "siblings", "2", "5", "兄长", "他", "-100", "974年1月1日"].join("/;/");
+  fs.writeFileSync(fixturePath, `${init}\n${characterLine}\n${childLine}\n${siblingLine}\n`, "utf8");
   parseLog(fixturePath).then((parsed) => {
     assert.strictEqual(parsed.playerID, 1);
     assert.strictEqual(parsed.aiID, 2);
     assert.strictEqual(parsed.year, 976);
     assert.strictEqual(parsed.characters.get(2).fullName, "东京名伎李师师");
+    assert.strictEqual(parsed.characters.get(2).children[0].gender, "female", "日志解析器必须为子女资料解析代词性别");
+    assert.strictEqual(parsed.characters.get(2).siblings[0].gender, "male", "日志解析器必须为兄弟姐妹资料解析代词性别");
     console.log("VOTC v7.8 main modularization: PASS (composition root, dependency direction, history parity and CK3 parser fixture)");
   }).catch((error) => {
     console.error(error);

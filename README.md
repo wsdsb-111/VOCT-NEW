@@ -145,7 +145,7 @@ V7.8 在进入 V8 前完成主进程第一轮模块化：游戏数据、日志�
 
 V7.8.1 修复模块拆分后首次完整对话/信件 Prompt 构建暴露的 helper 沙箱、描述缓存切分和 verbose logger 依赖缺失，并把 v7.7.2 的人物在场状态扩展为多段窗口。暂离人物不进入回应队列与动作参与者集合；返回后只恢复其缺席前记忆与返回后的新内容。
 
-V7.8.2 完成 V7 最终收尾：TemplateEngine 的默认 helper 路径与真实打包目录对齐，`Character.removeTrait()` 会实际保存过滤结果；发布测试新增真实 `default.hbs` / `letter.hbs`、默认 helpers、脚本沙箱和两类 PromptBuilder 的完整链路冒烟，并补齐唯一 NPC 暂离及多段缺席终局投影边界。
+V7.8.2 完成 V7 最终收尾：TemplateEngine 的默认 helper 路径与真实打包目录对齐，`Character.removeTrait()` 会实际保存过滤结果；发布测试新增真实 `default.hbs` / `letter.hbs`、默认 helpers、脚本沙箱和两类 PromptBuilder 的完整链路冒烟，并补齐唯一 NPC 暂离及多段缺席终局投影边界。P0 热修进一步补齐 `inferGenderFromPronoun` 在 GameData 与日志解析模块中的导入，并补齐人物目录投影写入所需的 `MEMORY_ENGINE_VERSION`，避免对话/信件初始化失败或终局已消耗 Token 却只留下 recovery、未写入人物摘要目录。信件送达链路同步修复模块拆分后失效的日期日志清理调用；等待旅行天数的回信会落盘保存，重启后继续等待，且 CK3 指令文件写入失败时不会提前丢弃。
 
 V7.7 在 V7.6 健康化基础上分阶段拆分主进程：第一阶段将六种模型 Provider 迁入 `providers/index.js`、92 个既有 IPC 注册迁入 `ipc/register-ipc.js`；第二阶段把 `ProviderRegistry`、`TokenCounter` 和 `LLMManager` 迁入 `provider-service.js`，通过显式依赖继续读取用户分别选择的对话、摘要和动作模型。`main.js` 由约 9477 行降至约 6612 行。动作语义同时补齐“共度春宵/鱼水之欢已发生”和“从今以后成为情人/认定灵魂伴侣”等自然完成态表达，并继续排除请求、计划、假设、回忆与失败尝试。当前仓库仍是可运行打包产物，没有能够重新生成这些文件的完整 `src` 工程，因此本阶段不伪造源码构建链。
 
@@ -155,7 +155,7 @@ V7.7 在 V7.6 健康化基础上分阶段拆分主进程：第一阶段将六种
 node scripts\test-release.js
 ```
 
-清单会覆盖全部 `test-*.js`：直接发布组、动作聚合组和 follow-up 聚合组均必须登记。V7.8.2 发布门禁为 41 组、覆盖 74 个测试文件，并维护 36 条动作/非动作/摘要金标样例，作为 Provider 切换或模型升级时的轻量人工语义复核基线。
+清单会覆盖全部 `test-*.js`：直接发布组、动作聚合组和 follow-up 聚合组均必须登记。V7.8.2 发布门禁为 42 组、覆盖 75 个测试文件，并维护 36 条动作/非动作/摘要金标样例，作为 Provider 切换或模型升级时的轻量人工语义复核基线。
 
 ## 版本信息
 
