@@ -1,5 +1,13 @@
 "use strict";
 
+const VOTC_FORK_IDENTITY = Object.freeze({
+  fork: true,
+  product: "VOTC-NEW",
+  upstream: "Voices-of-the-Court/VOTC",
+  repository: "wsdsb-111/VOCT-NEW",
+  autoUpdateEnabled: false
+});
+
 function createAppUpdater({ electronUpdater, log, settingsRepository, electron, updaterTranslations }) {
   class AppUpdater {
     constructor() {
@@ -14,6 +22,10 @@ function createAppUpdater({ electronUpdater, log, settingsRepository, electron, 
       this.mainWindow = window;
     }
     checkForUpdates() {
+      if (!VOTC_FORK_IDENTITY.autoUpdateEnabled) {
+        log.info("Automatic updates are disabled for the VOTC-NEW fork.");
+        return null;
+      }
       log.info("Checking for updates...");
       electronUpdater.autoUpdater.allowPrerelease = settingsRepository.getAllowPrerelease();
       log.info(`Prerelease updates ${electronUpdater.autoUpdater.allowPrerelease ? "enabled" : "disabled"}`);
@@ -128,7 +140,7 @@ function createAppUpdater({ electronUpdater, log, settingsRepository, electron, 
      * Get the changelog URL for a given version
      */
     getChangelogUrl(version) {
-      return `https://github.com/Voices-of-the-Court/VOTC/releases/tag/v${version}`;
+      return `https://github.com/wsdsb-111/VOCT-NEW/releases/tag/v${version}`;
     }
     async showUpdateDownloadedDialog() {
       if (!this.mainWindow || this.mainWindow.isDestroyed()) return;
@@ -156,4 +168,4 @@ function createAppUpdater({ electronUpdater, log, settingsRepository, electron, 
   return AppUpdater;
 }
 
-module.exports = { createAppUpdater };
+module.exports = { createAppUpdater, VOTC_FORK_IDENTITY };

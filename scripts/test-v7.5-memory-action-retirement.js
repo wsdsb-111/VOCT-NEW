@@ -85,8 +85,8 @@ try {
   assert(actionPromptSource.includes("CURRENT_COMPLETED_ACTION or NON_ACTION"));
   assert(actionPromptSource.includes('If NON_ACTION, return {"actions":[]} immediately'));
   assert(actionPromptSource.includes("Never infer an unstated result or relationship transition"));
-  assert(rendererRuntime.includes("Memory Engine 2.5 · V7.8.3"));
-  assert(rendererRuntime.includes("V7.8.3 适配状态"));
+  assert(rendererRuntime.includes("Memory Engine 2.5 · V7.9"));
+  assert(rendererRuntime.includes("V7.9 适配状态"));
 
   console.log("VOTC v7.5 memory/action retirement: PASS (session snapshots, unified summaries, two-stage semantics)");
 } finally {

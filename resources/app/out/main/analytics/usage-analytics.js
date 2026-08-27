@@ -56,6 +56,12 @@ function createUsageAnalytics({ fs, dataDir, analyticsFile, retention, createPro
         stage: metadata?.stage || null,
         outcome: metadata?.outcome || null,
         invocationOrigin: metadata?.invocationOrigin || null,
+        actionSystemMode: metadata?.actionSystemMode || null,
+        previousActionSystemMode: metadata?.previousActionSystemMode || null,
+        metric: metadata?.metric || null,
+        actionStage: metadata?.actionStage || null,
+        category: metadata?.category || metadata?.actionCategory || null,
+        confidence: Number.isFinite(Number(metadata?.confidence)) ? Number(metadata.confidence) : null,
         turnEpoch: Number.isFinite(Number(metadata?.turnEpoch)) ? Number(metadata.turnEpoch) : null,
         memoryOutcome: metadata?.memoryOutcome || null,
         turnRecallReason: metadata?.turnRecallReason || null,
@@ -133,10 +139,41 @@ function createUsageAnalytics({ fs, dataDir, analyticsFile, retention, createPro
         outcomes: {}
       };
       const actionPipeline = { candidateEvents: 0, semanticResolved: 0, semanticRejected: 0, localActions: 0, providerCalls: 0, executedActions: 0, modelExecutedActions: 0, emptyProviderResponses: 0 };
+      const actionEngine3 = {
+        currentMode: "balanced",
+        modeTokenUsage: {
+          balanced: create(),
+          performance: create(),
+          precision: create()
+        },
+        localEventCount: 0,
+        pendingCreated: 0,
+        pendingConfirmed: 0,
+        pendingRejected: 0,
+        pendingExpired: 0,
+        semanticRescueCalls: 0,
+        semanticRescueMatched: 0,
+        precisionJudgeCalls: 0,
+        precisionJudgeNoAction: 0,
+        precisionJudgeAction: 0,
+        stageBProviderCalls: 0,
+        localExecuted: 0,
+        providerExecuted: 0,
+        validationRejected: 0,
+        approvalPending: 0,
+        executionFailed: 0,
+        actionApiCalls: 0,
+        chatMessages: 0
+      };
       const memoryRecall = { requests: 0, intentTriggered: 0, selected: 0, empty: 0, cacheHits: 0, skippedContextPressure: 0, tokens: 0, candidateCount: 0, sessionTopicAnchorLocked: 0, reasons: {} };
       for (const entry of entries) {
         const isUsageRecord = usageAnalyticsRetention.isUsageEntry(entry);
         const isActionOutcome = entry.requestType === "action_outcome";
+        if (["balanced", "performance", "precision"].includes(entry.actionSystemMode)) actionEngine3.currentMode = entry.actionSystemMode;
+        if (entry.requestType === "action_mode_metric" && Object.prototype.hasOwnProperty.call(actionEngine3, entry.metric)) actionEngine3[entry.metric]++;
+        if (isUsageRecord && entry.requestType === "action") actionEngine3.actionApiCalls++;
+        if (isUsageRecord && entry.requestType === "action" && actionEngine3.modeTokenUsage[entry.actionSystemMode]) add(actionEngine3.modeTokenUsage[entry.actionSystemMode], entry);
+        if (isUsageRecord && entry.requestType === "chat") actionEngine3.chatMessages++;
         if (entry.requestType === "action_decision_trace" && entry.stage === "candidate" && entry.outcome === "pass") actionPipeline.candidateEvents++;
         if (entry.requestType === "action_decision_trace" && entry.stage === "semantic" && entry.outcome === "resolved") actionPipeline.semanticResolved++;
         if (entry.requestType === "action_decision_trace" && entry.stage === "semantic" && entry.outcome === "rejected") actionPipeline.semanticRejected++;
@@ -248,6 +285,12 @@ function createUsageAnalytics({ fs, dataDir, analyticsFile, retention, createPro
         actionPipeline: {
           ...actionPipeline,
           providerEfficiency: actionPipeline.providerCalls > 0 ? actionPipeline.modelExecutedActions / actionPipeline.providerCalls : null
+        },
+        actionEngine3: {
+          ...actionEngine3,
+          modeTokenUsage: Object.fromEntries(Object.entries(actionEngine3.modeTokenUsage).map(([mode, usage]) => [mode, finish(usage)])),
+          recognitionEfficiency: actionEngine3.actionApiCalls > 0 ? (actionEngine3.localExecuted + actionEngine3.providerExecuted) / actionEngine3.actionApiCalls : null,
+          actionApiCallsPer100ChatMessages: actionEngine3.chatMessages > 0 ? actionEngine3.actionApiCalls * 100 / actionEngine3.chatMessages : null
         },
         memoryRecall: {
           ...memoryRecall,

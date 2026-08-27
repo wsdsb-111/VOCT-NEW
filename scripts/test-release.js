@@ -15,4 +15,4 @@ for (const check of checks) {
   }
 }
 
-console.log(`\nVOTC v7.8.3 Release Regression: PASS (${checks.length} groups)`);
+console.log(`\nVOTC v7.9 Release Regression: PASS (${checks.length} groups)`);

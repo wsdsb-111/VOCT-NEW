@@ -27,6 +27,9 @@ const actionSchema = require("./action-schema");
 const { ActionRegistry } = require("./action-registry");
 const { createConversationRuntime } = require("./conversation-runtime");
 const { ActionPromptBuilder } = require("./action-prompt-builder");
+const actionModes = require("./modes");
+const interaction = require("./interaction");
+const semantic = require("./semantic");
 
 module.exports = {
   ConversationReferenceContext,
@@ -56,5 +59,8 @@ module.exports = {
   actionSchema,
   ActionRegistry,
   createConversationRuntime,
-  ActionPromptBuilder
+  ActionPromptBuilder,
+  actionModes,
+  interaction,
+  semantic
 };

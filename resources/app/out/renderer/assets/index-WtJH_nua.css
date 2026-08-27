@@ -3881,6 +3881,29 @@ button:active {
 .optimization-table-wrap tr:last-child td {
   border-bottom: none;
 }
+.optimization-mode-toggle {
+  padding: 0;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  background: transparent;
+  border: 0;
+  cursor: pointer;
+}
+.optimization-mode-toggle:hover {
+  color: #EFB16A;
+}
+.optimization-mode-toggle-icon {
+  display: inline-block;
+  width: 1em;
+  color: #EFB16A;
+  font-size: 0.82em;
+}
+.action-mode-token-label {
+  display: inline-block;
+  padding-left: 1.45em;
+  color: #c9b79f;
+}
 .optimization-error,
 .optimization-loading,
 .optimization-empty {
@@ -5794,6 +5817,75 @@ select,
 
 :root[data-votc-theme="ink"] .summaries-manager .summary-item .summary-content {
   color: #28302b;
+}
+
+/* Action Engine 3.0 mode switch belongs to the Actions page. */
+.actions-view .action-mode-section {
+  margin-bottom: 14px;
+}
+
+.actions-view .action-mode-section h4 {
+  margin-bottom: 6px;
+}
+
+.actions-view .action-mode-controls {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+  margin-top: 12px;
+}
+
+.actions-view .action-mode-controls button {
+  min-height: 48px;
+  padding: 8px 12px;
+  color: #ddd;
+  border: 1px solid #7e6540;
+  background: linear-gradient(180deg, rgba(65, 59, 58, 0.94), rgba(20, 18, 19, 0.96));
+  cursor: pointer;
+}
+
+.actions-view .action-mode-controls button:hover:not(.active) {
+  border-color: #d3a65d;
+  background: linear-gradient(180deg, rgba(91, 66, 58, 0.96), rgba(32, 23, 25, 0.98));
+}
+
+.actions-view .action-mode-controls button.active {
+  color: #ffe6b4;
+  border-color: #d4aa61;
+  background: linear-gradient(180deg, #80333d, #4b1d24 48%, #1e1114 52%, #5a232b);
+  box-shadow: inset 0 1px #a9686d, 0 0 0 1px rgba(211, 166, 93, 0.28), 0 3px 9px rgba(0, 0, 0, 0.45);
+}
+
+:root[data-votc-theme="parchment"] .actions-view .action-mode-controls button {
+  color: #3b2518;
+  border-color: #9a6b36;
+  background: linear-gradient(180deg, #f3dfb2, #d0a261);
+}
+
+:root[data-votc-theme="parchment"] .actions-view .action-mode-controls button.active {
+  color: #fff0d0;
+  border-color: #68221f;
+  background: radial-gradient(circle at 38% 30%, #b34b42, #711f1e 70%);
+}
+
+:root[data-votc-theme="ink"] .actions-view .action-mode-controls button {
+  color: #252b27;
+  border-color: #555d57;
+  background: rgba(246, 242, 229, 0.76);
+  box-shadow: 2px 2px 0 rgba(44, 50, 46, 0.18);
+}
+
+:root[data-votc-theme="ink"] .actions-view .action-mode-controls button.active {
+  color: #fff3e4;
+  border-color: #79372d;
+  background: #96483a;
+  box-shadow: inset 0 0 0 2px rgba(255, 223, 201, 0.18), 2px 2px 0 rgba(75, 33, 27, 0.25);
+}
+
+@media (max-width: 760px) {
+  .actions-view .action-mode-controls {
+    grid-template-columns: 1fr;
+  }
 }
 
 /* All themes: summary character names use one high-contrast silver treatment. */

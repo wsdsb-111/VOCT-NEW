@@ -1,6 +1,6 @@
-owner: Voices-of-the-Court
-repo: VOTC
+owner: wsdsb-111
+repo: VOCT-NEW
 provider: github
 private: false
 releaseType: release
-updaterCacheDirName: voices-of-the-court-updater
+updaterCacheDirName: votc-new-updater

@@ -12,8 +12,11 @@ const actionRuleRegistry = require("./action-rule-registry");
 const availabilityService = require("./availability-service");
 const deterministicInvocation = require("./deterministic-invocation");
 const invocationValidator = require("./invocation-validator");
-const { createExecutionResult } = require("./action-types");
+const actionTypes = require("./action-types");
 const actionExecutor = require("./action-executor");
+const actionModes = require("./modes");
+const interaction = require("./interaction");
+const semantic = require("./semantic");
 
 const actionSystem = {
   candidateGate,
@@ -28,8 +31,11 @@ const actionSystem = {
   availabilityService,
   deterministicInvocation,
   invocationValidator,
-  createExecutionResult,
-  actionExecutor
+  ...actionTypes,
+  actionExecutor,
+  actionModes,
+  interaction,
+  semantic
 };
 
 let actionRegistry = null;
@@ -173,6 +179,26 @@ class ActionEngine {
   static resolveEventParticipants(input) {
     const { event, message, speaker, gameData, actionDefinition, actionId, referenceContext, primaryAddresseeId } = input;
     const system = actionSystem;
+    if (event?.pendingBinding) {
+      const sourceCharacter = gameData.characters.get(Number(event.pendingBinding.sourceCharacterId)) || null;
+      const targetCharacter = gameData.characters.get(Number(event.pendingBinding.targetCharacterId)) || null;
+      if (!sourceCharacter || !targetCharacter) return { mode: "unresolved", reason: "pending_participant_unavailable", sourceCharacter, targetCharacter, binding: null };
+      const binding = system.createParticipantBinding({
+        messageId: message?.id,
+        eventId: event.eventId,
+        traceId: event.traceId,
+        actionId,
+        speakerCharacterId: speaker?.id,
+        actorCharacterId: sourceCharacter.id,
+        patientCharacterId: targetCharacter.id,
+        sourceCharacterId: sourceCharacter.id,
+        targetCharacterId: targetCharacter.id,
+        references: [],
+        evidence: event.evidence,
+        resolutionBasis: ["pending_intent_binding"]
+      });
+      return { mode: "resolved", reason: "pending_intent_binding", sourceCharacter, targetCharacter, binding };
+    }
     const references = system.ReferenceResolver.resolveEventReferences({
       message,
       event,
@@ -253,6 +279,140 @@ class ActionEngine {
       details: traceDetails
     });
   }
+  static getModeState(conv) {
+    const configuredMode = settingsRepository?.getActionSystemMode?.() || "balanced";
+    const state = actionSystem.actionModes.syncConversationMode(conv, configuredMode);
+    if (!conv.actionSystemModeAnalyticsRecorded) {
+      usageAnalytics.record({ requestType: "action_mode_state", actionSystemMode: state.mode, turnEpoch: conv.turnEpoch ?? null }, null);
+      conv.actionSystemModeAnalyticsRecorded = true;
+    }
+    if (state.changed) {
+      usageAnalytics.record({ requestType: "action_mode_changed", actionSystemMode: state.mode, previousActionSystemMode: state.previous, turnEpoch: conv.turnEpoch ?? null }, null);
+    }
+    return { ...state, policy: actionSystem.actionModes.getPolicy(state.mode) };
+  }
+  static recordModeMetric(conv, mode, metric, details = {}) {
+    usageAnalytics.record({ requestType: "action_mode_metric", actionSystemMode: mode, metric, turnEpoch: conv.turnEpoch ?? null, ...details }, null);
+  }
+  static buildPendingActionEvent(intent, message) {
+    const actionId = intent.candidateActionIds[0];
+    return actionSystem.createActionEvent({
+      eventId: `${intent.pendingId}:${message?.id ?? "response"}`,
+      traceId: `action:${intent.pendingId}:${message?.id ?? "response"}`,
+      category: intent.category,
+      evidence: { text: String(message?.content || ""), start: 0, end: String(message?.content || "").length },
+      executionStatus: "executed",
+      resultStatus: "succeeded",
+      sourceClauseIndex: 0,
+      reasons: [intent.category],
+      allowedActionIds: [actionId],
+      semanticEvidence: ["pending_confirmation"],
+      resolutionMode: "resolved",
+      pendingConfirmed: true,
+      pendingId: intent.pendingId,
+      pendingArgs: intent.extractedArgs || {},
+      pendingBinding: { sourceCharacterId: intent.initiatorId, targetCharacterId: intent.targetId },
+      interpretationSource: "pending"
+    });
+  }
+  static interpretPendingInteraction(conv, speaker, message, mode) {
+    const interaction = actionSystem.interaction;
+    if (!(conv.pendingActionIntentStore instanceof interaction.PendingIntentStore)) conv.pendingActionIntentStore = new interaction.PendingIntentStore();
+    const store = conv.pendingActionIntentStore;
+    for (const expired of store.expire(conv.turnEpoch ?? 0)) this.recordModeMetric(conv, mode, "pendingExpired", { pendingId: expired.pendingId, actionId: expired.candidateActionIds[0] });
+    const pendingForSpeaker = store.awaitingForTarget(speaker.id, conv.turnEpoch ?? 0);
+    const response = interaction.acceptanceResolver.resolve(message?.content);
+    if (response.decision !== "none" && pendingForSpeaker.length > 0) {
+      const recentIds = new Set((conv.messages || []).slice(-4).map((entry) => entry?.id));
+      if (pendingForSpeaker.length !== 1 || !recentIds.has(pendingForSpeaker[0].proposalMessageId)) {
+        this.recordModeMetric(conv, mode, "pendingAmbiguous", { candidateCount: pendingForSpeaker.length });
+        return { handled: true, event: null };
+      }
+      const intent = pendingForSpeaker[0];
+      if (response.decision === "reject") {
+        store.reject(intent.pendingId);
+        this.recordModeMetric(conv, mode, "pendingRejected", { pendingId: intent.pendingId, actionId: intent.candidateActionIds[0] });
+        return { handled: true, event: null };
+      }
+      if (response.decision === "uncertain") return { handled: true, event: null };
+      store.confirm(intent.pendingId);
+      this.recordModeMetric(conv, mode, "pendingConfirmed", { pendingId: intent.pendingId, actionId: intent.candidateActionIds[0] });
+      if (intent.confirmationPolicy !== "acceptance_completes") return { handled: true, event: null };
+      return { handled: true, event: this.buildPendingActionEvent(intent, message) };
+    }
+    const characters = typeof conv.getActiveConversationCharacters === "function" ? conv.getActiveConversationCharacters() : Array.from(conv.gameData?.characters?.values?.() || []);
+    const proposal = interaction.proposalDetector.detect({ text: message?.content, speaker, characters, registry: actionRegistry });
+    if (!proposal) return { handled: false, event: null };
+    const intent = store.create({ ...proposal, proposalMessageId: message?.id ?? null, proposalText: String(message?.content || ""), createdTurnEpoch: conv.turnEpoch ?? 0 });
+    this.recordModeMetric(conv, mode, "pendingCreated", { pendingId: intent.pendingId, actionId: intent.candidateActionIds[0] });
+    return { handled: true, event: null };
+  }
+  static buildPrecisionActionEvent(result, message) {
+    const action = actionRegistry.getById(result.actionId);
+    const evidenceText = typeof result.evidence === "string" && result.evidence.trim() ? result.evidence.trim() : String(message?.content || "");
+    const start = Math.max(0, String(message?.content || "").indexOf(evidenceText));
+    return actionSystem.createActionEvent({
+      eventId: `precision:${message?.id ?? "message"}:${result.actionId}`,
+      traceId: `action:precision:${message?.id ?? "message"}:${result.actionId}`,
+      category: action?.definition?.triggerCategories?.[0] || "other",
+      evidence: { text: evidenceText, start, end: start + evidenceText.length },
+      executionStatus: "executed",
+      resultStatus: "succeeded",
+      sourceClauseIndex: 0,
+      reasons: [...(action?.definition?.triggerCategories || ["other"])],
+      allowedActionIds: [result.actionId],
+      semanticEvidence: ["precision_stage_a"],
+      resolutionMode: "resolved",
+      interpretationSource: "precision_stage_a",
+      precisionConfidence: result.confidence
+    });
+  }
+  static async interpretPrecision(conv, speaker, message, signal, mode) {
+    const localProfile = this.getSemanticActionProfile(message?.content);
+    if (localProfile.events.some((event) => event.resolutionMode === "resolved" && event.allowedActionIds?.length > 0)) return { handled: false, event: null };
+    this.recordModeMetric(conv, mode, "precisionJudgeCalls");
+    const result = await actionSystem.semantic.precisionActionJudge.judge({
+      conversation: conv,
+      message,
+      speaker,
+      actions: actionRegistry.getAllActions(false),
+      registry: actionRegistry,
+      pendingStore: conv.pendingActionIntentStore,
+      llmManager,
+      signal
+    });
+    if (result.occurrence === "proposal") {
+      const characters = typeof conv.getActiveConversationCharacters === "function" ? conv.getActiveConversationCharacters() : [...conv.gameData.characters.values()];
+      const proposal = actionSystem.interaction.proposalDetector.createForAction({ actionId: result.actionId, text: message?.content, speaker, characters, registry: actionRegistry });
+      if (!proposal) {
+        this.recordModeMetric(conv, mode, "pendingAmbiguous", { actionId: result.actionId, source: "precision_stage_a" });
+        return { handled: true, event: null };
+      }
+      const intent = conv.pendingActionIntentStore.create({ ...proposal, proposalMessageId: message?.id ?? null, proposalText: String(message?.content || ""), createdTurnEpoch: conv.turnEpoch ?? 0 });
+      this.recordModeMetric(conv, mode, "stageAProposal", { actionId: result.actionId, confidence: result.confidence, pendingId: intent.pendingId });
+      this.recordModeMetric(conv, mode, "pendingCreated", { pendingId: intent.pendingId, actionId: result.actionId, source: "precision_stage_a" });
+      return { handled: true, event: null };
+    }
+    if (result.occurrence === "rejected_pending_commitment" && result.pending) {
+      conv.pendingActionIntentStore.reject(result.pending.pendingId);
+      this.recordModeMetric(conv, mode, "pendingRejected", { pendingId: result.pending.pendingId, actionId: result.actionId, source: "precision_stage_a" });
+      return { handled: true, event: null };
+    }
+    if (result.occurrence === "accepted_pending_commitment" && result.pending) {
+      conv.pendingActionIntentStore.confirm(result.pending.pendingId);
+      this.recordModeMetric(conv, mode, "pendingConfirmed", { pendingId: result.pending.pendingId, actionId: result.actionId, source: "precision_stage_a" });
+      if (result.pending.confirmationPolicy !== "acceptance_completes") return { handled: true, event: null };
+      this.recordModeMetric(conv, mode, "stageAActionDetected", { actionId: result.actionId, confidence: result.confidence, occurrence: result.occurrence });
+      return { handled: true, event: this.buildPendingActionEvent(result.pending, message) };
+    }
+    if (result.occurrence === "completed_action" && result.executable) {
+      this.recordModeMetric(conv, mode, "stageAActionDetected", { actionId: result.actionId, confidence: result.confidence, occurrence: result.occurrence });
+      this.recordModeMetric(conv, mode, "precisionJudgeAction", { actionId: result.actionId, confidence: result.confidence, occurrence: result.occurrence });
+      return { handled: true, event: this.buildPrecisionActionEvent(result, message) };
+    }
+    this.recordModeMetric(conv, mode, "precisionJudgeNoAction", { occurrence: result.occurrence, reason: result.reason || null });
+    return { handled: true, event: null };
+  }
   static async evaluateForCharacter(conv, npc, signal, actionMessage, actionEvent = null) {
     try {
       if (signal?.aborted) {
@@ -262,7 +422,19 @@ class ActionEngine {
         usageAnalytics.record({ requestType: "action_skipped", character: npc?.shortName, skipReason: actionSystem.actionDecisionTrace.normalizeActionSkipReason("inactive_participant") }, null);
         return { autoApproved: [], needsApproval: [] };
       }
-      const gate = this.shouldEvaluateForMessage(conv, actionMessage, actionEvent);
+      const modeState = this.getModeState(conv);
+      const actionSystemMode = modeState.mode;
+      if (!actionEvent && modeState.policy.usePendingIntents) {
+        const interaction = this.interpretPendingInteraction(conv, npc, actionMessage, actionSystemMode);
+        if (interaction.event) return this.evaluateForCharacter(conv, npc, signal, actionMessage, interaction.event);
+        if (interaction.handled) return { autoApproved: [], needsApproval: [] };
+      }
+      if (!actionEvent && modeState.policy.usePrecisionJudge) {
+        const precision = await this.interpretPrecision(conv, npc, actionMessage, signal, actionSystemMode);
+        if (precision.event) return this.evaluateForCharacter(conv, npc, signal, actionMessage, precision.event);
+        if (precision.handled) return { autoApproved: [], needsApproval: [] };
+      }
+      let gate = this.shouldEvaluateForMessage(conv, actionMessage, actionEvent);
       if (!gate.shouldEvaluate) {
         console.log(`[ActionEngine] Skipped action request for ${npc.shortName}: ${gate.reason}`);
         usageAnalytics.record({ requestType: "action_skipped", character: npc.shortName, skipReason: actionSystem.actionDecisionTrace.normalizeActionSkipReason(gate.reason) }, null);
@@ -277,7 +449,27 @@ class ActionEngine {
         }
         return combined;
       }
+      if (modeState.policy.useSemanticRescue && actionEvent.executionStatus === "executed" && actionEvent.resultStatus !== "failed" && gate.semanticProfile?.resolutionMode !== "resolved") {
+        this.recordModeMetric(conv, actionSystemMode, "semanticRescueCalls", { category: actionEvent.category });
+        const rescue = await actionSystem.semantic.semanticRescue.resolve({
+          event: actionEvent,
+          actions: actionRegistry.getAllActions(false),
+          registry: actionRegistry,
+          llmManager,
+          sourceCharacter: actionMessage?.role === "user" ? conv.gameData.characters.get(conv.gameData.playerID) || npc : npc,
+          targetCharacter: null,
+          signal
+        });
+        if (rescue.matched) {
+          gate = {
+            ...gate,
+            semanticProfile: { ...gate.semanticProfile, resolutionMode: "resolved", allowedActionIds: [rescue.actionId], evidence: ["performance_semantic_rescue"] }
+          };
+          this.recordModeMetric(conv, actionSystemMode, "semanticRescueMatched", { category: actionEvent.category, actionId: rescue.actionId, confidence: rescue.confidence });
+        }
+      }
       this.traceDecision(null, "candidate", "pass", { eventId: actionEvent.eventId, traceId: actionEvent.traceId, category: actionEvent.category });
+      if (!actionEvent.pendingConfirmed && actionEvent.interpretationSource !== "precision_stage_a") this.recordModeMetric(conv, actionSystemMode, "localEventCount", { category: actionEvent.category });
       this.traceDecision(null, "semantic", gate.semanticProfile.resolutionMode || "resolved", { eventId: actionEvent.eventId, traceId: actionEvent.traceId, category: actionEvent.category });
       console.log(`[ActionEngine] Explicit action keyword detected for ${npc.shortName}: ${gate.reason}`);
       conv.actionGateProcessedTriggers.add(gate.dedupeKey);
@@ -297,6 +489,7 @@ class ActionEngine {
         eventId: actionEvent.eventId,
         traceId: actionEvent.traceId,
         turnEpoch: conv.turnEpoch ?? null,
+        actionSystemMode,
         skipReason: skipReason ? actionSystem.actionDecisionTrace.normalizeActionSkipReason(skipReason) : null
       }, null);
       const semanticAllowlist = new Set(gate.semanticProfile?.allowedActionIds || []);
@@ -459,10 +652,27 @@ class ActionEngine {
       let actionFinishReason = null;
       let invocationOrigin = "model";
       const deterministicAvailable = semanticAllowlist.size === 1 ? available.find((action) => semanticAllowlist.has(action.signature)) : null;
-      const localCandidate = deterministicAvailable ? actionSystem.deterministicInvocation.resolve({
+      let localCandidate = deterministicAvailable ? actionSystem.deterministicInvocation.resolve({
         availableAction: deterministicAvailable,
         evidenceText: actionEvent?.evidence?.text
       }) : null;
+      if (actionEvent?.pendingConfirmed && deterministicAvailable) {
+        const binding = deterministicAvailable.participantBinding;
+        localCandidate = {
+          mode: "local",
+          reason: "confirmed_pending_intent",
+          invocation: actionSystem.createValidatedInvocation({
+            actionId: deterministicAvailable.signature,
+            sourceCharacterId: binding.sourceCharacterId,
+            targetCharacterId: binding.targetCharacterId,
+            bindingId: binding.bindingId,
+            eventId: actionEvent.eventId,
+            traceId: actionEvent.traceId,
+            args: actionEvent.pendingArgs || {}
+          }),
+          details: { reason: "confirmed_pending_intent" }
+        };
+      }
       if (localCandidate?.details?.injuryType) {
         this.traceDecision(deterministicAvailable.signature, "invocation", "args_resolved", { eventId: actionEvent.eventId, traceId: actionEvent.traceId, injuryType: localCandidate.details.injuryType, reason: localCandidate.details.reason });
       }
@@ -482,6 +692,7 @@ class ActionEngine {
           target: localCandidate.invocation.targetCharacterId
         });
       } else {
+        if (modeState.policy.usePrecisionJudge) this.recordModeMetric(conv, actionSystemMode, "stageBProviderCalls", { actionId: deterministicAvailable?.signature || null });
         usageAnalytics.record({
           requestType: "action_pipeline",
           character: npc.shortName,
@@ -490,6 +701,7 @@ class ActionEngine {
           eventId: actionEvent.eventId,
           traceId: actionEvent.traceId,
           invocationOrigin: "model",
+          actionSystemMode,
           turnEpoch: conv.turnEpoch ?? null
         }, null);
         const messages = ActionPromptBuilder.buildActionMessages(conv, actionSource, available, {
@@ -522,6 +734,7 @@ class ActionEngine {
             character: npc.shortName,
             actionTrigger: gate.reason,
             actionCandidateReasons: gate.reasons,
+            actionSystemMode,
             blocks: ActionPromptBuilder.getActionPromptBlocks(messages, jsonSchema)
           }
         );
@@ -596,6 +809,7 @@ class ActionEngine {
           traceId: actionEvent.traceId
         });
         if (!bindingValidation.valid) {
+          this.recordModeMetric(conv, actionSystemMode, "validationRejected", { actionId: inv.actionId, reason: bindingValidation.reason });
           this.traceDecision(inv.actionId, "validation", "rejected", {
             eventId: actionEvent.eventId,
             traceId: actionEvent.traceId,
@@ -628,6 +842,7 @@ class ActionEngine {
         const needsUserApproval = actionRegistry.shouldRequireApproval(inv.actionId, approvalSettings.approvalMode);
         console.log(`[ActionEngine] Action ${inv.actionId} isDestructive property: ${loaded2.definition.isDestructive}, computed: ${isDestructive}, needsApproval: ${needsUserApproval}`);
         if (needsUserApproval) {
+          this.recordModeMetric(conv, actionSystemMode, "approvalPending", { actionId: inv.actionId });
           const targetId = invocation.targetCharacterId ?? null;
           const target = targetId != null ? conv.gameData.characters.get(targetId) ?? void 0 : void 0;
           const actionTitle = loaded2.definition.title ? resolveI18nString(loaded2.definition.title, userLang) : void 0;
@@ -659,6 +874,8 @@ class ActionEngine {
       else if (pendingActionIds.length > 0 && executedActionIds.length === 0) actionOutcome = "awaiting_approval";
       else if (pendingActionIds.length > 0) actionOutcome = "actions_executed_and_pending";
       else if (failedActionIds.length > 0) actionOutcome = "actions_executed_with_failures";
+      for (const actionId of executedActionIds) this.recordModeMetric(conv, actionSystemMode, invocationOrigin === "local" ? "localExecuted" : "providerExecuted", { actionId });
+      for (const actionId of failedActionIds) this.recordModeMetric(conv, actionSystemMode, "executionFailed", { actionId });
       recordOutcome(actionOutcome, parsed.actions.map((inv) => inv.actionId), null, {
         executedActionIds,
         pendingActionIds,

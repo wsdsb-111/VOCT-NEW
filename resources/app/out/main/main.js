@@ -294,6 +294,11 @@ const schema = {
       }
     }
   },
+  actionSystemMode: {
+    type: "string",
+    enum: ["balanced", "performance", "precision"],
+    default: "balanced"
+  },
   summaryPromptSettings: {
     type: "object",
     default: { rollingPrompt: "", finalPrompt: "", letterSummaryPrompt: "", finalSummaryMaxTokens: 4096 },
@@ -1068,7 +1073,7 @@ const updaterTranslations = {
     downloadProgress: "下载中 {percent}%"
   }
 };
-const { createAppUpdater } = require("./app/app-updater");
+const { createAppUpdater, VOTC_FORK_IDENTITY } = require("./app/app-updater");
 const AppUpdater = createAppUpdater({ electronUpdater, log, settingsRepository, electron, updaterTranslations });
 const appUpdater = new AppUpdater();
 const { createFocusMonitor } = require("./app/focus-monitor");
@@ -1165,7 +1170,7 @@ electron.app.on("ready", () => {
   setupIpcHandlers();
   chatWindow = createWindow();
   appUpdater.setMainWindow(chatWindow);
-  if (electron.app.isPackaged) {
+  if (electron.app.isPackaged && VOTC_FORK_IDENTITY.autoUpdateEnabled) {
     appUpdater.checkForUpdates();
   }
   actionRegistry.setSettings(settingsRepository.getActionSettings());

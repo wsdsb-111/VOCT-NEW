@@ -308,6 +308,11 @@ function registerIpcHandlers(runtime) {
     settingsRepository.saveActionApprovalSettings(settings);
     return true;
   });
+  electron.ipcMain.handle("llm:getActionSystemMode", () => settingsRepository.getActionSystemMode());
+  electron.ipcMain.handle("llm:saveActionSystemMode", (_, mode) => {
+    settingsRepository.saveActionSystemMode(mode);
+    return true;
+  });
   electron.ipcMain.handle("llm:getSummaryPromptSettings", () => {
     return settingsRepository.getSummaryPromptSettings();
   });
