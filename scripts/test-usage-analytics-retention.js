@@ -47,6 +47,7 @@ assert(analyticsSource.includes("diagnostics = { total: 0, actionSkipped: 0, byT
 assert(analyticsSource.includes("providerEfficiency"), "Action Analytics 2.0 must expose Provider Efficiency");
 assert(analyticsSource.includes("memoryRecall"), "Memory Engine 2.5 must expose Turn Recall metrics");
 for (const field of ["turnRecallIntent", "turnRecallSelected", "turnRecallCacheHit", "sessionTopicAnchorLocked"]) assert(analyticsSource.includes(field), `${field} must be retained in usage analytics`);
+assert(analyticsSource.includes("memoryRecall.reasons[entry.turnRecallReason]"), "Turn Recall reasons must be aggregated for long-session diagnostics");
 assert(rendererSource.includes("服务商总 Token"), "UI must label provider-reported total tokens explicitly");
 assert(rendererSource.includes("API 请求"), "UI must exclude diagnostics from the request total label");
 assert(rendererSource.includes("诊断记录"), "UI must display diagnostic volume separately");

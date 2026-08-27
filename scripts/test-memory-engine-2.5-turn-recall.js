@@ -29,6 +29,8 @@ try {
   const memories = [
     makeMemory("relevant", "李师师与玩家曾在御花园约定春末商议婚事。", [1, 2], [1, 2], 990, ["约定", "婚约", "花园"]),
     makeMemory("kaifeng", "李师师与玩家曾在开封城门处理遗失玉佩事件。", [1, 2], [1, 2], 995, ["开封", "玉佩", "事件"]),
+    makeMemory("letter", "李师师与玩家曾互通书信，约定妥善保存来信。", [1, 2], [1, 2], 992, ["信件", "书信", "来信"]),
+    makeMemory("luoyang", "李师师与玩家曾在洛阳共同平息一场旧日纠纷。", [1, 2], [1, 2], 988, ["洛阳", "旧事", "纠纷"]),
     makeMemory("noise", "李师师昨日更换了琴弦。", [2], [2], 999, ["琴弦"])
   ];
   const cache = new Map();
@@ -77,9 +79,24 @@ try {
     assert.strictEqual(namedOnly.triggered, false, `${query}: a character name alone must not inject Turn Recall`);
     assert.strictEqual(namedOnly.reason, "no_recall_intent");
   }
+  const letterRecall = engine.retrieveTurnRecall({ ...input, query: "你还记得之前那封信吗？", assistContext: "", turnEpoch: 22 });
+  assert.strictEqual(letterRecall.triggered, true, "explicit recall with relevant memory must trigger");
+  assert.strictEqual(letterRecall.selected[0].memory.memoryId, "letter");
+  assert.strictEqual(letterRecall.reason, "explicit_recall_intent");
+
+  const missingRecall = engine.retrieveTurnRecall({ ...input, query: "你还记得我小时候养的那匹白马吗？", assistContext: "", turnEpoch: 23 });
+  assert.strictEqual(missingRecall.triggered, false, "explicit recall must not force an unrelated Top1 memory");
+  assert.strictEqual(missingRecall.selected.length, 0);
+  assert.strictEqual(missingRecall.reason, "explicit_recall_no_relevant_memory");
+
+  const assistRecall = engine.retrieveTurnRecall({ ...input, query: "当时到底发生了什么？", assistContext: "你方才提到洛阳旧事。", turnEpoch: 24 });
+  assert.strictEqual(assistRecall.triggered, true, "relevant assist context may satisfy the explicit recall threshold");
+  assert.strictEqual(assistRecall.selected[0].memory.memoryId, "luoyang");
+  assert.strictEqual(assistRecall.reason, "explicit_recall_intent");
+
   const later = engine.retrieveTurnRecall({ ...input, query: "那开封那次遗失玉佩事件呢？", turnEpoch: 12 });
   assert.strictEqual(later.selected[0].memory.memoryId, "kaifeng", "a later turn may select a different Top1 memory");
-  const similarityOnly = engine.retrieveTurnRecall({ ...input, query: "开封城门遗失玉佩事件", turnEpoch: 13 });
+  const similarityOnly = engine.retrieveTurnRecall({ ...input, query: "开封城门那块玉佩后来怎么样？", assistContext: "", turnEpoch: 13 });
   assert.strictEqual(similarityOnly.reason, "similarity_threshold", "high primary-query similarity is a secondary local trigger");
   assert.strictEqual(similarityOnly.selected[0].memory.memoryId, "kaifeng");
   console.log("Memory Engine 2.5 Turn Recall: PASS (intent gate, Top1, authority, budget, cache)");

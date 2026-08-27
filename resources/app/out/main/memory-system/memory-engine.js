@@ -984,16 +984,26 @@ class MemoryEngine {
       currentTotalDays
     });
     const top = ranked[0] || null;
-    const relevancePassed = Number(top?.reason?.primaryQuery || 0) >= 0.30;
-    const intentTriggered = intent.triggered || relevancePassed;
-    const triggered = intentTriggered && top != null && budget > 0;
+    const primaryScore = Number(top?.reason?.primaryQuery || 0);
+    const assistScore = Number(top?.reason?.assistQuery || 0);
+    const explicitRecallRelevant = intent.triggered && (primaryScore >= 0.08 || assistScore >= 0.20);
+    const similarityRecallRelevant = primaryScore >= 0.30;
+    const intentTriggered = intent.triggered || similarityRecallRelevant;
+    const triggered = top != null && budget > 0 && (explicitRecallRelevant || similarityRecallRelevant);
     const selected = triggered ? this.ranker.selectWithinBudget([top], { tokenBudget: budget, estimateTokens, allowTruncate: true }) : [];
     const text = this.formatTurnRecallBlock(selected);
     const actualTokens = text ? Math.max(1, (estimateTokens || ((value) => Math.ceil(String(value || "").length / 2)))(text)) : 0;
+    let reason;
+    if (!intent.triggered && !similarityRecallRelevant) reason = "no_recall_intent";
+    else if (intent.triggered && !explicitRecallRelevant && !similarityRecallRelevant) reason = "explicit_recall_no_relevant_memory";
+    else if (selected.length > 0 && intent.triggered) reason = "explicit_recall_intent";
+    else if (selected.length > 0) reason = "similarity_threshold";
+    else if (!top) reason = "no_memory_candidate";
+    else reason = "token_budget_exhausted";
     const result = {
       triggered: selected.length > 0,
       intentTriggered,
-      reason: !intentTriggered ? intent.reason : selected.length > 0 ? intent.triggered ? intent.reason : "similarity_threshold" : top == null ? "no_memory_candidate" : "token_budget_exhausted",
+      reason,
       selected,
       text,
       tokens: actualTokens,

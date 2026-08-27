@@ -133,7 +133,7 @@ function createUsageAnalytics({ fs, dataDir, analyticsFile, retention, createPro
         outcomes: {}
       };
       const actionPipeline = { candidateEvents: 0, semanticResolved: 0, semanticRejected: 0, localActions: 0, providerCalls: 0, executedActions: 0, modelExecutedActions: 0, emptyProviderResponses: 0 };
-      const memoryRecall = { requests: 0, intentTriggered: 0, selected: 0, empty: 0, cacheHits: 0, skippedContextPressure: 0, tokens: 0, candidateCount: 0, sessionTopicAnchorLocked: 0 };
+      const memoryRecall = { requests: 0, intentTriggered: 0, selected: 0, empty: 0, cacheHits: 0, skippedContextPressure: 0, tokens: 0, candidateCount: 0, sessionTopicAnchorLocked: 0, reasons: {} };
       for (const entry of entries) {
         const isUsageRecord = usageAnalyticsRetention.isUsageEntry(entry);
         const isActionOutcome = entry.requestType === "action_outcome";
@@ -143,6 +143,7 @@ function createUsageAnalytics({ fs, dataDir, analyticsFile, retention, createPro
         if (entry.requestType === "action_pipeline" && entry.stage === "provider" && entry.outcome === "called") actionPipeline.providerCalls++;
         if (entry.requestType === "memory_recall") {
           memoryRecall.requests++;
+          if (entry.turnRecallReason) memoryRecall.reasons[entry.turnRecallReason] = (memoryRecall.reasons[entry.turnRecallReason] || 0) + 1;
           if (entry.turnRecallIntent) memoryRecall.intentTriggered++;
           if (entry.turnRecallSelected) memoryRecall.selected++;
           if (entry.turnRecallIntent && !entry.turnRecallSelected) memoryRecall.empty++;
