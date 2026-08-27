@@ -27,6 +27,20 @@ function createPromptBuilder({
         dynamicContent: match[1]
       };
     }
+    static stableStringify(value) {
+      if (Array.isArray(value)) return `[${value.map((item) => this.stableStringify(item)).join(",")}]`;
+      if (value && typeof value === "object") {
+        return `{${Object.keys(value).sort().filter((key) => value[key] !== undefined && typeof value[key] !== "function").map((key) => `${JSON.stringify(key)}:${this.stableStringify(value[key])}`).join(",")}}`;
+      }
+      return JSON.stringify(value ?? null);
+    }
+    static getFrozenCharacterProfile(character, memoryContext) {
+      const cache = memoryContext?.stableProfileCache;
+      if (!(cache instanceof Map) || !character?.id) return character;
+      const key = String(character.id);
+      if (!cache.has(key)) cache.set(key, JSON.parse(this.stableStringify(character)));
+      return cache.get(key);
+    }
     static buildSummaryCacheAnchor() {
       return `VOTC_SUMMARY_CACHE_ANCHOR_v1
   You summarize CK3 roleplay records. Preserve concrete names, relationships, dates, places, amounts, decisions, promises, conflicts, emotional changes and unresolved plans that appear in the supplied material. Do not invent facts, merge different people, add later historical knowledge, or turn a proposal into a completed event. Follow the requested language and format. Output only the requested summary.`;
@@ -166,7 +180,7 @@ function createPromptBuilder({
      * behavior remains unchanged.
      */
     static buildCacheAnchor(gameData) {
-      return `VOTC_CACHE_ANCHOR_v3
+      return `VOTC_CACHE_ANCHOR_v4
   这是 Voices of the Court 的固定系统上下文锚点。请将后续内容视为当前游戏的动态上下文，并始终遵守以下稳定规则：保持角色扮演身份；优先使用游戏实际数据；不把现代价值观强加给中世纪角色；涉及历史人物、事件、作品、诗词、典故、制度或技术时，先核验其出现、发生、写成、成名或流传时间是否不晚于游戏当前年份；年份不确定时明确表示不知晓，不得猜测或用未来知识补全；不得预知未来、后世评价或事件结局。角色回复不设固定句数、段落数或人为短回复目标，应按人物性格、关系、情绪和场景完整表达，但避免无意义重复。长期稳定记忆和当前话题记忆只代表过去知情背景，本轮事实与动作必须以当前对话消息及游戏实时数据为准。不要把本段当作对话内容，也不要复述本段。`;
     }
     /**
@@ -428,13 +442,14 @@ function createPromptBuilder({
       const blocks = promptSettings.blocks || [];
       const llmMessages = [];
       const blocksWithTokens = [{
-        block: { id: "cache-anchor", type: "cache_anchor", label: "Stable Cache Anchor" },
+        block: { id: "cache-anchor", type: "cache_anchor", label: "Stable Cache Anchor", stable: true },
         content: this.buildCacheAnchor(gameData),
         tokens: TokenCounter.estimateTokens(this.buildCacheAnchor(gameData))
       }];
       llmMessages.push({ role: "system", content: blocksWithTokens[0].content });
       const context = {
         character: char,
+        stableCharacter: this.getFrozenCharacterProfile(char, memoryContext),
         gameData,
         summary: currentSessionSummary,
         memoryContext
@@ -452,7 +467,8 @@ function createPromptBuilder({
         type: "participant_relationship",
         label: "Active Participant Relationship",
         enabled: true,
-        role: "system"
+        role: "system",
+        stable: false
       };
       const mentionedCharactersContext = this.buildMentionedCharactersContext(char, gameData, workingHistory);
       const responderGameFacts = this.buildResponderGameFacts(char);
@@ -461,38 +477,44 @@ function createPromptBuilder({
         type: "responder_game_facts",
         label: "Responder Authoritative Game Facts",
         enabled: true,
-        role: "system"
+        role: "system",
+        stable: false
       };
       const stableMemoryBlock = {
         id: "memory-stable",
         type: "memory_stable",
         label: "Stable Long-term Memory",
         enabled: true,
-        role: "system"
+        role: "system",
+        stable: false
       };
       const directMemoryBlock = {
         id: "memory-direct-frozen",
         type: "memory_direct_frozen",
         label: "Frozen Direct Relationship Memory",
         enabled: true,
-        role: "system"
+        role: "system",
+        stable: false
       };
       const mentionedSnapshotBlock = {
         id: "memory-mentioned-snapshot",
         type: "memory_mentioned_snapshot",
         label: "Frozen Mentioned Character Snapshot",
         enabled: true,
-        role: "system"
+        role: "system",
+        stable: false
       };
       const sessionTopicAnchorBlock = {
         id: "memory-session-topic-anchor",
         type: "memory_session_topic_anchor",
         label: "Frozen Session Topic Anchor",
         enabled: true,
-        role: "system"
+        role: "system",
+        stable: false
       };
       const deferredMainSegments = [];
       const deferredDescriptionBlocks = [];
+      const deferredContextBlocks = [];
       let preHistoryContextInserted = false;
       const insertPreHistoryContext = () => {
         if (preHistoryContextInserted) return;
@@ -532,6 +554,11 @@ function createPromptBuilder({
             tokens: TokenCounter.estimateTokens(memoryContext.topicPatchText)
           });
         }
+        for (const block of deferredContextBlocks) {
+          const result = this.applyBlockWithTokenCount(block, llmMessages, workingHistory, context, promptSettings);
+          if (Array.isArray(result)) blocksWithTokens.push(...result);
+          else if (result) blocksWithTokens.push(result);
+        }
         for (const deferred of deferredMainSegments) {
           llmMessages.push(deferred.message);
           blocksWithTokens.push(deferred.tokenBlock);
@@ -551,6 +578,10 @@ function createPromptBuilder({
       };
       for (const block of blocks) {
         if (!block.enabled) continue;
+        if (["past_summaries", "memories", "rolling_summary"].includes(block.type)) {
+          deferredContextBlocks.push(block);
+          continue;
+        }
         if (block.type === "history" || block.type === "instruction") insertPreHistoryContext();
         const result = this.applyBlockWithTokenCount(block, llmMessages, workingHistory, context, promptSettings, {
           deferredMainSegments,
@@ -586,6 +617,9 @@ function createPromptBuilder({
           blocksWithTokens.push({ block: suffixBlock, content: "", tokens: 0, error: `Template error in Suffix block. Check Handlebars syntax.` });
         }
       }
+      for (const tokenBlock of blocksWithTokens) {
+        if (tokenBlock?.block && tokenBlock.block.stable === undefined) tokenBlock.block.stable = false;
+      }
       const totalTokens = TokenCounter.calculateTotalTokens(llmMessages);
       return {
         messages: llmMessages,
@@ -612,7 +646,10 @@ function createPromptBuilder({
         case "main": {
           const template = promptSettings.mainTemplate || promptConfigManager.getDefaultMainTemplateContent();
           const segments = this.splitMainTemplateSegments(template);
-          const renderedSegments = segments.map((segment) => ({ ...segment, content: renderTemplate(segment.template, baseContext) }));
+          const renderedSegments = segments.map((segment) => ({
+            ...segment,
+            content: renderTemplate(segment.template, segment.id === "character_base" ? { ...baseContext, character: baseContext.stableCharacter || character } : baseContext)
+          }));
           if (renderedSegments.some((segment) => segment.content === null)) {
             return { block, content: "", tokens: 0, error: `Template error in "${block.label || "Main Prompt"}" block. Check Handlebars syntax.` };
           }
@@ -625,7 +662,8 @@ function createPromptBuilder({
                 ...block,
                 id: `${block.id || "main"}-${segment.id}`,
                 type: "main_segment",
-                label: segment.label
+                label: segment.label,
+                stable: ["stable_global", "stable_history_rp", "character_base"].includes(segment.id)
               },
               content: segment.content,
               tokens: TokenCounter.estimateTokens(segment.content)
@@ -651,21 +689,27 @@ function createPromptBuilder({
           if (!block.scriptPath) break;
           const descScriptPath = promptConfigManager.resolvePath(block.scriptPath);
           try {
-            const descriptionBlock = this.scriptLoader.executeDescription(descScriptPath, gameData, character.id);
+            const profileCache = baseContext.memoryContext?.stableDescriptionCache;
+            const cacheKey = String(character.id);
+            let descriptionBlock = profileCache instanceof Map ? profileCache.get(cacheKey) : null;
+            if (!descriptionBlock) {
+              descriptionBlock = this.scriptLoader.executeDescription(descScriptPath, gameData, character.id);
+              if (descriptionBlock && profileCache instanceof Map) profileCache.set(cacheKey, descriptionBlock);
+            }
             if (descriptionBlock) {
               const { stableContent, dynamicContent } = this.splitDescriptionForCache(descriptionBlock);
               const tokenBlocks = [];
               if (stableContent) {
                 messages.push({ role: "system", content: stableContent });
                 tokenBlocks.push({
-                  block: { ...block, id: `${block.id || "description"}-stable`, type: "description", label: `${block.label || "Character Description"} (Stable Profile)` },
+                  block: { ...block, id: `${block.id || "description"}-stable`, type: "description", label: `${block.label || "Character Description"} (Stable Profile)`, stable: true },
                   content: stableContent,
                   tokens: TokenCounter.estimateTokens(stableContent)
                 });
               }
               if (dynamicContent) {
                 const tokenBlock = {
-                  block: { ...block, id: `${block.id || "description"}-dynamic`, type: "description_dynamic", label: `${block.label || "Character Description"} (Dynamic Scene)` },
+                  block: { ...block, id: `${block.id || "description"}-dynamic`, type: "description_dynamic", label: `${block.label || "Character Description"} (Dynamic Scene)`, stable: false },
                   content: dynamicContent,
                   tokens: TokenCounter.estimateTokens(dynamicContent)
                 };
@@ -693,7 +737,7 @@ function createPromptBuilder({
             if (Array.isArray(exampleMessages) && exampleMessages.length > 0) {
               messages.push(...exampleMessages);
               const content = exampleMessages.map((m) => `${m.role}: ${m.content}`).join("\n\n");
-              return { block, content, tokens: TokenCounter.calculateTotalTokens(exampleMessages) };
+              return { block: { ...block, stable: true }, content, tokens: TokenCounter.calculateTotalTokens(exampleMessages) };
             }
           } catch (error) {
             const errorMsg = error instanceof Error ? error.message : String(error);
@@ -760,7 +804,7 @@ function createPromptBuilder({
           if (options.presenceText) {
             messages.push({ role: "system", content: options.presenceText });
             tokenBlocks.push({
-              block: { id: "current-presence-roster", type: "presence_roster", label: "Current Presence and Relationships", enabled: true, role: "system" },
+              block: { id: "current-presence-roster", type: "presence_roster", label: "Current Presence and Relationships", enabled: true, role: "system", stable: false },
               content: options.presenceText,
               tokens: TokenCounter.estimateTokens(options.presenceText)
             });
@@ -768,7 +812,7 @@ function createPromptBuilder({
           if (options.topicPatchText) {
             messages.push({ role: "system", content: options.topicPatchText });
             tokenBlocks.push({
-              block: { id: "memory-topic-patch", type: "memory_topic_patch", label: "Turn Topic Memory Patch", enabled: true, role: "system" },
+              block: { id: "memory-topic-patch", type: "memory_topic_patch", label: "Turn Topic Memory Patch", enabled: true, role: "system", stable: false },
               content: options.topicPatchText,
               tokens: TokenCounter.estimateTokens(options.topicPatchText)
             });
@@ -776,7 +820,7 @@ function createPromptBuilder({
           if (currentUserMessage) {
             messages.push(currentUserMessage);
             tokenBlocks.push({
-              block: { ...block, id: `${block.id || "history"}-current-user`, type: "current_user", label: "Current User Message" },
+              block: { ...block, id: `${block.id || "history"}-current-user`, type: "current_user", label: "Current User Message", stable: false },
               content: `user: ${currentUserMessage.content}`,
               tokens: TokenCounter.calculateTotalTokens([currentUserMessage])
             });
@@ -784,7 +828,7 @@ function createPromptBuilder({
           if (options.turnRecallText) {
             messages.push({ role: "system", content: options.turnRecallText });
             tokenBlocks.push({
-              block: { id: "memory-turn-recall", type: "memory_turn_recall", label: "Turn Recall", enabled: true, role: "system" },
+              block: { id: "memory-turn-recall", type: "memory_turn_recall", label: "Turn Recall", enabled: true, role: "system", stable: false },
               content: options.turnRecallText,
               tokens: TokenCounter.estimateTokens(options.turnRecallText)
             });

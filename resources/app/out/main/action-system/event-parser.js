@@ -2,10 +2,11 @@
 
 const candidateGate = require("./candidate-gate");
 const { createActionEvent } = require("./action-types");
+const socialEvent = require("./social-event");
 
 function parse(text, { registry } = {}) {
     const source = typeof text === "string" ? text : "";
-    if (!source.trim()) return { events: [], rejectedCandidates: [] };
+    if (!source.trim()) return { events: [], socialEvents: [], rejectedCandidates: [] };
     const rejectedCandidates = [];
     const clauses = [];
     const basePattern = /[^。！？；，.!?;,\n]+[。！？；，.!?;,\n]?/g;
@@ -43,11 +44,20 @@ function parse(text, { registry } = {}) {
     const posthocNegationMarker = /(?:——|—|\.\.\.|…|至少).{0,24}(?:不[，,]?|只是做了个梦|也许没有|本来是这么打算)/i;
     const isPostActionQualifier = (clause) => /(?:杀死|杀了|刺伤|砍伤|打伤|关进|关押|囚禁|任命|罢免|雇佣|招募|亲吻|接吻).{0,16}(?:也许|或许|可能会)/i.test(clause);
     const events = [];
+    const socialEvents = [];
     for (let index = 0; index < clauses.length; index++) {
       const clause = clauses[index];
-      const hints = candidateGate.detect(clause.text, { candidateOnly: true }, { registry });
-      if (hints.length === 0) continue;
+      let hints = candidateGate.detect(clause.text, { candidateOnly: true }, { registry });
       const candidateEvidence = { text: clause.text, start: clause.start, end: clause.start + clause.text.length };
+      const detectedSocialEvent = socialEvent.detect(clause.text, candidateEvidence);
+      if (detectedSocialEvent && ["romantic_affection", "physical_affection", "romantic_proposal"].includes(detectedSocialEvent.type)) {
+        hints = hints.filter((category) => category !== "intimate_contact");
+      }
+      if (detectedSocialEvent?.type === "affection_rejection") {
+        const recentAffection = socialEvents.some((event) => event.evidence.start <= candidateEvidence.start && event.valence === "positive");
+        if (recentAffection) hints = hints.filter((category) => category !== "combat");
+      }
+      if (hints.length === 0 && !detectedSocialEvent) continue;
       if (nonExecutedMarker.test(clause.text) || explicitFutureMarker.test(clause.text)) {
         for (const category of hints) rejectedCandidates.push({ category, evidence: candidateEvidence, rejectionReason: "non_executed" });
         continue;
@@ -80,6 +90,7 @@ function parse(text, { registry } = {}) {
         for (const category of hints) rejectedCandidates.push({ category, evidence: candidateEvidence, rejectionReason: "failed_before_execution" });
         continue;
       }
+      if (detectedSocialEvent) socialEvents.push(detectedSocialEvent);
       for (const category of hints) {
         const resultFailed = category === "combat" && clauses.slice(index + 1, index + 2).some((nextClause) => failedResultMarker.test(nextClause.text));
         events.push({
@@ -94,6 +105,7 @@ function parse(text, { registry } = {}) {
     events.sort((left, right) => left.evidence.start - right.evidence.start || left.sourceClauseIndex - right.sourceClauseIndex);
     return {
       events: events.map((event, index) => createActionEvent({ ...event, eventId: `evt_${index + 1}` })),
+      socialEvents,
       rejectedCandidates
     };
   }

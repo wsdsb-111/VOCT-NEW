@@ -73,18 +73,24 @@ class Conversation {
     return this;
   }
   static buildPromptBlockMetadata(promptBuild = {}) {
+    const hasExplicitStability = (promptBuild.blocks || []).some(({ block }) => block?.stable !== undefined);
     const blocks = (promptBuild.blocks || []).map(({ block, content, tokens }, index) => ({
       id: block.id,
       label: block.label,
       type: block.type,
       position: index,
       tokens,
-      fingerprint: createPromptFingerprint(content)
+      fingerprint: createPromptFingerprint(content),
+      stable: hasExplicitStability ? block.stable === true : null
     }));
     const firstHistoryIndex = blocks.findIndex((block) => block.type === "history" || block.type === "presence_roster" || block.type === "current_user");
     const historyStartPosition = firstHistoryIndex >= 0 ? firstHistoryIndex : blocks.length;
-    const prefixFingerprint = createPromptFingerprint(JSON.stringify(blocks.slice(0, historyStartPosition).map((block) => [block.id, block.type, block.fingerprint])));
-    return { blocks, historyStartPosition, prefixFingerprint };
+    const firstDynamicIndex = hasExplicitStability ? blocks.findIndex((block) => block.stable === false) : -1;
+    const stablePrefixEndPosition = firstDynamicIndex >= 0 ? firstDynamicIndex : historyStartPosition;
+    const stablePrefixTokens = blocks.slice(0, stablePrefixEndPosition).reduce((total, block) => total + (Number(block.tokens) || 0), 0);
+    const dynamicSuffixTokens = blocks.slice(stablePrefixEndPosition).reduce((total, block) => total + (Number(block.tokens) || 0), 0);
+    const prefixFingerprint = createPromptFingerprint(JSON.stringify(blocks.slice(0, stablePrefixEndPosition).map((block) => [block.id, block.type, block.fingerprint, block.stable])));
+    return { blocks, historyStartPosition, stablePrefixEndPosition, stablePrefixTokens, dynamicSuffixTokens, prefixFingerprint };
   }
   constructor() {
     this.id = uuid.v4();
@@ -101,6 +107,8 @@ class Conversation {
     this.persistCustomQueue = false;
     this.inactiveParticipantIds = /* @__PURE__ */ new Map();
     this.summaryParticipantProfiles = /* @__PURE__ */ new Map();
+    this.stableProfileCache = /* @__PURE__ */ new Map();
+    this.stableDescriptionCache = /* @__PURE__ */ new Map();
     this.selectedCharacterIds = /* @__PURE__ */ new Set();
     this.presentCharacterIds = /* @__PURE__ */ new Set();
     this.waitingCharacterIds = /* @__PURE__ */ new Set();
@@ -367,6 +375,8 @@ class Conversation {
       turnRecallCandidateCount: turnRecall.candidateCount,
       turnRecallCacheHit: turnRecall.cacheHit,
       activeParticipantIds,
+      stableProfileCache: this.stableProfileCache,
+      stableDescriptionCache: this.stableDescriptionCache,
       presenceText: this.buildPresenceContext()
     };
   }
@@ -700,6 +710,9 @@ class Conversation {
           characterId: npc.id,
           blocks: promptBlockMetadata.blocks,
           historyStartPosition: promptBlockMetadata.historyStartPosition,
+          stablePrefixEndPosition: promptBlockMetadata.stablePrefixEndPosition,
+          stablePrefixTokens: promptBlockMetadata.stablePrefixTokens,
+          dynamicSuffixTokens: promptBlockMetadata.dynamicSuffixTokens,
           prefixFingerprint: promptBlockMetadata.prefixFingerprint
         }
       );

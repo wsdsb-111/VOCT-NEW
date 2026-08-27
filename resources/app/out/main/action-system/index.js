@@ -10,6 +10,7 @@ const eventTracker = require("./event-tracker");
 const actionExecutor = require("./action-executor");
 const candidateGate = require("./candidate-gate");
 const eventParser = require("./event-parser");
+const socialEvent = require("./social-event");
 const semanticResolver = require("./semantic-resolver");
 const availabilityService = require("./availability-service");
 const injuryTypeResolver = require("./injury-type-resolver");
@@ -43,6 +44,7 @@ module.exports = {
   actionExecutor,
   candidateGate,
   eventParser,
+  socialEvent,
   semanticResolver,
   availabilityService,
   injuryTypeResolver,

@@ -23,7 +23,7 @@ function similarity(left, right) {
 
 function shortlist({ event, actions, registry }) {
   const catalog = actionCatalog.build(actions, registry).entries;
-  return catalog.filter((entry) => entry.categories.includes(event.category) && entry.risk !== "high").map((entry) => {
+  return catalog.filter((entry) => entry.categories.includes(event.category) && entry.risk !== "high" && corpus.forAction(entry.actionId)).map((entry) => {
     const examples = corpus.forAction(entry.actionId);
     const score = Math.max(similarity(event.evidence?.text, entry.meaning), ...(examples?.positive || []).map((example) => similarity(event.evidence?.text, example)));
     return { ...entry, positive: examples?.positive || [], negative: examples?.negative || [], score };
@@ -45,7 +45,7 @@ function parseResult(output, candidates) {
   }
 }
 
-async function resolve({ event, actions, registry, llmManager, sourceCharacter, targetCharacter, signal }) {
+async function resolve({ event, actions, registry, llmManager, sourceCharacter, targetCharacter, signal, mode = "performance" }) {
   const candidates = shortlist({ event, actions, registry });
   if (candidates.length === 0) return { matched: false, reason: "no_safe_candidates", candidates: [] };
   const messages = [
@@ -63,7 +63,7 @@ async function resolve({ event, actions, registry, llmManager, sourceCharacter, 
       confidence: { type: "number", minimum: 0, maximum: 1 }
     }
   };
-  const output = await llmManager.sendActionsRequest(messages, "votc_action_semantic_rescue", schema, signal, { actionStage: "semantic_rescue", actionSystemMode: "performance", actionCategory: event.category });
+  const output = await llmManager.sendActionsRequest(messages, "votc_action_semantic_rescue", schema, signal, { actionStage: "semantic_rescue", actionSystemMode: mode, actionCategory: event.category, candidateCount: candidates.length });
   return { ...parseResult(output, candidates), candidates: candidates.map((entry) => entry.actionId) };
 }
 

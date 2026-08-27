@@ -106,7 +106,7 @@ function conversation(id) {
   completed.messages.push(completedMessage);
   const completedResult = await ActionEngine.evaluateForCharacter(completed, player, null, completedMessage);
   assert.strictEqual(completedResult.autoApproved.length, 1);
-  assert.deepStrictEqual(calls.slice(-2), ["votc_action_precision_judge", "votc_actions"], "Stage B must run only after Stage A identifies one exact action");
+  assert.deepStrictEqual(calls.slice(-2), ["votc_action_semantic_rescue", "votc_actions"], "local rescue must run before Stage B and avoid an unnecessary Precision Judge");
   assert.strictEqual(effects.length, 1);
 
   const pending = conversation("pending");
@@ -124,9 +124,7 @@ function conversation(id) {
   assert.deepStrictEqual([effects[1].sourceId, effects[1].targetId], [player.id, npc.id]);
   assert.strictEqual(calls.filter((id) => id === "votc_actions").length, 1, "pending confirmation fast path must not call Stage B");
 
-  assert(analytics.some((entry) => entry.metric === "precisionJudgeCalls"));
-  assert(analytics.some((entry) => entry.metric === "stageAActionDetected"));
-  assert(analytics.some((entry) => entry.metric === "stageAProposal"));
+  assert(analytics.some((entry) => entry.metric === "semanticRescueCalls"));
   assert(analytics.some((entry) => entry.metric === "stageBProviderCalls"));
 
   async function benchmarkMode(mode) {
@@ -148,10 +146,10 @@ function conversation(id) {
     performance: await benchmarkMode("performance"),
     precision: await benchmarkMode("precision")
   };
-  assert.deepStrictEqual(benchmark.balanced, { actionApiCalls: 0, executed: 0 });
+  assert.deepStrictEqual(benchmark.balanced, { actionApiCalls: 2, executed: 1 });
   assert.deepStrictEqual(benchmark.performance, { actionApiCalls: 2, executed: 1 });
-  assert.deepStrictEqual(benchmark.precision, { actionApiCalls: 3, executed: 1 });
-  assert(benchmark.performance.actionApiCalls < benchmark.precision.actionApiCalls, "the same corpus and provider must use fewer Action API calls in performance mode than precision mode");
+  assert.deepStrictEqual(benchmark.precision, { actionApiCalls: 2, executed: 1 });
+  assert.strictEqual(benchmark.precision.actionApiCalls, benchmark.performance.actionApiCalls, "a low-risk local ambiguity must be resolved by rescue before Precision Judge");
   console.log("VOTC v7.9 precision Stage A/Stage B: PASS");
 })().catch((error) => {
   console.error(error);

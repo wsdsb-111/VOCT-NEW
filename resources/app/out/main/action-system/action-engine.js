@@ -2,6 +2,7 @@
 
 const candidateGate = require("./candidate-gate");
 const eventParser = require("./event-parser");
+const socialEvent = require("./social-event");
 const semanticResolver = require("./semantic-resolver");
 const { ConversationReferenceContext } = require("./reference-context");
 const { ReferenceResolver } = require("./reference-resolver");
@@ -21,6 +22,7 @@ const semantic = require("./semantic");
 const actionSystem = {
   candidateGate,
   eventParser,
+  socialEvent,
   semanticResolver,
   ConversationReferenceContext,
   ReferenceResolver,
@@ -108,7 +110,8 @@ class ActionEngine {
    * against Positive Evidence, never against the full raw message.
    */
   static getSemanticActionProfile(text, initialReasons = []) {
-    const events = this.getActionEvents(text);
+    const parsed = this.parseActionEvents(text);
+    const events = parsed.events;
     const resolvedEvents = events.map((event) => {
       const profile = this.resolveSemanticEvent(event);
       return {
@@ -134,7 +137,7 @@ class ActionEngine {
       }
     }
     const resolutionModes = Array.from(new Set(resolvedEvents.map((event) => event.resolutionMode)));
-    return { reasons, allowedActionIds, evidence, events: resolvedEvents, resolutionMode: resolutionModes.length === 1 ? resolutionModes[0] : resolutionModes.length === 0 ? "unresolved" : "mixed" };
+    return { reasons, allowedActionIds, evidence, events: resolvedEvents, socialEvents: parsed.socialEvents || [], rejectedCandidates: parsed.rejectedCandidates || [], resolutionMode: resolutionModes.length === 1 ? resolutionModes[0] : resolutionModes.length === 0 ? "unresolved" : "mixed" };
   }
   static getActionTrigger(text) {
     return this.getActionTriggers(text)[0] || null;
@@ -229,7 +232,7 @@ class ActionEngine {
       resolutionMode: actionEvent.resolutionMode
     } : this.getSemanticActionProfile(message?.content, detectedReasons);
     if (!actionEvent && semanticProfile.events.length === 0) {
-      return { shouldEvaluate: false, reason: "no_executed_action_event" };
+      return { shouldEvaluate: false, reason: "no_executed_action_event", semanticProfile };
     }
     const semanticReasons = semanticProfile.reasons;
     const dedupeKey = actionEvent ? actionSystem.eventTracker.getEventKey(message, actionEvent) : `${message.id ?? "unknown"}|${semanticReasons.join("+")}|${message.name || message.role || "unknown"}|${message.content}`;
@@ -367,19 +370,35 @@ class ActionEngine {
       precisionConfidence: result.confidence
     });
   }
-  static async interpretPrecision(conv, speaker, message, signal, mode) {
-    const localProfile = this.getSemanticActionProfile(message?.content);
-    if (localProfile.events.some((event) => event.resolutionMode === "resolved" && event.allowedActionIds?.length > 0)) return { handled: false, event: null };
-    this.recordModeMetric(conv, mode, "precisionJudgeCalls");
+  static shouldInvokePrecisionJudge({ gate, semanticProfile, participantAmbiguous, candidateActions, modePolicy }) {
+    if (!modePolicy?.usePrecisionJudge || !gate?.shouldEvaluate || !semanticProfile?.events?.length || !Array.isArray(candidateActions) || candidateActions.length === 0) return null;
+    const unresolved = semanticProfile.resolutionMode === "unresolved" || semanticProfile.resolutionMode === "ambiguous";
+    const conflictingActions = (semanticProfile.allowedActionIds || []).length > 1;
+    const highRiskAction = candidateActions.some((action) => (actionRegistry?.getEffectiveRiskLevel?.(action.id) || action.definition?.semantic?.riskLevel) === "high");
+    if (modePolicy.precisionJudgeScope === "high_risk_or_conflict") {
+      if (conflictingActions) return "conflicting_actions";
+      if (unresolved && highRiskAction) return "high_risk_action";
+      return null;
+    }
+    if (unresolved) return highRiskAction ? "high_risk_action" : "semantic_ambiguous";
+    if (conflictingActions) return "conflicting_actions";
+    if (participantAmbiguous) return "participant_ambiguous";
+    return null;
+  }
+  static async interpretPrecision(conv, speaker, message, signal, mode, { actions, participants, reason }) {
+    this.recordModeMetric(conv, mode, "precisionJudgeCalls", { reason, candidateCount: actions.length, participantCount: participants.length });
     const result = await actionSystem.semantic.precisionActionJudge.judge({
       conversation: conv,
       message,
       speaker,
-      actions: actionRegistry.getAllActions(false),
+      actions,
       registry: actionRegistry,
       pendingStore: conv.pendingActionIntentStore,
       llmManager,
-      signal
+      signal,
+      participants,
+      reason,
+      mode
     });
     if (result.occurrence === "proposal") {
       const characters = typeof conv.getActiveConversationCharacters === "function" ? conv.getActiveConversationCharacters() : [...conv.gameData.characters.values()];
@@ -408,6 +427,7 @@ class ActionEngine {
     if (result.occurrence === "completed_action" && result.executable) {
       this.recordModeMetric(conv, mode, "stageAActionDetected", { actionId: result.actionId, confidence: result.confidence, occurrence: result.occurrence });
       this.recordModeMetric(conv, mode, "precisionJudgeAction", { actionId: result.actionId, confidence: result.confidence, occurrence: result.occurrence });
+      this.recordModeMetric(conv, mode, "precisionJudgeResolved", { actionId: result.actionId, reason, confidence: result.confidence });
       return { handled: true, event: this.buildPrecisionActionEvent(result, message) };
     }
     this.recordModeMetric(conv, mode, "precisionJudgeNoAction", { occurrence: result.occurrence, reason: result.reason || null });
@@ -424,22 +444,23 @@ class ActionEngine {
       }
       const modeState = this.getModeState(conv);
       const actionSystemMode = modeState.mode;
+      if (!actionEvent && ["user", "assistant"].includes(actionMessage?.role)) this.recordModeMetric(conv, actionSystemMode, "eligibleMessages");
       if (!actionEvent && modeState.policy.usePendingIntents) {
         const interaction = this.interpretPendingInteraction(conv, npc, actionMessage, actionSystemMode);
         if (interaction.event) return this.evaluateForCharacter(conv, npc, signal, actionMessage, interaction.event);
         if (interaction.handled) return { autoApproved: [], needsApproval: [] };
       }
-      if (!actionEvent && modeState.policy.usePrecisionJudge) {
-        const precision = await this.interpretPrecision(conv, npc, actionMessage, signal, actionSystemMode);
-        if (precision.event) return this.evaluateForCharacter(conv, npc, signal, actionMessage, precision.event);
-        if (precision.handled) return { autoApproved: [], needsApproval: [] };
-      }
       let gate = this.shouldEvaluateForMessage(conv, actionMessage, actionEvent);
       if (!gate.shouldEvaluate) {
+        if (!actionEvent && gate.semanticProfile?.socialEvents?.length) {
+          for (const socialEvent of gate.semanticProfile.socialEvents) this.recordModeMetric(conv, actionSystemMode, "socialEventRecognized", { category: socialEvent.type, valence: socialEvent.valence, reaction: socialEvent.reaction });
+        }
+        this.recordModeMetric(conv, actionSystemMode, gate.reason === "already_processed_action_event" || gate.reason === "already_processed_action_text" ? "duplicateSuppressed" : "gateRejected", { reason: gate.reason });
         console.log(`[ActionEngine] Skipped action request for ${npc.shortName}: ${gate.reason}`);
         usageAnalytics.record({ requestType: "action_skipped", character: npc.shortName, skipReason: actionSystem.actionDecisionTrace.normalizeActionSkipReason(gate.reason) }, null);
         return { autoApproved: [], needsApproval: [] };
       }
+      this.recordModeMetric(conv, actionSystemMode, "gatePositive", { category: gate.reason });
       if (!actionEvent) {
         const combined = { autoApproved: [], needsApproval: [] };
         for (const event of gate.semanticProfile.events) {
@@ -449,27 +470,9 @@ class ActionEngine {
         }
         return combined;
       }
-      if (modeState.policy.useSemanticRescue && actionEvent.executionStatus === "executed" && actionEvent.resultStatus !== "failed" && gate.semanticProfile?.resolutionMode !== "resolved") {
-        this.recordModeMetric(conv, actionSystemMode, "semanticRescueCalls", { category: actionEvent.category });
-        const rescue = await actionSystem.semantic.semanticRescue.resolve({
-          event: actionEvent,
-          actions: actionRegistry.getAllActions(false),
-          registry: actionRegistry,
-          llmManager,
-          sourceCharacter: actionMessage?.role === "user" ? conv.gameData.characters.get(conv.gameData.playerID) || npc : npc,
-          targetCharacter: null,
-          signal
-        });
-        if (rescue.matched) {
-          gate = {
-            ...gate,
-            semanticProfile: { ...gate.semanticProfile, resolutionMode: "resolved", allowedActionIds: [rescue.actionId], evidence: ["performance_semantic_rescue"] }
-          };
-          this.recordModeMetric(conv, actionSystemMode, "semanticRescueMatched", { category: actionEvent.category, actionId: rescue.actionId, confidence: rescue.confidence });
-        }
-      }
       this.traceDecision(null, "candidate", "pass", { eventId: actionEvent.eventId, traceId: actionEvent.traceId, category: actionEvent.category });
       if (!actionEvent.pendingConfirmed && actionEvent.interpretationSource !== "precision_stage_a") this.recordModeMetric(conv, actionSystemMode, "localEventCount", { category: actionEvent.category });
+      this.recordModeMetric(conv, actionSystemMode, gate.semanticProfile?.resolutionMode === "resolved" ? "localResolved" : "localUnresolved", { category: actionEvent.category });
       this.traceDecision(null, "semantic", gate.semanticProfile.resolutionMode || "resolved", { eventId: actionEvent.eventId, traceId: actionEvent.traceId, category: actionEvent.category });
       console.log(`[ActionEngine] Explicit action keyword detected for ${npc.shortName}: ${gate.reason}`);
       conv.actionGateProcessedTriggers.add(gate.dedupeKey);
@@ -492,12 +495,7 @@ class ActionEngine {
         actionSystemMode,
         skipReason: skipReason ? actionSystem.actionDecisionTrace.normalizeActionSkipReason(skipReason) : null
       }, null);
-      const semanticAllowlist = new Set(gate.semanticProfile?.allowedActionIds || []);
-      if (gate.semanticProfile?.resolutionMode !== "resolved" || semanticAllowlist.size === 0) {
-        this.traceDecision(null, "semantic", "rejected", { eventId: actionEvent.eventId, traceId: actionEvent.traceId, category: actionEvent.category, reason: "no_semantic_module_match" });
-        recordOutcome("no_semantic_module_match", [], "semantic_unresolved_no_module_match");
-        return { autoApproved: [], needsApproval: [] };
-      }
+      let semanticAllowlist = new Set(gate.semanticProfile?.allowedActionIds || []);
       const userLang = settingsRepository.getLanguage();
       const relevantActionIds = typeof actionRegistry.getActionIdsForCategories === "function" ? actionRegistry.getActionIdsForCategories(gate.reasons) : actionSystem.actionRuleRegistry.getActionIdsForCategories(
         actionSystem.actionRuleRegistry.buildCategoryIndex(actionRegistry.getAllActions(false)),
@@ -520,9 +518,11 @@ class ActionEngine {
       // long mutual gaze followed by a kiss rather than generic intimacy).
       // The selector can still resolve participants and arguments, but cannot
       // promote the event into a different game effect.
-      const loaded = allLoaded.filter((action) => relevantActionIds.has(action.id) && semanticAllowlist.has(action.id));
+      const categoryCandidates = allLoaded.filter((action) => relevantActionIds.has(action.id));
+      const loaded = gate.semanticProfile?.resolutionMode === "resolved" && semanticAllowlist.size > 0 ? categoryCandidates.filter((action) => semanticAllowlist.has(action.id)) : categoryCandidates;
       const available = [];
       let hadUnresolvedParticipants = false;
+      const participantResolutions = [];
       const referenceContext = this.getConversationReferenceContext(conv, actionMessage, actionSource);
       for (const act of loaded) {
         if (signal?.aborted) {
@@ -539,6 +539,7 @@ class ActionEngine {
             referenceContext,
             primaryAddresseeId: actionMessage?.primaryAddresseeId ?? actionMessage?.addresseeCharacterId ?? conv.primaryAddresseeId ?? null
           });
+          participantResolutions.push(participantResolution);
           for (const reference of participantResolution.binding?.references || []) {
             usageAnalytics.record({
               requestType: "reference_resolution",
@@ -556,6 +557,7 @@ class ActionEngine {
           if (participantResolution.mode === "unresolved") {
             this.traceDecision(act.id, "binding", "unresolved", { eventId: actionEvent.eventId, traceId: actionEvent.traceId, reason: participantResolution.reason || "unresolved_participants" });
             hadUnresolvedParticipants = true;
+            this.recordModeMetric(conv, actionSystemMode, "participantAmbiguous", { actionId: act.id, reason: participantResolution.reason || "unresolved_participants" });
             usageAnalytics.record({
               requestType: "action_participant_resolution",
               actionId: act.id,
@@ -638,6 +640,56 @@ class ActionEngine {
             message: `check() threw: ${err instanceof Error ? err.message : String(err)}`
           });
         }
+      }
+      const hasLocalResolution = gate.semanticProfile?.resolutionMode === "resolved" && semanticAllowlist.size > 0;
+      const firstResolvedBinding = participantResolutions.find((resolution) => resolution.mode === "resolved") || null;
+      if (!hasLocalResolution && modeState.policy.useSemanticRescue && actionEvent.executionStatus === "executed" && actionEvent.resultStatus !== "failed" && loaded.length > 0) {
+        this.recordModeMetric(conv, actionSystemMode, "semanticRescueCalls", { category: actionEvent.category, candidateCount: loaded.length });
+        const rescue = await actionSystem.semantic.semanticRescue.resolve({
+          event: actionEvent,
+          actions: loaded,
+          registry: actionRegistry,
+          llmManager,
+          sourceCharacter: firstResolvedBinding?.sourceCharacter || actionSource,
+          targetCharacter: firstResolvedBinding?.targetCharacter || null,
+          signal,
+          mode: actionSystemMode
+        });
+        if (rescue.matched) {
+          semanticAllowlist = new Set([rescue.actionId]);
+          gate = {
+            ...gate,
+            semanticProfile: { ...gate.semanticProfile, resolutionMode: "resolved", allowedActionIds: [rescue.actionId], evidence: ["semantic_rescue"] }
+          };
+          this.recordModeMetric(conv, actionSystemMode, "semanticRescueMatched", { category: actionEvent.category, actionId: rescue.actionId, confidence: rescue.confidence });
+        }
+      }
+      const precisionReason = actionEvent.pendingConfirmed ? null : this.shouldInvokePrecisionJudge({
+        gate,
+        semanticProfile: gate.semanticProfile,
+        participantAmbiguous: hadUnresolvedParticipants,
+        candidateActions: loaded,
+        modePolicy: modeState.policy
+      });
+      if (precisionReason) {
+        const precisionParticipants = [actionSource, ...participantResolutions.flatMap((resolution) => [resolution.sourceCharacter, resolution.targetCharacter])].filter((character, index, list) => character && list.findIndex((candidate) => Number(candidate.id) === Number(character.id)) === index);
+        if (hadUnresolvedParticipants) {
+          for (const character of typeof conv.getActiveConversationCharacters === "function" ? conv.getActiveConversationCharacters() : []) {
+            if (!precisionParticipants.some((candidate) => Number(candidate.id) === Number(character.id))) precisionParticipants.push(character);
+          }
+        }
+        const precision = await this.interpretPrecision(conv, actionSource, actionMessage, signal, actionSystemMode, { actions: loaded, participants: precisionParticipants, reason: precisionReason });
+        if (precision.event) return this.evaluateForCharacter(conv, npc, signal, actionMessage, precision.event);
+        if (precision.handled) return { autoApproved: [], needsApproval: [] };
+      }
+      if (gate.semanticProfile?.resolutionMode !== "resolved" || semanticAllowlist.size === 0) {
+        this.traceDecision(null, "semantic", "rejected", { eventId: actionEvent.eventId, traceId: actionEvent.traceId, category: actionEvent.category, reason: "no_semantic_module_match" });
+        recordOutcome("no_semantic_module_match", [], "semantic_unresolved_no_module_match");
+        return { autoApproved: [], needsApproval: [] };
+      }
+      if (semanticAllowlist.size > 0) {
+        const allowedAvailable = available.filter((action) => semanticAllowlist.has(action.signature));
+        available.splice(0, available.length, ...allowedAvailable);
       }
       if (available.length === 0) {
         recordOutcome("no_available_action", [], hadUnresolvedParticipants ? "unresolved_action_participants" : "no_available_action_for_trigger");
@@ -810,6 +862,7 @@ class ActionEngine {
         });
         if (!bindingValidation.valid) {
           this.recordModeMetric(conv, actionSystemMode, "validationRejected", { actionId: inv.actionId, reason: bindingValidation.reason });
+          this.recordModeMetric(conv, actionSystemMode, "rejectedActions", { actionId: inv.actionId, reason: bindingValidation.reason });
           this.traceDecision(inv.actionId, "validation", "rejected", {
             eventId: actionEvent.eventId,
             traceId: actionEvent.traceId,

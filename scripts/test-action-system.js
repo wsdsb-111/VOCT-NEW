@@ -61,8 +61,6 @@ for (const [text, expected] of triggerCases) {
 }
 
 const semanticCases = [
-  ["我与她对视许久，随后吻住了她的唇。", ["intimate_contact"], []],
-  ["我牵住她的手，轻轻亲吻她。", ["intimate_contact"], []],
   ["卫兵将他押送入牢。", ["imprisonment"], ["isImprisonedBy"]],
   ["他被刺伤，鲜血不断涌出。", ["death_or_injury"], ["isInjured"]],
   ["他被斩首处死。", ["death_or_injury"], ["characterIsKilled"]],
@@ -79,6 +77,15 @@ for (const [text, expectedReasons, expectedScripts] of semanticCases) {
   const profile = ActionEngine.getSemanticActionProfile(text, ActionEngine.getActionTriggers(text));
   for (const reason of expectedReasons) assert(profile.reasons.includes(reason), `${text}: missing reason ${reason}`);
   for (const script of expectedScripts) assert(profile.allowedActionIds.includes(script), `${text}: missing script ${script}`);
+}
+
+for (const [text, expectedType] of [
+  ["我与她对视许久，随后吻住了她的唇。", "romantic_affection"],
+  ["我牵住她的手，轻轻亲吻她。", "romantic_affection"]
+]) {
+  const profile = ActionEngine.getSemanticActionProfile(text, ActionEngine.getActionTriggers(text));
+  assert.strictEqual(profile.events.length, 0, `${text}: basic affection must not auto-select a CK3 action`);
+  assert(profile.socialEvents.some((event) => event.type === expectedType), `${text}: missing social event ${expectedType}`);
 }
 
 const eventCases = [

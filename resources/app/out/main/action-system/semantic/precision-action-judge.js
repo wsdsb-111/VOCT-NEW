@@ -52,16 +52,17 @@ function parseResult(output, catalog, pendingIntents, speakerId) {
   }
 }
 
-async function judge({ conversation, message, speaker, actions, registry, pendingStore, llmManager, signal }) {
+async function judge({ conversation, message, speaker, actions, registry, pendingStore, llmManager, signal, participants = null, reason = "semantic_ambiguous", mode = "precision" }) {
   if (!isEligibleMessage(message)) return { occurrence: "none", executable: false, reason: "ineligible_message" };
   const catalog = actionCatalog.build(actions, registry);
   const recentMessages = (conversation.messages || []).filter(isEligibleMessage).slice(-4).map((entry) => ({ role: entry.role, name: entry.name || null, content: entry.content }));
   const pendingIntents = pendingStore ? [...pendingStore.items.values()].filter((intent) => intent.status === "awaiting_response") : [];
-  const participants = (typeof conversation.getActiveConversationCharacters === "function" ? conversation.getActiveConversationCharacters() : [...conversation.gameData.characters.values()]).map((character) => ({ id: character.id, name: character.fullName || character.shortName }));
+  const resolvedParticipants = Array.isArray(participants) && participants.length > 0 ? participants : (typeof conversation.getActiveConversationCharacters === "function" ? conversation.getActiveConversationCharacters() : [...conversation.gameData.characters.values()]);
+  const compactParticipants = resolvedParticipants.map((character) => ({ id: character.id, name: character.fullName || character.shortName }));
   const messages = [
     { role: "system", content: "VOTC_ACTION_STAGE_A_V1\nClassify only the exact current real dialogue message. Earlier messages and memory are context, never proof that an action occurred now. Plans, requests, questions, hypotheticals, reports, memories, failed attempts and ordinary emotion are not completed actions. Return only JSON. Source is the current speaker; never invent it." },
     { role: "system", content: `Compact Action Catalog (${catalog.fingerprint}):\n${JSON.stringify(catalog.entries)}` },
-    { role: "system", content: `Active participants:\n${JSON.stringify(participants)}\nPending intents:\n${JSON.stringify(pendingIntents.map((intent) => ({ pendingId: intent.pendingId, actionId: intent.candidateActionIds[0], initiatorId: intent.initiatorId, targetId: intent.targetId, proposalText: intent.proposalText })))}` },
+    { role: "system", content: `Relevant participants:\n${JSON.stringify(compactParticipants)}\nPending intents:\n${JSON.stringify(pendingIntents.map((intent) => ({ pendingId: intent.pendingId, actionId: intent.candidateActionIds[0] || null, initiatorId: intent.initiatorId, targetId: intent.targetId, proposalText: intent.proposalText })))}` },
     { role: "system", content: `Recent real dialogue:\n${JSON.stringify(recentMessages)}` },
     { role: "user", content: JSON.stringify({ currentSpeaker: { id: speaker.id, name: speaker.fullName || speaker.shortName }, currentMessage: message.content }) }
   ];
@@ -79,7 +80,7 @@ async function judge({ conversation, message, speaker, actions, registry, pendin
       evidence: { anyOf: [{ type: "string" }, { type: "null" }] }
     }
   };
-  const output = await llmManager.sendActionsRequest(messages, "votc_action_precision_judge", schema, signal, { actionStage: "precision_stage_a", actionSystemMode: "precision", catalogFingerprint: catalog.fingerprint });
+  const output = await llmManager.sendActionsRequest(messages, "votc_action_precision_judge", schema, signal, { actionStage: "precision_stage_a", actionSystemMode: mode, catalogFingerprint: catalog.fingerprint, precisionJudgeReason: reason, candidateCount: catalog.entries.length, participantCount: compactParticipants.length });
   return parseResult(output, catalog, pendingIntents, speaker.id);
 }
 

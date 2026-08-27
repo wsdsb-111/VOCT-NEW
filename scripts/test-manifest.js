@@ -82,6 +82,7 @@ const releaseChecks = [
   { group: "v7.9-semantic-rescue", script: "test-v7.9-semantic-rescue.js" },
   { group: "v7.9-precision-judge", script: "test-v7.9-precision-judge.js" },
   { group: "v7.9-analytics-ui", script: "test-v7.9-analytics-ui.js" },
+  { group: "v7.9.1-production-stability", script: "test-v7.9.1-production-stability.js" },
   { group: "full-prompt-smoke", script: "test-v7.8.2-full-prompt-smoke.js" },
   { group: "usage-analytics-retention", script: "test-usage-analytics-retention.js" },
   { group: "usage-analytics-reconciliation", script: "test-usage-analytics-reconciliation.js" },

@@ -81,6 +81,9 @@ function createUsageAnalytics({ fs, dataDir, analyticsFile, retention, createPro
         cacheHitTokens: Number.isFinite(cacheHitTokens) ? cacheHitTokens : null,
         cacheMissTokens: Number.isFinite(cacheMissTokens) ? cacheMissTokens : null,
         historyStartPosition: Number.isFinite(Number(metadata?.historyStartPosition)) ? Number(metadata.historyStartPosition) : null,
+        stablePrefixEndPosition: Number.isFinite(Number(metadata?.stablePrefixEndPosition)) ? Number(metadata.stablePrefixEndPosition) : null,
+        stablePrefixTokens: Number(metadata?.stablePrefixTokens) || 0,
+        dynamicSuffixTokens: Number(metadata?.dynamicSuffixTokens) || 0,
         prefixFingerprint: metadata?.prefixFingerprint || null,
         blocks: Array.isArray(metadata?.blocks) ? metadata.blocks.map((block, index) => ({
           id: block.id,
@@ -88,7 +91,8 @@ function createUsageAnalytics({ fs, dataDir, analyticsFile, retention, createPro
           type: block.type,
           position: Number.isFinite(Number(block.position)) ? Number(block.position) : index,
           tokens: Number(block.tokens) || 0,
-          fingerprint: block.fingerprint || createPromptFingerprint(block.content)
+          fingerprint: block.fingerprint || createPromptFingerprint(block.content),
+          stable: block.stable === true
         })) : []
       };
       const data = this.read();
@@ -146,7 +150,12 @@ function createUsageAnalytics({ fs, dataDir, analyticsFile, retention, createPro
           performance: create(),
           precision: create()
         },
+        eligibleMessages: 0,
+        gatePositive: 0,
+        gateRejected: 0,
         localEventCount: 0,
+        localResolved: 0,
+        localUnresolved: 0,
         pendingCreated: 0,
         pendingConfirmed: 0,
         pendingRejected: 0,
@@ -154,12 +163,16 @@ function createUsageAnalytics({ fs, dataDir, analyticsFile, retention, createPro
         semanticRescueCalls: 0,
         semanticRescueMatched: 0,
         precisionJudgeCalls: 0,
+        precisionJudgeResolved: 0,
         precisionJudgeNoAction: 0,
         precisionJudgeAction: 0,
         stageBProviderCalls: 0,
         localExecuted: 0,
         providerExecuted: 0,
         validationRejected: 0,
+        rejectedActions: 0,
+        duplicateSuppressed: 0,
+        participantAmbiguous: 0,
         approvalPending: 0,
         executionFailed: 0,
         actionApiCalls: 0,
@@ -336,6 +349,7 @@ function createUsageAnalytics({ fs, dataDir, analyticsFile, retention, createPro
           label: block.label,
           type: block.type,
           position: Number.isFinite(Number(block.position)) ? Number(block.position) : index,
+          stable: block.stable === true,
           estimatedTokens: Number(block.tokens) || 0,
           attributedTokens: actualTokens,
           attributedHitTokens,
@@ -354,7 +368,7 @@ function createUsageAnalytics({ fs, dataDir, analyticsFile, retention, createPro
           const previous = previousBlocks[index];
           if (!current || !previous || current.id !== previous.id) {
             if (current) {
-              firstChangedBlock = { id: current.id, label: current.label, type: current.type, position: index };
+              firstChangedBlock = { id: current.id, label: current.label, type: current.type, position: index, stable: current.stable === true, tokens: Number(current.tokens) || 0, fingerprint: current.fingerprint || null };
             }
             break;
           }
@@ -362,7 +376,7 @@ function createUsageAnalytics({ fs, dataDir, analyticsFile, retention, createPro
           // remains usable, but an exact content-change comparison is unavailable.
           if (!current.fingerprint || !previous.fingerprint) break;
           if (current.fingerprint !== previous.fingerprint) {
-            firstChangedBlock = { id: current.id, label: current.label, type: current.type, position: index };
+            firstChangedBlock = { id: current.id, label: current.label, type: current.type, position: index, stable: current.stable === true, tokens: Number(current.tokens) || 0, fingerprint: current.fingerprint || null };
             break;
           }
         }

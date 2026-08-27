@@ -3,7 +3,7 @@
 const { getInteractionPolicy } = require("./interaction-policy");
 
 const PROPOSALS = [
-  { actionId: "makeAlliance", category: "relationship", pattern: /(?:(?:愿意|可愿|是否愿意|愿不愿意).{0,16}(?:结盟|联盟)|(?:与我|同我|我们).{0,8}(?:结盟|缔结同盟).{0,6}(?:吗|么|可好)?)/i },
+  { actionId: "makeAlliance", category: "relationship", pattern: /(?:(?:愿意|可愿|是否愿意|愿不愿意).{0,16}(?:结盟|联盟)|(?:与我|同我|我们).{0,8}(?:结盟|缔结同盟).{0,6}(?:吗|么|可好)?|(?:提议|提倡|希望).{0,16}(?:建立|缔结|结成).{0,8}(?:军事)?(?:盟约|同盟|联盟))/i },
   { actionId: "agreedToTruceWith", category: "relationship", pattern: /(?:(?:愿意|可愿|是否愿意|同意).{0,16}(?:停战|休战)|(?:停战|休战).{0,8}(?:吗|么|可好))/i },
   { actionId: "becomeLoversWith", category: "relationship", pattern: /(?:(?:愿意|可愿|是否愿意|愿不愿意).{0,16}(?:成为|做|当|结为).{0,6}(?:情人|恋人)|(?:与我|同我).{0,8}(?:相恋|定情).{0,6}(?:吗|么|可好)?)/i },
   { actionId: "becomeFriendsWith", category: "relationship", pattern: /(?:(?:愿意|可愿|是否愿意|愿不愿意).{0,16}(?:成为|做|结为).{0,6}(?:朋友|好友)|(?:与我|同我).{0,8}(?:为友|成为朋友).{0,6}(?:吗|么|可好)?)/i },
@@ -13,6 +13,7 @@ const PROPOSALS = [
   { actionId: "paysGoldTo", category: "gold", pattern: /(?:(?:能否|能不能|可以|可否|愿意).{0,16}(?:给我|付我|交给我).{0,10}(?:金|金币|钱)|(?:给我|付我).{0,10}(?:金|金币|钱).{0,6}(?:吗|么|可好))/i },
   { actionId: "playerPaysGoldTo", category: "gold", pattern: /(?:(?:要我|让我|可要我).{0,12}(?:给你|付你).{0,10}(?:金|金币|钱)|(?:我给你).{0,10}(?:金|金币|钱).{0,6}(?:吗|么|可好))/i }
 ];
+const SOCIAL_PROPOSAL = { category: "social_affection", pattern: /(?:(?:我可以|能否|可否|让我|请让我).{0,8}(?:亲吻|吻|拥抱|抱抱|牵手)|(?:愿意|可愿).{0,8}(?:让我|与我).{0,8}(?:亲吻|拥抱|牵手))/i };
 
 function findTarget({ speaker, characters, text }) {
   const others = (characters || []).filter((character) => Number(character.id) !== Number(speaker?.id));
@@ -23,9 +24,24 @@ function findTarget({ speaker, characters, text }) {
 
 function detect({ text, speaker, characters, registry }) {
   const match = PROPOSALS.find((entry) => entry.pattern.test(String(text || "")) && registry?.getById?.(entry.actionId)?.validation?.valid !== false && registry?.isActionDisabled?.(entry.actionId) !== true);
-  if (!match) return null;
+  const socialOnly = !match && SOCIAL_PROPOSAL.pattern.test(String(text || ""));
+  if (!match && !socialOnly) return null;
   const target = findTarget({ speaker, characters, text });
   if (!target) return null;
+  if (socialOnly) {
+    return {
+      category: SOCIAL_PROPOSAL.category,
+      candidateActionIds: [],
+      initiatorId: Number(speaker.id),
+      targetId: Number(target.id),
+      interactionType: "requested_social_interaction",
+      confirmationPolicy: "explicit_execution_required",
+      expiresAfterTurns: 2,
+      extractedArgs: {},
+      confidence: 0.95,
+      provenance: { source: "local_social_proposal_detector" }
+    };
+  }
   const policy = getInteractionPolicy(match.actionId);
   const amountMatch = String(text || "").match(/(\d+(?:\.\d+)?)\s*(?:金|金币|钱)/);
   return {

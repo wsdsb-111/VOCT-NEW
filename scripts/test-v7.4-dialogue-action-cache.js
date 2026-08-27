@@ -56,7 +56,7 @@ const defaultPromptSource = fs.readFileSync(path.join(root, "resources", "app", 
 assert(providerServiceSource.includes('thinking: { type: "enabled" }'), "DeepSeek normal chat must explicitly enable thinking");
 assert(providerServiceSource.includes("max_tokens: 4096"), "DeepSeek normal chat must keep the requested 4096-token budget");
 assert(promptBuilderSource.includes("角色回复不设固定句数、段落数或人为短回复目标"), "normal roleplay replies must not be artificially shortened");
-assert(promptBuilderSource.includes("VOTC_CACHE_ANCHOR_v3"), "the conversation cache anchor must change with the V7.4 prompt contract");
+assert(promptBuilderSource.includes("VOTC_CACHE_ANCHOR_v4"), "the conversation cache anchor must change with the V7.9.1 stable-prefix contract");
 assert(mainSource.includes("PROMPT_DEFAULTS_MANIFEST_VERSION = 2"), "the V7.4 bundled prompt update must advance its migration manifest");
 assert(mainSource.includes("9ef5e409071b1474e460bddbf2002e50420c153414bf53ac4255973c789742c6"), "the unchanged LF V7.4 predecessor must be eligible for safe prompt migration");
 assert(mainSource.includes("LEGACY_CHAT_INSTRUCTION") && mainSource.includes("DEFAULT_CHAT_INSTRUCTION"), "the untouched legacy reply instruction must migrate without overwriting custom instructions");
@@ -67,10 +67,10 @@ assert(!providerServiceSource.includes('thinking: { type: "enabled" }, max_token
 assert(providerServiceSource.includes('thinking: { type: "disabled" }, max_tokens: structuredSummaryMaxTokens'), "DeepSeek final summaries and recovery must remain non-thinking while using the configured output limit");
 assert(actionPromptSource.includes("VOTC_ACTION_CACHE_ANCHOR_v11"), "the action prompt anchor must change with local no-action filtering");
 assert(actionPromptSource.includes("they never prove that an action happened in the current turn"), "action selection must not treat recalled memory as current evidence");
-assert(rendererSource.includes("Memory Engine 2.5 · V7.9"));
+assert(rendererSource.includes("Memory Engine 2.5 · V7.9.1"));
 assert(rendererSource.includes("动作候选预筛"));
 assert(rendererSource.includes("稳定记忆前缀"));
 assert(rendererSource.includes("DeepSeek 思考与摘要"));
-assert(rendererSource.includes("V7.9 适配状态"));
+assert(rendererSource.includes("V7.9.1 适配状态"));
 
 console.log("VOTC v7.4 dialogue/action/cache: PASS (UI, prompt migration, thinking chat, stable memory prefix, candidate-filtered action routing)");
