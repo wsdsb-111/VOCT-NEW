@@ -113,6 +113,22 @@ const gameData = { playerID: 1, playerName: "玩家", characters: new Map([[1, p
   assert.match(effects[0].body, /value = flag:laugh/);
   assert(analytics.some((entry) => entry.requestType === "action_outcome" && entry.invocationOrigin === "local" && entry.executedActionIds.includes("setEmotion")), "local execution origin must be observable");
 
+  for (const [content, expectedOutcome] of [["我微笑后又哭泣。", "deterministic_unresolved"], ["我神情复杂地看着她。", null]]) {
+    const ambiguousConversation = {
+      ...localConversation,
+      id: `action-ambiguous-${content}`,
+      actionGateProcessedTriggers: new Set(),
+      processedActionEventIds: new Set()
+    };
+    const beforeEffects = effects.length;
+    const beforeProviderCalls = providerCalls;
+    const ambiguousResult = await ActionEngine.evaluateForCharacter(ambiguousConversation, npc, null, { id: content, role: "assistant", name: npc.fullName, content });
+    assert.deepStrictEqual(ambiguousResult, { autoApproved: [], needsApproval: [] }, `${content}: ambiguous emotion must fail closed`);
+    assert.strictEqual(providerCalls, beforeProviderCalls, `${content}: ambiguous emotion must not call Action Provider`);
+    assert.strictEqual(effects.length, beforeEffects, `${content}: ambiguous emotion must not write an effect`);
+    if (expectedOutcome) assert(analytics.some((entry) => entry.requestType === "action_outcome" && entry.actionOutcome === expectedOutcome), `${content}: deterministic rejection must remain observable`);
+  }
+
   const duplicateResult = await ActionEngine.evaluateForCharacter(localConversation, npc, null, localMessage);
   assert.deepStrictEqual(duplicateResult, { autoApproved: [], needsApproval: [] });
   assert.strictEqual(effects.length, 1, "same ActionEvent must execute at most once per turn");

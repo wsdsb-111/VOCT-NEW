@@ -6,7 +6,7 @@ const os = require("os");
 const path = require("path");
 
 const root = path.resolve(__dirname, "..");
-const { MemoryEngine } = require(path.join(root, "resources", "app", "out", "main", "memory-system"));
+const { MemoryEngine, turnRecall } = require(path.join(root, "resources", "app", "out", "main", "memory-system"));
 const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "votc-memory-25-recall-"));
 const makeMemory = (id, content, subjects, participants, totalDays, tags = []) => ({
   memoryId: id,
@@ -50,7 +50,8 @@ try {
   assert.strictEqual(first.triggered, true);
   assert.strictEqual(first.selected.length, 1, "Turn Recall must inject Top1 only");
   assert.strictEqual(first.selected[0].memory.memoryId, "relevant");
-  assert(first.tokens <= 256 && first.tokens <= 320, "Turn Recall must obey its independent cap");
+  assert(first.selected[0].tokens <= 256 && first.selected[0].tokens <= 320, "Turn Recall memory content must obey its independent cap");
+  assert.strictEqual(first.tokens, input.estimateTokens(first.text), "analytics must count the complete Turn Recall prompt block");
   assert.match(first.text, /当前回应角色真实可知/);
   assert.match(first.text, /当前 CK3 数据表示现在/);
   assert.match(first.text, /不得编造/);
@@ -63,6 +64,18 @@ try {
     const unrelated = engine.retrieveTurnRecall({ ...input, query: ["今天天气如何？", "你怎么看？", "继续说。", "坐吧。"][(turnEpoch - 4) % 4], turnEpoch });
     assert.strictEqual(unrelated.triggered, false, "ordinary dialogue must not inject Turn Recall");
     assert.strictEqual(unrelated.reason, "no_recall_intent");
+  }
+  for (const query of ["你是谁？", "你为什么生气？", "这里是哪里？", "今天是谁值守？", "为什么不坐下？"]) {
+    const intent = turnRecall.detectIntent(query);
+    assert.strictEqual(intent.triggered, false, `${query}: ordinary question words must not open the recall gate`);
+  }
+  for (const query of ["你还记得洛阳那次吗？", "你以前答应过我什么？", "当时是谁陪你去的？", "之前那封信是谁写的？", "你曾经为什么离开开封？", "还记得我们的婚约吗？"]) {
+    assert.strictEqual(turnRecall.detectIntent(query).triggered, true, `${query}: explicit past-memory wording must open the recall gate`);
+  }
+  for (const [query, turnEpoch] of [["李师师，喝杯茶吗？", 20], ["赵甲，你怎么看？", 21]]) {
+    const namedOnly = engine.retrieveTurnRecall({ ...input, query, entityNames: [query.split(/[，,]/)[0]], turnEpoch });
+    assert.strictEqual(namedOnly.triggered, false, `${query}: a character name alone must not inject Turn Recall`);
+    assert.strictEqual(namedOnly.reason, "no_recall_intent");
   }
   const later = engine.retrieveTurnRecall({ ...input, query: "那开封那次遗失玉佩事件呢？", turnEpoch: 12 });
   assert.strictEqual(later.selected[0].memory.memoryId, "kaifeng", "a later turn may select a different Top1 memory");

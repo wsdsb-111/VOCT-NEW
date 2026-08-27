@@ -966,6 +966,7 @@ class MemoryEngine {
   retrieveTurnRecall({ characterId, query = "", assistContext = "", entityIds = [], entityNames = [], participantIds = [], ownerFolderMemories = null, currentTotalDays = null, tokenBudget = 256, estimateTokens, cache = null, turnEpoch = 0 } = {}) {
     const ownerId = Number(characterId);
     const expandedQuery = turnRecall.expandQuery(query);
+    const lexicalQuery = turnRecall.expandQuery(turnRecall.removeEntityNames(query, entityNames));
     const fingerprint = turnRecall.createQueryFingerprint(expandedQuery);
     const cacheKey = `${turnEpoch}:${ownerId}:${fingerprint}`;
     if (cache instanceof Map && cache.has(cacheKey)) return { ...cache.get(cacheKey), cacheHit: true };
@@ -976,7 +977,7 @@ class MemoryEngine {
     const candidatesByKey = new Map();
     for (const memory of [...folderMemories, ...internalMemories]) candidatesByKey.set(this.getRouteMemoryKey(memory), memory);
     const ranked = this.ranker.rankTurnRecall([...candidatesByKey.values()], {
-      query: expandedQuery,
+      query: lexicalQuery,
       assistQuery: assistContext,
       entityIds,
       participantIds,
@@ -987,13 +988,15 @@ class MemoryEngine {
     const intentTriggered = intent.triggered || relevancePassed;
     const triggered = intentTriggered && top != null && budget > 0;
     const selected = triggered ? this.ranker.selectWithinBudget([top], { tokenBudget: budget, estimateTokens, allowTruncate: true }) : [];
+    const text = this.formatTurnRecallBlock(selected);
+    const actualTokens = text ? Math.max(1, (estimateTokens || ((value) => Math.ceil(String(value || "").length / 2)))(text)) : 0;
     const result = {
       triggered: selected.length > 0,
       intentTriggered,
       reason: !intentTriggered ? intent.reason : selected.length > 0 ? intent.triggered ? intent.reason : "similarity_threshold" : top == null ? "no_memory_candidate" : "token_budget_exhausted",
       selected,
-      text: this.formatTurnRecallBlock(selected),
-      tokens: selected.reduce((sum, entry) => sum + Number(entry.tokens || 0), 0),
+      text,
+      tokens: actualTokens,
       queryFingerprint: fingerprint,
       cacheHit: false,
       candidateCount: ranked.length

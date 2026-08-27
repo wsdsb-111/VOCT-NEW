@@ -466,6 +466,12 @@ class ActionEngine {
       if (localCandidate?.details?.injuryType) {
         this.traceDecision(deterministicAvailable.signature, "invocation", "args_resolved", { eventId: actionEvent.eventId, traceId: actionEvent.traceId, injuryType: localCandidate.details.injuryType, reason: localCandidate.details.reason });
       }
+      if (deterministicAvailable?.signature === "setEmotion" && localCandidate?.mode === "unresolved") {
+        const reason = localCandidate.reason || "ambiguous_emotion_evidence";
+        this.traceDecision(deterministicAvailable.signature, "invocation", "unresolved", { eventId: actionEvent.eventId, traceId: actionEvent.traceId, reason });
+        recordOutcome("deterministic_unresolved", [], reason, { invocationOrigin: "local" });
+        return { autoApproved: [], needsApproval: [] };
+      }
       if (localCandidate?.mode === "local") {
         invocationOrigin = "local";
         parsed = { actions: [localCandidate.invocation] };
