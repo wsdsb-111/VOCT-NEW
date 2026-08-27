@@ -626,17 +626,43 @@ function createGameData({ fs, path, memorySystem, memoryEngine, summariesDir, ge
       if (!activeCharacter) return "";
       const counterpartIdSet = /* @__PURE__ */ new Set([this.playerID, ...counterpartIds]);
       counterpartIdSet.delete(activeCharacter.id);
-      const relations = [];
+      const sections = [];
+      const getOpinion = (subject, other) => {
+        if (Number(other.id) === Number(this.playerID) && subject.opinionOfPlayer != null && Number.isFinite(Number(subject.opinionOfPlayer))) return Number(subject.opinionOfPlayer);
+        const entry = subject.opinions?.find((opinion) => Number(opinion.id) === Number(other.id));
+        const value = entry?.opinion ?? entry?.opinon;
+        return value != null && Number.isFinite(Number(value)) ? Number(value) : null;
+      };
+      const getFormalRelations = (subject, other) => {
+        const direct = subject.relationsToCharacters?.find((relation) => Number(relation.id) === Number(other.id))?.relations || [];
+        if (direct.length > 0) return direct.join("、");
+        if (Number(other.id) === Number(this.playerID) && subject.relationsToPlayer?.length > 0) return subject.relationsToPlayer.join("、");
+        return "无明确正式关系";
+      };
+      const getKinship = (subject, other) => {
+        const sibling = this.getSiblingRelation(subject, other);
+        if (sibling) return `${subject.fullName}是${other.fullName}的${sibling}`;
+        if (this.findFamilyEntry(subject.parents, other.id) || this.findFamilyEntry(other.children, subject.id)) return `${subject.fullName}是${other.fullName}的${subject.gender === "male" ? "儿子" : subject.gender === "female" ? "女儿" : "子女"}`;
+        if (this.findFamilyEntry(subject.children, other.id) || this.findFamilyEntry(other.parents, subject.id)) return `${subject.fullName}是${other.fullName}的${subject.gender === "male" ? "父亲" : subject.gender === "female" ? "母亲" : "父母"}`;
+        return "无";
+      };
       for (const counterpartId of counterpartIdSet) {
         const counterpart = this.characters.get(counterpartId);
         if (!counterpart) continue;
-        const activeToCounterpart = this.describeCharacterRelationship(activeCharacter, counterpart);
-        const counterpartToActive = this.describeCharacterRelationship(counterpart, activeCharacter);
-        if (activeToCounterpart) relations.push(activeToCounterpart);
-        if (counterpartToActive) relations.push(counterpartToActive);
+        const activeOpinion = getOpinion(activeCharacter, counterpart);
+        const counterpartOpinion = getOpinion(counterpart, activeCharacter);
+        sections.push([
+          `【${activeCharacter.fullName} ↔ ${counterpart.fullName}】`,
+          `- 正式关系（${activeCharacter.fullName}视角）：${getFormalRelations(activeCharacter, counterpart)}`,
+          `- 亲属关系（${activeCharacter.fullName}相对${counterpart.fullName}）：${getKinship(activeCharacter, counterpart)}`,
+          `- 正式关系（${counterpart.fullName}视角）：${getFormalRelations(counterpart, activeCharacter)}`,
+          `- 亲属关系（${counterpart.fullName}相对${activeCharacter.fullName}）：${getKinship(counterpart, activeCharacter)}`,
+          `- 当前好感（${activeCharacter.fullName}对${counterpart.fullName}）：${activeOpinion == null ? "未提供" : activeOpinion}`,
+          `- 当前好感（${counterpart.fullName}对${activeCharacter.fullName}）：${counterpartOpinion == null ? "未提供" : counterpartOpinion}`
+        ].join("\n"));
       }
-      if (relations.length === 0) return "";
-      return `=== 当前回应角色与亲属/对话对象的精确关系（高优先级游戏数据） ===\n${relations.map((relation) => `- ${relation}`).join("\n")}\n称谓必须服从上述关系与长幼：不得把哥哥称为弟弟、把姐姐称为妹妹，也不得仅因 CK3 的原始 brother/sister 标签而忽略出生日期或年龄。`;
+      if (sections.length === 0) return "";
+      return `=== 全部当前在场人物关系权威层（高优先级当前 CK3 数据） ===\n${sections.join("\n")}\n权威规则：正式关系与好感数值必须分开理解；好感高低不能改写亲属、配偶、恋人、朋友、敌对等正式关系。当前 CK3 数据表示现在，摘要/记忆只表示过去；发生冲突时以当前 CK3 正式关系和好感为准。称谓必须服从亲属关系与长幼，不得把哥哥称为弟弟、把姐姐称为妹妹。`;
     }
     
     /**

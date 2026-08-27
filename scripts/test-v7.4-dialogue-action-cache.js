@@ -67,10 +67,10 @@ assert(!providerServiceSource.includes('thinking: { type: "enabled" }, max_token
 assert(providerServiceSource.includes('thinking: { type: "disabled" }, max_tokens: structuredSummaryMaxTokens'), "DeepSeek final summaries and recovery must remain non-thinking while using the configured output limit");
 assert(actionPromptSource.includes("VOTC_ACTION_CACHE_ANCHOR_v11"), "the action prompt anchor must change with local no-action filtering");
 assert(actionPromptSource.includes("they never prove that an action happened in the current turn"), "action selection must not treat recalled memory as current evidence");
-assert(rendererSource.includes("Memory Engine 2.4 · V7.8.2"));
+assert(rendererSource.includes("Memory Engine 2.5 · V7.8.3"));
 assert(rendererSource.includes("动作候选预筛"));
 assert(rendererSource.includes("稳定记忆前缀"));
 assert(rendererSource.includes("DeepSeek 思考与摘要"));
-assert(rendererSource.includes("V7.8.2 适配状态"));
+assert(rendererSource.includes("V7.8.3 适配状态"));
 
 console.log("VOTC v7.4 dialogue/action/cache: PASS (UI, prompt migration, thinking chat, stable memory prefix, candidate-filtered action routing)");

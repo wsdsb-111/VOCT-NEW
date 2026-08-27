@@ -112,6 +112,7 @@ class Conversation {
     // Action checks are scoped to the current player turn. This prevents one
     // narrated event from being sent to the action model once per NPC reply.
     this.actionGateProcessedTriggers = /* @__PURE__ */ new Set();
+    this.processedActionEventIds = /* @__PURE__ */ new Set();
     this.eventEmitter = new events.EventEmitter();
     this.runtime = actionSystem.createConversationRuntime(this, {
       recordSkipped: (responseState, reason) => this.recordGenerationSkippedAnalytics(responseState, reason),
@@ -205,16 +206,41 @@ class Conversation {
   async checkAndSummarizeIfNeeded(npc) {
     memoryEngine?.syncRollingStateFromConversationFields(this);
     memoryEngine?.syncConversationRollingFields(this);
-    const memoryContext = await this.getMemoryContextFor(npc);
-    const currentMessages = PromptBuilder.buildMessages(
+    let memoryContext = await this.getMemoryContextFor(npc);
+    let currentMessages = PromptBuilder.buildMessages(
       this.getPromptHistoryForCharacter(npc.id),
       npc,
       this.gameData,
       this.getPromptSummaryForCharacter(npc.id),
       memoryContext
     );
-    const estimatedTokens = this.estimateTokenCount(currentMessages);
+    let estimatedTokens = this.estimateTokenCount(currentMessages);
     const contextLimit = await llmManager.getCurrentContextLength() || 1e4;
+    if (memoryContext?.turnRecallText && contextLimit - estimatedTokens < 192) {
+      usageAnalytics.record({
+        requestType: "memory_recall",
+        characterId: npc.id,
+        memoryOutcome: "skipped_context_pressure",
+        turnRecallReason: "context_headroom_below_192",
+        turnRecallTokens: memoryContext.turnRecallTokens,
+        turnRecallIntent: true,
+        turnRecallSelected: false,
+        turnRecallCacheHit: memoryContext.turnRecallCacheHit,
+        sessionTopicAnchorLocked: memoryContext.routing?.topicPatch === "locked",
+        queryFingerprint: memoryContext.turnRecallQueryFingerprint,
+        candidateCount: memoryContext.turnRecallCandidateCount,
+        turnEpoch: this.turnEpoch
+      }, null);
+      memoryContext = { ...memoryContext, turnRecall: [], turnRecallText: null, turnRecallTokens: 0, turnRecallReason: "context_headroom_below_192" };
+      currentMessages = PromptBuilder.buildMessages(
+        this.getPromptHistoryForCharacter(npc.id),
+        npc,
+        this.gameData,
+        this.getPromptSummaryForCharacter(npc.id),
+        memoryContext
+      );
+      estimatedTokens = this.estimateTokenCount(currentMessages);
+    }
     if (estimatedTokens > contextLimit * this.CONTEXT_LIMIT_PERCENTAGE) {
       console.log(`Context approaching limit (${estimatedTokens}/${contextLimit}), creating rolling summary`);
       if (this.canUseSharedRollingSummary(npc.id)) await this.createRollingSummary(contextLimit);
@@ -281,7 +307,9 @@ class Conversation {
       const character = mentionableProfiles.get(characterId);
       return [characterId, character ? memoryEngine.getCharacterMentionAliases(character) : []];
     }));
-    const query = history.slice(-4).map((entry) => entry.content || "").filter(Boolean).join("\n");
+    const currentUserIndex = history.findLastIndex((entry) => entry.role === "user");
+    const query = currentUserIndex >= 0 ? history[currentUserIndex].content || "" : "";
+    const assistContext = (currentUserIndex > 0 ? history.slice(Math.max(0, currentUserIndex - 2), currentUserIndex) : []).map((entry) => entry.content || "").filter(Boolean).join("\n");
     const retrieved = memoryEngine.retrieveForResponder({
       characterId: npc.id,
       query,
@@ -295,8 +323,49 @@ class Conversation {
       tokenBudget: Math.min(2400, Math.max(800, Math.floor(limit * 0.08))),
       estimateTokens: (text) => TokenCounter.estimateTokens(text)
     });
+    const turnEntityIds = [...new Set([...activeParticipantIds, ...mentionedCharacterIds].map(Number))].filter((characterId) => characterId !== Number(npc.id));
+    const turnEntityNames = turnEntityIds.flatMap((characterId) => {
+      const profile = mentionableProfiles.get(characterId) || this.gameData.characters.get(characterId);
+      return profile ? memoryEngine.getCharacterMentionAliases(profile) : [];
+    });
+    const turnRecall = memoryEngine.retrieveTurnRecall({
+      characterId: npc.id,
+      query,
+      assistContext,
+      entityIds: turnEntityIds,
+      entityNames: turnEntityNames,
+      participantIds: activeParticipantIds.filter((characterId) => characterId !== npc.id),
+      ownerFolderMemories: memoryState.mentionProfileCache.ownerFolderMemoriesById.get(Number(npc.id)) || [],
+      currentTotalDays: this.gameData.totalDays,
+      tokenBudget: 256,
+      estimateTokens: (text) => TokenCounter.estimateTokens(text),
+      cache: memoryState.turnRecallCache,
+      turnEpoch: this.turnEpoch
+    });
+    usageAnalytics.record({
+      requestType: "memory_recall",
+      character: npc.shortName,
+      characterId: npc.id,
+      memoryOutcome: turnRecall.triggered ? "inserted" : "skipped",
+      turnRecallReason: turnRecall.reason,
+      turnRecallTokens: turnRecall.tokens,
+      turnRecallIntent: turnRecall.intentTriggered,
+      turnRecallSelected: turnRecall.triggered,
+      turnRecallCacheHit: turnRecall.cacheHit,
+      sessionTopicAnchorLocked: retrieved.routing?.topicPatch === "locked",
+      queryFingerprint: turnRecall.queryFingerprint,
+      candidateCount: turnRecall.candidateCount,
+      turnEpoch: this.turnEpoch
+    }, null);
     return {
       ...retrieved,
+      turnRecall: turnRecall.selected,
+      turnRecallText: turnRecall.text,
+      turnRecallTokens: turnRecall.tokens,
+      turnRecallReason: turnRecall.reason,
+      turnRecallQueryFingerprint: turnRecall.queryFingerprint,
+      turnRecallCandidateCount: turnRecall.candidateCount,
+      turnRecallCacheHit: turnRecall.cacheHit,
       activeParticipantIds,
       presenceText: this.buildPresenceContext()
     };
@@ -857,6 +926,9 @@ class Conversation {
     this.messages.push(userMsg);
     memoryEngine?.observeParticipants(this, turnState.activeParticipantIds, userMsg.id);
     this.actionGateProcessedTriggers.clear();
+    if (!(this.processedActionEventIds instanceof Set)) this.processedActionEventIds = /* @__PURE__ */ new Set();
+    else this.processedActionEventIds.clear();
+    if (this.memoryState?.turnRecallCache instanceof Map) this.memoryState.turnRecallCache.clear();
     this.emitUpdate();
     const playerActionResults = await ActionEngine.evaluateForCharacter(this, user, null, userMsg);
     if (turnEpoch !== this.turnEpoch) return;

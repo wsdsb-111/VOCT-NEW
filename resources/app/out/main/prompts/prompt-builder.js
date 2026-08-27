@@ -445,8 +445,8 @@ function createPromptBuilder({
         content: m.content
       })).filter((m) => !!m.content);
       const activeParticipantIds = new Set((memoryContext?.activeParticipantIds || [...gameData.characters.keys()]).map(Number));
-      const siblingIds = Array.isArray(char.siblings) ? char.siblings.map((sibling) => sibling?.id).filter((id) => id !== void 0 && activeParticipantIds.has(Number(id))) : [];
-      const activeParticipantRelationshipContext = gameData.getActiveParticipantRelationshipInfo(char, siblingIds);
+      const activeCounterpartIds = [...activeParticipantIds].filter((id) => Number(id) !== Number(char.id));
+      const activeParticipantRelationshipContext = gameData.getActiveParticipantRelationshipInfo(char, activeCounterpartIds);
       const activeParticipantRelationshipBlock = {
         id: "active-participant-relationship",
         type: "participant_relationship",
@@ -484,6 +484,13 @@ function createPromptBuilder({
         enabled: true,
         role: "system"
       };
+      const sessionTopicAnchorBlock = {
+        id: "memory-session-topic-anchor",
+        type: "memory_session_topic_anchor",
+        label: "Frozen Session Topic Anchor",
+        enabled: true,
+        role: "system"
+      };
       const deferredMainSegments = [];
       const deferredDescriptionBlocks = [];
       let preHistoryContextInserted = false;
@@ -517,6 +524,14 @@ function createPromptBuilder({
             tokens: TokenCounter.estimateTokens(memoryContext.mentionedSnapshotText)
           });
         }
+        if (memoryContext?.topicPatchText) {
+          llmMessages.push({ role: "system", content: memoryContext.topicPatchText });
+          blocksWithTokens.push({
+            block: sessionTopicAnchorBlock,
+            content: memoryContext.topicPatchText,
+            tokens: TokenCounter.estimateTokens(memoryContext.topicPatchText)
+          });
+        }
         for (const deferred of deferredMainSegments) {
           llmMessages.push(deferred.message);
           blocksWithTokens.push(deferred.tokenBlock);
@@ -541,7 +556,8 @@ function createPromptBuilder({
           deferredMainSegments,
           deferredDescriptionBlocks,
           presenceText: [memoryContext?.presenceText, activeParticipantRelationshipContext].filter(Boolean).join("\n\n"),
-          topicPatchText: [mentionedCharactersContext, memoryContext?.topicPatchText].filter(Boolean).join("\n\n")
+          topicPatchText: mentionedCharactersContext,
+          turnRecallText: memoryContext?.turnRecallText
         });
         if (Array.isArray(result)) {
           blocksWithTokens.push(...result);
@@ -763,6 +779,14 @@ function createPromptBuilder({
               block: { ...block, id: `${block.id || "history"}-current-user`, type: "current_user", label: "Current User Message" },
               content: `user: ${currentUserMessage.content}`,
               tokens: TokenCounter.calculateTotalTokens([currentUserMessage])
+            });
+          }
+          if (options.turnRecallText) {
+            messages.push({ role: "system", content: options.turnRecallText });
+            tokenBlocks.push({
+              block: { id: "memory-turn-recall", type: "memory_turn_recall", label: "Turn Recall", enabled: true, role: "system" },
+              content: options.turnRecallText,
+              tokens: TokenCounter.estimateTokens(options.turnRecallText)
             });
           }
           return tokenBlocks;

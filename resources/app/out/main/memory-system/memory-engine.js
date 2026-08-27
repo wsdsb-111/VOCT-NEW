@@ -15,6 +15,7 @@ const { MemoryTrace } = require("./memory-trace");
 const { MentionTracker } = require("./mention-tracker");
 const { getCharacterMentionAliases } = require("./character-identity");
 const { buildPerspectiveSummaryMap, validatePerspectiveSummaryMap } = require("./perspective-projector");
+const turnRecall = require("./turn-recall");
 
 const FINAL_SUMMARY_MAX_ATTEMPTS = 2;
 const RECOVERY_MAX_ATTEMPTS = 3;
@@ -38,7 +39,7 @@ class MemoryEngine {
   }
 
   createConversationState(conversationId) {
-    return { conversationId, rollingState: this.rolling.createState(), participantPresence: [], mentionState: this.mentionTracker.createState(), mentionedRecallCache: new Map(), responderRecallCache: new Map() };
+    return { conversationId, rollingState: this.rolling.createState(), participantPresence: [], mentionState: this.mentionTracker.createState(), mentionedRecallCache: new Map(), responderRecallCache: new Map(), turnRecallCache: new Map() };
   }
 
   ensureConversationState(conversation) {
@@ -48,6 +49,7 @@ class MemoryEngine {
     if (!conversation.memoryState.mentionState) conversation.memoryState.mentionState = this.mentionTracker.createState();
     if (!(conversation.memoryState.mentionedRecallCache instanceof Map)) conversation.memoryState.mentionedRecallCache = new Map();
     if (!(conversation.memoryState.responderRecallCache instanceof Map)) conversation.memoryState.responderRecallCache = new Map();
+    if (!(conversation.memoryState.turnRecallCache instanceof Map)) conversation.memoryState.turnRecallCache = new Map();
     return conversation.memoryState;
   }
 
@@ -903,7 +905,7 @@ class MemoryEngine {
         .filter((entry) => !selectedFolderKeys.has(this.getRouteMemoryKey(entry.memory)) && Number(entry.reason?.query) >= 0.28);
       topicPatch = this.ranker.selectWithinBudget(rankedPatchCandidates.slice(0, 1), { tokenBudget: patchBudget, estimateTokens, allowTruncate: true });
       if (topicPatch.length > 0) {
-        topicPatch = topicPatch.map((entry) => ({ ...entry, routeKind: "topic_patch", routeCharacterIds: uniqueIds([...directIds, ...mentionedIds]) }));
+        topicPatch = topicPatch.map((entry) => ({ ...entry, routeKind: "session_topic_anchor", routeCharacterIds: uniqueIds([...directIds, ...mentionedIds]) }));
         responderCache.topicPatch = topicPatch;
         responderCache.topicPatchLocked = true;
       }
@@ -911,7 +913,7 @@ class MemoryEngine {
     if (sessionRecallCache instanceof Map) sessionRecallCache.set(ownerId, responderCache);
     const relevant = [...direct, ...deduplicatedMentioned, ...topicPatch];
     for (const entry of [...stable, ...relevant]) {
-      const reason = entry.routeKind === "direct" ? "direct_pair_route" : entry.routeKind === "mentioned" ? "mentioned_entity_route" : entry.routeKind === "topic_patch" ? "turn_topic_patch" : "stable_memory";
+      const reason = entry.routeKind === "direct" ? "direct_pair_route" : entry.routeKind === "mentioned" ? "mentioned_entity_route" : entry.routeKind === "session_topic_anchor" ? "session_topic_anchor" : "stable_memory";
       this.trace.record("rank", { memoryId: entry.memory.memoryId, type: entry.memory.type, score: entry.score, characterId: ownerId, reason });
       this.trace.record("retrieve", { memoryId: entry.memory.memoryId, type: entry.memory.type, score: entry.score, characterId: ownerId, reason });
       this.trace.record("inject", { memoryId: entry.memory.memoryId, type: entry.memory.type, score: entry.score, characterId: ownerId, reason });
@@ -945,7 +947,7 @@ class MemoryEngine {
       directStableText: this.formatMemoryBlock("冻结的直接关系记忆（钉住项与最近记录）", direct),
       mentionedText: this.formatMemoryBlock("与被提及场外人物有关的记忆", deduplicatedMentioned),
       mentionedSnapshotText: this.formatMemoryBlock("冻结的场外人物记忆快照", deduplicatedMentioned),
-      topicPatchText: this.formatMemoryBlock("本轮话题记忆补丁", topicPatch),
+      topicPatchText: this.formatMemoryBlock("会话话题记忆锚点（本场冻结）", topicPatch),
       relevantText: this.formatMemoryBlock("与当前话题相关的记忆", relevant),
       tokenBudget: budget,
       selectedTokens,
@@ -959,6 +961,46 @@ class MemoryEngine {
         budgets: { direct: directBudget, mentioned: mentionedBudget, stable: stableBudget, topicPatch: patchBudget }
       }
     };
+  }
+
+  retrieveTurnRecall({ characterId, query = "", assistContext = "", entityIds = [], entityNames = [], participantIds = [], ownerFolderMemories = null, currentTotalDays = null, tokenBudget = 256, estimateTokens, cache = null, turnEpoch = 0 } = {}) {
+    const ownerId = Number(characterId);
+    const expandedQuery = turnRecall.expandQuery(query);
+    const fingerprint = turnRecall.createQueryFingerprint(expandedQuery);
+    const cacheKey = `${turnEpoch}:${ownerId}:${fingerprint}`;
+    if (cache instanceof Map && cache.has(cacheKey)) return { ...cache.get(cacheKey), cacheHit: true };
+    const intent = turnRecall.detectIntent(query, { entityNames });
+    const budget = Math.min(320, Math.max(0, Number(tokenBudget) || 256));
+    const folderMemories = Array.isArray(ownerFolderMemories) ? ownerFolderMemories : this.store.loadFolderSummariesForCharacter(ownerId);
+    const internalMemories = this.store.queryMemories({ characterId: ownerId, includeFolderSummaries: false });
+    const candidatesByKey = new Map();
+    for (const memory of [...folderMemories, ...internalMemories]) candidatesByKey.set(this.getRouteMemoryKey(memory), memory);
+    const ranked = this.ranker.rankTurnRecall([...candidatesByKey.values()], {
+      query: expandedQuery,
+      assistQuery: assistContext,
+      entityIds,
+      participantIds,
+      currentTotalDays
+    });
+    const top = ranked[0] || null;
+    const relevancePassed = Number(top?.reason?.primaryQuery || 0) >= 0.30;
+    const intentTriggered = intent.triggered || relevancePassed;
+    const triggered = intentTriggered && top != null && budget > 0;
+    const selected = triggered ? this.ranker.selectWithinBudget([top], { tokenBudget: budget, estimateTokens, allowTruncate: true }) : [];
+    const result = {
+      triggered: selected.length > 0,
+      intentTriggered,
+      reason: !intentTriggered ? intent.reason : selected.length > 0 ? intent.triggered ? intent.reason : "similarity_threshold" : top == null ? "no_memory_candidate" : "token_budget_exhausted",
+      selected,
+      text: this.formatTurnRecallBlock(selected),
+      tokens: selected.reduce((sum, entry) => sum + Number(entry.tokens || 0), 0),
+      queryFingerprint: fingerprint,
+      cacheHit: false,
+      candidateCount: ranked.length
+    };
+    if (cache instanceof Map) cache.set(cacheKey, result);
+    this.trace.record("turn_recall", { characterId: ownerId, turnEpoch, reason: result.reason, selectedCount: selected.length, tokens: result.tokens, candidateCount: ranked.length, queryFingerprint: fingerprint });
+    return result;
   }
 
   retrieveForCharacter({ characterId, query = "", entityIds = [], entityNames = [], participantIds = [], currentTotalDays = null, tokenBudget = 800, estimateTokens } = {}) {
@@ -1108,7 +1150,8 @@ class MemoryEngine {
         "每名 NPC 只读取自己的 ID_姓名目录；玩家目录保存摘要但玩家不执行提示词记忆召回。",
         "同一场对话内，长期稳定记忆、直接关系最近记录和场外人物快照不随当前问题重排；只在新会话读取最新终局记忆。",
         "直接参与者按自己的目录精确召回最近 2 条，并保留承诺、秘密或未决事项等钉住记忆。",
-        "首次提到场外人物时，每名 NPC 分别从自己的目录建立记忆快照；本场后续回复复用，必要时只追加一个话题补丁。",
+        "首次提到场外人物时，每名 NPC 分别从自己的目录建立记忆快照；Session Topic Anchor 首次命中后整场冻结。",
+        "明确回忆问题可在当前用户消息之后追加 Top1 Turn Recall；默认 256 token、硬上限 320 token，同回合查询复用缓存。",
         "终局摘要按每名目录所有者的知情边界生成视角投影；不知情角色不会获得他人的私密内容。",
         "同一场群聊写入多个关系文件时按 finalizationId 去重；内容长度由每次 800–2400 token 的动态预算约束。"
       ],
@@ -1117,7 +1160,9 @@ class MemoryEngine {
         directPair: "直接关系：最近 2 条 + 钉住记忆，整场冻结",
         group: "多人：分别按每个回应角色的知情视角召回",
         mentioned: "场外人物：首次提及时锁定快照，整场复用",
-        tokenBudget: "每名 NPC 每次回复使用上下文约 8%，最少 800、最多 2400 token"
+        sessionTopicAnchor: "首次话题命中 Top1，整场冻结并保留在历史前稳定区",
+        turnRecall: "明确回忆意图且相关度达标时 Top1；当前用户消息后插入，默认 256 token",
+        tokenBudget: "冻结记忆每名 NPC 每次回复使用上下文约 8%，最少 800、最多 2400 token"
       },
       characters: []
     };
@@ -1126,6 +1171,11 @@ class MemoryEngine {
   formatMemoryBlock(title, entries) {
     if (!entries || entries.length === 0) return null;
     return `${title}（仅包含当前回应角色应当知道的内容）：\n${entries.map((entry) => `- [${entry.memory.type === "folder_summary" ? "人物目录摘要" : `${entry.memory.type}/${entry.memory.epistemicStatus}`}] ${entry.memory.eventDate || "日期不详"}：${entry.memory.content}`).join("\n")}`;
+  }
+
+  formatTurnRecallBlock(entries) {
+    if (!entries || entries.length === 0) return null;
+    return `=== Turn Recall：当前回应角色真实可知的过去事实 ===\n${entries.map((entry) => `- ${entry.memory.eventDate || "日期不详"}：${entry.memory.content}`).join("\n")}\n权威规则：不得否认上述明确记录。当前 CK3 数据表示现在，摘要/记忆表示过去；若信息不足，只能承认记忆模糊，不得编造。`;
   }
 
   recordLetterMemory({ senderId, recipientId, content, date = null, totalDays = null, letterId = null }) {

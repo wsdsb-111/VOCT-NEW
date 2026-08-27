@@ -132,7 +132,7 @@ try {
     ai,
     gameData,
     "",
-    { engineVersion: "2.4", activeParticipantIds: [1, 2], presenceText: "当前在场：玩家、李师师" }
+    { engineVersion: "2.5", activeParticipantIds: [1, 2], presenceText: "当前在场：玩家、李师师", topicPatchText: "会话话题记忆锚点（本场冻结）：花园旧约", turnRecallText: "=== Turn Recall：当前回应角色真实可知的过去事实 ===\n- 花园之约" }
   );
   assert(promptBuild.messages.length > 5, "真实 Chat Prompt 必须生成完整消息序列");
   assert.strictEqual(promptBuild.blocks[0].block.id, "cache-anchor", "Stable Cache Anchor 必须保持首位");
@@ -141,6 +141,21 @@ try {
   assert(blockIds.indexOf("main-system-stable_history_rp") > blockIds.indexOf("main-system-stable_global"));
   assert(blockIds.includes("character-description-stable"), "真实 Description Script 必须生成稳定人物资料块");
   assert(blockIds.includes("character-description-dynamic"), "splitDescriptionForCache 必须分离动态日期场景块");
+  const currentUserIndex = promptBuild.blocks.findIndex((entry) => entry.block.type === "current_user");
+  assert(blockIds.indexOf("memory-session-topic-anchor") < currentUserIndex, "Session Topic Anchor 必须位于冻结前缀");
+  assert(blockIds.indexOf("memory-turn-recall") > currentUserIndex, "Turn Recall 必须位于当前用户消息之后");
+  const secondPromptBuild = PromptBuilder.buildMessagesWithTokenCount(
+    [{ id: 1, role: "user", name: player.fullName, content: "你还记得开封那封信吗？" }],
+    ai,
+    gameData,
+    "",
+    { engineVersion: "2.5", activeParticipantIds: [1, 2], presenceText: "当前在场：玩家、李师师", topicPatchText: "会话话题记忆锚点（本场冻结）：花园旧约", turnRecallText: "=== Turn Recall：当前回应角色真实可知的过去事实 ===\n- 开封旧信" }
+  );
+  const frozenPrefix = (build) => {
+    const boundary = build.blocks.findIndex((entry) => entry.block.type === "current_user");
+    return build.blocks.slice(0, boundary).map((entry) => ({ id: entry.block.id, fingerprint: crypto.createHash("sha256").update(String(entry.content || "")).digest("hex") }));
+  };
+  assert.deepStrictEqual(frozenPrefix(secondPromptBuild), frozenPrefix(promptBuild), "Turn Recall changes must not alter any block before Current User Message");
   const chatText = promptBuild.messages.map((message) => message.content).join("\n");
   assert(chatText.includes("Voices of the Court 宫廷对话系统"), "default.hbs 必须实际渲染");
   assert(chatText.includes("1010年3月2日"));

@@ -16,6 +16,7 @@ const summaryCatalog = require("./summary-catalog");
 const characterIdentity = require("./character-identity");
 const memorySchema = require("./memory-schema");
 const perspectiveProjector = require("./perspective-projector");
+const turnRecall = require("./turn-recall");
 
 module.exports = {
   ...memoryTypes,
@@ -33,5 +34,6 @@ module.exports = {
   verifyDirectedSummaryPersistence,
   ...perspectiveProjector,
   ...characterIdentity,
-  ...summaryCatalog
+  ...summaryCatalog,
+  turnRecall
 };

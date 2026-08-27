@@ -50,6 +50,22 @@ function createUsageAnalytics({ fs, dataDir, analyticsFile, retention, createPro
         pendingActionIds: Array.isArray(metadata?.pendingActionIds) ? metadata.pendingActionIds : [],
         failedActionIds: Array.isArray(metadata?.failedActionIds) ? metadata.failedActionIds : [],
         skipReason: metadata?.skipReason || null,
+        traceId: metadata?.traceId || null,
+        eventId: metadata?.eventId || null,
+        actionId: metadata?.actionId || null,
+        stage: metadata?.stage || null,
+        outcome: metadata?.outcome || null,
+        invocationOrigin: metadata?.invocationOrigin || null,
+        turnEpoch: Number.isFinite(Number(metadata?.turnEpoch)) ? Number(metadata.turnEpoch) : null,
+        memoryOutcome: metadata?.memoryOutcome || null,
+        turnRecallReason: metadata?.turnRecallReason || null,
+        turnRecallTokens: Number(metadata?.turnRecallTokens) || 0,
+        turnRecallIntent: metadata?.turnRecallIntent === true,
+        turnRecallSelected: metadata?.turnRecallSelected === true,
+        turnRecallCacheHit: metadata?.turnRecallCacheHit === true,
+        sessionTopicAnchorLocked: metadata?.sessionTopicAnchorLocked === true,
+        queryFingerprint: metadata?.queryFingerprint || null,
+        candidateCount: Number(metadata?.candidateCount) || 0,
         estimatedPromptTokens,
         promptTokens,
         promptEstimateRatio: promptTokens > 0 && estimatedPromptTokens > 0 ? promptTokens / estimatedPromptTokens : null,
@@ -116,9 +132,26 @@ function createUsageAnalytics({ fs, dataDir, analyticsFile, retention, createPro
         selectedActionIds: {},
         outcomes: {}
       };
+      const actionPipeline = { candidateEvents: 0, semanticResolved: 0, semanticRejected: 0, localActions: 0, providerCalls: 0, executedActions: 0, modelExecutedActions: 0, emptyProviderResponses: 0 };
+      const memoryRecall = { requests: 0, intentTriggered: 0, selected: 0, empty: 0, cacheHits: 0, skippedContextPressure: 0, tokens: 0, candidateCount: 0, sessionTopicAnchorLocked: 0 };
       for (const entry of entries) {
         const isUsageRecord = usageAnalyticsRetention.isUsageEntry(entry);
         const isActionOutcome = entry.requestType === "action_outcome";
+        if (entry.requestType === "action_decision_trace" && entry.stage === "candidate" && entry.outcome === "pass") actionPipeline.candidateEvents++;
+        if (entry.requestType === "action_decision_trace" && entry.stage === "semantic" && entry.outcome === "resolved") actionPipeline.semanticResolved++;
+        if (entry.requestType === "action_decision_trace" && entry.stage === "semantic" && entry.outcome === "rejected") actionPipeline.semanticRejected++;
+        if (entry.requestType === "action_pipeline" && entry.stage === "provider" && entry.outcome === "called") actionPipeline.providerCalls++;
+        if (entry.requestType === "memory_recall") {
+          memoryRecall.requests++;
+          if (entry.turnRecallIntent) memoryRecall.intentTriggered++;
+          if (entry.turnRecallSelected) memoryRecall.selected++;
+          if (entry.turnRecallIntent && !entry.turnRecallSelected) memoryRecall.empty++;
+          if (entry.turnRecallCacheHit) memoryRecall.cacheHits++;
+          if (entry.memoryOutcome === "skipped_context_pressure") memoryRecall.skippedContextPressure++;
+          if (entry.sessionTopicAnchorLocked) memoryRecall.sessionTopicAnchorLocked++;
+          memoryRecall.tokens += Number(entry.turnRecallTokens) || 0;
+          memoryRecall.candidateCount += Number(entry.candidateCount) || 0;
+        }
         if (isUsageRecord) {
           add(total, entry);
           if (entry.isReconciledAggregate) {
@@ -138,6 +171,10 @@ function createUsageAnalytics({ fs, dataDir, analyticsFile, retention, createPro
           if (outcome === "invalid_json" || outcome === "invalid_schema") actionOutcomes.invalidResponse++;
           if (outcome === "no_action_selected") actionOutcomes.noActionSelected++;
           actionOutcomes.executed += entry.executedActionIds?.length || 0;
+          actionPipeline.executedActions += entry.executedActionIds?.length || 0;
+          if (entry.invocationOrigin === "local") actionPipeline.localActions += entry.executedActionIds?.length || 0;
+          if (entry.invocationOrigin === "model") actionPipeline.modelExecutedActions += entry.executedActionIds?.length || 0;
+          if (outcome === "empty_response") actionPipeline.emptyProviderResponses++;
           actionOutcomes.pendingApproval += entry.pendingActionIds?.length || 0;
           actionOutcomes.failed += entry.failedActionIds?.length || 0;
           if ((entry.selectedActionIds?.length || 0) > 0) actionOutcomes.withSelection++;
@@ -206,6 +243,16 @@ function createUsageAnalytics({ fs, dataDir, analyticsFile, retention, createPro
           ...actionOutcomes,
           selectionRate: actionOutcomes.evaluated > 0 ? actionOutcomes.withSelection / actionOutcomes.evaluated : null,
           successfulExecutionRate: actionOutcomes.executed + actionOutcomes.failed > 0 ? actionOutcomes.executed / (actionOutcomes.executed + actionOutcomes.failed) : null
+        },
+        actionPipeline: {
+          ...actionPipeline,
+          providerEfficiency: actionPipeline.providerCalls > 0 ? actionPipeline.modelExecutedActions / actionPipeline.providerCalls : null
+        },
+        memoryRecall: {
+          ...memoryRecall,
+          triggerRate: memoryRecall.requests > 0 ? memoryRecall.intentTriggered / memoryRecall.requests : null,
+          averageTokens: memoryRecall.selected > 0 ? memoryRecall.tokens / memoryRecall.selected : 0,
+          cacheHitRate: memoryRecall.requests > 0 ? memoryRecall.cacheHits / memoryRecall.requests : null
         },
         recent: recentWithAttribution.slice(-100).reverse()
       };

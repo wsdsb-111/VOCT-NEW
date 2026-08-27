@@ -61,6 +61,12 @@ class ParticipantResolver {
     const namedCharacters = characters.filter((character) => character.id !== speaker.id && identityPatternFor(character) && new RegExp(identityPatternFor(character)).test(evidenceText));
     const speakerIndex = evidenceText.indexOf("我");
     const reflexive = evidenceText.includes("自己");
+    if (actionDefinition?.semantic?.poseSubject === true) {
+      if (namedCharacters.length === 1) return resolve(namedCharacters[0], namedCharacters[0], "explicit_pose_subject");
+      if (namedCharacters.length > 1) return { mode: "unresolved", reason: "multiple_possible_targets", binding: createUnresolvedBinding({ ...baseInput, unresolvedReason: "multiple_possible_targets" }) };
+      if (!/[他她它]|(?:你|您|对方)/.test(originalText)) return resolve(speaker, speaker, "speaker_pose_subject");
+      return { mode: "unresolved", reason: "ambiguous_pose_subject", binding: createUnresolvedBinding({ ...baseInput, unresolvedReason: "ambiguous_pose_subject" }) };
+    }
     if (reflexive && speakerIndex >= 0 && actionPositions.length > 0) return resolve(speaker, speaker, "reflexive_speaker");
     if (actionDefinition?.semantic?.bilateralPersistentEffect === true && namedCharacters.length === 1 && actionPositions.length > 0) {
       return resolve(speaker, namedCharacters[0], "bilateral_explicit_counterpart");

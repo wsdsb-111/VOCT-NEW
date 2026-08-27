@@ -427,7 +427,7 @@ class MemoryStore {
               counterpartIds: [counterpartId],
               counterpartNames: [counterpartName],
               participantProfiles: summaryProfiles,
-              extractionMode: summary.engineVersion === MEMORY_ENGINE_VERSION ? "folder_summary_v2_4" : summary.engineVersion === "2.3" ? "folder_summary_v2_3" : "folder_summary_v2_1",
+              extractionMode: summary.engineVersion === MEMORY_ENGINE_VERSION ? "folder_summary_v2_5" : summary.engineVersion === "2.4" ? "folder_summary_v2_4" : summary.engineVersion === "2.3" ? "folder_summary_v2_3" : "folder_summary_v2_1",
               perspectiveMemoryIds: summary.perspectiveMemoryIds || [],
               projectionHash: summary.projectionHash || null,
               messageIds: [],

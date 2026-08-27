@@ -31,6 +31,7 @@ function validateActionRules(action) {
     }
   }
   if (semantic.bilateralPersistentEffect !== undefined && typeof semantic.bilateralPersistentEffect !== "boolean") return { valid: false, message: "Action semantic bilateralPersistentEffect must be a boolean." };
+  if (semantic.poseSubject !== undefined && typeof semantic.poseSubject !== "boolean") return { valid: false, message: "Action semantic poseSubject must be a boolean." };
   if (semantic.bilateralPersistentEffect === true && semantic.participantRoles === undefined) return { valid: false, message: "Bilateral persistent actions must define semantic participantRoles." };
   return { valid: true };
 }

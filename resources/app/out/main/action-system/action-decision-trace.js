@@ -9,8 +9,8 @@ function normalizeSkipReason(stage, reason) {
 
 function inferSkipStage(reason) {
   if (["no_action_candidate"].includes(reason)) return "gate";
-  if (["no_executed_action_event", "already_processed_action_text"].includes(reason)) return "event";
-  if (["unresolved_action_semantics"].includes(reason)) return "semantic";
+  if (["no_executed_action_event", "already_processed_action_text", "already_processed_action_event"].includes(reason)) return "event";
+  if (["unresolved_action_semantics", "semantic_unresolved_no_module_match", "no_semantic_module_match"].includes(reason)) return "semantic";
   if (["unresolved_action_participants"].includes(reason)) return "binding";
   if (["no_available_action_for_trigger", "inactive_participant"].includes(reason)) return "availability";
   if (["empty_model_response", "output_token_limit_reached", "unparseable_model_response", "schema_validation_failed"].includes(reason)) return "invocation";

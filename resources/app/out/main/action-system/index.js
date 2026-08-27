@@ -13,6 +13,7 @@ const eventParser = require("./event-parser");
 const semanticResolver = require("./semantic-resolver");
 const availabilityService = require("./availability-service");
 const injuryTypeResolver = require("./injury-type-resolver");
+const emotionTypeResolver = require("./emotion-type-resolver");
 const deterministicInvocation = require("./deterministic-invocation");
 const actionRuleRegistry = require("./action-rule-registry");
 const { ConversationTurnManager } = require("./conversation-turn-manager");
@@ -42,6 +43,7 @@ module.exports = {
   semanticResolver,
   availabilityService,
   injuryTypeResolver,
+  emotionTypeResolver,
   deterministicInvocation,
   actionRuleRegistry,
   ConversationTurnManager,

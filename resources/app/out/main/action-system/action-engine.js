@@ -208,6 +208,11 @@ class ActionEngine {
     const semanticReasons = semanticProfile.reasons;
     const dedupeKey = actionEvent ? actionSystem.eventTracker.getEventKey(message, actionEvent) : `${message.id ?? "unknown"}|${semanticReasons.join("+")}|${message.name || message.role || "unknown"}|${message.content}`;
     if (!conv.actionGateProcessedTriggers) conv.actionGateProcessedTriggers = /* @__PURE__ */ new Set();
+    if (!conv.processedActionEventIds) conv.processedActionEventIds = /* @__PURE__ */ new Set();
+    const eventDedupeKey = actionEvent ? `${conv.id || "conversation"}|${conv.turnEpoch ?? 0}|${dedupeKey}` : null;
+    if (eventDedupeKey && conv.processedActionEventIds.has(eventDedupeKey)) {
+      return { shouldEvaluate: false, reason: "already_processed_action_event" };
+    }
     if (conv.actionGateProcessedTriggers.has(dedupeKey)) {
       return { shouldEvaluate: false, reason: "already_processed_action_text" };
     }
@@ -215,7 +220,7 @@ class ActionEngine {
     // another message in this turn used the same category. The exact-message
     // key above still prevents a single player line from being evaluated more
     // than once, while multi-NPC dialogue keeps every distinct action.
-    return { shouldEvaluate: true, reason: semanticReasons.join("+"), reasons: semanticReasons, semanticProfile, dedupeKey };
+    return { shouldEvaluate: true, reason: semanticReasons.join("+"), reasons: semanticReasons, semanticProfile, dedupeKey, eventDedupeKey };
   }
   /**
    * Evaluate actions for the given NPC (as source) based on recent conversation state.
@@ -276,6 +281,7 @@ class ActionEngine {
       this.traceDecision(null, "semantic", gate.semanticProfile.resolutionMode || "resolved", { eventId: actionEvent.eventId, traceId: actionEvent.traceId, category: actionEvent.category });
       console.log(`[ActionEngine] Explicit action keyword detected for ${npc.shortName}: ${gate.reason}`);
       conv.actionGateProcessedTriggers.add(gate.dedupeKey);
+      if (gate.eventDedupeKey) conv.processedActionEventIds.add(gate.eventDedupeKey);
       const recordOutcome = (actionOutcome, selectedActionIds = [], skipReason = null, details = {}) => usageAnalytics.record({
         requestType: "action_outcome",
         character: npc.shortName,
@@ -287,8 +293,18 @@ class ActionEngine {
         pendingActionIds: details.pendingActionIds || [],
         failedActionIds: details.failedActionIds || [],
         actionFinishReason: details.actionFinishReason || null,
+        invocationOrigin: details.invocationOrigin || null,
+        eventId: actionEvent.eventId,
+        traceId: actionEvent.traceId,
+        turnEpoch: conv.turnEpoch ?? null,
         skipReason: skipReason ? actionSystem.actionDecisionTrace.normalizeActionSkipReason(skipReason) : null
       }, null);
+      const semanticAllowlist = new Set(gate.semanticProfile?.allowedActionIds || []);
+      if (gate.semanticProfile?.resolutionMode !== "resolved" || semanticAllowlist.size === 0) {
+        this.traceDecision(null, "semantic", "rejected", { eventId: actionEvent.eventId, traceId: actionEvent.traceId, category: actionEvent.category, reason: "no_semantic_module_match" });
+        recordOutcome("no_semantic_module_match", [], "semantic_unresolved_no_module_match");
+        return { autoApproved: [], needsApproval: [] };
+      }
       const userLang = settingsRepository.getLanguage();
       const relevantActionIds = typeof actionRegistry.getActionIdsForCategories === "function" ? actionRegistry.getActionIdsForCategories(gate.reasons) : actionSystem.actionRuleRegistry.getActionIdsForCategories(
         actionSystem.actionRuleRegistry.buildCategoryIndex(actionRegistry.getAllActions(false)),
@@ -311,8 +327,7 @@ class ActionEngine {
       // long mutual gaze followed by a kiss rather than generic intimacy).
       // The selector can still resolve participants and arguments, but cannot
       // promote the event into a different game effect.
-      const semanticAllowlist = new Set(gate.semanticProfile?.allowedActionIds || []);
-      const loaded = allLoaded.filter((action) => relevantActionIds.has(action.id) && (semanticAllowlist.size === 0 || semanticAllowlist.has(action.id)));
+      const loaded = allLoaded.filter((action) => relevantActionIds.has(action.id) && semanticAllowlist.has(action.id));
       const available = [];
       let hadUnresolvedParticipants = false;
       const referenceContext = this.getConversationReferenceContext(conv, actionMessage, actionSource);
@@ -461,6 +476,16 @@ class ActionEngine {
           target: localCandidate.invocation.targetCharacterId
         });
       } else {
+        usageAnalytics.record({
+          requestType: "action_pipeline",
+          character: npc.shortName,
+          stage: "provider",
+          outcome: "called",
+          eventId: actionEvent.eventId,
+          traceId: actionEvent.traceId,
+          invocationOrigin: "model",
+          turnEpoch: conv.turnEpoch ?? null
+        }, null);
         const messages = ActionPromptBuilder.buildActionMessages(conv, actionSource, available, {
           message: actionMessage,
           triggers: gate.reasons,
@@ -504,7 +529,7 @@ class ActionEngine {
         console.log(`[ActionEngine] Received structured response (${typeof content === "string" ? content.length : 0} characters)`);
         logVerboseLLM("[ActionEngine][verbose] Structured response:", content);
         if (!content || typeof content !== "string") {
-          recordOutcome("empty_response", [], actionFinishReason === "length" ? "output_token_limit_reached" : "empty_model_response", { actionFinishReason });
+          recordOutcome("empty_response", [], actionFinishReason === "length" ? "output_token_limit_reached" : "empty_model_response", { actionFinishReason, invocationOrigin });
           return { autoApproved: [], needsApproval: [] };
         }
         if (signal?.aborted) {
@@ -514,18 +539,18 @@ class ActionEngine {
         try {
           const maybeJson = healJsonResponseWithLogging(content, "ActionEngine");
           if (!maybeJson) {
-            recordOutcome("invalid_json", [], "unparseable_model_response", { actionFinishReason });
+            recordOutcome("invalid_json", [], "unparseable_model_response", { actionFinishReason, invocationOrigin });
             return { autoApproved: [], needsApproval: [] };
           }
           parsed = zodSchema.parse(maybeJson);
         } catch (err) {
-          recordOutcome("invalid_schema", [], "schema_validation_failed", { actionFinishReason });
+          recordOutcome("invalid_schema", [], "schema_validation_failed", { actionFinishReason, invocationOrigin });
           return { autoApproved: [], needsApproval: [] };
         }
       }
       if (!parsed || !Array.isArray(parsed.actions) || parsed.actions.length === 0) {
         console.log("[ActionEngine] No actions to process");
-        recordOutcome("no_action_selected", [], null, { actionFinishReason });
+        recordOutcome("no_action_selected", [], null, { actionFinishReason, invocationOrigin });
         return { autoApproved: [], needsApproval: [] };
       }
       const seenInvocations = /* @__PURE__ */ new Set();
@@ -632,7 +657,8 @@ class ActionEngine {
         executedActionIds,
         pendingActionIds,
         failedActionIds,
-        actionFinishReason
+        actionFinishReason,
+        invocationOrigin
       });
       return { autoApproved, needsApproval };
     } catch (err) {

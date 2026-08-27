@@ -1,11 +1,16 @@
 "use strict";
 const injuryTypeResolver = require("./injury-type-resolver");
+const emotionTypeResolver = require("./emotion-type-resolver");
 const { createValidatedInvocation } = require("./action-types");
 
 const deterministicResolvers = new Map([
   ["isInjured", ({ evidenceText }) => {
     const resolution = injuryTypeResolver.resolve(evidenceText);
     return resolution.resolved ? { resolved: true, args: { injuryType: resolution.injuryType }, details: resolution } : { resolved: false, details: resolution };
+  }],
+  ["setEmotion", ({ evidenceText }) => {
+    const resolution = emotionTypeResolver.resolve(evidenceText);
+    return resolution.resolved ? { resolved: true, args: { emotion: resolution.emotion }, details: resolution } : { resolved: false, details: resolution };
   }],
   ["intercourse", () => ({ resolved: true, args: {}, details: { reason: "no_action_arguments" } })]
 ]);

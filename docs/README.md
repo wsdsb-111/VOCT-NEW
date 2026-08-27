@@ -6,7 +6,7 @@
 
 1. [项目 README](../README.md)：运行环境、配置方式和当前版本基线。
 2. [CHANGELOG.md](../CHANGELOG.md)：按版本查看变更入口和对应的详细文档。
-3. [README_摘要系统.md](README_摘要系统.md)：Memory Engine 2.4 的存储、召回、写入和生命周期规则。
+3. [README_摘要系统.md](README_摘要系统.md)：Memory Engine 2.5 的存储、冻结召回、Turn Recall、写入和生命周期规则。
 4. [V7阶段优化记录.md](V7阶段优化记录.md)：V7/V7.x 的连续开发记录。
 5. [V6阶段优化记录.md](V6阶段优化记录.md)：V6/V6.x 的动作系统与基础设施记录。
 6. 需要核对具体方案时，再阅读版本设计文档和实施报告。
@@ -17,13 +17,14 @@
 
 - [VOTC_v7.8_main.js第一轮模块化拆分实施记录.md](VOTC_v7.8_main.js第一轮模块化拆分实施记录.md)：Pre-V8 组合根、游戏数据、Prompt、摘要、信件和运行服务拆分边界及验证结果。
 - [VOTC_v7.7_main.js架构拆分与迁移清单.md](VOTC_v7.7_main.js架构拆分与迁移清单.md)：V7.7 Provider Service、Provider 与 IPC 分阶段拆分范围、依赖边界和验证清单。
-- [README_摘要系统.md](README_摘要系统.md)：Memory Engine 2.4 和人物目录视角摘要系统。
+- [README_摘要系统.md](README_摘要系统.md)：Memory Engine 2.5 和人物目录视角摘要系统。
 - [V7阶段优化记录.md](V7阶段优化记录.md)：V7.0 至当前 V7.x 的功能、修复和验收边界。
 - [V6阶段优化记录.md](V6阶段优化记录.md)：V6.2 至 V6.9.1 的动作系统、缓存和架构记录。
 
 ### 版本设计与实施报告
 
 - [VOTC_v7.8.2_V7最终收尾修复实施记录.md](VOTC_v7.8.2_V7最终收尾修复实施记录.md)
+- [VOTC_v7.8.3_Memory_Engine_2.5实施记录.md](VOTC_v7.8.3_Memory_Engine_2.5实施记录.md)
 - [VOTC_v7.8.1_暂时离场与Prompt修复实施记录.md](VOTC_v7.8.1_暂时离场与Prompt修复实施记录.md)
 - [VOTC_v7.8_main.js第一轮模块化拆分实施记录.md](VOTC_v7.8_main.js第一轮模块化拆分实施记录.md)
 - [VOTC_v7.7.4_稳定性与基础设施实施记录.md](VOTC_v7.7.4_稳定性与基础设施实施记录.md)

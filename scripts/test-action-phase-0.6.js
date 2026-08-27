@@ -91,7 +91,7 @@ run("Every shipped standard action declares valid semantic metadata", () => {
     assert(Array.isArray(action.triggerCategories), `${file}: triggerCategories must be an array`);
     assert(action.semantic && typeof action.semantic === "object", `${file}: semantic metadata is missing`);
     assert(["low", "medium", "high"].includes(action.semantic.riskLevel), `${file}: invalid semantic riskLevel`);
-    const hasMatcher = Array.isArray(action.semantic.evidencePatterns) && action.semantic.evidencePatterns.length > 0;
+    const hasMatcher = Array.isArray(action.semantic.evidencePatterns) && action.semantic.evidencePatterns.length > 0 || typeof action.semantic.match === "function";
     assert(hasMatcher || action.semantic.fallback, `${file}: semantic metadata needs evidencePatterns, match(), or a fallback role`);
   }
 });

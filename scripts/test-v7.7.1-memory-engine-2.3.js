@@ -128,7 +128,7 @@ try {
   };
   const first = engine.retrieveForResponder({ ...common, query: "诸葛亮北伐" });
   const second = engine.retrieveForResponder({ ...common, query: "粮草运输" });
-  assert.strictEqual(first.engineVersion, "2.4");
+  assert.strictEqual(first.engineVersion, "2.5");
   assert.strictEqual(first.stableText, second.stableText, "稳定长期记忆必须整场字节冻结");
   assert.strictEqual(first.directStableText, second.directStableText, "直接关系最近两条与钉住记忆必须整场冻结");
   assert.strictEqual(first.mentionedSnapshotText, second.mentionedSnapshotText, "场外人物快照的内容和顺序必须整场冻结");

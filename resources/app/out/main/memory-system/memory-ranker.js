@@ -40,6 +40,28 @@ class MemoryRanker {
     });
   }
 
+  rankTurnRecall(memories, context = {}) {
+    const queryFeatures = textFeatures(context.query);
+    const assistFeatures = textFeatures(context.assistQuery);
+    const entityIds = new Set((context.entityIds || []).map(Number));
+    const participantIds = new Set((context.participantIds || []).map(Number));
+    const currentDays = Number(context.currentTotalDays);
+    return (Array.isArray(memories) ? memories : []).map((memory) => {
+      const memoryFeatures = textFeatures(`${memory.canonicalText || memory.content} ${(memory.tags || []).join(" ")}`);
+      const primaryQuery = overlapScore(queryFeatures, memoryFeatures);
+      const assistQuery = overlapScore(assistFeatures, memoryFeatures);
+      const query = 0.8 * primaryQuery + 0.2 * assistQuery;
+      const entity = memory.subjects?.some((id) => entityIds.has(Number(id))) ? 1 : 0;
+      const importance = Number(memory.importance) || 0;
+      const elapsed = Number.isFinite(currentDays) && Number.isFinite(Number(memory.totalDays)) ? Math.max(0, currentDays - Number(memory.totalDays)) : 180;
+      const recency = 1 / (1 + elapsed / 180);
+      const relationship = memory.participants?.some((id) => participantIds.has(Number(id))) ? 1 : 0;
+      const confidence = Number(memory.confidence) || 0;
+      const score = 0.40 * query + 0.20 * entity + 0.15 * importance + 0.10 * recency + 0.10 * relationship + 0.05 * confidence;
+      return { memory, score, reason: { query, primaryQuery, assistQuery, entity, importance, recency, relationship, confidence } };
+    }).sort((left, right) => right.score - left.score);
+  }
+
   selectWithinBudget(ranked, { tokenBudget, estimateTokens, allowTruncate = false } = {}) {
     const budget = Math.max(0, Number(tokenBudget) || 0);
     const estimate = estimateTokens || ((text) => Math.ceil(String(text || "").length / 2));
