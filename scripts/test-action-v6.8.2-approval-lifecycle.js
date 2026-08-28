@@ -31,6 +31,7 @@ globalThis.ActionEngine = {
 globalThis.createActionApproval = (params) => ({ ...params, type: "action-approval", status: "pending" });
 
 const Conversation = getConversationClass();
+const social = globalThis.__V67ActionSystem.social;
 
 function createConversation() {
   const conversation = {
@@ -46,7 +47,7 @@ function createConversation() {
     resumeConversation: () => {},
     pauseConversation: () => {}
   };
-  for (const method of ["getActionSystem", "createApprovalManager", "getApprovalManager", "isCharacterAvailableForConversation", "invalidatePendingActionApproval", "invalidateApprovalsForCharacter", "markParticipantInactive", "handleActionResults", "approveActions", "removeCharacterFromConversation"]) {
+  for (const method of ["getActionSystem", "createApprovalManager", "getApprovalManager", "isCharacterAvailableForConversation", "invalidatePendingActionApproval", "invalidateApprovalsForCharacter", "markParticipantInactive", "handleActionResults", "approveActions", "removeCharacterFromConversation", "getConfirmedExecutionResults", "hasPendingApprovalForMessage", "releaseSocialEvidenceIfSettled", "processSocialConsequences", "onActionExecutionSettled"]) {
     conversation[method] = Conversation.prototype[method];
   }
   const approvalManager = conversation.createApprovalManager();
@@ -140,6 +141,71 @@ function pendingAction() {
   assert.strictEqual(failedApprovalEntry.resultSentiment, "negative", "approved action execution failure must surface a negative result");
   assert(failedApprovalEntry.resultFeedback.includes("Resolved target character unavailable"), "approved action execution failure must show the local execution error");
   assert.strictEqual(effectWriteCount, 0, "failed approved action must not write a CK3 effect");
+
+  const published = [];
+  const approvedEffect = createConversation();
+  approvedEffect.messages.push({ id: 20, role: "user", name: player.fullName, content: "真实动作" });
+  approvedEffect.processSocialConsequences = async (payload) => { published.push(payload); return null; };
+  globalThis.ActionEngine.runInvocation = async (_conversation, _caller, invocation, options) => options?.dryRun
+    ? { actionId: invocation.actionId, success: true, effectWritten: false }
+    : { actionId: invocation.actionId, success: true, effectWritten: true, origin: "action", sourceMessageId: 20, eventId: "normal-20" };
+  await approvedEffect.handleActionResults(20, player, { autoApproved: [], needsApproval: [pendingAction()] });
+  await approvedEffect.approveActions([...approvedEffect.pendingActionApprovals.keys()][0]);
+  assert.strictEqual(published.length, 1, "approved written effect must publish one confirmed event to Social Engine");
+  assert.strictEqual(published[0].confirmedEvents.length, 1);
+
+  const declinedEffect = createConversation();
+  declinedEffect.messages.push({ id: 21, role: "user", name: player.fullName, content: "拒绝动作" });
+  let declinedPublications = 0;
+  declinedEffect.processSocialConsequences = async () => { declinedPublications++; };
+  await declinedEffect.handleActionResults(21, player, { autoApproved: [], needsApproval: [pendingAction()] });
+  declinedEffect.getApprovalManager().decline([...declinedEffect.pendingActionApprovals.keys()][0]);
+  await Promise.resolve();
+  assert.strictEqual(declinedPublications, 0, "declined approval must not publish a confirmed event");
+
+  const unwrittenEffect = createConversation();
+  unwrittenEffect.messages.push({ id: 22, role: "user", name: player.fullName, content: "无写入动作" });
+  let unwrittenPublications = 0;
+  unwrittenEffect.processSocialConsequences = async () => { unwrittenPublications++; };
+  globalThis.ActionEngine.runInvocation = async (_conversation, _caller, invocation, options) => ({
+    actionId: invocation.actionId,
+    success: true,
+    effectWritten: options?.dryRun ? false : false,
+    origin: "action",
+    sourceMessageId: 22
+  });
+  await unwrittenEffect.handleActionResults(22, player, { autoApproved: [], needsApproval: [pendingAction()] });
+  await unwrittenEffect.approveActions([...unwrittenEffect.pendingActionApprovals.keys()][0]);
+  assert.strictEqual(unwrittenPublications, 0, "successful dry or unwritten execution must not publish a confirmed event");
+
+  const socialApproved = createConversation();
+  const socialItem = { sourceCharacterId: 2, targetCharacterId: 1, reasonCluster: "gratitude", sourceEventId: "social-topic", delta: 2 };
+  const socialReservation = social.consequenceCooldown.reserve(socialApproved, social.consequenceCooldown.scaleDelta(socialApproved, socialItem));
+  const socialAction = pendingAction();
+  socialAction.origin = "social";
+  socialAction.socialReservationId = socialReservation.reservationId;
+  socialAction.invocation = Object.freeze({ ...socialAction.invocation, eventId: "social:test:approval", origin: "social" });
+  globalThis.ActionEngine.runInvocation = async (_conversation, _caller, invocation, options) => ({
+    actionId: invocation.actionId,
+    success: true,
+    effectWritten: options?.dryRun ? false : true,
+    eventId: invocation.eventId,
+    origin: invocation.origin
+  });
+  await socialApproved.handleActionResults(23, player, { autoApproved: [], needsApproval: [socialAction] });
+  await socialApproved.approveActions([...socialApproved.pendingActionApprovals.keys()][0]);
+  assert.strictEqual(social.consequenceCooldown.scaleDelta(socialApproved, socialItem).delta, 1, "approved Social action must commit its reservation");
+
+  const socialDeclined = createConversation();
+  const declinedReservation = social.consequenceCooldown.reserve(socialDeclined, social.consequenceCooldown.scaleDelta(socialDeclined, socialItem));
+  const declinedSocialAction = pendingAction();
+  declinedSocialAction.origin = "social";
+  declinedSocialAction.socialReservationId = declinedReservation.reservationId;
+  declinedSocialAction.invocation = Object.freeze({ ...declinedSocialAction.invocation, eventId: "social:test:decline", origin: "social" });
+  await socialDeclined.handleActionResults(24, player, { autoApproved: [], needsApproval: [declinedSocialAction] });
+  socialDeclined.getApprovalManager().decline([...socialDeclined.pendingActionApprovals.keys()][0]);
+  await Promise.resolve();
+  assert.strictEqual(social.consequenceCooldown.scaleDelta(socialDeclined, socialItem).delta, 2, "declined Social action must release its reservation");
 
   console.log("VOTC v6.8.2 approval lifecycle: PASS (binding snapshots, stale participants and execution failures)");
 })().catch((error) => {

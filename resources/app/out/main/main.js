@@ -721,6 +721,14 @@ const ActionEngine = actionSystem.ActionEngine.configure({
   resolveI18nString,
   logVerboseLLM
 });
+actionSystem.social.socialConsequenceEngine.configure({
+  ActionEngine,
+  settingsRepository,
+  llmManager,
+  TokenCounter,
+  createPromptFingerprint,
+  usageAnalytics
+});
 const Conversation = actionSystem.Conversation.configure({
   actionSystem,
   ActionEngine,

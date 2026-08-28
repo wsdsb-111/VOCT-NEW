@@ -121,6 +121,7 @@ class Conversation {
     // narrated event from being sent to the action model once per NPC reply.
     this.actionGateProcessedTriggers = /* @__PURE__ */ new Set();
     this.processedActionEventIds = /* @__PURE__ */ new Set();
+    this.temporarySocialEvidenceStore = /* @__PURE__ */ new Map();
     this.eventEmitter = new events.EventEmitter();
     this.runtime = actionSystem.createConversationRuntime(this, {
       recordSkipped: (responseState, reason) => this.recordGenerationSkippedAnalytics(responseState, reason),
@@ -161,7 +162,8 @@ class Conversation {
         reason: system.actionDecisionTrace.normalizeSkipReason("approval", entry.reason)
       }, null),
       getAction: (actionId) => actionRegistry.getById(actionId),
-      isActionDisabled: (actionId) => actionRegistry.isActionDisabled?.(actionId) === true
+      isActionDisabled: (actionId) => actionRegistry.isActionDisabled?.(actionId) === true,
+      onExecutionSettled: (payload) => this.onActionExecutionSettled(payload)
     });
   }
   getApprovalManager() {
@@ -686,6 +688,15 @@ class Conversation {
     let streamCompleted = false;
     try {
       const memoryContext = await this.checkAndSummarizeIfNeeded(npc);
+      if (settingsRepository.getActionSystemMode?.() !== "balanced") {
+        this.getActionSystem().social.socialContextProvider.captureMemoryEvidence({
+          conversation: this,
+          messageId: msgId,
+          characterId: npc.id,
+          memoryContext,
+          estimateTokens: (text) => TokenCounter.estimateTokens(text)
+        });
+      }
       if (!this.isResponseCurrent(responseState, npc)) throw new Error("AbortError: Message cancelled");
       const promptBuild = PromptBuilder.buildMessagesWithTokenCount(
         this.getPromptHistoryForCharacter(npc.id),
@@ -814,6 +825,7 @@ class Conversation {
         if (this.npcQueue.length > 0) this.pauseConversation();
       }
     } finally {
+      this.releaseSocialEvidenceIfSettled(msgId);
       this.getGenerationManager().finish(responseState, { wasCancelled });
     }
   }
@@ -839,6 +851,11 @@ class Conversation {
         return;
       }
       await this.handleActionResults(evaluation.associatedMessageId, evaluation.source, actionResults);
+      await this.processSocialConsequences({
+        message: evaluation.message,
+        confirmedEvents: this.getConfirmedExecutionResults(actionResults),
+        signal: responseState.controller.signal
+      });
     }
   }
   /**
@@ -846,6 +863,65 @@ class Conversation {
    */
   async handleActionResults(associatedMessageId, npc, actionResults) {
     return this.getApprovalManager().handleActionResults(associatedMessageId, npc, actionResults);
+  }
+  getConfirmedExecutionResults(actionResults) {
+    return (actionResults?.autoApproved || []).filter((result) => result?.success === true && result.effectWritten === true && result.origin !== "social" && !String(result.eventId || "").startsWith("social:"));
+  }
+  hasPendingApprovalForMessage(messageId) {
+    return [...(this.pendingActionApprovals?.values?.() || [])].some((pending) => pending.associatedMessageId === messageId);
+  }
+  releaseSocialEvidenceIfSettled(messageId) {
+    if (messageId == null || this.hasPendingApprovalForMessage(messageId)) return false;
+    return this.getActionSystem().social.socialContextProvider.releaseMessageEvidence(this, messageId);
+  }
+  async processSocialConsequences({ message, confirmedEvents = [], signal = null }) {
+    if (!message || !["user", "assistant"].includes(message.role)) return null;
+    try {
+      const result = await this.getActionSystem().social.socialConsequenceEngine.process({
+        conversation: this,
+        message,
+        confirmedEvents,
+        signal
+      });
+      if (result?.actionResults) {
+        const source = message.role === "user"
+          ? this.gameData.characters.get(this.gameData.playerID)
+          : [...this.gameData.characters.values()].find((character) => character.fullName === message.name || character.shortName === message.name);
+        if (source && (result.actionResults.autoApproved.length > 0 || result.actionResults.needsApproval.length > 0)) {
+          await this.handleActionResults(message.id, source, result.actionResults);
+        }
+      }
+      return result;
+    } catch (error) {
+      usageAnalytics.record({
+        requestType: "social_consequence",
+        actionSystemMode: settingsRepository.getActionSystemMode?.() || "balanced",
+        outcome: "rejected",
+        reason: error instanceof Error ? error.message : String(error),
+        turnEpoch: this.turnEpoch ?? null
+      }, null);
+      return null;
+    } finally {
+      this.releaseSocialEvidenceIfSettled(message.id);
+    }
+  }
+  async onActionExecutionSettled({ associatedMessageId, action, result, status }) {
+    const system = this.getActionSystem();
+    const socialOrigin = action?.origin === "social" || action?.invocation?.origin === "social" || String(action?.invocation?.eventId || "").startsWith("social:");
+    if (socialOrigin) {
+      const reservationId = action?.socialReservationId;
+      if (reservationId) {
+        if (status === "executed" && result?.success === true && result.effectWritten === true) system.social.consequenceCooldown.apply(this, reservationId);
+        else system.social.consequenceCooldown.release(this, reservationId);
+      }
+      this.releaseSocialEvidenceIfSettled(associatedMessageId);
+      return;
+    }
+    if (status === "executed" && result?.success === true && result.effectWritten === true) {
+      const message = this.messages.find((entry) => entry.id === associatedMessageId && ["user", "assistant"].includes(entry.role));
+      if (message) await this.processSocialConsequences({ message, confirmedEvents: [result], signal: null });
+    }
+    this.releaseSocialEvidenceIfSettled(associatedMessageId);
   }
   addActionFeedback(associatedMessageId, actionResults) {
     console.log("[Conversation] addActionFeedback called with results:", actionResults);
@@ -946,6 +1022,11 @@ class Conversation {
     const playerActionResults = await ActionEngine.evaluateForCharacter(this, user, null, userMsg);
     if (turnEpoch !== this.turnEpoch) return;
     await this.handleActionResults(userMsg.id, user, playerActionResults);
+    await this.processSocialConsequences({
+      message: userMsg,
+      confirmedEvents: this.getConfirmedExecutionResults(playerActionResults),
+      signal: null
+    });
     if (turnEpoch !== this.turnEpoch) return;
     if (this.isPaused) return;
     this.fillNpcQueue();
@@ -1214,6 +1295,10 @@ class Conversation {
   }
   end() {
     this.isActive = false;
+    this.temporarySocialEvidenceStore?.clear?.();
+    this.socialConsequenceState?.counts?.clear?.();
+    this.socialConsequenceState?.reservations?.clear?.();
+    this.socialConsequenceState = null;
     this.clearHistory();
     cleanLogFile(settingsRepository.getCK3DebugLogPath());
   }

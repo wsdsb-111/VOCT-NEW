@@ -13,6 +13,15 @@ class ApprovalManager {
     });
   }
 
+  async notifyExecutionSettled(payload) {
+    if (typeof this.dependencies.onExecutionSettled !== "function") return;
+    try {
+      await this.dependencies.onExecutionSettled(payload);
+    } catch (error) {
+      console.error("[ApprovalManager] Execution-settled callback failed:", error);
+    }
+  }
+
   async handleActionResults(associatedMessageId, npc, actionResults) {
     const conversation = this.conversation;
     const deps = this.dependencies;
@@ -48,6 +57,7 @@ class ApprovalManager {
       });
       conversation.messages.push(approvalEntry);
       this.pending.set(approvalEntry.id, {
+        associatedMessageId,
         npc,
         action,
         invocation: action.invocation,
@@ -84,6 +94,7 @@ class ApprovalManager {
       bindingId: pending.bindingId ?? null,
       reason
     });
+    void this.notifyExecutionSettled({ associatedMessageId: pending.associatedMessageId, action: pending.action, result: null, status: "invalidated", reason });
     conversation.emitUpdate();
     return true;
   }
@@ -129,8 +140,10 @@ class ApprovalManager {
     approvalEntry.resultSentiment = pending.previewSentiment || "neutral";
     this.pending.delete(approvalEntryId);
     conversation.emitUpdate();
+    let executionResult = null;
     try {
       const result = await deps.runInvocation(conversation, pending.npc, invocation);
+      executionResult = result;
       if (!result?.success) {
         approvalEntry.resultFeedback = `Failed: ${result?.error || "Action execution failed"}`;
         approvalEntry.resultSentiment = "negative";
@@ -146,6 +159,12 @@ class ApprovalManager {
       approvalEntry.resultSentiment = "negative";
       conversation.emitUpdate();
     }
+    await this.notifyExecutionSettled({
+      associatedMessageId: pending.associatedMessageId,
+      action: pending.action,
+      result: executionResult,
+      status: executionResult?.success ? "executed" : "failed"
+    });
     this.resumeIfNeeded();
   }
 
@@ -155,7 +174,9 @@ class ApprovalManager {
     const entryIndex = conversation.messages.findIndex((message) => message.type === "action-approval" && message.id === approvalEntryId);
     if (entryIndex === -1) throw new Error(`Approval entry not found for ID ${approvalEntryId}`);
     conversation.messages.splice(entryIndex, 1);
+    const pending = this.pending.get(approvalEntryId);
     this.pending.delete(approvalEntryId);
+    void this.notifyExecutionSettled({ associatedMessageId: pending?.associatedMessageId, action: pending?.action, result: null, status: "declined" });
     conversation.emitUpdate();
     this.resumeIfNeeded();
   }

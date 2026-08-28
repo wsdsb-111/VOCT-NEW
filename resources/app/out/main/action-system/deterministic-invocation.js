@@ -52,6 +52,8 @@ function buildDeterministicInvocation({ actionId, binding, args = {}, allowedAct
       bindingId: binding.bindingId,
       eventId: binding.eventId,
       traceId: binding.traceId,
+      origin: String(binding.eventId || "").startsWith("social:") ? "social" : "action",
+      sourceMessageId: binding.messageId ?? null,
       args: Object.freeze({ ...args })
     })
   };

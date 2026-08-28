@@ -75,6 +75,8 @@ function createValidatedInvocation(input) {
     bindingId: input.bindingId ?? null,
     eventId,
     traceId: input.traceId || (eventId ? `action:${eventId}` : null),
+    origin: input.origin || (String(eventId || "").startsWith("social:") ? "social" : "action"),
+    sourceMessageId: input.sourceMessageId ?? null,
     args: Object.freeze({ ...(input.args || {}) })
   });
 }
@@ -91,7 +93,9 @@ function createExecutionResult(input) {
     targetCharacterId: input.targetCharacterId ?? null,
     bindingId: input.bindingId ?? null,
     eventId,
-    traceId: input.traceId || (eventId ? `action:${eventId}` : null)
+    traceId: input.traceId || (eventId ? `action:${eventId}` : null),
+    origin: input.origin || (String(eventId || "").startsWith("social:") ? "social" : "action"),
+    sourceMessageId: input.sourceMessageId ?? null
   });
 }
 

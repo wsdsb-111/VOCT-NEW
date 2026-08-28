@@ -1,10 +1,14 @@
 "use strict";
 
 const assert = require("assert");
+const fs = require("fs");
 const path = require("path");
 
 const root = path.resolve(__dirname, "..");
 const social = require(path.join(root, "resources", "app", "out", "main", "action-system", "social"));
+const actionSystem = require(path.join(root, "resources", "app", "out", "main", "action-system"));
+
+assert.strictEqual(typeof actionSystem.Conversation.prototype.processSocialConsequences, "function", "Conversation must expose Social processing without a second recall");
 
 function createConversation() {
   const player = { id: 1, shortName: "李思昭", fullName: "李思昭", relationsToCharacters: [], opinions: [] };
@@ -68,5 +72,21 @@ const evidence = social.createEvidence({ evidenceId: "e1", type: "dialogue", con
 assert(Object.isFrozen(evidence));
 assert.throws(() => social.createEvidence({ evidenceId: "e2", type: "invented", content: "x" }), /invalid_evidence_type/);
 assert.strictEqual(social.LIMITS.memoryTokens, 256);
+
+const execution = actionSystem.createExecutionResult({
+  actionId: "changeOpinionOf",
+  success: true,
+  effectWritten: true,
+  eventId: "social:local:11:0",
+  sourceMessageId: 11,
+  origin: "social"
+});
+assert.strictEqual(execution.origin, "social");
+assert.strictEqual(execution.sourceMessageId, 11);
+assert(Object.isFrozen(execution));
+
+const socialSourceDir = path.join(root, "resources", "app", "out", "main", "action-system", "social");
+const socialSources = fs.readdirSync(socialSourceDir).filter((file) => file.endsWith(".js")).map((file) => fs.readFileSync(path.join(socialSourceDir, file), "utf8")).join("\n");
+assert.strictEqual(/retrieveForResponder|retrieveTurnRecall|checkAndSummarizeIfNeeded/.test(socialSources), false, "Social modules must never perform a second Memory Engine recall");
 
 console.log("VOTC v7.9.2 social context boundary: PASS");

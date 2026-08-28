@@ -30,7 +30,9 @@ function buildCanonicalInvocation({ modelInvocation, availableAction, binding = 
       sourceCharacterId,
       bindingId: binding?.bindingId || availableAction.bindingId || `available:${availableAction.signature}:${sourceCharacterId}:${targetCharacterId ?? "none"}`,
       eventId: binding?.eventId ?? eventId,
-      traceId: binding?.traceId ?? traceId
+      traceId: binding?.traceId ?? traceId,
+      origin: String(binding?.eventId ?? eventId ?? "").startsWith("social:") ? "social" : "action",
+      sourceMessageId: binding?.messageId ?? null
     })
   };
 }

@@ -969,7 +969,9 @@ class ActionEngine {
         targetCharacterId: inv.targetCharacterId,
         bindingId: inv.bindingId,
         eventId: inv.eventId,
-        traceId: inv.traceId
+        traceId: inv.traceId,
+        origin: inv.origin,
+        sourceMessageId: inv.sourceMessageId
       });
     }
     const sourceId = inv.sourceCharacterId ?? null;
@@ -983,7 +985,9 @@ class ActionEngine {
         targetCharacterId: inv.targetCharacterId,
         bindingId: inv.bindingId,
         eventId: inv.eventId,
-        traceId: inv.traceId
+        traceId: inv.traceId,
+        origin: inv.origin,
+        sourceMessageId: inv.sourceMessageId
       });
     }
     const targetId = inv.targetCharacterId ?? null;
@@ -997,7 +1001,9 @@ class ActionEngine {
         targetCharacterId: targetId,
         bindingId: inv.bindingId,
         eventId: inv.eventId,
-        traceId: inv.traceId
+        traceId: inv.traceId,
+        origin: inv.origin,
+        sourceMessageId: inv.sourceMessageId
       });
     }
     const userLang = settingsRepository.getLanguage();
@@ -1047,7 +1053,9 @@ class ActionEngine {
         targetCharacterId: target?.id,
         bindingId: inv.bindingId ?? null,
         eventId: inv.eventId,
-        traceId: inv.traceId
+        traceId: inv.traceId,
+        origin: inv.origin,
+        sourceMessageId: inv.sourceMessageId
       });
       this.traceDecision(inv.actionId, "execution", "success", { eventId: inv.eventId, traceId: inv.traceId, source: source.id, target: target?.id ?? null });
       if (execution.effectWritten) this.traceDecision(inv.actionId, "execution", "effect_written", { eventId: inv.eventId, traceId: inv.traceId, source: source.id, target: target?.id ?? null });
@@ -1063,7 +1071,9 @@ class ActionEngine {
         targetCharacterId: target?.id,
         bindingId: inv.bindingId,
         eventId: inv.eventId,
-        traceId: inv.traceId
+        traceId: inv.traceId,
+        origin: inv.origin,
+        sourceMessageId: inv.sourceMessageId
       });
     }
   }

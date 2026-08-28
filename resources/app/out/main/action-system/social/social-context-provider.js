@@ -99,7 +99,7 @@ function buildContext({ conversation, message, confirmedEvents = [] }) {
     confidence: 1,
     worldStateConfirmed: false
   })]);
-  const confirmedWorldEvents = Object.freeze((confirmedEvents || []).filter((event) => event?.success === true && event.effectWritten === true && !String(event.eventId || "").startsWith("social:")).map((event, index) => createEvidence({
+  const confirmedWorldEvents = Object.freeze((confirmedEvents || []).filter((event) => event?.success === true && event.effectWritten === true && event.origin !== "social" && !String(event.eventId || "").startsWith("social:")).map((event, index) => createEvidence({
     evidenceId: `confirmed:${event.eventId || index}`,
     type: "confirmed_world_event",
     sourceMessageId: event.sourceMessageId ?? message?.id ?? null,
