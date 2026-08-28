@@ -32,7 +32,9 @@ function confirmedSignals(context, participants) {
     const actionKey = evidence.reasonCluster || evidence.content;
     const type = CONFIRMED_SIGNAL_BY_ACTION[actionKey] || (['rescue', 'betrayal', 'severe_injury', 'family_death'].includes(actionKey) ? actionKey : null);
     if (!type) continue;
-    const affectedId = type === "rescue" ? evidence.targetId : (evidence.affectedCharacterId ?? participants.targetId);
+    const affectedId = type === "family_death"
+      ? (evidence.affectedCharacterId ?? participants.targetId)
+      : (evidence.targetId ?? participants.targetId);
     if (!isKnown(context, affectedId, evidence.evidenceId)) continue;
     result.push({
       eventId: evidence.sourceEventId || evidence.evidenceId,
