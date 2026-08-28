@@ -6,7 +6,7 @@ const path = require("path");
 
 const root = path.resolve(__dirname, "..");
 const versions = require(path.join(root, "resources", "app", "out", "main", "version.js"));
-assert.strictEqual(versions.VOTC_CORE_VERSION, "7.9.1");
+assert.strictEqual(versions.VOTC_CORE_VERSION, "7.9.2");
 assert.strictEqual(versions.ACTION_ENGINE_VERSION, "3.0");
 assert.strictEqual(versions.MEMORY_ENGINE_VERSION, "2.5", "v7.9 must not change Memory Engine behavior or data version");
 const { createUsageAnalytics } = require(path.join(root, "resources", "app", "out", "main", "analytics", "usage-analytics.js"));

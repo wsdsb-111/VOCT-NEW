@@ -155,6 +155,8 @@ V7.9 新增 Action Engine 3.0 三模式架构。平衡模式保持 v7.8.3 行为
 
 V7.9.1 是 Action Engine 3.0 的稳定性修复：真实动作消息先经过 Gate、事件解析、本地语义和参与者绑定，Semantic Rescue 仅处理未解析事件，Precision Judge 只仲裁仍歧义的候选；普通聊天不再进入 Judge。亲吻、拥抱、牵手、依偎和拒绝等改为独立社交事件，不会直接写入好感或关系。Chat Prompt 的固定锚点升级为 v4，角色基础资料和描述在同一会话内冻结并确定性序列化；长期记忆、实时关系、在场状态、历史和 Turn Recall 均保留在动态后缀，Turn Recall 仍紧随当前用户消息。Hotfix 进一步统一金币词表并加入阿拉伯数字金额的本地解析；明确完成的玩家/NPC 转账会锁定唯一对象并跳过 Stage B，计划、提议和拒收仍不执行。动作统计的全局 Stage B、Semantic Rescue、Precision Judge 调用数与模式明细统一从真实请求记录聚合。详细记录见 [docs/VOTC_v7.9.1_生产稳定性修复实施记录.md](docs/VOTC_v7.9.1_生产稳定性修复实施记录.md)。
 
+V7.9.2 新增仅在当前对话场景内有效的 Social Consequence Engine。Social Context Provider 严格区分当前对话、已成功写入 CK3 的世界事件和 Memory Engine 2.5 本轮既有 Turn Recall；不会二次检索摘要，也不会把角色未知或仅由台词声称的世界事件当作事实。平衡模式完全绕过新引擎，性能模式只做本地确定性推导且新增 Provider Token 为 0，精准模式最多调用 8 次独立 Social Judge，并继续复用 Action Engine 3.0 的参与者绑定、校验、审批、去重和确定性执行器。Social Judge 的稳定规则和结构化 Schema 位于前缀，人物状态、证据、最近对话与当前消息放在末尾动态区；Memory 证据上限 256 Token，六人场景输入估算不超过 1800 Token。用量页按三种模式独立统计 Social Judge Token，并以默认折叠的 `SOCIAL CONSEQUENCE` 面板展示证据、拒绝、动作、冷却和构建耗时。自动化测试覆盖场景边界、召回复用、关系跃迁、审批与统计；真实 CK3 效果、Provider Token/缓存遥测及 3/4/6 人实机场景仍需人工验证。详细规格见 [docs/VOTC_v7.9.2_Social_Consequence_Engine_设计规格.md](docs/VOTC_v7.9.2_Social_Consequence_Engine_设计规格.md)。
+
 V7.7 在 V7.6 健康化基础上分阶段拆分主进程：第一阶段将六种模型 Provider 迁入 `providers/index.js`、92 个既有 IPC 注册迁入 `ipc/register-ipc.js`；第二阶段把 `ProviderRegistry`、`TokenCounter` 和 `LLMManager` 迁入 `provider-service.js`，通过显式依赖继续读取用户分别选择的对话、摘要和动作模型。`main.js` 由约 9477 行降至约 6612 行。动作语义同时补齐“共度春宵/鱼水之欢已发生”和“从今以后成为情人/认定灵魂伴侣”等自然完成态表达，并继续排除请求、计划、假设、回忆与失败尝试。当前仓库仍是可运行打包产物，没有能够重新生成这些文件的完整 `src` 工程，因此本阶段不伪造源码构建链。
 
 发布测试统一由 `scripts/test-manifest.js` 声明。本地与 CI 都运行：
@@ -163,18 +165,18 @@ V7.7 在 V7.6 健康化基础上分阶段拆分主进程：第一阶段将六种
 node scripts\test-release.js
 ```
 
-清单会覆盖全部 `test-*.js`：直接发布组、动作聚合组和 follow-up 聚合组均必须登记。V7.9.1 发布门禁为 53 个直接回归组，清单覆盖 86 个测试文件，并维护动作/非动作/摘要金标样例，作为 Provider 切换或模型升级时的轻量人工语义复核基线。
+清单会覆盖全部 `test-*.js`：直接发布组、动作聚合组和 follow-up 聚合组均必须登记。V7.9.2 发布门禁为 57 个直接回归组，清单覆盖 90 个测试文件，并维护动作/非动作/摘要金标样例，作为 Provider 切换或模型升级时的轻量人工语义复核基线。
 
 ## 版本信息
 
 - 外挂 UI 版本：v2.0.4
-- 当前应用功能基线：v7.9.1
+- 当前应用功能基线：v7.9.2
 - CK3 模组版本：Voices of the Court 2.0.4
 - 模组支持版本：CK3 1.18.*
 - UI 主题：宫廷编年史风格（深红、暗金、羊皮纸文本层级）
 - UI 主题切换：羊皮卷、骑士纹章、水墨画卷三套完整历史风格；分别拥有独立背景、边框结构、按钮造型、消息卡片、输入框、字体和滚动条，并可自动保存选择
 - UI 素材生成提示词：参见 [docs/UI_ASSET_PROMPTS_2.0.3.md](docs/UI_ASSET_PROMPTS_2.0.3.md)
-- 当前重点：V7.9.1 / Action Engine 3.0 生产稳定性；Memory Engine 2.5 保持稳定
+- 当前重点：V7.9.2 / Social Consequence Engine；Action Engine 3.0 与 Memory Engine 2.5 保持稳定
 
 ## 已知限制
 

@@ -20880,7 +20880,7 @@ const SummariesManager = () => {
     /* @__PURE__ */ jsxRuntimeExports.jsxs("section", { className: "memory-engine-overview", children: [
       /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "memory-engine-title", children: [
         /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
-          /* @__PURE__ */ jsxRuntimeExports.jsx("h5", { children: "Memory Engine 2.5 · V7.9.1" }),
+          /* @__PURE__ */ jsxRuntimeExports.jsx("h5", { children: "Memory Engine 2.5 · V7.9.2" }),
           /* @__PURE__ */ jsxRuntimeExports.jsx("p", { children: "多段在场窗口隔离暂离期间内容；人物摘要缓存与来源 messageId 继续严格校验" })
         ] }),
         /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: `memory-engine-status ${memoryOverview.error ? "is-error" : ""}`, children: memoryOverview.error ? "读取异常" : "运行中" })
@@ -21459,13 +21459,14 @@ const OptimizationView = () => {
     [text("安全配置", "Secure configuration"), text("Provider API Key 使用 Electron safeStorage 加密落盘；明文旧配置在可用时自动迁移。", "Provider API keys are encrypted at rest with Electron safeStorage; plaintext settings migrate when encryption is available.")],
     [text("统一发布门禁", "Unified release gate"), text("本地与 CI 共用同一测试清单，并加入动作语义金标样例。", "Local and CI validation share one test manifest plus action semantic golden cases.")],
     [text("DeepSeek 思考与摘要", "DeepSeek thinking and summaries"), text("普通对话使用 4096 Token 思考；终局摘要、失败重试与恢复摘要使用摘要页配置的 Token 上限进行非思考结构化输出。", "Normal chat uses 4096-token thinking. Final summaries, retries, and recovery use the token ceiling configured on the summary page for non-thinking structured output.")],
-    [text("动作候选预筛与三模式", "Action prefilter and three modes"), text("Action Engine 3.0 提供平衡、性能和精准模式；共享绑定校验、审批、去重与执行器。", "Action Engine 3.0 provides Balanced, Performance and Precision modes with shared binding validation, approval, dedupe and execution.")]
+    [text("动作候选预筛与三模式", "Action prefilter and three modes"), text("Action Engine 3.0 提供平衡、性能和精准模式；共享绑定校验、审批、去重与执行器。", "Action Engine 3.0 provides Balanced, Performance and Precision modes with shared binding validation, approval, dedupe and execution.")],
+    [text("场景内社会后果", "Conversation-scoped social consequences"), text("V7.9.2 复用本轮既有记忆召回；平衡模式绕过，性能模式本地推导，精准模式使用受限 Social Judge。", "V7.9.2 reuses current-turn memory recall: Balanced bypasses it, Performance resolves locally, and Precision uses a bounded Social Judge.")]
   ];
   return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "optimization-view", children: [
     /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "optimization-header", children: [
       /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
         /* @__PURE__ */ jsxRuntimeExports.jsx("h3", { children: text("系统优化与用量", "System Optimization & Usage") }),
-        /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "muted-text", children: text("V7.9.1 收紧 Precision Judge、稳定 Chat 前缀并保留 Memory Engine 2.5 动态召回。", "V7.9.1 narrows Precision Judge, stabilizes the chat prefix, and preserves Memory Engine 2.5 dynamic recall.") })
+        /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "muted-text", children: text("V7.9.2 新增场景内社会后果推导，并继续复用 Memory Engine 2.5 本轮召回。", "V7.9.2 adds conversation-scoped social consequences while reusing the current Memory Engine 2.5 turn recall.") })
       ] }),
       /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "optimization-header-actions", children: [
         /* @__PURE__ */ jsxRuntimeExports.jsx("button", { type: "button", onClick: loadReport, disabled: isLoading, children: isLoading ? text("读取中…", "Loading…") : text("刷新", "Refresh") }),
@@ -21495,7 +21496,7 @@ const OptimizationView = () => {
       reconciliation?.aggregates > 0 && /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "muted-text", children: text(`已包含 ${formatTokens(reconciliation.requests)} 次 DeepSeek 官网核对补录、${formatTokens(reconciliation.totalTokens)} Token；缓存细分仅来自本机仍保留的原始响应。`, `Includes a DeepSeek-console reconciliation of ${formatTokens(reconciliation.requests)} requests and ${formatTokens(reconciliation.totalTokens)} tokens; cache details use only locally retained provider responses.`) }),
       /* @__PURE__ */ jsxRuntimeExports.jsxs("section", { className: "optimization-capabilities", children: [
         /* @__PURE__ */ jsxRuntimeExports.jsxs("details", { className: "optimization-capability-details", children: [
-          /* @__PURE__ */ jsxRuntimeExports.jsx("summary", { children: text("查看 V7.9.1 适配状态", "View V7.9.1 integration status") }),
+          /* @__PURE__ */ jsxRuntimeExports.jsx("summary", { children: text("查看 V7.9.2 适配状态", "View V7.9.2 integration status") }),
           /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "optimization-capability-grid", children: capabilities.map(([title, detail]) => /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "optimization-capability", children: [/* @__PURE__ */ jsxRuntimeExports.jsx("strong", { children: title }), /* @__PURE__ */ jsxRuntimeExports.jsx("span", { children: detail })] }, title)) })
         ] })
       ] }),

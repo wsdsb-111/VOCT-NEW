@@ -851,11 +851,13 @@ class Conversation {
         return;
       }
       await this.handleActionResults(evaluation.associatedMessageId, evaluation.source, actionResults);
-      await this.processSocialConsequences({
-        message: evaluation.message,
-        confirmedEvents: this.getConfirmedExecutionResults(actionResults),
-        signal: responseState.controller.signal
-      });
+      if (typeof this.processSocialConsequences === "function") {
+        await this.processSocialConsequences({
+          message: evaluation.message,
+          confirmedEvents: typeof this.getConfirmedExecutionResults === "function" ? this.getConfirmedExecutionResults(actionResults) : [],
+          signal: responseState.controller.signal
+        });
+      }
     }
   }
   /**
@@ -1022,11 +1024,13 @@ class Conversation {
     const playerActionResults = await ActionEngine.evaluateForCharacter(this, user, null, userMsg);
     if (turnEpoch !== this.turnEpoch) return;
     await this.handleActionResults(userMsg.id, user, playerActionResults);
-    await this.processSocialConsequences({
-      message: userMsg,
-      confirmedEvents: this.getConfirmedExecutionResults(playerActionResults),
-      signal: null
-    });
+    if (typeof this.processSocialConsequences === "function") {
+      await this.processSocialConsequences({
+        message: userMsg,
+        confirmedEvents: typeof this.getConfirmedExecutionResults === "function" ? this.getConfirmedExecutionResults(playerActionResults) : [],
+        signal: null
+      });
+    }
     if (turnEpoch !== this.turnEpoch) return;
     if (this.isPaused) return;
     this.fillNpcQueue();
