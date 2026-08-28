@@ -99,6 +99,7 @@ const validChange = {
 const validOutput = { content: JSON.stringify({ socialImpact: true, opinionChanges: [validChange], relationshipTransition: null, observerEffects: [] }) };
 assert.strictEqual(judge.parseResult(validOutput, contextA).socialImpact, true);
 
+
 const malformedId = { content: JSON.stringify({ socialImpact: true, opinionChanges: [{ ...validChange, sourceCharacterId: 999 }], relationshipTransition: null, observerEffects: [] }) };
 assert.strictEqual(judge.parseResult(malformedId, contextA).socialImpact, false);
 
