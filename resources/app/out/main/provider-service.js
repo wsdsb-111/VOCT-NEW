@@ -1,5 +1,6 @@
 "use strict";
 
+const crypto = require("crypto");
 const { estimateTokens } = require("./token-estimator");
 
 class ProviderRegistry {
@@ -218,12 +219,29 @@ class LLMManager {
       }
     };
     const estimatedPromptTokens = this.TokenCounter.calculateTotalTokens(messages);
+    const serializedSchema = JSON.stringify(jsonSchemaObject || {});
+    const schemaTokenEstimate = this.TokenCounter.estimateTokens(serializedSchema);
+    const schemaFingerprint = crypto.createHash("sha256").update(serializedSchema).digest("hex").slice(0, 16);
+    const deepseekSchemaInjection = config.providerType === "deepseek";
+    const schemaCacheRole = deepseekSchemaInjection ? "provider_injected_system_message" : "response_format";
+    const providerSerializedOrder = deepseekSchemaInjection ? "messages_then_provider_injected_schema_then_response_format" : "messages_then_response_format";
     console.log(`[LLMManager] Action request: provider=${config.providerType}, model=${config.defaultModel}, messages=${messages.length}, schema=${schemaName}, estimatedPromptTokens=${estimatedPromptTokens}, maxTokens=512, thinking=disabled`);
     if (this.debugVerboseLLM) {
       this.logVerboseLLM("[LLMManager][verbose] Structured action request:", JSON.stringify(request));
       this.logVerboseLLM("[LLMManager][verbose] Provider config:", JSON.stringify(config).replace(/"apiKey":\s*"[^"]*"/g, "HIDDEN"));
     }
-    return await this.trackUsage(provider.chatCompletion(request, config), { ...metadata, requestType: "action", providerType: config.providerType, model: config.defaultModel, estimatedPromptTokens });
+    return await this.trackUsage(provider.chatCompletion(request, config), {
+      ...metadata,
+      requestType: "action",
+      providerType: config.providerType,
+      model: config.defaultModel,
+      estimatedPromptTokens,
+      schemaTokenEstimate,
+      schemaFingerprint,
+      schemaCacheRole,
+      providerSerializedOrder,
+      estimatedSerializedPromptTokens: estimatedPromptTokens + (deepseekSchemaInjection ? schemaTokenEstimate : 0)
+    });
   }
   /**
    * Send a request for Summaries (rolling or final).

@@ -16,6 +16,8 @@ function getCharacter(gameData, id) {
 }
 
 function getExplicitVocativeId(index, source, gameData, activeIds) {
+  const leadingVocative = index.mentions.filter((mention) => !mention.ambiguous && source.slice(0, mention.start).trim() === "" && /^[\s，,：:]/.test(source.slice(mention.end)));
+  if (leadingVocative.length === 1 && activeIds.has(leadingVocative[0].characterId)) return getCharacter(gameData, leadingVocative[0].characterId)?.id ?? null;
   const firstPerson = source.search(/(?:我自己|本人|我)/);
   if (firstPerson < 0) return null;
   const vocative = index.mentions.filter((mention) => !mention.ambiguous && mention.end <= firstPerson && /^[\s，,：:]*$/.test(source.slice(mention.end, firstPerson)));

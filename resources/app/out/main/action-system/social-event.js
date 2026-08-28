@@ -37,7 +37,7 @@ const RULES = [
 const SIGNAL_RULES = [
   { type: "rescue", pattern: /(?:救我性命|救了我(?:一命|性命)|救命之恩|救了(?:我的)?(?:孩子|父亲|母亲|兄弟|姐妹))/i, valence: "positive", intensity: "high", confidence: 0.94 },
   { type: "gratitude", pattern: /(?:多谢|谢谢|感激|感恩|此恩|承蒙|有劳)/i, valence: "positive", intensity: "medium", confidence: 0.93 },
-  { type: "praise", pattern: /(?:你真|您真|实在是|堪称).{0,10}(?:勇敢|聪明|仁慈|善良|可靠|了不起|英明|优秀)|(?:佩服|敬佩|钦佩)/i, valence: "positive", intensity: "medium", confidence: 0.9 },
+  { type: "praise", pattern: /(?:你真|您真|实在是|堪称).{0,10}(?:勇敢|聪明|仁慈|善良|可靠|了不起|英明|优秀)|(?:佩服|敬佩|钦佩)|(?:做得很好|干得漂亮|表现出色)/i, valence: "positive", intensity: "medium", confidence: 0.9 },
   { type: "comfort", pattern: /(?:别怕|莫怕|不要难过|不必难过|我会陪着你|我陪你|节哀|保重)/i, valence: "positive", intensity: "medium", confidence: 0.88 },
   { type: "help", pattern: /(?:我来帮你|我会帮你|交给我|助你一臂之力|替你解决|为你解围)/i, valence: "positive", intensity: "medium", confidence: 0.86 },
   { type: "trust", pattern: /(?:我信任你|我相信你|可以信赖你|值得信任)/i, valence: "positive", intensity: "medium", confidence: 0.88 },
@@ -48,7 +48,7 @@ const SIGNAL_RULES = [
   { type: "revenge", pattern: /(?:我要报仇|定要报仇|为.{0,8}报仇|血债血偿)/i, valence: "negative", intensity: "high", confidence: 0.94 },
   { type: "relationship_statement", pattern: /(?:我们|你我|彼此|两人|二人).{0,12}(?:正式成为|结为|便是|就是|已是).{0,8}(?:朋友|挚友|至交|情人|恋人|灵魂伴侣|仇敌|死敌|宿敌|结义兄弟)|(?:结拜|义结金兰|义结兄弟)/i, valence: "neutral", intensity: "high", confidence: 0.94 },
   { type: "explicit_emotional_shift", pattern: /(?:从今以后|从此).{0,10}(?:信任你|敬重你|厌恶你|憎恨你|不再相信你)/i, valence: "neutral", intensity: "medium", confidence: 0.88 },
-  { type: "insult", pattern: /(?:卑鄙|无耻|蠢货|废物|混账|小人|贱人|懦夫)|(?:已经|早就).{0,8}(?:(?:杀了|害死).{0,6}(?:你父亲|你母亲)|(?:你父亲|你母亲).{0,6}(?:杀了|害死))/i, valence: "negative", intensity: "medium", confidence: 0.9 },
+  { type: "insult", pattern: /(?:卑鄙|无耻|蠢货|废物|混账|混蛋|小人|贱人|懦夫)|(?:已经|早就).{0,8}(?:(?:杀了|害死).{0,6}(?:你父亲|你母亲)|(?:你父亲|你母亲).{0,6}(?:杀了|害死))/i, valence: "negative", intensity: "medium", confidence: 0.9 },
   { type: "polite_positive", pattern: /(?:请多关照|幸会|久仰|劳驾)/i, valence: "positive", intensity: "low", confidence: 0.82 }
 ];
 

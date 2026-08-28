@@ -2,8 +2,9 @@
 
 const { LIMITS } = require("./social-consequence-types");
 const { normalizeRelation } = require("./relationship-transition-graph");
+const evidencePolicy = require("./evidence-policy");
 
-const MAJOR_REASONS = new Set(["betrayal", "severe_injury", "family_death"]);
+const MAJOR_REASONS = new Set(["betrayal", "severe_harm", "family_loss"]);
 const RELATION_WEIGHT = Object.freeze({
   soulmate: 0.65,
   lover: 0.65,
@@ -25,7 +26,7 @@ function relationBetween(context, sourceId, targetId) {
 }
 
 function resolve({ context, directConsequence, mode }) {
-  const direct = (directConsequence?.opinionChanges || []).find((item) => MAJOR_REASONS.has(item.reasonCluster));
+  const direct = (directConsequence?.opinionChanges || []).map((item) => ({ ...item, reasonCluster: evidencePolicy.canonicalReasonCluster(item.reasonCluster) })).find((item) => MAJOR_REASONS.has(item.reasonCluster));
   if (!direct) return [];
   const evidence = (context.confirmedWorldEvents || []).find((item) => item.evidenceId === direct.evidenceId);
   if (!evidence || evidence.worldStateConfirmed !== true) return [];
@@ -43,7 +44,7 @@ function resolve({ context, directConsequence, mode }) {
       targetCharacterId: direct.targetCharacterId,
       delta,
       reason: `observer_${direct.reasonCluster}`,
-      reasonCluster: `observer_${direct.reasonCluster}`,
+      reasonCluster: direct.reasonCluster,
       confidence: mode === "precision" ? Math.min(0.9, direct.confidence || 0.8) : 0.9,
       evidenceId: evidence.evidenceId,
       sourceEventId: evidence.sourceEventId

@@ -51,6 +51,9 @@ function canTransition({ actionId, sourceCharacter, targetCharacter }) {
   }
   const currentState = currentRelations(sourceCharacter, targetCharacter);
   if (currentState.includes(desired)) return { allowed: false, reason: "relationship_already_exists", currentState };
+  if (["becomeFriendsWith", "becomeBestFriendsWith"].includes(actionId) && currentState.some((relation) => ["rival", "nemesis"].includes(relation))) {
+    return { allowed: false, reason: "requires_reconciliation", currentState };
+  }
   const required = REQUIRED_PREVIOUS[actionId];
   if (required && !required.some((relation) => currentState.includes(relation))) {
     return { allowed: false, reason: "missing_previous_relationship", currentState };

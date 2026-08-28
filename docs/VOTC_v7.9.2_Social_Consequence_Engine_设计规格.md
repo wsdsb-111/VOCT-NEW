@@ -1,9 +1,10 @@
 # VOTC v7.9.2 Social Consequence Engine 设计规格
 
-> 状态：设计已确认，尚未实施  
+> 状态：已实施，自动化发布门禁通过；真实 CK3 与 Provider 实机验收待完成
 > 核心版本：v7.9.2  
 > Action Engine：3.0  
 > Memory Engine：2.5
+> 实施记录：[v7.9.2 Final Stable 修复实施报告](v7.9.2-final-stable-implementation-report.md)
 
 ## 1. 目标
 
@@ -482,4 +483,3 @@ node scripts/test-release.js
 ## 18. 不做事项
 
 V7.9.2 不实现完整人物心理模拟、人格数值、社会网络传播、派系舆论、复杂情绪曲线、长期恋爱模拟、完整 Reputation System、全局 NPC 舆论扩散或跨对话 Social Cooldown。这些能力留给 V8 之后评估。
-

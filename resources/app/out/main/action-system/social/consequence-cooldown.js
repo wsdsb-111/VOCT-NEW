@@ -8,7 +8,8 @@ function ensureState(conversation) {
 }
 
 function normalizedTopic(item) {
-  return String(item.sourceEventId || item.normalizedTopic || item.reason || "topic").trim().toLocaleLowerCase().replace(/\s+/g, " ");
+  const confirmedEventTopic = ["confirmed_world", "game_fact"].includes(item.evidenceAuthority) && item.sourceEventId ? `event:${item.sourceEventId}` : null;
+  return String(item.normalizedTopic || confirmedEventTopic || item.reasonCluster || item.consequenceType || "topic").trim().toLocaleLowerCase().replace(/\s+/g, " ");
 }
 
 function keyFor(item) {

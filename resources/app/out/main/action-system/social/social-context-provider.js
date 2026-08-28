@@ -45,7 +45,7 @@ function activeCharacters(conversation) {
   const values = typeof conversation.getActiveConversationCharacters === "function"
     ? conversation.getActiveConversationCharacters()
     : [...(conversation.gameData?.characters?.values?.() || [])];
-  return values.filter((character) => character && !conversation.inactiveParticipantIds?.has?.(character.id));
+  return values.filter((character) => character && !conversation.inactiveParticipantIds?.has?.(character.id) && !conversation.waitingCharacterIds?.has?.(character.id) && !conversation.departedCharacterIds?.has?.(character.id) && character.isDead !== true && character.dead !== true && character.alive !== false);
 }
 
 function resolveSpeaker(conversation, message, characters) {
@@ -79,8 +79,13 @@ function buildKnowledgeMap(characters, dialogueEvidence, memorySnapshot, confirm
     if (result[memorySnapshot.characterId]) result[memorySnapshot.characterId][item.evidenceId] = Object.freeze({ known: true, basis: "memory" });
   }
   for (const item of confirmedWorldEvents) {
-    for (const characterId of [item.actorId, item.targetId].filter((value) => value != null)) {
-      if (result[characterId]) result[characterId][item.evidenceId] = Object.freeze({ known: true, basis: characterId === item.targetId ? "direct_victim" : "current_dialogue" });
+    const directIds = new Set([item.actorId, item.targetId, item.affectedCharacterId].filter((value) => value != null).map(Number));
+    for (const characterId of directIds) {
+      if (result[characterId]) result[characterId][item.evidenceId] = Object.freeze({ known: true, basis: Number(characterId) === Number(item.actorId) ? "direct_actor" : "direct_victim" });
+    }
+    const witnessIds = item.witnessIds?.length > 0 ? item.witnessIds : item.observable !== false ? characters.map((character) => Number(character.id)) : [];
+    for (const characterId of witnessIds) {
+      if (!directIds.has(Number(characterId)) && result[characterId]) result[characterId][item.evidenceId] = Object.freeze({ known: true, basis: "visible_witness" });
     }
   }
   for (const value of Object.values(result)) Object.freeze(value);
@@ -106,9 +111,13 @@ function buildContext({ conversation, message, confirmedEvents = [] }) {
     sourceEventId: event.eventId ?? null,
     actorId: event.sourceCharacterId ?? null,
     targetId: event.targetCharacterId ?? null,
+    affectedCharacterId: event.affectedCharacterId ?? null,
+    actionId: event.actionId ?? null,
     content: event.actionId || "confirmed_action",
     confidence: 1,
-    worldStateConfirmed: true
+    worldStateConfirmed: true,
+    observable: event.observable !== false,
+    witnessIds: event.witnessIds || []
   })));
   const memorySnapshot = ensureEvidenceStore(conversation).get(message?.id) || null;
   const memoryEvidence = memorySnapshot?.evidence || Object.freeze([]);

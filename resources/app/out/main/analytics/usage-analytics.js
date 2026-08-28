@@ -74,6 +74,11 @@ function createUsageAnalytics({ fs, dataDir, analyticsFile, retention, createPro
         queryFingerprint: metadata?.queryFingerprint || null,
         candidateCount: Number(metadata?.candidateCount) || 0,
         estimatedPromptTokens,
+        schemaTokenEstimate: Number(metadata?.schemaTokenEstimate) || 0,
+        schemaFingerprint: metadata?.schemaFingerprint || null,
+        schemaCacheRole: metadata?.schemaCacheRole || null,
+        providerSerializedOrder: metadata?.providerSerializedOrder || null,
+        estimatedSerializedPromptTokens: Number(metadata?.estimatedSerializedPromptTokens) || estimatedPromptTokens,
         promptTokens,
         promptEstimateRatio: promptTokens > 0 && estimatedPromptTokens > 0 ? promptTokens / estimatedPromptTokens : null,
         completionTokens,
@@ -130,6 +135,7 @@ function createUsageAnalytics({ fs, dataDir, analyticsFile, retention, createPro
       const changesSincePreviousTotals = {};
       const previousByRequest = /* @__PURE__ */ new Map();
       const recentWithAttribution = [];
+      const structuredSchemas = { requests: 0, schemaTokenEstimate: 0, byCacheRole: {}, bySerializedOrder: {} };
       const actionOutcomes = {
         evaluated: 0,
         noAvailableAction: 0,
@@ -243,6 +249,14 @@ function createUsageAnalytics({ fs, dataDir, analyticsFile, retention, createPro
         }
         if (isUsageRecord) {
           add(total, entry);
+          if (entry.schemaFingerprint) {
+            structuredSchemas.requests++;
+            structuredSchemas.schemaTokenEstimate += Number(entry.schemaTokenEstimate) || 0;
+            const cacheRole = entry.schemaCacheRole || "unknown";
+            const serializedOrder = entry.providerSerializedOrder || "unknown";
+            structuredSchemas.byCacheRole[cacheRole] = (structuredSchemas.byCacheRole[cacheRole] || 0) + 1;
+            structuredSchemas.bySerializedOrder[serializedOrder] = (structuredSchemas.bySerializedOrder[serializedOrder] || 0) + 1;
+          }
           if (entry.isReconciledAggregate) {
             reconciliation.aggregates++;
             reconciliation.requests += Math.max(1, Math.floor(Number(entry.requestCount) || 1));
@@ -328,6 +342,7 @@ function createUsageAnalytics({ fs, dataDir, analyticsFile, retention, createPro
         blocks: Object.entries(blockTotals).map(([key, value]) => ({ key, ...value })).sort((a, b) => b.tokens - a.tokens),
         missAttribution: Object.entries(missAttributionTotals).map(([key, value]) => ({ key, ...value })).sort((a, b) => b.cacheMissTokens - a.cacheMissTokens),
         changesSincePrevious: Object.entries(changesSincePreviousTotals).map(([key, value]) => ({ key, ...value })).sort((a, b) => b.cacheMissTokens - a.cacheMissTokens),
+        structuredSchemas,
         actionOutcomes: {
           ...actionOutcomes,
           selectionRate: actionOutcomes.evaluated > 0 ? actionOutcomes.withSelection / actionOutcomes.evaluated : null,

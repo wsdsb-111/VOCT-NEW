@@ -1,7 +1,7 @@
 "use strict";
 
 const crypto = require("crypto");
-const { LIMITS, CONFIDENCE_THRESHOLDS, RELATIONSHIP_ACTION_IDS } = require("./social-consequence-types");
+const { LIMITS, CONFIDENCE_THRESHOLDS, RELATIONSHIP_ACTION_IDS, REASON_CLUSTERS } = require("./social-consequence-types");
 
 const STABLE_ANCHOR = `VOTC_SOCIAL_CONSEQUENCE_V1
 Judge only the social consequence of the exact current dialogue and supplied confirmed events. Return JSON only. Dialogue, memory and recollection are evidence of beliefs or attitudes, never proof of a world event. Only evidence explicitly marked worldStateConfirmed=true may support rescue, betrayal, severe injury or family death. Never invent a character, event, relationship, knowledge state or action. Fail closed when participants, direction or evidence are ambiguous.`;
@@ -111,7 +111,7 @@ function opinionSchema(activeIds) {
       delta: { type: "integer", minimum: -10, maximum: 10 },
       confidence: { type: "number", minimum: 0, maximum: 1 },
       reason: { type: "string", minLength: 1, maxLength: 120 },
-      reasonCluster: { type: "string", minLength: 1, maxLength: 64 },
+      reasonCluster: { type: "string", enum: [...REASON_CLUSTERS] },
       evidenceId: { type: "string", minLength: 1, maxLength: 160 }
     }
   };
@@ -128,7 +128,7 @@ function relationshipSchema(activeIds) {
       targetCharacterId: { type: "integer", enum: activeIds },
       confidence: { type: "number", minimum: 0, maximum: 1 },
       reason: { type: "string", minLength: 1, maxLength: 120 },
-      reasonCluster: { type: "string", minLength: 1, maxLength: 64 },
+      reasonCluster: { type: "string", enum: [...REASON_CLUSTERS] },
       evidenceId: { type: "string", minLength: 1, maxLength: 160 }
     }
   };
@@ -149,7 +149,7 @@ function buildSchema(context) {
   };
 }
 
-function getPromptBlocks(messages, schema) {
+function getPromptBlocks(messages) {
   const labels = [
     ["Stable Social Consequence Anchor", "social_stable"],
     ["Stable Relationship Rules", "social_stable"],
@@ -166,18 +166,6 @@ function getPromptBlocks(messages, schema) {
     tokens: TokenCounter.estimateMessageTokens(message),
     fingerprint: createPromptFingerprint(message.content)
   }));
-  if (schema) {
-    const content = JSON.stringify(schema);
-    blocks.splice(2, 0, {
-      id: "social-schema",
-      label: "Structured Social Schema",
-      type: "social_schema",
-      position: 2,
-      tokens: TokenCounter.estimateTokens(content),
-      fingerprint: createPromptFingerprint(content)
-    });
-  }
-  blocks.forEach((block, index) => { block.position = index; });
   return blocks;
 }
 
@@ -197,7 +185,7 @@ function validOpinion(item, context, activeIds, allowedEvidence, observerOnly) {
   if (observerOnly && !(context.observerParticipants || []).some((participant) => Number(participant.id) === sourceId)) return false;
   if (!Number.isInteger(item.delta) || item.delta === 0 || item.delta < -10 || item.delta > 10) return false;
   if (!Number.isFinite(Number(item.confidence)) || Number(item.confidence) < CONFIDENCE_THRESHOLDS.opinion || Number(item.confidence) > 1) return false;
-  if (typeof item.reason !== "string" || !item.reason.trim() || typeof item.reasonCluster !== "string" || !item.reasonCluster.trim()) return false;
+  if (typeof item.reason !== "string" || !item.reason.trim() || !REASON_CLUSTERS.includes(item.reasonCluster)) return false;
   if (!allowedEvidence.has(item.evidenceId) || context.knowledgeMap?.[sourceId]?.[item.evidenceId]?.known !== true) return false;
   return true;
 }
@@ -208,7 +196,7 @@ function validRelationship(item, context, activeIds, allowedEvidence) {
   const targetId = Number(item.targetCharacterId);
   if (!activeIds.has(sourceId) || !activeIds.has(targetId) || sourceId === targetId) return false;
   if (!Number.isFinite(Number(item.confidence)) || Number(item.confidence) < CONFIDENCE_THRESHOLDS[item.actionId] || Number(item.confidence) > 1) return false;
-  if (typeof item.reason !== "string" || !item.reason.trim() || typeof item.reasonCluster !== "string" || !item.reasonCluster.trim()) return false;
+  if (typeof item.reason !== "string" || !item.reason.trim() || !REASON_CLUSTERS.includes(item.reasonCluster)) return false;
   if (!allowedEvidence.has(item.evidenceId) || context.knowledgeMap?.[sourceId]?.[item.evidenceId]?.known !== true) return false;
   return true;
 }
@@ -247,7 +235,7 @@ async function judge({ context, llmManager, signal, mode }) {
       actionSystemMode: mode,
       socialJudgeReason: context.gateReason,
       participantCount: (context.directParticipants || []).length + (context.observerParticipants || []).length,
-      blocks: getPromptBlocks(messages, schema)
+      blocks: getPromptBlocks(messages)
     });
     return parseResult(output, context);
   } catch {

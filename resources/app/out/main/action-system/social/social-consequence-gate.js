@@ -6,8 +6,8 @@ const CONFIRMED_SIGNAL_BY_ACTION = Object.freeze({
   rescue: "rescue",
   rescuedCharacter: "rescue",
   betrayal: "betrayal",
-  isInjured: "severe_injury",
-  characterIsKilled: "family_death"
+  isInjured: "severe_harm",
+  characterIsKilled: "family_loss"
 });
 
 function resolveParticipants(context) {
@@ -30,9 +30,9 @@ function confirmedSignals(context, participants) {
   for (const evidence of context.confirmedWorldEvents || []) {
     if (evidence.worldStateConfirmed !== true) continue;
     const actionKey = evidence.reasonCluster || evidence.content;
-    const type = CONFIRMED_SIGNAL_BY_ACTION[actionKey] || (['rescue', 'betrayal', 'severe_injury', 'family_death'].includes(actionKey) ? actionKey : null);
+    const type = CONFIRMED_SIGNAL_BY_ACTION[actionKey] || (["rescue", "betrayal", "severe_harm", "family_loss"].includes(actionKey) ? actionKey : null);
     if (!type) continue;
-    const affectedId = type === "family_death"
+    const affectedId = type === "family_loss"
       ? (evidence.affectedCharacterId ?? participants.targetId)
       : (evidence.targetId ?? participants.targetId);
     if (!isKnown(context, affectedId, evidence.evidenceId)) continue;

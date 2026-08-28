@@ -8,6 +8,27 @@ const EVIDENCE_TYPES = Object.freeze([
   "relationship_state"
 ]);
 
+const REASON_CLUSTERS = Object.freeze([
+  "gratitude",
+  "praise",
+  "comfort",
+  "help",
+  "rescue",
+  "affection",
+  "rejection",
+  "insult",
+  "humiliation",
+  "threat",
+  "betrayal",
+  "severe_harm",
+  "family_loss",
+  "hostility",
+  "reconciliation",
+  "romance",
+  "friendship",
+  "other"
+]);
+
 const LIMITS = Object.freeze({
   directOpinion: 2,
   observerOpinion: 2,
@@ -50,9 +71,13 @@ function createEvidence(input = {}) {
     sourceEventId: input.sourceEventId ?? null,
     actorId: input.actorId ?? null,
     targetId: input.targetId ?? null,
+    affectedCharacterId: input.affectedCharacterId ?? null,
+    actionId: input.actionId ?? null,
     content: String(input.content || ""),
     confidence: Number.isFinite(Number(input.confidence)) ? Number(input.confidence) : 1,
-    worldStateConfirmed: input.worldStateConfirmed === true
+    worldStateConfirmed: input.worldStateConfirmed === true,
+    observable: input.observable !== false,
+    witnessIds: freezeArray((input.witnessIds || []).map(Number).filter(Number.isFinite))
   });
 }
 
@@ -78,6 +103,7 @@ function createConsequence(input = {}) {
 
 module.exports = {
   EVIDENCE_TYPES,
+  REASON_CLUSTERS,
   LIMITS,
   CONFIDENCE_THRESHOLDS,
   RELATIONSHIP_ACTION_IDS,

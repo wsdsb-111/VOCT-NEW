@@ -64,6 +64,13 @@ class ParticipantResolver {
       return { mode: "resolved", sourceCharacter, targetCharacter, actor, patient, reason, binding };
     };
     const namedCharacters = characters.filter((character) => character.id !== speaker.id && identityPatternFor(character) && new RegExp(identityPatternFor(character)).test(evidenceText));
+    if (actionDefinition?.semantic?.directedSpeech === true) {
+      if (namedCharacters.length === 1) return resolve(speaker, namedCharacters[0], "directed_speech_explicit_reference");
+      if (namedCharacters.length > 1) return { mode: "unresolved", reason: "multiple_possible_targets", binding: createUnresolvedBinding({ ...baseInput, unresolvedReason: "multiple_possible_targets" }) };
+      const referencedCharacters = references.filter((reference) => reference.mode === "resolved" && reference.referenceType !== "first_person" && reference.characterId != null && Number(reference.characterId) !== Number(speaker.id)).map((reference) => characters.find((character) => Number(character.id) === Number(reference.characterId))).filter(Boolean).filter((character, index, list) => list.findIndex((item) => Number(item.id) === Number(character.id)) === index);
+      if (referencedCharacters.length === 1) return resolve(speaker, referencedCharacters[0], "directed_speech_resolved_reference");
+      return { mode: "unresolved", reason: "unresolved_directed_addressee", binding: createUnresolvedBinding({ ...baseInput, unresolvedReason: "unresolved_directed_addressee" }) };
+    }
     const speakerIndex = evidenceText.indexOf("我");
     const reflexive = evidenceText.includes("自己");
     if (actionDefinition?.semantic?.poseSubject === true) {

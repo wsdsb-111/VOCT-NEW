@@ -54,12 +54,47 @@ function resolveMessageParticipants(context, conversation, message) {
   const actorId = message?.role === "user"
     ? conversation.gameData?.playerID
     : all.find((item) => item.name === message?.name)?.id ?? null;
+  const speaker = actorId != null ? conversation.gameData?.characters?.get?.(Number(actorId)) || null : null;
   let targetId = message?.primaryAddresseeId ?? message?.addresseeCharacterId ?? conversation.primaryAddresseeId ?? null;
+  let participantResolutionReason = targetId != null ? "explicit_primary_addressee" : null;
+  if (targetId == null && speaker && typeof ActionEngine?.getConversationReferenceContext === "function" && typeof ActionEngine?.resolveEventParticipants === "function") {
+    const text = String(message?.content || "");
+    const event = {
+      eventId: `social-reference:${message?.id ?? "message"}`,
+      traceId: `social-reference:${message?.id ?? "message"}`,
+      evidence: { text, start: 0, end: text.length }
+    };
+    const actionDefinition = {
+      semantic: {
+        participantRoles: { source: "speaker", target: "patient" },
+        directedSpeech: true,
+        evidencePatterns: [/[\s\S]+/]
+      }
+    };
+    const referenceContext = ActionEngine.getConversationReferenceContext(conversation, message, speaker);
+    const resolution = ActionEngine.resolveEventParticipants({
+      event,
+      message,
+      speaker,
+      gameData: conversation.gameData,
+      actionDefinition,
+      actionId: "socialConsequence",
+      referenceContext,
+      primaryAddresseeId: null
+    });
+    if (resolution?.mode === "resolved") {
+      targetId = resolution.targetCharacter?.id ?? resolution.binding?.targetCharacterId ?? null;
+      participantResolutionReason = resolution.reason || "reference_resolver";
+    } else {
+      participantResolutionReason = resolution?.reason || "participants_unresolved";
+    }
+  }
   if (targetId == null && all.length === 2 && actorId != null) targetId = all.find((item) => Number(item.id) !== Number(actorId))?.id ?? null;
+  if (targetId != null && participantResolutionReason == null) participantResolutionReason = "unique_interlocutor";
   const directIds = new Set([actorId, targetId].filter((value) => value != null).map(Number));
   return Object.freeze({
     ...context,
-    message: Object.freeze({ ...context.message, actorId, targetId, primaryAddresseeId: targetId }),
+    message: Object.freeze({ ...context.message, actorId, targetId, primaryAddresseeId: targetId, participantResolutionReason }),
     directParticipants: Object.freeze(all.filter((item) => directIds.has(Number(item.id)))),
     observerParticipants: Object.freeze(all.filter((item) => !directIds.has(Number(item.id))))
   });
@@ -166,7 +201,7 @@ async function process({ conversation, message, confirmedEvents = [], signal }) 
     const validation = consequenceValidator.validate({ consequence, context, mode });
     recordMetric(mode, "validatorRejected", validation.rejected.length);
     recordMetric(mode, "knowledgeGateRejected", validation.rejected.filter((item) => item.reason === "unknown_evidence").length);
-    recordMetric(mode, "unconfirmedClaimRejected", validation.rejected.filter((item) => item.reason === "unconfirmed_world_event").length);
+    recordMetric(mode, "unconfirmedClaimRejected", validation.rejected.filter((item) => ["unconfirmed_world_event", "world_authority_required"].includes(item.reason)).length);
     if (!validation.valid) return { ...emptyResult(mode, "validation_rejected"), metrics: { mode, reason: "validation_rejected", judgeCalls, consequences: 0, rejected: validation.rejected.length } };
 
     let diminishingReturnSuppressed = 0;
@@ -216,9 +251,10 @@ async function process({ conversation, message, confirmedEvents = [], signal }) 
     usageAnalytics?.record?.({ requestType: "social_consequence", actionSystemMode: mode, outcome: actionResults.autoApproved.length || actionResults.needsApproval.length ? "produced" : "empty", judgeCalls, consequenceCount: events.length }, null);
     return { actionResults, metrics: { mode, reason: "processed", judgeCalls, consequences: events.length }, reservations };
   } catch (error) {
+    console.error("[SocialConsequence] Processing failed:", error);
     usageAnalytics?.record?.({ requestType: "social_consequence", actionSystemMode: mode, outcome: "rejected", reason: error instanceof Error ? error.message : String(error) }, null);
     return emptyResult(mode, "processing_error");
   }
 }
 
-module.exports = { configure, process, toActionEvents };
+module.exports = { configure, process, resolveMessageParticipants, toActionEvents };

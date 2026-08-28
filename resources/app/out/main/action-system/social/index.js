@@ -4,6 +4,7 @@ const types = require("./social-consequence-types");
 const socialContextProvider = require("./social-context-provider");
 const socialConsequenceGate = require("./social-consequence-gate");
 const localConsequenceResolver = require("./local-consequence-resolver");
+const evidencePolicy = require("./evidence-policy");
 const relationshipTransitionGraph = require("./relationship-transition-graph");
 const consequenceValidator = require("./consequence-validator");
 const consequenceCooldown = require("./consequence-cooldown");
@@ -16,6 +17,7 @@ module.exports = {
   socialContextProvider,
   socialConsequenceGate,
   localConsequenceResolver,
+  evidencePolicy,
   relationshipTransitionGraph,
   consequenceValidator,
   consequenceCooldown,

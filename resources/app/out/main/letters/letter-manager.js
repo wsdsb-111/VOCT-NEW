@@ -1,6 +1,6 @@
 "use strict";
 
-function createLetterManager({ settingsRepository, fs, path, TailFile, readline, parseLog, letterPromptBuilder, llmManager, PromptBuilder, TokenCounter, memoryEngine, dataDir }) {
+function createLetterManager({ settingsRepository, fs, path, TailFile, readline, parseLog, letterPromptBuilder, llmManager, PromptBuilder, TokenCounter, memoryEngine, dataDir, sleep = (milliseconds) => new Promise((resolve) => setTimeout(resolve, milliseconds)), letterPayloadRetryDelays = [100, 200, 350, 600, 1e3] }) {
   const fs$1 = fs;
   const readline$1 = readline;
   var LetterResponseStatus = /* @__PURE__ */ ((LetterResponseStatus2) => {
@@ -21,6 +21,25 @@ function createLetterManager({ settingsRepository, fs, path, TailFile, readline,
     LetterSummaryStatus2["SAVE_FAILED"] = "save_failed";
     return LetterSummaryStatus2;
   })(LetterSummaryStatus || {});
+  var LetterPipelineState = /* @__PURE__ */ ((LetterPipelineState2) => {
+    LetterPipelineState2["TRIGGER_RECEIVED"] = "TRIGGER_RECEIVED";
+    LetterPipelineState2["CONTEXT_WAITING"] = "CONTEXT_WAITING";
+    LetterPipelineState2["CONTEXT_READY"] = "CONTEXT_READY";
+    LetterPipelineState2["PROMPT_BUILDING"] = "PROMPT_BUILDING";
+    LetterPipelineState2["PROMPT_READY"] = "PROMPT_READY";
+    LetterPipelineState2["REPLY_REQUESTED"] = "REPLY_REQUESTED";
+    LetterPipelineState2["REPLY_RECEIVED"] = "REPLY_RECEIVED";
+    LetterPipelineState2["SUMMARY_REQUESTED"] = "SUMMARY_REQUESTED";
+    LetterPipelineState2["SUMMARY_SAVED"] = "SUMMARY_SAVED";
+    LetterPipelineState2["PENDING_DELIVERY"] = "PENDING_DELIVERY";
+    LetterPipelineState2["DELIVERED"] = "DELIVERED";
+    LetterPipelineState2["CONTEXT_TIMEOUT"] = "CONTEXT_TIMEOUT";
+    LetterPipelineState2["PROMPT_BUILD_FAILED"] = "PROMPT_BUILD_FAILED";
+    LetterPipelineState2["REPLY_FAILED"] = "REPLY_FAILED";
+    LetterPipelineState2["SUMMARY_FAILED"] = "SUMMARY_FAILED";
+    LetterPipelineState2["DELIVERY_FAILED"] = "DELIVERY_FAILED";
+    return LetterPipelineState2;
+  })(LetterPipelineState || {});
   class LetterManager {
     // 5 minutes
     constructor() {
@@ -30,6 +49,9 @@ function createLetterManager({ settingsRepository, fs, path, TailFile, readline,
       this.deliveryInProgress = /* @__PURE__ */ new Set();
       this.tailFile = null;
       this.readline = null;
+      this.latestPipelineStatus = null;
+      this.pipelineSequence = 0;
+      this.lastPayloadDiagnostics = null;
       this.pendingLettersFile = dataDir ? path.join(dataDir, "pending-letters.json") : null;
       this.loadPendingLetters();
       const ck3UserPath = settingsRepository.getCK3UserFolderPath();
@@ -144,16 +166,30 @@ function createLetterManager({ settingsRepository, fs, path, TailFile, readline,
      * Process a new letter: generate response immediately but store it for delayed delivery
      */
     async processLatestLetter() {
+      const triggerId = `letter-trigger:${Date.now()}:${++this.pipelineSequence}`;
+      this.latestPipelineStatus = { triggerId, letterId: null, state: null, history: [], startedAt: Date.now() };
+      this.transitionPipeline(LetterPipelineState.TRIGGER_RECEIVED);
       const ck3UserPath = settingsRepository.getCK3UserFolderPath();
       if (ck3UserPath) {
         const runFolder = path.join(ck3UserPath, "run");
         const letterFilePath = path.join(runFolder, "letters.txt");
         console.log(`LetterManager: Resolved letters.txt path: ${letterFilePath}`);
-        fs$1.writeFileSync(letterFilePath, `debug_log = "[Localize('talk_event.9999.desc')]"`, "utf-8");
-        console.log("Created letters.txt file");
+        try {
+          fs$1.mkdirSync(runFolder, { recursive: true });
+          fs$1.writeFileSync(letterFilePath, `debug_log = "[Localize('talk_event.9999.desc')]"`, "utf-8");
+          console.log("Created letters.txt file");
+        } catch (error) {
+          const contextError = `Failed to request letter payload: ${error instanceof Error ? error.message : String(error)}`;
+          this.transitionPipeline(LetterPipelineState.CONTEXT_TIMEOUT, { contextError, debugLogPath: settingsRepository.getCK3DebugLogPath?.() || null });
+          return null;
+        }
       }
+      this.transitionPipeline(LetterPipelineState.CONTEXT_WAITING, { debugLogPath: settingsRepository.getCK3DebugLogPath?.() || null });
       const context = await this.loadLatestGameDataWithLetter();
-      if (!context) return null;
+      if (!context) {
+        this.transitionPipeline(LetterPipelineState.CONTEXT_TIMEOUT, this.lastPayloadDiagnostics || {});
+        return null;
+      }
       const { gameData, letter } = context;
       const letterTotalDays = Number(letter.totalDays);
       if (Number.isFinite(letterTotalDays)) {
@@ -161,11 +197,39 @@ function createLetterManager({ settingsRepository, fs, path, TailFile, readline,
       }
       const characterName = gameData.getAi()?.fullName || "Unknown";
       this.createLetterStatus(letter, characterName);
+      this.attachPipelineToLetter(letter.letterId);
+      this.transitionPipeline(LetterPipelineState.CONTEXT_READY, this.lastPayloadDiagnostics || {});
       this.updateLetterStatus(letter.letterId, { responseStatus: LetterResponseStatus.GENERATING });
-      const messages = letterPromptBuilder.buildMessages(gameData, letter);
+      this.transitionPipeline(LetterPipelineState.PROMPT_BUILDING);
+      let messages;
+      let promptMode = "enhanced";
+      let promptBuildError = null;
+      try {
+        messages = letterPromptBuilder.buildMessages(gameData, letter);
+      } catch (error) {
+        promptMode = "minimal_fallback";
+        promptBuildError = error instanceof Error ? error.message : String(error);
+        console.warn("Letter enhanced prompt build failed; using minimal fallback:", error);
+        try {
+          messages = letterPromptBuilder.buildMinimalMessages(gameData, letter);
+        } catch (fallbackError) {
+          const fallbackMessage = fallbackError instanceof Error ? fallbackError.message : String(fallbackError);
+          this.transitionPipeline(LetterPipelineState.PROMPT_BUILD_FAILED, { promptMode, promptBuildError, fallbackError: fallbackMessage });
+          this.updateLetterStatus(letter.letterId, {
+            responseStatus: LetterResponseStatus.GENERATION_FAILED,
+            responseError: `Prompt build failed: ${fallbackMessage}`,
+            promptMode,
+            promptBuildError
+          });
+          return null;
+        }
+      }
+      this.updateLetterStatus(letter.letterId, { promptMode, promptBuildError });
+      this.transitionPipeline(LetterPipelineState.PROMPT_READY, { promptMode, promptBuildError });
       let reply = null;
       let responseError = null;
       try {
+        this.transitionPipeline(LetterPipelineState.REPLY_REQUESTED);
         const result = await llmManager.sendChatRequest(messages, void 0, true, { requestType: "letter", character: characterName });
         reply = await this.extractReply(result);
         if (!reply) {
@@ -176,6 +240,7 @@ function createLetterManager({ settingsRepository, fs, path, TailFile, readline,
           responseContent: reply,
           responseError: null
         });
+        this.transitionPipeline(LetterPipelineState.REPLY_RECEIVED);
       } catch (error) {
         responseError = error instanceof Error ? error.message : "Unknown error";
         console.error("Letter reply generation failed:", error);
@@ -183,6 +248,7 @@ function createLetterManager({ settingsRepository, fs, path, TailFile, readline,
           responseStatus: LetterResponseStatus.GENERATION_FAILED,
           responseError
         });
+        this.transitionPipeline(LetterPipelineState.REPLY_FAILED, { responseError });
         return null;
       }
       await this.generateSummary(gameData, letter, reply);
@@ -200,6 +266,7 @@ function createLetterManager({ settingsRepository, fs, path, TailFile, readline,
         daysUntilDelivery: expectedDeliveryDay - this.currentTotalDays,
         isLate: this.currentTotalDays > expectedDeliveryDay
       });
+      this.transitionPipeline(LetterPipelineState.PENDING_DELIVERY, { expectedDeliveryDay });
       this.savePendingLetters();
       console.log(`Letter ${letter.letterId} generated and stored. Will deliver on day ${expectedDeliveryDay} (current: ${this.currentTotalDays})`);
       if (this.currentTotalDays >= expectedDeliveryDay) {
@@ -222,16 +289,51 @@ function createLetterManager({ settingsRepository, fs, path, TailFile, readline,
       const debugLogPath = settingsRepository.getCK3DebugLogPath();
       if (!debugLogPath) {
         console.warn("CK3 debug log path is not configured; cannot process letter.");
+        this.lastPayloadDiagnostics = { attemptCount: 0, elapsedMs: 0, debugLogPath: null, lastParseResult: "debug_log_path_missing" };
         return null;
       }
-      const gameData = await parseLog(debugLogPath);
-      gameData.loadCharactersSummaries();
-      const letter = gameData.letterData;
-      if (!letter) {
-        console.warn("No letter data found in parsed game data.");
-        return null;
+      const startedAt = Date.now();
+      let attemptCount = 0;
+      let lastParseResult = "not_started";
+      let lastError = null;
+      for (let index = 0; index <= letterPayloadRetryDelays.length; index++) {
+        if (index > 0) await sleep(letterPayloadRetryDelays[index - 1]);
+        attemptCount++;
+        try {
+          const gameData = await parseLog(debugLogPath);
+          if (!gameData) {
+            lastParseResult = "game_data_missing";
+            continue;
+          }
+          const letter = gameData.letterData;
+          if (!letter) {
+            lastParseResult = "letter_payload_missing";
+            continue;
+          }
+          let summaryLoadError = null;
+          try {
+            gameData.loadCharactersSummaries?.();
+          } catch (error) {
+            summaryLoadError = error instanceof Error ? error.message : String(error);
+            console.warn("Letter context summary loading failed; continuing without saved summaries:", error);
+          }
+          this.lastPayloadDiagnostics = {
+            attemptCount,
+            elapsedMs: Date.now() - startedAt,
+            debugLogPath,
+            lastParseResult: "letter_payload_ready",
+            lastError: null,
+            summaryLoadError
+          };
+          return { gameData, letter };
+        } catch (error) {
+          lastError = error instanceof Error ? error.message : String(error);
+          lastParseResult = "parse_failed";
+        }
       }
-      return { gameData, letter };
+      this.lastPayloadDiagnostics = { attemptCount, elapsedMs: Date.now() - startedAt, debugLogPath, lastParseResult, lastError };
+      console.warn(`No letter data found after ${attemptCount} parse attempts (${this.lastPayloadDiagnostics.elapsedMs}ms).`);
+      return null;
     }
     async extractReply(result) {
       if (result && typeof result === "object" && "content" in result) {
@@ -251,10 +353,14 @@ function createLetterManager({ settingsRepository, fs, path, TailFile, readline,
     }
     async generateSummary(gameData, letter, reply) {
       const ai = gameData.getAi();
-      if (!ai) return;
+      if (!ai) {
+        this.transitionPipeline(LetterPipelineState.SUMMARY_FAILED, { summaryError: "Letter recipient missing" });
+        return false;
+      }
       this.updateLetterStatus(letter.letterId, {
         summaryStatus: LetterSummaryStatus.GENERATING
       });
+      this.transitionPipeline(LetterPipelineState.SUMMARY_REQUESTED);
       const summarySettings = settingsRepository.getSummaryPromptSettings();
       const summaryPrompt = [
         {
@@ -274,43 +380,46 @@ function createLetterManager({ settingsRepository, fs, path, TailFile, readline,
           content: "Generate the concise letter summary now."
         }
       ];
+      let summaryGenerated = false;
       try {
         console.log(`[TOKEN_COUNT] Letter summary prompt tokens: ${TokenCounter.estimateMessageTokens(summaryPrompt[0])}`);
         console.log(`[TOKEN_COUNT] Letter summary letters letters content tokens: ${TokenCounter.estimateMessageTokens(summaryPrompt[1])}`);
         const summaryResult = await llmManager.sendSummaryRequest(summaryPrompt, void 0, { requestType: "letter_summary", character: ai.shortName });
-        if (summaryResult && typeof summaryResult === "object" && "content" in summaryResult) {
-          const summary = summaryResult.content;
-          if (summary?.trim()) {
-            this.updateLetterStatus(letter.letterId, {
-              summaryStatus: LetterSummaryStatus.GENERATED,
-              summaryContent: summary.trim(),
-              summaryError: null
-            });
-            gameData.saveCharacterSummary(ai.id, {
-              date: gameData.date,
-              totalDays: gameData.totalDays,
-              content: summary.trim()
-            });
-            memoryEngine.recordLetterMemory({
-              senderId: gameData.playerID,
-              recipientId: ai.id,
-              content: summary.trim(),
-              date: gameData.date,
-              totalDays: gameData.totalDays,
-              letterId: letter.letterId
-            });
-            this.updateLetterStatus(letter.letterId, {
-              summaryStatus: LetterSummaryStatus.SAVED
-            });
-          }
-        }
+        const summary = summaryResult && typeof summaryResult === "object" && "content" in summaryResult ? summaryResult.content : null;
+        if (!summary?.trim()) throw new Error("Letter summary generation returned empty content.");
+        summaryGenerated = true;
+        this.updateLetterStatus(letter.letterId, {
+          summaryStatus: LetterSummaryStatus.GENERATED,
+          summaryContent: summary.trim(),
+          summaryError: null
+        });
+        gameData.saveCharacterSummary(ai.id, {
+          date: gameData.date,
+          totalDays: gameData.totalDays,
+          content: summary.trim()
+        });
+        memoryEngine.recordLetterMemory({
+          senderId: gameData.playerID,
+          recipientId: ai.id,
+          content: summary.trim(),
+          date: gameData.date,
+          totalDays: gameData.totalDays,
+          letterId: letter.letterId
+        });
+        this.updateLetterStatus(letter.letterId, {
+          summaryStatus: LetterSummaryStatus.SAVED
+        });
+        this.transitionPipeline(LetterPipelineState.SUMMARY_SAVED);
+        return true;
       } catch (error) {
         const summaryError = error instanceof Error ? error.message : "Unknown error";
         console.error("Failed to generate letter summary:", error);
         this.updateLetterStatus(letter.letterId, {
-          summaryStatus: LetterSummaryStatus.GENERATION_FAILED,
+          summaryStatus: summaryGenerated ? LetterSummaryStatus.SAVE_FAILED : LetterSummaryStatus.GENERATION_FAILED,
           summaryError
         });
+        this.transitionPipeline(LetterPipelineState.SUMMARY_FAILED, { summaryError });
+        return false;
       }
     }
     async writeLetterEffect(reply, letter) {
@@ -322,6 +431,7 @@ function createLetterManager({ settingsRepository, fs, path, TailFile, readline,
           responseStatus: LetterResponseStatus.SEND_FAILED,
           responseError: "CK3 user folder not configured"
         });
+        this.transitionLetter(letter.letterId, LetterPipelineState.DELIVERY_FAILED, { deliveryError: "CK3 user folder not configured" });
         return false;
       }
       const runFolder = path.join(ck3Folder, "run");
@@ -336,6 +446,7 @@ function createLetterManager({ settingsRepository, fs, path, TailFile, readline,
           responseStatus: LetterResponseStatus.SEND_FAILED,
           responseError: errorMessage
         });
+        this.transitionLetter(letter.letterId, LetterPipelineState.DELIVERY_FAILED, { deliveryError: errorMessage });
         return false;
       }
       const letterFilePath = path.join(runFolder, `letters.txt`);
@@ -367,6 +478,7 @@ function createLetterManager({ settingsRepository, fs, path, TailFile, readline,
           responseStatus: LetterResponseStatus.SENT,
           responseError: null
         });
+        this.transitionLetter(letter.letterId, LetterPipelineState.DELIVERED);
         return true;
       } catch (error) {
         const errorMessage = `Failed to write letter effect: ${error instanceof Error ? error.message : "Unknown error"}`;
@@ -375,6 +487,7 @@ function createLetterManager({ settingsRepository, fs, path, TailFile, readline,
           responseStatus: LetterResponseStatus.SEND_FAILED,
           responseError: errorMessage
         });
+        this.transitionLetter(letter.letterId, LetterPipelineState.DELIVERY_FAILED, { deliveryError: errorMessage });
         return false;
       }
     }
@@ -485,9 +598,39 @@ function createLetterManager({ settingsRepository, fs, path, TailFile, readline,
         currentDay: this.currentTotalDays,
         daysUntilDelivery: letter.totalDays + letter.delay - this.currentTotalDays,
         isLate: this.currentTotalDays > letter.totalDays + letter.delay,
-        characterName
+        characterName,
+        pipelineState: this.latestPipelineStatus?.state || LetterPipelineState.CONTEXT_READY,
+        pipelineHistory: [...(this.latestPipelineStatus?.history || [])],
+        promptMode: null,
+        promptBuildError: null
       };
       this.letterStatuses.set(letter.letterId, statusInfo);
+    }
+    attachPipelineToLetter(letterId) {
+      if (!this.latestPipelineStatus) return;
+      this.latestPipelineStatus = { ...this.latestPipelineStatus, letterId };
+    }
+    transitionPipeline(state, details = {}) {
+      const timestamp = Date.now();
+      const current = this.latestPipelineStatus || { triggerId: `letter-trigger:${timestamp}:unknown`, letterId: null, history: [], startedAt: timestamp };
+      const transition = { state, timestamp };
+      const history = [...(current.history || []), transition].slice(-32);
+      this.latestPipelineStatus = { ...current, ...details, state, updatedAt: timestamp, history };
+      if (this.latestPipelineStatus.letterId) this.transitionLetter(this.latestPipelineStatus.letterId, state, details, false);
+      console.log(`[LetterPipeline] trigger=${this.latestPipelineStatus.triggerId} letter=${this.latestPipelineStatus.letterId || "pending"} state=${state}`);
+    }
+    transitionLetter(letterId, state, details = {}, updateLatest = true) {
+      const existing = this.letterStatuses.get(letterId);
+      if (existing) {
+        const timestamp = Date.now();
+        const history = [...(existing.pipelineHistory || []), { state, timestamp }].slice(-32);
+        this.letterStatuses.set(letterId, { ...existing, ...details, pipelineState: state, pipelineUpdatedAt: timestamp, pipelineHistory: history });
+      }
+      if (updateLatest && this.latestPipelineStatus?.letterId === letterId) {
+        const timestamp = Date.now();
+        const history = [...(this.latestPipelineStatus.history || []), { state, timestamp }].slice(-32);
+        this.latestPipelineStatus = { ...this.latestPipelineStatus, ...details, state, updatedAt: timestamp, history };
+      }
     }
     /**
      * Update letter status information
@@ -517,6 +660,7 @@ function createLetterManager({ settingsRepository, fs, path, TailFile, readline,
       return {
         letters: Array.from(this.letterStatuses.values()),
         currentTotalDays: this.currentTotalDays,
+        pipeline: this.latestPipelineStatus ? { ...this.latestPipelineStatus, history: [...this.latestPipelineStatus.history] } : null,
         timestamp: Date.now()
       };
     }
@@ -541,7 +685,7 @@ function createLetterManager({ settingsRepository, fs, path, TailFile, readline,
     }
   }
   
-  return { LetterManager, LetterResponseStatus, LetterSummaryStatus };
+  return { LetterManager, LetterResponseStatus, LetterSummaryStatus, LetterPipelineState };
 }
 
 module.exports = { createLetterManager };
