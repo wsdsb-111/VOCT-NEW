@@ -22,17 +22,21 @@ const UsageAnalytics = createUsageAnalytics({ fs: memoryFs, dataDir: "memory", a
 const analytics = new UsageAnalytics();
 analytics.record({ requestType: "action_mode_metric", actionSystemMode: "performance", metric: "pendingCreated" }, null);
 analytics.record({ requestType: "action_mode_metric", actionSystemMode: "performance", metric: "semanticRescueCalls" }, null);
+analytics.record({ requestType: "action_mode_metric", actionSystemMode: "balanced", metric: "stageBProviderCalls" }, null);
+analytics.record({ requestType: "action_mode_metric", actionSystemMode: "precision", metric: "precisionJudgeCalls" }, null);
 analytics.record({ requestType: "action_mode_metric", actionSystemMode: "performance", metric: "semanticRescueMatched" }, null);
 analytics.record({ requestType: "action_mode_metric", actionSystemMode: "performance", metric: "providerExecuted" }, null);
 analytics.record({ requestType: "chat", actionSystemMode: "performance" }, { prompt_tokens: 10, completion_tokens: 2, total_tokens: 12 });
 analytics.record({ requestType: "chat", actionSystemMode: "performance" }, { prompt_tokens: 10, completion_tokens: 2, total_tokens: 12 });
 analytics.record({ requestType: "action", actionStage: "semantic_rescue", actionSystemMode: "performance" }, { prompt_tokens: 5, completion_tokens: 1, total_tokens: 6 });
 analytics.record({ requestType: "action", actionSystemMode: "balanced" }, { prompt_tokens: 8, completion_tokens: 2, total_tokens: 10 });
-analytics.record({ requestType: "action", actionSystemMode: "precision" }, { prompt_tokens: 16, completion_tokens: 4, total_tokens: 20 });
+analytics.record({ requestType: "action", actionStage: "precision_stage_a", actionSystemMode: "precision" }, { prompt_tokens: 16, completion_tokens: 4, total_tokens: 20 });
 const report = analytics.getReport();
 assert.ok(["balanced", "performance", "precision"].includes(report.actionEngine3.currentMode), "current action mode must remain a valid mode after analytics retention");
 assert.strictEqual(report.actionEngine3.pendingCreated, 1);
 assert.strictEqual(report.actionEngine3.semanticRescueCalls, 1);
+assert.strictEqual(report.actionEngine3.stageBProviderCalls, 1);
+assert.strictEqual(report.actionEngine3.precisionJudgeCalls, 1);
 assert.strictEqual(report.actionEngine3.semanticRescueMatched, 1);
 assert.strictEqual(report.actionEngine3.providerExecuted, 1);
 assert.strictEqual(report.actionEngine3.recognitionEfficiency, 1 / 3);
@@ -46,10 +50,32 @@ assert.deepStrictEqual(
   },
   "action Token usage must stay separated by the mode that made the request"
 );
+assert.deepStrictEqual(
+  Object.fromEntries(Object.entries(report.actionEngine3.modeTokenUsage).map(([mode, usage]) => [mode, Object.fromEntries(Object.entries(usage.stages).map(([stage, stageUsage]) => [stage, { requests: stageUsage.requests, totalTokens: stageUsage.totalTokens }]))])),
+  {
+    balanced: {
+      stageB: { requests: 1, totalTokens: 10 },
+      semanticRescue: { requests: 0, totalTokens: 0 },
+      precisionJudge: { requests: 0, totalTokens: 0 }
+    },
+    performance: {
+      stageB: { requests: 0, totalTokens: 0 },
+      semanticRescue: { requests: 1, totalTokens: 6 },
+      precisionJudge: { requests: 0, totalTokens: 0 }
+    },
+    precision: {
+      stageB: { requests: 0, totalTokens: 0 },
+      semanticRescue: { requests: 0, totalTokens: 0 },
+      precisionJudge: { requests: 1, totalTokens: 20 }
+    }
+  },
+  "each action mode must expose Stage B, Semantic Rescue, and Precision Judge Token usage"
+);
 
 const renderer = fs.readFileSync(path.join(root, "resources", "app", "out", "renderer", "assets", "index-Dn3qWlAB.js"), "utf8");
 const rendererCss = fs.readFileSync(path.join(root, "resources", "app", "out", "renderer", "assets", "index-WtJH_nua.css"), "utf8");
 const main = fs.readFileSync(path.join(root, "resources", "app", "out", "main", "main.js"), "utf8");
+const actionEngine = fs.readFileSync(path.join(root, "resources", "app", "out", "main", "action-system", "action-engine.js"), "utf8");
 const settings = fs.readFileSync(path.join(root, "resources", "app", "out", "main", "config", "settings-repository.js"), "utf8");
 const ipc = fs.readFileSync(path.join(root, "resources", "app", "out", "main", "ipc", "register-ipc.js"), "utf8");
 const preload = fs.readFileSync(path.join(root, "resources", "app", "out", "preload", "preload.js"), "utf8");
@@ -65,6 +91,11 @@ assert(renderer.includes('className: "optimization-mode-toggle"'), "action mode 
 assert(renderer.includes('showActionModeTokenUsage ? "▼" : "▶"'), "action mode toggle must display the triangle state");
 assert(renderer.includes("actionModeTokenUsage"), "optimization UI must render per-mode action Token usage");
 assert(rendererCss.includes(".optimization-mode-toggle"), "mode-token toggle needs visible styling");
+assert(renderer.includes('className: "action-mode-token-usage"'), "mode-token rows must show the per-stage Token split");
+assert(renderer.includes("查看当前记忆策略"), "memory routing descriptions must be collapsed by default");
+assert(renderer.includes('className: "optimization-capability-details"'), "integration status must be collapsed by default");
+assert(rendererCss.includes(':root[data-votc-theme="ink"] .summaries-manager .memory-engine-overview'), "ink Memory Engine overview must use the soft paper surface");
+assert(actionEngine.includes('actionStage: "stage_b"'), "new Stage B requests must include an explicit stage for Token attribution");
 const actionsView = renderer.slice(renderer.indexOf("const ActionsView = () => {"), renderer.indexOf("const PromptsView = () => {"));
 for (const marker of ["updateActionSystemMode", "saveActionSystemMode", 'const currentActionSystemMode = appSettings?.actionSystemMode || "balanced"', 'className: "action-mode-controls"', 'role: "radiogroup"', '["balanced", "config.actionModeBalanced"]', '["performance", "config.actionModePerformance"]', '["precision", "config.actionModePrecision"]']) {
   assert(renderer.includes(marker), `Actions UI must expose ${marker}`);

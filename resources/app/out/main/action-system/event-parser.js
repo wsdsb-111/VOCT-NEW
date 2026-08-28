@@ -3,6 +3,7 @@
 const candidateGate = require("./candidate-gate");
 const { createActionEvent } = require("./action-types");
 const socialEvent = require("./social-event");
+const { MONEY_TRANSFER_FAILURE_PATTERN } = require("./money-lexicon");
 
 function parse(text, { registry } = {}) {
     const source = typeof text === "string" ? text : "";
@@ -38,7 +39,7 @@ function parse(text, { registry } = {}) {
     // Hints are already concrete action candidates. Reject any clause led by
     // a plan, request, question, near-miss, or negation regardless of action
     // category so new registry metadata cannot bypass the execution boundary.
-    const nonExecutedMarker = /(?:[？?]|(?:^|[，,；;])\s*(?:(?:明天|明日|稍后|待会|待会儿|将来|总有一天)\s*)?(?:我|你|他|她|它|我们|你们|他们|她们|众人)?\s*(?:(?:明天|明日|稍后|待会|待会儿|将来|总有一天)\s*)?(?:请|命令|要求|让|叫|希望|想|要|欲|准备|打算|计划|将(?:要|会)|会|能否|可否|是否|别|不要|莫|不许|不准|差点|险些|几乎))/i;
+    const nonExecutedMarker = /(?:[？?]|(?:^|[，,；;])\s*(?:(?:明天|明日|稍后|待会|待会儿|将来|总有一天)\s*)?(?:我|你|他|她|它|我们|你们|他们|她们|众人)?\s*(?:(?:明天|明日|稍后|待会|待会儿|将来|总有一天)\s*)?(?:本来|原本)?\s*(?:请|命令|要求|让|叫|希望|想|要|欲|愿意|准备|打算|计划|将(?:要|会)|会|能否|可否|是否|别|不要|莫|不许|不准|差点|险些|几乎))/i;
     const explicitFutureMarker = /(?:^|[，,；;])\s*(?:我|你|他|她|它|我们|你们|他们|她们|众人)?\s*(?:过会儿|等下|迟些时候|改日)\s*(?:我|你|他|她|它|我们|你们|他们|她们|众人)?\s*(?:就|再)?/i;
     const negatedActionMarker = /(?:^|[，,；;])\s*(?:我|你|他|她|它|我们|你们|他们|她们|众人)?\s*(?:没有|并未|不曾|未曾|尚未)/i;
     const posthocNegationMarker = /(?:——|—|\.\.\.|…|至少).{0,24}(?:不[，,]?|只是做了个梦|也许没有|本来是这么打算)/i;
@@ -85,7 +86,7 @@ function parse(text, { registry } = {}) {
         for (const category of hints) rejectedCandidates.push({ category, evidence: candidateEvidence, rejectionReason: "recalled_or_reported" });
         continue;
       }
-      const failedBeforeExecution = failedBeforeExecutionMarker.test(clause.text) || /(?:试图|尝试|企图)/.test(clause.text) && clauses.slice(index + 1, index + 2).some((nextClause) => /(?:没能|未能|卡在|失败|落空|无法|没有成功|拒绝|推开|挣脱|\b(?:failed|stuck|could not|refused)\b)/i.test(nextClause.text));
+      const failedBeforeExecution = failedBeforeExecutionMarker.test(clause.text) || /(?:试图|尝试|企图)/.test(clause.text) && clauses.slice(index + 1, index + 2).some((nextClause) => /(?:没能|未能|卡在|失败|落空|无法|没有成功|拒绝|推开|挣脱|\b(?:failed|stuck|could not|refused)\b)/i.test(nextClause.text)) || hints.includes("gold") && (MONEY_TRANSFER_FAILURE_PATTERN.test(clause.text) || clauses.slice(index + 1, index + 2).some((nextClause) => MONEY_TRANSFER_FAILURE_PATTERN.test(nextClause.text)));
       if (failedBeforeExecution) {
         for (const category of hints) rejectedCandidates.push({ category, evidence: candidateEvidence, rejectionReason: "failed_before_execution" });
         continue;

@@ -30,6 +30,11 @@ const triggerCases = [
   ["我穿上外袍", ["daily_object_interaction"]],
   ["我吃下糕点", ["daily_object_interaction"]],
   ["我打赏他十金币", ["gold"]],
+  ["我给李思念50文钱。", ["gold"]],
+  ["我把50文交给李思念。", ["gold"]],
+  ["我想给李思念50文。", []],
+  ["我准备明天给李思念50文。", []],
+  ["我递给她50文，但她没有接。", []],
   ["我推倒他，又踢了他一脚", ["combat"]],
   ["我挥剑砍伤了他", ["combat", "death_or_injury"]],
   ["我试图刺伤他，但他躲开了", ["combat"]],
@@ -208,7 +213,7 @@ assert(shippedActions.length >= 30, "the local candidate layer must cover all sh
 for (const action of shippedActions) {
   const semantic = action.definition.semantic || {};
   assert(Array.isArray(action.definition.triggerCategories) && action.definition.triggerCategories.length > 0, `${action.id}: missing local trigger categories`);
-  assert(Array.isArray(semantic.candidatePatterns) || Array.isArray(semantic.evidencePatterns) || typeof semantic.match === "function", `${action.id}: missing local semantic recall metadata`);
+  assert(Array.isArray(semantic.candidatePatterns) || Array.isArray(semantic.evidencePatterns) || typeof semantic.match === "function" || semantic.moneyTransfer === true, `${action.id}: missing local semantic recall metadata`);
 }
 const registryPatternProbe = {
   getAllActions: () => [

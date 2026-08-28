@@ -1814,6 +1814,15 @@ hr {
   gap: 7px;
   margin-top: 10px;
 }
+.summaries-manager .memory-routing-details {
+  margin-top: 10px;
+  color: #d8d2c7;
+  font-size: 12px;
+}
+.summaries-manager .memory-routing-details summary {
+  color: #efb16a;
+  cursor: pointer;
+}
 .summaries-manager .memory-routing-card {
   display: flex;
   flex-direction: column;
@@ -3851,6 +3860,14 @@ button:active {
   font-size: 0.87em;
   line-height: 1.45;
 }
+.optimization-capability-details summary {
+  color: #EFB16A;
+  cursor: pointer;
+  font-weight: 700;
+}
+.optimization-capability-details[open] summary {
+  margin-bottom: 10px;
+}
 .optimization-table-wrap {
   overflow-x: auto;
   border: 1px solid rgba(239, 177, 106, 0.3);
@@ -3903,6 +3920,16 @@ button:active {
   display: inline-block;
   padding-left: 1.45em;
   color: #c9b79f;
+}
+.action-mode-token-usage {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+.action-mode-token-usage small {
+  color: #aaa49a;
+  font-size: 0.84em;
+  line-height: 1.4;
 }
 .optimization-error,
 .optimization-loading,
@@ -5817,6 +5844,44 @@ select,
 
 :root[data-votc-theme="ink"] .summaries-manager .summary-item .summary-content {
   color: #28302b;
+}
+
+/* Keep the Memory Engine overview and summary folders on the same soft paper surface. */
+:root[data-votc-theme="ink"] .summaries-manager .memory-engine-overview,
+:root[data-votc-theme="ink"] .summaries-manager .player-summary-group,
+:root[data-votc-theme="ink"] .summaries-manager .character-summary-group {
+  color: #282e29;
+  border: 1px solid rgba(118, 91, 53, 0.48);
+  border-radius: 10px;
+  background: rgba(249, 245, 232, 0.76);
+  box-shadow: inset 0 0 12px rgba(101, 76, 40, 0.09);
+}
+:root[data-votc-theme="ink"] .summaries-manager .player-summary-group .player-header,
+:root[data-votc-theme="ink"] .summaries-manager .character-summary-group .character-header {
+  background: rgba(238, 229, 205, 0.64);
+}
+:root[data-votc-theme="ink"] .summaries-manager .player-summary-group .player-header:hover,
+:root[data-votc-theme="ink"] .summaries-manager .character-summary-group .character-header:hover {
+  background: rgba(230, 216, 186, 0.78);
+}
+:root[data-votc-theme="ink"] .summaries-manager .memory-engine-title h5,
+:root[data-votc-theme="ink"] .summaries-manager .memory-engine-title p,
+:root[data-votc-theme="ink"] .summaries-manager .memory-health-card span,
+:root[data-votc-theme="ink"] .summaries-manager .memory-routing-details,
+:root[data-votc-theme="ink"] .summaries-manager .memory-routing-card span {
+  color: #3d473f;
+  text-shadow: none;
+}
+:root[data-votc-theme="ink"] .summaries-manager .memory-health-card {
+  border-color: rgba(118, 91, 53, 0.32);
+  background: rgba(235, 226, 203, 0.66);
+}
+:root[data-votc-theme="ink"] .summaries-manager .memory-routing-card {
+  background: rgba(231, 218, 188, 0.54);
+}
+:root[data-votc-theme="ink"] .summaries-manager .memory-routing-details summary,
+:root[data-votc-theme="ink"] .summaries-manager .memory-boundary-details summary {
+  color: #8b4633;
 }
 
 /* Action Engine 3.0 mode switch belongs to the Actions page. */

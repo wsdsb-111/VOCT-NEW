@@ -4,7 +4,7 @@
 
 | 版本 | 重点 | 详细记录 |
 | --- | --- | --- |
-| v7.9.1 | Action Engine 3.0 生产稳定性：Precision Gate 后置、多人绑定优先、受限 Judge 输入、社交/亲密事件层与 Chat 固定前缀 v4；Memory Engine 2.5 动态摘要召回保持不变 | [V7.9.1 实施记录](docs/VOTC_v7.9.1_生产稳定性修复实施记录.md) |
+| v7.9.1 | Action Engine 3.0 生产稳定性：Precision Gate 后置、多人绑定优先、受限 Judge 输入、社交/亲密事件层、确定性金币转账与统一动作统计；Chat 固定前缀 v4 和 Memory Engine 2.5 动态摘要召回保持不变 | [V7.9.1 实施记录](docs/VOTC_v7.9.1_生产稳定性修复实施记录.md) |
 | v7.9 | Action Engine 3.0：平衡、性能、精准三模式，跨轮待定意图、受限语义兜底、两阶段精准判断、模式统计及 Fork 自动更新隔离 | [V7.9 实施记录](docs/VOTC_v7.9_Action_Engine_3.0实施记录.md) |
 | v7.8.3 | Memory Engine 2.5：意图门控 Turn Recall、冻结 Session Topic Anchor、动作严格白名单与全部在场人物关系权威层 | [V7.8.3 实施记录](docs/VOTC_v7.8.3_Memory_Engine_2.5实施记录.md) |
 | v7.8.2 | V7 最终收尾：修正默认 helper、人物特质、模块依赖和人物摘要落盘，并补齐可跨重启重试的信件延时送达 | [V7.8.2 实施记录](docs/VOTC_v7.8.2_V7最终收尾修复实施记录.md) |

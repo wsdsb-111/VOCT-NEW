@@ -2,6 +2,7 @@
 
 const { createParticipantBinding, createUnresolvedBinding } = require("./action-types");
 const { getCharacterAliases, escapeRegExp } = require("./reference-context");
+const { findMoneyTransferIndex } = require("./money-lexicon");
 
 function patternFor(character, referenceSurfaces = []) {
   return Array.from(new Set([...getCharacterAliases(character), ...referenceSurfaces])).sort((left, right) => right.length - left.length).map(escapeRegExp).join("|");
@@ -9,6 +10,10 @@ function patternFor(character, referenceSurfaces = []) {
 
 function getActionPositions(text, definition) {
   const positions = [];
+  if (definition?.semantic?.moneyTransfer === true) {
+    const position = findMoneyTransferIndex(text);
+    if (position >= 0) positions.push(position);
+  }
   for (const pattern of definition?.semantic?.evidencePatterns || []) {
     const flags = pattern.flags.replace("g", "").replace("y", "") + "g";
     for (const match of text.matchAll(new RegExp(pattern.source, flags))) positions.push(match.index);
@@ -68,6 +73,9 @@ class ParticipantResolver {
       return { mode: "unresolved", reason: "ambiguous_pose_subject", binding: createUnresolvedBinding({ ...baseInput, unresolvedReason: "ambiguous_pose_subject" }) };
     }
     if (reflexive && speakerIndex >= 0 && actionPositions.length > 0) return resolve(speaker, speaker, "reflexive_speaker");
+    if (actionDefinition?.semantic?.moneyTransfer === true && namedCharacters.length === 1 && actionPositions.length > 0) {
+      return resolve(speaker, namedCharacters[0], "money_explicit_counterpart");
+    }
     if (actionDefinition?.semantic?.bilateralPersistentEffect === true && namedCharacters.length === 1 && actionPositions.length > 0) {
       return resolve(speaker, namedCharacters[0], "bilateral_explicit_counterpart");
     }

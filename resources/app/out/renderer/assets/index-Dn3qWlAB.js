@@ -20890,10 +20890,13 @@ const SummariesManager = () => {
         /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "memory-health-card", children: [/* @__PURE__ */ jsxRuntimeExports.jsx("strong", { children: totals.summaryFiles || 0 }), /* @__PURE__ */ jsxRuntimeExports.jsx("span", { children: "人物对话文件" })] }),
         /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "memory-health-card", children: [/* @__PURE__ */ jsxRuntimeExports.jsx("strong", { children: totals.summaryRecords || 0 }), /* @__PURE__ */ jsxRuntimeExports.jsx("span", { children: "可编辑摘要" })] })
       ] }),
-      /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "memory-routing-grid", children: Object.entries(memoryOverview.routingPolicy || {}).map(([key, label]) => /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "memory-routing-card", children: [
-        /* @__PURE__ */ jsxRuntimeExports.jsx("strong", { children: key === "stablePrefix" ? "稳定前缀" : key === "directPair" ? "一对一" : key === "group" ? "多人对话" : key === "mentioned" ? "场外人物" : "Token 边界" }),
-        /* @__PURE__ */ jsxRuntimeExports.jsx("span", { children: label })
-      ] }, key)) }),
+      /* @__PURE__ */ jsxRuntimeExports.jsxs("details", { className: "memory-routing-details", children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsx("summary", { children: "查看当前记忆策略" }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "memory-routing-grid", children: Object.entries(memoryOverview.routingPolicy || {}).map(([key, label]) => /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "memory-routing-card", children: [
+          /* @__PURE__ */ jsxRuntimeExports.jsx("strong", { children: key === "stablePrefix" ? "稳定前缀" : key === "directPair" ? "一对一" : key === "group" ? "多人对话" : key === "mentioned" ? "场外人物" : "Token 边界" }),
+          /* @__PURE__ */ jsxRuntimeExports.jsx("span", { children: label })
+        ] }, key)) })
+      ] }),
       /* @__PURE__ */ jsxRuntimeExports.jsxs("details", { className: "memory-boundary-details", children: [
         /* @__PURE__ */ jsxRuntimeExports.jsx("summary", { children: "查看当前记忆边界" }),
         /* @__PURE__ */ jsxRuntimeExports.jsx("ul", { children: (memoryOverview.boundaries || []).map((boundary, index) => /* @__PURE__ */ jsxRuntimeExports.jsx("li", { children: boundary }, index)) })
@@ -21399,9 +21402,14 @@ const OptimizationView = () => {
   const actionModeTokenUsage = actionEngine3.modeTokenUsage || {};
   const actionModeTokenRows = ["balanced", "performance", "precision"].map((mode) => {
     const usage = actionModeTokenUsage[mode] || {};
+    const stages = usage.stages || {};
+    const stageUsage = (key) => stages[key] || {};
     return [
       /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "action-mode-token-label", children: actionModeNames[mode] }),
-      `${formatTokens(usage.totalTokens)} Token · ${formatTokens(usage.requests)} ${text("次动作请求", "action requests")}`
+      /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "action-mode-token-usage", children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsx("span", { children: `${formatTokens(usage.totalTokens)} Token · ${formatTokens(usage.requests)} ${text("次动作请求", "action requests")}` }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx("small", { children: `${text("Stage B", "Stage B")} ${formatTokens(stageUsage("stageB").totalTokens)} Token / ${formatTokens(stageUsage("stageB").requests)} · ${text("Semantic Rescue", "Semantic Rescue")} ${formatTokens(stageUsage("semanticRescue").totalTokens)} Token / ${formatTokens(stageUsage("semanticRescue").requests)} · ${text("Precision Judge", "Precision Judge")} ${formatTokens(stageUsage("precisionJudge").totalTokens)} Token / ${formatTokens(stageUsage("precisionJudge").requests)}` })
+      ] })
     ];
   });
   const actionEngineRows = [
@@ -21469,8 +21477,10 @@ const OptimizationView = () => {
       ] }),
       reconciliation?.aggregates > 0 && /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "muted-text", children: text(`已包含 ${formatTokens(reconciliation.requests)} 次 DeepSeek 官网核对补录、${formatTokens(reconciliation.totalTokens)} Token；缓存细分仅来自本机仍保留的原始响应。`, `Includes a DeepSeek-console reconciliation of ${formatTokens(reconciliation.requests)} requests and ${formatTokens(reconciliation.totalTokens)} tokens; cache details use only locally retained provider responses.`) }),
       /* @__PURE__ */ jsxRuntimeExports.jsxs("section", { className: "optimization-capabilities", children: [
-        /* @__PURE__ */ jsxRuntimeExports.jsx("h4", { children: text("V7.9.1 适配状态", "V7.9.1 integration status") }),
-        /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "optimization-capability-grid", children: capabilities.map(([title, detail]) => /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "optimization-capability", children: [/* @__PURE__ */ jsxRuntimeExports.jsx("strong", { children: title }), /* @__PURE__ */ jsxRuntimeExports.jsx("span", { children: detail })] }, title)) })
+        /* @__PURE__ */ jsxRuntimeExports.jsxs("details", { className: "optimization-capability-details", children: [
+          /* @__PURE__ */ jsxRuntimeExports.jsx("summary", { children: text("查看 V7.9.1 适配状态", "View V7.9.1 integration status") }),
+          /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "optimization-capability-grid", children: capabilities.map(([title, detail]) => /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "optimization-capability", children: [/* @__PURE__ */ jsxRuntimeExports.jsx("strong", { children: title }), /* @__PURE__ */ jsxRuntimeExports.jsx("span", { children: detail })] }, title)) })
+        ] })
       ] }),
       /* @__PURE__ */ jsxRuntimeExports.jsxs("section", { className: "optimization-section", children: [
         /* @__PURE__ */ jsxRuntimeExports.jsx("h4", { children: text("按请求类型", "Requests by type") }),

@@ -1,6 +1,7 @@
 "use strict";
 const injuryTypeResolver = require("./injury-type-resolver");
 const emotionTypeResolver = require("./emotion-type-resolver");
+const moneyAmountResolver = require("./money-amount-resolver");
 const { createValidatedInvocation } = require("./action-types");
 
 const deterministicResolvers = new Map([
@@ -11,6 +12,14 @@ const deterministicResolvers = new Map([
   ["setEmotion", ({ evidenceText }) => {
     const resolution = emotionTypeResolver.resolve(evidenceText);
     return resolution.resolved ? { resolved: true, args: { emotion: resolution.emotion }, details: resolution } : { resolved: false, details: resolution };
+  }],
+  ["playerPaysGoldTo", ({ evidenceText }) => {
+    const resolution = moneyAmountResolver.resolve(evidenceText);
+    return resolution.resolved ? { resolved: true, args: { amount: resolution.normalizedAmount }, details: resolution } : { resolved: false, details: resolution };
+  }],
+  ["paysGoldTo", ({ evidenceText }) => {
+    const resolution = moneyAmountResolver.resolve(evidenceText);
+    return resolution.resolved ? { resolved: true, args: { amount: resolution.normalizedAmount }, details: resolution } : { resolved: false, details: resolution };
   }],
   ["intercourse", () => ({ resolved: true, args: {}, details: { reason: "no_action_arguments" } })]
 ]);

@@ -1,15 +1,17 @@
 "use strict";
 
+const { MONEY_TRANSFER_PATTERN, MONEY_TRANSFER_FAILURE_PATTERN } = require("./money-lexicon");
+
 function detect(text, { candidateOnly = false } = {}, { registry } = {}) {
     if (!text || typeof text !== "string") return [];
     // Judge future tense only inside the clause that contains the candidate
     // action. This prevents a later plan ("明日再谈") from cancelling an
     // already-completed action in an earlier clause ("我给了他100金币").
-    const futureMarker = /(?:\u5c06(?:\u8981|\u4f1a)|(?:我|你|他|她|它|我们|你们|他们|她们)会|\u51c6\u5907|\u6253\u7b97|\u8ba1\u5212|\u60f3\u8981|\u6b32\u8981|\u7ea6\u597d|\u660e\u65e5|\u660e\u5929|\u5f85\u4f1a|\u5f85\u4f1a\u513f|\u7a0d\u540e|\u8fc7\u4f1a\u513f|\u7b49\u4e0b|\u8fdf\u4e9b\u65f6\u5019|\u6539\u65e5|\u4e4b\u540e\u518d|\u4e4b\u5f8c\u518d|\b(?:will|going to|plan to|wants? to|tomorrow|later)\b)/i;
+    const futureMarker = /(?:\u5c06(?:\u8981|\u4f1a)|(?:我|你|他|她|它|我们|你们|他们|她们)会|\u51c6\u5907|\u6253\u7b97|\u8ba1\u5212|\u60f3\u8981|\u6b32\u8981|愿意|\u7ea6\u597d|\u660e\u65e5|\u660e\u5929|\u5f85\u4f1a|\u5f85\u4f1a\u513f|\u7a0d\u540e|\u8fc7\u4f1a\u513f|\u7b49\u4e0b|\u8fdf\u4e9b\u65f6\u5019|\u6539\u65e5|\u4e4b\u540e\u518d|\u4e4b\u5f8c\u518d|\b(?:will|going to|plan to|wants? to|tomorrow|later)\b)/i;
     const completionMarker = /(?:\u5df2\u7ecf|\u5df2\u7136|\u521a\u521a|\u65b9\u624d|\u4e8b\u6bd5|\u5b8c\u4e8b|\b(?:already|just|completed?|finished)\b)/i;
     const failedAttemptMarker = /(?:试图|尝试|企图|没能|未能|没有(?:成功|得逞|做到|碰到|伤到|亲到|打中)|躲开|避开|闪开|挣脱|拒绝|推开|落空|被.{0,8}挡|挡下|missed|failed to|did not|didn't|dodged|avoided|refused)/i;
     const hypotheticalMarker = /(?:如果|假如|倘若|若是|要是|也许|或许|可能会|不妨考虑|\b(?:if|maybe|perhaps|might|could)\b)/i;
-    const futureLeadIn = /(?:\u51c6\u5907|\u6253\u7b97|\u8ba1\u5212|\u60f3\u8981|\u6b32\u8981|\u5c06\u8981|\u5c06\u4f1a|(?:我|你|他|她|它|我们|你们|他们|她们)会|\u660e\u65e5|\u660e\u5929|\u5f85\u4f1a|\u5f85\u4f1a\u513f|\u7a0d\u540e|\u8fc7\u4f1a\u513f|\u7b49\u4e0b|\u8fdf\u4e9b\u65f6\u5019|\u6539\u65e5|\b(?:will|going to|plan to|tomorrow|later)\b)\s*$/i;
+    const futureLeadIn = /(?:\u51c6\u5907|\u6253\u7b97|\u8ba1\u5212|\u60f3\u8981|\u6b32\u8981|愿意|\u5c06\u8981|\u5c06\u4f1a|(?:我|你|他|她|它|我们|你们|他们|她们)会|\u660e\u65e5|\u660e\u5929|\u5f85\u4f1a|\u5f85\u4f1a\u513f|\u7a0d\u540e|\u8fc7\u4f1a\u513f|\u7b49\u4e0b|\u8fdf\u4e9b\u65f6\u5019|\u6539\u65e5|\b(?:will|going to|plan to|tomorrow|later)\b)\s*$/i;
     // 保留每个分句末尾的问号；否则 split 会让“你拔剑？”变成“你拔剑”，
     // 导致下方的疑问句门控无法识别。
     const clauses = (text.match(/[^。！？；，.!?;,\n]+[？?]?/g) || []).map((clause) => clause.trim()).filter(Boolean);
@@ -24,12 +26,12 @@ function detect(text, { candidateOnly = false } = {}, { registry } = {}) {
       if (/(?:谈论|讨论|提及|讲述|回忆|描述|声称|听说|传闻|假装).{0,12}$/i.test(prefix)) return true;
       return /(?:请|命令|要求|让|叫|希望|想|要|欲|准备|打算|计划|将(?:要|会)|会|能否|可否|是否|别|不要|莫|不许|不准)\s*(?:我|你|他|她|它|我们|你们|他们|她们|众人|侍从|护卫)?\s*$/i.test(prefix);
     };
-    const describesCompletedOrCurrentAction = (pattern, rejectFailedAttempt = false) => clauses.some((clause, clauseIndex) => {
+    const describesCompletedOrCurrentAction = (pattern, rejectFailedAttempt = false, failurePattern = null) => clauses.some((clause, clauseIndex) => {
       const actionMatch = pattern.exec(clause);
       if (!actionMatch) return false;
       if (isNonExecutedActionClause(clause, actionMatch)) return false;
       const actionPrefix = clause.slice(Math.max(0, actionMatch.index - 8), actionMatch.index);
-      const adjacentFailure = /(?:没有|并未|不曾|未曾|尚未)/.test(actionPrefix) || failedAttemptMarker.test(clause) || clauseIndex + 1 < clauses.length && failedAttemptMarker.test(clauses[clauseIndex + 1]);
+      const adjacentFailure = /(?:没有|并未|不曾|未曾|尚未)/.test(actionPrefix) || failedAttemptMarker.test(clause) || clauseIndex + 1 < clauses.length && failedAttemptMarker.test(clauses[clauseIndex + 1]) || failurePattern && (failurePattern.test(clause) || clauseIndex + 1 < clauses.length && failurePattern.test(clauses[clauseIndex + 1]));
       if (rejectFailedAttempt && adjacentFailure) return false;
       const futureMatch = futureMarker.exec(clause);
       const inheritsFuture = clauseIndex > 0 && futureLeadIn.test(clauses[clauseIndex - 1]);
@@ -41,7 +43,7 @@ function detect(text, { candidateOnly = false } = {}, { registry } = {}) {
     });
     const completedSexualAction = /(?:(?:已经|已)(?:同房|圆房|行房|完成房事)|完成(?:了)?(?:交合|行房|房事|同房|圆房|性事)|发生(?:了)?(?:性关系|肉体关系)|(?:行|享|同享)(?:了|过)?(?:一场|一番)?鱼水之欢|(?:鱼水之欢|云雨)(?:已)?(?:毕|罢)|(?:一番云雨|云雨一番)(?:之后|过后)|云雨(?:了|过)?一番|行过房事|共度(?:了|过)?春宵(?:之后|过后)?|春宵一度|(?:已有|有了)夫妻之实|had (?:sexual )?intercourse|had sex|made love|consummated)/i;
     const rules = [
-      { reason: "gold", pattern: /(?:(?:支付|付给|给(?:了)?|交给|交付|塞给|递给|奉上|献上|打赏|赏赐|赏下|赏了|赏给|赠与|赠送|转交|给钱|送钱|付清|结清|赔付|补偿|贿赂|行贿|掏出|奉还|归还).{0,16}(?:钱|金|银|金币|银币|铜钱|贯|两|文|财物)|(?:把|将)?.{0,12}(?:钱|金|银|金币|银币|铜钱|贯|两|文|财物).{0,12}(?:交给|交付|付给|递给|给了|奉上|赠与|转交)|(?:赎金|彩礼|聘礼|酬金|赏钱).{0,12}(?:支付|交付|给|付|钱|金|银)|收下.{0,12}(?:钱|金|银|礼金|赏钱)|(?:pay|paid|give|gave|gift|gifted|transfer|transferred|compensated|bribed|repaid).{0,20}(?:gold|money|coin))/i },
+      { reason: "gold", pattern: MONEY_TRANSFER_PATTERN, failurePattern: MONEY_TRANSFER_FAILURE_PATTERN },
       { reason: "imprisonment", pattern: /(?:囚禁|关进|关押|投入(?:大牢|地牢)|收监|逮捕|拘押|软禁|拿下|押下|押入|押进|押往|押送(?:入|至).{0,8}(?:牢|狱)|下狱|入狱|捆(?:起|住)来?|绑(?:起|住)来?|上(?:了)?枷锁|戴上(?:镣铐|枷锁)|锁进(?:牢房|地牢)?|铁链(?:锁住|缚住)|imprison(?:ed)?|arrest(?:ed)?|jailed?|locked up|put in chains)/i },
       { reason: "death_or_injury", pattern: /(?:杀死|杀了|砍死|刺死|毒死|勒死|掐死|打死|烧死|淹死|处死|斩首|枭首|人头落地|身首异处|毙命|殒命|气绝|断气|倒地(?:身亡|死去)|(?:割|砍|斩|削)(?:了)?(?:下|断|落).{0,4}(?:脑袋|头颅|首级|头)|(?:脑袋|头颅|首级|头).{0,6}(?:被)?(?:割|砍|斩|削)(?:了)?(?:下|断|落)|刺伤|砍伤|打伤|烧伤|冻伤|摔伤|重创|重伤|负伤|受伤|划伤|割伤|划破|割破|刺穿|贯穿|(?:刺|捅)(?:中|入|进).{0,8}(?:胸(?:口|膛)?|腹(?:部)?|肩(?:膀)?|背(?:部)?|腰(?:部)?|腿|手臂|身体|身躯|血肉)|(?:刀|剑|匕首|枪尖|刀刃|剑刃).{0,6}(?:刺入|刺进|没入|扎进)|(?:手|手臂|手指|腿|脚|耳朵|鼻子).{0,8}(?:被)?(?:割|砍|斩)(?:了)?(?:下|掉|断|落)|(?:手|手臂|肩膀|胸口|腹部|背部|腰部|腿).{0,8}(?:砍|刺|捅|划|割)(?:了)?(?:一|两|几)(?:刀|剑|下|记)|(?:砍断|斩断|砍下|斩下|割下)(?:了)?.{0,8}(?:左腿|右腿|一条腿|腿)|捅伤|扎伤|流血(?:不止)?|鲜血.{0,8}(?:流出|涌出|喷出)|伤口|骨折|断骨|昏迷|毁容|弄瞎|刺瞎|打瞎|剜.?眼|断腿|折断|打断|割下|砍下|阉割|killed?|executed|wounded|injured|maimed|disfigured|bled|bleeding|blinded|castrat|poisoned|strangled|burned|drowned)/i },
       { reason: "relationship", pattern: /(?:成为(?:了)?(?:情人|恋人|朋友|挚友|至交|死敌|宿敌|仇敌|灵魂伴侣|义兄弟)|结为(?:了)?(?:情人|恋人|朋友|挚友|至交|死敌|宿敌|义兄弟|夫妻)|(?:彼此|两人|我们).{0,8}(?:相恋|相爱|坠入爱河|成为(?:了)?恋人|成为(?:了)?挚友|成为(?:了)?至交|成为(?:了)?死敌|反目成仇|化敌为友|冰释前嫌)|(?:与|和).{0,12}(?:结为|结成|成为)(?:了)?(?:情人|恋人|朋友|挚友|至交|死敌|宿敌|仇敌|灵魂伴侣|义兄弟|盟友)|(?:你我|我们|彼此|两人|二人|你|我).{0,8}(?:便是|就是|已是|算是).{0,8}(?:我的|你的|彼此的)?(?:情人|恋人|灵魂伴侣|命定之人)|(?:认定|确认).{0,16}(?:就是|便是|是|为).{0,12}(?:情人|恋人|灵魂伴侣|命定之人)|结拜|义结金兰|义结兄弟|定情|私定终身|握手言和|和解(?:如初)?|化敌为友|正式结盟|结盟成功|结成同盟|缔结同盟|签订停战|达成停战|became? (?:lovers?|friends?|rivals?|nemeses|soulmates?)|formed? an alliance|became? blood brothers?|agreed? to (?:a )?truce)/i },
@@ -74,7 +76,7 @@ function detect(text, { candidateOnly = false } = {}, { registry } = {}) {
     if ((candidateOnly ? completedSexualAction.test(text) : describesCompletedOrCurrentAction(completedSexualAction, true))) detected.push("sexual_intercourse_completed");
     for (const rule of rules) {
       if (rule.reason === "sexual_intercourse_completed") continue;
-      if ((candidateOnly ? rule.pattern.test(text) : describesCompletedOrCurrentAction(rule.pattern, rule.reason !== "combat"))) detected.push(rule.reason);
+      if ((candidateOnly ? rule.pattern.test(text) : describesCompletedOrCurrentAction(rule.pattern, rule.reason !== "combat", rule.failurePattern))) detected.push(rule.reason);
     }
     if (candidateOnly && registry) {
       for (const action of registry.getAllActions()) {

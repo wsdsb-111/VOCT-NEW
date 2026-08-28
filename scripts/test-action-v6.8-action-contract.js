@@ -85,7 +85,7 @@ for (const file of fs.readdirSync(actionsDir).filter((name) => name.endsWith(".j
   const action = require(path.join(actionsDir, file));
   if (action.signature === "noOp") continue;
   assert(Array.isArray(action.triggerCategories) && action.triggerCategories.length > 0, `${action.signature}: must declare trigger categories`);
-  assert(Array.isArray(action.semantic?.evidencePatterns) || typeof action.semantic?.match === "function", `${action.signature}: must declare deterministic semantic evidence`);
+  assert(Array.isArray(action.semantic?.evidencePatterns) || typeof action.semantic?.match === "function" || action.semantic?.moneyTransfer === true, `${action.signature}: must declare deterministic semantic evidence`);
 }
 
 console.log("VOTC v6.8.1 action contract: PASS (32 persistent actions and non-execution boundaries)");

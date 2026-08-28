@@ -508,6 +508,7 @@ class ActionEngine {
       const actionSource = candidateIsPlayer ? conv.gameData.characters.get(conv.gameData.playerID) || npc : npc;
       if (gate.reasons.includes("gold")) {
         relevantActionIds.delete(candidateIsPlayer ? "paysGoldTo" : "playerPaysGoldTo");
+        semanticAllowlist = new Set([...semanticAllowlist].filter((actionId) => relevantActionIds.has(actionId)));
       }
       const allLoaded = actionRegistry.getAllActions(
         /* includeDisabled = */
@@ -744,7 +745,7 @@ class ActionEngine {
           target: localCandidate.invocation.targetCharacterId
         });
       } else {
-        if (modeState.policy.usePrecisionJudge) this.recordModeMetric(conv, actionSystemMode, "stageBProviderCalls", { actionId: deterministicAvailable?.signature || null });
+        this.recordModeMetric(conv, actionSystemMode, "stageBProviderCalls", { actionId: deterministicAvailable?.signature || null });
         usageAnalytics.record({
           requestType: "action_pipeline",
           character: npc.shortName,
@@ -787,6 +788,7 @@ class ActionEngine {
             actionTrigger: gate.reason,
             actionCandidateReasons: gate.reasons,
             actionSystemMode,
+            actionStage: "stage_b",
             blocks: ActionPromptBuilder.getActionPromptBlocks(messages, jsonSchema)
           }
         );

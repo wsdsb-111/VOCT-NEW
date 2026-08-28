@@ -19,6 +19,7 @@ function validateActionRules(action) {
   }
   if (semantic.match !== undefined && typeof semantic.match !== "function") return { valid: false, message: "Action semantic match must be a function." };
   if (semantic.deterministicInvocation !== undefined && typeof semantic.deterministicInvocation !== "boolean") return { valid: false, message: "Action semantic deterministicInvocation must be a boolean." };
+  if (semantic.moneyTransfer !== undefined && typeof semantic.moneyTransfer !== "boolean") return { valid: false, message: "Action semantic moneyTransfer must be a boolean." };
   if (semantic.deterministicInvocation === true && !deterministicInvocation.hasResolver(action.signature)) return { valid: false, message: "Deterministic action is missing registered resolver." };
   if (semantic.exclusiveGroup !== undefined && typeof semantic.exclusiveGroup !== "string") return { valid: false, message: "Action semantic exclusiveGroup must be a string." };
   if (semantic.priority !== undefined && !Number.isFinite(semantic.priority)) return { valid: false, message: "Action semantic priority must be a finite number." };

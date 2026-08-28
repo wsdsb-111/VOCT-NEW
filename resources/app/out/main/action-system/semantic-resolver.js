@@ -1,5 +1,7 @@
 "use strict";
 
+const { isMoneyTransfer } = require("./money-lexicon");
+
 function matchesPatterns(patterns, evidenceText) {
   return Array.isArray(patterns) && patterns.some((pattern) => {
     pattern.lastIndex = 0;
@@ -17,7 +19,7 @@ function resolveMetadataCandidates(event, registry) {
     const categories = Array.isArray(definition?.triggerCategories) ? definition.triggerCategories : [];
     if (!semantic || !categories.includes(event.category)) continue;
     const excluded = matchesPatterns(semantic.excludePatterns, evidenceText);
-    const matched = matchesPatterns(semantic.evidencePatterns, evidenceText);
+    const matched = semantic.moneyTransfer === true ? isMoneyTransfer(evidenceText) : matchesPatterns(semantic.evidencePatterns, evidenceText);
     const customMatched = typeof semantic.match === "function" && semantic.match({ event, evidence: event.evidence });
     if (!excluded && (matched || customMatched)) candidates.push({ action, semantic });
   }
