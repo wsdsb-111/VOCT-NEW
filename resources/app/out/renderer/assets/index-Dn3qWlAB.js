@@ -21332,6 +21332,14 @@ const SummariesView = () => {
   ] });
 };
 
+const buildSocialConsequenceRows = (social, text, formatTokens) => [
+  [text("对话 / 已确认世界事件 / 记忆证据", "Dialogue / confirmed event / memory Evidence"), `${formatTokens(social?.dialogueEvidence)} / ${formatTokens(social?.confirmedWorldEventEvidence)} / ${formatTokens(social?.memoryEvidence)}`],
+  [text("知情门控 / 未确认主张 / 校验器拒绝", "Knowledge gate / unconfirmed claim / validator rejected"), `${formatTokens(social?.knowledgeGateRejected)} / ${formatTokens(social?.unconfirmedClaimRejected)} / ${formatTokens(social?.validatorRejected)}`],
+  [text("本地后果 / 好感动作 / 关系跃迁 / 观察者影响", "Local consequences / opinion actions / relationship transitions / observer effects"), `${formatTokens(social?.localConsequences)} / ${formatTokens(social?.opinionActions)} / ${formatTokens(social?.relationshipTransitions)} / ${formatTokens(social?.observerEffects)}`],
+  [text("精准 Social Judge 调用", "Precision Social Judge calls"), formatTokens(social?.precisionSocialJudgeCalls)],
+  [text("冷却抑制 / 衰减归零", "Cooldown suppressed / diminishing return suppressed"), `${formatTokens(social?.cooldownSuppressed)} / ${formatTokens(social?.diminishingReturnSuppressed)}`],
+  [text("社会上下文构建总耗时", "Social context total build time"), `${formatTokens(social?.socialContextBuildTimeMs)} ms`]
+];
 const OptimizationView = () => {
   const { i18n } = useTranslation();
   const [report, setReport] = reactExports.useState(null);
@@ -21408,7 +21416,7 @@ const OptimizationView = () => {
       /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "action-mode-token-label", children: actionModeNames[mode] }),
       /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "action-mode-token-usage", children: [
         /* @__PURE__ */ jsxRuntimeExports.jsx("span", { children: `${formatTokens(usage.totalTokens)} Token · ${formatTokens(usage.requests)} ${text("次动作请求", "action requests")}` }),
-        /* @__PURE__ */ jsxRuntimeExports.jsx("small", { children: `${text("Stage B", "Stage B")} ${formatTokens(stageUsage("stageB").totalTokens)} Token / ${formatTokens(stageUsage("stageB").requests)} · ${text("Semantic Rescue", "Semantic Rescue")} ${formatTokens(stageUsage("semanticRescue").totalTokens)} Token / ${formatTokens(stageUsage("semanticRescue").requests)} · ${text("Precision Judge", "Precision Judge")} ${formatTokens(stageUsage("precisionJudge").totalTokens)} Token / ${formatTokens(stageUsage("precisionJudge").requests)}` })
+        /* @__PURE__ */ jsxRuntimeExports.jsx("small", { children: `${text("Stage B", "Stage B")} ${formatTokens(stageUsage("stageB").totalTokens)} Token / ${formatTokens(stageUsage("stageB").requests)} · ${text("Semantic Rescue", "Semantic Rescue")} ${formatTokens(stageUsage("semanticRescue").totalTokens)} Token / ${formatTokens(stageUsage("semanticRescue").requests)} · ${text("Precision Judge", "Precision Judge")} ${formatTokens(stageUsage("precisionJudge").totalTokens)} Token / ${formatTokens(stageUsage("precisionJudge").requests)} · ${text("Social Judge", "Social Judge")} ${formatTokens(stageUsage("socialJudge").totalTokens)} Token / ${formatTokens(stageUsage("socialJudge").requests)}` })
       ] })
     ];
   });
@@ -21431,6 +21439,7 @@ const OptimizationView = () => {
     [text("动作识别效率", "Action recognition efficiency"), formatPercent(actionEngine3.recognitionEfficiency)],
     [text("每 100 条对话的动作 API 调用", "Action API calls per 100 chat messages"), actionEngine3.actionApiCallsPer100ChatMessages == null ? "—" : Number(actionEngine3.actionApiCallsPer100ChatMessages).toFixed(1)]
   ];
+  const socialConsequenceRows = buildSocialConsequenceRows(actionEngine3.socialConsequence || {}, text, formatTokens);
   const metrics = [
     [text("API 请求", "API requests"), formatTokens(total?.requests), ""],
     [text("服务商总 Token", "Provider total tokens"), formatTokens(total?.totalTokens), ""],
@@ -21473,6 +21482,14 @@ const OptimizationView = () => {
           [text("指标", "Metric"), text("数值", "Value")],
           actionEngineRows,
           "action-engine-3"
+        )
+      ] }),
+      /* @__PURE__ */ jsxRuntimeExports.jsxs("details", { className: "optimization-capability-details social-consequence-details", children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsx("summary", { children: "SOCIAL CONSEQUENCE" }),
+        renderTable(
+          [text("指标", "Metric"), text("数值", "Value")],
+          socialConsequenceRows,
+          "social-consequence"
         )
       ] }),
       reconciliation?.aggregates > 0 && /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "muted-text", children: text(`已包含 ${formatTokens(reconciliation.requests)} 次 DeepSeek 官网核对补录、${formatTokens(reconciliation.totalTokens)} Token；缓存细分仅来自本机仍保留的原始响应。`, `Includes a DeepSeek-console reconciliation of ${formatTokens(reconciliation.requests)} requests and ${formatTokens(reconciliation.totalTokens)} tokens; cache details use only locally retained provider responses.`) }),

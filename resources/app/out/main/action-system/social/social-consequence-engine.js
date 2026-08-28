@@ -37,6 +37,18 @@ function emptyResult(mode, reason) {
   };
 }
 
+function recordMetric(mode, metric, metricValue = 1) {
+  if (!Number.isFinite(Number(metricValue)) || Number(metricValue) <= 0) return;
+  usageAnalytics?.record?.({ requestType: "social_consequence_metric", actionSystemMode: mode, metric, metricValue: Number(metricValue) }, null);
+}
+
+function recordEvidenceMetrics(mode, context, buildTimeMs) {
+  recordMetric(mode, "dialogueEvidence", context.dialogueEvidence?.length || 0);
+  recordMetric(mode, "confirmedWorldEventEvidence", context.confirmedWorldEvents?.length || 0);
+  recordMetric(mode, "memoryEvidence", context.memoryEvidence?.length || 0);
+  recordMetric(mode, "socialContextBuildTimeMs", Math.max(1, buildTimeMs));
+}
+
 function resolveMessageParticipants(context, conversation, message) {
   const all = context.directParticipants || [];
   const actorId = message?.role === "user"
@@ -70,7 +82,10 @@ function fromJudgeResult(context, result) {
 }
 
 function itemsFromConsequence(consequence) {
-  const opinions = [...(consequence.opinionChanges || []), ...(consequence.observerEffects || [])].map((item) => ({
+  const opinions = [
+    ...(consequence.opinionChanges || []).map((item) => ({ ...item, observerEffect: false })),
+    ...(consequence.observerEffects || []).map((item) => ({ ...item, observerEffect: true }))
+  ].map((item) => ({
     ...item,
     actionId: "changeOpinionOf",
     consequenceId: consequence.consequenceId,
@@ -122,8 +137,10 @@ async function process({ conversation, message, confirmedEvents = [], signal }) 
   if (mode === "balanced") return emptyResult(mode, "balanced_bypass");
   if (!ActionEngine || !conversation || !message) return emptyResult(mode, "missing_dependency");
   try {
+    const contextBuildStartedAt = Date.now();
     const rawContext = socialContextProvider.buildContext({ conversation, message, confirmedEvents });
     let context = resolveMessageParticipants(rawContext, conversation, message);
+    recordEvidenceMetrics(mode, context, Date.now() - contextBuildStartedAt);
     const gateResult = socialConsequenceGate.evaluate(context);
     if (!gateResult.eligible) return emptyResult(mode, gateResult.reasons[0] || "gate_rejected");
     context = Object.freeze({ ...context, gateReason: gateResult.reasons.join("+") });
@@ -136,28 +153,49 @@ async function process({ conversation, message, confirmedEvents = [], signal }) 
       if (state.precisionJudgeCalls >= 8) return emptyResult(mode, "judge_budget_exhausted");
       state.precisionJudgeCalls++;
       judgeCalls = 1;
+      recordMetric(mode, "precisionSocialJudgeCalls");
       const judged = await socialConsequenceJudge.judge({ context, llmManager, signal, mode });
       if (!judged.socialImpact) return { ...emptyResult(mode, judged.reason || "judge_no_impact"), metrics: { mode, reason: judged.reason || "judge_no_impact", judgeCalls, consequences: 0 } };
       consequence = fromJudgeResult(context, judged);
     } else {
       consequence = localConsequenceResolver.resolve(context, gateResult);
       consequence = addObserverEffects(context, consequence, mode);
+      recordMetric(mode, "localConsequences", itemsFromConsequence(consequence).length);
     }
 
     const validation = consequenceValidator.validate({ consequence, context, mode });
+    recordMetric(mode, "validatorRejected", validation.rejected.length);
+    recordMetric(mode, "knowledgeGateRejected", validation.rejected.filter((item) => item.reason === "unknown_evidence").length);
+    recordMetric(mode, "unconfirmedClaimRejected", validation.rejected.filter((item) => item.reason === "unconfirmed_world_event").length);
     if (!validation.valid) return { ...emptyResult(mode, "validation_rejected"), metrics: { mode, reason: "validation_rejected", judgeCalls, consequences: 0, rejected: validation.rejected.length } };
 
+    let diminishingReturnSuppressed = 0;
     const scaled = createConsequence({
       ...validation.consequence,
-      opinionChanges: validation.consequence.opinionChanges.map((item) => consequenceCooldown.scaleDelta(conversation, item)).filter((item) => item.delta !== 0),
-      observerEffects: validation.consequence.observerEffects.map((item) => consequenceCooldown.scaleDelta(conversation, item)).filter((item) => item.delta !== 0)
+      opinionChanges: validation.consequence.opinionChanges.map((item) => consequenceCooldown.scaleDelta(conversation, item)).filter((item) => {
+        if (item.delta !== 0) return true;
+        diminishingReturnSuppressed++;
+        return false;
+      }),
+      observerEffects: validation.consequence.observerEffects.map((item) => consequenceCooldown.scaleDelta(conversation, item)).filter((item) => {
+        if (item.delta !== 0) return true;
+        diminishingReturnSuppressed++;
+        return false;
+      })
     });
+    recordMetric(mode, "diminishingReturnSuppressed", diminishingReturnSuppressed);
+    const consequenceItems = itemsFromConsequence(scaled);
     const reservationIds = [];
-    for (const item of itemsFromConsequence(scaled)) {
+    for (const item of consequenceItems) {
       const reservation = consequenceCooldown.reserve(conversation, item);
       reservationIds.push(reservation?.reservationId || null);
     }
-    const events = toActionEvents(scaled, reservationIds);
+    recordMetric(mode, "cooldownSuppressed", reservationIds.filter((reservationId) => reservationId == null).length);
+    const events = toActionEvents(scaled, reservationIds).filter((event) => event.socialReservationId != null);
+    const acceptedItems = consequenceItems.filter((_item, index) => reservationIds[index] != null);
+    recordMetric(mode, "opinionActions", acceptedItems.filter((item) => item.actionId === "changeOpinionOf").length);
+    recordMetric(mode, "relationshipTransitions", acceptedItems.filter((item) => item.actionId !== "changeOpinionOf").length);
+    recordMetric(mode, "observerEffects", acceptedItems.filter((item) => item.observerEffect === true).length);
     const actionResults = { autoApproved: [], needsApproval: [] };
     const reservations = [];
     for (const event of events) {

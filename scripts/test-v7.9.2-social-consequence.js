@@ -380,6 +380,9 @@ function createConversation(id, relation = null) {
   assert.strictEqual(recursiveContext.confirmedWorldEvents.length, 0, "social-origin execution must not recursively publish a confirmed event");
   assert.strictEqual(harness.providerRequests.length, 0);
   assert.strictEqual(harness.analytics.filter((entry) => entry.metric === "stageBProviderCalls").length, 0);
+  for (const metric of ["dialogueEvidence", "socialContextBuildTimeMs", "localConsequences", "opinionActions"]) {
+    assert(harness.analytics.some((entry) => entry.requestType === "social_consequence_metric" && entry.metric === metric && entry.metricValue > 0), `${metric} must be emitted as a non-usage Social Consequence metric`);
+  }
   assert.strictEqual(harness.effects.length, 1, "one gratitude message must write one game effect");
   assert.strictEqual(gratitude.actionResults.autoApproved.filter((item) => item.feedback).length, 1, "one gratitude message must create one feedback item");
 

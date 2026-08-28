@@ -31,6 +31,7 @@ analytics.record({ requestType: "chat", actionSystemMode: "performance" }, { pro
 analytics.record({ requestType: "action", actionStage: "semantic_rescue", actionSystemMode: "performance" }, { prompt_tokens: 5, completion_tokens: 1, total_tokens: 6 });
 analytics.record({ requestType: "action", actionSystemMode: "balanced" }, { prompt_tokens: 8, completion_tokens: 2, total_tokens: 10 });
 analytics.record({ requestType: "action", actionStage: "precision_stage_a", actionSystemMode: "precision" }, { prompt_tokens: 16, completion_tokens: 4, total_tokens: 20 });
+analytics.record({ requestType: "action", actionStage: "social_consequence_judge", actionSystemMode: "precision" }, { prompt_tokens: 12, completion_tokens: 3, total_tokens: 15 });
 const report = analytics.getReport();
 assert.ok(["balanced", "performance", "precision"].includes(report.actionEngine3.currentMode), "current action mode must remain a valid mode after analytics retention");
 assert.strictEqual(report.actionEngine3.pendingCreated, 1);
@@ -39,14 +40,14 @@ assert.strictEqual(report.actionEngine3.stageBProviderCalls, 1);
 assert.strictEqual(report.actionEngine3.precisionJudgeCalls, 1);
 assert.strictEqual(report.actionEngine3.semanticRescueMatched, 1);
 assert.strictEqual(report.actionEngine3.providerExecuted, 1);
-assert.strictEqual(report.actionEngine3.recognitionEfficiency, 1 / 3);
-assert.strictEqual(report.actionEngine3.actionApiCallsPer100ChatMessages, 150);
+assert.strictEqual(report.actionEngine3.recognitionEfficiency, 1 / 4);
+assert.strictEqual(report.actionEngine3.actionApiCallsPer100ChatMessages, 200);
 assert.deepStrictEqual(
   Object.fromEntries(Object.entries(report.actionEngine3.modeTokenUsage).map(([mode, usage]) => [mode, { requests: usage.requests, totalTokens: usage.totalTokens }])),
   {
     balanced: { requests: 1, totalTokens: 10 },
     performance: { requests: 1, totalTokens: 6 },
-    precision: { requests: 1, totalTokens: 20 }
+    precision: { requests: 2, totalTokens: 35 }
   },
   "action Token usage must stay separated by the mode that made the request"
 );
@@ -56,20 +57,23 @@ assert.deepStrictEqual(
     balanced: {
       stageB: { requests: 1, totalTokens: 10 },
       semanticRescue: { requests: 0, totalTokens: 0 },
-      precisionJudge: { requests: 0, totalTokens: 0 }
+      precisionJudge: { requests: 0, totalTokens: 0 },
+      socialJudge: { requests: 0, totalTokens: 0 }
     },
     performance: {
       stageB: { requests: 0, totalTokens: 0 },
       semanticRescue: { requests: 1, totalTokens: 6 },
-      precisionJudge: { requests: 0, totalTokens: 0 }
+      precisionJudge: { requests: 0, totalTokens: 0 },
+      socialJudge: { requests: 0, totalTokens: 0 }
     },
     precision: {
       stageB: { requests: 0, totalTokens: 0 },
       semanticRescue: { requests: 0, totalTokens: 0 },
-      precisionJudge: { requests: 1, totalTokens: 20 }
+      precisionJudge: { requests: 1, totalTokens: 20 },
+      socialJudge: { requests: 1, totalTokens: 15 }
     }
   },
-  "each action mode must expose Stage B, Semantic Rescue, and Precision Judge Token usage"
+  "each action mode must expose Stage B, Semantic Rescue, Precision Judge, and Social Judge Token usage"
 );
 
 const renderer = fs.readFileSync(path.join(root, "resources", "app", "out", "renderer", "assets", "index-Dn3qWlAB.js"), "utf8");
@@ -92,6 +96,7 @@ assert(renderer.includes('showActionModeTokenUsage ? "▼" : "▶"'), "action mo
 assert(renderer.includes("actionModeTokenUsage"), "optimization UI must render per-mode action Token usage");
 assert(rendererCss.includes(".optimization-mode-toggle"), "mode-token toggle needs visible styling");
 assert(renderer.includes('className: "action-mode-token-usage"'), "mode-token rows must show the per-stage Token split");
+assert(renderer.includes('stageUsage("socialJudge")'), "mode-token rows must show Social Judge Token usage");
 assert(renderer.includes("查看当前记忆策略"), "memory routing descriptions must be collapsed by default");
 assert(renderer.includes('className: "optimization-capability-details"'), "integration status must be collapsed by default");
 assert(rendererCss.includes(':root[data-votc-theme="ink"] .summaries-manager .memory-engine-overview'), "ink Memory Engine overview must use the soft paper surface");

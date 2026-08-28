@@ -59,6 +59,7 @@ function createUsageAnalytics({ fs, dataDir, analyticsFile, retention, createPro
         actionSystemMode: metadata?.actionSystemMode || null,
         previousActionSystemMode: metadata?.previousActionSystemMode || null,
         metric: metadata?.metric || null,
+        metricValue: Number.isFinite(Number(metadata?.metricValue)) ? Number(metadata.metricValue) : null,
         actionStage: metadata?.actionStage || null,
         category: metadata?.category || metadata?.actionCategory || null,
         confidence: Number.isFinite(Number(metadata?.confidence)) ? Number(metadata.confidence) : null,
@@ -148,7 +149,8 @@ function createUsageAnalytics({ fs, dataDir, analyticsFile, retention, createPro
         stages: {
           stageB: create(),
           semanticRescue: create(),
-          precisionJudge: create()
+          precisionJudge: create(),
+          socialJudge: create()
         }
       });
       const actionEngine3 = {
@@ -186,6 +188,22 @@ function createUsageAnalytics({ fs, dataDir, analyticsFile, retention, createPro
         actionApiCalls: 0,
         chatMessages: 0
       };
+      actionEngine3.socialConsequence = {
+        dialogueEvidence: 0,
+        confirmedWorldEventEvidence: 0,
+        memoryEvidence: 0,
+        knowledgeGateRejected: 0,
+        unconfirmedClaimRejected: 0,
+        localConsequences: 0,
+        precisionSocialJudgeCalls: 0,
+        opinionActions: 0,
+        relationshipTransitions: 0,
+        observerEffects: 0,
+        cooldownSuppressed: 0,
+        diminishingReturnSuppressed: 0,
+        validatorRejected: 0,
+        socialContextBuildTimeMs: 0
+      };
       const memoryRecall = { requests: 0, intentTriggered: 0, selected: 0, empty: 0, cacheHits: 0, skippedContextPressure: 0, tokens: 0, candidateCount: 0, sessionTopicAnchorLocked: 0, reasons: {} };
       const providerStageMetrics = new Set(["semanticRescueCalls", "precisionJudgeCalls", "stageBProviderCalls"]);
       for (const entry of entries) {
@@ -193,15 +211,18 @@ function createUsageAnalytics({ fs, dataDir, analyticsFile, retention, createPro
         const isActionOutcome = entry.requestType === "action_outcome";
         if (["balanced", "performance", "precision"].includes(entry.actionSystemMode)) actionEngine3.currentMode = entry.actionSystemMode;
         if (entry.requestType === "action_mode_metric" && !providerStageMetrics.has(entry.metric) && Object.prototype.hasOwnProperty.call(actionEngine3, entry.metric)) actionEngine3[entry.metric]++;
+        if (entry.requestType === "social_consequence_metric" && Object.prototype.hasOwnProperty.call(actionEngine3.socialConsequence, entry.metric)) {
+          actionEngine3.socialConsequence[entry.metric] += entry.metricValue == null ? 1 : entry.metricValue;
+        }
         if (isUsageRecord && entry.requestType === "action") actionEngine3.actionApiCalls++;
         if (isUsageRecord && entry.requestType === "action" && actionEngine3.modeTokenUsage[entry.actionSystemMode]) {
           const modeUsage = actionEngine3.modeTokenUsage[entry.actionSystemMode];
-          const stageKey = entry.actionStage === "semantic_rescue" ? "semanticRescue" : entry.actionStage === "precision_stage_a" ? "precisionJudge" : "stageB";
+          const stageKey = entry.actionStage === "semantic_rescue" ? "semanticRescue" : entry.actionStage === "precision_stage_a" ? "precisionJudge" : entry.actionStage === "social_consequence_judge" ? "socialJudge" : "stageB";
           add(modeUsage, entry);
           add(modeUsage.stages[stageKey], entry);
           if (stageKey === "semanticRescue") actionEngine3.semanticRescueCalls++;
           else if (stageKey === "precisionJudge") actionEngine3.precisionJudgeCalls++;
-          else actionEngine3.stageBProviderCalls++;
+          else if (stageKey === "stageB") actionEngine3.stageBProviderCalls++;
         }
         if (isUsageRecord && entry.requestType === "chat") actionEngine3.chatMessages++;
         if (entry.requestType === "action_decision_trace" && entry.stage === "candidate" && entry.outcome === "pass") actionPipeline.candidateEvents++;
