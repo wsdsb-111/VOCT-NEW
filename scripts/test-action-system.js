@@ -4,6 +4,7 @@ const path = require("path");
 
 const root = path.resolve(__dirname, "..");
 globalThis.__V67ActionSystem = require(path.join(root, "resources", "app", "out", "main", "action-system"));
+const actionSystem = globalThis.__V67ActionSystem;
 const ipcSource = fs.readFileSync(path.join(root, "resources", "app", "out", "main", "ipc", "register-ipc.js"), "utf8");
 const actionsDir = path.join(root, "resources", "app", "default_userdata", "actions", "standard");
 globalThis.actionRegistry = {
@@ -23,6 +24,23 @@ const GameData = createGameData({
   summariesDir: path.join(root, ".test-summaries"),
   getHistoricalReferenceByYear: () => ({})
 });
+
+const socialBinding = actionSystem.createParticipantBinding({
+  messageId: "social-test",
+  eventId: "social:test:0",
+  actionId: "changeOpinionOf",
+  sourceCharacterId: 2,
+  targetCharacterId: 1,
+  resolutionBasis: ["validated_social_consequence"]
+});
+const socialInvocation = actionSystem.deterministicInvocation.resolveSocial({
+  actionId: "changeOpinionOf",
+  binding: socialBinding,
+  args: { value: -3 }
+});
+assert.strictEqual(socialInvocation.mode, "local");
+assert.deepStrictEqual(socialInvocation.invocation.args, { value: -3 });
+assert.strictEqual(actionSystem.deterministicInvocation.resolveSocial({ actionId: "changeOpinionOf", binding: socialBinding, args: { value: -11 } }).mode, "unresolved");
 
 const triggerCases = [
   ["他踱步前行。", ["daily_movement"]],

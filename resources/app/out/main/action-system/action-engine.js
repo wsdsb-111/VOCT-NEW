@@ -665,7 +665,8 @@ class ActionEngine {
           this.recordModeMetric(conv, actionSystemMode, "semanticRescueMatched", { category: actionEvent.category, actionId: rescue.actionId, confidence: rescue.confidence });
         }
       }
-      const precisionReason = actionEvent.pendingConfirmed ? null : this.shouldInvokePrecisionJudge({
+      const socialInterpretation = ["social_local", "social_precision"].includes(actionEvent.interpretationSource);
+      const precisionReason = actionEvent.pendingConfirmed || socialInterpretation ? null : this.shouldInvokePrecisionJudge({
         gate,
         semanticProfile: gate.semanticProfile,
         participantAmbiguous: hadUnresolvedParticipants,
@@ -705,10 +706,16 @@ class ActionEngine {
       let actionFinishReason = null;
       let invocationOrigin = "model";
       const deterministicAvailable = semanticAllowlist.size === 1 ? available.find((action) => semanticAllowlist.has(action.signature)) : null;
-      let localCandidate = deterministicAvailable ? actionSystem.deterministicInvocation.resolve({
-        availableAction: deterministicAvailable,
-        evidenceText: actionEvent?.evidence?.text
-      }) : null;
+      let localCandidate = deterministicAvailable ? (socialInterpretation
+        ? actionSystem.deterministicInvocation.resolveSocial({
+          actionId: deterministicAvailable.signature,
+          binding: deterministicAvailable.participantBinding,
+          args: actionEvent.validatedArgs || {}
+        })
+        : actionSystem.deterministicInvocation.resolve({
+          availableAction: deterministicAvailable,
+          evidenceText: actionEvent?.evidence?.text
+        })) : null;
       if (actionEvent?.pendingConfirmed && deterministicAvailable) {
         const binding = deterministicAvailable.participantBinding;
         localCandidate = {
@@ -736,7 +743,7 @@ class ActionEngine {
         return { autoApproved: [], needsApproval: [] };
       }
       if (localCandidate?.mode === "local") {
-        invocationOrigin = "local";
+        invocationOrigin = socialInterpretation ? "social" : "local";
         parsed = { actions: [localCandidate.invocation] };
         this.traceDecision(deterministicAvailable.signature, "invocation", "local", {
           eventId: actionEvent.eventId,
@@ -929,7 +936,7 @@ class ActionEngine {
       else if (pendingActionIds.length > 0 && executedActionIds.length === 0) actionOutcome = "awaiting_approval";
       else if (pendingActionIds.length > 0) actionOutcome = "actions_executed_and_pending";
       else if (failedActionIds.length > 0) actionOutcome = "actions_executed_with_failures";
-      for (const actionId of executedActionIds) this.recordModeMetric(conv, actionSystemMode, invocationOrigin === "local" ? "localExecuted" : "providerExecuted", { actionId });
+      for (const actionId of executedActionIds) this.recordModeMetric(conv, actionSystemMode, invocationOrigin === "model" ? "providerExecuted" : "localExecuted", { actionId });
       for (const actionId of failedActionIds) this.recordModeMetric(conv, actionSystemMode, "executionFailed", { actionId });
       recordOutcome(actionOutcome, parsed.actions.map((inv) => inv.actionId), null, {
         executedActionIds,

@@ -23,12 +23,22 @@ const deterministicResolvers = new Map([
   }],
   ["intercourse", () => ({ resolved: true, args: {}, details: { reason: "no_action_arguments" } })]
 ]);
+const SOCIAL_ACTION_IDS = new Set([
+  "changeOpinionOf",
+  "becomeFriendsWith",
+  "becomeBestFriendsWith",
+  "becomeLoversWith",
+  "becomeSoulmatesWith",
+  "becomeRivalsWith",
+  "becomeNemesisWith",
+  "becomeBloodBrothersWith"
+]);
 const ALLOWED_ACTION_IDS = new Set(deterministicResolvers.keys());
 function hasResolver(actionId) {
   return deterministicResolvers.has(actionId);
 }
-function buildDeterministicInvocation({ actionId, binding, args = {} }) {
-  if (!ALLOWED_ACTION_IDS.has(actionId)) return { mode: "unsupported", invocation: null, reason: "action_not_deterministic" };
+function buildDeterministicInvocation({ actionId, binding, args = {}, allowedActionIds = ALLOWED_ACTION_IDS }) {
+  if (!allowedActionIds.has(actionId)) return { mode: "unsupported", invocation: null, reason: "action_not_deterministic" };
   if (!binding || binding.mode !== "resolved" || binding.sourceCharacterId == null || binding.targetCharacterId == null) {
     return { mode: "unresolved", invocation: null, reason: "missing_invocation_binding" };
   }
@@ -63,4 +73,15 @@ function resolve({ availableAction, evidenceText }) {
   };
 }
 
-module.exports = { resolve, buildDeterministicInvocation, hasResolver, deterministicResolvers, ALLOWED_ACTION_IDS };
+function resolveSocial({ actionId, binding, args = {} }) {
+  if (!SOCIAL_ACTION_IDS.has(actionId)) return { mode: "unsupported", invocation: null, reason: "social_action_not_allowed" };
+  if (actionId === "changeOpinionOf") {
+    const value = Number(args.value);
+    if (!Number.isInteger(value) || value === 0 || value < -10 || value > 10) return { mode: "unresolved", invocation: null, reason: "invalid_social_opinion_value" };
+  } else if (args.reason != null && typeof args.reason !== "string") {
+    return { mode: "unresolved", invocation: null, reason: "invalid_social_relationship_reason" };
+  }
+  return buildDeterministicInvocation({ actionId, binding, args, allowedActionIds: SOCIAL_ACTION_IDS });
+}
+
+module.exports = { resolve, resolveSocial, buildDeterministicInvocation, hasResolver, deterministicResolvers, SOCIAL_ACTION_IDS, ALLOWED_ACTION_IDS };

@@ -40,13 +40,14 @@ function normalizeSignal(signal) {
   if (signal.type === "affection_rejection") return { ...signal, reasonCluster: "affection_rejected" };
   if (["romantic_affection", "physical_affection", "intimate_contact"].includes(signal.type) && signal.reaction === "accepted") return { ...signal, reasonCluster: "affection_accepted" };
   if (signal.type === "betrayal_signal") return { ...signal, reasonCluster: "betrayal_claim" };
-  if (signal.type === "hate" || signal.type === "revenge") return { ...signal, reasonCluster: "insult" };
+  if (signal.type === "hate" || signal.type === "revenge") return { ...signal, reasonCluster: "insult", direction: "speaker_to_target" };
   return { ...signal, reasonCluster: signal.type };
 }
 
 function directionFor(signal, participants) {
   const actorId = participants.actorId;
   const targetId = participants.targetId;
+  if (signal.direction === "speaker_to_target") return { sourceCharacterId: actorId, targetCharacterId: targetId };
   if (["praise", "insult", "humiliation", "threat", "affection_rejected"].includes(signal.reasonCluster)) {
     return { sourceCharacterId: targetId, targetCharacterId: actorId };
   }
@@ -68,13 +69,29 @@ function relationshipFromText(text, signal) {
     ["becomeSoulmatesWith", /(?:灵魂伴侣|命定之人)/],
     ["becomeBestFriendsWith", /(?:挚友|至交)/],
     ["becomeLoversWith", /(?:情人|恋人)/],
-    ["becomeNemesisWith", /(?:死敌|宿敌)/],
-    ["becomeRivalsWith", /(?:仇敌)/],
     ["becomeBloodBrothersWith", /(?:结拜|义结金兰|义结兄弟|结义兄弟)/],
     ["becomeFriendsWith", /(?:朋友|好友)/]
   ];
   const match = rules.find(([, pattern]) => pattern.test(text));
   return match ? match[0] : null;
+}
+
+function hostileRelationship(context, normalized) {
+  const major = normalized.find((item) => ["betrayal", "severe_injury", "family_death"].includes(item.reasonCluster));
+  const enduringHostility = normalized.some((item) => ["hate", "revenge"].includes(item.type));
+  if (!major || !enduringHostility) return null;
+  const actorId = context.message?.actorId;
+  const targetId = context.message?.targetId;
+  const harmActorId = major.reasonCluster === "family_death" ? major.targetId : major.actorId;
+  if (Number(harmActorId) !== Number(targetId) || Number(major.affectedCharacterId ?? major.targetId) !== Number(actorId)) return null;
+  const existing = (context.relationshipStates || []).filter((item) => (
+    Number(item.sourceCharacterId) === Number(actorId) && Number(item.targetCharacterId) === Number(targetId)
+  ) || (
+    Number(item.sourceCharacterId) === Number(targetId) && Number(item.targetCharacterId) === Number(actorId)
+  )).flatMap((item) => item.relations || []).map((item) => String(item).toLocaleLowerCase());
+  return existing.some((item) => ["rival", "仇敌", "rivale", "好敵手", "경쟁자", "rywal", "соперник"].includes(item))
+    ? "becomeNemesisWith"
+    : "becomeRivalsWith";
 }
 
 function resolve(context, gateResult) {
@@ -112,7 +129,7 @@ function resolve(context, gateResult) {
   }
 
   const relationshipSignal = normalized.find((item) => item.type === "relationship_statement");
-  const actionId = relationshipFromText(context.message?.content || "", relationshipSignal);
+  const actionId = hostileRelationship(context, normalized) || relationshipFromText(context.message?.content || "", relationshipSignal);
   if (actionId) {
     base.relationshipTransition = {
       actionId,

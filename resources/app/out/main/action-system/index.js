@@ -33,6 +33,7 @@ const { ActionPromptBuilder } = require("./action-prompt-builder");
 const actionModes = require("./modes");
 const interaction = require("./interaction");
 const semantic = require("./semantic");
+const social = require("./social");
 
 module.exports = {
   ConversationReferenceContext,
@@ -68,5 +69,6 @@ module.exports = {
   ActionPromptBuilder,
   actionModes,
   interaction,
-  semantic
+  semantic,
+  social
 };
