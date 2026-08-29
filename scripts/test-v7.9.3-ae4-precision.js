@@ -70,6 +70,14 @@ const conversation = {
 
 (async () => {
   for (const rules of [precisionPrompt.UNIVERSAL_RULES, compactSelector.COMPACT_RULES]) {
+    assert(rules.includes("QUESTION RULE"));
+    assert(rules.includes("ordinary questions that merely ask about, discuss, speculate about, or evaluate an action"));
+    assert(rules.includes("An explicit proposal for a consent_required action is not an ordinary question"));
+    assert(rules.includes("如果杀了他会怎样"));
+    assert(rules.includes("你觉得我应该杀了他吗"));
+    assert(rules.includes("你愿意成为我的情人吗"));
+    assert(rules.includes("我们结为兄弟如何"));
+    assert(rules.includes("愿与我停战吗"));
     assert(rules.includes("A newly made explicit proposal MUST emit action_call"), "both selectors must create Pending from a new consent proposal");
     assert(rules.includes("This action_call represents a proposal, NOT gameplay execution"));
     assert(rules.includes("Acceptance, rejection, or defer from CURRENT_MESSAGE MUST use pending_response"));

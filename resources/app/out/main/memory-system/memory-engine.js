@@ -14,7 +14,7 @@ const { MemoryConsolidator } = require("./memory-consolidator");
 const { MemoryTrace } = require("./memory-trace");
 const { MentionTracker } = require("./mention-tracker");
 const { getCharacterMentionAliases } = require("./character-identity");
-const { buildPerspectiveSummaryMap, validatePerspectiveSummaryMap } = require("./perspective-projector");
+const { buildPerspectiveSummaryMap, validatePerspectiveSummaryMap, validateSummarySegmentPresenceBoundaries, validatePerspectiveCoverage } = require("./perspective-projector");
 const turnRecall = require("./turn-recall");
 
 const FINAL_SUMMARY_MAX_ATTEMPTS = 2;
@@ -313,7 +313,22 @@ class MemoryEngine {
     if (narrativeChars === 0) reasons.push("detailed narrative is empty");
     if (substantiveConversation && segments.length === 0) reasons.push("summarySegments are missing");
     reasons.push(...this.validateExtractionMessageIds(context, extraction).reasons);
-    return { success: reasons.length === 0, reasons, sourceChars, messageCount, narrativeChars };
+    const presenceBoundary = validateSummarySegmentPresenceBoundaries(context, extraction);
+    reasons.push(...presenceBoundary.reasons);
+    return { success: reasons.length === 0, reasons, sourceChars, messageCount, narrativeChars, presenceBoundaryFailures: presenceBoundary.failures };
+  }
+
+  recordSummaryQualityDiagnostics(context, quality) {
+    for (const failure of quality?.presenceBoundaryFailures || []) {
+      this.trace.record("summary_presence_boundary_failure", {
+        conversationId: context.conversationId,
+        finalizationId: context.finalizationId,
+        reason: "summary_segment_crosses_presence_boundary",
+        segmentId: failure.segmentId,
+        segmentMessageIds: failure.segmentMessageIds,
+        presenceSignatures: failure.presenceSignatures
+      });
+    }
   }
 
   validateExtractionMessageIds(context, extraction) {
@@ -345,9 +360,12 @@ class MemoryEngine {
   }
 
   buildSummaryQualityRetryPrompt(prompt, quality) {
+    const boundaryCorrection = (quality.presenceBoundaryFailures || []).length > 0
+      ? ` Affected segments: ${(quality.presenceBoundaryFailures || []).map((failure) => failure.segmentId || `summarySegments[${failure.index}]`).join(", ")} cross a participant-presence boundary. Split the narrative into separate chronological segments so every messageId in one segment belongs to the same participant-presence window. Keep all exact supporting messageIds in the appropriate split segments. Do not remove substantive detail, compress the narrative, or merge content across join, leave, temporary-leave, or return boundaries.`
+      : "";
     const correction = {
       role: "system",
-      content: `Final-summary quality correction: the previous response was rejected (${quality.reasons.join("; ")}). Regenerate the complete JSON from the supplied conversation. Put the full chronological narrative in summarySegments, preserve concrete details and exact source messageIds without inventing facts. Do not return a shortened overview.`
+      content: `Final-summary quality correction: the previous response was rejected (${quality.reasons.join("; ")}). Regenerate the complete JSON from the supplied conversation. Put the full chronological narrative in summarySegments, preserve concrete details and exact source messageIds without inventing facts. Do not return a shortened overview.${boundaryCorrection}`
     };
     const sourcePrompt = Array.isArray(prompt) ? [...prompt] : [];
     const finalUser = sourcePrompt.at(-1)?.role === "user" ? sourcePrompt.pop() : null;
@@ -375,6 +393,7 @@ class MemoryEngine {
             this.trace.record("summary_provider", { conversationId: context.conversationId, attempt, success: true, durationMs: Date.now() - startedAt });
             return content;
           }
+          this.recordSummaryQualityDiagnostics(context, quality);
           retryQuality = quality;
           lastError = new Error(`final_summary_quality_failed:${quality.reasons.join("|")}`);
         } else {
@@ -538,6 +557,7 @@ class MemoryEngine {
         extraction = this.assignStableMemoryIds(context, this.extractor.parseOutput(content, context));
         quality = this.evaluateFinalSummaryQuality(context, extraction);
       }
+      this.recordSummaryQualityDiagnostics(context, quality);
       if (!quality.success) throw new Error(`final_summary_quality_failed:${quality.reasons.join("|")}`);
       this.trace.record("extract", { conversationId: context.conversationId, reason: extraction.structured ? "structured" : "prose_fallback" });
       for (const memory of extraction.memories) this.trace.record("classify", { memoryId: memory.memoryId, type: memory.type, conversationId: context.conversationId });
@@ -561,6 +581,27 @@ class MemoryEngine {
       if (!projectionValidation.success) {
         throw new Error(`${projectionValidation.error}:${projectionValidation.invalidPairs.map((pair) => `${pair.ownerId}->${pair.counterpartId}:${pair.reason}`).join(",")}`);
       }
+      const coverage = validatePerspectiveCoverage(context, extraction, directedSummaries);
+      if (!coverage.success) {
+        for (const failure of coverage.invalidPairs) {
+          const details = {
+            conversationId: context.conversationId,
+            finalizationId: context.finalizationId,
+            characterId: failure.ownerId,
+            participantId: failure.ownerId,
+            counterpartId: failure.counterpartId,
+            reason: failure.reason,
+            visibleDialogueMessageCount: failure.visibleDialogueMessageCount,
+            visibleDialogueChars: failure.visibleDialogueChars,
+            visibleSpeakerTurns: failure.visibleSpeakerTurns,
+            projectionSegmentCount: failure.projectionSegmentCount,
+            projectionMemoryCount: failure.projectionMemoryCount
+          };
+          this.trace.record("projection_narrative_coverage_missing", details);
+          if (failure.projectionMemoryCount > 0) this.trace.record("projection_memory_only_fallback", details);
+        }
+        throw new Error(`projection_narrative_coverage_missing:${coverage.invalidPairs.map((pair) => `${pair.ownerId}->${pair.counterpartId}`).join(",")}`);
+      }
       const folderPersistence = await this.persistCharacterFolders(context, extraction.sessionSummary || content, directedSummaries);
       this.commitFinalization(context, extraction);
       this.trace.record("summary_persist", { conversationId: context.conversationId, finalizationId: context.finalizationId, success: true, durationMs: Date.now() - persistStartedAt, memoryCount: extraction.memories.length });
@@ -577,11 +618,12 @@ class MemoryEngine {
       return { success: true, finalSummary: extraction.sessionSummary || content, extraction, directedSummaries };
     } catch (error) {
       this.trace.record("summary_persist", { conversationId: context.conversationId, finalizationId: context.finalizationId, success: false, durationMs: Date.now() - persistStartedAt, memoryCount: extraction.memories.length, error: error.message || String(error) });
+      const needsSummaryRegeneration = String(error?.message || error).startsWith("projection_narrative_coverage_missing:");
       const failedPath = this.writeRecoverySnapshot(context, {
-        finalizationStage: "persist",
+        finalizationStage: needsSummaryRegeneration ? "request" : "persist",
         finalizationStatus: "pending",
-        providerOutput: content,
-        parsedExtraction: this.serializeExtraction(extraction)
+        providerOutput: needsSummaryRegeneration ? null : content,
+        parsedExtraction: needsSummaryRegeneration ? null : this.serializeExtraction(extraction)
       }, error);
       this.traceFinalization(context, "persist", { providerSuccess: true, memoryCount: extraction.memories.length, recoveryState: "pending", errorCode: error.message });
       return { success: false, error, recoveryPath: failedPath };
@@ -624,6 +666,8 @@ class MemoryEngine {
     const filePath = path.join(this.store.paths.recovery, `conversation_${safeId}.json`);
     const existing = this.store.readJson(filePath, {});
     const lastError = error instanceof Error ? error.message : error ? String(error) : state.lastError || existing.lastError || null;
+    const providerOutput = Object.prototype.hasOwnProperty.call(state, "providerOutput") ? state.providerOutput : existing.providerOutput ?? null;
+    const parsedExtraction = Object.prototype.hasOwnProperty.call(state, "parsedExtraction") ? state.parsedExtraction : existing.parsedExtraction ?? null;
     this.store.writeJson(filePath, {
       ...existing,
       schemaVersion: 2,
@@ -641,8 +685,8 @@ class MemoryEngine {
       rawMessages: context.messages || [],
       finalizationStage: state.finalizationStage || existing.finalizationStage || "request",
       finalizationStatus: state.finalizationStatus || existing.finalizationStatus || "pending",
-      providerOutput: state.providerOutput ?? existing.providerOutput ?? null,
-      parsedExtraction: state.parsedExtraction ?? existing.parsedExtraction ?? null,
+      providerOutput,
+      parsedExtraction,
       checkpointReason: state.checkpointReason || existing.checkpointReason || null,
       retryCount: Number(state.retryCount ?? existing.retryCount ?? context.retryCount ?? 0),
       lastError,

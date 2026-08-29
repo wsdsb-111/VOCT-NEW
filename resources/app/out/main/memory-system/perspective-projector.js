@@ -4,6 +4,7 @@ const crypto = require("crypto");
 const { uniqueIds } = require("./memory-types");
 
 const PINNED_TYPES = new Set(["promise", "secret", "relationship", "plan", "unresolved"]);
+const PRESENCE_MARKER_KINDS = new Set(["presence_join", "presence_leave", "presence_temporary_leave", "presence_temporary_return"]);
 
 function projectionKey(ownerId, counterpartId) {
   return `${Number(ownerId)}->${Number(counterpartId)}`;
@@ -23,6 +24,111 @@ function isMessageInsidePresenceWindow(window, messageId) {
   const joined = Number(window?.joinedAtMessageId ?? 0);
   const left = window?.leftAtMessageId == null ? Infinity : Number(window.leftAtMessageId);
   return joined <= Number(messageId) && Number(messageId) < left;
+}
+
+function getPresenceSignature(context = {}, messageId) {
+  const presence = Array.isArray(context.participantPresence) ? context.participantPresence : [];
+  const participants = (context.participants || []).map((participant) => Number(participant?.id)).filter(Number.isFinite);
+  const activeIds = presence.length > 0
+    ? presence.filter((window) => isMessageInsidePresenceWindow(window, messageId)).map((window) => window.characterId)
+    : participants;
+  return uniqueIds(activeIds).sort((left, right) => left - right).join(",");
+}
+
+function getSegmentPresenceSignatures(context = {}, segment = {}) {
+  return uniqueIds(segment?.provenance?.messageIds).map((messageId) => getPresenceSignature(context, messageId));
+}
+
+function validateSummarySegmentPresenceBoundaries(context = {}, extraction = {}) {
+  const boundaryMessageIds = uniqueIds((context.participantPresence || []).flatMap((window) => [window?.joinedAtMessageId, window?.leftAtMessageId])).sort((left, right) => left - right);
+  const failures = [];
+  for (const [index, segment] of (extraction.summarySegments || []).entries()) {
+    const messageIds = uniqueIds(segment?.provenance?.messageIds);
+    const presenceSignatures = [...new Set(getSegmentPresenceSignatures(context, segment))];
+    const minimumMessageId = messageIds.length > 0 ? Math.min(...messageIds) : null;
+    const maximumMessageId = messageIds.length > 0 ? Math.max(...messageIds) : null;
+    const crossedBoundaryMessageIds = boundaryMessageIds.filter((boundaryMessageId) => minimumMessageId < boundaryMessageId && boundaryMessageId <= maximumMessageId);
+    if (messageIds.length > 0 && (presenceSignatures.length > 1 || crossedBoundaryMessageIds.length > 0)) {
+      failures.push({
+        index,
+        segmentId: segment.segmentId || null,
+        segmentMessageIds: messageIds,
+        presenceSignatures,
+        crossedBoundaryMessageIds
+      });
+    }
+  }
+  return {
+    success: failures.length === 0,
+    failures,
+    reasons: failures.map(() => "summary_segment_crosses_presence_boundary")
+  };
+}
+
+function resolveMessageSpeakerId(message, participants) {
+  const directId = Number(message?.speakerCharacterId ?? message?.characterId);
+  if (Number.isFinite(directId)) return directId;
+  const name = message?.name;
+  if (!name) return null;
+  const participant = participants.find((entry) => [entry.name, entry.shortName, entry.fullName].filter(Boolean).includes(name));
+  return participant ? Number(participant.id) : null;
+}
+
+function getVisibleDialogueStats(context = {}, participantId, counterpartId = null) {
+  const participants = (context.participants || []).filter((entry) => Number.isFinite(Number(entry?.id)));
+  const messages = Array.isArray(context.messages) ? context.messages : [];
+  const visible = messages.filter((message) => {
+    const content = String(message?.content || "").trim();
+    if (!content || PRESENCE_MARKER_KINDS.has(message?.kind) || !["user", "assistant"].includes(message?.role)) return false;
+    const presence = Array.isArray(context.participantPresence) ? context.participantPresence : [];
+    if (presence.length === 0) return true;
+    const participantPresent = presence.some((window) => Number(window.characterId) === Number(participantId) && isMessageInsidePresenceWindow(window, message.id));
+    const counterpartPresent = counterpartId == null || presence.some((window) => Number(window.characterId) === Number(counterpartId) && isMessageInsidePresenceWindow(window, message.id));
+    return participantPresent && counterpartPresent;
+  });
+  let previousSpeakerId = null;
+  let visibleSpeakerTurns = 0;
+  for (const message of visible) {
+    const speakerId = resolveMessageSpeakerId(message, participants);
+    if (speakerId !== previousSpeakerId) visibleSpeakerTurns++;
+    previousSpeakerId = speakerId;
+  }
+  return {
+    visibleDialogueMessageCount: visible.length,
+    visibleDialogueChars: visible.reduce((total, message) => total + String(message.content || "").trim().length, 0),
+    visibleSpeakerTurns
+  };
+}
+
+function validatePerspectiveCoverage(context = {}, extraction = {}, projections) {
+  if (!(projections instanceof Map)) return { success: false, error: "perspective_summary_map_required", invalidPairs: [] };
+  const excludedOwners = new Set(uniqueIds(context.excludedSummaryOwnerIds));
+  const participants = (context.participants || []).filter((entry) => Number.isFinite(Number(entry?.id)));
+  const invalidPairs = [];
+  const statsByParticipant = {};
+  for (const owner of participants) {
+    const ownerId = Number(owner.id);
+    if (excludedOwners.has(ownerId)) continue;
+    statsByParticipant[ownerId] = getVisibleDialogueStats(context, ownerId);
+    for (const counterpart of participants) {
+      const counterpartId = Number(counterpart.id);
+      if (counterpartId === ownerId) continue;
+      const stats = getVisibleDialogueStats(context, ownerId, counterpartId);
+      const substantivePresence = stats.visibleDialogueMessageCount >= 3 && stats.visibleDialogueChars >= 120;
+      if (!substantivePresence) continue;
+      const projection = projections.get(projectionKey(ownerId, counterpartId));
+      if (!projection || (projection.summarySegmentIds || []).length > 0) continue;
+      invalidPairs.push({
+        ownerId,
+        counterpartId,
+        reason: "projection_narrative_coverage_missing",
+        ...stats,
+        projectionSegmentCount: (projection?.summarySegmentIds || []).length,
+        projectionMemoryCount: (projection?.memoryIds || []).length
+      });
+    }
+  }
+  return { success: invalidPairs.length === 0, invalidPairs, statsByParticipant };
 }
 
 function isMemoryInsidePairPresence(context, memory, ownerId, counterpartId) {
@@ -148,4 +254,4 @@ function validatePerspectiveSummaryMap(context = {}, extraction = {}, projection
     : { success: false, error: "perspective_summary_validation_failed", invalidPairs };
 }
 
-module.exports = { buildPerspectiveSummaryMap, validatePerspectiveSummaryMap, projectionKey, isMemoryRelevantToPair, isMemoryInsidePairPresence, renderPerspectiveContent, PINNED_TYPES };
+module.exports = { buildPerspectiveSummaryMap, validatePerspectiveSummaryMap, validateSummarySegmentPresenceBoundaries, validatePerspectiveCoverage, getPresenceSignature, getSegmentPresenceSignatures, getVisibleDialogueStats, projectionKey, isMemoryRelevantToPair, isMemoryInsidePairPresence, renderPerspectiveContent, PINNED_TYPES };

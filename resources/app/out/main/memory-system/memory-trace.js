@@ -20,7 +20,18 @@ class MemoryTrace {
       patchInserted: details.patchInserted === true,
       firstChangedBlock: details.firstChangedBlock || null,
       characterId: details.characterId ?? null,
-      conversationId: details.conversationId || null
+      participantId: details.participantId ?? null,
+      conversationId: details.conversationId || null,
+      finalizationId: details.finalizationId || null,
+      counterpartId: details.counterpartId ?? null,
+      segmentId: details.segmentId || null,
+      segmentMessageIds: Array.isArray(details.segmentMessageIds) ? [...details.segmentMessageIds] : [],
+      presenceSignatures: Array.isArray(details.presenceSignatures) ? [...details.presenceSignatures] : [],
+      visibleDialogueMessageCount: Number.isFinite(details.visibleDialogueMessageCount) ? details.visibleDialogueMessageCount : null,
+      visibleDialogueChars: Number.isFinite(details.visibleDialogueChars) ? details.visibleDialogueChars : null,
+      visibleSpeakerTurns: Number.isFinite(details.visibleSpeakerTurns) ? details.visibleSpeakerTurns : null,
+      projectionSegmentCount: Number.isFinite(details.projectionSegmentCount) ? details.projectionSegmentCount : null,
+      projectionMemoryCount: Number.isFinite(details.projectionMemoryCount) ? details.projectionMemoryCount : null
     };
     this.entries.push(safe);
     if (this.entries.length > this.maxEntries) this.entries.shift();

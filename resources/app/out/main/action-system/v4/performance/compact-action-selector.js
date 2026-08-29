@@ -9,8 +9,14 @@ const cacheAnalytics = require("../analytics/selector-cache-analytics");
 const COMPACT_RULES = `AE4_PERFORMANCE_COMPACT_SELECTOR_v3
 Return only Q2 JSON. Select 0 to 2 decisions caused by CURRENT_MESSAGE.
 Use only AVAILABLE_ACTIONS and listed participants. Never invent targets or required arguments.
-Do not execute questions, conditions, hypotheticals, plans, past reports, or failed attempts.
+Do not execute ordinary questions, conditions, hypotheticals, plans, past reports, or failed attempts.
 Use LAST_DIALOGUE only for references, target, amount, arguments, or a short pending response.
+QUESTION RULE
+- Do not emit action_call for ordinary questions that merely ask about, discuss, speculate about, or evaluate an action.
+- EXCEPTION: An explicit proposal for a consent_required action is not an ordinary question. It MUST emit action_call so the runtime can create Pending.
+- “如果杀了他会怎样？” and “你觉得我应该杀了他吗？” → no action.
+- “你愿意成为我的情人吗？” → action_call for the consent_required relationship proposal; the runtime creates Pending and performs no gameplay execution yet.
+- “我们结为兄弟如何？” and “愿与我停战吗？” → action_call for the matching consent_required proposal; the runtime creates Pending.
 ACTION TIMING
 For immediate actions:
 - Emit action_call only when CURRENT_MESSAGE makes the gameplay action executable now.
