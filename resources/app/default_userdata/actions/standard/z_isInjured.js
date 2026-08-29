@@ -151,6 +151,7 @@ const GENDER_WORDS = {
 
 module.exports = {
   signature: "isInjured",
+  actionMetadata: { requiredArguments: ["injuryType"], selectorContract: { shortDescription: "Source character injures target character.", sourceRole: "attacker", targetRole: "victim" } },
   triggerCategories: ["death_or_injury"],
   semantic: {
     candidatePatterns: [/(?:刺伤|砍伤|打伤|烧伤|冻伤|摔伤|重创|重伤|负伤|受伤|划伤|割伤|划破|割破|刺穿|贯穿|(?:刺|捅)(?:中|入|进).{0,8}(?:胸(?:口|膛)?|腹(?:部)?|肩(?:膀)?|背(?:部)?|腰(?:部)?|腿|手臂|身体|身躯|血肉)|(?:刀|剑|匕首|枪尖|刀刃|剑刃).{0,6}(?:刺入|刺进|没入|扎进)|(?:手|手臂|手指|腿|脚|耳朵|鼻子).{0,8}(?:被)?(?:割|砍|斩)(?:了)?(?:下|掉|断|落)|(?:手|手臂|肩膀|胸口|腹部|背部|腰部|腿).{0,8}(?:砍|刺|捅|划|割)(?:了)?(?:一|两|几)(?:刀|剑|下|记)|捅伤|扎伤|流血(?:不止)?|鲜血.{0,8}(?:流出|涌出|喷出)|伤口|骨折|断骨|昏迷|毁容|弄瞎|刺瞎|打瞎|剜.?眼|断腿|折断|打断|割下|砍下|阉割|wounded|injured|maimed|disfigured|bled|bleeding|blinded|castrat|poisoned|strangled|burned|drowned)/i],

@@ -79,8 +79,8 @@ const conversation = {
   assert.strictEqual(dynamic.recentDialogue.length, 4, "P2 must contain only the latest four prior dialogue turns");
   assert.strictEqual(dynamic.currentMessage.id, 21);
   assert(!calls[1].messages[1].content.includes("old-1"), "P2 must not include full history");
-  assert.strictEqual(calls[0].metadata.selectorVersion, "ae4-selector-v1");
-  assert.strictEqual(calls[0].metadata.catalogVersion, "ae4-c2-v1");
+  assert.strictEqual(calls[0].metadata.selectorVersion, "ae4-selector-v2");
+  assert.strictEqual(calls[0].metadata.catalogVersion, "ae4-c2-v2");
   assert.strictEqual(calls[0].metadata.schemaVersion, "ae4-q2-v1");
   assert(calls[0].metadata.stablePrefixHash && calls[0].metadata.availableCatalogHash && calls[0].metadata.p2ContextHash);
 

@@ -102,6 +102,7 @@ const releaseChecks = [
   { group: "v7.9.3-ae4-social-opinion", script: "test-v7.9.3-ae4-social-opinion.js" },
   { group: "v7.9.3-ae4-benchmark", script: "test-v7.9.3-ae4-benchmark.js" },
   { group: "v7.9.3-ae4-self-target-errata", script: "test-v7.9.3-ae4-self-target-errata.js" },
+  { group: "v7.9.3-ae4-preflight", script: "test-v7.9.3-ae4-preflight.js" },
   { group: "full-prompt-smoke", script: "test-v7.8.2-full-prompt-smoke.js" },
   { group: "usage-analytics-retention", script: "test-usage-analytics-retention.js" },
   { group: "usage-analytics-reconciliation", script: "test-usage-analytics-reconciliation.js" },

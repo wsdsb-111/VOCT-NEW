@@ -8,8 +8,11 @@ const pendingResolver = require("../pending/pending-resolver");
 const funnelAnalytics = require("../analytics/action-funnel-analytics");
 const opinionEffectNormalizer = require("../social/opinion-effect-normalizer");
 
-function evidenceAllowed(proposal, allowedMessageIds) {
-  return Array.isArray(proposal.evidenceMessageIds) && proposal.evidenceMessageIds.length > 0 && proposal.evidenceMessageIds.every((id) => allowedMessageIds.has(String(id)));
+function evidenceAllowed(proposal, allowedMessageIds, requiredMessageId = null) {
+  return Array.isArray(proposal.evidenceMessageIds)
+    && proposal.evidenceMessageIds.length > 0
+    && proposal.evidenceMessageIds.every((id) => allowedMessageIds.has(String(id)))
+    && (requiredMessageId == null || proposal.evidenceMessageIds.some((id) => String(id) === String(requiredMessageId)));
 }
 
 function normalizeActionDecision(decision, context, index) {
@@ -58,6 +61,11 @@ async function process({ conversation, speaker, message, decisions, catalog, reg
   for (let index = 0; index < decisions.length && index < 3; index++) {
     const decision = decisions[index];
     if (decision.type === "pending_response") {
+      if (!evidenceAllowed(decision, recentIds, message.id)) {
+        rejected.push({ decision, reason: "rejected_invalid_pending_evidence" });
+        funnelAnalytics.record(analytics, null, "Pending/Consent", "rejected", { reason: "rejected_invalid_pending_evidence", messageId: message.id, actionSystemMode: mode, origin });
+        continue;
+      }
       const pendingResult = pendingResolver.resolve({ conversation, decision, speaker, messageId: message.id, mode, origin });
       if (pendingResult.rejected) {
         rejected.push({ decision, reason: pendingResult.reason });

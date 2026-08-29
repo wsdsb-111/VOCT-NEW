@@ -51,6 +51,9 @@ async function build({ conversation, speaker, registry, language, resolveI18nStr
         entries.push(Object.freeze({
           actionId: loaded.id,
           sourceCharacterId: sourceCharacter.id,
+          shortDescription: metadata.selectorContract.shortDescription,
+          sourceRole: metadata.selectorContract.sourceRole,
+          targetRole: metadata.selectorContract.targetRole,
           targetPolicy: metadata.targetPolicy,
           validTargetCharacterIds: Object.freeze(targetIds),
           requiresTarget,
@@ -75,6 +78,9 @@ function serialize(catalog) {
   return JSON.stringify(catalog.entries.map((entry) => ({
     actionId: entry.actionId,
     sourceCharacterId: entry.sourceCharacterId,
+    shortDescription: entry.shortDescription,
+    sourceRole: entry.sourceRole,
+    targetRole: entry.targetRole,
     targetPolicy: entry.targetPolicy,
     requiresTarget: entry.requiresTarget,
     validTargetCharacterIds: entry.validTargetCharacterIds,

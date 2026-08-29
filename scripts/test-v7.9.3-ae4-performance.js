@@ -6,6 +6,7 @@ const path = require("path");
 const root = path.resolve(__dirname, "..");
 const { ActionEngineV4 } = require(path.join(root, "resources/app/out/main/action-system/action-engine"));
 const hintDetector = require(path.join(root, "resources/app/out/main/action-system/v4/performance/fallback-hint-detector"));
+const executionFormGuard = require(path.join(root, "resources/app/out/main/action-system/v4/performance/execution-form-guard"));
 
 const player = { id: 1, shortName: "Player", fullName: "Player", gold: 500, relationsToCharacters: [] };
 const npc = { id: 2, shortName: "NPC", fullName: "NPC", gold: 100, relationsToCharacters: [] };
@@ -102,10 +103,23 @@ async function evaluate(message) {
   assert.strictEqual(result.autoApproved.length, 0, "compact selector must not bypass consent");
   assert.strictEqual(result.pendingConsent.length, 1);
 
+  assert.strictEqual(executionFormGuard.evaluate("如果我给NPC 50金币会怎样？").status, "BLOCK");
+  assert.strictEqual(executionFormGuard.evaluate("昨天我给过NPC 50金币。").status, "BLOCK");
+  assert.strictEqual(executionFormGuard.evaluate("不要把NPC关起来。").status, "BLOCK");
+  for (const [id, text] of [
+    [7, "昨天我还不愿意，今天我把50金币交给了NPC。"],
+    [8, "别再说了，把NPC关进地牢。"],
+    [9, "如果你不服，现在就把NPC押入牢房。"]
+  ]) {
+    assert.strictEqual(executionFormGuard.evaluate(text).status, "MAYBE", `${text} must remain eligible for Compact Selector`);
+    await evaluate({ id, role: "user", name: "Player", content: text });
+  }
+  assert.strictEqual(providerCalls.length, 5, "three mixed-clause messages must each make exactly one Compact Selector call");
+
   for (const text of ["他被刺伤了。", "他被杀死了。", "任命他为内阁成员。", "我们达成停战。", "她脱下了长袍。"]) {
     assert.strictEqual(hintDetector.evaluate({ message: { content: text }, activePending: [] }).possibleAction, true, `${text} must not be a fallback false negative`);
   }
-  assert.strictEqual(providerCalls.filter((call) => call.metadata.actionStage === "performance_compact").length, 2);
+  assert.strictEqual(providerCalls.filter((call) => call.metadata.actionStage === "performance_compact").length, 5);
   console.log("PASS v7.9.3 AE4 Phase 5 Performance pipeline");
 })().catch((error) => {
   console.error(error);

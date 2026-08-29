@@ -81,29 +81,32 @@ async function direct(conv, id, content, value, options = {}) {
 
 (async () => {
   const conv = conversation();
-  let result = await direct(conv, 1, "NPC，你做得很好。", 2);
+  let result = await direct(conv, 1, "NPC，你很聪明。", 2);
   assert.strictEqual(result.autoApproved.length, 1, "low confidence must not veto a valid Q2 action");
   assert.strictEqual(effects.at(-1).body, "opinion:2");
 
-  result = await direct(conv, 2, "NPC，你做得很好。", 2);
+  result = await direct(conv, 2, "NPC，你非常有智慧。", 2);
   assert.strictEqual(result.autoApproved.length, 1);
   assert.strictEqual(effects.at(-1).body, "opinion:1", "second same-topic cause must scale to 40%");
 
-  result = await direct(conv, 3, "NPC，你做得很好。", 2);
-  assert(result.rejected.some((item) => item.reason === "topic_cooldown_suppressed"), "third same-topic cause must scale to zero");
+  result = await direct(conv, 3, "NPC，你的才智令人敬佩。", 2);
+  assert(result.rejected.some((item) => item.reason === "topic_cooldown_suppressed"), "semantic paraphrases of the same topic must scale to zero");
 
   result = await direct(conv, 4, "重复同一证据。", 2, { evidenceMessageIds: [1] });
   assert(result.rejected.some((item) => item.reason === "same_cause_deduped"), "same cause and effect must dedupe");
 
-  result = await direct(conv, 5, "强烈称赞另一件事。", 4);
+  result = await direct(conv, 5, "NPC，你非常勇敢。", 2);
+  assert.strictEqual(result.autoApproved.length, 1, "a genuinely different praise topic must not share the intelligence cooldown");
+
+  result = await direct(conv, 6, "强烈称赞另一件事。", 4);
   assert(result.rejected.some((item) => item.reason === "rejected_direct_opinion_delta"), "direct opinion must use O2 discrete values only");
 
-  result = await direct(conv, 6, "第三个独立赞赏。", 3, { targetId: 3 });
+  result = await direct(conv, 7, "第三个独立赞赏。", 3, { targetId: 3 });
   assert(result.rejected.some((item) => item.reason === "direct_turn_cap"), "direct dialogue total must not exceed 5 in one turn");
 
-  result = await direct(conv, 7, "confirmed injury", 7, { targetId: 3, origin: "derived_social" });
+  result = await direct(conv, 8, "confirmed injury", 5, { targetId: 3, origin: "derived_social" });
   assert.strictEqual(result.autoApproved.length, 1, "derived world effect may use a larger delta");
-  result = await direct(conv, 8, "another confirmed event", 1, { targetId: 3, origin: "derived_social" });
+  result = await direct(conv, 9, "another confirmed event", 1, { targetId: 3, origin: "derived_social" });
   assert(result.rejected.some((item) => item.reason === "overall_turn_cap"), "all social effects must not exceed 10 in one turn");
 
   const performanceConversation = conversation();

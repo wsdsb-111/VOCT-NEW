@@ -45,6 +45,11 @@ assert.deepStrictEqual(actionMetadata({ definition: {} }), {
   dependencyMetadata: {},
   socialCategory: null,
   targetPolicy: "other_only",
+  selectorContract: {
+    shortDescription: "Execute unknownAction according to its source and target roles.",
+    sourceRole: "actor",
+    targetRole: "target"
+  },
   selectorVisible: true
 });
 

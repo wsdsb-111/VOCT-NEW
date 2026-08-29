@@ -1,6 +1,7 @@
 /** @import { GameData, Character } from '../../gamedata_typedefs.js' */
 module.exports = {
   signature: "changeOpinionOf",
+  actionMetadata: { requiredArguments: ["value"], selectorContract: { shortDescription: "Change source character's opinion of target character.", sourceRole: "opinion_holder", targetRole: "opinion_target" } },
   triggerCategories: ["opinion_change"], semantic: { evidencePatterns: [/(?:好感|好感度|评价|看法|态度|意见).{0,12}(?:增加|上升|提高|改善|下降|降低|恶化|变差|转好|转坏|大增|大减)/i], priority: 30, riskLevel: "low" },
   title: {
     en: "Change Source's Opinion of Target",

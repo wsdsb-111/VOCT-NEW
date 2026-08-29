@@ -4,10 +4,24 @@ const socialEffectDedupe = require("./social-effect-dedupe");
 
 const DIRECT_ORIGINS = new Set(["precision_selector", "performance_local", "performance_compact"]);
 const DIRECT_VALUES = new Set([-3, -2, -1, 1, 2, 3]);
+const TOPIC_CLUSTERS = Object.freeze([
+  ["praise:intelligence", /(?:聪明|智慧|才智|睿智|机敏|smart|intelligen|wise)/i],
+  ["praise:appearance", /(?:美丽|漂亮|英俊|俊美|容貌|beaut|handsome|pretty)/i],
+  ["praise:bravery", /(?:勇敢|英勇|勇气|无畏|brave|courage)/i],
+  ["gratitude:help", /(?:多谢|感谢|感激|救命|帮助|相助|thank|grateful|help)/i],
+  ["insult:competence", /(?:愚蠢|无能|笨蛋|蠢货|stupid|fool|incompeten)/i],
+  ["threat:personal", /(?:威胁|杀了你|要你好看|付出代价|后果自负|threat|kill you|pay for this)/i]
+]);
 
-function normalizedTopic(message, delta) {
-  const text = String(message?.content || "").trim().toLocaleLowerCase().replace(/\s+/g, " ").slice(0, 64);
-  return `${delta > 0 ? "positive" : "negative"}:${text || message?.id || "dialogue"}`;
+function topicCluster(message) {
+  const text = String(message?.content || "");
+  return TOPIC_CLUSTERS.find(([, pattern]) => pattern.test(text))?.[0] || null;
+}
+
+function normalizedTopic(message, delta, targetCharacterId = null) {
+  const text = String(message?.content || "").trim().toLocaleLowerCase().replace(/\s+/g, " ").replace(/[，。！？,.!?]/g, "").slice(0, 64);
+  const identity = topicCluster(message) || `text:${text || message?.id || "dialogue"}`;
+  return `${delta > 0 ? "positive" : "negative"}:target:${targetCharacterId ?? "none"}:${identity}`;
 }
 
 function prepare(conversation, proposal, message) {
@@ -24,7 +38,7 @@ function prepare(conversation, proposal, message) {
     effectType: "opinion",
     causeType: direct ? "direct_dialogue" : "derived_world_event",
     causeId: (proposal.evidenceMessageIds || []).map(String).join("+") || String(proposal.messageId),
-    topicKey: normalizedTopic(message, delta),
+    topicKey: normalizedTopic(message, delta, proposal.targetCharacterId),
     turnId: state?.dialogueTurn ?? conversation.turnEpoch ?? 0,
     origin: direct ? "explicit_dialogue" : "derived_world_event",
     direct,
@@ -40,4 +54,4 @@ function prepare(conversation, proposal, message) {
   };
 }
 
-module.exports = { DIRECT_ORIGINS, DIRECT_VALUES, normalizedTopic, prepare, commit: socialEffectDedupe.commit, release: socialEffectDedupe.release };
+module.exports = { DIRECT_ORIGINS, DIRECT_VALUES, TOPIC_CLUSTERS, topicCluster, normalizedTopic, prepare, commit: socialEffectDedupe.commit, release: socialEffectDedupe.release };

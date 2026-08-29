@@ -1,6 +1,7 @@
 /** @import { GameData, Character } from '../../gamedata_typedefs.js' */
 module.exports = {
   signature: "characterIsKilled",
+  actionMetadata: { selectorContract: { shortDescription: "Source character is killed by target character.", sourceRole: "victim", targetRole: "killer" } },
   title: {
     en: "Source Character Is Killed",
     ru: "Исходный персонаж убит",

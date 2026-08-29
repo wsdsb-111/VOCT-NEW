@@ -103,9 +103,21 @@ async function propose(conv, actionId, messageId) {
   assert.strictEqual(result.autoApproved.length, 0);
   assert.strictEqual(pendingStore.get(conv, pending.pendingId).status, "pending");
 
-  const acceptMessage = { id: 204, role: "assistant", name: "NPC", content: "I accept" };
+  const oldEvidenceMessage = { id: 204, role: "assistant", name: "NPC", content: "I accept" };
+  conv.messages.push(oldEvidenceMessage);
+  result = await ActionEngineV4.evaluateProposals(conv, npc, oldEvidenceMessage, [{ type: "pending_response", pendingId: pending.pendingId, response: "accept", evidenceMessageIds: [203], confidence: 1 }], { mode: "precision", origin: "precision_selector" });
+  assert(result.rejected.some((item) => item.reason === "rejected_invalid_pending_evidence"), "old evidence alone must not settle pending");
+  assert.strictEqual(pendingStore.get(conv, pending.pendingId).status, "pending");
+
+  const missingEvidenceMessage = { id: 205, role: "assistant", name: "NPC", content: "I accept" };
+  conv.messages.push(missingEvidenceMessage);
+  result = await ActionEngineV4.evaluateProposals(conv, npc, missingEvidenceMessage, [{ type: "pending_response", pendingId: pending.pendingId, response: "accept", evidenceMessageIds: [99999], confidence: 1 }], { mode: "precision", origin: "precision_selector" });
+  assert(result.rejected.some((item) => item.reason === "rejected_invalid_pending_evidence"), "unknown evidence must not settle pending");
+  assert.strictEqual(pendingStore.get(conv, pending.pendingId).status, "pending");
+
+  const acceptMessage = { id: 206, role: "assistant", name: "NPC", content: "I accept" };
   conv.messages.push(acceptMessage);
-  result = await ActionEngineV4.evaluateProposals(conv, npc, acceptMessage, [{ type: "pending_response", pendingId: pending.pendingId, response: "accept", evidenceMessageIds: [204], confidence: 1 }], { mode: "precision", origin: "precision_selector" });
+  result = await ActionEngineV4.evaluateProposals(conv, npc, acceptMessage, [{ type: "pending_response", pendingId: pending.pendingId, response: "accept", evidenceMessageIds: [206], confidence: 1 }], { mode: "precision", origin: "precision_selector" });
   assert.strictEqual(result.autoApproved.length, 1, "target acceptance must execute once");
   assert.strictEqual(pendingStore.get(conv, pending.pendingId).status, "accepted");
   assert.strictEqual(effects.length, 1);

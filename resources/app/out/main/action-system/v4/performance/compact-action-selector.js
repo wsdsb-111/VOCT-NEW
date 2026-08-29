@@ -6,13 +6,15 @@ const availableActionCatalog = require("../catalog/available-action-catalog");
 const { compactDictionary } = require("../catalog/master-action-dictionary");
 const cacheAnalytics = require("../analytics/selector-cache-analytics");
 
-const COMPACT_RULES = `AE4_PERFORMANCE_COMPACT_SELECTOR_v1
+const COMPACT_RULES = `AE4_PERFORMANCE_COMPACT_SELECTOR_v2
 Return only Q2 JSON. Select 0 to 2 decisions caused by CURRENT_MESSAGE.
 Use only AVAILABLE_ACTIONS and listed participants. Never invent targets or required arguments.
 Do not execute questions, conditions, hypotheticals, plans, past reports, failed attempts, or unaccepted proposals.
 Use LAST_DIALOGUE only for references, target, amount, arguments, or a short pending response.
 For consent_required actions, action_call creates Pending; acceptance/rejection/defer must use pending_response.
-Confidence is analytics only. evidenceMessageIds must come from CURRENT_MESSAGE or LAST_DIALOGUE.`;
+Confidence is analytics only. evidenceMessageIds must come from CURRENT_MESSAGE or LAST_DIALOGUE.
+Follow each Action's sourceRole, targetRole, and targetPolicy exactly. Passive voice does not swap Action-contract roles.
+Use the same MASTER_COMPACT_ACTION_DICTIONARY and Q2 schema as Precision.`;
 
 function build({ conversation, speaker, message, catalog, registry }) {
   const previous = (conversation.messages || []).filter((entry) => ["user", "assistant"].includes(entry?.role) && String(entry.id) !== String(message.id)).slice(-2).map((entry) => ({ id: entry.id, role: entry.role, name: entry.name || null, content: entry.content }));

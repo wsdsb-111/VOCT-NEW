@@ -138,16 +138,20 @@ class ActionEngineV4 {
       return this.finalizeLanguageResult(message, mode, await this.evaluateProposals(conversation, speaker, message, selected.decisions, { mode, origin: "precision_selector", catalog }), selected.decisions.length);
     }
     const guard = executionFormGuard.evaluate(message.content);
-    if (!guard.allowed) {
+    if (guard.status === "BLOCK") {
       usageAnalytics?.record?.({ requestType: "action_v4_performance", engineVersion: "4.0", actionSystemMode: mode, messageId: message.id, stage: "execution_form_guard", outcome: "rejected", reason: guard.reason }, null);
       return this.finalizeLanguageResult(message, mode, { autoApproved: [], needsApproval: [], pendingConsent: [], rejected: [] }, 0);
     }
-    const fast = fastActionResolver.resolve({ message, speaker, catalog });
-    if (fast.status === "HIT") {
-      usageAnalytics?.record?.({ requestType: "action_v4_performance", engineVersion: "4.0", actionSystemMode: mode, messageId: message.id, stage: "fast_resolver", outcome: "hit", actionId: fast.decision.actionId }, null);
-      return this.finalizeLanguageResult(message, mode, await this.evaluateProposals(conversation, speaker, message, [fast.decision], { mode, origin: "performance_local", catalog }), 1);
+    if (guard.status === "ALLOW") {
+      const fast = fastActionResolver.resolve({ message, speaker, catalog });
+      if (fast.status === "HIT") {
+        usageAnalytics?.record?.({ requestType: "action_v4_performance", engineVersion: "4.0", actionSystemMode: mode, messageId: message.id, stage: "fast_resolver", outcome: "hit", actionId: fast.decision.actionId }, null);
+        return this.finalizeLanguageResult(message, mode, await this.evaluateProposals(conversation, speaker, message, [fast.decision], { mode, origin: "performance_local", catalog }), 1);
+      }
     }
-    const hint = fallbackHintDetector.evaluate({ message, activePending: pendingStore.listActive(conversation) });
+    const hint = guard.status === "MAYBE"
+      ? { possibleAction: true, reason: guard.reason }
+      : fallbackHintDetector.evaluate({ message, activePending: pendingStore.listActive(conversation) });
     usageAnalytics?.record?.({ requestType: "action_v4_performance", engineVersion: "4.0", actionSystemMode: mode, messageId: message.id, stage: "fallback_hint", outcome: hint.possibleAction ? "maybe" : "none", reason: hint.reason }, null);
     if (!hint.possibleAction) return this.finalizeLanguageResult(message, mode, { autoApproved: [], needsApproval: [], pendingConsent: [], rejected: [] }, 0);
     const selected = await compactActionSelector.select({
