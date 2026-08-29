@@ -7,6 +7,8 @@ const path = require("path");
 const root = path.resolve(__dirname, "..");
 const { ActionEngineV4 } = require(path.join(root, "resources/app/out/main/action-system/action-engine"));
 const selectorSchema = require(path.join(root, "resources/app/out/main/action-system/v4/proposal/action-selector-schema"));
+const precisionPrompt = require(path.join(root, "resources/app/out/main/action-system/v4/precision/precision-selector-prompt"));
+const compactSelector = require(path.join(root, "resources/app/out/main/action-system/v4/performance/compact-action-selector"));
 
 const player = { id: 1, shortName: "Player", fullName: "Player", gold: 100, relationsToCharacters: [] };
 const npc = { id: 2, shortName: "NPC", fullName: "NPC", gold: 100, relationsToCharacters: [] };
@@ -67,6 +69,12 @@ const conversation = {
 };
 
 (async () => {
+  for (const rules of [precisionPrompt.UNIVERSAL_RULES, compactSelector.COMPACT_RULES]) {
+    assert(rules.includes("A newly made explicit proposal MUST emit action_call"), "both selectors must create Pending from a new consent proposal");
+    assert(rules.includes("This action_call represents a proposal, NOT gameplay execution"));
+    assert(rules.includes("Acceptance, rejection, or defer from CURRENT_MESSAGE MUST use pending_response"));
+    assert(rules.includes("Never emit a fresh action_call merely to represent acceptance"));
+  }
   const ordinary = { id: 20, role: "user", name: "Player", content: "今天天气不错。" };
   await ActionEngineV4.evaluateForCharacter(conversation, player, null, ordinary);
   conversation.messages.push(ordinary);
@@ -79,8 +87,8 @@ const conversation = {
   assert.strictEqual(dynamic.recentDialogue.length, 4, "P2 must contain only the latest four prior dialogue turns");
   assert.strictEqual(dynamic.currentMessage.id, 21);
   assert(!calls[1].messages[1].content.includes("old-1"), "P2 must not include full history");
-  assert.strictEqual(calls[0].metadata.selectorVersion, "ae4-selector-v2");
-  assert.strictEqual(calls[0].metadata.catalogVersion, "ae4-c2-v2");
+  assert.strictEqual(calls[0].metadata.selectorVersion, "ae4-selector-v3");
+  assert.strictEqual(calls[0].metadata.catalogVersion, "ae4-c2-v3");
   assert.strictEqual(calls[0].metadata.schemaVersion, "ae4-q2-v1");
   assert(calls[0].metadata.stablePrefixHash && calls[0].metadata.availableCatalogHash && calls[0].metadata.p2ContextHash);
 

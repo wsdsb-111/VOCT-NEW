@@ -198,7 +198,7 @@
           "id": "h1",
           "role": "user",
           "name": "角色1",
-          "content": "角色1把50金币交给了角色2。"
+          "content": "角色1告诉角色2，稍后会交付50金币。"
         },
         {
           "id": "h2",
@@ -211,16 +211,19 @@
         "id": "m-playerPaysGoldTo-4",
         "role": "user",
         "name": "角色1",
-        "content": "就按刚才已经完成的结果执行。"
+        "content": "好，我现在把50金币交给角色2。"
       },
       "expectedDetection": true,
       "expectedExecution": true,
+      "expectedArguments": {
+        "amount": 50
+      },
       "expectedRejectReason": null,
       "mode": "performance",
       "legality": {
         "available": true
       },
-      "variant": "multi_turn"
+      "variant": "multi_turn_completion"
     },
     {
       "id": "playerPaysGoldTo-05",
@@ -672,7 +675,7 @@
           "id": "h1",
           "role": "user",
           "name": "角色1",
-          "content": "角色2命令卫兵将角色1押入地牢。"
+          "content": "卫兵已经把角色1带到角色2面前。"
         },
         {
           "id": "h2",
@@ -685,7 +688,7 @@
         "id": "m-isImprisonedBy-4",
         "role": "user",
         "name": "角色1",
-        "content": "就按刚才已经完成的结果执行。"
+        "content": "把角色1关进地牢。"
       },
       "expectedDetection": true,
       "expectedExecution": true,
@@ -694,7 +697,7 @@
       "legality": {
         "available": true
       },
-      "variant": "multi_turn"
+      "variant": "multi_turn_completion"
     },
     {
       "id": "isImprisonedBy-05",
@@ -993,8 +996,11 @@
       "expectedActions": [
         "isInjured"
       ],
-      "expectedSourceCharacterId": 2,
-      "expectedTargetCharacterId": 1,
+      "expectedSourceCharacterId": 1,
+      "expectedTargetCharacterId": 2,
+      "expectedArguments": {
+        "injuryType": "wounded"
+      },
       "history": [],
       "message": {
         "id": "m-isInjured-1",
@@ -1037,8 +1043,11 @@
       "expectedActions": [
         "isInjured"
       ],
-      "expectedSourceCharacterId": 2,
-      "expectedTargetCharacterId": 1,
+      "expectedSourceCharacterId": 1,
+      "expectedTargetCharacterId": 2,
+      "expectedArguments": {
+        "injuryType": "wounded"
+      },
       "history": [
         {
           "id": "h1",
@@ -1088,8 +1097,11 @@
       "expectedActions": [
         "isInjured"
       ],
-      "expectedSourceCharacterId": 2,
-      "expectedTargetCharacterId": 1,
+      "expectedSourceCharacterId": 1,
+      "expectedTargetCharacterId": 2,
+      "expectedArguments": {
+        "injuryType": "wounded"
+      },
       "history": [
         {
           "id": "h1",
@@ -1139,14 +1151,17 @@
       "expectedActions": [
         "isInjured"
       ],
-      "expectedSourceCharacterId": 2,
-      "expectedTargetCharacterId": 1,
+      "expectedSourceCharacterId": 1,
+      "expectedTargetCharacterId": 2,
+      "expectedArguments": {
+        "injuryType": "wounded"
+      },
       "history": [
         {
           "id": "h1",
           "role": "user",
           "name": "角色1",
-          "content": "角色1挥剑刺伤了角色2。"
+          "content": "角色1拔刀冲向角色2。"
         },
         {
           "id": "h2",
@@ -1159,7 +1174,7 @@
         "id": "m-isInjured-4",
         "role": "user",
         "name": "角色1",
-        "content": "就按刚才已经完成的结果执行。"
+        "content": "他现在一刀刺伤了角色2。"
       },
       "expectedDetection": true,
       "expectedExecution": true,
@@ -1168,7 +1183,7 @@
       "legality": {
         "available": true
       },
-      "variant": "multi_turn"
+      "variant": "multi_turn_completion"
     },
     {
       "id": "isInjured-05",
@@ -1196,8 +1211,11 @@
       "expectedActions": [
         "isInjured"
       ],
-      "expectedSourceCharacterId": 2,
-      "expectedTargetCharacterId": 1,
+      "expectedSourceCharacterId": 1,
+      "expectedTargetCharacterId": 2,
+      "expectedArguments": {
+        "injuryType": "wounded"
+      },
       "history": [
         {
           "id": "h1",
@@ -1247,8 +1265,11 @@
       "expectedActions": [
         "isInjured"
       ],
-      "expectedSourceCharacterId": 2,
-      "expectedTargetCharacterId": 1,
+      "expectedSourceCharacterId": 1,
+      "expectedTargetCharacterId": 2,
+      "expectedArguments": {
+        "injuryType": "wounded"
+      },
       "history": [],
       "message": {
         "id": "m-isInjured-6",
@@ -1291,8 +1312,11 @@
       "expectedActions": [
         "isInjured"
       ],
-      "expectedSourceCharacterId": 2,
-      "expectedTargetCharacterId": 1,
+      "expectedSourceCharacterId": 1,
+      "expectedTargetCharacterId": 2,
+      "expectedArguments": {
+        "injuryType": "wounded"
+      },
       "history": [],
       "message": {
         "id": "m-isInjured-7",
@@ -1335,8 +1359,11 @@
       "expectedActions": [
         "isInjured"
       ],
-      "expectedSourceCharacterId": 2,
-      "expectedTargetCharacterId": 1,
+      "expectedSourceCharacterId": 1,
+      "expectedTargetCharacterId": 2,
+      "expectedArguments": {
+        "injuryType": "wounded"
+      },
       "history": [],
       "message": {
         "id": "m-isInjured-8",
@@ -1379,8 +1406,11 @@
       "expectedActions": [
         "isInjured"
       ],
-      "expectedSourceCharacterId": 2,
-      "expectedTargetCharacterId": 1,
+      "expectedSourceCharacterId": 1,
+      "expectedTargetCharacterId": 2,
+      "expectedArguments": {
+        "injuryType": "wounded"
+      },
       "history": [],
       "message": {
         "id": "m-isInjured-9",
@@ -1423,8 +1453,11 @@
       "expectedActions": [
         "isInjured"
       ],
-      "expectedSourceCharacterId": 2,
-      "expectedTargetCharacterId": 1,
+      "expectedSourceCharacterId": 1,
+      "expectedTargetCharacterId": 2,
+      "expectedArguments": {
+        "injuryType": "wounded"
+      },
       "history": [],
       "message": {
         "id": "m-isInjured-10",
@@ -1620,7 +1653,7 @@
           "id": "h1",
           "role": "user",
           "name": "角色1",
-          "content": "角色1当场杀死了角色2。"
+          "content": "角色1举剑逼近角色2。"
         },
         {
           "id": "h2",
@@ -1633,7 +1666,7 @@
         "id": "m-characterIsKilled-4",
         "role": "user",
         "name": "角色1",
-        "content": "就按刚才已经完成的结果执行。"
+        "content": "角色1现在一剑杀死了角色2。"
       },
       "expectedDetection": true,
       "expectedExecution": true,
@@ -1642,7 +1675,7 @@
       "legality": {
         "available": true
       },
-      "variant": "multi_turn"
+      "variant": "multi_turn_completion"
     },
     {
       "id": "characterIsKilled-05",
@@ -2094,7 +2127,7 @@
           "id": "h1",
           "role": "user",
           "name": "角色1",
-          "content": "角色1与角色2已经完成了房事。"
+          "content": "角色1与角色2进入寝宫。"
         },
         {
           "id": "h2",
@@ -2107,7 +2140,7 @@
         "id": "m-intercourse-4",
         "role": "user",
         "name": "角色1",
-        "content": "就按刚才已经完成的结果执行。"
+        "content": "两人现在完成了房事。"
       },
       "expectedDetection": true,
       "expectedExecution": true,
@@ -2116,7 +2149,7 @@
       "legality": {
         "available": true
       },
-      "variant": "multi_turn"
+      "variant": "multi_turn_completion"
     },
     {
       "id": "intercourse-05",
@@ -2568,7 +2601,7 @@
           "id": "h1",
           "role": "user",
           "name": "角色1",
-          "content": "角色1与角色2正式义结金兰。"
+          "content": "角色1看向角色2，准备提出结义。"
         },
         {
           "id": "h2",
@@ -2581,16 +2614,17 @@
         "id": "m-becomeBloodBrothersWith-4",
         "role": "user",
         "name": "角色1",
-        "content": "就按刚才已经完成的结果执行。"
+        "content": "角色1现在明确提议与角色2义结金兰。"
       },
       "expectedDetection": true,
-      "expectedExecution": true,
-      "expectedRejectReason": null,
+      "expectedExecution": false,
+      "expectedPending": true,
+      "expectedRejectReason": "consent_required",
       "mode": "performance",
       "legality": {
         "available": true
       },
-      "variant": "multi_turn"
+      "variant": "multi_turn_completion"
     },
     {
       "id": "becomeBloodBrothersWith-05",
@@ -3042,7 +3076,7 @@
           "id": "h1",
           "role": "user",
           "name": "角色1",
-          "content": "角色1请求与角色2正式成为恋人。"
+          "content": "角色1看向角色2，准备提出请求。"
         },
         {
           "id": "h2",
@@ -3055,16 +3089,17 @@
         "id": "m-becomeLoversWith-4",
         "role": "user",
         "name": "角色1",
-        "content": "就按刚才已经完成的结果执行。"
+        "content": "角色1现在明确请求角色2成为自己的恋人。"
       },
       "expectedDetection": true,
-      "expectedExecution": true,
-      "expectedRejectReason": null,
+      "expectedExecution": false,
+      "expectedPending": true,
+      "expectedRejectReason": "consent_required",
       "mode": "performance",
       "legality": {
         "available": true
       },
-      "variant": "multi_turn"
+      "variant": "multi_turn_completion"
     },
     {
       "id": "becomeLoversWith-05",
@@ -3516,7 +3551,7 @@
           "id": "h1",
           "role": "user",
           "name": "角色1",
-          "content": "角色1请求与角色2结为灵魂伴侣。"
+          "content": "角色1看向角色2，准备说出心意。"
         },
         {
           "id": "h2",
@@ -3529,16 +3564,17 @@
         "id": "m-becomeSoulmatesWith-4",
         "role": "user",
         "name": "角色1",
-        "content": "就按刚才已经完成的结果执行。"
+        "content": "角色1现在明确请求角色2结为灵魂伴侣。"
       },
       "expectedDetection": true,
-      "expectedExecution": true,
-      "expectedRejectReason": null,
+      "expectedExecution": false,
+      "expectedPending": true,
+      "expectedRejectReason": "consent_required",
       "mode": "performance",
       "legality": {
         "available": true
       },
-      "variant": "multi_turn"
+      "variant": "multi_turn_completion"
     },
     {
       "id": "becomeSoulmatesWith-05",
@@ -3990,7 +4026,7 @@
           "id": "h1",
           "role": "user",
           "name": "角色1",
-          "content": "角色2正式任命角色1担任宫廷职位。"
+          "content": "角色1适合担任宫廷医师。"
         },
         {
           "id": "h2",
@@ -4003,16 +4039,19 @@
         "id": "m-isAssignedToCourtPositionBy-4",
         "role": "user",
         "name": "角色1",
-        "content": "就按刚才已经完成的结果执行。"
+        "content": "角色2现在任命角色1为宫廷医师。"
       },
       "expectedDetection": true,
       "expectedExecution": true,
+      "expectedArguments": {
+        "court_position": "physician"
+      },
       "expectedRejectReason": null,
       "mode": "performance",
       "legality": {
         "available": true
       },
-      "variant": "multi_turn"
+      "variant": "multi_turn_completion"
     },
     {
       "id": "isAssignedToCourtPositionBy-05",
@@ -4464,7 +4503,7 @@
           "id": "h1",
           "role": "user",
           "name": "角色1",
-          "content": "角色2正式任命角色1进入内阁。"
+          "content": "角色1适合加入内阁。"
         },
         {
           "id": "h2",
@@ -4477,16 +4516,19 @@
         "id": "m-isAssignedToCouncilBy-4",
         "role": "user",
         "name": "角色1",
-        "content": "就按刚才已经完成的结果执行。"
+        "content": "角色2现在任命角色1为掌玺大臣。"
       },
       "expectedDetection": true,
       "expectedExecution": true,
+      "expectedArguments": {
+        "council_position": "chancellor"
+      },
       "expectedRejectReason": null,
       "mode": "performance",
       "legality": {
         "available": true
       },
-      "variant": "multi_turn"
+      "variant": "multi_turn_completion"
     },
     {
       "id": "isAssignedToCouncilBy-05",
@@ -4938,7 +4980,7 @@
           "id": "h1",
           "role": "user",
           "name": "角色1",
-          "content": "角色2正式罢免了角色1的内阁职位。"
+          "content": "角色2准备调整内阁。"
         },
         {
           "id": "h2",
@@ -4951,7 +4993,7 @@
         "id": "m-isFiredFromCouncilOf-4",
         "role": "user",
         "name": "角色1",
-        "content": "就按刚才已经完成的结果执行。"
+        "content": "角色2现在罢免角色1的内阁职位。"
       },
       "expectedDetection": true,
       "expectedExecution": true,
@@ -4960,7 +5002,7 @@
       "legality": {
         "available": true
       },
-      "variant": "multi_turn"
+      "variant": "multi_turn_completion"
     },
     {
       "id": "isFiredFromCouncilOf-05",
@@ -5412,7 +5454,7 @@
           "id": "h1",
           "role": "user",
           "name": "角色1",
-          "content": "角色1与角色2正式达成停战。"
+          "content": "双方使者已经到场。"
         },
         {
           "id": "h2",
@@ -5425,16 +5467,17 @@
         "id": "m-agreedToTruceWith-4",
         "role": "user",
         "name": "角色1",
-        "content": "就按刚才已经完成的结果执行。"
+        "content": "角色1现在向角色2提出正式停战。"
       },
       "expectedDetection": true,
-      "expectedExecution": true,
-      "expectedRejectReason": null,
+      "expectedExecution": false,
+      "expectedPending": true,
+      "expectedRejectReason": "consent_required",
       "mode": "performance",
       "legality": {
         "available": true
       },
-      "variant": "multi_turn"
+      "variant": "multi_turn_completion"
     },
     {
       "id": "agreedToTruceWith-05",
@@ -5886,7 +5929,7 @@
           "id": "h1",
           "role": "user",
           "name": "角色1",
-          "content": "角色1真诚称赞角色2做得很好。"
+          "content": "角色2完成了一件明智之事。"
         },
         {
           "id": "h2",
@@ -5899,16 +5942,19 @@
         "id": "m-changeOpinionOf-4",
         "role": "user",
         "name": "角色1",
-        "content": "就按刚才已经完成的结果执行。"
+        "content": "角色1现在真诚称赞角色2的智慧。"
       },
       "expectedDetection": true,
       "expectedExecution": true,
+      "expectedArguments": {
+        "value": 1
+      },
       "expectedRejectReason": null,
       "mode": "performance",
       "legality": {
         "available": true
       },
-      "variant": "multi_turn"
+      "variant": "multi_turn_completion"
     },
     {
       "id": "changeOpinionOf-05",
@@ -6360,7 +6406,7 @@
           "id": "h1",
           "role": "user",
           "name": "角色1",
-          "content": "角色2露出了微笑。"
+          "content": "角色2深吸了一口气。"
         },
         {
           "id": "h2",
@@ -6373,16 +6419,19 @@
         "id": "m-setEmotion-4",
         "role": "user",
         "name": "角色1",
-        "content": "就按刚才已经完成的结果执行。"
+        "content": "角色2现在露出了微笑。"
       },
       "expectedDetection": true,
       "expectedExecution": true,
+      "expectedArguments": {
+        "emotion": "happy"
+      },
       "expectedRejectReason": null,
       "mode": "performance",
       "legality": {
         "available": true
       },
-      "variant": "multi_turn"
+      "variant": "multi_turn_completion"
     },
     {
       "id": "setEmotion-05",
@@ -6834,7 +6883,7 @@
           "id": "h1",
           "role": "user",
           "name": "角色1",
-          "content": "角色1亲手脱下了角色2的长袍。"
+          "content": "角色1走到角色2身边。"
         },
         {
           "id": "h2",
@@ -6847,7 +6896,7 @@
         "id": "m-isUndressed-4",
         "role": "user",
         "name": "角色1",
-        "content": "就按刚才已经完成的结果执行。"
+        "content": "角色1现在亲手脱下角色2的长袍。"
       },
       "expectedDetection": true,
       "expectedExecution": true,
@@ -6856,7 +6905,7 @@
       "legality": {
         "available": true
       },
-      "variant": "multi_turn"
+      "variant": "multi_turn_completion"
     },
     {
       "id": "isUndressed-05",
@@ -7308,7 +7357,7 @@
           "id": "h1",
           "role": "user",
           "name": "角色1",
-          "content": "众人已经进入了王座厅。"
+          "content": "众人正走向王座厅。"
         },
         {
           "id": "h2",
@@ -7321,16 +7370,19 @@
         "id": "m-changeLocation-4",
         "role": "user",
         "name": "角色1",
-        "content": "就按刚才已经完成的结果执行。"
+        "content": "众人现在进入王座厅。"
       },
       "expectedDetection": true,
       "expectedExecution": true,
+      "expectedArguments": {
+        "location": "throne_room"
+      },
       "expectedRejectReason": null,
       "mode": "performance",
       "legality": {
         "available": true
       },
-      "variant": "multi_turn"
+      "variant": "multi_turn_completion"
     },
     {
       "id": "changeLocation-05",
@@ -7769,6 +7821,36 @@
       "mode": "performance",
       "legality": {"available":true},
       "variant": "multi_person_name"
+    },
+    {
+      "id": "historical-payment-no-replay",
+      "category": "Payment Safety",
+      "participants": [{"id":1,"name":"玩家","isPlayer":true,"alive":true},{"id":2,"name":"伯爵贝拉","isPlayer":false,"alive":true},{"id":3,"name":"侍从迪恩","isPlayer":false,"alive":true}],
+      "expectedActions": [],
+      "historicalActionId": "playerPaysGoldTo",
+      "history": [{"id":"h-historical-payment","role":"user","name":"玩家","content":"我已经给过伯爵贝拉50金币。"}],
+      "message": {"id":"m-historical-payment","role":"user","name":"玩家","content":"记住刚才的结果。"},
+      "expectedDetection": false,
+      "expectedExecution": false,
+      "expectedRejectReason": null,
+      "mode": "performance",
+      "legality": {"available":true},
+      "variant": "historical_completed_no_replay"
+    },
+    {
+      "id": "historical-kill-no-replay",
+      "category": "Kill Safety",
+      "participants": [{"id":1,"name":"玩家","isPlayer":true,"alive":true},{"id":2,"name":"伯爵贝拉","isPlayer":false,"alive":true},{"id":3,"name":"侍从迪恩","isPlayer":false,"alive":true}],
+      "expectedActions": [],
+      "historicalActionId": "characterIsKilled",
+      "history": [{"id":"h-historical-kill","role":"user","name":"玩家","content":"伯爵贝拉此前已经被处死。"}],
+      "message": {"id":"m-historical-kill","role":"user","name":"玩家","content":"记住刚才的结果。"},
+      "expectedDetection": false,
+      "expectedExecution": false,
+      "expectedRejectReason": null,
+      "mode": "precision",
+      "legality": {"available":true},
+      "variant": "historical_completed_no_replay"
     }
   ]
 }

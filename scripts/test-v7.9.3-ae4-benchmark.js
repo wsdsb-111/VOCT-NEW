@@ -5,7 +5,7 @@ const benchmark = require("./action-engine-v4-benchmark");
 
 const corpus = benchmark.loadJson(benchmark.DEFAULT_CORPUS);
 const validation = benchmark.validateCorpus(corpus);
-assert.strictEqual(validation.caseCount, 170);
+assert.strictEqual(validation.caseCount, 172);
 assert.strictEqual(Object.keys(validation.actionCounts).length, 17);
 assert((corpus.p0Actions || []).every((actionId) => validation.actionCounts[actionId] >= 10));
 assert.deepStrictEqual([...new Set(corpus.cases.map((entry) => entry.participants.length))].sort((left, right) => left - right), [3, 4, 6], "benchmark must cover 3/4/6-person target binding");
@@ -116,5 +116,23 @@ expectBlocker((values) => {
   values[0].nonIdempotentDuplicate = true;
   return values[0].id;
 }, "non_idempotent_duplicate");
+expectBlocker((values) => {
+  values[0].participantOverrideMismatch = true;
+  return values[0].id;
+}, "participant_override_mismatch");
+expectBlocker((values) => {
+  const expected = corpus.cases.find((entry) => entry.variant === "historical_completed_no_replay");
+  const value = values.find((entry) => entry.id === expected.id);
+  value.detected = true;
+  value.actions = [expected.historicalActionId];
+  value.executed = true;
+  return value.id;
+}, "historical_replay");
+expectBlocker((values) => {
+  const expected = corpus.cases.find((entry) => entry.expectedActions.includes("isInjured"));
+  const value = values.find((entry) => entry.id === expected.id);
+  value.actualCk3VictimCharacterId = 999;
+  return value.id;
+}, "injury_victim_mismatch");
 
 console.log("PASS v7.9.3 AE4 Phase 7 benchmark infrastructure");

@@ -1,6 +1,6 @@
 "use strict";
 
-const { actionMetadata, CATALOG_VERSION, isValidTargetPolicy, targetAllowed } = require("./master-action-dictionary");
+const { actionMetadata, CATALOG_VERSION, isParticipantOverrideArgument, isValidTargetPolicy, targetAllowed } = require("./master-action-dictionary");
 const relevantStateProjector = require("./relevant-state-projector");
 
 function sourceAllowed(requirements, source, gameData) {
@@ -15,7 +15,7 @@ function localize(value, language, resolveI18nString) {
 
 function resolveArguments(definition, context, language, resolveI18nString) {
   const args = typeof definition.args === "function" ? definition.args(context) : definition.args;
-  return (args || []).map((arg) => Object.freeze({
+  return (args || []).filter((arg) => !isParticipantOverrideArgument(arg.name)).map((arg) => Object.freeze({
     ...arg,
     description: localize(arg.description, language, resolveI18nString)
   }));
@@ -78,11 +78,6 @@ function serialize(catalog) {
   return JSON.stringify(catalog.entries.map((entry) => ({
     actionId: entry.actionId,
     sourceCharacterId: entry.sourceCharacterId,
-    shortDescription: entry.shortDescription,
-    sourceRole: entry.sourceRole,
-    targetRole: entry.targetRole,
-    targetPolicy: entry.targetPolicy,
-    requiresTarget: entry.requiresTarget,
     validTargetCharacterIds: entry.validTargetCharacterIds,
     arguments: entry.arguments.map((arg) => ({
       name: arg.name,
@@ -96,4 +91,4 @@ function serialize(catalog) {
   })));
 }
 
-module.exports = { build, findEntry, serialize, sourceAllowed };
+module.exports = { isParticipantOverrideArgument, build, findEntry, serialize, sourceAllowed };

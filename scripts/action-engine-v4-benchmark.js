@@ -8,7 +8,7 @@ const THRESHOLDS = Object.freeze({
   precision: Object.freeze({ coreRecall: 0.95, overallRecall: 0.9, triggerAccuracy: 0.92, perActionRecall: 0.9, criticalPerActionRecall: 0.95 }),
   performance: Object.freeze({ coreRecall: 0.85, overallRecall: 0.8, triggerAccuracy: 0.94, fallbackFalseNegative: 5, perActionRecall: 0.75, criticalPerActionRecall: 0.8 })
 });
-const CORE_VARIANTS = new Set(["direct", "natural", "indirect", "multi_person", "multi_turn"]);
+const CORE_VARIANTS = new Set(["direct", "natural", "indirect", "multi_person", "multi_turn_completion", "multi_turn_reference"]);
 const CRITICAL_ACTIONS = new Set(["playerPaysGoldTo", "paysGoldTo", "isImprisonedBy", "isInjured", "characterIsKilled", "isAssignedToCourtPositionBy", "isAssignedToCouncilBy", "isFiredFromCouncilOf", "agreedToTruceWith"]);
 
 function loadJson(filePath) {
@@ -24,7 +24,7 @@ function validateCorpus(corpus) {
     if (ids.has(entry.id)) throw new Error(`duplicate_benchmark_id:${entry.id}`);
     ids.add(entry.id);
     if (!Array.isArray(entry.participants) || !Array.isArray(entry.history) || !entry.message || !Array.isArray(entry.expectedActions) || !["performance", "precision"].includes(entry.mode)) throw new Error(`invalid_benchmark_case:${entry.id}`);
-    counts.set(entry.expectedActions[0], (counts.get(entry.expectedActions[0]) || 0) + 1);
+    if (entry.expectedActions[0]) counts.set(entry.expectedActions[0], (counts.get(entry.expectedActions[0]) || 0) + 1);
   }
   for (const actionId of corpus.p0Actions || []) if ((counts.get(actionId) || 0) < 10) throw new Error(`insufficient_p0_cases:${actionId}`);
   return { valid: true, caseCount: corpus.cases.length, actionCounts: Object.fromEntries(counts) };
@@ -113,8 +113,8 @@ function calculate(corpus, results) {
       if (actual.executed === true) executed++;
       providerCalls += Number(actual.providerCalls || 0);
       const actionId = expected.expectedActions[0];
-      if (!perAction[actionId]) perAction[actionId] = { expected: 0, matched: 0 };
-      if (expected.expectedDetection) {
+      if (expected.expectedDetection && actionId) {
+        if (!perAction[actionId]) perAction[actionId] = { expected: 0, matched: 0 };
         perAction[actionId].expected++;
         if (match.actionMatch) perAction[actionId].matched++;
       }
@@ -128,6 +128,13 @@ function calculate(corpus, results) {
       if (Math.max(Number(actual.executedActionCount || 0), Number(actual.selectedActionCount || 0), match.records.length) > 3) blockers.push({ id: expected.id, reason: "more_than_three_actions" });
       if (actual.usedLegacyFallback === true) blockers.push({ id: expected.id, reason: "legacy_fallback" });
       if (actual.nonIdempotentDuplicate === true) blockers.push({ id: expected.id, reason: "non_idempotent_duplicate" });
+      if (actual.participantOverrideMismatch === true || (actual.actualSourceCharacterId != null && match.records[0]?.sourceCharacterId != null && Number(actual.actualSourceCharacterId) !== Number(match.records[0].sourceCharacterId))) {
+        blockers.push({ id: expected.id, reason: "participant_override_mismatch" });
+      }
+      if (expected.variant === "historical_completed_no_replay" && (match.actualDetection || actual.executed === true)) blockers.push({ id: expected.id, reason: "historical_replay" });
+      if (expected.expectedActions.includes("isInjured") && actual.actualCk3VictimCharacterId != null && Number(actual.actualCk3VictimCharacterId) !== Number(match.records.find((record) => record.actionId === "isInjured")?.targetCharacterId)) {
+        blockers.push({ id: expected.id, reason: "injury_victim_mismatch" });
+      }
     }
     const thresholds = THRESHOLDS[mode];
     const perActionRecall = Object.fromEntries(Object.entries(perAction).map(([actionId, value]) => [actionId, percent(value.matched, value.expected)]));

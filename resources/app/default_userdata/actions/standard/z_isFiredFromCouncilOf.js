@@ -6,6 +6,7 @@
 // If so, it uses `destroy_held_ministry_titles_effect` to remove them from power, otherwise it falls back to `fire_councillor`.
 module.exports = {
   signature: "isFiredFromCouncilOf",
+  actionMetadata: { requiredArguments: [], optionalArguments: [], selectorContract: { shortDescription: "Remove source character from target ruler's council.", sourceRole: "dismissed_councillor", targetRole: "council_ruler" } },
   triggerCategories: ["employment_or_office"],
   semantic: {
     evidencePatterns: [/(?:罢免|罢官|免去|撤职|解职|革职|贬职|开除|dismissed|fired)/i],

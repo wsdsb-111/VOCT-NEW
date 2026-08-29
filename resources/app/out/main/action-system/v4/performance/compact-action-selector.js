@@ -6,12 +6,21 @@ const availableActionCatalog = require("../catalog/available-action-catalog");
 const { compactDictionary } = require("../catalog/master-action-dictionary");
 const cacheAnalytics = require("../analytics/selector-cache-analytics");
 
-const COMPACT_RULES = `AE4_PERFORMANCE_COMPACT_SELECTOR_v2
+const COMPACT_RULES = `AE4_PERFORMANCE_COMPACT_SELECTOR_v3
 Return only Q2 JSON. Select 0 to 2 decisions caused by CURRENT_MESSAGE.
 Use only AVAILABLE_ACTIONS and listed participants. Never invent targets or required arguments.
-Do not execute questions, conditions, hypotheticals, plans, past reports, failed attempts, or unaccepted proposals.
+Do not execute questions, conditions, hypotheticals, plans, past reports, or failed attempts.
 Use LAST_DIALOGUE only for references, target, amount, arguments, or a short pending response.
-For consent_required actions, action_call creates Pending; acceptance/rejection/defer must use pending_response.
+ACTION TIMING
+For immediate actions:
+- Emit action_call only when CURRENT_MESSAGE makes the gameplay action executable now.
+For consent_required actions:
+- A newly made explicit proposal MUST emit action_call so the runtime can create Pending.
+- This action_call represents a proposal, NOT gameplay execution.
+- Target acceptance is NOT required before Pending is created.
+For an existing Pending:
+- Acceptance, rejection, or defer from CURRENT_MESSAGE MUST use pending_response.
+- Never emit a fresh action_call merely to represent acceptance of an existing Pending.
 Confidence is analytics only. evidenceMessageIds must come from CURRENT_MESSAGE or LAST_DIALOGUE.
 Follow each Action's sourceRole, targetRole, and targetPolicy exactly. Passive voice does not swap Action-contract roles.
 Use the same MASTER_COMPACT_ACTION_DICTIONARY and Q2 schema as Precision.`;

@@ -1,5 +1,7 @@
 # VOCT-NEW v7.9.3 — Action Engine 4.0 实机前修复清单
 
+> 历史文件：其中 `isInjured` 的 victim/source 示例已被[最终实机前修复清单](VOCT-NEW_v7.9.3_AE4_最终实机前修复清单_含Injury裁定.md)替代；当前正式合同为 VOCT-NEW AE4 项目级 `source=attacker / target=victim`。
+
 ## 0. 文档定位
 
 本文件用于修复 v7.9.3 当前静态审查中发现的实机前高优先级问题。
@@ -1160,4 +1162,3 @@ Benchmark：
 > **A wrong action is not a successful detection.**
 
 这两条必须作为 v7.9.3 实机前最后修复阶段的核心验收标准。
-

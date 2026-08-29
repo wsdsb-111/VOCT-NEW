@@ -203,6 +203,9 @@ class ActionEngineV4 {
     };
     if (!loaded || !loaded.validation?.valid) return actionTypes.createExecutionResult({ ...base, success: false, error: "Action not found or invalid", executionStatus: "pre_send_failure" });
     if (!source || (invocation.targetCharacterId != null && !target)) return actionTypes.createExecutionResult({ ...base, success: false, error: "Resolved participant unavailable", executionStatus: "pre_send_failure" });
+    if (Object.keys(invocation.args || {}).some(availableActionCatalog.isParticipantOverrideArgument)) {
+      return actionTypes.createExecutionResult({ ...base, success: false, error: "participant_override_mismatch", executionStatus: "pre_send_failure" });
+    }
     try {
       const execution = await actionExecutor.execute({
         actionSandbox: ActionSandbox,

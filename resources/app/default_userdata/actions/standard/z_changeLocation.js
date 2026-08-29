@@ -76,7 +76,7 @@ const VALID_LOCATIONS = [
 
 module.exports = {
   signature: "changeLocation",
-  actionMetadata: { targetPolicy: "none" },
+  actionMetadata: { targetPolicy: "none", requiredArguments: ["location"], optionalArguments: [], selectorContract: { shortDescription: "Change the current scene to the specified location.", sourceRole: "scene_actor", targetRole: "none" } },
   triggerCategories: ["location_or_exit"],
   semantic: {
     evidencePatterns: [/(?:踏入|进入|来到|赶往|移步|前往|返回|回到|抵达|到达|搬到|移动到|entered|arrived|returned to|moved? to)/i],

@@ -1,7 +1,12 @@
 "use strict";
 
-const CATALOG_VERSION = "ae4-c2-v2";
+const CATALOG_VERSION = "ae4-c2-v3";
 const TARGET_POLICIES = Object.freeze(["other_only", "self_only", "self_or_other", "none"]);
+const PARTICIPANT_OVERRIDE_ARGUMENTS = Object.freeze(["isPlayerSource"]);
+
+function isParticipantOverrideArgument(name) {
+  return PARTICIPANT_OVERRIDE_ARGUMENTS.includes(name);
+}
 
 function isValidTargetPolicy(policy) {
   return TARGET_POLICIES.includes(policy);
@@ -32,14 +37,18 @@ function descriptionContract(actionId, definition, declared) {
       });
     } catch (_error) {}
   }
-  return compactText(description || `Execute ${actionId} according to its source and target roles.`);
+  const safeDescription = String(description || "").replace(/[^.!?\n]*\bisPlayerSource\b[^.!?\n]*[.!?]?/gi, " ");
+  return compactText(safeDescription || `Execute ${actionId} according to its source and target roles.`);
 }
 
 function argumentContract(definition, declared) {
   const staticArguments = Array.isArray(definition.args) ? definition.args : [];
   const requiredArguments = declared.requiredArguments || definition.requiredArguments || staticArguments.filter((argument) => argument.required === true).map((argument) => argument.name);
   const optionalArguments = declared.optionalArguments || definition.optionalArguments || staticArguments.filter((argument) => argument.required !== true).map((argument) => argument.name);
-  return { requiredArguments, optionalArguments };
+  return {
+    requiredArguments: requiredArguments.filter((name) => !isParticipantOverrideArgument(name)),
+    optionalArguments: optionalArguments.filter((name) => !isParticipantOverrideArgument(name))
+  };
 }
 
 function actionMetadata(loadedAction) {
@@ -90,4 +99,4 @@ function compactDictionary(actions) {
     .sort((left, right) => left.actionId.localeCompare(right.actionId));
 }
 
-module.exports = { CATALOG_VERSION, TARGET_POLICIES, isValidTargetPolicy, targetAllowed, compactText, descriptionContract, actionMetadata, compactDictionary };
+module.exports = { CATALOG_VERSION, TARGET_POLICIES, PARTICIPANT_OVERRIDE_ARGUMENTS, isParticipantOverrideArgument, isValidTargetPolicy, targetAllowed, compactText, descriptionContract, actionMetadata, compactDictionary };

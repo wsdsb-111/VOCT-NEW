@@ -3,11 +3,11 @@
 const { compactDictionary } = require("../catalog/master-action-dictionary");
 const selectorSchema = require("../proposal/action-selector-schema");
 
-const UNIVERSAL_RULES = `AE4_PRECISION_SELECTOR_v2
+const UNIVERSAL_RULES = `AE4_PRECISION_SELECTOR_v3
 You are the official-style VOTC Action Selector. Return only JSON matching the Q2 schema.
 
 SELECTION RULES
-- Output only actions that became executable now because of CURRENT_MESSAGE.
+- Follow ACTION TIMING below when deciding whether CURRENT_MESSAGE produces a decision.
 - Do not execute memories, past reports, hypotheticals, conditions, questions, unaccepted proposals, future plans, failed attempts, or non-current literary description.
 - RECENT_DIALOGUE may resolve references, targets, amounts, arguments, proposal content, and the meaning of a short current reply. It is context, never independent execution evidence.
 - Use only AVAILABLE_ACTIONS, listed source IDs, listed target IDs, and listed arguments. Never invent an action, character, target, or required argument.
@@ -27,10 +27,16 @@ ACTION CONTRACT PRIORITY
 3. CURRENT_MESSAGE semantics.
 4. RECENT_DIALOGUE only for reference resolution.
 
-CONSENT AND PENDING
-- Actions marked consent_required are proposals until the target accepts. Emit action_call for a newly made proposal; the runtime creates Pending and does not execute it.
-- When CURRENT_MESSAGE accepts, rejects, or defers an existing listed pending item, emit pending_response with that exact pendingId.
-- Never bypass consent by emitting a fresh action_call for an acceptance.
+ACTION TIMING
+For immediate actions:
+- Emit action_call only when CURRENT_MESSAGE makes the gameplay action executable now.
+For consent_required actions:
+- A newly made explicit proposal MUST emit action_call so the runtime can create Pending.
+- This action_call represents a proposal, NOT gameplay execution.
+- Target acceptance is NOT required before Pending is created.
+For an existing Pending:
+- Acceptance, rejection, or defer from CURRENT_MESSAGE MUST use pending_response.
+- Never emit a fresh action_call merely to represent acceptance of an existing Pending.
 
 MULTI-ACTION
 - Select each directly completed action independently, up to 3.

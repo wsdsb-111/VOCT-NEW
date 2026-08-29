@@ -146,7 +146,8 @@ async function validate(catalog, actionId, targetCharacterId, sourceCharacterId 
   assert.strictEqual((await validate(catalog, "changeLocation", "missing_character")).valid, false);
 
   const serialized = JSON.parse(catalogBuilder.serialize(catalog));
-  assert(serialized.every((item) => isValidTargetPolicy(item.targetPolicy)), "selector catalog must expose a valid targetPolicy for every action");
+  assert(catalog.entries.every((item) => isValidTargetPolicy(item.targetPolicy)), "internal catalog must retain a valid targetPolicy for every action");
+  assert(serialized.every((item) => !Object.prototype.hasOwnProperty.call(item, "targetPolicy")), "Dynamic Catalog must not duplicate stable targetPolicy tokens");
 
   let resolution = fastActionResolver.resolve({ message: { id: 10, content: "他笑了起来。" }, speaker: npcA, catalog });
   assert.strictEqual(resolution.status, "HIT");

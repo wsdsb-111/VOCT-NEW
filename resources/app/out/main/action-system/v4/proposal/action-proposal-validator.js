@@ -55,6 +55,9 @@ function relationshipSafety(actionId, source, target, metadata) {
 
 async function validate({ proposal, catalog, conversation, registry, consentGranted = false }) {
   const gameData = conversation.gameData;
+  if (Object.keys(proposal.arguments || {}).some(availableActionCatalog.isParticipantOverrideArgument)) {
+    return { valid: false, reason: "rejected_participant_override" };
+  }
   const loaded = registry.getById(proposal.actionId);
   if (!loaded || !loaded.validation?.valid || registry.isActionDisabled?.(proposal.actionId)) return { valid: false, reason: "rejected_unavailable_action" };
   const sourceCharacterId = resolveCharacterId(proposal.sourceCharacterId, gameData);

@@ -8,8 +8,8 @@ function hash(value) {
 
 function build({ stablePrefix, availableCatalog, context }) {
   return {
-    selectorVersion: "ae4-selector-v2",
-    catalogVersion: "ae4-c2-v2",
+    selectorVersion: "ae4-selector-v3",
+    catalogVersion: "ae4-c2-v3",
     schemaVersion: "ae4-q2-v1",
     stablePrefixHash: hash(stablePrefix),
     availableCatalogHash: hash(availableCatalog),
