@@ -202,11 +202,10 @@ module.exports = {
    * @param {Character} params.sourceCharacter
    */
   check: ({ gameData, sourceCharacter }) => {
-    // Allow targeting any character including source
     const allIds = Array.from(gameData.characters.keys());
     return {
       canExecute: true,
-      validTargetCharacterIds: allIds,
+      validTargetCharacterIds: allIds.filter((id) => id !== sourceCharacter.id),
     };
   },
 

@@ -7,7 +7,8 @@ const root = path.resolve(__dirname, "..");
 const actionSystem = require(path.join(root, "resources", "app", "out", "main", "action-system"));
 globalThis.__V67ActionSystem = actionSystem;
 
-const { eventParser, interaction, ParticipantResolver, ActionEngine, Conversation } = actionSystem;
+const { eventParser, interaction, ParticipantResolver, Conversation } = actionSystem;
+const { LegacyActionEngineV3: ActionEngine } = require(path.join(root, "resources", "app", "out", "main", "action-system", "action-engine"));
 Conversation.configure({ createPromptFingerprint: (value) => String(value).length.toString(16) });
 
 const kiss = eventParser.parse("李思念轻轻吻了李思昭的脸颊。");

@@ -57,6 +57,7 @@ function getLocalizedBloodBrother(lang) {
 
 module.exports = {
   signature: "becomeBloodBrothersWith",
+  actionMetadata: { executionMode: "consent_required", idempotent: false, relationshipTransition: true, pendingTtl: 10 },
   triggerCategories: ["relationship"], semantic: { evidencePatterns: [/(?:正式|已经|已)?(?:结拜|义结金兰|义结兄弟|结为(?:了)?(?:义兄弟|血盟兄弟))|became? blood brothers?/i], exclusiveGroup: "relationship_tier", priority: 40, riskLevel: "medium", bilateralPersistentEffect: true, participantRoles: { source: "actor", target: "patient" } },
   title: {
     en: "Become Blood Brothers",

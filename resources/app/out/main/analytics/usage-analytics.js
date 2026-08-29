@@ -37,6 +37,11 @@ function createUsageAnalytics({ fs, dataDir, analyticsFile, retention, createPro
       const entry = {
         timestamp: (/* @__PURE__ */ new Date()).toISOString(),
         requestType: metadata?.requestType || "unknown",
+        engineVersion: metadata?.engineVersion || null,
+        proposalId: metadata?.proposalId || null,
+        messageId: metadata?.messageId ?? null,
+        mode: metadata?.mode || metadata?.actionSystemMode || null,
+        origin: metadata?.origin || null,
         providerType: metadata?.providerType || "unknown",
         model: metadata?.model || "unknown",
         character: metadata?.character || null,
@@ -55,6 +60,9 @@ function createUsageAnalytics({ fs, dataDir, analyticsFile, retention, createPro
         actionId: metadata?.actionId || null,
         stage: metadata?.stage || null,
         outcome: metadata?.outcome || null,
+        failureStage: metadata?.failureStage || null,
+        failureReason: metadata?.failureReason || null,
+        executionStatus: metadata?.executionStatus || null,
         invocationOrigin: metadata?.invocationOrigin || null,
         actionSystemMode: metadata?.actionSystemMode || null,
         previousActionSystemMode: metadata?.previousActionSystemMode || null,
@@ -77,6 +85,18 @@ function createUsageAnalytics({ fs, dataDir, analyticsFile, retention, createPro
         schemaTokenEstimate: Number(metadata?.schemaTokenEstimate) || 0,
         schemaFingerprint: metadata?.schemaFingerprint || null,
         schemaCacheRole: metadata?.schemaCacheRole || null,
+        selectorVersion: metadata?.selectorVersion || null,
+        catalogVersion: metadata?.catalogVersion || null,
+        schemaVersion: metadata?.schemaVersion || null,
+        stablePrefixHash: metadata?.stablePrefixHash || null,
+        availableCatalogHash: metadata?.availableCatalogHash || null,
+        p2ContextHash: metadata?.p2ContextHash || null,
+        detectedDecisions: Number(metadata?.detectedDecisions) || 0,
+        detected: Number(metadata?.detected) || 0,
+        executed: Number(metadata?.executed) || 0,
+        approvalPending: Number(metadata?.approvalPending) || 0,
+        consentPending: Number(metadata?.consentPending) || 0,
+        rejected: Number(metadata?.rejected) || 0,
         providerSerializedOrder: metadata?.providerSerializedOrder || null,
         estimatedSerializedPromptTokens: Number(metadata?.estimatedSerializedPromptTokens) || estimatedPromptTokens,
         promptTokens,
@@ -210,17 +230,83 @@ function createUsageAnalytics({ fs, dataDir, analyticsFile, retention, createPro
         validatorRejected: 0,
         socialContextBuildTimeMs: 0
       };
+      const createV4ModeTokenUsage = () => ({
+        ...create(),
+        stages: { precisionSelector: create(), compactSelector: create() }
+      });
+      const actionEngine4 = {
+        currentMode: "performance",
+        modeTokenUsage: { performance: createV4ModeTokenUsage(), precision: createV4ModeTokenUsage() },
+        eligibleMessages: 0,
+        detected: 0,
+        bound: 0,
+        validated: 0,
+        consentPending: 0,
+        approved: 0,
+        executed: 0,
+        rejected: 0,
+        fastResolverHits: 0,
+        compactSelectorCalls: 0,
+        precisionSelectorCalls: 0,
+        selectorCalls: 0,
+        actionApiCalls: 0,
+        chatMessages: 0,
+        languageMessages: 0,
+        noActionMessages: 0,
+        pendingResponses: 0,
+        pendingResolved: 0,
+        compactSelectorHits: 0,
+        cachedInputTokens: 0,
+        uncachedInputTokens: 0,
+        selectorCacheReportedRequests: 0
+      };
       const memoryRecall = { requests: 0, intentTriggered: 0, selected: 0, empty: 0, cacheHits: 0, skippedContextPressure: 0, tokens: 0, candidateCount: 0, sessionTopicAnchorLocked: 0, reasons: {} };
       const providerStageMetrics = new Set(["semanticRescueCalls", "precisionJudgeCalls", "stageBProviderCalls"]);
       for (const entry of entries) {
         const isUsageRecord = usageAnalyticsRetention.isUsageEntry(entry);
         const isActionOutcome = entry.requestType === "action_outcome";
         if (["balanced", "performance", "precision"].includes(entry.actionSystemMode)) actionEngine3.currentMode = entry.actionSystemMode;
+        if (entry.engineVersion === "4.0" && ["performance", "precision"].includes(entry.actionSystemMode)) actionEngine4.currentMode = entry.actionSystemMode;
+        if (entry.requestType === "action_v4_message" && entry.outcome === "eligible") actionEngine4.eligibleMessages++;
+        if (entry.requestType === "action_v4_funnel") {
+          if (entry.outcome === "rejected" || entry.outcome === "failed") actionEngine4.rejected++;
+          else if (entry.stage === "Detected") actionEngine4.detected++;
+          else if (entry.stage === "Bound") actionEngine4.bound++;
+          else if (entry.stage === "Validated") actionEngine4.validated++;
+          else if (entry.stage === "Pending/Consent" && entry.outcome === "pending") actionEngine4.consentPending++;
+          else if (entry.stage === "Approved") actionEngine4.approved++;
+          else if (entry.stage === "Executed") actionEngine4.executed++;
+        }
+        if (entry.requestType === "action_v4_funnel" && entry.stage === "Pending/Consent" && ["accepted", "cancelled", "deferred"].includes(entry.outcome)) {
+          actionEngine4.pendingResponses++;
+          if (["accepted", "cancelled"].includes(entry.outcome)) actionEngine4.pendingResolved++;
+        }
+        if (entry.requestType === "action_v4_message_result") {
+          actionEngine4.languageMessages++;
+          if (entry.detectedDecisions === 0) actionEngine4.noActionMessages++;
+        }
+        if (entry.requestType === "action_v4_outcome" && entry.origin === "performance_compact" && entry.executed > 0) actionEngine4.compactSelectorHits++;
+        if (entry.requestType === "action_v4_performance" && entry.stage === "fast_resolver" && entry.outcome === "hit") actionEngine4.fastResolverHits++;
         if (entry.requestType === "action_mode_metric" && !providerStageMetrics.has(entry.metric) && Object.prototype.hasOwnProperty.call(actionEngine3, entry.metric)) actionEngine3[entry.metric]++;
         if (entry.requestType === "social_consequence_metric" && Object.prototype.hasOwnProperty.call(actionEngine3.socialConsequence, entry.metric)) {
           actionEngine3.socialConsequence[entry.metric] += entry.metricValue == null ? 1 : entry.metricValue;
         }
         if (isUsageRecord && entry.requestType === "action") actionEngine3.actionApiCalls++;
+        if (isUsageRecord && entry.requestType === "action" && entry.engineVersion === "4.0" && actionEngine4.modeTokenUsage[entry.actionSystemMode]) {
+          const modeUsage = actionEngine4.modeTokenUsage[entry.actionSystemMode];
+          const stageKey = entry.actionStage === "performance_compact" ? "compactSelector" : "precisionSelector";
+          add(modeUsage, entry);
+          add(modeUsage.stages[stageKey], entry);
+          actionEngine4.actionApiCalls++;
+          actionEngine4.selectorCalls++;
+          if (stageKey === "compactSelector") actionEngine4.compactSelectorCalls++;
+          else actionEngine4.precisionSelectorCalls++;
+          if (entry.cacheHitTokens != null) {
+            actionEngine4.selectorCacheReportedRequests++;
+            actionEngine4.cachedInputTokens += entry.cacheHitTokens || 0;
+            actionEngine4.uncachedInputTokens += entry.cacheMissTokens || 0;
+          }
+        }
         if (isUsageRecord && entry.requestType === "action" && actionEngine3.modeTokenUsage[entry.actionSystemMode]) {
           const modeUsage = actionEngine3.modeTokenUsage[entry.actionSystemMode];
           const stageKey = entry.actionStage === "semantic_rescue" ? "semanticRescue" : entry.actionStage === "precision_stage_a" ? "precisionJudge" : entry.actionStage === "social_consequence_judge" ? "socialJudge" : "stageB";
@@ -231,6 +317,7 @@ function createUsageAnalytics({ fs, dataDir, analyticsFile, retention, createPro
           else if (stageKey === "stageB") actionEngine3.stageBProviderCalls++;
         }
         if (isUsageRecord && entry.requestType === "chat") actionEngine3.chatMessages++;
+        if (isUsageRecord && entry.requestType === "chat") actionEngine4.chatMessages++;
         if (entry.requestType === "action_decision_trace" && entry.stage === "candidate" && entry.outcome === "pass") actionPipeline.candidateEvents++;
         if (entry.requestType === "action_decision_trace" && entry.stage === "semantic" && entry.outcome === "resolved") actionPipeline.semanticResolved++;
         if (entry.requestType === "action_decision_trace" && entry.stage === "semantic" && entry.outcome === "rejected") actionPipeline.semanticRejected++;
@@ -360,6 +447,24 @@ function createUsageAnalytics({ fs, dataDir, analyticsFile, retention, createPro
           }])),
           recognitionEfficiency: actionEngine3.actionApiCalls > 0 ? (actionEngine3.localExecuted + actionEngine3.providerExecuted) / actionEngine3.actionApiCalls : null,
           actionApiCallsPer100ChatMessages: actionEngine3.chatMessages > 0 ? actionEngine3.actionApiCalls * 100 / actionEngine3.chatMessages : null
+        },
+        actionEngine4: {
+          ...actionEngine4,
+          modeTokenUsage: Object.fromEntries(Object.entries(actionEngine4.modeTokenUsage).map(([mode, usage]) => [mode, {
+            ...finish(usage),
+            stages: Object.fromEntries(Object.entries(usage.stages).map(([stage, stageUsage]) => [stage, finish(stageUsage)]))
+          }])),
+          bindingSuccessRate: actionEngine4.detected > 0 ? actionEngine4.bound / actionEngine4.detected : null,
+          validationRejectRate: actionEngine4.validated + actionEngine4.rejected > 0 ? actionEngine4.rejected / (actionEngine4.validated + actionEngine4.rejected) : null,
+          executionYield: actionEngine4.detected > 0 ? actionEngine4.executed / actionEngine4.detected : null,
+          pendingResolutionRate: actionEngine4.pendingResponses > 0 ? actionEngine4.pendingResolved / actionEngine4.pendingResponses : null,
+          compactSelectorHitRate: actionEngine4.compactSelectorCalls > 0 ? actionEngine4.compactSelectorHits / actionEngine4.compactSelectorCalls : null,
+          providerCallsPer100Dialogues: actionEngine4.chatMessages > 0 ? actionEngine4.selectorCalls * 100 / actionEngine4.chatMessages : null,
+          selectorCacheHitRate: actionEngine4.cachedInputTokens + actionEngine4.uncachedInputTokens > 0 ? actionEngine4.cachedInputTokens / (actionEngine4.cachedInputTokens + actionEngine4.uncachedInputTokens) : null,
+          uncachedTokensPerDialogue: actionEngine4.chatMessages > 0 ? actionEngine4.uncachedInputTokens / actionEngine4.chatMessages : null,
+          tokensPerExecutedAction: actionEngine4.executed > 0 ? Object.values(actionEngine4.modeTokenUsage).reduce((sum, usage) => sum + usage.totalTokens, 0) / actionEngine4.executed : null,
+          uncachedTokensPerExecutedAction: actionEngine4.executed > 0 ? actionEngine4.uncachedInputTokens / actionEngine4.executed : null,
+          noActionRate: actionEngine4.languageMessages > 0 ? actionEngine4.noActionMessages / actionEngine4.languageMessages : null
         },
         memoryRecall: {
           ...memoryRecall,

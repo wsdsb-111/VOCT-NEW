@@ -42,6 +42,7 @@ function getLocalizedLover(lang) {
 
 module.exports = {
   signature: "becomeLoversWith",
+  actionMetadata: { executionMode: "consent_required", idempotent: false, relationshipTransition: true, pendingTtl: 10 },
   triggerCategories: ["relationship"], semantic: { evidencePatterns: [/(?:正式|已经|已)?(?:成为|结为)(?:了)?(?:情人|恋人)|正式相恋|确定(?:了)?(?:恋人)?关系|接受(?:了)?.{0,12}(?:表白|告白).{0,16}(?:成为|结为|确定)|(?:你我|我们|彼此|两人|二人|你|我).{0,8}(?:便是|就是|已是|算是).{0,8}(?:我的|你的|彼此的)?(?:情人|恋人)|(?:认定|确认).{0,16}(?:就是|便是|是|为).{0,12}(?:情人|恋人)|私定终身|became? lovers?/i], excludePatterns: [/(?:请求|希望|想要|愿意|愿|可愿|是否愿|要不要|想不想).{0,16}(?:成为|结为|做|当).{0,8}(?:情人|恋人)/i], exclusiveGroup: "relationship_tier", priority: 40, riskLevel: "medium", bilateralPersistentEffect: true, participantRoles: { source: "actor", target: "patient" } },
   title: {
     en: "Become Lovers",

@@ -33,10 +33,10 @@ module.exports = {
 
   description: "Record a clearly stated temporary RP state on the exact target: drunk, angry, insulted, humiliated, grateful, frightened, suspicious, affectionate, or exhausted. This stores a CK3 character flag and updates the talk pose; it does not alter health, traits, relationships, or opinion.",
 
-  check: ({ gameData }) => ({
+  check: ({ gameData, sourceCharacter }) => ({
     canExecute: gameData.characters.size > 0,
     requiresTarget: true,
-    validTargetCharacterIds: Array.from(gameData.characters.keys())
+    validTargetCharacterIds: Array.from(gameData.characters.keys()).filter((id) => id !== sourceCharacter.id)
   }),
 
   run: ({ targetCharacter, runGameEffect, args }) => {

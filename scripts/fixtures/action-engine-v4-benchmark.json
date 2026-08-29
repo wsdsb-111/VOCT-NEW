@@ -1,0 +1,7607 @@
+{
+  "schemaVersion": "ae4-benchmark-v1",
+  "p0Actions": [
+    "playerPaysGoldTo",
+    "isImprisonedBy",
+    "isInjured",
+    "characterIsKilled",
+    "intercourse",
+    "becomeBloodBrothersWith",
+    "becomeLoversWith",
+    "becomeSoulmatesWith",
+    "isAssignedToCourtPositionBy",
+    "isAssignedToCouncilBy",
+    "isFiredFromCouncilOf",
+    "agreedToTruceWith",
+    "changeOpinionOf",
+    "setEmotion",
+    "isUndressed",
+    "changeLocation"
+  ],
+  "cases": [
+    {
+      "id": "playerPaysGoldTo-01",
+      "category": "Payment",
+      "participants": [
+        {
+          "id": 1,
+          "name": "角色1",
+          "isPlayer": true,
+          "alive": true
+        },
+        {
+          "id": 2,
+          "name": "角色2",
+          "isPlayer": false,
+          "alive": true
+        },
+        {
+          "id": 3,
+          "name": "角色3",
+          "isPlayer": false,
+          "alive": true
+        }
+      ],
+      "expectedActions": [
+        "playerPaysGoldTo"
+      ],
+      "expectedSourceCharacterId": 1,
+      "expectedTargetCharacterId": 2,
+      "history": [],
+      "message": {
+        "id": "m-playerPaysGoldTo-1",
+        "role": "user",
+        "name": "角色1",
+        "content": "角色1把50金币交给了角色2。"
+      },
+      "expectedDetection": true,
+      "expectedExecution": true,
+      "expectedRejectReason": null,
+      "mode": "precision",
+      "legality": {
+        "available": true
+      },
+      "variant": "direct"
+    },
+    {
+      "id": "playerPaysGoldTo-02",
+      "category": "Payment",
+      "participants": [
+        {
+          "id": 1,
+          "name": "角色1",
+          "isPlayer": true,
+          "alive": true
+        },
+        {
+          "id": 2,
+          "name": "角色2",
+          "isPlayer": false,
+          "alive": true
+        },
+        {
+          "id": 3,
+          "name": "角色3",
+          "isPlayer": false,
+          "alive": true
+        }
+      ],
+      "expectedActions": [
+        "playerPaysGoldTo"
+      ],
+      "expectedSourceCharacterId": 1,
+      "expectedTargetCharacterId": 2,
+      "history": [
+        {
+          "id": "h1",
+          "role": "assistant",
+          "name": "角色2",
+          "content": "此事现在就办。"
+        }
+      ],
+      "message": {
+        "id": "m-playerPaysGoldTo-2",
+        "role": "user",
+        "name": "角色1",
+        "content": "角色1把50金币交给了角色2。"
+      },
+      "expectedDetection": true,
+      "expectedExecution": true,
+      "expectedRejectReason": null,
+      "mode": "performance",
+      "legality": {
+        "available": true
+      },
+      "variant": "natural"
+    },
+    {
+      "id": "playerPaysGoldTo-03",
+      "category": "Payment",
+      "participants": [
+        {
+          "id": 1,
+          "name": "角色1",
+          "isPlayer": true,
+          "alive": true
+        },
+        {
+          "id": 2,
+          "name": "角色2",
+          "isPlayer": false,
+          "alive": true
+        },
+        {
+          "id": 3,
+          "name": "角色3",
+          "isPlayer": false,
+          "alive": true
+        }
+      ],
+      "expectedActions": [
+        "playerPaysGoldTo"
+      ],
+      "expectedSourceCharacterId": 1,
+      "expectedTargetCharacterId": 2,
+      "history": [
+        {
+          "id": "h1",
+          "role": "user",
+          "name": "角色1",
+          "content": "请确认眼前发生的事。"
+        }
+      ],
+      "message": {
+        "id": "m-playerPaysGoldTo-3",
+        "role": "user",
+        "name": "角色1",
+        "content": "在众人见证下，角色1把50金币交给了角色2。"
+      },
+      "expectedDetection": true,
+      "expectedExecution": true,
+      "expectedRejectReason": null,
+      "mode": "precision",
+      "legality": {
+        "available": true
+      },
+      "variant": "indirect"
+    },
+    {
+      "id": "playerPaysGoldTo-04",
+      "category": "Payment",
+      "participants": [
+        {
+          "id": 1,
+          "name": "角色1",
+          "isPlayer": true,
+          "alive": true
+        },
+        {
+          "id": 2,
+          "name": "角色2",
+          "isPlayer": false,
+          "alive": true
+        },
+        {
+          "id": 3,
+          "name": "角色3",
+          "isPlayer": false,
+          "alive": true
+        }
+      ],
+      "expectedActions": [
+        "playerPaysGoldTo"
+      ],
+      "expectedSourceCharacterId": 1,
+      "expectedTargetCharacterId": 2,
+      "history": [
+        {
+          "id": "h1",
+          "role": "user",
+          "name": "角色1",
+          "content": "角色1把50金币交给了角色2。"
+        },
+        {
+          "id": "h2",
+          "role": "assistant",
+          "name": "角色2",
+          "content": "我确认眼前结果。"
+        }
+      ],
+      "message": {
+        "id": "m-playerPaysGoldTo-4",
+        "role": "user",
+        "name": "角色1",
+        "content": "就按刚才已经完成的结果执行。"
+      },
+      "expectedDetection": true,
+      "expectedExecution": true,
+      "expectedRejectReason": null,
+      "mode": "performance",
+      "legality": {
+        "available": true
+      },
+      "variant": "multi_turn"
+    },
+    {
+      "id": "playerPaysGoldTo-05",
+      "category": "Payment",
+      "participants": [
+        {
+          "id": 1,
+          "name": "角色1",
+          "isPlayer": true,
+          "alive": true
+        },
+        {
+          "id": 2,
+          "name": "角色2",
+          "isPlayer": false,
+          "alive": true
+        },
+        {
+          "id": 3,
+          "name": "角色3",
+          "isPlayer": false,
+          "alive": true
+        }
+      ],
+      "expectedActions": [
+        "playerPaysGoldTo"
+      ],
+      "expectedSourceCharacterId": 1,
+      "expectedTargetCharacterId": 2,
+      "history": [
+        {
+          "id": "h1",
+          "role": "assistant",
+          "name": "角色3",
+          "content": "我在场见证。"
+        }
+      ],
+      "message": {
+        "id": "m-playerPaysGoldTo-5",
+        "role": "user",
+        "name": "角色1",
+        "content": "角色3在场时，角色1把50金币交给了角色2。"
+      },
+      "expectedDetection": true,
+      "expectedExecution": true,
+      "expectedRejectReason": null,
+      "mode": "precision",
+      "legality": {
+        "available": true
+      },
+      "variant": "multi_person"
+    },
+    {
+      "id": "playerPaysGoldTo-06",
+      "category": "Payment",
+      "participants": [
+        {
+          "id": 1,
+          "name": "角色1",
+          "isPlayer": true,
+          "alive": true
+        },
+        {
+          "id": 2,
+          "name": "角色2",
+          "isPlayer": false,
+          "alive": true
+        },
+        {
+          "id": 3,
+          "name": "角色3",
+          "isPlayer": false,
+          "alive": true
+        }
+      ],
+      "expectedActions": [
+        "playerPaysGoldTo"
+      ],
+      "expectedSourceCharacterId": 1,
+      "expectedTargetCharacterId": 2,
+      "history": [],
+      "message": {
+        "id": "m-playerPaysGoldTo-6",
+        "role": "user",
+        "name": "角色1",
+        "content": "并没有发生这件事：角色1把50金币交给了角色2。"
+      },
+      "expectedDetection": false,
+      "expectedExecution": false,
+      "expectedRejectReason": "not_current_action",
+      "mode": "performance",
+      "legality": {
+        "available": true
+      },
+      "variant": "negative"
+    },
+    {
+      "id": "playerPaysGoldTo-07",
+      "category": "Payment",
+      "participants": [
+        {
+          "id": 1,
+          "name": "角色1",
+          "isPlayer": true,
+          "alive": true
+        },
+        {
+          "id": 2,
+          "name": "角色2",
+          "isPlayer": false,
+          "alive": true
+        },
+        {
+          "id": 3,
+          "name": "角色3",
+          "isPlayer": false,
+          "alive": true
+        }
+      ],
+      "expectedActions": [
+        "playerPaysGoldTo"
+      ],
+      "expectedSourceCharacterId": 1,
+      "expectedTargetCharacterId": 2,
+      "history": [],
+      "message": {
+        "id": "m-playerPaysGoldTo-7",
+        "role": "user",
+        "name": "角色1",
+        "content": "如果角色1把50金币交给了角色2，会发生什么？"
+      },
+      "expectedDetection": false,
+      "expectedExecution": false,
+      "expectedRejectReason": "hypothetical",
+      "mode": "precision",
+      "legality": {
+        "available": true
+      },
+      "variant": "hypothetical"
+    },
+    {
+      "id": "playerPaysGoldTo-08",
+      "category": "Payment",
+      "participants": [
+        {
+          "id": 1,
+          "name": "角色1",
+          "isPlayer": true,
+          "alive": true
+        },
+        {
+          "id": 2,
+          "name": "角色2",
+          "isPlayer": false,
+          "alive": true
+        },
+        {
+          "id": 3,
+          "name": "角色3",
+          "isPlayer": false,
+          "alive": true
+        }
+      ],
+      "expectedActions": [
+        "playerPaysGoldTo"
+      ],
+      "expectedSourceCharacterId": 1,
+      "expectedTargetCharacterId": 2,
+      "history": [],
+      "message": {
+        "id": "m-playerPaysGoldTo-8",
+        "role": "user",
+        "name": "角色1",
+        "content": "我昨天听说过：角色1把50金币交给了角色2。"
+      },
+      "expectedDetection": false,
+      "expectedExecution": false,
+      "expectedRejectReason": "past_report",
+      "mode": "performance",
+      "legality": {
+        "available": true
+      },
+      "variant": "past_report"
+    },
+    {
+      "id": "playerPaysGoldTo-09",
+      "category": "Payment",
+      "participants": [
+        {
+          "id": 1,
+          "name": "角色1",
+          "isPlayer": true,
+          "alive": true
+        },
+        {
+          "id": 2,
+          "name": "角色2",
+          "isPlayer": false,
+          "alive": true
+        },
+        {
+          "id": 3,
+          "name": "角色3",
+          "isPlayer": false,
+          "alive": true
+        }
+      ],
+      "expectedActions": [
+        "playerPaysGoldTo"
+      ],
+      "expectedSourceCharacterId": 1,
+      "expectedTargetCharacterId": 2,
+      "history": [],
+      "message": {
+        "id": "m-playerPaysGoldTo-9",
+        "role": "user",
+        "name": "角色1",
+        "content": "我提议以后再做：角色1把50金币交给了角色2。"
+      },
+      "expectedDetection": false,
+      "expectedExecution": false,
+      "expectedRejectReason": "unaccepted_proposal",
+      "mode": "precision",
+      "legality": {
+        "available": true
+      },
+      "variant": "proposal"
+    },
+    {
+      "id": "playerPaysGoldTo-10",
+      "category": "Payment",
+      "participants": [
+        {
+          "id": 1,
+          "name": "角色1",
+          "isPlayer": true,
+          "alive": true
+        },
+        {
+          "id": 2,
+          "name": "角色2",
+          "isPlayer": false,
+          "alive": true
+        },
+        {
+          "id": 3,
+          "name": "角色3",
+          "isPlayer": false,
+          "alive": true
+        }
+      ],
+      "expectedActions": [
+        "playerPaysGoldTo"
+      ],
+      "expectedSourceCharacterId": 1,
+      "expectedTargetCharacterId": 2,
+      "history": [],
+      "message": {
+        "id": "m-playerPaysGoldTo-10",
+        "role": "user",
+        "name": "角色1",
+        "content": "角色1把50金币交给了角色2。"
+      },
+      "expectedDetection": true,
+      "expectedExecution": false,
+      "expectedRejectReason": "rejected_legality_changed",
+      "mode": "performance",
+      "legality": {
+        "available": false
+      },
+      "variant": "invalid_legality"
+    },
+    {
+      "id": "isImprisonedBy-01",
+      "category": "Imprison",
+      "participants": [
+        {
+          "id": 1,
+          "name": "角色1",
+          "isPlayer": true,
+          "alive": true
+        },
+        {
+          "id": 2,
+          "name": "角色2",
+          "isPlayer": false,
+          "alive": true
+        },
+        {
+          "id": 3,
+          "name": "角色3",
+          "isPlayer": false,
+          "alive": true
+        }
+      ],
+      "expectedActions": [
+        "isImprisonedBy"
+      ],
+      "expectedSourceCharacterId": 1,
+      "expectedTargetCharacterId": 2,
+      "history": [],
+      "message": {
+        "id": "m-isImprisonedBy-1",
+        "role": "user",
+        "name": "角色1",
+        "content": "角色2命令卫兵将角色1押入地牢。"
+      },
+      "expectedDetection": true,
+      "expectedExecution": true,
+      "expectedRejectReason": null,
+      "mode": "precision",
+      "legality": {
+        "available": true
+      },
+      "variant": "direct"
+    },
+    {
+      "id": "isImprisonedBy-02",
+      "category": "Imprison",
+      "participants": [
+        {
+          "id": 1,
+          "name": "角色1",
+          "isPlayer": true,
+          "alive": true
+        },
+        {
+          "id": 2,
+          "name": "角色2",
+          "isPlayer": false,
+          "alive": true
+        },
+        {
+          "id": 3,
+          "name": "角色3",
+          "isPlayer": false,
+          "alive": true
+        }
+      ],
+      "expectedActions": [
+        "isImprisonedBy"
+      ],
+      "expectedSourceCharacterId": 1,
+      "expectedTargetCharacterId": 2,
+      "history": [
+        {
+          "id": "h1",
+          "role": "assistant",
+          "name": "角色2",
+          "content": "此事现在就办。"
+        }
+      ],
+      "message": {
+        "id": "m-isImprisonedBy-2",
+        "role": "user",
+        "name": "角色1",
+        "content": "角色2命令卫兵将角色1押入地牢。"
+      },
+      "expectedDetection": true,
+      "expectedExecution": true,
+      "expectedRejectReason": null,
+      "mode": "performance",
+      "legality": {
+        "available": true
+      },
+      "variant": "natural"
+    },
+    {
+      "id": "isImprisonedBy-03",
+      "category": "Imprison",
+      "participants": [
+        {
+          "id": 1,
+          "name": "角色1",
+          "isPlayer": true,
+          "alive": true
+        },
+        {
+          "id": 2,
+          "name": "角色2",
+          "isPlayer": false,
+          "alive": true
+        },
+        {
+          "id": 3,
+          "name": "角色3",
+          "isPlayer": false,
+          "alive": true
+        }
+      ],
+      "expectedActions": [
+        "isImprisonedBy"
+      ],
+      "expectedSourceCharacterId": 1,
+      "expectedTargetCharacterId": 2,
+      "history": [
+        {
+          "id": "h1",
+          "role": "user",
+          "name": "角色1",
+          "content": "请确认眼前发生的事。"
+        }
+      ],
+      "message": {
+        "id": "m-isImprisonedBy-3",
+        "role": "user",
+        "name": "角色1",
+        "content": "在众人见证下，角色2命令卫兵将角色1押入地牢。"
+      },
+      "expectedDetection": true,
+      "expectedExecution": true,
+      "expectedRejectReason": null,
+      "mode": "precision",
+      "legality": {
+        "available": true
+      },
+      "variant": "indirect"
+    },
+    {
+      "id": "isImprisonedBy-04",
+      "category": "Imprison",
+      "participants": [
+        {
+          "id": 1,
+          "name": "角色1",
+          "isPlayer": true,
+          "alive": true
+        },
+        {
+          "id": 2,
+          "name": "角色2",
+          "isPlayer": false,
+          "alive": true
+        },
+        {
+          "id": 3,
+          "name": "角色3",
+          "isPlayer": false,
+          "alive": true
+        }
+      ],
+      "expectedActions": [
+        "isImprisonedBy"
+      ],
+      "expectedSourceCharacterId": 1,
+      "expectedTargetCharacterId": 2,
+      "history": [
+        {
+          "id": "h1",
+          "role": "user",
+          "name": "角色1",
+          "content": "角色2命令卫兵将角色1押入地牢。"
+        },
+        {
+          "id": "h2",
+          "role": "assistant",
+          "name": "角色2",
+          "content": "我确认眼前结果。"
+        }
+      ],
+      "message": {
+        "id": "m-isImprisonedBy-4",
+        "role": "user",
+        "name": "角色1",
+        "content": "就按刚才已经完成的结果执行。"
+      },
+      "expectedDetection": true,
+      "expectedExecution": true,
+      "expectedRejectReason": null,
+      "mode": "performance",
+      "legality": {
+        "available": true
+      },
+      "variant": "multi_turn"
+    },
+    {
+      "id": "isImprisonedBy-05",
+      "category": "Imprison",
+      "participants": [
+        {
+          "id": 1,
+          "name": "角色1",
+          "isPlayer": true,
+          "alive": true
+        },
+        {
+          "id": 2,
+          "name": "角色2",
+          "isPlayer": false,
+          "alive": true
+        },
+        {
+          "id": 3,
+          "name": "角色3",
+          "isPlayer": false,
+          "alive": true
+        }
+      ],
+      "expectedActions": [
+        "isImprisonedBy"
+      ],
+      "expectedSourceCharacterId": 1,
+      "expectedTargetCharacterId": 2,
+      "history": [
+        {
+          "id": "h1",
+          "role": "assistant",
+          "name": "角色3",
+          "content": "我在场见证。"
+        }
+      ],
+      "message": {
+        "id": "m-isImprisonedBy-5",
+        "role": "user",
+        "name": "角色1",
+        "content": "角色3在场时，角色2命令卫兵将角色1押入地牢。"
+      },
+      "expectedDetection": true,
+      "expectedExecution": true,
+      "expectedRejectReason": null,
+      "mode": "precision",
+      "legality": {
+        "available": true
+      },
+      "variant": "multi_person"
+    },
+    {
+      "id": "isImprisonedBy-06",
+      "category": "Imprison",
+      "participants": [
+        {
+          "id": 1,
+          "name": "角色1",
+          "isPlayer": true,
+          "alive": true
+        },
+        {
+          "id": 2,
+          "name": "角色2",
+          "isPlayer": false,
+          "alive": true
+        },
+        {
+          "id": 3,
+          "name": "角色3",
+          "isPlayer": false,
+          "alive": true
+        }
+      ],
+      "expectedActions": [
+        "isImprisonedBy"
+      ],
+      "expectedSourceCharacterId": 1,
+      "expectedTargetCharacterId": 2,
+      "history": [],
+      "message": {
+        "id": "m-isImprisonedBy-6",
+        "role": "user",
+        "name": "角色1",
+        "content": "并没有发生这件事：角色2命令卫兵将角色1押入地牢。"
+      },
+      "expectedDetection": false,
+      "expectedExecution": false,
+      "expectedRejectReason": "not_current_action",
+      "mode": "performance",
+      "legality": {
+        "available": true
+      },
+      "variant": "negative"
+    },
+    {
+      "id": "isImprisonedBy-07",
+      "category": "Imprison",
+      "participants": [
+        {
+          "id": 1,
+          "name": "角色1",
+          "isPlayer": true,
+          "alive": true
+        },
+        {
+          "id": 2,
+          "name": "角色2",
+          "isPlayer": false,
+          "alive": true
+        },
+        {
+          "id": 3,
+          "name": "角色3",
+          "isPlayer": false,
+          "alive": true
+        }
+      ],
+      "expectedActions": [
+        "isImprisonedBy"
+      ],
+      "expectedSourceCharacterId": 1,
+      "expectedTargetCharacterId": 2,
+      "history": [],
+      "message": {
+        "id": "m-isImprisonedBy-7",
+        "role": "user",
+        "name": "角色1",
+        "content": "如果角色2命令卫兵将角色1押入地牢，会发生什么？"
+      },
+      "expectedDetection": false,
+      "expectedExecution": false,
+      "expectedRejectReason": "hypothetical",
+      "mode": "precision",
+      "legality": {
+        "available": true
+      },
+      "variant": "hypothetical"
+    },
+    {
+      "id": "isImprisonedBy-08",
+      "category": "Imprison",
+      "participants": [
+        {
+          "id": 1,
+          "name": "角色1",
+          "isPlayer": true,
+          "alive": true
+        },
+        {
+          "id": 2,
+          "name": "角色2",
+          "isPlayer": false,
+          "alive": true
+        },
+        {
+          "id": 3,
+          "name": "角色3",
+          "isPlayer": false,
+          "alive": true
+        }
+      ],
+      "expectedActions": [
+        "isImprisonedBy"
+      ],
+      "expectedSourceCharacterId": 1,
+      "expectedTargetCharacterId": 2,
+      "history": [],
+      "message": {
+        "id": "m-isImprisonedBy-8",
+        "role": "user",
+        "name": "角色1",
+        "content": "我昨天听说过：角色2命令卫兵将角色1押入地牢。"
+      },
+      "expectedDetection": false,
+      "expectedExecution": false,
+      "expectedRejectReason": "past_report",
+      "mode": "performance",
+      "legality": {
+        "available": true
+      },
+      "variant": "past_report"
+    },
+    {
+      "id": "isImprisonedBy-09",
+      "category": "Imprison",
+      "participants": [
+        {
+          "id": 1,
+          "name": "角色1",
+          "isPlayer": true,
+          "alive": true
+        },
+        {
+          "id": 2,
+          "name": "角色2",
+          "isPlayer": false,
+          "alive": true
+        },
+        {
+          "id": 3,
+          "name": "角色3",
+          "isPlayer": false,
+          "alive": true
+        }
+      ],
+      "expectedActions": [
+        "isImprisonedBy"
+      ],
+      "expectedSourceCharacterId": 1,
+      "expectedTargetCharacterId": 2,
+      "history": [],
+      "message": {
+        "id": "m-isImprisonedBy-9",
+        "role": "user",
+        "name": "角色1",
+        "content": "我提议以后再做：角色2命令卫兵将角色1押入地牢。"
+      },
+      "expectedDetection": false,
+      "expectedExecution": false,
+      "expectedRejectReason": "unaccepted_proposal",
+      "mode": "precision",
+      "legality": {
+        "available": true
+      },
+      "variant": "proposal"
+    },
+    {
+      "id": "isImprisonedBy-10",
+      "category": "Imprison",
+      "participants": [
+        {
+          "id": 1,
+          "name": "角色1",
+          "isPlayer": true,
+          "alive": true
+        },
+        {
+          "id": 2,
+          "name": "角色2",
+          "isPlayer": false,
+          "alive": true
+        },
+        {
+          "id": 3,
+          "name": "角色3",
+          "isPlayer": false,
+          "alive": true
+        }
+      ],
+      "expectedActions": [
+        "isImprisonedBy"
+      ],
+      "expectedSourceCharacterId": 1,
+      "expectedTargetCharacterId": 2,
+      "history": [],
+      "message": {
+        "id": "m-isImprisonedBy-10",
+        "role": "user",
+        "name": "角色1",
+        "content": "角色2命令卫兵将角色1押入地牢。"
+      },
+      "expectedDetection": true,
+      "expectedExecution": false,
+      "expectedRejectReason": "rejected_legality_changed",
+      "mode": "performance",
+      "legality": {
+        "available": false
+      },
+      "variant": "invalid_legality"
+    },
+    {
+      "id": "isInjured-01",
+      "category": "Injury",
+      "participants": [
+        {
+          "id": 1,
+          "name": "角色1",
+          "isPlayer": true,
+          "alive": true
+        },
+        {
+          "id": 2,
+          "name": "角色2",
+          "isPlayer": false,
+          "alive": true
+        },
+        {
+          "id": 3,
+          "name": "角色3",
+          "isPlayer": false,
+          "alive": true
+        }
+      ],
+      "expectedActions": [
+        "isInjured"
+      ],
+      "expectedSourceCharacterId": 2,
+      "expectedTargetCharacterId": 1,
+      "history": [],
+      "message": {
+        "id": "m-isInjured-1",
+        "role": "user",
+        "name": "角色1",
+        "content": "角色1挥剑刺伤了角色2。"
+      },
+      "expectedDetection": true,
+      "expectedExecution": true,
+      "expectedRejectReason": null,
+      "mode": "precision",
+      "legality": {
+        "available": true
+      },
+      "variant": "direct"
+    },
+    {
+      "id": "isInjured-02",
+      "category": "Injury",
+      "participants": [
+        {
+          "id": 1,
+          "name": "角色1",
+          "isPlayer": true,
+          "alive": true
+        },
+        {
+          "id": 2,
+          "name": "角色2",
+          "isPlayer": false,
+          "alive": true
+        },
+        {
+          "id": 3,
+          "name": "角色3",
+          "isPlayer": false,
+          "alive": true
+        }
+      ],
+      "expectedActions": [
+        "isInjured"
+      ],
+      "expectedSourceCharacterId": 2,
+      "expectedTargetCharacterId": 1,
+      "history": [
+        {
+          "id": "h1",
+          "role": "assistant",
+          "name": "角色2",
+          "content": "此事现在就办。"
+        }
+      ],
+      "message": {
+        "id": "m-isInjured-2",
+        "role": "user",
+        "name": "角色1",
+        "content": "角色1挥剑刺伤了角色2。"
+      },
+      "expectedDetection": true,
+      "expectedExecution": true,
+      "expectedRejectReason": null,
+      "mode": "performance",
+      "legality": {
+        "available": true
+      },
+      "variant": "natural"
+    },
+    {
+      "id": "isInjured-03",
+      "category": "Injury",
+      "participants": [
+        {
+          "id": 1,
+          "name": "角色1",
+          "isPlayer": true,
+          "alive": true
+        },
+        {
+          "id": 2,
+          "name": "角色2",
+          "isPlayer": false,
+          "alive": true
+        },
+        {
+          "id": 3,
+          "name": "角色3",
+          "isPlayer": false,
+          "alive": true
+        }
+      ],
+      "expectedActions": [
+        "isInjured"
+      ],
+      "expectedSourceCharacterId": 2,
+      "expectedTargetCharacterId": 1,
+      "history": [
+        {
+          "id": "h1",
+          "role": "user",
+          "name": "角色1",
+          "content": "请确认眼前发生的事。"
+        }
+      ],
+      "message": {
+        "id": "m-isInjured-3",
+        "role": "user",
+        "name": "角色1",
+        "content": "在众人见证下，角色1挥剑刺伤了角色2。"
+      },
+      "expectedDetection": true,
+      "expectedExecution": true,
+      "expectedRejectReason": null,
+      "mode": "precision",
+      "legality": {
+        "available": true
+      },
+      "variant": "indirect"
+    },
+    {
+      "id": "isInjured-04",
+      "category": "Injury",
+      "participants": [
+        {
+          "id": 1,
+          "name": "角色1",
+          "isPlayer": true,
+          "alive": true
+        },
+        {
+          "id": 2,
+          "name": "角色2",
+          "isPlayer": false,
+          "alive": true
+        },
+        {
+          "id": 3,
+          "name": "角色3",
+          "isPlayer": false,
+          "alive": true
+        }
+      ],
+      "expectedActions": [
+        "isInjured"
+      ],
+      "expectedSourceCharacterId": 2,
+      "expectedTargetCharacterId": 1,
+      "history": [
+        {
+          "id": "h1",
+          "role": "user",
+          "name": "角色1",
+          "content": "角色1挥剑刺伤了角色2。"
+        },
+        {
+          "id": "h2",
+          "role": "assistant",
+          "name": "角色2",
+          "content": "我确认眼前结果。"
+        }
+      ],
+      "message": {
+        "id": "m-isInjured-4",
+        "role": "user",
+        "name": "角色1",
+        "content": "就按刚才已经完成的结果执行。"
+      },
+      "expectedDetection": true,
+      "expectedExecution": true,
+      "expectedRejectReason": null,
+      "mode": "performance",
+      "legality": {
+        "available": true
+      },
+      "variant": "multi_turn"
+    },
+    {
+      "id": "isInjured-05",
+      "category": "Injury",
+      "participants": [
+        {
+          "id": 1,
+          "name": "角色1",
+          "isPlayer": true,
+          "alive": true
+        },
+        {
+          "id": 2,
+          "name": "角色2",
+          "isPlayer": false,
+          "alive": true
+        },
+        {
+          "id": 3,
+          "name": "角色3",
+          "isPlayer": false,
+          "alive": true
+        }
+      ],
+      "expectedActions": [
+        "isInjured"
+      ],
+      "expectedSourceCharacterId": 2,
+      "expectedTargetCharacterId": 1,
+      "history": [
+        {
+          "id": "h1",
+          "role": "assistant",
+          "name": "角色3",
+          "content": "我在场见证。"
+        }
+      ],
+      "message": {
+        "id": "m-isInjured-5",
+        "role": "user",
+        "name": "角色1",
+        "content": "角色3在场时，角色1挥剑刺伤了角色2。"
+      },
+      "expectedDetection": true,
+      "expectedExecution": true,
+      "expectedRejectReason": null,
+      "mode": "precision",
+      "legality": {
+        "available": true
+      },
+      "variant": "multi_person"
+    },
+    {
+      "id": "isInjured-06",
+      "category": "Injury",
+      "participants": [
+        {
+          "id": 1,
+          "name": "角色1",
+          "isPlayer": true,
+          "alive": true
+        },
+        {
+          "id": 2,
+          "name": "角色2",
+          "isPlayer": false,
+          "alive": true
+        },
+        {
+          "id": 3,
+          "name": "角色3",
+          "isPlayer": false,
+          "alive": true
+        }
+      ],
+      "expectedActions": [
+        "isInjured"
+      ],
+      "expectedSourceCharacterId": 2,
+      "expectedTargetCharacterId": 1,
+      "history": [],
+      "message": {
+        "id": "m-isInjured-6",
+        "role": "user",
+        "name": "角色1",
+        "content": "并没有发生这件事：角色1挥剑刺伤了角色2。"
+      },
+      "expectedDetection": false,
+      "expectedExecution": false,
+      "expectedRejectReason": "not_current_action",
+      "mode": "performance",
+      "legality": {
+        "available": true
+      },
+      "variant": "negative"
+    },
+    {
+      "id": "isInjured-07",
+      "category": "Injury",
+      "participants": [
+        {
+          "id": 1,
+          "name": "角色1",
+          "isPlayer": true,
+          "alive": true
+        },
+        {
+          "id": 2,
+          "name": "角色2",
+          "isPlayer": false,
+          "alive": true
+        },
+        {
+          "id": 3,
+          "name": "角色3",
+          "isPlayer": false,
+          "alive": true
+        }
+      ],
+      "expectedActions": [
+        "isInjured"
+      ],
+      "expectedSourceCharacterId": 2,
+      "expectedTargetCharacterId": 1,
+      "history": [],
+      "message": {
+        "id": "m-isInjured-7",
+        "role": "user",
+        "name": "角色1",
+        "content": "如果角色1挥剑刺伤了角色2，会发生什么？"
+      },
+      "expectedDetection": false,
+      "expectedExecution": false,
+      "expectedRejectReason": "hypothetical",
+      "mode": "precision",
+      "legality": {
+        "available": true
+      },
+      "variant": "hypothetical"
+    },
+    {
+      "id": "isInjured-08",
+      "category": "Injury",
+      "participants": [
+        {
+          "id": 1,
+          "name": "角色1",
+          "isPlayer": true,
+          "alive": true
+        },
+        {
+          "id": 2,
+          "name": "角色2",
+          "isPlayer": false,
+          "alive": true
+        },
+        {
+          "id": 3,
+          "name": "角色3",
+          "isPlayer": false,
+          "alive": true
+        }
+      ],
+      "expectedActions": [
+        "isInjured"
+      ],
+      "expectedSourceCharacterId": 2,
+      "expectedTargetCharacterId": 1,
+      "history": [],
+      "message": {
+        "id": "m-isInjured-8",
+        "role": "user",
+        "name": "角色1",
+        "content": "我昨天听说过：角色1挥剑刺伤了角色2。"
+      },
+      "expectedDetection": false,
+      "expectedExecution": false,
+      "expectedRejectReason": "past_report",
+      "mode": "performance",
+      "legality": {
+        "available": true
+      },
+      "variant": "past_report"
+    },
+    {
+      "id": "isInjured-09",
+      "category": "Injury",
+      "participants": [
+        {
+          "id": 1,
+          "name": "角色1",
+          "isPlayer": true,
+          "alive": true
+        },
+        {
+          "id": 2,
+          "name": "角色2",
+          "isPlayer": false,
+          "alive": true
+        },
+        {
+          "id": 3,
+          "name": "角色3",
+          "isPlayer": false,
+          "alive": true
+        }
+      ],
+      "expectedActions": [
+        "isInjured"
+      ],
+      "expectedSourceCharacterId": 2,
+      "expectedTargetCharacterId": 1,
+      "history": [],
+      "message": {
+        "id": "m-isInjured-9",
+        "role": "user",
+        "name": "角色1",
+        "content": "我提议以后再做：角色1挥剑刺伤了角色2。"
+      },
+      "expectedDetection": false,
+      "expectedExecution": false,
+      "expectedRejectReason": "unaccepted_proposal",
+      "mode": "precision",
+      "legality": {
+        "available": true
+      },
+      "variant": "proposal"
+    },
+    {
+      "id": "isInjured-10",
+      "category": "Injury",
+      "participants": [
+        {
+          "id": 1,
+          "name": "角色1",
+          "isPlayer": true,
+          "alive": true
+        },
+        {
+          "id": 2,
+          "name": "角色2",
+          "isPlayer": false,
+          "alive": true
+        },
+        {
+          "id": 3,
+          "name": "角色3",
+          "isPlayer": false,
+          "alive": true
+        }
+      ],
+      "expectedActions": [
+        "isInjured"
+      ],
+      "expectedSourceCharacterId": 2,
+      "expectedTargetCharacterId": 1,
+      "history": [],
+      "message": {
+        "id": "m-isInjured-10",
+        "role": "user",
+        "name": "角色1",
+        "content": "角色1挥剑刺伤了角色2。"
+      },
+      "expectedDetection": true,
+      "expectedExecution": false,
+      "expectedRejectReason": "rejected_legality_changed",
+      "mode": "performance",
+      "legality": {
+        "available": false
+      },
+      "variant": "invalid_legality"
+    },
+    {
+      "id": "characterIsKilled-01",
+      "category": "Kill",
+      "participants": [
+        {
+          "id": 1,
+          "name": "角色1",
+          "isPlayer": true,
+          "alive": true
+        },
+        {
+          "id": 2,
+          "name": "角色2",
+          "isPlayer": false,
+          "alive": true
+        },
+        {
+          "id": 3,
+          "name": "角色3",
+          "isPlayer": false,
+          "alive": true
+        }
+      ],
+      "expectedActions": [
+        "characterIsKilled"
+      ],
+      "expectedSourceCharacterId": 2,
+      "expectedTargetCharacterId": 1,
+      "history": [],
+      "message": {
+        "id": "m-characterIsKilled-1",
+        "role": "user",
+        "name": "角色1",
+        "content": "角色1当场杀死了角色2。"
+      },
+      "expectedDetection": true,
+      "expectedExecution": true,
+      "expectedRejectReason": null,
+      "mode": "precision",
+      "legality": {
+        "available": true
+      },
+      "variant": "direct"
+    },
+    {
+      "id": "characterIsKilled-02",
+      "category": "Kill",
+      "participants": [
+        {
+          "id": 1,
+          "name": "角色1",
+          "isPlayer": true,
+          "alive": true
+        },
+        {
+          "id": 2,
+          "name": "角色2",
+          "isPlayer": false,
+          "alive": true
+        },
+        {
+          "id": 3,
+          "name": "角色3",
+          "isPlayer": false,
+          "alive": true
+        }
+      ],
+      "expectedActions": [
+        "characterIsKilled"
+      ],
+      "expectedSourceCharacterId": 2,
+      "expectedTargetCharacterId": 1,
+      "history": [
+        {
+          "id": "h1",
+          "role": "assistant",
+          "name": "角色2",
+          "content": "此事现在就办。"
+        }
+      ],
+      "message": {
+        "id": "m-characterIsKilled-2",
+        "role": "user",
+        "name": "角色1",
+        "content": "角色1当场杀死了角色2。"
+      },
+      "expectedDetection": true,
+      "expectedExecution": true,
+      "expectedRejectReason": null,
+      "mode": "performance",
+      "legality": {
+        "available": true
+      },
+      "variant": "natural"
+    },
+    {
+      "id": "characterIsKilled-03",
+      "category": "Kill",
+      "participants": [
+        {
+          "id": 1,
+          "name": "角色1",
+          "isPlayer": true,
+          "alive": true
+        },
+        {
+          "id": 2,
+          "name": "角色2",
+          "isPlayer": false,
+          "alive": true
+        },
+        {
+          "id": 3,
+          "name": "角色3",
+          "isPlayer": false,
+          "alive": true
+        }
+      ],
+      "expectedActions": [
+        "characterIsKilled"
+      ],
+      "expectedSourceCharacterId": 2,
+      "expectedTargetCharacterId": 1,
+      "history": [
+        {
+          "id": "h1",
+          "role": "user",
+          "name": "角色1",
+          "content": "请确认眼前发生的事。"
+        }
+      ],
+      "message": {
+        "id": "m-characterIsKilled-3",
+        "role": "user",
+        "name": "角色1",
+        "content": "在众人见证下，角色1当场杀死了角色2。"
+      },
+      "expectedDetection": true,
+      "expectedExecution": true,
+      "expectedRejectReason": null,
+      "mode": "precision",
+      "legality": {
+        "available": true
+      },
+      "variant": "indirect"
+    },
+    {
+      "id": "characterIsKilled-04",
+      "category": "Kill",
+      "participants": [
+        {
+          "id": 1,
+          "name": "角色1",
+          "isPlayer": true,
+          "alive": true
+        },
+        {
+          "id": 2,
+          "name": "角色2",
+          "isPlayer": false,
+          "alive": true
+        },
+        {
+          "id": 3,
+          "name": "角色3",
+          "isPlayer": false,
+          "alive": true
+        }
+      ],
+      "expectedActions": [
+        "characterIsKilled"
+      ],
+      "expectedSourceCharacterId": 2,
+      "expectedTargetCharacterId": 1,
+      "history": [
+        {
+          "id": "h1",
+          "role": "user",
+          "name": "角色1",
+          "content": "角色1当场杀死了角色2。"
+        },
+        {
+          "id": "h2",
+          "role": "assistant",
+          "name": "角色2",
+          "content": "我确认眼前结果。"
+        }
+      ],
+      "message": {
+        "id": "m-characterIsKilled-4",
+        "role": "user",
+        "name": "角色1",
+        "content": "就按刚才已经完成的结果执行。"
+      },
+      "expectedDetection": true,
+      "expectedExecution": true,
+      "expectedRejectReason": null,
+      "mode": "performance",
+      "legality": {
+        "available": true
+      },
+      "variant": "multi_turn"
+    },
+    {
+      "id": "characterIsKilled-05",
+      "category": "Kill",
+      "participants": [
+        {
+          "id": 1,
+          "name": "角色1",
+          "isPlayer": true,
+          "alive": true
+        },
+        {
+          "id": 2,
+          "name": "角色2",
+          "isPlayer": false,
+          "alive": true
+        },
+        {
+          "id": 3,
+          "name": "角色3",
+          "isPlayer": false,
+          "alive": true
+        }
+      ],
+      "expectedActions": [
+        "characterIsKilled"
+      ],
+      "expectedSourceCharacterId": 2,
+      "expectedTargetCharacterId": 1,
+      "history": [
+        {
+          "id": "h1",
+          "role": "assistant",
+          "name": "角色3",
+          "content": "我在场见证。"
+        }
+      ],
+      "message": {
+        "id": "m-characterIsKilled-5",
+        "role": "user",
+        "name": "角色1",
+        "content": "角色3在场时，角色1当场杀死了角色2。"
+      },
+      "expectedDetection": true,
+      "expectedExecution": true,
+      "expectedRejectReason": null,
+      "mode": "precision",
+      "legality": {
+        "available": true
+      },
+      "variant": "multi_person"
+    },
+    {
+      "id": "characterIsKilled-06",
+      "category": "Kill",
+      "participants": [
+        {
+          "id": 1,
+          "name": "角色1",
+          "isPlayer": true,
+          "alive": true
+        },
+        {
+          "id": 2,
+          "name": "角色2",
+          "isPlayer": false,
+          "alive": true
+        },
+        {
+          "id": 3,
+          "name": "角色3",
+          "isPlayer": false,
+          "alive": true
+        }
+      ],
+      "expectedActions": [
+        "characterIsKilled"
+      ],
+      "expectedSourceCharacterId": 2,
+      "expectedTargetCharacterId": 1,
+      "history": [],
+      "message": {
+        "id": "m-characterIsKilled-6",
+        "role": "user",
+        "name": "角色1",
+        "content": "并没有发生这件事：角色1当场杀死了角色2。"
+      },
+      "expectedDetection": false,
+      "expectedExecution": false,
+      "expectedRejectReason": "not_current_action",
+      "mode": "performance",
+      "legality": {
+        "available": true
+      },
+      "variant": "negative"
+    },
+    {
+      "id": "characterIsKilled-07",
+      "category": "Kill",
+      "participants": [
+        {
+          "id": 1,
+          "name": "角色1",
+          "isPlayer": true,
+          "alive": true
+        },
+        {
+          "id": 2,
+          "name": "角色2",
+          "isPlayer": false,
+          "alive": true
+        },
+        {
+          "id": 3,
+          "name": "角色3",
+          "isPlayer": false,
+          "alive": true
+        }
+      ],
+      "expectedActions": [
+        "characterIsKilled"
+      ],
+      "expectedSourceCharacterId": 2,
+      "expectedTargetCharacterId": 1,
+      "history": [],
+      "message": {
+        "id": "m-characterIsKilled-7",
+        "role": "user",
+        "name": "角色1",
+        "content": "如果角色1当场杀死了角色2，会发生什么？"
+      },
+      "expectedDetection": false,
+      "expectedExecution": false,
+      "expectedRejectReason": "hypothetical",
+      "mode": "precision",
+      "legality": {
+        "available": true
+      },
+      "variant": "hypothetical"
+    },
+    {
+      "id": "characterIsKilled-08",
+      "category": "Kill",
+      "participants": [
+        {
+          "id": 1,
+          "name": "角色1",
+          "isPlayer": true,
+          "alive": true
+        },
+        {
+          "id": 2,
+          "name": "角色2",
+          "isPlayer": false,
+          "alive": true
+        },
+        {
+          "id": 3,
+          "name": "角色3",
+          "isPlayer": false,
+          "alive": true
+        }
+      ],
+      "expectedActions": [
+        "characterIsKilled"
+      ],
+      "expectedSourceCharacterId": 2,
+      "expectedTargetCharacterId": 1,
+      "history": [],
+      "message": {
+        "id": "m-characterIsKilled-8",
+        "role": "user",
+        "name": "角色1",
+        "content": "我昨天听说过：角色1当场杀死了角色2。"
+      },
+      "expectedDetection": false,
+      "expectedExecution": false,
+      "expectedRejectReason": "past_report",
+      "mode": "performance",
+      "legality": {
+        "available": true
+      },
+      "variant": "past_report"
+    },
+    {
+      "id": "characterIsKilled-09",
+      "category": "Kill",
+      "participants": [
+        {
+          "id": 1,
+          "name": "角色1",
+          "isPlayer": true,
+          "alive": true
+        },
+        {
+          "id": 2,
+          "name": "角色2",
+          "isPlayer": false,
+          "alive": true
+        },
+        {
+          "id": 3,
+          "name": "角色3",
+          "isPlayer": false,
+          "alive": true
+        }
+      ],
+      "expectedActions": [
+        "characterIsKilled"
+      ],
+      "expectedSourceCharacterId": 2,
+      "expectedTargetCharacterId": 1,
+      "history": [],
+      "message": {
+        "id": "m-characterIsKilled-9",
+        "role": "user",
+        "name": "角色1",
+        "content": "我提议以后再做：角色1当场杀死了角色2。"
+      },
+      "expectedDetection": false,
+      "expectedExecution": false,
+      "expectedRejectReason": "unaccepted_proposal",
+      "mode": "precision",
+      "legality": {
+        "available": true
+      },
+      "variant": "proposal"
+    },
+    {
+      "id": "characterIsKilled-10",
+      "category": "Kill",
+      "participants": [
+        {
+          "id": 1,
+          "name": "角色1",
+          "isPlayer": true,
+          "alive": true
+        },
+        {
+          "id": 2,
+          "name": "角色2",
+          "isPlayer": false,
+          "alive": true
+        },
+        {
+          "id": 3,
+          "name": "角色3",
+          "isPlayer": false,
+          "alive": true
+        }
+      ],
+      "expectedActions": [
+        "characterIsKilled"
+      ],
+      "expectedSourceCharacterId": 2,
+      "expectedTargetCharacterId": 1,
+      "history": [],
+      "message": {
+        "id": "m-characterIsKilled-10",
+        "role": "user",
+        "name": "角色1",
+        "content": "角色1当场杀死了角色2。"
+      },
+      "expectedDetection": true,
+      "expectedExecution": false,
+      "expectedRejectReason": "rejected_legality_changed",
+      "mode": "performance",
+      "legality": {
+        "available": false
+      },
+      "variant": "invalid_legality"
+    },
+    {
+      "id": "intercourse-01",
+      "category": "Intercourse",
+      "participants": [
+        {
+          "id": 1,
+          "name": "角色1",
+          "isPlayer": true,
+          "alive": true
+        },
+        {
+          "id": 2,
+          "name": "角色2",
+          "isPlayer": false,
+          "alive": true
+        },
+        {
+          "id": 3,
+          "name": "角色3",
+          "isPlayer": false,
+          "alive": true
+        }
+      ],
+      "expectedActions": [
+        "intercourse"
+      ],
+      "expectedSourceCharacterId": 1,
+      "expectedTargetCharacterId": 2,
+      "history": [],
+      "message": {
+        "id": "m-intercourse-1",
+        "role": "user",
+        "name": "角色1",
+        "content": "角色1与角色2已经完成了房事。"
+      },
+      "expectedDetection": true,
+      "expectedExecution": true,
+      "expectedRejectReason": null,
+      "mode": "precision",
+      "legality": {
+        "available": true
+      },
+      "variant": "direct"
+    },
+    {
+      "id": "intercourse-02",
+      "category": "Intercourse",
+      "participants": [
+        {
+          "id": 1,
+          "name": "角色1",
+          "isPlayer": true,
+          "alive": true
+        },
+        {
+          "id": 2,
+          "name": "角色2",
+          "isPlayer": false,
+          "alive": true
+        },
+        {
+          "id": 3,
+          "name": "角色3",
+          "isPlayer": false,
+          "alive": true
+        }
+      ],
+      "expectedActions": [
+        "intercourse"
+      ],
+      "expectedSourceCharacterId": 1,
+      "expectedTargetCharacterId": 2,
+      "history": [
+        {
+          "id": "h1",
+          "role": "assistant",
+          "name": "角色2",
+          "content": "此事现在就办。"
+        }
+      ],
+      "message": {
+        "id": "m-intercourse-2",
+        "role": "user",
+        "name": "角色1",
+        "content": "角色1与角色2确实已经完成了房事。"
+      },
+      "expectedDetection": true,
+      "expectedExecution": true,
+      "expectedRejectReason": null,
+      "mode": "performance",
+      "legality": {
+        "available": true
+      },
+      "variant": "natural"
+    },
+    {
+      "id": "intercourse-03",
+      "category": "Intercourse",
+      "participants": [
+        {
+          "id": 1,
+          "name": "角色1",
+          "isPlayer": true,
+          "alive": true
+        },
+        {
+          "id": 2,
+          "name": "角色2",
+          "isPlayer": false,
+          "alive": true
+        },
+        {
+          "id": 3,
+          "name": "角色3",
+          "isPlayer": false,
+          "alive": true
+        }
+      ],
+      "expectedActions": [
+        "intercourse"
+      ],
+      "expectedSourceCharacterId": 1,
+      "expectedTargetCharacterId": 2,
+      "history": [
+        {
+          "id": "h1",
+          "role": "user",
+          "name": "角色1",
+          "content": "请确认眼前发生的事。"
+        }
+      ],
+      "message": {
+        "id": "m-intercourse-3",
+        "role": "user",
+        "name": "角色1",
+        "content": "在众人见证下，角色1与角色2已经完成了房事。"
+      },
+      "expectedDetection": true,
+      "expectedExecution": true,
+      "expectedRejectReason": null,
+      "mode": "precision",
+      "legality": {
+        "available": true
+      },
+      "variant": "indirect"
+    },
+    {
+      "id": "intercourse-04",
+      "category": "Intercourse",
+      "participants": [
+        {
+          "id": 1,
+          "name": "角色1",
+          "isPlayer": true,
+          "alive": true
+        },
+        {
+          "id": 2,
+          "name": "角色2",
+          "isPlayer": false,
+          "alive": true
+        },
+        {
+          "id": 3,
+          "name": "角色3",
+          "isPlayer": false,
+          "alive": true
+        }
+      ],
+      "expectedActions": [
+        "intercourse"
+      ],
+      "expectedSourceCharacterId": 1,
+      "expectedTargetCharacterId": 2,
+      "history": [
+        {
+          "id": "h1",
+          "role": "user",
+          "name": "角色1",
+          "content": "角色1与角色2已经完成了房事。"
+        },
+        {
+          "id": "h2",
+          "role": "assistant",
+          "name": "角色2",
+          "content": "我确认眼前结果。"
+        }
+      ],
+      "message": {
+        "id": "m-intercourse-4",
+        "role": "user",
+        "name": "角色1",
+        "content": "就按刚才已经完成的结果执行。"
+      },
+      "expectedDetection": true,
+      "expectedExecution": true,
+      "expectedRejectReason": null,
+      "mode": "performance",
+      "legality": {
+        "available": true
+      },
+      "variant": "multi_turn"
+    },
+    {
+      "id": "intercourse-05",
+      "category": "Intercourse",
+      "participants": [
+        {
+          "id": 1,
+          "name": "角色1",
+          "isPlayer": true,
+          "alive": true
+        },
+        {
+          "id": 2,
+          "name": "角色2",
+          "isPlayer": false,
+          "alive": true
+        },
+        {
+          "id": 3,
+          "name": "角色3",
+          "isPlayer": false,
+          "alive": true
+        }
+      ],
+      "expectedActions": [
+        "intercourse"
+      ],
+      "expectedSourceCharacterId": 1,
+      "expectedTargetCharacterId": 2,
+      "history": [
+        {
+          "id": "h1",
+          "role": "assistant",
+          "name": "角色3",
+          "content": "我在场见证。"
+        }
+      ],
+      "message": {
+        "id": "m-intercourse-5",
+        "role": "user",
+        "name": "角色1",
+        "content": "角色3在场时，角色1与角色2已经完成了房事。"
+      },
+      "expectedDetection": true,
+      "expectedExecution": true,
+      "expectedRejectReason": null,
+      "mode": "precision",
+      "legality": {
+        "available": true
+      },
+      "variant": "multi_person"
+    },
+    {
+      "id": "intercourse-06",
+      "category": "Intercourse",
+      "participants": [
+        {
+          "id": 1,
+          "name": "角色1",
+          "isPlayer": true,
+          "alive": true
+        },
+        {
+          "id": 2,
+          "name": "角色2",
+          "isPlayer": false,
+          "alive": true
+        },
+        {
+          "id": 3,
+          "name": "角色3",
+          "isPlayer": false,
+          "alive": true
+        }
+      ],
+      "expectedActions": [
+        "intercourse"
+      ],
+      "expectedSourceCharacterId": 1,
+      "expectedTargetCharacterId": 2,
+      "history": [],
+      "message": {
+        "id": "m-intercourse-6",
+        "role": "user",
+        "name": "角色1",
+        "content": "并没有发生这件事：角色1与角色2已经完成了房事。"
+      },
+      "expectedDetection": false,
+      "expectedExecution": false,
+      "expectedRejectReason": "not_current_action",
+      "mode": "performance",
+      "legality": {
+        "available": true
+      },
+      "variant": "negative"
+    },
+    {
+      "id": "intercourse-07",
+      "category": "Intercourse",
+      "participants": [
+        {
+          "id": 1,
+          "name": "角色1",
+          "isPlayer": true,
+          "alive": true
+        },
+        {
+          "id": 2,
+          "name": "角色2",
+          "isPlayer": false,
+          "alive": true
+        },
+        {
+          "id": 3,
+          "name": "角色3",
+          "isPlayer": false,
+          "alive": true
+        }
+      ],
+      "expectedActions": [
+        "intercourse"
+      ],
+      "expectedSourceCharacterId": 1,
+      "expectedTargetCharacterId": 2,
+      "history": [],
+      "message": {
+        "id": "m-intercourse-7",
+        "role": "user",
+        "name": "角色1",
+        "content": "如果角色1与角色2已经完成了房事，会发生什么？"
+      },
+      "expectedDetection": false,
+      "expectedExecution": false,
+      "expectedRejectReason": "hypothetical",
+      "mode": "precision",
+      "legality": {
+        "available": true
+      },
+      "variant": "hypothetical"
+    },
+    {
+      "id": "intercourse-08",
+      "category": "Intercourse",
+      "participants": [
+        {
+          "id": 1,
+          "name": "角色1",
+          "isPlayer": true,
+          "alive": true
+        },
+        {
+          "id": 2,
+          "name": "角色2",
+          "isPlayer": false,
+          "alive": true
+        },
+        {
+          "id": 3,
+          "name": "角色3",
+          "isPlayer": false,
+          "alive": true
+        }
+      ],
+      "expectedActions": [
+        "intercourse"
+      ],
+      "expectedSourceCharacterId": 1,
+      "expectedTargetCharacterId": 2,
+      "history": [],
+      "message": {
+        "id": "m-intercourse-8",
+        "role": "user",
+        "name": "角色1",
+        "content": "我昨天听说过：角色1与角色2已经完成了房事。"
+      },
+      "expectedDetection": false,
+      "expectedExecution": false,
+      "expectedRejectReason": "past_report",
+      "mode": "performance",
+      "legality": {
+        "available": true
+      },
+      "variant": "past_report"
+    },
+    {
+      "id": "intercourse-09",
+      "category": "Intercourse",
+      "participants": [
+        {
+          "id": 1,
+          "name": "角色1",
+          "isPlayer": true,
+          "alive": true
+        },
+        {
+          "id": 2,
+          "name": "角色2",
+          "isPlayer": false,
+          "alive": true
+        },
+        {
+          "id": 3,
+          "name": "角色3",
+          "isPlayer": false,
+          "alive": true
+        }
+      ],
+      "expectedActions": [
+        "intercourse"
+      ],
+      "expectedSourceCharacterId": 1,
+      "expectedTargetCharacterId": 2,
+      "history": [],
+      "message": {
+        "id": "m-intercourse-9",
+        "role": "user",
+        "name": "角色1",
+        "content": "我提议以后再做：角色1与角色2已经完成了房事。"
+      },
+      "expectedDetection": false,
+      "expectedExecution": false,
+      "expectedRejectReason": "unaccepted_proposal",
+      "mode": "precision",
+      "legality": {
+        "available": true
+      },
+      "variant": "proposal"
+    },
+    {
+      "id": "intercourse-10",
+      "category": "Intercourse",
+      "participants": [
+        {
+          "id": 1,
+          "name": "角色1",
+          "isPlayer": true,
+          "alive": true
+        },
+        {
+          "id": 2,
+          "name": "角色2",
+          "isPlayer": false,
+          "alive": true
+        },
+        {
+          "id": 3,
+          "name": "角色3",
+          "isPlayer": false,
+          "alive": true
+        }
+      ],
+      "expectedActions": [
+        "intercourse"
+      ],
+      "expectedSourceCharacterId": 1,
+      "expectedTargetCharacterId": 2,
+      "history": [],
+      "message": {
+        "id": "m-intercourse-10",
+        "role": "user",
+        "name": "角色1",
+        "content": "角色1与角色2已经完成了房事。"
+      },
+      "expectedDetection": true,
+      "expectedExecution": false,
+      "expectedRejectReason": "rejected_legality_changed",
+      "mode": "performance",
+      "legality": {
+        "available": false
+      },
+      "variant": "invalid_legality"
+    },
+    {
+      "id": "becomeBloodBrothersWith-01",
+      "category": "Blood Brother",
+      "participants": [
+        {
+          "id": 1,
+          "name": "角色1",
+          "isPlayer": true,
+          "alive": true
+        },
+        {
+          "id": 2,
+          "name": "角色2",
+          "isPlayer": false,
+          "alive": true
+        },
+        {
+          "id": 3,
+          "name": "角色3",
+          "isPlayer": false,
+          "alive": true
+        }
+      ],
+      "expectedActions": [
+        "becomeBloodBrothersWith"
+      ],
+      "expectedSourceCharacterId": 1,
+      "expectedTargetCharacterId": 2,
+      "history": [],
+      "message": {
+        "id": "m-becomeBloodBrothersWith-1",
+        "role": "user",
+        "name": "角色1",
+        "content": "角色1与角色2正式义结金兰。"
+      },
+      "expectedDetection": true,
+      "expectedExecution": true,
+      "expectedRejectReason": null,
+      "mode": "precision",
+      "legality": {
+        "available": true
+      },
+      "variant": "direct"
+    },
+    {
+      "id": "becomeBloodBrothersWith-02",
+      "category": "Blood Brother",
+      "participants": [
+        {
+          "id": 1,
+          "name": "角色1",
+          "isPlayer": true,
+          "alive": true
+        },
+        {
+          "id": 2,
+          "name": "角色2",
+          "isPlayer": false,
+          "alive": true
+        },
+        {
+          "id": 3,
+          "name": "角色3",
+          "isPlayer": false,
+          "alive": true
+        }
+      ],
+      "expectedActions": [
+        "becomeBloodBrothersWith"
+      ],
+      "expectedSourceCharacterId": 1,
+      "expectedTargetCharacterId": 2,
+      "history": [
+        {
+          "id": "h1",
+          "role": "assistant",
+          "name": "角色2",
+          "content": "此事现在就办。"
+        }
+      ],
+      "message": {
+        "id": "m-becomeBloodBrothersWith-2",
+        "role": "user",
+        "name": "角色1",
+        "content": "角色1与角色2郑重地义结金兰。"
+      },
+      "expectedDetection": true,
+      "expectedExecution": true,
+      "expectedRejectReason": null,
+      "mode": "performance",
+      "legality": {
+        "available": true
+      },
+      "variant": "natural"
+    },
+    {
+      "id": "becomeBloodBrothersWith-03",
+      "category": "Blood Brother",
+      "participants": [
+        {
+          "id": 1,
+          "name": "角色1",
+          "isPlayer": true,
+          "alive": true
+        },
+        {
+          "id": 2,
+          "name": "角色2",
+          "isPlayer": false,
+          "alive": true
+        },
+        {
+          "id": 3,
+          "name": "角色3",
+          "isPlayer": false,
+          "alive": true
+        }
+      ],
+      "expectedActions": [
+        "becomeBloodBrothersWith"
+      ],
+      "expectedSourceCharacterId": 1,
+      "expectedTargetCharacterId": 2,
+      "history": [
+        {
+          "id": "h1",
+          "role": "user",
+          "name": "角色1",
+          "content": "请确认眼前发生的事。"
+        }
+      ],
+      "message": {
+        "id": "m-becomeBloodBrothersWith-3",
+        "role": "user",
+        "name": "角色1",
+        "content": "在众人见证下，角色1与角色2正式义结金兰。"
+      },
+      "expectedDetection": true,
+      "expectedExecution": true,
+      "expectedRejectReason": null,
+      "mode": "precision",
+      "legality": {
+        "available": true
+      },
+      "variant": "indirect"
+    },
+    {
+      "id": "becomeBloodBrothersWith-04",
+      "category": "Blood Brother",
+      "participants": [
+        {
+          "id": 1,
+          "name": "角色1",
+          "isPlayer": true,
+          "alive": true
+        },
+        {
+          "id": 2,
+          "name": "角色2",
+          "isPlayer": false,
+          "alive": true
+        },
+        {
+          "id": 3,
+          "name": "角色3",
+          "isPlayer": false,
+          "alive": true
+        }
+      ],
+      "expectedActions": [
+        "becomeBloodBrothersWith"
+      ],
+      "expectedSourceCharacterId": 1,
+      "expectedTargetCharacterId": 2,
+      "history": [
+        {
+          "id": "h1",
+          "role": "user",
+          "name": "角色1",
+          "content": "角色1与角色2正式义结金兰。"
+        },
+        {
+          "id": "h2",
+          "role": "assistant",
+          "name": "角色2",
+          "content": "我确认眼前结果。"
+        }
+      ],
+      "message": {
+        "id": "m-becomeBloodBrothersWith-4",
+        "role": "user",
+        "name": "角色1",
+        "content": "就按刚才已经完成的结果执行。"
+      },
+      "expectedDetection": true,
+      "expectedExecution": true,
+      "expectedRejectReason": null,
+      "mode": "performance",
+      "legality": {
+        "available": true
+      },
+      "variant": "multi_turn"
+    },
+    {
+      "id": "becomeBloodBrothersWith-05",
+      "category": "Blood Brother",
+      "participants": [
+        {
+          "id": 1,
+          "name": "角色1",
+          "isPlayer": true,
+          "alive": true
+        },
+        {
+          "id": 2,
+          "name": "角色2",
+          "isPlayer": false,
+          "alive": true
+        },
+        {
+          "id": 3,
+          "name": "角色3",
+          "isPlayer": false,
+          "alive": true
+        }
+      ],
+      "expectedActions": [
+        "becomeBloodBrothersWith"
+      ],
+      "expectedSourceCharacterId": 1,
+      "expectedTargetCharacterId": 2,
+      "history": [
+        {
+          "id": "h1",
+          "role": "assistant",
+          "name": "角色3",
+          "content": "我在场见证。"
+        }
+      ],
+      "message": {
+        "id": "m-becomeBloodBrothersWith-5",
+        "role": "user",
+        "name": "角色1",
+        "content": "角色3在场时，角色1与角色2正式义结金兰。"
+      },
+      "expectedDetection": true,
+      "expectedExecution": true,
+      "expectedRejectReason": null,
+      "mode": "precision",
+      "legality": {
+        "available": true
+      },
+      "variant": "multi_person"
+    },
+    {
+      "id": "becomeBloodBrothersWith-06",
+      "category": "Blood Brother",
+      "participants": [
+        {
+          "id": 1,
+          "name": "角色1",
+          "isPlayer": true,
+          "alive": true
+        },
+        {
+          "id": 2,
+          "name": "角色2",
+          "isPlayer": false,
+          "alive": true
+        },
+        {
+          "id": 3,
+          "name": "角色3",
+          "isPlayer": false,
+          "alive": true
+        }
+      ],
+      "expectedActions": [
+        "becomeBloodBrothersWith"
+      ],
+      "expectedSourceCharacterId": 1,
+      "expectedTargetCharacterId": 2,
+      "history": [],
+      "message": {
+        "id": "m-becomeBloodBrothersWith-6",
+        "role": "user",
+        "name": "角色1",
+        "content": "并没有发生这件事：角色1与角色2正式义结金兰。"
+      },
+      "expectedDetection": false,
+      "expectedExecution": false,
+      "expectedRejectReason": "not_current_action",
+      "mode": "performance",
+      "legality": {
+        "available": true
+      },
+      "variant": "negative"
+    },
+    {
+      "id": "becomeBloodBrothersWith-07",
+      "category": "Blood Brother",
+      "participants": [
+        {
+          "id": 1,
+          "name": "角色1",
+          "isPlayer": true,
+          "alive": true
+        },
+        {
+          "id": 2,
+          "name": "角色2",
+          "isPlayer": false,
+          "alive": true
+        },
+        {
+          "id": 3,
+          "name": "角色3",
+          "isPlayer": false,
+          "alive": true
+        }
+      ],
+      "expectedActions": [
+        "becomeBloodBrothersWith"
+      ],
+      "expectedSourceCharacterId": 1,
+      "expectedTargetCharacterId": 2,
+      "history": [],
+      "message": {
+        "id": "m-becomeBloodBrothersWith-7",
+        "role": "user",
+        "name": "角色1",
+        "content": "如果角色1与角色2正式义结金兰，会发生什么？"
+      },
+      "expectedDetection": false,
+      "expectedExecution": false,
+      "expectedRejectReason": "hypothetical",
+      "mode": "precision",
+      "legality": {
+        "available": true
+      },
+      "variant": "hypothetical"
+    },
+    {
+      "id": "becomeBloodBrothersWith-08",
+      "category": "Blood Brother",
+      "participants": [
+        {
+          "id": 1,
+          "name": "角色1",
+          "isPlayer": true,
+          "alive": true
+        },
+        {
+          "id": 2,
+          "name": "角色2",
+          "isPlayer": false,
+          "alive": true
+        },
+        {
+          "id": 3,
+          "name": "角色3",
+          "isPlayer": false,
+          "alive": true
+        }
+      ],
+      "expectedActions": [
+        "becomeBloodBrothersWith"
+      ],
+      "expectedSourceCharacterId": 1,
+      "expectedTargetCharacterId": 2,
+      "history": [],
+      "message": {
+        "id": "m-becomeBloodBrothersWith-8",
+        "role": "user",
+        "name": "角色1",
+        "content": "我昨天听说过：角色1与角色2正式义结金兰。"
+      },
+      "expectedDetection": false,
+      "expectedExecution": false,
+      "expectedRejectReason": "past_report",
+      "mode": "performance",
+      "legality": {
+        "available": true
+      },
+      "variant": "past_report"
+    },
+    {
+      "id": "becomeBloodBrothersWith-09",
+      "category": "Blood Brother",
+      "participants": [
+        {
+          "id": 1,
+          "name": "角色1",
+          "isPlayer": true,
+          "alive": true
+        },
+        {
+          "id": 2,
+          "name": "角色2",
+          "isPlayer": false,
+          "alive": true
+        },
+        {
+          "id": 3,
+          "name": "角色3",
+          "isPlayer": false,
+          "alive": true
+        }
+      ],
+      "expectedActions": [
+        "becomeBloodBrothersWith"
+      ],
+      "expectedSourceCharacterId": 1,
+      "expectedTargetCharacterId": 2,
+      "history": [],
+      "message": {
+        "id": "m-becomeBloodBrothersWith-9",
+        "role": "user",
+        "name": "角色1",
+        "content": "我提议以后再做：角色1与角色2正式义结金兰。"
+      },
+      "expectedDetection": true,
+      "expectedExecution": false,
+      "expectedRejectReason": "consent_required",
+      "mode": "precision",
+      "legality": {
+        "available": true
+      },
+      "variant": "proposal"
+    },
+    {
+      "id": "becomeBloodBrothersWith-10",
+      "category": "Blood Brother",
+      "participants": [
+        {
+          "id": 1,
+          "name": "角色1",
+          "isPlayer": true,
+          "alive": true
+        },
+        {
+          "id": 2,
+          "name": "角色2",
+          "isPlayer": false,
+          "alive": true
+        },
+        {
+          "id": 3,
+          "name": "角色3",
+          "isPlayer": false,
+          "alive": true
+        }
+      ],
+      "expectedActions": [
+        "becomeBloodBrothersWith"
+      ],
+      "expectedSourceCharacterId": 1,
+      "expectedTargetCharacterId": 2,
+      "history": [],
+      "message": {
+        "id": "m-becomeBloodBrothersWith-10",
+        "role": "user",
+        "name": "角色1",
+        "content": "角色1与角色2正式义结金兰。"
+      },
+      "expectedDetection": true,
+      "expectedExecution": false,
+      "expectedRejectReason": "rejected_legality_changed",
+      "mode": "performance",
+      "legality": {
+        "available": false
+      },
+      "variant": "invalid_legality"
+    },
+    {
+      "id": "becomeLoversWith-01",
+      "category": "Lover",
+      "participants": [
+        {
+          "id": 1,
+          "name": "角色1",
+          "isPlayer": true,
+          "alive": true
+        },
+        {
+          "id": 2,
+          "name": "角色2",
+          "isPlayer": false,
+          "alive": true
+        },
+        {
+          "id": 3,
+          "name": "角色3",
+          "isPlayer": false,
+          "alive": true
+        }
+      ],
+      "expectedActions": [
+        "becomeLoversWith"
+      ],
+      "expectedSourceCharacterId": 1,
+      "expectedTargetCharacterId": 2,
+      "history": [],
+      "message": {
+        "id": "m-becomeLoversWith-1",
+        "role": "user",
+        "name": "角色1",
+        "content": "角色1请求与角色2正式成为恋人。"
+      },
+      "expectedDetection": true,
+      "expectedExecution": true,
+      "expectedRejectReason": null,
+      "mode": "precision",
+      "legality": {
+        "available": true
+      },
+      "variant": "direct"
+    },
+    {
+      "id": "becomeLoversWith-02",
+      "category": "Lover",
+      "participants": [
+        {
+          "id": 1,
+          "name": "角色1",
+          "isPlayer": true,
+          "alive": true
+        },
+        {
+          "id": 2,
+          "name": "角色2",
+          "isPlayer": false,
+          "alive": true
+        },
+        {
+          "id": 3,
+          "name": "角色3",
+          "isPlayer": false,
+          "alive": true
+        }
+      ],
+      "expectedActions": [
+        "becomeLoversWith"
+      ],
+      "expectedSourceCharacterId": 1,
+      "expectedTargetCharacterId": 2,
+      "history": [
+        {
+          "id": "h1",
+          "role": "assistant",
+          "name": "角色2",
+          "content": "此事现在就办。"
+        }
+      ],
+      "message": {
+        "id": "m-becomeLoversWith-2",
+        "role": "user",
+        "name": "角色1",
+        "content": "角色1请求与角色2郑重地成为恋人。"
+      },
+      "expectedDetection": true,
+      "expectedExecution": true,
+      "expectedRejectReason": null,
+      "mode": "performance",
+      "legality": {
+        "available": true
+      },
+      "variant": "natural"
+    },
+    {
+      "id": "becomeLoversWith-03",
+      "category": "Lover",
+      "participants": [
+        {
+          "id": 1,
+          "name": "角色1",
+          "isPlayer": true,
+          "alive": true
+        },
+        {
+          "id": 2,
+          "name": "角色2",
+          "isPlayer": false,
+          "alive": true
+        },
+        {
+          "id": 3,
+          "name": "角色3",
+          "isPlayer": false,
+          "alive": true
+        }
+      ],
+      "expectedActions": [
+        "becomeLoversWith"
+      ],
+      "expectedSourceCharacterId": 1,
+      "expectedTargetCharacterId": 2,
+      "history": [
+        {
+          "id": "h1",
+          "role": "user",
+          "name": "角色1",
+          "content": "请确认眼前发生的事。"
+        }
+      ],
+      "message": {
+        "id": "m-becomeLoversWith-3",
+        "role": "user",
+        "name": "角色1",
+        "content": "在众人见证下，角色1请求与角色2正式成为恋人。"
+      },
+      "expectedDetection": true,
+      "expectedExecution": true,
+      "expectedRejectReason": null,
+      "mode": "precision",
+      "legality": {
+        "available": true
+      },
+      "variant": "indirect"
+    },
+    {
+      "id": "becomeLoversWith-04",
+      "category": "Lover",
+      "participants": [
+        {
+          "id": 1,
+          "name": "角色1",
+          "isPlayer": true,
+          "alive": true
+        },
+        {
+          "id": 2,
+          "name": "角色2",
+          "isPlayer": false,
+          "alive": true
+        },
+        {
+          "id": 3,
+          "name": "角色3",
+          "isPlayer": false,
+          "alive": true
+        }
+      ],
+      "expectedActions": [
+        "becomeLoversWith"
+      ],
+      "expectedSourceCharacterId": 1,
+      "expectedTargetCharacterId": 2,
+      "history": [
+        {
+          "id": "h1",
+          "role": "user",
+          "name": "角色1",
+          "content": "角色1请求与角色2正式成为恋人。"
+        },
+        {
+          "id": "h2",
+          "role": "assistant",
+          "name": "角色2",
+          "content": "我确认眼前结果。"
+        }
+      ],
+      "message": {
+        "id": "m-becomeLoversWith-4",
+        "role": "user",
+        "name": "角色1",
+        "content": "就按刚才已经完成的结果执行。"
+      },
+      "expectedDetection": true,
+      "expectedExecution": true,
+      "expectedRejectReason": null,
+      "mode": "performance",
+      "legality": {
+        "available": true
+      },
+      "variant": "multi_turn"
+    },
+    {
+      "id": "becomeLoversWith-05",
+      "category": "Lover",
+      "participants": [
+        {
+          "id": 1,
+          "name": "角色1",
+          "isPlayer": true,
+          "alive": true
+        },
+        {
+          "id": 2,
+          "name": "角色2",
+          "isPlayer": false,
+          "alive": true
+        },
+        {
+          "id": 3,
+          "name": "角色3",
+          "isPlayer": false,
+          "alive": true
+        }
+      ],
+      "expectedActions": [
+        "becomeLoversWith"
+      ],
+      "expectedSourceCharacterId": 1,
+      "expectedTargetCharacterId": 2,
+      "history": [
+        {
+          "id": "h1",
+          "role": "assistant",
+          "name": "角色3",
+          "content": "我在场见证。"
+        }
+      ],
+      "message": {
+        "id": "m-becomeLoversWith-5",
+        "role": "user",
+        "name": "角色1",
+        "content": "角色3在场时，角色1请求与角色2正式成为恋人。"
+      },
+      "expectedDetection": true,
+      "expectedExecution": true,
+      "expectedRejectReason": null,
+      "mode": "precision",
+      "legality": {
+        "available": true
+      },
+      "variant": "multi_person"
+    },
+    {
+      "id": "becomeLoversWith-06",
+      "category": "Lover",
+      "participants": [
+        {
+          "id": 1,
+          "name": "角色1",
+          "isPlayer": true,
+          "alive": true
+        },
+        {
+          "id": 2,
+          "name": "角色2",
+          "isPlayer": false,
+          "alive": true
+        },
+        {
+          "id": 3,
+          "name": "角色3",
+          "isPlayer": false,
+          "alive": true
+        }
+      ],
+      "expectedActions": [
+        "becomeLoversWith"
+      ],
+      "expectedSourceCharacterId": 1,
+      "expectedTargetCharacterId": 2,
+      "history": [],
+      "message": {
+        "id": "m-becomeLoversWith-6",
+        "role": "user",
+        "name": "角色1",
+        "content": "并没有发生这件事：角色1请求与角色2正式成为恋人。"
+      },
+      "expectedDetection": false,
+      "expectedExecution": false,
+      "expectedRejectReason": "not_current_action",
+      "mode": "performance",
+      "legality": {
+        "available": true
+      },
+      "variant": "negative"
+    },
+    {
+      "id": "becomeLoversWith-07",
+      "category": "Lover",
+      "participants": [
+        {
+          "id": 1,
+          "name": "角色1",
+          "isPlayer": true,
+          "alive": true
+        },
+        {
+          "id": 2,
+          "name": "角色2",
+          "isPlayer": false,
+          "alive": true
+        },
+        {
+          "id": 3,
+          "name": "角色3",
+          "isPlayer": false,
+          "alive": true
+        }
+      ],
+      "expectedActions": [
+        "becomeLoversWith"
+      ],
+      "expectedSourceCharacterId": 1,
+      "expectedTargetCharacterId": 2,
+      "history": [],
+      "message": {
+        "id": "m-becomeLoversWith-7",
+        "role": "user",
+        "name": "角色1",
+        "content": "如果角色1请求与角色2正式成为恋人，会发生什么？"
+      },
+      "expectedDetection": false,
+      "expectedExecution": false,
+      "expectedRejectReason": "hypothetical",
+      "mode": "precision",
+      "legality": {
+        "available": true
+      },
+      "variant": "hypothetical"
+    },
+    {
+      "id": "becomeLoversWith-08",
+      "category": "Lover",
+      "participants": [
+        {
+          "id": 1,
+          "name": "角色1",
+          "isPlayer": true,
+          "alive": true
+        },
+        {
+          "id": 2,
+          "name": "角色2",
+          "isPlayer": false,
+          "alive": true
+        },
+        {
+          "id": 3,
+          "name": "角色3",
+          "isPlayer": false,
+          "alive": true
+        }
+      ],
+      "expectedActions": [
+        "becomeLoversWith"
+      ],
+      "expectedSourceCharacterId": 1,
+      "expectedTargetCharacterId": 2,
+      "history": [],
+      "message": {
+        "id": "m-becomeLoversWith-8",
+        "role": "user",
+        "name": "角色1",
+        "content": "我昨天听说过：角色1请求与角色2正式成为恋人。"
+      },
+      "expectedDetection": false,
+      "expectedExecution": false,
+      "expectedRejectReason": "past_report",
+      "mode": "performance",
+      "legality": {
+        "available": true
+      },
+      "variant": "past_report"
+    },
+    {
+      "id": "becomeLoversWith-09",
+      "category": "Lover",
+      "participants": [
+        {
+          "id": 1,
+          "name": "角色1",
+          "isPlayer": true,
+          "alive": true
+        },
+        {
+          "id": 2,
+          "name": "角色2",
+          "isPlayer": false,
+          "alive": true
+        },
+        {
+          "id": 3,
+          "name": "角色3",
+          "isPlayer": false,
+          "alive": true
+        }
+      ],
+      "expectedActions": [
+        "becomeLoversWith"
+      ],
+      "expectedSourceCharacterId": 1,
+      "expectedTargetCharacterId": 2,
+      "history": [],
+      "message": {
+        "id": "m-becomeLoversWith-9",
+        "role": "user",
+        "name": "角色1",
+        "content": "我提议以后再做：角色1请求与角色2正式成为恋人。"
+      },
+      "expectedDetection": true,
+      "expectedExecution": false,
+      "expectedRejectReason": "consent_required",
+      "mode": "precision",
+      "legality": {
+        "available": true
+      },
+      "variant": "proposal"
+    },
+    {
+      "id": "becomeLoversWith-10",
+      "category": "Lover",
+      "participants": [
+        {
+          "id": 1,
+          "name": "角色1",
+          "isPlayer": true,
+          "alive": true
+        },
+        {
+          "id": 2,
+          "name": "角色2",
+          "isPlayer": false,
+          "alive": true
+        },
+        {
+          "id": 3,
+          "name": "角色3",
+          "isPlayer": false,
+          "alive": true
+        }
+      ],
+      "expectedActions": [
+        "becomeLoversWith"
+      ],
+      "expectedSourceCharacterId": 1,
+      "expectedTargetCharacterId": 2,
+      "history": [],
+      "message": {
+        "id": "m-becomeLoversWith-10",
+        "role": "user",
+        "name": "角色1",
+        "content": "角色1请求与角色2正式成为恋人。"
+      },
+      "expectedDetection": true,
+      "expectedExecution": false,
+      "expectedRejectReason": "rejected_legality_changed",
+      "mode": "performance",
+      "legality": {
+        "available": false
+      },
+      "variant": "invalid_legality"
+    },
+    {
+      "id": "becomeSoulmatesWith-01",
+      "category": "Soulmate",
+      "participants": [
+        {
+          "id": 1,
+          "name": "角色1",
+          "isPlayer": true,
+          "alive": true
+        },
+        {
+          "id": 2,
+          "name": "角色2",
+          "isPlayer": false,
+          "alive": true
+        },
+        {
+          "id": 3,
+          "name": "角色3",
+          "isPlayer": false,
+          "alive": true
+        }
+      ],
+      "expectedActions": [
+        "becomeSoulmatesWith"
+      ],
+      "expectedSourceCharacterId": 1,
+      "expectedTargetCharacterId": 2,
+      "history": [],
+      "message": {
+        "id": "m-becomeSoulmatesWith-1",
+        "role": "user",
+        "name": "角色1",
+        "content": "角色1请求与角色2结为灵魂伴侣。"
+      },
+      "expectedDetection": true,
+      "expectedExecution": true,
+      "expectedRejectReason": null,
+      "mode": "precision",
+      "legality": {
+        "available": true
+      },
+      "variant": "direct"
+    },
+    {
+      "id": "becomeSoulmatesWith-02",
+      "category": "Soulmate",
+      "participants": [
+        {
+          "id": 1,
+          "name": "角色1",
+          "isPlayer": true,
+          "alive": true
+        },
+        {
+          "id": 2,
+          "name": "角色2",
+          "isPlayer": false,
+          "alive": true
+        },
+        {
+          "id": 3,
+          "name": "角色3",
+          "isPlayer": false,
+          "alive": true
+        }
+      ],
+      "expectedActions": [
+        "becomeSoulmatesWith"
+      ],
+      "expectedSourceCharacterId": 1,
+      "expectedTargetCharacterId": 2,
+      "history": [
+        {
+          "id": "h1",
+          "role": "assistant",
+          "name": "角色2",
+          "content": "此事现在就办。"
+        }
+      ],
+      "message": {
+        "id": "m-becomeSoulmatesWith-2",
+        "role": "user",
+        "name": "角色1",
+        "content": "角色1请求与角色2结为灵魂伴侣。"
+      },
+      "expectedDetection": true,
+      "expectedExecution": true,
+      "expectedRejectReason": null,
+      "mode": "performance",
+      "legality": {
+        "available": true
+      },
+      "variant": "natural"
+    },
+    {
+      "id": "becomeSoulmatesWith-03",
+      "category": "Soulmate",
+      "participants": [
+        {
+          "id": 1,
+          "name": "角色1",
+          "isPlayer": true,
+          "alive": true
+        },
+        {
+          "id": 2,
+          "name": "角色2",
+          "isPlayer": false,
+          "alive": true
+        },
+        {
+          "id": 3,
+          "name": "角色3",
+          "isPlayer": false,
+          "alive": true
+        }
+      ],
+      "expectedActions": [
+        "becomeSoulmatesWith"
+      ],
+      "expectedSourceCharacterId": 1,
+      "expectedTargetCharacterId": 2,
+      "history": [
+        {
+          "id": "h1",
+          "role": "user",
+          "name": "角色1",
+          "content": "请确认眼前发生的事。"
+        }
+      ],
+      "message": {
+        "id": "m-becomeSoulmatesWith-3",
+        "role": "user",
+        "name": "角色1",
+        "content": "在众人见证下，角色1请求与角色2结为灵魂伴侣。"
+      },
+      "expectedDetection": true,
+      "expectedExecution": true,
+      "expectedRejectReason": null,
+      "mode": "precision",
+      "legality": {
+        "available": true
+      },
+      "variant": "indirect"
+    },
+    {
+      "id": "becomeSoulmatesWith-04",
+      "category": "Soulmate",
+      "participants": [
+        {
+          "id": 1,
+          "name": "角色1",
+          "isPlayer": true,
+          "alive": true
+        },
+        {
+          "id": 2,
+          "name": "角色2",
+          "isPlayer": false,
+          "alive": true
+        },
+        {
+          "id": 3,
+          "name": "角色3",
+          "isPlayer": false,
+          "alive": true
+        }
+      ],
+      "expectedActions": [
+        "becomeSoulmatesWith"
+      ],
+      "expectedSourceCharacterId": 1,
+      "expectedTargetCharacterId": 2,
+      "history": [
+        {
+          "id": "h1",
+          "role": "user",
+          "name": "角色1",
+          "content": "角色1请求与角色2结为灵魂伴侣。"
+        },
+        {
+          "id": "h2",
+          "role": "assistant",
+          "name": "角色2",
+          "content": "我确认眼前结果。"
+        }
+      ],
+      "message": {
+        "id": "m-becomeSoulmatesWith-4",
+        "role": "user",
+        "name": "角色1",
+        "content": "就按刚才已经完成的结果执行。"
+      },
+      "expectedDetection": true,
+      "expectedExecution": true,
+      "expectedRejectReason": null,
+      "mode": "performance",
+      "legality": {
+        "available": true
+      },
+      "variant": "multi_turn"
+    },
+    {
+      "id": "becomeSoulmatesWith-05",
+      "category": "Soulmate",
+      "participants": [
+        {
+          "id": 1,
+          "name": "角色1",
+          "isPlayer": true,
+          "alive": true
+        },
+        {
+          "id": 2,
+          "name": "角色2",
+          "isPlayer": false,
+          "alive": true
+        },
+        {
+          "id": 3,
+          "name": "角色3",
+          "isPlayer": false,
+          "alive": true
+        }
+      ],
+      "expectedActions": [
+        "becomeSoulmatesWith"
+      ],
+      "expectedSourceCharacterId": 1,
+      "expectedTargetCharacterId": 2,
+      "history": [
+        {
+          "id": "h1",
+          "role": "assistant",
+          "name": "角色3",
+          "content": "我在场见证。"
+        }
+      ],
+      "message": {
+        "id": "m-becomeSoulmatesWith-5",
+        "role": "user",
+        "name": "角色1",
+        "content": "角色3在场时，角色1请求与角色2结为灵魂伴侣。"
+      },
+      "expectedDetection": true,
+      "expectedExecution": true,
+      "expectedRejectReason": null,
+      "mode": "precision",
+      "legality": {
+        "available": true
+      },
+      "variant": "multi_person"
+    },
+    {
+      "id": "becomeSoulmatesWith-06",
+      "category": "Soulmate",
+      "participants": [
+        {
+          "id": 1,
+          "name": "角色1",
+          "isPlayer": true,
+          "alive": true
+        },
+        {
+          "id": 2,
+          "name": "角色2",
+          "isPlayer": false,
+          "alive": true
+        },
+        {
+          "id": 3,
+          "name": "角色3",
+          "isPlayer": false,
+          "alive": true
+        }
+      ],
+      "expectedActions": [
+        "becomeSoulmatesWith"
+      ],
+      "expectedSourceCharacterId": 1,
+      "expectedTargetCharacterId": 2,
+      "history": [],
+      "message": {
+        "id": "m-becomeSoulmatesWith-6",
+        "role": "user",
+        "name": "角色1",
+        "content": "并没有发生这件事：角色1请求与角色2结为灵魂伴侣。"
+      },
+      "expectedDetection": false,
+      "expectedExecution": false,
+      "expectedRejectReason": "not_current_action",
+      "mode": "performance",
+      "legality": {
+        "available": true
+      },
+      "variant": "negative"
+    },
+    {
+      "id": "becomeSoulmatesWith-07",
+      "category": "Soulmate",
+      "participants": [
+        {
+          "id": 1,
+          "name": "角色1",
+          "isPlayer": true,
+          "alive": true
+        },
+        {
+          "id": 2,
+          "name": "角色2",
+          "isPlayer": false,
+          "alive": true
+        },
+        {
+          "id": 3,
+          "name": "角色3",
+          "isPlayer": false,
+          "alive": true
+        }
+      ],
+      "expectedActions": [
+        "becomeSoulmatesWith"
+      ],
+      "expectedSourceCharacterId": 1,
+      "expectedTargetCharacterId": 2,
+      "history": [],
+      "message": {
+        "id": "m-becomeSoulmatesWith-7",
+        "role": "user",
+        "name": "角色1",
+        "content": "如果角色1请求与角色2结为灵魂伴侣，会发生什么？"
+      },
+      "expectedDetection": false,
+      "expectedExecution": false,
+      "expectedRejectReason": "hypothetical",
+      "mode": "precision",
+      "legality": {
+        "available": true
+      },
+      "variant": "hypothetical"
+    },
+    {
+      "id": "becomeSoulmatesWith-08",
+      "category": "Soulmate",
+      "participants": [
+        {
+          "id": 1,
+          "name": "角色1",
+          "isPlayer": true,
+          "alive": true
+        },
+        {
+          "id": 2,
+          "name": "角色2",
+          "isPlayer": false,
+          "alive": true
+        },
+        {
+          "id": 3,
+          "name": "角色3",
+          "isPlayer": false,
+          "alive": true
+        }
+      ],
+      "expectedActions": [
+        "becomeSoulmatesWith"
+      ],
+      "expectedSourceCharacterId": 1,
+      "expectedTargetCharacterId": 2,
+      "history": [],
+      "message": {
+        "id": "m-becomeSoulmatesWith-8",
+        "role": "user",
+        "name": "角色1",
+        "content": "我昨天听说过：角色1请求与角色2结为灵魂伴侣。"
+      },
+      "expectedDetection": false,
+      "expectedExecution": false,
+      "expectedRejectReason": "past_report",
+      "mode": "performance",
+      "legality": {
+        "available": true
+      },
+      "variant": "past_report"
+    },
+    {
+      "id": "becomeSoulmatesWith-09",
+      "category": "Soulmate",
+      "participants": [
+        {
+          "id": 1,
+          "name": "角色1",
+          "isPlayer": true,
+          "alive": true
+        },
+        {
+          "id": 2,
+          "name": "角色2",
+          "isPlayer": false,
+          "alive": true
+        },
+        {
+          "id": 3,
+          "name": "角色3",
+          "isPlayer": false,
+          "alive": true
+        }
+      ],
+      "expectedActions": [
+        "becomeSoulmatesWith"
+      ],
+      "expectedSourceCharacterId": 1,
+      "expectedTargetCharacterId": 2,
+      "history": [],
+      "message": {
+        "id": "m-becomeSoulmatesWith-9",
+        "role": "user",
+        "name": "角色1",
+        "content": "我提议以后再做：角色1请求与角色2结为灵魂伴侣。"
+      },
+      "expectedDetection": true,
+      "expectedExecution": false,
+      "expectedRejectReason": "consent_required",
+      "mode": "precision",
+      "legality": {
+        "available": true
+      },
+      "variant": "proposal"
+    },
+    {
+      "id": "becomeSoulmatesWith-10",
+      "category": "Soulmate",
+      "participants": [
+        {
+          "id": 1,
+          "name": "角色1",
+          "isPlayer": true,
+          "alive": true
+        },
+        {
+          "id": 2,
+          "name": "角色2",
+          "isPlayer": false,
+          "alive": true
+        },
+        {
+          "id": 3,
+          "name": "角色3",
+          "isPlayer": false,
+          "alive": true
+        }
+      ],
+      "expectedActions": [
+        "becomeSoulmatesWith"
+      ],
+      "expectedSourceCharacterId": 1,
+      "expectedTargetCharacterId": 2,
+      "history": [],
+      "message": {
+        "id": "m-becomeSoulmatesWith-10",
+        "role": "user",
+        "name": "角色1",
+        "content": "角色1请求与角色2结为灵魂伴侣。"
+      },
+      "expectedDetection": true,
+      "expectedExecution": false,
+      "expectedRejectReason": "rejected_legality_changed",
+      "mode": "performance",
+      "legality": {
+        "available": false
+      },
+      "variant": "invalid_legality"
+    },
+    {
+      "id": "isAssignedToCourtPositionBy-01",
+      "category": "Court Position",
+      "participants": [
+        {
+          "id": 1,
+          "name": "角色1",
+          "isPlayer": true,
+          "alive": true
+        },
+        {
+          "id": 2,
+          "name": "角色2",
+          "isPlayer": false,
+          "alive": true
+        },
+        {
+          "id": 3,
+          "name": "角色3",
+          "isPlayer": false,
+          "alive": true
+        }
+      ],
+      "expectedActions": [
+        "isAssignedToCourtPositionBy"
+      ],
+      "expectedSourceCharacterId": 1,
+      "expectedTargetCharacterId": 2,
+      "history": [],
+      "message": {
+        "id": "m-isAssignedToCourtPositionBy-1",
+        "role": "user",
+        "name": "角色1",
+        "content": "角色2正式任命角色1担任宫廷职位。"
+      },
+      "expectedDetection": true,
+      "expectedExecution": true,
+      "expectedRejectReason": null,
+      "mode": "precision",
+      "legality": {
+        "available": true
+      },
+      "variant": "direct"
+    },
+    {
+      "id": "isAssignedToCourtPositionBy-02",
+      "category": "Court Position",
+      "participants": [
+        {
+          "id": 1,
+          "name": "角色1",
+          "isPlayer": true,
+          "alive": true
+        },
+        {
+          "id": 2,
+          "name": "角色2",
+          "isPlayer": false,
+          "alive": true
+        },
+        {
+          "id": 3,
+          "name": "角色3",
+          "isPlayer": false,
+          "alive": true
+        }
+      ],
+      "expectedActions": [
+        "isAssignedToCourtPositionBy"
+      ],
+      "expectedSourceCharacterId": 1,
+      "expectedTargetCharacterId": 2,
+      "history": [
+        {
+          "id": "h1",
+          "role": "assistant",
+          "name": "角色2",
+          "content": "此事现在就办。"
+        }
+      ],
+      "message": {
+        "id": "m-isAssignedToCourtPositionBy-2",
+        "role": "user",
+        "name": "角色1",
+        "content": "角色2郑重地任命角色1担任宫廷职位。"
+      },
+      "expectedDetection": true,
+      "expectedExecution": true,
+      "expectedRejectReason": null,
+      "mode": "performance",
+      "legality": {
+        "available": true
+      },
+      "variant": "natural"
+    },
+    {
+      "id": "isAssignedToCourtPositionBy-03",
+      "category": "Court Position",
+      "participants": [
+        {
+          "id": 1,
+          "name": "角色1",
+          "isPlayer": true,
+          "alive": true
+        },
+        {
+          "id": 2,
+          "name": "角色2",
+          "isPlayer": false,
+          "alive": true
+        },
+        {
+          "id": 3,
+          "name": "角色3",
+          "isPlayer": false,
+          "alive": true
+        }
+      ],
+      "expectedActions": [
+        "isAssignedToCourtPositionBy"
+      ],
+      "expectedSourceCharacterId": 1,
+      "expectedTargetCharacterId": 2,
+      "history": [
+        {
+          "id": "h1",
+          "role": "user",
+          "name": "角色1",
+          "content": "请确认眼前发生的事。"
+        }
+      ],
+      "message": {
+        "id": "m-isAssignedToCourtPositionBy-3",
+        "role": "user",
+        "name": "角色1",
+        "content": "在众人见证下，角色2正式任命角色1担任宫廷职位。"
+      },
+      "expectedDetection": true,
+      "expectedExecution": true,
+      "expectedRejectReason": null,
+      "mode": "precision",
+      "legality": {
+        "available": true
+      },
+      "variant": "indirect"
+    },
+    {
+      "id": "isAssignedToCourtPositionBy-04",
+      "category": "Court Position",
+      "participants": [
+        {
+          "id": 1,
+          "name": "角色1",
+          "isPlayer": true,
+          "alive": true
+        },
+        {
+          "id": 2,
+          "name": "角色2",
+          "isPlayer": false,
+          "alive": true
+        },
+        {
+          "id": 3,
+          "name": "角色3",
+          "isPlayer": false,
+          "alive": true
+        }
+      ],
+      "expectedActions": [
+        "isAssignedToCourtPositionBy"
+      ],
+      "expectedSourceCharacterId": 1,
+      "expectedTargetCharacterId": 2,
+      "history": [
+        {
+          "id": "h1",
+          "role": "user",
+          "name": "角色1",
+          "content": "角色2正式任命角色1担任宫廷职位。"
+        },
+        {
+          "id": "h2",
+          "role": "assistant",
+          "name": "角色2",
+          "content": "我确认眼前结果。"
+        }
+      ],
+      "message": {
+        "id": "m-isAssignedToCourtPositionBy-4",
+        "role": "user",
+        "name": "角色1",
+        "content": "就按刚才已经完成的结果执行。"
+      },
+      "expectedDetection": true,
+      "expectedExecution": true,
+      "expectedRejectReason": null,
+      "mode": "performance",
+      "legality": {
+        "available": true
+      },
+      "variant": "multi_turn"
+    },
+    {
+      "id": "isAssignedToCourtPositionBy-05",
+      "category": "Court Position",
+      "participants": [
+        {
+          "id": 1,
+          "name": "角色1",
+          "isPlayer": true,
+          "alive": true
+        },
+        {
+          "id": 2,
+          "name": "角色2",
+          "isPlayer": false,
+          "alive": true
+        },
+        {
+          "id": 3,
+          "name": "角色3",
+          "isPlayer": false,
+          "alive": true
+        }
+      ],
+      "expectedActions": [
+        "isAssignedToCourtPositionBy"
+      ],
+      "expectedSourceCharacterId": 1,
+      "expectedTargetCharacterId": 2,
+      "history": [
+        {
+          "id": "h1",
+          "role": "assistant",
+          "name": "角色3",
+          "content": "我在场见证。"
+        }
+      ],
+      "message": {
+        "id": "m-isAssignedToCourtPositionBy-5",
+        "role": "user",
+        "name": "角色1",
+        "content": "角色3在场时，角色2正式任命角色1担任宫廷职位。"
+      },
+      "expectedDetection": true,
+      "expectedExecution": true,
+      "expectedRejectReason": null,
+      "mode": "precision",
+      "legality": {
+        "available": true
+      },
+      "variant": "multi_person"
+    },
+    {
+      "id": "isAssignedToCourtPositionBy-06",
+      "category": "Court Position",
+      "participants": [
+        {
+          "id": 1,
+          "name": "角色1",
+          "isPlayer": true,
+          "alive": true
+        },
+        {
+          "id": 2,
+          "name": "角色2",
+          "isPlayer": false,
+          "alive": true
+        },
+        {
+          "id": 3,
+          "name": "角色3",
+          "isPlayer": false,
+          "alive": true
+        }
+      ],
+      "expectedActions": [
+        "isAssignedToCourtPositionBy"
+      ],
+      "expectedSourceCharacterId": 1,
+      "expectedTargetCharacterId": 2,
+      "history": [],
+      "message": {
+        "id": "m-isAssignedToCourtPositionBy-6",
+        "role": "user",
+        "name": "角色1",
+        "content": "并没有发生这件事：角色2正式任命角色1担任宫廷职位。"
+      },
+      "expectedDetection": false,
+      "expectedExecution": false,
+      "expectedRejectReason": "not_current_action",
+      "mode": "performance",
+      "legality": {
+        "available": true
+      },
+      "variant": "negative"
+    },
+    {
+      "id": "isAssignedToCourtPositionBy-07",
+      "category": "Court Position",
+      "participants": [
+        {
+          "id": 1,
+          "name": "角色1",
+          "isPlayer": true,
+          "alive": true
+        },
+        {
+          "id": 2,
+          "name": "角色2",
+          "isPlayer": false,
+          "alive": true
+        },
+        {
+          "id": 3,
+          "name": "角色3",
+          "isPlayer": false,
+          "alive": true
+        }
+      ],
+      "expectedActions": [
+        "isAssignedToCourtPositionBy"
+      ],
+      "expectedSourceCharacterId": 1,
+      "expectedTargetCharacterId": 2,
+      "history": [],
+      "message": {
+        "id": "m-isAssignedToCourtPositionBy-7",
+        "role": "user",
+        "name": "角色1",
+        "content": "如果角色2正式任命角色1担任宫廷职位，会发生什么？"
+      },
+      "expectedDetection": false,
+      "expectedExecution": false,
+      "expectedRejectReason": "hypothetical",
+      "mode": "precision",
+      "legality": {
+        "available": true
+      },
+      "variant": "hypothetical"
+    },
+    {
+      "id": "isAssignedToCourtPositionBy-08",
+      "category": "Court Position",
+      "participants": [
+        {
+          "id": 1,
+          "name": "角色1",
+          "isPlayer": true,
+          "alive": true
+        },
+        {
+          "id": 2,
+          "name": "角色2",
+          "isPlayer": false,
+          "alive": true
+        },
+        {
+          "id": 3,
+          "name": "角色3",
+          "isPlayer": false,
+          "alive": true
+        }
+      ],
+      "expectedActions": [
+        "isAssignedToCourtPositionBy"
+      ],
+      "expectedSourceCharacterId": 1,
+      "expectedTargetCharacterId": 2,
+      "history": [],
+      "message": {
+        "id": "m-isAssignedToCourtPositionBy-8",
+        "role": "user",
+        "name": "角色1",
+        "content": "我昨天听说过：角色2正式任命角色1担任宫廷职位。"
+      },
+      "expectedDetection": false,
+      "expectedExecution": false,
+      "expectedRejectReason": "past_report",
+      "mode": "performance",
+      "legality": {
+        "available": true
+      },
+      "variant": "past_report"
+    },
+    {
+      "id": "isAssignedToCourtPositionBy-09",
+      "category": "Court Position",
+      "participants": [
+        {
+          "id": 1,
+          "name": "角色1",
+          "isPlayer": true,
+          "alive": true
+        },
+        {
+          "id": 2,
+          "name": "角色2",
+          "isPlayer": false,
+          "alive": true
+        },
+        {
+          "id": 3,
+          "name": "角色3",
+          "isPlayer": false,
+          "alive": true
+        }
+      ],
+      "expectedActions": [
+        "isAssignedToCourtPositionBy"
+      ],
+      "expectedSourceCharacterId": 1,
+      "expectedTargetCharacterId": 2,
+      "history": [],
+      "message": {
+        "id": "m-isAssignedToCourtPositionBy-9",
+        "role": "user",
+        "name": "角色1",
+        "content": "我提议以后再做：角色2正式任命角色1担任宫廷职位。"
+      },
+      "expectedDetection": false,
+      "expectedExecution": false,
+      "expectedRejectReason": "unaccepted_proposal",
+      "mode": "precision",
+      "legality": {
+        "available": true
+      },
+      "variant": "proposal"
+    },
+    {
+      "id": "isAssignedToCourtPositionBy-10",
+      "category": "Court Position",
+      "participants": [
+        {
+          "id": 1,
+          "name": "角色1",
+          "isPlayer": true,
+          "alive": true
+        },
+        {
+          "id": 2,
+          "name": "角色2",
+          "isPlayer": false,
+          "alive": true
+        },
+        {
+          "id": 3,
+          "name": "角色3",
+          "isPlayer": false,
+          "alive": true
+        }
+      ],
+      "expectedActions": [
+        "isAssignedToCourtPositionBy"
+      ],
+      "expectedSourceCharacterId": 1,
+      "expectedTargetCharacterId": 2,
+      "history": [],
+      "message": {
+        "id": "m-isAssignedToCourtPositionBy-10",
+        "role": "user",
+        "name": "角色1",
+        "content": "角色2正式任命角色1担任宫廷职位。"
+      },
+      "expectedDetection": true,
+      "expectedExecution": false,
+      "expectedRejectReason": "rejected_legality_changed",
+      "mode": "performance",
+      "legality": {
+        "available": false
+      },
+      "variant": "invalid_legality"
+    },
+    {
+      "id": "isAssignedToCouncilBy-01",
+      "category": "Council Appointment",
+      "participants": [
+        {
+          "id": 1,
+          "name": "角色1",
+          "isPlayer": true,
+          "alive": true
+        },
+        {
+          "id": 2,
+          "name": "角色2",
+          "isPlayer": false,
+          "alive": true
+        },
+        {
+          "id": 3,
+          "name": "角色3",
+          "isPlayer": false,
+          "alive": true
+        }
+      ],
+      "expectedActions": [
+        "isAssignedToCouncilBy"
+      ],
+      "expectedSourceCharacterId": 1,
+      "expectedTargetCharacterId": 2,
+      "history": [],
+      "message": {
+        "id": "m-isAssignedToCouncilBy-1",
+        "role": "user",
+        "name": "角色1",
+        "content": "角色2正式任命角色1进入内阁。"
+      },
+      "expectedDetection": true,
+      "expectedExecution": true,
+      "expectedRejectReason": null,
+      "mode": "precision",
+      "legality": {
+        "available": true
+      },
+      "variant": "direct"
+    },
+    {
+      "id": "isAssignedToCouncilBy-02",
+      "category": "Council Appointment",
+      "participants": [
+        {
+          "id": 1,
+          "name": "角色1",
+          "isPlayer": true,
+          "alive": true
+        },
+        {
+          "id": 2,
+          "name": "角色2",
+          "isPlayer": false,
+          "alive": true
+        },
+        {
+          "id": 3,
+          "name": "角色3",
+          "isPlayer": false,
+          "alive": true
+        }
+      ],
+      "expectedActions": [
+        "isAssignedToCouncilBy"
+      ],
+      "expectedSourceCharacterId": 1,
+      "expectedTargetCharacterId": 2,
+      "history": [
+        {
+          "id": "h1",
+          "role": "assistant",
+          "name": "角色2",
+          "content": "此事现在就办。"
+        }
+      ],
+      "message": {
+        "id": "m-isAssignedToCouncilBy-2",
+        "role": "user",
+        "name": "角色1",
+        "content": "角色2郑重地任命角色1进入内阁。"
+      },
+      "expectedDetection": true,
+      "expectedExecution": true,
+      "expectedRejectReason": null,
+      "mode": "performance",
+      "legality": {
+        "available": true
+      },
+      "variant": "natural"
+    },
+    {
+      "id": "isAssignedToCouncilBy-03",
+      "category": "Council Appointment",
+      "participants": [
+        {
+          "id": 1,
+          "name": "角色1",
+          "isPlayer": true,
+          "alive": true
+        },
+        {
+          "id": 2,
+          "name": "角色2",
+          "isPlayer": false,
+          "alive": true
+        },
+        {
+          "id": 3,
+          "name": "角色3",
+          "isPlayer": false,
+          "alive": true
+        }
+      ],
+      "expectedActions": [
+        "isAssignedToCouncilBy"
+      ],
+      "expectedSourceCharacterId": 1,
+      "expectedTargetCharacterId": 2,
+      "history": [
+        {
+          "id": "h1",
+          "role": "user",
+          "name": "角色1",
+          "content": "请确认眼前发生的事。"
+        }
+      ],
+      "message": {
+        "id": "m-isAssignedToCouncilBy-3",
+        "role": "user",
+        "name": "角色1",
+        "content": "在众人见证下，角色2正式任命角色1进入内阁。"
+      },
+      "expectedDetection": true,
+      "expectedExecution": true,
+      "expectedRejectReason": null,
+      "mode": "precision",
+      "legality": {
+        "available": true
+      },
+      "variant": "indirect"
+    },
+    {
+      "id": "isAssignedToCouncilBy-04",
+      "category": "Council Appointment",
+      "participants": [
+        {
+          "id": 1,
+          "name": "角色1",
+          "isPlayer": true,
+          "alive": true
+        },
+        {
+          "id": 2,
+          "name": "角色2",
+          "isPlayer": false,
+          "alive": true
+        },
+        {
+          "id": 3,
+          "name": "角色3",
+          "isPlayer": false,
+          "alive": true
+        }
+      ],
+      "expectedActions": [
+        "isAssignedToCouncilBy"
+      ],
+      "expectedSourceCharacterId": 1,
+      "expectedTargetCharacterId": 2,
+      "history": [
+        {
+          "id": "h1",
+          "role": "user",
+          "name": "角色1",
+          "content": "角色2正式任命角色1进入内阁。"
+        },
+        {
+          "id": "h2",
+          "role": "assistant",
+          "name": "角色2",
+          "content": "我确认眼前结果。"
+        }
+      ],
+      "message": {
+        "id": "m-isAssignedToCouncilBy-4",
+        "role": "user",
+        "name": "角色1",
+        "content": "就按刚才已经完成的结果执行。"
+      },
+      "expectedDetection": true,
+      "expectedExecution": true,
+      "expectedRejectReason": null,
+      "mode": "performance",
+      "legality": {
+        "available": true
+      },
+      "variant": "multi_turn"
+    },
+    {
+      "id": "isAssignedToCouncilBy-05",
+      "category": "Council Appointment",
+      "participants": [
+        {
+          "id": 1,
+          "name": "角色1",
+          "isPlayer": true,
+          "alive": true
+        },
+        {
+          "id": 2,
+          "name": "角色2",
+          "isPlayer": false,
+          "alive": true
+        },
+        {
+          "id": 3,
+          "name": "角色3",
+          "isPlayer": false,
+          "alive": true
+        }
+      ],
+      "expectedActions": [
+        "isAssignedToCouncilBy"
+      ],
+      "expectedSourceCharacterId": 1,
+      "expectedTargetCharacterId": 2,
+      "history": [
+        {
+          "id": "h1",
+          "role": "assistant",
+          "name": "角色3",
+          "content": "我在场见证。"
+        }
+      ],
+      "message": {
+        "id": "m-isAssignedToCouncilBy-5",
+        "role": "user",
+        "name": "角色1",
+        "content": "角色3在场时，角色2正式任命角色1进入内阁。"
+      },
+      "expectedDetection": true,
+      "expectedExecution": true,
+      "expectedRejectReason": null,
+      "mode": "precision",
+      "legality": {
+        "available": true
+      },
+      "variant": "multi_person"
+    },
+    {
+      "id": "isAssignedToCouncilBy-06",
+      "category": "Council Appointment",
+      "participants": [
+        {
+          "id": 1,
+          "name": "角色1",
+          "isPlayer": true,
+          "alive": true
+        },
+        {
+          "id": 2,
+          "name": "角色2",
+          "isPlayer": false,
+          "alive": true
+        },
+        {
+          "id": 3,
+          "name": "角色3",
+          "isPlayer": false,
+          "alive": true
+        }
+      ],
+      "expectedActions": [
+        "isAssignedToCouncilBy"
+      ],
+      "expectedSourceCharacterId": 1,
+      "expectedTargetCharacterId": 2,
+      "history": [],
+      "message": {
+        "id": "m-isAssignedToCouncilBy-6",
+        "role": "user",
+        "name": "角色1",
+        "content": "并没有发生这件事：角色2正式任命角色1进入内阁。"
+      },
+      "expectedDetection": false,
+      "expectedExecution": false,
+      "expectedRejectReason": "not_current_action",
+      "mode": "performance",
+      "legality": {
+        "available": true
+      },
+      "variant": "negative"
+    },
+    {
+      "id": "isAssignedToCouncilBy-07",
+      "category": "Council Appointment",
+      "participants": [
+        {
+          "id": 1,
+          "name": "角色1",
+          "isPlayer": true,
+          "alive": true
+        },
+        {
+          "id": 2,
+          "name": "角色2",
+          "isPlayer": false,
+          "alive": true
+        },
+        {
+          "id": 3,
+          "name": "角色3",
+          "isPlayer": false,
+          "alive": true
+        }
+      ],
+      "expectedActions": [
+        "isAssignedToCouncilBy"
+      ],
+      "expectedSourceCharacterId": 1,
+      "expectedTargetCharacterId": 2,
+      "history": [],
+      "message": {
+        "id": "m-isAssignedToCouncilBy-7",
+        "role": "user",
+        "name": "角色1",
+        "content": "如果角色2正式任命角色1进入内阁，会发生什么？"
+      },
+      "expectedDetection": false,
+      "expectedExecution": false,
+      "expectedRejectReason": "hypothetical",
+      "mode": "precision",
+      "legality": {
+        "available": true
+      },
+      "variant": "hypothetical"
+    },
+    {
+      "id": "isAssignedToCouncilBy-08",
+      "category": "Council Appointment",
+      "participants": [
+        {
+          "id": 1,
+          "name": "角色1",
+          "isPlayer": true,
+          "alive": true
+        },
+        {
+          "id": 2,
+          "name": "角色2",
+          "isPlayer": false,
+          "alive": true
+        },
+        {
+          "id": 3,
+          "name": "角色3",
+          "isPlayer": false,
+          "alive": true
+        }
+      ],
+      "expectedActions": [
+        "isAssignedToCouncilBy"
+      ],
+      "expectedSourceCharacterId": 1,
+      "expectedTargetCharacterId": 2,
+      "history": [],
+      "message": {
+        "id": "m-isAssignedToCouncilBy-8",
+        "role": "user",
+        "name": "角色1",
+        "content": "我昨天听说过：角色2正式任命角色1进入内阁。"
+      },
+      "expectedDetection": false,
+      "expectedExecution": false,
+      "expectedRejectReason": "past_report",
+      "mode": "performance",
+      "legality": {
+        "available": true
+      },
+      "variant": "past_report"
+    },
+    {
+      "id": "isAssignedToCouncilBy-09",
+      "category": "Council Appointment",
+      "participants": [
+        {
+          "id": 1,
+          "name": "角色1",
+          "isPlayer": true,
+          "alive": true
+        },
+        {
+          "id": 2,
+          "name": "角色2",
+          "isPlayer": false,
+          "alive": true
+        },
+        {
+          "id": 3,
+          "name": "角色3",
+          "isPlayer": false,
+          "alive": true
+        }
+      ],
+      "expectedActions": [
+        "isAssignedToCouncilBy"
+      ],
+      "expectedSourceCharacterId": 1,
+      "expectedTargetCharacterId": 2,
+      "history": [],
+      "message": {
+        "id": "m-isAssignedToCouncilBy-9",
+        "role": "user",
+        "name": "角色1",
+        "content": "我提议以后再做：角色2正式任命角色1进入内阁。"
+      },
+      "expectedDetection": false,
+      "expectedExecution": false,
+      "expectedRejectReason": "unaccepted_proposal",
+      "mode": "precision",
+      "legality": {
+        "available": true
+      },
+      "variant": "proposal"
+    },
+    {
+      "id": "isAssignedToCouncilBy-10",
+      "category": "Council Appointment",
+      "participants": [
+        {
+          "id": 1,
+          "name": "角色1",
+          "isPlayer": true,
+          "alive": true
+        },
+        {
+          "id": 2,
+          "name": "角色2",
+          "isPlayer": false,
+          "alive": true
+        },
+        {
+          "id": 3,
+          "name": "角色3",
+          "isPlayer": false,
+          "alive": true
+        }
+      ],
+      "expectedActions": [
+        "isAssignedToCouncilBy"
+      ],
+      "expectedSourceCharacterId": 1,
+      "expectedTargetCharacterId": 2,
+      "history": [],
+      "message": {
+        "id": "m-isAssignedToCouncilBy-10",
+        "role": "user",
+        "name": "角色1",
+        "content": "角色2正式任命角色1进入内阁。"
+      },
+      "expectedDetection": true,
+      "expectedExecution": false,
+      "expectedRejectReason": "rejected_legality_changed",
+      "mode": "performance",
+      "legality": {
+        "available": false
+      },
+      "variant": "invalid_legality"
+    },
+    {
+      "id": "isFiredFromCouncilOf-01",
+      "category": "Council Dismissal",
+      "participants": [
+        {
+          "id": 1,
+          "name": "角色1",
+          "isPlayer": true,
+          "alive": true
+        },
+        {
+          "id": 2,
+          "name": "角色2",
+          "isPlayer": false,
+          "alive": true
+        },
+        {
+          "id": 3,
+          "name": "角色3",
+          "isPlayer": false,
+          "alive": true
+        }
+      ],
+      "expectedActions": [
+        "isFiredFromCouncilOf"
+      ],
+      "expectedSourceCharacterId": 1,
+      "expectedTargetCharacterId": 2,
+      "history": [],
+      "message": {
+        "id": "m-isFiredFromCouncilOf-1",
+        "role": "user",
+        "name": "角色1",
+        "content": "角色2正式罢免了角色1的内阁职位。"
+      },
+      "expectedDetection": true,
+      "expectedExecution": true,
+      "expectedRejectReason": null,
+      "mode": "precision",
+      "legality": {
+        "available": true
+      },
+      "variant": "direct"
+    },
+    {
+      "id": "isFiredFromCouncilOf-02",
+      "category": "Council Dismissal",
+      "participants": [
+        {
+          "id": 1,
+          "name": "角色1",
+          "isPlayer": true,
+          "alive": true
+        },
+        {
+          "id": 2,
+          "name": "角色2",
+          "isPlayer": false,
+          "alive": true
+        },
+        {
+          "id": 3,
+          "name": "角色3",
+          "isPlayer": false,
+          "alive": true
+        }
+      ],
+      "expectedActions": [
+        "isFiredFromCouncilOf"
+      ],
+      "expectedSourceCharacterId": 1,
+      "expectedTargetCharacterId": 2,
+      "history": [
+        {
+          "id": "h1",
+          "role": "assistant",
+          "name": "角色2",
+          "content": "此事现在就办。"
+        }
+      ],
+      "message": {
+        "id": "m-isFiredFromCouncilOf-2",
+        "role": "user",
+        "name": "角色1",
+        "content": "角色2郑重地罢免了角色1的内阁职位。"
+      },
+      "expectedDetection": true,
+      "expectedExecution": true,
+      "expectedRejectReason": null,
+      "mode": "performance",
+      "legality": {
+        "available": true
+      },
+      "variant": "natural"
+    },
+    {
+      "id": "isFiredFromCouncilOf-03",
+      "category": "Council Dismissal",
+      "participants": [
+        {
+          "id": 1,
+          "name": "角色1",
+          "isPlayer": true,
+          "alive": true
+        },
+        {
+          "id": 2,
+          "name": "角色2",
+          "isPlayer": false,
+          "alive": true
+        },
+        {
+          "id": 3,
+          "name": "角色3",
+          "isPlayer": false,
+          "alive": true
+        }
+      ],
+      "expectedActions": [
+        "isFiredFromCouncilOf"
+      ],
+      "expectedSourceCharacterId": 1,
+      "expectedTargetCharacterId": 2,
+      "history": [
+        {
+          "id": "h1",
+          "role": "user",
+          "name": "角色1",
+          "content": "请确认眼前发生的事。"
+        }
+      ],
+      "message": {
+        "id": "m-isFiredFromCouncilOf-3",
+        "role": "user",
+        "name": "角色1",
+        "content": "在众人见证下，角色2正式罢免了角色1的内阁职位。"
+      },
+      "expectedDetection": true,
+      "expectedExecution": true,
+      "expectedRejectReason": null,
+      "mode": "precision",
+      "legality": {
+        "available": true
+      },
+      "variant": "indirect"
+    },
+    {
+      "id": "isFiredFromCouncilOf-04",
+      "category": "Council Dismissal",
+      "participants": [
+        {
+          "id": 1,
+          "name": "角色1",
+          "isPlayer": true,
+          "alive": true
+        },
+        {
+          "id": 2,
+          "name": "角色2",
+          "isPlayer": false,
+          "alive": true
+        },
+        {
+          "id": 3,
+          "name": "角色3",
+          "isPlayer": false,
+          "alive": true
+        }
+      ],
+      "expectedActions": [
+        "isFiredFromCouncilOf"
+      ],
+      "expectedSourceCharacterId": 1,
+      "expectedTargetCharacterId": 2,
+      "history": [
+        {
+          "id": "h1",
+          "role": "user",
+          "name": "角色1",
+          "content": "角色2正式罢免了角色1的内阁职位。"
+        },
+        {
+          "id": "h2",
+          "role": "assistant",
+          "name": "角色2",
+          "content": "我确认眼前结果。"
+        }
+      ],
+      "message": {
+        "id": "m-isFiredFromCouncilOf-4",
+        "role": "user",
+        "name": "角色1",
+        "content": "就按刚才已经完成的结果执行。"
+      },
+      "expectedDetection": true,
+      "expectedExecution": true,
+      "expectedRejectReason": null,
+      "mode": "performance",
+      "legality": {
+        "available": true
+      },
+      "variant": "multi_turn"
+    },
+    {
+      "id": "isFiredFromCouncilOf-05",
+      "category": "Council Dismissal",
+      "participants": [
+        {
+          "id": 1,
+          "name": "角色1",
+          "isPlayer": true,
+          "alive": true
+        },
+        {
+          "id": 2,
+          "name": "角色2",
+          "isPlayer": false,
+          "alive": true
+        },
+        {
+          "id": 3,
+          "name": "角色3",
+          "isPlayer": false,
+          "alive": true
+        }
+      ],
+      "expectedActions": [
+        "isFiredFromCouncilOf"
+      ],
+      "expectedSourceCharacterId": 1,
+      "expectedTargetCharacterId": 2,
+      "history": [
+        {
+          "id": "h1",
+          "role": "assistant",
+          "name": "角色3",
+          "content": "我在场见证。"
+        }
+      ],
+      "message": {
+        "id": "m-isFiredFromCouncilOf-5",
+        "role": "user",
+        "name": "角色1",
+        "content": "角色3在场时，角色2正式罢免了角色1的内阁职位。"
+      },
+      "expectedDetection": true,
+      "expectedExecution": true,
+      "expectedRejectReason": null,
+      "mode": "precision",
+      "legality": {
+        "available": true
+      },
+      "variant": "multi_person"
+    },
+    {
+      "id": "isFiredFromCouncilOf-06",
+      "category": "Council Dismissal",
+      "participants": [
+        {
+          "id": 1,
+          "name": "角色1",
+          "isPlayer": true,
+          "alive": true
+        },
+        {
+          "id": 2,
+          "name": "角色2",
+          "isPlayer": false,
+          "alive": true
+        },
+        {
+          "id": 3,
+          "name": "角色3",
+          "isPlayer": false,
+          "alive": true
+        }
+      ],
+      "expectedActions": [
+        "isFiredFromCouncilOf"
+      ],
+      "expectedSourceCharacterId": 1,
+      "expectedTargetCharacterId": 2,
+      "history": [],
+      "message": {
+        "id": "m-isFiredFromCouncilOf-6",
+        "role": "user",
+        "name": "角色1",
+        "content": "并没有发生这件事：角色2正式罢免了角色1的内阁职位。"
+      },
+      "expectedDetection": false,
+      "expectedExecution": false,
+      "expectedRejectReason": "not_current_action",
+      "mode": "performance",
+      "legality": {
+        "available": true
+      },
+      "variant": "negative"
+    },
+    {
+      "id": "isFiredFromCouncilOf-07",
+      "category": "Council Dismissal",
+      "participants": [
+        {
+          "id": 1,
+          "name": "角色1",
+          "isPlayer": true,
+          "alive": true
+        },
+        {
+          "id": 2,
+          "name": "角色2",
+          "isPlayer": false,
+          "alive": true
+        },
+        {
+          "id": 3,
+          "name": "角色3",
+          "isPlayer": false,
+          "alive": true
+        }
+      ],
+      "expectedActions": [
+        "isFiredFromCouncilOf"
+      ],
+      "expectedSourceCharacterId": 1,
+      "expectedTargetCharacterId": 2,
+      "history": [],
+      "message": {
+        "id": "m-isFiredFromCouncilOf-7",
+        "role": "user",
+        "name": "角色1",
+        "content": "如果角色2正式罢免了角色1的内阁职位，会发生什么？"
+      },
+      "expectedDetection": false,
+      "expectedExecution": false,
+      "expectedRejectReason": "hypothetical",
+      "mode": "precision",
+      "legality": {
+        "available": true
+      },
+      "variant": "hypothetical"
+    },
+    {
+      "id": "isFiredFromCouncilOf-08",
+      "category": "Council Dismissal",
+      "participants": [
+        {
+          "id": 1,
+          "name": "角色1",
+          "isPlayer": true,
+          "alive": true
+        },
+        {
+          "id": 2,
+          "name": "角色2",
+          "isPlayer": false,
+          "alive": true
+        },
+        {
+          "id": 3,
+          "name": "角色3",
+          "isPlayer": false,
+          "alive": true
+        }
+      ],
+      "expectedActions": [
+        "isFiredFromCouncilOf"
+      ],
+      "expectedSourceCharacterId": 1,
+      "expectedTargetCharacterId": 2,
+      "history": [],
+      "message": {
+        "id": "m-isFiredFromCouncilOf-8",
+        "role": "user",
+        "name": "角色1",
+        "content": "我昨天听说过：角色2正式罢免了角色1的内阁职位。"
+      },
+      "expectedDetection": false,
+      "expectedExecution": false,
+      "expectedRejectReason": "past_report",
+      "mode": "performance",
+      "legality": {
+        "available": true
+      },
+      "variant": "past_report"
+    },
+    {
+      "id": "isFiredFromCouncilOf-09",
+      "category": "Council Dismissal",
+      "participants": [
+        {
+          "id": 1,
+          "name": "角色1",
+          "isPlayer": true,
+          "alive": true
+        },
+        {
+          "id": 2,
+          "name": "角色2",
+          "isPlayer": false,
+          "alive": true
+        },
+        {
+          "id": 3,
+          "name": "角色3",
+          "isPlayer": false,
+          "alive": true
+        }
+      ],
+      "expectedActions": [
+        "isFiredFromCouncilOf"
+      ],
+      "expectedSourceCharacterId": 1,
+      "expectedTargetCharacterId": 2,
+      "history": [],
+      "message": {
+        "id": "m-isFiredFromCouncilOf-9",
+        "role": "user",
+        "name": "角色1",
+        "content": "我提议以后再做：角色2正式罢免了角色1的内阁职位。"
+      },
+      "expectedDetection": false,
+      "expectedExecution": false,
+      "expectedRejectReason": "unaccepted_proposal",
+      "mode": "precision",
+      "legality": {
+        "available": true
+      },
+      "variant": "proposal"
+    },
+    {
+      "id": "isFiredFromCouncilOf-10",
+      "category": "Council Dismissal",
+      "participants": [
+        {
+          "id": 1,
+          "name": "角色1",
+          "isPlayer": true,
+          "alive": true
+        },
+        {
+          "id": 2,
+          "name": "角色2",
+          "isPlayer": false,
+          "alive": true
+        },
+        {
+          "id": 3,
+          "name": "角色3",
+          "isPlayer": false,
+          "alive": true
+        }
+      ],
+      "expectedActions": [
+        "isFiredFromCouncilOf"
+      ],
+      "expectedSourceCharacterId": 1,
+      "expectedTargetCharacterId": 2,
+      "history": [],
+      "message": {
+        "id": "m-isFiredFromCouncilOf-10",
+        "role": "user",
+        "name": "角色1",
+        "content": "角色2正式罢免了角色1的内阁职位。"
+      },
+      "expectedDetection": true,
+      "expectedExecution": false,
+      "expectedRejectReason": "rejected_legality_changed",
+      "mode": "performance",
+      "legality": {
+        "available": false
+      },
+      "variant": "invalid_legality"
+    },
+    {
+      "id": "agreedToTruceWith-01",
+      "category": "Mutual Truce",
+      "participants": [
+        {
+          "id": 1,
+          "name": "角色1",
+          "isPlayer": true,
+          "alive": true
+        },
+        {
+          "id": 2,
+          "name": "角色2",
+          "isPlayer": false,
+          "alive": true
+        },
+        {
+          "id": 3,
+          "name": "角色3",
+          "isPlayer": false,
+          "alive": true
+        }
+      ],
+      "expectedActions": [
+        "agreedToTruceWith"
+      ],
+      "expectedSourceCharacterId": 1,
+      "expectedTargetCharacterId": 2,
+      "history": [],
+      "message": {
+        "id": "m-agreedToTruceWith-1",
+        "role": "user",
+        "name": "角色1",
+        "content": "角色1与角色2正式达成停战。"
+      },
+      "expectedDetection": true,
+      "expectedExecution": true,
+      "expectedRejectReason": null,
+      "mode": "precision",
+      "legality": {
+        "available": true
+      },
+      "variant": "direct"
+    },
+    {
+      "id": "agreedToTruceWith-02",
+      "category": "Mutual Truce",
+      "participants": [
+        {
+          "id": 1,
+          "name": "角色1",
+          "isPlayer": true,
+          "alive": true
+        },
+        {
+          "id": 2,
+          "name": "角色2",
+          "isPlayer": false,
+          "alive": true
+        },
+        {
+          "id": 3,
+          "name": "角色3",
+          "isPlayer": false,
+          "alive": true
+        }
+      ],
+      "expectedActions": [
+        "agreedToTruceWith"
+      ],
+      "expectedSourceCharacterId": 1,
+      "expectedTargetCharacterId": 2,
+      "history": [
+        {
+          "id": "h1",
+          "role": "assistant",
+          "name": "角色2",
+          "content": "此事现在就办。"
+        }
+      ],
+      "message": {
+        "id": "m-agreedToTruceWith-2",
+        "role": "user",
+        "name": "角色1",
+        "content": "角色1与角色2郑重地达成停战。"
+      },
+      "expectedDetection": true,
+      "expectedExecution": true,
+      "expectedRejectReason": null,
+      "mode": "performance",
+      "legality": {
+        "available": true
+      },
+      "variant": "natural"
+    },
+    {
+      "id": "agreedToTruceWith-03",
+      "category": "Mutual Truce",
+      "participants": [
+        {
+          "id": 1,
+          "name": "角色1",
+          "isPlayer": true,
+          "alive": true
+        },
+        {
+          "id": 2,
+          "name": "角色2",
+          "isPlayer": false,
+          "alive": true
+        },
+        {
+          "id": 3,
+          "name": "角色3",
+          "isPlayer": false,
+          "alive": true
+        }
+      ],
+      "expectedActions": [
+        "agreedToTruceWith"
+      ],
+      "expectedSourceCharacterId": 1,
+      "expectedTargetCharacterId": 2,
+      "history": [
+        {
+          "id": "h1",
+          "role": "user",
+          "name": "角色1",
+          "content": "请确认眼前发生的事。"
+        }
+      ],
+      "message": {
+        "id": "m-agreedToTruceWith-3",
+        "role": "user",
+        "name": "角色1",
+        "content": "在众人见证下，角色1与角色2正式达成停战。"
+      },
+      "expectedDetection": true,
+      "expectedExecution": true,
+      "expectedRejectReason": null,
+      "mode": "precision",
+      "legality": {
+        "available": true
+      },
+      "variant": "indirect"
+    },
+    {
+      "id": "agreedToTruceWith-04",
+      "category": "Mutual Truce",
+      "participants": [
+        {
+          "id": 1,
+          "name": "角色1",
+          "isPlayer": true,
+          "alive": true
+        },
+        {
+          "id": 2,
+          "name": "角色2",
+          "isPlayer": false,
+          "alive": true
+        },
+        {
+          "id": 3,
+          "name": "角色3",
+          "isPlayer": false,
+          "alive": true
+        }
+      ],
+      "expectedActions": [
+        "agreedToTruceWith"
+      ],
+      "expectedSourceCharacterId": 1,
+      "expectedTargetCharacterId": 2,
+      "history": [
+        {
+          "id": "h1",
+          "role": "user",
+          "name": "角色1",
+          "content": "角色1与角色2正式达成停战。"
+        },
+        {
+          "id": "h2",
+          "role": "assistant",
+          "name": "角色2",
+          "content": "我确认眼前结果。"
+        }
+      ],
+      "message": {
+        "id": "m-agreedToTruceWith-4",
+        "role": "user",
+        "name": "角色1",
+        "content": "就按刚才已经完成的结果执行。"
+      },
+      "expectedDetection": true,
+      "expectedExecution": true,
+      "expectedRejectReason": null,
+      "mode": "performance",
+      "legality": {
+        "available": true
+      },
+      "variant": "multi_turn"
+    },
+    {
+      "id": "agreedToTruceWith-05",
+      "category": "Mutual Truce",
+      "participants": [
+        {
+          "id": 1,
+          "name": "角色1",
+          "isPlayer": true,
+          "alive": true
+        },
+        {
+          "id": 2,
+          "name": "角色2",
+          "isPlayer": false,
+          "alive": true
+        },
+        {
+          "id": 3,
+          "name": "角色3",
+          "isPlayer": false,
+          "alive": true
+        }
+      ],
+      "expectedActions": [
+        "agreedToTruceWith"
+      ],
+      "expectedSourceCharacterId": 1,
+      "expectedTargetCharacterId": 2,
+      "history": [
+        {
+          "id": "h1",
+          "role": "assistant",
+          "name": "角色3",
+          "content": "我在场见证。"
+        }
+      ],
+      "message": {
+        "id": "m-agreedToTruceWith-5",
+        "role": "user",
+        "name": "角色1",
+        "content": "角色3在场时，角色1与角色2正式达成停战。"
+      },
+      "expectedDetection": true,
+      "expectedExecution": true,
+      "expectedRejectReason": null,
+      "mode": "precision",
+      "legality": {
+        "available": true
+      },
+      "variant": "multi_person"
+    },
+    {
+      "id": "agreedToTruceWith-06",
+      "category": "Mutual Truce",
+      "participants": [
+        {
+          "id": 1,
+          "name": "角色1",
+          "isPlayer": true,
+          "alive": true
+        },
+        {
+          "id": 2,
+          "name": "角色2",
+          "isPlayer": false,
+          "alive": true
+        },
+        {
+          "id": 3,
+          "name": "角色3",
+          "isPlayer": false,
+          "alive": true
+        }
+      ],
+      "expectedActions": [
+        "agreedToTruceWith"
+      ],
+      "expectedSourceCharacterId": 1,
+      "expectedTargetCharacterId": 2,
+      "history": [],
+      "message": {
+        "id": "m-agreedToTruceWith-6",
+        "role": "user",
+        "name": "角色1",
+        "content": "并没有发生这件事：角色1与角色2正式达成停战。"
+      },
+      "expectedDetection": false,
+      "expectedExecution": false,
+      "expectedRejectReason": "not_current_action",
+      "mode": "performance",
+      "legality": {
+        "available": true
+      },
+      "variant": "negative"
+    },
+    {
+      "id": "agreedToTruceWith-07",
+      "category": "Mutual Truce",
+      "participants": [
+        {
+          "id": 1,
+          "name": "角色1",
+          "isPlayer": true,
+          "alive": true
+        },
+        {
+          "id": 2,
+          "name": "角色2",
+          "isPlayer": false,
+          "alive": true
+        },
+        {
+          "id": 3,
+          "name": "角色3",
+          "isPlayer": false,
+          "alive": true
+        }
+      ],
+      "expectedActions": [
+        "agreedToTruceWith"
+      ],
+      "expectedSourceCharacterId": 1,
+      "expectedTargetCharacterId": 2,
+      "history": [],
+      "message": {
+        "id": "m-agreedToTruceWith-7",
+        "role": "user",
+        "name": "角色1",
+        "content": "如果角色1与角色2正式达成停战，会发生什么？"
+      },
+      "expectedDetection": false,
+      "expectedExecution": false,
+      "expectedRejectReason": "hypothetical",
+      "mode": "precision",
+      "legality": {
+        "available": true
+      },
+      "variant": "hypothetical"
+    },
+    {
+      "id": "agreedToTruceWith-08",
+      "category": "Mutual Truce",
+      "participants": [
+        {
+          "id": 1,
+          "name": "角色1",
+          "isPlayer": true,
+          "alive": true
+        },
+        {
+          "id": 2,
+          "name": "角色2",
+          "isPlayer": false,
+          "alive": true
+        },
+        {
+          "id": 3,
+          "name": "角色3",
+          "isPlayer": false,
+          "alive": true
+        }
+      ],
+      "expectedActions": [
+        "agreedToTruceWith"
+      ],
+      "expectedSourceCharacterId": 1,
+      "expectedTargetCharacterId": 2,
+      "history": [],
+      "message": {
+        "id": "m-agreedToTruceWith-8",
+        "role": "user",
+        "name": "角色1",
+        "content": "我昨天听说过：角色1与角色2正式达成停战。"
+      },
+      "expectedDetection": false,
+      "expectedExecution": false,
+      "expectedRejectReason": "past_report",
+      "mode": "performance",
+      "legality": {
+        "available": true
+      },
+      "variant": "past_report"
+    },
+    {
+      "id": "agreedToTruceWith-09",
+      "category": "Mutual Truce",
+      "participants": [
+        {
+          "id": 1,
+          "name": "角色1",
+          "isPlayer": true,
+          "alive": true
+        },
+        {
+          "id": 2,
+          "name": "角色2",
+          "isPlayer": false,
+          "alive": true
+        },
+        {
+          "id": 3,
+          "name": "角色3",
+          "isPlayer": false,
+          "alive": true
+        }
+      ],
+      "expectedActions": [
+        "agreedToTruceWith"
+      ],
+      "expectedSourceCharacterId": 1,
+      "expectedTargetCharacterId": 2,
+      "history": [],
+      "message": {
+        "id": "m-agreedToTruceWith-9",
+        "role": "user",
+        "name": "角色1",
+        "content": "我提议以后再做：角色1与角色2正式达成停战。"
+      },
+      "expectedDetection": true,
+      "expectedExecution": false,
+      "expectedRejectReason": "consent_required",
+      "mode": "precision",
+      "legality": {
+        "available": true
+      },
+      "variant": "proposal"
+    },
+    {
+      "id": "agreedToTruceWith-10",
+      "category": "Mutual Truce",
+      "participants": [
+        {
+          "id": 1,
+          "name": "角色1",
+          "isPlayer": true,
+          "alive": true
+        },
+        {
+          "id": 2,
+          "name": "角色2",
+          "isPlayer": false,
+          "alive": true
+        },
+        {
+          "id": 3,
+          "name": "角色3",
+          "isPlayer": false,
+          "alive": true
+        }
+      ],
+      "expectedActions": [
+        "agreedToTruceWith"
+      ],
+      "expectedSourceCharacterId": 1,
+      "expectedTargetCharacterId": 2,
+      "history": [],
+      "message": {
+        "id": "m-agreedToTruceWith-10",
+        "role": "user",
+        "name": "角色1",
+        "content": "角色1与角色2正式达成停战。"
+      },
+      "expectedDetection": true,
+      "expectedExecution": false,
+      "expectedRejectReason": "rejected_legality_changed",
+      "mode": "performance",
+      "legality": {
+        "available": false
+      },
+      "variant": "invalid_legality"
+    },
+    {
+      "id": "changeOpinionOf-01",
+      "category": "Praise / Opinion",
+      "participants": [
+        {
+          "id": 1,
+          "name": "角色1",
+          "isPlayer": true,
+          "alive": true
+        },
+        {
+          "id": 2,
+          "name": "角色2",
+          "isPlayer": false,
+          "alive": true
+        },
+        {
+          "id": 3,
+          "name": "角色3",
+          "isPlayer": false,
+          "alive": true
+        }
+      ],
+      "expectedActions": [
+        "changeOpinionOf"
+      ],
+      "expectedSourceCharacterId": 2,
+      "expectedTargetCharacterId": 1,
+      "history": [],
+      "message": {
+        "id": "m-changeOpinionOf-1",
+        "role": "user",
+        "name": "角色1",
+        "content": "角色1真诚称赞角色2做得很好。"
+      },
+      "expectedDetection": true,
+      "expectedExecution": true,
+      "expectedRejectReason": null,
+      "mode": "precision",
+      "legality": {
+        "available": true
+      },
+      "variant": "direct"
+    },
+    {
+      "id": "changeOpinionOf-02",
+      "category": "Praise / Opinion",
+      "participants": [
+        {
+          "id": 1,
+          "name": "角色1",
+          "isPlayer": true,
+          "alive": true
+        },
+        {
+          "id": 2,
+          "name": "角色2",
+          "isPlayer": false,
+          "alive": true
+        },
+        {
+          "id": 3,
+          "name": "角色3",
+          "isPlayer": false,
+          "alive": true
+        }
+      ],
+      "expectedActions": [
+        "changeOpinionOf"
+      ],
+      "expectedSourceCharacterId": 2,
+      "expectedTargetCharacterId": 1,
+      "history": [
+        {
+          "id": "h1",
+          "role": "assistant",
+          "name": "角色2",
+          "content": "此事现在就办。"
+        }
+      ],
+      "message": {
+        "id": "m-changeOpinionOf-2",
+        "role": "user",
+        "name": "角色1",
+        "content": "角色1真诚称赞角色2做得很好。"
+      },
+      "expectedDetection": true,
+      "expectedExecution": true,
+      "expectedRejectReason": null,
+      "mode": "performance",
+      "legality": {
+        "available": true
+      },
+      "variant": "natural"
+    },
+    {
+      "id": "changeOpinionOf-03",
+      "category": "Praise / Opinion",
+      "participants": [
+        {
+          "id": 1,
+          "name": "角色1",
+          "isPlayer": true,
+          "alive": true
+        },
+        {
+          "id": 2,
+          "name": "角色2",
+          "isPlayer": false,
+          "alive": true
+        },
+        {
+          "id": 3,
+          "name": "角色3",
+          "isPlayer": false,
+          "alive": true
+        }
+      ],
+      "expectedActions": [
+        "changeOpinionOf"
+      ],
+      "expectedSourceCharacterId": 2,
+      "expectedTargetCharacterId": 1,
+      "history": [
+        {
+          "id": "h1",
+          "role": "user",
+          "name": "角色1",
+          "content": "请确认眼前发生的事。"
+        }
+      ],
+      "message": {
+        "id": "m-changeOpinionOf-3",
+        "role": "user",
+        "name": "角色1",
+        "content": "在众人见证下，角色1真诚称赞角色2做得很好。"
+      },
+      "expectedDetection": true,
+      "expectedExecution": true,
+      "expectedRejectReason": null,
+      "mode": "precision",
+      "legality": {
+        "available": true
+      },
+      "variant": "indirect"
+    },
+    {
+      "id": "changeOpinionOf-04",
+      "category": "Praise / Opinion",
+      "participants": [
+        {
+          "id": 1,
+          "name": "角色1",
+          "isPlayer": true,
+          "alive": true
+        },
+        {
+          "id": 2,
+          "name": "角色2",
+          "isPlayer": false,
+          "alive": true
+        },
+        {
+          "id": 3,
+          "name": "角色3",
+          "isPlayer": false,
+          "alive": true
+        }
+      ],
+      "expectedActions": [
+        "changeOpinionOf"
+      ],
+      "expectedSourceCharacterId": 2,
+      "expectedTargetCharacterId": 1,
+      "history": [
+        {
+          "id": "h1",
+          "role": "user",
+          "name": "角色1",
+          "content": "角色1真诚称赞角色2做得很好。"
+        },
+        {
+          "id": "h2",
+          "role": "assistant",
+          "name": "角色2",
+          "content": "我确认眼前结果。"
+        }
+      ],
+      "message": {
+        "id": "m-changeOpinionOf-4",
+        "role": "user",
+        "name": "角色1",
+        "content": "就按刚才已经完成的结果执行。"
+      },
+      "expectedDetection": true,
+      "expectedExecution": true,
+      "expectedRejectReason": null,
+      "mode": "performance",
+      "legality": {
+        "available": true
+      },
+      "variant": "multi_turn"
+    },
+    {
+      "id": "changeOpinionOf-05",
+      "category": "Praise / Opinion",
+      "participants": [
+        {
+          "id": 1,
+          "name": "角色1",
+          "isPlayer": true,
+          "alive": true
+        },
+        {
+          "id": 2,
+          "name": "角色2",
+          "isPlayer": false,
+          "alive": true
+        },
+        {
+          "id": 3,
+          "name": "角色3",
+          "isPlayer": false,
+          "alive": true
+        }
+      ],
+      "expectedActions": [
+        "changeOpinionOf"
+      ],
+      "expectedSourceCharacterId": 2,
+      "expectedTargetCharacterId": 1,
+      "history": [
+        {
+          "id": "h1",
+          "role": "assistant",
+          "name": "角色3",
+          "content": "我在场见证。"
+        }
+      ],
+      "message": {
+        "id": "m-changeOpinionOf-5",
+        "role": "user",
+        "name": "角色1",
+        "content": "角色3在场时，角色1真诚称赞角色2做得很好。"
+      },
+      "expectedDetection": true,
+      "expectedExecution": true,
+      "expectedRejectReason": null,
+      "mode": "precision",
+      "legality": {
+        "available": true
+      },
+      "variant": "multi_person"
+    },
+    {
+      "id": "changeOpinionOf-06",
+      "category": "Praise / Opinion",
+      "participants": [
+        {
+          "id": 1,
+          "name": "角色1",
+          "isPlayer": true,
+          "alive": true
+        },
+        {
+          "id": 2,
+          "name": "角色2",
+          "isPlayer": false,
+          "alive": true
+        },
+        {
+          "id": 3,
+          "name": "角色3",
+          "isPlayer": false,
+          "alive": true
+        }
+      ],
+      "expectedActions": [
+        "changeOpinionOf"
+      ],
+      "expectedSourceCharacterId": 2,
+      "expectedTargetCharacterId": 1,
+      "history": [],
+      "message": {
+        "id": "m-changeOpinionOf-6",
+        "role": "user",
+        "name": "角色1",
+        "content": "并没有发生这件事：角色1真诚称赞角色2做得很好。"
+      },
+      "expectedDetection": false,
+      "expectedExecution": false,
+      "expectedRejectReason": "not_current_action",
+      "mode": "performance",
+      "legality": {
+        "available": true
+      },
+      "variant": "negative"
+    },
+    {
+      "id": "changeOpinionOf-07",
+      "category": "Praise / Opinion",
+      "participants": [
+        {
+          "id": 1,
+          "name": "角色1",
+          "isPlayer": true,
+          "alive": true
+        },
+        {
+          "id": 2,
+          "name": "角色2",
+          "isPlayer": false,
+          "alive": true
+        },
+        {
+          "id": 3,
+          "name": "角色3",
+          "isPlayer": false,
+          "alive": true
+        }
+      ],
+      "expectedActions": [
+        "changeOpinionOf"
+      ],
+      "expectedSourceCharacterId": 2,
+      "expectedTargetCharacterId": 1,
+      "history": [],
+      "message": {
+        "id": "m-changeOpinionOf-7",
+        "role": "user",
+        "name": "角色1",
+        "content": "如果角色1真诚称赞角色2做得很好，会发生什么？"
+      },
+      "expectedDetection": false,
+      "expectedExecution": false,
+      "expectedRejectReason": "hypothetical",
+      "mode": "precision",
+      "legality": {
+        "available": true
+      },
+      "variant": "hypothetical"
+    },
+    {
+      "id": "changeOpinionOf-08",
+      "category": "Praise / Opinion",
+      "participants": [
+        {
+          "id": 1,
+          "name": "角色1",
+          "isPlayer": true,
+          "alive": true
+        },
+        {
+          "id": 2,
+          "name": "角色2",
+          "isPlayer": false,
+          "alive": true
+        },
+        {
+          "id": 3,
+          "name": "角色3",
+          "isPlayer": false,
+          "alive": true
+        }
+      ],
+      "expectedActions": [
+        "changeOpinionOf"
+      ],
+      "expectedSourceCharacterId": 2,
+      "expectedTargetCharacterId": 1,
+      "history": [],
+      "message": {
+        "id": "m-changeOpinionOf-8",
+        "role": "user",
+        "name": "角色1",
+        "content": "我昨天听说过：角色1真诚称赞角色2做得很好。"
+      },
+      "expectedDetection": false,
+      "expectedExecution": false,
+      "expectedRejectReason": "past_report",
+      "mode": "performance",
+      "legality": {
+        "available": true
+      },
+      "variant": "past_report"
+    },
+    {
+      "id": "changeOpinionOf-09",
+      "category": "Praise / Opinion",
+      "participants": [
+        {
+          "id": 1,
+          "name": "角色1",
+          "isPlayer": true,
+          "alive": true
+        },
+        {
+          "id": 2,
+          "name": "角色2",
+          "isPlayer": false,
+          "alive": true
+        },
+        {
+          "id": 3,
+          "name": "角色3",
+          "isPlayer": false,
+          "alive": true
+        }
+      ],
+      "expectedActions": [
+        "changeOpinionOf"
+      ],
+      "expectedSourceCharacterId": 2,
+      "expectedTargetCharacterId": 1,
+      "history": [],
+      "message": {
+        "id": "m-changeOpinionOf-9",
+        "role": "user",
+        "name": "角色1",
+        "content": "我提议以后再做：角色1真诚称赞角色2做得很好。"
+      },
+      "expectedDetection": false,
+      "expectedExecution": false,
+      "expectedRejectReason": "unaccepted_proposal",
+      "mode": "precision",
+      "legality": {
+        "available": true
+      },
+      "variant": "proposal"
+    },
+    {
+      "id": "changeOpinionOf-10",
+      "category": "Praise / Opinion",
+      "participants": [
+        {
+          "id": 1,
+          "name": "角色1",
+          "isPlayer": true,
+          "alive": true
+        },
+        {
+          "id": 2,
+          "name": "角色2",
+          "isPlayer": false,
+          "alive": true
+        },
+        {
+          "id": 3,
+          "name": "角色3",
+          "isPlayer": false,
+          "alive": true
+        }
+      ],
+      "expectedActions": [
+        "changeOpinionOf"
+      ],
+      "expectedSourceCharacterId": 2,
+      "expectedTargetCharacterId": 1,
+      "history": [],
+      "message": {
+        "id": "m-changeOpinionOf-10",
+        "role": "user",
+        "name": "角色1",
+        "content": "角色1真诚称赞角色2做得很好。"
+      },
+      "expectedDetection": true,
+      "expectedExecution": false,
+      "expectedRejectReason": "rejected_legality_changed",
+      "mode": "performance",
+      "legality": {
+        "available": false
+      },
+      "variant": "invalid_legality"
+    },
+    {
+      "id": "setEmotion-01",
+      "category": "setEmotion",
+      "participants": [
+        {
+          "id": 1,
+          "name": "角色1",
+          "isPlayer": true,
+          "alive": true
+        },
+        {
+          "id": 2,
+          "name": "角色2",
+          "isPlayer": false,
+          "alive": true
+        },
+        {
+          "id": 3,
+          "name": "角色3",
+          "isPlayer": false,
+          "alive": true
+        }
+      ],
+      "expectedActions": [
+        "setEmotion"
+      ],
+      "expectedSourceCharacterId": 1,
+      "expectedTargetCharacterId": 2,
+      "history": [],
+      "message": {
+        "id": "m-setEmotion-1",
+        "role": "user",
+        "name": "角色1",
+        "content": "角色2露出了微笑。"
+      },
+      "expectedDetection": true,
+      "expectedExecution": true,
+      "expectedRejectReason": null,
+      "mode": "precision",
+      "legality": {
+        "available": true
+      },
+      "variant": "direct"
+    },
+    {
+      "id": "setEmotion-02",
+      "category": "setEmotion",
+      "participants": [
+        {
+          "id": 1,
+          "name": "角色1",
+          "isPlayer": true,
+          "alive": true
+        },
+        {
+          "id": 2,
+          "name": "角色2",
+          "isPlayer": false,
+          "alive": true
+        },
+        {
+          "id": 3,
+          "name": "角色3",
+          "isPlayer": false,
+          "alive": true
+        }
+      ],
+      "expectedActions": [
+        "setEmotion"
+      ],
+      "expectedSourceCharacterId": 1,
+      "expectedTargetCharacterId": 2,
+      "history": [
+        {
+          "id": "h1",
+          "role": "assistant",
+          "name": "角色2",
+          "content": "此事现在就办。"
+        }
+      ],
+      "message": {
+        "id": "m-setEmotion-2",
+        "role": "user",
+        "name": "角色1",
+        "content": "角色2露出了微笑。"
+      },
+      "expectedDetection": true,
+      "expectedExecution": true,
+      "expectedRejectReason": null,
+      "mode": "performance",
+      "legality": {
+        "available": true
+      },
+      "variant": "natural"
+    },
+    {
+      "id": "setEmotion-03",
+      "category": "setEmotion",
+      "participants": [
+        {
+          "id": 1,
+          "name": "角色1",
+          "isPlayer": true,
+          "alive": true
+        },
+        {
+          "id": 2,
+          "name": "角色2",
+          "isPlayer": false,
+          "alive": true
+        },
+        {
+          "id": 3,
+          "name": "角色3",
+          "isPlayer": false,
+          "alive": true
+        }
+      ],
+      "expectedActions": [
+        "setEmotion"
+      ],
+      "expectedSourceCharacterId": 1,
+      "expectedTargetCharacterId": 2,
+      "history": [
+        {
+          "id": "h1",
+          "role": "user",
+          "name": "角色1",
+          "content": "请确认眼前发生的事。"
+        }
+      ],
+      "message": {
+        "id": "m-setEmotion-3",
+        "role": "user",
+        "name": "角色1",
+        "content": "在众人见证下，角色2露出了微笑。"
+      },
+      "expectedDetection": true,
+      "expectedExecution": true,
+      "expectedRejectReason": null,
+      "mode": "precision",
+      "legality": {
+        "available": true
+      },
+      "variant": "indirect"
+    },
+    {
+      "id": "setEmotion-04",
+      "category": "setEmotion",
+      "participants": [
+        {
+          "id": 1,
+          "name": "角色1",
+          "isPlayer": true,
+          "alive": true
+        },
+        {
+          "id": 2,
+          "name": "角色2",
+          "isPlayer": false,
+          "alive": true
+        },
+        {
+          "id": 3,
+          "name": "角色3",
+          "isPlayer": false,
+          "alive": true
+        }
+      ],
+      "expectedActions": [
+        "setEmotion"
+      ],
+      "expectedSourceCharacterId": 1,
+      "expectedTargetCharacterId": 2,
+      "history": [
+        {
+          "id": "h1",
+          "role": "user",
+          "name": "角色1",
+          "content": "角色2露出了微笑。"
+        },
+        {
+          "id": "h2",
+          "role": "assistant",
+          "name": "角色2",
+          "content": "我确认眼前结果。"
+        }
+      ],
+      "message": {
+        "id": "m-setEmotion-4",
+        "role": "user",
+        "name": "角色1",
+        "content": "就按刚才已经完成的结果执行。"
+      },
+      "expectedDetection": true,
+      "expectedExecution": true,
+      "expectedRejectReason": null,
+      "mode": "performance",
+      "legality": {
+        "available": true
+      },
+      "variant": "multi_turn"
+    },
+    {
+      "id": "setEmotion-05",
+      "category": "setEmotion",
+      "participants": [
+        {
+          "id": 1,
+          "name": "角色1",
+          "isPlayer": true,
+          "alive": true
+        },
+        {
+          "id": 2,
+          "name": "角色2",
+          "isPlayer": false,
+          "alive": true
+        },
+        {
+          "id": 3,
+          "name": "角色3",
+          "isPlayer": false,
+          "alive": true
+        }
+      ],
+      "expectedActions": [
+        "setEmotion"
+      ],
+      "expectedSourceCharacterId": 1,
+      "expectedTargetCharacterId": 2,
+      "history": [
+        {
+          "id": "h1",
+          "role": "assistant",
+          "name": "角色3",
+          "content": "我在场见证。"
+        }
+      ],
+      "message": {
+        "id": "m-setEmotion-5",
+        "role": "user",
+        "name": "角色1",
+        "content": "角色3在场时，角色2露出了微笑。"
+      },
+      "expectedDetection": true,
+      "expectedExecution": true,
+      "expectedRejectReason": null,
+      "mode": "precision",
+      "legality": {
+        "available": true
+      },
+      "variant": "multi_person"
+    },
+    {
+      "id": "setEmotion-06",
+      "category": "setEmotion",
+      "participants": [
+        {
+          "id": 1,
+          "name": "角色1",
+          "isPlayer": true,
+          "alive": true
+        },
+        {
+          "id": 2,
+          "name": "角色2",
+          "isPlayer": false,
+          "alive": true
+        },
+        {
+          "id": 3,
+          "name": "角色3",
+          "isPlayer": false,
+          "alive": true
+        }
+      ],
+      "expectedActions": [
+        "setEmotion"
+      ],
+      "expectedSourceCharacterId": 1,
+      "expectedTargetCharacterId": 2,
+      "history": [],
+      "message": {
+        "id": "m-setEmotion-6",
+        "role": "user",
+        "name": "角色1",
+        "content": "并没有发生这件事：角色2露出了微笑。"
+      },
+      "expectedDetection": false,
+      "expectedExecution": false,
+      "expectedRejectReason": "not_current_action",
+      "mode": "performance",
+      "legality": {
+        "available": true
+      },
+      "variant": "negative"
+    },
+    {
+      "id": "setEmotion-07",
+      "category": "setEmotion",
+      "participants": [
+        {
+          "id": 1,
+          "name": "角色1",
+          "isPlayer": true,
+          "alive": true
+        },
+        {
+          "id": 2,
+          "name": "角色2",
+          "isPlayer": false,
+          "alive": true
+        },
+        {
+          "id": 3,
+          "name": "角色3",
+          "isPlayer": false,
+          "alive": true
+        }
+      ],
+      "expectedActions": [
+        "setEmotion"
+      ],
+      "expectedSourceCharacterId": 1,
+      "expectedTargetCharacterId": 2,
+      "history": [],
+      "message": {
+        "id": "m-setEmotion-7",
+        "role": "user",
+        "name": "角色1",
+        "content": "如果角色2露出了微笑，会发生什么？"
+      },
+      "expectedDetection": false,
+      "expectedExecution": false,
+      "expectedRejectReason": "hypothetical",
+      "mode": "precision",
+      "legality": {
+        "available": true
+      },
+      "variant": "hypothetical"
+    },
+    {
+      "id": "setEmotion-08",
+      "category": "setEmotion",
+      "participants": [
+        {
+          "id": 1,
+          "name": "角色1",
+          "isPlayer": true,
+          "alive": true
+        },
+        {
+          "id": 2,
+          "name": "角色2",
+          "isPlayer": false,
+          "alive": true
+        },
+        {
+          "id": 3,
+          "name": "角色3",
+          "isPlayer": false,
+          "alive": true
+        }
+      ],
+      "expectedActions": [
+        "setEmotion"
+      ],
+      "expectedSourceCharacterId": 1,
+      "expectedTargetCharacterId": 2,
+      "history": [],
+      "message": {
+        "id": "m-setEmotion-8",
+        "role": "user",
+        "name": "角色1",
+        "content": "我昨天听说过：角色2露出了微笑。"
+      },
+      "expectedDetection": false,
+      "expectedExecution": false,
+      "expectedRejectReason": "past_report",
+      "mode": "performance",
+      "legality": {
+        "available": true
+      },
+      "variant": "past_report"
+    },
+    {
+      "id": "setEmotion-09",
+      "category": "setEmotion",
+      "participants": [
+        {
+          "id": 1,
+          "name": "角色1",
+          "isPlayer": true,
+          "alive": true
+        },
+        {
+          "id": 2,
+          "name": "角色2",
+          "isPlayer": false,
+          "alive": true
+        },
+        {
+          "id": 3,
+          "name": "角色3",
+          "isPlayer": false,
+          "alive": true
+        }
+      ],
+      "expectedActions": [
+        "setEmotion"
+      ],
+      "expectedSourceCharacterId": 1,
+      "expectedTargetCharacterId": 2,
+      "history": [],
+      "message": {
+        "id": "m-setEmotion-9",
+        "role": "user",
+        "name": "角色1",
+        "content": "我提议以后再做：角色2露出了微笑。"
+      },
+      "expectedDetection": false,
+      "expectedExecution": false,
+      "expectedRejectReason": "unaccepted_proposal",
+      "mode": "precision",
+      "legality": {
+        "available": true
+      },
+      "variant": "proposal"
+    },
+    {
+      "id": "setEmotion-10",
+      "category": "setEmotion",
+      "participants": [
+        {
+          "id": 1,
+          "name": "角色1",
+          "isPlayer": true,
+          "alive": true
+        },
+        {
+          "id": 2,
+          "name": "角色2",
+          "isPlayer": false,
+          "alive": true
+        },
+        {
+          "id": 3,
+          "name": "角色3",
+          "isPlayer": false,
+          "alive": true
+        }
+      ],
+      "expectedActions": [
+        "setEmotion"
+      ],
+      "expectedSourceCharacterId": 1,
+      "expectedTargetCharacterId": 2,
+      "history": [],
+      "message": {
+        "id": "m-setEmotion-10",
+        "role": "user",
+        "name": "角色1",
+        "content": "角色2露出了微笑。"
+      },
+      "expectedDetection": true,
+      "expectedExecution": false,
+      "expectedRejectReason": "rejected_legality_changed",
+      "mode": "performance",
+      "legality": {
+        "available": false
+      },
+      "variant": "invalid_legality"
+    },
+    {
+      "id": "isUndressed-01",
+      "category": "Undress",
+      "participants": [
+        {
+          "id": 1,
+          "name": "角色1",
+          "isPlayer": true,
+          "alive": true
+        },
+        {
+          "id": 2,
+          "name": "角色2",
+          "isPlayer": false,
+          "alive": true
+        },
+        {
+          "id": 3,
+          "name": "角色3",
+          "isPlayer": false,
+          "alive": true
+        }
+      ],
+      "expectedActions": [
+        "isUndressed"
+      ],
+      "expectedSourceCharacterId": 1,
+      "expectedTargetCharacterId": 2,
+      "history": [],
+      "message": {
+        "id": "m-isUndressed-1",
+        "role": "user",
+        "name": "角色1",
+        "content": "角色1亲手脱下了角色2的长袍。"
+      },
+      "expectedDetection": true,
+      "expectedExecution": true,
+      "expectedRejectReason": null,
+      "mode": "precision",
+      "legality": {
+        "available": true
+      },
+      "variant": "direct"
+    },
+    {
+      "id": "isUndressed-02",
+      "category": "Undress",
+      "participants": [
+        {
+          "id": 1,
+          "name": "角色1",
+          "isPlayer": true,
+          "alive": true
+        },
+        {
+          "id": 2,
+          "name": "角色2",
+          "isPlayer": false,
+          "alive": true
+        },
+        {
+          "id": 3,
+          "name": "角色3",
+          "isPlayer": false,
+          "alive": true
+        }
+      ],
+      "expectedActions": [
+        "isUndressed"
+      ],
+      "expectedSourceCharacterId": 1,
+      "expectedTargetCharacterId": 2,
+      "history": [
+        {
+          "id": "h1",
+          "role": "assistant",
+          "name": "角色2",
+          "content": "此事现在就办。"
+        }
+      ],
+      "message": {
+        "id": "m-isUndressed-2",
+        "role": "user",
+        "name": "角色1",
+        "content": "角色1亲手脱下了角色2的长袍。"
+      },
+      "expectedDetection": true,
+      "expectedExecution": true,
+      "expectedRejectReason": null,
+      "mode": "performance",
+      "legality": {
+        "available": true
+      },
+      "variant": "natural"
+    },
+    {
+      "id": "isUndressed-03",
+      "category": "Undress",
+      "participants": [
+        {
+          "id": 1,
+          "name": "角色1",
+          "isPlayer": true,
+          "alive": true
+        },
+        {
+          "id": 2,
+          "name": "角色2",
+          "isPlayer": false,
+          "alive": true
+        },
+        {
+          "id": 3,
+          "name": "角色3",
+          "isPlayer": false,
+          "alive": true
+        }
+      ],
+      "expectedActions": [
+        "isUndressed"
+      ],
+      "expectedSourceCharacterId": 1,
+      "expectedTargetCharacterId": 2,
+      "history": [
+        {
+          "id": "h1",
+          "role": "user",
+          "name": "角色1",
+          "content": "请确认眼前发生的事。"
+        }
+      ],
+      "message": {
+        "id": "m-isUndressed-3",
+        "role": "user",
+        "name": "角色1",
+        "content": "在众人见证下，角色1亲手脱下了角色2的长袍。"
+      },
+      "expectedDetection": true,
+      "expectedExecution": true,
+      "expectedRejectReason": null,
+      "mode": "precision",
+      "legality": {
+        "available": true
+      },
+      "variant": "indirect"
+    },
+    {
+      "id": "isUndressed-04",
+      "category": "Undress",
+      "participants": [
+        {
+          "id": 1,
+          "name": "角色1",
+          "isPlayer": true,
+          "alive": true
+        },
+        {
+          "id": 2,
+          "name": "角色2",
+          "isPlayer": false,
+          "alive": true
+        },
+        {
+          "id": 3,
+          "name": "角色3",
+          "isPlayer": false,
+          "alive": true
+        }
+      ],
+      "expectedActions": [
+        "isUndressed"
+      ],
+      "expectedSourceCharacterId": 1,
+      "expectedTargetCharacterId": 2,
+      "history": [
+        {
+          "id": "h1",
+          "role": "user",
+          "name": "角色1",
+          "content": "角色1亲手脱下了角色2的长袍。"
+        },
+        {
+          "id": "h2",
+          "role": "assistant",
+          "name": "角色2",
+          "content": "我确认眼前结果。"
+        }
+      ],
+      "message": {
+        "id": "m-isUndressed-4",
+        "role": "user",
+        "name": "角色1",
+        "content": "就按刚才已经完成的结果执行。"
+      },
+      "expectedDetection": true,
+      "expectedExecution": true,
+      "expectedRejectReason": null,
+      "mode": "performance",
+      "legality": {
+        "available": true
+      },
+      "variant": "multi_turn"
+    },
+    {
+      "id": "isUndressed-05",
+      "category": "Undress",
+      "participants": [
+        {
+          "id": 1,
+          "name": "角色1",
+          "isPlayer": true,
+          "alive": true
+        },
+        {
+          "id": 2,
+          "name": "角色2",
+          "isPlayer": false,
+          "alive": true
+        },
+        {
+          "id": 3,
+          "name": "角色3",
+          "isPlayer": false,
+          "alive": true
+        }
+      ],
+      "expectedActions": [
+        "isUndressed"
+      ],
+      "expectedSourceCharacterId": 1,
+      "expectedTargetCharacterId": 2,
+      "history": [
+        {
+          "id": "h1",
+          "role": "assistant",
+          "name": "角色3",
+          "content": "我在场见证。"
+        }
+      ],
+      "message": {
+        "id": "m-isUndressed-5",
+        "role": "user",
+        "name": "角色1",
+        "content": "角色3在场时，角色1亲手脱下了角色2的长袍。"
+      },
+      "expectedDetection": true,
+      "expectedExecution": true,
+      "expectedRejectReason": null,
+      "mode": "precision",
+      "legality": {
+        "available": true
+      },
+      "variant": "multi_person"
+    },
+    {
+      "id": "isUndressed-06",
+      "category": "Undress",
+      "participants": [
+        {
+          "id": 1,
+          "name": "角色1",
+          "isPlayer": true,
+          "alive": true
+        },
+        {
+          "id": 2,
+          "name": "角色2",
+          "isPlayer": false,
+          "alive": true
+        },
+        {
+          "id": 3,
+          "name": "角色3",
+          "isPlayer": false,
+          "alive": true
+        }
+      ],
+      "expectedActions": [
+        "isUndressed"
+      ],
+      "expectedSourceCharacterId": 1,
+      "expectedTargetCharacterId": 2,
+      "history": [],
+      "message": {
+        "id": "m-isUndressed-6",
+        "role": "user",
+        "name": "角色1",
+        "content": "并没有发生这件事：角色1亲手脱下了角色2的长袍。"
+      },
+      "expectedDetection": false,
+      "expectedExecution": false,
+      "expectedRejectReason": "not_current_action",
+      "mode": "performance",
+      "legality": {
+        "available": true
+      },
+      "variant": "negative"
+    },
+    {
+      "id": "isUndressed-07",
+      "category": "Undress",
+      "participants": [
+        {
+          "id": 1,
+          "name": "角色1",
+          "isPlayer": true,
+          "alive": true
+        },
+        {
+          "id": 2,
+          "name": "角色2",
+          "isPlayer": false,
+          "alive": true
+        },
+        {
+          "id": 3,
+          "name": "角色3",
+          "isPlayer": false,
+          "alive": true
+        }
+      ],
+      "expectedActions": [
+        "isUndressed"
+      ],
+      "expectedSourceCharacterId": 1,
+      "expectedTargetCharacterId": 2,
+      "history": [],
+      "message": {
+        "id": "m-isUndressed-7",
+        "role": "user",
+        "name": "角色1",
+        "content": "如果角色1亲手脱下了角色2的长袍，会发生什么？"
+      },
+      "expectedDetection": false,
+      "expectedExecution": false,
+      "expectedRejectReason": "hypothetical",
+      "mode": "precision",
+      "legality": {
+        "available": true
+      },
+      "variant": "hypothetical"
+    },
+    {
+      "id": "isUndressed-08",
+      "category": "Undress",
+      "participants": [
+        {
+          "id": 1,
+          "name": "角色1",
+          "isPlayer": true,
+          "alive": true
+        },
+        {
+          "id": 2,
+          "name": "角色2",
+          "isPlayer": false,
+          "alive": true
+        },
+        {
+          "id": 3,
+          "name": "角色3",
+          "isPlayer": false,
+          "alive": true
+        }
+      ],
+      "expectedActions": [
+        "isUndressed"
+      ],
+      "expectedSourceCharacterId": 1,
+      "expectedTargetCharacterId": 2,
+      "history": [],
+      "message": {
+        "id": "m-isUndressed-8",
+        "role": "user",
+        "name": "角色1",
+        "content": "我昨天听说过：角色1亲手脱下了角色2的长袍。"
+      },
+      "expectedDetection": false,
+      "expectedExecution": false,
+      "expectedRejectReason": "past_report",
+      "mode": "performance",
+      "legality": {
+        "available": true
+      },
+      "variant": "past_report"
+    },
+    {
+      "id": "isUndressed-09",
+      "category": "Undress",
+      "participants": [
+        {
+          "id": 1,
+          "name": "角色1",
+          "isPlayer": true,
+          "alive": true
+        },
+        {
+          "id": 2,
+          "name": "角色2",
+          "isPlayer": false,
+          "alive": true
+        },
+        {
+          "id": 3,
+          "name": "角色3",
+          "isPlayer": false,
+          "alive": true
+        }
+      ],
+      "expectedActions": [
+        "isUndressed"
+      ],
+      "expectedSourceCharacterId": 1,
+      "expectedTargetCharacterId": 2,
+      "history": [],
+      "message": {
+        "id": "m-isUndressed-9",
+        "role": "user",
+        "name": "角色1",
+        "content": "我提议以后再做：角色1亲手脱下了角色2的长袍。"
+      },
+      "expectedDetection": false,
+      "expectedExecution": false,
+      "expectedRejectReason": "unaccepted_proposal",
+      "mode": "precision",
+      "legality": {
+        "available": true
+      },
+      "variant": "proposal"
+    },
+    {
+      "id": "isUndressed-10",
+      "category": "Undress",
+      "participants": [
+        {
+          "id": 1,
+          "name": "角色1",
+          "isPlayer": true,
+          "alive": true
+        },
+        {
+          "id": 2,
+          "name": "角色2",
+          "isPlayer": false,
+          "alive": true
+        },
+        {
+          "id": 3,
+          "name": "角色3",
+          "isPlayer": false,
+          "alive": true
+        }
+      ],
+      "expectedActions": [
+        "isUndressed"
+      ],
+      "expectedSourceCharacterId": 1,
+      "expectedTargetCharacterId": 2,
+      "history": [],
+      "message": {
+        "id": "m-isUndressed-10",
+        "role": "user",
+        "name": "角色1",
+        "content": "角色1亲手脱下了角色2的长袍。"
+      },
+      "expectedDetection": true,
+      "expectedExecution": false,
+      "expectedRejectReason": "rejected_legality_changed",
+      "mode": "performance",
+      "legality": {
+        "available": false
+      },
+      "variant": "invalid_legality"
+    },
+    {
+      "id": "changeLocation-01",
+      "category": "Scene Change",
+      "participants": [
+        {
+          "id": 1,
+          "name": "角色1",
+          "isPlayer": true,
+          "alive": true
+        },
+        {
+          "id": 2,
+          "name": "角色2",
+          "isPlayer": false,
+          "alive": true
+        },
+        {
+          "id": 3,
+          "name": "角色3",
+          "isPlayer": false,
+          "alive": true
+        }
+      ],
+      "expectedActions": [
+        "changeLocation"
+      ],
+      "expectedSourceCharacterId": 1,
+      "expectedTargetCharacterId": null,
+      "history": [],
+      "message": {
+        "id": "m-changeLocation-1",
+        "role": "user",
+        "name": "角色1",
+        "content": "众人已经进入了王座厅。"
+      },
+      "expectedDetection": true,
+      "expectedExecution": true,
+      "expectedRejectReason": null,
+      "mode": "precision",
+      "legality": {
+        "available": true
+      },
+      "variant": "direct"
+    },
+    {
+      "id": "changeLocation-02",
+      "category": "Scene Change",
+      "participants": [
+        {
+          "id": 1,
+          "name": "角色1",
+          "isPlayer": true,
+          "alive": true
+        },
+        {
+          "id": 2,
+          "name": "角色2",
+          "isPlayer": false,
+          "alive": true
+        },
+        {
+          "id": 3,
+          "name": "角色3",
+          "isPlayer": false,
+          "alive": true
+        }
+      ],
+      "expectedActions": [
+        "changeLocation"
+      ],
+      "expectedSourceCharacterId": 1,
+      "expectedTargetCharacterId": null,
+      "history": [
+        {
+          "id": "h1",
+          "role": "assistant",
+          "name": "角色2",
+          "content": "此事现在就办。"
+        }
+      ],
+      "message": {
+        "id": "m-changeLocation-2",
+        "role": "user",
+        "name": "角色1",
+        "content": "众人确实已经进入了王座厅。"
+      },
+      "expectedDetection": true,
+      "expectedExecution": true,
+      "expectedRejectReason": null,
+      "mode": "performance",
+      "legality": {
+        "available": true
+      },
+      "variant": "natural"
+    },
+    {
+      "id": "changeLocation-03",
+      "category": "Scene Change",
+      "participants": [
+        {
+          "id": 1,
+          "name": "角色1",
+          "isPlayer": true,
+          "alive": true
+        },
+        {
+          "id": 2,
+          "name": "角色2",
+          "isPlayer": false,
+          "alive": true
+        },
+        {
+          "id": 3,
+          "name": "角色3",
+          "isPlayer": false,
+          "alive": true
+        }
+      ],
+      "expectedActions": [
+        "changeLocation"
+      ],
+      "expectedSourceCharacterId": 1,
+      "expectedTargetCharacterId": null,
+      "history": [
+        {
+          "id": "h1",
+          "role": "user",
+          "name": "角色1",
+          "content": "请确认眼前发生的事。"
+        }
+      ],
+      "message": {
+        "id": "m-changeLocation-3",
+        "role": "user",
+        "name": "角色1",
+        "content": "在众人见证下，众人已经进入了王座厅。"
+      },
+      "expectedDetection": true,
+      "expectedExecution": true,
+      "expectedRejectReason": null,
+      "mode": "precision",
+      "legality": {
+        "available": true
+      },
+      "variant": "indirect"
+    },
+    {
+      "id": "changeLocation-04",
+      "category": "Scene Change",
+      "participants": [
+        {
+          "id": 1,
+          "name": "角色1",
+          "isPlayer": true,
+          "alive": true
+        },
+        {
+          "id": 2,
+          "name": "角色2",
+          "isPlayer": false,
+          "alive": true
+        },
+        {
+          "id": 3,
+          "name": "角色3",
+          "isPlayer": false,
+          "alive": true
+        }
+      ],
+      "expectedActions": [
+        "changeLocation"
+      ],
+      "expectedSourceCharacterId": 1,
+      "expectedTargetCharacterId": null,
+      "history": [
+        {
+          "id": "h1",
+          "role": "user",
+          "name": "角色1",
+          "content": "众人已经进入了王座厅。"
+        },
+        {
+          "id": "h2",
+          "role": "assistant",
+          "name": "角色2",
+          "content": "我确认眼前结果。"
+        }
+      ],
+      "message": {
+        "id": "m-changeLocation-4",
+        "role": "user",
+        "name": "角色1",
+        "content": "就按刚才已经完成的结果执行。"
+      },
+      "expectedDetection": true,
+      "expectedExecution": true,
+      "expectedRejectReason": null,
+      "mode": "performance",
+      "legality": {
+        "available": true
+      },
+      "variant": "multi_turn"
+    },
+    {
+      "id": "changeLocation-05",
+      "category": "Scene Change",
+      "participants": [
+        {
+          "id": 1,
+          "name": "角色1",
+          "isPlayer": true,
+          "alive": true
+        },
+        {
+          "id": 2,
+          "name": "角色2",
+          "isPlayer": false,
+          "alive": true
+        },
+        {
+          "id": 3,
+          "name": "角色3",
+          "isPlayer": false,
+          "alive": true
+        }
+      ],
+      "expectedActions": [
+        "changeLocation"
+      ],
+      "expectedSourceCharacterId": 1,
+      "expectedTargetCharacterId": null,
+      "history": [
+        {
+          "id": "h1",
+          "role": "assistant",
+          "name": "角色3",
+          "content": "我在场见证。"
+        }
+      ],
+      "message": {
+        "id": "m-changeLocation-5",
+        "role": "user",
+        "name": "角色1",
+        "content": "角色3在场时，众人已经进入了王座厅。"
+      },
+      "expectedDetection": true,
+      "expectedExecution": true,
+      "expectedRejectReason": null,
+      "mode": "precision",
+      "legality": {
+        "available": true
+      },
+      "variant": "multi_person"
+    },
+    {
+      "id": "changeLocation-06",
+      "category": "Scene Change",
+      "participants": [
+        {
+          "id": 1,
+          "name": "角色1",
+          "isPlayer": true,
+          "alive": true
+        },
+        {
+          "id": 2,
+          "name": "角色2",
+          "isPlayer": false,
+          "alive": true
+        },
+        {
+          "id": 3,
+          "name": "角色3",
+          "isPlayer": false,
+          "alive": true
+        }
+      ],
+      "expectedActions": [
+        "changeLocation"
+      ],
+      "expectedSourceCharacterId": 1,
+      "expectedTargetCharacterId": null,
+      "history": [],
+      "message": {
+        "id": "m-changeLocation-6",
+        "role": "user",
+        "name": "角色1",
+        "content": "并没有发生这件事：众人已经进入了王座厅。"
+      },
+      "expectedDetection": false,
+      "expectedExecution": false,
+      "expectedRejectReason": "not_current_action",
+      "mode": "performance",
+      "legality": {
+        "available": true
+      },
+      "variant": "negative"
+    },
+    {
+      "id": "changeLocation-07",
+      "category": "Scene Change",
+      "participants": [
+        {
+          "id": 1,
+          "name": "角色1",
+          "isPlayer": true,
+          "alive": true
+        },
+        {
+          "id": 2,
+          "name": "角色2",
+          "isPlayer": false,
+          "alive": true
+        },
+        {
+          "id": 3,
+          "name": "角色3",
+          "isPlayer": false,
+          "alive": true
+        }
+      ],
+      "expectedActions": [
+        "changeLocation"
+      ],
+      "expectedSourceCharacterId": 1,
+      "expectedTargetCharacterId": null,
+      "history": [],
+      "message": {
+        "id": "m-changeLocation-7",
+        "role": "user",
+        "name": "角色1",
+        "content": "如果众人已经进入了王座厅，会发生什么？"
+      },
+      "expectedDetection": false,
+      "expectedExecution": false,
+      "expectedRejectReason": "hypothetical",
+      "mode": "precision",
+      "legality": {
+        "available": true
+      },
+      "variant": "hypothetical"
+    },
+    {
+      "id": "changeLocation-08",
+      "category": "Scene Change",
+      "participants": [
+        {
+          "id": 1,
+          "name": "角色1",
+          "isPlayer": true,
+          "alive": true
+        },
+        {
+          "id": 2,
+          "name": "角色2",
+          "isPlayer": false,
+          "alive": true
+        },
+        {
+          "id": 3,
+          "name": "角色3",
+          "isPlayer": false,
+          "alive": true
+        }
+      ],
+      "expectedActions": [
+        "changeLocation"
+      ],
+      "expectedSourceCharacterId": 1,
+      "expectedTargetCharacterId": null,
+      "history": [],
+      "message": {
+        "id": "m-changeLocation-8",
+        "role": "user",
+        "name": "角色1",
+        "content": "我昨天听说过：众人已经进入了王座厅。"
+      },
+      "expectedDetection": false,
+      "expectedExecution": false,
+      "expectedRejectReason": "past_report",
+      "mode": "performance",
+      "legality": {
+        "available": true
+      },
+      "variant": "past_report"
+    },
+    {
+      "id": "changeLocation-09",
+      "category": "Scene Change",
+      "participants": [
+        {
+          "id": 1,
+          "name": "角色1",
+          "isPlayer": true,
+          "alive": true
+        },
+        {
+          "id": 2,
+          "name": "角色2",
+          "isPlayer": false,
+          "alive": true
+        },
+        {
+          "id": 3,
+          "name": "角色3",
+          "isPlayer": false,
+          "alive": true
+        }
+      ],
+      "expectedActions": [
+        "changeLocation"
+      ],
+      "expectedSourceCharacterId": 1,
+      "expectedTargetCharacterId": null,
+      "history": [],
+      "message": {
+        "id": "m-changeLocation-9",
+        "role": "user",
+        "name": "角色1",
+        "content": "我提议以后再做：众人已经进入了王座厅。"
+      },
+      "expectedDetection": false,
+      "expectedExecution": false,
+      "expectedRejectReason": "unaccepted_proposal",
+      "mode": "precision",
+      "legality": {
+        "available": true
+      },
+      "variant": "proposal"
+    },
+    {
+      "id": "changeLocation-10",
+      "category": "Scene Change",
+      "participants": [
+        {
+          "id": 1,
+          "name": "角色1",
+          "isPlayer": true,
+          "alive": true
+        },
+        {
+          "id": 2,
+          "name": "角色2",
+          "isPlayer": false,
+          "alive": true
+        },
+        {
+          "id": 3,
+          "name": "角色3",
+          "isPlayer": false,
+          "alive": true
+        }
+      ],
+      "expectedActions": [
+        "changeLocation"
+      ],
+      "expectedSourceCharacterId": 1,
+      "expectedTargetCharacterId": null,
+      "history": [],
+      "message": {
+        "id": "m-changeLocation-10",
+        "role": "user",
+        "name": "角色1",
+        "content": "众人已经进入了王座厅。"
+      },
+      "expectedDetection": true,
+      "expectedExecution": false,
+      "expectedRejectReason": "rejected_legality_changed",
+      "mode": "performance",
+      "legality": {
+        "available": false
+      },
+      "variant": "invalid_legality"
+    }
+  ]
+}

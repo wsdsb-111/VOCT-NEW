@@ -3,6 +3,7 @@
 
 module.exports = {
   signature: "noOp",
+  actionMetadata: { executionMode: "immediate", idempotent: true, selectorVisible: false },
   triggerCategories: [],
   semantic: {
     riskLevel: "low",

@@ -4,7 +4,7 @@ const path = require("path");
 
 const root = path.resolve(__dirname, "..");
 const source = fs.readFileSync(path.join(root, "resources", "app", "out", "main", "main.js"), "utf8");
-const engineSource = fs.readFileSync(path.join(root, "resources", "app", "out", "main", "action-system", "action-engine.js"), "utf8");
+const engineSource = fs.readFileSync(path.join(root, "resources", "app", "out", "main", "action-system", "action-engine-v3.js"), "utf8");
 const actionSystem = require(path.join(root, "resources", "app", "out", "main", "action-system"));
 globalThis.__V67ActionSystem = actionSystem;
 const { getActionEngine } = require("./action-engine-test-helper");

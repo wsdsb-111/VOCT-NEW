@@ -1,6 +1,7 @@
 /** @import { GameData, Character } from '../../gamedata_typedefs.js' */
 module.exports = {
   signature: "setEmotion",
+  actionMetadata: { executionMode: "immediate", idempotent: true, targetPolicy: "self_or_other" },
   triggerCategories: ["drinking_or_toast", "visible_pose"],
   semantic: {
     match: ({ event, evidence }) => event.category === "visible_pose"

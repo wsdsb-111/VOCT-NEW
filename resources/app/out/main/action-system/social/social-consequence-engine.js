@@ -156,6 +156,7 @@ function toActionEvents(validatedConsequence, reservations = []) {
       validatedArgs: Object.freeze(item.actionId === "changeOpinionOf" ? { value: item.delta } : { reason: text }),
       pendingBinding: Object.freeze({ sourceCharacterId: item.sourceCharacterId, targetCharacterId: item.targetCharacterId }),
       socialReservationId: reservations[index] || null,
+      proposalOrigin: ["confirmed_world", "game_fact"].includes(item.evidenceAuthority) ? "derived_social" : "performance_local",
       origin: "social"
     });
   });
@@ -169,12 +170,21 @@ function addObserverEffects(context, consequence, mode) {
 
 async function process({ conversation, message, confirmedEvents = [], signal }) {
   const mode = settingsRepository?.getActionSystemMode?.() || "balanced";
+  const isAe4 = ActionEngine?.getActiveEngineVersion?.() === 4;
   if (mode === "balanced") return emptyResult(mode, "balanced_bypass");
   if (!ActionEngine || !conversation || !message) return emptyResult(mode, "missing_dependency");
   try {
     const contextBuildStartedAt = Date.now();
     const rawContext = socialContextProvider.buildContext({ conversation, message, confirmedEvents });
     let context = resolveMessageParticipants(rawContext, conversation, message);
+    if (isAe4 && mode === "precision") {
+      context = Object.freeze({
+        ...context,
+        message: Object.freeze({ ...context.message, content: "" }),
+        dialogueEvidence: Object.freeze([]),
+        memoryEvidence: Object.freeze([])
+      });
+    }
     recordEvidenceMetrics(mode, context, Date.now() - contextBuildStartedAt);
     const gateResult = socialConsequenceGate.evaluate(context);
     if (!gateResult.eligible) return emptyResult(mode, gateResult.reasons[0] || "gate_rejected");
@@ -182,7 +192,7 @@ async function process({ conversation, message, confirmedEvents = [], signal }) 
 
     let consequence;
     let judgeCalls = 0;
-    if (mode === "precision") {
+    if (mode === "precision" && !isAe4) {
       const state = consequenceCooldown.ensureState(conversation);
       state.precisionJudgeCalls = Number(state.precisionJudgeCalls || 0);
       if (state.precisionJudgeCalls >= 8) return emptyResult(mode, "judge_budget_exhausted");
@@ -205,7 +215,7 @@ async function process({ conversation, message, confirmedEvents = [], signal }) 
     if (!validation.valid) return { ...emptyResult(mode, "validation_rejected"), metrics: { mode, reason: "validation_rejected", judgeCalls, consequences: 0, rejected: validation.rejected.length } };
 
     let diminishingReturnSuppressed = 0;
-    const scaled = createConsequence({
+    const scaled = isAe4 ? validation.consequence : createConsequence({
       ...validation.consequence,
       opinionChanges: validation.consequence.opinionChanges.map((item) => consequenceCooldown.scaleDelta(conversation, item)).filter((item) => {
         if (item.delta !== 0) return true;

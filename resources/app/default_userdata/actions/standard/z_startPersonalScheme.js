@@ -39,10 +39,10 @@ module.exports = {
   description: ({ gameData, sourceCharacter }) =>
     `Start a real non-hostile CK3 personal scheme when the candidate explicitly says ${sourceCharacter.shortName} or ${gameData.playerName} begins operational planning. A wish, hypothetical, or vague future promise is not enough. Romance/seduction schemes require both characters to be adults. Hostile schemes use startHostileScheme. CK3's native can_start_scheme trigger remains authoritative.`,
 
-  check: ({ gameData }) => ({
+  check: ({ gameData, sourceCharacter }) => ({
     canExecute: gameData.characters.size > 1,
     requiresTarget: true,
-    validTargetCharacterIds: Array.from(gameData.characters.keys())
+    validTargetCharacterIds: Array.from(gameData.characters.keys()).filter((id) => id !== sourceCharacter.id)
   }),
 
   run: ({ gameData, sourceCharacter, targetCharacter, runGameEffect, args }) => {

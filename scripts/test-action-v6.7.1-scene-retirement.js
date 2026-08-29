@@ -7,7 +7,7 @@ const root = path.resolve(__dirname, "..");
 const mainPath = path.join(root, "resources", "app", "out", "main", "main.js");
 const actionsDir = path.join(root, "resources", "app", "default_userdata", "actions", "standard");
 const source = fs.readFileSync(mainPath, "utf8");
-const engineSource = fs.readFileSync(path.join(root, "resources", "app", "out", "main", "action-system", "action-engine.js"), "utf8");
+const engineSource = fs.readFileSync(path.join(root, "resources", "app", "out", "main", "action-system", "action-engine-v3.js"), "utf8");
 const retiredFiles = ["z_performCombatAction.js", "z_performDailyAction.js", "z_performIntimateAction.js"];
 const retiredIds = ["performCombatAction", "performDailyAction", "performIntimateAction"];
 

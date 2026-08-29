@@ -297,7 +297,7 @@ const schema = {
   actionSystemMode: {
     type: "string",
     enum: ["balanced", "performance", "precision"],
-    default: "balanced"
+    default: "performance"
   },
   summaryPromptSettings: {
     type: "object",

@@ -909,6 +909,11 @@ class Conversation {
   }
   async onActionExecutionSettled({ associatedMessageId, action, result, status }) {
     const system = this.getActionSystem();
+    const opinionReservationId = action?.invocation?.opinionReservationId || result?.opinionReservationId || null;
+    if (opinionReservationId) {
+      if (status === "executed" && result?.success === true) system.v4.opinionEffectNormalizer.commit(this, opinionReservationId);
+      else system.v4.opinionEffectNormalizer.release(this, opinionReservationId);
+    }
     const socialOrigin = action?.origin === "social" || action?.invocation?.origin === "social" || String(action?.invocation?.eventId || "").startsWith("social:");
     if (socialOrigin) {
       const reservationId = action?.socialReservationId;

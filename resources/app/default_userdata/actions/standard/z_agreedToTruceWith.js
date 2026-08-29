@@ -1,6 +1,7 @@
 /** @import { GameData, Character } from '../../gamedata_typedefs.js' */
 module.exports = {
   signature: "agreedToTruceWith",
+  actionMetadata: { executionMode: "consent_required", idempotent: false, relationshipTransition: true, pendingTtl: 10 },
   triggerCategories: ["relationship"], semantic: { evidencePatterns: [/(?:达成|签订|同意|正式)(?:了)?(?:停战|休战)|agreed? to (?:a )?truce/i], excludePatterns: [/(?:提出|请求|希望).{0,8}(?:停战|休战)/i], exclusiveGroup: "relationship_tier", priority: 40, riskLevel: "medium", bilateralPersistentEffect: true, participantRoles: { source: "actor", target: "patient" } },
   title: {
     en: "Mutual Truce",

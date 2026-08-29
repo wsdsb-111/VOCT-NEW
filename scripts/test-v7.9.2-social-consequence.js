@@ -323,6 +323,7 @@ function createActionHarness() {
     }
   };
   const ActionEngine = actionSystem.ActionEngine.configure({
+    actionEngineVersion: 3,
     actionRegistry: registry,
     settingsRepository,
     usageAnalytics: { record: (entry) => analytics.push(entry) },

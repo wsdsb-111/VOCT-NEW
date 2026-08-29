@@ -84,7 +84,7 @@ function createSettingsRepository({ Store, schema, SecureProviderSecrets, electr
         });
       }
       if (currentAppSettings.actionSystemMode === void 0) {
-        this.store.set("actionSystemMode", "balanced");
+        this.store.set("actionSystemMode", "performance");
       }
       if (currentAppSettings.summaryPromptSettings === void 0) {
         this.store.set("summaryPromptSettings", {
@@ -312,13 +312,15 @@ function createSettingsRepository({ Store, schema, SecureProviderSecrets, electr
       console.log("Action settings saved.");
     }
     getActionSystemMode() {
-      const mode = this.store.get("actionSystemMode", "balanced");
-      return ["balanced", "performance", "precision"].includes(mode) ? mode : "balanced";
+      const stored = this.store.get("actionSystemMode", "performance");
+      const mode = stored === "precision" ? "precision" : "performance";
+      if (stored !== mode) this.store.set("actionSystemMode", mode);
+      return mode;
     }
     saveActionSystemMode(mode) {
-      if (!["balanced", "performance", "precision"].includes(mode)) throw new Error("invalid_action_system_mode");
-      this.store.set("actionSystemMode", mode);
-      console.log("Action system mode saved:", mode);
+      const normalized = mode === "precision" ? "precision" : "performance";
+      this.store.set("actionSystemMode", normalized);
+      console.log("Action system mode saved:", normalized);
     }
     // --- Action Approval Settings ---
     getActionApprovalSettings() {

@@ -5,7 +5,7 @@ const path = require("path");
 const root = path.resolve(__dirname, "..");
 const mainPath = path.join(root, "resources", "app", "out", "main", "main.js");
 const source = fs.readFileSync(mainPath, "utf8");
-const engineSource = fs.readFileSync(path.join(root, "resources", "app", "out", "main", "action-system", "action-engine.js"), "utf8");
+const engineSource = fs.readFileSync(path.join(root, "resources", "app", "out", "main", "action-system", "action-engine-v3.js"), "utf8");
 const registrySource = fs.readFileSync(path.join(root, "resources", "app", "out", "main", "action-system", "action-registry.js"), "utf8");
 const modules = require(path.join(root, "resources", "app", "out", "main", "action-system"));
 for (const name of ["ConversationReferenceContext", "ReferenceResolver", "ParticipantResolver", "riskPolicy", "invocationValidator", "actionExecutor", "eventTracker", "candidateGate", "eventParser", "semanticResolver", "availabilityService"]) {

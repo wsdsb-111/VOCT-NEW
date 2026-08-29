@@ -37,10 +37,10 @@ module.exports = {
   description: ({ gameData, sourceCharacter }) =>
     `Start a real hostile CK3 scheme only when the candidate explicitly says ${sourceCharacter.shortName} or ${gameData.playerName} begins operational planning to murder, abduct, or fabricate a hook on the target. A threat, wish, hypothetical, or vague future promise is not enough. CK3's native can_start_scheme trigger remains authoritative.`,
 
-  check: ({ gameData }) => ({
+  check: ({ gameData, sourceCharacter }) => ({
     canExecute: gameData.characters.size > 1,
     requiresTarget: true,
-    validTargetCharacterIds: Array.from(gameData.characters.keys())
+    validTargetCharacterIds: Array.from(gameData.characters.keys()).filter((id) => id !== sourceCharacter.id)
   }),
 
   run: ({ gameData, sourceCharacter, targetCharacter, runGameEffect, args }) => {

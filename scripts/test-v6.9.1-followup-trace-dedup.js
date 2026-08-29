@@ -5,7 +5,7 @@ const path = require("path");
 
 const root = path.resolve(__dirname, "..");
 const actionSystem = require(path.join(root, "resources", "app", "out", "main", "action-system"));
-const { ActionEngine } = require(path.join(root, "resources", "app", "out", "main", "action-system", "action-engine"));
+const { LegacyActionEngineV3: ActionEngine } = require(path.join(root, "resources", "app", "out", "main", "action-system", "action-engine"));
 
 const player = { id: 1, fullName: "玩家", shortName: "玩家" };
 const gameData = {
@@ -46,6 +46,7 @@ const actionSandbox = {
 };
 
 ActionEngine.configure({
+  actionEngineVersion: 3,
   actionRegistry: registry,
   settingsRepository: {
     getLanguage: () => "zh",

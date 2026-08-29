@@ -34,6 +34,10 @@ const actionModes = require("./modes");
 const interaction = require("./interaction");
 const semantic = require("./semantic");
 const social = require("./social");
+const v4 = Object.freeze({
+  opinionEffectNormalizer: require("./v4/social/opinion-effect-normalizer"),
+  socialEffectDedupe: require("./v4/social/social-effect-dedupe")
+});
 
 module.exports = {
   ConversationReferenceContext,
@@ -70,5 +74,6 @@ module.exports = {
   actionModes,
   interaction,
   semantic,
-  social
+  social,
+  v4
 };

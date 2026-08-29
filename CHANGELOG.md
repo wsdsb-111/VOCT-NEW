@@ -4,6 +4,7 @@
 
 | 版本 | 重点 | 详细记录 |
 | --- | --- | --- |
+| v7.9.3 | Action Engine 4.0：Engine-level AE3 回滚、Performance/Precision 双模式、官方式 Q2 Selector、Explicit Consent Pending、共享 Proposal 执行管线、metadata 驱动的 Self-Target 约束、Cause-aware Opinion 与 160 条 P0 Benchmark | [实施报告](docs/v7.9.3-action-engine-4.0-implementation-report.md) / [正式规格](docs/VOTC_v7.9.3_Action_Engine_4.0正式实施规格书.md) / [Errata-001](docs/AE4_Spec_Errata-001_Self-Target目标约束冲突修正.md) |
 | v7.9.2 | Social Consequence Engine 与信件链路稳定性收口：本地证据权威、受限关系跃迁、多人见证与语义冷却；信件载荷有界重试、全过程状态和 Memory/Prompt 降级；结构化 Schema 独立诊断 | [V7.9.2 实施报告](docs/v7.9.2-final-stable-implementation-report.md) / [设计规格](docs/VOTC_v7.9.2_Social_Consequence_Engine_设计规格.md) |
 | v7.9.1 | Action Engine 3.0 生产稳定性：Precision Gate 后置、多人绑定优先、受限 Judge 输入、社交/亲密事件层、确定性金币转账与统一动作统计；Chat 固定前缀 v4 和 Memory Engine 2.5 动态摘要召回保持不变 | [V7.9.1 实施记录](docs/VOTC_v7.9.1_生产稳定性修复实施记录.md) |
 | v7.9 | Action Engine 3.0：平衡、性能、精准三模式，跨轮待定意图、受限语义兜底、两阶段精准判断、模式统计及 Fork 自动更新隔离 | [V7.9 实施记录](docs/VOTC_v7.9_Action_Engine_3.0实施记录.md) |

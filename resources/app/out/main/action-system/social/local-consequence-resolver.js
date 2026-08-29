@@ -13,7 +13,7 @@ const OPINION_BY_SIGNAL = Object.freeze({
   affection: 2,
   rejection: -2,
   insult: -2,
-  humiliation: -4,
+  humiliation: -3,
   threat: -3,
   betrayal: -6,
   severe_harm: -7,

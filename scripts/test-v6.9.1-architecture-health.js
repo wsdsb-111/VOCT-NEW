@@ -9,6 +9,7 @@ const mainPath = path.join(root, "resources", "app", "out", "main", "main.js");
 const actionSystemDir = path.join(root, "resources", "app", "out", "main", "action-system");
 const mainSource = fs.readFileSync(mainPath, "utf8");
 const engineSource = fs.readFileSync(path.join(actionSystemDir, "action-engine.js"), "utf8");
+const engineV3Source = fs.readFileSync(path.join(actionSystemDir, "action-engine-v3.js"), "utf8");
 const conversationSource = fs.readFileSync(path.join(actionSystemDir, "conversation.js"), "utf8");
 const conversationRuntimeSource = fs.readFileSync(path.join(actionSystemDir, "conversation-runtime.js"), "utf8");
 const semanticSource = fs.readFileSync(path.join(actionSystemDir, "semantic-resolver.js"), "utf8");
@@ -34,7 +35,8 @@ for (const actionId of ["characterIsKilled", "isInjured", "intercourse"]) {
 assert(fs.existsSync(path.join(actionSystemDir, "action-engine.js")), "ActionEngine module is missing");
 assert(fs.existsSync(path.join(actionSystemDir, "conversation.js")), "Conversation module is missing");
 assert(!semanticSource.includes("legacyResolver") && !semanticSource.includes("requiresLegacyResolution"), "Semantic Resolver must own a metadata-only resolution path");
-assert(engineSource.includes("actionSystem.semanticResolver.resolve"), "ActionEngine must delegate semantic resolution to Semantic Resolver");
+assert(engineV3Source.includes("actionSystem.semanticResolver.resolve"), "frozen Action Engine 3 must delegate semantic resolution to Semantic Resolver");
+assert(engineSource.includes('require("./action-engine-v3")') && engineSource.includes('require("./v4/action-engine-v4")'), "ActionEngine router must expose frozen AE3 and default AE4 implementations");
 assert(!engineSource.includes("globalThis.__V67ActionSystem"), "ActionEngine production path must not use the test façade global");
 assert(conversationRuntimeSource.includes("new ConversationTurnManager") && conversationRuntimeSource.includes("new GenerationManager"), "conversation-runtime must own service wiring");
 assert(!conversationSource.includes("new ConversationTurnManager") && !conversationSource.includes("new GenerationManager"), "Conversation must consume runtime services instead of constructing them directly");

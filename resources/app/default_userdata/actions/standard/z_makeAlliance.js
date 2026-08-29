@@ -4,6 +4,7 @@
 /** @import { GameData, Character } from '../../gamedata_typedefs.js' */
 module.exports = {
     signature: "makeAlliance",
+    actionMetadata: { executionMode: "consent_required", idempotent: false, relationshipTransition: true, pendingTtl: 10 },
     triggerCategories: ["relationship"],
     semantic: {
       evidencePatterns: [/(?:正式结盟|结盟成功|结成同盟|缔结同盟|formed? an alliance)/i],

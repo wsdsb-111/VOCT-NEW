@@ -11,7 +11,7 @@ Voices of the Court 是一个面向《Crusader Kings III》（CK3）的沉浸式
 - **历史认知边界**：提示词要求角色只使用当前年份已经发生、写成、流传或成名的信息，避免引用未来人物、事件、诗词和典故。
 - **当前政局优先**：皇帝和年号从实际游戏角色数据中识别，支持玩家篡位或改变历史后的沙盒玩法。
 - **Memory Engine 2.5**：保留 `角色ID_姓名/与对方的对话.json` 人物目录与 2.4 写入合同，并新增整场冻结的 Session Topic Anchor，以及只在明确回忆意图下触发、Top1、默认 256 Token 的 Turn Recall。
-- **Action Engine 3.0**：提供兼容 v7.8.3 的平衡模式、支持跨轮承诺与受限语义兜底的性能模式，以及采用轻量 Stage A 与原 Action Provider Stage B 的精准模式。
+- **Action Engine 4.0**：仅保留性能与精准模式；精准模式对每条有效 RP 对白调用一次官方式 Q2 Selector，性能模式采用确定性本地 HIT 与最多一次 Compact Selector，两者在 Proposal 后共用 Consent、校验、批处理、审批和执行管线。
 - **候场与在场窗口**：多人会话可在首句前设置候场，开始后可请入内、永久离场，或选择昏迷、睡着、暂时离开三种可返回的暂离模式；每名角色只回应、获知并保存自己实际在场区间的内容。
 - **多人对话摘要**：支持玩家与当前会话中的全部 NPC 同时对话，并将多人互动摘要按实际参与者逐对保存，避免 NPC 之间的对话内容丢失。
 - **动态人物关系**：提及未参与当前对话的角色时，也可以从 CK3 角色和亲属数据中加载关系；兄弟姐妹会结合出生日期或年龄判断哥哥、弟弟、姐姐和妹妹。
@@ -157,6 +157,8 @@ V7.9.1 是 Action Engine 3.0 的稳定性修复：真实动作消息先经过 Ga
 
 V7.9.2 新增仅在当前对话场景内有效的 Social Consequence Engine，并完成信件链路可靠性收口。Social Context Provider 严格区分当前对话、已成功写入 CK3 的世界事件和 Memory Engine 2.5 本轮既有 Turn Recall；本地 Evidence Policy 阻止模型自行提升证据权威，并为正式关系跃迁、多人称谓、见证者知情和语义主题冷却设置 fail-closed 边界。信件链路增加有界载荷重试、全过程状态、Memory/增强 Prompt 失败时的最小 Prompt 降级，以及摘要和待投递诊断。平衡模式完全绕过新引擎，性能模式只做本地确定性推导且新增 Provider Token 为 0，精准模式最多调用 8 次独立 Social Judge，并继续复用 Action Engine 3.0 的参与者绑定、校验、审批、去重和确定性执行器。Social Judge 的稳定规则位于消息前缀，结构化 Schema 作为 Provider 请求边界独立记录；人物状态、证据、最近对话与当前消息放在末尾动态区。用量报告分别记录 Schema Token、指纹、缓存角色和实际 Provider 序列化顺序。自动化发布门禁已通过；真实 CK3 效果、Provider Token/缓存遥测及 3/4/6 人实机场景仍需人工验证。详细内容见 [设计规格](docs/VOTC_v7.9.2_Social_Consequence_Engine_设计规格.md)和 [Final Stable 修复实施报告](docs/v7.9.2-final-stable-implementation-report.md)。
 
+V7.9.3 按冻结规格接入 Action Engine 4.0。顶层 Router 默认进入 AE4，只有显式 Engine Version 3 才整体回滚到冻结 AE3，禁止逐消息 fallback。Balanced 启动时迁移到 Performance；模式切换保留 Explicit Pending、执行历史、去重账本、Opinion Cooldown 和世界事件证据。Precision 不再经过 Candidate Gate、Event Parser、Semantic Resolver、Semantic Rescue 或 Precision Judge；每条有效 RP 对白恰好一次 Q2 Selector。Performance 仅允许确定性本地 HIT，否则由 recall-biased Hint 决定是否调用最多一次 Compact Selector。两种模式在 Proposal 后汇入同一确定性绑定、参数、Consent、关系安全、Action.check、冲突、审批和执行管线。Errata-001 进一步以四态 `targetPolicy` 取代全局 `source != target`：表情和脱衣按官方合同允许自身目标，其它动作默认仅允许其他角色，未知策略失败关闭。已建立 160 条 P0 Ground Truth Benchmark 与硬阻断报告器；真实 Provider Recall、缓存实测和 CK3 效果仍属于 Phase 7 人工验收，不在自动化通过前宣称 Stable。详见 [正式规格](docs/VOTC_v7.9.3_Action_Engine_4.0正式实施规格书.md)、[Errata-001](docs/AE4_Spec_Errata-001_Self-Target目标约束冲突修正.md)与 [实施报告](docs/v7.9.3-action-engine-4.0-implementation-report.md)。
+
 V7.7 在 V7.6 健康化基础上分阶段拆分主进程：第一阶段将六种模型 Provider 迁入 `providers/index.js`、92 个既有 IPC 注册迁入 `ipc/register-ipc.js`；第二阶段把 `ProviderRegistry`、`TokenCounter` 和 `LLMManager` 迁入 `provider-service.js`，通过显式依赖继续读取用户分别选择的对话、摘要和动作模型。`main.js` 由约 9477 行降至约 6612 行。动作语义同时补齐“共度春宵/鱼水之欢已发生”和“从今以后成为情人/认定灵魂伴侣”等自然完成态表达，并继续排除请求、计划、假设、回忆与失败尝试。当前仓库仍是可运行打包产物，没有能够重新生成这些文件的完整 `src` 工程，因此本阶段不伪造源码构建链。
 
 发布测试统一由 `scripts/test-manifest.js` 声明。本地与 CI 都运行：
@@ -165,18 +167,18 @@ V7.7 在 V7.6 健康化基础上分阶段拆分主进程：第一阶段将六种
 node scripts\test-release.js
 ```
 
-清单会覆盖全部 `test-*.js`：直接发布组、动作聚合组和 follow-up 聚合组均必须登记。V7.9.2 发布门禁为 63 个直接回归组，清单覆盖 96 个测试文件，并维护动作/非动作/摘要金标样例，作为 Provider 切换或模型升级时的轻量人工语义复核基线。
+清单会覆盖全部 `test-*.js`：直接发布组、动作聚合组和 follow-up 聚合组均必须登记。V7.9.3 当前登记 71 个直接发布组并覆盖 104 个测试文件；另有 160 条 AE4 P0 Ground Truth Benchmark，供真实 Selector 与 CK3 验收结果计算 Recall、Trigger Accuracy 和 Stop-the-Line Blocker。
 
 ## 版本信息
 
 - 外挂 UI 版本：v2.0.4
-- 当前应用功能基线：v7.9.2
+- 当前应用功能基线：v7.9.3
 - CK3 模组版本：Voices of the Court 2.0.4
 - 模组支持版本：CK3 1.18.*
 - UI 主题：宫廷编年史风格（深红、暗金、羊皮纸文本层级）
 - UI 主题切换：羊皮卷、骑士纹章、水墨画卷三套完整历史风格；分别拥有独立背景、边框结构、按钮造型、消息卡片、输入框、字体和滚动条，并可自动保存选择
 - UI 素材生成提示词：参见 [docs/UI_ASSET_PROMPTS_2.0.3.md](docs/UI_ASSET_PROMPTS_2.0.3.md)
-- 当前重点：V7.9.2 / Social Consequence Engine；Action Engine 3.0 与 Memory Engine 2.5 保持稳定
+- 当前重点：V7.9.3 / Action Engine 4.0；Memory Engine 2.5、外挂 UI 2.0.4 与 CK3 Workshop 2.0.4 保持不变
 
 ## 已知限制
 

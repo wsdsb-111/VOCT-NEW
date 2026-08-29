@@ -35,10 +35,10 @@ module.exports = {
 
   description: "Record an accepted political commitment to join, leave, support a claimant, or oppose a faction. Current VOTC game data has no faction ID/scope, so this action deliberately records a persistent CK3 character flag and target reference instead of falsely claiming that CK3 faction membership changed. Wishes, threats, and unaccepted proposals must not execute.",
 
-  check: ({ gameData }) => ({
+  check: ({ gameData, sourceCharacter }) => ({
     canExecute: gameData.characters.size > 0,
     requiresTarget: false,
-    validTargetCharacterIds: Array.from(gameData.characters.keys())
+    validTargetCharacterIds: Array.from(gameData.characters.keys()).filter((id) => id !== sourceCharacter.id)
   }),
 
   run: ({ gameData, sourceCharacter, targetCharacter, runGameEffect, args }) => {

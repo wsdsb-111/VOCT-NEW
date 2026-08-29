@@ -76,6 +76,11 @@ function createValidatedInvocation(input) {
     eventId,
     traceId: input.traceId || (eventId ? `action:${eventId}` : null),
     origin: input.origin || (String(eventId || "").startsWith("social:") ? "social" : "action"),
+    engineVersion: input.engineVersion || null,
+    proposalId: input.proposalId || null,
+    messageId: input.messageId ?? input.sourceMessageId ?? null,
+    mode: input.mode || null,
+    opinionReservationId: input.opinionReservationId || null,
     sourceMessageId: input.sourceMessageId ?? null,
     args: Object.freeze({ ...(input.args || {}) })
   });
@@ -95,6 +100,12 @@ function createExecutionResult(input) {
     eventId,
     traceId: input.traceId || (eventId ? `action:${eventId}` : null),
     origin: input.origin || (String(eventId || "").startsWith("social:") ? "social" : "action"),
+    engineVersion: input.engineVersion || null,
+    proposalId: input.proposalId || null,
+    messageId: input.messageId ?? input.sourceMessageId ?? null,
+    mode: input.mode || null,
+    executionStatus: input.executionStatus || null,
+    opinionReservationId: input.opinionReservationId || null,
     sourceMessageId: input.sourceMessageId ?? null
   });
 }

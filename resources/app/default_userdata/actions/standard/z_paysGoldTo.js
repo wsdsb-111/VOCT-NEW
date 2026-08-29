@@ -1,6 +1,7 @@
 /** @import { GameData, Character } from '../../gamedata_typedefs.js' */
 module.exports = {
   signature: "paysGoldTo",
+  actionMetadata: { executionMode: "immediate", idempotent: false, requiredArguments: ["amount"], availabilityRequirements: { source: "non_player" } },
   triggerCategories: ["gold"],
   semantic: {
     riskLevel: "medium",

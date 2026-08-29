@@ -141,7 +141,7 @@ assert(rendererSource.includes("const groups = new Map()"), "numeric character I
 assert(!rendererSource.includes("Object.entries(summariesByPlayer)"), "search result groups must not use numeric object-key enumeration");
 assert(!rendererSource.includes('className: "memory-character-coverage"'), "the duplicate per-character structured-memory tree must be removed");
 assert(!rendererSource.includes("Promise.all([listAllSummaries(), getMemoryOverview()])"), "summary dashboard must not parse every JSON file twice");
-assert(rendererSource.includes("Memory Engine 2.5 · V7.9.2"), "summary UI must expose the V7.9.2 / Memory Engine 2.5 runtime version");
+assert(rendererSource.includes("Memory Engine 2.5 · V7.9.3"), "summary UI must expose the V7.9.3 / Memory Engine 2.5 runtime version");
 assert(!rendererSource.includes('className: "form-group summary-management"'), "summary folder actions must not remain in a duplicate standalone block");
 assert(rendererSource.includes("onClick: handleOpenSummariesFolder") && rendererSource.includes("onClick: handleClearSummaries"), "the summary manager header must contain the consolidated folder and clear actions");
 assert(!rendererSource.includes("警告：此操作将删除所有玩家的所有对话摘要"), "the duplicate hardcoded clear-summary handler must be removed");

@@ -22,10 +22,10 @@ module.exports = {
 
   description: "Apply an explicitly completed/current release or banishment to the target character. Do not execute for a proposal, threat, hypothetical, attempted action, or future plan. CK3 remains authoritative when the target is not in a valid prisoner state.",
 
-  check: ({ gameData }) => ({
+  check: ({ gameData, sourceCharacter }) => ({
     canExecute: gameData.characters.size > 0,
     requiresTarget: true,
-    validTargetCharacterIds: Array.from(gameData.characters.keys())
+    validTargetCharacterIds: Array.from(gameData.characters.keys()).filter((id) => id !== sourceCharacter.id)
   }),
 
   run: ({ targetCharacter, runGameEffect, args }) => {

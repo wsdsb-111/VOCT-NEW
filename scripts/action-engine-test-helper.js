@@ -4,6 +4,7 @@ const path = require("path");
 
 const root = path.resolve(__dirname, "..");
 const actionSystem = require(path.join(root, "resources", "app", "out", "main", "action-system"));
+const { LegacyActionEngineV3 } = require(path.join(root, "resources", "app", "out", "main", "action-system", "action-engine"));
 
 function globalProxy(name) {
   return new Proxy({}, {
@@ -24,7 +25,7 @@ function globalFunction(name) {
 }
 
 function getActionEngine() {
-  return actionSystem.ActionEngine.configure({
+  return LegacyActionEngineV3.configure({
     actionRegistry: globalProxy("actionRegistry"),
     settingsRepository: globalProxy("settingsRepository"),
     usageAnalytics: globalProxy("usageAnalytics"),
