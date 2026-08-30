@@ -17576,6 +17576,7 @@ const DEFAULT_PROVIDER_CONFIGS = {
     defaultParameters: { temperature: 0.7, max_tokens: 2048 },
     useMinimizedActionsSchema: false,
     actionSchemaDeliveryMode: "optimized_local_validation",
+    deepseekActionStateTransitionRecallOverlay: false,
     deepseekActionStablePrefixOptimization: false
   },
   gemini: {
@@ -17778,6 +17779,7 @@ const useConfigStore = create()(
           customContextLength: editingConfig.customContextLength,
           useMinimizedActionsSchema: editingConfig.useMinimizedActionsSchema,
           actionSchemaDeliveryMode: editingConfig.actionSchemaDeliveryMode,
+          deepseekActionStateTransitionRecallOverlay: editingConfig.deepseekActionStateTransitionRecallOverlay,
           deepseekActionStablePrefixOptimization: editingConfig.deepseekActionStablePrefixOptimization
         };
         try {
@@ -17853,6 +17855,7 @@ const useConfigStore = create()(
           customContextLength: editingConfig.customContextLength,
           useMinimizedActionsSchema: editingConfig.useMinimizedActionsSchema,
           actionSchemaDeliveryMode: editingConfig.actionSchemaDeliveryMode,
+          deepseekActionStateTransitionRecallOverlay: editingConfig.deepseekActionStateTransitionRecallOverlay,
           deepseekActionStablePrefixOptimization: editingConfig.deepseekActionStablePrefixOptimization
         };
         try {
@@ -18847,6 +18850,19 @@ const ProviderConfigPanel = (props) => {
             ]
           }),
           /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "muted-text", children: "两种模式都完整构建官方 Full Schema；RC3 模式只移除 DeepSeek HTTP Prompt 中的重复 Schema 文本。" })
+        ] }),
+        /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "form-group", children: [
+          /* @__PURE__ */ jsxRuntimeExports.jsxs("label", { htmlFor: "deepseekActionStateTransitionRecallOverlay", children: [
+            /* @__PURE__ */ jsxRuntimeExports.jsx("input", {
+              id: "deepseekActionStateTransitionRecallOverlay",
+              name: "deepseekActionStateTransitionRecallOverlay",
+              type: "checkbox",
+              checked: config2.deepseekActionStateTransitionRecallOverlay === true,
+              onChange: (event) => updateEditingConfig({ deepseekActionStateTransitionRecallOverlay: event.target.checked })
+            }),
+            " DeepSeek Action State Transition Recall Overlay"
+          ] }),
+          /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "muted-text", children: "RC5 默认关闭；仅强化受伤、死亡与关系状态转换的官方 Selector 召回，不改变动作可用性、Schema、校验或执行。" })
         ] }),
         /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "form-group", children: [
           /* @__PURE__ */ jsxRuntimeExports.jsxs("label", { htmlFor: "deepseekActionStablePrefixOptimization", children: [
@@ -21559,6 +21575,11 @@ const OptimizationView = () => {
   const missAttribution = report?.missAttribution || [];
   const changesSincePrevious = report?.changesSincePrevious || [];
   const recent = report?.recent || [];
+  const criticalActionRecall = report?.criticalActionRecall;
+  const actionExperiments = report?.actionExperiments;
+  const criticalActionRows = criticalActionRecall?.byAction || [];
+  const criticalActionRecent = criticalActionRecall?.recent || [];
+  const actionExperimentStages = actionExperiments?.stages || [];
   const actionUsage = byRequest.filter((item) => item.key.startsWith("action | ")).reduce((total2, item) => ({
     requests: total2.requests + item.requests,
     inputTokens: total2.inputTokens + (item.promptTokens || item.estimatedPromptTokens || 0),
@@ -21607,6 +21628,28 @@ const OptimizationView = () => {
       /* @__PURE__ */ jsxRuntimeExports.jsxs("section", { className: "optimization-section", children: [
         /* @__PURE__ */ jsxRuntimeExports.jsx("h4", { children: "ACTION SYSTEM — Official VOTC 2.0.3" }),
         /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "muted-text", children: text("旧版动作模式与漏斗统计已停用；服务商 Token 仍按普通请求类型统计。", "Legacy action modes and funnel analytics are disabled; provider tokens remain available in the standard request tables.") })
+      ] }),
+      /* @__PURE__ */ jsxRuntimeExports.jsxs("section", { className: "optimization-section", children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsx("h4", { children: text("关键动作召回", "Critical Action Recall") }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "muted-text", children: text("旁路记录 9 个重点官方动作的可用性、合法目标、Selector 选择与执行结果。可用但未选择不自动算 SELECTOR_MISS，必须由带 Ground Truth 的实机或回归样例裁定。", "Observes availability, valid targets, selector choices, and execution for nine critical official actions. Available-but-unselected is not automatically a SELECTOR_MISS; a labeled in-game or regression ground truth is required.") }),
+        /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "optimization-metrics", children: [
+          /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "optimization-metric", children: [/* @__PURE__ */ jsxRuntimeExports.jsx("span", { children: text("诊断轮次", "Diagnostic turns") }), /* @__PURE__ */ jsxRuntimeExports.jsx("strong", { children: formatTokens(criticalActionRecall?.requests) })] }),
+          /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "optimization-metric", children: [/* @__PURE__ */ jsxRuntimeExports.jsx("span", { children: text("动作观测", "Action observations") }), /* @__PURE__ */ jsxRuntimeExports.jsx("strong", { children: formatTokens(criticalActionRecall?.observations) })] }),
+          /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "optimization-metric", children: [/* @__PURE__ */ jsxRuntimeExports.jsx("span", { children: text("已选择", "Selected") }), /* @__PURE__ */ jsxRuntimeExports.jsx("strong", { children: formatTokens(criticalActionRecall?.selected) })] }),
+          /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "optimization-metric", children: [/* @__PURE__ */ jsxRuntimeExports.jsx("span", { children: text("待 Ground Truth 裁定", "Awaiting ground truth") }), /* @__PURE__ */ jsxRuntimeExports.jsx("strong", { children: formatTokens(criticalActionRecall?.unassessedAvailableNotSelected) })] })
+        ] }),
+        criticalActionRows.length === 0 ? /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "optimization-empty", children: text("暂无关键动作诊断。完成一次 NPC 动作评估后刷新。", "No critical action diagnostics yet. Refresh after one NPC action evaluation.") }) : renderTable([text("动作", "Action"), text("可用 / 观测", "Available / observed"), text("已选择", "Selected"), text("可用时选择率", "Selection rate when available"), text("执行失败", "Effect failed")], criticalActionRows.map((item) => [item.actionId, `${formatTokens(item.available)} / ${formatTokens(item.observations)}`, formatTokens(item.selected), formatPercent(item.selectionRateWhenAvailable), formatTokens(item.effectFailed)]), "critical-action"),
+        criticalActionRecent.length > 0 && renderTable([text("时间", "Time"), text("动作", "Action"), text("来源 → 目标", "Source → target"), text("可用性", "Availability"), text("校验 / 执行", "Validation / effect"), text("分类", "Category")], criticalActionRecent.slice(0, 12).map((item) => [item.timestamp ? new Date(item.timestamp).toLocaleString(isChinese ? "zh-CN" : "en-US") : "—", item.actionId, `#${item.sourceCharacterId ?? "—"} → ${item.selectedTarget == null ? "—" : `#${item.selectedTarget}`}`, item.availabilityReason || "—", item.validationResult || "—", item.missCategory || item.groundTruthCategory || (item.wasAvailable && !item.selected ? text("待裁定", "Unassessed") : "—")]), "critical-recent")
+      ] }),
+      /* @__PURE__ */ jsxRuntimeExports.jsxs("section", { className: "optimization-section", children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsx("h4", { children: text("RC5 Action A/B/C 元数据", "RC5 Action A/B/C Metadata") }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "muted-text", children: text("Stage A：Overlay 关 / Stable Prefix 关；Stage B：Overlay 开 / Stable Prefix 关；Stage C：两者都开。Overlay 版本 state-transition-overlay/v1，两个开关默认均关闭。", "Stage A: overlay off / stable prefix off; Stage B: overlay on / stable prefix off; Stage C: both on. Overlay version is state-transition-overlay/v1 and both switches default to off.") }),
+        /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "optimization-metrics", children: [
+          /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "optimization-metric", children: [/* @__PURE__ */ jsxRuntimeExports.jsx("span", { children: text("Overlay 请求 / 实施", "Overlay requested / applied") }), /* @__PURE__ */ jsxRuntimeExports.jsx("strong", { children: `${formatTokens(actionExperiments?.overlayRequested)} / ${formatTokens(actionExperiments?.overlayApplied)}` })] }),
+          /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "optimization-metric", children: [/* @__PURE__ */ jsxRuntimeExports.jsx("span", { children: text("Stable 请求 / 实施", "Stable requested / applied") }), /* @__PURE__ */ jsxRuntimeExports.jsx("strong", { children: `${formatTokens(actionExperiments?.stablePrefixRequested)} / ${formatTokens(actionExperiments?.stablePrefixApplied)}` })] })
+        ] }),
+        actionExperimentStages.length === 0 ? /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "optimization-empty", children: text("暂无 RC5 分阶段动作请求。", "No staged RC5 action requests yet.") }) : renderTable([text("阶段", "Stage"), text("请求", "Requests"), text("平均输入", "Average input"), text("缓存命中率", "Cache hit rate"), text("平均未命中", "Average cache miss")], actionExperimentStages.map((item) => [item.stage, formatTokens(item.requests), formatTokens(item.averageInputTokens), formatPercent(item.cacheHitRate), formatNullableTokens(item.averageCacheMissTokens)]), "action-stage"),
+        Object.keys(actionExperiments?.stablePrefixFailures || {}).length > 0 && /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "muted-text", children: text(`Stable Prefix 已安全回退：${Object.entries(actionExperiments.stablePrefixFailures).map(([reason, count]) => `${reason} × ${count}`).join("；")}`, `Stable Prefix safely failed open: ${Object.entries(actionExperiments.stablePrefixFailures).map(([reason, count]) => `${reason} × ${count}`).join("; ")}`) })
       ] }),
       /* @__PURE__ */ jsxRuntimeExports.jsxs("section", { className: "optimization-section", children: [
         /* @__PURE__ */ jsxRuntimeExports.jsx("h4", { children: text("动作 Token 分析", "Action Token Analytics") }),

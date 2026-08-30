@@ -1,17 +1,58 @@
 "use strict";
 
-function createActionEngine({ actionRegistry, settingsRepository, llmManager, ActionPromptBuilder, ActionSandbox, ActionEffectWriter, buildStructuredResponseJsonSchema, buildStructuredResponseSchema, healJsonResponseWithLogging, resolveI18nString, logVerboseLLM }) {
+const { CriticalActionRecallObserver: DefaultCriticalActionRecallObserver } = require("./critical-action-recall-diagnostics");
+
+function createActionEngine({ actionRegistry, settingsRepository, usageAnalytics, llmManager, ActionPromptBuilder, ActionSandbox, ActionEffectWriter, CriticalActionRecallObserver = DefaultCriticalActionRecallObserver, buildStructuredResponseJsonSchema, buildStructuredResponseSchema, healJsonResponseWithLogging, resolveI18nString, logVerboseLLM }) {
   return class ActionEngine {
     static async evaluateForCharacter(conv, npc, signal) {
+      let diagnosticsObserver = null;
+      let diagnosticsRecorded = false;
+      const observeDiagnostics = (method, ...args) => {
+        try {
+          diagnosticsObserver?.[method]?.(...args);
+        } catch (error) {
+          console.warn(`[ActionRecallDiagnostics] ${method} failed:`, error);
+        }
+      };
+      const recordDiagnostics = (evaluationStatus, selectedInvocations = [], autoApproved = [], needsApproval = []) => {
+        if (!diagnosticsObserver || diagnosticsRecorded || signal?.aborted) return;
+        diagnosticsRecorded = true;
+        try {
+          const actionsConfig = settingsRepository.getActionsProviderConfig();
+          const overlayEnabled = actionsConfig?.deepseekActionStateTransitionRecallOverlay === true;
+          const stablePrefixEnabled = actionsConfig?.deepseekActionStablePrefixOptimization === true;
+          const actionExperimentStage = !overlayEnabled && !stablePrefixEnabled ? "A" : overlayEnabled && !stablePrefixEnabled ? "B" : overlayEnabled && stablePrefixEnabled ? "C" : "CUSTOM_STABLE_ONLY";
+          usageAnalytics?.record({
+            requestType: "action_recall_diagnostic",
+            character: npc.shortName,
+            characterId: npc.id,
+            actionRecallEvaluationStatus: evaluationStatus,
+            actionExperimentStage,
+            deepseekActionStateTransitionRecallOverlay: overlayEnabled,
+            deepseekActionStablePrefixOptimization: stablePrefixEnabled,
+            criticalActionDiagnostics: diagnosticsObserver.build({ selectedInvocations, autoApproved, needsApproval, evaluationStatus })
+          }, null);
+        } catch (error) {
+          console.warn("[ActionRecallDiagnostics] record failed:", error);
+        }
+      };
       try {
         if (signal?.aborted) return { autoApproved: [], needsApproval: [] };
         const userLang = settingsRepository.getLanguage();
         const loaded = actionRegistry.getAllActions(false);
+        try {
+          diagnosticsObserver = new CriticalActionRecallObserver(npc, conv.gameData);
+          observeDiagnostics("observeMissingActions", loaded.map((action) => action.id));
+        } catch (error) {
+          console.warn("[ActionRecallDiagnostics] initialization failed:", error);
+          diagnosticsObserver = null;
+        }
         const available = [];
         for (const action of loaded) {
           if (signal?.aborted) return { autoApproved: [], needsApproval: [] };
           try {
             const checkResult = await action.definition.check({ gameData: conv.gameData, sourceCharacter: npc });
+            observeDiagnostics("observeCheck", action.id, checkResult);
             if (!checkResult?.canExecute) continue;
             const requiresTarget = !!(checkResult.validTargetCharacterIds && checkResult.validTargetCharacterIds.length > 0);
             const args = typeof action.definition.args === "function" ? action.definition.args({ gameData: conv.gameData, sourceCharacter: npc }) : action.definition.args;
@@ -25,10 +66,14 @@ function createActionEngine({ actionRegistry, settingsRepository, llmManager, Ac
               description: resolveI18nString(descriptionValue, userLang)
             });
           } catch (error) {
+            observeDiagnostics("observeCheckFailure", action.id);
             actionRegistry.registerValidation(action.id, { valid: false, message: `check() threw: ${error instanceof Error ? error.message : String(error)}` });
           }
         }
-        if (available.length === 0) return { autoApproved: [], needsApproval: [] };
+        if (available.length === 0) {
+          recordDiagnostics("no_available_action");
+          return { autoApproved: [], needsApproval: [] };
+        }
         if (signal?.aborted) return { autoApproved: [], needsApproval: [] };
         const messages = ActionPromptBuilder.buildActionMessages(conv, npc, available);
         const actionsConfig = settingsRepository.getActionsProviderConfig();
@@ -41,17 +86,25 @@ function createActionEngine({ actionRegistry, settingsRepository, llmManager, Ac
         const result = await output;
         const content = result && typeof result === "object" ? result.content : null;
         console.log("[DEBUG] ActionEngine: Received LLM response", content);
-        if (!content || typeof content !== "string" || signal?.aborted) return { autoApproved: [], needsApproval: [] };
+        if (!content || typeof content !== "string" || signal?.aborted) {
+          recordDiagnostics("empty_response");
+          return { autoApproved: [], needsApproval: [] };
+        }
         let parsed;
         try {
           const maybeJson = healJsonResponseWithLogging(content, "ActionEngine", logVerboseLLM);
-          if (!maybeJson) return { autoApproved: [], needsApproval: [] };
+          if (!maybeJson) {
+            recordDiagnostics("invalid_json");
+            return { autoApproved: [], needsApproval: [] };
+          }
           parsed = zodSchema.parse(maybeJson);
         } catch {
+          recordDiagnostics("invalid_schema");
           return { autoApproved: [], needsApproval: [] };
         }
         if (!parsed || !Array.isArray(parsed.actions) || parsed.actions.length === 0) {
           console.log("[ActionEngine] No actions to process");
+          recordDiagnostics("no_action_selected");
           return { autoApproved: [], needsApproval: [] };
         }
         if (signal?.aborted) return { autoApproved: [], needsApproval: [] };
@@ -93,9 +146,11 @@ function createActionEngine({ actionRegistry, settingsRepository, llmManager, Ac
             autoApproved.push(await this.runInvocation(conv, npc, invocation));
           }
         }
+        recordDiagnostics("completed", parsed.actions, autoApproved, needsApproval);
         return { autoApproved, needsApproval };
       } catch (error) {
         if (!signal?.aborted) console.error("ActionEngine error:", error);
+        recordDiagnostics("engine_error");
         return { autoApproved: [], needsApproval: [] };
       }
     }

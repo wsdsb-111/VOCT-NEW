@@ -88,6 +88,8 @@ const releaseChecks = [
   { group: "v7.10-rc4-letter-payload-numeric", script: "test-v7.10-rc4-letter-payload-numeric.js" },
   { group: "v7.10-rc4-letter-diagnostic-2.3", script: "test-v7.10-rc4-letter-diagnostic-2.3.js" },
   { group: "v7.10-rc4-runfile-nonregression", script: "test-v7.10-rc4-runfile-nonregression.js" },
+  { group: "v7.10-rc5-critical-action-recall", script: "test-v7.10-rc5-action-recall.js" },
+  { group: "v7.10-rc5-overlay-stable-prefix", script: "test-v7.10-rc5-overlay-stable-prefix.js" },
   { group: "v7.10-official-action-system", script: "test-v7.10-official-action-system.js" },
   { group: "v7.10-action-provider-parity", script: "test-v7.10-action-provider-parity.js" },
   { group: "v7.10-deepseek-action-compatibility", script: "test-v7.10-deepseek-action-compatibility.js" },

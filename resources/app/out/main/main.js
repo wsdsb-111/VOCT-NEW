@@ -60,6 +60,7 @@ const DEFAULT_PROVIDER_CONFIGS = {
     defaultParameters: { temperature: 0.7, max_tokens: 2048 },
     useMinimizedActionsSchema: false,
     actionSchemaDeliveryMode: "optimized_local_validation",
+    deepseekActionStateTransitionRecallOverlay: false,
     deepseekActionStablePrefixOptimization: false
   },
   gemini: {
@@ -141,6 +142,7 @@ const baseProviderConfigSchema = {
     customContextLength: { type: "number" },
     useMinimizedActionsSchema: { type: "boolean" },
     actionSchemaDeliveryMode: { type: "string", enum: ["official_full_injected", "optimized_local_validation"] },
+    deepseekActionStateTransitionRecallOverlay: { type: "boolean" },
     deepseekActionStablePrefixOptimization: { type: "boolean" }
   },
   required: ["instanceId", "providerType"]
@@ -417,7 +419,7 @@ const llmManager = new LLMManager({
   debugVerboseLLM: DEBUG_VERBOSE_LLM,
   logVerboseLLM
 });
-const { ActionRegistry, ActionPromptBuilder, ActionSandbox, createActionEffectWriter, createActionEngine, schema: actionSchema, responseHealing, resolveI18nString } = require("./actions");
+const { ActionRegistry, ActionPromptBuilder, ActionSandbox, createActionEffectWriter, createActionEngine, CriticalActionRecallObserver, schema: actionSchema, responseHealing, resolveI18nString } = require("./actions");
 const ActionRegistryClass = ActionRegistry.configure({
   actionsDir: VOTC_ACTIONS_DIR,
   dataDir: VOTC_DATA_DIR,
@@ -432,10 +434,12 @@ const ActionEffectWriter = createActionEffectWriter({ runFileManager });
 const ActionEngine = createActionEngine({
   actionRegistry,
   settingsRepository,
+  usageAnalytics,
   llmManager,
   ActionPromptBuilder,
   ActionSandbox,
   ActionEffectWriter,
+  CriticalActionRecallObserver,
   buildStructuredResponseJsonSchema,
   buildStructuredResponseSchema,
   healJsonResponseWithLogging: responseHealing.healJsonResponseWithLogging,

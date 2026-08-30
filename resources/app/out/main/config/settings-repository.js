@@ -411,6 +411,7 @@ function createSettingsRepository({ Store, schema, SecureProviderSecrets, electr
         ...config,
         useMinimizedActionsSchema: false,
         actionSchemaDeliveryMode: config.actionSchemaDeliveryMode || "optimized_local_validation",
+        deepseekActionStateTransitionRecallOverlay: config.deepseekActionStateTransitionRecallOverlay === true,
         deepseekActionStablePrefixOptimization: config.deepseekActionStablePrefixOptimization === true
       } : config;
     }

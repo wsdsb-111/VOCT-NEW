@@ -9,6 +9,7 @@ const { createRunFileManager } = require("./run-file-manager");
 const schema = require("./schema");
 const responseHealing = require("./response-healing");
 const { resolveI18nString } = require("./i18n-utils");
+const { CriticalActionRecallObserver, classifyWithGroundTruth } = require("./critical-action-recall-diagnostics");
 
 module.exports = {
   ActionRegistry,
@@ -20,5 +21,7 @@ module.exports = {
   createRunFileManager,
   schema,
   responseHealing,
-  resolveI18nString
+  resolveI18nString,
+  CriticalActionRecallObserver,
+  classifyWithGroundTruth
 };

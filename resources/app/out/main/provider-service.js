@@ -2,6 +2,7 @@
 
 const crypto = require("crypto");
 const { estimateTokens } = require("./token-estimator");
+const { OVERLAY_BLOCK_ID, OVERLAY_VERSION, prepareActionMessages } = require("./actions/action-prompt-compatibility-overlay");
 
 class ProviderRegistry {
   constructor() {
@@ -196,9 +197,24 @@ class LLMManager {
       throw new Error(`Provider '${config.customName || config.providerType}' has no default model selected.`);
     }
     const provider = this.getProviderInstance(config);
+    const isDeepseekAction = config.providerType === "deepseek" && schemaName === "votc_actions";
+    const overlayEnabled = isDeepseekAction && config.deepseekActionStateTransitionRecallOverlay === true;
+    const stablePrefixRequested = isDeepseekAction && config.deepseekActionStablePrefixOptimization === true;
+    const preparedActionPrompt = isDeepseekAction ? prepareActionMessages(messages, {
+      overlayEnabled,
+      stablePrefixEnabled: stablePrefixRequested
+    }) : {
+      messages,
+      blockMessages: messages,
+      blockMetadataValid: false,
+      overlayApplied: false,
+      stablePrefixApplied: false,
+      failureReason: null,
+      experimentStage: null
+    };
     const request = {
       model: config.defaultModel,
-      messages,
+      messages: preparedActionPrompt.messages,
       stream: false,
       ...config.defaultParameters,
       signal,
@@ -211,21 +227,21 @@ class LLMManager {
         }
       }
     };
-    const estimatedPromptTokens = this.TokenCounter.calculateTotalTokens(messages);
+    const estimatedPromptTokens = this.TokenCounter.calculateTotalTokens(preparedActionPrompt.messages);
     const serializedSchema = JSON.stringify(jsonSchemaObject || {});
     const schemaTokenEstimate = this.TokenCounter.estimateTokens(serializedSchema);
     const schemaFingerprint = crypto.createHash("sha256").update(serializedSchema).digest("hex").slice(0, 16);
     const deepseekSchemaInjection = config.providerType === "deepseek";
     const actionSchemaDeliveryMode = deepseekSchemaInjection && schemaName === "votc_actions" ? config.actionSchemaDeliveryMode || "optimized_local_validation" : null;
     const providerInjectsSchema = deepseekSchemaInjection && actionSchemaDeliveryMode !== "optimized_local_validation";
-    const stablePrefixOptimization = deepseekSchemaInjection && schemaName === "votc_actions" && config.deepseekActionStablePrefixOptimization === true;
     const schemaCacheRole = providerInjectsSchema ? "provider_injected_system_message" : deepseekSchemaInjection ? "local_validation_only" : "response_format";
-    const providerSerializedOrder = stablePrefixOptimization ? "deepseek_stable_intro_actions_examples_roster_recent_actions_recent_messages_final" : providerInjectsSchema ? "messages_then_provider_injected_schema_then_response_format" : "messages_then_response_format";
-    const builtActionPromptBlocks = schemaName === "votc_actions" && (!Array.isArray(metadata.blocks) || metadata.blocks.length === 0) ? this.buildActionPromptBlocks(messages, serializedSchema, providerInjectsSchema) : metadata.blocks;
-    const actionPromptBlocks = stablePrefixOptimization ? this.reorderActionPromptBlocks(builtActionPromptBlocks) : builtActionPromptBlocks;
-    const stablePrefixEndPosition = stablePrefixOptimization ? actionPromptBlocks.findIndex((block) => block.id === "action_roster") : null;
-    const stablePrefixTokens = stablePrefixOptimization ? actionPromptBlocks.slice(0, stablePrefixEndPosition).reduce((sum, block) => sum + (Number(block.tokens) || 0), 0) : 0;
-    console.log(`[LLMManager] Action request: provider=${config.providerType}, model=${config.defaultModel}, messages=${messages.length}, schema=${schemaName}, estimatedPromptTokens=${estimatedPromptTokens}`);
+    const providerSerializedOrder = preparedActionPrompt.stablePrefixApplied ? preparedActionPrompt.overlayApplied ? "deepseek_intro_state_transition_rules_actions_examples_roster_recent_actions_recent_messages_final" : "deepseek_intro_actions_examples_roster_recent_actions_recent_messages_final" : preparedActionPrompt.overlayApplied ? "deepseek_official_order_with_state_transition_overlay" : stablePrefixRequested && preparedActionPrompt.failureReason ? "messages_official_fail_open" : providerInjectsSchema ? "messages_then_provider_injected_schema_then_response_format" : "messages_then_response_format";
+    const actionPromptBlocks = schemaName === "votc_actions" && (!Array.isArray(metadata.blocks) || metadata.blocks.length === 0) ? this.buildActionPromptBlocks(preparedActionPrompt.blockMessages, serializedSchema, providerInjectsSchema) : Array.isArray(metadata.blocks) ? metadata.blocks : [];
+    const rosterPosition = preparedActionPrompt.stablePrefixApplied ? actionPromptBlocks.findIndex((block) => block.id === "action_roster") : -1;
+    const stablePrefixEndPosition = rosterPosition >= 0 ? rosterPosition : null;
+    const stablePrefixTokens = rosterPosition >= 0 ? actionPromptBlocks.slice(0, rosterPosition).reduce((sum, block) => sum + (Number(block.tokens) || 0), 0) : 0;
+    const overlayBlock = actionPromptBlocks.find((block) => block.id === OVERLAY_BLOCK_ID);
+    console.log(`[LLMManager] Action request: provider=${config.providerType}, model=${config.defaultModel}, messages=${preparedActionPrompt.messages.length}, schema=${schemaName}, estimatedPromptTokens=${estimatedPromptTokens}`);
     if (this.debugVerboseLLM) {
       this.logVerboseLLM("[LLMManager][verbose] Structured action request:", JSON.stringify(request));
       this.logVerboseLLM("[LLMManager][verbose] Provider config:", JSON.stringify(config).replace(/"apiKey":\s*"[^"]*"/g, "HIDDEN"));
@@ -241,7 +257,16 @@ class LLMManager {
       schemaFingerprint,
       schemaCacheRole,
       actionSchemaDeliveryMode,
-      deepseekActionStablePrefixOptimization: stablePrefixOptimization,
+      deepseekActionStablePrefixOptimization: stablePrefixRequested,
+      stablePrefixApplied: preparedActionPrompt.stablePrefixApplied,
+      stablePrefixFailureReason: stablePrefixRequested ? preparedActionPrompt.failureReason : null,
+      actionBlockMetadataValid: preparedActionPrompt.blockMetadataValid,
+      deepseekActionStateTransitionRecallOverlay: overlayEnabled,
+      overlayEnabled,
+      overlayApplied: preparedActionPrompt.overlayApplied,
+      overlayVersion: preparedActionPrompt.overlayApplied ? OVERLAY_VERSION : null,
+      overlayTokenEstimate: overlayBlock?.tokens || 0,
+      actionExperimentStage: preparedActionPrompt.experimentStage,
       providerSerializedOrder,
       stablePrefixEndPosition,
       stablePrefixTokens,
@@ -249,17 +274,58 @@ class LLMManager {
     });
   }
   buildActionPromptBlocks(messages, serializedSchema, providerInjectsSchema = true) {
-    const definitions = [
-      ["action_system_intro", "Action system introduction", "action_prompt", true],
-      ["action_recent_messages", "Recent messages", "action_prompt", false],
-      ["action_recent_actions", "Recent actions", "action_prompt", false],
-      ["action_roster", "Character roster", "action_prompt", false],
-      ["action_available_actions", "Available actions", "action_prompt", false],
-      ["action_provider_schema", "Provider schema", "action_provider_schema", false],
-      ["action_examples", "Examples", "action_prompt", true],
-      ["action_final_instruction", "Final instruction", "action_prompt", false]
-    ];
-    const contents = new Map(definitions.map(([id]) => [id, ""]));
+    const definitions = new Map([
+      ["action_system_intro", ["Action system introduction", "action_prompt", true]],
+      [OVERLAY_BLOCK_ID, ["State transition recall rules", "action_prompt", true]],
+      ["action_recent_messages", ["Recent messages", "action_prompt", false]],
+      ["action_recent_actions", ["Recent actions", "action_prompt", false]],
+      ["action_roster", ["Character roster", "action_prompt", false]],
+      ["action_available_actions", ["Available actions", "action_prompt", false]],
+      ["action_examples", ["Examples", "action_prompt", true]],
+      ["action_final_instruction", ["Final instruction", "action_prompt", false]]
+    ]);
+    if (Array.isArray(messages) && messages.length > 0 && messages.every((message) => definitions.has(message?.blockId))) {
+      const blocks = messages.map((message, position) => {
+        const [label, type, stable] = definitions.get(message.blockId);
+        return {
+          id: message.blockId,
+          label,
+          type,
+          position,
+          stable,
+          tokens: this.TokenCounter.estimateMessageTokens ? this.TokenCounter.estimateMessageTokens(message) : this.TokenCounter.estimateTokens(message.content),
+          content: message.content
+        };
+      });
+      if (!blocks.some((block) => block.id === "action_recent_actions")) {
+        const recentMessagesPosition = blocks.findIndex((block) => block.id === "action_recent_messages");
+        const rosterPosition = blocks.findIndex((block) => block.id === "action_roster");
+        const insertionPosition = recentMessagesPosition < rosterPosition ? recentMessagesPosition + 1 : recentMessagesPosition;
+        blocks.splice(insertionPosition, 0, {
+          id: "action_recent_actions",
+          label: "Recent actions",
+          type: "action_prompt",
+          position: insertionPosition,
+          stable: false,
+          tokens: 0,
+          content: ""
+        });
+      }
+      const schemaPosition = Math.max(0, blocks.findIndex((block) => block.id === "action_available_actions") + 1);
+      blocks.splice(schemaPosition, 0, {
+        id: "action_provider_schema",
+        label: "Provider schema",
+        type: "action_provider_schema",
+        position: schemaPosition,
+        stable: false,
+        tokens: providerInjectsSchema ? this.TokenCounter.estimateTokens(serializedSchema) : 0,
+        content: serializedSchema
+      });
+      return blocks.map((block, position) => ({ ...block, position }));
+    }
+    const fallbackDefinitions = [...definitions.entries()].map(([id, [label, type, stable]]) => [id, label, type, stable]);
+    fallbackDefinitions.splice(6, 0, ["action_provider_schema", "Provider schema", "action_provider_schema", false]);
+    const contents = new Map(fallbackDefinitions.map(([id]) => [id, ""]));
     for (const message of messages) {
       const content = typeof message?.content === "string" ? message.content : "";
       let blockId = null;
@@ -273,7 +339,7 @@ class LLMManager {
       if (blockId) contents.set(blockId, `${contents.get(blockId) || ""}${contents.get(blockId) ? "\n" : ""}${content}`);
     }
     contents.set("action_provider_schema", serializedSchema);
-    return definitions.map(([id, label, type, stable], position) => {
+    return fallbackDefinitions.map(([id, label, type, stable], position) => {
       const content = contents.get(id) || "";
       return {
         id,
@@ -287,7 +353,7 @@ class LLMManager {
     });
   }
   reorderActionPromptBlocks(blocks) {
-    const order = ["action_system_intro", "action_available_actions", "action_examples", "action_roster", "action_recent_actions", "action_recent_messages", "action_provider_schema", "action_final_instruction"];
+    const order = ["action_system_intro", OVERLAY_BLOCK_ID, "action_available_actions", "action_provider_schema", "action_examples", "action_roster", "action_recent_actions", "action_recent_messages", "action_final_instruction"];
     const positions = new Map(order.map((id, index) => [id, index]));
     return [...blocks].sort((left, right) => (positions.get(left.id) ?? order.length) - (positions.get(right.id) ?? order.length)).map((block, position) => ({ ...block, position }));
   }

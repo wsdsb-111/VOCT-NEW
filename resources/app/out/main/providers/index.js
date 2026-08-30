@@ -1175,24 +1175,9 @@ class DeepseekProvider extends BaseProvider {
           });
         }
       }
-      transformed.messages = schemaName === "votc_actions" && config.deepseekActionStablePrefixOptimization === true ? this.buildStableActionMessageCopy(messages) : messages;
+      transformed.messages = messages.map(({ blockId, ...message }) => ({ ...message }));
     }
     return transformed;
-  }
-  buildStableActionMessageCopy(messages) {
-    const buckets = { intro: [], actions: [], examples: [], roster: [], recentActions: [], recentMessages: [], other: [], final: [] };
-    for (const message of messages) {
-      const content = typeof message?.content === "string" ? message.content : "";
-      if (content.startsWith("You are an action selection engine")) buckets.intro.push(message);
-      else if (content.startsWith("Available Actions:")) buckets.actions.push(message);
-      else if (content.startsWith("Examples of correct JSON output:")) buckets.examples.push(message);
-      else if (content.startsWith("Characters in this conversation")) buckets.roster.push(message);
-      else if (content.startsWith("Recent actions (last ")) buckets.recentActions.push(message);
-      else if (content.startsWith("Recent messages:")) buckets.recentMessages.push(message);
-      else if (message?.role === "user" && content.startsWith("Given everything above, select the actions")) buckets.final.push(message);
-      else buckets.other.push(message);
-    }
-    return [...buckets.intro, ...buckets.actions, ...buckets.examples, ...buckets.roster, ...buckets.recentActions, ...buckets.recentMessages, ...buckets.other, ...buckets.final].map((message) => ({ ...message }));
   }
   /**
    * Build a human-readable schema description for the prompt

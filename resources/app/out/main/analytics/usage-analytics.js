@@ -85,6 +85,28 @@ function createUsageAnalytics({ fs, dataDir, analyticsFile, retention, createPro
         schemaCacheRole: metadata?.schemaCacheRole || null,
         actionSchemaDeliveryMode: metadata?.actionSchemaDeliveryMode || null,
         deepseekActionStablePrefixOptimization: metadata?.deepseekActionStablePrefixOptimization === true,
+        stablePrefixApplied: metadata?.stablePrefixApplied === true,
+        stablePrefixFailureReason: metadata?.stablePrefixFailureReason || null,
+        actionBlockMetadataValid: metadata?.actionBlockMetadataValid === true,
+        deepseekActionStateTransitionRecallOverlay: metadata?.deepseekActionStateTransitionRecallOverlay === true,
+        overlayEnabled: metadata?.overlayEnabled === true,
+        overlayApplied: metadata?.overlayApplied === true,
+        overlayVersion: metadata?.overlayVersion || null,
+        overlayTokenEstimate: Number(metadata?.overlayTokenEstimate) || 0,
+        actionExperimentStage: metadata?.actionExperimentStage || null,
+        actionRecallEvaluationStatus: metadata?.actionRecallEvaluationStatus || null,
+        criticalActionDiagnostics: Array.isArray(metadata?.criticalActionDiagnostics) ? metadata.criticalActionDiagnostics.map((diagnostic) => ({
+          actionId: diagnostic?.actionId || null,
+          wasAvailable: diagnostic?.wasAvailable === true,
+          validTargetCharacterIds: Array.isArray(diagnostic?.validTargetCharacterIds) ? diagnostic.validTargetCharacterIds.map(Number).filter(Number.isFinite) : [],
+          sourceCharacterId: diagnostic?.sourceCharacterId != null && Number.isFinite(Number(diagnostic.sourceCharacterId)) ? Number(diagnostic.sourceCharacterId) : null,
+          availabilityReason: diagnostic?.availabilityReason || null,
+          selected: diagnostic?.selected === true,
+          selectedTarget: diagnostic?.selectedTarget != null && Number.isFinite(Number(diagnostic.selectedTarget)) ? Number(diagnostic.selectedTarget) : null,
+          validationResult: diagnostic?.validationResult || null,
+          missCategory: diagnostic?.missCategory || null,
+          groundTruthCategory: diagnostic?.groundTruthCategory || null
+        })) : [],
         selectorVersion: metadata?.selectorVersion || null,
         catalogVersion: metadata?.catalogVersion || null,
         schemaVersion: metadata?.schemaVersion || null,
@@ -170,6 +192,8 @@ function createUsageAnalytics({ fs, dataDir, analyticsFile, retention, createPro
         outcomes: {}
       };
       const actionPipeline = { candidateEvents: 0, semanticResolved: 0, semanticRejected: 0, localActions: 0, providerCalls: 0, executedActions: 0, modelExecutedActions: 0, emptyProviderResponses: 0 };
+      const criticalActionRecall = { requests: 0, observations: 0, available: 0, selected: 0, unassessedAvailableNotSelected: 0, byAction: {}, byAvailabilityReason: {}, byValidationResult: {}, byMissCategory: {}, recent: [] };
+      const actionExperiments = { stages: {}, overlayRequested: 0, overlayApplied: 0, stablePrefixRequested: 0, stablePrefixApplied: 0, stablePrefixFailures: {} };
       const memoryRecall = { requests: 0, intentTriggered: 0, selected: 0, empty: 0, cacheHits: 0, skippedContextPressure: 0, tokens: 0, candidateCount: 0, sessionTopicAnchorLocked: 0, reasons: {} };
       for (const entry of entries) {
         const isUsageRecord = usageAnalyticsRetention.isUsageEntry(entry);
@@ -190,8 +214,48 @@ function createUsageAnalytics({ fs, dataDir, analyticsFile, retention, createPro
           memoryRecall.tokens += Number(entry.turnRecallTokens) || 0;
           memoryRecall.candidateCount += Number(entry.candidateCount) || 0;
         }
+        if (entry.requestType === "action_recall_diagnostic") {
+          criticalActionRecall.requests++;
+          for (const diagnostic of entry.criticalActionDiagnostics || []) {
+            if (!diagnostic.actionId) continue;
+            criticalActionRecall.observations++;
+            if (diagnostic.wasAvailable) criticalActionRecall.available++;
+            if (diagnostic.selected) criticalActionRecall.selected++;
+            if (diagnostic.wasAvailable && !diagnostic.selected && !diagnostic.groundTruthCategory) criticalActionRecall.unassessedAvailableNotSelected++;
+            if (!criticalActionRecall.byAction[diagnostic.actionId]) criticalActionRecall.byAction[diagnostic.actionId] = { observations: 0, available: 0, selected: 0, effectFailed: 0, pendingApproval: 0 };
+            const action = criticalActionRecall.byAction[diagnostic.actionId];
+            action.observations++;
+            if (diagnostic.wasAvailable) action.available++;
+            if (diagnostic.selected) action.selected++;
+            if (diagnostic.validationResult === "EFFECT_FAILED") action.effectFailed++;
+            if (diagnostic.validationResult === "PENDING_APPROVAL") action.pendingApproval++;
+            const availabilityReason = diagnostic.availabilityReason || "UNKNOWN";
+            const validationResult = diagnostic.validationResult || "UNKNOWN";
+            criticalActionRecall.byAvailabilityReason[availabilityReason] = (criticalActionRecall.byAvailabilityReason[availabilityReason] || 0) + 1;
+            criticalActionRecall.byValidationResult[validationResult] = (criticalActionRecall.byValidationResult[validationResult] || 0) + 1;
+            if (diagnostic.missCategory) criticalActionRecall.byMissCategory[diagnostic.missCategory] = (criticalActionRecall.byMissCategory[diagnostic.missCategory] || 0) + 1;
+            criticalActionRecall.recent.push({ timestamp: entry.timestamp, evaluationStatus: entry.actionRecallEvaluationStatus, experimentStage: entry.actionExperimentStage, ...diagnostic });
+          }
+        }
         if (isUsageRecord) {
           add(total, entry);
+          if (entry.requestType === "action" && entry.actionExperimentStage) {
+            const stage = entry.actionExperimentStage || "UNLABELED";
+            if (!actionExperiments.stages[stage]) actionExperiments.stages[stage] = { requests: 0, cacheReportedRequests: 0, cacheHitTokens: 0, cacheMissTokens: 0, promptTokens: 0 };
+            const stageMetrics = actionExperiments.stages[stage];
+            stageMetrics.requests++;
+            stageMetrics.promptTokens += entry.promptTokens || entry.estimatedPromptTokens || 0;
+            if (entry.cacheHitTokens != null) {
+              stageMetrics.cacheReportedRequests++;
+              stageMetrics.cacheHitTokens += entry.cacheHitTokens || 0;
+              stageMetrics.cacheMissTokens += entry.cacheMissTokens || 0;
+            }
+            if (entry.overlayEnabled) actionExperiments.overlayRequested++;
+            if (entry.overlayApplied) actionExperiments.overlayApplied++;
+            if (entry.deepseekActionStablePrefixOptimization) actionExperiments.stablePrefixRequested++;
+            if (entry.stablePrefixApplied) actionExperiments.stablePrefixApplied++;
+            if (entry.stablePrefixFailureReason) actionExperiments.stablePrefixFailures[entry.stablePrefixFailureReason] = (actionExperiments.stablePrefixFailures[entry.stablePrefixFailureReason] || 0) + 1;
+          }
           if (entry.schemaFingerprint) {
             structuredSchemas.requests++;
             structuredSchemas.schemaTokenEstimate += Number(entry.schemaTokenEstimate) || 0;
@@ -294,6 +358,21 @@ function createUsageAnalytics({ fs, dataDir, analyticsFile, retention, createPro
         actionPipeline: {
           ...actionPipeline,
           providerEfficiency: actionPipeline.providerCalls > 0 ? actionPipeline.modelExecutedActions / actionPipeline.providerCalls : null
+        },
+        criticalActionRecall: {
+          ...criticalActionRecall,
+          byAction: Object.entries(criticalActionRecall.byAction).map(([actionId, value]) => ({ actionId, ...value, selectionRateWhenAvailable: value.available > 0 ? value.selected / value.available : null })),
+          recent: criticalActionRecall.recent.slice(-100).reverse()
+        },
+        actionExperiments: {
+          ...actionExperiments,
+          stages: Object.entries(actionExperiments.stages).map(([stage, value]) => ({
+            stage,
+            ...value,
+            averageInputTokens: value.requests > 0 ? value.promptTokens / value.requests : 0,
+            averageCacheMissTokens: value.cacheReportedRequests > 0 ? value.cacheMissTokens / value.cacheReportedRequests : null,
+            cacheHitRate: value.cacheHitTokens + value.cacheMissTokens > 0 ? value.cacheHitTokens / (value.cacheHitTokens + value.cacheMissTokens) : null
+          })).sort((left, right) => left.stage.localeCompare(right.stage))
         },
         memoryRecall: {
           ...memoryRecall,

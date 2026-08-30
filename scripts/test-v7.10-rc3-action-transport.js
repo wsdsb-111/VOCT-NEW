@@ -71,13 +71,13 @@ const stableRequest = { model: "deepseek-v4-flash", messages: stableInput, respo
 const stable = provider.transformRequestForDeepseek(stableRequest, { actionSchemaDeliveryMode: "optimized_local_validation", deepseekActionStablePrefixOptimization: true });
 assert.deepStrictEqual(stable.messages.map((message) => message.content.split("\n")[0]), [
   "You are an action selection engine in a roleplay AI system.",
+  "Recent messages:",
+  "Recent actions (last 5):",
+  "Characters in this conversation (order matches CK3 global list):",
   "Available Actions:",
   "Examples of correct JSON output:",
-  "Characters in this conversation (order matches CK3 global list):",
-  "Recent actions (last 5):",
-  "Recent messages:",
   "Given everything above, select the actions (if any) that should be executed right now."
-]);
+], "RC5 provider adapter must fail open without verified blockId metadata");
 assert.deepStrictEqual(stableInput, stableRequest.messages, "stable-prefix transport must reorder a copy, not mutate official messages");
 assert(rendererSource.includes("区块自身估算 Token"), "analytics UI must label block-self tokens");
 assert(rendererSource.includes("后续连带未命中 Token"), "analytics UI must label downstream miss tokens separately");
