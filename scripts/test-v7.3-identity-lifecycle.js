@@ -7,7 +7,7 @@ const path = require("path");
 
 const root = path.resolve(__dirname, "..");
 const mainPath = path.join(root, "resources", "app", "out", "main", "main.js");
-const conversationPath = path.join(root, "resources", "app", "out", "main", "action-system", "conversation.js");
+const conversationPath = path.join(root, "resources", "app", "out", "main", "conversation", "conversation.js");
 const memorySystem = require(path.join(root, "resources", "app", "out", "main", "memory-system"));
 const {
   MemoryEngine,

@@ -1,7 +1,6 @@
 /** @import { GameData, Character } from '../../gamedata_typedefs.js' */
 module.exports = {
   signature: "characterIsKilled",
-  actionMetadata: { selectorContract: { shortDescription: "Source character is killed by target character.", sourceRole: "victim", targetRole: "killer" } },
   title: {
     en: "Source Character Is Killed",
     ru: "Исходный персонаж убит",
@@ -14,29 +13,28 @@ module.exports = {
     zh: "角色被杀害"
   },
   isDestructive: true,
-  triggerCategories: ["death_or_injury"],
-  semantic: {
-    candidatePatterns: [/(?:杀死|杀了|砍死|刺死|毒死|勒死|掐死|打死|烧死|淹死|处死|斩首|枭首|人头落地|身首异处|毙命|殒命|气绝|断气|倒地(?:身亡|死去)|(?:割|砍|斩|削)(?:了)?(?:下|断|落).{0,4}(?:脑袋|头颅|首级|头)|(?:脑袋|头颅|首级|头).{0,6}(?:被)?(?:割|砍|斩|削)(?:了)?(?:下|断|落)|killed?|executed|died)/i],
-    evidencePatterns: [/(?:杀死|杀了|砍死|刺死|毒死|勒死|掐死|打死|烧死|淹死|处死|斩首|枭首|人头落地|身首异处|毙命|殒命|气绝|断气|倒地(?:身亡|死去)|(?:割|砍|斩|削)(?:了)?(?:下|断|落).{0,4}(?:脑袋|头颅|首级|头)|(?:脑袋|头颅|首级|头).{0,6}(?:被)?(?:割|砍|斩|削)(?:了)?(?:下|断|落)|killed?|executed|died)/i],
-    exclusiveGroup: "physical_outcome",
-    priority: 100,
-    riskLevel: "high",
-    participantRoles: { source: "patient", target: "actor" }
-  },
 
   /**
    * @param {object} params
    * @param {GameData} params.gameData
    * @param {Character} params.sourceCharacter
    */
-  args: [],
+  args: ({ gameData, sourceCharacter }) => [
+    {
+      name: "isPlayerSource",
+      type: "boolean",
+      description: `If true, ${gameData.playerName} is the one being killed`,
+      required: false,
+    }
+  ],
 
   /**
    * @param {object} params
    * @param {Character} params.sourceCharacter
    */
-  description: ({ sourceCharacter }) =>
-    `Execute ONLY when ${sourceCharacter.shortName} (id=${sourceCharacter.id}) is the victim. The target is the killer and is already bound from the narrated action; do not change either participant.`,
+  description: ({ gameData, sourceCharacter }) =>
+    `Execute ONLY when ${sourceCharacter.shortName} (id=${sourceCharacter.id}) is killed. Target must be the killer of the source.
+    If isPlayerSource is true, the ${gameData.playerName} will be killed instead of ${sourceCharacter.shortName}.`,
 
   /**
    * @param {object} params
@@ -79,10 +77,7 @@ module.exports = {
       };
     }
 
-    // Participant binding is fixed before this action is invoked. Keep this
-    // legacy variable false so a stale external isPlayerSource argument cannot
-    // redirect a resolved death to the player.
-    const isPlayerSource = false;
+    const isPlayerSource = args && typeof args.isPlayerSource === "boolean" ? args.isPlayerSource : false;
 
     if (isPlayerSource) {
       runGameEffect(`

@@ -1,13 +1,6 @@
 /** @import { GameData, Character } from '../../gamedata_typedefs.js' */
 module.exports = {
     signature: "leavesConversation",
-    triggerCategories: ["location_or_exit"],
-    semantic: {
-        evidencePatterns: [/(?:离开|走出|退出|离席|离场|转身离去|退下|告辞|left|walked out)/i],
-        exclusiveGroup: "location_change",
-        priority: 50,
-        riskLevel: "high"
-    },
     title: {
         en: "Character Leaves Conversation",
         ru: "Персонаж уходит из разговора",
@@ -116,6 +109,30 @@ module.exports = {
 
         // Actual execution (only when approved)
         try {
+            // Get all conversation messages
+            const allMessages = conversation.getHistory();
+            
+            // Build summary prompt for the leaving character
+            const summaryPrompt = [
+                {
+                    role: 'system',
+                    content: `You are summarizing a conversation from the perspective of ${targetCharacter.fullName} who is leaving the conversation. Focus on their experiences, interactions, and key events they participated in. The summary should be comprehensive but concise, written from their point of view.`
+                },
+                // Include current rolling summary if it exists
+                ...(conversation.currentSummary ? [{
+                    role: 'system',
+                    content: `Previous summary of this conversation:\n\n${conversation.currentSummary}`
+                }] : []),
+                {
+                    role: 'system',
+                    content: `Full conversation:\n` + allMessages.map(m => `${m.name}: ${m.content}`).join('\n')
+                },
+                {
+                    role: 'user',
+                    content: `Create a comprehensive summary of this conversation from ${targetCharacter.fullName}'s perspective. Include their interactions with ${gameData.playerName} and other characters, key events they participated in, and their overall experience. This summary will be saved as their personal record of this conversation.`
+                }
+            ];
+            
             runGameEffect(`
 remove_list_global_variable = {
     name = mcc_characters_list_v2
@@ -255,6 +272,22 @@ if ={
 }`);
 
                 
+            // Generate summary for leaving character
+            console.log(`[leavesConversation] Starting summary generation for ${targetCharacter.fullName}`);
+            const summary = await conversation.createCharacterLeavingSummary(targetCharacter.id, summaryPrompt);
+            console.log(`[leavesConversation] Summary generation completed, summary exists: ${!!summary}`);
+            
+            if (summary) {
+                // Save summary to character's file
+                console.log(`[leavesConversation] Saving summary for ${targetCharacter.fullName}`);
+                gameData.saveCharacterSummary(targetCharacter.id, {
+                    date: gameData.date,
+                    totalDays: gameData.totalDays,
+                    content: summary
+                });
+                console.log(`[leavesConversation] Summary saved successfully`);
+            }
+            
             // Remove character from conversation
             console.log(`[leavesConversation] Removing ${targetCharacter.fullName} from conversation`);
             conversation.removeCharacterFromConversation(targetCharacter.id);

@@ -191,7 +191,7 @@ try {
   assert(letterText.includes("仅以"));
   assert(letterText.includes("请于明日来园中相见"));
   assert(letterText.includes("Current location: 开封"), "真实 pListLetter.js 必须实际执行");
-  assert.strictEqual(verboseLogCalls, 1, "Letter verbose logger 必须完成真实装配注入");
+  assert.strictEqual(verboseLogCalls, 0, "官方 VOTC 2.0.3 LetterPromptBuilder 不得被 verbose logger 包装改变");
 
   console.log("VOTC v7.8.2 full prompt smoke: PASS (real templates, helpers, scripts, cache blocks, chat and letter assembly)");
 } finally {

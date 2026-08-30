@@ -107,12 +107,12 @@ function writePair(folderRoot, owner, counterpart, summaries) {
     const gameDataSource = fs.readFileSync(path.join(root, "resources", "app", "out", "main", "game-data", "game-data.js"), "utf8");
     const letterBlock = fs.readFileSync(path.join(root, "resources", "app", "out", "main", "prompts", "letter-prompt-builder.js"), "utf8");
     assert(gameDataSource.includes("memoryEngine.findMentionedCharactersInHistory"), "GameData and Conversation mention detection must share one matcher");
-    assert(letterBlock.includes("retrieveForResponder"), "letters must use the Engine 2.2 routed retrieval entrypoint");
-    assert(letterBlock.includes("mentionedEntityIds"), "letters must route mentioned out-of-scene characters");
-    assert(!letterBlock.includes("tokenBudget: 600"), "letters must not keep the old 600-token recall path");
+    assert(!letterBlock.includes("retrieveForResponder"), "official VOTC 2.0.3 letter prompts must not be extended with the retired routed-retrieval adapter");
+    assert(letterBlock.includes("buildPastSummariesContext"), "official letter prompts must preserve the upstream past-summaries block");
+    assert(letterBlock.includes("buildAllMemoriesBlock"), "official letter prompts must preserve the upstream character-memories block");
     assert(gameDataSource.includes('error: "insufficient_summary_participants"'), "insufficient participant persistence must return an explicit failure");
 
-    console.log("VOTC v7.2.1 stability: PASS (budget return, bounded exit, durable snapshot, precise mentions, letter routes)");
+    console.log("VOTC v7.2.1 stability: PASS (budget return, bounded exit, durable snapshot, precise mentions, official letter blocks)");
   } finally {
     fs.rmSync(tempDir, { recursive: true, force: true });
   }

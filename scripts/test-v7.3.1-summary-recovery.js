@@ -6,7 +6,7 @@ const path = require("path");
 const os = require("os");
 
 const root = path.resolve(__dirname, "..");
-const { Conversation } = require(path.join(root, "resources", "app", "out", "main", "action-system", "conversation"));
+const { Conversation } = require(path.join(root, "resources", "app", "out", "main", "conversation", "conversation"));
 const {
   MemoryEngine,
   buildDirectedParticipantPairs,
@@ -81,7 +81,7 @@ try {
   fs.rmSync(recoveryDir, { recursive: true, force: true });
 }
 
-const conversationSource = fs.readFileSync(path.join(root, "resources", "app", "out", "main", "action-system", "conversation.js"), "utf8");
+const conversationSource = fs.readFileSync(path.join(root, "resources", "app", "out", "main", "conversation", "conversation.js"), "utf8");
 const profileForwardingCount = conversationSource.match(/participantProfiles:\s*context\.participants/g)?.length || 0;
 assert.strictEqual(profileForwardingCount, 2, "live finalization and recovery must both forward participant snapshots");
 

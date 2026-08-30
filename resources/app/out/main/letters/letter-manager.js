@@ -8,6 +8,7 @@ function createLetterManager({ settingsRepository, fs, path, TailFile, readline,
     LetterResponseStatus2["GENERATED"] = "generated";
     LetterResponseStatus2["GENERATION_FAILED"] = "generation_failed";
     LetterResponseStatus2["PENDING_DELIVERY"] = "pending_delivery";
+    LetterResponseStatus2["EFFECT_FILE_WRITTEN"] = "effect_file_written";
     LetterResponseStatus2["SENT"] = "sent";
     LetterResponseStatus2["SEND_FAILED"] = "send_failed";
     return LetterResponseStatus2;
@@ -32,6 +33,8 @@ function createLetterManager({ settingsRepository, fs, path, TailFile, readline,
     LetterPipelineState2["SUMMARY_REQUESTED"] = "SUMMARY_REQUESTED";
     LetterPipelineState2["SUMMARY_SAVED"] = "SUMMARY_SAVED";
     LetterPipelineState2["PENDING_DELIVERY"] = "PENDING_DELIVERY";
+    LetterPipelineState2["DELIVERY_DUE"] = "DELIVERY_DUE";
+    LetterPipelineState2["EFFECT_FILE_WRITTEN"] = "EFFECT_FILE_WRITTEN";
     LetterPipelineState2["DELIVERED"] = "DELIVERED";
     LetterPipelineState2["CONTEXT_TIMEOUT"] = "CONTEXT_TIMEOUT";
     LetterPipelineState2["PROMPT_BUILD_FAILED"] = "PROMPT_BUILD_FAILED";
@@ -47,8 +50,11 @@ function createLetterManager({ settingsRepository, fs, path, TailFile, readline,
       this.storedLetters = /* @__PURE__ */ new Map();
       this.letterStatuses = /* @__PURE__ */ new Map();
       this.deliveryInProgress = /* @__PURE__ */ new Set();
+      this.awaitingAcceptanceLetterId = null;
       this.tailFile = null;
       this.readline = null;
+      this.tailRestartTimer = null;
+      this.lastDateLogReceivedAt = null;
       this.latestPipelineStatus = null;
       this.pipelineSequence = 0;
       this.lastPayloadDiagnostics = null;
@@ -75,11 +81,13 @@ function createLetterManager({ settingsRepository, fs, path, TailFile, readline,
       }
       if (!fs$1.existsSync(debugLogPath)) {
         console.warn(`LetterManager: Debug log file does not exist: ${debugLogPath}`);
+        this.scheduleLogTailingRestart();
         return;
       }
       try {
         this.tailFile = new TailFile(debugLogPath, { encoding: "utf8" }).on("tail_error", (err) => {
           console.error("Tail error:", err);
+          this.scheduleLogTailingRestart();
         });
         await this.tailFile.start();
         console.log(`Started tailing debug log: ${debugLogPath}`);
@@ -89,7 +97,16 @@ function createLetterManager({ settingsRepository, fs, path, TailFile, readline,
         });
       } catch (error) {
         console.error("Failed to start log tailing:", error);
+        this.scheduleLogTailingRestart();
       }
+    }
+    scheduleLogTailingRestart() {
+      if (this.tailRestartTimer) return;
+      this.tailRestartTimer = setTimeout(() => {
+        this.tailRestartTimer = null;
+        this.restartLogTailing().catch((error) => console.error("LetterManager: Failed to recover log tailing:", error));
+      }, 1e3);
+      this.tailRestartTimer.unref?.();
     }
     /**
      * Process a single log line looking for VOTC:DATE
@@ -99,6 +116,8 @@ function createLetterManager({ settingsRepository, fs, path, TailFile, readline,
       const match = line.match(dateRegex);
       if (match) {
         const newTotalDays = Number(match[1]);
+        this.lastDateLogReceivedAt = Date.now();
+        console.log(`LetterManager: VOTC:DATE received (${newTotalDays})`);
         return this.updateCurrentDate(newTotalDays);
       }
       return Promise.resolve();
@@ -140,15 +159,17 @@ function createLetterManager({ settingsRepository, fs, path, TailFile, readline,
      * Check stored letters and deliver any that are ready
      */
     async checkAndDeliverLetters() {
+      if (this.awaitingAcceptanceLetterId) return;
       for (const [letterId, storedLetter] of this.storedLetters.entries()) {
         if (this.currentTotalDays >= storedLetter.expectedDeliveryDay && !this.deliveryInProgress.has(letterId)) {
           console.log(`Delivering letter ${letterId} (current: ${this.currentTotalDays}, expected: ${storedLetter.expectedDeliveryDay})`);
+          this.transitionLetter(letterId, LetterPipelineState.DELIVERY_DUE, { currentTotalDays: this.currentTotalDays });
           this.deliveryInProgress.add(letterId);
           try {
             const delivered = await this.deliverLetter(storedLetter);
             if (delivered) {
-              this.storedLetters.delete(letterId);
               this.savePendingLetters();
+              break;
             }
           } finally {
             this.deliveryInProgress.delete(letterId);
@@ -202,27 +223,21 @@ function createLetterManager({ settingsRepository, fs, path, TailFile, readline,
       this.updateLetterStatus(letter.letterId, { responseStatus: LetterResponseStatus.GENERATING });
       this.transitionPipeline(LetterPipelineState.PROMPT_BUILDING);
       let messages;
-      let promptMode = "enhanced";
+      const promptMode = "official_votc_2.0.3";
       let promptBuildError = null;
       try {
         messages = letterPromptBuilder.buildMessages(gameData, letter);
       } catch (error) {
-        promptMode = "minimal_fallback";
         promptBuildError = error instanceof Error ? error.message : String(error);
-        console.warn("Letter enhanced prompt build failed; using minimal fallback:", error);
-        try {
-          messages = letterPromptBuilder.buildMinimalMessages(gameData, letter);
-        } catch (fallbackError) {
-          const fallbackMessage = fallbackError instanceof Error ? fallbackError.message : String(fallbackError);
-          this.transitionPipeline(LetterPipelineState.PROMPT_BUILD_FAILED, { promptMode, promptBuildError, fallbackError: fallbackMessage });
-          this.updateLetterStatus(letter.letterId, {
-            responseStatus: LetterResponseStatus.GENERATION_FAILED,
-            responseError: `Prompt build failed: ${fallbackMessage}`,
-            promptMode,
-            promptBuildError
-          });
-          return null;
-        }
+        console.error("Letter prompt build failed:", error);
+        this.transitionPipeline(LetterPipelineState.PROMPT_BUILD_FAILED, { promptMode, promptBuildError });
+        this.updateLetterStatus(letter.letterId, {
+          responseStatus: LetterResponseStatus.GENERATION_FAILED,
+          responseError: `Prompt build failed: ${promptBuildError}`,
+          promptMode,
+          promptBuildError
+        });
+        return null;
       }
       this.updateLetterStatus(letter.letterId, { promptMode, promptBuildError });
       this.transitionPipeline(LetterPipelineState.PROMPT_READY, { promptMode, promptBuildError });
@@ -251,7 +266,6 @@ function createLetterManager({ settingsRepository, fs, path, TailFile, readline,
         this.transitionPipeline(LetterPipelineState.REPLY_FAILED, { responseError });
         return null;
       }
-      await this.generateSummary(gameData, letter, reply);
       const expectedDeliveryDay = letter.totalDays + letter.delay;
       const storedLetter = {
         letter,
@@ -271,12 +285,9 @@ function createLetterManager({ settingsRepository, fs, path, TailFile, readline,
       console.log(`Letter ${letter.letterId} generated and stored. Will deliver on day ${expectedDeliveryDay} (current: ${this.currentTotalDays})`);
       if (this.currentTotalDays >= expectedDeliveryDay) {
         console.log(`Letter ${letter.letterId} is ready for immediate delivery`);
-        const delivered = await this.deliverLetter(storedLetter);
-        if (delivered) {
-          this.storedLetters.delete(letter.letterId);
-          this.savePendingLetters();
-        }
+        await this.checkAndDeliverLetters();
       }
+      await this.generateSummary(gameData, letter, reply);
       return reply;
     }
     async buildPromptPreview() {
@@ -453,32 +464,35 @@ function createLetterManager({ settingsRepository, fs, path, TailFile, readline,
       console.log(`LetterManager.writeLetterEffect: Letter file path: ${letterFilePath}`);
       const escapedReply = reply.replace(/"/g, '\\"');
       const gameCommand = `debug_log = "[Localize('talk_event.9999.desc')]"
-  remove_global_variable ?= votc_${letter.letterId}
-  create_artifact = {
-  	name = votc_huixin_title${letter.letterId.replace(/letter_/, "")}
-  	description = "${escapedReply}"
-  	type = journal
+remove_global_variable ?= votc_${letter.letterId}
+create_artifact = {
+	name = votc_huixin_title${letter.letterId.replace(/letter_/, "")}
+	description = "${escapedReply}"
+	type = journal
   	visuals = scroll
   	creator = global_var:message_second_scope_${letter.letterId}
   	modifier = artifact_monthly_minor_prestige_1_modifier
-  	wealth = scope:wealth
-  	save_scope_as = votc_latest_letter
-  }
-  scope:votc_latest_letter = {
-  set_variable = { name = votc_letter_artifact value = yes}
-  }
-  set_global_variable = {
-  	name = votc_latest_letter
-  	value = scope:votc_latest_letter
-  }
-  trigger_event = message_event.362`;
+	wealth = scope:wealth
+	save_scope_as = votc_latest_letter
+}
+scope:votc_latest_letter = {
+set_variable = { name = votc_letter_artifact value = yes}
+}
+set_global_variable = {
+	name = votc_latest_letter
+	value = scope:votc_latest_letter
+}
+trigger_event = message_event.362`;
       try {
         fs$1.writeFileSync(letterFilePath, gameCommand, "utf-8");
+        this.awaitingAcceptanceLetterId = letter.letterId;
         this.updateLetterStatus(letter.letterId, {
-          responseStatus: LetterResponseStatus.SENT,
-          responseError: null
+          responseStatus: LetterResponseStatus.EFFECT_FILE_WRITTEN,
+          responseError: null,
+          effectFileWrittenAt: Date.now()
         });
-        this.transitionLetter(letter.letterId, LetterPipelineState.DELIVERED);
+        this.transitionLetter(letter.letterId, LetterPipelineState.EFFECT_FILE_WRITTEN);
+        this.savePendingLetters();
         return true;
       } catch (error) {
         const errorMessage = `Failed to write letter effect: ${error instanceof Error ? error.message : "Unknown error"}`;
@@ -495,6 +509,7 @@ function createLetterManager({ settingsRepository, fs, path, TailFile, readline,
       if (!this.pendingLettersFile || !fs$1.existsSync(this.pendingLettersFile)) return;
       try {
         const state = JSON.parse(fs$1.readFileSync(this.pendingLettersFile, "utf8"));
+        this.awaitingAcceptanceLetterId = typeof state?.awaitingAcceptanceLetterId === "string" ? state.awaitingAcceptanceLetterId : null;
         for (const storedLetter of Array.isArray(state?.letters) ? state.letters : []) {
           const letterId = storedLetter?.letter?.letterId;
           if (!letterId || typeof storedLetter.reply !== "string" || !Number.isFinite(storedLetter.expectedDeliveryDay)) continue;
@@ -526,7 +541,7 @@ function createLetterManager({ settingsRepository, fs, path, TailFile, readline,
           ...storedLetter,
           status: this.letterStatuses.get(letterId) || null
         }));
-        fs$1.writeFileSync(this.pendingLettersFile, JSON.stringify({ version: 1, letters }, null, 2), "utf8");
+        fs$1.writeFileSync(this.pendingLettersFile, JSON.stringify({ version: 2, awaitingAcceptanceLetterId: this.awaitingAcceptanceLetterId, letters }, null, 2), "utf8");
       } catch (error) {
         console.error("LetterManager: Failed to save pending letters:", error);
       }
@@ -534,7 +549,7 @@ function createLetterManager({ settingsRepository, fs, path, TailFile, readline,
     /**
      * Clear the letters.txt file
      */
-    clearLettersFile() {
+    async clearLettersFile() {
       const ck3Folder = settingsRepository.getCK3UserFolderPath();
       console.log(`LetterManager.clearLettersFile: CK3 user path: ${ck3Folder}`);
       if (!ck3Folder) {
@@ -550,11 +565,28 @@ function createLetterManager({ settingsRepository, fs, path, TailFile, readline,
       } else {
         console.log("letters.txt file does not exist, nothing to clear");
       }
+      const acceptedLetterId = this.awaitingAcceptanceLetterId;
+      this.awaitingAcceptanceLetterId = null;
+      if (acceptedLetterId) {
+        this.updateLetterStatus(acceptedLetterId, {
+          responseStatus: LetterResponseStatus.SENT,
+          responseError: null,
+          acceptedAt: Date.now()
+        });
+        this.transitionLetter(acceptedLetterId, LetterPipelineState.DELIVERED);
+        this.storedLetters.delete(acceptedLetterId);
+        this.savePendingLetters();
+      }
+      await this.checkAndDeliverLetters();
     }
     /**
      * Stop log tailing (cleanup)
      */
     async stopLogTailing() {
+      if (this.tailRestartTimer) {
+        clearTimeout(this.tailRestartTimer);
+        this.tailRestartTimer = null;
+      }
       if (this.readline) {
         this.readline.close();
         this.readline = null;
@@ -660,6 +692,8 @@ function createLetterManager({ settingsRepository, fs, path, TailFile, readline,
       return {
         letters: Array.from(this.letterStatuses.values()),
         currentTotalDays: this.currentTotalDays,
+        lastDateLogReceivedAt: this.lastDateLogReceivedAt,
+        awaitingAcceptanceLetterId: this.awaitingAcceptanceLetterId,
         pipeline: this.latestPipelineStatus ? { ...this.latestPipelineStatus, history: [...this.latestPipelineStatus.history] } : null,
         timestamp: Date.now()
       };

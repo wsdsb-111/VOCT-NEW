@@ -17984,12 +17984,6 @@ const useConfigStore = create()(
           appSettings: state.appSettings ? { ...state.appSettings, allowPrerelease: enabled } : null
         }));
       },
-      updateActionSystemMode: async (mode) => {
-        await window.llmConfigAPI.saveActionSystemMode(mode);
-        set((state) => ({
-          appSettings: state.appSettings ? { ...state.appSettings, actionSystemMode: mode } : null
-        }));
-      },
       // Action approval settings
       getActionApprovalSettings: async () => {
         return await window.llmConfigAPI.getActionApprovalSettings();
@@ -19031,6 +19025,8 @@ function LettersStatusModal({ onClose }) {
         return "❌";
       case "pending_delivery":
         return "📬";
+      case "effect_file_written":
+        return "📝";
       case "sent":
         return "✉️";
       case "send_failed":
@@ -19059,6 +19055,9 @@ function LettersStatusModal({ onClose }) {
       case "pending_delivery":
         return "#2196F3";
       // Blue
+      case "effect_file_written":
+        return "#6f42c1";
+      // Purple
       case "sent":
         return "#28a745";
       // Green
@@ -19088,6 +19087,8 @@ function LettersStatusModal({ onClose }) {
         return t("lettersModal.statusGenerationFailed");
       case "pending_delivery":
         return t("lettersModal.statusPendingDelivery");
+      case "effect_file_written":
+        return t("lettersModal.statusEffectFileWritten");
       case "sent":
         return t("lettersModal.statusSent");
       case "send_failed":
@@ -19123,6 +19124,8 @@ function LettersStatusModal({ onClose }) {
       if (letter.responseStatus === "generating") {
         groups2.generating.push(letter);
       } else if (letter.responseStatus === "pending_delivery") {
+        groups2.pending_delivery.push(letter);
+      } else if (letter.responseStatus === "effect_file_written") {
         groups2.pending_delivery.push(letter);
       } else if (letter.responseStatus === "generation_failed") {
         groups2.generation_failed.push(letter);
@@ -19624,8 +19627,6 @@ const SettingsView = () => {
 };
 const ActionsView = () => {
   const { t } = useTranslation();
-  const appSettings = useConfigStore((state) => state.appSettings);
-  const updateActionSystemMode = useConfigStore((state) => state.updateActionSystemMode);
   const [allActions, setAllActions] = reactExports.useState([]);
   const [hideDisabled, setHideDisabled] = reactExports.useState(false);
   const [isLoading, setIsLoading] = reactExports.useState(true);
@@ -19788,16 +19789,6 @@ const ActionsView = () => {
       console.error("Failed to save action approval settings:", error2);
     }
   };
-  const currentActionSystemMode = appSettings?.actionSystemMode === "precision" ? "precision" : "performance";
-  const handleActionSystemModeChange = async (mode) => {
-    if (mode === currentActionSystemMode) return;
-    try {
-      await updateActionSystemMode(mode);
-    } catch (error2) {
-      console.error("Failed to save action system mode:", error2);
-      alert(error2?.message || String(error2));
-    }
-  };
   const handlePauseOnApprovalToggle = async (e) => {
     if (!actionApprovalSettings) return;
     const newSettings = {
@@ -19811,38 +19802,7 @@ const ActionsView = () => {
       console.error("Failed to save action approval settings:", error2);
     }
   };
-  const getRiskLabel = (riskLevel) => {
-    if (riskLevel === "high") return t("actions.riskHigh");
-    if (riskLevel === "medium") return t("actions.riskMedium");
-    if (riskLevel === "low") return t("actions.riskLow");
-    return t("actions.riskUnknown");
-  };
-  const getSemanticModeLabel = (semanticMode) => {
-    if (semanticMode === "legacy") return t("actions.legacyResolution");
-    if (semanticMode === "fallback") return t("actions.fallbackAction");
-    return t("actions.eventResolver");
-  };
   return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "actions-view", children: [
-    /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "action-mode-section", children: [
-      /* @__PURE__ */ jsxRuntimeExports.jsx("h4", { children: t("config.actionSystemMode") }),
-      /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "help-text", children: t("config.actionModeHelp") }),
-      /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "action-mode-controls", role: "radiogroup", "aria-label": t("config.actionSystemMode"), children: [
-        ["performance", "config.actionModePerformance"],
-        ["precision", "config.actionModePrecision"]
-      ].map(([mode, label]) => /* @__PURE__ */ jsxRuntimeExports.jsx(
-        "button",
-        {
-          type: "button",
-          role: "radio",
-          "aria-checked": currentActionSystemMode === mode,
-          className: currentActionSystemMode === mode ? "active" : "",
-          onClick: () => handleActionSystemModeChange(mode),
-          children: t(label)
-        },
-        mode
-      )) })
-    ] }),
-    /* @__PURE__ */ jsxRuntimeExports.jsx("hr", {}),
     /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "form-group", children: [
       /* @__PURE__ */ jsxRuntimeExports.jsx("h4", { children: t("settings.actionApprovalSettings") }),
       /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "help-text", children: t("settings.actionApprovalHelp") }),
@@ -19931,7 +19891,6 @@ const ActionsView = () => {
       visibleActions.map((a) => {
         const isHovered = hoveredAction === a.id;
         const titleClass = `action-title ${a.disabled ? "disabled" : ""} ${!a.validation.valid ? "invalid" : ""}`;
-        const triggerCategories = Array.isArray(a.triggerCategories) ? a.triggerCategories : [];
         return /* @__PURE__ */ jsxRuntimeExports.jsxs(
           "div",
           {
@@ -19969,21 +19928,12 @@ const ActionsView = () => {
                     children: a.title
                   }
                 ),
-                /* @__PURE__ */ jsxRuntimeExports.jsxs("span", { className: "action-semantic-meta", children: [
-                  /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: `semantic-badge risk-${a.riskLevel || "unknown"}`, children: getRiskLabel(a.riskLevel) }),
-                  /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "semantic-badge mode", children: getSemanticModeLabel(a.semanticMode) }),
-                  triggerCategories.length > 0 ? /* @__PURE__ */ jsxRuntimeExports.jsxs("span", { className: "semantic-badge categories", children: [
-                    t("actions.triggerCategories"),
-                    ": ",
-                    triggerCategories.join(" · ")
-                  ] }) : /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "semantic-badge categories", children: t("actions.noTriggerCategory") }),
-                  isHovered && /* @__PURE__ */ jsxRuntimeExports.jsxs("span", { className: "action-meta", children: [
+                isHovered && /* @__PURE__ */ jsxRuntimeExports.jsxs("span", { className: "action-meta", children: [
                     "[",
                     a.scope,
                     "] ",
                     a.id
                   ] })
-                ] })
               ] }),
               /* @__PURE__ */ jsxRuntimeExports.jsxs(
                 "button",
@@ -20879,7 +20829,7 @@ const SummariesManager = () => {
     /* @__PURE__ */ jsxRuntimeExports.jsxs("section", { className: "memory-engine-overview", children: [
       /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "memory-engine-title", children: [
         /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
-          /* @__PURE__ */ jsxRuntimeExports.jsx("h5", { children: "Memory Engine 2.5 · V7.9.3" }),
+          /* @__PURE__ */ jsxRuntimeExports.jsx("h5", { children: "Memory Engine 2.5 · V7.10.0" }),
           /* @__PURE__ */ jsxRuntimeExports.jsx("p", { children: "多段在场窗口隔离暂离期间内容；人物摘要缓存与来源 messageId 继续严格校验" })
         ] }),
         /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: `memory-engine-status ${memoryOverview.error ? "is-error" : ""}`, children: memoryOverview.error ? "读取异常" : "运行中" })
@@ -21331,21 +21281,12 @@ const SummariesView = () => {
   ] });
 };
 
-const buildSocialConsequenceRows = (social, text, formatTokens) => [
-  [text("对话 / 已确认世界事件 / 记忆证据", "Dialogue / confirmed event / memory Evidence"), `${formatTokens(social?.dialogueEvidence)} / ${formatTokens(social?.confirmedWorldEventEvidence)} / ${formatTokens(social?.memoryEvidence)}`],
-  [text("知情门控 / 未确认主张 / 校验器拒绝", "Knowledge gate / unconfirmed claim / validator rejected"), `${formatTokens(social?.knowledgeGateRejected)} / ${formatTokens(social?.unconfirmedClaimRejected)} / ${formatTokens(social?.validatorRejected)}`],
-  [text("本地后果 / 好感动作 / 关系跃迁 / 观察者影响", "Local consequences / opinion actions / relationship transitions / observer effects"), `${formatTokens(social?.localConsequences)} / ${formatTokens(social?.opinionActions)} / ${formatTokens(social?.relationshipTransitions)} / ${formatTokens(social?.observerEffects)}`],
-  [text("精准 Social Judge 调用", "Precision Social Judge calls"), formatTokens(social?.precisionSocialJudgeCalls)],
-  [text("冷却抑制 / 衰减归零", "Cooldown suppressed / diminishing return suppressed"), `${formatTokens(social?.cooldownSuppressed)} / ${formatTokens(social?.diminishingReturnSuppressed)}`],
-  [text("社会上下文构建总耗时", "Social context total build time"), `${formatTokens(social?.socialContextBuildTimeMs)} ms`]
-];
 const OptimizationView = () => {
   const { i18n } = useTranslation();
   const [report, setReport] = reactExports.useState(null);
   const [isLoading, setIsLoading] = reactExports.useState(true);
   const [isClearing, setIsClearing] = reactExports.useState(false);
   const [error, setError] = reactExports.useState(null);
-  const [showActionModeTokenUsage, setShowActionModeTokenUsage] = reactExports.useState(false);
   const isChinese = (i18n.language || "").toLowerCase().startsWith("zh");
   const text = (zh, en) => isChinese ? zh : en;
   const formatTokens = (value) => new Intl.NumberFormat(isChinese ? "zh-CN" : "en-US").format(Math.round(Number(value) || 0));
@@ -21395,51 +21336,6 @@ const OptimizationView = () => {
   const missAttribution = report?.missAttribution || [];
   const changesSincePrevious = report?.changesSincePrevious || [];
   const recent = report?.recent || [];
-  const actionEngine3 = report?.actionEngine4 || report?.actionEngine3 || {};
-  const actionModeLabel = {
-    performance: text("性能", "Performance"),
-    precision: text("精准", "Precision")
-  }[actionEngine3.currentMode] || text("性能", "Performance");
-  const actionModeNames = {
-    performance: text("性能模式", "Performance"),
-    precision: text("精准模式", "Precision")
-  };
-  const actionModeTokenUsage = actionEngine3.modeTokenUsage || {};
-  const actionModeTokenRows = ["performance", "precision"].map((mode) => {
-    const usage = actionModeTokenUsage[mode] || {};
-    const stages = usage.stages || {};
-    const stageUsage = (key) => stages[key] || {};
-    return [
-      /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "action-mode-token-label", children: actionModeNames[mode] }),
-      /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "action-mode-token-usage", children: [
-        /* @__PURE__ */ jsxRuntimeExports.jsx("span", { children: `${formatTokens(usage.totalTokens)} Token · ${formatTokens(usage.requests)} ${text("次动作请求", "action requests")}` }),
-        /* @__PURE__ */ jsxRuntimeExports.jsx("small", { children: `${text("精准 Selector", "Precision Selector")} ${formatTokens(stageUsage("precisionSelector").totalTokens)} Token / ${formatTokens(stageUsage("precisionSelector").requests)} · ${text("Compact Selector", "Compact Selector")} ${formatTokens(stageUsage("compactSelector").totalTokens)} Token / ${formatTokens(stageUsage("compactSelector").requests)}` })
-      ] })
-    ];
-  });
-  const actionEngineRows = [
-    [
-      /* @__PURE__ */ jsxRuntimeExports.jsxs("button", { type: "button", className: "optimization-mode-toggle", "aria-expanded": showActionModeTokenUsage, onClick: () => setShowActionModeTokenUsage((visible) => !visible), title: text("展开三种模式的动作 Token 统计", "Expand action-token usage by mode"), children: [
-        /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "optimization-mode-toggle-icon", children: showActionModeTokenUsage ? "▼" : "▶" }),
-        " ",
-        text("动作系统模式", "Action mode")
-      ] }),
-      actionModeLabel
-    ],
-    ...showActionModeTokenUsage ? actionModeTokenRows : [],
-    [text("Detected / Bound / Validated", "Detected / Bound / Validated"), `${formatTokens(actionEngine3.detected)} / ${formatTokens(actionEngine3.bound)} / ${formatTokens(actionEngine3.validated)}`],
-    [text("Consent Pending / Approved / Executed", "Consent Pending / Approved / Executed"), `${formatTokens(actionEngine3.consentPending)} / ${formatTokens(actionEngine3.approved)} / ${formatTokens(actionEngine3.executed)}`],
-    [text("拒绝", "Rejected"), formatTokens(actionEngine3.rejected)],
-    [text("Fast Resolver HIT / Compact / Precision", "Fast Resolver HIT / Compact / Precision"), `${formatTokens(actionEngine3.fastResolverHits)} / ${formatTokens(actionEngine3.compactSelectorCalls)} / ${formatTokens(actionEngine3.precisionSelectorCalls)}`],
-    [text("绑定成功率 / 执行产出率", "Binding success / execution yield"), `${formatPercent(actionEngine3.bindingSuccessRate)} / ${formatPercent(actionEngine3.executionYield)}`],
-    [text("Pending 解决率 / No Action 率", "Pending resolution / No Action rate"), `${formatPercent(actionEngine3.pendingResolutionRate)} / ${formatPercent(actionEngine3.noActionRate)}`],
-    [text("Selector 缓存命中率", "Selector cache hit rate"), formatPercent(actionEngine3.selectorCacheHitRate)],
-    [text("每 100 条对话的 Selector 调用", "Selector calls per 100 dialogues"), actionEngine3.providerCallsPer100Dialogues == null ? "—" : Number(actionEngine3.providerCallsPer100Dialogues).toFixed(1)],
-    [text("未缓存 Token / 对话", "Uncached tokens / dialogue"), actionEngine3.uncachedTokensPerDialogue == null ? "—" : Number(actionEngine3.uncachedTokensPerDialogue).toFixed(1)],
-    [text("Token / 已执行动作", "Tokens / executed action"), actionEngine3.tokensPerExecutedAction == null ? "—" : Number(actionEngine3.tokensPerExecutedAction).toFixed(1)],
-    [text("未缓存 Token / 已执行动作", "Uncached tokens / executed action"), actionEngine3.uncachedTokensPerExecutedAction == null ? "—" : Number(actionEngine3.uncachedTokensPerExecutedAction).toFixed(1)]
-  ];
-  const socialConsequenceRows = buildSocialConsequenceRows(actionEngine3.socialConsequence || {}, text, formatTokens);
   const metrics = [
     [text("API 请求", "API requests"), formatTokens(total?.requests), ""],
     [text("服务商总 Token", "Provider total tokens"), formatTokens(total?.totalTokens), ""],
@@ -21459,14 +21355,14 @@ const OptimizationView = () => {
     [text("安全配置", "Secure configuration"), text("Provider API Key 使用 Electron safeStorage 加密落盘；明文旧配置在可用时自动迁移。", "Provider API keys are encrypted at rest with Electron safeStorage; plaintext settings migrate when encryption is available.")],
     [text("统一发布门禁", "Unified release gate"), text("本地与 CI 共用同一测试清单，并加入动作语义金标样例。", "Local and CI validation share one test manifest plus action semantic golden cases.")],
     [text("DeepSeek 思考与摘要", "DeepSeek thinking and summaries"), text("普通对话使用 4096 Token 思考；终局摘要、失败重试与恢复摘要使用摘要页配置的 Token 上限进行非思考结构化输出。", "Normal chat uses 4096-token thinking. Final summaries, retries, and recovery use the token ceiling configured on the summary page for non-thinking structured output.")],
-    [text("AE4 双模式与共享管线", "AE4 two modes and shared pipeline"), text("Action Engine 4.0 仅保留性能与精准模式；Proposal 之后共用绑定、Consent、校验、批处理、审批与执行。", "Action Engine 4.0 keeps only Performance and Precision; proposals share binding, consent, validation, batching, approval, and execution.")],
-    [text("直接社会语义与世界后果", "Direct social and world consequences"), text("精准模式由统一 Selector 处理直接社会语义，性能模式本地处理；已确认世界事件独立派生后果。", "Precision handles direct social meaning in the unified selector, Performance handles it locally, and confirmed world events derive consequences separately.")]
+    [text("官方动作系统", "Official Action System"), text("V7.10 使用 Official VOTC 2.0.3 的 Prompt、Schema、Registry、审批与执行语义；每个 NPC 回复仅评估一次。", "V7.10 uses the Official VOTC 2.0.3 prompt, schema, registry, approval, and execution semantics, with one evaluation per NPC reply.")],
+    [text("Letter 投递恢复", "Letter delivery recovery"), text("回复生成与摘要失败不再阻断官方原子投递 effect；延迟信件可持久化并在日期推进后重试。", "Reply delivery uses the official atomic effect independently of summary success; delayed letters persist and retry after date advancement.")]
   ];
   return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "optimization-view", children: [
     /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "optimization-header", children: [
       /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
         /* @__PURE__ */ jsxRuntimeExports.jsx("h3", { children: text("系统优化与用量", "System Optimization & Usage") }),
-        /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "muted-text", children: text("V7.9.3 接入 Action Engine 4.0，并继续保持 Memory Engine 2.5 数据边界。", "V7.9.3 introduces Action Engine 4.0 while preserving Memory Engine 2.5 data boundaries.") })
+        /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "muted-text", children: text("V7.10 迁移至 Official VOTC 2.0.3 Action System，并继续保持 Memory Engine 2.5 数据边界。", "V7.10 migrates to the Official VOTC 2.0.3 Action System while preserving Memory Engine 2.5 data boundaries.") })
       ] }),
       /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "optimization-header-actions", children: [
         /* @__PURE__ */ jsxRuntimeExports.jsx("button", { type: "button", onClick: loadReport, disabled: isLoading, children: isLoading ? text("读取中…", "Loading…") : text("刷新", "Refresh") }),
@@ -21478,25 +21374,13 @@ const OptimizationView = () => {
     report && /* @__PURE__ */ jsxRuntimeExports.jsxs(React.Fragment, { children: [
       /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "optimization-metrics", children: metrics.map(([label, value, tone]) => /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: `optimization-metric ${tone}`, children: [/* @__PURE__ */ jsxRuntimeExports.jsx("span", { children: label }), /* @__PURE__ */ jsxRuntimeExports.jsx("strong", { children: value })] }, label)) }),
       /* @__PURE__ */ jsxRuntimeExports.jsxs("section", { className: "optimization-section", children: [
-        /* @__PURE__ */ jsxRuntimeExports.jsx("h4", { children: text("Action Engine 4.0", "Action Engine 4.0") }),
-        renderTable(
-          [text("指标", "Metric"), text("数值", "Value")],
-          actionEngineRows,
-          "action-engine-3"
-        )
-      ] }),
-      /* @__PURE__ */ jsxRuntimeExports.jsxs("details", { className: "optimization-capability-details social-consequence-details", children: [
-        /* @__PURE__ */ jsxRuntimeExports.jsx("summary", { children: "SOCIAL CONSEQUENCE" }),
-        renderTable(
-          [text("指标", "Metric"), text("数值", "Value")],
-          socialConsequenceRows,
-          "social-consequence"
-        )
+        /* @__PURE__ */ jsxRuntimeExports.jsx("h4", { children: "ACTION SYSTEM — Official VOTC 2.0.3" }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "muted-text", children: text("旧版动作模式与漏斗统计已停用；服务商 Token 仍按普通请求类型统计。", "Legacy action modes and funnel analytics are disabled; provider tokens remain available in the standard request tables.") })
       ] }),
       reconciliation?.aggregates > 0 && /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "muted-text", children: text(`已包含 ${formatTokens(reconciliation.requests)} 次 DeepSeek 官网核对补录、${formatTokens(reconciliation.totalTokens)} Token；缓存细分仅来自本机仍保留的原始响应。`, `Includes a DeepSeek-console reconciliation of ${formatTokens(reconciliation.requests)} requests and ${formatTokens(reconciliation.totalTokens)} tokens; cache details use only locally retained provider responses.`) }),
       /* @__PURE__ */ jsxRuntimeExports.jsxs("section", { className: "optimization-capabilities", children: [
         /* @__PURE__ */ jsxRuntimeExports.jsxs("details", { className: "optimization-capability-details", children: [
-          /* @__PURE__ */ jsxRuntimeExports.jsx("summary", { children: text("查看 V7.9.3 适配状态", "View V7.9.3 integration status") }),
+          /* @__PURE__ */ jsxRuntimeExports.jsx("summary", { children: text("查看 V7.10 适配状态", "View V7.10 integration status") }),
           /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "optimization-capability-grid", children: capabilities.map(([title, detail]) => /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "optimization-capability", children: [/* @__PURE__ */ jsxRuntimeExports.jsx("strong", { children: title }), /* @__PURE__ */ jsxRuntimeExports.jsx("span", { children: detail })] }, title)) })
         ] })
       ] }),
@@ -22494,9 +22378,9 @@ Browser.type = "languageDetector";
 const actions$8 = { "disableAction": "Disable action", "enableAction": "Enable action", "failedToLoadActions": "Failed to load actions.", "failedToOpenActionsFile": "Failed to open action file: {{error}}", "failedToOpenActionsFolder": "Failed to open actions folder: {{error}}", "failedToReloadActions": "Failed to reload actions.", "failedToUpdateActionState": "Failed to update action state: {{error}}", "hideDisabled": "Hide disabled", "invalidAction": "Invalid action", "loadingActions": "Loading actions...", "noActionsToDisplay": "No actions to display with the current filters.", "openActionsFile": "Open File", "openActionsFolder": "Open Actions Folder", "reloadActions": "Reload", "showOnlyInvalid": "Show only invalid", "validAction": "Valid action", "enableAllActions": "Enable All", "disableAllActions": "Disable All", "destructive": "Destructive action - requires approval", "nonDestructive": "Non-destructive action", "destructiveOverridden": "Destructive state overridden: {{state}}", "openFile": "Open File", "eventResolver": "Event resolver", "legacyResolution": "Legacy direction resolver", "fallbackAction": "Fallback action", "riskHigh": "Risk: High", "riskMedium": "Risk: Medium", "riskLow": "Risk: Low", "riskUnknown": "Risk: Unknown", "triggerCategories": "Triggers", "noTriggerCategory": "Fallback only" };
 const chat$8 = { "args": "Args", "cancelStream": "Cancel Stream", "details": "Details", "endConversation": "End Conversation", "from": "From", "loadingDots": "Loading...", "maximize": "+", "minimize": "-", "noParameters": "No parameters", "pauseConversation": "Pause Conversation", "pendingApproval": "Pending approval", "regenerate": "Regenerate", "resumeConversation": "Resume Conversation", "system": "System", "to": "To", "writeMessage": "Write a message...", "you": "You" };
 const common$8 = { "apply": "Apply", "approve": "Approve", "back": "Back", "cancel": "Cancel", "close": "Close", "collapseAll": "Collapse All", "confirm": "Confirm", "decline": "Decline", "delete": "Delete", "disabled": "Disabled", "edit": "Edit", "enabled": "Enabled", "error": "Error", "expandAll": "Expand All", "filter": "Filter", "folder": "Folder", "hide": "Hide", "loading": "Loading...", "next": "Next", "no": "No", "ok": "OK", "open": "Open", "pause": "Pause", "previous": "Previous", "refresh": "Refresh", "reset": "Reset", "save": "Save", "search": "Search", "settings": "Settings", "show": "Show", "success": "Success", "tokens": "tokens", "yes": "Yes" };
-const config$8 = { "actions": "Actions", "actionSystemMode": "Action mode", "actionModeBalanced": "Balanced (migrated to Performance)", "actionModePerformance": "Performance (recommended)", "actionModePrecision": "Precision (higher Token use)", "actionModeHelp": "Global Action Engine 4.0 mode. Performance and Precision share one validation and execution pipeline.", "collectLogs": "Collect all logs for bug report", "configuration": "Configuration", "connection": "Connection", "default": "Default", "help": "Help section", "joinDiscord": "Join our Discord", "manageActions": "Manage detected Actions", "noPresetsYet": "No presets saved yet", "npcActions": "NPC Actions", "npcMessages": "NPC Messages", "npcSummaries": "NPC Summaries", "preset": "Preset", "prompts": "Prompts", "selectProviderOrPreset": "Select a provider or preset from the sidebar to configure", "settings": "Settings", "summaries": "Summaries", "type": "Type", "unnamedPreset": "Unnamed Preset" };
+const config$8 = { "actions": "Actions", "collectLogs": "Collect all logs for bug report", "configuration": "Configuration", "connection": "Connection", "default": "Default", "help": "Help section", "joinDiscord": "Join our Discord", "manageActions": "Manage detected Actions", "noPresetsYet": "No presets saved yet", "npcActions": "NPC Actions", "npcMessages": "NPC Messages", "npcSummaries": "NPC Summaries", "preset": "Preset", "prompts": "Prompts", "selectProviderOrPreset": "Select a provider or preset from the sidebar to configure", "settings": "Settings", "summaries": "Summaries", "type": "Type", "unnamedPreset": "Unnamed Preset" };
 const connection$8 = { "confirmDeletePreset": 'Are you sure you want to delete the preset "{{name}}"?', "createNewPreset": "Create New Preset", "createPreset": "Create Preset", "defaultParameters": "Default Parameters", "deletePreset": "Delete Preset", "makePreset": "Make Preset from these Settings", "maxTokens": "Max Tokens", "presetName": "Preset name", "presetNamePlaceholder": "Enter preset name", "presetNameRequired": "Preset name cannot be empty", "presets": "Presets", "providers": "Providers", "savePreset": "Save Preset", "temperature": "Temperature", "testConnection": "Test Connection", "testConnectionFailed": "Connection failed", "testConnectionSuccess": "Connection successful!", "openPlayer2App": "Open Player2 App", "player2AppHelp": "Click to open the Player2 application. Make sure it is installed and running.", "actionsSchemaType": "Actions Schema Type", "actionsSchemaTypeHelp": "Controls the JSON schema complexity for action responses. 'Auto' detects Gemini models and uses minimized schema. 'Minimized' may be required for models with strict schema limits (like Gemini). If actions don't appear with your model, try switching to 'Minimized'.", "actionsSchemaAuto": "Auto-detect (Recommended)", "actionsSchemaAdvanced": "Advanced (Full validation)", "actionsSchemaMinimized": "Minimized (For limited models)" };
-const lettersModal$8 = { "completed": "Completed", "created": "Created", "currentDay": "Current Day", "currentGameDay": "Current Game Day", "daysUntilDelivery": "Days Until Delivery", "delivered": "Delivered", "deliversInDays": "Delivers in {{days}} days", "deliversToday": "Delivers today", "deliveryFailed": "Delivery Failed", "error": "Error", "expectedDeliveryDay": "Expected Delivery Day", "failed": "Failed", "generating": "Generating", "information": "Information", "isLate": "Is Late", "lastUpdated": "Last updated", "lateByDays": "Late by {{days}} days", "letterId": "Letter ID", "lettersStatus": "Letters Status", "loading": "Loading...", "no": "No", "noLettersFound": "No letters found. Letters will appear here when they are processed.", "originalLetter": "Original Letter", "pendingDelivery": "Pending Delivery", "pendingDeliveryTitle": "Pending Delivery", "refresh": "Refresh", "responseContent": "Response Content", "responseGenerationFailed": "Response Generation Failed", "responseGenerationInProgress": "Response Generation In Progress", "responseStatus": "Response Status", "sentSuccessfully": "Sent Successfully", "status": "Status", "statusGenerated": "Generated", "statusGenerating": "Generating", "statusGenerationFailed": "Generation Failed", "statusNotStarted": "Not Started", "statusPendingDelivery": "Pending Delivery", "statusSaved": "Saved", "statusSaveFailed": "Save Failed", "statusSendFailed": "Send Failed", "statusSent": "Sent", "summaryContent": "Summary Content", "summaryStatus": "Summary Status", "totalLetters": "Total Letters", "yes": "Yes" };
+const lettersModal$8 = { "completed": "Completed", "created": "Created", "currentDay": "Current Day", "currentGameDay": "Current Game Day", "daysUntilDelivery": "Days Until Delivery", "delivered": "Delivered", "deliversInDays": "Delivers in {{days}} days", "deliversToday": "Delivers today", "deliveryFailed": "Delivery Failed", "error": "Error", "expectedDeliveryDay": "Expected Delivery Day", "failed": "Failed", "generating": "Generating", "information": "Information", "isLate": "Is Late", "lastUpdated": "Last updated", "lateByDays": "Late by {{days}} days", "letterId": "Letter ID", "lettersStatus": "Letters Status", "loading": "Loading...", "no": "No", "noLettersFound": "No letters found. Letters will appear here when they are processed.", "originalLetter": "Original Letter", "pendingDelivery": "Pending Delivery", "pendingDeliveryTitle": "Pending Delivery", "refresh": "Refresh", "responseContent": "Response Content", "responseGenerationFailed": "Response Generation Failed", "responseGenerationInProgress": "Response Generation In Progress", "responseStatus": "Response Status", "sentSuccessfully": "Sent Successfully", "status": "Status", "statusEffectFileWritten": "Effect file written (awaiting CK3 confirmation)", "statusGenerated": "Generated", "statusGenerating": "Generating", "statusGenerationFailed": "Generation Failed", "statusNotStarted": "Not Started", "statusPendingDelivery": "Pending Delivery", "statusSaved": "Saved", "statusSaveFailed": "Save Failed", "statusSendFailed": "Send Failed", "statusSent": "Sent", "summaryContent": "Summary Content", "summaryStatus": "Summary Status", "totalLetters": "Total Letters", "yes": "Yes" };
 const messageItem$8 = { "cancel": "Cancel", "errorTitle": "Error", "save": "Save" };
 const modals$8 = { "areYouSureDeletePreset": "Are you sure you want to delete the preset {{name}}?", "confirmDeletion": "Confirm Deletion" };
 const promptPreview$8 = { "character": "Character", "loadingPreview": "Loading preview...", "noActiveConversation": "No active conversation. Start a conversation to preview prompts.", "noModelSelected": "No model selected", "none": "None", "promptBlocks": "Prompt Blocks", "promptPreview": "Prompt Preview", "totalTokens": "Total Tokens" };
@@ -22662,9 +22546,9 @@ const pl = {
 const actions$2 = { "disableAction": "禁用操作", "enableAction": "启用操作", "failedToLoadActions": "加载操作失败。", "failedToOpenActionsFolder": "打开操作文件夹失败：{{error}}", "failedToReloadActions": "重新加载操作失败。", "failedToUpdateActionState": "更新操作状态失败：{{error}}", "hideDisabled": "隐藏已禁用", "invalidAction": "无效操作", "loadingActions": "加载操作中...", "noActionsToDisplay": "当前筛选条件下无可显示的操作。", "openActionsFolder": "打开操作文件夹", "reloadActions": "重新加载", "showOnlyInvalid": "仅显示无效", "validAction": "有效操作", "enableAllActions": "全部启用", "disableAllActions": "全部禁用", "openFile": "打开文件", "destructiveOverridden": "危险状态已覆盖：{{state}}", "destructive": "危险操作 - 需要批准", "nonDestructive": "安全操作", "eventResolver": "事件解析", "legacyResolution": "方向兼容解析", "fallbackAction": "无动作回退", "riskHigh": "风险：高", "riskMedium": "风险：中", "riskLow": "风险：低", "riskUnknown": "风险：未标注", "triggerCategories": "触发类别", "noTriggerCategory": "仅作回退" };
 const chat$2 = { "args": "参数", "cancelStream": "取消流式输出", "details": "详情", "endConversation": "结束对话", "from": "来自", "loadingDots": "加载中...", "maximize": "+", "minimize": "-", "noParameters": "无参数", "pauseConversation": "暂停对话", "pendingApproval": "等待批准", "regenerate": "重新生成", "resumeConversation": "恢复对话", "system": "系统", "to": "发送至", "writeMessage": "输入消息...", "you": "你" };
 const common$2 = { "apply": "应用", "approve": "批准", "back": "返回", "cancel": "取消", "close": "关闭", "collapseAll": "全部折叠", "confirm": "确认", "decline": "拒绝", "delete": "删除", "disabled": "已禁用", "edit": "编辑", "enabled": "已启用", "error": "错误", "expandAll": "全部展开", "filter": "筛选", "folder": "文件夹", "hide": "隐藏", "loading": "加载中...", "next": "下一步", "no": "否", "ok": "确定", "open": "打开", "pause": "暂停", "previous": "上一步", "refresh": "刷新", "reset": "重置", "save": "保存", "search": "搜索", "settings": "设置", "show": "显示", "success": "成功", "tokens": "Token", "yes": "是" };
-const config$2 = { "actions": "操作", "actionSystemMode": "动作模式", "actionModeBalanced": "平衡模式（已迁移至性能模式）", "actionModePerformance": "性能模式（推荐）", "actionModePrecision": "精准模式（较高 Token）", "actionModeHelp": "Action Engine 4.0 全局模式；性能与精准模式共用同一套校验和执行管线。", "collectLogs": "收集所有日志以便提交错误报告", "configuration": "配置", "connection": "连接", "default": "默认", "help": "帮助", "joinDiscord": "加入我们的 Discord", "manageActions": "管理检测到的操作", "noPresetsYet": "尚未保存预设", "npcActions": "NPC 操作", "npcMessages": "NPC 消息", "npcSummaries": "NPC 摘要", "preset": "预设", "prompts": "提示词", "selectProviderOrPreset": "从侧边栏选择服务商或预设进行配置", "settings": "设置", "summaries": "摘要", "type": "类型", "unnamedPreset": "未命名预设" };
+const config$2 = { "actions": "操作", "collectLogs": "收集所有日志以便提交错误报告", "configuration": "配置", "connection": "连接", "default": "默认", "help": "帮助", "joinDiscord": "加入我们的 Discord", "manageActions": "管理检测到的操作", "noPresetsYet": "尚未保存预设", "npcActions": "NPC 操作", "npcMessages": "NPC 消息", "npcSummaries": "NPC 摘要", "preset": "预设", "prompts": "提示词", "selectProviderOrPreset": "从侧边栏选择服务商或预设进行配置", "settings": "设置", "summaries": "摘要", "type": "类型", "unnamedPreset": "未命名预设" };
 const connection$2 = { "confirmDeletePreset": '您确定要删除预设 "{{name}}" 吗？', "createNewPreset": "创建新预设", "createPreset": "创建预设", "defaultParameters": "默认参数", "deletePreset": "删除预设", "makePreset": "基于当前设置创建预设", "maxTokens": "最大 Token 数", "presetName": "预设名称", "presetNamePlaceholder": "输入预设名称", "presetNameRequired": "预设名称不能为空", "presets": "预设", "providers": "服务商", "savePreset": "保存预设", "temperature": "Temperature", "testConnection": "测试连接", "testConnectionFailed": "连接失败", "testConnectionSuccess": "连接成功！", "openPlayer2App": "打开 Player2 应用", "player2AppHelp": "点击打开 Player2 应用。请确保已安装且正在运行。", "actionsSchemaType": "操作架构类型", "actionsSchemaTypeHelp": "控制操作响应的 JSON 架构复杂度。'自动'会检测 Gemini 模型并使用简化架构。'简化'可能是具有严格架构限制的模型（如 Gemini）所必需的。如果您的模型未显示操作，请尝试切换到'简化'。", "actionsSchemaAuto": "自动检测（推荐）", "actionsSchemaAdvanced": "高级（完整验证）", "actionsSchemaMinimized": "简化（用于受限模型）" };
-const lettersModal$2 = { "completed": "已完成", "created": "创建时间", "currentDay": "当前日", "currentGameDay": "当前游戏日", "daysUntilDelivery": "距离送达天数", "delivered": "已送达", "deliversInDays": "{{days}} 天后送达", "deliversToday": "今天送达", "deliveryFailed": "送达失败", "error": "错误", "expectedDeliveryDay": "预计送达日", "failed": "失败", "generating": "生成中", "information": "信息", "isLate": "是否延迟", "lastUpdated": "最后更新", "lateByDays": "延迟 {{days}} 天", "letterId": "信件 ID", "lettersStatus": "信件状态", "loading": "加载中...", "no": "否", "noLettersFound": "未找到信件。信件处理后将显示在此处。", "originalLetter": "原始信件", "pendingDelivery": "待送达", "pendingDeliveryTitle": "待送达", "refresh": "刷新", "responseContent": "回复内容", "responseGenerationFailed": "回复生成失败", "responseGenerationInProgress": "回复生成中", "responseStatus": "回复状态", "sentSuccessfully": "发送成功", "status": "状态", "statusGenerated": "已生成", "statusGenerating": "生成中", "statusGenerationFailed": "生成失败", "statusNotStarted": "未开始", "statusPendingDelivery": "待送达", "statusSaved": "已保存", "statusSaveFailed": "保存失败", "statusSendFailed": "发送失败", "statusSent": "已发送", "summaryContent": "摘要内容", "summaryStatus": "摘要状态", "totalLetters": "总信件数", "yes": "是" };
+const lettersModal$2 = { "completed": "已完成", "created": "创建时间", "currentDay": "当前日", "currentGameDay": "当前游戏日", "daysUntilDelivery": "距离送达天数", "delivered": "已送达", "deliversInDays": "{{days}} 天后送达", "deliversToday": "今天送达", "deliveryFailed": "送达失败", "error": "错误", "expectedDeliveryDay": "预计送达日", "failed": "失败", "generating": "生成中", "information": "信息", "isLate": "是否延迟", "lastUpdated": "最后更新", "lateByDays": "延迟 {{days}} 天", "letterId": "信件 ID", "lettersStatus": "信件状态", "loading": "加载中...", "no": "否", "noLettersFound": "未找到信件。信件处理后将显示在此处。", "originalLetter": "原始信件", "pendingDelivery": "待送达", "pendingDeliveryTitle": "待送达", "refresh": "刷新", "responseContent": "回复内容", "responseGenerationFailed": "回复生成失败", "responseGenerationInProgress": "回复生成中", "responseStatus": "回复状态", "sentSuccessfully": "发送成功", "status": "状态", "statusEffectFileWritten": "投递命令已写入（等待 CK3 确认）", "statusGenerated": "已生成", "statusGenerating": "生成中", "statusGenerationFailed": "生成失败", "statusNotStarted": "未开始", "statusPendingDelivery": "待送达", "statusSaved": "已保存", "statusSaveFailed": "保存失败", "statusSendFailed": "发送失败", "statusSent": "已发送", "summaryContent": "摘要内容", "summaryStatus": "摘要状态", "totalLetters": "总信件数", "yes": "是" };
 const messageItem$2 = { "cancel": "取消", "errorTitle": "错误", "save": "保存" };
 const modals$2 = { "areYouSureDeletePreset": "您确定要删除预设 {{name}} 吗？", "confirmDeletion": "确认删除" };
 const promptPreview$2 = { "character": "角色", "loadingPreview": "加载预览中...", "noActiveConversation": "没有进行中的对话。开始对话以预览提示词。", "noModelSelected": "未选择模型", "none": "无", "promptBlocks": "提示词块", "promptPreview": "提示词预览", "totalTokens": "总 Token 数" };

@@ -308,11 +308,6 @@ function registerIpcHandlers(runtime) {
     settingsRepository.saveActionApprovalSettings(settings);
     return true;
   });
-  electron.ipcMain.handle("llm:getActionSystemMode", () => settingsRepository.getActionSystemMode());
-  electron.ipcMain.handle("llm:saveActionSystemMode", (_, mode) => {
-    settingsRepository.saveActionSystemMode(mode);
-    return true;
-  });
   electron.ipcMain.handle("llm:getSummaryPromptSettings", () => {
     return settingsRepository.getSummaryPromptSettings();
   });
@@ -344,10 +339,7 @@ function registerIpcHandlers(runtime) {
         true
       );
       const userLang = settingsRepository.getLanguage();
-      return actions.map((a) => {
-        const semantic = a.definition.semantic || {};
-        const triggerCategories = Array.isArray(a.definition.triggerCategories) ? a.definition.triggerCategories : [];
-        return {
+      return actions.map((a) => ({
           id: a.id,
           title: a.definition.title ? resolveI18nString(a.definition.title, userLang) : a.id,
           scope: a.scope,
@@ -355,12 +347,8 @@ function registerIpcHandlers(runtime) {
           validation: a.validation,
           disabled: actionRegistry.isActionDisabled(a.id),
           isDestructive: actionRegistry.getEffectiveDestructive(a.id),
-          hasDestructiveOverride: actionRegistry.hasDestructiveOverride(a.id),
-          triggerCategories,
-          riskLevel: semantic.riskLevel || "unknown",
-          semanticMode: semantic.fallback ? "fallback" : "event"
-        };
-      });
+          hasDestructiveOverride: actionRegistry.hasDestructiveOverride(a.id)
+        }));
     } catch (error) {
       console.error("Failed to get actions:", error);
       return [];

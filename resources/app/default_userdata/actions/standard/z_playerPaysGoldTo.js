@@ -1,14 +1,6 @@
 /** @import { GameData, Character } from '../../gamedata_typedefs.js' */
 module.exports = {
   signature: "playerPaysGoldTo",
-  actionMetadata: { executionMode: "immediate", idempotent: false, requiredArguments: ["amount"], availabilityRequirements: { source: "player" }, selectorContract: { shortDescription: "Player source pays gold to target character.", sourceRole: "payer", targetRole: "recipient" } },
-  triggerCategories: ["gold"],
-  semantic: {
-    riskLevel: "medium",
-    moneyTransfer: true,
-    deterministicInvocation: true,
-    participantRoles: { source: "actor", target: "patient" }
-  },
   title: {
     en: "Player Pays Gold to Target",
     ru: "Игрок платит золотом цели",

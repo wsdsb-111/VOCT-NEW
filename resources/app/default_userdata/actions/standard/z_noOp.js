@@ -3,12 +3,6 @@
 
 module.exports = {
   signature: "noOp",
-  actionMetadata: { executionMode: "immediate", idempotent: true, selectorVisible: false },
-  triggerCategories: [],
-  semantic: {
-    riskLevel: "low",
-    fallback: true
-  },
   title: {
     en: "No executed actions fallback",
     ru: "Отсутствие выполненных действий",

@@ -8,7 +8,7 @@ const path = require("path");
 const root = path.resolve(__dirname, "..");
 const memorySystem = require(path.join(root, "resources", "app", "out", "main", "memory-system"));
 const { MemoryEngine, MemoryExtractor, MentionTracker, buildPerspectiveSummaryMap, validatePerspectiveSummaryMap } = memorySystem;
-const { Conversation } = require(path.join(root, "resources", "app", "out", "main", "action-system", "conversation"));
+const { Conversation } = require(path.join(root, "resources", "app", "out", "main", "conversation", "conversation"));
 
 const participants = [
   { id: 1, name: "甲", shortName: "甲" },

@@ -1,14 +1,6 @@
 /** @import { GameData, Character } from '../../gamedata_typedefs.js' */
 module.exports = {
   signature: "isImprisonedBy",
-  triggerCategories: ["imprisonment"],
-  semantic: {
-    candidatePatterns: [/(?:囚禁|关进|关押|投入(?:大牢|地牢)|收监|逮捕|拘押|软禁|拿下|押下|押入|押进|押往|押送(?:入|至).{0,8}(?:牢|狱)|下狱|入狱|捆(?:起|住)来?|绑(?:起|住)来?|上(?:了)?枷锁|戴上(?:镣铐|枷锁)|锁进(?:牢房|地牢)?|铁链(?:锁住|缚住)|imprison(?:ed)?|arrest(?:ed)?|jailed?|locked up|put in chains)/i],
-    evidencePatterns: [/(?:囚禁|关进|关押|投入(?:大牢|地牢)|收监|逮捕|拘押|软禁|拿下|押下|押入|押进|押往|押送(?:入|至).{0,8}(?:牢|狱)|下狱|入狱|捆(?:起|住)来?|绑(?:起|住)来?|上(?:了)?枷锁|戴上(?:镣铐|枷锁)|锁进(?:牢房|地牢)?|铁链(?:锁住|缚住)|imprison(?:ed)?|arrest(?:ed)?|jailed?|locked up|put in chains)/i],
-    priority: 80,
-    riskLevel: "high",
-    participantRoles: { source: "patient", target: "actor" }
-  },
   title: {
     en: "Source Is Imprisoned By Target",
     ru: "Исходный персонаж заключен в тюрьму целью",
@@ -33,6 +25,12 @@ module.exports = {
       description: `Type of prison ${sourceCharacter.shortName} is sent to. Possible values: house_arrest, dungeon.`,
       required: false,
       options: ["house_arrest", "dungeon"],
+    },
+    {
+      name: "isPlayerSource",
+      type: "boolean",
+      description: `If true, ${gameData.playerName} is the one being imprisoned instead of ${sourceCharacter.shortName}.`,
+      required: false,
     }
   ],
 
@@ -41,8 +39,9 @@ module.exports = {
    * @param {GameData} params.gameData
    * @param {Character} params.sourceCharacter
    */
-  description: ({ sourceCharacter }) =>
-    `Execute when ${sourceCharacter.shortName} is the prisoner and the target is the jailor. Both participants are already bound from the narrated action; only choose prisonType (house_arrest or dungeon; defaults to dungeon).`,
+  description: ({ gameData, sourceCharacter }) =>
+    `Execute when ${sourceCharacter.shortName} is imprisoned by the target (the jailor). Specify prisonType if needed (house_arrest or dungeon; defaults to dungeon).
+    If isPlayerSource is true, ${gameData.playerName} will be imprisoned instead.`,
 
   /**
    * @param {object} params
@@ -86,9 +85,7 @@ module.exports = {
     }
 
     const raw = (args && typeof args.prisonType === "string") ? args.prisonType.trim().toLowerCase() : "default";
-    // Participant binding is fixed before this action is invoked. Ignore the
-    // old override path so a stale argument cannot imprison a different role.
-    const isPlayerSource = false;
+    const isPlayerSource = args && typeof args.isPlayerSource === "boolean" ? args.isPlayerSource : false;
     const prisonType = ["default", "house_arrest", "dungeon"].includes(raw) ? raw : "default";
 
     if (!isPlayerSource) {

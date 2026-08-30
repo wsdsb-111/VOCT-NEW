@@ -1,17 +1,6 @@
 /** @import { GameData, Character } from '../../gamedata_typedefs.js' */
 module.exports = {
   signature: "setEmotion",
-  actionMetadata: { executionMode: "immediate", idempotent: true, targetPolicy: "self_or_other" },
-  triggerCategories: ["drinking_or_toast", "visible_pose"],
-  semantic: {
-    match: ({ event, evidence }) => event.category === "visible_pose"
-      ? /(?:微笑|笑了|轻笑|失笑|大笑|哭泣|流泪|抽泣|哽咽|怒视|怒目而视|瞪着|惊呆|跪下祈祷|祈祷|诵经|读书|翻书|写字|执笔|伏案(?:书写|写字)|偷听|侧耳倾听|争辩|争论|讲故事|跳舞|起舞|翩翩起舞|翻白眼|后退|举杖|手持权杖)/.test(evidence.text)
-      : event.category === "drinking_or_toast" && /(?:饮酒|喝酒|饮茶|喝茶|小酌|痛饮|畅饮|一饮而尽|饮尽|饮罢|举杯|敬酒|碰杯|祝酒)/.test(evidence.text),
-    participantRoles: { source: "actor", target: "patient" },
-    poseSubject: true,
-    deterministicInvocation: true,
-    riskLevel: "low"
-  },
   title: {
     en: "Set Target Emotion",
     ru: "Установить эмоцию цели",

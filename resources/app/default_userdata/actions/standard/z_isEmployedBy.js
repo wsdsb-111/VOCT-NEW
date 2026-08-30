@@ -1,7 +1,6 @@
 /** @import { GameData, Character } from '../../gamedata_typedefs.js' */
 module.exports = {
   signature: "isEmployedBy",
-  triggerCategories: ["employment_or_office"], semantic: { evidencePatterns: [/(?:任命|册封|拜为|擢升|升任|提拔|调任|委任|委派|封为|授官|授职|雇佣|招募|聘为|入仕|效力于|appointed?|promoted?|employed|hired)/i], exclusiveGroup: "employment_change", priority: 20, riskLevel: "medium" },
   title: {
     en: "Source Joins Target's Court",
     ru: "Исходный персонаж вступает в двор цели",

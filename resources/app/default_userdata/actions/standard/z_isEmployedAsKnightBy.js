@@ -1,15 +1,6 @@
 /** @import { GameData, Character } from '../../gamedata_typedefs.js' */
 module.exports = {
   signature: "isEmployedAsKnightBy",
-  triggerCategories: ["employment_or_office"],
-  semantic: {
-    candidatePatterns: [/(?:任命(?:为|了)?骑士|任为骑士|骑士|侍从|knight)/i],
-    evidencePatterns: [/(?:任命(?:为|了)?骑士|任为骑士|骑士|侍从|knight)/i],
-    exclusiveGroup: "employment_change",
-    priority: 80,
-    riskLevel: "medium",
-    participantRoles: { source: "patient", target: "actor" }
-  },
   title: {
     en: "Source Joins Target's Court as Knight",
     ru: "Исходный персонаж вступает в двор цели как рыцарь",
@@ -33,7 +24,7 @@ module.exports = {
    * @param {Character} params.sourceCharacter
    */
   description: ({ sourceCharacter }) =>
-    `Execute when ${sourceCharacter.shortName} is the appointee and the target is the employer/court owner. Both participants are already bound from the narrated appointment; do not choose a different target.`,
+    `Execute when ${sourceCharacter.shortName} (who is not a ruler or knight) decides to join the target character's court as a knight.`,
 
   /**
    * @param {object} params

@@ -8,7 +8,7 @@ const path = require("path");
 
 const root = path.resolve(__dirname, "..");
 const memorySystem = require(path.join(root, "resources", "app", "out", "main", "memory-system"));
-const { Conversation } = require(path.join(root, "resources", "app", "out", "main", "action-system", "conversation"));
+const { Conversation } = require(path.join(root, "resources", "app", "out", "main", "conversation", "conversation"));
 const { MemoryEngine, KnowledgeService, buildPerspectiveSummaryMap, validatePerspectiveSummaryMap } = memorySystem;
 
 const player = { id: 1, firstName: "玩家", shortName: "玩家", fullName: "玩家" };
@@ -432,7 +432,7 @@ function makeConversation() {
   const preloadSource = fs.readFileSync(path.join(root, "resources", "app", "out", "preload", "preload.js"), "utf8");
   const ipcSource = fs.readFileSync(path.join(root, "resources", "app", "out", "main", "ipc", "register-ipc.js"), "utf8");
   const rendererSource = fs.readFileSync(path.join(root, "resources", "app", "out", "renderer", "assets", "index-Dn3qWlAB.js"), "utf8");
-  const conversationSource = fs.readFileSync(path.join(root, "resources", "app", "out", "main", "action-system", "conversation.js"), "utf8");
+const conversationSource = fs.readFileSync(path.join(root, "resources", "app", "out", "main", "conversation", "conversation.js"), "utf8");
   const leavesActionSource = fs.readFileSync(path.join(root, "resources", "app", "default_userdata", "actions", "standard", "z_leavesConversation.js"), "utf8");
   assert(preloadSource.includes("joinWaitingCharacter") && preloadSource.includes("leavePresentCharacter") && preloadSource.includes("temporarilyLeaveCharacter") && preloadSource.includes("returnTemporaryCharacter"), "preload 必须公开入内、永久离场、暂离和返回操作");
   assert(ipcSource.includes("conversation:joinWaitingCharacter") && ipcSource.includes("conversation:leavePresentCharacter") && ipcSource.includes("conversation:temporarilyLeaveCharacter") && ipcSource.includes("conversation:returnTemporaryCharacter"), "主进程必须注册完整人物状态 IPC");
@@ -441,7 +441,7 @@ function makeConversation() {
   assert(rendererSource.includes("presenceOperationPending || !conversationState.presence.canManage"), "忙碌和 IPC 处理中人物按钮必须实际禁用");
   assert(/this\.isActive = true;\s*this\.emitUpdate\(\);/.test(conversationSource), "日志解析完成后必须立即推送首句前的候场按钮状态");
   assert(!conversationSource.includes('requestType: "leaving_summary"'), "主动离场不得再单独调用旧散文摘要 Provider");
-  assert(!leavesActionSource.includes("createCharacterLeavingSummary"), "动作脚本离席必须复用统一快照和终局路径");
+  assert(leavesActionSource.includes("conversation.removeCharacterFromConversation(targetCharacter.id)"), "官方 leavesConversation 动作必须完成离场状态切换");
 
   console.log("VOTC v7.7.2 staged presence: PASS (waiting, join, leave, visible history, knowledge windows, pair projection and UI contracts)");
 })().catch((error) => {

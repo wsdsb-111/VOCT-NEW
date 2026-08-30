@@ -22,7 +22,7 @@ const requiredModules = [
   "prompts/prompt-script-loader.js",
   "prompts/prompt-builder.js",
   "prompts/letter-prompt-builder.js",
-  "runtime/run-file-manager.js",
+  "actions/run-file-manager.js",
   "conversation/conversation-manager.js",
   "summaries/summaries-manager.js",
   "app/app-updater.js",
@@ -58,7 +58,7 @@ for (const dependency of ["defaultPromptsDir", "defaultMainTemplatePath", "legac
 }
 
 const { VOTC_CORE_VERSION, MEMORY_ENGINE_VERSION } = require(path.join(mainDir, "version"));
-assert.strictEqual(VOTC_CORE_VERSION, "7.9.3");
+assert.strictEqual(VOTC_CORE_VERSION, "7.10.0");
 assert.strictEqual(MEMORY_ENGINE_VERSION, "2.5");
 
 const { Character } = require(path.join(mainDir, "game-data", "character"));

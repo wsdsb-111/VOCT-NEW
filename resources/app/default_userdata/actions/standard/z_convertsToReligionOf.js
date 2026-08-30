@@ -1,7 +1,6 @@
 /** @import { GameData, Character } from '../../gamedata_typedefs.js' */
 module.exports = {
   signature: "convertsToReligionOf",
-  triggerCategories: ["faith_or_vassal"], semantic: { evidencePatterns: [/(?:改宗|皈依|改信|改奉|弃绝(?:原)?信仰|信奉.{0,12}(?:教|信仰)|converted?)/i], exclusiveGroup: "faith_or_vassal", priority: 60, riskLevel: "high" },
   title: {
     en: "Source Converts to Target's Religion",
     ru: "Исходный персонаж переходит в религию цели",

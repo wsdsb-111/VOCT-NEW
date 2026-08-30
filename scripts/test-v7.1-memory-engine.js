@@ -91,7 +91,7 @@ try {
   const mainSource = fs.readFileSync(path.join(root, "resources", "app", "out", "main", "main.js"), "utf8");
   const gameDataSource = fs.readFileSync(path.join(root, "resources", "app", "out", "main", "game-data", "game-data.js"), "utf8");
   const promptBuilderSource = fs.readFileSync(path.join(root, "resources", "app", "out", "main", "prompts", "prompt-builder.js"), "utf8");
-  const conversationSource = fs.readFileSync(path.join(root, "resources", "app", "out", "main", "action-system", "conversation.js"), "utf8");
+const conversationSource = fs.readFileSync(path.join(root, "resources", "app", "out", "main", "conversation", "conversation.js"), "utf8");
   const rendererSource = fs.readFileSync(path.join(root, "resources", "app", "out", "renderer", "assets", "index-Dn3qWlAB.js"), "utf8");
   const mentionedFinder = gameDataSource.slice(gameDataSource.indexOf("findMentionedCharacterIdsInHistory("), gameDataSource.indexOf("findFamilyEntry(", gameDataSource.indexOf("findMentionedCharacterIdsInHistory(")));
   const mentionedContext = promptBuilderSource.slice(promptBuilderSource.indexOf("static buildMentionedCharactersContext("), promptBuilderSource.indexOf("static buildFinalSummary(", promptBuilderSource.indexOf("static buildMentionedCharactersContext(")));

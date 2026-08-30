@@ -3,3 +3,5 @@ Uninstall[[:space:]]VOTC.exe filter=lfs diff=lfs merge=lfs -text
 *.dll filter=lfs diff=lfs merge=lfs -text
 *.bin filter=lfs diff=lfs merge=lfs -text
 VOTC.exe filter=lfs diff=lfs merge=lfs -text
+# Preserve the vendored VOTC 2.0.3 source formatting for parity checks.
+resources/app/default_userdata/actions/standard/z_leavesConversation.js -whitespace

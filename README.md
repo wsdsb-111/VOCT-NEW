@@ -11,7 +11,7 @@ Voices of the Court 是一个面向《Crusader Kings III》（CK3）的沉浸式
 - **历史认知边界**：提示词要求角色只使用当前年份已经发生、写成、流传或成名的信息，避免引用未来人物、事件、诗词和典故。
 - **当前政局优先**：皇帝和年号从实际游戏角色数据中识别，支持玩家篡位或改变历史后的沙盒玩法。
 - **Memory Engine 2.5**：保留 `角色ID_姓名/与对方的对话.json` 人物目录与 2.4 写入合同，并新增整场冻结的 Session Topic Anchor，以及只在明确回忆意图下触发、Top1、默认 256 Token 的 Turn Recall。
-- **Action Engine 4.0**：仅保留性能与精准模式；精准模式对每条有效 RP 对白调用一次官方式 Q2 Selector，性能模式采用确定性本地 HIT 与最多一次 Compact Selector，两者在 Proposal 后共用 Consent、校验、批处理、审批和执行管线。
+- **Official VOTC 2.0.3 Action System**：以官方 Prompt、Schema、Registry、Sandbox、审批与 28 个标准动作作为唯一动作基线；每个 NPC 完整回复后评估一次，不再运行 AE3/AE4、Action Mode、Pending 或 Social Consequence。
 - **候场与在场窗口**：多人会话可在首句前设置候场，开始后可请入内、永久离场，或选择昏迷、睡着、暂时离开三种可返回的暂离模式；每名角色只回应、获知并保存自己实际在场区间的内容。
 - **多人对话摘要**：支持玩家与当前会话中的全部 NPC 同时对话，并将多人互动摘要按实际参与者逐对保存，避免 NPC 之间的对话内容丢失。
 - **动态人物关系**：提及未参与当前对话的角色时，也可以从 CK3 角色和亲属数据中加载关系；兄弟姐妹会结合出生日期或年龄判断哥哥、弟弟、姐姐和妹妹。
@@ -106,7 +106,7 @@ V7.9.1 继续使用 Memory Engine 2.5，本次未修改摘要存储、动态召�
 - 会话结束改由串行终局协调器提交；立即开始第二场对话不会复用上一场状态。请求 Provider 前先保存原始会话快照，退出最多等待 15 秒，超时任务在下次启动恢复；
 - 直接关系、场外人物和稳定记忆只在实际命中候选时占用预算；首次话题命中最多选 1 条 Session Topic Anchor，并在整场会话中固定内容和顺序；
 - 每轮以当前用户消息为主查询、最近 1–2 条消息仅作辅助。只有明确回忆意图或明确人物指向且主查询相关度达标时，才在当前用户消息之后追加 Top1 Turn Recall；独立预算默认 256、硬上限 320 Token，同回合相同回应者与查询复用缓存，剩余上下文不足 192 Token 时跳过；
-- 人物提及统一使用同一匹配器：唯一称号可以指代人物、同名或同称号歧义失败关闭并记录诊断、中文长名优先，“那个人”绑定本场最近的明确第三人称对象；信件继续使用人物目录路由；
+- 人物提及统一使用同一匹配器：唯一称号可以指代人物、同名或同称号歧义失败关闭并记录诊断、中文长名优先，“那个人”绑定本场最近的明确第三人称对象；信件 Prompt 在 v7.10 恢复官方 2.0.3 的 past summaries 与 character memories blocks，不再注入自研 routed retrieval；
 - 人物身份始终使用 CK3 数字 ID；摘要目录和对话文件只保存本名，当前头衔、称号和官职仅作为动态召回别名及摘要正文资料；
 - “陛下”“殿下”或具体头衔只有在当前资料或目录中最近观察到的持有人唯一时才解析；同一称谓无法唯一绑定时不猜测、不串记忆；
 - NPC 死亡后写入墓碑状态并停止继续写入该 NPC 的拥有者方向，但保留其历史摘要目录；其他人物目录中关于死者的回忆也继续保留，读档或复活后可以解除墓碑；
@@ -135,6 +135,9 @@ voices-of-the-court/
 ├─ resources/app/out/main/window-manager.js          # Electron 窗口构造
 ├─ resources/app/out/main/secure-provider-secrets.js # safeStorage 密钥落盘
 ├─ resources/app/out/main/memory-system/             # Memory Engine 2.5
+├─ resources/app/out/main/actions/                   # Official VOTC 2.0.3 Action System
+├─ resources/app/out/main/conversation/              # 对话与在场生命周期基础设施
+├─ resources/app/out/main/letters/                   # Official Letter + Delivery Recovery 外层
 ├─ resources/app/default_userdata/                   # 默认提示词、动作和本地化脚本
 ├─ locales/                                           # Electron 界面语言资源
 ├─ docs/                                               # 架构、版本、测试与 UI 文档
@@ -159,6 +162,8 @@ V7.9.2 新增仅在当前对话场景内有效的 Social Consequence Engine，�
 
 V7.9.3 按冻结规格接入 Action Engine 4.0。顶层 Router 默认进入 AE4，只有显式 Engine Version 3 才整体回滚到冻结 AE3，禁止逐消息 fallback。Balanced 启动时迁移到 Performance；模式切换保留 Explicit Pending、执行历史、去重账本、Opinion Cooldown 和世界事件证据。Precision 不再经过 Candidate Gate、Event Parser、Semantic Resolver、Semantic Rescue 或 Precision Judge；每条有效 RP 对白恰好一次 Q2 Selector。Performance 仅允许确定性本地 HIT，其余最多调用一次 Compact Selector；混合句通过 `ALLOW/BLOCK/MAYBE` Guard 避免整句误杀。两种模式共享稳定 Action Contract、Consent Action Timing 和 Proposal 执行管线；Pending 响应必须引用当前消息，AE4 禁止 `isPlayerSource` 改写已绑定 Source。Precision 与 Compact 的 Question Rule 明确把普通询问和 `consent_required` 明确提议分开：前者不触发动作，后者即使采用问句也创建 Pending，尚不执行游戏效果。Memory Engine 2.5 在 Final Summary Quality Gate 拒绝跨 join/leave/暂离/返回边界的 `summarySegments` 并要求按边界拆段；严格 Perspective Projection 后再执行共同在场正文覆盖门禁，实质参与者若只剩 memory 而没有 narrative 则进入可重新生成摘要的恢复流程，不写人物文件、不 commit，也不放宽 `every(messageId)` 知识隔离。`isInjured` 固定为 VOCT-NEW 项目级 `attacker→victim` 合同，CK3 效果落在 target。172 条 Ground Truth Benchmark 已拆分 Action/Source/Target/Argument 等 Match、Core/Overall Recall 与 Per-Action Gate，Wrong Action 不再算 Recall，并覆盖 3/4/6 人错目标、Historical Replay 与 Injury Victim Mismatch。真实 Provider Recall、缓存实测和 CK3 效果仍属于 Phase 7 人工验收，不在自动化通过前宣称 Stable。详见 [正式规格](docs/VOTC_v7.9.3_Action_Engine_4.0正式实施规格书.md)、[最终实机前修复清单](docs/VOCT-NEW_v7.9.3_AE4_最终实机前修复清单_含Injury裁定.md)、[Errata-001](docs/AE4_Spec_Errata-001_Self-Target目标约束冲突修正.md)与 [实施报告](docs/v7.9.3-action-engine-4.0-implementation-report.md)。
 
+V7.10.0 停止维护自研 Action Engine 3.0/4.0，删除其运行时、模式、Pending、Social Consequence 与版本路由，完整迁入官方 VOTC 2.0.3 Action System 和 28 个标准动作。Prompt、`votc_actions` Schema、Registry、response healing、审批与 Effect 语义以官方为唯一基线；自定义动作首版不加载。Letter 同步恢复官方 2.0.3 Prompt 与原子 Delivery Effect，并在外层增加有界载荷重试、跨重启待投递、单通道双信排队、日志 tail 恢复和 `LETTER_ACCEPTED` 后清理；文件写入状态明确为等待 CK3 确认，不再等同于已送达。Memory Engine 2.5、Presence Boundary P1、Final Summary 和普通 Chat 保持非回归。详见 [v7.10 实施报告](docs/v7.10-official-action-letter-recovery-implementation-report.md)、[Action 上游清单](docs/upstream/votc-2.0.3-action-manifest.md)和 [Letter 上游清单](docs/upstream/votc-2.0.3-letter-manifest.md)。
+
 V7.7 在 V7.6 健康化基础上分阶段拆分主进程：第一阶段将六种模型 Provider 迁入 `providers/index.js`、92 个既有 IPC 注册迁入 `ipc/register-ipc.js`；第二阶段把 `ProviderRegistry`、`TokenCounter` 和 `LLMManager` 迁入 `provider-service.js`，通过显式依赖继续读取用户分别选择的对话、摘要和动作模型。`main.js` 由约 9477 行降至约 6612 行。动作语义同时补齐“共度春宵/鱼水之欢已发生”和“从今以后成为情人/认定灵魂伴侣”等自然完成态表达，并继续排除请求、计划、假设、回忆与失败尝试。当前仓库仍是可运行打包产物，没有能够重新生成这些文件的完整 `src` 工程，因此本阶段不伪造源码构建链。
 
 发布测试统一由 `scripts/test-manifest.js` 声明。本地与 CI 都运行：
@@ -167,18 +172,18 @@ V7.7 在 V7.6 健康化基础上分阶段拆分主进程：第一阶段将六种
 node scripts\test-release.js
 ```
 
-清单会覆盖全部 `test-*.js`：直接发布组、动作聚合组和 follow-up 聚合组均必须登记。V7.9.3 当前登记 73 个直接发布组并覆盖 106 个测试文件；另有 172 条 AE4 Ground Truth Benchmark，供真实 Selector 与 CK3 验收结果计算 Recall、Trigger Accuracy、Per-Action Gate 和 Stop-the-Line Blocker。
+清单会覆盖全部 `test-*.js`。V7.10.0 当前分类 108 个测试文件：39 个直接发布组，68 个依赖已退休 AE3/AE4/Social 语义的历史测试明确归档；官方 Action parity 与 Letter Delivery Recovery 2.0 是新的动作/信件发布门禁。
 
 ## 版本信息
 
 - 外挂 UI 版本：v2.0.4
-- 当前应用功能基线：v7.9.3
+- 当前应用功能基线：v7.10.0
 - CK3 模组版本：Voices of the Court 2.0.4
 - 模组支持版本：CK3 1.18.*
 - UI 主题：宫廷编年史风格（深红、暗金、羊皮纸文本层级）
 - UI 主题切换：羊皮卷、骑士纹章、水墨画卷三套完整历史风格；分别拥有独立背景、边框结构、按钮造型、消息卡片、输入框、字体和滚动条，并可自动保存选择
 - UI 素材生成提示词：参见 [docs/UI_ASSET_PROMPTS_2.0.3.md](docs/UI_ASSET_PROMPTS_2.0.3.md)
-- 当前重点：V7.9.3 / Action Engine 4.0；Memory Engine 2.5、外挂 UI 2.0.4 与 CK3 Workshop 2.0.4 保持不变
+- 当前重点：V7.10.0 / Official VOTC 2.0.3 Action System / Letter Delivery Recovery 2.0；Memory Engine 2.5、外挂 UI 2.0.4 与 CK3 Workshop 2.0.4 保持不变
 
 ## 已知限制
 

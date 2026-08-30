@@ -68,8 +68,6 @@ electron.contextBridge.exposeInMainWorld("llmConfigAPI", {
   setSummaryProviderId: (instanceId) => electron.ipcRenderer.invoke("llm:setSummaryProviderId", instanceId),
   getActionApprovalSettings: () => electron.ipcRenderer.invoke("llm:getActionApprovalSettings"),
   saveActionApprovalSettings: (settings) => electron.ipcRenderer.invoke("llm:saveActionApprovalSettings", settings),
-  getActionSystemMode: () => electron.ipcRenderer.invoke("llm:getActionSystemMode"),
-  saveActionSystemMode: (mode) => electron.ipcRenderer.invoke("llm:saveActionSystemMode", mode),
   getSummaryPromptSettings: () => electron.ipcRenderer.invoke("llm:getSummaryPromptSettings"),
   saveSummaryPromptSettings: (settings) => electron.ipcRenderer.invoke("llm:saveSummaryPromptSettings", settings)
 });

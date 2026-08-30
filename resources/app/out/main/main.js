@@ -7,9 +7,7 @@ const Store = require("electron-store");
 const uuid = require("uuid");
 const Handlebars = require("handlebars");
 const events = require("events");
-const actionSystem = require("./action-system");
 const memorySystem = require("./memory-system");
-const scriptSandbox = require("./script-sandbox");
 const usageAnalyticsRetention = require("./usage-analytics-retention");
 const { createChatWindow } = require("./window-manager");
 const { SecureProviderSecrets } = require("./secure-provider-secrets");
@@ -20,30 +18,12 @@ const { registerIpcHandlers } = require("./ipc/register-ipc");
 const { createPaths } = require("./config/paths");
 const { getHistoricalReferenceByYear } = require("./game-data/legacy-historical-reference");
 
-const zod = require("zod");
 const log = require("electron-log");
 const electronUpdater = require("electron-updater");
 const activeWin = require("active-win");
 const TailFile = require("@logdna/tail-file");
 const readline$1 = require("node:readline");
 const archiver = require("archiver");
-function _interopNamespaceDefault(e) {
-  const n = Object.create(null, { [Symbol.toStringTag]: { value: "Module" } });
-  if (e) {
-    for (const k in e) {
-      if (k !== "default") {
-        const d = Object.getOwnPropertyDescriptor(e, k);
-        Object.defineProperty(n, k, d.get ? d : {
-          enumerable: true,
-          get: () => e[k]
-        });
-      }
-    }
-  }
-  n.default = e;
-  return Object.freeze(n);
-}
-const fs__namespace = /* @__PURE__ */ _interopNamespaceDefault(fs$1);
 const PROVIDER_TYPES = ["player2", "openrouter", "openai-compatible", "ollama", "deepseek", "gemini"];
 const DEFAULT_ACTIVE_PROVIDER = "player2";
 const DEFAULT_PROVIDER_CONFIGS = {
@@ -294,11 +274,6 @@ const schema = {
       }
     }
   },
-  actionSystemMode: {
-    type: "string",
-    enum: ["balanced", "performance", "precision"],
-    default: "performance"
-  },
   summaryPromptSettings: {
     type: "object",
     default: { rollingPrompt: "", finalPrompt: "", letterSummaryPrompt: "", finalSummaryMaxTokens: 4096 },
@@ -437,302 +412,34 @@ const llmManager = new LLMManager({
   debugVerboseLLM: DEBUG_VERBOSE_LLM,
   logVerboseLLM
 });
-const ActionRegistry = actionSystem.ActionRegistry.configure({
+const { ActionRegistry, ActionPromptBuilder, ActionSandbox, createActionEffectWriter, createActionEngine, schema: actionSchema, responseHealing, resolveI18nString } = require("./actions");
+const ActionRegistryClass = ActionRegistry.configure({
   actionsDir: VOTC_ACTIONS_DIR,
   dataDir: VOTC_DATA_DIR,
   defaultUserdataDir: path.join(electron.app.getAppPath(), "default_userdata", "actions")
 });
-const actionRegistry = ActionRegistry.getInstance();
-const {
-  buildStructuredResponseJsonSchema,
-  buildStructuredResponseSchema
-} = actionSystem.actionSchema;
-const { createRunFileManager } = require("./runtime/run-file-manager");
+const actionRegistry = ActionRegistryClass.getInstance();
+const { buildStructuredResponseJsonSchema, buildStructuredResponseSchema } = actionSchema;
+const { createRunFileManager } = require("./actions/run-file-manager");
 const RunFileManager = createRunFileManager({ settingsRepository, path, fs: fs$1 });
 const runFileManager = new RunFileManager();
-class ActionEffectWriter {
-  /**
-   * Compose CK3 prelude code to scope source/target characters from the ordered list.
-   * Uses:
-   *  - global_var:votc_action_source
-   *  - global_var:votc_action_target
-   */
-  static composeScopePrelude(sourceIndex, targetIndex, isPlayerTarget) {
-    let prelude = "";
-    if (sourceIndex !== null && sourceIndex !== void 0) {
-      prelude += `
-ordered_in_global_list = {
-    variable = mcc_characters_list_v2
-    position = ${sourceIndex}
-    set_global_variable = {
-        name = votc_action_source
-        value = this
-    }
-}
-`;
-    }
-    if (targetIndex !== null && targetIndex !== void 0) {
-      if (isPlayerTarget) {
-        prelude += `
-root = {
-    set_global_variable = {
-        name = votc_action_target
-        value = root
-    }
-}
-`;
-      } else {
-        prelude += `
-ordered_in_global_list = {
-    variable = mcc_characters_list_v2
-    position = ${targetIndex}
-    set_global_variable = {
-        name = votc_action_target
-        value = this
-    }
-}
-`;
-      }
-    }
-    return prelude;
-  }
-  /**
-   * Compose final CK3 effect block including scope prelude and action effect text.
-   * Consumers can write this string into run file.
-   */
-  static composeFullEffect(gameData, sourceCharacterId, targetCharacterId, effectBody) {
-    const sourceIndex = this.getCharacterIndex(gameData, sourceCharacterId);
-    const targetIndex = targetCharacterId != null ? this.getCharacterIndex(gameData, targetCharacterId) : null;
-    const isPlayerTarget = targetCharacterId != null && targetCharacterId === gameData.playerID;
-    const prelude = this.composeScopePrelude(sourceIndex, targetIndex, isPlayerTarget);
-    return `${prelude}
-${effectBody}
-`;
-  }
-  /**
-   * Write composed effect to run file (appends).
-   * Creates a RunFileManager using CK3 user folder path from SettingsRepository if not already created.
-   */
-  static writeEffect(gameData, sourceCharacterId, targetCharacterId, effectBody) {
-    const effect = this.composeFullEffect(gameData, sourceCharacterId, targetCharacterId, effectBody);
-    runFileManager.write(effect);
-  }
-  /**
-   * Compute 0-based position for character id in the ordered list.
-   * The GameData.characters Map is guaranteed to be in CK3 order.
-   */
-  static getCharacterIndex(gameData, characterId) {
-    const ids = Array.from(gameData.characters.keys());
-    const idx = ids.indexOf(characterId);
-    if (idx === -1) {
-      throw new Error(`Character id ${characterId} not found in GameData.characters`);
-    }
-    return idx;
-  }
-}
-const ActionPromptBuilder = actionSystem.ActionPromptBuilder.configure({
-  TokenCounter,
-  createPromptFingerprint
-});
-function fixTypingErrors(obj) {
-  if (obj === null || obj === void 0) {
-    return obj;
-  }
-  if (Array.isArray(obj)) {
-    return obj.map((item) => fixTypingErrors(item));
-  }
-  if (typeof obj === "object") {
-    const fixed = {};
-    for (const [key, value] of Object.entries(obj)) {
-      fixed[key] = fixTypingErrors(value);
-    }
-    return fixed;
-  }
-  if (typeof obj === "string") {
-    const trimmed = obj.trim();
-    if (trimmed !== "" && !isNaN(Number(trimmed))) {
-      if (/^-?\d+\.?\d*$/.test(trimmed)) {
-        return Number(trimmed);
-      }
-    }
-    if (trimmed.toLowerCase() === "true") {
-      return true;
-    }
-    if (trimmed.toLowerCase() === "false") {
-      return false;
-    }
-  }
-  return obj;
-}
-function healJsonResponse(content) {
-  if (!content || typeof content !== "string") {
-    return null;
-  }
-  try {
-    const parsed = JSON.parse(content);
-    return fixTypingErrors(parsed);
-  } catch {
-  }
-  const markdownMatch = content.match(/```(?:json)?\s*\n?([\s\S]*?)\n?```/);
-  if (markdownMatch) {
-    try {
-      const parsed = JSON.parse(markdownMatch[1].trim());
-      return fixTypingErrors(parsed);
-    } catch {
-      content = markdownMatch[1].trim();
-    }
-  }
-  const jsonStart = Math.min(
-    content.indexOf("{") !== -1 ? content.indexOf("{") : Infinity,
-    content.indexOf("[") !== -1 ? content.indexOf("[") : Infinity
-  );
-  if (jsonStart !== Infinity) {
-    const startChar = content[jsonStart];
-    const endChar = startChar === "{" ? "}" : "]";
-    const jsonEnd = content.lastIndexOf(endChar);
-    if (jsonEnd > jsonStart) {
-      const extracted = content.substring(jsonStart, jsonEnd + 1);
-      try {
-        const parsed = JSON.parse(extracted);
-        return fixTypingErrors(parsed);
-      } catch {
-        content = extracted;
-      }
-    }
-  }
-  let repaired = content.trim();
-  repaired = repaired.replace(/,(\s*[}\]])/g, "$1");
-  repaired = repaired.replace(/([{,]\s*)([a-zA-Z_][a-zA-Z0-9_]*)\s*:/g, '$1"$2":');
-  const openBraces = (repaired.match(/{/g) || []).length;
-  const closeBraces = (repaired.match(/}/g) || []).length;
-  const openBrackets = (repaired.match(/\[/g) || []).length;
-  const closeBrackets = (repaired.match(/\]/g) || []).length;
-  if (openBraces > closeBraces) {
-    repaired += "}".repeat(openBraces - closeBraces);
-  }
-  if (openBrackets > closeBrackets) {
-    repaired += "]".repeat(openBrackets - closeBrackets);
-  }
-  try {
-    const parsed = JSON.parse(repaired);
-    return fixTypingErrors(parsed);
-  } catch {
-    return null;
-  }
-}
-function healJsonResponseWithLogging(content, context = "JSON") {
-  console.log(`[${context}] Attempting to heal JSON response`);
-  console.log(`[${context}] Original content length: ${content?.length || 0} characters`);
-  const healed = healJsonResponse(content);
-  if (healed !== null) {
-    console.log(`[${context}] Successfully healed JSON response`);
-    return healed;
-  }
-  console.error(`[${context}] Failed to heal JSON response`);
-  logVerboseLLM(`[${context}][verbose] Original content:`, content?.substring(0, 500));
-  return null;
-}
-function resolveI18nString(value, lang) {
-  if (typeof value === "string") {
-    return value;
-  }
-  if (typeof value === "object" && value !== null) {
-    if (lang && value[lang]) {
-      return value[lang];
-    }
-    if (value["en"]) {
-      return value["en"];
-    }
-    const keys = Object.keys(value);
-    if (keys.length > 0) {
-      return value[keys[0]];
-    }
-  }
-  return "";
-}
-class ActionSandbox {
-  /**
-   * Load and execute an action in a sandboxed VM context
-   */
-  static async executeAction(actionFilePath, context) {
-    const actionCode = fs__namespace.readFileSync(actionFilePath, "utf-8");
-    const sandbox = scriptSandbox.createSandbox({
-      // Provide the context objects (these are references, so modifications work)
-      gameData: context.gameData,
-      sourceCharacter: context.sourceCharacter,
-      targetCharacter: context.targetCharacter,
-      runGameEffect: context.runGameEffect,
-      args: context.args,
-      conversation: context.conversation,
-      dryRun: context.dryRun,
-      lang: context.lang
-    });
-    const wrapperCode = `
-      (async function() {
-        // Create a module-like structure
-        const module = { exports: {} };
-        const exports = module.exports;
-
-        // Execute the action code to populate module.exports
-        ${actionCode}
-
-        // Get the action definition
-        const actionDef = module.exports;
-
-        if (!actionDef || typeof actionDef.run !== 'function') {
-          throw new Error('Action must export an object with a run function');
-        }
-
-        // Execute the run function with the context
-        const result = await actionDef.run({
-          gameData,
-          sourceCharacter,
-          targetCharacter,
-          runGameEffect,
-          args,
-          conversation,
-          dryRun,
-          lang
-        });
-
-        return result;
-      })();
-    `;
-    try {
-      const result = await scriptSandbox.runScript(wrapperCode, { filename: actionFilePath, sandbox });
-      return result;
-    } catch (error) {
-      console.error("[ActionSandbox] Execution error:", error);
-      throw new Error(`Action execution failed: ${error instanceof Error ? error.message : String(error)}`);
-    }
-  }
-}
-const ActionEngine = actionSystem.ActionEngine.configure({
+const ActionEffectWriter = createActionEffectWriter({ runFileManager });
+const ActionEngine = createActionEngine({
   actionRegistry,
   settingsRepository,
-  usageAnalytics,
   llmManager,
   ActionPromptBuilder,
   ActionSandbox,
   ActionEffectWriter,
   buildStructuredResponseJsonSchema,
   buildStructuredResponseSchema,
-  healJsonResponseWithLogging,
+  healJsonResponseWithLogging: responseHealing.healJsonResponseWithLogging,
   resolveI18nString,
   logVerboseLLM
 });
-actionSystem.social.socialConsequenceEngine.configure({
+const { Conversation } = require("./conversation/conversation");
+Conversation.configure({
   ActionEngine,
-  settingsRepository,
-  llmManager,
-  TokenCounter,
-  createPromptFingerprint,
-  usageAnalytics
-});
-const Conversation = actionSystem.Conversation.configure({
-  actionSystem,
-  ActionEngine,
-  actionRegistry,
   settingsRepository,
   usageAnalytics,
   llmManager,
@@ -744,7 +451,6 @@ const Conversation = actionSystem.Conversation.configure({
   createActionFeedback,
   createPromptFingerprint,
   cleanLogFile,
-  resolveI18nString,
   PromptBuilder,
   TokenCounter,
   logVerboseLLM,
@@ -1239,10 +945,10 @@ electron.app.on("ready", () => {
       console.error("Failed to process letter:", error);
     }
   });
-  clipboardListener.on("VOTC:LETTER_ACCEPTED", () => {
+  clipboardListener.on("VOTC:LETTER_ACCEPTED", async () => {
     console.log("VOTC:LETTER_ACCEPTED detected - clearing letters.txt");
     try {
-      letterManager.clearLettersFile();
+      await letterManager.clearLettersFile();
     } catch (error) {
       console.error("Failed to clear letters file:", error);
     }

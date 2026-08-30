@@ -3,7 +3,6 @@
 /** @import { GameData, Character } from '../../gamedata_typedefs.js' */
 module.exports = {
     signature: "isVassalizedBy",
-    triggerCategories: ["faith_or_vassal"], semantic: { evidencePatterns: [/(?:臣服|归顺|投降|称臣|纳贡称臣|宣誓(?:效忠|臣服)|成为.{0,12}封臣|纳为封臣|vassalized|surrendered|swore fealty|pledged allegiance)/i], exclusiveGroup: "faith_or_vassal", priority: 70, riskLevel: "high" },
     title: {
         en: "Source Character Is Vassalized By Target",
         ru: "Исходный персонаж вассализирован целью",

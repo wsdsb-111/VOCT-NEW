@@ -41,8 +41,6 @@ const COURT_POSITION_ZH = {
 // We also added language mapping context to the AI prompt description so it understands these English enum variables in a Chinese context.
 module.exports = {
   signature: "isAssignedToCourtPositionBy",
-  actionMetadata: { requiredArguments: ["court_position"], optionalArguments: [], selectorContract: { shortDescription: "Assign source character to a court position in target ruler's court.", sourceRole: "appointee", targetRole: "appointing_ruler" } },
-  triggerCategories: ["employment_or_office"], semantic: { evidencePatterns: [/(?:宫廷职位|宫廷职务|court position)/i], exclusiveGroup: "employment_change", priority: 70, riskLevel: "medium" },
   title: {
     en: "Source Assigned to Target's Court Position",
     ru: "Исходный персонаж назначен на придворную должность цели",

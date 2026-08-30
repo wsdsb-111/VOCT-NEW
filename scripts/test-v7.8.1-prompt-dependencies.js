@@ -89,9 +89,9 @@ try {
     totalDays: 1
   }, { id: "letter-1", content: "问候" });
   assert.deepStrictEqual(letterMessages, []);
-  assert.strictEqual(verboseLogCalls, 1, "信件 Prompt 构建必须使用注入的 verbose logger");
+  assert.strictEqual(verboseLogCalls, 0, "官方 VOTC 2.0.3 LetterPromptBuilder 不得被额外日志适配改变调用路径");
 
-  console.log("VOTC v7.8.1 prompt dependencies: PASS (template helpers, description cache split and letter logger)");
+  console.log("VOTC v7.8.1 prompt dependencies: PASS (template helpers, description cache split and official letter isolation)");
 } finally {
   fs.rmSync(tempDir, { recursive: true, force: true });
 }
