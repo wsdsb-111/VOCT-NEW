@@ -19034,6 +19034,7 @@ function LettersStatusModal({ onClose }) {
   const [isRunningDiagnostic, setIsRunningDiagnostic] = reactExports.useState(false);
   const [isResyncingDate, setIsResyncingDate] = reactExports.useState(false);
   const [retryingLetterId, setRetryingLetterId] = reactExports.useState(null);
+  const [isClearingPending, setIsClearingPending] = reactExports.useState(false);
   const loadStatuses = async () => {
     setIsLoading(true);
     try {
@@ -19104,6 +19105,20 @@ function LettersStatusModal({ onClose }) {
       setRetryingLetterId(null);
     }
   };
+  const clearPendingLetters = async () => {
+    if (!window.confirm("确定清除全部待送达信件吗？这会解除当前等待确认锁，已送达历史不会删除。")) return;
+    setIsClearingPending(true);
+    try {
+      const result = await window.lettersAPI.clearPending();
+      setDiagnosticResult(result?.success ? { success: true, stage: "CLEAR", result: `已清除 ${result.clearedPendingCount || 0} 封待送达信件` } : { success: false, error: result?.error || "清除失败" });
+      await loadStatuses();
+    } catch (error) {
+      console.error("Failed to clear pending letters:", error);
+      setDiagnosticResult({ success: false, error: error?.message || "Unknown error" });
+    } finally {
+      setIsClearingPending(false);
+    }
+  };
   const toggleLetterExpanded = (letterId) => {
     setExpandedLetters((prev) => {
       const newSet = new Set(prev);
@@ -19131,6 +19146,11 @@ function LettersStatusModal({ onClose }) {
         return "✉️";
       case "send_failed":
         return "⚠️";
+      case "payload_invalid":
+      case "legacy_invalid_pending":
+        return "🚫";
+      case "cancelled":
+        return "🗑️";
       case "not_started":
         return "⭕";
       case "saved":
@@ -19164,6 +19184,11 @@ function LettersStatusModal({ onClose }) {
       case "send_failed":
         return "#dc3545";
       // Red
+      case "payload_invalid":
+      case "legacy_invalid_pending":
+        return "#dc3545";
+      case "cancelled":
+        return "#6c757d";
       case "not_started":
         return "#6c757d";
       // Gray
@@ -19193,6 +19218,12 @@ function LettersStatusModal({ onClose }) {
         return t("lettersModal.statusSent");
       case "send_failed":
         return t("lettersModal.statusSendFailed");
+      case "payload_invalid":
+        return "信件日期数据无效";
+      case "legacy_invalid_pending":
+        return "旧待送达记录已隔离";
+      case "cancelled":
+        return "已手动清除";
       case "not_started":
         return t("lettersModal.statusNotStarted");
       case "saved":
@@ -19210,7 +19241,8 @@ function LettersStatusModal({ onClose }) {
         pending_delivery: [],
         generation_failed: [],
         sent: [],
-        send_failed: []
+        send_failed: [],
+        cancelled: []
       };
     }
     const groups2 = {
@@ -19218,7 +19250,8 @@ function LettersStatusModal({ onClose }) {
       pending_delivery: [],
       generation_failed: [],
       sent: [],
-      send_failed: []
+      send_failed: [],
+      cancelled: []
     };
     snapshot.letters.forEach((letter) => {
       if (letter.responseStatus === "generating") {
@@ -19233,6 +19266,10 @@ function LettersStatusModal({ onClose }) {
         groups2.sent.push(letter);
       } else if (letter.responseStatus === "send_failed") {
         groups2.send_failed.push(letter);
+      } else if (letter.responseStatus === "payload_invalid" || letter.responseStatus === "legacy_invalid_pending") {
+        groups2.send_failed.push(letter);
+      } else if (letter.responseStatus === "cancelled") {
+        groups2.cancelled.push(letter);
       }
     });
     return groups2;
@@ -19241,6 +19278,8 @@ function LettersStatusModal({ onClose }) {
     if (letter.responseStatus === "sent") {
       return t("lettersModal.delivered");
     }
+    if (letter.responseStatus === "cancelled") return "已清除";
+    if (!Number.isFinite(letter.daysUntilDelivery)) return "日期数据异常";
     if (letter.isLate) {
       return t("lettersModal.lateByDays", { days: Math.abs(letter.daysUntilDelivery) });
     }
@@ -19257,12 +19296,14 @@ function LettersStatusModal({ onClose }) {
     if (isRunningDiagnostic) return "诊断操作进行中";
     const active = Object.values(snapshot?.effectDiagnostics || {}).find((item) => item?.result === "WAITING_FOR_CK3_EXECUTION" || item?.result === "ARTIFACT_VISUAL_CHECK_REQUIRED");
     if (active) return active.result === "WAITING_FOR_CK3_EXECUTION" ? `${active.stage} 正在等待 CK3 Execution Marker` : `${active.stage} 已执行，请先确认 CK3 可见结果`;
-    if (stage !== "A" && !diagnosticLetterId) return "请选择 Known Letter ID";
-    if (stage !== "A") {
-      const previousStage = String.fromCharCode(stage.charCodeAt(0) - 1);
+    if (["B", "C", "D"].includes(stage) && !diagnosticLetterId) return "请选择 Known Letter ID";
+    if (stage === "A2" && !["PASS", "RUN_FILE_NOT_EXECUTED"].includes(snapshot?.effectDiagnostics?.A1?.result)) return "A1 尚未完成 letters.txt Execution 判定";
+    if (stage === "A3" && snapshot?.effectDiagnostics?.A2?.result !== "PASS") return "A2 votc.txt Execution Marker 尚未通过";
+    if (["B", "C", "D"].includes(stage)) {
+      const previousStage = stage === "B" ? "A3" : String.fromCharCode(stage.charCodeAt(0) - 1);
       if (snapshot?.effectDiagnostics?.[previousStage]?.result !== "PASS") return `${previousStage} 尚未通过 CK3 Execution 与可见结果确认`;
     }
-    return snapshot?.diagnosticDisableReasons?.A || null;
+    return snapshot?.diagnosticDisableReasons?.[stage] || null;
   };
   const groups = groupLettersByStatus();
   const visualCheckDiagnostic = Object.values(snapshot?.effectDiagnostics || {}).find((item) => item?.result === "ARTIFACT_VISUAL_CHECK_REQUIRED");
@@ -19274,6 +19315,7 @@ function LettersStatusModal({ onClose }) {
     /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "modal-body", children: [
       /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "header-actions", children: [
         /* @__PURE__ */ jsxRuntimeExports.jsx("button", { onClick: loadStatuses, disabled: isLoading, children: isLoading ? t("lettersModal.loading") : t("lettersModal.refresh") }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx("button", { onClick: clearPendingLetters, disabled: isClearingPending || (snapshot?.clearablePendingCount || 0) === 0, children: isClearingPending ? "清除中…" : "一键清除待送达信件" }),
         snapshot && /* @__PURE__ */ jsxRuntimeExports.jsxs("span", { style: { marginLeft: "10px", color: "#888", fontSize: "0.9em" }, children: [
           t("lettersModal.lastUpdated"),
           ": ",
@@ -19324,16 +19366,22 @@ function LettersStatusModal({ onClose }) {
         ] })
       ] }),
       /* @__PURE__ */ jsxRuntimeExports.jsxs("section", { className: "letter-details", children: [
-        /* @__PURE__ */ jsxRuntimeExports.jsx("h5", { children: "Effect 实机诊断 2.2（WRITE → CK3 EXECUTE → 可见结果确认）" }),
-        /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "muted-text", children: "A/B/C/D 必须顺序通过；文件写入不代表 CK3 已执行。B/C/D 只能选择当前已知 Letter ID，正式投递繁忙时诊断会锁定。" }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx("h5", { children: "Effect 实机诊断 2.3（Transport → CK3 EXECUTE → 可见结果确认）" }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "muted-text", children: "严格按 A1 → A2 → A3 → B → C → D 执行；文件写入不代表 CK3 已执行。B/C/D 只能选择当前已知 Letter ID，正式投递繁忙时诊断会锁定。" }),
+        /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { className: "muted-text", children: [
+          "正式 Outbound Transport: ",
+          snapshot?.letterTransport?.outboundMode || "legacy_letters_file",
+          " / Contract Drift: ",
+          snapshot?.letterTransport?.contractDriftConfirmed ? "CONFIRMED" : "NOT CONFIRMED"
+        ] }),
         /* @__PURE__ */ jsxRuntimeExports.jsxs("select", { value: diagnosticLetterId, onChange: (event) => setDiagnosticLetterId(event.target.value), disabled: isRunningDiagnostic, children: [
           /* @__PURE__ */ jsxRuntimeExports.jsx("option", { value: "", children: "选择 Known Letter ID（B/C/D 必填）" }),
           (snapshot?.knownDiagnosticLetters || []).map((letter) => /* @__PURE__ */ jsxRuntimeExports.jsx("option", { value: letter.letterId, children: `${letter.letterId} — ${letter.characterName} — ${letter.responseStatus}` }, letter.letterId))
         ] }),
         /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "header-actions", style: { marginTop: "8px" }, children: [
-          ...[["A", "最小 Artifact"], ["B", "Creator Scope"], ["C", "Global Variable"], ["D", "Message Event"]].map(([stage, label]) => /* @__PURE__ */ jsxRuntimeExports.jsx("button", { type: "button", title: getDiagnosticDisableReason(stage) || "", onClick: () => runEffectDiagnostic(stage), disabled: Boolean(getDiagnosticDisableReason(stage)), children: `${stage} ${label} — ${snapshot?.effectDiagnostics?.[stage]?.result || "NOT_STARTED"}` }, stage))
+          ...[["A1", "letters.txt Execution"], ["A2", "votc.txt Execution"], ["A3", "Minimal Artifact"], ["B", "Creator Scope"], ["C", "Global Variable"], ["D", "Message Event"]].map(([stage, label]) => /* @__PURE__ */ jsxRuntimeExports.jsx("button", { type: "button", title: getDiagnosticDisableReason(stage) || "", onClick: () => runEffectDiagnostic(stage), disabled: Boolean(getDiagnosticDisableReason(stage)), children: `${stage} ${label} — ${snapshot?.effectDiagnostics?.[stage]?.result || "NOT_STARTED"}` }, stage))
         ] }),
-        /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "muted-text", children: [["A", "最小 Artifact"], ["B", "Creator Scope"], ["C", "Global Variable"], ["D", "Message Event"]].map(([stage, label]) => /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "muted-text", children: [["A1", "letters.txt Execution"], ["A2", "votc.txt Execution"], ["A3", "Minimal Artifact"], ["B", "Creator Scope"], ["C", "Global Variable"], ["D", "Message Event"]].map(([stage, label]) => /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
           stage,
           " ",
           label,
@@ -19416,6 +19464,21 @@ function LettersStatusModal({ onClose }) {
             title: t("lettersModal.deliveryFailed"),
             letters: [...groups.send_failed],
             icon: "⚠️",
+            expandedLetters,
+            toggleLetterExpanded,
+            getStatusIcon,
+            getStatusColor,
+            getStatusText,
+            formatDeliveryTime,
+            t
+          }
+        ),
+        groups.cancelled.length > 0 && /* @__PURE__ */ jsxRuntimeExports.jsx(
+          LetterGroup,
+          {
+            title: "已清除记录",
+            letters: [...groups.cancelled],
+            icon: "🗑️",
             expandedLetters,
             toggleLetterExpanded,
             getStatusIcon,
@@ -19602,7 +19665,7 @@ function LetterItem({
               ":"
             ] }),
             " ",
-            letter.expectedDeliveryDay
+            Number.isFinite(letter.expectedDeliveryDay) ? letter.expectedDeliveryDay : "日期数据异常"
           ] }),
           /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
             /* @__PURE__ */ jsxRuntimeExports.jsxs("strong", { children: [
@@ -19618,7 +19681,7 @@ function LetterItem({
               ":"
             ] }),
             " ",
-            letter.daysUntilDelivery
+            Number.isFinite(letter.daysUntilDelivery) ? letter.daysUntilDelivery : "日期数据异常"
           ] }),
           /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
             /* @__PURE__ */ jsxRuntimeExports.jsxs("strong", { children: [

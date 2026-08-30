@@ -97,6 +97,7 @@ electron.contextBridge.exposeInMainWorld("lettersAPI", {
   resyncGameDate: () => electron.ipcRenderer.invoke("letters:resyncGameDate"),
   confirmEffectDiagnostic: (stage, passed) => electron.ipcRenderer.invoke("letters:confirmEffectDiagnostic", { stage, passed }),
   retryFailed: (letterId) => electron.ipcRenderer.invoke("letters:retryFailed", letterId),
+  clearPending: () => electron.ipcRenderer.invoke("letters:clearPending"),
   clearOldStatuses: (daysThreshold) => electron.ipcRenderer.invoke("letters:clearOldStatuses", daysThreshold)
 });
 electron.contextBridge.exposeInMainWorld("conversationAPI", {

@@ -803,10 +803,13 @@ registerProviderImplementations(providerRegistry);
 const { createLetterPromptBuilder } = require("./prompts/letter-prompt-builder");
 const LetterPromptBuilder = createLetterPromptBuilder({ TemplateEngine, PromptScriptLoader, settingsRepository, memoryEngine, memorySystem, PromptBuilder, TokenCounter, promptConfigManager, logVerboseLLM });
 const letterPromptBuilder = new LetterPromptBuilder();
+const { createLetterEffectTransport } = require("./letters/letter-effect-transport");
+const { LetterEffectTransport } = createLetterEffectTransport({ settingsRepository, fs: fs$1, path, runFileManager, dataDir: VOTC_DATA_DIR });
+const letterEffectTransport = new LetterEffectTransport();
 const { createLetterManager } = require("./letters/letter-manager");
 const { LetterManager, LetterResponseStatus, LetterSummaryStatus } = createLetterManager({
   settingsRepository, fs: fs$1, path, TailFile, readline: readline$1, parseLog,
-  letterPromptBuilder, llmManager, PromptBuilder, TokenCounter, memoryEngine, dataDir: VOTC_DATA_DIR
+  letterPromptBuilder, llmManager, PromptBuilder, TokenCounter, memoryEngine, dataDir: VOTC_DATA_DIR, letterEffectTransport
 });
 const letterManager = new LetterManager();
 initLogger();

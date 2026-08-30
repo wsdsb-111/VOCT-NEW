@@ -194,6 +194,14 @@ function registerIpcHandlers(runtime) {
       return { success: false, error: error instanceof Error ? error.message : "Unknown error" };
     }
   });
+  electron.ipcMain.handle("letters:clearPending", async () => {
+    try {
+      return letterManager.clearPendingLetters();
+    } catch (error) {
+      console.error("Failed to clear pending letters:", error);
+      return { success: false, error: error instanceof Error ? error.message : "Unknown error" };
+    }
+  });
   electron.ipcMain.handle("letters:clearOldStatuses", async (_, daysThreshold) => {
     try {
       letterManager.clearOldStatuses(daysThreshold);
