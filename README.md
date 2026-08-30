@@ -162,7 +162,7 @@ V7.9.2 新增仅在当前对话场景内有效的 Social Consequence Engine，�
 
 V7.9.3 按冻结规格接入 Action Engine 4.0。顶层 Router 默认进入 AE4，只有显式 Engine Version 3 才整体回滚到冻结 AE3，禁止逐消息 fallback。Balanced 启动时迁移到 Performance；模式切换保留 Explicit Pending、执行历史、去重账本、Opinion Cooldown 和世界事件证据。Precision 不再经过 Candidate Gate、Event Parser、Semantic Resolver、Semantic Rescue 或 Precision Judge；每条有效 RP 对白恰好一次 Q2 Selector。Performance 仅允许确定性本地 HIT，其余最多调用一次 Compact Selector；混合句通过 `ALLOW/BLOCK/MAYBE` Guard 避免整句误杀。两种模式共享稳定 Action Contract、Consent Action Timing 和 Proposal 执行管线；Pending 响应必须引用当前消息，AE4 禁止 `isPlayerSource` 改写已绑定 Source。Precision 与 Compact 的 Question Rule 明确把普通询问和 `consent_required` 明确提议分开：前者不触发动作，后者即使采用问句也创建 Pending，尚不执行游戏效果。Memory Engine 2.5 在 Final Summary Quality Gate 拒绝跨 join/leave/暂离/返回边界的 `summarySegments` 并要求按边界拆段；严格 Perspective Projection 后再执行共同在场正文覆盖门禁，实质参与者若只剩 memory 而没有 narrative 则进入可重新生成摘要的恢复流程，不写人物文件、不 commit，也不放宽 `every(messageId)` 知识隔离。`isInjured` 固定为 VOCT-NEW 项目级 `attacker→victim` 合同，CK3 效果落在 target。172 条 Ground Truth Benchmark 已拆分 Action/Source/Target/Argument 等 Match、Core/Overall Recall 与 Per-Action Gate，Wrong Action 不再算 Recall，并覆盖 3/4/6 人错目标、Historical Replay 与 Injury Victim Mismatch。真实 Provider Recall、缓存实测和 CK3 效果仍属于 Phase 7 人工验收，不在自动化通过前宣称 Stable。详见 [正式规格](docs/VOTC_v7.9.3_Action_Engine_4.0正式实施规格书.md)、[最终实机前修复清单](docs/VOCT-NEW_v7.9.3_AE4_最终实机前修复清单_含Injury裁定.md)、[Errata-001](docs/AE4_Spec_Errata-001_Self-Target目标约束冲突修正.md)与 [实施报告](docs/v7.9.3-action-engine-4.0-implementation-report.md)。
 
-V7.10.0-RC1 停止维护自研 Action Engine 3.0/4.0，删除其运行时、模式、Pending、Social Consequence 与版本路由，完整迁入官方 VOTC 2.0.3 Action System 和 28 个标准动作。Prompt、`votc_actions` Schema、Registry、response healing、审批与 Effect 语义以官方为唯一基线；自定义动作首版不加载。实机前 P1 收口取消 LLMManager 对动作 Provider 的固定温度、输出上限和 thinking 覆盖，DeepSeek 兼容仅由 Provider 适配层完成；官方 `leavesConversation` 通过 Presence-safe 兼容 API 生成离场人物摘要，摘要失败仍继续离场。Letter 同步恢复官方 2.0.3 Prompt 与原子 Delivery Effect，并在外层增加有界载荷重试、跨重启待投递、单通道双信排队、日志 tail 恢复、投递文件诊断和 `LETTER_ACCEPTED` 后清理。当前状态为 RC1，尚未宣称 Stable；Memory Engine 2.5、Presence Boundary P1、Final Summary 和普通 Chat 保持非回归。详见 [v7.10 实施报告](docs/v7.10-official-action-letter-recovery-implementation-report.md)、[Action 上游清单](docs/upstream/votc-2.0.3-action-manifest.md)和 [Letter 上游清单](docs/upstream/votc-2.0.3-letter-manifest.md)。
+V7.10.0-RC2 Candidate 停止维护自研 Action Engine 3.0/4.0，删除其运行时、模式、Pending、Social Consequence 与版本路由，完整迁入官方 VOTC 2.0.3 Action System 和 28 个标准动作。Prompt、官方 Full/Minimized Schema variant、Registry、response healing、审批与 Effect 语义以官方为唯一基线；DeepSeek RC2 固定选择官方 Full Schema，不承诺比其他官方 variant 更小。Action Provider 参数保持独立配置，DeepSeek thinking 仅在 `votc_actions` Provider 适配层关闭。官方 `leavesConversation` 继续通过 Presence-safe 兼容 API 生成离场人物摘要。Letter 保持官方 2.0.3 原子 Delivery Effect，外层新增 A/B/C/D Effect 诊断、Payload 真值和 Popup/ACK 时序字段。Workshop 2.0.4 静态对照确认 ACK 在事件窗口创建时发出，并不代表玩家点击接受；Artifact 缺失仍须实机 A/B/C/D 定位。当前为 RC2 Candidate，未宣称 Stable。详见 [v7.10 实施报告](docs/v7.10-official-action-letter-recovery-implementation-report.md)、[Action 上游清单](docs/upstream/votc-2.0.3-action-manifest.md)和 [Letter 上游清单](docs/upstream/votc-2.0.3-letter-manifest.md)。
 
 V7.7 在 V7.6 健康化基础上分阶段拆分主进程：第一阶段将六种模型 Provider 迁入 `providers/index.js`、92 个既有 IPC 注册迁入 `ipc/register-ipc.js`；第二阶段把 `ProviderRegistry`、`TokenCounter` 和 `LLMManager` 迁入 `provider-service.js`，通过显式依赖继续读取用户分别选择的对话、摘要和动作模型。`main.js` 由约 9477 行降至约 6612 行。动作语义同时补齐“共度春宵/鱼水之欢已发生”和“从今以后成为情人/认定灵魂伴侣”等自然完成态表达，并继续排除请求、计划、假设、回忆与失败尝试。当前仓库仍是可运行打包产物，没有能够重新生成这些文件的完整 `src` 工程，因此本阶段不伪造源码构建链。
 
@@ -172,12 +172,12 @@ V7.7 在 V7.6 健康化基础上分阶段拆分主进程：第一阶段将六种
 node scripts\test-release.js
 ```
 
-清单会覆盖全部 `test-*.js`。V7.10.0-RC1 当前分类 111 个测试文件：42 个直接发布组，68 个依赖已退休 AE3/AE4/Social 语义的历史测试明确归档；官方 Action parity、Action Provider parity、DeepSeek 兼容、官方离场动作与 Letter Delivery Recovery 2.0 均为直接发布门禁。
+清单会覆盖全部 `test-*.js`。V7.10.0-RC2 Candidate 当前分类 114 个测试文件：45 个直接发布组，68 个依赖已退休 AE3/AE4/Social 语义的历史测试明确归档；官方 Action parity、Action Provider parity、DeepSeek Full Schema、Action Token 分块、官方离场动作、Letter Delivery Recovery 2.0 与 A/B/C/D 诊断均为直接发布门禁。
 
 ## 版本信息
 
 - 外挂 UI 版本：v2.0.4
-- 当前应用功能基线：v7.10.0-RC1（实机候选，未宣称 Stable）
+- 当前应用功能基线：v7.10.0-RC2 Candidate（实机候选，未宣称 Stable）
 - CK3 模组版本：Voices of the Court 2.0.4
 - 模组支持版本：CK3 1.18.*
 - UI 主题：宫廷编年史风格（深红、暗金、羊皮纸文本层级）

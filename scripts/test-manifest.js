@@ -78,6 +78,9 @@ const archivedChecks = [
 
 const releaseChecks = [
   { group: "syntax", args: ["--check", "resources/app/out/main/main.js"] },
+  { group: "v7.10-rc2-action-config", script: "test-v7.10-rc2-action-config.js" },
+  { group: "v7.10-rc2-terra-action-token-metadata", script: "test-v7.10-rc2-action-token-metadata.js" },
+  { group: "v7.10-rc2-terra-letter-effect-diagnostics", script: "test-v7.10-rc2-letter-effect-diagnostics.js" },
   { group: "v7.10-official-action-system", script: "test-v7.10-official-action-system.js" },
   { group: "v7.10-action-provider-parity", script: "test-v7.10-action-provider-parity.js" },
   { group: "v7.10-deepseek-action-compatibility", script: "test-v7.10-deepseek-action-compatibility.js" },

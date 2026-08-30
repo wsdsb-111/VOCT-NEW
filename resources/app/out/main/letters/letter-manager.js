@@ -58,6 +58,7 @@ function createLetterManager({ settingsRepository, fs, path, TailFile, readline,
       this.latestPipelineStatus = null;
       this.pipelineSequence = 0;
       this.lastPayloadDiagnostics = null;
+      this.lastEffectDiagnostic = null;
       this.pendingLettersFile = dataDir ? path.join(dataDir, "pending-letters.json") : null;
       this.loadPendingLetters();
       const ck3UserPath = settingsRepository.getCK3UserFolderPath();
@@ -485,11 +486,12 @@ set_global_variable = {
 trigger_event = message_event.362`;
       try {
         fs$1.writeFileSync(letterFilePath, gameCommand, "utf-8");
+        const effectWrittenAt = Date.now();
         this.awaitingAcceptanceLetterId = letter.letterId;
         this.updateLetterStatus(letter.letterId, {
           responseStatus: LetterResponseStatus.EFFECT_FILE_WRITTEN,
           responseError: null,
-          effectFileWrittenAt: Date.now()
+          effectFileWrittenAt: effectWrittenAt
         });
         this.transitionLetter(letter.letterId, LetterPipelineState.EFFECT_FILE_WRITTEN);
         this.savePendingLetters();
@@ -568,10 +570,19 @@ trigger_event = message_event.362`;
       const acceptedLetterId = this.awaitingAcceptanceLetterId;
       this.awaitingAcceptanceLetterId = null;
       if (acceptedLetterId) {
+        const letterAcceptedAt = Date.now();
+        const status = this.getLetterStatus(acceptedLetterId);
+        const effectWrittenAt = Number(status?.effectFileWrittenAt);
+        const acceptLatencyMs = Number.isFinite(effectWrittenAt) ? Math.max(0, letterAcceptedAt - effectWrittenAt) : null;
         this.updateLetterStatus(acceptedLetterId, {
           responseStatus: LetterResponseStatus.SENT,
           responseError: null,
-          acceptedAt: Date.now()
+          acceptedAt: letterAcceptedAt,
+          popupTriggeredAt: letterAcceptedAt,
+          letterAcceptedAt,
+          acceptLatencyMs,
+          suspiciousImmediateLetterAcceptance: acceptLatencyMs !== null && acceptLatencyMs < 500,
+          suspicious_immediate_letter_acceptance: acceptLatencyMs !== null && acceptLatencyMs < 500
         });
         this.transitionLetter(acceptedLetterId, LetterPipelineState.DELIVERED);
         this.storedLetters.delete(acceptedLetterId);
@@ -680,6 +691,63 @@ trigger_event = message_event.362`;
     getLetterStatus(letterId) {
       return this.letterStatuses.get(letterId) || null;
     }
+    runEffectDiagnostic(stage, letterId = null) {
+      const diagnosticStage = String(stage || "").toUpperCase();
+      if (!["A", "B", "C", "D"].includes(diagnosticStage)) {
+        return { success: false, error: "Diagnostic stage must be A, B, C, or D." };
+      }
+      if (this.awaitingAcceptanceLetterId) {
+        return { success: false, error: "A formal letter effect is awaiting CK3 acceptance; diagnostics will not overwrite it." };
+      }
+      const requiresLetterId = diagnosticStage !== "A";
+      const normalizedLetterId = typeof letterId === "string" ? letterId.trim() : "";
+      if (requiresLetterId && !normalizedLetterId) {
+        return { success: false, error: "Diagnostics B-D require the real letterId; root fallback is not permitted." };
+      }
+      const ck3Folder = settingsRepository.getCK3UserFolderPath();
+      if (!ck3Folder) return { success: false, error: "CK3 user folder not configured." };
+      const runFolder = path.join(ck3Folder, "run");
+      const letterFilePath = path.join(runFolder, "letters.txt");
+      const creatorScopeName = diagnosticStage === "A" ? "root" : `global_var:message_second_scope_${normalizedLetterId}`;
+      let gameCommand = `create_artifact = {
+\tname = "VOTC_TEST"
+\tdescription = "TEST LETTER"
+\ttype = journal
+\tvisuals = scroll
+\tcreator = ${creatorScopeName}`;
+      if (diagnosticStage === "A" || diagnosticStage === "B") {
+        gameCommand += `
+\tsave_scope_as = votc_test_letter`;
+      } else {
+        gameCommand += `
+\tsave_scope_as = votc_latest_letter
+}
+set_global_variable = {
+\tname = votc_latest_letter
+\tvalue = scope:votc_latest_letter`;
+      }
+      gameCommand += "\n}";
+      if (diagnosticStage === "D") gameCommand += "\ntrigger_event = message_event.362";
+      try {
+        fs$1.mkdirSync(runFolder, { recursive: true });
+        fs$1.writeFileSync(letterFilePath, gameCommand, "utf-8");
+        this.lastEffectDiagnostic = {
+          success: true,
+          stage: diagnosticStage,
+          letterId: requiresLetterId ? normalizedLetterId : null,
+          creatorScopeName,
+          effectFilePath: letterFilePath,
+          writtenAt: Date.now()
+        };
+        console.log(`[LetterDiagnostics] stage=${diagnosticStage} letter=${normalizedLetterId || "none"} creator=${creatorScopeName}`);
+        return { ...this.lastEffectDiagnostic };
+      } catch (error) {
+        const errorMessage = `Failed to write diagnostic effect: ${error instanceof Error ? error.message : "Unknown error"}`;
+        console.error(`LetterManager.runEffectDiagnostic: ${errorMessage}`);
+        this.lastEffectDiagnostic = { success: false, stage: diagnosticStage, letterId: requiresLetterId ? normalizedLetterId : null, creatorScopeName, error: errorMessage, writtenAt: Date.now() };
+        return { ...this.lastEffectDiagnostic };
+      }
+    }
     /**
      * Get all letter statuses
      */
@@ -691,18 +759,28 @@ trigger_event = message_event.362`;
       }
       let effectFileExists = false;
       let effectFileAge = null;
+      let effectContent = "";
       const ck3Folder = settingsRepository.getCK3UserFolderPath();
       if (ck3Folder) {
         const effectFilePath = path.join(ck3Folder, "run", "letters.txt");
         try {
           effectFileExists = fs$1.existsSync(effectFilePath);
-          if (effectFileExists) effectFileAge = Math.max(0, Date.now() - fs$1.statSync(effectFilePath).mtimeMs);
+          if (effectFileExists) {
+            effectFileAge = Math.max(0, Date.now() - fs$1.statSync(effectFilePath).mtimeMs);
+            effectContent = fs$1.readFileSync(effectFilePath, "utf8");
+          }
         } catch (error) {
           console.warn("LetterManager: Failed to inspect letters.txt diagnostics:", error);
           effectFileExists = false;
           effectFileAge = null;
+          effectContent = "";
         }
       }
+      const effectContainsCreateArtifact = /\bcreate_artifact\s*=/.test(effectContent);
+      const effectContainsMessageEvent362 = /\btrigger_event\s*=\s*message_event\.362\b/.test(effectContent);
+      const statusWithEffect = Array.from(this.letterStatuses.values()).sort((left, right) => Math.max(right.letterAcceptedAt || right.acceptedAt || 0, right.effectFileWrittenAt || 0) - Math.max(left.letterAcceptedAt || left.acceptedAt || 0, left.effectFileWrittenAt || 0))[0] || null;
+      const creatorScopeName = effectContent.match(/\bcreator\s*=\s*([^\s]+)/)?.[1] || this.lastEffectDiagnostic?.creatorScopeName || null;
+      const creatorScopeExpected = statusWithEffect?.letterId ? `global_var:message_second_scope_${statusWithEffect.letterId}` : this.lastEffectDiagnostic?.letterId ? `global_var:message_second_scope_${this.lastEffectDiagnostic.letterId}` : null;
       return {
         letters: Array.from(this.letterStatuses.values()),
         currentTotalDays: this.currentTotalDays,
@@ -711,6 +789,18 @@ trigger_event = message_event.362`;
         effectFileExists,
         effectFileAge,
         storedLettersCount: this.storedLetters.size,
+        effectPayloadPresent: effectContainsCreateArtifact || effectContainsMessageEvent362,
+        effectContainsCreateArtifact,
+        effectContainsMessageEvent362,
+        effectWrittenAt: statusWithEffect?.effectFileWrittenAt || null,
+        popupTriggeredAt: statusWithEffect?.popupTriggeredAt || null,
+        letterAcceptedAt: statusWithEffect?.letterAcceptedAt || statusWithEffect?.acceptedAt || null,
+        acceptLatencyMs: statusWithEffect?.acceptLatencyMs ?? null,
+        suspiciousImmediateLetterAcceptance: statusWithEffect?.suspiciousImmediateLetterAcceptance === true,
+        suspicious_immediate_letter_acceptance: statusWithEffect?.suspicious_immediate_letter_acceptance === true,
+        creatorScopeName,
+        creatorScopeExpected,
+        lastEffectDiagnostic: this.lastEffectDiagnostic ? { ...this.lastEffectDiagnostic } : null,
         pipeline: this.latestPipelineStatus ? { ...this.latestPipelineStatus, history: [...this.latestPipelineStatus.history] } : null,
         timestamp: Date.now()
       };

@@ -162,6 +162,14 @@ function registerIpcHandlers(runtime) {
       return null;
     }
   });
+  electron.ipcMain.handle("letters:runEffectDiagnostic", async (_, payload) => {
+    try {
+      return letterManager.runEffectDiagnostic(payload?.stage, payload?.letterId);
+    } catch (error) {
+      console.error("Failed to run letter effect diagnostic:", error);
+      return { success: false, error: error instanceof Error ? error.message : "Unknown error" };
+    }
+  });
   electron.ipcMain.handle("letters:clearOldStatuses", async (_, daysThreshold) => {
     try {
       letterManager.clearOldStatuses(daysThreshold);

@@ -93,6 +93,7 @@ electron.contextBridge.exposeInMainWorld("lettersAPI", {
   getPromptPreview: () => electron.ipcRenderer.invoke("letter:getPromptPreview"),
   getStatuses: () => electron.ipcRenderer.invoke("letters:getStatuses"),
   getLetterDetails: (letterId) => electron.ipcRenderer.invoke("letters:getLetterDetails", letterId),
+  runEffectDiagnostic: (stage, letterId) => electron.ipcRenderer.invoke("letters:runEffectDiagnostic", { stage, letterId }),
   clearOldStatuses: (daysThreshold) => electron.ipcRenderer.invoke("letters:clearOldStatuses", daysThreshold)
 });
 electron.contextBridge.exposeInMainWorld("conversationAPI", {

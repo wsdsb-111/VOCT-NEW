@@ -57,7 +57,8 @@ const DEFAULT_PROVIDER_CONFIGS = {
     apiKey: "",
     baseUrl: "https://api.deepseek.com",
     defaultModel: "deepseek-v4-flash",
-    defaultParameters: { temperature: 0.7, max_tokens: 2048 }
+    defaultParameters: { temperature: 0.7, max_tokens: 2048 },
+    useMinimizedActionsSchema: false
   },
   gemini: {
     apiKey: "",

@@ -375,4 +375,3 @@ function buildStructuredResponseSchema(input) {
 
 module.exports = { buildStructuredResponseJsonSchema, buildStructuredResponseSchema, buildGeminiCompatibleSchema, buildActionInvocationSchema };
 
-

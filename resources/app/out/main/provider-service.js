@@ -218,6 +218,7 @@ class LLMManager {
     const deepseekSchemaInjection = config.providerType === "deepseek";
     const schemaCacheRole = deepseekSchemaInjection ? "provider_injected_system_message" : "response_format";
     const providerSerializedOrder = deepseekSchemaInjection ? "messages_then_provider_injected_schema_then_response_format" : "messages_then_response_format";
+    const actionPromptBlocks = schemaName === "votc_actions" && (!Array.isArray(metadata.blocks) || metadata.blocks.length === 0) ? this.buildActionPromptBlocks(messages, serializedSchema) : metadata.blocks;
     console.log(`[LLMManager] Action request: provider=${config.providerType}, model=${config.defaultModel}, messages=${messages.length}, schema=${schemaName}, estimatedPromptTokens=${estimatedPromptTokens}`);
     if (this.debugVerboseLLM) {
       this.logVerboseLLM("[LLMManager][verbose] Structured action request:", JSON.stringify(request));
@@ -228,12 +229,51 @@ class LLMManager {
       requestType: "action",
       providerType: config.providerType,
       model: config.defaultModel,
+      blocks: actionPromptBlocks,
       estimatedPromptTokens,
       schemaTokenEstimate,
       schemaFingerprint,
       schemaCacheRole,
       providerSerializedOrder,
       estimatedSerializedPromptTokens: estimatedPromptTokens + (deepseekSchemaInjection ? schemaTokenEstimate : 0)
+    });
+  }
+  buildActionPromptBlocks(messages, serializedSchema) {
+    const definitions = [
+      ["action_system_intro", "Action system introduction", "action_prompt", true],
+      ["action_recent_messages", "Recent messages", "action_prompt", false],
+      ["action_recent_actions", "Recent actions", "action_prompt", false],
+      ["action_roster", "Character roster", "action_prompt", false],
+      ["action_available_actions", "Available actions", "action_prompt", false],
+      ["action_provider_schema", "Provider schema", "action_provider_schema", false],
+      ["action_examples", "Examples", "action_prompt", true],
+      ["action_final_instruction", "Final instruction", "action_prompt", false]
+    ];
+    const contents = new Map(definitions.map(([id]) => [id, ""]));
+    for (const message of messages) {
+      const content = typeof message?.content === "string" ? message.content : "";
+      let blockId = null;
+      if (content.startsWith("You are an action selection engine")) blockId = "action_system_intro";
+      else if (content.startsWith("Recent messages:")) blockId = "action_recent_messages";
+      else if (content.startsWith("Recent actions (last ")) blockId = "action_recent_actions";
+      else if (content.startsWith("Characters in this conversation")) blockId = "action_roster";
+      else if (content.startsWith("Available Actions:")) blockId = "action_available_actions";
+      else if (content.startsWith("Examples of correct JSON output:")) blockId = "action_examples";
+      else if (message?.role === "user" && content.startsWith("Given everything above, select the actions")) blockId = "action_final_instruction";
+      if (blockId) contents.set(blockId, `${contents.get(blockId) || ""}${contents.get(blockId) ? "\n" : ""}${content}`);
+    }
+    contents.set("action_provider_schema", serializedSchema);
+    return definitions.map(([id, label, type, stable], position) => {
+      const content = contents.get(id) || "";
+      return {
+        id,
+        label,
+        type,
+        position,
+        stable,
+        tokens: id === "action_provider_schema" ? this.TokenCounter.estimateTokens(content) : this.TokenCounter.estimateMessageTokens ? this.TokenCounter.estimateMessageTokens({ role: "system", content }) : this.TokenCounter.estimateTokens(content),
+        content
+      };
     });
   }
   /**

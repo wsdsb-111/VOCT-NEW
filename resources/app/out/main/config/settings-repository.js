@@ -406,10 +406,8 @@ function createSettingsRepository({ Store, schema, SecureProviderSecrets, electr
      */
     getActionsProviderConfig() {
       const overrideId = this.getActionsProviderInstanceId();
-      if (overrideId) {
-        return this.getProviderConfigById(overrideId);
-      }
-      return this.getActiveProviderConfig();
+      const config = overrideId ? this.getProviderConfigById(overrideId) : this.getActiveProviderConfig();
+      return config?.providerType === "deepseek" ? { ...config, useMinimizedActionsSchema: false } : config;
     }
     /**
      * Get the provider config for Summaries.

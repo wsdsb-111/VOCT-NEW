@@ -23,7 +23,7 @@
 
 ### 版本设计与实施报告
 
-- [v7.10-official-action-letter-recovery-implementation-report.md](v7.10-official-action-letter-recovery-implementation-report.md)：V7.10-RC1 官方 Action 迁移、Provider parity、Presence-safe 离场摘要、Letter Delivery Recovery 2.0 与验证边界。
+- [v7.10-official-action-letter-recovery-implementation-report.md](v7.10-official-action-letter-recovery-implementation-report.md)：V7.10-RC1/RC2 Candidate 官方 Action 迁移、DeepSeek Full Schema、Action Token 诊断、Letter Delivery Recovery 2.0、Sol 契约对照与验证边界。
 - [upstream/votc-2.0.3-action-manifest.md](upstream/votc-2.0.3-action-manifest.md)：官方 Action Kernel Blob SHA、适配路径和语义边界。
 - [upstream/votc-2.0.3-letter-manifest.md](upstream/votc-2.0.3-letter-manifest.md)：官方 Letter Kernel Blob SHA、Delivery Effect 与可靠性外层边界。
 - [Third-Party Notices](../THIRD_PARTY_NOTICES.md)：上游出处、GPL-3.0-only 声明与 VOCT-NEW 适配范围。
