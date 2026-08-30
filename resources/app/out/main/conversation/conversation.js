@@ -1278,6 +1278,46 @@ class Conversation {
     if (approvalSettings.pauseOnApproval && this.isPaused && this.npcQueue.length > 0) this.resumeConversation();
   }
   /**
+   * Create a presence-safe summary for the official leavesConversation action.
+   * The caller remains responsible for persistence and participant removal.
+   */
+  async createCharacterLeavingSummary(characterId, summaryPrompt) {
+    const numericId = Number(characterId);
+    const character = this.gameData?.characters?.get(numericId);
+    if (!character) {
+      console.error(`Character ${characterId} not found for leaving summary`);
+      return null;
+    }
+    try {
+      const suppliedPrompt = Array.isArray(summaryPrompt) ? summaryPrompt : [];
+      const visibleHistory = this.getHistoryForCharacter(numericId);
+      const safePrompt = [];
+      const perspectiveInstruction = suppliedPrompt.find((message) => message?.role === "system" && !String(message.content || "").startsWith("Previous summary of this conversation:") && !String(message.content || "").startsWith("Full conversation:"));
+      if (perspectiveInstruction) safePrompt.push({ ...perspectiveInstruction });
+      if (this.canUseSharedRollingSummary(numericId) && this.currentSummary) {
+        safePrompt.push({ role: "system", content: `Previous summary of this conversation:\n\n${this.currentSummary}` });
+      }
+      safePrompt.push({
+        role: "system",
+        content: `Full conversation:\n${visibleHistory.map((message) => `${message.name || "System"}: ${message.content}`).join("\n")}`
+      });
+      const finalInstruction = [...suppliedPrompt].reverse().find((message) => message?.role === "user");
+      if (finalInstruction) safePrompt.push({ ...finalInstruction });
+      console.log(`[TOKEN_COUNT] Character leaving summary for ${character.fullName}: ${this.estimateTokenCount(safePrompt)}`);
+      const result = await llmManager.sendSummaryRequest(safePrompt, void 0, { requestType: "character_leaving_summary" });
+      const summary = result && typeof result === "object" && typeof result.content === "string" ? result.content.trim() : "";
+      if (!summary) {
+        console.error("Invalid response format for character leaving summary");
+        return null;
+      }
+      console.log(`Generated leaving summary for ${character.fullName}: ${summary.substring(0, 100)}...`);
+      return summary;
+    } catch (error) {
+      console.error(`Failed to create leaving summary for ${character.fullName}:`, error);
+      return null;
+    }
+  }
+  /**
    * Remove a character from the conversation entirely
    */
   removeCharacterFromConversation(characterId) {

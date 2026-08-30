@@ -689,11 +689,28 @@ trigger_event = message_event.362`;
         status.daysUntilDelivery = status.expectedDeliveryDay - this.currentTotalDays;
         status.isLate = this.currentTotalDays > status.expectedDeliveryDay;
       }
+      let effectFileExists = false;
+      let effectFileAge = null;
+      const ck3Folder = settingsRepository.getCK3UserFolderPath();
+      if (ck3Folder) {
+        const effectFilePath = path.join(ck3Folder, "run", "letters.txt");
+        try {
+          effectFileExists = fs$1.existsSync(effectFilePath);
+          if (effectFileExists) effectFileAge = Math.max(0, Date.now() - fs$1.statSync(effectFilePath).mtimeMs);
+        } catch (error) {
+          console.warn("LetterManager: Failed to inspect letters.txt diagnostics:", error);
+          effectFileExists = false;
+          effectFileAge = null;
+        }
+      }
       return {
         letters: Array.from(this.letterStatuses.values()),
         currentTotalDays: this.currentTotalDays,
         lastDateLogReceivedAt: this.lastDateLogReceivedAt,
         awaitingAcceptanceLetterId: this.awaitingAcceptanceLetterId,
+        effectFileExists,
+        effectFileAge,
+        storedLettersCount: this.storedLetters.size,
         pipeline: this.latestPipelineStatus ? { ...this.latestPipelineStatus, history: [...this.latestPipelineStatus.history] } : null,
         timestamp: Date.now()
       };

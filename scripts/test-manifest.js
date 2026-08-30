@@ -79,6 +79,9 @@ const archivedChecks = [
 const releaseChecks = [
   { group: "syntax", args: ["--check", "resources/app/out/main/main.js"] },
   { group: "v7.10-official-action-system", script: "test-v7.10-official-action-system.js" },
+  { group: "v7.10-action-provider-parity", script: "test-v7.10-action-provider-parity.js" },
+  { group: "v7.10-deepseek-action-compatibility", script: "test-v7.10-deepseek-action-compatibility.js" },
+  { group: "v7.10-official-leaves-conversation", script: "test-v7.10-official-leaves-conversation.js" },
   { group: "v7.10-letter-delivery-recovery", script: "test-v7.10-letter-delivery-recovery.js" },
   { group: "memory-health", script: "test-v7-memory-health.js" },
   { group: "memory-regression", script: "test-memory-regression.js" },

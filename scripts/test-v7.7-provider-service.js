@@ -124,8 +124,9 @@ const service = new LLMManager({
   assert.strictEqual(actionCall.config, actionConfig, "actions must use the selected action provider");
   assert.strictEqual(actionCall.request.model, "action-model");
   assert.strictEqual(actionCall.request.stream, false);
-  assert.deepStrictEqual(actionCall.request.thinking, { type: "disabled" });
-  assert.strictEqual(actionCall.request.max_tokens, 512);
+  assert.strictEqual(actionCall.request.thinking, undefined, "action routing must not impose provider-specific thinking parameters");
+  assert.strictEqual(actionCall.request.temperature, 0.8);
+  assert.strictEqual(actionCall.request.max_tokens, 999);
   assert.strictEqual(actionCall.request.response_format.type, "json_schema");
 
   assert.strictEqual(summaryCall.config, summaryConfig, "summaries must use the selected summary provider");

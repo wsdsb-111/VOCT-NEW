@@ -125,12 +125,23 @@ async function testDateAndEscaping() {
     fixture.activate();
     const letter = makeLetter("letter_quotes", 200, 1);
     storeLetter(manager, letter, longText);
+    const beforeDeliveryDiagnostics = manager.getAllLetterStatuses();
+    assert.strictEqual(beforeDeliveryDiagnostics.awaitingAcceptanceLetterId, null);
+    assert.strictEqual(beforeDeliveryDiagnostics.effectFileExists, false);
+    assert.strictEqual(beforeDeliveryDiagnostics.effectFileAge, null);
+    assert.strictEqual(beforeDeliveryDiagnostics.storedLettersCount, 1);
     await manager.processLogLine("[debug] VOTC:DATE/;/201");
     assert.strictEqual(manager.getCurrentTotalDays(), 201);
     assert(Number.isFinite(manager.lastDateLogReceivedAt));
     const effect = fs.readFileSync(fixture.effectPath, "utf8");
     assertOfficialEffect(effect, letter.letterId, longText.replace(/"/g, '\\"'));
     assert(effect.includes("山河无恙，静候佳音。".repeat(80)), "long reply must not be truncated");
+    const deliveryDiagnostics = manager.getAllLetterStatuses();
+    assert.strictEqual(deliveryDiagnostics.awaitingAcceptanceLetterId, letter.letterId);
+    assert.strictEqual(deliveryDiagnostics.effectFileExists, true);
+    assert(Number.isFinite(deliveryDiagnostics.effectFileAge) && deliveryDiagnostics.effectFileAge >= 0);
+    assert.strictEqual(deliveryDiagnostics.lastDateLogReceivedAt, manager.lastDateLogReceivedAt);
+    assert.strictEqual(deliveryDiagnostics.storedLettersCount, 1);
   } finally {
     fixture.cleanup();
   }
@@ -223,7 +234,7 @@ async function testSummaryFailureDoesNotBlockImmediateDelivery() {
   await testRestartAndNoDuplicate();
   await testTwoLettersAreSerialized();
   await testSummaryFailureDoesNotBlockImmediateDelivery();
-  console.log("VOTC v7.10 Letter Delivery Recovery 2.0: PASS (delay 0/1/3, DATE, escaping, long text, restart, serialization, acceptance and summary independence)");
+  console.log("VOTC v7.10 Letter Delivery Recovery 2.0: PASS (delay 0/1/3, DATE, diagnostics, escaping, long text, restart, serialization, acceptance and summary independence)");
 })().catch((error) => {
   console.error(error);
   process.exitCode = 1;

@@ -133,12 +133,18 @@ test_effect = yes
 assert.strictEqual(EffectWriter.composeFullEffect(gameData, 202, 101, "test_effect = yes"), expectedEffect);
 
 const conversationSource = fs.readFileSync(path.join(root, "resources", "app", "out", "main", "conversation", "conversation.js"), "utf8");
+const providerSource = fs.readFileSync(path.join(root, "resources", "app", "out", "main", "provider-service.js"), "utf8");
 const mainSource = fs.readFileSync(path.join(root, "resources", "app", "out", "main", "main.js"), "utf8");
 const engineSource = fs.readFileSync(path.join(root, "resources", "app", "out", "main", "actions", "action-engine.js"), "utf8");
 const analyticsSource = fs.readFileSync(path.join(root, "resources", "app", "out", "main", "analytics", "usage-analytics.js"), "utf8");
 const rendererSource = fs.readFileSync(path.join(root, "resources", "app", "out", "renderer", "assets", "index-Dn3qWlAB.js"), "utf8");
 assert.strictEqual((conversationSource.match(/ActionEngine\.evaluateForCharacter\(this, npc,/g) || []).length, 1, "one official action evaluation is required per NPC reply");
 assert(!conversationSource.includes("evaluateForCharacter(this, user"));
+assert(conversationSource.includes("async createCharacterLeavingSummary(characterId, summaryPrompt)"), "official leavesConversation compatibility API is required");
+assert(conversationSource.includes("const visibleHistory = this.getHistoryForCharacter(numericId)"), "official leaving summaries must enforce Presence windows");
+const actionProviderMethod = providerSource.slice(providerSource.indexOf("async sendActionsRequest"), providerSource.indexOf("async sendSummaryRequest"));
+assert(actionProviderMethod.includes("...config.defaultParameters"), "action requests must preserve provider defaults");
+assert(!actionProviderMethod.includes("temperature: 0.1") && !actionProviderMethod.includes("max_tokens: 512") && !actionProviderMethod.includes('thinking: { type: "disabled" }'), "LLMManager must not impose action-provider overrides");
 assert(engineSource.includes('sendActionsRequest(messages, "votc_actions", jsonSchema, signal)'));
 assert(!mainSource.includes('require("./action-system")'));
 assert(!mainSource.includes("actionSystemMode"));

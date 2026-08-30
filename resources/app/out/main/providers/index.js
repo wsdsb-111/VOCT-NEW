@@ -1112,8 +1112,8 @@ class DeepseekProvider extends BaseProvider {
       top_p: transformedRequest.top_p,
       presence_penalty: transformedRequest.presence_penalty,
       frequency_penalty: transformedRequest.frequency_penalty,
-      // DeepSeek V4 defaults to thinking mode. Action selection explicitly
-      // disables it so hidden reasoning cannot consume the entire output cap.
+      // DeepSeek structured action requests disable thinking in the provider
+      // adapter; ordinary chat and summary request parameters remain unchanged.
       ...transformedRequest.thinking ? { thinking: transformedRequest.thinking } : {},
       // Deepseek only supports json_object, not json_schema
       ...transformedRequest.response_format ? { response_format: transformedRequest.response_format } : {},
@@ -1136,6 +1136,9 @@ class DeepseekProvider extends BaseProvider {
       const schemaName = jsonSchemaObj.name || "response";
       const schemaObj = jsonSchemaObj.schema;
       transformed.response_format = { type: "json_object" };
+      if (schemaName === "votc_actions") {
+        transformed.thinking = { type: "disabled" };
+      }
       const schemaDescription = this.buildSchemaDescription(schemaName, schemaObj);
       const messages = [...request.messages];
       let schemaInjected = false;

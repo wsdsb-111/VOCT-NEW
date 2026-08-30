@@ -200,14 +200,7 @@ class LLMManager {
       model: config.defaultModel,
       messages,
       stream: false,
-      // structured outputs should be non-streamed
       ...config.defaultParameters,
-      // Action selection is a small classification task. DeepSeek V4 enables
-      // thinking by default, which previously spent up to 4096 hidden output
-      // tokens even when the visible result was an empty string.
-      temperature: 0.1,
-      max_tokens: 512,
-      thinking: { type: "disabled" },
       signal,
       response_format: {
         type: "json_schema",
@@ -225,7 +218,7 @@ class LLMManager {
     const deepseekSchemaInjection = config.providerType === "deepseek";
     const schemaCacheRole = deepseekSchemaInjection ? "provider_injected_system_message" : "response_format";
     const providerSerializedOrder = deepseekSchemaInjection ? "messages_then_provider_injected_schema_then_response_format" : "messages_then_response_format";
-    console.log(`[LLMManager] Action request: provider=${config.providerType}, model=${config.defaultModel}, messages=${messages.length}, schema=${schemaName}, estimatedPromptTokens=${estimatedPromptTokens}, maxTokens=512, thinking=disabled`);
+    console.log(`[LLMManager] Action request: provider=${config.providerType}, model=${config.defaultModel}, messages=${messages.length}, schema=${schemaName}, estimatedPromptTokens=${estimatedPromptTokens}`);
     if (this.debugVerboseLLM) {
       this.logVerboseLLM("[LLMManager][verbose] Structured action request:", JSON.stringify(request));
       this.logVerboseLLM("[LLMManager][verbose] Provider config:", JSON.stringify(config).replace(/"apiKey":\s*"[^"]*"/g, "HIDDEN"));
