@@ -17574,7 +17574,9 @@ const DEFAULT_PROVIDER_CONFIGS = {
     baseUrl: "https://api.deepseek.com",
     defaultModel: "deepseek-v4-flash",
     defaultParameters: { temperature: 0.7, max_tokens: 2048 },
-    useMinimizedActionsSchema: false
+    useMinimizedActionsSchema: false,
+    actionSchemaDeliveryMode: "optimized_local_validation",
+    deepseekActionStablePrefixOptimization: false
   },
   gemini: {
     apiKey: "",
@@ -17774,7 +17776,9 @@ const useConfigStore = create()(
           defaultModel: editingConfig.defaultModel || "",
           defaultParameters: editingConfig.defaultParameters || { ...DEFAULT_PARAMETERS },
           customContextLength: editingConfig.customContextLength,
-          useMinimizedActionsSchema: editingConfig.useMinimizedActionsSchema
+          useMinimizedActionsSchema: editingConfig.useMinimizedActionsSchema,
+          actionSchemaDeliveryMode: editingConfig.actionSchemaDeliveryMode,
+          deepseekActionStablePrefixOptimization: editingConfig.deepseekActionStablePrefixOptimization
         };
         try {
           const saved = await window.llmConfigAPI.saveProviderConfig(configToSave);
@@ -17847,7 +17851,9 @@ const useConfigStore = create()(
           defaultModel: editingConfig.defaultModel || "",
           defaultParameters: editingConfig.defaultParameters || { ...DEFAULT_PARAMETERS },
           customContextLength: editingConfig.customContextLength,
-          useMinimizedActionsSchema: editingConfig.useMinimizedActionsSchema
+          useMinimizedActionsSchema: editingConfig.useMinimizedActionsSchema,
+          actionSchemaDeliveryMode: editingConfig.actionSchemaDeliveryMode,
+          deepseekActionStablePrefixOptimization: editingConfig.deepseekActionStablePrefixOptimization
         };
         try {
           const saved = await window.llmConfigAPI.saveProviderConfig(newPreset);
@@ -18826,6 +18832,36 @@ const ProviderConfigPanel = (props) => {
           }
         )
       ] }),
+      config2.providerType === "deepseek" && /* @__PURE__ */ jsxRuntimeExports.jsxs(jsxRuntimeExports.Fragment, { children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "form-group", children: [
+          /* @__PURE__ */ jsxRuntimeExports.jsx("label", { htmlFor: "actionSchemaDeliveryMode", children: "Action Schema 传输模式" }),
+          /* @__PURE__ */ jsxRuntimeExports.jsxs("select", {
+            id: "actionSchemaDeliveryMode",
+            name: "actionSchemaDeliveryMode",
+            value: config2.actionSchemaDeliveryMode || "optimized_local_validation",
+            onChange: (event) => updateEditingConfig({ actionSchemaDeliveryMode: event.target.value }),
+            className: "schema-type-select",
+            children: [
+              /* @__PURE__ */ jsxRuntimeExports.jsx("option", { value: "official_full_injected", children: "Baseline：官方 Full Schema 注入" }),
+              /* @__PURE__ */ jsxRuntimeExports.jsx("option", { value: "optimized_local_validation", children: "RC3：Full Schema 仅本地校验（推荐）" })
+            ]
+          }),
+          /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "muted-text", children: "两种模式都完整构建官方 Full Schema；RC3 模式只移除 DeepSeek HTTP Prompt 中的重复 Schema 文本。" })
+        ] }),
+        /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "form-group", children: [
+          /* @__PURE__ */ jsxRuntimeExports.jsxs("label", { htmlFor: "deepseekActionStablePrefixOptimization", children: [
+            /* @__PURE__ */ jsxRuntimeExports.jsx("input", {
+              id: "deepseekActionStablePrefixOptimization",
+              name: "deepseekActionStablePrefixOptimization",
+              type: "checkbox",
+              checked: config2.deepseekActionStablePrefixOptimization === true,
+              onChange: (event) => updateEditingConfig({ deepseekActionStablePrefixOptimization: event.target.checked })
+            }),
+            " DeepSeek Action Stable Prefix A/B"
+          ] }),
+          /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "muted-text", children: "默认关闭；仅在 50 次真实 A/B 通过后启用。不会修改官方 ActionPromptBuilder。" })
+        ] })
+      ] }),
       /* @__PURE__ */ jsxRuntimeExports.jsx(DefaultParameterFieldsComponent, { config: config2, onInputChange, t }),
       /* @__PURE__ */ jsxRuntimeExports.jsx(ActionButtonsComponent, { onTestConnection, onMakePreset, providerType: config2.providerType, t }),
       /* @__PURE__ */ jsxRuntimeExports.jsx(TestResultDisplayComponent, { testResult })
@@ -18996,11 +19032,14 @@ function LettersStatusModal({ onClose }) {
   const [diagnosticLetterId, setDiagnosticLetterId] = reactExports.useState("");
   const [diagnosticResult, setDiagnosticResult] = reactExports.useState(null);
   const [isRunningDiagnostic, setIsRunningDiagnostic] = reactExports.useState(false);
+  const [isResyncingDate, setIsResyncingDate] = reactExports.useState(false);
+  const [retryingLetterId, setRetryingLetterId] = reactExports.useState(null);
   const loadStatuses = async () => {
     setIsLoading(true);
     try {
       const data = await window.lettersAPI.getStatuses();
       setSnapshot(data);
+      setDiagnosticLetterId((current) => data.knownDiagnosticLetters?.some((letter) => letter.letterId === current) ? current : data.knownDiagnosticLetters?.[0]?.letterId || "");
     } catch (error) {
       console.error("Failed to load letter statuses:", error);
     } finally {
@@ -19010,6 +19049,11 @@ function LettersStatusModal({ onClose }) {
   reactExports.useEffect(() => {
     loadStatuses();
   }, []);
+  reactExports.useEffect(() => {
+    if (snapshot?.lastEffectDiagnostic?.result !== "WAITING_FOR_CK3_EXECUTION") return void 0;
+    const timer = setTimeout(loadStatuses, 1e3);
+    return () => clearTimeout(timer);
+  }, [snapshot?.timestamp, snapshot?.lastEffectDiagnostic?.result]);
   const runEffectDiagnostic = async (stage) => {
     setIsRunningDiagnostic(true);
     try {
@@ -19021,6 +19065,43 @@ function LettersStatusModal({ onClose }) {
       setDiagnosticResult({ success: false, error: error?.message || "Unknown error" });
     } finally {
       setIsRunningDiagnostic(false);
+    }
+  };
+  const confirmEffectDiagnostic = async (stage, passed) => {
+    setIsRunningDiagnostic(true);
+    try {
+      const result = await window.lettersAPI.confirmEffectDiagnostic(stage, passed);
+      setDiagnosticResult(result);
+      await loadStatuses();
+    } catch (error) {
+      console.error("Failed to confirm letter effect diagnostic:", error);
+      setDiagnosticResult({ success: false, error: error?.message || "Unknown error" });
+    } finally {
+      setIsRunningDiagnostic(false);
+    }
+  };
+  const resyncGameDate = async () => {
+    setIsResyncingDate(true);
+    try {
+      await window.lettersAPI.resyncGameDate();
+      await loadStatuses();
+    } catch (error) {
+      console.error("Failed to resync CK3 date:", error);
+    } finally {
+      setIsResyncingDate(false);
+    }
+  };
+  const retryFailedLetter = async (letterId) => {
+    setRetryingLetterId(letterId);
+    try {
+      const result = await window.lettersAPI.retryFailed(letterId);
+      if (!result?.success) setDiagnosticResult({ success: false, error: result?.error || "Retry failed." });
+      await loadStatuses();
+    } catch (error) {
+      console.error("Failed to retry letter response:", error);
+      setDiagnosticResult({ success: false, error: error?.message || "Unknown error" });
+    } finally {
+      setRetryingLetterId(null);
     }
   };
   const toggleLetterExpanded = (letterId) => {
@@ -19169,9 +19250,22 @@ function LettersStatusModal({ onClose }) {
     return t("lettersModal.deliversInDays", { days: letter.daysUntilDelivery });
   };
   const formatDate = (timestamp) => {
+    if (!timestamp) return "—";
     return new Date(timestamp).toLocaleString();
   };
+  const getDiagnosticDisableReason = (stage) => {
+    if (isRunningDiagnostic) return "诊断操作进行中";
+    const active = Object.values(snapshot?.effectDiagnostics || {}).find((item) => item?.result === "WAITING_FOR_CK3_EXECUTION" || item?.result === "ARTIFACT_VISUAL_CHECK_REQUIRED");
+    if (active) return active.result === "WAITING_FOR_CK3_EXECUTION" ? `${active.stage} 正在等待 CK3 Execution Marker` : `${active.stage} 已执行，请先确认 CK3 可见结果`;
+    if (stage !== "A" && !diagnosticLetterId) return "请选择 Known Letter ID";
+    if (stage !== "A") {
+      const previousStage = String.fromCharCode(stage.charCodeAt(0) - 1);
+      if (snapshot?.effectDiagnostics?.[previousStage]?.result !== "PASS") return `${previousStage} 尚未通过 CK3 Execution 与可见结果确认`;
+    }
+    return snapshot?.diagnosticDisableReasons?.A || null;
+  };
   const groups = groupLettersByStatus();
+  const visualCheckDiagnostic = Object.values(snapshot?.effectDiagnostics || {}).find((item) => item?.result === "ARTIFACT_VISUAL_CHECK_REQUIRED");
   return /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "modal-overlay", children: /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "modal-content letters-status-modal", children: [
     /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "modal-header", children: [
       /* @__PURE__ */ jsxRuntimeExports.jsx("h4", { children: t("lettersModal.lettersStatus") }),
@@ -19214,19 +19308,44 @@ function LettersStatusModal({ onClose }) {
           ":"
         ] }),
         " ",
-        snapshot.currentTotalDays
+        snapshot.currentTotalDays,
+        /* @__PURE__ */ jsxRuntimeExports.jsx("button", { type: "button", style: { marginLeft: "12px" }, onClick: resyncGameDate, disabled: isResyncingDate, children: isResyncingDate ? "重新扫描中…" : "从 debug.log 重新同步日期" }),
+        /* @__PURE__ */ jsxRuntimeExports.jsxs("span", { className: "muted-text", style: { marginLeft: "12px" }, children: [
+          "Tracker: ",
+          snapshot.dateTracker?.dateSourceState || "UNKNOWN",
+          " / Tail: ",
+          snapshot.dateTracker?.tailState || "UNKNOWN",
+          " / Scanned day: ",
+          snapshot.dateTracker?.lastDateScanResult?.value ?? "—",
+          " / Source: ",
+          snapshot.dateTracker?.lastDateScanResult?.source || "live tail",
+          " / Last scan: ",
+          formatDate(snapshot.dateTracker?.lastDateReconciliationAt)
+        ] })
       ] }),
       /* @__PURE__ */ jsxRuntimeExports.jsxs("section", { className: "letter-details", children: [
-        /* @__PURE__ */ jsxRuntimeExports.jsx("h5", { children: "Effect 实机诊断（独立写入，不改变正式投递状态）" }),
-        /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "muted-text", children: "B/C/D 必须填写当前真实 letterId；正式 Effect 等待 CK3 确认时将拒绝运行。" }),
-        /* @__PURE__ */ jsxRuntimeExports.jsx("input", { type: "text", value: diagnosticLetterId, onChange: (event) => setDiagnosticLetterId(event.target.value), placeholder: "真实 letterId（B/C/D 必填）", disabled: isRunningDiagnostic }),
-        /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "header-actions", style: { marginTop: "8px" }, children: [
-          /* @__PURE__ */ jsxRuntimeExports.jsx("button", { type: "button", onClick: () => runEffectDiagnostic("A"), disabled: isRunningDiagnostic, children: "A 最小 Artifact" }),
-          /* @__PURE__ */ jsxRuntimeExports.jsx("button", { type: "button", onClick: () => runEffectDiagnostic("B"), disabled: isRunningDiagnostic || !diagnosticLetterId.trim(), children: "B Creator Scope" }),
-          /* @__PURE__ */ jsxRuntimeExports.jsx("button", { type: "button", onClick: () => runEffectDiagnostic("C"), disabled: isRunningDiagnostic || !diagnosticLetterId.trim(), children: "C Global Variable" }),
-          /* @__PURE__ */ jsxRuntimeExports.jsx("button", { type: "button", onClick: () => runEffectDiagnostic("D"), disabled: isRunningDiagnostic || !diagnosticLetterId.trim(), children: "D Message Event" })
+        /* @__PURE__ */ jsxRuntimeExports.jsx("h5", { children: "Effect 实机诊断 2.2（WRITE → CK3 EXECUTE → 可见结果确认）" }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "muted-text", children: "A/B/C/D 必须顺序通过；文件写入不代表 CK3 已执行。B/C/D 只能选择当前已知 Letter ID，正式投递繁忙时诊断会锁定。" }),
+        /* @__PURE__ */ jsxRuntimeExports.jsxs("select", { value: diagnosticLetterId, onChange: (event) => setDiagnosticLetterId(event.target.value), disabled: isRunningDiagnostic, children: [
+          /* @__PURE__ */ jsxRuntimeExports.jsx("option", { value: "", children: "选择 Known Letter ID（B/C/D 必填）" }),
+          (snapshot?.knownDiagnosticLetters || []).map((letter) => /* @__PURE__ */ jsxRuntimeExports.jsx("option", { value: letter.letterId, children: `${letter.letterId} — ${letter.characterName} — ${letter.responseStatus}` }, letter.letterId))
         ] }),
-        diagnosticResult && /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: diagnosticResult.success ? "muted-text" : "error-message", children: diagnosticResult.success ? `阶段 ${diagnosticResult.stage} 已写入；creator=${diagnosticResult.creatorScopeName}` : diagnosticResult.error })
+        /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "header-actions", style: { marginTop: "8px" }, children: [
+          ...[["A", "最小 Artifact"], ["B", "Creator Scope"], ["C", "Global Variable"], ["D", "Message Event"]].map(([stage, label]) => /* @__PURE__ */ jsxRuntimeExports.jsx("button", { type: "button", title: getDiagnosticDisableReason(stage) || "", onClick: () => runEffectDiagnostic(stage), disabled: Boolean(getDiagnosticDisableReason(stage)), children: `${stage} ${label} — ${snapshot?.effectDiagnostics?.[stage]?.result || "NOT_STARTED"}` }, stage))
+        ] }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "muted-text", children: [["A", "最小 Artifact"], ["B", "Creator Scope"], ["C", "Global Variable"], ["D", "Message Event"]].map(([stage, label]) => /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
+          stage,
+          " ",
+          label,
+          ": ",
+          getDiagnosticDisableReason(stage) ? `🔒 ${getDiagnosticDisableReason(stage)}` : "可执行"
+        ] }, stage)) }),
+        visualCheckDiagnostic && /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "header-actions", style: { marginTop: "8px" }, children: [
+          /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "muted-text", children: `${visualCheckDiagnostic.stage} 已收到 CK3 Execution Marker，请检查游戏内可见结果：` }),
+          /* @__PURE__ */ jsxRuntimeExports.jsx("button", { type: "button", onClick: () => confirmEffectDiagnostic(visualCheckDiagnostic.stage, true), disabled: isRunningDiagnostic, children: "可见结果通过" }),
+          /* @__PURE__ */ jsxRuntimeExports.jsx("button", { type: "button", onClick: () => confirmEffectDiagnostic(visualCheckDiagnostic.stage, false), disabled: isRunningDiagnostic, children: "可见结果失败" })
+        ] }),
+        diagnosticResult && /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: diagnosticResult.success ? "muted-text" : "error-message", children: diagnosticResult.error || `阶段 ${diagnosticResult.stage}: ${diagnosticResult.result}; creator=${diagnosticResult.creatorScopeName || "n/a"}` })
       ] }),
       /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "letters-list", children: [
         groups.generating.length > 0 && /* @__PURE__ */ jsxRuntimeExports.jsx(
@@ -19271,6 +19390,8 @@ function LettersStatusModal({ onClose }) {
             getStatusColor,
             getStatusText,
             formatDeliveryTime,
+            onRetry: retryFailedLetter,
+            retryingLetterId,
             t
           }
         ),
@@ -19319,6 +19440,8 @@ function LetterGroup({
   getStatusColor,
   getStatusText,
   formatDeliveryTime,
+  onRetry,
+  retryingLetterId,
   t
 }) {
   return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "letter-group", children: [
@@ -19337,6 +19460,8 @@ function LetterGroup({
         getStatusColor,
         getStatusText,
         formatDeliveryTime,
+        onRetry,
+        retryingLetterId,
         t
       },
       letter.letterId
@@ -19351,6 +19476,8 @@ function LetterItem({
   getStatusColor,
   getStatusText,
   formatDeliveryTime,
+  onRetry,
+  retryingLetterId,
   t
 }) {
   return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "letter-item", children: [
@@ -19408,6 +19535,7 @@ function LetterItem({
           " ",
           letter.responseError
         ] }),
+        letter.responseStatus === "generation_failed" && onRetry && /* @__PURE__ */ jsxRuntimeExports.jsx("button", { type: "button", onClick: () => onRetry(letter.letterId), disabled: retryingLetterId === letter.letterId, children: retryingLetterId === letter.letterId ? "重试中…" : "手动重试回复生成" }),
         letter.responseContent && /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "content-preview", children: [
           /* @__PURE__ */ jsxRuntimeExports.jsxs("h6", { children: [
             t("lettersModal.responseContent"),
@@ -21424,7 +21552,7 @@ const OptimizationView = () => {
           /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "optimization-metric", children: [/* @__PURE__ */ jsxRuntimeExports.jsx("span", { children: text("动作平均输出 Token", "Action Average Output Tokens") }), /* @__PURE__ */ jsxRuntimeExports.jsx("strong", { children: formatTokens(actionUsage.requests > 0 ? actionUsage.outputTokens / actionUsage.requests : 0) })] }),
           /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "optimization-metric", children: [/* @__PURE__ */ jsxRuntimeExports.jsx("span", { children: text("动作缓存命中率", "Action Cache Hit Rate") }), /* @__PURE__ */ jsxRuntimeExports.jsx("strong", { children: formatPercent(actionUsage.cacheHitTokens + actionUsage.cacheMissTokens > 0 ? actionUsage.cacheHitTokens / (actionUsage.cacheHitTokens + actionUsage.cacheMissTokens) : null) })] })
         ] }),
-        actionPromptBlocks.length === 0 ? /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "optimization-empty", children: text("暂无动作请求记录。完成一次动作评估后刷新。", "No action request records yet. Refresh after an action evaluation.") }) : renderTable([text("动作 Prompt 区块", "Action Prompt Block"), text("请求", "Requests"), text("估算 Token", "Estimated tokens")], actionPromptBlocks.map((item) => [item.key.replace(/^action_(prompt|provider_schema) \| /, ""), formatTokens(item.requests), formatTokens(item.tokens)]), "action-block")
+        actionPromptBlocks.length === 0 ? /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "optimization-empty", children: text("暂无动作请求记录。完成一次动作评估后刷新。", "No action request records yet. Refresh after an action evaluation.") }) : renderTable([text("动作 Prompt 区块", "Action Prompt Block"), text("请求", "Requests"), text("区块自身估算 Token", "Estimated block-self tokens")], actionPromptBlocks.map((item) => [item.key.replace(/^action_(prompt|provider_schema) \| /, ""), formatTokens(item.requests), formatTokens(item.tokens)]), "action-block")
       ] }),
       reconciliation?.aggregates > 0 && /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "muted-text", children: text(`已包含 ${formatTokens(reconciliation.requests)} 次 DeepSeek 官网核对补录、${formatTokens(reconciliation.totalTokens)} Token；缓存细分仅来自本机仍保留的原始响应。`, `Includes a DeepSeek-console reconciliation of ${formatTokens(reconciliation.requests)} requests and ${formatTokens(reconciliation.totalTokens)} tokens; cache details use only locally retained provider responses.`) }),
       /* @__PURE__ */ jsxRuntimeExports.jsxs("section", { className: "optimization-capabilities", children: [
@@ -21439,8 +21567,8 @@ const OptimizationView = () => {
       ] }),
       /* @__PURE__ */ jsxRuntimeExports.jsxs("section", { className: "optimization-section", children: [
         /* @__PURE__ */ jsxRuntimeExports.jsx("h4", { children: text("未命中归因", "Cache-miss attribution") }),
-        /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "muted-text", children: text("断点根据服务商返回的聚合 Token 估算；连带未命中表示该断点之后无法继续复用的 Token。", "Breakpoints are estimated from provider-reported aggregate tokens; downstream misses cannot be reused after that breakpoint.") }),
-        missAttribution.length === 0 ? /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "optimization-empty", children: text("暂无可归因的缓存数据。完成两次同类请求后再刷新。", "No cache data to attribute yet. Run two similar requests, then refresh.") }) : renderTable([text("首个断点", "First breakpoint"), text("次数", "Count"), text("未命中", "Misses"), text("连带未命中", "Downstream")], missAttribution.slice(0, 8).map((item) => [item.key, formatTokens(item.requests), formatTokens(item.cacheMissTokens), formatTokens(item.downstreamMissTokens)]), "miss")
+        /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "muted-text", children: text("这是按有序 Prompt 前缀和服务商聚合 Token 得出的估算，不是服务商缓存断点遥测。区块自身未命中与该断点之后的连带未命中分开显示。", "This is an ordered-prompt-prefix estimate based on provider aggregate tokens, not provider cache-breakpoint telemetry. Block-self and downstream misses are shown separately.") }),
+        missAttribution.length === 0 ? /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "optimization-empty", children: text("暂无可归因的缓存数据。完成两次同类请求后再刷新。", "No cache data to attribute yet. Run two similar requests, then refresh.") }) : renderTable([text("首个估算断点", "First estimated breakpoint"), text("次数", "Count"), text("区块自身未命中 Token", "Block-self miss tokens"), text("后续连带未命中 Token", "Downstream miss tokens")], missAttribution.slice(0, 8).map((item) => [item.key, formatTokens(item.requests), formatTokens(item.breakpointMissTokens), formatTokens(item.downstreamMissTokens)]), "miss")
       ] }),
       changesSincePrevious.length > 0 && /* @__PURE__ */ jsxRuntimeExports.jsxs("section", { className: "optimization-section", children: [
         /* @__PURE__ */ jsxRuntimeExports.jsx("h4", { children: text("相邻请求的最早变化", "Earliest change since the previous request") }),
@@ -22596,7 +22724,7 @@ const actions$2 = { "disableAction": "禁用操作", "enableAction": "启用操�
 const chat$2 = { "args": "参数", "cancelStream": "取消流式输出", "details": "详情", "endConversation": "结束对话", "from": "来自", "loadingDots": "加载中...", "maximize": "+", "minimize": "-", "noParameters": "无参数", "pauseConversation": "暂停对话", "pendingApproval": "等待批准", "regenerate": "重新生成", "resumeConversation": "恢复对话", "system": "系统", "to": "发送至", "writeMessage": "输入消息...", "you": "你" };
 const common$2 = { "apply": "应用", "approve": "批准", "back": "返回", "cancel": "取消", "close": "关闭", "collapseAll": "全部折叠", "confirm": "确认", "decline": "拒绝", "delete": "删除", "disabled": "已禁用", "edit": "编辑", "enabled": "已启用", "error": "错误", "expandAll": "全部展开", "filter": "筛选", "folder": "文件夹", "hide": "隐藏", "loading": "加载中...", "next": "下一步", "no": "否", "ok": "确定", "open": "打开", "pause": "暂停", "previous": "上一步", "refresh": "刷新", "reset": "重置", "save": "保存", "search": "搜索", "settings": "设置", "show": "显示", "success": "成功", "tokens": "Token", "yes": "是" };
 const config$2 = { "actions": "操作", "collectLogs": "收集所有日志以便提交错误报告", "configuration": "配置", "connection": "连接", "default": "默认", "help": "帮助", "joinDiscord": "加入我们的 Discord", "manageActions": "管理检测到的操作", "noPresetsYet": "尚未保存预设", "npcActions": "NPC 操作", "npcMessages": "NPC 消息", "npcSummaries": "NPC 摘要", "preset": "预设", "prompts": "提示词", "selectProviderOrPreset": "从侧边栏选择服务商或预设进行配置", "settings": "设置", "summaries": "摘要", "type": "类型", "unnamedPreset": "未命名预设" };
-const connection$2 = { "confirmDeletePreset": '您确定要删除预设 "{{name}}" 吗？', "createNewPreset": "创建新预设", "createPreset": "创建预设", "defaultParameters": "默认参数", "deletePreset": "删除预设", "makePreset": "基于当前设置创建预设", "maxTokens": "最大 Token 数", "presetName": "预设名称", "presetNamePlaceholder": "输入预设名称", "presetNameRequired": "预设名称不能为空", "presets": "预设", "providers": "服务商", "savePreset": "保存预设", "temperature": "Temperature", "testConnection": "测试连接", "testConnectionFailed": "连接失败", "testConnectionSuccess": "连接成功！", "openPlayer2App": "打开 Player2 应用", "player2AppHelp": "点击打开 Player2 应用。请确保已安装且正在运行。", "actionsSchemaType": "操作架构类型", "actionsSchemaTypeHelp": "控制操作响应的 JSON 架构复杂度。RC2 的 DeepSeek Action Provider 固定使用官方 Full Schema；推荐 deepseek-v4-flash、temperature=0.1、max_tokens=512。Chat 与 Summary 参数保持独立不变。", "actionsSchemaAuto": "自动检测（推荐）", "actionsSchemaAdvanced": "高级（完整验证）", "actionsSchemaMinimized": "简化（用于受限模型）" };
+const connection$2 = { "confirmDeletePreset": '您确定要删除预设 "{{name}}" 吗？', "createNewPreset": "创建新预设", "createPreset": "创建预设", "defaultParameters": "默认参数", "deletePreset": "删除预设", "makePreset": "基于当前设置创建预设", "maxTokens": "最大 Token 数", "presetName": "预设名称", "presetNamePlaceholder": "输入预设名称", "presetNameRequired": "预设名称不能为空", "presets": "预设", "providers": "服务商", "savePreset": "保存预设", "temperature": "Temperature", "testConnection": "测试连接", "testConnectionFailed": "连接失败", "testConnectionSuccess": "连接成功！", "openPlayer2App": "打开 Player2 应用", "player2AppHelp": "点击打开 Player2 应用。请确保已安装且正在运行。", "actionsSchemaType": "操作架构类型", "actionsSchemaTypeHelp": "RC3 仍构建官方 Full Schema，并在本地用于官方 ActionEngine 校验；推荐的 optimized_local_validation 仅避免在 DeepSeek HTTP Prompt 中重复注入同一 Schema。稳定前缀优化默认关闭，须完成 50 次真实 A/B 后再启用。Chat 与 Summary 参数保持独立不变。", "actionsSchemaAuto": "自动检测（推荐）", "actionsSchemaAdvanced": "高级（完整验证）", "actionsSchemaMinimized": "简化（用于受限模型）" };
 const lettersModal$2 = { "completed": "已完成", "created": "创建时间", "currentDay": "当前日", "currentGameDay": "当前游戏日", "daysUntilDelivery": "距离送达天数", "delivered": "已送达", "deliversInDays": "{{days}} 天后送达", "deliversToday": "今天送达", "deliveryFailed": "送达失败", "error": "错误", "expectedDeliveryDay": "预计送达日", "failed": "失败", "generating": "生成中", "information": "信息", "isLate": "是否延迟", "lastUpdated": "最后更新", "lateByDays": "延迟 {{days}} 天", "letterId": "信件 ID", "lettersStatus": "信件状态", "loading": "加载中...", "no": "否", "noLettersFound": "未找到信件。信件处理后将显示在此处。", "originalLetter": "原始信件", "pendingDelivery": "待送达", "pendingDeliveryTitle": "待送达", "refresh": "刷新", "responseContent": "回复内容", "responseGenerationFailed": "回复生成失败", "responseGenerationInProgress": "回复生成中", "responseStatus": "回复状态", "sentSuccessfully": "发送成功", "status": "状态", "statusEffectFileWritten": "投递命令已写入（等待 CK3 确认）", "statusGenerated": "已生成", "statusGenerating": "生成中", "statusGenerationFailed": "生成失败", "statusNotStarted": "未开始", "statusPendingDelivery": "待送达", "statusSaved": "已保存", "statusSaveFailed": "保存失败", "statusSendFailed": "发送失败", "statusSent": "已发送", "summaryContent": "摘要内容", "summaryStatus": "摘要状态", "totalLetters": "总信件数", "yes": "是" };
 const messageItem$2 = { "cancel": "取消", "errorTitle": "错误", "save": "保存" };
 const modals$2 = { "areYouSureDeletePreset": "您确定要删除预设 {{name}} 吗？", "confirmDeletion": "确认删除" };

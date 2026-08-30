@@ -170,6 +170,30 @@ function registerIpcHandlers(runtime) {
       return { success: false, error: error instanceof Error ? error.message : "Unknown error" };
     }
   });
+  electron.ipcMain.handle("letters:resyncGameDate", async () => {
+    try {
+      return await letterManager.resyncGameDate();
+    } catch (error) {
+      console.error("Failed to resync letter game date:", error);
+      return { dateSourceState: "ERROR", error: error instanceof Error ? error.message : "Unknown error" };
+    }
+  });
+  electron.ipcMain.handle("letters:confirmEffectDiagnostic", async (_, payload) => {
+    try {
+      return letterManager.confirmEffectDiagnostic(payload?.stage, payload?.passed === true);
+    } catch (error) {
+      console.error("Failed to confirm letter effect diagnostic:", error);
+      return { success: false, error: error instanceof Error ? error.message : "Unknown error" };
+    }
+  });
+  electron.ipcMain.handle("letters:retryFailed", async (_, letterId) => {
+    try {
+      return await letterManager.retryFailedLetter(letterId);
+    } catch (error) {
+      console.error("Failed to retry letter reply:", error);
+      return { success: false, error: error instanceof Error ? error.message : "Unknown error" };
+    }
+  });
   electron.ipcMain.handle("letters:clearOldStatuses", async (_, daysThreshold) => {
     try {
       letterManager.clearOldStatuses(daysThreshold);

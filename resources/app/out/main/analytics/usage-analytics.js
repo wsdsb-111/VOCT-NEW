@@ -83,6 +83,8 @@ function createUsageAnalytics({ fs, dataDir, analyticsFile, retention, createPro
         schemaTokenEstimate: Number(metadata?.schemaTokenEstimate) || 0,
         schemaFingerprint: metadata?.schemaFingerprint || null,
         schemaCacheRole: metadata?.schemaCacheRole || null,
+        actionSchemaDeliveryMode: metadata?.actionSchemaDeliveryMode || null,
+        deepseekActionStablePrefixOptimization: metadata?.deepseekActionStablePrefixOptimization === true,
         selectorVersion: metadata?.selectorVersion || null,
         catalogVersion: metadata?.catalogVersion || null,
         schemaVersion: metadata?.schemaVersion || null,

@@ -407,7 +407,12 @@ function createSettingsRepository({ Store, schema, SecureProviderSecrets, electr
     getActionsProviderConfig() {
       const overrideId = this.getActionsProviderInstanceId();
       const config = overrideId ? this.getProviderConfigById(overrideId) : this.getActiveProviderConfig();
-      return config?.providerType === "deepseek" ? { ...config, useMinimizedActionsSchema: false } : config;
+      return config?.providerType === "deepseek" ? {
+        ...config,
+        useMinimizedActionsSchema: false,
+        actionSchemaDeliveryMode: config.actionSchemaDeliveryMode || "optimized_local_validation",
+        deepseekActionStablePrefixOptimization: config.deepseekActionStablePrefixOptimization === true
+      } : config;
     }
     /**
      * Get the provider config for Summaries.

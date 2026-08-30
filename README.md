@@ -162,7 +162,7 @@ V7.9.2 新增仅在当前对话场景内有效的 Social Consequence Engine，�
 
 V7.9.3 按冻结规格接入 Action Engine 4.0。顶层 Router 默认进入 AE4，只有显式 Engine Version 3 才整体回滚到冻结 AE3，禁止逐消息 fallback。Balanced 启动时迁移到 Performance；模式切换保留 Explicit Pending、执行历史、去重账本、Opinion Cooldown 和世界事件证据。Precision 不再经过 Candidate Gate、Event Parser、Semantic Resolver、Semantic Rescue 或 Precision Judge；每条有效 RP 对白恰好一次 Q2 Selector。Performance 仅允许确定性本地 HIT，其余最多调用一次 Compact Selector；混合句通过 `ALLOW/BLOCK/MAYBE` Guard 避免整句误杀。两种模式共享稳定 Action Contract、Consent Action Timing 和 Proposal 执行管线；Pending 响应必须引用当前消息，AE4 禁止 `isPlayerSource` 改写已绑定 Source。Precision 与 Compact 的 Question Rule 明确把普通询问和 `consent_required` 明确提议分开：前者不触发动作，后者即使采用问句也创建 Pending，尚不执行游戏效果。Memory Engine 2.5 在 Final Summary Quality Gate 拒绝跨 join/leave/暂离/返回边界的 `summarySegments` 并要求按边界拆段；严格 Perspective Projection 后再执行共同在场正文覆盖门禁，实质参与者若只剩 memory 而没有 narrative 则进入可重新生成摘要的恢复流程，不写人物文件、不 commit，也不放宽 `every(messageId)` 知识隔离。`isInjured` 固定为 VOCT-NEW 项目级 `attacker→victim` 合同，CK3 效果落在 target。172 条 Ground Truth Benchmark 已拆分 Action/Source/Target/Argument 等 Match、Core/Overall Recall 与 Per-Action Gate，Wrong Action 不再算 Recall，并覆盖 3/4/6 人错目标、Historical Replay 与 Injury Victim Mismatch。真实 Provider Recall、缓存实测和 CK3 效果仍属于 Phase 7 人工验收，不在自动化通过前宣称 Stable。详见 [正式规格](docs/VOTC_v7.9.3_Action_Engine_4.0正式实施规格书.md)、[最终实机前修复清单](docs/VOCT-NEW_v7.9.3_AE4_最终实机前修复清单_含Injury裁定.md)、[Errata-001](docs/AE4_Spec_Errata-001_Self-Target目标约束冲突修正.md)与 [实施报告](docs/v7.9.3-action-engine-4.0-implementation-report.md)。
 
-V7.10.0-RC2 Candidate 停止维护自研 Action Engine 3.0/4.0，删除其运行时、模式、Pending、Social Consequence 与版本路由，完整迁入官方 VOTC 2.0.3 Action System 和 28 个标准动作。Prompt、官方 Full/Minimized Schema variant、Registry、response healing、审批与 Effect 语义以官方为唯一基线；DeepSeek RC2 固定选择官方 Full Schema，不承诺比其他官方 variant 更小。Action Provider 参数保持独立配置，DeepSeek thinking 仅在 `votc_actions` Provider 适配层关闭。官方 `leavesConversation` 继续通过 Presence-safe 兼容 API 生成离场人物摘要。Letter 保持官方 2.0.3 原子 Delivery Effect，外层新增 A/B/C/D Effect 诊断、Payload 真值和 Popup/ACK 时序字段。Workshop 2.0.4 静态对照确认 ACK 在事件窗口创建时发出，并不代表玩家点击接受；Artifact 缺失仍须实机 A/B/C/D 定位。当前为 RC2 Candidate，未宣称 Stable。详见 [v7.10 实施报告](docs/v7.10-official-action-letter-recovery-implementation-report.md)、[Action 上游清单](docs/upstream/votc-2.0.3-action-manifest.md)和 [Letter 上游清单](docs/upstream/votc-2.0.3-letter-manifest.md)。
+V7.10.0-RC3 Consolidated 停止维护自研 Action Engine 3.0/4.0，以官方 VOTC 2.0.3 Action System、ActionPromptBuilder、Full Schema、Registry、response healing、审批、EffectWriter 和 28 个标准动作为冻结基线。DeepSeek `votc_actions` 默认采用 `optimized_local_validation`：官方 Full Schema 仍完整构建并用于本地校验、healing、analytics fingerprint 与 parity，但不再作为重复 Prompt 消息注入 HTTP 请求；`official_full_injected` 保留为 A/B 回退。Provider-only 稳定前缀复制与重排受 Feature Flag 控制，在 50 次真实 A/B 前默认关闭。Letter 外层新增 Pending-only Date Tracker Supervisor、尾部日期对账、向前补追不删信、手动日期重同步、结构化 Provider 错误、同 letterId 幂等重试，以及严格区分 WRITE / CK3 EXECUTE / VERIFY 的 Effect Diagnostic 2.2。Workshop 2.0.4 和官方 Letter Effect 合同未改。当前仍是 RC3 实机候选；真实 Action Recall/Token、CK3 日期推进、A/B/C/D、Popup 与 Artifact 未完成前不标 Stable。详见 [v7.10 实施报告](docs/v7.10-official-action-letter-recovery-implementation-report.md)、[Action 上游清单](docs/upstream/votc-2.0.3-action-manifest.md)和 [Letter 上游清单](docs/upstream/votc-2.0.3-letter-manifest.md)。
 
 V7.7 在 V7.6 健康化基础上分阶段拆分主进程：第一阶段将六种模型 Provider 迁入 `providers/index.js`、92 个既有 IPC 注册迁入 `ipc/register-ipc.js`；第二阶段把 `ProviderRegistry`、`TokenCounter` 和 `LLMManager` 迁入 `provider-service.js`，通过显式依赖继续读取用户分别选择的对话、摘要和动作模型。`main.js` 由约 9477 行降至约 6612 行。动作语义同时补齐“共度春宵/鱼水之欢已发生”和“从今以后成为情人/认定灵魂伴侣”等自然完成态表达，并继续排除请求、计划、假设、回忆与失败尝试。当前仓库仍是可运行打包产物，没有能够重新生成这些文件的完整 `src` 工程，因此本阶段不伪造源码构建链。
 
@@ -172,18 +172,18 @@ V7.7 在 V7.6 健康化基础上分阶段拆分主进程：第一阶段将六种
 node scripts\test-release.js
 ```
 
-清单会覆盖全部 `test-*.js`。V7.10.0-RC2 Candidate 当前分类 114 个测试文件：45 个直接发布组，68 个依赖已退休 AE3/AE4/Social 语义的历史测试明确归档；官方 Action parity、Action Provider parity、DeepSeek Full Schema、Action Token 分块、官方离场动作、Letter Delivery Recovery 2.0 与 A/B/C/D 诊断均为直接发布门禁。
+清单会覆盖全部 `test-*.js`。V7.10.0-RC3 Consolidated 当前分类 117 个测试文件：48 个直接发布组，68 个依赖已退休 AE3/AE4/Social 语义的历史测试明确归档，另 1 个为统一发布入口；官方 Action parity、DeepSeek Full Schema 本地校验与传输去重、Action Token 分块、Letter Date Tracker D01–D09、Provider 手动重试、Delivery Recovery 2.0 与 Diagnostic 2.2 均为直接发布门禁。
 
 ## 版本信息
 
 - 外挂 UI 版本：v2.0.4
-- 当前应用功能基线：v7.10.0-RC2 Candidate（实机候选，未宣称 Stable）
+- 当前应用功能基线：v7.10.0-RC3 Consolidated（实机候选，未宣称 Stable）
 - CK3 模组版本：Voices of the Court 2.0.4
 - 模组支持版本：CK3 1.18.*
 - UI 主题：宫廷编年史风格（深红、暗金、羊皮纸文本层级）
 - UI 主题切换：羊皮卷、骑士纹章、水墨画卷三套完整历史风格；分别拥有独立背景、边框结构、按钮造型、消息卡片、输入框、字体和滚动条，并可自动保存选择
 - UI 素材生成提示词：参见 [docs/UI_ASSET_PROMPTS_2.0.3.md](docs/UI_ASSET_PROMPTS_2.0.3.md)
-- 当前重点：V7.10.0 / Official VOTC 2.0.3 Action System / Letter Delivery Recovery 2.0；Memory Engine 2.5、外挂 UI 2.0.4 与 CK3 Workshop 2.0.4 保持不变
+- 当前重点：V7.10.0-RC3 Consolidated / Official VOTC 2.0.3 Action System / Letter Date & Delivery Recovery / DeepSeek Action Transport；Memory Engine 2.5、外挂 UI 2.0.4 与 CK3 Workshop 2.0.4 保持不变
 
 ## 已知限制
 

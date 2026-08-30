@@ -22,7 +22,7 @@ const UsageAnalytics = createUsageAnalytics({
 });
 const analytics = new UsageAnalytics();
 const requests = [];
-const config = { providerType: "deepseek", defaultModel: "deepseek-v4-flash", defaultParameters: { temperature: 0.1, max_tokens: 512 }, useMinimizedActionsSchema: false };
+const config = { providerType: "deepseek", defaultModel: "deepseek-v4-flash", defaultParameters: { temperature: 0.1, max_tokens: 512 }, useMinimizedActionsSchema: false, actionSchemaDeliveryMode: "optimized_local_validation", deepseekActionStablePrefixOptimization: false };
 const manager = new LLMManager({
   settingsRepository: { getActionsProviderConfig: () => config },
   providerRegistry: {
@@ -82,11 +82,14 @@ const availableActions = [{
   ];
   assert.deepStrictEqual(entry.blocks.map((block) => block.id), expectedBlockIds);
   assert.strictEqual(entry.blocks.find((block) => block.id === "action_recent_actions").tokens, 0, "omitted Recent actions remains an explicit zero-token block");
-  assert.strictEqual(entry.blocks.reduce((sum, block) => sum + block.tokens, 0), entry.estimatedSerializedPromptTokens, "Action block totals must include the provider schema exactly once");
-  assert.strictEqual(entry.schemaTokenEstimate, entry.blocks.find((block) => block.id === "action_provider_schema").tokens);
+  assert.strictEqual(entry.blocks.reduce((sum, block) => sum + block.tokens, 0), entry.estimatedSerializedPromptTokens, "optimized Action block totals must exclude the non-serialized local schema");
+  assert(entry.schemaTokenEstimate > 0, "the official Full Schema must remain measured locally");
+  assert.strictEqual(entry.blocks.find((block) => block.id === "action_provider_schema").tokens, 0, "local-only schema must contribute zero provider input tokens");
+  assert.strictEqual(entry.schemaCacheRole, "local_validation_only");
+  assert.strictEqual(entry.actionSchemaDeliveryMode, "optimized_local_validation");
   const report = analytics.getReport();
   assert.strictEqual(report.blocks.filter((block) => block.key.startsWith("action_")).length, 8, "existing Usage Analytics must expose all Action blocks");
-  console.log("VOTC v7.10-RC2 Terra Action Token Metadata: PASS (8 blocks, official Full schema, 0.1/512 and prompt preservation)");
+  console.log("VOTC v7.10-RC3 Action Token Metadata: PASS (8 blocks, local Full Schema fingerprint and provider serialization truth)");
 })().catch((error) => {
   console.error(error);
   process.exitCode = 1;

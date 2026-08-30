@@ -24,7 +24,7 @@ const actionRequest = {
   max_tokens: 1800,
   response_format: { type: "json_schema", json_schema: { name: "votc_actions", schema, strict: true } }
 };
-const transformedAction = provider.transformRequestForDeepseek(actionRequest);
+const transformedAction = provider.transformRequestForDeepseek(actionRequest, { actionSchemaDeliveryMode: "official_full_injected" });
 assert.deepStrictEqual(transformedAction.response_format, { type: "json_object" });
 assert.deepStrictEqual(transformedAction.thinking, { type: "disabled" }, "only the DeepSeek action adapter may disable thinking");
 assert.strictEqual(transformedAction.temperature, actionRequest.temperature);
@@ -33,6 +33,11 @@ const injectedActionList = transformedAction.messages.find((message) => message.
 assert(injectedActionList.content.includes("Schema name: votc_actions"));
 assert(injectedActionList.content.includes("actions: array of objects"), "the action schema must be retained in the injected prompt");
 assert(!actionRequest.messages[1].content.includes("Schema name:"), "the adapter must not mutate caller messages");
+
+const optimizedAction = provider.transformRequestForDeepseek(actionRequest, { actionSchemaDeliveryMode: "optimized_local_validation" });
+assert.deepStrictEqual(optimizedAction.response_format, { type: "json_object" });
+assert.deepStrictEqual(optimizedAction.thinking, { type: "disabled" });
+assert.deepStrictEqual(optimizedAction.messages, actionRequest.messages, "optimized transport must not append the Full Schema to DeepSeek messages");
 
 const chatRequest = {
   model: "deepseek-v4-flash",

@@ -116,7 +116,10 @@ class BaseProvider {
         return await operation();
       } catch (error) {
         lastError = error;
-        if (attempt === maxRetries || !shouldRetry(error)) {
+        const retryable = shouldRetry(error);
+        error.votcAttemptCount = attempt + 1;
+        error.votcRetryable = retryable;
+        if (attempt === maxRetries || !retryable) {
           throw error;
         }
         console.log(`[${this.providerId}] Retry attempt ${attempt + 1}/${maxRetries + 1} after ${delay}ms delay`);
@@ -1102,7 +1105,7 @@ class DeepseekProvider extends BaseProvider {
       baseURL: baseUrl,
       maxRetries: 0
     });
-    const transformedRequest = this.transformRequestForDeepseek(request);
+    const transformedRequest = this.transformRequestForDeepseek(request, config);
     const requestParams = {
       model: transformedRequest.model,
       messages: transformedRequest.messages,
@@ -1129,7 +1132,7 @@ class DeepseekProvider extends BaseProvider {
    * Transform the request for Deepseek compatibility
    * - Converts json_schema response_format to json_object with schema in prompt
    */
-  transformRequestForDeepseek(request) {
+  transformRequestForDeepseek(request, config = {}) {
     const transformed = { ...request };
     if (request.response_format?.type === "json_schema" && request.response_format.json_schema) {
       const jsonSchemaObj = request.response_format.json_schema;
@@ -1139,41 +1142,57 @@ class DeepseekProvider extends BaseProvider {
       if (schemaName === "votc_actions") {
         transformed.thinking = { type: "disabled" };
       }
-      const schemaDescription = this.buildSchemaDescription(schemaName, schemaObj);
       const messages = [...request.messages];
-      let schemaInjected = false;
-      // The action list and its schema change together. Keeping the schema beside
-      // Available Actions lets DeepSeek cache both before volatile recent dialogue.
-      // Other structured requests retain the original last-system-message behavior.
-      if (schemaName === "votc_actions") {
-        const actionListIndex = messages.findIndex((message) => message.role === "system" && typeof message.content === "string" && message.content.startsWith("Available Actions:"));
-        if (actionListIndex >= 0) {
-          messages[actionListIndex] = {
-            ...messages[actionListIndex],
-            content: messages[actionListIndex].content + "\n\n" + schemaDescription
-          };
-          schemaInjected = true;
+      const actionSchemaDeliveryMode = schemaName === "votc_actions" ? config.actionSchemaDeliveryMode || "optimized_local_validation" : "official_full_injected";
+      if (schemaName !== "votc_actions" || actionSchemaDeliveryMode === "official_full_injected") {
+        const schemaDescription = this.buildSchemaDescription(schemaName, schemaObj);
+        let schemaInjected = false;
+        // Baseline mode keeps the prior provider fallback exactly available for A/B.
+        if (schemaName === "votc_actions") {
+          const actionListIndex = messages.findIndex((message) => message.role === "system" && typeof message.content === "string" && message.content.startsWith("Available Actions:"));
+          if (actionListIndex >= 0) {
+            messages[actionListIndex] = {
+              ...messages[actionListIndex],
+              content: messages[actionListIndex].content + "\n\n" + schemaDescription
+            };
+            schemaInjected = true;
+          }
+        }
+        for (let i = messages.length - 1; i >= 0 && !schemaInjected; i--) {
+          if (messages[i].role === "system") {
+            messages[i] = {
+              ...messages[i],
+              content: messages[i].content + "\n\n" + schemaDescription
+            };
+            schemaInjected = true;
+            break;
+          }
+        }
+        if (!schemaInjected) {
+          messages.unshift({
+            role: "system",
+            content: schemaDescription
+          });
         }
       }
-      for (let i = messages.length - 1; i >= 0 && !schemaInjected; i--) {
-        if (messages[i].role === "system") {
-          messages[i] = {
-            ...messages[i],
-            content: messages[i].content + "\n\n" + schemaDescription
-          };
-          schemaInjected = true;
-          break;
-        }
-      }
-      if (!schemaInjected) {
-        messages.unshift({
-          role: "system",
-          content: schemaDescription
-        });
-      }
-      transformed.messages = messages;
+      transformed.messages = schemaName === "votc_actions" && config.deepseekActionStablePrefixOptimization === true ? this.buildStableActionMessageCopy(messages) : messages;
     }
     return transformed;
+  }
+  buildStableActionMessageCopy(messages) {
+    const buckets = { intro: [], actions: [], examples: [], roster: [], recentActions: [], recentMessages: [], other: [], final: [] };
+    for (const message of messages) {
+      const content = typeof message?.content === "string" ? message.content : "";
+      if (content.startsWith("You are an action selection engine")) buckets.intro.push(message);
+      else if (content.startsWith("Available Actions:")) buckets.actions.push(message);
+      else if (content.startsWith("Examples of correct JSON output:")) buckets.examples.push(message);
+      else if (content.startsWith("Characters in this conversation")) buckets.roster.push(message);
+      else if (content.startsWith("Recent actions (last ")) buckets.recentActions.push(message);
+      else if (content.startsWith("Recent messages:")) buckets.recentMessages.push(message);
+      else if (message?.role === "user" && content.startsWith("Given everything above, select the actions")) buckets.final.push(message);
+      else buckets.other.push(message);
+    }
+    return [...buckets.intro, ...buckets.actions, ...buckets.examples, ...buckets.roster, ...buckets.recentActions, ...buckets.recentMessages, ...buckets.other, ...buckets.final].map((message) => ({ ...message }));
   }
   /**
    * Build a human-readable schema description for the prompt
@@ -1287,10 +1306,28 @@ IMPORTANT: Your response must be ONLY valid JSON. No prose, no code fences, no e
           error.name,
           error.message
         );
-        throw new Error(`Deepseek API error: ${error.status} ${error.name} - ${error.message}`);
+        const providerError = new Error(`Deepseek API error: ${error.status ?? "n/a"} ${error.name || "APIError"} - ${error.message}`);
+        providerError.name = error.name || "APIError";
+        providerError.provider = "deepseek";
+        providerError.model = request.model;
+        providerError.status = error.status ?? null;
+        providerError.code = error.code ?? null;
+        providerError.causeCode = error.cause?.code ?? null;
+        providerError.attemptCount = error.votcAttemptCount || 1;
+        providerError.retryable = error.votcRetryable === true;
+        throw providerError;
       }
       console.error(`[DeepseekProvider] Unexpected error for model ${request.model}:`, error);
-      throw new Error(`Unexpected Deepseek API error: ${error.message || error}`);
+      const providerError = new Error(`Unexpected Deepseek API error: ${error.message || error}`);
+      providerError.name = error?.name || "Error";
+      providerError.provider = "deepseek";
+      providerError.model = request.model;
+      providerError.status = error?.status ?? null;
+      providerError.code = error?.code ?? null;
+      providerError.causeCode = error?.cause?.code ?? null;
+      providerError.attemptCount = error?.votcAttemptCount || 1;
+      providerError.retryable = error?.votcRetryable === true;
+      throw providerError;
     }
   }
   async *_streamChatCompletion(request, openAIClient, signal) {
@@ -1367,10 +1404,16 @@ IMPORTANT: Your response must be ONLY valid JSON. No prose, no code fences, no e
         throw new Error(`AbortError: Message cancelled`);
       }
       console.error(`[DeepseekProvider] Stream error for model ${request.model}:`, error);
-      if (error instanceof OpenAI.APIError) {
-        throw new Error(`Deepseek API stream error: ${error.status} ${error.name} - ${error.message}`);
-      }
-      throw new Error(`Deepseek API stream error: ${error.message || "Unknown error"}`);
+      const providerError = new Error(error instanceof OpenAI.APIError ? `Deepseek API stream error: ${error.status ?? "n/a"} ${error.name || "APIError"} - ${error.message}` : `Deepseek API stream error: ${error.message || "Unknown error"}`);
+      providerError.name = error?.name || "Error";
+      providerError.provider = "deepseek";
+      providerError.model = request.model;
+      providerError.status = error?.status ?? null;
+      providerError.code = error?.code ?? null;
+      providerError.causeCode = error?.cause?.code ?? null;
+      providerError.attemptCount = error?.votcAttemptCount || 1;
+      providerError.retryable = error?.votcRetryable === true;
+      throw providerError;
     }
   }
   async testConnection(config) {

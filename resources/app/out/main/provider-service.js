@@ -216,9 +216,15 @@ class LLMManager {
     const schemaTokenEstimate = this.TokenCounter.estimateTokens(serializedSchema);
     const schemaFingerprint = crypto.createHash("sha256").update(serializedSchema).digest("hex").slice(0, 16);
     const deepseekSchemaInjection = config.providerType === "deepseek";
-    const schemaCacheRole = deepseekSchemaInjection ? "provider_injected_system_message" : "response_format";
-    const providerSerializedOrder = deepseekSchemaInjection ? "messages_then_provider_injected_schema_then_response_format" : "messages_then_response_format";
-    const actionPromptBlocks = schemaName === "votc_actions" && (!Array.isArray(metadata.blocks) || metadata.blocks.length === 0) ? this.buildActionPromptBlocks(messages, serializedSchema) : metadata.blocks;
+    const actionSchemaDeliveryMode = deepseekSchemaInjection && schemaName === "votc_actions" ? config.actionSchemaDeliveryMode || "optimized_local_validation" : null;
+    const providerInjectsSchema = deepseekSchemaInjection && actionSchemaDeliveryMode !== "optimized_local_validation";
+    const stablePrefixOptimization = deepseekSchemaInjection && schemaName === "votc_actions" && config.deepseekActionStablePrefixOptimization === true;
+    const schemaCacheRole = providerInjectsSchema ? "provider_injected_system_message" : deepseekSchemaInjection ? "local_validation_only" : "response_format";
+    const providerSerializedOrder = stablePrefixOptimization ? "deepseek_stable_intro_actions_examples_roster_recent_actions_recent_messages_final" : providerInjectsSchema ? "messages_then_provider_injected_schema_then_response_format" : "messages_then_response_format";
+    const builtActionPromptBlocks = schemaName === "votc_actions" && (!Array.isArray(metadata.blocks) || metadata.blocks.length === 0) ? this.buildActionPromptBlocks(messages, serializedSchema, providerInjectsSchema) : metadata.blocks;
+    const actionPromptBlocks = stablePrefixOptimization ? this.reorderActionPromptBlocks(builtActionPromptBlocks) : builtActionPromptBlocks;
+    const stablePrefixEndPosition = stablePrefixOptimization ? actionPromptBlocks.findIndex((block) => block.id === "action_roster") : null;
+    const stablePrefixTokens = stablePrefixOptimization ? actionPromptBlocks.slice(0, stablePrefixEndPosition).reduce((sum, block) => sum + (Number(block.tokens) || 0), 0) : 0;
     console.log(`[LLMManager] Action request: provider=${config.providerType}, model=${config.defaultModel}, messages=${messages.length}, schema=${schemaName}, estimatedPromptTokens=${estimatedPromptTokens}`);
     if (this.debugVerboseLLM) {
       this.logVerboseLLM("[LLMManager][verbose] Structured action request:", JSON.stringify(request));
@@ -234,11 +240,15 @@ class LLMManager {
       schemaTokenEstimate,
       schemaFingerprint,
       schemaCacheRole,
+      actionSchemaDeliveryMode,
+      deepseekActionStablePrefixOptimization: stablePrefixOptimization,
       providerSerializedOrder,
-      estimatedSerializedPromptTokens: estimatedPromptTokens + (deepseekSchemaInjection ? schemaTokenEstimate : 0)
+      stablePrefixEndPosition,
+      stablePrefixTokens,
+      estimatedSerializedPromptTokens: estimatedPromptTokens + (providerInjectsSchema ? schemaTokenEstimate : 0)
     });
   }
-  buildActionPromptBlocks(messages, serializedSchema) {
+  buildActionPromptBlocks(messages, serializedSchema, providerInjectsSchema = true) {
     const definitions = [
       ["action_system_intro", "Action system introduction", "action_prompt", true],
       ["action_recent_messages", "Recent messages", "action_prompt", false],
@@ -271,10 +281,15 @@ class LLMManager {
         type,
         position,
         stable,
-        tokens: id === "action_provider_schema" ? this.TokenCounter.estimateTokens(content) : this.TokenCounter.estimateMessageTokens ? this.TokenCounter.estimateMessageTokens({ role: "system", content }) : this.TokenCounter.estimateTokens(content),
+        tokens: id === "action_provider_schema" ? providerInjectsSchema ? this.TokenCounter.estimateTokens(content) : 0 : this.TokenCounter.estimateMessageTokens ? this.TokenCounter.estimateMessageTokens({ role: "system", content }) : this.TokenCounter.estimateTokens(content),
         content
       };
     });
+  }
+  reorderActionPromptBlocks(blocks) {
+    const order = ["action_system_intro", "action_available_actions", "action_examples", "action_roster", "action_recent_actions", "action_recent_messages", "action_provider_schema", "action_final_instruction"];
+    const positions = new Map(order.map((id, index) => [id, index]));
+    return [...blocks].sort((left, right) => (positions.get(left.id) ?? order.length) - (positions.get(right.id) ?? order.length)).map((block, position) => ({ ...block, position }));
   }
   /**
    * Send a request for Summaries (rolling or final).

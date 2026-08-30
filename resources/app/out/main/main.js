@@ -58,7 +58,9 @@ const DEFAULT_PROVIDER_CONFIGS = {
     baseUrl: "https://api.deepseek.com",
     defaultModel: "deepseek-v4-flash",
     defaultParameters: { temperature: 0.7, max_tokens: 2048 },
-    useMinimizedActionsSchema: false
+    useMinimizedActionsSchema: false,
+    actionSchemaDeliveryMode: "optimized_local_validation",
+    deepseekActionStablePrefixOptimization: false
   },
   gemini: {
     apiKey: "",
@@ -137,7 +139,9 @@ const baseProviderConfigSchema = {
     defaultModel: { type: "string" },
     defaultParameters: { type: "object" },
     customContextLength: { type: "number" },
-    useMinimizedActionsSchema: { type: "boolean" }
+    useMinimizedActionsSchema: { type: "boolean" },
+    actionSchemaDeliveryMode: { type: "string", enum: ["official_full_injected", "optimized_local_validation"] },
+    deepseekActionStablePrefixOptimization: { type: "boolean" }
   },
   required: ["instanceId", "providerType"]
 };

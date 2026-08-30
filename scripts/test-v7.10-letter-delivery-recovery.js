@@ -165,9 +165,10 @@ async function testRestartAndNoDuplicate() {
     assert.strictEqual(fs.readFileSync(fixture.effectPath, "utf8"), firstEffect, "restart must not write a duplicate effect while awaiting CK3 acceptance");
     await restarted.clearLettersFile();
     const state = JSON.parse(fs.readFileSync(fixture.pendingPath, "utf8"));
-    assert.strictEqual(state.version, 2);
+    assert.strictEqual(state.version, 3);
     assert.strictEqual(state.awaitingAcceptanceLetterId, null);
     assert.strictEqual(state.letters.length, 0);
+    assert.deepStrictEqual(state.failedLetters, []);
   } finally {
     fixture.cleanup();
   }

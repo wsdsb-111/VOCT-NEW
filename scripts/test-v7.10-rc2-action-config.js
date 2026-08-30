@@ -21,7 +21,9 @@ const actionConfig = {
   customName: "DeepSeek Actions",
   defaultModel: "deepseek-v4-flash",
   defaultParameters: { temperature: 0.1, max_tokens: 512 },
-  useMinimizedActionsSchema: false
+  useMinimizedActionsSchema: false,
+  actionSchemaDeliveryMode: "optimized_local_validation",
+  deepseekActionStablePrefixOptimization: false
 };
 const chatConfig = {
   instanceId: "openrouter",
@@ -67,15 +69,22 @@ const manager = new LLMManager({
   assert.strictEqual(actionRequest.request.temperature, 0.1);
   assert.strictEqual(actionRequest.request.max_tokens, 512);
   assert.strictEqual(actionConfig.useMinimizedActionsSchema, false);
+  assert.strictEqual(actionConfig.actionSchemaDeliveryMode, "optimized_local_validation");
+  assert.strictEqual(actionConfig.deepseekActionStablePrefixOptimization, false);
   assert.strictEqual(summaryRequest.config, summaryConfig);
   assert.strictEqual(summaryRequest.request.temperature, summaryConfig.defaultParameters.temperature, "Summary Provider defaults must remain independent");
 
   assert(mainSource.includes('defaultModel: "deepseek-v4-flash"'));
   assert(mainSource.includes('defaultParameters: { temperature: 0.7, max_tokens: 2048 },\n    useMinimizedActionsSchema: false'), "DeepSeek base config must use the official Full Action schema without changing Chat defaults");
+  assert(mainSource.includes('actionSchemaDeliveryMode: "optimized_local_validation"'), "DeepSeek must default to local-only Full Schema delivery for RC3");
+  assert(mainSource.includes('deepseekActionStablePrefixOptimization: false'), "stable-prefix optimization must remain disabled before real A/B validation");
   assert(rendererSource.includes('useMinimizedActionsSchema: false'), "UI defaults must use the official Full Action schema for DeepSeek");
-  assert(rendererSource.includes("RC2 的 DeepSeek Action Provider 固定使用官方 Full Schema"), "Chinese UI must explain the DeepSeek Full Schema decision");
+  assert(rendererSource.includes("RC3 仍构建官方 Full Schema，并在本地用于官方 ActionEngine 校验"), "Chinese UI must explain the RC3 Full Schema transport decision");
+  assert(rendererSource.includes("须完成 50 次真实 A/B 后再启用"), "UI must disclose the stable-prefix real A/B gate");
   assert(!actionEngineSource.includes('actionsConfig?.providerType === "deepseek"'), "DeepSeek compatibility must not modify the official ActionEngine");
-  assert(settingsRepositorySource.includes('config?.providerType === "deepseek" ? { ...config, useMinimizedActionsSchema: false } : config'), "saved DeepSeek minimized settings must be normalized in the provider config layer");
+  assert(settingsRepositorySource.includes('useMinimizedActionsSchema: false'), "saved DeepSeek minimized settings must be normalized in the provider config layer");
+  assert(settingsRepositorySource.includes('actionSchemaDeliveryMode: config.actionSchemaDeliveryMode || "optimized_local_validation"'), "saved DeepSeek settings must default to RC3 schema transport");
+  assert(settingsRepositorySource.includes('deepseekActionStablePrefixOptimization: config.deepseekActionStablePrefixOptimization === true'), "stable-prefix must require explicit opt-in");
   const actionMethod = providerServiceSource.slice(providerServiceSource.indexOf("async sendActionsRequest"), providerServiceSource.indexOf("async sendSummaryRequest"));
   assert(!actionMethod.includes("temperature: 0.1") && !actionMethod.includes("max_tokens: 512"), "Action tuning must remain configuration-driven");
   let selectedSchema = null;
@@ -114,7 +123,7 @@ const manager = new LLMManager({
   await ActionEngine.evaluateForCharacter({ gameData: { characters: new Map() } }, { id: 1, shortName: "NPC", fullName: "NPC" });
   const expectedFullSchema = buildStructuredResponseJsonSchema({ availableActions: [{ signature: "noOp", args: [], requiresTarget: false, validTargetCharacterIds: [], description: "No operation" }] }, false);
   assert.deepStrictEqual(selectedSchema, expectedFullSchema, "DeepSeek must use the official Full schema even if an old setting requests minimized");
-  console.log("VOTC v7.10-RC2 Action Config: PASS (independent config, 0.1/512 recommendation, DeepSeek official Full schema, chat/summary isolation)");
+  console.log("VOTC v7.10-RC3 Action Config: PASS (Full Schema local validation, deduplicated transport, stable-prefix opt-in, chat/summary isolation)");
 })().catch((error) => {
   console.error(error);
   process.exitCode = 1;
