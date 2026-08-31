@@ -11,7 +11,7 @@ V8.0 在此目录建立结构化、可验证的历史基线；V8.1 增加存档�
 - `temporal-knowledge-gate.js`：严格日期解析和 fail-safe 时间可用性判断；V8.0 仅供 shadow/test 使用。
 - `campaign-identity.js`：验证 CK3 存档 token，派生稳定哈希 ID；无可靠 token 时返回不可持久化 session identity。
 - `worldline-store.js`：校验并原子保存 schema version 1 `worldline.json`，未知/损坏 state 不覆盖。
-- `dynamic-history-service.js`：组合 Campaign Identity 与 WorldlineStore 的唯一 Shadow 入口。
+- `dynamic-history-service.js`：组合 Campaign Identity 与 WorldlineStore 的唯一 Shadow 入口；状态绑定到当前 GameData 的隐藏 `dynamicHistory`，不保留全局 last-writer state。
 
 Schema version：`1`。
 
@@ -31,9 +31,11 @@ CK3 VOTC:CAMPAIGN → LogParser
                DynamicHistoryService
                   ↙             ↘
        CampaignIdentity      WorldlineStore
+                         ↓
+             GameData.dynamicHistory
 ```
 
-原 `game-data/legacy-historical-reference.js` import 路径、函数名与返回结构保持不变。`default.hbs`、Prompt block 顺序、cache anchor 和 stable/dynamic 分类均不读取 V8 shadow state。
+原 `game-data/legacy-historical-reference.js` import 路径、函数名与返回结构保持不变。`dynamicHistory` 和兼容入口 `historicalCampaignIdentity` 均不可枚举，不进入对象展开或 JSON 序列化；`getWorldlineState(gameData)` 只读取指定实例。`default.hbs`、Prompt block 顺序、cache anchor 和 stable/dynamic 分类均不读取 V8 shadow state。
 
 ## 边界
 

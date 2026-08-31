@@ -31,41 +31,63 @@ class TestCharacter {}
     assert.deepStrictEqual(parsedCalls, [parsed]);
 
     const stableIdentity = Object.freeze({ campaignId: `ck3-${"c".repeat(32)}`, source: "ck3_mod_token", persistenceAllowed: true, tokenFingerprint: "c".repeat(64) });
+    const otherIdentity = Object.freeze({ campaignId: `ck3-${"d".repeat(32)}`, source: "ck3_mod_token", persistenceAllowed: true, tokenFingerprint: "d".repeat(64) });
     const sessionIdentity = Object.freeze({ campaignId: "session-fixture", source: "session", persistenceAllowed: false, tokenFingerprint: null });
     const persistedState = Object.freeze({ schemaVersion: 1, campaignId: stableIdentity.campaignId, mode: "shadow" });
+    const otherState = Object.freeze({ schemaVersion: 1, campaignId: otherIdentity.campaignId, mode: "shadow" });
     const storeCalls = [];
     const service = new DynamicHistoryService({
-      identityResolver: { resolve: (token) => token ? stableIdentity : sessionIdentity },
-      worldlineStore: { loadOrCreate: (identity) => { storeCalls.push(identity); return { status: "created", state: persistedState, path: "fixture" }; } }
+      identityResolver: { resolve: (token) => token === "votc8c-123456789012" ? stableIdentity : token === "votc8c-210987654321" ? otherIdentity : sessionIdentity },
+      worldlineStore: { loadOrCreate: (identity) => { storeCalls.push(identity); return { status: "created", state: identity === stableIdentity ? persistedState : otherState, path: "fixture" }; } }
     });
     const stableGameData = { campaignToken: "votc8c-123456789012" };
     const stableResult = service.updateFromGameData(stableGameData);
     assert.strictEqual(stableResult.status, "created");
     assert.strictEqual(stableGameData.historicalCampaignIdentity, stableIdentity);
-    assert.strictEqual(Object.getOwnPropertyDescriptor(stableGameData, "historicalCampaignIdentity").writable, false);
+    assert.strictEqual(Object.getOwnPropertyDescriptor(stableGameData, "historicalCampaignIdentity").enumerable, false);
+    assert.strictEqual(Object.getOwnPropertyDescriptor(stableGameData, "historicalCampaignIdentity").set, undefined);
     assert.throws(() => {
       stableGameData.historicalCampaignIdentity = sessionIdentity;
     }, TypeError);
-    assert.deepStrictEqual(service.getWorldlineState(), persistedState);
-    assert.deepStrictEqual(storeCalls, [stableIdentity]);
+    assert.strictEqual(stableGameData.dynamicHistory.campaignId, stableIdentity.campaignId);
+    assert.strictEqual(stableGameData.dynamicHistory.campaignIdentity, stableIdentity);
+    assert.strictEqual(stableGameData.dynamicHistory.worldlineState, persistedState);
+    assert.strictEqual(service.getWorldlineState(stableGameData), persistedState);
+    assert.strictEqual(service.getWorldlineState(), null, "service must not expose global last-writer state");
+    assert.strictEqual(Object.getOwnPropertyDescriptor(stableGameData, "dynamicHistory").enumerable, false);
+    assert.strictEqual(Object.getOwnPropertyDescriptor(stableGameData, "dynamicHistory").writable, false);
+    assert(!Object.keys(stableGameData).includes("dynamicHistory"));
+    assert(!Object.keys(stableGameData).includes("historicalCampaignIdentity"));
+    assert(!Object.prototype.hasOwnProperty.call({ ...stableGameData }, "dynamicHistory"));
+    assert(!JSON.stringify(stableGameData).includes("dynamicHistory"));
+    assert(!JSON.stringify(stableGameData).includes("historicalCampaignIdentity"));
+    assert.doesNotThrow(() => service.updateFromGameData(stableGameData), "updating the same GameData must be idempotent");
+    assert.deepStrictEqual(storeCalls, [stableIdentity, stableIdentity]);
+
+    const otherGameData = { campaignToken: "votc8c-210987654321" };
+    service.updateFromGameData(otherGameData);
+    assert.strictEqual(otherGameData.dynamicHistory.campaignId, otherIdentity.campaignId);
+    assert.strictEqual(service.getWorldlineState(otherGameData), otherState);
+    assert.strictEqual(service.getWorldlineState(stableGameData), persistedState, "Campaign B must not overwrite Campaign A context");
 
     const sessionGameData = {};
     const sessionResult = service.updateFromGameData(sessionGameData);
     assert.strictEqual(sessionResult.status, "persistence_skipped");
     assert.strictEqual(sessionGameData.historicalCampaignIdentity, sessionIdentity);
-    assert.strictEqual(storeCalls.length, 1, "session identity must never reach persistent store");
+    assert.strictEqual(storeCalls.length, 3, "session identity must never reach persistent store");
 
     const errorService = new DynamicHistoryService({
       identityResolver: { resolve: () => stableIdentity },
       worldlineStore: { loadOrCreate: () => { throw new Error("worldline_schema_unsupported:99"); } }
     });
-    assert.doesNotThrow(() => errorService.updateFromGameData({ campaignToken: "votc8c-123456789012" }), "shadow persistence errors must not block existing runtime");
+    const failedGameData = { campaignToken: "votc8c-123456789012" };
+    assert.doesNotThrow(() => errorService.updateFromGameData(failedGameData), "shadow persistence errors must not block existing runtime");
     assert.strictEqual(errorService.getDiagnostics()[0].code, "WORLDLINE_PERSISTENCE_FAILED");
-    assert.strictEqual(errorService.getWorldlineState(), null);
+    assert.strictEqual(errorService.getWorldlineState(failedGameData), null);
   } finally {
     fs.rmSync(tempRoot, { recursive: true, force: true });
   }
-  console.log("VOTC v8.1 Shadow Integration: PASS (log protocol, persistent gate, diagnostics isolation)");
+  console.log("VOTC v8.1 Shadow Integration: PASS (GameData-scoped hidden metadata, idempotency, diagnostics isolation)");
 })().catch((error) => {
   console.error(error);
   process.exitCode = 1;

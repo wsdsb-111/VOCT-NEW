@@ -5,12 +5,14 @@ const fs = require("fs");
 const path = require("path");
 
 const root = path.resolve(__dirname, "..");
-const mainSource = fs.readFileSync(path.join(root, "resources", "app", "out", "main", "main.js"), "utf8");
-const rendererSource = fs.readFileSync(path.join(root, "resources", "app", "out", "renderer", "assets", "index-Dn3qWlAB.js"), "utf8");
-const actionEngineSource = fs.readFileSync(path.join(root, "resources", "app", "out", "main", "actions", "action-engine.js"), "utf8");
-const settingsRepositorySource = fs.readFileSync(path.join(root, "resources", "app", "out", "main", "config", "settings-repository.js"), "utf8");
+const normalizeEol = (text) => String(text || "").replace(/\r\n/g, "\n");
+const readSource = (...segments) => normalizeEol(fs.readFileSync(path.join(root, ...segments), "utf8"));
+const mainSource = readSource("resources", "app", "out", "main", "main.js");
+const rendererSource = readSource("resources", "app", "out", "renderer", "assets", "index-Dn3qWlAB.js");
+const actionEngineSource = readSource("resources", "app", "out", "main", "actions", "action-engine.js");
+const settingsRepositorySource = readSource("resources", "app", "out", "main", "config", "settings-repository.js");
 const providerServicePath = path.join(root, "resources", "app", "out", "main", "provider-service.js");
-const providerServiceSource = fs.readFileSync(providerServicePath, "utf8");
+const providerServiceSource = normalizeEol(fs.readFileSync(providerServicePath, "utf8"));
 const { LLMManager, TokenCounter } = require(providerServicePath);
 const { createActionEngine } = require(path.join(root, "resources", "app", "out", "main", "actions", "action-engine"));
 const { buildStructuredResponseJsonSchema, buildStructuredResponseSchema } = require(path.join(root, "resources", "app", "out", "main", "actions", "schema"));
@@ -58,6 +60,7 @@ const manager = new LLMManager({
 });
 
 (async () => {
+  assert.strictEqual(normalizeEol("first\r\nsecond\r\n"), "first\nsecond\n", "source assertions must be independent of Windows checkout EOL");
   await manager.sendChatRequest([{ role: "user", content: "chat" }], undefined, false);
   await manager.sendActionsRequest([{ role: "user", content: "action" }], "votc_actions", { type: "object", properties: {}, required: [] });
   await manager.sendSummaryRequest([{ role: "user", content: "summary" }]);

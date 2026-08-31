@@ -174,6 +174,8 @@ V8.0 Historical Baseline 2.0 以用户于 2026-08-31 确认实机通过的 v7.10
 
 V8.1 Campaign Identity + Worldline Store Foundation 在不修改现有 Prompt 和 V6/V7 运行合同的前提下接入 CK3 存档级 token、严格 identity 派生、session fail-closed 降级和原子 `worldline.json`。不同 token 使用独立目录；同 token 跨应用重启加载同一 state；原始 token 不落盘。详见 [V8.1 设计](docs/VOTC_v8.1_Campaign_Identity与Worldline_Store_Foundation设计.md)和 [V8.1 实施报告](docs/v8.1-campaign-identity-worldline-store-implementation-report.md)。
 
+V8.3 前置 Gate A–C 已完成基础设施加固：Windows 源码静态断言统一归一化 EOL；Dynamic History 状态改为绑定当前 GameData，不再读取全局最近一次解析结果；Shadow metadata 不参与枚举、展开或 JSON 序列化，并支持同一 GameData 幂等更新。Campaign Token 的 Save A/B 稳定性仍须真实 CK3 验收。详见 [V8.3 前置修复实施报告](docs/v8.3-prerequisite-fixes-implementation-report.md)。
+
 V7.7 在 V7.6 健康化基础上分阶段拆分主进程：第一阶段将六种模型 Provider 迁入 `providers/index.js`、92 个既有 IPC 注册迁入 `ipc/register-ipc.js`；第二阶段把 `ProviderRegistry`、`TokenCounter` 和 `LLMManager` 迁入 `provider-service.js`，通过显式依赖继续读取用户分别选择的对话、摘要和动作模型。`main.js` 由约 9477 行降至约 6612 行。动作语义同时补齐“共度春宵/鱼水之欢已发生”和“从今以后成为情人/认定灵魂伴侣”等自然完成态表达，并继续排除请求、计划、假设、回忆与失败尝试。当前仓库仍是可运行打包产物，没有能够重新生成这些文件的完整 `src` 工程，因此本阶段不伪造源码构建链。
 
 发布测试统一由 `scripts/test-manifest.js` 声明。本地与 CI 都运行：

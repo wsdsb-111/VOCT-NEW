@@ -6,24 +6,24 @@ class DynamicHistoryService {
     if (!worldlineStore || typeof worldlineStore.loadOrCreate !== "function") throw new Error("dynamic_history_worldline_store_required");
     this.identityResolver = identityResolver;
     this.worldlineStore = worldlineStore;
-    this.worldlineState = null;
     this.diagnostics = [];
   }
 
   updateFromGameData(gameData) {
     if (!gameData || typeof gameData !== "object") throw new Error("dynamic_history_game_data_required");
     const identity = this.identityResolver.resolve(gameData.campaignToken);
-    Object.defineProperty(gameData, "historicalCampaignIdentity", {
-      value: identity,
-      enumerable: true,
-      writable: false,
-      configurable: false
-    });
-    this.worldlineState = null;
-    if (!identity.persistenceAllowed) return { status: "persistence_skipped", state: null, path: null };
+    const dynamicHistory = this.getOrCreateContext(gameData);
+    dynamicHistory.campaignId = identity.campaignId;
+    dynamicHistory.campaignIdentity = identity;
+    dynamicHistory.worldlineState = null;
+    if (!identity.persistenceAllowed) {
+      dynamicHistory.persistenceStatus = "persistence_skipped";
+      return { status: "persistence_skipped", state: null, path: null };
+    }
     try {
       const result = this.worldlineStore.loadOrCreate(identity);
-      this.worldlineState = result.state;
+      dynamicHistory.worldlineState = result.state;
+      dynamicHistory.persistenceStatus = result.status;
       return result;
     } catch (error) {
       const diagnostic = Object.freeze({
@@ -34,12 +34,40 @@ class DynamicHistoryService {
       this.diagnostics.push(diagnostic);
       if (this.diagnostics.length > 100) this.diagnostics.shift();
       console.error("[DynamicHistory] Worldline persistence failed:", diagnostic.message);
+      dynamicHistory.persistenceStatus = "error";
       return { status: "error", state: null, path: null };
     }
   }
 
-  getWorldlineState() {
-    return this.worldlineState;
+  getOrCreateContext(gameData) {
+    if (Object.prototype.hasOwnProperty.call(gameData, "dynamicHistory")) {
+      const context = gameData.dynamicHistory;
+      if (!context || typeof context !== "object") throw new Error("dynamic_history_context_invalid");
+      return context;
+    }
+    const context = {
+      campaignId: null,
+      campaignIdentity: null,
+      worldlineState: null,
+      persistenceStatus: null
+    };
+    Object.defineProperty(gameData, "dynamicHistory", {
+      value: context,
+      enumerable: false,
+      writable: false,
+      configurable: false
+    });
+    Object.defineProperty(gameData, "historicalCampaignIdentity", {
+      get: () => context.campaignIdentity,
+      enumerable: false,
+      configurable: false
+    });
+    return context;
+  }
+
+  getWorldlineState(gameData) {
+    if (!gameData || typeof gameData !== "object") return null;
+    return gameData.dynamicHistory?.worldlineState || null;
   }
 
   getDiagnostics() {
