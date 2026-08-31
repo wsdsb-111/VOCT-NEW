@@ -9,10 +9,13 @@
 3. [V8阶段开发记录.md](V8阶段开发记录.md)：V8 Dynamic Historical Worldline System 的连续开发、冻结边界与验收记录。
 4. [v8.4 GameState 能力勘探报告](v8.4-gamestate-capability-report.md)：CK3 Save 容器、Gamestate、人物/头衔/战争字段和停止边界。
 5. [v8.4 性能基准](v8.4-gamestate-performance-benchmark.md)：指定 `autosave_1.ck3` 的读取、扫描、Query、索引和内存检查点。
-6. [README_摘要系统.md](README_摘要系统.md)：Memory Engine 2.5 的存储、冻结召回、Turn Recall、写入和生命周期规则。
-7. [V7阶段优化记录.md](V7阶段优化记录.md)：V7/V7.x 的连续开发记录。
-8. [V6阶段优化记录.md](V6阶段优化记录.md)：V6/V6.x 的动作系统与基础设施记录。
-9. 需要核对具体方案时，再阅读版本设计文档和实施报告。
+6. [v8.4 Historical Definition ID 报告](v8.4-historical-definition-id-report.md)：历史源定义键、Runtime ID、`character_lookup` 与当前不确定性。
+7. [v8.4 Mod 历史人物源报告](v8.4-modded-historical-character-source-report.md)：当前 active playset、岳飞/辛弃疾源文件和同名候选。
+8. [v8.4 Historical ID UI/Debug 报告](v8.4-historical-id-ui-source-report.md)：CK3 `GetHistoryId`、debug.log 与 VOTC probe 边界。
+9. [README_摘要系统.md](README_摘要系统.md)：Memory Engine 2.5 的存储、冻结召回、Turn Recall、写入和生命周期规则。
+10. [V7阶段优化记录.md](V7阶段优化记录.md)：V7/V7.x 的连续开发记录。
+11. [V6阶段优化记录.md](V6阶段优化记录.md)：V6/V6.x 的动作系统与基础设施记录。
+12. 需要核对具体方案时，再阅读版本设计文档和实施报告。
 
 ## 文档分类
 
@@ -24,6 +27,11 @@
 - [v8.4-gamestate-schema-notes.md](v8.4-gamestate-schema-notes.md)：顶层 section、Character、Title、War 和历史人物解析字段笔记。
 - [v8.4-gamestate-adapter-index-proposal.md](v8.4-gamestate-adapter-index-proposal.md)：后续 adapter、worker、normalized snapshot 和 bounded index 提案。
 - [v8.4-live-probe-delta-hook-feasibility.md](v8.4-live-probe-delta-hook-feasibility.md)：Workshop debug probe、live date 和 delta hook 可行性。
+- [v8.4-historical-definition-id-report.md](v8.4-historical-definition-id-report.md)：Definition ID、Historical ID 与 Runtime ID 的证据和稳定性边界。
+- [v8.4-definition-runtime-mapping-report.md](v8.4-definition-runtime-mapping-report.md)：`character_lookup` 精确映射、控制组和全 Gamestate 数字反向搜索。
+- [v8.4-modded-historical-character-source-report.md](v8.4-modded-historical-character-source-report.md)：当前启用 Mod 的历史人物源和同名冲突。
+- [v8.4-historical-id-ui-source-report.md](v8.4-historical-id-ui-source-report.md)：CK3 UI/Debug getter、日志和 VOTC 临时 probe 可行性。
+- [v8.4-historical-definition-catalog-proposal.md](v8.4-historical-definition-catalog-proposal.md)：只读 Definition Catalog 原型与正式 adapter 前置 Gate。
 - [VOTC_v8.1_Campaign_Identity与Worldline_Store_Foundation设计.md](VOTC_v8.1_Campaign_Identity与Worldline_Store_Foundation设计.md)：V8.1 存档身份协议、session 降级、Worldline schema、原子持久化和 Shadow 集成合同。
 - [v8.1-campaign-identity-worldline-store-implementation-report.md](v8.1-campaign-identity-worldline-store-implementation-report.md)：V8.0 P0/P1 审计、V8.1 应用与 Workshop 实施、自动化验证和实机边界。
 - [v8.3.1-historical-figure-dashboard-implementation-report.md](v8.3.1-historical-figure-dashboard-implementation-report.md)：V8.3.1 实机诊断 Snapshot、Overlay Dashboard、append-only Ground Truth 与冻结边界。
@@ -44,6 +52,11 @@
 - [v8.4-gamestate-schema-notes.md](v8.4-gamestate-schema-notes.md)
 - [v8.4-gamestate-adapter-index-proposal.md](v8.4-gamestate-adapter-index-proposal.md)
 - [v8.4-live-probe-delta-hook-feasibility.md](v8.4-live-probe-delta-hook-feasibility.md)
+- [v8.4-historical-definition-id-report.md](v8.4-historical-definition-id-report.md)
+- [v8.4-definition-runtime-mapping-report.md](v8.4-definition-runtime-mapping-report.md)
+- [v8.4-modded-historical-character-source-report.md](v8.4-modded-historical-character-source-report.md)
+- [v8.4-historical-id-ui-source-report.md](v8.4-historical-id-ui-source-report.md)
+- [v8.4-historical-definition-catalog-proposal.md](v8.4-historical-definition-catalog-proposal.md)
 - [VOTC_v8.1_Campaign_Identity与Worldline_Store_Foundation设计.md](VOTC_v8.1_Campaign_Identity与Worldline_Store_Foundation设计.md)
 - [v8.1-campaign-identity-worldline-store-implementation-report.md](v8.1-campaign-identity-worldline-store-implementation-report.md)
 - [v8.3.1-historical-figure-dashboard-implementation-report.md](v8.3.1-historical-figure-dashboard-implementation-report.md)
