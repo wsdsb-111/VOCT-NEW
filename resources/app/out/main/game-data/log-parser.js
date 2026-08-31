@@ -4,7 +4,7 @@ const fs = require("fs");
 const readline = require("readline");
 const { inferGenderFromPronoun } = require("./character");
 
-function createLogParser({ GameData, Character }) {
+function createLogParser({ GameData, Character, onGameDataParsed = null }) {
   async function parseLog(debugLogPath) {
     console.log(`parseLog: Processing debug log at path: ${debugLogPath}`);
     let gameData;
@@ -73,6 +73,11 @@ function createLogParser({ GameData, Character }) {
             gameData.letterData = letterData;
           }
         }
+        continue;
+      }
+      if (line.includes("VOTC:CAMPAIGN/")) {
+        const campaignMatch = line.match(/VOTC:CAMPAIGN\/(votc8c-[0-9]{12})(?![A-Za-z0-9_-])/);
+        if (gameData) gameData.campaignToken = campaignMatch ? campaignMatch[1] : null;
         continue;
       }
       if (line.includes("VOTC:IN")) {
@@ -692,6 +697,7 @@ function createLogParser({ GameData, Character }) {
         value: Number(splits[1])
       };
     }
+    if (gameData && typeof onGameDataParsed === "function") await onGameDataParsed(gameData);
     console.log(gameData);
     return gameData;
   }

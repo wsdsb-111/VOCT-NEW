@@ -4,6 +4,9 @@
 
 | 版本 | 重点 | 详细记录 |
 | --- | --- | --- |
+| v8.1 Campaign Identity + Worldline Store Foundation | Workshop 2.0.5 新增存档持久化随机 token 和 `VOTC:CAMPAIGN` 协议；应用以完整 SHA-256 指纹派生隔离的 `campaignId`，只在可靠 token 下原子创建 schema version 1 `worldline.json`。旧模组、畸形 token、损坏 JSON、未知 schema、身份/指纹不匹配均 fail-closed 且不影响既有对话。V8.0 审计同时修复日期、事实归属、区间空洞与运行时可变数据 P1；139 个测试文件全部分类，70 个 Release Groups 通过 | [设计](docs/VOTC_v8.1_Campaign_Identity与Worldline_Store_Foundation设计.md) / [实施报告](docs/v8.1-campaign-identity-worldline-store-implementation-report.md) / [V8 阶段记录](docs/V8阶段开发记录.md) |
+| v8.0 Historical Baseline 2.0 | 在用户确认 v7.10.1 全部既有人工 Gate 通过的基线上，将 18 个 legacy 年份分支迁移为 schema version 1 的结构化 period/event/figure 数据；新增 Legacy Compatibility Adapter 与 fail-safe Temporal Knowledge Gate。原历史 import、函数和 Prompt 四字段输出保持兼容，`default.hbs`、stable prefix、Memory、Conversation、Action、Letter、Relationship 与 Run Command Queue 均冻结；136 个测试文件全部分类，67 个 Release Groups 纳入 800–1400 parity、边界、schema、Temporal、Prompt/cache 与依赖门禁 | [实施报告](docs/v8.0-historical-baseline-2.0-implementation-report.md) / [V8 阶段记录](docs/V8阶段开发记录.md) |
+| v7.10.1 Stable Baseline | 2026-08-31 用户确认此前待验收的真实 CK3、Provider、连续重启、Action、Letter、Conversation Close、缓存和关系链路均已通过并正常工作；该状态作为 V8.0 的已验收输入基线 | [v7.10 实施报告](docs/v7.10-official-action-letter-recovery-implementation-report.md) |
 | v7.10.0-RC6 Final Rev.3 Candidate | 修复 6.2 完成 Run Command Queue 崩溃安全收口：首次 dispatch 先 durable 记录可能执行，再写 `votc.txt`；任一写入历史（`writeAttempts` / `lastWrittenAt` / `writtenAt`）无 ACK 时只进入 STALLED；损坏状态文件 fail-closed；CK3 路径与 ACK Tail 作为可回滚事务切换。ACK 继续使用最多 64 MB 反向分块扫描，Conversation 不再清理 debug.log，Renderer/preload/IPC 保持 BLOCKED/STALLED 表层。T1–T18 与 62 个 Release Groups 已通过；真实 CK3 与 Provider Gate 仍待人工验收，未标 Stable | [实施报告](docs/v7.10-official-action-letter-recovery-implementation-report.md) |
 | v7.10.0-RC6 Final Rev.2 Candidate | Rev2 以持久化串行 Run Command Queue 统一 Action/Letter/Conversation Close；生命周期补丁要求启动先做历史 ACK reconciliation 并建立实时 Tail，再恢复未确认队首。状态落盘失败禁止 dispatch，ACK 超时进入 STALLED 且只能由用户在重复效果风险提示后重试或取消。Date Tracker 区分 Tail、Producer、Fresh Marker 与 Progress；投递日固定为 Payload `sendDay + delay`。第三方亲属资料继续使用统一 Kinship Resolver，本轮未修改其语义。真实崩溃恢复、并发与 D0–D5 Gate 通过前不标 Stable | [实施报告](docs/v7.10-official-action-letter-recovery-implementation-report.md) |
 | v7.10.0-RC5 Candidate | 在 Official VOTC 2.0.3 Action Core 外新增只读 Critical Action Availability Diagnostics，覆盖受伤、死亡与七类关系动作的可用性、合法目标、来源/目标、选择、校验和 Effect 结果；新增默认关闭的 `state-transition-overlay/v1` 与 DeepSeek Stable Prefix A/B/C，稳定排序只接受 `blockId` 元数据并在异常时保持官方顺序安全回退。RC4 Letter 实现不变；真实 Recall、Wrong Target、Critical FP、缓存与 CK3 Gate 未完成前不标 Stable | [实施报告](docs/v7.10-official-action-letter-recovery-implementation-report.md) |
@@ -34,5 +37,5 @@
 ## 当前维护约定
 
 - 当前应用基线以根目录 [README.md](README.md) 的“版本信息”为准。
-- V6 后续记录只追加到 [V6阶段优化记录.md](docs/V6阶段优化记录.md)，V7 后续记录只追加到 [V7阶段优化记录.md](docs/V7阶段优化记录.md)。
+- V6、V7、V8 后续记录分别追加到对应的 [V6阶段优化记录.md](docs/V6阶段优化记录.md)、[V7阶段优化记录.md](docs/V7阶段优化记录.md)和 [V8阶段开发记录.md](docs/V8阶段开发记录.md)。
 - 新增独立设计方案或实施报告时，在本表增加一行，并同步更新 [docs/README.md](docs/README.md) 的分类列表。

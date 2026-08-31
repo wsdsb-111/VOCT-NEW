@@ -78,6 +78,14 @@ const archivedChecks = [
 
 const releaseChecks = [
   { group: "syntax", args: ["--check", "resources/app/out/main/main.js"] },
+  { group: "v8.0-historical-baseline-parity", script: "test-v8.0-historical-baseline-parity.js" },
+  { group: "v8.0-historical-schema", script: "test-v8.0-historical-schema.js" },
+  { group: "v8.0-temporal-gate", script: "test-v8.0-temporal-gate.js" },
+  { group: "v8.0-prompt-compatibility", script: "test-v8.0-prompt-compatibility.js" },
+  { group: "v8.0-cache-and-boundaries", script: "test-v8.0-cache-and-boundaries.js" },
+  { group: "v8.1-campaign-identity", script: "test-v8.1-campaign-identity.js" },
+  { group: "v8.1-worldline-store", script: "test-v8.1-worldline-store.js" },
+  { group: "v8.1-shadow-integration", script: "test-v8.1-shadow-integration.js" },
   { group: "v7.10-rc2-action-config", script: "test-v7.10-rc2-action-config.js" },
   { group: "v7.10-rc2-terra-action-token-metadata", script: "test-v7.10-rc2-action-token-metadata.js" },
   { group: "v7.10-rc2-terra-letter-effect-diagnostics", script: "test-v7.10-rc2-letter-effect-diagnostics.js" },

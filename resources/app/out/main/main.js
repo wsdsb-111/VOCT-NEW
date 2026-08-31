@@ -17,6 +17,9 @@ const { MEMORY_ENGINE_VERSION } = require("./version");
 const { registerIpcHandlers } = require("./ipc/register-ipc");
 const { createPaths } = require("./config/paths");
 const { getHistoricalReferenceByYear } = require("./game-data/legacy-historical-reference");
+const { CampaignIdentityResolver } = require("./historical-system/campaign-identity");
+const { WorldlineStore } = require("./historical-system/worldline-store");
+const { DynamicHistoryService } = require("./historical-system/dynamic-history-service");
 
 const log = require("electron-log");
 const electronUpdater = require("electron-updater");
@@ -76,6 +79,7 @@ const {
   VOTC_SUMMARIES_DIR,
   VOTC_MEMORY_DIR,
   VOTC_MEMORY_RECOVERY_DIR,
+  VOTC_DYNAMIC_HISTORY_DIR,
   VOTC_ACTIONS_DIR,
   VOTC_USAGE_ANALYTICS_FILE,
   VOTC_PROMPTS_DIR,
@@ -86,6 +90,10 @@ const {
   DEFAULT_PROMPTS_DIR
 } = createPaths(electron.app);
 const memoryEngine = new memorySystem.MemoryEngine({ baseDir: VOTC_MEMORY_DIR, summaryFoldersDir: VOTC_SUMMARIES_DIR, recoveryDir: VOTC_MEMORY_RECOVERY_DIR });
+const dynamicHistoryService = new DynamicHistoryService({
+  identityResolver: new CampaignIdentityResolver(),
+  worldlineStore: new WorldlineStore({ rootDir: VOTC_DYNAMIC_HISTORY_DIR })
+});
 const DEFAULT_USERDATA_DIR$1 = DEFAULT_PROMPTS_DIR;
 const DEFAULT_MAIN_TEMPLATE_PATH = "system/default.hbs";
 const DEFAULT_LETTER_TEMPLATE_PATH = "system/letter.hbs";
@@ -339,7 +347,7 @@ const GameData = createGameData({
 const { Character } = require("./game-data/character");
 const fs = require("fs");
 const { createLogParser } = require("./game-data/log-parser");
-const parseLog = createLogParser({ GameData, Character });
+const parseLog = createLogParser({ GameData, Character, onGameDataParsed: (gameData) => dynamicHistoryService.updateFromGameData(gameData) });
 function createMessage(input) {
   return {
     ...input,

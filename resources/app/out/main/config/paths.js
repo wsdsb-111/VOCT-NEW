@@ -11,6 +11,7 @@ function createPaths(app) {
     VOTC_SUMMARIES_DIR: path.join(VOTC_DATA_DIR, "conversation_summaries"),
     VOTC_MEMORY_DIR: path.join(VOTC_DATA_DIR, "memory"),
     VOTC_MEMORY_RECOVERY_DIR: path.join(VOTC_DATA_DIR, "memory_recovery"),
+    VOTC_DYNAMIC_HISTORY_DIR: path.join(VOTC_DATA_DIR, "dynamic_history"),
     VOTC_ACTIONS_DIR: path.join(VOTC_DATA_DIR, "actions"),
     VOTC_USAGE_ANALYTICS_FILE: path.join(VOTC_DATA_DIR, "usage-analytics.json"),
     VOTC_PROMPTS_DIR,

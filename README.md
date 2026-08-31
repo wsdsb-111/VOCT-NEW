@@ -7,7 +7,8 @@ Voices of the Court 是一个面向《Crusader Kings III》（CK3）的沉浸式
 ## 主要功能
 
 - **CK3 角色扮演对话**：根据角色的性格、头衔、关系、财富、信仰、处境和当前场景生成回复。
-- **动态历史背景**：从游戏日期提取年份，自动判断唐、五代十国、北宋、南宋和元朝等时期，并提供对应的事件和人物背景。
+- **Historical Baseline 2.0**：从游戏日期提取年份，以 V8 结构化时期、事件和人物数据生成与 v7.10.1 字节等价的唐、五代十国、北宋、南宋和元初历史背景；Temporal Knowledge Gate 在 v8.0 仅以 shadow/pure logic 运行。
+- **Campaign Identity / Worldline Store**：V8.1 从 CK3 存档读取稳定 token，以哈希隔离 `dynamic_history/<campaignId>/worldline.json`；旧模组或无效 token 只使用进程级 identity，不写世界线数据。
 - **历史认知边界**：提示词要求角色只使用当前年份已经发生、写成、流传或成名的信息，避免引用未来人物、事件、诗词和典故。
 - **当前政局优先**：皇帝和年号从实际游戏角色数据中识别，支持玩家篡位或改变历史后的沙盒玩法。
 - **Memory Engine 2.5**：保留 `角色ID_姓名/与对方的对话.json` 人物目录与 2.4 写入合同，并新增整场冻结的 Session Topic Anchor，以及只在明确回忆意图下触发、Top1、默认 256 Token 的 Turn Recall。
@@ -71,13 +72,13 @@ V7.6 起，Provider API Key 使用 Electron `safeStorage` 加密后写入独立�
 
 历史认知规则还会要求模型在提及人物、事件、书籍、诗词、典故、制度或技术时，先将其出现、发生、写成、成名或流传时间与当前年份比较。年份不确定时，角色应回答“不曾听闻”或“并不知晓”，而不是用现代知识补全。
 
-默认提示词位于：
+默认提示词及其动态 `world_context` 段位于：
 
 `resources/app/default_userdata/prompts/system/default.hbs`
 
-动态历史模板位于默认用户数据目录：
+V8.0 将旧年份分支迁移到 `resources/app/out/main/historical-system/`，并通过兼容适配器继续向 `GameData.historicalReferenceInfo` 返回原来的 `period / context / notableEvents / notableFigures`。当前 Prompt 文本、block 顺序、stable/dynamic 标记和 cache anchor 均未改变；Temporal Knowledge Gate 对无效日期和未知来源时间 fail-safe，但本阶段不改写最终 Prompt。
 
-`resources/app/default_userdata/prompts/system/default.hbs`
+V8.1 新增独立 Campaign Identity、WorldlineStore 与 DynamicHistoryService。Workshop 2.0.5 在存档内持久化 12 位随机 token，并通过 `VOTC:CAMPAIGN` 日志协议发送；应用只保存 SHA-256 指纹和派生 `campaignId`。可靠 token 才允许在 `%APPDATA%/VOTC/votc_data/dynamic_history/` 原子创建 schema version 1 的 `worldline.json`；缺失、畸形 token、损坏文件、未知 schema 或身份不匹配均 fail-closed。该状态仍为 shadow metadata，不进入 Prompt。
 
 V7.6 默认模板明确区分长期稳定记忆、当前话题记忆与本轮事实，并要求角色结合性格、关系、好感、地位和情绪自然完整作答。升级后，程序只自动迁移内容仍与旧版默认值完全一致的模板和末尾指令；玩家自行编辑过的提示词不会被覆盖。修改打包目录中的 `main.js` 后，需要完全退出并重启应用。
 
@@ -135,6 +136,7 @@ voices-of-the-court/
 ├─ resources/app/out/main/window-manager.js          # Electron 窗口构造
 ├─ resources/app/out/main/secure-provider-secrets.js # safeStorage 密钥落盘
 ├─ resources/app/out/main/memory-system/             # Memory Engine 2.5
+├─ resources/app/out/main/historical-system/         # V8 Baseline、Campaign Identity 与 Worldline Store
 ├─ resources/app/out/main/actions/                   # Official VOTC 2.0.3 Action System
 ├─ resources/app/out/main/conversation/              # 对话与在场生命周期基础设施
 ├─ resources/app/out/main/letters/                   # Official Letter + Delivery Recovery 外层
@@ -168,6 +170,10 @@ V7.10.0-RC6 Final Rev.2 在 RC6 Letter 收口上继续修复生命周期与亲�
 
 V7.10.0-RC6 Final Rev.3 Candidate（修复 6.2）在上述队列合同上完成验证与机械性收尾：首次 dispatch 会先 durable 地记录可能已执行，再写入 `votc.txt`，因此进程崩溃不会把已写 Effect 误判为未写；启动时凡有 `writeAttempts`、`lastWrittenAt` 或 `writtenAt` 历史但未 ACK 的命令只进入 `STALLED`。仅路径不可用的零历史命令进入 `BLOCKED` 并支持安全重试或取消；文件写入已进入不确定区时保守停在 `STALLED`。损坏的队列状态会 fail-closed，禁止清空或 dispatch。ACK 扫描改为最多 64 MB 的反向 1 MB 分块且只匹配当前 Pending。CK3 路径与 ACK Tail 作为同一事务切换，失败会回滚两者；`Conversation.end()` 不再改写 CK3 `debug.log`。状态页补齐 BLOCKED 的安全提示与操作，保留 STALLED 的重复 Effect 风险警告。T1–T18 与完整发布回归均已通过；真实 CK3、Provider 与连续重启仍属于人工验收，当前未标 Stable。详见 [v7.10 实施报告](docs/v7.10-official-action-letter-recovery-implementation-report.md)。
 
+V8.0 Historical Baseline 2.0 以用户于 2026-08-31 确认实机通过的 v7.10.1 为基线，将 18 个 legacy 年份区间迁移为 schema version 1 的结构化 period/event/figure 数据，并新增 Legacy Compatibility Adapter 与 fail-safe Temporal Knowledge Gate。原 `getHistoricalReferenceByYear(year)` 路径、函数名和四字段输出保持不变；800–1400 全年 parity、边界、Prompt 字节等价和 stable prefix hash 均进入发布门禁。v8.0 不启用 campaign、worldline、figure binding、divergence 或 projector，也不修改 Memory、Conversation、Action、Letter、Relationship、Run Command Queue 和 `default.hbs`。详见 [V8 阶段记录](docs/V8阶段开发记录.md)和 [v8.0 实施报告](docs/v8.0-historical-baseline-2.0-implementation-report.md)。
+
+V8.1 Campaign Identity + Worldline Store Foundation 在不修改现有 Prompt 和 V6/V7 运行合同的前提下接入 CK3 存档级 token、严格 identity 派生、session fail-closed 降级和原子 `worldline.json`。不同 token 使用独立目录；同 token 跨应用重启加载同一 state；原始 token 不落盘。详见 [V8.1 设计](docs/VOTC_v8.1_Campaign_Identity与Worldline_Store_Foundation设计.md)和 [V8.1 实施报告](docs/v8.1-campaign-identity-worldline-store-implementation-report.md)。
+
 V7.7 在 V7.6 健康化基础上分阶段拆分主进程：第一阶段将六种模型 Provider 迁入 `providers/index.js`、92 个既有 IPC 注册迁入 `ipc/register-ipc.js`；第二阶段把 `ProviderRegistry`、`TokenCounter` 和 `LLMManager` 迁入 `provider-service.js`，通过显式依赖继续读取用户分别选择的对话、摘要和动作模型。`main.js` 由约 9477 行降至约 6612 行。动作语义同时补齐“共度春宵/鱼水之欢已发生”和“从今以后成为情人/认定灵魂伴侣”等自然完成态表达，并继续排除请求、计划、假设、回忆与失败尝试。当前仓库仍是可运行打包产物，没有能够重新生成这些文件的完整 `src` 工程，因此本阶段不伪造源码构建链。
 
 发布测试统一由 `scripts/test-manifest.js` 声明。本地与 CI 都运行：
@@ -176,22 +182,24 @@ V7.7 在 V7.6 健康化基础上分阶段拆分主进程：第一阶段将六种
 node scripts\test-release.js
 ```
 
-清单会覆盖全部 `test-*.js`。V7.10.0-RC6 Final Rev.3 Candidate 当前分类 131 个测试文件：62 个直接发布组，68 个依赖已退休 AE3/AE4/Social 语义的历史测试明确归档，另 1 个为统一发布入口；Run Command Recovery T1–T18 覆盖启动 ACK reconciliation、Conversation 不 replay、错误 ACK、连续 FIFO、持久化失败 fail-closed、BLOCKED 安全恢复、STALLED 不自动重放、人工重试/取消、只读 debug.log、CK3 路径切换、超过旧 4 MB 窗口的 ACK、写入前 durable dispatch intent、`lastWrittenAt` 迁移、损坏状态 fail-closed 和路径/Tail 事务回滚，并继续覆盖 Rev2 Queue、Date Producer、亲属关系 R1–R10、RC6 A3、Payload Race、Letter UI/IPC/Transport 和 RC5 Action 非回归。
+清单会覆盖全部 `test-*.js`。V8.1 当前分类 139 个测试文件：70 个直接发布组，68 个依赖已退休 AE3/AE4/Social 语义的历史测试明确归档，另 1 个为统一发布入口。V8.0 五组门禁继续覆盖 legacy parity、Schema、Temporal、Prompt/cache 与依赖冻结；V8.1 三组门禁覆盖稳定 identity、不同存档隔离、无可靠 ID 零持久化、Worldline schema/原子写入/损坏保护及 Shadow 集成。既有 Run Command Recovery T1–T18、Memory、Conversation、Action、Letter、Relationship、Date Producer 与缓存回归继续执行。
 
 ## 版本信息
 
 - 外挂 UI 版本：v2.0.4
-- 当前应用功能基线：v7.10.0-RC6 Final Rev.3 Candidate（实机候选，未宣称 Stable）
-- CK3 模组版本：Voices of the Court 2.0.4
+- 当前应用功能基线：v8.1 Campaign Identity + Worldline Store Foundation（Shadow Mode）
+- CK3 模组版本：Voices of the Court 2.0.5
 - 模组支持版本：CK3 1.18.*
 - UI 主题：宫廷编年史风格（深红、暗金、羊皮纸文本层级）
 - UI 主题切换：羊皮卷、骑士纹章、水墨画卷三套完整历史风格；分别拥有独立背景、边框结构、按钮造型、消息卡片、输入框、字体和滚动条，并可自动保存选择
 - UI 素材生成提示词：参见 [docs/UI_ASSET_PROMPTS_2.0.3.md](docs/UI_ASSET_PROMPTS_2.0.3.md)
-- 当前重点：V7.10.0-RC6 Final Rev.3 Candidate / CK3 ACK Queue / BLOCKED-STALLED Recovery / Read-only debug.log / Date Producer Recovery / Canonical Relative Profile / Unified Kinship Resolver；Official VOTC 2.0.3 Action Prompt/Selector、Memory Engine 2.5、外挂 UI 2.0.4 与 CK3 Workshop 2.0.4 保持基线
+- 当前重点：V8.1 存档级 Campaign Identity、Worldline schema v1、原子持久化和 Shadow diagnostics；Official VOTC 2.0.3 Action、Memory Engine 2.5、外挂 UI 2.0.4 与 Prompt/cache 合同保持冻结
 
 ## 已知限制
 
 - 历史知识核验依赖模型自身的年代知识，提示词规则可以显著降低穿越，但不能替代外部历史数据库。
+- V8.1 Campaign Identity 和 Worldline Store 仍只在 Shadow Mode 运行，不改变当前 Prompt；GameStateSnapshot、统治者解析、世界线分叉、人物绑定和动态投影按 v8.2–v8.6 分阶段实现。
+- Workshop 2.0.5 的存档 token 跨重启与不同新存档隔离仍需真实 CK3 保存/读档 Gate；旧模组不会持久化世界线，但现有对话仍可运行。
 - CK3 日志格式、角色头衔语言和本地化文本变化时，可能影响年份或皇帝识别。
 - DeepSeek 等服务商的上下文缓存由服务端管理，命中率会受到请求前缀、模型、账号隔离和缓存生命周期影响。
 - 人物摘要目录是 Memory Engine 2.5 的可见长期记忆数据；清理或迁移前请先备份 `%APPDATA%/VOTC/votc_data/conversation_summaries`。
@@ -210,6 +218,10 @@ V6/V6.x 的完整阶段记录统一维护在 [docs/V6阶段优化记录.md](docs
 ## V7 阶段优化记录
 
 V7/V7.x 的 Memory Engine 与后续优化统一记录在 [docs/V7阶段优化记录.md](docs/V7阶段优化记录.md)。
+
+## V8 阶段开发记录
+
+V8 Dynamic Historical Worldline System 的阶段实现、冻结边界和验收结果统一记录在 [docs/V8阶段开发记录.md](docs/V8阶段开发记录.md)。
 
 ## 许可证
 
