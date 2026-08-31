@@ -26,10 +26,12 @@ const { createHarness } = require("./letter-pipeline-test-helper");
   try {
     assert.strictEqual(await timeout.manager.processLatestLetter(), null);
     const pipeline = timeout.manager.getAllLetterStatuses().pipeline;
-    assert.strictEqual(pipeline.state, timeout.LetterPipelineState.CONTEXT_TIMEOUT);
+    assert.strictEqual(pipeline.state, timeout.LetterPipelineState.PAYLOAD_INVALID);
     assert.strictEqual(pipeline.attemptCount, 3);
-    assert.strictEqual(pipeline.lastParseResult, "letter_payload_missing");
+    assert.strictEqual(pipeline.lastParseResult, "PAYLOAD_INCOMPLETE_TIMEOUT");
     assert.strictEqual(pipeline.debugLogPath, timeout.debugLogPath);
+    const timeoutStatus = timeout.manager.getAllLetterStatuses().letters.find((status) => status.payloadErrorCode === "PAYLOAD_INCOMPLETE_TIMEOUT");
+    assert(timeoutStatus?.letterId.startsWith("invalid_payload_"));
     assert.strictEqual(timeout.providerCalls.length, 0, "context timeout must happen before any provider request");
     console.log("VOTC v7.9.2 letter payload race: PASS (bounded retry, delayed payload and timeout diagnostics)");
   } finally {

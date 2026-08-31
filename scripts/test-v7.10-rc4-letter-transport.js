@@ -30,7 +30,7 @@ try {
   assert(legacy.success);
   assert.strictEqual(fs.readFileSync(path.join(runDir, "letters.txt"), "utf8"), 'debug_log = "VOTC:LETTER_TRANSPORT/A/test-a"', "T01 legacy diagnostic must be marker-only in letters.txt");
   transport.recordTransportDiagnostic("A1", "RUN_FILE_NOT_EXECUTED");
-  assert.strictEqual(transport.getOutboundMode(), LetterEffectTransportMode.LEGACY, "T02 A1 timeout alone must not migrate outbound transport");
+  assert.strictEqual(transport.getOutboundMode(), LetterEffectTransportMode.VOTC, "T02 RC6 fixes formal outbound transport to votc.txt independently of legacy diagnostic results");
 
   const votc = transport.writeDiagnosticEffect('debug_log = "VOTC:LETTER_TRANSPORT/B/test-b"', LetterEffectTransportMode.VOTC);
   assert(votc.success);

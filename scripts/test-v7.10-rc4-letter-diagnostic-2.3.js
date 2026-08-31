@@ -58,15 +58,23 @@ try {
 
     const confirmArtifact = (result) => {
       manager.processLogLine(`[debug] ${result.marker}`);
-      assert.strictEqual(manager.effectDiagnosticStages[result.stage].result, "ARTIFACT_VISUAL_CHECK_REQUIRED");
+      if (result.stage === "A3") {
+        manager.processLogLine(`[debug] ${result.scopeMarker}`);
+        manager.processLogLine(`[debug] ${result.postMarker}`);
+        assert.strictEqual(manager.effectDiagnosticStages[result.stage].result, "A3_VISUAL_CHECK_REQUIRED");
+      } else {
+        assert.strictEqual(manager.effectDiagnosticStages[result.stage].result, "ARTIFACT_VISUAL_CHECK_REQUIRED");
+      }
       assert(!fs.readFileSync(path.join(runDir, "votc.txt"), "utf8").includes(result.marker), "executed artifact diagnostics must not pollute the next stage");
       assert.strictEqual(manager.confirmEffectDiagnostic(result.stage, true).result, "PASS");
     };
     const a3 = manager.runEffectDiagnostic("A3");
     assert(a3.success && a3.creatorScopeName === "root");
     let text = fs.readFileSync(path.join(runDir, "votc.txt"), "utf8");
-    assert(text.startsWith(`debug_log = "${a3.marker}"\ncreate_artifact = {`));
+    assert(text.startsWith(`root = {\n\tdebug_log = "${a3.marker}"\n\tcreate_artifact = {`));
     assert(text.includes("creator = root"));
+    assert(text.includes("modifier = artifact_monthly_minor_prestige_1_modifier"));
+    assert(text.includes("wealth = scope:wealth"));
     confirmArtifact(a3);
 
     const letter = { letterId: "letter_23", content: "known", totalDays: 1, delay: 0 };

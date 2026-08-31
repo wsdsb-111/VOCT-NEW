@@ -19067,7 +19067,7 @@ function LettersStatusModal({ onClose }) {
     loadStatuses();
   }, []);
   reactExports.useEffect(() => {
-    if (snapshot?.lastEffectDiagnostic?.result !== "WAITING_FOR_CK3_EXECUTION") return void 0;
+    if (!["WAITING_FOR_CK3_EXECUTION", "A3_PRE_WAIT", "A3_EFFECT_ENTERED", "A3_POST_WAIT", "A3_SCOPE_CONFIRMED"].includes(snapshot?.lastEffectDiagnostic?.result)) return void 0;
     const timer = setTimeout(loadStatuses, 1e3);
     return () => clearTimeout(timer);
   }, [snapshot?.timestamp, snapshot?.lastEffectDiagnostic?.result]);
@@ -19116,6 +19116,19 @@ function LettersStatusModal({ onClose }) {
       await loadStatuses();
     } catch (error) {
       console.error("Failed to retry letter response:", error);
+      setDiagnosticResult({ success: false, error: error?.message || "Unknown error" });
+    } finally {
+      setRetryingLetterId(null);
+    }
+  };
+  const retryIncompletePayload = async (errorRecordId) => {
+    setRetryingLetterId(errorRecordId);
+    try {
+      const result = await window.lettersAPI.retryPayload(errorRecordId);
+      setDiagnosticResult(result?.success ? { success: true, stage: "PAYLOAD", result: `已从原触发上下文重新读取为 ${result.letterId}` } : { success: false, error: result?.error || "重新读取失败" });
+      await loadStatuses();
+    } catch (error) {
+      console.error("Failed to reread letter payload:", error);
       setDiagnosticResult({ success: false, error: error?.message || "Unknown error" });
     } finally {
       setRetryingLetterId(null);
@@ -19218,7 +19231,7 @@ function LettersStatusModal({ onClose }) {
         return "#6c757d";
     }
   };
-  const getStatusText = (status) => {
+  const getStatusText = (status, payloadErrorCode = null) => {
     switch (status) {
       case "generating":
         return t("lettersModal.statusGenerating");
@@ -19235,7 +19248,9 @@ function LettersStatusModal({ onClose }) {
       case "send_failed":
         return t("lettersModal.statusSendFailed");
       case "payload_invalid":
-        return "信件日期数据无效";
+        if (payloadErrorCode === "PAYLOAD_INCOMPLETE_TIMEOUT") return "信件数据读取超时";
+        if (payloadErrorCode === "INVALID_LETTER_PAYLOAD_NUMERIC") return "信件日期数值无效";
+        return "信件载荷无效";
       case "legacy_invalid_pending":
         return "旧待送达记录已隔离";
       case "cancelled":
@@ -19310,8 +19325,8 @@ function LettersStatusModal({ onClose }) {
   };
   const getDiagnosticDisableReason = (stage) => {
     if (isRunningDiagnostic) return "诊断操作进行中";
-    const active = Object.values(snapshot?.effectDiagnostics || {}).find((item) => item?.result === "WAITING_FOR_CK3_EXECUTION" || item?.result === "ARTIFACT_VISUAL_CHECK_REQUIRED");
-    if (active) return active.result === "WAITING_FOR_CK3_EXECUTION" ? `${active.stage} 正在等待 CK3 Execution Marker` : `${active.stage} 已执行，请先确认 CK3 可见结果`;
+    const active = Object.values(snapshot?.effectDiagnostics || {}).find((item) => ["WAITING_FOR_CK3_EXECUTION", "A3_PRE_WAIT", "A3_EFFECT_ENTERED", "A3_POST_WAIT", "A3_SCOPE_CONFIRMED", "ARTIFACT_VISUAL_CHECK_REQUIRED", "A3_VISUAL_CHECK_REQUIRED"].includes(item?.result));
+    if (active) return ["ARTIFACT_VISUAL_CHECK_REQUIRED", "A3_VISUAL_CHECK_REQUIRED"].includes(active.result) ? `${active.stage} 已执行，请先确认 CK3 可见结果` : `${active.stage} 正在等待 CK3 Execution Marker`;
     if (["B", "C", "D"].includes(stage) && !diagnosticLetterId) return "请选择 Known Letter ID";
     if (stage === "A2" && !["PASS", "RUN_FILE_NOT_EXECUTED"].includes(snapshot?.effectDiagnostics?.A1?.result)) return "A1 尚未完成 letters.txt Execution 判定";
     if (stage === "A3" && snapshot?.effectDiagnostics?.A2?.result !== "PASS") return "A2 votc.txt Execution Marker 尚未通过";
@@ -19322,7 +19337,7 @@ function LettersStatusModal({ onClose }) {
     return snapshot?.diagnosticDisableReasons?.[stage] || null;
   };
   const groups = groupLettersByStatus();
-  const visualCheckDiagnostic = Object.values(snapshot?.effectDiagnostics || {}).find((item) => item?.result === "ARTIFACT_VISUAL_CHECK_REQUIRED");
+  const visualCheckDiagnostic = Object.values(snapshot?.effectDiagnostics || {}).find((item) => ["ARTIFACT_VISUAL_CHECK_REQUIRED", "A3_VISUAL_CHECK_REQUIRED"].includes(item?.result));
   return /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "modal-overlay", children: /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "modal-content letters-status-modal", children: [
     /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "modal-header", children: [
       /* @__PURE__ */ jsxRuntimeExports.jsx("h4", { children: t("lettersModal.lettersStatus") }),
@@ -19382,11 +19397,11 @@ function LettersStatusModal({ onClose }) {
         ] })
       ] }),
       /* @__PURE__ */ jsxRuntimeExports.jsxs("section", { className: "letter-details", children: [
-        /* @__PURE__ */ jsxRuntimeExports.jsx("h5", { children: "Effect 实机诊断 2.3（Transport → CK3 EXECUTE → 可见结果确认）" }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx("h5", { children: "Effect 实机诊断 3.0（Transport → CK3 EXECUTE → Scope → 可见结果确认）" }),
         /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "muted-text", children: "严格按 A1 → A2 → A3 → B → C → D 执行；文件写入不代表 CK3 已执行。B/C/D 只能选择当前已知 Letter ID，正式投递繁忙时诊断会锁定。" }),
         /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { className: "muted-text", children: [
           "正式 Outbound Transport: ",
-          snapshot?.letterTransport?.outboundMode || "legacy_letters_file",
+          snapshot?.letterTransport?.outboundMode || "votc_run_file",
           " / Contract Drift: ",
           snapshot?.letterTransport?.contractDriftConfirmed ? "CONFIRMED" : "NOT CONFIRMED"
         ] }),
@@ -19395,9 +19410,9 @@ function LettersStatusModal({ onClose }) {
           (snapshot?.knownDiagnosticLetters || []).map((letter) => /* @__PURE__ */ jsxRuntimeExports.jsx("option", { value: letter.letterId, children: `${letter.letterId} — ${letter.characterName} — ${letter.responseStatus}` }, letter.letterId))
         ] }),
         /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "header-actions", style: { marginTop: "8px" }, children: [
-          ...[["A1", "letters.txt Execution"], ["A2", "votc.txt Execution"], ["A3", "Minimal Artifact"], ["B", "Creator Scope"], ["C", "Global Variable"], ["D", "Message Event"]].map(([stage, label]) => /* @__PURE__ */ jsxRuntimeExports.jsx("button", { type: "button", title: getDiagnosticDisableReason(stage) || "", onClick: () => runEffectDiagnostic(stage), disabled: Boolean(getDiagnosticDisableReason(stage)), children: `${stage} ${label} — ${snapshot?.effectDiagnostics?.[stage]?.result || "NOT_STARTED"}` }, stage))
+          ...[["A1", "letters.txt Execution"], ["A2", "votc.txt Execution"], ["A3", "Official-Parity Artifact"], ["B", "Creator Scope"], ["C", "Global Variable"], ["D", "Message Event"]].map(([stage, label]) => /* @__PURE__ */ jsxRuntimeExports.jsx("button", { type: "button", title: getDiagnosticDisableReason(stage) || "", onClick: () => runEffectDiagnostic(stage), disabled: Boolean(getDiagnosticDisableReason(stage)), children: `${stage} ${label} — ${snapshot?.effectDiagnostics?.[stage]?.result || "NOT_STARTED"}` }, stage))
         ] }),
-        /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "muted-text", children: [["A1", "letters.txt Execution"], ["A2", "votc.txt Execution"], ["A3", "Minimal Artifact"], ["B", "Creator Scope"], ["C", "Global Variable"], ["D", "Message Event"]].map(([stage, label]) => /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "muted-text", children: [["A1", "letters.txt Execution"], ["A2", "votc.txt Execution"], ["A3", "Official-Parity Artifact"], ["B", "Creator Scope"], ["C", "Global Variable"], ["D", "Message Event"]].map(([stage, label]) => /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
           stage,
           " ",
           label,
@@ -19501,6 +19516,8 @@ function LettersStatusModal({ onClose }) {
             getStatusColor,
             getStatusText,
             formatDeliveryTime,
+            onPayloadReread: retryIncompletePayload,
+            retryingLetterId,
             t
           }
         ),
@@ -19520,6 +19537,7 @@ function LetterGroup({
   getStatusText,
   formatDeliveryTime,
   onRetry,
+  onPayloadReread,
   retryingLetterId,
   t
 }) {
@@ -19540,6 +19558,7 @@ function LetterGroup({
         getStatusText,
         formatDeliveryTime,
         onRetry,
+        onPayloadReread,
         retryingLetterId,
         t
       },
@@ -19556,6 +19575,7 @@ function LetterItem({
   getStatusText,
   formatDeliveryTime,
   onRetry,
+  onPayloadReread,
   retryingLetterId,
   t
 }) {
@@ -19573,7 +19593,7 @@ function LetterItem({
             children: [
               getStatusIcon(letter.responseStatus),
               " ",
-              getStatusText(letter.responseStatus)
+              getStatusText(letter.responseStatus, letter.payloadErrorCode)
             ]
           }
         ),
@@ -19603,7 +19623,7 @@ function LetterItem({
           /* @__PURE__ */ jsxRuntimeExports.jsxs("span", { style: { color: getStatusColor(letter.responseStatus), marginLeft: "8px" }, children: [
             getStatusIcon(letter.responseStatus),
             " ",
-            getStatusText(letter.responseStatus)
+            getStatusText(letter.responseStatus, letter.payloadErrorCode)
           ] })
         ] }),
         letter.responseError && /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "error-message", children: [
@@ -19615,6 +19635,7 @@ function LetterItem({
           letter.responseError
         ] }),
         letter.responseStatus === "generation_failed" && onRetry && /* @__PURE__ */ jsxRuntimeExports.jsx("button", { type: "button", onClick: () => onRetry(letter.letterId), disabled: retryingLetterId === letter.letterId, children: retryingLetterId === letter.letterId ? "重试中…" : "手动重试回复生成" }),
+        letter.payloadErrorCode === "PAYLOAD_INCOMPLETE_TIMEOUT" && onPayloadReread && /* @__PURE__ */ jsxRuntimeExports.jsx("button", { type: "button", onClick: () => onPayloadReread(letter.letterId), disabled: retryingLetterId === letter.letterId || letter.payloadRereadInProgress, children: retryingLetterId === letter.letterId || letter.payloadRereadInProgress ? "重新读取中…" : "重新读取信件数据" }),
         letter.responseContent && /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "content-preview", children: [
           /* @__PURE__ */ jsxRuntimeExports.jsxs("h6", { children: [
             t("lettersModal.responseContent"),
@@ -19692,6 +19713,30 @@ function LetterItem({
             letter.currentDay
           ] }),
           /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
+            /* @__PURE__ */ jsxRuntimeExports.jsx("strong", { children: "Payload 游戏日：" }),
+            letter.payloadGameDay ?? "—"
+          ] }),
+          /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
+            /* @__PURE__ */ jsxRuntimeExports.jsx("strong", { children: "Tracker 游戏日：" }),
+            letter.trackerGameDayAtCreation ?? "—"
+          ] }),
+          /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
+            /* @__PURE__ */ jsxRuntimeExports.jsx("strong", { children: "Reconciled 游戏日：" }),
+            letter.reconciledGameDayAtCreation ?? "—"
+          ] }),
+          /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
+            /* @__PURE__ */ jsxRuntimeExports.jsx("strong", { children: "投递基准日：" }),
+            letter.deliveryBaseDay ?? "—"
+          ] }),
+          /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
+            /* @__PURE__ */ jsxRuntimeExports.jsx("strong", { children: "日期偏差：" }),
+            Number.isFinite(letter.dateDelta) ? `${letter.dateDelta} 天` : "—"
+          ] }),
+          /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
+            /* @__PURE__ */ jsxRuntimeExports.jsx("strong", { children: "日期来源：" }),
+            letter.dateSourceDecision || "—"
+          ] }),
+          /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
             /* @__PURE__ */ jsxRuntimeExports.jsxs("strong", { children: [
               t("lettersModal.daysUntilDelivery"),
               ":"
@@ -19707,7 +19752,8 @@ function LetterItem({
             " ",
             letter.isLate ? t("lettersModal.yes") : t("lettersModal.no")
           ] })
-        ] })
+        ] }),
+        letter.dateSourceEvent === "DATE_SOURCE_DIVERGENCE" && /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "error-message", children: "⚠ Payload 日期与当前游戏日期不一致，已按 Date Tracker 重新计算投递日" })
       ] })
     ] })
   ] });

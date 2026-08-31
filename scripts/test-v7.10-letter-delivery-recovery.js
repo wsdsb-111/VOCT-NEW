@@ -4,6 +4,8 @@ const assert = require("assert");
 const fs = require("fs");
 const os = require("os");
 const path = require("path");
+const { createRunFileManager } = require("../resources/app/out/main/actions/run-file-manager");
+const { createLetterEffectTransport } = require("../resources/app/out/main/letters/letter-effect-transport");
 const { createLetterManager } = require("../resources/app/out/main/letters/letter-manager");
 
 function createFixture(options = {}) {
@@ -12,18 +14,24 @@ function createFixture(options = {}) {
   const dataDir = path.join(tempDir, "data");
   const debugLogPath = path.join(ck3Dir, "logs", "debug.log");
   fs.mkdirSync(path.join(ck3Dir, "run"), { recursive: true });
+  fs.writeFileSync(path.join(ck3Dir, "run", "votc.txt"), "", "utf8");
   fs.mkdirSync(path.dirname(debugLogPath), { recursive: true });
   fs.writeFileSync(debugLogPath, "", "utf8");
   let active = false;
   let parsedContext = options.parsedContext || null;
   const summaryCalls = [];
   const memoryRecords = [];
-  const dependencies = {
-    settingsRepository: {
+  const settingsRepository = {
       getCK3UserFolderPath: () => active ? ck3Dir : null,
       getCK3DebugLogPath: () => active ? debugLogPath : null,
       getSummaryPromptSettings: () => ({ letterSummaryPrompt: "概括来信和回信。" })
-    },
+  };
+  const RunFileManager = createRunFileManager({ settingsRepository, fs, path });
+  const runFileManager = new RunFileManager();
+  const { LetterEffectTransport } = createLetterEffectTransport({ settingsRepository, fs, path, runFileManager, dataDir });
+  const letterEffectTransport = new LetterEffectTransport();
+  const dependencies = {
+    settingsRepository,
     fs,
     path,
     TailFile: class {},
@@ -45,6 +53,7 @@ function createFixture(options = {}) {
     TokenCounter: { estimateMessageTokens: () => 1 },
     memoryEngine: { recordLetterMemory: (entry) => memoryRecords.push(entry) },
     dataDir,
+    letterEffectTransport,
     sleep: async () => {},
     letterPayloadRetryDelays: []
   };
@@ -61,7 +70,7 @@ function createFixture(options = {}) {
     activate: () => { active = true; },
     deactivate: () => { active = false; },
     setParsedContext: (context) => { parsedContext = context; },
-    effectPath: path.join(ck3Dir, "run", "letters.txt"),
+    effectPath: path.join(ck3Dir, "run", "votc.txt"),
     pendingPath: path.join(dataDir, "pending-letters.json"),
     cleanup: () => fs.rmSync(tempDir, { recursive: true, force: true })
   };
@@ -165,7 +174,7 @@ async function testRestartAndNoDuplicate() {
     assert.strictEqual(fs.readFileSync(fixture.effectPath, "utf8"), firstEffect, "restart must not write a duplicate effect while awaiting CK3 acceptance");
     await restarted.clearLettersFile();
     const state = JSON.parse(fs.readFileSync(fixture.pendingPath, "utf8"));
-    assert.strictEqual(state.version, 3);
+    assert.strictEqual(state.version, 4);
     assert.strictEqual(state.awaitingAcceptanceLetterId, null);
     assert.strictEqual(state.letters.length, 0);
     assert.deepStrictEqual(state.failedLetters, []);

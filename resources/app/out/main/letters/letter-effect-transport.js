@@ -9,8 +9,8 @@ function createLetterEffectTransport({ settingsRepository, fs, path, runFileMana
     constructor() {
       this.stateFile = dataDir ? path.join(dataDir, "letter-transport-state.json") : null;
       this.state = {
-        version: 1,
-        outboundMode: modes.LEGACY,
+        version: 2,
+        outboundMode: modes.VOTC,
         diagnostics: { A1: null, A2: null },
         contractDriftConfirmed: false,
         updatedAt: null
@@ -24,7 +24,7 @@ function createLetterEffectTransport({ settingsRepository, fs, path, runFileMana
         this.state = {
           ...this.state,
           ...saved,
-          outboundMode: saved?.outboundMode === modes.VOTC ? modes.VOTC : modes.LEGACY,
+          outboundMode: modes.VOTC,
           diagnostics: { A1: saved?.diagnostics?.A1 || null, A2: saved?.diagnostics?.A2 || null }
         };
       } catch (error) {
@@ -82,11 +82,10 @@ function createLetterEffectTransport({ settingsRepository, fs, path, runFileMana
       this.state.diagnostics[stage] = { result, recordedAt: Date.now() };
       const legacyResult = this.state.diagnostics.A1?.result;
       const votcResult = this.state.diagnostics.A2?.result;
+      this.state.outboundMode = modes.VOTC;
       if (legacyResult === "RUN_FILE_NOT_EXECUTED" && votcResult === "PASS") {
-        this.state.outboundMode = modes.VOTC;
         this.state.contractDriftConfirmed = true;
       } else if (legacyResult && votcResult) {
-        this.state.outboundMode = modes.LEGACY;
         this.state.contractDriftConfirmed = false;
       }
       this.state.updatedAt = Date.now();

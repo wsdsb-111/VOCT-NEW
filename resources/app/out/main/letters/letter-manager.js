@@ -60,6 +60,8 @@ function createLetterManager({ settingsRepository, fs, path, TailFile, readline,
       this.currentTotalDays = 0;
       this.storedLetters = /* @__PURE__ */ new Map();
       this.failedLetterContexts = /* @__PURE__ */ new Map();
+      this.payloadRetryContexts = /* @__PURE__ */ new Map();
+      this.payloadRetryInProgress = /* @__PURE__ */ new Set();
       this.replyRetryInProgress = /* @__PURE__ */ new Set();
       this.letterStatuses = /* @__PURE__ */ new Map();
       this.deliveryInProgress = /* @__PURE__ */ new Set();
@@ -162,7 +164,9 @@ function createLetterManager({ settingsRepository, fs, path, TailFile, readline,
       this.lastLogLineReceivedAt = Date.now();
       const transportMatch = line.match(/VOTC:LETTER_TRANSPORT\/([AB])\/([A-Za-z0-9_-]+)/);
       if (transportMatch) this.confirmDiagnosticExecutionMarker(transportMatch[1] === "A" ? "A1" : "A2", transportMatch[2]);
-      const diagnosticMatch = line.match(/VOTC:LETTER_DIAG\/(A3|B|C|D)\/([A-Za-z0-9_-]+)/);
+      const a3DiagnosticMatch = line.match(/VOTC:LETTER_DIAG\/A3\/(PRE|POST|SCOPE_OK)\/([A-Za-z0-9_-]+)/);
+      if (a3DiagnosticMatch) this.confirmA3DiagnosticMarker(a3DiagnosticMatch[1], a3DiagnosticMatch[2]);
+      const diagnosticMatch = line.match(/VOTC:LETTER_DIAG\/(B|C|D)\/([A-Za-z0-9_-]+)/);
       if (diagnosticMatch) this.confirmDiagnosticExecutionMarker(diagnosticMatch[1], diagnosticMatch[2]);
       const dateRegex = /VOTC:DATE\/;\/(\d+)/;
       const match = line.match(dateRegex);
@@ -311,6 +315,61 @@ function createLetterManager({ settingsRepository, fs, path, TailFile, readline,
     async resyncGameDate() {
       return this.runDateTrackerHeartbeat({ forceReconcile: true });
     }
+    isValidGameDay(value) {
+      return Number.isFinite(value) && Number.isInteger(value) && value > 0;
+    }
+    getEffectiveDeliveryCurrentDay(deliveryTiming = null) {
+      if (this.isValidGameDay(Number(this.currentTotalDays))) return Number(this.currentTotalDays);
+      const deliveryBaseDay = Number(deliveryTiming?.deliveryBaseDay);
+      return this.isValidGameDay(deliveryBaseDay) ? deliveryBaseDay : Number(this.currentTotalDays) || 0;
+    }
+    async resolveDeliveryTiming(letter) {
+      const payloadGameDay = Number(letter.totalDays);
+      const trackerGameDayAtCreation = this.isValidGameDay(Number(this.currentTotalDays)) ? Number(this.currentTotalDays) : null;
+      const initialDateDelta = trackerGameDayAtCreation === null ? null : payloadGameDay - trackerGameDayAtCreation;
+      const needsReconcile = trackerGameDayAtCreation === null || Math.abs(initialDateDelta) > 1;
+      let reconciledGameDayAtCreation = null;
+      if (needsReconcile) {
+        const reconciliationStartedAt = Date.now();
+        await this.runDateTrackerHeartbeat({ forceReconcile: true });
+        const trackerStatus = this.getDateTrackerStatus();
+        const reconciledDay = Number(this.currentTotalDays);
+        if (this.isValidGameDay(reconciledDay) && trackerStatus.lastDateScanResult?.found === true && Number(trackerStatus.lastDateReconciliationAt) >= reconciliationStartedAt) {
+          reconciledGameDayAtCreation = reconciledDay;
+        }
+      }
+      const currentTrackerDay = this.isValidGameDay(Number(this.currentTotalDays)) ? Number(this.currentTotalDays) : null;
+      const authoritativeTrackerDay = reconciledGameDayAtCreation ?? trackerGameDayAtCreation ?? currentTrackerDay;
+      const dateDelta = authoritativeTrackerDay === null ? null : payloadGameDay - authoritativeTrackerDay;
+      let deliveryBaseDay;
+      let dateSourceDecision;
+      if (reconciledGameDayAtCreation !== null) {
+        deliveryBaseDay = reconciledGameDayAtCreation;
+        dateSourceDecision = Math.abs(dateDelta) <= 1 ? "PAYLOAD_ALIGNED" : "RECONCILED_TRACKER_AUTHORITATIVE";
+      } else if (trackerGameDayAtCreation !== null) {
+        deliveryBaseDay = trackerGameDayAtCreation;
+        dateSourceDecision = Math.abs(dateDelta) <= 1 ? "PAYLOAD_ALIGNED" : "TRACKER_AUTHORITATIVE";
+      } else if (currentTrackerDay !== null) {
+        deliveryBaseDay = currentTrackerDay;
+        dateSourceDecision = Math.abs(dateDelta) <= 1 ? "PAYLOAD_ALIGNED" : "RECONCILED_TRACKER_AUTHORITATIVE";
+      } else {
+        deliveryBaseDay = payloadGameDay;
+        dateSourceDecision = "PAYLOAD_FALLBACK";
+      }
+      const expectedDeliveryDay = deliveryBaseDay + Number(letter.delay);
+      const dateSourceEvent = dateDelta !== null && Math.abs(dateDelta) <= 1 ? "DATE_ALIGNED" : dateDelta === null ? "DATE_TRACKER_UNAVAILABLE" : "DATE_SOURCE_DIVERGENCE";
+      console.log(`[LetterDate] letter=${letter.letterId} event=${dateSourceEvent} payload=${payloadGameDay} tracker=${trackerGameDayAtCreation ?? "unavailable"} reconciled=${reconciledGameDayAtCreation ?? "unavailable"} base=${deliveryBaseDay} delta=${dateDelta ?? "unavailable"} decision=${dateSourceDecision}`);
+      return {
+        payloadGameDay,
+        trackerGameDayAtCreation,
+        reconciledGameDayAtCreation,
+        deliveryBaseDay,
+        dateDelta,
+        dateSourceDecision,
+        dateSourceEvent,
+        expectedDeliveryDay
+      };
+    }
     getDateTrackerStatus() {
       return {
         tailState: this.tailState,
@@ -334,9 +393,10 @@ function createLetterManager({ settingsRepository, fs, path, TailFile, readline,
       if (this.awaitingAcceptanceLetterId) return;
       for (const [letterId, storedLetter] of this.storedLetters.entries()) {
         if (!Number.isFinite(storedLetter.expectedDeliveryDay)) continue;
-        if (this.currentTotalDays >= storedLetter.expectedDeliveryDay && !this.deliveryInProgress.has(letterId)) {
-          console.log(`Delivering letter ${letterId} (current: ${this.currentTotalDays}, expected: ${storedLetter.expectedDeliveryDay})`);
-          this.transitionLetter(letterId, LetterPipelineState.DELIVERY_DUE, { currentTotalDays: this.currentTotalDays });
+        const effectiveCurrentDay = this.getEffectiveDeliveryCurrentDay(storedLetter);
+        if (effectiveCurrentDay >= storedLetter.expectedDeliveryDay && !this.deliveryInProgress.has(letterId)) {
+          console.log(`Delivering letter ${letterId} (current: ${effectiveCurrentDay}, expected: ${storedLetter.expectedDeliveryDay})`);
+          this.transitionLetter(letterId, LetterPipelineState.DELIVERY_DUE, { currentTotalDays: effectiveCurrentDay });
           this.deliveryInProgress.add(letterId);
           try {
             const delivered = await this.deliverLetter(storedLetter);
@@ -359,12 +419,12 @@ function createLetterManager({ settingsRepository, fs, path, TailFile, readline,
     /**
      * Process a new letter: generate response immediately but store it for delayed delivery
      */
-    async processLatestLetter() {
-      const triggerId = `letter-trigger:${Date.now()}:${++this.pipelineSequence}`;
-      this.latestPipelineStatus = { triggerId, letterId: null, state: null, history: [], startedAt: Date.now() };
+    async processLatestLetter({ triggerContext = null, skipPayloadRequest = false, payloadErrorRecordId = null } = {}) {
+      const triggerId = triggerContext?.triggerId || `letter-trigger:${Date.now()}:${++this.pipelineSequence}`;
+      this.latestPipelineStatus = { triggerId, letterId: null, state: null, history: [], startedAt: triggerContext?.startedAt || Date.now(), payloadReread: skipPayloadRequest };
       this.transitionPipeline(LetterPipelineState.TRIGGER_RECEIVED);
       const ck3UserPath = settingsRepository.getCK3UserFolderPath();
-      if (ck3UserPath) {
+      if (ck3UserPath && !skipPayloadRequest) {
         const runFolder = path.join(ck3UserPath, "run");
         const letterFilePath = path.join(runFolder, "letters.txt");
         console.log(`LetterManager: Resolved letters.txt path: ${letterFilePath}`);
@@ -382,16 +442,33 @@ function createLetterManager({ settingsRepository, fs, path, TailFile, readline,
       const context = await this.loadLatestGameDataWithLetter();
       if (!context) {
         this.transitionPipeline(LetterPipelineState.CONTEXT_TIMEOUT, this.lastPayloadDiagnostics || {});
-        if (this.lastInvalidLetterPayload) this.recordInvalidLetterPayload(this.lastInvalidLetterPayload);
+        if (this.lastInvalidLetterPayload) {
+          let invalidStatus = payloadErrorRecordId ? this.getLetterStatus(payloadErrorRecordId) : null;
+          if (invalidStatus) {
+            this.updateLetterStatus(payloadErrorRecordId, {
+              responseError: this.lastInvalidLetterPayload.errorCode,
+              payloadErrorCode: this.lastInvalidLetterPayload.errorCode,
+              payloadErrorDetails: this.lastInvalidLetterPayload.details,
+              payloadRereadError: this.lastInvalidLetterPayload.errorCode
+            });
+            invalidStatus = this.getLetterStatus(payloadErrorRecordId);
+          } else {
+            invalidStatus = this.recordInvalidLetterPayload(this.lastInvalidLetterPayload);
+          }
+          if (this.lastInvalidLetterPayload.errorCode === "PAYLOAD_INCOMPLETE_TIMEOUT") {
+            this.payloadRetryContexts.set(invalidStatus.letterId, {
+              triggerId,
+              startedAt: this.latestPipelineStatus.startedAt,
+              debugLogPath: settingsRepository.getCK3DebugLogPath?.() || null
+            });
+          }
+        }
         return null;
       }
       const { gameData, letter } = context;
-      const letterTotalDays = Number(letter.totalDays);
-      if (Number.isFinite(letterTotalDays)) {
-        this.currentTotalDays = Math.max(this.currentTotalDays, letterTotalDays);
-      }
+      const deliveryTiming = await this.resolveDeliveryTiming(letter);
       const characterName = gameData.getAi()?.fullName || "Unknown";
-      this.createLetterStatus(letter, characterName);
+      this.createLetterStatus(letter, characterName, deliveryTiming);
       this.attachPipelineToLetter(letter.letterId);
       this.transitionPipeline(LetterPipelineState.CONTEXT_READY, this.lastPayloadDiagnostics || {});
       this.updateLetterStatus(letter.letterId, { responseStatus: LetterResponseStatus.GENERATING });
@@ -413,7 +490,7 @@ function createLetterManager({ settingsRepository, fs, path, TailFile, readline,
         });
         return null;
       }
-      this.failedLetterContexts.set(letter.letterId, { letter, messages, characterName, promptMode });
+      this.failedLetterContexts.set(letter.letterId, { letter, messages, characterName, promptMode, deliveryTiming });
       this.updateLetterStatus(letter.letterId, { promptMode, promptBuildError });
       this.transitionPipeline(LetterPipelineState.PROMPT_READY, { promptMode, promptBuildError });
       let reply = null;
@@ -445,12 +522,14 @@ function createLetterManager({ settingsRepository, fs, path, TailFile, readline,
         this.savePendingLetters();
         return null;
       }
-      const expectedDeliveryDay = letter.totalDays + letter.delay;
+      const expectedDeliveryDay = deliveryTiming.expectedDeliveryDay;
+      const effectiveCurrentDay = this.getEffectiveDeliveryCurrentDay(deliveryTiming);
       const storedLetter = {
         letter,
         reply,
         expectedDeliveryDay,
-        characterName
+        characterName,
+        ...deliveryTiming
       };
       this.storedLetters.set(letter.letterId, storedLetter);
       this.failedLetterContexts.delete(letter.letterId);
@@ -458,13 +537,14 @@ function createLetterManager({ settingsRepository, fs, path, TailFile, readline,
       this.updateLetterStatus(letter.letterId, {
         responseStatus: LetterResponseStatus.PENDING_DELIVERY,
         expectedDeliveryDay,
-        daysUntilDelivery: expectedDeliveryDay - this.currentTotalDays,
-        isLate: this.currentTotalDays > expectedDeliveryDay
+        daysUntilDelivery: expectedDeliveryDay - effectiveCurrentDay,
+        isLate: effectiveCurrentDay > expectedDeliveryDay,
+        ...deliveryTiming
       });
-      this.transitionPipeline(LetterPipelineState.PENDING_DELIVERY, { expectedDeliveryDay });
+      this.transitionPipeline(LetterPipelineState.PENDING_DELIVERY, { expectedDeliveryDay, ...deliveryTiming });
       this.savePendingLetters();
-      console.log(`Letter ${letter.letterId} generated and stored. Will deliver on day ${expectedDeliveryDay} (current: ${this.currentTotalDays})`);
-      if (this.currentTotalDays >= expectedDeliveryDay) {
+      console.log(`Letter ${letter.letterId} generated and stored. Will deliver on day ${expectedDeliveryDay} (current: ${effectiveCurrentDay})`);
+      if (effectiveCurrentDay >= expectedDeliveryDay) {
         console.log(`Letter ${letter.letterId} is ready for immediate delivery`);
         await this.checkAndDeliverLetters();
       }
@@ -484,7 +564,7 @@ function createLetterManager({ settingsRepository, fs, path, TailFile, readline,
         parsedDelay,
         expectedDeliveryDay: parsedTotalDays + parsedDelay
       };
-      if (typeof letter?.letterId !== "string" || !letter.letterId.trim() || typeof letter?.content !== "string") {
+      if (typeof letter?.letterId !== "string" || !letter.letterId.trim() || typeof letter?.content !== "string" || !letter.content.trim()) {
         return { valid: false, errorCode: "INVALID_LETTER_PAYLOAD", details };
       }
       const numericTypesValid = [rawTotalDays, rawDelay].every((value) => typeof value === "number" || typeof value === "string");
@@ -496,7 +576,8 @@ function createLetterManager({ settingsRepository, fs, path, TailFile, readline,
     }
     recordInvalidLetterPayload(invalidPayload, legacy = false) {
       const rawLetter = invalidPayload?.letter || {};
-      const letterId = typeof rawLetter.letterId === "string" && rawLetter.letterId.trim() ? rawLetter.letterId.trim() : `invalid_payload_${Date.now()}`;
+      const useErrorRecordId = invalidPayload?.errorCode === "PAYLOAD_INCOMPLETE_TIMEOUT";
+      const letterId = !useErrorRecordId && typeof rawLetter.letterId === "string" && rawLetter.letterId.trim() ? rawLetter.letterId.trim() : `invalid_payload_${Date.now()}_${++this.pipelineSequence}`;
       const responseStatus = legacy ? LetterResponseStatus.LEGACY_INVALID_PENDING : LetterResponseStatus.PAYLOAD_INVALID;
       const status = {
         letterId,
@@ -572,8 +653,10 @@ function createLetterManager({ settingsRepository, fs, path, TailFile, readline,
         if (!reply) throw new Error("Letter reply generation returned empty content.");
         this.updateLetterStatus(normalizedLetterId, { responseStatus: LetterResponseStatus.GENERATED, responseContent: reply });
         this.transitionLetter(normalizedLetterId, LetterPipelineState.REPLY_RECEIVED, { retryAttemptCount });
-        const expectedDeliveryDay = Number(context.letter.totalDays) + Number(context.letter.delay);
-        const storedLetter = { letter: context.letter, reply, expectedDeliveryDay, characterName: context.characterName };
+        const deliveryTiming = context.deliveryTiming || await this.resolveDeliveryTiming(context.letter);
+        const expectedDeliveryDay = deliveryTiming.expectedDeliveryDay;
+        const effectiveCurrentDay = this.getEffectiveDeliveryCurrentDay(deliveryTiming);
+        const storedLetter = { letter: context.letter, reply, expectedDeliveryDay, characterName: context.characterName, ...deliveryTiming };
         this.storedLetters.set(normalizedLetterId, storedLetter);
         this.failedLetterContexts.delete(normalizedLetterId);
         this.updateLetterStatus(normalizedLetterId, {
@@ -582,12 +665,13 @@ function createLetterManager({ settingsRepository, fs, path, TailFile, readline,
           responseError: null,
           responseErrorDetails: null,
           expectedDeliveryDay,
-          daysUntilDelivery: expectedDeliveryDay - this.currentTotalDays,
-          isLate: this.currentTotalDays > expectedDeliveryDay
+          daysUntilDelivery: expectedDeliveryDay - effectiveCurrentDay,
+          isLate: effectiveCurrentDay > expectedDeliveryDay,
+          ...deliveryTiming
         });
-        this.transitionLetter(normalizedLetterId, LetterPipelineState.PENDING_DELIVERY, { expectedDeliveryDay, retryAttemptCount });
+        this.transitionLetter(normalizedLetterId, LetterPipelineState.PENDING_DELIVERY, { expectedDeliveryDay, retryAttemptCount, ...deliveryTiming });
         this.savePendingLetters();
-        if (this.currentTotalDays >= expectedDeliveryDay) await this.checkAndDeliverLetters();
+        if (effectiveCurrentDay >= expectedDeliveryDay) await this.checkAndDeliverLetters();
         const latestContext = await this.loadLatestGameDataWithLetter();
         if (latestContext?.letter?.letterId === normalizedLetterId) await this.generateSummary(latestContext.gameData, context.letter, reply);
         else this.updateLetterStatus(normalizedLetterId, { summaryStatus: LetterSummaryStatus.GENERATION_FAILED, summaryError: "Retry succeeded, but matching letter context was unavailable for summary." });
@@ -620,25 +704,33 @@ function createLetterManager({ settingsRepository, fs, path, TailFile, readline,
       let attemptCount = 0;
       let lastParseResult = "not_started";
       let lastError = null;
+      let lastRawLetter = null;
+      let lastValidation = null;
+      const attempts = [];
       this.lastInvalidLetterPayload = null;
       for (let index = 0; index <= letterPayloadRetryDelays.length; index++) {
         if (index > 0) await sleep(letterPayloadRetryDelays[index - 1]);
         attemptCount++;
+        const timestamp = Date.now();
         try {
           const gameData = await parseLog(debugLogPath);
           if (!gameData) {
             lastParseResult = "game_data_missing";
+            attempts.push(this.buildPayloadAttemptDiagnostic(attemptCount, timestamp, null, "game_data_missing"));
             continue;
           }
           const rawLetter = gameData.letterData;
           if (!rawLetter) {
             lastParseResult = "letter_payload_missing";
+            attempts.push(this.buildPayloadAttemptDiagnostic(attemptCount, timestamp, null, "letter_payload_missing"));
             continue;
           }
+          lastRawLetter = rawLetter;
           const validation = this.validateLetterPayload(rawLetter);
+          lastValidation = validation;
+          attempts.push(this.buildPayloadAttemptDiagnostic(attemptCount, timestamp, rawLetter, validation.valid ? null : validation.errorCode));
           if (!validation.valid) {
             lastParseResult = validation.errorCode;
-            this.lastInvalidLetterPayload = { letter: rawLetter, errorCode: validation.errorCode, details: validation.details, characterName: gameData.getAi?.()?.fullName || "Unknown" };
             continue;
           }
           const letter = validation.letter;
@@ -655,17 +747,69 @@ function createLetterManager({ settingsRepository, fs, path, TailFile, readline,
             debugLogPath,
             lastParseResult: "letter_payload_ready",
             lastError: null,
-            summaryLoadError
+            summaryLoadError,
+            attempts
           };
           return { gameData, letter };
         } catch (error) {
           lastError = error instanceof Error ? error.message : String(error);
           lastParseResult = "parse_failed";
+          attempts.push(this.buildPayloadAttemptDiagnostic(attemptCount, timestamp, null, "parse_failed"));
         }
       }
-      this.lastPayloadDiagnostics = { attemptCount, elapsedMs: Date.now() - startedAt, debugLogPath, lastParseResult, lastError };
+      const incompletePayload = !lastRawLetter || typeof lastRawLetter.letterId !== "string" || !lastRawLetter.letterId.trim() || lastRawLetter.content === null || lastRawLetter.content === void 0 || typeof lastRawLetter.content === "string" && !lastRawLetter.content.trim();
+      const errorCode = incompletePayload ? "PAYLOAD_INCOMPLETE_TIMEOUT" : lastValidation?.errorCode || "PAYLOAD_INCOMPLETE_TIMEOUT";
+      this.lastPayloadDiagnostics = { attemptCount, elapsedMs: Date.now() - startedAt, debugLogPath, lastParseResult: errorCode, lastError, attempts };
+      this.lastInvalidLetterPayload = {
+        letter: lastRawLetter || {},
+        errorCode,
+        details: { ...(lastValidation?.details || {}), attempts },
+        characterName: "Unknown"
+      };
       console.warn(`No letter data found after ${attemptCount} parse attempts (${this.lastPayloadDiagnostics.elapsedMs}ms).`);
       return null;
+    }
+    buildPayloadAttemptDiagnostic(attempt, timestamp, rawLetter, validationError) {
+      const content = rawLetter?.content;
+      return {
+        attempt,
+        timestamp,
+        payloadExists: Boolean(rawLetter),
+        letterIdPresent: typeof rawLetter?.letterId === "string" && Boolean(rawLetter.letterId.trim()),
+        letterIdValue: typeof rawLetter?.letterId === "string" ? rawLetter.letterId.slice(0, 120) : null,
+        contentType: content === null ? "null" : Array.isArray(content) ? "array" : typeof content,
+        contentLength: typeof content === "string" ? content.length : null,
+        contentPreview: typeof content === "string" ? Array.from(content).slice(0, 40).join("") : null,
+        totalDaysRaw: rawLetter?.totalDays,
+        delayRaw: rawLetter?.delay,
+        validationError
+      };
+    }
+    async retryIncompletePayload(errorRecordId) {
+      const normalizedRecordId = typeof errorRecordId === "string" ? errorRecordId.trim() : "";
+      const status = this.getLetterStatus(normalizedRecordId);
+      if (!status || status.payloadErrorCode !== "PAYLOAD_INCOMPLETE_TIMEOUT") return { success: false, error: "Only PAYLOAD_INCOMPLETE_TIMEOUT records can be reread." };
+      const triggerContext = this.payloadRetryContexts.get(normalizedRecordId);
+      if (!triggerContext) return { success: false, error: "The original trigger context is unavailable." };
+      if (this.payloadRetryInProgress.has(normalizedRecordId)) return { success: false, error: "This payload reread is already in progress." };
+      this.payloadRetryInProgress.add(normalizedRecordId);
+      this.updateLetterStatus(normalizedRecordId, { payloadRereadInProgress: true, payloadRereadError: null, payloadRereadAttemptedAt: Date.now() });
+      try {
+        await this.processLatestLetter({ triggerContext, skipPayloadRequest: true, payloadErrorRecordId: normalizedRecordId });
+        const rereadLetterId = this.latestPipelineStatus?.triggerId === triggerContext.triggerId ? this.latestPipelineStatus.letterId : null;
+        const success = Boolean(rereadLetterId);
+        this.updateLetterStatus(normalizedRecordId, {
+          payloadRereadInProgress: false,
+          payloadRereadResolvedAt: success ? Date.now() : null,
+          payloadRereadLetterId: rereadLetterId,
+          payloadRereadError: success ? null : this.lastPayloadDiagnostics?.lastParseResult || "PAYLOAD_INCOMPLETE_TIMEOUT"
+        });
+        if (success) this.payloadRetryContexts.delete(normalizedRecordId);
+        return { success, errorRecordId: normalizedRecordId, letterId: rereadLetterId, error: success ? null : this.lastPayloadDiagnostics?.lastParseResult || "PAYLOAD_INCOMPLETE_TIMEOUT" };
+      } finally {
+        this.payloadRetryInProgress.delete(normalizedRecordId);
+        this.updateLetterStatus(normalizedRecordId, { payloadRereadInProgress: false });
+      }
     }
     async extractReply(result) {
       if (result && typeof result === "object" && "content" in result) {
@@ -793,19 +937,15 @@ function createLetterManager({ settingsRepository, fs, path, TailFile, readline,
       return false;
     }
     buildOfficialLetterEffectBody(reply, letter) {
-      const escapedReply = reply.replace(/"/g, '\\"');
+      const artifactBody = this.buildLetterArtifactBody({
+        creatorScope: `global_var:message_second_scope_${letter.letterId}`,
+        name: `votc_huixin_title${letter.letterId.replace(/letter_/, "")}`,
+        description: reply,
+        saveScopeAs: "votc_latest_letter"
+      });
       return `debug_log = "[Localize('talk_event.9999.desc')]"
 remove_global_variable ?= votc_${letter.letterId}
-create_artifact = {
-	name = votc_huixin_title${letter.letterId.replace(/letter_/, "")}
-	description = "${escapedReply}"
-	type = journal
-  	visuals = scroll
-  	creator = global_var:message_second_scope_${letter.letterId}
-  	modifier = artifact_monthly_minor_prestige_1_modifier
-	wealth = scope:wealth
-	save_scope_as = votc_latest_letter
-}
+${artifactBody}
 scope:votc_latest_letter = {
 set_variable = { name = votc_letter_artifact value = yes}
 }
@@ -814,6 +954,19 @@ set_global_variable = {
 	value = scope:votc_latest_letter
 }
 trigger_event = message_event.362`;
+    }
+    buildLetterArtifactBody({ creatorScope, name, description, saveScopeAs }) {
+      const escapedDescription = String(description).replace(/"/g, '\\"');
+      return `create_artifact = {
+	name = ${name}
+	description = "${escapedDescription}"
+	type = journal
+${"  \t"}visuals = scroll
+${"  \t"}creator = ${creatorScope}
+${"  \t"}modifier = artifact_monthly_minor_prestige_1_modifier
+	wealth = scope:wealth
+	save_scope_as = ${saveScopeAs}
+}`;
     }
     loadPendingLetters() {
       if (!this.pendingLettersFile || !fs$1.existsSync(this.pendingLettersFile)) return;
@@ -891,7 +1044,7 @@ trigger_event = message_event.362`;
           ...failedContext,
           status: this.letterStatuses.get(letterId) || null
         }));
-        fs$1.writeFileSync(this.pendingLettersFile, JSON.stringify({ version: 3, awaitingAcceptanceLetterId: this.awaitingAcceptanceLetterId, letters, failedLetters }, null, 2), "utf8");
+        fs$1.writeFileSync(this.pendingLettersFile, JSON.stringify({ version: 4, awaitingAcceptanceLetterId: this.awaitingAcceptanceLetterId, letters, failedLetters }, null, 2), "utf8");
         this.syncDateTrackerSupervisor();
       } catch (error) {
         console.error("LetterManager: Failed to save pending letters:", error);
@@ -909,7 +1062,7 @@ trigger_event = message_event.362`;
       }
       const acceptedLetterId = this.awaitingAcceptanceLetterId;
       const acceptedStatus = acceptedLetterId ? this.getLetterStatus(acceptedLetterId) : null;
-      const acceptedTransportMode = acceptedStatus?.effectTransportMode || LetterEffectTransportMode.LEGACY;
+      const acceptedTransportMode = acceptedStatus?.effectTransportMode || LetterEffectTransportMode.VOTC;
       const clearResult = letterEffectTransport.clearOutboundEffect(acceptedTransportMode);
       if (!clearResult.success) console.warn(`LetterManager.clearLettersFile: ${clearResult.error}`);
       this.awaitingAcceptanceLetterId = null;
@@ -943,7 +1096,7 @@ trigger_event = message_event.362`;
       }
       const awaitingStatus = this.awaitingAcceptanceLetterId ? this.getLetterStatus(this.awaitingAcceptanceLetterId) : null;
       const effectStatus = awaitingStatus || Array.from(this.letterStatuses.values()).find((status) => status.responseStatus === LetterResponseStatus.EFFECT_FILE_WRITTEN) || null;
-      const clearedTransportMode = effectStatus?.effectTransportMode || LetterEffectTransportMode.LEGACY;
+      const clearedTransportMode = effectStatus?.effectTransportMode || LetterEffectTransportMode.VOTC;
       let effectClearResult = null;
       if (effectStatus) {
         const storedEffect = this.storedLetters.get(effectStatus.letterId);
@@ -1017,10 +1170,22 @@ trigger_event = message_event.362`;
     /**
      * Create initial letter status entry
      */
-    createLetterStatus(letter, characterName) {
+    createLetterStatus(letter, characterName, deliveryTiming = null) {
       const validation = this.validateLetterPayload(letter);
       if (!validation.valid) return this.recordInvalidLetterPayload({ letter, errorCode: validation.errorCode, details: validation.details, characterName });
       letter = validation.letter;
+      const fallbackDeliveryTiming = {
+        payloadGameDay: letter.totalDays,
+        trackerGameDayAtCreation: null,
+        reconciledGameDayAtCreation: null,
+        deliveryBaseDay: letter.totalDays,
+        dateDelta: null,
+        dateSourceDecision: "PAYLOAD_FALLBACK",
+        dateSourceEvent: "DATE_TRACKER_UNAVAILABLE",
+        expectedDeliveryDay: letter.totalDays + letter.delay
+      };
+      const resolvedDeliveryTiming = deliveryTiming || fallbackDeliveryTiming;
+      const effectiveCurrentDay = this.getEffectiveDeliveryCurrentDay(resolvedDeliveryTiming);
       const statusInfo = {
         letterId: letter.letterId,
         letterContent: letter.content,
@@ -1031,15 +1196,16 @@ trigger_event = message_event.362`;
         summaryContent: null,
         summaryError: null,
         createdAt: Date.now(),
-        expectedDeliveryDay: letter.totalDays + letter.delay,
-        currentDay: this.currentTotalDays,
-        daysUntilDelivery: letter.totalDays + letter.delay - this.currentTotalDays,
-        isLate: this.currentTotalDays > letter.totalDays + letter.delay,
+        expectedDeliveryDay: resolvedDeliveryTiming.expectedDeliveryDay,
+        currentDay: effectiveCurrentDay,
+        daysUntilDelivery: resolvedDeliveryTiming.expectedDeliveryDay - effectiveCurrentDay,
+        isLate: effectiveCurrentDay > resolvedDeliveryTiming.expectedDeliveryDay,
         characterName,
         pipelineState: this.latestPipelineStatus?.state || LetterPipelineState.CONTEXT_READY,
         pipelineHistory: [...(this.latestPipelineStatus?.history || [])],
         promptMode: null,
-        promptBuildError: null
+        promptBuildError: null,
+        ...resolvedDeliveryTiming
       };
       this.letterStatuses.set(letter.letterId, statusInfo);
       return statusInfo;
@@ -1127,9 +1293,10 @@ trigger_event = message_event.362`;
     }
     refreshEffectDiagnosticTimeout() {
       const diagnostic = this.activeEffectDiagnostic;
-      if (diagnostic?.executionStatus === "WAITING_FOR_CK3_EXECUTION" && Date.now() - diagnostic.writtenAt >= diagnosticExecutionTimeoutMs) {
-        diagnostic.executionStatus = "RUN_FILE_NOT_EXECUTED";
-        diagnostic.result = "RUN_FILE_NOT_EXECUTED";
+      if (diagnostic && diagnostic.executionStatus !== "EXECUTION_CONFIRMED" && Date.now() - diagnostic.writtenAt >= diagnosticExecutionTimeoutMs) {
+        const result = diagnostic.stage !== "A3" || !diagnostic.preConfirmed ? "RUN_FILE_NOT_EXECUTED" : !diagnostic.postConfirmed ? "ARTIFACT_EFFECT_ABORTED" : "ARTIFACT_SCOPE_NOT_CREATED";
+        diagnostic.executionStatus = result;
+        diagnostic.result = result;
         diagnostic.executionTimedOutAt = Date.now();
         diagnostic.effectClearResult = letterEffectTransport.cancelOutboundEffect(diagnostic.transportMode, diagnostic.effectText);
         this.effectDiagnosticStages[diagnostic.stage] = { ...diagnostic };
@@ -1145,8 +1312,8 @@ trigger_event = message_event.362`;
       const busyReason = this.getDiagnosticPipelineBusyReason();
       if (busyReason) return busyReason;
       this.refreshEffectDiagnosticTimeout();
-      if (this.activeEffectDiagnostic?.executionStatus === "WAITING_FOR_CK3_EXECUTION") return `${this.activeEffectDiagnostic.stage} 正在等待 CK3 Execution Marker`;
-      if (this.activeEffectDiagnostic?.result === "ARTIFACT_VISUAL_CHECK_REQUIRED") return `${this.activeEffectDiagnostic.stage} 已执行，请先确认 CK3 可见结果`;
+      if (this.activeEffectDiagnostic && this.activeEffectDiagnostic.executionStatus !== "EXECUTION_CONFIRMED") return `${this.activeEffectDiagnostic.stage} 正在等待 CK3 Execution Marker`;
+      if (["ARTIFACT_VISUAL_CHECK_REQUIRED", "A3_VISUAL_CHECK_REQUIRED"].includes(this.activeEffectDiagnostic?.result)) return `${this.activeEffectDiagnostic.stage} 已执行，请先确认 CK3 可见结果`;
       if (diagnosticStage === "A2" && !["PASS", "RUN_FILE_NOT_EXECUTED"].includes(this.effectDiagnosticStages.A1?.result)) return "A1 尚未完成 letters.txt Execution 判定";
       if (diagnosticStage === "A3" && this.effectDiagnosticStages.A2?.result !== "PASS") return "A2 votc.txt Execution Marker 尚未通过";
       if (["B", "C", "D"].includes(diagnosticStage)) {
@@ -1172,28 +1339,36 @@ trigger_event = message_event.362`;
       const creatorScopeName = diagnosticStage === "A3" ? "root" : ["B", "C", "D"].includes(diagnosticStage) ? `global_var:message_second_scope_${normalizedLetterId}` : null;
       const diagnosticId = `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`;
       const transportStage = diagnosticStage === "A1" || diagnosticStage === "A2";
-      const marker = transportStage ? `VOTC:LETTER_TRANSPORT/${diagnosticStage === "A1" ? "A" : "B"}/${diagnosticId}` : `VOTC:LETTER_DIAG/${diagnosticStage}/${diagnosticId}`;
+      const marker = transportStage ? `VOTC:LETTER_TRANSPORT/${diagnosticStage === "A1" ? "A" : "B"}/${diagnosticId}` : diagnosticStage === "A3" ? `VOTC:LETTER_DIAG/A3/PRE/${diagnosticId}` : `VOTC:LETTER_DIAG/${diagnosticStage}/${diagnosticId}`;
       const transportMode = diagnosticStage === "A1" ? LetterEffectTransportMode.LEGACY : LetterEffectTransportMode.VOTC;
       let gameCommand = `debug_log = "${marker}"`;
-      if (!transportStage) gameCommand += `
-create_artifact = {
-\tname = "VOTC_TEST"
-\tdescription = "TEST LETTER"
-\ttype = journal
-\tvisuals = scroll
-\tcreator = ${creatorScopeName}`;
-      if (diagnosticStage === "A3" || diagnosticStage === "B") {
+      let postMarker = null;
+      let scopeMarker = null;
+      if (diagnosticStage === "A3") {
+        postMarker = `VOTC:LETTER_DIAG/A3/POST/${diagnosticId}`;
+        scopeMarker = `VOTC:LETTER_DIAG/A3/SCOPE_OK/${diagnosticId}`;
+        const artifactBody = this.buildLetterArtifactBody({ creatorScope: "root", name: "votc_huixin_title1", description: "VOTC RC6 ARTIFACT TEST", saveScopeAs: "votc_test_letter" }).split("\n").map((line) => `\t${line}`).join("\n");
+        gameCommand = `root = {
+	debug_log = "${marker}"
+${artifactBody}
+	if = {
+		limit = { exists = scope:votc_test_letter }
+		debug_log = "${scopeMarker}"
+	}
+	debug_log = "${postMarker}"
+}`;
+      } else {
+      if (["B", "C", "D"].includes(diagnosticStage)) {
+        const saveScopeAs = diagnosticStage === "B" ? "votc_test_letter" : "votc_latest_letter";
         gameCommand += `
-\tsave_scope_as = votc_test_letter`;
-      } else if (diagnosticStage === "C" || diagnosticStage === "D") {
-        gameCommand += `
-\tsave_scope_as = votc_latest_letter
-}
+${this.buildLetterArtifactBody({ creatorScope: creatorScopeName, name: `votc_huixin_title${normalizedLetterId.replace(/letter_/, "")}`, description: "VOTC RC6 ARTIFACT TEST", saveScopeAs })}`;
+        if (diagnosticStage === "C" || diagnosticStage === "D") gameCommand += `
 set_global_variable = {
-\tname = votc_latest_letter
-\tvalue = scope:votc_latest_letter`;
+	name = votc_latest_letter
+	value = scope:votc_latest_letter
+}`;
       }
-      if (!transportStage) gameCommand += "\n}";
+      }
       if (diagnosticStage === "D") gameCommand += "\ntrigger_event = message_event.362";
       const writeResult = letterEffectTransport.writeDiagnosticEffect(gameCommand, transportMode);
       if (writeResult.success) {
@@ -1202,21 +1377,26 @@ set_global_variable = {
           stage: diagnosticStage,
           diagnosticId,
           marker,
+          postMarker,
+          scopeMarker,
           letterId: ["B", "C", "D"].includes(diagnosticStage) ? normalizedLetterId : null,
           creatorScopeName,
           transportMode,
           effectFilePath: writeResult.effectFilePath,
           effectText: gameCommand,
           writeStatus: "FILE_WRITE_OK",
-          executionStatus: "WAITING_FOR_CK3_EXECUTION",
-          result: "WAITING_FOR_CK3_EXECUTION",
+          executionStatus: diagnosticStage === "A3" ? "A3_PRE_WAIT" : "WAITING_FOR_CK3_EXECUTION",
+          result: diagnosticStage === "A3" ? "A3_PRE_WAIT" : "WAITING_FOR_CK3_EXECUTION",
           requiresVisualCheck: !transportStage,
+          preConfirmed: false,
+          postConfirmed: false,
+          scopeConfirmed: false,
           writtenAt: Date.now()
         };
         this.activeEffectDiagnostic = diagnostic;
         this.effectDiagnosticStages[diagnosticStage] = { ...diagnostic };
         this.lastEffectDiagnostic = { ...diagnostic };
-        console.log(`[LetterDiagnostics] stage=${diagnosticStage} id=${diagnosticId} state=WAITING_FOR_CK3_EXECUTION`);
+        console.log(`[LetterDiagnostics] stage=${diagnosticStage} id=${diagnosticId} state=${diagnostic.result}`);
         return { ...diagnostic };
       }
       const errorMessage = `Failed to write diagnostic effect: ${writeResult.error || "Unknown error"}`;
@@ -1225,6 +1405,38 @@ set_global_variable = {
       this.effectDiagnosticStages[diagnosticStage] = { ...diagnostic };
       this.lastEffectDiagnostic = { ...diagnostic };
       return { ...diagnostic };
+    }
+    confirmA3DiagnosticMarker(markerType, diagnosticId) {
+      const diagnostic = this.activeEffectDiagnostic;
+      if (!diagnostic || diagnostic.stage !== "A3" || diagnostic.diagnosticId !== diagnosticId || diagnostic.executionStatus === "EXECUTION_CONFIRMED") return false;
+      const confirmedAt = Date.now();
+      if (markerType === "PRE") {
+        diagnostic.preConfirmed = true;
+        diagnostic.preConfirmedAt = confirmedAt;
+        diagnostic.executionStatus = "A3_EFFECT_ENTERED";
+        diagnostic.result = "A3_EFFECT_ENTERED";
+      } else if (markerType === "POST") {
+        diagnostic.postConfirmed = true;
+        diagnostic.postConfirmedAt = confirmedAt;
+        diagnostic.executionStatus = diagnostic.scopeConfirmed ? "A3_SCOPE_CONFIRMED" : "A3_POST_WAIT";
+        diagnostic.result = diagnostic.executionStatus;
+      } else if (markerType === "SCOPE_OK") {
+        diagnostic.scopeConfirmed = true;
+        diagnostic.scopeConfirmedAt = confirmedAt;
+        diagnostic.executionStatus = "A3_SCOPE_CONFIRMED";
+        diagnostic.result = "A3_SCOPE_CONFIRMED";
+      }
+      if (diagnostic.preConfirmed && diagnostic.postConfirmed && diagnostic.scopeConfirmed) {
+        diagnostic.executionStatus = "EXECUTION_CONFIRMED";
+        diagnostic.executionConfirmedAt = confirmedAt;
+        diagnostic.effectClearResult = letterEffectTransport.cancelOutboundEffect(diagnostic.transportMode, diagnostic.effectText);
+        diagnostic.result = "A3_VISUAL_CHECK_REQUIRED";
+        diagnostic.visualCheckRequired = true;
+      }
+      this.effectDiagnosticStages.A3 = { ...diagnostic };
+      this.lastEffectDiagnostic = { ...diagnostic };
+      console.log(`[LetterDiagnostics] stage=A3 id=${diagnosticId} state=${diagnostic.result}`);
+      return true;
     }
     confirmDiagnosticExecutionMarker(stage, diagnosticId) {
       const diagnostic = this.activeEffectDiagnostic;
@@ -1254,7 +1466,7 @@ set_global_variable = {
       if (!diagnostic || diagnostic.executionStatus !== "EXECUTION_CONFIRMED" || !diagnostic.requiresVisualCheck) return { success: false, error: `${diagnosticStage} 尚未进入 CK3 可见结果确认` };
       diagnostic.visualCheckRequired = false;
       diagnostic.visualCheckConfirmedAt = Date.now();
-      diagnostic.result = passed === true ? "PASS" : "FAIL";
+      diagnostic.result = passed === true ? "PASS" : diagnosticStage === "A3" ? "ARTIFACT_NOT_VISIBLE" : "FAIL";
       diagnostic.success = passed === true;
       this.effectDiagnosticStages[diagnosticStage] = { ...diagnostic };
       this.activeEffectDiagnostic = null;
@@ -1267,10 +1479,11 @@ set_global_variable = {
     getAllLetterStatuses() {
       this.refreshEffectDiagnosticTimeout();
       for (const status of this.letterStatuses.values()) {
-        status.currentDay = this.currentTotalDays;
+        const effectiveCurrentDay = this.getEffectiveDeliveryCurrentDay(status);
+        status.currentDay = effectiveCurrentDay;
         if (Number.isFinite(status.expectedDeliveryDay)) {
-          status.daysUntilDelivery = status.expectedDeliveryDay - this.currentTotalDays;
-          status.isLate = this.currentTotalDays > status.expectedDeliveryDay;
+          status.daysUntilDelivery = status.expectedDeliveryDay - effectiveCurrentDay;
+          status.isLate = effectiveCurrentDay > status.expectedDeliveryDay;
         } else {
           status.daysUntilDelivery = null;
           status.isLate = false;

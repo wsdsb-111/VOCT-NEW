@@ -23,7 +23,7 @@
 
 ### 版本设计与实施报告
 
-- [v7.10-official-action-letter-recovery-implementation-report.md](v7.10-official-action-letter-recovery-implementation-report.md)：V7.10-RC1 至 RC5 Candidate 官方 Action 迁移、Critical Action Recall 诊断、默认关闭的 State Transition Overlay / Stable Prefix A/B/C、DeepSeek Full Schema 本地保留、Letter Transport Recovery 与验证边界。
+- [v7.10-official-action-letter-recovery-implementation-report.md](v7.10-official-action-letter-recovery-implementation-report.md)：V7.10-RC1 至 RC6 Candidate 官方 Action 迁移、Critical Action Recall 诊断、默认关闭的 State Transition Overlay / Stable Prefix A/B/C、Authoritative Delivery Base、Artifact Diagnostic 3.0、Payload Race Recovery 与验证边界。
 - [upstream/votc-2.0.3-action-manifest.md](upstream/votc-2.0.3-action-manifest.md)：官方 Action Kernel Blob SHA、适配路径和语义边界。
 - [upstream/votc-2.0.3-letter-manifest.md](upstream/votc-2.0.3-letter-manifest.md)：官方 Letter Kernel Blob SHA、Delivery Effect 与可靠性外层边界。
 - [Third-Party Notices](../THIRD_PARTY_NOTICES.md)：上游出处、GPL-3.0-only 声明与 VOCT-NEW 适配范围。

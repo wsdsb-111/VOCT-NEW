@@ -194,6 +194,14 @@ function registerIpcHandlers(runtime) {
       return { success: false, error: error instanceof Error ? error.message : "Unknown error" };
     }
   });
+  electron.ipcMain.handle("letters:retryPayload", async (_, errorRecordId) => {
+    try {
+      return await letterManager.retryIncompletePayload(errorRecordId);
+    } catch (error) {
+      console.error("Failed to reread letter payload:", error);
+      return { success: false, error: error instanceof Error ? error.message : "Unknown error" };
+    }
+  });
   electron.ipcMain.handle("letters:clearPending", async () => {
     try {
       return letterManager.clearPendingLetters();
