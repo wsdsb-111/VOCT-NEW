@@ -16,6 +16,7 @@ const actions = require(path.join(root, "resources", "app", "out", "main", "acti
 const normalize = (value) => String(value).replace(/\r\n/g, "\n").trimEnd();
 const hash = (value) => crypto.createHash("sha256").update(normalize(value), "utf8").digest("hex");
 const listFiles = (directory) => fs.readdirSync(directory, { withFileTypes: true }).flatMap((entry) => entry.isDirectory() ? listFiles(path.join(directory, entry.name)) : [path.join(directory, entry.name)]);
+const isRetiredDirectoryAbsentOrEmpty = (directory) => !fs.existsSync(directory) || listFiles(directory).length === 0;
 
 const expectedActionHashes = {
   "z_agreedToTruceWith.js": "a8f418131bfc5031f19d81d9a633f93716f06618669f04ec968c71db33a79453",
@@ -150,7 +151,19 @@ assert(!mainSource.includes('require("./action-system")'));
 assert(!mainSource.includes("actionSystemMode"));
 assert(!analyticsSource.includes("actionSystemMode"));
 for (const retiredLabel of ["Action Engine 4.0", "Action Engine 3.0", "动作系统模式", "性能模式", "精准模式", "Social Consequence"]) assert(!rendererSource.includes(retiredLabel), `retired Action UI remains: ${retiredLabel}`);
-assert.strictEqual(listFiles(path.join(root, "resources", "app", "out", "main", "action-system")).length, 0);
+const retiredActionSystemDir = path.join(root, "resources", "app", "out", "main", "action-system");
+assert(isRetiredDirectoryAbsentOrEmpty(retiredActionSystemDir), "retired action-system directory must be absent or empty");
+const retiredContractRoot = fs.mkdtempSync(path.join(os.tmpdir(), "votc-retired-action-system-"));
+const retiredContractDir = path.join(retiredContractRoot, "action-system");
+try {
+  assert(isRetiredDirectoryAbsentOrEmpty(retiredContractDir), "absent retired directory must pass");
+  fs.mkdirSync(retiredContractDir);
+  assert(isRetiredDirectoryAbsentOrEmpty(retiredContractDir), "empty retired directory must pass");
+  fs.writeFileSync(path.join(retiredContractDir, "unexpected.js"), "", "utf8");
+  assert.strictEqual(isRetiredDirectoryAbsentOrEmpty(retiredContractDir), false, "populated retired directory must fail");
+} finally {
+  fs.rmSync(retiredContractRoot, { recursive: true, force: true });
+}
 
 registryPromise.then(() => {
   console.log("VOTC v7.10 official Action System parity: PASS");

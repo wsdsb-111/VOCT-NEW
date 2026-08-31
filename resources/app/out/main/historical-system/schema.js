@@ -3,6 +3,10 @@
 const HISTORICAL_SCHEMA_VERSION = 1;
 const VALID_SENSITIVITY = new Set(["low", "medium", "high"]);
 const VALID_IMPORTANCE = new Set(["unknown", "low", "medium", "high"]);
+const VALID_FIGURE_GENDERS = new Set(["male", "female", "unknown", null]);
+const VALID_FAMILY_RELATIONS = new Set(["parent", "child", "sibling", "spouse"]);
+const VALID_CONFIDENCE_POLICIES = new Set(["standard", "conservative"]);
+const FIGURE_HINT_KEYS = Object.freeze(["cultures", "houses", "titles", "positions", "realms", "locations"]);
 
 function assertObject(value, label) {
   if (!value || typeof value !== "object" || Array.isArray(value)) throw new Error(`${label}_must_be_an_object`);
@@ -77,6 +81,51 @@ function validateHistoricalFigure(figure) {
   assertString(figure.seedingType, `historical_figure_seeding_type:${figure.figureKey}`);
   assertStringArray(figure.historicalFactIds, `historical_figure_fact_ids:${figure.figureKey}`);
   return figure;
+}
+
+function validateFigureMatchingRecord(record) {
+  assertObject(record, "figure_matching");
+  assertString(record.figureKey, "figure_matching_key");
+  if (typeof record.resolverReady !== "boolean") throw new Error(`figure_matching_resolver_ready_must_be_a_boolean:${record.figureKey}`);
+  assertObject(record.intrinsic, `figure_matching_intrinsic:${record.figureKey}`);
+  if (!VALID_FIGURE_GENDERS.has(record.intrinsic.gender)) throw new Error(`figure_matching_gender_invalid:${record.figureKey}`);
+  const birthYear = assertInteger(record.intrinsic.birthYear, `figure_matching_birth_year:${record.figureKey}`, { nullable: true });
+  if (birthYear !== null && birthYear < 1) throw new Error(`figure_matching_birth_year_out_of_range:${record.figureKey}`);
+  assertObject(record.hints, `figure_matching_hints:${record.figureKey}`);
+  for (const key of FIGURE_HINT_KEYS) assertStringArray(record.hints[key], `figure_matching_${key}:${record.figureKey}`);
+  if (!Array.isArray(record.familyHints)) throw new Error(`figure_matching_family_hints_must_be_an_array:${record.figureKey}`);
+  for (const hint of record.familyHints) {
+    assertObject(hint, `figure_matching_family_hint:${record.figureKey}`);
+    if (!VALID_FAMILY_RELATIONS.has(hint.relation)) throw new Error(`figure_matching_family_relation_invalid:${record.figureKey}`);
+    assertStringArray(hint.names, `figure_matching_family_names:${record.figureKey}`);
+    if (hint.names.length === 0) throw new Error(`figure_matching_family_names_empty:${record.figureKey}`);
+  }
+  if (!VALID_CONFIDENCE_POLICIES.has(record.confidencePolicy)) throw new Error(`figure_matching_confidence_policy_invalid:${record.figureKey}`);
+  if (typeof record.reviewed !== "boolean") throw new Error(`figure_matching_reviewed_must_be_a_boolean:${record.figureKey}`);
+  assertStringArray(record.sources, `figure_matching_sources:${record.figureKey}`);
+  return record;
+}
+
+function validateFigureMatchingDataset(records, figures) {
+  if (!Array.isArray(records)) throw new Error("figure_matching_dataset_must_be_an_array");
+  if (!Array.isArray(figures)) throw new Error("figure_matching_figures_must_be_an_array");
+  const figureByKey = indexUnique(figures, "figureKey", "figure_matching_figure");
+  const matchingByKey = new Map();
+  for (const record of records) {
+    validateFigureMatchingRecord(record);
+    if (!figureByKey.has(record.figureKey)) throw new Error(`figure_matching_unknown_figure:${record.figureKey}`);
+    if (matchingByKey.has(record.figureKey)) throw new Error(`figure_matching_duplicate:${record.figureKey}`);
+    const figure = figureByKey.get(record.figureKey);
+    if (record.resolverReady) {
+      if (!record.reviewed || record.sources.length === 0) throw new Error(`figure_matching_ready_without_review:${record.figureKey}`);
+      if (record.intrinsic.birthYear === null && !Number.isInteger(figure.activeWindow?.earliestYear)) throw new Error(`figure_matching_ready_without_temporal_anchor:${record.figureKey}`);
+      const auxiliaryHints = FIGURE_HINT_KEYS.reduce((count, key) => count + record.hints[key].length, 0) + record.familyHints.length;
+      if (auxiliaryHints === 0) throw new Error(`figure_matching_ready_without_auxiliary_hint:${record.figureKey}`);
+    }
+    matchingByKey.set(record.figureKey, record);
+  }
+  for (const figure of figures) if (!matchingByKey.has(figure.figureKey)) throw new Error(`figure_matching_missing_figure:${figure.figureKey}`);
+  return matchingByKey;
 }
 
 function validateHistoricalFact(fact) {
@@ -173,9 +222,14 @@ function validateHistoricalDataset(dataset) {
 module.exports = {
   HISTORICAL_SCHEMA_VERSION,
   VALID_SENSITIVITY,
+  VALID_FIGURE_GENDERS,
+  VALID_FAMILY_RELATIONS,
+  FIGURE_HINT_KEYS,
   validateDate,
   validateHistoricalPeriod,
   validateHistoricalFigure,
+  validateFigureMatchingRecord,
+  validateFigureMatchingDataset,
   validateHistoricalFact,
   validateHistoricalEvent,
   validateRuler,

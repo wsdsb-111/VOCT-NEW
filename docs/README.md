@@ -19,6 +19,7 @@
 - [V8阶段开发记录.md](V8阶段开发记录.md)：V8.0 起的 Historical Baseline、Temporal Gate 与后续世界线阶段记录。
 - [VOTC_v8.1_Campaign_Identity与Worldline_Store_Foundation设计.md](VOTC_v8.1_Campaign_Identity与Worldline_Store_Foundation设计.md)：V8.1 存档身份协议、session 降级、Worldline schema、原子持久化和 Shadow 集成合同。
 - [v8.1-campaign-identity-worldline-store-implementation-report.md](v8.1-campaign-identity-worldline-store-implementation-report.md)：V8.0 P0/P1 审计、V8.1 应用与 Workshop 实施、自动化验证和实机边界。
+- [v8.3-historical-figure-resolver-implementation-report.md](v8.3-historical-figure-resolver-implementation-report.md)：V8.3 人物匹配数据、Canonical 输入、精确名称门禁、身份评分、Shadow 集成与人工 Gate 边界。
 - [v8.3-prerequisite-fixes-implementation-report.md](v8.3-prerequisite-fixes-implementation-report.md)：V8.3 前置 EOL、GameData 状态归属和 Shadow metadata 加固，以及仍需 CK3 实机完成的 Gate。
 - [v8.0-historical-baseline-2.0-implementation-report.md](v8.0-historical-baseline-2.0-implementation-report.md)：V8.0 结构化历史基线、兼容适配、shadow Temporal Gate、Prompt/cache 等价和发布验证边界。
 - [VOTC_v7.8_main.js第一轮模块化拆分实施记录.md](VOTC_v7.8_main.js第一轮模块化拆分实施记录.md)：Pre-V8 组合根、游戏数据、Prompt、摘要、信件和运行服务拆分边界及验证结果。
@@ -31,6 +32,7 @@
 
 - [VOTC_v8.1_Campaign_Identity与Worldline_Store_Foundation设计.md](VOTC_v8.1_Campaign_Identity与Worldline_Store_Foundation设计.md)
 - [v8.1-campaign-identity-worldline-store-implementation-report.md](v8.1-campaign-identity-worldline-store-implementation-report.md)
+- [v8.3-historical-figure-resolver-implementation-report.md](v8.3-historical-figure-resolver-implementation-report.md)
 - [v8.3-prerequisite-fixes-implementation-report.md](v8.3-prerequisite-fixes-implementation-report.md)
 - [v8.0-historical-baseline-2.0-implementation-report.md](v8.0-historical-baseline-2.0-implementation-report.md)：V8.0 Historical Baseline 2.0 实施、测试与实机 smoke 边界。
 - [v7.10-official-action-letter-recovery-implementation-report.md](v7.10-official-action-letter-recovery-implementation-report.md)：V7.10-RC1 至 RC6 Final Rev.3 Candidate 官方 Action 迁移、启动 ACK Reconciliation、崩溃安全 dispatch、BLOCKED/STALLED 恢复、只读 debug.log、路径/Tail 事务、Date Producer Recovery、Canonical Relative Profile、统一 Kinship Resolver、Artifact Diagnostic 3.0 与验证边界。

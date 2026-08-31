@@ -1,6 +1,6 @@
-# V8 Historical System（v8.1）
+# V8 Historical System（v8.3）
 
-V8.0 在此目录建立结构化、可验证的历史基线；V8.1 增加存档身份和最小 WorldlineStore。当前仍保持 Shadow Mode，不改变 v7.10.1 的 Prompt 与既有运行合同。
+V8.0 在此目录建立结构化、可验证的历史基线；V8.1 增加存档身份和最小 WorldlineStore；V8.3 增加只读 Historical Figure Resolver。当前仍保持 Shadow Mode，不改变 v7.10.1 的 Prompt 与既有运行合同。
 
 ## 当前模块
 
@@ -11,7 +11,11 @@ V8.0 在此目录建立结构化、可验证的历史基线；V8.1 增加存档�
 - `temporal-knowledge-gate.js`：严格日期解析和 fail-safe 时间可用性判断；V8.0 仅供 shadow/test 使用。
 - `campaign-identity.js`：验证 CK3 存档 token，派生稳定哈希 ID；无可靠 token 时返回不可持久化 session identity。
 - `worldline-store.js`：校验并原子保存 schema version 1 `worldline.json`，未知/损坏 state 不覆盖。
-- `dynamic-history-service.js`：组合 Campaign Identity 与 WorldlineStore 的唯一 Shadow 入口；状态绑定到当前 GameData 的隐藏 `dynamicHistory`，不保留全局 last-writer state。
+- `historical-data/figure-matching.js`：为 48 个历史人物提供显式 resolver readiness；首批 14 人包含人工复核的出生年与正向文化提示。
+- `historical-figure-input.js`：每个 GameData 只构建一次 Canonical Relationship Profile，并生成深冻结、紧凑的候选证据快照。
+- `figure-name-index.js`：归一化人物名与别名，只允许 exact canonical/alias 进入候选集。
+- `historical-figure-resolver.js`：分离 identity 与 world-state 证据，输出 `UNSUPPORTED` 至 `RESOLVED` 六种 shadow 状态。
+- `dynamic-history-service.js`：组合 Campaign Identity、WorldlineStore 与 Figure Resolver 的唯一 Shadow 入口；状态绑定到当前 GameData 的隐藏 `dynamicHistory`，不保留全局 last-writer state。
 
 Schema version：`1`。
 
@@ -29,25 +33,29 @@ game-data/legacy-historical-reference.js
 CK3 VOTC:CAMPAIGN → LogParser
                          ↓
                DynamicHistoryService
-                  ↙             ↘
-       CampaignIdentity      WorldlineStore
+              ↙         ↓          ↘
+ CampaignIdentity   Figure Resolver   WorldlineStore
+                         ↓
+              RelationshipResolver
                          ↓
              GameData.dynamicHistory
 ```
 
 原 `game-data/legacy-historical-reference.js` import 路径、函数名与返回结构保持不变。`dynamicHistory` 和兼容入口 `historicalCampaignIdentity` 均不可枚举，不进入对象展开或 JSON 序列化；`getWorldlineState(gameData)` 只读取指定实例。`default.hbs`、Prompt block 顺序、cache anchor 和 stable/dynamic 分类均不读取 V8 shadow state。
 
+Figure Resolver 先以规范名/别名精确门禁缩小候选，再使用出生时间、性别与亲属关系等身份信号评分；文化、家族、头衔、职位、领地和位置仅作为正向辅助证据。当前角色的头衔或位置与历史不一致不构成身份冲突，历史死亡日期也不排除 CK3 沙盒中的存活人物。`RESOLVED` 要求分数不低于 0.85、领先第二名至少 0.15、没有硬冲突，且具备强出生年或亲属证据。结果只保存在不可枚举的 `GameData.dynamicHistory.figureResolution`，不写入 `worldline.json`。
+
 ## 边界
 
-V8.1 historical-system：
+V8.3 historical-system：
 
 - 不拥有或修改 Memory；
 - 不执行 Action；
 - 不生成或投递 Letter；
 - 不写 CK3 文件；
-- 不依赖 Conversation Runtime、Run Command Queue 或 Relationship Resolver；
+- 不依赖 Conversation Runtime 或 Run Command Queue；Figure Resolver 只读复用 Canonical Relationship Resolver，不修改其语义或状态；
 - 只在 `votc_data/dynamic_history/` 持久化可靠 campaign 的最小 Shadow state，不修改 Memory 目录；
-- 不建立 GameStateSnapshot、figure binding、divergence、fact validity 或 worldline projection；
+- 不持久化 figure binding，不建立全局人物缓存、GameStateSnapshot、divergence、fact validity 或 worldline projection；
 - 不让 Temporal Gate 改写最终 Prompt。
 
-GameStateSnapshot、Figure Resolver、Divergence Ledger、Fact Validity 和 Worldline Projector 分别留给 v8.2–v8.6。
+GameStateSnapshot、Divergence Ledger、Fact Validity 和 Worldline Projector 仍按后续阶段推进；V8.3 的人物解析结果在人工 Ground Truth 与真实 CK3 Save A/B Gate 完成前只作为 shadow diagnostic。

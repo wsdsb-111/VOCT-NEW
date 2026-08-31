@@ -9,6 +9,7 @@ Voices of the Court 是一个面向《Crusader Kings III》（CK3）的沉浸式
 - **CK3 角色扮演对话**：根据角色的性格、头衔、关系、财富、信仰、处境和当前场景生成回复。
 - **Historical Baseline 2.0**：从游戏日期提取年份，以 V8 结构化时期、事件和人物数据生成与 v7.10.1 字节等价的唐、五代十国、北宋、南宋和元初历史背景；Temporal Knowledge Gate 在 v8.0 仅以 shadow/pure logic 运行。
 - **Campaign Identity / Worldline Store**：V8.1 从 CK3 存档读取稳定 token，以哈希隔离 `dynamic_history/<campaignId>/worldline.json`；旧模组或无效 token 只使用进程级 identity，不写世界线数据。
+- **Historical Figure Resolver**：V8.3 在 Shadow Mode 中以规范名/别名精确门禁、出生时间、性别和亲属证据匹配 CK3 人物；解析结果只保存在当前 GameData 的隐藏 metadata，不进入 Prompt 或世界线持久化。
 - **历史认知边界**：提示词要求角色只使用当前年份已经发生、写成、流传或成名的信息，避免引用未来人物、事件、诗词和典故。
 - **当前政局优先**：皇帝和年号从实际游戏角色数据中识别，支持玩家篡位或改变历史后的沙盒玩法。
 - **Memory Engine 2.5**：保留 `角色ID_姓名/与对方的对话.json` 人物目录与 2.4 写入合同，并新增整场冻结的 Session Topic Anchor，以及只在明确回忆意图下触发、Top1、默认 256 Token 的 Turn Recall。
@@ -176,6 +177,8 @@ V8.1 Campaign Identity + Worldline Store Foundation 在不修改现有 Prompt �
 
 V8.3 前置 Gate A–C 已完成基础设施加固：Windows 源码静态断言统一归一化 EOL；Dynamic History 状态改为绑定当前 GameData，不再读取全局最近一次解析结果；Shadow metadata 不参与枚举、展开或 JSON 序列化，并支持同一 GameData 幂等更新。Campaign Token 的 Save A/B 稳定性仍须真实 CK3 验收。详见 [V8.3 前置修复实施报告](docs/v8.3-prerequisite-fixes-implementation-report.md)。
 
+V8.3 Historical Figure Resolver 为 48 个历史人物提供显式 readiness，并以首批 14 人 reviewed cohort 建立 fail-closed 校准。只有规范名或别名精确命中的 CK3 角色进入候选；出生时间、性别和亲属关系用于身份判断，当前头衔、职位、领地与位置仅作为正向辅助，因此沙盒改史不会被当作身份冲突。结果只写入不可枚举的 `GameData.dynamicHistory.figureResolution`，不改变 Prompt、cache 或 `worldline.json`。详见 [V8.3 实施报告](docs/v8.3-historical-figure-resolver-implementation-report.md)。
+
 V7.7 在 V7.6 健康化基础上分阶段拆分主进程：第一阶段将六种模型 Provider 迁入 `providers/index.js`、92 个既有 IPC 注册迁入 `ipc/register-ipc.js`；第二阶段把 `ProviderRegistry`、`TokenCounter` 和 `LLMManager` 迁入 `provider-service.js`，通过显式依赖继续读取用户分别选择的对话、摘要和动作模型。`main.js` 由约 9477 行降至约 6612 行。动作语义同时补齐“共度春宵/鱼水之欢已发生”和“从今以后成为情人/认定灵魂伴侣”等自然完成态表达，并继续排除请求、计划、假设、回忆与失败尝试。当前仓库仍是可运行打包产物，没有能够重新生成这些文件的完整 `src` 工程，因此本阶段不伪造源码构建链。
 
 发布测试统一由 `scripts/test-manifest.js` 声明。本地与 CI 都运行：
@@ -184,23 +187,24 @@ V7.7 在 V7.6 健康化基础上分阶段拆分主进程：第一阶段将六种
 node scripts\test-release.js
 ```
 
-清单会覆盖全部 `test-*.js`。V8.1 当前分类 139 个测试文件：70 个直接发布组，68 个依赖已退休 AE3/AE4/Social 语义的历史测试明确归档，另 1 个为统一发布入口。V8.0 五组门禁继续覆盖 legacy parity、Schema、Temporal、Prompt/cache 与依赖冻结；V8.1 三组门禁覆盖稳定 identity、不同存档隔离、无可靠 ID 零持久化、Worldline schema/原子写入/损坏保护及 Shadow 集成。既有 Run Command Recovery T1–T18、Memory、Conversation、Action、Letter、Relationship、Date Producer 与缓存回归继续执行。
+清单会覆盖全部 `test-*.js`。V8.3 当前分类 144 个测试文件：75 个直接发布组，68 个依赖已退休 AE3/AE4/Social 语义的历史测试明确归档，另 1 个为统一发布入口。V8.0 五组门禁继续覆盖 legacy parity、Schema、Temporal、Prompt/cache 与依赖冻结；V8.1 三组门禁覆盖稳定 identity、存档隔离、Worldline schema 与 Shadow 集成；V8.3 五组门禁覆盖人物数据、Canonical 输入、解析状态、GameData 隔离、零持久化和 cache 边界。既有 Run Command Recovery T1–T18、Memory、Conversation、Action、Letter、Relationship、Date Producer 与缓存回归继续执行。
 
 ## 版本信息
 
 - 外挂 UI 版本：v2.0.4
-- 当前应用功能基线：v8.1 Campaign Identity + Worldline Store Foundation（Shadow Mode）
+- 当前应用功能基线：v8.3 Historical Figure Resolver（Shadow Mode）
 - CK3 模组版本：Voices of the Court 2.0.5
 - 模组支持版本：CK3 1.18.*
 - UI 主题：宫廷编年史风格（深红、暗金、羊皮纸文本层级）
 - UI 主题切换：羊皮卷、骑士纹章、水墨画卷三套完整历史风格；分别拥有独立背景、边框结构、按钮造型、消息卡片、输入框、字体和滚动条，并可自动保存选择
 - UI 素材生成提示词：参见 [docs/UI_ASSET_PROMPTS_2.0.3.md](docs/UI_ASSET_PROMPTS_2.0.3.md)
-- 当前重点：V8.1 存档级 Campaign Identity、Worldline schema v1、原子持久化和 Shadow diagnostics；Official VOTC 2.0.3 Action、Memory Engine 2.5、外挂 UI 2.0.4 与 Prompt/cache 合同保持冻结
+- 当前重点：V8.3 exact-name Historical Figure Resolver、48 人 readiness、14 人 reviewed calibration 和 GameData-scoped Shadow diagnostics；Worldline schema v1、Official VOTC 2.0.3 Action、Memory Engine 2.5、外挂 UI 2.0.4 与 Prompt/cache 合同保持冻结
 
 ## 已知限制
 
 - 历史知识核验依赖模型自身的年代知识，提示词规则可以显著降低穿越，但不能替代外部历史数据库。
-- V8.1 Campaign Identity 和 Worldline Store 仍只在 Shadow Mode 运行，不改变当前 Prompt；GameStateSnapshot、统治者解析、世界线分叉、人物绑定和动态投影按 v8.2–v8.6 分阶段实现。
+- V8.1 Campaign Identity、Worldline Store 与 V8.3 Historical Figure Resolver 仍只在 Shadow Mode 运行，不改变当前 Prompt；V8.3 不持久化人物绑定，GameStateSnapshot、世界线分叉、事实有效性和动态投影按后续阶段实现。
+- V8.3 的 20–30 条人工 Ground Truth、真实 CK3 Save A/B、跨重启/读档和同名改名场景尚未验收，因此当前不宣称人物解析达到生产 Precision/Recall 门槛。
 - Workshop 2.0.5 的存档 token 跨重启与不同新存档隔离仍需真实 CK3 保存/读档 Gate；旧模组不会持久化世界线，但现有对话仍可运行。
 - CK3 日志格式、角色头衔语言和本地化文本变化时，可能影响年份或皇帝识别。
 - DeepSeek 等服务商的上下文缓存由服务端管理，命中率会受到请求前缀、模型、账号隔离和缓存生命周期影响。

@@ -1,6 +1,6 @@
 "use strict";
 
-const VOTC_CORE_VERSION = "8.1.0";
+const VOTC_CORE_VERSION = "8.3.0";
 const MEMORY_ENGINE_VERSION = "2.5";
 const ACTION_SYSTEM_VERSION = "official-votc-2.0.3";
 const SUPPORTED_PERSPECTIVE_SUMMARY_ENGINE_VERSIONS = new Set(["2.3", "2.4", MEMORY_ENGINE_VERSION]);

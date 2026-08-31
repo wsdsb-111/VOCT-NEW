@@ -38,7 +38,7 @@ while (queue.length > 0) {
   }
 }
 
-for (const forbidden of ["game-state-snapshot.js", "divergence-engine.js", "historical-figure-resolver.js", "historical-context-projector.js"]) {
+for (const forbidden of ["game-state-snapshot.js", "divergence-engine.js", "historical-context-projector.js"]) {
   assert.strictEqual(fs.existsSync(path.join(historicalRoot, forbidden)), false, `${forbidden} belongs to a later V8 phase`);
 }
 

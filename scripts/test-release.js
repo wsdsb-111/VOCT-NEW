@@ -15,4 +15,4 @@ for (const check of checks) {
   }
 }
 
-console.log(`\nVOTC v8.1 Campaign Identity + Worldline Store Foundation Release Regression: PASS (${checks.length} groups)`);
+console.log(`\nVOTC v8.3 Historical Figure Resolver Release Regression: PASS (${checks.length} groups)`);
