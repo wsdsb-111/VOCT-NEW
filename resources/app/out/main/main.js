@@ -428,7 +428,7 @@ const ActionRegistryClass = ActionRegistry.configure({
 const actionRegistry = ActionRegistryClass.getInstance();
 const { buildStructuredResponseJsonSchema, buildStructuredResponseSchema } = actionSchema;
 const { createRunFileManager } = require("./actions/run-file-manager");
-const RunFileManager = createRunFileManager({ settingsRepository, path, fs: fs$1 });
+const RunFileManager = createRunFileManager({ settingsRepository, path, fs: fs$1, dataDir: VOTC_DATA_DIR });
 const runFileManager = new RunFileManager();
 const ActionEffectWriter = createActionEffectWriter({ runFileManager });
 const ActionEngine = createActionEngine({
@@ -813,7 +813,7 @@ const letterEffectTransport = new LetterEffectTransport();
 const { createLetterManager } = require("./letters/letter-manager");
 const { LetterManager, LetterResponseStatus, LetterSummaryStatus } = createLetterManager({
   settingsRepository, fs: fs$1, path, TailFile, readline: readline$1, parseLog,
-  letterPromptBuilder, llmManager, PromptBuilder, TokenCounter, memoryEngine, dataDir: VOTC_DATA_DIR, letterEffectTransport
+  letterPromptBuilder, llmManager, PromptBuilder, TokenCounter, memoryEngine, dataDir: VOTC_DATA_DIR, letterEffectTransport, runFileManager
 });
 const letterManager = new LetterManager();
 initLogger();
@@ -946,8 +946,7 @@ electron.app.on("ready", () => {
     chatWindow.webContents.send("chat-reset");
   });
   clipboardListener.on("VOTC:EFFECT_ACCEPTED", () => {
-    console.log("VOTC:EFFECT_ACCEPTED detected - clearing run file");
-    runFileManager.clear();
+    console.log("VOTC:EFFECT_ACCEPTED detected - waiting for command-specific CK3 debug ACK");
   });
   clipboardListener.on("VOTC:LETTER", async () => {
     console.log("VOTC:LETTER detected - generating reply");

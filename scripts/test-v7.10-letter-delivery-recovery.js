@@ -26,7 +26,7 @@ function createFixture(options = {}) {
       getCK3DebugLogPath: () => active ? debugLogPath : null,
       getSummaryPromptSettings: () => ({ letterSummaryPrompt: "概括来信和回信。" })
   };
-  const RunFileManager = createRunFileManager({ settingsRepository, fs, path });
+  const RunFileManager = createRunFileManager({ settingsRepository, fs, path, dataDir });
   const runFileManager = new RunFileManager();
   const { LetterEffectTransport } = createLetterEffectTransport({ settingsRepository, fs, path, runFileManager, dataDir });
   const letterEffectTransport = new LetterEffectTransport();
@@ -34,8 +34,12 @@ function createFixture(options = {}) {
     settingsRepository,
     fs,
     path,
-    TailFile: class {},
-    readline: {},
+    TailFile: class {
+      on() { return this; }
+      async start() {}
+      async quit() {}
+    },
+    readline: { createInterface: () => ({ on() {}, close() {} }) },
     parseLog: async () => parsedContext,
     letterPromptBuilder: {
       buildMessages: () => [{ role: "user", content: "请回信" }],
@@ -54,6 +58,7 @@ function createFixture(options = {}) {
     memoryEngine: { recordLetterMemory: (entry) => memoryRecords.push(entry) },
     dataDir,
     letterEffectTransport,
+    runFileManager,
     sleep: async () => {},
     letterPayloadRetryDelays: []
   };
@@ -66,6 +71,7 @@ function createFixture(options = {}) {
     debugLogPath,
     summaryCalls,
     memoryRecords,
+    runFileManager,
     createManager,
     activate: () => { active = true; },
     deactivate: () => { active = false; },
@@ -74,6 +80,20 @@ function createFixture(options = {}) {
     pendingPath: path.join(dataDir, "pending-letters.json"),
     cleanup: () => fs.rmSync(tempDir, { recursive: true, force: true })
   };
+}
+
+async function acknowledgeWrittenEffect(manager, letterId) {
+  const commandId = manager.getLetterStatus(letterId)?.runCommandId;
+  assert(commandId, `missing Run Command ID for ${letterId}`);
+  await manager.processLogLine(`VOTC:RUN_ACK/LETTER_EFFECT/${commandId}`);
+}
+
+async function acknowledgeDateRecoveryCommands(manager, runFileManager) {
+  while (runFileManager.getPendingCommands()[0]?.kind === "date_producer_rearm") {
+    const command = runFileManager.getPendingCommands()[0];
+    await manager.processLogLine(`VOTC:DATE_PRODUCER/REARMED/${command.commandId}`);
+    await manager.processLogLine(`VOTC:RUN_ACK/DATE_PRODUCER_REARM/${command.commandId}`);
+  }
 }
 
 function makeLetter(id, totalDays, delay, content = "测试来信") {
@@ -118,6 +138,7 @@ async function testDelay(delay) {
     assert.strictEqual(manager.storedLetters.size, 1, "effect write is not equivalent to CK3 acceptance");
     assertOfficialEffect(fs.readFileSync(fixture.effectPath, "utf8"), letter.letterId, `延迟${delay}日回信`);
     assert.strictEqual(manager.getLetterStatus(letter.letterId).responseStatus, fixture.LetterResponseStatus.EFFECT_FILE_WRITTEN);
+    await acknowledgeWrittenEffect(manager, letter.letterId);
     await manager.clearLettersFile();
     assert.strictEqual(manager.getLetterStatus(letter.letterId).responseStatus, fixture.LetterResponseStatus.SENT);
     assert.strictEqual(manager.storedLetters.size, 0);
@@ -172,6 +193,7 @@ async function testRestartAndNoDuplicate() {
     fixture.activate();
     await restarted.updateCurrentDate(301);
     assert.strictEqual(fs.readFileSync(fixture.effectPath, "utf8"), firstEffect, "restart must not write a duplicate effect while awaiting CK3 acceptance");
+    await acknowledgeWrittenEffect(restarted, letter.letterId);
     await restarted.clearLettersFile();
     const state = JSON.parse(fs.readFileSync(fixture.pendingPath, "utf8"));
     assert.strictEqual(state.version, 4);
@@ -196,10 +218,12 @@ async function testTwoLettersAreSerialized() {
     assert.strictEqual(manager.awaitingAcceptanceLetterId, first.letterId);
     assert(fs.readFileSync(fixture.effectPath, "utf8").includes("第一封回信"));
     assert.strictEqual(manager.storedLetters.size, 2);
+    await acknowledgeWrittenEffect(manager, first.letterId);
     await manager.clearLettersFile();
     assert.strictEqual(manager.awaitingAcceptanceLetterId, second.letterId);
     assert(fs.readFileSync(fixture.effectPath, "utf8").includes("第二封回信"));
     assert.strictEqual(manager.storedLetters.size, 1);
+    await acknowledgeWrittenEffect(manager, second.letterId);
     await manager.clearLettersFile();
     assert.strictEqual(manager.awaitingAcceptanceLetterId, null);
     assert.strictEqual(manager.storedLetters.size, 0);
@@ -227,6 +251,7 @@ async function testSummaryFailureDoesNotBlockImmediateDelivery() {
     fixture.activate();
     assert.strictEqual(await manager.processLatestLetter(), "即刻回信。");
     assert.strictEqual(manager.awaitingAcceptanceLetterId, letter.letterId, "immediate delivery must occur even when summary generation fails");
+    await acknowledgeDateRecoveryCommands(manager, fixture.runFileManager);
     assertOfficialEffect(fs.readFileSync(fixture.effectPath, "utf8"), letter.letterId, "即刻回信。");
     const status = manager.getLetterStatus(letter.letterId);
     assert.strictEqual(status.responseStatus, fixture.LetterResponseStatus.EFFECT_FILE_WRITTEN);

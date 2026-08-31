@@ -1,6 +1,6 @@
 "use strict";
 
-function createLetterManager({ settingsRepository, fs, path, TailFile, readline, parseLog, letterPromptBuilder, llmManager, PromptBuilder, TokenCounter, memoryEngine, dataDir, letterEffectTransport = null, sleep = (milliseconds) => new Promise((resolve) => setTimeout(resolve, milliseconds)), letterPayloadRetryDelays = [100, 200, 350, 600, 1e3], dateHeartbeatIntervalMs = 5e3, dateStaleMs = 2e4, dateScanBytes = 1024 * 1024, diagnosticExecutionTimeoutMs = 15e3, setIntervalFn = setInterval, clearIntervalFn = clearInterval }) {
+function createLetterManager({ settingsRepository, fs, path, TailFile, readline, parseLog, letterPromptBuilder, llmManager, PromptBuilder, TokenCounter, memoryEngine, dataDir, letterEffectTransport = null, runFileManager = null, sleep = (milliseconds) => new Promise((resolve) => setTimeout(resolve, milliseconds)), letterPayloadRetryDelays = [100, 200, 350, 600, 1e3], dateHeartbeatIntervalMs = 5e3, dateStaleMs = 2e4, dateScanBytes = 1024 * 1024, diagnosticExecutionTimeoutMs = 15e3, setIntervalFn = setInterval, clearIntervalFn = clearInterval }) {
   const fs$1 = fs;
   const readline$1 = readline;
   const LetterEffectTransportMode = Object.freeze({ LEGACY: "legacy_letters_file", VOTC: "votc_run_file" });
@@ -76,12 +76,19 @@ function createLetterManager({ settingsRepository, fs, path, TailFile, readline,
       this.lastLogLineReceivedAt = null;
       this.lastDateLogReceivedAt = null;
       this.lastDateValue = null;
+      this.lastObservedDateValue = null;
+      this.lastObservedDateMarkerAt = null;
+      this.lastProgressDateValue = null;
+      this.lastProgressAt = null;
+      this.lastDateMarkerSource = null;
       this.debugLogPath = null;
       this.debugLogExists = false;
       this.debugLogSize = null;
       this.debugLogMtime = null;
       this.debugLogIdentity = null;
-      this.dateSourceState = "STALE";
+      this.dateSourceState = "UNKNOWN";
+      this.dateProducerState = "UNKNOWN";
+      this.dateProducerRecovery = null;
       this.lastDateReconciliationAt = null;
       this.lastDateScanResult = null;
       this.latestPipelineStatus = null;
@@ -101,6 +108,7 @@ function createLetterManager({ settingsRepository, fs, path, TailFile, readline,
       } else {
         console.log("LetterManager: CK3 user path not configured yet, will start tailing when path is set");
       }
+      if (this.storedLetters.size > 0) Promise.resolve().then(() => this.ensureDateProducerRunning("app_start_pending_letters"));
     }
     /**
      * Start tailing the debug.log file to track VOTC:DATE updates
@@ -162,6 +170,20 @@ function createLetterManager({ settingsRepository, fs, path, TailFile, readline,
      */
     processLogLine(line) {
       this.lastLogLineReceivedAt = Date.now();
+      const runAckMatch = line.match(/VOTC:RUN_ACK\/([A-Za-z0-9_-]+)\/([A-Za-z0-9_-]+)/);
+      if (runAckMatch && runFileManager?.ackCommand) {
+        const acknowledged = runFileManager.ackCommand(runAckMatch[2], runAckMatch[1]);
+        if (acknowledged?.kind === "conversation_close") this.ensureDateProducerRunning("conversation_close_ack");
+      }
+      const producerMatch = line.match(/VOTC:DATE_PRODUCER\/(REARMED|BLOCKED)\/([A-Za-z0-9_-]+)/);
+      if (producerMatch && this.dateProducerRecovery?.recoveryId === producerMatch[2]) {
+        this.dateProducerRecovery = {
+          ...this.dateProducerRecovery,
+          executionResult: producerMatch[1],
+          executionObservedAt: Date.now(),
+          status: producerMatch[1] === "REARMED" ? "WAITING_FOR_FRESH_MARKER" : "BLOCKED_BY_TALK_SCENE"
+        };
+      }
       const transportMatch = line.match(/VOTC:LETTER_TRANSPORT\/([AB])\/([A-Za-z0-9_-]+)/);
       if (transportMatch) this.confirmDiagnosticExecutionMarker(transportMatch[1] === "A" ? "A1" : "A2", transportMatch[2]);
       const a3DiagnosticMatch = line.match(/VOTC:LETTER_DIAG\/A3\/(PRE|POST|SCOPE_OK)\/([A-Za-z0-9_-]+)/);
@@ -172,9 +194,24 @@ function createLetterManager({ settingsRepository, fs, path, TailFile, readline,
       const match = line.match(dateRegex);
       if (match) {
         const newTotalDays = Number(match[1]);
-        this.lastDateLogReceivedAt = Date.now();
+        const observedAt = Date.now();
+        const previousObservedValue = this.lastObservedDateValue;
+        this.lastDateLogReceivedAt = observedAt;
+        this.lastObservedDateMarkerAt = observedAt;
+        this.lastObservedDateValue = newTotalDays;
         this.lastDateValue = newTotalDays;
-        this.dateSourceState = "HEALTHY";
+        this.lastDateMarkerSource = "tail";
+        if (previousObservedValue === null || previousObservedValue !== newTotalDays) {
+          this.lastProgressDateValue = newTotalDays;
+          this.lastProgressAt = observedAt;
+          this.dateProducerState = "LIVE";
+        } else {
+          this.dateProducerState = "LIVE_NO_PROGRESS";
+        }
+        this.dateSourceState = this.tailState === "ACTIVE" ? "HEALTHY" : "TAIL_RESTARTING";
+        if (this.dateProducerRecovery && observedAt >= this.dateProducerRecovery.requestedAt) {
+          this.dateProducerRecovery = { ...this.dateProducerRecovery, status: "RECOVERED", recoveredAt: observedAt, freshDateValue: newTotalDays };
+        }
         console.log(`LetterManager: VOTC:DATE received (${newTotalDays})`);
         return this.updateCurrentDate(newTotalDays);
       }
@@ -269,10 +306,14 @@ function createLetterManager({ settingsRepository, fs, path, TailFile, readline,
           this.dateSourceState = "TAIL_RESTARTING";
           await this.restartLogTailing();
         }
-        const stale = !this.lastDateLogReceivedAt || Date.now() - this.lastDateLogReceivedAt > dateStaleMs;
+        const stale = !this.lastObservedDateMarkerAt || Date.now() - this.lastObservedDateMarkerAt > dateStaleMs;
         if (forceReconcile || stale) {
-          this.dateSourceState = "STALE";
+          this.dateSourceState = "DATE_SOURCE_STALLED";
+          this.dateProducerState = "STALLED";
           await this.reconcileLatestDateMarker(forceReconcile ? "manual" : "heartbeat");
+          await this.ensureDateProducerRunning(forceReconcile ? "manual_resync" : "date_source_stalled");
+        } else if (this.tailState === "ACTIVE") {
+          this.dateSourceState = "HEALTHY";
         }
         return this.getDateTrackerStatus();
       } finally {
@@ -305,15 +346,42 @@ function createLetterManager({ settingsRepository, fs, path, TailFile, readline,
         this.dateSourceState = scan.reason === "log_file_missing" ? "LOG_FILE_MISSING" : "DATE_MARKER_MISSING";
         return this.getDateTrackerStatus();
       }
-      this.lastDateLogReceivedAt = scannedAt;
       this.lastDateValue = scan.value;
-      this.dateSourceState = "HEALTHY";
+      this.lastDateMarkerSource = source;
+      const hasRecentLiveMarker = this.lastObservedDateMarkerAt && scannedAt - this.lastObservedDateMarkerAt <= dateStaleMs;
+      this.dateSourceState = this.tailState === "ACTIVE" && hasRecentLiveMarker ? "HEALTHY" : "DATE_SOURCE_STALLED";
+      if (!hasRecentLiveMarker) this.dateProducerState = "STALLED";
       if (scan.value !== this.currentTotalDays) await this.updateCurrentDate(scan.value);
       else await this.checkAndDeliverLetters();
       return this.getDateTrackerStatus();
     }
     async resyncGameDate() {
       return this.runDateTrackerHeartbeat({ forceReconcile: true });
+    }
+    ensureDateProducerRunning(reason = "unspecified") {
+      if (!runFileManager?.enqueueCommand || !runFileManager.isAvailable?.()) {
+        this.dateProducerRecovery = { status: "UNAVAILABLE", reason, requestedAt: Date.now(), error: "RunFileManager unavailable" };
+        return this.getDateTrackerStatus();
+      }
+      const existing = runFileManager.findPendingCommand?.((command) => command.kind === "date_producer_rearm");
+      if (existing) {
+        this.dateProducerRecovery = { ...(this.dateProducerRecovery || {}), status: "REQUESTED", reason, recoveryId: existing.commandId, requestedAt: this.dateProducerRecovery?.requestedAt || existing.queuedAt };
+        return this.getDateTrackerStatus();
+      }
+      const now = Date.now();
+      if (this.dateProducerRecovery && ["REQUESTED", "WAITING_FOR_FRESH_MARKER"].includes(this.dateProducerRecovery.status) && now - this.dateProducerRecovery.requestedAt < dateStaleMs) return this.getDateTrackerStatus();
+      const recoveryId = `rc6-date-${now.toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
+      const effectText = `if = {
+	limit = { NOT = { has_global_variable = talk_scene } }
+	root = { trigger_event = mcc_event_v2.9998 }
+	debug_log = "VOTC:DATE_PRODUCER/REARMED/${recoveryId}"
+}
+else = {
+	debug_log = "VOTC:DATE_PRODUCER/BLOCKED/${recoveryId}"
+}`;
+      const command = runFileManager.enqueueCommand({ commandId: recoveryId, owner: "letter", kind: "date_producer_rearm", effectText });
+      this.dateProducerRecovery = { status: "REQUESTED", reason, recoveryId: command.commandId, requestedAt: now };
+      return this.getDateTrackerStatus();
     }
     isValidGameDay(value) {
       return Number.isFinite(value) && Number.isInteger(value) && value > 0;
@@ -339,23 +407,10 @@ function createLetterManager({ settingsRepository, fs, path, TailFile, readline,
         }
       }
       const currentTrackerDay = this.isValidGameDay(Number(this.currentTotalDays)) ? Number(this.currentTotalDays) : null;
-      const authoritativeTrackerDay = reconciledGameDayAtCreation ?? trackerGameDayAtCreation ?? currentTrackerDay;
-      const dateDelta = authoritativeTrackerDay === null ? null : payloadGameDay - authoritativeTrackerDay;
-      let deliveryBaseDay;
-      let dateSourceDecision;
-      if (reconciledGameDayAtCreation !== null) {
-        deliveryBaseDay = reconciledGameDayAtCreation;
-        dateSourceDecision = Math.abs(dateDelta) <= 1 ? "PAYLOAD_ALIGNED" : "RECONCILED_TRACKER_AUTHORITATIVE";
-      } else if (trackerGameDayAtCreation !== null) {
-        deliveryBaseDay = trackerGameDayAtCreation;
-        dateSourceDecision = Math.abs(dateDelta) <= 1 ? "PAYLOAD_ALIGNED" : "TRACKER_AUTHORITATIVE";
-      } else if (currentTrackerDay !== null) {
-        deliveryBaseDay = currentTrackerDay;
-        dateSourceDecision = Math.abs(dateDelta) <= 1 ? "PAYLOAD_ALIGNED" : "RECONCILED_TRACKER_AUTHORITATIVE";
-      } else {
-        deliveryBaseDay = payloadGameDay;
-        dateSourceDecision = "PAYLOAD_FALLBACK";
-      }
+      const observedTrackerDay = reconciledGameDayAtCreation ?? trackerGameDayAtCreation ?? currentTrackerDay;
+      const dateDelta = observedTrackerDay === null ? null : payloadGameDay - observedTrackerDay;
+      const deliveryBaseDay = payloadGameDay;
+      const dateSourceDecision = dateDelta === null ? "PAYLOAD_BOOTSTRAP" : Math.abs(dateDelta) <= 1 ? "PAYLOAD_ALIGNED" : "PAYLOAD_SEND_DAY_AUTHORITATIVE";
       const expectedDeliveryDay = deliveryBaseDay + Number(letter.delay);
       const dateSourceEvent = dateDelta !== null && Math.abs(dateDelta) <= 1 ? "DATE_ALIGNED" : dateDelta === null ? "DATE_TRACKER_UNAVAILABLE" : "DATE_SOURCE_DIVERGENCE";
       console.log(`[LetterDate] letter=${letter.letterId} event=${dateSourceEvent} payload=${payloadGameDay} tracker=${trackerGameDayAtCreation ?? "unavailable"} reconciled=${reconciledGameDayAtCreation ?? "unavailable"} base=${deliveryBaseDay} delta=${dateDelta ?? "unavailable"} decision=${dateSourceDecision}`);
@@ -377,11 +432,20 @@ function createLetterManager({ settingsRepository, fs, path, TailFile, readline,
         lastLogLineReceivedAt: this.lastLogLineReceivedAt,
         lastDateLogReceivedAt: this.lastDateLogReceivedAt,
         lastDateValue: this.lastDateValue,
+        lastObservedDateValue: this.lastObservedDateValue,
+        lastObservedDateMarkerAt: this.lastObservedDateMarkerAt,
+        lastProgressDateValue: this.lastProgressDateValue,
+        lastProgressAt: this.lastProgressAt,
+        lastDateMarkerSource: this.lastDateMarkerSource,
         debugLogPath: this.debugLogPath,
         debugLogExists: this.debugLogExists,
         debugLogSize: this.debugLogSize,
         debugLogMtime: this.debugLogMtime,
         dateSourceState: this.dateSourceState,
+        dateProducerState: this.dateProducerState,
+        markerAgeMs: this.lastObservedDateMarkerAt ? Math.max(0, Date.now() - this.lastObservedDateMarkerAt) : null,
+        dateProducerRecovery: this.dateProducerRecovery ? { ...this.dateProducerRecovery } : null,
+        runCommands: runFileManager?.getPendingCommands ? runFileManager.getPendingCommands().map(({ effectText, ...command }) => command) : [],
         lastDateReconciliationAt: this.lastDateReconciliationAt,
         lastDateScanResult: this.lastDateScanResult ? { ...this.lastDateScanResult } : null
       };
@@ -921,7 +985,9 @@ function createLetterManager({ settingsRepository, fs, path, TailFile, readline,
           responseError: null,
           effectFileWrittenAt: effectWrittenAt,
           effectTransportMode: outboundMode,
-          effectFilePath: writeResult.effectFilePath
+          effectFilePath: writeResult.effectFilePath,
+          runCommandId: writeResult.commandId || null,
+          runCommandStatus: writeResult.commandStatus || null
         });
         this.transitionLetter(letter.letterId, LetterPipelineState.EFFECT_FILE_WRITTEN, { effectTransportMode: outboundMode });
         this.savePendingLetters();
@@ -1101,7 +1167,7 @@ ${"  \t"}modifier = artifact_monthly_minor_prestige_1_modifier
       if (effectStatus) {
         const storedEffect = this.storedLetters.get(effectStatus.letterId);
         const effectText = storedEffect ? this.buildOfficialLetterEffectBody(storedEffect.reply, storedEffect.letter) : null;
-        effectClearResult = letterEffectTransport.cancelOutboundEffect(clearedTransportMode, effectText);
+        effectClearResult = letterEffectTransport.cancelOutboundEffect(clearedTransportMode, effectText, effectStatus.runCommandId || null);
       }
       this.storedLetters.clear();
       this.deliveryInProgress.clear();
@@ -1298,7 +1364,7 @@ ${"  \t"}modifier = artifact_monthly_minor_prestige_1_modifier
         diagnostic.executionStatus = result;
         diagnostic.result = result;
         diagnostic.executionTimedOutAt = Date.now();
-        diagnostic.effectClearResult = letterEffectTransport.cancelOutboundEffect(diagnostic.transportMode, diagnostic.effectText);
+        diagnostic.effectClearResult = letterEffectTransport.cancelOutboundEffect(diagnostic.transportMode, diagnostic.effectText, diagnostic.runCommandId || null);
         this.effectDiagnosticStages[diagnostic.stage] = { ...diagnostic };
         this.lastEffectDiagnostic = { ...diagnostic };
         this.activeEffectDiagnostic = null;
@@ -1383,6 +1449,7 @@ set_global_variable = {
           creatorScopeName,
           transportMode,
           effectFilePath: writeResult.effectFilePath,
+          runCommandId: writeResult.commandId || null,
           effectText: gameCommand,
           writeStatus: "FILE_WRITE_OK",
           executionStatus: diagnosticStage === "A3" ? "A3_PRE_WAIT" : "WAITING_FOR_CK3_EXECUTION",
@@ -1429,7 +1496,9 @@ set_global_variable = {
       if (diagnostic.preConfirmed && diagnostic.postConfirmed && diagnostic.scopeConfirmed) {
         diagnostic.executionStatus = "EXECUTION_CONFIRMED";
         diagnostic.executionConfirmedAt = confirmedAt;
-        diagnostic.effectClearResult = letterEffectTransport.cancelOutboundEffect(diagnostic.transportMode, diagnostic.effectText);
+        diagnostic.effectClearResult = diagnostic.transportMode === LetterEffectTransportMode.VOTC
+          ? { success: true, cleanupOwner: "run_command_ack_queue", commandId: diagnostic.runCommandId || null }
+          : letterEffectTransport.cancelOutboundEffect(diagnostic.transportMode, diagnostic.effectText, diagnostic.runCommandId || null);
         diagnostic.result = "A3_VISUAL_CHECK_REQUIRED";
         diagnostic.visualCheckRequired = true;
       }
@@ -1444,7 +1513,9 @@ set_global_variable = {
       if (diagnostic.executionStatus !== "WAITING_FOR_CK3_EXECUTION") return false;
       diagnostic.executionStatus = "EXECUTION_CONFIRMED";
       diagnostic.executionConfirmedAt = Date.now();
-      diagnostic.effectClearResult = letterEffectTransport.cancelOutboundEffect(diagnostic.transportMode, diagnostic.effectText);
+      diagnostic.effectClearResult = diagnostic.transportMode === LetterEffectTransportMode.VOTC
+        ? { success: true, cleanupOwner: "run_command_ack_queue", commandId: diagnostic.runCommandId || null }
+        : letterEffectTransport.cancelOutboundEffect(diagnostic.transportMode, diagnostic.effectText, diagnostic.runCommandId || null);
       if (diagnostic.requiresVisualCheck) {
         diagnostic.result = "ARTIFACT_VISUAL_CHECK_REQUIRED";
         diagnostic.visualCheckRequired = true;

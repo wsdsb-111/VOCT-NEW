@@ -19382,18 +19382,28 @@ function LettersStatusModal({ onClose }) {
         ] }),
         " ",
         snapshot.currentTotalDays,
-        /* @__PURE__ */ jsxRuntimeExports.jsx("button", { type: "button", style: { marginLeft: "12px" }, onClick: resyncGameDate, disabled: isResyncingDate, children: isResyncingDate ? "重新扫描中…" : "从 debug.log 重新同步日期" }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx("button", { type: "button", style: { marginLeft: "12px" }, onClick: resyncGameDate, disabled: isResyncingDate, children: isResyncingDate ? "恢复并同步中…" : "重新同步日期" }),
         /* @__PURE__ */ jsxRuntimeExports.jsxs("span", { className: "muted-text", style: { marginLeft: "12px" }, children: [
-          "Tracker: ",
-          snapshot.dateTracker?.dateSourceState || "UNKNOWN",
-          " / Tail: ",
+          "Tail Consumer: ",
           snapshot.dateTracker?.tailState || "UNKNOWN",
-          " / Scanned day: ",
-          snapshot.dateTracker?.lastDateScanResult?.value ?? "—",
+          " / Date Producer: ",
+          snapshot.dateTracker?.dateProducerState || "UNKNOWN",
+          " / Overall: ",
+          snapshot.dateTracker?.dateSourceState || "UNKNOWN",
+          " / Last Date Marker: ",
+          snapshot.dateTracker?.lastObservedDateValue ?? snapshot.dateTracker?.lastDateScanResult?.value ?? "—",
+          " / Last Fresh Marker At: ",
+          formatDate(snapshot.dateTracker?.lastObservedDateMarkerAt),
+          " / Marker Age: ",
+          snapshot.dateTracker?.markerAgeMs == null ? "—" : `${Math.round(snapshot.dateTracker.markerAgeMs / 1e3)}s`,
+          " / Last Progress: ",
+          snapshot.dateTracker?.lastProgressDateValue ?? "—",
+          " @ ",
+          formatDate(snapshot.dateTracker?.lastProgressAt),
           " / Source: ",
-          snapshot.dateTracker?.lastDateScanResult?.source || "live tail",
-          " / Last scan: ",
-          formatDate(snapshot.dateTracker?.lastDateReconciliationAt)
+          snapshot.dateTracker?.lastDateMarkerSource || "—",
+          " / ACK Queue: ",
+          snapshot.dateTracker?.runCommands?.length || 0
         ] })
       ] }),
       /* @__PURE__ */ jsxRuntimeExports.jsxs("section", { className: "letter-details", children: [
@@ -19753,7 +19763,7 @@ function LetterItem({
             letter.isLate ? t("lettersModal.yes") : t("lettersModal.no")
           ] })
         ] }),
-        letter.dateSourceEvent === "DATE_SOURCE_DIVERGENCE" && /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "error-message", children: "⚠ Payload 日期与当前游戏日期不一致，已按 Date Tracker 重新计算投递日" })
+        letter.dateSourceEvent === "DATE_SOURCE_DIVERGENCE" && /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "error-message", children: "⚠ Payload 发送日与当前游戏日期不一致；已记录偏差，投递日仍按 Payload sendDay + delay 计算" })
       ] })
     ] })
   ] });

@@ -118,8 +118,8 @@ const api = createLetterManager({
     await manager.checkAndDeliverLetters();
     await manager.checkAndDeliverLetters();
     assert.deepStrictEqual(delivered, ["letter_first"], "D09 second pending letter must wait for first acceptance");
-    assert(rendererSource.includes("从 debug.log 重新同步日期"), "letter UI must expose manual date resync");
-    assert(rendererSource.includes('snapshot.dateTracker?.lastDateScanResult?.value'), "letter UI must show the scanned game day");
+    assert(rendererSource.includes("重新同步日期"), "letter UI must expose manual date resync and producer recovery");
+    assert(rendererSource.includes('snapshot.dateTracker?.lastObservedDateValue'), "letter UI must show the latest observed game day");
     assert(rendererSource.includes('snapshot.dateTracker?.dateSourceState'), "letter UI must show the date source state");
 
     await manager.stopLogTailing();

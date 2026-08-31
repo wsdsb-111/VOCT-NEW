@@ -164,7 +164,7 @@ V7.9.3 按冻结规格接入 Action Engine 4.0。顶层 Router 默认进入 AE4�
 
 V7.10.0-RC5 Candidate 保持 Official VOTC 2.0.3 的 28 个标准动作、Registry、Schema、Validator、EffectWriter 和 RC4 Letter 管线不变，在 Action 外层新增九个重点动作的只读可用性/来源/目标/选择/执行诊断。DeepSeek 新增默认关闭的 `state-transition-overlay/v1`，只强化已完成受伤、死亡官方 SOURCE=受害者/TARGET=凶手绑定和明确建立关系的 Selector 召回；Stable Prefix 也继续默认关闭，Stage A/B/C 必须分阶段实测。稳定排序只使用已验证 `blockId`，元数据异常时保持官方顺序安全回退。线上“可用但未选择”不自动算 `SELECTOR_MISS`，真实 Recall、Wrong Target、Critical FP、缓存和 CK3 Effect Gate 未完成前不标 Stable。RC4 的 Letter Transport、Numeric Gate、Diagnostic 2.3 和一键清除待送达功能保持原实现。详见 [v7.10 实施报告](docs/v7.10-official-action-letter-recovery-implementation-report.md)、[Action 上游清单](docs/upstream/votc-2.0.3-action-manifest.md)和 [Letter 上游清单](docs/upstream/votc-2.0.3-letter-manifest.md)。
 
-V7.10.0-RC6 Candidate 只收口 Letter System，Action、Chat、Memory 与三类 Letter Prompt 保持 RC5 冻结基线。新信按 Date Tracker authoritative day 计算投递日期，Payload 漂移超过一天时强制扫描最新 `VOTC:DATE`；`419184 / 419198 / delay=7` 固定得到 `419205`，不再刚生成便逾期。正式 Outbound 固定使用 Workshop 2.0.4 已实机确认可执行的 `votc_run_file`。A3 使用显式 `root` scope 和正式 Artifact recipe，PRE/POST/Scope Marker 分开定位 transport、effect、scope 与可见性；Payload 重试新增逐次安全诊断、超时分类和同 trigger 手动重读。自动门禁通过后仍须依次完成 A3、B、C、D、delay=0、delay=3、stale payload 与非回归实机 Gate，当前不标 Stable。详见 [v7.10 实施报告](docs/v7.10-official-action-letter-recovery-implementation-report.md)。
+V7.10.0-RC6 Final Rev.2 在 RC6 Letter 收口上继续修复生命周期与亲属关系回归。Action、Letter、Conversation Close 通过持久化串行 Run Command Queue 共用 `votc.txt`，每条命令只有收到 CK3 `VOTC:RUN_ACK` 后才推进，不再用固定延时或通用 Clipboard Marker 清空共享文件；`letters.txt` 继续承担 Date Producer 职责。Date Tracker 区分 Tail Consumer、Date Producer、Fresh Marker 与 Last Progress，扫描到旧 Marker 不再标为健康。投递日按已校验 Payload `sendDay + delay` 计算，运行期当前日只信任实时 `VOTC:DATE`。第三方亲属资料改为多来源证据聚合，并统一使用 Parent/Child 优先、exact birth 优先且冲突 fail-closed 的 Kinship Resolver。当前仍须完成 D0–D5 与关系实机 Gate，未标 Stable。详见 [v7.10 实施报告](docs/v7.10-official-action-letter-recovery-implementation-report.md)。
 
 V7.7 在 V7.6 健康化基础上分阶段拆分主进程：第一阶段将六种模型 Provider 迁入 `providers/index.js`、92 个既有 IPC 注册迁入 `ipc/register-ipc.js`；第二阶段把 `ProviderRegistry`、`TokenCounter` 和 `LLMManager` 迁入 `provider-service.js`，通过显式依赖继续读取用户分别选择的对话、摘要和动作模型。`main.js` 由约 9477 行降至约 6612 行。动作语义同时补齐“共度春宵/鱼水之欢已发生”和“从今以后成为情人/认定灵魂伴侣”等自然完成态表达，并继续排除请求、计划、假设、回忆与失败尝试。当前仓库仍是可运行打包产物，没有能够重新生成这些文件的完整 `src` 工程，因此本阶段不伪造源码构建链。
 
@@ -174,18 +174,18 @@ V7.7 在 V7.6 健康化基础上分阶段拆分主进程：第一阶段将六种
 node scripts\test-release.js
 ```
 
-清单会覆盖全部 `test-*.js`。V7.10.0-RC6 Candidate 当前分类 127 个测试文件：58 个直接发布组，68 个依赖已退休 AE3/AE4/Social 语义的历史测试明确归档，另 1 个为统一发布入口；RC6 新增门禁覆盖 Delivery Base D01–D10、A3 Official-Parity Artifact、Payload Race/同 trigger 重读与最终 Letter UI/IPC/Transport 合同，并继续覆盖 RC5 Action 与全部既有非回归门禁。
+清单会覆盖全部 `test-*.js`。V7.10.0-RC6 Final Rev.2 Candidate 当前分类 130 个测试文件：61 个直接发布组，68 个依赖已退休 AE3/AE4/Social 语义的历史测试明确归档，另 1 个为统一发布入口；Rev2 新增门禁覆盖持久化 ACK Queue、Date Producer Fresh Marker/受控恢复与亲属关系 R1–R10，并继续覆盖 RC6 A3、Payload Race、Letter UI/IPC/Transport 和 RC5 Action 非回归。
 
 ## 版本信息
 
 - 外挂 UI 版本：v2.0.4
-- 当前应用功能基线：v7.10.0-RC6 Candidate（实机候选，未宣称 Stable）
+- 当前应用功能基线：v7.10.0-RC6 Final Rev.2 Candidate（实机候选，未宣称 Stable）
 - CK3 模组版本：Voices of the Court 2.0.4
 - 模组支持版本：CK3 1.18.*
 - UI 主题：宫廷编年史风格（深红、暗金、羊皮纸文本层级）
 - UI 主题切换：羊皮卷、骑士纹章、水墨画卷三套完整历史风格；分别拥有独立背景、边框结构、按钮造型、消息卡片、输入框、字体和滚动条，并可自动保存选择
 - UI 素材生成提示词：参见 [docs/UI_ASSET_PROMPTS_2.0.3.md](docs/UI_ASSET_PROMPTS_2.0.3.md)
-- 当前重点：V7.10.0-RC6 Candidate / Final Letter Gate / Authoritative Delivery Base / A3 Official-Parity Artifact / Payload Race Recovery；Official VOTC 2.0.3 Action、Memory Engine 2.5、外挂 UI 2.0.4 与 CK3 Workshop 2.0.4 保持冻结基线
+- 当前重点：V7.10.0-RC6 Final Rev.2 Candidate / CK3 ACK Queue / Date Producer Recovery / Canonical Relative Profile / Unified Kinship Resolver；Official VOTC 2.0.3 Action Prompt/Selector、Memory Engine 2.5、外挂 UI 2.0.4 与 CK3 Workshop 2.0.4 保持基线
 
 ## 已知限制
 

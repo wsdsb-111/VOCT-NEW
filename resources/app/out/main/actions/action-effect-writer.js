@@ -50,7 +50,10 @@ ordered_in_global_list = {
     }
 
     static writeEffect(gameData, sourceCharacterId, targetCharacterId, effectBody) {
-      runFileManager.write(this.composeFullEffect(gameData, sourceCharacterId, targetCharacterId, effectBody));
+      return runFileManager.write(this.composeFullEffect(gameData, sourceCharacterId, targetCharacterId, effectBody), {
+        owner: "action",
+        kind: "action_effect"
+      });
     }
 
     static getCharacterIndex(gameData, characterId) {

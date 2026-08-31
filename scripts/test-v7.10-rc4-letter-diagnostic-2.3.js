@@ -21,7 +21,7 @@ try {
     getCK3DebugLogPath: () => null,
     getSummaryPromptSettings: () => ({ letterSummaryPrompt: "summary" })
   };
-  const RunFileManager = createRunFileManager({ settingsRepository, path, fs });
+  const RunFileManager = createRunFileManager({ settingsRepository, path, fs, dataDir });
   const runFileManager = new RunFileManager();
   const { LetterEffectTransport } = createLetterEffectTransport({ settingsRepository, fs, path, runFileManager, dataDir });
   const transport = new LetterEffectTransport();
@@ -29,7 +29,7 @@ try {
   const { LetterManager } = createLetterManager({
     settingsRepository, fs, path, TailFile: class {}, readline: {}, parseLog: async () => null,
     letterPromptBuilder: {}, llmManager: {}, PromptBuilder: {}, TokenCounter: {}, memoryEngine: {}, dataDir,
-    letterEffectTransport: transport, diagnosticExecutionTimeoutMs: 10,
+    letterEffectTransport: transport, runFileManager, diagnosticExecutionTimeoutMs: 10,
     setIntervalFn: () => ({ unref() {} }), clearIntervalFn: () => {}
   });
   const manager = new LetterManager();
@@ -52,6 +52,7 @@ try {
     assert(fs.readFileSync(path.join(runDir, "votc.txt"), "utf8").includes(`debug_log = "${a2.marker}"`));
     assert.strictEqual(manager.runEffectDiagnostic("A3").success, false, "A3 must remain locked before A2 PASS");
     manager.processLogLine(`[debug] ${a2.marker}`);
+    manager.processLogLine(`[debug] VOTC:RUN_ACK/LETTER_DIAGNOSTIC/${a2.runCommandId}`);
     assert.strictEqual(manager.effectDiagnosticStages.A2.result, "PASS");
     assert.strictEqual(transport.getState().contractDriftConfirmed, true);
     assert(!fs.readFileSync(path.join(runDir, "votc.txt"), "utf8").includes(a2.marker), "completed transport diagnostics must be removed without clearing the root contract");
@@ -65,6 +66,7 @@ try {
       } else {
         assert.strictEqual(manager.effectDiagnosticStages[result.stage].result, "ARTIFACT_VISUAL_CHECK_REQUIRED");
       }
+      manager.processLogLine(`[debug] VOTC:RUN_ACK/LETTER_DIAGNOSTIC/${result.runCommandId}`);
       assert(!fs.readFileSync(path.join(runDir, "votc.txt"), "utf8").includes(result.marker), "executed artifact diagnostics must not pollute the next stage");
       assert.strictEqual(manager.confirmEffectDiagnostic(result.stage, true).result, "PASS");
     };

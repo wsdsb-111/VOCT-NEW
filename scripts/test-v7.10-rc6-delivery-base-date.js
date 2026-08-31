@@ -45,31 +45,31 @@ async function resolve(payloadDay, trackerDay, delay, reconciledDay = null) {
 
   result = await resolve(99, 100, 7);
   assert.strictEqual(result.timing.dateDelta, -1, "D02 payload -1 day");
-  assert.strictEqual(result.timing.deliveryBaseDay, 100);
+  assert.strictEqual(result.timing.deliveryBaseDay, 99);
 
   result = await resolve(101, 100, 7);
   assert.strictEqual(result.timing.dateDelta, 1, "D03 payload +1 day");
-  assert.strictEqual(result.timing.deliveryBaseDay, 100);
+  assert.strictEqual(result.timing.deliveryBaseDay, 101);
 
   result = await resolve(419184, 419198, 7, 419198);
   assert.strictEqual(result.timing.dateSourceEvent, "DATE_SOURCE_DIVERGENCE", "D04 stale payload must be explicit");
-  assert.strictEqual(result.timing.deliveryBaseDay, 419198);
-  assert.strictEqual(result.timing.expectedDeliveryDay, 419205);
-  assert.strictEqual(result.timing.dateSourceDecision, "RECONCILED_TRACKER_AUTHORITATIVE");
+  assert.strictEqual(result.timing.deliveryBaseDay, 419184);
+  assert.strictEqual(result.timing.expectedDeliveryDay, 419191);
+  assert.strictEqual(result.timing.dateSourceDecision, "PAYLOAD_SEND_DAY_AUTHORITATIVE");
 
   result = await resolve(214, 200, 7, 200);
   assert.strictEqual(result.timing.dateDelta, 14, "D05 future payload divergence");
-  assert.strictEqual(result.timing.expectedDeliveryDay, 207);
+  assert.strictEqual(result.timing.expectedDeliveryDay, 221);
 
   result = await resolve(300, 0, 3);
   assert.strictEqual(result.getReconcileCalls(), 1, "D06 tracker=0 must force reconciliation");
 
   result = await resolve(300, 0, 3, 320);
   assert.strictEqual(result.timing.reconciledGameDayAtCreation, 320, "D07 successful reconciliation");
-  assert.strictEqual(result.timing.expectedDeliveryDay, 323);
+  assert.strictEqual(result.timing.expectedDeliveryDay, 303);
 
   result = await resolve(300, 0, 3);
-  assert.strictEqual(result.timing.dateSourceDecision, "PAYLOAD_FALLBACK", "D08 failed reconciliation falls back to payload only when tracker is unavailable");
+  assert.strictEqual(result.timing.dateSourceDecision, "PAYLOAD_BOOTSTRAP", "D08 failed reconciliation bootstraps from payload only when tracker is unavailable");
   assert.strictEqual(result.timing.deliveryBaseDay, 300);
 
   result = await resolve(500, 500, 0);
@@ -78,7 +78,7 @@ async function resolve(payloadDay, trackerDay, delay, reconciledDay = null) {
   result = await resolve(500, 500, 7);
   assert.strictEqual(result.timing.expectedDeliveryDay - result.timing.deliveryBaseDay, 7, "D10 delay=7 remains seven days");
   assert(!fs.readFileSync(path.join(__dirname, "..", "resources", "app", "out", "main", "letters", "letter-manager.js"), "utf8").includes("this.currentTotalDays = Math.max(this.currentTotalDays, letterTotalDays)"));
-  console.log("VOTC v7.10-RC6 Delivery Base Date: PASS (D01-D10, stale payload 419184 -> 419205)");
+  console.log("VOTC v7.10-RC6 Final Rev2 Delivery Base Date: PASS (D01-D10, payload sendDay + delay contract)");
 })().catch((error) => {
   console.error(error);
   process.exitCode = 1;

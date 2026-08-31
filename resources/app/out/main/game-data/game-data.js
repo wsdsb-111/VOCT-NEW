@@ -1,6 +1,7 @@
 "use strict";
 
 const { inferGenderFromPronoun } = require("./character");
+const { createRelationshipResolver } = require("./relationship-resolver");
 const { MEMORY_ENGINE_VERSION } = require("../version");
 
 function createGameData({ fs, path, memorySystem, memoryEngine, summariesDir, getHistoricalReferenceByYear }) {
@@ -12,6 +13,18 @@ function createGameData({ fs, path, memorySystem, memoryEngine, summariesDir, ge
   class GameData {
     constructor(data) {
       this.playerID = Number(data[0]), this.playerName = removeTooltip$2(data[1]), this.aiID = Number(data[2]), this.aiName = removeTooltip$2(data[3]), this.date = data[4], this.scene = data[5].substring(11), this.location = data[6], this.locationController = data[7], this.totalDays = Number(data[8]), this.characters = /* @__PURE__ */ new Map(), this.letterData = null;
+      this.relationshipDiagnostics = [];
+      this.relationshipDiagnosticKeys = /* @__PURE__ */ new Set();
+      this.relationshipResolver = createRelationshipResolver({
+        onDiagnostic: (diagnostic) => {
+          const key = JSON.stringify({ ...diagnostic, recordedAt: void 0 });
+          if (this.relationshipDiagnosticKeys.has(key)) return false;
+          this.relationshipDiagnosticKeys.add(key);
+          this.relationshipDiagnostics.push(diagnostic);
+          if (this.relationshipDiagnostics.length > 100) this.relationshipDiagnostics.shift();
+          return true;
+        }
+      });
       
       // 解析动态历史信息
       this.parseHistoricalContext();
@@ -494,37 +507,8 @@ function createGameData({ fs, path, memorySystem, memoryEngine, summariesDir, ge
      * action targets; their profiles are used only for mentioned-person context.
      */
     getMentionableCharacterProfiles() {
-      const profiles = /* @__PURE__ */ new Map(this.characters);
-      const addRelative = (entry) => {
-        const id = Number(entry?.id);
-        if (!Number.isFinite(id) || profiles.has(id) || !entry?.name) return;
-        const birthDateTotalDays = Number(entry.birthDateTotalDays);
-        const age = Number.isFinite(birthDateTotalDays) && Number.isFinite(this.totalDays) ? Math.max(0, Math.floor((this.totalDays - birthDateTotalDays) / 365.2425)) : null;
-        const gender = entry.gender || (entry.sheHe ? inferGenderFromPronoun(entry.sheHe) : "unknown");
-        profiles.set(id, {
-          id,
-          shortName: entry.name,
-          fullName: entry.name,
-          firstName: entry.name,
-          age,
-          gender,
-          primaryTitle: "",
-          traits: Array.isArray(entry.traits) ? entry.traits : [],
-          relationsToCharacters: [],
-          relationsToPlayer: [],
-          parents: [],
-          children: [],
-          siblings: [],
-          consort: "",
-          liege: "",
-          isMentionedRelativeProfile: true
-        });
-      };
-      for (const participant of this.characters.values()) {
-        for (const parent of participant.parents || []) addRelative(parent);
-        for (const child of participant.children || []) addRelative(child);
-        for (const sibling of participant.siblings || []) addRelative(sibling);
-      }
+      const resolver = this.relationshipResolver || createRelationshipResolver();
+      const profiles = resolver.buildCanonicalProfiles(this.characters, this.totalDays, inferGenderFromPronoun);
       const addRelationAliases = (characterId, aliases) => {
         const profile = profiles.get(Number(characterId));
         if (!profile) return;
@@ -532,17 +516,16 @@ function createGameData({ fs, path, memorySystem, memoryEngine, summariesDir, ge
       };
       for (const participant of this.characters.values()) {
         for (const parent of participant.parents || []) {
-          const gender = parent.gender || (parent.sheHe ? inferGenderFromPronoun(parent.sheHe) : "unknown");
+          const gender = profiles.get(Number(parent.id))?.gender || "unknown";
           addRelationAliases(parent.id, gender === "male" ? ["令尊", "家父", "父亲"] : gender === "female" ? ["令堂", "家母", "母亲"] : ["父母"]);
         }
         for (const sibling of participant.siblings || []) {
-          const siblingAge = Number.isFinite(Number(sibling.birthDateTotalDays)) && Number.isFinite(this.totalDays)
-            ? Math.max(0, Math.floor((this.totalDays - Number(sibling.birthDateTotalDays)) / 365.2425))
-            : null;
-          const gender = sibling.gender || (sibling.sheHe ? inferGenderFromPronoun(sibling.sheHe) : "unknown");
-          if (Number.isFinite(siblingAge) && Number.isFinite(participant.age) && siblingAge > participant.age) {
-            addRelationAliases(sibling.id, gender === "male" ? ["家兄", "兄长"] : gender === "female" ? ["家姐", "姐姐"] : ["年长手足"]);
-          }
+          const siblingProfile = profiles.get(Number(sibling.id));
+          const participantProfile = profiles.get(Number(participant.id)) || participant;
+          const resolution = resolver.resolveSiblingKinship(siblingProfile, participantProfile);
+          if (resolution?.label === "哥哥") addRelationAliases(sibling.id, ["家兄", "兄长"]);
+          else if (resolution?.label === "姐姐") addRelationAliases(sibling.id, ["家姐", "姐姐"]);
+          else if (resolution?.label === "年长手足") addRelationAliases(sibling.id, ["年长手足"]);
         }
       }
       return profiles;
@@ -569,25 +552,13 @@ function createGameData({ fs, path, memorySystem, memoryEngine, summariesDir, ge
       }));
     }
     findFamilyEntry(entries, characterId) {
-      return Array.isArray(entries) ? entries.find((entry) => entry?.id === characterId) : void 0;
+      return (this.relationshipResolver || createRelationshipResolver()).findFamilyEntry(entries, characterId);
     }
     /** Return a precise sibling title for subject relative to other. */
     getSiblingRelation(subject, other) {
-      const subjectSiblingEntry = this.findFamilyEntry(subject?.siblings, other?.id);
-      const otherSiblingEntry = this.findFamilyEntry(other?.siblings, subject?.id);
-      if (!subjectSiblingEntry && !otherSiblingEntry) return null;
-      const subjectBirth = Number(otherSiblingEntry?.birthDateTotalDays);
-      const otherBirth = Number(subjectSiblingEntry?.birthDateTotalDays);
-      let subjectIsOlder = null;
-      if (Number.isFinite(subjectBirth) && Number.isFinite(otherBirth) && subjectBirth !== otherBirth) {
-        subjectIsOlder = subjectBirth < otherBirth;
-      } else if (Number.isFinite(subject?.age) && Number.isFinite(other?.age) && subject.age !== other.age) {
-        subjectIsOlder = subject.age > other.age;
-      }
-      if (subjectIsOlder === null) return "同胞手足（长幼不详）";
-      if (subject?.gender === "male") return subjectIsOlder ? "哥哥" : "弟弟";
-      if (subject?.gender === "female") return subjectIsOlder ? "姐姐" : "妹妹";
-      return subjectIsOlder ? "年长的手足" : "年幼的手足";
+      const resolver = this.relationshipResolver || createRelationshipResolver();
+      const profiles = typeof this.getMentionableCharacterProfiles === "function" ? this.getMentionableCharacterProfiles() : new Map(this.characters || []);
+      return resolver.resolveSiblingKinship(profiles.get(Number(subject?.id)) || subject, profiles.get(Number(other?.id)) || other)?.label || null;
     }
     /**
      * Describe subject's relationship to other using parsed family data first.
@@ -596,18 +567,12 @@ function createGameData({ fs, path, memorySystem, memoryEngine, summariesDir, ge
      */
     describeCharacterRelationship(subject, other) {
       if (!subject || !other || subject.id === other.id) return null;
-      const siblingRelation = this.getSiblingRelation(subject, other);
-      if (siblingRelation) return `${subject.fullName}是${other.fullName}的${siblingRelation}`;
-      const subjectIsChild = !!this.findFamilyEntry(subject.parents, other.id) || !!this.findFamilyEntry(other.children, subject.id);
-      if (subjectIsChild) {
-        const label = subject.gender === "male" ? "儿子" : subject.gender === "female" ? "女儿" : "子女";
-        return `${subject.fullName}是${other.fullName}的${label}`;
-      }
-      const subjectIsParent = !!this.findFamilyEntry(subject.children, other.id) || !!this.findFamilyEntry(other.parents, subject.id);
-      if (subjectIsParent) {
-        const label = subject.gender === "male" ? "父亲" : subject.gender === "female" ? "母亲" : "父母";
-        return `${subject.fullName}是${other.fullName}的${label}`;
-      }
+      const resolver = this.relationshipResolver || createRelationshipResolver();
+      const profiles = typeof this.getMentionableCharacterProfiles === "function" ? this.getMentionableCharacterProfiles() : new Map(this.characters || []);
+      const canonicalSubject = profiles.get(Number(subject.id)) || subject;
+      const canonicalOther = profiles.get(Number(other.id)) || other;
+      const kinship = resolver.resolveDirectKinship(canonicalSubject, canonicalOther);
+      if (kinship) return `${canonicalSubject.fullName}是${canonicalOther.fullName}的${kinship.label}`;
       const direct = subject.relationsToCharacters?.find((relation) => relation.id === other.id)?.relations || [];
       if (direct.length > 0) return `${subject.fullName}与${other.fullName}的游戏关系：${direct.join("、")}`;
       if (other.id === this.playerID && subject.relationsToPlayer?.length > 0) {
@@ -627,6 +592,8 @@ function createGameData({ fs, path, memorySystem, memoryEngine, summariesDir, ge
       const counterpartIdSet = /* @__PURE__ */ new Set([this.playerID, ...counterpartIds]);
       counterpartIdSet.delete(activeCharacter.id);
       const sections = [];
+      const resolver = this.relationshipResolver || createRelationshipResolver();
+      const mentionableProfiles = typeof this.getMentionableCharacterProfiles === "function" ? this.getMentionableCharacterProfiles() : new Map(this.characters || []);
       const getOpinion = (subject, other) => {
         if (Number(other.id) === Number(this.playerID) && subject.opinionOfPlayer != null && Number.isFinite(Number(subject.opinionOfPlayer))) return Number(subject.opinionOfPlayer);
         const entry = subject.opinions?.find((opinion) => Number(opinion.id) === Number(other.id));
@@ -640,11 +607,10 @@ function createGameData({ fs, path, memorySystem, memoryEngine, summariesDir, ge
         return "无明确正式关系";
       };
       const getKinship = (subject, other) => {
-        const sibling = this.getSiblingRelation(subject, other);
-        if (sibling) return `${subject.fullName}是${other.fullName}的${sibling}`;
-        if (this.findFamilyEntry(subject.parents, other.id) || this.findFamilyEntry(other.children, subject.id)) return `${subject.fullName}是${other.fullName}的${subject.gender === "male" ? "儿子" : subject.gender === "female" ? "女儿" : "子女"}`;
-        if (this.findFamilyEntry(subject.children, other.id) || this.findFamilyEntry(other.parents, subject.id)) return `${subject.fullName}是${other.fullName}的${subject.gender === "male" ? "父亲" : subject.gender === "female" ? "母亲" : "父母"}`;
-        return "无";
+        const canonicalSubject = mentionableProfiles.get(Number(subject.id)) || subject;
+        const canonicalOther = mentionableProfiles.get(Number(other.id)) || other;
+        const resolution = resolver.resolveDirectKinship(canonicalSubject, canonicalOther);
+        return resolution ? `${canonicalSubject.fullName}是${canonicalOther.fullName}的${resolution.label}` : "无";
       };
       for (const counterpartId of counterpartIdSet) {
         const counterpart = this.characters.get(counterpartId);

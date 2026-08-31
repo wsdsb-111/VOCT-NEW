@@ -21,7 +21,7 @@ try {
     getCK3DebugLogPath: () => null,
     getSummaryPromptSettings: () => ({ letterSummaryPrompt: "summary" })
   };
-  const RunFileManager = createRunFileManager({ settingsRepository, path, fs });
+  const RunFileManager = createRunFileManager({ settingsRepository, path, fs, dataDir });
   const runFileManager = new RunFileManager();
   const { LetterEffectTransport, LetterEffectTransportMode } = createLetterEffectTransport({ settingsRepository, fs, path, runFileManager, dataDir });
   const transport = new LetterEffectTransport();
@@ -37,6 +37,8 @@ try {
   const votcText = fs.readFileSync(path.join(runDir, "votc.txt"), "utf8");
   assert(votcText.includes('debug_log = "VOTC:LETTER_TRANSPORT/B/test-b"'));
   assert(votcText.includes("root = {trigger_event = mcc_event_v2.9003}"), "T03/T04 votc transport must preserve the existing RunFileManager root trigger contract");
+  assert(votcText.includes(`VOTC:RUN_ACK/LETTER_DIAGNOSTIC/${votc.commandId}`), "Rev2 must append a command-specific CK3 ACK marker");
+  assert(runFileManager.ackCommand(votc.commandId), "diagnostic command must advance only after its matching ACK");
   transport.recordTransportDiagnostic("A2", "PASS");
   assert.strictEqual(transport.getOutboundMode(), LetterEffectTransportMode.VOTC, "T06 migration requires actual A1 FAIL + A2 PASS");
   assert.strictEqual(transport.getState().contractDriftConfirmed, true);
@@ -45,7 +47,7 @@ try {
   const { LetterManager } = createLetterManager({
     settingsRepository, fs, path, TailFile: class {}, readline: {}, parseLog: async () => null,
     letterPromptBuilder: {}, llmManager: {}, PromptBuilder: {}, TokenCounter: {}, memoryEngine: {}, dataDir,
-    letterEffectTransport: transport, setIntervalFn: () => ({ unref() {} }), clearIntervalFn: () => {}
+    letterEffectTransport: transport, runFileManager, setIntervalFn: () => ({ unref() {} }), clearIntervalFn: () => {}
   });
   const manager = new LetterManager();
   active = true;
@@ -85,8 +87,7 @@ trigger_event = message_event.362`;
   assert.strictEqual(manager.getLetterStatus(letter.letterId).responseStatus, "cancelled", "one-click clear must release pending delivery without deleting its status history");
   const afterClear = fs.readFileSync(path.join(runDir, "votc.txt"), "utf8");
   assert(!afterClear.includes(expectedBody), "one-click clear must remove the pending Letter Effect");
-  assert(afterClear.includes('debug_log = "VOTC:LETTER_TRANSPORT/B/test-b"'), "one-click clear must preserve unrelated votc.txt commands");
-  assert(afterClear.includes("root = {trigger_event = mcc_event_v2.9003}"));
+  assert.strictEqual(afterClear, "", "one-click clear may cancel its own queued Letter command after the earlier diagnostic was ACKed");
   console.log("VOTC v7.10-RC4 Letter Transport: PASS (T01-T06 + one-click pending clear)");
 } finally {
   fs.rmSync(tempDir, { recursive: true, force: true });

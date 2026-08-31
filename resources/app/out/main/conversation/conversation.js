@@ -137,8 +137,7 @@ class Conversation {
     const ck3DebugPath = settingsRepository.getCK3DebugLogPath();
     console.log(`Conversation.initializeGameData: CK3 debug log path: ${ck3DebugPath}`);
     if (runFileManager.isAvailable()) {
-      console.log("Conversation.initializeGameData: Clearing run file");
-      runFileManager.clear();
+      runFileManager.recoverPendingCommands();
     } else {
       console.warn("Conversation.initializeGameData: RunFileManager not available - CK3 path not configured");
     }
@@ -1115,14 +1114,10 @@ class Conversation {
   }
   // Create final comprehensive summary and save to characters
   async finalizeConversation() {
-    runFileManager.write(`
-            trigger_event = mcc_event_v2.9002
-            trigger_event = mcc_event_v2.9003
-            `);
-    setTimeout(() => {
-      runFileManager.clear();
-      console.log("Run file cleared after conversation end event.");
-    }, 500);
+    runFileManager.write("trigger_event = mcc_event_v2.9002", {
+      owner: "conversation",
+      kind: "conversation_close"
+    });
     
     // PERFORMANCE: Clear caches when conversation ends
     if (this.gameData) {
