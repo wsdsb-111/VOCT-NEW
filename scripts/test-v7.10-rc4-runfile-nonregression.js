@@ -17,6 +17,7 @@ try {
   const settingsRepository = { getCK3UserFolderPath: () => ck3Dir };
   const RunFileManager = createRunFileManager({ settingsRepository, path, fs, dataDir, now: () => 100, random: () => 0.5 });
   const runFileManager = new RunFileManager();
+  runFileManager.initializeAfterAckReconciliation();
   const actionEffect = "scope:action_target = { add_gold = 10 }";
   const actionCommand = runFileManager.write(actionEffect, { owner: "action", kind: "action_effect" });
   let text = fs.readFileSync(runFileManager.path, "utf8");

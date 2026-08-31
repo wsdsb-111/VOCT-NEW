@@ -10,9 +10,10 @@ function createRunFileManager({ settingsRepository, path, fs, dataDir = null, no
       this.pendingCommands = [];
       this.recentCommands = [];
       this.commandSequence = 0;
+      this.initialized = false;
+      this.recoveryCompleted = false;
       this.resolvePath();
       this.loadState();
-      this.recoverPendingCommands();
     }
     resolvePath() {
       if (!this.ck3UserPath) this.ck3UserPath = settingsRepository.getCK3UserFolderPath() || null;
@@ -40,22 +41,41 @@ function createRunFileManager({ settingsRepository, path, fs, dataDir = null, no
       try {
         const saved = JSON.parse(fs$1.readFileSync(this.stateFile, "utf8"));
         this.pendingCommands = Array.isArray(saved.pendingCommands)
-          ? saved.pendingCommands.filter((command) => command && ["queued", "written", "failed"].includes(command.status) && command.commandId && command.effectText)
+          ? saved.pendingCommands.filter((command) => command && ["queued", "written", "awaiting_ack", "stalled", "failed"].includes(command.status) && command.commandId && command.effectText).map((command) => ({
+            ...command,
+            lastWrittenAt: command.lastWrittenAt || command.writtenAt || null,
+            writeAttempts: Number(command.writeAttempts) || (command.writtenAt ? 1 : 0)
+          }))
           : [];
         this.recentCommands = Array.isArray(saved.recentCommands) ? saved.recentCommands.slice(-50) : [];
       } catch (error) {
         console.error("RunFileManager: Failed to load command queue:", error);
       }
     }
-    saveState() {
-      if (!this.stateFile) return;
+    saveStateOrThrow() {
+      if (!this.stateFile) throw new Error("run_command_state_file_unavailable");
+      let tempPath = null;
       try {
         fs$1.mkdirSync(path.dirname(this.stateFile), { recursive: true });
-        const tempPath = `${this.stateFile}.${process.pid}.${now()}.tmp`;
-        fs$1.writeFileSync(tempPath, JSON.stringify({ version: 1, pendingCommands: this.pendingCommands, recentCommands: this.recentCommands.slice(-50) }, null, 2), "utf8");
+        tempPath = `${this.stateFile}.${process.pid}.${now()}.tmp`;
+        fs$1.writeFileSync(tempPath, JSON.stringify({ version: 2, pendingCommands: this.pendingCommands, recentCommands: this.recentCommands.slice(-50) }, null, 2), "utf8");
         fs$1.renameSync(tempPath, this.stateFile);
+        return true;
+      } catch (error) {
+        if (tempPath && fs$1.existsSync(tempPath)) {
+          try {
+            fs$1.unlinkSync(tempPath);
+          } catch {}
+        }
+        throw error;
+      }
+    }
+    saveState() {
+      try {
+        return this.saveStateOrThrow();
       } catch (error) {
         console.error("RunFileManager: Failed to persist command queue:", error);
+        return false;
       }
     }
     composeCommandText(command) {
@@ -67,21 +87,26 @@ root = {trigger_event = mcc_event_v2.9003}`;
     writeActiveCommand() {
       const command = this.pendingCommands[0];
       if (!command) {
-        if (this.path && fs$1.existsSync(this.path)) fs$1.writeFileSync(this.path, "", "utf8");
-        this.saveState();
+        this.writeEmptyRunFileIfSafe();
         return null;
       }
+      if (!this.recoveryCompleted || ["stalled", "failed"].includes(command.status)) return this.snapshot(command);
       if (!this.resolvePath()) return null;
+      let dispatched = false;
       try {
         fs$1.writeFileSync(this.path, this.composeCommandText(command), "utf8");
-        command.status = "written";
+        dispatched = true;
+        command.status = "awaiting_ack";
         command.writtenAt = command.writtenAt || now();
-        this.saveState();
+        command.lastWrittenAt = now();
+        command.writeAttempts = (command.writeAttempts || 0) + 1;
+        this.saveStateOrThrow();
         console.log(`[RunCommand] written id=${command.commandId} owner=${command.owner} kind=${command.kind}`);
         return this.snapshot(command);
       } catch (error) {
-        command.status = "failed";
-        command.failedAt = now();
+        command.status = dispatched ? "stalled" : "failed";
+        if (dispatched) command.stalledAt = now();
+        else command.failedAt = now();
         command.failureReason = error instanceof Error ? error.message : String(error);
         this.saveState();
         console.error(`RunFileManager: Failed to write command ${command.commandId}:`, error);
@@ -101,13 +126,20 @@ root = {trigger_event = mcc_event_v2.9003}`;
         kind: this.normalizeKind(kind),
         effectText: normalizedText,
         writtenAt: null,
+        lastWrittenAt: null,
+        writeAttempts: 0,
         queuedAt: now(),
         status: "queued",
         ackMarker: `VOTC:RUN_ACK/${this.normalizeKind(kind).toUpperCase()}/${id}`
       };
       this.pendingCommands.push(command);
-      this.saveState();
-      if (this.pendingCommands.length === 1) this.writeActiveCommand();
+      try {
+        this.saveStateOrThrow();
+      } catch (error) {
+        this.pendingCommands.pop();
+        throw new Error(`run_command_persist_failed: ${error instanceof Error ? error.message : String(error)}`);
+      }
+      if (this.pendingCommands.length === 1 && this.recoveryCompleted) return this.writeActiveCommand();
       return this.snapshot(command);
     }
     write(text, options = {}) {
@@ -128,34 +160,88 @@ root = {trigger_event = mcc_event_v2.9003}`;
       this.pendingCommands.shift();
       active.status = "acknowledged";
       active.acknowledgedAt = now();
+      active.ackSource = "live_debug_log";
       this.recentCommands.push(active);
-      this.saveState();
+      try {
+        this.saveStateOrThrow();
+      } catch (error) {
+        this.recentCommands.pop();
+        active.status = "stalled";
+        active.stalledAt = now();
+        active.failureReason = `ack_persist_failed: ${error instanceof Error ? error.message : String(error)}`;
+        this.pendingCommands.unshift(active);
+        console.error(`RunFileManager: Failed to persist ACK for ${active.commandId}:`, error);
+        return null;
+      }
       console.log(`[RunCommand] acknowledged id=${active.commandId} owner=${active.owner} kind=${active.kind}`);
-      this.writeActiveCommand();
+      if (this.recoveryCompleted) this.writeActiveCommand();
       return this.snapshot(active);
+    }
+    reconcileAcknowledgedCommands(ackEntries = []) {
+      if (!Array.isArray(ackEntries) || ackEntries.length === 0) return [];
+      const ackSet = new Set(ackEntries.map((entry) => `${this.normalizeKind(entry?.kind)}:${String(entry?.commandId || "")}`));
+      const reconciled = [];
+      while (this.pendingCommands.length > 0) {
+        const active = this.pendingCommands[0];
+        if (!ackSet.has(`${this.normalizeKind(active.kind)}:${active.commandId}`)) break;
+        this.pendingCommands.shift();
+        active.status = "acknowledged";
+        active.acknowledgedAt = now();
+        active.ackSource = "startup_debug_log_reconciliation";
+        this.recentCommands.push(active);
+        reconciled.push(active);
+      }
+      if (reconciled.length === 0) return [];
+      try {
+        this.saveStateOrThrow();
+      } catch (error) {
+        this.recentCommands.splice(this.recentCommands.length - reconciled.length, reconciled.length);
+        for (let index = reconciled.length - 1; index >= 0; index -= 1) {
+          const command = reconciled[index];
+          command.status = command.lastWrittenAt ? "awaiting_ack" : "queued";
+          command.acknowledgedAt = null;
+          command.ackSource = null;
+          this.pendingCommands.unshift(command);
+        }
+        throw error;
+      }
+      if (this.recoveryCompleted) this.writeActiveCommand();
+      return reconciled.map((command) => this.snapshot(command));
     }
     failCommand(commandId, reason) {
       const index = this.pendingCommands.findIndex((command) => command.commandId === commandId);
       if (index === -1) return null;
       const [command] = this.pendingCommands.splice(index, 1);
+      const previous = this.snapshot(command);
       command.status = "failed";
       command.failedAt = now();
       command.failureReason = String(reason || "unknown_failure");
       this.recentCommands.push(command);
-      this.saveState();
-      if (index === 0) this.writeActiveCommand();
+      if (!this.saveState()) {
+        this.recentCommands.pop();
+        Object.assign(command, previous);
+        this.pendingCommands.splice(index, 0, command);
+        return null;
+      }
+      if (index === 0 && this.recoveryCompleted) this.writeActiveCommand();
       return this.snapshot(command);
     }
     cancelCommand(commandId, reason = "cancelled") {
       const index = this.pendingCommands.findIndex((command) => command.commandId === commandId);
       if (index === -1) return null;
       const [command] = this.pendingCommands.splice(index, 1);
+      const previous = this.snapshot(command);
       command.status = "cancelled";
       command.cancelledAt = now();
       command.cancelReason = String(reason);
       this.recentCommands.push(command);
-      this.saveState();
-      if (index === 0) this.writeActiveCommand();
+      if (!this.saveState()) {
+        this.recentCommands.pop();
+        Object.assign(command, previous);
+        this.pendingCommands.splice(index, 0, command);
+        return null;
+      }
+      if (index === 0 && this.recoveryCompleted) this.writeActiveCommand();
       return this.snapshot(command);
     }
     findPendingCommand(predicate) {
@@ -170,10 +256,79 @@ root = {trigger_event = mcc_event_v2.9003}`;
     }
     recoverPendingCommands() {
       if (this.pendingCommands.length === 0) return [];
+      if (["stalled", "failed"].includes(this.pendingCommands[0].status)) return this.getPendingCommands();
+      const previousStatus = this.pendingCommands[0].status;
       this.pendingCommands[0].status = "queued";
-      this.pendingCommands[0].writtenAt = null;
+      try {
+        this.saveStateOrThrow();
+      } catch (error) {
+        this.pendingCommands[0].status = previousStatus;
+        throw error;
+      }
       this.writeActiveCommand();
       return this.getPendingCommands();
+    }
+    initializeAfterAckReconciliation() {
+      if (this.recoveryCompleted) return this.getPendingCommands();
+      this.initialized = true;
+      this.recoveryCompleted = true;
+      try {
+        if (this.pendingCommands.length === 0) {
+          this.writeEmptyRunFileIfSafe();
+          return [];
+        }
+        return this.recoverPendingCommands();
+      } catch (error) {
+        this.recoveryCompleted = false;
+        throw error;
+      }
+    }
+    markActiveCommandStalledIfNeeded({ ackTimeoutMs = 30000 } = {}) {
+      const active = this.pendingCommands[0];
+      if (!active || !["awaiting_ack", "written"].includes(active.status)) return null;
+      const lastWrittenAt = Number(active.lastWrittenAt || active.writtenAt);
+      if (!lastWrittenAt || now() - lastWrittenAt < ackTimeoutMs) return null;
+      const previousStatus = active.status;
+      active.status = "stalled";
+      active.stalledAt = now();
+      try {
+        this.saveStateOrThrow();
+      } catch (error) {
+        active.status = previousStatus;
+        active.stalledAt = null;
+        throw error;
+      }
+      return this.snapshot(active);
+    }
+    retryStalledCommand(commandId) {
+      const active = this.pendingCommands[0];
+      if (!active || active.commandId !== commandId) throw new Error("run_command_not_active");
+      if (active.status !== "stalled") throw new Error("run_command_not_stalled");
+      const previous = this.snapshot(active);
+      active.status = "queued";
+      active.lastRetryAt = now();
+      active.failureReason = null;
+      try {
+        this.saveStateOrThrow();
+      } catch (error) {
+        Object.assign(active, previous);
+        throw error;
+      }
+      return this.writeActiveCommand();
+    }
+    cancelStalledCommand(commandId, reason = "user_cancelled") {
+      const active = this.pendingCommands[0];
+      if (!active || active.commandId !== commandId) throw new Error("run_command_not_active");
+      if (active.status !== "stalled") throw new Error("run_command_not_stalled");
+      return this.cancelCommand(commandId, reason);
+    }
+    writeEmptyRunFileIfSafe() {
+      if (this.pendingCommands.length > 0 || !this.resolvePath()) return false;
+      if (fs$1.existsSync(this.path)) fs$1.writeFileSync(this.path, "", "utf8");
+      return true;
+    }
+    isRecoveryCompleted() {
+      return this.recoveryCompleted;
     }
     clear() {
       if (this.pendingCommands.length > 0) {

@@ -23,6 +23,7 @@ try {
   };
   const RunFileManager = createRunFileManager({ settingsRepository, path, fs, dataDir });
   const runFileManager = new RunFileManager();
+  runFileManager.initializeAfterAckReconciliation();
   const { LetterEffectTransport, LetterEffectTransportMode } = createLetterEffectTransport({ settingsRepository, fs, path, runFileManager, dataDir });
   const transport = new LetterEffectTransport();
 

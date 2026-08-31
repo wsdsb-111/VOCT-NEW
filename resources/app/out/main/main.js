@@ -428,6 +428,7 @@ const ActionRegistryClass = ActionRegistry.configure({
 const actionRegistry = ActionRegistryClass.getInstance();
 const { buildStructuredResponseJsonSchema, buildStructuredResponseSchema } = actionSchema;
 const { createRunFileManager } = require("./actions/run-file-manager");
+const { scanRecentRunAcks } = require("./actions/run-command-recovery");
 const RunFileManager = createRunFileManager({ settingsRepository, path, fs: fs$1, dataDir: VOTC_DATA_DIR });
 const runFileManager = new RunFileManager();
 const ActionEffectWriter = createActionEffectWriter({ runFileManager });
@@ -813,9 +814,23 @@ const letterEffectTransport = new LetterEffectTransport();
 const { createLetterManager } = require("./letters/letter-manager");
 const { LetterManager, LetterResponseStatus, LetterSummaryStatus } = createLetterManager({
   settingsRepository, fs: fs$1, path, TailFile, readline: readline$1, parseLog,
-  letterPromptBuilder, llmManager, PromptBuilder, TokenCounter, memoryEngine, dataDir: VOTC_DATA_DIR, letterEffectTransport, runFileManager
+  letterPromptBuilder, llmManager, PromptBuilder, TokenCounter, memoryEngine, dataDir: VOTC_DATA_DIR, letterEffectTransport, runFileManager, scanRecentRunAcks, autoStartLogTailing: false
 });
 const letterManager = new LetterManager();
+const initializeRunCommandQueue = async () => {
+  const reconciledById = /* @__PURE__ */ new Map();
+  const reconcileRecentAcks = () => {
+    const debugLogPath = settingsRepository.getCK3DebugLogPath();
+    const reconciled = runFileManager.reconcileAcknowledgedCommands(scanRecentRunAcks(debugLogPath, { fs: fs$1 }));
+    for (const command of reconciled) reconciledById.set(command.commandId, command);
+  };
+  reconcileRecentAcks();
+  await letterManager.startLogTailing();
+  reconcileRecentAcks();
+  runFileManager.initializeAfterAckReconciliation();
+  letterManager.handleReconciledRunCommands(Array.from(reconciledById.values()), "startup");
+  letterManager.startRunCommandWatchdog();
+};
 initLogger();
 let chatWindow = null;
 let tray = null;
@@ -888,11 +903,16 @@ const setupFocusMonitoring = (window) => {
   });
   focusMonitor.start();
 };
-electron.app.on("ready", () => {
+electron.app.on("ready", async () => {
   console.log(electron.app.getPath("userData"));
   clearLog();
   settingsRepository.migrateProviderSecrets();
   promptConfigManager.seedDefaults();
+  try {
+    await initializeRunCommandQueue();
+  } catch (error) {
+    console.error("Run Command Queue startup recovery failed; dispatch remains disabled:", error);
+  }
   setupIpcHandlers();
   chatWindow = createWindow();
   appUpdater.setMainWindow(chatWindow);

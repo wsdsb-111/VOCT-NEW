@@ -28,6 +28,7 @@ function createFixture(options = {}) {
   };
   const RunFileManager = createRunFileManager({ settingsRepository, fs, path, dataDir });
   const runFileManager = new RunFileManager();
+  runFileManager.initializeAfterAckReconciliation();
   const { LetterEffectTransport } = createLetterEffectTransport({ settingsRepository, fs, path, runFileManager, dataDir });
   const letterEffectTransport = new LetterEffectTransport();
   const dependencies = {

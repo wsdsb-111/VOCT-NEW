@@ -95,6 +95,7 @@ const releaseChecks = [
   { group: "v7.10-rc6-payload-race", script: "test-v7.10-rc6-payload-race.js" },
   { group: "v7.10-rc6-final-letter-gate", script: "test-v7.10-rc6-final-letter-gate.js" },
   { group: "v7.10-rc6-rev2-run-command-queue", script: "test-v7.10-rc6-rev2-run-command-queue.js" },
+  { group: "v7.10-rc6-run-command-recovery", script: "test-v7.10-rc6-rev3-run-command-recovery.js" },
   { group: "v7.10-rc6-rev2-date-producer", script: "test-v7.10-rc6-rev2-date-producer.js" },
   { group: "v7.10-rc6-rev2-relationship-resolver", script: "test-v7.10-rc6-rev2-relationship-resolver.js" },
   { group: "v7.10-official-action-system", script: "test-v7.10-official-action-system.js" },

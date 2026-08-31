@@ -31,6 +31,7 @@ const settingsRepository = {
 };
 const RunFileManager = createRunFileManager({ settingsRepository, path, fs, dataDir });
 const runFileManager = new RunFileManager();
+runFileManager.initializeAfterAckReconciliation();
 const { LetterManager } = createLetterManager({
   settingsRepository, fs, path, TailFile: TestTailFile,
   readline: { createInterface: () => ({ on() {}, close() {} }) },

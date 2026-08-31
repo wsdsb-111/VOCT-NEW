@@ -136,9 +136,7 @@ class Conversation {
   async initializeGameData() {
     const ck3DebugPath = settingsRepository.getCK3DebugLogPath();
     console.log(`Conversation.initializeGameData: CK3 debug log path: ${ck3DebugPath}`);
-    if (runFileManager.isAvailable()) {
-      runFileManager.recoverPendingCommands();
-    } else {
+    if (!runFileManager.isAvailable()) {
       console.warn("Conversation.initializeGameData: RunFileManager not available - CK3 path not configured");
     }
     if (!ck3DebugPath) {

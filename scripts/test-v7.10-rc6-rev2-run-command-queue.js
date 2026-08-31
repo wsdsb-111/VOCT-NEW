@@ -17,6 +17,7 @@ try {
   let tick = 1000;
   const RunFileManager = createRunFileManager({ settingsRepository, path, fs, dataDir, now: () => tick++, random: () => 0.25 });
   const manager = new RunFileManager();
+  manager.initializeAfterAckReconciliation();
   const action = manager.enqueueCommand({ owner: "action", kind: "action_effect", effectText: "add_gold = 1" });
   const close = manager.enqueueCommand({ owner: "conversation", kind: "conversation_close", effectText: "trigger_event = mcc_event_v2.9002" });
   const letter = manager.enqueueCommand({ owner: "letter", kind: "letter_effect", effectText: 'debug_log = "LETTER"' });
@@ -39,6 +40,7 @@ try {
   const restarted = new RestartedRunFileManager();
   assert.strictEqual(restarted.getPendingCommands().length, 1, "D4 restart must recover the unacknowledged command");
   assert.strictEqual(restarted.getPendingCommands()[0].commandId, letter.commandId);
+  restarted.initializeAfterAckReconciliation();
   assert(fs.readFileSync(restarted.path, "utf8").includes(letter.ackMarker));
   assert(restarted.ackCommand(letter.commandId));
   assert.strictEqual(fs.readFileSync(restarted.path, "utf8"), "");

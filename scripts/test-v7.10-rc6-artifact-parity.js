@@ -11,20 +11,22 @@ const { createLetterManager } = require("../resources/app/out/main/letters/lette
 const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "votc-v710-rc6-artifact-"));
 try {
   const ck3Dir = path.join(tempDir, "ck3");
+  const dataDir = path.join(tempDir, "data");
   const runDir = path.join(ck3Dir, "run");
   fs.mkdirSync(runDir, { recursive: true });
   fs.writeFileSync(path.join(runDir, "votc.txt"), "", "utf8");
   let active = true;
   const settingsRepository = { getCK3UserFolderPath: () => active ? ck3Dir : null, getCK3DebugLogPath: () => null, getSummaryPromptSettings: () => ({ letterSummaryPrompt: "summary" }) };
-  const RunFileManager = createRunFileManager({ settingsRepository, fs, path });
+  const RunFileManager = createRunFileManager({ settingsRepository, fs, path, dataDir });
   const runFileManager = new RunFileManager();
-  const { LetterEffectTransport } = createLetterEffectTransport({ settingsRepository, fs, path, runFileManager, dataDir: path.join(tempDir, "data") });
+  runFileManager.initializeAfterAckReconciliation();
+  const { LetterEffectTransport } = createLetterEffectTransport({ settingsRepository, fs, path, runFileManager, dataDir });
   const transport = new LetterEffectTransport();
   active = false;
   const { LetterManager } = createLetterManager({
     settingsRepository, fs, path, TailFile: class {}, readline: {}, parseLog: async () => null,
-    letterPromptBuilder: {}, llmManager: {}, PromptBuilder: {}, TokenCounter: {}, memoryEngine: {}, dataDir: path.join(tempDir, "data"),
-    letterEffectTransport: transport, diagnosticExecutionTimeoutMs: 10,
+    letterPromptBuilder: {}, llmManager: {}, PromptBuilder: {}, TokenCounter: {}, memoryEngine: {}, dataDir,
+    letterEffectTransport: transport, runFileManager, diagnosticExecutionTimeoutMs: 10,
     setIntervalFn: () => ({ unref() {} }), clearIntervalFn: () => {}
   });
   const manager = new LetterManager();

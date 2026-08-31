@@ -178,6 +178,12 @@ function registerIpcHandlers(runtime) {
       return { dateSourceState: "ERROR", error: error instanceof Error ? error.message : "Unknown error" };
     }
   });
+  electron.ipcMain.handle("letters:retryStalledRunCommand", async (_, commandId) => {
+    return letterManager.retryStalledRunCommand(commandId);
+  });
+  electron.ipcMain.handle("letters:cancelStalledRunCommand", async (_, commandId) => {
+    return letterManager.cancelStalledRunCommand(commandId);
+  });
   electron.ipcMain.handle("letters:confirmEffectDiagnostic", async (_, payload) => {
     try {
       return letterManager.confirmEffectDiagnostic(payload?.stage, payload?.passed === true);

@@ -19049,6 +19049,7 @@ function LettersStatusModal({ onClose }) {
   const [diagnosticResult, setDiagnosticResult] = reactExports.useState(null);
   const [isRunningDiagnostic, setIsRunningDiagnostic] = reactExports.useState(false);
   const [isResyncingDate, setIsResyncingDate] = reactExports.useState(false);
+  const [handlingRunCommandId, setHandlingRunCommandId] = reactExports.useState(null);
   const [retryingLetterId, setRetryingLetterId] = reactExports.useState(null);
   const [isClearingPending, setIsClearingPending] = reactExports.useState(false);
   const loadStatuses = async () => {
@@ -19106,6 +19107,28 @@ function LettersStatusModal({ onClose }) {
       console.error("Failed to resync CK3 date:", error);
     } finally {
       setIsResyncingDate(false);
+    }
+  };
+  const retryStalledRunCommand = async (commandId) => {
+    if (!window.confirm("CK3 是否已经执行该 Effect 无法完全确认。重新执行可能造成重复效果。")) return;
+    setHandlingRunCommandId(commandId);
+    try {
+      const result = await window.lettersAPI.retryStalledRunCommand(commandId);
+      setDiagnosticResult(result?.success ? { success: true, stage: "RUN_COMMAND", result: `已明确重试 ${commandId}` } : { success: false, error: result?.error || "命令重试失败" });
+      await loadStatuses();
+    } finally {
+      setHandlingRunCommandId(null);
+    }
+  };
+  const cancelStalledRunCommand = async (commandId) => {
+    if (!window.confirm("确定取消这条 STALLED 命令并继续后续队列吗？该 Effect 是否已由 CK3 执行仍无法确认。")) return;
+    setHandlingRunCommandId(commandId);
+    try {
+      const result = await window.lettersAPI.cancelStalledRunCommand(commandId);
+      setDiagnosticResult(result?.success ? { success: true, stage: "RUN_COMMAND", result: `已取消 ${commandId}` } : { success: false, error: result?.error || "命令取消失败" });
+      await loadStatuses();
+    } finally {
+      setHandlingRunCommandId(null);
     }
   };
   const retryFailedLetter = async (letterId) => {
@@ -19337,6 +19360,7 @@ function LettersStatusModal({ onClose }) {
     return snapshot?.diagnosticDisableReasons?.[stage] || null;
   };
   const groups = groupLettersByStatus();
+  const stalledRunCommand = snapshot?.dateTracker?.runCommands?.find((command) => command.status === "stalled") || null;
   const visualCheckDiagnostic = Object.values(snapshot?.effectDiagnostics || {}).find((item) => ["ARTIFACT_VISUAL_CHECK_REQUIRED", "A3_VISUAL_CHECK_REQUIRED"].includes(item?.result));
   return /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "modal-overlay", children: /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "modal-content letters-status-modal", children: [
     /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "modal-header", children: [
@@ -19404,6 +19428,20 @@ function LettersStatusModal({ onClose }) {
           snapshot.dateTracker?.lastDateMarkerSource || "—",
           " / ACK Queue: ",
           snapshot.dateTracker?.runCommands?.length || 0
+        ] })
+      ] }),
+      stalledRunCommand && /* @__PURE__ */ jsxRuntimeExports.jsxs("section", { className: "letter-details", style: { borderColor: "#dc3545" }, children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsx("h5", { style: { color: "#dc3545" }, children: "Run Command Queue 已阻塞（STALLED）" }),
+        /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { className: "muted-text", children: [
+          "命令 ",
+          stalledRunCommand.commandId,
+          " / ",
+          stalledRunCommand.kind,
+          " 已超过 ACK 等待时间。没有看到 ACK 不代表 CK3 没有执行。"
+        ] }),
+        /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "header-actions", children: [
+          /* @__PURE__ */ jsxRuntimeExports.jsx("button", { type: "button", onClick: () => retryStalledRunCommand(stalledRunCommand.commandId), disabled: handlingRunCommandId === stalledRunCommand.commandId, children: "确认风险并重新执行" }),
+          /* @__PURE__ */ jsxRuntimeExports.jsx("button", { type: "button", onClick: () => cancelStalledRunCommand(stalledRunCommand.commandId), disabled: handlingRunCommandId === stalledRunCommand.commandId, children: "取消命令并继续队列" })
         ] })
       ] }),
       /* @__PURE__ */ jsxRuntimeExports.jsxs("section", { className: "letter-details", children: [

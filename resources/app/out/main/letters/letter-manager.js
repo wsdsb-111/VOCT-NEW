@@ -1,8 +1,9 @@
 "use strict";
 
-function createLetterManager({ settingsRepository, fs, path, TailFile, readline, parseLog, letterPromptBuilder, llmManager, PromptBuilder, TokenCounter, memoryEngine, dataDir, letterEffectTransport = null, runFileManager = null, sleep = (milliseconds) => new Promise((resolve) => setTimeout(resolve, milliseconds)), letterPayloadRetryDelays = [100, 200, 350, 600, 1e3], dateHeartbeatIntervalMs = 5e3, dateStaleMs = 2e4, dateScanBytes = 1024 * 1024, diagnosticExecutionTimeoutMs = 15e3, setIntervalFn = setInterval, clearIntervalFn = clearInterval }) {
+function createLetterManager({ settingsRepository, fs, path, TailFile, readline, parseLog, letterPromptBuilder, llmManager, PromptBuilder, TokenCounter, memoryEngine, dataDir, letterEffectTransport = null, runFileManager = null, scanRecentRunAcks = null, autoStartLogTailing = true, sleep = (milliseconds) => new Promise((resolve) => setTimeout(resolve, milliseconds)), letterPayloadRetryDelays = [100, 200, 350, 600, 1e3], dateHeartbeatIntervalMs = 5e3, dateStaleMs = 2e4, dateScanBytes = 1024 * 1024, diagnosticExecutionTimeoutMs = 15e3, runCommandAckTimeoutMs = 3e4, runCommandWatchdogIntervalMs = 5e3, setIntervalFn = setInterval, clearIntervalFn = clearInterval, setRunCommandIntervalFn = setInterval, clearRunCommandIntervalFn = clearInterval }) {
   const fs$1 = fs;
   const readline$1 = readline;
+  if (!scanRecentRunAcks) ({ scanRecentRunAcks } = require("../actions/run-command-recovery"));
   const LetterEffectTransportMode = Object.freeze({ LEGACY: "legacy_letters_file", VOTC: "votc_run_file" });
   if (!letterEffectTransport) {
     const { createLetterEffectTransport } = require("./letter-effect-transport");
@@ -70,6 +71,7 @@ function createLetterManager({ settingsRepository, fs, path, TailFile, readline,
       this.readline = null;
       this.tailRestartTimer = null;
       this.dateHeartbeatTimer = null;
+      this.runCommandWatchdogTimer = null;
       this.dateHeartbeatRunning = false;
       this.tailState = "STOPPED";
       this.tailStartedAt = null;
@@ -103,9 +105,9 @@ function createLetterManager({ settingsRepository, fs, path, TailFile, readline,
       this.loadPendingLetters();
       this.syncDateTrackerSupervisor();
       const ck3UserPath = settingsRepository.getCK3UserFolderPath();
-      if (ck3UserPath) {
+      if (ck3UserPath && autoStartLogTailing) {
         this.startLogTailing();
-      } else {
+      } else if (!ck3UserPath) {
         console.log("LetterManager: CK3 user path not configured yet, will start tailing when path is set");
       }
       if (this.storedLetters.size > 0) Promise.resolve().then(() => this.ensureDateProducerRunning("app_start_pending_letters"));
@@ -216,6 +218,48 @@ function createLetterManager({ settingsRepository, fs, path, TailFile, readline,
         return this.updateCurrentDate(newTotalDays);
       }
       return Promise.resolve();
+    }
+    handleReconciledRunCommands(commands, reason = "debug_log_reconciliation") {
+      for (const command of commands || []) {
+        if (command?.kind === "conversation_close") this.ensureDateProducerRunning(`${reason}_conversation_close_ack`);
+      }
+    }
+    runCommandWatchdog() {
+      if (!runFileManager?.isRecoveryCompleted?.()) return { reconciled: [], stalled: null };
+      if (!runFileManager.getPendingCommands?.().length) return { reconciled: [], stalled: null };
+      const debugLogPath = settingsRepository.getCK3DebugLogPath();
+      const acknowledgements = scanRecentRunAcks(debugLogPath, { fs: fs$1 });
+      const reconciled = runFileManager.reconcileAcknowledgedCommands(acknowledgements);
+      this.handleReconciledRunCommands(reconciled, "watchdog");
+      const stalled = runFileManager.markActiveCommandStalledIfNeeded({ ackTimeoutMs: runCommandAckTimeoutMs });
+      return { reconciled, stalled };
+    }
+    startRunCommandWatchdog() {
+      if (this.runCommandWatchdogTimer) return;
+      this.runCommandWatchdogTimer = setRunCommandIntervalFn(() => {
+        try {
+          this.runCommandWatchdog();
+        } catch (error) {
+          console.error("Run Command ACK watchdog failed:", error);
+        }
+      }, runCommandWatchdogIntervalMs);
+      this.runCommandWatchdogTimer?.unref?.();
+    }
+    retryStalledRunCommand(commandId) {
+      try {
+        const command = runFileManager?.retryStalledCommand?.(String(commandId || ""));
+        return command ? { success: true, command } : { success: false, error: "run_command_retry_failed" };
+      } catch (error) {
+        return { success: false, error: error instanceof Error ? error.message : String(error) };
+      }
+    }
+    cancelStalledRunCommand(commandId) {
+      try {
+        const command = runFileManager?.cancelStalledCommand?.(String(commandId || ""), "user_cancelled");
+        return command ? { success: true, command } : { success: false, error: "run_command_cancel_failed" };
+      } catch (error) {
+        return { success: false, error: error instanceof Error ? error.message : String(error) };
+      }
     }
     /**
      * Update current date and handle time travel detection
@@ -1215,6 +1259,10 @@ ${"  \t"}modifier = artifact_monthly_minor_prestige_1_modifier
       if (stopSupervisor && this.dateHeartbeatTimer) {
         clearIntervalFn(this.dateHeartbeatTimer);
         this.dateHeartbeatTimer = null;
+      }
+      if (stopSupervisor && this.runCommandWatchdogTimer) {
+        clearRunCommandIntervalFn(this.runCommandWatchdogTimer);
+        this.runCommandWatchdogTimer = null;
       }
     }
     /**

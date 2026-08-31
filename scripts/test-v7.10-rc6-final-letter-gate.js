@@ -26,6 +26,6 @@ assert(manager.includes('const deliveryBaseDay = payloadGameDay'));
 assert(manager.includes('"PAYLOAD_SEND_DAY_AUTHORITATIVE"'));
 assert(renderer.includes("Payload sendDay + delay"));
 
-for (const test of ["test-v7.10-rc6-delivery-base-date.js", "test-v7.10-rc6-artifact-parity.js", "test-v7.10-rc6-payload-race.js", "test-v7.10-rc6-final-letter-gate.js", "test-v7.10-rc6-rev2-run-command-queue.js", "test-v7.10-rc6-rev2-date-producer.js", "test-v7.10-rc6-rev2-relationship-resolver.js"]) assert(fs.existsSync(path.join(__dirname, test)), `RC6 gate missing: ${test}`);
+for (const test of ["test-v7.10-rc6-delivery-base-date.js", "test-v7.10-rc6-artifact-parity.js", "test-v7.10-rc6-payload-race.js", "test-v7.10-rc6-final-letter-gate.js", "test-v7.10-rc6-rev2-run-command-queue.js", "test-v7.10-rc6-rev3-run-command-recovery.js", "test-v7.10-rc6-rev2-date-producer.js", "test-v7.10-rc6-rev2-relationship-resolver.js"]) assert(fs.existsSync(path.join(__dirname, test)), `RC6 gate missing: ${test}`);
 
 console.log("VOTC v7.10-RC6 Final Rev2 Gate: PASS (sendDay contract, ACK queue, Date Producer health, relationship resolver, A3 and payload recovery)");
