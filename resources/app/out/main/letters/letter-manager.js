@@ -1,9 +1,9 @@
 "use strict";
 
-function createLetterManager({ settingsRepository, fs, path, TailFile, readline, parseLog, letterPromptBuilder, llmManager, PromptBuilder, TokenCounter, memoryEngine, dataDir, letterEffectTransport = null, runFileManager = null, scanRecentRunAcks = null, autoStartLogTailing = true, sleep = (milliseconds) => new Promise((resolve) => setTimeout(resolve, milliseconds)), letterPayloadRetryDelays = [100, 200, 350, 600, 1e3], dateHeartbeatIntervalMs = 5e3, dateStaleMs = 2e4, dateScanBytes = 1024 * 1024, diagnosticExecutionTimeoutMs = 15e3, runCommandAckTimeoutMs = 3e4, runCommandWatchdogIntervalMs = 5e3, setIntervalFn = setInterval, clearIntervalFn = clearInterval, setRunCommandIntervalFn = setInterval, clearRunCommandIntervalFn = clearInterval }) {
+function createLetterManager({ settingsRepository, fs, path, TailFile, readline, parseLog, letterPromptBuilder, llmManager, PromptBuilder, TokenCounter, memoryEngine, dataDir, letterEffectTransport = null, runFileManager = null, scanRunAcksForPendingCommands = null, autoStartLogTailing = true, sleep = (milliseconds) => new Promise((resolve) => setTimeout(resolve, milliseconds)), letterPayloadRetryDelays = [100, 200, 350, 600, 1e3], dateHeartbeatIntervalMs = 5e3, dateStaleMs = 2e4, dateScanBytes = 1024 * 1024, diagnosticExecutionTimeoutMs = 15e3, runCommandAckTimeoutMs = 3e4, runCommandWatchdogIntervalMs = 5e3, setIntervalFn = setInterval, clearIntervalFn = clearInterval, setRunCommandIntervalFn = setInterval, clearRunCommandIntervalFn = clearInterval }) {
   const fs$1 = fs;
   const readline$1 = readline;
-  if (!scanRecentRunAcks) ({ scanRecentRunAcks } = require("../actions/run-command-recovery"));
+  if (!scanRunAcksForPendingCommands) ({ scanRunAcksForPendingCommands } = require("../actions/run-command-recovery"));
   const LetterEffectTransportMode = Object.freeze({ LEGACY: "legacy_letters_file", VOTC: "votc_run_file" });
   if (!letterEffectTransport) {
     const { createLetterEffectTransport } = require("./letter-effect-transport");
@@ -228,10 +228,12 @@ function createLetterManager({ settingsRepository, fs, path, TailFile, readline,
       if (!runFileManager?.isRecoveryCompleted?.()) return { reconciled: [], stalled: null };
       if (!runFileManager.getPendingCommands?.().length) return { reconciled: [], stalled: null };
       const debugLogPath = settingsRepository.getCK3DebugLogPath();
-      const acknowledgements = scanRecentRunAcks(debugLogPath, { fs: fs$1 });
+      const acknowledgements = scanRunAcksForPendingCommands(debugLogPath, { fs: fs$1, pendingCommands: runFileManager.getPendingCommands() });
       const reconciled = runFileManager.reconcileAcknowledgedCommands(acknowledgements);
       this.handleReconciledRunCommands(reconciled, "watchdog");
       const stalled = runFileManager.markActiveCommandStalledIfNeeded({ ackTimeoutMs: runCommandAckTimeoutMs });
+      const active = runFileManager.getPendingCommands()[0];
+      if (active && ["queued", "blocked"].includes(active.status) && Number(active.writeAttempts) === 0) runFileManager.writeActiveCommand();
       return { reconciled, stalled };
     }
     startRunCommandWatchdog() {
@@ -249,6 +251,25 @@ function createLetterManager({ settingsRepository, fs, path, TailFile, readline,
       try {
         const command = runFileManager?.retryStalledCommand?.(String(commandId || ""));
         return command ? { success: true, command } : { success: false, error: "run_command_retry_failed" };
+      } catch (error) {
+        return { success: false, error: error instanceof Error ? error.message : String(error) };
+      }
+    }
+    retryBlockedRunCommand(commandId) {
+      try {
+        const command = runFileManager?.retryBlockedCommand?.(String(commandId || ""));
+        return command ? { success: true, command } : { success: false, error: "run_command_retry_failed" };
+      } catch (error) {
+        return { success: false, error: error instanceof Error ? error.message : String(error) };
+      }
+    }
+    cancelBlockedRunCommand(commandId) {
+      try {
+        const normalizedId = String(commandId || "");
+        const active = runFileManager?.findPendingCommand?.((command) => command.commandId === normalizedId);
+        if (!active || active.status !== "blocked") return { success: false, error: "run_command_not_blocked" };
+        const command = runFileManager.cancelCommand(normalizedId, "user_cancelled");
+        return command ? { success: true, command } : { success: false, error: "run_command_cancel_failed" };
       } catch (error) {
         return { success: false, error: error instanceof Error ? error.message : String(error) };
       }

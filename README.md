@@ -166,6 +166,8 @@ V7.10.0-RC5 Candidate 保持 Official VOTC 2.0.3 的 28 个标准动作、Regist
 
 V7.10.0-RC6 Final Rev.2 在 RC6 Letter 收口上继续修复生命周期与亲属关系回归。Action、Letter、Conversation Close 通过持久化串行 Run Command Queue 共用 `votc.txt`，每条命令只有收到 CK3 `VOTC:RUN_ACK` 后才推进，不再用固定延时或通用 Clipboard Marker 清空共享文件；启动时先扫描历史 ACK、启动实时 Tail、再次扫描闭合竞态窗口，最后才恢复真正未确认的队首。ACK 超时只进入 `STALLED`，不会自动 replay，用户必须在明确重复效果风险后手动重试或取消；队列状态落盘失败时禁止 dispatch。`letters.txt` 继续承担 Date Producer 职责。Date Tracker 区分 Tail Consumer、Date Producer、Fresh Marker 与 Last Progress，扫描到旧 Marker 不再标为健康。投递日按已校验 Payload `sendDay + delay` 计算，运行期当前日只信任实时 `VOTC:DATE`。第三方亲属资料改为多来源证据聚合，并统一使用 Parent/Child 优先、exact birth 优先且冲突 fail-closed 的 Kinship Resolver。当前仍须完成 D0–D5 与关系实机 Gate，未标 Stable。详见 [v7.10 实施报告](docs/v7.10-official-action-letter-recovery-implementation-report.md)。
 
+V7.10.0-RC6 Final Rev.3 Candidate（修复 6.2）在上述队列合同上完成验证与机械性收尾：首次 dispatch 会先 durable 地记录可能已执行，再写入 `votc.txt`，因此进程崩溃不会把已写 Effect 误判为未写；启动时凡有 `writeAttempts`、`lastWrittenAt` 或 `writtenAt` 历史但未 ACK 的命令只进入 `STALLED`。仅路径不可用的零历史命令进入 `BLOCKED` 并支持安全重试或取消；文件写入已进入不确定区时保守停在 `STALLED`。损坏的队列状态会 fail-closed，禁止清空或 dispatch。ACK 扫描改为最多 64 MB 的反向 1 MB 分块且只匹配当前 Pending。CK3 路径与 ACK Tail 作为同一事务切换，失败会回滚两者；`Conversation.end()` 不再改写 CK3 `debug.log`。状态页补齐 BLOCKED 的安全提示与操作，保留 STALLED 的重复 Effect 风险警告。T1–T18 与完整发布回归均已通过；真实 CK3、Provider 与连续重启仍属于人工验收，当前未标 Stable。详见 [v7.10 实施报告](docs/v7.10-official-action-letter-recovery-implementation-report.md)。
+
 V7.7 在 V7.6 健康化基础上分阶段拆分主进程：第一阶段将六种模型 Provider 迁入 `providers/index.js`、92 个既有 IPC 注册迁入 `ipc/register-ipc.js`；第二阶段把 `ProviderRegistry`、`TokenCounter` 和 `LLMManager` 迁入 `provider-service.js`，通过显式依赖继续读取用户分别选择的对话、摘要和动作模型。`main.js` 由约 9477 行降至约 6612 行。动作语义同时补齐“共度春宵/鱼水之欢已发生”和“从今以后成为情人/认定灵魂伴侣”等自然完成态表达，并继续排除请求、计划、假设、回忆与失败尝试。当前仓库仍是可运行打包产物，没有能够重新生成这些文件的完整 `src` 工程，因此本阶段不伪造源码构建链。
 
 发布测试统一由 `scripts/test-manifest.js` 声明。本地与 CI 都运行：
@@ -174,18 +176,18 @@ V7.7 在 V7.6 健康化基础上分阶段拆分主进程：第一阶段将六种
 node scripts\test-release.js
 ```
 
-清单会覆盖全部 `test-*.js`。V7.10.0-RC6 Final Rev.2 Candidate 当前分类 131 个测试文件：62 个直接发布组，68 个依赖已退休 AE3/AE4/Social 语义的历史测试明确归档，另 1 个为统一发布入口；新增 Run Command Recovery T1–T10 门禁覆盖启动 ACK reconciliation、Conversation 不 replay、错误 ACK、连续 FIFO、持久化失败 fail-closed、STALLED 不自动重放及人工重试/取消，并继续覆盖 Rev2 Queue、Date Producer、亲属关系 R1–R10、RC6 A3、Payload Race、Letter UI/IPC/Transport 和 RC5 Action 非回归。
+清单会覆盖全部 `test-*.js`。V7.10.0-RC6 Final Rev.3 Candidate 当前分类 131 个测试文件：62 个直接发布组，68 个依赖已退休 AE3/AE4/Social 语义的历史测试明确归档，另 1 个为统一发布入口；Run Command Recovery T1–T18 覆盖启动 ACK reconciliation、Conversation 不 replay、错误 ACK、连续 FIFO、持久化失败 fail-closed、BLOCKED 安全恢复、STALLED 不自动重放、人工重试/取消、只读 debug.log、CK3 路径切换、超过旧 4 MB 窗口的 ACK、写入前 durable dispatch intent、`lastWrittenAt` 迁移、损坏状态 fail-closed 和路径/Tail 事务回滚，并继续覆盖 Rev2 Queue、Date Producer、亲属关系 R1–R10、RC6 A3、Payload Race、Letter UI/IPC/Transport 和 RC5 Action 非回归。
 
 ## 版本信息
 
 - 外挂 UI 版本：v2.0.4
-- 当前应用功能基线：v7.10.0-RC6 Final Rev.2 Candidate（实机候选，未宣称 Stable）
+- 当前应用功能基线：v7.10.0-RC6 Final Rev.3 Candidate（实机候选，未宣称 Stable）
 - CK3 模组版本：Voices of the Court 2.0.4
 - 模组支持版本：CK3 1.18.*
 - UI 主题：宫廷编年史风格（深红、暗金、羊皮纸文本层级）
 - UI 主题切换：羊皮卷、骑士纹章、水墨画卷三套完整历史风格；分别拥有独立背景、边框结构、按钮造型、消息卡片、输入框、字体和滚动条，并可自动保存选择
 - UI 素材生成提示词：参见 [docs/UI_ASSET_PROMPTS_2.0.3.md](docs/UI_ASSET_PROMPTS_2.0.3.md)
-- 当前重点：V7.10.0-RC6 Final Rev.2 Candidate / CK3 ACK Queue / Date Producer Recovery / Canonical Relative Profile / Unified Kinship Resolver；Official VOTC 2.0.3 Action Prompt/Selector、Memory Engine 2.5、外挂 UI 2.0.4 与 CK3 Workshop 2.0.4 保持基线
+- 当前重点：V7.10.0-RC6 Final Rev.3 Candidate / CK3 ACK Queue / BLOCKED-STALLED Recovery / Read-only debug.log / Date Producer Recovery / Canonical Relative Profile / Unified Kinship Resolver；Official VOTC 2.0.3 Action Prompt/Selector、Memory Engine 2.5、外挂 UI 2.0.4 与 CK3 Workshop 2.0.4 保持基线
 
 ## 已知限制
 

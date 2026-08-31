@@ -15,7 +15,6 @@ let createMessage = null;
 let createActionApproval = null;
 let createActionFeedback = null;
 let createPromptFingerprint = null;
-let cleanLogFile = null;
 let PromptBuilder = null;
 let TokenCounter = null;
 let logVerboseLLM = null;
@@ -58,7 +57,6 @@ class Conversation {
     createActionApproval = dependencies.createActionApproval || createActionApproval;
     createActionFeedback = dependencies.createActionFeedback || createActionFeedback;
     createPromptFingerprint = dependencies.createPromptFingerprint || createPromptFingerprint;
-    cleanLogFile = dependencies.cleanLogFile || cleanLogFile;
     PromptBuilder = dependencies.PromptBuilder || PromptBuilder;
     TokenCounter = dependencies.TokenCounter || TokenCounter;
     logVerboseLLM = dependencies.logVerboseLLM || logVerboseLLM;
@@ -1209,7 +1207,6 @@ class Conversation {
   end() {
     this.isActive = false;
     this.clearHistory();
-    cleanLogFile(settingsRepository.getCK3DebugLogPath());
   }
   // Emit conversation update event
   emitUpdate() {

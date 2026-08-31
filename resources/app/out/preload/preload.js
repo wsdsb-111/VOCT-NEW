@@ -95,6 +95,8 @@ electron.contextBridge.exposeInMainWorld("lettersAPI", {
   getLetterDetails: (letterId) => electron.ipcRenderer.invoke("letters:getLetterDetails", letterId),
   runEffectDiagnostic: (stage, letterId) => electron.ipcRenderer.invoke("letters:runEffectDiagnostic", { stage, letterId }),
   resyncGameDate: () => electron.ipcRenderer.invoke("letters:resyncGameDate"),
+  retryBlockedRunCommand: (commandId) => electron.ipcRenderer.invoke("letters:retryBlockedRunCommand", commandId),
+  cancelBlockedRunCommand: (commandId) => electron.ipcRenderer.invoke("letters:cancelBlockedRunCommand", commandId),
   retryStalledRunCommand: (commandId) => electron.ipcRenderer.invoke("letters:retryStalledRunCommand", commandId),
   cancelStalledRunCommand: (commandId) => electron.ipcRenderer.invoke("letters:cancelStalledRunCommand", commandId),
   confirmEffectDiagnostic: (stage, passed) => electron.ipcRenderer.invoke("letters:confirmEffectDiagnostic", { stage, passed }),

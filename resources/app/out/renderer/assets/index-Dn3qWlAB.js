@@ -17930,7 +17930,8 @@ const useConfigStore = create()(
         }));
       },
       updateCK3Folder: async (path2) => {
-        await window.llmConfigAPI.setCK3Folder(path2);
+        const result = await window.llmConfigAPI.setCK3Folder(path2);
+        if (result?.success === false) throw new Error(result.error || "Failed to update CK3 folder");
         set((state) => ({
           appSettings: state.appSettings ? { ...state.appSettings, ck3UserFolderPath: path2 } : null
         }));
@@ -19120,11 +19121,32 @@ function LettersStatusModal({ onClose }) {
       setHandlingRunCommandId(null);
     }
   };
+  const retryBlockedRunCommand = async (commandId) => {
+    setHandlingRunCommandId(commandId);
+    try {
+      const result = await window.lettersAPI.retryBlockedRunCommand(commandId);
+      setDiagnosticResult(result?.success ? { success: true, stage: "RUN_COMMAND", result: `已安全重试 ${commandId}` } : { success: false, error: result?.error || "命令重试失败" });
+      await loadStatuses();
+    } finally {
+      setHandlingRunCommandId(null);
+    }
+  };
   const cancelStalledRunCommand = async (commandId) => {
     if (!window.confirm("确定取消这条 STALLED 命令并继续后续队列吗？该 Effect 是否已由 CK3 执行仍无法确认。")) return;
     setHandlingRunCommandId(commandId);
     try {
       const result = await window.lettersAPI.cancelStalledRunCommand(commandId);
+      setDiagnosticResult(result?.success ? { success: true, stage: "RUN_COMMAND", result: `已取消 ${commandId}` } : { success: false, error: result?.error || "命令取消失败" });
+      await loadStatuses();
+    } finally {
+      setHandlingRunCommandId(null);
+    }
+  };
+  const cancelBlockedRunCommand = async (commandId) => {
+    if (!window.confirm("确定取消这条 BLOCKED 命令并继续后续队列吗？该命令尚未写入 CK3。")) return;
+    setHandlingRunCommandId(commandId);
+    try {
+      const result = await window.lettersAPI.cancelBlockedRunCommand(commandId);
       setDiagnosticResult(result?.success ? { success: true, stage: "RUN_COMMAND", result: `已取消 ${commandId}` } : { success: false, error: result?.error || "命令取消失败" });
       await loadStatuses();
     } finally {
@@ -19360,6 +19382,7 @@ function LettersStatusModal({ onClose }) {
     return snapshot?.diagnosticDisableReasons?.[stage] || null;
   };
   const groups = groupLettersByStatus();
+  const blockedRunCommand = snapshot?.dateTracker?.runCommands?.find((command) => command.status === "blocked") || null;
   const stalledRunCommand = snapshot?.dateTracker?.runCommands?.find((command) => command.status === "stalled") || null;
   const visualCheckDiagnostic = Object.values(snapshot?.effectDiagnostics || {}).find((item) => ["ARTIFACT_VISUAL_CHECK_REQUIRED", "A3_VISUAL_CHECK_REQUIRED"].includes(item?.result));
   return /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "modal-overlay", children: /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "modal-content letters-status-modal", children: [
@@ -19428,6 +19451,14 @@ function LettersStatusModal({ onClose }) {
           snapshot.dateTracker?.lastDateMarkerSource || "—",
           " / ACK Queue: ",
           snapshot.dateTracker?.runCommands?.length || 0
+        ] })
+      ] }),
+      blockedRunCommand && /* @__PURE__ */ jsxRuntimeExports.jsxs("section", { className: "letter-details", style: { borderColor: "#d9822b" }, children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsx("h5", { style: { color: "#d9822b" }, children: "Run Command Queue 暂时无法发送（BLOCKED）" }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "muted-text", children: "这条命令尚未成功写入 CK3，因此重新尝试不会造成重复 Effect。请检查 CK3 用户目录和 run 文件权限。" }),
+        /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "header-actions", children: [
+          /* @__PURE__ */ jsxRuntimeExports.jsx("button", { type: "button", onClick: () => retryBlockedRunCommand(blockedRunCommand.commandId), disabled: handlingRunCommandId === blockedRunCommand.commandId, children: "安全重新尝试" }),
+          /* @__PURE__ */ jsxRuntimeExports.jsx("button", { type: "button", onClick: () => cancelBlockedRunCommand(blockedRunCommand.commandId), disabled: handlingRunCommandId === blockedRunCommand.commandId, children: "取消命令并继续队列" })
         ] })
       ] }),
       stalledRunCommand && /* @__PURE__ */ jsxRuntimeExports.jsxs("section", { className: "letter-details", style: { borderColor: "#dc3545" }, children: [

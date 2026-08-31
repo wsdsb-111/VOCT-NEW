@@ -28,7 +28,7 @@ function validateActionFilePath(filePath, actionsRoot) {
 }
 
 function registerIpcHandlers(runtime) {
-  const { electron, settingsRepository, promptConfigManager, uuid, VOTC_PROMPTS_DIR, TemplateEngine, exportPromptsZip, letterManager, llmManager, providerRegistry, usageAnalytics, actionRegistry, VOTC_ACTIONS_DIR, resolveI18nString, conversationManager, ActionEngine, VOTC_SUMMARIES_DIR, SummariesManager, memoryEngine } = runtime;
+  const { electron, settingsRepository, promptConfigManager, uuid, VOTC_PROMPTS_DIR, TemplateEngine, exportPromptsZip, letterManager, runFileManager, llmManager, providerRegistry, usageAnalytics, actionRegistry, VOTC_ACTIONS_DIR, resolveI18nString, conversationManager, ActionEngine, VOTC_SUMMARIES_DIR, SummariesManager, memoryEngine } = runtime;
 
   electron.ipcMain.handle("toggle-config-panel", () => {
     if (runtime.chatWindow) {
@@ -181,6 +181,12 @@ function registerIpcHandlers(runtime) {
   electron.ipcMain.handle("letters:retryStalledRunCommand", async (_, commandId) => {
     return letterManager.retryStalledRunCommand(commandId);
   });
+  electron.ipcMain.handle("letters:retryBlockedRunCommand", async (_, commandId) => {
+    return letterManager.retryBlockedRunCommand(commandId);
+  });
+  electron.ipcMain.handle("letters:cancelBlockedRunCommand", async (_, commandId) => {
+    return letterManager.cancelBlockedRunCommand(commandId);
+  });
   electron.ipcMain.handle("letters:cancelStalledRunCommand", async (_, commandId) => {
     return letterManager.cancelStalledRunCommand(commandId);
   });
@@ -262,14 +268,31 @@ function registerIpcHandlers(runtime) {
     }
   });
   electron.ipcMain.handle("llm:setCK3Folder", async (_, path2) => {
+    const previousPath = settingsRepository.getCK3UserFolderPath() || null;
     settingsRepository.setCK3UserFolderPath(path2);
-    if (path2) {
-      try {
+    let tailSwitchStarted = false;
+    try {
+      runFileManager.refreshPathFromSettings();
+      tailSwitchStarted = true;
+      if (path2) {
         await letterManager.restartLogTailing();
-        console.log("Log tailing restarted after CK3 path update");
-      } catch (error) {
-        console.error("Failed to restart log tailing after CK3 path update:", error);
+        const tailStatus = letterManager.getDateTrackerStatus?.();
+        if (tailStatus?.tailState === "ERROR") throw new Error("log_tailing_restart_failed");
+      } else await letterManager.stopLogTailing(false);
+      console.log("CK3 path and log tailing updated");
+      return { success: true };
+    } catch (error) {
+      settingsRepository.setCK3UserFolderPath(previousPath);
+      try {
+        runFileManager.refreshPathFromSettings();
+        if (tailSwitchStarted) {
+          if (previousPath) await letterManager.restartLogTailing();
+          else await letterManager.stopLogTailing(false);
+        }
+      } catch (rollbackError) {
+        console.error("Failed to restore the previous CK3 path and log tailing:", rollbackError);
       }
+      return { success: false, error: error instanceof Error ? error.message : String(error) };
     }
   });
   electron.ipcMain.handle("llm:setModLocationPath", (_, path2) => {

@@ -41,7 +41,6 @@ function getConversationClass() {
     createActionFeedback: globalFunction("createActionFeedback"),
     createSummaryImport: globalFunction("createSummaryImport"),
     createPromptFingerprint: globalFunction("createPromptFingerprint"),
-    cleanLogFile: globalFunction("cleanLogFile"),
     resolveI18nString: globalFunction("resolveI18nString"),
     PromptBuilder: globalProxy("PromptBuilder"),
     TokenCounter: globalProxy("TokenCounter"),

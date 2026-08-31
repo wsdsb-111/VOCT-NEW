@@ -340,21 +340,6 @@ const { Character } = require("./game-data/character");
 const fs = require("fs");
 const { createLogParser } = require("./game-data/log-parser");
 const parseLog = createLogParser({ GameData, Character });
-async function cleanLogFile(filePath) {
-  const fileContent = await fs.promises.readFile(filePath, "utf-8");
-  const lines = fileContent.split("\n");
-  const stringsToRemove = [
-    "Running console command",
-    "console_failure: Effect is empty. Check error log",
-    "console_success: Executing effect",
-    "Trying to trigger an animation with glow_alpha for a widget which has no glow",
-    "No sound alias named 'river_node' configured! Please check you sound alias database"
-  ];
-  const cleaned = lines.filter((line) => {
-    return !stringsToRemove.some((str) => line.includes(str));
-  });
-  await fs.promises.writeFile(filePath, cleaned.join("\n"), "utf-8");
-}
 function createMessage(input) {
   return {
     ...input,
@@ -428,7 +413,7 @@ const ActionRegistryClass = ActionRegistry.configure({
 const actionRegistry = ActionRegistryClass.getInstance();
 const { buildStructuredResponseJsonSchema, buildStructuredResponseSchema } = actionSchema;
 const { createRunFileManager } = require("./actions/run-file-manager");
-const { scanRecentRunAcks } = require("./actions/run-command-recovery");
+const { scanRunAcksForPendingCommands } = require("./actions/run-command-recovery");
 const RunFileManager = createRunFileManager({ settingsRepository, path, fs: fs$1, dataDir: VOTC_DATA_DIR });
 const runFileManager = new RunFileManager();
 const ActionEffectWriter = createActionEffectWriter({ runFileManager });
@@ -460,7 +445,6 @@ Conversation.configure({
   createActionApproval,
   createActionFeedback,
   createPromptFingerprint,
-  cleanLogFile,
   PromptBuilder,
   TokenCounter,
   logVerboseLLM,
@@ -814,14 +798,14 @@ const letterEffectTransport = new LetterEffectTransport();
 const { createLetterManager } = require("./letters/letter-manager");
 const { LetterManager, LetterResponseStatus, LetterSummaryStatus } = createLetterManager({
   settingsRepository, fs: fs$1, path, TailFile, readline: readline$1, parseLog,
-  letterPromptBuilder, llmManager, PromptBuilder, TokenCounter, memoryEngine, dataDir: VOTC_DATA_DIR, letterEffectTransport, runFileManager, scanRecentRunAcks, autoStartLogTailing: false
+  letterPromptBuilder, llmManager, PromptBuilder, TokenCounter, memoryEngine, dataDir: VOTC_DATA_DIR, letterEffectTransport, runFileManager, scanRunAcksForPendingCommands, autoStartLogTailing: false
 });
 const letterManager = new LetterManager();
 const initializeRunCommandQueue = async () => {
   const reconciledById = /* @__PURE__ */ new Map();
   const reconcileRecentAcks = () => {
     const debugLogPath = settingsRepository.getCK3DebugLogPath();
-    const reconciled = runFileManager.reconcileAcknowledgedCommands(scanRecentRunAcks(debugLogPath, { fs: fs$1 }));
+    const reconciled = runFileManager.reconcileAcknowledgedCommands(scanRunAcksForPendingCommands(debugLogPath, { fs: fs$1, pendingCommands: runFileManager.getPendingCommands() }));
     for (const command of reconciled) reconciledById.set(command.commandId, command);
   };
   reconcileRecentAcks();
@@ -873,6 +857,7 @@ const setupIpcHandlers = () => registerIpcHandlers({
   TemplateEngine,
   exportPromptsZip,
   letterManager,
+  runFileManager,
   llmManager,
   providerRegistry,
   usageAnalytics,
