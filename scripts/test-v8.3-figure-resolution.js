@@ -57,6 +57,16 @@ assert.strictEqual(exact.status, FIGURE_STATUS.RESOLVED);
 assert.strictEqual(exact.matchedCharacterId, 1);
 assert(exact.evidence.some((entry) => entry.code === "NAME_EXACT"));
 
+const cultureIndependent = resolveOne(figure(), matching(), input([character(14, "人物甲", { culture: "汉人" })]));
+assert.strictEqual(cultureIndependent.status, FIGURE_STATUS.RESOLVED, "exact name, strong age and gender must resolve without a culture match");
+assert.strictEqual(cultureIndependent.score, 0.85);
+
+const cultureTieBreaker = resolveOne(figure(), matching(), input([
+  character(15, "人物甲", { culture: "汉" }),
+  character(16, "人物甲", { culture: "汉人" })
+]));
+assert.strictEqual(cultureTieBreaker.status, FIGURE_STATUS.AMBIGUOUS, "a culture bonus must not hide a close same-name ambiguity");
+
 const aliasFigure = figure({ identity: { name: "人物甲", aliases: ["甲别名"] } });
 const alias = resolveOne(aliasFigure, matching(), input([character(2, "甲别名")]));
 assert.strictEqual(alias.status, FIGURE_STATUS.CANDIDATE);

@@ -4,6 +4,7 @@
 
 | 版本 | 重点 | 详细记录 |
 | --- | --- | --- |
+| v8.3.1 Historical Figure Ground Truth Dashboard | 修复 spouse evidence 与 culture 关键补分；在现有 Overlay 增加一次解析、纯 JSON Snapshot、raw culture、分层证据、候选和 append-only 人工裁定。Ground Truth 只写 diagnostics，不反哺 Resolver；真实 CK3 20+ 条样本、Precision 与远端 CI 仍待验收 | [实施报告](docs/v8.3.1-historical-figure-dashboard-implementation-report.md) / [V8 阶段记录](docs/V8阶段开发记录.md) |
 | v8.3 Historical Figure Resolver | 为 48 个基线人物建立显式 readiness，以 14 人 reviewed cohort 校准 exact name/alias、出生时间、性别和亲属证据；输出六态 GameData-scoped Shadow 结果。Prompt/cache、Worldline schema 和 V7 运行合同保持冻结；人工 Ground Truth、真实 CK3 Save A/B 与远端 CI 尚未宣称通过 | [实施报告](docs/v8.3-historical-figure-resolver-implementation-report.md) / [V8 阶段记录](docs/V8阶段开发记录.md) |
 | v8.1（V8.3 前置加固） | 修复 Windows CRLF 导致的 V7.10 Action Config CI 假失败；Dynamic History 状态改为 GameData instance scoped，Shadow metadata non-enumerable 且重复更新幂等。V7 核心语义与 V8.1 持久化合同不变；CK3 Campaign Token 实机 Gate 仍未宣称通过 | [实施报告](docs/v8.3-prerequisite-fixes-implementation-report.md) / [V8 阶段记录](docs/V8阶段开发记录.md) |
 | v8.1 Campaign Identity + Worldline Store Foundation | Workshop 2.0.5 新增存档持久化随机 token 和 `VOTC:CAMPAIGN` 协议；应用以完整 SHA-256 指纹派生隔离的 `campaignId`，只在可靠 token 下原子创建 schema version 1 `worldline.json`。旧模组、畸形 token、损坏 JSON、未知 schema、身份/指纹不匹配均 fail-closed 且不影响既有对话。V8.0 审计同时修复日期、事实归属、区间空洞与运行时可变数据 P1；139 个测试文件全部分类，70 个 Release Groups 通过 | [设计](docs/VOTC_v8.1_Campaign_Identity与Worldline_Store_Foundation设计.md) / [实施报告](docs/v8.1-campaign-identity-worldline-store-implementation-report.md) / [V8 阶段记录](docs/V8阶段开发记录.md) |

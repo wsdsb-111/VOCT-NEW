@@ -58,7 +58,7 @@ for (const dependency of ["defaultPromptsDir", "defaultMainTemplatePath", "legac
 }
 
 const { VOTC_CORE_VERSION, MEMORY_ENGINE_VERSION } = require(path.join(mainDir, "version"));
-assert.strictEqual(VOTC_CORE_VERSION, "8.3.0");
+assert.strictEqual(VOTC_CORE_VERSION, "8.3.1");
 assert.strictEqual(MEMORY_ENGINE_VERSION, "2.5");
 
 const { Character } = require(path.join(mainDir, "game-data", "character"));

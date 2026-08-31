@@ -21,6 +21,9 @@ const { CampaignIdentityResolver } = require("./historical-system/campaign-ident
 const { WorldlineStore } = require("./historical-system/worldline-store");
 const { DynamicHistoryService } = require("./historical-system/dynamic-history-service");
 const { HistoricalFigureResolver } = require("./historical-system/historical-figure-resolver");
+const { buildHistoricalFigureDiagnostics } = require("./historical-system/historical-figure-diagnostics");
+const { HistoricalGroundTruthStore } = require("./historical-system/historical-ground-truth-store");
+const { createHistoricalDiagnosticsController, registerHistoricalDiagnosticsIpc } = require("./historical-system/historical-diagnostics-ipc");
 const { dataset: historicalDataset } = require("./historical-system/historical-baseline");
 const { figureMatchingRecords } = require("./historical-system/historical-data/figure-matching");
 const { parseGameDateStrict } = require("./historical-system/temporal-knowledge-gate");
@@ -366,6 +369,15 @@ const GameData = createGameData({
 const fs = require("fs");
 const { createLogParser } = require("./game-data/log-parser");
 const parseLog = createLogParser({ GameData, Character, onGameDataParsed: (gameData) => dynamicHistoryService.updateFromGameData(gameData) });
+const historicalGroundTruthStore = new HistoricalGroundTruthStore({ rootDir: VOTC_DATA_DIR });
+const historicalDiagnosticsController = createHistoricalDiagnosticsController({
+  settingsRepository,
+  parseLog,
+  buildDiagnostics: buildHistoricalFigureDiagnostics,
+  figures: historicalDataset.figures,
+  matchingRecords: figureMatchingRecords,
+  groundTruthStore: historicalGroundTruthStore
+});
 function createMessage(input) {
   return {
     ...input,
@@ -874,31 +886,34 @@ const createWindow = () => {
     rendererUrl: !electron.app.isPackaged ? process.env["ELECTRON_RENDERER_URL"] || null : null
   });
 };
-const setupIpcHandlers = () => registerIpcHandlers({
-  electron,
-  settingsRepository,
-  promptConfigManager,
-  uuid,
-  VOTC_PROMPTS_DIR,
-  TemplateEngine,
-  exportPromptsZip,
-  letterManager,
-  runFileManager,
-  llmManager,
-  providerRegistry,
-  usageAnalytics,
-  actionRegistry,
-  VOTC_ACTIONS_DIR,
-  resolveI18nString,
-  conversationManager,
-  ActionEngine,
-  VOTC_SUMMARIES_DIR,
-  SummariesManager,
-  memoryEngine,
-  get chatWindow() {
-    return chatWindow;
-  }
-});
+const setupIpcHandlers = () => {
+  registerIpcHandlers({
+    electron,
+    settingsRepository,
+    promptConfigManager,
+    uuid,
+    VOTC_PROMPTS_DIR,
+    TemplateEngine,
+    exportPromptsZip,
+    letterManager,
+    runFileManager,
+    llmManager,
+    providerRegistry,
+    usageAnalytics,
+    actionRegistry,
+    VOTC_ACTIONS_DIR,
+    resolveI18nString,
+    conversationManager,
+    ActionEngine,
+    VOTC_SUMMARIES_DIR,
+    SummariesManager,
+    memoryEngine,
+    get chatWindow() {
+      return chatWindow;
+    }
+  });
+  registerHistoricalDiagnosticsIpc({ electron, controller: historicalDiagnosticsController });
+};
 const setupFocusMonitoring = (window) => {
   focusMonitor.on("overlay-state-changed", (isOverlay) => {
     if (!window || window.isDestroyed()) return;

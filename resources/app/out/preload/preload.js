@@ -178,3 +178,7 @@ electron.contextBridge.exposeInMainWorld("usageAPI", {
   getReport: () => electron.ipcRenderer.invoke("usage:getReport"),
   clear: () => electron.ipcRenderer.invoke("usage:clear")
 });
+electron.contextBridge.exposeInMainWorld("historicalAPI", {
+  getFigureGroundTruthDashboard: () => electron.ipcRenderer.invoke("historical:getFigureGroundTruthDashboard"),
+  recordFigureGroundTruthVerdict: (payload) => electron.ipcRenderer.invoke("historical:recordFigureGroundTruthVerdict", payload)
+});

@@ -13,7 +13,15 @@ const finiteNumber = (value) => {
 };
 const stringValue = (value) => typeof value === "string" ? value : "";
 
-function buildFamilyEvidence(profile, profiles) {
+function extractNamesFromRelationshipValue(value) {
+  if (!value) return [];
+  if (typeof value === "string") return value.split(/[、,，;\/]/).map((item) => item.trim()).filter(Boolean);
+  if (Array.isArray(value)) return value.flatMap(extractNamesFromRelationshipValue);
+  if (typeof value === "object") return [value.name, value.shortName, value.fullName].filter((item) => typeof item === "string" && item.trim());
+  return [];
+}
+
+function buildFamilyEvidence(profile, profiles, canonicalCharacter) {
   const evidence = [];
   const seen = new Set();
   const add = (relation, relatedCharacterId, names) => {
@@ -31,6 +39,7 @@ function buildFamilyEvidence(profile, profiles) {
     const inverse = relation.relationType === "parent" ? "child" : relation.relationType === "child" ? "parent" : relation.relationType;
     add(inverse, relation.ownerId, [related?.fullName, related?.shortName, related?.firstName]);
   }
+  add("spouse", null, extractNamesFromRelationshipValue(profile.consort || canonicalCharacter?.consort));
   return evidence;
 }
 
@@ -64,7 +73,7 @@ function buildHistoricalFigureInput({ gameData, relationshipResolver, inferGende
     isRuler: profile.isRuler === true,
     isIndependentRuler: profile.isIndependentRuler === true,
     isLandedRuler: profile.isLandedRuler === true,
-    familyEvidence: buildFamilyEvidence(profile, profiles),
+    familyEvidence: buildFamilyEvidence(profile, profiles, gameData.characters.get(Number(profile.id))),
     conflicts: {
       gender: profile.evidence?.conflicts?.gender === true,
       birthDate: profile.evidence?.conflicts?.birthDate === true
@@ -77,4 +86,4 @@ function buildHistoricalFigureInput({ gameData, relationshipResolver, inferGende
   });
 }
 
-module.exports = { buildHistoricalFigureInput, deepFreeze };
+module.exports = { buildHistoricalFigureInput, deepFreeze, extractNamesFromRelationshipValue };

@@ -21644,12 +21644,167 @@ const SummariesView = () => {
   ] });
 };
 
+const HistoricalFigureDashboard = ({ text }) => {
+  const [snapshot, setSnapshot] = reactExports.useState(null);
+  const [isLoading, setIsLoading] = reactExports.useState(false);
+  const [error, setError] = reactExports.useState(null);
+  const [readyOnly, setReadyOnly] = reactExports.useState(true);
+  const [statusFilter, setStatusFilter] = reactExports.useState("ALL");
+  const [search, setSearch] = reactExports.useState("");
+  const [currentReview, setCurrentReview] = reactExports.useState(null);
+  const [verdictState, setVerdictState] = reactExports.useState({});
+  const helpers = window.VOTCHistoricalDashboard;
+  const display = helpers?.displayValue || ((value) => value == null || value === "" ? "—" : String(value));
+  const refresh = async () => {
+    if (!window.historicalAPI?.getFigureGroundTruthDashboard) {
+      setError(text("当前客户端未提供历史人物诊断接口。请完全重启应用。", "Historical diagnostics are unavailable. Restart the app."));
+      return;
+    }
+    try {
+      setIsLoading(true);
+      setError(null);
+      const response = await window.historicalAPI.getFigureGroundTruthDashboard();
+      if (!response?.success) throw new Error(response?.error || "historical_dashboard_capture_failed");
+      setSnapshot(response.data);
+      setCurrentReview(null);
+      setVerdictState({});
+    } catch (loadError) {
+      setError(loadError?.message || text("无法读取当前 CK3 数据。", "Failed to read current CK3 data."));
+    } finally {
+      setIsLoading(false);
+    }
+  };
+  const filteredRows = helpers?.filterFigureRows(snapshot?.rows || [], { readyOnly, statusFilter, search }) || [];
+  const nextReview = () => {
+    const figureKey = helpers?.findNextReviewFigureKey(snapshot?.rows || [], currentReview);
+    if (!figureKey) return;
+    setReadyOnly(true);
+    setStatusFilter("REVIEW");
+    setSearch("");
+    setCurrentReview(figureKey);
+    setTimeout(() => document.getElementById(`historical-row-${figureKey}`)?.scrollIntoView({ behavior: "smooth", block: "start" }), 0);
+  };
+  const recordVerdict = async (row, verdict) => {
+    if (!window.historicalAPI?.recordFigureGroundTruthVerdict || !snapshot) return;
+    setVerdictState((current) => ({ ...current, [row.figureKey]: "saving" }));
+    try {
+      const response = await window.historicalAPI.recordFigureGroundTruthVerdict({ captureId: snapshot.capture.captureId, figureKey: row.figureKey, verdict });
+      if (!response?.success) throw new Error(response?.error || "ground_truth_save_failed");
+      setVerdictState((current) => ({ ...current, [row.figureKey]: verdict }));
+    } catch (saveError) {
+      setVerdictState((current) => ({ ...current, [row.figureKey]: `ERROR: ${saveError?.message || "ground_truth_save_failed"}` }));
+    }
+  };
+  const evidenceGroup = (title, items, tone = "") => items?.length ? /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: `historical-evidence-group ${tone}`, children: [
+    /* @__PURE__ */ jsxRuntimeExports.jsx("strong", { children: title }),
+    /* @__PURE__ */ jsxRuntimeExports.jsx("ul", { children: items.map((item, index) => /* @__PURE__ */ jsxRuntimeExports.jsxs("li", { children: [/* @__PURE__ */ jsxRuntimeExports.jsx("span", { children: item.code }), /* @__PURE__ */ jsxRuntimeExports.jsx("b", { children: `${item.weight >= 0 ? "+" : ""}${Number(item.weight || 0).toFixed(2)}` })] }, `${item.code}-${index}`)) })
+  ] }) : null;
+  const verdicts = ["CORRECT", "INCORRECT", "SHOULD_BE_AMBIGUOUS", "SHOULD_BE_RESOLVED", "SHOULD_BE_UNRESOLVED", "UNKNOWN"];
+  const summaryMetrics = snapshot ? [
+    [text("已解析", "Resolved"), snapshot.summary.resolved],
+    [text("候选", "Candidates"), snapshot.summary.candidate],
+    [text("歧义", "Ambiguous"), snapshot.summary.ambiguous],
+    [text("未找到", "Unresolved"), snapshot.summary.unresolved],
+    [text("未到期", "Not due"), snapshot.summary.notDue],
+    [text("未支持", "Unsupported"), snapshot.summary.unsupported]
+  ] : [];
+  return /* @__PURE__ */ jsxRuntimeExports.jsxs("section", { className: "historical-dashboard", children: [
+    /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "historical-dashboard-header", children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsx("h3", { children: text("V8.3.1 历史人物实机校准", "V8.3.1 Historical Figure Ground Truth") }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "historical-shadow-badge", children: "SHADOW MODE" }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "muted-text", children: text("本页面只用于诊断与人工裁定，不会修改游戏状态或生产 Resolver。", "Diagnostics and verdicts only; this page never changes game state or the production resolver.") })
+      ] }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx("button", { type: "button", className: "primary-button", onClick: refresh, disabled: isLoading, children: isLoading ? text("读取中…", "Reading…") : text("重新读取当前游戏", "Read current game") })
+    ] }),
+    error && /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "optimization-error", children: display(error) }),
+    !snapshot && !isLoading && !error && /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "optimization-empty", children: text("点击一次按钮读取当前 CK3 debug.log；不需要先开始对话。", "Click once to read the current CK3 debug.log; no active conversation is required.") }),
+    snapshot && /* @__PURE__ */ jsxRuntimeExports.jsxs(React.Fragment, { children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "historical-capture", children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsx("span", { children: `${text("游戏日期", "Game date")}：${display(snapshot.capture.gameDate)}` }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx("span", { children: `Campaign：${display(snapshot.capture.campaignId)}` }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx("span", { children: `${text("捕获时间", "Captured")}：${snapshot.capture.capturedAt ? new Date(snapshot.capture.capturedAt).toLocaleString() : "—"}` }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx("span", { children: `${text("角色数", "Characters")}：${display(snapshot.capture.characterCount)}` })
+      ] }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "optimization-metrics", children: summaryMetrics.map(([label, value]) => /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "optimization-metric", children: [/* @__PURE__ */ jsxRuntimeExports.jsx("span", { children: label }), /* @__PURE__ */ jsxRuntimeExports.jsx("strong", { children: display(value) })] }, label)) }),
+      /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "historical-controls", children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsxs("label", { children: [/* @__PURE__ */ jsxRuntimeExports.jsx("input", { type: "checkbox", checked: readyOnly, onChange: (event) => setReadyOnly(event.target.checked) }), text("只显示已校准人物", "Ready only")] }),
+        /* @__PURE__ */ jsxRuntimeExports.jsxs("select", { value: statusFilter, onChange: (event) => setStatusFilter(event.target.value), children: [
+          /* @__PURE__ */ jsxRuntimeExports.jsx("option", { value: "ALL", children: text("全部", "All") }),
+          /* @__PURE__ */ jsxRuntimeExports.jsx("option", { value: "RESOLVED", children: text("已解析", "Resolved") }),
+          /* @__PURE__ */ jsxRuntimeExports.jsx("option", { value: "REVIEW", children: text("待核验", "Review") }),
+          /* @__PURE__ */ jsxRuntimeExports.jsx("option", { value: "AMBIGUOUS", children: text("歧义", "Ambiguous") }),
+          /* @__PURE__ */ jsxRuntimeExports.jsx("option", { value: "UNRESOLVED", children: text("未找到", "Unresolved") }),
+          /* @__PURE__ */ jsxRuntimeExports.jsx("option", { value: "NOT_DUE", children: text("未到期", "Not due") })
+        ] }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx("input", { type: "text", value: search, onChange: (event) => setSearch(event.target.value), placeholder: text("搜索姓名 / figureKey / Character ID", "Search name / figureKey / Character ID") }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx("button", { type: "button", onClick: nextReview, children: text("下一个待核验", "Next review") })
+      ] }),
+      filteredRows.length === 0 && /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "optimization-empty", children: text("当前筛选没有人物。", "No figures match the current filters.") }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "historical-rows", children: filteredRows.map((row) => {
+        const score = Math.max(0, Math.min(1, Number(row.resolution.score) || 0));
+        const groups = helpers?.groupEvidence(row.evidence) || { identity: row.evidence || [], auxiliary: [], worldState: [], historical: [], other: [] };
+        return /* @__PURE__ */ jsxRuntimeExports.jsxs("article", { id: `historical-row-${row.figureKey}`, className: `historical-row status-${String(row.resolution.status || "ERROR").toLowerCase()}`, children: [
+          /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "historical-row-title", children: [
+            /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [/* @__PURE__ */ jsxRuntimeExports.jsx("h4", { children: display(row.historical.name) }), /* @__PURE__ */ jsxRuntimeExports.jsx("code", { children: row.figureKey })] }),
+            /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [/* @__PURE__ */ jsxRuntimeExports.jsx("strong", { children: row.resolution.status }), /* @__PURE__ */ jsxRuntimeExports.jsx("span", { children: `${score.toFixed(2)} · ${(score * 100).toFixed(0)}%` })] })
+          ] }),
+          /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "historical-comparison", children: [
+            /* @__PURE__ */ jsxRuntimeExports.jsxs("section", { children: [
+              /* @__PURE__ */ jsxRuntimeExports.jsx("h5", { children: text("史实基准", "Historical baseline") }),
+              /* @__PURE__ */ jsxRuntimeExports.jsx("p", { children: `${text("姓名", "Name")}：${display(row.historical.name)}` }),
+              /* @__PURE__ */ jsxRuntimeExports.jsx("p", { children: `${text("别名", "Aliases")}：${row.historical.aliases?.length ? row.historical.aliases.join("、") : "—"}` }),
+              /* @__PURE__ */ jsxRuntimeExports.jsx("p", { children: `${text("生年", "Birth year")}：${display(row.historical.birthYear)}` }),
+              /* @__PURE__ */ jsxRuntimeExports.jsx("p", { children: `${text("史实卒年", "Historical death")}：${display(row.historical.deathYear)}` })
+            ] }),
+            /* @__PURE__ */ jsxRuntimeExports.jsxs("section", { children: [
+              /* @__PURE__ */ jsxRuntimeExports.jsx("h5", { children: text("当前 CK3", "Current CK3") }),
+              /* @__PURE__ */ jsxRuntimeExports.jsx("p", { children: `Character ID：${display(row.character?.id)}` }),
+              /* @__PURE__ */ jsxRuntimeExports.jsx("p", { children: `${text("姓名", "Name")}：${display(row.character?.fullName || row.character?.name)}` }),
+              /* @__PURE__ */ jsxRuntimeExports.jsx("p", { children: `${text("年龄", "Age")}：${display(row.character?.age)} · ${text("性别", "Gender")}：${display(row.character?.gender)}` }),
+              /* @__PURE__ */ jsxRuntimeExports.jsx("p", { children: `Culture Raw：${display(row.character?.culture)}` }),
+              /* @__PURE__ */ jsxRuntimeExports.jsx("p", { children: `${text("信仰", "Faith")}：${display(row.character?.faith)} · ${text("家族", "House")}：${display(row.character?.house)}` }),
+              /* @__PURE__ */ jsxRuntimeExports.jsx("p", { children: `${text("头衔", "Title")}：${display(row.character?.primaryTitle)}` }),
+              /* @__PURE__ */ jsxRuntimeExports.jsx("p", { children: `${text("职位", "Positions")}：${display(row.character?.positions)}` }),
+              /* @__PURE__ */ jsxRuntimeExports.jsx("p", { children: `${text("领主 / 顶级领主", "Liege / top liege")}：${display(row.character?.liege)} / ${display(row.character?.topLiege)}` }),
+              /* @__PURE__ */ jsxRuntimeExports.jsx("p", { children: `${text("首都", "Capital")}：${display(row.character?.capitalLocation)}` })
+            ] })
+          ] }),
+          /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "historical-score", children: [
+            /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "historical-score-label", children: [/* @__PURE__ */ jsxRuntimeExports.jsx("span", { children: text("身份置信度", "Identity confidence") }), /* @__PURE__ */ jsxRuntimeExports.jsx("strong", { children: `${score.toFixed(2)} / ${(score * 100).toFixed(0)}%` })] }),
+            /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "historical-score-bar", children: [/* @__PURE__ */ jsxRuntimeExports.jsx("i", { style: { width: `${score * 100}%` } }), /* @__PURE__ */ jsxRuntimeExports.jsx("b", { title: "Resolve threshold 85%" })] }),
+            /* @__PURE__ */ jsxRuntimeExports.jsx("small", { children: "Resolve threshold 85%" })
+          ] }),
+          /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "historical-evidence-groups", children: [
+            evidenceGroup("Identity Evidence", groups.identity),
+            evidenceGroup("Auxiliary Identity Evidence", groups.auxiliary, "auxiliary"),
+            evidenceGroup("World-State Evidence", groups.worldState, "world-state"),
+            evidenceGroup("Historical Note", groups.historical, "historical-note"),
+            evidenceGroup(text("其他证据", "Other Evidence"), groups.other)
+          ] }),
+          row.conflicts?.length > 0 && /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "historical-conflicts", children: [/* @__PURE__ */ jsxRuntimeExports.jsx("strong", { children: text("⚠ 身份冲突", "⚠ Identity conflicts") }), /* @__PURE__ */ jsxRuntimeExports.jsx("ul", { children: row.conflicts.map((item, index) => /* @__PURE__ */ jsxRuntimeExports.jsx("li", { children: item.code }, `${item.code}-${index}`)) })] }),
+          row.alternatives?.length > 0 && /* @__PURE__ */ jsxRuntimeExports.jsxs("details", { className: "historical-alternatives", open: row.resolution.status === "AMBIGUOUS", children: [
+            /* @__PURE__ */ jsxRuntimeExports.jsx("summary", { children: `${text("重要候选", "Alternatives")} (${row.alternatives.length})` }),
+            /* @__PURE__ */ jsxRuntimeExports.jsx("div", { children: row.alternatives.map((item, index) => /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [/* @__PURE__ */ jsxRuntimeExports.jsx("strong", { children: `#${index + 1} · Character ${display(item.characterId)} · ${display(item.displayName)}` }), /* @__PURE__ */ jsxRuntimeExports.jsx("span", { children: `${text("年龄", "Age")} ${display(item.character?.age)} · Culture Raw ${display(item.character?.culture)} · score ${Number(item.score || 0).toFixed(2)}` })] }, `${item.characterId}-${index}`)) })
+          ] }),
+          /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "historical-verdicts", children: [
+            /* @__PURE__ */ jsxRuntimeExports.jsx("strong", { children: text("人工 Ground Truth", "Manual Ground Truth") }),
+            /* @__PURE__ */ jsxRuntimeExports.jsx("div", { children: verdicts.map((verdict) => /* @__PURE__ */ jsxRuntimeExports.jsx("button", { type: "button", disabled: verdictState[row.figureKey] === "saving", onClick: () => recordVerdict(row, verdict), children: verdict }, verdict)) }),
+            verdictState[row.figureKey] && verdictState[row.figureKey] !== "saving" && /* @__PURE__ */ jsxRuntimeExports.jsx("span", { children: verdictState[row.figureKey] })
+          ] })
+        ] }, row.figureKey);
+      }) })
+    ] })
+  ] });
+};
+
 const OptimizationView = () => {
   const { i18n } = useTranslation();
   const [report, setReport] = reactExports.useState(null);
   const [isLoading, setIsLoading] = reactExports.useState(true);
   const [isClearing, setIsClearing] = reactExports.useState(false);
   const [error, setError] = reactExports.useState(null);
+  const [dashboardMode, setDashboardMode] = reactExports.useState("usage");
   const isChinese = (i18n.language || "").toLowerCase().startsWith("zh");
   const text = (zh, en) => isChinese ? zh : en;
   const formatTokens = (value) => new Intl.NumberFormat(isChinese ? "zh-CN" : "en-US").format(Math.round(Number(value) || 0));
@@ -21735,7 +21890,13 @@ const OptimizationView = () => {
     [text("官方动作系统", "Official Action System"), text("V7.10 使用 Official VOTC 2.0.3 的 Prompt、Schema、Registry、审批与执行语义；每个 NPC 回复仅评估一次。", "V7.10 uses the Official VOTC 2.0.3 prompt, schema, registry, approval, and execution semantics, with one evaluation per NPC reply.")],
     [text("Letter 投递恢复", "Letter delivery recovery"), text("回复生成与摘要失败不再阻断官方原子投递 effect；延迟信件可持久化并在日期推进后重试。", "Reply delivery uses the official atomic effect independently of summary success; delayed letters persist and retry after date advancement.")]
   ];
+  const dashboardTabs = /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "optimization-dashboard-tabs", children: [
+    /* @__PURE__ */ jsxRuntimeExports.jsx("button", { type: "button", className: dashboardMode === "usage" ? "active" : "", onClick: () => setDashboardMode("usage"), children: text("用量与优化", "Usage & optimization") }),
+    /* @__PURE__ */ jsxRuntimeExports.jsx("button", { type: "button", className: dashboardMode === "historical" ? "active" : "", onClick: () => setDashboardMode("historical"), children: text("历史人物", "Historical figures") })
+  ] });
+  if (dashboardMode === "historical") return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "optimization-view", children: [dashboardTabs, /* @__PURE__ */ jsxRuntimeExports.jsx(HistoricalFigureDashboard, { text })] });
   return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "optimization-view", children: [
+    dashboardTabs,
     /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "optimization-header", children: [
       /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
         /* @__PURE__ */ jsxRuntimeExports.jsx("h3", { children: text("系统优化与用量", "System Optimization & Usage") }),

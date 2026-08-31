@@ -1,6 +1,6 @@
-# V8 Historical System（v8.3）
+# V8 Historical System（v8.3.1）
 
-V8.0 在此目录建立结构化、可验证的历史基线；V8.1 增加存档身份和最小 WorldlineStore；V8.3 增加只读 Historical Figure Resolver。当前仍保持 Shadow Mode，不改变 v7.10.1 的 Prompt 与既有运行合同。
+V8.0 在此目录建立结构化、可验证的历史基线；V8.1 增加存档身份和最小 WorldlineStore；V8.3 增加只读 Historical Figure Resolver；V8.3.1 增加实机诊断和人工 Ground Truth Dashboard。当前仍保持 Shadow Mode，不改变 v7.10.1 的 Prompt 与既有运行合同。
 
 ## 当前模块
 
@@ -15,6 +15,9 @@ V8.0 在此目录建立结构化、可验证的历史基线；V8.1 增加存档�
 - `historical-figure-input.js`：每个 GameData 只构建一次 Canonical Relationship Profile，并生成深冻结、紧凑的候选证据快照。
 - `figure-name-index.js`：归一化人物名与别名，只允许 exact canonical/alias 进入候选集。
 - `historical-figure-resolver.js`：分离 identity 与 world-state 证据，输出 `UNSUPPORTED` 至 `RESOLVED` 六种 shadow 状态。
+- `historical-figure-diagnostics.js`：将当前 GameData 已有解析结果投影为 Renderer 可用的紧凑纯 JSON Snapshot。
+- `historical-ground-truth-store.js`：只在 diagnostics 目录 append 人工裁定，生产 Resolver 不读取。
+- `historical-diagnostics-ipc.js`：执行一次 parse、维护短期可信 capture cache 并校验裁定 IPC。
 - `dynamic-history-service.js`：组合 Campaign Identity、WorldlineStore 与 Figure Resolver 的唯一 Shadow 入口；状态绑定到当前 GameData 的隐藏 `dynamicHistory`，不保留全局 last-writer state。
 
 Schema version：`1`。
@@ -47,7 +50,7 @@ Figure Resolver 先以规范名/别名精确门禁缩小候选，再使用出生
 
 ## 边界
 
-V8.3 historical-system：
+V8.3.1 historical-system：
 
 - 不拥有或修改 Memory；
 - 不执行 Action；
@@ -56,6 +59,7 @@ V8.3 historical-system：
 - 不依赖 Conversation Runtime 或 Run Command Queue；Figure Resolver 只读复用 Canonical Relationship Resolver，不修改其语义或状态；
 - 只在 `votc_data/dynamic_history/` 持久化可靠 campaign 的最小 Shadow state，不修改 Memory 目录；
 - 不持久化 figure binding，不建立全局人物缓存、GameStateSnapshot、divergence、fact validity 或 worldline projection；
+- Ground Truth 只写 `votc_data/diagnostics/historical-figure-ground-truth/records.jsonl`，不按 campaign 覆盖，不进入生产 Resolver；
 - 不让 Temporal Gate 改写最终 Prompt。
 
 GameStateSnapshot、Divergence Ledger、Fact Validity 和 Worldline Projector 仍按后续阶段推进；V8.3 的人物解析结果在人工 Ground Truth 与真实 CK3 Save A/B Gate 完成前只作为 shadow diagnostic。

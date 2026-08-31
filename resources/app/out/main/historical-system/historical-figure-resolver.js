@@ -43,7 +43,7 @@ function scoreCandidate(figure, matching, character, nameEvidence, currentYear) 
       conflict("RELATION_BIRTH_CONFLICT");
     } else {
       const difference = Math.abs(character.age - (currentYear - birthYear));
-      if (difference <= 2) add("AGE_MATCH_STRONG", 0.18);
+      if (difference <= 2) add("AGE_MATCH_STRONG", 0.22);
       else if (difference <= 5) add("AGE_MATCH_WEAK", 0.10);
       else if (difference >= 15) conflict("AGE_IMPOSSIBLE", -0.50, true);
       else conflict("AGE_MISMATCH", -0.15);
@@ -51,7 +51,7 @@ function scoreCandidate(figure, matching, character, nameEvidence, currentYear) 
   }
   if (matching.intrinsic.gender === "male" || matching.intrinsic.gender === "female") {
     if (character.conflicts?.gender) conflict("RELATION_GENDER_CONFLICT");
-    else if (character.gender === matching.intrinsic.gender) add("GENDER_MATCH", 0.05);
+    else if (character.gender === matching.intrinsic.gender) add("GENDER_MATCH", 0.08);
     else if (character.gender === "male" || character.gender === "female") conflict("GENDER_CONFLICT", -0.40, true);
   }
   for (const familyHint of matching.familyHints) {
@@ -62,16 +62,17 @@ function scoreCandidate(figure, matching, character, nameEvidence, currentYear) 
       break;
     }
   }
-  if (normalizedEquals(character.culture, matching.hints.cultures)) add("CULTURE_HINT_MATCH", 0.07);
-  if (normalizedEquals(character.house, matching.hints.houses)) add("HOUSE_HINT_MATCH", 0.08);
-  if ([character.primaryTitle, character.titleRankConcept].some((value) => normalizedIncludes(value, matching.hints.titles))) add("TITLE_HINT_MATCH", 0.05);
-  if (normalizedIncludes(character.heldCourtAndCouncilPositions, matching.hints.positions)) add("POSITION_HINT_MATCH", 0.06);
-  if ([character.liege, character.topLiege].some((value) => normalizedIncludes(value, matching.hints.realms))) add("REALM_HINT_MATCH", 0.04);
-  if (normalizedIncludes(character.capitalLocation, matching.hints.locations)) add("LOCATION_HINT_MATCH", 0.03);
+  if (normalizedEquals(character.culture, matching.hints.cultures)) add("CULTURE_HINT_MATCH", 0.03);
+  if (normalizedEquals(character.house, matching.hints.houses)) add("HOUSE_HINT_MATCH", 0.06);
+  if ([character.primaryTitle, character.titleRankConcept].some((value) => normalizedIncludes(value, matching.hints.titles))) add("TITLE_HINT_MATCH", 0.04);
+  if (normalizedIncludes(character.heldCourtAndCouncilPositions, matching.hints.positions)) add("POSITION_HINT_MATCH", 0.05);
+  if ([character.liege, character.topLiege].some((value) => normalizedIncludes(value, matching.hints.realms))) add("REALM_HINT_MATCH", 0.03);
+  if (normalizedIncludes(character.capitalLocation, matching.hints.locations)) add("LOCATION_HINT_MATCH", 0.02);
   if (Number.isInteger(currentYear) && Number.isInteger(figure.life?.deathYear) && currentYear > figure.life.deathYear) evidence.push({ code: "SURVIVED_BEYOND_BASELINE_DEATH", weight: 0 });
   return {
     characterId: character.id,
     displayName: character.names.fullName || character.names.shortName || character.names.firstName,
+    rawScore,
     score: roundScore(rawScore),
     evidence,
     conflicts,
@@ -102,11 +103,11 @@ function resolveFigure(figure, matching, input, nameIndex) {
   const dueYear = matching.intrinsic.birthYear ?? figure.activeWindow?.earliestYear ?? figure.life?.birthYear;
   const temporalStatus = Number.isInteger(currentYear) ? "due" : "unknown";
   if (Number.isInteger(currentYear) && Number.isInteger(dueYear) && currentYear < dueYear) return baseResult(figure.figureKey, FIGURE_STATUS.NOT_DUE, "not_due");
-  const candidates = findFigureCandidates(figure, nameIndex).map(({ character, nameEvidence }) => scoreCandidate(figure, matching, character, nameEvidence, currentYear)).sort((left, right) => right.score - left.score || left.characterId - right.characterId);
+  const candidates = findFigureCandidates(figure, nameIndex).map(({ character, nameEvidence }) => scoreCandidate(figure, matching, character, nameEvidence, currentYear)).sort((left, right) => right.rawScore - left.rawScore || left.characterId - right.characterId);
   if (candidates.length === 0) return baseResult(figure.figureKey, FIGURE_STATUS.DUE_UNRESOLVED, temporalStatus);
   const top = candidates[0];
   const second = candidates[1] || null;
-  const margin = second ? roundScore(top.score - second.score) : 1;
+  const margin = second ? roundScore(top.rawScore - second.rawScore) : 1;
   let status = FIGURE_STATUS.DUE_UNRESOLVED;
   if (top.score >= 0.65 && second?.score >= 0.65 && margin < 0.15) status = FIGURE_STATUS.AMBIGUOUS;
   else if (top.score >= 0.85 && margin >= 0.15 && top.hardConflicts.length === 0 && top.hasStrongSecondaryIdentity) status = FIGURE_STATUS.RESOLVED;

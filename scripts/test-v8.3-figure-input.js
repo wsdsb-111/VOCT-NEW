@@ -24,6 +24,7 @@ const canonical = {
   liege: "宋真宗",
   topLiege: "宋真宗",
   capitalLocation: "开封",
+  consort: "王氏、李氏",
   isRuler: false,
   isIndependentRuler: false,
   isLandedRuler: false,
@@ -53,6 +54,7 @@ assert.strictEqual(input.characters[0].id, 2);
 assert.strictEqual(input.characters.length, 1, "relation-only synthetic profiles must not become figure candidates");
 assert.strictEqual(input.characters[0].names.fullName, "寇准");
 assert(input.characters[0].familyEvidence.some((entry) => entry.relation === "parent" && entry.names.includes("寇相")));
+assert(input.characters[0].familyEvidence.some((entry) => entry.relation === "spouse" && entry.names.includes("王氏") && entry.names.includes("李氏")), "consort must become spouse evidence");
 assert(Object.isFrozen(input));
 assert(Object.isFrozen(input.characters));
 assert(Object.isFrozen(input.characters[0]));
