@@ -1,0 +1,13 @@
+# Four buckets mirror the deduplication probe without real save identifiers.
+living = {
+	100 = { first_name = Yuefei_name birth = 1115.1.16 female = yes culture = 47 faith = 24 }
+}
+dead_unprunable = {
+	101 = { first_name = Yuefei_name birth = 558.1.1 female = yes dead_data = { death_date = 622.1.1 } }
+	102 = { first_name = Yuefei_name birth = 1104.1.12 female = yes dead_data = { death_date = 1143.6.11 reason = death_vanished } }
+}
+characters = {
+	dead_prunable = {
+		103 = { first_name = Yuefei_name birth = 1106.9.7 female = yes dead_data = { death_date = 1145.4.7 reason = death_accident } }
+	}
+}

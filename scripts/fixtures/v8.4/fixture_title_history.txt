@@ -1,0 +1,14 @@
+# Minimal sanitized title fixture for holder-history extraction.
+landed_titles = {
+	landed_titles = {
+		500 = {
+			key = c_fixture
+			holder = 100
+			date = 1154.1.1
+			history = {
+				1140.1.1 = { type = appointment holder = 101 }
+				1154.1.1 = { type = appointment_succession holder = 100 }
+			}
+		}
+	}
+}

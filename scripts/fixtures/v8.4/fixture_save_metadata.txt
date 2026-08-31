@@ -1,0 +1,12 @@
+# Metadata-only fixture; not a playable CK3 save. Header fields are illustrative
+# and the body date is included for metadata/body consistency tests.
+SAV0100fixture00000020
+meta_data = {
+	version = "1.19.0.6"
+	save_game_version = 15
+	date = 1154.1.1
+	player_name = "Fixture Ruler"
+	title_name = "Fixture Realm"
+	ironman = no
+}
+date = 1154.1.1

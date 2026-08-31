@@ -1,0 +1,16 @@
+# Minimal sanitized active-war fixture. It intentionally has no ended-war store.
+date = 1154.1.1
+wars = {
+	active_wars = {
+		900 = {
+			attacker = 100
+			defender = 101
+			start_date = 1153.4.15
+			casus_belli = fixture_cb
+			name = fixture_war_name
+		}
+	}
+	names = {
+		fixture_war_name = { name = fixture_war_name }
+	}
+}

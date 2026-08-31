@@ -1,0 +1,24 @@
+# Minimal sanitized CK3-like character fixture.
+# The absence of historical_id is intentional: the selected save did not expose
+# a direct historical identity field on its character records.
+living = {
+	100 = {
+		first_name = fixture_historical_name
+		birth = 1103.1.1
+		culture = 47
+		faith = 54
+		dynasty_house = 900
+		family_data = {
+			spouse = 101
+			child = { 102 }
+		}
+		alive_data = {
+			location = { location = 8841 }
+			gold = { value = 12.5 }
+		}
+		landed_data = {
+			domain = { 500 }
+		}
+		traits = { 1964 3615 }
+	}
+}
