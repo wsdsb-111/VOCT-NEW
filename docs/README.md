@@ -19,10 +19,14 @@
 13. [v8.4 Sol 最终冻结审查](v8.4-final-freeze-readiness-review.md)：Test 1–6 最终 Gate、P0 阻断项和可冻结架构结论。
 14. [v8.4 Terra 世界线运行时实施](v8.4-terra-worldline-runtime-implementation-report.md)：Save Reader、Worker、Checkpoint、Delta、IPC 和默认关闭的世界知识 Prompt 基础。
 15. [v8.4 Luna 世界线前端实施](v8.4-luna-worldline-frontend-implementation-report.md)：世界线页面、检查点展示、Supplemental 编辑器和 Terra IPC 接入。
-16. [README_摘要系统.md](README_摘要系统.md)：Memory Engine 2.5 的存储、冻结召回、Turn Recall、写入和生命周期规则。
-16. [V7阶段优化记录.md](V7阶段优化记录.md)：V7/V7.x 的连续开发记录。
-17. [V6阶段优化记录.md](V6阶段优化记录.md)：V6/V6.x 的动作系统与基础设施记录。
-18. 需要核对具体方案时，再阅读版本设计文档和实施报告。
+16. [v8.4.1 Luna UI 实施报告](v8.4.1-luna-ui-implementation-report.md)：Localization 证据展示、语义化世界概览、长字段和复制入口。
+17. [v8.4.1 Terra Query/Freshness 实施报告](v8.4.1-terra-query-freshness-implementation-report.md)：中文实体分析、Localization 反查、as-of 与 STALE Prompt Gate。
+18. [v8.4.1 Luna Prompt Diagnostics 实施报告](v8.4.1-luna-prompt-diagnostics-implementation-report.md)：只读 Query / World Recall 诊断、Token 分块、Cache Hit 与裁剪项。
+19. [v8.4.1 Sol-3 Prompt Source Boundary Review](v8.4.1-sol-3-prompt-source-boundary-review.md)：中文 Live 日期兼容、Checkpoint as-of 与 Prompt 来源优先级审查。
+20. [README_摘要系统.md](README_摘要系统.md)：Memory Engine 2.5 的存储、冻结召回、Turn Recall、写入和生命周期规则。
+21. [V7阶段优化记录.md](V7阶段优化记录.md)：V7/V7.x 的连续开发记录。
+22. [V6阶段优化记录.md](V6阶段优化记录.md)：V6/V6.x 的动作系统与基础设施记录。
+23. 需要核对具体方案时，再阅读版本设计文档和实施报告。
 
 ## 文档分类
 
@@ -47,6 +51,13 @@
 - [v8.4-luna-worldline-frontend-implementation-report.md](v8.4-luna-worldline-frontend-implementation-report.md)：V8.4 Luna 世界线前端、Supplemental 编辑器和 Terra IPC 边界。
 - [v8.4-terra-worldline-runtime-implementation-report.md](v8.4-terra-worldline-runtime-implementation-report.md)：V8.4 Terra Save Reader、Worker、Checkpoint、Delta、IPC 与 Prompt 基础的已实现行为和 Gate。
 - [v8.4-sol-implementation-freeze-review.md](v8.4-sol-implementation-freeze-review.md)：V8.4 Sol P0/P1 审计、真实 autosave Service Gate、前端自动发现/状态事件管线及 Full Freeze 未放行项。
+- [v8.4.1-terra-phase-a-implementation-report.md](v8.4.1-terra-phase-a-implementation-report.md)：V8.4.1 Terra Phase A 的 source revision race 防护、Political Context Resolver 与 Sol-1 交接边界。
+- [v8.4.1-sol-1-p0-correctness-review.md](v8.4.1-sol-1-p0-correctness-review.md)：V8.4.1 Sol-1 对 source race、政治证据链、UNKNOWN 与 identity 边界的独立 P0 Gate。
+- [v8.4.1-terra-localization-implementation-report.md](v8.4.1-terra-localization-implementation-report.md)：V8.4.1 Terra-3 的 CK3/启用 Mod 本地化 Resolver、来源冲突保留与 identity/display 合同。
+- [v8.4.1-luna-ui-implementation-report.md](v8.4.1-luna-ui-implementation-report.md)：V8.4.1 Luna-1/2/3 的本地化证据展示、语义化世界概览、长字段和复制入口。
+- [v8.4.1-terra-query-freshness-implementation-report.md](v8.4.1-terra-query-freshness-implementation-report.md)：V8.4.1 Terra-4/5 的中文实体分析、Localization 反查、Checkpoint as-of 和 STALE Prompt Gate。
+- [v8.4.1-luna-prompt-diagnostics-implementation-report.md](v8.4.1-luna-prompt-diagnostics-implementation-report.md)：V8.4.1 Luna-6 的只读 Prompt / World Recall 诊断、Token 分块、Cache Hit 与裁剪项。
+- [v8.4.1-sol-3-prompt-source-boundary-review.md](v8.4.1-sol-3-prompt-source-boundary-review.md)：V8.4.1 Sol-3 的中文 Live 日期兼容、Checkpoint as-of、来源优先级与 fail-closed Prompt Gate。
 - [VOTC_v8.1_Campaign_Identity与Worldline_Store_Foundation设计.md](VOTC_v8.1_Campaign_Identity与Worldline_Store_Foundation设计.md)：V8.1 存档身份协议、session 降级、Worldline schema、原子持久化和 Shadow 集成合同。
 - [v8.1-campaign-identity-worldline-store-implementation-report.md](v8.1-campaign-identity-worldline-store-implementation-report.md)：V8.0 P0/P1 审计、V8.1 应用与 Workshop 实施、自动化验证和实机边界。
 - [v8.3.1-historical-figure-dashboard-implementation-report.md](v8.3.1-historical-figure-dashboard-implementation-report.md)：V8.3.1 实机诊断 Snapshot、Overlay Dashboard、append-only Ground Truth 与冻结边界。
@@ -80,6 +91,9 @@
 - [v8.4-luna-worldline-frontend-implementation-report.md](v8.4-luna-worldline-frontend-implementation-report.md)
 - [v8.4-terra-worldline-runtime-implementation-report.md](v8.4-terra-worldline-runtime-implementation-report.md)
 - [v8.4-sol-implementation-freeze-review.md](v8.4-sol-implementation-freeze-review.md)
+- [v8.4.1-terra-phase-a-implementation-report.md](v8.4.1-terra-phase-a-implementation-report.md)
+- [v8.4.1-sol-1-p0-correctness-review.md](v8.4.1-sol-1-p0-correctness-review.md)
+- [v8.4.1-terra-localization-implementation-report.md](v8.4.1-terra-localization-implementation-report.md)
 - [VOTC_v8.1_Campaign_Identity与Worldline_Store_Foundation设计.md](VOTC_v8.1_Campaign_Identity与Worldline_Store_Foundation设计.md)
 - [v8.1-campaign-identity-worldline-store-implementation-report.md](v8.1-campaign-identity-worldline-store-implementation-report.md)
 - [v8.3.1-historical-figure-dashboard-implementation-report.md](v8.3.1-historical-figure-dashboard-implementation-report.md)

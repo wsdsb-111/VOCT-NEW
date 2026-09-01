@@ -194,6 +194,7 @@ electron.contextBridge.exposeInMainWorld("worldlineAPI", {
   getWorldKnowledge: () => electron.ipcRenderer.invoke("worldline:getWorldKnowledge"),
   getHistoricalBindings: () => electron.ipcRenderer.invoke("worldline:getHistoricalBindings"),
   getDiagnostics: () => electron.ipcRenderer.invoke("worldline:getDiagnostics"),
+  getPromptDiagnostics: (payload) => electron.ipcRenderer.invoke("worldline:getPromptDiagnostics", payload),
   listSupplemental: () => electron.ipcRenderer.invoke("worldline:listSupplemental"),
   createSupplemental: (payload) => electron.ipcRenderer.invoke("worldline:createSupplemental", payload),
   updateSupplemental: (id, payload) => electron.ipcRenderer.invoke("worldline:updateSupplemental", id, payload),

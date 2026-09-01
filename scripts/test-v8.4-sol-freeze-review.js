@@ -132,6 +132,7 @@ async function run() {
     service._persistCheckpoint = persistCheckpoint;
     assert.equal((await service.rebuildCheckpoint()).success, true, "checkpoint may activate after durable persistence succeeds");
     assert.ok(service.getAnnualDelta().annualDelta.some((item) => item.type === "IMPORTANT_CHARACTER_DIED"), "same-campaign annual changes must be retained");
+    fs.appendFileSync(debugLogPath, "VOTC:TEST_DATE/;/1155.1.1/;/days=421366\n", "utf8");
 
     settings.settings = { ...settings.settings, promptIntegrationEnabled: true };
     const created = service.createSupplemental({ title: "Moon treaty", body: "The moon treaty is publicly proclaimed.", visibility: "PUBLIC_WORLD", importance: "HIGH" }).supplemental;

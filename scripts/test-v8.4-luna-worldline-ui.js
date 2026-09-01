@@ -27,6 +27,24 @@ const requiredRendererMarkers = [
   "Annual Delta",
   "Historical Identity",
   "Supplemental Knowledge",
+  "worldline-semantic-grid",
+  "semanticMeta",
+  "politicalContext",
+  "Player Primary Title",
+  "Direct Liege",
+  "Top Realm",
+  "Top Realm Ruler",
+  "Checkpoint Freshness",
+  "Prompt / World Recall Diagnostics",
+  "Query Analyzer Entities",
+  "Matched Game Truth",
+  "Matched Supplemental",
+  "World Prompt Token",
+  "Trimmed Items",
+  "Unknown / Unconfirmed",
+  "confidence:",
+  "raw:",
+  "source:",
   "source: \"PLAYER_CANON\"",
   "gameDate: \"\"",
   "scope: \"SESSION\"",
@@ -49,6 +67,7 @@ for (const method of [
   "getWorldKnowledge",
   "getHistoricalBindings",
   "getDiagnostics",
+  "getPromptDiagnostics",
   "listSupplemental",
   "createSupplemental",
   "updateSupplemental",
@@ -58,6 +77,8 @@ for (const method of [
 }
 
 assert.match(styles, /\.worldline-view\s*\{/);
+assert.match(styles, /\.worldline-semantic-grid\s*\{/);
+assert.match(styles, /\.worldline-semantic-item small\s*\{/);
 assert.match(styles, /\.worldline-editor-form textarea/);
 assert.ok(html.includes('src="./assets/index-Dn3qWlAB.js"'), "renderer bundle is not loaded by index.html");
 assert.ok(html.includes('href="./assets/index-WtJH_nua.css"'), "renderer stylesheet is not loaded by index.html");

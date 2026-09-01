@@ -328,7 +328,7 @@ class Conversation {
     }, null);
     let worldContext = null;
     try {
-      worldContext = worldlineService?.getPromptContext?.({ query, assistContext }) || null;
+      worldContext = worldlineService?.getPromptContext?.({ query, assistContext, mentionedEntityIds: mentionedCharacterIds }) || null;
     } catch (error) {
       console.warn("[Worldline] World recall failed; continuing with personal memory:", error.message);
     }

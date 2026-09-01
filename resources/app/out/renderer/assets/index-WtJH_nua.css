@@ -1908,6 +1908,41 @@ hr {
 .worldline-diagnostics button {
   white-space: nowrap;
 }
+.worldline-prompt-diagnostics {
+  margin-top: 16px;
+  padding-top: 12px;
+  border-top: 1px solid rgba(239, 177, 106, 0.45);
+}
+.worldline-prompt-diagnostics h5,
+.worldline-prompt-diagnostics h6 {
+  margin: 12px 0 6px;
+}
+.worldline-prompt-diagnostics h5 {
+  font-size: 1.05em;
+}
+.worldline-prompt-diagnostics h6 {
+  font-size: 0.92em;
+  color: #efb16a;
+}
+.worldline-prompt-query {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 8px;
+}
+.worldline-prompt-query input {
+  flex: 1;
+  min-width: 0;
+}
+.worldline-prompt-query button {
+  white-space: nowrap;
+}
+.worldline-prompt-row {
+  grid-template-columns: minmax(130px, 1.2fr) minmax(100px, 1fr) minmax(100px, 1fr);
+}
+.worldline-prompt-result {
+  margin-top: 8px;
+}
 .worldline-source-meta,
 .worldline-diagnostics {
   display: grid;
@@ -1939,6 +1974,64 @@ hr {
 .worldline-metric strong {
   margin-top: 4px;
   overflow-wrap: anywhere;
+}
+.worldline-semantic-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
+  gap: 8px;
+  margin-bottom: 8px;
+}
+.worldline-semantic-item {
+  min-width: 0;
+  padding: 9px;
+  border-radius: 7px;
+  background: rgba(0, 0, 0, 0.2);
+}
+.worldline-semantic-item span,
+.worldline-semantic-item strong,
+.worldline-semantic-item small {
+  display: block;
+}
+.worldline-semantic-item span {
+  font-size: 0.78em;
+  opacity: 0.78;
+}
+.worldline-semantic-item strong {
+  margin-top: 4px;
+  overflow-wrap: anywhere;
+}
+.worldline-copyable {
+  display: flex;
+  align-items: flex-start;
+  gap: 5px;
+  min-width: 0;
+}
+.worldline-copyable strong {
+  flex: 1;
+  min-width: 0;
+}
+.worldline-copy-button {
+  flex: 0 0 auto;
+  padding: 2px 5px;
+  border: 1px solid rgba(239, 177, 106, 0.55);
+  border-radius: 4px;
+  background: rgba(0, 0, 0, 0.28);
+  color: inherit;
+  font-size: 0.72em;
+  white-space: nowrap;
+}
+.worldline-copy-button:hover {
+  background: rgba(239, 177, 106, 0.22);
+}
+.worldline-semantic-item small {
+  margin-top: 5px;
+  color: rgba(255, 255, 255, 0.68);
+  font-size: 0.72em;
+  line-height: 1.4;
+  overflow-wrap: anywhere;
+}
+.worldline-freshness-grid {
+  margin-top: 0;
 }
 .worldline-tabs {
   display: flex;
@@ -1979,6 +2072,14 @@ hr {
 .worldline-row p {
   margin: 4px 0 0;
   white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+.worldline-row > strong,
+.worldline-row > span {
+  min-width: 0;
+}
+.worldline-row > strong,
+.worldline-row > span:not(.worldline-source-tag) {
   overflow-wrap: anywhere;
 }
 .worldline-row.is-hidden {
@@ -2032,7 +2133,8 @@ hr {
 }
 @media (max-width: 720px) {
   .worldline-source-form,
-  .worldline-row {
+  .worldline-row,
+  .worldline-prompt-query {
     display: flex;
     flex-direction: column;
     align-items: stretch;

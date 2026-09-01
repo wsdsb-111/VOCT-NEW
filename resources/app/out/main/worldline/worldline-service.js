@@ -6,6 +6,11 @@ const nodePath = require("path");
 const { Worker: NodeWorker } = require("worker_threads");
 const { readSavePreamble } = require("./save-container");
 const { dateValue } = require("./game-state-adapter");
+const { resolvePlayerPoliticalContext } = require("./political-context");
+const { CK3LocalizationResolver } = require("./localization-resolver");
+const { getCheckpointFreshness } = require("./checkpoint-freshness");
+const { analysisTextMatches, analyzeSharedQuery } = require("./shared-query-analyzer");
+const { estimateTokens } = require("../token-estimator");
 
 const DEFAULT_SETTINGS = Object.freeze({
   autosavePath: null,
@@ -46,11 +51,6 @@ function formatCharacter(snapshot, id) {
   if (!id) return null;
   const character = snapshot.characters?.[String(id)];
   return character?.firstName ? `${character.firstName} (#${id})` : `#${id}`;
-}
-
-function firstPlayerTitle(snapshot) {
-  const playerId = String(snapshot.playerId || "");
-  return Object.values(snapshot.titles || {}).find((title) => String(title.holder || "") === playerId) || null;
 }
 
 function latestHistoryHolder(title, afterDate, beforeDate) {
@@ -126,6 +126,9 @@ class WorldlineService {
     this.poller = null;
     this.pendingRefresh = null;
     this.buildPromise = null;
+    this.buildRevision = null;
+    this.buildSource = null;
+    this.sourceRevision = 0;
     this.lastObservedFile = null;
     this.worldKnowledgeState = {
       stableRecallCache: new Map(),
@@ -136,6 +139,11 @@ class WorldlineService {
       supplementalRevision: 0
     };
     this.liveCache = { key: null, value: null };
+    this.localizationResolver = new CK3LocalizationResolver({
+      fs: this.fs,
+      path: this.path,
+      getCK3UserFolderPath: () => this.settingsRepository.getCK3UserFolderPath?.() || null
+    });
     this.stateListener = null;
     this._loadPersistedState();
     const configuredPath = this._settings().autosavePath;
@@ -168,6 +176,11 @@ class WorldlineService {
 
   _defaultAutosavePath(ck3Folder) {
     return ck3Folder ? this.path.join(ck3Folder, "save games", "autosave.ck3") : null;
+  }
+
+  _isCurrentBuild(buildRevision, buildSource) {
+    const settings = this._settings();
+    return this.sourceRevision === buildRevision && this._samePath(settings.autosavePath, buildSource);
   }
 
   _saveSettings(next) {
@@ -233,6 +246,8 @@ class WorldlineService {
     const next = this._saveSettings({ ...settings, autosavePath, lastValidationStatus: autosavePath ? "UNCONFIGURED" : "UNCONFIGURED", lastValidatedAt: null });
     this.stopWatcher();
     if (sourceChanged) {
+      this.sourceRevision += 1;
+      this.localizationResolver.invalidate();
       this.currentCheckpoint = null;
       this.buildState = "UNCONFIGURED";
       this.lastObservedFile = null;
@@ -366,11 +381,14 @@ class WorldlineService {
   }
 
   async rebuildCheckpoint() {
-    if (this.buildPromise) return this.buildPromise;
     const settings = this._settings();
     if (!settings.autosavePath) return { success: false, error: "autosave_path_not_configured" };
-    this.buildPromise = (async () => {
+    const buildRevision = this.sourceRevision;
+    const buildSource = settings.autosavePath;
+    if (this.buildPromise && this.buildRevision === buildRevision && this._samePath(this.buildSource, buildSource)) return this.buildPromise;
+    const buildPromise = (async () => {
       const validation = this.validateAutosavePath();
+      if (!this._isCurrentBuild(buildRevision, buildSource)) return { success: false, error: "worldline_build_superseded", superseded: true };
       if (!validation.success) {
         this.lastError = validation.validationStatus;
         this.buildState = this.currentCheckpoint ? "STALE" : "FAILED";
@@ -378,17 +396,20 @@ class WorldlineService {
         return { success: false, error: validation.validationStatus };
       }
       try {
-        if (!await this._fileIsStable(settings.autosavePath)) {
+        if (!await this._fileIsStable(buildSource)) {
+          if (!this._isCurrentBuild(buildRevision, buildSource)) return { success: false, error: "worldline_build_superseded", superseded: true };
           this.lastError = "save_write_in_progress";
           this.buildState = this.currentCheckpoint ? "STALE" : "FAILED";
           this._notifyStateChanged("checkpoint_deferred");
           return { success: false, error: this.lastError };
         }
+        if (!this._isCurrentBuild(buildRevision, buildSource)) return { success: false, error: "worldline_build_superseded", superseded: true };
         this.buildState = "BUILDING";
         this._notifyStateChanged("checkpoint_building");
-        const parsed = await this._runWorker(settings.autosavePath);
+        const parsed = await this._runWorker(buildSource);
         if (!parsed?.success) throw new Error(parsed?.error || "worldline_parse_failed");
         if (!parsed.snapshot?.gameDate) throw new Error("gamestate_date_missing");
+        if (!this._isCurrentBuild(buildRevision, buildSource)) return { success: false, error: "worldline_build_superseded", superseded: true };
         const candidate = {
           id: checkpointId(parsed.snapshot),
           state: "ACTIVE",
@@ -412,7 +433,7 @@ class WorldlineService {
         this.lastError = null;
         this.buildState = "ACTIVE";
         try {
-          const activeStat = this.fs.statSync(settings.autosavePath);
+          const activeStat = this.fs.statSync(buildSource);
           this.lastObservedFile = `${activeStat.size}:${activeStat.mtimeMs}`;
         } catch (_error) {
           this.lastObservedFile = null;
@@ -420,16 +441,24 @@ class WorldlineService {
         this._notifyStateChanged("checkpoint_active");
         return { success: true, checkpoint: this.getCheckpointStatus().checkpoint, deltaAdded: delta.length };
       } catch (error) {
+        if (!this._isCurrentBuild(buildRevision, buildSource)) return { success: false, error: "worldline_build_superseded", superseded: true };
         this.lastError = error.message || "worldline_parse_failed";
         this.buildState = this.currentCheckpoint ? "STALE" : "FAILED";
         this._notifyStateChanged("checkpoint_failed");
         return { success: false, error: this.lastError };
       }
     })();
+    this.buildPromise = buildPromise;
+    this.buildRevision = buildRevision;
+    this.buildSource = buildSource;
     try {
-      return await this.buildPromise;
+      return await buildPromise;
     } finally {
-      this.buildPromise = null;
+      if (this.buildPromise === buildPromise) {
+        this.buildPromise = null;
+        this.buildRevision = null;
+        this.buildSource = null;
+      }
     }
   }
 
@@ -437,14 +466,22 @@ class WorldlineService {
     const checkpoint = this.currentCheckpoint;
     const snapshot = checkpoint?.snapshot;
     const bindings = Object.keys(snapshot?.definitionToRuntime || {}).length;
+    const live = this.getLiveState();
+    const freshness = getCheckpointFreshness({ pipelineState: this.buildState, checkpointAsOf: snapshot?.gameDate || null, liveDate: live.gameDate });
     return {
       checkpoint: {
         id: checkpoint?.id || null,
         checkpointId: checkpoint?.id || null,
         status: this.buildState,
         state: this.buildState,
+        pipelineState: this.buildState,
         gameDate: snapshot?.gameDate || null,
-        totalDays: this.getLiveState().totalDays || null,
+        checkpointAsOf: freshness.checkpointAsOf,
+        liveDate: freshness.liveDate,
+        ageDays: freshness.ageDays,
+        freshnessStatus: freshness.freshnessStatus,
+        freshnessReason: freshness.reason,
+        totalDays: live.totalDays || null,
         container: checkpoint?.source?.container || null,
         fileSize: checkpoint?.source?.fileSize || null,
         characters: snapshot?.diagnostics?.characterCount || 0,
@@ -453,7 +490,7 @@ class WorldlineService {
         historicalBindings: bindings,
         parseDurationMs: checkpoint?.diagnostics?.parseDurationMs || null,
         lastParseDuration: checkpoint?.diagnostics?.parseDurationMs || null,
-        freshness: checkpoint ? this.buildState === "ACTIVE" ? "FRESH" : "STALE" : "UNAVAILABLE",
+        freshness: freshness.freshnessStatus,
         lastError: this.lastError
       }
     };
@@ -476,16 +513,23 @@ class WorldlineService {
   getOverview() {
     const snapshot = this.currentCheckpoint?.snapshot;
     const live = this.getLiveState();
-    const title = snapshot ? firstPlayerTitle(snapshot) : null;
-    const realmTitle = snapshot ? Object.values(snapshot.titles || {}).find((item) => /^(e|k)_/.test(item.key || "") && item.holder) : null;
+    const checkpoint = this.getCheckpointStatus().checkpoint;
+    const politicalContext = snapshot ? resolvePlayerPoliticalContext(snapshot, { localize: (type, rawKey) => this.localizationResolver?.resolve(type, rawKey) }) : null;
     return {
       overview: {
         currentPlayer: snapshot ? formatCharacter(snapshot, snapshot.playerId) : null,
-        primaryTitle: title?.key || null,
-        currentRuler: realmTitle ? formatCharacter(snapshot, realmTitle.holder) : null,
+        primaryTitle: politicalContext?.primaryTitle?.rawKey || null,
+        directLiege: politicalContext?.directLiege?.ruler?.displayName || politicalContext?.directLiege?.title?.rawKey || null,
+        topRealmTitle: politicalContext?.topRealmTitle?.rawKey || null,
+        currentRuler: politicalContext?.topRealmRuler?.displayName || null,
+        politicalContext,
         importantWars: snapshot?.diagnostics?.activeWarCount ?? null,
         historicalBindingStatus: snapshot ? `${Object.keys(snapshot.definitionToRuntime || {}).length} DIRECT` : null,
-        freshness: this.getCheckpointStatus().checkpoint.freshness,
+        pipelineState: checkpoint.pipelineState || checkpoint.status || null,
+        checkpointAsOf: checkpoint.checkpointAsOf || snapshot?.gameDate || null,
+        ageDays: checkpoint.ageDays ?? null,
+        freshness: checkpoint.freshnessStatus || checkpoint.freshness || "UNAVAILABLE",
+        freshnessReason: checkpoint.freshnessReason || null,
         deltaPending: this._currentCampaignDelta().filter((entry) => entry.reconciliationStatus === "PENDING" || entry.reconciliationStatus === "RECONCILIATION_UNKNOWN").length,
         supplementalCount: this.listSupplemental().supplemental.length,
         liveGameDate: live.gameDate,
@@ -606,23 +650,28 @@ class WorldlineService {
 
   getWorldKnowledge() {
     const snapshot = this.currentCheckpoint?.snapshot;
+    const politicalContext = snapshot ? resolvePlayerPoliticalContext(snapshot, { localize: (type, rawKey) => this.localizationResolver?.resolve(type, rawKey) }) : null;
     const facts = snapshot ? [
       { id: "game-date", title: "Game Date", value: snapshot.gameDate, source: "Game Truth" },
       { id: "player", title: "Current Player", value: formatCharacter(snapshot, snapshot.playerId), source: "Game Truth" },
-      { id: "primary-title", title: "Primary Title", value: firstPlayerTitle(snapshot)?.key || null, source: "Game Truth" },
+      { id: "primary-title", title: "Primary Title", value: politicalContext?.primaryTitle?.rawKey || null, source: "Game Truth" },
       { id: "active-wars", title: "Active Wars", value: String(snapshot.diagnostics?.activeWarCount || 0), source: "Game Truth" }
     ] : [];
     const supplemental = this.listSupplemental().supplemental.map((item) => ({ id: item.id, title: item.title, body: item.body, source: item.source, visibility: item.visibility, hidden: item.hidden }));
     return { worldKnowledge: [...facts, ...supplemental] };
   }
 
-  getPromptContext({ query = "", assistContext = "" } = {}) {
+  getPromptContext({ query = "", assistContext = "", mentionedEntityIds = [], diagnostic = false } = {}) {
     const settings = this._settings();
+    const safeMentionedEntityIds = Array.isArray(mentionedEntityIds) ? mentionedEntityIds : [];
     const sourceMatches = settings.autosavePath && this.currentCheckpoint?.source?.path && this.path.resolve(settings.autosavePath).toLowerCase() === this.path.resolve(this.currentCheckpoint.source.path).toLowerCase();
-    if (!settings.promptIntegrationEnabled || settings.lastValidationStatus !== "VALID" || this.buildState !== "ACTIVE" || !sourceMatches || this.path.basename(settings.autosavePath).toLowerCase() !== "autosave.ck3" || !this.currentCheckpoint?.snapshot) return null;
+    if ((!settings.promptIntegrationEnabled && diagnostic !== true) || settings.lastValidationStatus !== "VALID" || this.buildState !== "ACTIVE" || !sourceMatches || this.path.basename(settings.autosavePath).toLowerCase() !== "autosave.ck3" || !this.currentCheckpoint?.snapshot) return null;
     try {
       const snapshot = this.currentCheckpoint.snapshot;
       const checkpointId2 = this.currentCheckpoint.id;
+      const live = this.getLiveState();
+      const freshness = getCheckpointFreshness({ pipelineState: this.buildState, checkpointAsOf: snapshot.gameDate, liveDate: live.gameDate });
+      if (freshness.freshnessStatus === "STALE" || freshness.freshnessStatus === "UNAVAILABLE") return null;
       if (this.worldKnowledgeState.checkpointId !== checkpointId2) {
         this.worldKnowledgeState.stableRecallCache.clear();
         this.worldKnowledgeState.topicPatchCache.clear();
@@ -631,25 +680,48 @@ class WorldlineService {
       }
       let stableText = this.worldKnowledgeState.stableRecallCache.get(checkpointId2);
       if (!stableText) {
-        stableText = `=== 世界知识：已确认 Checkpoint（只读 CK3 事实） ===\n- Checkpoint 日期：${snapshot.gameDate}\n- 当前玩家：${formatCharacter(snapshot, snapshot.playerId) || "未知"}\n- 已索引角色：${snapshot.diagnostics?.characterCount || 0}\n- 活跃战争：${snapshot.diagnostics?.activeWarCount || 0}\n此区块是年度存档事实；它不能被玩家 Canon 或 Supplemental 文本覆盖。`;
+        stableText = `=== 世界知识：已确认 Checkpoint（只读 CK3 事实） ===\n- Checkpoint 世界事实截至：${snapshot.gameDate}\n- 当前玩家：${formatCharacter(snapshot, snapshot.playerId) || "未知"}\n- 已索引角色：${snapshot.diagnostics?.characterCount || 0}\n- 活跃战争：${snapshot.diagnostics?.activeWarCount || 0}\n此区块是截至上述日期的年度存档事实；其中的可变事实不得表述为 Live 当前状态。\n事实优先级：本轮 Live、回应角色权威游戏资料与场景直接事实 > 本 Checkpoint > Supplemental > Personal Memory > 模型推断。\n玩家 Canon 或 Supplemental 文本不得覆盖本 Checkpoint；冲突时按上述优先级处理。`;
         this.worldKnowledgeState.stableRecallCache.set(checkpointId2, stableText);
       }
-      const normalizedQuery = `${query}\n${assistContext}`.toLocaleLowerCase().trim();
-      const queryFingerprint = nodeCrypto.createHash("sha256").update(normalizedQuery || "empty", "utf8").digest("hex").slice(0, 16);
-      const cacheKey = `${checkpointId2}:${this.annualDelta.length}:${this.worldKnowledgeState.supplementalRevision}:${queryFingerprint}`;
+      const queryAnalysis = analyzeSharedQuery({
+        snapshot,
+        query,
+        assistContext,
+        mentionedEntityIds: safeMentionedEntityIds,
+        localize: (type, rawKey) => this.localizationResolver?.resolve(type, rawKey),
+        findLocalizedKeys: (type, value) => this.localizationResolver?.findRawKeysByLocalizedValue(type, value) || []
+      });
+      const mentionedEntityKey = [...new Set(safeMentionedEntityIds.map((id) => String(id)))].sort().join(",");
+      const queryFingerprint = nodeCrypto.createHash("sha256").update(`${queryAnalysis.normalizedQuery || "empty"}|${mentionedEntityKey}`, "utf8").digest("hex").slice(0, 16);
+      const liveFingerprint = `${live.connected ? "1" : "0"}:${live.gameDate || "none"}:${live.totalDays ?? "none"}:${freshness.freshnessStatus}:${freshness.ageDays ?? "none"}`;
+      const cacheKey = `${checkpointId2}:${this.annualDelta.length}:${this.worldKnowledgeState.supplementalRevision}:${queryFingerprint}:${liveFingerprint}`;
       const cached = this.worldKnowledgeState.topicPatchCache.get(cacheKey);
       if (cached) return { ...cached, stableText, cacheHit: true };
-      const terms = [...new Set((normalizedQuery.match(/[\p{L}\p{N}_-]{2,}/gu) || []).slice(0, 24))];
-      const matches = (value) => terms.length > 0 && terms.some((term) => String(value || "").toLocaleLowerCase().includes(term));
-      const topicFacts = Object.values(snapshot.characters || {}).filter((character) => matches(`${character.firstName} ${character.id}`)).slice(0, 4).map((character) => `- ${formatCharacter(snapshot, character.id)}：${character.alive ? "存活" : "已死亡"}${character.location ? `；位置 ${character.location}` : ""}`);
-      const supplemental = this.listSupplemental().supplemental.filter((entry) => !entry.hidden && entry.visibility === "PUBLIC_WORLD" && matches(`${entry.title}\n${entry.body}\n${entry.entities.join(" ")}`)).slice(0, 3);
+      const characterFacts = queryAnalysis.characters.map((match) => {
+        const character = snapshot.characters?.[match.id];
+        if (!character) return null;
+        const displayName = match.displayName || formatCharacter(snapshot, match.id) || `#${match.id}`;
+        return `- ${displayName} (#${match.id})：${character.alive ? "存活" : "已死亡"}${character.location ? `；位置 ${character.location}` : ""}`;
+      }).filter(Boolean);
+      const titleFacts = queryAnalysis.titles.map((match) => {
+        const holder = formatCharacter(snapshot, match.holderId);
+        return `- 头衔 ${match.displayName}${match.rawKey && match.displayName !== match.rawKey ? `（${match.rawKey}）` : ""}${holder ? `；持有者 ${holder}` : ""}`;
+      });
+      const topicFacts = [...characterFacts, ...titleFacts];
+      const supplemental = this.listSupplemental().supplemental.filter((entry) => !entry.hidden && entry.visibility === "PUBLIC_WORLD" && analysisTextMatches(queryAnalysis, `${entry.title}\n${entry.body}\n${Array.isArray(entry.entities) ? entry.entities.join(" ") : ""}`)).slice(0, 3);
       const currentDelta = this._currentCampaignDelta().slice(-8).filter((entry) => entry.source === "GAMESTATE").slice(-3).map((entry) => `- ${entry.type}（${entry.date || "日期未知"}）`);
-      const live = this.getLiveState();
+      const liveDateText = live.gameDate || "Live Probe 未提供";
+      const ageText = freshness.ageDays === null ? "无法计算（Live Probe 未提供）" : `${freshness.ageDays} 天`;
       const context = {
-        topicText: topicFacts.length ? `=== 与当前话题相关的 CK3 世界事实 ===\n${topicFacts.join("\n")}` : null,
+        topicText: topicFacts.length ? `=== 与当前话题相关的 CK3 Checkpoint 事实（截至 ${snapshot.gameDate}） ===\n若与本轮 Live、回应角色权威游戏资料或场景直接事实冲突，必须以后者为准。\n${topicFacts.join("\n")}` : null,
         supplementalText: supplemental.length ? `=== 公开 Supplemental 世界知识（叙事来源） ===\n以下内容不能覆盖、修正或否定任何当前 Live、GameState、角色自身资料或场景直接事实；发生冲突时必须忽略冲突的 Supplemental 主张。\n${supplemental.map((entry) => `- ${entry.title}：${entry.body}`).join("\n")}` : null,
-        currentText: `=== 当前世界视图 ===\n- 当前日期：${live.gameDate || snapshot.gameDate}\n${currentDelta.length ? `${currentDelta.join("\n")}\n` : ""}当前实时信息优先于年度 Checkpoint；缺失实时信息时仅可使用 Checkpoint。`,
+        currentText: `=== 当前世界视图 ===\n- Checkpoint 世界事实截至：${freshness.checkpointAsOf}\n- Live 当前日期：${liveDateText}\n- Checkpoint 新鲜度：${freshness.freshnessStatus}${freshness.ageDays === null ? "" : `（相差 ${ageText}）`}\n${currentDelta.length ? `${currentDelta.join("\n")}\n` : ""}只有 Live Probe 直接提供的信息可表述为 Live 当前日期的实时状态；未被 Live Probe 更新的可变事实仍仅截至 Checkpoint 日期。`,
         queryFingerprint,
+        queryAnalysis,
+        checkpointAsOf: freshness.checkpointAsOf,
+        liveDate: freshness.liveDate,
+        ageDays: freshness.ageDays,
+        freshnessStatus: freshness.freshnessStatus,
         cacheHit: false
       };
       this.worldKnowledgeState.topicPatchCache.set(cacheKey, context);
@@ -659,8 +731,76 @@ class WorldlineService {
     }
   }
 
+  getPromptDiagnostics({ query = "", assistContext = "" } = {}) {
+    const safeQuery = String(query || "").slice(0, 1000);
+    const context = this.getPromptContext({ query: safeQuery, assistContext: String(assistContext || "").slice(0, 2000), diagnostic: true });
+    const runtime = this.getDiagnostics().diagnostics;
+    if (!context) {
+      const reason = runtime.freshnessStatus === "STALE" ? "CHECKPOINT_STALE" : runtime.freshnessStatus === "UNAVAILABLE" ? "CHECKPOINT_UNAVAILABLE" : "PROMPT_CONTEXT_UNAVAILABLE";
+      return {
+        promptDiagnostics: {
+          available: false,
+          query: safeQuery,
+          reason,
+          checkpointAsOf: runtime.checkpointAsOf,
+          liveDate: runtime.liveDate,
+          ageDays: runtime.ageDays,
+          freshnessStatus: runtime.freshnessStatus,
+          worldPromptTokens: 0,
+          cacheHit: false,
+          queryAnalysis: { normalizedQuery: safeQuery.trim().toLocaleLowerCase(), terms: [], characters: [], titles: [], matchedAliases: [] },
+          gameTruth: { characters: [], titles: [] },
+          supplemental: [],
+          tokenBreakdown: [],
+          trimmedItems: []
+        }
+      };
+    }
+    const analysis = context.queryAnalysis || { normalizedQuery: safeQuery.trim().toLocaleLowerCase(), terms: [], characters: [], titles: [], matchedAliases: [] };
+    const allSupplemental = this.listSupplemental().supplemental.filter((entry) => !entry.hidden && entry.visibility === "PUBLIC_WORLD" && analysisTextMatches(analysis, `${entry.title}\n${entry.body}\n${Array.isArray(entry.entities) ? entry.entities.join(" ") : ""}`));
+    const selectedSupplemental = allSupplemental.slice(0, 3);
+    const trimmedItems = allSupplemental.slice(3).map((entry) => ({ type: "SUPPLEMENTAL", id: entry.id, title: entry.title, reason: "TOP_3_LIMIT" }));
+    const gameTruth = {
+      characters: analysis.characters || [],
+      titles: analysis.titles || []
+    };
+    for (const id of (analysis.candidateCharacterIds || []).slice((analysis.limits?.maxCharacters || 4))) {
+      const character = this.currentCheckpoint?.snapshot?.characters?.[id];
+      if (character) trimmedItems.push({ type: "GAME_TRUTH_CHARACTER", id, title: character.fullName || character.firstName || `#${id}`, reason: "QUERY_RESULT_LIMIT" });
+    }
+    for (const id of (analysis.candidateTitleIds || []).slice((analysis.limits?.maxTitles || 3))) {
+      const title = this.currentCheckpoint?.snapshot?.titles?.[id];
+      if (title) trimmedItems.push({ type: "GAME_TRUTH_TITLE", id, title: title.key || `#${id}`, reason: "QUERY_RESULT_LIMIT" });
+    }
+    const tokenBreakdown = [
+      ["worldline-stable", "Stable World Checkpoint", context.stableText],
+      ["worldline-topic", "Topic Game Truth", context.topicText],
+      ["worldline-supplemental", "Supplemental", context.supplementalText],
+      ["worldline-current", "Current World View", context.currentText]
+    ].filter(([, , content]) => content).map(([id, label, content]) => ({ id, label, tokens: estimateTokens(content) }));
+    return {
+      promptDiagnostics: {
+        available: true,
+        query: safeQuery,
+        queryAnalysis: analysis,
+        gameTruth,
+        supplemental: selectedSupplemental.map((entry) => ({ id: entry.id, title: entry.title, body: entry.body, visibility: entry.visibility })),
+        checkpointAsOf: context.checkpointAsOf,
+        liveDate: context.liveDate,
+        ageDays: context.ageDays,
+        freshnessStatus: context.freshnessStatus,
+        worldPromptTokens: tokenBreakdown.reduce((total, block) => total + block.tokens, 0),
+        cacheHit: context.cacheHit === true,
+        tokenBreakdown,
+        trimmedItems
+      }
+    };
+  }
+
   getDiagnostics() {
     const settings = this._settings();
+    const live = this.getLiveState();
+    const freshness = getCheckpointFreshness({ pipelineState: this.buildState, checkpointAsOf: this.currentCheckpoint?.snapshot?.gameDate || null, liveDate: live.gameDate });
     return {
       diagnostics: {
         savePath: settings.autosavePath,
@@ -672,6 +812,12 @@ class WorldlineService {
         parseDurationMs: this.currentCheckpoint?.diagnostics?.parseDurationMs || null,
         checkpointId: this.currentCheckpoint?.id || null,
         checkpointGameDate: this.currentCheckpoint?.snapshot?.gameDate || null,
+        pipelineState: freshness.pipelineState,
+        checkpointAsOf: freshness.checkpointAsOf,
+        liveDate: freshness.liveDate,
+        ageDays: freshness.ageDays,
+        freshnessStatus: freshness.freshnessStatus,
+        freshnessReason: freshness.reason,
         deltaRevision: this._currentCampaignDelta().length,
         deltaStoredTotal: this.annualDelta.length,
         catalogStatus: "NOT_CONNECTED",
