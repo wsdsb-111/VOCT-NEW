@@ -12,10 +12,15 @@
 6. [v8.4 Historical Definition ID 报告](v8.4-historical-definition-id-report.md)：历史源定义键、Runtime ID、`character_lookup` 与当前不确定性。
 7. [v8.4 Mod 历史人物源报告](v8.4-modded-historical-character-source-report.md)：当前 active playset、岳飞/辛弃疾源文件和同名候选。
 8. [v8.4 Historical ID UI/Debug 报告](v8.4-historical-id-ui-source-report.md)：CK3 `GetHistoryId`、debug.log 与 VOTC probe 边界。
-9. [README_摘要系统.md](README_摘要系统.md)：Memory Engine 2.5 的存储、冻结召回、Turn Recall、写入和生命周期规则。
-10. [V7阶段优化记录.md](V7阶段优化记录.md)：V7/V7.x 的连续开发记录。
-11. [V6阶段优化记录.md](V6阶段优化记录.md)：V6/V6.x 的动作系统与基础设施记录。
-12. 需要核对具体方案时，再阅读版本设计文档和实施报告。
+9. [v8.4 Luna 实机 Date/History ID 验证](v8.4-live-date-historyid-validation.md)：CK3 运行时日期、岳飞 Historical ID 和普通角色空值对照。
+10. [v8.4 Luna + Terra S0/S1 差分报告](v8.4-s0-s1-checkpoint-diff-report.md)：人物、Title、War、死亡、出生和历史人物 checkpoint 差分。
+11. [v8.4 Luna + Terra 年度 Delta 对账矩阵](v8.4-annual-delta-reconciliation-matrix.md)：已确认项、部分可重建项与 Supplemental 边界。
+12. [v8.4 Terra Definition Override 验证](v8.4-definition-override-validation.md)：当前 active playset 的重复源、Gamestate 证据和保守覆盖结论。
+13. [v8.4 Sol 最终冻结审查](v8.4-final-freeze-readiness-review.md)：Test 1–6 最终 Gate、P0 阻断项和可冻结架构结论。
+14. [README_摘要系统.md](README_摘要系统.md)：Memory Engine 2.5 的存储、冻结召回、Turn Recall、写入和生命周期规则。
+15. [V7阶段优化记录.md](V7阶段优化记录.md)：V7/V7.x 的连续开发记录。
+16. [V6阶段优化记录.md](V6阶段优化记录.md)：V6/V6.x 的动作系统与基础设施记录。
+17. 需要核对具体方案时，再阅读版本设计文档和实施报告。
 
 ## 文档分类
 
@@ -32,6 +37,11 @@
 - [v8.4-modded-historical-character-source-report.md](v8.4-modded-historical-character-source-report.md)：当前启用 Mod 的历史人物源和同名冲突。
 - [v8.4-historical-id-ui-source-report.md](v8.4-historical-id-ui-source-report.md)：CK3 UI/Debug getter、日志和 VOTC 临时 probe 可行性。
 - [v8.4-historical-definition-catalog-proposal.md](v8.4-historical-definition-catalog-proposal.md)：只读 Definition Catalog 原型与正式 adapter 前置 Gate。
+- [v8.4-live-date-historyid-validation.md](v8.4-live-date-historyid-validation.md)：Luna 实机 Live Date、Historical ID 和闭环证据。
+- [v8.4-s0-s1-checkpoint-diff-report.md](v8.4-s0-s1-checkpoint-diff-report.md)：Luna + Terra S0/S1 人物、Title 与 War checkpoint 差分。
+- [v8.4-annual-delta-reconciliation-matrix.md](v8.4-annual-delta-reconciliation-matrix.md)：Luna + Terra 年度 Delta 对账矩阵。
+- [v8.4-definition-override-validation.md](v8.4-definition-override-validation.md)：Terra 重复 Definition ID、active playset 与覆盖结论。
+- [v8.4-final-freeze-readiness-review.md](v8.4-final-freeze-readiness-review.md)：Sol 对 Test 1–6 的最终 Gate、冻结边界与补证路径。
 - [VOTC_v8.1_Campaign_Identity与Worldline_Store_Foundation设计.md](VOTC_v8.1_Campaign_Identity与Worldline_Store_Foundation设计.md)：V8.1 存档身份协议、session 降级、Worldline schema、原子持久化和 Shadow 集成合同。
 - [v8.1-campaign-identity-worldline-store-implementation-report.md](v8.1-campaign-identity-worldline-store-implementation-report.md)：V8.0 P0/P1 审计、V8.1 应用与 Workshop 实施、自动化验证和实机边界。
 - [v8.3.1-historical-figure-dashboard-implementation-report.md](v8.3.1-historical-figure-dashboard-implementation-report.md)：V8.3.1 实机诊断 Snapshot、Overlay Dashboard、append-only Ground Truth 与冻结边界。
@@ -57,6 +67,11 @@
 - [v8.4-modded-historical-character-source-report.md](v8.4-modded-historical-character-source-report.md)
 - [v8.4-historical-id-ui-source-report.md](v8.4-historical-id-ui-source-report.md)
 - [v8.4-historical-definition-catalog-proposal.md](v8.4-historical-definition-catalog-proposal.md)
+- [v8.4-live-date-historyid-validation.md](v8.4-live-date-historyid-validation.md)
+- [v8.4-s0-s1-checkpoint-diff-report.md](v8.4-s0-s1-checkpoint-diff-report.md)
+- [v8.4-annual-delta-reconciliation-matrix.md](v8.4-annual-delta-reconciliation-matrix.md)
+- [v8.4-definition-override-validation.md](v8.4-definition-override-validation.md)
+- [v8.4-final-freeze-readiness-review.md](v8.4-final-freeze-readiness-review.md)
 - [VOTC_v8.1_Campaign_Identity与Worldline_Store_Foundation设计.md](VOTC_v8.1_Campaign_Identity与Worldline_Store_Foundation设计.md)
 - [v8.1-campaign-identity-worldline-store-implementation-report.md](v8.1-campaign-identity-worldline-store-implementation-report.md)
 - [v8.3.1-historical-figure-dashboard-implementation-report.md](v8.3.1-historical-figure-dashboard-implementation-report.md)
