@@ -22080,6 +22080,272 @@ function LanguageSelector() {
     )
   ] });
 }
+function WorldlineView() {
+  const { i18n } = useTranslation();
+  const isChinese = (i18n.language || "").startsWith("zh");
+  const text = (zh, en) => isChinese ? zh : en;
+  const emptySource = {
+    autosavePath: "",
+    validationStatus: "UNCONFIGURED",
+    fileSize: null,
+    modifiedAt: null,
+    container: null,
+    gameDate: null,
+    lastParsedAt: null,
+    checkpointId: null
+  };
+  const emptyCheckpoint = {
+    status: "UNCONFIGURED",
+    gameDate: null,
+    totalDays: null,
+    container: null,
+    fileSize: null,
+    characters: null,
+    titles: null,
+    activeWars: null,
+    historicalBindings: null,
+    parseDurationMs: null,
+    lastError: null
+  };
+  const [source, setSource] = reactExports.useState(emptySource);
+  const [checkpoint, setCheckpoint] = reactExports.useState(emptyCheckpoint);
+  const [overview, setOverview] = reactExports.useState(null);
+  const [annualDelta, setAnnualDelta] = reactExports.useState([]);
+  const [worldKnowledge, setWorldKnowledge] = reactExports.useState([]);
+  const [historicalBindings, setHistoricalBindings] = reactExports.useState([]);
+  const [diagnostics, setDiagnostics] = reactExports.useState(null);
+  const [supplemental, setSupplemental] = reactExports.useState([]);
+  const [activeTab, setActiveTab] = reactExports.useState("overview");
+  const [loadState, setLoadState] = reactExports.useState("idle");
+  const [error, setError] = reactExports.useState("");
+  const [editingId, setEditingId] = reactExports.useState(null);
+  const [draft, setDraft] = reactExports.useState({ title: "", body: "", gameDate: "", dateRange: "", entities: "", visibility: "PUBLIC_WORLD", importance: "NORMAL" });
+  const getApi = () => typeof window !== "undefined" ? window.worldlineAPI : null;
+  const invoke = async (method, ...args) => {
+    const api = getApi();
+    if (!api || typeof api[method] !== "function") return null;
+    try {
+      return await api[method](...args);
+    } catch (invokeError) {
+      setError(invokeError?.message || text("Terra 接口调用失败。", "Terra IPC call failed."));
+      return null;
+    }
+  };
+  const canInvoke = (method) => {
+    const api = getApi();
+    return !!api && typeof api[method] === "function";
+  };
+  const unwrap = (result, key) => result?.[key] ?? result?.data ?? result;
+  const refresh = async () => {
+    if (!getApi() || (!canInvoke("getSettings") && !canInvoke("getCheckpointStatus"))) {
+      setLoadState("ipc_pending");
+      return;
+    }
+    setLoadState("loading");
+    setError("");
+    const [settingsResult, checkpointResult, overviewResult, deltaResult, knowledgeResult, bindingResult, diagnosticsResult, supplementalResult] = await Promise.all([
+      invoke("getSettings"),
+      invoke("getCheckpointStatus"),
+      invoke("getOverview"),
+      invoke("getAnnualDelta"),
+      invoke("getWorldKnowledge"),
+      invoke("getHistoricalBindings"),
+      invoke("getDiagnostics"),
+      invoke("listSupplemental")
+    ]);
+    const settings = settingsResult?.settings ?? settingsResult?.worldlineSettings ?? settingsResult?.data ?? settingsResult;
+    const nextCheckpoint = unwrap(checkpointResult, "checkpoint");
+    if (!settings && !nextCheckpoint) {
+      setLoadState("error");
+      return;
+    }
+    if (settings && typeof settings === "object") setSource((current) => ({ ...current, ...settings, validationStatus: settings.validationStatus || settings.lastValidationStatus || current.validationStatus, modifiedAt: settings.modifiedAt || settings.mtime || current.modifiedAt, container: settings.container || settings.containerKind || current.container, lastParsedAt: settings.lastParsedAt || settings.lastSuccessfulParse || current.lastParsedAt, checkpointId: settings.checkpointId || settings.lastCheckpointId || current.checkpointId }));
+    if (nextCheckpoint && typeof nextCheckpoint === "object") setCheckpoint((current) => ({ ...current, ...nextCheckpoint, status: nextCheckpoint.status || nextCheckpoint.state || current.status, parseDurationMs: nextCheckpoint.parseDurationMs ?? nextCheckpoint.lastParseDuration ?? current.parseDurationMs }));
+    if (overviewResult && typeof overviewResult === "object") setOverview(unwrap(overviewResult, "overview"));
+    if (Array.isArray(unwrap(deltaResult, "annualDelta"))) setAnnualDelta(unwrap(deltaResult, "annualDelta"));
+    if (Array.isArray(unwrap(knowledgeResult, "worldKnowledge"))) setWorldKnowledge(unwrap(knowledgeResult, "worldKnowledge"));
+    if (Array.isArray(unwrap(bindingResult, "bindings"))) setHistoricalBindings(unwrap(bindingResult, "bindings"));
+    if (diagnosticsResult) setDiagnostics(unwrap(diagnosticsResult, "diagnostics"));
+    if (Array.isArray(unwrap(supplementalResult, "supplemental"))) setSupplemental(unwrap(supplementalResult, "supplemental"));
+    setLoadState("ready");
+  };
+  reactExports.useEffect(() => {
+    refresh();
+    const unsubscribe = getApi()?.onUpdated?.(() => refresh());
+    return () => unsubscribe?.();
+  }, []);
+  const handleSelect = async () => {
+    if (!getApi()) {
+      setError(text("等待 Terra IPC 接入后才能选择存档。", "File selection is waiting for Terra IPC."));
+      return;
+    }
+    const result = await invoke("selectAutosaveFile");
+    const selectedPath = typeof result === "string" ? result : result?.path || result?.autosavePath;
+    if (selectedPath) {
+      setSource((current) => ({ ...current, autosavePath: selectedPath }));
+      const configured = await invoke("setAutosavePath", selectedPath);
+      if (!configured) return;
+      const validation = await invoke("validateAutosavePath");
+      if (!validation) return;
+      if (validation.validationStatus === "VALID") await invoke("rebuildCheckpoint");
+      await refresh();
+    }
+  };
+  const handleValidate = async () => {
+    if (!source.autosavePath.trim()) {
+      setError(text("请先填写或选择 autosave.ck3 路径。", "Enter or select an autosave.ck3 path first."));
+      return;
+    }
+    if (!getApi()) {
+      setError(text("路径已保留在当前页面，但等待 Terra IPC 执行真实校验。", "The path is held in this page; real validation is waiting for Terra IPC."));
+      return;
+    }
+    setSource((current) => ({ ...current, validationStatus: "VALIDATING" }));
+    const configured = await invoke("setAutosavePath", source.autosavePath.trim());
+    if (!configured) return;
+    const validation = await invoke("validateAutosavePath");
+    if (!validation) return;
+    if (validation.validationStatus === "VALID") await invoke("rebuildCheckpoint");
+    await refresh();
+  };
+  const handleReload = async () => {
+    if (!getApi()) {
+      setError(text("等待 Terra IPC 接入后才能重建检查点。", "Checkpoint rebuild is waiting for Terra IPC."));
+      return;
+    }
+    await invoke("rebuildCheckpoint");
+    await refresh();
+  };
+  const saveSupplemental = async () => {
+    if (!draft.title.trim() || !draft.body.trim()) {
+      setError(text("补充知识需要标题和内容。", "Supplemental knowledge needs a title and body."));
+      return;
+    }
+    const payload = { ...draft, gameDate: draft.gameDate.trim() || null, dateRange: draft.dateRange.trim() || null, entities: draft.entities.split(",").map((entity) => entity.trim()).filter(Boolean), source: "PLAYER_CANON", scope: "SESSION", checkpointScope: "CURRENT_CHECKPOINT" };
+    if (editingId) {
+      if (canInvoke("updateSupplemental")) {
+        const result = await invoke("updateSupplemental", editingId, payload);
+        if (!result) return;
+        await refresh();
+      } else {
+        setSupplemental((items) => items.map((item) => item.id === editingId ? { ...item, ...payload } : item));
+      }
+    } else {
+      if (canInvoke("createSupplemental")) {
+        const result = await invoke("createSupplemental", payload);
+        if (!result) return;
+        await refresh();
+      } else {
+        setSupplemental((items) => [...items, { ...payload, id: `luna-${Date.now()}` }]);
+      }
+    }
+    setDraft({ title: "", body: "", gameDate: "", dateRange: "", entities: "", visibility: "PUBLIC_WORLD", importance: "NORMAL" });
+    setEditingId(null);
+    setError("");
+  };
+  const editSupplemental = (item) => {
+    setEditingId(item.id);
+    setDraft({ title: item.title || "", body: item.body || "", gameDate: item.gameDate || "", dateRange: item.dateRange || "", entities: Array.isArray(item.entities) ? item.entities.join(", ") : item.entities || "", visibility: item.visibility || "PUBLIC_WORLD", importance: item.importance || "NORMAL" });
+  };
+  const deleteSupplemental = async (id) => {
+    if (canInvoke("deleteSupplemental")) {
+      const result = await invoke("deleteSupplemental", id);
+      if (!result) return;
+      await refresh();
+    } else {
+      setSupplemental((items) => items.filter((item) => item.id !== id));
+    }
+    if (editingId === id) {
+      setEditingId(null);
+      setDraft({ title: "", body: "", gameDate: "", dateRange: "", entities: "", visibility: "PUBLIC_WORLD", importance: "NORMAL" });
+    }
+  };
+  const hideSupplemental = async (id) => {
+    const current = supplemental.find((item) => item.id === id);
+    if (!current) return;
+    if (canInvoke("updateSupplemental")) {
+      const result = await invoke("updateSupplemental", id, { ...current, hidden: !current.hidden });
+      if (!result) return;
+      await refresh();
+    } else {
+      setSupplemental((items) => items.map((item) => item.id === id ? { ...item, hidden: !item.hidden } : item));
+    }
+  };
+  const display = (value) => value === null || value === undefined || value === "" ? "—" : String(value);
+  const statusLabel = (status) => ({
+    UNCONFIGURED: text("未配置", "Unconfigured"),
+    VALIDATING: text("校验中", "Validating"),
+    VALID: text("有效", "Valid"),
+    NOT_FOUND: text("未找到", "Not found"),
+    NOT_AUTOSAVE: text("不是 autosave", "Not autosave"),
+    UNSUPPORTED_CONTAINER: text("容器不支持", "Unsupported container"),
+    READ_ERROR: text("读取失败", "Read error"),
+    ACTIVE: text("活跃", "Active"),
+    BUILDING: text("构建中", "Building"),
+    STALE: text("过期", "Stale"),
+    FAILED: text("失败", "Failed")
+  }[status] || display(status));
+  const metric = (label, value) => /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "worldline-metric", children: [/* @__PURE__ */ jsxRuntimeExports.jsx("span", { children: label }), /* @__PURE__ */ jsxRuntimeExports.jsx("strong", { children: display(value) })] });
+  const tabs = [
+    ["overview", text("世界概览", "Overview")],
+    ["delta", text("年度变化", "Annual Delta")],
+    ["knowledge", text("世界知识", "World Knowledge")],
+    ["historical", text("历史人物", "Historical Identity")],
+    ["diagnostics", text("诊断", "Diagnostics")]
+  ];
+  const apiReady = canInvoke("getSettings") && canInvoke("getCheckpointStatus");
+  const pipelineStatus = checkpoint.status !== "UNCONFIGURED" ? checkpoint.status : source.validationStatus;
+  return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "worldline-view", children: [
+    /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "worldline-header", children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [/* @__PURE__ */ jsxRuntimeExports.jsx("h3", { children: text("世界线", "Worldline") }), /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "muted-text", children: text("V8.4 世界线：Game Truth 保持只读，补充知识限定在当前检查点并服从事实优先级。", "V8.4 Worldline: Game Truth stays read-only; supplemental knowledge is checkpoint-scoped and subordinate to verified facts.") })] }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: `worldline-status worldline-status-${String(pipelineStatus || loadState).toLowerCase()}`, children: apiReady ? statusLabel(pipelineStatus) : text("世界线 IPC 未就绪", "Worldline IPC unavailable") })
+    ] }),
+    /* @__PURE__ */ jsxRuntimeExports.jsxs("section", { className: "worldline-card worldline-source-card", children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsx("h4", { children: text("年度存档来源", "Annual Save Source") }),
+      /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "worldline-source-form", children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsxs("label", { className: "worldline-field", children: [text("autosave.ck3 路径", "autosave.ck3 path"), /* @__PURE__ */ jsxRuntimeExports.jsx("input", { value: source.autosavePath, onChange: (event) => setSource((current) => ({ ...current, autosavePath: event.target.value })), placeholder: "...\\save games\\autosave.ck3" })] }),
+        /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "worldline-actions", children: [/* @__PURE__ */ jsxRuntimeExports.jsx("button", { type: "button", onClick: handleSelect, children: text("选择文件", "Select File") }), /* @__PURE__ */ jsxRuntimeExports.jsx("button", { type: "button", onClick: handleValidate, children: text("校验路径", "Validate Path") }), /* @__PURE__ */ jsxRuntimeExports.jsx("button", { type: "button", onClick: handleReload, children: text("重新加载", "Reload") }), /* @__PURE__ */ jsxRuntimeExports.jsx("button", { type: "button", onClick: () => setActiveTab("diagnostics"), children: text("打开诊断", "Open Diagnostics") })] })
+      ] }),
+      /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "worldline-source-meta", children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsxs("span", { children: [text("状态", "Status"), "：", /* @__PURE__ */ jsxRuntimeExports.jsx("strong", { children: statusLabel(source.validationStatus) })] }),
+        /* @__PURE__ */ jsxRuntimeExports.jsxs("span", { children: [text("文件大小", "File size"), "：", display(source.fileSize)] }),
+        /* @__PURE__ */ jsxRuntimeExports.jsxs("span", { children: [text("修改时间", "Modified"), "：", display(source.modifiedAt)] }),
+        /* @__PURE__ */ jsxRuntimeExports.jsxs("span", { children: [text("容器", "Container"), "：", display(source.container)] }),
+        /* @__PURE__ */ jsxRuntimeExports.jsxs("span", { children: [text("游戏日期", "Game date"), "：", display(source.gameDate)] }),
+        /* @__PURE__ */ jsxRuntimeExports.jsxs("span", { children: [text("最后解析", "Last parse"), "：", display(source.lastParsedAt)] })
+      ] }),
+      error && /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "worldline-error", role: "alert", children: error })
+    ] }),
+    /* @__PURE__ */ jsxRuntimeExports.jsxs("section", { className: "worldline-card", children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsx("h4", { children: text("检查点状态", "Checkpoint Status") }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "worldline-metric-grid", children: [
+        [text("状态", "Status"), statusLabel(checkpoint.status)], [text("检查点", "Checkpoint"), source.checkpointId || diagnostics?.checkpointId], [text("游戏日期", "Game Date"), checkpoint.gameDate], [text("总天数", "Total Days"), checkpoint.totalDays], [text("容器", "Container"), checkpoint.container], [text("文件大小", "File Size"), checkpoint.fileSize], [text("人物", "Characters"), checkpoint.characters], [text("头衔", "Titles"), checkpoint.titles], [text("进行中的战争", "Active Wars"), checkpoint.activeWars], [text("历史绑定", "Historical Bindings"), checkpoint.historicalBindings], [text("解析耗时", "Parse Duration"), checkpoint.parseDurationMs == null ? null : `${checkpoint.parseDurationMs} ms`]
+      ].map(([label, value]) => metric(label, value)) })
+    ] }),
+    /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "worldline-tabs", role: "tablist", children: tabs.map(([id, label]) => /* @__PURE__ */ jsxRuntimeExports.jsx("button", { type: "button", role: "tab", "aria-selected": activeTab === id, className: activeTab === id ? "active" : "", onClick: () => setActiveTab(id), children: label }, id)) }),
+    activeTab === "overview" && /* @__PURE__ */ jsxRuntimeExports.jsxs("section", { className: "worldline-card worldline-tab-panel", children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsx("h4", { children: text("世界概览", "World Overview") }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "worldline-metric-grid", children: [
+        [text("当前玩家", "Current Player"), overview?.currentPlayer], [text("主头衔", "Primary Title"), overview?.primaryTitle], [text("当前统治者", "Current Ruler"), overview?.currentRuler], [text("重要战争", "Important Wars"), overview?.importantWars], [text("绑定状态", "Binding Status"), overview?.historicalBindingStatus], [text("Delta 待处理", "Delta Pending"), overview?.deltaPending], [text("补充知识条目", "Supplemental Entries"), supplemental.length]
+      ].map(([label, value]) => metric(label, value)) }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "worldline-note", children: text("Game Truth 仅作为只读事实源；检查点未激活时不显示伪造数据。", "Game Truth is read-only; no synthetic facts are shown before a checkpoint becomes active.") })
+    ] }),
+    activeTab === "delta" && /* @__PURE__ */ jsxRuntimeExports.jsxs("section", { className: "worldline-card worldline-tab-panel", children: [/* @__PURE__ */ jsxRuntimeExports.jsx("h4", { children: text("年度变化", "Annual Delta") }), annualDelta.length === 0 ? /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "worldline-empty", children: text("当前检查点暂无年度变化数据。", "No annual-delta data exists for the current checkpoint.") }) : /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "worldline-list", children: annualDelta.map((item, index) => /* @__PURE__ */ jsxRuntimeExports.jsxs("article", { className: "worldline-row", children: [/* @__PURE__ */ jsxRuntimeExports.jsx("strong", { children: display(item.type) }), /* @__PURE__ */ jsxRuntimeExports.jsx("span", { children: display(item.date) }), /* @__PURE__ */ jsxRuntimeExports.jsx("span", { children: display(item.actors) }), /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "worldline-source-tag", children: display(item.source || "CK3") }), /* @__PURE__ */ jsxRuntimeExports.jsx("span", { children: display(item.reconciliationStatus || item.confidence) })] }, item.id || index)) })] }),
+    activeTab === "knowledge" && /* @__PURE__ */ jsxRuntimeExports.jsxs("section", { className: "worldline-card worldline-tab-panel", children: [/* @__PURE__ */ jsxRuntimeExports.jsx("h4", { children: text("世界知识", "World Knowledge") }), /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "worldline-source-legend", children: [/* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "worldline-source-tag game-truth", children: "Game Truth" }), /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "worldline-source-tag supplemental", children: "Supplemental" }), /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "worldline-source-tag player-canon", children: "Player Canon" })] }), worldKnowledge.length === 0 ? /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "worldline-empty", children: text("暂无 Terra 世界知识数据。", "No Terra world-knowledge data yet.") }) : /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "worldline-list", children: worldKnowledge.map((item, index) => /* @__PURE__ */ jsxRuntimeExports.jsxs("article", { className: "worldline-row", children: [/* @__PURE__ */ jsxRuntimeExports.jsx("strong", { children: display(item.title || item.key) }), /* @__PURE__ */ jsxRuntimeExports.jsx("span", { children: display(item.body || item.value) }), /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "worldline-source-tag", children: display(item.source || "Game Truth") })] }, item.id || index)) })] }),
+    activeTab === "historical" && /* @__PURE__ */ jsxRuntimeExports.jsxs("section", { className: "worldline-card worldline-tab-panel", children: [/* @__PURE__ */ jsxRuntimeExports.jsx("h4", { children: text("历史人物身份", "Historical Identity") }), historicalBindings.length === 0 ? /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "worldline-empty", children: text("当前检查点暂无历史人物身份数据。", "No historical-identity data exists for the current checkpoint.") }) : /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "worldline-list", children: historicalBindings.map((item, index) => /* @__PURE__ */ jsxRuntimeExports.jsxs("article", { className: "worldline-row", children: [/* @__PURE__ */ jsxRuntimeExports.jsx("strong", { children: display(item.figureKey) }), /* @__PURE__ */ jsxRuntimeExports.jsx("span", { children: display(item.definitionId) }), /* @__PURE__ */ jsxRuntimeExports.jsx("span", { children: display(item.sourceMod) }), /* @__PURE__ */ jsxRuntimeExports.jsx("span", { children: display(item.runtimeId) }), /* @__PURE__ */ jsxRuntimeExports.jsx("span", { children: display(item.liveHistoryId) }), /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "worldline-source-tag", children: display(item.status || item.conflict) })] }, item.figureKey || index)) })] }),
+    activeTab === "diagnostics" && /* @__PURE__ */ jsxRuntimeExports.jsxs("section", { className: "worldline-card worldline-tab-panel", children: [/* @__PURE__ */ jsxRuntimeExports.jsx("h4", { children: text("诊断", "Diagnostics") }), /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "worldline-diagnostics", children: [/* @__PURE__ */ jsxRuntimeExports.jsxs("p", { children: [text("前端状态", "Frontend state"), "：", apiReady ? loadState : text("世界线 IPC 未接入", "Worldline IPC not connected")] }), /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { children: [text("检查点状态", "Checkpoint state"), "：", statusLabel(checkpoint.status)] }), /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { children: [text("解析器", "Parser"), "：", display(diagnostics?.parserState)] }), /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { children: [text("目录索引", "Definition catalog"), "：", display(diagnostics?.catalogStatus)] }), /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { children: [text("分支边界", "Branch boundary"), "：", display(diagnostics?.branchStatus)] }), /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { children: [text("当前 Delta / 总存储", "Current delta / stored"), "：", `${display(diagnostics?.deltaRevision)} / ${display(diagnostics?.deltaStoredTotal)}`] }), /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { children: [text("最近错误", "Last error"), "：", display(checkpoint.lastError || diagnostics?.lastError)] })] })] }),
+    /* @__PURE__ */ jsxRuntimeExports.jsxs("section", { className: "worldline-card worldline-editor", children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "worldline-section-heading", children: [/* @__PURE__ */ jsxRuntimeExports.jsx("h4", { children: text("补充知识", "Supplemental Knowledge") }), /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "worldline-scope-note", children: text("范围：当前会话 / 当前检查点", "Scope: current session / current checkpoint") })] }),
+      /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "worldline-editor-form", children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsx("input", { value: draft.title, onChange: (event) => setDraft((current) => ({ ...current, title: event.target.value })), placeholder: text("标题", "Title") }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx("textarea", { value: draft.body, onChange: (event) => setDraft((current) => ({ ...current, body: event.target.value })), placeholder: text("只写入玩家明确补充的事实或设定", "Only enter facts or canon explicitly supplied by the player") }),
+        /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "worldline-editor-fields", children: [/* @__PURE__ */ jsxRuntimeExports.jsx("input", { value: draft.gameDate, onChange: (event) => setDraft((current) => ({ ...current, gameDate: event.target.value })), placeholder: text("游戏日期（可选）", "Game date (optional)") }), /* @__PURE__ */ jsxRuntimeExports.jsx("input", { value: draft.dateRange, onChange: (event) => setDraft((current) => ({ ...current, dateRange: event.target.value })), placeholder: text("日期区间（可选）", "Date range (optional)") }), /* @__PURE__ */ jsxRuntimeExports.jsx("input", { value: draft.entities, onChange: (event) => setDraft((current) => ({ ...current, entities: event.target.value })), placeholder: text("实体，逗号分隔（可选）", "Entities, comma-separated (optional)") })] }),
+        /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "worldline-editor-controls", children: [/* @__PURE__ */ jsxRuntimeExports.jsxs("label", { children: [text("可见性", "Visibility"), /* @__PURE__ */ jsxRuntimeExports.jsxs("select", { value: draft.visibility, onChange: (event) => setDraft((current) => ({ ...current, visibility: event.target.value })), children: [/* @__PURE__ */ jsxRuntimeExports.jsx("option", { value: "PUBLIC_WORLD", children: "PUBLIC_WORLD" }), /* @__PURE__ */ jsxRuntimeExports.jsx("option", { value: "COURT_PUBLIC", children: "COURT_PUBLIC" }), /* @__PURE__ */ jsxRuntimeExports.jsx("option", { value: "PERSONAL", children: "PERSONAL" }), /* @__PURE__ */ jsxRuntimeExports.jsx("option", { value: "SECRET", children: "SECRET" })] })] }), /* @__PURE__ */ jsxRuntimeExports.jsxs("label", { children: [text("重要性", "Importance"), /* @__PURE__ */ jsxRuntimeExports.jsxs("select", { value: draft.importance, onChange: (event) => setDraft((current) => ({ ...current, importance: event.target.value })), children: [/* @__PURE__ */ jsxRuntimeExports.jsx("option", { value: "NORMAL", children: "NORMAL" }), /* @__PURE__ */ jsxRuntimeExports.jsx("option", { value: "HIGH", children: "HIGH" })] })] }), /* @__PURE__ */ jsxRuntimeExports.jsx("button", { type: "button", className: "primary-button", onClick: saveSupplemental, children: editingId ? text("更新", "Update") : text("添加", "Add") }), editingId && /* @__PURE__ */ jsxRuntimeExports.jsx("button", { type: "button", onClick: () => { setEditingId(null); setDraft({ title: "", body: "", gameDate: "", dateRange: "", entities: "", visibility: "PUBLIC_WORLD", importance: "NORMAL" }); }, children: text("取消编辑", "Cancel") })] })
+      ] }),
+      supplemental.length === 0 ? /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "worldline-empty", children: text("当前会话暂无补充知识。", "No supplemental knowledge in this session.") }) : /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "worldline-list", children: supplemental.map((item) => /* @__PURE__ */ jsxRuntimeExports.jsxs("article", { className: `worldline-row ${item.hidden ? "is-hidden" : ""}`, children: [/* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [/* @__PURE__ */ jsxRuntimeExports.jsx("strong", { children: display(item.title) }), /* @__PURE__ */ jsxRuntimeExports.jsx("p", { children: display(item.body) })] }), /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "worldline-source-tag supplemental", children: display(item.visibility) }), /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "worldline-row-actions", children: [/* @__PURE__ */ jsxRuntimeExports.jsx("button", { type: "button", onClick: () => editSupplemental(item), children: text("更新", "Update") }), /* @__PURE__ */ jsxRuntimeExports.jsx("button", { type: "button", onClick: () => hideSupplemental(item.id), children: item.hidden ? text("显示", "Show") : text("隐藏", "Hide") }), /* @__PURE__ */ jsxRuntimeExports.jsx("button", { type: "button", onClick: () => deleteSupplemental(item.id), children: text("删除", "Delete") })] })] }, item.id)) })
+    ] })
+  ] });
+}
 function ConfigPanel({ onClose }) {
   const { t } = useTranslation();
   const loadSettings = useConfigStore((state) => state.loadSettings);
@@ -22386,6 +22652,15 @@ function ConfigPanel({ onClose }) {
               children: "优化"
             }
           ),
+          /* @__PURE__ */ jsxRuntimeExports.jsx(
+            "button",
+            {
+              onClick: () => setCurrentTab("worldline"),
+              className: currentTab === "worldline" ? "active" : "",
+              style: { zIndex: 12 },
+              children: "世界线"
+            }
+          ),
           /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "court-theme-switcher", role: "group", "aria-label": "界面风格", children: [
             /* @__PURE__ */ jsxRuntimeExports.jsx(
               "button",
@@ -22429,7 +22704,8 @@ function ConfigPanel({ onClose }) {
           currentTab === "actions" && /* @__PURE__ */ jsxRuntimeExports.jsx(ActionsView, {}),
           currentTab === "prompts" && /* @__PURE__ */ jsxRuntimeExports.jsx(PromptsView, {}),
           currentTab === "summaries" && /* @__PURE__ */ jsxRuntimeExports.jsx(SummariesView, {}),
-          currentTab === "optimization" && /* @__PURE__ */ jsxRuntimeExports.jsx(OptimizationView, {})
+          currentTab === "optimization" && /* @__PURE__ */ jsxRuntimeExports.jsx(OptimizationView, {}),
+          currentTab === "worldline" && /* @__PURE__ */ jsxRuntimeExports.jsx(WorldlineView, {})
         ] }),
         /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "app-version", children: [
           "v",

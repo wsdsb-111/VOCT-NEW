@@ -1,0 +1,741 @@
+"use strict";
+
+const nodeCrypto = require("node:crypto");
+const nodeFs = require("fs");
+const nodePath = require("path");
+const { Worker: NodeWorker } = require("worker_threads");
+const { readSavePreamble } = require("./save-container");
+const { dateValue } = require("./game-state-adapter");
+
+const DEFAULT_SETTINGS = Object.freeze({
+  autosavePath: null,
+  autoWatchEnabled: true,
+  promptIntegrationEnabled: false,
+  lastValidatedAt: null,
+  lastValidationStatus: "UNCONFIGURED"
+});
+const VALID_VISIBILITY = new Set(["PUBLIC_WORLD", "COURT_PUBLIC", "PERSONAL", "SECRET"]);
+const VALID_IMPORTANCE = new Set(["NORMAL", "HIGH"]);
+const MAX_UI_BINDINGS = 500;
+const MAX_UI_DELTA = 1000;
+
+function clone(value) {
+  return value === undefined ? undefined : JSON.parse(JSON.stringify(value));
+}
+
+function nowIso(clock) {
+  return clock().toISOString();
+}
+
+function normalizeSettings(value) {
+  const settings = value && typeof value === "object" && !Array.isArray(value) ? value : {};
+  return {
+    autosavePath: typeof settings.autosavePath === "string" && settings.autosavePath ? settings.autosavePath : null,
+    autoWatchEnabled: settings.autoWatchEnabled !== false,
+    promptIntegrationEnabled: settings.promptIntegrationEnabled === true,
+    lastValidatedAt: typeof settings.lastValidatedAt === "string" ? settings.lastValidatedAt : null,
+    lastValidationStatus: typeof settings.lastValidationStatus === "string" ? settings.lastValidationStatus : "UNCONFIGURED"
+  };
+}
+
+function checkpointId(snapshot) {
+  return nodeCrypto.createHash("sha256").update(`${snapshot.playthroughId || "UNKNOWN"}|${snapshot.gameDate || "UNKNOWN"}|${snapshot.contentFingerprint || "UNKNOWN"}`).digest("hex").slice(0, 24);
+}
+
+function formatCharacter(snapshot, id) {
+  if (!id) return null;
+  const character = snapshot.characters?.[String(id)];
+  return character?.firstName ? `${character.firstName} (#${id})` : `#${id}`;
+}
+
+function firstPlayerTitle(snapshot) {
+  const playerId = String(snapshot.playerId || "");
+  return Object.values(snapshot.titles || {}).find((title) => String(title.holder || "") === playerId) || null;
+}
+
+function latestHistoryHolder(title, afterDate, beforeDate) {
+  return (title.history || []).filter((entry) => entry.holder && (dateValue(entry.date) || 0) > (dateValue(afterDate) || 0) && (dateValue(entry.date) || 0) <= (dateValue(beforeDate) || Number.MAX_SAFE_INTEGER)).at(-1) || null;
+}
+
+function readTail(fs, filePath, maxBytes = 1024 * 1024) {
+  const stat = fs.statSync(filePath);
+  const fd = fs.openSync(filePath, "r");
+  try {
+    const size = Math.min(maxBytes, stat.size);
+    const buffer = Buffer.alloc(size);
+    fs.readSync(fd, buffer, 0, size, Math.max(0, stat.size - size));
+    return buffer.toString("utf8");
+  } finally {
+    fs.closeSync(fd);
+  }
+}
+
+function readLiveProbe({ fs, debugLogPath }) {
+  if (!debugLogPath || !fs.existsSync(debugLogPath)) return { connected: false, gameDate: null, totalDays: null, characters: [] };
+  try {
+    const text = readTail(fs, debugLogPath);
+    const inMatches = [...text.matchAll(/VOTC:IN\/;\/init\/;\/[^\r\n]*?\/;\/([^/\r\n]+)\/;\/[^/\r\n]*?\/;\/[^/\r\n]*?\/;\/(\d+)/g)];
+    const dateMatches = [...text.matchAll(/VOTC:TEST_DATE\/;\/([^/\r\n]+)\/;\/(?:days=)?(\d+)/g)];
+    const characterMatches = [...text.matchAll(/VOTC:TEST_CHAR\/;\/runtime=([^/\r\n]+)\/;\/history=([^/\r\n]*)\/;\/date=([^/\r\n]+)(?:\/;\/days=(\d+))?/g)];
+    const latestCharacterById = new Map();
+    for (const match of characterMatches) latestCharacterById.set(match[1].trim(), { runtimeId: match[1].trim(), historyId: match[2].trim() || null, gameDate: match[3].trim(), totalDays: match[4] ? Number(match[4]) : null });
+    const latestDate = dateMatches.at(-1);
+    const latestIn = inMatches.at(-1);
+    const latestCharacter = characterMatches.at(-1);
+    const markers = [
+      latestIn && { index: latestIn.index, gameDate: latestIn[1].trim(), totalDays: Number(latestIn[2]) },
+      latestDate && { index: latestDate.index, gameDate: latestDate[1].trim(), totalDays: Number(latestDate[2]) },
+      latestCharacter && { index: latestCharacter.index, gameDate: latestCharacter[3].trim(), totalDays: latestCharacter[4] ? Number(latestCharacter[4]) : null }
+    ].filter(Boolean).sort((left, right) => left.index - right.index);
+    const latestMarker = markers.at(-1) || null;
+    const latestDayMarker = markers.filter((marker) => Number.isFinite(marker.totalDays)).at(-1) || null;
+    return {
+      connected: markers.length > 0,
+      gameDate: latestMarker?.gameDate || null,
+      totalDays: latestDayMarker?.totalDays ?? null,
+      characters: [...latestCharacterById.values()]
+    };
+  } catch (_error) {
+    return { connected: false, gameDate: null, totalDays: null, characters: [] };
+  }
+}
+
+class WorldlineService {
+  constructor({ settingsRepository, dataDir, fs = nodeFs, path = nodePath, Worker = NodeWorker, dialog = null, clock = () => new Date(), stabilityDelayMs = 750, pollIntervalMs = 30000, workerTimeoutMs = 120000 } = {}) {
+    if (!settingsRepository || typeof settingsRepository.getWorldlineSettings !== "function" || typeof settingsRepository.saveWorldlineSettings !== "function") throw new Error("worldline_settings_repository_required");
+    if (typeof dataDir !== "string" || !dataDir) throw new Error("worldline_data_dir_required");
+    this.settingsRepository = settingsRepository;
+    this.dataDir = dataDir;
+    this.fs = fs;
+    this.path = path;
+    this.Worker = Worker;
+    this.dialog = dialog;
+    this.clock = clock;
+    this.stabilityDelayMs = stabilityDelayMs;
+    this.pollIntervalMs = pollIntervalMs;
+    this.workerTimeoutMs = workerTimeoutMs;
+    this.storageDir = path.join(dataDir, "worldline-v8.4");
+    this.checkpointPath = path.join(this.storageDir, "checkpoint.json");
+    this.supplementalPath = path.join(this.storageDir, "supplemental.json");
+    this.currentCheckpoint = null;
+    this.annualDelta = [];
+    this.supplemental = [];
+    this.lastError = null;
+    this.buildState = "UNCONFIGURED";
+    this.watcher = null;
+    this.poller = null;
+    this.pendingRefresh = null;
+    this.buildPromise = null;
+    this.lastObservedFile = null;
+    this.worldKnowledgeState = {
+      stableRecallCache: new Map(),
+      topicPatchCache: new Map(),
+      turnRecallCache: new Map(),
+      checkpointId: null,
+      deltaRevision: 0,
+      supplementalRevision: 0
+    };
+    this.liveCache = { key: null, value: null };
+    this.stateListener = null;
+    this._loadPersistedState();
+    const configuredPath = this._settings().autosavePath;
+    if (this.currentCheckpoint?.source?.path && (!configuredPath || this.path.resolve(this.currentCheckpoint.source.path).toLowerCase() !== this.path.resolve(configuredPath).toLowerCase())) {
+      this.currentCheckpoint = null;
+      this.buildState = "UNCONFIGURED";
+    }
+  }
+
+  _settings() {
+    return normalizeSettings(this.settingsRepository.getWorldlineSettings());
+  }
+
+  setStateListener(listener) {
+    this.stateListener = typeof listener === "function" ? listener : null;
+  }
+
+  _notifyStateChanged(reason) {
+    try {
+      this.stateListener?.({ reason, checkpointId: this.currentCheckpoint?.id || null, checkpointState: this.buildState, validationStatus: this._settings().lastValidationStatus });
+    } catch (_error) {
+      // Renderer updates are best-effort and must not affect checkpoint durability.
+    }
+  }
+
+  _samePath(left, right) {
+    if (!left || !right) return left === right;
+    return this.path.resolve(left).toLowerCase() === this.path.resolve(right).toLowerCase();
+  }
+
+  _defaultAutosavePath(ck3Folder) {
+    return ck3Folder ? this.path.join(ck3Folder, "save games", "autosave.ck3") : null;
+  }
+
+  _saveSettings(next) {
+    const normalized = normalizeSettings(next);
+    this.settingsRepository.saveWorldlineSettings(normalized);
+    return normalized;
+  }
+
+  _atomicWrite(filePath, value) {
+    this.fs.mkdirSync(this.path.dirname(filePath), { recursive: true });
+    const temporary = `${filePath}.${process.pid}.${Date.now()}.tmp`;
+    this.fs.writeFileSync(temporary, JSON.stringify(value), "utf8");
+    this.fs.renameSync(temporary, filePath);
+  }
+
+  _loadJson(filePath, fallback) {
+    try {
+      if (!this.fs.existsSync(filePath)) return fallback;
+      return JSON.parse(this.fs.readFileSync(filePath, "utf8"));
+    } catch (_error) {
+      return fallback;
+    }
+  }
+
+  _loadPersistedState() {
+    const checkpointState = this._loadJson(this.checkpointPath, null);
+    if (checkpointState?.schemaVersion === 1 && checkpointState.currentCheckpoint?.snapshot) {
+      this.currentCheckpoint = checkpointState.currentCheckpoint;
+      const campaignId = checkpointState.currentCheckpoint.snapshot.playthroughId || null;
+      this.annualDelta = Array.isArray(checkpointState.annualDelta) ? checkpointState.annualDelta.map((entry) => entry.campaignId === undefined ? { ...entry, campaignId, checkpointId: checkpointState.currentCheckpoint.id } : entry) : [];
+      this.buildState = "STALE";
+    }
+    const supplementalState = this._loadJson(this.supplementalPath, null);
+    this.supplemental = supplementalState?.schemaVersion === 1 && Array.isArray(supplementalState.entries) ? supplementalState.entries : [];
+  }
+
+  _persistCheckpoint(currentCheckpoint = this.currentCheckpoint, annualDelta = this.annualDelta) {
+    this._atomicWrite(this.checkpointPath, { schemaVersion: 1, currentCheckpoint, annualDelta });
+  }
+
+  _persistSupplemental(entries = this.supplemental) {
+    this._atomicWrite(this.supplementalPath, { schemaVersion: 1, entries });
+  }
+
+  getSettings() {
+    const checkpoint = this.currentCheckpoint;
+    return {
+      ...this._settings(),
+      fileSize: checkpoint?.source?.fileSize || null,
+      modifiedAt: checkpoint?.source?.modifiedAt || null,
+      container: checkpoint?.source?.container || null,
+      gameDate: checkpoint?.snapshot?.gameDate || null,
+      lastParsedAt: checkpoint?.builtAt || null,
+      checkpointId: checkpoint?.id || null
+    };
+  }
+
+  setAutosavePath(candidatePath) {
+    if (candidatePath !== null && (typeof candidatePath !== "string" || !candidatePath.trim())) throw new Error("worldline_autosave_path_invalid");
+    const settings = this._settings();
+    const autosavePath = candidatePath === null ? null : this.path.resolve(candidatePath.trim());
+    const sourceChanged = String(settings.autosavePath || "").toLowerCase() !== String(autosavePath || "").toLowerCase();
+    const next = this._saveSettings({ ...settings, autosavePath, lastValidationStatus: autosavePath ? "UNCONFIGURED" : "UNCONFIGURED", lastValidatedAt: null });
+    this.stopWatcher();
+    if (sourceChanged) {
+      this.currentCheckpoint = null;
+      this.buildState = "UNCONFIGURED";
+      this.lastObservedFile = null;
+      this.worldKnowledgeState.stableRecallCache.clear();
+      this.worldKnowledgeState.topicPatchCache.clear();
+      this.worldKnowledgeState.turnRecallCache.clear();
+      this.worldKnowledgeState.checkpointId = null;
+    }
+    this.startWatcher();
+    this._notifyStateChanged("source_changed");
+    return next;
+  }
+
+  async syncAutosaveFromCK3Folder(previousFolder = null) {
+    const settings = this._settings();
+    const currentFolder = this.settingsRepository.getCK3UserFolderPath?.() || null;
+    const previousDefault = this._defaultAutosavePath(previousFolder);
+    const currentIsManaged = !settings.autosavePath || !!previousDefault && this._samePath(settings.autosavePath, previousDefault);
+    if (!currentIsManaged) return { success: true, preservedExplicitSource: true, settings: this.getSettings() };
+    const candidate = this._defaultAutosavePath(currentFolder);
+    if (!this._samePath(settings.autosavePath, candidate)) this.setAutosavePath(candidate);
+    if (!candidate) {
+      this.buildState = "UNCONFIGURED";
+      this._notifyStateChanged("source_unconfigured");
+      return { success: false, error: "ck3_user_folder_unconfigured", settings: this.getSettings() };
+    }
+    return this.rebuildCheckpoint();
+  }
+
+  validateAutosavePath(candidatePath = null) {
+    const settings = candidatePath === null ? this._settings() : this.setAutosavePath(candidatePath);
+    const target = settings.autosavePath;
+    const validatedAt = nowIso(this.clock);
+    let validationStatus = "VALID";
+    let manualDiagnostic = false;
+    let details = {};
+    try {
+      if (!target || !this.fs.existsSync(target)) validationStatus = "NOT_FOUND";
+      else {
+        const stat = this.fs.statSync(target);
+        if (!stat.isFile()) validationStatus = "NOT_FOUND";
+        else if (this.path.extname(target).toLowerCase() !== ".ck3") validationStatus = "NOT_AUTOSAVE";
+        else {
+          const preamble = readSavePreamble(target, { fs: this.fs });
+          const baseName = this.path.basename(target).toLowerCase();
+          if (!["PLAIN_TEXT_SAVE", "UNIFIED_TEXT_ZIP"].includes(preamble.containerKind)) validationStatus = "UNSUPPORTED_CONTAINER";
+          else {
+            validationStatus = baseName === "autosave.ck3" ? "VALID" : "NOT_AUTOSAVE";
+            manualDiagnostic = validationStatus === "NOT_AUTOSAVE";
+          }
+          details = { fileSize: stat.size, modifiedAt: stat.mtime.toISOString(), container: preamble.containerKind, metadataGameDate: preamble.metadata.metaDate };
+        }
+      }
+    } catch (error) {
+      validationStatus = /unsupported|binary/i.test(error.message) ? "UNSUPPORTED_CONTAINER" : "READ_ERROR";
+      details = { error: error.message };
+    }
+    const next = this._saveSettings({ ...settings, lastValidationStatus: validationStatus, lastValidatedAt: validatedAt });
+    this.stopWatcher();
+    this.startWatcher();
+    this._notifyStateChanged("source_validated");
+    return { success: validationStatus === "VALID" || manualDiagnostic, settings: next, validationStatus, ...details, manualDiagnostic };
+  }
+
+  async selectAutosaveFile() {
+    if (!this.dialog || typeof this.dialog.showOpenDialog !== "function") return null;
+    const result = await this.dialog.showOpenDialog({ properties: ["openFile"], filters: [{ name: "CK3 Save", extensions: ["ck3"] }] });
+    if (result.canceled || !result.filePaths?.[0]) return null;
+    return { path: result.filePaths[0] };
+  }
+
+  async _fileIsStable(savePath) {
+    const first = this.fs.statSync(savePath);
+    await new Promise((resolve) => setTimeout(resolve, this.stabilityDelayMs));
+    const second = this.fs.statSync(savePath);
+    return first.size === second.size && first.mtimeMs === second.mtimeMs && second.size > 0;
+  }
+
+  _runWorker(savePath) {
+    const workerPath = this.path.join(__dirname, "parser-worker.js");
+    return new Promise((resolve, reject) => {
+      const worker = new this.Worker(workerPath, { workerData: { savePath }, resourceLimits: { maxOldGenerationSizeMb: 1536 } });
+      let settled = false;
+      const timeout = setTimeout(() => {
+        worker.terminate();
+        finish(reject, new Error("worldline_worker_timeout"));
+      }, this.workerTimeoutMs);
+      timeout.unref?.();
+      const finish = (handler, value) => {
+        if (settled) return;
+        settled = true;
+        clearTimeout(timeout);
+        handler(value);
+      };
+      worker.once("message", (message) => finish(resolve, message));
+      worker.once("error", (error) => finish(reject, error));
+      worker.once("exit", (code) => {
+        if (code !== 0) finish(reject, new Error(`worldline_worker_exit_${code}`));
+      });
+    });
+  }
+
+  _delta(previous, next) {
+    if (!previous) return [];
+    const entries = [];
+    const previousSnapshot = previous.snapshot;
+    const nextSnapshot = next.snapshot;
+    const fromDate = previousSnapshot.gameDate;
+    const toDate = nextSnapshot.gameDate;
+    if (!fromDate || !toDate || (dateValue(toDate) || 0) <= (dateValue(fromDate) || 0)) return [];
+    for (const [id, oldCharacter] of Object.entries(previousSnapshot.characters || {})) {
+      const currentCharacter = nextSnapshot.characters?.[id];
+      if (oldCharacter.alive && currentCharacter && !currentCharacter.alive) entries.push({ id: `death:${id}:${toDate}`, type: "IMPORTANT_CHARACTER_DIED", date: currentCharacter.deathDate || toDate, actors: [id], source: "GAMESTATE", confidence: "CONFIRMED", reconciliationStatus: "CONFIRMED_BY_GAMESTATE" });
+    }
+    for (const [id, currentWar] of Object.entries(nextSnapshot.wars || {})) {
+      if (previousSnapshot.wars?.[id]) continue;
+      const startedInWindow = (dateValue(currentWar.startDate) || 0) > (dateValue(fromDate) || 0) && (dateValue(currentWar.startDate) || 0) <= (dateValue(toDate) || Number.MAX_SAFE_INTEGER);
+      entries.push({ id: `war-start:${id}:${toDate}`, type: "WAR_STARTED", date: currentWar.startDate || toDate, actors: [...(currentWar.attacker || []), ...(currentWar.defender || [])], source: "GAMESTATE", confidence: startedInWindow ? "CONFIRMED" : "PARTIAL", reconciliationStatus: startedInWindow ? "CONFIRMED_BY_GAMESTATE" : "RECONCILIATION_UNKNOWN" });
+    }
+    for (const [id, previousWar] of Object.entries(previousSnapshot.wars || {})) {
+      if (nextSnapshot.wars?.[id]) continue;
+      entries.push({ id: `war-missing:${id}:${toDate}`, type: "WAR_ENDED", date: toDate, actors: [...(previousWar.attacker || []), ...(previousWar.defender || [])], source: "SUPPLEMENTAL", confidence: "UNKNOWN", reconciliationStatus: "PROMOTED_TO_SUPPLEMENTAL", detail: "War is absent from the next active-war list; no end date or result was inferred." });
+    }
+    for (const [id, previousTitle] of Object.entries(previousSnapshot.titles || {})) {
+      const currentTitle = nextSnapshot.titles?.[id];
+      if (!currentTitle || String(previousTitle.holder || "") === String(currentTitle.holder || "")) continue;
+      const history = latestHistoryHolder(currentTitle, fromDate, toDate);
+      entries.push({ id: `title-holder:${id}:${toDate}`, type: "TITLE_HOLDER_CHANGED", date: history?.date || toDate, actors: [previousTitle.holder, currentTitle.holder].filter(Boolean), source: history ? "GAMESTATE" : "SUPPLEMENTAL", confidence: history ? "CONFIRMED" : "PARTIAL", reconciliationStatus: history ? "CONFIRMED_BY_GAMESTATE" : "PROMOTED_TO_SUPPLEMENTAL", titleId: id, detail: history ? null : "Current holder changed without history evidence in the checkpoint window." });
+    }
+    return entries.map((entry) => ({ ...entry, campaignId: nextSnapshot.playthroughId || null, checkpointId: next.id }));
+  }
+
+  async rebuildCheckpoint() {
+    if (this.buildPromise) return this.buildPromise;
+    const settings = this._settings();
+    if (!settings.autosavePath) return { success: false, error: "autosave_path_not_configured" };
+    this.buildPromise = (async () => {
+      const validation = this.validateAutosavePath();
+      if (!validation.success) {
+        this.lastError = validation.validationStatus;
+        this.buildState = this.currentCheckpoint ? "STALE" : "FAILED";
+        this._notifyStateChanged("checkpoint_failed");
+        return { success: false, error: validation.validationStatus };
+      }
+      try {
+        if (!await this._fileIsStable(settings.autosavePath)) {
+          this.lastError = "save_write_in_progress";
+          this.buildState = this.currentCheckpoint ? "STALE" : "FAILED";
+          this._notifyStateChanged("checkpoint_deferred");
+          return { success: false, error: this.lastError };
+        }
+        this.buildState = "BUILDING";
+        this._notifyStateChanged("checkpoint_building");
+        const parsed = await this._runWorker(settings.autosavePath);
+        if (!parsed?.success) throw new Error(parsed?.error || "worldline_parse_failed");
+        if (!parsed.snapshot?.gameDate) throw new Error("gamestate_date_missing");
+        const candidate = {
+          id: checkpointId(parsed.snapshot),
+          state: "ACTIVE",
+          builtAt: nowIso(this.clock),
+          source: parsed.source,
+          snapshot: parsed.snapshot,
+          diagnostics: parsed.diagnostics
+        };
+        const previous = this.currentCheckpoint;
+        const sameCampaign = previous?.snapshot?.playthroughId && candidate.snapshot.playthroughId && previous.snapshot.playthroughId === candidate.snapshot.playthroughId;
+        const delta = validation.manualDiagnostic || !sameCampaign ? [] : this._delta(previous, candidate);
+        const nextAnnualDelta = [...this.annualDelta, ...delta];
+        this._persistCheckpoint(candidate, nextAnnualDelta);
+        this.currentCheckpoint = candidate;
+        this.annualDelta = nextAnnualDelta;
+        this.worldKnowledgeState.stableRecallCache.clear();
+        this.worldKnowledgeState.topicPatchCache.clear();
+        this.worldKnowledgeState.turnRecallCache.clear();
+        this.worldKnowledgeState.checkpointId = candidate.id;
+        this.worldKnowledgeState.deltaRevision = this.annualDelta.length;
+        this.lastError = null;
+        this.buildState = "ACTIVE";
+        try {
+          const activeStat = this.fs.statSync(settings.autosavePath);
+          this.lastObservedFile = `${activeStat.size}:${activeStat.mtimeMs}`;
+        } catch (_error) {
+          this.lastObservedFile = null;
+        }
+        this._notifyStateChanged("checkpoint_active");
+        return { success: true, checkpoint: this.getCheckpointStatus().checkpoint, deltaAdded: delta.length };
+      } catch (error) {
+        this.lastError = error.message || "worldline_parse_failed";
+        this.buildState = this.currentCheckpoint ? "STALE" : "FAILED";
+        this._notifyStateChanged("checkpoint_failed");
+        return { success: false, error: this.lastError };
+      }
+    })();
+    try {
+      return await this.buildPromise;
+    } finally {
+      this.buildPromise = null;
+    }
+  }
+
+  getCheckpointStatus() {
+    const checkpoint = this.currentCheckpoint;
+    const snapshot = checkpoint?.snapshot;
+    const bindings = Object.keys(snapshot?.definitionToRuntime || {}).length;
+    return {
+      checkpoint: {
+        id: checkpoint?.id || null,
+        checkpointId: checkpoint?.id || null,
+        status: this.buildState,
+        state: this.buildState,
+        gameDate: snapshot?.gameDate || null,
+        totalDays: this.getLiveState().totalDays || null,
+        container: checkpoint?.source?.container || null,
+        fileSize: checkpoint?.source?.fileSize || null,
+        characters: snapshot?.diagnostics?.characterCount || 0,
+        titles: snapshot?.diagnostics?.titleCount || 0,
+        activeWars: snapshot?.diagnostics?.activeWarCount || 0,
+        historicalBindings: bindings,
+        parseDurationMs: checkpoint?.diagnostics?.parseDurationMs || null,
+        lastParseDuration: checkpoint?.diagnostics?.parseDurationMs || null,
+        freshness: checkpoint ? this.buildState === "ACTIVE" ? "FRESH" : "STALE" : "UNAVAILABLE",
+        lastError: this.lastError
+      }
+    };
+  }
+
+  getLiveState() {
+    const debugLogPath = this.settingsRepository.getCK3DebugLogPath?.() || null;
+    try {
+      const stat = debugLogPath ? this.fs.statSync(debugLogPath) : null;
+      const key = stat ? `${debugLogPath}:${stat.size}:${stat.mtimeMs}` : String(debugLogPath || "unconfigured");
+      if (this.liveCache.key === key && this.liveCache.value) return clone(this.liveCache.value);
+      const value = readLiveProbe({ fs: this.fs, debugLogPath });
+      this.liveCache = { key, value };
+      return clone(value);
+    } catch (_error) {
+      return { connected: false, gameDate: null, totalDays: null, characters: [] };
+    }
+  }
+
+  getOverview() {
+    const snapshot = this.currentCheckpoint?.snapshot;
+    const live = this.getLiveState();
+    const title = snapshot ? firstPlayerTitle(snapshot) : null;
+    const realmTitle = snapshot ? Object.values(snapshot.titles || {}).find((item) => /^(e|k)_/.test(item.key || "") && item.holder) : null;
+    return {
+      overview: {
+        currentPlayer: snapshot ? formatCharacter(snapshot, snapshot.playerId) : null,
+        primaryTitle: title?.key || null,
+        currentRuler: realmTitle ? formatCharacter(snapshot, realmTitle.holder) : null,
+        importantWars: snapshot?.diagnostics?.activeWarCount ?? null,
+        historicalBindingStatus: snapshot ? `${Object.keys(snapshot.definitionToRuntime || {}).length} DIRECT` : null,
+        freshness: this.getCheckpointStatus().checkpoint.freshness,
+        deltaPending: this._currentCampaignDelta().filter((entry) => entry.reconciliationStatus === "PENDING" || entry.reconciliationStatus === "RECONCILIATION_UNKNOWN").length,
+        supplementalCount: this.listSupplemental().supplemental.length,
+        liveGameDate: live.gameDate,
+        liveConnected: live.connected
+      }
+    };
+  }
+
+  getAnnualDelta() {
+    const sorted = clone(this._currentCampaignDelta()).sort((left, right) => (dateValue(right.date) || 0) - (dateValue(left.date) || 0));
+    return { annualDelta: sorted.slice(0, MAX_UI_DELTA), total: sorted.length, truncated: sorted.length > MAX_UI_DELTA };
+  }
+
+  _currentCampaignDelta() {
+    const campaignId = this.currentCheckpoint?.snapshot?.playthroughId || null;
+    return this.annualDelta.filter((entry) => (entry.campaignId || null) === campaignId);
+  }
+
+  getHistoricalBindings() {
+    const snapshot = this.currentCheckpoint?.snapshot;
+    if (!snapshot) return { bindings: [], total: 0 };
+    const liveByRuntime = new Map(this.getLiveState().characters.map((item) => [String(item.runtimeId), item]));
+    const bindings = Object.entries(snapshot.definitionToRuntime || {}).sort(([left], [right]) => left.localeCompare(right)).slice(0, MAX_UI_BINDINGS).map(([definitionId, runtimeId]) => {
+      const live = liveByRuntime.get(String(runtimeId));
+      const exactLiveMatch = live?.historyId === definitionId;
+      const provenance = snapshot.runtimeToDefinitions?.[String(runtimeId)] || [];
+      const ambiguous = provenance.length > 1;
+      const liveConflict = !!live?.historyId && !exactLiveMatch;
+      return {
+        figureKey: definitionId,
+        definitionId,
+        sourceMod: null,
+        runtimeId: String(runtimeId),
+        liveHistoryId: live?.historyId || null,
+        status: ambiguous ? "AMBIGUOUS_PROVENANCE" : liveConflict ? "CONFLICT" : exactLiveMatch ? "LIVE_CONFIRMED" : "DIRECT",
+        conflict: ambiguous ? `MULTIPLE_DEFINITIONS:${provenance.join(",")}` : liveConflict ? "LIVE_CONFLICT" : null
+      };
+    });
+    return { bindings, total: Object.keys(snapshot.definitionToRuntime || {}).length, truncated: Object.keys(snapshot.definitionToRuntime || {}).length > MAX_UI_BINDINGS };
+  }
+
+  listSupplemental() {
+    const checkpointId2 = this.currentCheckpoint?.id || null;
+    return { supplemental: clone(this.supplemental.filter((item) => item.checkpointId === checkpointId2)) };
+  }
+
+  _validateSupplemental(payload) {
+    if (!payload || typeof payload !== "object" || Array.isArray(payload)) throw new Error("supplemental_payload_invalid");
+    if (typeof payload.title !== "string" || !payload.title.trim() || payload.title.length > 160) throw new Error("supplemental_title_invalid");
+    if (typeof payload.body !== "string" || !payload.body.trim() || payload.body.length > 12000) throw new Error("supplemental_body_invalid");
+    if (!VALID_VISIBILITY.has(payload.visibility || "PUBLIC_WORLD")) throw new Error("supplemental_visibility_invalid");
+    if (!VALID_IMPORTANCE.has(payload.importance || "NORMAL")) throw new Error("supplemental_importance_invalid");
+    return {
+      title: payload.title.trim(),
+      body: payload.body.trim(),
+      gameDate: typeof payload.gameDate === "string" && payload.gameDate ? payload.gameDate : null,
+      dateRange: typeof payload.dateRange === "string" && payload.dateRange ? payload.dateRange : null,
+      entities: Array.isArray(payload.entities) ? payload.entities.filter((item) => typeof item === "string" && item).slice(0, 32) : [],
+      visibility: payload.visibility || "PUBLIC_WORLD",
+      importance: payload.importance || "NORMAL",
+      hidden: typeof payload.hidden === "boolean" ? payload.hidden : undefined
+    };
+  }
+
+  _invalidateSupplementalRecall() {
+    this.worldKnowledgeState.supplementalRevision += 1;
+    this.worldKnowledgeState.topicPatchCache.clear();
+    this.worldKnowledgeState.turnRecallCache.clear();
+  }
+
+  createSupplemental(payload) {
+    if (!this.currentCheckpoint) throw new Error("supplemental_checkpoint_unavailable");
+    const entry = {
+      id: nodeCrypto.randomUUID(),
+      ...this._validateSupplemental(payload),
+      source: "PLAYER_CANON",
+      scope: "CHECKPOINT",
+      checkpointScope: "CURRENT_CHECKPOINT",
+      checkpointId: this.currentCheckpoint.id,
+      createdAt: nowIso(this.clock),
+      updatedAt: nowIso(this.clock),
+      hidden: false
+    };
+    const nextEntries = [...this.supplemental, entry];
+    this._persistSupplemental(nextEntries);
+    this.supplemental = nextEntries;
+    this._invalidateSupplementalRecall();
+    this._notifyStateChanged("supplemental_created");
+    return { supplemental: clone(entry) };
+  }
+
+  updateSupplemental(id, payload) {
+    const index = this.supplemental.findIndex((item) => item.id === id && item.checkpointId === this.currentCheckpoint?.id);
+    if (index < 0) throw new Error("supplemental_not_found");
+    const current = this.supplemental[index];
+    const validated = this._validateSupplemental(payload);
+    const next = { ...current, ...validated, hidden: typeof validated.hidden === "boolean" ? validated.hidden : current.hidden, updatedAt: nowIso(this.clock) };
+    const nextEntries = this.supplemental.slice();
+    nextEntries[index] = next;
+    this._persistSupplemental(nextEntries);
+    this.supplemental = nextEntries;
+    this._invalidateSupplementalRecall();
+    this._notifyStateChanged("supplemental_updated");
+    return { supplemental: clone(next) };
+  }
+
+  deleteSupplemental(id) {
+    const index = this.supplemental.findIndex((item) => item.id === id && item.checkpointId === this.currentCheckpoint?.id);
+    if (index < 0) throw new Error("supplemental_not_found");
+    const deleted = this.supplemental[index];
+    const nextEntries = this.supplemental.filter((_item, entryIndex) => entryIndex !== index);
+    this._persistSupplemental(nextEntries);
+    this.supplemental = nextEntries;
+    this._invalidateSupplementalRecall();
+    this._notifyStateChanged("supplemental_deleted");
+    return { success: true, deletedId: deleted.id };
+  }
+
+  getWorldKnowledge() {
+    const snapshot = this.currentCheckpoint?.snapshot;
+    const facts = snapshot ? [
+      { id: "game-date", title: "Game Date", value: snapshot.gameDate, source: "Game Truth" },
+      { id: "player", title: "Current Player", value: formatCharacter(snapshot, snapshot.playerId), source: "Game Truth" },
+      { id: "primary-title", title: "Primary Title", value: firstPlayerTitle(snapshot)?.key || null, source: "Game Truth" },
+      { id: "active-wars", title: "Active Wars", value: String(snapshot.diagnostics?.activeWarCount || 0), source: "Game Truth" }
+    ] : [];
+    const supplemental = this.listSupplemental().supplemental.map((item) => ({ id: item.id, title: item.title, body: item.body, source: item.source, visibility: item.visibility, hidden: item.hidden }));
+    return { worldKnowledge: [...facts, ...supplemental] };
+  }
+
+  getPromptContext({ query = "", assistContext = "" } = {}) {
+    const settings = this._settings();
+    const sourceMatches = settings.autosavePath && this.currentCheckpoint?.source?.path && this.path.resolve(settings.autosavePath).toLowerCase() === this.path.resolve(this.currentCheckpoint.source.path).toLowerCase();
+    if (!settings.promptIntegrationEnabled || settings.lastValidationStatus !== "VALID" || this.buildState !== "ACTIVE" || !sourceMatches || this.path.basename(settings.autosavePath).toLowerCase() !== "autosave.ck3" || !this.currentCheckpoint?.snapshot) return null;
+    try {
+      const snapshot = this.currentCheckpoint.snapshot;
+      const checkpointId2 = this.currentCheckpoint.id;
+      if (this.worldKnowledgeState.checkpointId !== checkpointId2) {
+        this.worldKnowledgeState.stableRecallCache.clear();
+        this.worldKnowledgeState.topicPatchCache.clear();
+        this.worldKnowledgeState.turnRecallCache.clear();
+        this.worldKnowledgeState.checkpointId = checkpointId2;
+      }
+      let stableText = this.worldKnowledgeState.stableRecallCache.get(checkpointId2);
+      if (!stableText) {
+        stableText = `=== 世界知识：已确认 Checkpoint（只读 CK3 事实） ===\n- Checkpoint 日期：${snapshot.gameDate}\n- 当前玩家：${formatCharacter(snapshot, snapshot.playerId) || "未知"}\n- 已索引角色：${snapshot.diagnostics?.characterCount || 0}\n- 活跃战争：${snapshot.diagnostics?.activeWarCount || 0}\n此区块是年度存档事实；它不能被玩家 Canon 或 Supplemental 文本覆盖。`;
+        this.worldKnowledgeState.stableRecallCache.set(checkpointId2, stableText);
+      }
+      const normalizedQuery = `${query}\n${assistContext}`.toLocaleLowerCase().trim();
+      const queryFingerprint = nodeCrypto.createHash("sha256").update(normalizedQuery || "empty", "utf8").digest("hex").slice(0, 16);
+      const cacheKey = `${checkpointId2}:${this.annualDelta.length}:${this.worldKnowledgeState.supplementalRevision}:${queryFingerprint}`;
+      const cached = this.worldKnowledgeState.topicPatchCache.get(cacheKey);
+      if (cached) return { ...cached, stableText, cacheHit: true };
+      const terms = [...new Set((normalizedQuery.match(/[\p{L}\p{N}_-]{2,}/gu) || []).slice(0, 24))];
+      const matches = (value) => terms.length > 0 && terms.some((term) => String(value || "").toLocaleLowerCase().includes(term));
+      const topicFacts = Object.values(snapshot.characters || {}).filter((character) => matches(`${character.firstName} ${character.id}`)).slice(0, 4).map((character) => `- ${formatCharacter(snapshot, character.id)}：${character.alive ? "存活" : "已死亡"}${character.location ? `；位置 ${character.location}` : ""}`);
+      const supplemental = this.listSupplemental().supplemental.filter((entry) => !entry.hidden && entry.visibility === "PUBLIC_WORLD" && matches(`${entry.title}\n${entry.body}\n${entry.entities.join(" ")}`)).slice(0, 3);
+      const currentDelta = this._currentCampaignDelta().slice(-8).filter((entry) => entry.source === "GAMESTATE").slice(-3).map((entry) => `- ${entry.type}（${entry.date || "日期未知"}）`);
+      const live = this.getLiveState();
+      const context = {
+        topicText: topicFacts.length ? `=== 与当前话题相关的 CK3 世界事实 ===\n${topicFacts.join("\n")}` : null,
+        supplementalText: supplemental.length ? `=== 公开 Supplemental 世界知识（叙事来源） ===\n以下内容不能覆盖、修正或否定任何当前 Live、GameState、角色自身资料或场景直接事实；发生冲突时必须忽略冲突的 Supplemental 主张。\n${supplemental.map((entry) => `- ${entry.title}：${entry.body}`).join("\n")}` : null,
+        currentText: `=== 当前世界视图 ===\n- 当前日期：${live.gameDate || snapshot.gameDate}\n${currentDelta.length ? `${currentDelta.join("\n")}\n` : ""}当前实时信息优先于年度 Checkpoint；缺失实时信息时仅可使用 Checkpoint。`,
+        queryFingerprint,
+        cacheHit: false
+      };
+      this.worldKnowledgeState.topicPatchCache.set(cacheKey, context);
+      return { ...context, stableText };
+    } catch (_error) {
+      return null;
+    }
+  }
+
+  getDiagnostics() {
+    const settings = this._settings();
+    return {
+      diagnostics: {
+        savePath: settings.autosavePath,
+        validationStatus: settings.lastValidationStatus,
+        lastValidatedAt: settings.lastValidatedAt,
+        watcherStatus: this.watcher ? "WATCHING" : settings.autoWatchEnabled ? "IDLE" : "DISABLED",
+        parserState: this.buildState,
+        container: this.currentCheckpoint?.source?.container || null,
+        parseDurationMs: this.currentCheckpoint?.diagnostics?.parseDurationMs || null,
+        checkpointId: this.currentCheckpoint?.id || null,
+        checkpointGameDate: this.currentCheckpoint?.snapshot?.gameDate || null,
+        deltaRevision: this._currentCampaignDelta().length,
+        deltaStoredTotal: this.annualDelta.length,
+        catalogStatus: "NOT_CONNECTED",
+        branchStatus: "UNKNOWN_WITHOUT_SAVE_AB_GATE",
+        lastError: this.lastError
+      }
+    };
+  }
+
+  _scheduleRefresh() {
+    if (this.pendingRefresh) clearTimeout(this.pendingRefresh);
+    this.pendingRefresh = setTimeout(async () => {
+      this.pendingRefresh = null;
+      const settings = this._settings();
+      try {
+        const previousLiveKey = this.liveCache.key;
+        this.getLiveState();
+        if (previousLiveKey !== null && this.liveCache.key !== previousLiveKey) this._notifyStateChanged("live_updated");
+        const stat = this.fs.statSync(settings.autosavePath);
+        const nextObserved = `${stat.size}:${stat.mtimeMs}`;
+        if (nextObserved === this.lastObservedFile) return;
+        const result = await this.rebuildCheckpoint();
+        if (result?.success) this.lastObservedFile = nextObserved;
+      } catch (_error) {
+        this.lastError = "autosave_watch_read_failed";
+        this._notifyStateChanged("watcher_failed");
+      }
+    }, 500);
+  }
+
+  startWatcher() {
+    const settings = this._settings();
+    if (!settings.autoWatchEnabled || settings.lastValidationStatus !== "VALID" || !settings.autosavePath || this.path.basename(settings.autosavePath).toLowerCase() !== "autosave.ck3" || this.watcher) return;
+    try {
+      const directory = this.path.dirname(settings.autosavePath);
+      const baseName = this.path.basename(settings.autosavePath);
+      this.watcher = this.fs.watch(directory, (_event, fileName) => {
+        if (!fileName || String(fileName).toLowerCase() === baseName.toLowerCase()) this._scheduleRefresh();
+      });
+      this.poller = setInterval(() => this._scheduleRefresh(), this.pollIntervalMs);
+      this.poller.unref?.();
+    } catch (_error) {
+      this.lastError = "autosave_watcher_unavailable";
+    }
+  }
+
+  stopWatcher() {
+    if (this.pendingRefresh) clearTimeout(this.pendingRefresh);
+    if (this.watcher) this.watcher.close();
+    if (this.poller) clearInterval(this.poller);
+    this.pendingRefresh = null;
+    this.watcher = null;
+    this.poller = null;
+  }
+
+  async start() {
+    const settings = this._settings();
+    if (!settings.autosavePath) return this.syncAutosaveFromCK3Folder();
+    return this.rebuildCheckpoint();
+  }
+
+  dispose() {
+    this.stopWatcher();
+  }
+}
+
+module.exports = { DEFAULT_SETTINGS, WorldlineService, normalizeSettings, readLiveProbe };

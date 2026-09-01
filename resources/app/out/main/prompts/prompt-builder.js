@@ -488,6 +488,14 @@ function createPromptBuilder({
         role: "system",
         stable: false
       };
+      const stableWorldBlock = {
+        id: "worldline-stable",
+        type: "worldline_stable",
+        label: "Stable World Checkpoint Recall",
+        enabled: true,
+        role: "system",
+        stable: true
+      };
       const directMemoryBlock = {
         id: "memory-direct-frozen",
         type: "memory_direct_frozen",
@@ -546,6 +554,14 @@ function createPromptBuilder({
             tokens: TokenCounter.estimateTokens(memoryContext.mentionedSnapshotText)
           });
         }
+        if (memoryContext?.worldStableText) {
+          llmMessages.push({ role: "system", content: memoryContext.worldStableText });
+          blocksWithTokens.push({
+            block: stableWorldBlock,
+            content: memoryContext.worldStableText,
+            tokens: TokenCounter.estimateTokens(memoryContext.worldStableText)
+          });
+        }
         if (memoryContext?.topicPatchText) {
           llmMessages.push({ role: "system", content: memoryContext.topicPatchText });
           blocksWithTokens.push({
@@ -588,7 +604,10 @@ function createPromptBuilder({
           deferredDescriptionBlocks,
           presenceText: [memoryContext?.presenceText, activeParticipantRelationshipContext].filter(Boolean).join("\n\n"),
           topicPatchText: mentionedCharactersContext,
-          turnRecallText: memoryContext?.turnRecallText
+          worldTopicText: memoryContext?.worldTopicText,
+          worldSupplementalText: memoryContext?.worldSupplementalText,
+          turnRecallText: memoryContext?.turnRecallText,
+          worldCurrentText: memoryContext?.worldCurrentText
         });
         if (Array.isArray(result)) {
           blocksWithTokens.push(...result);
@@ -793,14 +812,15 @@ function createPromptBuilder({
           const priorHistory = hasCurrentUserMessage ? historyMessages.slice(0, -1) : historyMessages;
           const currentUserMessage = hasCurrentUserMessage ? historyMessages.at(-1) : null;
           const tokenBlocks = [];
-          if (priorHistory.length > 0) {
+          const appendPriorHistory = () => {
+            if (priorHistory.length === 0) return;
             messages.push(...priorHistory);
             tokenBlocks.push({
               block,
               content: priorHistory.map((message) => `${message.role}: ${message.content}`).join("\n\n"),
               tokens: TokenCounter.calculateTotalTokens(priorHistory)
             });
-          }
+          };
           if (options.presenceText) {
             messages.push({ role: "system", content: options.presenceText });
             tokenBlocks.push({
@@ -817,6 +837,31 @@ function createPromptBuilder({
               tokens: TokenCounter.estimateTokens(options.topicPatchText)
             });
           }
+          if (options.worldTopicText) {
+            messages.push({ role: "system", content: options.worldTopicText });
+            tokenBlocks.push({
+              block: { id: "worldline-topic", type: "worldline_topic", label: "World Topic Facts", enabled: true, role: "system", stable: false },
+              content: options.worldTopicText,
+              tokens: TokenCounter.estimateTokens(options.worldTopicText)
+            });
+          }
+          if (options.worldSupplementalText) {
+            messages.push({ role: "system", content: options.worldSupplementalText });
+            tokenBlocks.push({
+              block: { id: "worldline-supplemental", type: "worldline_supplemental", label: "World Supplemental Knowledge", enabled: true, role: "system", stable: false },
+              content: options.worldSupplementalText,
+              tokens: TokenCounter.estimateTokens(options.worldSupplementalText)
+            });
+          }
+          if (options.worldCurrentText) {
+            messages.push({ role: "system", content: options.worldCurrentText });
+            tokenBlocks.push({
+              block: { id: "worldline-current", type: "worldline_current", label: "Current World View", enabled: true, role: "system", stable: false },
+              content: options.worldCurrentText,
+              tokens: TokenCounter.estimateTokens(options.worldCurrentText)
+            });
+          }
+          appendPriorHistory();
           if (currentUserMessage) {
             messages.push(currentUserMessage);
             tokenBlocks.push({

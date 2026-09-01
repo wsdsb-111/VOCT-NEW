@@ -17,10 +17,12 @@
 11. [v8.4 Luna + Terra 年度 Delta 对账矩阵](v8.4-annual-delta-reconciliation-matrix.md)：已确认项、部分可重建项与 Supplemental 边界。
 12. [v8.4 Terra Definition Override 验证](v8.4-definition-override-validation.md)：当前 active playset 的重复源、Gamestate 证据和保守覆盖结论。
 13. [v8.4 Sol 最终冻结审查](v8.4-final-freeze-readiness-review.md)：Test 1–6 最终 Gate、P0 阻断项和可冻结架构结论。
-14. [README_摘要系统.md](README_摘要系统.md)：Memory Engine 2.5 的存储、冻结召回、Turn Recall、写入和生命周期规则。
-15. [V7阶段优化记录.md](V7阶段优化记录.md)：V7/V7.x 的连续开发记录。
-16. [V6阶段优化记录.md](V6阶段优化记录.md)：V6/V6.x 的动作系统与基础设施记录。
-17. 需要核对具体方案时，再阅读版本设计文档和实施报告。
+14. [v8.4 Terra 世界线运行时实施](v8.4-terra-worldline-runtime-implementation-report.md)：Save Reader、Worker、Checkpoint、Delta、IPC 和默认关闭的世界知识 Prompt 基础。
+15. [v8.4 Luna 世界线前端实施](v8.4-luna-worldline-frontend-implementation-report.md)：世界线页面、检查点展示、Supplemental 编辑器和 Terra IPC 接入。
+16. [README_摘要系统.md](README_摘要系统.md)：Memory Engine 2.5 的存储、冻结召回、Turn Recall、写入和生命周期规则。
+16. [V7阶段优化记录.md](V7阶段优化记录.md)：V7/V7.x 的连续开发记录。
+17. [V6阶段优化记录.md](V6阶段优化记录.md)：V6/V6.x 的动作系统与基础设施记录。
+18. 需要核对具体方案时，再阅读版本设计文档和实施报告。
 
 ## 文档分类
 
@@ -42,6 +44,9 @@
 - [v8.4-annual-delta-reconciliation-matrix.md](v8.4-annual-delta-reconciliation-matrix.md)：Luna + Terra 年度 Delta 对账矩阵。
 - [v8.4-definition-override-validation.md](v8.4-definition-override-validation.md)：Terra 重复 Definition ID、active playset 与覆盖结论。
 - [v8.4-final-freeze-readiness-review.md](v8.4-final-freeze-readiness-review.md)：Sol 对 Test 1–6 的最终 Gate、冻结边界与补证路径。
+- [v8.4-luna-worldline-frontend-implementation-report.md](v8.4-luna-worldline-frontend-implementation-report.md)：V8.4 Luna 世界线前端、Supplemental 编辑器和 Terra IPC 边界。
+- [v8.4-terra-worldline-runtime-implementation-report.md](v8.4-terra-worldline-runtime-implementation-report.md)：V8.4 Terra Save Reader、Worker、Checkpoint、Delta、IPC 与 Prompt 基础的已实现行为和 Gate。
+- [v8.4-sol-implementation-freeze-review.md](v8.4-sol-implementation-freeze-review.md)：V8.4 Sol P0/P1 审计、真实 autosave Service Gate、前端自动发现/状态事件管线及 Full Freeze 未放行项。
 - [VOTC_v8.1_Campaign_Identity与Worldline_Store_Foundation设计.md](VOTC_v8.1_Campaign_Identity与Worldline_Store_Foundation设计.md)：V8.1 存档身份协议、session 降级、Worldline schema、原子持久化和 Shadow 集成合同。
 - [v8.1-campaign-identity-worldline-store-implementation-report.md](v8.1-campaign-identity-worldline-store-implementation-report.md)：V8.0 P0/P1 审计、V8.1 应用与 Workshop 实施、自动化验证和实机边界。
 - [v8.3.1-historical-figure-dashboard-implementation-report.md](v8.3.1-historical-figure-dashboard-implementation-report.md)：V8.3.1 实机诊断 Snapshot、Overlay Dashboard、append-only Ground Truth 与冻结边界。
@@ -72,6 +77,9 @@
 - [v8.4-annual-delta-reconciliation-matrix.md](v8.4-annual-delta-reconciliation-matrix.md)
 - [v8.4-definition-override-validation.md](v8.4-definition-override-validation.md)
 - [v8.4-final-freeze-readiness-review.md](v8.4-final-freeze-readiness-review.md)
+- [v8.4-luna-worldline-frontend-implementation-report.md](v8.4-luna-worldline-frontend-implementation-report.md)
+- [v8.4-terra-worldline-runtime-implementation-report.md](v8.4-terra-worldline-runtime-implementation-report.md)
+- [v8.4-sol-implementation-freeze-review.md](v8.4-sol-implementation-freeze-review.md)
 - [VOTC_v8.1_Campaign_Identity与Worldline_Store_Foundation设计.md](VOTC_v8.1_Campaign_Identity与Worldline_Store_Foundation设计.md)
 - [v8.1-campaign-identity-worldline-store-implementation-report.md](v8.1-campaign-identity-worldline-store-implementation-report.md)
 - [v8.3.1-historical-figure-dashboard-implementation-report.md](v8.3.1-historical-figure-dashboard-implementation-report.md)

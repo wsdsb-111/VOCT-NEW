@@ -28,7 +28,7 @@ function validateActionFilePath(filePath, actionsRoot) {
 }
 
 function registerIpcHandlers(runtime) {
-  const { electron, settingsRepository, promptConfigManager, uuid, VOTC_PROMPTS_DIR, TemplateEngine, exportPromptsZip, letterManager, runFileManager, llmManager, providerRegistry, usageAnalytics, actionRegistry, VOTC_ACTIONS_DIR, resolveI18nString, conversationManager, ActionEngine, VOTC_SUMMARIES_DIR, SummariesManager, memoryEngine } = runtime;
+  const { electron, settingsRepository, promptConfigManager, uuid, VOTC_PROMPTS_DIR, TemplateEngine, exportPromptsZip, letterManager, runFileManager, llmManager, providerRegistry, usageAnalytics, actionRegistry, VOTC_ACTIONS_DIR, resolveI18nString, conversationManager, ActionEngine, VOTC_SUMMARIES_DIR, SummariesManager, memoryEngine, worldlineService } = runtime;
 
   electron.ipcMain.handle("toggle-config-panel", () => {
     if (runtime.chatWindow) {
@@ -39,6 +39,28 @@ function registerIpcHandlers(runtime) {
   electron.ipcMain.handle("llm:getAppSettings", () => {
     return settingsRepository.getAppSettings();
   });
+  if (worldlineService) {
+    worldlineService.setStateListener?.((payload) => {
+      const window = runtime.chatWindow;
+      if (!window || window.isDestroyed()) return;
+      window.webContents.send("worldline:updated", payload);
+    });
+    electron.ipcMain.handle("worldline:getSettings", () => worldlineService.getSettings());
+    electron.ipcMain.handle("worldline:setAutosavePath", (_event, candidatePath) => worldlineService.setAutosavePath(candidatePath));
+    electron.ipcMain.handle("worldline:validateAutosavePath", (_event, candidatePath) => worldlineService.validateAutosavePath(candidatePath));
+    electron.ipcMain.handle("worldline:selectAutosaveFile", () => worldlineService.selectAutosaveFile());
+    electron.ipcMain.handle("worldline:getCheckpointStatus", () => worldlineService.getCheckpointStatus());
+    electron.ipcMain.handle("worldline:rebuildCheckpoint", () => worldlineService.rebuildCheckpoint());
+    electron.ipcMain.handle("worldline:getOverview", () => worldlineService.getOverview());
+    electron.ipcMain.handle("worldline:getAnnualDelta", () => worldlineService.getAnnualDelta());
+    electron.ipcMain.handle("worldline:getWorldKnowledge", () => worldlineService.getWorldKnowledge());
+    electron.ipcMain.handle("worldline:getHistoricalBindings", () => worldlineService.getHistoricalBindings());
+    electron.ipcMain.handle("worldline:getDiagnostics", () => worldlineService.getDiagnostics());
+    electron.ipcMain.handle("worldline:listSupplemental", () => worldlineService.listSupplemental());
+    electron.ipcMain.handle("worldline:createSupplemental", (_event, payload) => worldlineService.createSupplemental(payload));
+    electron.ipcMain.handle("worldline:updateSupplemental", (_event, id, payload) => worldlineService.updateSupplemental(id, payload));
+    electron.ipcMain.handle("worldline:deleteSupplemental", (_event, id) => worldlineService.deleteSupplemental(id));
+  }
   electron.ipcMain.handle("prompts:getSettings", () => {
     return settingsRepository.getPromptSettings();
   });
@@ -279,6 +301,11 @@ function registerIpcHandlers(runtime) {
         const tailStatus = letterManager.getDateTrackerStatus?.();
         if (tailStatus?.tailState === "ERROR") throw new Error("log_tailing_restart_failed");
       } else await letterManager.stopLogTailing(false);
+      try {
+        await worldlineService?.syncAutosaveFromCK3Folder?.(previousPath);
+      } catch (worldlineError) {
+        console.error("[Worldline] CK3 folder sync failed without affecting the base CK3 path:", worldlineError);
+      }
       console.log("CK3 path and log tailing updated");
       return { success: true };
     } catch (error) {

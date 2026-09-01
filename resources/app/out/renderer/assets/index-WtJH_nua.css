@@ -1814,6 +1814,237 @@ hr {
   gap: 7px;
   margin-top: 10px;
 }
+
+/* V8.4 Luna Worldline frontend */
+.worldline-view {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding-bottom: 28px;
+}
+.worldline-header,
+.worldline-section-heading {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+.worldline-header h3,
+.worldline-card h4 {
+  margin: 0 0 6px;
+}
+.worldline-header p {
+  margin: 0;
+}
+.worldline-status,
+.worldline-scope-note,
+.worldline-source-tag {
+  display: inline-flex;
+  align-items: center;
+  width: fit-content;
+  padding: 3px 8px;
+  border: 1px solid currentColor;
+  border-radius: 999px;
+  font-size: 0.78em;
+  white-space: nowrap;
+}
+.worldline-status-ready,
+.worldline-status-active,
+.worldline-status-valid,
+.worldline-source-tag.game-truth {
+  color: #b9e6bd;
+}
+.worldline-status-loading,
+.worldline-status-ipc_pending,
+.worldline-status-building,
+.worldline-status-validating,
+.worldline-status-stale,
+.worldline-source-tag.supplemental {
+  color: #f3d28a;
+}
+.worldline-status-idle,
+.worldline-status-unconfigured,
+.worldline-source-tag.player-canon {
+  color: #b9d9f4;
+}
+.worldline-status-failed,
+.worldline-status-error,
+.worldline-status-not_found,
+.worldline-status-not_autosave,
+.worldline-status-unsupported_container,
+.worldline-status-read_error {
+  color: #f0a1a1;
+}
+.worldline-card {
+  padding: 12px;
+  border: 1px solid rgba(239, 177, 106, 0.7);
+  border-radius: 10px;
+  background: rgba(0, 0, 0, 0.2);
+}
+.worldline-source-form {
+  display: flex;
+  align-items: end;
+  gap: 8px;
+}
+.worldline-field {
+  flex: 1;
+  margin: 0;
+}
+.worldline-field input {
+  width: 100%;
+  margin: 5px 0 0;
+}
+.worldline-actions,
+.worldline-editor-controls,
+.worldline-row-actions,
+.worldline-source-legend {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.worldline-actions button,
+.worldline-row-actions button,
+.worldline-diagnostics button {
+  white-space: nowrap;
+}
+.worldline-source-meta,
+.worldline-diagnostics {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  gap: 8px;
+  margin-top: 10px;
+  color: rgba(255, 255, 255, 0.82);
+  font-size: 0.88em;
+}
+.worldline-metric-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(125px, 1fr));
+  gap: 8px;
+}
+.worldline-metric {
+  min-height: 48px;
+  padding: 8px;
+  border-radius: 7px;
+  background: rgba(0, 0, 0, 0.2);
+}
+.worldline-metric span,
+.worldline-metric strong {
+  display: block;
+}
+.worldline-metric span {
+  font-size: 0.78em;
+  opacity: 0.78;
+}
+.worldline-metric strong {
+  margin-top: 4px;
+  overflow-wrap: anywhere;
+}
+.worldline-tabs {
+  display: flex;
+  gap: 5px;
+  overflow-x: auto;
+  padding-bottom: 2px;
+}
+.worldline-tabs button {
+  flex: 0 0 auto;
+  padding: 7px 9px;
+  border: 1px solid rgba(239, 177, 106, 0.75);
+  border-radius: 8px;
+  background: rgba(0, 0, 0, 0.3);
+  color: inherit;
+  white-space: nowrap;
+}
+.worldline-tabs button.active {
+  background: #EFB16A;
+  color: white;
+}
+.worldline-tab-panel {
+  min-height: 110px;
+}
+.worldline-list {
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+}
+.worldline-row {
+  display: grid;
+  grid-template-columns: minmax(100px, 1.1fr) minmax(80px, 1fr) minmax(80px, 1fr) auto auto;
+  align-items: center;
+  gap: 8px;
+  padding: 8px;
+  border-radius: 7px;
+  background: rgba(0, 0, 0, 0.18);
+}
+.worldline-row p {
+  margin: 4px 0 0;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+.worldline-row.is-hidden {
+  opacity: 0.55;
+}
+.worldline-editor-form {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+.worldline-editor-fields {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 6px;
+}
+.worldline-editor-form input,
+.worldline-editor-form textarea,
+.worldline-editor-controls select {
+  width: 100%;
+  box-sizing: border-box;
+}
+.worldline-editor-form textarea {
+  min-height: 70px;
+  resize: vertical;
+}
+.worldline-editor-controls label {
+  margin: 0;
+  font-size: 0.82em;
+}
+.worldline-editor-controls select {
+  display: block;
+  min-width: 130px;
+  margin: 4px 0 0;
+}
+.worldline-note,
+.worldline-empty,
+.worldline-error {
+  margin: 10px 0 0;
+  padding: 8px;
+  border-radius: 7px;
+  background: rgba(0, 0, 0, 0.18);
+  overflow-wrap: anywhere;
+}
+.worldline-empty {
+  opacity: 0.78;
+  font-style: italic;
+}
+.worldline-error {
+  color: #ffd0d0;
+  border: 1px solid rgba(255, 120, 120, 0.7);
+}
+@media (max-width: 720px) {
+  .worldline-source-form,
+  .worldline-row {
+    display: flex;
+    flex-direction: column;
+    align-items: stretch;
+  }
+  .worldline-editor-fields {
+    grid-template-columns: 1fr;
+  }
+  .worldline-actions,
+  .worldline-row-actions {
+    justify-content: flex-start;
+  }
+}
 .summaries-manager .memory-routing-details {
   margin-top: 10px;
   color: #d8d2c7;
@@ -6252,4 +6483,18 @@ select,
   :root[data-votc-theme="ink"] .config-panel-container {
     padding: 10px;
   }
+}
+
+/* Keep Luna form controls consistent with the later theme overrides. */
+.worldline-field input,
+.worldline-editor-form input,
+.worldline-editor-form textarea {
+  width: 100%;
+  box-sizing: border-box;
+}
+.worldline-field input {
+  margin: 5px 0 0;
+}
+.worldline-editor-form textarea {
+  min-height: 70px;
 }

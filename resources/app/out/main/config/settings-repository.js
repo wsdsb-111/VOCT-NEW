@@ -94,6 +94,15 @@ function createSettingsRepository({ Store, schema, SecureProviderSecrets, electr
       if (currentAppSettings.allowPrerelease === void 0) {
         this.store.set("allowPrerelease", false);
       }
+      if (currentAppSettings.worldlineSettings === void 0) {
+        this.store.set("worldlineSettings", {
+          autosavePath: null,
+          autoWatchEnabled: true,
+          promptIntegrationEnabled: false,
+          lastValidatedAt: null,
+          lastValidationStatus: "UNCONFIGURED"
+        });
+      }
     }
     getDefaultPromptSettings() {
       return promptConfigManager.normalizeSettings(
@@ -142,6 +151,7 @@ function createSettingsRepository({ Store, schema, SecureProviderSecrets, electr
         actionSettings: this.getActionSettings(),
         actionApprovalSettings: this.getActionApprovalSettings(),
         summaryPromptSettings: this.getSummaryPromptSettings(),
+        worldlineSettings: this.getWorldlineSettings(),
         language: this.getLanguage()
       };
     }
@@ -187,6 +197,19 @@ function createSettingsRepository({ Store, schema, SecureProviderSecrets, electr
       console.log(`SettingsRepository.setCK3UserFolderPath: Setting path to ${path2}`);
       this.store.set("ck3UserFolderPath", path2);
       console.log("CK3 User Folder Path saved:", path2);
+    }
+    getWorldlineSettings() {
+      return this.store.get("worldlineSettings", {
+        autosavePath: null,
+        autoWatchEnabled: true,
+        promptIntegrationEnabled: false,
+        lastValidatedAt: null,
+        lastValidationStatus: "UNCONFIGURED"
+      });
+    }
+    saveWorldlineSettings(settings) {
+      this.store.set("worldlineSettings", settings);
+      console.log("Worldline settings saved.");
     }
     getModLocationPath() {
       return this.store.get("modLocationPath");

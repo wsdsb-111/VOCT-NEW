@@ -22,6 +22,7 @@ let events = null;
 let uuid = null;
 let path = null;
 let memoryEngine = null;
+let worldlineService = null;
 
 const TEMPORARY_ABSENCE_MODES = Object.freeze({
   unconscious: {
@@ -64,6 +65,7 @@ class Conversation {
     uuid = dependencies.uuid || uuid;
     path = dependencies.path || path;
     memoryEngine = dependencies.memoryEngine || memoryEngine;
+    worldlineService = dependencies.worldlineService || worldlineService;
     return this;
   }
   static buildPromptBlockMetadata(promptBuild = {}) {
@@ -324,6 +326,12 @@ class Conversation {
       candidateCount: turnRecall.candidateCount,
       turnEpoch: this.turnEpoch
     }, null);
+    let worldContext = null;
+    try {
+      worldContext = worldlineService?.getPromptContext?.({ query, assistContext }) || null;
+    } catch (error) {
+      console.warn("[Worldline] World recall failed; continuing with personal memory:", error.message);
+    }
     return {
       ...retrieved,
       turnRecall: turnRecall.selected,
@@ -336,7 +344,13 @@ class Conversation {
       activeParticipantIds,
       stableProfileCache: this.stableProfileCache,
       stableDescriptionCache: this.stableDescriptionCache,
-      presenceText: this.buildPresenceContext()
+      presenceText: this.buildPresenceContext(),
+      worldStableText: worldContext?.stableText || null,
+      worldTopicText: worldContext?.topicText || null,
+      worldSupplementalText: worldContext?.supplementalText || null,
+      worldCurrentText: worldContext?.currentText || null,
+      worldRecallQueryFingerprint: worldContext?.queryFingerprint || null,
+      worldRecallCacheHit: worldContext?.cacheHit === true
     };
   }
   /**

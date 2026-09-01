@@ -11,6 +11,7 @@ Voices of the Court 是一个面向《Crusader Kings III》（CK3）的沉浸式
 - **Campaign Identity / Worldline Store**：V8.1 从 CK3 存档读取稳定 token，以哈希隔离 `dynamic_history/<campaignId>/worldline.json`；旧模组或无效 token 只使用进程级 identity，不写世界线数据。
 - **Historical Figure Resolver**：V8.3 在 Shadow Mode 中以规范名/别名精确门禁、出生时间、性别和亲属证据匹配 CK3 人物；解析结果只保存在当前 GameData 的隐藏 metadata，不进入 Prompt 或世界线持久化。
 - **历史人物实机校准**：V8.3.1 在现有 Overlay 中一键读取当前 CK3，展示 raw culture、分数、证据、冲突和候选，并将人工裁定 append 到独立 diagnostics JSONL；裁定不会改变生产 Resolver。
+- **世界线（V8.4 Luna + Terra）**：页面已接入年度 `autosave.ck3` Checkpoint、Worker 解析、世界概览、年度变化、Historical Identity、诊断和 Checkpoint-scoped Supplemental；世界知识 Prompt 基础默认关闭，等待最终 Cache 审查。
 - **历史认知边界**：提示词要求角色只使用当前年份已经发生、写成、流传或成名的信息，避免引用未来人物、事件、诗词和典故。
 - **当前政局优先**：皇帝和年号从实际游戏角色数据中识别，支持玩家篡位或改变历史后的沙盒玩法。
 - **Memory Engine 2.5**：保留 `角色ID_姓名/与对方的对话.json` 人物目录与 2.4 写入合同，并新增整场冻结的 Session Topic Anchor，以及只在明确回忆意图下触发、Top1、默认 256 Token 的 Turn Recall。
@@ -182,6 +183,8 @@ V8.3 Historical Figure Resolver 为 48 个历史人物提供显式 readiness，�
 
 V8.3.1 修复 spouse evidence 与 culture 关键补分，并在“系统优化与用量”增加历史人物实机校准 Tab。每次手动刷新只解析一次 `debug.log`，以纯 JSON 显示史实/当前对照、raw culture、85% 阈值、分层证据、冲突和候选；人工 Ground Truth 只追加到 `votc_data/diagnostics/historical-figure-ground-truth/records.jsonl`，不会反哺生产解析。详见 [V8.3.1 实施报告](docs/v8.3.1-historical-figure-dashboard-implementation-report.md)。
 
+V8.4 世界线页面已接入 `autosave.ck3` Save Reader、Worker、原子 Checkpoint、年度 Delta、Live probe 和 Supplemental 持久化。Sol 修复主进程整文件读取、非原子状态切换、跨 campaign Delta、身份歧义、隐藏召回和 Prompt 来源边界，并接通“CK3 用户目录自动发现 → 校验/构建 → Main 状态事件 → Renderer 刷新”管线；真实 231.8 MB autosave 的完整 Service Gate 已通过。Active Playset Definition Catalog、Save A/B、默认开启后的 Provider/Cache 与新版 UI 人工验收未完成，世界知识 Prompt 仍默认关闭。详见 [V8.4 Sol 实现冻结审查](docs/v8.4-sol-implementation-freeze-review.md)。
+
 V7.7 在 V7.6 健康化基础上分阶段拆分主进程：第一阶段将六种模型 Provider 迁入 `providers/index.js`、92 个既有 IPC 注册迁入 `ipc/register-ipc.js`；第二阶段把 `ProviderRegistry`、`TokenCounter` 和 `LLMManager` 迁入 `provider-service.js`，通过显式依赖继续读取用户分别选择的对话、摘要和动作模型。`main.js` 由约 9477 行降至约 6612 行。动作语义同时补齐“共度春宵/鱼水之欢已发生”和“从今以后成为情人/认定灵魂伴侣”等自然完成态表达，并继续排除请求、计划、假设、回忆与失败尝试。当前仓库仍是可运行打包产物，没有能够重新生成这些文件的完整 `src` 工程，因此本阶段不伪造源码构建链。
 
 发布测试统一由 `scripts/test-manifest.js` 声明。本地与 CI 都运行：
@@ -201,12 +204,12 @@ node scripts\test-release.js
 - UI 主题：宫廷编年史风格（深红、暗金、羊皮纸文本层级）
 - UI 主题切换：羊皮卷、骑士纹章、水墨画卷三套完整历史风格；分别拥有独立背景、边框结构、按钮造型、消息卡片、输入框、字体和滚动条，并可自动保存选择
 - UI 素材生成提示词：参见 [docs/UI_ASSET_PROMPTS_2.0.3.md](docs/UI_ASSET_PROMPTS_2.0.3.md)
-- 当前重点：V8.3.1 历史人物实机校准 Dashboard、raw culture 采样和 append-only Ground Truth；Worldline schema v1、Official VOTC 2.0.3 Action、Memory Engine 2.5、外挂 UI 2.0.4 与 Prompt/cache 合同保持冻结
+- 当前重点：V8.4 Active Playset Definition Catalog、Save A/B 分支 Gate、世界知识启用后的 Provider/Cache 回归及修复版世界线 UI 人工验收；Official VOTC 2.0.3 Action、Memory Engine 2.5、外挂 UI 2.0.4 与默认 Prompt/cache 合同保持冻结
 
 ## 已知限制
 
 - 历史知识核验依赖模型自身的年代知识，提示词规则可以显著降低穿越，但不能替代外部历史数据库。
-- V8.1 Campaign Identity、Worldline Store 与 V8.3 Historical Figure Resolver 仍只在 Shadow Mode 运行，不改变当前 Prompt；V8.3 不持久化人物绑定，GameStateSnapshot、世界线分叉、事实有效性和动态投影按后续阶段实现。
+- V8.1 Campaign Identity、Worldline Store 与 V8.3 Historical Figure Resolver 仍只在 Shadow Mode 运行；V8.4 的世界知识 Prompt 也默认关闭，Definition Catalog provenance、跨分支安全与真实 CK3/Electron/Provider 验收仍需 Sol 阶段确认。
 - V8.3.1 已提供 Ground Truth 收集工具，但至少 20 条人工样本、Auto `RESOLVED` Precision ≥ 98%、真实 CK3 Save A/B、岳飞早死/长寿和同名改名场景尚未验收，因此当前不宣称人物解析达到生产冻结门槛。
 - Workshop 2.0.5 的存档 token 跨重启与不同新存档隔离仍需真实 CK3 保存/读档 Gate；旧模组不会持久化世界线，但现有对话仍可运行。
 - CK3 日志格式、角色头衔语言和本地化文本变化时，可能影响年份或皇帝识别。

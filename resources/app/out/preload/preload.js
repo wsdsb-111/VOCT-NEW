@@ -182,3 +182,25 @@ electron.contextBridge.exposeInMainWorld("historicalAPI", {
   getFigureGroundTruthDashboard: () => electron.ipcRenderer.invoke("historical:getFigureGroundTruthDashboard"),
   recordFigureGroundTruthVerdict: (payload) => electron.ipcRenderer.invoke("historical:recordFigureGroundTruthVerdict", payload)
 });
+electron.contextBridge.exposeInMainWorld("worldlineAPI", {
+  getSettings: () => electron.ipcRenderer.invoke("worldline:getSettings"),
+  setAutosavePath: (path) => electron.ipcRenderer.invoke("worldline:setAutosavePath", path),
+  validateAutosavePath: (path) => electron.ipcRenderer.invoke("worldline:validateAutosavePath", path),
+  selectAutosaveFile: () => electron.ipcRenderer.invoke("worldline:selectAutosaveFile"),
+  getCheckpointStatus: () => electron.ipcRenderer.invoke("worldline:getCheckpointStatus"),
+  rebuildCheckpoint: () => electron.ipcRenderer.invoke("worldline:rebuildCheckpoint"),
+  getOverview: () => electron.ipcRenderer.invoke("worldline:getOverview"),
+  getAnnualDelta: () => electron.ipcRenderer.invoke("worldline:getAnnualDelta"),
+  getWorldKnowledge: () => electron.ipcRenderer.invoke("worldline:getWorldKnowledge"),
+  getHistoricalBindings: () => electron.ipcRenderer.invoke("worldline:getHistoricalBindings"),
+  getDiagnostics: () => electron.ipcRenderer.invoke("worldline:getDiagnostics"),
+  listSupplemental: () => electron.ipcRenderer.invoke("worldline:listSupplemental"),
+  createSupplemental: (payload) => electron.ipcRenderer.invoke("worldline:createSupplemental", payload),
+  updateSupplemental: (id, payload) => electron.ipcRenderer.invoke("worldline:updateSupplemental", id, payload),
+  deleteSupplemental: (id) => electron.ipcRenderer.invoke("worldline:deleteSupplemental", id),
+  onUpdated: (callback) => {
+    const handler = (_event, payload) => callback(payload);
+    electron.ipcRenderer.on("worldline:updated", handler);
+    return () => electron.ipcRenderer.removeListener("worldline:updated", handler);
+  }
+});

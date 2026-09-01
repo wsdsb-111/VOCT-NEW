@@ -15,6 +15,7 @@ const { registerProviderImplementations } = require("./providers");
 const { ProviderRegistry, TokenCounter, LLMManager } = require("./provider-service");
 const { MEMORY_ENGINE_VERSION } = require("./version");
 const { registerIpcHandlers } = require("./ipc/register-ipc");
+const { WorldlineService } = require("./worldline/worldline-service");
 const { createPaths } = require("./config/paths");
 const { getHistoricalReferenceByYear } = require("./game-data/legacy-historical-reference");
 const { CampaignIdentityResolver } = require("./historical-system/campaign-identity");
@@ -339,6 +340,11 @@ const SettingsRepository = createSettingsRepository({
   legacyBundledPromptHashes: LEGACY_BUNDLED_PROMPT_HASHES
 });
 const settingsRepository = new SettingsRepository();
+const worldlineService = new WorldlineService({
+  settingsRepository,
+  dataDir: VOTC_DATA_DIR,
+  dialog: electron.dialog
+});
 const providerRegistry = ProviderRegistry.getInstance();
 function createPromptFingerprint(value) {
   if (value === null || value === void 0) return null;
@@ -489,7 +495,8 @@ Conversation.configure({
   events,
   uuid,
   path,
-  memoryEngine
+  memoryEngine,
+  worldlineService
 });
 const { createConversationManager } = require("./conversation/conversation-manager");
 const ConversationManager = createConversationManager({ events, memorySystem, Conversation, PromptBuilder, createActionFeedback, logVerboseLLM });
@@ -908,6 +915,7 @@ const setupIpcHandlers = () => {
     VOTC_SUMMARIES_DIR,
     SummariesManager,
     memoryEngine,
+    worldlineService,
     get chatWindow() {
       return chatWindow;
     }
@@ -940,6 +948,7 @@ electron.app.on("ready", async () => {
     console.error("Run Command Queue startup recovery failed; dispatch remains disabled:", error);
   }
   setupIpcHandlers();
+  worldlineService.start().catch((error) => console.error("[Worldline] Startup failed:", error));
   chatWindow = createWindow();
   appUpdater.setMainWindow(chatWindow);
   if (electron.app.isPackaged && VOTC_FORK_IDENTITY.autoUpdateEnabled) {
@@ -1061,6 +1070,7 @@ electron.app.on("before-quit", (event) => {
   }
   tray?.destroy();
   letterManager.stopLogTailing();
+  worldlineService.dispose();
   focusMonitor.stop();
 });
 electron.app.on("activate", () => {
