@@ -23,10 +23,13 @@
 17. [v8.4.1 Terra Query/Freshness 实施报告](v8.4.1-terra-query-freshness-implementation-report.md)：中文实体分析、Localization 反查、as-of 与 STALE Prompt Gate。
 18. [v8.4.1 Luna Prompt Diagnostics 实施报告](v8.4.1-luna-prompt-diagnostics-implementation-report.md)：只读 Query / World Recall 诊断、Token 分块、Cache Hit 与裁剪项。
 19. [v8.4.1 Sol-3 Prompt Source Boundary Review](v8.4.1-sol-3-prompt-source-boundary-review.md)：中文 Live 日期兼容、Checkpoint as-of 与 Prompt 来源优先级审查。
-20. [README_摘要系统.md](README_摘要系统.md)：Memory Engine 2.5 的存储、冻结召回、Turn Recall、写入和生命周期规则。
-21. [V7阶段优化记录.md](V7阶段优化记录.md)：V7/V7.x 的连续开发记录。
-22. [V6阶段优化记录.md](V6阶段优化记录.md)：V6/V6.x 的动作系统与基础设施记录。
-23. 需要核对具体方案时，再阅读版本设计文档和实施报告。
+20. [v8.4.1 Hotfix Luna 实施报告](v8.4.1-hotfix-luna-implementation-report.md)：Token Breakdown 专用渲染、总和校验和 Resolver 诊断区域。
+21. [v8.4.1 Hotfix Terra 实施报告](v8.4.1-hotfix-terra-implementation-report.md)：中文 Localization 回退、扫描状态、Historical Alias→Runtime 闭环与真实 Checkpoint Gate。
+22. [v8.4.1 Hotfix Sol 最终审查](v8.4.1-hotfix-sol-final-review.md)：真实六查询矩阵、Alias/Source/UI 边界和最终自动化 Gate。
+23. [README_摘要系统.md](README_摘要系统.md)：Memory Engine 2.5 的存储、冻结召回、Turn Recall、写入和生命周期规则。
+24. [V7阶段优化记录.md](V7阶段优化记录.md)：V7/V7.x 的连续阶段记录。
+25. [V6阶段优化记录.md](V6阶段优化记录.md)：V6/V6.x 的动作系统与基础设施记录。
+26. 需要核对具体方案时，再阅读版本设计文档和实施报告。
 
 ## 文档分类
 
@@ -58,6 +61,9 @@
 - [v8.4.1-terra-query-freshness-implementation-report.md](v8.4.1-terra-query-freshness-implementation-report.md)：V8.4.1 Terra-4/5 的中文实体分析、Localization 反查、Checkpoint as-of 和 STALE Prompt Gate。
 - [v8.4.1-luna-prompt-diagnostics-implementation-report.md](v8.4.1-luna-prompt-diagnostics-implementation-report.md)：V8.4.1 Luna-6 的只读 Prompt / World Recall 诊断、Token 分块、Cache Hit 与裁剪项。
 - [v8.4.1-sol-3-prompt-source-boundary-review.md](v8.4.1-sol-3-prompt-source-boundary-review.md)：V8.4.1 Sol-3 的中文 Live 日期兼容、Checkpoint as-of、来源优先级与 fail-closed Prompt Gate。
+- [v8.4.1-hotfix-luna-implementation-report.md](v8.4.1-hotfix-luna-implementation-report.md)：V8.4.1 Hotfix Luna-H1/H2 的 Token Breakdown 与 Resolver 诊断 UI 实施边界。
+- [v8.4.1-hotfix-terra-implementation-report.md](v8.4.1-hotfix-terra-implementation-report.md)：V8.4.1 Hotfix Terra-H1/H5 的 Localization 回退、Historical Alias Bridge 和真实 Checkpoint 查询结果。
+- [v8.4.1-hotfix-sol-final-review.md](v8.4.1-hotfix-sol-final-review.md)：V8.4.1 Hotfix Sol-H1/H4 的真实查询矩阵、身份/来源边界与 Prompt UI 自动化审查。
 - [VOTC_v8.1_Campaign_Identity与Worldline_Store_Foundation设计.md](VOTC_v8.1_Campaign_Identity与Worldline_Store_Foundation设计.md)：V8.1 存档身份协议、session 降级、Worldline schema、原子持久化和 Shadow 集成合同。
 - [v8.1-campaign-identity-worldline-store-implementation-report.md](v8.1-campaign-identity-worldline-store-implementation-report.md)：V8.0 P0/P1 审计、V8.1 应用与 Workshop 实施、自动化验证和实机边界。
 - [v8.3.1-historical-figure-dashboard-implementation-report.md](v8.3.1-historical-figure-dashboard-implementation-report.md)：V8.3.1 实机诊断 Snapshot、Overlay Dashboard、append-only Ground Truth 与冻结边界。

@@ -54,6 +54,8 @@ try {
   assert.ok(first.trimmedItems.some((item) => item.id === "supp-4"), "diagnostics must expose supplemental entries trimmed by the selection cap");
   assert.ok(first.worldPromptTokens > 0, "diagnostics must expose the estimated world prompt token total");
   assert.ok(first.tokenBreakdown.some((block) => block.id === "worldline-current"), "diagnostics must expose world prompt block token breakdown");
+  assert.ok(first.tokenBreakdown.some((block) => block.id === "worldline-stable" && block.tokens > 0), "diagnostics must expose a measurable stable world block");
+  assert.equal(first.worldPromptTokens, first.tokenBreakdown.reduce((total, block) => total + block.tokens, 0), "world prompt total must equal the sum of block tokens");
   assert.equal(first.cacheHit, false, "the first diagnostic query must be a cache miss");
 
   const inspectedContext = service.getPromptContext({ query: "Yuefei现在在哪里", diagnostic: true });

@@ -9,6 +9,7 @@ const { readSaveContainer } = require("../resources/app/out/main/worldline/save-
 const { WorldlineService } = require("../resources/app/out/main/worldline/worldline-service");
 
 const root = path.resolve(__dirname, "..");
+const worldlineServiceSource = fs.readFileSync(path.join(root, "resources", "app", "out", "main", "worldline", "worldline-service.js"), "utf8");
 const ipcSource = fs.readFileSync(path.join(root, "resources", "app", "out", "main", "ipc", "register-ipc.js"), "utf8");
 const preloadSource = fs.readFileSync(path.join(root, "resources", "app", "out", "preload", "preload.js"), "utf8");
 const promptSource = fs.readFileSync(path.join(root, "resources", "app", "out", "main", "prompts", "prompt-builder.js"), "utf8");
@@ -100,6 +101,18 @@ async function run() {
     assert.equal(firstStatus.characters, 2, "character buckets must be indexed without an AST");
     assert.equal(firstStatus.historicalBindings, 2, "lookup must expose direct historical bindings");
     assert.equal(service.getHistoricalBindings().bindings[0].status, "DIRECT", "unprobed bindings remain direct rather than guessed");
+    const largeDefinitions = {};
+    for (let index = 0; index < 100000; index += 1) largeDefinitions[`fixture_${index}`] = index;
+    service.currentCheckpoint.snapshot.definitionToRuntime = largeDefinitions;
+    service.currentCheckpoint.snapshot.runtimeToDefinitions = {};
+    const largeBindings = service.getHistoricalBindings();
+    assert.equal(largeBindings.total, 100000, "historical binding totals must include every definition without sorting the checkpoint");
+    assert.equal(largeBindings.bindings.length, 500, "historical binding UI payload must remain bounded for large checkpoints");
+    assert.equal(largeBindings.truncated, true, "large historical binding payloads must report truncation");
+    const historicalBindingsMethod = worldlineServiceSource.slice(worldlineServiceSource.indexOf("  getHistoricalBindings()"), worldlineServiceSource.indexOf("  listSupplemental()"));
+    assert.ok(!historicalBindingsMethod.includes(".sort("), "historical binding UI loading must never sort the full checkpoint on the main process");
+    assert.ok(!historicalBindingsMethod.includes("Object.entries("), "historical binding UI loading must not materialize the full checkpoint before truncation");
+    await service.rebuildCheckpoint();
     assert.equal(service.getPromptContext({ query: "Yuefei" }), null, "world prompt integration must remain opt-in during Terra");
     settingsRepository.settings = { ...settingsRepository.settings, promptIntegrationEnabled: true };
     const worldContext = service.getPromptContext({ query: "Yuefei" });

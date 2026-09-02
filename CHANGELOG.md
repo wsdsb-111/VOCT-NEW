@@ -4,6 +4,10 @@
 
 | 版本 | 重点 | 详细记录 |
 | --- | --- | --- |
+| v8.4.1 P0 世界线页阻塞修复 | 移除 9.2 万条历史绑定的主进程全量排序；进一步修复概览把中文显示名当 localization key 穷举 3,670 个文件的问题，显示解析改为文字直通/typed 250 文件硬上限，完整查询 Resolver 保持不变 | [Hotfix Sol 审查](docs/v8.4.1-hotfix-sol-final-review.md) / [V8 阶段记录](docs/V8阶段开发记录.md) |
+| v8.4.1 Hotfix Sol-H1/H4 | 真实六查询 Gate 通过；修复多 Steam Library base root 选择、Runtime Trace、typed/fallback 实机慢扫描，并以“当前快照唯一”约束涿郡前缀 title alias；Token/Resolver UI 自动化 Gate 通过，人工 Electron 视觉验收待重启确认 | [Hotfix Sol 审查](docs/v8.4.1-hotfix-sol-final-review.md) / [V8 阶段记录](docs/V8阶段开发记录.md) |
+| v8.4.1 Hotfix Terra-H1/H5 | 中文 Localization 反查支持非标准文件名 fallback，源不完整/冲突显式诊断；冻结 Historical Alias 仅经 Definition→Runtime 绑定召回，真实 Checkpoint 的“岳飞现在在哪里”命中两个已绑定 Runtime 并保留 AMBIGUOUS | [Hotfix Terra 实施](docs/v8.4.1-hotfix-terra-implementation-report.md) / [V8 阶段记录](docs/V8阶段开发记录.md) |
+| v8.4.1 Hotfix Luna-H1/H2 | 修复 Prompt Token Breakdown 使用错误字段导致分块显示为空；新增 Token 总和校验和 Localization/Historical/Runtime Resolver 诊断区域，真实 CK3 Query Gate 待 Terra/Sol 完成 | [Hotfix Luna 实施](docs/v8.4.1-hotfix-luna-implementation-report.md) / [V8 阶段记录](docs/V8阶段开发记录.md) |
 | v8.4.1 Sol-3 | 修复中文 Live 日期被误判为 STALE；Checkpoint Prompt 显式标注 as-of 与完整来源优先级，继续阻断 hidden Supplemental、手工存档、陈旧及错误来源；Prompt Default On 保持关闭 | [Sol-3 Prompt Source Boundary Review](docs/v8.4.1-sol-3-prompt-source-boundary-review.md) / [V8 阶段记录](docs/V8阶段开发记录.md) |
 | v8.4.1 Terra-4/5 | 以中文 Shared Query Analyzer 替代整句 term 召回，并用 Localization reverse index、Historical Definition/Runtime ID 与 Memory 已确认实体构建证据化命中；新增 Checkpoint as-of、Live/freshness 分层，STALE/wrong-source Checkpoint 不进入 Prompt | [Terra Query/Freshness 实施](docs/v8.4.1-terra-query-freshness-implementation-report.md) / [V8 阶段记录](docs/V8阶段开发记录.md) |
 | v8.4.1 Luna-6 | 新增只读 Prompt / World Recall 诊断：Query Analyzer 实体、Game Truth/Supplemental 命中、Checkpoint asOf、Live Date、World Prompt Token、Cache Hit 与裁剪项；诊断不会打开生产 Prompt Integration | [Luna Prompt Diagnostics 实施](docs/v8.4.1-luna-prompt-diagnostics-implementation-report.md) / [V8 阶段记录](docs/V8阶段开发记录.md) |

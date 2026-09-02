@@ -40,7 +40,8 @@ function findLocalizedKeys(type, value) {
   return values[`${type}:${value}`] || [];
 }
 
-const chineseCharacter = analyzeSharedQuery({ snapshot, query: "岳飞现在在哪里", localize, findLocalizedKeys });
+const localizedOnlySnapshot = { ...snapshot, definitionToRuntime: {} };
+const chineseCharacter = analyzeSharedQuery({ snapshot: localizedOnlySnapshot, query: "岳飞现在在哪里", localize, findLocalizedKeys });
 assert.deepEqual(chineseCharacter.characters.map((item) => item.id), ["100"], "a Chinese sentence must resolve the localized character entity rather than use the whole sentence as one term");
 assert.ok(chineseCharacter.terms.includes("岳飞"), "CJK 2-gram terms must retain the character name");
 assert.ok(!chineseCharacter.terms.includes("岳飞现在在哪里"), "the complete Chinese sentence must never become the only query term");

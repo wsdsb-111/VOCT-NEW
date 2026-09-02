@@ -40,6 +40,16 @@ const requiredRendererMarkers = [
   "Matched Game Truth",
   "Matched Supplemental",
   "World Prompt Token",
+  "promptTokenBreakdownRows",
+  "item.label",
+  "item.tokens",
+  "tokenBreakdownTotal",
+  "tokenBreakdownMatches",
+  "Token 总和校验",
+  "Localization Reverse Lookup",
+  "Historical Alias Resolver",
+  "Runtime Identity Resolution",
+  "resolverTrace",
   "Trimmed Items",
   "Unknown / Unconfirmed",
   "confidence:",
@@ -80,6 +90,8 @@ assert.match(styles, /\.worldline-view\s*\{/);
 assert.match(styles, /\.worldline-semantic-grid\s*\{/);
 assert.match(styles, /\.worldline-semantic-item small\s*\{/);
 assert.match(styles, /\.worldline-editor-form textarea/);
+assert.match(styles, /\.worldline-token-row\s*\{/);
+assert.match(styles, /\.worldline-resolver-trace\s*\{/);
 assert.ok(html.includes('src="./assets/index-Dn3qWlAB.js"'), "renderer bundle is not loaded by index.html");
 assert.ok(html.includes('href="./assets/index-WtJH_nua.css"'), "renderer stylesheet is not loaded by index.html");
 

@@ -514,7 +514,7 @@ class WorldlineService {
     const snapshot = this.currentCheckpoint?.snapshot;
     const live = this.getLiveState();
     const checkpoint = this.getCheckpointStatus().checkpoint;
-    const politicalContext = snapshot ? resolvePlayerPoliticalContext(snapshot, { localize: (type, rawKey) => this.localizationResolver?.resolve(type, rawKey) }) : null;
+    const politicalContext = snapshot ? resolvePlayerPoliticalContext(snapshot, { localize: (type, rawKey) => this.localizationResolver?.resolveForDisplay(type, rawKey) }) : null;
     return {
       overview: {
         currentPlayer: snapshot ? formatCharacter(snapshot, snapshot.playerId) : null,
@@ -552,13 +552,20 @@ class WorldlineService {
     const snapshot = this.currentCheckpoint?.snapshot;
     if (!snapshot) return { bindings: [], total: 0 };
     const liveByRuntime = new Map(this.getLiveState().characters.map((item) => [String(item.runtimeId), item]));
-    const bindings = Object.entries(snapshot.definitionToRuntime || {}).sort(([left], [right]) => left.localeCompare(right)).slice(0, MAX_UI_BINDINGS).map(([definitionId, runtimeId]) => {
+    const definitions = snapshot.definitionToRuntime || {};
+    const bindings = [];
+    let total = 0;
+    for (const definitionId in definitions) {
+      if (!Object.prototype.hasOwnProperty.call(definitions, definitionId)) continue;
+      total += 1;
+      if (bindings.length >= MAX_UI_BINDINGS) continue;
+      const runtimeId = definitions[definitionId];
       const live = liveByRuntime.get(String(runtimeId));
       const exactLiveMatch = live?.historyId === definitionId;
       const provenance = snapshot.runtimeToDefinitions?.[String(runtimeId)] || [];
       const ambiguous = provenance.length > 1;
       const liveConflict = !!live?.historyId && !exactLiveMatch;
-      return {
+      bindings.push({
         figureKey: definitionId,
         definitionId,
         sourceMod: null,
@@ -566,9 +573,9 @@ class WorldlineService {
         liveHistoryId: live?.historyId || null,
         status: ambiguous ? "AMBIGUOUS_PROVENANCE" : liveConflict ? "CONFLICT" : exactLiveMatch ? "LIVE_CONFIRMED" : "DIRECT",
         conflict: ambiguous ? `MULTIPLE_DEFINITIONS:${provenance.join(",")}` : liveConflict ? "LIVE_CONFLICT" : null
-      };
-    });
-    return { bindings, total: Object.keys(snapshot.definitionToRuntime || {}).length, truncated: Object.keys(snapshot.definitionToRuntime || {}).length > MAX_UI_BINDINGS };
+      });
+    }
+    return { bindings, total, truncated: total > MAX_UI_BINDINGS };
   }
 
   listSupplemental() {
@@ -650,7 +657,7 @@ class WorldlineService {
 
   getWorldKnowledge() {
     const snapshot = this.currentCheckpoint?.snapshot;
-    const politicalContext = snapshot ? resolvePlayerPoliticalContext(snapshot, { localize: (type, rawKey) => this.localizationResolver?.resolve(type, rawKey) }) : null;
+    const politicalContext = snapshot ? resolvePlayerPoliticalContext(snapshot, { localize: (type, rawKey) => this.localizationResolver?.resolveForDisplay(type, rawKey) }) : null;
     const facts = snapshot ? [
       { id: "game-date", title: "Game Date", value: snapshot.gameDate, source: "Game Truth" },
       { id: "player", title: "Current Player", value: formatCharacter(snapshot, snapshot.playerId), source: "Game Truth" },
@@ -689,7 +696,7 @@ class WorldlineService {
         assistContext,
         mentionedEntityIds: safeMentionedEntityIds,
         localize: (type, rawKey) => this.localizationResolver?.resolve(type, rawKey),
-        findLocalizedKeys: (type, value) => this.localizationResolver?.findRawKeysByLocalizedValue(type, value) || []
+        findLocalizedKeys: (type, value, options) => this.localizationResolver?.findRawKeysByLocalizedValue(type, value, options) || { status: "NO_MATCH", matches: [], sourceComplete: true, scannedFiles: 0, missingDescriptors: [], matchedRawKeys: [] }
       });
       const mentionedEntityKey = [...new Set(safeMentionedEntityIds.map((id) => String(id)))].sort().join(",");
       const queryFingerprint = nodeCrypto.createHash("sha256").update(`${queryAnalysis.normalizedQuery || "empty"}|${mentionedEntityKey}`, "utf8").digest("hex").slice(0, 16);
@@ -749,6 +756,7 @@ class WorldlineService {
           worldPromptTokens: 0,
           cacheHit: false,
           queryAnalysis: { normalizedQuery: safeQuery.trim().toLocaleLowerCase(), terms: [], characters: [], titles: [], matchedAliases: [] },
+          resolverTrace: { localization: { status: "NO_MATCH", sourceComplete: true, scannedFiles: 0, missingDescriptors: [], matchedRawKeys: [] }, historical: { status: "NO_MATCH", aliases: [], matchedDefinitionIds: [], matchedRuntimeIds: [], matchSources: [] }, runtime: { status: "NO_MATCH" } },
           gameTruth: { characters: [], titles: [] },
           supplemental: [],
           tokenBreakdown: [],
@@ -783,6 +791,7 @@ class WorldlineService {
         available: true,
         query: safeQuery,
         queryAnalysis: analysis,
+        resolverTrace: analysis.resolverTrace,
         gameTruth,
         supplemental: selectedSupplemental.map((entry) => ({ id: entry.id, title: entry.title, body: entry.body, visibility: entry.visibility })),
         checkpointAsOf: context.checkpointAsOf,

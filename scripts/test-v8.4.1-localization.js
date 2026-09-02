@@ -48,6 +48,12 @@ function run() {
     fs.writeFileSync(path.join(userFolder, "dlc_load.json"), JSON.stringify({ enabled_mods: ["mod/ugc_42.mod"], disabled_dlcs: [] }), "utf8");
 
     const resolver = new CK3LocalizationResolver({ fs, path, getCK3UserFolderPath: () => userFolder });
+    const displayLiteral = resolver.resolveForDisplay("character", "思昭");
+    assert.equal(displayLiteral.localizedValue, "思昭", "an already-localized character name must remain directly displayable");
+    assert.equal(displayLiteral.confidence, "DISPLAY_LITERAL", "an already-localized character name must bypass filesystem localization scans");
+    const displayTitle = resolver.resolveForDisplay("title", "h_single");
+    assert.equal(displayTitle.localizedValue, "单一来源", "the bounded display resolver may retain typed-file localization");
+    assert.ok(displayTitle.scannedFiles <= 250, "worldline display localization must have a hard file-scan bound");
     const title = resolver.resolve("title", "h_single");
     assert.deepEqual({ localizedValue: title.localizedValue, rawKey: title.rawKey, language: title.language, sourceMod: title.sourceMod, confidence: title.confidence }, { localizedValue: "单一来源", rawKey: "h_single", language: "simp_chinese", sourceMod: null, confidence: "CONFIRMED" }, "a unique base localization must preserve identity and expose its display source");
     assert.ok(title.sourceFile.endsWith("titles_l_simp_chinese.yml"), "a confirmed localization must expose its source file");
@@ -67,8 +73,12 @@ function run() {
       assert.equal(localized.rawKey, key, `${type} localization must retain raw identity`);
       assert.equal(localized.confidence, "CONFIRMED", `${type} localization must retain confirmed provenance`);
     }
-    assert.deepEqual(resolver.findRawKeysByLocalizedValue("character", "玩家姓名").map((item) => item.rawKey), ["player_name_key"], "localized-name reverse lookup must return only confirmed raw identities");
-    assert.deepEqual(resolver.findRawKeysByLocalizedValue("title", "Mod 标题"), [], "a localized value from an unproven override conflict must not create a reverse identity alias");
+    const playerNameLookup = resolver.findRawKeysByLocalizedValue("character", "玩家姓名");
+    assert.equal(playerNameLookup.status, "MATCHED", "localized-name reverse lookup must report a confirmed match");
+    assert.deepEqual(playerNameLookup.matches.map((item) => item.rawKey), ["player_name_key"], "localized-name reverse lookup must return only confirmed raw identities");
+    const conflictLookup = resolver.findRawKeysByLocalizedValue("title", "Mod 标题");
+    assert.equal(conflictLookup.status, "CONFLICT", "a localized value from an unproven override conflict must not create a reverse identity alias");
+    assert.deepEqual(conflictLookup.matches, [], "a localization conflict must fail closed without reverse aliases");
 
     const missing = resolver.resolve("title", "unknown_title_key");
     assert.equal(missing.localizedValue, "unknown_title_key", "unknown keys must remain raw rather than guessed");
