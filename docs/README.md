@@ -26,10 +26,11 @@
 20. [v8.4.1 Hotfix Luna 实施报告](v8.4.1-hotfix-luna-implementation-report.md)：Token Breakdown 专用渲染、总和校验和 Resolver 诊断区域。
 21. [v8.4.1 Hotfix Terra 实施报告](v8.4.1-hotfix-terra-implementation-report.md)：中文 Localization 回退、扫描状态、Historical Alias→Runtime 闭环与真实 Checkpoint Gate。
 22. [v8.4.1 Hotfix Sol 最终审查](v8.4.1-hotfix-sol-final-review.md)：真实六查询矩阵、Alias/Source/UI 边界和最终自动化 Gate。
-23. [README_摘要系统.md](README_摘要系统.md)：Memory Engine 2.5 的存储、冻结召回、Turn Recall、写入和生命周期规则。
-24. [V7阶段优化记录.md](V7阶段优化记录.md)：V7/V7.x 的连续阶段记录。
-25. [V6阶段优化记录.md](V6阶段优化记录.md)：V6/V6.x 的动作系统与基础设施记录。
-26. 需要核对具体方案时，再阅读版本设计文档和实施报告。
+23. [v8.4.2 Luna UI 前置层实施报告](v8.4.2-luna-ui-implementation-report.md)：身份候选与 Game Truth 隔离、历史定义绑定语义、年度 Delta actor/来源展示和 Checkpoint-only 新鲜度。
+24. [README_摘要系统.md](README_摘要系统.md)：Memory Engine 2.5 的存储、冻结召回、Turn Recall、写入和生命周期规则。
+25. [V7阶段优化记录.md](V7阶段优化记录.md)：V7/V7.x 的连续阶段记录。
+26. [V6阶段优化记录.md](V6阶段优化记录.md)：V6/V6.x 的动作系统和基础设施记录。
+27. 需要核对具体方案时，再阅读版本设计文档和实施报告。
 
 ## 文档分类
 
@@ -64,6 +65,9 @@
 - [v8.4.1-hotfix-luna-implementation-report.md](v8.4.1-hotfix-luna-implementation-report.md)：V8.4.1 Hotfix Luna-H1/H2 的 Token Breakdown 与 Resolver 诊断 UI 实施边界。
 - [v8.4.1-hotfix-terra-implementation-report.md](v8.4.1-hotfix-terra-implementation-report.md)：V8.4.1 Hotfix Terra-H1/H5 的 Localization 回退、Historical Alias Bridge 和真实 Checkpoint 查询结果。
 - [v8.4.1-hotfix-sol-final-review.md](v8.4.1-hotfix-sol-final-review.md)：V8.4.1 Hotfix Sol-H1/H4 的真实查询矩阵、身份/来源边界与 Prompt UI 自动化审查。
+- [v8.4.2-luna-ui-implementation-report.md](v8.4.2-luna-ui-implementation-report.md)：V8.4.2 Luna 前置 UI 的身份歧义隔离、Definition Binding 语义、年度 Delta 和 Freshness 展示。
+- [v8.4.2-terra-p0-implementation-report.md](v8.4.2-terra-p0-implementation-report.md)：V8.4.2 Terra 的身份解析、War parser、Delta provenance 与 CJK Prompt 安全边界。
+- [v8.4.2-sol-final-review.md](v8.4.2-sol-final-review.md)：V8.4.2 Sol 的 P0/P1 审计、真实 1156→1157 存档 Historical/War Gate 与实现冻结结论。
 - [VOTC_v8.1_Campaign_Identity与Worldline_Store_Foundation设计.md](VOTC_v8.1_Campaign_Identity与Worldline_Store_Foundation设计.md)：V8.1 存档身份协议、session 降级、Worldline schema、原子持久化和 Shadow 集成合同。
 - [v8.1-campaign-identity-worldline-store-implementation-report.md](v8.1-campaign-identity-worldline-store-implementation-report.md)：V8.0 P0/P1 审计、V8.1 应用与 Workshop 实施、自动化验证和实机边界。
 - [v8.3.1-historical-figure-dashboard-implementation-report.md](v8.3.1-historical-figure-dashboard-implementation-report.md)：V8.3.1 实机诊断 Snapshot、Overlay Dashboard、append-only Ground Truth 与冻结边界。

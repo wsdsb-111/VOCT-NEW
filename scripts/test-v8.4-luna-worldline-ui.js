@@ -20,12 +20,31 @@ assert.ok(!worldlineSource.includes("require("), "Luna must not load filesystem 
 
 const requiredRendererMarkers = [
   "function WorldlineView()",
+  "V8.4.2 Worldline",
   "window.worldlineAPI",
   "autosave.ck3 path",
   "Open Diagnostics",
   "Checkpoint Status",
   "Annual Delta",
   "Historical Identity",
+  "Historical Definition Bindings",
+  "历史定义绑定",
+  "worldline-identity-resolution",
+  "identityCandidates",
+  "candidateCharacters",
+  "resolvedCharacters",
+  "worldline-candidate-card",
+  "worldline-binding-controls",
+  "bindingStatusFilter",
+  "actorsLabel",
+  "WAR_NO_LONGER_ACTIVE",
+  "战争已不在活跃列表",
+  "DERIVED_GAMESTATE",
+  "CHECKPOINT_ONLY",
+  "LIVE_VERIFIED",
+  "检查点有效",
+  "verificationMode",
+  "filteredHistoricalBindings",
   "Supplemental Knowledge",
   "worldline-semantic-grid",
   "semanticMeta",
@@ -34,7 +53,7 @@ const requiredRendererMarkers = [
   "Direct Liege",
   "Top Realm",
   "Top Realm Ruler",
-  "Checkpoint Freshness",
+  "Verification Mode",
   "Prompt / World Recall Diagnostics",
   "Query Analyzer Entities",
   "Matched Game Truth",
@@ -55,7 +74,7 @@ const requiredRendererMarkers = [
   "confidence:",
   "raw:",
   "source:",
-  "source: \"PLAYER_CANON\"",
+  "source: \"PLAYER_SUPPLEMENTAL\"",
   "gameDate: \"\"",
   "scope: \"SESSION\"",
   "checkpointScope: \"CURRENT_CHECKPOINT\"",
@@ -92,7 +111,14 @@ assert.match(styles, /\.worldline-semantic-item small\s*\{/);
 assert.match(styles, /\.worldline-editor-form textarea/);
 assert.match(styles, /\.worldline-token-row\s*\{/);
 assert.match(styles, /\.worldline-resolver-trace\s*\{/);
+assert.match(styles, /\.worldline-binding-controls\s*\{/);
+assert.match(styles, /\.worldline-identity-resolution\s*\{/);
+assert.match(styles, /\.worldline-candidate-card\s*\{/);
+assert.match(styles, /\.worldline-delta-detail\s*\{/);
 assert.ok(html.includes('src="./assets/index-Dn3qWlAB.js"'), "renderer bundle is not loaded by index.html");
 assert.ok(html.includes('href="./assets/index-WtJH_nua.css"'), "renderer stylesheet is not loaded by index.html");
+assert.ok(renderer.includes('key !== "displayName" && key !== "aliasCandidate"'), "ambiguous candidates must not use authoritative display names");
+assert.ok(renderer.includes("isAmbiguous && isGameTruth"), "ambiguous candidates must be blocked from the Game Truth panel");
+assert.ok(renderer.includes("isAmbiguous && (isCharacterQuery || isTitleQuery)"), "ambiguous query entities must use the candidate panel");
 
-console.log("V8.4 Luna Worldline UI structure: PASS");
+console.log("V8.4.2 Luna Worldline UI structure: PASS");

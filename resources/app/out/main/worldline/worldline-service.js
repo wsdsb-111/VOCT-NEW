@@ -53,6 +53,13 @@ function formatCharacter(snapshot, id) {
   return character?.firstName ? `${character.firstName} (#${id})` : `#${id}`;
 }
 
+function formatDeltaActors(snapshot, ids) {
+  return [...new Set((ids || []).map((id) => String(id)))].flatMap((runtimeId) => {
+    const character = snapshot?.characters?.[runtimeId];
+    return character ? [{ runtimeId, rawName: character.firstName || null, displayName: formatCharacter(snapshot, runtimeId) }] : [];
+  });
+}
+
 function latestHistoryHolder(title, afterDate, beforeDate) {
   return (title.history || []).filter((entry) => entry.holder && (dateValue(entry.date) || 0) > (dateValue(afterDate) || 0) && (dateValue(entry.date) || 0) <= (dateValue(beforeDate) || Number.MAX_SAFE_INTEGER)).at(-1) || null;
 }
@@ -360,22 +367,22 @@ class WorldlineService {
     if (!fromDate || !toDate || (dateValue(toDate) || 0) <= (dateValue(fromDate) || 0)) return [];
     for (const [id, oldCharacter] of Object.entries(previousSnapshot.characters || {})) {
       const currentCharacter = nextSnapshot.characters?.[id];
-      if (oldCharacter.alive && currentCharacter && !currentCharacter.alive) entries.push({ id: `death:${id}:${toDate}`, type: "IMPORTANT_CHARACTER_DIED", date: currentCharacter.deathDate || toDate, actors: [id], source: "GAMESTATE", confidence: "CONFIRMED", reconciliationStatus: "CONFIRMED_BY_GAMESTATE" });
+      if (oldCharacter.alive && currentCharacter && !currentCharacter.alive) entries.push({ id: `death:${id}:${toDate}`, type: "IMPORTANT_CHARACTER_DIED", date: currentCharacter.deathDate || toDate, actors: formatDeltaActors(nextSnapshot, [id]), source: "GAMESTATE", confidence: "CONFIRMED", reconciliationStatus: "CONFIRMED_BY_GAMESTATE" });
     }
     for (const [id, currentWar] of Object.entries(nextSnapshot.wars || {})) {
       if (previousSnapshot.wars?.[id]) continue;
       const startedInWindow = (dateValue(currentWar.startDate) || 0) > (dateValue(fromDate) || 0) && (dateValue(currentWar.startDate) || 0) <= (dateValue(toDate) || Number.MAX_SAFE_INTEGER);
-      entries.push({ id: `war-start:${id}:${toDate}`, type: "WAR_STARTED", date: currentWar.startDate || toDate, actors: [...(currentWar.attacker || []), ...(currentWar.defender || [])], source: "GAMESTATE", confidence: startedInWindow ? "CONFIRMED" : "PARTIAL", reconciliationStatus: startedInWindow ? "CONFIRMED_BY_GAMESTATE" : "RECONCILIATION_UNKNOWN" });
+      entries.push({ id: `war-start:${id}:${toDate}`, type: "WAR_STARTED", date: currentWar.startDate || toDate, actors: formatDeltaActors(nextSnapshot, [...(currentWar.attacker || []), ...(currentWar.defender || [])]), source: "GAMESTATE", confidence: startedInWindow ? "CONFIRMED" : "PARTIAL", reconciliationStatus: startedInWindow ? "CONFIRMED_BY_GAMESTATE" : "RECONCILIATION_UNKNOWN" });
     }
     for (const [id, previousWar] of Object.entries(previousSnapshot.wars || {})) {
       if (nextSnapshot.wars?.[id]) continue;
-      entries.push({ id: `war-missing:${id}:${toDate}`, type: "WAR_ENDED", date: toDate, actors: [...(previousWar.attacker || []), ...(previousWar.defender || [])], source: "SUPPLEMENTAL", confidence: "UNKNOWN", reconciliationStatus: "PROMOTED_TO_SUPPLEMENTAL", detail: "War is absent from the next active-war list; no end date or result was inferred." });
+      entries.push({ id: `war-missing:${id}:${toDate}`, type: "WAR_NO_LONGER_ACTIVE", date: toDate, actors: formatDeltaActors(nextSnapshot, [...(previousWar.attacker || []), ...(previousWar.defender || [])]), source: "DERIVED_GAMESTATE", confidence: "UNKNOWN", reconciliationStatus: "RECONCILIATION_PENDING", detail: "War is absent from the next active-war list; no end date or result was inferred." });
     }
     for (const [id, previousTitle] of Object.entries(previousSnapshot.titles || {})) {
       const currentTitle = nextSnapshot.titles?.[id];
       if (!currentTitle || String(previousTitle.holder || "") === String(currentTitle.holder || "")) continue;
       const history = latestHistoryHolder(currentTitle, fromDate, toDate);
-      entries.push({ id: `title-holder:${id}:${toDate}`, type: "TITLE_HOLDER_CHANGED", date: history?.date || toDate, actors: [previousTitle.holder, currentTitle.holder].filter(Boolean), source: history ? "GAMESTATE" : "SUPPLEMENTAL", confidence: history ? "CONFIRMED" : "PARTIAL", reconciliationStatus: history ? "CONFIRMED_BY_GAMESTATE" : "PROMOTED_TO_SUPPLEMENTAL", titleId: id, detail: history ? null : "Current holder changed without history evidence in the checkpoint window." });
+      entries.push({ id: `title-holder:${id}:${toDate}`, type: "TITLE_HOLDER_CHANGED", date: history?.date || toDate, actors: formatDeltaActors(nextSnapshot, [previousTitle.holder, currentTitle.holder]), source: history ? "GAMESTATE" : "DERIVED_GAMESTATE", confidence: history ? "CONFIRMED" : "PARTIAL", reconciliationStatus: history ? "CONFIRMED_BY_GAMESTATE" : "RECONCILIATION_PENDING", titleId: id, detail: history ? null : "Current holder changed without history evidence in the checkpoint window." });
     }
     return entries.map((entry) => ({ ...entry, campaignId: nextSnapshot.playthroughId || null, checkpointId: next.id }));
   }
@@ -480,6 +487,7 @@ class WorldlineService {
         liveDate: freshness.liveDate,
         ageDays: freshness.ageDays,
         freshnessStatus: freshness.freshnessStatus,
+        verificationMode: freshness.verificationMode,
         freshnessReason: freshness.reason,
         totalDays: live.totalDays || null,
         container: checkpoint?.source?.container || null,
@@ -530,7 +538,8 @@ class WorldlineService {
         ageDays: checkpoint.ageDays ?? null,
         freshness: checkpoint.freshnessStatus || checkpoint.freshness || "UNAVAILABLE",
         freshnessReason: checkpoint.freshnessReason || null,
-        deltaPending: this._currentCampaignDelta().filter((entry) => entry.reconciliationStatus === "PENDING" || entry.reconciliationStatus === "RECONCILIATION_UNKNOWN").length,
+        verificationMode: checkpoint.verificationMode || "STALE",
+        deltaPending: this._currentCampaignDelta().filter((entry) => entry.reconciliationStatus === "PENDING" || entry.reconciliationStatus === "RECONCILIATION_UNKNOWN" || entry.reconciliationStatus === "RECONCILIATION_PENDING").length,
         supplementalCount: this.listSupplemental().supplemental.length,
         liveGameDate: live.gameDate,
         liveConnected: live.connected
@@ -612,7 +621,7 @@ class WorldlineService {
     const entry = {
       id: nodeCrypto.randomUUID(),
       ...this._validateSupplemental(payload),
-      source: "PLAYER_CANON",
+      source: "PLAYER_SUPPLEMENTAL",
       scope: "CHECKPOINT",
       checkpointScope: "CURRENT_CHECKPOINT",
       checkpointId: this.currentCheckpoint.id,
@@ -704,13 +713,15 @@ class WorldlineService {
       const cacheKey = `${checkpointId2}:${this.annualDelta.length}:${this.worldKnowledgeState.supplementalRevision}:${queryFingerprint}:${liveFingerprint}`;
       const cached = this.worldKnowledgeState.topicPatchCache.get(cacheKey);
       if (cached) return { ...cached, stableText, cacheHit: true };
-      const characterFacts = queryAnalysis.characters.map((match) => {
+      const resolvedCharacters = queryAnalysis.resolvedCharacters || queryAnalysis.characters || [];
+      const resolvedTitles = queryAnalysis.resolvedTitles || queryAnalysis.titles || [];
+      const characterFacts = resolvedCharacters.map((match) => {
         const character = snapshot.characters?.[match.id];
         if (!character) return null;
         const displayName = match.displayName || formatCharacter(snapshot, match.id) || `#${match.id}`;
         return `- ${displayName} (#${match.id})：${character.alive ? "存活" : "已死亡"}${character.location ? `；位置 ${character.location}` : ""}`;
       }).filter(Boolean);
-      const titleFacts = queryAnalysis.titles.map((match) => {
+      const titleFacts = resolvedTitles.map((match) => {
         const holder = formatCharacter(snapshot, match.holderId);
         return `- 头衔 ${match.displayName}${match.rawKey && match.displayName !== match.rawKey ? `（${match.rawKey}）` : ""}${holder ? `；持有者 ${holder}` : ""}`;
       });
@@ -729,6 +740,7 @@ class WorldlineService {
         liveDate: freshness.liveDate,
         ageDays: freshness.ageDays,
         freshnessStatus: freshness.freshnessStatus,
+        verificationMode: freshness.verificationMode,
         cacheHit: false
       };
       this.worldKnowledgeState.topicPatchCache.set(cacheKey, context);
@@ -753,9 +765,10 @@ class WorldlineService {
           liveDate: runtime.liveDate,
           ageDays: runtime.ageDays,
           freshnessStatus: runtime.freshnessStatus,
+          verificationMode: runtime.verificationMode,
           worldPromptTokens: 0,
           cacheHit: false,
-          queryAnalysis: { normalizedQuery: safeQuery.trim().toLocaleLowerCase(), terms: [], characters: [], titles: [], matchedAliases: [] },
+          queryAnalysis: { normalizedQuery: safeQuery.trim().toLocaleLowerCase(), terms: [], characters: [], titles: [], resolvedCharacters: [], candidateCharacters: [], resolvedTitles: [], candidateTitles: [], identityResolution: { status: "NO_MATCH", reason: "CONTEXT_UNAVAILABLE", evidence: [], candidates: [] }, matchedAliases: [] },
           resolverTrace: { localization: { status: "NO_MATCH", sourceComplete: true, scannedFiles: 0, missingDescriptors: [], matchedRawKeys: [] }, historical: { status: "NO_MATCH", aliases: [], matchedDefinitionIds: [], matchedRuntimeIds: [], matchSources: [] }, runtime: { status: "NO_MATCH" } },
           gameTruth: { characters: [], titles: [] },
           supplemental: [],
@@ -769,8 +782,8 @@ class WorldlineService {
     const selectedSupplemental = allSupplemental.slice(0, 3);
     const trimmedItems = allSupplemental.slice(3).map((entry) => ({ type: "SUPPLEMENTAL", id: entry.id, title: entry.title, reason: "TOP_3_LIMIT" }));
     const gameTruth = {
-      characters: analysis.characters || [],
-      titles: analysis.titles || []
+      characters: analysis.resolvedCharacters || analysis.characters || [],
+      titles: analysis.resolvedTitles || analysis.titles || []
     };
     for (const id of (analysis.candidateCharacterIds || []).slice((analysis.limits?.maxCharacters || 4))) {
       const character = this.currentCheckpoint?.snapshot?.characters?.[id];
@@ -798,6 +811,7 @@ class WorldlineService {
         liveDate: context.liveDate,
         ageDays: context.ageDays,
         freshnessStatus: context.freshnessStatus,
+        verificationMode: context.verificationMode,
         worldPromptTokens: tokenBreakdown.reduce((total, block) => total + block.tokens, 0),
         cacheHit: context.cacheHit === true,
         tokenBreakdown,
@@ -826,6 +840,7 @@ class WorldlineService {
         liveDate: freshness.liveDate,
         ageDays: freshness.ageDays,
         freshnessStatus: freshness.freshnessStatus,
+        verificationMode: freshness.verificationMode,
         freshnessReason: freshness.reason,
         deltaRevision: this._currentCampaignDelta().length,
         deltaStoredTotal: this.annualDelta.length,

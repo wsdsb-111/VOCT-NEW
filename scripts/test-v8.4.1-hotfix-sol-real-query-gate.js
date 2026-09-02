@@ -38,9 +38,10 @@ try {
   });
 
   const yueFei = analyze("岳飞");
-  assert.deepEqual(yueFei.characters.map((item) => item.id), ["96896", "96895"], "岳飞 must reach every directly bound runtime without silently choosing a Definition");
+  assert.deepEqual(yueFei.characters, [], "岳飞 candidates must not become Game Truth before identity evidence resolves one runtime");
+  assert.deepEqual(yueFei.candidateCharacters.map((item) => item.runtimeId).sort(), ["96895", "96896"], "岳飞 must expose every directly bound runtime as a candidate without silently choosing a Definition");
   assert.equal(yueFei.resolverTrace.historical.status, "AMBIGUOUS", "multi-Definition historical aliases must remain explicit");
-  assert.deepEqual(analyze("岳飞现在在哪里").characters.map((item) => item.id), ["96896", "96895"], "a Chinese sentence must retain the same historical runtimes");
+  assert.deepEqual(analyze("岳飞现在在哪里").candidateCharacters.map((item) => item.runtimeId).sort(), ["96895", "96896"], "a Chinese sentence must retain the same historical candidates without injecting them into Game Truth");
   assert.deepEqual(analyze("nansong_yue_085").characters.map((item) => item.id), ["96896"], "a Definition ID must resolve directly to its runtime");
   const runtime = analyze("#96896");
   assert.deepEqual(runtime.characters.map((item) => item.id), ["96896"], "a Runtime ID must resolve directly");

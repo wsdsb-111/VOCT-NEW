@@ -40,7 +40,7 @@ try {
     source: { path: autosavePath },
     snapshot: {
       gameDate: "1155.1.1", playerId: "100", playthroughId: "fixture", diagnostics: { characterCount: 2, activeWarCount: 0 },
-      characters: { "100": { id: "100", firstName: "Player", alive: true }, "96896": { id: "96896", firstName: "Yuefei_name", fullName: "岳飞", alive: true, location: "kaifeng" } },
+      characters: { "100": { id: "100", firstName: "Player", alive: true }, "96896": { id: "96896", firstName: "Yuefei_name", fullName: "岳飞", birth: "1103.3.24", gender: "male", culture: "汉", alive: true, location: "kaifeng" } },
       nameToCharacterIds: { player: ["100"], yuefei_name: ["96896"] },
       definitionToRuntime: { nansong_yue_085: "96896" }, runtimeToDefinitions: { "96896": ["nansong_yue_085"] }, titles: {}
     }
@@ -52,7 +52,7 @@ try {
   assert.equal(diagnostics.available, true, "the real resolver path must remain available while Prompt Default On is disabled");
   assert.ok(diagnostics.queryAnalysis.matchedAliases.includes("岳飞"), "the analyzed Chinese query must record its historical alias");
   assert.deepEqual(diagnostics.gameTruth.characters.map((item) => item.id), ["96896"], "the resolver, analyzer and diagnostics path must reach the observed runtime character without mocked reverse lookup");
-  assert.ok(diagnostics.gameTruth.characters[0].matchSources.includes("historical_alias"), "the end-to-end result must retain historical-alias provenance");
+  assert.ok(diagnostics.gameTruth.characters[0].matchSources.includes("historical_identity_resolved"), "Game Truth must be entered only after the V8.3 evidence threshold resolves identity");
   assert.equal(diagnostics.resolverTrace.localization.status, "NOT_REQUIRED_HISTORICAL_MATCH", "a confirmed historical identity must avoid an unnecessary reverse localization scan");
   assert.deepEqual(diagnostics.resolverTrace.historical.matchedRuntimeIds, ["96896"], "the trace must prove definition-to-runtime bridging");
   assert.equal(service.getPromptContext({ query: "岳飞现在在哪里" }), null, "the E2E gate must not turn on production prompt integration");

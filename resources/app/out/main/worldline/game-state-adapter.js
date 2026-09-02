@@ -254,18 +254,35 @@ function parseTitles(text, value) {
   return titles;
 }
 
-function parseParticipants(text, value) {
+function parseParticipants(text, value, knownCharacterIds = new Set(), diagnostics = { rejectedNumericTokens: [], unknownRuntimeIds: [] }) {
   const selected = firstField(value);
-  if (!selected) return [];
-  if (selected.kind === "scalar") return [selected.value];
-  const fields = collectFields(text, selected, ["character", "participant", "participants"]);
-  const direct = scalarList(text, fields.character).concat(scalarList(text, fields.participant));
-  if (direct.length) return [...new Set(direct)];
-  const participants = firstField(fields.participants);
-  return scalarList(text, participants).filter((value2) => /^\d+$/.test(value2));
+  if (!selected || selected.kind !== "block") return [];
+  const participants = new Set();
+  const addExplicitRuntimeId = (candidate) => {
+    const runtimeId = String(candidate || "");
+    if (!/^\d+$/.test(runtimeId)) return;
+    if (knownCharacterIds.has(runtimeId)) participants.add(runtimeId);
+    else diagnostics.unknownRuntimeIds.push(runtimeId);
+  };
+  const inspect = (range, explicit = false) => {
+    scanDirectEntries(text, range.start, range.end, (key, entry) => {
+      if (key === "character" || key === "participant") {
+        if (entry.kind === "scalar") addExplicitRuntimeId(entry.value);
+        else inspect(entry, true);
+        return;
+      }
+      if (key === "participants" && entry.kind === "block") {
+        inspect(entry, true);
+        return;
+      }
+      if (entry.kind === "scalar" && /^\d+$/.test(entry.value)) diagnostics.rejectedNumericTokens.push(entry.value);
+    });
+  };
+  inspect(selected);
+  return [...participants];
 }
 
-function parseWars(text, value) {
+function parseWars(text, value, knownCharacterIds, diagnostics) {
   const root = firstField(value);
   const section = firstField(collectFields(text, root, ["active_wars"]).active_wars);
   const wars = Object.create(null);
@@ -277,8 +294,8 @@ function parseWars(text, value) {
       id: String(id),
       startDate: scalar(fields.start_date),
       endDate: scalar(fields.end_date),
-      attacker: parseParticipants(text, fields.attacker),
-      defender: parseParticipants(text, fields.defender),
+      attacker: parseParticipants(text, fields.attacker, knownCharacterIds, diagnostics),
+      defender: parseParticipants(text, fields.defender, knownCharacterIds, diagnostics),
       casusBelli: scalar(fields.casus_belli),
       name: scalar(fields.name),
       result: scalar(fields.result)
@@ -304,7 +321,8 @@ function parseGameState(gamestate) {
   parseCharacterSection(text, collectFields(text, charactersRoot, ["dead_prunable"]).dead_prunable, "dead_prunable", characters, nameToCharacterIds);
   const lookup = parseLookup(text, fields.character_lookup);
   const titles = parseTitles(text, fields.landed_titles);
-  const wars = parseWars(text, fields.wars);
+  const warParticipantDiagnostics = { rejectedNumericTokens: [], unknownRuntimeIds: [] };
+  const wars = parseWars(text, fields.wars, new Set(Object.keys(characters)), warParticipantDiagnostics);
   return {
     schemaVersion: 1,
     gameDate: scalar(fields.date),
@@ -321,6 +339,8 @@ function parseGameState(gamestate) {
       characterCount: Object.keys(characters).length,
       titleCount: Object.keys(titles).length,
       activeWarCount: Object.keys(wars).length,
+      warParticipantRejectedNumericTokens: [...new Set(warParticipantDiagnostics.rejectedNumericTokens)],
+      warParticipantUnknownRuntimeIds: [...new Set(warParticipantDiagnostics.unknownRuntimeIds)],
       missingFields: [scalar(fields.date) ? null : "date", scalar(fields.played_character) || scalar(playedCharacterFields.character) ? null : "played_character"].filter(Boolean),
       parseWarnings: []
     }
@@ -330,8 +350,10 @@ function parseGameState(gamestate) {
 module.exports = {
   collectFields,
   dateValue,
+  parseParticipants,
   parseGameState,
   parseHistory,
+  parseWars,
   readBlock,
   readToken,
   scanDirectEntries

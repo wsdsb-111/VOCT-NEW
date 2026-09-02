@@ -11,7 +11,7 @@ Voices of the Court 是一个面向《Crusader Kings III》（CK3）的沉浸式
 - **Campaign Identity / Worldline Store**：V8.1 从 CK3 存档读取稳定 token，以哈希隔离 `dynamic_history/<campaignId>/worldline.json`；旧模组或无效 token 只使用进程级 identity，不写世界线数据。
 - **Historical Figure Resolver**：V8.3 在 Shadow Mode 中以规范名/别名精确门禁、出生时间、性别和亲属证据匹配 CK3 人物；解析结果只保存在当前 GameData 的隐藏 metadata，不进入 Prompt 或世界线持久化。
 - **历史人物实机校准**：V8.3.1 在现有 Overlay 中一键读取当前 CK3，展示 raw culture、分数、证据、冲突和候选，并将人工裁定 append 到独立 diagnostics JSONL；裁定不会改变生产 Resolver。
-- **世界线（V8.4 Luna + Terra）**：页面已接入年度 `autosave.ck3` Checkpoint、Worker 解析、世界概览、年度变化、Historical Identity、诊断和 Checkpoint-scoped Supplemental；世界知识 Prompt 基础默认关闭，等待最终 Cache 审查。
+- **世界线（V8.4.2 Luna + Terra + Sol）**：页面已接入年度 `autosave.ck3` Checkpoint、Worker 解析、世界概览、年度变化、世界知识、Historical Definition Bindings、身份候选诊断和 Checkpoint-scoped Supplemental；候选与 Game Truth 已分离，历史身份复用 V8.3 阈值 fail-closed 解析，真实 Historical/War Gate 已通过，并已修复 Prompt 诊断为空时的首屏渲染 P0，世界知识 Prompt 基础默认保持关闭。
 - **历史认知边界**：提示词要求角色只使用当前年份已经发生、写成、流传或成名的信息，避免引用未来人物、事件、诗词和典故。
 - **当前政局优先**：皇帝和年号从实际游戏角色数据中识别，支持玩家篡位或改变历史后的沙盒玩法。
 - **Memory Engine 2.5**：保留 `角色ID_姓名/与对方的对话.json` 人物目录与 2.4 写入合同，并新增整场冻结的 Session Topic Anchor，以及只在明确回忆意图下触发、Top1、默认 256 Token 的 Turn Recall。
@@ -200,13 +200,13 @@ node scripts\test-release.js
 ## 版本信息
 
 - 外挂 UI 版本：v2.0.4
-- 当前应用功能基线：v8.3.1 Historical Figure Ground Truth Dashboard（Shadow Mode）
+- 当前应用功能基线：v8.4.2 实现冻结 + 世界线首屏 P0 热修（PASS，Prompt Default On 保持关闭）
 - CK3 模组版本：Voices of the Court 2.0.5
 - 模组支持版本：CK3 1.18.*
 - UI 主题：宫廷编年史风格（深红、暗金、羊皮纸文本层级）
 - UI 主题切换：羊皮卷、骑士纹章、水墨画卷三套完整历史风格；分别拥有独立背景、边框结构、按钮造型、消息卡片、输入框、字体和滚动条，并可自动保存选择
 - UI 素材生成提示词：参见 [docs/UI_ASSET_PROMPTS_2.0.3.md](docs/UI_ASSET_PROMPTS_2.0.3.md)
-- 当前重点：V8.4 Active Playset Definition Catalog、Save A/B 分支 Gate、世界知识启用后的 Provider/Cache 回归及修复版世界线 UI 人工验收；Official VOTC 2.0.3 Action、Memory Engine 2.5、外挂 UI 2.0.4 与默认 Prompt/cache 合同保持冻结
+- 当前重点：重启 VOTC 后进行 V8.4.2 三主题视觉烟雾验收，并规划 V8.5 Checkpoint 架构重构；Official VOTC 2.0.3 Action、Memory Engine 2.5、外挂 UI 2.0.4 与默认 Prompt/cache 合同保持冻结
 
 ## 已知限制
 

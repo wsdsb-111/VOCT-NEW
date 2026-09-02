@@ -13,6 +13,7 @@ assert.deepEqual(getCheckpointFreshness({ pipelineState: "ACTIVE", checkpointAsO
   liveDate: "1155.1.1",
   ageDays: 0,
   freshnessStatus: "FRESH",
+  verificationMode: "LIVE_VERIFIED",
   reason: "SAME_DAY"
 }, "same-day Live and Checkpoint facts must be fresh");
 assert.equal(getCheckpointFreshness({ pipelineState: "ACTIVE", checkpointAsOf: "1155.1.1", liveDate: "1155.1.2" }).freshnessStatus, "AGING", "a newer Live date must separate checkpoint facts without calling them current");
@@ -25,6 +26,7 @@ assert.equal(getCheckpointFreshness({ pipelineState: "ACTIVE", checkpointAsOf: "
 assert.equal(getCheckpointFreshness({ pipelineState: "STALE", checkpointAsOf: "1155.1.1", liveDate: "1155.1.1" }).freshnessStatus, "STALE", "a non-active pipeline must remain stale even when dates match");
 assert.equal(getCheckpointFreshness({ pipelineState: "ACTIVE", checkpointAsOf: "1155.1.1", liveDate: "1154.12.30" }).reason, "LIVE_DATE_BEFORE_CHECKPOINT", "a reversed Live date must fail closed");
 assert.equal(getCheckpointFreshness({ pipelineState: "ACTIVE", checkpointAsOf: "1155.1.1", liveDate: null }).freshnessStatus, "FRESH", "an active checkpoint without a Live probe may remain available only with an explicit missing-Live boundary");
+assert.equal(getCheckpointFreshness({ pipelineState: "ACTIVE", checkpointAsOf: "1155.1.1", liveDate: null }).verificationMode, "CHECKPOINT_ONLY", "a missing Live probe must never be represented as a real-time verification");
 
 class SettingsFixture {
   constructor(autosavePath) {

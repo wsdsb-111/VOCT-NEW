@@ -2100,6 +2100,63 @@ hr {
 .worldline-row > span:not(.worldline-source-tag) {
   overflow-wrap: anywhere;
 }
+.worldline-binding-controls {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(150px, auto);
+  gap: 6px;
+  margin-bottom: 8px;
+}
+.worldline-binding-controls input,
+.worldline-binding-controls select {
+  width: 100%;
+  min-width: 0;
+  box-sizing: border-box;
+}
+.worldline-binding-count {
+  margin: 6px 0 0;
+  opacity: 0.78;
+  font-size: 0.82em;
+}
+.worldline-identity-resolution {
+  margin: 10px 0;
+  padding: 9px;
+  border: 1px solid rgba(239, 177, 106, 0.45);
+  border-radius: 7px;
+  background: rgba(239, 177, 106, 0.08);
+}
+.worldline-identity-resolution h5 {
+  margin: 0 0 6px;
+}
+.worldline-candidate-card {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+  gap: 6px;
+  padding: 8px;
+  border: 1px solid rgba(240, 161, 161, 0.55);
+  border-radius: 7px;
+  background: rgba(96, 20, 20, 0.18);
+  color: inherit;
+}
+.worldline-candidate-card strong {
+  grid-column: 1 / -1;
+  color: #f3d28a;
+}
+.worldline-candidate-card span {
+  min-width: 0;
+  overflow-wrap: anywhere;
+  font-size: 0.86em;
+}
+.worldline-delta-row {
+  grid-template-columns: minmax(140px, 1.2fr) minmax(80px, 0.7fr) minmax(150px, 1.4fr) auto auto;
+}
+.worldline-delta-detail {
+  grid-column: 1 / -1;
+  opacity: 0.78;
+  overflow-wrap: anywhere;
+}
+.worldline-binding-row {
+  grid-template-columns: minmax(120px, 1.1fr) minmax(120px, 1.1fr) minmax(80px, 0.7fr) minmax(80px, 0.7fr) minmax(80px, 0.7fr) auto;
+}
 .worldline-row.is-hidden {
   opacity: 0.55;
 }
@@ -2163,6 +2220,16 @@ hr {
   .worldline-actions,
   .worldline-row-actions {
     justify-content: flex-start;
+  }
+  .worldline-binding-controls {
+    grid-template-columns: 1fr;
+  }
+  .worldline-delta-row,
+  .worldline-binding-row {
+    grid-template-columns: 1fr;
+  }
+  .worldline-delta-detail {
+    grid-column: auto;
   }
 }
 .summaries-manager .memory-routing-details {

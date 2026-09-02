@@ -62,7 +62,7 @@ dead_unprunable={ ${yuefeiAlive ? "" : "101={ first_name=HanShizhong dead_data={
 characters={ dead_prunable={} }
 character_lookup={ nansong_yue_085=100 nansong_han_001=101 }
 landed_titles={ landed_titles={ 500={ key=c_fixture holder=${titleHolder} date=${date} history={ 1154.1.1={ type=appointment holder=100 } 1155.1.1={ type=appointment_succession holder=${titleHolder} } } } } }
-wars={ active_wars={ ${includeOldWar ? "900={ attacker=100 defender=101 start_date=1153.4.15 casus_belli=fixture_cb }" : ""} ${includeNewWar ? "901={ attacker=100 defender=102 start_date=1155.1.1 casus_belli=fixture_cb }" : ""} } }
+wars={ active_wars={ ${includeOldWar ? "900={ attacker={ character=100 } defender={ participant={ character=101 } } start_date=1153.4.15 casus_belli=fixture_cb }" : ""} ${includeNewWar ? "901={ attacker={ character=100 } defender={ participant={ character=102 } } start_date=1155.1.1 casus_belli=fixture_cb }" : ""} } }
 `;
 }
 
@@ -128,12 +128,16 @@ async function run() {
     const delta = service.getAnnualDelta().annualDelta;
     assert.ok(delta.some((entry) => entry.type === "IMPORTANT_CHARACTER_DIED" && entry.source === "GAMESTATE"), "death must reconcile from game truth");
     assert.ok(delta.some((entry) => entry.type === "WAR_STARTED" && entry.reconciliationStatus === "CONFIRMED_BY_GAMESTATE"), "dated war start must reconcile from game truth");
-    assert.ok(delta.some((entry) => entry.type === "WAR_ENDED" && entry.source === "SUPPLEMENTAL"), "missing active war must not be fabricated as game truth");
+    assert.ok(delta.some((entry) => entry.type === "WAR_NO_LONGER_ACTIVE" && entry.source === "DERIVED_GAMESTATE" && entry.reconciliationStatus === "RECONCILIATION_PENDING"), "missing active war must remain a pending derived observation, not a fabricated ending");
+    assert.ok(delta.every((entry) => entry.type !== "WAR_ENDED"), "an active-war list omission alone must never claim a war ended");
     assert.ok(delta.some((entry) => entry.type === "TITLE_HOLDER_CHANGED" && entry.source === "GAMESTATE"), "dated title history must reconcile from game truth");
 
     const supplemental = service.createSupplemental({ title: "Player canon", body: "The court received a private letter.", visibility: "PERSONAL", importance: "HIGH" }).supplemental;
+    assert.equal(supplemental.source, "PLAYER_SUPPLEMENTAL", "player-authored knowledge must not share a system-derived source label");
     assert.equal(service.listSupplemental().supplemental.length, 1, "supplemental entry must be checkpoint-scoped");
-    assert.equal(service.updateSupplemental(supplemental.id, { title: "Revised canon", body: "The court received a sealed letter.", visibility: "PERSONAL", importance: "HIGH" }).supplemental.title, "Revised canon", "supplemental entry must be editable");
+    const updatedSupplemental = service.updateSupplemental(supplemental.id, { title: "Revised canon", body: "The court received a sealed letter.", visibility: "PERSONAL", importance: "HIGH", source: "DERIVED_GAMESTATE" }).supplemental;
+    assert.equal(updatedSupplemental.title, "Revised canon", "supplemental entry must be editable");
+    assert.equal(updatedSupplemental.source, "PLAYER_SUPPLEMENTAL", "an update payload must not rewrite player provenance");
     assert.equal(service.deleteSupplemental(supplemental.id).success, true, "supplemental entry must be removable");
 
     const activeCheckpointId = service.getCheckpointStatus().checkpoint.id;

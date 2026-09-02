@@ -13,6 +13,27 @@ const FIGURE_STATUS = Object.freeze({
   RESOLVED: "RESOLVED"
 });
 
+const IDENTITY_SCORING = Object.freeze({
+  nameExact: 0.55,
+  nameAlias: 0.45,
+  ageStrong: 0.22,
+  ageWeak: 0.10,
+  ageImpossible: -0.50,
+  ageMismatch: -0.15,
+  genderMatch: 0.08,
+  genderConflict: -0.40,
+  familyMatch: 0.20,
+  cultureMatch: 0.03,
+  houseMatch: 0.06,
+  titleMatch: 0.04,
+  positionMatch: 0.05,
+  realmMatch: 0.03,
+  locationMatch: 0.02,
+  candidateThreshold: 0.65,
+  resolveThreshold: 0.85,
+  resolutionMargin: 0.15
+});
+
 const roundScore = (value) => Math.round(Math.max(0, Math.min(1, value)) * 10000) / 10000;
 const normalizedIncludes = (value, hints) => {
   const normalized = normalizeHistoricalName(value);
@@ -43,31 +64,31 @@ function scoreCandidate(figure, matching, character, nameEvidence, currentYear) 
       conflict("RELATION_BIRTH_CONFLICT");
     } else {
       const difference = Math.abs(character.age - (currentYear - birthYear));
-      if (difference <= 2) add("AGE_MATCH_STRONG", 0.22);
-      else if (difference <= 5) add("AGE_MATCH_WEAK", 0.10);
-      else if (difference >= 15) conflict("AGE_IMPOSSIBLE", -0.50, true);
-      else conflict("AGE_MISMATCH", -0.15);
+      if (difference <= 2) add("AGE_MATCH_STRONG", IDENTITY_SCORING.ageStrong);
+      else if (difference <= 5) add("AGE_MATCH_WEAK", IDENTITY_SCORING.ageWeak);
+      else if (difference >= 15) conflict("AGE_IMPOSSIBLE", IDENTITY_SCORING.ageImpossible, true);
+      else conflict("AGE_MISMATCH", IDENTITY_SCORING.ageMismatch);
     }
   }
   if (matching.intrinsic.gender === "male" || matching.intrinsic.gender === "female") {
     if (character.conflicts?.gender) conflict("RELATION_GENDER_CONFLICT");
-    else if (character.gender === matching.intrinsic.gender) add("GENDER_MATCH", 0.08);
-    else if (character.gender === "male" || character.gender === "female") conflict("GENDER_CONFLICT", -0.40, true);
+    else if (character.gender === matching.intrinsic.gender) add("GENDER_MATCH", IDENTITY_SCORING.genderMatch);
+    else if (character.gender === "male" || character.gender === "female") conflict("GENDER_CONFLICT", IDENTITY_SCORING.genderConflict, true);
   }
   for (const familyHint of matching.familyHints) {
     const expected = new Set(familyHint.names.map(normalizeHistoricalName));
     const matched = character.familyEvidence.some((entry) => entry.relation === familyHint.relation && entry.names.some((name) => expected.has(normalizeHistoricalName(name))));
     if (matched) {
-      add("FAMILY_MATCH", 0.20);
+      add("FAMILY_MATCH", IDENTITY_SCORING.familyMatch);
       break;
     }
   }
-  if (normalizedEquals(character.culture, matching.hints.cultures)) add("CULTURE_HINT_MATCH", 0.03);
-  if (normalizedEquals(character.house, matching.hints.houses)) add("HOUSE_HINT_MATCH", 0.06);
-  if ([character.primaryTitle, character.titleRankConcept].some((value) => normalizedIncludes(value, matching.hints.titles))) add("TITLE_HINT_MATCH", 0.04);
-  if (normalizedIncludes(character.heldCourtAndCouncilPositions, matching.hints.positions)) add("POSITION_HINT_MATCH", 0.05);
-  if ([character.liege, character.topLiege].some((value) => normalizedIncludes(value, matching.hints.realms))) add("REALM_HINT_MATCH", 0.03);
-  if (normalizedIncludes(character.capitalLocation, matching.hints.locations)) add("LOCATION_HINT_MATCH", 0.02);
+  if (normalizedEquals(character.culture, matching.hints.cultures)) add("CULTURE_HINT_MATCH", IDENTITY_SCORING.cultureMatch);
+  if (normalizedEquals(character.house, matching.hints.houses)) add("HOUSE_HINT_MATCH", IDENTITY_SCORING.houseMatch);
+  if ([character.primaryTitle, character.titleRankConcept].some((value) => normalizedIncludes(value, matching.hints.titles))) add("TITLE_HINT_MATCH", IDENTITY_SCORING.titleMatch);
+  if (normalizedIncludes(character.heldCourtAndCouncilPositions, matching.hints.positions)) add("POSITION_HINT_MATCH", IDENTITY_SCORING.positionMatch);
+  if ([character.liege, character.topLiege].some((value) => normalizedIncludes(value, matching.hints.realms))) add("REALM_HINT_MATCH", IDENTITY_SCORING.realmMatch);
+  if (normalizedIncludes(character.capitalLocation, matching.hints.locations)) add("LOCATION_HINT_MATCH", IDENTITY_SCORING.locationMatch);
   if (Number.isInteger(currentYear) && Number.isInteger(figure.life?.deathYear) && currentYear > figure.life.deathYear) evidence.push({ code: "SURVIVED_BEYOND_BASELINE_DEATH", weight: 0 });
   return {
     characterId: character.id,
@@ -109,9 +130,9 @@ function resolveFigure(figure, matching, input, nameIndex) {
   const second = candidates[1] || null;
   const margin = second ? roundScore(top.rawScore - second.rawScore) : 1;
   let status = FIGURE_STATUS.DUE_UNRESOLVED;
-  if (top.score >= 0.65 && second?.score >= 0.65 && margin < 0.15) status = FIGURE_STATUS.AMBIGUOUS;
-  else if (top.score >= 0.85 && margin >= 0.15 && top.hardConflicts.length === 0 && top.hasStrongSecondaryIdentity) status = FIGURE_STATUS.RESOLVED;
-  else if (top.score >= 0.65 && top.hardConflicts.length === 0) status = FIGURE_STATUS.CANDIDATE;
+  if (top.score >= IDENTITY_SCORING.candidateThreshold && second?.score >= IDENTITY_SCORING.candidateThreshold && margin < IDENTITY_SCORING.resolutionMargin) status = FIGURE_STATUS.AMBIGUOUS;
+  else if (top.score >= IDENTITY_SCORING.resolveThreshold && margin >= IDENTITY_SCORING.resolutionMargin && top.hardConflicts.length === 0 && top.hasStrongSecondaryIdentity) status = FIGURE_STATUS.RESOLVED;
+  else if (top.score >= IDENTITY_SCORING.candidateThreshold && top.hardConflicts.length === 0) status = FIGURE_STATUS.CANDIDATE;
   return {
     figureKey: figure.figureKey,
     status,
@@ -168,4 +189,4 @@ class HistoricalFigureResolver {
   }
 }
 
-module.exports = { FIGURE_STATUS, HistoricalFigureResolver, resolveHistoricalFigures };
+module.exports = { FIGURE_STATUS, IDENTITY_SCORING, HistoricalFigureResolver, resolveHistoricalFigures };

@@ -2,8 +2,11 @@
 
 这里是版本变更的单一入口。详细设计和测试证据保留在链接目标中，本文件只维护版本顺序、用户可见摘要和文档索引。
 
+| v8.4.2 P0 热修 | 修复世界线页首次打开时 Prompt 诊断尚未生成导致 Renderer 崩溃、界面消失的问题；候选数组安全回退，新增首屏渲染回归 | [V8.4.2 Sol 最终审查](docs/v8.4.2-sol-final-review.md) / [V8 阶段记录](docs/V8阶段开发记录.md) |
+
 | 版本 | 重点 | 详细记录 |
 | --- | --- | --- |
+| v8.4.2 最终实现冻结（PASS） | Historical Identity、AMBIGUOUS Prompt 隔离、严格 War participant、Delta provenance、CJK entity anchor、候选 UI 与 Freshness 全部通过；真实 1156→1157 存档五查询和 131 条 War Delta Gate 通过，100/100 release groups；Prompt Default On 继续关闭 | [V8.4.2 Sol 最终审查](docs/v8.4.2-sol-final-review.md) / [Terra P0 实施](docs/v8.4.2-terra-p0-implementation-report.md) |
 | v8.4.1 P0 世界线页阻塞修复 | 移除 9.2 万条历史绑定的主进程全量排序；进一步修复概览把中文显示名当 localization key 穷举 3,670 个文件的问题，显示解析改为文字直通/typed 250 文件硬上限，完整查询 Resolver 保持不变 | [Hotfix Sol 审查](docs/v8.4.1-hotfix-sol-final-review.md) / [V8 阶段记录](docs/V8阶段开发记录.md) |
 | v8.4.1 Hotfix Sol-H1/H4 | 真实六查询 Gate 通过；修复多 Steam Library base root 选择、Runtime Trace、typed/fallback 实机慢扫描，并以“当前快照唯一”约束涿郡前缀 title alias；Token/Resolver UI 自动化 Gate 通过，人工 Electron 视觉验收待重启确认 | [Hotfix Sol 审查](docs/v8.4.1-hotfix-sol-final-review.md) / [V8 阶段记录](docs/V8阶段开发记录.md) |
 | v8.4.1 Hotfix Terra-H1/H5 | 中文 Localization 反查支持非标准文件名 fallback，源不完整/冲突显式诊断；冻结 Historical Alias 仅经 Definition→Runtime 绑定召回，真实 Checkpoint 的“岳飞现在在哪里”命中两个已绑定 Runtime 并保留 AMBIGUOUS | [Hotfix Terra 实施](docs/v8.4.1-hotfix-terra-implementation-report.md) / [V8 阶段记录](docs/V8阶段开发记录.md) |
