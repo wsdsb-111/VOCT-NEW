@@ -6,6 +6,7 @@
 
 | 版本 | 重点 | 详细记录 |
 | --- | --- | --- |
+| v8.4.2 P0 Run Command 生命周期热修 | 修复旧 Conversation Close 迟到执行导致当前 CK3 Talk Scene 被关闭，以及 stalled Close 阻塞 FIFO 队列；增加 Close TTL/epoch、v2→v3 迁移、启动 neutralize、迟到 ACK 保护和队列健康诊断 | [V8.4.2 Run Command 生命周期热修](docs/v8.4.2-run-command-lifecycle-hotfix-implementation-report.md) / [V8 阶段记录](docs/V8阶段开发记录.md) |
 | v8.4.2 最终实现冻结（PASS） | Historical Identity、AMBIGUOUS Prompt 隔离、严格 War participant、Delta provenance、CJK entity anchor、候选 UI 与 Freshness 全部通过；真实 1156→1157 存档五查询和 131 条 War Delta Gate 通过，100/100 release groups；Prompt Default On 继续关闭 | [V8.4.2 Sol 最终审查](docs/v8.4.2-sol-final-review.md) / [Terra P0 实施](docs/v8.4.2-terra-p0-implementation-report.md) |
 | v8.4.1 P0 世界线页阻塞修复 | 移除 9.2 万条历史绑定的主进程全量排序；进一步修复概览把中文显示名当 localization key 穷举 3,670 个文件的问题，显示解析改为文字直通/typed 250 文件硬上限，完整查询 Resolver 保持不变 | [Hotfix Sol 审查](docs/v8.4.1-hotfix-sol-final-review.md) / [V8 阶段记录](docs/V8阶段开发记录.md) |
 | v8.4.1 Hotfix Sol-H1/H4 | 真实六查询 Gate 通过；修复多 Steam Library base root 选择、Runtime Trace、typed/fallback 实机慢扫描，并以“当前快照唯一”约束涿郡前缀 title alias；Token/Resolver UI 自动化 Gate 通过，人工 Electron 视觉验收待重启确认 | [Hotfix Sol 审查](docs/v8.4.1-hotfix-sol-final-review.md) / [V8 阶段记录](docs/V8阶段开发记录.md) |

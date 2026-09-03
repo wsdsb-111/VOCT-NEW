@@ -81,7 +81,6 @@ async function run() {
     const first = harness.createManager();
     first.initializeAfterAckReconciliation();
     const action = first.enqueueCommand({ owner: "action", kind: "action_effect", effectText: "add_gold = 6" });
-    const runFileBeforeRestart = fs.readFileSync(harness.runFile, "utf8");
     const restarted = harness.createManager();
     assert.strictEqual(restarted.reconcileAcknowledgedCommands(scanRunAcksForPendingCommands(harness.debugLog, { fs, pendingCommands: restarted.getPendingCommands() })).length, 0);
     restarted.initializeAfterAckReconciliation();
@@ -90,7 +89,7 @@ async function run() {
     assert.strictEqual(active.status, "stalled", "T3 unacknowledged head must become STALLED after restart");
     assert.strictEqual(active.failureReason, "startup_ack_unconfirmed", "T3 restart must record the ACK uncertainty reason");
     assert.strictEqual(active.writeAttempts, 1, "T3 restart must not increase writeAttempts");
-    assert.strictEqual(fs.readFileSync(harness.runFile, "utf8"), runFileBeforeRestart, "T3 restart must not rewrite votc.txt");
+    assert.strictEqual(fs.readFileSync(harness.runFile, "utf8"), "", "T3 restart must neutralize the unconfirmed carrier without replay");
   }
 
   {
@@ -125,8 +124,9 @@ async function run() {
     ]);
     assert.deepStrictEqual(continuous.map((command) => command.commandId), [a.commandId, b.commandId], "T7 continuous ACKs must reconcile in FIFO order");
     restarted.initializeAfterAckReconciliation();
-    assert.deepStrictEqual(restarted.getPendingCommands().map((command) => command.commandId), [c.commandId]);
-    assert(fs.readFileSync(harness.runFile, "utf8").includes(c.ackMarker), "T7 next unconfirmed command must become active");
+    assert.deepStrictEqual(restarted.getPendingCommands().map((command) => command.commandId), [], "T7 queued conversation close must not be auto-replayed during startup recovery");
+    assert.strictEqual(restarted.getRecentCommands().find((command) => command.commandId === c.commandId).status, "expired", "T7 queued conversation close must expire during startup recovery");
+    assert(!fs.readFileSync(harness.runFile, "utf8").includes(c.ackMarker), "T7 startup recovery must not write the queued conversation close carrier");
   }
 
   {
@@ -238,8 +238,6 @@ async function run() {
 
   {
     const operations = [];
-    let restartWriteCount = 0;
-    let countRestartWrites = false;
     const trackingFs = Object.create(fs);
     const harness = createHarness("dispatch-intent", { fsImpl: trackingFs });
     trackingFs.renameSync = (source, destination) => {
@@ -249,7 +247,6 @@ async function run() {
     trackingFs.writeFileSync = (filePath, ...args) => {
       if (path.resolve(filePath) === path.resolve(harness.runFile)) {
         operations.push("run");
-        if (countRestartWrites) restartWriteCount += 1;
       }
       return fs.writeFileSync(filePath, ...args);
     };
@@ -266,9 +263,8 @@ async function run() {
     assert.strictEqual(action.status, "awaiting_ack");
 
     const restarted = harness.createManager();
-    countRestartWrites = true;
     restarted.initializeAfterAckReconciliation();
-    assert.strictEqual(restartWriteCount, 0, "T16 restart after the physical write must not replay votc.txt");
+    assert.strictEqual(fs.readFileSync(harness.runFile, "utf8"), "", "T16 restart must neutralize the carrier without replaying the Effect");
     assert.strictEqual(restarted.getPendingCommands()[0].status, "stalled");
   }
 

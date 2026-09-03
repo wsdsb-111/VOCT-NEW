@@ -116,6 +116,7 @@ const releaseChecks = [
   { group: "v8.4.2-war-participants", script: "test-v8.4.2-war-participants.js" },
   { group: "v8.4.2-cjk-entity-anchor", script: "test-v8.4.2-cjk-entity-anchor.js" },
   { group: "v8.4.2-sol-safety-gates", script: "test-v8.4.2-sol-safety-gates.js" },
+  { group: "v8.4.2-run-command-lifecycle", script: "test-v8.4.2-run-command-lifecycle.js" },
   { group: "v7.10-rc2-action-config", script: "test-v7.10-rc2-action-config.js" },
   { group: "v7.10-rc2-terra-action-token-metadata", script: "test-v7.10-rc2-action-token-metadata.js" },
   { group: "v7.10-rc2-terra-letter-effect-diagnostics", script: "test-v7.10-rc2-letter-effect-diagnostics.js" },

@@ -41,6 +41,9 @@ try {
   assert.strictEqual(restarted.getPendingCommands().length, 1, "D4 restart must recover the unacknowledged command");
   assert.strictEqual(restarted.getPendingCommands()[0].commandId, letter.commandId);
   restarted.initializeAfterAckReconciliation();
+  assert.strictEqual(restarted.getPendingCommands()[0].status, "stalled", "D4 restart must retain unconfirmed command as STALLED");
+  assert.strictEqual(fs.readFileSync(restarted.path, "utf8"), "", "D4 startup must neutralize the unconfirmed carrier without replay");
+  restarted.retryStalledCommand(letter.commandId);
   assert(fs.readFileSync(restarted.path, "utf8").includes(letter.ackMarker));
   assert(restarted.ackCommand(letter.commandId));
   assert.strictEqual(fs.readFileSync(restarted.path, "utf8"), "");

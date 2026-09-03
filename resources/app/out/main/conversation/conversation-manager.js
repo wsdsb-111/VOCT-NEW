@@ -1,9 +1,10 @@
 "use strict";
 
-function createConversationManager({ events, memorySystem, Conversation, PromptBuilder, createActionFeedback, logVerboseLLM }) {
+function createConversationManager({ events, memorySystem, Conversation, PromptBuilder, createActionFeedback, logVerboseLLM, runFileManager = null }) {
   class ConversationManager {
     constructor() {
       this.currentConversation = null;
+      this.conversationEpoch = 0;
       this.eventEmitter = new events.EventEmitter();
       this.finalizationCoordinator = new memorySystem.FinalizationCoordinator({ logger: console });
     }
@@ -28,9 +29,16 @@ function createConversationManager({ events, memorySystem, Conversation, PromptB
      * Create a new conversation with an NPC
      */
     createConversation() {
+      const nextEpoch = this.conversationEpoch + 1;
       try {
-        this.endCurrentConversation();
-        this.currentConversation = new Conversation();
+        this.endCurrentConversation({ closeGameScene: false, reason: "superseded_by_new_conversation" });
+        try {
+          runFileManager?.setCurrentConversationEpoch?.(nextEpoch);
+        } catch (error) {
+          console.error(`Failed to cancel stale conversation close commands for epoch ${nextEpoch}:`, error);
+        }
+        this.conversationEpoch = nextEpoch;
+        this.currentConversation = new Conversation({ conversationEpoch: nextEpoch });
         this.setupConversationListeners();
         return this.currentConversation;
       } catch (error) {
@@ -136,12 +144,16 @@ function createConversationManager({ events, memorySystem, Conversation, PromptB
     /**
      * End current conversation
      */
-    endCurrentConversation() {
+    endCurrentConversation(options = {}) {
       const conversation = this.currentConversation;
       this.currentConversation = null;
       if (!conversation) return Promise.resolve(null);
       console.log(`Conversation ${conversation.id} detached; finalization queued`);
-      return this.finalizationCoordinator.enqueue(conversation.id, () => conversation.finalizeConversation()).catch((error) => {
+      return this.finalizationCoordinator.enqueue(conversation.id, () => conversation.finalizeConversation({
+        closeGameScene: options.closeGameScene !== false,
+        reason: options.reason || "normal_end",
+        conversationId: conversation.id
+      })).catch((error) => {
         console.error(`Conversation ${conversation.id} finalization failed:`, error);
         return { success: false, error };
       });

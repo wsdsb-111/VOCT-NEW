@@ -88,8 +88,9 @@ class Conversation {
     const prefixFingerprint = createPromptFingerprint(JSON.stringify(blocks.slice(0, stablePrefixEndPosition).map((block) => [block.id, block.type, block.fingerprint, block.stable])));
     return { blocks, historyStartPosition, stablePrefixEndPosition, stablePrefixTokens, dynamicSuffixTokens, prefixFingerprint };
   }
-  constructor() {
+  constructor({ conversationEpoch = null } = {}) {
     this.id = uuid.v4();
+    this.conversationEpoch = conversationEpoch != null && Number.isInteger(Number(conversationEpoch)) ? Number(conversationEpoch) : null;
     this.messages = [];
     this.isActive = false;
     this.nextId = 0;
@@ -1123,11 +1124,20 @@ class Conversation {
     return memoryEngine.checkpointConversation(this.buildFinalizationBaseContext(), { reason });
   }
   // Create final comprehensive summary and save to characters
-  async finalizeConversation() {
-    runFileManager.write("trigger_event = mcc_event_v2.9002", {
-      owner: "conversation",
-      kind: "conversation_close"
-    });
+  async finalizeConversation(options = {}) {
+    if (options.closeGameScene !== false) {
+      runFileManager.write("trigger_event = mcc_event_v2.9002", {
+        owner: "conversation",
+        kind: "conversation_close",
+        scopeId: options.conversationId || this.id,
+        epoch: options.epoch ?? this.conversationEpoch,
+        expiresInMs: 15e3,
+        destructive: true,
+        supersedable: true
+      });
+    } else {
+      console.log(`[Conversation] game scene close skipped id=${this.id} reason=${options.reason || "conversation_rollover"}`);
+    }
     
     // PERFORMANCE: Clear caches when conversation ends
     if (this.gameData) {

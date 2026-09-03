@@ -511,6 +511,7 @@ else = {
         markerAgeMs: this.lastObservedDateMarkerAt ? Math.max(0, Date.now() - this.lastObservedDateMarkerAt) : null,
         dateProducerRecovery: this.dateProducerRecovery ? { ...this.dateProducerRecovery } : null,
         runCommands: runFileManager?.getPendingCommands ? runFileManager.getPendingCommands().map(({ effectText, ...command }) => command) : [],
+        runCommandHealth: runFileManager?.getQueueHealth ? runFileManager.getQueueHealth() : null,
         lastDateReconciliationAt: this.lastDateReconciliationAt,
         lastDateScanResult: this.lastDateScanResult ? { ...this.lastDateScanResult } : null
       };

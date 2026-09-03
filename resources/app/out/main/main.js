@@ -499,7 +499,7 @@ Conversation.configure({
   worldlineService
 });
 const { createConversationManager } = require("./conversation/conversation-manager");
-const ConversationManager = createConversationManager({ events, memorySystem, Conversation, PromptBuilder, createActionFeedback, logVerboseLLM });
+const ConversationManager = createConversationManager({ events, memorySystem, Conversation, PromptBuilder, createActionFeedback, logVerboseLLM, runFileManager });
 const conversationManager = ConversationManager.getInstance();
 let quitAfterFinalizations = false;
 let quitDrainStarted = false;
