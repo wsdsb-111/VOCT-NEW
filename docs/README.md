@@ -4,6 +4,8 @@
 
 ## 推荐阅读顺序
 
+V8.5.1 当前施工入口：[Sol 最终审查与修复](v8.5.1-sol-final-review.md)；109 组自动回归与 15 人真实存档定义召回已验证，实际 Electron、全量召回率和剩余来源合同未闭合，INTERNAL FREEZE 仍为 NOT READY。
+
 1. [项目 README](../README.md)：运行环境、配置方式和当前版本基线。
 2. [CHANGELOG.md](../CHANGELOG.md)：按版本查看变更入口和对应的详细文档。
 3. [V8阶段开发记录.md](V8阶段开发记录.md)：V8 Dynamic Historical Worldline System 的连续开发、冻结边界与验收记录。
@@ -30,10 +32,12 @@
 24. [V8.4.2 Run Command 生命周期热修实施报告](v8.4.2-run-command-lifecycle-hotfix-implementation-report.md)：Conversation Close 世代/TTL、Run Command Queue v3、启动恢复、carrier 隔离和 ACK 超时安全边界。
 25. [V8.5 Luna 玩家语义展示层实施报告](v8.5-luna-player-semantic-ui-implementation-report.md)：默认玩家视图、语义映射和高级诊断。
 26. [V8.5 Terra Retrieval 2.0 实施报告](v8.5-terra-retrieval-implementation-report.md)：确定性 Query Planner、Retriever/Ranker、DTO、缓存 revision 与 Prompt token 预算。
-27. [README_摘要系统.md](README_摘要系统.md)：Memory Engine 2.5 的存储、冻结召回、Turn Recall、写入和生命周期规则。
-28. [V7阶段优化记录.md](V7阶段优化记录.md)：V7/V7.x 的连续阶段记录。
-29. [V6阶段优化记录.md](V6阶段优化记录.md)：V6/V6.x 的动作系统和基础设施记录。
-30. 需要核对具体方案时，再阅读版本设计文档和实施报告。
+27. [V8.5.1 Terra Historical Definition Index 实施报告](v8.5.1-historical-definition-index-terra-implementation-report.md)：后台通用姓名索引、身份门禁、coverage 与 100 条确定性矩阵。
+28. [V8.5.1 Luna 历史人物诊断可读性实施报告](v8.5.1-luna-historical-diagnostic-ui-implementation-report.md)：玩家摘要、可读判定依据、来源完整性/索引未命中状态和开发者追踪分层。
+29. [README_摘要系统.md](README_摘要系统.md)：Memory Engine 2.5 的存储、冻结召回、Turn Recall、写入和生命周期规则。
+30. [V7阶段优化记录.md](V7阶段优化记录.md)：V7/V7.x 的连续阶段记录。
+31. [V6阶段优化记录.md](V6阶段优化记录.md)：V6/V6.x 的动作系统和基础设施记录。
+32. 需要核对具体方案时，再阅读版本设计文档和实施报告。
 
 ## 文档分类
 
@@ -75,6 +79,7 @@
 - [v8.5-luna-player-semantic-ui-implementation-report.md](v8.5-luna-player-semantic-ui-implementation-report.md)：V8.5 Luna 玩家语义展示层、默认 UI 内部字段隔离和高级诊断保留。
 - [v8.5-terra-retrieval-implementation-report.md](v8.5-terra-retrieval-implementation-report.md)：V8.5 Terra 的确定性 Query Planner、Retriever/Ranker、DTO、缓存 revision 和 token 预算边界。
 - [v8.5-sol-internal-review.md](v8.5-sol-internal-review.md)：V8.5 Sol 白屏根因、分页/后台本地化修复、正确性回归和未完成的实机预冻结 Gate。
+- [v8.5.1-historical-definition-index-terra-implementation-report.md](v8.5.1-historical-definition-index-terra-implementation-report.md)：V8.5.1 Terra 通用 Historical Definition Index、Worker、绑定安全门禁和 fixture 矩阵。
 - [VOTC_v8.1_Campaign_Identity与Worldline_Store_Foundation设计.md](VOTC_v8.1_Campaign_Identity与Worldline_Store_Foundation设计.md)：V8.1 存档身份协议、session 降级、Worldline schema、原子持久化和 Shadow 集成合同。
 - [v8.1-campaign-identity-worldline-store-implementation-report.md](v8.1-campaign-identity-worldline-store-implementation-report.md)：V8.0 P0/P1 审计、V8.1 应用与 Workshop 实施、自动化验证和实机边界。
 - [v8.3.1-historical-figure-dashboard-implementation-report.md](v8.3.1-historical-figure-dashboard-implementation-report.md)：V8.3.1 实机诊断 Snapshot、Overlay Dashboard、append-only Ground Truth 与冻结边界。

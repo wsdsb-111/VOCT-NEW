@@ -8,6 +8,10 @@
 
 | 版本 | 重点 | 详细记录 |
 | --- | --- | --- |
+| v8.5.1 Sol 审查与修复 | 修复源解析灾难性回溯、身份旁路、Worker 世代/缓存和通用历史映射管线；完善三层诊断与分页。109 组自动回归、15 人实存档定义召回通过；Electron 和剩余来源合同未验收，不冻结 | [V8.5.1 Sol 最终审查](docs/v8.5.1-sol-final-review.md) |
+| v8.5.1 Sol 合同冻结 | 固化通用姓名索引、来源/身份证据、后台构建、缓存与三层诊断接口；下一步 Terra，实现与最终验收尚未开始 | [V8.5.1 Sol 合同](docs/v8.5.1-sol-contract-freeze.md) |
+| v8.5.1 Terra Historical Definition Index | 启用来源的历史人物全名索引移入后台 Worker；通用候选经双向绑定、来源完整性、冲突与既有阈值门禁后才进入 Game Truth，诊断新增 coverage/index 状态 | [V8.5.1 Terra 实施报告](docs/v8.5.1-historical-definition-index-terra-implementation-report.md) |
+| v8.5.1 Luna 历史人物诊断可读性 | 诊断页新增玩家摘要、懒展开的可读判定依据和开发者追踪三层；明确来源不完整、姓名索引未命中、历史定义无 Runtime 与证据冲突，保留 50 条候选上限 | [V8.5.1 Luna 实施报告](docs/v8.5.1-luna-historical-diagnostic-ui-implementation-report.md) / [V8 阶段记录](docs/V8阶段开发记录.md) |
 | v8.5 Sol 审查与诊断白屏修复 | 42,312 条 Delta 的诊断改为 50 条分页与懒渲染，本地化搜索移入后台线程；修复时间、可见性、缓存与 Token 门禁，105 组发布回归及隔离浏览器交互通过；实机预冻结仍待验收 | [V8.5 Sol 内部审查](docs/v8.5-sol-internal-review.md) |
 | v8.5 Terra Retrieval 2.0 | 落地确定性 Query Planner、Retriever/Ranker、查询感知 Delta、无虚构结果摘要、additive Player DTO 与相关 Supplemental/campaign Delta 缓存 revision；103/103 自动发布组通过，等待 Sol 与真实运行链路审查 | [V8.5 Terra 实施报告](docs/v8.5-terra-retrieval-implementation-report.md) / [V8 阶段记录](docs/V8阶段开发记录.md) |
 | v8.5 Luna 玩家语义展示层 | 世界线默认 UI 改为语义优先，来源/新鲜度/身份/事件/历史映射使用玩家文案；内部 ID、枚举和 Resolver 细节移入高级诊断，本阶段等待 Terra/Sol/Astra | [V8.5 Luna 实施报告](docs/v8.5-luna-player-semantic-ui-implementation-report.md) / [V8 阶段记录](docs/V8阶段开发记录.md) |

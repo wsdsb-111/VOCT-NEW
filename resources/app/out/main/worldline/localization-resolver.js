@@ -36,13 +36,13 @@ function parseDescriptor(text) {
 }
 
 function parseLocalizationLine(line, rawKey) {
-  const match = line.match(/^\s*([^\s:#]+):\s*(?:\d+\s*)?"((?:\\.|[^"])*)"\s*(?:#.*)?$/);
+  const match = line.match(/^\s*([^\s:#]+):\s*(?:\d+\s*)?"((?:\\.|[^"\\])*)"\s*(?:#.*)?$/);
   if (!match || match[1] !== rawKey) return null;
   return match[2].replace(/\\"/g, '"').replace(/\\\\/g, "\\");
 }
 
 function parseAnyLocalizationLine(line) {
-  const match = line.match(/^\s*([^\s:#]+):\s*(?:\d+\s*)?"((?:\\.|[^"])*)"\s*(?:#.*)?$/);
+  const match = line.match(/^\s*([^\s:#]+):\s*(?:\d+\s*)?"((?:\\.|[^"\\])*)"\s*(?:#.*)?$/);
   return match ? { rawKey: match[1], value: match[2].replace(/\\"/g, '"').replace(/\\\\/g, "\\") } : null;
 }
 

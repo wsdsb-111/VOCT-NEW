@@ -26,6 +26,8 @@ Voices of the Court 是一个面向《Crusader Kings III》（CK3）的沉浸式
 
 ## 运行环境
 
+当前施工：V8.5.1 历史人物通用召回与诊断可读性；[Sol 最终审查与修复](docs/v8.5.1-sol-final-review.md)已完成本轮审查，109 组自动回归通过，15 人真实存档均召回到历史定义。实际 Electron 验收、全量召回率与剩余来源合同尚未闭合，INTERNAL FREEZE 仍为 NOT READY，Prompt Default On 保持关闭。
+
 - Windows 10/11
 - 《Crusader Kings III》
 - CK3 1.18.*（模组版本要求）

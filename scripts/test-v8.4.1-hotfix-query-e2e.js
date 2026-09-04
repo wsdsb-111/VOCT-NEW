@@ -18,6 +18,7 @@ class SettingsFixture {
 }
 
 const tempRoot = fs.mkdtempSync(path.join(os.tmpdir(), "votc-v841-hotfix-e2e-"));
+(async () => {
 try {
   const userFolder = path.join(tempRoot, "Documents", "Paradox Interactive", "Crusader Kings III");
   const steamapps = path.join(tempRoot, "SteamLibrary", "steamapps");
@@ -48,6 +49,7 @@ try {
   service.buildState = "ACTIVE";
   service.getLiveState = () => ({ connected: true, gameDate: "1155年11月8日", totalDays: 1, characters: [] });
 
+  await service.historicalDefinitionIndex.prepare(["岳飞"], 5000);
   const diagnostics = service.getPromptDiagnostics({ query: "岳飞现在在哪里" }).promptDiagnostics;
   assert.equal(diagnostics.available, true, "the real resolver path must remain available while Prompt Default On is disabled");
   assert.ok(diagnostics.queryAnalysis.matchedAliases.includes("岳飞"), "the analyzed Chinese query must record its historical alias");
@@ -61,3 +63,4 @@ try {
 } finally {
   fs.rmSync(tempRoot, { recursive: true, force: true });
 }
+})().catch(error => { console.error(error); process.exitCode = 1; });

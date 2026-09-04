@@ -2291,6 +2291,23 @@ hr {
 .worldline-diagnostic-sources .worldline-metric-grid {
   margin-top: 0;
 }
+.worldline-historical-explanation {
+  margin-top: 8px;
+}
+.worldline-explanation-body {
+  margin-top: 8px;
+}
+.worldline-explanation-reason {
+  margin: 8px 0 0;
+  color: #e4d8c7;
+}
+.worldline-candidate-readable {
+  grid-template-columns: minmax(140px, 1fr) minmax(100px, 0.7fr) minmax(180px, 1.5fr) minmax(150px, 1fr);
+  align-items: start;
+}
+.worldline-candidate-readable .worldline-semantic-warning {
+  display: block;
+}
 .summaries-manager .memory-routing-details {
   margin-top: 10px;
   color: #d8d2c7;

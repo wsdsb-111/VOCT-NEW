@@ -53,12 +53,17 @@ for (const marker of [
   "历史人物映射",
   "worldline-semantic-binding-row",
   "worldline-advanced-details",
-  "展开 Resolver 详细信息",
+  "展开开发者原始数据",
   "结果摘要",
   "命中来源",
   "tokenBreakdownTotal",
   "tokenBreakdownMatches",
   "promptTokenBreakdownRows",
+  "historicalCoverage",
+  "historicalIndex",
+  "worldline-historical-explanation",
+  "展开历史人物判定依据",
+  "worldline-candidate-readable",
   "trimmedItems",
   "runtimeId",
   "definitionId",
@@ -105,5 +110,23 @@ assert.deepEqual(ui.event({ type: "WAR_NO_LONGER_ACTIVE", source: "DERIVED_GAMES
 assert.equal(ui.visibility("PUBLIC_WORLD"), "所有人可知");
 assert.equal(ui.importance("HIGH"), "重要");
 assert.equal(ui.identity("AMBIGUOUS_PROVENANCE"), "存在多个候选");
+assert.equal(ui.coverage("DEFINITION_FOUND_RUNTIME_MISSING"), "找到历史定义，但当前存档没有对应角色");
+const explanation = ui.historicalExplanation({
+  queryAnalysis: {
+    identityResolution: { status: "NO_MATCH", reason: "NO_RUNTIME_CANDIDATES", candidates: [] },
+    historicalCoverage: [{ status: "DEFINITION_FOUND_RUNTIME_MISSING", reason: "NO_RUNTIME_CANDIDATES", definitionIds: ["han_022"] }]
+  },
+  historicalIndex: { status: "READY", sourceComplete: true }
+});
+assert.equal(explanation.statusLabel, "找到历史定义，但当前存档没有对应角色");
+assert.equal(explanation.reason, "索引中的历史定义没有对应当前存档角色。");
+assert.equal(ui.promptSummary({
+  query: "韩世忠",
+  queryAnalysis: { identityResolution: { status: "NO_MATCH", reason: "SOURCE_INCOMPLETE" }, historicalCoverage: [{ status: "SOURCE_INCOMPLETE", reason: "SOURCE_INCOMPLETE" }] },
+  historicalIndex: { status: "BUILDING", sourceComplete: false },
+  available: true,
+  supplemental: [],
+  gameTruth: { characters: [], titles: [] }
+}).conclusion, "历史人物来源仍在读取，当前不能下结论");
 
 console.log("V8.5 Luna Player Semantic UI: PASS");

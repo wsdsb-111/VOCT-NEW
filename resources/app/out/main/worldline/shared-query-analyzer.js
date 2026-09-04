@@ -27,7 +27,7 @@ function collectTerms(text) {
     seen.add(term);
     terms.push(term);
   };
-  for (const token of normalized.match(/[a-z0-9][a-z0-9_-]{1,}/g) || []) add(token);
+  for (const token of normalized.match(/[a-z0-9][a-z0-9_-]*/g) || []) if (token.length > 1 || /^\d+$/.test(token)) add(token);
   for (const run of normalized.match(/[\u3400-\u9fff\uf900-\ufaff]+/gu) || []) {
     for (let size = 2; size <= 4; size += 1) {
       for (let start = 0; start + size <= run.length; start += 1) add(run.slice(start, start + size));
@@ -77,7 +77,7 @@ function normalizeReverseLookup(result) {
   return { status: result.status || "NO_MATCH", matches: Array.isArray(result.matches) ? result.matches : [], sourceComplete: result.sourceComplete !== false, scannedFiles: Number(result.scannedFiles) || 0, missingDescriptors: Array.isArray(result.missingDescriptors) ? result.missingDescriptors : [], matchedRawKeys: Array.isArray(result.matchedRawKeys) ? result.matchedRawKeys : [] };
 }
 
-function analyzeSharedQuery({ snapshot, query = "", assistContext = "", mentionedEntityIds = [], localize = null, findLocalizedKeys = null } = {}) {
+function analyzeSharedQuery({ snapshot, query = "", assistContext = "", mentionedEntityIds = [], localize = null, findLocalizedKeys = null, historicalDefinitionLookup = null } = {}) {
   const normalizedQuery = normalize(`${query}\n${assistContext}`);
   const terms = collectTerms(normalizedQuery);
   const termSet = new Set(terms);
@@ -93,8 +93,34 @@ function analyzeSharedQuery({ snapshot, query = "", assistContext = "", mentione
   const entityAnchoredTerms = new Set(terms.filter((term) => !isCjk(term) && !CJK_GENERIC_TERMS.has(term) && term.length >= 3));
   const resolverTrace = emptyResolverTrace();
   let exactEntityResolved = false;
-  const historicalAliases = findHistoricalAliases(normalizedQuery, terms);
-  const historicalAliasTerms = new Set(historicalAliases.map((entry) => normalize(entry.alias)));
+  const manualHistoricalAliases = findHistoricalAliases(normalizedQuery, terms);
+  const indexResults = typeof historicalDefinitionLookup === "function" ? terms.map((term) => [term, historicalDefinitionLookup(term) || {}]) : [];
+  const indexedHistoricalAliases = indexResults.flatMap(([term, result]) => {
+    if (result.status !== "FOUND") return [];
+    return [{ alias: term, figureKey: null, definitionIds: result.candidates.map((candidate) => candidate.definitionId), candidateDefinitionIds: result.candidates.map((candidate) => candidate.definitionId), definitionRecords: result.candidates, indexStatus: result.status, sourceComplete: result.sourceComplete !== false && result.candidateSetComplete !== false }];
+  });
+  const cjkRuns = normalizedQuery.match(/[\u3400-\u9fff\uf900-\ufaff]+/gu) || [];
+  const shortCjkQuery = cjkRuns.every((run) => run.length <= 4) && terms.filter((term) => isCjk(term) && term.length >= 2 && !CJK_GENERIC_TERMS.has(term)).sort((left, right) => right.length - left.length)[0] || null;
+  const indexedTermSet = new Set(indexedHistoricalAliases.map((entry) => normalize(entry.alias)));
+  const indexCoverage = shortCjkQuery && !indexedTermSet.has(normalize(shortCjkQuery)) ? indexResults.find(([term]) => term === shortCjkQuery)?.[1] : null;
+  const historicalAliases = [...manualHistoricalAliases.map((entry) => ({ ...entry, sourceComplete: !historicalDefinitionLookup || indexResults.find(([term]) => term === normalize(entry.alias))?.[1]?.sourceComplete === true, definitionRecords: [] })), ...indexedHistoricalAliases].reduce((items, entry) => {
+    const key = normalize(entry.alias);
+    const existing = items.get(key);
+    if (existing) {
+      existing.figureKey ||= entry.figureKey;
+      existing.definitionIds = [...new Set([...existing.definitionIds, ...entry.definitionIds])];
+      existing.candidateDefinitionIds = [...new Set([...existing.candidateDefinitionIds, ...entry.candidateDefinitionIds])];
+      existing.definitionRecords = [...new Map([...existing.definitionRecords, ...entry.definitionRecords].map((record) => [record.definitionId, record])).values()];
+      existing.indexStatus = entry.indexStatus || existing.indexStatus;
+      existing.sourceComplete &&= entry.sourceComplete !== false;
+    } else items.set(key, { ...entry });
+    return items;
+  }, new Map()).values();
+  const allHistoricalAliases = [...historicalAliases];
+  const standaloneName = shortCjkQuery === normalizedQuery.trim() && ![...CJK_GENERIC_TERMS].some(term => shortCjkQuery?.includes(term));
+  const historicalAliasList = allHistoricalAliases.filter(entry => (!standaloneName || normalize(entry.alias) === shortCjkQuery) && !allHistoricalAliases.some(other => other.alias.length > entry.alias.length && normalize(other.alias).includes(normalize(entry.alias))));
+  const historicalAliasTerms = new Set(historicalAliasList.filter((entry) => entry.candidateDefinitionIds.length).map((entry) => normalize(entry.alias)));
+  const isHistoricalTerm = term => [...historicalAliasTerms].some(alias => alias.includes(term));
   const resolvedHistoricalAliases = new Map();
   const addResolvedCharacter = (id, source, alias = null) => {
     const key = String(id);
@@ -147,6 +173,7 @@ function analyzeSharedQuery({ snapshot, query = "", assistContext = "", mentione
       addResolvedCharacter(term, "runtime_id", term);
       entityAnchoredTerms.add(term);
       resolverTrace.runtime.status = "MATCHED";
+      continue;
     }
     const runtimeId = snapshot?.definitionToRuntime?.[term] || null;
     if (runtimeId) {
@@ -154,7 +181,7 @@ function analyzeSharedQuery({ snapshot, query = "", assistContext = "", mentione
       entityAnchoredTerms.add(term);
       resolverTrace.runtime.status = "MATCHED";
     }
-    if (!historicalAliasTerms.has(term)) {
+    if (!isHistoricalTerm(term)) {
       const namedIds = snapshot?.nameToCharacterIds?.[term] || [];
       if (namedIds.length === 1) {
         addResolvedCharacter(namedIds[0], "character_alias", term);
@@ -162,7 +189,6 @@ function analyzeSharedQuery({ snapshot, query = "", assistContext = "", mentione
       } else for (const id of namedIds) addCandidateCharacter({ runtimeId: id, rawName: characters[id]?.firstName, aliasCandidate: term }, "character_alias_ambiguous");
     }
   }
-  for (const id of mentionedEntityIds) addResolvedCharacter(id, "shared_memory_entity");
   for (const title of Object.values(titles)) {
     if (aliasMatches(title.key, normalizedQuery, termSet)) {
       addResolvedTitle(title.id, "title_alias", title.key);
@@ -170,16 +196,17 @@ function analyzeSharedQuery({ snapshot, query = "", assistContext = "", mentione
     }
   }
 
-  const historicalResolutions = historicalAliases.map((entry) => {
+  const historicalResolutions = historicalAliasList.map((entry) => {
     resolverTrace.historical.aliases.push(entry.alias);
     resolverTrace.historical.matchedDefinitionIds.push(...entry.definitionIds);
     for (const definitionId of entry.definitionIds) {
       const runtimeId = snapshot?.definitionToRuntime?.[definitionId] || null;
       if (!runtimeId) continue;
       resolverTrace.historical.matchedRuntimeIds.push(String(runtimeId));
-      resolverTrace.historical.matchSources.push({ alias: entry.alias, definitionId, runtimeId: String(runtimeId), source: "historical_alias_catalog" });
+      resolverTrace.historical.matchSources.push({ alias: entry.alias, definitionId, runtimeId: String(runtimeId), source: entry.indexStatus === "FOUND" ? "historical_definition_index" : "historical_alias_override" });
     }
-    const resolution = resolveHistoricalIdentity({ alias: entry.alias, figureKey: entry.figureKey, candidateDefinitionIds: entry.candidateDefinitionIds, snapshot });
+    const resolution = resolveHistoricalIdentity({ alias: entry.alias, figureKey: entry.figureKey, candidateDefinitionIds: entry.candidateDefinitionIds, definitionRecords: entry.definitionRecords, snapshot });
+    if (entry.sourceComplete === false) Object.assign(resolution, { status: "REJECTED", resolvedRuntimeId: null, reason: "SOURCE_INCOMPLETE" });
     resolverTrace.historical.resolutions.push({ alias: entry.alias, figureKey: entry.figureKey, status: resolution.status, reason: resolution.reason, resolvedRuntimeId: resolution.resolvedRuntimeId || null });
     matchedAliases.add(normalize(entry.alias));
     entityAnchoredTerms.add(normalize(entry.alias));
@@ -188,13 +215,19 @@ function analyzeSharedQuery({ snapshot, query = "", assistContext = "", mentione
       resolvedHistoricalAliases.set(String(resolution.resolvedRuntimeId), entry.alias);
       resolverTrace.runtime.status = "MATCHED";
     } else for (const candidate of resolution.candidates) addCandidateCharacter(candidate, "historical_alias_candidate");
-    return { alias: entry.alias, figureKey: entry.figureKey, ...resolution };
+    const coverageStatus = entry.sourceComplete === false ? "SOURCE_INCOMPLETE" : entry.definitionRecords?.length && !resolution.candidates.length ? "DEFINITION_FOUND_RUNTIME_MISSING" : resolution.status === "REJECTED" ? "REJECTED_BY_EVIDENCE" : resolution.status;
+    return { alias: entry.alias, figureKey: entry.figureKey, coverageStatus, definitionIds: entry.candidateDefinitionIds, ...resolution };
   });
   const primaryHistoricalResolution = historicalResolutions[0];
+  const historicalRuntimeIds = new Set(historicalResolutions.flatMap(resolution => (resolution.candidates || []).map(candidate => String(candidate.runtimeId))));
+  for (const id of mentionedEntityIds) if (!historicalRuntimeIds.has(String(id)) && !historicalResolutions.some(resolution => resolution.coverageStatus === "SOURCE_INCOMPLETE")) addResolvedCharacter(id, "shared_memory_entity");
   const identityResolution = historicalResolutions.length === 0 ? { status: "NO_MATCH", reason: "NO_HISTORICAL_ALIAS", evidence: [], candidates: [] } : historicalResolutions.some((resolution) => resolution.status === "AMBIGUOUS") ? { status: "AMBIGUOUS", reason: "MULTIPLE_CANDIDATES", evidence: historicalResolutions.flatMap((resolution) => resolution.evidence || []), candidates: historicalResolutions.flatMap((resolution) => resolution.candidates || []) } : primaryHistoricalResolution.status === "RESOLVED" ? primaryHistoricalResolution : { status: "NO_MATCH", reason: primaryHistoricalResolution.reason, evidence: primaryHistoricalResolution.evidence || [], candidates: primaryHistoricalResolution.candidates || [] };
+  const historicalCoverage = historicalResolutions.map((resolution) => ({ alias: resolution.alias, status: resolution.coverageStatus, definitionIds: resolution.definitionIds, reason: resolution.reason }));
+  if (indexCoverage && ["SOURCE_INCOMPLETE", "NAME_INDEX_MISS"].includes(indexCoverage.status)) historicalCoverage.push({ alias: shortCjkQuery, status: indexCoverage.status, definitionIds: [], reason: indexCoverage.status });
   if (historicalResolutions.length) resolverTrace.historical.status = identityResolution.status;
+  else if (historicalCoverage.length) resolverTrace.historical.status = historicalCoverage[0].status;
 
-  const localizedTerms = exactEntityResolved ? [] : terms.filter(isCjk).slice(0, MAX_LOCALIZED_TERMS);
+  const localizedTerms = exactEntityResolved ? [] : terms.filter(term => isCjk(term) && !isHistoricalTerm(term)).slice(0, MAX_LOCALIZED_TERMS);
   if (resolverTrace.historical.matchedRuntimeIds.length) resolverTrace.localization.status = "NOT_REQUIRED_HISTORICAL_MATCH";
   else if (exactEntityResolved) resolverTrace.localization.status = "NOT_REQUIRED_ENTITY_MATCH";
   else if (typeof findLocalizedKeys === "function") {
@@ -297,6 +330,8 @@ function analyzeSharedQuery({ snapshot, query = "", assistContext = "", mentione
     resolvedTitles,
     candidateTitles: [...candidateTitles.values()],
     identityResolution,
+    historicalCoverage,
+    historicalPending: indexResults.some(([, result]) => result.pending === true),
     matchedAliases: [...matchedAliases].filter(Boolean),
     candidateCharacterIds: [...candidateCharacterIds],
     candidateTitleIds: [...candidateTitleIds],
