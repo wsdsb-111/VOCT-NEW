@@ -77,7 +77,7 @@ try {
   assert.ok(worldlineStart >= 0 && worldlineEnd > worldlineStart, "WorldlineView boundaries must be present for the initial-render regression");
   const worldlineSource = renderer.slice(worldlineStart, worldlineEnd);
   const jsxRuntimeExports = { jsx: () => null, jsxs: () => null };
-  const reactExports = { useState: (initial) => [initial, () => {}], useEffect: () => {} };
+  const reactExports = { useState: (initial) => [initial, () => {}], useRef: (initial) => ({ current: initial }), useEffect: () => {} };
   const useTranslation = () => ({ i18n: { language: "zh-CN" } });
   const renderWorldline = new Function("reactExports", "jsxRuntimeExports", "useTranslation", "window", "navigator", `${worldlineSource}; return WorldlineView;`)(reactExports, jsxRuntimeExports, useTranslation, {}, {});
   assert.doesNotThrow(() => renderWorldline(), "WorldlineView must render before Prompt diagnostics have produced query arrays");

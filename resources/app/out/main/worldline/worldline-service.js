@@ -7,9 +7,15 @@ const { Worker: NodeWorker } = require("worker_threads");
 const { readSavePreamble } = require("./save-container");
 const { dateValue } = require("./game-state-adapter");
 const { resolvePlayerPoliticalContext } = require("./political-context");
-const { CK3LocalizationResolver } = require("./localization-resolver");
+const { LocalizationWorkerClient } = require("./localization-worker-client");
 const { getCheckpointFreshness } = require("./checkpoint-freshness");
 const { analysisTextMatches, analyzeSharedQuery } = require("./shared-query-analyzer");
+const { HISTORICAL_ALIAS_CATALOG } = require("./historical-alias-catalog");
+const { RETRIEVAL_POLICY_VERSION, buildWorldQueryPlan } = require("./world-query-planner");
+const { buildWorldCandidates } = require("./world-retriever");
+const { rankWorldCandidates } = require("./world-ranker");
+const { buildDeterministicWorldSummary } = require("./world-summary");
+const { createPlayerAnnualDelta, createPlayerHistoricalCharacters, createPlayerOverview, createPlayerWorldKnowledge } = require("./world-presentation");
 const { estimateTokens } = require("../token-estimator");
 
 const DEFAULT_SETTINGS = Object.freeze({
@@ -21,8 +27,11 @@ const DEFAULT_SETTINGS = Object.freeze({
 });
 const VALID_VISIBILITY = new Set(["PUBLIC_WORLD", "COURT_PUBLIC", "PERSONAL", "SECRET"]);
 const VALID_IMPORTANCE = new Set(["NORMAL", "HIGH"]);
+const VALID_BINDING_STATUSES = new Set(["ALL", "DIRECT", "LIVE_CONFIRMED", "CONFLICT", "AMBIGUOUS_PROVENANCE"]);
 const MAX_UI_BINDINGS = 500;
 const MAX_UI_DELTA = 1000;
+const TOKEN_BUDGETS = Object.freeze({ SIMPLE: 350, SINGLE_ENTITY: 550, COMPLEX: 900, HARD_MAX: 1200 });
+const HISTORICAL_DEFINITION_METADATA = new Map(HISTORICAL_ALIAS_CATALOG.flatMap((entry) => entry.candidateDefinitionIds.map((definitionId) => [definitionId, { figureKey: entry.figureKey, aliases: [...entry.aliases] }])));
 
 function clone(value) {
   return value === undefined ? undefined : JSON.parse(JSON.stringify(value));
@@ -30,6 +39,18 @@ function clone(value) {
 
 function nowIso(clock) {
   return clock().toISOString();
+}
+
+function promptTokenBudget(plan) {
+  const entityCount = (plan?.entities?.characters?.length || 0) + (plan?.entities?.titles?.length || 0);
+  if (plan?.time?.mode === "AS_OF" || plan?.time?.mode === "RANGE" || entityCount > 1 || plan?.intent === "HISTORY_LOOKUP") return TOKEN_BUDGETS.COMPLEX;
+  return entityCount === 1 ? TOKEN_BUDGETS.SINGLE_ENTITY : TOKEN_BUDGETS.SIMPLE;
+}
+
+function relevantSupplementalRevision(entries, analysis) {
+  const relevant = (entries || []).filter((entry) => !entry.hidden && entry.visibility === "PUBLIC_WORLD" && analysisTextMatches(analysis, `${entry.title}\n${entry.body}\n${Array.isArray(entry.entities) ? entry.entities.join(" ") : ""}`));
+  const signature = JSON.stringify(relevant.map((entry) => [entry.id, entry.updatedAt || "", entry.title, entry.body, entry.gameDate || "", entry.dateRange || "", entry.importance, entry.source, entry.entities || []]).sort((a, b) => String(a[0]).localeCompare(String(b[0]))));
+  return nodeCrypto.createHash("sha256").update(signature, "utf8").digest("hex").slice(0, 16);
 }
 
 function normalizeSettings(value) {
@@ -141,15 +162,20 @@ class WorldlineService {
       stableRecallCache: new Map(),
       topicPatchCache: new Map(),
       turnRecallCache: new Map(),
+      summaryCache: new Map(),
       checkpointId: null,
       deltaRevision: 0,
+      currentCampaignDeltaRevision: 0,
       supplementalRevision: 0
     };
     this.liveCache = { key: null, value: null };
-    this.localizationResolver = new CK3LocalizationResolver({
-      fs: this.fs,
-      path: this.path,
-      getCK3UserFolderPath: () => this.settingsRepository.getCK3UserFolderPath?.() || null
+    this.localizationResolver = new LocalizationWorkerClient({
+      getCK3UserFolderPath: () => this.settingsRepository.getCK3UserFolderPath?.() || null,
+      onUpdated: () => {
+        this.worldKnowledgeState.topicPatchCache.clear();
+        this.worldKnowledgeState.summaryCache.clear();
+        this._notifyStateChanged("localization_updated");
+      }
     });
     this.stateListener = null;
     this._loadPersistedState();
@@ -222,6 +248,7 @@ class WorldlineService {
     }
     const supplementalState = this._loadJson(this.supplementalPath, null);
     this.supplemental = supplementalState?.schemaVersion === 1 && Array.isArray(supplementalState.entries) ? supplementalState.entries : [];
+    this.worldKnowledgeState.currentCampaignDeltaRevision = this._currentCampaignDelta().length ? 1 : 0;
   }
 
   _persistCheckpoint(currentCheckpoint = this.currentCheckpoint, annualDelta = this.annualDelta) {
@@ -261,7 +288,9 @@ class WorldlineService {
       this.worldKnowledgeState.stableRecallCache.clear();
       this.worldKnowledgeState.topicPatchCache.clear();
       this.worldKnowledgeState.turnRecallCache.clear();
+      this.worldKnowledgeState.summaryCache.clear();
       this.worldKnowledgeState.checkpointId = null;
+      this.worldKnowledgeState.currentCampaignDeltaRevision = 0;
     }
     this.startWatcher();
     this._notifyStateChanged("source_changed");
@@ -435,8 +464,10 @@ class WorldlineService {
         this.worldKnowledgeState.stableRecallCache.clear();
         this.worldKnowledgeState.topicPatchCache.clear();
         this.worldKnowledgeState.turnRecallCache.clear();
+        this.worldKnowledgeState.summaryCache.clear();
         this.worldKnowledgeState.checkpointId = candidate.id;
         this.worldKnowledgeState.deltaRevision = this.annualDelta.length;
+        this.worldKnowledgeState.currentCampaignDeltaRevision = sameCampaign ? this.worldKnowledgeState.currentCampaignDeltaRevision + (delta.length ? 1 : 0) : 0;
         this.lastError = null;
         this.buildState = "ACTIVE";
         try {
@@ -523,33 +554,36 @@ class WorldlineService {
     const live = this.getLiveState();
     const checkpoint = this.getCheckpointStatus().checkpoint;
     const politicalContext = snapshot ? resolvePlayerPoliticalContext(snapshot, { localize: (type, rawKey) => this.localizationResolver?.resolveForDisplay(type, rawKey) }) : null;
+    const overview = {
+      currentPlayer: snapshot ? formatCharacter(snapshot, snapshot.playerId) : null,
+      primaryTitle: politicalContext?.primaryTitle?.rawKey || null,
+      directLiege: politicalContext?.directLiege?.ruler?.displayName || politicalContext?.directLiege?.title?.rawKey || null,
+      topRealmTitle: politicalContext?.topRealmTitle?.rawKey || null,
+      currentRuler: politicalContext?.topRealmRuler?.displayName || null,
+      politicalContext,
+      importantWars: snapshot?.diagnostics?.activeWarCount ?? null,
+      historicalBindingStatus: snapshot ? `${Object.keys(snapshot.definitionToRuntime || {}).length} DIRECT` : null,
+      pipelineState: checkpoint.pipelineState || checkpoint.status || null,
+      checkpointAsOf: checkpoint.checkpointAsOf || snapshot?.gameDate || null,
+      ageDays: checkpoint.ageDays ?? null,
+      freshness: checkpoint.freshnessStatus || checkpoint.freshness || "UNAVAILABLE",
+      freshnessReason: checkpoint.freshnessReason || null,
+      verificationMode: checkpoint.verificationMode || "STALE",
+      deltaPending: this._currentCampaignDelta().filter((entry) => entry.reconciliationStatus === "PENDING" || entry.reconciliationStatus === "RECONCILIATION_UNKNOWN" || entry.reconciliationStatus === "RECONCILIATION_PENDING").length,
+      supplementalCount: this.listSupplemental().supplemental.length,
+      liveGameDate: live.gameDate,
+      liveConnected: live.connected
+    };
     return {
-      overview: {
-        currentPlayer: snapshot ? formatCharacter(snapshot, snapshot.playerId) : null,
-        primaryTitle: politicalContext?.primaryTitle?.rawKey || null,
-        directLiege: politicalContext?.directLiege?.ruler?.displayName || politicalContext?.directLiege?.title?.rawKey || null,
-        topRealmTitle: politicalContext?.topRealmTitle?.rawKey || null,
-        currentRuler: politicalContext?.topRealmRuler?.displayName || null,
-        politicalContext,
-        importantWars: snapshot?.diagnostics?.activeWarCount ?? null,
-        historicalBindingStatus: snapshot ? `${Object.keys(snapshot.definitionToRuntime || {}).length} DIRECT` : null,
-        pipelineState: checkpoint.pipelineState || checkpoint.status || null,
-        checkpointAsOf: checkpoint.checkpointAsOf || snapshot?.gameDate || null,
-        ageDays: checkpoint.ageDays ?? null,
-        freshness: checkpoint.freshnessStatus || checkpoint.freshness || "UNAVAILABLE",
-        freshnessReason: checkpoint.freshnessReason || null,
-        verificationMode: checkpoint.verificationMode || "STALE",
-        deltaPending: this._currentCampaignDelta().filter((entry) => entry.reconciliationStatus === "PENDING" || entry.reconciliationStatus === "RECONCILIATION_UNKNOWN" || entry.reconciliationStatus === "RECONCILIATION_PENDING").length,
-        supplementalCount: this.listSupplemental().supplemental.length,
-        liveGameDate: live.gameDate,
-        liveConnected: live.connected
-      }
+      overview,
+      playerView: createPlayerOverview({ snapshot, politicalContext, checkpoint, deltaPending: overview.deltaPending })
     };
   }
 
   getAnnualDelta() {
     const sorted = clone(this._currentCampaignDelta()).sort((left, right) => (dateValue(right.date) || 0) - (dateValue(left.date) || 0));
-    return { annualDelta: sorted.slice(0, MAX_UI_DELTA), total: sorted.length, truncated: sorted.length > MAX_UI_DELTA };
+    const annualDelta = sorted.slice(0, MAX_UI_DELTA);
+    return { annualDelta, total: sorted.length, truncated: sorted.length > MAX_UI_DELTA, playerView: { annualDelta: createPlayerAnnualDelta(annualDelta) } };
   }
 
   _currentCampaignDelta() {
@@ -557,34 +591,49 @@ class WorldlineService {
     return this.annualDelta.filter((entry) => (entry.campaignId || null) === campaignId);
   }
 
-  getHistoricalBindings() {
+  getHistoricalBindings({ query = "", status = "ALL" } = {}) {
     const snapshot = this.currentCheckpoint?.snapshot;
     if (!snapshot) return { bindings: [], total: 0 };
     const liveByRuntime = new Map(this.getLiveState().characters.map((item) => [String(item.runtimeId), item]));
     const definitions = snapshot.definitionToRuntime || {};
+    const search = String(query || "").trim().toLocaleLowerCase().slice(0, 120);
+    const rawStatus = String(status || "ALL").trim().toUpperCase();
+    const statusFilter = VALID_BINDING_STATUSES.has(rawStatus) ? rawStatus : "ALL";
     const bindings = [];
     let total = 0;
+    let matchedTotal = 0;
     for (const definitionId in definitions) {
       if (!Object.prototype.hasOwnProperty.call(definitions, definitionId)) continue;
       total += 1;
-      if (bindings.length >= MAX_UI_BINDINGS) continue;
+      if (!search && statusFilter === "ALL" && bindings.length >= MAX_UI_BINDINGS) continue;
       const runtimeId = definitions[definitionId];
       const live = liveByRuntime.get(String(runtimeId));
       const exactLiveMatch = live?.historyId === definitionId;
       const provenance = snapshot.runtimeToDefinitions?.[String(runtimeId)] || [];
       const ambiguous = provenance.length > 1;
       const liveConflict = !!live?.historyId && !exactLiveMatch;
-      bindings.push({
+      const metadata = HISTORICAL_DEFINITION_METADATA.get(definitionId);
+      const binding = {
         figureKey: definitionId,
         definitionId,
+        historicalName: metadata?.aliases?.[0] || null,
+        historicalAliases: metadata?.aliases || [],
         sourceMod: null,
         runtimeId: String(runtimeId),
         liveHistoryId: live?.historyId || null,
         status: ambiguous ? "AMBIGUOUS_PROVENANCE" : liveConflict ? "CONFLICT" : exactLiveMatch ? "LIVE_CONFIRMED" : "DIRECT",
         conflict: ambiguous ? `MULTIPLE_DEFINITIONS:${provenance.join(",")}` : liveConflict ? "LIVE_CONFLICT" : null
-      });
+      };
+      const character = snapshot.characters?.[String(runtimeId)];
+      const currentCharacterName = character?.fullName || character?.firstName || null;
+      const searchText = [metadata?.figureKey, ...(metadata?.aliases || []), currentCharacterName, definitionId, runtimeId, live?.historyId].filter(Boolean).join(" ").toLocaleLowerCase();
+      if ((search && !searchText.includes(search)) || (statusFilter !== "ALL" && binding.status !== statusFilter)) continue;
+      matchedTotal += 1;
+      if (bindings.length >= MAX_UI_BINDINGS) continue;
+      bindings.push({ ...binding, currentCharacterName });
     }
-    return { bindings, total, truncated: total > MAX_UI_BINDINGS };
+    const resultTotal = search || statusFilter !== "ALL" ? matchedTotal : total;
+    return { bindings, total: resultTotal, truncated: resultTotal > MAX_UI_BINDINGS, query: search, status: statusFilter, playerView: { historicalCharacters: createPlayerHistoricalCharacters(bindings, snapshot) } };
   }
 
   listSupplemental() {
@@ -612,7 +661,6 @@ class WorldlineService {
 
   _invalidateSupplementalRecall() {
     this.worldKnowledgeState.supplementalRevision += 1;
-    this.worldKnowledgeState.topicPatchCache.clear();
     this.worldKnowledgeState.turnRecallCache.clear();
   }
 
@@ -668,13 +716,14 @@ class WorldlineService {
     const snapshot = this.currentCheckpoint?.snapshot;
     const politicalContext = snapshot ? resolvePlayerPoliticalContext(snapshot, { localize: (type, rawKey) => this.localizationResolver?.resolveForDisplay(type, rawKey) }) : null;
     const facts = snapshot ? [
-      { id: "game-date", title: "Game Date", value: snapshot.gameDate, source: "Game Truth" },
-      { id: "player", title: "Current Player", value: formatCharacter(snapshot, snapshot.playerId), source: "Game Truth" },
-      { id: "primary-title", title: "Primary Title", value: politicalContext?.primaryTitle?.rawKey || null, source: "Game Truth" },
-      { id: "active-wars", title: "Active Wars", value: String(snapshot.diagnostics?.activeWarCount || 0), source: "Game Truth" }
+      { id: "game-date", field: "GAME_DATE", value: snapshot.gameDate, source: "GAME_TRUTH" },
+      { id: "player", field: "CURRENT_PLAYER", value: formatCharacter(snapshot, snapshot.playerId), source: "GAME_TRUTH" },
+      { id: "primary-title", field: "PRIMARY_TITLE", value: politicalContext?.primaryTitle?.rawKey || null, displayName: politicalContext?.primaryTitle?.displayName || null, localization: politicalContext?.primaryTitle?.localization || null, source: "GAME_TRUTH" },
+      { id: "active-wars", field: "ACTIVE_WARS", value: String(snapshot.diagnostics?.activeWarCount || 0), source: "GAME_TRUTH" }
     ] : [];
     const supplemental = this.listSupplemental().supplemental.map((item) => ({ id: item.id, title: item.title, body: item.body, source: item.source, visibility: item.visibility, hidden: item.hidden }));
-    return { worldKnowledge: [...facts, ...supplemental] };
+    const worldKnowledge = [...facts, ...supplemental];
+    return { worldKnowledge, playerView: { worldKnowledge: createPlayerWorldKnowledge(worldKnowledge) } };
   }
 
   getPromptContext({ query = "", assistContext = "", mentionedEntityIds = [], diagnostic = false } = {}) {
@@ -693,6 +742,7 @@ class WorldlineService {
         this.worldKnowledgeState.topicPatchCache.clear();
         this.worldKnowledgeState.turnRecallCache.clear();
         this.worldKnowledgeState.checkpointId = checkpointId2;
+        this.worldKnowledgeState.summaryCache.clear();
       }
       let stableText = this.worldKnowledgeState.stableRecallCache.get(checkpointId2);
       if (!stableText) {
@@ -707,35 +757,72 @@ class WorldlineService {
         localize: (type, rawKey) => this.localizationResolver?.resolve(type, rawKey),
         findLocalizedKeys: (type, value, options) => this.localizationResolver?.findRawKeysByLocalizedValue(type, value, options) || { status: "NO_MATCH", matches: [], sourceComplete: true, scannedFiles: 0, missingDescriptors: [], matchedRawKeys: [] }
       });
+      const queryPlan = buildWorldQueryPlan({ query, assistContext, analysis: queryAnalysis });
+      const activeSupplemental = this.listSupplemental().supplemental;
+      const supplementalRevision = relevantSupplementalRevision(activeSupplemental, queryAnalysis);
       const mentionedEntityKey = [...new Set(safeMentionedEntityIds.map((id) => String(id)))].sort().join(",");
-      const queryFingerprint = nodeCrypto.createHash("sha256").update(`${queryAnalysis.normalizedQuery || "empty"}|${mentionedEntityKey}`, "utf8").digest("hex").slice(0, 16);
+      const queryFingerprint = nodeCrypto.createHash("sha256").update(queryAnalysis.normalizedQuery || "empty", "utf8").digest("hex").slice(0, 16);
+      const mentionedEntityFingerprint = nodeCrypto.createHash("sha256").update(mentionedEntityKey || "none", "utf8").digest("hex").slice(0, 16);
       const liveFingerprint = `${live.connected ? "1" : "0"}:${live.gameDate || "none"}:${live.totalDays ?? "none"}:${freshness.freshnessStatus}:${freshness.ageDays ?? "none"}`;
-      const cacheKey = `${checkpointId2}:${this.annualDelta.length}:${this.worldKnowledgeState.supplementalRevision}:${queryFingerprint}:${liveFingerprint}`;
+      const cacheKey = `${checkpointId2}:${this.worldKnowledgeState.currentCampaignDeltaRevision}:${supplementalRevision}:${queryFingerprint}:${mentionedEntityFingerprint}:${liveFingerprint}:${RETRIEVAL_POLICY_VERSION}:${this.localizationResolver?.revision || 0}`;
       const cached = this.worldKnowledgeState.topicPatchCache.get(cacheKey);
       if (cached) return { ...cached, stableText, cacheHit: true };
-      const resolvedCharacters = queryAnalysis.resolvedCharacters || queryAnalysis.characters || [];
-      const resolvedTitles = queryAnalysis.resolvedTitles || queryAnalysis.titles || [];
-      const characterFacts = resolvedCharacters.map((match) => {
-        const character = snapshot.characters?.[match.id];
-        if (!character) return null;
-        const displayName = match.displayName || formatCharacter(snapshot, match.id) || `#${match.id}`;
-        return `- ${displayName} (#${match.id})：${character.alive ? "存活" : "已死亡"}${character.location ? `；位置 ${character.location}` : ""}`;
-      }).filter(Boolean);
-      const titleFacts = resolvedTitles.map((match) => {
-        const holder = formatCharacter(snapshot, match.holderId);
-        return `- 头衔 ${match.displayName}${match.rawKey && match.displayName !== match.rawKey ? `（${match.rawKey}）` : ""}${holder ? `；持有者 ${holder}` : ""}`;
-      });
-      const topicFacts = [...characterFacts, ...titleFacts];
-      const supplemental = this.listSupplemental().supplemental.filter((entry) => !entry.hidden && entry.visibility === "PUBLIC_WORLD" && analysisTextMatches(queryAnalysis, `${entry.title}\n${entry.body}\n${Array.isArray(entry.entities) ? entry.entities.join(" ") : ""}`)).slice(0, 3);
-      const currentDelta = this._currentCampaignDelta().slice(-8).filter((entry) => entry.source === "GAMESTATE").slice(-3).map((entry) => `- ${entry.type}（${entry.date || "日期未知"}）`);
-      const liveDateText = live.gameDate || "Live Probe 未提供";
-      const ageText = freshness.ageDays === null ? "无法计算（Live Probe 未提供）" : `${freshness.ageDays} 天`;
+      const candidates = buildWorldCandidates({ snapshot, analysis: queryAnalysis, annualDelta: this._currentCampaignDelta(), supplemental: activeSupplemental });
+      const retrieval = rankWorldCandidates(candidates, { plan: queryPlan, checkpointDate: snapshot.gameDate });
+      if (queryPlan.ambiguity) retrieval.trimmed.push({ type: "GAME_TRUTH_CHARACTER", id: "historical-candidates", title: "Historical identity candidates", reason: "AMBIGUOUS_IDENTITY" });
+      const selected = {
+        gameTruth: retrieval.selected.gameTruth.slice(),
+        supplemental: retrieval.selected.supplemental.slice(),
+        delta: retrieval.selected.delta.slice()
+      };
+      const targetTokenBudget = promptTokenBudget(queryPlan);
+      let summaryCacheHit = false;
+      const buildRecall = () => {
+        const selectedKey = [...selected.gameTruth, ...selected.supplemental, ...selected.delta].map((candidate) => candidate.id).join(",") || "empty";
+        const summaryKey = `${cacheKey}:${selectedKey}`;
+        let summary = this.worldKnowledgeState.summaryCache.get(summaryKey);
+        if (summary) summaryCacheHit = true;
+        else {
+          summary = buildDeterministicWorldSummary({ selected });
+          this.worldKnowledgeState.summaryCache.set(summaryKey, summary);
+          if (this.worldKnowledgeState.summaryCache.size > 64) this.worldKnowledgeState.summaryCache.delete(this.worldKnowledgeState.summaryCache.keys().next().value);
+        }
+        const topicText = summary.topicItems.length ? `=== 与当前话题相关的 CK3 Checkpoint 事实（截至 ${snapshot.gameDate}） ===\n若与本轮 Live、回应角色权威游戏资料或场景直接事实冲突，必须以后者为准。\n${summary.topicItems.map((item) => item.text).join("\n")}` : null;
+        const supplementalText = summary.supplementalItems.length ? `=== 公开 Supplemental 世界知识（叙事来源） ===\n以下内容不能覆盖、修正或否定任何当前 Live、GameState、角色自身资料或场景直接事实；发生冲突时必须忽略冲突的 Supplemental 主张。\n${summary.supplementalItems.map((item) => item.text).join("\n")}` : null;
+        const currentDeltaText = [...summary.summaryLines, ...summary.deltaItems.map((item) => item.text)].join("\n");
+        const liveDateText = live.gameDate || "Live Probe 未提供";
+        const ageText = freshness.ageDays === null ? "无法计算（Live Probe 未提供）" : `${freshness.ageDays} 天`;
+        const currentText = `=== 当前世界视图 ===\n- Checkpoint 世界事实截至：${freshness.checkpointAsOf}\n- Live 当前日期：${liveDateText}\n- Checkpoint 新鲜度：${freshness.freshnessStatus}${freshness.ageDays === null ? "" : `（相差 ${ageText}）`}\n${currentDeltaText ? `${currentDeltaText}\n` : ""}只有 Live Probe 直接提供的信息可表述为 Live 当前日期的实时状态；未被 Live Probe 更新的可变事实仍仅截至 Checkpoint 日期。`;
+        return { summary, topicText, supplementalText, currentText };
+      };
+      let recall = buildRecall();
+      let worldPromptTokens = estimateTokens([stableText, recall.topicText, recall.supplementalText, recall.currentText].filter(Boolean).join("\n"));
+      while (worldPromptTokens > targetTokenBudget) {
+        const category = ["supplemental", "delta", "gameTruth"].find((key) => selected[key].length > 0);
+        if (!category) break;
+        const removed = selected[category].pop();
+        retrieval.trimmed.push({ type: removed.category, id: removed.payload?.id || removed.id, title: removed.title, reason: "TOKEN_BUDGET", score: removed.score });
+        recall = buildRecall();
+        worldPromptTokens = estimateTokens([stableText, recall.topicText, recall.supplementalText, recall.currentText].filter(Boolean).join("\n"));
+      }
+      if (worldPromptTokens > TOKEN_BUDGETS.HARD_MAX) return null;
       const context = {
-        topicText: topicFacts.length ? `=== 与当前话题相关的 CK3 Checkpoint 事实（截至 ${snapshot.gameDate}） ===\n若与本轮 Live、回应角色权威游戏资料或场景直接事实冲突，必须以后者为准。\n${topicFacts.join("\n")}` : null,
-        supplementalText: supplemental.length ? `=== 公开 Supplemental 世界知识（叙事来源） ===\n以下内容不能覆盖、修正或否定任何当前 Live、GameState、角色自身资料或场景直接事实；发生冲突时必须忽略冲突的 Supplemental 主张。\n${supplemental.map((entry) => `- ${entry.title}：${entry.body}`).join("\n")}` : null,
-        currentText: `=== 当前世界视图 ===\n- Checkpoint 世界事实截至：${freshness.checkpointAsOf}\n- Live 当前日期：${liveDateText}\n- Checkpoint 新鲜度：${freshness.freshnessStatus}${freshness.ageDays === null ? "" : `（相差 ${ageText}）`}\n${currentDelta.length ? `${currentDelta.join("\n")}\n` : ""}只有 Live Probe 直接提供的信息可表述为 Live 当前日期的实时状态；未被 Live Probe 更新的可变事实仍仅截至 Checkpoint 日期。`,
+        topicText: recall.topicText,
+        supplementalText: recall.supplementalText,
+        currentText: recall.currentText,
         queryFingerprint,
         queryAnalysis,
+        queryPlan,
+        retrieval: {
+          selected,
+          trimmedItems: retrieval.trimmed,
+          targetTokenBudget,
+          hardTokenBudget: TOKEN_BUDGETS.HARD_MAX,
+          supplementalRevision,
+          worldPromptTokens,
+          summaryCacheHit,
+          tokenBudgetExceeded: worldPromptTokens > TOKEN_BUDGETS.HARD_MAX
+        },
         checkpointAsOf: freshness.checkpointAsOf,
         liveDate: freshness.liveDate,
         ageDays: freshness.ageDays,
@@ -744,13 +831,27 @@ class WorldlineService {
         cacheHit: false
       };
       this.worldKnowledgeState.topicPatchCache.set(cacheKey, context);
+      if (this.worldKnowledgeState.topicPatchCache.size > 8) this.worldKnowledgeState.topicPatchCache.delete(this.worldKnowledgeState.topicPatchCache.keys().next().value);
       return { ...context, stableText };
     } catch (_error) {
       return null;
     }
   }
 
-  getPromptDiagnostics({ query = "", assistContext = "" } = {}) {
+  async getPromptDiagnosticsAsync(payload = {}) {
+    const checkpoint = this.currentCheckpoint;
+    const deadline = Date.now() + 8000;
+    let result = this.getPromptDiagnostics(payload);
+    while (this.localizationResolver.pending?.size && Date.now() < deadline) {
+      await this.localizationResolver.settle(Math.max(1, deadline - Date.now()));
+      if (this.currentCheckpoint !== checkpoint) return { promptDiagnostics: { available: false, reason: "CHECKPOINT_CHANGED", query: String(payload.query || "").slice(0, 1000) } };
+      result = this.getPromptDiagnostics(payload);
+    }
+    result.promptDiagnostics.localizationPending = this.localizationResolver.pending?.size > 0;
+    return result;
+  }
+
+  getPromptDiagnostics({ query = "", assistContext = "", trimmedPage = 0 } = {}) {
     const safeQuery = String(query || "").slice(0, 1000);
     const context = this.getPromptContext({ query: safeQuery, assistContext: String(assistContext || "").slice(0, 2000), diagnostic: true });
     const runtime = this.getDiagnostics().diagnostics;
@@ -778,12 +879,12 @@ class WorldlineService {
       };
     }
     const analysis = context.queryAnalysis || { normalizedQuery: safeQuery.trim().toLocaleLowerCase(), terms: [], characters: [], titles: [], matchedAliases: [] };
-    const allSupplemental = this.listSupplemental().supplemental.filter((entry) => !entry.hidden && entry.visibility === "PUBLIC_WORLD" && analysisTextMatches(analysis, `${entry.title}\n${entry.body}\n${Array.isArray(entry.entities) ? entry.entities.join(" ") : ""}`));
-    const selectedSupplemental = allSupplemental.slice(0, 3);
-    const trimmedItems = allSupplemental.slice(3).map((entry) => ({ type: "SUPPLEMENTAL", id: entry.id, title: entry.title, reason: "TOP_3_LIMIT" }));
+    const selected = context.retrieval?.selected || { gameTruth: [], supplemental: [], delta: [] };
+    const selectedSupplemental = selected.supplemental.map((candidate) => candidate.payload);
+    const trimmedItems = (context.retrieval?.trimmedItems || []).slice();
     const gameTruth = {
-      characters: analysis.resolvedCharacters || analysis.characters || [],
-      titles: analysis.resolvedTitles || analysis.titles || []
+      characters: selected.gameTruth.filter((candidate) => candidate.kind === "CHARACTER").map((candidate) => candidate.payload.match),
+      titles: selected.gameTruth.filter((candidate) => candidate.kind === "TITLE").map((candidate) => candidate.payload.match)
     };
     for (const id of (analysis.candidateCharacterIds || []).slice((analysis.limits?.maxCharacters || 4))) {
       const character = this.currentCheckpoint?.snapshot?.characters?.[id];
@@ -793,6 +894,8 @@ class WorldlineService {
       const title = this.currentCheckpoint?.snapshot?.titles?.[id];
       if (title) trimmedItems.push({ type: "GAME_TRUTH_TITLE", id, title: title.key || `#${id}`, reason: "QUERY_RESULT_LIMIT" });
     }
+    const trimmedPageSize = 50;
+    const page = Math.min(Math.max(0, Math.floor(Number(trimmedPage) || 0)), Math.max(0, Math.ceil(trimmedItems.length / trimmedPageSize) - 1));
     const tokenBreakdown = [
       ["worldline-stable", "Stable World Checkpoint", context.stableText],
       ["worldline-topic", "Topic Game Truth", context.topicText],
@@ -804,6 +907,19 @@ class WorldlineService {
         available: true,
         query: safeQuery,
         queryAnalysis: analysis,
+        localizationIncomplete: analysis.resolverTrace?.localization?.sourceComplete === false,
+        queryPlan: context.queryPlan,
+        retrieval: {
+          selected: {
+            gameTruth: selected.gameTruth.map((candidate) => ({ id: candidate.id, kind: candidate.kind, score: candidate.score, scoreBreakdown: candidate.scoreBreakdown })),
+            supplemental: selected.supplemental.map((candidate) => ({ id: candidate.id, score: candidate.score, scoreBreakdown: candidate.scoreBreakdown })),
+            delta: selected.delta.map((candidate) => ({ id: candidate.id, eventType: candidate.eventType, score: candidate.score, scoreBreakdown: candidate.scoreBreakdown }))
+          },
+          targetTokenBudget: context.retrieval?.targetTokenBudget || null,
+          hardTokenBudget: context.retrieval?.hardTokenBudget || null,
+          summaryCacheHit: context.retrieval?.summaryCacheHit === true,
+          tokenBudgetExceeded: context.retrieval?.tokenBudgetExceeded === true
+        },
         resolverTrace: analysis.resolverTrace,
         gameTruth,
         supplemental: selectedSupplemental.map((entry) => ({ id: entry.id, title: entry.title, body: entry.body, visibility: entry.visibility })),
@@ -815,7 +931,10 @@ class WorldlineService {
         worldPromptTokens: tokenBreakdown.reduce((total, block) => total + block.tokens, 0),
         cacheHit: context.cacheHit === true,
         tokenBreakdown,
-        trimmedItems
+        trimmedTotal: trimmedItems.length,
+        trimmedPage: page,
+        trimmedPageSize,
+        trimmedItems: clone(trimmedItems.slice(page * trimmedPageSize, (page + 1) * trimmedPageSize))
       }
     };
   }
@@ -842,8 +961,9 @@ class WorldlineService {
         freshnessStatus: freshness.freshnessStatus,
         verificationMode: freshness.verificationMode,
         freshnessReason: freshness.reason,
-        deltaRevision: this._currentCampaignDelta().length,
+        deltaRevision: this.worldKnowledgeState.currentCampaignDeltaRevision,
         deltaStoredTotal: this.annualDelta.length,
+        retrievalPolicyVersion: RETRIEVAL_POLICY_VERSION,
         catalogStatus: "NOT_CONNECTED",
         branchStatus: "UNKNOWN_WITHOUT_SAVE_AB_GATE",
         lastError: this.lastError
@@ -905,6 +1025,7 @@ class WorldlineService {
 
   dispose() {
     this.stopWatcher();
+    this.localizationResolver?.dispose?.();
   }
 }
 

@@ -4,8 +4,13 @@
 
 | v8.4.2 P0 热修 | 修复世界线页首次打开时 Prompt 诊断尚未生成导致 Renderer 崩溃、界面消失的问题；候选数组安全回退，新增首屏渲染回归 | [V8.4.2 Sol 最终审查](docs/v8.4.2-sol-final-review.md) / [V8 阶段记录](docs/V8阶段开发记录.md) |
 
+| v8.5 Terra 前置缺陷修复 | 历史映射支持完整索引查询与可读岳飞绑定；诊断正确区分当前玩家“赵思昭”和历史别名未命中；精确人物命中跳过高成本 Localization reverse lookup，并加入 Renderer 查询防竞态 | [V8.5 Terra 实施报告](docs/v8.5-terra-retrieval-implementation-report.md) / [V8 阶段记录](docs/V8阶段开发记录.md) |
+
 | 版本 | 重点 | 详细记录 |
 | --- | --- | --- |
+| v8.5 Sol 审查与诊断白屏修复 | 42,312 条 Delta 的诊断改为 50 条分页与懒渲染，本地化搜索移入后台线程；修复时间、可见性、缓存与 Token 门禁，105 组发布回归及隔离浏览器交互通过；实机预冻结仍待验收 | [V8.5 Sol 内部审查](docs/v8.5-sol-internal-review.md) |
+| v8.5 Terra Retrieval 2.0 | 落地确定性 Query Planner、Retriever/Ranker、查询感知 Delta、无虚构结果摘要、additive Player DTO 与相关 Supplemental/campaign Delta 缓存 revision；103/103 自动发布组通过，等待 Sol 与真实运行链路审查 | [V8.5 Terra 实施报告](docs/v8.5-terra-retrieval-implementation-report.md) / [V8 阶段记录](docs/V8阶段开发记录.md) |
+| v8.5 Luna 玩家语义展示层 | 世界线默认 UI 改为语义优先，来源/新鲜度/身份/事件/历史映射使用玩家文案；内部 ID、枚举和 Resolver 细节移入高级诊断，本阶段等待 Terra/Sol/Astra | [V8.5 Luna 实施报告](docs/v8.5-luna-player-semantic-ui-implementation-report.md) / [V8 阶段记录](docs/V8阶段开发记录.md) |
 | v8.4.2 P0 Run Command 生命周期热修 | 修复旧 Conversation Close 迟到执行导致当前 CK3 Talk Scene 被关闭，以及 stalled Close 阻塞 FIFO 队列；增加 Close TTL/epoch、v2→v3 迁移、启动 neutralize、迟到 ACK 保护和队列健康诊断 | [V8.4.2 Run Command 生命周期热修](docs/v8.4.2-run-command-lifecycle-hotfix-implementation-report.md) / [V8 阶段记录](docs/V8阶段开发记录.md) |
 | v8.4.2 最终实现冻结（PASS） | Historical Identity、AMBIGUOUS Prompt 隔离、严格 War participant、Delta provenance、CJK entity anchor、候选 UI 与 Freshness 全部通过；真实 1156→1157 存档五查询和 131 条 War Delta Gate 通过，100/100 release groups；Prompt Default On 继续关闭 | [V8.4.2 Sol 最终审查](docs/v8.4.2-sol-final-review.md) / [Terra P0 实施](docs/v8.4.2-terra-p0-implementation-report.md) |
 | v8.4.1 P0 世界线页阻塞修复 | 移除 9.2 万条历史绑定的主进程全量排序；进一步修复概览把中文显示名当 localization key 穷举 3,670 个文件的问题，显示解析改为文字直通/typed 250 文件硬上限，完整查询 Resolver 保持不变 | [Hotfix Sol 审查](docs/v8.4.1-hotfix-sol-final-review.md) / [V8 阶段记录](docs/V8阶段开发记录.md) |

@@ -192,7 +192,7 @@ electron.contextBridge.exposeInMainWorld("worldlineAPI", {
   getOverview: () => electron.ipcRenderer.invoke("worldline:getOverview"),
   getAnnualDelta: () => electron.ipcRenderer.invoke("worldline:getAnnualDelta"),
   getWorldKnowledge: () => electron.ipcRenderer.invoke("worldline:getWorldKnowledge"),
-  getHistoricalBindings: () => electron.ipcRenderer.invoke("worldline:getHistoricalBindings"),
+  getHistoricalBindings: (payload) => electron.ipcRenderer.invoke("worldline:getHistoricalBindings", payload),
   getDiagnostics: () => electron.ipcRenderer.invoke("worldline:getDiagnostics"),
   getPromptDiagnostics: (payload) => electron.ipcRenderer.invoke("worldline:getPromptDiagnostics", payload),
   listSupplemental: () => electron.ipcRenderer.invoke("worldline:listSupplemental"),

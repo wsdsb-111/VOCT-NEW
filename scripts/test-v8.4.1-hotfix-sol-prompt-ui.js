@@ -18,13 +18,16 @@ assert.ok(!tokenRenderer.includes("item.body") && !tokenRenderer.includes("item.
 const diagnosticsStart = renderer.indexOf('activeTab === "diagnostics"');
 const diagnosticsEnd = renderer.indexOf('className: "worldline-card worldline-editor"', diagnosticsStart);
 const diagnostics = renderer.slice(diagnosticsStart, diagnosticsEnd);
+const worldlineStart = renderer.indexOf("function WorldlineView()");
+const worldlineEnd = renderer.indexOf("function ConfigPanel", worldlineStart);
+const worldline = renderer.slice(worldlineStart, worldlineEnd);
 assert.ok(diagnostics.includes("promptTokenBreakdownRows(promptDiagnostics.tokenBreakdown"), "Prompt Diagnostics must call the dedicated token renderer");
-assert.ok(diagnostics.includes("tokenBreakdownTotal"), "Prompt Diagnostics must expose the block sum");
-assert.ok(diagnostics.includes("tokenBreakdownMatches"), "Prompt Diagnostics must compare the block sum with worldPromptTokens");
+assert.ok(worldline.includes("tokenBreakdownTotal"), "Prompt Diagnostics must expose the block sum");
+assert.ok(worldline.includes("tokenBreakdownMatches"), "Prompt Diagnostics must compare the block sum with worldPromptTokens");
 for (const blockId of ["worldline-stable", "worldline-topic", "worldline-supplemental", "worldline-current"]) {
   const service = fs.readFileSync(path.join(root, "resources", "app", "out", "main", "worldline", "worldline-service.js"), "utf8");
   assert.ok(service.includes(`"${blockId}"`), `backend token breakdown must retain ${blockId}`);
 }
-assert.ok(diagnostics.includes("promptResolverTraceRows(promptDiagnostics.resolverTrace)"), "the UI must consume the backend Resolver Trace");
+assert.ok(worldline.includes("promptResolverTraceRows(promptDiagnostics.resolverTrace)"), "the UI must consume the backend Resolver Trace");
 
 console.log("V8.4.1 Hotfix Sol Prompt UI: PASS (token fields, total equality gate and resolver trace)");

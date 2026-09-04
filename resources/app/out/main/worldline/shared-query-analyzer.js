@@ -92,6 +92,7 @@ function analyzeSharedQuery({ snapshot, query = "", assistContext = "", mentione
   const matchedAliases = new Set();
   const entityAnchoredTerms = new Set(terms.filter((term) => !isCjk(term) && !CJK_GENERIC_TERMS.has(term) && term.length >= 3));
   const resolverTrace = emptyResolverTrace();
+  let exactEntityResolved = false;
   const historicalAliases = findHistoricalAliases(normalizedQuery, terms);
   const historicalAliasTerms = new Set(historicalAliases.map((entry) => normalize(entry.alias)));
   const resolvedHistoricalAliases = new Map();
@@ -103,6 +104,7 @@ function analyzeSharedQuery({ snapshot, query = "", assistContext = "", mentione
     const sources = resolvedCharacterIds.get(key) || new Set();
     sources.add(source);
     resolvedCharacterIds.set(key, sources);
+    exactEntityResolved = true;
     if (alias) matchedAliases.add(normalize(alias));
   };
   const addCandidateCharacter = (candidate, source) => {
@@ -130,6 +132,7 @@ function analyzeSharedQuery({ snapshot, query = "", assistContext = "", mentione
     const sources = resolvedTitleIds.get(key) || new Set();
     sources.add(source);
     resolvedTitleIds.set(key, sources);
+    exactEntityResolved = true;
     if (alias) matchedAliases.add(normalize(alias));
   };
   const addCandidateTitle = (id, source, alias = null) => {
@@ -191,8 +194,9 @@ function analyzeSharedQuery({ snapshot, query = "", assistContext = "", mentione
   const identityResolution = historicalResolutions.length === 0 ? { status: "NO_MATCH", reason: "NO_HISTORICAL_ALIAS", evidence: [], candidates: [] } : historicalResolutions.some((resolution) => resolution.status === "AMBIGUOUS") ? { status: "AMBIGUOUS", reason: "MULTIPLE_CANDIDATES", evidence: historicalResolutions.flatMap((resolution) => resolution.evidence || []), candidates: historicalResolutions.flatMap((resolution) => resolution.candidates || []) } : primaryHistoricalResolution.status === "RESOLVED" ? primaryHistoricalResolution : { status: "NO_MATCH", reason: primaryHistoricalResolution.reason, evidence: primaryHistoricalResolution.evidence || [], candidates: primaryHistoricalResolution.candidates || [] };
   if (historicalResolutions.length) resolverTrace.historical.status = identityResolution.status;
 
-  const localizedTerms = terms.filter(isCjk).slice(0, MAX_LOCALIZED_TERMS);
+  const localizedTerms = exactEntityResolved ? [] : terms.filter(isCjk).slice(0, MAX_LOCALIZED_TERMS);
   if (resolverTrace.historical.matchedRuntimeIds.length) resolverTrace.localization.status = "NOT_REQUIRED_HISTORICAL_MATCH";
+  else if (exactEntityResolved) resolverTrace.localization.status = "NOT_REQUIRED_ENTITY_MATCH";
   else if (typeof findLocalizedKeys === "function") {
     let characterLookupAvailable = true;
     let titleLookupAvailable = true;

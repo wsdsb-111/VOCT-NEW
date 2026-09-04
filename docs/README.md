@@ -28,10 +28,12 @@
 22. [v8.4.1 Hotfix Sol 最终审查](v8.4.1-hotfix-sol-final-review.md)：真实六查询矩阵、Alias/Source/UI 边界和最终自动化 Gate。
 23. [v8.4.2 Luna UI 前置层实施报告](v8.4.2-luna-ui-implementation-report.md)：身份候选与 Game Truth 隔离、历史定义绑定语义、年度 Delta actor/来源展示和 Checkpoint-only 新鲜度。
 24. [V8.4.2 Run Command 生命周期热修实施报告](v8.4.2-run-command-lifecycle-hotfix-implementation-report.md)：Conversation Close 世代/TTL、Run Command Queue v3、启动恢复、carrier 隔离和 ACK 超时安全边界。
-25. [README_摘要系统.md](README_摘要系统.md)：Memory Engine 2.5 的存储、冻结召回、Turn Recall、写入和生命周期规则。
-26. [V7阶段优化记录.md](V7阶段优化记录.md)：V7/V7.x 的连续阶段记录。
-27. [V6阶段优化记录.md](V6阶段优化记录.md)：V6/V6.x 的动作系统和基础设施记录。
-28. 需要核对具体方案时，再阅读版本设计文档和实施报告。
+25. [V8.5 Luna 玩家语义展示层实施报告](v8.5-luna-player-semantic-ui-implementation-report.md)：默认玩家视图、语义映射和高级诊断。
+26. [V8.5 Terra Retrieval 2.0 实施报告](v8.5-terra-retrieval-implementation-report.md)：确定性 Query Planner、Retriever/Ranker、DTO、缓存 revision 与 Prompt token 预算。
+27. [README_摘要系统.md](README_摘要系统.md)：Memory Engine 2.5 的存储、冻结召回、Turn Recall、写入和生命周期规则。
+28. [V7阶段优化记录.md](V7阶段优化记录.md)：V7/V7.x 的连续阶段记录。
+29. [V6阶段优化记录.md](V6阶段优化记录.md)：V6/V6.x 的动作系统和基础设施记录。
+30. 需要核对具体方案时，再阅读版本设计文档和实施报告。
 
 ## 文档分类
 
@@ -70,6 +72,9 @@
 - [v8.4.2-terra-p0-implementation-report.md](v8.4.2-terra-p0-implementation-report.md)：V8.4.2 Terra 的身份解析、War parser、Delta provenance 与 CJK Prompt 安全边界。
 - [v8.4.2-sol-final-review.md](v8.4.2-sol-final-review.md)：V8.4.2 Sol 的 P0/P1 审计、真实 1156→1157 存档 Historical/War Gate 与实现冻结结论。
 - [v8.4.2-run-command-lifecycle-hotfix-implementation-report.md](v8.4.2-run-command-lifecycle-hotfix-implementation-report.md)：V8.4.2 P0 的 Conversation Close 生命周期、Run Command Queue v3、carrier 恢复和确定性回归。
+- [v8.5-luna-player-semantic-ui-implementation-report.md](v8.5-luna-player-semantic-ui-implementation-report.md)：V8.5 Luna 玩家语义展示层、默认 UI 内部字段隔离和高级诊断保留。
+- [v8.5-terra-retrieval-implementation-report.md](v8.5-terra-retrieval-implementation-report.md)：V8.5 Terra 的确定性 Query Planner、Retriever/Ranker、DTO、缓存 revision 和 token 预算边界。
+- [v8.5-sol-internal-review.md](v8.5-sol-internal-review.md)：V8.5 Sol 白屏根因、分页/后台本地化修复、正确性回归和未完成的实机预冻结 Gate。
 - [VOTC_v8.1_Campaign_Identity与Worldline_Store_Foundation设计.md](VOTC_v8.1_Campaign_Identity与Worldline_Store_Foundation设计.md)：V8.1 存档身份协议、session 降级、Worldline schema、原子持久化和 Shadow 集成合同。
 - [v8.1-campaign-identity-worldline-store-implementation-report.md](v8.1-campaign-identity-worldline-store-implementation-report.md)：V8.0 P0/P1 审计、V8.1 应用与 Workshop 实施、自动化验证和实机边界。
 - [v8.3.1-historical-figure-dashboard-implementation-report.md](v8.3.1-historical-figure-dashboard-implementation-report.md)：V8.3.1 实机诊断 Snapshot、Overlay Dashboard、append-only Ground Truth 与冻结边界。

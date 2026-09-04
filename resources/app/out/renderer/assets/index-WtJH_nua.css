@@ -1975,6 +1975,10 @@ hr {
   grid-template-columns: repeat(auto-fit, minmax(125px, 1fr));
   gap: 8px;
 }
+.worldline-diagnostics > p {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
 .worldline-metric {
   min-height: 48px;
   padding: 8px;
@@ -2231,6 +2235,61 @@ hr {
   .worldline-delta-detail {
     grid-column: auto;
   }
+}
+/* V8.5 Luna player semantic presentation */
+.worldline-player-summary-grid {
+  margin-bottom: 8px;
+}
+.worldline-source-advanced {
+  margin-top: 10px;
+  padding-top: 10px;
+  border-top: 1px solid rgba(239, 177, 106, 0.45);
+}
+.worldline-advanced-details {
+  margin-top: 8px;
+  padding: 7px 9px;
+  border: 1px solid rgba(239, 177, 106, 0.42);
+  border-radius: 7px;
+  background: rgba(0, 0, 0, 0.16);
+}
+.worldline-advanced-details > summary {
+  cursor: pointer;
+  color: #efb16a;
+  font-weight: 600;
+}
+.worldline-advanced-details .worldline-diagnostics {
+  margin-top: 7px;
+}
+.worldline-semantic-warning {
+  color: #f3d28a;
+}
+.worldline-overview-advanced {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 6px;
+  margin-top: 8px;
+}
+.worldline-semantic-binding-row {
+  grid-template-columns: repeat(5, minmax(110px, 1fr)) auto;
+  align-items: start;
+}
+.worldline-semantic-binding-row .worldline-advanced-details {
+  margin-top: 0;
+}
+.worldline-diagnostic-summary,
+.worldline-diagnostic-sources {
+  margin-top: 8px;
+  padding: 8px;
+  border-radius: 7px;
+  background: rgba(0, 0, 0, 0.16);
+}
+.worldline-diagnostic-summary h5,
+.worldline-diagnostic-sources h6 {
+  margin: 0 0 7px;
+}
+.worldline-diagnostic-summary .worldline-metric-grid,
+.worldline-diagnostic-sources .worldline-metric-grid {
+  margin-top: 0;
 }
 .summaries-manager .memory-routing-details {
   margin-top: 10px;

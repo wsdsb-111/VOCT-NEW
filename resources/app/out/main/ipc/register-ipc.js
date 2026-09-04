@@ -54,9 +54,9 @@ function registerIpcHandlers(runtime) {
     electron.ipcMain.handle("worldline:getOverview", () => worldlineService.getOverview());
     electron.ipcMain.handle("worldline:getAnnualDelta", () => worldlineService.getAnnualDelta());
     electron.ipcMain.handle("worldline:getWorldKnowledge", () => worldlineService.getWorldKnowledge());
-    electron.ipcMain.handle("worldline:getHistoricalBindings", () => worldlineService.getHistoricalBindings());
+    electron.ipcMain.handle("worldline:getHistoricalBindings", (_event, payload) => worldlineService.getHistoricalBindings(payload));
     electron.ipcMain.handle("worldline:getDiagnostics", () => worldlineService.getDiagnostics());
-    electron.ipcMain.handle("worldline:getPromptDiagnostics", (_event, payload) => worldlineService.getPromptDiagnostics(payload));
+    electron.ipcMain.handle("worldline:getPromptDiagnostics", (_event, payload) => worldlineService.getPromptDiagnosticsAsync(payload));
     electron.ipcMain.handle("worldline:listSupplemental", () => worldlineService.listSupplemental());
     electron.ipcMain.handle("worldline:createSupplemental", (_event, payload) => worldlineService.createSupplemental(payload));
     electron.ipcMain.handle("worldline:updateSupplemental", (_event, id, payload) => worldlineService.updateSupplemental(id, payload));
