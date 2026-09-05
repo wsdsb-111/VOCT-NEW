@@ -386,10 +386,14 @@ class MemoryStore {
           ]);
           const participantNames = participantProfiles.flatMap((participant) => participant && typeof participant === "object" ? [participant.name, participant.shortName, participant.fullName] : []).filter(Boolean);
           const finalizationId = summary.finalizationId || null;
-          const sessionKey = finalizationId ? `${ownerId}|${finalizationId}` : `${ownerId}|${summary.date || ""}|${summary.totalDays ?? ""}|${summary.content}`;
+          // Pair projections from one session can differ by presence and subject.
+          // Only byte-identical bodies are mirrors; never discard another pair's facts.
+          const sessionKey = finalizationId ? `${ownerId}|${finalizationId}|${summary.content}` : `${ownerId}|${summary.date || ""}|${summary.totalDays ?? ""}|${summary.content}`;
           const digest = crypto.createHash("sha1").update(sessionKey).digest("hex").slice(0, 16);
           const existing = sessions.get(sessionKey);
           if (existing) {
+            existing.importance = Math.max(existing.importance, summary.pinned === true ? 0.95 : 0.65);
+            if (summary.open === true) existing.status = "open";
             existing.participants = uniqueIds([...existing.participants, ...participants]);
             existing.subjects = uniqueIds([...existing.subjects, ...participants.filter((id) => id !== ownerId)]);
             existing.tags = [...new Set([...existing.tags, counterpartName, ...participantNames].filter(Boolean))];

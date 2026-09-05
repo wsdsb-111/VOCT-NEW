@@ -26,8 +26,10 @@ try {
   const modRoot = path.join(steamapps, "workshop", "content", "1158310", "42");
   const localizationPath = path.join(modRoot, "localization", "simp_chinese", "nansong_l_simp_chinese.yml");
   fs.mkdirSync(path.dirname(localizationPath), { recursive: true });
+  fs.mkdirSync(path.join(modRoot, "history", "characters"), { recursive: true });
   fs.mkdirSync(path.join(baseGameRoot, "localization", "simp_chinese"), { recursive: true });
   fs.writeFileSync(localizationPath, "\uFEFFl_simp_chinese:\n Yuefei_name:0 \"岳飞\"\n", "utf8");
+  fs.writeFileSync(path.join(modRoot, "history", "characters", "fixture.txt"), 'nansong_yue_085 = { name="岳飞" culture=han female=no 1103.3.24={ birth=yes } }\n', "utf8");
   const descriptorPath = path.join(userFolder, "mod", "ugc_42.mod");
   fs.mkdirSync(path.dirname(descriptorPath), { recursive: true });
   fs.writeFileSync(descriptorPath, `path="${modRoot.replaceAll("\\", "/")}"\nremote_file_id="42"\n`, "utf8");
@@ -50,11 +52,11 @@ try {
   service.getLiveState = () => ({ connected: true, gameDate: "1155年11月8日", totalDays: 1, characters: [] });
 
   await service.historicalDefinitionIndex.prepare(["岳飞"], 5000);
-  const diagnostics = service.getPromptDiagnostics({ query: "岳飞现在在哪里" }).promptDiagnostics;
+  const diagnostics = (await service.getPromptDiagnosticsAsync({ query: "岳飞现在在哪里" })).promptDiagnostics;
   assert.equal(diagnostics.available, true, "the real resolver path must remain available while Prompt Default On is disabled");
   assert.ok(diagnostics.queryAnalysis.matchedAliases.includes("岳飞"), "the analyzed Chinese query must record its historical alias");
   assert.deepEqual(diagnostics.gameTruth.characters.map((item) => item.id), ["96896"], "the resolver, analyzer and diagnostics path must reach the observed runtime character without mocked reverse lookup");
-  assert.ok(diagnostics.gameTruth.characters[0].matchSources.includes("historical_identity_resolved"), "Game Truth must be entered only after the V8.3 evidence threshold resolves identity");
+  assert.ok(diagnostics.gameTruth.characters[0].matchSources.includes("historical_identity_resolved"), "Game Truth must be entered only after the V8.5.2 core identity gate resolves identity");
   assert.equal(diagnostics.resolverTrace.localization.status, "NOT_REQUIRED_HISTORICAL_MATCH", "a confirmed historical identity must avoid an unnecessary reverse localization scan");
   assert.deepEqual(diagnostics.resolverTrace.historical.matchedRuntimeIds, ["96896"], "the trace must prove definition-to-runtime bridging");
   assert.equal(service.getPromptContext({ query: "岳飞现在在哪里" }), null, "the E2E gate must not turn on production prompt integration");

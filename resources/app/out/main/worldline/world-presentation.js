@@ -85,7 +85,7 @@ function createPlayerAnnualDelta(entries) {
 function createPlayerHistoricalCharacters(bindings, snapshot) {
   return (bindings || []).map((binding) => ({
     historicalFigure: humanLiteral(binding?.historicalName) || "历史人物",
-    currentCharacter: characterName(snapshot, binding.runtimeId),
+    currentCharacter: binding?.runtimeId ? characterName(snapshot, binding.runtimeId) : "当前存档未找到",
     status: IDENTITY_LABELS[binding.status] || "暂未找到对应人物",
     confidence: binding.status === "LIVE_CONFIRMED" || binding.status === "RESOLVED" ? "高" : binding.status === "DIRECT" ? "中" : "待确认",
     warning: binding.status === "CONFLICT" || binding.status === "AMBIGUOUS_PROVENANCE",

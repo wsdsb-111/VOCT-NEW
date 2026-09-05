@@ -51,7 +51,8 @@ try {
   const reverseOnly = snapshot();
   reverseOnly.definitionToRuntime = {};
   const reverseOnlyAnalysis = analyzeSharedQuery({ snapshot: reverseOnly, query: "韩世忠", historicalDefinitionLookup: (value) => lookup(index, value) });
-  assert.deepEqual(reverseOnlyAnalysis.characters.map((character) => character.id), ["96896"], "the retained reverse definition mapping may recover a single runtime candidate");
+  assert.deepEqual(reverseOnlyAnalysis.characters, [], "a reverse-only definition mapping cannot satisfy the bidirectional identity gate");
+  assert.equal(reverseOnlyAnalysis.historicalCoverage[0].status, "REJECTED_BY_EVIDENCE");
 
   const inconsistentBinding = snapshot();
   inconsistentBinding.runtimeToDefinitions = {};

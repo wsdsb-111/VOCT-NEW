@@ -158,9 +158,11 @@ class Conversation {
       this.captureSummaryParticipantProfiles(this.gameData.characters.values());
       this.initializePresence();
       this.gameData.loadCharactersSummaries();
-      await this.recoverPendingMemories();
       this.isActive = true;
       this.emitUpdate();
+      this.memoryRecoveryPromise = Promise.resolve().then(() => this.recoverPendingMemories()).catch((error) => {
+        console.error("[Summary] Background recovery failed; snapshots retained:", error);
+      });
     } catch (error) {
       console.error("Failed to parse log file:", error);
       this.isActive = false;
@@ -1126,15 +1128,19 @@ class Conversation {
   // Create final comprehensive summary and save to characters
   async finalizeConversation(options = {}) {
     if (options.closeGameScene !== false) {
-      runFileManager.write("trigger_event = mcc_event_v2.9002", {
-        owner: "conversation",
-        kind: "conversation_close",
-        scopeId: options.conversationId || this.id,
-        epoch: options.epoch ?? this.conversationEpoch,
-        expiresInMs: 15e3,
-        destructive: true,
-        supersedable: true
-      });
+      try {
+        runFileManager.write("trigger_event = mcc_event_v2.9002", {
+          owner: "conversation",
+          kind: "conversation_close",
+          scopeId: options.conversationId || this.id,
+          epoch: options.epoch ?? this.conversationEpoch,
+          expiresInMs: 15e3,
+          destructive: true,
+          supersedable: true
+        });
+      } catch (error) {
+        console.error("[Summary] Game scene close failed; continuing memory finalization:", error);
+      }
     } else {
       console.log(`[Conversation] game scene close skipped id=${this.id} reason=${options.reason || "conversation_rollover"}`);
     }
@@ -1168,6 +1174,7 @@ class Conversation {
       console.error(`Final summary failed; recovery snapshot preserved at ${finalResult.recoveryPath}`);
     }
     this.end();
+    return finalResult;
   }
   //  Create final comprehensive summary using ALL messages
   async createFinalSummary() {
@@ -1181,6 +1188,8 @@ class Conversation {
       persistCharacterFolders: async (finalSummary, context) => {
         return this.gameData.saveCharactersSummaries(finalSummary, participantIds, {
           finalizationId: context.finalizationId,
+          date: context.date,
+          totalDays: context.totalDays,
           excludedOwnerIds: context.excludedSummaryOwnerIds,
           participantProfiles: context.participants,
           directedSummaries: context.directedSummaries,
@@ -1209,6 +1218,8 @@ class Conversation {
         const participantIds = (context.participants || []).map((entry) => entry.id);
         return this.gameData.saveCharactersSummaries(finalSummary, participantIds, {
           finalizationId: context.finalizationId,
+          date: context.date,
+          totalDays: context.totalDays,
           excludedOwnerIds: context.excludedSummaryOwnerIds,
           participantProfiles: context.participants,
           directedSummaries: context.directedSummaries,

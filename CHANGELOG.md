@@ -8,6 +8,15 @@
 
 | 版本 | 重点 | 详细记录 |
 | --- | --- | --- |
+| v8.5.2 Astra Stage 6 | 修复交叉姓名误拆、原生人物重复诊断实体和历史 Runtime 缺失状态丢失；120 组回归、三份存档和隔离 Electron IPC 通过。补充知识基础链路已实现，生产注入仍关闭；正式视觉、Provider 与长会话 Gate 未签发 | [Astra 最终集成审查](docs/v8.5.2-astra-final-review.md) |
+| v8.5.2 Sol Stage 5 | 独立审查 Luna UI/DTO 边界；修复 Runtime-native 成功被旧聚合 `NAME_INDEX_MISS` 覆盖、候选数错误、coverage 大小写/冲突优先级遗漏及降级路径 raw 值泄漏。120 组回归通过，等待 Astra 最终集成 | [Sol UI/DTO 边界审查](docs/v8.5.2-sol-ui-boundary-review.md) / [V8 阶段记录](docs/V8阶段开发记录.md) |
+| v8.5.2 Luna Stage 4 | 接入逐实体 Historical / Runtime-native 玩家语义、懒展开 Worldline Difference、来源不完整/歧义可读状态和 Historical Mapping A/B/C 分层；119 组发布回归通过，等待 Sol Stage 5 | [Luna UI 实施报告](docs/v8.5.2-luna-ui-implementation-report.md) / [V8 阶段记录](docs/V8阶段开发记录.md) |
+| v8.5.2 Sol Stage 3 | 独立复核 Terra 后端并修复诊断 DTO 携带完整检查点的 P0、Runtime 截断部分注入与 Mapping coverage P1；False Resolution / Game Truth Injection 均为 0，118 组回归通过，等待 Luna | [Sol 后端正确性审查](docs/v8.5.2-sol-correctness-review.md) |
+| v8.5.2 Terra Stage 2 | 增加 Runtime-native 与 additive 身份 DTO；世界线差异仅作诊断；复姓/长姓名改由可验证本地化来源构造，Historical Mapping 不再显示 raw key。117 组回归和真实来源只读探测通过，等待 Sol | [Terra Runtime Identity 实施](docs/v8.5.2-terra-runtime-identity-implementation-report.md) |
+| v8.5.2 Sol Stage 1 | 历史身份改用完整姓名、唯一 Definition、双向 Runtime 绑定和性别核心门禁；年龄/家庭退出判定，修复年份数字误入 Runtime namespace，并统一来源不完整优先级。114 组回归及真实存档 fail-closed 审计通过，等待 Terra | [Sol 正确性审查](docs/v8.5.2-sol-correctness-review.md) |
+| v8.5.2 Astra Stage 0 | 静态历史来源每分钟轻量探测，未变化不重建/清缓存，重读存档不再重建静态索引；接入长姓名内存扫描与失败/世代隔离。113 组回归通过，下一步 Sol 身份门禁，最终未冻结 | [Astra 架构与实施交接](docs/v8.5.2-astra-architecture-contract.md) |
+| v8.5.1 摘要召回 P0 热修 | 不同配对投影不再被错误合并；最近 3 条直接摘要优先入选，超长摘要优先保留长期事项，原始文件与预算保持不变 | [摘要事故修复报告](docs/v8.5.1-summary-incident-review.md) |
+| v8.5.1 摘要 P0 / 多人入场 P2 热修 | 恢复旧摘要不再加入当前玩家或使用当前日期；截断/质量失败启用有界、在场边界安全的分段恢复；恢复转后台，不阻塞入场控制；关闭场景失败与摘要隔离 | [摘要事故修复报告](docs/v8.5.1-summary-incident-review.md) |
 | v8.5.1 Sol 审查与修复 | 修复源解析灾难性回溯、身份旁路、Worker 世代/缓存和通用历史映射管线；完善三层诊断与分页。109 组自动回归、15 人实存档定义召回通过；Electron 和剩余来源合同未验收，不冻结 | [V8.5.1 Sol 最终审查](docs/v8.5.1-sol-final-review.md) |
 | v8.5.1 Sol 合同冻结 | 固化通用姓名索引、来源/身份证据、后台构建、缓存与三层诊断接口；下一步 Terra，实现与最终验收尚未开始 | [V8.5.1 Sol 合同](docs/v8.5.1-sol-contract-freeze.md) |
 | v8.5.1 Terra Historical Definition Index | 启用来源的历史人物全名索引移入后台 Worker；通用候选经双向绑定、来源完整性、冲突与既有阈值门禁后才进入 Game Truth，诊断新增 coverage/index 状态 | [V8.5.1 Terra 实施报告](docs/v8.5.1-historical-definition-index-terra-implementation-report.md) |

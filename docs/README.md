@@ -4,7 +4,11 @@
 
 ## 推荐阅读顺序
 
-V8.5.1 当前施工入口：[Sol 最终审查与修复](v8.5.1-sol-final-review.md)；109 组自动回归与 15 人真实存档定义召回已验证，实际 Electron、全量召回率和剩余来源合同未闭合，INTERNAL FREEZE 仍为 NOT READY。
+当前事故入口：[V8.5.1 摘要 P0 / 多人入场 P2 修复报告](v8.5.1-summary-incident-review.md)：摘要链路审计、长会话恢复、参与者隔离与入场延迟。
+
+V8.5.2 当前施工入口：[Sol Stage 5 UI / DTO 边界审查](v8.5.2-sol-ui-boundary-review.md)；新旧 DTO 聚合矛盾、来源优先级和 Renderer 降级 raw 泄漏已修复，逐实体 UI 与 50 条边界保持通过，完整发布回归为 120/120。下一步 Astra Stage 6 最终集成与实机 Gate；`INTERNAL FREEZE = NOT READY`。
+
+V8.5.1 历史基线：[Sol 最终审查与修复](v8.5.1-sol-final-review.md)，保留当时 109 组自动回归、15 人真实存档定义召回及未验收边界。
 
 1. [项目 README](../README.md)：运行环境、配置方式和当前版本基线。
 2. [CHANGELOG.md](../CHANGELOG.md)：按版本查看变更入口和对应的详细文档。
@@ -34,12 +38,18 @@ V8.5.1 当前施工入口：[Sol 最终审查与修复](v8.5.1-sol-final-review.
 26. [V8.5 Terra Retrieval 2.0 实施报告](v8.5-terra-retrieval-implementation-report.md)：确定性 Query Planner、Retriever/Ranker、DTO、缓存 revision 与 Prompt token 预算。
 27. [V8.5.1 Terra Historical Definition Index 实施报告](v8.5.1-historical-definition-index-terra-implementation-report.md)：后台通用姓名索引、身份门禁、coverage 与 100 条确定性矩阵。
 28. [V8.5.1 Luna 历史人物诊断可读性实施报告](v8.5.1-luna-historical-diagnostic-ui-implementation-report.md)：玩家摘要、可读判定依据、来源完整性/索引未命中状态和开发者追踪分层。
-29. [README_摘要系统.md](README_摘要系统.md)：Memory Engine 2.5 的存储、冻结召回、Turn Recall、写入和生命周期规则。
-30. [V7阶段优化记录.md](V7阶段优化记录.md)：V7/V7.x 的连续阶段记录。
-31. [V6阶段优化记录.md](V6阶段优化记录.md)：V6/V6.x 的动作系统和基础设施记录。
-32. 需要核对具体方案时，再阅读版本设计文档和实施报告。
+29. [V8.5.2 Terra Runtime Identity 实施报告](v8.5.2-terra-runtime-identity-implementation-report.md)：Runtime-native、世界线差异、复姓/长姓名来源和 Mapping 安全显示。
+30. [V8.5.2 Sol 后端正确性独立审查](v8.5.2-sol-correctness-review.md)：False Resolution 矩阵、DTO/IPC 边界、截断与 coverage 安全修复。
+31. [V8.5.2 Luna 玩家语义与世界线差异 UI](v8.5.2-luna-ui-implementation-report.md)：逐实体身份、差异面板、Mapping 玩家层和多分辨率/主题视觉回归边界。
+32. [V8.5.2 Sol UI / DTO 边界独立审查](v8.5.2-sol-ui-boundary-review.md)：additive/legacy 摘要一致性、SOURCE_INCOMPLETE 优先级、A/B/C 层泄漏和有界渲染复核。
+33. [README_摘要系统.md](README_摘要系统.md)：Memory Engine 2.5 的存储、冻结召回、Turn Recall、写入和生命周期规则。
+34. [V7阶段优化记录.md](V7阶段优化记录.md)：V7/V7.x 的连续阶段记录。
+35. [V6阶段优化记录.md](V6阶段优化记录.md)：V6.2 至当前 V6.x 的动作系统和基础设施记录。
+36. 需要核对具体方案时，再阅读版本设计文档和实施报告。
 
 ## 文档分类
+
+最新阶段：[V8.5.2 Astra 最终集成审查](v8.5.2-astra-final-review.md)，包含真实存档矩阵、隔离 Electron IPC、补充知识功能范围和 NOT READY 的剩余验收条件。
 
 ### 架构与运行规则
 
@@ -80,6 +90,10 @@ V8.5.1 当前施工入口：[Sol 最终审查与修复](v8.5.1-sol-final-review.
 - [v8.5-terra-retrieval-implementation-report.md](v8.5-terra-retrieval-implementation-report.md)：V8.5 Terra 的确定性 Query Planner、Retriever/Ranker、DTO、缓存 revision 和 token 预算边界。
 - [v8.5-sol-internal-review.md](v8.5-sol-internal-review.md)：V8.5 Sol 白屏根因、分页/后台本地化修复、正确性回归和未完成的实机预冻结 Gate。
 - [v8.5.1-historical-definition-index-terra-implementation-report.md](v8.5.1-historical-definition-index-terra-implementation-report.md)：V8.5.1 Terra 通用 Historical Definition Index、Worker、绑定安全门禁和 fixture 矩阵。
+- [v8.5.2-terra-runtime-identity-implementation-report.md](v8.5.2-terra-runtime-identity-implementation-report.md)：V8.5.2 Terra Runtime-native、Domain DTO、世界线差异、全名来源和历史映射显示边界。
+- [v8.5.2-sol-correctness-review.md](v8.5.2-sol-correctness-review.md)：V8.5.2 Sol Stage 3 后端正确性、False Resolution、DTO/IPC 与来源优先级审查。
+- [v8.5.2-luna-ui-implementation-report.md](v8.5.2-luna-ui-implementation-report.md)：V8.5.2 Luna Stage 4 玩家语义、Worldline Difference、多实体诊断和 A/B/C 层 UI 边界。
+- [v8.5.2-sol-ui-boundary-review.md](v8.5.2-sol-ui-boundary-review.md)：V8.5.2 Sol Stage 5 additive/legacy DTO 一致性、来源优先级、降级安全和 A/B/C 泄漏审查。
 - [VOTC_v8.1_Campaign_Identity与Worldline_Store_Foundation设计.md](VOTC_v8.1_Campaign_Identity与Worldline_Store_Foundation设计.md)：V8.1 存档身份协议、session 降级、Worldline schema、原子持久化和 Shadow 集成合同。
 - [v8.1-campaign-identity-worldline-store-implementation-report.md](v8.1-campaign-identity-worldline-store-implementation-report.md)：V8.0 P0/P1 审计、V8.1 应用与 Workshop 实施、自动化验证和实机边界。
 - [v8.3.1-historical-figure-dashboard-implementation-report.md](v8.3.1-historical-figure-dashboard-implementation-report.md)：V8.3.1 实机诊断 Snapshot、Overlay Dashboard、append-only Ground Truth 与冻结边界。

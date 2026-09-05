@@ -2,6 +2,7 @@
 
 const { findHistoricalAliases } = require("./historical-alias-catalog");
 const { resolveHistoricalIdentity } = require("./historical-identity-resolver");
+const { HistoricalNameScanner, normalizeName } = require("./historical-name-scanner");
 
 const MAX_QUERY_TERMS = 32;
 const MAX_LOCALIZED_TERMS = 12;
@@ -10,7 +11,29 @@ const MAX_TITLE_RESULTS = 3;
 const CJK_GENERIC_TERMS = new Set(["现在", "在哪", "哪里", "怎么", "为何", "什么", "是否", "是谁"]);
 
 function normalize(value) {
-  return String(value || "").trim().toLocaleLowerCase();
+  return normalizeName(value);
+}
+
+const runtimeScanners = new WeakMap();
+const runtimeNameIndexes = new WeakMap();
+function scanRuntimeNames(snapshot, query) {
+  if (!snapshot) return { matches: [], candidateSetComplete: true };
+  if (!runtimeScanners.has(snapshot)) runtimeScanners.set(snapshot, new HistoricalNameScanner(Object.keys(snapshot.nameToCharacterIds || {})));
+  return runtimeScanners.get(snapshot).scan(query);
+}
+
+function runtimeIdsForName(snapshot, value) {
+  if (!snapshot) return [];
+  if (!runtimeNameIndexes.has(snapshot)) {
+    const index = new Map();
+    for (const [name, ids] of Object.entries(snapshot.nameToCharacterIds || {})) {
+      const key = normalize(name);
+      if (!key) continue;
+      index.set(key, [...new Set([...(index.get(key) || []), ...(Array.isArray(ids) ? ids : [])].map(String))]);
+    }
+    runtimeNameIndexes.set(snapshot, index);
+  }
+  return runtimeNameIndexes.get(snapshot).get(normalize(value)) || [];
 }
 
 function isCjk(value) {
@@ -77,9 +100,64 @@ function normalizeReverseLookup(result) {
   return { status: result.status || "NO_MATCH", matches: Array.isArray(result.matches) ? result.matches : [], sourceComplete: result.sourceComplete !== false, scannedFiles: Number(result.scannedFiles) || 0, missingDescriptors: Array.isArray(result.missingDescriptors) ? result.missingDescriptors : [], matchedRawKeys: Array.isArray(result.matchedRawKeys) ? result.matchedRawKeys : [] };
 }
 
-function analyzeSharedQuery({ snapshot, query = "", assistContext = "", mentionedEntityIds = [], localize = null, findLocalizedKeys = null, historicalDefinitionLookup = null } = {}) {
+function runtimeDefinitionIds(snapshot, runtimeId) {
+  const key = String(runtimeId);
+  const reverse = Array.isArray(snapshot?.runtimeToDefinitions?.[key]) ? snapshot.runtimeToDefinitions[key] : [];
+  const forward = Object.entries(snapshot?.definitionToRuntime || {}).filter(([, id]) => String(id) === key).map(([definitionId]) => definitionId);
+  return [...new Set([...reverse, ...forward].filter(Boolean).map(String))];
+}
+
+function differenceOfWorldline({ record, character, snapshot }) {
+  const differences = [];
+  const expectedBirth = record?.metadata?.birthDate || null;
+  if (expectedBirth && character?.birth && expectedBirth !== character.birth) differences.push({ code: "AGE_WORLDLINE_SHIFT", severity: "INFO", expectedBirth, currentBirth: character.birth });
+  const expectedRuntime = (definitionId) => definitionId && snapshot?.definitionToRuntime?.[definitionId] ? String(snapshot.definitionToRuntime[definitionId]) : null;
+  const expectedFather = expectedRuntime(record?.metadata?.parents?.father);
+  const expectedMother = expectedRuntime(record?.metadata?.parents?.mother);
+  if (expectedFather && character?.parents?.father && String(character.parents.father) !== expectedFather) differences.push({ code: "FATHER_DIFFERENT", severity: "NOTICE" });
+  if (expectedMother && character?.parents?.mother && String(character.parents.mother) !== expectedMother) differences.push({ code: "MOTHER_DIFFERENT", severity: "NOTICE" });
+  const compareIds = (code, expectedDefinitions, actualIds) => {
+    if (!Array.isArray(expectedDefinitions) || !expectedDefinitions.length || !Array.isArray(actualIds)) return;
+    const expected = expectedDefinitions.map(expectedRuntime);
+    if (expected.some((id) => !id)) return;
+    const actual = [...new Set(actualIds.map(String))].sort();
+    if (expected.sort().join(",") !== actual.join(",")) differences.push({ code, severity: "NOTICE" });
+  };
+  compareIds("SPOUSE_DIFFERENT", record?.metadata?.spouses, character?.spouse ? [character.spouse] : []);
+  compareIds("CHILDREN_DIFFERENT", record?.metadata?.children, character?.children);
+  return differences;
+}
+
+function historicalEntity(resolution, { definitionRecords = [], sourceComplete = true, candidateSetComplete = true, candidateTotal = 0, snapshot } = {}) {
+  const runtimeIds = [...new Set((resolution.candidates || []).map((candidate) => candidate.runtimeId).filter(Boolean).map(String))];
+  const resolutionStatus = ["SOURCE_INCOMPLETE", "DEFINITION_FOUND_RUNTIME_MISSING"].includes(resolution.coverageStatus) ? resolution.coverageStatus : resolution.status === "REJECTED" ? "REJECTED_BY_CONFLICT" : resolution.status === "RESOLVED" || resolution.status === "AMBIGUOUS" ? resolution.status : "NO_MATCH";
+  const resolved = resolution.status === "RESOLVED" && resolution.resolvedRuntimeId ? String(resolution.resolvedRuntimeId) : null;
+  const record = definitionRecords.length === 1 ? definitionRecords[0] : null;
+  const character = resolved ? snapshot?.characters?.[resolved] : null;
+  return {
+    identityKind: "HISTORICAL",
+    resolutionStatus,
+    subjectName: resolution.alias,
+    candidateTotal: Math.max(Number(candidateTotal) || 0, resolution.definitionIds?.length || 0, runtimeIds.length),
+    historicalDefinitionIds: [...new Set(resolution.definitionIds || [])],
+    runtimeIds,
+    identityEvidence: resolution.evidence || [],
+    worldlineDifferences: record && character ? differenceOfWorldline({ record, character, snapshot }) : [],
+    sourceComplete: sourceComplete === true,
+    candidateSetComplete: candidateSetComplete === true
+  };
+}
+
+function analyzeSharedQuery({ snapshot, query = "", assistContext = "", mentionedEntityIds = [], localize = null, findLocalizedKeys = null, historicalDefinitionLookup = null, historicalNameScan = null } = {}) {
   const normalizedQuery = normalize(`${query}\n${assistContext}`);
-  const terms = collectTerms(normalizedQuery);
+  const directRuntimeMatch = String(query || "").trim().match(/^#?(\d+)$/);
+  const directRuntimeId = directRuntimeMatch?.[1] || null;
+  const runtimeScan = scanRuntimeNames(snapshot, normalizedQuery);
+  const nameScan = typeof historicalNameScan === "function" ? historicalNameScan(normalizedQuery) : null;
+  const scanComplete = !nameScan || nameScan.sourceComplete === true && nameScan.candidateSetComplete === true;
+  const overlapsRuntimeSuffix = (match) => runtimeScan.matches.some(other => other.end > match.end && other.start < match.end);
+  const scannedMatches = (nameScan?.matches || []).filter(match => !overlapsRuntimeSuffix(match));
+  const terms = [...new Set([...scannedMatches.map(match => match.value), ...runtimeScan.matches.map(match => match.value), ...collectTerms(normalizedQuery)])].slice(0, MAX_QUERY_TERMS);
   const termSet = new Set(terms);
   const characters = snapshot?.characters || {};
   const titles = snapshot?.titles || {};
@@ -90,20 +168,43 @@ function analyzeSharedQuery({ snapshot, query = "", assistContext = "", mentione
   const candidateCharacterIds = new Set();
   const candidateTitleIds = new Set();
   const matchedAliases = new Set();
-  const entityAnchoredTerms = new Set(terms.filter((term) => !isCjk(term) && !CJK_GENERIC_TERMS.has(term) && term.length >= 3));
+  const entityAnchoredTerms = new Set(terms.filter((term) => !isCjk(term) && !/^\d+$/.test(term) && !CJK_GENERIC_TERMS.has(term) && term.length >= 3));
   const resolverTrace = emptyResolverTrace();
   let exactEntityResolved = false;
-  const manualHistoricalAliases = findHistoricalAliases(normalizedQuery, terms);
-  const indexResults = typeof historicalDefinitionLookup === "function" ? terms.map((term) => [term, historicalDefinitionLookup(term) || {}]) : [];
+  const manualHistoricalAliases = findHistoricalAliases(normalizedQuery, terms).filter(entry => {
+    const spans = new HistoricalNameScanner([entry.alias]).scan(normalizedQuery).matches;
+    return spans.some(span => !overlapsRuntimeSuffix(span) && ![...runtimeScan.matches, ...scannedMatches].some(other => other.start <= span.start && other.end >= span.end && other.end - other.start > span.end - span.start));
+  });
+  const indexResults = nameScan
+    ? [...new Map(scannedMatches.map(match => [match.value, { ...match.result, sourceComplete: nameScan.sourceComplete === true && nameScan.candidateSetComplete === true && match.result?.sourceComplete === true }])).entries()]
+    : typeof historicalDefinitionLookup === "function" ? terms.map((term) => [term, historicalDefinitionLookup(term) || {}]) : [];
+  if (nameScan && typeof historicalDefinitionLookup === "function") for (const entry of manualHistoricalAliases) {
+    const key = normalize(entry.alias);
+    if (!indexResults.some(([term]) => term === key)) indexResults.push([key, historicalDefinitionLookup(key) || {}]);
+  }
+  if (nameScan && !indexResults.length && typeof historicalDefinitionLookup === "function" && isCjk(normalizedQuery) && normalizedQuery.length <= 32) indexResults.push([normalizedQuery, historicalDefinitionLookup(normalizedQuery) || {}]);
   const indexedHistoricalAliases = indexResults.flatMap(([term, result]) => {
     if (result.status !== "FOUND") return [];
-    return [{ alias: term, figureKey: null, definitionIds: result.candidates.map((candidate) => candidate.definitionId), candidateDefinitionIds: result.candidates.map((candidate) => candidate.definitionId), definitionRecords: result.candidates, indexStatus: result.status, sourceComplete: result.sourceComplete !== false && result.candidateSetComplete !== false }];
+    return [{ alias: term, figureKey: null, definitionIds: result.candidates.map((candidate) => candidate.definitionId), candidateDefinitionIds: result.candidates.map((candidate) => candidate.definitionId), definitionRecords: result.candidates, candidateTotal: result.candidateTotal ?? result.candidates.length, indexStatus: result.status, sourceComplete: nameScan ? nameScan.sourceComplete === true && result.sourceComplete === true : result.sourceComplete !== false, candidateSetComplete: scanComplete && result.candidateSetComplete !== false }];
   });
   const cjkRuns = normalizedQuery.match(/[\u3400-\u9fff\uf900-\ufaff]+/gu) || [];
   const shortCjkQuery = cjkRuns.every((run) => run.length <= 4) && terms.filter((term) => isCjk(term) && term.length >= 2 && !CJK_GENERIC_TERMS.has(term)).sort((left, right) => right.length - left.length)[0] || null;
   const indexedTermSet = new Set(indexedHistoricalAliases.map((entry) => normalize(entry.alias)));
   const indexCoverage = shortCjkQuery && !indexedTermSet.has(normalize(shortCjkQuery)) ? indexResults.find(([term]) => term === shortCjkQuery)?.[1] : null;
-  const historicalAliases = [...manualHistoricalAliases.map((entry) => ({ ...entry, sourceComplete: !historicalDefinitionLookup || indexResults.find(([term]) => term === normalize(entry.alias))?.[1]?.sourceComplete === true, definitionRecords: [] })), ...indexedHistoricalAliases].reduce((items, entry) => {
+  const historicalAliases = [...manualHistoricalAliases.map((entry) => {
+    const indexed = indexResults.find(([term]) => term === normalize(entry.alias))?.[1];
+    const indexedCandidates = indexed?.status === "FOUND" ? indexed.candidates || [] : null;
+    return {
+      ...entry,
+      definitionIds: indexedCandidates ? indexedCandidates.map(candidate => candidate.definitionId) : entry.definitionIds,
+      candidateDefinitionIds: indexedCandidates ? indexedCandidates.map(candidate => candidate.definitionId) : entry.candidateDefinitionIds,
+      candidateTotal: indexed?.candidateTotal ?? indexedCandidates?.length ?? entry.candidateDefinitionIds.length,
+      sourceComplete: !historicalDefinitionLookup ? scanComplete : scanComplete && indexed?.sourceComplete === true,
+      candidateSetComplete: scanComplete && (!historicalDefinitionLookup || indexed?.candidateSetComplete !== false),
+      definitionRecords: indexedCandidates || [],
+      indexStatus: indexed?.status || null
+    };
+  }), ...indexedHistoricalAliases].reduce((items, entry) => {
     const key = normalize(entry.alias);
     const existing = items.get(key);
     if (existing) {
@@ -111,14 +212,16 @@ function analyzeSharedQuery({ snapshot, query = "", assistContext = "", mentione
       existing.definitionIds = [...new Set([...existing.definitionIds, ...entry.definitionIds])];
       existing.candidateDefinitionIds = [...new Set([...existing.candidateDefinitionIds, ...entry.candidateDefinitionIds])];
       existing.definitionRecords = [...new Map([...existing.definitionRecords, ...entry.definitionRecords].map((record) => [record.definitionId, record])).values()];
+      existing.candidateTotal = Math.max(existing.candidateTotal || 0, entry.candidateTotal || 0);
       existing.indexStatus = entry.indexStatus || existing.indexStatus;
       existing.sourceComplete &&= entry.sourceComplete !== false;
+      existing.candidateSetComplete &&= entry.candidateSetComplete !== false;
     } else items.set(key, { ...entry });
     return items;
   }, new Map()).values();
   const allHistoricalAliases = [...historicalAliases];
   const standaloneName = shortCjkQuery === normalizedQuery.trim() && ![...CJK_GENERIC_TERMS].some(term => shortCjkQuery?.includes(term));
-  const historicalAliasList = allHistoricalAliases.filter(entry => (!standaloneName || normalize(entry.alias) === shortCjkQuery) && !allHistoricalAliases.some(other => other.alias.length > entry.alias.length && normalize(other.alias).includes(normalize(entry.alias))));
+  const historicalAliasList = allHistoricalAliases.filter(entry => (!standaloneName || normalize(entry.alias) === shortCjkQuery) && (nameScan || !allHistoricalAliases.some(other => other.alias.length > entry.alias.length && normalize(other.alias).includes(normalize(entry.alias)))));
   const historicalAliasTerms = new Set(historicalAliasList.filter((entry) => entry.candidateDefinitionIds.length).map((entry) => normalize(entry.alias)));
   const isHistoricalTerm = term => [...historicalAliasTerms].some(alias => alias.includes(term));
   const resolvedHistoricalAliases = new Map();
@@ -169,24 +272,18 @@ function analyzeSharedQuery({ snapshot, query = "", assistContext = "", mentione
   };
 
   for (const term of terms) {
-    if (characters[term]) {
+    if (term === directRuntimeId && characters[term]) {
       addResolvedCharacter(term, "runtime_id", term);
       entityAnchoredTerms.add(term);
       resolverTrace.runtime.status = "MATCHED";
       continue;
     }
+    if (/^\d+$/.test(term)) continue;
     const runtimeId = snapshot?.definitionToRuntime?.[term] || null;
     if (runtimeId) {
       addResolvedCharacter(runtimeId, "historical_definition_id", term);
       entityAnchoredTerms.add(term);
       resolverTrace.runtime.status = "MATCHED";
-    }
-    if (!isHistoricalTerm(term)) {
-      const namedIds = snapshot?.nameToCharacterIds?.[term] || [];
-      if (namedIds.length === 1) {
-        addResolvedCharacter(namedIds[0], "character_alias", term);
-        entityAnchoredTerms.add(term);
-      } else for (const id of namedIds) addCandidateCharacter({ runtimeId: id, rawName: characters[id]?.firstName, aliasCandidate: term }, "character_alias_ambiguous");
     }
   }
   for (const title of Object.values(titles)) {
@@ -196,6 +293,7 @@ function analyzeSharedQuery({ snapshot, query = "", assistContext = "", mentione
     }
   }
 
+  const historicalDomainEntities = [];
   const historicalResolutions = historicalAliasList.map((entry) => {
     resolverTrace.historical.aliases.push(entry.alias);
     resolverTrace.historical.matchedDefinitionIds.push(...entry.definitionIds);
@@ -205,8 +303,7 @@ function analyzeSharedQuery({ snapshot, query = "", assistContext = "", mentione
       resolverTrace.historical.matchedRuntimeIds.push(String(runtimeId));
       resolverTrace.historical.matchSources.push({ alias: entry.alias, definitionId, runtimeId: String(runtimeId), source: entry.indexStatus === "FOUND" ? "historical_definition_index" : "historical_alias_override" });
     }
-    const resolution = resolveHistoricalIdentity({ alias: entry.alias, figureKey: entry.figureKey, candidateDefinitionIds: entry.candidateDefinitionIds, definitionRecords: entry.definitionRecords, snapshot });
-    if (entry.sourceComplete === false) Object.assign(resolution, { status: "REJECTED", resolvedRuntimeId: null, reason: "SOURCE_INCOMPLETE" });
+    const resolution = resolveHistoricalIdentity({ alias: entry.alias, figureKey: entry.figureKey, candidateDefinitionIds: entry.candidateDefinitionIds, definitionRecords: entry.definitionRecords, snapshot, sourceComplete: entry.sourceComplete, candidateSetComplete: entry.candidateSetComplete });
     resolverTrace.historical.resolutions.push({ alias: entry.alias, figureKey: entry.figureKey, status: resolution.status, reason: resolution.reason, resolvedRuntimeId: resolution.resolvedRuntimeId || null });
     matchedAliases.add(normalize(entry.alias));
     entityAnchoredTerms.add(normalize(entry.alias));
@@ -215,17 +312,61 @@ function analyzeSharedQuery({ snapshot, query = "", assistContext = "", mentione
       resolvedHistoricalAliases.set(String(resolution.resolvedRuntimeId), entry.alias);
       resolverTrace.runtime.status = "MATCHED";
     } else for (const candidate of resolution.candidates) addCandidateCharacter(candidate, "historical_alias_candidate");
-    const coverageStatus = entry.sourceComplete === false ? "SOURCE_INCOMPLETE" : entry.definitionRecords?.length && !resolution.candidates.length ? "DEFINITION_FOUND_RUNTIME_MISSING" : resolution.status === "REJECTED" ? "REJECTED_BY_EVIDENCE" : resolution.status;
-    return { alias: entry.alias, figureKey: entry.figureKey, coverageStatus, definitionIds: entry.candidateDefinitionIds, ...resolution };
+    const coverageStatus = entry.sourceComplete === false || entry.candidateSetComplete === false ? "SOURCE_INCOMPLETE" : entry.definitionRecords?.length && !resolution.candidates.length ? "DEFINITION_FOUND_RUNTIME_MISSING" : resolution.status === "REJECTED" ? "REJECTED_BY_EVIDENCE" : resolution.status;
+    const result = { alias: entry.alias, figureKey: entry.figureKey, coverageStatus, definitionIds: entry.candidateDefinitionIds, ...resolution };
+    historicalDomainEntities.push(historicalEntity(result, { definitionRecords: entry.definitionRecords, sourceComplete: entry.sourceComplete, candidateSetComplete: entry.candidateSetComplete, candidateTotal: entry.candidateTotal, snapshot }));
+    return result;
   });
+  const nativeEntityResolutions = [];
+  const nativeSubjects = new Set();
+  const addRuntimeNative = (subjectName, runtimeIds, source, candidateSetComplete = true) => {
+    const ids = [...new Set(runtimeIds.map(String).filter((id) => characters[id]))];
+    if (!subjectName || !ids.length || nativeSubjects.has(subjectName)) return;
+    // A name with any Historical Definition remains exclusively in the historical
+    // resolver; native handling must never bypass its fail-closed identity gate.
+    if (ids.some((id) => runtimeDefinitionIds(snapshot, id).length)) return;
+    nativeSubjects.add(subjectName);
+    const resolutionStatus = candidateSetComplete ? ids.length === 1 ? "RESOLVED" : "AMBIGUOUS" : "SOURCE_INCOMPLETE";
+    nativeEntityResolutions.push({
+      identityKind: "RUNTIME_NATIVE",
+      resolutionStatus,
+      subjectName,
+      candidateTotal: ids.length,
+      historicalDefinitionIds: [],
+      runtimeIds: ids,
+      identityEvidence: [{ code: source, category: "IDENTITY_CORE" }],
+      worldlineDifferences: [],
+      sourceComplete: true,
+      candidateSetComplete
+    });
+    entityAnchoredTerms.add(normalize(subjectName));
+    if (!candidateSetComplete) return;
+    if (ids.length === 1) addResolvedCharacter(ids[0], "runtime_native_name", subjectName);
+    else for (const runtimeId of ids) addCandidateCharacter({ runtimeId, rawName: characters[runtimeId]?.firstName, aliasCandidate: subjectName }, "runtime_native_ambiguous");
+  };
+  for (const match of runtimeScan.matches) addRuntimeNative(match.value, runtimeIdsForName(snapshot, match.value), "RUNTIME_NATIVE_FULL_NAME", runtimeScan.candidateSetComplete === true);
+  if (directRuntimeId && characters[directRuntimeId]) addRuntimeNative(characters[directRuntimeId]?.fullName || characters[directRuntimeId]?.firstName || `#${directRuntimeId}`, [directRuntimeId], "RUNTIME_NATIVE_DIRECT_ID");
+  // Preserve legacy non-CJK runtime aliases (for example, CK3 fixture or
+  // localized Latin names). CJK names with historical bindings stay closed
+  // until the Historical Index can prove the full identity.
+  for (const match of runtimeScan.matches) {
+    if (isCjk(match.value)) continue;
+    const ids = runtimeIdsForName(snapshot, match.value);
+    if (!ids.some((id) => runtimeDefinitionIds(snapshot, id).length)) continue;
+    if (ids.length === 1) addResolvedCharacter(ids[0], "character_alias", match.value);
+    else for (const runtimeId of ids) addCandidateCharacter({ runtimeId, rawName: characters[runtimeId]?.firstName, aliasCandidate: match.value }, "character_alias_ambiguous");
+  }
   const primaryHistoricalResolution = historicalResolutions[0];
   const historicalRuntimeIds = new Set(historicalResolutions.flatMap(resolution => (resolution.candidates || []).map(candidate => String(candidate.runtimeId))));
   for (const id of mentionedEntityIds) if (!historicalRuntimeIds.has(String(id)) && !historicalResolutions.some(resolution => resolution.coverageStatus === "SOURCE_INCOMPLETE")) addResolvedCharacter(id, "shared_memory_entity");
-  const identityResolution = historicalResolutions.length === 0 ? { status: "NO_MATCH", reason: "NO_HISTORICAL_ALIAS", evidence: [], candidates: [] } : historicalResolutions.some((resolution) => resolution.status === "AMBIGUOUS") ? { status: "AMBIGUOUS", reason: "MULTIPLE_CANDIDATES", evidence: historicalResolutions.flatMap((resolution) => resolution.evidence || []), candidates: historicalResolutions.flatMap((resolution) => resolution.candidates || []) } : primaryHistoricalResolution.status === "RESOLVED" ? primaryHistoricalResolution : { status: "NO_MATCH", reason: primaryHistoricalResolution.reason, evidence: primaryHistoricalResolution.evidence || [], candidates: primaryHistoricalResolution.candidates || [] };
   const historicalCoverage = historicalResolutions.map((resolution) => ({ alias: resolution.alias, status: resolution.coverageStatus, definitionIds: resolution.definitionIds, reason: resolution.reason }));
   if (indexCoverage && ["SOURCE_INCOMPLETE", "NAME_INDEX_MISS"].includes(indexCoverage.status)) historicalCoverage.push({ alias: shortCjkQuery, status: indexCoverage.status, definitionIds: [], reason: indexCoverage.status });
-  if (historicalResolutions.length) resolverTrace.historical.status = identityResolution.status;
-  else if (historicalCoverage.length) resolverTrace.historical.status = historicalCoverage[0].status;
+  const resolvedEntityNames = new Set([...historicalDomainEntities, ...nativeEntityResolutions].map((entity) => normalize(entity.subjectName)));
+  const coverageDomainEntities = historicalCoverage.filter((item) => !resolvedEntityNames.has(normalize(item.alias)) && !(item.status === "NAME_INDEX_MISS" && nativeEntityResolutions.some(entity => normalize(item.alias).includes(normalize(entity.subjectName))))).map((item) => ({ identityKind: "UNKNOWN", resolutionStatus: item.status, subjectName: item.alias, candidateTotal: 0, historicalDefinitionIds: item.definitionIds || [], runtimeIds: [], identityEvidence: [], worldlineDifferences: [], sourceComplete: item.status !== "SOURCE_INCOMPLETE", candidateSetComplete: item.status !== "SOURCE_INCOMPLETE" }));
+  const coveragePriority = { SOURCE_INCOMPLETE: 4, DEFINITION_FOUND_RUNTIME_MISSING: 3, REJECTED_BY_EVIDENCE: 2, NAME_INDEX_MISS: 1 };
+  const primaryCoverage = historicalCoverage.reduce((best, item) => !best || (coveragePriority[item.status] || 0) > (coveragePriority[best.status] || 0) ? item : best, null);
+  const identityResolution = primaryCoverage?.status === "SOURCE_INCOMPLETE" ? { status: "NO_MATCH", reason: primaryCoverage.reason || "SOURCE_INCOMPLETE", evidence: [], candidates: historicalResolutions.flatMap((resolution) => resolution.candidates || []) } : historicalResolutions.length === 0 ? { status: "NO_MATCH", reason: primaryCoverage?.reason || "NO_HISTORICAL_ALIAS", evidence: [], candidates: [] } : historicalResolutions.some((resolution) => resolution.status === "AMBIGUOUS") ? { status: "AMBIGUOUS", reason: "MULTIPLE_CANDIDATES", evidence: historicalResolutions.flatMap((resolution) => resolution.evidence || []), candidates: historicalResolutions.flatMap((resolution) => resolution.candidates || []) } : primaryHistoricalResolution.status === "RESOLVED" ? primaryHistoricalResolution : { status: "NO_MATCH", reason: primaryHistoricalResolution.reason, evidence: primaryHistoricalResolution.evidence || [], candidates: primaryHistoricalResolution.candidates || [] };
+  resolverTrace.historical.status = primaryCoverage?.status === "SOURCE_INCOMPLETE" ? "SOURCE_INCOMPLETE" : historicalResolutions.length ? identityResolution.status : primaryCoverage?.status || "NO_MATCH";
 
   const localizedTerms = exactEntityResolved ? [] : terms.filter(term => isCjk(term) && !isHistoricalTerm(term)).slice(0, MAX_LOCALIZED_TERMS);
   if (resolverTrace.historical.matchedRuntimeIds.length) resolverTrace.localization.status = "NOT_REQUIRED_HISTORICAL_MATCH";
@@ -330,8 +471,10 @@ function analyzeSharedQuery({ snapshot, query = "", assistContext = "", mentione
     resolvedTitles,
     candidateTitles: [...candidateTitles.values()],
     identityResolution,
+    entityResolutions: [...historicalDomainEntities, ...nativeEntityResolutions, ...coverageDomainEntities],
     historicalCoverage,
-    historicalPending: indexResults.some(([, result]) => result.pending === true),
+    historicalPending: nameScan?.pending === true || indexResults.some(([, result]) => result.pending === true),
+    historicalNameScan: nameScan && { revision: nameScan.revision || null, sourceComplete: nameScan.sourceComplete === true, candidateSetComplete: nameScan.candidateSetComplete === true, matches: scannedMatches.map(({ value, start, end }) => ({ value, start, end })) },
     matchedAliases: [...matchedAliases].filter(Boolean),
     candidateCharacterIds: [...candidateCharacterIds],
     candidateTitleIds: [...candidateTitleIds],

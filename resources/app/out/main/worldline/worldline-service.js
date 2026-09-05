@@ -75,6 +75,17 @@ function formatCharacter(snapshot, id) {
   return character?.firstName ? `${character.firstName} (#${id})` : `#${id}`;
 }
 
+function readableName(value) {
+  const text = String(value || "").trim();
+  return /[\u3400-\u9fff\uf900-\ufaff]/u.test(text) && !/[_:#]/.test(text) ? text : null;
+}
+
+function historicalDisplayName({ indexed, currentCharacterName, metadata, query }) {
+  const exactIndexedName = (indexed?.names || []).find((name) => String(name || "").toLocaleLowerCase() === String(query || "").toLocaleLowerCase());
+  const soleIndexedName = indexed?.names?.length === 1 ? indexed.names[0] : null;
+  return readableName(indexed?.displayName) || readableName(exactIndexedName) || readableName(soleIndexedName) || readableName(currentCharacterName) || (metadata?.aliases || []).map(readableName).find(Boolean) || "名称未解析";
+}
+
 function formatDeltaActors(snapshot, ids) {
   return [...new Set((ids || []).map((id) => String(id)))].flatMap((runtimeId) => {
     const character = snapshot?.characters?.[runtimeId];
@@ -185,6 +196,7 @@ class WorldlineService {
         this.worldKnowledgeState.summaryCache.clear();
         this._notifyStateChanged("historical_definition_index_updated");
       },
+      onQueryReady: () => this._notifyStateChanged("historical_query_ready"),
       WorkerClass: this.Worker,
       aliases: HISTORICAL_ALIAS_CATALOG
     });
@@ -294,8 +306,6 @@ class WorldlineService {
     if (sourceChanged) {
       this.sourceRevision += 1;
       this.localizationResolver.invalidate();
-      this.historicalDefinitionIndex.invalidate();
-      this.historicalDefinitionIndex.start();
       this.currentCheckpoint = null;
       this.buildState = "UNCONFIGURED";
       this.lastObservedFile = null;
@@ -314,10 +324,7 @@ class WorldlineService {
   async syncAutosaveFromCK3Folder(previousFolder = null) {
     const settings = this._settings();
     const currentFolder = this.settingsRepository.getCK3UserFolderPath?.() || null;
-    if (previousFolder && currentFolder && !this._samePath(previousFolder, currentFolder)) {
-      this.historicalDefinitionIndex.invalidate();
-      this.historicalDefinitionIndex.start();
-    }
+    this.historicalDefinitionIndex.start();
     const previousDefault = this._defaultAutosavePath(previousFolder);
     const currentIsManaged = !settings.autosavePath || !!previousDefault && this._samePath(settings.autosavePath, previousDefault);
     if (!currentIsManaged) return { success: true, preservedExplicitSource: true, settings: this.getSettings() };
@@ -440,8 +447,6 @@ class WorldlineService {
     const buildRevision = this.sourceRevision;
     const buildSource = settings.autosavePath;
     if (this.buildPromise && this.buildRevision === buildRevision && this._samePath(this.buildSource, buildSource)) return this.buildPromise;
-    this.historicalDefinitionIndex?.invalidate();
-    this.historicalDefinitionIndex?.start();
     const buildPromise = (async () => {
       const validation = this.validateAutosavePath();
       if (!this._isCurrentBuild(buildRevision, buildSource)) return { success: false, error: "worldline_build_superseded", superseded: true };
@@ -629,8 +634,10 @@ class WorldlineService {
     const rawStatus = String(status || "ALL").trim().toUpperCase();
     const statusFilter = VALID_BINDING_STATUSES.has(rawStatus) ? rawStatus : "ALL";
     const bindings = [];
+    const boundDefinitionIds = new Set();
     let total = 0;
     let matchedTotal = 0;
+    let matchedRuntimeTotal = 0;
     for (const definitionId in definitions) {
       if (!Object.prototype.hasOwnProperty.call(definitions, definitionId)) continue;
       total += 1;
@@ -646,7 +653,7 @@ class WorldlineService {
       const binding = {
         figureKey: definitionId,
         definitionId,
-        historicalName: indexed?.displayName || metadata?.aliases?.[0] || null,
+        historicalName: historicalDisplayName({ indexed, currentCharacterName: snapshot.characters?.[String(runtimeId)]?.fullName || snapshot.characters?.[String(runtimeId)]?.firstName, metadata, query: search }),
         historicalAliases: metadata?.aliases || [],
         sourceMod: null,
         runtimeId: String(runtimeId),
@@ -659,11 +666,32 @@ class WorldlineService {
       const searchText = [indexed?.displayName, ...(indexed?.names || []), metadata?.figureKey, ...(metadata?.aliases || []), currentCharacterName, definitionId, runtimeId, live?.historyId].filter(Boolean).join(" ").toLocaleLowerCase();
       if ((search && !searchText.includes(search)) || (statusFilter !== "ALL" && binding.status !== statusFilter)) continue;
       matchedTotal += 1;
+      matchedRuntimeTotal += 1;
       if (bindings.length >= MAX_UI_BINDINGS) continue;
+      boundDefinitionIds.add(definitionId);
       bindings.push({ ...binding, currentCharacterName });
     }
+    if (search && statusFilter === "ALL" && indexedResult?.status === "FOUND") for (const indexed of indexedResult.candidates || []) {
+      if (boundDefinitionIds.has(indexed.definitionId)) continue;
+      matchedTotal += 1;
+      if (bindings.length >= MAX_UI_BINDINGS) continue;
+      const metadata = HISTORICAL_DEFINITION_METADATA.get(indexed.definitionId);
+      bindings.push({
+        figureKey: indexed.definitionId,
+        definitionId: indexed.definitionId,
+        historicalName: historicalDisplayName({ indexed, currentCharacterName: null, metadata, query: search }),
+        historicalAliases: metadata?.aliases || [],
+        sourceMod: indexed.sourceRows?.[0]?.source?.modId || null,
+        runtimeId: null,
+        liveHistoryId: null,
+        status: "NO_MATCH",
+        conflict: "DEFINITION_FOUND_RUNTIME_MISSING",
+        currentCharacterName: null
+      });
+    }
     const resultTotal = search || statusFilter !== "ALL" ? matchedTotal : total;
-    return { bindings, total: resultTotal, truncated: resultTotal > MAX_UI_BINDINGS, query: search, status: statusFilter, coverageStatus: indexedResult?.status === "FOUND" && !resultTotal ? "DEFINITION_FOUND_RUNTIME_MISSING" : indexedResult?.status, playerView: { historicalCharacters: createPlayerHistoricalCharacters(bindings, snapshot) } };
+    const coverageStatus = indexedResult?.sourceComplete === false || indexedResult?.candidateSetComplete === false ? "SOURCE_INCOMPLETE" : indexedResult?.status === "FOUND" && !matchedRuntimeTotal ? "DEFINITION_FOUND_RUNTIME_MISSING" : indexedResult?.status;
+    return { bindings, total: resultTotal, truncated: resultTotal > MAX_UI_BINDINGS, query: search, status: statusFilter, coverageStatus, playerView: { historicalCharacters: createPlayerHistoricalCharacters(bindings, snapshot), coverageStatus } };
   }
 
   listSupplemental() {
@@ -786,7 +814,8 @@ class WorldlineService {
         mentionedEntityIds: safeMentionedEntityIds,
         localize: (type, rawKey) => this.localizationResolver?.resolve(type, rawKey),
         findLocalizedKeys: (type, value, options) => this.localizationResolver?.findRawKeysByLocalizedValue(type, value, options) || { status: "NO_MATCH", matches: [], sourceComplete: true, scannedFiles: 0, missingDescriptors: [], matchedRawKeys: [] },
-        historicalDefinitionLookup: !["UNCONFIGURED", "FAILED"].includes(this.historicalDefinitionIndex?.status) ? (value) => this.historicalDefinitionIndex.find(value) : null
+        historicalDefinitionLookup: !["UNCONFIGURED", "FAILED"].includes(this.historicalDefinitionIndex?.status) ? (value) => this.historicalDefinitionIndex.find(value) : null,
+        historicalNameScan: !["UNCONFIGURED", "FAILED"].includes(this.historicalDefinitionIndex?.status) && this.historicalDefinitionIndex?.scan ? (value) => this.historicalDefinitionIndex.scan(value) : null
       });
       const queryPlan = buildWorldQueryPlan({ query, assistContext, analysis: queryAnalysis });
       const activeSupplemental = this.listSupplemental().supplemental;
@@ -811,11 +840,11 @@ class WorldlineService {
       const buildRecall = () => {
         const selectedKey = [...selected.gameTruth, ...selected.supplemental, ...selected.delta].map((candidate) => candidate.id).join(",") || "empty";
         const summaryKey = `${cacheKey}:${selectedKey}`;
-        let summary = this.worldKnowledgeState.summaryCache.get(summaryKey);
+        let summary = queryAnalysis.historicalPending ? null : this.worldKnowledgeState.summaryCache.get(summaryKey);
         if (summary) summaryCacheHit = true;
         else {
           summary = buildDeterministicWorldSummary({ selected });
-          this.worldKnowledgeState.summaryCache.set(summaryKey, summary);
+          if (!queryAnalysis.historicalPending) this.worldKnowledgeState.summaryCache.set(summaryKey, summary);
           if (this.worldKnowledgeState.summaryCache.size > 64) this.worldKnowledgeState.summaryCache.delete(this.worldKnowledgeState.summaryCache.keys().next().value);
         }
         const topicText = summary.topicItems.length ? `=== 与当前话题相关的 CK3 Checkpoint 事实（截至 ${snapshot.gameDate}） ===\n若与本轮 Live、回应角色权威游戏资料或场景直接事实冲突，必须以后者为准。\n${summary.topicItems.map((item) => item.text).join("\n")}` : null;
@@ -873,7 +902,12 @@ class WorldlineService {
     const checkpoint = this.currentCheckpoint;
     const deadline = Date.now() + 8000;
     const historicalBudgetMs = Math.min(1500, Math.max(0, deadline - Date.now()));
-    await this.historicalDefinitionIndex?.prepare?.(collectTerms(`${String(payload.query || "")}\n${String(payload.assistContext || "")}`), historicalBudgetMs);
+    const query = `${String(payload.query || "").slice(0, 1000)}\n${String(payload.assistContext || "").slice(0, 2000)}`;
+    if (this.historicalDefinitionIndex?.prepareQuery) {
+      await this.historicalDefinitionIndex.prepareQuery(query, historicalBudgetMs);
+      const overrides = HISTORICAL_ALIAS_CATALOG.flatMap(entry => entry.aliases.filter(alias => query.includes(alias)));
+      await this.historicalDefinitionIndex.prepare([query.trim(), ...overrides], Math.max(1, Math.min(1500, deadline - Date.now())));
+    } else await this.historicalDefinitionIndex?.prepare?.(collectTerms(query), historicalBudgetMs);
     if (this.localizationResolver.pending?.size) await this.localizationResolver.settle(Math.max(1, deadline - Date.now()));
     if (this.currentCheckpoint !== checkpoint) return { promptDiagnostics: { available: false, reason: "CHECKPOINT_CHANGED", query: String(payload.query || "").slice(0, 1000) } };
     const result = this.getPromptDiagnostics(payload);
@@ -943,7 +977,7 @@ class WorldlineService {
         historicalCoverage: analysis.historicalCoverage || [],
         historicalIndex: {
           status: this.historicalDefinitionIndex?.status || "UNCONFIGURED",
-          sourceComplete: this.historicalDefinitionIndex?.meta?.sourceComplete === true,
+          sourceComplete: ["READY", "PARTIAL"].includes(this.historicalDefinitionIndex?.status) && this.historicalDefinitionIndex?.meta?.sourceComplete === true,
           revision: this.historicalDefinitionIndex?.meta?.revision || null,
           diagnostics: this.historicalDefinitionIndex?.meta?.diagnostics || null
         },

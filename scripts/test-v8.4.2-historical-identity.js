@@ -37,14 +37,15 @@ const resolvedSnapshot = {
   definitionToRuntime: { nansong_yue_085: "96896" },
   runtimeToDefinitions: { "96896": ["nansong_yue_085"] }
 };
-const resolved = resolveHistoricalIdentity({ alias: "岳飞", figureKey: "yue_fei", candidateDefinitionIds: ["nansong_yue_085", "tangyin_yue_014"], snapshot: resolvedSnapshot });
-assert.equal(resolved.status, "RESOLVED", "one evidence-complete candidate must resolve through the V8.3 threshold");
-assert.equal(resolved.resolvedRuntimeId, "96896", "only the thresholded runtime may become Game Truth");
-assert.ok(resolved.candidates[0].evidence.some((item) => item.code === "AGE_MATCH_STRONG"), "the resolver must retain V8.3 age evidence");
-assert.ok(resolved.candidates[0].evidence.some((item) => item.code === "GENDER_MATCH"), "the resolver must retain V8.3 gender evidence");
+const resolved = resolveHistoricalIdentity({ alias: "岳飞", figureKey: "yue_fei", candidateDefinitionIds: ["nansong_yue_085"], snapshot: resolvedSnapshot });
+assert.equal(resolved.status, "RESOLVED", "one exact definition with reciprocal runtime binding must resolve through the V8.5.2 core gate");
+assert.equal(resolved.resolvedRuntimeId, "96896", "only the core-confirmed runtime may become Game Truth");
+assert.ok(!resolved.candidates[0].evidence.some((item) => item.code.startsWith("AGE_")), "age must not enter Historical Identity evidence");
+assert.ok(resolved.candidates[0].evidence.some((item) => item.code === "GENDER_MATCH" && item.category === "IDENTITY_SUPPORT"), "gender support remains classified outside the binding core");
 
 const rejectedSnapshot = { ...resolvedSnapshot, characters: { "96896": { ...character("96896", "1060.1.1"), gender: "female" } } };
-const rejectedAnalysis = analyzeSharedQuery({ snapshot: rejectedSnapshot, query: "岳飞", findLocalizedKeys: () => ({ status: "NO_MATCH", matches: [], sourceComplete: true, scannedFiles: 0, missingDescriptors: [], matchedRawKeys: [] }) });
-assert.equal(rejectedAnalysis.identityResolution.status, "NO_MATCH", "the shared Query contract must map resolver rejection to NO_MATCH");
-assert.equal(rejectedAnalysis.characters.length, 0, "rejected candidates must remain outside Game Truth");
-console.log("V8.4.2 Historical Identity: PASS (candidate split, threshold resolution and fail-closed ambiguity)");
+const rejected = resolveHistoricalIdentity({ alias: "岳飞", figureKey: "yue_fei", candidateDefinitionIds: ["nansong_yue_085"], snapshot: rejectedSnapshot });
+assert.equal(rejected.status, "REJECTED", "a gender hard conflict must reject the core identity");
+assert.equal(rejected.reason, "GENDER_CONFLICT");
+assert.equal(rejected.resolvedRuntimeId, null, "rejected candidates must remain outside Game Truth");
+console.log("V8.4.2 Historical Identity: PASS (candidate split, core-gate resolution and fail-closed ambiguity)");

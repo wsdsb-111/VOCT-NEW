@@ -25,7 +25,7 @@ Return at most 10 high-value durable memories for retrieval. These are an index,
       ...(finalInstructions ? [{ role: "system", content: `Stable final-summary content instructions (apply these inside summarySegments and memories; they do not replace the required JSON format). Any fixed character-count or word-count target in older saved instructions is obsolete and must be ignored; the only size ceiling is the configured provider output-token limit:\n${finalInstructions}` }] : []),
       { role: "system", content: `Conversation date: ${date || "unknown"}; totalDays: ${totalDays ?? "unknown"}\nParticipants:\n${participantText}\nPresence windows [joinedAt, leftBefore):\n${presenceText || "(all listed participants present for the full conversation)"}\nPrevious rolling summary:\n${rollingSummary || "(none)"}` },
       { role: "system", content: `Full conversation:\n${conversationText}` },
-      { role: "user", content: "Extract the durable memories and session summary now." }
+      { role: "user", content: `Extract the durable memories and session summary now. Source-ID contract v2: allowed messageIds are ${JSON.stringify((messages || []).map(entry => entry.id))}; allowed participant/speaker IDs are ${JSON.stringify((participants || []).map(entry => entry.id))}. Copy original IDs exactly; do not renumber messages from zero or one, use schema example IDs, or invent messages outside this supplied excerpt. Summarize only the supplied messages, not an imagined complete conversation.` }
     ];
   }
 

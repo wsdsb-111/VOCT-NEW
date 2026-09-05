@@ -64,6 +64,12 @@ for (const marker of [
   "worldline-historical-explanation",
   "展开历史人物判定依据",
   "worldline-candidate-readable",
+  "promptEntityResolutions",
+  "showEntityResolutions",
+  "promptEntityResolutionPanel",
+  "worldline-entity-resolution-panel",
+  "worldline-worldline-differences",
+  "promptEntityResolutionPanel, promptHistoricalExplanationPanel",
   "trimmedItems",
   "runtimeId",
   "definitionId",
@@ -77,13 +83,17 @@ for (const marker of [
 }
 
 assert.ok(html.indexOf('src="./worldline-player-presentation.js"') < html.indexOf('src="./assets/index-Dn3qWlAB.js"'), "player presentation helper must load before the bundle");
+assert.ok(!worldlineSource.includes("coverageItems[0]"), "player diagnostics must not collapse multi-entity coverage to the first item");
 for (const marker of [
   ".worldline-player-summary-grid",
   ".worldline-source-advanced",
   ".worldline-advanced-details",
   ".worldline-semantic-binding-row",
   ".worldline-diagnostic-summary",
-  ".worldline-diagnostic-sources"
+  ".worldline-diagnostic-sources",
+  ".worldline-entity-resolution-panel",
+  ".worldline-worldline-differences",
+  ".worldline-difference-item"
 ]) {
   assert.ok(styles.includes(marker), `stylesheet is missing V8.5 Luna marker: ${marker}`);
 }
@@ -111,6 +121,49 @@ assert.equal(ui.visibility("PUBLIC_WORLD"), "所有人可知");
 assert.equal(ui.importance("HIGH"), "重要");
 assert.equal(ui.identity("AMBIGUOUS_PROVENANCE"), "存在多个候选");
 assert.equal(ui.coverage("DEFINITION_FOUND_RUNTIME_MISSING"), "找到历史定义，但当前存档没有对应角色");
+assert.equal(ui.identityKind("HISTORICAL", "RESOLVED"), "已确认历史人物");
+assert.equal(ui.identityKind("RUNTIME_NATIVE", "RESOLVED"), "已确认当前存档角色");
+assert.equal(ui.identityKind("RUNTIME_NATIVE", "AMBIGUOUS"), "当前存档存在多个同名角色");
+assert.equal(ui.worldlineDifference({ code: "AGE_WORLDLINE_SHIFT", expectedBirth: "1100.1.1", currentBirth: "1101.2.3" }).detail, "当前角色出生时间与历史基准存在偏移，不影响已确认的历史身份。 1100年1月1日 → 1101年2月3日");
+const entity = ui.entityResolution({
+  subjectName: "韩世忠",
+  identityKind: "HISTORICAL",
+  resolutionStatus: "RESOLVED",
+  candidateTotal: 1,
+  sourceComplete: true,
+  worldlineDifferences: [{ code: "SPOUSE_DIFFERENT" }]
+});
+assert.deepEqual(entity, {
+  subject: "韩世忠",
+  identityKind: "HISTORICAL",
+  identityKindLabel: "已确认历史人物",
+  status: "RESOLVED",
+  statusLabel: "已确认身份",
+  candidateCount: 1,
+  sourceLabel: "来源完整",
+  differences: [{ code: "SPOUSE_DIFFERENT", title: "婚姻关系存在差异", detail: "当前存档关系与历史基准不同；以当前存档事实为准。", severity: "INFO" }]
+}, "entity resolution must expose only readable player semantics");
+const multiEntitySummary = ui.promptSummary({
+  query: "岳飞与韩世忠",
+  queryAnalysis: {
+    entityResolutions: [
+      { subjectName: "岳飞", identityKind: "HISTORICAL", resolutionStatus: "AMBIGUOUS", candidateTotal: 2 },
+      { subjectName: "韩世忠", identityKind: "HISTORICAL", resolutionStatus: "RESOLVED", candidateTotal: 1 }
+    ],
+    identityResolution: { status: "AMBIGUOUS", candidateTotal: 2 },
+    historicalCoverage: []
+  },
+  available: true,
+  supplemental: [],
+  gameTruth: { characters: [], titles: [] }
+});
+assert.equal(multiEntitySummary.entities.length, 2, "multi-entity diagnostics must preserve every entity");
+assert.equal(multiEntitySummary.entities[0].subject, "岳飞");
+assert.equal(multiEntitySummary.entities[1].identityKindLabel, "已确认历史人物");
+const playerSemanticText = JSON.stringify(multiEntitySummary.entities);
+for (const forbiddenInternalValue of ["Fei_name11", "nansong_yue_085", "runtimeId", "definitionId", "NAME_EXACT"]) {
+  assert.ok(!playerSemanticText.includes(forbiddenInternalValue), `player semantic entity output must not expose ${forbiddenInternalValue}`);
+}
 const explanation = ui.historicalExplanation({
   queryAnalysis: {
     identityResolution: { status: "NO_MATCH", reason: "NO_RUNTIME_CANDIDATES", candidates: [] },

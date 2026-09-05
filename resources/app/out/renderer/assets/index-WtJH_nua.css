@@ -2308,6 +2308,72 @@ hr {
 .worldline-candidate-readable .worldline-semantic-warning {
   display: block;
 }
+.worldline-entity-resolution-panel {
+  margin-top: 8px;
+}
+.worldline-entity-resolution-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: 8px;
+}
+.worldline-entity-resolution-card {
+  padding: 8px;
+  border: 1px solid rgba(239, 177, 106, 0.32);
+  border-radius: 7px;
+  background: rgba(20, 12, 10, 0.42);
+}
+.worldline-entity-heading {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.worldline-entity-heading strong {
+  color: #f3d28a;
+}
+.worldline-entity-kind {
+  color: #efb16a;
+  font-size: 0.84em;
+}
+.worldline-entity-status,
+.worldline-entity-meta {
+  margin: 5px 0 0;
+  overflow-wrap: anywhere;
+}
+.worldline-entity-meta {
+  opacity: 0.78;
+  font-size: 0.82em;
+}
+.worldline-worldline-differences {
+  margin-top: 8px;
+  padding-top: 7px;
+  border-top: 1px solid rgba(239, 177, 106, 0.22);
+}
+.worldline-worldline-differences h6 {
+  margin: 0 0 6px;
+}
+.worldline-difference-list {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+.worldline-difference-item {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 6px;
+  border-radius: 5px;
+  background: rgba(239, 177, 106, 0.08);
+}
+.worldline-difference-item strong {
+  color: #f3d28a;
+}
+.worldline-difference-item span {
+  overflow-wrap: anywhere;
+  font-size: 0.86em;
+}
 .summaries-manager .memory-routing-details {
   margin-top: 10px;
   color: #d8d2c7;

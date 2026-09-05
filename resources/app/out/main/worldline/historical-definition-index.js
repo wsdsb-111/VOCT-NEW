@@ -5,46 +5,13 @@ const fs = require("fs");
 const path = require("path");
 const { Worker, isMainThread, parentPort, workerData } = require("worker_threads");
 const { scanDirectEntries } = require("./game-state-adapter");
+const { SOURCE_DIRECTORIES, discoverSources, listFiles, probeHistoricalSources } = require("./historical-source-probe");
+const { HistoricalNameScanner, normalizeName } = require("./historical-name-scanner");
 
-const POLICY_VERSION = "v8.5.1-historical-index-3";
-const normalize = value => String(value || "").trim().normalize("NFKC").toLocaleLowerCase();
+const POLICY_VERSION = "v8.5.2-historical-index-4";
+const normalize = normalizeName;
 const literalName = value => /[\u3400-\u9fff\uf900-\ufaff]/u.test(String(value || "")) ? String(value).trim() : null;
-
-function descriptor(text) {
-  return { root: text.match(/^\s*path\s*=\s*"([^"]+)"/m)?.[1] || null, modId: text.match(/^\s*remote_file_id\s*=\s*"?(\d+)"?/m)?.[1] || null, unsupported: /^\s*archive\s*=/m.test(text) || [...text.matchAll(/^\s*replace_path\s*=\s*"([^"]+)"/gm)].some(match => /^(history(?:\/characters)?|common(?:\/(?:dynasties|dynasty_houses))?|localization)(?:\/|$)/.test(match[1])) };
-}
-function baseRoot(modRoot) {
-  const parts = path.resolve(modRoot).split(path.sep); const index = parts.findIndex(part => part.toLowerCase() === "steamapps");
-  return index < 0 ? null : path.join(parts.slice(0, index + 1).join(path.sep), "common", "Crusader Kings III", "game");
-}
-function listFiles(root, suffix) {
-  if (!root || !fs.existsSync(root)) return [];
-  const files = [], pending = [root];
-  while (pending.length) { const current = pending.pop(); for (const entry of fs.readdirSync(current, { withFileTypes: true })) {
-    const full = path.join(current, entry.name);
-    if (entry.isDirectory()) pending.push(full); else if (entry.isFile() && entry.name.toLowerCase().endsWith(suffix)) files.push(full);
-  } }
-  return files.sort((a, b) => a.localeCompare(b));
-}
-function discoverSources(userFolder) {
-  const missing = [], sources = []; let complete = !!userFolder, base = null;
-  try {
-    const load = JSON.parse(fs.readFileSync(path.join(userFolder, "dlc_load.json"), "utf8"));
-    for (const relative of Array.isArray(load.enabled_mods) ? load.enabled_mods : []) {
-      const file = path.resolve(userFolder, relative); if (!fs.existsSync(file)) { missing.push(relative); complete = false; continue; }
-      const descriptorText = fs.readFileSync(file, "utf8");
-      const item = descriptor(descriptorText);
-      if (item.unsupported) { missing.push(`UNSUPPORTED_SOURCE_SEMANTICS:${relative}`); complete = false; }
-      const root = item.root ? path.resolve(userFolder, item.root) : null;
-      if (!root || !fs.existsSync(root)) { missing.push(relative); complete = false; continue; }
-      const inferred = baseRoot(root);
-      if (!base && inferred && fs.existsSync(inferred)) base = inferred;
-      sources.push({ root, modId: item.modId, sourceId: `mod:${item.modId || root}`, descriptorHash: crypto.createHash("sha256").update(descriptorText).digest("hex") });
-    }
-  } catch (_error) { complete = false; }
-  if (base && fs.existsSync(base)) sources.unshift({ root: base, modId: null, sourceId: "base" }); else complete = false;
-  return { sources, complete, missing };
-}
+const SURNAME_FIRST_CULTURES = new Set(["han", "chinese", "khitan", "jurchen"]);
 function fields(block) {
   const values = Object.create(null);
   scanDirectEntries(block, 0, block.length, (key, value) => {
@@ -53,7 +20,7 @@ function fields(block) {
       if (field === "birth" && item.kind === "scalar" && item.value === "yes") values.birth = key;
     });
   });
-  return { name: values.name || null, dynasty: values.dynasty || null, house: values.dynasty_house || null, culture: values.culture || null, gender: values.female === "yes" ? "female" : values.female === "no" ? "male" : "unknown", birthDate: values.birth || null };
+  return { name: values.name || null, dynasty: values.dynasty || null, house: values.dynasty_house || null, culture: values.culture || null, gender: values.female === "yes" ? "female" : values.female === "no" ? "male" : "unknown", birthDate: values.birth || null, father: values.father || null, mother: values.mother || null };
 }
 function blocks(filePath) {
   const text = fs.readFileSync(filePath, "utf8").replace(/^\uFEFF/, ""), output = [];
@@ -78,7 +45,7 @@ function sourceRevision(sources) {
   const hash = crypto.createHash("sha256").update(POLICY_VERSION, "utf8");
   for (const source of sources) {
     hash.update(`${source.root}:${source.sourceId || source.root}:${source.descriptorHash || ""}\n`, "utf8");
-    for (const [relativeRoot, suffix] of [["history/characters", ".txt"], ["common/dynasties", ".txt"], ["common/dynasty_houses", ".txt"], ["localization/simp_chinese", ".yml"]]) {
+    for (const [relativeRoot, suffix] of SOURCE_DIRECTORIES) {
       const root = path.join(source.root, ...relativeRoot.split("/"));
       for (const file of listFiles(root, suffix)) {
         hash.update(`${source.sourceId || source.root}:${path.relative(source.root, file)}\n`, "utf8");
@@ -136,12 +103,13 @@ function buildHistoricalDefinitionIndex({ sources, complete = true, missing = []
       const familyKey = houseNames.size === 1 ? [...houseNames][0] : dynastyKey;
       const family = literalName(familyKey) || (translations.get(familyKey)?.size === 1 ? literalName([...translations.get(familyKey)][0]) : null);
       if (translations.get(row.name)?.size > 1 || translations.get(familyKey)?.size > 1 || dynastyKeys?.size > 1 || houseNames.size > 1 || houseDynasties.size > 1) nameConflicts.add("NAME_SOURCE_CONFLICT");
-      // A Chinese given name is not a full name when its surname source is missing.
-      const full = given && family && family.length === 1 && /^(han|chinese)(?:_|$)/.test(row.culture || "") ? (given.startsWith(family) ? given : `${family}${given}`) : !row.dynasty && !row.house && given?.length > 1 ? given : null;
+      // Only compose a name from verified literal/localized sources. Compound surnames
+      // are valid just like one-character surnames; raw dynasty/house keys never are.
+      const full = given && family && SURNAME_FIRST_CULTURES.has(String(row.culture || "").toLowerCase()) ? (given.startsWith(family) ? given : `${family}${given}`) : !row.dynasty && !row.house && given?.length > 1 ? given : null;
       if (full) names.set(normalize(full), full);
     }
-    const conflict = new Set(sourceRows.map(row => JSON.stringify([row.name, row.dynasty, row.house, row.culture, row.birthDate, row.gender]))).size > 1;
-    const record = { definitionId, displayName: names.size === 1 ? [...names.values()][0] : null, names: [...names.values()], sourceRows, metadata: { birthDate: sourceRows[0]?.birthDate || null, gender: sourceRows[0]?.gender || "unknown", culture: sourceRows[0]?.culture || null }, conflicts: [...(conflict ? ["DEFINITION_SOURCE_CONFLICT"] : []), ...nameConflicts], sourceComplete: complete };
+    const conflict = new Set(sourceRows.map(row => JSON.stringify([row.name, row.dynasty, row.house, row.culture, row.birthDate, row.gender, row.father, row.mother]))).size > 1;
+    const record = { definitionId, displayName: names.size === 1 ? [...names.values()][0] : null, names: [...names.values()], sourceRows, metadata: { birthDate: sourceRows[0]?.birthDate || null, gender: sourceRows[0]?.gender || "unknown", culture: sourceRows[0]?.culture || null, parents: { father: sourceRows[0]?.father || null, mother: sourceRows[0]?.mother || null }, siblings: [], spouses: [], children: [] }, conflicts: [...(conflict ? ["DEFINITION_SOURCE_CONFLICT"] : []), ...nameConflicts], sourceComplete: complete };
     byId[definitionId] = record;
     for (const name of record.names) { const key = normalize(name); if (!exactNames[key]) exactNames[key] = []; exactNames[key].push(definitionId); }
   }
@@ -165,33 +133,86 @@ function lookup(index, value) {
   return ids.length ? { status: "FOUND", matchType: nameIds.length ? "NAME_EXACT" : "NAME_ALIAS", candidates: ids.slice(0, 200).map(id => index.byId[id]), candidateTotal: ids.length, candidateSetComplete: ids.length <= 200, sourceComplete: index.sourceComplete, revision: index.revision } : { status: index.sourceComplete ? "NAME_INDEX_MISS" : "SOURCE_INCOMPLETE", candidates: [], sourceComplete: index.sourceComplete, revision: index.revision };
 }
 
+const scanners = new WeakMap();
+function scanHistoricalNames(index, value) {
+  if (!index) return { status: "SOURCE_INCOMPLETE", matches: [], sourceComplete: false, candidateSetComplete: false };
+  if (!scanners.has(index)) scanners.set(index, new HistoricalNameScanner([...Object.keys(index.exactNames), ...Object.keys(index.exactAliases)]));
+  const result = scanners.get(index).scan(value);
+  return { ...result, status: index.sourceComplete ? "READY" : "SOURCE_INCOMPLETE", sourceComplete: index.sourceComplete, revision: index.revision, matches: result.matches.map(match => ({ ...match, result: lookup(index, match.value) })) };
+}
+
+class HistoricalIndexLifecycle {
+  constructor({ userFolder, aliases = [], probe = probeHistoricalSources, build = buildHistoricalDefinitionIndex } = {}) {
+    this.config = { userFolder, aliases, policyVersion: POLICY_VERSION };
+    this.probe = probe;
+    this.build = build;
+    this.index = null;
+    this.fingerprint = null;
+    this.generation = 0;
+    this.probeCount = 0;
+    this.buildCount = 0;
+  }
+  meta() {
+    const index = this.index;
+    return index && { policyVersion: index.policyVersion, revision: index.revision, state: index.state, sourceComplete: index.sourceComplete, missing: index.missing, diagnostics: index.diagnostics, generation: this.generation, probeCount: this.probeCount, buildCount: this.buildCount, sourceFingerprint: this.fingerprint };
+  }
+  check({ force = false, onBuild = () => {}, onProgress = () => {} } = {}) {
+    this.probeCount += 1;
+    const before = this.probe(this.config);
+    if (!force && this.index && before.fingerprint === this.fingerprint) return { type: "unchanged", meta: this.meta() };
+    onBuild();
+    this.buildCount += 1;
+    const candidate = this.build({ ...before, aliases: this.config.aliases, onProgress });
+    const after = this.probe(this.config);
+    if (before.fingerprint !== after.fingerprint || candidate.missing.includes("SOURCE_CHANGED_DURING_BUILD")) {
+      this.index = null;
+      this.fingerprint = null;
+      throw new Error("SOURCE_CHANGED_DURING_BUILD");
+    }
+    this.fingerprint = after.fingerprint;
+    if (candidate.revision === this.index?.revision) return { type: "unchanged", meta: this.meta() };
+    // Construct the matching structure before publishing the next generation.
+    scanners.set(candidate, new HistoricalNameScanner([...Object.keys(candidate.exactNames), ...Object.keys(candidate.exactAliases)]));
+    this.index = candidate;
+    this.generation += 1;
+    return { type: "built", meta: this.meta() };
+  }
+}
+
 if (!isMainThread && workerData?.historicalDefinitionIndex) {
-  let index = null, sourceConfig = null, refreshTimer = null;
-  const build = () => {
-    parentPort.postMessage({ type: "checking" });
-    const sources = discoverSources(sourceConfig.userFolder);
-    index = buildHistoricalDefinitionIndex({ ...sources, aliases: sourceConfig.aliases || [], onProgress: stage => parentPort.postMessage({ type: "progress", stage }) });
-    parentPort.postMessage({ type: "built", meta: { policyVersion: index.policyVersion, revision: index.revision, state: index.state, sourceComplete: index.sourceComplete, missing: index.missing, diagnostics: index.diagnostics } });
+  let lifecycle = null, refreshTimer = null;
+  const check = (force = false) => {
+    parentPort.postMessage({ type: "probing" });
+    parentPort.postMessage(lifecycle.check({ force, onBuild: () => parentPort.postMessage({ type: "checking" }), onProgress: stage => parentPort.postMessage({ type: "progress", stage }) }));
     clearTimeout(refreshTimer);
-    refreshTimer = setTimeout(() => { try { build(); } catch (error) { parentPort.postMessage({ type: "failed", reason: error.message }); } }, 60000);
+    refreshTimer = setTimeout(() => { try { check(); } catch (error) { parentPort.postMessage({ type: "failed", reason: error.message }); } }, 60000);
     refreshTimer.unref();
   };
   parentPort.on("message", (message) => {
     try {
-      if (message?.type === "build") { sourceConfig = message; build(); }
-      else if (message?.type === "lookup") parentPort.postMessage({ type: "lookup", requestId: message.requestId, result: lookup(index, message.value) });
+      if (message?.type === "build") { lifecycle = new HistoricalIndexLifecycle(message); check(); }
+      else if (message?.type === "refresh") check(message.force === true);
+      else if (["lookup", "scan"].includes(message?.type)) {
+        const index = lifecycle?.index;
+        const result = !index || message.revision !== index.revision
+          ? { status: "SOURCE_INCOMPLETE", candidates: [], matches: [], sourceComplete: false, candidateSetComplete: false, pending: true, revision: index?.revision || null }
+          : message.type === "scan" ? scanHistoricalNames(index, message.value) : lookup(index, message.value);
+        parentPort.postMessage({ type: message.type, requestId: message.requestId, result });
+      }
     } catch (error) { parentPort.postMessage({ type: "failed", requestId: message?.requestId || null, reason: error.message }); }
   });
 }
 
 class HistoricalDefinitionIndexClient {
-  constructor({ getCK3UserFolderPath, onUpdated = () => {}, WorkerClass = Worker, aliases = [] } = {}) {
+  constructor({ getCK3UserFolderPath, onUpdated = () => {}, onQueryReady = () => {}, WorkerClass = Worker, aliases = [] } = {}) {
     this.getFolder = getCK3UserFolderPath || (() => null);
     this.onUpdated = onUpdated;
+    this.onQueryReady = onQueryReady;
     this.WorkerClass = WorkerClass;
     this.aliases = aliases;
     this.meta = null;
     this.cache = new Map();
+    this.scanCache = new Map();
     this.building = null;
     this.failed = false;
     this.worker = null;
@@ -203,9 +224,11 @@ class HistoricalDefinitionIndexClient {
     this.buildTimer = null;
     this.finishBuild = null;
     this.checking = false;
+    this.refreshing = null;
+    this.finishRefresh = null;
   }
   _incomplete(pending = false) {
-    return { status: "SOURCE_INCOMPLETE", candidates: [], sourceComplete: false, pending, revision: this.meta?.revision || null };
+    return { status: "SOURCE_INCOMPLETE", candidates: [], matches: [], sourceComplete: false, candidateSetComplete: false, pending, revision: this.meta?.revision || null };
   }
   _fail(worker) {
     if (this.worker !== worker) return;
@@ -213,10 +236,11 @@ class HistoricalDefinitionIndexClient {
     this.failed = true;
     this.onUpdated();
   }
-  _request(value) {
-    const key = normalize(value);
-    if (this.cache.has(key)) return Promise.resolve(this.cache.get(key));
+  _request(value, kind = "lookup") {
+    const normalized = normalize(value), key = `${kind}:${normalized}`;
+    const cache = kind === "scan" ? this.scanCache : this.cache;
     if (!this.worker || !["READY", "PARTIAL"].includes(this.status)) return Promise.resolve(this._incomplete(true));
+    if (cache.has(normalized)) return Promise.resolve(cache.get(normalized));
     if (this.pendingValues.has(key)) return this.pendingValues.get(key);
     if (this.requests.size >= 64) return Promise.resolve(this._incomplete(true));
     const worker = this.worker, requestId = this.nextRequestId++;
@@ -224,9 +248,9 @@ class HistoricalDefinitionIndexClient {
     const pending = new Promise(finish => { resolve = finish; });
     const timer = setTimeout(() => this._fail(worker), 30000);
     timer.unref?.();
-    this.requests.set(requestId, { key, resolve, timer });
+    this.requests.set(requestId, { key, normalized, kind, resolve, timer, revision: this.meta?.revision });
     this.pendingValues.set(key, pending);
-    try { worker.postMessage({ type: "lookup", requestId, value: key }); }
+    try { worker.postMessage({ type: kind, requestId, value: normalized, revision: this.meta?.revision }); }
     catch (_error) { this._fail(worker); }
     return pending;
   }
@@ -243,37 +267,52 @@ class HistoricalDefinitionIndexClient {
       this.buildTimer.unref?.();
       worker.on("message", (message) => {
         if (this.worker !== worker) return;
-        if (message?.type === "checking") {
-          this.checking = true;
+        if (message?.type === "probing" || message?.type === "checking") {
+          if (message.type === "checking") {
+            this.checking = true;
+            if (!this.building) this.building = new Promise(resolve => { this.finishBuild = resolve; });
+            // Queued reads must not time out and kill a legitimate slow rebuild.
+            for (const request of this.requests.values()) { clearTimeout(request.timer); request.resolve(this._incomplete(true)); }
+            this.requests.clear();
+            this.pendingValues.clear();
+          }
           clearTimeout(this.buildTimer);
           this.buildTimer = setTimeout(() => this._fail(worker), 120000);
           this.buildTimer.unref?.();
-          this.cache.clear();
-          this.onUpdated();
-        } else if (message?.type === "built") {
+        } else if (message?.type === "built" || message?.type === "unchanged") {
           clearTimeout(this.buildTimer);
+          const changed = this.meta?.revision !== message.meta?.revision;
           this.meta = message.meta;
           this.checking = false;
           this.failed = false;
-          this.cache.clear();
+          if (changed) {
+            this.generation += 1;
+            this.cache.clear();
+            this.scanCache.clear();
+          }
           this.finishBuild?.(this.meta);
           this.finishBuild = null;
           this.building = null;
-          this.onUpdated();
-        } else if (message?.type === "lookup" || message?.type === "failed" && message.requestId) {
+          this.finishRefresh?.(this.meta);
+          this.finishRefresh = null;
+          this.refreshing = null;
+          if (changed) this.onUpdated();
+        } else if (["lookup", "scan"].includes(message?.type) || message?.type === "failed" && message.requestId) {
           const request = this.requests.get(message.requestId);
           if (!request) return;
           clearTimeout(request.timer);
           this.requests.delete(message.requestId);
           this.pendingValues.delete(request.key);
-          const result = message.result || this._incomplete();
+          const valid = !this.checking && request.revision === this.meta?.revision && message.result?.revision === this.meta?.revision;
+          const result = valid ? message.result : this._incomplete(!!this.worker);
           // Only the owning worker may populate this generation's cache.
-          if (!this.checking && result.revision === this.meta?.revision) {
-            this.cache.set(request.key, result);
-            if (this.cache.size > 512) this.cache.delete(this.cache.keys().next().value);
+          if (valid && result.pending !== true) {
+            const cache = request.kind === "scan" ? this.scanCache : this.cache;
+            cache.set(request.normalized, result);
+            if (cache.size > 512) cache.delete(cache.keys().next().value);
           }
           request.resolve(result);
-          if (!this.requests.size) this.onUpdated();
+          if (!this.requests.size) this.onQueryReady();
         } else if (message?.type === "failed") this._fail(worker);
       });
       worker.once("error", () => this._fail(worker));
@@ -285,10 +324,19 @@ class HistoricalDefinitionIndexClient {
   get status() { return this.checking ? "BUILDING" : this.meta?.state || (this.building ? "BUILDING" : this.failed ? "FAILED" : "UNCONFIGURED"); }
   find(value) {
     this.start();
+    if (!["READY", "PARTIAL"].includes(this.status)) return this._incomplete(!!this.worker);
     const key = normalize(value);
     if (this.cache.has(key)) return this.cache.get(key);
     if (["READY", "PARTIAL"].includes(this.status)) this._request(key);
     return this._incomplete(!!this.worker);
+  }
+  scan(value) {
+    this.start();
+    if (!["READY", "PARTIAL"].includes(this.status)) return this._incomplete(!!this.worker);
+    const key = normalize(value);
+    if (this.scanCache.has(key)) return this.scanCache.get(key);
+    this._request(key, "scan");
+    return this._incomplete(true);
   }
   async _bounded(pending, timeoutMs) {
     if (!pending) return null;
@@ -305,7 +353,24 @@ class HistoricalDefinitionIndexClient {
     const missing = [...new Set((values || []).map(normalize).filter(value => value && !this.cache.has(value)))].slice(0, 64);
     return await this._bounded(Promise.all(missing.map(value => this._request(value))), deadline ? Math.max(1, deadline - Date.now()) : 0) || [];
   }
-  invalidate() { this.dispose(); this.failed = false; }
+  async prepareQuery(value, timeoutMs = 0) {
+    const startedAt = Date.now();
+    await this.ready(timeoutMs);
+    if (timeoutMs && Date.now() - startedAt >= timeoutMs) return this._incomplete(true);
+    return await this._bounded(this._request(value, "scan"), timeoutMs ? Math.max(1, timeoutMs - (Date.now() - startedAt)) : 0) || this._incomplete(true);
+  }
+  async refresh({ force = false } = {}, timeoutMs = 0) {
+    if (this.failed) this.invalidate();
+    await this.ready(timeoutMs);
+    if (!this.worker) return null;
+    if (!this.refreshing) {
+      this.refreshing = new Promise(resolve => { this.finishRefresh = resolve; });
+      try { this.worker.postMessage({ type: "refresh", force }); }
+      catch (_error) { this._fail(this.worker); }
+    }
+    return this._bounded(this.refreshing, timeoutMs);
+  }
+  invalidate() { this.dispose(); this.failed = false; this.onUpdated(); }
   dispose() {
     this.generation += 1;
     clearTimeout(this.buildTimer);
@@ -320,7 +385,11 @@ class HistoricalDefinitionIndexClient {
     this.checking = false;
     this.meta = null;
     this.cache.clear();
+    this.scanCache.clear();
+    this.finishRefresh?.(null);
+    this.finishRefresh = null;
+    this.refreshing = null;
     worker?.terminate?.();
   }
 }
-module.exports = { HistoricalDefinitionIndexClient, POLICY_VERSION, buildHistoricalDefinitionIndex, discoverSources, lookup };
+module.exports = { HistoricalDefinitionIndexClient, HistoricalIndexLifecycle, POLICY_VERSION, buildHistoricalDefinitionIndex, discoverSources, lookup, scanHistoricalNames };

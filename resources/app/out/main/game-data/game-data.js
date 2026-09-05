@@ -776,8 +776,8 @@ function createGameData({ fs, path, memorySystem, memoryEngine, summariesDir, ge
       if (!alreadySaved) {
         summaries.unshift({
           schemaVersion: memorySystem.CURRENT_SUMMARY_SCHEMA_VERSION,
-          date: this.date,
-          totalDays: this.totalDays,
+          date: options.date ?? this.date,
+          totalDays: options.totalDays ?? this.totalDays,
           content: directedContent,
           playerName: ownerName,
           playerId: owner.id,
@@ -809,7 +809,7 @@ function createGameData({ fs, path, memorySystem, memoryEngine, summariesDir, ge
       const excludedOwnerIds = new Set((options.excludedOwnerIds || []).map(Number).filter(Number.isFinite));
       const requestedIds = Array.isArray(participantIds) ? participantIds : Array.from(this.characters.keys());
       const participants = memorySystem.resolveSummaryParticipants({
-        playerId: this.playerID,
+        playerId: options.directedSummaries ? requestedIds[0] : this.playerID,
         participantIds: requestedIds,
         currentCharacters: this.characters,
         participantProfiles: options.participantProfiles

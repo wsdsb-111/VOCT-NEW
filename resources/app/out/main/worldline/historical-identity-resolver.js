@@ -2,7 +2,6 @@
 
 const { figures } = require("../historical-system/historical-data/figures");
 const { figureMatchingRecords } = require("../historical-system/historical-data/figure-matching");
-const { IDENTITY_SCORING } = require("../historical-system/historical-figure-resolver");
 
 const figuresByKey = new Map(figures.map((figure) => [figure.figureKey, figure]));
 const matchingByKey = new Map(figureMatchingRecords.map((record) => [record.figureKey, record]));
@@ -14,119 +13,101 @@ function reverseIndex(bindings) {
   const index = new Map();
   for (const runtimeId in bindings) for (const definitionId of Array.isArray(bindings[runtimeId]) ? bindings[runtimeId] : []) {
     if (!index.has(definitionId)) index.set(definitionId, []);
-    index.get(definitionId).push(runtimeId);
+    index.get(definitionId).push(String(runtimeId));
   }
   reverseIndexes.set(bindings, index);
   return index;
 }
 
 function normalize(value) {
-  return String(value || "").trim().toLocaleLowerCase("zh-CN");
+  return String(value || "").trim().normalize("NFKC").toLocaleLowerCase("zh-CN");
 }
 
-function roundScore(value) {
-  return Math.round(Math.max(0, Math.min(1, value)) * 10000) / 10000;
-}
-
-function parseYear(value) {
-  const match = String(value || "").match(/^(\d+)\.(\d+)\.(\d+)$/);
-  return match ? Number(match[1]) : null;
-}
-
-function scoreCandidate({ alias, figure, matching, definitionRecords = [], character, runtimeId, definitionIds, bindingConflict = false, currentYear }) {
-  const metadata = definitionRecords.find((record) => definitionIds.includes(record.definitionId))?.metadata || {};
-  const exactName = normalize(alias) === normalize(figure?.identity?.name || definitionRecords.find((record) => definitionIds.includes(record.definitionId))?.displayName);
-  let rawScore = exactName ? IDENTITY_SCORING.nameExact : IDENTITY_SCORING.nameAlias;
-  const evidence = [{ code: exactName ? "NAME_EXACT" : "NAME_ALIAS", weight: rawScore }];
-  const conflicts = [];
-  const hardConflicts = [];
-  const add = (code, weight) => {
-    rawScore += weight;
-    evidence.push({ code, weight });
-  };
-  const conflict = (code, weight = 0, hard = false) => {
-    rawScore += weight;
-    conflicts.push({ code, weight });
-    if (hard) hardConflicts.push(code);
-  };
-  if (definitionRecords.some((record) => definitionIds.includes(record.definitionId) && Array.isArray(record.conflicts) && record.conflicts.length)) {
-    conflict("DEFINITION_SOURCE_CONFLICT", 0, true);
-  }
-  if (bindingConflict) conflict("DEFINITION_RUNTIME_BINDING_CONFLICT", 0, true);
-  const birthYear = parseYear(character?.birth);
-  const expectedBirthYear = matching?.intrinsic?.birthYear ?? figure?.life?.birthYear ?? parseYear(metadata.birthDate);
-  const sourceBirthYear = parseYear(metadata.birthDate);
-  if (sourceBirthYear !== null && expectedBirthYear !== null && Math.abs(sourceBirthYear - expectedBirthYear) > 2) conflict("CURATED_METADATA_CONFLICT", 0, true);
-  if (Number.isInteger(currentYear) && Number.isInteger(birthYear) && Number.isInteger(expectedBirthYear)) {
-    const difference = Math.abs((currentYear - birthYear) - (currentYear - expectedBirthYear));
-    if (difference <= 2) add("AGE_MATCH_STRONG", IDENTITY_SCORING.ageStrong);
-    else if (difference <= 5) add("AGE_MATCH_WEAK", IDENTITY_SCORING.ageWeak);
-    else if (difference >= 15) conflict("AGE_IMPOSSIBLE", IDENTITY_SCORING.ageImpossible, true);
-    else conflict("AGE_MISMATCH", IDENTITY_SCORING.ageMismatch);
-  }
-  const expectedGender = matching?.intrinsic?.gender ?? metadata.gender;
-  if (["male", "female"].includes(metadata.gender) && ["male", "female"].includes(expectedGender) && metadata.gender !== expectedGender) conflict("CURATED_METADATA_CONFLICT", 0, true);
-  if (expectedGender === "male" || expectedGender === "female") {
-    if (character?.gender === expectedGender) add("GENDER_MATCH", IDENTITY_SCORING.genderMatch);
-    else if (character?.gender === "male" || character?.gender === "female") conflict("GENDER_CONFLICT", IDENTITY_SCORING.genderConflict, true);
-  }
-  const cultures = matching?.hints?.cultures || [];
-  if (cultures.some((culture) => normalize(culture) === normalize(character?.culture))) add("CULTURE_HINT_MATCH", IDENTITY_SCORING.cultureMatch);
-  evidence.push({ code: "DEFINITION_RUNTIME_BINDING", definitionIds: [...definitionIds] });
+function candidateFor({ alias, definitionId, runtimeId, character, conflicts = [] }) {
   return {
-    runtimeId: String(runtimeId),
-    definitionId: definitionIds[0] || null,
-    definitionIds: [...definitionIds],
-    rawName: character?.firstName || null,
+    runtimeId: runtimeId ? String(runtimeId) : null,
+    definitionId: definitionId || null,
+    definitionIds: definitionId ? [definitionId] : [],
+    rawName: character?.fullName || character?.firstName || null,
     aliasCandidate: alias,
-    score: roundScore(rawScore),
-    rawScore,
-    evidence,
-    conflicts,
-    hardConflicts,
-    hasStrongSecondaryIdentity: evidence.some((item) => item.code === "AGE_MATCH_STRONG" || item.code === "AGE_MATCH_WEAK" || item.code === "FAMILY_MATCH")
+    score: null,
+    rawScore: null,
+    evidence: [],
+    conflicts: conflicts.map((code) => ({ code, category: "IDENTITY_CORE" })),
+    hardConflicts: [...conflicts],
+    hasStrongSecondaryIdentity: false
   };
 }
 
-function resolveHistoricalIdentity({ alias, figureKey, candidateDefinitionIds = [], definitionRecords = [], snapshot } = {}) {
+function resolveHistoricalIdentity({ alias, figureKey, candidateDefinitionIds = [], definitionRecords = [], snapshot, sourceComplete = true, candidateSetComplete = true } = {}) {
   const figure = figuresByKey.get(figureKey);
   const matching = matchingByKey.get(figureKey);
-  if ((!figure || matching?.resolverReady !== true) && definitionRecords.length === 0) {
-    return { status: "REJECTED", resolvedRuntimeId: null, candidates: [], reason: "HISTORICAL_FIGURE_UNSUPPORTED", evidence: [] };
-  }
-  const candidatesByRuntime = new Map();
+  const definitionIds = [...new Set(candidateDefinitionIds.filter(Boolean).map(String))];
+  const recordsById = new Map(definitionRecords.map((record) => [String(record.definitionId), record]));
   const reverse = reverseIndex(snapshot?.runtimeToDefinitions);
-  let multipleRuntimeBinding = false;
-  for (const definitionId of candidateDefinitionIds) {
-    const forwardRuntimeId = snapshot?.definitionToRuntime?.[definitionId];
-    const reverseRuntimeIds = reverse.get(definitionId) || [];
-    const runtimeIds = [...new Set([forwardRuntimeId, ...reverseRuntimeIds].filter(Boolean).map(String))];
-    multipleRuntimeBinding ||= runtimeIds.length > 1;
-    for (const runtimeId of runtimeIds) {
-      const character = snapshot?.characters?.[runtimeId];
-      if (!character) continue;
-      const bindingConflict = runtimeIds.length > 1 || !!forwardRuntimeId && !reverseRuntimeIds.includes(String(forwardRuntimeId));
-      const existing = candidatesByRuntime.get(runtimeId);
-      if (existing) {
-        existing.definitionIds.push(definitionId);
-        existing.bindingConflict ||= bindingConflict;
-      } else candidatesByRuntime.set(runtimeId, { runtimeId, character, definitionIds: [definitionId], bindingConflict });
-    }
+  const observedCandidates = [];
+  for (const definitionId of definitionIds) {
+    const forward = snapshot?.definitionToRuntime?.[definitionId];
+    const runtimeIds = [...new Set([forward, ...(reverse.get(definitionId) || [])].filter(Boolean).map(String))];
+    for (const runtimeId of runtimeIds) observedCandidates.push(candidateFor({ alias, definitionId, runtimeId, character: snapshot?.characters?.[runtimeId] }));
   }
-  if (candidatesByRuntime.size === 0) return { status: "NO_MATCH", resolvedRuntimeId: null, candidates: [], reason: "NO_RUNTIME_CANDIDATES", evidence: [] };
-  const currentYear = parseYear(snapshot?.gameDate);
-  const candidates = [...candidatesByRuntime.values()].map((candidate) => scoreCandidate({ alias, figure, matching, definitionRecords, ...candidate, currentYear })).sort((left, right) => right.rawScore - left.rawScore || Number(left.runtimeId) - Number(right.runtimeId));
-  if (multipleRuntimeBinding) return { status: candidates.length > 1 ? "AMBIGUOUS" : "REJECTED", resolvedRuntimeId: null, candidates, reason: "DEFINITION_RUNTIME_BINDING_CONFLICT", evidence: candidates.flatMap(candidate => candidate.conflicts) };
-  const eligible = candidates.filter((candidate) => candidate.hardConflicts.length === 0);
-  if (eligible.length === 0) return { status: "REJECTED", resolvedRuntimeId: null, candidates, reason: "ALL_CANDIDATES_CONFLICT", evidence: candidates.flatMap((candidate) => candidate.conflicts) };
-  const top = eligible[0];
-  const second = eligible[1] || null;
-  const margin = second ? roundScore(top.rawScore - second.rawScore) : 1;
-  if (top.score >= IDENTITY_SCORING.resolveThreshold && margin >= IDENTITY_SCORING.resolutionMargin && top.hasStrongSecondaryIdentity) {
-    return { status: "RESOLVED", resolvedRuntimeId: top.runtimeId, candidates, reason: "UNIQUE_EVIDENCE_SUFFICIENT", evidence: top.evidence };
+
+  if (sourceComplete !== true || definitionRecords.some(record => record?.sourceComplete === false)) return { status: "REJECTED", resolvedRuntimeId: null, candidates: observedCandidates, reason: "SOURCE_INCOMPLETE", evidence: [] };
+  if (candidateSetComplete !== true) return { status: "REJECTED", resolvedRuntimeId: null, candidates: observedCandidates, reason: "CANDIDATE_SET_INCOMPLETE", evidence: [] };
+  if ((!figure || matching?.resolverReady !== true) && definitionRecords.length === 0) {
+    return { status: "REJECTED", resolvedRuntimeId: null, candidates: observedCandidates, reason: "HISTORICAL_FIGURE_UNSUPPORTED", evidence: [] };
   }
-  if (eligible.length > 1) return { status: "AMBIGUOUS", resolvedRuntimeId: null, candidates, reason: second?.score >= IDENTITY_SCORING.candidateThreshold ? "MULTIPLE_CANDIDATES" : "UNIQUE_EVIDENCE_INSUFFICIENT", evidence: top.evidence };
-  return { status: "REJECTED", resolvedRuntimeId: null, candidates, reason: "UNIQUE_EVIDENCE_INSUFFICIENT", evidence: top.evidence };
+  if (definitionIds.length === 0) return { status: "NO_MATCH", resolvedRuntimeId: null, candidates: [], reason: "NO_HISTORICAL_DEFINITION", evidence: [] };
+  if (definitionIds.length > 1) return { status: "AMBIGUOUS", resolvedRuntimeId: null, candidates: observedCandidates, reason: "MULTIPLE_DEFINITIONS", evidence: [] };
+
+  const definitionId = definitionIds[0];
+  const record = recordsById.get(definitionId);
+  const sourceConflicts = Array.isArray(record?.conflicts) ? record.conflicts.filter(Boolean) : [];
+  if (sourceConflicts.length) {
+    const candidates = observedCandidates.map((candidate) => ({ ...candidate, conflicts: sourceConflicts.map(code => ({ code, category: "IDENTITY_CORE" })), hardConflicts: [...sourceConflicts] }));
+    return { status: "REJECTED", resolvedRuntimeId: null, candidates, reason: "DEFINITION_SOURCE_CONFLICT", evidence: sourceConflicts.map(code => ({ code, category: "IDENTITY_CORE" })) };
+  }
+
+  const verifiedNames = new Set([...(record?.names || []), record?.displayName, figure?.identity?.name].filter(Boolean).map(normalize));
+  if (!verifiedNames.has(normalize(alias))) {
+    return { status: "REJECTED", resolvedRuntimeId: null, candidates: observedCandidates, reason: "HISTORICAL_FULL_NAME_NOT_EXACT", evidence: [] };
+  }
+
+  const forwardRuntimeId = snapshot?.definitionToRuntime?.[definitionId];
+  const reverseRuntimeIds = [...new Set((reverse.get(definitionId) || []).map(String))];
+  if (!forwardRuntimeId && reverseRuntimeIds.length === 0) return { status: "NO_MATCH", resolvedRuntimeId: null, candidates: [], reason: "NO_RUNTIME_CANDIDATES", evidence: [] };
+  const forwardId = forwardRuntimeId ? String(forwardRuntimeId) : null;
+  const reciprocalDefinitions = forwardId ? [...new Set((snapshot?.runtimeToDefinitions?.[forwardId] || []).map(String))] : [];
+  const bindingConsistent = !!forwardId && reverseRuntimeIds.length === 1 && reverseRuntimeIds[0] === forwardId && reciprocalDefinitions.length === 1 && reciprocalDefinitions[0] === definitionId;
+  if (!bindingConsistent) {
+    const runtimeIds = [...new Set([forwardId, ...reverseRuntimeIds].filter(Boolean))];
+    const candidates = runtimeIds.map(runtimeId => candidateFor({ alias, definitionId, runtimeId, character: snapshot?.characters?.[runtimeId], conflicts: ["DEFINITION_RUNTIME_BINDING_CONFLICT"] }));
+    return { status: runtimeIds.length > 1 ? "AMBIGUOUS" : "REJECTED", resolvedRuntimeId: null, candidates, reason: "DEFINITION_RUNTIME_BINDING_CONFLICT", evidence: [{ code: "DEFINITION_RUNTIME_BINDING_CONFLICT", category: "IDENTITY_CORE" }] };
+  }
+
+  const character = snapshot?.characters?.[forwardId];
+  if (!character) return { status: "NO_MATCH", resolvedRuntimeId: null, candidates: [], reason: "RUNTIME_CHARACTER_MISSING", evidence: [] };
+  const expectedGender = matching?.intrinsic?.gender ?? record?.metadata?.gender;
+  const sourceGender = record?.metadata?.gender;
+  if (["male", "female"].includes(sourceGender) && ["male", "female"].includes(expectedGender) && sourceGender !== expectedGender) {
+    const candidate = candidateFor({ alias, definitionId, runtimeId: forwardId, character, conflicts: ["CURATED_METADATA_CONFLICT"] });
+    return { status: "REJECTED", resolvedRuntimeId: null, candidates: [candidate], reason: "CURATED_METADATA_CONFLICT", evidence: candidate.conflicts };
+  }
+  if (["male", "female"].includes(expectedGender) && ["male", "female"].includes(character.gender) && character.gender !== expectedGender) {
+    const candidate = candidateFor({ alias, definitionId, runtimeId: forwardId, character, conflicts: ["GENDER_CONFLICT"] });
+    return { status: "REJECTED", resolvedRuntimeId: null, candidates: [candidate], reason: "GENDER_CONFLICT", evidence: candidate.conflicts };
+  }
+
+  const evidence = [
+    { code: "HISTORICAL_FULL_NAME_EXACT", category: "IDENTITY_CORE", definitionId },
+    { code: "DEFINITION_UNIQUE", category: "IDENTITY_CORE", definitionId },
+    { code: "DEFINITION_RUNTIME_BINDING", category: "IDENTITY_CORE", definitionIds: [definitionId], runtimeId: forwardId },
+    { code: "BIDIRECTIONAL_BINDING_CONSISTENT", category: "IDENTITY_CORE", definitionId, runtimeId: forwardId }
+  ];
+  if (["male", "female"].includes(expectedGender) && character.gender === expectedGender) evidence.push({ code: "GENDER_MATCH", category: "IDENTITY_SUPPORT" });
+  else evidence.push({ code: "GENDER_UNKNOWN", category: "IDENTITY_SUPPORT" });
+  const candidate = { ...candidateFor({ alias, definitionId, runtimeId: forwardId, character }), evidence };
+  return { status: "RESOLVED", resolvedRuntimeId: forwardId, candidates: [candidate], reason: "HISTORICAL_IDENTITY_CORE_CONFIRMED", evidence };
 }
 
 module.exports = { resolveHistoricalIdentity };

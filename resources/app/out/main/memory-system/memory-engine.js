@@ -143,7 +143,7 @@ class MemoryEngine {
 
   resolveRecoveryParticipantProfiles(snapshot = {}, currentProfiles = []) {
     const profiles = new Map();
-    for (const profile of [...(snapshot.participants || []), ...(currentProfiles || [])]) {
+    for (const profile of [...(currentProfiles || []), ...(snapshot.participants || [])]) {
       const id = Number(profile?.id);
       if (Number.isFinite(id)) profiles.set(id, { ...(profiles.get(id) || {}), ...profile, id });
     }
@@ -376,9 +376,10 @@ class MemoryEngine {
 
   async requestFinalSummary(context) {
     const prompt = context.buildPrompt(context);
-    let lastError = null;
+    const resumeChunks = context.preferChunkedSummary && !context.summaryChunk && context.messages?.length >= 4;
+    let lastError = resumeChunks ? new Error("truncated_final_summary_response") : null;
     let retryQuality = null;
-    for (let attempt = 1; attempt <= FINAL_SUMMARY_MAX_ATTEMPTS; attempt++) {
+    for (let attempt = 1; attempt <= (resumeChunks ? 0 : FINAL_SUMMARY_MAX_ATTEMPTS); attempt++) {
       const startedAt = Date.now();
       try {
         const requestPrompt = retryQuality ? this.buildSummaryQualityRetryPrompt(prompt, retryQuality) : prompt;
@@ -406,6 +407,39 @@ class MemoryEngine {
       if (attempt < FINAL_SUMMARY_MAX_ATTEMPTS) {
         this.trace.record("recover", { conversationId: context.conversationId, reason: "final_summary_retry" });
       }
+    }
+    if (!context.summaryChunk && context.messages?.length >= 4 && /^(truncated_final_summary_response|final_summary_quality_failed:)/.test(lastError?.message || "")) {
+      const size = Math.ceil(context.messages.length / 4);
+      const summarySegments = [], memories = [];
+      const boundaries = uniqueIds((context.participantPresence || []).flatMap(window => [window.joinedAtMessageId, window.leftAtMessageId])).sort((a, b) => a - b);
+      const chunks = [];
+      let current = [], region = null;
+      for (const message of context.messages) {
+        const nextRegion = boundaries.filter(boundary => boundary <= Number(message.id)).length;
+        if (current.length && (nextRegion !== region || current.length >= size)) { chunks.push(current); current = []; }
+        current.push(message);
+        region = nextRegion;
+      }
+      if (current.length) chunks.push(current);
+      if (chunks.length > 12) throw new Error("summary_partition_limit_exceeded");
+      for (const [index, messages] of chunks.entries()) {
+        if (messages.every(message => ["presence_join", "presence_leave", "presence_temporary_leave", "presence_temporary_return"].includes(message.kind))) {
+          for (const message of messages) {
+            const present = uniqueIds((context.participantPresence || []).filter(window => Number(window.joinedAtMessageId ?? 0) <= message.id && (window.leftAtMessageId == null || message.id < Number(window.leftAtMessageId))).map(window => window.characterId));
+            summarySegments.push({ content: message.content, participants: present, visibility: "participants", messageIds: [message.id], speakerIds: [] });
+          }
+          continue;
+        }
+        const chunk = { ...context, summaryChunk: true, rollingState: null, messages };
+        this.trace.record("summary_chunk", { conversationId: context.conversationId, reason: "whole_summary_failed", attempt: index + 1 });
+        const parsed = this.extractor.parseOutput(await this.requestFinalSummary(chunk), chunk);
+        for (const segment of parsed.summarySegments) summarySegments.push({ ...segment, segmentId: null, messageIds: segment.provenance.messageIds, speakerIds: segment.provenance.speakerIds });
+        for (const memory of parsed.memories) memories.push({ ...memory, memoryId: null, messageIds: memory.provenance.messageIds, speakerIds: memory.provenance.speakerIds });
+      }
+      const content = JSON.stringify({ summarySegments, memories });
+      const quality = this.evaluateFinalSummaryQuality(context, this.extractor.parseOutput(content, context));
+      if (!quality.success) throw new Error(`final_summary_quality_failed:${quality.reasons.join("|")}`);
+      return content;
     }
     throw lastError || new Error("invalid_final_summary_response");
   }
@@ -720,6 +754,7 @@ class MemoryEngine {
       messages: snapshot.rawMessages,
       rollingState: snapshot.rollingState,
       retryCount: Number(snapshot.retryCount || 0) + 1,
+      preferChunkedSummary: /^(truncated_final_summary_response|final_summary_quality_failed:)/.test(snapshot.lastError || ""),
       requestSummary,
       buildPrompt,
       persistCharacterFolders
@@ -756,6 +791,13 @@ class MemoryEngine {
   }
 
   async recoverPendingFinalizations({ requestSummary, buildPrompt, persistCharacterFolders, resolveParticipantProfiles } = {}) {
+    if (this.pendingRecovery) return this.pendingRecovery;
+    this.pendingRecovery = this.runPendingFinalizations({ requestSummary, buildPrompt, persistCharacterFolders, resolveParticipantProfiles });
+    try { return await this.pendingRecovery; }
+    finally { this.pendingRecovery = null; }
+  }
+
+  async runPendingFinalizations({ requestSummary, buildPrompt, persistCharacterFolders, resolveParticipantProfiles } = {}) {
     const results = [];
     for (const filePath of this.listRecoverySnapshots()) {
       let snapshot = this.store.readJson(filePath, null);
@@ -787,6 +829,7 @@ class MemoryEngine {
   }
 
   getRouteMemoryKey(memory) {
+    if (memory.type === "folder_summary") return memory.memoryId;
     const finalizationId = memory.provenance?.finalizationId;
     return finalizationId ? `${memory.provenance?.folderOwnerId ?? "internal"}|${finalizationId}` : memory.memoryId;
   }
@@ -826,18 +869,21 @@ class MemoryEngine {
     };
 
     const recentByRoute = new Map(groups.map(([routeId, entries]) => [routeId, [...entries].sort((left, right) => this.getMemoryRecency(right.memory) - this.getMemoryRecency(left.memory))]));
-    const baselineRounds = mode === "direct" && groups.length === 1 ? 2 : 1;
-    const baselineAllowance = Math.max(1, Math.floor(tokenBudget / Math.max(1, groups.length * baselineRounds)));
+    const baselineRounds = mode === "direct" ? 3 : 1;
+    const recentKeys = new Set([...recentByRoute.values()].flatMap(entries => entries.slice(0, baselineRounds).map(entry => this.getRouteMemoryKey(entry.memory))));
+    const extraLimit = mode === "direct" ? (groups.length === 1 ? 1 : 2) : 0;
+    const pinnedPool = groups.flatMap(([routeId, entries]) => entries.map(entry => ({ routeId, entry })))
+      .filter(({ entry }) => !recentKeys.has(this.getRouteMemoryKey(entry.memory)) && (entry.memory.importance >= 0.9 || entry.memory.status === "open" || entry.memory.unresolved))
+      .sort((left, right) => right.entry.score - left.entry.score);
+    const pinnedKeys = new Set(pinnedPool.map(({ entry }) => this.getRouteMemoryKey(entry.memory)));
+    const baselineAllowance = Math.max(1, Math.floor(tokenBudget / Math.max(1, recentKeys.size + Math.min(extraLimit, pinnedKeys.size))));
     for (let round = 0; round < baselineRounds; round++) {
       for (const [routeId] of groups) add(recentByRoute.get(routeId)?.[round], routeId, baselineAllowance);
     }
 
     if (mode === "direct") {
-      const extraLimit = groups.length === 1 ? Math.max(0, 3 - selected.length) : 2;
-      const pool = groups.flatMap(([routeId, entries]) => entries.map((entry) => ({ routeId, entry })))
-        .sort((left, right) => right.entry.score - left.entry.score);
       let extrasAdded = 0;
-      for (const candidate of pool) {
+      for (const candidate of pinnedPool) {
         if (extrasAdded >= extraLimit || usedTokens >= tokenBudget) break;
         const result = add(candidate.entry, candidate.routeId);
         if (result.added) extrasAdded++;
@@ -1206,15 +1252,15 @@ class MemoryEngine {
       boundaries: [
         "每名 NPC 只读取自己的 ID_姓名目录；玩家目录保存摘要但玩家不执行提示词记忆召回。",
         "同一场对话内，长期稳定记忆、直接关系最近记录和场外人物快照不随当前问题重排；只在新会话读取最新终局记忆。",
-        "直接参与者按自己的目录精确召回最近 2 条，并保留承诺、秘密或未决事项等钉住记忆。",
+        "直接参与者按自己的目录精确召回最近 3 条；预算内补充钉住记忆，超长摘要优先保留长期事项。",
         "首次提到场外人物时，每名 NPC 分别从自己的目录建立记忆快照；Session Topic Anchor 首次命中后整场冻结。",
         "明确回忆问题可在当前用户消息之后追加 Top1 Turn Recall；默认 256 token、硬上限 320 token，同回合查询复用缓存。",
         "终局摘要按每名目录所有者的知情边界生成视角投影；不知情角色不会获得他人的私密内容。",
-        "同一场群聊写入多个关系文件时按 finalizationId 去重；内容长度由每次 800–2400 token 的动态预算约束。"
+        "同一场群聊仅合并正文相同的关系副本，保留不同知情投影；内容长度由每次 800–2400 token 的动态预算约束。"
       ],
       routingPolicy: {
         stablePrefix: "同一场对话每轮保持一致；新会话重新读取",
-        directPair: "直接关系：最近 2 条 + 钉住记忆，整场冻结",
+        directPair: "直接关系：最近 3 条 + 预算内钉住记忆，整场冻结",
         group: "多人：分别按每个回应角色的知情视角召回",
         mentioned: "场外人物：首次提及时锁定快照，整场复用",
         sessionTopicAnchor: "首次话题命中 Top1，整场冻结并保留在历史前稳定区",

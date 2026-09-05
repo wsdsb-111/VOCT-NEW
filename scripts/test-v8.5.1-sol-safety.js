@@ -36,6 +36,7 @@ async function main() {
     assert.ok(!explanation.reason.includes("NAME_INDEX_MISS"), "unknown and coverage reasons must be readable");
     const prefixAnalysis = analyze("赵思昭", { historicalDefinitionLookup: value => value === "赵思" ? { status: "FOUND", sourceComplete: true, candidates: [{ definitionId: "han", displayName: "赵思", metadata: {} }] } : { status: "NAME_INDEX_MISS", sourceComplete: true } });
     assert.equal(prefixAnalysis.historicalCoverage[0].alias, "赵思昭", "a shorter historical name cannot replace the complete player query");
+    assert.deepEqual(prefixAnalysis.characters.map(item => item.id), ["3"], "a shorter historical name cannot replace the complete player query");
 
     let analyses = 0;
     const stub = { currentCheckpoint: {}, historicalDefinitionIndex: { prepare: async () => {} }, localizationResolver: { pending: new Map([["lookup", {}]]), settle: async () => stub.localizationResolver.pending.clear() }, getPromptDiagnostics: () => { analyses++; return { promptDiagnostics: {} }; } };

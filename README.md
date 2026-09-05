@@ -13,6 +13,7 @@ Voices of the Court 是一个面向《Crusader Kings III》（CK3）的沉浸式
 - **历史人物实机校准**：V8.3.1 在现有 Overlay 中一键读取当前 CK3，展示 raw culture、分数、证据、冲突和候选，并将人工裁定 append 到独立 diagnostics JSONL；裁定不会改变生产 Resolver。
 - **世界线（V8.4.2 Luna + Terra + Sol）**：页面已接入年度 `autosave.ck3` Checkpoint、Worker 解析、世界概览、年度变化、世界知识、Historical Definition Bindings、身份候选诊断和 Checkpoint-scoped Supplemental；候选与 Game Truth 已分离，历史身份复用 V8.3 阈值 fail-closed 解析，真实 Historical/War Gate 已通过，并已修复 Prompt 诊断为空时的首屏渲染 P0 与旧 Conversation Close 阻塞/迟到执行问题，世界知识 Prompt 基础默认保持关闭。
 - **V8.5 Player Semantic Presentation + Retrieval 2.0（Luna + Terra + Sol 内审）**：世界线默认页已接入统一玩家语义展示层；后端已接入确定性 Query Planner、Retriever/Ranker、查询感知 Delta、无虚构结果摘要、additive Player DTO 与相关缓存 revision。来源、freshness、identity、来源冲突、年度事件和历史人物映射以可读文案呈现，Runtime/Definition/Raw 与 Resolver 细节保留在高级诊断。Sol 已修复诊断超大列表白屏、后台本地化阻塞及时间/缓存等正确性问题，105 组回归与隔离浏览器交互通过；真实运行 Gate 和 Astra 终审尚未完成，内部预冻结仍 NOT READY。详见 [Sol 内部审查](docs/v8.5-sol-internal-review.md)。
+- **V8.5.2 玩家语义与世界线差异 UI（Luna + Sol）**：逐实体展示 Historical / Runtime-native 身份、歧义和来源不完整状态；年龄、父母、兄弟、婚姻和子女差异只进入懒展开的可读 Worldline Difference 面板。Sol Stage 5 已修复新旧 DTO 聚合矛盾、来源优先级和降级路径 raw 值泄漏，50 条候选分页及 A/B/C 诊断分层保持不变。120 组发布回归通过，下一步 Astra 最终集成与实机 Gate。
 - **历史认知边界**：提示词要求角色只使用当前年份已经发生、写成、流传或成名的信息，避免引用未来人物、事件、诗词和典故。
 - **当前政局优先**：皇帝和年号从实际游戏角色数据中识别，支持玩家篡位或改变历史后的沙盒玩法。
 - **Memory Engine 2.5**：保留 `角色ID_姓名/与对方的对话.json` 人物目录与 2.4 写入合同，并新增整场冻结的 Session Topic Anchor，以及只在明确回忆意图下触发、Top1、默认 256 Token 的 Turn Recall。
@@ -26,7 +27,17 @@ Voices of the Court 是一个面向《Crusader Kings III》（CK3）的沉浸式
 
 ## 运行环境
 
-当前施工：V8.5.1 历史人物通用召回与诊断可读性；[Sol 最终审查与修复](docs/v8.5.1-sol-final-review.md)已完成本轮审查，109 组自动回归通过，15 人真实存档均召回到历史定义。实际 Electron 验收、全量召回率与剩余来源合同尚未闭合，INTERNAL FREEZE 仍为 NOT READY，Prompt Default On 保持关闭。
+最新终审：V8.5.2 [Astra Stage 6 集成审查](docs/v8.5.2-astra-final-review.md)已完成本轮代码修复、120 组回归、三份真实存档矩阵和隔离 Electron IPC 验证。修复交叉姓名误拆、原生人物重复诊断实体及历史 Runtime 缺失状态丢失；正式 Overlay 连续交互、实际 Provider 和长会话 Gate 仍待验收，`INTERNAL FREEZE = NOT READY`。补充知识已可保存和诊断召回，但正式配置的对话注入仍关闭；当前只作用于本检查点，长期 Player Canon 属于 V8.7 规划。
+
+以下为上一阶段交接记录，其“下一步”状态由上方 Astra 终审更新：
+
+当前施工：V8.5.2 [Sol Stage 5 UI / DTO 边界审查](docs/v8.5.2-sol-ui-boundary-review.md)已完成：Runtime-native 成功不再被旧聚合字段或 Historical `NAME_INDEX_MISS` 覆盖，`SOURCE_INCOMPLETE` 保持最高优先级，Renderer 降级路径不再泄漏 raw key / ID / 内部枚举；Luna 的逐实体 UI、惰性诊断和 50 条边界保持通过。120 组发布回归和语法检查通过。下一步 Astra Stage 6 完成真实 Electron、CK3、Provider、长期 Worker/Cache 与最终冻结审计；当前 `INTERNAL FREEZE = NOT READY`，Prompt Default On 保持关闭。
+
+V8.5.1 基线与历史验证边界见 [Sol 最终审查与修复](docs/v8.5.1-sol-final-review.md)；此前 15 人真实存档定义召回不代表所有身份已确认或全量召回已验收。
+
+摘要事故热修：[摘要 P0 / 多人入场 P2 修复报告](docs/v8.5.1-summary-incident-review.md)。修复旧会话恢复混入当前玩家/日期、长摘要截断后重复失败，以及摘要恢复阻塞入场控制；保持原有 Token 上限与隐私门禁，不改变世界线冻结状态。
+
+摘要召回追加修复（2026-09-05）：直接关系最近 2 条改为 3 条，保留不同配对的知情投影，超长摘要优先召回末尾长期事项。只改变召回副本，不重写摘要、不改全局 Cache Anchor；结束旧会话并重启 VOTC 后生效。证据与验收见同一事故报告。
 
 - Windows 10/11
 - 《Crusader Kings III》

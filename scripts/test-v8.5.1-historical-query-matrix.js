@@ -74,8 +74,8 @@ try {
       const found = lookup(currentIndex, value);
       return found.status === "FOUND" ? { ...found, candidates: found.candidates.map((candidate) => ({ ...candidate, metadata: { birthDate: null, gender: "unknown" } })) } : found;
     });
-    assert.equal(result.characters.length, 0, `${person.name} missing metadata must stay a candidate`);
-    assert.equal(result.historicalCoverage[0].status, "REJECTED_BY_EVIDENCE");
+    assert.deepEqual(result.characters.map((character) => character.id), [person.runtimeId], `${person.name} unknown gender and missing age metadata are neutral under the V8.5.2 core gate`);
+    assert.equal(result.historicalCoverage[0].status, "RESOLVED");
     total += 1;
   }
   for (const person of people.slice(0, 10)) {

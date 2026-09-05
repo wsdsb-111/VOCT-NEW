@@ -170,6 +170,21 @@ try {
     recoveryDir: path.join(tempDir, "recovery"),
     trace: { record() {} }
   });
+  const promise = "约定下月初一一同入宫见皇后，尚未履行。";
+  const summaryFolder = path.join(tempDir, "summaries", "2_李师师");
+  fs.mkdirSync(summaryFolder, { recursive: true });
+  fs.writeFileSync(path.join(summaryFolder, "与玩家的对话.json"), JSON.stringify([3, 2, 1].map(day => ({
+    playerId: 2, characterId: 1, totalDays: day, date: `1010年${day}月1日`, finalizationId: `recall-${day}`,
+    content: day === 1 ? `【本场经过】\n${"游览园中景色。".repeat(1000)}\n\n【需要长期记住的事项】\n- ${promise}` : `第${day}次会面。`
+  }))));
+  const recalled = memoryEngine.retrieveForResponder({ characterId: 2, directCounterpartIds: [1], tokenBudget: 800, estimateTokens: text => TokenCounter.estimateTokens(text) });
+  const recallBuild = PromptBuilder.buildMessagesWithTokenCount(
+    [{ id: 0, role: "user", content: "今天有什么安排？" }], ai, gameData, "",
+    { ...recalled, activeParticipantIds: [1, 2] }
+  );
+  assert.equal(recalled.direct.length, 3);
+  assert(recallBuild.messages.some(message => message.role === "system" && message.content.includes(promise)), "stored third summary's tail promise must reach actual Chat messages even without a recall question");
+  assert(recallBuild.blocks.some(entry => entry.block.id === "memory-direct-frozen" && entry.content.includes(promise)), "promise belongs to the frozen direct lane, not only optional Turn Recall");
   let verboseLogCalls = 0;
   const LetterPromptBuilder = createLetterPromptBuilder({
     TemplateEngine,

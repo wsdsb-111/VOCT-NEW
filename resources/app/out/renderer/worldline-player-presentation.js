@@ -42,6 +42,7 @@
       sourceConflict: zh ? "名称来源存在冲突" : "Name sources conflict",
       historicalFigure: zh ? "历史人物" : "Historical figure",
       currentCharacter: zh ? "当前角色" : "Current character",
+      multipleEntities: zh ? "多个对象，见逐实体判定" : "Multiple objects; see per-entity results",
       noConclusion: zh ? "当前世界线中暂无可确认结论" : "No confirmed conclusion is available for the current worldline"
     };
   }
@@ -147,9 +148,30 @@
       AMBIGUOUS_PROVENANCE: zh ? "存在多个候选" : "Multiple candidates",
       CONFLICT: zh ? "信息存在冲突" : "Conflicting information",
       NO_MATCH: zh ? "暂未找到对应人物" : "No matching character yet",
-      REJECTED: zh ? "证据不足，未确认" : "Insufficient evidence"
+      REJECTED: zh ? "证据不足，未确认" : "Insufficient evidence",
+      SOURCE_INCOMPLETE: zh ? "历史来源不完整" : "Historical sources incomplete",
+      DEFINITION_FOUND_RUNTIME_MISSING: zh ? "历史定义已找到，但当前存档未绑定" : "Definition found, current save not bound",
+      REJECTED_BY_EVIDENCE: zh ? "证据不足，未确认" : "Evidence insufficient, not confirmed",
+      REJECTED_BY_CONFLICT: zh ? "证据冲突或不足，未确认" : "Conflicting or insufficient evidence",
+      NAME_INDEX_MISS: zh ? "历史姓名索引未命中" : "Historical name not found"
     };
     return map[String(value || "").toUpperCase()] || (value ? (zh ? "状态待确认" : "Status pending") : labels(locale).unknown);
+  }
+
+  function identityKindLabel(kind, resolutionStatus, locale) {
+    const zh = isChinese(locale);
+    const identityKindValue = String(kind || "UNKNOWN").toUpperCase();
+    const statusValue = String(resolutionStatus || "NO_MATCH").toUpperCase();
+    if (identityKindValue === "HISTORICAL" && statusValue === "RESOLVED") return zh ? "已确认历史人物" : "Confirmed historical figure";
+    if (identityKindValue === "RUNTIME_NATIVE" && statusValue === "RESOLVED") return zh ? "已确认当前存档角色" : "Confirmed current-save character";
+    if (identityKindValue === "RUNTIME_NATIVE" && statusValue === "AMBIGUOUS") return zh ? "当前存档存在多个同名角色" : "Multiple same-name save characters";
+    if (identityKindValue === "HISTORICAL" && statusValue === "AMBIGUOUS") return zh ? "找到多个历史候选，未确认" : "Multiple historical candidates, not confirmed";
+    if (statusValue === "SOURCE_INCOMPLETE") return zh ? "历史来源不完整，暂不确认" : "Historical source incomplete, not confirmed";
+    if (statusValue === "DEFINITION_FOUND_RUNTIME_MISSING") return zh ? "已找到历史定义，当前存档未找到角色" : "Historical definition found, current role absent";
+    if (["REJECTED_BY_EVIDENCE", "REJECTED_BY_CONFLICT", "REJECTED", "CONFLICT"].includes(statusValue)) return zh ? "证据冲突或不足，未确认" : "Conflicting or insufficient evidence";
+    if (identityKindValue === "RUNTIME_NATIVE") return zh ? "当前存档角色" : "Current-save character";
+    if (identityKindValue === "HISTORICAL") return zh ? "历史人物候选" : "Historical figure candidate";
+    return zh ? "待确认对象" : "Object pending confirmation";
   }
 
   function coverage(value, locale) {
@@ -161,9 +183,44 @@
       NAME_INDEX_MISS: zh ? "索引中暂无这个完整姓名" : "This full name is not in the index",
       DEFINITION_FOUND_RUNTIME_MISSING: zh ? "找到历史定义，但当前存档没有对应角色" : "Definition found, but no current role is bound",
       REJECTED_BY_EVIDENCE: zh ? "找到候选，但证据不足" : "Candidate found, but evidence is insufficient",
+      REJECTED_BY_CONFLICT: zh ? "证据冲突或不足，未确认" : "Conflicting or insufficient evidence",
       VOTC_METADATA_MISSING: zh ? "缺少补充历史资料" : "Curated historical metadata is missing"
     };
     return map[String(value || "").toUpperCase()] || identity(value, locale);
+  }
+
+  function worldlineDifference(item, locale) {
+    const zh = isChinese(locale);
+    const code = String(item?.code || item?.type || "WORLDLINE_DIFFERENCE").toUpperCase();
+    const titles = {
+      AGE_WORLDLINE_SHIFT: zh ? "出生时间偏移" : "Birth-time shift",
+      FATHER_DIFFERENT: zh ? "父亲信息存在差异" : "Father differs",
+      MOTHER_DIFFERENT: zh ? "母亲信息存在差异" : "Mother differs",
+      SIBLING_DIFFERENT: zh ? "兄弟姐妹关系存在差异" : "Sibling relationship differs",
+      SPOUSE_DIFFERENT: zh ? "婚姻关系存在差异" : "Spouse relationship differs",
+      CHILDREN_DIFFERENT: zh ? "子女信息存在差异" : "Children differ"
+    };
+    const detail = code === "AGE_WORLDLINE_SHIFT"
+      ? `${zh ? "当前角色出生时间与历史基准存在偏移，不影响已确认的历史身份。" : "The current character's birth time differs from the historical baseline; this does not change a confirmed historical identity."}${item?.expectedBirth && item?.currentBirth ? ` ${date(item.expectedBirth, locale)} → ${date(item.currentBirth, locale)}` : ""}`
+      : (zh ? "当前存档关系与历史基准不同；以当前存档事实为准。" : "The current save differs from the historical baseline; current-save facts take precedence.");
+    return { code, title: titles[code] || (zh ? "世界线存在差异" : "Worldline difference"), detail, severity: ["INFO", "NOTICE"].includes(String(item?.severity || "").toUpperCase()) ? String(item.severity).toUpperCase() : "INFO" };
+  }
+
+  function entityResolution(item, locale) {
+    const rawStatus = String(item?.resolutionStatus || item?.status || item?.coverageStatus || "NO_MATCH").toUpperCase();
+    const subject = [item?.subjectName, item?.alias, item?.figureName].find((value) => isReadable(value));
+    const rawCandidateCount = Number.isFinite(Number(item?.candidateTotal)) ? Number(item.candidateTotal) : Array.isArray(item?.runtimeIds) ? item.runtimeIds.length : 0;
+    const candidateCount = rawStatus === "RESOLVED" ? Math.max(1, rawCandidateCount) : rawCandidateCount;
+    return {
+      subject: subject || labels(locale).unknown,
+      identityKind: String(item?.identityKind || "UNKNOWN").toUpperCase(),
+      identityKindLabel: identityKindLabel(item?.identityKind, rawStatus, locale),
+      status: rawStatus,
+      statusLabel: ["SOURCE_INCOMPLETE", "DEFINITION_FOUND_RUNTIME_MISSING", "REJECTED_BY_EVIDENCE", "REJECTED_BY_CONFLICT", "NAME_INDEX_MISS"].includes(rawStatus) ? coverage(rawStatus, locale) : identity(rawStatus, locale),
+      candidateCount,
+      sourceLabel: item?.sourceComplete === false || rawStatus === "SOURCE_INCOMPLETE" ? (isChinese(locale) ? "来源尚未完整读取" : "Sources incomplete") : (isChinese(locale) ? "来源完整" : "Sources complete"),
+      differences: Array.isArray(item?.worldlineDifferences) ? item.worldlineDifferences.map((difference) => worldlineDifference(difference, locale)) : []
+    };
   }
 
   function explanationReason(value, locale) {
@@ -207,8 +264,12 @@
     const analysis = promptDiagnostics?.queryAnalysis || {};
     const resolution = analysis.identityResolution || promptDiagnostics?.identityResolution || {};
     const coverageItems = Array.isArray(analysis.historicalCoverage) ? analysis.historicalCoverage : Array.isArray(promptDiagnostics?.historicalCoverage) ? promptDiagnostics.historicalCoverage : [];
-    const coverageItem = coverageItems[0] || null;
-    const rawStatus = coverageItem?.status || resolution.status || "NO_MATCH";
+    const coveragePriority = { SOURCE_INCOMPLETE: 4, DEFINITION_FOUND_RUNTIME_MISSING: 3, REJECTED_BY_EVIDENCE: 2, REJECTED_BY_CONFLICT: 2, NAME_INDEX_MISS: 1 };
+    const coverageStatus = (item) => String(item?.status || "").toUpperCase();
+    const coverageItem = coverageItems.reduce((best, item) => !best || (coveragePriority[coverageStatus(item)] || 0) > (coveragePriority[coverageStatus(best)] || 0) ? item : best, null);
+    const entityItems = Array.isArray(analysis.entityResolutions) ? analysis.entityResolutions : [];
+    const hasHistoricalEntity = entityItems.some((item) => String(item?.identityKind || "").toUpperCase() === "HISTORICAL");
+    const rawStatus = String(coverageItem?.status || resolution.status || "NO_MATCH").toUpperCase();
     const candidateItems = Array.isArray(resolution.candidates) ? resolution.candidates : Array.isArray(analysis.candidateCharacters) ? analysis.candidateCharacters : [];
     const candidates = candidateItems.slice(0, 50).map((candidate) => {
       const candidateName = [candidate?.displayName, candidate?.rawName, candidate?.aliasCandidate].find((value) => isReadable(value, candidate?.rawName || candidate?.aliasCandidate));
@@ -229,7 +290,8 @@
       sourceComplete: promptDiagnostics?.historicalIndex?.sourceComplete === true,
       indexStatus: promptDiagnostics?.historicalIndex?.status || null,
       indexStatusLabel: promptDiagnostics?.historicalIndex?.status ? status(promptDiagnostics.historicalIndex.status, locale) : labels(locale).unknown,
-      detailsAvailable: Boolean(coverageItem || resolution.status || promptDiagnostics?.historicalIndex)
+      entities: entityItems.map((item) => entityResolution(item, locale)),
+      detailsAvailable: Boolean((entityItems.length === 0 || hasHistoricalEntity) && (coverageItems.length || resolution.status || promptDiagnostics?.historicalIndex))
     };
   }
 
@@ -306,15 +368,15 @@
     const text = labels(locale);
     const readableFigure = [item?.historicalName, item?.figureName, item?.displayName, item?.name, item?.alias].find((value) => isReadable(value, item?.figureKey));
     const readableCharacter = [item?.currentCharacterName, item?.characterName, item?.character?.displayName, item?.character?.name].find((value) => isReadable(value, item?.runtimeId));
-    const rawStatus = item?.identityStatus || item?.status || "NO_MATCH";
+    const rawStatus = item?.identityStatus || item?.status || item?.coverageStatus || ["DEFINITION_FOUND_RUNTIME_MISSING", "SOURCE_INCOMPLETE", "REJECTED_BY_EVIDENCE", "REJECTED_BY_CONFLICT", "NAME_INDEX_MISS"].includes(String(item?.conflict || "").toUpperCase()) && item.conflict || "NO_MATCH";
     const statusText = identity(rawStatus, locale);
-    const confidence = ({ LIVE_CONFIRMED: isChinese(locale) ? "高" : "High", DIRECT: isChinese(locale) ? "中" : "Medium", RESOLVED: isChinese(locale) ? "高" : "High", AMBIGUOUS_PROVENANCE: isChinese(locale) ? "待复核" : "Review", CONFLICT: isChinese(locale) ? "待复核" : "Review" })[String(rawStatus).toUpperCase()] || (isChinese(locale) ? "待确认" : "Pending");
+    const confidence = ({ LIVE_CONFIRMED: isChinese(locale) ? "高" : "High", DIRECT: isChinese(locale) ? "中" : "Medium", RESOLVED: isChinese(locale) ? "高" : "High", AMBIGUOUS_PROVENANCE: isChinese(locale) ? "待复核" : "Review", CONFLICT: isChinese(locale) ? "待复核" : "Review", SOURCE_INCOMPLETE: isChinese(locale) ? "待读取" : "Pending read", DEFINITION_FOUND_RUNTIME_MISSING: isChinese(locale) ? "未绑定" : "Not bound", REJECTED_BY_EVIDENCE: isChinese(locale) ? "待复核" : "Review", REJECTED_BY_CONFLICT: isChinese(locale) ? "待复核" : "Review" })[String(rawStatus).toUpperCase()] || (isChinese(locale) ? "待确认" : "Pending");
     return {
       figure: readableFigure || text.historicalFigure,
       character: readableCharacter || text.currentCharacter,
       status: statusText,
       confidence,
-      note: String(rawStatus).toUpperCase() === "CONFLICT" ? text.sourceConflict : String(rawStatus).toUpperCase() === "AMBIGUOUS_PROVENANCE" ? (isChinese(locale) ? "多个历史定义指向同一角色" : "Multiple historical definitions point to the same character") : null
+      note: String(rawStatus).toUpperCase() === "CONFLICT" ? text.sourceConflict : ["REJECTED_BY_EVIDENCE", "REJECTED_BY_CONFLICT"].includes(String(rawStatus).toUpperCase()) ? (isChinese(locale) ? "证据冲突或不足，暂不确认" : "Evidence conflicts or is insufficient; not confirmed") : String(rawStatus).toUpperCase() === "AMBIGUOUS_PROVENANCE" ? (isChinese(locale) ? "多个历史定义指向同一角色" : "Multiple historical definitions point to the same character") : String(rawStatus).toUpperCase() === "DEFINITION_FOUND_RUNTIME_MISSING" ? (isChinese(locale) ? "历史定义已找到，但当前存档暂无对应角色" : "Historical definition found, but no current role is bound") : String(rawStatus).toUpperCase() === "SOURCE_INCOMPLETE" ? (isChinese(locale) ? "来源仍在读取，暂不下结论" : "Sources are still loading; no conclusion yet") : null
     };
   }
 
@@ -322,37 +384,45 @@
     const zh = isChinese(locale);
     const analysis = promptDiagnostics?.queryAnalysis || {};
     const resolution = analysis.identityResolution || promptDiagnostics?.identityResolution || {};
-    const resolvedNames = [...(Array.isArray(analysis.resolvedCharacters) ? analysis.resolvedCharacters : []), ...(Array.isArray(analysis.resolvedTitles) ? analysis.resolvedTitles : [])].map((item) => isReadable(item?.displayName) ? item.displayName : (zh ? "名称未解析" : "Name unavailable"));
-    const resolvedEntities = (Array.isArray(analysis.resolvedCharacters) ? analysis.resolvedCharacters.length : 0) + (Array.isArray(analysis.resolvedTitles) ? analysis.resolvedTitles.length : 0);
+    const entityItems = Array.isArray(analysis.entityResolutions) ? analysis.entityResolutions : [];
+    const semanticEntities = entityItems.map((item) => entityResolution(item, locale));
+    const resolvedNames = semanticEntities.length ? semanticEntities.map((item) => item.subject) : [...(Array.isArray(analysis.resolvedCharacters) ? analysis.resolvedCharacters : []), ...(Array.isArray(analysis.resolvedTitles) ? analysis.resolvedTitles : [])].map((item) => isReadable(item?.displayName) ? item.displayName : (zh ? "名称未解析" : "Name unavailable"));
+    const legacyResolvedEntities = (Array.isArray(analysis.resolvedCharacters) ? analysis.resolvedCharacters.length : 0) + (Array.isArray(analysis.resolvedTitles) ? analysis.resolvedTitles.length : 0);
+    const semanticStatuses = semanticEntities.map((item) => item.status);
+    const semanticResolvedEntities = semanticStatuses.filter((value) => value === "RESOLVED").length;
+    const resolvedEntities = Math.max(legacyResolvedEntities, semanticResolvedEntities);
     const unresolvedCandidates = Number.isFinite(resolution.candidateTotal) ? resolution.candidateTotal : Array.isArray(resolution.candidates) ? resolution.candidates.length : (Array.isArray(analysis.candidateCharacters) ? analysis.candidateCharacters.length : 0) + (Array.isArray(analysis.candidateTitles) ? analysis.candidateTitles.length : 0);
     const effectiveStatus = resolvedEntities > 0 && ["", "NO_MATCH"].includes(String(resolution.status || "").toUpperCase()) ? "RESOLVED" : resolution.status;
     const historical = historicalExplanation(promptDiagnostics, locale);
-    const candidates = unresolvedCandidates || resolvedEntities;
+    const semanticCandidates = semanticEntities.reduce((total, item) => total + item.candidateCount, 0);
+    const candidates = semanticEntities.length ? semanticCandidates : unresolvedCandidates || resolvedEntities;
     const hasFacts = (promptDiagnostics?.gameTruth?.characters || []).length > 0 || (promptDiagnostics?.gameTruth?.titles || []).length > 0;
     let conclusion = zh ? "当前世界线中暂无可确认结论" : "No confirmed conclusion is available for the current worldline";
     if (promptDiagnostics?.localizationPending) conclusion = zh ? "本地化仍在后台解析，请稍后重新诊断；当前结果并非完整检索结论" : "Localization is still running; retry diagnostics shortly. Results are incomplete.";
     else if (promptDiagnostics?.localizationIncomplete) conclusion = zh ? "本地化来源尚未完整核实，当前结果不代表人物不存在" : "Localization sources are incomplete; this does not establish that the character is absent.";
     else if (promptDiagnostics?.available === false) conclusion = zh ? "当前无法安全读取世界知识" : "World knowledge cannot be read safely right now";
+    else if (historical.status === "SOURCE_INCOMPLETE" || semanticStatuses.includes("SOURCE_INCOMPLETE")) conclusion = zh ? "历史人物来源仍在读取，当前不能下结论" : "Historical sources are still loading; no conclusion is available yet";
+    else if (semanticEntities.length > 1) conclusion = zh ? "已完成逐实体判定，请查看各对象结果" : "Per-entity resolution is complete; see each object result";
     else if (hasFacts && resolvedEntities > 0) conclusion = zh ? "已找到与查询相关的存档事实" : "Relevant save facts were found";
-    else if (historical.status === "SOURCE_INCOMPLETE") conclusion = zh ? "历史人物来源仍在读取，当前不能下结论" : "Historical sources are still loading; no conclusion is available yet";
     else if (historical.status === "DEFINITION_FOUND_RUNTIME_MISSING") conclusion = zh ? "找到历史定义，但当前存档没有对应角色" : "The historical definition was found, but no current save character is bound";
-    else if (historical.status === "REJECTED_BY_EVIDENCE") conclusion = zh ? "找到历史候选，但证据不足以确认身份" : "A historical candidate was found, but the evidence is insufficient to confirm identity";
-    else if (["AMBIGUOUS", "AMBIGUOUS_PROVENANCE"].includes(String(resolution.status || "").toUpperCase())) conclusion = zh ? "当前世界线中无法安全给出唯一结论" : "A unique conclusion cannot be given safely for this worldline";
+    else if (["REJECTED_BY_EVIDENCE", "REJECTED_BY_CONFLICT"].includes(historical.status)) conclusion = zh ? "找到历史候选，但证据不足以确认身份" : "A historical candidate was found, but the evidence is insufficient to confirm identity";
+    else if (semanticStatuses.some((value) => ["AMBIGUOUS", "AMBIGUOUS_PROVENANCE"].includes(value)) || ["AMBIGUOUS", "AMBIGUOUS_PROVENANCE"].includes(String(resolution.status || "").toUpperCase())) conclusion = zh ? "当前世界线中无法安全给出唯一结论" : "A unique conclusion cannot be given safely for this worldline";
     else if (hasFacts) conclusion = zh ? "已找到与查询相关的存档事实" : "Relevant save facts were found";
     else if (resolvedEntities > 0) conclusion = zh ? "已确认查询对象，但当前没有可展示的存档事实" : "The query object was resolved, but no save facts are available to display";
     else if (resolution.status === "NO_MATCH") conclusion = zh ? "当前世界线中暂未找到明确对应对象" : "No matching object was found in the current worldline";
-    const reason = resolvedEntities > 0 && ["NO_MATCH", "NAME_INDEX_MISS"].includes(historical.status) ? null : resolution.reason === "CONTEXT_UNAVAILABLE" ? (zh ? "当前检查点或实时状态不可用。" : "The checkpoint or live state is unavailable.") : historical.reasonCode !== "NO_MATCH" ? historical.reason : null;
+    const reason = semanticEntities.length > 1 && historical.status !== "SOURCE_INCOMPLETE" ? null : resolvedEntities > 0 && ["NO_MATCH", "NAME_INDEX_MISS"].includes(historical.status) ? null : resolution.reason === "CONTEXT_UNAVAILABLE" ? (zh ? "当前检查点或实时状态不可用。" : "The checkpoint or live state is unavailable.") : historical.reasonCode !== "NO_MATCH" ? historical.reason : null;
     return {
       query: promptDiagnostics?.query || "",
       recognizedObject: resolvedNames.join(" / ") || promptDiagnostics?.query || "",
-      identity: promptDiagnostics?.localizationPending && !resolvedEntities ? (zh ? "正在检索" : "Searching") : identity(effectiveStatus, locale),
+      identity: promptDiagnostics?.localizationPending && !resolvedEntities ? (zh ? "正在检索" : "Searching") : semanticEntities.length > 1 ? labels(locale).multipleEntities : semanticEntities.length === 1 ? semanticEntities[0].identityKindLabel : identity(effectiveStatus, locale),
       candidateCount: candidates,
       conclusion,
       reason,
       sourceFacts: hasFacts ? (zh ? "已命中" : "Matched") : (zh ? "未命中" : "No match"),
       sourceSupplemental: (promptDiagnostics?.supplemental || []).length ? (zh ? "已命中" : "Matched") : (zh ? "未命中" : "No match"),
       tokens: promptDiagnostics?.worldPromptTokens ?? 0,
-      historical
+      historical,
+      entities: semanticEntities
     };
   }
 
@@ -376,6 +446,9 @@
         event: (value) => event(value, locale),
         historical: (value) => historical(value, locale),
         coverage: (value) => coverage(value, locale),
+        identityKind: (kind, resolutionStatus) => identityKindLabel(kind, resolutionStatus, locale),
+        entityResolution: (value) => entityResolution(value, locale),
+        worldlineDifference: (value) => worldlineDifference(value, locale),
         historicalExplanation: (value) => historicalExplanation(value, locale),
         promptSummary: (value) => promptSummary(value, locale)
       };

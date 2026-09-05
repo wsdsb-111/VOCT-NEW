@@ -76,12 +76,19 @@ class MemoryRanker {
       let tokens = Math.max(1, estimate(memory.content));
       const remaining = budget - used;
       if (tokens > remaining && (allowTruncate || memory.importance >= 0.9) && remaining > 0) {
+        // The generated perspective summary puts promises/plans at the END.
+        // Prioritize that section in the recall copy, never mutate the stored body.
+        const marker = "【需要长期记住的事项】";
+        const markerIndex = memory.type === "folder_summary" ? memory.content.indexOf(marker) : -1;
+        const recallContent = markerIndex >= 0
+          ? `${memory.content.slice(markerIndex).trim()}\n\n${memory.content.slice(0, markerIndex).trim()}`
+          : memory.content;
         let low = 1;
-        let high = memory.content.length;
+        let high = recallContent.length;
         let fitted = "";
         while (low <= high) {
           const middle = Math.floor((low + high) / 2);
-          const candidate = `${memory.content.slice(0, middle)}…`;
+          const candidate = `${recallContent.slice(0, middle)}…`;
           if (estimate(candidate) <= remaining) {
             fitted = candidate;
             low = middle + 1;

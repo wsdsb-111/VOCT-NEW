@@ -11,6 +11,10 @@ class MemoryTrace {
     const safe = {
       timestamp: new Date().toISOString(),
       stage,
+      success: typeof details.success === "boolean" ? details.success : null,
+      error: details.error || details.errorCode || null,
+      attempt: Number.isInteger(details.attempt) ? details.attempt : null,
+      durationMs: Number.isFinite(details.durationMs) ? details.durationMs : null,
       memoryId: details.memoryId || null,
       type: details.type || null,
       score: Number.isFinite(details.score) ? details.score : null,
