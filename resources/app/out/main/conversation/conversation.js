@@ -3,6 +3,8 @@
 const { getCharacterPersonalName } = require("../memory-system/character-identity");
 const { createConversationRuntime } = require("./conversation-runtime");
 const participantLifecycle = require("./participant-lifecycle");
+const { buildPresenceObservationFacts } = require("../worldline/direct-observation-producer");
+const { resolveWorldlineTurnBudget, shouldTrimMemoryTurnRecall } = require("../worldline/worldline-context-budget");
 
 let ActionEngine = null;
 let settingsRepository = null;
@@ -178,7 +180,10 @@ class Conversation {
   async checkAndSummarizeIfNeeded(npc) {
     memoryEngine?.syncRollingStateFromConversationFields(this);
     memoryEngine?.syncConversationRollingFields(this);
-    let memoryContext = await this.getMemoryContextFor(npc);
+    const contextLimit = await llmManager.getCurrentContextLength() || 1e4;
+    const memoryRecallStartedAt = Date.now();
+    let memoryContext = await this.getMemoryContextFor(npc, contextLimit);
+    const memoryRecallMs = Date.now() - memoryRecallStartedAt;
     let currentMessages = PromptBuilder.buildMessages(
       this.getPromptHistoryForCharacter(npc.id),
       npc,
@@ -187,13 +192,13 @@ class Conversation {
       memoryContext
     );
     let estimatedTokens = this.estimateTokenCount(currentMessages);
-    const contextLimit = await llmManager.getCurrentContextLength() || 1e4;
-    if (memoryContext?.turnRecallText && contextLimit - estimatedTokens < 192) {
+    const productionWorldlineEnabled = worldlineService?.isSubjectivePromptIntegrationEnabled?.() === true;
+    const trimMemoryTurnRecall = (reason) => {
       usageAnalytics.record({
         requestType: "memory_recall",
         characterId: npc.id,
         memoryOutcome: "skipped_context_pressure",
-        turnRecallReason: "context_headroom_below_192",
+        turnRecallReason: reason,
         turnRecallTokens: memoryContext.turnRecallTokens,
         turnRecallIntent: true,
         turnRecallSelected: false,
@@ -203,7 +208,7 @@ class Conversation {
         candidateCount: memoryContext.turnRecallCandidateCount,
         turnEpoch: this.turnEpoch
       }, null);
-      memoryContext = { ...memoryContext, turnRecall: [], turnRecallText: null, turnRecallTokens: 0, turnRecallReason: "context_headroom_below_192" };
+      memoryContext = { ...memoryContext, turnRecall: [], turnRecallText: null, turnRecallTokens: 0, turnRecallReason: reason };
       currentMessages = PromptBuilder.buildMessages(
         this.getPromptHistoryForCharacter(npc.id),
         npc,
@@ -212,6 +217,94 @@ class Conversation {
         memoryContext
       );
       estimatedTokens = this.estimateTokenCount(currentMessages);
+    };
+    if (memoryContext?.turnRecallText && !productionWorldlineEnabled && shouldTrimMemoryTurnRecall({ contextLimit, basePromptTokens: estimatedTokens, worldlineEnabled: false })) {
+      trimMemoryTurnRecall("context_headroom_below_192");
+    }
+    if (productionWorldlineEnabled) {
+      const request = memoryContext?.worldlineRequest || {};
+      const presentIds = [...(this.presentCharacterIds || [])];
+      const directObservationFacts = buildPresenceObservationFacts({
+        responderId: npc.id,
+        presentCharacterIds: presentIds,
+        characters: this.gameData?.characters,
+        asOf: this.gameData?.date || null
+      });
+      const initialBudget = resolveWorldlineTurnBudget({ contextLimit, basePromptTokens: estimatedTokens });
+      const remainingContext = initialBudget.remainingContext;
+      try {
+        let subjectiveWorldContext = worldlineService.getSubjectivePromptContext({
+          responderId: npc.id,
+          query: request.query || "",
+          assistContext: request.assistContext || "",
+          mentionedEntityIds: request.mentionedEntityIds || [],
+          conversationId: this.id,
+          turnEpoch: this.turnEpoch,
+          sceneRevision: `${this.gameData.date || ""}\n${this.gameData.scene || ""}`,
+          presenceRevision: presentIds.map(String).sort().join(","),
+          directObservationFactIds: directObservationFacts.map((fact) => fact.factId),
+          directObservationFacts,
+          historicalReferenceInfo: this.gameData.historicalReferenceInfo,
+          tokenBudget: initialBudget.turnBudget
+        }) || null;
+        const stableTokens = TokenCounter.estimateTokens(subjectiveWorldContext?.worldStableText || "");
+        if (subjectiveWorldContext && stableTokens > remainingContext) {
+          subjectiveWorldContext = {
+            ...subjectiveWorldContext,
+            worldStableText: null,
+            worldTurnRecallText: null,
+            worldTurnRecallTokens: 0,
+            worldTurnRecallTrimmed: [...(subjectiveWorldContext.worldTurnRecallTrimmed || []), { factId: null, sourceTier: null, reason: "WORLD_STABLE_CONTEXT_HEADROOM" }]
+          };
+        } else if (subjectiveWorldContext && stableTokens + (subjectiveWorldContext.worldTurnRecallTokens || 0) > remainingContext) {
+          subjectiveWorldContext = worldlineService.getSubjectivePromptContext({
+            responderId: npc.id,
+            query: request.query || "",
+            assistContext: request.assistContext || "",
+            mentionedEntityIds: request.mentionedEntityIds || [],
+            conversationId: this.id,
+            turnEpoch: this.turnEpoch,
+            sceneRevision: `${this.gameData.date || ""}\n${this.gameData.scene || ""}`,
+            presenceRevision: presentIds.map(String).sort().join(","),
+            directObservationFactIds: directObservationFacts.map((fact) => fact.factId),
+            directObservationFacts,
+            historicalReferenceInfo: this.gameData.historicalReferenceInfo,
+            tokenBudget: resolveWorldlineTurnBudget({ contextLimit, basePromptTokens: estimatedTokens, stableWorldTokens: stableTokens }).turnBudget
+          }) || null;
+        }
+        memoryContext = {
+          ...memoryContext,
+          worldStableText: subjectiveWorldContext?.worldStableText || null,
+          worldTurnRecallText: subjectiveWorldContext?.worldTurnRecallText || null,
+          worldTurnRecallTokens: subjectiveWorldContext?.worldTurnRecallTokens || 0,
+          worldTurnRecallTrimmed: subjectiveWorldContext?.worldTurnRecallTrimmed || [],
+          historicalReferenceInfo: subjectiveWorldContext?.historicalReferenceInfo || null,
+          worldRecallQueryFingerprint: subjectiveWorldContext?.queryFingerprint || null,
+          worldRecallCacheHit: subjectiveWorldContext?.cacheHit === true,
+          worldlineHeadroom: remainingContext,
+          worldlineMetrics: subjectiveWorldContext?.metrics ? { ...subjectiveWorldContext.metrics, memoryRecallMs } : null
+        };
+        if (subjectiveWorldContext?.metrics) {
+          usageAnalytics?.record({
+            requestType: "worldline_recall",
+            characterId: npc.id,
+            conversationId: this.id,
+            cacheHit: subjectiveWorldContext.cacheHit === true,
+            ...subjectiveWorldContext.metrics,
+            worldSharedCacheHit: subjectiveWorldContext.metrics.sharedWorldCacheHit === true,
+            worldSubjectiveCacheHit: subjectiveWorldContext.metrics.subjectiveCacheHit === true,
+            worldTurnRecallTokens: subjectiveWorldContext.worldTurnRecallTokens || 0,
+            worldTurnRecallTrimmed: subjectiveWorldContext.worldTurnRecallTrimmed?.length || 0,
+            memoryRecallMs
+          }, null);
+        }
+      } catch (error) {
+        console.warn("[Worldline] World recall failed; continuing without world recall:", error.message);
+      }
+      if (memoryContext?.turnRecallText && shouldTrimMemoryTurnRecall({ contextLimit, basePromptTokens: estimatedTokens, worldlineEnabled: true })) {
+        memoryContext = { ...memoryContext, worldStableText: null, worldTurnRecallText: null, worldTurnRecallTokens: 0 };
+        trimMemoryTurnRecall("context_limit_exceeded_after_worldline_trim");
+      }
     }
     if (estimatedTokens > contextLimit * this.CONTEXT_LIMIT_PERCENTAGE) {
       console.log(`Context approaching limit (${estimatedTokens}/${contextLimit}), creating rolling summary`);
@@ -330,22 +423,8 @@ class Conversation {
       turnEpoch: this.turnEpoch
     }, null);
     let worldContext = null;
-    let subjectiveWorldContext = null;
     try {
-      if (worldlineService?.isSubjectivePromptIntegrationEnabled?.()) {
-        subjectiveWorldContext = worldlineService.getSubjectivePromptContext({
-          responderId: npc.id,
-          query,
-          assistContext,
-          mentionedEntityIds: mentionedCharacterIds,
-          conversationId: this.id,
-          turnEpoch: this.turnEpoch,
-          sceneRevision: `${this.gameData.date || ""}\n${this.gameData.scene || ""}`,
-          presenceRevision: activeParticipantIds.map(String).sort().join(","),
-          directObservationFactIds: [],
-          historicalReferenceInfo: this.gameData.historicalReferenceInfo
-        }) || null;
-      } else {
+      if (!worldlineService?.isSubjectivePromptIntegrationEnabled?.()) {
         worldContext = worldlineService?.getPromptContext?.({ query, assistContext, mentionedEntityIds: mentionedCharacterIds, responderId: npc.id, conversationId: this.id, turnEpoch: this.turnEpoch }) || null;
       }
     } catch (error) {
@@ -368,8 +447,8 @@ class Conversation {
       worldTopicText: worldContext?.topicText || null,
       worldSupplementalText: worldContext?.supplementalText || null,
       worldCurrentText: worldContext?.currentText || null,
-      subjectiveWorldText: subjectiveWorldContext?.worldText || null,
-      historicalReferenceInfo: subjectiveWorldContext?.historicalReferenceInfo || null,
+      worldlineRequest: { query, assistContext, mentionedEntityIds: mentionedCharacterIds },
+      historicalReferenceInfo: null,
       worldRecallQueryFingerprint: worldContext?.queryFingerprint || null,
       worldRecallCacheHit: worldContext?.cacheHit === true
     };
@@ -694,6 +773,7 @@ class Conversation {
     try {
       const memoryContext = await this.checkAndSummarizeIfNeeded(npc);
       if (!this.isResponseCurrent(responseState, npc)) throw new Error("AbortError: Message cancelled");
+      const promptBuildStartedAt = Date.now();
       const promptBuild = PromptBuilder.buildMessagesWithTokenCount(
         this.getPromptHistoryForCharacter(npc.id),
         npc,
@@ -701,8 +781,10 @@ class Conversation {
         this.getPromptSummaryForCharacter(npc.id),
         memoryContext
       );
+      const promptBuildMs = Date.now() - promptBuildStartedAt;
       const llmMessages = promptBuild.messages;
       const promptBlockMetadata = Conversation.buildPromptBlockMetadata(promptBuild);
+      const promptBlockTokens = (id) => promptBlockMetadata.blocks.filter((block) => block.id === id).reduce((total, block) => total + (Number(block.tokens) || 0), 0);
       logVerboseLLM(`[Conversation][verbose] Prompt for ${npc.fullName}:`, llmMessages);
       console.log(`[TOKEN_COUNT] Message from ${npc.fullName}:`, this.estimateTokenCount(llmMessages));
       const activeConfig = settingsRepository.getActiveProviderConfig();
@@ -720,7 +802,20 @@ class Conversation {
           stablePrefixEndPosition: promptBlockMetadata.stablePrefixEndPosition,
           stablePrefixTokens: promptBlockMetadata.stablePrefixTokens,
           dynamicSuffixTokens: promptBlockMetadata.dynamicSuffixTokens,
-          prefixFingerprint: promptBlockMetadata.prefixFingerprint
+          prefixFingerprint: promptBlockMetadata.prefixFingerprint,
+          memoryStableTokens: promptBlockTokens("memory-stable"),
+          memoryDirectTokens: promptBlockTokens("memory-direct-frozen"),
+          memoryTopicTokens: promptBlockTokens("memory-session-topic-anchor"),
+          memoryTurnRecallTokens: promptBlockTokens("memory-turn-recall"),
+          worldStableTokens: promptBlockTokens("worldline-stable"),
+          worldTurnRecallTokens: promptBlockTokens("worldline-turn-recall"),
+          worldRetrievalMs: memoryContext?.worldlineMetrics?.worldRetrievalMs || 0,
+          worldPolicyMs: memoryContext?.worldlineMetrics?.worldPolicyMs || 0,
+          worldFormatMs: memoryContext?.worldlineMetrics?.worldFormatMs || 0,
+          memoryRecallMs: memoryContext?.worldlineMetrics?.memoryRecallMs || 0,
+          promptBuildMs,
+          worldSharedCacheHit: memoryContext?.worldlineMetrics?.sharedWorldCacheHit === true,
+          worldSubjectiveCacheHit: memoryContext?.worldlineMetrics?.subjectiveCacheHit === true
         }
       );
       if (settingsRepository.getGlobalStreamSetting() && typeof result === "object" && typeof result[Symbol.asyncIterator] === "function") {

@@ -6,6 +6,15 @@ const LEVEL_SET = new Set(KNOWLEDGE_LEVELS);
 const SELF_FIELDS = new Set(["NAME", "IDENTITY", "PRIMARY_TITLE", "SPOUSE", "CHILDREN", "COURT_POSITION", "LOCATION", "CULTURE", "FAITH", "KNOWN_ACTION"]);
 const PRIORITY = Object.freeze({ SELF: 700, DIRECT_OBSERVATION: 700, PERSONAL_MEMORY: 600, COURT_PUBLIC: 500, REALM_PUBLIC: 500, PUBLIC_WORLD: 500, SECRET: 650, UNKNOWN: 0 });
 
+function factPriority(item) {
+  const level = item?.knowledgeLevel || "UNKNOWN";
+  const sourceTier = item?.fact?.sourceTier || null;
+  if (["GAME_TRUTH", "GAMESTATE"].includes(sourceTier) && !["SELF", "DIRECT_OBSERVATION"].includes(level)) return 900;
+  if (level === "SELF") return 850;
+  if (level === "DIRECT_OBSERVATION") return 800;
+  return PRIORITY[level] || 0;
+}
+
 function idOf(value) {
   const id = value && typeof value === "object" ? value.id ?? value.characterId : value;
   return id === null || id === undefined ? null : String(id);
@@ -85,12 +94,12 @@ function canKnow(responder, fact, context = {}) {
 }
 
 function resolveKnowledgeConflict(candidates = []) {
-  const allowed = candidates.filter((item) => item.decision === "ALLOW").sort((left, right) => (PRIORITY[right.knowledgeLevel] || 0) - (PRIORITY[left.knowledgeLevel] || 0));
+  const allowed = candidates.filter((item) => item.decision === "ALLOW").sort((left, right) => factPriority(right) - factPriority(left));
   const secretUnavailable = candidates.some((item) => item.knowledgeLevel === "SECRET" && item.decision !== "ALLOW");
   if (!allowed.length) return { fact: null, knowledgeLevel: "UNKNOWN", decision: "UNKNOWN", reason: secretUnavailable ? "SECRET_UNAVAILABLE" : "NO_ALLOWED_FACT" };
-  const topPriority = PRIORITY[allowed[0].knowledgeLevel] || 0;
+  const topPriority = factPriority(allowed[0]);
   if (secretUnavailable && topPriority <= PRIORITY.SECRET) return { fact: null, knowledgeLevel: "UNKNOWN", decision: "UNKNOWN", reason: "SECRET_UNAVAILABLE" };
-  const top = allowed.filter((item) => (PRIORITY[item.knowledgeLevel] || 0) === topPriority);
+  const top = allowed.filter((item) => factPriority(item) === topPriority);
   const values = new Set(top.map((item) => JSON.stringify(item.fact?.value)));
   if (values.size > 1) return { fact: null, knowledgeLevel: "UNKNOWN", decision: "UNKNOWN", reason: "EQUAL_AUTHORITY_CONFLICT" };
   return { ...allowed[0], conflictReason: "HIGHER_AUTHORITY_FACT" };

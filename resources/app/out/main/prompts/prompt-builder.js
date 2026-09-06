@@ -492,7 +492,7 @@ function createPromptBuilder({
         label: "Stable Long-term Memory",
         enabled: true,
         role: "system",
-        stable: false
+        stable: true
       };
       const stableWorldBlock = {
         id: "worldline-stable",
@@ -503,9 +503,9 @@ function createPromptBuilder({
         stable: true
       };
       const subjectiveWorldBlock = {
-        id: "worldline-subjective",
-        type: "worldline_subjective",
-        label: "Responder-scoped World Facts",
+        id: "worldline-turn-recall",
+        type: "worldline_turn_recall",
+        label: "Worldline Turn Recall",
         enabled: true,
         role: "system",
         stable: false
@@ -516,7 +516,7 @@ function createPromptBuilder({
         label: "Frozen Direct Relationship Memory",
         enabled: true,
         role: "system",
-        stable: false
+        stable: true
       };
       const mentionedSnapshotBlock = {
         id: "memory-mentioned-snapshot",
@@ -524,7 +524,7 @@ function createPromptBuilder({
         label: "Frozen Mentioned Character Snapshot",
         enabled: true,
         role: "system",
-        stable: false
+        stable: true
       };
       const sessionTopicAnchorBlock = {
         id: "memory-session-topic-anchor",
@@ -532,7 +532,7 @@ function createPromptBuilder({
         label: "Frozen Session Topic Anchor",
         enabled: true,
         role: "system",
-        stable: false
+        stable: true
       };
       const deferredMainSegments = [];
       const deferredDescriptionBlocks = [];
@@ -574,14 +574,6 @@ function createPromptBuilder({
             block: stableWorldBlock,
             content: memoryContext.worldStableText,
             tokens: TokenCounter.estimateTokens(memoryContext.worldStableText)
-          });
-        }
-        if (memoryContext?.subjectiveWorldText) {
-          llmMessages.push({ role: "system", content: memoryContext.subjectiveWorldText });
-          blocksWithTokens.push({
-            block: subjectiveWorldBlock,
-            content: memoryContext.subjectiveWorldText,
-            tokens: TokenCounter.estimateTokens(memoryContext.subjectiveWorldText)
           });
         }
         if (memoryContext?.topicPatchText) {
@@ -629,7 +621,9 @@ function createPromptBuilder({
           worldTopicText: memoryContext?.worldTopicText,
           worldSupplementalText: memoryContext?.worldSupplementalText,
           turnRecallText: memoryContext?.turnRecallText,
-          worldCurrentText: memoryContext?.worldCurrentText
+          worldCurrentText: memoryContext?.worldCurrentText,
+          worldTurnRecallText: memoryContext?.worldTurnRecallText,
+          subjectiveWorldBlock
         });
         if (Array.isArray(result)) {
           blocksWithTokens.push(...result);
@@ -898,6 +892,14 @@ function createPromptBuilder({
               block: { id: "memory-turn-recall", type: "memory_turn_recall", label: "Turn Recall", enabled: true, role: "system", stable: false },
               content: options.turnRecallText,
               tokens: TokenCounter.estimateTokens(options.turnRecallText)
+            });
+          }
+          if (options.worldTurnRecallText) {
+            messages.push({ role: "system", content: options.worldTurnRecallText });
+            tokenBlocks.push({
+              block: options.subjectiveWorldBlock || { id: "worldline-turn-recall", type: "worldline_turn_recall", label: "Worldline Turn Recall", enabled: true, role: "system", stable: false },
+              content: options.worldTurnRecallText,
+              tokens: TokenCounter.estimateTokens(options.worldTurnRecallText)
             });
           }
           return tokenBlocks;

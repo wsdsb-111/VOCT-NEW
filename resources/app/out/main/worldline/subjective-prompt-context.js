@@ -2,6 +2,7 @@
 
 const { dataset, getPeriodByYear } = require("../historical-system/historical-baseline");
 const { isEventAvailable, isFigureKnowledgeAvailable, parseGameDateStrict } = require("../historical-system/temporal-knowledge-gate");
+const { estimateTokens } = require("../token-estimator");
 
 const WORLD_SOURCE_TIERS = new Set(["GAME_TRUTH", "GAMESTATE", "ANNUAL_DELTA", "PLAYER_SUPPLEMENTAL"]);
 
@@ -44,8 +45,7 @@ function buildHistoricalReferenceReplacement(reference, checkpointAsOf) {
   };
 }
 
-function buildSubjectiveWorldPrompt(view) {
-  const facts = (view?.allowedFacts || []).filter((fact) => WORLD_SOURCE_TIERS.has(fact?.sourceTier) && text(fact?.value)).slice(0, 16);
+function formatSubjectiveWorldFacts(facts) {
   if (!facts.length) return null;
   const current = facts.filter((fact) => ["GAME_TRUTH", "GAMESTATE"].includes(fact.sourceTier));
   const history = facts.filter((fact) => fact.sourceTier === "ANNUAL_DELTA");
@@ -53,9 +53,45 @@ function buildSubjectiveWorldPrompt(view) {
   const sections = [];
   if (current.length) sections.push(`【当前获准 CK3 事实】\n${current.map((fact) => `- ${fact.value}`).join("\n")}`);
   if (history.length) sections.push(`【相关 CK3 年度变化】\n${history.map((fact) => `- ${fact.value}`).join("\n")}`);
-  if (supplemental.length) sections.push(`【获准公开补充知识】\n${supplemental.map((fact) => `- ${fact.value}`).join("\n")}`);
+  if (supplemental.length) sections.push(`【获准补充知识】\n${supplemental.map((fact) => `- ${fact.value}`).join("\n")}`);
   if (!sections.length) return null;
   return `=== 回应角色可知的世界事实（仅限下列获准内容） ===\n这些内容仅截至各自标注的 Checkpoint 日期；不得补全、推断或泄露未列出的角色私密信息。\n${sections.join("\n\n")}`;
 }
 
-module.exports = { buildHistoricalReferenceReplacement, buildSubjectiveWorldPrompt };
+function buildSubjectiveWorldTurnRecall(view, { tokenBudget = null } = {}) {
+  const sourceOrder = { GAME_TRUTH: 0, GAMESTATE: 1, ANNUAL_DELTA: 2, PLAYER_SUPPLEMENTAL: 3 };
+  const facts = (view?.allowedFacts || []).filter((fact) => WORLD_SOURCE_TIERS.has(fact?.sourceTier) && text(fact?.value)).sort((left, right) =>
+    (sourceOrder[left.sourceTier] ?? 99) - (sourceOrder[right.sourceTier] ?? 99)
+    || text(left.entityId).localeCompare(text(right.entityId), "zh-Hans-CN")
+    || text(left.field).localeCompare(text(right.field), "en")
+    || text(left.factId).localeCompare(text(right.factId), "en")
+    || text(left.value).localeCompare(text(right.value), "zh-Hans-CN")
+  ).slice(0, 16);
+  const maxTokens = tokenBudget !== null && tokenBudget !== undefined && Number.isFinite(Number(tokenBudget)) ? Math.max(0, Math.floor(Number(tokenBudget))) : null;
+  const trimmed = [];
+  let remaining = facts.slice();
+  let textValue = formatSubjectiveWorldFacts(remaining);
+  while (textValue && maxTokens !== null && estimateTokens(textValue) > maxTokens) {
+    const index = ["PLAYER_SUPPLEMENTAL", "ANNUAL_DELTA", "GAMESTATE", "GAME_TRUTH"].map((sourceTier) => remaining.map((fact) => fact.sourceTier).lastIndexOf(sourceTier)).find((value) => value >= 0);
+    if (index === undefined) break;
+    const [removed] = remaining.splice(index, 1);
+    trimmed.push({ factId: removed.factId || null, sourceTier: removed.sourceTier || null, reason: "CONTEXT_HEADROOM" });
+    textValue = formatSubjectiveWorldFacts(remaining);
+  }
+  if (textValue && maxTokens !== null && estimateTokens(textValue) > maxTokens) {
+    return { text: null, tokens: 0, trimmed: [...trimmed, { factId: null, sourceTier: null, reason: "CONTEXT_HEADROOM_EMPTY" }] };
+  }
+  return { text: textValue, tokens: textValue ? estimateTokens(textValue) : 0, trimmed };
+}
+
+function buildSubjectiveWorldPrompt(view, options = {}) {
+  return buildSubjectiveWorldTurnRecall(view, options).text;
+}
+
+function buildWorldStablePrompt({ checkpointId = null, checkpointAsOf = null } = {}) {
+  const asOf = text(checkpointAsOf);
+  if (!asOf) return null;
+  return `=== Worldline Checkpoint Anchor ===\n- Checkpoint: ${text(checkpointId) || "unknown"}\n- World facts are valid only through: ${asOf}\n- Only responder-scoped Worldline Turn Recall after the current user message may supply current characters, titles, wars, deltas, or supplemental facts.\n- Do not infer or reveal facts absent from that recall.`;
+}
+
+module.exports = { buildHistoricalReferenceReplacement, buildSubjectiveWorldPrompt, buildSubjectiveWorldTurnRecall, buildWorldStablePrompt };

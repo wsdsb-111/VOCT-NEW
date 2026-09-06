@@ -14,12 +14,12 @@ const { getCheckpointFreshness } = require("./checkpoint-freshness");
 const { analysisTextMatches, analyzeSharedQuery, collectTerms } = require("./shared-query-analyzer");
 const { HISTORICAL_ALIAS_CATALOG } = require("./historical-alias-catalog");
 const { KNOWLEDGE_POLICY_VERSION } = require("./character-knowledge-policy");
-const { resolveKnowledgeScope } = require("./knowledge-scope-resolver");
+const { createRealmRootIndex, resolveKnowledgeScope } = require("./knowledge-scope-resolver");
 const { memoryFactsForResponder } = require("./personal-memory-policy-adapter");
 const { createSharedCandidatePool } = require("./shared-candidate-pool");
 const { buildSubjectiveWorldView } = require("./subjective-world-builder");
 const { classifySelectedWorldFacts } = require("./world-knowledge-classifier");
-const { buildHistoricalReferenceReplacement, buildSubjectiveWorldPrompt } = require("./subjective-prompt-context");
+const { buildHistoricalReferenceReplacement, buildSubjectiveWorldTurnRecall, buildWorldStablePrompt } = require("./subjective-prompt-context");
 const { RETRIEVAL_POLICY_VERSION, buildWorldQueryPlan } = require("./world-query-planner");
 const { buildWorldCandidates } = require("./world-retriever");
 const { rankWorldCandidates } = require("./world-ranker");
@@ -63,8 +63,8 @@ function promptTokenBudget(plan) {
   return entityCount === 1 ? TOKEN_BUDGETS.SINGLE_ENTITY : TOKEN_BUDGETS.SIMPLE;
 }
 
-function relevantSupplementalRevision(entries, analysis) {
-  const relevant = (entries || []).filter((entry) => !entry.hidden && entry.visibility === "PUBLIC_WORLD" && analysisTextMatches(analysis, `${entry.title}\n${entry.body}\n${Array.isArray(entry.entities) ? entry.entities.join(" ") : ""}`));
+function relevantSupplementalRevision(entries, analysis, includeScopedSupplemental = false) {
+  const relevant = (entries || []).filter((entry) => !entry.hidden && (includeScopedSupplemental || entry.visibility === "PUBLIC_WORLD") && analysisTextMatches(analysis, `${entry.title}\n${entry.body}\n${Array.isArray(entry.entities) ? entry.entities.join(" ") : ""}`));
   const signature = JSON.stringify(relevant.map((entry) => [entry.id, entry.updatedAt || "", entry.title, entry.body, entry.gameDate || "", entry.dateRange || "", entry.importance, entry.source, entry.entities || []]).sort((a, b) => String(a[0]).localeCompare(String(b[0]))));
   return nodeCrypto.createHash("sha256").update(signature, "utf8").digest("hex").slice(0, 16);
 }
@@ -780,7 +780,7 @@ class WorldlineService {
     return { supplemental: clone(this.supplemental.filter((item) => item.checkpointId === checkpointId2)) };
   }
 
-  _validateSupplemental(payload) {
+  _validateSupplemental(payload, { checkpointDate = null } = {}) {
     if (!payload || typeof payload !== "object" || Array.isArray(payload)) throw new Error("supplemental_payload_invalid");
     if (typeof payload.title !== "string" || !payload.title.trim() || payload.title.length > 160) throw new Error("supplemental_title_invalid");
     if (typeof payload.body !== "string" || !payload.body.trim() || payload.body.length > 12000) throw new Error("supplemental_body_invalid");
@@ -789,7 +789,7 @@ class WorldlineService {
     return {
       title: payload.title.trim(),
       body: payload.body.trim(),
-      gameDate: typeof payload.gameDate === "string" && payload.gameDate ? payload.gameDate : null,
+      gameDate: typeof payload.gameDate === "string" && payload.gameDate ? payload.gameDate : checkpointDate,
       dateRange: typeof payload.dateRange === "string" && payload.dateRange ? payload.dateRange : null,
       entities: Array.isArray(payload.entities) ? payload.entities.filter((item) => typeof item === "string" && item).slice(0, 32) : [],
       visibility: payload.visibility || "PUBLIC_WORLD",
@@ -807,7 +807,7 @@ class WorldlineService {
     if (!this.currentCheckpoint) throw new Error("supplemental_checkpoint_unavailable");
     const entry = {
       id: nodeCrypto.randomUUID(),
-      ...this._validateSupplemental(payload),
+      ...this._validateSupplemental(payload, { checkpointDate: this.currentCheckpoint?.snapshot?.gameDate || null }),
       source: "PLAYER_SUPPLEMENTAL",
       scope: "CHECKPOINT",
       checkpointScope: "CURRENT_CHECKPOINT",
@@ -828,7 +828,7 @@ class WorldlineService {
     const index = this.supplemental.findIndex((item) => item.id === id && item.checkpointId === this.currentCheckpoint?.id);
     if (index < 0) throw new Error("supplemental_not_found");
     const current = this.supplemental[index];
-    const validated = this._validateSupplemental(payload);
+    const validated = this._validateSupplemental(payload, { checkpointDate: current.gameDate || this.currentCheckpoint?.snapshot?.gameDate || null });
     const next = { ...current, ...validated, hidden: typeof validated.hidden === "boolean" ? validated.hidden : current.hidden, updatedAt: nowIso(this.clock) };
     const nextEntries = this.supplemental.slice();
     nextEntries[index] = next;
@@ -865,7 +865,7 @@ class WorldlineService {
     return { worldKnowledge, playerView: { worldKnowledge: createPlayerWorldKnowledge(worldKnowledge) } };
   }
 
-  getPromptContext({ query = "", assistContext = "", mentionedEntityIds = [], diagnostic = false } = {}) {
+  getPromptContext({ query = "", assistContext = "", mentionedEntityIds = [], diagnostic = false, includeScopedSupplemental = false } = {}) {
     const settings = this._settings();
     const safeMentionedEntityIds = Array.isArray(mentionedEntityIds) ? mentionedEntityIds : [];
     const sourceMatches = settings.autosavePath && this.currentCheckpoint?.source?.path && this.path.resolve(settings.autosavePath).toLowerCase() === this.path.resolve(this.currentCheckpoint.source.path).toLowerCase();
@@ -902,16 +902,16 @@ class WorldlineService {
       });
       const queryPlan = buildWorldQueryPlan({ query, assistContext, analysis: queryAnalysis });
       const activeSupplemental = this.listSupplemental().supplemental;
-      const supplementalRevision = relevantSupplementalRevision(activeSupplemental, queryAnalysis);
+      const supplementalRevision = relevantSupplementalRevision(activeSupplemental, queryAnalysis, includeScopedSupplemental);
       const mentionedEntityKey = [...new Set(safeMentionedEntityIds.map((id) => String(id)))].sort().join(",");
       const queryFingerprint = nodeCrypto.createHash("sha256").update(queryAnalysis.normalizedQuery || "empty", "utf8").digest("hex").slice(0, 16);
       const mentionedEntityFingerprint = nodeCrypto.createHash("sha256").update(mentionedEntityKey || "none", "utf8").digest("hex").slice(0, 16);
       const liveFingerprint = `${live.connected ? "1" : "0"}:${live.gameDate || "none"}:${live.totalDays ?? "none"}:${freshness.freshnessStatus}:${freshness.ageDays ?? "none"}`;
-      const cacheKey = `${checkpointId2}:${this.worldKnowledgeState.currentCampaignDeltaRevision}:${supplementalRevision}:${queryFingerprint}:${mentionedEntityFingerprint}:${liveFingerprint}:${RETRIEVAL_POLICY_VERSION}:${this.localizationResolver?.revision || 0}:${this.historicalDefinitionIndex?.meta?.revision || this.historicalDefinitionIndex?.status || "none"}`;
+      const cacheKey = `${checkpointId2}:${this.worldKnowledgeState.currentCampaignDeltaRevision}:${supplementalRevision}:${includeScopedSupplemental ? "scoped" : "public"}:${queryFingerprint}:${mentionedEntityFingerprint}:${liveFingerprint}:${RETRIEVAL_POLICY_VERSION}:${this.localizationResolver?.revision || 0}:${this.historicalDefinitionIndex?.meta?.revision || this.historicalDefinitionIndex?.status || "none"}`;
       const cached = queryAnalysis.historicalPending ? null : this.worldKnowledgeState.topicPatchCache.get(cacheKey);
       if (cached) return { ...cached, stableText, cacheHit: true };
       const candidates = buildWorldCandidates({ snapshot, analysis: queryAnalysis, annualDelta: this._currentCampaignDelta(), supplemental: activeSupplemental });
-      const retrieval = rankWorldCandidates(candidates, { plan: queryPlan, checkpointDate: snapshot.gameDate });
+      const retrieval = rankWorldCandidates(candidates, { plan: queryPlan, checkpointDate: snapshot.gameDate, includeScopedSupplemental });
       if (queryPlan.ambiguity) retrieval.trimmed.push({ type: "GAME_TRUTH_CHARACTER", id: "historical-candidates", title: "Historical identity candidates", reason: "AMBIGUOUS_IDENTITY" });
       const selected = {
         gameTruth: retrieval.selected.gameTruth.slice(),
@@ -1002,6 +1002,31 @@ class WorldlineService {
     }));
   }
 
+  _hydrateScopedSupplementalFacts(candidates = []) {
+    const entries = new Map(this.listSupplemental().supplemental.map((entry) => [String(entry.id), entry]));
+    return (Array.isArray(candidates) ? candidates : []).flatMap((fact) => {
+      if (fact?.sourceTier !== "PLAYER_SUPPLEMENTAL" || !fact?.contentRef || fact?.value) return [];
+      const entry = entries.get(String(fact.contentRef));
+      if (!entry || entry.hidden === true || !["PERSONAL", "SECRET"].includes(entry.visibility)) return [];
+      const audienceIds = [...new Set((entry.entities || []).map((value) => String(value || "").trim().replace(/^#/, "")).filter((value) => /^\d+$/.test(value)))];
+      if (!audienceIds.length) return [];
+      return [{
+        ...fact,
+        entityId: audienceIds[0],
+        value: `${entry.title}：${entry.body}`,
+        knowledgeLevel: entry.visibility === "SECRET" ? "SECRET" : "PERSONAL_MEMORY",
+        knownBy: audienceIds,
+        ownerId: entry.visibility === "PERSONAL" && audienceIds.length === 1 ? audienceIds[0] : null,
+        authorizationComplete: true,
+        public: false,
+        sourceComplete: true,
+        candidateSetComplete: true,
+        temporalSafe: dateValue(entry.gameDate || this.currentCheckpoint?.snapshot?.gameDate) !== null && dateValue(entry.gameDate || this.currentCheckpoint?.snapshot?.gameDate) <= dateValue(this.currentCheckpoint?.snapshot?.gameDate),
+        asOf: entry.gameDate || this.currentCheckpoint?.snapshot?.gameDate || null
+      }];
+    });
+  }
+
   getSharedCandidatePool({ query = "", assistContext = "", mentionedEntityIds = [] } = {}) {
     const startedAt = Date.now();
     const safeQuery = String(query || "").slice(0, 1000);
@@ -1031,7 +1056,7 @@ class WorldlineService {
       const pool = createSharedCandidatePool({ cache: this.worldKnowledgeState.sharedCandidateCache, key, build: () => [] });
       return { ...pool, key, checkpointId: this.currentCheckpoint?.id || null, queryFingerprint: pool.queryFingerprint || queryFingerprint, sharedRetrievalMs: Date.now() - startedAt };
     }
-    const context = this.getPromptContext({ query: safeQuery, assistContext: safeAssistContext, mentionedEntityIds: safeMentionedEntityIds, diagnostic: true });
+    const context = this.getPromptContext({ query: safeQuery, assistContext: safeAssistContext, mentionedEntityIds: safeMentionedEntityIds, diagnostic: true, includeScopedSupplemental: true });
     if (!context?.retrieval) return null;
     const subjectId = context.queryPlan?.entities?.characters?.[0] || null;
     const pool = createSharedCandidatePool({
@@ -1042,7 +1067,7 @@ class WorldlineService {
     return { ...pool, key, checkpointId: this.currentCheckpoint?.id || null, queryFingerprint: pool.queryFingerprint || queryFingerprint, sharedRetrievalMs: Date.now() - startedAt };
   }
 
-  getSubjectiveWorldView({ responderId, query = "", assistContext = "", mentionedEntityIds = [], conversationId = null, turnEpoch = null, sceneRevision = null, presenceRevision = null, directObservationFactIds = [] } = {}) {
+  getSubjectiveWorldView({ responderId, query = "", assistContext = "", mentionedEntityIds = [], conversationId = null, turnEpoch = null, sceneRevision = null, presenceRevision = null, directObservationFactIds = [], directObservationFacts = [] } = {}) {
     const mode = this._settings().subjectiveWorldMode;
     if (!['DIAGNOSTIC', 'PRODUCTION'].includes(mode) || responderId === null || responderId === undefined) return null;
     const snapshot = this.currentCheckpoint?.snapshot;
@@ -1053,13 +1078,21 @@ class WorldlineService {
     if (!pool) return null;
     const live = this.getLiveState();
     const scopeStartedAt = Date.now();
-    const scope = resolveKnowledgeScope({ snapshot, responderId: responderId2, subjectId: pool.subjectId, live });
+    const realmRootByCharacter = createRealmRootIndex(snapshot);
+    const scope = resolveKnowledgeScope({ snapshot, responderId: responderId2, subjectId: pool.subjectId, live, realmRootByCharacter });
     const memoryStartedAt = Date.now();
     const memoryFacts = memoryFactsForResponder(this.memoryEngine, responderId2);
     const memoryRecallMs = Date.now() - memoryStartedAt;
     const selfFacts = this._selfPolicyFacts(snapshot, responderId2);
-    const candidates = [...selfFacts, ...memoryFacts, ...pool.candidates];
-    const scopeByEntity = new Map([...new Set(candidates.map((fact) => String(fact.entityId || "")).filter(Boolean))].map((entityId) => [entityId, resolveKnowledgeScope({ snapshot, responderId: responderId2, subjectId: entityId, live })]));
+    const hydratedScopedSupplemental = this._hydrateScopedSupplementalFacts(pool.candidates);
+    // Personal and secret Supplemental entries are deliberately body-less in
+    // the shared pool. Never pass an unhydrated placeholder to policy: it
+    // cannot be displayed safely and must not become a different responder's
+    // cache-visible candidate.
+    const redactedScopedFactIds = new Set((pool.candidates || []).filter((fact) => fact?.sourceTier === "PLAYER_SUPPLEMENTAL" && ["PERSONAL_MEMORY", "SECRET"].includes(fact?.knowledgeLevel) && !fact?.value).map((fact) => String(fact.factId || "")));
+    const safeDirectObservationFacts = (Array.isArray(directObservationFacts) ? directObservationFacts : []).filter((fact) => fact && typeof fact === "object" && fact.knowledgeLevel === "DIRECT_OBSERVATION" && String(fact.entityId || "") === String(pool.subjectId || "") && Array.isArray(fact.directObserverIds) && fact.directObserverIds.map(String).includes(responderId2)).map((fact) => ({ ...fact, factId: String(fact.factId || ""), entityId: String(fact.entityId), directObserverIds: [responderId2], observationEvidenceComplete: true, temporalSafe: fact.temporalSafe === true })).sort((left, right) => left.factId.localeCompare(right.factId)).slice(0, 16);
+    const candidates = [...selfFacts, ...memoryFacts, ...pool.candidates.filter((fact) => !redactedScopedFactIds.has(String(fact.factId || ""))), ...hydratedScopedSupplemental, ...safeDirectObservationFacts];
+    const scopeByEntity = new Map([...new Set(candidates.map((fact) => String(fact.entityId || "")).filter(Boolean))].map((entityId) => [entityId, resolveKnowledgeScope({ snapshot, responderId: responderId2, subjectId: entityId, live, realmRootByCharacter })]));
     const scopeResolveMs = Date.now() - scopeStartedAt;
     const safeDirectObservationFactIds = [...new Set((Array.isArray(directObservationFactIds) ? directObservationFactIds : []).map((id) => String(id)).filter(Boolean))].sort().slice(0, 128);
     const memoryRevision = shortFingerprint(memoryFacts.map((fact) => [fact.factId, fact.contentRef, fact.knowledgeLevel, fact.ownerId, fact.knownBy, fact.participantIds, fact.asOf]));
@@ -1072,6 +1105,7 @@ class WorldlineService {
       sceneRevision: sceneRevision ?? null,
       presenceRevision: presenceRevision ?? null,
       directObservationFactIds: safeDirectObservationFactIds,
+      directObservationFacts: safeDirectObservationFacts.map((fact) => [fact.factId, fact.value, fact.asOf]),
       memoryRevision,
       scopeRevision,
       mode,
@@ -1127,16 +1161,27 @@ class WorldlineService {
     return settings.promptIntegrationEnabled === true && settings.subjectiveWorldMode === "PRODUCTION";
   }
 
-  getSubjectivePromptContext({ responderId, query = "", assistContext = "", mentionedEntityIds = [], conversationId = null, turnEpoch = null, sceneRevision = null, presenceRevision = null, directObservationFactIds = [], historicalReferenceInfo = null } = {}) {
+  getSubjectivePromptContext({ responderId, query = "", assistContext = "", mentionedEntityIds = [], conversationId = null, turnEpoch = null, sceneRevision = null, presenceRevision = null, directObservationFactIds = [], directObservationFacts = [], historicalReferenceInfo = null, tokenBudget = null } = {}) {
     if (!this.isSubjectivePromptIntegrationEnabled()) return null;
-    const view = this.getSubjectiveWorldView({ responderId, query, assistContext, mentionedEntityIds, conversationId, turnEpoch, sceneRevision, presenceRevision, directObservationFactIds });
+    const view = this.getSubjectiveWorldView({ responderId, query, assistContext, mentionedEntityIds, conversationId, turnEpoch, sceneRevision, presenceRevision, directObservationFactIds, directObservationFacts });
     if (!view) return null;
-    const worldText = buildSubjectiveWorldPrompt(view);
+    const formatStartedAt = Date.now();
+    const formatted = buildSubjectiveWorldTurnRecall(view, { tokenBudget });
     return {
-      worldText,
+      worldStableText: buildWorldStablePrompt({ checkpointId: view.checkpointId, checkpointAsOf: view.asOf }),
+      worldTurnRecallText: formatted.text,
+      worldTurnRecallTokens: formatted.tokens,
+      worldTurnRecallTrimmed: formatted.trimmed,
       historicalReferenceInfo: buildHistoricalReferenceReplacement(historicalReferenceInfo, view.asOf),
       queryFingerprint: view.queryFingerprint || null,
-      cacheHit: view.cacheHit === true
+      cacheHit: view.cacheHit === true,
+      metrics: {
+        ...view.metrics,
+        worldRetrievalMs: view.metrics?.sharedRetrievalMs || 0,
+        worldPolicyMs: view.metrics?.knowledgePolicyMs || 0,
+        worldFormatMs: Date.now() - formatStartedAt,
+        worldTurnRecallTokens: formatted.tokens
+      }
     };
   }
 

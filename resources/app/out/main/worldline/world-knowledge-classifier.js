@@ -26,7 +26,12 @@ function fact(candidate, values) {
     sourceComplete: true,
     candidateSetComplete: true,
     evidenceRefs: ["CHECKPOINT", `CANDIDATE:${candidate.id}`, values.evidence],
-    contentRef: values.contentRef || null
+    contentRef: values.contentRef || null,
+    knownBy: Array.isArray(values.knownBy) ? values.knownBy.slice() : undefined,
+    ownerId: values.ownerId || null,
+    authorizationComplete: values.authorizationComplete === true,
+    directObserverIds: Array.isArray(values.directObserverIds) ? values.directObserverIds.slice() : undefined,
+    observationEvidenceComplete: values.observationEvidenceComplete === true
   };
 }
 
@@ -104,16 +109,40 @@ function supplementalFact(candidate, checkpointDate) {
   const entry = candidate?.payload || {};
   const title = text(entry.title || candidate?.title);
   const body = text(entry.body);
-  if (candidate?.visibility !== "PUBLIC_WORLD" || candidate?.hidden === true) return [];
-  return [fact(candidate, {
-    entityId: candidate.id,
+  if (candidate?.hidden === true || !title || !body) return [];
+  const visibility = candidate?.visibility || "PUBLIC_WORLD";
+  const audienceIds = [...new Set((candidate?.entityRefs?.characters || []).map((id) => text(id)).filter(Boolean))];
+  const base = {
+    entityId: audienceIds[0] || candidate.id,
     field: "SUPPLEMENTAL",
-    value: title && body ? `${title}：${body}` : "",
+    value: `${title}：${body}`,
+    temporalSafe: checkpointSafe(candidate, checkpointDate),
+    contentRef: text(entry.id) || null
+  };
+  if (visibility === "PUBLIC_WORLD") return [fact(candidate, {
+    ...base,
     knowledgeLevel: "PUBLIC_WORLD",
     public: true,
-    temporalSafe: checkpointSafe(candidate, checkpointDate),
-    evidence: "PLAYER_PUBLIC_SUPPLEMENTAL",
-    contentRef: text(entry.id) || null
+    evidence: "PLAYER_PUBLIC_SUPPLEMENTAL"
+  })];
+  if (visibility === "COURT_PUBLIC") {
+    if (!audienceIds.length) return [];
+    return [fact(candidate, {
+      ...base,
+      knowledgeLevel: "COURT_PUBLIC",
+      public: true,
+      evidence: "PLAYER_COURT_SUPPLEMENTAL"
+    })];
+  }
+  if (!audienceIds.length) return [];
+  return [fact(candidate, {
+    ...base,
+    knowledgeLevel: visibility === "SECRET" ? "SECRET" : "PERSONAL_MEMORY",
+    public: false,
+    knownBy: audienceIds,
+    ownerId: visibility === "PERSONAL" && audienceIds.length === 1 ? audienceIds[0] : null,
+    authorizationComplete: true,
+    evidence: visibility === "SECRET" ? "PLAYER_SECRET_SUPPLEMENTAL" : "PLAYER_PERSONAL_SUPPLEMENTAL"
   })];
 }
 

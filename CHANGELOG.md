@@ -8,6 +8,11 @@
 
 | 版本 | 重点 | 详细记录 |
 | --- | --- | --- |
+| v8.6.1 Sol Stage 7 | 最终代码审查与 149 组发布门禁通过；确认 Terra 主链路 11 次实机请求，并在最终版补测 7 次带分块字段的 A 组请求。修复旧遥测冒充 V8.6.1 观测；用户确认实机无问题并豁免剩余 10/30/50 生产 A/B，Full Freeze 按人工验收签发 | [Sol Stage 7 最终审查](docs/v8.6.1-sol-stage-7-final-review.md) |
+| v8.6.1 Sol Stage 4 | 修复 Worldline 压力下先删 Memory、Personal Supplemental 共享 ACL、当前 Game Truth 冲突优先级和稳定块溢出；补齐确定性格式及 Provider 指标持久化。148 组发布门禁通过，等待 Luna UI 与实机 Gate | [Sol Stage 4 审查](docs/v8.6.1-sol-stage-4-safety-review.md) |
+| v8.6.1 Luna Stage 5 | 世界线诊断页接通只读 Token/Cache 观测，展示 Memory/Worldline 分块、Provider/内部缓存层与关键耗时；补充知识明确会话、检查点和 Runtime ID 角色范围。生产 Prompt 默认仍关闭，等待真实 CK3/Provider A/B | [Luna Stage 5 实施报告](docs/v8.6.1-luna-stage-5-implementation-report.md) |
+| v8.6.1 Terra Stage 2 + 3 | 实现稳定 Checkpoint Anchor / 动态 Worldline Turn Recall、Global Headroom、预算优先裁剪、递归 Realm Root、最小 Presence Observation 与受限 Supplemental；Memory 核心和默认生产开关未改，等待 Sol 独立审查 | [Terra Stage 2 + 3 实施报告](docs/v8.6.1-terra-stage-2-3-implementation-report.md) |
+| v8.6.1 Sol Stage 1 | 冻结 Prompt/Memory 兼容性合同；复现动态 Subjective World 位于 History Prefix 前及 Memory/Worldline 独立预算问题，明确新顺序、Global Headroom、Memory 冻结、事实优先级、Secret 与失败隔离 Gate。未改生产代码，默认继续关闭 | [Sol Stage 1 兼容性合同](docs/v8.6.1-sol-stage-1-compatibility-contract.md) |
 | v8.6 Sol Stage 6 复审 | 修复普通姓名/战争过度公开与 legacy 历史伪时间安全；结构化 Temporal Gate、真实 PromptBuilder 唯一注入及 135 组回归通过，CODE REVIEW PASS；实机/Provider/远端 CI 未签发 | [Sol 最终正确性复审](docs/v8.6-sol-final-correctness-review.md) |
 | v8.6 Terra Production Subjective Prompt | 实现字段级公开范围、Historical Context Replacement Phase B 与唯一 server-side responder-scoped Prompt block；默认仍关闭，构建失败不回退旧未过滤 World Context，等待 Sol 重审 | [Terra 实施报告](docs/v8.6-terra-production-subjective-prompt-report.md) |
 | v8.6 Sol Stage 6 | 修复回应角色首屏全表排序/预取、搜索竞态、Worker raw 状态及 Subjective 来源/缓存可读性；134 组回归通过。审查确认 Character Knowledge 未进入生产 Prompt、World/Delta 无公开层级、Historical Context Replacement 未进入 Phase B，故 CODE REVIEW FAIL，退回 Terra | [Sol 最终正确性审查](docs/v8.6-sol-final-correctness-review.md) |

@@ -158,7 +158,7 @@ try {
       queryPlan: { entities: { characters: ["2"] } },
       retrieval: {
         supplementalRevision: "same-revision",
-        selected: { gameTruth: [], delta: [], supplemental: [{ id: `supplemental:${id}`, sourceTier: "PLAYER_SUPPLEMENTAL", visibility: "PUBLIC_WORLD", hidden: false, gameDate: "1170.6.6", payload: { id } }] }
+        selected: { gameTruth: [], delta: [], supplemental: [{ id: `supplemental:${id}`, sourceTier: "PLAYER_SUPPLEMENTAL", visibility: "PUBLIC_WORLD", hidden: false, gameDate: "1170.6.6", payload: { id, title: id, body: `正文:${id}` } }] }
       }
     };
   };

@@ -4,7 +4,7 @@
 
 ## 推荐阅读顺序
 
-V8.6 当前施工入口：[Sol Stage 6 最终正确性复审](v8.6-sol-final-correctness-review.md)。普通姓名/地点 Court 范围、头衔/战争 Realm 范围、结构化 Temporal Gate 与唯一 server-side Subjective Prompt 已通过代码审查和真实 PromptBuilder 回归；默认仍关闭，下一步进入 Electron/CK3/Provider/性能实机 Gate，总冻结仍为 `NOT READY`。
+V8.6.1 当前版本入口：[Sol Stage 7 最终审查](v8.6.1-sol-stage-7-final-review.md)。代码与 149 组发布门禁通过，Terra 主链路 11 次实机冒烟有效，最终版另有 7 次带新分块字段的 A 组请求；旧遥测冒充 V8.6.1 观测的问题已修复。用户确认实机无问题并明确豁免剩余生产 10/30/50 A/B，未执行部分保留标注；`V8.6.1 FULL FREEZE = PASS (USER ACCEPTANCE)`。
 
 当前事故入口：[V8.5.1 摘要 P0 / 多人入场 P2 修复报告](v8.5.1-summary-incident-review.md)：摘要链路审计、长会话恢复、参与者隔离与入场延迟。
 
@@ -51,7 +51,7 @@ V8.5.1 历史基线：[Sol 最终审查与修复](v8.5.1-sol-final-review.md)，
 
 ## 文档分类
 
-最新阶段：[V8.6 Sol Stage 6 最终正确性复审](v8.6-sol-final-correctness-review.md)，已修复过度公开与伪时间安全问题，135/135 发布组通过并签发 `CODE REVIEW PASS`；实机、Provider、usage、性能与远端 CI 未完成，V8.6 总冻结仍为 `NOT READY`。
+最新阶段：[V8.6.1 Sol Stage 7 最终审查](v8.6.1-sol-stage-7-final-review.md)；主链路和最终版分块观测实机通过，代码终审无遗留 P0，旧遥测来源边界 P1 已修复。当前 A 组为 7 次、生产 B 组未执行，剩余矩阵由用户明确豁免；总冻结按人工验收签发为 `PASS`。
 
 ### 架构与运行规则
 
@@ -104,6 +104,9 @@ V8.5.1 历史基线：[Sol 最终审查与修复](v8.5.1-sol-final-review.md)，
 - [v8.6-luna-stage-5-implementation-report.md](v8.6-luna-stage-5-implementation-report.md)：安全 Subjective DTO IPC、回应角色选择、单角色/A-B 诊断 UI、Secret 计数脱敏和 Sol Stage 6 交接边界。
 - [v8.6-sol-final-correctness-review.md](v8.6-sol-final-correctness-review.md)：Stage 6 复审、字段公开范围、结构化 Temporal Gate、真实 PromptBuilder 唯一注入及剩余实机 Gate。
 - [v8.6-terra-production-subjective-prompt-report.md](v8.6-terra-production-subjective-prompt-report.md)：字段级公开范围、Historical Phase B 与生产 Subjective Prompt 实施及 Sol 复审边界。
+- [v8.6.1-sol-stage-1-compatibility-contract.md](v8.6.1-sol-stage-1-compatibility-contract.md)：V8.6.1 Prompt 调序、Global Headroom、Memory 冻结、事实优先级、Secret 与失败隔离合同。
+- [v8.6.1-terra-stage-2-3-implementation-report.md](v8.6.1-terra-stage-2-3-implementation-report.md)：V8.6.1 Prompt / Budget、Realm / Observation 与 Scoped Supplemental 实施和边界。
+- [v8.6.1-sol-stage-4-safety-review.md](v8.6.1-sol-stage-4-safety-review.md)：V8.6.1 Memory-first Context、Secret/Scoped Supplemental、事实仲裁、确定性与指标独立审查。
 - [VOTC_v8.1_Campaign_Identity与Worldline_Store_Foundation设计.md](VOTC_v8.1_Campaign_Identity与Worldline_Store_Foundation设计.md)：V8.1 存档身份协议、session 降级、Worldline schema、原子持久化和 Shadow 集成合同。
 - [v8.1-campaign-identity-worldline-store-implementation-report.md](v8.1-campaign-identity-worldline-store-implementation-report.md)：V8.0 P0/P1 审计、V8.1 应用与 Workshop 实施、自动化验证和实机边界。
 - [v8.3.1-historical-figure-dashboard-implementation-report.md](v8.3.1-historical-figure-dashboard-implementation-report.md)：V8.3.1 实机诊断 Snapshot、Overlay Dashboard、append-only Ground Truth 与冻结边界。

@@ -5,7 +5,17 @@ const MAX_SHARED_CANDIDATES = 128;
 function safeCandidate(candidate) {
   if (!candidate || typeof candidate !== "object") return null;
   const copy = { ...candidate };
-  if (copy.hidden === true || ["SELF", "DIRECT_OBSERVATION", "PERSONAL_MEMORY", "SECRET"].includes(copy.knowledgeLevel)) {
+  if (["PERSONAL_MEMORY", "SECRET"].includes(copy.knowledgeLevel)) {
+    return {
+      factId: copy.factId || null,
+      contentRef: copy.contentRef || null,
+      sourceTier: copy.sourceTier || null,
+      knowledgeLevel: copy.knowledgeLevel,
+      asOf: copy.asOf || null,
+      temporalSafe: copy.temporalSafe === true
+    };
+  }
+  if (copy.hidden === true || ["SELF", "DIRECT_OBSERVATION"].includes(copy.knowledgeLevel)) {
     delete copy.value;
     delete copy.title;
     delete copy.body;

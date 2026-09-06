@@ -27,7 +27,7 @@ Voices of the Court 是一个面向《Crusader Kings III》（CK3）的沉浸式
 
 ## 运行环境
 
-当前施工：V8.6 [Sol Stage 6 最终正确性复审](docs/v8.6-sol-final-correctness-review.md)已 `CODE REVIEW PASS`。普通姓名/地点限制为 Court，头衔与带角色锚点的战争/年度变化限制为 Realm；Historical Phase B 现按检查点逐项执行时间门禁，并由真实 PromptBuilder 回归证明旧背景不重复注入。生产路径仍只在显式 `subjectiveWorldMode=PRODUCTION` 且 `promptIntegrationEnabled=true` 时启用，默认保持诊断/关闭；真实 Electron、CK3、Provider、usage、性能和远端 CI 尚未验收，V8.6 总冻结仍为 NOT READY。
+当前版本：V8.6.1 [Sol Stage 7 最终审查](docs/v8.6.1-sol-stage-7-final-review.md)已签发。代码审查与 149 组发布门禁通过，Terra 主链路完成 11 次真实 Provider 对话冒烟；最终版重启后又完成 7 次带 Memory/Worldline 分块字段的 A 组实机请求，观测管线通过，旧遥测不得冒充新证据的 P1 已修复。用户确认当前实机无问题并明确豁免剩余 10/30/50 生产 A/B，未执行部分不记为测试通过；`V8.6.1 FULL FREEZE = PASS (USER ACCEPTANCE)`。
 
 最新终审：V8.5.2 [Astra Stage 6 集成审查](docs/v8.5.2-astra-final-review.md)已完成本轮代码修复、120 组回归、三份真实存档矩阵和隔离 Electron IPC 验证。修复交叉姓名误拆、原生人物重复诊断实体及历史 Runtime 缺失状态丢失；正式 Overlay 连续交互、实际 Provider 和长会话 Gate 仍待验收，`INTERNAL FREEZE = NOT READY`。补充知识已可保存和诊断召回，但正式配置的对话注入仍关闭；当前只作用于本检查点，长期 Player Canon 属于 V8.7 规划。
 
@@ -216,13 +216,13 @@ node scripts\test-release.js
 ## 版本信息
 
 - 外挂 UI 版本：v2.0.4
-- 当前应用功能基线：v8.4.2 实现冻结与 P0 热修 + v8.5 Luna/Terra 玩家语义展示与 Retrieval 2.0（代码与确定性回归 PASS，Sol/Astra 尚未完成，Prompt Default On 保持关闭）
+- 当前应用功能基线：V8.6 Subjective World 代码复审通过 + V8.6.1 Sol Stage 4 安全与兼容审查通过；生产 Prompt 默认仍为诊断/关闭，Luna UI 与实机 Gate 尚未完成
 - CK3 模组版本：Voices of the Court 2.0.5
 - 模组支持版本：CK3 1.18.*
 - UI 主题：宫廷编年史风格（深红、暗金、羊皮纸文本层级）
 - UI 主题切换：羊皮卷、骑士纹章、水墨画卷三套完整历史风格；分别拥有独立背景、边框结构、按钮造型、消息卡片、输入框、字体和滚动条，并可自动保存选择
 - UI 素材生成提示词：参见 [docs/UI_ASSET_PROMPTS_2.0.3.md](docs/UI_ASSET_PROMPTS_2.0.3.md)
-- 当前重点：按 V8.5 顺序切换 Sol，独立审查 DTO/Query/Ranker/Cache/IPC 的事实、时间、身份、可见性和缓存合同；再由 Astra 完成最终发布审查。Official VOTC 2.0.3 Action、Memory Engine 2.5、外挂 UI 2.0.4 与默认 Prompt/cache 合同保持冻结
+- 当前重点：切换 Luna 执行 V8.6.1 Stage 5，完成 Prompt Diagnostics、Cache Breakpoint、Memory/Worldline Token/Cache 展示与 Supplemental 范围文案；Official VOTC 2.0.3 Action、Memory Engine 2.5 核心与默认生产开关保持冻结
 
 ## 已知限制
 

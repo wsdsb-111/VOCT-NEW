@@ -14,6 +14,13 @@ function actorIds(entry) {
   return uniqueStrings((entry?.actors || []).map((actor) => actor?.runtimeId));
 }
 
+function runtimeIds(values) {
+  return uniqueStrings(values).flatMap((value) => {
+    const match = value.match(/^#?(\d+)$/);
+    return match ? [match[1]] : [];
+  });
+}
+
 function buildWorldCandidates({ snapshot, analysis, annualDelta = [], supplemental = [] } = {}) {
   const candidates = [];
   const characters = snapshot?.characters || {};
@@ -76,13 +83,14 @@ function buildWorldCandidates({ snapshot, analysis, annualDelta = [], supplement
 
   for (const entry of supplemental) {
     const text = `${entry?.title || ""}\n${entry?.body || ""}\n${Array.isArray(entry?.entities) ? entry.entities.join(" ") : ""}`;
+    const scopedCharacterIds = runtimeIds(entry?.entities);
     candidates.push({
       id: `supplemental:${entry?.id || "unknown"}`,
       category: "SUPPLEMENTAL",
       kind: "SUPPLEMENTAL",
       sourceTier: "PLAYER_SUPPLEMENTAL",
-      entityRefs: { characters: [], titles: [], keys: uniqueStrings([entry?.title, ...(entry?.entities || [])]) },
-      gameDate: entry?.gameDate || null,
+      entityRefs: { characters: scopedCharacterIds, titles: [], keys: uniqueStrings([entry?.title, ...(entry?.entities || [])]) },
+      gameDate: entry?.gameDate || snapshot?.gameDate || null,
       dateRange: entry?.dateRange || null,
       visibility: entry?.visibility || "UNKNOWN",
       hidden: Boolean(entry?.hidden),

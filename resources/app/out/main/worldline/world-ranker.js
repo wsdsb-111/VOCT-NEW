@@ -72,12 +72,12 @@ function recencyScore(candidate, deltaCount) {
   return Math.max(1, Math.min(5, 6 - Math.min(5, deltaCount - (candidate.recencyRank || deltaCount))));
 }
 
-function rankWorldCandidates(candidates, { plan, checkpointDate } = {}) {
+function rankWorldCandidates(candidates, { plan, checkpointDate, includeScopedSupplemental = false } = {}) {
   const trimmed = [];
   const ranked = [];
   const deltaCount = candidates.filter((candidate) => candidate.category === "DELTA").length;
   for (const candidate of candidates) {
-    if (candidate.category === "SUPPLEMENTAL" && (candidate.hidden || candidate.visibility !== "PUBLIC_WORLD")) {
+    if (candidate.category === "SUPPLEMENTAL" && (candidate.hidden || (!includeScopedSupplemental && candidate.visibility !== "PUBLIC_WORLD"))) {
       trimmed.push({ type: "SUPPLEMENTAL", id: candidate.payload?.id || candidate.id, title: candidate.title, reason: "VISIBILITY_BLOCKED" });
       continue;
     }
