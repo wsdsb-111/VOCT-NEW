@@ -24,7 +24,7 @@ async function main() {
     assert.equal(lookup(index, "韩错误").status, "NAME_INDEX_MISS");
     assert.equal(lookup(index, "韩小明").status, "NAME_INDEX_MISS", "unknown culture cannot prove surname-first full-name composition");
     assert.equal(lookup(index, "constructor").status, "NAME_INDEX_MISS", "prototype properties are not historical names");
-    const snapshot = { gameDate: "1155.1.1", characters: { "1": { firstName: "世忠", birth: "1090.1.26", gender: "male" }, "2": { firstName: "世忠", birth: "900.1.1", gender: "male" }, "3": { firstName: "思昭" } }, definitionToRuntime: { han: "1" }, runtimeToDefinitions: { "1": ["han"], "2": ["han"] }, nameToCharacterIds: { "世忠": ["1"], "赵思昭": ["3"] }, titles: {} };
+    const snapshot = { gameDate: "1155.1.1", characters: { "1": { firstName: "世忠", birth: "1090.1.26", gender: "male" }, "2": { firstName: "世忠", birth: "900.1.1", gender: "male" }, "3": { firstName: "思昭" } }, definitionToRuntime: { han: "1" }, runtimeToDefinitions: { "1": ["han"], "2": ["han"] }, nameToCharacterIds: { "世忠": ["1"], "赵思昭": ["3"] }, indexes: { verifiedFullNameToRuntimeIds: { "赵思昭": ["3"] }, givenNameToRuntimeIds: { "世忠": ["1"], "思昭": ["3"] } }, titles: {} };
     const analyze = (query, extra = {}) => analyzeSharedQuery({ snapshot, query, historicalDefinitionLookup: value => lookup(index, value), ...extra });
     assert.equal(analyze("韩世忠").characters.length, 0, "contradictory multi-runtime binding cannot be resolved by picking the better age");
     assert.equal(analyze("韩世忠", { mentionedEntityIds: ["1"] }).characters.length, 0, "memory entity hints cannot bypass a rejected historical identity");
@@ -72,7 +72,7 @@ async function main() {
       newWorker.emit("error", new Error("fixture worker failure"));
       await Promise.resolve();
       assert.equal(client.requests.size, 0, "worker failure settles outstanding requests");
-      assert.equal(client.status, "FAILED");
+      assert.equal(client.status, "FAILED_TRANSIENT");
     } finally { client.dispose(); }
   } finally { fs.rmSync(root, { recursive: true, force: true }); }
   console.log("V8.5.1 Sol Safety: PASS (parser, binding, fallback, UI and worker generation)");

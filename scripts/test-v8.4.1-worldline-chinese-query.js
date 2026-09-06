@@ -12,6 +12,10 @@ const snapshot = {
     npc_name: ["100"],
     han_name: ["101"]
   },
+  indexes: {
+    verifiedFullNameToRuntimeIds: { "李小明": ["100"], "韩世忠": ["101"] },
+    givenNameToRuntimeIds: { npc_name: ["100"], han_name: ["101"] }
+  },
   definitionToRuntime: {
     nansong_yue_085: "100"
   },
@@ -40,13 +44,13 @@ function findLocalizedKeys(type, value) {
   return values[`${type}:${value}`] || [];
 }
 
-const localizedOnlySnapshot = { ...snapshot, definitionToRuntime: {} };
+const localizedOnlySnapshot = { ...snapshot, definitionToRuntime: {}, runtimeToDefinitions: {} };
 const chineseCharacter = analyzeSharedQuery({ snapshot: localizedOnlySnapshot, query: "李小明现在在哪里", localize, findLocalizedKeys });
 assert.deepEqual(chineseCharacter.characters.map((item) => item.id), ["100"], "a Chinese sentence must resolve the localized character entity rather than use the whole sentence as one term");
 assert.ok(chineseCharacter.terms.includes("李小明"), "CJK 2-gram terms must retain the character name");
 assert.ok(!chineseCharacter.terms.includes("李小明现在在哪里"), "the complete Chinese sentence must never become the only query term");
 assert.equal(chineseCharacter.characters[0].displayName, "李小明", "localized character display text must remain separate from raw identity");
-assert.ok(chineseCharacter.characters[0].matchSources.includes("localized_character_name"), "localized name resolution must disclose its match source");
+assert.ok(chineseCharacter.characters[0].matchSources.includes("runtime_native_name"), "a verified localized full-name index must disclose its Runtime-native match source");
 assert.ok(analysisTextMatches(chineseCharacter, "李小明已抵达前线"), "Supplemental matching must reuse the analyzed entity terms");
 
 assert.equal(analyzeSharedQuery({ snapshot, query: "岳飞现在在哪里", localize, findLocalizedKeys }).characters.length, 0, "historical candidates cannot use localization to bypass missing identity evidence");

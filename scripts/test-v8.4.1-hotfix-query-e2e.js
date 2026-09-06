@@ -27,6 +27,7 @@ try {
   const localizationPath = path.join(modRoot, "localization", "simp_chinese", "nansong_l_simp_chinese.yml");
   fs.mkdirSync(path.dirname(localizationPath), { recursive: true });
   fs.mkdirSync(path.join(modRoot, "history", "characters"), { recursive: true });
+  fs.mkdirSync(path.join(baseGameRoot, "history", "characters"), { recursive: true });
   fs.mkdirSync(path.join(baseGameRoot, "localization", "simp_chinese"), { recursive: true });
   fs.writeFileSync(localizationPath, "\uFEFFl_simp_chinese:\n Yuefei_name:0 \"岳飞\"\n", "utf8");
   fs.writeFileSync(path.join(modRoot, "history", "characters", "fixture.txt"), 'nansong_yue_085 = { name="岳飞" culture=han female=no 1103.3.24={ birth=yes } }\n', "utf8");

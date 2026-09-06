@@ -8,6 +8,15 @@
 
 | 版本 | 重点 | 详细记录 |
 | --- | --- | --- |
+| v8.6 Sol Stage 6 复审 | 修复普通姓名/战争过度公开与 legacy 历史伪时间安全；结构化 Temporal Gate、真实 PromptBuilder 唯一注入及 135 组回归通过，CODE REVIEW PASS；实机/Provider/远端 CI 未签发 | [Sol 最终正确性复审](docs/v8.6-sol-final-correctness-review.md) |
+| v8.6 Terra Production Subjective Prompt | 实现字段级公开范围、Historical Context Replacement Phase B 与唯一 server-side responder-scoped Prompt block；默认仍关闭，构建失败不回退旧未过滤 World Context，等待 Sol 重审 | [Terra 实施报告](docs/v8.6-terra-production-subjective-prompt-report.md) |
+| v8.6 Sol Stage 6 | 修复回应角色首屏全表排序/预取、搜索竞态、Worker raw 状态及 Subjective 来源/缓存可读性；134 组回归通过。审查确认 Character Knowledge 未进入生产 Prompt、World/Delta 无公开层级、Historical Context Replacement 未进入 Phase B，故 CODE REVIEW FAIL，退回 Terra | [Sol 最终正确性审查](docs/v8.6-sol-final-correctness-review.md) |
+| v8.6 Luna Stage 5 | 接入服务端回应角色候选、安全 Subjective DTO IPC、单角色与 A/B 主观世界诊断 UI；Secret 仅显示过滤计数，恢复并保护 Prompt / World Recall 旧诊断入口。133 组发布回归通过，真实 Electron/CK3/Provider/视觉 Gate 待 Sol Stage 6 | [Luna Stage 5 实施报告](docs/v8.6-luna-stage-5-implementation-report.md) |
+| v8.6 Sol Stage 4 | 独立修复共享/主观缓存串用与撤权失效、Secret/ACL DTO 泄漏、未知 responder、Scope 与冲突优先级问题；132 组发布回归通过，可进入 Luna Stage 5，生产 Prompt 尚未切换 | [Sol Stage 4 安全审查](docs/v8.6-sol-stage-4-safety-review.md) |
+| v8.6 Terra Stage 3 | 建立共享安全候选、Court/Realm Scope、定向 Memory adapter 与逐 responder 主观世界 Phase A；默认只诊断，不改旧 Prompt 注入。131 组发布回归通过，进入 Sol Stage 4 | [Terra Stage 3 主观世界报告](docs/v8.6-terra-stage-3-subjective-world-report.md) |
+| v8.6 Terra Stage 2 | 接入可验证 Live 完整姓名与 Snapshot reverse index；Historical Worker 以单飞行 1/5/30 秒策略恢复；Base Game 支持零 Mod/跨 Steam 库发现及歧义停机。127 组发布回归通过，继续 Terra Stage 3 | [Terra Stage 2 实施报告](docs/v8.6-terra-stage-2-implementation-report.md) |
+| v8.6 Sol Stage 1 | 关闭给名片段误确认与 Game Truth 注入；birth/family 来源差异降级为非身份 variant；冻结八级 Character Knowledge、Secret 撤权和非 ALLOW 脱敏合同。123 组发布回归通过，进入 Terra Stage 2 | [Sol Stage 1 安全审查](docs/v8.6-sol-stage-1-safety-review.md) |
+| v8.6 Astra Stage 0 | 完成角色知识/隐私/缓存/兼容架构合同；复现给名片段误确认，核对元数据硬冲突与现有 CI。120 组基线回归通过，进入 Sol Stage 1；本阶段仅审查与文档 | [V8.6 架构切换合同](docs/v8.6-astra-transition-contract.md) |
 | v8.5.2 Astra Stage 6 | 修复交叉姓名误拆、原生人物重复诊断实体和历史 Runtime 缺失状态丢失；120 组回归、三份存档和隔离 Electron IPC 通过。补充知识基础链路已实现，生产注入仍关闭；正式视觉、Provider 与长会话 Gate 未签发 | [Astra 最终集成审查](docs/v8.5.2-astra-final-review.md) |
 | v8.5.2 Sol Stage 5 | 独立审查 Luna UI/DTO 边界；修复 Runtime-native 成功被旧聚合 `NAME_INDEX_MISS` 覆盖、候选数错误、coverage 大小写/冲突优先级遗漏及降级路径 raw 值泄漏。120 组回归通过，等待 Astra 最终集成 | [Sol UI/DTO 边界审查](docs/v8.5.2-sol-ui-boundary-review.md) / [V8 阶段记录](docs/V8阶段开发记录.md) |
 | v8.5.2 Luna Stage 4 | 接入逐实体 Historical / Runtime-native 玩家语义、懒展开 Worldline Difference、来源不完整/歧义可读状态和 Historical Mapping A/B/C 分层；119 组发布回归通过，等待 Sol Stage 5 | [Luna UI 实施报告](docs/v8.5.2-luna-ui-implementation-report.md) / [V8 阶段记录](docs/V8阶段开发记录.md) |

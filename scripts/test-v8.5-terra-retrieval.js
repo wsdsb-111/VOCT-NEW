@@ -32,6 +32,7 @@ function snapshot() {
       "101": { id: "101", firstName: "Yuefei", fullName: "Yuefei", alive: true, location: "xiangyang" }
     },
     nameToCharacterIds: { yuefei: ["101"], "思昭": ["100"] },
+    indexes: { verifiedFullNameToRuntimeIds: { "赵思昭": ["100"], yuefei: ["101"] }, givenNameToRuntimeIds: { "思昭": ["100"] } },
     definitionToRuntime: {},
     runtimeToDefinitions: {},
     titles: {},

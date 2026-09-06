@@ -5,13 +5,24 @@ const fs = require("fs");
 const path = require("path");
 const { Worker, isMainThread, parentPort, workerData } = require("worker_threads");
 const { scanDirectEntries } = require("./game-state-adapter");
-const { SOURCE_DIRECTORIES, discoverSources, listFiles, probeHistoricalSources } = require("./historical-source-probe");
+const { SOURCE_DIRECTORIES, discoverSources, listFiles, probeHistoricalSources, watchSignature } = require("./historical-source-probe");
 const { HistoricalNameScanner, normalizeName } = require("./historical-name-scanner");
 
-const POLICY_VERSION = "v8.5.2-historical-index-4";
+const POLICY_VERSION = "v8.6-historical-index-5";
 const normalize = normalizeName;
 const literalName = value => /[\u3400-\u9fff\uf900-\ufaff]/u.test(String(value || "")) ? String(value).trim() : null;
 const SURNAME_FIRST_CULTURES = new Set(["han", "chinese", "khitan", "jurchen"]);
+function uniqueValues(rows, field, allowed = null) {
+  return [...new Set(rows.map((row) => row?.[field]).filter((value) => value && (!allowed || allowed.has(value))))];
+}
+function uniqueValue(rows, field, allowed = null) {
+  const values = uniqueValues(rows, field, allowed);
+  return values.length === 1 ? values[0] : null;
+}
+function sourceVariant(rows, field, code) {
+  const values = uniqueValues(rows, field);
+  return values.length > 1 ? { code, field, severity: "NOTICE", values } : null;
+}
 function fields(block) {
   const values = Object.create(null);
   scanDirectEntries(block, 0, block.length, (key, value) => {
@@ -92,7 +103,7 @@ function buildHistoricalDefinitionIndex({ sources, complete = true, missing = []
   const byId = Object.create(null), exactNames = Object.create(null), exactAliases = Object.create(null);
   onProgress("names");
   for (const [definitionId, sourceRows] of rows) {
-    const names = new Map(), nameConflicts = new Set();
+    const names = new Map(), nameConflicts = new Set(), rowNames = [];
     for (const row of sourceRows) {
       const given = literalName(row.name) || (translations.get(row.name)?.size === 1 ? literalName([...translations.get(row.name)][0]) : null);
       const houseRows = houses.get(row.house) || [];
@@ -106,10 +117,34 @@ function buildHistoricalDefinitionIndex({ sources, complete = true, missing = []
       // Only compose a name from verified literal/localized sources. Compound surnames
       // are valid just like one-character surnames; raw dynasty/house keys never are.
       const full = given && family && SURNAME_FIRST_CULTURES.has(String(row.culture || "").toLowerCase()) ? (given.startsWith(family) ? given : `${family}${given}`) : !row.dynasty && !row.house && given?.length > 1 ? given : null;
+      rowNames.push(full);
       if (full) names.set(normalize(full), full);
     }
-    const conflict = new Set(sourceRows.map(row => JSON.stringify([row.name, row.dynasty, row.house, row.culture, row.birthDate, row.gender, row.father, row.mother]))).size > 1;
-    const record = { definitionId, displayName: names.size === 1 ? [...names.values()][0] : null, names: [...names.values()], sourceRows, metadata: { birthDate: sourceRows[0]?.birthDate || null, gender: sourceRows[0]?.gender || "unknown", culture: sourceRows[0]?.culture || null, parents: { father: sourceRows[0]?.father || null, mother: sourceRows[0]?.mother || null }, siblings: [], spouses: [], children: [] }, conflicts: [...(conflict ? ["DEFINITION_SOURCE_CONFLICT"] : []), ...nameConflicts], sourceComplete: complete };
+    if (names.size > 1) nameConflicts.add("NAME_SOURCE_CONFLICT");
+    if (sourceRows.length > 1 && rowNames.some(Boolean) && rowNames.some((name) => !name)) nameConflicts.add("FULL_NAME_PROVENANCE_CONFLICT");
+    const knownGenders = uniqueValues(sourceRows, "gender", new Set(["male", "female"]));
+    if (knownGenders.length > 1) nameConflicts.add("GENDER_SOURCE_CONFLICT");
+    const sourceVariants = [
+      sourceVariant(sourceRows, "birthDate", "BIRTH_SOURCE_VARIANT"),
+      sourceVariant(sourceRows, "father", "FATHER_SOURCE_VARIANT"),
+      sourceVariant(sourceRows, "mother", "MOTHER_SOURCE_VARIANT")
+    ].filter(Boolean);
+    const record = {
+      definitionId,
+      displayName: names.size === 1 ? [...names.values()][0] : null,
+      names: [...names.values()],
+      sourceRows,
+      metadata: {
+        birthDate: uniqueValue(sourceRows, "birthDate"),
+        gender: knownGenders.length === 1 ? knownGenders[0] : "unknown",
+        culture: uniqueValue(sourceRows, "culture"),
+        parents: { father: uniqueValue(sourceRows, "father"), mother: uniqueValue(sourceRows, "mother") },
+        siblings: [], spouses: [], children: []
+      },
+      conflicts: [...nameConflicts],
+      sourceVariants,
+      sourceComplete: complete
+    };
     byId[definitionId] = record;
     for (const name of record.names) { const key = normalize(name); if (!exactNames[key]) exactNames[key] = []; exactNames[key].push(definitionId); }
   }
@@ -142,8 +177,8 @@ function scanHistoricalNames(index, value) {
 }
 
 class HistoricalIndexLifecycle {
-  constructor({ userFolder, aliases = [], probe = probeHistoricalSources, build = buildHistoricalDefinitionIndex } = {}) {
-    this.config = { userFolder, aliases, policyVersion: POLICY_VERSION };
+  constructor({ userFolder, aliases = [], baseGamePath = null, probe = probeHistoricalSources, build = buildHistoricalDefinitionIndex } = {}) {
+    this.config = { userFolder, aliases, baseGamePath, policyVersion: POLICY_VERSION };
     this.probe = probe;
     this.build = build;
     this.index = null;
@@ -151,6 +186,8 @@ class HistoricalIndexLifecycle {
     this.generation = 0;
     this.probeCount = 0;
     this.buildCount = 0;
+    this.discovery = null;
+    this.discoveryWatchSignature = null;
   }
   meta() {
     const index = this.index;
@@ -158,12 +195,20 @@ class HistoricalIndexLifecycle {
   }
   check({ force = false, onBuild = () => {}, onProgress = () => {} } = {}) {
     this.probeCount += 1;
-    const before = this.probe(this.config);
+    if (!this.discovery || force || watchSignature(this.discovery.watchFiles) !== this.discoveryWatchSignature) {
+      this.discovery = discoverSources(this.config.userFolder, { baseGamePath: this.config.baseGamePath });
+      this.discoveryWatchSignature = this.discovery.watchSignature;
+    }
+    const before = this.probe({ ...this.config, discovery: this.discovery });
     if (!force && this.index && before.fingerprint === this.fingerprint) return { type: "unchanged", meta: this.meta() };
     onBuild();
     this.buildCount += 1;
     const candidate = this.build({ ...before, aliases: this.config.aliases, onProgress });
-    const after = this.probe(this.config);
+    if (watchSignature(this.discovery.watchFiles) !== this.discoveryWatchSignature) {
+      this.discovery = discoverSources(this.config.userFolder, { baseGamePath: this.config.baseGamePath });
+      this.discoveryWatchSignature = this.discovery.watchSignature;
+    }
+    const after = this.probe({ ...this.config, discovery: this.discovery });
     if (before.fingerprint !== after.fingerprint || candidate.missing.includes("SOURCE_CHANGED_DURING_BUILD")) {
       this.index = null;
       this.fingerprint = null;
@@ -204,17 +249,23 @@ if (!isMainThread && workerData?.historicalDefinitionIndex) {
 }
 
 class HistoricalDefinitionIndexClient {
-  constructor({ getCK3UserFolderPath, onUpdated = () => {}, onQueryReady = () => {}, WorkerClass = Worker, aliases = [] } = {}) {
+  constructor({ getCK3UserFolderPath, getBaseGamePath = () => null, onUpdated = () => {}, onQueryReady = () => {}, WorkerClass = Worker, aliases = [], setTimeout: setTimer = setTimeout, clearTimeout: clearTimer = clearTimeout } = {}) {
     this.getFolder = getCK3UserFolderPath || (() => null);
+    this.getBaseGamePath = getBaseGamePath;
     this.onUpdated = onUpdated;
     this.onQueryReady = onQueryReady;
     this.WorkerClass = WorkerClass;
+    this.setTimeout = setTimer;
+    this.clearTimeout = clearTimer;
     this.aliases = aliases;
     this.meta = null;
     this.cache = new Map();
     this.scanCache = new Map();
     this.building = null;
     this.failed = false;
+    this.stableFailure = false;
+    this.retryCount = 0;
+    this.retryTimer = null;
     this.worker = null;
     this.requests = new Map();
     this.pendingValues = new Map();
@@ -230,10 +281,47 @@ class HistoricalDefinitionIndexClient {
   _incomplete(pending = false) {
     return { status: "SOURCE_INCOMPLETE", candidates: [], matches: [], sourceComplete: false, candidateSetComplete: false, pending, revision: this.meta?.revision || null };
   }
+  _clearRetry() {
+    this.clearTimeout(this.retryTimer);
+    this.retryTimer = null;
+  }
+  _release(worker) {
+    if (worker && this.worker !== worker) return false;
+    this.clearTimeout(this.buildTimer);
+    this.buildTimer = null;
+    const active = this.worker;
+    this.worker = null;
+    for (const request of this.requests.values()) { this.clearTimeout(request.timer); request.resolve(this._incomplete()); }
+    this.requests.clear();
+    this.pendingValues.clear();
+    this.finishBuild?.(null);
+    this.finishBuild = null;
+    this.building = null;
+    this.checking = false;
+    this.meta = null;
+    this.cache.clear();
+    this.scanCache.clear();
+    this.finishRefresh?.(null);
+    this.finishRefresh = null;
+    this.refreshing = null;
+    active?.terminate?.();
+    return true;
+  }
   _fail(worker) {
-    if (this.worker !== worker) return;
-    this.dispose();
+    if (!this._release(worker)) return;
     this.failed = true;
+    this.retryCount += 1;
+    if (this.retryCount > 3) this.stableFailure = true;
+    else {
+      const delay = [1000, 5000, 30000][this.retryCount - 1];
+      this.retryTimer = this.setTimeout(() => {
+        this.retryTimer = null;
+        if (this.stableFailure || !this.failed) return;
+        this.failed = false;
+        this.start();
+      }, delay);
+      this.retryTimer.unref?.();
+    }
     this.onUpdated();
   }
   _request(value, kind = "lookup") {
@@ -246,7 +334,7 @@ class HistoricalDefinitionIndexClient {
     const worker = this.worker, requestId = this.nextRequestId++;
     let resolve;
     const pending = new Promise(finish => { resolve = finish; });
-    const timer = setTimeout(() => this._fail(worker), 30000);
+    const timer = this.setTimeout(() => this._fail(worker), 30000);
     timer.unref?.();
     this.requests.set(requestId, { key, normalized, kind, resolve, timer, revision: this.meta?.revision });
     this.pendingValues.set(key, pending);
@@ -256,14 +344,15 @@ class HistoricalDefinitionIndexClient {
   }
   start() {
     const folder = this.getFolder();
-    if (this.folder !== folder) { this.invalidate(); this.folder = folder; }
+    const baseGamePath = this.getBaseGamePath?.() || null;
+    if (this.folder !== folder || this.baseGamePath !== baseGamePath) { this.invalidate(); this.folder = folder; this.baseGamePath = baseGamePath; }
     if (this.building || this.meta || this.failed || !folder) return this.building;
     try {
       const worker = new this.WorkerClass(__filename, { workerData: { historicalDefinitionIndex: true } });
       this.worker = worker;
       worker.unref?.();
       this.building = new Promise(resolve => { this.finishBuild = resolve; });
-      this.buildTimer = setTimeout(() => this._fail(worker), 120000);
+      this.buildTimer = this.setTimeout(() => this._fail(worker), 120000);
       this.buildTimer.unref?.();
       worker.on("message", (message) => {
         if (this.worker !== worker) return;
@@ -272,19 +361,22 @@ class HistoricalDefinitionIndexClient {
             this.checking = true;
             if (!this.building) this.building = new Promise(resolve => { this.finishBuild = resolve; });
             // Queued reads must not time out and kill a legitimate slow rebuild.
-            for (const request of this.requests.values()) { clearTimeout(request.timer); request.resolve(this._incomplete(true)); }
+            for (const request of this.requests.values()) { this.clearTimeout(request.timer); request.resolve(this._incomplete(true)); }
             this.requests.clear();
             this.pendingValues.clear();
           }
-          clearTimeout(this.buildTimer);
-          this.buildTimer = setTimeout(() => this._fail(worker), 120000);
+          this.clearTimeout(this.buildTimer);
+          this.buildTimer = this.setTimeout(() => this._fail(worker), 120000);
           this.buildTimer.unref?.();
         } else if (message?.type === "built" || message?.type === "unchanged") {
-          clearTimeout(this.buildTimer);
+          this.clearTimeout(this.buildTimer);
+          this.buildTimer = null;
           const changed = this.meta?.revision !== message.meta?.revision;
+          const completedUnchangedReadyCycle = message?.type === "unchanged" && this.meta && ["READY", "PARTIAL"].includes(this.meta.state);
           this.meta = message.meta;
           this.checking = false;
           this.failed = false;
+          if (completedUnchangedReadyCycle) { this.retryCount = 0; this.stableFailure = false; }
           if (changed) {
             this.generation += 1;
             this.cache.clear();
@@ -300,7 +392,7 @@ class HistoricalDefinitionIndexClient {
         } else if (["lookup", "scan"].includes(message?.type) || message?.type === "failed" && message.requestId) {
           const request = this.requests.get(message.requestId);
           if (!request) return;
-          clearTimeout(request.timer);
+          this.clearTimeout(request.timer);
           this.requests.delete(message.requestId);
           this.pendingValues.delete(request.key);
           const valid = !this.checking && request.revision === this.meta?.revision && message.result?.revision === this.meta?.revision;
@@ -317,11 +409,11 @@ class HistoricalDefinitionIndexClient {
       });
       worker.once("error", () => this._fail(worker));
       worker.once("exit", () => this._fail(worker));
-      worker.postMessage({ type: "build", userFolder: folder, aliases: this.aliases });
-    } catch (_error) { this.dispose(); this.failed = true; }
+      worker.postMessage({ type: "build", userFolder: folder, baseGamePath, aliases: this.aliases });
+    } catch (_error) { this._fail(null); }
     return this.building;
   }
-  get status() { return this.checking ? "BUILDING" : this.meta?.state || (this.building ? "BUILDING" : this.failed ? "FAILED" : "UNCONFIGURED"); }
+  get status() { return this.checking ? "BUILDING" : this.meta?.state || (this.building ? "BUILDING" : this.stableFailure ? "FAILED_STABLE" : this.failed ? "FAILED_TRANSIENT" : "UNCONFIGURED"); }
   find(value) {
     this.start();
     if (!["READY", "PARTIAL"].includes(this.status)) return this._incomplete(!!this.worker);
@@ -342,8 +434,8 @@ class HistoricalDefinitionIndexClient {
     if (!pending) return null;
     if (!timeoutMs) return pending;
     let timer;
-    try { return await Promise.race([pending, new Promise(resolve => { timer = setTimeout(() => resolve(null), timeoutMs); })]); }
-    finally { clearTimeout(timer); }
+    try { return await Promise.race([pending, new Promise(resolve => { timer = this.setTimeout(() => resolve(null), timeoutMs); })]); }
+    finally { this.clearTimeout(timer); }
   }
   async ready(timeoutMs = 0) { await this._bounded(this.start(), timeoutMs); return this.meta; }
   async prepare(values, timeoutMs = 0) {
@@ -370,26 +462,18 @@ class HistoricalDefinitionIndexClient {
     }
     return this._bounded(this.refreshing, timeoutMs);
   }
-  invalidate() { this.dispose(); this.failed = false; this.onUpdated(); }
+  invalidate() {
+    this._clearRetry();
+    this._release(null);
+    this.failed = false;
+    this.stableFailure = false;
+    this.retryCount = 0;
+    this.onUpdated();
+  }
   dispose() {
     this.generation += 1;
-    clearTimeout(this.buildTimer);
-    const worker = this.worker;
-    this.worker = null;
-    for (const request of this.requests.values()) { clearTimeout(request.timer); request.resolve(this._incomplete()); }
-    this.requests.clear();
-    this.pendingValues.clear();
-    this.finishBuild?.(null);
-    this.finishBuild = null;
-    this.building = null;
-    this.checking = false;
-    this.meta = null;
-    this.cache.clear();
-    this.scanCache.clear();
-    this.finishRefresh?.(null);
-    this.finishRefresh = null;
-    this.refreshing = null;
-    worker?.terminate?.();
+    this._clearRetry();
+    this._release(null);
   }
 }
 module.exports = { HistoricalDefinitionIndexClient, HistoricalIndexLifecycle, POLICY_VERSION, buildHistoricalDefinitionIndex, discoverSources, lookup, scanHistoricalNames };

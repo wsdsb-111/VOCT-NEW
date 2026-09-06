@@ -126,7 +126,7 @@ async function main() {
       worker.emit("error", new Error("fixture"));
       assert.equal((await cancelled).sourceComplete, false);
       assert.equal(fake.requests.size, 0);
-      assert.equal(fake.status, "FAILED");
+      assert.equal(fake.status, "FAILED_TRANSIENT");
     } finally { fake.dispose(); }
     console.log("V8.5.2 historical lifecycle: PASS (20 no-op cycles, touch, edits, source set, atomic discard, cache authority, checkpoint isolation and stale replies)");
   } finally { client.dispose(); fs.rmSync(root, { recursive: true, force: true }); }

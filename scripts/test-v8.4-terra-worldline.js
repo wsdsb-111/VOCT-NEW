@@ -113,13 +113,13 @@ async function run() {
     assert.ok(!historicalBindingsMethod.includes(".sort("), "historical binding UI loading must never sort the full checkpoint on the main process");
     assert.ok(!historicalBindingsMethod.includes("Object.entries("), "historical binding UI loading must not materialize the full checkpoint before truncation");
     await service.rebuildCheckpoint();
-    assert.equal(service.getPromptContext({ query: "Yuefei" }), null, "world prompt integration must remain opt-in during Terra");
+    assert.equal(service.getPromptContext({ query: "#100" }), null, "world prompt integration must remain opt-in during Terra");
     settingsRepository.settings = { ...settingsRepository.settings, promptIntegrationEnabled: true };
-    const worldContext = service.getPromptContext({ query: "Yuefei" });
+    const worldContext = service.getPromptContext({ query: "#100" });
     assert.match(worldContext.stableText, /已确认 Checkpoint/, "enabled world recall must expose stable checkpoint facts");
     assert.match(worldContext.topicText, /Yuefei/, "world topic recall must use the existing turn query");
     assert.match(worldContext.currentText, /当前世界视图/, "current world view must be isolated from stable recall");
-    assert.equal(service.getPromptContext({ query: "Yuefei" }).cacheHit, true, "world topic recall must be checkpoint/query cached");
+    assert.equal(service.getPromptContext({ query: "#100" }).cacheHit, true, "world topic recall must be checkpoint/query cached");
     settingsRepository.settings = { ...settingsRepository.settings, promptIntegrationEnabled: false };
 
     fs.writeFileSync(autosavePath, makeSave(0, gamestate("1155.1.1", { yuefeiAlive: false, includeOldWar: false, includeNewWar: true, titleHolder: "102" })));

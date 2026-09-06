@@ -3,6 +3,7 @@
 const { findHistoricalAliases } = require("./historical-alias-catalog");
 const { resolveHistoricalIdentity } = require("./historical-identity-resolver");
 const { HistoricalNameScanner, normalizeName } = require("./historical-name-scanner");
+const { runtimeDefinitionIds } = require("./runtime-definition-index");
 
 const MAX_QUERY_TERMS = 32;
 const MAX_LOCALIZED_TERMS = 12;
@@ -16,24 +17,48 @@ function normalize(value) {
 
 const runtimeScanners = new WeakMap();
 const runtimeNameIndexes = new WeakMap();
-function scanRuntimeNames(snapshot, query) {
-  if (!snapshot) return { matches: [], candidateSetComplete: true };
-  if (!runtimeScanners.has(snapshot)) runtimeScanners.set(snapshot, new HistoricalNameScanner(Object.keys(snapshot.nameToCharacterIds || {})));
-  return runtimeScanners.get(snapshot).scan(query);
+function runtimeNameSources(snapshot) {
+  return {
+    full: snapshot?.indexes?.verifiedFullNameToRuntimeIds || snapshot?.verifiedFullNameToRuntimeIds || {},
+    given: snapshot?.indexes?.givenNameToRuntimeIds || snapshot?.givenNameToRuntimeIds || snapshot?.nameToCharacterIds || {}
+  };
 }
 
-function runtimeIdsForName(snapshot, value) {
-  if (!snapshot) return [];
-  if (!runtimeNameIndexes.has(snapshot)) {
-    const index = new Map();
-    for (const [name, ids] of Object.entries(snapshot.nameToCharacterIds || {})) {
-      const key = normalize(name);
-      if (!key) continue;
-      index.set(key, [...new Set([...(index.get(key) || []), ...(Array.isArray(ids) ? ids : [])].map(String))]);
-    }
-    runtimeNameIndexes.set(snapshot, index);
+function buildRuntimeNameIndex(source) {
+  const index = new Map();
+  for (const [name, ids] of Object.entries(source || {})) {
+    const key = normalize(name);
+    if (!key) continue;
+    index.set(key, [...new Set([...(index.get(key) || []), ...(Array.isArray(ids) ? ids : [])].map(String))]);
   }
-  return runtimeNameIndexes.get(snapshot).get(normalize(value)) || [];
+  return index;
+}
+
+function getRuntimeNameIndexes(snapshot) {
+  if (!snapshot) return { full: new Map(), given: new Map() };
+  if (!runtimeNameIndexes.has(snapshot)) {
+    const sources = runtimeNameSources(snapshot);
+    runtimeNameIndexes.set(snapshot, { full: buildRuntimeNameIndex(sources.full), given: buildRuntimeNameIndex(sources.given) });
+  }
+  return runtimeNameIndexes.get(snapshot);
+}
+
+function scanRuntimeNames(snapshot, query) {
+  if (!snapshot) return { matches: [], fullMatches: [], givenMatches: [], candidateSetComplete: true };
+  if (!runtimeScanners.has(snapshot)) {
+    const indexes = getRuntimeNameIndexes(snapshot);
+    runtimeScanners.set(snapshot, { full: new HistoricalNameScanner([...indexes.full.keys()]), given: new HistoricalNameScanner([...indexes.given.keys()]) });
+  }
+  const scanners = runtimeScanners.get(snapshot);
+  const full = scanners.full.scan(query);
+  const given = scanners.given.scan(query);
+  const givenMatches = given.matches.filter((match) => !full.matches.some((other) => other.start < match.end && match.start < other.end));
+  const matches = [...full.matches, ...givenMatches].sort((left, right) => left.start - right.start || right.end - right.start - (left.end - left.start));
+  return { matches, fullMatches: full.matches, givenMatches, candidateSetComplete: full.candidateSetComplete === true && given.candidateSetComplete === true };
+}
+
+function runtimeIdsForName(snapshot, value, kind = "given") {
+  return getRuntimeNameIndexes(snapshot)[kind]?.get(normalize(value)) || [];
 }
 
 function isCjk(value) {
@@ -98,13 +123,6 @@ function normalizeReverseLookup(result) {
   if (Array.isArray(result)) return { status: result.length ? "MATCHED" : "NO_MATCH", matches: result, sourceComplete: true, scannedFiles: 0, missingDescriptors: [], matchedRawKeys: result.map((item) => item.rawKey).filter(Boolean) };
   if (!result || typeof result !== "object") return { status: "NO_MATCH", matches: [], sourceComplete: true, scannedFiles: 0, missingDescriptors: [], matchedRawKeys: [] };
   return { status: result.status || "NO_MATCH", matches: Array.isArray(result.matches) ? result.matches : [], sourceComplete: result.sourceComplete !== false, scannedFiles: Number(result.scannedFiles) || 0, missingDescriptors: Array.isArray(result.missingDescriptors) ? result.missingDescriptors : [], matchedRawKeys: Array.isArray(result.matchedRawKeys) ? result.matchedRawKeys : [] };
-}
-
-function runtimeDefinitionIds(snapshot, runtimeId) {
-  const key = String(runtimeId);
-  const reverse = Array.isArray(snapshot?.runtimeToDefinitions?.[key]) ? snapshot.runtimeToDefinitions[key] : [];
-  const forward = Object.entries(snapshot?.definitionToRuntime || {}).filter(([, id]) => String(id) === key).map(([definitionId]) => definitionId);
-  return [...new Set([...reverse, ...forward].filter(Boolean).map(String))];
 }
 
 function differenceOfWorldline({ record, character, snapshot }) {
@@ -319,46 +337,41 @@ function analyzeSharedQuery({ snapshot, query = "", assistContext = "", mentione
   });
   const nativeEntityResolutions = [];
   const nativeSubjects = new Set();
-  const addRuntimeNative = (subjectName, runtimeIds, source, candidateSetComplete = true) => {
+  const addRuntimeNative = (subjectName, runtimeIds, source, candidateSetComplete = true, nameMatchKind = "GIVEN_NAME", mayResolve = false) => {
     const ids = [...new Set(runtimeIds.map(String).filter((id) => characters[id]))];
-    if (!subjectName || !ids.length || nativeSubjects.has(subjectName)) return;
+    const subjectKey = normalize(subjectName);
+    if (!subjectKey || !ids.length || nativeSubjects.has(subjectKey)) return false;
     // A name with any Historical Definition remains exclusively in the historical
     // resolver; native handling must never bypass its fail-closed identity gate.
-    if (ids.some((id) => runtimeDefinitionIds(snapshot, id).length)) return;
-    nativeSubjects.add(subjectName);
-    const resolutionStatus = candidateSetComplete ? ids.length === 1 ? "RESOLVED" : "AMBIGUOUS" : "SOURCE_INCOMPLETE";
+    if (ids.some((id) => runtimeDefinitionIds(snapshot, id).length)) return false;
+    nativeSubjects.add(subjectKey);
+    const resolutionStatus = candidateSetComplete ? mayResolve && ids.length === 1 ? "RESOLVED" : "AMBIGUOUS" : "SOURCE_INCOMPLETE";
     nativeEntityResolutions.push({
       identityKind: "RUNTIME_NATIVE",
       resolutionStatus,
       subjectName,
+      nameMatchKind,
       candidateTotal: ids.length,
       historicalDefinitionIds: [],
       runtimeIds: ids,
-      identityEvidence: [{ code: source, category: "IDENTITY_CORE" }],
+      identityEvidence: [{ code: source, category: mayResolve ? "IDENTITY_CORE" : "IDENTITY_SUPPORT" }],
       worldlineDifferences: [],
       sourceComplete: true,
       candidateSetComplete
     });
     entityAnchoredTerms.add(normalize(subjectName));
-    if (!candidateSetComplete) return;
-    if (ids.length === 1) addResolvedCharacter(ids[0], "runtime_native_name", subjectName);
+    if (!candidateSetComplete) return true;
+    if (mayResolve && ids.length === 1) addResolvedCharacter(ids[0], source === "RUNTIME_NATIVE_LOCALIZED_FULL_NAME" ? "localized_character_name" : source === "RUNTIME_NATIVE_DIRECT_ID" ? "runtime_id" : "runtime_native_name", subjectName);
     else for (const runtimeId of ids) addCandidateCharacter({ runtimeId, rawName: characters[runtimeId]?.firstName, aliasCandidate: subjectName }, "runtime_native_ambiguous");
+    return true;
   };
-  for (const match of runtimeScan.matches) addRuntimeNative(match.value, runtimeIdsForName(snapshot, match.value), "RUNTIME_NATIVE_FULL_NAME", runtimeScan.candidateSetComplete === true);
-  if (directRuntimeId && characters[directRuntimeId]) addRuntimeNative(characters[directRuntimeId]?.fullName || characters[directRuntimeId]?.firstName || `#${directRuntimeId}`, [directRuntimeId], "RUNTIME_NATIVE_DIRECT_ID");
-  // Preserve legacy non-CJK runtime aliases (for example, CK3 fixture or
-  // localized Latin names). CJK names with historical bindings stay closed
-  // until the Historical Index can prove the full identity.
-  for (const match of runtimeScan.matches) {
-    if (isCjk(match.value)) continue;
-    const ids = runtimeIdsForName(snapshot, match.value);
-    if (!ids.some((id) => runtimeDefinitionIds(snapshot, id).length)) continue;
-    if (ids.length === 1) addResolvedCharacter(ids[0], "character_alias", match.value);
-    else for (const runtimeId of ids) addCandidateCharacter({ runtimeId, rawName: characters[runtimeId]?.firstName, aliasCandidate: match.value }, "character_alias_ambiguous");
-  }
+  for (const match of runtimeScan.fullMatches) addRuntimeNative(match.value, runtimeIdsForName(snapshot, match.value, "full"), "RUNTIME_NATIVE_FULL_NAME", runtimeScan.candidateSetComplete === true, "FULL_VERIFIED_NAME", true);
+  for (const match of runtimeScan.givenMatches) addRuntimeNative(match.value, runtimeIdsForName(snapshot, match.value, "given"), "RUNTIME_NATIVE_GIVEN_NAME_CANDIDATE", runtimeScan.candidateSetComplete === true, "GIVEN_NAME", false);
+  if (directRuntimeId && characters[directRuntimeId]) addRuntimeNative(characters[directRuntimeId]?.fullName || characters[directRuntimeId]?.firstName || `#${directRuntimeId}`, [directRuntimeId], "RUNTIME_NATIVE_DIRECT_ID", true, "DIRECT_RUNTIME_ID", true);
   const primaryHistoricalResolution = historicalResolutions[0];
   const historicalRuntimeIds = new Set(historicalResolutions.flatMap(resolution => (resolution.candidates || []).map(candidate => String(candidate.runtimeId))));
-  for (const id of mentionedEntityIds) if (!historicalRuntimeIds.has(String(id)) && !historicalResolutions.some(resolution => resolution.coverageStatus === "SOURCE_INCOMPLETE")) addResolvedCharacter(id, "shared_memory_entity");
+  const unresolvedNativeRuntimeIds = new Set(nativeEntityResolutions.filter((entity) => entity.resolutionStatus !== "RESOLVED").flatMap((entity) => entity.runtimeIds));
+  for (const id of mentionedEntityIds) if (!historicalRuntimeIds.has(String(id)) && !unresolvedNativeRuntimeIds.has(String(id)) && !historicalResolutions.some(resolution => resolution.coverageStatus === "SOURCE_INCOMPLETE")) addResolvedCharacter(id, "shared_memory_entity");
   const historicalCoverage = historicalResolutions.map((resolution) => ({ alias: resolution.alias, status: resolution.coverageStatus, definitionIds: resolution.definitionIds, reason: resolution.reason }));
   if (indexCoverage && ["SOURCE_INCOMPLETE", "NAME_INDEX_MISS"].includes(indexCoverage.status)) historicalCoverage.push({ alias: shortCjkQuery, status: indexCoverage.status, definitionIds: [], reason: indexCoverage.status });
   const resolvedEntityNames = new Set([...historicalDomainEntities, ...nativeEntityResolutions].map((entity) => normalize(entity.subjectName)));
@@ -384,12 +397,10 @@ function analyzeSharedQuery({ snapshot, query = "", assistContext = "", mentione
       let matched = false;
       if (type === "character") {
         for (const match of lookup.status === "MATCHED" ? lookup.matches : []) {
-          const ids = snapshot?.nameToCharacterIds?.[normalize(match.rawKey)] || [];
-          if (ids.length === 1) {
-            addResolvedCharacter(ids[0], "localized_character_name", term);
-            entityAnchoredTerms.add(term);
-            matched = true;
-          } else for (const id of ids) addCandidateCharacter({ runtimeId: id, rawName: characters[id]?.firstName, aliasCandidate: term }, "localized_character_ambiguous");
+          const verifiedIds = runtimeIdsForName(snapshot, term, "full");
+          const givenIds = runtimeIdsForName(snapshot, match.rawKey, "given");
+          matched = addRuntimeNative(term, verifiedIds, "RUNTIME_NATIVE_LOCALIZED_FULL_NAME", true, "FULL_VERIFIED_NAME", true) || matched;
+          if (!verifiedIds.length) matched = addRuntimeNative(term, givenIds, "RUNTIME_NATIVE_LOCALIZED_GIVEN_NAME_CANDIDATE", true, "GIVEN_NAME", false) || matched;
         }
       } else {
         const matches = [];

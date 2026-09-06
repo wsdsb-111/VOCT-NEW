@@ -4,7 +4,15 @@ const assert = require("assert");
 const { analyzeSharedQuery } = require("../resources/app/out/main/worldline/shared-query-analyzer");
 
 function snapshot(nameToCharacterIds, characters) {
-  return { gameDate: "1169.1.1", nameToCharacterIds, characters, definitionToRuntime: {}, runtimeToDefinitions: {}, titles: {} };
+  return {
+    gameDate: "1169.1.1",
+    nameToCharacterIds,
+    indexes: { verifiedFullNameToRuntimeIds: nameToCharacterIds },
+    characters,
+    definitionToRuntime: {},
+    runtimeToDefinitions: {},
+    titles: {}
+  };
 }
 
 const unique = analyzeSharedQuery({

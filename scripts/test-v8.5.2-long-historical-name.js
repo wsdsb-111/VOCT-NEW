@@ -10,7 +10,7 @@ const { analyzeSharedQuery } = require("../resources/app/out/main/worldline/shar
 
 const names = ["司马光", "欧阳修", "耶律阿保机", "完颜阿骨打", "赵思", "韩世忠"];
 const index = { revision: "fixture", state: "READY", sourceComplete: true, exactNames: Object.create(null), exactAliases: Object.create(null), byId: Object.create(null) };
-const snapshot = { characters: {}, nameToCharacterIds: { "赵思昭": ["100"], "赵思": ["101"] }, definitionToRuntime: {}, runtimeToDefinitions: {}, titles: {}, gameDate: "1155.1.1" };
+const snapshot = { characters: {}, nameToCharacterIds: { "赵思昭": ["100"], "赵思": ["101"] }, indexes: { verifiedFullNameToRuntimeIds: { "赵思昭": ["100"], "赵思": ["101"] } }, definitionToRuntime: {}, runtimeToDefinitions: {}, titles: {}, gameDate: "1155.1.1" };
 for (const [i, name] of names.entries()) {
   const id = `definition_${i}`, runtime = String(i + 1);
   index.exactNames[name] = [id];
@@ -32,7 +32,7 @@ assert(result.candidateCharacterIds.includes("100"), "full runtime name is retai
 assert(!result.historicalCoverage.some(item => item.alias === "赵思"), "historical prefix cannot hijack a runtime-native full name inside a sentence");
 assert.deepEqual(analyze("赵思与赵思昭在哪里").historicalCoverage.map(item => item.alias), ["赵思"], "an independent short-name mention survives a separate long-name mention");
 assert.equal(analyze("耶律阿保机").historicalCoverage[0].status, "RESOLVED");
-const givenNameSnapshot = { ...snapshot, nameToCharacterIds: { "思昭": ["100"] } };
+const givenNameSnapshot = { ...snapshot, nameToCharacterIds: { "思昭": ["100"] }, indexes: { verifiedFullNameToRuntimeIds: {}, givenNameToRuntimeIds: { "思昭": ["100"] } } };
 const givenNameQuery = analyzeSharedQuery({ snapshot: givenNameSnapshot, query: "韩世忠、赵思昭", historicalNameScan: text => scanHistoricalNames(index, text), historicalDefinitionLookup: text => lookup(index, text) });
 assert(!givenNameQuery.historicalCoverage.some(item => item.alias === "赵思"), "crossing historical prefix must not split a current character's given name");
 const singleGivenName = analyzeSharedQuery({ snapshot: givenNameSnapshot, query: "赵思昭", historicalNameScan: text => scanHistoricalNames(index, text), historicalDefinitionLookup: text => lookup(index, text) });

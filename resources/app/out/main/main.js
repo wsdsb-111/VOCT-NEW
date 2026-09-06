@@ -343,7 +343,8 @@ const settingsRepository = new SettingsRepository();
 const worldlineService = new WorldlineService({
   settingsRepository,
   dataDir: VOTC_DATA_DIR,
-  dialog: electron.dialog
+  dialog: electron.dialog,
+  memoryEngine
 });
 const providerRegistry = ProviderRegistry.getInstance();
 function createPromptFingerprint(value) {
@@ -372,9 +373,14 @@ const GameData = createGameData({
   summariesDir: VOTC_SUMMARIES_DIR,
   getHistoricalReferenceByYear
 });
+worldlineService.setRuntimeNameSource(() => ({
+  gameDate: GameData?.date || null,
+  playerId: GameData?.playerID ?? null,
+  characters: [...(GameData?.characters?.values?.() || [])].map((character) => ({ id: character.id, firstName: character.firstName, fullName: character.fullName }))
+}));
 const fs = require("fs");
 const { createLogParser } = require("./game-data/log-parser");
-const parseLog = createLogParser({ GameData, Character, onGameDataParsed: (gameData) => dynamicHistoryService.updateFromGameData(gameData) });
+const parseLog = createLogParser({ GameData, Character, onGameDataParsed: (gameData) => { dynamicHistoryService.updateFromGameData(gameData); worldlineService.refreshRuntimeNameIndex(); } });
 const historicalGroundTruthStore = new HistoricalGroundTruthStore({ rootDir: VOTC_DATA_DIR });
 const historicalDiagnosticsController = createHistoricalDiagnosticsController({
   settingsRepository,

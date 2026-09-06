@@ -4,6 +4,8 @@
 
 ## 推荐阅读顺序
 
+V8.6 当前施工入口：[Sol Stage 6 最终正确性复审](v8.6-sol-final-correctness-review.md)。普通姓名/地点 Court 范围、头衔/战争 Realm 范围、结构化 Temporal Gate 与唯一 server-side Subjective Prompt 已通过代码审查和真实 PromptBuilder 回归；默认仍关闭，下一步进入 Electron/CK3/Provider/性能实机 Gate，总冻结仍为 `NOT READY`。
+
 当前事故入口：[V8.5.1 摘要 P0 / 多人入场 P2 修复报告](v8.5.1-summary-incident-review.md)：摘要链路审计、长会话恢复、参与者隔离与入场延迟。
 
 V8.5.2 当前施工入口：[Sol Stage 5 UI / DTO 边界审查](v8.5.2-sol-ui-boundary-review.md)；新旧 DTO 聚合矛盾、来源优先级和 Renderer 降级 raw 泄漏已修复，逐实体 UI 与 50 条边界保持通过，完整发布回归为 120/120。下一步 Astra Stage 6 最终集成与实机 Gate；`INTERNAL FREEZE = NOT READY`。
@@ -49,7 +51,7 @@ V8.5.1 历史基线：[Sol 最终审查与修复](v8.5.1-sol-final-review.md)，
 
 ## 文档分类
 
-最新阶段：[V8.5.2 Astra 最终集成审查](v8.5.2-astra-final-review.md)，包含真实存档矩阵、隔离 Electron IPC、补充知识功能范围和 NOT READY 的剩余验收条件。
+最新阶段：[V8.6 Sol Stage 6 最终正确性复审](v8.6-sol-final-correctness-review.md)，已修复过度公开与伪时间安全问题，135/135 发布组通过并签发 `CODE REVIEW PASS`；实机、Provider、usage、性能与远端 CI 未完成，V8.6 总冻结仍为 `NOT READY`。
 
 ### 架构与运行规则
 
@@ -94,6 +96,14 @@ V8.5.1 历史基线：[Sol 最终审查与修复](v8.5.1-sol-final-review.md)，
 - [v8.5.2-sol-correctness-review.md](v8.5.2-sol-correctness-review.md)：V8.5.2 Sol Stage 3 后端正确性、False Resolution、DTO/IPC 与来源优先级审查。
 - [v8.5.2-luna-ui-implementation-report.md](v8.5.2-luna-ui-implementation-report.md)：V8.5.2 Luna Stage 4 玩家语义、Worldline Difference、多实体诊断和 A/B/C 层 UI 边界。
 - [v8.5.2-sol-ui-boundary-review.md](v8.5.2-sol-ui-boundary-review.md)：V8.5.2 Sol Stage 5 additive/legacy DTO 一致性、来源优先级、降级安全和 A/B/C 泄漏审查。
+- [v8.6-astra-transition-contract.md](v8.6-astra-transition-contract.md)：V8.6 角色知识、字段级事实、共享检索/主观缓存、Secret/Presence 与兼容切换合同。
+- [v8.6-sol-stage-1-safety-review.md](v8.6-sol-stage-1-safety-review.md)：V8.6 给名身份 P0、历史来源 variant P1、Character Knowledge 与 Secret 安全合同。
+- [v8.6-terra-stage-2-implementation-report.md](v8.6-terra-stage-2-implementation-report.md)：可信完整姓名、Runtime reverse index、Worker 恢复和 Base Game Discovery 2.0。
+- [v8.6-terra-stage-3-subjective-world-report.md](v8.6-terra-stage-3-subjective-world-report.md)：共享候选、Scope、定向 Memory、主观 View 与 Prompt Phase A 边界。
+- [v8.6-sol-stage-4-safety-review.md](v8.6-sol-stage-4-safety-review.md)：共享/主观缓存隔离、Secret/DTO 脱敏、逐事实 Scope、Prompt 入口审计与 Luna 安全交接合同。
+- [v8.6-luna-stage-5-implementation-report.md](v8.6-luna-stage-5-implementation-report.md)：安全 Subjective DTO IPC、回应角色选择、单角色/A-B 诊断 UI、Secret 计数脱敏和 Sol Stage 6 交接边界。
+- [v8.6-sol-final-correctness-review.md](v8.6-sol-final-correctness-review.md)：Stage 6 复审、字段公开范围、结构化 Temporal Gate、真实 PromptBuilder 唯一注入及剩余实机 Gate。
+- [v8.6-terra-production-subjective-prompt-report.md](v8.6-terra-production-subjective-prompt-report.md)：字段级公开范围、Historical Phase B 与生产 Subjective Prompt 实施及 Sol 复审边界。
 - [VOTC_v8.1_Campaign_Identity与Worldline_Store_Foundation设计.md](VOTC_v8.1_Campaign_Identity与Worldline_Store_Foundation设计.md)：V8.1 存档身份协议、session 降级、Worldline schema、原子持久化和 Shadow 集成合同。
 - [v8.1-campaign-identity-worldline-store-implementation-report.md](v8.1-campaign-identity-worldline-store-implementation-report.md)：V8.0 P0/P1 审计、V8.1 应用与 Workshop 实施、自动化验证和实机边界。
 - [v8.3.1-historical-figure-dashboard-implementation-report.md](v8.3.1-historical-figure-dashboard-implementation-report.md)：V8.3.1 实机诊断 Snapshot、Overlay Dashboard、append-only Ground Truth 与冻结边界。

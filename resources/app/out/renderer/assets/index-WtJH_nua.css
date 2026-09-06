@@ -1937,6 +1937,49 @@ hr {
 .worldline-prompt-query button {
   white-space: nowrap;
 }
+.worldline-subjective-query {
+  flex-wrap: wrap;
+}
+.worldline-subjective-query input,
+.worldline-subjective-query select {
+  flex: 1 1 180px;
+  min-width: 150px;
+}
+.worldline-subjective-query button {
+  flex: 0 0 auto;
+}
+.worldline-subjective-result {
+  display: grid;
+  gap: 10px;
+  margin-top: 10px;
+}
+.worldline-subjective-view {
+  padding: 9px;
+  border: 1px solid rgba(239, 177, 106, 0.35);
+  border-radius: 7px;
+  background: rgba(0, 0, 0, 0.14);
+}
+.worldline-subjective-view h6 {
+  margin: 0 0 7px;
+  color: #efb16a;
+  font-size: 0.96em;
+}
+.worldline-subjective-facts {
+  margin-top: 8px;
+}
+.worldline-subjective-facts .worldline-row {
+  grid-template-columns: minmax(100px, 0.7fr) minmax(110px, 0.8fr) minmax(180px, 2fr) minmax(130px, 1fr);
+}
+.worldline-subjective-facts small {
+  color: rgba(255, 255, 255, 0.72);
+  overflow-wrap: anywhere;
+}
+.worldline-secret-filtered {
+  color: #f3d28a;
+}
+.worldline-subjective-developer {
+  margin-top: 9px;
+}
 .worldline-prompt-row {
   grid-template-columns: minmax(130px, 1.2fr) minmax(100px, 1fr) minmax(100px, 1fr);
 }

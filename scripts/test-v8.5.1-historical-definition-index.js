@@ -71,12 +71,15 @@ try {
     { root: path.join(root, "override"), sourceId: "mod:fixture", modId: "fixture" }
   ] });
   assert.notEqual(conflicted.revision, index.revision, "source content changes must alter the index revision even when the playset name is unchanged");
-  assert.ok(lookup(conflicted, "韩世忠").candidates[0].conflicts.includes("DEFINITION_SOURCE_CONFLICT"));
+  const variantRecord = lookup(conflicted, "韩世忠").candidates[0];
+  assert.equal(variantRecord.conflicts.length, 0, "birth variants are metadata ambiguity, not identity conflicts");
+  assert.ok(variantRecord.sourceVariants.some((item) => item.code === "BIRTH_SOURCE_VARIANT"));
+  assert.equal(variantRecord.metadata.birthDate, null, "ambiguous birth metadata must not select a load-order winner");
   const conflictAnalysis = analyzeSharedQuery({ snapshot: snapshot(), query: "韩世忠", historicalDefinitionLookup: (value) => lookup(conflicted, value) });
-  assert.equal(conflictAnalysis.characters.length, 0, "source conflicts must fail closed instead of selecting a load-order winner");
-  assert.equal(conflictAnalysis.historicalCoverage[0].status, "REJECTED_BY_EVIDENCE");
+  assert.deepEqual(conflictAnalysis.characters.map((character) => character.id), ["96896"], "metadata variants must not reject an otherwise verified identity");
+  assert.equal(conflictAnalysis.historicalCoverage[0].status, "RESOLVED");
 } finally {
   fs.rmSync(root, { recursive: true, force: true });
 }
 
-console.log("V8.5.1 Historical Definition Index: PASS (generic names, source completeness, runtime binding and conflict safety)");
+console.log("V8.5.1 Historical Definition Index: PASS (generic names, source completeness, runtime binding and metadata variants)");

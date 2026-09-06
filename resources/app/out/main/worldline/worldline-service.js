@@ -9,9 +9,17 @@ const { dateValue } = require("./game-state-adapter");
 const { resolvePlayerPoliticalContext } = require("./political-context");
 const { LocalizationWorkerClient } = require("./localization-worker-client");
 const { HistoricalDefinitionIndexClient } = require("./historical-definition-index");
+const { attachRuntimeNameIndex } = require("./runtime-name-index");
 const { getCheckpointFreshness } = require("./checkpoint-freshness");
 const { analysisTextMatches, analyzeSharedQuery, collectTerms } = require("./shared-query-analyzer");
 const { HISTORICAL_ALIAS_CATALOG } = require("./historical-alias-catalog");
+const { KNOWLEDGE_POLICY_VERSION } = require("./character-knowledge-policy");
+const { resolveKnowledgeScope } = require("./knowledge-scope-resolver");
+const { memoryFactsForResponder } = require("./personal-memory-policy-adapter");
+const { createSharedCandidatePool } = require("./shared-candidate-pool");
+const { buildSubjectiveWorldView } = require("./subjective-world-builder");
+const { classifySelectedWorldFacts } = require("./world-knowledge-classifier");
+const { buildHistoricalReferenceReplacement, buildSubjectiveWorldPrompt } = require("./subjective-prompt-context");
 const { RETRIEVAL_POLICY_VERSION, buildWorldQueryPlan } = require("./world-query-planner");
 const { buildWorldCandidates } = require("./world-retriever");
 const { rankWorldCandidates } = require("./world-ranker");
@@ -21,6 +29,8 @@ const { estimateTokens } = require("../token-estimator");
 
 const DEFAULT_SETTINGS = Object.freeze({
   autosavePath: null,
+  baseGamePath: null,
+  subjectiveWorldMode: "DIAGNOSTIC",
   autoWatchEnabled: true,
   promptIntegrationEnabled: false,
   lastValidatedAt: null,
@@ -42,6 +52,11 @@ function nowIso(clock) {
   return clock().toISOString();
 }
 
+function shortFingerprint(value) {
+  const source = typeof value === "string" ? value : JSON.stringify(value);
+  return nodeCrypto.createHash("sha256").update(source, "utf8").digest("hex").slice(0, 16);
+}
+
 function promptTokenBudget(plan) {
   const entityCount = (plan?.entities?.characters?.length || 0) + (plan?.entities?.titles?.length || 0);
   if (plan?.time?.mode === "AS_OF" || plan?.time?.mode === "RANGE" || entityCount > 1 || plan?.intent === "HISTORY_LOOKUP") return TOKEN_BUDGETS.COMPLEX;
@@ -58,6 +73,8 @@ function normalizeSettings(value) {
   const settings = value && typeof value === "object" && !Array.isArray(value) ? value : {};
   return {
     autosavePath: typeof settings.autosavePath === "string" && settings.autosavePath ? settings.autosavePath : null,
+    baseGamePath: typeof settings.baseGamePath === "string" && settings.baseGamePath ? settings.baseGamePath : null,
+    subjectiveWorldMode: ["DIAGNOSTIC", "PRODUCTION"].includes(settings.subjectiveWorldMode) ? settings.subjectiveWorldMode : "DIAGNOSTIC",
     autoWatchEnabled: settings.autoWatchEnabled !== false,
     promptIntegrationEnabled: settings.promptIntegrationEnabled === true,
     lastValidatedAt: typeof settings.lastValidatedAt === "string" ? settings.lastValidatedAt : null,
@@ -141,7 +158,7 @@ function readLiveProbe({ fs, debugLogPath }) {
 }
 
 class WorldlineService {
-  constructor({ settingsRepository, dataDir, fs = nodeFs, path = nodePath, Worker = NodeWorker, dialog = null, clock = () => new Date(), stabilityDelayMs = 750, pollIntervalMs = 30000, workerTimeoutMs = 120000 } = {}) {
+  constructor({ settingsRepository, dataDir, fs = nodeFs, path = nodePath, Worker = NodeWorker, dialog = null, clock = () => new Date(), stabilityDelayMs = 750, pollIntervalMs = 30000, workerTimeoutMs = 120000, getRuntimeNames = () => null, memoryEngine = null } = {}) {
     if (!settingsRepository || typeof settingsRepository.getWorldlineSettings !== "function" || typeof settingsRepository.saveWorldlineSettings !== "function") throw new Error("worldline_settings_repository_required");
     if (typeof dataDir !== "string" || !dataDir) throw new Error("worldline_data_dir_required");
     this.settingsRepository = settingsRepository;
@@ -154,6 +171,8 @@ class WorldlineService {
     this.stabilityDelayMs = stabilityDelayMs;
     this.pollIntervalMs = pollIntervalMs;
     this.workerTimeoutMs = workerTimeoutMs;
+    this.getRuntimeNames = getRuntimeNames;
+    this.memoryEngine = memoryEngine;
     this.storageDir = path.join(dataDir, "worldline-v8.4");
     this.checkpointPath = path.join(this.storageDir, "checkpoint.json");
     this.supplementalPath = path.join(this.storageDir, "supplemental.json");
@@ -175,6 +194,8 @@ class WorldlineService {
       topicPatchCache: new Map(),
       turnRecallCache: new Map(),
       summaryCache: new Map(),
+      sharedCandidateCache: new Map(),
+      subjectiveViewCache: new Map(),
       checkpointId: null,
       deltaRevision: 0,
       currentCampaignDeltaRevision: 0,
@@ -186,14 +207,19 @@ class WorldlineService {
       onUpdated: () => {
         this.worldKnowledgeState.topicPatchCache.clear();
         this.worldKnowledgeState.summaryCache.clear();
+        this.worldKnowledgeState.sharedCandidateCache.clear();
+        this.worldKnowledgeState.subjectiveViewCache.clear();
         this._notifyStateChanged("localization_updated");
       }
     });
     this.historicalDefinitionIndex = new HistoricalDefinitionIndexClient({
       getCK3UserFolderPath: () => this.settingsRepository.getCK3UserFolderPath?.() || null,
+      getBaseGamePath: () => this._settings().baseGamePath,
       onUpdated: () => {
         this.worldKnowledgeState.topicPatchCache.clear();
         this.worldKnowledgeState.summaryCache.clear();
+        this.worldKnowledgeState.sharedCandidateCache.clear();
+        this.worldKnowledgeState.subjectiveViewCache.clear();
         this._notifyStateChanged("historical_definition_index_updated");
       },
       onQueryReady: () => this._notifyStateChanged("historical_query_ready"),
@@ -212,6 +238,28 @@ class WorldlineService {
 
   _settings() {
     return normalizeSettings(this.settingsRepository.getWorldlineSettings());
+  }
+
+  setRuntimeNameSource(source) {
+    this.getRuntimeNames = typeof source === "function" ? source : () => null;
+    this.refreshRuntimeNameIndex();
+  }
+
+  refreshRuntimeNameIndex() {
+    if (!this.currentCheckpoint?.snapshot) return false;
+    let live = null;
+    try { live = this.getRuntimeNames?.() || null; } catch (_error) { return false; }
+    const indexedSnapshot = attachRuntimeNameIndex(this.currentCheckpoint.snapshot, { live });
+    const before = JSON.stringify(this.currentCheckpoint.snapshot.indexes || {});
+    const after = JSON.stringify(indexedSnapshot.indexes || {});
+    if (before === after) return false;
+    this.currentCheckpoint = { ...this.currentCheckpoint, snapshot: indexedSnapshot };
+    this.worldKnowledgeState.topicPatchCache.clear();
+    this.worldKnowledgeState.summaryCache.clear();
+    this.worldKnowledgeState.sharedCandidateCache.clear();
+    this.worldKnowledgeState.subjectiveViewCache.clear();
+    this._notifyStateChanged("runtime_name_index_updated");
+    return true;
   }
 
   setStateListener(listener) {
@@ -313,6 +361,8 @@ class WorldlineService {
       this.worldKnowledgeState.topicPatchCache.clear();
       this.worldKnowledgeState.turnRecallCache.clear();
       this.worldKnowledgeState.summaryCache.clear();
+      this.worldKnowledgeState.sharedCandidateCache.clear();
+      this.worldKnowledgeState.subjectiveViewCache.clear();
       this.worldKnowledgeState.checkpointId = null;
       this.worldKnowledgeState.currentCampaignDeltaRevision = 0;
     }
@@ -484,12 +534,16 @@ class WorldlineService {
         const delta = validation.manualDiagnostic || !sameCampaign ? [] : this._delta(previous, candidate);
         const nextAnnualDelta = [...this.annualDelta, ...delta];
         this._persistCheckpoint(candidate, nextAnnualDelta);
-        this.currentCheckpoint = candidate;
+        let liveNames = null;
+        try { liveNames = this.getRuntimeNames?.() || null; } catch (_error) { liveNames = null; }
+        this.currentCheckpoint = { ...candidate, snapshot: attachRuntimeNameIndex(candidate.snapshot, { live: liveNames }) };
         this.annualDelta = nextAnnualDelta;
         this.worldKnowledgeState.stableRecallCache.clear();
         this.worldKnowledgeState.topicPatchCache.clear();
         this.worldKnowledgeState.turnRecallCache.clear();
         this.worldKnowledgeState.summaryCache.clear();
+        this.worldKnowledgeState.sharedCandidateCache.clear();
+        this.worldKnowledgeState.subjectiveViewCache.clear();
         this.worldKnowledgeState.checkpointId = candidate.id;
         this.worldKnowledgeState.deltaRevision = this.annualDelta.length;
         this.worldKnowledgeState.currentCampaignDeltaRevision = sameCampaign ? this.worldKnowledgeState.currentCampaignDeltaRevision + (delta.length ? 1 : 0) : 0;
@@ -602,6 +656,33 @@ class WorldlineService {
     return {
       overview,
       playerView: createPlayerOverview({ snapshot, politicalContext, checkpoint, deltaPending: overview.deltaPending })
+    };
+  }
+
+  getSubjectiveResponderOptions({ query = "" } = {}) {
+    const snapshot = this.currentCheckpoint?.snapshot;
+    const characters = snapshot?.characters && typeof snapshot.characters === "object" ? snapshot.characters : {};
+    const currentPlayerId = snapshot?.playerId === null || snapshot?.playerId === undefined ? null : String(snapshot.playerId);
+    const normalizedQuery = String(query || "").trim().toLocaleLowerCase().slice(0, 120);
+    const responders = [];
+    let total = 0;
+    const matches = (runtimeId, character) => !normalizedQuery || [runtimeId, character?.firstName, character?.fullName].filter(Boolean).join(" ").toLocaleLowerCase().includes(normalizedQuery);
+    const add = (runtimeId, character) => {
+      if (!matches(runtimeId, character)) return;
+      total += 1;
+      if (responders.length < 50) responders.push({ responderId: String(runtimeId), displayName: formatCharacter(snapshot, runtimeId) });
+    };
+    if (currentPlayerId && Object.hasOwn(characters, currentPlayerId)) add(currentPlayerId, characters[currentPlayerId]);
+    for (const runtimeId in characters) {
+      if (!Object.hasOwn(characters, runtimeId) || runtimeId === currentPlayerId) continue;
+      add(runtimeId, responders.length < 50 || normalizedQuery ? characters[runtimeId] : null);
+    }
+    return {
+      responders,
+      total,
+      truncated: total > responders.length,
+      currentPlayerId,
+      checkpointId: this.currentCheckpoint?.id || null
     };
   }
 
@@ -801,6 +882,8 @@ class WorldlineService {
         this.worldKnowledgeState.turnRecallCache.clear();
         this.worldKnowledgeState.checkpointId = checkpointId2;
         this.worldKnowledgeState.summaryCache.clear();
+        this.worldKnowledgeState.sharedCandidateCache.clear();
+        this.worldKnowledgeState.subjectiveViewCache.clear();
       }
       let stableText = this.worldKnowledgeState.stableRecallCache.get(checkpointId2);
       if (!stableText) {
@@ -814,8 +897,8 @@ class WorldlineService {
         mentionedEntityIds: safeMentionedEntityIds,
         localize: (type, rawKey) => this.localizationResolver?.resolve(type, rawKey),
         findLocalizedKeys: (type, value, options) => this.localizationResolver?.findRawKeysByLocalizedValue(type, value, options) || { status: "NO_MATCH", matches: [], sourceComplete: true, scannedFiles: 0, missingDescriptors: [], matchedRawKeys: [] },
-        historicalDefinitionLookup: !["UNCONFIGURED", "FAILED"].includes(this.historicalDefinitionIndex?.status) ? (value) => this.historicalDefinitionIndex.find(value) : null,
-        historicalNameScan: !["UNCONFIGURED", "FAILED"].includes(this.historicalDefinitionIndex?.status) && this.historicalDefinitionIndex?.scan ? (value) => this.historicalDefinitionIndex.scan(value) : null
+        historicalDefinitionLookup: !["UNCONFIGURED", "FAILED", "FAILED_TRANSIENT", "FAILED_STABLE"].includes(this.historicalDefinitionIndex?.status) ? (value) => this.historicalDefinitionIndex.find(value) : null,
+        historicalNameScan: !["UNCONFIGURED", "FAILED", "FAILED_TRANSIENT", "FAILED_STABLE"].includes(this.historicalDefinitionIndex?.status) && this.historicalDefinitionIndex?.scan ? (value) => this.historicalDefinitionIndex.scan(value) : null
       });
       const queryPlan = buildWorldQueryPlan({ query, assistContext, analysis: queryAnalysis });
       const activeSupplemental = this.listSupplemental().supplemental;
@@ -896,6 +979,165 @@ class WorldlineService {
     } catch (_error) {
       return null;
     }
+  }
+
+  _sharedPolicyFacts(selected = {}) {
+    return classifySelectedWorldFacts(selected, this.currentCheckpoint?.snapshot?.gameDate || null);
+  }
+
+  _selfPolicyFacts(snapshot, responderId) {
+    const character = snapshot?.characters?.[String(responderId)];
+    if (!character) return [];
+    const fields = [["NAME", character.firstName], ["LOCATION", character.location], ["CULTURE", character.culture], ["FAITH", character.faith], ["SPOUSE", character.spouse], ["CHILDREN", character.children?.join(", ")], ["COURT_POSITION", character.courtEmployer]];
+    return fields.filter(([, value]) => value !== null && value !== undefined && value !== "").map(([field, value]) => ({
+      factId: `self:${responderId}:${field}`,
+      entityId: String(responderId),
+      field,
+      value,
+      sourceTier: "GAME_TRUTH",
+      knowledgeLevel: "SELF",
+      selfKnowledgeVerified: true,
+      asOf: snapshot.gameDate,
+      temporalSafe: true
+    }));
+  }
+
+  getSharedCandidatePool({ query = "", assistContext = "", mentionedEntityIds = [] } = {}) {
+    const startedAt = Date.now();
+    const safeQuery = String(query || "").slice(0, 1000);
+    const safeAssistContext = String(assistContext || "").slice(0, 2000);
+    const safeMentionedEntityIds = [...new Set((Array.isArray(mentionedEntityIds) ? mentionedEntityIds : []).map((id) => String(id)).filter(Boolean))].sort().slice(0, 64);
+    const settings = this._settings();
+    const live = this.getLiveState();
+    const queryFingerprint = shortFingerprint(`${safeQuery}\n${safeAssistContext}`);
+    const key = `v8.6-shared:${shortFingerprint({
+      checkpointId: this.currentCheckpoint?.id || null,
+      checkpointSource: this.currentCheckpoint?.source?.path || null,
+      configuredSource: settings.autosavePath,
+      validationStatus: settings.lastValidationStatus,
+      buildState: this.buildState,
+      sourceRevision: this.sourceRevision,
+      deltaRevision: this.worldKnowledgeState.currentCampaignDeltaRevision,
+      supplementalRevision: this.worldKnowledgeState.supplementalRevision,
+      localizationRevision: this.localizationResolver?.revision || 0,
+      historicalRevision: this.historicalDefinitionIndex?.meta?.revision || this.historicalDefinitionIndex?.status || "none",
+      retrievalPolicyVersion: RETRIEVAL_POLICY_VERSION,
+      query: safeQuery,
+      assistContext: safeAssistContext,
+      mentionedEntityIds: safeMentionedEntityIds,
+      live: [live.connected === true, live.gameDate || null, live.totalDays ?? null]
+    })}`;
+    if (this.worldKnowledgeState.sharedCandidateCache.has(key)) {
+      const pool = createSharedCandidatePool({ cache: this.worldKnowledgeState.sharedCandidateCache, key, build: () => [] });
+      return { ...pool, key, checkpointId: this.currentCheckpoint?.id || null, queryFingerprint: pool.queryFingerprint || queryFingerprint, sharedRetrievalMs: Date.now() - startedAt };
+    }
+    const context = this.getPromptContext({ query: safeQuery, assistContext: safeAssistContext, mentionedEntityIds: safeMentionedEntityIds, diagnostic: true });
+    if (!context?.retrieval) return null;
+    const subjectId = context.queryPlan?.entities?.characters?.[0] || null;
+    const pool = createSharedCandidatePool({
+      cache: this.worldKnowledgeState.sharedCandidateCache,
+      key,
+      build: () => ({ candidates: this._sharedPolicyFacts(context.retrieval.selected), subjectId, queryFingerprint: context.queryFingerprint || queryFingerprint })
+    });
+    return { ...pool, key, checkpointId: this.currentCheckpoint?.id || null, queryFingerprint: pool.queryFingerprint || queryFingerprint, sharedRetrievalMs: Date.now() - startedAt };
+  }
+
+  getSubjectiveWorldView({ responderId, query = "", assistContext = "", mentionedEntityIds = [], conversationId = null, turnEpoch = null, sceneRevision = null, presenceRevision = null, directObservationFactIds = [] } = {}) {
+    const mode = this._settings().subjectiveWorldMode;
+    if (!['DIAGNOSTIC', 'PRODUCTION'].includes(mode) || responderId === null || responderId === undefined) return null;
+    const snapshot = this.currentCheckpoint?.snapshot;
+    const responderId2 = String(responderId);
+    if (!snapshot?.characters || !Object.hasOwn(snapshot.characters, responderId2)) return null;
+    const startedAt = Date.now();
+    const pool = this.getSharedCandidatePool({ query, assistContext, mentionedEntityIds });
+    if (!pool) return null;
+    const live = this.getLiveState();
+    const scopeStartedAt = Date.now();
+    const scope = resolveKnowledgeScope({ snapshot, responderId: responderId2, subjectId: pool.subjectId, live });
+    const memoryStartedAt = Date.now();
+    const memoryFacts = memoryFactsForResponder(this.memoryEngine, responderId2);
+    const memoryRecallMs = Date.now() - memoryStartedAt;
+    const selfFacts = this._selfPolicyFacts(snapshot, responderId2);
+    const candidates = [...selfFacts, ...memoryFacts, ...pool.candidates];
+    const scopeByEntity = new Map([...new Set(candidates.map((fact) => String(fact.entityId || "")).filter(Boolean))].map((entityId) => [entityId, resolveKnowledgeScope({ snapshot, responderId: responderId2, subjectId: entityId, live })]));
+    const scopeResolveMs = Date.now() - scopeStartedAt;
+    const safeDirectObservationFactIds = [...new Set((Array.isArray(directObservationFactIds) ? directObservationFactIds : []).map((id) => String(id)).filter(Boolean))].sort().slice(0, 128);
+    const memoryRevision = shortFingerprint(memoryFacts.map((fact) => [fact.factId, fact.contentRef, fact.knowledgeLevel, fact.ownerId, fact.knownBy, fact.participantIds, fact.asOf]));
+    const scopeRevision = shortFingerprint([...scopeByEntity.entries()].map(([entityId, value]) => [entityId, value.sameCourt, value.sameRealm, value.asOf, value.verificationMode, value.completeness]));
+    const key = `v8.6-subjective:${shortFingerprint({
+      sharedKey: pool.key,
+      responderId: responderId2,
+      conversationId: String(conversationId || "none").slice(0, 128),
+      turnEpoch: turnEpoch ?? null,
+      sceneRevision: sceneRevision ?? null,
+      presenceRevision: presenceRevision ?? null,
+      directObservationFactIds: safeDirectObservationFactIds,
+      memoryRevision,
+      scopeRevision,
+      mode,
+      knowledgePolicyVersion: KNOWLEDGE_POLICY_VERSION
+    })}`;
+    if (this.worldKnowledgeState.subjectiveViewCache.has(key)) {
+      const cached = clone(this.worldKnowledgeState.subjectiveViewCache.get(key));
+      return { ...cached, cacheHit: true, sharedCacheHit: pool.cacheHit, metrics: { ...cached.metrics, subjectiveCacheHit: true, sharedWorldCacheHit: pool.cacheHit } };
+    }
+    const policyStartedAt = Date.now();
+    const view = buildSubjectiveWorldView({
+      responder: { id: responderId2 },
+      candidates,
+      scope,
+      scopeResolver: (fact) => scopeByEntity.get(String(fact.entityId || "")) || { sameCourt: null, sameRealm: null, completeness: "INCOMPLETE" },
+      checkpointId: this.currentCheckpoint.id,
+      directObservationFactIds: safeDirectObservationFactIds
+    });
+    const knowledgePolicyMs = Date.now() - policyStartedAt;
+    const result = {
+      mode,
+      ...view,
+      queryFingerprint: pool.queryFingerprint || null,
+      cacheHit: false,
+      sharedCacheHit: pool.cacheHit,
+      metrics: {
+        sharedRetrievalMs: pool.sharedRetrievalMs || 0,
+        knowledgePolicyMs,
+        scopeResolveMs,
+        memoryRecallMs,
+        subjectiveSummaryMs: 0,
+        subjectiveCacheHit: false,
+        sharedWorldCacheHit: pool.cacheHit,
+        candidateInputCount: candidates.length,
+        knownCount: view.allowedFacts.length,
+        filteredCount: view.filteredCount,
+        secretBlockedCount: view.secretBlockedCount,
+        ipcBytes: 0,
+        totalMs: Date.now() - startedAt
+      }
+    };
+    result.metrics.ipcBytes = Buffer.byteLength(JSON.stringify(result), "utf8");
+    if (result.metrics.ipcBytes > 500 * 1024) return null;
+    this.worldKnowledgeState.subjectiveViewCache.set(key, result);
+    const responderKeys = [...this.worldKnowledgeState.subjectiveViewCache.entries()].filter(([, entry]) => entry.responderId === responderId2).map(([cacheKey]) => cacheKey);
+    while (responderKeys.length > 8) this.worldKnowledgeState.subjectiveViewCache.delete(responderKeys.shift());
+    if (this.worldKnowledgeState.subjectiveViewCache.size > 128) this.worldKnowledgeState.subjectiveViewCache.delete(this.worldKnowledgeState.subjectiveViewCache.keys().next().value);
+    return clone(result);
+  }
+
+  isSubjectivePromptIntegrationEnabled() {
+    const settings = this._settings();
+    return settings.promptIntegrationEnabled === true && settings.subjectiveWorldMode === "PRODUCTION";
+  }
+
+  getSubjectivePromptContext({ responderId, query = "", assistContext = "", mentionedEntityIds = [], conversationId = null, turnEpoch = null, sceneRevision = null, presenceRevision = null, directObservationFactIds = [], historicalReferenceInfo = null } = {}) {
+    if (!this.isSubjectivePromptIntegrationEnabled()) return null;
+    const view = this.getSubjectiveWorldView({ responderId, query, assistContext, mentionedEntityIds, conversationId, turnEpoch, sceneRevision, presenceRevision, directObservationFactIds });
+    if (!view) return null;
+    const worldText = buildSubjectiveWorldPrompt(view);
+    return {
+      worldText,
+      historicalReferenceInfo: buildHistoricalReferenceReplacement(historicalReferenceInfo, view.asOf),
+      queryFingerprint: view.queryFingerprint || null,
+      cacheHit: view.cacheHit === true
+    };
   }
 
   async getPromptDiagnosticsAsync(payload = {}) {

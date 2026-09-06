@@ -27,6 +27,8 @@ Voices of the Court 是一个面向《Crusader Kings III》（CK3）的沉浸式
 
 ## 运行环境
 
+当前施工：V8.6 [Sol Stage 6 最终正确性复审](docs/v8.6-sol-final-correctness-review.md)已 `CODE REVIEW PASS`。普通姓名/地点限制为 Court，头衔与带角色锚点的战争/年度变化限制为 Realm；Historical Phase B 现按检查点逐项执行时间门禁，并由真实 PromptBuilder 回归证明旧背景不重复注入。生产路径仍只在显式 `subjectiveWorldMode=PRODUCTION` 且 `promptIntegrationEnabled=true` 时启用，默认保持诊断/关闭；真实 Electron、CK3、Provider、usage、性能和远端 CI 尚未验收，V8.6 总冻结仍为 NOT READY。
+
 最新终审：V8.5.2 [Astra Stage 6 集成审查](docs/v8.5.2-astra-final-review.md)已完成本轮代码修复、120 组回归、三份真实存档矩阵和隔离 Electron IPC 验证。修复交叉姓名误拆、原生人物重复诊断实体及历史 Runtime 缺失状态丢失；正式 Overlay 连续交互、实际 Provider 和长会话 Gate 仍待验收，`INTERNAL FREEZE = NOT READY`。补充知识已可保存和诊断召回，但正式配置的对话注入仍关闭；当前只作用于本检查点，长期 Player Canon 属于 V8.7 规划。
 
 以下为上一阶段交接记录，其“下一步”状态由上方 Astra 终审更新：

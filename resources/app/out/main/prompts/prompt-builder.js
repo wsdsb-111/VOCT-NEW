@@ -447,10 +447,16 @@ function createPromptBuilder({
         tokens: TokenCounter.estimateTokens(this.buildCacheAnchor(gameData))
       }];
       llmMessages.push({ role: "system", content: blocksWithTokens[0].content });
+      const promptGameData = memoryContext?.historicalReferenceInfo ? Object.assign(Object.create(Object.getPrototypeOf(gameData)), gameData, {
+        historicalReferenceInfo: memoryContext.historicalReferenceInfo,
+        currentEmperor: null,
+        currentEmperorTitle: null,
+        currentEraName: null
+      }) : gameData;
       const context = {
         character: char,
         stableCharacter: this.getFrozenCharacterProfile(char, memoryContext),
-        gameData,
+        gameData: promptGameData,
         summary: currentSessionSummary,
         memoryContext
       };
@@ -495,6 +501,14 @@ function createPromptBuilder({
         enabled: true,
         role: "system",
         stable: true
+      };
+      const subjectiveWorldBlock = {
+        id: "worldline-subjective",
+        type: "worldline_subjective",
+        label: "Responder-scoped World Facts",
+        enabled: true,
+        role: "system",
+        stable: false
       };
       const directMemoryBlock = {
         id: "memory-direct-frozen",
@@ -560,6 +574,14 @@ function createPromptBuilder({
             block: stableWorldBlock,
             content: memoryContext.worldStableText,
             tokens: TokenCounter.estimateTokens(memoryContext.worldStableText)
+          });
+        }
+        if (memoryContext?.subjectiveWorldText) {
+          llmMessages.push({ role: "system", content: memoryContext.subjectiveWorldText });
+          blocksWithTokens.push({
+            block: subjectiveWorldBlock,
+            content: memoryContext.subjectiveWorldText,
+            tokens: TokenCounter.estimateTokens(memoryContext.subjectiveWorldText)
           });
         }
         if (memoryContext?.topicPatchText) {

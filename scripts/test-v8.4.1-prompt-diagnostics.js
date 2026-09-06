@@ -34,6 +34,7 @@ try {
         "102": { id: "102", firstName: "YuefeiJunior", fullName: "YuefeiJunior", alive: true, location: "kaifeng" }
       },
       nameToCharacterIds: { yuefei: ["101"], yuefeijunior: ["102"] },
+      indexes: { verifiedFullNameToRuntimeIds: { yuefei: ["101"], yuefeijunior: ["102"] }, givenNameToRuntimeIds: { yuefei: ["101"], yuefeijunior: ["102"] } },
       definitionToRuntime: {},
       runtimeToDefinitions: {},
       titles: { "1": { id: "1", key: "title_yuefei", holder: "101" } }

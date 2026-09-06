@@ -6,6 +6,7 @@ const { figureMatchingRecords } = require("../historical-system/historical-data/
 const figuresByKey = new Map(figures.map((figure) => [figure.figureKey, figure]));
 const matchingByKey = new Map(figureMatchingRecords.map((record) => [record.figureKey, record]));
 const reverseIndexes = new WeakMap();
+const IDENTITY_HARD_CONFLICTS = new Set(["DEFINITION_SOURCE_CONFLICT", "NAME_SOURCE_CONFLICT", "GENDER_SOURCE_CONFLICT", "DEFINITION_BINDING_CONFLICT", "DEFINITION_RUNTIME_BINDING_CONFLICT", "FULL_NAME_PROVENANCE_CONFLICT"]);
 
 function reverseIndex(bindings) {
   if (!bindings || typeof bindings !== "object") return new Map();
@@ -62,7 +63,7 @@ function resolveHistoricalIdentity({ alias, figureKey, candidateDefinitionIds = 
 
   const definitionId = definitionIds[0];
   const record = recordsById.get(definitionId);
-  const sourceConflicts = Array.isArray(record?.conflicts) ? record.conflicts.filter(Boolean) : [];
+  const sourceConflicts = Array.isArray(record?.conflicts) ? record.conflicts.filter((code) => IDENTITY_HARD_CONFLICTS.has(code)) : [];
   if (sourceConflicts.length) {
     const candidates = observedCandidates.map((candidate) => ({ ...candidate, conflicts: sourceConflicts.map(code => ({ code, category: "IDENTITY_CORE" })), hardConflicts: [...sourceConflicts] }));
     return { status: "REJECTED", resolvedRuntimeId: null, candidates, reason: "DEFINITION_SOURCE_CONFLICT", evidence: sourceConflicts.map(code => ({ code, category: "IDENTITY_CORE" })) };

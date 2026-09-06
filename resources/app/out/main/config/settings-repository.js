@@ -97,6 +97,8 @@ function createSettingsRepository({ Store, schema, SecureProviderSecrets, electr
       if (currentAppSettings.worldlineSettings === void 0) {
         this.store.set("worldlineSettings", {
           autosavePath: null,
+          baseGamePath: null,
+          subjectiveWorldMode: "DIAGNOSTIC",
           autoWatchEnabled: true,
           promptIntegrationEnabled: false,
           lastValidatedAt: null,
@@ -201,6 +203,8 @@ function createSettingsRepository({ Store, schema, SecureProviderSecrets, electr
     getWorldlineSettings() {
       return this.store.get("worldlineSettings", {
         autosavePath: null,
+        baseGamePath: null,
+        subjectiveWorldMode: "DIAGNOSTIC",
         autoWatchEnabled: true,
         promptIntegrationEnabled: false,
         lastValidatedAt: null,

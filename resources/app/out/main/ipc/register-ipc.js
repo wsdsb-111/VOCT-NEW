@@ -57,6 +57,11 @@ function registerIpcHandlers(runtime) {
     electron.ipcMain.handle("worldline:getHistoricalBindings", (_event, payload) => worldlineService.getHistoricalBindingsAsync ? worldlineService.getHistoricalBindingsAsync(payload) : worldlineService.getHistoricalBindings(payload));
     electron.ipcMain.handle("worldline:getDiagnostics", () => worldlineService.getDiagnostics());
     electron.ipcMain.handle("worldline:getPromptDiagnostics", (_event, payload) => worldlineService.getPromptDiagnosticsAsync(payload));
+    electron.ipcMain.handle("worldline:getSubjectiveResponderOptions", (_event, payload) => worldlineService.getSubjectiveResponderOptions({ query: typeof payload?.query === "string" ? payload.query : "" }));
+    electron.ipcMain.handle("worldline:getSubjectiveWorldView", (_event, payload) => worldlineService.getSubjectiveWorldView({
+      responderId: typeof payload?.responderId === "string" || Number.isSafeInteger(payload?.responderId) ? payload.responderId : null,
+      query: typeof payload?.query === "string" ? payload.query : ""
+    }));
     electron.ipcMain.handle("worldline:listSupplemental", () => worldlineService.listSupplemental());
     electron.ipcMain.handle("worldline:createSupplemental", (_event, payload) => worldlineService.createSupplemental(payload));
     electron.ipcMain.handle("worldline:updateSupplemental", (_event, id, payload) => worldlineService.updateSupplemental(id, payload));

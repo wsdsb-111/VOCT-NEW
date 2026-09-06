@@ -330,10 +330,26 @@ class Conversation {
       turnEpoch: this.turnEpoch
     }, null);
     let worldContext = null;
+    let subjectiveWorldContext = null;
     try {
-      worldContext = worldlineService?.getPromptContext?.({ query, assistContext, mentionedEntityIds: mentionedCharacterIds }) || null;
+      if (worldlineService?.isSubjectivePromptIntegrationEnabled?.()) {
+        subjectiveWorldContext = worldlineService.getSubjectivePromptContext({
+          responderId: npc.id,
+          query,
+          assistContext,
+          mentionedEntityIds: mentionedCharacterIds,
+          conversationId: this.id,
+          turnEpoch: this.turnEpoch,
+          sceneRevision: `${this.gameData.date || ""}\n${this.gameData.scene || ""}`,
+          presenceRevision: activeParticipantIds.map(String).sort().join(","),
+          directObservationFactIds: [],
+          historicalReferenceInfo: this.gameData.historicalReferenceInfo
+        }) || null;
+      } else {
+        worldContext = worldlineService?.getPromptContext?.({ query, assistContext, mentionedEntityIds: mentionedCharacterIds, responderId: npc.id, conversationId: this.id, turnEpoch: this.turnEpoch }) || null;
+      }
     } catch (error) {
-      console.warn("[Worldline] World recall failed; continuing with personal memory:", error.message);
+      console.warn("[Worldline] World recall failed; continuing without world recall:", error.message);
     }
     return {
       ...retrieved,
@@ -352,6 +368,8 @@ class Conversation {
       worldTopicText: worldContext?.topicText || null,
       worldSupplementalText: worldContext?.supplementalText || null,
       worldCurrentText: worldContext?.currentText || null,
+      subjectiveWorldText: subjectiveWorldContext?.worldText || null,
+      historicalReferenceInfo: subjectiveWorldContext?.historicalReferenceInfo || null,
       worldRecallQueryFingerprint: worldContext?.queryFingerprint || null,
       worldRecallCacheHit: worldContext?.cacheHit === true
     };
