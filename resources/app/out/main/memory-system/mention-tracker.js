@@ -70,7 +70,7 @@ class MentionTracker {
     return entry;
   }
 
-  findMentionedCharacterIds(history = [], { candidates = [], excludedIds = [], recentCharacterId = null } = {}) {
+  findMentionedCharacterIds(history = [], { candidates = [], excludedIds = [], recentCharacterId = null, resolveCoreference = true } = {}) {
     const excluded = new Set(uniqueNumericIds(excludedIds));
     const aliases = this.buildAliases(candidates).filter((alias) => !excluded.has(alias.id));
     const mentioned = [];
@@ -107,7 +107,7 @@ class MentionTracker {
       }
       if (lastMessageMentionId != null) recentId = lastMessageMentionId;
       const hasCoreference = /(?:那个人|那人|此人|刚才说的那位)/.test(content) || /(?<![其吉])[他她](?![们人者])/.test(content);
-      if (hasCoreference) {
+      if (hasCoreference && resolveCoreference) {
         if (recentId != null && !excluded.has(recentId)) {
           if (!seen.has(recentId)) {
             seen.add(recentId);
@@ -130,9 +130,15 @@ class MentionTracker {
     if (historyChanged) {
       cursor = 0;
       target.mentionedCharacterIds = [];
+      target.currentTurnMentionedCharacterIds = [];
+      target.recentThirdPersonCharacterId = null;
+      target.recentThirdPersonTurnEpoch = null;
+      target.recentThirdPersonMessageIndex = null;
     }
 
-    const previousRecentCharacterId = target.recentThirdPersonCharacterId;
+    const userTurn = history.filter((message) => message?.role === "user").length;
+    const expired = target.recentThirdPersonTurnEpoch == null || userTurn - target.recentThirdPersonTurnEpoch > 3;
+    const previousRecentCharacterId = expired ? null : target.recentThirdPersonCharacterId;
     const newlyMentioned = this.findMentionedCharacterIds(history.slice(cursor), { candidates, excludedIds, recentCharacterId: previousRecentCharacterId });
     target.mentionedCharacterIds = uniqueNumericIds([...(target.mentionedCharacterIds || []), ...newlyMentioned]);
     target.processedThroughIndex = history.length;
@@ -141,7 +147,16 @@ class MentionTracker {
     target.currentTurnMentionedCharacterIds = latestUserMessage
       ? this.findMentionedCharacterIds([latestUserMessage], { candidates, excludedIds, recentCharacterId: previousRecentCharacterId })
       : [];
-    target.recentThirdPersonCharacterId = this.lastScanRecentCharacterId ?? previousRecentCharacterId ?? null;
+    const currentRecentId = this.lastScanRecentCharacterId;
+    const explicitIds = latestUserMessage ? this.findMentionedCharacterIds([latestUserMessage], { candidates, excludedIds, resolveCoreference: false }) : [];
+    if (explicitIds.length === 1) {
+      target.recentThirdPersonCharacterId = explicitIds[0];
+      target.recentThirdPersonTurnEpoch = userTurn;
+      target.recentThirdPersonMessageIndex = history.lastIndexOf(latestUserMessage);
+    } else {
+      target.recentThirdPersonCharacterId = explicitIds.length > 1 ? null : previousRecentCharacterId;
+      if (expired && currentRecentId == null && latestUserMessage && /那个人|那人|此人|他|她/.test(latestUserMessage.content || "")) this.recordUnresolved("第三人指代", "UNRESOLVED_COREFERENCE");
+    }
     delete target.processedMessageKeys;
 
     const excluded = new Set(uniqueNumericIds(excludedIds));

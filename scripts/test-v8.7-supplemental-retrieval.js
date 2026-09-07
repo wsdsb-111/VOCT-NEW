@@ -1,0 +1,15 @@
+"use strict";
+const assert = require("assert");
+const { retrieveSupplemental } = require("../resources/app/out/main/worldline/supplemental-retriever");
+const base = { recordId: "r1", campaignId: "c", branchId: "a", type: "PLAYER_CANON", status: "ACTIVE", revision: 1, visibility: "PUBLIC_WORLD", entities: ["3"], knownBy: [], title: "赴约", content: "韩世忠私下答应下月赴约", totalDays: 100, importance: "NORMAL" };
+const call = (record, options = {}) => retrieveSupplemental({ records: [record], campaignId: "c", branchId: "a", responderId: "1", query: "赴约", currentTotalDays: 101, ...options });
+assert.equal(call(base).selected.length, 1);
+for (const patch of [{ branchId: "b" }, { status: "HIDDEN" }, { status: "SUPERSEDED" }, { totalDays: 102 }, { visibility: "SECRET", knownBy: ["2"] }, { visibility: "COURT_PUBLIC" }]) assert.equal(call({ ...base, ...patch }).text, null);
+assert(call({ ...base, visibility: "SECRET", knownBy: ["1"] }).text);
+assert.equal(call(base, { query: "国库财政" }).text, null);
+assert.equal(call(base, { tokenBudget: 1 }).text, null);
+assert(call({ ...base, type: "PLANNED_DECISION" }).text.includes("尚未发生"));
+const conflict = call(base, { records: [{ ...base, conflictKey: "promise" }, { ...base, recordId: "r2", conflictKey: "promise", content: "韩世忠拒绝赴约" }] });
+assert.equal(conflict.selected.length, 0);
+assert(conflict.text.includes("CANON_CONFLICT"));
+console.log("V8.7 Supplemental Retrieval PASS: branch, ACL, time, status, relevance, budget, conflict");

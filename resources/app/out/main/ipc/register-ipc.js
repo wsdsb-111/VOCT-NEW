@@ -63,6 +63,12 @@ function registerIpcHandlers(runtime) {
       query: typeof payload?.query === "string" ? payload.query : ""
     }));
     electron.ipcMain.handle("worldline:listSupplemental", () => worldlineService.listSupplemental());
+    electron.ipcMain.handle("worldline:listCanon", (_event, options) => worldlineService.listCanon(options));
+    electron.ipcMain.handle("worldline:mutateCanon", (_event, payload) => worldlineService.mutateCanon(payload));
+    electron.ipcMain.handle("worldline:getCanonHistory", (_event, payload) => worldlineService.getCanonHistory(payload));
+    electron.ipcMain.handle("worldline:confirmCanonBranch", (_event, token) => worldlineService.confirmCanonBranch(token));
+    electron.ipcMain.handle("worldline:forkCanonBranch", (_event, token) => worldlineService.forkCanonBranch(token));
+    electron.ipcMain.handle("worldline:renameCanonBranch", (_event, payload) => worldlineService.renameCanonBranch(payload));
     electron.ipcMain.handle("worldline:createSupplemental", (_event, payload) => worldlineService.createSupplemental(payload));
     electron.ipcMain.handle("worldline:updateSupplemental", (_event, id, payload) => worldlineService.updateSupplemental(id, payload));
     electron.ipcMain.handle("worldline:deleteSupplemental", (_event, id) => worldlineService.deleteSupplemental(id));

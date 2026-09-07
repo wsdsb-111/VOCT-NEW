@@ -4,6 +4,7 @@ const nodeCrypto = require("node:crypto");
 const nodeFs = require("fs");
 const nodePath = require("path");
 const { Worker: NodeWorker } = require("worker_threads");
+const { CanonService } = require("./canon-service");
 const { readSavePreamble } = require("./save-container");
 const { dateValue } = require("./game-state-adapter");
 const { resolvePlayerPoliticalContext } = require("./political-context");
@@ -174,6 +175,7 @@ class WorldlineService {
     this.getRuntimeNames = getRuntimeNames;
     this.memoryEngine = memoryEngine;
     this.storageDir = path.join(dataDir, "worldline-v8.4");
+    this.canon = new CanonService({ root: path.join(this.storageDir, "supplemental-v8.7"), getCheckpoint: () => this.currentCheckpoint, getLiveState: () => this.getLiveState() });
     this.checkpointPath = path.join(this.storageDir, "checkpoint.json");
     this.supplementalPath = path.join(this.storageDir, "supplemental.json");
     this.currentCheckpoint = null;
@@ -1161,16 +1163,38 @@ class WorldlineService {
     return settings.promptIntegrationEnabled === true && settings.subjectiveWorldMode === "PRODUCTION";
   }
 
+  async listCanon(options) {
+    return { ...await this.canon.list(options), promptEnabled: this.isSubjectivePromptIntegrationEnabled() };
+  }
+
+  mutateCanon(payload) { return this.canon.mutate(payload); }
+  getCanonHistory(payload) { return this.canon.history(payload); }
+  confirmCanonBranch(token) { return this.canon.confirm(token); }
+  forkCanonBranch(token) { return this.canon.fork(token); }
+  renameCanonBranch(payload) { return this.canon.rename(payload); }
+  async prepareCanon() {
+    let timer;
+    try {
+      await Promise.race([this.canon.prepare(), new Promise(resolve => { timer = setTimeout(resolve, 1500); })]);
+    } catch (_error) { /* Optional Canon failure must not suppress CK3 recall. */ }
+    finally { clearTimeout(timer); }
+  }
+
   getSubjectivePromptContext({ responderId, query = "", assistContext = "", mentionedEntityIds = [], conversationId = null, turnEpoch = null, sceneRevision = null, presenceRevision = null, directObservationFactIds = [], directObservationFacts = [], historicalReferenceInfo = null, tokenBudget = null } = {}) {
     if (!this.isSubjectivePromptIntegrationEnabled()) return null;
     const view = this.getSubjectiveWorldView({ responderId, query, assistContext, mentionedEntityIds, conversationId, turnEpoch, sceneRevision, presenceRevision, directObservationFactIds, directObservationFacts });
     if (!view) return null;
     const formatStartedAt = Date.now();
     const formatted = buildSubjectiveWorldTurnRecall(view, { tokenBudget });
+    const remaining = tokenBudget == null ? 512 : Math.max(0, tokenBudget - formatted.tokens - 2);
+    const stableCanon = this.canon.recall({ responderId, stable: true, conversationId, tokenBudget: 192, currentFacts: view.allowedFacts || [] });
+    const canon = this.canon.recall({ responderId, query, entityIds: mentionedEntityIds, tokenBudget: Math.min(512, remaining), currentFacts: view.allowedFacts || [], excludeIds: stableCanon.selected.map(item => item.recordId) });
+    const turnText = [formatted.text, canon.text].filter(Boolean).join("\n\n") || null;
+    const turnTokens = turnText ? estimateTokens(turnText) : 0;
     return {
-      worldStableText: buildWorldStablePrompt({ checkpointId: view.checkpointId, checkpointAsOf: view.asOf }),
-      worldTurnRecallText: formatted.text,
-      worldTurnRecallTokens: formatted.tokens,
+      worldStableText: [buildWorldStablePrompt({ checkpointId: view.checkpointId, checkpointAsOf: view.asOf, hasStableCanon: !!stableCanon.text }), stableCanon.text?.replace("本轮玩家 Canon", "会话固定玩家 Canon（V8.7）")].filter(Boolean).join("\n\n") || null,
+      worldTurnRecallText: turnText,
+      worldTurnRecallTokens: turnTokens,
       worldTurnRecallTrimmed: formatted.trimmed,
       historicalReferenceInfo: buildHistoricalReferenceReplacement(historicalReferenceInfo, view.asOf),
       queryFingerprint: view.queryFingerprint || null,
@@ -1180,7 +1204,17 @@ class WorldlineService {
         worldRetrievalMs: view.metrics?.sharedRetrievalMs || 0,
         worldPolicyMs: view.metrics?.knowledgePolicyMs || 0,
         worldFormatMs: Date.now() - formatStartedAt,
-        worldTurnRecallTokens: formatted.tokens
+        worldTurnRecallTokens: turnTokens,
+        supplementalCandidateCount: canon.candidateCount || 0,
+        supplementalSelectedCount: canon.selected.length,
+        supplementalTokens: canon.tokens,
+        supplementalStableTokens: stableCanon.tokens,
+        supplementalStableCacheHit: stableCanon.cacheHit === true,
+        supplementalCacheHit: canon.cacheHit === true,
+        supplementalRevision: canon.revision || 0,
+        canonConflictCount: canon.conflictCount || 0,
+        canonTemporalBlockedCount: canon.temporalBlockedCount || 0,
+        canonVisibilityBlockedCount: canon.visibilityBlockedCount || 0
       }
     };
   }

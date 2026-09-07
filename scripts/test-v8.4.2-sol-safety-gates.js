@@ -79,7 +79,7 @@ try {
   const jsxRuntimeExports = { jsx: () => null, jsxs: () => null };
   const reactExports = { useState: (initial) => [initial, () => {}], useRef: (initial) => ({ current: initial }), useEffect: () => {} };
   const useTranslation = () => ({ i18n: { language: "zh-CN" } });
-  const renderWorldline = new Function("reactExports", "jsxRuntimeExports", "useTranslation", "window", "navigator", `${worldlineSource}; return WorldlineView;`)(reactExports, jsxRuntimeExports, useTranslation, {}, {});
+  const renderWorldline = new Function("reactExports", "jsxRuntimeExports", "useTranslation", "window", "navigator", "WorldMemoryEditor", `${worldlineSource}; return WorldlineView;`)(reactExports, jsxRuntimeExports, useTranslation, {}, {}, () => null);
   assert.doesNotThrow(() => renderWorldline(), "WorldlineView must render before Prompt diagnostics have produced query arrays");
 
   const worldlineServiceSource = fs.readFileSync(path.join(__dirname, "..", "resources", "app", "out", "main", "worldline", "worldline-service.js"), "utf8");

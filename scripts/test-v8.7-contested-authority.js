@@ -1,0 +1,12 @@
+"use strict";
+const assert = require("assert");
+const { buildThirdPartyEvidencePatch } = require("../resources/app/out/main/memory-system/third-party-evidence");
+const { evidenceMemory } = require("./v8.6.2-test-fixtures");
+const memories = [evidenceMemory({ source: "witnessed", conflictKey: "约定", polarity: "YES" }), evidenceMemory({ source: "rumor", conflictKey: "约定", polarity: "NO" })];
+const result = buildThirdPartyEvidencePatch({ query: "韩世忠的约定", entities: [{ id: 3, aliases: ["韩世忠"], memories }] });
+assert.equal(result.conflict, false);
+assert.equal(result.contested, true);
+assert.equal(result.entities[0].selected[0].memory.source, "witnessed");
+assert.equal(result.entities[0].selected[1].arbitrationStatus, "LOW_AUTHORITY_CONTESTED");
+assert(result.text.includes("相反"));
+console.log("contested authority PASS");

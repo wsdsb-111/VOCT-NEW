@@ -8,7 +8,7 @@ function relationFingerprint(gameData) {
   const characters = gameData?.characters instanceof Map ? [...gameData.characters.values()] : Object.values(gameData?.characters || {});
   return characters.map((character) => [
     character?.id,
-    ...["parents", "children", "siblings"].map((field) => (character?.[field] || []).map((entry) => entry?.id ?? entry).join(",")),
+    ...["parents", "children", "siblings", "spouse", "spouses", "formerSpouses", "deceasedSpouses"].map((field) => JSON.stringify(character?.[field] ?? null)),
     character?.consort && typeof character.consort === "object" ? character.consort.id ?? character.consort.name : character?.consort || "",
     character?.alive,
     character?.deathDateTotalDays ?? character?.deathDate ?? ""
@@ -19,9 +19,9 @@ function revisionKey(gameData) {
   return [
     gameData?.campaignToken ?? gameData?.campaignId ?? "",
     gameData?.checkpointId ?? gameData?.currentCheckpoint?.id ?? "",
-    gameData?.gameDataRevision ?? "",
-    gameData?.totalDays ?? "",
-    gameData?.participantRelationRevision ?? relationFingerprint(gameData)
+    gameData?.structuralRevision ?? "",
+    gameData?.participantRelationRevision ?? "",
+    relationFingerprint(gameData)
   ].join("|");
 }
 

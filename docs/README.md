@@ -4,6 +4,10 @@
 
 ## 推荐阅读顺序
 
+V8.7 主体开发：[实施记录](v8.7-implementation-report.md)，存储—IPC—编辑器—正式对话已接通，204 组发布回归通过；浏览器交互验证通过，真实 CK3/Provider/打包 Electron 与最终 Freeze 待验收。
+
+最新前置修复：[V8.7.0a 实施记录](v8.7.0a-implementation-report.md)，200 组发布回归通过，主体开发前暂停，实机验证待执行。
+
 V8.6.2 当前版本入口：[Sol 实施与最终审查](v8.6.2-sol-implementation-and-final-review.md)。Subjective World 输出、第三人 Grounding、Kinship、Death/Temporal 与缓存/Token 边界已完成，38 个专项和 187 组发布门禁通过；真实 CK3、Provider、Production A/B 与 Electron UI Gate 未执行，`V8.6.2 FREEZE = PENDING MANUAL GATES`。
 
 当前事故入口：[V8.5.1 摘要 P0 / 多人入场 P2 修复报告](v8.5.1-summary-incident-review.md)：摘要链路审计、长会话恢复、参与者隔离与入场延迟。

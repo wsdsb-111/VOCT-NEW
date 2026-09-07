@@ -90,18 +90,6 @@ function epistemicInstruction(memory) {
   return "既有记录：不得补造证据未说明的内容";
 }
 
-function hasEvidenceConflict(entries) {
-  if (entries.some((entry) => entry.memory?.type === "conflict" || entry.memory?.unresolved === true)) return true;
-  const groups = new Map();
-  for (const entry of entries) {
-    const key = entry.memory?.conflictKey;
-    if (!key) continue;
-    if (!groups.has(key)) groups.set(key, new Set());
-    if (entry.memory?.polarity) groups.get(key).add(entry.memory.polarity);
-  }
-  return [...groups.values()].some((polarities) => polarities.size > 1);
-}
-
 function auditEvidencePool(entries) {
   const explicit = entries.find((entry) => entry.memory?.type === "conflict" || entry.memory?.unresolved === true);
   if (explicit) return { conflict: true, forced: [explicit] };
@@ -114,15 +102,22 @@ function auditEvidencePool(entries) {
     groups.get(key).push(entry);
   }
   for (const group of groups.values()) {
+    const highestAuthority = Math.max(...group.map((entry) => entry.sourceAuthority));
     for (let leftIndex = 0; leftIndex < group.length; leftIndex++) {
       for (let rightIndex = leftIndex + 1; rightIndex < group.length; rightIndex++) {
         const left = group[leftIndex];
         const right = group[rightIndex];
-        if (left.memory.polarity !== right.memory.polarity && left.sourceAuthority === right.sourceAuthority) {
+        if (left.memory.polarity !== right.memory.polarity && left.sourceAuthority === highestAuthority && right.sourceAuthority === highestAuthority) {
           return { conflict: true, forced: [left, right] };
         }
       }
     }
+  }
+  for (const group of groups.values()) {
+    const ordered = [...group].sort((left, right) => right.sourceAuthority - left.sourceAuthority);
+    const high = ordered[0];
+    const low = ordered.find((entry) => entry.sourceAuthority < high.sourceAuthority && entry.memory.polarity !== high.memory.polarity);
+    if (low) return { conflict: false, contested: true, forced: [{ ...high, arbitrationStatus: "HIGH_AUTHORITY_SELECTED" }, { ...low, arbitrationStatus: "LOW_AUTHORITY_CONTESTED" }] };
   }
   return { conflict: false, forced: [] };
 }
@@ -146,19 +141,20 @@ function buildThirdPartyEvidencePatch({ query = "", entities = [], currentTotalD
     const second = ranked[1];
     const selected = audit.forced.length ? audit.forced.slice(0, 2) : [top];
     if (!audit.forced.length && second && (second.queryRelevance >= 0.12 || second.memory?.type === "conflict" || second.memory?.conflictKey && second.memory.conflictKey === top.memory?.conflictKey)) selected.push(second);
-    const conflict = audit.conflict || hasEvidenceConflict(selected);
+    const conflict = audit.conflict;
     const label = aliases[0] || `#${entityId}`;
     const perEntityBudget = Math.min(320, evidenceBudget - usedTokens);
     const header = `=== 当前轮召回证据：第三人 ${label} ===\n以下记录与当前问题直接相关，回答涉及其明确内容时必须遵守；没有说明的内容必须承认不知道，不得补造。`;
     const rows = selected.slice(0, 2).map((entry) => {
       const excerpt = extractRelevantEvidenceWindow(entry.memory?.content, { query, aliases });
-      return `- ${entry.memory?.eventDate || "日期不详"} / ${entry.memory?.source || "来源不详"} / ${entry.memory?.epistemicStatus || "状态不详"} / ${entry.centrality}\n  ${epistemicInstruction(entry.memory)}\n  ${excerpt}`;
+      const instruction = entry.arbitrationStatus === "LOW_AUTHORITY_CONTESTED" ? "LOW_AUTHORITY_CONTESTED：仅为相反传闻/说法，不得作为主要事实。" : entry.arbitrationStatus === "HIGH_AUTHORITY_SELECTED" ? "HIGH_AUTHORITY_SELECTED：采用本条高权威证据；存在相反低权威说法。" : epistemicInstruction(entry.memory);
+      return `- ${entry.memory?.eventDate || "日期不详"} / ${entry.memory?.source || "来源不详"} / ${entry.memory?.epistemicStatus || "状态不详"} / ${entry.centrality}\n  ${instruction}\n  ${excerpt}`;
     });
     if (conflict) rows.unshift("- EVIDENCE_CONFLICT：同权威记录存在冲突，不得随机选边；应明确表示无法确定。");
     const text = truncateToBudget(`${header}\n${rows.join("\n")}`, perEntityBudget, estimate);
     const tokens = text ? Math.max(1, estimate(text)) : 0;
     if (!text || tokens > perEntityBudget) continue;
-    entityResults.push({ entityId, label, selected, conflict, text, tokens });
+    entityResults.push({ entityId, label, selected, conflict, contested: audit.contested === true, text, tokens });
     usedTokens += tokens;
   }
   const text = entityResults.length ? `${entityResults.map((entry) => entry.text).join("\n\n")}\n${authorityText}` : null;
@@ -169,6 +165,7 @@ function buildThirdPartyEvidencePatch({ query = "", entities = [], currentTotalD
     text,
     tokens: text ? Math.max(1, estimate(text)) : 0,
     conflict: entityResults.some((entry) => entry.conflict),
+    contested: entityResults.some((entry) => entry.contested),
     candidateCount: entityResults.reduce((total, entry) => total + entry.selected.length, 0)
   };
 }

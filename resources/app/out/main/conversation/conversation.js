@@ -233,6 +233,7 @@ class Conversation {
       const initialBudget = resolveWorldlineTurnBudget({ contextLimit, basePromptTokens: estimatedTokens });
       const remainingContext = initialBudget.remainingContext;
       try {
+        await worldlineService.prepareCanon?.();
         let subjectiveWorldContext = worldlineService.getSubjectivePromptContext({
           responderId: npc.id,
           query: request.query || "",

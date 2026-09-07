@@ -1,0 +1,116 @@
+"use strict";
+const assert = require("assert");
+const fs = require("fs");
+const os = require("os");
+const path = require("path");
+const { CanonService } = require("../resources/app/out/main/worldline/canon-service");
+const { WorldlineService } = require("../resources/app/out/main/worldline/worldline-service");
+const { retrieveSupplemental } = require("../resources/app/out/main/worldline/supplemental-retriever");
+const { registerIpcHandlers } = require("../resources/app/out/main/ipc/register-ipc");
+
+(async () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), "votc-v87-canon-"));
+  try {
+    let checkpoint = { id: "a", source: { path: "C:\\saves\\A.ck3", fingerprint: "a".repeat(64) }, snapshot: { playthroughId: "campaign-fixture", gameDate: "1171.9.20", characters: {
+      "1": { id: "1", courtEmployer: "10", liege: "10" }, "2": { id: "2", courtEmployer: "10", liege: "10" }, "3": { id: "3", courtEmployer: "30", liege: "30" }, "10": { id: "10" }, "30": { id: "30" }
+    } } };
+    const original = checkpoint;
+    const createService = () => new CanonService({ root, getCheckpoint: () => checkpoint, getLiveState: () => ({ gameDate: "1171.9.20", totalDays: 100 }) });
+    const service = createService();
+    let page = await service.list();
+    const payload = { title: "赴约", content: "韩世忠曾答应下月赴约", gameDate: "1171.9.20", entities: ["2"] };
+    const entry = await service.mutate({ token: page.branch.token, operation: "create", payload });
+    await service.prepare();
+    const recall = (options = {}) => service.recall({ responderId: "1", query: "赴约", ...options });
+    assert(recall().text.includes("赴约"));
+    assert(recall().cacheHit);
+    assert.equal(recall({ query: "种田" }).text, null);
+    await service.mutate({ token: page.branch.token, operation: "update", id: entry.recordId, revision: 1, payload: { visibility: "SECRET", knownBy: ["1", "2"] } });
+    await service.prepare();
+    assert(recall().text);
+    assert.equal(recall({ responderId: "3" }).text, null);
+    await service.mutate({ token: page.branch.token, operation: "update", id: entry.recordId, revision: 2, payload: { status: "HIDDEN" } });
+    await service.prepare();
+    assert.equal(recall().text, null, "hidden record invalidates previous cached recall");
+    await service.mutate({ token: page.branch.token, operation: "update", id: entry.recordId, revision: 3, payload: { status: "ACTIVE", visibility: "COURT_PUBLIC", scopeEntityId: "2" } });
+    await service.prepare();
+    assert(recall().text);
+    assert.equal(recall({ responderId: "3" }).text, null);
+    const staleToken = page.branch.token;
+    checkpoint = { ...checkpoint, id: "b", source: { ...checkpoint.source, path: "C:\\saves\\B.ck3" } };
+    page = await service.list();
+    assert.equal(page.total, 0, "copied save has no A records");
+    assert.equal(recall().text, null);
+    await assert.rejects(service.mutate({ token: staleToken, operation: "create", payload }), /branch_write_blocked/);
+    checkpoint = original;
+    page = await service.list();
+    assert.equal(page.records[0].revision, 4);
+    assert.equal((await createService().list()).total, 1, "worker persistence survives service restart");
+    checkpoint = { ...original, id: "later", source: { ...original.source, fingerprint: "b".repeat(64) }, snapshot: { ...original.snapshot, gameDate: "1171.9.21" } };
+    page = await service.list();
+    assert.equal(page.branch.state, "BRANCH_UNKNOWN");
+    service.confirm(page.branch.token);
+    assert.equal((await service.list()).total, 1, "explicit continuation retains branch");
+    assert.equal((await service.history({ token: service.branch().token, id: entry.recordId })).length, 4);
+    const pinned = await service.mutate({ token: service.branch().token, operation: "create", payload: { title: "礼制", content: "祭礼使用青色灯笼", gameDate: "1171.9.20", type: "WORLD_ANNOTATION", importance: "HIGH", conversationStable: true, visibility: "SECRET", knownBy: ["1"] } });
+    await service.prepare();
+    const stable = service.recall({ responderId: "1", stable: true, conversationId: "conversation", query: "不相关问题一" });
+    assert(stable.text.includes("青色灯笼"));
+    assert(service.recall({ responderId: "1", stable: true, conversationId: "conversation", query: "不相关问题二" }).cacheHit, "stable cache does not depend on current query");
+    assert.equal(service.recall({ responderId: "3", stable: true, conversationId: "conversation" }).text, null);
+    await service.mutate({ token: service.branch().token, operation: "update", id: pinned.recordId, revision: 1, payload: { status: "HIDDEN" } });
+    await service.prepare();
+    assert.equal(service.recall({ responderId: "1", stable: true, conversationId: "conversation" }).text, null);
+
+    // Exercise the production service formatter, not a separate test-only formatter.
+    checkpoint = original;
+    await service.prepare();
+    const world = new WorldlineService({ dataDir: root, settingsRepository: { getWorldlineSettings: () => ({ promptIntegrationEnabled: true, subjectiveWorldMode: "PRODUCTION" }), saveWorldlineSettings() {} } });
+    world.canon = createService();
+    // Registry advanced above: use the verified later checkpoint for production.
+    checkpoint = { ...original, id: "later", source: { ...original.source, fingerprint: "b".repeat(64) }, snapshot: { ...original.snapshot, gameDate: "1171.9.21" } };
+    await world.prepareCanon();
+    world.getSubjectiveWorldView = () => ({ checkpointId: "later", asOf: "1171.9.21", allowedFacts: [], metrics: {} });
+    const context = world.getSubjectivePromptContext({ responderId: "1", query: "赴约", tokenBudget: 512 });
+    assert(context.worldTurnRecallText.includes("赴约"));
+    assert(context.worldTurnRecallTokens <= 512);
+    assert.equal(context.metrics.supplementalSelectedCount, 1);
+    assert.equal(world.getSubjectivePromptContext({ responderId: "3", query: "赴约" }).worldTurnRecallText, null);
+    const handlers = new Map();
+    registerIpcHandlers({ electron: { ipcMain: { handle: (name, fn) => handlers.set(name, fn) } }, worldlineService: world, conversationManager: { onConversationUpdate() {} } });
+    const ipcPage = await handlers.get("worldline:listCanon")(null, {});
+    assert(ipcPage.branch.branchId);
+    await assert.rejects(handlers.get("worldline:mutateCanon")(null, { token: "stale", operation: "create", payload }), /branch_write_blocked/);
+    const ipcHistory = await handlers.get("worldline:getCanonHistory")(null, { token: ipcPage.branch.token, id: entry.recordId });
+    assert.equal(ipcHistory.length, 4);
+    world.canon.prepare = async () => { throw new Error("fixture disk failure"); };
+    await assert.doesNotReject(world.prepareCanon(), "optional failure never blocks conversation");
+    world.dispose();
+
+    const current = { ...entry, content: "韩世忠现在在临安", currentClaim: { entityId: "2", field: "location", value: "临安" } };
+    const result = retrieveSupplemental({ records: [current], campaignId: entry.campaignId, branchId: entry.branchId, responderId: "1", query: "韩世忠", currentGameDate: "1171.9.20", currentTruth: () => "建康" });
+    assert.equal(result.selected.length, 0);
+    assert(!result.text.includes("临安"));
+    const verified = retrieveSupplemental({ records: [{ ...current, content: "韩世忠现在在建康，而且丙已经死亡" }], campaignId: entry.campaignId, branchId: entry.branchId, responderId: "1", query: "韩世忠", currentGameDate: "1171.9.20", currentTruth: () => "临安" });
+    assert(verified.text.includes("location=临安"));
+    assert(!verified.text.includes("丙已经死亡"), "one verified field cannot authorize unrelated prose");
+    const rollback = createService();
+    checkpoint = original;
+    const ambiguous = await rollback.list();
+    assert.equal(ambiguous.branch.state, "BRANCH_CONFLICT");
+    const fork = rollback.fork(ambiguous.branch.token);
+    assert.notEqual(fork.branchId, entry.branchId);
+    assert.equal((await rollback.list()).total, 0, "explicit rollback fork starts empty");
+    assert.equal((await createService().list()).branch.branchId, fork.branchId, "explicit fork survives restart");
+    assert(fs.existsSync(path.join(root, "campaigns", entry.campaignId, "branches", entry.branchId, "state.json")), "fork never deletes original Canon");
+    await rollback.mutate({ token: rollback.branch().token, operation: "create", payload });
+    checkpoint = { ...original, source: { ...original.source, path: "C:\\saves\\renamed.ck3" } };
+    const renamePage = await rollback.list();
+    assert(renamePage.renameCandidates.some(item => item.branchId === fork.branchId));
+    const renameResult = await rollback.rename({ token: renamePage.branch.token, sourceBranchId: fork.branchId });
+    assert.equal(renameResult.branchId, fork.branchId);
+    assert.equal((await rollback.list()).total, 1, "explicit proven rename retains original records");
+    assert.equal((await createService().list()).branch.branchId, fork.branchId);
+    console.log("V8.7 production Canon PASS: workers, CRUD, restart, branch, cache, ACL, production prompt, current truth, fail-open");
+  } finally { fs.rmSync(root, { recursive: true, force: true }); }
+})().catch(error => { console.error(error); process.exitCode = 1; });

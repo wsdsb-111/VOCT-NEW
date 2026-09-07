@@ -56,7 +56,7 @@ function buildFamilyFactBlock(character, gameData) {
     lines.push(`- 配偶/伴侣（未绑定角色）：${spouse.name}`);
   }
   if (!lines.length) return null;
-  return `=== 当前结构化家庭事实（本轮 CK3 数据） ===\n${lines.join("\n")}\n权威规则：亲属身份、性别、是否已故、死亡日期、致死者与年龄只能服从本块结构化结果；相对时间只能使用系统给出的结果。Memory 只可补充过去经历与主观感受，不得覆盖这些事实。`;
+  return `=== 当前结构化家庭事实（本轮 CK3 数据） ===\n${lines.join("\n")}\n权威规则：亲属身份、性别、是否已故、死亡日期和年龄以本块结构化结果为准；相对时间只能使用系统给出的结果。若本块明确给出致死者，则以本块为准；若本块未给出致死者，可使用后续获准的 Current Game Truth / Worldline Game Truth。不得从 Memory 或模型推测致死者。Memory 只可补充过去经历与主观感受，不得覆盖这些事实。`;
 }
 
 module.exports = { buildFamilyFactBlock, formatStructuredCharacter };

@@ -2,6 +2,7 @@
 
 const { parentPort, workerData } = require("worker_threads");
 const fs = require("fs");
+const crypto = require("crypto");
 const { readSaveContainer } = require("./save-container");
 const { parseGameState } = require("./game-state-adapter");
 
@@ -39,12 +40,14 @@ function buildResult(savePath) {
   }
   const parseStartedAt = nowMs();
   const snapshot = parseGameState(container.gamestate);
+  const fingerprint = crypto.createHash("sha256").update(container.gamestate).digest("hex");
   validateSnapshotBounds(snapshot);
   const finalStat = fs.statSync(savePath);
   if (finalStat.size !== stat.size || finalStat.mtimeMs !== stat.mtimeMs) throw new Error("save_changed_during_parse");
   return {
     success: true,
     source: {
+      fingerprint,
       path: savePath,
       fileSize: stat.size,
       modifiedAt: stat.mtime.toISOString(),

@@ -88,10 +88,10 @@ function buildSubjectiveWorldPrompt(view, options = {}) {
   return buildSubjectiveWorldTurnRecall(view, options).text;
 }
 
-function buildWorldStablePrompt({ checkpointId = null, checkpointAsOf = null } = {}) {
+function buildWorldStablePrompt({ checkpointId = null, checkpointAsOf = null, hasStableCanon = false } = {}) {
   const asOf = text(checkpointAsOf);
   if (!asOf) return null;
-  return `=== Worldline Checkpoint Anchor ===\n- Checkpoint: ${text(checkpointId) || "unknown"}\n- World facts are valid only through: ${asOf}\n- Only responder-scoped Worldline Turn Recall after the current user message may supply current characters, titles, wars, deltas, or supplemental facts.\n- Do not infer or reveal facts absent from that recall.`;
+  return `=== Worldline Checkpoint Anchor${hasStableCanon ? " / Canon V8.7" : ""} ===\n- Checkpoint: ${text(checkpointId) || "unknown"}\n- World facts are valid only through: ${asOf}\n- Only responder-scoped Worldline Turn Recall after the current user message may supply current characters, titles, wars, deltas, or supplemental facts.\n- Do not infer or reveal facts absent from that recall.${hasStableCanon ? "\n- Canon V8.7 exception: explicitly pinned responder-authorized RP rules below may supply non-CK3 narrative rules. Current CK3 facts still take priority; personal beliefs remain subjective." : ""}`;
 }
 
 module.exports = { buildHistoricalReferenceReplacement, buildSubjectiveWorldPrompt, buildSubjectiveWorldTurnRecall, buildWorldStablePrompt };

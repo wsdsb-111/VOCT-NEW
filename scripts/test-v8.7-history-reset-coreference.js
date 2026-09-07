@@ -1,0 +1,11 @@
+"use strict";
+const assert = require("assert");
+const { MentionTracker } = require("../resources/app/out/main/memory-system/mention-tracker");
+const tracker = new MentionTracker();
+const state = tracker.createState();
+const candidates = [{ id: 3, fullName: "韩世忠" }];
+tracker.update(state, { history: [{ id: 1, role: "user", content: "韩世忠呢？" }], candidates });
+tracker.update(state, { history: [{ id: 2, role: "user", content: "他呢？" }], candidates });
+assert.deepStrictEqual(state.currentTurnMentionedCharacterIds, []);
+assert.equal(state.recentThirdPersonCharacterId, null);
+console.log("history reset PASS");

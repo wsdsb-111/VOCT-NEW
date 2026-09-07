@@ -1,0 +1,10 @@
+"use strict";
+const assert = require("assert");
+const { getCachedKinshipGraph } = require("../resources/app/out/main/worldline/kinship-graph-cache");
+const data = { totalDays: 100, characters: new Map([[1, { id: 1, parents: [{ id: 2 }] }]]) };
+const first = getCachedKinshipGraph(data);
+data.totalDays++;
+assert.strictEqual(getCachedKinshipGraph(data), first);
+data.characters.get(1).parents[0].deathDate = "1171.9.2";
+assert.notStrictEqual(getCachedKinshipGraph(data), first);
+console.log("structural cache PASS");

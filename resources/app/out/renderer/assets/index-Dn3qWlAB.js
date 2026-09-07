@@ -1,3 +1,4 @@
+import { WorldMemoryEditor } from "../world-memory-editor.js";
 function getDefaultExportFromCjs(x) {
   return x && x.__esModule && Object.prototype.hasOwnProperty.call(x, "default") ? x["default"] : x;
 }
@@ -22665,7 +22666,7 @@ function WorldlineView() {
   const historicalBindingLabel = player.bindingStatus(overview?.historicalBindingStatus);
   return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "worldline-view", children: [
     /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "worldline-header", children: [
-      /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [/* @__PURE__ */ jsxRuntimeExports.jsx("h3", { children: text("世界线", "Worldline") }), /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "muted-text", children: text("V8.5 世界线：以玩家可读结论为先，详细证据保留在高级信息中。", "V8.5 Worldline: player-readable conclusions come first; detailed evidence remains available under advanced information.") })] }),
+      /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [/* @__PURE__ */ jsxRuntimeExports.jsx("h3", { children: text("世界线", "Worldline") }), /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "muted-text", children: text("V8.7 世界线：CK3 事实只读，长期世界记忆绑定当前战役与存档分支。", "V8.7 Worldline: CK3 facts remain read-only; durable world memory belongs to the current campaign and save branch.") })] }),
       /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: `worldline-status worldline-status-${String(pipelineStatus || loadState).toLowerCase()}`, children: apiReady ? player.status(pipelineStatus) : text("暂不可用", "Unavailable") })
     ] }),
     /* @__PURE__ */ jsxRuntimeExports.jsxs("section", { className: "worldline-card worldline-source-card", children: [
@@ -22731,6 +22732,7 @@ function WorldlineView() {
         subjectiveCompareView && subjectiveViewPanel(subjectiveCompareView, text("对比角色：", "Compared responder: ") + subjectiveResponderLabel(subjectiveCompareView.responderId), "compare-subjective")
       ] }) : /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "worldline-empty", children: text("选择回应角色并运行只读诊断。", "Select a responder and run the read-only diagnostic.") })
     ] }),
+    /* @__PURE__ */ jsxRuntimeExports.jsx(WorldMemoryEditor, { react: reactExports }),
     /* @__PURE__ */ jsxRuntimeExports.jsxs("section", { className: "worldline-card worldline-editor", children: [
       /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "worldline-section-heading", children: [/* @__PURE__ */ jsxRuntimeExports.jsx("h4", { children: text("补充知识", "Supplemental Knowledge") }), /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "worldline-scope-note", children: text("范围：当前会话 / 当前检查点", "Scope: current session / current checkpoint") })] }),
       /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "worldline-note worldline-supplemental-scope-note", children: text("补充知识只在当前会话和当前检查点有效。Personal / Secret 内容必须填写可验证的 CK3 Runtime ID 作为角色范围；不填写时不会自动共享给其他角色。", "Supplemental knowledge is limited to the current session and checkpoint. Personal / Secret content needs verifiable CK3 Runtime IDs as the audience; without them it is not shared automatically with other responders.") }),

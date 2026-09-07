@@ -41,7 +41,7 @@ for (const forbiddenText of [
 }
 
 for (const marker of [
-  "V8.5 Worldline",
+  "V8.7 Worldline",
   "worldline-player-summary-grid",
   "showAdvancedSource",
   "player.connection",
