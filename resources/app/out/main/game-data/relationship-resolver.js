@@ -21,6 +21,11 @@ function createRelationshipResolver({ onDiagnostic = null } = {}) {
     names: [],
     gender: [],
     birthDate: [],
+    birthDateText: [],
+    alive: [],
+    deathDate: [],
+    deathDateText: [],
+    deathReason: [],
     relations: []
   });
   const pushUnique = (items, value, key) => {
@@ -50,6 +55,31 @@ function createRelationshipResolver({ onDiagnostic = null } = {}) {
     const sourceItem = record.birthDate.find((item) => item.value === value);
     return { value, source: sourceItem?.source || "unknown", conflict: false };
   };
+  const resolveTieredValue = (record, field, diagnosticCode) => {
+    const items = record[field].filter((item) => item.value !== null && item.value !== void 0 && item.value !== "");
+    const canonicalValues = new Set(items.filter((item) => item.priority === 1).map((item) => item.value));
+    const edgeValues = new Set(items.filter((item) => item.priority > 1).map((item) => item.value));
+    const selectedValues = canonicalValues.size > 0 ? canonicalValues : edgeValues;
+    if (selectedValues.size > 1) {
+      emit(diagnosticCode, { characterId: record.id, values: [...selectedValues], evidenceCount: items.length });
+      return { value: null, source: "conflict", conflict: true };
+    }
+    const value = [...selectedValues][0] ?? null;
+    const sourceItem = items.find((item) => item.value === value);
+    return { value, source: sourceItem?.source || "unknown", conflict: false };
+  };
+  const collectTemporalEvidence = (record, value, priority, sourceOwnerId, relationType, source) => {
+    const common = { priority, sourceOwnerId, relationType, source };
+    const birthDate = finiteDay(value?.birthDateTotalDays);
+    if (birthDate !== null) record.birthDate.push({ value: birthDate, ...common });
+    if (value?.birthDate) record.birthDateText.push({ value: value.birthDate, ...common });
+    const deathDate = finiteDay(value?.deathDateTotalDays);
+    if (deathDate !== null) record.deathDate.push({ value: deathDate, ...common });
+    if (value?.deathDate) record.deathDateText.push({ value: value.deathDate, ...common });
+    if (value?.deathReason) record.deathReason.push({ value: value.deathReason, ...common });
+    if (value?.alive === false || deathDate !== null || value?.deathDate) record.alive.push({ value: false, ...common });
+    else if (value?.alive === true) record.alive.push({ value: true, ...common });
+  };
   const buildCanonicalProfiles = (characters, totalDays, inferGenderFromPronoun) => {
     const records = new Map();
     const getRecord = (id) => {
@@ -64,8 +94,7 @@ function createRelationshipResolver({ onDiagnostic = null } = {}) {
       if (character.fullName || character.shortName) record.names.push(character.fullName || character.shortName);
       const gender = normalizeGender(character.gender, character.sheHe, inferGenderFromPronoun);
       record.gender.push({ value: gender, priority: 1, sourceOwnerId: id, relationType: "canonical", source: "characters" });
-      const birthDate = finiteDay(character.birthDateTotalDays);
-      if (birthDate !== null) record.birthDate.push({ value: birthDate, priority: 1, sourceOwnerId: id, relationType: "canonical", source: "characters" });
+      collectTemporalEvidence(record, character, 1, id, "canonical", "characters");
     }
     const relationLists = [
       { field: "parents", relationType: "parent" },
@@ -84,8 +113,7 @@ function createRelationshipResolver({ onDiagnostic = null } = {}) {
           const source = `${ownerId}.${field}`;
           const gender = normalizeGender(entry.gender, entry.sheHe, inferGenderFromPronoun);
           record.gender.push({ value: gender, priority: 2, sourceOwnerId: ownerId, relationType, source });
-          const birthDate = finiteDay(entry.birthDateTotalDays);
-          if (birthDate !== null) record.birthDate.push({ value: birthDate, priority: 2, sourceOwnerId: ownerId, relationType, source });
+          collectTemporalEvidence(record, entry, 2, ownerId, relationType, source);
           pushUnique(record.relations, { ownerId, relationType, source }, (item) => `${item.ownerId}:${item.relationType}`);
         }
       }
@@ -97,8 +125,14 @@ function createRelationshipResolver({ onDiagnostic = null } = {}) {
       if (!name) continue;
       const gender = resolveTieredGender(record);
       const birthDate = resolveTieredBirthDate(record);
-      const age = birthDate.value !== null && Number.isFinite(Number(totalDays))
-        ? Math.max(0, Math.floor((Number(totalDays) - birthDate.value) / 365.2425))
+      const birthDateText = resolveTieredValue(record, "birthDateText", "RELATION_CONFLICT_BIRTHDATE_TEXT");
+      const alive = resolveTieredValue(record, "alive", "RELATION_CONFLICT_ALIVE");
+      const deathDate = resolveTieredValue(record, "deathDate", "RELATION_CONFLICT_DEATHDATE");
+      const deathDateText = resolveTieredValue(record, "deathDateText", "RELATION_CONFLICT_DEATHDATE_TEXT");
+      const deathReason = resolveTieredValue(record, "deathReason", "RELATION_CONFLICT_DEATH_REASON");
+      const ageAtDay = alive.value === false && deathDate.value !== null ? deathDate.value : Number(totalDays);
+      const age = birthDate.value !== null && Number.isFinite(ageAtDay)
+        ? Math.max(0, Math.floor((ageAtDay - birthDate.value) / 365.2425))
         : Number.isFinite(Number(canonical?.age)) ? Number(canonical.age) : null;
       const profile = canonical ? { ...canonical } : {
         id: record.id,
@@ -122,15 +156,31 @@ function createRelationshipResolver({ onDiagnostic = null } = {}) {
       profile.firstName = profile.firstName || name;
       profile.gender = gender.value;
       profile.birthDateTotalDays = birthDate.value;
+      profile.birthDate = birthDateText.value || profile.birthDate || null;
+      if (alive.value !== null) profile.alive = alive.value;
+      profile.deathDateTotalDays = deathDate.value;
+      profile.deathDate = deathDateText.value || profile.deathDate || null;
+      profile.deathReason = deathReason.value || profile.deathReason || null;
       profile.age = age;
       profile.evidence = {
         canonicalCharacter: canonical || null,
         gender: record.gender.map((item) => ({ ...item })),
         birthDate: record.birthDate.map((item) => ({ ...item })),
+        birthDateText: record.birthDateText.map((item) => ({ ...item })),
+        alive: record.alive.map((item) => ({ ...item })),
+        deathDate: record.deathDate.map((item) => ({ ...item })),
+        deathDateText: record.deathDateText.map((item) => ({ ...item })),
+        deathReason: record.deathReason.map((item) => ({ ...item })),
         relations: record.relations.map((item) => ({ ...item })),
         resolvedGenderSource: gender.source,
         resolvedBirthSource: birthDate.source,
-        conflicts: { gender: gender.conflict, birthDate: birthDate.conflict }
+        conflicts: {
+          gender: gender.conflict,
+          birthDate: birthDate.conflict,
+          alive: alive.conflict,
+          deathDate: deathDate.conflict,
+          deathReason: deathReason.conflict
+        }
       };
       profiles.set(record.id, profile);
       if (record.gender.length + record.birthDate.length + record.relations.length > 1) {

@@ -61,9 +61,17 @@ class MemoryEngine {
     this.trace.record("mention_scan", {
       conversationId: conversation.id,
       processedMessageCount: state.mentionState.processedThroughIndex,
-      mentionedCharacterCount: characterIds.length
+      mentionedCharacterCount: characterIds.length,
+      currentTurnMentionedCharacterCount: state.mentionState.currentTurnMentionedCharacterIds?.length || 0
     });
     return characterIds;
+  }
+
+  getCurrentTurnMentionedOutOfSceneCharacters({ conversation, excludedIds = [] } = {}) {
+    if (!conversation) return [];
+    const state = this.ensureConversationState(conversation);
+    const excluded = new Set(uniqueIds(excludedIds).map(Number));
+    return uniqueIds(state.mentionState.currentTurnMentionedCharacterIds).map(Number).filter((characterId) => !excluded.has(characterId));
   }
 
   findMentionedCharactersInHistory({ history = [], candidates = [], excludedIds = [] } = {}) {

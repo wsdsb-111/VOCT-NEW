@@ -360,21 +360,25 @@ class Conversation {
       memoryState.mentionProfileCache = { participantKey, profiles, ownerFolderMemoriesById };
     }
     const mentionableProfiles = memoryState.mentionProfileCache.profiles;
+    const currentUserIndex = history.findLastIndex((entry) => entry.role === "user");
+    const query = currentUserIndex >= 0 ? history[currentUserIndex].content || "" : "";
+    const assistContext = (currentUserIndex > 0 ? history.slice(Math.max(0, currentUserIndex - 2), currentUserIndex) : []).map((entry) => entry.content || "").filter(Boolean).join("\n");
     const mentionedCharacterIds = memoryEngine.findMentionedOutOfSceneCharacters({
       conversation: this,
       history,
       candidates: [...mentionableProfiles.values()],
       excludedIds: mentionExcludedIds
     });
+    const currentTurnMentionedCharacterIds = typeof memoryEngine.getCurrentTurnMentionedOutOfSceneCharacters === "function"
+      ? memoryEngine.getCurrentTurnMentionedOutOfSceneCharacters({ conversation: this, excludedIds: mentionExcludedIds })
+      : mentionedCharacterIds;
     if (!this.gameData.mentionedCharactersInContext) this.gameData.mentionedCharactersInContext = /* @__PURE__ */ new Set();
     for (const characterId of mentionedCharacterIds) this.gameData.mentionedCharactersInContext.add(characterId);
     const mentionedEntityNames = Object.fromEntries(mentionedCharacterIds.map((characterId) => {
       const character = mentionableProfiles.get(characterId);
       return [characterId, character ? memoryEngine.getCharacterMentionAliases(character) : []];
     }));
-    const currentUserIndex = history.findLastIndex((entry) => entry.role === "user");
-    const query = currentUserIndex >= 0 ? history[currentUserIndex].content || "" : "";
-    const assistContext = (currentUserIndex > 0 ? history.slice(Math.max(0, currentUserIndex - 2), currentUserIndex) : []).map((entry) => entry.content || "").filter(Boolean).join("\n");
+    const currentTurnMentionedEntityNames = Object.fromEntries(currentTurnMentionedCharacterIds.map((characterId) => [characterId, mentionedEntityNames[characterId] || []]));
     const retrieved = memoryEngine.retrieveForResponder({
       characterId: npc.id,
       query,
@@ -388,7 +392,7 @@ class Conversation {
       tokenBudget: Math.min(2400, Math.max(800, Math.floor(limit * 0.08))),
       estimateTokens: (text) => TokenCounter.estimateTokens(text)
     });
-    const turnEntityIds = [...new Set([...activeParticipantIds, ...mentionedCharacterIds].map(Number))].filter((characterId) => characterId !== Number(npc.id));
+    const turnEntityIds = [...new Set([...activeParticipantIds, ...currentTurnMentionedCharacterIds].map(Number))].filter((characterId) => characterId !== Number(npc.id));
     const turnEntityNames = turnEntityIds.flatMap((characterId) => {
       const profile = mentionableProfiles.get(characterId) || this.gameData.characters.get(characterId);
       return profile ? memoryEngine.getCharacterMentionAliases(profile) : [];
@@ -410,8 +414,8 @@ class Conversation {
     const thirdPartyEvidence = typeof memoryEngine.retrieveThirdPartyEvidence === "function" ? memoryEngine.retrieveThirdPartyEvidence({
       characterId: npc.id,
       query,
-      mentionedEntityIds: mentionedCharacterIds,
-      mentionedEntityNames,
+      mentionedEntityIds: currentTurnMentionedCharacterIds,
+      mentionedEntityNames: currentTurnMentionedEntityNames,
       ownerFolderMemories: memoryState.mentionProfileCache.ownerFolderMemoriesById.get(Number(npc.id)) || [],
       currentTotalDays: this.gameData.totalDays,
       tokenBudget: 512,
@@ -435,7 +439,7 @@ class Conversation {
     let worldContext = null;
     try {
       if (!worldlineService?.isSubjectivePromptIntegrationEnabled?.()) {
-        worldContext = worldlineService?.getPromptContext?.({ query, assistContext, mentionedEntityIds: mentionedCharacterIds, responderId: npc.id, conversationId: this.id, turnEpoch: this.turnEpoch }) || null;
+        worldContext = worldlineService?.getPromptContext?.({ query, assistContext, mentionedEntityIds: currentTurnMentionedCharacterIds, responderId: npc.id, conversationId: this.id, turnEpoch: this.turnEpoch }) || null;
       }
     } catch (error) {
       console.warn("[Worldline] World recall failed; continuing without world recall:", error.message);
@@ -461,7 +465,7 @@ class Conversation {
       worldTopicText: worldContext?.topicText || null,
       worldSupplementalText: worldContext?.supplementalText || null,
       worldCurrentText: worldContext?.currentText || null,
-      worldlineRequest: { query, assistContext, mentionedEntityIds: mentionedCharacterIds },
+      worldlineRequest: { query, assistContext, mentionedEntityIds: currentTurnMentionedCharacterIds },
       subjectiveWorldPolicyActive: worldlineService?.isSubjectivePromptIntegrationEnabled?.() === true,
       historicalReferenceInfo: null,
       worldRecallQueryFingerprint: worldContext?.queryFingerprint || null,

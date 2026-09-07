@@ -7,6 +7,21 @@ const MAX_SELECTED = 24;
 const MAX_DIAGNOSTICS = 50;
 const MAX_VALUE_CHARS = 512;
 const PROMPT_SOURCE_TIERS = new Set(["GAME_TRUTH", "GAMESTATE", "ANNUAL_DELTA", "PLAYER_SUPPLEMENTAL"]);
+const LANE_PRIORITY = Object.freeze({
+  SELF: 0,
+  DIRECT_OBSERVATION: 1,
+  GAME_TRUTH: 2,
+  GAMESTATE: 3,
+  PERSONAL_MEMORY: 4,
+  PLAYER_SUPPLEMENTAL: 5,
+  ANNUAL_DELTA: 6
+});
+
+function candidateLanePriority(fact) {
+  if (fact?.knowledgeLevel === "SELF") return LANE_PRIORITY.SELF;
+  if (fact?.knowledgeLevel === "DIRECT_OBSERVATION") return LANE_PRIORITY.DIRECT_OBSERVATION;
+  return LANE_PRIORITY[fact?.sourceTier] ?? 7;
+}
 
 function boundedText(value, max = MAX_VALUE_CHARS) {
   const text = String(value ?? "");
@@ -32,6 +47,20 @@ function conflictKey(fact = {}) {
   return `field:${fact.entityId || "-"}:${fact.field || "-"}`;
 }
 
+function admitCandidates(input) {
+  const seen = new Set();
+  return input.map((fact, index) => ({ fact, index })).filter(({ fact }) => {
+    const signature = fact?.factId || `${fact?.entityId ?? "-"}:${fact?.field ?? "-"}:${JSON.stringify(safeValue(fact?.value))}:${fact?.sourceTier ?? "-"}`;
+    if (seen.has(signature)) return false;
+    seen.add(signature);
+    return true;
+  }).sort((left, right) => {
+    const leftPriority = candidateLanePriority(left.fact);
+    const rightPriority = candidateLanePriority(right.fact);
+    return leftPriority - rightPriority || left.index - right.index;
+  }).slice(0, MAX_CANDIDATES).map((entry) => entry.fact);
+}
+
 function safeAllowedFact(item) {
   const fact = item.fact || {};
   return {
@@ -53,7 +82,7 @@ function safeAllowedFact(item) {
 
 function buildSubjectiveWorldView({ responder, candidates = [], scope = {}, scopeResolver = null, checkpointId = null, directObservationFactIds = [] } = {}) {
   const input = Array.isArray(candidates) ? candidates : [];
-  const bounded = input.slice(0, MAX_CANDIDATES);
+  const bounded = admitCandidates(input);
   const decisions = bounded.map((fact) => classifyKnowledge(fact, responder, { ...scope, ...(typeof scopeResolver === "function" ? scopeResolver(fact) : {}), directObservationFactIds }));
   const grouped = new Map();
   for (const item of decisions) {
@@ -98,4 +127,4 @@ function buildSubjectiveWorldView({ responder, candidates = [], scope = {}, scop
   return view;
 }
 
-module.exports = { MAX_CANDIDATES, MAX_SELECTED, buildSubjectiveWorldView };
+module.exports = { LANE_PRIORITY, MAX_CANDIDATES, MAX_SELECTED, admitCandidates, buildSubjectiveWorldView };

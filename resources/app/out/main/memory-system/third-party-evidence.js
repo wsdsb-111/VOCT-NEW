@@ -42,7 +42,7 @@ function scoreEvidence(memory, { query = "", entityId, aliases = [], currentTota
   const confidence = Math.max(0, Math.min(1, Number(memory?.confidence) || 0));
   const recency = recencyScore(memory, currentTotalDays);
   const sourceAuthority = SOURCE_AUTHORITY[memory?.source] ?? 0.5;
-  const score = 0.30 + 0.30 * queryRelevance + 0.15 * CENTRALITY[centrality] + 0.10 * importance + 0.10 * confidence + 0.05 * recency;
+  const score = 0.10 + 0.30 * queryRelevance + 0.20 * CENTRALITY[centrality] + 0.15 * sourceAuthority + 0.10 * importance + 0.10 * confidence + 0.05 * recency;
   return { memory, entityId: Number(entityId), aliases, centrality, queryRelevance, sourceAuthority, score };
 }
 
@@ -102,6 +102,31 @@ function hasEvidenceConflict(entries) {
   return [...groups.values()].some((polarities) => polarities.size > 1);
 }
 
+function auditEvidencePool(entries) {
+  const explicit = entries.find((entry) => entry.memory?.type === "conflict" || entry.memory?.unresolved === true);
+  if (explicit) return { conflict: true, forced: [explicit] };
+  const groups = new Map();
+  for (const entry of entries) {
+    const key = entry.memory?.conflictKey;
+    const polarity = entry.memory?.polarity;
+    if (!key || !polarity) continue;
+    if (!groups.has(key)) groups.set(key, []);
+    groups.get(key).push(entry);
+  }
+  for (const group of groups.values()) {
+    for (let leftIndex = 0; leftIndex < group.length; leftIndex++) {
+      for (let rightIndex = leftIndex + 1; rightIndex < group.length; rightIndex++) {
+        const left = group[leftIndex];
+        const right = group[rightIndex];
+        if (left.memory.polarity !== right.memory.polarity && left.sourceAuthority === right.sourceAuthority) {
+          return { conflict: true, forced: [left, right] };
+        }
+      }
+    }
+  }
+  return { conflict: false, forced: [] };
+}
+
 function buildThirdPartyEvidencePatch({ query = "", entities = [], currentTotalDays = null, tokenBudget = 512, estimateTokens } = {}) {
   const estimate = estimateTokens || ((text) => Math.ceil(String(text || "").length / 2));
   const totalBudget = Math.min(512, Math.max(0, Number(tokenBudget) || 0));
@@ -116,11 +141,12 @@ function buildThirdPartyEvidencePatch({ query = "", entities = [], currentTotalD
     const aliases = [...new Set((entity.aliases || []).map((value) => String(value || "").trim()).filter(Boolean))];
     const ranked = (entity.memories || []).map((memory) => scoreEvidence(memory, { query, entityId, aliases, currentTotalDays })).filter(Boolean).sort((left, right) => right.score - left.score || String(left.memory?.memoryId || "").localeCompare(String(right.memory?.memoryId || "")));
     if (!ranked.length) continue;
+    const audit = auditEvidencePool(ranked);
     const top = ranked[0];
     const second = ranked[1];
-    const selected = [top];
-    if (second && (second.queryRelevance >= 0.12 || second.memory?.type === "conflict" || second.memory?.conflictKey && second.memory.conflictKey === top.memory?.conflictKey)) selected.push(second);
-    const conflict = hasEvidenceConflict(selected);
+    const selected = audit.forced.length ? audit.forced.slice(0, 2) : [top];
+    if (!audit.forced.length && second && (second.queryRelevance >= 0.12 || second.memory?.type === "conflict" || second.memory?.conflictKey && second.memory.conflictKey === top.memory?.conflictKey)) selected.push(second);
+    const conflict = audit.conflict || hasEvidenceConflict(selected);
     const label = aliases[0] || `#${entityId}`;
     const perEntityBudget = Math.min(320, evidenceBudget - usedTokens);
     const header = `=== 当前轮召回证据：第三人 ${label} ===\n以下记录与当前问题直接相关，回答涉及其明确内容时必须遵守；没有说明的内容必须承认不知道，不得补造。`;
@@ -147,4 +173,4 @@ function buildThirdPartyEvidencePatch({ query = "", entities = [], currentTotalD
   };
 }
 
-module.exports = { CENTRALITY, buildThirdPartyEvidencePatch, centralityFor, extractRelevantEvidenceWindow, scoreEvidence };
+module.exports = { CENTRALITY, SOURCE_AUTHORITY, auditEvidencePool, buildThirdPartyEvidencePatch, centralityFor, extractRelevantEvidenceWindow, scoreEvidence };

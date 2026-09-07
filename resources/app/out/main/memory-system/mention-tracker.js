@@ -5,7 +5,7 @@ const { getCharacterMentionAliases } = require("./character-identity");
 const UNIQUE_TITLE_TERMS = new Set(["陛下", "殿下", "阁下", "官家", "皇帝", "皇后", "太上皇", "太子", "国王", "女王"]);
 
 function uniqueNumericIds(values) {
-  return [...new Set((values || []).map(Number).filter(Number.isFinite))];
+  return [...new Set((values || []).filter((value) => value !== null && value !== undefined && value !== "").map(Number).filter(Number.isFinite))];
 }
 
 class MentionTracker {
@@ -16,7 +16,7 @@ class MentionTracker {
   }
 
   createState() {
-    return { processedThroughIndex: 0, lastProcessedMessageKey: null, mentionedCharacterIds: [] };
+    return { processedThroughIndex: 0, lastProcessedMessageKey: null, mentionedCharacterIds: [], currentTurnMentionedCharacterIds: [], recentThirdPersonCharacterId: null };
   }
 
   getMessageKey(message, index) {
@@ -76,7 +76,7 @@ class MentionTracker {
     const mentioned = [];
     const seen = new Set();
 
-    let recentId = Number.isFinite(Number(recentCharacterId)) ? Number(recentCharacterId) : null;
+    let recentId = recentCharacterId !== null && recentCharacterId !== undefined && recentCharacterId !== "" && Number.isFinite(Number(recentCharacterId)) ? Number(recentCharacterId) : null;
     for (const message of history || []) {
       const content = typeof message?.content === "string" ? message.content : "";
       if (!content) continue;
@@ -106,7 +106,8 @@ class MentionTracker {
         lastMessageMentionId = match.id;
       }
       if (lastMessageMentionId != null) recentId = lastMessageMentionId;
-      if (/(?:那个人|那人|此人)/.test(content)) {
+      const hasCoreference = /(?:那个人|那人|此人|刚才说的那位)/.test(content) || /(?<![其吉])[他她](?![们人者])/.test(content);
+      if (hasCoreference) {
         if (recentId != null && !excluded.has(recentId)) {
           if (!seen.has(recentId)) {
             seen.add(recentId);
@@ -131,11 +132,16 @@ class MentionTracker {
       target.mentionedCharacterIds = [];
     }
 
-    const newlyMentioned = this.findMentionedCharacterIds(history.slice(cursor), { candidates, excludedIds, recentCharacterId: target.recentThirdPersonCharacterId });
+    const previousRecentCharacterId = target.recentThirdPersonCharacterId;
+    const newlyMentioned = this.findMentionedCharacterIds(history.slice(cursor), { candidates, excludedIds, recentCharacterId: previousRecentCharacterId });
     target.mentionedCharacterIds = uniqueNumericIds([...(target.mentionedCharacterIds || []), ...newlyMentioned]);
     target.processedThroughIndex = history.length;
     target.lastProcessedMessageKey = history.length > 0 ? this.getMessageKey(history[history.length - 1], history.length - 1) : null;
-    target.recentThirdPersonCharacterId = this.lastScanRecentCharacterId;
+    const latestUserMessage = [...history].reverse().find((message) => message?.role === "user");
+    target.currentTurnMentionedCharacterIds = latestUserMessage
+      ? this.findMentionedCharacterIds([latestUserMessage], { candidates, excludedIds, recentCharacterId: previousRecentCharacterId })
+      : [];
+    target.recentThirdPersonCharacterId = this.lastScanRecentCharacterId ?? previousRecentCharacterId ?? null;
     delete target.processedMessageKeys;
 
     const excluded = new Set(uniqueNumericIds(excludedIds));

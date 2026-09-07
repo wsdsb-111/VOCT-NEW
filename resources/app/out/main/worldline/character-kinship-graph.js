@@ -2,6 +2,7 @@
 
 const { resolveCharacterSex } = require("./character-demographic-normalizer");
 const { resolveKinshipLabel } = require("./kinship-label-resolver");
+const { normalizeSpouseRecords } = require("./canonical-spouse-record");
 
 function id(value) {
   const raw = value && typeof value === "object" ? value.id ?? value.characterId : value;
@@ -57,25 +58,16 @@ function buildKinshipGraph(source = {}) {
       add(characterId, childId, "PARENT_OF", [characterId, childId]);
       add(childId, characterId, "CHILD_OF", [childId, characterId]);
     }
-    for (const spouse of values(character?.spouses ?? character?.spouse)) {
-      const spouseId = ensureNode(spouse);
+    for (const spouse of normalizeSpouseRecords(character)) {
+      if (spouse.runtimeId === null) continue;
+      const spouseId = ensureNode(spouse.raw && typeof spouse.raw === "object" ? spouse.raw : spouse.runtimeId);
       if (!spouseId) continue;
       const spouseNode = nodes.get(spouseId);
-      const type = spouseNode?.alive === false || spouseNode?.deathDate ? "DECEASED_SPOUSE_OF" : "SPOUSE_OF";
-      add(characterId, spouseId, type, [characterId, spouseId]);
-      add(spouseId, characterId, type, [spouseId, characterId]);
-    }
-    for (const spouse of values(character?.formerSpouses)) {
-      const spouseId = ensureNode(spouse);
-      if (!spouseId) continue;
-      add(characterId, spouseId, "FORMER_SPOUSE_OF", [characterId, spouseId]);
-      add(spouseId, characterId, "FORMER_SPOUSE_OF", [spouseId, characterId]);
-    }
-    for (const spouse of values(character?.deceasedSpouses)) {
-      const spouseId = ensureNode(spouse);
-      if (!spouseId) continue;
-      add(characterId, spouseId, "DECEASED_SPOUSE_OF", [characterId, spouseId]);
-      add(spouseId, characterId, "DECEASED_SPOUSE_OF", [spouseId, characterId]);
+      const type = spouse.relationType === "DECEASED_SPOUSE" || spouseNode?.alive === false || spouseNode?.deathDate || spouseNode?.deathDateTotalDays !== null && spouseNode?.deathDateTotalDays !== undefined
+        ? "DECEASED_SPOUSE_OF"
+        : spouse.relationType === "FORMER_SPOUSE" ? "FORMER_SPOUSE_OF" : "SPOUSE_OF";
+      add(characterId, spouseId, type, [characterId, spouseId], spouse.confidence, { source: "SNAPSHOT_DIRECT" });
+      add(spouseId, characterId, type, [spouseId, characterId], spouse.confidence, { source: "SNAPSHOT_DIRECT" });
     }
     for (const evidence of character?.evidence?.relations || []) {
       const ownerId = ensureNode(evidence.ownerId);
@@ -86,6 +78,9 @@ function buildKinshipGraph(source = {}) {
       } else if (evidence.relationType === "child") {
         add(characterId, ownerId, "CHILD_OF", [characterId, ownerId], 1, { source: evidence.source || "SNAPSHOT_DIRECT" });
         add(ownerId, characterId, "PARENT_OF", [ownerId, characterId], 1, { source: evidence.source || "SNAPSHOT_DIRECT" });
+      } else if (evidence.relationType === "sibling") {
+        add(characterId, ownerId, "SIBLING_OF", [characterId, ownerId], evidence.confidence ?? 1, { source: "LOG_DIRECT", evidenceSource: evidence.source || null });
+        add(ownerId, characterId, "SIBLING_OF", [ownerId, characterId], evidence.confidence ?? 1, { source: "LOG_DIRECT", evidenceSource: evidence.source || null });
       }
     }
   }
