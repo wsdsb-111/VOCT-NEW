@@ -4,7 +4,7 @@
 
 ## 推荐阅读顺序
 
-V8.6.1 当前版本入口：[Sol Stage 7 最终审查](v8.6.1-sol-stage-7-final-review.md)。代码与 149 组发布门禁通过，Terra 主链路 11 次实机冒烟有效，最终版另有 7 次带新分块字段的 A 组请求；旧遥测冒充 V8.6.1 观测的问题已修复。用户确认实机无问题并明确豁免剩余生产 10/30/50 A/B，未执行部分保留标注；`V8.6.1 FULL FREEZE = PASS (USER ACCEPTANCE)`。
+V8.6.2 当前版本入口：[Sol 实施与最终审查](v8.6.2-sol-implementation-and-final-review.md)。Subjective World 输出、第三人 Grounding、Kinship、Death/Temporal 与缓存/Token 边界已完成，38 个专项和 187 组发布门禁通过；真实 CK3、Provider、Production A/B 与 Electron UI Gate 未执行，`V8.6.2 FREEZE = PENDING MANUAL GATES`。
 
 当前事故入口：[V8.5.1 摘要 P0 / 多人入场 P2 修复报告](v8.5.1-summary-incident-review.md)：摘要链路审计、长会话恢复、参与者隔离与入场延迟。
 
@@ -44,14 +44,14 @@ V8.5.1 历史基线：[Sol 最终审查与修复](v8.5.1-sol-final-review.md)，
 30. [V8.5.2 Sol 后端正确性独立审查](v8.5.2-sol-correctness-review.md)：False Resolution 矩阵、DTO/IPC 边界、截断与 coverage 安全修复。
 31. [V8.5.2 Luna 玩家语义与世界线差异 UI](v8.5.2-luna-ui-implementation-report.md)：逐实体身份、差异面板、Mapping 玩家层和多分辨率/主题视觉回归边界。
 32. [V8.5.2 Sol UI / DTO 边界独立审查](v8.5.2-sol-ui-boundary-review.md)：additive/legacy 摘要一致性、SOURCE_INCOMPLETE 优先级、A/B/C 层泄漏和有界渲染复核。
-33. [README_摘要系统.md](README_摘要系统.md)：Memory Engine 2.5 的存储、冻结召回、Turn Recall、写入和生命周期规则。
+33. [README_摘要系统.md](README_摘要系统.md)：Memory Engine 2.6 可见标签、2.5 存储合同、冻结召回、Turn Recall、第三人证据与生命周期规则。
 34. [V7阶段优化记录.md](V7阶段优化记录.md)：V7/V7.x 的连续阶段记录。
 35. [V6阶段优化记录.md](V6阶段优化记录.md)：V6.2 至当前 V6.x 的动作系统和基础设施记录。
 36. 需要核对具体方案时，再阅读版本设计文档和实施报告。
 
 ## 文档分类
 
-最新阶段：[V8.6.1 Sol Stage 7 最终审查](v8.6.1-sol-stage-7-final-review.md)；主链路和最终版分块观测实机通过，代码终审无遗留 P0，旧遥测来源边界 P1 已修复。当前 A 组为 7 次、生产 B 组未执行，剩余矩阵由用户明确豁免；总冻结按人工验收签发为 `PASS`。
+最新阶段：[V8.6.2 Sol 实施与最终审查](v8.6.2-sol-implementation-and-final-review.md)；代码施工与 187 组发布门禁通过，CK3、Provider、Production A/B 和 Electron UI 人工 Gate 尚未执行，当前冻结状态为 `PENDING MANUAL GATES`。
 
 ### 架构与运行规则
 
@@ -107,6 +107,7 @@ V8.5.1 历史基线：[Sol 最终审查与修复](v8.5.1-sol-final-review.md)，
 - [v8.6.1-sol-stage-1-compatibility-contract.md](v8.6.1-sol-stage-1-compatibility-contract.md)：V8.6.1 Prompt 调序、Global Headroom、Memory 冻结、事实优先级、Secret 与失败隔离合同。
 - [v8.6.1-terra-stage-2-3-implementation-report.md](v8.6.1-terra-stage-2-3-implementation-report.md)：V8.6.1 Prompt / Budget、Realm / Observation 与 Scoped Supplemental 实施和边界。
 - [v8.6.1-sol-stage-4-safety-review.md](v8.6.1-sol-stage-4-safety-review.md)：V8.6.1 Memory-first Context、Secret/Scoped Supplemental、事实仲裁、确定性与指标独立审查。
+- [v8.6.2-sol-implementation-and-final-review.md](v8.6.2-sol-implementation-and-final-review.md)：V8.6.2 Subjective 输出、第三人证据、亲属/死亡/时间事实、发布门禁与人工验收边界。
 - [VOTC_v8.1_Campaign_Identity与Worldline_Store_Foundation设计.md](VOTC_v8.1_Campaign_Identity与Worldline_Store_Foundation设计.md)：V8.1 存档身份协议、session 降级、Worldline schema、原子持久化和 Shadow 集成合同。
 - [v8.1-campaign-identity-worldline-store-implementation-report.md](v8.1-campaign-identity-worldline-store-implementation-report.md)：V8.0 P0/P1 审计、V8.1 应用与 Workshop 实施、自动化验证和实机边界。
 - [v8.3.1-historical-figure-dashboard-implementation-report.md](v8.3.1-historical-figure-dashboard-implementation-report.md)：V8.3.1 实机诊断 Snapshot、Overlay Dashboard、append-only Ground Truth 与冻结边界。
@@ -115,7 +116,7 @@ V8.5.1 历史基线：[Sol 最终审查与修复](v8.5.1-sol-final-review.md)，
 - [v8.0-historical-baseline-2.0-implementation-report.md](v8.0-historical-baseline-2.0-implementation-report.md)：V8.0 结构化历史基线、兼容适配、shadow Temporal Gate、Prompt/cache 等价和发布验证边界。
 - [VOTC_v7.8_main.js第一轮模块化拆分实施记录.md](VOTC_v7.8_main.js第一轮模块化拆分实施记录.md)：Pre-V8 组合根、游戏数据、Prompt、摘要、信件和运行服务拆分边界及验证结果。
 - [VOTC_v7.7_main.js架构拆分与迁移清单.md](VOTC_v7.7_main.js架构拆分与迁移清单.md)：V7.7 Provider Service、Provider 与 IPC 分阶段拆分范围、依赖边界和验证清单。
-- [README_摘要系统.md](README_摘要系统.md)：Memory Engine 2.5 和人物目录视角摘要系统。
+- [README_摘要系统.md](README_摘要系统.md)：Memory Engine 2.6 可见标签、2.5 数据合同和人物目录视角摘要系统。
 - [V7阶段优化记录.md](V7阶段优化记录.md)：V7.0 至当前 V7.x 的功能、修复和验收边界。
 - [V6阶段优化记录.md](V6阶段优化记录.md)：V6.2 至 V6.9.1 的动作系统、缓存和架构记录。
 

@@ -407,6 +407,16 @@ class Conversation {
       cache: memoryState.turnRecallCache,
       turnEpoch: this.turnEpoch
     });
+    const thirdPartyEvidence = typeof memoryEngine.retrieveThirdPartyEvidence === "function" ? memoryEngine.retrieveThirdPartyEvidence({
+      characterId: npc.id,
+      query,
+      mentionedEntityIds: mentionedCharacterIds,
+      mentionedEntityNames,
+      ownerFolderMemories: memoryState.mentionProfileCache.ownerFolderMemoriesById.get(Number(npc.id)) || [],
+      currentTotalDays: this.gameData.totalDays,
+      tokenBudget: 512,
+      estimateTokens: (text) => TokenCounter.estimateTokens(text)
+    }) : { text: null, tokens: 0, reason: "UNAVAILABLE", conflict: false };
     usageAnalytics.record({
       requestType: "memory_recall",
       character: npc.shortName,
@@ -439,6 +449,10 @@ class Conversation {
       turnRecallQueryFingerprint: turnRecall.queryFingerprint,
       turnRecallCandidateCount: turnRecall.candidateCount,
       turnRecallCacheHit: turnRecall.cacheHit,
+      thirdPartyEvidenceText: thirdPartyEvidence.text,
+      thirdPartyEvidenceTokens: thirdPartyEvidence.tokens,
+      thirdPartyEvidenceReason: thirdPartyEvidence.reason,
+      thirdPartyEvidenceConflict: thirdPartyEvidence.conflict,
       activeParticipantIds,
       stableProfileCache: this.stableProfileCache,
       stableDescriptionCache: this.stableDescriptionCache,
@@ -448,6 +462,7 @@ class Conversation {
       worldSupplementalText: worldContext?.supplementalText || null,
       worldCurrentText: worldContext?.currentText || null,
       worldlineRequest: { query, assistContext, mentionedEntityIds: mentionedCharacterIds },
+      subjectiveWorldPolicyActive: worldlineService?.isSubjectivePromptIntegrationEnabled?.() === true,
       historicalReferenceInfo: null,
       worldRecallQueryFingerprint: worldContext?.queryFingerprint || null,
       worldRecallCacheHit: worldContext?.cacheHit === true
@@ -785,6 +800,11 @@ class Conversation {
       const llmMessages = promptBuild.messages;
       const promptBlockMetadata = Conversation.buildPromptBlockMetadata(promptBuild);
       const promptBlockTokens = (id) => promptBlockMetadata.blocks.filter((block) => block.id === id).reduce((total, block) => total + (Number(block.tokens) || 0), 0);
+      const mentionedSnapshotTokens = promptBlockTokens("memory-mentioned-snapshot");
+      const thirdPartyEvidenceTokens = promptBlockTokens("third-party-evidence-patch");
+      const turnRecallTokens = promptBlockTokens("memory-turn-recall");
+      const worldlineTokens = promptBlockTokens("worldline-stable") + promptBlockTokens("worldline-turn-recall");
+      const totalMemoryTokens = promptBlockTokens("memory-stable") + promptBlockTokens("memory-direct-frozen") + mentionedSnapshotTokens + promptBlockTokens("memory-session-topic-anchor") + turnRecallTokens + thirdPartyEvidenceTokens;
       logVerboseLLM(`[Conversation][verbose] Prompt for ${npc.fullName}:`, llmMessages);
       console.log(`[TOKEN_COUNT] Message from ${npc.fullName}:`, this.estimateTokenCount(llmMessages));
       const activeConfig = settingsRepository.getActiveProviderConfig();
@@ -806,9 +826,15 @@ class Conversation {
           memoryStableTokens: promptBlockTokens("memory-stable"),
           memoryDirectTokens: promptBlockTokens("memory-direct-frozen"),
           memoryTopicTokens: promptBlockTokens("memory-session-topic-anchor"),
-          memoryTurnRecallTokens: promptBlockTokens("memory-turn-recall"),
+          memoryMentionedSnapshotTokens: mentionedSnapshotTokens,
+          mentionedSnapshotTokens,
+          memoryTurnRecallTokens: turnRecallTokens,
+          turnRecallTokens,
+          thirdPartyEvidenceTokens,
+          totalMemoryTokens,
           worldStableTokens: promptBlockTokens("worldline-stable"),
           worldTurnRecallTokens: promptBlockTokens("worldline-turn-recall"),
+          worldlineTokens,
           worldRetrievalMs: memoryContext?.worldlineMetrics?.worldRetrievalMs || 0,
           worldPolicyMs: memoryContext?.worldlineMetrics?.worldPolicyMs || 0,
           worldFormatMs: memoryContext?.worldlineMetrics?.worldFormatMs || 0,

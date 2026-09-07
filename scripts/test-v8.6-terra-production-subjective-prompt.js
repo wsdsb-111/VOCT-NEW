@@ -49,7 +49,8 @@ try {
       "1": { id: "1", firstName: "甲", courtEmployer: "10", liege: "20" },
       "2": { id: "2", firstName: "乙", courtEmployer: "10", liege: "20" },
       "3": { id: "3", firstName: "丙", courtEmployer: "99", liege: "99" },
-      "4": { id: "4", firstName: "丁", courtEmployer: "10", liege: "20" }
+      "4": { id: "4", firstName: "丁", courtEmployer: "10", liege: "20" },
+      "20": { id: "20", firstName: "本国君主" }
     },
     nameToCharacterIds: {}, definitionToRuntime: {}, runtimeToDefinitions: {}, titles: {}
   } };

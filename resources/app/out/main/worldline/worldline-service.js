@@ -982,7 +982,7 @@ class WorldlineService {
   }
 
   _sharedPolicyFacts(selected = {}) {
-    return classifySelectedWorldFacts(selected, this.currentCheckpoint?.snapshot?.gameDate || null);
+    return classifySelectedWorldFacts(selected, this.currentCheckpoint?.snapshot?.gameDate || null, this.currentCheckpoint?.snapshot || null);
   }
 
   _selfPolicyFacts(snapshot, responderId) {

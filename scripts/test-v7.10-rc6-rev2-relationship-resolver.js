@@ -85,7 +85,7 @@ assert(birthConflict.game.relationshipDiagnostics.some((item) => item.code === "
 
 const typeConflict = makeGame({ siblingGender: "male", siblingPronoun: "he", siblingBirth: 418000, conflictingSiblingEdge: true });
 const typeProfiles = typeConflict.game.getMentionableCharacterProfiles();
-assert.strictEqual(typeConflict.game.relationshipResolver.resolveDirectKinship(typeProfiles.get(3), typeProfiles.get(2)).label, "儿子", "R9 parent/child must outrank sibling");
+assert.strictEqual(typeConflict.game.relationshipResolver.resolveDirectKinship(typeProfiles.get(3), typeProfiles.get(2)), null, "V8.6.2 conflicting relation types must fail closed");
 assert(typeConflict.game.relationshipDiagnostics.some((item) => item.code === "RELATION_CONFLICT_TYPE"));
 
 assert.strictEqual(inferGenderFromPronoun("he"), "male");

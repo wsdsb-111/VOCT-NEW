@@ -81,6 +81,6 @@ assert(promptContract.blocks.every((block) => typeof block.fingerprint === "stri
 
 const promptBuilderSource = require("fs").readFileSync(path.join(root, "resources", "app", "out", "main", "prompts", "prompt-builder.js"), "utf8");
 assert(promptBuilderSource.indexOf("Current User Message") < promptBuilderSource.indexOf("Turn Recall"), "dynamic Turn Recall must remain after the current user message");
-assert(promptBuilderSource.includes("VOTC_CACHE_ANCHOR_v4"));
+assert(promptBuilderSource.includes("VOTC_CACHE_ANCHOR_v5"));
 
 console.log("VOTC v7.9.1 production stability: PASS");

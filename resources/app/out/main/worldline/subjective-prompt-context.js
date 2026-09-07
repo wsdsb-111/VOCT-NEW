@@ -60,7 +60,7 @@ function formatSubjectiveWorldFacts(facts) {
 
 function buildSubjectiveWorldTurnRecall(view, { tokenBudget = null } = {}) {
   const sourceOrder = { GAME_TRUTH: 0, GAMESTATE: 1, ANNUAL_DELTA: 2, PLAYER_SUPPLEMENTAL: 3 };
-  const facts = (view?.allowedFacts || []).filter((fact) => WORLD_SOURCE_TIERS.has(fact?.sourceTier) && text(fact?.value)).sort((left, right) =>
+  const facts = (Array.isArray(view?.promptFacts) ? view.promptFacts : view?.allowedFacts || []).filter((fact) => WORLD_SOURCE_TIERS.has(fact?.sourceTier) && text(fact?.value)).sort((left, right) =>
     (sourceOrder[left.sourceTier] ?? 99) - (sourceOrder[right.sourceTier] ?? 99)
     || text(left.entityId).localeCompare(text(right.entityId), "zh-Hans-CN")
     || text(left.field).localeCompare(text(right.field), "en")

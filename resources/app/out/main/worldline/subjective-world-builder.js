@@ -5,7 +5,8 @@ const { KNOWLEDGE_POLICY_VERSION, classifyKnowledge, resolveKnowledgeConflict } 
 const MAX_CANDIDATES = 128;
 const MAX_SELECTED = 24;
 const MAX_DIAGNOSTICS = 50;
-const MAX_VALUE_CHARS = 1024;
+const MAX_VALUE_CHARS = 512;
+const PROMPT_SOURCE_TIERS = new Set(["GAME_TRUTH", "GAMESTATE", "ANNUAL_DELTA", "PLAYER_SUPPLEMENTAL"]);
 
 function boundedText(value, max = MAX_VALUE_CHARS) {
   const text = String(value ?? "");
@@ -63,14 +64,16 @@ function buildSubjectiveWorldView({ responder, candidates = [], scope = {}, scop
   const resolutions = [...grouped.values()].map(resolveKnowledgeConflict);
   const resolved = resolutions.filter((item) => item.decision === "ALLOW");
   const conflicts = resolutions.filter((item) => ["EQUAL_AUTHORITY_CONFLICT", "SECRET_UNAVAILABLE"].includes(item.reason));
-  const allowedFacts = resolved.slice(0, MAX_SELECTED).map(safeAllowedFact);
+  const policyFacts = resolved.slice(0, MAX_SELECTED).map(safeAllowedFact);
+  const promptResolved = resolved.filter((item) => PROMPT_SOURCE_TIERS.has(item.fact?.sourceTier) && safeValue(item.fact?.value) !== null && boundedText(item.fact?.value).trim());
+  const promptFacts = promptResolved.slice(0, MAX_SELECTED).map(safeAllowedFact);
   const filtered = decisions.filter((item) => item.decision !== "ALLOW");
-  const truncated = input.length > bounded.length || resolved.length > MAX_SELECTED;
+  const truncated = input.length > bounded.length || resolved.length > MAX_SELECTED || promptResolved.length > MAX_SELECTED;
   const diagnostics = [
     ...filtered.map((item) => ({ factId: item.fact?.factId || null, decision: item.decision, reason: item.reason })),
     ...conflicts.map((item) => ({ factId: null, decision: item.decision, reason: item.reason }))
   ].slice(0, MAX_DIAGNOSTICS);
-  return {
+  const view = {
     responderId: responder?.id === undefined ? null : String(responder.id),
     checkpointId,
     knowledgePolicyVersion: KNOWLEDGE_POLICY_VERSION,
@@ -78,7 +81,8 @@ function buildSubjectiveWorldView({ responder, candidates = [], scope = {}, scop
     verificationMode: scope.verificationMode || "UNVERIFIED",
     completeness: scope.completeness || "INCOMPLETE",
     candidateCount: bounded.length,
-    allowedFacts,
+    allowedFacts: policyFacts,
+    promptFacts,
     unknownCount: filtered.filter((item) => item.decision === "UNKNOWN").length,
     filteredCount: filtered.length,
     secretBlockedCount: filtered.filter((item) => item.knowledgeLevel === "SECRET").length,
@@ -87,6 +91,11 @@ function buildSubjectiveWorldView({ responder, candidates = [], scope = {}, scop
     truncated,
     diagnostics
   };
+  Object.defineProperties(view, {
+    policyFacts: { value: policyFacts, enumerable: false },
+    diagnosticFacts: { value: diagnostics, enumerable: false }
+  });
+  return view;
 }
 
 module.exports = { MAX_CANDIDATES, MAX_SELECTED, buildSubjectiveWorldView };

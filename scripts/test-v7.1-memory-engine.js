@@ -99,7 +99,7 @@ const conversationSource = fs.readFileSync(path.join(root, "resources", "app", "
   assert(!mentionedContext.includes("loadDynamicMemoriesFromHistory"), "the old dynamic-summary prompt path must be disconnected");
   assert(conversationSource.includes("mentionedEntityNames"), "Engine 2.2 retrieval must receive mentioned-person names for owner-folder matching");
   assert(promptBuilderSource.includes('memoryContext?.engineVersion?.startsWith("2.")'), "past_summaries must be suppressed when Memory Engine 2.x is active");
-  assert(rendererSource.includes("Memory Engine 2.5"), "summary UI must identify the current Memory Engine 2.5 runtime");
+  assert(rendererSource.includes("Memory Engine 2.6"), "summary UI must identify the current Memory Engine 2.6 label");
   assert(!rendererSource.includes('className: "memory-character-coverage"'), "summary UI must not render the duplicate structured-memory coverage tree");
   assert(!rendererSource.includes("可访问的结构化记忆（可编辑）"), "summary UI must expose one folder-based editing surface");
   assert(rendererSource.includes("handleEditSummary"), "folder summary content must remain player-editable");

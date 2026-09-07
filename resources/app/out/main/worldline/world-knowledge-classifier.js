@@ -1,6 +1,7 @@
 "use strict";
 
 const { dateValue } = require("./game-state-adapter");
+const { formatStructuredCharacter } = require("./character-family-facts");
 
 function text(value) {
   return String(value ?? "").trim();
@@ -35,7 +36,7 @@ function fact(candidate, values) {
   };
 }
 
-function characterFacts(candidate, checkpointDate) {
+function characterFacts(candidate, checkpointDate, snapshot) {
   const character = candidate?.payload?.character;
   const id = text(candidate?.payload?.id || character?.id);
   const name = text(candidate?.payload?.match?.displayName || character?.fullName || character?.firstName || candidate?.title);
@@ -51,6 +52,16 @@ function characterFacts(candidate, checkpointDate) {
       temporalSafe,
       evidence: "CHARACTER_NAME"
     }));
+    const structured = formatStructuredCharacter(character, checkpointDate, snapshot?.characters || null);
+    facts.push(fact(candidate, {
+      entityId: id,
+      field: "IDENTITY",
+      value: structured.text,
+      knowledgeLevel: "COURT_PUBLIC",
+      public: true,
+      temporalSafe,
+      evidence: "CHARACTER_STRUCTURED_FACTS"
+    }));
   }
   if (id && text(character?.location)) {
     facts.push(fact(candidate, {
@@ -63,6 +74,16 @@ function characterFacts(candidate, checkpointDate) {
       evidence: "CHARACTER_LOCATION"
     }));
   }
+  const characterName = (characterId) => {
+    const related = snapshot?.characters?.[String(characterId)];
+    return text(related?.fullName || related?.firstName) || `#${characterId}`;
+  };
+  const parentIds = [character?.parents?.father, character?.parents?.mother].map(text).filter(Boolean);
+  if (id && parentIds.length) facts.push(fact(candidate, { entityId: id, field: "PARENTS", value: `${name}的父母：${parentIds.map(characterName).join("、")}`, knowledgeLevel: "COURT_PUBLIC", public: true, temporalSafe, evidence: "CHARACTER_PARENTS" }));
+  const spouseId = text(character?.spouse);
+  if (id && spouseId) facts.push(fact(candidate, { entityId: id, field: "SPOUSE", value: `${name}的配偶：${characterName(spouseId)}`, knowledgeLevel: "COURT_PUBLIC", public: true, temporalSafe, evidence: "CHARACTER_SPOUSE" }));
+  const childIds = (character?.children || []).map(text).filter(Boolean);
+  if (id && childIds.length) facts.push(fact(candidate, { entityId: id, field: "CHILDREN", value: `${name}的子女：${childIds.map(characterName).join("、")}`, knowledgeLevel: "COURT_PUBLIC", public: true, temporalSafe, evidence: "CHARACTER_CHILDREN" }));
   return facts;
 }
 
@@ -146,10 +167,10 @@ function supplementalFact(candidate, checkpointDate) {
   })];
 }
 
-function classifySelectedWorldFacts(selected = {}, checkpointDate = null) {
+function classifySelectedWorldFacts(selected = {}, checkpointDate = null, snapshot = null) {
   const facts = [];
   for (const candidate of selected.gameTruth || []) {
-    if (candidate?.kind === "CHARACTER") facts.push(...characterFacts(candidate, checkpointDate));
+    if (candidate?.kind === "CHARACTER") facts.push(...characterFacts(candidate, checkpointDate, snapshot));
     else if (candidate?.kind === "TITLE") facts.push(...titleFacts(candidate, checkpointDate));
   }
   for (const candidate of selected.delta || []) facts.push(...deltaFacts(candidate, checkpointDate));

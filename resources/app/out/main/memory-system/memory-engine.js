@@ -16,6 +16,7 @@ const { MentionTracker } = require("./mention-tracker");
 const { getCharacterMentionAliases } = require("./character-identity");
 const { buildPerspectiveSummaryMap, validatePerspectiveSummaryMap, validateSummarySegmentPresenceBoundaries, validatePerspectiveCoverage } = require("./perspective-projector");
 const turnRecall = require("./turn-recall");
+const { buildThirdPartyEvidencePatch } = require("./third-party-evidence");
 
 const FINAL_SUMMARY_MAX_ATTEMPTS = 2;
 const RECOVERY_MAX_ATTEMPTS = 3;
@@ -1103,6 +1104,22 @@ class MemoryEngine {
     };
     if (cache instanceof Map) cache.set(cacheKey, result);
     this.trace.record("turn_recall", { characterId: ownerId, turnEpoch, reason: result.reason, selectedCount: selected.length, tokens: result.tokens, candidateCount: ranked.length, queryFingerprint: fingerprint });
+    return result;
+  }
+
+  retrieveThirdPartyEvidence({ characterId, query = "", mentionedEntityIds = [], mentionedEntityNames = {}, ownerFolderMemories = null, currentTotalDays = null, tokenBudget = 512, estimateTokens } = {}) {
+    const ownerId = Number(characterId);
+    const memories = Array.isArray(ownerFolderMemories) ? ownerFolderMemories : this.store.loadFolderSummariesForCharacter(ownerId);
+    const entities = uniqueIds(mentionedEntityIds).map((entityId) => {
+      const aliases = Array.isArray(mentionedEntityNames) ? mentionedEntityNames : mentionedEntityNames?.[entityId] || mentionedEntityNames?.[String(entityId)] || [];
+      return {
+        id: entityId,
+        aliases,
+        memories: this.store.searchOwnerFolderForEntity(ownerId, entityId, aliases, memories)
+      };
+    });
+    const result = buildThirdPartyEvidencePatch({ query, entities, currentTotalDays, tokenBudget, estimateTokens });
+    this.trace.record("third_party_evidence", { characterId: ownerId, reason: result.reason, entityCount: result.entities.length, selectedCount: result.candidateCount, tokens: result.tokens, conflict: result.conflict });
     return result;
   }
 

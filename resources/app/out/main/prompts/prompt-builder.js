@@ -1,5 +1,7 @@
 "use strict";
 
+const { buildFamilyFactBlock } = require("../worldline/character-family-facts");
+
 function createPromptBuilder({
   TemplateEngine,
   PromptScriptLoader,
@@ -180,8 +182,8 @@ function createPromptBuilder({
      * behavior remains unchanged.
      */
     static buildCacheAnchor(gameData) {
-      return `VOTC_CACHE_ANCHOR_v4
-  这是 Voices of the Court 的固定系统上下文锚点。请将后续内容视为当前游戏的动态上下文，并始终遵守以下稳定规则：保持角色扮演身份；优先使用游戏实际数据；不把现代价值观强加给中世纪角色；涉及历史人物、事件、作品、诗词、典故、制度或技术时，先核验其出现、发生、写成、成名或流传时间是否不晚于游戏当前年份；年份不确定时明确表示不知晓，不得猜测或用未来知识补全；不得预知未来、后世评价或事件结局。角色回复不设固定句数、段落数或人为短回复目标，应按人物性格、关系、情绪和场景完整表达，但避免无意义重复。长期稳定记忆和当前话题记忆只代表过去知情背景，本轮事实与动作必须以当前对话消息及游戏实时数据为准。不要把本段当作对话内容，也不要复述本段。`;
+      return `VOTC_CACHE_ANCHOR_v5
+  这是 Voices of the Court 的固定系统上下文锚点。请将后续内容视为当前游戏的动态上下文，并始终遵守以下稳定规则：保持角色扮演身份；优先使用游戏实际数据；不把现代价值观强加给中世纪角色；涉及历史人物、事件、作品、诗词、典故、制度或技术时，先核验其出现、发生、写成、成名或流传时间是否不晚于游戏当前年份；年份不确定时明确表示不知晓，不得猜测或用未来知识补全；不得预知未来、后世评价或事件结局。角色回复不设固定句数、段落数或人为短回复目标，应按人物性格、关系、情绪和场景完整表达，但避免无意义重复。长期稳定记忆和当前话题记忆只代表过去知情背景，本轮事实与动作必须以当前对话消息及游戏实时数据为准。【召回证据规则】系统提供“当前轮召回证据”时，这些内容代表当前回应角色已经知道的过去记录；涉及其中明确的过去事实、承诺、关系和言行时不得否认、篡改或无依据补全。当前 CK3 结构化事实负责现在的状态，但不得反向改写已经记录的过去；证据未说明的内容应表示不知道、记不清或只能推测。不要把本段当作对话内容，也不要复述本段。`;
     }
     /**
     * Build the stable portion of a character's past conversation summaries.
@@ -476,8 +478,9 @@ function createPromptBuilder({
         role: "system",
         stable: false
       };
-      const mentionedCharactersContext = this.buildMentionedCharactersContext(char, gameData, workingHistory);
+      const mentionedCharactersContext = memoryContext?.subjectiveWorldPolicyActive ? null : this.buildMentionedCharactersContext(char, gameData, workingHistory);
       const responderGameFacts = this.buildResponderGameFacts(char);
+      const responderFamilyFacts = buildFamilyFactBlock(char, gameData);
       const responderGameFactsBlock = {
         id: "responder-game-facts",
         type: "responder_game_facts",
@@ -493,6 +496,14 @@ function createPromptBuilder({
         enabled: true,
         role: "system",
         stable: true
+      };
+      const responderFamilyFactsBlock = {
+        id: "responder-family-facts",
+        type: "responder_family_facts",
+        label: "Current Structured Family Facts",
+        enabled: true,
+        role: "system",
+        stable: false
       };
       const stableWorldBlock = {
         id: "worldline-stable",
@@ -605,6 +616,14 @@ function createPromptBuilder({
             tokens: TokenCounter.estimateTokens(responderGameFacts)
           });
         }
+        if (responderFamilyFacts) {
+          llmMessages.push({ role: "system", content: responderFamilyFacts });
+          blocksWithTokens.push({
+            block: responderFamilyFactsBlock,
+            content: responderFamilyFacts,
+            tokens: TokenCounter.estimateTokens(responderFamilyFacts)
+          });
+        }
       };
       for (const block of blocks) {
         if (!block.enabled) continue;
@@ -621,6 +640,7 @@ function createPromptBuilder({
           worldTopicText: memoryContext?.worldTopicText,
           worldSupplementalText: memoryContext?.worldSupplementalText,
           turnRecallText: memoryContext?.turnRecallText,
+          thirdPartyEvidenceText: memoryContext?.thirdPartyEvidenceText,
           worldCurrentText: memoryContext?.worldCurrentText,
           worldTurnRecallText: memoryContext?.worldTurnRecallText,
           subjectiveWorldBlock
@@ -892,6 +912,14 @@ function createPromptBuilder({
               block: { id: "memory-turn-recall", type: "memory_turn_recall", label: "Turn Recall", enabled: true, role: "system", stable: false },
               content: options.turnRecallText,
               tokens: TokenCounter.estimateTokens(options.turnRecallText)
+            });
+          }
+          if (options.thirdPartyEvidenceText) {
+            messages.push({ role: "system", content: options.thirdPartyEvidenceText });
+            tokenBlocks.push({
+              block: { id: "third-party-evidence-patch", type: "third_party_evidence", label: "ThirdPartyEvidencePatch", enabled: true, role: "system", stable: false },
+              content: options.thirdPartyEvidenceText,
+              tokens: TokenCounter.estimateTokens(options.thirdPartyEvidenceText)
             });
           }
           if (options.worldTurnRecallText) {

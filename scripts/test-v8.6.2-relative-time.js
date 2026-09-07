@@ -1,0 +1,10 @@
+"use strict";
+const assert = require("assert");
+const { relativeTimeLabel } = require("../resources/app/out/main/worldline/character-temporal-facts");
+assert.equal(relativeTimeLabel("1171.9.20", "1171.9.20").relativeLabel, "今日");
+assert.equal(relativeTimeLabel("1171.9.19", "1171.9.20").relativeLabel, "昨日");
+assert.equal(relativeTimeLabel("1171.9.18", "1171.9.20").relativeLabel, "前日");
+assert.equal(relativeTimeLabel("1171.9.2", "1171.9.20").relativeLabel, "2周前");
+assert.equal(relativeTimeLabel("1170.9.20", "1171.9.20").relativeLabel, "去年");
+assert.equal(relativeTimeLabel("1172.1.1", "1171.9.20").status, "TEMPORAL_ANOMALY");
+console.log("V8.6.2 Relative Time: PASS");

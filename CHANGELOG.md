@@ -8,6 +8,7 @@
 
 | 版本 | 重点 | 详细记录 |
 | --- | --- | --- |
+| v8.6.2 Sol | 修复 Subjective Prompt 输出饥饿，新增第三人 Entity-grounded Evidence、结构化家庭/死亡/年龄/相对时间事实和冲突 fail-closed；Memory Engine 可见标签更新为 2.6，内部 2.5 数据合同不迁移。38 个专项及 187 组发布门禁通过，CK3/Provider/Production A/B 人工 Gate 未执行 | [V8.6.2 实施与最终审查](docs/v8.6.2-sol-implementation-and-final-review.md) |
 | v8.6.1 Sol Stage 7 | 最终代码审查与 149 组发布门禁通过；确认 Terra 主链路 11 次实机请求，并在最终版补测 7 次带分块字段的 A 组请求。修复旧遥测冒充 V8.6.1 观测；用户确认实机无问题并豁免剩余 10/30/50 生产 A/B，Full Freeze 按人工验收签发 | [Sol Stage 7 最终审查](docs/v8.6.1-sol-stage-7-final-review.md) |
 | v8.6.1 Sol Stage 4 | 修复 Worldline 压力下先删 Memory、Personal Supplemental 共享 ACL、当前 Game Truth 冲突优先级和稳定块溢出；补齐确定性格式及 Provider 指标持久化。148 组发布门禁通过，等待 Luna UI 与实机 Gate | [Sol Stage 4 审查](docs/v8.6.1-sol-stage-4-safety-review.md) |
 | v8.6.1 Luna Stage 5 | 世界线诊断页接通只读 Token/Cache 观测，展示 Memory/Worldline 分块、Provider/内部缓存层与关键耗时；补充知识明确会话、检查点和 Runtime ID 角色范围。生产 Prompt 默认仍关闭，等待真实 CK3/Provider A/B | [Luna Stage 5 实施报告](docs/v8.6.1-luna-stage-5-implementation-report.md) |

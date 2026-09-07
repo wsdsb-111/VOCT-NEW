@@ -16,7 +16,7 @@ Voices of the Court 是一个面向《Crusader Kings III》（CK3）的沉浸式
 - **V8.5.2 玩家语义与世界线差异 UI（Luna + Sol）**：逐实体展示 Historical / Runtime-native 身份、歧义和来源不完整状态；年龄、父母、兄弟、婚姻和子女差异只进入懒展开的可读 Worldline Difference 面板。Sol Stage 5 已修复新旧 DTO 聚合矛盾、来源优先级和降级路径 raw 值泄漏，50 条候选分页及 A/B/C 诊断分层保持不变。120 组发布回归通过，下一步 Astra 最终集成与实机 Gate。
 - **历史认知边界**：提示词要求角色只使用当前年份已经发生、写成、流传或成名的信息，避免引用未来人物、事件、诗词和典故。
 - **当前政局优先**：皇帝和年号从实际游戏角色数据中识别，支持玩家篡位或改变历史后的沙盒玩法。
-- **Memory Engine 2.5**：保留 `角色ID_姓名/与对方的对话.json` 人物目录与 2.4 写入合同，并新增整场冻结的 Session Topic Anchor，以及只在明确回忆意图下触发、Top1、默认 256 Token 的 Turn Recall。
+- **Memory Engine 2.6（可见标签）**：保留 2.5 的 `角色ID_姓名/与对方的对话.json` 人物目录、存储 schema 与写入合同；V8.6.2 新增当前轮第三人证据 Grounding，Session Topic Anchor 与 Turn Recall 合同不迁移。
 - **Official VOTC 2.0.3 Action System**：以官方 Prompt、Schema、Registry、Sandbox、审批与 28 个标准动作作为唯一动作基线；每个 NPC 完整回复后评估一次，不再运行 AE3/AE4、Action Mode、Pending 或 Social Consequence。
 - **候场与在场窗口**：多人会话可在首句前设置候场，开始后可请入内、永久离场，或选择昏迷、睡着、暂时离开三种可返回的暂离模式；每名角色只回应、获知并保存自己实际在场区间的内容。
 - **多人对话摘要**：支持玩家与当前会话中的全部 NPC 同时对话，并将多人互动摘要按实际参与者逐对保存，避免 NPC 之间的对话内容丢失。
@@ -27,9 +27,9 @@ Voices of the Court 是一个面向《Crusader Kings III》（CK3）的沉浸式
 
 ## 运行环境
 
-当前版本：V8.6.1 [Sol Stage 7 最终审查](docs/v8.6.1-sol-stage-7-final-review.md)已签发。代码审查与 149 组发布门禁通过，Terra 主链路完成 11 次真实 Provider 对话冒烟；最终版重启后又完成 7 次带 Memory/Worldline 分块字段的 A 组实机请求，观测管线通过，旧遥测不得冒充新证据的 P1 已修复。用户确认当前实机无问题并明确豁免剩余 10/30/50 生产 A/B，未执行部分不记为测试通过；`V8.6.1 FULL FREEZE = PASS (USER ACCEPTANCE)`。
+当前版本：V8.6.2 [Sol 实施与最终审查](docs/v8.6.2-sol-implementation-and-final-review.md)已完成代码施工。Subjective World、第三人 Grounding、Kinship、Death/Temporal 与 Memory/Worldline 边界已通过 38 个专项和 187 组发布门禁；Memory Engine 可见标签更新为 2.6，内部 2.5 数据合同不变。真实 CK3、Provider、Production Worldline A/B 与 Electron UI 人工 Gate 尚未执行，故 `V8.6.2 FREEZE = PENDING MANUAL GATES`。
 
-最新终审：V8.5.2 [Astra Stage 6 集成审查](docs/v8.5.2-astra-final-review.md)已完成本轮代码修复、120 组回归、三份真实存档矩阵和隔离 Electron IPC 验证。修复交叉姓名误拆、原生人物重复诊断实体及历史 Runtime 缺失状态丢失；正式 Overlay 连续交互、实际 Provider 和长会话 Gate 仍待验收，`INTERNAL FREEZE = NOT READY`。补充知识已可保存和诊断召回，但正式配置的对话注入仍关闭；当前只作用于本检查点，长期 Player Canon 属于 V8.7 规划。
+V8.5.2 历史终审：[Astra Stage 6 集成审查](docs/v8.5.2-astra-final-review.md)完成了当时的代码修复、120 组回归、三份真实存档矩阵和隔离 Electron IPC 验证。其验收边界保留供追溯，当前状态以上方 V8.6.2 入口为准。
 
 以下为上一阶段交接记录，其“下一步”状态由上方 Astra 终审更新：
 
@@ -154,7 +154,7 @@ voices-of-the-court/
 ├─ resources/app/out/main/script-sandbox.js          # 提示词/动作脚本共享 VM 策略
 ├─ resources/app/out/main/window-manager.js          # Electron 窗口构造
 ├─ resources/app/out/main/secure-provider-secrets.js # safeStorage 密钥落盘
-├─ resources/app/out/main/memory-system/             # Memory Engine 2.5
+├─ resources/app/out/main/memory-system/             # Memory Engine 2.6 标签 / 2.5 数据合同
 ├─ resources/app/out/main/historical-system/         # V8 Baseline、Campaign Identity 与 Worldline Store
 ├─ resources/app/out/main/actions/                   # Official VOTC 2.0.3 Action System
 ├─ resources/app/out/main/conversation/              # 对话与在场生命周期基础设施
@@ -216,13 +216,13 @@ node scripts\test-release.js
 ## 版本信息
 
 - 外挂 UI 版本：v2.0.4
-- 当前应用功能基线：V8.6 Subjective World 代码复审通过 + V8.6.1 Sol Stage 4 安全与兼容审查通过；生产 Prompt 默认仍为诊断/关闭，Luna UI 与实机 Gate 尚未完成
+- 当前应用功能基线：V8.6.2 Subjective World 输出、第三人 Grounding、Kinship 与 Death/Temporal 代码审查通过；人工 CK3/Provider/Production A/B Gate 尚未执行
 - CK3 模组版本：Voices of the Court 2.0.5
 - 模组支持版本：CK3 1.18.*
 - UI 主题：宫廷编年史风格（深红、暗金、羊皮纸文本层级）
 - UI 主题切换：羊皮卷、骑士纹章、水墨画卷三套完整历史风格；分别拥有独立背景、边框结构、按钮造型、消息卡片、输入框、字体和滚动条，并可自动保存选择
 - UI 素材生成提示词：参见 [docs/UI_ASSET_PROMPTS_2.0.3.md](docs/UI_ASSET_PROMPTS_2.0.3.md)
-- 当前重点：切换 Luna 执行 V8.6.1 Stage 5，完成 Prompt Diagnostics、Cache Breakpoint、Memory/Worldline Token/Cache 展示与 Supplemental 范围文案；Official VOTC 2.0.3 Action、Memory Engine 2.5 核心与默认生产开关保持冻结
+- 当前重点：执行 V8.6.2 Stage 7 人工 Gate，验证第三人明确记录遵循、亲属称谓、死亡相对时间、Production Worldline A/B 与 Electron UI；Official VOTC 2.0.3 Action 和 Memory Engine 2.5 存储合同保持冻结
 
 ## 已知限制
 
@@ -233,7 +233,7 @@ node scripts\test-release.js
 - Workshop 2.0.5 的存档 token 跨重启与不同新存档隔离仍需真实 CK3 保存/读档 Gate；旧模组不会持久化世界线，但现有对话仍可运行。
 - CK3 日志格式、角色头衔语言和本地化文本变化时，可能影响年份或皇帝识别。
 - DeepSeek 等服务商的上下文缓存由服务端管理，命中率会受到请求前缀、模型、账号隔离和缓存生命周期影响。
-- 人物摘要目录是 Memory Engine 2.5 的可见长期记忆数据；清理或迁移前请先备份 `%APPDATA%/VOTC/votc_data/conversation_summaries`。
+- 人物摘要目录是 Memory Engine 2.6 UI 所展示的长期记忆数据，底层继续使用 2.5 数据合同；清理或迁移前请先备份 `%APPDATA%/VOTC/votc_data/conversation_summaries`。
 - 结构化记忆质量仍受摘要 Provider 的 JSON 遵循能力影响；新终局请求解析失败时会自动重试，连续失败则保留 recovery snapshot，旧恢复快照仍兼容自然语言回退。
 
 ## 文档入口

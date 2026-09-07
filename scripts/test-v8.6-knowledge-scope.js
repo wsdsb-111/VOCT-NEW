@@ -8,7 +8,9 @@ const snapshot = {
   characters: {
     "1": { id: "1", courtEmployer: "10", liege: "20" },
     "2": { id: "2", courtEmployer: "10", liege: "20" },
-    "3": { id: "3", courtEmployer: "11", liege: "21" }
+    "3": { id: "3", courtEmployer: "11", liege: "21" },
+    "20": { id: "20" },
+    "21": { id: "21" }
   }
 };
 

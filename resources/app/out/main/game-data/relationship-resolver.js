@@ -190,7 +190,10 @@ function createRelationshipResolver({ onDiagnostic = null } = {}) {
   const resolveDirectKinship = (subject, other) => {
     if (!subject || !other || Number(subject.id) === Number(other.id)) return null;
     const types = relationTypesBetween(subject, other);
-    if (types.size > 1) emit("RELATION_CONFLICT_TYPE", { subjectId: subject.id, otherId: other.id, types: [...types] });
+    if (types.size > 1) {
+      emit("RELATION_CONFLICT_TYPE", { subjectId: subject.id, otherId: other.id, types: [...types] });
+      return null;
+    }
     let resolution = null;
     if (types.has("child")) {
       resolution = { type: "child", label: subject.gender === "male" ? "儿子" : subject.gender === "female" ? "女儿" : "子女", gender: subject.gender || "unknown" };

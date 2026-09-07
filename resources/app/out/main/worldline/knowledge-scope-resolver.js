@@ -17,7 +17,7 @@ function createRealmRootIndex(snapshot = {}) {
     if (roots.has(key)) return roots.get(key);
     if (trail.has(key)) return null;
     const character = characters[key];
-    if (!character) return key;
+    if (!character) return null;
     const liegeId = id(character.liege) || id(character.topLiege) || id(character.realm);
     if (!liegeId || liegeId === key) {
       roots.set(key, key);
