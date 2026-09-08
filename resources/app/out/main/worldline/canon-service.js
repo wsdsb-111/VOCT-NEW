@@ -8,7 +8,22 @@ const { KNOWLEDGE_POLICY_VERSION } = require("./character-knowledge-policy");
 const { resolveKnowledgeScope } = require("./knowledge-scope-resolver");
 const { estimateTokens } = require("../token-estimator");
 const { normalizeGameDate } = require("./character-temporal-facts");
+const { isPotentialCurrentState, normalizeCanonPayload } = require("./canon-contract");
 const queues = new Map();
+const NORMALIZATION_INPUT_FIELDS = new Set(["title", "content", "type", "entities", "entityRefs", "gameDate", "totalDays", "temporalMode", "temporalSemantics", "currentClaim", "conflictKey"]);
+const NORMALIZED_OUTPUT_FIELDS = ["gameDate", "totalDays", "temporalMode", "temporalSemantics", "currentClaim", "conflictKey"];
+
+function queryCharacterIds(snapshot, query) {
+  const normalized = String(query || "").trim().toLocaleLowerCase();
+  if (!normalized) return [];
+  const ids = [];
+  for (const [runtimeId, character] of Object.entries(snapshot?.characters || {})) {
+    const names = [character?.fullName, character?.firstName, character?.shortName].filter((name) => typeof name === "string" && name.trim()).map((name) => name.trim().toLocaleLowerCase());
+    if (names.some((name) => normalized.includes(name))) ids.push(String(runtimeId));
+    if (ids.length >= 64) break;
+  }
+  return ids;
+}
 
 class CanonService {
   constructor({ root, getCheckpoint, getLiveState }) {
@@ -55,6 +70,17 @@ class CanonService {
     if (!scope.token || scope.token !== token) throw new Error("branch_confirmation_stale_or_invalid");
     const created = this.registry.fork(this.input);
     this.scope = { ...scope, ...created, reason: null, token: crypto.randomUUID() };
+    this.snapshot = null;
+    this.cache.clear();
+    return this.scope;
+  }
+
+  resume({ token, branchId } = {}) {
+    if (this.identityBusy) throw new Error("branch_identity_change_in_progress");
+    const scope = this.branch();
+    if (!scope.token || scope.token !== token) throw new Error("branch_confirmation_stale_or_invalid");
+    const resumed = this.registry.resume(this.input, branchId);
+    this.scope = { ...scope, ...resumed, reason: null, token: crypto.randomUUID() };
     this.snapshot = null;
     this.cache.clear();
     return this.scope;
@@ -120,7 +146,7 @@ class CanonService {
       conflicts.get(record.conflictKey).add(record.content);
     }
     const page = records.slice(offset, offset + 20).map(record => ({ ...record,
-      recallWarning: record.status !== "ACTIVE" ? null : conflicts.get(record.conflictKey)?.size > 1 ? "同事项存在不同 Canon，召回时禁止随机选边" : record.currentClaim || /(?:现在|目前|当前|如今).{0,12}(?:在|位于|活着|已死|信仰|文化|领主)/.test(record.content) ? "当前状态声明必须经过 CK3 验证；缺少结构化证据时不注入" : date && normalizeGameDate(record.gameDate)?.serial > date.serial || record.totalDays != null && Number.isSafeInteger(live.totalDays) && record.totalDays > live.totalDays ? "未来记录：当前不可召回" : null
+      recallWarning: record.status !== "ACTIVE" ? null : conflicts.get(record.conflictKey)?.size > 1 ? "同事项存在不同 Canon，召回时禁止随机选边" : record.currentClaim || isPotentialCurrentState(record.content) ? "当前状态声明必须经过 CK3 验证；缺少结构化证据时不注入" : record.temporalMode === "TIMELESS" ? null : record.temporalMode === "PLANNED" ? "未来计划将以“尚未发生”的方式召回" : date && normalizeGameDate(record.gameDate)?.serial > date.serial || record.totalDays != null && Number.isSafeInteger(live.totalDays) && record.totalDays > live.totalDays ? "未来记录：当前不可召回" : null
     }));
     const renameCandidates = scope.branchId && !state?.revision ? this.registry.load().branches.filter(item => item.archived !== true && item.campaignId === scope.campaignId && item.branchId !== scope.branchId && item.fingerprint === this.input.fingerprint).map(item => ({ branchId: item.branchId, sourcePath: item.sourcePath })) : [];
     return { branch: scope, revision: state?.revision || 0, total: records.length, offset, records: page, defaultGameDate: gameDate, renameCandidates, promptEnabled: null };
@@ -131,11 +157,31 @@ class CanonService {
     const scope = { ...this.branch() };
     if (!scope.branchId || token !== scope.token) throw new Error("branch_write_blocked_reload_editor");
     if (!["create", "update", "supersede"].includes(operation)) throw new Error("supplemental_operation_invalid");
-    if (["COURT_PUBLIC", "REALM_PUBLIC"].includes(payload?.visibility) && !this.getCheckpoint()?.snapshot?.characters?.[payload.scopeEntityId]) throw new Error("supplemental_scope_character_required");
+    const checkpoint = this.getCheckpoint();
+    const live = this.getLiveState();
+    const normalizationContext = { gameDate: live.gameDate || checkpoint?.snapshot?.gameDate || scope.gameDate, totalDays: Number.isSafeInteger(live.totalDays) ? live.totalDays : checkpoint?.snapshot?.totalDays };
+    let normalizedPayload;
+    let effectiveRecord;
+    if (operation === "create") normalizedPayload = normalizeCanonPayload(payload, normalizationContext);
+    else {
+      const state = await this.prepare();
+      if (!state || this.branch().token !== scope.token) throw new Error("branch_write_blocked_reload_editor");
+      const existing = state.records.find((record) => record.recordId === id);
+      if (!existing) throw new Error("supplemental_not_found");
+      if (Object.keys(payload || {}).some((field) => NORMALIZATION_INPUT_FIELDS.has(field))) {
+        const normalized = normalizeCanonPayload({ ...existing, ...payload }, normalizationContext);
+        normalizedPayload = { ...payload };
+        for (const field of NORMALIZED_OUTPUT_FIELDS) normalizedPayload[field] = normalized[field] === undefined ? null : normalized[field];
+      } else normalizedPayload = payload;
+      effectiveRecord = { ...existing, ...normalizedPayload };
+    }
+    effectiveRecord ||= normalizedPayload;
+    if (effectiveRecord.currentClaim && !checkpoint?.snapshot?.characters?.[String(effectiveRecord.currentClaim.entityId)]) throw new Error("supplemental_current_claim_character_required");
+    if (["COURT_PUBLIC", "REALM_PUBLIC"].includes(effectiveRecord.visibility) && !checkpoint?.snapshot?.characters?.[effectiveRecord.scopeEntityId]) throw new Error("supplemental_scope_character_required");
     // Capture the branch at invocation. A queued edit can never be retargeted to B.
     this.snapshot = null;
     this.cache.clear();
-    try { return await this.run(scope, operation, { id, payload, revision }); }
+    try { return await this.run(scope, operation, { id, payload: normalizedPayload, revision }); }
     finally { this.snapshot = null; this.cache.clear(); }
   }
 
@@ -143,6 +189,49 @@ class CanonService {
     const scope = { ...this.branch() };
     if (!scope.branchId || token !== scope.token) throw new Error("branch_changed_reload_editor");
     return this.run(scope, "history", { id, options: { offset, limit: 20 } });
+  }
+
+  _currentTruthValue(claim, currentFacts = []) {
+    const fact = currentFacts.find((item) => String(item.entityId) === String(claim.entityId) && String(item.field).toLowerCase() === claim.field && ["GAME_TRUTH", "GAMESTATE"].includes(item.sourceTier));
+    if (fact) return fact.structuredValue !== undefined ? fact.structuredValue : fact.value;
+    return this.getCheckpoint()?.snapshot?.characters?.[String(claim.entityId)]?.[claim.field];
+  }
+
+  async testRecall({ token, recordId, responderId, query = "", currentFacts = [] } = {}) {
+    const scope = { ...this.branch() };
+    if (!scope.branchId || token !== scope.token) throw new Error("branch_changed_reload_editor");
+    if (typeof recordId !== "string" || !/^swm_[a-f0-9-]+$/.test(recordId) || !/^\d+$/.test(String(responderId || "")) || typeof query !== "string" || query.length > 1000) throw new Error("canon_test_request_invalid");
+    const state = await this.prepare();
+    if (!state || this.branch().token !== scope.token) throw new Error("branch_changed_reload_editor");
+    const record = state.records.find((item) => item.recordId === recordId);
+    if (!record) throw new Error("supplemental_not_found");
+    const checkpoint = this.getCheckpoint();
+    const live = this.getLiveState();
+    const entityIds = queryCharacterIds(checkpoint?.snapshot, query);
+    const recordEntityIds = new Set([...(record.entities || []), ...(record.entityRefs || []).filter((item) => item.namespace === "character").map((item) => item.id)].map(String));
+    const entityMatch = entityIds.some((id) => recordEntityIds.has(id));
+    const result = retrieveSupplemental({ records: [record], ...scope, responderId: String(responderId), query, entityIds, currentTotalDays: live.totalDays, currentGameDate: live.gameDate || checkpoint?.snapshot?.gameDate, tokenBudget: 640, estimateTokens,
+      scopeResolver: (item) => item.scopeEntityId ? resolveKnowledgeScope({ snapshot: checkpoint?.snapshot, responderId: String(responderId), subjectId: item.scopeEntityId }) : {},
+      currentTruth: (claim) => this._currentTruthValue(claim, currentFacts)
+    });
+    const selected = result.selected.some((item) => item.recordId === recordId);
+    const candidate = supplementalCandidates(state.index, query, entityIds).some((item) => item.recordId === recordId);
+    const visibilityAllowed = result.visibilityBlockedCount === 0;
+    const actualCurrentValue = visibilityAllowed && record.currentClaim ? this._currentTruthValue(record.currentClaim, currentFacts) : undefined;
+    const reason = !candidate ? "QUERY_NOT_RELEVANT" : result.visibilityBlockedCount ? "NPC_NOT_AUTHORIZED" : result.temporalBlockedCount ? "TEMPORAL_BLOCKED" : result.conflictCount ? "CURRENT_TRUTH_CONFLICT" : selected ? entityMatch ? "RELEVANT_ENTITY_MATCH" : "RELEVANT_TEXT_MATCH" : record.status !== "ACTIVE" ? "RECORD_NOT_ACTIVE" : "NOT_SELECTED";
+    return {
+      matched: selected,
+      visibility: result.visibilityBlockedCount ? "DENY" : "ALLOW",
+      temporal: result.temporalBlockedCount ? "BLOCKED" : "SAFE",
+      branch: record.campaignId === scope.campaignId && record.branchId === scope.branchId ? "MATCH" : "MISMATCH",
+      currentTruth: result.conflictCount ? "CONFLICT" : "NO_CONFLICT",
+      selected,
+      tokens: selected ? result.tokens : 0,
+      promptText: selected ? result.text : null,
+      currentTruthValue: actualCurrentValue === undefined ? null : actualCurrentValue,
+      claimValue: visibilityAllowed && record.currentClaim ? record.currentClaim.value : null,
+      reason
+    };
   }
 
   recall({ responderId, query = "", entityIds = [], tokenBudget = 512, currentFacts = [], stable = false, conversationId = null, excludeIds = [] } = {}) {
@@ -160,13 +249,7 @@ class CanonService {
       const candidates = supplementalCandidates(this.snapshot.index, query, entityIds).filter(record => !excludeIds.includes(record.recordId));
       const result = retrieveSupplemental({ records: candidates, ...scope, responderId, query, entityIds, selectionIds: stable ? new Set(this.snapshot.stableRecords.map(record => record.recordId)) : null, currentTotalDays: live.totalDays, currentGameDate: live.gameDate || checkpoint.snapshot.gameDate, tokenBudget, estimateTokens,
         scopeResolver: record => record.scopeEntityId ? resolveKnowledgeScope({ snapshot: checkpoint.snapshot, responderId, subjectId: record.scopeEntityId }) : {},
-        currentTruth: claim => {
-          const fact = currentFacts.find(item => String(item.entityId) === String(claim.entityId) && String(item.field).toLowerCase() === claim.field && ["GAME_TRUTH", "GAMESTATE"].includes(item.sourceTier));
-          if (!fact) return undefined;
-          if (fact.structuredValue !== undefined) return fact.structuredValue;
-          // Never consult an unapproved character field to grant knowledge.
-          return checkpoint.snapshot.characters?.[String(claim.entityId)]?.[claim.field] ?? undefined;
-        }
+        currentTruth: claim => this._currentTruthValue(claim, currentFacts)
       });
       const output = { ...result, revision: this.snapshot.revision, candidateCount: candidates.length, cacheHit: false };
       if (this.cache.size >= 64) this.cache.delete(this.cache.keys().next().value);

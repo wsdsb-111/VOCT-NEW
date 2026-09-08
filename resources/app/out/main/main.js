@@ -1,5 +1,7 @@
 "use strict";
 const electron = require("electron");
+const votcHasSingleInstanceLock = electron.app.requestSingleInstanceLock();
+if (!votcHasSingleInstanceLock) electron.app.quit();
 const fs$1 = require("fs");
 const path = require("path");
 const crypto = require("node:crypto");
@@ -869,6 +871,12 @@ const initializeRunCommandQueue = async () => {
 initLogger();
 let chatWindow = null;
 let tray = null;
+electron.app.on("second-instance", () => {
+  if (!votcHasSingleInstanceLock || !chatWindow || chatWindow.isDestroyed()) return;
+  if (chatWindow.isMinimized()) chatWindow.restore();
+  chatWindow.show();
+  chatWindow.focus();
+});
 if (require("electron-squirrel-startup")) {
   electron.app.quit();
 }
@@ -944,6 +952,7 @@ const setupFocusMonitoring = (window) => {
   focusMonitor.start();
 };
 electron.app.on("ready", async () => {
+  if (!votcHasSingleInstanceLock) return;
   console.log(electron.app.getPath("userData"));
   clearLog();
   settingsRepository.migrateProviderSecrets();

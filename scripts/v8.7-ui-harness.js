@@ -19,14 +19,25 @@ const server = http.createServer(async (req, res) => {
       let body = "";
       for await (const chunk of req) { body += chunk; if (body.length > 30000) throw new Error("payload_too_large"); }
       const { method, args } = JSON.parse(body);
-      const calls = { listCanon: () => service.list(args[0]), mutateCanon: () => service.mutate(args[0]), getCanonHistory: () => service.history(args[0]), confirmCanonBranch: () => service.confirm(args[0]), forkCanonBranch: () => service.fork(args[0]), renameCanonBranch: () => service.rename(args[0]) };
+      const calls = {
+        listCanon: async () => ({ ...await service.list(args[0]), promptEnabled: false }),
+        mutateCanon: () => service.mutate(args[0]),
+        getCanonHistory: () => service.history(args[0]),
+        confirmCanonBranch: () => service.confirm(args[0]),
+        forkCanonBranch: () => service.fork(args[0]),
+        resumeCanonBranch: () => service.resume(args[0]),
+        renameCanonBranch: () => service.rename(args[0]),
+        listCanonCharacterOptions: () => ({ options: [{ runtimeId: "1", displayName: "测试角色", currentlyPresent: true }], total: 1 }),
+        testCanonRecall: () => service.testRecall(args[0]),
+        setRecallSettings: () => ({ promptIntegrationEnabled: true, subjectiveWorldMode: "PRODUCTION" })
+      };
       if (!Object.hasOwn(calls, method)) throw new Error("method_denied");
       res.setHeader("Content-Type", "application/json");
       res.end(JSON.stringify(await calls[method]())); return;
     }
     if (url.pathname === "/") {
       res.setHeader("Content-Type", "text/html; charset=utf-8");
-      res.end(`<html><head><meta charset="utf-8"><link rel="stylesheet" href="/assets/index-WtJH_nua.css"></head><body style="background:#171411"><div id="root" class="worldline-view" style="max-width:1000px;margin:auto"></div><script>window.worldlineAPI=Object.fromEntries(['listCanon','mutateCanon','getCanonHistory','confirmCanonBranch','forkCanonBranch','renameCanonBranch'].map(method=>[method,async(...args)=>{const response=await fetch('/rpc',{method:'POST',headers:{'x-fixture-token':${JSON.stringify(token)}},body:JSON.stringify({method,args})});const value=await response.json();if(!response.ok)throw Error(value.error);return value}]));window.worldlineAPI.onUpdated=()=>()=>{};</script><script type="module" src="/assets/index-Dn3qWlAB.js"></script></body></html>`); return;
+      res.end(`<html><head><meta charset="utf-8"><link rel="stylesheet" href="/assets/index-WtJH_nua.css"></head><body style="background:#171411"><div id="root" class="worldline-view" style="max-width:1000px;margin:auto"></div><script>window.worldlineAPI=Object.fromEntries(['listCanon','mutateCanon','getCanonHistory','confirmCanonBranch','forkCanonBranch','resumeCanonBranch','renameCanonBranch','listCanonCharacterOptions','testCanonRecall','setRecallSettings'].map(method=>[method,async(...args)=>{const response=await fetch('/rpc',{method:'POST',headers:{'x-fixture-token':${JSON.stringify(token)}},body:JSON.stringify({method,args})});const value=await response.json();if(!response.ok)throw Error(value.error);return value}]));window.worldlineAPI.onUpdated=()=>()=>{};</script><script type="module" src="/assets/index-Dn3qWlAB.js"></script></body></html>`); return;
     }
     const file = path.resolve(renderer, "." + decodeURIComponent(url.pathname));
     if (!file.startsWith(renderer + path.sep) || !fs.existsSync(file) || !fs.statSync(file).isFile()) { res.writeHead(404); res.end(); return; }

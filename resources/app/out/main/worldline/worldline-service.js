@@ -346,6 +346,29 @@ class WorldlineService {
     };
   }
 
+  setRecallSettings(input = {}) {
+    if (!input || typeof input !== "object" || Array.isArray(input)) throw new Error("worldline_recall_settings_invalid");
+    const { promptIntegrationEnabled, subjectiveWorldMode } = input;
+    if (promptIntegrationEnabled === undefined && subjectiveWorldMode === undefined) throw new Error("worldline_recall_settings_empty");
+    if (promptIntegrationEnabled !== undefined && typeof promptIntegrationEnabled !== "boolean") throw new Error("worldline_prompt_integration_invalid");
+    const current = this._settings();
+    const next = { ...current };
+    if (promptIntegrationEnabled !== undefined) next.promptIntegrationEnabled = promptIntegrationEnabled === true;
+    if (subjectiveWorldMode !== undefined) {
+      if (!["DIAGNOSTIC", "PRODUCTION"].includes(subjectiveWorldMode)) throw new Error("worldline_subjective_mode_invalid");
+      next.subjectiveWorldMode = subjectiveWorldMode;
+    }
+    const changed = next.promptIntegrationEnabled !== current.promptIntegrationEnabled || next.subjectiveWorldMode !== current.subjectiveWorldMode;
+    const saved = this._saveSettings(next);
+    if (changed) {
+      this.worldKnowledgeState.stableRecallCache.clear();
+      this.worldKnowledgeState.turnRecallCache.clear();
+      this.worldKnowledgeState.subjectiveViewCache.clear();
+      this._notifyStateChanged("recall_settings_updated");
+    }
+    return { ...this.getSettings(), ...saved };
+  }
+
   setAutosavePath(candidatePath) {
     if (candidatePath !== null && (typeof candidatePath !== "string" || !candidatePath.trim())) throw new Error("worldline_autosave_path_invalid");
     const settings = this._settings();
@@ -686,6 +709,35 @@ class WorldlineService {
       currentPlayerId,
       checkpointId: this.currentCheckpoint?.id || null
     };
+  }
+
+  listCanonCharacterOptions({ query = "" } = {}) {
+    const snapshot = this.currentCheckpoint?.snapshot;
+    const characters = snapshot?.characters && typeof snapshot.characters === "object" ? snapshot.characters : {};
+    const playerId = snapshot?.playerId === null || snapshot?.playerId === undefined ? null : String(snapshot.playerId);
+    const liveIds = new Set((this.getLiveState().characters || []).map((item) => String(item.runtimeId || "")).filter(Boolean));
+    const presentIds = new Set((Array.isArray(snapshot?.presentCharacterIds) ? snapshot.presentCharacterIds : []).map(String));
+    const search = String(query || "").trim().toLocaleLowerCase().slice(0, 120);
+    const options = [];
+    let total = 0;
+    const add = (runtimeId, character) => {
+      character ||= {};
+      const title = Array.isArray(character.domainTitles) ? character.domainTitles[0] || null : null;
+      const court = character.courtEmployer || null;
+      const realm = character.liege || null;
+      const displayName = character.fullName || character.firstName || `#${runtimeId}`;
+      const searchable = [runtimeId, displayName, character.firstName, title, court, realm].filter(Boolean).join(" ").toLocaleLowerCase();
+      if (search && !searchable.includes(search)) return;
+      total += 1;
+      if (options.length >= 50) return;
+      options.push({ runtimeId: String(runtimeId), displayName, title, alive: character.alive === true, court, realm, recentlyMentioned: liveIds.has(String(runtimeId)), currentlyPresent: presentIds.has(String(runtimeId)) });
+    };
+    if (playerId && Object.hasOwn(characters, playerId)) add(playerId, characters[playerId]);
+    for (const runtimeId in characters) {
+      if (!Object.hasOwn(characters, runtimeId) || runtimeId === playerId) continue;
+      add(runtimeId, characters[runtimeId]);
+    }
+    return { options, total, truncated: total > options.length, checkpointId: this.currentCheckpoint?.id || null };
   }
 
   getAnnualDelta() {
@@ -1171,7 +1223,15 @@ class WorldlineService {
   getCanonHistory(payload) { return this.canon.history(payload); }
   confirmCanonBranch(token) { return this.canon.confirm(token); }
   forkCanonBranch(token) { return this.canon.fork(token); }
+  resumeCanonBranch(payload) { return this.canon.resume(payload); }
   renameCanonBranch(payload) { return this.canon.rename(payload); }
+  async testCanonRecall(payload) {
+    const responderId = String(payload?.responderId || "");
+    if (!this.currentCheckpoint?.snapshot?.characters?.[responderId]) throw new Error("canon_test_responder_not_found");
+    const result = await this.canon.testRecall(payload);
+    if (!this.isSubjectivePromptIntegrationEnabled()) return { ...result, matched: false, selected: false, tokens: 0, promptText: null, reason: "RECALL_DISABLED", recallEnabled: false };
+    return { ...result, recallEnabled: true };
+  }
   async prepareCanon() {
     let timer;
     try {

@@ -29,9 +29,11 @@ Voices of the Court 是一个面向《Crusader Kings III》（CK3）的沉浸式
 
 V8.7 已接通长期世界记忆的存储、后台线程、IPC、编辑器和正式对话召回：[实施记录](docs/v8.7-implementation-report.md)。支持修订、权限、隐藏/恢复、显式分支延续/回档分叉/重命名；204 组发布回归通过。显式固定规则使用 Canon V8.7 稳定锚点扩展，未固定时保留原锚点；旧补充知识与 Memory Engine 2.6 标签/2.5 数据边界不迁移。真实 CK3、Provider 与打包 Electron 验收尚未完成，不标记 FULL FREEZE。
 
+V8.7.1 Terra + Luna + Sol 已完成 [后端收口](docs/v8.7.1-terra-implementation-report.md)、[玩家优先世界记忆 UI](docs/v8.7.1-luna-implementation-report.md)与 [最终正确性审查](docs/v8.7.1-sol-final-review.md)：分支恢复、结构化 Current Truth、Secret/ACL、时间、Memory/Cache 与 Canon Test 负向边界已收口，Current Truth 冲突可在 UI 中对照并安全处理；232 组发布门禁通过，代码侧 P0/P1 为 0。真实 CK3、Provider 与打包 Electron 人工 Gate 尚未执行，故 `V8.7.1 FREEZE = PENDING MANUAL GATES`。
+
 V8.7.0a [前置修复记录](docs/v8.7.0a-implementation-report.md)：条件式致死者权威、3 轮指代有效期、历史重置、证据争议语义及亲属结构缓存已修复，200 组发布回归通过。按用户要求暂停于 V8.7 主体开发前；本轮实机验收尚未执行。
 
-当前版本：V8.6.2 [Sol 实施与最终审查](docs/v8.6.2-sol-implementation-and-final-review.md)已完成代码施工。Subjective World、第三人 Grounding、Kinship、Death/Temporal 与 Memory/Worldline 边界已通过 38 个专项和 187 组发布门禁；Memory Engine 可见标签更新为 2.6，内部 2.5 数据合同不变。真实 CK3、Provider、Production Worldline A/B 与 Electron UI 人工 Gate 尚未执行，故 `V8.6.2 FREEZE = PENDING MANUAL GATES`。
+V8.6.2 历史入口：[Sol 实施与最终审查](docs/v8.6.2-sol-implementation-and-final-review.md)已完成代码施工。Subjective World、第三人 Grounding、Kinship、Death/Temporal 与 Memory/Worldline 边界已通过 38 个专项和 187 组发布门禁；Memory Engine 可见标签更新为 2.6，内部 2.5 数据合同不变。真实 CK3、Provider、Production Worldline A/B 与 Electron UI 人工 Gate 尚未执行，故 `V8.6.2 FREEZE = PENDING MANUAL GATES`。
 
 V8.5.2 历史终审：[Astra Stage 6 集成审查](docs/v8.5.2-astra-final-review.md)完成了当时的代码修复、120 组回归、三份真实存档矩阵和隔离 Electron IPC 验证。其验收边界保留供追溯，当前状态以上方 V8.6.2 入口为准。
 

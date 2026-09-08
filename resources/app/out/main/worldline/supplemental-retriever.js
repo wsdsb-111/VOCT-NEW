@@ -2,6 +2,7 @@
 
 const { classifyKnowledge } = require("./character-knowledge-policy");
 const { normalizeGameDate } = require("./character-temporal-facts");
+const { isPotentialCurrentState } = require("./canon-contract");
 const { textFeatures } = require("../memory-system/memory-ranker");
 
 function buildSupplementalIndex(records) {
@@ -42,7 +43,7 @@ function retrieveSupplemental({ records = [], campaignId, branchId, responderId,
     const dated = record.totalDays !== null && Number.isSafeInteger(record.totalDays);
     const fallbackCurrent = normalizeGameDate(currentGameDate);
     const fallbackRecord = normalizeGameDate(record.gameDate);
-    const dateSafe = dated ? current !== null && record.totalDays <= current : !!fallbackCurrent && !!fallbackRecord && fallbackRecord.serial <= fallbackCurrent.serial;
+    const dateSafe = record.temporalMode === "TIMELESS" || record.temporalMode === "PLANNED" ? true : dated ? current !== null && record.totalDays <= current : !!fallbackCurrent && !!fallbackRecord && fallbackRecord.serial <= fallbackCurrent.serial;
     const rangeSafe = (record.validFrom == null || current !== null && record.validFrom <= current) && (record.validUntil == null || current !== null && current <= record.validUntil);
     if (!dateSafe || !rangeSafe) { result.temporalBlockedCount++; continue; }
     const features = textFeatures(`${record.title} ${record.content}`);
@@ -52,7 +53,7 @@ function retrieveSupplemental({ records = [], campaignId, branchId, responderId,
     // Current-state declarations require a verified structural value. Past RP
     // events and subjective memories are not rejected merely by present state.
     const claim = record.currentClaim;
-    const unstructuredCurrent = /(?:现在|目前|当前|如今).{0,12}(?:在|位于|活着|已死|信仰|文化|领主)|\b(?:currently|now)\b.{0,20}\b(?:in|at|alive|dead|liege)\b/i.test(record.content);
+    const unstructuredCurrent = isPotentialCurrentState(record.content);
     if (claim || unstructuredCurrent) {
       const actual = claim ? currentTruth(claim) : undefined;
       if (!claim || actual === undefined || String(actual) !== String(claim.value)) {
@@ -86,7 +87,7 @@ function retrieveSupplemental({ records = [], campaignId, branchId, responderId,
     // to it. Only render the verified field, never relabel the entire body as truth.
     const row = record.currentClaim
       ? `- CK3 结构化核对：角色 #${record.currentClaim.entityId} · ${record.currentClaim.field}=${String(record.currentClaim.value)}`
-      : `- ${record.type === "PLANNED_DECISION" ? "计划/意图，尚未发生：" : ""}${record.title}：${record.content}`;
+      : `- ${record.type === "PLANNED_DECISION" || record.temporalMode === "PLANNED" ? "计划/意图，尚未发生：" : ""}${record.title}：${record.content}`;
     if (estimateTokens(header + [...rows, row].join("\n")) > budget) continue;
     rows.push(row);
     result.selected.push({ recordId: record.recordId, revision: record.revision });

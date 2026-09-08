@@ -46,6 +46,7 @@ function registerIpcHandlers(runtime) {
       window.webContents.send("worldline:updated", payload);
     });
     electron.ipcMain.handle("worldline:getSettings", () => worldlineService.getSettings());
+    electron.ipcMain.handle("worldline:setRecallSettings", (_event, payload) => worldlineService.setRecallSettings(payload));
     electron.ipcMain.handle("worldline:setAutosavePath", (_event, candidatePath) => worldlineService.setAutosavePath(candidatePath));
     electron.ipcMain.handle("worldline:validateAutosavePath", (_event, candidatePath) => worldlineService.validateAutosavePath(candidatePath));
     electron.ipcMain.handle("worldline:selectAutosaveFile", () => worldlineService.selectAutosaveFile());
@@ -58,6 +59,7 @@ function registerIpcHandlers(runtime) {
     electron.ipcMain.handle("worldline:getDiagnostics", () => worldlineService.getDiagnostics());
     electron.ipcMain.handle("worldline:getPromptDiagnostics", (_event, payload) => worldlineService.getPromptDiagnosticsAsync(payload));
     electron.ipcMain.handle("worldline:getSubjectiveResponderOptions", (_event, payload) => worldlineService.getSubjectiveResponderOptions({ query: typeof payload?.query === "string" ? payload.query : "" }));
+    electron.ipcMain.handle("worldline:listCanonCharacterOptions", (_event, payload) => worldlineService.listCanonCharacterOptions({ query: typeof payload?.query === "string" ? payload.query : "" }));
     electron.ipcMain.handle("worldline:getSubjectiveWorldView", (_event, payload) => worldlineService.getSubjectiveWorldView({
       responderId: typeof payload?.responderId === "string" || Number.isSafeInteger(payload?.responderId) ? payload.responderId : null,
       query: typeof payload?.query === "string" ? payload.query : ""
@@ -68,7 +70,9 @@ function registerIpcHandlers(runtime) {
     electron.ipcMain.handle("worldline:getCanonHistory", (_event, payload) => worldlineService.getCanonHistory(payload));
     electron.ipcMain.handle("worldline:confirmCanonBranch", (_event, token) => worldlineService.confirmCanonBranch(token));
     electron.ipcMain.handle("worldline:forkCanonBranch", (_event, token) => worldlineService.forkCanonBranch(token));
+    electron.ipcMain.handle("worldline:resumeCanonBranch", (_event, payload) => worldlineService.resumeCanonBranch({ token: payload?.token, branchId: payload?.branchId }));
     electron.ipcMain.handle("worldline:renameCanonBranch", (_event, payload) => worldlineService.renameCanonBranch(payload));
+    electron.ipcMain.handle("worldline:testCanonRecall", (_event, payload) => worldlineService.testCanonRecall({ token: payload?.token, recordId: payload?.recordId, responderId: payload?.responderId, query: payload?.query }));
     electron.ipcMain.handle("worldline:createSupplemental", (_event, payload) => worldlineService.createSupplemental(payload));
     electron.ipcMain.handle("worldline:updateSupplemental", (_event, id, payload) => worldlineService.updateSupplemental(id, payload));
     electron.ipcMain.handle("worldline:deleteSupplemental", (_event, id) => worldlineService.deleteSupplemental(id));

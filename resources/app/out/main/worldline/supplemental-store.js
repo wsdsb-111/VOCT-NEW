@@ -4,24 +4,30 @@ const nodeFs = require("fs");
 const path = require("path");
 const crypto = require("crypto");
 const { normalizeGameDate } = require("./character-temporal-facts");
+const { BOOLEAN_CLAIM_FIELDS, CURRENT_CLAIM_FIELDS, TEMPORAL_MODES, TEMPORAL_SEMANTICS } = require("./canon-contract");
 
 const TYPES = new Set(["PLAYER_CANON", "RP_POLITICAL_DECISION", "SECRET_AGREEMENT", "NARRATIVE_EVENT", "WORLD_ANNOTATION", "MANUAL_CORRECTION", "PLANNED_DECISION"]);
 const VISIBILITIES = new Set(["PUBLIC_WORLD", "REALM_PUBLIC", "COURT_PUBLIC", "PERSONAL", "SECRET"]);
 const IMPORTANCES = new Set(["LOW", "NORMAL", "HIGH", "CRITICAL"]);
 const STATUSES = new Set(["ACTIVE", "SUPERSEDED", "HIDDEN", "RETIRED", "CONFLICTED", "TEMPORAL_BLOCKED"]);
-const WRITABLE = new Set(["NEW_CAMPAIGN", "SAME_BRANCH", "BRANCH_FORK_DETECTED", "BRANCH_RENAMED"]);
-const EDITABLE = new Set(["title", "content", "type", "entities", "entityRefs", "visibility", "importance", "gameDate", "totalDays", "validFrom", "validUntil", "status", "knownBy", "conflictKey", "revisionReason", "scopeEntityId", "currentClaim", "conversationStable"]);
+const WRITABLE = new Set(["NEW_CAMPAIGN", "SAME_BRANCH", "BRANCH_FORK_DETECTED", "BRANCH_RENAMED", "BRANCH_RESUMED"]);
+const EDITABLE = new Set(["title", "content", "type", "entities", "entityRefs", "visibility", "importance", "gameDate", "totalDays", "validFrom", "validUntil", "status", "knownBy", "conflictKey", "revisionReason", "scopeEntityId", "currentClaim", "conversationStable", "temporalMode", "temporalSemantics"]);
 const queues = new Map();
 const clone = (value) => JSON.parse(JSON.stringify(value));
 const hash = (value) => crypto.createHash("sha256").update(JSON.stringify(value)).digest("hex");
 
 function validate(record) {
+  if (record.temporalMode != null && !TEMPORAL_MODES.has(record.temporalMode)) throw new Error("supplemental_temporal_mode_invalid");
+  if (record.temporalSemantics != null && !TEMPORAL_SEMANTICS.has(record.temporalSemantics)) throw new Error("supplemental_temporal_semantics_invalid");
+  if (record.temporalSemantics === "CURRENT_STRUCTURED_CLAIM" && !record.currentClaim) throw new Error("supplemental_current_claim_required");
+  if (record.temporalSemantics && record.temporalSemantics !== "CURRENT_STRUCTURED_CLAIM" && record.currentClaim) throw new Error("supplemental_current_claim_semantics_invalid");
+  if (record.temporalSemantics === "CURRENT_STRUCTURED_CLAIM" && record.temporalMode !== "CURRENT_DATE") throw new Error("supplemental_current_claim_requires_current_date");
   if (record.conversationStable != null && typeof record.conversationStable !== "boolean") throw new Error("supplemental_stable_flag_invalid");
   if (record.conversationStable === true && (!["WORLD_ANNOTATION", "RP_POLITICAL_DECISION"].includes(record.type) || !["HIGH", "CRITICAL"].includes(record.importance))) throw new Error("supplemental_stable_requires_high_priority_world_rule");
   if (record.scopeEntityId != null && (typeof record.scopeEntityId !== "string" || !/^\d+$/.test(record.scopeEntityId))) throw new Error("supplemental_scope_entity_invalid");
   if (record.currentClaim != null) {
     const claim = record.currentClaim;
-    if (!claim || typeof claim !== "object" || !/^\d+$/.test(claim.entityId) || !["location", "alive", "faith", "culture", "liege"].includes(claim.field) || !["string", "boolean"].includes(typeof claim.value) || String(claim.value).length > 160) throw new Error("supplemental_current_claim_invalid");
+    if (!claim || typeof claim !== "object" || !/^\d+$/.test(claim.entityId) || !CURRENT_CLAIM_FIELDS.has(claim.field) || typeof claim.value !== (BOOLEAN_CLAIM_FIELDS.has(claim.field) ? "boolean" : "string") || String(claim.value).length > 160) throw new Error("supplemental_current_claim_invalid");
   }
   if (typeof record.title !== "string" || !record.title.trim() || record.title.length > 160) throw new Error("supplemental_title_invalid");
   if (typeof record.content !== "string" || !record.content.trim() || record.content.length > 12000) throw new Error("supplemental_content_invalid");
@@ -29,7 +35,7 @@ function validate(record) {
   for (const field of ["entities", "entityRefs", "knownBy"]) {
     if (!Array.isArray(record[field]) || record[field].length > 32) throw new Error("supplemental_list_invalid");
   }
-  if (!record.entities.every((item) => typeof item === "string" && item.length <= 160)) throw new Error("supplemental_entities_invalid");
+  if (!record.entities.every((item) => typeof item === "string" && /^\d+$/.test(item))) throw new Error("supplemental_entities_invalid");
   if (!record.entityRefs.every((item) => item && typeof item === "object" && ["character", "title"].includes(item.namespace) && typeof item.id === "string" && /^[a-zA-Z0-9_-]{1,100}$/.test(item.id))) throw new Error("supplemental_entity_refs_invalid");
   if (!record.knownBy.every((item) => typeof item === "string" && /^\d+$/.test(item))) throw new Error("supplemental_acl_invalid");
   if (record.type === "SECRET_AGREEMENT" && record.visibility !== "SECRET") throw new Error("supplemental_secret_visibility_required");
@@ -139,7 +145,7 @@ class SupplementalStore {
     return this.transaction(scope, (state) => {
       this.checkPayload(payload);
       const timestamp = this.clock();
-      const record = { schemaVersion: 1, recordId: `swm_${crypto.randomUUID()}`, campaignId: state.campaignId, branchId: state.branchId, type: "PLAYER_CANON", entities: [], entityRefs: [], knownBy: [], visibility: "PUBLIC_WORLD", importance: "NORMAL", gameDate: null, totalDays: null, validFrom: null, validUntil: null, status: "ACTIVE", source: "PLAYER", createdBy: "PLAYER", conflictKey: null, supersedes: null, supersededBy: null, revision: 1, previousRevisionHash: null, revisionReason: "create", createdAt: timestamp, updatedAt: timestamp, ...clone(payload) };
+      const record = { schemaVersion: 1, recordId: `swm_${crypto.randomUUID()}`, campaignId: state.campaignId, branchId: state.branchId, type: "PLAYER_CANON", entities: [], entityRefs: [], knownBy: [], visibility: "PUBLIC_WORLD", importance: "NORMAL", gameDate: null, totalDays: null, validFrom: null, validUntil: null, temporalMode: null, temporalSemantics: null, status: "ACTIVE", source: "PLAYER", createdBy: "PLAYER", conflictKey: null, supersedes: null, supersededBy: null, revision: 1, previousRevisionHash: null, revisionReason: "create", createdAt: timestamp, updatedAt: timestamp, ...clone(payload) };
       if (record.status !== "ACTIVE") throw new Error("supplemental_initial_status_invalid");
       validate(record);
       state.records.push(record);
@@ -199,7 +205,7 @@ class SupplementalStore {
   }
 
   history(scope, id, { offset = 0, limit = 20 } = {}) {
-    const records = this.read(scope).revisions.filter((record) => record.recordId === id);
+    const records = this.read(scope).revisions.filter((record) => record.recordId === id).sort((left, right) => right.revision - left.revision);
     const start = Number.isSafeInteger(offset) && offset >= 0 ? offset : 0;
     const size = Number.isSafeInteger(limit) ? Math.max(1, Math.min(20, limit)) : 20;
     return clone(records.slice(start, start + size));

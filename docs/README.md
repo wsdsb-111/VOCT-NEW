@@ -6,9 +6,11 @@
 
 V8.7 主体开发：[实施记录](v8.7-implementation-report.md)，存储—IPC—编辑器—正式对话已接通，204 组发布回归通过；浏览器交互验证通过，真实 CK3/Provider/打包 Electron 与最终 Freeze 待验收。
 
+V8.7.1：[Terra 后端实施报告](v8.7.1-terra-implementation-report.md)、[Luna UI 实施报告](v8.7.1-luna-implementation-report.md)与 [Sol 最终正确性审查](v8.7.1-sol-final-review.md)已完成；分支、结构化 Current Truth、Secret/ACL、时间、Memory/Cache、Canon Test 与玩家处理界面通过 232 组发布门禁，代码侧 P0/P1 为 0；真实 CK3、Provider 与打包 Electron Gate 待执行，当前为 `PENDING MANUAL GATES`。
+
 最新前置修复：[V8.7.0a 实施记录](v8.7.0a-implementation-report.md)，200 组发布回归通过，主体开发前暂停，实机验证待执行。
 
-V8.6.2 当前版本入口：[Sol 实施与最终审查](v8.6.2-sol-implementation-and-final-review.md)。Subjective World 输出、第三人 Grounding、Kinship、Death/Temporal 与缓存/Token 边界已完成，38 个专项和 187 组发布门禁通过；真实 CK3、Provider、Production A/B 与 Electron UI Gate 未执行，`V8.6.2 FREEZE = PENDING MANUAL GATES`。
+V8.6.2 历史入口：[Sol 实施与最终审查](v8.6.2-sol-implementation-and-final-review.md)。Subjective World 输出、第三人 Grounding、Kinship、Death/Temporal 与缓存/Token 边界已完成，38 个专项和 187 组发布门禁通过；真实 CK3、Provider、Production A/B 与 Electron UI Gate 未执行，`V8.6.2 FREEZE = PENDING MANUAL GATES`。
 
 当前事故入口：[V8.5.1 摘要 P0 / 多人入场 P2 修复报告](v8.5.1-summary-incident-review.md)：摘要链路审计、长会话恢复、参与者隔离与入场延迟。
 
@@ -55,7 +57,7 @@ V8.5.1 历史基线：[Sol 最终审查与修复](v8.5.1-sol-final-review.md)，
 
 ## 文档分类
 
-最新阶段：[V8.6.2 Sol 实施与最终审查](v8.6.2-sol-implementation-and-final-review.md)；代码施工与 187 组发布门禁通过，CK3、Provider、Production A/B 和 Electron UI 人工 Gate 尚未执行，当前冻结状态为 `PENDING MANUAL GATES`。
+最新阶段：[V8.7.1 Sol 最终正确性审查](v8.7.1-sol-final-review.md)；代码侧 P0/P1 审查与 232 组发布门禁通过，真实 CK3、Provider 和打包 Electron 人工 Gate 尚未执行，当前冻结状态为 `PENDING MANUAL GATES`。
 
 ### 架构与运行规则
 
@@ -153,6 +155,9 @@ V8.5.1 历史基线：[Sol 最终审查与修复](v8.5.1-sol-final-review.md)，
 - [v8.3.1-historical-figure-dashboard-implementation-report.md](v8.3.1-historical-figure-dashboard-implementation-report.md)
 - [v8.3-historical-figure-resolver-implementation-report.md](v8.3-historical-figure-resolver-implementation-report.md)
 - [v8.3-prerequisite-fixes-implementation-report.md](v8.3-prerequisite-fixes-implementation-report.md)
+- [v8.7.1-terra-implementation-report.md](v8.7.1-terra-implementation-report.md)：V8.7.1 Terra 分支安全、Current Truth、时间合同、人物/测试 API 与单实例写入保护。
+- [v8.7.1-luna-implementation-report.md](v8.7.1-luna-implementation-report.md)：V8.7.1 Luna 玩家优先编辑器、模板、人物选择、召回引导与可读诊断。
+- [v8.7.1-sol-final-review.md](v8.7.1-sol-final-review.md)：V8.7.1 Sol 分支、Current Truth、Secret/ACL、Memory/Cache 与 UI/API 最终正确性审查。
 - [v8.0-historical-baseline-2.0-implementation-report.md](v8.0-historical-baseline-2.0-implementation-report.md)：V8.0 Historical Baseline 2.0 实施、测试与实机 smoke 边界。
 - [v7.10-official-action-letter-recovery-implementation-report.md](v7.10-official-action-letter-recovery-implementation-report.md)：V7.10-RC1 至 RC6 Final Rev.3 Candidate 官方 Action 迁移、启动 ACK Reconciliation、崩溃安全 dispatch、BLOCKED/STALLED 恢复、只读 debug.log、路径/Tail 事务、Date Producer Recovery、Canonical Relative Profile、统一 Kinship Resolver、Artifact Diagnostic 3.0 与验证边界。
 - [upstream/votc-2.0.3-action-manifest.md](upstream/votc-2.0.3-action-manifest.md)：官方 Action Kernel Blob SHA、适配路径和语义边界。

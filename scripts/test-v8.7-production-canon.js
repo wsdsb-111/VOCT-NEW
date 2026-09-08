@@ -48,9 +48,8 @@ const { registerIpcHandlers } = require("../resources/app/out/main/ipc/register-
     assert.equal((await createService().list()).total, 1, "worker persistence survives service restart");
     checkpoint = { ...original, id: "later", source: { ...original.source, fingerprint: "b".repeat(64) }, snapshot: { ...original.snapshot, gameDate: "1171.9.21" } };
     page = await service.list();
-    assert.equal(page.branch.state, "BRANCH_UNKNOWN");
-    service.confirm(page.branch.token);
-    assert.equal((await service.list()).total, 1, "explicit continuation retains branch");
+    assert.equal(page.branch.state, "SAME_BRANCH");
+    assert.equal((await service.list()).total, 1, "forward autosave continuity retains branch");
     assert.equal((await service.history({ token: service.branch().token, id: entry.recordId })).length, 4);
     const pinned = await service.mutate({ token: service.branch().token, operation: "create", payload: { title: "礼制", content: "祭礼使用青色灯笼", gameDate: "1171.9.20", type: "WORLD_ANNOTATION", importance: "HIGH", conversationStable: true, visibility: "SECRET", knownBy: ["1"] } });
     await service.prepare();
@@ -97,7 +96,7 @@ const { registerIpcHandlers } = require("../resources/app/out/main/ipc/register-
     const rollback = createService();
     checkpoint = original;
     const ambiguous = await rollback.list();
-    assert.equal(ambiguous.branch.state, "BRANCH_CONFLICT");
+    assert.equal(ambiguous.branch.state, "ROLLBACK_CANDIDATE");
     const fork = rollback.fork(ambiguous.branch.token);
     assert.notEqual(fork.branchId, entry.branchId);
     assert.equal((await rollback.list()).total, 0, "explicit rollback fork starts empty");

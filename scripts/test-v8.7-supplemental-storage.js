@@ -18,7 +18,7 @@ const { SupplementalStore } = require("../resources/app/out/main/worldline/suppl
     const edited = await store.update(scope, first.recordId, { content: "改为两个月后赴约" }, 1);
     assert.equal(edited.revision, 2);
     await assert.rejects(store.update(scope, first.recordId, { title: "过期编辑" }, 1), /revision_conflict/);
-    assert.equal(store.history(scope, first.recordId)[0].content, payload.content);
+    assert.equal(store.history(scope, first.recordId)[0].content, "改为两个月后赴约");
     await store.update(scope, first.recordId, { status: "HIDDEN" }, 2);
     assert.equal(store.list(scope).records.length, 0);
     await store.update(scope, first.recordId, { status: "ACTIVE" }, 3);
@@ -41,7 +41,7 @@ const { SupplementalStore } = require("../resources/app/out/main/worldline/suppl
     const prior = store.list(scope).records[0];
     const next = await store.supersede(scope, prior.recordId, { content: "改为明年赴约" }, prior.revision);
     assert.equal(next.supersedes, prior.recordId);
-    assert.equal(store.history(scope, prior.recordId).at(-1).supersededBy, next.recordId);
+    assert.equal(store.history(scope, prior.recordId).find((record) => record.revision === prior.revision + 1).supersededBy, next.recordId);
     assert.equal(store.list(scope).records.length, 1);
     await assert.rejects(store.update(scope, prior.recordId, { status: "ACTIVE" }, prior.revision + 1), /superseded_immutable/);
     const file = store.file(scope);

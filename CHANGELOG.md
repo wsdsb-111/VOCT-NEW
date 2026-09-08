@@ -8,6 +8,9 @@
 
 | 版本 | 重点 | 详细记录 |
 | --- | --- | --- |
+| v8.7.1 Sol 最终正确性审查 | 修复 Canon Test 伪实体命中、局部更新时间漂移、归档分支恢复优先级与 DTO、Current Claim 服务端约束、召回关闭门控和 UI Current Truth 处理；Memory/Cache 专项及 232 组发布门禁通过。代码侧 P0/P1 为 0，真实 CK3/Provider/打包 Electron Gate 待执行 | [Sol 最终审查](docs/v8.7.1-sol-final-review.md) / [V8 阶段记录](docs/V8阶段开发记录.md) |
+| v8.7.1 Terra 后端收口 | 正常 autosave 自动延续、回档/复制隔离与 archived resume；Current Truth 改为结构化 claim；补齐时间合同、人物选择/Canon 测试 API 和单实例写入保护。222 组发布门禁通过，等待 Luna UI 与 Sol 复审 | [Terra 实施报告](docs/v8.7.1-terra-implementation-report.md) |
+| v8.7.1 Luna 玩家优先世界记忆 UI | 基础模式不再要求 Runtime ID；新增五类模板、人物选择器、召回开启引导、记录级 Canon 测试、可读权限/时间/分支诊断和修订追加展示；227 组发布门禁通过，等待 Sol 复审与实机 Gate | [Luna 实施报告](docs/v8.7.1-luna-implementation-report.md) / [V8 阶段记录](docs/V8阶段开发记录.md) |
 | v8.7 生产链路已接通，待实机验收 | 长期世界记忆编辑器、后台持久化、分支确认/分叉/重命名、权限召回及稳定/动态 Prompt；204 组回归通过，未 FULL FREEZE | [实施记录](docs/v8.7-implementation-report.md) |
 | v8.7.0a 前置修复 | 条件式致死者权威、指代 TTL/重置、不同权威争议状态和亲属结构缓存；200 组自动回归通过，主体开发前暂停 | [实施记录](docs/v8.7.0a-implementation-report.md) |
 | v8.6.2 Sol | 修复 Subjective Prompt 输出饥饿，新增第三人 Entity-grounded Evidence、结构化家庭/死亡/年龄/相对时间事实和冲突 fail-closed；Memory Engine 可见标签更新为 2.6，内部 2.5 数据合同不迁移。38 个专项及 187 组发布门禁通过，CK3/Provider/Production A/B 人工 Gate 未执行 | [V8.6.2 实施与最终审查](docs/v8.6.2-sol-implementation-and-final-review.md) |

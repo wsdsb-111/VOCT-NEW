@@ -184,6 +184,7 @@ electron.contextBridge.exposeInMainWorld("historicalAPI", {
 });
 electron.contextBridge.exposeInMainWorld("worldlineAPI", {
   getSettings: () => electron.ipcRenderer.invoke("worldline:getSettings"),
+  setRecallSettings: (settings) => electron.ipcRenderer.invoke("worldline:setRecallSettings", settings),
   setAutosavePath: (path) => electron.ipcRenderer.invoke("worldline:setAutosavePath", path),
   validateAutosavePath: (path) => electron.ipcRenderer.invoke("worldline:validateAutosavePath", path),
   selectAutosaveFile: () => electron.ipcRenderer.invoke("worldline:selectAutosaveFile"),
@@ -196,6 +197,7 @@ electron.contextBridge.exposeInMainWorld("worldlineAPI", {
   getDiagnostics: () => electron.ipcRenderer.invoke("worldline:getDiagnostics"),
   getPromptDiagnostics: (payload) => electron.ipcRenderer.invoke("worldline:getPromptDiagnostics", payload),
   getSubjectiveResponderOptions: (payload) => electron.ipcRenderer.invoke("worldline:getSubjectiveResponderOptions", payload),
+  listCanonCharacterOptions: (payload) => electron.ipcRenderer.invoke("worldline:listCanonCharacterOptions", payload),
   getSubjectiveWorldView: (payload) => electron.ipcRenderer.invoke("worldline:getSubjectiveWorldView", payload),
   listSupplemental: () => electron.ipcRenderer.invoke("worldline:listSupplemental"),
   listCanon: (options) => electron.ipcRenderer.invoke("worldline:listCanon", options),
@@ -203,7 +205,9 @@ electron.contextBridge.exposeInMainWorld("worldlineAPI", {
   getCanonHistory: (payload) => electron.ipcRenderer.invoke("worldline:getCanonHistory", payload),
   confirmCanonBranch: (token) => electron.ipcRenderer.invoke("worldline:confirmCanonBranch", token),
   forkCanonBranch: (token) => electron.ipcRenderer.invoke("worldline:forkCanonBranch", token),
+  resumeCanonBranch: (payload) => electron.ipcRenderer.invoke("worldline:resumeCanonBranch", payload),
   renameCanonBranch: (payload) => electron.ipcRenderer.invoke("worldline:renameCanonBranch", payload),
+  testCanonRecall: (payload) => electron.ipcRenderer.invoke("worldline:testCanonRecall", payload),
   createSupplemental: (payload) => electron.ipcRenderer.invoke("worldline:createSupplemental", payload),
   updateSupplemental: (id, payload) => electron.ipcRenderer.invoke("worldline:updateSupplemental", id, payload),
   deleteSupplemental: (id) => electron.ipcRenderer.invoke("worldline:deleteSupplemental", id),
