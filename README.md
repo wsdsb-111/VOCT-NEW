@@ -27,7 +27,7 @@ Voices of the Court 是一个面向《Crusader Kings III》（CK3）的沉浸式
 
 ## 运行环境
 
-V8.7 已接通长期世界记忆的存储、后台线程、IPC、编辑器和正式对话召回：[实施记录](docs/v8.7-implementation-report.md)。支持修订、权限、隐藏/恢复、显式分支延续/回档分叉/重命名；204 组发布回归通过。显式固定规则使用 Canon V8.7 稳定锚点扩展，未固定时保留原锚点；旧补充知识与 Memory Engine 2.6 标签/2.5 数据边界不迁移。真实 CK3、Provider 与打包 Electron 验收尚未完成，不标记 FULL FREEZE。
+V8.7.2 已完成 Terra + Luna 施工及 [Sol 最终正确性审查](docs/v8.7.2-sol-final-review.md)：Current Truth 由 CK3 只读预览并由服务端二次核验；新的 CK3 载入会话必须明确继续当前分支或建立独立分支；旧 Supplemental 只读并可经审阅迁移为 Canon。Sol 已收口 Load Session 重复、迁移并发/ACL、双重召回和默认页重数据加载风险，243/243 发布组通过；真实 CK3、Provider 与打包 Electron Gate 尚未完成，当前不标记 FULL FREEZE。
 
 V8.7.1 Terra + Luna + Sol 已完成 [后端收口](docs/v8.7.1-terra-implementation-report.md)、[玩家优先世界记忆 UI](docs/v8.7.1-luna-implementation-report.md)与 [最终正确性审查](docs/v8.7.1-sol-final-review.md)：分支恢复、结构化 Current Truth、Secret/ACL、时间、Memory/Cache 与 Canon Test 负向边界已收口，Current Truth 冲突可在 UI 中对照并安全处理；232 组发布门禁通过，代码侧 P0/P1 为 0。真实 CK3、Provider 与打包 Electron 人工 Gate 尚未执行，故 `V8.7.1 FREEZE = PENDING MANUAL GATES`。
 

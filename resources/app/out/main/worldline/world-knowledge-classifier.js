@@ -2,6 +2,7 @@
 
 const { dateValue } = require("./game-state-adapter");
 const { formatStructuredCharacter } = require("./character-family-facts");
+const { currentTruthFact } = require("./current-truth-adapter");
 
 function text(value) {
   return String(value ?? "").trim();
@@ -19,6 +20,8 @@ function fact(candidate, values) {
     entityId: values.entityId || candidate.id,
     field: values.field,
     value: values.value,
+    structuredValue: values.structuredValue,
+    structuredDisplayValue: values.structuredDisplayValue,
     sourceTier: candidate.sourceTier,
     knowledgeLevel: values.knowledgeLevel,
     public: values.public === true,
@@ -63,16 +66,21 @@ function characterFacts(candidate, checkpointDate, snapshot) {
       evidence: "CHARACTER_STRUCTURED_FACTS"
     }));
   }
-  if (id && text(character?.location)) {
-    facts.push(fact(candidate, {
-      entityId: id,
-      field: "LOCATION",
-      value: `${name || "该角色"}当前位于 ${text(character.location)}（截至 ${candidate.gameDate}）`,
-      knowledgeLevel: "COURT_PUBLIC",
-      public: true,
-      temporalSafe,
-      evidence: "CHARACTER_LOCATION"
-    }));
+  if (id) for (const [field, label, evidence] of [
+    ["location", "当前位于 ", "CHARACTER_LOCATION"],
+    ["alive", "当前生死状态为", "CHARACTER_ALIVE"],
+    ["faith", "当前信仰为", "CHARACTER_FAITH"],
+    ["culture", "当前文化为", "CHARACTER_CULTURE"],
+    ["liege", "当前直属领主为", "CHARACTER_LIEGE"],
+    ["courtEmployer", "当前所在宫廷为", "CHARACTER_COURT_EMPLOYER"]
+  ]) {
+    const currentTruth = currentTruthFact(snapshot, id, field, { entityId: id, knowledgeLevel: "COURT_PUBLIC", public: true, temporalSafe, evidence });
+    if (!currentTruth) {
+      if (field === "location" && text(character?.location)) facts.push(fact(candidate, { entityId: id, field: "LOCATION", value: `${name || "该角色"}当前位于 ${text(character.location)}（截至 ${candidate.gameDate}）`, knowledgeLevel: "COURT_PUBLIC", public: true, temporalSafe, evidence }));
+      continue;
+    }
+    currentTruth.value = `${name || "该角色"}${label}${currentTruth.structuredDisplayValue}（截至 ${candidate.gameDate}）`;
+    facts.push(fact(candidate, currentTruth));
   }
   const characterName = (characterId) => {
     const related = snapshot?.characters?.[String(characterId)];

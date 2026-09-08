@@ -11,7 +11,7 @@ const VISIBILITIES = new Set(["PUBLIC_WORLD", "REALM_PUBLIC", "COURT_PUBLIC", "P
 const IMPORTANCES = new Set(["LOW", "NORMAL", "HIGH", "CRITICAL"]);
 const STATUSES = new Set(["ACTIVE", "SUPERSEDED", "HIDDEN", "RETIRED", "CONFLICTED", "TEMPORAL_BLOCKED"]);
 const WRITABLE = new Set(["NEW_CAMPAIGN", "SAME_BRANCH", "BRANCH_FORK_DETECTED", "BRANCH_RENAMED", "BRANCH_RESUMED"]);
-const EDITABLE = new Set(["title", "content", "type", "entities", "entityRefs", "visibility", "importance", "gameDate", "totalDays", "validFrom", "validUntil", "status", "knownBy", "conflictKey", "revisionReason", "scopeEntityId", "currentClaim", "conversationStable", "temporalMode", "temporalSemantics"]);
+const EDITABLE = new Set(["title", "content", "type", "entities", "entityRefs", "visibility", "importance", "gameDate", "totalDays", "validFrom", "validUntil", "status", "knownBy", "conflictKey", "revisionReason", "scopeEntityId", "currentClaim", "conversationStable", "temporalMode", "temporalSemantics", "legacyMigrationId", "legacyContentFingerprint"]);
 const queues = new Map();
 const clone = (value) => JSON.parse(JSON.stringify(value));
 const hash = (value) => crypto.createHash("sha256").update(JSON.stringify(value)).digest("hex");
@@ -27,7 +27,7 @@ function validate(record) {
   if (record.scopeEntityId != null && (typeof record.scopeEntityId !== "string" || !/^\d+$/.test(record.scopeEntityId))) throw new Error("supplemental_scope_entity_invalid");
   if (record.currentClaim != null) {
     const claim = record.currentClaim;
-    if (!claim || typeof claim !== "object" || !/^\d+$/.test(claim.entityId) || !CURRENT_CLAIM_FIELDS.has(claim.field) || typeof claim.value !== (BOOLEAN_CLAIM_FIELDS.has(claim.field) ? "boolean" : "string") || String(claim.value).length > 160) throw new Error("supplemental_current_claim_invalid");
+    if (!claim || typeof claim !== "object" || !/^\d+$/.test(claim.entityId) || !CURRENT_CLAIM_FIELDS.has(claim.field) || typeof claim.value !== (BOOLEAN_CLAIM_FIELDS.has(claim.field) ? "boolean" : "string") || String(claim.value).length > 160 || claim.displayValue != null && (typeof claim.displayValue !== "string" || claim.displayValue.length > 160)) throw new Error("supplemental_current_claim_invalid");
   }
   if (typeof record.title !== "string" || !record.title.trim() || record.title.length > 160) throw new Error("supplemental_title_invalid");
   if (typeof record.content !== "string" || !record.content.trim() || record.content.length > 12000) throw new Error("supplemental_content_invalid");
@@ -46,6 +46,8 @@ function validate(record) {
   if (record.validFrom !== null && record.validUntil !== null && record.validUntil < record.validFrom) throw new Error("supplemental_time_range_invalid");
   if (record.gameDate !== null && (typeof record.gameDate !== "string" || !normalizeGameDate(record.gameDate))) throw new Error("supplemental_date_invalid");
   if (record.conflictKey !== null && (typeof record.conflictKey !== "string" || record.conflictKey.length > 256)) throw new Error("supplemental_conflict_key_invalid");
+  if (record.legacyMigrationId != null && (typeof record.legacyMigrationId !== "string" || !/^[a-f0-9-]{1,100}$/i.test(record.legacyMigrationId))) throw new Error("supplemental_legacy_migration_invalid");
+  if (record.legacyContentFingerprint != null && (typeof record.legacyContentFingerprint !== "string" || !/^[a-f0-9]{64}$/.test(record.legacyContentFingerprint))) throw new Error("supplemental_legacy_migration_invalid");
   if (typeof record.revisionReason !== "string" || record.revisionReason.length > 500) throw new Error("supplemental_revision_reason_invalid");
 }
 
@@ -144,6 +146,13 @@ class SupplementalStore {
     try { this.checkPayload(payload); payload = clone(payload); } catch (error) { return Promise.reject(error); }
     return this.transaction(scope, (state) => {
       this.checkPayload(payload);
+      if (payload.legacyMigrationId) {
+        const existing = state.records.find((record) => record.legacyMigrationId === payload.legacyMigrationId);
+        if (existing) {
+          if (existing.legacyContentFingerprint !== payload.legacyContentFingerprint) throw new Error("supplemental_legacy_migration_conflict");
+          return existing;
+        }
+      }
       const timestamp = this.clock();
       const record = { schemaVersion: 1, recordId: `swm_${crypto.randomUUID()}`, campaignId: state.campaignId, branchId: state.branchId, type: "PLAYER_CANON", entities: [], entityRefs: [], knownBy: [], visibility: "PUBLIC_WORLD", importance: "NORMAL", gameDate: null, totalDays: null, validFrom: null, validUntil: null, temporalMode: null, temporalSemantics: null, status: "ACTIVE", source: "PLAYER", createdBy: "PLAYER", conflictKey: null, supersedes: null, supersededBy: null, revision: 1, previousRevisionHash: null, revisionReason: "create", createdAt: timestamp, updatedAt: timestamp, ...clone(payload) };
       if (record.status !== "ACTIVE") throw new Error("supplemental_initial_status_invalid");

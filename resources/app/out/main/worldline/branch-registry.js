@@ -12,6 +12,10 @@ function validFingerprint(value) {
   return typeof value === "string" && /^[a-f0-9]{64}$/.test(value);
 }
 
+function validLoadSessionId(value) {
+  return typeof value === "string" && /^[a-zA-Z0-9_.-]{8,160}$/.test(value);
+}
+
 function addFingerprint(history, fingerprint) {
   return [...new Set([...(Array.isArray(history) ? history.filter(validFingerprint) : []), fingerprint])].slice(-MAX_FINGERPRINT_HISTORY);
 }
@@ -34,6 +38,7 @@ class BranchRegistry {
       fingerprintHistory: addFingerprint(item.fingerprintHistory, fingerprint),
       gameDate,
       latestGameDate: gameDate,
+      loadSessionId: validLoadSessionId(item.loadSessionId) ? item.loadSessionId : null,
       status: archived ? "ARCHIVED" : "ACTIVE",
       archived
     };
@@ -80,7 +85,7 @@ class BranchRegistry {
 
   identity(input) {
     if (typeof input?.campaignToken !== "string" || !input.campaignToken.trim() || input.campaignToken.length > 256 || typeof input.sourcePath !== "string" || !path.win32.isAbsolute(input.sourcePath) || !validFingerprint(input.fingerprint) || !normalizeGameDate(input.gameDate)) return null;
-    return { campaignId: `campaign_${digest(input.campaignToken)}`, sourcePath: path.win32.normalize(input.sourcePath).toLowerCase(), fingerprint: input.fingerprint, gameDate: input.gameDate };
+    return { campaignId: `campaign_${digest(input.campaignToken)}`, sourcePath: path.win32.normalize(input.sourcePath).toLowerCase(), fingerprint: input.fingerprint, gameDate: input.gameDate, loadSessionId: validLoadSessionId(input.loadSessionId) ? input.loadSessionId : null };
   }
 
   _touch(branch, evidence) {
@@ -89,6 +94,7 @@ class BranchRegistry {
     branch.fingerprintHistory = addFingerprint(branch.fingerprintHistory, evidence.fingerprint);
     branch.gameDate = evidence.gameDate;
     branch.latestGameDate = evidence.gameDate;
+    branch.loadSessionId = evidence.loadSessionId;
     branch.lastSeenAt = this.clock();
   }
 
@@ -142,6 +148,15 @@ class BranchRegistry {
         const oldDate = normalizeGameDate(current.latestGameDate).serial;
         const newDate = normalizeGameDate(evidence.gameDate).serial;
         if (newDate > oldDate) {
+          // Old registry rows created before V8.7.2 have no load marker. Keep
+          // their established autosave continuity, but once either side has a
+          // marker, absence or mismatch is a hard load boundary.
+          if ((evidence.loadSessionId || current.loadSessionId) && (!evidence.loadSessionId || !current.loadSessionId || evidence.loadSessionId !== current.loadSessionId)) return {
+            state: "LOAD_BOUNDARY_CANDIDATE",
+            campaignId: current.campaignId,
+            branchId: current.branchId,
+            reason: evidence.loadSessionId && current.loadSessionId ? "load_session_changed" : "load_session_unavailable"
+          };
           this._touch(current, evidence);
           this.save(state);
           return { state: "SAME_BRANCH", campaignId: current.campaignId, branchId: current.branchId };
@@ -170,6 +185,17 @@ class BranchRegistry {
     const result = this._resume(state, evidence, branch);
     this.save(state);
     return result;
+  }
+
+  confirmContinuation(input, branchId) {
+    const evidence = this.identity(input);
+    if (!evidence || !/^branch_[a-f0-9-]{36}$/.test(branchId || "")) throw new Error("branch_confirmation_invalid");
+    const state = this.load();
+    const branch = state.branches.find((item) => item.archived !== true && item.branchId === branchId && item.campaignId === evidence.campaignId && item.sourcePath === evidence.sourcePath);
+    if (!branch) throw new Error("branch_confirmation_invalid");
+    this._touch(branch, evidence);
+    this.save(state);
+    return { state: "SAME_BRANCH", campaignId: branch.campaignId, branchId: branch.branchId };
   }
 
   // Called only for an explicit rename, never inferred from an identical copy.

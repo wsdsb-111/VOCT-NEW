@@ -8,7 +8,10 @@
 
 | 版本 | 重点 | 详细记录 |
 | --- | --- | --- |
+| v8.7.2 Sol 最终正确性审查 | 修复可重复 Load Session、Legacy 迁移并发/崩溃窗口/敏感 ACL、Current Truth 字段归一化及世界线默认页重数据加载；243/243 发布组通过，代码侧 P0/P1 为 0，真实 CK3/Provider/打包 Electron Gate 待执行 | [Sol 最终审查](docs/v8.7.2-sol-final-review.md) / [V8 阶段记录](docs/V8阶段开发记录.md) |
 | v8.7.1 Sol 最终正确性审查 | 修复 Canon Test 伪实体命中、局部更新时间漂移、归档分支恢复优先级与 DTO、Current Claim 服务端约束、召回关闭门控和 UI Current Truth 处理；Memory/Cache 专项及 232 组发布门禁通过。代码侧 P0/P1 为 0，真实 CK3/Provider/打包 Electron Gate 待执行 | [Sol 最终审查](docs/v8.7.1-sol-final-review.md) / [V8 阶段记录](docs/V8阶段开发记录.md) |
+| v8.7.2 Terra 当前事实与载入边界 | Current Claim 改为生产来源核验的双值合同；CK3 Load Session 阻止同路径跨载入自动串分支；旧 Supplemental 改为玩家只读、可审阅迁移且去重。234 组发布门禁通过，等待 Luna UI 与实机 Gate | [Terra 实施报告](docs/v8.7.2-terra-implementation-report.md) / [V8 阶段记录](docs/V8阶段开发记录.md) |
+| v8.7.2 Luna 玩家化世界记忆 UI | Current Truth 只读预览、Load Boundary 继续/独立分支选择、Legacy Supplemental 只读迁移审阅与零记录状态；8 个 Luna 专项加入完整 242/242 发布门禁，等待 Sol 与实机 Gate | [Luna 实施报告](docs/v8.7.2-luna-implementation-report.md) / [V8 阶段记录](docs/V8阶段开发记录.md) |
 | v8.7.1 Terra 后端收口 | 正常 autosave 自动延续、回档/复制隔离与 archived resume；Current Truth 改为结构化 claim；补齐时间合同、人物选择/Canon 测试 API 和单实例写入保护。222 组发布门禁通过，等待 Luna UI 与 Sol 复审 | [Terra 实施报告](docs/v8.7.1-terra-implementation-report.md) |
 | v8.7.1 Luna 玩家优先世界记忆 UI | 基础模式不再要求 Runtime ID；新增五类模板、人物选择器、召回开启引导、记录级 Canon 测试、可读权限/时间/分支诊断和修订追加展示；227 组发布门禁通过，等待 Sol 复审与实机 Gate | [Luna 实施报告](docs/v8.7.1-luna-implementation-report.md) / [V8 阶段记录](docs/V8阶段开发记录.md) |
 | v8.7 生产链路已接通，待实机验收 | 长期世界记忆编辑器、后台持久化、分支确认/分叉/重命名、权限召回及稳定/动态 Prompt；204 组回归通过，未 FULL FREEZE | [实施记录](docs/v8.7-implementation-report.md) |

@@ -67,15 +67,18 @@ function registerIpcHandlers(runtime) {
     electron.ipcMain.handle("worldline:listSupplemental", () => worldlineService.listSupplemental());
     electron.ipcMain.handle("worldline:listCanon", (_event, options) => worldlineService.listCanon(options));
     electron.ipcMain.handle("worldline:mutateCanon", (_event, payload) => worldlineService.mutateCanon(payload));
+    electron.ipcMain.handle("worldline:getCanonCurrentTruth", (_event, payload) => worldlineService.getCanonCurrentTruth({ entityId: payload?.entityId, field: payload?.field }));
     electron.ipcMain.handle("worldline:getCanonHistory", (_event, payload) => worldlineService.getCanonHistory(payload));
+    electron.ipcMain.handle("worldline:getLegacySupplementalMigration", (_event, payload) => worldlineService.getLegacySupplementalMigration({ id: payload?.id }));
+    electron.ipcMain.handle("worldline:migrateLegacySupplemental", (_event, payload) => worldlineService.migrateLegacySupplemental({ token: payload?.token, id: payload?.id, payload: payload?.payload || null }));
     electron.ipcMain.handle("worldline:confirmCanonBranch", (_event, token) => worldlineService.confirmCanonBranch(token));
     electron.ipcMain.handle("worldline:forkCanonBranch", (_event, token) => worldlineService.forkCanonBranch(token));
     electron.ipcMain.handle("worldline:resumeCanonBranch", (_event, payload) => worldlineService.resumeCanonBranch({ token: payload?.token, branchId: payload?.branchId }));
     electron.ipcMain.handle("worldline:renameCanonBranch", (_event, payload) => worldlineService.renameCanonBranch(payload));
     electron.ipcMain.handle("worldline:testCanonRecall", (_event, payload) => worldlineService.testCanonRecall({ token: payload?.token, recordId: payload?.recordId, responderId: payload?.responderId, query: payload?.query }));
-    electron.ipcMain.handle("worldline:createSupplemental", (_event, payload) => worldlineService.createSupplemental(payload));
-    electron.ipcMain.handle("worldline:updateSupplemental", (_event, id, payload) => worldlineService.updateSupplemental(id, payload));
-    electron.ipcMain.handle("worldline:deleteSupplemental", (_event, id) => worldlineService.deleteSupplemental(id));
+    electron.ipcMain.handle("worldline:createSupplemental", () => { throw new Error("legacy_supplemental_read_only"); });
+    electron.ipcMain.handle("worldline:updateSupplemental", () => { throw new Error("legacy_supplemental_read_only"); });
+    electron.ipcMain.handle("worldline:deleteSupplemental", () => { throw new Error("legacy_supplemental_read_only"); });
   }
   electron.ipcMain.handle("prompts:getSettings", () => {
     return settingsRepository.getPromptSettings();

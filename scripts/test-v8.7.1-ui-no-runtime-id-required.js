@@ -5,7 +5,7 @@ const fs = require("fs");
 
 const source = fs.readFileSync("resources/app/out/renderer/world-memory-editor.js", "utf8");
 const formStart = source.indexOf("const renderForm");
-const advancedStart = source.indexOf("高级选项（Runtime ID、冲突与调试）", formStart);
+const advancedStart = source.indexOf('developerMode && h("div", { className: "world-memory-developer-fields"', formStart);
 const form = source.slice(formStart, advancedStart);
 assert.ok(form.includes("selectedEntities"), "basic mode must use character selections");
 assert.ok(form.includes("selectedKnownBy"), "basic mode must use known-by selections");

@@ -19848,6 +19848,7 @@ const SettingsView = () => {
   const updateShowSettingsOnStartup = useConfigStore((state) => state.updateShowSettingsOnStartup);
   const updateAllowPrerelease = useConfigStore((state) => state.updateAllowPrerelease);
   const [showLettersModal, setShowLettersModal] = React.useState(false);
+  const [developerMode, setDeveloperMode] = React.useState(() => window.localStorage?.getItem("votc-developer-mode") === "true");
   if (!appSettings) {
     return /* @__PURE__ */ jsxRuntimeExports.jsx("div", { children: t("common.loading") });
   }
@@ -19868,6 +19869,11 @@ const SettingsView = () => {
   };
   const handleAllowPrereleaseToggle = async (e) => {
     await updateAllowPrerelease(e.target.checked);
+  };
+  const handleDeveloperModeToggle = (e) => {
+    const enabled = e.target.checked;
+    window.localStorage?.setItem("votc-developer-mode", enabled ? "true" : "false");
+    setDeveloperMode(enabled);
   };
   return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "settings-view", children: [
     /* @__PURE__ */ jsxRuntimeExports.jsx("h3", { children: t("settings.globalApplicationSettings") }),
@@ -19972,6 +19978,11 @@ const SettingsView = () => {
         }
       ),
       /* @__PURE__ */ jsxRuntimeExports.jsx("small", { style: { display: "block", marginTop: "4px", opacity: 0.7 }, children: t("settings.allowPrereleaseHelp") })
+    ] }),
+    /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "form-group", children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsx("label", { htmlFor: "developerMode", children: "开发者模式:" }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx("input", { type: "checkbox", id: "developerMode", name: "developerMode", checked: developerMode, onChange: handleDeveloperModeToggle }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx("small", { style: { display: "block", marginTop: "4px", opacity: 0.7 }, children: "显示世界线诊断、原始 ID 与技术信息；默认关闭，不改变生产召回行为。" })
     ] }),
     /* @__PURE__ */ jsxRuntimeExports.jsx("hr", {}),
     /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "form-group letter-management", children: [
@@ -22085,6 +22096,7 @@ function WorldlineView() {
   const { i18n } = useTranslation();
   const isChinese = (i18n.language || "").startsWith("zh");
   const text = (zh, en) => isChinese ? zh : en;
+  const developerMode = window.localStorage?.getItem("votc-developer-mode") === "true";
   const emptySource = {
     autosavePath: "",
     validationStatus: "UNCONFIGURED",
@@ -22192,17 +22204,13 @@ function WorldlineView() {
     }
     setLoadState("loading");
     setError("");
-    const bindingRequestId = historicalBindingRequestRef.current + 1;
-    historicalBindingRequestRef.current = bindingRequestId;
-    const [settingsResult, checkpointResult, overviewResult, deltaResult, knowledgeResult, bindingResult, diagnosticsResult, supplementalResult] = await Promise.all([
+    const [settingsResult, checkpointResult, overviewResult, deltaResult, knowledgeResult, diagnosticsResult] = await Promise.all([
       invoke("getSettings"),
       invoke("getCheckpointStatus"),
       invoke("getOverview"),
       invoke("getAnnualDelta"),
       invoke("getWorldKnowledge"),
-      invoke("getHistoricalBindings", { query: bindingSearchRef.current, status: bindingStatusFilterRef.current }),
-      invoke("getDiagnostics"),
-      invoke("listSupplemental")
+      developerMode ? invoke("getDiagnostics") : Promise.resolve(null)
     ]);
     const settings = settingsResult?.settings ?? settingsResult?.worldlineSettings ?? settingsResult?.data ?? settingsResult;
     const nextCheckpoint = unwrap(checkpointResult, "checkpoint");
@@ -22215,15 +22223,7 @@ function WorldlineView() {
     if (overviewResult && typeof overviewResult === "object") setOverview(unwrap(overviewResult, "overview"));
     if (Array.isArray(unwrap(deltaResult, "annualDelta"))) setAnnualDelta(unwrap(deltaResult, "annualDelta"));
     if (Array.isArray(unwrap(knowledgeResult, "worldKnowledge"))) setWorldKnowledge(unwrap(knowledgeResult, "worldKnowledge"));
-    if (bindingRequestId === historicalBindingRequestRef.current) {
-      const bindingPayload = bindingResult?.data && typeof bindingResult.data === "object" ? bindingResult.data : bindingResult;
-      if (Array.isArray(unwrap(bindingPayload, "bindings"))) setHistoricalBindings(unwrap(bindingPayload, "bindings"));
-      setHistoricalCoverageStatus(bindingPayload?.coverageStatus || null);
-      if (Number.isFinite(Number(bindingPayload?.total))) setHistoricalBindingTotal(Number(bindingPayload.total));
-      if (typeof bindingPayload?.truncated === "boolean") setHistoricalBindingTruncated(bindingPayload.truncated);
-    }
     if (diagnosticsResult) setDiagnostics(unwrap(diagnosticsResult, "diagnostics"));
-    if (Array.isArray(unwrap(supplementalResult, "supplemental"))) setSupplemental(unwrap(supplementalResult, "supplemental"));
     setLoadState("ready");
   };
   const loadHistoricalBindings = async () => {
@@ -22654,8 +22654,7 @@ function WorldlineView() {
     ["overview", text("世界概览", "Overview")],
     ["delta", text("年度变化", "Annual Delta")],
     ["knowledge", text("世界知识", "World Knowledge")],
-    ["historical", text("历史人物", "Historical Characters")],
-    ["diagnostics", text("诊断", "Diagnostics")]
+    ...(developerMode ? [["diagnostics", text("开发者诊断", "Developer Diagnostics")]] : [])
   ];
   const apiReady = canInvoke("getSettings") && canInvoke("getCheckpointStatus");
   const pipelineStatus = checkpoint.status !== "UNCONFIGURED" ? checkpoint.status : source.validationStatus;
@@ -22677,7 +22676,7 @@ function WorldlineView() {
       /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "worldline-actions", children: [/* @__PURE__ */ jsxRuntimeExports.jsx("button", { type: "button", onClick: handleSelect, children: text("选择存档", "Select Save") }), /* @__PURE__ */ jsxRuntimeExports.jsx("button", { type: "button", onClick: handleReload, children: text("重新读取", "Reload Save") }), /* @__PURE__ */ jsxRuntimeExports.jsx("button", { type: "button", onClick: () => setShowAdvancedSource((current) => !current), "aria-expanded": showAdvancedSource, children: showAdvancedSource ? text("收起高级信息", "Hide Advanced Info") : text("高级信息", "Advanced Info") })] }),
       showAdvancedSource && /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "worldline-advanced-details worldline-source-advanced", children: [
         /* @__PURE__ */ jsxRuntimeExports.jsxs("label", { className: "worldline-field", children: [text("autosave.ck3 路径", "autosave.ck3 path"), /* @__PURE__ */ jsxRuntimeExports.jsx("input", { value: source.autosavePath, onChange: (event) => setSource((current) => ({ ...current, autosavePath: event.target.value })), placeholder: "...\\save games\\autosave.ck3" })] }),
-        /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "worldline-actions", children: [/* @__PURE__ */ jsxRuntimeExports.jsx("button", { type: "button", onClick: handleValidate, children: text("校验路径", "Validate Path") }), /* @__PURE__ */ jsxRuntimeExports.jsx("button", { type: "button", onClick: () => setActiveTab("diagnostics"), children: text("打开诊断", "Open Diagnostics") })] }),
+        /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "worldline-actions", children: [/* @__PURE__ */ jsxRuntimeExports.jsx("button", { type: "button", onClick: handleValidate, children: text("校验路径", "Validate Path") }), developerMode && /* @__PURE__ */ jsxRuntimeExports.jsx("button", { type: "button", onClick: () => setActiveTab("diagnostics"), children: text("打开开发者诊断", "Open Diagnostics") })] }),
         /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "worldline-source-meta", children: [
           /* @__PURE__ */ jsxRuntimeExports.jsxs("span", { children: [text("完整路径", "Full path"), "：", display(source.autosavePath)] }),
           /* @__PURE__ */ jsxRuntimeExports.jsxs("span", { children: [text("文件大小", "File size"), "：", display(source.fileSize)] }),
@@ -22705,7 +22704,7 @@ function WorldlineView() {
         [text("检查点日期", "Checkpoint date"), player.date(overview?.checkpointAsOf || checkpoint.gameDate)], [text("当前游戏日期", "Current game date"), player.date(overview?.liveGameDate)], [text("同步状态", "Sync status"), worldlineFreshness], [text("读取状态", "Read status"), player.status(pipelineStatus)]
       ].map(([label, value]) => metric(label, value)) }),
       /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "worldline-metric-grid", children: [
-        [text("当前玩家", "Current player"), currentPlayerLabel], [text("进行中的战争", "Active wars"), overview?.importantWars], [text("历史人物映射", "Historical character mappings"), historicalBindingLabel], [text("待同步变化", "Pending changes"), overview?.deltaPending], [text("补充知识条目", "Supplemental entries"), supplemental.length]
+        [text("当前玩家", "Current player"), currentPlayerLabel], [text("进行中的战争", "Active wars"), overview?.importantWars], [text("历史人物映射", "Historical character mappings"), historicalBindingLabel], [text("待同步变化", "Pending changes"), overview?.deltaPending]
       ].map(([label, value]) => metric(label, value)) }),
       /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "worldline-actions", children: [/* @__PURE__ */ jsxRuntimeExports.jsx("button", { type: "button", onClick: () => setShowAdvancedOverview((current) => !current), "aria-expanded": showAdvancedOverview, children: showAdvancedOverview ? text("收起详细信息", "Hide Details") : text("详细信息", "Details") })] }),
       /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "worldline-note", children: text("存档事实保持只读；检查点未激活时不显示伪造数据。", "Save facts remain read-only; no synthetic facts are shown before a checkpoint becomes active.") }),
@@ -22733,7 +22732,7 @@ function WorldlineView() {
       ] }) : /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "worldline-empty", children: text("选择回应角色并运行只读诊断。", "Select a responder and run the read-only diagnostic.") })
     ] }),
     /* @__PURE__ */ jsxRuntimeExports.jsx(WorldMemoryEditor, { react: reactExports }),
-    /* @__PURE__ */ jsxRuntimeExports.jsxs("section", { className: "worldline-card worldline-editor", children: [
+    false && /* @__PURE__ */ jsxRuntimeExports.jsxs("section", { className: "worldline-card worldline-editor", children: [
       /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "worldline-section-heading", children: [/* @__PURE__ */ jsxRuntimeExports.jsx("h4", { children: text("补充知识", "Supplemental Knowledge") }), /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "worldline-scope-note", children: text("范围：当前会话 / 当前检查点", "Scope: current session / current checkpoint") })] }),
       /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "worldline-note worldline-supplemental-scope-note", children: text("补充知识只在当前会话和当前检查点有效。Personal / Secret 内容必须填写可验证的 CK3 Runtime ID 作为角色范围；不填写时不会自动共享给其他角色。", "Supplemental knowledge is limited to the current session and checkpoint. Personal / Secret content needs verifiable CK3 Runtime IDs as the audience; without them it is not shared automatically with other responders.") }),
       /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "worldline-editor-form", children: [

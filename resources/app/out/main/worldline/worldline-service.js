@@ -122,19 +122,25 @@ function readTail(fs, filePath, maxBytes = 1024 * 1024) {
     const size = Math.min(maxBytes, stat.size);
     const buffer = Buffer.alloc(size);
     fs.readSync(fd, buffer, 0, size, Math.max(0, stat.size - size));
-    return buffer.toString("utf8");
+    return {
+      text: buffer.toString("utf8"),
+      startOffset: Math.max(0, stat.size - size),
+      fileIdentity: Number.isFinite(stat.birthtimeMs) ? Math.trunc(stat.birthtimeMs) : Number.isFinite(stat.ctimeMs) ? Math.trunc(stat.ctimeMs) : 0
+    };
   } finally {
     fs.closeSync(fd);
   }
 }
 
 function readLiveProbe({ fs, debugLogPath }) {
-  if (!debugLogPath || !fs.existsSync(debugLogPath)) return { connected: false, gameDate: null, totalDays: null, characters: [] };
+  if (!debugLogPath || !fs.existsSync(debugLogPath)) return { connected: false, gameDate: null, totalDays: null, characters: [], loadSessionId: null };
   try {
-    const text = readTail(fs, debugLogPath);
+    const tail = readTail(fs, debugLogPath);
+    const text = tail.text;
     const inMatches = [...text.matchAll(/VOTC:IN\/;\/init\/;\/[^\r\n]*?\/;\/([^/\r\n]+)\/;\/[^/\r\n]*?\/;\/[^/\r\n]*?\/;\/(\d+)/g)];
     const dateMatches = [...text.matchAll(/VOTC:TEST_DATE\/;\/([^/\r\n]+)\/;\/(?:days=)?(\d+)/g)];
     const characterMatches = [...text.matchAll(/VOTC:TEST_CHAR\/;\/runtime=([^/\r\n]+)\/;\/history=([^/\r\n]*)\/;\/date=([^/\r\n]+)(?:\/;\/days=(\d+))?/g)];
+    const loadMatches = [...text.matchAll(/VOTC:LOAD_SESSION\/;\/([A-Za-z0-9_.-]{8,160})(?:\/;\/[^\r\n]*)?/g)];
     const latestCharacterById = new Map();
     for (const match of characterMatches) latestCharacterById.set(match[1].trim(), { runtimeId: match[1].trim(), historyId: match[2].trim() || null, gameDate: match[3].trim(), totalDays: match[4] ? Number(match[4]) : null });
     const latestDate = dateMatches.at(-1);
@@ -151,10 +157,11 @@ function readLiveProbe({ fs, debugLogPath }) {
       connected: markers.length > 0,
       gameDate: latestMarker?.gameDate || null,
       totalDays: latestDayMarker?.totalDays ?? null,
-      characters: [...latestCharacterById.values()]
+      characters: [...latestCharacterById.values()],
+      loadSessionId: loadMatches.length ? `session-${nodeCrypto.createHash("sha256").update(JSON.stringify([tail.fileIdentity, tail.startOffset + loadMatches.at(-1).index, loadMatches.at(-1)[1]])).digest("hex").slice(0, 32)}` : null
     };
   } catch (_error) {
-    return { connected: false, gameDate: null, totalDays: null, characters: [] };
+    return { connected: false, gameDate: null, totalDays: null, characters: [], loadSessionId: null };
   }
 }
 
@@ -181,6 +188,7 @@ class WorldlineService {
     this.currentCheckpoint = null;
     this.annualDelta = [];
     this.supplemental = [];
+    this.legacyMigrationTasks = new Map();
     this.lastError = null;
     this.buildState = "UNCONFIGURED";
     this.watcher = null;
@@ -649,7 +657,7 @@ class WorldlineService {
       this.liveCache = { key, value };
       return clone(value);
     } catch (_error) {
-      return { connected: false, gameDate: null, totalDays: null, characters: [] };
+      return { connected: false, gameDate: null, totalDays: null, characters: [], loadSessionId: null };
     }
   }
 
@@ -831,7 +839,13 @@ class WorldlineService {
 
   listSupplemental() {
     const checkpointId2 = this.currentCheckpoint?.id || null;
-    return { supplemental: clone(this.supplemental.filter((item) => item.checkpointId === checkpointId2)) };
+    const supplemental = this.supplemental.filter((item) => item.checkpointId === checkpointId2);
+    return { supplemental: clone(supplemental), readOnly: true, legacyCount: supplemental.length };
+  }
+
+  _activeLegacySupplemental() {
+    const migratedIds = new Set((this.canon.snapshot?.records || []).map((record) => record.legacyMigrationId).filter(Boolean));
+    return this.listSupplemental().supplemental.filter((item) => item.hidden !== true && item.migration?.status !== "MIGRATED" && !migratedIds.has(item.id));
   }
 
   _validateSupplemental(payload, { checkpointDate = null } = {}) {
@@ -905,6 +919,88 @@ class WorldlineService {
     return { success: true, deletedId: deleted.id };
   }
 
+  _legacyMigrationDraft(entry) {
+    const visibility = entry.visibility || "PUBLIC_WORLD";
+    const entities = (entry.entities || []).map(String).filter((id) => /^\d+$/.test(id)).slice(0, 32);
+    const fingerprint = nodeCrypto.createHash("sha256").update(JSON.stringify([entry.id, entry.title, entry.body, entry.gameDate, entry.dateRange, visibility, entities]), "utf8").digest("hex");
+    const draft = {
+      title: entry.title,
+      content: entry.body,
+      type: "PLAYER_CANON",
+      entities,
+      visibility,
+      importance: entry.importance || "NORMAL",
+      temporalMode: entry.gameDate ? "SPECIFIC_DATE" : "TIMELESS",
+      gameDate: entry.gameDate || null,
+      knownBy: ["PERSONAL", "SECRET"].includes(visibility) ? entities : [],
+      scopeEntityId: ["COURT_PUBLIC", "REALM_PUBLIC"].includes(visibility) ? entities[0] || null : null,
+      legacyMigrationId: entry.id,
+      legacyContentFingerprint: fingerprint,
+      revisionReason: "迁移旧 Supplemental"
+    };
+    const requiresReview = visibility !== "PUBLIC_WORLD";
+    return { status: requiresReview ? "MIGRATION_REVIEW_REQUIRED" : "MIGRATION_READY", legacyId: entry.id, fingerprint, draft, requiresReview };
+  }
+
+  getLegacySupplementalMigrationPlan({ id } = {}) {
+    const entry = this.listSupplemental().supplemental.find((item) => item.id === id);
+    if (!entry) throw new Error("legacy_supplemental_not_found");
+    if (entry.migration?.status === "MIGRATED") return { status: "MIGRATED", legacyId: entry.id, canonRecordId: entry.migration.canonRecordId || null };
+    return this._legacyMigrationDraft(entry);
+  }
+
+  _markLegacyMigrated(id, canonRecordId, fingerprint) {
+    const index = this.supplemental.findIndex((item) => item.id === id && item.checkpointId === this.currentCheckpoint?.id);
+    if (index < 0) throw new Error("legacy_supplemental_not_found");
+    const next = { ...this.supplemental[index], hidden: true, migration: { status: "MIGRATED", canonRecordId, fingerprint, migratedAt: nowIso(this.clock) }, updatedAt: nowIso(this.clock) };
+    const nextEntries = this.supplemental.slice();
+    nextEntries[index] = next;
+    this._persistSupplemental(nextEntries);
+    this.supplemental = nextEntries;
+    this._invalidateSupplementalRecall();
+    this._notifyStateChanged("legacy_supplemental_migrated");
+    return next;
+  }
+
+  async _migrateLegacySupplementalEntry({ token, id, payload = null } = {}) {
+    const prepared = this.getLegacySupplementalMigrationPlan({ id });
+    if (prepared.status === "MIGRATED") return prepared;
+    if (prepared.requiresReview && !payload) return prepared;
+    let reviewedPayload = payload;
+    if (prepared.requiresReview) {
+      if (!payload || payload.reviewConfirmed !== true) throw new Error("legacy_migration_review_required");
+      const visibility = payload.visibility || prepared.draft.visibility;
+      const characters = this.currentCheckpoint?.snapshot?.characters || {};
+      if (["PERSONAL", "SECRET"].includes(visibility)) {
+        if (!Array.isArray(payload.knownBy) || !payload.knownBy.length || payload.knownBy.some((value) => !characters[String(value)])) throw new Error("legacy_migration_acl_review_required");
+      }
+      if (["COURT_PUBLIC", "REALM_PUBLIC"].includes(visibility) && !characters[String(payload.scopeEntityId || "")]) throw new Error("legacy_migration_scope_review_required");
+      const { reviewConfirmed: _reviewConfirmed, ...safePayload } = payload;
+      reviewedPayload = safePayload;
+    }
+    const scope = this.canon.branch();
+    if (!scope.branchId || scope.token !== token) throw new Error("branch_write_blocked_reload_editor");
+    const state = await this.canon.prepare();
+    const existing = state?.records.find((record) => record.legacyMigrationId === prepared.legacyId);
+    if (existing) {
+      this._markLegacyMigrated(prepared.legacyId, existing.recordId, prepared.fingerprint);
+      return { status: "MIGRATED", legacyId: prepared.legacyId, canonRecordId: existing.recordId, deduplicated: true };
+    }
+    const record = await this.canon.mutate({ token, operation: "create", payload: { ...prepared.draft, ...(reviewedPayload || {}), legacyMigrationId: prepared.legacyId, legacyContentFingerprint: prepared.fingerprint } });
+    this._markLegacyMigrated(prepared.legacyId, record.recordId, prepared.fingerprint);
+    return { status: "MIGRATED", legacyId: prepared.legacyId, canonRecordId: record.recordId, deduplicated: false };
+  }
+
+  migrateLegacySupplementalEntry(input = {}) {
+    const id = String(input.id || "");
+    if (this.legacyMigrationTasks.has(id)) return this.legacyMigrationTasks.get(id);
+    const task = this._migrateLegacySupplementalEntry(input).finally(() => {
+      if (this.legacyMigrationTasks.get(id) === task) this.legacyMigrationTasks.delete(id);
+    });
+    this.legacyMigrationTasks.set(id, task);
+    return task;
+  }
+
   getWorldKnowledge() {
     const snapshot = this.currentCheckpoint?.snapshot;
     const politicalContext = snapshot ? resolvePlayerPoliticalContext(snapshot, { localize: (type, rawKey) => this.localizationResolver?.resolveForDisplay(type, rawKey) }) : null;
@@ -955,7 +1051,7 @@ class WorldlineService {
         historicalNameScan: !["UNCONFIGURED", "FAILED", "FAILED_TRANSIENT", "FAILED_STABLE"].includes(this.historicalDefinitionIndex?.status) && this.historicalDefinitionIndex?.scan ? (value) => this.historicalDefinitionIndex.scan(value) : null
       });
       const queryPlan = buildWorldQueryPlan({ query, assistContext, analysis: queryAnalysis });
-      const activeSupplemental = this.listSupplemental().supplemental;
+      const activeSupplemental = this._activeLegacySupplemental();
       const supplementalRevision = relevantSupplementalRevision(activeSupplemental, queryAnalysis, includeScopedSupplemental);
       const mentionedEntityKey = [...new Set(safeMentionedEntityIds.map((id) => String(id)))].sort().join(",");
       const queryFingerprint = nodeCrypto.createHash("sha256").update(queryAnalysis.normalizedQuery || "empty", "utf8").digest("hex").slice(0, 16);
@@ -1220,7 +1316,10 @@ class WorldlineService {
   }
 
   mutateCanon(payload) { return this.canon.mutate(payload); }
+  getCanonCurrentTruth(payload) { return this.canon.getCurrentTruth(payload); }
   getCanonHistory(payload) { return this.canon.history(payload); }
+  getLegacySupplementalMigration(payload) { return this.getLegacySupplementalMigrationPlan(payload); }
+  migrateLegacySupplemental(payload) { return this.migrateLegacySupplementalEntry(payload); }
   confirmCanonBranch(token) { return this.canon.confirm(token); }
   forkCanonBranch(token) { return this.canon.fork(token); }
   resumeCanonBranch(payload) { return this.canon.resume(payload); }

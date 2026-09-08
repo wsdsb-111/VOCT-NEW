@@ -13,5 +13,6 @@ assert.match(source, /要核对哪项状态？/);
 assert.match(source, /记忆类型/);
 assert.match(source, /从模板开始/);
 assert.match(source, /world-memory-advanced/);
-assert.match(source, /高级选项（Runtime ID、冲突与调试）/);
+assert.match(source, /对话提醒/);
+assert.match(source, /developerMode && h\("div", \{ className: "world-memory-developer-fields"/);
 console.log("V8.7.1 Luna basic mode UI PASS");

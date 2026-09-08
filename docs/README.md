@@ -4,6 +4,8 @@
 
 ## 推荐阅读顺序
 
+V8.7.2 当前基线：[Terra 实施报告](v8.7.2-terra-implementation-report.md)、[Luna 实施报告](v8.7.2-luna-implementation-report.md)与 [Sol 最终正确性审查](v8.7.2-sol-final-review.md)已完成；Load Session、Legacy 迁移原子性/ACL、双重召回和默认页性能边界已收口，243/243 发布组通过。真实 CK3、Provider 与打包 Electron Gate 待执行，当前为 `PENDING MANUAL GATES`。
+
 V8.7 主体开发：[实施记录](v8.7-implementation-report.md)，存储—IPC—编辑器—正式对话已接通，204 组发布回归通过；浏览器交互验证通过，真实 CK3/Provider/打包 Electron 与最终 Freeze 待验收。
 
 V8.7.1：[Terra 后端实施报告](v8.7.1-terra-implementation-report.md)、[Luna UI 实施报告](v8.7.1-luna-implementation-report.md)与 [Sol 最终正确性审查](v8.7.1-sol-final-review.md)已完成；分支、结构化 Current Truth、Secret/ACL、时间、Memory/Cache、Canon Test 与玩家处理界面通过 232 组发布门禁，代码侧 P0/P1 为 0；真实 CK3、Provider 与打包 Electron Gate 待执行，当前为 `PENDING MANUAL GATES`。
@@ -57,7 +59,7 @@ V8.5.1 历史基线：[Sol 最终审查与修复](v8.5.1-sol-final-review.md)，
 
 ## 文档分类
 
-最新阶段：[V8.7.1 Sol 最终正确性审查](v8.7.1-sol-final-review.md)；代码侧 P0/P1 审查与 232 组发布门禁通过，真实 CK3、Provider 和打包 Electron 人工 Gate 尚未执行，当前冻结状态为 `PENDING MANUAL GATES`。
+最新阶段：[V8.7.2 Sol 最终正确性审查](v8.7.2-sol-final-review.md)；Current Truth、Load Boundary、Legacy Supplemental 迁移与默认世界线 UI 已通过代码审查及 243 组发布门禁，代码侧 P0/P1 为 0。真实 CK3、Provider 和打包 Electron 人工 Gate 尚未执行，当前冻结状态为 `PENDING MANUAL GATES`。
 
 ### 架构与运行规则
 
@@ -158,6 +160,9 @@ V8.5.1 历史基线：[Sol 最终审查与修复](v8.5.1-sol-final-review.md)，
 - [v8.7.1-terra-implementation-report.md](v8.7.1-terra-implementation-report.md)：V8.7.1 Terra 分支安全、Current Truth、时间合同、人物/测试 API 与单实例写入保护。
 - [v8.7.1-luna-implementation-report.md](v8.7.1-luna-implementation-report.md)：V8.7.1 Luna 玩家优先编辑器、模板、人物选择、召回引导与可读诊断。
 - [v8.7.1-sol-final-review.md](v8.7.1-sol-final-review.md)：V8.7.1 Sol 分支、Current Truth、Secret/ACL、Memory/Cache 与 UI/API 最终正确性审查。
+- [v8.7.2-terra-implementation-report.md](v8.7.2-terra-implementation-report.md)：V8.7.2 Terra Current Truth 双值合同、CK3 载入边界及 Legacy Supplemental 只读迁移。
+- [v8.7.2-luna-implementation-report.md](v8.7.2-luna-implementation-report.md)：V8.7.2 Luna Current Truth 只读预览、Load Boundary 分支选择和 Legacy Supplemental 迁移 UI。
+- [v8.7.2-sol-final-review.md](v8.7.2-sol-final-review.md)：V8.7.2 Sol Load Session、Legacy 迁移原子性/ACL、Current Truth 与默认世界线 UI 最终正确性审查。
 - [v8.0-historical-baseline-2.0-implementation-report.md](v8.0-historical-baseline-2.0-implementation-report.md)：V8.0 Historical Baseline 2.0 实施、测试与实机 smoke 边界。
 - [v7.10-official-action-letter-recovery-implementation-report.md](v7.10-official-action-letter-recovery-implementation-report.md)：V7.10-RC1 至 RC6 Final Rev.3 Candidate 官方 Action 迁移、启动 ACK Reconciliation、崩溃安全 dispatch、BLOCKED/STALLED 恢复、只读 debug.log、路径/Tail 事务、Date Producer Recovery、Canonical Relative Profile、统一 Kinship Resolver、Artifact Diagnostic 3.0 与验证边界。
 - [upstream/votc-2.0.3-action-manifest.md](upstream/votc-2.0.3-action-manifest.md)：官方 Action Kernel Blob SHA、适配路径和语义边界。

@@ -86,7 +86,7 @@ function retrieveSupplemental({ records = [], campaignId, branchId, responderId,
     // Verifying one structured claim does not authorize arbitrary prose attached
     // to it. Only render the verified field, never relabel the entire body as truth.
     const row = record.currentClaim
-      ? `- CK3 结构化核对：角色 #${record.currentClaim.entityId} · ${record.currentClaim.field}=${String(record.currentClaim.value)}`
+      ? `- CK3 结构化核对：角色 #${record.currentClaim.entityId} · ${record.currentClaim.field}=${String(record.currentClaim.displayValue ?? record.currentClaim.value)}`
       : `- ${record.type === "PLANNED_DECISION" || record.temporalMode === "PLANNED" ? "计划/意图，尚未发生：" : ""}${record.title}：${record.content}`;
     if (estimateTokens(header + [...rows, row].join("\n")) > budget) continue;
     rows.push(row);

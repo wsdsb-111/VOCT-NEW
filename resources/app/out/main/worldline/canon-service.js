@@ -9,8 +9,9 @@ const { resolveKnowledgeScope } = require("./knowledge-scope-resolver");
 const { estimateTokens } = require("../token-estimator");
 const { normalizeGameDate } = require("./character-temporal-facts");
 const { isPotentialCurrentState, normalizeCanonPayload } = require("./canon-contract");
+const { getCurrentTruth } = require("./current-truth-adapter");
 const queues = new Map();
-const NORMALIZATION_INPUT_FIELDS = new Set(["title", "content", "type", "entities", "entityRefs", "gameDate", "totalDays", "temporalMode", "temporalSemantics", "currentClaim", "conflictKey"]);
+const NORMALIZATION_INPUT_FIELDS = new Set(["title", "content", "type", "entities", "entityRefs", "gameDate", "totalDays", "temporalMode", "temporalSemantics", "currentClaim", "conflictKey", "legacyMigrationId", "legacyContentFingerprint"]);
 const NORMALIZED_OUTPUT_FIELDS = ["gameDate", "totalDays", "temporalMode", "temporalSemantics", "currentClaim", "conflictKey"];
 
 function queryCharacterIds(snapshot, query) {
@@ -39,10 +40,12 @@ class CanonService {
   branch() {
     const checkpoint = this.getCheckpoint();
     if (!checkpoint) return { state: "BRANCH_UNKNOWN", token: null, branchId: null };
-    if (this.observedCheckpoint === checkpoint) return this.scope;
-    const input = { campaignToken: checkpoint.snapshot?.playthroughId, sourcePath: checkpoint.source?.path, fingerprint: checkpoint.source?.fingerprint, gameDate: checkpoint.snapshot?.gameDate };
+    const live = this.getLiveState();
+    const input = { campaignToken: checkpoint.snapshot?.playthroughId, sourcePath: checkpoint.source?.path, fingerprint: checkpoint.source?.fingerprint, gameDate: checkpoint.snapshot?.gameDate, loadSessionId: live?.loadSessionId || checkpoint.snapshot?.loadSessionId || null };
+    const observedIdentityKey = JSON.stringify([checkpoint.id, input]);
+    if (this.observedIdentityKey === observedIdentityKey) return this.scope;
     const scope = this.registry.observe(input);
-    this.observedCheckpoint = checkpoint;
+    this.observedIdentityKey = observedIdentityKey;
     this.input = input;
     this.scope = { ...scope, token: crypto.createHash("sha256").update(JSON.stringify([checkpoint.id, input, scope.branchId])).digest("hex"), gameDate: input.gameDate };
     this.snapshot = null;
@@ -53,11 +56,11 @@ class CanonService {
   confirm(token) {
     if (this.identityBusy) throw new Error("branch_identity_change_in_progress");
     const scope = this.branch();
-    if (scope.token !== token || scope.reason !== "save_continuity_unverified") throw new Error("branch_confirmation_stale_or_invalid");
+    if (scope.token !== token || !["save_continuity_unverified", "load_session_changed", "load_session_unavailable"].includes(scope.reason)) throw new Error("branch_confirmation_stale_or_invalid");
     const identity = this.registry.identity(this.input);
     const previous = this.registry.load().branches.find(item => item.archived !== true && item.campaignId === identity.campaignId && item.sourcePath === identity.sourcePath);
     if (!previous) throw new Error("branch_confirmation_invalid");
-    const confirmed = this.registry.observe({ ...this.input, confirmedContinuationOf: previous.fingerprint });
+    const confirmed = this.registry.confirmContinuation(this.input, previous.branchId);
     this.scope = { ...scope, ...confirmed, reason: null, token: crypto.randomUUID() };
     this.snapshot = null;
     this.cache.clear();
@@ -176,7 +179,15 @@ class CanonService {
       effectiveRecord = { ...existing, ...normalizedPayload };
     }
     effectiveRecord ||= normalizedPayload;
-    if (effectiveRecord.currentClaim && !checkpoint?.snapshot?.characters?.[String(effectiveRecord.currentClaim.entityId)]) throw new Error("supplemental_current_claim_character_required");
+    if (effectiveRecord.currentClaim) {
+      const truth = getCurrentTruth(checkpoint?.snapshot, effectiveRecord.currentClaim.entityId, effectiveRecord.currentClaim.field);
+      if (truth.reason === "CURRENT_TRUTH_CHARACTER_UNAVAILABLE") throw new Error("supplemental_current_claim_character_required");
+      if (!truth.available) throw new Error(`supplemental_${truth.reason.toLocaleLowerCase()}`);
+      if (effectiveRecord.currentClaim.value !== undefined && String(effectiveRecord.currentClaim.value) !== String(truth.rawValue)) throw new Error("supplemental_current_claim_value_mismatch");
+      const claim = { entityId: truth.entityId, field: truth.field, value: truth.rawValue, displayValue: truth.displayValue };
+      normalizedPayload = { ...normalizedPayload, currentClaim: claim };
+      effectiveRecord = { ...effectiveRecord, currentClaim: claim };
+    }
     if (["COURT_PUBLIC", "REALM_PUBLIC"].includes(effectiveRecord.visibility) && !checkpoint?.snapshot?.characters?.[effectiveRecord.scopeEntityId]) throw new Error("supplemental_scope_character_required");
     // Capture the branch at invocation. A queued edit can never be retargeted to B.
     this.snapshot = null;
@@ -192,9 +203,20 @@ class CanonService {
   }
 
   _currentTruthValue(claim, currentFacts = []) {
-    const fact = currentFacts.find((item) => String(item.entityId) === String(claim.entityId) && String(item.field).toLowerCase() === claim.field && ["GAME_TRUTH", "GAMESTATE"].includes(item.sourceTier));
+    const claimField = String(claim.field || "").replace(/_/g, "").toLocaleLowerCase();
+    const fact = currentFacts.find((item) => String(item.entityId) === String(claim.entityId) && String(item.field).replace(/_/g, "").toLocaleLowerCase() === claimField && ["GAME_TRUTH", "GAMESTATE"].includes(item.sourceTier));
     if (fact) return fact.structuredValue !== undefined ? fact.structuredValue : fact.value;
-    return this.getCheckpoint()?.snapshot?.characters?.[String(claim.entityId)]?.[claim.field];
+    const truth = getCurrentTruth(this.getCheckpoint()?.snapshot, claim?.entityId, claim?.field);
+    if (truth.available) return truth.rawValue;
+    return undefined;
+  }
+
+  getCurrentTruth({ entityId, field } = {}) {
+    const checkpoint = this.getCheckpoint();
+    if (!checkpoint?.snapshot) throw new Error("supplemental_current_claim_checkpoint_unavailable");
+    const truth = getCurrentTruth(checkpoint.snapshot, entityId, field);
+    if (!truth.available) throw new Error(`supplemental_${truth.reason.toLocaleLowerCase()}`);
+    return truth;
   }
 
   async testRecall({ token, recordId, responderId, query = "", currentFacts = [] } = {}) {

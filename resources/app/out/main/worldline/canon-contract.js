@@ -1,11 +1,11 @@
 "use strict";
 
 const crypto = require("crypto");
+const { BOOLEAN_CLAIM_FIELDS, CURRENT_CLAIM_FIELD_SET } = require("./current-truth-adapter");
 
 const TEMPORAL_MODES = new Set(["CURRENT_DATE", "SPECIFIC_DATE", "TIMELESS", "PLANNED"]);
 const TEMPORAL_SEMANTICS = new Set(["PAST_EVENT", "DURABLE_WORLD_RULE", "CURRENT_STRUCTURED_CLAIM", "PLANNED"]);
-const CURRENT_CLAIM_FIELDS = new Set(["location", "alive", "faith", "culture", "liege", "primaryTitle", "courtEmployer", "imprisoned"]);
-const BOOLEAN_CLAIM_FIELDS = new Set(["alive", "imprisoned"]);
+const CURRENT_CLAIM_FIELDS = CURRENT_CLAIM_FIELD_SET;
 const CURRENT_STATE_PATTERN = /(?:现在|目前|当前|如今|现居|仍在|已经迁往|现任|currently|now)\s*(?:在|位于|居于|活着|已死|信仰|文化|领主|担任|为)?/i;
 
 function isPotentialCurrentState(text) {

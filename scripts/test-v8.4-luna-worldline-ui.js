@@ -97,7 +97,6 @@ for (const method of [
   "getHistoricalBindings",
   "getDiagnostics",
   "getPromptDiagnostics",
-  "listSupplemental",
   "createSupplemental",
   "updateSupplemental",
   "deleteSupplemental"
