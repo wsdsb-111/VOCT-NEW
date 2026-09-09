@@ -23,15 +23,7 @@ const { getHistoricalReferenceByYear } = require("./game-data/legacy-historical-
 const { CampaignIdentityResolver } = require("./historical-system/campaign-identity");
 const { WorldlineStore } = require("./historical-system/worldline-store");
 const { DynamicHistoryService } = require("./historical-system/dynamic-history-service");
-const { HistoricalFigureResolver } = require("./historical-system/historical-figure-resolver");
-const { buildHistoricalFigureDiagnostics } = require("./historical-system/historical-figure-diagnostics");
-const { HistoricalGroundTruthStore } = require("./historical-system/historical-ground-truth-store");
-const { createHistoricalDiagnosticsController, registerHistoricalDiagnosticsIpc } = require("./historical-system/historical-diagnostics-ipc");
-const { dataset: historicalDataset } = require("./historical-system/historical-baseline");
-const { figureMatchingRecords } = require("./historical-system/historical-data/figure-matching");
-const { parseGameDateStrict } = require("./historical-system/temporal-knowledge-gate");
-const { createRelationshipResolver } = require("./game-data/relationship-resolver");
-const { Character, inferGenderFromPronoun } = require("./game-data/character");
+const { Character } = require("./game-data/character");
 
 const log = require("electron-log");
 const electronUpdater = require("electron-updater");
@@ -102,22 +94,9 @@ const {
   DEFAULT_PROMPTS_DIR
 } = createPaths(electron.app);
 const memoryEngine = new memorySystem.MemoryEngine({ baseDir: VOTC_MEMORY_DIR, summaryFoldersDir: VOTC_SUMMARIES_DIR, recoveryDir: VOTC_MEMORY_RECOVERY_DIR });
-let historicalFigureResolver = null;
-try {
-  historicalFigureResolver = new HistoricalFigureResolver({
-    figures: historicalDataset.figures,
-    matchingRecords: figureMatchingRecords,
-    relationshipResolver: createRelationshipResolver({ onDiagnostic: () => false }),
-    inferGenderFromPronoun,
-    parseGameDateStrict
-  });
-} catch (error) {
-  console.error("[DynamicHistory] Historical figure resolver disabled:", error.message);
-}
 const dynamicHistoryService = new DynamicHistoryService({
   identityResolver: new CampaignIdentityResolver(),
-  worldlineStore: new WorldlineStore({ rootDir: VOTC_DYNAMIC_HISTORY_DIR }),
-  historicalFigureResolver
+  worldlineStore: new WorldlineStore({ rootDir: VOTC_DYNAMIC_HISTORY_DIR })
 });
 const DEFAULT_USERDATA_DIR$1 = DEFAULT_PROMPTS_DIR;
 const DEFAULT_MAIN_TEMPLATE_PATH = "system/default.hbs";
@@ -383,15 +362,6 @@ worldlineService.setRuntimeNameSource(() => ({
 const fs = require("fs");
 const { createLogParser } = require("./game-data/log-parser");
 const parseLog = createLogParser({ GameData, Character, onGameDataParsed: (gameData) => { dynamicHistoryService.updateFromGameData(gameData); worldlineService.refreshRuntimeNameIndex(); } });
-const historicalGroundTruthStore = new HistoricalGroundTruthStore({ rootDir: VOTC_DATA_DIR });
-const historicalDiagnosticsController = createHistoricalDiagnosticsController({
-  settingsRepository,
-  parseLog,
-  buildDiagnostics: buildHistoricalFigureDiagnostics,
-  figures: historicalDataset.figures,
-  matchingRecords: figureMatchingRecords,
-  groundTruthStore: historicalGroundTruthStore
-});
 function createMessage(input) {
   return {
     ...input,
@@ -934,7 +904,6 @@ const setupIpcHandlers = () => {
       return chatWindow;
     }
   });
-  registerHistoricalDiagnosticsIpc({ electron, controller: historicalDiagnosticsController });
 };
 const setupFocusMonitoring = (window) => {
   focusMonitor.on("overlay-state-changed", (isOverlay) => {

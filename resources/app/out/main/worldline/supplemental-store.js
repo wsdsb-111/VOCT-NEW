@@ -15,6 +15,11 @@ const EDITABLE = new Set(["title", "content", "type", "entities", "entityRefs", 
 const queues = new Map();
 const clone = (value) => JSON.parse(JSON.stringify(value));
 const hash = (value) => crypto.createHash("sha256").update(JSON.stringify(value)).digest("hex");
+function canonicalizeGameDate(record) {
+  if (record.gameDate === null || record.gameDate === undefined) return record;
+  const normalized = normalizeGameDate(record.gameDate);
+  return normalized ? { ...record, gameDate: normalized.canonical } : record;
+}
 
 function validate(record) {
   if (record.temporalMode != null && !TEMPORAL_MODES.has(record.temporalMode)) throw new Error("supplemental_temporal_mode_invalid");
@@ -154,7 +159,7 @@ class SupplementalStore {
         }
       }
       const timestamp = this.clock();
-      const record = { schemaVersion: 1, recordId: `swm_${crypto.randomUUID()}`, campaignId: state.campaignId, branchId: state.branchId, type: "PLAYER_CANON", entities: [], entityRefs: [], knownBy: [], visibility: "PUBLIC_WORLD", importance: "NORMAL", gameDate: null, totalDays: null, validFrom: null, validUntil: null, temporalMode: null, temporalSemantics: null, status: "ACTIVE", source: "PLAYER", createdBy: "PLAYER", conflictKey: null, supersedes: null, supersededBy: null, revision: 1, previousRevisionHash: null, revisionReason: "create", createdAt: timestamp, updatedAt: timestamp, ...clone(payload) };
+      const record = canonicalizeGameDate({ schemaVersion: 1, recordId: `swm_${crypto.randomUUID()}`, campaignId: state.campaignId, branchId: state.branchId, type: "PLAYER_CANON", entities: [], entityRefs: [], knownBy: [], visibility: "PUBLIC_WORLD", importance: "NORMAL", gameDate: null, totalDays: null, validFrom: null, validUntil: null, temporalMode: null, temporalSemantics: null, status: "ACTIVE", source: "PLAYER", createdBy: "PLAYER", conflictKey: null, supersedes: null, supersededBy: null, revision: 1, previousRevisionHash: null, revisionReason: "create", createdAt: timestamp, updatedAt: timestamp, ...clone(payload) });
       if (record.status !== "ACTIVE") throw new Error("supplemental_initial_status_invalid");
       validate(record);
       state.records.push(record);
@@ -178,7 +183,7 @@ class SupplementalStore {
       if (old.revision !== expectedRevision) throw new Error("supplemental_revision_conflict");
       if (old.status === "SUPERSEDED") throw new Error("supplemental_superseded_immutable");
       if (payload.status === "SUPERSEDED") throw new Error("supplemental_supersession_transaction_required");
-      const record = { ...old, ...clone(payload), revision: old.revision + 1, previousRevisionHash: hash(old), revisionReason: payload.revisionReason || "edit", updatedAt: this.clock() };
+      const record = canonicalizeGameDate({ ...old, ...clone(payload), revision: old.revision + 1, previousRevisionHash: hash(old), revisionReason: payload.revisionReason || "edit", updatedAt: this.clock() });
       validate(record);
       state.records[index] = record;
       state.revisions.push(clone(record));
@@ -195,7 +200,7 @@ class SupplementalStore {
       if (old.revision !== expectedRevision) throw new Error("supplemental_revision_conflict");
       if (old.status === "SUPERSEDED") throw new Error("supplemental_superseded_immutable");
       const timestamp = this.clock();
-      const next = { ...old, ...replacement, recordId: `swm_${crypto.randomUUID()}`, status: "ACTIVE", revision: 1, supersedes: old.recordId, supersededBy: null, previousRevisionHash: null, revisionReason: replacement.revisionReason || "supersede", createdAt: timestamp, updatedAt: timestamp };
+      const next = canonicalizeGameDate({ ...old, ...replacement, recordId: `swm_${crypto.randomUUID()}`, status: "ACTIVE", revision: 1, supersedes: old.recordId, supersededBy: null, previousRevisionHash: null, revisionReason: replacement.revisionReason || "supersede", createdAt: timestamp, updatedAt: timestamp });
       validate(next);
       const retired = { ...old, status: "SUPERSEDED", supersededBy: next.recordId, revision: old.revision + 1, previousRevisionHash: hash(old), revisionReason: "superseded", updatedAt: timestamp };
       state.records[index] = retired;

@@ -44,6 +44,13 @@ const RECALL_REASONS = {
   RELEVANT_ENTITY_MATCH: "问题涉及这条记忆中的人物",
   RELEVANT_TEXT_MATCH: "问题与这条记忆的文字相关"
 };
+const EDITOR_PRESERVING_UPDATE_REASONS = new Set([
+  "historical_definition_index_updated",
+  "historical_query_ready",
+  "localization_updated",
+  "runtime_name_index_updated",
+  "live_updated"
+]);
 const CURRENT_CLAIM_FIELDS = {
   location: "所在地",
   alive: "是否在世",
@@ -52,6 +59,40 @@ const CURRENT_CLAIM_FIELDS = {
   liege: "直属领主",
   courtEmployer: "所在宫廷"
 };
+const CANON_ERROR_MESSAGES = {
+  supplemental_date_invalid: "日期格式无效，请重新选择日期。",
+  supplemental_current_date_invalid: "无法识别当前游戏日期，请刷新存档后重试。",
+  supplemental_specific_date_invalid: "指定日期无效，请输入例如 1175.8.23。",
+  supplemental_specific_date_required: "指定日期无效，请填写日期。",
+  supplemental_planned_date_invalid: "计划日期无效，请输入例如 1175.8.23。",
+  supplemental_current_date_unavailable: "当前游戏日期暂不可用，请刷新存档后重试。"
+};
+
+function isValidGameDateInput(value) {
+  const text = String(value || "").trim();
+  const match = text.match(/^(\d{1,6})[.\-/](\d{1,2})[.\-/](\d{1,2})$/) || text.match(/^(\d{1,6})年(\d{1,2})月(\d{1,2})日$/);
+  if (!match) return false;
+  const year = Number(match[1]);
+  const month = Number(match[2]);
+  const day = Number(match[3]);
+  if (year < 1 || month < 1 || month > 12 || day < 1) return false;
+  const leap = year % 4 === 0 && (year % 100 !== 0 || year % 400 === 0);
+  const monthLengths = [31, leap ? 29 : 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31];
+  return day <= monthLengths[month - 1];
+}
+
+function formatGameDateForDisplay(value) {
+  const text = String(value || "").trim();
+  const match = text.match(/^(\d{1,6})[.\-/](\d{1,2})[.\-/](\d{1,2})$/);
+  return match ? `${Number(match[1])}年${Number(match[2])}月${Number(match[3])}日` : value || "";
+}
+
+function formatCanonError(cause, developerMode) {
+  const raw = String(cause?.message || cause);
+  const code = Object.keys(CANON_ERROR_MESSAGES).find(key => raw.includes(key));
+  if (!code) return raw.slice(0, 300);
+  return developerMode ? `${CANON_ERROR_MESSAGES[code]}（${code}）` : CANON_ERROR_MESSAGES[code];
+}
 const TEMPLATES = [
   { name: "某人答应过一件事", values: { title: "一项约定", content: "谁在什么场合答应了什么事情。", type: "PLAYER_CANON", visibility: "PUBLIC_WORLD", importance: "NORMAL", temporalMode: "CURRENT_DATE" } },
   { name: "两个人达成秘密约定", values: { title: "秘密约定", content: "两人私下约定了什么，以及约定何时成立。", type: "SECRET_AGREEMENT", visibility: "SECRET", importance: "HIGH", temporalMode: "TIMELESS" } },
@@ -140,7 +181,7 @@ export function WorldMemoryEditor({ react: R }) {
     const sequence = ++request.current;
     setBusy(true); setError("");
     try { await action(sequence); }
-    catch (cause) { if (mounted.current && sequence === request.current) setError(String(cause?.message || cause).slice(0, 300)); }
+    catch (cause) { if (mounted.current && sequence === request.current) setError(formatCanonError(cause, developerMode)); }
     finally { if (mounted.current && sequence === request.current) setBusy(false); }
   };
   const defaultDate = result => result?.defaultGameDate || result?.branch?.gameDate || "";
@@ -153,7 +194,10 @@ export function WorldMemoryEditor({ react: R }) {
   };
   R.useEffect(() => {
     mounted.current = true;
-    const unsubscribe = api?.onUpdated?.((payload) => { if (payload?.reason === "recall_settings_updated") return; request.current++; setData(null); setLegacyState({ supplemental: [], readOnly: true, legacyCount: 0 }); setLegacyMigration(null); setHistory(null); setEditing(null); setBusy(false); });
+    const unsubscribe = api?.onUpdated?.((payload) => {
+      if (payload?.reason === "recall_settings_updated" || EDITOR_PRESERVING_UPDATE_REASONS.has(payload?.reason)) return;
+      request.current++; setData(null); setLegacyState({ supplemental: [], readOnly: true, legacyCount: 0 }); setLegacyMigration(null); setHistory(null); setEditing(null); setBusy(false);
+    });
     return () => { mounted.current = false; request.current++; unsubscribe?.(); };
   }, []);
 
@@ -173,7 +217,11 @@ export function WorldMemoryEditor({ react: R }) {
   });
   const save = operation => run(async sequence => {
     if (!draft.title.trim() || !draft.content.trim()) throw new Error("请填写标题和希望世界长期记住的内容。");
-    if (draft.temporalMode === "SPECIFIC_DATE" && !draft.gameDate.trim()) throw new Error("指定日期记忆必须填写日期。");
+    if (draft.temporalMode === "SPECIFIC_DATE") {
+      if (!draft.gameDate.trim()) throw new Error("supplemental_specific_date_required");
+      if (!isValidGameDateInput(draft.gameDate)) throw new Error("supplemental_specific_date_invalid");
+    }
+    if (draft.temporalMode === "PLANNED" && draft.gameDate.trim() && !isValidGameDateInput(draft.gameDate)) throw new Error("supplemental_planned_date_invalid");
     const entities = draft.selectedEntities.map(item => item.runtimeId).filter(Boolean);
     const knownBy = draft.selectedKnownBy.map(item => item.runtimeId).filter(Boolean);
     let currentClaim = null;
@@ -267,7 +315,7 @@ export function WorldMemoryEditor({ react: R }) {
   const renderRecord = record => h("article", { key: record.recordId, className: `world-memory-record ${record.status !== "ACTIVE" ? "is-inactive" : ""}` },
     h("div", { className: "world-memory-record-heading" }, h("strong", null, record.title), h("span", { className: `world-memory-status-tag status-${String(record.status).toLowerCase()}` }, STATUS[record.status] || record.status)),
     h("p", { className: "world-memory-record-content" }, record.content),
-    h("div", { className: "world-memory-record-meta" }, h("span", null, record.temporalMode === "TIMELESS" ? "长期规则" : record.temporalMode === "PLANNED" ? "未来计划" : record.gameDate || "无日期"), h("span", null, TYPES[record.type] || record.type), h("span", null, VISIBILITY[record.visibility] || record.visibility), h("span", null, `修订 ${record.revision}`)),
+    h("div", { className: "world-memory-record-meta" }, h("span", null, record.temporalMode === "TIMELESS" ? "长期规则" : record.temporalMode === "PLANNED" ? "未来计划" : formatGameDateForDisplay(record.gameDate) || "无日期"), h("span", null, TYPES[record.type] || record.type), h("span", null, VISIBILITY[record.visibility] || record.visibility), h("span", null, `修订 ${record.revision}`)),
     record.recallWarning && h("p", { className: "world-memory-record-warning", role: "status" }, record.recallWarning),
     h("div", { className: "world-memory-record-actions" },
       record.status === "ACTIVE" && button("测试这条记忆", () => openTest(record), !data.branch.branchId),
@@ -294,9 +342,9 @@ export function WorldMemoryEditor({ react: R }) {
     field("title", "标题"),
     field("content", "希望世界长期记住的内容", true, "写清楚发生了什么、涉及谁、达成了什么约定；不要覆盖 CK3 当前地点、生死、领主等状态。"),
     h("div", { className: "world-memory-field-grid is-two" }, select("temporalMode", "这件事从什么时候成立？", TEMPORAL_MODES, draft.currentStateEnabled ? "当前状态必须使用当前游戏日期，并由 CK3 核对。" : "当前游戏日期会随当前检查点写入；长期规则不绑定日期。", draft.currentStateEnabled), select("type", "记忆类型", typeOptions, TYPE_HELP[draft.type] || "")),
-    draft.temporalMode === "SPECIFIC_DATE" && field("gameDate", "具体日期", false, "格式如 1171.9.20"),
-    draft.temporalMode === "PLANNED" && field("gameDate", "计划日期（可选）", false, "留空表示尚未确定日期。"),
-    draft.temporalMode === "CURRENT_DATE" && h("p", { className: "world-memory-date-note" }, `将以当前游戏日期 ${defaultDate(data) || "读取中的日期"} 成立。`),
+    draft.temporalMode === "SPECIFIC_DATE" && field("gameDate", "具体日期", false, "格式如 1171.9.20 或 1171年9月20日"),
+    draft.temporalMode === "PLANNED" && field("gameDate", "计划日期（可选）", false, "留空表示尚未确定日期；也可输入 1171年9月20日。"),
+    draft.temporalMode === "CURRENT_DATE" && h("p", { className: "world-memory-date-note" }, `将以当前游戏日期 ${formatGameDateForDisplay(defaultDate(data)) || "读取中的日期"} 成立。`),
     h("div", { className: "world-memory-field-grid is-two" }, select("visibility", "谁可以知道？", VISIBILITY, VISIBILITY_HELP[draft.visibility] || ""), select("importance", "重要性", IMPORTANCE, "重要 / 关键记忆更适合固定在本次对话中提醒。")),
     h(CharacterPicker, { react: R, api, label: "涉及人物（可选）", help: draft.currentStateEnabled ? "当前状态至少需要选择一名人物。" : "搜索并选择这条记忆涉及的人物；不选择也可以保存。", value: draft.selectedEntities, onChange: values => setDraft(previous => ({ ...previous, selectedEntities: values, scopeEntityId: values.some(item => item.runtimeId === previous.scopeEntityId) ? previous.scopeEntityId : "", currentClaimEntityId: values.some(item => item.runtimeId === previous.currentClaimEntityId) ? previous.currentClaimEntityId : values[0]?.runtimeId || "", currentTruth: null })), disabled: busy }),
     h("div", { className: "world-memory-current-claim" },

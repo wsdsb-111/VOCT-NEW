@@ -1095,7 +1095,8 @@ class DeepseekProvider extends BaseProvider {
   async listModels(_) {
     return [
       { id: "deepseek-v4-flash", name: "DeepSeek V4 Flash" },
-      { id: "deepseek-v4-pro", name: "DeepSeek V4 Pro" }
+      { id: "deepseek-v4-pro", name: "DeepSeek V4 Pro" },
+      { id: "deepseek-v4.1-flash-expires-on-0910", name: "deepseek-v4.1-flash-expires-on-0910" }
     ];
   }
   chatCompletion(request, config) {

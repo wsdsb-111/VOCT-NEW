@@ -1,6 +1,7 @@
 "use strict";
 
 const crypto = require("node:crypto");
+const { normalizeGameDate } = require("./character-temporal-facts");
 
 function skipIgnored(text, cursor, end) {
   let next = cursor;
@@ -147,8 +148,7 @@ function normalizeName(value) {
 }
 
 function dateValue(value) {
-  const match = String(value || "").match(/^(\d+)\.(\d+)\.(\d+)$/);
-  return match ? Number(match[1]) * 10000 + Number(match[2]) * 100 + Number(match[3]) : null;
+  return normalizeGameDate(value)?.serial ?? null;
 }
 
 function parseHistory(text, value) {

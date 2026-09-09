@@ -1,9 +1,13 @@
 "use strict";
 
+const { resolveLifeStatus } = require("./character-temporal-facts");
+
 function characterLine(candidate) {
   const { id, character, match } = candidate.payload;
   const displayName = match.displayName || character.fullName || character.firstName || `#${id}`;
-  return `- ${displayName} (#${id})：${character.alive ? "存活" : "已死亡"}${character.location ? `；位置 ${character.location}` : ""}`;
+  const lifeStatus = resolveLifeStatus(character);
+  const lifeText = lifeStatus.conflict ? "生死状态存在冲突，未输出结论" : lifeStatus.alive === true ? "存活" : lifeStatus.alive === false ? "已死亡" : "生死状态未知";
+  return `- ${displayName} (#${id})：${lifeText}${character.location ? `；位置 ${character.location}` : ""}`;
 }
 
 function titleLine(candidate) {

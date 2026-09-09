@@ -2,6 +2,7 @@
 
 const crypto = require("crypto");
 const { BOOLEAN_CLAIM_FIELDS, CURRENT_CLAIM_FIELD_SET } = require("./current-truth-adapter");
+const { normalizeGameDate } = require("./character-temporal-facts");
 
 const TEMPORAL_MODES = new Set(["CURRENT_DATE", "SPECIFIC_DATE", "TIMELESS", "PLANNED"]);
 const TEMPORAL_SEMANTICS = new Set(["PAST_EVENT", "DURABLE_WORLD_RULE", "CURRENT_STRUCTURED_CLAIM", "PLANNED"]);
@@ -33,16 +34,27 @@ function normalizeCanonPayload(payload, { gameDate = null, totalDays = null } = 
   const temporalMode = TEMPORAL_MODES.has(suppliedMode) ? suppliedMode : result.gameDate ? "SPECIFIC_DATE" : "CURRENT_DATE";
   if (suppliedMode != null && !TEMPORAL_MODES.has(suppliedMode)) throw new Error("supplemental_temporal_mode_invalid");
   if (temporalMode === "CURRENT_DATE") {
-    if (typeof gameDate !== "string" || !gameDate) throw new Error("supplemental_current_date_unavailable");
-    result.gameDate = gameDate;
+    if (gameDate == null || gameDate === "") throw new Error("supplemental_current_date_unavailable");
+    const normalized = normalizeGameDate(gameDate);
+    if (!normalized) throw new Error("supplemental_current_date_invalid");
+    result.gameDate = normalized.canonical;
     result.totalDays = Number.isSafeInteger(totalDays) ? totalDays : null;
   } else if (temporalMode === "SPECIFIC_DATE") {
-    if (typeof result.gameDate !== "string" || !result.gameDate) throw new Error("supplemental_specific_date_required");
+    if (result.gameDate == null || result.gameDate === "") throw new Error("supplemental_specific_date_required");
+    const normalized = normalizeGameDate(result.gameDate);
+    if (!normalized) throw new Error("supplemental_specific_date_invalid");
+    result.gameDate = normalized.canonical;
     result.totalDays = null;
   } else if (temporalMode === "TIMELESS") {
     result.gameDate = null;
     result.totalDays = null;
   } else {
+    if (result.gameDate == null || result.gameDate === "") result.gameDate = null;
+    else {
+      const normalized = normalizeGameDate(result.gameDate);
+      if (!normalized) throw new Error("supplemental_planned_date_invalid");
+      result.gameDate = normalized.canonical;
+    }
     result.totalDays = null;
   }
   const temporalSemantics = result.temporalSemantics || (result.currentClaim ? "CURRENT_STRUCTURED_CLAIM" : temporalMode === "PLANNED" ? "PLANNED" : temporalMode === "TIMELESS" ? "DURABLE_WORLD_RULE" : "PAST_EVENT");

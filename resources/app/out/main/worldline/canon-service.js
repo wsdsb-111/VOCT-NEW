@@ -41,7 +41,8 @@ class CanonService {
     const checkpoint = this.getCheckpoint();
     if (!checkpoint) return { state: "BRANCH_UNKNOWN", token: null, branchId: null };
     const live = this.getLiveState();
-    const input = { campaignToken: checkpoint.snapshot?.playthroughId, sourcePath: checkpoint.source?.path, fingerprint: checkpoint.source?.fingerprint, gameDate: checkpoint.snapshot?.gameDate, loadSessionId: live?.loadSessionId || checkpoint.snapshot?.loadSessionId || null };
+    const checkpointDate = normalizeGameDate(checkpoint.snapshot?.gameDate);
+    const input = { campaignToken: checkpoint.snapshot?.playthroughId, sourcePath: checkpoint.source?.path, fingerprint: checkpoint.source?.fingerprint, gameDate: checkpointDate?.canonical || checkpoint.snapshot?.gameDate, loadSessionId: live?.loadSessionId || checkpoint.snapshot?.loadSessionId || null };
     const observedIdentityKey = JSON.stringify([checkpoint.id, input]);
     if (this.observedIdentityKey === observedIdentityKey) return this.scope;
     const scope = this.registry.observe(input);

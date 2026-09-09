@@ -7,10 +7,11 @@ const { BranchRegistry } = require("../resources/app/out/main/worldline/branch-r
 const root = fs.mkdtempSync(path.join(os.tmpdir(), "votc-branch-"));
 try {
   const registry = new BranchRegistry({ root });
-  const a = { campaignToken: "playthrough-a", sourcePath: "C:\\saves\\A.ck3", fingerprint: "a".repeat(64), gameDate: "1171.9.20" };
+  const a = { campaignToken: "playthrough-a", sourcePath: "C:\\saves\\A.ck3", fingerprint: "a".repeat(64), gameDate: "1171年9月20日" };
   assert.equal(registry.observe({ ...a, campaignToken: null }).state, "BRANCH_UNKNOWN");
   const first = registry.observe(a);
   assert.equal(first.state, "NEW_CAMPAIGN");
+  assert.equal(registry.load().branches[0].gameDate, "1171.9.20", "branch registry must persist canonical dates");
   assert.equal(registry.observe(a).branchId, first.branchId);
   const b = registry.observe({ ...a, sourcePath: "C:\\saves\\B.ck3" });
   assert.equal(b.state, "BRANCH_FORK_DETECTED");

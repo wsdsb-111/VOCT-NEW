@@ -1,13 +1,11 @@
 "use strict";
 
 class DynamicHistoryService {
-  constructor({ identityResolver, worldlineStore, historicalFigureResolver = null }) {
+  constructor({ identityResolver, worldlineStore }) {
     if (!identityResolver || typeof identityResolver.resolve !== "function") throw new Error("dynamic_history_identity_resolver_required");
     if (!worldlineStore || typeof worldlineStore.loadOrCreate !== "function") throw new Error("dynamic_history_worldline_store_required");
-    if (historicalFigureResolver !== null && typeof historicalFigureResolver.resolve !== "function") throw new Error("dynamic_history_figure_resolver_invalid");
     this.identityResolver = identityResolver;
     this.worldlineStore = worldlineStore;
-    this.historicalFigureResolver = historicalFigureResolver;
     this.diagnostics = [];
   }
 
@@ -18,7 +16,6 @@ class DynamicHistoryService {
     dynamicHistory.campaignId = identity.campaignId;
     dynamicHistory.campaignIdentity = identity;
     dynamicHistory.worldlineState = null;
-    dynamicHistory.figureResolution = null;
     let result;
     if (!identity.persistenceAllowed) {
       dynamicHistory.persistenceStatus = "persistence_skipped";
@@ -35,19 +32,7 @@ class DynamicHistoryService {
         result = { status: "error", state: null, path: null };
       }
     }
-    this.updateFigureResolution(gameData, dynamicHistory, identity);
     return result;
-  }
-
-  updateFigureResolution(gameData, dynamicHistory, identity) {
-    if (!this.historicalFigureResolver) return;
-    try {
-      dynamicHistory.figureResolution = this.historicalFigureResolver.resolve(gameData);
-    } catch (error) {
-      const diagnostic = this.recordDiagnostic("HISTORICAL_FIGURE_RESOLUTION_FAILED", identity.campaignId, error);
-      console.error("[DynamicHistory] Historical figure resolution failed:", diagnostic.message);
-      dynamicHistory.figureResolution = Object.freeze({ status: "error", summary: null, results: Object.freeze([]) });
-    }
   }
 
   recordDiagnostic(code, campaignId, error) {
@@ -67,8 +52,7 @@ class DynamicHistoryService {
       campaignId: null,
       campaignIdentity: null,
       worldlineState: null,
-      persistenceStatus: null,
-      figureResolution: null
+      persistenceStatus: null
     };
     Object.defineProperty(gameData, "dynamicHistory", {
       value: context,

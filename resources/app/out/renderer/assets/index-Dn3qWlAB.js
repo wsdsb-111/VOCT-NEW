@@ -21656,167 +21656,12 @@ const SummariesView = () => {
   ] });
 };
 
-const HistoricalFigureDashboard = ({ text }) => {
-  const [snapshot, setSnapshot] = reactExports.useState(null);
-  const [isLoading, setIsLoading] = reactExports.useState(false);
-  const [error, setError] = reactExports.useState(null);
-  const [readyOnly, setReadyOnly] = reactExports.useState(true);
-  const [statusFilter, setStatusFilter] = reactExports.useState("ALL");
-  const [search, setSearch] = reactExports.useState("");
-  const [currentReview, setCurrentReview] = reactExports.useState(null);
-  const [verdictState, setVerdictState] = reactExports.useState({});
-  const helpers = window.VOTCHistoricalDashboard;
-  const display = helpers?.displayValue || ((value) => value == null || value === "" ? "—" : String(value));
-  const refresh = async () => {
-    if (!window.historicalAPI?.getFigureGroundTruthDashboard) {
-      setError(text("当前客户端未提供历史人物诊断接口。请完全重启应用。", "Historical diagnostics are unavailable. Restart the app."));
-      return;
-    }
-    try {
-      setIsLoading(true);
-      setError(null);
-      const response = await window.historicalAPI.getFigureGroundTruthDashboard();
-      if (!response?.success) throw new Error(response?.error || "historical_dashboard_capture_failed");
-      setSnapshot(response.data);
-      setCurrentReview(null);
-      setVerdictState({});
-    } catch (loadError) {
-      setError(loadError?.message || text("无法读取当前 CK3 数据。", "Failed to read current CK3 data."));
-    } finally {
-      setIsLoading(false);
-    }
-  };
-  const filteredRows = helpers?.filterFigureRows(snapshot?.rows || [], { readyOnly, statusFilter, search }) || [];
-  const nextReview = () => {
-    const figureKey = helpers?.findNextReviewFigureKey(snapshot?.rows || [], currentReview);
-    if (!figureKey) return;
-    setReadyOnly(true);
-    setStatusFilter("REVIEW");
-    setSearch("");
-    setCurrentReview(figureKey);
-    setTimeout(() => document.getElementById(`historical-row-${figureKey}`)?.scrollIntoView({ behavior: "smooth", block: "start" }), 0);
-  };
-  const recordVerdict = async (row, verdict) => {
-    if (!window.historicalAPI?.recordFigureGroundTruthVerdict || !snapshot) return;
-    setVerdictState((current) => ({ ...current, [row.figureKey]: "saving" }));
-    try {
-      const response = await window.historicalAPI.recordFigureGroundTruthVerdict({ captureId: snapshot.capture.captureId, figureKey: row.figureKey, verdict });
-      if (!response?.success) throw new Error(response?.error || "ground_truth_save_failed");
-      setVerdictState((current) => ({ ...current, [row.figureKey]: verdict }));
-    } catch (saveError) {
-      setVerdictState((current) => ({ ...current, [row.figureKey]: `ERROR: ${saveError?.message || "ground_truth_save_failed"}` }));
-    }
-  };
-  const evidenceGroup = (title, items, tone = "") => items?.length ? /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: `historical-evidence-group ${tone}`, children: [
-    /* @__PURE__ */ jsxRuntimeExports.jsx("strong", { children: title }),
-    /* @__PURE__ */ jsxRuntimeExports.jsx("ul", { children: items.map((item, index) => /* @__PURE__ */ jsxRuntimeExports.jsxs("li", { children: [/* @__PURE__ */ jsxRuntimeExports.jsx("span", { children: item.code }), /* @__PURE__ */ jsxRuntimeExports.jsx("b", { children: `${item.weight >= 0 ? "+" : ""}${Number(item.weight || 0).toFixed(2)}` })] }, `${item.code}-${index}`)) })
-  ] }) : null;
-  const verdicts = ["CORRECT", "INCORRECT", "SHOULD_BE_AMBIGUOUS", "SHOULD_BE_RESOLVED", "SHOULD_BE_UNRESOLVED", "UNKNOWN"];
-  const summaryMetrics = snapshot ? [
-    [text("已解析", "Resolved"), snapshot.summary.resolved],
-    [text("候选", "Candidates"), snapshot.summary.candidate],
-    [text("歧义", "Ambiguous"), snapshot.summary.ambiguous],
-    [text("未找到", "Unresolved"), snapshot.summary.unresolved],
-    [text("未到期", "Not due"), snapshot.summary.notDue],
-    [text("未支持", "Unsupported"), snapshot.summary.unsupported]
-  ] : [];
-  return /* @__PURE__ */ jsxRuntimeExports.jsxs("section", { className: "historical-dashboard", children: [
-    /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "historical-dashboard-header", children: [
-      /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
-        /* @__PURE__ */ jsxRuntimeExports.jsx("h3", { children: text("V8.3.1 历史人物实机校准", "V8.3.1 Historical Figure Ground Truth") }),
-        /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "historical-shadow-badge", children: "SHADOW MODE" }),
-        /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "muted-text", children: text("本页面只用于诊断与人工裁定，不会修改游戏状态或生产 Resolver。", "Diagnostics and verdicts only; this page never changes game state or the production resolver.") })
-      ] }),
-      /* @__PURE__ */ jsxRuntimeExports.jsx("button", { type: "button", className: "primary-button", onClick: refresh, disabled: isLoading, children: isLoading ? text("读取中…", "Reading…") : text("重新读取当前游戏", "Read current game") })
-    ] }),
-    error && /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "optimization-error", children: display(error) }),
-    !snapshot && !isLoading && !error && /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "optimization-empty", children: text("点击一次按钮读取当前 CK3 debug.log；不需要先开始对话。", "Click once to read the current CK3 debug.log; no active conversation is required.") }),
-    snapshot && /* @__PURE__ */ jsxRuntimeExports.jsxs(React.Fragment, { children: [
-      /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "historical-capture", children: [
-        /* @__PURE__ */ jsxRuntimeExports.jsx("span", { children: `${text("游戏日期", "Game date")}：${display(snapshot.capture.gameDate)}` }),
-        /* @__PURE__ */ jsxRuntimeExports.jsx("span", { children: `Campaign：${display(snapshot.capture.campaignId)}` }),
-        /* @__PURE__ */ jsxRuntimeExports.jsx("span", { children: `${text("捕获时间", "Captured")}：${snapshot.capture.capturedAt ? new Date(snapshot.capture.capturedAt).toLocaleString() : "—"}` }),
-        /* @__PURE__ */ jsxRuntimeExports.jsx("span", { children: `${text("角色数", "Characters")}：${display(snapshot.capture.characterCount)}` })
-      ] }),
-      /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "optimization-metrics", children: summaryMetrics.map(([label, value]) => /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "optimization-metric", children: [/* @__PURE__ */ jsxRuntimeExports.jsx("span", { children: label }), /* @__PURE__ */ jsxRuntimeExports.jsx("strong", { children: display(value) })] }, label)) }),
-      /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "historical-controls", children: [
-        /* @__PURE__ */ jsxRuntimeExports.jsxs("label", { children: [/* @__PURE__ */ jsxRuntimeExports.jsx("input", { type: "checkbox", checked: readyOnly, onChange: (event) => setReadyOnly(event.target.checked) }), text("只显示已校准人物", "Ready only")] }),
-        /* @__PURE__ */ jsxRuntimeExports.jsxs("select", { value: statusFilter, onChange: (event) => setStatusFilter(event.target.value), children: [
-          /* @__PURE__ */ jsxRuntimeExports.jsx("option", { value: "ALL", children: text("全部", "All") }),
-          /* @__PURE__ */ jsxRuntimeExports.jsx("option", { value: "RESOLVED", children: text("已解析", "Resolved") }),
-          /* @__PURE__ */ jsxRuntimeExports.jsx("option", { value: "REVIEW", children: text("待核验", "Review") }),
-          /* @__PURE__ */ jsxRuntimeExports.jsx("option", { value: "AMBIGUOUS", children: text("歧义", "Ambiguous") }),
-          /* @__PURE__ */ jsxRuntimeExports.jsx("option", { value: "UNRESOLVED", children: text("未找到", "Unresolved") }),
-          /* @__PURE__ */ jsxRuntimeExports.jsx("option", { value: "NOT_DUE", children: text("未到期", "Not due") })
-        ] }),
-        /* @__PURE__ */ jsxRuntimeExports.jsx("input", { type: "text", value: search, onChange: (event) => setSearch(event.target.value), placeholder: text("搜索姓名 / figureKey / Character ID", "Search name / figureKey / Character ID") }),
-        /* @__PURE__ */ jsxRuntimeExports.jsx("button", { type: "button", onClick: nextReview, children: text("下一个待核验", "Next review") })
-      ] }),
-      filteredRows.length === 0 && /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "optimization-empty", children: text("当前筛选没有人物。", "No figures match the current filters.") }),
-      /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "historical-rows", children: filteredRows.map((row) => {
-        const score = Math.max(0, Math.min(1, Number(row.resolution.score) || 0));
-        const groups = helpers?.groupEvidence(row.evidence) || { identity: row.evidence || [], auxiliary: [], worldState: [], historical: [], other: [] };
-        return /* @__PURE__ */ jsxRuntimeExports.jsxs("article", { id: `historical-row-${row.figureKey}`, className: `historical-row status-${String(row.resolution.status || "ERROR").toLowerCase()}`, children: [
-          /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "historical-row-title", children: [
-            /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [/* @__PURE__ */ jsxRuntimeExports.jsx("h4", { children: display(row.historical.name) }), /* @__PURE__ */ jsxRuntimeExports.jsx("code", { children: row.figureKey })] }),
-            /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [/* @__PURE__ */ jsxRuntimeExports.jsx("strong", { children: row.resolution.status }), /* @__PURE__ */ jsxRuntimeExports.jsx("span", { children: `${score.toFixed(2)} · ${(score * 100).toFixed(0)}%` })] })
-          ] }),
-          /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "historical-comparison", children: [
-            /* @__PURE__ */ jsxRuntimeExports.jsxs("section", { children: [
-              /* @__PURE__ */ jsxRuntimeExports.jsx("h5", { children: text("史实基准", "Historical baseline") }),
-              /* @__PURE__ */ jsxRuntimeExports.jsx("p", { children: `${text("姓名", "Name")}：${display(row.historical.name)}` }),
-              /* @__PURE__ */ jsxRuntimeExports.jsx("p", { children: `${text("别名", "Aliases")}：${row.historical.aliases?.length ? row.historical.aliases.join("、") : "—"}` }),
-              /* @__PURE__ */ jsxRuntimeExports.jsx("p", { children: `${text("生年", "Birth year")}：${display(row.historical.birthYear)}` }),
-              /* @__PURE__ */ jsxRuntimeExports.jsx("p", { children: `${text("史实卒年", "Historical death")}：${display(row.historical.deathYear)}` })
-            ] }),
-            /* @__PURE__ */ jsxRuntimeExports.jsxs("section", { children: [
-              /* @__PURE__ */ jsxRuntimeExports.jsx("h5", { children: text("当前 CK3", "Current CK3") }),
-              /* @__PURE__ */ jsxRuntimeExports.jsx("p", { children: `Character ID：${display(row.character?.id)}` }),
-              /* @__PURE__ */ jsxRuntimeExports.jsx("p", { children: `${text("姓名", "Name")}：${display(row.character?.fullName || row.character?.name)}` }),
-              /* @__PURE__ */ jsxRuntimeExports.jsx("p", { children: `${text("年龄", "Age")}：${display(row.character?.age)} · ${text("性别", "Gender")}：${display(row.character?.gender)}` }),
-              /* @__PURE__ */ jsxRuntimeExports.jsx("p", { children: `Culture Raw：${display(row.character?.culture)}` }),
-              /* @__PURE__ */ jsxRuntimeExports.jsx("p", { children: `${text("信仰", "Faith")}：${display(row.character?.faith)} · ${text("家族", "House")}：${display(row.character?.house)}` }),
-              /* @__PURE__ */ jsxRuntimeExports.jsx("p", { children: `${text("头衔", "Title")}：${display(row.character?.primaryTitle)}` }),
-              /* @__PURE__ */ jsxRuntimeExports.jsx("p", { children: `${text("职位", "Positions")}：${display(row.character?.positions)}` }),
-              /* @__PURE__ */ jsxRuntimeExports.jsx("p", { children: `${text("领主 / 顶级领主", "Liege / top liege")}：${display(row.character?.liege)} / ${display(row.character?.topLiege)}` }),
-              /* @__PURE__ */ jsxRuntimeExports.jsx("p", { children: `${text("首都", "Capital")}：${display(row.character?.capitalLocation)}` })
-            ] })
-          ] }),
-          /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "historical-score", children: [
-            /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "historical-score-label", children: [/* @__PURE__ */ jsxRuntimeExports.jsx("span", { children: text("身份置信度", "Identity confidence") }), /* @__PURE__ */ jsxRuntimeExports.jsx("strong", { children: `${score.toFixed(2)} / ${(score * 100).toFixed(0)}%` })] }),
-            /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "historical-score-bar", children: [/* @__PURE__ */ jsxRuntimeExports.jsx("i", { style: { width: `${score * 100}%` } }), /* @__PURE__ */ jsxRuntimeExports.jsx("b", { title: "Resolve threshold 85%" })] }),
-            /* @__PURE__ */ jsxRuntimeExports.jsx("small", { children: "Resolve threshold 85%" })
-          ] }),
-          /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "historical-evidence-groups", children: [
-            evidenceGroup("Identity Evidence", groups.identity),
-            evidenceGroup("Auxiliary Identity Evidence", groups.auxiliary, "auxiliary"),
-            evidenceGroup("World-State Evidence", groups.worldState, "world-state"),
-            evidenceGroup("Historical Note", groups.historical, "historical-note"),
-            evidenceGroup(text("其他证据", "Other Evidence"), groups.other)
-          ] }),
-          row.conflicts?.length > 0 && /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "historical-conflicts", children: [/* @__PURE__ */ jsxRuntimeExports.jsx("strong", { children: text("⚠ 身份冲突", "⚠ Identity conflicts") }), /* @__PURE__ */ jsxRuntimeExports.jsx("ul", { children: row.conflicts.map((item, index) => /* @__PURE__ */ jsxRuntimeExports.jsx("li", { children: item.code }, `${item.code}-${index}`)) })] }),
-          row.alternatives?.length > 0 && /* @__PURE__ */ jsxRuntimeExports.jsxs("details", { className: "historical-alternatives", open: row.resolution.status === "AMBIGUOUS", children: [
-            /* @__PURE__ */ jsxRuntimeExports.jsx("summary", { children: `${text("重要候选", "Alternatives")} (${row.alternatives.length})` }),
-            /* @__PURE__ */ jsxRuntimeExports.jsx("div", { children: row.alternatives.map((item, index) => /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [/* @__PURE__ */ jsxRuntimeExports.jsx("strong", { children: `#${index + 1} · Character ${display(item.characterId)} · ${display(item.displayName)}` }), /* @__PURE__ */ jsxRuntimeExports.jsx("span", { children: `${text("年龄", "Age")} ${display(item.character?.age)} · Culture Raw ${display(item.character?.culture)} · score ${Number(item.score || 0).toFixed(2)}` })] }, `${item.characterId}-${index}`)) })
-          ] }),
-          /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "historical-verdicts", children: [
-            /* @__PURE__ */ jsxRuntimeExports.jsx("strong", { children: text("人工 Ground Truth", "Manual Ground Truth") }),
-            /* @__PURE__ */ jsxRuntimeExports.jsx("div", { children: verdicts.map((verdict) => /* @__PURE__ */ jsxRuntimeExports.jsx("button", { type: "button", disabled: verdictState[row.figureKey] === "saving", onClick: () => recordVerdict(row, verdict), children: verdict }, verdict)) }),
-            verdictState[row.figureKey] && verdictState[row.figureKey] !== "saving" && /* @__PURE__ */ jsxRuntimeExports.jsx("span", { children: verdictState[row.figureKey] })
-          ] })
-        ] }, row.figureKey);
-      }) })
-    ] })
-  ] });
-};
-
 const OptimizationView = () => {
   const { i18n } = useTranslation();
   const [report, setReport] = reactExports.useState(null);
   const [isLoading, setIsLoading] = reactExports.useState(true);
   const [isClearing, setIsClearing] = reactExports.useState(false);
   const [error, setError] = reactExports.useState(null);
-  const [dashboardMode, setDashboardMode] = reactExports.useState("usage");
   const isChinese = (i18n.language || "").toLowerCase().startsWith("zh");
   const text = (zh, en) => isChinese ? zh : en;
   const formatTokens = (value) => new Intl.NumberFormat(isChinese ? "zh-CN" : "en-US").format(Math.round(Number(value) || 0));
@@ -21902,13 +21747,7 @@ const OptimizationView = () => {
     [text("官方动作系统", "Official Action System"), text("V7.10 使用 Official VOTC 2.0.3 的 Prompt、Schema、Registry、审批与执行语义；每个 NPC 回复仅评估一次。", "V7.10 uses the Official VOTC 2.0.3 prompt, schema, registry, approval, and execution semantics, with one evaluation per NPC reply.")],
     [text("Letter 投递恢复", "Letter delivery recovery"), text("回复生成与摘要失败不再阻断官方原子投递 effect；延迟信件可持久化并在日期推进后重试。", "Reply delivery uses the official atomic effect independently of summary success; delayed letters persist and retry after date advancement.")]
   ];
-  const dashboardTabs = /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "optimization-dashboard-tabs", children: [
-    /* @__PURE__ */ jsxRuntimeExports.jsx("button", { type: "button", className: dashboardMode === "usage" ? "active" : "", onClick: () => setDashboardMode("usage"), children: text("用量与优化", "Usage & optimization") }),
-    /* @__PURE__ */ jsxRuntimeExports.jsx("button", { type: "button", className: dashboardMode === "historical" ? "active" : "", onClick: () => setDashboardMode("historical"), children: text("历史人物", "Historical figures") })
-  ] });
-  if (dashboardMode === "historical") return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "optimization-view", children: [dashboardTabs, /* @__PURE__ */ jsxRuntimeExports.jsx(HistoricalFigureDashboard, { text })] });
   return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "optimization-view", children: [
-    dashboardTabs,
     /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "optimization-header", children: [
       /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
         /* @__PURE__ */ jsxRuntimeExports.jsx("h3", { children: text("系统优化与用量", "System Optimization & Usage") }),
@@ -22150,6 +21989,11 @@ function WorldlineView() {
   const [subjectiveView, setSubjectiveView] = reactExports.useState(null);
   const [subjectiveCompareView, setSubjectiveCompareView] = reactExports.useState(null);
   const [subjectiveLoading, setSubjectiveLoading] = reactExports.useState(false);
+  const [inspectorQuery, setInspectorQuery] = reactExports.useState("");
+  const [inspectorResponderId, setInspectorResponderId] = reactExports.useState("");
+  const [inspectorTargetId, setInspectorTargetId] = reactExports.useState("");
+  const [entityInspector, setEntityInspector] = reactExports.useState(null);
+  const [entityInspectorLoading, setEntityInspectorLoading] = reactExports.useState(false);
   const [usageReport, setUsageReport] = reactExports.useState(null);
   const [usageReportLoading, setUsageReportLoading] = reactExports.useState(false);
   const [usageReportError, setUsageReportError] = reactExports.useState("");
@@ -22295,6 +22139,26 @@ function WorldlineView() {
       setSubjectiveLoading(false);
     }
   };
+  const runEntityKinshipInspector = async () => {
+    const responderId = inspectorResponderId.trim().slice(0, 64);
+    const targetId = inspectorTargetId.trim().slice(0, 64);
+    if (!responderId || (!targetId && !inspectorQuery.trim())) {
+      setError(text("请先选择回应角色；如未指定目标，请输入人物查询。", "Select a responder; enter a query when no target is selected."));
+      return;
+    }
+    if (!canInvoke("getEntityKinshipInspector")) {
+      setError(text("等待 Luna Entity & Kinship Inspector IPC 接入。", "Entity & Kinship Inspector IPC is not connected."));
+      return;
+    }
+    setEntityInspectorLoading(true);
+    setError("");
+    try {
+      const result = await invoke("getEntityKinshipInspector", { query: inspectorQuery.slice(0, 240), responderId, targetId });
+      setEntityInspector(result && typeof result === "object" ? result : null);
+    } finally {
+      setEntityInspectorLoading(false);
+    }
+  };
   reactExports.useEffect(() => {
     refresh();
     const unsubscribe = getApi()?.onUpdated?.(() => refresh());
@@ -22311,14 +22175,11 @@ function WorldlineView() {
     return () => clearTimeout(timer);
   }, [activeTab]);
   reactExports.useEffect(() => {
-    if (!historicalBindingInitializedRef.current && !bindingSearch && bindingStatusFilter === "ALL") {
-      historicalBindingInitializedRef.current = true;
-      return;
-    }
+    if (activeTab !== "historical") return;
     historicalBindingInitializedRef.current = true;
     const timer = setTimeout(() => loadHistoricalBindings(), 150);
     return () => clearTimeout(timer);
-  }, [bindingSearch, bindingStatusFilter]);
+  }, [activeTab, bindingSearch, bindingStatusFilter]);
   const handleSelect = async () => {
     if (!getApi()) {
       setError(text("等待 Terra IPC 接入后才能选择存档。", "File selection is waiting for Terra IPC."));
@@ -22650,10 +22511,55 @@ function WorldlineView() {
       ] })
     ] });
   };
+  const inspectorStatusLabel = (status) => ({ RESOLVED_RUNTIME: text("已解析到当前人物", "Resolved to runtime character"), RESOLVED_CONTEXTUALLY: text("已按当前对话上下文解析", "Resolved by conversation context"), AMBIGUOUS: text("存在多个候选", "Multiple candidates"), UNRESOLVED: text("尚未解析", "Unresolved"), NO_MATCH: text("未命中", "No match"), DIRECT: text("直接关系", "Direct relation"), DERIVED: text("派生关系", "Derived relation"), CONFLICT: text("关系冲突", "Relation conflict"), UNKNOWN: text("未知关系", "Unknown relation"), TARGET_REQUIRED: text("需要目标人物", "Target required"), DIFFERENT: text("检测到历史差异", "Historical differences detected"), NO_DIFFERENCE_DETECTED: text("未检测到差异", "No difference detected"), UNAVAILABLE: text("暂不可用", "Unavailable") }[status] || display(status));
+  const inspectorRelationStatusLabel = (status) => ({ RELATION_AMBIGUOUS: text("亲属关系存在多个候选", "Multiple relation candidates"), RELATION_GENDER_CONFLICT: text("亲属性别证据冲突", "Relation gender conflict"), RELATION_SOURCE_INCOMPLETE: text("亲属候选过多，未作唯一判定", "Relation candidate set is incomplete") }[status] || inspectorStatusLabel(status));
+  const inspectorDifferenceLabel = (code) => ({ AGE_WORLDLINE_SHIFT: text("年龄 / 出生日期差异", "Age / birth-date difference"), FATHER_DIFFERENT: text("父系差异", "Father differs"), MOTHER_DIFFERENT: text("母系差异", "Mother differs"), SPOUSE_DIFFERENT: text("配偶差异", "Spouse differs"), CHILDREN_DIFFERENT: text("子女差异", "Children differ") }[code] || display(code));
+  const entityKinshipInspectorPanel = () => !developerMode ? null : /* @__PURE__ */ jsxRuntimeExports.jsxs("section", { className: "worldline-card worldline-entity-inspector", children: [
+    /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "worldline-section-heading", children: [/* @__PURE__ */ jsxRuntimeExports.jsx("h4", { children: text("Entity & Kinship Inspector", "Entity & Kinship Inspector") }), /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "worldline-scope-note", children: text("仅开发者诊断", "Developer diagnostics only") })] }),
+    /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "worldline-note", children: text("先以 Runtime ID 确定人物，再读取当前状态与 CK3 亲属关系；历史差异不会替换当前游戏事实。", "Resolve the runtime entity first, then inspect current state and CK3 kinship; historical differences never replace current game truth.") }),
+    /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "worldline-prompt-query worldline-subjective-query", children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsx("input", { value: inspectorQuery, onChange: (event) => setInspectorQuery(event.target.value), placeholder: text("输入人物姓名或 Definition ID（可选）", "Enter a name or Definition ID (optional)") }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx("input", { value: inspectorResponderId, onChange: (event) => setInspectorResponderId(event.target.value), placeholder: text("Responder Runtime ID", "Responder Runtime ID") }),
+      /* @__PURE__ */ jsxRuntimeExports.jsxs("select", { value: inspectorResponderId, onChange: (event) => setInspectorResponderId(event.target.value), "aria-label": text("检查回应角色", "Inspector responder"), children: [/* @__PURE__ */ jsxRuntimeExports.jsx("option", { value: "", children: text("选择回应角色", "Select responder") }), subjectiveResponders.map((item) => /* @__PURE__ */ jsxRuntimeExports.jsx("option", { value: item.responderId, children: `${item.displayName || `#${item.responderId}`} · ${item.responderId}` }, `inspector-responder-${item.responderId}`))] }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx("input", { value: inspectorTargetId, onChange: (event) => setInspectorTargetId(event.target.value), placeholder: text("Target Runtime ID", "Target Runtime ID") }),
+      /* @__PURE__ */ jsxRuntimeExports.jsxs("select", { value: inspectorTargetId, onChange: (event) => setInspectorTargetId(event.target.value), "aria-label": text("检查目标角色", "Inspector target"), children: [/* @__PURE__ */ jsxRuntimeExports.jsx("option", { value: "", children: text("选择目标角色", "Select target") }), subjectiveResponders.map((item) => /* @__PURE__ */ jsxRuntimeExports.jsx("option", { value: item.responderId, children: `${item.displayName || `#${item.responderId}`} · ${item.responderId}` }, `inspector-target-${item.responderId}`))] }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx("button", { type: "button", onClick: runEntityKinshipInspector, disabled: entityInspectorLoading, children: entityInspectorLoading ? text("读取中…", "Reading…") : text("运行人物检查器", "Inspect entity") })
+    ] }),
+    entityInspector?.available === false && /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "worldline-error", children: `${text("检查器不可用", "Inspector unavailable")}：${display(entityInspector.reason)}` }),
+    entityInspector?.available && /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "worldline-entity-inspector-result", children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "worldline-semantic-grid", children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "worldline-semantic-item", children: [/* @__PURE__ */ jsxRuntimeExports.jsx("span", { children: text("身份依据", "Identity basis") }), /* @__PURE__ */ jsxRuntimeExports.jsx("strong", { children: display(entityInspector.identity?.input || entityInspector.target?.displayName) }), /* @__PURE__ */ jsxRuntimeExports.jsx("small", { children: `${text("状态", "Status")}：${inspectorStatusLabel(entityInspector.identity?.resolutionStatus)}` })] }),
+        /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "worldline-semantic-item", children: [/* @__PURE__ */ jsxRuntimeExports.jsx("span", { children: text("当前世界状态", "Current world state") }), /* @__PURE__ */ jsxRuntimeExports.jsx("strong", { children: entityInspector.state ? `${inspectorStatusLabel(entityInspector.state.lifeStatus)} · ${display(entityInspector.state.age)}` : text("未选择目标", "No target selected") }), /* @__PURE__ */ jsxRuntimeExports.jsx("small", { children: entityInspector.state?.death ? text("已故事实已冻结", "Death fact is frozen") : text("按当前 CK3 检查点读取", "Read from current CK3 checkpoint") })] }),
+        /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "worldline-semantic-item", children: [/* @__PURE__ */ jsxRuntimeExports.jsx("span", { children: text("亲属关系", "Kinship relation") }), /* @__PURE__ */ jsxRuntimeExports.jsx("strong", { children: entityInspector.relation?.label || inspectorRelationStatusLabel(entityInspector.relation?.status) }), /* @__PURE__ */ jsxRuntimeExports.jsx("small", { children: entityInspector.relation?.distance == null ? "—" : `${text("距离", "Distance")}：${entityInspector.relation.distance}` })] }),
+        /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "worldline-semantic-item", children: [/* @__PURE__ */ jsxRuntimeExports.jsx("span", { children: text("历史差异", "Historical difference") }), /* @__PURE__ */ jsxRuntimeExports.jsx("strong", { children: inspectorStatusLabel(entityInspector.difference?.status) }), /* @__PURE__ */ jsxRuntimeExports.jsx("small", { children: `${text("条目", "Items")}：${entityInspector.difference?.items?.length || 0}` })] })
+      ] }),
+      /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "worldline-metric-grid", children: [
+        [text("Responder", "Responder"), `${display(entityInspector.responder?.displayName)} (#${display(entityInspector.responder?.runtimeId)})`],
+        [text("Target", "Target"), `${display(entityInspector.target?.displayName)} (#${display(entityInspector.target?.runtimeId)})`],
+        [text("存活状态", "Life status"), inspectorStatusLabel(entityInspector.state?.lifeStatus)],
+        [text("性别", "Gender"), `${display(entityInspector.state?.gender)} · ${display(entityInspector.state?.genderStatus)}`],
+        [text("年龄", "Age"), `${display(entityInspector.state?.age)} (${display(entityInspector.state?.ageLabel)})`],
+        [text("地点 / 领主 / 宫廷", "Location / liege / court"), [entityInspector.state?.location, entityInspector.state?.liege, entityInspector.state?.court].map(display).join(" / ")]
+      ].map(([label, value]) => metric(label, value)) }),
+      entityInspector.profiling && /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "worldline-diagnostics worldline-inspector-profiler", children: [
+        [text("实体延迟", "Entity latency"), `${display(entityInspector.profiling.entityLatencyMs)} ms`],
+        [text("关系延迟", "Relation latency"), `${display(entityInspector.profiling.relationLatencyMs)} ms`],
+        [text("Binding 缓存", "Binding cache"), display(entityInspector.profiling.bindingCacheSize)],
+        [text("Kinship 缓存范围", "Kinship cache scope"), display(entityInspector.profiling.kinshipCacheScope)]
+      ].map(([label, value]) => metric(label, value)) }),
+      entityInspector.state?.death && /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "worldline-note worldline-semantic-warning", children: `${text("已故亲属", "Deceased relative")}：${display(entityInspector.state.death)}` }),
+      entityInspector.identity?.runtimeCandidates?.length > 0 && /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "worldline-list", children: [/* @__PURE__ */ jsxRuntimeExports.jsx("h6", { children: text("同名候选", "Same-name candidates") }), entityInspector.identity.runtimeCandidates.map((candidate, index) => /* @__PURE__ */ jsxRuntimeExports.jsxs("article", { className: "worldline-row worldline-candidate-card", children: [/* @__PURE__ */ jsxRuntimeExports.jsx("strong", { children: `${display(candidate.displayName)} (#${display(candidate.runtimeId)})` }), /* @__PURE__ */ jsxRuntimeExports.jsx("span", { children: `${text("Definition", "Definition")}: ${display(candidate.definitionId)}` }), /* @__PURE__ */ jsxRuntimeExports.jsx("span", { children: `${text("依据", "Evidence")}: ${display((candidate.evidence || []).map(item => item?.code || item).join(" · "))}` }), candidate.conflicts?.length > 0 && /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "worldline-semantic-warning", children: `${text("冲突", "Conflict")}: ${display(candidate.conflicts.join(" · "))}` })] }, `inspector-candidate-${candidate.runtimeId}-${index}`))] }),
+      entityInspector.relation?.candidates?.length > 0 && /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "worldline-list worldline-relation-candidates", children: [/* @__PURE__ */ jsxRuntimeExports.jsx("h6", { children: text("关系候选", "Relation candidates") }), entityInspector.relation.candidates.map((candidate, index) => /* @__PURE__ */ jsxRuntimeExports.jsxs("article", { className: "worldline-row", children: [/* @__PURE__ */ jsxRuntimeExports.jsx("strong", { children: `${display(candidate.name)} (#${display(candidate.runtimeId)})` }), /* @__PURE__ */ jsxRuntimeExports.jsx("span", { children: inspectorRelationStatusLabel(entityInspector.relation.status) })] }, `inspector-relation-candidate-${candidate.runtimeId}-${index}`))] }),
+      /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "worldline-list", children: [/* @__PURE__ */ jsxRuntimeExports.jsx("h6", { children: text("Relation Path", "Relation Path") }), entityInspector.relation?.path?.length ? entityInspector.relation.path.map((step, index) => /* @__PURE__ */ jsxRuntimeExports.jsxs("article", { className: "worldline-row", children: [/* @__PURE__ */ jsxRuntimeExports.jsx("strong", { children: display(step.type) }), /* @__PURE__ */ jsxRuntimeExports.jsx("span", { children: `${display(step.from)} → ${display(step.to)}` })] }, `inspector-path-${index}`)) : /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "worldline-empty", children: text("没有结构化关系路径。", "No structured relation path.") })] }),
+      entityInspector.difference?.items?.length > 0 && /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "worldline-list", children: [/* @__PURE__ */ jsxRuntimeExports.jsx("h6", { children: text("历史差异（不改变当前身份）", "Historical differences (do not change current identity)") }), entityInspector.difference.items.map((item, index) => /* @__PURE__ */ jsxRuntimeExports.jsxs("article", { className: "worldline-row", children: [/* @__PURE__ */ jsxRuntimeExports.jsx("strong", { children: inspectorDifferenceLabel(item.code) }), /* @__PURE__ */ jsxRuntimeExports.jsx("span", { children: display(item.severity) })] }, `inspector-difference-${index}`))] }),
+      /* @__PURE__ */ jsxRuntimeExports.jsxs("details", { className: "worldline-advanced-details", children: [/* @__PURE__ */ jsxRuntimeExports.jsx("summary", { children: text("开发者原始检查数据", "Developer raw inspector data") }), /* @__PURE__ */ jsxRuntimeExports.jsx("pre", { children: JSON.stringify(entityInspector, null, 2) })] })
+    ] })
+  ] });
   const tabs = [
     ["overview", text("世界概览", "Overview")],
     ["delta", text("年度变化", "Annual Delta")],
     ["knowledge", text("世界知识", "World Knowledge")],
+    ["historical", text("历史身份", "Historical Identity")],
     ...(developerMode ? [["diagnostics", text("开发者诊断", "Developer Diagnostics")]] : [])
   ];
   const apiReady = canInvoke("getSettings") && canInvoke("getCheckpointStatus");
@@ -22712,8 +22618,9 @@ function WorldlineView() {
     ] }),
     activeTab === "delta" && /* @__PURE__ */ jsxRuntimeExports.jsxs("section", { className: "worldline-card worldline-tab-panel", children: [/* @__PURE__ */ jsxRuntimeExports.jsx("h4", { children: text("年度变化", "Annual Delta") }), annualDelta.length === 0 ? /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "worldline-empty", children: text("当前检查点暂无年度变化数据。", "No annual-delta data exists for the current checkpoint.") }) : /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "worldline-list", children: annualDelta.map((item, index) => { const semanticEvent = player.event(item); return /* @__PURE__ */ jsxRuntimeExports.jsxs("article", { className: "worldline-row worldline-delta-row", children: [/* @__PURE__ */ jsxRuntimeExports.jsx("strong", { children: semanticEvent.title }), /* @__PURE__ */ jsxRuntimeExports.jsx("span", { children: player.date(item.date) }), /* @__PURE__ */ jsxRuntimeExports.jsxs("span", { title: text("无法确认的参与者不会显示为数字人物。", "Unconfirmed participants are not shown as numeric characters."), children: [text("参与者：", "Actors: "), actorsLabel(item.actors)] }), /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "worldline-source-tag", children: semanticEvent.source }), /* @__PURE__ */ jsxRuntimeExports.jsx("span", { children: semanticEvent.status }), semanticEvent.detail && /* @__PURE__ */ jsxRuntimeExports.jsx("small", { className: "worldline-delta-detail", children: semanticEvent.detail })] }, item.id || index); }) })] }),
     activeTab === "knowledge" && /* @__PURE__ */ jsxRuntimeExports.jsxs("section", { className: "worldline-card worldline-tab-panel", children: [/* @__PURE__ */ jsxRuntimeExports.jsx("h4", { children: text("世界知识", "World Knowledge") }), /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "worldline-source-legend", children: [/* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "worldline-source-tag game-truth", children: player.source("GAME_TRUTH") }), /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "worldline-source-tag supplemental", children: player.source("SYSTEM_SUPPLEMENTAL") }), /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "worldline-source-tag player-canon", children: player.source("PLAYER_SUPPLEMENTAL") })] }), worldKnowledge.length === 0 ? /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "worldline-empty", children: text("暂无世界知识数据。", "No world-knowledge data yet.") }) : /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "worldline-list", children: worldKnowledge.map((item, index) => { const semanticKnowledge = player.knowledge(item); return /* @__PURE__ */ jsxRuntimeExports.jsxs("article", { className: "worldline-row", children: [/* @__PURE__ */ jsxRuntimeExports.jsx("strong", { children: semanticKnowledge.title }), /* @__PURE__ */ jsxRuntimeExports.jsx("span", { children: semanticKnowledge.value }), /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "worldline-source-tag", children: semanticKnowledge.source }), semanticKnowledge.visibility && /* @__PURE__ */ jsxRuntimeExports.jsx("span", { children: semanticKnowledge.visibility })] }, item.id || index); }) })] }),
-    activeTab === "historical" && /* @__PURE__ */ jsxRuntimeExports.jsxs("section", { className: "worldline-card worldline-tab-panel", children: [/* @__PURE__ */ jsxRuntimeExports.jsx("h4", { children: text("历史人物映射", "Historical Character Mapping") }), /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "worldline-note", children: text("系统尝试把 CK3 当前角色与历史人物定义对应起来。存在歧义时不会自动猜测。", "The system maps current CK3 characters to historical figures without guessing when evidence is ambiguous.") }), /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "worldline-binding-controls", children: [/* @__PURE__ */ jsxRuntimeExports.jsx("input", { value: bindingSearch, onChange: (event) => setBindingSearch(event.target.value), placeholder: text("搜索历史人物 / 当前角色", "Search historical figure / current character") }), /* @__PURE__ */ jsxRuntimeExports.jsxs("select", { value: bindingStatusFilter, onChange: (event) => setBindingStatusFilter(event.target.value), "aria-label": text("映射状态筛选", "Mapping status filter"), children: [/* @__PURE__ */ jsxRuntimeExports.jsx("option", { value: "ALL", children: text("全部状态", "All statuses") }), /* @__PURE__ */ jsxRuntimeExports.jsx("option", { value: "DIRECT", children: player.identity("DIRECT") }), /* @__PURE__ */ jsxRuntimeExports.jsx("option", { value: "LIVE_CONFIRMED", children: player.identity("LIVE_CONFIRMED") }), /* @__PURE__ */ jsxRuntimeExports.jsx("option", { value: "CONFLICT", children: player.identity("CONFLICT") }), /* @__PURE__ */ jsxRuntimeExports.jsx("option", { value: "AMBIGUOUS_PROVENANCE", children: player.identity("AMBIGUOUS_PROVENANCE") })] })] }), historicalBindingTotal > 0 && /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "worldline-binding-count", children: text(`显示 ${filteredHistoricalBindings.length} / ${historicalBindingTotal} 条映射`, `${filteredHistoricalBindings.length} / ${historicalBindingTotal} mappings shown`) }), historicalIdentity || identityCandidates.length > 0 ? /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "worldline-identity-resolution", children: [/* @__PURE__ */ jsxRuntimeExports.jsx("h5", { children: text("身份判定", "Identity result") }), /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { children: [text("状态", "Status"), "：", identityStatusLabel(historicalIdentity?.status || (identityCandidates.length ? "AMBIGUOUS" : "NO_MATCH"))] }), identityCandidates.length > 0 && /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { children: [text("候选数量", "Candidate count"), "：", identityCandidates.length] }), /* @__PURE__ */ jsxRuntimeExports.jsx("details", { className: "worldline-advanced-details", children: [/* @__PURE__ */ jsxRuntimeExports.jsx("summary", { children: text("开发者原始数据（Historical Identity Resolution）", "Developer raw data (Historical Identity Resolution)") }), historicalIdentity?.reason && /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { children: ["reason：", display(historicalIdentity.reason)] }), identityCandidates.length > 0 && /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "worldline-list", children: identityCandidates.map((candidate, index) => /* @__PURE__ */ jsxRuntimeExports.jsxs("article", { className: "worldline-candidate-card", children: [/* @__PURE__ */ jsxRuntimeExports.jsx("strong", { children: `${text("身份候选", "Identity candidate")} #${display(candidateField(candidate, "runtimeId", "id"))}` }), /* @__PURE__ */ jsxRuntimeExports.jsxs("span", { children: [text("Runtime", "Runtime"), "：", display(candidateField(candidate, "runtimeId", "id"))] }), /* @__PURE__ */ jsxRuntimeExports.jsxs("span", { children: [text("Definition", "Definition"), "：", display(candidateField(candidate, "definitionId"))] }), /* @__PURE__ */ jsxRuntimeExports.jsxs("span", { children: [text("Raw", "Raw"), "：", display(candidateField(candidate, "rawName", "rawKey"))] }), /* @__PURE__ */ jsxRuntimeExports.jsxs("span", { children: [text("Alias candidate", "Alias candidate"), "：", display(candidateField(candidate, "aliasCandidate"))] }), /* @__PURE__ */ jsxRuntimeExports.jsxs("span", { children: [text("Score", "Score"), "：", display(candidateField(candidate, "score"))] }), /* @__PURE__ */ jsxRuntimeExports.jsxs("span", { children: [text("Evidence", "Evidence"), "：", candidateEvidence(candidate)] }), /* @__PURE__ */ jsxRuntimeExports.jsxs("span", { children: [text("Conflict", "Conflict"), "：", candidateConflicts(candidate)] })] }, `${candidateField(candidate, "runtimeId", "id") || "candidate"}-${index}`)) })] })] }) : /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "worldline-empty", children: text("当前检查点暂无身份判定。", "No identity result is available for this checkpoint yet.") }), historicalBindings.length === 0 ? /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "worldline-empty", children: bindingSearch && historicalCoverageStatus ? player.coverage(historicalCoverageStatus) : text("当前检查点暂无历史人物映射。", "No historical-character mappings exist for the current checkpoint.") }) : filteredHistoricalBindings.length === 0 ? /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "worldline-empty", children: text("没有匹配当前筛选条件的映射。", "No mappings match the current filters.") }) : /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "worldline-list", children: filteredHistoricalBindings.map((item, index) => { const semantic = player.historical(item); return /* @__PURE__ */ jsxRuntimeExports.jsxs("article", { className: "worldline-row worldline-binding-row worldline-semantic-binding-row", children: [/* @__PURE__ */ jsxRuntimeExports.jsx("strong", { children: semantic.figure }), /* @__PURE__ */ jsxRuntimeExports.jsx("span", { children: semantic.character }), /* @__PURE__ */ jsxRuntimeExports.jsx("span", { children: semantic.status }), /* @__PURE__ */ jsxRuntimeExports.jsx("span", { children: semantic.confidence }), /* @__PURE__ */ jsxRuntimeExports.jsx("span", { children: semantic.note || "—" }), /* @__PURE__ */ jsxRuntimeExports.jsxs("details", { className: "worldline-advanced-details", children: [/* @__PURE__ */ jsxRuntimeExports.jsx("summary", { children: text("开发者原始数据", "Developer raw data") }), /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "worldline-diagnostics", children: [/* @__PURE__ */ jsxRuntimeExports.jsxs("p", { children: ["figureKey：", display(item.figureKey)] }), /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { children: ["definitionId：", display(item.definitionId)] }), /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { children: ["runtimeId：", display(item.runtimeId)] }), /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { children: ["liveHistoryId：", display(item.liveHistoryId)] }), /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { children: ["provenance：", display(item.sourceMod || item.conflict)] })] })] })] }, item.figureKey || index); }) })] }),
+    activeTab === "historical" && /* @__PURE__ */ jsxRuntimeExports.jsxs("section", { className: "worldline-card worldline-tab-panel", children: [/* @__PURE__ */ jsxRuntimeExports.jsx("h4", { children: text("历史人物映射", "Historical Character Mapping") }), /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "worldline-note", children: text("系统尝试把 CK3 当前角色与历史人物定义对应起来。存在歧义时不会自动猜测。", "The system maps current CK3 characters to historical figures without guessing when evidence is ambiguous.") }), /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "worldline-binding-controls", children: [/* @__PURE__ */ jsxRuntimeExports.jsx("input", { value: bindingSearch, onChange: (event) => setBindingSearch(event.target.value), placeholder: text("搜索历史人物 / 当前角色", "Search historical figure / current character") }), /* @__PURE__ */ jsxRuntimeExports.jsxs("select", { value: bindingStatusFilter, onChange: (event) => setBindingStatusFilter(event.target.value), "aria-label": text("映射状态筛选", "Mapping status filter"), children: [/* @__PURE__ */ jsxRuntimeExports.jsx("option", { value: "ALL", children: text("全部状态", "All statuses") }), /* @__PURE__ */ jsxRuntimeExports.jsx("option", { value: "DIRECT", children: player.identity("DIRECT") }), /* @__PURE__ */ jsxRuntimeExports.jsx("option", { value: "LIVE_CONFIRMED", children: player.identity("LIVE_CONFIRMED") }), /* @__PURE__ */ jsxRuntimeExports.jsx("option", { value: "CONFLICT", children: player.identity("CONFLICT") }), /* @__PURE__ */ jsxRuntimeExports.jsx("option", { value: "AMBIGUOUS_PROVENANCE", children: player.identity("AMBIGUOUS_PROVENANCE") })] })] }), historicalBindingTotal > 0 && /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "worldline-binding-count", children: text(`显示 ${filteredHistoricalBindings.length} / ${historicalBindingTotal} 条映射`, `${filteredHistoricalBindings.length} / ${historicalBindingTotal} mappings shown`) }), historicalIdentity || identityCandidates.length > 0 ? /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "worldline-identity-resolution", children: [/* @__PURE__ */ jsxRuntimeExports.jsx("h5", { children: text("身份判定", "Identity result") }), /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { children: [text("状态", "Status"), "：", identityStatusLabel(historicalIdentity?.status || (identityCandidates.length ? "AMBIGUOUS" : "NO_MATCH"))] }), /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { children: [text("候选数量", "Candidate count"), "：", identityCandidates.length] }), developerMode && /* @__PURE__ */ jsxRuntimeExports.jsx("details", { className: "worldline-advanced-details", children: [/* @__PURE__ */ jsxRuntimeExports.jsx("summary", { children: text("开发者原始数据（Historical Identity Resolution）", "Developer raw data (Historical Identity Resolution)") }), historicalIdentity?.reason && /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { children: ["reason：", display(historicalIdentity.reason)] }), identityCandidates.length > 0 && /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "worldline-list", children: identityCandidates.map((candidate, index) => /* @__PURE__ */ jsxRuntimeExports.jsxs("article", { className: "worldline-candidate-card", children: [/* @__PURE__ */ jsxRuntimeExports.jsx("strong", { children: `${text("身份候选", "Identity candidate")} #${display(candidateField(candidate, "runtimeId", "id"))}` }), /* @__PURE__ */ jsxRuntimeExports.jsxs("span", { children: [text("Runtime", "Runtime"), "：", display(candidateField(candidate, "runtimeId", "id"))] }), /* @__PURE__ */ jsxRuntimeExports.jsxs("span", { children: [text("Definition", "Definition"), "：", display(candidateField(candidate, "definitionId"))] }), /* @__PURE__ */ jsxRuntimeExports.jsxs("span", { children: [text("Raw", "Raw"), "：", display(candidateField(candidate, "rawName", "rawKey"))] }), /* @__PURE__ */ jsxRuntimeExports.jsxs("span", { children: [text("Alias candidate", "Alias candidate"), "：", display(candidateField(candidate, "aliasCandidate"))] }), /* @__PURE__ */ jsxRuntimeExports.jsxs("span", { children: [text("Score", "Score"), "：", display(candidateField(candidate, "score"))] }), /* @__PURE__ */ jsxRuntimeExports.jsxs("span", { children: [text("Evidence", "Evidence"), "：", candidateEvidence(candidate)] }), /* @__PURE__ */ jsxRuntimeExports.jsxs("span", { children: [text("Conflict", "Conflict"), "：", candidateConflicts(candidate)] })] }, `${candidateField(candidate, "runtimeId", "id") || "candidate"}-${index}`)) })] }) ] }) : null, historicalBindings.length === 0 ? /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "worldline-empty", children: bindingSearch && historicalCoverageStatus ? player.coverage(historicalCoverageStatus) : text("当前检查点暂无历史人物映射。", "No historical-character mappings exist for the current checkpoint.") }) : filteredHistoricalBindings.length === 0 ? /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "worldline-empty", children: text("没有匹配当前筛选条件的映射。", "No mappings match the current filters.") }) : /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "worldline-list", children: filteredHistoricalBindings.map((item, index) => { const semantic = player.historical(item); return /* @__PURE__ */ jsxRuntimeExports.jsxs("article", { className: "worldline-row worldline-binding-row worldline-semantic-binding-row", children: [/* @__PURE__ */ jsxRuntimeExports.jsx("strong", { children: semantic.figure }), /* @__PURE__ */ jsxRuntimeExports.jsx("span", { children: semantic.character }), /* @__PURE__ */ jsxRuntimeExports.jsx("span", { children: semantic.status }), /* @__PURE__ */ jsxRuntimeExports.jsx("span", { children: semantic.confidence }), /* @__PURE__ */ jsxRuntimeExports.jsx("span", { children: semantic.note || "—" }), developerMode && /* @__PURE__ */ jsxRuntimeExports.jsxs("details", { className: "worldline-advanced-details", children: [/* @__PURE__ */ jsxRuntimeExports.jsx("summary", { children: text("开发者原始数据", "Developer raw data") }), /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "worldline-diagnostics", children: [/* @__PURE__ */ jsxRuntimeExports.jsxs("p", { children: ["figureKey：", display(item.figureKey)] }), /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { children: ["definitionId：", display(item.definitionId)] }), /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { children: ["runtimeId：", display(item.runtimeId)] }), /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { children: ["liveHistoryId：", display(item.liveHistoryId)] }), /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { children: ["provenance：", display(item.sourceMod || item.conflict)] })] })] })] }, item.figureKey || index); }) })] }),
     activeTab === "diagnostics" && /* @__PURE__ */ jsxRuntimeExports.jsxs("section", { className: "worldline-card worldline-tab-panel", children: [/* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "worldline-section-heading", children: [/* @__PURE__ */ jsxRuntimeExports.jsx("h4", { children: text("诊断", "Diagnostics") }), /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "worldline-scope-note", children: text("高级 / 开发诊断", "Advanced / developer diagnostics") })] }), /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "worldline-diagnostics", children: [/* @__PURE__ */ jsxRuntimeExports.jsxs("p", { children: [text("前端状态", "Frontend state"), "：", apiReady ? player.status(loadState === "ready" ? "ACTIVE" : loadState) : player.status("UNAVAILABLE")] }), /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { children: [text("检查点状态", "Checkpoint state"), "：", player.status(checkpoint.status)] }), /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { children: [text("解析器", "Parser"), "：", statusLabel(diagnostics?.parserState)] }), /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { children: [text("目录索引", "Definition catalog"), "：", statusLabel(diagnostics?.catalogStatus)] }), /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { children: [text("分支边界", "Branch boundary"), "：", display(diagnostics?.branchStatus)] }), /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { children: [text("当前 Delta / 总存储", "Current delta / stored"), "：", `${display(diagnostics?.deltaRevision)} / ${display(diagnostics?.deltaStoredTotal)}`] }), /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { children: [text("最近错误", "Last error"), "：", display(checkpoint.lastError || diagnostics?.lastError)] })] }), /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "worldline-prompt-diagnostics", children: [/* @__PURE__ */ jsxRuntimeExports.jsx("h5", { children: text("Prompt / World Recall 诊断", "Prompt / World Recall Diagnostics") }), /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "worldline-note", children: text("只读检查，不会启用 Prompt Default On，也不会修改存档或补充知识。", "Read-only inspection; it does not enable Prompt Default On or modify saves or supplemental knowledge.") }), /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "worldline-prompt-query", children: [/* @__PURE__ */ jsxRuntimeExports.jsx("input", { value: promptQuery, onChange: (event) => setPromptQuery(event.target.value), placeholder: text("输入要检查的查询，例如：岳飞现在在哪里", "Enter a query, for example: Where is Yue Fei now?") }), /* @__PURE__ */ jsxRuntimeExports.jsx("button", { type: "button", onClick: runPromptDiagnostics, disabled: promptDiagnosticsLoading, children: promptDiagnosticsLoading ? text("诊断中…", "Inspecting…") : text("运行诊断", "Run Diagnostics") })] }), promptDiagnostics?.available === false ? /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "worldline-diagnostic-summary worldline-error", children: [/* @__PURE__ */ jsxRuntimeExports.jsx("strong", { children: text("结果摘要", "Result summary") }), /* @__PURE__ */ jsxRuntimeExports.jsx("p", { children: text("当前无法安全读取世界知识。", "World knowledge cannot be read safely right now.") }), /* @__PURE__ */ jsxRuntimeExports.jsxs("details", { className: "worldline-advanced-details", children: [/* @__PURE__ */ jsxRuntimeExports.jsx("summary", { children: text("展开原始原因", "Show raw reason") }), /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { children: [text("原因", "Reason"), "：", display(promptDiagnostics.reason)] }), /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { children: [text("检查点", "Checkpoint"), "：", display(promptDiagnostics.checkpointAsOf)] }), /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { children: [text("实时日期", "Live date"), "：", display(promptDiagnostics.liveDate)] })] })] }) : promptDiagnostics?.available ? /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "worldline-prompt-result", children: [/* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "worldline-diagnostic-summary", children: [/* @__PURE__ */ jsxRuntimeExports.jsx("h5", { children: text("结果摘要", "Result summary") }), /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "worldline-metric-grid", children: [[text("查询", "Query"), promptSemantic.query], [text("识别对象", "Recognized object"), promptSemantic.recognizedObject || promptSemantic.query || "—"], [text("身份判定", "Identity"), promptSemantic.identity], [text("候选数量", "Candidate count"), promptSemantic.candidateCount], [text("查询结论", "Conclusion"), promptSemantic.conclusion], [text("原因", "Reason"), promptSemantic.reason || "—"]].map(([label, value]) => metric(label, value)) })] }), /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "worldline-diagnostic-sources", children: [/* @__PURE__ */ jsxRuntimeExports.jsx("h6", { children: text("命中来源", "Matched sources") }), /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "worldline-metric-grid", children: [[text("存档事实", "Save facts"), promptSemantic.sourceFacts], [text("玩家补充", "Player supplement"), promptSemantic.sourceSupplemental], [text("World Prompt Token", "World Prompt Token"), promptSemantic.tokens], [text("缓存", "Cache"), promptDiagnostics.cacheHit ? text("已命中", "Hit") : text("未命中", "Miss")]].map(([label, value]) => metric(label, value)) })] }), promptEntityResolutionPanel, promptHistoricalExplanationPanel, /* @__PURE__ */ jsxRuntimeExports.jsxs("details", { className: "worldline-advanced-details", onToggle: (event) => setShowPromptDetails(event.currentTarget.open), children: [/* @__PURE__ */ jsxRuntimeExports.jsx("summary", { children: text("展开开发者原始数据", "Show developer raw data") }), showPromptDetails && /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [ /* @__PURE__ */ jsxRuntimeExports.jsx("h6", { children: text("Query Analyzer 解析实体", "Query Analyzer Entities") }), /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "worldline-diagnostics", children: [/* @__PURE__ */ jsxRuntimeExports.jsxs("p", { children: [text("Terms", "Terms"), "：", display((promptDiagnostics.queryAnalysis?.terms || []).join(" · "))] }), /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { children: [text("Matched aliases", "Matched aliases"), "：", display((promptDiagnostics.queryAnalysis?.matchedAliases || []).join(" · "))] })] }), /* @__PURE__ */ jsxRuntimeExports.jsx("h6", { children: text("Resolver 诊断", "Resolver Diagnostics") }), promptResolverTraceRows(promptDiagnostics.resolverTrace), identityCandidateRows((promptIdentityResolution?.candidates || []).slice(0, 50), text("没有身份候选。", "No identity candidates.")), /* @__PURE__ */ jsxRuntimeExports.jsx("pre", { children: JSON.stringify(promptDiagnostics.queryPlan, null, 2) }), promptMatchRows(promptDiagnostics.queryAnalysis?.characters, text("未命中人物。", "No character matched.")), promptMatchRows(promptDiagnostics.queryAnalysis?.titles, text("未命中头衔。", "No title matched.")), /* @__PURE__ */ jsxRuntimeExports.jsx("h6", { children: text("命中的 Game Truth", "Matched Game Truth") }), promptMatchRows(promptDiagnostics.gameTruth?.characters, text("未命中人物事实。", "No character Game Truth matched.")), promptMatchRows(promptDiagnostics.gameTruth?.titles, text("未命中头衔事实。", "No title Game Truth matched.")), /* @__PURE__ */ jsxRuntimeExports.jsx("h6", { children: text("命中的 Supplemental", "Matched Supplemental") }), promptDiagnosticList(promptDiagnostics.supplemental, text("未命中 Supplemental。", "No Supplemental matched.")), /* @__PURE__ */ jsxRuntimeExports.jsx("h6", { children: text("World Prompt Token 明细", "World Prompt Token Breakdown") }), promptTokenBreakdownRows(promptDiagnostics.tokenBreakdown, text("没有可计量的 World Prompt 区块。", "No measurable World Prompt blocks.")), /* @__PURE__ */ jsxRuntimeExports.jsx("h6", { children: text("被裁剪条目", "Trimmed Items") }), promptDiagnosticList(promptDiagnostics.trimmedItems, text("没有被裁剪条目。", "No items were trimmed.")), /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "worldline-actions", children: [/* @__PURE__ */ jsxRuntimeExports.jsx("span", { children: `${text("裁剪总数", "Trimmed total")}: ${promptDiagnostics.trimmedTotal ?? promptDiagnostics.trimmedItems?.length ?? 0} · ${text("页", "Page")} ${(promptDiagnostics.trimmedPage || 0) + 1}` }), /* @__PURE__ */ jsxRuntimeExports.jsx("button", { type: "button", disabled: promptDiagnosticsLoading || !(promptDiagnostics.trimmedPage > 0), onClick: () => runPromptDiagnostics(promptDiagnostics.trimmedPage - 1), children: text("上一页", "Previous") }), /* @__PURE__ */ jsxRuntimeExports.jsx("button", { type: "button", disabled: promptDiagnosticsLoading || ((promptDiagnostics.trimmedPage || 0) + 1) * (promptDiagnostics.trimmedPageSize || 50) >= Math.max(promptDiagnostics.trimmedTotal || 0, promptDiagnostics.candidateTotal || 0), onClick: () => runPromptDiagnostics((promptDiagnostics.trimmedPage || 0) + 1), children: text("下一页", "Next") })] })] })] })] }) : /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "worldline-empty", children: text("输入查询后运行只读诊断。", "Enter a query and run the read-only diagnostics.") })] })] }),
+    activeTab === "diagnostics" && entityKinshipInspectorPanel(),
     activeTab === "diagnostics" && usageObservabilityPanel(),
     activeTab === "diagnostics" && /* @__PURE__ */ jsxRuntimeExports.jsxs("section", { className: "worldline-card worldline-subjective-diagnostics", children: [
       /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "worldline-section-heading", children: [/* @__PURE__ */ jsxRuntimeExports.jsx("h4", { children: text("角色认知 / 主观世界", "Character Knowledge / Subjective World") }), /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "worldline-scope-note", children: text("Phase A 只读诊断", "Phase A read-only diagnostics") })] }),

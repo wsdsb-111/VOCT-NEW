@@ -27,17 +27,19 @@ class BranchRegistry {
   }
 
   _normalizeBranch(item) {
-    if (!item || typeof item !== "object" || !/^campaign_[a-f0-9]{64}$/.test(item.campaignId) || !/^branch_[a-f0-9-]{36}$/.test(item.branchId) || typeof item.sourcePath !== "string" || !validFingerprint(item.fingerprint) || !normalizeGameDate(item.gameDate)) throw new Error("branch_registry_invalid");
+    const normalizedBaseDate = normalizeGameDate(item?.gameDate);
+    if (!item || typeof item !== "object" || !/^campaign_[a-f0-9]{64}$/.test(item.campaignId) || !/^branch_[a-f0-9-]{36}$/.test(item.branchId) || typeof item.sourcePath !== "string" || !validFingerprint(item.fingerprint) || !normalizedBaseDate) throw new Error("branch_registry_invalid");
     const archived = item.archived === true || item.status === "ARCHIVED";
     const fingerprint = validFingerprint(item.currentFingerprint) ? item.currentFingerprint : item.fingerprint;
-    const gameDate = normalizeGameDate(item.latestGameDate) ? item.latestGameDate : item.gameDate;
+    const latestDate = normalizeGameDate(item.latestGameDate) || normalizedBaseDate;
+    const gameDate = normalizedBaseDate.canonical;
     const normalized = {
       ...item,
       fingerprint,
       currentFingerprint: fingerprint,
       fingerprintHistory: addFingerprint(item.fingerprintHistory, fingerprint),
       gameDate,
-      latestGameDate: gameDate,
+      latestGameDate: latestDate.canonical,
       loadSessionId: validLoadSessionId(item.loadSessionId) ? item.loadSessionId : null,
       status: archived ? "ARCHIVED" : "ACTIVE",
       archived
@@ -84,8 +86,9 @@ class BranchRegistry {
   }
 
   identity(input) {
-    if (typeof input?.campaignToken !== "string" || !input.campaignToken.trim() || input.campaignToken.length > 256 || typeof input.sourcePath !== "string" || !path.win32.isAbsolute(input.sourcePath) || !validFingerprint(input.fingerprint) || !normalizeGameDate(input.gameDate)) return null;
-    return { campaignId: `campaign_${digest(input.campaignToken)}`, sourcePath: path.win32.normalize(input.sourcePath).toLowerCase(), fingerprint: input.fingerprint, gameDate: input.gameDate, loadSessionId: validLoadSessionId(input.loadSessionId) ? input.loadSessionId : null };
+    const normalizedDate = normalizeGameDate(input?.gameDate);
+    if (typeof input?.campaignToken !== "string" || !input.campaignToken.trim() || input.campaignToken.length > 256 || typeof input.sourcePath !== "string" || !path.win32.isAbsolute(input.sourcePath) || !validFingerprint(input.fingerprint) || !normalizedDate) return null;
+    return { campaignId: `campaign_${digest(input.campaignToken)}`, sourcePath: path.win32.normalize(input.sourcePath).toLowerCase(), fingerprint: input.fingerprint, gameDate: normalizedDate.canonical, loadSessionId: validLoadSessionId(input.loadSessionId) ? input.loadSessionId : null };
   }
 
   _touch(branch, evidence) {

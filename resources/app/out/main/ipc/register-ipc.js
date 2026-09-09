@@ -56,6 +56,12 @@ function registerIpcHandlers(runtime) {
     electron.ipcMain.handle("worldline:getAnnualDelta", () => worldlineService.getAnnualDelta());
     electron.ipcMain.handle("worldline:getWorldKnowledge", () => worldlineService.getWorldKnowledge());
     electron.ipcMain.handle("worldline:getHistoricalBindings", (_event, payload) => worldlineService.getHistoricalBindingsAsync ? worldlineService.getHistoricalBindingsAsync(payload) : worldlineService.getHistoricalBindings(payload));
+    electron.ipcMain.handle("worldline:getEntityKinshipInspector", (_event, payload) => worldlineService.getEntityKinshipInspectorAsync ? worldlineService.getEntityKinshipInspectorAsync({
+      query: typeof payload?.query === "string" ? payload.query : "",
+      responderId: typeof payload?.responderId === "string" || Number.isSafeInteger(payload?.responderId) ? payload.responderId : null,
+      targetId: typeof payload?.targetId === "string" || Number.isSafeInteger(payload?.targetId) ? payload.targetId : null
+    }) : worldlineService.getEntityKinshipInspector(payload));
+    electron.ipcMain.handle("worldline:getKinshipIntegrityReport", () => worldlineService.getKinshipIntegrityReport());
     electron.ipcMain.handle("worldline:getDiagnostics", () => worldlineService.getDiagnostics());
     electron.ipcMain.handle("worldline:getPromptDiagnostics", (_event, payload) => worldlineService.getPromptDiagnosticsAsync(payload));
     electron.ipcMain.handle("worldline:getSubjectiveResponderOptions", (_event, payload) => worldlineService.getSubjectiveResponderOptions({ query: typeof payload?.query === "string" ? payload.query : "" }));

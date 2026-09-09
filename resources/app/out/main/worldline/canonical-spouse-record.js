@@ -1,5 +1,7 @@
 "use strict";
 
+const { resolveLifeStatus } = require("./character-temporal-facts");
+
 function values(value) {
   if (Array.isArray(value)) return value;
   return value === null || value === undefined || value === "" ? [] : [value];
@@ -12,12 +14,13 @@ function normalizeRecord(value, relationType, source, allowPrimitiveId) {
   const runtimeId = rawId !== null && rawId !== undefined && rawId !== "" && Number.isFinite(numericId) ? numericId : null;
   const name = String(object?.fullName || object?.shortName || object?.firstName || object?.name || (object || runtimeId !== null ? "" : value) || "").trim() || null;
   const hasDeathTotalDays = object?.deathDateTotalDays !== null && object?.deathDateTotalDays !== undefined && object?.deathDateTotalDays !== "" && Number.isFinite(Number(object.deathDateTotalDays));
-  const deceased = object?.alive === false || !!object?.deathDate || hasDeathTotalDays;
+  const lifeStatus = object ? resolveLifeStatus(object) : null;
+  const deceased = lifeStatus?.alive === false;
   return {
     runtimeId,
     name,
     relationType: deceased ? "DECEASED_SPOUSE" : relationType,
-    alive: deceased ? false : object?.alive ?? null,
+    alive: lifeStatus?.conflict ? null : deceased ? false : object?.alive ?? null,
     deathDate: object?.deathDate || null,
     deathDateTotalDays: hasDeathTotalDays ? Number(object.deathDateTotalDays) : null,
     source,

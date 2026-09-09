@@ -9,12 +9,13 @@ const { SupplementalStore } = require("../resources/app/out/main/worldline/suppl
 (async () => {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), "votc-canon-"));
   const scope = { campaignId: "campaign-a", branchId: "branch-a", state: "SAME_BRANCH" };
-  const payload = { title: "赴约", content: "韩世忠答应下月赴约", totalDays: 428018, gameDate: "1171.9.20" };
+  const payload = { title: "赴约", content: "韩世忠答应下月赴约", totalDays: 428018, gameDate: "1171年9月20日" };
   try {
     const store = new SupplementalStore({ root });
     await assert.rejects(store.create({ ...scope, state: "BRANCH_UNKNOWN" }, payload), /branch_write_blocked/);
     const first = await store.create(scope, payload);
     assert.equal(first.revision, 1);
+    assert.equal(first.gameDate, "1171.9.20");
     const edited = await store.update(scope, first.recordId, { content: "改为两个月后赴约" }, 1);
     assert.equal(edited.revision, 2);
     await assert.rejects(store.update(scope, first.recordId, { title: "过期编辑" }, 1), /revision_conflict/);

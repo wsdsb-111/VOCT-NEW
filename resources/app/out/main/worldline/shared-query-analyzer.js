@@ -166,7 +166,7 @@ function historicalEntity(resolution, { definitionRecords = [], sourceComplete =
   };
 }
 
-function analyzeSharedQuery({ snapshot, query = "", assistContext = "", mentionedEntityIds = [], localize = null, findLocalizedKeys = null, historicalDefinitionLookup = null, historicalNameScan = null } = {}) {
+function analyzeSharedQuery({ snapshot, query = "", assistContext = "", mentionedEntityIds = [], runtimeContext = null, localize = null, findLocalizedKeys = null, historicalDefinitionLookup = null, historicalNameScan = null } = {}) {
   const normalizedQuery = normalize(`${query}\n${assistContext}`);
   const directRuntimeMatch = String(query || "").trim().match(/^#?(\d+)$/);
   const directRuntimeId = directRuntimeMatch?.[1] || null;
@@ -337,6 +337,7 @@ function analyzeSharedQuery({ snapshot, query = "", assistContext = "", mentione
   });
   const nativeEntityResolutions = [];
   const nativeSubjects = new Set();
+  const contextualRuntimeIds = new Set([...(runtimeContext?.activeParticipantIds || []), ...(runtimeContext?.recentRuntimeIds || [])].map(String));
   const addRuntimeNative = (subjectName, runtimeIds, source, candidateSetComplete = true, nameMatchKind = "GIVEN_NAME", mayResolve = false) => {
     const ids = [...new Set(runtimeIds.map(String).filter((id) => characters[id]))];
     const subjectKey = normalize(subjectName);
@@ -345,16 +346,20 @@ function analyzeSharedQuery({ snapshot, query = "", assistContext = "", mentione
     // resolver; native handling must never bypass its fail-closed identity gate.
     if (ids.some((id) => runtimeDefinitionIds(snapshot, id).length)) return false;
     nativeSubjects.add(subjectKey);
-    const resolutionStatus = candidateSetComplete ? mayResolve && ids.length === 1 ? "RESOLVED" : "AMBIGUOUS" : "SOURCE_INCOMPLETE";
+    const contextualIds = !mayResolve && nameMatchKind === "GIVEN_NAME" ? ids.filter((id) => contextualRuntimeIds.has(id)) : [];
+    const resolvedContextually = candidateSetComplete && contextualIds.length === 1;
+    const resolutionStatus = candidateSetComplete ? mayResolve && ids.length === 1 || resolvedContextually ? "RESOLVED" : "AMBIGUOUS" : "SOURCE_INCOMPLETE";
+    const resolutionMode = mayResolve && ids.length === 1 ? "RESOLVED_RUNTIME" : resolvedContextually ? "RESOLVED_CONTEXTUALLY" : null;
     nativeEntityResolutions.push({
       identityKind: "RUNTIME_NATIVE",
       resolutionStatus,
+      resolutionMode,
       subjectName,
       nameMatchKind,
       candidateTotal: ids.length,
       historicalDefinitionIds: [],
       runtimeIds: ids,
-      identityEvidence: [{ code: source, category: mayResolve ? "IDENTITY_CORE" : "IDENTITY_SUPPORT" }],
+      identityEvidence: [{ code: resolvedContextually ? "RUNTIME_CONTEXT_DISAMBIGUATION" : source, category: mayResolve || resolvedContextually ? "IDENTITY_CORE" : "IDENTITY_SUPPORT" }],
       worldlineDifferences: [],
       sourceComplete: true,
       candidateSetComplete
@@ -362,6 +367,7 @@ function analyzeSharedQuery({ snapshot, query = "", assistContext = "", mentione
     entityAnchoredTerms.add(normalize(subjectName));
     if (!candidateSetComplete) return true;
     if (mayResolve && ids.length === 1) addResolvedCharacter(ids[0], source === "RUNTIME_NATIVE_LOCALIZED_FULL_NAME" ? "localized_character_name" : source === "RUNTIME_NATIVE_DIRECT_ID" ? "runtime_id" : "runtime_native_name", subjectName);
+    else if (resolvedContextually) addResolvedCharacter(contextualIds[0], "runtime_contextual_given_name", subjectName);
     else for (const runtimeId of ids) addCandidateCharacter({ runtimeId, rawName: characters[runtimeId]?.firstName, aliasCandidate: subjectName }, "runtime_native_ambiguous");
     return true;
   };

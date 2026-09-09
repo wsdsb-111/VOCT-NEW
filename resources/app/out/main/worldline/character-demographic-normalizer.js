@@ -20,4 +20,18 @@ function resolveCharacterSex({ snapshot = null, live = null, historical = null }
   return { sex: "unknown", source: "UNKNOWN" };
 }
 
-module.exports = { normalizeSex, resolveCharacterSex };
+function resolveCharacterSexConsensus({ snapshot = null, live = null, historical = null, relation = null } = {}) {
+  if (snapshot?.evidence?.conflicts?.gender === true) return { sex: "unknown", source: "CONFLICT", conflict: true, status: "RELATION_GENDER_CONFLICT", evidence: [] };
+  const lanes = [
+    [snapshot?.gender ?? snapshot?.sex ?? snapshot?.female, "CURRENT_SNAPSHOT"],
+    [relation?.gender ?? relation?.sex ?? relation?.female, "RELATION_METADATA"],
+    [live?.gender ?? live?.sex ?? live?.female, "LIVE_STRUCTURED"],
+    [historical?.gender ?? historical?.sex ?? historical?.female, "HISTORICAL_FALLBACK"]
+  ].map(([value, source]) => ({ sex: normalizeSex(value), source })).filter((item) => item.sex !== "unknown");
+  const values = new Set(lanes.map((item) => item.sex));
+  if (values.size > 1) return { sex: "unknown", source: "CONFLICT", conflict: true, status: "RELATION_GENDER_CONFLICT", evidence: lanes };
+  const selected = lanes[0] || { sex: "unknown", source: "UNKNOWN" };
+  return { ...selected, conflict: false, status: selected.sex === "unknown" ? "UNKNOWN" : "RESOLVED", evidence: lanes };
+}
+
+module.exports = { normalizeSex, resolveCharacterSex, resolveCharacterSexConsensus };

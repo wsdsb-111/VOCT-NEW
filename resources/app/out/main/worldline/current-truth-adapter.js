@@ -1,5 +1,7 @@
 "use strict";
 
+const { resolveLifeStatus } = require("./character-temporal-facts");
+
 const CURRENT_CLAIM_FIELDS = Object.freeze(["location", "alive", "faith", "culture", "liege", "courtEmployer"]);
 const CURRENT_CLAIM_FIELD_SET = new Set(CURRENT_CLAIM_FIELDS);
 const BOOLEAN_CLAIM_FIELDS = new Set(["alive"]);
@@ -28,7 +30,9 @@ function getCurrentTruth(snapshot, entityId, field) {
   if (!normalizedField) return { available: false, reason: "CURRENT_TRUTH_FIELD_UNSUPPORTED" };
   const character = snapshot?.characters?.[String(entityId)];
   if (!character) return { available: false, reason: "CURRENT_TRUTH_CHARACTER_UNAVAILABLE" };
-  const value = character[normalizedField];
+  const lifeStatus = normalizedField === "alive" ? resolveLifeStatus(character) : null;
+  if (lifeStatus?.conflict) return { available: false, reason: "CURRENT_TRUTH_LIFE_STATUS_CONFLICT", field: normalizedField };
+  const value = normalizedField === "alive" ? lifeStatus?.alive : character[normalizedField];
   if (value === null || value === undefined || value === "") return { available: false, reason: "CURRENT_TRUTH_VALUE_UNAVAILABLE", field: normalizedField };
   const rawValue = BOOLEAN_CLAIM_FIELDS.has(normalizedField) ? value === true : String(value);
   if (BOOLEAN_CLAIM_FIELDS.has(normalizedField) && typeof value !== "boolean") return { available: false, reason: "CURRENT_TRUTH_VALUE_INVALID", field: normalizedField };

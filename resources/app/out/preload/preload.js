@@ -178,10 +178,6 @@ electron.contextBridge.exposeInMainWorld("usageAPI", {
   getReport: () => electron.ipcRenderer.invoke("usage:getReport"),
   clear: () => electron.ipcRenderer.invoke("usage:clear")
 });
-electron.contextBridge.exposeInMainWorld("historicalAPI", {
-  getFigureGroundTruthDashboard: () => electron.ipcRenderer.invoke("historical:getFigureGroundTruthDashboard"),
-  recordFigureGroundTruthVerdict: (payload) => electron.ipcRenderer.invoke("historical:recordFigureGroundTruthVerdict", payload)
-});
 electron.contextBridge.exposeInMainWorld("worldlineAPI", {
   getSettings: () => electron.ipcRenderer.invoke("worldline:getSettings"),
   setRecallSettings: (settings) => electron.ipcRenderer.invoke("worldline:setRecallSettings", settings),
@@ -194,6 +190,8 @@ electron.contextBridge.exposeInMainWorld("worldlineAPI", {
   getAnnualDelta: () => electron.ipcRenderer.invoke("worldline:getAnnualDelta"),
   getWorldKnowledge: () => electron.ipcRenderer.invoke("worldline:getWorldKnowledge"),
   getHistoricalBindings: (payload) => electron.ipcRenderer.invoke("worldline:getHistoricalBindings", payload),
+  getEntityKinshipInspector: (payload) => electron.ipcRenderer.invoke("worldline:getEntityKinshipInspector", payload),
+  getKinshipIntegrityReport: () => electron.ipcRenderer.invoke("worldline:getKinshipIntegrityReport"),
   getDiagnostics: () => electron.ipcRenderer.invoke("worldline:getDiagnostics"),
   getPromptDiagnostics: (payload) => electron.ipcRenderer.invoke("worldline:getPromptDiagnostics", payload),
   getSubjectiveResponderOptions: (payload) => electron.ipcRenderer.invoke("worldline:getSubjectiveResponderOptions", payload),

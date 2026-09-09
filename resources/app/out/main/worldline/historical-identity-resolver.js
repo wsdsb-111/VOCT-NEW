@@ -2,6 +2,7 @@
 
 const { figures } = require("../historical-system/historical-data/figures");
 const { figureMatchingRecords } = require("../historical-system/historical-data/figure-matching");
+const { resolveCharacterSexConsensus } = require("./character-demographic-normalizer");
 
 const figuresByKey = new Map(figures.map((figure) => [figure.figureKey, figure]));
 const matchingByKey = new Map(figureMatchingRecords.map((record) => [record.figureKey, record]));
@@ -94,7 +95,8 @@ function resolveHistoricalIdentity({ alias, figureKey, candidateDefinitionIds = 
     const candidate = candidateFor({ alias, definitionId, runtimeId: forwardId, character, conflicts: ["CURATED_METADATA_CONFLICT"] });
     return { status: "REJECTED", resolvedRuntimeId: null, candidates: [candidate], reason: "CURATED_METADATA_CONFLICT", evidence: candidate.conflicts };
   }
-  if (["male", "female"].includes(expectedGender) && ["male", "female"].includes(character.gender) && character.gender !== expectedGender) {
+  const gender = resolveCharacterSexConsensus({ snapshot: character });
+  if (gender.conflict || ["male", "female"].includes(expectedGender) && ["male", "female"].includes(gender.sex) && gender.sex !== expectedGender) {
     const candidate = candidateFor({ alias, definitionId, runtimeId: forwardId, character, conflicts: ["GENDER_CONFLICT"] });
     return { status: "REJECTED", resolvedRuntimeId: null, candidates: [candidate], reason: "GENDER_CONFLICT", evidence: candidate.conflicts };
   }
@@ -105,7 +107,7 @@ function resolveHistoricalIdentity({ alias, figureKey, candidateDefinitionIds = 
     { code: "DEFINITION_RUNTIME_BINDING", category: "IDENTITY_CORE", definitionIds: [definitionId], runtimeId: forwardId },
     { code: "BIDIRECTIONAL_BINDING_CONSISTENT", category: "IDENTITY_CORE", definitionId, runtimeId: forwardId }
   ];
-  if (["male", "female"].includes(expectedGender) && character.gender === expectedGender) evidence.push({ code: "GENDER_MATCH", category: "IDENTITY_SUPPORT" });
+  if (["male", "female"].includes(expectedGender) && gender.sex === expectedGender) evidence.push({ code: "GENDER_MATCH", category: "IDENTITY_SUPPORT" });
   else evidence.push({ code: "GENDER_UNKNOWN", category: "IDENTITY_SUPPORT" });
   const candidate = { ...candidateFor({ alias, definitionId, runtimeId: forwardId, character }), evidence };
   return { status: "RESOLVED", resolvedRuntimeId: forwardId, candidates: [candidate], reason: "HISTORICAL_IDENTITY_CORE_CONFIRMED", evidence };

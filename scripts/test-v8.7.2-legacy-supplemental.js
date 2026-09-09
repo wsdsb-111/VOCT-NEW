@@ -14,7 +14,7 @@ class Settings {
 }
 
 function entry(id, visibility = "PUBLIC_WORLD") {
-  return { id, checkpointId: "checkpoint-1", title: `旧记录 ${id}`, body: "这是旧 Supplemental 的保留内容。", gameDate: "1175.1.1", dateRange: null, entities: ["2"], visibility, importance: "NORMAL", hidden: false, source: "PLAYER_SUPPLEMENTAL" };
+  return { id, checkpointId: "checkpoint-1", title: `旧记录 ${id}`, body: "这是旧 Supplemental 的保留内容。", gameDate: "1175年1月1日", dateRange: null, entities: ["2"], visibility, importance: "NORMAL", hidden: false, source: "PLAYER_SUPPLEMENTAL" };
 }
 
 (async () => {
@@ -37,7 +37,9 @@ function entry(id, visibility = "PUBLIC_WORLD") {
     assert.equal(migrated.status, "MIGRATED");
     assert.equal(service._activeLegacySupplemental().some((item) => item.id === publicId), false, "migrated legacy text must leave old recall immediately");
     const records = (await service.listCanon()).records;
-    assert.equal(records.filter((record) => record.legacyMigrationId === publicId).length, 1);
+    const migratedRecord = records.find((record) => record.legacyMigrationId === publicId);
+    assert.ok(migratedRecord);
+    assert.equal(migratedRecord.gameDate, "1175.1.1", "localized legacy dates must be canonicalized during migration");
     const second = await service.migrateLegacySupplemental({ token: (await service.listCanon()).branch.token, id: publicId });
     assert.equal(second.canonRecordId, migrated.canonRecordId, "migration retry must be idempotent");
     const review = await service.migrateLegacySupplemental({ token: (await service.listCanon()).branch.token, id: secretId });

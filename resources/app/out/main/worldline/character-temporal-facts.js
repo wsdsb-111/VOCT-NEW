@@ -1,7 +1,8 @@
 "use strict";
 
 function normalizeGameDate(value) {
-  const match = String(value || "").trim().match(/^(\d{1,6})[.\-/](\d{1,2})[.\-/](\d{1,2})$/);
+  const text = String(value || "").trim();
+  const match = text.match(/^(\d{1,6})[.\-/](\d{1,2})[.\-/](\d{1,2})$/) || text.match(/^(\d{1,6})年(\d{1,2})月(\d{1,2})日$/);
   if (!match) return null;
   const year = Number(match[1]);
   const month = Number(match[2]);
@@ -94,13 +95,25 @@ function computeAgeAtDeath(character = {}) {
   return computeAgeAtDate(character.birth || character.birthDate, character.deathDate);
 }
 
+function resolveLifeStatus(character = {}) {
+  const hasDeathDate = String(character.deathDate || "").trim() !== "" || totalDay(character.deathDateTotalDays ?? character.deathTotalDays) !== null;
+  const evidenceConflict = character.evidence?.conflicts?.lifeStatus === true;
+  if (evidenceConflict || character.alive === true && hasDeathDate) {
+    return { alive: null, status: "RELATION_LIFE_STATUS_CONFLICT", conflict: true };
+  }
+  if (character.alive === false || hasDeathDate) return { alive: false, status: "DEAD", conflict: false };
+  if (character.alive === true) return { alive: true, status: "ALIVE", conflict: false };
+  return { alive: null, status: "UNKNOWN", conflict: false };
+}
+
 function buildDeathFact(character = {}, { currentGameDate = null, currentTotalDays = null, characters = null } = {}) {
   const deceasedId = character.id === null || character.id === undefined ? null : String(character.id);
   const normalizedDeathDate = normalizeGameDate(character.deathDate);
   const rawDeathDate = String(character.deathDate || "").trim() || null;
   const deathDate = normalizedDeathDate?.canonical || rawDeathDate;
   const deathDateTotalDays = totalDay(character.deathDateTotalDays ?? character.deathTotalDays);
-  if (!deceasedId || character.alive !== false && !deathDate && deathDateTotalDays === null) return null;
+  const lifeStatus = resolveLifeStatus(character);
+  if (!deceasedId || lifeStatus.conflict || lifeStatus.alive !== false) return null;
   const reason = character.deathReason && typeof character.deathReason === "object" ? character.deathReason : null;
   const killerIdValue = character.killerId ?? character.killedById ?? reason?.killerId ?? reason?.killer;
   const killerId = killerIdValue === null || killerIdValue === undefined || killerIdValue === "" ? null : String(killerIdValue);
@@ -136,4 +149,4 @@ function formatDeathFact(character, options = {}) {
   return { fact, text: details.join("；") };
 }
 
-module.exports = { buildDeathFact, compareGameDates, computeAgeAtDate, computeAgeAtDeath, daysBetween, formatDeathFact, normalizeGameDate, relativeTimeFromTotalDays, relativeTimeLabel };
+module.exports = { buildDeathFact, compareGameDates, computeAgeAtDate, computeAgeAtDeath, daysBetween, formatDeathFact, normalizeGameDate, relativeTimeFromTotalDays, relativeTimeLabel, resolveLifeStatus };

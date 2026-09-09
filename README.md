@@ -9,9 +9,8 @@ Voices of the Court 是一个面向《Crusader Kings III》（CK3）的沉浸式
 - **CK3 角色扮演对话**：根据角色的性格、头衔、关系、财富、信仰、处境和当前场景生成回复。
 - **Historical Baseline 2.0**：从游戏日期提取年份，以 V8 结构化时期、事件和人物数据生成与 v7.10.1 字节等价的唐、五代十国、北宋、南宋和元初历史背景；Temporal Knowledge Gate 在 v8.0 仅以 shadow/pure logic 运行。
 - **Campaign Identity / Worldline Store**：V8.1 从 CK3 存档读取稳定 token，以哈希隔离 `dynamic_history/<campaignId>/worldline.json`；旧模组或无效 token 只使用进程级 identity，不写世界线数据。
-- **Historical Figure Resolver**：V8.3 在 Shadow Mode 中以规范名/别名精确门禁、出生时间、性别和亲属证据匹配 CK3 人物；解析结果只保存在当前 GameData 的隐藏 metadata，不进入 Prompt 或世界线持久化。
-- **历史人物实机校准**：V8.3.1 在现有 Overlay 中一键读取当前 CK3，展示 raw culture、分数、证据、冲突和候选，并将人工裁定 append 到独立 diagnostics JSONL；裁定不会改变生产 Resolver。
-- **世界线（V8.4.2 Luna + Terra + Sol）**：页面已接入年度 `autosave.ck3` Checkpoint、Worker 解析、世界概览、年度变化、世界知识、Historical Definition Bindings、身份候选诊断和 Checkpoint-scoped Supplemental；候选与 Game Truth 已分离，历史身份复用 V8.3 阈值 fail-closed 解析，真实 Historical/War Gate 已通过，并已修复 Prompt 诊断为空时的首屏渲染 P0 与旧 Conversation Close 阻塞/迟到执行问题，世界知识 Prompt 基础默认保持关闭。
+- **历史人物 Definition-ID 绑定**：世界线通过 Definition-ID 与 CK3 Runtime ID 的双向绑定判定历史人物身份；来源冲突、同名歧义或非唯一映射均 fail-closed。
+- **世界线**：页面已接入年度 `autosave.ck3` Checkpoint、Worker 解析、世界概览、年度变化、世界知识、历史身份候选诊断和 Checkpoint-scoped Supplemental；CK3 事实保持只读，世界知识 Prompt 基础默认关闭。
 - **V8.5 Player Semantic Presentation + Retrieval 2.0（Luna + Terra + Sol 内审）**：世界线默认页已接入统一玩家语义展示层；后端已接入确定性 Query Planner、Retriever/Ranker、查询感知 Delta、无虚构结果摘要、additive Player DTO 与相关缓存 revision。来源、freshness、identity、来源冲突、年度事件和历史人物映射以可读文案呈现，Runtime/Definition/Raw 与 Resolver 细节保留在高级诊断。Sol 已修复诊断超大列表白屏、后台本地化阻塞及时间/缓存等正确性问题，105 组回归与隔离浏览器交互通过；真实运行 Gate 和 Astra 终审尚未完成，内部预冻结仍 NOT READY。详见 [Sol 内部审查](docs/v8.5-sol-internal-review.md)。
 - **V8.5.2 玩家语义与世界线差异 UI（Luna + Sol）**：逐实体展示 Historical / Runtime-native 身份、歧义和来源不完整状态；年龄、父母、兄弟、婚姻和子女差异只进入懒展开的可读 Worldline Difference 面板。Sol Stage 5 已修复新旧 DTO 聚合矛盾、来源优先级和降级路径 raw 值泄漏，50 条候选分页及 A/B/C 诊断分层保持不变。120 组发布回归通过，下一步 Astra 最终集成与实机 Gate。
 - **历史认知边界**：提示词要求角色只使用当前年份已经发生、写成、流传或成名的信息，避免引用未来人物、事件、诗词和典故。
@@ -27,7 +26,9 @@ Voices of the Court 是一个面向《Crusader Kings III》（CK3）的沉浸式
 
 ## 运行环境
 
-V8.7.2 已完成 Terra + Luna 施工及 [Sol 最终正确性审查](docs/v8.7.2-sol-final-review.md)：Current Truth 由 CK3 只读预览并由服务端二次核验；新的 CK3 载入会话必须明确继续当前分支或建立独立分支；旧 Supplemental 只读并可经审阅迁移为 Canon。Sol 已收口 Load Session 重复、迁移并发/ACL、双重召回和默认页重数据加载风险，243/243 发布组通过；真实 CK3、Provider 与打包 Electron Gate 尚未完成，当前不标记 FULL FREEZE。
+V8.8 已完成 [Terra Stage 1—4 Runtime / Historical / Kinship 实施](docs/v8.8-terra-stage1-4-implementation.md)、[Luna Entity & Kinship Inspector](docs/v8.8-luna-implementation-report.md)、[Sol 静态安全审查](docs/v8.8-sol-static-safety-review.md)、[Terra Stage 6 收口](docs/v8.8-terra-stage6-decommission-and-integrity.md)与 [Sol 最终代码审查](docs/v8.8-sol-final-code-review.md)。旧 V8.3 Shadow Resolver、Ground Truth Dashboard 和专用 IPC 已退役；历史人物身份只走 V8.8 Definition-ID 双向绑定。生死、性别、已故配偶、年度死亡 Delta 与确定性世界摘要现统一 fail-closed；关系类型仅接受来源明确标注的 Biological / Adoptive / Step，显式类型冲突进入完整性报告。262/262 发布组及隔离 Electron 世界线导航通过，代码侧 P0/P1 为 0；Stage 8 真实 CK3/Provider/100 次对话/2 小时 Soak 尚未完成，因此 V8.8 尚未 Full Freeze。
+
+V8.7.2 已完成 Terra + Luna 施工及 [Sol 最终正确性审查](docs/v8.7.2-sol-final-review.md)：Current Truth 由 CK3 只读预览并由服务端二次核验；新的 CK3 载入会话必须明确继续当前分支或建立独立分支；旧 Supplemental 只读并可经审阅迁移为 Canon。Sol 已收口 Load Session 重复、迁移并发/ACL、双重召回和默认页重数据加载风险；新增 DeepSeek 模型选项、移除“优化 → 历史人物”普通入口，修复后台世界线通知导致世界记忆编辑器收起的 P0，并完成 CK3 中文日期到 Canon canonical 日期链热修，249/249 发布组通过。真实 CK3、Provider 与打包 Electron Gate 尚未完成，当前不标记 FULL FREEZE。
 
 V8.7.1 Terra + Luna + Sol 已完成 [后端收口](docs/v8.7.1-terra-implementation-report.md)、[玩家优先世界记忆 UI](docs/v8.7.1-luna-implementation-report.md)与 [最终正确性审查](docs/v8.7.1-sol-final-review.md)：分支恢复、结构化 Current Truth、Secret/ACL、时间、Memory/Cache 与 Canon Test 负向边界已收口，Current Truth 冲突可在 UI 中对照并安全处理；232 组发布门禁通过，代码侧 P0/P1 为 0。真实 CK3、Provider 与打包 Electron 人工 Gate 尚未执行，故 `V8.7.1 FREEZE = PENDING MANUAL GATES`。
 
@@ -201,9 +202,7 @@ V8.1 Campaign Identity + Worldline Store Foundation 在不修改现有 Prompt �
 
 V8.3 前置 Gate A–C 已完成基础设施加固：Windows 源码静态断言统一归一化 EOL；Dynamic History 状态改为绑定当前 GameData，不再读取全局最近一次解析结果；Shadow metadata 不参与枚举、展开或 JSON 序列化，并支持同一 GameData 幂等更新。Campaign Token 的 Save A/B 稳定性仍须真实 CK3 验收。详见 [V8.3 前置修复实施报告](docs/v8.3-prerequisite-fixes-implementation-report.md)。
 
-V8.3 Historical Figure Resolver 为 48 个历史人物提供显式 readiness，并以首批 14 人 reviewed cohort 建立 fail-closed 校准。只有规范名或别名精确命中的 CK3 角色进入候选；出生时间、性别和亲属关系用于身份判断，当前头衔、职位、领地与位置仅作为正向辅助，因此沙盒改史不会被当作身份冲突。结果只写入不可枚举的 `GameData.dynamicHistory.figureResolution`，不改变 Prompt、cache 或 `worldline.json`。详见 [V8.3 实施报告](docs/v8.3-historical-figure-resolver-implementation-report.md)。
-
-V8.3.1 修复 spouse evidence 与 culture 关键补分，并在“系统优化与用量”增加历史人物实机校准 Tab。每次手动刷新只解析一次 `debug.log`，以纯 JSON 显示史实/当前对照、raw culture、85% 阈值、分层证据、冲突和候选；人工 Ground Truth 只追加到 `votc_data/diagnostics/historical-figure-ground-truth/records.jsonl`，不会反哺生产解析。详见 [V8.3.1 实施报告](docs/v8.3.1-historical-figure-dashboard-implementation-report.md)。
+V8.3 / V8.3.1 的 Historical Figure Shadow Resolver、人工 Ground Truth 与 Dashboard 已在 V8.8 Terra Stage 6 退役；对应历史报告仅保留为开发档案，当前运行时不再创建 `figureResolution`、不再提供历史诊断 IPC 或 Dashboard。当前历史人物身份一律通过 V8.8 Definition-ID 双向绑定判定。
 
 V8.4 世界线页面已接入 `autosave.ck3` Save Reader、Worker、原子 Checkpoint、年度 Delta、Live probe 和 Supplemental 持久化。Sol 修复主进程整文件读取、非原子状态切换、跨 campaign Delta、身份歧义、隐藏召回和 Prompt 来源边界，并接通“CK3 用户目录自动发现 → 校验/构建 → Main 状态事件 → Renderer 刷新”管线；真实 231.8 MB autosave 的完整 Service Gate 已通过。Active Playset Definition Catalog、Save A/B、默认开启后的 Provider/Cache 与新版 UI 人工验收未完成，世界知识 Prompt 仍默认关闭。详见 [V8.4 Sol 实现冻结审查](docs/v8.4-sol-implementation-freeze-review.md)。
 
@@ -217,25 +216,24 @@ V7.7 在 V7.6 健康化基础上分阶段拆分主进程：第一阶段将六种
 node scripts\test-release.js
 ```
 
-清单会覆盖全部 `test-*.js`。V8.3.1 当前分类 149 个测试文件：80 个直接发布组，68 个依赖已退休 AE3/AE4/Social 语义的历史测试明确归档，另 1 个为统一发布入口。V8.0–V8.3 门禁继续覆盖历史基线、Campaign/Worldline、人物解析和冻结边界；V8.3.1 五组门禁覆盖纯 JSON Snapshot、一次 parse、可信 capture cache、append-only 裁定、筛选/搜索/跳转 UI 和零生产依赖。既有 Run Command Recovery T1–T18、Memory、Conversation、Action、Letter、Relationship、Date Producer 与缓存回归继续执行。
+清单会覆盖全部 `test-*.js`。当前分类为 331 个测试文件、262 个直接发布组和 68 个归档检查；已退役的 V8.3/V8.3.1 Shadow Resolver、Ground Truth 与诊断面板测试不再作为发布路径。V8.8 门禁继续覆盖历史基线、Campaign/Worldline、Definition-ID 绑定、亲属关系、完整性扫描和冻结边界；既有 Run Command Recovery T1–T18、Memory、Conversation、Action、Letter、Relationship、Date Producer 与缓存回归继续执行。
 
 ## 版本信息
 
 - 外挂 UI 版本：v2.0.4
-- 当前应用功能基线：V8.6.2 Subjective World 输出、第三人 Grounding、Kinship 与 Death/Temporal 代码审查通过；人工 CK3/Provider/Production A/B Gate 尚未执行
+- 当前应用功能基线：V8.8 Worldline Definition-ID 绑定、关系事实与按需完整性扫描已完成；Stage 8 真实 CK3/Provider/长时 Electron Gate 与 Stage 9 Final Freeze 尚未完成
 - CK3 模组版本：Voices of the Court 2.0.5
 - 模组支持版本：CK3 1.18.*
 - UI 主题：宫廷编年史风格（深红、暗金、羊皮纸文本层级）
 - UI 主题切换：羊皮卷、骑士纹章、水墨画卷三套完整历史风格；分别拥有独立背景、边框结构、按钮造型、消息卡片、输入框、字体和滚动条，并可自动保存选择
 - UI 素材生成提示词：参见 [docs/UI_ASSET_PROMPTS_2.0.3.md](docs/UI_ASSET_PROMPTS_2.0.3.md)
-- 当前重点：执行 V8.6.2 Stage 7 人工 Gate，验证第三人明确记录遵循、亲属称谓、死亡相对时间、Production Worldline A/B 与 Electron UI；Official VOTC 2.0.3 Action 和 Memory Engine 2.5 存储合同保持冻结
+- 当前重点：执行 V8.8 Stage 8 人工 Gate，验证 CK3 世界线读取、Definition-ID 绑定、关系事实、Provider 与长时 Electron 稳定性；Official VOTC 2.0.3 Action 和 Memory Engine 2.6 存储合同保持冻结
 
 ## 已知限制
 
 - 历史知识核验依赖模型自身的年代知识，提示词规则可以显著降低穿越，但不能替代外部历史数据库。
-- V8.1 Campaign Identity、Worldline Store 与 V8.3 Historical Figure Resolver 仍只在 Shadow Mode 运行；V8.4 的世界知识 Prompt 也默认关闭，Definition Catalog provenance、跨分支安全与真实 CK3/Electron/Provider 验收仍需 Sol 阶段确认。
+- V8.1 Campaign Identity 与 Worldline Store 保持最小持久化边界；旧 V8.3 Historical Figure Resolver 已退役。世界知识 Prompt 默认关闭，Definition-ID 绑定的真实 CK3/Electron/Provider 验收仍需 Stage 8/9 确认。
 - V8.5 Luna/Terra 已完成 Renderer 玩家语义展示和后端 DTO/Query/Ranker/Cache 实现；Sol/Astra 正确性审查以及真实 Electron/CK3/Provider/KV cache 验收尚未完成。
-- V8.3.1 已提供 Ground Truth 收集工具，但至少 20 条人工样本、Auto `RESOLVED` Precision ≥ 98%、真实 CK3 Save A/B、岳飞早死/长寿和同名改名场景尚未验收，因此当前不宣称人物解析达到生产冻结门槛。
 - Workshop 2.0.5 的存档 token 跨重启与不同新存档隔离仍需真实 CK3 保存/读档 Gate；旧模组不会持久化世界线，但现有对话仍可运行。
 - CK3 日志格式、角色头衔语言和本地化文本变化时，可能影响年份或皇帝识别。
 - DeepSeek 等服务商的上下文缓存由服务端管理，命中率会受到请求前缀、模型、账号隔离和缓存生命周期影响。

@@ -8,7 +8,16 @@
 
 | 版本 | 重点 | 详细记录 |
 | --- | --- | --- |
+| v8.8 Sol 最终代码审查 | 修复原始家庭事实、确定性世界摘要、年度死亡 Delta、配偶状态与 Historical/Kinship 性别仲裁旁路；关系类型重复边可合并显式信息并报告冲突；262/262 发布组及隔离 Electron 导航通过，代码侧 P0/P1 为 0，Stage 8 人工 Gate 待完成 | [Sol 最终代码审查](docs/v8.8-sol-final-code-review.md) / [V8 阶段记录](docs/V8阶段开发记录.md) |
+| v8.8 Terra Stage 6 | 退役已作废的 V8.3/V8.3.1 Shadow Historical Figure Resolver、Ground Truth、诊断 IPC 与 Dashboard，保留 V8.8 Definition-ID 双向绑定；新增仅依来源显式标记的 Biological/Adoptive/Step 分类、按需完整性扫描、Checkpoint/branch 缓存清理与回归 | [Terra Stage 6 收口](docs/v8.8-terra-stage6-decommission-and-integrity.md) / [V8 阶段记录](docs/V8阶段开发记录.md) |
+| v8.8 Sol 静态安全审查 | 修复大存档亲属图二次方构建导致的世界线延迟白屏、Historical Binding 重复全表扫描、Current Truth 生死冲突、关系方向/目标串线及跨来源性别冲突；真实 15.8 万人物存档 Inspector 降至约 170ms，269/269 发布组通过；Stage 8/9 尚待完成 | [Sol 静态审查](docs/v8.8-sol-static-safety-review.md) / [V8 阶段记录](docs/V8阶段开发记录.md) |
+| v8.8 Luna Entity & Kinship Inspector | 新增开发者只读人物/亲属检查器：身份依据、当前状态、亲属关系、历史差异四栏；接入同名候选、关系歧义、已故状态、Relation Path 与历史身份页，并隔离普通玩家 raw enum；264/264 发布组通过，等待 Sol 与真实 CK3/Provider/Electron Gate | [Luna 实施报告](docs/v8.8-luna-implementation-report.md) / [V8 阶段记录](docs/V8阶段开发记录.md) |
+| v8.8 Terra Stage 1—4 | 修复 alive/death 双重权威 P0；接入 Runtime 同名安全消歧、branch-scoped Historical Binding、Relation Mention、query-aware Family Projection 与 Runtime ID 事实隔离；263/263 发布组通过，仍待 Luna/Sol 与实机 Gate | [Terra 实施报告](docs/v8.8-terra-stage1-4-implementation.md) / [V8 阶段记录](docs/V8阶段开发记录.md) |
+| v8.8 Stage 0 Sol 合同审计 | 冻结 Runtime Identity、Historical Identity、Kinship 与 Current State 四层边界；复现 `alive=true + deathDate` 双重权威 P0，并列出 RelationMentionResolver、branch-local Binding、ageAtDeath、gender conflict、统一 DTO、query-aware Family Projection 与联合缓存等 Terra 阻断项 | [Stage 0 Sol 审计](docs/v8.8-stage0-sol-contract-audit.md) / [V8 阶段记录](docs/V8阶段开发记录.md) |
 | v8.7.2 Sol 最终正确性审查 | 修复可重复 Load Session、Legacy 迁移并发/崩溃窗口/敏感 ACL、Current Truth 字段归一化及世界线默认页重数据加载；243/243 发布组通过，代码侧 P0/P1 为 0，真实 CK3/Provider/打包 Electron Gate 待执行 | [Sol 最终审查](docs/v8.7.2-sol-final-review.md) / [V8 阶段记录](docs/V8阶段开发记录.md) |
+| v8.7.2 UI/模型选项小修 | DeepSeek 模型选择新增 `deepseek-v4.1-flash-expires-on-0910`，保持既有模型、地址和参数不变；移除“优化 → 历史人物”普通玩家入口，Historical Resolver 后端与诊断 API 保留 | [V8 阶段记录](docs/V8阶段开发记录.md) |
+| v8.7.2 P0 世界记忆输入稳定性热修 | 忽略历史定义、本地化、运行时索引和 CK3 实时状态的后台更新通知，不再在玩家输入世界记忆时清空编辑器；真实存档/分支变化仍保持安全失效 | [V8 阶段记录](docs/V8阶段开发记录.md) |
+| v8.7.2 日期链兼容热修 | CK3 中文日期统一 canonicalize 为 `YYYY.M.D`；修复 CURRENT_DATE、SPECIFIC_DATE、PLANNED、Legacy migration、Branch 与 Temporal 链路的生产格式不一致；新增中文生产日期、无效日期 fail-closed 与玩家化错误提示回归 | [V8 阶段记录](docs/V8阶段开发记录.md) / [Sol 最终审查](docs/v8.7.2-sol-final-review.md) |
 | v8.7.1 Sol 最终正确性审查 | 修复 Canon Test 伪实体命中、局部更新时间漂移、归档分支恢复优先级与 DTO、Current Claim 服务端约束、召回关闭门控和 UI Current Truth 处理；Memory/Cache 专项及 232 组发布门禁通过。代码侧 P0/P1 为 0，真实 CK3/Provider/打包 Electron Gate 待执行 | [Sol 最终审查](docs/v8.7.1-sol-final-review.md) / [V8 阶段记录](docs/V8阶段开发记录.md) |
 | v8.7.2 Terra 当前事实与载入边界 | Current Claim 改为生产来源核验的双值合同；CK3 Load Session 阻止同路径跨载入自动串分支；旧 Supplemental 改为玩家只读、可审阅迁移且去重。234 组发布门禁通过，等待 Luna UI 与实机 Gate | [Terra 实施报告](docs/v8.7.2-terra-implementation-report.md) / [V8 阶段记录](docs/V8阶段开发记录.md) |
 | v8.7.2 Luna 玩家化世界记忆 UI | Current Truth 只读预览、Load Boundary 继续/独立分支选择、Legacy Supplemental 只读迁移审阅与零记录状态；8 个 Luna 专项加入完整 242/242 发布门禁，等待 Sol 与实机 Gate | [Luna 实施报告](docs/v8.7.2-luna-implementation-report.md) / [V8 阶段记录](docs/V8阶段开发记录.md) |

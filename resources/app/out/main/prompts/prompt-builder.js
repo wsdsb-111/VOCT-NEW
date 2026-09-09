@@ -480,7 +480,8 @@ function createPromptBuilder({
       };
       const mentionedCharactersContext = memoryContext?.subjectiveWorldPolicyActive ? null : this.buildMentionedCharactersContext(char, gameData, workingHistory);
       const responderGameFacts = this.buildResponderGameFacts(char);
-      const responderFamilyFacts = buildFamilyFactBlock(char, gameData);
+      const latestUserQuery = [...workingHistory].reverse().find((message) => message.role === "user")?.content || "";
+      const responderFamilyFacts = buildFamilyFactBlock(char, gameData, { query: latestUserQuery });
       const responderGameFactsBlock = {
         id: "responder-game-facts",
         type: "responder_game_facts",

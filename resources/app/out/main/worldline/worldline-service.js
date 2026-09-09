@@ -10,6 +10,14 @@ const { dateValue } = require("./game-state-adapter");
 const { resolvePlayerPoliticalContext } = require("./political-context");
 const { LocalizationWorkerClient } = require("./localization-worker-client");
 const { HistoricalDefinitionIndexClient } = require("./historical-definition-index");
+const { HistoricalEntityBindingCache, resolveHistoricalEntityBinding, createReverseDefinitionIndex } = require("./historical-entity-binding");
+const { getCachedKinshipGraph, getTargetedKinshipGraph } = require("./kinship-graph-cache");
+const { scanKinshipIntegrity } = require("./kinship-integrity-scan");
+const { buildFamilyEntityFactBundle } = require("./family-entity-fact-bundle");
+const { resolveRelationMention } = require("./relation-mention-resolver");
+const { resolveCharacterAge } = require("./character-age-service");
+const { resolveCharacterSexConsensus } = require("./character-demographic-normalizer");
+const { resolveLifeStatus } = require("./character-temporal-facts");
 const { attachRuntimeNameIndex } = require("./runtime-name-index");
 const { getCheckpointFreshness } = require("./checkpoint-freshness");
 const { analysisTextMatches, analyzeSharedQuery, collectTerms } = require("./shared-query-analyzer");
@@ -183,6 +191,7 @@ class WorldlineService {
     this.memoryEngine = memoryEngine;
     this.storageDir = path.join(dataDir, "worldline-v8.4");
     this.canon = new CanonService({ root: path.join(this.storageDir, "supplemental-v8.7"), getCheckpoint: () => this.currentCheckpoint, getLiveState: () => this.getLiveState() });
+    this.historicalBindingCache = new HistoricalEntityBindingCache();
     this.checkpointPath = path.join(this.storageDir, "checkpoint.json");
     this.supplementalPath = path.join(this.storageDir, "supplemental.json");
     this.currentCheckpoint = null;
@@ -396,6 +405,7 @@ class WorldlineService {
       this.worldKnowledgeState.summaryCache.clear();
       this.worldKnowledgeState.sharedCandidateCache.clear();
       this.worldKnowledgeState.subjectiveViewCache.clear();
+      this.historicalBindingCache.clear();
       this.worldKnowledgeState.checkpointId = null;
       this.worldKnowledgeState.currentCampaignDeltaRevision = 0;
     }
@@ -504,7 +514,9 @@ class WorldlineService {
     if (!fromDate || !toDate || (dateValue(toDate) || 0) <= (dateValue(fromDate) || 0)) return [];
     for (const [id, oldCharacter] of Object.entries(previousSnapshot.characters || {})) {
       const currentCharacter = nextSnapshot.characters?.[id];
-      if (oldCharacter.alive && currentCharacter && !currentCharacter.alive) entries.push({ id: `death:${id}:${toDate}`, type: "IMPORTANT_CHARACTER_DIED", date: currentCharacter.deathDate || toDate, actors: formatDeltaActors(nextSnapshot, [id]), source: "GAMESTATE", confidence: "CONFIRMED", reconciliationStatus: "CONFIRMED_BY_GAMESTATE" });
+      const previousLife = resolveLifeStatus(oldCharacter);
+      const currentLife = currentCharacter ? resolveLifeStatus(currentCharacter) : null;
+      if (previousLife.alive === true && currentLife?.alive === false) entries.push({ id: `death:${id}:${toDate}`, type: "IMPORTANT_CHARACTER_DIED", date: currentCharacter.deathDate || toDate, actors: formatDeltaActors(nextSnapshot, [id]), source: "GAMESTATE", confidence: "CONFIRMED", reconciliationStatus: "CONFIRMED_BY_GAMESTATE" });
     }
     for (const [id, currentWar] of Object.entries(nextSnapshot.wars || {})) {
       if (previousSnapshot.wars?.[id]) continue;
@@ -570,6 +582,7 @@ class WorldlineService {
         let liveNames = null;
         try { liveNames = this.getRuntimeNames?.() || null; } catch (_error) { liveNames = null; }
         this.currentCheckpoint = { ...candidate, snapshot: attachRuntimeNameIndex(candidate.snapshot, { live: liveNames }) };
+        this.historicalBindingCache.clear();
         this.annualDelta = nextAnnualDelta;
         this.worldKnowledgeState.stableRecallCache.clear();
         this.worldKnowledgeState.topicPatchCache.clear();
@@ -771,9 +784,11 @@ class WorldlineService {
     if (!snapshot) return { bindings: [], total: 0 };
     const liveByRuntime = new Map(this.getLiveState().characters.map((item) => [String(item.runtimeId), item]));
     const definitions = snapshot.definitionToRuntime || {};
+    const reverseDefinitionIndex = createReverseDefinitionIndex(snapshot);
     const search = String(query || "").trim().toLocaleLowerCase().slice(0, 120);
     const indexedResult = search ? this.historicalDefinitionIndex?.find(search) : null;
     const indexedById = new Map((indexedResult?.candidates || []).map(record => [record.definitionId, record]));
+    const branch = this.canon?.branch?.() || { campaignId: snapshot.playthroughId || null, branchId: null };
     const rawStatus = String(status || "ALL").trim().toUpperCase();
     const statusFilter = VALID_BINDING_STATUSES.has(rawStatus) ? rawStatus : "ALL";
     const bindings = [];
@@ -804,6 +819,17 @@ class WorldlineService {
         status: ambiguous ? "AMBIGUOUS_PROVENANCE" : liveConflict ? "CONFLICT" : exactLiveMatch ? "LIVE_CONFIRMED" : "DIRECT",
         conflict: ambiguous ? `MULTIPLE_DEFINITIONS:${provenance.join(",")}` : liveConflict ? "LIVE_CONFLICT" : null
       };
+      const bindingInput = {
+        snapshot,
+        reverseDefinitionIndex,
+        candidateDefinitionIds: [definitionId],
+        definitionRecord: indexedById.get(definitionId) || null,
+        scope: { campaignId: branch.campaignId, branchId: branch.branchId, checkpointId: this.currentCheckpoint?.id, datasetRevision: this.historicalDefinitionIndex?.meta?.revision || null }
+      };
+      const bindingValidation = this.historicalBindingCache?.resolve?.(bindingInput) || resolveHistoricalEntityBinding(bindingInput);
+      binding.bindingStatus = bindingValidation.status;
+      binding.bindingScope = bindingValidation.bindingScope;
+      if (bindingValidation.status !== "RESOLVED_RUNTIME") binding.conflict ||= bindingValidation.reason;
       const character = snapshot.characters?.[String(runtimeId)];
       const currentCharacterName = character?.fullName || character?.firstName || null;
       const searchText = [indexed?.displayName, ...(indexed?.names || []), metadata?.figureKey, ...(metadata?.aliases || []), currentCharacterName, definitionId, runtimeId, live?.historyId].filter(Boolean).join(" ").toLocaleLowerCase();
@@ -835,6 +861,175 @@ class WorldlineService {
     const resultTotal = search || statusFilter !== "ALL" ? matchedTotal : total;
     const coverageStatus = indexedResult?.sourceComplete === false || indexedResult?.candidateSetComplete === false ? "SOURCE_INCOMPLETE" : indexedResult?.status === "FOUND" && !matchedRuntimeTotal ? "DEFINITION_FOUND_RUNTIME_MISSING" : indexedResult?.status;
     return { bindings, total: resultTotal, truncated: resultTotal > MAX_UI_BINDINGS, query: search, status: statusFilter, coverageStatus, playerView: { historicalCharacters: createPlayerHistoricalCharacters(bindings, snapshot), coverageStatus } };
+  }
+
+  async getEntityKinshipInspectorAsync(payload = {}) {
+    const query = String(payload?.query || "").trim().slice(0, 240);
+    await this.historicalDefinitionIndex?.prepare?.([query], 1500);
+    return this.getEntityKinshipInspector({ ...payload, query });
+  }
+
+  getEntityKinshipInspector({ query = "", responderId = null, targetId = null } = {}) {
+    const inspectionStartedAt = Date.now();
+    const snapshot = this.currentCheckpoint?.snapshot;
+    const safeQuery = String(query || "").trim().slice(0, 240);
+    const safeId = value => {
+      const text = String(value ?? "").trim();
+      return /^\d{1,32}$/.test(text) ? text : null;
+    };
+    const responderRuntimeId = safeId(responderId);
+    const explicitTargetId = safeId(targetId);
+    if (!snapshot?.characters || !responderRuntimeId || !Object.hasOwn(snapshot.characters, responderRuntimeId)) {
+      return { available: false, reason: "RESPONDER_NOT_FOUND", query: safeQuery, checkpointId: this.currentCheckpoint?.id || null };
+    }
+    const resolver = analyzeSharedQuery({
+      snapshot,
+      query: safeQuery,
+      runtimeContext: { activeParticipantIds: [responderRuntimeId, explicitTargetId].filter(Boolean) },
+      localize: (type, rawKey) => this.localizationResolver?.resolve(type, rawKey),
+      findLocalizedKeys: (type, value, options) => this.localizationResolver?.findRawKeysByLocalizedValue(type, value, options) || { status: "NO_MATCH", matches: [], sourceComplete: true, scannedFiles: 0, missingDescriptors: [], matchedRawKeys: [] },
+      historicalDefinitionLookup: typeof this.historicalDefinitionIndex?.find === "function" && !["UNCONFIGURED", "FAILED", "FAILED_TRANSIENT", "FAILED_STABLE"].includes(this.historicalDefinitionIndex.status) ? value => this.historicalDefinitionIndex.find(value) : null,
+      historicalNameScan: !["UNCONFIGURED", "FAILED", "FAILED_TRANSIENT", "FAILED_STABLE"].includes(this.historicalDefinitionIndex?.status) && this.historicalDefinitionIndex?.scan ? value => this.historicalDefinitionIndex.scan(value) : null
+    });
+    const resolvedByQuery = resolver.resolvedCharacters?.length === 1 && resolver.identityResolution?.status !== "AMBIGUOUS" ? String(resolver.resolvedCharacters[0].id) : null;
+    let resolvedTargetId = explicitTargetId && Object.hasOwn(snapshot.characters, explicitTargetId) ? explicitTargetId : resolvedByQuery;
+    const responder = snapshot.characters[responderRuntimeId];
+    const identityCandidates = (resolver.candidateCharacters || []).slice(0, 50).map(candidate => ({
+      runtimeId: String(candidate.runtimeId),
+      displayName: snapshot.characters?.[String(candidate.runtimeId)]?.fullName || snapshot.characters?.[String(candidate.runtimeId)]?.firstName || `#${candidate.runtimeId}`,
+      definitionId: candidate.definitionId || null,
+      evidence: candidate.evidence || [],
+      conflicts: candidate.conflicts || []
+    }));
+    const reference = value => {
+      if (value && typeof value === "object") return value.displayName || value.fullName || value.name || value.key || value.id || value.runtimeId || null;
+      return value === null || value === undefined || value === "" ? null : String(value);
+    };
+    const relatedReference = value => {
+      const raw = value && typeof value === "object" ? value.id ?? value.runtimeId ?? value.characterId : value;
+      return formatCharacter(snapshot, raw) || reference(value);
+    };
+    const relationStartedAt = Date.now();
+    const graph = getTargetedKinshipGraph(snapshot, [responderRuntimeId, resolvedTargetId].filter(Boolean));
+    const integrity = scanKinshipIntegrity(graph);
+    const relationMention = graph ? resolveRelationMention({ query: safeQuery, responderId: responderRuntimeId, graph, recentTargetId: explicitTargetId }) : null;
+    if (!resolvedTargetId && relationMention?.status === "RELATION_RESOLVED") resolvedTargetId = relationMention.targetRuntimeId;
+    const target = resolvedTargetId ? snapshot.characters[resolvedTargetId] : null;
+    const targetDefinitionIds = resolvedTargetId ? [...new Set((snapshot.runtimeToDefinitions?.[resolvedTargetId] || []).map(String))] : [];
+    const exactEntity = resolver.entityResolutions?.find(item => String(item?.subjectName || "").toLocaleLowerCase() === safeQuery.toLocaleLowerCase()) || null;
+    const resolvedEntity = resolvedTargetId ? resolver.entityResolutions?.find(item => (item?.runtimeIds || []).map(String).includes(resolvedTargetId) || targetDefinitionIds.some(id => (item?.historicalDefinitionIds || []).map(String).includes(id))) || null : exactEntity;
+    const historicalDefinitionIds = [...new Set((target ? targetDefinitionIds : [...(resolvedEntity?.historicalDefinitionIds || []), ...(resolver.identityResolution?.historicalDefinitionIds || [])]).map(String).filter(Boolean))];
+    const explicitTargetResolved = explicitTargetId && target && explicitTargetId === resolvedTargetId;
+    const identityStatus = explicitTargetResolved ? "RESOLVED_RUNTIME" : resolvedEntity?.resolutionStatus || resolver.identityResolution?.status || (resolvedTargetId ? "RESOLVED_RUNTIME" : "UNRESOLVED");
+    const identityRule = explicitTargetResolved ? "EXPLICIT_RUNTIME_ID" : relationMention?.status === "RELATION_RESOLVED" && !resolvedByQuery ? "RELATION_MENTION_UNIQUE" : resolvedEntity?.resolutionMode || resolvedEntity?.identityEvidence?.[0]?.code || resolver.identityResolution?.reason || "NO_MATCH";
+    const identityConflicts = explicitTargetResolved ? [] : [...new Set([
+      ...(resolver.identityResolution?.status === "AMBIGUOUS" ? [resolver.identityResolution.reason || "MULTIPLE_CANDIDATES"] : []),
+      ...(resolvedEntity?.identityEvidence || []).filter(item => item?.category === "IDENTITY_CONFLICT").map(item => item.code),
+      ...identityCandidates.flatMap(candidate => candidate.conflicts)
+    ].filter(Boolean))];
+    const sex = target ? resolveCharacterSexConsensus({ snapshot: target }) : null;
+    const life = target ? resolveLifeStatus(target) : null;
+    const age = target ? resolveCharacterAge(target, { currentGameDate: snapshot.gameDate, currentTotalDays: snapshot.totalDays }) : null;
+    const relationResult = resolvedTargetId ? graph?.relationBetween(resolvedTargetId, responderRuntimeId) : null;
+    const relation = ["RELATION_AMBIGUOUS", "RELATION_GENDER_CONFLICT", "RELATION_SOURCE_INCOMPLETE"].includes(relationMention?.status) ? {
+      status: relationMention.status,
+      type: null,
+      label: null,
+      path: [],
+      distance: null,
+      source: "RELATION_MENTION",
+      conflict: relationMention.status,
+      candidates: relationMention.candidates || [],
+      candidateTotal: relationMention.candidateTotal ?? relationMention.candidates?.length ?? 0,
+      truncated: relationMention.truncated === true
+    } : relationResult?.relation ? {
+      status: relationResult.relation.source === "SNAPSHOT_DIRECT" || relationResult.relation.source === "LOG_DIRECT" ? "DIRECT" : "DERIVED",
+      type: relationResult.relation.type,
+      label: relationResult.relation.label,
+      relationshipKind: relationResult.relation.relationshipKind || "UNSPECIFIED",
+      path: relationResult.relation.structuredPath || [],
+      distance: relationResult.relation.structuredPath?.length || 0,
+      source: relationResult.relation.source,
+      conflict: relationResult.diagnostic || null,
+      candidates: relationMention?.candidates || []
+    } : {
+      status: relationResult?.diagnostic ? "CONFLICT" : resolvedTargetId ? "UNKNOWN" : "TARGET_REQUIRED",
+      type: null,
+      label: null,
+      path: [],
+      distance: null,
+      source: null,
+      conflict: relationResult?.diagnostic || (relationMention?.status && relationMention.status !== "RELATION_UNKNOWN" ? relationMention.status : null),
+      candidates: relationMention?.candidates || []
+    };
+    const relationLatencyMs = Math.max(0, Date.now() - relationStartedAt);
+    const familyBundle = resolvedTargetId ? buildFamilyEntityFactBundle({ graph, responderId: responderRuntimeId, targetRuntimeId: resolvedTargetId, temporal: { currentGameDate: snapshot.gameDate, currentTotalDays: snapshot.totalDays } }) : null;
+    const branch = this.canon?.branch?.() || { campaignId: snapshot.playthroughId || null, branchId: null };
+    const indexed = safeQuery && typeof this.historicalDefinitionIndex?.find === "function" ? this.historicalDefinitionIndex.find(safeQuery) : null;
+    const indexedById = new Map((indexed?.candidates || []).map(record => [String(record.definitionId), record]));
+    const bindingRows = historicalDefinitionIds.map(definitionId => {
+      const validation = this.historicalBindingCache?.resolve?.({
+        snapshot,
+        candidateDefinitionIds: [definitionId],
+        definitionRecord: indexedById.get(definitionId) || null,
+        scope: { campaignId: branch.campaignId, branchId: branch.branchId, checkpointId: this.currentCheckpoint?.id, datasetRevision: this.historicalDefinitionIndex?.meta?.revision || null }
+      }) || resolveHistoricalEntityBinding({ snapshot, candidateDefinitionIds: [definitionId], definitionRecord: indexedById.get(definitionId) || null, scope: { campaignId: branch.campaignId, branchId: branch.branchId, checkpointId: this.currentCheckpoint?.id, datasetRevision: this.historicalDefinitionIndex?.meta?.revision || null } });
+      return { definitionId, status: validation.status, reason: validation.reason, bindingScope: validation.bindingScope };
+    });
+    const differences = resolvedEntity?.worldlineDifferences || [];
+    const entityLatencyMs = Math.max(0, Date.now() - inspectionStartedAt);
+    return {
+      available: true,
+      checkpointId: this.currentCheckpoint?.id || null,
+      checkpointAsOf: snapshot.gameDate || null,
+      query: safeQuery,
+      responder: { runtimeId: responderRuntimeId, displayName: responder.fullName || responder.firstName || `#${responderRuntimeId}` },
+      target: target ? { runtimeId: resolvedTargetId, displayName: target.fullName || target.firstName || `#${resolvedTargetId}` } : null,
+      identity: {
+        input: safeQuery || null,
+        runtimeCandidates: explicitTargetResolved ? [] : identityCandidates,
+        historicalDefinitionIds,
+        resolvedRuntimeId: resolvedTargetId,
+        resolutionStatus: identityStatus,
+        resolutionRule: identityRule,
+        conflicts: identityConflicts,
+        evidence: explicitTargetResolved ? [] : resolver.identityResolution?.evidence || []
+      },
+      state: target ? {
+        alive: life?.alive ?? null,
+        lifeStatus: life?.status || "UNKNOWN",
+        gender: sex?.sex || null,
+        genderStatus: sex?.status || "UNKNOWN",
+        age: familyBundle?.age ?? age?.age ?? null,
+        ageLabel: familyBundle?.ageLabel || age?.label || "age",
+        ageSource: age?.source || null,
+        location: reference(target.locationName || target.location || target.currentLocation),
+        liege: relatedReference(target.liege || target.liegeId || target.directLiege),
+        court: reference(target.courtEmployer || target.court || target.courtName),
+        death: familyBundle?.death || null
+      } : null,
+      relation,
+      difference: {
+        status: resolvedEntity && historicalDefinitionIds.length ? differences.length ? "DIFFERENT" : "NO_DIFFERENCE_DETECTED" : "UNAVAILABLE",
+        items: differences,
+        bindings: bindingRows
+      },
+      familyFact: familyBundle ? { relation: familyBundle.relation, relationLabel: familyBundle.relationLabel, relationshipKind: familyBundle.relationshipKind, lifeStatus: familyBundle.lifeStatus, age: familyBundle.age, ageLabel: familyBundle.ageLabel, death: familyBundle.death, sourceTier: familyBundle.sourceTier, sourceComplete: familyBundle.sourceComplete } : null,
+      integrity,
+      profiling: {
+        entityLatencyMs,
+        relationLatencyMs,
+        bindingCacheSize: this.historicalBindingCache?.entries?.size ?? null,
+        kinshipCacheScope: graph?.scopeTruncated ? "REVISION_SCOPED_TARGETED_TRUNCATED" : "REVISION_SCOPED_TARGETED"
+      }
+    };
+  }
+
+  getKinshipIntegrityReport() {
+    const snapshot = this.currentCheckpoint?.snapshot;
+    if (!snapshot?.characters) return { available: false, status: "UNAVAILABLE", reason: "CHECKPOINT_UNAVAILABLE", checkpointId: this.currentCheckpoint?.id || null, issues: [] };
+    const report = scanKinshipIntegrity(getCachedKinshipGraph(snapshot));
+    return { ...report, checkpointId: this.currentCheckpoint?.id || null, checkpointAsOf: snapshot.gameDate || null };
   }
 
   listSupplemental() {
@@ -1015,7 +1210,7 @@ class WorldlineService {
     return { worldKnowledge, playerView: { worldKnowledge: createPlayerWorldKnowledge(worldKnowledge) } };
   }
 
-  getPromptContext({ query = "", assistContext = "", mentionedEntityIds = [], diagnostic = false, includeScopedSupplemental = false } = {}) {
+  getPromptContext({ query = "", assistContext = "", mentionedEntityIds = [], runtimeContext = null, diagnostic = false, includeScopedSupplemental = false } = {}) {
     const settings = this._settings();
     const safeMentionedEntityIds = Array.isArray(mentionedEntityIds) ? mentionedEntityIds : [];
     const sourceMatches = settings.autosavePath && this.currentCheckpoint?.source?.path && this.path.resolve(settings.autosavePath).toLowerCase() === this.path.resolve(this.currentCheckpoint.source.path).toLowerCase();
@@ -1045,6 +1240,7 @@ class WorldlineService {
         query,
         assistContext,
         mentionedEntityIds: safeMentionedEntityIds,
+        runtimeContext,
         localize: (type, rawKey) => this.localizationResolver?.resolve(type, rawKey),
         findLocalizedKeys: (type, value, options) => this.localizationResolver?.findRawKeysByLocalizedValue(type, value, options) || { status: "NO_MATCH", matches: [], sourceComplete: true, scannedFiles: 0, missingDescriptors: [], matchedRawKeys: [] },
         historicalDefinitionLookup: !["UNCONFIGURED", "FAILED", "FAILED_TRANSIENT", "FAILED_STABLE"].includes(this.historicalDefinitionIndex?.status) ? (value) => this.historicalDefinitionIndex.find(value) : null,
@@ -1177,7 +1373,7 @@ class WorldlineService {
     });
   }
 
-  getSharedCandidatePool({ query = "", assistContext = "", mentionedEntityIds = [] } = {}) {
+  getSharedCandidatePool({ query = "", assistContext = "", mentionedEntityIds = [], runtimeContext = null } = {}) {
     const startedAt = Date.now();
     const safeQuery = String(query || "").slice(0, 1000);
     const safeAssistContext = String(assistContext || "").slice(0, 2000);
@@ -1200,13 +1396,14 @@ class WorldlineService {
       query: safeQuery,
       assistContext: safeAssistContext,
       mentionedEntityIds: safeMentionedEntityIds,
+      runtimeContext: runtimeContext && { activeParticipantIds: Array.isArray(runtimeContext.activeParticipantIds) ? runtimeContext.activeParticipantIds.map(String).sort() : [], recentRuntimeIds: Array.isArray(runtimeContext.recentRuntimeIds) ? runtimeContext.recentRuntimeIds.map(String).sort() : [] },
       live: [live.connected === true, live.gameDate || null, live.totalDays ?? null]
     })}`;
     if (this.worldKnowledgeState.sharedCandidateCache.has(key)) {
       const pool = createSharedCandidatePool({ cache: this.worldKnowledgeState.sharedCandidateCache, key, build: () => [] });
       return { ...pool, key, checkpointId: this.currentCheckpoint?.id || null, queryFingerprint: pool.queryFingerprint || queryFingerprint, sharedRetrievalMs: Date.now() - startedAt };
     }
-    const context = this.getPromptContext({ query: safeQuery, assistContext: safeAssistContext, mentionedEntityIds: safeMentionedEntityIds, diagnostic: true, includeScopedSupplemental: true });
+    const context = this.getPromptContext({ query: safeQuery, assistContext: safeAssistContext, mentionedEntityIds: safeMentionedEntityIds, runtimeContext, diagnostic: true, includeScopedSupplemental: true });
     if (!context?.retrieval) return null;
     const subjectId = context.queryPlan?.entities?.characters?.[0] || null;
     const pool = createSharedCandidatePool({
@@ -1217,14 +1414,14 @@ class WorldlineService {
     return { ...pool, key, checkpointId: this.currentCheckpoint?.id || null, queryFingerprint: pool.queryFingerprint || queryFingerprint, sharedRetrievalMs: Date.now() - startedAt };
   }
 
-  getSubjectiveWorldView({ responderId, query = "", assistContext = "", mentionedEntityIds = [], conversationId = null, turnEpoch = null, sceneRevision = null, presenceRevision = null, directObservationFactIds = [], directObservationFacts = [] } = {}) {
+  getSubjectiveWorldView({ responderId, query = "", assistContext = "", mentionedEntityIds = [], activeParticipantIds = [], conversationId = null, turnEpoch = null, sceneRevision = null, presenceRevision = null, directObservationFactIds = [], directObservationFacts = [] } = {}) {
     const mode = this._settings().subjectiveWorldMode;
     if (!['DIAGNOSTIC', 'PRODUCTION'].includes(mode) || responderId === null || responderId === undefined) return null;
     const snapshot = this.currentCheckpoint?.snapshot;
     const responderId2 = String(responderId);
     if (!snapshot?.characters || !Object.hasOwn(snapshot.characters, responderId2)) return null;
     const startedAt = Date.now();
-    const pool = this.getSharedCandidatePool({ query, assistContext, mentionedEntityIds });
+    const pool = this.getSharedCandidatePool({ query, assistContext, mentionedEntityIds, runtimeContext: { activeParticipantIds } });
     if (!pool) return null;
     const live = this.getLiveState();
     const scopeStartedAt = Date.now();
@@ -1339,9 +1536,9 @@ class WorldlineService {
     finally { clearTimeout(timer); }
   }
 
-  getSubjectivePromptContext({ responderId, query = "", assistContext = "", mentionedEntityIds = [], conversationId = null, turnEpoch = null, sceneRevision = null, presenceRevision = null, directObservationFactIds = [], directObservationFacts = [], historicalReferenceInfo = null, tokenBudget = null } = {}) {
+  getSubjectivePromptContext({ responderId, query = "", assistContext = "", mentionedEntityIds = [], activeParticipantIds = [], conversationId = null, turnEpoch = null, sceneRevision = null, presenceRevision = null, directObservationFactIds = [], directObservationFacts = [], historicalReferenceInfo = null, tokenBudget = null } = {}) {
     if (!this.isSubjectivePromptIntegrationEnabled()) return null;
-    const view = this.getSubjectiveWorldView({ responderId, query, assistContext, mentionedEntityIds, conversationId, turnEpoch, sceneRevision, presenceRevision, directObservationFactIds, directObservationFacts });
+    const view = this.getSubjectiveWorldView({ responderId, query, assistContext, mentionedEntityIds, activeParticipantIds, conversationId, turnEpoch, sceneRevision, presenceRevision, directObservationFactIds, directObservationFacts });
     if (!view) return null;
     const formatStartedAt = Date.now();
     const formatted = buildSubjectiveWorldTurnRecall(view, { tokenBudget });
