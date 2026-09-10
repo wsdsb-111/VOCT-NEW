@@ -8,6 +8,7 @@
 
 | 版本 | 重点 | 详细记录 |
 | --- | --- | --- |
+| v8.8.2 亲属关系正确性闭环 | 修复兄弟姐妹长幼参照、出生日并列/缺失、性别冲突权威、多重亲属角色、Anchor/Target 未解析泄漏、配偶中立语义、Definition↔Runtime 一对一及 Targeted Graph 来源完整性；275/275 发布组通过，真实 CK3/Provider Gate 待执行 | [V8.8.2 实施报告](docs/v8.8.2-correctness-closure.md) / [V8 阶段记录](docs/V8阶段开发记录.md) |
 | v8.8 UI 主题背景补充 | 三个兼容主题键分别将整块外挂界面映射到游牧、骑士、水墨背景图；按钮继续作为主题切换控件；主面板、世界线、世界记忆与输入控件增加遮罩/不透明内容层和主题对比色 | [UI 主题背景补充](docs/v8.8-ui-theme-backgrounds.md) / [V8 阶段记录](docs/V8阶段开发记录.md) |
 | v8.8.1 第三方亲属关系锚点 | 将回应者、关系主体和目标人物拆分为独立 Runtime ID；支持姓名/头衔/府邸的第三方亲属查询、“得一子/女”性别 fail-closed、子女 alias 与可诊断输出；263/263 发布组通过，真实 CK3/Provider Gate 待执行 | [V8.8.1 实施报告](docs/v8.8.1-implementation-report.md) / [V8 阶段记录](docs/V8阶段开发记录.md) |
 | v8.8 Sol 最终代码审查 | 修复原始家庭事实、确定性世界摘要、年度死亡 Delta、配偶状态与 Historical/Kinship 性别仲裁旁路；关系类型重复边可合并显式信息并报告冲突；262/262 发布组及隔离 Electron 导航通过，代码侧 P0/P1 为 0，Stage 8 人工 Gate 待完成 | [Sol 最终代码审查](docs/v8.8-sol-final-code-review.md) / [V8 阶段记录](docs/V8阶段开发记录.md) |

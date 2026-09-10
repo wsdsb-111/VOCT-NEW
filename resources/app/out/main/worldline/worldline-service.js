@@ -913,7 +913,7 @@ class WorldlineService {
     const graph = getTargetedKinshipGraph(snapshot, [responderRuntimeId, resolvedTargetId].filter(Boolean));
     const integrity = scanKinshipIntegrity(graph);
     const relationMention = graph ? resolveRelationMention({ query: safeQuery, responderId: responderRuntimeId, graph, recentTargetId: explicitTargetId }) : null;
-    if (!resolvedTargetId && relationMention?.status === "RELATION_RESOLVED") resolvedTargetId = relationMention.targetRuntimeId;
+    if (!explicitTargetId && relationMention?.status === "RELATION_RESOLVED") resolvedTargetId = relationMention.targetRuntimeId;
     const target = resolvedTargetId ? snapshot.characters[resolvedTargetId] : null;
     const targetDefinitionIds = resolvedTargetId ? [...new Set((snapshot.runtimeToDefinitions?.[resolvedTargetId] || []).map(String))] : [];
     const exactEntity = resolver.entityResolutions?.find(item => String(item?.subjectName || "").toLocaleLowerCase() === safeQuery.toLocaleLowerCase()) || null;
@@ -921,7 +921,7 @@ class WorldlineService {
     const historicalDefinitionIds = [...new Set((target ? targetDefinitionIds : [...(resolvedEntity?.historicalDefinitionIds || []), ...(resolver.identityResolution?.historicalDefinitionIds || [])]).map(String).filter(Boolean))];
     const explicitTargetResolved = explicitTargetId && target && explicitTargetId === resolvedTargetId;
     const identityStatus = explicitTargetResolved ? "RESOLVED_RUNTIME" : resolvedEntity?.resolutionStatus || resolver.identityResolution?.status || (resolvedTargetId ? "RESOLVED_RUNTIME" : "UNRESOLVED");
-    const identityRule = explicitTargetResolved ? "EXPLICIT_RUNTIME_ID" : relationMention?.status === "RELATION_RESOLVED" && !resolvedByQuery ? "RELATION_MENTION_UNIQUE" : resolvedEntity?.resolutionMode || resolvedEntity?.identityEvidence?.[0]?.code || resolver.identityResolution?.reason || "NO_MATCH";
+    const identityRule = explicitTargetResolved ? "EXPLICIT_RUNTIME_ID" : relationMention?.status === "RELATION_RESOLVED" && !explicitTargetId ? "RELATION_MENTION_UNIQUE" : resolvedEntity?.resolutionMode || resolvedEntity?.identityEvidence?.[0]?.code || resolver.identityResolution?.reason || "NO_MATCH";
     const identityConflicts = explicitTargetResolved ? [] : [...new Set([
       ...(resolver.identityResolution?.status === "AMBIGUOUS" ? [resolver.identityResolution.reason || "MULTIPLE_CANDIDATES"] : []),
       ...(resolvedEntity?.identityEvidence || []).filter(item => item?.category === "IDENTITY_CONFLICT").map(item => item.code),
@@ -930,7 +930,11 @@ class WorldlineService {
     const sex = target ? resolveCharacterSexConsensus({ snapshot: target }) : null;
     const life = target ? resolveLifeStatus(target) : null;
     const age = target ? resolveCharacterAge(target, { currentGameDate: snapshot.gameDate, currentTotalDays: snapshot.totalDays }) : null;
-    const relationResult = resolvedTargetId ? graph?.relationBetween(resolvedTargetId, responderRuntimeId) : null;
+    const scopedRelationTypes = relationMention?.status === "RELATION_RESOLVED" ? relationMention.intent?.relationTypes || null : null;
+    const relationAnchorId = relationMention?.status === "RELATION_RESOLVED" ? relationMention.relationAnchorRuntimeId : responderRuntimeId;
+    const relationResult = resolvedTargetId ? (Array.isArray(scopedRelationTypes) && typeof graph?.relationBetweenOfTypes === "function"
+      ? graph.relationBetweenOfTypes(resolvedTargetId, relationAnchorId, scopedRelationTypes)
+      : graph?.relationBetween(resolvedTargetId, relationAnchorId)) : null;
     const relation = ["RELATION_AMBIGUOUS", "RELATION_GENDER_CONFLICT", "RELATION_SOURCE_INCOMPLETE"].includes(relationMention?.status) ? {
       status: relationMention.status,
       type: null,
@@ -963,7 +967,7 @@ class WorldlineService {
       candidates: relationMention?.candidates || []
     };
     const relationLatencyMs = Math.max(0, Date.now() - relationStartedAt);
-    const familyBundle = resolvedTargetId ? buildFamilyEntityFactBundle({ graph, responderId: responderRuntimeId, targetRuntimeId: resolvedTargetId, temporal: { currentGameDate: snapshot.gameDate, currentTotalDays: snapshot.totalDays } }) : null;
+    const familyBundle = resolvedTargetId ? buildFamilyEntityFactBundle({ graph, responderId: responderRuntimeId, relationAnchorId, targetRuntimeId: resolvedTargetId, relationTypes: scopedRelationTypes, temporal: { currentGameDate: snapshot.gameDate, currentTotalDays: snapshot.totalDays } }) : null;
     const branch = this.canon?.branch?.() || { campaignId: snapshot.playthroughId || null, branchId: null };
     const indexed = safeQuery && typeof this.historicalDefinitionIndex?.find === "function" ? this.historicalDefinitionIndex.find(safeQuery) : null;
     const indexedById = new Map((indexed?.candidates || []).map(record => [String(record.definitionId), record]));

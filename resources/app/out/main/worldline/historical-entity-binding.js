@@ -26,7 +26,8 @@ function resolveHistoricalEntityBinding({ snapshot = null, candidateDefinitionId
   const reverseRuntimeIds = (reverseDefinitionIndex || createReverseDefinitionIndex(snapshot)).get(definitionId) || [];
   if (!forwardRuntimeId && !reverseRuntimeIds.length) return { status: "RUNTIME_ENTITY_MISSING", runtimeId: null, definitionId, bindingScope, reason: "RUNTIME_ENTITY_MISSING" };
   const runtimeId = forwardRuntimeId ? String(forwardRuntimeId) : null;
-  if (!runtimeId || reverseRuntimeIds.length !== 1 || reverseRuntimeIds[0] !== runtimeId || (snapshot?.runtimeToDefinitions?.[runtimeId] || []).map(String).filter((id) => id === definitionId).length !== 1) return { status: "AMBIGUOUS", runtimeId: null, definitionId, bindingScope, reason: "DEFINITION_RUNTIME_BINDING_CONFLICT" };
+  const reciprocalDefinitions = [...new Set((snapshot?.runtimeToDefinitions?.[runtimeId] || []).map(String).filter(Boolean))];
+  if (!runtimeId || reverseRuntimeIds.length !== 1 || reverseRuntimeIds[0] !== runtimeId || reciprocalDefinitions.length !== 1 || reciprocalDefinitions[0] !== definitionId) return { status: "AMBIGUOUS", runtimeId: null, definitionId, bindingScope, reason: "DEFINITION_RUNTIME_BINDING_CONFLICT" };
   const character = snapshot?.characters?.[runtimeId];
   if (!character) return { status: "RUNTIME_ENTITY_MISSING", runtimeId: null, definitionId, bindingScope, reason: "RUNTIME_CHARACTER_MISSING" };
   const gender = resolveCharacterSexConsensus({ snapshot: character, historical: definitionRecord?.metadata });
@@ -42,9 +43,10 @@ class HistoricalEntityBindingCache {
     const reverseDefinitionIndex = input.reverseDefinitionIndex || createReverseDefinitionIndex(input.snapshot);
     const forwardRuntimeId = definitionId ? input.snapshot?.definitionToRuntime?.[definitionId] : null;
     const reverseRuntimeIds = definitionId ? reverseDefinitionIndex.get(definitionId) || [] : [];
+    const reciprocalDefinitions = forwardRuntimeId === null || forwardRuntimeId === undefined ? [] : [...new Set((input.snapshot?.runtimeToDefinitions?.[String(forwardRuntimeId)] || []).map(String).filter(Boolean))];
     const character = forwardRuntimeId === null || forwardRuntimeId === undefined ? null : input.snapshot?.characters?.[String(forwardRuntimeId)];
     const key = JSON.stringify([
-      input.scope || {}, definitionIds, forwardRuntimeId === null || forwardRuntimeId === undefined ? null : String(forwardRuntimeId), reverseRuntimeIds,
+      input.scope || {}, definitionIds, forwardRuntimeId === null || forwardRuntimeId === undefined ? null : String(forwardRuntimeId), reverseRuntimeIds, reciprocalDefinitions,
       character?.gender ?? character?.sex ?? character?.female ?? null, character?.evidence?.conflicts?.gender === true,
       input.definitionRecord?.metadata?.gender ?? input.definitionRecord?.metadata?.sex ?? input.definitionRecord?.metadata?.female ?? null
     ]);

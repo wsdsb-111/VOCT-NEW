@@ -19,6 +19,7 @@ const INTENTS = [
   { terms: ["你姐妹"], relationTypes: ["SIBLING_OF"], sexConstraint: "female", label: "姐妹", anchorMode: "RESPONDER" },
   { terms: ["你妻子", "你夫人"], relationTypes: ["SPOUSE_OF", "FORMER_SPOUSE_OF", "DECEASED_SPOUSE_OF"], sexConstraint: "female", label: "妻子", anchorMode: "RESPONDER" },
   { terms: ["你丈夫", "你夫君"], relationTypes: ["SPOUSE_OF", "FORMER_SPOUSE_OF", "DECEASED_SPOUSE_OF"], sexConstraint: "male", label: "丈夫", anchorMode: "RESPONDER" },
+  { terms: ["你配偶", "你的配偶"], relationTypes: ["SPOUSE_OF", "FORMER_SPOUSE_OF", "DECEASED_SPOUSE_OF"], sexConstraint: null, label: "配偶", anchorMode: "RESPONDER" },
   { terms: ["最近得的儿子", "新得一子", "又得一子", "得一子", "添了一子", "添一子", "得子", "添子", "麟儿"], relationTypes: ["CHILD_OF"], sexConstraint: "male", label: "儿子", recency: "latest", anchorMode: "EXPLICIT" },
   { terms: ["最近得的女儿", "新得一女", "又得一女", "得一女", "添了一女", "添一女", "得女", "添女", "千金"], relationTypes: ["CHILD_OF"], sexConstraint: "female", label: "女儿", recency: "latest", anchorMode: "EXPLICIT" },
   { terms: ["儿子", "子嗣", "后嗣", "嗣子"], relationTypes: ["CHILD_OF"], sexConstraint: "male", label: "儿子", anchorMode: "EXPLICIT" },
@@ -37,7 +38,8 @@ const INTENTS = [
   { terms: ["姐姐"], relationTypes: ["SIBLING_OF"], sexConstraint: "female", label: "姐姐", birthOrder: "older", anchorMode: "EXPLICIT" },
   { terms: ["妹妹"], relationTypes: ["SIBLING_OF"], sexConstraint: "female", label: "妹妹", birthOrder: "younger", anchorMode: "EXPLICIT" },
   { terms: ["妻子", "夫人", "王妃", "正妻", "继室"], relationTypes: ["SPOUSE_OF", "FORMER_SPOUSE_OF", "DECEASED_SPOUSE_OF"], sexConstraint: "female", label: "妻子", anchorMode: "EXPLICIT" },
-  { terms: ["丈夫", "夫君", "配偶"], relationTypes: ["SPOUSE_OF", "FORMER_SPOUSE_OF", "DECEASED_SPOUSE_OF"], sexConstraint: "male", label: "丈夫", anchorMode: "EXPLICIT" }
+  { terms: ["丈夫", "夫君"], relationTypes: ["SPOUSE_OF", "FORMER_SPOUSE_OF", "DECEASED_SPOUSE_OF"], sexConstraint: "male", label: "丈夫", anchorMode: "EXPLICIT" },
+  { terms: ["配偶"], relationTypes: ["SPOUSE_OF", "FORMER_SPOUSE_OF", "DECEASED_SPOUSE_OF"], sexConstraint: null, label: "配偶", anchorMode: "EXPLICIT" }
 ];
 
 function parseRelationIntent(query = "") {

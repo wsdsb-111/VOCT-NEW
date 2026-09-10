@@ -528,7 +528,12 @@ function createGameData({ fs, path, memorySystem, memoryEngine, summariesDir, ge
           else if (resolution?.label === "年长手足") addRelationAliases(sibling.id, ["年长手足"]);
         }
         const children = (participant.children || []).map((child) => profiles.get(Number(child?.id ?? child))).filter(Boolean);
-        const orderedChildren = [...children].sort((left, right) => Number(left.birthDateTotalDays ?? Infinity) - Number(right.birthDateTotalDays ?? Infinity) || Number(left.id) - Number(right.id));
+        const childBirthDay = child => {
+          const raw = child?.birthDateTotalDays ?? child?.birthTotalDays;
+          if (raw === null || raw === undefined || raw === "") return null;
+          const value = Number(raw);
+          return Number.isFinite(value) ? value : null;
+        };
         for (const child of children) {
           const gender = child.gender || "unknown";
           const aliases = gender === "male"
@@ -536,11 +541,16 @@ function createGameData({ fs, path, memorySystem, memoryEngine, summariesDir, ge
             : gender === "female"
               ? ["女儿", "千金", "子嗣", "后嗣"]
               : ["孩子", "子女", "子嗣", "后嗣"];
-          const sameGender = orderedChildren.filter((candidate) => candidate.gender === gender);
-          const index = sameGender.findIndex((candidate) => Number(candidate.id) === Number(child.id));
-          if (index === 0) aliases.push(gender === "male" ? "长子" : gender === "female" ? "长女" : "长子女");
-          else if (index === 1) aliases.push(gender === "male" ? "次子" : gender === "female" ? "次女" : "次子女");
-          if (sameGender.length > 1 && index === sameGender.length - 1) aliases.push(gender === "male" ? "幼子" : gender === "female" ? "幼女" : "幼子女");
+          const sameGender = children.filter((candidate) => candidate.gender === gender);
+          const birthDays = sameGender.map(childBirthDay);
+          const birthOrderReliable = birthDays.every(value => value !== null) && new Set(birthDays).size === birthDays.length;
+          if (birthOrderReliable) {
+            const ordered = [...sameGender].sort((left, right) => childBirthDay(left) - childBirthDay(right));
+            const index = ordered.findIndex((candidate) => String(candidate.id) === String(child.id));
+            if (index === 0) aliases.push(gender === "male" ? "长子" : gender === "female" ? "长女" : "长子女");
+            else if (index === 1) aliases.push(gender === "male" ? "次子" : gender === "female" ? "次女" : "次子女");
+            if (ordered.length > 1 && index === ordered.length - 1) aliases.push(gender === "male" ? "幼子" : gender === "female" ? "幼女" : "幼子女");
+          }
           addRelationAliases(child.id, aliases);
         }
       }

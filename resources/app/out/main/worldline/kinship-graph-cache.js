@@ -67,9 +67,10 @@ function getTargetedKinshipGraph(gameData, seedIds = [], { maxDepth = 3, maxNode
     const character = characters.get(current.id) ?? characters.get(Number(current.id));
     if (!character) continue;
     selected.set(current.id, character);
-    if (selected.size >= maxNodes) { truncated = queue.length > 0; break; }
+    const neighborIds = current.depth < maxDepth ? relatedIds(character) : [];
+    if (selected.size >= maxNodes) { truncated = queue.length > 0 || neighborIds.some(id => !visited.has(id)); break; }
     if (current.depth >= maxDepth) continue;
-    for (const relatedId of relatedIds(character)) if (!visited.has(relatedId)) queue.push({ id: relatedId, depth: current.depth + 1 });
+    for (const relatedId of neighborIds) if (!visited.has(relatedId)) queue.push({ id: relatedId, depth: current.depth + 1 });
   }
   const graph = buildKinshipGraph(selected);
   graph.scopeTruncated = truncated;

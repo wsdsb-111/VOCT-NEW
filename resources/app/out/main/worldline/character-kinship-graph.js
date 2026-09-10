@@ -167,12 +167,13 @@ function buildKinshipGraph(source = {}) {
       }
     }
   }
-  const relationBetween = (from, to) => {
-    const matches = outgoing(from).filter((edge) => edge.to === String(to));
+  const resolveRelationBetween = (from, to, allowedTypes = null) => {
+    const allowed = allowedTypes === null ? null : new Set((Array.isArray(allowedTypes) ? allowedTypes : []).map(String));
+    const matches = outgoing(from).filter((edge) => edge.to === String(to) && (!allowed || allowed.has(edge.type)));
     const types = [...new Set(matches.map((edge) => edge.type))];
     if (types.length > 1) {
       const diagnostic = { code: "RELATION_CONFLICT_TYPE", from: String(from), to: String(to), types };
-      const diagnosticKey = `${from}:${to}`;
+      const diagnosticKey = `${from}:${to}:${types.join(",")}`;
       if (!diagnosticKeys.has(diagnosticKey)) {
         diagnosticKeys.add(diagnosticKey);
         diagnostics.push(diagnostic);
@@ -193,7 +194,9 @@ function buildKinshipGraph(source = {}) {
     }
     return { relation: { ...edge, relationshipKind: edge.relationshipKind || "UNSPECIFIED", sex: sex.sex, sexSource: sex.source, label: resolveKinshipLabel({ type: edge.type, sex: sex.sex, branch: edge.branch }), structuredPath }, diagnostic: null };
   };
-  return { nodes, edges, diagnostics, relationBetween, relationsTo: (characterId) => [...(incomingEdges.get(String(characterId)) || [])] };
+  const relationBetween = (from, to) => resolveRelationBetween(from, to);
+  const relationBetweenOfTypes = (from, to, allowedTypes) => resolveRelationBetween(from, to, allowedTypes);
+  return { nodes, edges, diagnostics, relationBetween, relationBetweenOfTypes, relationsTo: (characterId) => [...(incomingEdges.get(String(characterId)) || [])] };
 }
 
 module.exports = { buildKinshipGraph, explicitRelationshipKind };

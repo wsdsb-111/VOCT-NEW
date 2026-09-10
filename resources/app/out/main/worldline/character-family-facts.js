@@ -33,6 +33,32 @@ function formatStructuredCharacter(character = {}, current = null, characters = 
   return { text: parts.join("；"), diagnostics: { sexSource: sex.source, ageSource: age.source, ageConflict: age.conflict, lifeStatusConflict, death: death?.fact || null } };
 }
 
+function buildUnresolvedRelationConstraint(result) {
+  const sex = result?.intent?.sexConstraint || null;
+  const sexLabel = sex === "male" ? "男性亲属（仅用于查询筛选）" : sex === "female" ? "女性亲属（仅用于查询筛选）" : "无";
+  const opposite = sex === "male" ? "女性、女儿、她、女子" : sex === "female" ? "男性、儿子、他、男子" : null;
+  return `=== 当前亲属查询未完成解析 ===
+- 查询关系：${result?.intent?.sourcePhrase || "未知"}
+- 当前解析状态：${result?.status || "UNKNOWN"}
+- 玩家语义性别约束：${sexLabel}
+权威规则：
+- 当前无法可靠确定具体关系主体或目标 Runtime ID。
+- 不得输出具体人物姓名、年龄、位置、生死状态、头衔、配偶或私人事实。
+- 不得从 Memory、历史常识或模型猜测中选择某个具体人物。
+- 玩家语义中的性别只能作为 Query Constraint，不得升级为某个 Runtime Character 的 CK3 Game Truth。${opposite ? `\n- 不得将该目标改写为${opposite}。` : ""}`;
+}
+
+function buildGenderConflictConstraint(result) {
+  return `=== 当前结构化亲属事实冲突（本轮 CK3 数据） ===
+- 玩家使用了“${result?.mention || result?.intent?.sourcePhrase || "亲属"}”这一称谓。
+- 当前 CK3 / Canonical 数据对候选人物性别存在冲突。
+- 系统不能确认该人物为男性或女性。
+权威规则：
+- 不得依据玩家称谓替代 CK3 性别事实。
+- 不得输出男性、女性、儿子、女儿、他、她等确定性性别结论。
+- 不得从 Memory 或模型猜测具体人物；需要更多当前游戏数据后才能确定。`;
+}
+
 function buildFamilyFactBlock(character, gameData, { query = "", recentTargetId = null } = {}) {
   if (!character?.id || !gameData) return null;
   const graph = getCachedKinshipGraph(gameData);
@@ -42,19 +68,16 @@ function buildFamilyFactBlock(character, gameData, { query = "", recentTargetId 
     console.log(`[VOTC Relation] query=${String(query).replace(/\s+/g, " ").trim()} intent=${relationResolution.intent.relationTypes.join(",") || "NONE"} sex=${relationResolution.intent.sexConstraint || "unknown"} anchorMention=${relationResolution.anchor.mention || "-"} anchorRuntimeId=${relationResolution.relationAnchorRuntimeId || "-"} targetRuntimeId=${relationResolution.targetRuntimeId || "-"} targetName=${relationResolution.target?.name || "-"} resolution=${relationResolution.status}`);
   }
   if (relationResolution?.status === "NO_RELATION_INTENT") return null;
+  if (relationResolution?.status === "RELATION_GENDER_CONFLICT") return buildGenderConflictConstraint(relationResolution);
   if (relationResolution?.status === "RELATION_AMBIGUOUS") {
-    return `=== 当前结构化家庭事实（本轮 CK3 数据） ===\n- “${relationResolution.mention}”存在多个候选，系统未选择任何人，也未注入任一候选的私有事实。\n权威规则：需要玩家提供姓名或更明确的上下文后再继续。`;
+    return `=== 当前结构化家庭事实（本轮 CK3 数据） ===\n- “${relationResolution.mention}”存在多个候选，系统未选择任何人，也未注入任一候选的私有事实。\n${buildUnresolvedRelationConstraint(relationResolution)}`;
   }
   if (relationResolution && relationResolution.status !== "NO_RELATION_INTENT" && relationResolution.status !== "RELATION_RESOLVED") {
-    if (relationResolution.intent.sexConstraint) {
-      const sexLabel = relationResolution.intent.sexConstraint === "male" ? "男性" : "女性";
-      return `=== 当前结构化亲属约束（本轮查询） ===\n- 玩家明确称目标为“${relationResolution.mention}”，该目标必须作为${sexLabel}亲属处理。\n权威规则：关系主体或具体人物尚未可靠解析时，不得将该目标改写为${relationResolution.intent.sexConstraint === "male" ? "女性、女儿、她、女子" : "男性、儿子、他、男子"}。不得用 Memory 或模型推测覆盖本约束。`;
-    }
-    return null;
+    return buildUnresolvedRelationConstraint(relationResolution);
   }
   const relations = (relationResolution
     && relationResolution.status === "RELATION_RESOLVED"
-    ? graph.relationsTo(relationResolution.relationAnchorRuntimeId).filter((edge) => String(edge.from) === String(relationResolution.targetRuntimeId))
+    ? graph.relationsTo(relationResolution.relationAnchorRuntimeId).filter((edge) => String(edge.from) === String(relationResolution.targetRuntimeId) && relationResolution.intent.relationTypes.includes(edge.type))
     : graph.relationsTo(character.id).filter((edge) => DISPLAY_TYPES.has(edge.type)));
   const seen = new Set();
   const lines = [];
@@ -64,9 +87,11 @@ function buildFamilyFactBlock(character, gameData, { query = "", recentTargetId 
     seen.add(key);
     const relative = graph.nodes.get(edge.from) || {};
     const relationAnchorId = relationResolution?.relationAnchorRuntimeId || character.id;
-    const resolution = graph.relationBetween(edge.from, relationAnchorId);
+    const resolution = relationResolution?.status === "RELATION_RESOLVED" && typeof graph.relationBetweenOfTypes === "function"
+      ? graph.relationBetweenOfTypes(edge.from, relationAnchorId, relationResolution.intent.relationTypes)
+      : graph.relationBetween(edge.from, relationAnchorId);
     if (!resolution.relation) continue;
-    const bundle = buildFamilyEntityFactBundle({ graph, responderId: character.id, relationAnchorId, targetRuntimeId: edge.from, temporal });
+    const bundle = buildFamilyEntityFactBundle({ graph, responderId: character.id, relationAnchorId, targetRuntimeId: edge.from, relationTypes: relationResolution?.intent?.relationTypes || null, temporal });
     if (!bundle) continue;
     const sex = resolveCharacterSexConsensus({ snapshot: relative });
     const label = resolveKinshipLabel({ type: edge.type, sex: sex.sex, branch: edge.branch });
@@ -74,6 +99,7 @@ function buildFamilyFactBlock(character, gameData, { query = "", recentTargetId 
     const lifeStatus = resolveLifeStatus(relative);
     const age = { age: bundle.age, label: bundle.ageLabel };
     const details = [];
+    if (!bundle.sourceComplete) details.push("来源范围不完整");
     if (lifeStatus.conflict) details.push("生死状态存在冲突，未输出结论");
     else if (death) details.push(death.text);
     else if (lifeStatus.alive === true) details.push("在世");
@@ -92,4 +118,4 @@ function buildFamilyFactBlock(character, gameData, { query = "", recentTargetId 
   return `=== 当前结构化家庭事实（本轮 CK3 数据） ===\n${lines.join("\n")}\n权威规则：亲属身份、性别、是否已故、死亡日期和年龄以本块结构化结果为准；相对时间只能使用系统给出的结果。若本块明确给出致死者，则以本块为准；若本块未给出致死者，可使用后续获准的 Current Game Truth / Worldline Game Truth。不得从 Memory 或模型推测致死者。Memory 只可补充过去经历与主观感受，不得覆盖这些事实。`;
 }
 
-module.exports = { buildFamilyFactBlock, formatStructuredCharacter };
+module.exports = { buildFamilyFactBlock, formatStructuredCharacter, buildUnresolvedRelationConstraint };

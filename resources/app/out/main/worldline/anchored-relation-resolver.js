@@ -15,6 +15,11 @@ function birthOrderValue(character = {}) {
   return Number.isFinite(totalDays) ? totalDays : null;
 }
 
+function resolveAnchorBirthDay(graph, anchorRuntimeId) {
+  const anchor = graph?.nodes?.get(String(anchorRuntimeId));
+  return birthOrderValue(anchor);
+}
+
 function summarize(candidates) {
   return candidates.slice(0, MAX_RELATION_CANDIDATES).map((candidate) => ({ runtimeId: candidate.runtimeId, name: candidate.name }));
 }
@@ -41,21 +46,36 @@ function resolveAnchoredRelationMention({ query = "", responderId = null, graph 
   const anchor = resolveRelationAnchor({ query, intent, responderId, graph });
   const base = resultBase({ responderId, intent, anchor });
   if (anchor.status !== "ANCHOR_RESOLVED") return { ...base, status: anchor.status, mention: intent.sourcePhrase, candidates: anchor.candidates || [], candidateTotal: anchor.candidates?.length || 0 };
-  const allCandidates = (graph?.relationsTo(anchor.runtimeId) || []).filter((edge) => intent.relationTypes.includes(edge.type)).map((edge) => {
-    const target = graph.nodes.get(String(edge.from)) || { id: edge.from };
+  const candidateIds = [...new Set((graph?.relationsTo(anchor.runtimeId) || []).filter((edge) => intent.relationTypes.includes(edge.type)).map((edge) => String(edge.from)))];
+  const allCandidates = candidateIds.map((runtimeId) => {
+    const target = graph.nodes.get(runtimeId) || { id: runtimeId };
     const sex = resolveCharacterSexConsensus({ snapshot: target });
-    return { runtimeId: String(edge.from), name: characterName(target, edge.from), sex, birthOrder: birthOrderValue(target), relation: graph.relationBetween(edge.from, anchor.runtimeId).relation };
+    const relationResult = typeof graph.relationBetweenOfTypes === "function"
+      ? graph.relationBetweenOfTypes(runtimeId, anchor.runtimeId, intent.relationTypes)
+      : graph.relationBetween(runtimeId, anchor.runtimeId);
+    return { runtimeId, name: characterName(target, runtimeId), sex, birthOrder: birthOrderValue(target), relation: relationResult.relation, relationDiagnostic: relationResult.diagnostic };
   });
   if (graph?.scopeTruncated) return { ...base, status: "RELATION_SOURCE_INCOMPLETE", mention: intent.sourcePhrase, candidates: summarize(allCandidates), candidateTotal: allCandidates.length, truncated: true };
+  if (allCandidates.some((candidate) => candidate.relationDiagnostic || !candidate.relation)) return { ...base, status: "RELATION_CONFLICT_TYPE", mention: intent.sourcePhrase, candidates: summarize(allCandidates), candidateTotal: allCandidates.length };
   if (allCandidates.some((candidate) => candidate.sex.conflict)) return { ...base, status: "RELATION_GENDER_CONFLICT", mention: intent.sourcePhrase, candidates: summarize(allCandidates), candidateTotal: allCandidates.length };
   let candidates = allCandidates.filter((candidate) => !intent.sexConstraint || candidate.sex.sex === intent.sexConstraint);
   if (!candidates.length) return { ...base, status: "RELATION_UNKNOWN", mention: intent.sourcePhrase, candidates: [], candidateTotal: 0 };
-  if (intent.recency || intent.birthOrder) {
+  if (intent.birthOrder === "older" || intent.birthOrder === "younger") {
+    const anchorBirth = resolveAnchorBirthDay(graph, anchor.runtimeId);
+    if (anchorBirth === null) return { ...base, status: "RELATION_AMBIGUOUS", mention: intent.sourcePhrase, candidates: summarize(candidates), candidateTotal: candidates.length, reason: "ANCHOR_BIRTH_ORDER_UNAVAILABLE" };
+    if (candidates.some((candidate) => candidate.birthOrder === null)) return { ...base, status: "RELATION_AMBIGUOUS", mention: intent.sourcePhrase, candidates: summarize(candidates), candidateTotal: candidates.length, reason: "CANDIDATE_BIRTH_ORDER_UNAVAILABLE" };
+    candidates = candidates.filter((candidate) => intent.birthOrder === "older" ? candidate.birthOrder < anchorBirth : candidate.birthOrder > anchorBirth);
+    if (!candidates.length) return { ...base, status: "RELATION_UNKNOWN", mention: intent.sourcePhrase, candidates: [], candidateTotal: 0 };
+    if (candidates.length > 1) return { ...base, status: "RELATION_AMBIGUOUS", mention: intent.sourcePhrase, candidates: summarize(candidates), candidateTotal: candidates.length, reason: "MULTIPLE_RELATION_CANDIDATES" };
+  } else if (intent.recency || intent.birthOrder) {
     if (candidates.some((candidate) => candidate.birthOrder === null)) return { ...base, status: "RELATION_AMBIGUOUS", mention: intent.sourcePhrase, candidates: summarize(candidates), candidateTotal: candidates.length, reason: "BIRTH_ORDER_UNAVAILABLE" };
-    candidates = [...candidates].sort((left, right) => left.birthOrder - right.birthOrder || left.runtimeId.localeCompare(right.runtimeId));
+    candidates = [...candidates].sort((left, right) => left.birthOrder - right.birthOrder);
     const position = intent.recency === "latest" || intent.birthOrder === "last" ? candidates.length - 1 : intent.birthOrder === "second" ? 1 : intent.birthOrder === "third" ? 2 : 0;
     if (!candidates[position]) return { ...base, status: "RELATION_AMBIGUOUS", mention: intent.sourcePhrase, candidates: summarize(candidates), candidateTotal: candidates.length, reason: "BIRTH_ORDER_UNAVAILABLE" };
-    candidates = [candidates[position]];
+    const selected = candidates[position];
+    const sameBirth = candidates.filter((candidate) => candidate.birthOrder === selected.birthOrder);
+    if (sameBirth.length > 1) return { ...base, status: "RELATION_AMBIGUOUS", mention: intent.sourcePhrase, candidates: summarize(sameBirth), candidateTotal: sameBirth.length, reason: "BIRTH_ORDER_TIE" };
+    candidates = [selected];
   }
   if (candidates.length > 1) {
     const recent = candidates.find((candidate) => String(candidate.runtimeId) === String(recentTargetId));
@@ -76,4 +96,4 @@ function resolveAnchoredRelationMention({ query = "", responderId = null, graph 
   };
 }
 
-module.exports = { resolveAnchoredRelationMention };
+module.exports = { resolveAnchoredRelationMention, resolveAnchorBirthDay };

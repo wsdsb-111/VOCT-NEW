@@ -26,6 +26,8 @@ Voices of the Court 是一个面向《Crusader Kings III》（CK3）的沉浸式
 
 ## 运行环境
 
+V8.8.2 已完成 [亲属关系正确性闭环](docs/v8.8.2-correctness-closure.md)：兄弟姐妹长幼改为与关系主体出生日比较；出生日缺失或并列、Anchor/Target 未解析、性别冲突及来源截断统一 fail-closed。多重亲属角色按查询类型限定，配偶称谓保持性别中立；Historical Definition↔Runtime 要求双向真正一对一，Family Fact 的来源完整性不再误报。新增 11 个专项门禁，完整发布回归为 275/275（344 个测试文件分类、68 个历史检查归档）。真实 CK3/Provider 十问矩阵与 Stage 8 长时 Gate 尚待执行，因此 V8.8 尚未 Full Freeze。
+
 V8.8.1 已完成 [第三方亲属关系锚点实施](docs/v8.8.1-implementation-report.md)与 [UI 主题背景补充](docs/v8.8-ui-theme-backgrounds.md)：回应者、关系主体与目标人物按独立 Runtime ID 解析，第三方姓名/头衔/府邸可查询其亲属；“得一子/女”的显式性别在 Anchor 或目标未解析时仍 fail-closed，不再被 Memory 或模型反向改写。该链路仅使用 CK3 结构化亲属数据，不要求目标人物已有任何对话或摘要。外挂 UI 三种风格现在分别使用游牧、骑士、水墨背景图，并通过主题遮罩和不透明内容层保持文字、输入框、状态色清晰。旧 V8.3 Shadow Resolver、Ground Truth Dashboard 和专用 IPC 已退役；历史人物身份只走 V8.8 Definition-ID 双向绑定。生死、性别、已故配偶、年度死亡 Delta 与确定性世界摘要现统一 fail-closed；关系类型仅接受来源明确标注的 Biological / Adoptive / Step，显式类型冲突进入完整性报告。264/264 发布组通过；Stage 8 真实 CK3/Provider/100 次对话/2 小时 Soak 与三主题人工视觉尚未完成，因此 V8.8 尚未 Full Freeze。
 
 V8.7.2 已完成 Terra + Luna 施工及 [Sol 最终正确性审查](docs/v8.7.2-sol-final-review.md)：Current Truth 由 CK3 只读预览并由服务端二次核验；新的 CK3 载入会话必须明确继续当前分支或建立独立分支；旧 Supplemental 只读并可经审阅迁移为 Canon。Sol 已收口 Load Session 重复、迁移并发/ACL、双重召回和默认页重数据加载风险；新增 DeepSeek 模型选项、移除“优化 → 历史人物”普通入口，修复后台世界线通知导致世界记忆编辑器收起的 P0，并完成 CK3 中文日期到 Canon canonical 日期链热修，249/249 发布组通过。真实 CK3、Provider 与打包 Electron Gate 尚未完成，当前不标记 FULL FREEZE。
@@ -216,12 +218,12 @@ V7.7 在 V7.6 健康化基础上分阶段拆分主进程：第一阶段将六种
 node scripts\test-release.js
 ```
 
-清单会覆盖全部 `test-*.js`。当前分类为 332 个测试文件、263 个直接发布组和 68 个归档检查；已退役的 V8.3/V8.3.1 Shadow Resolver、Ground Truth 与诊断面板测试不再作为发布路径。V8.8.1 门禁继续覆盖历史基线、Campaign/Worldline、Definition-ID 绑定、第三方亲属 Anchor、性别 fail-closed、完整性扫描和冻结边界；既有 Run Command Recovery T1–T18、Memory、Conversation、Action、Letter、Relationship、Date Producer 与缓存回归继续执行。
+清单会覆盖全部 `test-*.js`。当前分类为 344 个测试文件、275 个直接发布组和 68 个归档检查；已退役的 V8.3/V8.3.1 Shadow Resolver、Ground Truth 与诊断面板测试不再作为发布路径。V8.8.2 门禁继续覆盖历史基线、Campaign/Worldline、Definition-ID 双向唯一绑定、第三方亲属 Anchor、长幼/出生日歧义、性别冲突、关系类型限定、来源完整性和冻结边界；既有 Run Command Recovery T1–T18、Memory、Conversation、Action、Letter、Relationship、Date Producer 与缓存回归继续执行。
 
 ## 版本信息
 
 - 外挂 UI 版本：v2.0.4
-- 当前应用功能基线：V8.8.1 Worldline Definition-ID、第三方亲属关系 Anchor、结构化关系事实、按需完整性扫描与游牧/骑士/水墨三主题整块背景已完成；Stage 8 真实 CK3/Provider/长时 Electron Gate、三主题人工视觉与 Stage 9 Final Freeze 尚未完成
+- 当前应用功能基线：V8.8.2 Worldline Definition-ID、第三方亲属关系 Anchor、长幼与出生日歧义、关系类型限定、结构化关系事实、按需完整性扫描与游牧/骑士/水墨三主题整块背景已完成；Stage 8 真实 CK3/Provider/长时 Electron Gate、三主题人工视觉与 Stage 9 Final Freeze 尚未完成
 - CK3 模组版本：Voices of the Court 2.0.5
 - 模组支持版本：CK3 1.18.*
 - UI 主题：宫廷编年史风格（深红、暗金、羊皮纸文本层级）

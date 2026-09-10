@@ -4,11 +4,13 @@ const { resolveCharacterAge } = require("./character-age-service");
 const { resolveCharacterSexConsensus } = require("./character-demographic-normalizer");
 const { formatDeathFact, resolveLifeStatus } = require("./character-temporal-facts");
 
-function buildFamilyEntityFactBundle({ graph = null, responderId = null, relationAnchorId = responderId, targetRuntimeId = null, temporal = {} } = {}) {
+function buildFamilyEntityFactBundle({ graph = null, responderId = null, relationAnchorId = responderId, targetRuntimeId = null, relationTypes = null, temporal = {} } = {}) {
   if (!graph || responderId === null || responderId === undefined || relationAnchorId === null || relationAnchorId === undefined || targetRuntimeId === null || targetRuntimeId === undefined) return null;
   const targetId = String(targetRuntimeId);
   const character = graph.nodes.get(targetId);
-  const relationResult = graph.relationBetween(targetId, relationAnchorId);
+  const relationResult = Array.isArray(relationTypes) && typeof graph.relationBetweenOfTypes === "function"
+    ? graph.relationBetweenOfTypes(targetId, relationAnchorId, relationTypes)
+    : graph.relationBetween(targetId, relationAnchorId);
   if (!character || !relationResult.relation) return null;
   const sex = resolveCharacterSexConsensus({ snapshot: character });
   const life = resolveLifeStatus(character);
@@ -30,7 +32,7 @@ function buildFamilyEntityFactBundle({ graph = null, responderId = null, relatio
     ageLabel: age.label,
     death: death?.fact || null,
     sourceTier: "GAME_TRUTH",
-    sourceComplete: true
+    sourceComplete: graph.scopeTruncated !== true && character.partial !== true && !relationResult.diagnostic
   };
 }
 
