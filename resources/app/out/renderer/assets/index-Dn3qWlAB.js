@@ -22973,8 +22973,8 @@ function ConfigPanel({ onClose }) {
               {
                 className: `court-theme-button ${courtTheme === "parchment" ? "active" : ""}`,
                 onClick: () => setCourtTheme("parchment"),
-                title: "羊皮卷风格",
-                "aria-label": "切换为羊皮卷风格",
+                title: "游牧风格",
+                "aria-label": "切换为游牧风格",
                 "aria-pressed": courtTheme === "parchment",
                 children: /* @__PURE__ */ jsxRuntimeExports.jsx("img", { src: "./assets/theme-parchment-v1.png", alt: "" })
               }

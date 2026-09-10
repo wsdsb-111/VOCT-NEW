@@ -527,6 +527,22 @@ function createGameData({ fs, path, memorySystem, memoryEngine, summariesDir, ge
           else if (resolution?.label === "姐姐") addRelationAliases(sibling.id, ["家姐", "姐姐"]);
           else if (resolution?.label === "年长手足") addRelationAliases(sibling.id, ["年长手足"]);
         }
+        const children = (participant.children || []).map((child) => profiles.get(Number(child?.id ?? child))).filter(Boolean);
+        const orderedChildren = [...children].sort((left, right) => Number(left.birthDateTotalDays ?? Infinity) - Number(right.birthDateTotalDays ?? Infinity) || Number(left.id) - Number(right.id));
+        for (const child of children) {
+          const gender = child.gender || "unknown";
+          const aliases = gender === "male"
+            ? ["儿子", "公子", "世子", "嗣子", "子嗣", "后嗣"]
+            : gender === "female"
+              ? ["女儿", "千金", "子嗣", "后嗣"]
+              : ["孩子", "子女", "子嗣", "后嗣"];
+          const sameGender = orderedChildren.filter((candidate) => candidate.gender === gender);
+          const index = sameGender.findIndex((candidate) => Number(candidate.id) === Number(child.id));
+          if (index === 0) aliases.push(gender === "male" ? "长子" : gender === "female" ? "长女" : "长子女");
+          else if (index === 1) aliases.push(gender === "male" ? "次子" : gender === "female" ? "次女" : "次子女");
+          if (sameGender.length > 1 && index === sameGender.length - 1) aliases.push(gender === "male" ? "幼子" : gender === "female" ? "幼女" : "幼子女");
+          addRelationAliases(child.id, aliases);
+        }
       }
       return profiles;
     }

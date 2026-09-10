@@ -5811,7 +5811,7 @@ select,
 }
 
 :root[data-votc-theme="parchment"] .court-theme-switcher::before {
-  content: "羊皮卷";
+  content: "游牧";
 }
 
 :root[data-votc-theme="knight"] .court-theme-switcher::before {
@@ -7258,4 +7258,445 @@ select,
   .world-memory-picker-search button {
     min-width: 62px;
   }
+}
+
+/* V8.8 visual theme backgrounds: the three supplied style plates are used as
+   the theme surfaces while an opaque content layer keeps UI text readable. */
+:root[data-votc-theme="parchment"] {
+  --votc-style-image: url("../../../../../image/草原游牧.png");
+  --votc-style-overlay: linear-gradient(rgba(247, 245, 237, 0.12), rgba(226, 224, 213, 0.26));
+  --votc-content-overlay: linear-gradient(rgba(250, 247, 239, 0.45), rgba(241, 235, 220, 0.56));
+  --votc-surface: rgba(250, 246, 235, 0.8);
+  --votc-surface-raised: rgba(255, 250, 239, 0.86);
+  --votc-surface-muted: rgba(235, 229, 214, 0.68);
+  --votc-text-body: #34291f;
+  --votc-text-heading: #683426;
+  --votc-text-muted: #6b5947;
+  --votc-border: rgba(109, 76, 43, 0.52);
+  --votc-control-bg: rgba(255, 250, 240, 0.9);
+  --votc-control-text: #2c241e;
+}
+
+:root[data-votc-theme="knight"] {
+  --votc-style-image: url("../../../../../image/中世纪骑士.png");
+  --votc-style-overlay: linear-gradient(rgba(12, 14, 18, 0.12), rgba(8, 10, 14, 0.34));
+  --votc-content-overlay: linear-gradient(rgba(18, 19, 23, 0.58), rgba(12, 13, 17, 0.68));
+  --votc-surface: rgba(22, 23, 28, 0.82);
+  --votc-surface-raised: rgba(31, 31, 36, 0.87);
+  --votc-surface-muted: rgba(16, 17, 21, 0.7);
+  --votc-text-body: #e8e0d2;
+  --votc-text-heading: #f0cb85;
+  --votc-text-muted: #c2b9a9;
+  --votc-border: rgba(188, 157, 99, 0.58);
+  --votc-control-bg: rgba(10, 11, 14, 0.93);
+  --votc-control-text: #eee5d6;
+}
+
+:root[data-votc-theme="ink"] {
+  --votc-style-image: url("../../../../../image/中国古典.png");
+  --votc-style-overlay: linear-gradient(rgba(247, 244, 234, 0.05), rgba(222, 223, 211, 0.14));
+  --votc-content-overlay: linear-gradient(rgba(250, 248, 239, 0.3), rgba(239, 237, 225, 0.43));
+  --votc-surface: rgba(250, 247, 238, 0.78);
+  --votc-surface-raised: rgba(255, 252, 243, 0.85);
+  --votc-surface-muted: rgba(236, 235, 222, 0.6);
+  --votc-text-body: #282e29;
+  --votc-text-heading: #71362e;
+  --votc-text-muted: #626a63;
+  --votc-border: rgba(66, 75, 68, 0.48);
+  --votc-control-bg: rgba(255, 252, 243, 0.9);
+  --votc-control-text: #202521;
+}
+
+:root[data-votc-theme] .chat-box,
+:root[data-votc-theme] .config-panel-container {
+  color: var(--votc-text-body);
+  background-color: var(--votc-surface-muted);
+  background-image: var(--votc-style-overlay), var(--votc-style-image);
+  background-repeat: no-repeat;
+  background-position: center;
+  background-size: cover;
+}
+
+:root[data-votc-theme] .messages-container,
+:root[data-votc-theme] .config-main-content {
+  color: var(--votc-text-body);
+  border-color: var(--votc-border);
+  background-color: var(--votc-surface);
+  background-image: var(--votc-content-overlay), var(--votc-style-image);
+  background-repeat: no-repeat;
+  background-position: center;
+  background-size: cover;
+}
+
+:root[data-votc-theme] .worldline-view,
+:root[data-votc-theme] .worldline-editor-v87,
+:root[data-votc-theme] .worldline-card,
+:root[data-votc-theme] .worldline-subjective-view,
+:root[data-votc-theme] .worldline-metric,
+:root[data-votc-theme] .worldline-semantic-item,
+:root[data-votc-theme] .worldline-row,
+:root[data-votc-theme] .worldline-note,
+:root[data-votc-theme] .worldline-empty,
+:root[data-votc-theme] .worldline-advanced-details,
+:root[data-votc-theme] .worldline-identity-resolution,
+:root[data-votc-theme] .worldline-candidate-card,
+:root[data-votc-theme] .worldline-diagnostic-summary,
+:root[data-votc-theme] .worldline-diagnostic-sources,
+:root[data-votc-theme] .worldline-resolver-trace,
+:root[data-votc-theme] .worldline-observability-panel,
+:root[data-votc-theme] .world-memory-warning,
+:root[data-votc-theme] .world-memory-secondary-details,
+:root[data-votc-theme] .world-memory-advanced,
+:root[data-votc-theme] .world-memory-history,
+:root[data-votc-theme] .world-memory-developer,
+:root[data-votc-theme] .world-memory-form,
+:root[data-votc-theme] .world-memory-status-card,
+:root[data-votc-theme] .world-memory-feedback {
+  color: var(--votc-text-body);
+  border-color: var(--votc-border);
+  background-color: var(--votc-surface);
+}
+
+:root[data-votc-theme] .worldline-metric,
+:root[data-votc-theme] .worldline-semantic-item,
+:root[data-votc-theme] .worldline-row,
+:root[data-votc-theme] .worldline-note,
+:root[data-votc-theme] .worldline-empty,
+:root[data-votc-theme] .worldline-advanced-details,
+:root[data-votc-theme] .world-memory-status-card,
+:root[data-votc-theme] .world-memory-feedback {
+  background: var(--votc-surface-raised);
+}
+
+:root[data-votc-theme] .worldline-card,
+:root[data-votc-theme] .world-memory-form,
+:root[data-votc-theme] .world-memory-warning,
+:root[data-votc-theme] .world-memory-secondary-details,
+:root[data-votc-theme] .world-memory-advanced,
+:root[data-votc-theme] .world-memory-history,
+:root[data-votc-theme] .world-memory-developer {
+  box-shadow: inset 0 0 12px rgba(0, 0, 0, 0.08), 0 2px 7px rgba(0, 0, 0, 0.12);
+}
+
+:root[data-votc-theme] .worldline-header p,
+:root[data-votc-theme] .worldline-note,
+:root[data-votc-theme] .worldline-empty,
+:root[data-votc-theme] .worldline-source-meta,
+:root[data-votc-theme] .worldline-diagnostics,
+:root[data-votc-theme] .worldline-observability-caption,
+:root[data-votc-theme] .worldline-supplemental-scope-note,
+:root[data-votc-theme] .world-memory-heading p,
+:root[data-votc-theme] .world-memory-quiet-note,
+:root[data-votc-theme] .world-memory-status-card span,
+:root[data-votc-theme] .world-memory-form-heading span,
+:root[data-votc-theme] .world-memory-list-heading span,
+:root[data-votc-theme] .world-memory-field small,
+:root[data-votc-theme] .world-memory-help {
+  color: var(--votc-text-muted);
+}
+
+:root[data-votc-theme] .worldline-card h4,
+:root[data-votc-theme] .worldline-section-heading h4,
+:root[data-votc-theme] .worldline-subjective-view h6,
+:root[data-votc-theme] .worldline-prompt-diagnostics h6,
+:root[data-votc-theme] .worldline-observability-panel h6,
+:root[data-votc-theme] .world-memory-form-heading h4,
+:root[data-votc-theme] .world-memory-list-heading h4 {
+  color: var(--votc-text-heading);
+}
+
+:root[data-votc-theme] .worldline-view input,
+:root[data-votc-theme] .worldline-view textarea,
+:root[data-votc-theme] .worldline-view select,
+:root[data-votc-theme] .worldline-editor-v87 input,
+:root[data-votc-theme] .worldline-editor-v87 textarea,
+:root[data-votc-theme] .worldline-editor-v87 select {
+  color: var(--votc-control-text);
+  border-color: var(--votc-border);
+  background: var(--votc-control-bg);
+  background-image: none;
+}
+
+:root[data-votc-theme] .worldline-view input::placeholder,
+:root[data-votc-theme] .worldline-view textarea::placeholder,
+:root[data-votc-theme] .worldline-editor-v87 input::placeholder,
+:root[data-votc-theme] .worldline-editor-v87 textarea::placeholder {
+  color: var(--votc-text-muted);
+}
+
+:root[data-votc-theme] .worldline-view input:focus,
+:root[data-votc-theme] .worldline-view textarea:focus,
+:root[data-votc-theme] .worldline-view select:focus,
+:root[data-votc-theme] .worldline-editor-v87 input:focus,
+:root[data-votc-theme] .worldline-editor-v87 textarea:focus,
+:root[data-votc-theme] .worldline-editor-v87 select:focus {
+  outline: 2px solid currentColor;
+  outline-offset: 1px;
+}
+
+:root[data-votc-theme] .worldline-tabs button.active {
+  color: #fffaf0;
+  border-color: var(--votc-text-heading);
+  background: var(--votc-text-heading);
+}
+
+:root[data-votc-theme] .worldline-status,
+:root[data-votc-theme] .worldline-source-tag {
+  background: var(--votc-surface-raised);
+}
+
+:root[data-votc-theme="parchment"] .worldline-status-ready,
+:root[data-votc-theme="parchment"] .worldline-status-active,
+:root[data-votc-theme="parchment"] .worldline-status-valid,
+:root[data-votc-theme="parchment"] .worldline-source-tag.game-truth {
+  color: #28643c;
+}
+
+:root[data-votc-theme="parchment"] .worldline-status-loading,
+:root[data-votc-theme="parchment"] .worldline-status-ipc_pending,
+:root[data-votc-theme="parchment"] .worldline-status-building,
+:root[data-votc-theme="parchment"] .worldline-status-validating,
+:root[data-votc-theme="parchment"] .worldline-status-stale,
+:root[data-votc-theme="parchment"] .worldline-source-tag.supplemental,
+:root[data-votc-theme="parchment"] .world-memory-warning summary {
+  color: #8a5b13;
+}
+
+:root[data-votc-theme="parchment"] .worldline-status-idle,
+:root[data-votc-theme="parchment"] .worldline-status-unconfigured,
+:root[data-votc-theme="parchment"] .worldline-source-tag.player-canon {
+  color: #285b80;
+}
+
+:root[data-votc-theme="parchment"] .worldline-status-failed,
+:root[data-votc-theme="parchment"] .worldline-status-error,
+:root[data-votc-theme="parchment"] .worldline-status-not_found,
+:root[data-votc-theme="parchment"] .worldline-status-not_autosave,
+:root[data-votc-theme="parchment"] .worldline-status-unsupported_container,
+:root[data-votc-theme="parchment"] .worldline-status-read_error {
+  color: #9b302f;
+}
+
+:root[data-votc-theme="ink"] .worldline-status-ready,
+:root[data-votc-theme="ink"] .worldline-status-active,
+:root[data-votc-theme="ink"] .worldline-status-valid,
+:root[data-votc-theme="ink"] .worldline-source-tag.game-truth {
+  color: #28643c;
+}
+
+:root[data-votc-theme="ink"] .worldline-status-loading,
+:root[data-votc-theme="ink"] .worldline-status-ipc_pending,
+:root[data-votc-theme="ink"] .worldline-status-building,
+:root[data-votc-theme="ink"] .worldline-status-validating,
+:root[data-votc-theme="ink"] .worldline-status-stale,
+:root[data-votc-theme="ink"] .worldline-source-tag.supplemental,
+:root[data-votc-theme="ink"] .world-memory-warning summary {
+  color: #8a5b13;
+}
+
+:root[data-votc-theme="ink"] .worldline-status-idle,
+:root[data-votc-theme="ink"] .worldline-status-unconfigured,
+:root[data-votc-theme="ink"] .worldline-source-tag.player-canon {
+  color: #285b80;
+}
+
+:root[data-votc-theme="ink"] .worldline-status-failed,
+:root[data-votc-theme="ink"] .worldline-status-error,
+:root[data-votc-theme="ink"] .worldline-status-not_found,
+:root[data-votc-theme="ink"] .worldline-status-not_autosave,
+:root[data-votc-theme="ink"] .worldline-status-unsupported_container,
+:root[data-votc-theme="ink"] .worldline-status-read_error {
+  color: #9b302f;
+}
+
+:root[data-votc-theme="parchment"] .world-memory-status-card strong.is-ready,
+:root[data-votc-theme="ink"] .world-memory-status-card strong.is-ready {
+  color: #28643c;
+}
+
+:root[data-votc-theme="parchment"] .world-memory-status-card strong.is-blocked,
+:root[data-votc-theme="ink"] .world-memory-status-card strong.is-blocked,
+:root[data-votc-theme="parchment"] .world-memory-feedback.is-error,
+:root[data-votc-theme="ink"] .world-memory-feedback.is-error {
+  color: #9b302f;
+}
+
+:root[data-votc-theme="parchment"] .world-memory-status-card strong.is-muted,
+:root[data-votc-theme="ink"] .world-memory-status-card strong.is-muted {
+  color: #8a5b13;
+}
+
+:root[data-votc-theme="parchment"] .world-memory-check,
+:root[data-votc-theme="ink"] .world-memory-check,
+:root[data-votc-theme="parchment"] .world-memory-field,
+:root[data-votc-theme="ink"] .world-memory-field {
+  color: var(--votc-text-body);
+}
+
+:root[data-votc-theme="knight"] .world-memory-status-card strong.is-ready {
+  color: #c8f6da;
+}
+
+:root[data-votc-theme="knight"] .world-memory-status-card strong.is-blocked,
+:root[data-votc-theme="knight"] .world-memory-feedback.is-error {
+  color: #ffd0d0;
+}
+
+:root[data-votc-theme="knight"] .world-memory-status-card strong.is-muted,
+:root[data-votc-theme="knight"] .world-memory-warning summary {
+  color: #f3d28a;
+}
+
+/* The supplied plates are the full panel backgrounds; theme buttons retain
+   their existing control icons and only switch the active theme. */
+:root[data-votc-theme="parchment"] .chat-box,
+:root[data-votc-theme="parchment"] .config-panel-container {
+  background-color: #e2e0d5 !important;
+  background-image: linear-gradient(rgba(247, 245, 237, 0.12), rgba(226, 224, 213, 0.26)), url("../../../../../image/草原游牧.png") !important;
+  background-repeat: no-repeat !important;
+  background-position: center !important;
+  background-size: cover !important;
+}
+
+:root[data-votc-theme="parchment"] .messages-container,
+:root[data-votc-theme="parchment"] .config-main-content {
+  background-color: #f1ebdc !important;
+  background-image: linear-gradient(rgba(250, 247, 239, 0.45), rgba(241, 235, 220, 0.56)), url("../../../../../image/草原游牧.png") !important;
+  background-repeat: no-repeat !important;
+  background-position: center !important;
+  background-size: cover !important;
+}
+
+:root[data-votc-theme="knight"] .chat-box,
+:root[data-votc-theme="knight"] .config-panel-container {
+  background-color: #0c0e12 !important;
+  background-image: linear-gradient(rgba(12, 14, 18, 0.12), rgba(8, 10, 14, 0.34)), url("../../../../../image/中世纪骑士.png") !important;
+  background-repeat: no-repeat !important;
+  background-position: center !important;
+  background-size: cover !important;
+}
+
+:root[data-votc-theme="knight"] .messages-container,
+:root[data-votc-theme="knight"] .config-main-content {
+  background-color: #121317 !important;
+  background-image: linear-gradient(rgba(18, 19, 23, 0.58), rgba(12, 13, 17, 0.68)), url("../../../../../image/中世纪骑士.png") !important;
+  background-repeat: no-repeat !important;
+  background-position: center !important;
+  background-size: cover !important;
+}
+
+:root[data-votc-theme="ink"] .chat-box,
+:root[data-votc-theme="ink"] .config-panel-container {
+  background-color: #dedfd3 !important;
+  background-image: linear-gradient(rgba(247, 244, 234, 0.05), rgba(222, 223, 211, 0.14)), url("../../../../../image/中国古典.png") !important;
+  background-repeat: no-repeat !important;
+  background-position: center !important;
+  background-size: cover !important;
+}
+
+:root[data-votc-theme="ink"] .messages-container,
+:root[data-votc-theme="ink"] .config-main-content {
+  background-color: #efede1 !important;
+  background-image: linear-gradient(rgba(250, 248, 239, 0.3), rgba(239, 237, 225, 0.43)), url("../../../../../image/中国古典.png") !important;
+  background-repeat: no-repeat !important;
+  background-position: center !important;
+  background-size: cover !important;
+}
+
+/* Light themes need a distinct worldline layer so the data cards do not
+   disappear into the pale center of the supplied plates. */
+:root[data-votc-theme="parchment"] .worldline-view {
+  color: #26322f;
+  background-color: rgba(190, 202, 196, 0.72);
+  border-color: rgba(65, 82, 76, 0.5);
+}
+
+:root[data-votc-theme="parchment"] .worldline-card,
+:root[data-votc-theme="parchment"] .worldline-subjective-view,
+:root[data-votc-theme="parchment"] .worldline-identity-resolution,
+:root[data-votc-theme="parchment"] .worldline-candidate-card,
+:root[data-votc-theme="parchment"] .worldline-diagnostic-summary,
+:root[data-votc-theme="parchment"] .worldline-diagnostic-sources,
+:root[data-votc-theme="parchment"] .worldline-resolver-trace,
+:root[data-votc-theme="parchment"] .worldline-observability-panel {
+  color: #26322f;
+  background-color: rgba(232, 233, 221, 0.78);
+  border-color: rgba(65, 82, 76, 0.5);
+}
+
+:root[data-votc-theme="parchment"] .worldline-metric,
+:root[data-votc-theme="parchment"] .worldline-semantic-item,
+:root[data-votc-theme="parchment"] .worldline-row,
+:root[data-votc-theme="parchment"] .worldline-note,
+:root[data-votc-theme="parchment"] .worldline-empty,
+:root[data-votc-theme="parchment"] .worldline-advanced-details {
+  background: rgba(198, 210, 204, 0.82);
+  color: #26322f;
+}
+
+:root[data-votc-theme="parchment"] .worldline-view .worldline-source-meta,
+:root[data-votc-theme="parchment"] .worldline-view .worldline-diagnostics,
+:root[data-votc-theme="parchment"] .worldline-view .worldline-subjective-facts small,
+:root[data-votc-theme="parchment"] .worldline-view .worldline-token-check,
+:root[data-votc-theme="parchment"] .worldline-view .worldline-explanation-reason {
+  color: #46554f;
+}
+
+:root[data-votc-theme="parchment"] .worldline-view .worldline-advanced-details > summary,
+:root[data-votc-theme="parchment"] .worldline-view .worldline-semantic-warning,
+:root[data-votc-theme="parchment"] .worldline-view .worldline-candidate-card strong {
+  color: #7b5413;
+}
+
+:root[data-votc-theme="parchment"] .worldline-view .worldline-error {
+  color: #8c2929;
+  background-color: rgba(255, 225, 218, 0.82);
+}
+
+:root[data-votc-theme="ink"] .worldline-view {
+  color: #302b26;
+  background-color: rgba(181, 166, 141, 0.58);
+  border-color: rgba(111, 73, 49, 0.48);
+}
+
+:root[data-votc-theme="ink"] .worldline-card,
+:root[data-votc-theme="ink"] .worldline-subjective-view,
+:root[data-votc-theme="ink"] .worldline-identity-resolution,
+:root[data-votc-theme="ink"] .worldline-candidate-card,
+:root[data-votc-theme="ink"] .worldline-diagnostic-summary,
+:root[data-votc-theme="ink"] .worldline-diagnostic-sources,
+:root[data-votc-theme="ink"] .worldline-resolver-trace,
+:root[data-votc-theme="ink"] .worldline-observability-panel {
+  color: #302b26;
+  background-color: rgba(247, 237, 215, 0.8);
+  border-color: rgba(111, 73, 49, 0.48);
+}
+
+:root[data-votc-theme="ink"] .worldline-metric,
+:root[data-votc-theme="ink"] .worldline-semantic-item,
+:root[data-votc-theme="ink"] .worldline-row,
+:root[data-votc-theme="ink"] .worldline-note,
+:root[data-votc-theme="ink"] .worldline-empty,
+:root[data-votc-theme="ink"] .worldline-advanced-details {
+  background: rgba(222, 210, 185, 0.82);
+  color: #302b26;
+}
+
+:root[data-votc-theme="ink"] .worldline-view .worldline-source-meta,
+:root[data-votc-theme="ink"] .worldline-view .worldline-diagnostics,
+:root[data-votc-theme="ink"] .worldline-view .worldline-subjective-facts small,
+:root[data-votc-theme="ink"] .worldline-view .worldline-token-check,
+:root[data-votc-theme="ink"] .worldline-view .worldline-explanation-reason {
+  color: #5d5145;
+}
+
+:root[data-votc-theme="ink"] .worldline-view .worldline-advanced-details > summary,
+:root[data-votc-theme="ink"] .worldline-view .worldline-semantic-warning,
+:root[data-votc-theme="ink"] .worldline-view .worldline-candidate-card strong {
+  color: #8a4c1f;
+}
+
+:root[data-votc-theme="ink"] .worldline-view .worldline-error {
+  color: #8c2929;
+  background-color: rgba(255, 225, 218, 0.84);
 }

@@ -4,11 +4,11 @@ const { resolveCharacterAge } = require("./character-age-service");
 const { resolveCharacterSexConsensus } = require("./character-demographic-normalizer");
 const { formatDeathFact, resolveLifeStatus } = require("./character-temporal-facts");
 
-function buildFamilyEntityFactBundle({ graph = null, responderId = null, targetRuntimeId = null, temporal = {} } = {}) {
-  if (!graph || responderId === null || responderId === undefined || targetRuntimeId === null || targetRuntimeId === undefined) return null;
+function buildFamilyEntityFactBundle({ graph = null, responderId = null, relationAnchorId = responderId, targetRuntimeId = null, temporal = {} } = {}) {
+  if (!graph || responderId === null || responderId === undefined || relationAnchorId === null || relationAnchorId === undefined || targetRuntimeId === null || targetRuntimeId === undefined) return null;
   const targetId = String(targetRuntimeId);
   const character = graph.nodes.get(targetId);
-  const relationResult = graph.relationBetween(targetId, responderId);
+  const relationResult = graph.relationBetween(targetId, relationAnchorId);
   if (!character || !relationResult.relation) return null;
   const sex = resolveCharacterSexConsensus({ snapshot: character });
   const life = resolveLifeStatus(character);
@@ -17,6 +17,7 @@ function buildFamilyEntityFactBundle({ graph = null, responderId = null, targetR
   return {
     entityId: targetId,
     responderEntityId: String(responderId),
+    relationAnchorEntityId: String(relationAnchorId),
     relation: relationResult.relation.type,
     relationLabel: relationResult.relation.label,
     relationshipKind: relationResult.relation.relationshipKind || "UNSPECIFIED",

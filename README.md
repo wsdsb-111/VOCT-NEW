@@ -26,7 +26,7 @@ Voices of the Court 是一个面向《Crusader Kings III》（CK3）的沉浸式
 
 ## 运行环境
 
-V8.8 已完成 [Terra Stage 1—4 Runtime / Historical / Kinship 实施](docs/v8.8-terra-stage1-4-implementation.md)、[Luna Entity & Kinship Inspector](docs/v8.8-luna-implementation-report.md)、[Sol 静态安全审查](docs/v8.8-sol-static-safety-review.md)、[Terra Stage 6 收口](docs/v8.8-terra-stage6-decommission-and-integrity.md)与 [Sol 最终代码审查](docs/v8.8-sol-final-code-review.md)。旧 V8.3 Shadow Resolver、Ground Truth Dashboard 和专用 IPC 已退役；历史人物身份只走 V8.8 Definition-ID 双向绑定。生死、性别、已故配偶、年度死亡 Delta 与确定性世界摘要现统一 fail-closed；关系类型仅接受来源明确标注的 Biological / Adoptive / Step，显式类型冲突进入完整性报告。262/262 发布组及隔离 Electron 世界线导航通过，代码侧 P0/P1 为 0；Stage 8 真实 CK3/Provider/100 次对话/2 小时 Soak 尚未完成，因此 V8.8 尚未 Full Freeze。
+V8.8.1 已完成 [第三方亲属关系锚点实施](docs/v8.8.1-implementation-report.md)与 [UI 主题背景补充](docs/v8.8-ui-theme-backgrounds.md)：回应者、关系主体与目标人物按独立 Runtime ID 解析，第三方姓名/头衔/府邸可查询其亲属；“得一子/女”的显式性别在 Anchor 或目标未解析时仍 fail-closed，不再被 Memory 或模型反向改写。该链路仅使用 CK3 结构化亲属数据，不要求目标人物已有任何对话或摘要。外挂 UI 三种风格现在分别使用游牧、骑士、水墨背景图，并通过主题遮罩和不透明内容层保持文字、输入框、状态色清晰。旧 V8.3 Shadow Resolver、Ground Truth Dashboard 和专用 IPC 已退役；历史人物身份只走 V8.8 Definition-ID 双向绑定。生死、性别、已故配偶、年度死亡 Delta 与确定性世界摘要现统一 fail-closed；关系类型仅接受来源明确标注的 Biological / Adoptive / Step，显式类型冲突进入完整性报告。264/264 发布组通过；Stage 8 真实 CK3/Provider/100 次对话/2 小时 Soak 与三主题人工视觉尚未完成，因此 V8.8 尚未 Full Freeze。
 
 V8.7.2 已完成 Terra + Luna 施工及 [Sol 最终正确性审查](docs/v8.7.2-sol-final-review.md)：Current Truth 由 CK3 只读预览并由服务端二次核验；新的 CK3 载入会话必须明确继续当前分支或建立独立分支；旧 Supplemental 只读并可经审阅迁移为 Canon。Sol 已收口 Load Session 重复、迁移并发/ACL、双重召回和默认页重数据加载风险；新增 DeepSeek 模型选项、移除“优化 → 历史人物”普通入口，修复后台世界线通知导致世界记忆编辑器收起的 P0，并完成 CK3 中文日期到 Canon canonical 日期链热修，249/249 发布组通过。真实 CK3、Provider 与打包 Electron Gate 尚未完成，当前不标记 FULL FREEZE。
 
@@ -216,16 +216,16 @@ V7.7 在 V7.6 健康化基础上分阶段拆分主进程：第一阶段将六种
 node scripts\test-release.js
 ```
 
-清单会覆盖全部 `test-*.js`。当前分类为 331 个测试文件、262 个直接发布组和 68 个归档检查；已退役的 V8.3/V8.3.1 Shadow Resolver、Ground Truth 与诊断面板测试不再作为发布路径。V8.8 门禁继续覆盖历史基线、Campaign/Worldline、Definition-ID 绑定、亲属关系、完整性扫描和冻结边界；既有 Run Command Recovery T1–T18、Memory、Conversation、Action、Letter、Relationship、Date Producer 与缓存回归继续执行。
+清单会覆盖全部 `test-*.js`。当前分类为 332 个测试文件、263 个直接发布组和 68 个归档检查；已退役的 V8.3/V8.3.1 Shadow Resolver、Ground Truth 与诊断面板测试不再作为发布路径。V8.8.1 门禁继续覆盖历史基线、Campaign/Worldline、Definition-ID 绑定、第三方亲属 Anchor、性别 fail-closed、完整性扫描和冻结边界；既有 Run Command Recovery T1–T18、Memory、Conversation、Action、Letter、Relationship、Date Producer 与缓存回归继续执行。
 
 ## 版本信息
 
 - 外挂 UI 版本：v2.0.4
-- 当前应用功能基线：V8.8 Worldline Definition-ID 绑定、关系事实与按需完整性扫描已完成；Stage 8 真实 CK3/Provider/长时 Electron Gate 与 Stage 9 Final Freeze 尚未完成
+- 当前应用功能基线：V8.8.1 Worldline Definition-ID、第三方亲属关系 Anchor、结构化关系事实、按需完整性扫描与游牧/骑士/水墨三主题整块背景已完成；Stage 8 真实 CK3/Provider/长时 Electron Gate、三主题人工视觉与 Stage 9 Final Freeze 尚未完成
 - CK3 模组版本：Voices of the Court 2.0.5
 - 模组支持版本：CK3 1.18.*
 - UI 主题：宫廷编年史风格（深红、暗金、羊皮纸文本层级）
-- UI 主题切换：羊皮卷、骑士纹章、水墨画卷三套完整历史风格；分别拥有独立背景、边框结构、按钮造型、消息卡片、输入框、字体和滚动条，并可自动保存选择
+- UI 主题切换：游牧、骑士纹章、水墨画卷三套完整历史风格；分别使用 `image/草原游牧.png`、`image/中世纪骑士.png`、`image/中国古典.png` 作为整块界面背景，并保留各自的边框结构、按钮造型、消息卡片、输入框、字体和滚动条，主题选择可自动保存
 - UI 素材生成提示词：参见 [docs/UI_ASSET_PROMPTS_2.0.3.md](docs/UI_ASSET_PROMPTS_2.0.3.md)
 - 当前重点：执行 V8.8 Stage 8 人工 Gate，验证 CK3 世界线读取、Definition-ID 绑定、关系事实、Provider 与长时 Electron 稳定性；Official VOTC 2.0.3 Action 和 Memory Engine 2.6 存储合同保持冻结
 

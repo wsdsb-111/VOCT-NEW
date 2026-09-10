@@ -8,6 +8,8 @@
 
 | 版本 | 重点 | 详细记录 |
 | --- | --- | --- |
+| v8.8 UI 主题背景补充 | 三个兼容主题键分别将整块外挂界面映射到游牧、骑士、水墨背景图；按钮继续作为主题切换控件；主面板、世界线、世界记忆与输入控件增加遮罩/不透明内容层和主题对比色 | [UI 主题背景补充](docs/v8.8-ui-theme-backgrounds.md) / [V8 阶段记录](docs/V8阶段开发记录.md) |
+| v8.8.1 第三方亲属关系锚点 | 将回应者、关系主体和目标人物拆分为独立 Runtime ID；支持姓名/头衔/府邸的第三方亲属查询、“得一子/女”性别 fail-closed、子女 alias 与可诊断输出；263/263 发布组通过，真实 CK3/Provider Gate 待执行 | [V8.8.1 实施报告](docs/v8.8.1-implementation-report.md) / [V8 阶段记录](docs/V8阶段开发记录.md) |
 | v8.8 Sol 最终代码审查 | 修复原始家庭事实、确定性世界摘要、年度死亡 Delta、配偶状态与 Historical/Kinship 性别仲裁旁路；关系类型重复边可合并显式信息并报告冲突；262/262 发布组及隔离 Electron 导航通过，代码侧 P0/P1 为 0，Stage 8 人工 Gate 待完成 | [Sol 最终代码审查](docs/v8.8-sol-final-code-review.md) / [V8 阶段记录](docs/V8阶段开发记录.md) |
 | v8.8 Terra Stage 6 | 退役已作废的 V8.3/V8.3.1 Shadow Historical Figure Resolver、Ground Truth、诊断 IPC 与 Dashboard，保留 V8.8 Definition-ID 双向绑定；新增仅依来源显式标记的 Biological/Adoptive/Step 分类、按需完整性扫描、Checkpoint/branch 缓存清理与回归 | [Terra Stage 6 收口](docs/v8.8-terra-stage6-decommission-and-integrity.md) / [V8 阶段记录](docs/V8阶段开发记录.md) |
 | v8.8 Sol 静态安全审查 | 修复大存档亲属图二次方构建导致的世界线延迟白屏、Historical Binding 重复全表扫描、Current Truth 生死冲突、关系方向/目标串线及跨来源性别冲突；真实 15.8 万人物存档 Inspector 降至约 170ms，269/269 发布组通过；Stage 8/9 尚待完成 | [Sol 静态审查](docs/v8.8-sol-static-safety-review.md) / [V8 阶段记录](docs/V8阶段开发记录.md) |

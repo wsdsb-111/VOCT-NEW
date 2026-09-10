@@ -4,7 +4,7 @@
 
 ## 推荐阅读顺序
 
-V8.8 当前入口：[Sol 最终代码审查](v8.8-sol-final-code-review.md)。旧 V8.3 Shadow 链、关系分类/完整性、同名隔离、Secret、缓存以及生死/性别所有已知旁路均已收口；262/262 发布组与隔离 Electron 导航通过，代码侧 P0/P1 为 0。Stage 8 真实 CK3/Provider/100 次对话/2 小时 Soak 尚待完成，因此仍为 `PENDING STAGE 8 MANUAL GATES`。
+V8.8.1 当前入口：[第三方亲属关系锚点实施报告](v8.8.1-implementation-report.md) 与 [UI 主题背景补充](v8.8-ui-theme-backgrounds.md)。回应者、关系主体与目标人物现按独立 Runtime ID 解析；第三方姓名/头衔/府邸的亲属查询、显式性别 fail-closed、子女 alias、关系诊断与三套主题背景映射已完成。264/264 发布组通过；真实 CK3/Provider/100 次对话/2 小时 Soak 与三主题人工视觉尚待完成，因此仍为 `PENDING STAGE 8 MANUAL GATES`。
 
 V8.7.2 当前基线：[Terra 实施报告](v8.7.2-terra-implementation-report.md)、[Luna 实施报告](v8.7.2-luna-implementation-report.md)与 [Sol 最终正确性审查](v8.7.2-sol-final-review.md)已完成；Load Session、Legacy 迁移原子性/ACL、双重召回、默认页性能边界、DeepSeek 模型选项、历史人物普通入口清理、世界记忆输入稳定性 P0 与 CK3 中文日期链热修已收口，249/249 发布组通过。真实 CK3、Provider 与打包 Electron Gate 待执行，当前为 `PENDING MANUAL GATES`。
 
@@ -56,14 +56,16 @@ V8.5.1 历史基线：[Sol 最终审查与修复](v8.5.1-sol-final-review.md)，
 32. [V8.5.2 Sol UI / DTO 边界独立审查](v8.5.2-sol-ui-boundary-review.md)：additive/legacy 摘要一致性、SOURCE_INCOMPLETE 优先级、A/B/C 层泄漏和有界渲染复核。
 33. [V8.8 Luna Entity & Kinship Inspector](v8.8-luna-implementation-report.md)：身份/状态/关系/差异四栏、同名候选、关系歧义、已故状态、Relation Path、历史身份页和 raw enum 隔离。
 34. [V8.8 Sol 静态架构与安全审查](v8.8-sol-static-safety-review.md)：大存档白屏性能修复、关系/身份正确性、Secret/Memory/Cache 边界、真实存档隔离 Electron 证据和未冻结项。
-34. [README_摘要系统.md](README_摘要系统.md)：Memory Engine 2.6 可见标签、2.5 存储合同、冻结召回、Turn Recall、第三人证据与生命周期规则。
-35. [V7阶段优化记录.md](V7阶段优化记录.md)：V7/V7.x 的连续阶段记录。
-36. [V6阶段优化记录.md](V6阶段优化记录.md)：V6.2 至当前 V6.x 的动作系统和基础设施记录。
-37. 需要核对具体方案时，再阅读版本设计文档和实施报告。
+35. [V8.8.1 第三方亲属关系锚点](v8.8.1-implementation-report.md)：第三方 Anchor、自然中文关系意图、性别 fail-closed、子女 alias、诊断与自动化证据。
+36. [V8.8 UI 主题背景补充](v8.8-ui-theme-backgrounds.md)：游牧、骑士、水墨三套背景映射、控件可读性覆盖层与验证结果。
+37. [README_摘要系统.md](README_摘要系统.md)：Memory Engine 2.6 可见标签、2.5 存储合同、冻结召回、Turn Recall、第三人证据与生命周期规则。
+38. [V7阶段优化记录.md](V7阶段优化记录.md)：V7/V7.x 的连续阶段记录。
+39. [V6阶段优化记录.md](V6阶段优化记录.md)：V6.2 至当前 V6.x 的动作系统和基础设施记录。
+40. 需要核对具体方案时，再阅读版本设计文档和实施报告。
 
 ## 文档分类
 
-最新阶段：[V8.8 Sol 最终代码审查](v8.8-sol-final-code-review.md)；已修复生死/年度 Delta/配偶/世界摘要与性别仲裁旁路、关系类型去重冲突，当前已审计生产代码 `P0/P1=0 OPEN`。Stage 8 真实 Gate 尚未完成，V8.8 尚未 Full Freeze。
+最新阶段：[V8.8.1 第三方亲属关系锚点实施报告](v8.8.1-implementation-report.md) 与 [V8.8 UI 主题背景补充](v8.8-ui-theme-backgrounds.md)；已修复第三方亲属主体误绑回应者、显式性别约束丢失与缺锚点静默空投影，并接入游牧/骑士/水墨三套主题背景及可读性覆盖层。Stage 8 真实 Gate 与三主题人工视觉尚未完成，V8.8 尚未 Full Freeze。
 
 ### 架构与运行规则
 
@@ -73,6 +75,7 @@ V8.5.1 历史基线：[Sol 最终审查与修复](v8.5.1-sol-final-review.md)，
 - [v8.8-sol-static-safety-review.md](v8.8-sol-static-safety-review.md)：V8.8 Sol 大存档性能、身份/亲属正确性、Secret/Memory/Cache 边界审查与真实存档隔离 Electron 结果。
 - [v8.8-terra-stage6-decommission-and-integrity.md](v8.8-terra-stage6-decommission-and-integrity.md)：V8.3 Shadow 链路退役、显式亲属类型、完整性扫描和 Checkpoint/branch 缓存边界。
 - [v8.8-sol-final-code-review.md](v8.8-sol-final-code-review.md)：最终代码审查、生死/性别旁路修复、全量回归、隔离 Electron 证据与 Stage 8 人工冻结边界。
+- [v8.8.1-implementation-report.md](v8.8.1-implementation-report.md)：第三方亲属 Anchor、自然中文关系意图、性别 fail-closed、子女 alias、诊断和自动化/实机边界。
 - [V8阶段开发记录.md](V8阶段开发记录.md)：V8.0 起的 Historical Baseline、Temporal Gate 与后续世界线阶段记录。
 - [v8.4-gamestate-capability-report.md](v8.4-gamestate-capability-report.md)：V8.4 CK3 Save/GameState 前置勘探总览；仅报告能力，不代表正式 V8.4 已实现。
 - [v8.4-ck3-save-container-report.md](v8.4-ck3-save-container-report.md)：`SAV0100` 容器、metadata、Gamestate 提取和存档轮换观察。

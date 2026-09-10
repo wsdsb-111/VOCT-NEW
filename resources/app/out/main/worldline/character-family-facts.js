@@ -6,7 +6,7 @@ const { getCachedKinshipGraph } = require("./kinship-graph-cache");
 const { formatDeathFact, resolveLifeStatus } = require("./character-temporal-facts");
 const { resolveKinshipLabel } = require("./kinship-label-resolver");
 const { resolveCharacterSexConsensus } = require("./character-demographic-normalizer");
-const { resolveRelationMention } = require("./relation-mention-resolver");
+const { resolveAnchoredRelationMention } = require("./anchored-relation-resolver");
 const { buildFamilyEntityFactBundle } = require("./family-entity-fact-bundle");
 
 const DISPLAY_TYPES = new Set(["PARENT_OF", "CHILD_OF", "SIBLING_OF", "GRANDPARENT_OF", "AUNT_UNCLE_OF", "NIECE_NEPHEW_OF", "COUSIN_OF", "SPOUSE_OF", "FORMER_SPOUSE_OF", "DECEASED_SPOUSE_OF"]);
@@ -37,13 +37,24 @@ function buildFamilyFactBlock(character, gameData, { query = "", recentTargetId 
   if (!character?.id || !gameData) return null;
   const graph = getCachedKinshipGraph(gameData);
   const temporal = { currentGameDate: gameData.date, currentTotalDays: gameData.totalDays };
-  const relationResolution = query ? resolveRelationMention({ query, responderId: character.id, graph, recentTargetId }) : null;
+  const relationResolution = query ? resolveAnchoredRelationMention({ query, responderId: character.id, graph, recentTargetId }) : null;
+  if (relationResolution?.intent?.sourcePhrase) {
+    console.log(`[VOTC Relation] query=${String(query).replace(/\s+/g, " ").trim()} intent=${relationResolution.intent.relationTypes.join(",") || "NONE"} sex=${relationResolution.intent.sexConstraint || "unknown"} anchorMention=${relationResolution.anchor.mention || "-"} anchorRuntimeId=${relationResolution.relationAnchorRuntimeId || "-"} targetRuntimeId=${relationResolution.targetRuntimeId || "-"} targetName=${relationResolution.target?.name || "-"} resolution=${relationResolution.status}`);
+  }
+  if (relationResolution?.status === "NO_RELATION_INTENT") return null;
   if (relationResolution?.status === "RELATION_AMBIGUOUS") {
     return `=== 当前结构化家庭事实（本轮 CK3 数据） ===\n- “${relationResolution.mention}”存在多个候选，系统未选择任何人，也未注入任一候选的私有事实。\n权威规则：需要玩家提供姓名或更明确的上下文后再继续。`;
   }
-  if (relationResolution && relationResolution.status !== "RELATION_RESOLVED") return null;
+  if (relationResolution && relationResolution.status !== "NO_RELATION_INTENT" && relationResolution.status !== "RELATION_RESOLVED") {
+    if (relationResolution.intent.sexConstraint) {
+      const sexLabel = relationResolution.intent.sexConstraint === "male" ? "男性" : "女性";
+      return `=== 当前结构化亲属约束（本轮查询） ===\n- 玩家明确称目标为“${relationResolution.mention}”，该目标必须作为${sexLabel}亲属处理。\n权威规则：关系主体或具体人物尚未可靠解析时，不得将该目标改写为${relationResolution.intent.sexConstraint === "male" ? "女性、女儿、她、女子" : "男性、儿子、他、男子"}。不得用 Memory 或模型推测覆盖本约束。`;
+    }
+    return null;
+  }
   const relations = (relationResolution
-    ? graph.relationsTo(character.id).filter((edge) => String(edge.from) === String(relationResolution.targetRuntimeId))
+    && relationResolution.status === "RELATION_RESOLVED"
+    ? graph.relationsTo(relationResolution.relationAnchorRuntimeId).filter((edge) => String(edge.from) === String(relationResolution.targetRuntimeId))
     : graph.relationsTo(character.id).filter((edge) => DISPLAY_TYPES.has(edge.type)));
   const seen = new Set();
   const lines = [];
@@ -52,9 +63,10 @@ function buildFamilyFactBlock(character, gameData, { query = "", recentTargetId 
     if (seen.has(key)) continue;
     seen.add(key);
     const relative = graph.nodes.get(edge.from) || {};
-    const resolution = graph.relationBetween(edge.from, character.id);
+    const relationAnchorId = relationResolution?.relationAnchorRuntimeId || character.id;
+    const resolution = graph.relationBetween(edge.from, relationAnchorId);
     if (!resolution.relation) continue;
-    const bundle = buildFamilyEntityFactBundle({ graph, responderId: character.id, targetRuntimeId: edge.from, temporal });
+    const bundle = buildFamilyEntityFactBundle({ graph, responderId: character.id, relationAnchorId, targetRuntimeId: edge.from, temporal });
     if (!bundle) continue;
     const sex = resolveCharacterSexConsensus({ snapshot: relative });
     const label = resolveKinshipLabel({ type: edge.type, sex: sex.sex, branch: edge.branch });
@@ -66,7 +78,12 @@ function buildFamilyFactBlock(character, gameData, { query = "", recentTargetId 
     else if (death) details.push(death.text);
     else if (lifeStatus.alive === true) details.push("在世");
     if (!death && age.age !== null) details.push(`${age.age}岁`);
-    lines.push(`- ${label}：${characterName(relative, edge.from)}${details.length ? `（${details.join("；")}）` : ""}`);
+    if (relationResolution?.status === "RELATION_RESOLVED") {
+      const anchor = graph.nodes.get(String(relationAnchorId)) || {};
+      lines.push(`- 查询关系主体：${characterName(anchor, relationAnchorId)}；查询关系：${relationResolution.intent.label || label}；目标人物：${characterName(relative, edge.from)}（Runtime ID：${edge.from}；性别：${sex.sex === "male" ? "男性" : sex.sex === "female" ? "女性" : "未知"}${details.length ? `；${details.join("；")}` : ""}）`);
+    } else {
+      lines.push(`- ${label}：${characterName(relative, edge.from)}${details.length ? `（${details.join("；")}）` : ""}`);
+    }
   }
   for (const spouse of relationResolution ? [] : normalizeSpouseRecords(character).filter((record) => record.runtimeId === null && record.name)) {
     lines.push(`- 配偶/伴侣（未绑定角色）：${spouse.name}`);

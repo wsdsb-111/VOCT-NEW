@@ -251,6 +251,8 @@ const releaseChecks = [
   { group: "v8.8-cache-load-boundary", script: "test-v8.8-cache-load-boundary.js" },
   { group: "v8.8-relationship-kind-integrity", script: "test-v8.8-relationship-kind-integrity.js" },
   { group: "v8.8-retired-v8.3-shadow-chain", script: "test-v8.8-retired-v8.3-shadow-chain.js" },
+  { group: "v8.8.1-anchored-relation-resolution", script: "test-v8.8.1-anchored-relation-resolution.js" },
+  { group: "v8.8-ui-style-backgrounds", script: "test-v8.8-ui-style-backgrounds.js" },
   ...["killer-authority-fallback", "coreference-ttl", "history-reset-coreference", "contested-authority", "kinship-cache-structural-revision"].map((name) => ({ group: `v8.7-${name}`, script: `test-v8.7-${name}.js` })),
   { group: "v8.7.0-conversation-mention-routing", script: "test-v8.7.0-conversation-mention-routing.js" },
   { group: "v8.7.0-third-party-authority-conflict", script: "test-v8.7.0-third-party-authority-conflict.js" },
