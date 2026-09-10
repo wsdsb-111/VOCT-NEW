@@ -100,6 +100,7 @@ function buildFamilyFactBlock(character, gameData, { query = "", recentTargetId 
     const age = { age: bundle.age, label: bundle.ageLabel };
     const details = [];
     if (!bundle.sourceComplete) details.push("来源范围不完整");
+    if (sex.conflict) details.push("性别数据存在冲突，未输出性别结论");
     if (lifeStatus.conflict) details.push("生死状态存在冲突，未输出结论");
     else if (death) details.push(death.text);
     else if (lifeStatus.alive === true) details.push("在世");

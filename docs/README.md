@@ -4,7 +4,7 @@
 
 ## 推荐阅读顺序
 
-V8.8.2 当前入口：[亲属关系正确性闭环](v8.8.2-correctness-closure.md)。长幼关系按 Anchor 出生日比较，出生日缺失/并列、性别冲突、Anchor/Target 未解析和来源截断均 fail-closed；多重角色按查询关系限定，Definition↔Runtime 强制双向一对一。275/275 发布组通过；真实 CK3/Provider 十问矩阵、100 次对话与 2 小时 Soak 尚待完成，因此仍为 `PENDING STAGE 8 MANUAL GATES`。
+V8.8.2 当前入口：[亲属关系正确性闭环](v8.8.2-correctness-closure.md)。长幼关系按 Anchor 出生日比较，出生日缺失/并列、性别冲突、Anchor/Target 未解析和来源截断均 fail-closed；多重角色按查询关系限定，Definition↔Runtime 强制双向一对一。后续热修将已故配偶改为观察者方向，缓存覆盖人口属性，中性“配偶”在性别冲突下仍可唯一解析。278/278 发布组通过；真实 CK3/Provider 十问矩阵、100 次对话与 2 小时 Soak 尚待完成，因此仍为 `PENDING STAGE 8 MANUAL GATES`。
 
 V8.7.2 当前基线：[Terra 实施报告](v8.7.2-terra-implementation-report.md)、[Luna 实施报告](v8.7.2-luna-implementation-report.md)与 [Sol 最终正确性审查](v8.7.2-sol-final-review.md)已完成；Load Session、Legacy 迁移原子性/ACL、双重召回、默认页性能边界、DeepSeek 模型选项、历史人物普通入口清理、世界记忆输入稳定性 P0 与 CK3 中文日期链热修已收口，249/249 发布组通过。真实 CK3、Provider 与打包 Electron Gate 待执行，当前为 `PENDING MANUAL GATES`。
 
@@ -58,7 +58,7 @@ V8.5.1 历史基线：[Sol 最终审查与修复](v8.5.1-sol-final-review.md)，
 34. [V8.8 Sol 静态架构与安全审查](v8.8-sol-static-safety-review.md)：大存档白屏性能修复、关系/身份正确性、Secret/Memory/Cache 边界、真实存档隔离 Electron 证据和未冻结项。
 35. [V8.8.1 第三方亲属关系锚点](v8.8.1-implementation-report.md)：第三方 Anchor、自然中文关系意图、性别 fail-closed、子女 alias、诊断与自动化证据。
 36. [V8.8 UI 主题背景补充](v8.8-ui-theme-backgrounds.md)：游牧、骑士、水墨三套背景映射、控件可读性覆盖层与验证结果。
-37. [V8.8.2 亲属关系正确性闭环](v8.8.2-correctness-closure.md)：长幼参照、性别冲突、多重角色、身份一对一、截断与来源完整性修复及门禁。
+37. [V8.8.2 亲属关系正确性闭环](v8.8.2-correctness-closure.md)：长幼参照、性别冲突、多重角色、身份一对一、已故配偶方向、人口属性缓存、截断与来源完整性修复及门禁。
 38. [README_摘要系统.md](README_摘要系统.md)：Memory Engine 2.6 可见标签、2.5 存储合同、冻结召回、Turn Recall、第三人证据与生命周期规则。
 39. [V7阶段优化记录.md](V7阶段优化记录.md)：V7/V7.x 的连续阶段记录。
 40. [V6阶段优化记录.md](V6阶段优化记录.md)：V6.2 至当前 V6.x 的动作系统和基础设施记录。
@@ -66,7 +66,7 @@ V8.5.1 历史基线：[Sol 最终审查与修复](v8.5.1-sol-final-review.md)，
 
 ## 文档分类
 
-最新阶段：[V8.8.2 亲属关系正确性闭环](v8.8.2-correctness-closure.md)；在 V8.8.1 Anchor 结构上收口长幼参照、出生日歧义、性别冲突、多重角色限定、Definition↔Runtime 一对一和来源完整性。Stage 8 真实 CK3/Provider Gate 与三主题人工视觉尚未完成，V8.8 尚未 Full Freeze。
+最新阶段：[V8.8.2 亲属关系正确性闭环](v8.8.2-correctness-closure.md)；在 V8.8.1 Anchor 结构上收口长幼参照、出生日歧义、性别冲突、多重角色限定、Definition↔Runtime 一对一、已故配偶方向与人口属性缓存。Stage 8 真实 CK3/Provider Gate 与三主题人工视觉尚未完成，V8.8 尚未 Full Freeze。
 
 ### 架构与运行规则
 

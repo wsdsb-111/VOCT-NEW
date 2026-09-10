@@ -11,7 +11,11 @@ function relationFingerprint(gameData) {
     character?.id,
     ...["parents", "children", "siblings", "spouse", "spouses", "formerSpouses", "deceasedSpouses"].map((field) => JSON.stringify(character?.[field] ?? null)),
     character?.consort && typeof character.consort === "object" ? character.consort.id ?? character.consort.name : character?.consort || "",
+    character?.gender ?? character?.sex ?? character?.female ?? "",
+    character?.evidence?.conflicts?.gender === true,
+    character?.birthDateTotalDays ?? character?.birthTotalDays ?? "",
     character?.alive,
+    character?.evidence?.conflicts?.alive === true,
     character?.deathDateTotalDays ?? character?.deathDate ?? ""
   ].join(":")).sort().join("|");
 }

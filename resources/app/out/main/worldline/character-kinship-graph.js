@@ -107,11 +107,15 @@ function buildKinshipGraph(source = {}) {
       if (!spouseId) continue;
       const spouseNode = nodes.get(spouseId);
       const spouseLife = resolveLifeStatus(spouseNode || spouse.raw || {});
-      const type = spouse.relationType === "DECEASED_SPOUSE" || spouseLife.alive === false
+      const type = spouse.relationType === "FORMER_SPOUSE" ? "FORMER_SPOUSE_OF"
+        : spouse.relationType === "DECEASED_SPOUSE" || spouseLife.alive === false
         ? "DECEASED_SPOUSE_OF"
-        : spouse.relationType === "FORMER_SPOUSE" ? "FORMER_SPOUSE_OF" : "SPOUSE_OF";
+        : "SPOUSE_OF";
+      const reverseLife = resolveLifeStatus(character);
+      const reverseType = spouse.relationType === "FORMER_SPOUSE" ? "FORMER_SPOUSE_OF"
+        : reverseLife.alive === false ? "DECEASED_SPOUSE_OF" : "SPOUSE_OF";
       add(characterId, spouseId, type, [characterId, spouseId], spouse.confidence, { source: "SNAPSHOT_DIRECT" });
-      add(spouseId, characterId, type, [spouseId, characterId], spouse.confidence, { source: "SNAPSHOT_DIRECT" });
+      add(spouseId, characterId, reverseType, [spouseId, characterId], spouse.confidence, { source: "SNAPSHOT_DIRECT" });
     }
     for (const evidence of character?.evidence?.relations || []) {
       const ownerId = ensureNode(evidence.ownerId);

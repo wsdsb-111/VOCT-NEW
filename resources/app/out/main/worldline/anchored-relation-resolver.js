@@ -57,7 +57,7 @@ function resolveAnchoredRelationMention({ query = "", responderId = null, graph 
   });
   if (graph?.scopeTruncated) return { ...base, status: "RELATION_SOURCE_INCOMPLETE", mention: intent.sourcePhrase, candidates: summarize(allCandidates), candidateTotal: allCandidates.length, truncated: true };
   if (allCandidates.some((candidate) => candidate.relationDiagnostic || !candidate.relation)) return { ...base, status: "RELATION_CONFLICT_TYPE", mention: intent.sourcePhrase, candidates: summarize(allCandidates), candidateTotal: allCandidates.length };
-  if (allCandidates.some((candidate) => candidate.sex.conflict)) return { ...base, status: "RELATION_GENDER_CONFLICT", mention: intent.sourcePhrase, candidates: summarize(allCandidates), candidateTotal: allCandidates.length };
+  if (intent.sexConstraint && allCandidates.some((candidate) => candidate.sex.conflict)) return { ...base, status: "RELATION_GENDER_CONFLICT", mention: intent.sourcePhrase, candidates: summarize(allCandidates), candidateTotal: allCandidates.length };
   let candidates = allCandidates.filter((candidate) => !intent.sexConstraint || candidate.sex.sex === intent.sexConstraint);
   if (!candidates.length) return { ...base, status: "RELATION_UNKNOWN", mention: intent.sourcePhrase, candidates: [], candidateTotal: 0 };
   if (intent.birthOrder === "older" || intent.birthOrder === "younger") {

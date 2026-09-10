@@ -5,6 +5,6 @@ const { familyCharacters } = require("./v8.6.2-test-fixtures");
 const characters = familyCharacters();
 const block = buildFamilyFactBlock(characters["1"], { date: "1171.9.20", getMentionableCharacterProfiles: () => new Map(Object.entries(characters)) });
 assert(block.includes("当前结构化家庭事实"));
-assert(block.includes("父亲：父") && block.includes("亡妻：亡妻"));
+assert(block.includes("父亲：父") && block.includes("妻子：亡妻") && block.includes("1170年2月1日去世"));
 assert(block.includes("Memory") && block.includes("不得覆盖"));
 console.log("V8.6.2 Family Prompt: PASS");

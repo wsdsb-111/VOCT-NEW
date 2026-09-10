@@ -16,9 +16,12 @@ const nameOnly = normalizeSpouseRecords({ id: 1, consort: "王氏" });
 assert.deepStrictEqual(nameOnly.map((record) => [record.runtimeId, record.name, record.relationType]), [[null, "王氏", "UNKNOWN_CONSORT"]]);
 assert.equal(buildKinshipGraph({ 1: { id: 1, consort: "王氏" } }).relationsTo(1).length, 0, "name-only consort must not invent a runtime edge");
 
-const bound = buildKinshipGraph({
+const boundGraph = buildKinshipGraph({
   1: { id: 1, spouses: [{ id: 3, name: "李氏", alive: false, deathDate: "1170.1.1" }] },
   3: { id: 3, name: "李氏", gender: "female", alive: false, deathDate: "1170.1.1" }
-}).relationBetween(3, 1).relation;
-assert(bound && bound.type === "DECEASED_SPOUSE_OF");
+});
+const bound = boundGraph.relationBetween(3, 1).relation;
+const deceasedTarget = boundGraph.relationBetween(1, 3).relation;
+assert(bound && bound.type === "SPOUSE_OF");
+assert(deceasedTarget && deceasedTarget.type === "DECEASED_SPOUSE_OF");
 console.log("V8.7.0 Direct Sibling / Consort: PASS (LOG_DIRECT sibling and name-only spouse safety)");
