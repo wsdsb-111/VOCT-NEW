@@ -266,6 +266,8 @@ const releaseChecks = [
   { group: "v8.8.2-spouse-status-direction", script: "test-v8.8.2-spouse-status-direction.js" },
   { group: "v8.8.2-relation-cache-demographics", script: "test-v8.8.2-relation-cache-demographics.js" },
   { group: "v8.8.2-neutral-spouse-gender-conflict", script: "test-v8.8.2-neutral-spouse-gender-conflict.js" },
+  { group: "v8.8.2-spouse-intent-status", script: "test-v8.8.2-spouse-intent-status.js" },
+  { group: "v8.8.2-spouse-production-revision", script: "test-v8.8.2-spouse-production-revision.js" },
   { group: "v8.8-ui-style-backgrounds", script: "test-v8.8-ui-style-backgrounds.js" },
   ...["killer-authority-fallback", "coreference-ttl", "history-reset-coreference", "contested-authority", "kinship-cache-structural-revision"].map((name) => ({ group: `v8.7-${name}`, script: `test-v8.7-${name}.js` })),
   { group: "v8.7.0-conversation-mention-routing", script: "test-v8.7.0-conversation-mention-routing.js" },

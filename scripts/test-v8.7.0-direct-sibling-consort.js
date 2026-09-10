@@ -22,6 +22,6 @@ const boundGraph = buildKinshipGraph({
 });
 const bound = boundGraph.relationBetween(3, 1).relation;
 const deceasedTarget = boundGraph.relationBetween(1, 3).relation;
-assert(bound && bound.type === "SPOUSE_OF");
-assert(deceasedTarget && deceasedTarget.type === "DECEASED_SPOUSE_OF");
+assert(bound && bound.type === "DECEASED_SPOUSE_OF");
+assert(deceasedTarget && deceasedTarget.type === "SPOUSE_OF");
 console.log("V8.7.0 Direct Sibling / Consort: PASS (LOG_DIRECT sibling and name-only spouse safety)");

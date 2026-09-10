@@ -31,7 +31,9 @@ function resultBase({ responderId, intent, anchor }) {
     targetRuntimeId: null,
     intent: {
       relationTypes: intent.relationTypes || [],
+      spouseStatus: intent.spouseStatus || null,
       sexConstraint: intent.sexConstraint || null,
+      label: intent.label || null,
       birthOrder: intent.birthOrder || null,
       recency: intent.recency || null,
       sourcePhrase: intent.sourcePhrase || null

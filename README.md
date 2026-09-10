@@ -26,7 +26,7 @@ Voices of the Court 是一个面向《Crusader Kings III》（CK3）的沉浸式
 
 ## 运行环境
 
-V8.8.2 已完成 [亲属关系正确性闭环](docs/v8.8.2-correctness-closure.md)：兄弟姐妹长幼改为与关系主体出生日比较；出生日缺失或并列、Anchor/Target 未解析、性别冲突及来源截断统一 fail-closed。多重亲属角色按查询类型限定，配偶称谓保持性别中立；Historical Definition↔Runtime 要求双向真正一对一，Family Fact 的来源完整性不再误报。后续热修将已故配偶改为按观察者方向表达，亲属缓存纳入性别、出生与生死属性；中性“配偶”可在性别冲突下唯一解析，妻子/丈夫仍 fail-closed。新增 3 个专项门禁，完整发布回归为 278/278（347 个测试文件分类、68 个历史检查归档）。真实 CK3/Provider 十问矩阵与 Stage 8 长时 Gate 尚待执行，因此 V8.8 尚未 Full Freeze。
+V8.8.2 已完成 [亲属关系正确性闭环](docs/v8.8.2-correctness-closure.md)：兄弟姐妹长幼改为与关系主体出生日比较；出生日缺失或并列、Anchor/Target 未解析、性别冲突及来源截断统一 fail-closed。多重亲属角色按查询类型限定，Historical Definition↔Runtime 要求双向真正一对一，Family Fact 的来源完整性不再误报。配偶热修进一步让 `edge.from` 人物自身生死决定已故语义，现任、前任、已故配偶查询分别限定到独立关系类型；生产完整存档指纹和运行时人口属性 fallback 均可正确失效缓存。中性“配偶”可在性别冲突下唯一解析，妻子/丈夫仍 fail-closed。完整发布回归为 280/280（349 个测试文件分类、68 个历史检查归档）。真实 CK3/Provider 十问矩阵与 Stage 8 长时 Gate 尚待执行，因此 V8.8 尚未 Full Freeze。
 
 V8.8.1 已完成 [第三方亲属关系锚点实施](docs/v8.8.1-implementation-report.md)与 [UI 主题背景补充](docs/v8.8-ui-theme-backgrounds.md)：回应者、关系主体与目标人物按独立 Runtime ID 解析，第三方姓名/头衔/府邸可查询其亲属；“得一子/女”的显式性别在 Anchor 或目标未解析时仍 fail-closed，不再被 Memory 或模型反向改写。该链路仅使用 CK3 结构化亲属数据，不要求目标人物已有任何对话或摘要。外挂 UI 三种风格现在分别使用游牧、骑士、水墨背景图，并通过主题遮罩和不透明内容层保持文字、输入框、状态色清晰。旧 V8.3 Shadow Resolver、Ground Truth Dashboard 和专用 IPC 已退役；历史人物身份只走 V8.8 Definition-ID 双向绑定。生死、性别、已故配偶、年度死亡 Delta 与确定性世界摘要现统一 fail-closed；关系类型仅接受来源明确标注的 Biological / Adoptive / Step，显式类型冲突进入完整性报告。264/264 发布组通过；Stage 8 真实 CK3/Provider/100 次对话/2 小时 Soak 与三主题人工视觉尚未完成，因此 V8.8 尚未 Full Freeze。
 
@@ -218,12 +218,12 @@ V7.7 在 V7.6 健康化基础上分阶段拆分主进程：第一阶段将六种
 node scripts\test-release.js
 ```
 
-清单会覆盖全部 `test-*.js`。当前分类为 347 个测试文件、278 个直接发布组和 68 个归档检查；已退役的 V8.3/V8.3.1 Shadow Resolver、Ground Truth 与诊断面板测试不再作为发布路径。V8.8.2 门禁继续覆盖历史基线、Campaign/Worldline、Definition-ID 双向唯一绑定、第三方亲属 Anchor、长幼/出生日歧义、性别冲突、关系类型限定、已故配偶方向、人口属性缓存失效、来源完整性和冻结边界；既有 Run Command Recovery T1–T18、Memory、Conversation、Action、Letter、Relationship、Date Producer 与缓存回归继续执行。
+清单会覆盖全部 `test-*.js`。当前分类为 349 个测试文件、280 个直接发布组和 68 个归档检查；已退役的 V8.3/V8.3.1 Shadow Resolver、Ground Truth 与诊断面板测试不再作为发布路径。V8.8.2 门禁继续覆盖历史基线、Campaign/Worldline、Definition-ID 双向唯一绑定、第三方亲属 Anchor、长幼/出生日歧义、性别冲突、关系类型限定、已故配偶方向、配偶三状态 Intent、生产 revision invariant、人口属性缓存失效、来源完整性和冻结边界；既有 Run Command Recovery T1–T18、Memory、Conversation、Action、Letter、Relationship、Date Producer 与缓存回归继续执行。
 
 ## 版本信息
 
 - 外挂 UI 版本：v2.0.4
-- 当前应用功能基线：V8.8.2 Worldline Definition-ID、第三方亲属关系 Anchor、长幼与出生日歧义、关系类型限定、已故配偶方向、人口属性缓存失效、结构化关系事实、按需完整性扫描与游牧/骑士/水墨三主题整块背景已完成；Stage 8 真实 CK3/Provider/长时 Electron Gate、三主题人工视觉与 Stage 9 Final Freeze 尚未完成
+- 当前应用功能基线：V8.8.2 Worldline Definition-ID、第三方亲属关系 Anchor、长幼与出生日歧义、关系类型限定、配偶三状态查询、已故配偶方向、生产/运行时缓存失效、结构化关系事实、按需完整性扫描与游牧/骑士/水墨三主题整块背景已完成；Stage 8 真实 CK3/Provider/长时 Electron Gate、三主题人工视觉与 Stage 9 Final Freeze 尚未完成
 - CK3 模组版本：Voices of the Court 2.0.5
 - 模组支持版本：CK3 1.18.*
 - UI 主题：宫廷编年史风格（深红、暗金、羊皮纸文本层级）

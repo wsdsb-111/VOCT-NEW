@@ -21,6 +21,8 @@ function relationFingerprint(gameData) {
 }
 
 function revisionKey(gameData) {
+  // Production checkpoints use parseGameState's SHA-256 of the complete gamestate;
+  // runtime objects without that invariant fall back to the demographic fingerprint.
   const explicitRevision = gameData?.contentFingerprint ?? gameData?.saveContentHash ?? gameData?.relationFingerprint;
   return [
     gameData?.campaignToken ?? gameData?.campaignId ?? "",
