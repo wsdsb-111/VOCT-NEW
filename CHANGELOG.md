@@ -8,6 +8,7 @@
 
 | 版本 | 重点 | 详细记录 |
 | --- | --- | --- |
+| v8.8.2 P1 配偶/CI 修复 | 已故前配偶保持前配偶关系，不混入亡妻/亡夫；Prompt Order 不再依赖换行格式，Windows CI 增加手动触发、最小权限与超时；281/281 本地发布组通过，远端 Actions 待推送确认 | [V8.8.2 实施报告](docs/v8.8.2-correctness-closure.md) / [V8 阶段记录](docs/V8阶段开发记录.md) |
 | v8.8.2 配偶关系修复 | 已故状态按 `edge.from` 人物自身生死表达，现任/前任/已故配偶自然语言查询完全拆分；生产完整存档指纹与运行时人口属性 fallback 均可使缓存正确失效；中性称谓保持可解析，性别化称谓继续 fail-closed；280/280 发布组通过 | [V8.8.2 实施报告](docs/v8.8.2-correctness-closure.md) / [V8 阶段记录](docs/V8阶段开发记录.md) |
 | v8.8.2 亲属关系正确性闭环 | 修复兄弟姐妹长幼参照、出生日并列/缺失、性别冲突权威、多重亲属角色、Anchor/Target 未解析泄漏、配偶中立语义、Definition↔Runtime 一对一及 Targeted Graph 来源完整性；275/275 发布组通过，真实 CK3/Provider Gate 待执行 | [V8.8.2 实施报告](docs/v8.8.2-correctness-closure.md) / [V8 阶段记录](docs/V8阶段开发记录.md) |
 | v8.8 UI 主题背景补充 | 三个兼容主题键分别将整块外挂界面映射到游牧、骑士、水墨背景图；按钮继续作为主题切换控件；主面板、世界线、世界记忆与输入控件增加遮罩/不透明内容层和主题对比色 | [UI 主题背景补充](docs/v8.8-ui-theme-backgrounds.md) / [V8 阶段记录](docs/V8阶段开发记录.md) |

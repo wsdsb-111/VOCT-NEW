@@ -16,10 +16,15 @@ function normalizeRecord(value, relationType, source, allowPrimitiveId) {
   const hasDeathTotalDays = object?.deathDateTotalDays !== null && object?.deathDateTotalDays !== undefined && object?.deathDateTotalDays !== "" && Number.isFinite(Number(object.deathDateTotalDays));
   const lifeStatus = object ? resolveLifeStatus(object) : null;
   const deceased = lifeStatus?.alive === false;
+  const normalizedRelationType = relationType === "FORMER_SPOUSE"
+    ? "FORMER_SPOUSE"
+    : relationType === "DECEASED_SPOUSE" || deceased
+      ? "DECEASED_SPOUSE"
+      : relationType;
   return {
     runtimeId,
     name,
-    relationType: deceased ? "DECEASED_SPOUSE" : relationType,
+    relationType: normalizedRelationType,
     alive: lifeStatus?.conflict ? null : deceased ? false : object?.alive ?? null,
     deathDate: object?.deathDate || null,
     deathDateTotalDays: hasDeathTotalDays ? Number(object.deathDateTotalDays) : null,

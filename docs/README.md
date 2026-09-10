@@ -4,7 +4,7 @@
 
 ## 推荐阅读顺序
 
-V8.8.2 当前入口：[亲属关系正确性闭环](v8.8.2-correctness-closure.md)。长幼关系按 Anchor 出生日比较，出生日缺失/并列、性别冲突、Anchor/Target 未解析和来源截断均 fail-closed；多重角色按查询关系限定，Definition↔Runtime 强制双向一对一。配偶热修让 `edge.from` 人物自身生死决定已故语义，并拆分现任、前任与已故配偶 Intent；生产完整存档指纹与运行时 demographic fallback 均覆盖缓存失效。280/280 发布组通过；真实 CK3/Provider 十问矩阵、100 次对话与 2 小时 Soak 尚待完成，因此仍为 `PENDING STAGE 8 MANUAL GATES`。
+V8.8.2 当前入口：[亲属关系正确性闭环](v8.8.2-correctness-closure.md)。长幼关系按 Anchor 出生日比较，出生日缺失/并列、性别冲突、Anchor/Target 未解析和来源截断均 fail-closed；多重角色按查询关系限定，Definition↔Runtime 强制双向一对一。配偶热修让 `edge.from` 人物自身生死决定已故语义，并拆分现任、前任与已故配偶 Intent；已故前配偶仍保留前配偶类型，不混入亡配偶查询。Prompt Order 不再依赖换行格式，Windows CI 支持手动触发。281/281 本地发布组通过；远端 Actions、真实 CK3/Provider 十问矩阵、100 次对话与 2 小时 Soak 尚待完成，因此仍为 `PENDING STAGE 8 MANUAL GATES`。
 
 V8.7.2 当前基线：[Terra 实施报告](v8.7.2-terra-implementation-report.md)、[Luna 实施报告](v8.7.2-luna-implementation-report.md)与 [Sol 最终正确性审查](v8.7.2-sol-final-review.md)已完成；Load Session、Legacy 迁移原子性/ACL、双重召回、默认页性能边界、DeepSeek 模型选项、历史人物普通入口清理、世界记忆输入稳定性 P0 与 CK3 中文日期链热修已收口，249/249 发布组通过。真实 CK3、Provider 与打包 Electron Gate 待执行，当前为 `PENDING MANUAL GATES`。
 
@@ -66,7 +66,7 @@ V8.5.1 历史基线：[Sol 最终审查与修复](v8.5.1-sol-final-review.md)，
 
 ## 文档分类
 
-最新阶段：[V8.8.2 亲属关系正确性闭环](v8.8.2-correctness-closure.md)；在 V8.8.1 Anchor 结构上收口长幼参照、出生日歧义、性别冲突、多重角色限定、Definition↔Runtime 一对一、配偶三状态、已故配偶方向与生产/运行时缓存失效。Stage 8 真实 CK3/Provider Gate 与三主题人工视觉尚未完成，V8.8 尚未 Full Freeze。
+最新阶段：[V8.8.2 亲属关系正确性闭环](v8.8.2-correctness-closure.md)；在 V8.8.1 Anchor 结构上收口长幼参照、出生日歧义、性别冲突、多重角色限定、Definition↔Runtime 一对一、配偶三状态、已故前配偶隔离、已故配偶方向与生产/运行时缓存失效。Stage 8 真实 CK3/Provider Gate、远端 CI 与三主题人工视觉尚未完成，V8.8 尚未 Full Freeze。
 
 ### 架构与运行规则
 
@@ -77,7 +77,7 @@ V8.5.1 历史基线：[Sol 最终审查与修复](v8.5.1-sol-final-review.md)，
 - [v8.8-terra-stage6-decommission-and-integrity.md](v8.8-terra-stage6-decommission-and-integrity.md)：V8.3 Shadow 链路退役、显式亲属类型、完整性扫描和 Checkpoint/branch 缓存边界。
 - [v8.8-sol-final-code-review.md](v8.8-sol-final-code-review.md)：最终代码审查、生死/性别旁路修复、全量回归、隔离 Electron 证据与 Stage 8 人工冻结边界。
 - [v8.8.1-implementation-report.md](v8.8.1-implementation-report.md)：第三方亲属 Anchor、自然中文关系意图、性别 fail-closed、子女 alias、诊断和自动化/实机边界。
-- [v8.8.2-correctness-closure.md](v8.8.2-correctness-closure.md)：亲属长幼、性别冲突、多重角色、绑定一对一、截断与来源完整性正确性闭环。
+- [v8.8.2-correctness-closure.md](v8.8.2-correctness-closure.md)：亲属长幼、性别冲突、多重角色、绑定一对一、已故前配偶隔离、CI 换行兼容、截断与来源完整性正确性闭环。
 - [V8阶段开发记录.md](V8阶段开发记录.md)：V8.0 起的 Historical Baseline、Temporal Gate 与后续世界线阶段记录。
 - [v8.4-gamestate-capability-report.md](v8.4-gamestate-capability-report.md)：V8.4 CK3 Save/GameState 前置勘探总览；仅报告能力，不代表正式 V8.4 已实现。
 - [v8.4-ck3-save-container-report.md](v8.4-ck3-save-container-report.md)：`SAV0100` 容器、metadata、Gamestate 提取和存档轮换观察。

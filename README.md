@@ -218,12 +218,12 @@ V7.7 在 V7.6 健康化基础上分阶段拆分主进程：第一阶段将六种
 node scripts\test-release.js
 ```
 
-清单会覆盖全部 `test-*.js`。当前分类为 349 个测试文件、280 个直接发布组和 68 个归档检查；已退役的 V8.3/V8.3.1 Shadow Resolver、Ground Truth 与诊断面板测试不再作为发布路径。V8.8.2 门禁继续覆盖历史基线、Campaign/Worldline、Definition-ID 双向唯一绑定、第三方亲属 Anchor、长幼/出生日歧义、性别冲突、关系类型限定、已故配偶方向、配偶三状态 Intent、生产 revision invariant、人口属性缓存失效、来源完整性和冻结边界；既有 Run Command Recovery T1–T18、Memory、Conversation、Action、Letter、Relationship、Date Producer 与缓存回归继续执行。
+清单会覆盖全部 `test-*.js`。当前分类为 350 个测试文件、281 个直接发布组和 68 个归档检查；已退役的 V8.3/V8.3.1 Shadow Resolver、Ground Truth 与诊断面板测试不再作为发布路径。V8.8.2 门禁继续覆盖历史基线、Campaign/Worldline、Definition-ID 双向唯一绑定、第三方亲属 Anchor、长幼/出生日歧义、性别冲突、关系类型限定、已故配偶方向、已故前配偶隔离、配偶三状态 Intent、生产 revision invariant、人口属性缓存失效、来源完整性和冻结边界；既有 Run Command Recovery T1–T18、Memory、Conversation、Action、Letter、Relationship、Date Producer 与缓存回归继续执行。
 
 ## 版本信息
 
 - 外挂 UI 版本：v2.0.4
-- 当前应用功能基线：V8.8.2 Worldline Definition-ID、第三方亲属关系 Anchor、长幼与出生日歧义、关系类型限定、配偶三状态查询、已故配偶方向、生产/运行时缓存失效、结构化关系事实、按需完整性扫描与游牧/骑士/水墨三主题整块背景已完成；Stage 8 真实 CK3/Provider/长时 Electron Gate、三主题人工视觉与 Stage 9 Final Freeze 尚未完成
+- 当前应用功能基线：V8.8.2 Worldline Definition-ID、第三方亲属关系 Anchor、长幼与出生日歧义、关系类型限定、配偶三状态查询、已故前配偶隔离、生产/运行时缓存失效、结构化关系事实、按需完整性扫描与游牧/骑士/水墨三主题整块背景已完成；Stage 8 真实 CK3/Provider/长时 Electron Gate、三主题人工视觉与 Stage 9 Final Freeze 尚未完成
 - CK3 模组版本：Voices of the Court 2.0.5
 - 模组支持版本：CK3 1.18.*
 - UI 主题：宫廷编年史风格（深红、暗金、羊皮纸文本层级）
