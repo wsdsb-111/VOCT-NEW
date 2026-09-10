@@ -60,7 +60,7 @@ function writeOwnerSummary(summaryRoot, content) {
     const root = path.resolve(__dirname, "..");
     const workflow = fs.readFileSync(path.join(root, ".github", "workflows", "regression.yml"), "utf8");
     const ipcSource = fs.readFileSync(path.join(root, "resources", "app", "out", "main", "ipc", "register-ipc.js"), "utf8");
-    assert(/uses: actions\/checkout@v4\s+with:\s+lfs: true/.test(workflow), "CI checkout must materialize Git LFS assets");
+    assert(/uses:\s+actions\/checkout@v\d+\s+with:\s+lfs:\s+true/.test(workflow), "CI checkout must materialize Git LFS assets");
     assert(ipcSource.includes("options?.refresh === true") && ipcSource.includes("memoryEngine.invalidateSummaryFolderCache()"), "summary dashboard refresh must invalidate the Memory Engine cache");
     assert(ipcSource.includes("validateExternalHttpUrl") && ipcSource.includes("validateActionFilePath"), "high-risk IPC inputs must be constrained in the main process");
     console.log("VOTC v7.7.4: PASS (token estimator, cache observability, source trust, single-read knowledge, refresh and IPC safety)");
