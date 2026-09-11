@@ -35,11 +35,22 @@ function createRelationshipResolver({ onDiagnostic = null } = {}) {
     const canonicalValues = new Set(record.gender.filter((item) => item.priority === 1 && item.value !== "unknown").map((item) => item.value));
     const edgeValues = new Set(record.gender.filter((item) => item.priority > 1 && item.value !== "unknown").map((item) => item.value));
     const allValues = new Set([...canonicalValues, ...edgeValues]);
-    const selectedValues = canonicalValues.size > 0 ? canonicalValues : edgeValues;
-    if (allValues.size > 1) {
+    if (canonicalValues.size > 1) {
       emit("RELATION_CONFLICT_GENDER", { characterId: record.id, values: [...allValues], evidenceCount: record.gender.length });
       return { value: "unknown", source: "conflict", conflict: true };
     }
+    if (canonicalValues.size === 1) {
+      const value = [...canonicalValues][0];
+      const disagreement = [...edgeValues].some((item) => item !== value);
+      if (disagreement) emit("RELATION_CONFLICT_GENDER", { characterId: record.id, values: [...allValues], evidenceCount: record.gender.length, selectedSource: "canonical_runtime" });
+      const sourceItem = record.gender.find((item) => item.priority === 1 && item.value === value);
+      return { value, source: sourceItem?.source || "characters", conflict: false, disagreement };
+    }
+    if (edgeValues.size > 1) {
+      emit("RELATION_CONFLICT_GENDER", { characterId: record.id, values: [...allValues], evidenceCount: record.gender.length });
+      return { value: "unknown", source: "conflict", conflict: true };
+    }
+    const selectedValues = edgeValues;
     const value = [...selectedValues][0] || "unknown";
     const sourceItem = record.gender.find((item) => item.value === value);
     return { value, source: sourceItem?.source || "unknown", conflict: false };
@@ -193,6 +204,7 @@ function createRelationshipResolver({ onDiagnostic = null } = {}) {
         resolvedBirthSource: birthDate.source,
         conflicts: {
           gender: gender.conflict,
+          genderDisagreement: gender.disagreement === true,
           birthDate: birthDate.conflict,
           alive: alive.conflict,
           lifeStatus: alive.conflict,

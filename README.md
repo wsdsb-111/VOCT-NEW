@@ -16,7 +16,7 @@ Voices of the Court 是一个面向《Crusader Kings III》（CK3）的沉浸式
 - **历史认知边界**：提示词要求角色只使用当前年份已经发生、写成、流传或成名的信息，避免引用未来人物、事件、诗词和典故。
 - **当前政局优先**：皇帝和年号从实际游戏角色数据中识别，支持玩家篡位或改变历史后的沙盒玩法。
 - **Memory Engine 2.6（可见标签）**：保留 2.5 的 `角色ID_姓名/与对方的对话.json` 人物目录、存储 schema 与写入合同；V8.6.2 新增当前轮第三人证据 Grounding，Session Topic Anchor 与 Turn Recall 合同不迁移。
-- **Official VOTC 2.0.3 Action System**：以官方 Prompt、Schema、Registry、Sandbox、审批与 28 个标准动作作为唯一动作基线；每个 NPC 完整回复后评估一次，不再运行 AE3/AE4、Action Mode、Pending 或 Social Consequence。
+- **Official VOTC 2.0.3 Action System**：以官方 Prompt、Schema、Registry、Sandbox、审批与 28 个标准动作作为唯一动作基线；每个 NPC 完整回复后评估一次，不再运行 AE3/AE4、Action Mode、Pending 或 Social Consequence。V8.8.3 对金币转移实行 RunFile ACK 后的 CK3 回读确认，只有双方金额精确匹配才显示完成。
 - **候场与在场窗口**：多人会话可在首句前设置候场，开始后可请入内、永久离场，或选择昏迷、睡着、暂时离开三种可返回的暂离模式；每名角色只回应、获知并保存自己实际在场区间的内容。
 - **多人对话摘要**：支持玩家与当前会话中的全部 NPC 同时对话，并将多人互动摘要按实际参与者逐对保存，避免 NPC 之间的对话内容丢失。
 - **动态人物关系**：提及未参与当前对话的角色时，也可以从 CK3 角色和亲属数据中加载关系；兄弟姐妹会结合出生日期或年龄判断哥哥、弟弟、姐姐和妹妹。
@@ -25,6 +25,8 @@ Voices of the Court 是一个面向《Crusader Kings III》（CK3）的沉浸式
 - **多语言资源**：项目包含中文、英语、日语、韩语、俄语、德语、法语、西班牙语和波兰语等本地化资源。
 
 ## 运行环境
+
+V8.8.3 已完成 Luna + Terra + Sol 的 [Action 生命周期、真实回读与 Current Truth 收口](docs/v8.8.3-sol-final-review.md)：金币动作不再预写本地金币；同一 RunFile 在 Effect 后输出双方实时金币，ACK 后只有精确变化才标记 `CONFIRMED`。被提及人物、在场关系与 Family Fact 共用当前亲属事实，canonical Runtime 性别优先，缺失/冲突使用中性称谓，Memory 不参与当前性别。玩家显式金额与模型参数漂移会记录 `ACTION_ARGUMENT_DRIFT` 并以玩家数值执行。代码侧 289/289 发布组通过，Final Freeze 等待真实 CK3 人工 Gate。
 
 V8.8.2 已完成 [亲属关系正确性闭环](docs/v8.8.2-correctness-closure.md)：兄弟姐妹长幼改为与关系主体出生日比较；出生日缺失或并列、Anchor/Target 未解析、性别冲突及来源截断统一 fail-closed。多重亲属角色按查询类型限定，Historical Definition↔Runtime 要求双向真正一对一，Family Fact 的来源完整性不再误报。配偶热修进一步让 `edge.from` 人物自身生死决定已故语义，现任、前任、已故配偶查询分别限定到独立关系类型；生产完整存档指纹和运行时人口属性 fallback 均可正确失效缓存。中性“配偶”可在性别冲突下唯一解析，妻子/丈夫仍 fail-closed。完整发布回归为 280/280（349 个测试文件分类、68 个历史检查归档）。真实 CK3/Provider 十问矩阵与 Stage 8 长时 Gate 尚待执行，因此 V8.8 尚未 Full Freeze。
 
@@ -229,7 +231,7 @@ node scripts\test-release.js
 - UI 主题：宫廷编年史风格（深红、暗金、羊皮纸文本层级）
 - UI 主题切换：游牧、骑士纹章、水墨画卷三套完整历史风格；分别使用 `image/草原游牧.png`、`image/中世纪骑士.png`、`image/中国古典.png` 作为整块界面背景，并保留各自的边框结构、按钮造型、消息卡片、输入框、字体和滚动条，主题选择可自动保存
 - UI 素材生成提示词：参见 [docs/UI_ASSET_PROMPTS_2.0.3.md](docs/UI_ASSET_PROMPTS_2.0.3.md)
-- 当前重点：执行 V8.8 Stage 8 人工 Gate，验证 CK3 世界线读取、Definition-ID 绑定、关系事实、Provider 与长时 Electron 稳定性；Official VOTC 2.0.3 Action 和 Memory Engine 2.6 存储合同保持冻结
+- 当前重点：执行 V8.8.3 人工 Gate，验证金币 Action 双边真实变化、未对话亲属性别、CK3 世界线读取、Provider、100 次对话与长时 Electron 稳定性；Official VOTC 2.0.3 Action 基线和 Memory Engine 2.6 存储合同保持冻结
 
 ## 已知限制
 

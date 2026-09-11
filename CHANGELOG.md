@@ -2,6 +2,10 @@
 
 这里是版本变更的单一入口。详细设计和测试证据保留在链接目标中，本文件只维护版本顺序、用户可见摘要和文档索引。
 
+| v8.8.3 Sol 最终正确性审查 | 金币 Effect 在同一 RunFile 内追加双方实时金币回读，ACK 后精确核对才完成；命令丢失不再视作 ACK，玩家显式金额覆盖模型漂移；在场/Family/Mentioned 共用 Current Truth，canonical 冲突与缺失均 fail-closed；289/289 发布组通过，真实 CK3 Gate 待执行 | [Sol 最终审查](docs/v8.8.3-sol-final-review.md) / [V8 阶段记录](docs/V8阶段开发记录.md) |
+| v8.8.3 Terra Action 回读确认与人物当前事实 | 金币动作不再乐观改写本地状态；RunFile ACK 后重读 CK3 数据，双方金额精确匹配才标记 CONFIRMED；未确认/状态不一致保持失败。被提及人物与 Family Fact 共享当前亲属事实，canonical Runtime 性别优先且 relation-side 冲突可诊断 | [V8 阶段记录](docs/V8阶段开发记录.md) |
+| v8.8.3 Luna Action 生命周期可观测性 | 为 Action 历史、会话反馈和 Renderer 增加 SELECTED/VALIDATED/DISPATCHED/CONFIRMED 及失败态字段；已发送但未获 CK3 确认的动作显示为待确认，不提前宣称成功；新增生命周期与 UI 静态回归 | [V8 阶段记录](docs/V8阶段开发记录.md) |
+
 | v8.4.2 P0 热修 | 修复世界线页首次打开时 Prompt 诊断尚未生成导致 Renderer 崩溃、界面消失的问题；候选数组安全回退，新增首屏渲染回归 | [V8.4.2 Sol 最终审查](docs/v8.4.2-sol-final-review.md) / [V8 阶段记录](docs/V8阶段开发记录.md) |
 
 | v8.5 Terra 前置缺陷修复 | 历史映射支持完整索引查询与可读岳飞绑定；诊断正确区分当前玩家“赵思昭”和历史别名未命中；精确人物命中跳过高成本 Localization reverse lookup，并加入 Renderer 查询防竞态 | [V8.5 Terra 实施报告](docs/v8.5-terra-retrieval-implementation-report.md) / [V8 阶段记录](docs/V8阶段开发记录.md) |

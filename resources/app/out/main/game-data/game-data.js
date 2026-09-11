@@ -2,6 +2,7 @@
 
 const { inferGenderFromPronoun } = require("./character");
 const { createRelationshipResolver } = require("./relationship-resolver");
+const { resolveRelationshipCurrentTruth } = require("../worldline/relationship-current-truth");
 const { MEMORY_ENGINE_VERSION } = require("../version");
 
 function createGameData({ fs, path, memorySystem, memoryEngine, summariesDir, getHistoricalReferenceByYear }) {
@@ -613,13 +614,11 @@ function createGameData({ fs, path, memorySystem, memoryEngine, summariesDir, ge
      * character mentioned in the dialogue. The active pair therefore still saw
      * CK3's ambiguous raw `brother` / `sister` relation in the main prompt.
     */
-    getActiveParticipantRelationshipInfo(activeCharacter, counterpartIds = []) {
+    getActiveParticipantRelationshipInfo(activeCharacter, counterpartIds = [], currentFactRegistry = null) {
       if (!activeCharacter) return "";
       const counterpartIdSet = /* @__PURE__ */ new Set([this.playerID, ...counterpartIds]);
       counterpartIdSet.delete(activeCharacter.id);
       const sections = [];
-      const resolver = this.relationshipResolver || createRelationshipResolver();
-      const mentionableProfiles = typeof this.getMentionableCharacterProfiles === "function" ? this.getMentionableCharacterProfiles() : new Map(this.characters || []);
       const getOpinion = (subject, other) => {
         if (Number(other.id) === Number(this.playerID) && subject.opinionOfPlayer != null && Number.isFinite(Number(subject.opinionOfPlayer))) return Number(subject.opinionOfPlayer);
         const entry = subject.opinions?.find((opinion) => Number(opinion.id) === Number(other.id));
@@ -633,10 +632,9 @@ function createGameData({ fs, path, memorySystem, memoryEngine, summariesDir, ge
         return "无明确正式关系";
       };
       const getKinship = (subject, other) => {
-        const canonicalSubject = mentionableProfiles.get(Number(subject.id)) || subject;
-        const canonicalOther = mentionableProfiles.get(Number(other.id)) || other;
-        const resolution = resolver.resolveDirectKinship(canonicalSubject, canonicalOther);
-        return resolution ? `${canonicalSubject.fullName}是${canonicalOther.fullName}的${resolution.label}` : "无";
+        const fact = resolveRelationshipCurrentTruth({ gameData: this, subjectRuntimeId: subject.id, anchorRuntimeId: other.id, registry: currentFactRegistry });
+        const relation = fact?.relations?.[String(other.id)];
+        return relation ? `${fact.identity.fullName}是${other.fullName}的${relation.label}` : "无";
       };
       for (const counterpartId of counterpartIdSet) {
         const counterpart = this.characters.get(counterpartId);
@@ -654,14 +652,14 @@ function createGameData({ fs, path, memorySystem, memoryEngine, summariesDir, ge
         ].join("\n"));
       }
       if (sections.length === 0) return "";
-      return `=== 全部当前在场人物关系权威层（高优先级当前 CK3 数据） ===\n${sections.join("\n")}\n权威规则：正式关系与好感数值必须分开理解；好感高低不能改写亲属、配偶、恋人、朋友、敌对等正式关系。当前 CK3 数据表示现在，摘要/记忆只表示过去；发生冲突时以当前 CK3 正式关系和好感为准。称谓必须服从亲属关系与长幼，不得把哥哥称为弟弟、把姐姐称为妹妹。`;
+      return `=== 全部当前在场人物关系权威层（高优先级当前 CK3 数据） ===\n${sections.join("\n")}\n权威规则：正式关系与好感数值必须分开理解；好感高低不能改写亲属、配偶、恋人、朋友、敌对等正式关系。当前 CK3 数据表示现在，摘要/记忆只表示过去；发生冲突时以当前 CK3 正式关系和好感为准。称谓必须服从本层提供的亲属关系与长幼；性别未知或冲突时必须使用中性称谓。`;
     }
     
     /**
      * 获取提到的角色的详细信息（用于添加到prompt上下文）
      * @returns {string} - 格式化的角色信息字符串
      */
-    getMentionedCharactersInfo(activeCharacter) {
+    getMentionedCharactersInfo(activeCharacter, { currentFactRegistry = null } = {}) {
       if (!this.mentionedCharactersInContext || this.mentionedCharactersInContext.size === 0) {
         return '';
       }
@@ -675,10 +673,12 @@ function createGameData({ fs, path, memorySystem, memoryEngine, summariesDir, ge
       for (const charId of this.mentionedCharactersInContext) {
         const char = mentionableProfiles.get(charId);
         if (!char || charId === this.playerID || charId === dialoguePartner?.id) continue;
+        const fact = resolveRelationshipCurrentTruth({ gameData: this, subjectRuntimeId: charId, anchorRuntimeId: this.playerID, registry: currentFactRegistry });
+        if (!fact) continue;
         
-        info += `【${char.fullName}】\n`;
-        if (Number.isFinite(char.age)) info += `- 年龄：${char.age}岁\n`;
-        info += `- 性别：${char.gender === 'male' ? '男性' : char.gender === 'female' ? '女性' : '未知'}\n`;
+        info += `【${fact.identity.fullName}】\n`;
+        if (Number.isFinite(fact.currentState.age)) info += `- 年龄：${fact.currentState.age}岁\n`;
+        info += `- 性别：${fact.currentState.sex === 'male' ? '男性' : fact.currentState.sex === 'female' ? '女性' : '未知'}\n`;
         
         if (char.primaryTitle) {
           info += `- 头衔：${char.primaryTitle}\n`;
@@ -693,13 +693,14 @@ function createGameData({ fs, path, memorySystem, memoryEngine, summariesDir, ge
         // With both participants. Do not assume GameData.aiID is the current
         // responder: one conversation can generate replies for several NPCs.
         if (player) {
-          const relation = this.describeCharacterRelationship(char, player);
-          if (relation) info += `- 与${player.fullName}的关系：${relation}\n`;
+          const relation = fact.relations[String(player.id)];
+          if (relation) info += `- 与${player.fullName}的关系：${relation.label}\n`;
         }
         
         if (dialoguePartner && dialoguePartner.id !== this.playerID) {
-          const relation = this.describeCharacterRelationship(char, dialoguePartner);
-          if (relation) info += `- 与${dialoguePartner.fullName}的关系：${relation}\n`;
+          const partnerFact = resolveRelationshipCurrentTruth({ gameData: this, subjectRuntimeId: charId, anchorRuntimeId: dialoguePartner.id, registry: currentFactRegistry });
+          const relation = partnerFact?.relations[String(dialoguePartner.id)];
+          if (relation) info += `- 与${dialoguePartner.fullName}的关系：${relation.label}\n`;
         }
         
         // 配偶

@@ -342,7 +342,9 @@ function createLogParser({ GameData, Character, onGameDataParsed = null }) {
                 balance: Number(data[2]),
                 balanceBreakdown: removeTooltip(line.split("#")[1])
               };
-              gameData.characters.get(rootID).income = income;
+              const character = gameData.characters.get(rootID);
+              character.income = income;
+              if (Number.isFinite(income.gold)) character.gold = Math.floor(income.gold);
             }
             if (!line.includes("#ENDMULTILINE")) {
               multiLineTempStorage = [gameData.characters.get(rootID).income.balanceBreakdown];

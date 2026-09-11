@@ -217,7 +217,7 @@ function createPromptBuilder({
      * unchanged in meaning, but is emitted immediately before conversation
      * history rather than inside the earlier stable summaries block.
      */
-    static buildMentionedCharactersContext(char, gameData, history = null) {
+    static buildMentionedCharactersContext(char, gameData, history = null, currentFactRegistry = null) {
       if (!history || history.length === 0) return null;
       const mentionedCharacterIds = gameData.findMentionedCharacterIdsInHistory(history, char);
       if (!gameData.mentionedCharactersInContext) gameData.mentionedCharactersInContext = /* @__PURE__ */ new Set();
@@ -225,7 +225,7 @@ function createPromptBuilder({
         gameData.mentionedCharactersInContext.add(characterId);
       }
       let context = "";
-      const mentionedCharsInfo = gameData.getMentionedCharactersInfo(char);
+      const mentionedCharsInfo = gameData.getMentionedCharactersInfo(char, { currentFactRegistry });
       if (mentionedCharsInfo) context += mentionedCharsInfo;
       return context.trim() ? context : null;
     }
@@ -467,9 +467,10 @@ function createPromptBuilder({
         name: m.name,
         content: m.content
       })).filter((m) => !!m.content);
+      const currentFactRegistry = new Map();
       const activeParticipantIds = new Set((memoryContext?.activeParticipantIds || [...gameData.characters.keys()]).map(Number));
       const activeCounterpartIds = [...activeParticipantIds].filter((id) => Number(id) !== Number(char.id));
-      const activeParticipantRelationshipContext = gameData.getActiveParticipantRelationshipInfo(char, activeCounterpartIds);
+      const activeParticipantRelationshipContext = gameData.getActiveParticipantRelationshipInfo(char, activeCounterpartIds, currentFactRegistry);
       const activeParticipantRelationshipBlock = {
         id: "active-participant-relationship",
         type: "participant_relationship",
@@ -478,10 +479,10 @@ function createPromptBuilder({
         role: "system",
         stable: false
       };
-      const mentionedCharactersContext = memoryContext?.subjectiveWorldPolicyActive ? null : this.buildMentionedCharactersContext(char, gameData, workingHistory);
       const responderGameFacts = this.buildResponderGameFacts(char);
       const latestUserQuery = [...workingHistory].reverse().find((message) => message.role === "user")?.content || "";
-      const responderFamilyFacts = buildFamilyFactBlock(char, gameData, { query: latestUserQuery });
+      const responderFamilyFacts = buildFamilyFactBlock(char, gameData, { query: latestUserQuery, currentFactRegistry });
+      const mentionedCharactersContext = memoryContext?.subjectiveWorldPolicyActive ? null : this.buildMentionedCharactersContext(char, gameData, workingHistory, currentFactRegistry);
       const responderGameFactsBlock = {
         id: "responder-game-facts",
         type: "responder_game_facts",

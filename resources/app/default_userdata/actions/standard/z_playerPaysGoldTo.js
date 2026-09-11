@@ -177,18 +177,27 @@ module.exports = {
     runGameEffect(`
 global_var:votc_action_target = {
     add_gold = ${amount}
+    log_income = yes
 }
 
 root = {
     remove_short_term_gold = ${amount}
+    log_income = yes
 }`);
-
-    // Update local game data
-    player.gold -= amount;
-    targetCharacter.gold += amount;
 
     return {
       message: {
+        en: `Requested ${gameData.playerName} to pay ${amount} gold to ${targetCharacter.shortName}; awaiting game confirmation`,
+        ru: `Запрошена выплата ${amount} золота от ${gameData.playerName} персонажу ${targetCharacter.shortName}; ожидается подтверждение игры`,
+        fr: `Paiement de ${amount} or demandé de ${gameData.playerName} à ${targetCharacter.shortName} ; en attente de confirmation du jeu`,
+        de: `Zahlung von ${amount} Gold von ${gameData.playerName} an ${targetCharacter.shortName} angefordert; Spielbestätigung ausstehend`,
+        es: `Se solicitó que ${gameData.playerName} pague ${amount} de oro a ${targetCharacter.shortName}; esperando confirmación del juego`,
+        ja: `${gameData.playerName}から${targetCharacter.shortName}への${amount}金の支払いを要求しました。ゲームの確認待ちです`,
+        ko: `${gameData.playerName}이(가) ${targetCharacter.shortName}에게 ${amount}골드를 지급하도록 요청했습니다. 게임 확인을 기다리는 중입니다`,
+        pl: `Zlecono płatność ${amount} złota od ${gameData.playerName} do ${targetCharacter.shortName}; oczekiwanie na potwierdzenie gry`,
+        zh: `已请求${gameData.playerName}向${targetCharacter.shortName}支付${amount}金币，等待游戏确认`
+      },
+      confirmedMessage: {
         en: `${gameData.playerName} paid ${amount} gold to ${targetCharacter.shortName}`,
         ru: `${gameData.playerName} заплатил ${amount} золота ${targetCharacter.shortName}`,
         fr: `${gameData.playerName} a payé ${amount} or à ${targetCharacter.shortName}`,
@@ -197,9 +206,15 @@ root = {
         ja: `${gameData.playerName}は${targetCharacter.shortName}に${amount}金を支払いました`,
         ko: `${gameData.playerName}은(는) ${targetCharacter.shortName}에게 ${amount}골드를 지불했습니다`,
         pl: `${gameData.playerName} zapłacił ${amount} złota ${targetCharacter.shortName}`,
-        zh: `${gameData.playerName}向${targetCharacter.shortName}支付了${amount}金币`
+        zh: `${gameData.playerName}已向${targetCharacter.shortName}支付${amount}金币`
       },
-      sentiment: 'neutral'
+      sentiment: 'neutral',
+      expectedStateChange: {
+        type: "GOLD_TRANSFER",
+        sourceRuntimeId: gameData.playerID,
+        targetRuntimeId: targetCharacter.id,
+        amount
+      }
     };
   },
 };

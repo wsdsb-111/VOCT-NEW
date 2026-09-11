@@ -50,10 +50,14 @@ ordered_in_global_list = {
     }
 
     static writeEffect(gameData, sourceCharacterId, targetCharacterId, effectBody) {
-      return runFileManager.write(this.composeFullEffect(gameData, sourceCharacterId, targetCharacterId, effectBody), {
+      const sourceIndex = this.getCharacterIndex(gameData, sourceCharacterId);
+      const targetIndex = targetCharacterId != null ? this.getCharacterIndex(gameData, targetCharacterId) : null;
+      const effectText = this.composeFullEffect(gameData, sourceCharacterId, targetCharacterId, effectBody);
+      const result = runFileManager.write(effectText, {
         owner: "action",
         kind: "action_effect"
       });
+      return result ? { ...result, sourceIndex, targetIndex, effectBody: String(effectBody).trim(), effectText } : result;
     }
 
     static getCharacterIndex(gameData, characterId) {

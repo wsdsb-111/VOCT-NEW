@@ -113,7 +113,9 @@ function createConversationManager({ events, memorySystem, Conversation, PromptB
               actionId: f.actionId,
               success: f.success,
               message: f.message,
-              sentiment: f.sentiment
+              sentiment: f.sentiment,
+              lifecycle: f.lifecycle || null,
+              diagnostic: f.diagnostic || null
             })),
             datetime: entry.datetime
           };
@@ -128,6 +130,8 @@ function createConversationManager({ events, memorySystem, Conversation, PromptB
             previewSentiment: entry.previewSentiment,
             resultFeedback: entry.resultFeedback,
             resultSentiment: entry.resultSentiment,
+            lifecycle: entry.lifecycle || null,
+            diagnostic: entry.diagnostic || null,
             datetime: entry.datetime
           };
         } else {
@@ -322,7 +326,9 @@ function createConversationManager({ events, memorySystem, Conversation, PromptB
           actionId: feedback.actionId,
           success: feedback.success,
           message: feedback.message,
-          sentiment: feedback.sentiment
+          sentiment: feedback.sentiment,
+          lifecycle: feedback.lifecycle || null,
+          diagnostic: feedback.diagnostic || null
         }]
       });
       this.currentConversation["messages"].push(feedbackEntry);

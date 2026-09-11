@@ -1,6 +1,8 @@
 "use strict";
 
 const { CriticalActionRecallObserver: DefaultCriticalActionRecallObserver } = require("./critical-action-recall-diagnostics");
+const { ACTION_LIFECYCLE_STATUSES, createActionLifecycle, createActionDiagnostic } = require("./types");
+const { captureActionConfirmation, detectActionArgumentDrift, extractRequestedActionArgs } = require("./action-confirmation");
 
 function createActionEngine({ actionRegistry, settingsRepository, usageAnalytics, llmManager, ActionPromptBuilder, ActionSandbox, ActionEffectWriter, CriticalActionRecallObserver = DefaultCriticalActionRecallObserver, buildStructuredResponseJsonSchema, buildStructuredResponseSchema, healJsonResponseWithLogging, resolveI18nString, logVerboseLLM }) {
   return class ActionEngine {
@@ -140,7 +142,18 @@ function createActionEngine({ actionRegistry, settingsRepository, usageAnalytics
               targetCharacterName: target?.shortName,
               args: invocation.args ?? {},
               isDestructive,
-              invocation
+              invocation,
+              lifecycle: createActionLifecycle({ selected: true, validated: true, confirmed: false, status: ACTION_LIFECYCLE_STATUSES.PENDING_APPROVAL }),
+              diagnostic: createActionDiagnostic({
+                actionId: invocation.actionId,
+                sourceRuntimeId: npc.id,
+                targetRuntimeId: targetId,
+                args: invocation.args ?? {},
+                selectedArgs: invocation.args ?? {},
+                dispatchStatus: "NOT_DISPATCHED",
+                confirmationStatus: "NOT_STARTED",
+                revisionBefore: conv.gameData?.revision ?? conv.gameData?.gameDataRevision ?? null
+              })
             });
           } else {
             autoApproved.push(await this.runInvocation(conv, npc, invocation));
@@ -161,8 +174,23 @@ function createActionEngine({ actionRegistry, settingsRepository, usageAnalytics
       const targetId = invocation.targetCharacterId ?? null;
       const target = targetId != null ? conv.gameData.characters.get(targetId) ?? undefined : undefined;
       const userLang = settingsRepository.getLanguage();
+      const dispatchSourceId = invocation.actionId === "playerPaysGoldTo" ? conv.gameData.playerID : npc.id;
+      const dispatchRecords = [];
+      const selectedArgs = invocation.args ?? {};
+      const requestedArgs = invocation.requestedArgs ?? extractRequestedActionArgs(invocation.actionId, conv.getHistory?.() || conv.messages || []);
+      const argumentDrift = detectActionArgumentDrift(requestedArgs, selectedArgs);
+      const executionArgs = argumentDrift ? { ...selectedArgs, amount: argumentDrift.requestedAmount } : selectedArgs;
       const runGameEffect = (effectBody) => {
-        if (!options?.dryRun) ActionEffectWriter.writeEffect(conv.gameData, npc.id, targetId, effectBody);
+        if (options?.dryRun) return { status: "NOT_DISPATCHED" };
+        try {
+          const result = ActionEffectWriter.writeEffect(conv.gameData, dispatchSourceId, targetId, effectBody);
+          if (!result?.commandId || !["queued", "awaiting_ack"].includes(result.status)) throw new Error(`action_effect_dispatch_failed:${result?.status || "no_result"}`);
+          dispatchRecords.push({ status: result?.status || "WRITTEN", ...result });
+          return result;
+        } catch (error) {
+          dispatchRecords.push({ status: "FAILED" });
+          throw error;
+        }
       };
       try {
         const result = await ActionSandbox.executeAction(loaded.filePath, {
@@ -170,7 +198,7 @@ function createActionEngine({ actionRegistry, settingsRepository, usageAnalytics
           sourceCharacter: npc,
           targetCharacter: target,
           runGameEffect,
-          args: invocation.args ?? {},
+          args: executionArgs,
           conversation: conv,
           dryRun: options?.dryRun,
           lang: userLang
@@ -179,13 +207,68 @@ function createActionEngine({ actionRegistry, settingsRepository, usageAnalytics
         if (result) {
           if (typeof result === "string") feedback = { message: result, sentiment: "neutral" };
           else if (typeof result === "object") {
-            feedback = "message" in result ? { message: resolveI18nString(result.message, userLang), sentiment: result.sentiment || "neutral" } : { message: resolveI18nString(result, userLang), sentiment: "neutral" };
+            feedback = "message" in result ? { message: resolveI18nString(result.message, userLang), confirmedMessage: result.confirmedMessage ? resolveI18nString(result.confirmedMessage, userLang) : null, sentiment: result.sentiment || "neutral" } : { message: resolveI18nString(result, userLang), sentiment: "neutral" };
           }
         }
-        return { actionId: invocation.actionId, success: true, feedback };
+        const dispatched = dispatchRecords.length > 0;
+        const expectedStateChange = result && typeof result === "object" ? result.expectedStateChange ?? null : null;
+        const validationFailed = !dispatched && result && typeof result === "object" && result.sentiment === "negative";
+        const confirmation = !options?.dryRun && dispatched ? captureActionConfirmation({
+          actionId: invocation.actionId,
+          expectedStateChange,
+          gameData: conv.gameData,
+          gameDataRevision: conv.gameDataRevision ?? conv.gameData?.revision ?? conv.gameData?.gameDataRevision ?? null,
+          dispatch: dispatchRecords.at(-1)
+        }) : null;
+        const requiresConfirmation = confirmation !== null;
+        const lifecycle = createActionLifecycle({
+          selected: true,
+          validated: true,
+          dispatched,
+          confirmed: false,
+          status: options?.dryRun ? ACTION_LIFECYCLE_STATUSES.VALIDATED : validationFailed ? ACTION_LIFECYCLE_STATUSES.VALIDATION_FAILED : requiresConfirmation ? ACTION_LIFECYCLE_STATUSES.DISPATCHED : ACTION_LIFECYCLE_STATUSES.NO_EFFECT
+        });
+        const diagnostic = createActionDiagnostic({
+          actionId: invocation.actionId,
+          sourceRuntimeId: expectedStateChange?.sourceRuntimeId ?? dispatchSourceId,
+          targetRuntimeId: targetId,
+          args: executionArgs,
+          selectedArgs,
+          effectiveArgs: executionArgs,
+          dispatchStatus: options?.dryRun ? "NOT_DISPATCHED" : dispatchRecords.at(-1)?.status || "NOT_REQUIRED",
+          confirmationStatus: options?.dryRun ? "PREVIEW_ONLY" : validationFailed ? "NOT_CONFIRMED" : requiresConfirmation ? "PENDING_CONFIRMATION" : "NOT_REQUIRED",
+          revisionBefore: conv.gameDataRevision ?? conv.gameData?.revision ?? conv.gameData?.gameDataRevision ?? null,
+          stateBefore: confirmation?.before || null,
+          expectedStateChange,
+          requestedArgs,
+          commandId: confirmation?.dispatch?.commandId || null,
+          commandStatus: confirmation?.dispatch?.status || null,
+          dispatchEvidence: confirmation?.dispatch || dispatchRecords.at(-1) || null,
+          argumentDrift
+        });
+        return { actionId: invocation.actionId, success: !requiresConfirmation && !validationFailed, feedback, lifecycle, diagnostic, confirmation };
       } catch (error) {
         console.error(`Action ${invocation.actionId} failed:`, error);
-        return { actionId: invocation.actionId, success: false, error: error instanceof Error ? error.message : String(error) };
+        const dispatched = dispatchRecords.length > 0;
+        return {
+          actionId: invocation.actionId,
+          success: false,
+          error: error instanceof Error ? error.message : String(error),
+          lifecycle: createActionLifecycle({ selected: true, validated: true, dispatched, confirmed: false, status: dispatched ? ACTION_LIFECYCLE_STATUSES.DISPATCH_FAILED : ACTION_LIFECYCLE_STATUSES.VALIDATION_FAILED }),
+          diagnostic: createActionDiagnostic({
+            actionId: invocation.actionId,
+            sourceRuntimeId: dispatchSourceId,
+            targetRuntimeId: targetId,
+            args: executionArgs,
+            selectedArgs,
+            effectiveArgs: executionArgs,
+            dispatchStatus: dispatched ? "FAILED" : "NOT_DISPATCHED",
+            confirmationStatus: "NOT_CONFIRMED",
+            revisionBefore: conv.gameData?.revision ?? conv.gameData?.gameDataRevision ?? null,
+            requestedArgs,
+            argumentDrift
+          })
+        };
       }
     }
   };

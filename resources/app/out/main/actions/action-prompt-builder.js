@@ -47,14 +47,18 @@ You are now processing the NPC "${npc.fullName}" turn, but you may still output 
         if (entry.type === "action-feedback" && entry.feedbacks) {
           for (const fb of entry.feedbacks) {
             if (actionHistoryLines.length >= 10) break;
-            const status = fb.success ? "✓" : "✗";
+            const lifecycleStatus = fb.lifecycle?.status;
+            const failedLifecycle = new Set(["VALIDATION_FAILED", "DISPATCH_FAILED", "UNCONFIRMED", "STATE_MISMATCH", "TIMEOUT"]);
+            const status = lifecycleStatus === "CONFIRMED" ? "✓" : failedLifecycle.has(lifecycleStatus) || fb.success === false ? "✗" : lifecycleStatus ? "⏳" : fb.success ? "✓" : "✗";
             actionHistoryLines.unshift(`${status} ${fb.actionId}: ${fb.message}`);
           }
         } else if (entry.type === "action-approval" && entry.action) {
           const action = entry.action;
           const sourceName = action.sourceCharacterName || `#${action.sourceCharacterId}`;
           const targetInfo = action.targetCharacterName ? ` → ${action.targetCharacterName}` : action.targetCharacterId ? ` → #${action.targetCharacterId}` : "";
-          const status = entry.status === "approved" ? "✓" : "⏳";
+          const lifecycleStatus = entry.lifecycle?.status;
+          const failedLifecycle = new Set(["VALIDATION_FAILED", "DISPATCH_FAILED", "UNCONFIRMED", "STATE_MISMATCH", "TIMEOUT"]);
+          const status = lifecycleStatus === "CONFIRMED" || !lifecycleStatus && entry.status === "approved" ? "✓" : failedLifecycle.has(lifecycleStatus) ? "✗" : "⏳";
           actionHistoryLines.unshift(`${status} ${sourceName}${targetInfo}: ${action.actionId}`);
         }
       }

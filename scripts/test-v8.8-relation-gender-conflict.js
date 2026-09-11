@@ -20,6 +20,7 @@ const profiles = createRelationshipResolver({ onDiagnostic: () => false }).build
   [1, { id: 1, fullName: "父亲", children: [{ id: 2, name: "孩子", gender: "female" }] }],
   [2, { id: 2, fullName: "孩子", gender: "male" }]
 ]), 430000, () => "unknown");
-assert.equal(profiles.get(2).gender, "unknown", "canonical and relation-entry gender disagreement must fail closed");
-assert.equal(profiles.get(2).evidence.conflicts.gender, true);
+assert.equal(profiles.get(2).gender, "male", "canonical Runtime gender must outrank relation-entry payload gender");
+assert.equal(profiles.get(2).evidence.conflicts.gender, false);
+assert.equal(profiles.get(2).evidence.conflicts.genderDisagreement, true, "the lower-authority disagreement must remain diagnosable");
 console.log("V8.8 Relation Gender Conflict: PASS");

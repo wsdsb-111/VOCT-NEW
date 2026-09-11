@@ -4,6 +4,8 @@
 
 ## 推荐阅读顺序
 
+V8.8.3 当前入口：[Sol 最终正确性审查](v8.8.3-sol-final-review.md)与 [V8 阶段记录](V8阶段开发记录.md)。金币不再乐观修改本地状态；同一 RunFile 在 Effect 后输出双方实时金币并写 ACK，只有回读精确匹配才进入 `CONFIRMED`。在场关系、被提及人物与 Family Fact 共享 Current Truth DTO，canonical Runtime 性别优先，缺失/冲突使用中性称谓。代码侧 289/289 发布组通过，Final Freeze 等待真实 CK3 人工 Gate。
+
 V8.8.2 当前入口：[亲属关系正确性闭环](v8.8.2-correctness-closure.md)。长幼关系按 Anchor 出生日比较，出生日缺失/并列、性别冲突、Anchor/Target 未解析和来源截断均 fail-closed；多重角色按查询关系限定，Definition↔Runtime 强制双向一对一。配偶热修让 `edge.from` 人物自身生死决定已故语义，并拆分现任、前任与已故配偶 Intent；已故前配偶仍保留前配偶类型，不混入亡配偶查询。Prompt Order 不再依赖换行格式，Windows CI 支持手动触发。281/281 本地发布组通过；远端 Actions、真实 CK3/Provider 十问矩阵、100 次对话与 2 小时 Soak 尚待完成，因此仍为 `PENDING STAGE 8 MANUAL GATES`。
 
 V8.7.2 当前基线：[Terra 实施报告](v8.7.2-terra-implementation-report.md)、[Luna 实施报告](v8.7.2-luna-implementation-report.md)与 [Sol 最终正确性审查](v8.7.2-sol-final-review.md)已完成；Load Session、Legacy 迁移原子性/ACL、双重召回、默认页性能边界、DeepSeek 模型选项、历史人物普通入口清理、世界记忆输入稳定性 P0 与 CK3 中文日期链热修已收口，249/249 发布组通过。真实 CK3、Provider 与打包 Electron Gate 待执行，当前为 `PENDING MANUAL GATES`。
@@ -178,6 +180,7 @@ V8.5.1 历史基线：[Sol 最终审查与修复](v8.5.1-sol-final-review.md)，
 - [v8.7.2-terra-implementation-report.md](v8.7.2-terra-implementation-report.md)：V8.7.2 Terra Current Truth 双值合同、CK3 载入边界及 Legacy Supplemental 只读迁移。
 - [v8.7.2-luna-implementation-report.md](v8.7.2-luna-implementation-report.md)：V8.7.2 Luna Current Truth 只读预览、Load Boundary 分支选择和 Legacy Supplemental 迁移 UI。
 - [v8.7.2-sol-final-review.md](v8.7.2-sol-final-review.md)：V8.7.2 Sol Load Session、Legacy 迁移原子性/ACL、Current Truth 与默认世界线 UI 最终正确性审查。
+- [v8.8.3-sol-final-review.md](v8.8.3-sol-final-review.md)：V8.8.3 Sol Action 真实回读合同、参数一致性、Relationship Current Truth 与最终静态门禁。
 - [v8.0-historical-baseline-2.0-implementation-report.md](v8.0-historical-baseline-2.0-implementation-report.md)：V8.0 Historical Baseline 2.0 实施、测试与实机 smoke 边界。
 - [v7.10-official-action-letter-recovery-implementation-report.md](v7.10-official-action-letter-recovery-implementation-report.md)：V7.10-RC1 至 RC6 Final Rev.3 Candidate 官方 Action 迁移、启动 ACK Reconciliation、崩溃安全 dispatch、BLOCKED/STALLED 恢复、只读 debug.log、路径/Tail 事务、Date Producer Recovery、Canonical Relative Profile、统一 Kinship Resolver、Artifact Diagnostic 3.0 与验证边界。
 - [upstream/votc-2.0.3-action-manifest.md](upstream/votc-2.0.3-action-manifest.md)：官方 Action Kernel Blob SHA、适配路径和语义边界。

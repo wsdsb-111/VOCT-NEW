@@ -48,6 +48,7 @@ const expectedActionHashes = {
   "z_playerPaysGoldTo.js": "256742169d575a11f5d8b1ce82a36eba3147d24324865f1ffd55933b94936ecf",
   "z_setEmotion.js": "42e11cf67fdf89cf274d86c9ae19b1c4eb29a073996f783f1981ece5f9488700"
 };
+const v883ActionOverrides = new Set(["z_paysGoldTo.js", "z_playerPaysGoldTo.js"]);
 
 const player = { id: 101, fullName: "Player One", shortName: "Player" };
 const npc = { id: 202, fullName: "NPC Two", shortName: "NPC" };
@@ -84,13 +85,21 @@ if (fs.existsSync(officialMainPath)) {
   assert.deepStrictEqual(JSON.parse(JSON.stringify(portFullSchema)), JSON.parse(JSON.stringify(schemaSandbox.buildOfficialJsonSchema({ availableActions }))), "official full schema parity failed");
   assert.deepStrictEqual(JSON.parse(JSON.stringify(portMinSchema)), JSON.parse(JSON.stringify(schemaSandbox.buildOfficialJsonSchema({ availableActions }, true))), "official minimized schema parity failed");
 
-  for (const file of Object.keys(expectedActionHashes)) {
+  for (const file of Object.keys(expectedActionHashes).filter((file) => !v883ActionOverrides.has(file))) {
     assert.strictEqual(hash(fs.readFileSync(path.join(officialActionsDir, file), "utf8")), expectedActionHashes[file], `local official action drift: ${file}`);
   }
 }
 
 assert.deepStrictEqual(fs.readdirSync(currentActionsDir).filter((file) => file.endsWith(".js")).sort(), Object.keys(expectedActionHashes).sort());
-for (const [file, expectedHash] of Object.entries(expectedActionHashes)) assert.strictEqual(hash(fs.readFileSync(path.join(currentActionsDir, file), "utf8")), expectedHash, `ported standard action drift: ${file}`);
+for (const [file, expectedHash] of Object.entries(expectedActionHashes)) {
+  if (v883ActionOverrides.has(file)) continue;
+  assert.strictEqual(hash(fs.readFileSync(path.join(currentActionsDir, file), "utf8")), expectedHash, `ported standard action drift: ${file}`);
+}
+for (const file of v883ActionOverrides) {
+  const actionSource = fs.readFileSync(path.join(currentActionsDir, file), "utf8");
+  assert(actionSource.includes('type: "GOLD_TRANSFER"'), `${file} must declare its expected CK3 state change`);
+  assert(!/\.gold\s*[+-]=/.test(actionSource), `${file} must not optimistically mutate local gold`);
+}
 
 const temporaryRoot = fs.mkdtempSync(path.join(os.tmpdir(), "votc-action-registry-"));
 let registryPromise;

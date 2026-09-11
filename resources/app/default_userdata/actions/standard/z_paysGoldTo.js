@@ -147,18 +147,27 @@ module.exports = {
     runGameEffect(`
 global_var:votc_action_target = {
     add_gold = ${amount}
+    log_income = yes
 }
 
 global_var:votc_action_source = {
     remove_short_term_gold = ${amount}
+    log_income = yes
 }`);
-
-    // Update local game data
-    sourceCharacter.gold -= amount;
-    targetCharacter.gold += amount;
 
     return {
       message: {
+        en: `Requested ${sourceCharacter.shortName} to pay ${amount} gold to ${targetCharacter.shortName}; awaiting game confirmation`,
+        ru: `Запрошена выплата ${amount} золота от ${sourceCharacter.shortName} персонажу ${targetCharacter.shortName}; ожидается подтверждение игры`,
+        fr: `Paiement de ${amount} or demandé de ${sourceCharacter.shortName} à ${targetCharacter.shortName} ; en attente de confirmation du jeu`,
+        de: `Zahlung von ${amount} Gold von ${sourceCharacter.shortName} an ${targetCharacter.shortName} angefordert; Spielbestätigung ausstehend`,
+        es: `Se solicitó que ${sourceCharacter.shortName} pague ${amount} de oro a ${targetCharacter.shortName}; esperando confirmación del juego`,
+        ja: `${sourceCharacter.shortName}から${targetCharacter.shortName}への${amount}金の支払いを要求しました。ゲームの確認待ちです`,
+        ko: `${sourceCharacter.shortName}이(가) ${targetCharacter.shortName}에게 ${amount}골드를 지급하도록 요청했습니다. 게임 확인을 기다리는 중입니다`,
+        pl: `Zlecono płatność ${amount} złota od ${sourceCharacter.shortName} do ${targetCharacter.shortName}; oczekiwanie na potwierdzenie gry`,
+        zh: `已请求${sourceCharacter.shortName}向${targetCharacter.shortName}支付${amount}金币，等待游戏确认`
+      },
+      confirmedMessage: {
         en: `${sourceCharacter.shortName} paid ${amount} gold to ${targetCharacter.shortName}`,
         ru: `${sourceCharacter.shortName} заплатил ${amount} золота ${targetCharacter.shortName}`,
         fr: `${sourceCharacter.shortName} a payé ${amount} or à ${targetCharacter.shortName}`,
@@ -167,9 +176,15 @@ global_var:votc_action_source = {
         ja: `${sourceCharacter.shortName}は${targetCharacter.shortName}に${amount}金を支払いました`,
         ko: `${sourceCharacter.shortName}은(는) ${targetCharacter.shortName}에게 ${amount}골드를 지불했습니다`,
         pl: `${sourceCharacter.shortName} zapłacił ${amount} złota ${targetCharacter.shortName}`,
-        zh: `${sourceCharacter.shortName}向${targetCharacter.shortName}支付了${amount}金币`
+        zh: `${sourceCharacter.shortName}已向${targetCharacter.shortName}支付${amount}金币`
       },
-      sentiment: 'neutral'
+      sentiment: 'neutral',
+      expectedStateChange: {
+        type: "GOLD_TRANSFER",
+        sourceRuntimeId: sourceCharacter.id,
+        targetRuntimeId: targetCharacter.id,
+        amount
+      }
     };
   },
 };

@@ -8,6 +8,7 @@ const { resolveKinshipLabel } = require("./kinship-label-resolver");
 const { resolveCharacterSexConsensus } = require("./character-demographic-normalizer");
 const { resolveAnchoredRelationMention } = require("./anchored-relation-resolver");
 const { buildFamilyEntityFactBundle } = require("./family-entity-fact-bundle");
+const { resolveRelationshipCurrentTruth } = require("./relationship-current-truth");
 
 const DISPLAY_TYPES = new Set(["PARENT_OF", "CHILD_OF", "SIBLING_OF", "GRANDPARENT_OF", "AUNT_UNCLE_OF", "NIECE_NEPHEW_OF", "COUSIN_OF", "SPOUSE_OF", "FORMER_SPOUSE_OF", "DECEASED_SPOUSE_OF"]);
 
@@ -59,7 +60,7 @@ function buildGenderConflictConstraint(result) {
 - 不得从 Memory 或模型猜测具体人物；需要更多当前游戏数据后才能确定。`;
 }
 
-function buildFamilyFactBlock(character, gameData, { query = "", recentTargetId = null } = {}) {
+function buildFamilyFactBlock(character, gameData, { query = "", recentTargetId = null, currentFactRegistry = null } = {}) {
   if (!character?.id || !gameData) return null;
   const graph = getCachedKinshipGraph(gameData);
   const temporal = { currentGameDate: gameData.date, currentTotalDays: gameData.totalDays };
@@ -93,8 +94,9 @@ function buildFamilyFactBlock(character, gameData, { query = "", recentTargetId 
     if (!resolution.relation) continue;
     const bundle = buildFamilyEntityFactBundle({ graph, responderId: character.id, relationAnchorId, targetRuntimeId: edge.from, relationTypes: relationResolution?.intent?.relationTypes || null, temporal });
     if (!bundle) continue;
-    const sex = resolveCharacterSexConsensus({ snapshot: relative });
-    const label = resolveKinshipLabel({ type: edge.type, sex: sex.sex, branch: edge.branch });
+    const currentFact = resolveRelationshipCurrentTruth({ gameData, subjectRuntimeId: edge.from, anchorRuntimeId: relationAnchorId, registry: currentFactRegistry });
+    const sex = { sex: currentFact?.currentState?.sex || "unknown", conflict: currentFact?.evidence?.conflicts?.length > 0 };
+    const label = currentFact?.relations[String(relationAnchorId)]?.label || resolveKinshipLabel({ type: edge.type, sex: "unknown", branch: edge.branch });
     const death = bundle.death ? { fact: bundle.death, text: formatDeathFact(relative, { ...temporal, characters: graph.nodes })?.text || "已故" } : null;
     const lifeStatus = resolveLifeStatus(relative);
     const age = { age: bundle.age, label: bundle.ageLabel };

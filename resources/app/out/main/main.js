@@ -392,6 +392,8 @@ function createActionApproval(params) {
     status: "pending",
     previewFeedback: params.previewFeedback,
     previewSentiment: params.previewSentiment,
+    lifecycle: params.lifecycle || null,
+    diagnostic: params.diagnostic || null,
     datetime: /* @__PURE__ */ new Date()
   };
 }

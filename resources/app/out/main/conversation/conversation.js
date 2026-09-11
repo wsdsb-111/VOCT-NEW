@@ -5,6 +5,7 @@ const { createConversationRuntime } = require("./conversation-runtime");
 const participantLifecycle = require("./participant-lifecycle");
 const { buildPresenceObservationFacts } = require("../worldline/direct-observation-producer");
 const { resolveWorldlineTurnBudget, shouldTrimMemoryTurnRecall } = require("../worldline/worldline-context-budget");
+const { verifyActionConfirmation, settleActionResult } = require("../actions/action-confirmation");
 
 let ActionEngine = null;
 let settingsRepository = null;
@@ -117,6 +118,7 @@ class Conversation {
     this.leaveEvents = [];
     this.presenceInitialized = false;
     this.pendingActionApprovals = /* @__PURE__ */ new Map();
+    this.gameDataRevision = 0;
     this.eventEmitter = new events.EventEmitter();
     this.runtime = createConversationRuntime(this, {
       recordSkipped: (responseState, reason) => this.recordGenerationSkippedAnalytics(responseState, reason)
@@ -156,6 +158,8 @@ class Conversation {
     }
     try {
       this.gameData = await parseLog(ck3DebugPath);
+      this.gameDataRevision += 1;
+      this.gameData.gameDataRevision = this.gameDataRevision;
       console.log("GameData initialized with", this.gameData.characters.size, "characters");
       this.captureSummaryParticipantProfiles(this.gameData.characters.values());
       this.initializePresence();
@@ -999,7 +1003,9 @@ class Conversation {
           isDestructive: action.isDestructive
         },
         previewFeedback,
-        previewSentiment
+        previewSentiment,
+        lifecycle: action.lifecycle || null,
+        diagnostic: action.diagnostic || null
       });
       this.messages.push(approvalEntry);
       this.pendingActionApprovals.set(approvalEntry.id, {
@@ -1010,18 +1016,23 @@ class Conversation {
         approvalEntryId: approvalEntry.id
       });
     }
-    if (autoFeedbackResults.length > 0) this.addActionFeedback(associatedMessageId, autoFeedbackResults);
+    if (autoFeedbackResults.length > 0) {
+      this.addActionFeedback(associatedMessageId, autoFeedbackResults);
+      for (const result of autoFeedbackResults) this.scheduleActionConfirmation(associatedMessageId, result);
+    }
     const approvalSettings = settingsRepository.getActionApprovalSettings();
     if (this.pendingActionApprovals.size > 0 && approvalSettings.pauseOnApproval && this.npcQueue.length > 0) this.pauseConversation();
     if (this.pendingActionApprovals.size > 0) this.emitUpdate();
   }
   addActionFeedback(associatedMessageId, actionResults) {
     console.log("[Conversation] addActionFeedback called with results:", actionResults);
-    const feedbackItems = actionResults.filter((r) => r.feedback || r.error).map((r) => ({
+    const feedbackItems = actionResults.filter((r) => r.feedback || r.error || r.lifecycle || r.diagnostic).map((r) => ({
       actionId: r.actionId,
       success: r.success,
-      message: r.feedback?.message || r.error || "Unknown error",
-      sentiment: r.feedback?.sentiment || "negative"
+      message: r.feedback?.message || r.error || (r.success === false ? "Unknown error" : "Action completed"),
+      sentiment: r.feedback?.sentiment || "negative",
+      lifecycle: r.lifecycle || null,
+      diagnostic: r.diagnostic || null
     }));
     console.log("[Conversation] Filtered feedback items:", feedbackItems);
     if (feedbackItems.length > 0) {
@@ -1034,9 +1045,76 @@ class Conversation {
       this.messages.push(feedbackEntry);
       this.emitUpdate();
       console.log("[Conversation] Feedback entry added and update emitted");
+      return feedbackEntry;
     } else {
       console.log("[Conversation] No feedback items to display");
+      return null;
     }
+  }
+  getRunCommand(commandId) {
+    if (!commandId || !runFileManager) return null;
+    return [...runFileManager.getPendingCommands(), ...runFileManager.getRecentCommands()].find((command) => command.commandId === commandId) || null;
+  }
+  async refreshGameDataForActionConfirmation() {
+    const ck3DebugPath = settingsRepository.getCK3DebugLogPath();
+    if (!ck3DebugPath) throw new Error("ck3_debug_log_path_not_configured");
+    const gameData = await parseLog(ck3DebugPath);
+    gameData.loadCharactersSummaries();
+    this.gameData = gameData;
+    this.gameDataRevision += 1;
+    this.gameData.gameDataRevision = this.gameDataRevision;
+    return this.gameData;
+  }
+  async waitForActionConfirmation(result, { timeoutMs = 12e3, pollMs = 500 } = {}) {
+    if (!result?.confirmation) return result;
+    const startedAt = Date.now();
+    while (Date.now() - startedAt < timeoutMs) {
+      const command = this.getRunCommand(result.confirmation.dispatch?.commandId);
+      if (command?.status === "acknowledged") {
+        try {
+          await this.refreshGameDataForActionConfirmation();
+          const verification = verifyActionConfirmation({
+            confirmation: result.confirmation,
+            gameData: this.gameData,
+            gameDataRevision: this.gameDataRevision
+          });
+          if (verification.status !== "PENDING") return settleActionResult(result, { ...verification, commandStatus: command.status });
+        } catch (error) {
+          console.warn("[ActionConfirmation] runtime refresh failed:", error);
+        }
+      } else if (command && ["failed", "cancelled", "expired", "quarantined"].includes(command.status)) {
+        return settleActionResult(result, { status: "UNCONFIRMED", stateAfter: null, revisionAfter: this.gameDataRevision, confirmedStateChange: null, commandStatus: command.status });
+      }
+      await new Promise((resolve) => setTimeout(resolve, pollMs));
+    }
+    return settleActionResult(result, { status: "TIMEOUT", stateAfter: null, revisionAfter: this.gameDataRevision, confirmedStateChange: null });
+  }
+  replaceActionFeedback(associatedMessageId, provisional, settled) {
+    const commandId = provisional?.diagnostic?.commandId || null;
+    for (const message of this.messages) {
+      if (message.type !== "action-feedback" || message.associatedMessageId !== associatedMessageId) continue;
+      const feedback = message.feedbacks?.find((item) => item.actionId === provisional.actionId && (!commandId || item.diagnostic?.commandId === commandId));
+      if (!feedback) continue;
+      feedback.success = settled.success;
+      feedback.message = settled.feedback?.message || settled.error || feedback.message;
+      feedback.sentiment = settled.feedback?.sentiment || (settled.success ? "neutral" : "negative");
+      feedback.lifecycle = settled.lifecycle || feedback.lifecycle;
+      feedback.diagnostic = settled.diagnostic || feedback.diagnostic;
+      this.emitUpdate();
+      return;
+    }
+  }
+  scheduleActionConfirmation(associatedMessageId, result, approvalEntry = null) {
+    if (!result?.confirmation) return;
+    void this.waitForActionConfirmation(result).then((settled) => {
+      if (approvalEntry) {
+        approvalEntry.lifecycle = settled.lifecycle;
+        approvalEntry.diagnostic = settled.diagnostic;
+        approvalEntry.resultFeedback = settled.feedback?.message || approvalEntry.resultFeedback;
+        approvalEntry.resultSentiment = settled.feedback?.sentiment || (settled.success ? "neutral" : "negative");
+        this.emitUpdate();
+      } else this.replaceActionFeedback(associatedMessageId, result, settled);
+    }).catch((error) => console.error("[ActionConfirmation] unexpected failure:", error));
   }
   cancelCurrentStream() {
     console.log("Cancelling current stream");
@@ -1412,17 +1490,21 @@ class Conversation {
     const approvalEntry = this.messages[entryIndex];
     if (approvalEntry.type !== "action-approval") throw new Error(`Entry ${approvalEntryId} is not an action-approval entry`);
     approvalEntry.status = "approved";
+    approvalEntry.lifecycle = approvalEntry.lifecycle ? { ...approvalEntry.lifecycle, status: "VALIDATED", dispatched: false, confirmed: false } : null;
     approvalEntry.resultFeedback = pending.previewFeedback || pending.action.actionTitle || pending.action.actionId;
     approvalEntry.resultSentiment = pending.previewSentiment || "neutral";
     this.pendingActionApprovals.delete(approvalEntryId);
     this.emitUpdate();
     try {
       const result = await ActionEngine.runInvocation(this, pending.npc, pending.action.invocation);
+      approvalEntry.lifecycle = result.lifecycle || approvalEntry.lifecycle || null;
+      approvalEntry.diagnostic = result.diagnostic || approvalEntry.diagnostic || null;
       if (result.feedback?.message && result.feedback.message !== approvalEntry.resultFeedback) {
         approvalEntry.resultFeedback = result.feedback.message;
         approvalEntry.resultSentiment = result.feedback.sentiment || "neutral";
         this.emitUpdate();
       }
+      this.scheduleActionConfirmation(approvalEntry.associatedMessageId, result, approvalEntry);
     } catch (error) {
       console.error("[Conversation] Background action execution failed:", error);
       approvalEntry.resultFeedback = `Failed: ${error instanceof Error ? error.message : String(error)}`;

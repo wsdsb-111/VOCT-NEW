@@ -15742,22 +15742,45 @@ const StreamingMarkdown = ({
   }, []);
   return /* @__PURE__ */ jsxRuntimeExports.jsx("div", { ref: containerRef, className: "markdown-content" });
 };
+const actionLifecycleLabel = (status, language) => {
+  if (!status) return null;
+  const isChinese = String(language || "").toLowerCase().startsWith("zh");
+  const labels = {
+    VALIDATED: isChinese ? "已校验，尚未发送" : "Validated; not dispatched",
+    PENDING_APPROVAL: isChinese ? "等待批准" : "Awaiting approval",
+    DISPATCHED: isChinese ? "已发送到游戏，等待确认" : "Sent to game; awaiting confirmation",
+    CONFIRMED: isChinese ? "已确认" : "Confirmed",
+    NO_EFFECT: isChinese ? "未产生游戏状态变更" : "No game-state change",
+    VALIDATION_FAILED: isChinese ? "校验失败" : "Validation failed",
+    DISPATCH_FAILED: isChinese ? "发送失败" : "Dispatch failed",
+    UNCONFIRMED: isChinese ? "尚未确认" : "Unconfirmed",
+    STATE_MISMATCH: isChinese ? "游戏状态不一致" : "Game state mismatch",
+    TIMEOUT: isChinese ? "确认超时" : "Confirmation timed out"
+  };
+  return labels[String(status).toUpperCase()] || String(status);
+};
 const ActionFeedbackItem = ({ entry }) => {
+  const { i18n } = useTranslation();
   if (!entry.feedbacks || !Array.isArray(entry.feedbacks) || entry.feedbacks.length === 0) {
     return null;
   }
   return /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "action-feedback-container", children: /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "action-feedback-list", children: entry.feedbacks.map((feedback, index) => {
+    const lifecycleStatus = feedback.lifecycle?.status;
+    const lifecycleLabel = actionLifecycleLabel(lifecycleStatus, i18n.language);
+    const lifecycleFailure = ["VALIDATION_FAILED", "DISPATCH_FAILED", "UNCONFIRMED", "STATE_MISMATCH", "TIMEOUT"].includes(lifecycleStatus);
+    const lifecyclePending = lifecycleStatus && lifecycleStatus !== "CONFIRMED" && lifecycleStatus !== "NO_EFFECT" && !lifecycleFailure;
     let itemClass = "action-feedback-item";
-    if (!feedback.success) {
-      itemClass += " error";
-    } else {
-      itemClass += ` ${feedback.sentiment}`;
-    }
-    return /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: itemClass, children: /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "action-feedback-message", children: feedback.message }) }, index);
+    if (lifecycleFailure || !lifecycleStatus && !feedback.success) itemClass += " error";
+    else if (lifecyclePending) itemClass += " pending-confirmation";
+    else itemClass += ` ${feedback.sentiment}`;
+    return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: itemClass, children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "action-feedback-message", children: feedback.message }),
+      lifecycleLabel && /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "action-feedback-status", children: lifecycleLabel })
+    ] }, index);
   }) }) });
 };
 const ActionApprovalItem = ({ entry }) => {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
   const [isProcessing, setIsProcessing] = React.useState(false);
   const action = entry.action;
   const handleApprove = async () => {
@@ -15781,6 +15804,8 @@ const ActionApprovalItem = ({ entry }) => {
     }
   };
   const isPending = entry.status === "pending";
+  const lifecycleStatus = entry.lifecycle?.status;
+  const lifecycleLabel = !isPending ? actionLifecycleLabel(lifecycleStatus, i18n.language) : null;
   const hasTarget = !!action.targetCharacterName;
   const sentiment = entry.resultSentiment || entry.previewSentiment || "neutral";
   const message = entry.resultFeedback || entry.previewFeedback || action.actionTitle || action.actionId;
@@ -15790,13 +15815,14 @@ const ActionApprovalItem = ({ entry }) => {
     /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "action-feedback-list", children: /* @__PURE__ */ jsxRuntimeExports.jsxs(
       "div",
       {
-        className: `action-feedback-item ${sentiment} ${isPending ? "pending" : "resolved"} ${action.isDestructive ? "destructive" : ""}`,
+        className: `action-feedback-item ${sentiment} ${isPending ? "pending" : "resolved"} ${action.isDestructive ? "destructive" : ""} ${lifecycleStatus === "DISPATCHED" || lifecycleStatus === "VALIDATED" ? "pending-confirmation" : ""}`,
         title: action.actionTitle || action.actionId,
         children: [
           /* @__PURE__ */ jsxRuntimeExports.jsxs("span", { className: "action-feedback-message", children: [
             isPending ? t("chat.pendingApproval") + " · " : "",
             message
           ] }),
+          lifecycleLabel && /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "action-feedback-status", children: lifecycleLabel }),
           isPending && /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "approval-actions", children: [
             /* @__PURE__ */ jsxRuntimeExports.jsx(
               "button",
