@@ -140,8 +140,9 @@ async function run() {
       const manager = harness.createManager();
       manager.initializeAfterAckReconciliation();
       assert.strictEqual(manager.getRecentCommands().find((command) => command.commandId === "queued-close").status, "expired", "startup must expire an unexecuted destructive close instead of replaying it");
-      assert.strictEqual(manager.getPendingCommands()[0].commandId, "queued-action-after-close");
-      assert(fs.readFileSync(harness.runFile, "utf8").includes("queued-action-after-close"), "startup may dispatch the next safe queued command after removing the close");
+      assert.strictEqual(manager.getPendingCommands().length, 0, "v8.8.4 must not replay actions from an ended conversation");
+      assert.strictEqual(manager.getRecentCommands().find((command) => command.commandId === "queued-action-after-close").status, "expired");
+      assert(!fs.readFileSync(harness.runFile, "utf8").includes("queued-action-after-close"), "removing a stale close must not release historic effects");
       assert(!fs.readFileSync(harness.runFile, "utf8").includes("queued-close"), "startup must never write a queued stale close carrier");
     }
 

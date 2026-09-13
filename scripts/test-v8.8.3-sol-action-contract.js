@@ -43,7 +43,7 @@ const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "votc-v883-sol-action-"));
     assert(targetMutation >= 0 && targetMutation < targetReadback);
     assert(targetReadback < sourceMutation && sourceMutation < sourceReadback && sourceReadback < ack, "both post-effect gold readbacks must precede ACK");
     assert.strictEqual(dispatch.sourceIndex, 0);
-    assert.strictEqual(dispatch.targetIndex, 1);
+    assert.strictEqual(dispatch.targetIndex, 0, "CK3 global NPC list excludes the separately emitted player");
     assert.match(actionResult.message.zh, /等待游戏确认/);
     assert.match(actionResult.confirmedMessage.zh, /已向.*支付100金币/);
 

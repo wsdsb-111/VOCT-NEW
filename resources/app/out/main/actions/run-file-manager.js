@@ -2,6 +2,8 @@
 
 const RUN_COMMAND_QUEUE_VERSION = 3;
 const CONVERSATION_CLOSE_TTL_MS = 15e3;
+const ACTION_COMMAND_TTL_MS = 120e3;
+const DATE_REARM_TTL_MS = 30e3;
 const PENDING_COMMAND_STATUSES = ["queued", "blocked", "awaiting_ack", "stalled"];
 const TERMINAL_COMMAND_STATUSES = ["failed", "acknowledged", "cancelled", "expired", "quarantined"];
 
@@ -24,6 +26,7 @@ function createRunFileManager({ settingsRepository, path, fs, dataDir = null, no
       this.lastLateAckAt = null;
       this.resolvePath();
       this.loadState();
+      this.restoredCommandIds = new Set(this.pendingCommands.map(command => command.commandId));
     }
     resolvePath() {
       if (!this.ck3UserPath) this.ck3UserPath = settingsRepository.getCK3UserFolderPath() || null;
@@ -99,10 +102,12 @@ function createRunFileManager({ settingsRepository, path, fs, dataDir = null, no
       const status = command.status === "written" ? "awaiting_ack" : command.status;
       const scopeId = command.scopeId == null || String(command.scopeId).trim() === "" ? null : String(command.scopeId);
       const epoch = this.normalizeEpoch(command.epoch);
-      const expiresAtValue = Number(command.expiresAt);
-      const expiresAt = Number.isFinite(expiresAtValue)
+      const expiresAtValue = command.expiresAt == null ? NaN : Number(command.expiresAt);
+      const expiresAt = Number.isFinite(expiresAtValue) && expiresAtValue > 0
         ? expiresAtValue
-        : kind === "conversation_close" ? queuedAt + CONVERSATION_CLOSE_TTL_MS : null;
+        : kind === "conversation_close" ? queuedAt + CONVERSATION_CLOSE_TTL_MS
+        : kind === "action_effect" ? queuedAt + ACTION_COMMAND_TTL_MS
+        : kind === "date_producer_rearm" ? queuedAt + DATE_REARM_TTL_MS : null;
       const lastWrittenAt = command.lastWrittenAt != null ? command.lastWrittenAt : command.writtenAt != null ? command.writtenAt : null;
       const writeAttempts = Number(command.writeAttempts) || (lastWrittenAt != null ? 1 : 0);
       return {
@@ -122,6 +127,8 @@ function createRunFileManager({ settingsRepository, path, fs, dataDir = null, no
       };
     }
     isCommandExpired(command) {
+      // Action TTL only cancels zero-write work. An unacknowledged effect stays stalled.
+      if (command?.kind === "action_effect" && this.hasWriteHistory(command)) return false;
       const expiresAt = Number(command?.expiresAt);
       return Number.isFinite(expiresAt) && expiresAt > 0 && now() >= expiresAt;
     }
@@ -156,7 +163,9 @@ function createRunFileManager({ settingsRepository, path, fs, dataDir = null, no
       this.currentConversationEpoch = this.normalizeEpoch(epoch);
       if (this.currentConversationEpoch == null) return [];
       return this.cancelPendingCommands(
-        (command) => command.kind === "conversation_close" && this.isStaleConversationClose(command),
+        (command) => command.kind === "conversation_close" && this.isStaleConversationClose(command)
+          || command.kind === "action_effect" && !this.hasWriteHistory(command)
+            && (command.epoch == null || command.epoch !== this.currentConversationEpoch),
         "stale_conversation_epoch"
       );
     }
@@ -204,11 +213,30 @@ function createRunFileManager({ settingsRepository, path, fs, dataDir = null, no
         return false;
       }
     }
+    recordActionVerification(commandId, verification) {
+      const command = [...this.recentCommands, ...this.pendingCommands].find(item => item.commandId === commandId);
+      if (!command) return false;
+      const previous = command.actionVerification;
+      command.actionVerification = { status: verification.status, stateBefore: verification.stateBefore || null, stateAfter: verification.stateAfter || null, verifiedAt: now() };
+      if (this.saveState()) return true;
+      command.actionVerification = previous;
+      return false;
+    }
     composeCommandText(command) {
       const ackKind = this.normalizeKind(command.kind).toUpperCase();
-      return `${String(command.effectText).trim()}
+      const begin = command.kind === "action_effect" ? `debug_log = "VOTC:ACTION_BEGIN/ACTION_EFFECT/${command.commandId}"\n` : "";
+      const payload = `${begin}${String(command.effectText).trim()}
 debug_log = "VOTC:RUN_ACK/${ackKind}/${command.commandId}"
 root = {trigger_event = mcc_event_v2.9003}`;
+      if (command.kind !== "action_effect") return payload;
+      if (!/^[A-Za-z0-9_-]+$/.test(command.commandId)) throw new Error("unsafe_action_command_id");
+      // CK3 polls the carrier repeatedly until Electron consumes ACK. Execute effects once.
+      return `if = { limit = { NOT = { has_global_variable = votc_last_action_command } } set_global_variable = { name = votc_last_action_command value = flag:votc_none } }
+if = {
+limit = { NOT = { global_var:votc_last_action_command = flag:${command.commandId} } }
+set_global_variable = { name = votc_last_action_command value = flag:${command.commandId} }
+${payload}
+}`;
     }
     markActiveCommandUnavailable(command, reason) {
       const hasWriteHistory = this.hasWriteHistory(command);
@@ -234,6 +262,7 @@ root = {trigger_event = mcc_event_v2.9003}`;
           continue;
         }
         if (this.isCommandExpired(active)) {
+          if (active.kind === "date_producer_rearm" && this.hasWriteHistory(active) && !this.neutralizeExecutableFile({ expectedCommandId: active.commandId, command: active, reason: "expired_date_rearm" })) return this.snapshot(active);
           const removed = this.hasWriteHistory(active)
             ? this.quarantineCommand(active.commandId, `${active.kind}_expired_after_dispatch`, { advance: false })
             : this.expireCommand(active.commandId, `${active.kind}_expired_before_dispatch`, { advance: false });
@@ -300,7 +329,9 @@ root = {trigger_event = mcc_event_v2.9003}`;
       const requestedTtl = expiresInMs == null ? NaN : Number(expiresInMs);
       const commandExpiresAt = Number.isFinite(requestedExpiresAt)
         ? requestedExpiresAt
-        : normalizedKind === "conversation_close" ? queuedAt + (Number.isFinite(requestedTtl) && requestedTtl > 0 ? requestedTtl : CONVERSATION_CLOSE_TTL_MS) : null;
+        : normalizedKind === "conversation_close" ? queuedAt + (Number.isFinite(requestedTtl) && requestedTtl > 0 ? requestedTtl : CONVERSATION_CLOSE_TTL_MS)
+        : normalizedKind === "action_effect" ? queuedAt + ACTION_COMMAND_TTL_MS
+        : normalizedKind === "date_producer_rearm" ? queuedAt + DATE_REARM_TTL_MS : null;
       const existing = this.pendingCommands.find((command) => command.commandId === id);
       if (existing) return this.snapshot(existing);
       if (normalizedKind === "conversation_close" && normalizedScopeId) {
@@ -423,6 +454,9 @@ root = {trigger_event = mcc_event_v2.9003}`;
       this.assertStateLoaded();
       const index = this.pendingCommands.findIndex((command) => command.commandId === commandId);
       if (index === -1) return null;
+      const pending = this.pendingCommands[index];
+      if (index === 0 && neutralize && this.hasWriteHistory(pending)
+        && !this.neutralizeExecutableFile({ expectedCommandId: pending.commandId, command: pending, reason })) return null;
       const [command] = this.pendingCommands.splice(index, 1);
       const previous = this.snapshot(command);
       const hadWriteHistory = this.hasWriteHistory(command);
@@ -565,6 +599,24 @@ root = {trigger_event = mcc_event_v2.9003}`;
       this.recoveryCompleted = true;
       try {
         if (this.stateNeedsMigration) this.saveStateOrThrow();
+        // Discard stale zero-write actions before releasing a blocking producer.
+        // Keep the original queue as recovery evidence; never replay old effects.
+        const stale = this.pendingCommands.filter(command => command.kind === "action_effect"
+          && this.restoredCommandIds.has(command.commandId) && !this.hasWriteHistory(command));
+        if (stale.length) {
+          if (this.stateFile && fs$1.existsSync(this.stateFile)) {
+            const backup = this.stateFile + ".v8.8.4-backup";
+            if (!fs$1.existsSync(backup)) fs$1.copyFileSync(this.stateFile, backup);
+          }
+          const previousPending = this.pendingCommands;
+          const previousRecent = this.recentCommands;
+          const ids = new Set(stale.map(command => command.commandId));
+          this.pendingCommands = previousPending.filter(command => !ids.has(command.commandId));
+          this.recentCommands = [...previousRecent, ...stale.map(command => ({ ...command, status: "expired", expiredAt: now(), failureReason: "stale_action_before_dispatch" }))].slice(-50);
+          try { this.saveStateOrThrow(); }
+          catch (error) { this.pendingCommands = previousPending; this.recentCommands = previousRecent; throw error; }
+          console.log("[RunCommand] expired stale zero-write actions: " + stale.length);
+        }
         if (this.pendingCommands.length === 0) {
           this.writeEmptyRunFileIfSafe();
           return [];
@@ -580,6 +632,8 @@ root = {trigger_event = mcc_event_v2.9003}`;
             continue;
           }
           if (this.isCommandExpired(active)) {
+            if (active.kind === "date_producer_rearm" && this.hasWriteHistory(active)
+              && !this.neutralizeExecutableFile({ expectedCommandId: active.commandId, command: active, reason: "startup_expired_date_rearm" })) return this.getPendingCommands();
             const removed = this.hasWriteHistory(active)
               ? this.quarantineCommand(active.commandId, `${active.kind}_expired_after_dispatch`, { advance: false })
               : this.expireCommand(active.commandId, `${active.kind}_expired_before_dispatch`, { advance: false });

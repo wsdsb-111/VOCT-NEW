@@ -43,7 +43,7 @@
       historicalFigure: zh ? "历史人物" : "Historical figure",
       currentCharacter: zh ? "当前角色" : "Current character",
       multipleEntities: zh ? "多个对象，见逐实体判定" : "Multiple objects; see per-entity results",
-      noConclusion: zh ? "当前世界线中暂无可确认结论" : "No confirmed conclusion is available for the current worldline"
+      noConclusion: zh ? "当前世界书中暂无可确认结论" : "No confirmed conclusion is available for the current worldline"
     };
   }
 
@@ -130,7 +130,7 @@
       HISTORICAL_BASELINE: zh ? "历史背景" : "Historical context",
       SUPPLEMENTAL: zh ? "系统补充" : "System supplement"
     };
-    return map[String(value || "").toUpperCase()] || (zh ? "世界线来源" : "Worldline source");
+    return map[String(value || "").toUpperCase()] || (zh ? "世界书来源" : "Worldline source");
   }
 
   function freshness(value, mode, liveDate, locale) {
@@ -203,7 +203,7 @@
     const detail = code === "AGE_WORLDLINE_SHIFT"
       ? `${zh ? "当前角色出生时间与历史基准存在偏移，不影响已确认的历史身份。" : "The current character's birth time differs from the historical baseline; this does not change a confirmed historical identity."}${item?.expectedBirth && item?.currentBirth ? ` ${date(item.expectedBirth, locale)} → ${date(item.currentBirth, locale)}` : ""}`
       : (zh ? "当前存档关系与历史基准不同；以当前存档事实为准。" : "The current save differs from the historical baseline; current-save facts take precedence.");
-    return { code, title: titles[code] || (zh ? "世界线存在差异" : "Worldline difference"), detail, severity: ["INFO", "NOTICE"].includes(String(item?.severity || "").toUpperCase()) ? String(item.severity).toUpperCase() : "INFO" };
+    return { code, title: titles[code] || (zh ? "世界书存在差异" : "Worldline difference"), detail, severity: ["INFO", "NOTICE"].includes(String(item?.severity || "").toUpperCase()) ? String(item.severity).toUpperCase() : "INFO" };
   }
 
   function entityResolution(item, locale) {
@@ -360,7 +360,7 @@
       IMPORTANT_CHARACTER_DIED: [zh ? "重要人物去世" : "Important character died", zh ? "已确认" : "Confirmed"],
       TITLE_HOLDER_CHANGED: [zh ? "头衔持有人变更" : "Title holder changed", zh ? "已确认" : "Confirmed"]
     };
-    const [title, state] = map[type] || [zh ? "世界线发生变化" : "Worldline changed", zh ? "状态待确认" : "Status pending"];
+    const [title, state] = map[type] || [zh ? "世界书发生变化" : "Worldline changed", zh ? "状态待确认" : "Status pending"];
     return { title, detail: null, status: state, source: source(item?.source, locale) };
   }
 
@@ -397,7 +397,7 @@
     const semanticCandidates = semanticEntities.reduce((total, item) => total + item.candidateCount, 0);
     const candidates = semanticEntities.length ? semanticCandidates : unresolvedCandidates || resolvedEntities;
     const hasFacts = (promptDiagnostics?.gameTruth?.characters || []).length > 0 || (promptDiagnostics?.gameTruth?.titles || []).length > 0;
-    let conclusion = zh ? "当前世界线中暂无可确认结论" : "No confirmed conclusion is available for the current worldline";
+    let conclusion = zh ? "当前世界书中暂无可确认结论" : "No confirmed conclusion is available for the current worldline";
     if (promptDiagnostics?.localizationPending) conclusion = zh ? "本地化仍在后台解析，请稍后重新诊断；当前结果并非完整检索结论" : "Localization is still running; retry diagnostics shortly. Results are incomplete.";
     else if (promptDiagnostics?.localizationIncomplete) conclusion = zh ? "本地化来源尚未完整核实，当前结果不代表人物不存在" : "Localization sources are incomplete; this does not establish that the character is absent.";
     else if (promptDiagnostics?.available === false) conclusion = zh ? "当前无法安全读取世界知识" : "World knowledge cannot be read safely right now";
@@ -406,10 +406,10 @@
     else if (hasFacts && resolvedEntities > 0) conclusion = zh ? "已找到与查询相关的存档事实" : "Relevant save facts were found";
     else if (historical.status === "DEFINITION_FOUND_RUNTIME_MISSING") conclusion = zh ? "找到历史定义，但当前存档没有对应角色" : "The historical definition was found, but no current save character is bound";
     else if (["REJECTED_BY_EVIDENCE", "REJECTED_BY_CONFLICT"].includes(historical.status)) conclusion = zh ? "找到历史候选，但证据不足以确认身份" : "A historical candidate was found, but the evidence is insufficient to confirm identity";
-    else if (semanticStatuses.some((value) => ["AMBIGUOUS", "AMBIGUOUS_PROVENANCE"].includes(value)) || ["AMBIGUOUS", "AMBIGUOUS_PROVENANCE"].includes(String(resolution.status || "").toUpperCase())) conclusion = zh ? "当前世界线中无法安全给出唯一结论" : "A unique conclusion cannot be given safely for this worldline";
+    else if (semanticStatuses.some((value) => ["AMBIGUOUS", "AMBIGUOUS_PROVENANCE"].includes(value)) || ["AMBIGUOUS", "AMBIGUOUS_PROVENANCE"].includes(String(resolution.status || "").toUpperCase())) conclusion = zh ? "当前世界书中无法安全给出唯一结论" : "A unique conclusion cannot be given safely for this worldline";
     else if (hasFacts) conclusion = zh ? "已找到与查询相关的存档事实" : "Relevant save facts were found";
     else if (resolvedEntities > 0) conclusion = zh ? "已确认查询对象，但当前没有可展示的存档事实" : "The query object was resolved, but no save facts are available to display";
-    else if (resolution.status === "NO_MATCH") conclusion = zh ? "当前世界线中暂未找到明确对应对象" : "No matching object was found in the current worldline";
+    else if (resolution.status === "NO_MATCH") conclusion = zh ? "当前世界书中暂未找到明确对应对象" : "No matching object was found in the current worldline";
     const reason = semanticEntities.length > 1 && historical.status !== "SOURCE_INCOMPLETE" ? null : resolvedEntities > 0 && ["NO_MATCH", "NAME_INDEX_MISS"].includes(historical.status) ? null : resolution.reason === "CONTEXT_UNAVAILABLE" ? (zh ? "当前检查点或实时状态不可用。" : "The checkpoint or live state is unavailable.") : historical.reasonCode !== "NO_MATCH" ? historical.reason : null;
     return {
       query: promptDiagnostics?.query || "",

@@ -70,7 +70,7 @@ function createPlayerAnnualDelta(entries) {
     WAR_NO_LONGER_ACTIVE: ["战争疑似结束", "待核实"]
   };
   return (entries || []).map((entry) => {
-    const [title, status] = labels[entry.type] || ["世界线发生变化", "状态待确认"];
+    const [title, status] = labels[entry.type] || ["世界书发生变化", "状态待确认"];
     return {
       title,
       status,

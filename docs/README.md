@@ -4,6 +4,8 @@
 
 ## 推荐阅读顺序
 
+V8.8.4 当前入口：[关系与动作事故修复报告](v8.8.4-incident-implementation-report.md)。包括真实旧人物脚本兼容、旧队列隔离、NPC/玩家 Scope 绑定、游戏侧重复执行保护、命令内金币与好感度回读。290/290 发布组及隔离 Electron 冒烟通过；用户已确认关系识别，最新动作补丁仍待 CK3 验收。下方 V8.8.3 记录属于前置历史基线，不能代表本次实机事故已通过。
+
 V8.8.3 当前入口：[Sol 最终正确性审查](v8.8.3-sol-final-review.md)与 [V8 阶段记录](V8阶段开发记录.md)。金币不再乐观修改本地状态；同一 RunFile 在 Effect 后输出双方实时金币并写 ACK，只有回读精确匹配才进入 `CONFIRMED`。在场关系、被提及人物与 Family Fact 共享 Current Truth DTO，canonical Runtime 性别优先，缺失/冲突使用中性称谓。代码侧 289/289 发布组通过，Final Freeze 等待真实 CK3 人工 Gate。
 
 V8.8.2 当前入口：[亲属关系正确性闭环](v8.8.2-correctness-closure.md)。长幼关系按 Anchor 出生日比较，出生日缺失/并列、性别冲突、Anchor/Target 未解析和来源截断均 fail-closed；多重角色按查询关系限定，Definition↔Runtime 强制双向一对一。配偶热修让 `edge.from` 人物自身生死决定已故语义，并拆分现任、前任与已故配偶 Intent；已故前配偶仍保留前配偶类型，不混入亡配偶查询。Prompt Order 不再依赖换行格式，Windows CI 支持手动触发。281/281 本地发布组通过；远端 Actions、真实 CK3/Provider 十问矩阵、100 次对话与 2 小时 Soak 尚待完成，因此仍为 `PENDING STAGE 8 MANUAL GATES`。

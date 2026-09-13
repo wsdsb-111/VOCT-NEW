@@ -18,6 +18,7 @@ function neutralLabel(type, fallback = "近亲") {
 }
 
 function relationSideSex(profile, gameData, subjectRuntimeId) {
+  const verifiedValues = new Set();
   const values = new Set((profile?.evidence?.gender || [])
     .filter((item) => item.priority > 1)
     .map((item) => item.value)
@@ -28,10 +29,11 @@ function relationSideSex(profile, gameData, subjectRuntimeId) {
         if (Number(entry?.id) !== Number(subjectRuntimeId)) continue;
         const sex = normalizeSex(entry.gender ?? entry.sex ?? entry.female);
         if (sex !== "unknown") values.add(sex);
+        if (entry.genderSource === "CK3_LIVE_RELATIVE" && sex !== "unknown") verifiedValues.add(sex);
       }
     }
   }
-  return { sex: values.size === 1 ? [...values][0] : "unknown", values: [...values], conflict: values.size > 1 };
+  return { sex: values.size === 1 ? [...values][0] : "unknown", values: [...values], conflict: values.size > 1, verifiedSex: verifiedValues.size === 1 && values.size === 1 ? [...verifiedValues][0] : "unknown" };
 }
 
 function resolveRelationshipCurrentTruth({ gameData, subjectRuntimeId, anchorRuntimeId, registry = null } = {}) {
@@ -51,7 +53,8 @@ function resolveRelationshipCurrentTruth({ gameData, subjectRuntimeId, anchorRun
   const conflicts = [];
   if (canonicalResolution.conflict) conflicts.push("CURRENT_RUNTIME_GENDER_CONFLICT");
   if (sideEvidence.conflict || canonicalSex !== "unknown" && sideEvidence.values.some((value) => value !== canonicalSex)) conflicts.push("RELATION_SIDE_GENDER_CONFLICT");
-  const sex = canonicalSex;
+  const sex = canonical ? canonicalSex : sideEvidence.verifiedSex;
+  const sexSource = canonicalSex !== "unknown" ? "CURRENT_RUNTIME" : sex !== "unknown" ? "CK3_LIVE_RELATIVE" : "UNKNOWN";
   const relationResult = Number.isFinite(anchorId) ? graph.relationBetween(subjectId, anchorId) : { relation: null, diagnostic: null };
   const anchor = gameData.characters instanceof Map
     ? gameData.characters.get(anchorId) || null
@@ -75,7 +78,7 @@ function resolveRelationshipCurrentTruth({ gameData, subjectRuntimeId, anchorRun
     },
     relations: {},
     evidence: {
-      sexSource: canonicalSex === "unknown" ? "UNKNOWN" : "CURRENT_RUNTIME",
+      sexSource,
       relationSource: relation?.source || "KINSHIP_GRAPH",
       sourceComplete: graph.scopeTruncated !== true && profile.partial !== true,
       conflicts,
@@ -86,7 +89,7 @@ function resolveRelationshipCurrentTruth({ gameData, subjectRuntimeId, anchorRun
       historicalSex: "NOT_CONSULTED",
       memorySex: "NOT_CONSULTED",
       selectedSex: sex,
-      selectedSexSource: canonicalSex === "unknown" ? "UNKNOWN" : "CURRENT_RUNTIME"
+      selectedSexSource: sexSource
     }
   };
   fact.evidence.conflicts = [...new Set([...(fact.evidence.conflicts || []), ...conflicts])];

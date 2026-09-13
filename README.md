@@ -26,6 +26,8 @@ Voices of the Court 是一个面向《Crusader Kings III》（CK3）的沉浸式
 
 ## 运行环境
 
+当前修复基线为 **V8.8.4**：[关系与动作事故修复报告](docs/v8.8.4-incident-implementation-report.md)。关系识别已由用户实机确认；动作增加旧会话队列隔离、NPC 专用索引、玩家 root 绑定、缺失绑定保护和游戏侧同命令防重复执行。金币与好感度改为同一命令 BEGIN—ACK 内的前后状态核验，普通 ACK 不冒充效果成功。290/290 发布组及隔离 Electron 启动/导航通过；最新动作补丁的真实 CK3 效果与长时验收仍待完成。
+
 V8.8.3 已完成 Luna + Terra + Sol 的 [Action 生命周期、真实回读与 Current Truth 收口](docs/v8.8.3-sol-final-review.md)：金币动作不再预写本地金币；同一 RunFile 在 Effect 后输出双方实时金币，ACK 后只有精确变化才标记 `CONFIRMED`。被提及人物、在场关系与 Family Fact 共用当前亲属事实，canonical Runtime 性别优先，缺失/冲突使用中性称谓，Memory 不参与当前性别。玩家显式金额与模型参数漂移会记录 `ACTION_ARGUMENT_DRIFT` 并以玩家数值执行。代码侧 289/289 发布组通过，Final Freeze 等待真实 CK3 人工 Gate。
 
 V8.8.2 已完成 [亲属关系正确性闭环](docs/v8.8.2-correctness-closure.md)：兄弟姐妹长幼改为与关系主体出生日比较；出生日缺失或并列、Anchor/Target 未解析、性别冲突及来源截断统一 fail-closed。多重亲属角色按查询类型限定，Historical Definition↔Runtime 要求双向真正一对一，Family Fact 的来源完整性不再误报。配偶热修进一步让 `edge.from` 人物自身生死决定已故语义，现任、前任、已故配偶查询分别限定到独立关系类型；生产完整存档指纹和运行时人口属性 fallback 均可正确失效缓存。中性“配偶”可在性别冲突下唯一解析，妻子/丈夫仍 fail-closed。完整发布回归为 280/280（349 个测试文件分类、68 个历史检查归档）。真实 CK3/Provider 十问矩阵与 Stage 8 长时 Gate 尚待执行，因此 V8.8 尚未 Full Freeze。
@@ -231,7 +233,7 @@ node scripts\test-release.js
 - UI 主题：宫廷编年史风格（深红、暗金、羊皮纸文本层级）
 - UI 主题切换：游牧、骑士纹章、水墨画卷三套完整历史风格；分别使用 `image/草原游牧.png`、`image/中世纪骑士.png`、`image/中国古典.png` 作为整块界面背景，并保留各自的边框结构、按钮造型、消息卡片、输入框、字体和滚动条，主题选择可自动保存
 - UI 素材生成提示词：参见 [docs/UI_ASSET_PROMPTS_2.0.3.md](docs/UI_ASSET_PROMPTS_2.0.3.md)
-- 当前重点：执行 V8.8.3 人工 Gate，验证金币 Action 双边真实变化、未对话亲属性别、CK3 世界线读取、Provider、100 次对话与长时 Electron 稳定性；Official VOTC 2.0.3 Action 基线和 Memory Engine 2.6 存储合同保持冻结
+- 当前重点：执行 V8.8.4 动作补丁人工 Gate，验证金币单次双边变化、好感度实际变化/上限、其他动作实际效果与命令角色绑定；关系识别用户实机已通过。Official VOTC 2.0.3 Action 定义与 Memory Engine 2.6 存储合同保持兼容
 
 ## 已知限制
 

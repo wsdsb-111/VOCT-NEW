@@ -6313,19 +6313,19 @@ select,
 
 :root[data-votc-theme="ink"] .player-message {
   border-left: 5px solid #934638;
-  background: linear-gradient(90deg, rgba(147, 70, 56, 0.12), transparent 55%);
+  background: linear-gradient(90deg, rgba(173, 145, 129, 0.52), rgba(197, 193, 177, 0.42) 58%, rgba(169, 181, 171, 0.38));
 }
 
 :root[data-votc-theme="ink"] .ai-message {
   border-left-color: #2f3732;
   background:
-    linear-gradient(90deg, rgba(68, 80, 72, 0.1), transparent 67%),
-    radial-gradient(ellipse at 22% 0, rgba(41, 50, 45, 0.08), transparent 55%);
+    linear-gradient(90deg, rgba(151, 166, 157, 0.56), rgba(198, 196, 179, 0.46) 72%),
+    radial-gradient(ellipse at 22% 0, rgba(41, 50, 45, 0.1), transparent 55%);
 }
 
 :root[data-votc-theme="ink"] .system-message {
   border-left: 2px dashed #6d7770;
-  background: rgba(111, 128, 118, 0.06);
+  background: rgba(166, 178, 168, 0.44);
 }
 
 :root[data-votc-theme="ink"] .player-message .message-role {
@@ -6637,7 +6637,8 @@ select,
   }
 }
 
-/* All themes: summary character names use one high-contrast silver treatment. */
+/* Base summary-name treatment for dark material; light themes override it in
+   the final theme-audit layer below. */
 :root[data-votc-theme="parchment"] .summaries-manager .player-header .player-name,
 :root[data-votc-theme="parchment"] .summaries-manager .character-header .character-name,
 :root[data-votc-theme="knight"] .summaries-manager .player-header .player-name,
@@ -7307,8 +7308,8 @@ select,
 
 :root[data-votc-theme="ink"] {
   --votc-style-image: url("../../../../../image/中国古典.png");
-  --votc-style-overlay: linear-gradient(rgba(247, 244, 234, 0.05), rgba(222, 223, 211, 0.14));
-  --votc-content-overlay: linear-gradient(rgba(250, 248, 239, 0.3), rgba(239, 237, 225, 0.43));
+  --votc-style-overlay: linear-gradient(rgba(43, 53, 48, 0.1), rgba(33, 43, 39, 0.18));
+  --votc-content-overlay: linear-gradient(rgba(225, 222, 209, 0.24), rgba(207, 207, 192, 0.34));
   --votc-surface: rgba(250, 247, 238, 0.78);
   --votc-surface-raised: rgba(255, 252, 243, 0.85);
   --votc-surface-muted: rgba(236, 235, 222, 0.6);
@@ -7600,8 +7601,8 @@ select,
 
 :root[data-votc-theme="ink"] .chat-box,
 :root[data-votc-theme="ink"] .config-panel-container {
-  background-color: #dedfd3 !important;
-  background-image: linear-gradient(rgba(247, 244, 234, 0.05), rgba(222, 223, 211, 0.14)), url("../../../../../image/中国古典.png") !important;
+  background-color: #d3d4c8 !important;
+  background-image: linear-gradient(rgba(43, 53, 48, 0.1), rgba(33, 43, 39, 0.18)), url("../../../../../image/中国古典.png") !important;
   background-repeat: no-repeat !important;
   background-position: center !important;
   background-size: cover !important;
@@ -7609,11 +7610,16 @@ select,
 
 :root[data-votc-theme="ink"] .messages-container,
 :root[data-votc-theme="ink"] .config-main-content {
-  background-color: #efede1 !important;
-  background-image: linear-gradient(rgba(250, 248, 239, 0.3), rgba(239, 237, 225, 0.43)), url("../../../../../image/中国古典.png") !important;
+  background-color: #e3e0d4 !important;
+  background-image: linear-gradient(rgba(225, 222, 209, 0.24), rgba(207, 207, 192, 0.34)), url("../../../../../image/中国古典.png") !important;
   background-repeat: no-repeat !important;
   background-position: center !important;
   background-size: cover !important;
+}
+
+:root[data-votc-theme="ink"] .messages-container {
+  background-color: #d8d9cc !important;
+  background-image: linear-gradient(rgba(195, 199, 187, 0.34), rgba(179, 188, 176, 0.44)), url("../../../../../image/中国古典.png") !important;
 }
 
 /* Light themes need a distinct worldline layer so the data cards do not
@@ -7712,4 +7718,263 @@ select,
 :root[data-votc-theme="ink"] .worldline-view .worldline-error {
   color: #8c2929;
   background-color: rgba(255, 225, 218, 0.84);
+}
+
+/* Ink theme icon palette: blue-black for utilities, cinnabar for the active
+   control, and muted warm copper for hover. Semantic error/status icons keep
+   their existing colors so meaning is not lost. */
+:root[data-votc-theme="ink"] .config-header .court-theme-button img {
+  filter: grayscale(0.72) sepia(0.2) hue-rotate(92deg) saturate(0.68) brightness(0.66) contrast(1.22);
+}
+
+:root[data-votc-theme="ink"] .config-header .court-theme-button:hover:not(:disabled) img {
+  filter: grayscale(0.6) sepia(0.55) hue-rotate(345deg) saturate(0.9) brightness(0.78) contrast(1.15);
+}
+
+:root[data-votc-theme="ink"] .config-header .court-theme-button.active img {
+  filter: grayscale(0.18) sepia(0.42) hue-rotate(326deg) saturate(1.08) brightness(0.72) contrast(1.2);
+}
+
+:root[data-votc-theme="ink"] .config-header .tooltip-button .tooltip-icon,
+:root[data-votc-theme="ink"] .config-header .discord-button .discord-icon,
+:root[data-votc-theme="ink"] .language-button .language-icon,
+:root[data-votc-theme="ink"] .tooltip-container .tooltip-icon {
+  filter: brightness(0) saturate(100%) invert(27%) sepia(14%) saturate(650%) hue-rotate(121deg) brightness(91%) contrast(88%);
+}
+
+:root[data-votc-theme="ink"] .config-header .tooltip-button:hover .tooltip-icon,
+:root[data-votc-theme="ink"] .config-header .discord-button:hover .discord-icon,
+:root[data-votc-theme="ink"] .language-button:hover .language-icon,
+:root[data-votc-theme="ink"] .tooltip-container .tooltip-icon:hover {
+  filter: brightness(0) saturate(100%) invert(35%) sepia(20%) saturate(1450%) hue-rotate(317deg) brightness(87%) contrast(90%);
+}
+
+:root[data-votc-theme="ink"] .config-header .config-close-button,
+:root[data-votc-theme="ink"] .summary-search-icon,
+:root[data-votc-theme="ink"] .expand-icon,
+:root[data-votc-theme="ink"] .group-icon,
+:root[data-votc-theme="ink"] .optimization-mode-toggle-icon {
+  color: #344b47 !important;
+}
+
+:root[data-votc-theme="ink"] .config-header .config-close-button:hover,
+:root[data-votc-theme="ink"] .summary-search-icon:hover {
+  color: #9a6a3d !important;
+}
+
+/* Ink summary cards are pale paper, so use crisp dark ink instead of the
+   shared silver-on-dark treatment. Keep the counts in a restrained copper. */
+:root[data-votc-theme="ink"] .summaries-manager .player-header .player-name,
+:root[data-votc-theme="ink"] .summaries-manager .character-header .character-name {
+  color: #263b37;
+  text-shadow: none;
+}
+
+:root[data-votc-theme="ink"] .summaries-manager .player-header .summary-count,
+:root[data-votc-theme="ink"] .summaries-manager .character-header .summary-count,
+:root[data-votc-theme="ink"] .summaries-manager .character-header .character-id {
+  color: #80532f;
+  text-shadow: none;
+}
+
+/* V8.8 three-theme UI audit: each court uses its own button construction.
+   Shadows stay hard-edged so small Chinese labels remain crisp. */
+:root[data-votc-theme="parchment"] button:not(.court-theme-button) {
+  color: #fff1d5;
+  border: 1px solid #4f3322;
+  border-radius: 0;
+  clip-path: polygon(8px 0, calc(100% - 8px) 0, 100% 8px, 100% calc(100% - 8px), calc(100% - 8px) 100%, 8px 100%, 0 calc(100% - 8px), 0 8px);
+  background-color: #8b5932;
+  background-image:
+    repeating-linear-gradient(135deg, rgba(244, 205, 139, 0.1) 0 2px, transparent 2px 8px),
+    linear-gradient(180deg, #ad7945, #7a492b);
+  box-shadow: inset 0 1px 0 #d7ad71, inset 0 -2px 0 #4b2d1d, 0 2px 0 rgba(55, 36, 25, 0.34);
+  text-shadow: none;
+}
+
+:root[data-votc-theme="parchment"] button:not(.court-theme-button):hover:not(:disabled) {
+  color: #fff8e7;
+  border-color: #6c3d28;
+  background-color: #a56939;
+  background-image:
+    repeating-linear-gradient(135deg, rgba(255, 224, 169, 0.14) 0 2px, transparent 2px 8px),
+    linear-gradient(180deg, #c38a4d, #8b512e);
+  box-shadow: inset 0 1px 0 #ecd09b, inset 0 -2px 0 #5c3420, 0 3px 0 rgba(55, 36, 25, 0.32);
+}
+
+:root[data-votc-theme="parchment"] .config-header button.active:not(.court-theme-button),
+:root[data-votc-theme="parchment"] .primary-button,
+:root[data-votc-theme="parchment"] .approve-button,
+:root[data-votc-theme="parchment"] .buttons-container .execute-button.ready {
+  color: #fff3da;
+  border-color: #542822;
+  background-color: #74352d;
+  background-image:
+    repeating-linear-gradient(135deg, rgba(238, 177, 116, 0.1) 0 2px, transparent 2px 8px),
+    linear-gradient(180deg, #91463a, #682d29);
+  box-shadow: inset 0 1px 0 rgba(239, 181, 130, 0.48), inset 0 -2px 0 #451c1b, 0 2px 0 rgba(55, 26, 23, 0.34);
+  text-shadow: none;
+}
+
+:root[data-votc-theme="knight"] button:not(.court-theme-button) {
+  color: #eee4d2;
+  border: 1px solid #77716a;
+  border-radius: 0;
+  clip-path: polygon(8px 0, calc(100% - 8px) 0, 100% 50%, calc(100% - 8px) 100%, 8px 100%, 0 50%);
+  background-color: #242326;
+  background-image:
+    radial-gradient(circle at 9px 50%, #b49358 0 1px, #312d28 2px, transparent 3px),
+    radial-gradient(circle at calc(100% - 9px) 50%, #b49358 0 1px, #312d28 2px, transparent 3px),
+    linear-gradient(180deg, #55524e 0, #29282a 47%, #111113 53%, #302e31 100%);
+  box-shadow: inset 0 1px 0 #827d74, inset 0 -1px 0 #050505, 0 2px 0 rgba(0, 0, 0, 0.55);
+  text-shadow: 0 1px 0 #000;
+}
+
+:root[data-votc-theme="knight"] button:not(.court-theme-button):hover:not(:disabled) {
+  color: #ffe9ba;
+  border-color: #bd9658;
+  background-color: #4a2025;
+  background-image:
+    radial-gradient(circle at 9px 50%, #d0aa64 0 1px, #3a2a24 2px, transparent 3px),
+    radial-gradient(circle at calc(100% - 9px) 50%, #d0aa64 0 1px, #3a2a24 2px, transparent 3px),
+    linear-gradient(180deg, #73323a 0, #3f1d22 47%, #180f11 53%, #4e2228 100%);
+  box-shadow: inset 0 1px 0 #9c6669, inset 0 -1px 0 #090506, 0 3px 0 rgba(0, 0, 0, 0.55);
+}
+
+:root[data-votc-theme="knight"] .config-header button.active:not(.court-theme-button),
+:root[data-votc-theme="knight"] .primary-button,
+:root[data-votc-theme="knight"] .approve-button,
+:root[data-votc-theme="knight"] .buttons-container .execute-button.ready {
+  color: #ffe6b4;
+  border-color: #c39a5a;
+  background-color: #4b1d24;
+  background-image:
+    radial-gradient(circle at 9px 50%, #d3ae69 0 1px, #3a2a24 2px, transparent 3px),
+    radial-gradient(circle at calc(100% - 9px) 50%, #d3ae69 0 1px, #3a2a24 2px, transparent 3px),
+    linear-gradient(180deg, #80333d 0, #4b1d24 47%, #1e1114 53%, #5a232b 100%);
+  text-shadow: 0 1px 0 #000;
+}
+
+:root[data-votc-theme="ink"] button:not(.court-theme-button) {
+  color: #27322e;
+  border: 1px solid rgba(54, 65, 59, 0.62);
+  border-left: 3px solid #344b47;
+  border-radius: 1px;
+  clip-path: none;
+  background-color: rgba(233, 230, 215, 0.9);
+  background-image: linear-gradient(180deg, rgba(252, 248, 236, 0.72), rgba(207, 211, 197, 0.64));
+  box-shadow: inset 0 1px 0 rgba(255, 253, 246, 0.78), 2px 2px 0 rgba(52, 66, 59, 0.22);
+  text-shadow: none;
+}
+
+:root[data-votc-theme="ink"] button:not(.court-theme-button):hover:not(:disabled) {
+  color: #6f3029;
+  border-color: #7f4b3a;
+  border-left-color: #9a493c;
+  background-color: rgba(226, 218, 198, 0.94);
+  background-image: linear-gradient(180deg, rgba(244, 237, 220, 0.82), rgba(201, 207, 191, 0.72));
+  box-shadow: inset 0 1px 0 rgba(255, 251, 239, 0.7), 2px 2px 0 rgba(91, 55, 43, 0.22);
+}
+
+:root[data-votc-theme="ink"] .config-header button.active:not(.court-theme-button),
+:root[data-votc-theme="ink"] .primary-button,
+:root[data-votc-theme="ink"] .approve-button,
+:root[data-votc-theme="ink"] .buttons-container .execute-button.ready {
+  color: #fff5e7;
+  border-color: #6f3029;
+  border-left-color: #54231f;
+  background-color: #8d4136;
+  background-image: linear-gradient(180deg, #9c4b3d, #7a352e);
+  box-shadow: inset 0 1px 0 rgba(255, 211, 185, 0.34), 2px 2px 0 rgba(75, 33, 27, 0.28);
+  text-shadow: none;
+}
+
+/* Theme selector frames follow the same material language without changing
+   the stable icon assets or active-dot contract. */
+:root[data-votc-theme="parchment"] .court-theme-switcher {
+  border-color: #64442f;
+  border-radius: 3px;
+  background: rgba(91, 59, 38, 0.58);
+  box-shadow: inset 0 0 0 2px rgba(210, 165, 99, 0.2);
+}
+
+:root[data-votc-theme="parchment"] .config-header .court-theme-button {
+  border-color: #765034;
+  border-radius: 0;
+  clip-path: polygon(5px 0, calc(100% - 5px) 0, 100% 5px, 100% calc(100% - 5px), calc(100% - 5px) 100%, 5px 100%, 0 calc(100% - 5px), 0 5px);
+  background: linear-gradient(180deg, #9f6b3d, #62402a);
+}
+
+:root[data-votc-theme="knight"] .court-theme-switcher {
+  border: 2px ridge #75664d;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+}
+
+:root[data-votc-theme="knight"] .config-header .court-theme-button {
+  border-color: #625e58;
+  border-radius: 0;
+  clip-path: polygon(5px 0, calc(100% - 5px) 0, 100% 50%, calc(100% - 5px) 100%, 5px 100%, 0 50%);
+  background: transparent;
+  box-shadow: none;
+}
+
+:root[data-votc-theme="ink"] .court-theme-switcher {
+  border: 0;
+  border-left: 1px solid rgba(49, 60, 54, 0.62);
+  border-right: 1px solid rgba(49, 60, 54, 0.62);
+  border-radius: 0;
+  background: rgba(226, 224, 211, 0.7);
+  box-shadow: none;
+}
+
+:root[data-votc-theme="ink"] .config-header .court-theme-button {
+  border-color: #4f5c55;
+  border-radius: 1px;
+  background: linear-gradient(180deg, rgba(237, 234, 221, 0.94), rgba(193, 201, 190, 0.84));
+  box-shadow: 1px 1px 0 rgba(51, 63, 57, 0.24);
+}
+
+:root[data-votc-theme="parchment"] .config-header .court-theme-button.active,
+:root[data-votc-theme="knight"] .config-header .court-theme-button.active {
+  border-color: #d2aa68;
+}
+
+:root[data-votc-theme="ink"] .config-header .court-theme-button.active {
+  border-color: #8d4136;
+  background: rgba(145, 69, 57, 0.2);
+}
+
+:root[data-votc-theme="ink"] .config-header .court-theme-button.active::after {
+  border-radius: 0;
+  background: #914539;
+  box-shadow: none;
+}
+
+/* Summary headers: dark ink on light surfaces, restrained metal on knight. */
+:root[data-votc-theme="parchment"] .summaries-manager .player-header .player-name,
+:root[data-votc-theme="parchment"] .summaries-manager .character-header .character-name {
+  color: #2f4743;
+  text-shadow: none;
+}
+
+:root[data-votc-theme="parchment"] .summaries-manager .player-header .summary-count,
+:root[data-votc-theme="parchment"] .summaries-manager .character-header .summary-count,
+:root[data-votc-theme="parchment"] .summaries-manager .character-header .character-id {
+  color: #704725;
+  text-shadow: none;
+}
+
+:root[data-votc-theme="knight"] .summaries-manager .player-header .player-name,
+:root[data-votc-theme="knight"] .summaries-manager .character-header .character-name {
+  color: #f0d69e;
+  text-shadow: 0 1px 0 #000;
+}
+
+:root[data-votc-theme="knight"] .summaries-manager .player-header .summary-count,
+:root[data-votc-theme="knight"] .summaries-manager .character-header .summary-count,
+:root[data-votc-theme="knight"] .summaries-manager .character-header .character-id {
+  color: #d6cbb6;
+  text-shadow: 0 1px 0 #000;
 }

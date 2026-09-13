@@ -373,7 +373,7 @@ export function WorldMemoryEditor({ react: R }) {
     if (branchState === "LOAD_BOUNDARY_CANDIDATE") return h("strong", { className: "is-warning" }, "需要确认载入边界");
     return h("strong", { className: "is-ready" }, "已安全绑定");
   };
-  const renderRecallGuidance = () => !data.promptEnabled && h("div", { className: "world-memory-recall-guide" }, h("p", null, "NPC 暂时不会读取世界记忆。"), button(recallGuideOpen ? "收起开启步骤" : "前往开启", () => setRecallGuideOpen(value => !value), busy), recallGuideOpen && h("div", { className: "world-memory-recall-steps" }, h("p", null, "请开启以下两项："), h("ol", null, h("li", null, "Worldline Prompt Integration = ON"), h("li", null, "Subjective World Mode = PRODUCTION")), h("small", null, "只会改变世界线召回设置，不会改变模型，也不会修改 CK3 存档。"), button("一键开启推荐设置", enableRecall, busy, "primary-button")));
+  const renderRecallGuidance = () => !data.promptEnabled && h("div", { className: "world-memory-recall-guide" }, h("p", null, "NPC 暂时不会读取世界记忆。"), button(recallGuideOpen ? "收起开启步骤" : "前往开启", () => setRecallGuideOpen(value => !value), busy), recallGuideOpen && h("div", { className: "world-memory-recall-steps" }, h("p", null, "请开启以下两项："), h("ol", null, h("li", null, "Worldline Prompt Integration = ON"), h("li", null, "Subjective World Mode = PRODUCTION")), h("small", null, "只会改变世界书召回设置，不会改变模型，也不会修改 CK3 存档。"), button("一键开启推荐设置", enableRecall, busy, "primary-button")));
   const renderBranchWarning = () => {
     if (!branchNeedsAction) return null;
     const loadBoundary = branchState === "LOAD_BOUNDARY_CANDIDATE";

@@ -121,10 +121,12 @@ try {
 const runFileWrites = [];
 const EffectWriter = actions.createActionEffectWriter({ runFileManager: { write: (effect) => runFileWrites.push(effect) } });
 const gameData = { playerID: 101, characters: new Map([[101, player], [202, npc]]) };
-const expectedEffect = `
+const expectedEffect = `remove_global_variable = votc_action_source
+remove_global_variable = votc_action_target
+
 ordered_in_global_list = {
     variable = mcc_characters_list_v2
-    position = 1
+    position = 0
     set_global_variable = {
         name = votc_action_source
         value = this
@@ -138,7 +140,13 @@ root = {
     }
 }
 
+if = { limit = { exists = global_var:votc_action_source exists = global_var:votc_action_target }
+global_var:votc_action_source = { debug_log = "VOTC:ACTION_SOURCE/;/[THIS.Char.GetID]" }
+global_var:votc_action_target = { debug_log = "VOTC:ACTION_TARGET/;/[THIS.Char.GetID]" }
 test_effect = yes
+
+}
+else = { debug_log = "VOTC:ACTION_BINDING_FAILED" }
 `;
 assert.strictEqual(EffectWriter.composeFullEffect(gameData, 202, 101, "test_effect = yes"), expectedEffect);
 

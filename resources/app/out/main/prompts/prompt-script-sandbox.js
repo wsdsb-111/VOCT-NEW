@@ -2,6 +2,26 @@
 
 const fs__namespace = require("fs");
 const scriptSandbox = require("../script-sandbox");
+const { inferGenderFromPronoun } = require("../game-data/character");
+const { resolveCharacterSexConsensus } = require("../worldline/character-demographic-normalizer");
+
+// Adapt known legacy pList ternaries at execution time, preserving user files.
+function adaptLegacyGenderLabels(code) {
+  const neutralLabels = new Map([
+    ["son|daughter", "child"], ["brother|sister", "sibling"], ["man|woman", "person"],
+    ["儿子|女儿", "子女"], ["兄弟|姐妹", "手足"], ["男性|女性", "性别未知"]
+  ]);
+  const replaceLabel = (expression, object, maleFirst, yes, no) => {
+    const male = maleFirst ? yes : no;
+    const female = maleFirst ? no : yes;
+    const neutral = neutralLabels.get(male + "|" + female);
+    return neutral ? "__votcGenderLabel(" + object + "," + [male, female, neutral].map(value => JSON.stringify(value)).join(",") + ")" : expression;
+  };
+  return code.replace(/(\w+)\.sheHe\s*===\s*["'](he|she|他|她)["']\s*\?\s*["']([^"']+)["']\s*:\s*["']([^"']+)["']/g,
+    (expression, object, pronoun, yes, no) => replaceLabel(expression, object, pronoun === "he" || pronoun === "他", yes, no))
+    .replace(/is(Male|Female)\((\w+)\)\s*\?\s*["']([^"']+)["']\s*:\s*["']([^"']+)["']/g,
+      (expression, sex, object, yes, no) => replaceLabel(expression, object, sex === "Male", yes, no));
+}
 
 class PromptScriptSandbox {
   /**
@@ -9,8 +29,16 @@ class PromptScriptSandbox {
    * Expected to return a string
    */
   static executeDescription(scriptFilePath, context) {
-    const scriptCode = fs__namespace.readFileSync(scriptFilePath, "utf-8");
+    const scriptCode = adaptLegacyGenderLabels(fs__namespace.readFileSync(scriptFilePath, "utf-8"));
     const sandbox = this.createBaseSandbox();
+    sandbox.__votcGenderLabel = (character, male, female, neutral) => {
+      const canonical = context.gameData?.characters?.get(Number(character?.id));
+      const subject = canonical || character;
+      const consensus = resolveCharacterSexConsensus({ snapshot: subject });
+      const sex = consensus.sex;
+      const resolved = consensus.conflict || sex !== "unknown" || subject?.gender != null ? sex : inferGenderFromPronoun(subject?.sheHe);
+      return resolved === "male" ? male : resolved === "female" ? female : neutral;
+    };
     sandbox.gameData = context.gameData;
     sandbox.currentCharacterId = context.currentCharacterId;
     const result = this.executeScript(scriptFilePath, scriptCode, sandbox, "description");

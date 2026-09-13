@@ -59,7 +59,7 @@ async function main() {
     assert.equal(state.checkpoint.status, "ACTIVE");
     const body = await evaluate("document.body.innerText");
     console.log(JSON.stringify({ phase: "uiSnapshot", text: body.slice(0, 1200) }));
-    const clicked = await evaluate("(() => { const e = [...document.querySelectorAll('button')].find(e => e.textContent.trim() === '世界线'); if (e) e.click(); return !!e; })()");
+    const clicked = await evaluate("(() => { const e = [...document.querySelectorAll('button')].find(e => e.textContent.trim() === '世界书'); if (e) e.click(); return !!e; })()");
     await new Promise(resolve => setTimeout(resolve, 500));
     const result = await evaluate(`(async () => {
       const entry = (await worldlineAPI.createSupplemental({ title: 'Astra lantern audit', body: 'lantern public festival', entities: ['lantern'], visibility: 'PUBLIC_WORLD' })).supplemental;

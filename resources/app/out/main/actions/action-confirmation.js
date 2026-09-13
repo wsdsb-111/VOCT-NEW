@@ -25,6 +25,7 @@ function extractRequestedActionArgs(actionId, history = []) {
 }
 
 function captureActionConfirmation({ actionId, expectedStateChange, gameData, gameDataRevision, dispatch = null } = {}) {
+  if (expectedStateChange?.type === "OPINION_CHANGE") return { ...expectedStateChange, actionId, dispatch, requireCommandReadback: true };
   if (!expectedStateChange || expectedStateChange.type !== "GOLD_TRANSFER") return null;
   const sourceRuntimeId = Number(expectedStateChange.sourceRuntimeId);
   const targetRuntimeId = Number(expectedStateChange.targetRuntimeId);
@@ -38,6 +39,7 @@ function captureActionConfirmation({ actionId, expectedStateChange, gameData, ga
     sourceRuntimeId,
     targetRuntimeId,
     amount,
+    requireCommandReadback: dispatch?.hasGoldReadback === true,
     before: { sourceGold, targetGold, gameDataRevision: numberOrNull(gameDataRevision) },
     dispatch: dispatch ? {
       commandId: dispatch.commandId || null,
@@ -52,8 +54,34 @@ function captureActionConfirmation({ actionId, expectedStateChange, gameData, ga
   };
 }
 
-function verifyActionConfirmation({ confirmation, gameData, gameDataRevision } = {}) {
+function verifyActionConfirmation({ confirmation, gameData, gameDataRevision, commandReadback = null } = {}) {
   if (!confirmation) return { status: ACTION_LIFECYCLE_STATUSES.UNCONFIRMED, stateAfter: null, confirmedStateChange: null };
+  if (confirmation.requireCommandReadback) {
+    if (!commandReadback?.acknowledged || commandReadback.commandId !== confirmation.dispatch?.commandId) return { status: "UNCONFIRMED", stateAfter: null, confirmedStateChange: null };
+    if (commandReadback.sourceRuntimeId !== confirmation.sourceRuntimeId || confirmation.targetRuntimeId != null && commandReadback.targetRuntimeId !== confirmation.targetRuntimeId) return { status: "BINDING_FAILED", stateAfter: null, confirmedStateChange: null };
+  }
+  if (commandReadback?.bindingFailed) return { status: "BINDING_FAILED", stateAfter: null, confirmedStateChange: null };
+  if (commandReadback?.insufficientGold) return { status: "INSUFFICIENT_GOLD", stateAfter: null, confirmedStateChange: null };
+  if (confirmation.type === "RUN_ACK") return { status: "ACKNOWLEDGED", stateAfter: null, confirmedStateChange: null };
+  if (confirmation.type === "STATE_UNVERIFIABLE") return { status: "UNCONFIRMED", stateAfter: null, confirmedStateChange: null };
+  if (confirmation.requireCommandReadback) {
+    if (!commandReadback?.acknowledged || commandReadback.commandId !== confirmation.dispatch?.commandId) return { status: "UNCONFIRMED", stateAfter: null, confirmedStateChange: null };
+    if (confirmation.type === "OPINION_CHANGE") {
+      const observed = commandReadback.opinion[confirmation.sourceRuntimeId + ":" + confirmation.targetRuntimeId];
+      if (!observed || observed.count < 2) return { status: "UNCONFIRMED", stateAfter: null, confirmedStateChange: null };
+      const delta = observed.after - observed.before;
+      const status = delta === confirmation.amount ? "CONFIRMED" : delta === 0 ? "NO_EFFECT" : "STATE_MISMATCH";
+      return { status, stateBefore: { opinion: observed.before }, stateAfter: { opinion: observed.after }, confirmedStateChange: status === "CONFIRMED" ? { type: "OPINION_CHANGE", amount: delta } : null };
+    }
+    const source = commandReadback.gold[confirmation.sourceRuntimeId];
+    const target = commandReadback.gold[confirmation.targetRuntimeId];
+    if (!source || !target || source.count < 2 || target.count < 2 || confirmation.sourceRuntimeId === confirmation.targetRuntimeId) return { status: "UNCONFIRMED", stateAfter: null, confirmedStateChange: null };
+    const verified = verifyActionConfirmation({
+      confirmation: { ...confirmation, requireCommandReadback: false, before: { sourceGold: source.before, targetGold: target.before, gameDataRevision: null } },
+      gameData: { characters: new Map([[confirmation.sourceRuntimeId, { gold: source.after }], [confirmation.targetRuntimeId, { gold: target.after }]]) }
+    });
+    return { ...verified, stateBefore: { sourceGold: source.before, targetGold: target.before } };
+  }
   const revisionAfter = numberOrNull(gameDataRevision);
   const revisionBefore = numberOrNull(confirmation.before?.gameDataRevision);
   if (revisionBefore !== null && (revisionAfter === null || revisionAfter <= revisionBefore)) {
@@ -63,8 +91,8 @@ function verifyActionConfirmation({ confirmation, gameData, gameDataRevision } =
   const targetGold = readGold(gameData, confirmation.targetRuntimeId);
   const stateAfter = { sourceGold, targetGold };
   if (sourceGold === null || targetGold === null) return { status: ACTION_LIFECYCLE_STATUSES.UNCONFIRMED, stateAfter, confirmedStateChange: null, revisionAfter };
-  const sourceMatches = sourceGold === confirmation.before.sourceGold - confirmation.amount;
-  const targetMatches = targetGold === confirmation.before.targetGold + confirmation.amount;
+  const sourceMatches = Math.abs(sourceGold - (confirmation.before.sourceGold - confirmation.amount)) < 0.00001;
+  const targetMatches = Math.abs(targetGold - (confirmation.before.targetGold + confirmation.amount)) < 0.00001;
   if (sourceMatches && targetMatches) {
     return {
       status: ACTION_LIFECYCLE_STATUSES.CONFIRMED,
@@ -86,15 +114,27 @@ function verifyActionConfirmation({ confirmation, gameData, gameDataRevision } =
 function settleActionResult(result, verification) {
   const status = verification.status;
   const confirmed = status === ACTION_LIFECYCLE_STATUSES.CONFIRMED;
-  const lifecycle = createActionLifecycle({ selected: true, validated: true, dispatched: true, confirmed, status });
+  const dispatched = status !== "QUEUE_BLOCKED" && status !== "QUEUE_EXPIRED";
+  const lifecycle = createActionLifecycle({ selected: true, validated: true, dispatched, confirmed, status });
   const diagnostic = createActionDiagnostic({
     ...(result.diagnostic || {}),
+    stateBefore: verification.stateBefore || result.diagnostic?.stateBefore || null,
     stateAfter: verification.stateAfter,
     revisionAfter: verification.revisionAfter ?? null,
     confirmationStatus: status,
     commandStatus: verification.commandStatus ?? result.diagnostic?.commandStatus ?? null,
     confirmedStateChange: verification.confirmedStateChange
   });
+  const failureMessages = {
+    INSUFFICIENT_GOLD: "执行时游戏内金币不足，未转账",
+    BINDING_FAILED: "动作角色绑定缺失或不符，请重新进入对话后再操作",
+    ACKNOWLEDGED: "游戏已接收动作指令；尚无该效果的状态核验，不能视为执行成功",
+    NO_EFFECT: "游戏已执行核验，但未观察到好感度变化（对话修正上限为正负10，总好感度也有上限）",
+    QUEUE_BLOCKED: "动作尚未写入游戏：命令队列被未确认命令阻塞",
+    QUEUE_EXPIRED: "动作排队超时，已取消未写入的命令",
+    TIMEOUT: "动作等待 CK3 确认超时",
+    STATE_MISMATCH: "游戏状态与动作预期不一致；实测 " + JSON.stringify(verification.stateBefore || {}) + " → " + JSON.stringify(verification.stateAfter || {})
+  };
   return {
     ...result,
     success: confirmed,
@@ -102,7 +142,8 @@ function settleActionResult(result, verification) {
     diagnostic,
     feedback: result.feedback ? {
       ...result.feedback,
-      message: confirmed ? result.feedback.confirmedMessage || result.feedback.message : status === ACTION_LIFECYCLE_STATUSES.TIMEOUT ? "动作等待 CK3 确认超时" : status === ACTION_LIFECYCLE_STATUSES.STATE_MISMATCH ? "游戏状态与动作预期不一致" : "动作未获 CK3 状态确认"
+      sentiment: confirmed ? result.feedback.sentiment : "neutral",
+      message: confirmed ? result.feedback.confirmedMessage || result.feedback.message : failureMessages[status] || "动作未获 CK3 状态确认"
     } : result.feedback
   };
 }

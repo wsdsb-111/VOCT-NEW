@@ -64,11 +64,12 @@ function buildFamilyFactBlock(character, gameData, { query = "", recentTargetId 
   if (!character?.id || !gameData) return null;
   const graph = getCachedKinshipGraph(gameData);
   const temporal = { currentGameDate: gameData.date, currentTotalDays: gameData.totalDays };
-  const relationResolution = query ? resolveAnchoredRelationMention({ query, responderId: character.id, graph, recentTargetId }) : null;
+  let relationResolution = query ? resolveAnchoredRelationMention({ query, responderId: character.id, graph, recentTargetId }) : null;
+  // A family inventory is not a request to select one ambiguous person.
+  if (relationResolution?.status === "NO_RELATION_INTENT") relationResolution = null;
   if (relationResolution?.intent?.sourcePhrase) {
     console.log(`[VOTC Relation] query=${String(query).replace(/\s+/g, " ").trim()} intent=${relationResolution.intent.relationTypes.join(",") || "NONE"} sex=${relationResolution.intent.sexConstraint || "unknown"} anchorMention=${relationResolution.anchor.mention || "-"} anchorRuntimeId=${relationResolution.relationAnchorRuntimeId || "-"} targetRuntimeId=${relationResolution.targetRuntimeId || "-"} targetName=${relationResolution.target?.name || "-"} resolution=${relationResolution.status}`);
   }
-  if (relationResolution?.status === "NO_RELATION_INTENT") return null;
   if (relationResolution?.status === "RELATION_GENDER_CONFLICT") return buildGenderConflictConstraint(relationResolution);
   if (relationResolution?.status === "RELATION_AMBIGUOUS") {
     return `=== 当前结构化家庭事实（本轮 CK3 数据） ===\n- “${relationResolution.mention}”存在多个候选，系统未选择任何人，也未注入任一候选的私有事实。\n${buildUnresolvedRelationConstraint(relationResolution)}`;
@@ -79,10 +80,14 @@ function buildFamilyFactBlock(character, gameData, { query = "", recentTargetId 
   const relations = (relationResolution
     && relationResolution.status === "RELATION_RESOLVED"
     ? graph.relationsTo(relationResolution.relationAnchorRuntimeId).filter((edge) => String(edge.from) === String(relationResolution.targetRuntimeId) && relationResolution.intent.relationTypes.includes(edge.type))
-    : graph.relationsTo(character.id).filter((edge) => DISPLAY_TYPES.has(edge.type)));
+    : graph.relationsTo(character.id).filter((edge) => DISPLAY_TYPES.has(edge.type) && (!query || ["PARENT_OF", "CHILD_OF", "SIBLING_OF", "SPOUSE_OF"].includes(edge.type))));
   const seen = new Set();
   const lines = [];
   for (const edge of relations) {
+    if (lines.length >= 32) {
+      lines.push("- 本次家庭列表已截断；未列出不等于不存在，不得据此推断亲属总人数。");
+      break;
+    }
     const key = `${edge.from}:${edge.type}`;
     if (seen.has(key)) continue;
     seen.add(key);
@@ -102,7 +107,7 @@ function buildFamilyFactBlock(character, gameData, { query = "", recentTargetId 
     const age = { age: bundle.age, label: bundle.ageLabel };
     const details = [];
     if (!bundle.sourceComplete) details.push("来源范围不完整");
-    if (sex.conflict) details.push("性别数据存在冲突，未输出性别结论");
+    if (sex.conflict && sex.sex === "unknown") details.push("性别数据存在冲突，未输出性别结论");
     if (lifeStatus.conflict) details.push("生死状态存在冲突，未输出结论");
     else if (death) details.push(death.text);
     else if (lifeStatus.alive === true) details.push("在世");

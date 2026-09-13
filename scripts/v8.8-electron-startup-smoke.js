@@ -69,7 +69,7 @@ async function main() {
       assert.equal(loaded.checkpoint.status, "ACTIVE");
     }
     console.log("BUTTONS", await evaluate("[...document.querySelectorAll('button')].map(e=>e.textContent.trim()).slice(0,30)"));
-    const clicked = await evaluate("(() => { const e=[...document.querySelectorAll('button')].find(e=>['世界线','Worldline'].includes(e.textContent.trim())); if(e)e.click();return !!e; })()");
+    const clicked = await evaluate("(() => { const e=[...document.querySelectorAll('button')].find(e=>['世界书','Worldline'].includes(e.textContent.trim())); if(e)e.click();return !!e; })()");
     assert(clicked, "worldline navigation missing");
     await new Promise(resolve => setTimeout(resolve, 1500));
     assert(await evaluate("!!document.querySelector('.worldline-view')"), "worldline rendered an empty body");

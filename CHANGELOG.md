@@ -2,6 +2,8 @@
 
 这里是版本变更的单一入口。详细设计和测试证据保留在链接目标中，本文件只维护版本顺序、用户可见摘要和文档索引。
 
+V8.8.4：[关系与动作事故修复](docs/v8.8.4-incident-implementation-report.md)。修复旧英文人物脚本读取中文性别、日期探针队列阻塞、动作 NPC 索引及重复执行风险；金币/好感度改为同命令前后回读，ACK 不再表示效果成功。290/290 发布组、隔离 Electron 冒烟通过；关系实机通过，最新动作补丁等待 CK3 复测。
+
 | v8.8.3 Sol 最终正确性审查 | 金币 Effect 在同一 RunFile 内追加双方实时金币回读，ACK 后精确核对才完成；命令丢失不再视作 ACK，玩家显式金额覆盖模型漂移；在场/Family/Mentioned 共用 Current Truth，canonical 冲突与缺失均 fail-closed；289/289 发布组通过，真实 CK3 Gate 待执行 | [Sol 最终审查](docs/v8.8.3-sol-final-review.md) / [V8 阶段记录](docs/V8阶段开发记录.md) |
 | v8.8.3 Terra Action 回读确认与人物当前事实 | 金币动作不再乐观改写本地状态；RunFile ACK 后重读 CK3 数据，双方金额精确匹配才标记 CONFIRMED；未确认/状态不一致保持失败。被提及人物与 Family Fact 共享当前亲属事实，canonical Runtime 性别优先且 relation-side 冲突可诊断 | [V8 阶段记录](docs/V8阶段开发记录.md) |
 | v8.8.3 Luna Action 生命周期可观测性 | 为 Action 历史、会话反馈和 Renderer 增加 SELECTED/VALIDATED/DISPATCHED/CONFIRMED 及失败态字段；已发送但未获 CK3 确认的动作显示为待确认，不提前宣称成功；新增生命周期与 UI 静态回归 | [V8 阶段记录](docs/V8阶段开发记录.md) |

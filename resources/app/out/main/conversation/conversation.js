@@ -6,6 +6,7 @@ const participantLifecycle = require("./participant-lifecycle");
 const { buildPresenceObservationFacts } = require("../worldline/direct-observation-producer");
 const { resolveWorldlineTurnBudget, shouldTrimMemoryTurnRecall } = require("../worldline/worldline-context-budget");
 const { verifyActionConfirmation, settleActionResult } = require("../actions/action-confirmation");
+const { readActionCommandReadback } = require("../actions/action-command-readback");
 
 let ActionEngine = null;
 let settingsRepository = null;
@@ -1070,15 +1071,29 @@ class Conversation {
     const startedAt = Date.now();
     while (Date.now() - startedAt < timeoutMs) {
       const command = this.getRunCommand(result.confirmation.dispatch?.commandId);
+      if (command?.status === "queued" && runFileManager.getQueueHealth?.()?.queueBlocked) {
+        runFileManager.cancelCommand(command.commandId, "action_queue_blocked", { advance: false });
+        return settleActionResult(result, { status: "QUEUE_BLOCKED", commandStatus: "cancelled", stateAfter: null });
+      }
       if (command?.status === "acknowledged") {
         try {
-          await this.refreshGameDataForActionConfirmation();
+          const commandReadback = result.confirmation.requireCommandReadback
+            ? await readActionCommandReadback(settingsRepository.getCK3DebugLogPath(), command.commandId) : null;
+          if (!result.confirmation.requireCommandReadback && result.confirmation.type !== "RUN_ACK") await this.refreshGameDataForActionConfirmation();
           const verification = verifyActionConfirmation({
             confirmation: result.confirmation,
             gameData: this.gameData,
-            gameDataRevision: this.gameDataRevision
+            gameDataRevision: this.gameDataRevision,
+            commandReadback
           });
-          if (verification.status !== "PENDING") return settleActionResult(result, { ...verification, commandStatus: command.status });
+          if (verification.status !== "PENDING") {
+            if (result.confirmation.requireCommandReadback && ["GOLD_TRANSFER", "OPINION_CHANGE"].includes(result.confirmation.type)) {
+              try { await this.refreshGameDataForActionConfirmation(); }
+              catch (error) { console.warn("[ActionConfirmation] post-verification balance refresh failed:", error.message); }
+            }
+            runFileManager.recordActionVerification?.(command.commandId, verification);
+            return settleActionResult(result, { ...verification, commandStatus: command.status });
+          }
         } catch (error) {
           console.warn("[ActionConfirmation] runtime refresh failed:", error);
         }
@@ -1086,6 +1101,11 @@ class Conversation {
         return settleActionResult(result, { status: "UNCONFIRMED", stateAfter: null, revisionAfter: this.gameDataRevision, confirmedStateChange: null, commandStatus: command.status });
       }
       await new Promise((resolve) => setTimeout(resolve, pollMs));
+    }
+    const command = this.getRunCommand(result.confirmation.dispatch?.commandId);
+    if (command && !runFileManager.hasWriteHistory(command)) {
+      runFileManager.cancelCommand(command.commandId, "action_queue_timeout", { advance: false });
+      return settleActionResult(result, { status: "QUEUE_EXPIRED", commandStatus: "cancelled", stateAfter: null });
     }
     return settleActionResult(result, { status: "TIMEOUT", stateAfter: null, revisionAfter: this.gameDataRevision, confirmedStateChange: null });
   }

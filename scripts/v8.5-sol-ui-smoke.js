@@ -57,14 +57,14 @@ async function main() {
       await page.getByText("展开历史人物判定依据", { exact: true }).click();
       await page.locator(".worldline-candidate-readable").first().waitFor();
       assert.equal(await page.locator(".worldline-candidate-readable").count(), 2);
-      await page.getByText("逐实体身份与世界线差异", { exact: true }).click();
+      await page.getByText("逐实体身份与世界书差异", { exact: true }).click();
       await page.locator(".worldline-entity-resolution-card").first().waitFor();
       assert.equal(await page.locator(".worldline-entity-resolution-card").count(), 3, "all diagnostic entities remain visible");
       const entityText = await page.locator(".worldline-entity-resolution-list").innerText();
       assert.ok(entityText.includes("岳飞") && entityText.includes("韩世忠") && entityText.includes("赵思昭"));
       assert.ok(entityText.includes("当前角色出生时间与历史基准存在偏移，不影响已确认的历史身份。"));
       assert.ok(!/runtimeId|definitionId|NAME_EXACT|Fei_name11|96895/.test(entityText), "entity semantic layer contains no raw IDs or evidence codes");
-      await page.getByText("逐实体身份与世界线差异", { exact: true }).click();
+      await page.getByText("逐实体身份与世界书差异", { exact: true }).click();
       const visible = await page.locator(".worldline-prompt-result").innerText();
       assert.ok(!/runtimeId|definitionId|NAME_EXACT|AGE_MATCH_STRONG|Fei_name11|96895/.test(visible), "A/B layers contain no raw evidence or ID");
       assert.ok(visible.includes("0.77 / 1.00"));

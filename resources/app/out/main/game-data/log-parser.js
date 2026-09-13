@@ -397,9 +397,13 @@ function createLogParser({ GameData, Character, onGameDataParsed = null }) {
           case "trait":
             gameData.characters.get(rootID).traits.push(parseTrait(data));
             break;
-          case "opinions":
-            gameData.characters.get(rootID).opinions.push({ id: Number(data[1]), opinon: Number(data[2]) });
+          case "opinions": {
+            const opinions = gameData.characters.get(rootID).opinions;
+            const current = opinions.find(item => item.id === Number(data[1]));
+            if (current) current.opinon = Number(data[2]);
+            else opinions.push({ id: Number(data[1]), opinon: Number(data[2]) });
             break;
+          }
           case "relations":
             if (line.split("#")[1] !== "") {
               gameData.characters.get(rootID).relationsToPlayer = [removeTooltip(line.split("#")[1])];
@@ -466,6 +470,7 @@ function createLogParser({ GameData, Character, onGameDataParsed = null }) {
               name: data[2],
               sheHe: data[3],
               gender: inferGenderFromPronoun(data[3]),
+              genderSource: "CK3_LIVE_RELATIVE",
               birthDateTotalDays: Number(data[4]),
               birthDate: data[5],
               traits: [],
@@ -551,6 +556,7 @@ function createLogParser({ GameData, Character, onGameDataParsed = null }) {
               name: data[2],
               sheHe: data[3],
               gender: inferGenderFromPronoun(data[3]),
+              genderSource: "CK3_LIVE_RELATIVE",
               birthDateTotalDays: Number(data[4]),
               birthDate: data[5],
               traits: [],

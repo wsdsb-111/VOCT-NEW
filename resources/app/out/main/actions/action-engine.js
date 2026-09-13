@@ -183,7 +183,7 @@ function createActionEngine({ actionRegistry, settingsRepository, usageAnalytics
       const runGameEffect = (effectBody) => {
         if (options?.dryRun) return { status: "NOT_DISPATCHED" };
         try {
-          const result = ActionEffectWriter.writeEffect(conv.gameData, dispatchSourceId, targetId, effectBody);
+          const result = ActionEffectWriter.writeEffect(conv.gameData, dispatchSourceId, targetId, effectBody, { scopeId: conv.id, epoch: conv.conversationEpoch, trackGold: ["playerPaysGoldTo", "paysGoldTo"].includes(invocation.actionId), goldAmount: Number(executionArgs.amount), trackOpinion: invocation.actionId === "changeOpinionOf" });
           if (!result?.commandId || !["queued", "awaiting_ack"].includes(result.status)) throw new Error(`action_effect_dispatch_failed:${result?.status || "no_result"}`);
           dispatchRecords.push({ status: result?.status || "WRITTEN", ...result });
           return result;
@@ -211,7 +211,8 @@ function createActionEngine({ actionRegistry, settingsRepository, usageAnalytics
           }
         }
         const dispatched = dispatchRecords.length > 0;
-        const expectedStateChange = result && typeof result === "object" ? result.expectedStateChange ?? null : null;
+        const expectedStateChange = (result && typeof result === "object" ? result.expectedStateChange ?? null : null)
+          || (invocation.actionId === "changeOpinionOf" && dispatched ? { type: "OPINION_CHANGE", sourceRuntimeId: npc.id, targetRuntimeId: targetId, amount: Math.max(-10, Math.min(10, Math.floor(Number(executionArgs.value)))) } : null);
         const validationFailed = !dispatched && result && typeof result === "object" && result.sentiment === "negative";
         const confirmation = !options?.dryRun && dispatched ? captureActionConfirmation({
           actionId: invocation.actionId,
@@ -219,14 +220,15 @@ function createActionEngine({ actionRegistry, settingsRepository, usageAnalytics
           gameData: conv.gameData,
           gameDataRevision: conv.gameDataRevision ?? conv.gameData?.revision ?? conv.gameData?.gameDataRevision ?? null,
           dispatch: dispatchRecords.at(-1)
-        }) : null;
+        }) || { type: expectedStateChange ? "STATE_UNVERIFIABLE" : "RUN_ACK", dispatch: dispatchRecords.at(-1), sourceRuntimeId: dispatchSourceId, targetRuntimeId: targetId, requireCommandReadback: dispatchRecords.at(-1)?.hasCommandEnvelope === true } : null;
         const requiresConfirmation = confirmation !== null;
+        if (requiresConfirmation && !feedback) feedback = { message: String(userLang).startsWith("zh") ? "已提交动作请求，等待游戏回执" : "Action requested; awaiting game acknowledgement", sentiment: "neutral" };
         const lifecycle = createActionLifecycle({
           selected: true,
           validated: true,
-          dispatched,
+          dispatched: dispatched && dispatchRecords.at(-1)?.status !== "queued",
           confirmed: false,
-          status: options?.dryRun ? ACTION_LIFECYCLE_STATUSES.VALIDATED : validationFailed ? ACTION_LIFECYCLE_STATUSES.VALIDATION_FAILED : requiresConfirmation ? ACTION_LIFECYCLE_STATUSES.DISPATCHED : ACTION_LIFECYCLE_STATUSES.NO_EFFECT
+          status: options?.dryRun ? ACTION_LIFECYCLE_STATUSES.VALIDATED : validationFailed ? ACTION_LIFECYCLE_STATUSES.VALIDATION_FAILED : requiresConfirmation ? dispatchRecords.at(-1)?.status === "queued" ? "QUEUED" : ACTION_LIFECYCLE_STATUSES.DISPATCHED : ACTION_LIFECYCLE_STATUSES.NO_EFFECT
         });
         const diagnostic = createActionDiagnostic({
           actionId: invocation.actionId,
