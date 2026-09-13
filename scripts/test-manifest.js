@@ -79,6 +79,8 @@ const archivedChecks = [
 const releaseChecks = [
   { group: "v8.8.4-incident-regression", script: "test-v8.8.4-incident-regression.js" },
   { group: "v8.8.5-review-kinship", script: "test-v8.8.5-review-kinship.js" },
+  { group: "v8.8.5-zhipu-provider", script: "test-v8.8.5-zhipu-provider.js" },
+  { group: "v8.8.5-provider-diagnostics", script: "test-v8.8.5-provider-diagnostics.js" },
   { group: "syntax", args: ["--check", "resources/app/out/main/main.js"] },
   { group: "v8.0-historical-baseline-parity", script: "test-v8.0-historical-baseline-parity.js" },
   { group: "v8.0-historical-schema", script: "test-v8.0-historical-schema.js" },

@@ -60,6 +60,7 @@ ordered_in_global_list = {
     }
 
     static writeEffect(gameData, sourceCharacterId, targetCharacterId, effectBody, context = {}) {
+      runFileManager.releaseStalledActionForNewAction?.();
       if (runFileManager.getQueueHealth?.()?.queueBlocked) throw new Error("action_queue_blocked");
       const sourceIndex = this.getCharacterIndex(gameData, sourceCharacterId);
       const targetIndex = targetCharacterId != null ? this.getCharacterIndex(gameData, targetCharacterId) : null;

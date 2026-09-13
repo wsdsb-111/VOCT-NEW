@@ -32,8 +32,10 @@ function createUsageAnalytics({ fs, dataDir, analyticsFile, retention, createPro
       const promptTokens = Number(usage?.prompt_tokens) || 0;
       const completionTokens = Number(usage?.completion_tokens) || 0;
       const estimatedPromptTokens = Number(metadata?.estimatedPromptTokens) || 0;
-      const cacheHitTokens = Number(usage?.prompt_cache_hit_tokens);
-      const cacheMissTokens = Number(usage?.prompt_cache_miss_tokens);
+      const cacheHitTokens = usage?.prompt_cache_hit_tokens == null ? null : Number(usage.prompt_cache_hit_tokens);
+      const cacheMissTokens = usage?.prompt_cache_miss_tokens == null ? null : Number(usage.prompt_cache_miss_tokens);
+      const reasoningTokens = Number(usage?.reasoning_tokens ?? usage?.completion_tokens_details?.reasoning_tokens) || 0;
+      const visibleCompletionTokens = Number(usage?.visible_completion_tokens) || Math.max(0, completionTokens - reasoningTokens);
       const entry = {
         timestamp: (/* @__PURE__ */ new Date()).toISOString(),
         requestType: metadata?.requestType || "unknown",
@@ -124,8 +126,11 @@ function createUsageAnalytics({ fs, dataDir, analyticsFile, retention, createPro
         promptTokens,
         promptEstimateRatio: promptTokens > 0 && estimatedPromptTokens > 0 ? promptTokens / estimatedPromptTokens : null,
         completionTokens,
+        reasoningTokens,
+        visibleCompletionTokens,
         totalTokens: Number(usage?.total_tokens) || promptTokens + completionTokens,
         isUsageRecord: !!usage && typeof usage === "object",
+        usageEstimated: usage?.votc_estimated === true,
         cacheHitTokens: Number.isFinite(cacheHitTokens) ? cacheHitTokens : null,
         cacheMissTokens: Number.isFinite(cacheMissTokens) ? cacheMissTokens : null,
         historyStartPosition: Number.isFinite(Number(metadata?.historyStartPosition)) ? Number(metadata.historyStartPosition) : null,
@@ -181,6 +186,8 @@ function createUsageAnalytics({ fs, dataDir, analyticsFile, retention, createPro
         target.estimatedPromptTokens += entry.estimatedPromptTokens || 0;
         target.promptTokens += entry.promptTokens || 0;
         target.completionTokens += entry.completionTokens || 0;
+        target.reasoningTokens += entry.reasoningTokens || 0;
+        target.visibleCompletionTokens += entry.visibleCompletionTokens || 0;
         target.totalTokens += entry.totalTokens || 0;
         if (entry.cacheHitTokens != null) {
           target.cacheReportedRequests++;
@@ -188,7 +195,7 @@ function createUsageAnalytics({ fs, dataDir, analyticsFile, retention, createPro
           target.cacheMissTokens += entry.cacheMissTokens || 0;
         }
       };
-      const create = () => ({ requests: 0, estimatedPromptTokens: 0, promptTokens: 0, completionTokens: 0, totalTokens: 0, cacheReportedRequests: 0, cacheHitTokens: 0, cacheMissTokens: 0 });
+      const create = () => ({ requests: 0, estimatedPromptTokens: 0, promptTokens: 0, completionTokens: 0, reasoningTokens: 0, visibleCompletionTokens: 0, totalTokens: 0, cacheReportedRequests: 0, cacheHitTokens: 0, cacheMissTokens: 0 });
       const total = create();
       const diagnostics = { total: 0, actionSkipped: 0, byType: {} };
       const reconciliation = { aggregates: 0, requests: 0, totalTokens: 0 };

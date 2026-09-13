@@ -234,7 +234,11 @@ class OpenRouterProvider extends BaseProvider {
           completion_tokens: data.usage.completion_tokens,
           total_tokens: data.usage.total_tokens,
           prompt_cache_hit_tokens: data.usage.prompt_cache_hit_tokens,
-          prompt_cache_miss_tokens: data.usage.prompt_cache_miss_tokens
+          prompt_cache_miss_tokens: data.usage.prompt_cache_miss_tokens,
+          prompt_tokens_details: data.usage.prompt_tokens_details,
+          completion_tokens_details: data.usage.completion_tokens_details,
+          reasoning_tokens: data.usage.reasoning_tokens,
+          visible_completion_tokens: data.usage.visible_completion_tokens
         } : void 0
       };
     } catch (error) {
@@ -285,7 +289,10 @@ class OpenRouterProvider extends BaseProvider {
         if (!firstChunkId && chunk.id) {
           firstChunkId = chunk.id;
         }
-        if (!choice) continue;
+        if (!choice) {
+          if (chunk.usage) finalUsage = chunk.usage;
+          continue;
+        }
         const delta = choice.delta;
         const finish_reason = choice.finish_reason;
         if (chunk.usage) {
@@ -501,7 +508,11 @@ class OpenAICompatibleProvider extends BaseProvider {
           completion_tokens: data.usage.completion_tokens,
           total_tokens: data.usage.total_tokens,
           prompt_cache_hit_tokens: data.usage.prompt_cache_hit_tokens,
-          prompt_cache_miss_tokens: data.usage.prompt_cache_miss_tokens
+          prompt_cache_miss_tokens: data.usage.prompt_cache_miss_tokens,
+          prompt_tokens_details: data.usage.prompt_tokens_details,
+          completion_tokens_details: data.usage.completion_tokens_details,
+          reasoning_tokens: data.usage.reasoning_tokens,
+          visible_completion_tokens: data.usage.visible_completion_tokens
         } : void 0
       };
     } catch (error) {
@@ -536,7 +547,10 @@ class OpenAICompatibleProvider extends BaseProvider {
         if (!firstChunkId && chunk.id) {
           firstChunkId = chunk.id;
         }
-        if (!choice) continue;
+        if (!choice) {
+          if (chunk.usage) finalUsage = chunk.usage;
+          continue;
+        }
         const delta = choice.delta;
         const finish_reason = choice.finish_reason;
         if (chunk.usage) {
@@ -614,6 +628,134 @@ class OpenAICompatibleProvider extends BaseProvider {
     } catch (e) {
       console.error("OpenAI-Compatible testConnection error:", e);
       return { success: false, error: e.message || "Unknown error during OpenAI-Compatible test connection." };
+    }
+  }
+}
+class ZhipuProvider extends OpenAICompatibleProvider {
+  constructor() {
+    super();
+    this.providerId = "zhipu";
+    this.name = "智谱 GLM";
+    this.DEFAULT_BASE_URL = "https://open.bigmodel.cn/api/paas/v4";
+  }
+  getBaseUrl(config) {
+    return config.baseUrl || this.DEFAULT_BASE_URL;
+  }
+  getReasoningEffort(config) {
+    return ["low", "high", "max"].includes(config.glmReasoningEffort) ? config.glmReasoningEffort : "low";
+  }
+  normalizeUsage(usage) {
+    if (!usage || typeof usage !== "object") return void 0;
+    const promptTokens = Number(usage.prompt_tokens) || 0;
+    const completionTokens = Number(usage.completion_tokens) || 0;
+    const hasCachedField = !!usage.prompt_tokens_details && Object.prototype.hasOwnProperty.call(usage.prompt_tokens_details, "cached_tokens");
+    const cachedTokens = hasCachedField ? Number(usage.prompt_tokens_details.cached_tokens) || 0 : null;
+    const reasoningTokens = Number(usage.completion_tokens_details?.reasoning_tokens) || 0;
+    return {
+      prompt_tokens: promptTokens,
+      completion_tokens: completionTokens,
+      total_tokens: Number(usage.total_tokens) || promptTokens + completionTokens,
+      prompt_cache_hit_tokens: cachedTokens,
+      prompt_cache_miss_tokens: cachedTokens == null ? null : Math.max(0, promptTokens - cachedTokens),
+      cache_reporting_status: hasCachedField ? "reported" : "not_reported",
+      prompt_tokens_details: usage.prompt_tokens_details,
+      completion_tokens_details: usage.completion_tokens_details,
+      reasoning_tokens: reasoningTokens,
+      visible_completion_tokens: Math.max(0, completionTokens - reasoningTokens)
+    };
+  }
+  buildUsageDebug(rawUsage, normalizedUsage) {
+    if (!rawUsage || typeof rawUsage !== "object") return null;
+    const raw = {};
+    for (const key of ["prompt_tokens", "completion_tokens", "total_tokens"]) {
+      if (Object.prototype.hasOwnProperty.call(rawUsage, key)) raw[key] = Number(rawUsage[key]) || 0;
+    }
+    if (rawUsage.prompt_tokens_details && typeof rawUsage.prompt_tokens_details === "object" && Object.prototype.hasOwnProperty.call(rawUsage.prompt_tokens_details, "cached_tokens")) {
+      raw.prompt_tokens_details = { cached_tokens: Number(rawUsage.prompt_tokens_details.cached_tokens) || 0 };
+    }
+    if (rawUsage.completion_tokens_details && typeof rawUsage.completion_tokens_details === "object" && Object.prototype.hasOwnProperty.call(rawUsage.completion_tokens_details, "reasoning_tokens")) {
+      raw.completion_tokens_details = { reasoning_tokens: Number(rawUsage.completion_tokens_details.reasoning_tokens) || 0 };
+    }
+    return {
+      provider: "zhipu",
+      raw_usage: raw,
+      normalized_usage: normalizedUsage || null
+    };
+  }
+  buildRequestParams(request, config) {
+    return {
+      model: request.model,
+      messages: request.messages,
+      stream: request.stream,
+      temperature: request.temperature,
+      max_tokens: request.max_tokens,
+      top_p: request.top_p,
+      presence_penalty: request.presence_penalty,
+      frequency_penalty: request.frequency_penalty,
+      reasoning_effort: this.getReasoningEffort(config),
+      thinking: {
+        type: "enabled",
+        clear_thinking: config.glmClearThinking !== false
+      },
+      ...request.response_format ? { response_format: request.response_format } : {},
+      ...request.stream ? { stream_options: { include_usage: true } } : {}
+    };
+  }
+  createOpenAIClient(config) {
+    return new OpenAI({
+      apiKey: this.getAPIKey(config),
+      baseURL: this.getBaseUrl(config),
+      defaultHeaders: {
+        "Content-Type": "application/json",
+        "User-Agent": "VOTC/2.0.4",
+        "Authorization": `Bearer ${this.getAPIKey(config)}`
+      },
+      maxRetries: 0
+    });
+  }
+  chatCompletion(request, config) {
+    const requestParams = this.buildRequestParams(request, config);
+    const openAIClient = this.createOpenAIClient(config);
+    return requestParams.stream ? this._streamZhipuChatCompletion(requestParams, openAIClient, request.signal) : this._nonStreamZhipuChatCompletion(requestParams, openAIClient);
+  }
+  async _nonStreamZhipuChatCompletion(request, openAIClient) {
+    const response = await super._nonStreamChatCompletion(request, openAIClient);
+    const normalizedUsage = this.normalizeUsage(response.usage);
+    return { ...response, usage: normalizedUsage, usage_debug: this.buildUsageDebug(response.usage, normalizedUsage) };
+  }
+  async *_streamZhipuChatCompletion(request, openAIClient, signal) {
+    const iterator = super._streamChatCompletion(request, openAIClient, signal)[Symbol.asyncIterator]();
+    while (true) {
+      const step = await iterator.next();
+      if (step.done) {
+        const normalizedUsage = this.normalizeUsage(step.value?.usage);
+        return { ...step.value, usage: normalizedUsage, usage_debug: this.buildUsageDebug(step.value?.usage, normalizedUsage) };
+      }
+      yield step.value;
+    }
+  }
+  async listModels(config) {
+    try {
+      const response = await this.createOpenAIClient(config).models.list();
+      const models = Array.isArray(response?.data) ? response.data.map((model) => ({ id: model.id, name: model.id })) : [];
+      return models.length > 0 ? models : [{ id: "glm-5.3-flash", name: "GLM-5.3-Flash" }];
+    } catch (error) {
+      console.warn("ZhipuProvider: Failed to fetch models; using the GLM-5.3-Flash fallback.", error.message || error);
+      return [{ id: "glm-5.3-flash", name: "GLM-5.3-Flash" }];
+    }
+  }
+  async testConnection(config) {
+    try {
+      const response = await this.chatCompletion({
+        model: config.defaultModel || "glm-5.3-flash",
+        messages: [{ role: "user", content: "Reply with exactly: OK" }],
+        max_tokens: 128,
+        stream: false
+      }, config);
+      return response && (response.content != null || response.id) ? { success: true, message: `Successfully connected to 智谱 GLM. Received response ID: ${response.id}` } : { success: false, error: "Test connection to 智谱 GLM failed to get a valid response." };
+    } catch (error) {
+      console.error("ZhipuProvider testConnection error:", error);
+      return { success: false, error: error.message || "Unknown error during 智谱 GLM test connection." };
     }
   }
 }
@@ -944,7 +1086,10 @@ class Player2Provider extends BaseProvider {
         if (!firstChunkId && chunk.id) {
           firstChunkId = chunk.id;
         }
-        if (!choice) continue;
+        if (!choice) {
+          if (chunk.usage) finalUsage = chunk.usage;
+          continue;
+        }
         const delta = choice.delta;
         const finish_reason = choice.finish_reason;
         if (chunk.usage) {
@@ -1334,7 +1479,10 @@ IMPORTANT: Your response must be ONLY valid JSON. No prose, no code fences, no e
         if (!firstChunkId && chunk.id) {
           firstChunkId = chunk.id;
         }
-        if (!choice) continue;
+        if (!choice) {
+          if (chunk.usage) finalUsage = chunk.usage;
+          continue;
+        }
         const delta = choice.delta;
         const finish_reason = choice.finish_reason;
         if (chunk.usage) {
@@ -1686,6 +1834,8 @@ class GeminiProvider extends BaseProvider {
     let buffer = "";
     let accumulatedContent = "";
     let firstChunkId = "";
+    let finalFinishReason = null;
+    let finalUsage = void 0;
     try {
       while (true) {
         const { done, value } = await reader.read();
@@ -1703,6 +1853,12 @@ class GeminiProvider extends BaseProvider {
               if (!firstChunkId && chunk.id) {
                 firstChunkId = chunk.id;
               }
+              if (chunk.finish_reason) {
+                finalFinishReason = chunk.finish_reason;
+              }
+              if (chunk.usage) {
+                finalUsage = chunk.usage;
+              }
               if (chunk.delta?.content) {
                 accumulatedContent += chunk.delta.content;
               }
@@ -1716,7 +1872,8 @@ class GeminiProvider extends BaseProvider {
       return {
         id: firstChunkId,
         content: accumulatedContent,
-        finish_reason: "stop"
+        finish_reason: finalFinishReason || "stop",
+        usage: finalUsage
       };
     } finally {
       reader.releaseLock();
@@ -1765,11 +1922,17 @@ class GeminiProvider extends BaseProvider {
    */
   parseGeminiStreamChunk(chunk) {
     const candidate = chunk.candidates?.[0];
+    const usage = chunk.usageMetadata ? {
+      prompt_tokens: chunk.usageMetadata.promptTokenCount,
+      completion_tokens: chunk.usageMetadata.candidatesTokenCount,
+      total_tokens: chunk.usageMetadata.totalTokenCount
+    } : void 0;
     if (!candidate) {
       return {
         id: chunk.responseId,
         delta: void 0,
-        finish_reason: null
+        finish_reason: null,
+        usage
       };
     }
     let content = "";
@@ -1793,7 +1956,8 @@ class GeminiProvider extends BaseProvider {
         content: content || void 0,
         role: "assistant"
       },
-      finish_reason: candidate.finishReason ? finishReasonMap[candidate.finishReason] || null : null
+      finish_reason: candidate.finishReason ? finishReasonMap[candidate.finishReason] || null : null,
+      usage
     };
   }
   async testConnection(config) {
@@ -1819,6 +1983,7 @@ class GeminiProvider extends BaseProvider {
 function registerProviderImplementations(providerRegistry) {
   providerRegistry.register("openrouter", OpenRouterProvider);
   providerRegistry.register("openai-compatible", OpenAICompatibleProvider);
+  providerRegistry.register("zhipu", ZhipuProvider);
   providerRegistry.register("ollama", OllamaProvider);
   providerRegistry.register("player2", Player2Provider);
   providerRegistry.register("deepseek", DeepseekProvider);
@@ -1829,6 +1994,7 @@ module.exports = {
   BaseProvider,
   OpenRouterProvider,
   OpenAICompatibleProvider,
+  ZhipuProvider,
   OllamaProvider,
   Player2Provider,
   DeepseekProvider,

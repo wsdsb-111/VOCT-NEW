@@ -24,6 +24,7 @@ function createRunFileManager({ settingsRepository, path, fs, dataDir = null, no
       this.currentConversationEpoch = null;
       this.lateAckCount = 0;
       this.lastLateAckAt = null;
+      this.carrierWriteSequence = 0;
       this.resolvePath();
       this.loadState();
       this.restoredCommandIds = new Set(this.pendingCommands.map(command => command.commandId));
@@ -150,7 +151,7 @@ function createRunFileManager({ settingsRepository, path, fs, dataDir = null, no
           console.warn(`[RunCommand] neutralize_refused id=${expectedCommandId} reason=carrier_mismatch`);
           return false;
         }
-        fs$1.writeFileSync(this.path, "", "utf8");
+        this.writeCarrierFile("");
         this.logRunCommand("neutralized", command || { commandId: expectedCommandId, kind: "unknown", owner: "unknown", queuedAt: now(), writeAttempts: 0, status: "-" }, command?.status || null, reason);
         return true;
       } catch (error) {
@@ -238,6 +239,22 @@ set_global_variable = { name = votc_last_action_command value = flag:${command.c
 ${payload}
 }`;
     }
+    writeCarrierFile(text) {
+      if (!this.path) throw new Error("run_command_path_unavailable");
+      const content = text ? `\uFEFF${text}` : "";
+      if (typeof fs$1.renameSync !== "function") {
+        fs$1.writeFileSync(this.path, content, "utf8");
+        return;
+      }
+      this.carrierWriteSequence += 1;
+      const temporaryPath = `${this.path}.${process.pid}.${this.carrierWriteSequence}.tmp`;
+      try {
+        fs$1.writeFileSync(temporaryPath, content, "utf8");
+        fs$1.renameSync(temporaryPath, this.path);
+      } finally {
+        if (typeof fs$1.existsSync === "function" && fs$1.existsSync(temporaryPath) && typeof fs$1.unlinkSync === "function") fs$1.unlinkSync(temporaryPath);
+      }
+    }
     markActiveCommandUnavailable(command, reason) {
       const hasWriteHistory = this.hasWriteHistory(command);
       this.setCommandStatus(command, hasWriteHistory ? "stalled" : "blocked", {
@@ -290,7 +307,7 @@ ${payload}
         command.failureReason = null;
         this.saveStateOrThrow();
         dispatchPrepared = true;
-        fs$1.writeFileSync(this.path, this.composeCommandText(command), "utf8");
+        this.writeCarrierFile(this.composeCommandText(command));
         this.logRunCommand("dispatch", command, previous.status);
         return this.snapshot(command);
       } catch (error) {
@@ -735,6 +752,14 @@ ${payload}
       }
       return this.writeActiveCommand();
     }
+    releaseStalledActionForNewAction() {
+      this.assertStateLoaded();
+      const active = this.pendingCommands[0];
+      if (!active || active.kind !== "action_effect" || active.status !== "stalled" || !this.hasWriteHistory(active)) return this.snapshot(active);
+      const neutralized = this.neutralizeExecutableFile({ expectedCommandId: active.commandId, command: active, reason: "release_stalled_action_for_new_action" });
+      if (!neutralized) return this.snapshot(active);
+      return this.quarantineCommand(active.commandId, "stalled_action_unknown_released_for_new_action", { neutralize: false });
+    }
     retryBlockedCommand(commandId) {
       this.assertStateLoaded();
       const active = this.pendingCommands[0];
@@ -785,7 +810,7 @@ ${payload}
         return false;
       }
       if (!this.resolvePath()) return false;
-      fs$1.writeFileSync(this.path, "", "utf8");
+        this.writeCarrierFile("");
       return true;
     }
     createRunFolder(userFolderPath) {

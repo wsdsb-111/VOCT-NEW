@@ -26,7 +26,7 @@ Voices of the Court 是一个面向《Crusader Kings III》（CK3）的沉浸式
 
 ## 运行环境
 
-当前修复基线为 **V8.8.5**：[审查问题与扩展亲属改进报告](docs/v8.8.5-review-kinship-implementation-report.md)。动作排队 TTL 与写入后的确认计时分离，多金额/改口不再强制覆盖模型金额，好感度先显示待确认；修复空年龄变成 0 岁，旧英文人物模板接入当前 CK3 扩展亲属、年龄与性别，按证据细分堂表兄姐弟妹、伯父/叔父及父母系祖辈。291/291 发布组、360 个已分类测试文件及隔离 Electron 启动/导航通过；真实 CK3 动作和扩展亲属仍待复测。V8.8.4 已实测通过的子女性别识别不等同于本版全部实机验收。
+当前修复基线为 **V8.8.5**：[审查问题与扩展亲属改进报告](docs/v8.8.5-review-kinship-implementation-report.md)。动作排队 TTL 与写入后的确认计时分离；RunFile 改为 UTF-8 BOM 原子替换，新的动作会安全隔离已清空载体的旧 STALLED 项且不重放未知效果。DeepSeek 两项 Action 优化默认开启并可手动关闭，OpenAI-compatible 同样提供 Action Schema 标准/兼容传输模式。多金额/改口不再强制覆盖模型金额，好感度先显示待确认；修复空年龄变成 0 岁，旧英文人物模板接入当前 CK3 扩展亲属、年龄与性别，按证据细分堂表兄姐弟妹、伯父/叔父及父母系祖辈。OpenAI 风格流式 Provider 会保留末尾 usage-only 数据块，Gemini 接入 `usageMetadata`，无 usage 的兼容端点使用明确标记的估算值，确保请求进入服务商 Token 汇总。新增独立“智谱 GLM”服务商，默认 `glm-5.3-flash`、大陆官方端点、低推理强度和清除历史思考；GLM 缓存/推理 Token 归一化后进入既有统计，并在“世界书”右侧提供独立诊断页，显示 Raw/Normalized Usage、缓存三态、缓存探针、clear_thinking A/B 与脱敏导出。293 个发布组、362 个已分类测试文件及隔离 Electron 设置/导航冒烟通过；用户已确认关系提取与动作执行实机恢复，真实 GLM API、缓存命中与长时 Gate 仍待完成。
 
 V8.8.3 已完成 Luna + Terra + Sol 的 [Action 生命周期、真实回读与 Current Truth 收口](docs/v8.8.3-sol-final-review.md)：金币动作不再预写本地金币；同一 RunFile 在 Effect 后输出双方实时金币，ACK 后只有精确变化才标记 `CONFIRMED`。被提及人物、在场关系与 Family Fact 共用当前亲属事实，canonical Runtime 性别优先，缺失/冲突使用中性称谓，Memory 不参与当前性别。玩家显式金额与模型参数漂移会记录 `ACTION_ARGUMENT_DRIFT` 并以玩家数值执行。代码侧 289/289 发布组通过，Final Freeze 等待真实 CK3 人工 Gate。
 
@@ -233,7 +233,7 @@ node scripts\test-release.js
 - UI 主题：宫廷编年史风格（深红、暗金、羊皮纸文本层级）
 - UI 主题切换：游牧、骑士纹章、水墨画卷三套完整历史风格；分别使用 `image/草原游牧.png`、`image/中世纪骑士.png`、`image/中国古典.png` 作为整块界面背景，并保留各自的边框结构、按钮造型、消息卡片、输入框、字体和滚动条，主题选择可自动保存
 - UI 素材生成提示词：参见 [docs/UI_ASSET_PROMPTS_2.0.3.md](docs/UI_ASSET_PROMPTS_2.0.3.md)
-- 当前重点：执行 V8.8.5 人工 Gate，验证多动作排队、改口金额、好感度确认前后文案与游戏效果，以及旧英文模板中的扩展亲属/长幼称谓。Official VOTC 2.0.3 Action 签名、Memory Engine 2.6 标签及 2.5 存储合同保持兼容
+- 当前重点：继续执行 V8.8.5 人工 Gate，验证旧英文模板中的扩展亲属/长幼称谓、各 Provider 新请求的 Token 统计与长时稳定性。关系提取和动作执行已由用户实机确认恢复；Official VOTC 2.0.3 Action 签名、Memory Engine 2.6 标签及 2.5 存储合同保持兼容
 
 ## 已知限制
 

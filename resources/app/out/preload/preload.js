@@ -178,6 +178,14 @@ electron.contextBridge.exposeInMainWorld("usageAPI", {
   getReport: () => electron.ipcRenderer.invoke("usage:getReport"),
   clear: () => electron.ipcRenderer.invoke("usage:clear")
 });
+electron.contextBridge.exposeInMainWorld("providerDiagnosticsAPI", {
+  getStatus: () => electron.ipcRenderer.invoke("providerDiagnostics:getStatus"),
+  testConnection: () => electron.ipcRenderer.invoke("providerDiagnostics:testConnection"),
+  runCacheProbe: () => electron.ipcRenderer.invoke("providerDiagnostics:runCacheProbe"),
+  runClearThinkingAB: () => electron.ipcRenderer.invoke("providerDiagnostics:runClearThinkingAB"),
+  getRecent: (limit) => electron.ipcRenderer.invoke("providerDiagnostics:getRecent", limit),
+  exportRecent: (limit) => electron.ipcRenderer.invoke("providerDiagnostics:exportRecent", limit)
+});
 electron.contextBridge.exposeInMainWorld("worldlineAPI", {
   getSettings: () => electron.ipcRenderer.invoke("worldline:getSettings"),
   setRecallSettings: (settings) => electron.ipcRenderer.invoke("worldline:setRecallSettings", settings),

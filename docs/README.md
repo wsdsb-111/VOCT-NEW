@@ -4,7 +4,7 @@
 
 ## 推荐阅读顺序
 
-V8.8.5 当前入口：[审查问题与扩展亲属改进报告](v8.8.5-review-kinship-implementation-report.md)。覆盖动作队列/确认分时计时、唯一明确金额才允许覆盖、好感度待确认文案、空年龄边界和旧英文 pList 扩展亲属。291/291 发布组、360 个文件分类及隔离 Electron 冒烟通过；本版真实 CK3/Provider/长时 Gate 尚未验收，下方版本为历史证据。
+V8.8.5 当前入口：[审查问题与扩展亲属改进报告](v8.8.5-review-kinship-implementation-report.md)。覆盖动作队列/确认分时计时、RunFile 原子投递与 STALLED 安全放行、DeepSeek 默认 Action 优化、OpenAI-compatible Schema 传输模式、唯一明确金额才允许覆盖、好感度待确认文案、空年龄边界和旧英文 pList 扩展亲属。流式 OpenAI 风格 Provider 会保留 usage-only 尾块，Gemini usage 已统一，无原生 usage 时记入明确估算 Token；摘要链路未改。新增独立智谱 GLM Provider：默认官方大陆端点、`glm-5.3-flash`、低推理强度和清除历史思考，缓存/推理 Token 统一记账；在“世界书”右侧新增独立诊断页，显示 Raw/Normalized Usage、cached_tokens 三态、缓存探针、clear_thinking A/B 与脱敏导出。293/293 发布组、362 个文件分类及隔离 Electron 冒烟通过；真实 GLM API、缓存命中与长时 Gate 尚待验收，下方版本为历史证据。
 
 V8.8.4 当前入口：[关系与动作事故修复报告](v8.8.4-incident-implementation-report.md)。包括真实旧人物脚本兼容、旧队列隔离、NPC/玩家 Scope 绑定、游戏侧重复执行保护、命令内金币与好感度回读。290/290 发布组及隔离 Electron 冒烟通过；用户已确认关系识别，最新动作补丁仍待 CK3 验收。下方 V8.8.3 记录属于前置历史基线，不能代表本次实机事故已通过。
 

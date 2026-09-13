@@ -10,7 +10,9 @@ const { resolveCharacterAge } = require("../resources/app/out/main/worldline/cha
 const { buildKinshipGraph } = require("../resources/app/out/main/worldline/character-kinship-graph");
 const opinion = require("../resources/app/default_userdata/actions/standard/z_changeOpinionOf");
 const { createRunFileManager } = require("../resources/app/out/main/actions/run-file-manager");
+const { createActionEffectWriter } = require("../resources/app/out/main/actions/action-effect-writer");
 const { createActionEngine } = require("../resources/app/out/main/actions/action-engine");
+const { LLMManager, TokenCounter } = require("../resources/app/out/main/provider-service");
 const { PromptScriptSandbox } = require("../resources/app/out/main/prompts/prompt-script-sandbox");
 const { buildLegacyFamilyLine } = require("../resources/app/out/main/worldline/legacy-family-presentation");
 const { resolveAnchoredRelationMention } = require("../resources/app/out/main/worldline/anchored-relation-resolver");
@@ -191,6 +193,53 @@ async function run() {
       assert.strictEqual(manager.getPendingCommands()[0].commandId, first.commandId);
       assert.strictEqual(manager.getPendingCommands()[0].writeAttempts, 1);
     } finally { fs.rmSync(dir, { recursive: true, force: true }); }
+  });
+  await check("a new action safely releases one neutralized stalled action without replay", () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), "votc-v885-stalled-release-"));
+    try {
+      let time = 1000;
+      const ck3 = path.join(dir, "ck3");
+      fs.mkdirSync(path.join(ck3, "run"), { recursive: true });
+      const Manager = createRunFileManager({ fs, path, dataDir: path.join(dir, "data"), settingsRepository: { getCK3UserFolderPath: () => ck3 }, now: () => time });
+      const manager = new Manager();
+      manager.initializeAfterAckReconciliation();
+      const stalled = manager.write("add_gold = 1", { kind: "action_effect" });
+      assert.strictEqual(fs.readFileSync(path.join(ck3, "run", "votc.txt"), "utf8").charCodeAt(0), 0xfeff, "CK3 carrier must be complete UTF-8 BOM text");
+      assert.strictEqual(fs.readdirSync(path.join(ck3, "run")).some(name => name.endsWith(".tmp")), false, "atomic carrier temporary file must be replaced");
+      time += 31000;
+      manager.markActiveCommandStalledIfNeeded();
+      assert.strictEqual(manager.getPendingCommands()[0].status, "stalled");
+      assert.strictEqual(fs.readFileSync(path.join(ck3, "run", "votc.txt"), "utf8"), "");
+
+      const Writer = createActionEffectWriter({ runFileManager: manager });
+      const dispatched = Writer.writeEffect({ playerID: 1, characters: new Map([[1, { id: 1 }], [2, { id: 2 }]]) }, 1, 2, "add_gold = 2", { scopeId: "new-conversation", epoch: 2 });
+      assert.strictEqual(dispatched.status, "awaiting_ack");
+      assert.notStrictEqual(dispatched.commandId, stalled.commandId);
+      assert.match(fs.readFileSync(path.join(ck3, "run", "votc.txt"), "utf8"), new RegExp(dispatched.commandId));
+      assert.doesNotMatch(fs.readFileSync(path.join(ck3, "run", "votc.txt"), "utf8"), new RegExp(stalled.commandId));
+      const preserved = manager.getRecentCommands().find(command => command.commandId === stalled.commandId);
+      assert.strictEqual(preserved.status, "quarantined");
+      assert.strictEqual(preserved.failureReason, "stalled_action_unknown_released_for_new_action");
+      assert.strictEqual(preserved.writeAttempts, 1, "unknown action must never be replayed");
+    } finally { fs.rmSync(dir, { recursive: true, force: true }); }
+  });
+  await check("OpenAI-compatible Action Schema mode switches transport but keeps structured JSON", async () => {
+    const requests = [];
+    const config = { providerType: "openai-compatible", defaultModel: "fixture", defaultParameters: {} };
+    const manager = new LLMManager({
+      settingsRepository: { getActionsProviderConfig: () => config },
+      providerRegistry: { createProvider: () => ({ chatCompletion: async request => { requests.push(request); return { content: '{"actions":[]}' }; } }) },
+      usageAnalytics: { record() {} },
+      TokenCounter,
+      PromptBuilder: {}
+    });
+    const schema = { type: "object", properties: { actions: { type: "array" } }, required: ["actions"] };
+    await manager.sendActionsRequest([{ role: "user", content: "fixture" }], "votc_actions", schema);
+    assert.strictEqual(requests[0].response_format.type, "json_schema");
+    assert.deepStrictEqual(requests[0].response_format.json_schema.schema, schema);
+    config.actionSchemaDeliveryMode = "optimized_local_validation";
+    await manager.sendActionsRequest([{ role: "user", content: "fixture" }], "votc_actions", schema);
+    assert.deepStrictEqual(requests[1].response_format, { type: "json_object" });
   });
   if (failures.length) throw new Error(failures.join("\n"));
 }

@@ -69,6 +69,18 @@ async function main() {
       assert.equal(loaded.checkpoint.status, "ACTIVE");
     }
     console.log("BUTTONS", await evaluate("[...document.querySelectorAll('button')].map(e=>e.textContent.trim()).slice(0,30)"));
+    const clickProvider = async name => {
+      const clickedProvider = await evaluate(`(() => { const e=[...document.querySelectorAll('*')].find(e=>e.children.length===0&&e.textContent.trim()===${JSON.stringify(name)});if(e)e.click();return !!e; })()`);
+      assert(clickedProvider, `provider missing: ${name}`);
+      await new Promise(resolve => setTimeout(resolve, 300));
+    };
+    await clickProvider("Openai-compatible");
+    assert(await evaluate("!!document.querySelector('#actionSchemaDeliveryMode')"), "OpenAI-compatible Action Schema transport selector missing");
+    await clickProvider("Deepseek");
+    assert(await evaluate("document.querySelector('#deepseekActionStateTransitionRecallOverlay')?.checked===true"), "DeepSeek state transition overlay must default on");
+    assert(await evaluate("document.querySelector('#deepseekActionStablePrefixOptimization')?.checked===true"), "DeepSeek stable prefix must default on");
+    await clickProvider("诊断");
+    assert(await evaluate("!!document.querySelector('.provider-diagnostics-view')"), "provider diagnostics page rendered an empty body");
     const clicked = await evaluate("(() => { const e=[...document.querySelectorAll('button')].find(e=>['世界书','Worldline'].includes(e.textContent.trim())); if(e)e.click();return !!e; })()");
     assert(clicked, "worldline navigation missing");
     await new Promise(resolve => setTimeout(resolve, 1500));

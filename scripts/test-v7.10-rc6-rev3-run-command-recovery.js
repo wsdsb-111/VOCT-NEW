@@ -242,13 +242,8 @@ async function run() {
     const harness = createHarness("dispatch-intent", { fsImpl: trackingFs });
     trackingFs.renameSync = (source, destination) => {
       if (path.resolve(destination) === path.resolve(path.join(harness.dataDir, "run-command-queue.json"))) operations.push("state");
+      if (path.resolve(destination) === path.resolve(harness.runFile)) operations.push("run");
       return fs.renameSync(source, destination);
-    };
-    trackingFs.writeFileSync = (filePath, ...args) => {
-      if (path.resolve(filePath) === path.resolve(harness.runFile)) {
-        operations.push("run");
-      }
-      return fs.writeFileSync(filePath, ...args);
     };
     const manager = harness.createManager();
     manager.initializeAfterAckReconciliation();

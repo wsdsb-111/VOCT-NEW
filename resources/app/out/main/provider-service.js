@@ -98,10 +98,11 @@ class TokenCounter {
 
 class LLMManager {
   // Cache instantiated providers
-  constructor({ settingsRepository, providerRegistry, usageAnalytics, TokenCounter, PromptBuilder, debugVerboseLLM = false, logVerboseLLM = () => {} }) {
+  constructor({ settingsRepository, providerRegistry, usageAnalytics, providerDiagnostics = null, TokenCounter, PromptBuilder, debugVerboseLLM = false, logVerboseLLM = () => {} }) {
     this.settingsRepository = settingsRepository;
     this.providerRegistry = providerRegistry;
     this.usageAnalytics = usageAnalytics;
+    this.providerDiagnostics = providerDiagnostics;
     this.TokenCounter = TokenCounter;
     this.PromptBuilder = PromptBuilder;
     this.debugVerboseLLM = debugVerboseLLM;
@@ -198,6 +199,9 @@ class LLMManager {
     }
     const provider = this.getProviderInstance(config);
     const isDeepseekAction = config.providerType === "deepseek" && schemaName === "votc_actions";
+    const isOpenAICompatibleAction = config.providerType === "openai-compatible" && schemaName === "votc_actions";
+    const actionSchemaDeliveryMode = isDeepseekAction || isOpenAICompatibleAction
+      ? config.actionSchemaDeliveryMode || (isDeepseekAction ? "optimized_local_validation" : "official_full_injected") : null;
     const overlayEnabled = isDeepseekAction && config.deepseekActionStateTransitionRecallOverlay === true;
     const stablePrefixRequested = isDeepseekAction && config.deepseekActionStablePrefixOptimization === true;
     const preparedActionPrompt = isDeepseekAction ? prepareActionMessages(messages, {
@@ -218,7 +222,7 @@ class LLMManager {
       stream: false,
       ...config.defaultParameters,
       signal,
-      response_format: {
+      response_format: isOpenAICompatibleAction && actionSchemaDeliveryMode === "optimized_local_validation" ? { type: "json_object" } : {
         type: "json_schema",
         json_schema: {
           name: schemaName,
@@ -231,11 +235,10 @@ class LLMManager {
     const serializedSchema = JSON.stringify(jsonSchemaObject || {});
     const schemaTokenEstimate = this.TokenCounter.estimateTokens(serializedSchema);
     const schemaFingerprint = crypto.createHash("sha256").update(serializedSchema).digest("hex").slice(0, 16);
-    const deepseekSchemaInjection = config.providerType === "deepseek";
-    const actionSchemaDeliveryMode = deepseekSchemaInjection && schemaName === "votc_actions" ? config.actionSchemaDeliveryMode || "optimized_local_validation" : null;
-    const providerInjectsSchema = deepseekSchemaInjection && actionSchemaDeliveryMode !== "optimized_local_validation";
-    const schemaCacheRole = providerInjectsSchema ? "provider_injected_system_message" : deepseekSchemaInjection ? "local_validation_only" : "response_format";
-    const providerSerializedOrder = preparedActionPrompt.stablePrefixApplied ? preparedActionPrompt.overlayApplied ? "deepseek_intro_state_transition_rules_actions_examples_roster_recent_actions_recent_messages_final" : "deepseek_intro_actions_examples_roster_recent_actions_recent_messages_final" : preparedActionPrompt.overlayApplied ? "deepseek_official_order_with_state_transition_overlay" : stablePrefixRequested && preparedActionPrompt.failureReason ? "messages_official_fail_open" : providerInjectsSchema ? "messages_then_provider_injected_schema_then_response_format" : "messages_then_response_format";
+    const deepseekSchemaInjection = isDeepseekAction;
+    const providerInjectsSchema = (isDeepseekAction || isOpenAICompatibleAction) && actionSchemaDeliveryMode !== "optimized_local_validation";
+    const schemaCacheRole = actionSchemaDeliveryMode === "optimized_local_validation" ? "local_validation_only" : isDeepseekAction ? "provider_injected_system_message" : "response_format";
+    const providerSerializedOrder = preparedActionPrompt.stablePrefixApplied ? preparedActionPrompt.overlayApplied ? "deepseek_intro_state_transition_rules_actions_examples_roster_recent_actions_recent_messages_final" : "deepseek_intro_actions_examples_roster_recent_actions_recent_messages_final" : preparedActionPrompt.overlayApplied ? "deepseek_official_order_with_state_transition_overlay" : stablePrefixRequested && preparedActionPrompt.failureReason ? "messages_official_fail_open" : isOpenAICompatibleAction ? actionSchemaDeliveryMode === "optimized_local_validation" ? "messages_then_json_object_local_validation" : "messages_then_response_format_json_schema" : providerInjectsSchema ? "messages_then_provider_injected_schema_then_response_format" : "messages_then_response_format";
     const actionPromptBlocks = schemaName === "votc_actions" && (!Array.isArray(metadata.blocks) || metadata.blocks.length === 0) ? this.buildActionPromptBlocks(preparedActionPrompt.blockMessages, serializedSchema, providerInjectsSchema) : Array.isArray(metadata.blocks) ? metadata.blocks : [];
     const rosterPosition = preparedActionPrompt.stablePrefixApplied ? actionPromptBlocks.findIndex((block) => block.id === "action_roster") : -1;
     const stablePrefixEndPosition = rosterPosition >= 0 ? rosterPosition : null;
@@ -396,15 +399,27 @@ class LLMManager {
   }
   async trackUsage(result, metadata) {
     const response = await result;
+    const recordUsage = (finalResponse) => {
+      const usage = this.buildUsageRecord(finalResponse, metadata);
+      this.usageAnalytics.record(metadata, usage);
+      this.providerDiagnostics?.recordResponse({
+        provider: metadata.providerType,
+        model: metadata.model,
+        requestType: metadata.requestType,
+        response: finalResponse,
+        usage,
+        metadata
+      });
+      return usage;
+    };
     if (response && typeof response[Symbol.asyncIterator] === "function") {
       const iterator = response[Symbol.asyncIterator]();
-      const analytics = this.usageAnalytics;
       return {
         async *[Symbol.asyncIterator]() {
           while (true) {
             const step = await iterator.next();
             if (step.done) {
-              analytics.record(metadata, step.value?.usage);
+              recordUsage(step.value);
               return step.value;
             }
             yield step.value;
@@ -412,8 +427,20 @@ class LLMManager {
         }
       };
     }
-    this.usageAnalytics.record(metadata, response?.usage);
+    recordUsage(response);
     return response;
+  }
+  buildUsageRecord(response, metadata = {}) {
+    if (response?.usage && typeof response.usage === "object") return response.usage;
+    const promptTokens = Math.max(0, Math.floor(Number(metadata.estimatedPromptTokens) || 0));
+    const completionSource = typeof response?.content === "string" ? response.content : response?.tool_calls ? JSON.stringify(response.tool_calls) : "";
+    const completionTokens = Math.max(0, Math.floor(Number(this.TokenCounter.estimateTokens(completionSource)) || 0));
+    return {
+      prompt_tokens: promptTokens,
+      completion_tokens: completionTokens,
+      total_tokens: promptTokens + completionTokens,
+      votc_estimated: true
+    };
   }
   // Get current context length for the active provider
   async getCurrentContextLength() {

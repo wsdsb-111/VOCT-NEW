@@ -31,7 +31,7 @@ const activeWin = require("active-win");
 const TailFile = require("@logdna/tail-file");
 const readline$1 = require("node:readline");
 const archiver = require("archiver");
-const PROVIDER_TYPES = ["player2", "openrouter", "openai-compatible", "ollama", "deepseek", "gemini"];
+const PROVIDER_TYPES = ["player2", "openrouter", "openai-compatible", "ollama", "deepseek", "gemini", "zhipu"];
 const DEFAULT_ACTIVE_PROVIDER = "player2";
 const DEFAULT_PROVIDER_CONFIGS = {
   openrouter: {
@@ -44,7 +44,8 @@ const DEFAULT_PROVIDER_CONFIGS = {
     apiKey: "",
     baseUrl: "",
     defaultModel: "",
-    defaultParameters: { temperature: 0.7, max_tokens: 2048 }
+    defaultParameters: { temperature: 0.7, max_tokens: 2048 },
+    actionSchemaDeliveryMode: "official_full_injected"
   },
   ollama: {
     apiKey: "",
@@ -67,14 +68,23 @@ const DEFAULT_PROVIDER_CONFIGS = {
     defaultParameters: { temperature: 0.7, max_tokens: 2048 },
     useMinimizedActionsSchema: false,
     actionSchemaDeliveryMode: "optimized_local_validation",
-    deepseekActionStateTransitionRecallOverlay: false,
-    deepseekActionStablePrefixOptimization: false
+    deepseekActionStateTransitionRecallOverlay: true,
+    deepseekActionStablePrefixOptimization: true
   },
   gemini: {
     apiKey: "",
     baseUrl: "https://generativelanguage.googleapis.com/v1beta",
     defaultModel: "gemini-2.5-flash",
     defaultParameters: { temperature: 0.7, max_tokens: 4096 }
+  },
+  zhipu: {
+    apiKey: "",
+    baseUrl: "https://open.bigmodel.cn/api/paas/v4",
+    defaultModel: "glm-5.3-flash",
+    customContextLength: 9e4,
+    defaultParameters: { temperature: 0.7, max_tokens: 4096 },
+    glmReasoningEffort: "low",
+    glmClearThinking: true
   }
 };
 const {
@@ -155,7 +165,9 @@ const baseProviderConfigSchema = {
     useMinimizedActionsSchema: { type: "boolean" },
     actionSchemaDeliveryMode: { type: "string", enum: ["official_full_injected", "optimized_local_validation"] },
     deepseekActionStateTransitionRecallOverlay: { type: "boolean" },
-    deepseekActionStablePrefixOptimization: { type: "boolean" }
+    deepseekActionStablePrefixOptimization: { type: "boolean" },
+    glmReasoningEffort: { type: "string", enum: ["low", "high", "max"] },
+    glmClearThinking: { type: "boolean" }
   },
   required: ["instanceId", "providerType"]
 };
@@ -345,6 +357,16 @@ const UsageAnalytics = createUsageAnalytics({
   createPromptFingerprint
 });
 const usageAnalytics = new UsageAnalytics();
+const { createProviderDiagnostics } = require("./analytics/provider-diagnostics");
+const ProviderDiagnostics = createProviderDiagnostics({
+  fs: fs$1,
+  path,
+  dataDir: VOTC_DATA_DIR,
+  settingsRepository,
+  providerRegistry,
+  TokenCounter
+});
+const providerDiagnostics = new ProviderDiagnostics();
 const { createGameData } = require("./game-data/game-data");
 const GameData = createGameData({
   fs: fs$1,
@@ -423,6 +445,7 @@ const llmManager = new LLMManager({
   settingsRepository,
   providerRegistry,
   usageAnalytics,
+  providerDiagnostics,
   TokenCounter,
   PromptBuilder,
   debugVerboseLLM: DEBUG_VERBOSE_LLM,
@@ -893,6 +916,7 @@ const setupIpcHandlers = () => {
     llmManager,
     providerRegistry,
     usageAnalytics,
+    providerDiagnostics,
     actionRegistry,
     VOTC_ACTIONS_DIR,
     resolveI18nString,

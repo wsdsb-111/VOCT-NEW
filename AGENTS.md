@@ -2,7 +2,7 @@
 
 ## 项目定位与结构
 
-本仓库是面向 Crusader Kings III 的 Windows 打包版 VOTC（Voices of the Court）Electron 应用。当前代码基线为 V8.8.5；V8.8.4 子女性别识别用户实机已通过，本版动作与扩展亲属仍待 CK3 实机复测。代码回归与隔离 Electron 冒烟不等于真实 CK3、Provider 和长时间运行 Gate，不能宣称 Full Freeze。
+本仓库是面向 Crusader Kings III 的 Windows 打包版 VOTC（Voices of the Court）Electron 应用。当前代码基线为 V8.8.5；关系提取与动作执行已由用户实机确认恢复，扩展亲属矩阵、跨 Provider Token 与长时间运行仍待实测。代码回归与隔离 Electron 冒烟不等于真实 CK3、Provider 和长时间运行 Gate，不能宣称 Full Freeze。
 
 - resources/app/out/main/main.js 是 Electron 主进程组合根；主进程实现已按职责拆分到 actions/、conversation/、memory-system/、summaries/、worldline/、game-data/、historical-system/、letters/、providers/、ipc/、analytics/、runtime/、config/ 等目录，action-system/ 保留为历史目录结构。
 - resources/app/out/main/provider-service.js、providers/index.js、ipc/register-ipc.js、window-manager.js 等是打包后的主进程服务和边界；不要把 out/ 当作可任意重打包的源代码目录。
@@ -16,7 +16,7 @@
 ## 当前稳定合同
 
 - V8.8.4 动作区分 QUEUED、ACKNOWLEDGED 与 CONFIRMED。NPC 列表不含玩家，玩家绑定 root；金币/好感度以同命令 BEGIN—ACK 的真实前后状态确认。游戏侧同命令去重和旧会话零写入隔离不可移除；其他动作只有 ACK 时不宣称效果成功。
-- V8.8.5 排队 TTL 归 RunFileManager，ACK 计时从实际写入开始；多个金额不做确定性覆盖，好感度确认前不能使用成功文案。空年龄保持未知；扩展亲属依赖实际家谱，伯叔与父亲比较长幼，堂表亲与主体比较长幼，旧英文模板只做动态事实接入、不扩充动作参与者。
+- V8.8.5 排队 TTL 归 RunFileManager，ACK 计时从实际写入开始；`votc.txt` 必须以 UTF-8 BOM 临时文件原子替换。新动作可在载体已安全清空后隔离旧 STALLED 动作，但绝不重放未知效果。多个金额不做确定性覆盖，好感度确认前不能使用成功文案。DeepSeek 两项 Action 优化默认开启且可关闭；OpenAI-compatible 提供 Action Schema 标准/兼容传输模式。独立 `zhipu` Provider 的 GLM 推理强度和 `clear_thinking` 不得与 DeepSeek 专属配置交叉；缓存/推理 Token 必须先归一化。流式 Provider 必须保留 usage-only 尾块，Gemini `usageMetadata` 统一记账；端点不返回 usage 时只能记录明确标记的估算 Token。空年龄保持未知；扩展亲属依赖实际家谱，伯叔与父亲比较长幼，堂表亲与主体比较长幼，旧英文模板只做动态事实接入、不扩充动作参与者。
 - Official VOTC 2.0.3 Action System 是当前唯一正式动作基线。动作必须经过确定性门禁、注册检查、结构化输出和本地校验；旧的自研 AE/Action Mode/Pending/Social Consequence 链路只作为历史资料，不得重新接入生产路径。
 - 涉及游戏状态的效果以 CK3 回读为准。尤其金币转移不能乐观修改本地当前状态；同一 RunFile 的 Effect、双方实时金币和 ACK 必须形成可核对证据，只有精确匹配才可视为 CONFIRMED。
 - Worldline 是 CK3 事实只读层；Current Runtime Truth、在场关系、被提及人物和 Family Fact 必须沿共享 DTO/Resolver 合同工作。历史 Definition 与 Runtime 的绑定要求一对一，冲突或缺失应 fail-closed。

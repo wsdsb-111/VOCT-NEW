@@ -434,13 +434,18 @@ function createSettingsRepository({ Store, schema, SecureProviderSecrets, electr
     getActionsProviderConfig() {
       const overrideId = this.getActionsProviderInstanceId();
       const config = overrideId ? this.getProviderConfigById(overrideId) : this.getActiveProviderConfig();
-      return config?.providerType === "deepseek" ? {
+      if (config?.providerType === "deepseek") return {
         ...config,
         useMinimizedActionsSchema: false,
         actionSchemaDeliveryMode: config.actionSchemaDeliveryMode || "optimized_local_validation",
-        deepseekActionStateTransitionRecallOverlay: config.deepseekActionStateTransitionRecallOverlay === true,
-        deepseekActionStablePrefixOptimization: config.deepseekActionStablePrefixOptimization === true
-      } : config;
+        deepseekActionStateTransitionRecallOverlay: config.deepseekActionStateTransitionRecallOverlay !== false,
+        deepseekActionStablePrefixOptimization: config.deepseekActionStablePrefixOptimization !== false
+      };
+      if (config?.providerType === "openai-compatible") return {
+        ...config,
+        actionSchemaDeliveryMode: config.actionSchemaDeliveryMode || "official_full_injected"
+      };
+      return config;
     }
     /**
      * Get the provider config for Summaries.

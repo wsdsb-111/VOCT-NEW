@@ -5,13 +5,14 @@ const path = require("path");
 
 const root = path.resolve(__dirname, "..");
 const { ProviderRegistry, TokenCounter, LLMManager } = require(path.join(root, "resources", "app", "out", "main", "provider-service.js"));
-const { registerProviderImplementations } = require(path.join(root, "resources", "app", "out", "main", "providers"));
+const { registerProviderImplementations, OpenRouterProvider, OpenAICompatibleProvider, Player2Provider, DeepseekProvider, GeminiProvider } = require(path.join(root, "resources", "app", "out", "main", "providers"));
 
 const shippedRegistry = new ProviderRegistry();
 registerProviderImplementations(shippedRegistry);
 assert.deepStrictEqual(shippedRegistry.getRegisteredTypes(), [
   "openrouter",
   "openai-compatible",
+  "zhipu",
   "ollama",
   "player2",
   "deepseek",
@@ -145,6 +146,35 @@ const service = new LLMManager({
   assert.deepStrictEqual(usageRecords.map((entry) => entry.metadata.providerType), ["deepseek", "openrouter", "deepseek", "deepseek", "deepseek"]);
   assert.deepStrictEqual(usageRecords.map((entry) => entry.metadata.model), ["chat-model", "action-model", "summary-model", "summary-model", "summary-model"]);
   assert(usageRecords.every((entry) => entry.usage.total_tokens === 15));
+
+  const usageOnlyChunk = { id: "usage", choices: [], usage: { prompt_tokens: 7, completion_tokens: 2, total_tokens: 9 } };
+  for (const Provider of [OpenRouterProvider, OpenAICompatibleProvider, Player2Provider, DeepseekProvider]) {
+    const provider = new Provider();
+    const openAIClient = { chat: { completions: { create: async () => (async function* () {
+      yield { id: "stream", choices: [{ delta: { content: "ok" }, finish_reason: "stop" }] };
+      yield usageOnlyChunk;
+    })() } } };
+    const iterator = provider._streamChatCompletion({ model: "fixture" }, openAIClient)[Symbol.asyncIterator]();
+    let finalResponse;
+    while (true) {
+      const step = await iterator.next();
+      if (step.done) { finalResponse = step.value; break; }
+    }
+    assert.deepStrictEqual(finalResponse.usage, usageOnlyChunk.usage, `${provider.providerId} must retain a final usage-only stream chunk`);
+  }
+  assert.deepStrictEqual(new GeminiProvider().parseGeminiStreamChunk({ responseId: "gemini", usageMetadata: { promptTokenCount: 8, candidatesTokenCount: 3, totalTokenCount: 11 } }).usage, { prompt_tokens: 8, completion_tokens: 3, total_tokens: 11 });
+
+  const estimatedRecords = [];
+  const estimateManager = new LLMManager({
+    settingsRepository: { getActiveProviderConfig: () => ({ providerType: "openai-compatible", defaultModel: "fixture", defaultParameters: {} }), getGlobalStreamSetting: () => false },
+    providerRegistry: { createProvider: () => ({ chatCompletion: async () => ({ content: "provider omitted usage" }) }) },
+    usageAnalytics: { record: (metadata, usage) => estimatedRecords.push({ metadata, usage }) },
+    TokenCounter,
+    PromptBuilder: {}
+  });
+  await estimateManager.sendChatRequest([{ role: "user", content: "fixture prompt" }]);
+  assert.strictEqual(estimatedRecords[0].usage.votc_estimated, true, "a provider without usage must still produce explicitly estimated token statistics");
+  assert(estimatedRecords[0].usage.prompt_tokens > 0 && estimatedRecords[0].usage.completion_tokens > 0);
 
   assert.strictEqual(await service.getCurrentContextLength(), 131072);
   assert.deepStrictEqual(await service.testProviderConnection(), { success: true, providerType: "deepseek" });

@@ -28,7 +28,7 @@ function validateActionFilePath(filePath, actionsRoot) {
 }
 
 function registerIpcHandlers(runtime) {
-  const { electron, settingsRepository, promptConfigManager, uuid, VOTC_PROMPTS_DIR, TemplateEngine, exportPromptsZip, letterManager, runFileManager, llmManager, providerRegistry, usageAnalytics, actionRegistry, VOTC_ACTIONS_DIR, resolveI18nString, conversationManager, ActionEngine, VOTC_SUMMARIES_DIR, SummariesManager, memoryEngine, worldlineService } = runtime;
+  const { electron, settingsRepository, promptConfigManager, uuid, VOTC_PROMPTS_DIR, TemplateEngine, exportPromptsZip, letterManager, runFileManager, llmManager, providerRegistry, usageAnalytics, providerDiagnostics, actionRegistry, VOTC_ACTIONS_DIR, resolveI18nString, conversationManager, ActionEngine, VOTC_SUMMARIES_DIR, SummariesManager, memoryEngine, worldlineService } = runtime;
 
   electron.ipcMain.handle("toggle-config-panel", () => {
     if (runtime.chatWindow) {
@@ -445,6 +445,12 @@ function registerIpcHandlers(runtime) {
     usageAnalytics.clear();
     return { success: true };
   });
+  electron.ipcMain.handle("providerDiagnostics:getStatus", () => providerDiagnostics?.getStatus() || { success: false, error: "provider_diagnostics_unavailable" });
+  electron.ipcMain.handle("providerDiagnostics:testConnection", async () => providerDiagnostics?.testConnection() || { success: false, error: "provider_diagnostics_unavailable" });
+  electron.ipcMain.handle("providerDiagnostics:runCacheProbe", async () => providerDiagnostics?.runCacheProbe() || { success: false, error: "provider_diagnostics_unavailable" });
+  electron.ipcMain.handle("providerDiagnostics:runClearThinkingAB", async () => providerDiagnostics?.runClearThinkingAB() || { success: false, error: "provider_diagnostics_unavailable" });
+  electron.ipcMain.handle("providerDiagnostics:getRecent", (_, limit) => providerDiagnostics?.getRecent(limit) || []);
+  electron.ipcMain.handle("providerDiagnostics:exportRecent", (_, limit) => providerDiagnostics?.exportRecent(limit) || { success: false, error: "provider_diagnostics_unavailable" });
   electron.ipcMain.handle("llm:saveSummaryPromptSettings", (_, settings) => {
     if (!settings || typeof settings !== "object" || Array.isArray(settings)) throw new Error("summary_prompt_settings_must_be_an_object");
     requireInteger(Number(settings.finalSummaryMaxTokens), "final_summary_max_tokens", { min: 256, max: 16384 });

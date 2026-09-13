@@ -17569,7 +17569,7 @@ const parseJsonThen = (stringified, fn) => {
   }
   if (parsed !== void 0) fn(parsed);
 };
-const PROVIDER_TYPES = ["player2", "openrouter", "openai-compatible", "ollama", "deepseek", "gemini"];
+const PROVIDER_TYPES = ["player2", "openrouter", "openai-compatible", "ollama", "deepseek", "gemini", "zhipu"];
 const DEFAULT_ACTIVE_PROVIDER = "player2";
 const DEFAULT_PARAMETERS = {
   temperature: 0.7,
@@ -17586,7 +17586,8 @@ const DEFAULT_PROVIDER_CONFIGS = {
     apiKey: "",
     baseUrl: "",
     defaultModel: "",
-    defaultParameters: { temperature: 0.7, max_tokens: 2048 }
+    defaultParameters: { temperature: 0.7, max_tokens: 2048 },
+    actionSchemaDeliveryMode: "official_full_injected"
   },
   ollama: {
     apiKey: "",
@@ -17609,16 +17610,26 @@ const DEFAULT_PROVIDER_CONFIGS = {
     defaultParameters: { temperature: 0.7, max_tokens: 2048 },
     useMinimizedActionsSchema: false,
     actionSchemaDeliveryMode: "optimized_local_validation",
-    deepseekActionStateTransitionRecallOverlay: false,
-    deepseekActionStablePrefixOptimization: false
+    deepseekActionStateTransitionRecallOverlay: true,
+    deepseekActionStablePrefixOptimization: true
   },
   gemini: {
     apiKey: "",
     baseUrl: "https://generativelanguage.googleapis.com/v1beta",
     defaultModel: "gemini-2.5-flash",
     defaultParameters: { temperature: 0.7, max_tokens: 4096 }
+  },
+  zhipu: {
+    apiKey: "",
+    baseUrl: "https://open.bigmodel.cn/api/paas/v4",
+    defaultModel: "glm-5.3-flash",
+    customContextLength: 9e4,
+    defaultParameters: { temperature: 0.7, max_tokens: 4096 },
+    glmReasoningEffort: "low",
+    glmClearThinking: true
   }
 };
+const getProviderDisplayName = (providerType) => providerType === "zhipu" ? "智谱 GLM" : providerType.charAt(0).toUpperCase() + providerType.slice(1);
 const getCacheKey$2 = (config2) => {
   if (config2.providerType === "openrouter") return "openrouter";
   if (config2.providerType === "player2") return "player2";
@@ -17813,7 +17824,9 @@ const useConfigStore = create()(
           useMinimizedActionsSchema: editingConfig.useMinimizedActionsSchema,
           actionSchemaDeliveryMode: editingConfig.actionSchemaDeliveryMode,
           deepseekActionStateTransitionRecallOverlay: editingConfig.deepseekActionStateTransitionRecallOverlay,
-          deepseekActionStablePrefixOptimization: editingConfig.deepseekActionStablePrefixOptimization
+          deepseekActionStablePrefixOptimization: editingConfig.deepseekActionStablePrefixOptimization,
+          glmReasoningEffort: editingConfig.glmReasoningEffort,
+          glmClearThinking: editingConfig.glmClearThinking
         };
         try {
           const saved = await window.llmConfigAPI.saveProviderConfig(configToSave);
@@ -17889,7 +17902,9 @@ const useConfigStore = create()(
           useMinimizedActionsSchema: editingConfig.useMinimizedActionsSchema,
           actionSchemaDeliveryMode: editingConfig.actionSchemaDeliveryMode,
           deepseekActionStateTransitionRecallOverlay: editingConfig.deepseekActionStateTransitionRecallOverlay,
-          deepseekActionStablePrefixOptimization: editingConfig.deepseekActionStablePrefixOptimization
+          deepseekActionStablePrefixOptimization: editingConfig.deepseekActionStablePrefixOptimization,
+          glmReasoningEffort: editingConfig.glmReasoningEffort,
+          glmClearThinking: editingConfig.glmClearThinking
         };
         try {
           const saved = await window.llmConfigAPI.saveProviderConfig(newPreset);
@@ -18226,7 +18241,7 @@ const ProviderSidebar = ({
     const activeId = appSettings?.llmSettings.activeProviderInstanceId;
     const activeProvider = allProviders.find((p) => p.instanceId === activeId);
     return {
-      displayName: activeProvider?.customName || activeProvider?.providerType || t("promptPreview.none"),
+      displayName: activeProvider?.customName || activeProvider?.providerType ? activeProvider?.customName || getProviderDisplayName(activeProvider.providerType) : t("promptPreview.none"),
       modelName: activeProvider?.defaultModel || t("promptPreview.noModelSelected")
     };
   }, [appSettings?.llmSettings.activeProviderInstanceId, allProviders, t]);
@@ -18250,7 +18265,7 @@ const ProviderSidebar = ({
                                     ${selectedProviderTypeForEditing === type && !selectedPresetIdForEditing ? "active" : ""}
                                     ${getAssignmentClass(type)}
                                 `.trim(),
-            children: type.charAt(0).toUpperCase() + type.slice(1)
+            children: getProviderDisplayName(type)
           },
           type
         );
@@ -18310,7 +18325,7 @@ const ProviderSidebar = ({
             onChange: (e) => onSetActionsProvider(e.target.value || null),
             children: [
               /* @__PURE__ */ jsxRuntimeExports.jsx("option", { value: "", children: t("config.default") }),
-              allProviders.map((p) => /* @__PURE__ */ jsxRuntimeExports.jsx("option", { value: p.instanceId, children: p.customName || p.providerType }, p.instanceId))
+              allProviders.map((p) => /* @__PURE__ */ jsxRuntimeExports.jsx("option", { value: p.instanceId, children: p.customName || getProviderDisplayName(p.providerType) }, p.instanceId))
             ]
           }
         )
@@ -18324,7 +18339,7 @@ const ProviderSidebar = ({
             onChange: (e) => onSetSummaryProvider(e.target.value || null),
             children: [
               /* @__PURE__ */ jsxRuntimeExports.jsx("option", { value: "", children: t("config.default") }),
-              allProviders.map((p) => /* @__PURE__ */ jsxRuntimeExports.jsx("option", { value: p.instanceId, children: p.customName || p.providerType }, p.instanceId))
+              allProviders.map((p) => /* @__PURE__ */ jsxRuntimeExports.jsx("option", { value: p.instanceId, children: p.customName || getProviderDisplayName(p.providerType) }, p.instanceId))
             ]
           }
         )
@@ -18355,7 +18370,7 @@ const ModelSelector = ({
     const value = e.target.value;
     setSearchText(value);
     onInputChange(e);
-    if (config2.providerType === "openrouter" || config2.providerType === "openai-compatible") {
+    if (["openrouter", "openai-compatible", "zhipu"].includes(config2.providerType)) {
       if (value.trim() === "") {
         setSuggestions([]);
       } else {
@@ -18378,7 +18393,7 @@ const ModelSelector = ({
   const handleBlur = () => {
     setIsFocused(false);
   };
-  const canShowSuggestions = config2.providerType === "openrouter" && config2.apiKey || config2.providerType === "openai-compatible" && config2.baseUrl;
+  const canShowSuggestions = config2.providerType === "openrouter" && config2.apiKey || config2.providerType === "openai-compatible" && config2.baseUrl || config2.providerType === "zhipu" && config2.apiKey;
   return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "form-group", children: [
     /* @__PURE__ */ jsxRuntimeExports.jsx("label", { htmlFor: "defaultModel", children: "Default Model ID:" }),
     config2.providerType === "ollama" || config2.providerType === "deepseek" || config2.providerType === "gemini" ? /* @__PURE__ */ jsxRuntimeExports.jsxs(
@@ -18641,6 +18656,31 @@ const DeepseekConfigFieldsComponent = ({ config: config2, onInputChange }) => /*
     placeholder: "sk-..."
   }
 );
+const ZhipuConfigFieldsComponent = ({ config: config2, onInputChange }) => /* @__PURE__ */ jsxRuntimeExports.jsxs(jsxRuntimeExports.Fragment, { children: [
+  /* @__PURE__ */ jsxRuntimeExports.jsx(
+    FormGroupInput,
+    {
+      id: "apiKey",
+      label: "智谱 GLM API Key:",
+      type: "password",
+      name: "apiKey",
+      value: config2.apiKey || "",
+      onChange: onInputChange,
+      placeholder: "填写智谱开放平台 API Key"
+    }
+  ),
+  /* @__PURE__ */ jsxRuntimeExports.jsx(
+    FormGroupInput,
+    {
+      id: "baseUrl",
+      label: "智谱 GLM Base URL:",
+      type: "text",
+      name: "baseUrl",
+      value: config2.baseUrl || "https://open.bigmodel.cn/api/paas/v4",
+      onChange: onInputChange
+    }
+  )
+] });
 const GeminiConfigFieldsComponent = ({ config: config2, onInputChange }) => /* @__PURE__ */ jsxRuntimeExports.jsx(
   FormGroupInput,
   {
@@ -18752,6 +18792,7 @@ const ProviderFieldComponents = {
   "openai-compatible": OpenAICompatibleConfigFieldsComponent,
   ollama: OllamaConfigFieldsComponent,
   deepseek: DeepseekConfigFieldsComponent,
+  zhipu: ZhipuConfigFieldsComponent,
   gemini: GeminiConfigFieldsComponent
 };
 const ProviderConfigPanel = (props) => {
@@ -18775,7 +18816,7 @@ const ProviderConfigPanel = (props) => {
   if (!config2.providerType) {
     return /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "config-panel-placeholder", children: /* @__PURE__ */ jsxRuntimeExports.jsx("p", { children: t("config.selectProviderOrPreset") }) });
   }
-  const displayName = config2.customName || config2.providerType.charAt(0).toUpperCase() + config2.providerType.slice(1);
+  const displayName = config2.customName || getProviderDisplayName(config2.providerType);
   const isPreset = !!config2.customName && config2.instanceId !== config2.providerType;
   const isDeepseekFullSchema = config2.providerType === "deepseek";
   const SpecificProviderFields = ProviderFieldComponents[config2.providerType];
@@ -18837,6 +18878,24 @@ const ProviderConfigPanel = (props) => {
           onContextLengthChange
         }
       ),
+      config2.providerType === "zhipu" && /* @__PURE__ */ jsxRuntimeExports.jsxs(jsxRuntimeExports.Fragment, { children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "form-group", children: [
+          /* @__PURE__ */ jsxRuntimeExports.jsx("label", { htmlFor: "glmReasoningEffort", children: "推理强度" }),
+          /* @__PURE__ */ jsxRuntimeExports.jsxs("select", { id: "glmReasoningEffort", name: "glmReasoningEffort", value: ["low", "high", "max"].includes(config2.glmReasoningEffort) ? config2.glmReasoningEffort : "low", onChange: (event) => updateEditingConfig({ glmReasoningEffort: event.target.value }), className: "schema-type-select", children: [
+            /* @__PURE__ */ jsxRuntimeExports.jsx("option", { value: "low", children: "低（推荐 RP）" }),
+            /* @__PURE__ */ jsxRuntimeExports.jsx("option", { value: "high", children: "高" }),
+            /* @__PURE__ */ jsxRuntimeExports.jsx("option", { value: "max", children: "最大" })
+          ] }),
+          /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "muted-text", children: "GLM 未指定时可能默认最大推理强度；VOCT 会始终显式发送当前选择。" })
+        ] }),
+        /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "form-group", children: [
+          /* @__PURE__ */ jsxRuntimeExports.jsxs("label", { htmlFor: "glmClearThinking", children: [
+            /* @__PURE__ */ jsxRuntimeExports.jsx("input", { id: "glmClearThinking", name: "glmClearThinking", type: "checkbox", checked: config2.glmClearThinking !== false, onChange: (event) => updateEditingConfig({ glmClearThinking: event.target.checked }) }),
+            " 清除历史思考（推荐）"
+          ] }),
+          /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "muted-text", children: "只保留可见对话上下文；隐藏 reasoning_content 不会进入对话历史或摘要。" })
+        ] })
+      ] }),
       /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "form-group", children: [
         /* @__PURE__ */ jsxRuntimeExports.jsxs("label", { htmlFor: "useMinimizedActionsSchema", children: [
           t("connection.actionsSchemaType"),
@@ -18869,47 +18928,47 @@ const ProviderConfigPanel = (props) => {
           }
         )
       ] }),
-      config2.providerType === "deepseek" && /* @__PURE__ */ jsxRuntimeExports.jsxs(jsxRuntimeExports.Fragment, { children: [
+      ["deepseek", "openai-compatible"].includes(config2.providerType) && /* @__PURE__ */ jsxRuntimeExports.jsxs(jsxRuntimeExports.Fragment, { children: [
         /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "form-group", children: [
           /* @__PURE__ */ jsxRuntimeExports.jsx("label", { htmlFor: "actionSchemaDeliveryMode", children: "Action Schema 传输模式" }),
           /* @__PURE__ */ jsxRuntimeExports.jsxs("select", {
             id: "actionSchemaDeliveryMode",
             name: "actionSchemaDeliveryMode",
-            value: config2.actionSchemaDeliveryMode || "optimized_local_validation",
+            value: config2.actionSchemaDeliveryMode || (config2.providerType === "deepseek" ? "optimized_local_validation" : "official_full_injected"),
             onChange: (event) => updateEditingConfig({ actionSchemaDeliveryMode: event.target.value }),
             className: "schema-type-select",
             children: [
-              /* @__PURE__ */ jsxRuntimeExports.jsx("option", { value: "official_full_injected", children: "Baseline：官方 Full Schema 注入" }),
-              /* @__PURE__ */ jsxRuntimeExports.jsx("option", { value: "optimized_local_validation", children: "RC3：Full Schema 仅本地校验（推荐）" })
+              /* @__PURE__ */ jsxRuntimeExports.jsx("option", { value: "official_full_injected", children: config2.providerType === "deepseek" ? "Baseline：官方 Full Schema 注入" : "标准：通过 response_format 传输 Schema（推荐）" }),
+              /* @__PURE__ */ jsxRuntimeExports.jsx("option", { value: "optimized_local_validation", children: config2.providerType === "deepseek" ? "RC3：Full Schema 仅本地校验（推荐）" : "兼容：Schema 仅本地校验" })
             ]
           }),
-          /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "muted-text", children: "两种模式都完整构建官方 Full Schema；RC3 模式只移除 DeepSeek HTTP Prompt 中的重复 Schema 文本。" })
+          /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "muted-text", children: config2.providerType === "deepseek" ? "两种模式都完整构建官方 Full Schema；RC3 模式只移除 DeepSeek HTTP Prompt 中的重复 Schema 文本。" : "标准模式通过 response_format.json_schema 发送 Schema；若兼容接口不支持该格式，可改用仅发送 json_object、仍在本地校验的兼容模式。" })
         ] }),
-        /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "form-group", children: [
+        config2.providerType === "deepseek" && /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "form-group", children: [
           /* @__PURE__ */ jsxRuntimeExports.jsxs("label", { htmlFor: "deepseekActionStateTransitionRecallOverlay", children: [
             /* @__PURE__ */ jsxRuntimeExports.jsx("input", {
               id: "deepseekActionStateTransitionRecallOverlay",
               name: "deepseekActionStateTransitionRecallOverlay",
               type: "checkbox",
-              checked: config2.deepseekActionStateTransitionRecallOverlay === true,
+              checked: config2.deepseekActionStateTransitionRecallOverlay !== false,
               onChange: (event) => updateEditingConfig({ deepseekActionStateTransitionRecallOverlay: event.target.checked })
             }),
             " DeepSeek Action State Transition Recall Overlay"
           ] }),
-          /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "muted-text", children: "RC5 默认关闭；仅强化受伤、死亡与关系状态转换的官方 Selector 召回，不改变动作可用性、Schema、校验或执行。" })
+          /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "muted-text", children: "默认开启；强化受伤、死亡与关系状态转换的官方 Selector 召回，不改变动作可用性、Schema、校验或执行。" })
         ] }),
-        /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "form-group", children: [
+        config2.providerType === "deepseek" && /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "form-group", children: [
           /* @__PURE__ */ jsxRuntimeExports.jsxs("label", { htmlFor: "deepseekActionStablePrefixOptimization", children: [
             /* @__PURE__ */ jsxRuntimeExports.jsx("input", {
               id: "deepseekActionStablePrefixOptimization",
               name: "deepseekActionStablePrefixOptimization",
               type: "checkbox",
-              checked: config2.deepseekActionStablePrefixOptimization === true,
+              checked: config2.deepseekActionStablePrefixOptimization !== false,
               onChange: (event) => updateEditingConfig({ deepseekActionStablePrefixOptimization: event.target.checked })
             }),
             " DeepSeek Action Stable Prefix A/B"
           ] }),
-          /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "muted-text", children: "默认关闭；仅在 50 次真实 A/B 通过后启用。不会修改官方 ActionPromptBuilder。" })
+          /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "muted-text", children: "默认开启；保持稳定 Action 前缀以提高缓存复用，不修改官方 ActionPromptBuilder。" })
         ] })
       ] }),
       /* @__PURE__ */ jsxRuntimeExports.jsx(DefaultParameterFieldsComponent, { config: config2, onInputChange, t }),
@@ -21963,6 +22022,202 @@ function LanguageSelector() {
     )
   ] });
 }
+const ProviderDiagnosticsView = () => {
+  const { i18n } = useTranslation();
+  const [status, setStatus] = reactExports.useState(null);
+  const [recent, setRecent] = reactExports.useState([]);
+  const [cacheProbe, setCacheProbe] = reactExports.useState(null);
+  const [clearThinkingAB, setClearThinkingAB] = reactExports.useState(null);
+  const [exportResult, setExportResult] = reactExports.useState(null);
+  const [copyMessage, setCopyMessage] = reactExports.useState(null);
+  const [error, setError] = reactExports.useState(null);
+  const [busy, setBusy] = reactExports.useState(null);
+  const isChinese = (i18n.language || "").toLowerCase().startsWith("zh");
+  const text = (zh, en) => isChinese ? zh : en;
+  const formatTokens = (value) => value == null ? "—" : new Intl.NumberFormat(isChinese ? "zh-CN" : "en-US").format(Math.round(Number(value) || 0));
+  const formatPercent = (value) => typeof value === "number" && Number.isFinite(value) ? `${(value * 100).toFixed(1)}%` : "—";
+  const formatTime = (value) => value ? new Date(value).toLocaleString(isChinese ? "zh-CN" : "en-US") : "—";
+  const cacheInfo = (usage) => {
+    const hit = usage?.prompt_cache_hit_tokens == null ? null : Number(usage.prompt_cache_hit_tokens);
+    const miss = usage?.prompt_cache_miss_tokens == null ? null : Number(usage.prompt_cache_miss_tokens);
+    const total = Number.isFinite(hit) && Number.isFinite(miss) ? hit + miss : 0;
+    return { hit, miss, rate: total > 0 ? hit / total : null, status: usage?.cache_reporting_status === "reported" || hit != null ? "reported" : "not_reported" };
+  };
+  const load = async () => {
+    const api = window.providerDiagnosticsAPI;
+    if (!api) {
+      setError(text("当前客户端未提供智谱诊断接口，请重启到已更新版本。", "The provider diagnostics API is unavailable. Restart the updated client."));
+      return;
+    }
+    try {
+      setError(null);
+      const [nextStatus, nextRecent] = await Promise.all([api.getStatus(), api.getRecent(50)]);
+      setStatus(nextStatus);
+      setRecent(Array.isArray(nextRecent) ? nextRecent : []);
+    } catch (loadError) {
+      console.error("Failed to load provider diagnostics:", loadError);
+      setError(loadError?.message || text("无法读取智谱诊断。", "Failed to load provider diagnostics."));
+    }
+  };
+  reactExports.useEffect(() => {
+    load();
+  }, []);
+  const run = async (operation, setter) => {
+    const api = window.providerDiagnosticsAPI;
+    if (!api?.[operation]) return;
+    try {
+      setBusy(operation);
+      setError(null);
+      setter(await api[operation]());
+      setRecent(await api.getRecent(50));
+    } catch (runError) {
+      console.error(`Failed to run provider diagnostic ${operation}:`, runError);
+      setError(runError?.message || text("诊断运行失败。", "The diagnostic failed."));
+    } finally {
+      setBusy(null);
+    }
+  };
+  const testConnection = async () => {
+    try {
+      setBusy("testConnection");
+      setError(null);
+      const result = await window.providerDiagnosticsAPI.testConnection();
+      if (!result?.success) setError(result?.error || text("智谱连接测试失败。", "Zhipu connection test failed."));
+      else setCopyMessage(result.message || text("智谱连接成功。", "Zhipu connection succeeded."));
+    } catch (testError) {
+      setError(testError?.message || text("智谱连接测试失败。", "Zhipu connection test failed."));
+    } finally {
+      setBusy(null);
+    }
+  };
+  const exportRecent = async () => {
+    try {
+      setBusy("exportRecent");
+      const result = await window.providerDiagnosticsAPI.exportRecent(50);
+      setExportResult(result);
+      if (!result?.success) setError(result?.error || text("诊断导出失败。", "Diagnostic export failed."));
+    } catch (exportError) {
+      setError(exportError?.message || text("诊断导出失败。", "Diagnostic export failed."));
+    } finally {
+      setBusy(null);
+    }
+  };
+  const copyEntry = async (entry) => {
+    try {
+      await navigator.clipboard.writeText(JSON.stringify(entry, null, 2));
+      setCopyMessage(text("已复制脱敏诊断信息。", "Redacted diagnostic information copied."));
+    } catch (copyError) {
+      setError(copyError?.message || text("复制失败。", "Copy failed."));
+    }
+  };
+  const usagePanel = (title, usage, normalized) => {
+    const cache = normalized ? cacheInfo(usage) : { hit: usage?.prompt_tokens_details?.cached_tokens == null ? null : Number(usage.prompt_tokens_details.cached_tokens), miss: null, rate: null, status: usage?.prompt_tokens_details?.cached_tokens == null ? "not_reported" : "reported" };
+    return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "provider-diagnostic-usage", children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsx("h6", { children: title }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "optimization-metrics", children: [
+        [text("Prompt", "Prompt"), formatTokens(usage?.prompt_tokens)],
+        [text("Completion", "Completion"), formatTokens(usage?.completion_tokens)],
+        [text("Total", "Total"), formatTokens(usage?.total_tokens)],
+        [text("Provider Cache Hit", "Provider Cache Hit"), formatTokens(cache.hit)],
+        [text("Provider Cache Miss", "Provider Cache Miss"), formatTokens(cache.miss)],
+        [text("Hit Rate", "Hit Rate"), formatPercent(cache.rate)],
+        [text("Cache Reporting", "Cache Reporting"), cache.status === "reported" ? "reported" : "—"],
+        [text("Reasoning", "Reasoning"), formatTokens(usage?.reasoning_tokens ?? usage?.completion_tokens_details?.reasoning_tokens)],
+        [text("Visible Output", "Visible Output"), formatTokens(usage?.visible_completion_tokens)]
+      ].map(([label, value]) => /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "optimization-metric", children: [/* @__PURE__ */ jsxRuntimeExports.jsx("span", { children: label }), /* @__PURE__ */ jsxRuntimeExports.jsx("strong", { children: value })] }, label)) })
+    ] });
+  };
+  const rawDetails = (usage) => /* @__PURE__ */ jsxRuntimeExports.jsxs("details", { className: "worldline-advanced-details", children: [
+    /* @__PURE__ */ jsxRuntimeExports.jsx("summary", { children: text("查看 Raw Usage JSON", "View Raw Usage JSON") }),
+    /* @__PURE__ */ jsxRuntimeExports.jsx("pre", { children: JSON.stringify(usage || {}, null, 2) })
+  ] });
+  const resultCard = (title, result) => result ? /* @__PURE__ */ jsxRuntimeExports.jsxs("section", { className: "optimization-section", children: [
+    /* @__PURE__ */ jsxRuntimeExports.jsx("h4", { children: title }),
+    result.rawUsage || result.normalizedUsage ? /* @__PURE__ */ jsxRuntimeExports.jsxs(React.Fragment, { children: [usagePanel(text("原始 Usage", "Raw Usage"), result.rawUsage, false), usagePanel(text("VOCT Normalize 后", "VOCT normalized"), result.normalizedUsage, true), rawDetails(result.rawUsage)] }) : null,
+    result.localPrefixDiagnostics && /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "worldline-diagnostics", children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { children: [text("本地估算可复用前缀", "Local estimated reusable prefix"), "：", formatTokens(result.localPrefixDiagnostics.reusablePrefixTokens)] }),
+      /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { children: [text("最早变化段", "First break"), "：", result.localPrefixDiagnostics.firstBreakSegment || "—"] })
+    ] }),
+    result.cache && /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { className: "muted-text", children: [text("缓存命中", "Cache hit"), "：", formatTokens(result.cache.hit), " · ", text("命中率", "Hit rate"), "：", formatPercent(result.cache.hitRate)] }),
+    result.totalLatencyMs != null && /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { className: "muted-text", children: [text("总耗时", "Total latency"), "：", `${result.totalLatencyMs} ms`] })
+  ] }) : null;
+  const renderProbe = () => {
+    if (!cacheProbe) return null;
+    if (!cacheProbe.success) return /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "optimization-error", children: cacheProbe.error });
+    return /* @__PURE__ */ jsxRuntimeExports.jsxs(React.Fragment, { children: [
+      resultCard(text("第一次：冷请求", "First request: cold"), cacheProbe.first),
+      resultCard(text("第二次：共享稳定前缀", "Second request: shared stable prefix"), cacheProbe.second),
+      /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "worldline-diagnostic-summary", children: /* @__PURE__ */ jsxRuntimeExports.jsx("strong", { children: cacheProbe.conclusion }) })
+    ] });
+  };
+  const renderABGroup = (title, group) => group && /* @__PURE__ */ jsxRuntimeExports.jsxs("section", { className: "optimization-section", children: [
+    /* @__PURE__ */ jsxRuntimeExports.jsx("h4", { children: title }),
+    /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "optimization-metrics", children: [
+      [text("Warm Hit Rate", "Warm Hit Rate"), formatPercent(group.warmHitRate)],
+      [text("Cold Cache", "Cold Cache"), formatTokens(group.cold?.cache?.hit)],
+      [text("Warm Cache", "Warm Cache"), formatTokens(group.warm?.cache?.hit)]
+    ].map(([label, value]) => /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "optimization-metric", children: [/* @__PURE__ */ jsxRuntimeExports.jsx("span", { children: label }), /* @__PURE__ */ jsxRuntimeExports.jsx("strong", { children: value })] }, label)) }),
+    resultCard(text("冷请求 Raw / Normalize", "Cold request Raw / normalized"), group.cold),
+    resultCard(text("暖请求 Raw / Normalize", "Warm request Raw / normalized"), group.warm)
+  ] });
+  return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "optimization-view provider-diagnostics-view", children: [
+    /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "optimization-header", children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsx("h3", { children: text("智谱 GLM 缓存诊断", "Zhipu GLM Cache Diagnostics") }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "muted-text", children: text("独立于世界书和 CK3 的 Provider 观测程序；Provider Truth 与本地前缀估算分开显示。", "An independent Provider observation tool; Provider truth is shown separately from the local prefix estimate.") })
+      ] }),
+      /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "optimization-header-actions", children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsx("button", { type: "button", onClick: load, disabled: busy != null, children: text("刷新", "Refresh") }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx("button", { type: "button", onClick: testConnection, disabled: busy != null, children: busy === "testConnection" ? text("测试中…", "Testing…") : text("测试连接", "Test connection") }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx("button", { type: "button", onClick: () => run("runCacheProbe", setCacheProbe), disabled: busy != null, children: busy === "runCacheProbe" ? text("测试中…", "Testing…") : text("测试缓存", "Test cache") }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx("button", { type: "button", onClick: () => run("runClearThinkingAB", setClearThinkingAB), disabled: busy != null, children: busy === "runClearThinkingAB" ? text("测试中…", "Testing…") : text("测试 clear_thinking A/B", "Test clear_thinking A/B") }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx("button", { type: "button", onClick: exportRecent, disabled: busy != null, children: busy === "exportRecent" ? text("导出中…", "Exporting…") : text("导出最近 50 条诊断", "Export latest 50 diagnostics") })
+      ] })
+    ] }),
+    status && /* @__PURE__ */ jsxRuntimeExports.jsxs("section", { className: "optimization-section", children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsx("h4", { children: text("智谱 Provider 状态", "Zhipu Provider status") }),
+      /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "optimization-metrics", children: [
+        [text("配置", "Configured"), status.configured ? text("已配置", "Yes") : text("未配置 API Key", "API key missing")],
+        [text("模型", "Model"), status.model || "—"],
+        [text("推理强度", "Reasoning"), status.reasoningEffort || "—"],
+        [text("clear_thinking", "clear_thinking"), status.clearThinking ? "true" : "false"],
+        [text("端点", "Endpoint"), status.baseUrl || "—"]
+      ].map(([label, value]) => /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "optimization-metric", children: [/* @__PURE__ */ jsxRuntimeExports.jsx("span", { children: label }), /* @__PURE__ */ jsxRuntimeExports.jsx("strong", { children: value })] }, label)) }),
+      status.error && /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "optimization-error", children: status.error })
+    ] }),
+    error && /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "optimization-error", children: error }),
+    copyMessage && /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "muted-text", children: copyMessage }),
+    exportResult?.success && /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { className: "muted-text", children: [text("已导出", "Exported"), "：", String(exportResult.path || "").split(/[\\/]/).pop(), "（", exportResult.count, " ", text("条", "entries"), "）"] }),
+    cacheProbe && /* @__PURE__ */ jsxRuntimeExports.jsxs("section", { className: "optimization-section", children: [/* @__PURE__ */ jsxRuntimeExports.jsx("h4", { children: text("智谱缓存测试", "Zhipu cache probe") }), renderProbe()] }),
+    clearThinkingAB && (clearThinkingAB.success ? /* @__PURE__ */ jsxRuntimeExports.jsxs("section", { className: "optimization-section", children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsx("h4", { children: text("clear_thinking A/B", "clear_thinking A/B") }),
+      renderABGroup("clear_thinking=true", clearThinkingAB.trueGroup),
+      renderABGroup("clear_thinking=false", clearThinkingAB.falseGroup),
+      /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "worldline-diagnostic-summary", children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { children: [text("Difference", "Difference"), "：", clearThinkingAB.difference == null ? "—" : `${(clearThinkingAB.difference * 100).toFixed(1)} 个百分点`] }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx("strong", { children: clearThinkingAB.conclusion })
+      ] })
+    ] }) : /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "optimization-error", children: clearThinkingAB.error }) ),
+    /* @__PURE__ */ jsxRuntimeExports.jsxs("section", { className: "optimization-section", children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "optimization-header", children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsx("h4", { children: text("最近诊断记录", "Recent diagnostic records") }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx("button", { type: "button", onClick: load, disabled: busy != null, children: text("刷新记录", "Refresh records") })
+      ] }),
+      recent.length === 0 ? /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "optimization-empty", children: text("暂无智谱诊断记录。", "No Zhipu diagnostic records yet.") }) : recent.map((entry, index) => /* @__PURE__ */ jsxRuntimeExports.jsxs("details", { className: "worldline-advanced-details", children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsxs("summary", { children: [entry.requestType, " · ", formatTime(entry.timestamp), " · ", entry.model || "—"] }),
+        /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "worldline-diagnostics", children: [
+          /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { children: [text("本地估算可复用前缀", "Local estimated reusable prefix"), "：", formatTokens(entry.localPrefixDiagnostics?.reusablePrefixTokens)] }),
+          /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { children: [text("最早变化段", "First break"), "：", entry.localPrefixDiagnostics?.firstBreakSegment || "—"] }),
+          /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "optimization-header-actions", children: /* @__PURE__ */ jsxRuntimeExports.jsx("button", { type: "button", onClick: () => copyEntry(entry), children: text("复制诊断信息", "Copy diagnostic information") }) })
+        ] }),
+        usagePanel(text("Raw Usage", "Raw Usage"), entry.rawUsage, false),
+        usagePanel(text("Normalized Usage", "Normalized Usage"), entry.normalizedUsage, true),
+        rawDetails(entry.rawUsage)
+      ] }, `${entry.timestamp || "entry"}-${index}`))
+    ] })
+  ] });
+};
+
 function WorldlineView() {
   const { i18n } = useTranslation();
   const isChinese = (i18n.language || "").startsWith("zh");
@@ -22999,6 +23254,15 @@ function ConfigPanel({ onClose }) {
               children: "世界书"
             }
           ),
+          /* @__PURE__ */ jsxRuntimeExports.jsx(
+            "button",
+            {
+              onClick: () => setCurrentTab("providerDiagnostics"),
+              className: currentTab === "providerDiagnostics" ? "active" : "",
+              style: { zIndex: 12 },
+              children: "诊断"
+            }
+          ),
           /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "court-theme-switcher", role: "group", "aria-label": "界面风格", children: [
             /* @__PURE__ */ jsxRuntimeExports.jsx(
               "button",
@@ -23043,7 +23307,8 @@ function ConfigPanel({ onClose }) {
           currentTab === "prompts" && /* @__PURE__ */ jsxRuntimeExports.jsx(PromptsView, {}),
           currentTab === "summaries" && /* @__PURE__ */ jsxRuntimeExports.jsx(SummariesView, {}),
           currentTab === "optimization" && /* @__PURE__ */ jsxRuntimeExports.jsx(OptimizationView, {}),
-          currentTab === "worldline" && /* @__PURE__ */ jsxRuntimeExports.jsx(WorldlineView, {})
+          currentTab === "worldline" && /* @__PURE__ */ jsxRuntimeExports.jsx(WorldlineView, {}),
+          currentTab === "providerDiagnostics" && /* @__PURE__ */ jsxRuntimeExports.jsx(ProviderDiagnosticsView, {})
         ] }),
         /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "app-version", children: [
           "v",
@@ -23730,7 +23995,7 @@ const actions$2 = { "disableAction": "禁用操作", "enableAction": "启用操�
 const chat$2 = { "args": "参数", "cancelStream": "取消流式输出", "details": "详情", "endConversation": "结束对话", "from": "来自", "loadingDots": "加载中...", "maximize": "+", "minimize": "-", "noParameters": "无参数", "pauseConversation": "暂停对话", "pendingApproval": "等待批准", "regenerate": "重新生成", "resumeConversation": "恢复对话", "system": "系统", "to": "发送至", "writeMessage": "输入消息...", "you": "你" };
 const common$2 = { "apply": "应用", "approve": "批准", "back": "返回", "cancel": "取消", "close": "关闭", "collapseAll": "全部折叠", "confirm": "确认", "decline": "拒绝", "delete": "删除", "disabled": "已禁用", "edit": "编辑", "enabled": "已启用", "error": "错误", "expandAll": "全部展开", "filter": "筛选", "folder": "文件夹", "hide": "隐藏", "loading": "加载中...", "next": "下一步", "no": "否", "ok": "确定", "open": "打开", "pause": "暂停", "previous": "上一步", "refresh": "刷新", "reset": "重置", "save": "保存", "search": "搜索", "settings": "设置", "show": "显示", "success": "成功", "tokens": "Token", "yes": "是" };
 const config$2 = { "actions": "操作", "collectLogs": "收集所有日志以便提交错误报告", "configuration": "配置", "connection": "连接", "default": "默认", "help": "帮助", "joinDiscord": "加入我们的 Discord", "manageActions": "管理检测到的操作", "noPresetsYet": "尚未保存预设", "npcActions": "NPC 操作", "npcMessages": "NPC 消息", "npcSummaries": "NPC 摘要", "preset": "预设", "prompts": "提示词", "selectProviderOrPreset": "从侧边栏选择服务商或预设进行配置", "settings": "设置", "summaries": "摘要", "type": "类型", "unnamedPreset": "未命名预设" };
-const connection$2 = { "confirmDeletePreset": '您确定要删除预设 "{{name}}" 吗？', "createNewPreset": "创建新预设", "createPreset": "创建预设", "defaultParameters": "默认参数", "deletePreset": "删除预设", "makePreset": "基于当前设置创建预设", "maxTokens": "最大 Token 数", "presetName": "预设名称", "presetNamePlaceholder": "输入预设名称", "presetNameRequired": "预设名称不能为空", "presets": "预设", "providers": "服务商", "savePreset": "保存预设", "temperature": "Temperature", "testConnection": "测试连接", "testConnectionFailed": "连接失败", "testConnectionSuccess": "连接成功！", "openPlayer2App": "打开 Player2 应用", "player2AppHelp": "点击打开 Player2 应用。请确保已安装且正在运行。", "actionsSchemaType": "操作架构类型", "actionsSchemaTypeHelp": "RC3 仍构建官方 Full Schema，并在本地用于官方 ActionEngine 校验；推荐的 optimized_local_validation 仅避免在 DeepSeek HTTP Prompt 中重复注入同一 Schema。稳定前缀优化默认关闭，须完成 50 次真实 A/B 后再启用。Chat 与 Summary 参数保持独立不变。", "actionsSchemaAuto": "自动检测（推荐）", "actionsSchemaAdvanced": "高级（完整验证）", "actionsSchemaMinimized": "简化（用于受限模型）" };
+const connection$2 = { "confirmDeletePreset": '您确定要删除预设 "{{name}}" 吗？', "createNewPreset": "创建新预设", "createPreset": "创建预设", "defaultParameters": "默认参数", "deletePreset": "删除预设", "makePreset": "基于当前设置创建预设", "maxTokens": "最大 Token 数", "presetName": "预设名称", "presetNamePlaceholder": "输入预设名称", "presetNameRequired": "预设名称不能为空", "presets": "预设", "providers": "服务商", "savePreset": "保存预设", "temperature": "Temperature", "testConnection": "测试连接", "testConnectionFailed": "连接失败", "testConnectionSuccess": "连接成功！", "openPlayer2App": "打开 Player2 应用", "player2AppHelp": "点击打开 Player2 应用。请确保已安装且正在运行。", "actionsSchemaType": "操作架构类型", "actionsSchemaTypeHelp": "RC3 仍构建官方 Full Schema，并在本地用于官方 ActionEngine 校验；推荐的 optimized_local_validation 仅避免在 DeepSeek HTTP Prompt 中重复注入同一 Schema。状态转换召回与稳定前缀默认开启，仍可手动关闭。Chat 与 Summary 参数保持独立不变。", "actionsSchemaAuto": "自动检测（推荐）", "actionsSchemaAdvanced": "高级（完整验证）", "actionsSchemaMinimized": "简化（用于受限模型）" };
 const lettersModal$2 = { "completed": "已完成", "created": "创建时间", "currentDay": "当前日", "currentGameDay": "当前游戏日", "daysUntilDelivery": "距离送达天数", "delivered": "已送达", "deliversInDays": "{{days}} 天后送达", "deliversToday": "今天送达", "deliveryFailed": "送达失败", "error": "错误", "expectedDeliveryDay": "预计送达日", "failed": "失败", "generating": "生成中", "information": "信息", "isLate": "是否延迟", "lastUpdated": "最后更新", "lateByDays": "延迟 {{days}} 天", "letterId": "信件 ID", "lettersStatus": "信件状态", "loading": "加载中...", "no": "否", "noLettersFound": "未找到信件。信件处理后将显示在此处。", "originalLetter": "原始信件", "pendingDelivery": "待送达", "pendingDeliveryTitle": "待送达", "refresh": "刷新", "responseContent": "回复内容", "responseGenerationFailed": "回复生成失败", "responseGenerationInProgress": "回复生成中", "responseStatus": "回复状态", "sentSuccessfully": "发送成功", "status": "状态", "statusEffectFileWritten": "投递命令已写入（等待 CK3 确认）", "statusGenerated": "已生成", "statusGenerating": "生成中", "statusGenerationFailed": "生成失败", "statusNotStarted": "未开始", "statusPendingDelivery": "待送达", "statusSaved": "已保存", "statusSaveFailed": "保存失败", "statusSendFailed": "发送失败", "statusSent": "已发送", "summaryContent": "摘要内容", "summaryStatus": "摘要状态", "totalLetters": "总信件数", "yes": "是" };
 const messageItem$2 = { "cancel": "取消", "errorTitle": "错误", "save": "保存" };
 const modals$2 = { "areYouSureDeletePreset": "您确定要删除预设 {{name}} 吗？", "confirmDeletion": "确认删除" };

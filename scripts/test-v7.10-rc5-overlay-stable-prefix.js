@@ -114,8 +114,8 @@ const manager = new LLMManager({
   const mainSource = fs.readFileSync(path.join(root, "resources/app/out/main/main.js"), "utf8");
   const settingsSource = fs.readFileSync(path.join(root, "resources/app/out/main/config/settings-repository.js"), "utf8");
   const rendererSource = fs.readFileSync(path.join(root, "resources/app/out/renderer/assets/index-Dn3qWlAB.js"), "utf8");
-  assert(mainSource.includes("deepseekActionStateTransitionRecallOverlay: false"), "overlay must default off");
-  assert(settingsSource.includes("deepseekActionStateTransitionRecallOverlay: config.deepseekActionStateTransitionRecallOverlay === true"), "overlay must require explicit opt-in");
+  assert(mainSource.includes("deepseekActionStateTransitionRecallOverlay: true"), "overlay must default on");
+  assert(settingsSource.includes("deepseekActionStateTransitionRecallOverlay: config.deepseekActionStateTransitionRecallOverlay !== false"), "overlay must preserve explicit opt-out while defaulting on");
   assert(rendererSource.includes("关键动作召回"));
   assert(rendererSource.includes("RC5 Action A/B/C 元数据"));
   assert(rendererSource.includes("可用但未选择不自动算 SELECTOR_MISS"));
