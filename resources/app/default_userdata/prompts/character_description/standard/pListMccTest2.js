@@ -433,6 +433,7 @@ function allMemoriesLine(char) {
 }
 
 function kinshipReferenceLine(char) {
+  if (typeof __votcFamilyReference === "function") return __votcFamilyReference(char);
   const references = [];
   if (char.siblings && char.siblings.length > 0) {
     for (const sibling of char.siblings) {
@@ -450,6 +451,7 @@ function kinshipReferenceLine(char) {
 }
 
 function familyLine(char) {
+  if (typeof __votcFamilyLine === "function") return __votcFamilyLine(char);
   const parts = [];
   if (char.parents && char.parents.length > 0) {
     const parentsList = char.parents

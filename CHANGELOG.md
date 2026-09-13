@@ -2,6 +2,8 @@
 
 这里是版本变更的单一入口。详细设计和测试证据保留在链接目标中，本文件只维护版本顺序、用户可见摘要和文档索引。
 
+V8.8.5：[审查问题与扩展亲属改进](docs/v8.8.5-review-kinship-implementation-report.md)。修复后排动作提前超时、多金额误覆盖、好感度提前报成功和空年龄误报 0 岁；旧英文模板按 CK3 家谱、性别与长幼输出堂表兄姐弟妹、叔伯姑舅姨和祖辈。291/291 发布组及隔离 Electron 冒烟通过，真实 CK3 Gate 待复测。
+
 V8.8.4：[关系与动作事故修复](docs/v8.8.4-incident-implementation-report.md)。修复旧英文人物脚本读取中文性别、日期探针队列阻塞、动作 NPC 索引及重复执行风险；金币/好感度改为同命令前后回读，ACK 不再表示效果成功。290/290 发布组、隔离 Electron 冒烟通过；关系实机通过，最新动作补丁等待 CK3 复测。
 
 | v8.8.3 Sol 最终正确性审查 | 金币 Effect 在同一 RunFile 内追加双方实时金币回读，ACK 后精确核对才完成；命令丢失不再视作 ACK，玩家显式金额覆盖模型漂移；在场/Family/Mentioned 共用 Current Truth，canonical 冲突与缺失均 fail-closed；289/289 发布组通过，真实 CK3 Gate 待执行 | [Sol 最终审查](docs/v8.8.3-sol-final-review.md) / [V8 阶段记录](docs/V8阶段开发记录.md) |

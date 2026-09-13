@@ -493,6 +493,16 @@ ${payload}
       const active = this.pendingCommands[0];
       return active ? this.expireCommand(active.commandId, reason, options) : null;
     }
+    expireQueuedActions() {
+      this.assertStateLoaded();
+      const headId = this.pendingCommands[0]?.commandId;
+      for (const command of [...this.pendingCommands]) {
+        if (command.kind === "action_effect" && !this.hasWriteHistory(command) && this.isCommandExpired(command)) {
+          this.expireCommand(command.commandId, "action_effect_expired_before_dispatch", { advance: false });
+        }
+      }
+      if (headId && this.pendingCommands[0]?.commandId !== headId && this.recoveryCompleted) this.writeActiveCommand();
+    }
     quarantineCommand(commandId, reason = "command_quarantined", options = {}) {
       return this.movePendingCommandToTerminal(commandId, "quarantined", reason, { neutralize: true, ...options });
     }
@@ -669,6 +679,7 @@ ${payload}
     }
     markActiveCommandStalledIfNeeded({ ackTimeoutMs = 30000 } = {}) {
       this.assertStateLoaded();
+      this.expireQueuedActions();
       const active = this.pendingCommands[0];
       if (!active) return null;
       if (active.kind === "conversation_close" && (this.isStaleConversationClose(active) || active.status === "stalled")) {

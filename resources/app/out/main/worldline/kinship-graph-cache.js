@@ -14,6 +14,8 @@ function relationFingerprint(gameData) {
     character?.gender ?? character?.sex ?? character?.female ?? "",
     character?.evidence?.conflicts?.gender === true,
     character?.birthDateTotalDays ?? character?.birthTotalDays ?? "",
+    character?.birthDate ?? character?.birth ?? "",
+    character?.age ?? "",
     character?.alive,
     character?.evidence?.conflicts?.alive === true,
     character?.deathDateTotalDays ?? character?.deathDate ?? ""

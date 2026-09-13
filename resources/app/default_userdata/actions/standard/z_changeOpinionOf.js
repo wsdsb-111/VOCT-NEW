@@ -130,6 +130,17 @@ global_var:votc_action_source = {
 
     return {
       message: {
+        en: `Requested opinion change: ${sourceCharacter.shortName} toward ${targetCharacter.shortName}, ${value > 0 ? '+' : ''}${value}; awaiting game confirmation`,
+        zh: `已请求将${sourceCharacter.shortName}对${targetCharacter.shortName}的看法改变${value > 0 ? '+' : ''}${value}，等待游戏确认`,
+        ru: `Запрошено изменение мнения на ${value}; ожидается подтверждение игры`,
+        fr: `Changement d'opinion demandé : ${value} ; en attente de confirmation du jeu`,
+        de: `Meinungsänderung angefragt: ${value}; Spielbestätigung ausstehend`,
+        es: `Cambio de opinión solicitado: ${value}; esperando confirmación del juego`,
+        ja: `評価変更 ${value} を要求しました。ゲームの確認待ちです`,
+        ko: `의견 변경 ${value} 요청됨; 게임 확인 대기 중`,
+        pl: `Poproszono o zmianę opinii o ${value}; oczekiwanie na potwierdzenie gry`
+      },
+      confirmedMessage: {
         en: `${sourceCharacter.shortName}'s opinion of ${targetCharacter.shortName} ${value > 0 ? 'improved' : 'worsened'} by ${absValue}`,
         ru: `Мнение ${sourceCharacter.shortName} о ${targetCharacter.shortName} ${value > 0 ? 'улучшилось' : 'ухудшилось'} на ${absValue}`,
         fr: `L'opinion de ${sourceCharacter.shortName} sur ${targetCharacter.shortName} s'est ${value > 0 ? 'améliorée' : 'détériorée'} de ${absValue}`,

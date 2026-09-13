@@ -4,6 +4,8 @@ const fs__namespace = require("fs");
 const scriptSandbox = require("../script-sandbox");
 const { inferGenderFromPronoun } = require("../game-data/character");
 const { resolveCharacterSexConsensus } = require("../worldline/character-demographic-normalizer");
+const { buildLegacyFamilyLine } = require("../worldline/legacy-family-presentation");
+const { resolveCharacterAge } = require("../worldline/character-age-service");
 
 // Adapt known legacy pList ternaries at execution time, preserving user files.
 function adaptLegacyGenderLabels(code) {
@@ -29,8 +31,31 @@ class PromptScriptSandbox {
    * Expected to return a string
    */
   static executeDescription(scriptFilePath, context) {
-    const scriptCode = adaptLegacyGenderLabels(fs__namespace.readFileSync(scriptFilePath, "utf-8"));
+    let scriptCode = adaptLegacyGenderLabels(fs__namespace.readFileSync(scriptFilePath, "utf-8"));
     const sandbox = this.createBaseSandbox();
+    // Adapt only the known English pList family entrypoints, never rewrite a
+    // user file or change the participants/Action-target collection.
+    if (/(?:^|[\\/])pListMccTest2(?:JE)?\.js$/i.test(scriptFilePath)) {
+      if (!scriptCode.includes("__votcFamilyLine")) scriptCode = scriptCode.replace(/function familyLine\(char\)\s*\{/, "function familyLine(char) { return __votcFamilyLine(char);");
+      if (!scriptCode.includes("__votcFamilyReference")) scriptCode = scriptCode.replace(/function kinshipReferenceLine\(char\)\s*\{/, "function kinshipReferenceLine(char) { return __votcFamilyReference(char);");
+      scriptCode = scriptCode.replace(/\$\{char\.age\}/g, "${__votcAge(char)}");
+    }
+    const registry = new Map();
+    const familyCache = new Map();
+    let remainingFamilyLines = 96;
+    sandbox.__votcFamilyReference = () => null;
+    sandbox.__votcFamilyLine = character => {
+      if (!familyCache.has(character.id)) {
+        const rendered = buildLegacyFamilyLine(character, context.gameData, { limit: Math.min(32, remainingFamilyLines), registry });
+        remainingFamilyLines -= rendered.count;
+        familyCache.set(character.id, rendered.text);
+      }
+      return familyCache.get(character.id);
+    };
+    sandbox.__votcAge = character => {
+      const age = resolveCharacterAge(character, { currentGameDate: context.gameData?.date, currentTotalDays: context.gameData?.totalDays });
+      return age.age === null ? "unknown" : age.label === "ageAtDeath" ? `${age.age} (at death)` : age.age;
+    };
     sandbox.__votcGenderLabel = (character, male, female, neutral) => {
       const canonical = context.gameData?.characters?.get(Number(character?.id));
       const subject = canonical || character;

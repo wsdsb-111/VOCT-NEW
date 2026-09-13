@@ -4,6 +4,8 @@
 
 ## 推荐阅读顺序
 
+V8.8.5 当前入口：[审查问题与扩展亲属改进报告](v8.8.5-review-kinship-implementation-report.md)。覆盖动作队列/确认分时计时、唯一明确金额才允许覆盖、好感度待确认文案、空年龄边界和旧英文 pList 扩展亲属。291/291 发布组、360 个文件分类及隔离 Electron 冒烟通过；本版真实 CK3/Provider/长时 Gate 尚未验收，下方版本为历史证据。
+
 V8.8.4 当前入口：[关系与动作事故修复报告](v8.8.4-incident-implementation-report.md)。包括真实旧人物脚本兼容、旧队列隔离、NPC/玩家 Scope 绑定、游戏侧重复执行保护、命令内金币与好感度回读。290/290 发布组及隔离 Electron 冒烟通过；用户已确认关系识别，最新动作补丁仍待 CK3 验收。下方 V8.8.3 记录属于前置历史基线，不能代表本次实机事故已通过。
 
 V8.8.3 当前入口：[Sol 最终正确性审查](v8.8.3-sol-final-review.md)与 [V8 阶段记录](V8阶段开发记录.md)。金币不再乐观修改本地状态；同一 RunFile 在 Effect 后输出双方实时金币并写 ACK，只有回读精确匹配才进入 `CONFIRMED`。在场关系、被提及人物与 Family Fact 共享 Current Truth DTO，canonical Runtime 性别优先，缺失/冲突使用中性称谓。代码侧 289/289 发布组通过，Final Freeze 等待真实 CK3 人工 Gate。

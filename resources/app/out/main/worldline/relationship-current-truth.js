@@ -25,7 +25,7 @@ function relationSideSex(profile, gameData, subjectRuntimeId) {
     .filter((value) => value === "male" || value === "female"));
   for (const character of gameData?.characters?.values?.() || []) {
     for (const field of ["parents", "children", "siblings"]) {
-      for (const entry of character?.[field] || []) {
+      for (const entry of Array.isArray(character?.[field]) ? character[field] : Object.values(character?.[field] || {})) {
         if (Number(entry?.id) !== Number(subjectRuntimeId)) continue;
         const sex = normalizeSex(entry.gender ?? entry.sex ?? entry.female);
         if (sex !== "unknown") values.add(sex);
@@ -61,8 +61,8 @@ function resolveRelationshipCurrentTruth({ gameData, subjectRuntimeId, anchorRun
     : gameData.characters?.[anchorId] || gameData.characters?.[String(anchorId)] || graph.nodes.get(String(anchorId)) || null;
   const legacyResolution = canonical && anchor ? createRelationshipResolver().resolveDirectKinship({ ...canonical, gender: sex }, anchor) : null;
   const legacyType = legacyResolution?.type === "parent" ? "PARENT_OF" : legacyResolution?.type === "child" ? "CHILD_OF" : legacyResolution?.type === "sibling" ? "SIBLING_OF" : null;
-  const relation = relationResult.relation || (legacyType ? { type: legacyType, source: "CURRENT_RUNTIME_RELATION", branch: null } : null);
-  const relationLabel = relation ? (sex === "unknown" ? neutralLabel(relation.type, relation.label) : legacyType === relation.type ? legacyResolution.label : resolveKinshipLabel({ type: relation.type, sex, branch: relation.branch })) : null;
+  const relation = relationResult.diagnostic ? null : relationResult.relation || (legacyType ? { type: legacyType, source: "CURRENT_RUNTIME_RELATION", branch: null } : null);
+  const relationLabel = relation ? (sex === "unknown" ? neutralLabel(relation.type, resolveKinshipLabel({ ...relation, sex })) : legacyType === relation.type ? legacyResolution.label : resolveKinshipLabel({ ...relation, sex })) : null;
   const life = resolveLifeStatus(canonical || profile);
   const age = resolveCharacterAge(canonical || profile, { currentGameDate: gameData.date, currentTotalDays: gameData.totalDays });
   const fact = registry?.get(String(subjectId)) || {

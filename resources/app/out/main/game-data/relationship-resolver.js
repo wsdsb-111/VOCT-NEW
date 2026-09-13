@@ -1,5 +1,7 @@
 "use strict";
 
+const { nonnegativeNumber, compareCharacterSeniority } = require("../worldline/character-age-service");
+
 function createRelationshipResolver({ onDiagnostic = null } = {}) {
   const emit = (code, details) => {
     const diagnostic = { code, ...details, recordedAt: Date.now() };
@@ -158,10 +160,10 @@ function createRelationshipResolver({ onDiagnostic = null } = {}) {
       const deathDate = resolveTieredValue(record, "deathDate", "RELATION_CONFLICT_DEATHDATE");
       const deathDateText = resolveTieredValue(record, "deathDateText", "RELATION_CONFLICT_DEATHDATE_TEXT");
       const deathReason = resolveTieredValue(record, "deathReason", "RELATION_CONFLICT_DEATH_REASON");
-      const ageAtDay = alive.value === false && deathDate.value !== null ? deathDate.value : Number(totalDays);
-      const age = birthDate.value !== null && Number.isFinite(ageAtDay)
+      const ageAtDay = alive.value === false ? deathDate.value : nonnegativeNumber(totalDays);
+      const age = birthDate.value !== null && ageAtDay !== null && ageAtDay >= birthDate.value
         ? Math.max(0, Math.floor((ageAtDay - birthDate.value) / 365.2425))
-        : Number.isFinite(Number(canonical?.age)) ? Number(canonical.age) : null;
+        : alive.value === false ? null : nonnegativeNumber(canonical?.age);
       const profile = canonical ? { ...canonical } : {
         id: record.id,
         shortName: name,
@@ -255,8 +257,8 @@ function createRelationshipResolver({ onDiagnostic = null } = {}) {
     if (!birthConflict && subjectBirth !== null && otherBirth !== null && subjectBirth !== otherBirth) {
       older = subjectBirth < otherBirth;
       birthSource = "exact_birth_date";
-    } else if (!birthConflict && Number.isFinite(Number(subject?.age)) && Number.isFinite(Number(other?.age)) && Number(subject.age) !== Number(other.age)) {
-      older = Number(subject.age) > Number(other.age);
+    } else if (!birthConflict && (subjectBirth === null || otherBirth === null) && compareCharacterSeniority(subject, other) !== null) {
+      older = compareCharacterSeniority(subject, other) > 0;
       birthSource = "integer_age_fallback";
     }
     if (older === null) emit("RELATION_AGE_UNRESOLVED", { subjectId: subject?.id, otherId: other?.id, subjectBirth, otherBirth, birthConflict });

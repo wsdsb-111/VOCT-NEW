@@ -17,7 +17,7 @@ class Character {
   constructor(data) {
     this.conversationSummaries = [];
     const ageText = String(data[5] ?? "").replace(/<[^>]*>/g, "").trim();
-    const parsedAge = Number(ageText);
+    const parsedAge = ageText ? Number(ageText) : NaN;
     this.id = Number(data[0]), this.shortName = data[1], this.fullName = data[2], this.primaryTitle = String(data[3] ?? "").replace(/<[^>]*>/g, "").trim(), this.sheHe = data[4], this.gender = inferGenderFromPronoun(data[4]), this.age = Number.isFinite(parsedAge) ? Math.floor(parsedAge) : Number.parseInt(ageText.match(/\d+/)?.[0] || "", 10), this.gold = Math.floor(Number(data[6])), this.opinionOfPlayer = Number(data[7]), this.sexuality = removeTooltip$1(data[8]), this.personality = data[9], this.greed = Number(data[10]), this.boldness = 0, this.compassion = 0, this.energy = 0, this.honor = 0, this.rationality = 0, this.sociability = 0, this.vengefulness = 0, this.zeal = 0, this.isIndependentRuler = !!Number(data[11]), this.liege = data[12], this.consort = data[13], this.culture = data[14], this.faith = data[15], this.house = data[16], this.isRuler = !!Number(data[17]), this.firstName = data[18], this.capitalLocation = data[19], this.topLiege = data[20], this.prowess = Number(data[21]), this.isKnight = !!Number(data[22]), this.liegeRealmLaw = data[23], this.isLandedRuler = !!Number(data[24]), this.heldCourtAndCouncilPositions = data[25], this.titleRankConcept = data[26], this.secrets = [], this.knownSecrets = [], this.modifiers = [], this.laws = [], this.memories = [], this.traits = [], this.relationsToPlayer = [], this.relationsToCharacters = [], this.opinionBreakdowns = [], this.opinions = [], this.parents = [], this.children = [], this.siblings = [];
   }
   /**

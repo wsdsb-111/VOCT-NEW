@@ -3,6 +3,7 @@
 const { parseRelationIntent } = require("./relation-intent-parser");
 const { resolveRelationAnchor } = require("./relation-anchor-resolver");
 const { resolveCharacterSexConsensus } = require("./character-demographic-normalizer");
+const { nonnegativeNumber } = require("./character-age-service");
 
 const MAX_RELATION_CANDIDATES = 50;
 
@@ -11,8 +12,7 @@ function characterName(character = {}, runtimeId = "") {
 }
 
 function birthOrderValue(character = {}) {
-  const totalDays = Number(character.birthDateTotalDays ?? character.birthTotalDays);
-  return Number.isFinite(totalDays) ? totalDays : null;
+  return nonnegativeNumber(character.birthDateTotalDays ?? character.birthTotalDays);
 }
 
 function resolveAnchorBirthDay(graph, anchorRuntimeId) {
@@ -61,8 +61,16 @@ function resolveAnchoredRelationMention({ query = "", responderId = null, graph 
   if (allCandidates.some((candidate) => candidate.relationDiagnostic || !candidate.relation)) return { ...base, status: "RELATION_CONFLICT_TYPE", mention: intent.sourcePhrase, candidates: summarize(allCandidates), candidateTotal: allCandidates.length };
   if (intent.sexConstraint && allCandidates.some((candidate) => candidate.sex.conflict)) return { ...base, status: "RELATION_GENDER_CONFLICT", mention: intent.sourcePhrase, candidates: summarize(allCandidates), candidateTotal: allCandidates.length };
   let candidates = allCandidates.filter((candidate) => !intent.sexConstraint || candidate.sex.sex === intent.sexConstraint);
+  if (intent.branches) {
+    if (candidates.some(candidate => !candidate.relation?.branch)) return { ...base, status: "RELATION_AMBIGUOUS", mention: intent.sourcePhrase, candidates: summarize(candidates), candidateTotal: candidates.length, reason: "KINSHIP_BRANCH_UNAVAILABLE" };
+    candidates = candidates.filter(candidate => intent.branches.includes(candidate.relation.branch));
+  }
   if (!candidates.length) return { ...base, status: "RELATION_UNKNOWN", mention: intent.sourcePhrase, candidates: [], candidateTotal: 0 };
-  if (intent.birthOrder === "older" || intent.birthOrder === "younger") {
+  if (intent.branches && (intent.birthOrder === "older" || intent.birthOrder === "younger")) {
+    if (candidates.some(candidate => candidate.relation.seniority === null)) return { ...base, status: "RELATION_AMBIGUOUS", mention: intent.sourcePhrase, candidates: summarize(candidates), candidateTotal: candidates.length, reason: "BIRTH_ORDER_UNAVAILABLE" };
+    candidates = candidates.filter(candidate => intent.birthOrder === "older" ? candidate.relation.seniority > 0 : candidate.relation.seniority < 0);
+    if (!candidates.length) return { ...base, status: "RELATION_UNKNOWN", mention: intent.sourcePhrase, candidates: [], candidateTotal: 0 };
+  } else if (intent.birthOrder === "older" || intent.birthOrder === "younger") {
     const anchorBirth = resolveAnchorBirthDay(graph, anchor.runtimeId);
     if (anchorBirth === null) return { ...base, status: "RELATION_AMBIGUOUS", mention: intent.sourcePhrase, candidates: summarize(candidates), candidateTotal: candidates.length, reason: "ANCHOR_BIRTH_ORDER_UNAVAILABLE" };
     if (candidates.some((candidate) => candidate.birthOrder === null)) return { ...base, status: "RELATION_AMBIGUOUS", mention: intent.sourcePhrase, candidates: summarize(candidates), candidateTotal: candidates.length, reason: "CANDIDATE_BIRTH_ORDER_UNAVAILABLE" };

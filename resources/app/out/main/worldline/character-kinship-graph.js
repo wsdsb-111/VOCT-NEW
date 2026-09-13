@@ -4,6 +4,7 @@ const { resolveCharacterSexConsensus } = require("./character-demographic-normal
 const { resolveLifeStatus } = require("./character-temporal-facts");
 const { resolveKinshipLabel } = require("./kinship-label-resolver");
 const { normalizeSpouseRecords } = require("./canonical-spouse-record");
+const { compareCharacterSeniority } = require("./character-age-service");
 
 function id(value) {
   const raw = value && typeof value === "object" ? value.id ?? value.characterId : value;
@@ -61,6 +62,8 @@ function buildKinshipGraph(source = {}) {
     const key = `${fromId}:${toId}:${type}`;
     if (edgeKeys.has(key)) {
       const existing = edgeByKey.get(key);
+      if (existing && details.branch && existing.branch && existing.branch !== details.branch) existing.branchConflict = true;
+      if (existing && details.branch && !existing.branch) existing.branch = details.branch;
       const incomingKind = details.relationshipKind || null;
       if (existing && incomingKind) {
         if (Array.isArray(existing.relationshipKindConflict)) {
@@ -100,6 +103,12 @@ function buildKinshipGraph(source = {}) {
       const details = relationshipDetails(child);
       add(characterId, childId, "PARENT_OF", [characterId, childId], 1, details);
       add(childId, characterId, "CHILD_OF", [childId, characterId], 1, details);
+    }
+    for (const sibling of values(character?.siblings)) {
+      const siblingId = ensureNode(sibling);
+      if (!siblingId) continue;
+      add(characterId, siblingId, "SIBLING_OF", [characterId, siblingId], 1, { source: "LOG_DIRECT" });
+      add(siblingId, characterId, "SIBLING_OF", [siblingId, characterId], 1, { source: "LOG_DIRECT" });
     }
     for (const spouse of normalizeSpouseRecords(character)) {
       if (spouse.runtimeId === null) continue;
@@ -154,7 +163,10 @@ function buildKinshipGraph(source = {}) {
   for (const childId of allIds) {
     for (const parentEdge of outgoing(childId, "CHILD_OF")) {
       const parentId = parentEdge.to;
-      const branch = parentEdge.branch || null;
+      const parentSex = resolveCharacterSexConsensus({ snapshot: nodes.get(parentId) }).sex;
+      const inferredBranch = parentSex === "male" ? "PATERNAL" : parentSex === "female" ? "MATERNAL" : null;
+      const branch = parentEdge.branchConflict || parentEdge.branch && inferredBranch && parentEdge.branch !== inferredBranch
+        ? null : parentEdge.branch || inferredBranch;
       for (const grandparentId of parentsOf(parentId)) {
         add(grandparentId, childId, "GRANDPARENT_OF", [grandparentId, parentId, childId], 0.95, { source: "DERIVED_KINSHIP", branch });
         add(childId, grandparentId, "GRANDCHILD_OF", [childId, parentId, grandparentId], 0.95, { source: "DERIVED_KINSHIP", branch });
@@ -164,10 +176,10 @@ function buildKinshipGraph(source = {}) {
         add(childId, parentSibling, "NIECE_NEPHEW_OF", [childId, parentId, parentSibling], 0.9, { source: "DERIVED_KINSHIP", branch });
         const parentSiblingNode = nodes.get(parentSibling);
         const sex = resolveCharacterSexConsensus({ snapshot: parentSiblingNode }).sex;
-        const cousinBranch = branch === "PATERNAL" && sex === "male" ? "PATERNAL_MALE" : branch;
+        const cousinBranch = branch === "PATERNAL" ? sex === "male" ? "PATERNAL_MALE" : sex === "female" ? "PATERNAL_FEMALE" : null : branch;
         for (const cousinId of childrenOf(parentSibling)) {
           add(cousinId, childId, "COUSIN_OF", [cousinId, parentSibling, parentId, childId], 0.85, { source: "DERIVED_KINSHIP", branch: cousinBranch });
-          add(childId, cousinId, "COUSIN_OF", [childId, parentId, parentSibling, cousinId], 0.85, { source: "DERIVED_KINSHIP", branch: cousinBranch });
+          // The reverse relation is derived from its own parent branch, not ours.
         }
       }
     }
@@ -187,8 +199,11 @@ function buildKinshipGraph(source = {}) {
     }
     const edge = matches[0] || null;
     if (!edge) return { relation: null, diagnostic: null };
+    if (edge.branchConflict) return { relation: null, diagnostic: { code: "RELATION_CONFLICT_PATH", from: String(from), to: String(to) } };
     const node = nodes.get(String(from));
     const sex = resolveCharacterSexConsensus({ snapshot: node });
+    const seniorityReferenceId = edge.type === "AUNT_UNCLE_OF" ? edge.relationPath[1] : String(to);
+    const seniority = compareCharacterSeniority(node, nodes.get(seniorityReferenceId));
     const structuredPath = [];
     for (let index = 0; index < edge.relationPath.length - 1; index++) {
       const pathFrom = String(edge.relationPath[index]);
@@ -197,7 +212,7 @@ function buildKinshipGraph(source = {}) {
       const relationshipKind = direct?.relationshipKind || edge.relationshipKind || null;
       structuredPath.push({ type: direct?.type || edge.type, from: pathFrom, to: pathTo, ...(relationshipKind ? { relationshipKind } : {}) });
     }
-    return { relation: { ...edge, relationshipKind: edge.relationshipKind || "UNSPECIFIED", sex: sex.sex, sexSource: sex.source, label: resolveKinshipLabel({ type: edge.type, sex: sex.sex, branch: edge.branch }), structuredPath }, diagnostic: null };
+    return { relation: { ...edge, seniority, seniorityReferenceId, relationshipKind: edge.relationshipKind || "UNSPECIFIED", sex: sex.sex, sexSource: sex.source, label: resolveKinshipLabel({ type: edge.type, sex: sex.sex, branch: edge.branch, seniority }), structuredPath }, diagnostic: null };
   };
   const relationBetween = (from, to) => resolveRelationBetween(from, to);
   const relationBetweenOfTypes = (from, to, allowedTypes) => resolveRelationBetween(from, to, allowedTypes);

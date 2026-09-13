@@ -1,6 +1,23 @@
 "use strict";
 
+const EXTENDED_INTENTS = [
+  ...["堂", "表"].flatMap(prefix => [
+    ...["哥", "姐", "弟", "妹"].map(suffix => ({ terms: [prefix + suffix], relationTypes: ["COUSIN_OF"], sexConstraint: ["哥", "弟"].includes(suffix) ? "male" : "female", birthOrder: ["哥", "姐"].includes(suffix) ? "older" : "younger", branches: prefix === "堂" ? ["PATERNAL_MALE"] : ["PATERNAL_FEMALE", "MATERNAL"], label: prefix + suffix })),
+    { terms: [prefix + "亲"], relationTypes: ["COUSIN_OF"], branches: prefix === "堂" ? ["PATERNAL_MALE"] : ["PATERNAL_FEMALE", "MATERNAL"], label: prefix + "亲" }
+  ]),
+  { terms: ["伯父", "伯伯"], relationTypes: ["AUNT_UNCLE_OF"], sexConstraint: "male", birthOrder: "older", branches: ["PATERNAL"], label: "伯父" },
+  { terms: ["叔父", "叔叔"], relationTypes: ["AUNT_UNCLE_OF"], sexConstraint: "male", birthOrder: "younger", branches: ["PATERNAL"], label: "叔父" },
+  { terms: ["姑母", "姑姑"], relationTypes: ["AUNT_UNCLE_OF"], sexConstraint: "female", branches: ["PATERNAL"], label: "姑母" },
+  { terms: ["舅父", "舅舅"], relationTypes: ["AUNT_UNCLE_OF"], sexConstraint: "male", branches: ["MATERNAL"], label: "舅父" },
+  { terms: ["姨母", "姨妈", "阿姨"], relationTypes: ["AUNT_UNCLE_OF"], sexConstraint: "female", branches: ["MATERNAL"], label: "姨母" },
+  ...[["祖父", "爷爷", "male", "PATERNAL"], ["祖母", "奶奶", "female", "PATERNAL"], ["外祖父", "外公", "male", "MATERNAL"], ["外祖母", "外婆", "female", "MATERNAL"]].map(([label, alias, sexConstraint, branch]) => ({ terms: [label, alias], relationTypes: ["GRANDPARENT_OF"], sexConstraint, branches: [branch], label }))
+];
+
 const INTENTS = [
+  ...EXTENDED_INTENTS.flatMap(intent => [
+    { ...intent, terms: intent.terms.flatMap(term => ["你" + term, "你的" + term]), anchorMode: "RESPONDER" },
+    { ...intent, anchorMode: "EXPLICIT" }
+  ]),
   { terms: ["你儿子", "你的儿子"], relationTypes: ["CHILD_OF"], sexConstraint: "male", label: "儿子", anchorMode: "RESPONDER" },
   { terms: ["你女儿", "你的女儿"], relationTypes: ["CHILD_OF"], sexConstraint: "female", label: "女儿", anchorMode: "RESPONDER" },
   { terms: ["你子女", "你的孩子"], relationTypes: ["CHILD_OF"], sexConstraint: null, label: "子女", anchorMode: "RESPONDER" },
@@ -65,6 +82,7 @@ function parseRelationIntent(query = "") {
     spouseStatus: match.intent.spouseStatus || null,
     sexConstraint: match.intent.sexConstraint,
     birthOrder: match.intent.birthOrder || null,
+    branches: match.intent.branches || null,
     recency: match.intent.recency || null,
     anchorMention: null,
     sourcePhrase: match.term,

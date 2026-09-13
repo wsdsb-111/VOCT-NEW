@@ -1068,13 +1068,12 @@ class Conversation {
   }
   async waitForActionConfirmation(result, { timeoutMs = 12e3, pollMs = 500 } = {}) {
     if (!result?.confirmation) return result;
-    const startedAt = Date.now();
-    while (Date.now() - startedAt < timeoutMs) {
+    let observedWriteAt = null;
+    while (true) {
+      // Queue TTL belongs to RunFileManager; ACK time starts only after a write.
+      runFileManager.expireQueuedActions?.();
       const command = this.getRunCommand(result.confirmation.dispatch?.commandId);
-      if (command?.status === "queued" && runFileManager.getQueueHealth?.()?.queueBlocked) {
-        runFileManager.cancelCommand(command.commandId, "action_queue_blocked", { advance: false });
-        return settleActionResult(result, { status: "QUEUE_BLOCKED", commandStatus: "cancelled", stateAfter: null });
-      }
+      if (!command) return settleActionResult(result, { status: "UNCONFIRMED", stateAfter: null });
       if (command?.status === "acknowledged") {
         try {
           const commandReadback = result.confirmation.requireCommandReadback
@@ -1098,14 +1097,14 @@ class Conversation {
           console.warn("[ActionConfirmation] runtime refresh failed:", error);
         }
       } else if (command && ["failed", "cancelled", "expired", "quarantined"].includes(command.status)) {
-        return settleActionResult(result, { status: "UNCONFIRMED", stateAfter: null, revisionAfter: this.gameDataRevision, confirmedStateChange: null, commandStatus: command.status });
+        return settleActionResult(result, { status: command.status === "expired" && !runFileManager.hasWriteHistory(command) ? "QUEUE_EXPIRED" : "UNCONFIRMED", stateAfter: null, revisionAfter: this.gameDataRevision, confirmedStateChange: null, commandStatus: command.status });
+      }
+      if (runFileManager.hasWriteHistory(command)) {
+        observedWriteAt ??= Date.now();
+        const writtenAt = command.lastWrittenAt ?? command.writtenAt ?? observedWriteAt;
+        if (Date.now() - writtenAt >= timeoutMs) break;
       }
       await new Promise((resolve) => setTimeout(resolve, pollMs));
-    }
-    const command = this.getRunCommand(result.confirmation.dispatch?.commandId);
-    if (command && !runFileManager.hasWriteHistory(command)) {
-      runFileManager.cancelCommand(command.commandId, "action_queue_timeout", { advance: false });
-      return settleActionResult(result, { status: "QUEUE_EXPIRED", commandStatus: "cancelled", stateAfter: null });
     }
     return settleActionResult(result, { status: "TIMEOUT", stateAfter: null, revisionAfter: this.gameDataRevision, confirmedStateChange: null });
   }

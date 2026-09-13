@@ -49,6 +49,8 @@ const expectedActionHashes = {
   "z_setEmotion.js": "42e11cf67fdf89cf274d86c9ae19b1c4eb29a073996f783f1981ece5f9488700"
 };
 const v883ActionOverrides = new Set(["z_paysGoldTo.js", "z_playerPaysGoldTo.js"]);
+// V8.8.5 changes feedback only; official source hashes above remain frozen.
+const v885ActionHashes = { "z_changeOpinionOf.js": "fc5e1f3ece104642cd3ba793cc404fb760e4761135adb4093552950c92901b96" };
 
 const player = { id: 101, fullName: "Player One", shortName: "Player" };
 const npc = { id: 202, fullName: "NPC Two", shortName: "NPC" };
@@ -93,7 +95,7 @@ if (fs.existsSync(officialMainPath)) {
 assert.deepStrictEqual(fs.readdirSync(currentActionsDir).filter((file) => file.endsWith(".js")).sort(), Object.keys(expectedActionHashes).sort());
 for (const [file, expectedHash] of Object.entries(expectedActionHashes)) {
   if (v883ActionOverrides.has(file)) continue;
-  assert.strictEqual(hash(fs.readFileSync(path.join(currentActionsDir, file), "utf8")), expectedHash, `ported standard action drift: ${file}`);
+  assert.strictEqual(hash(fs.readFileSync(path.join(currentActionsDir, file), "utf8")), v885ActionHashes[file] || expectedHash, `ported standard action drift: ${file}`);
 }
 for (const file of v883ActionOverrides) {
   const actionSource = fs.readFileSync(path.join(currentActionsDir, file), "utf8");

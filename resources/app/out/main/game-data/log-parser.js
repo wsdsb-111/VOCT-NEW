@@ -1,5 +1,7 @@
 "use strict";
 
+const { nonnegativeNumber } = require("../worldline/character-age-service");
+
 const fs = require("fs");
 const readline = require("readline");
 const { inferGenderFromPronoun } = require("./character");
@@ -450,7 +452,7 @@ function createLogParser({ GameData, Character, onGameDataParsed = null }) {
             const parent = {
               id: Number(data[1]),
               name: data[2],
-              birthDateTotalDays: Number(data[3]),
+              birthDateTotalDays: nonnegativeNumber(data[3]),
               birthDate: data[4]
             };
             gameData.characters.get(rootID).parents.push(parent);
@@ -471,7 +473,7 @@ function createLogParser({ GameData, Character, onGameDataParsed = null }) {
               sheHe: data[3],
               gender: inferGenderFromPronoun(data[3]),
               genderSource: "CK3_LIVE_RELATIVE",
-              birthDateTotalDays: Number(data[4]),
+              birthDateTotalDays: nonnegativeNumber(data[4]),
               birthDate: data[5],
               traits: [],
               maritalStatus: "unmarried",
@@ -557,7 +559,7 @@ function createLogParser({ GameData, Character, onGameDataParsed = null }) {
               sheHe: data[3],
               gender: inferGenderFromPronoun(data[3]),
               genderSource: "CK3_LIVE_RELATIVE",
-              birthDateTotalDays: Number(data[4]),
+              birthDateTotalDays: nonnegativeNumber(data[4]),
               birthDate: data[5],
               traits: [],
               maritalStatus: "unmarried",

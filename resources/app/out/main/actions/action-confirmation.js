@@ -17,6 +17,10 @@ function extractRequestedActionArgs(actionId, history = []) {
   if (!new Set(["paysGoldTo", "playerPaysGoldTo"]).has(actionId)) return null;
   const latestUserText = [...(Array.isArray(history) ? history : [])].reverse().find((entry) => entry?.role === "user")?.content;
   if (typeof latestUserText !== "string") return null;
+  // A correction, negation or additional number makes deterministic ownership
+  // unclear. Leave the validated Action model arguments intact in that case.
+  const numbers = latestUserText.match(/[0-9][0-9,]*(?:\.[0-9]+)?\s*两?|[零〇一二两三四五六七八九十百千万亿]+/g) || [];
+  if (numbers.length !== 1 || /不要|别给|不付|不给|取消|改成|改为|等等|[+-]\s*\d|\b(?:not|no|don't|instead|cancel|wait)\b/i.test(latestUserText)) return null;
   const amountToken = "([0-9][0-9,]*(?:\\.[0-9]+)?)";
   const paymentVerb = "(?:给|付给|支付|赠予|赠给|赏给|交给|转给|送给|拿出|pay|give|gift|transfer)";
   const match = latestUserText.match(new RegExp(`${paymentVerb}.{0,24}?${amountToken}`, "i"));

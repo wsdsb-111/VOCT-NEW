@@ -26,7 +26,7 @@ Voices of the Court 是一个面向《Crusader Kings III》（CK3）的沉浸式
 
 ## 运行环境
 
-当前修复基线为 **V8.8.4**：[关系与动作事故修复报告](docs/v8.8.4-incident-implementation-report.md)。关系识别已由用户实机确认；动作增加旧会话队列隔离、NPC 专用索引、玩家 root 绑定、缺失绑定保护和游戏侧同命令防重复执行。金币与好感度改为同一命令 BEGIN—ACK 内的前后状态核验，普通 ACK 不冒充效果成功。290/290 发布组及隔离 Electron 启动/导航通过；最新动作补丁的真实 CK3 效果与长时验收仍待完成。
+当前修复基线为 **V8.8.5**：[审查问题与扩展亲属改进报告](docs/v8.8.5-review-kinship-implementation-report.md)。动作排队 TTL 与写入后的确认计时分离，多金额/改口不再强制覆盖模型金额，好感度先显示待确认；修复空年龄变成 0 岁，旧英文人物模板接入当前 CK3 扩展亲属、年龄与性别，按证据细分堂表兄姐弟妹、伯父/叔父及父母系祖辈。291/291 发布组、360 个已分类测试文件及隔离 Electron 启动/导航通过；真实 CK3 动作和扩展亲属仍待复测。V8.8.4 已实测通过的子女性别识别不等同于本版全部实机验收。
 
 V8.8.3 已完成 Luna + Terra + Sol 的 [Action 生命周期、真实回读与 Current Truth 收口](docs/v8.8.3-sol-final-review.md)：金币动作不再预写本地金币；同一 RunFile 在 Effect 后输出双方实时金币，ACK 后只有精确变化才标记 `CONFIRMED`。被提及人物、在场关系与 Family Fact 共用当前亲属事实，canonical Runtime 性别优先，缺失/冲突使用中性称谓，Memory 不参与当前性别。玩家显式金额与模型参数漂移会记录 `ACTION_ARGUMENT_DRIFT` 并以玩家数值执行。代码侧 289/289 发布组通过，Final Freeze 等待真实 CK3 人工 Gate。
 
@@ -233,7 +233,7 @@ node scripts\test-release.js
 - UI 主题：宫廷编年史风格（深红、暗金、羊皮纸文本层级）
 - UI 主题切换：游牧、骑士纹章、水墨画卷三套完整历史风格；分别使用 `image/草原游牧.png`、`image/中世纪骑士.png`、`image/中国古典.png` 作为整块界面背景，并保留各自的边框结构、按钮造型、消息卡片、输入框、字体和滚动条，主题选择可自动保存
 - UI 素材生成提示词：参见 [docs/UI_ASSET_PROMPTS_2.0.3.md](docs/UI_ASSET_PROMPTS_2.0.3.md)
-- 当前重点：执行 V8.8.4 动作补丁人工 Gate，验证金币单次双边变化、好感度实际变化/上限、其他动作实际效果与命令角色绑定；关系识别用户实机已通过。Official VOTC 2.0.3 Action 定义与 Memory Engine 2.6 存储合同保持兼容
+- 当前重点：执行 V8.8.5 人工 Gate，验证多动作排队、改口金额、好感度确认前后文案与游戏效果，以及旧英文模板中的扩展亲属/长幼称谓。Official VOTC 2.0.3 Action 签名、Memory Engine 2.6 标签及 2.5 存储合同保持兼容
 
 ## 已知限制
 
