@@ -74,15 +74,35 @@ class Conversation {
   }
   static buildPromptBlockMetadata(promptBuild = {}) {
     const hasExplicitStability = (promptBuild.blocks || []).some(({ block }) => block?.stable !== undefined);
-    const blocks = (promptBuild.blocks || []).map(({ block, content, tokens }, index) => ({
-      id: block.id,
-      label: block.label,
-      type: block.type,
-      position: index,
-      tokens,
-      fingerprint: createPromptFingerprint(content),
-      stable: hasExplicitStability ? block.stable === true : null
-    }));
+    const messages = Array.isArray(promptBuild.messages) ? promptBuild.messages : [];
+    let messageCursor = 0;
+    const blocks = (promptBuild.blocks || []).map(({ block, content, tokens }, index) => {
+      let messageStartPosition = null;
+      let messageCount = 0;
+      const blockContent = typeof content === "string" ? content : "";
+      for (let end = messageCursor + 1; blockContent && end <= messages.length; end += 1) {
+        const candidate = messages.slice(messageCursor, end);
+        const directContent = candidate.length === 1 ? candidate[0]?.content : null;
+        const roleContent = candidate.map((message) => `${message.role}: ${message.content}`).join("\n\n");
+        if (directContent === blockContent || roleContent === blockContent) {
+          messageStartPosition = messageCursor;
+          messageCount = candidate.length;
+          messageCursor = end;
+          break;
+        }
+      }
+      return {
+        id: block.id,
+        label: block.label,
+        type: block.type,
+        position: index,
+        messageStartPosition,
+        messageCount,
+        tokens,
+        fingerprint: createPromptFingerprint(content),
+        stable: hasExplicitStability ? block.stable === true : null
+      };
+    });
     const firstHistoryIndex = blocks.findIndex((block) => block.type === "history" || block.type === "presence_roster" || block.type === "current_user");
     const historyStartPosition = firstHistoryIndex >= 0 ? firstHistoryIndex : blocks.length;
     const firstDynamicIndex = hasExplicitStability ? blocks.findIndex((block) => block.stable === false) : -1;

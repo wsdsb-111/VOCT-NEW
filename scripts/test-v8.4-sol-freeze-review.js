@@ -168,10 +168,13 @@ async function run() {
     assert.match(workerSource, /gamestate_index_bounds_exceeded/, "worker must bound indexed snapshot memory");
     assert.doesNotMatch(serviceSource, /readFileSync\(target\)/, "main-process validation must not read the full save");
     assert.ok(promptSource.indexOf("if (memoryContext?.worldStableText)") < promptSource.indexOf("if (memoryContext?.topicPatchText)"), "stable Game Truth must precede personal topic patches");
-    assert.ok(promptSource.indexOf("if (options.worldTopicText)") < promptSource.indexOf("if (options.worldSupplementalText)"), "Game Truth topic facts must precede Supplemental knowledge");
-    assert.ok(promptSource.indexOf("if (options.worldSupplementalText)") < promptSource.indexOf("if (options.worldCurrentText)"), "world layers must retain explicit source separation");
-    assert.ok(promptSource.indexOf("if (options.worldCurrentText)") < promptSource.indexOf("\n          appendPriorHistory();"), "current world context must be placed before conversation history");
-    assert.ok(promptSource.indexOf("if (currentUserMessage)") < promptSource.indexOf("if (options.turnRecallText)"), "V7 current-user then Turn Recall compatibility must remain frozen");
+    const v89LayoutStart = promptSource.indexOf("if (options.v89Layout)");
+    const v89LayoutEnd = promptSource.indexOf("} else {", v89LayoutStart);
+    const v89Layout = promptSource.slice(v89LayoutStart, v89LayoutEnd);
+    assert.ok(v89Layout.indexOf("appendWorldTopic();") < v89Layout.indexOf("appendWorldSupplemental();"), "Game Truth topic facts must precede Supplemental knowledge");
+    assert.ok(v89Layout.indexOf("appendWorldSupplemental();") < v89Layout.indexOf("appendWorldCurrent();"), "world layers must retain explicit source separation");
+    assert.ok(v89Layout.indexOf("appendPriorHistory();") < v89Layout.indexOf("appendWorldCurrent();"), "V8.9 must move volatile world context behind prior conversation history");
+    assert.ok(v89Layout.indexOf("appendCurrentUser();") < v89Layout.indexOf("appendTurnRecall();"), "current-user then Turn Recall compatibility must remain frozen");
     assert.match(rendererSource, /invoke\("updateSupplemental", id, \{ \.\.\.current, hidden: !current\.hidden \}\)/, "hide/show must persist through main IPC");
     assert.match(rendererSource, /if \(!result\) return;/, "failed Supplemental writes must not clear or falsify the editor state");
     assert.match(ipcSource, /syncAutosaveFromCK3Folder/, "changing the CK3 user folder must synchronize the managed autosave source");

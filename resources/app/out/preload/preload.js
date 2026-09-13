@@ -184,7 +184,10 @@ electron.contextBridge.exposeInMainWorld("providerDiagnosticsAPI", {
   runCacheProbe: () => electron.ipcRenderer.invoke("providerDiagnostics:runCacheProbe"),
   runClearThinkingAB: () => electron.ipcRenderer.invoke("providerDiagnostics:runClearThinkingAB"),
   getRecent: (limit) => electron.ipcRenderer.invoke("providerDiagnostics:getRecent", limit),
-  exportRecent: (limit) => electron.ipcRenderer.invoke("providerDiagnostics:exportRecent", limit)
+  exportRecent: (limit) => electron.ipcRenderer.invoke("providerDiagnostics:exportRecent", limit),
+  getV89Settings: () => electron.ipcRenderer.invoke("providerDiagnostics:getV89Settings"),
+  saveV89Settings: (settings) => electron.ipcRenderer.invoke("providerDiagnostics:saveV89Settings", settings),
+  ensureV89ChatPresets: () => electron.ipcRenderer.invoke("providerDiagnostics:ensureV89ChatPresets")
 });
 electron.contextBridge.exposeInMainWorld("worldlineAPI", {
   getSettings: () => electron.ipcRenderer.invoke("worldline:getSettings"),

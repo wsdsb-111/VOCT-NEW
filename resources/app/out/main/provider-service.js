@@ -183,7 +183,22 @@ class LLMManager {
       this.logVerboseLLM("[LLMManager][verbose] Chat messages:", messages);
       this.logVerboseLLM("[LLMManager][verbose] Provider config:", JSON.stringify(activeConfig).replace(/"apiKey":\s*"[^"]*"/g, "HIDDEN"));
     }
-    return await this.trackUsage(provider.chatCompletion(request, activeConfig), { ...metadata, requestType: metadata.requestType || "chat", providerType: activeConfig.providerType, model: activeConfig.defaultModel, estimatedPromptTokens });
+    const requestType = metadata.requestType || "chat";
+    const v89Settings = this.settingsRepository.getChatPromptV89Settings?.() || { chatPromptV89OutboundDiagnostics: true };
+    const outboundFingerprint = requestType === "chat" && v89Settings.chatPromptV89OutboundDiagnostics !== false
+      ? this.providerDiagnostics?.prepareOutboundRequest({ provider: activeConfig.providerType, model: activeConfig.defaultModel, requestType, messages, blocks: metadata.blocks }) || null
+      : null;
+    const requestStartedAt = new Date().toISOString();
+    return await this.trackUsage(provider.chatCompletion(request, activeConfig), {
+      ...metadata,
+      requestType,
+      providerType: activeConfig.providerType,
+      model: activeConfig.defaultModel,
+      estimatedPromptTokens,
+      outboundFingerprint,
+      requestStartedAt,
+      captureChatTiming: requestType === "chat"
+    });
   }
   /**
    * Send a structured JSON request for Actions.
@@ -399,7 +414,7 @@ class LLMManager {
   }
   async trackUsage(result, metadata) {
     const response = await result;
-    const recordUsage = (finalResponse) => {
+    const recordUsage = (finalResponse, timing = {}) => {
       const usage = this.buildUsageRecord(finalResponse, metadata);
       this.usageAnalytics.record(metadata, usage);
       this.providerDiagnostics?.recordResponse({
@@ -408,7 +423,11 @@ class LLMManager {
         requestType: metadata.requestType,
         response: finalResponse,
         usage,
-        metadata
+        metadata,
+        startedAt: metadata.requestStartedAt,
+        firstReasoningAt: timing.firstReasoningAt,
+        firstVisibleContentAt: timing.firstVisibleContentAt,
+        completedAt: timing.completedAt || new Date().toISOString()
       });
       return usage;
     };
@@ -416,18 +435,27 @@ class LLMManager {
       const iterator = response[Symbol.asyncIterator]();
       return {
         async *[Symbol.asyncIterator]() {
+          let firstReasoningAt = null;
+          let firstVisibleContentAt = null;
           while (true) {
             const step = await iterator.next();
             if (step.done) {
-              recordUsage(step.value);
+              recordUsage(step.value, { firstReasoningAt, firstVisibleContentAt, completedAt: new Date().toISOString() });
               return step.value;
             }
+            if (metadata.captureChatTiming && !firstReasoningAt && step.value?.delta?.reasoning) firstReasoningAt = new Date().toISOString();
+            if (metadata.captureChatTiming && !firstVisibleContentAt && step.value?.delta?.content) firstVisibleContentAt = new Date().toISOString();
             yield step.value;
           }
         }
       };
     }
-    recordUsage(response);
+    const completedAt = new Date().toISOString();
+    recordUsage(response, {
+      firstReasoningAt: metadata.captureChatTiming && (response?.reasoning || response?.reasoning_content) ? completedAt : null,
+      firstVisibleContentAt: metadata.captureChatTiming && response?.content ? completedAt : null,
+      completedAt
+    });
     return response;
   }
   buildUsageRecord(response, metadata = {}) {

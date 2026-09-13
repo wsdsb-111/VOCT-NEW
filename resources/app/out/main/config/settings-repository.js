@@ -77,6 +77,15 @@ function createSettingsRepository({ Store, schema, SecureProviderSecrets, electr
       if (currentAppSettings.showSettingsOnStartup === void 0) {
         this.store.set("showSettingsOnStartup", true);
       }
+      if (currentAppSettings.chatPromptV89Layout === void 0) {
+        this.store.set("chatPromptV89Layout", true);
+      }
+      if (currentAppSettings.chatPromptV89OutboundDiagnostics === void 0) {
+        this.store.set("chatPromptV89OutboundDiagnostics", true);
+      }
+      if (currentAppSettings.chatPromptV89RuntimeProfileSplit === void 0) {
+        this.store.set("chatPromptV89RuntimeProfileSplit", false);
+      }
       if (currentAppSettings.actionApprovalSettings === void 0) {
         this.store.set("actionApprovalSettings", {
           approvalMode: "none",
@@ -147,6 +156,7 @@ function createSettingsRepository({ Store, schema, SecureProviderSecrets, electr
         generateFollowingMessages: this.getGenerateFollowingMessagesSetting(),
         messageFontSize: this.getMessageFontSize(),
         showSettingsOnStartup: this.getShowSettingsOnStartup(),
+        chatPromptV89Settings: this.getChatPromptV89Settings(),
         allowPrerelease: this.getAllowPrerelease(),
         promptSettings: this.getPromptSettings(),
         letterPromptSettings: this.getLetterPromptSettings(),
@@ -249,6 +259,25 @@ function createSettingsRepository({ Store, schema, SecureProviderSecrets, electr
     saveShowSettingsOnStartupSetting(enabled) {
       this.store.set("showSettingsOnStartup", enabled);
       console.log("Show settings on startup setting saved:", enabled);
+    }
+    getChatPromptV89Settings() {
+      return {
+        chatPromptV89Layout: this.store.get("chatPromptV89Layout", true) !== false,
+        chatPromptV89OutboundDiagnostics: this.store.get("chatPromptV89OutboundDiagnostics", true) !== false,
+        chatPromptV89RuntimeProfileSplit: this.store.get("chatPromptV89RuntimeProfileSplit", false) === true
+      };
+    }
+    saveChatPromptV89Settings(settings = {}) {
+      const current = this.getChatPromptV89Settings();
+      const next = {
+        chatPromptV89Layout: typeof settings.chatPromptV89Layout === "boolean" ? settings.chatPromptV89Layout : current.chatPromptV89Layout,
+        chatPromptV89OutboundDiagnostics: typeof settings.chatPromptV89OutboundDiagnostics === "boolean" ? settings.chatPromptV89OutboundDiagnostics : current.chatPromptV89OutboundDiagnostics,
+        chatPromptV89RuntimeProfileSplit: typeof settings.chatPromptV89RuntimeProfileSplit === "boolean" ? settings.chatPromptV89RuntimeProfileSplit : current.chatPromptV89RuntimeProfileSplit
+      };
+      this.store.set("chatPromptV89Layout", next.chatPromptV89Layout);
+      this.store.set("chatPromptV89OutboundDiagnostics", next.chatPromptV89OutboundDiagnostics);
+      this.store.set("chatPromptV89RuntimeProfileSplit", next.chatPromptV89RuntimeProfileSplit);
+      return next;
     }
     getLanguage() {
       return this.store.get("language", "en");
@@ -378,6 +407,41 @@ function createSettingsRepository({ Store, schema, SecureProviderSecrets, electr
       }
       this.saveLLMSettings(settings);
       return configToSave;
+    }
+    ensureV89ChatPresets() {
+      const zhipu = this.getProviderConfigById("zhipu") || {};
+      const compatible = this.getProviderConfigById("openai-compatible") || {};
+      const presets = [
+        {
+          ...zhipu,
+          instanceId: "v89-chat-glm53f-low",
+          providerType: "zhipu",
+          customName: "V8.9 · GLM53F-Low",
+          baseUrl: zhipu.baseUrl || "https://open.bigmodel.cn/api/paas/v4",
+          defaultModel: "glm-5.3-flash",
+          customContextLength: 9e4,
+          defaultParameters: { ...(zhipu.defaultParameters || {}), temperature: 0.7 },
+          glmReasoningEffort: "low",
+          glmClearThinking: true
+        },
+        {
+          ...compatible,
+          instanceId: "v89-chat-dsv4f-0731",
+          providerType: "openai-compatible",
+          customName: "V8.9 · DSV4F-0731",
+          defaultModel: "deepseek-v4-flash-0731",
+          customContextLength: 9e4,
+          defaultParameters: { ...(compatible.defaultParameters || {}), temperature: 0.7 }
+        }
+      ];
+      for (const preset of presets) this.saveProviderConfig(preset);
+      return {
+        success: true,
+        presets: presets.map(({ instanceId, customName, providerType, defaultModel }) => ({ instanceId, customName, providerType, defaultModel })),
+        activeProviderInstanceId: this.getActiveProviderInstanceId(),
+        actionsProviderInstanceId: this.getActionsProviderInstanceId(),
+        summaryProviderInstanceId: this.getSummaryProviderInstanceId()
+      };
     }
     // deleteProviderConfig is effectively deletePreset now, as base configs are not deleted
     deletePreset(presetInstanceId) {

@@ -22032,6 +22032,8 @@ const ProviderDiagnosticsView = () => {
   const [copyMessage, setCopyMessage] = reactExports.useState(null);
   const [error, setError] = reactExports.useState(null);
   const [busy, setBusy] = reactExports.useState(null);
+  const [v89Settings, setV89Settings] = reactExports.useState({ chatPromptV89Layout: true, chatPromptV89OutboundDiagnostics: true, chatPromptV89RuntimeProfileSplit: false });
+  const [presetResult, setPresetResult] = reactExports.useState(null);
   const isChinese = (i18n.language || "").toLowerCase().startsWith("zh");
   const text = (zh, en) => isChinese ? zh : en;
   const formatTokens = (value) => value == null ? "—" : new Intl.NumberFormat(isChinese ? "zh-CN" : "en-US").format(Math.round(Number(value) || 0));
@@ -22051,9 +22053,10 @@ const ProviderDiagnosticsView = () => {
     }
     try {
       setError(null);
-      const [nextStatus, nextRecent] = await Promise.all([api.getStatus(), api.getRecent(50)]);
+      const [nextStatus, nextRecent, nextV89Settings] = await Promise.all([api.getStatus(), api.getRecent(50), api.getV89Settings?.()]);
       setStatus(nextStatus);
       setRecent(Array.isArray(nextRecent) ? nextRecent : []);
+      if (nextV89Settings) setV89Settings(nextV89Settings);
     } catch (loadError) {
       console.error("Failed to load provider diagnostics:", loadError);
       setError(loadError?.message || text("无法读取智谱诊断。", "Failed to load provider diagnostics."));
@@ -22102,6 +22105,29 @@ const ProviderDiagnosticsView = () => {
       setBusy(null);
     }
   };
+  const updateV89Setting = async (key, value) => {
+    try {
+      setBusy(key);
+      setError(null);
+      const saved = await window.providerDiagnosticsAPI.saveV89Settings({ ...v89Settings, [key]: value });
+      setV89Settings(saved);
+    } catch (saveError) {
+      setError(saveError?.message || text("V8.9 开关保存失败。", "Failed to save V8.9 settings."));
+    } finally {
+      setBusy(null);
+    }
+  };
+  const ensureV89ChatPresets = async () => {
+    try {
+      setBusy("ensureV89ChatPresets");
+      setError(null);
+      setPresetResult(await window.providerDiagnosticsAPI.ensureV89ChatPresets());
+    } catch (presetError) {
+      setError(presetError?.message || text("双模型预设创建失败。", "Failed to create dual-model presets."));
+    } finally {
+      setBusy(null);
+    }
+  };
   const copyEntry = async (entry) => {
     try {
       await navigator.clipboard.writeText(JSON.stringify(entry, null, 2));
@@ -22135,11 +22161,16 @@ const ProviderDiagnosticsView = () => {
     /* @__PURE__ */ jsxRuntimeExports.jsx("h4", { children: title }),
     result.rawUsage || result.normalizedUsage ? /* @__PURE__ */ jsxRuntimeExports.jsxs(React.Fragment, { children: [usagePanel(text("原始 Usage", "Raw Usage"), result.rawUsage, false), usagePanel(text("VOCT Normalize 后", "VOCT normalized"), result.normalizedUsage, true), rawDetails(result.rawUsage)] }) : null,
     result.localPrefixDiagnostics && /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "worldline-diagnostics", children: [
-      /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { children: [text("本地估算可复用前缀", "Local estimated reusable prefix"), "：", formatTokens(result.localPrefixDiagnostics.reusablePrefixTokens)] }),
-      /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { children: [text("最早变化段", "First break"), "：", result.localPrefixDiagnostics.firstBreakSegment || "—"] })
+      /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { children: [text("Provider Hit Block 归因估算", "Provider Hit Block attribution estimate"), "：", formatTokens(result.localPrefixDiagnostics.reusablePrefixTokens)] }),
+      /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { children: [text("归因估算最早变化段", "Attribution-estimated first break"), "：", result.localPrefixDiagnostics.firstBreakSegment || "—"] })
+    ] }),
+    result.outboundFingerprint && /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "worldline-diagnostics", children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { children: [text("Outbound 实际公共前缀估算", "Outbound actual common-prefix estimate"), "：", formatTokens(result.outboundFingerprint.commonPrefixWithPrevious?.commonEstimatedTokens)] }),
+      /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { children: [text("公共消息数", "Common messages"), "：", result.outboundFingerprint.commonPrefixWithPrevious?.commonMessageCount ?? "—"] }),
+      /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { children: [text("首个实际差异位置 / Block", "First actual difference / block"), "：", result.outboundFingerprint.commonPrefixWithPrevious?.firstDifferentPosition ?? "—", " / ", result.outboundFingerprint.commonPrefixWithPrevious?.firstDifferentBlockId || "—"] })
     ] }),
     result.cache && /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { className: "muted-text", children: [text("缓存命中", "Cache hit"), "：", formatTokens(result.cache.hit), " · ", text("命中率", "Hit rate"), "：", formatPercent(result.cache.hitRate)] }),
-    result.totalLatencyMs != null && /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { className: "muted-text", children: [text("总耗时", "Total latency"), "：", `${result.totalLatencyMs} ms`] })
+    result.totalLatencyMs != null && /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { className: "muted-text", children: [text("推理 TTFT / 可见 TTFT / 输出 / 总耗时", "Reasoning TTFT / visible TTFT / output / total"), "：", `${result.reasoningTTFTMs ?? "—"} / ${result.visibleTTFTMs ?? "—"} / ${result.outputTimeMs ?? "—"} / ${result.totalLatencyMs} ms`] })
   ] }) : null;
   const renderProbe = () => {
     if (!cacheProbe) return null;
@@ -22163,14 +22194,15 @@ const ProviderDiagnosticsView = () => {
   return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "optimization-view provider-diagnostics-view", children: [
     /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "optimization-header", children: [
       /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
-        /* @__PURE__ */ jsxRuntimeExports.jsx("h3", { children: text("智谱 GLM 缓存诊断", "Zhipu GLM Cache Diagnostics") }),
-        /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "muted-text", children: text("独立于世界书和 CK3 的 Provider 观测程序；Provider Truth 与本地前缀估算分开显示。", "An independent Provider observation tool; Provider truth is shown separately from the local prefix estimate.") })
+        /* @__PURE__ */ jsxRuntimeExports.jsx("h3", { children: text("V8.9 主对话缓存诊断", "V8.9 Chat Cache Diagnostics") }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "muted-text", children: text("独立于世界书和 CK3；按 Provider Truth、Outbound 实际公共前缀估算、Block 归因估算的优先级展示。", "Independent from World Book and CK3; evidence is shown in Provider truth, outbound common-prefix, then block-attribution order.") })
       ] }),
       /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "optimization-header-actions", children: [
         /* @__PURE__ */ jsxRuntimeExports.jsx("button", { type: "button", onClick: load, disabled: busy != null, children: text("刷新", "Refresh") }),
         /* @__PURE__ */ jsxRuntimeExports.jsx("button", { type: "button", onClick: testConnection, disabled: busy != null, children: busy === "testConnection" ? text("测试中…", "Testing…") : text("测试连接", "Test connection") }),
         /* @__PURE__ */ jsxRuntimeExports.jsx("button", { type: "button", onClick: () => run("runCacheProbe", setCacheProbe), disabled: busy != null, children: busy === "runCacheProbe" ? text("测试中…", "Testing…") : text("测试缓存", "Test cache") }),
         /* @__PURE__ */ jsxRuntimeExports.jsx("button", { type: "button", onClick: () => run("runClearThinkingAB", setClearThinkingAB), disabled: busy != null, children: busy === "runClearThinkingAB" ? text("测试中…", "Testing…") : text("测试 clear_thinking A/B", "Test clear_thinking A/B") }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx("button", { type: "button", onClick: ensureV89ChatPresets, disabled: busy != null, children: busy === "ensureV89ChatPresets" ? text("创建中…", "Creating…") : text("创建 V8.9 双模型预设", "Create V8.9 dual-model presets") }),
         /* @__PURE__ */ jsxRuntimeExports.jsx("button", { type: "button", onClick: exportRecent, disabled: busy != null, children: busy === "exportRecent" ? text("导出中…", "Exporting…") : text("导出最近 50 条诊断", "Export latest 50 diagnostics") })
       ] })
     ] }),
@@ -22184,6 +22216,13 @@ const ProviderDiagnosticsView = () => {
         [text("端点", "Endpoint"), status.baseUrl || "—"]
       ].map(([label, value]) => /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "optimization-metric", children: [/* @__PURE__ */ jsxRuntimeExports.jsx("span", { children: label }), /* @__PURE__ */ jsxRuntimeExports.jsx("strong", { children: value })] }, label)) }),
       status.error && /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "optimization-error", children: status.error })
+    ] }),
+    /* @__PURE__ */ jsxRuntimeExports.jsxs("section", { className: "optimization-section", children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsx("h4", { children: text("V8.9 Chat Prompt 开关", "V8.9 Chat Prompt switches") }),
+      /* @__PURE__ */ jsxRuntimeExports.jsxs("label", { className: "optimization-checkbox", children: [/* @__PURE__ */ jsxRuntimeExports.jsx("input", { type: "checkbox", checked: v89Settings.chatPromptV89Layout !== false, disabled: busy != null, onChange: (event) => updateV89Setting("chatPromptV89Layout", event.target.checked) }), text("启用 v6 稳定前缀与动态尾部布局", "Enable v6 stable-prefix and dynamic-tail layout")] }),
+      /* @__PURE__ */ jsxRuntimeExports.jsxs("label", { className: "optimization-checkbox", children: [/* @__PURE__ */ jsxRuntimeExports.jsx("input", { type: "checkbox", checked: v89Settings.chatPromptV89OutboundDiagnostics !== false, disabled: busy != null, onChange: (event) => updateV89Setting("chatPromptV89OutboundDiagnostics", event.target.checked) }), text("记录脱敏 Outbound 指纹和 TTFT", "Record redacted outbound fingerprints and TTFT")] }),
+      /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { className: "muted-text", children: [text("Runtime Profile Split：", "Runtime Profile Split: "), v89Settings.chatPromptV89RuntimeProfileSplit ? text("配置为 true，但本版尚未接入", "configured true, but not wired in this release") : text("默认关闭，延期到 V8.9.1；本版不改 pList/亲属语义。", "off by default and deferred to V8.9.1; pList/kinship semantics are unchanged.")] }),
+      presetResult?.success && /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "muted-text", children: text("双模型预设已创建或更新；NPC、Action 与 Summary 当前选择均未改变。", "Dual-model presets were created or updated; NPC, Action, and Summary selections were not changed.") })
     ] }),
     error && /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "optimization-error", children: error }),
     copyMessage && /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "muted-text", children: copyMessage }),
@@ -22203,11 +22242,13 @@ const ProviderDiagnosticsView = () => {
         /* @__PURE__ */ jsxRuntimeExports.jsx("h4", { children: text("最近诊断记录", "Recent diagnostic records") }),
         /* @__PURE__ */ jsxRuntimeExports.jsx("button", { type: "button", onClick: load, disabled: busy != null, children: text("刷新记录", "Refresh records") })
       ] }),
-      recent.length === 0 ? /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "optimization-empty", children: text("暂无智谱诊断记录。", "No Zhipu diagnostic records yet.") }) : recent.map((entry, index) => /* @__PURE__ */ jsxRuntimeExports.jsxs("details", { className: "worldline-advanced-details", children: [
-        /* @__PURE__ */ jsxRuntimeExports.jsxs("summary", { children: [entry.requestType, " · ", formatTime(entry.timestamp), " · ", entry.model || "—"] }),
+      recent.length === 0 ? /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "optimization-empty", children: text("暂无主对话或智谱探针诊断记录。", "No chat or Zhipu probe diagnostics yet.") }) : recent.map((entry, index) => /* @__PURE__ */ jsxRuntimeExports.jsxs("details", { className: "worldline-advanced-details", children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsxs("summary", { children: [entry.requestType, " · ", entry.provider || "—", " · ", formatTime(entry.timestamp), " · ", entry.model || "—"] }),
         /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "worldline-diagnostics", children: [
-          /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { children: [text("本地估算可复用前缀", "Local estimated reusable prefix"), "：", formatTokens(entry.localPrefixDiagnostics?.reusablePrefixTokens)] }),
-          /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { children: [text("最早变化段", "First break"), "：", entry.localPrefixDiagnostics?.firstBreakSegment || "—"] }),
+          /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { children: [text("Provider Hit Block 归因估算", "Provider Hit Block attribution estimate"), "：", formatTokens(entry.localPrefixDiagnostics?.reusablePrefixTokens)] }),
+          /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { children: [text("Outbound 实际公共前缀估算", "Outbound actual common-prefix estimate"), "：", formatTokens(entry.outboundFingerprint?.commonPrefixWithPrevious?.commonEstimatedTokens)] }),
+          /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { children: [text("首个实际差异位置 / Block", "First actual difference / block"), "：", entry.outboundFingerprint?.commonPrefixWithPrevious?.firstDifferentPosition ?? "—", " / ", entry.outboundFingerprint?.commonPrefixWithPrevious?.firstDifferentBlockId || "—"] }),
+          /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { children: [text("可见 TTFT / 总耗时", "Visible TTFT / total latency"), "：", `${entry.visibleTTFTMs ?? "—"} / ${entry.totalLatencyMs ?? "—"} ms`] }),
           /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "optimization-header-actions", children: /* @__PURE__ */ jsxRuntimeExports.jsx("button", { type: "button", onClick: () => copyEntry(entry), children: text("复制诊断信息", "Copy diagnostic information") }) })
         ] }),
         usagePanel(text("Raw Usage", "Raw Usage"), entry.rawUsage, false),

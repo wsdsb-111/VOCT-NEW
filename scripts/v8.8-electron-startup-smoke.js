@@ -81,6 +81,10 @@ async function main() {
     assert(await evaluate("document.querySelector('#deepseekActionStablePrefixOptimization')?.checked===true"), "DeepSeek stable prefix must default on");
     await clickProvider("诊断");
     assert(await evaluate("!!document.querySelector('.provider-diagnostics-view')"), "provider diagnostics page rendered an empty body");
+    console.log("DIAGNOSTICS", await evaluate("document.querySelector('.provider-diagnostics-view')?.innerText.slice(0,600)"));
+    assert(await evaluate("['V8.9 主对话缓存诊断','V8.9 Chat Cache Diagnostics'].includes(document.querySelector('.provider-diagnostics-view h3')?.textContent.trim())"), "V8.9 diagnostics heading missing");
+    assert(await evaluate("[...document.querySelectorAll('.provider-diagnostics-view h4')].some(e=>['V8.9 Chat Prompt 开关','V8.9 Chat Prompt switches'].includes(e.textContent.trim()))"), "V8.9 diagnostics switches missing");
+    assert(await evaluate("document.querySelectorAll('.provider-diagnostics-view input[type=checkbox]').length===2"), "V8.9 diagnostics must expose layout and outbound diagnostics switches");
     const clicked = await evaluate("(() => { const e=[...document.querySelectorAll('button')].find(e=>['世界书','Worldline'].includes(e.textContent.trim())); if(e)e.click();return !!e; })()");
     assert(clicked, "worldline navigation missing");
     await new Promise(resolve => setTimeout(resolve, 1500));
@@ -96,7 +100,7 @@ async function main() {
       assert(await evaluate("!!document.querySelector('.worldline-view')"), `blank tab ${tab}`);
     }
     assert.deepEqual(errors, [], "renderer exceptions");
-    console.log("V8.8 isolated Electron startup/navigation: PASS");
+    console.log("V8.9 isolated Electron startup/navigation: PASS");
   } finally {
     console.log("RENDERER_ERRORS", JSON.stringify(errors));
     ws?.close();

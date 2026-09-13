@@ -235,6 +235,18 @@ const schema = {
     type: "boolean",
     default: true
   },
+  chatPromptV89Layout: {
+    type: "boolean",
+    default: true
+  },
+  chatPromptV89OutboundDiagnostics: {
+    type: "boolean",
+    default: true
+  },
+  chatPromptV89RuntimeProfileSplit: {
+    type: "boolean",
+    default: false
+  },
   language: {
     type: "string",
     default: "en"

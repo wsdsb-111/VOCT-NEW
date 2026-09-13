@@ -1,5 +1,6 @@
 "use strict";
 
+const crypto = require("crypto");
 const DEFAULT_MAX_ENTRIES = 500;
 const DEFAULT_MAX_BYTES = 10 * 1024 * 1024;
 const DEFAULT_MODEL = "glm-5.3-flash";
@@ -13,8 +14,86 @@ const NORMALIZED_USAGE_SCALARS = [
 ];
 
 function finiteNumber(value) {
+  if (value === null || value === void 0 || typeof value === "string" && value.trim() === "") return null;
+  if (typeof value !== "number" && typeof value !== "string") return null;
   const number = Number(value);
   return Number.isFinite(number) ? number : null;
+}
+
+function hashValue(value) {
+  return crypto.createHash("sha256").update(String(value)).digest("hex");
+}
+
+function serializeMessageContent(content) {
+  if (typeof content === "string") return content;
+  try {
+    return JSON.stringify(content);
+  } catch (_error) {
+    return String(content ?? "");
+  }
+}
+
+function buildMessageBlockMap(blocks = [], messageCount = 0) {
+  const result = Array(messageCount).fill(null);
+  for (const block of Array.isArray(blocks) ? blocks : []) {
+    const start = Number(block?.messageStartPosition);
+    const count = Number(block?.messageCount);
+    if (!Number.isInteger(start) || !Number.isInteger(count) || start < 0 || count < 1) continue;
+    for (let index = start; index < Math.min(messageCount, start + count); index += 1) {
+      result[index] = typeof block.id === "string" ? block.id : null;
+    }
+  }
+  return result;
+}
+
+function buildOutboundFingerprint({ messages = [], blocks = [], TokenCounter }) {
+  const safeMessages = Array.isArray(messages) ? messages : [];
+  const blockIds = buildMessageBlockMap(blocks, safeMessages.length);
+  let cumulativePrefixHash = hashValue("VOTC_OUTBOUND_PREFIX_V1");
+  const fingerprints = safeMessages.map((message, position) => {
+    const role = typeof message?.role === "string" ? message.role : "unknown";
+    const content = serializeMessageContent(message?.content);
+    const contentHash = hashValue(`${role}\0${content}`);
+    cumulativePrefixHash = hashValue(`${cumulativePrefixHash}\0${contentHash}`);
+    const estimatedTokens = typeof TokenCounter?.estimateMessageTokens === "function"
+      ? TokenCounter.estimateMessageTokens({ role, content })
+      : typeof TokenCounter?.estimateTokens === "function" ? TokenCounter.estimateTokens(content) : 0;
+    return {
+      position,
+      role,
+      estimatedTokens: Math.max(0, Math.floor(Number(estimatedTokens) || 0)),
+      contentHash,
+      cumulativePrefixHash,
+      blockId: blockIds[position]
+    };
+  });
+  return {
+    outboundFingerprintVersion: 1,
+    messages: fingerprints,
+    totalEstimatedTokens: fingerprints.reduce((sum, message) => sum + message.estimatedTokens, 0),
+    commonPrefixWithPrevious: null
+  };
+}
+
+function compareOutboundFingerprints(previous, current) {
+  const previousMessages = Array.isArray(previous?.messages) ? previous.messages : [];
+  const currentMessages = Array.isArray(current?.messages) ? current.messages : [];
+  const limit = Math.min(previousMessages.length, currentMessages.length);
+  let commonMessageCount = 0;
+  let commonEstimatedTokens = 0;
+  while (commonMessageCount < limit && previousMessages[commonMessageCount]?.contentHash === currentMessages[commonMessageCount]?.contentHash && previousMessages[commonMessageCount]?.role === currentMessages[commonMessageCount]?.role) {
+    commonEstimatedTokens += currentMessages[commonMessageCount]?.estimatedTokens || 0;
+    commonMessageCount += 1;
+  }
+  const firstDifferentMessage = currentMessages[commonMessageCount] || previousMessages[commonMessageCount] || null;
+  return {
+    commonMessageCount,
+    commonEstimatedTokens,
+    firstDifferentPosition: commonMessageCount < Math.max(previousMessages.length, currentMessages.length) ? commonMessageCount : null,
+    firstDifferentBlockId: firstDifferentMessage?.blockId || null,
+    previousMessageCount: previousMessages.length,
+    currentMessageCount: currentMessages.length
+  };
 }
 
 function copyUsageDetails(value, allowedKey) {
@@ -102,8 +181,21 @@ function buildLocalPrefixDiagnostics({ normalizedUsage, blocks = [], TokenCounte
 
 function createProviderDiagnostics({ fs, path, dataDir, settingsRepository, providerRegistry, TokenCounter, diagnosticsFile }) {
   const filePath = diagnosticsFile || path.join(dataDir, "provider-diagnostics.jsonl");
+  const previousOutboundByRoute = new Map();
 
   class ProviderDiagnostics {
+    prepareOutboundRequest({ provider, model, requestType, messages, blocks }) {
+      const routeKey = `${provider || "unknown"}:${model || "unknown"}:${requestType || "unknown"}`;
+      let previous = previousOutboundByRoute.get(routeKey) || null;
+      if (!previous) {
+        previous = [...this.readEntries()].reverse().find((entry) => entry.provider === provider && entry.model === model && entry.requestType === requestType && entry.outboundFingerprint)?.outboundFingerprint || null;
+      }
+      const outboundFingerprint = buildOutboundFingerprint({ messages, blocks, TokenCounter });
+      outboundFingerprint.commonPrefixWithPrevious = previous ? compareOutboundFingerprints(previous, outboundFingerprint) : null;
+      previousOutboundByRoute.set(routeKey, outboundFingerprint);
+      return outboundFingerprint;
+    }
+
     getProviderConfig() {
       const config = settingsRepository.getProviderConfigById("zhipu") || settingsRepository.getActiveProviderConfig?.();
       if (!config || config.providerType !== "zhipu") throw new Error("zhipu_provider_not_configured");
@@ -174,11 +266,11 @@ function createProviderDiagnostics({ fs, path, dataDir, settingsRepository, prov
       return entry;
     }
 
-    recordResponse({ provider, model, requestType, response, usage, metadata = {}, startedAt, completedAt }) {
-      if (provider !== "zhipu") return null;
+    recordResponse({ provider, model, requestType, response, usage, metadata = {}, startedAt, completedAt, firstReasoningAt, firstVisibleContentAt }) {
+      if (provider !== "zhipu" && !metadata.outboundFingerprint) return null;
       const usageDebug = response?.usage_debug;
       const normalizedUsage = sanitizeUsage(usageDebug?.normalized_usage || usage, true);
-      const rawUsage = sanitizeUsage(usageDebug?.raw_usage, false);
+      const rawUsage = sanitizeUsage(usageDebug?.raw_usage || response?.usage, false);
       const messages = Array.isArray(metadata.messages) ? metadata.messages : [];
       const blocks = Array.isArray(metadata.blocks) ? metadata.blocks : [];
       const entry = {
@@ -189,8 +281,14 @@ function createProviderDiagnostics({ fs, path, dataDir, settingsRepository, prov
         rawUsage,
         normalizedUsage,
         localPrefixDiagnostics: buildLocalPrefixDiagnostics({ normalizedUsage, blocks, TokenCounter, messages }),
+        outboundFingerprint: metadata.outboundFingerprint || null,
         requestStartedAt: startedAt || null,
+        firstReasoningAt: firstReasoningAt || null,
+        firstVisibleContentAt: firstVisibleContentAt || null,
         requestCompletedAt: completedAt || null,
+        reasoningTTFTMs: startedAt && firstReasoningAt ? Math.max(0, new Date(firstReasoningAt).getTime() - new Date(startedAt).getTime()) : null,
+        visibleTTFTMs: startedAt && firstVisibleContentAt ? Math.max(0, new Date(firstVisibleContentAt).getTime() - new Date(startedAt).getTime()) : null,
+        outputTimeMs: firstVisibleContentAt && completedAt ? Math.max(0, new Date(completedAt).getTime() - new Date(firstVisibleContentAt).getTime()) : null,
         totalLatencyMs: startedAt && completedAt ? Math.max(0, new Date(completedAt).getTime() - new Date(startedAt).getTime()) : null
       };
       return this.append(entry);
@@ -203,6 +301,9 @@ function createProviderDiagnostics({ fs, path, dataDir, settingsRepository, prov
         { role: "system", content: stablePrefix },
         { role: "user", content: suffix }
       ];
+      const prefixTokens = typeof TokenCounter?.calculateTotalTokens === "function" ? TokenCounter.calculateTotalTokens([{ role: "system", content: stablePrefix }]) : 0;
+      const blocks = [{ id: `${namespace.toLowerCase()}_stable_prefix`, label: "Synthetic Stable Prefix", tokens: prefixTokens, stable: true, messageStartPosition: 0, messageCount: 1 }];
+      const outboundFingerprint = this.prepareOutboundRequest({ provider: "zhipu", model: config.defaultModel, requestType, messages, blocks });
       const startedAt = new Date().toISOString();
       const startedMs = Date.now();
       const response = await provider.chatCompletion({
@@ -216,7 +317,6 @@ function createProviderDiagnostics({ fs, path, dataDir, settingsRepository, prov
       }, { ...config, glmReasoningEffort: "low", glmClearThinking: clearThinking });
       const completedAt = new Date().toISOString();
       const normalizedUsage = response?.usage_debug?.normalized_usage || response?.usage;
-      const prefixTokens = typeof TokenCounter?.calculateTotalTokens === "function" ? TokenCounter.calculateTotalTokens([{ role: "system", content: stablePrefix }]) : 0;
       const entry = this.recordResponse({
         provider: "zhipu",
         model: config.defaultModel,
@@ -224,8 +324,8 @@ function createProviderDiagnostics({ fs, path, dataDir, settingsRepository, prov
         response,
         usage: normalizedUsage,
         metadata: {
-          messages,
-          blocks: [{ id: `${namespace.toLowerCase()}_stable_prefix`, label: "Synthetic Stable Prefix", tokens: prefixTokens, stable: true }]
+          blocks,
+          outboundFingerprint
         },
         startedAt,
         completedAt
@@ -312,5 +412,7 @@ module.exports = {
   createProviderDiagnostics,
   sanitizeUsage,
   cacheMetrics,
-  buildLocalPrefixDiagnostics
+  buildLocalPrefixDiagnostics,
+  buildOutboundFingerprint,
+  compareOutboundFingerprints
 };
