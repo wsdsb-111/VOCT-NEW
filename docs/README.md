@@ -4,6 +4,8 @@
 
 ## 推荐阅读顺序
 
+V8.9.1 当前入口：[缓存统计与 Runtime Profile 补全](v8.9.1-cache-runtime-implementation-report.md)。修复 DeepSeek 嵌套 cached_tokens 漏统计（本批真实 84.83%），基于唯一 Raw Usage 证据恢复历史报表；补齐每轮人物 Stable/Runtime 拆分和 v7/v6/v5 回退。299/299 发布组、368 个文件分类和隔离 Electron 通过；GLM 真实 20.29% 的服务端未命中原因仍需受控实测。下方版本为前置记录。
+
 V8.9 当前入口：[主对话多模型缓存实施报告](v8.9-chat-cache-implementation-report.md)。正式聊天 Prompt 升级为 v6 稳定前缀/动态尾部布局，保留 v5 一键回退；Family Facts 仅调整位置，不修改事实构造和亲属语义。独立诊断页记录脱敏 Outbound 指纹、相邻请求公共前缀、首差异 Block、Provider 缓存三态与 TTFT，并可显式创建 `GLM53F-Low` / `DSV4F-0731` 两个 NPC 对话预设，不改变 Action/Summary 选择。Runtime Profile Split 默认关闭并延期到 V8.9.1。297/297 发布组、366 个文件分类及隔离 Electron 诊断页导航通过；真实 Provider、CK3、RP 矩阵和 Soak Gate 尚待验收，不是 Full Freeze。
 
 V8.8.5 当前入口：[审查问题与扩展亲属改进报告](v8.8.5-review-kinship-implementation-report.md)。覆盖动作队列/确认分时计时、RunFile 原子投递与 STALLED 安全放行、DeepSeek 默认 Action 优化、OpenAI-compatible Schema 传输模式、唯一明确金额才允许覆盖、好感度待确认文案、空年龄边界和旧英文 pList 扩展亲属。流式 OpenAI 风格 Provider 会保留 usage-only 尾块，Gemini usage 已统一，无原生 usage 时记入明确估算 Token；摘要链路未改。新增独立智谱 GLM Provider：默认官方大陆端点、`glm-5.3-flash`、低推理强度和清除历史思考，缓存/推理 Token 统一记账；在“世界书”右侧新增独立诊断页，显示 Raw/Normalized Usage、cached_tokens 三态、缓存探针、clear_thinking A/B 与脱敏导出。293/293 发布组、362 个文件分类及隔离 Electron 冒烟通过；真实 GLM API、缓存命中与长时 Gate 尚待验收，下方版本为历史证据。

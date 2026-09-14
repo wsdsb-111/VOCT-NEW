@@ -84,7 +84,7 @@ async function main() {
     console.log("DIAGNOSTICS", await evaluate("document.querySelector('.provider-diagnostics-view')?.innerText.slice(0,600)"));
     assert(await evaluate("['V8.9 主对话缓存诊断','V8.9 Chat Cache Diagnostics'].includes(document.querySelector('.provider-diagnostics-view h3')?.textContent.trim())"), "V8.9 diagnostics heading missing");
     assert(await evaluate("[...document.querySelectorAll('.provider-diagnostics-view h4')].some(e=>['V8.9 Chat Prompt 开关','V8.9 Chat Prompt switches'].includes(e.textContent.trim()))"), "V8.9 diagnostics switches missing");
-    assert(await evaluate("document.querySelectorAll('.provider-diagnostics-view input[type=checkbox]').length===2"), "V8.9 diagnostics must expose layout and outbound diagnostics switches");
+    assert(await evaluate("document.querySelectorAll('.provider-diagnostics-view input[type=checkbox]').length===3"), "V8.9 diagnostics must expose layout, outbound and runtime profile switches");
     const clicked = await evaluate("(() => { const e=[...document.querySelectorAll('button')].find(e=>['世界书','Worldline'].includes(e.textContent.trim())); if(e)e.click();return !!e; })()");
     assert(clicked, "worldline navigation missing");
     await new Promise(resolve => setTimeout(resolve, 1500));

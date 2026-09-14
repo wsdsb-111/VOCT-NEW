@@ -16,9 +16,15 @@ class TemplateEngine {
   }
 }
 
-class PromptScriptLoader {}
+class PromptScriptLoader {
+  executeDescription(_path, data, id) {
+    const c = data.characters.get(id);
+    return `[${c.shortName}'s character info: id(${c.id}); \nname: ${c.shortName}; \nage: ${c.age}; \ngold: ${c.gold}]\n[date(${data.date})]`;
+  }
+}
 
 let v89Layout = true;
+let runtimeProfileSplit = false;
 const promptSettings = {
   mainTemplate: "STABLE_MAIN",
   blocks: [
@@ -30,7 +36,7 @@ const promptSettings = {
 };
 const settingsRepository = {
   getPromptSettings: () => promptSettings,
-  getChatPromptV89Settings: () => ({ chatPromptV89Layout: v89Layout, chatPromptV89OutboundDiagnostics: true, chatPromptV89RuntimeProfileSplit: false })
+  getChatPromptV89Settings: () => ({ chatPromptV89Layout: v89Layout, chatPromptV89OutboundDiagnostics: true, chatPromptV89RuntimeProfileSplit: runtimeProfileSplit })
 };
 const promptConfigManager = {
   getDefaultMainTemplateContent: () => "STABLE_MAIN",
@@ -123,3 +129,26 @@ const payload = (result) => result.messages.slice(1).map((message) => `${message
 assert.deepStrictEqual(payload(v89), payload(legacy), "V8.9 layout must preserve every non-anchor message byte-for-byte");
 
 console.log("VOTC V8.9 chat prompt layout: PASS (v6 order, v5 rollback, Family Facts parity, final instruction)");
+
+v89Layout = true;
+runtimeProfileSplit = true;
+memoryContext.stableDescriptionCache = new Map([[String(responder.id), "STALE_LEGACY_PROFILE"]]);
+promptSettings.blocks.splice(1, 0, { id: "profile", type: "description", enabled: true, scriptPath: "fixture.js" });
+responder.gold = 100;
+const fresh1 = build();
+responder.gold = 200;
+const fresh2 = build();
+assert.match(fresh2.messages[0].content, /^VOTC_CACHE_ANCHOR_v7/);
+assert.strictEqual(fresh1.blocks.find(b => b.block.id === "profile-stable").content, fresh2.blocks.find(b => b.block.id === "profile-stable").content);
+assert(fresh2.blocks.find(b => b.block.id === "profile-dynamic").content.includes("gold: 200"));
+assert(blockIndex(fresh2, "profile-dynamic") > blockIndex(fresh2, "history"));
+assert.strictEqual(familyContent(fresh1), familyContent(fresh2));
+assert(![...memoryContext.stableDescriptionCache.entries()].filter(([key]) => key.startsWith("v7:")).some(([, value]) => value.includes("gold:")));
+responder.shortName = "新姓名";
+assert(build().blocks.find(b => b.block.id === "profile-stable").content.includes("新姓名"));
+runtimeProfileSplit = false;
+assert.match(build().messages[0].content, /^VOTC_CACHE_ANCHOR_v6/);
+v89Layout = false;
+runtimeProfileSplit = true;
+assert.match(build().messages[0].content, /^VOTC_CACHE_ANCHOR_v5/);
+console.log("V8.9.1 multi-turn profile PASS: fresh runtime, stable cache, identity refresh, v7/v6/v5 rollback");

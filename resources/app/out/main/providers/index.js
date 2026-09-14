@@ -646,23 +646,8 @@ class ZhipuProvider extends OpenAICompatibleProvider {
   }
   normalizeUsage(usage) {
     if (!usage || typeof usage !== "object") return void 0;
-    const promptTokens = Number(usage.prompt_tokens) || 0;
-    const completionTokens = Number(usage.completion_tokens) || 0;
-    const hasCachedField = !!usage.prompt_tokens_details && Object.prototype.hasOwnProperty.call(usage.prompt_tokens_details, "cached_tokens");
-    const cachedTokens = hasCachedField ? Number(usage.prompt_tokens_details.cached_tokens) || 0 : null;
-    const reasoningTokens = Number(usage.completion_tokens_details?.reasoning_tokens) || 0;
-    return {
-      prompt_tokens: promptTokens,
-      completion_tokens: completionTokens,
-      total_tokens: Number(usage.total_tokens) || promptTokens + completionTokens,
-      prompt_cache_hit_tokens: cachedTokens,
-      prompt_cache_miss_tokens: cachedTokens == null ? null : Math.max(0, promptTokens - cachedTokens),
-      cache_reporting_status: hasCachedField ? "reported" : "not_reported",
-      prompt_tokens_details: usage.prompt_tokens_details,
-      completion_tokens_details: usage.completion_tokens_details,
-      reasoning_tokens: reasoningTokens,
-      visible_completion_tokens: Math.max(0, completionTokens - reasoningTokens)
-    };
+    const normalized = require("./usage-normalization").normalizeProviderUsage(usage);
+    return { ...normalized, prompt_tokens_details: usage.prompt_tokens_details, completion_tokens_details: usage.completion_tokens_details, reasoning_tokens: normalized.reasoning_tokens ?? 0 };
   }
   buildUsageDebug(rawUsage, normalizedUsage) {
     if (!rawUsage || typeof rawUsage !== "object") return null;
@@ -671,7 +656,7 @@ class ZhipuProvider extends OpenAICompatibleProvider {
       if (Object.prototype.hasOwnProperty.call(rawUsage, key)) raw[key] = Number(rawUsage[key]) || 0;
     }
     if (rawUsage.prompt_tokens_details && typeof rawUsage.prompt_tokens_details === "object" && Object.prototype.hasOwnProperty.call(rawUsage.prompt_tokens_details, "cached_tokens")) {
-      raw.prompt_tokens_details = { cached_tokens: Number(rawUsage.prompt_tokens_details.cached_tokens) || 0 };
+      raw.prompt_tokens_details = { cached_tokens: require("./usage-normalization").usageNumber(rawUsage.prompt_tokens_details.cached_tokens) };
     }
     if (rawUsage.completion_tokens_details && typeof rawUsage.completion_tokens_details === "object" && Object.prototype.hasOwnProperty.call(rawUsage.completion_tokens_details, "reasoning_tokens")) {
       raw.completion_tokens_details = { reasoning_tokens: Number(rawUsage.completion_tokens_details.reasoning_tokens) || 0 };

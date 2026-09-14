@@ -2,6 +2,8 @@
 
 这里是版本变更的单一入口。详细设计和测试证据保留在链接目标中，本文件只维护版本顺序、用户可见摘要和文档索引。
 
+V8.9.1：[缓存统计与 Runtime Profile 补全](docs/v8.9.1-cache-runtime-implementation-report.md)。修复 OpenAI-compatible 嵌套缓存计数丢失，唯一匹配 Raw Usage 恢复历史报表；新增请求间隔和公共前缀未命中诊断。此前延期的人物字段拆分启用 v7，实时状态每轮刷新，支持回退 v6/v5。299/299 发布组与隔离 Electron 通过；GLM 的服务端缓存未命中、RP 和 Soak Gate 待继续验收。
+
 V8.9：[主对话多模型缓存实施](docs/v8.9-chat-cache-implementation-report.md)。聊天 Prompt 改为 v6 稳定前缀/动态尾部布局，并保留 v5 回退；Family Facts 字节内容、关系解析、Memory/Worldline 语义及 Action/Summary Prompt 均不改。独立诊断页新增脱敏 Outbound 指纹、相邻公共前缀/首差异 Block、Provider 缓存三态和 reasoning/visible TTFT。可显式创建 `GLM53F-Low` 与 `DSV4F-0731` 两个 NPC 对话预设，创建时不切换 NPC、Action 或 Summary。Runtime Profile Split 延期到 V8.9.1。297/297 发布组、366 个文件分类和隔离 Electron 诊断页导航通过；真实双 Provider、CK3、RP 与 Soak Gate 待人工验收。
 
 V8.8.5：[审查问题与扩展亲属改进](docs/v8.8.5-review-kinship-implementation-report.md)。修复后排动作提前超时、RunFile 非原子重写造成的偶发 ACK 丢失及 STALLED 永久阻塞；DeepSeek 两项 Action 优化默认开启，OpenAI-compatible 增加 Action Schema 标准/兼容传输模式。另修复多金额误覆盖、好感度提前报成功和空年龄误报 0 岁；旧英文模板按 CK3 家谱、性别与长幼输出堂表兄姐弟妹、叔伯姑舅姨和祖辈。流式 Provider Token 统计保留 usage-only 尾块并兼容 Gemini usage，无原生 usage 时以明确估算值记账；摘要链路未改。新增独立智谱 GLM 官方服务商，提供官方端点、GLM 推理强度/清除历史思考设置，以及缓存和推理 Token 归一化；“世界书”右侧新增独立诊断页，支持 Raw/Normalized Usage、缓存探针、clear_thinking A/B、最近记录与脱敏导出。293/293 发布组及隔离 Electron 冒烟通过，用户已确认关系与动作实机恢复，真实 GLM API、缓存命中与长时 Gate 待继续验收。

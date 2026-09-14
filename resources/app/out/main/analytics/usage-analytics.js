@@ -1,5 +1,7 @@
 "use strict";
 
+const { normalizeProviderUsage } = require("../providers/usage-normalization");
+
 function createUsageAnalytics({ fs, dataDir, analyticsFile, retention, createPromptFingerprint }) {
   const fs$1 = fs;
   const VOTC_DATA_DIR = dataDir;
@@ -29,6 +31,7 @@ function createUsageAnalytics({ fs, dataDir, analyticsFile, retention, createPro
       }
     }
     record(metadata, usage) {
+      usage = normalizeProviderUsage(usage);
       const promptTokens = Number(usage?.prompt_tokens) || 0;
       const completionTokens = Number(usage?.completion_tokens) || 0;
       const estimatedPromptTokens = Number(metadata?.estimatedPromptTokens) || 0;
@@ -179,7 +182,18 @@ function createUsageAnalytics({ fs, dataDir, analyticsFile, retention, createPro
       console.log(`[UsageAnalytics] ${entry.requestType}: input=${entry.promptTokens || entry.estimatedPromptTokens}, hit=${entry.cacheHitTokens ?? "n/a"}, miss=${entry.cacheMissTokens ?? "n/a"}, output=${entry.completionTokens}`);
     }
     getReport() {
-      const entries = this.read().entries;
+      let entries = this.read().entries;
+      const diagnosticsPath = require("path").join(VOTC_DATA_DIR, "provider-diagnostics.jsonl");
+      if (fs$1.existsSync(diagnosticsPath)) {
+        try {
+          const diagnostics = fs$1.readFileSync(diagnosticsPath, "utf8").split(/\r?\n/).filter(Boolean).flatMap(line => {
+            try { return [JSON.parse(line)]; } catch (_) { return []; }
+          });
+          entries = require("./cache-usage-reconciliation").reconcileCacheUsage(entries, diagnostics);
+        } catch (error) {
+          console.warn("[UsageAnalytics] Cache evidence unavailable:", error.message);
+        }
+      }
       const groups = {};
       const add = (target, entry) => {
         target.requests += Math.max(1, Math.floor(Number(entry.requestCount) || 1));

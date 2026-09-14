@@ -444,8 +444,9 @@ function createPromptBuilder({
       const blocks = promptSettings.blocks || [];
       const v89Settings = settingsRepository.getChatPromptV89Settings?.() || { chatPromptV89Layout: true };
       const v89LayoutEnabled = v89Settings.chatPromptV89Layout !== false && blocks.some((block) => block.enabled && block.type === "history");
+      const runtimeProfileSplit = v89LayoutEnabled && v89Settings.chatPromptV89RuntimeProfileSplit === true;
       const llmMessages = [];
-      const cacheAnchor = this.buildCacheAnchor(gameData, v89LayoutEnabled ? "v6" : "v5");
+      const cacheAnchor = this.buildCacheAnchor(gameData, runtimeProfileSplit ? "v7" : v89LayoutEnabled ? "v6" : "v5");
       const blocksWithTokens = [{
         block: { id: "cache-anchor", type: "cache_anchor", label: "Stable Cache Anchor", stable: true },
         content: cacheAnchor,
@@ -460,7 +461,7 @@ function createPromptBuilder({
       }) : gameData;
       const context = {
         character: char,
-        stableCharacter: this.getFrozenCharacterProfile(char, memoryContext),
+        stableCharacter: runtimeProfileSplit ? char : this.getFrozenCharacterProfile(char, memoryContext),
         gameData: promptGameData,
         summary: currentSessionSummary,
         memoryContext
@@ -652,6 +653,7 @@ function createPromptBuilder({
           worldTurnRecallText: memoryContext?.worldTurnRecallText,
           subjectiveWorldBlock,
           v89Layout: v89LayoutEnabled,
+          runtimeProfileSplit,
           deferredMainSegments,
           deferredDescriptionBlocks,
           responderGameFacts,
@@ -740,7 +742,8 @@ function createPromptBuilder({
             // Date, world state and scene must stay near the history tail. This
             // leaves character profile, examples and persisted summaries in the
             // reusable prefix when a game day advances.
-            if (options.deferredMainSegments && (segment.id === "world_context" || segment.id === "character_state")) {
+            if (options.deferredMainSegments && (segment.id === "world_context" || segment.id === "character_state" || options.runtimeProfileSplit && segment.id === "character_base")) {
+              tokenBlock.block.stable = false;
               options.deferredMainSegments.push({ message, tokenBlock });
             } else {
               messages.push(message);
@@ -759,14 +762,22 @@ function createPromptBuilder({
           const descScriptPath = promptConfigManager.resolvePath(block.scriptPath);
           try {
             const profileCache = baseContext.memoryContext?.stableDescriptionCache;
-            const cacheKey = String(character.id);
-            let descriptionBlock = profileCache instanceof Map ? profileCache.get(cacheKey) : null;
+            const cacheKey = options.runtimeProfileSplit ? `v7:${descScriptPath}:${character.id}` : String(character.id);
+            let descriptionBlock = !options.runtimeProfileSplit && profileCache instanceof Map ? profileCache.get(cacheKey) : null;
             if (!descriptionBlock) {
               descriptionBlock = this.scriptLoader.executeDescription(descScriptPath, gameData, character.id);
-              if (descriptionBlock && profileCache instanceof Map) profileCache.set(cacheKey, descriptionBlock);
+              if (descriptionBlock && !options.runtimeProfileSplit && profileCache instanceof Map) profileCache.set(cacheKey, descriptionBlock);
             }
             if (descriptionBlock) {
-              const { stableContent, dynamicContent } = this.splitDescriptionForCache(descriptionBlock);
+              let { stableContent, dynamicContent } = options.runtimeProfileSplit
+                ? require("./character-profile-split").splitCharacterProfile(descriptionBlock)
+                : this.splitDescriptionForCache(descriptionBlock);
+              if (options.runtimeProfileSplit && profileCache instanceof Map) {
+                // Only stable text is retained. Changes of identity, participants,
+                // script, culture or traits replace it; runtime is always fresh.
+                if (profileCache.get(cacheKey) !== stableContent) profileCache.set(cacheKey, stableContent);
+                stableContent = profileCache.get(cacheKey);
+              }
               const tokenBlocks = [];
               if (stableContent) {
                 messages.push({ role: "system", content: stableContent });

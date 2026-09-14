@@ -459,7 +459,7 @@ class LLMManager {
     return response;
   }
   buildUsageRecord(response, metadata = {}) {
-    if (response?.usage && typeof response.usage === "object") return response.usage;
+    if (response?.usage && typeof response.usage === "object") return require("./providers/usage-normalization").normalizeProviderUsage(response.usage);
     const promptTokens = Math.max(0, Math.floor(Number(metadata.estimatedPromptTokens) || 0));
     const completionSource = typeof response?.content === "string" ? response.content : response?.tool_calls ? JSON.stringify(response.tool_calls) : "";
     const completionTokens = Math.max(0, Math.floor(Number(this.TokenCounter.estimateTokens(completionSource)) || 0));

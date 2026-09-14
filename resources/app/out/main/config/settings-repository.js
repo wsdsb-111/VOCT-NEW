@@ -83,8 +83,9 @@ function createSettingsRepository({ Store, schema, SecureProviderSecrets, electr
       if (currentAppSettings.chatPromptV89OutboundDiagnostics === void 0) {
         this.store.set("chatPromptV89OutboundDiagnostics", true);
       }
-      if (currentAppSettings.chatPromptV89RuntimeProfileSplit === void 0) {
-        this.store.set("chatPromptV89RuntimeProfileSplit", false);
+      if (currentAppSettings.chatPromptRuntimeProfileVersion !== 1) {
+        this.store.set("chatPromptV89RuntimeProfileSplit", true);
+        this.store.set("chatPromptRuntimeProfileVersion", 1);
       }
       if (currentAppSettings.actionApprovalSettings === void 0) {
         this.store.set("actionApprovalSettings", {
@@ -264,7 +265,7 @@ function createSettingsRepository({ Store, schema, SecureProviderSecrets, electr
       return {
         chatPromptV89Layout: this.store.get("chatPromptV89Layout", true) !== false,
         chatPromptV89OutboundDiagnostics: this.store.get("chatPromptV89OutboundDiagnostics", true) !== false,
-        chatPromptV89RuntimeProfileSplit: this.store.get("chatPromptV89RuntimeProfileSplit", false) === true
+        chatPromptV89RuntimeProfileSplit: this.store.get("chatPromptV89RuntimeProfileSplit", true) === true
       };
     }
     saveChatPromptV89Settings(settings = {}) {

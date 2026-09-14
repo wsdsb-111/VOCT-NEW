@@ -245,7 +245,11 @@ const schema = {
   },
   chatPromptV89RuntimeProfileSplit: {
     type: "boolean",
-    default: false
+    default: true
+  },
+  chatPromptRuntimeProfileVersion: {
+    type: "number",
+    default: 0
   },
   language: {
     type: "string",

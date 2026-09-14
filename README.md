@@ -26,6 +26,8 @@ Voices of the Court 是一个面向《Crusader Kings III》（CK3）的沉浸式
 
 ## 运行环境
 
+当前补丁为 **V8.9.1**：[缓存统计与 Runtime Profile 补全](docs/v8.9.1-cache-runtime-implementation-report.md)。实机 DeepSeek 35 次 Chat 实际命中率为 84.83%，已修复嵌套 cached_tokens 未进入统计的问题，并可从唯一匹配的 Raw Usage 恢复历史报表。此前延期的人物 Stable/Runtime 拆分已接入，首次升级启用 v7，诊断页支持回退 v6/v5；实时状态每轮刷新。299/299 发布组、368 个测试文件分类及打包 Electron 冒烟通过。GLM 本批 20.29% 为真实服务端数字，长公共前缀仍可能未命中，保留/路由因素尚待受控实测，不宣称缓存目标达标。下方为此前版本记录。
+
 当前代码基线为 **V8.9**：[主对话多模型缓存实施报告](docs/v8.9-chat-cache-implementation-report.md)。正式聊天 Prompt 使用 v6 稳定前缀/动态尾部布局，可一键回退到 V8.8.5 v5 顺序；Family Facts 只移动位置，不改变构造、内容或亲属语义。独立诊断页新增真实出站消息哈希指纹、相邻请求公共前缀、首差异 Block、缓存三态及 reasoning/visible TTFT，证据优先级固定为 Provider Truth、Outbound 实际差分、Block 归因估算。可显式创建 `GLM53F-Low` 与 `DSV4F-0731` 两个 NPC 对话预设，创建过程不切换 NPC、Action 或 Summary 当前选择。Runtime Profile Split 保持默认关闭并延期到 V8.9.1。297/297 发布组、366 个测试文件分类及隔离 Electron 诊断页导航通过；真实双 Provider 缓存、角色扮演矩阵、CK3 隔离和长时 Soak 仍待人工验收，当前不宣称 Full Freeze。
 
 前一修复基线为 **V8.8.5**：[审查问题与扩展亲属改进报告](docs/v8.8.5-review-kinship-implementation-report.md)。动作排队 TTL 与写入后的确认计时分离；RunFile 改为 UTF-8 BOM 原子替换，新的动作会安全隔离已清空载体的旧 STALLED 项且不重放未知效果。DeepSeek 两项 Action 优化默认开启并可手动关闭，OpenAI-compatible 同样提供 Action Schema 标准/兼容传输模式。多金额/改口不再强制覆盖模型金额，好感度先显示待确认；修复空年龄变成 0 岁，旧英文人物模板接入当前 CK3 扩展亲属、年龄与性别，按证据细分堂表兄姐弟妹、伯父/叔父及父母系祖辈。OpenAI 风格流式 Provider 会保留末尾 usage-only 数据块，Gemini 接入 `usageMetadata`，无 usage 的兼容端点使用明确标记的估算值，确保请求进入服务商 Token 汇总。新增独立“智谱 GLM”服务商，默认 `glm-5.3-flash`、大陆官方端点、低推理强度和清除历史思考；GLM 缓存/推理 Token 归一化后进入既有统计，并在“世界书”右侧提供独立诊断页，显示 Raw/Normalized Usage、缓存三态、缓存探针、clear_thinking A/B 与脱敏导出。293 个发布组、362 个已分类测试文件及隔离 Electron 设置/导航冒烟通过；用户已确认关系提取与动作执行实机恢复，真实 GLM API、缓存命中与长时 Gate 仍待完成。

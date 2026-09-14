@@ -1,6 +1,7 @@
 "use strict";
 
 const crypto = require("crypto");
+const { normalizeProviderUsage } = require("../providers/usage-normalization");
 const DEFAULT_MAX_ENTRIES = 500;
 const DEFAULT_MAX_BYTES = 10 * 1024 * 1024;
 const DEFAULT_MODEL = "glm-5.3-flash";
@@ -269,7 +270,7 @@ function createProviderDiagnostics({ fs, path, dataDir, settingsRepository, prov
     recordResponse({ provider, model, requestType, response, usage, metadata = {}, startedAt, completedAt, firstReasoningAt, firstVisibleContentAt }) {
       if (provider !== "zhipu" && !metadata.outboundFingerprint) return null;
       const usageDebug = response?.usage_debug;
-      const normalizedUsage = sanitizeUsage(usageDebug?.normalized_usage || usage, true);
+      const normalizedUsage = sanitizeUsage(normalizeProviderUsage(usageDebug?.normalized_usage || usage), true);
       const rawUsage = sanitizeUsage(usageDebug?.raw_usage || response?.usage, false);
       const messages = Array.isArray(metadata.messages) ? metadata.messages : [];
       const blocks = Array.isArray(metadata.blocks) ? metadata.blocks : [];
@@ -392,7 +393,21 @@ function createProviderDiagnostics({ fs, path, dataDir, settingsRepository, prov
 
     getRecent(limit = 50) {
       const count = Math.min(200, Math.max(1, Math.floor(Number(limit) || 50)));
-      return this.readEntries().slice(-count).reverse();
+      const previousByRoute = new Map();
+      return this.readEntries().map(entry => {
+        const key = `${entry.provider}:${entry.model}:${entry.requestType}`;
+        const previous = previousByRoute.get(key);
+        previousByRoute.set(key, entry);
+        const normalizedUsage = sanitizeUsage(normalizeProviderUsage({ ...entry.normalizedUsage, ...entry.rawUsage }), true);
+        const gap = previous ? Date.parse(entry.requestStartedAt || entry.timestamp) - Date.parse(previous.requestCompletedAt || previous.timestamp) : null;
+        const prefix = entry.outboundFingerprint?.commonPrefixWithPrevious;
+        return {
+          ...entry,
+          normalizedUsage,
+          previousRequestGapMs: gap != null && Number.isFinite(gap) ? Math.max(0, gap) : null,
+          cacheObservation: normalizedUsage?.prompt_cache_hit_tokens === 0 && prefix?.commonEstimatedTokens > 0 ? "shared_prefix_provider_miss" : null
+        };
+      }).slice(-count).reverse();
     }
 
     exportRecent(limit = 50) {
