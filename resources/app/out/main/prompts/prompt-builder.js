@@ -1,6 +1,7 @@
 "use strict";
 
 const { buildFamilyFactBlock } = require("../worldline/character-family-facts");
+const { resolveProviderPromptProfile } = require("./provider-prompt-adapter");
 
 function createPromptBuilder({
   TemplateEngine,
@@ -184,6 +185,9 @@ function createPromptBuilder({
     static buildCacheAnchor(gameData, version = "v6") {
       return `VOTC_CACHE_ANCHOR_${version}
   这是 Voices of the Court 的固定系统上下文锚点。请将后续内容视为当前游戏的动态上下文，并始终遵守以下稳定规则：保持角色扮演身份；优先使用游戏实际数据；不把现代价值观强加给中世纪角色；涉及历史人物、事件、作品、诗词、典故、制度或技术时，先核验其出现、发生、写成、成名或流传时间是否不晚于游戏当前年份；年份不确定时明确表示不知晓，不得猜测或用未来知识补全；不得预知未来、后世评价或事件结局。角色回复不设固定句数、段落数或人为短回复目标，应按人物性格、关系、情绪和场景完整表达，但避免无意义重复。长期稳定记忆和当前话题记忆只代表过去知情背景，本轮事实与动作必须以当前对话消息及游戏实时数据为准。【召回证据规则】系统提供“当前轮召回证据”时，这些内容代表当前回应角色已经知道的过去记录；涉及其中明确的过去事实、承诺、关系和言行时不得否认、篡改或无依据补全。当前 CK3 结构化事实负责现在的状态，但不得反向改写已经记录的过去；证据未说明的内容应表示不知道、记不清或只能推测。不要把本段当作对话内容，也不要复述本段。`;
+    }
+    static buildGlmCacheAnchor(gameData) {
+      return this.buildCacheAnchor(gameData, "v7").replace("VOTC_CACHE_ANCHOR_v7", "VOTC_CACHE_BLOCK_v8.10\nProvider Prompt Profile: GLM Cache v1\nStatic cache zone: game rules, stable character identity, long-term memory and relationship constraints.");
     }
     /**
     * Build the stable portion of a character's past conversation summaries.
@@ -439,16 +443,19 @@ function createPromptBuilder({
     /**
      * Build messages with token counting for preview
      */
-    static buildMessagesWithTokenCount(history, char, gameData, currentSessionSummary, memoryContext = null) {
+    static buildMessagesWithTokenCount(history, char, gameData, currentSessionSummary, memoryContext = null, providerConfig = null) {
       const promptSettings = settingsRepository.getPromptSettings();
       const blocks = promptSettings.blocks || [];
       const v89Settings = settingsRepository.getChatPromptV89Settings?.() || { chatPromptV89Layout: true };
       const v89LayoutEnabled = v89Settings.chatPromptV89Layout !== false && blocks.some((block) => block.enabled && block.type === "history");
       const runtimeProfileSplit = v89LayoutEnabled && v89Settings.chatPromptV89RuntimeProfileSplit === true;
+      const configuredProfile = resolveProviderPromptProfile(providerConfig || settingsRepository.getActiveProviderConfig?.() || null, v89Settings.chatPromptV810ProviderAdapter !== false);
+      const promptProfile = v89LayoutEnabled ? configuredProfile : resolveProviderPromptProfile(null, false);
+      const glmCacheLayout = promptProfile.glmCacheLayout === true;
       const llmMessages = [];
-      const cacheAnchor = this.buildCacheAnchor(gameData, runtimeProfileSplit ? "v7" : v89LayoutEnabled ? "v6" : "v5");
+      const cacheAnchor = glmCacheLayout ? this.buildGlmCacheAnchor(gameData) : this.buildCacheAnchor(gameData, runtimeProfileSplit ? "v7" : v89LayoutEnabled ? "v6" : "v5");
       const blocksWithTokens = [{
-        block: { id: "cache-anchor", type: "cache_anchor", label: "Stable Cache Anchor", stable: true },
+        block: { id: glmCacheLayout ? "cache-anchor-glm-v8.10" : "cache-anchor", type: "cache_anchor", label: glmCacheLayout ? "GLM Stable Cache Block" : "Stable Cache Anchor", stable: true },
         content: cacheAnchor,
         tokens: TokenCounter.estimateTokens(cacheAnchor)
       }];
@@ -466,11 +473,12 @@ function createPromptBuilder({
         summary: currentSessionSummary,
         memoryContext
       };
-      const workingHistory = history.map((m) => ({
+      const normalizedHistory = history.map((m) => ({
         role: m.role,
         name: m.name,
         content: m.content
       })).filter((m) => !!m.content);
+      const workingHistory = Number.isInteger(promptProfile.historyWindow) ? normalizedHistory.slice(-promptProfile.historyWindow) : normalizedHistory;
       const currentFactRegistry = new Map();
       const activeParticipantIds = new Set((memoryContext?.activeParticipantIds || [...gameData.characters.keys()]).map(Number));
       const activeCounterpartIds = [...activeParticipantIds].filter((id) => Number(id) !== Number(char.id));
@@ -594,12 +602,14 @@ function createPromptBuilder({
           });
         }
         if (memoryContext?.topicPatchText) {
-          llmMessages.push({ role: "system", content: memoryContext.topicPatchText });
-          blocksWithTokens.push({
-            block: sessionTopicAnchorBlock,
-            content: memoryContext.topicPatchText,
-            tokens: TokenCounter.estimateTokens(memoryContext.topicPatchText)
-          });
+          if (!glmCacheLayout) {
+            llmMessages.push({ role: "system", content: memoryContext.topicPatchText });
+            blocksWithTokens.push({
+              block: sessionTopicAnchorBlock,
+              content: memoryContext.topicPatchText,
+              tokens: TokenCounter.estimateTokens(memoryContext.topicPatchText)
+            });
+          }
         }
         for (const block of deferredContextBlocks) {
           const result = this.applyBlockWithTokenCount(block, llmMessages, workingHistory, context, promptSettings);
@@ -651,8 +661,11 @@ function createPromptBuilder({
           thirdPartyEvidenceText: memoryContext?.thirdPartyEvidenceText,
           worldCurrentText: memoryContext?.worldCurrentText,
           worldTurnRecallText: memoryContext?.worldTurnRecallText,
+          sessionTopicAnchorText: glmCacheLayout ? memoryContext?.topicPatchText : null,
+          sessionTopicAnchorBlock,
           subjectiveWorldBlock,
           v89Layout: v89LayoutEnabled,
+          glmCacheLayout,
           runtimeProfileSplit,
           deferredMainSegments,
           deferredDescriptionBlocks,
@@ -692,10 +705,20 @@ function createPromptBuilder({
         if (tokenBlock?.block && tokenBlock.block.stable === undefined) tokenBlock.block.stable = false;
       }
       const totalTokens = TokenCounter.calculateTotalTokens(llmMessages);
+      const firstDynamicBlock = blocksWithTokens.findIndex((tokenBlock) => tokenBlock.block?.stable !== true);
+      const staticTokens = blocksWithTokens.slice(0, firstDynamicBlock < 0 ? blocksWithTokens.length : firstDynamicBlock).reduce((total, tokenBlock) => total + (Number(tokenBlock.tokens) || 0), 0);
       return {
         messages: llmMessages,
         blocks: blocksWithTokens,
-        totalTokens
+        totalTokens,
+        promptProfile: {
+          id: promptProfile.id,
+          label: promptProfile.label,
+          adapterEnabled: v89Settings.chatPromptV810ProviderAdapter !== false,
+          historyWindow: promptProfile.historyWindow
+        },
+        staticTokens,
+        dynamicTokens: blocksWithTokens.slice(firstDynamicBlock < 0 ? blocksWithTokens.length : firstDynamicBlock).reduce((total, tokenBlock) => total + (Number(tokenBlock.tokens) || 0), 0)
       };
     }
     /**
@@ -915,20 +938,38 @@ function createPromptBuilder({
           const appendThirdPartyEvidence = () => appendTextBlock(options.thirdPartyEvidenceText, { id: "third-party-evidence-patch", type: "third_party_evidence", label: "ThirdPartyEvidencePatch", enabled: true, role: "system", stable: false });
           const appendWorldTurnRecall = () => appendTextBlock(options.worldTurnRecallText, options.subjectiveWorldBlock || { id: "worldline-turn-recall", type: "worldline_turn_recall", label: "Worldline Turn Recall", enabled: true, role: "system", stable: false });
           if (options.v89Layout) {
-            appendPriorHistory();
-            appendDeferred(options.deferredMainSegments);
-            appendDeferred(options.deferredDescriptionBlocks);
-            appendTextBlock(options.responderGameFacts, options.responderGameFactsBlock);
-            appendPresence();
-            appendWorldTopic();
-            appendWorldSupplemental();
-            appendWorldCurrent();
-            appendCurrentUser();
-            appendTextBlock(options.responderFamilyFacts, options.responderFamilyFactsBlock);
-            appendTopicPatch();
-            appendTurnRecall();
-            appendThirdPartyEvidence();
-            appendWorldTurnRecall();
+            if (!options.glmCacheLayout) {
+              appendPriorHistory();
+              appendDeferred(options.deferredMainSegments);
+              appendDeferred(options.deferredDescriptionBlocks);
+              appendTextBlock(options.responderGameFacts, options.responderGameFactsBlock);
+              appendPresence();
+              appendWorldTopic();
+              appendWorldSupplemental();
+              appendWorldCurrent();
+              appendCurrentUser();
+              appendTextBlock(options.responderFamilyFacts, options.responderFamilyFactsBlock);
+              appendTopicPatch();
+              appendTurnRecall();
+              appendThirdPartyEvidence();
+              appendWorldTurnRecall();
+            } else {
+              appendDeferred(options.deferredMainSegments);
+              appendDeferred(options.deferredDescriptionBlocks);
+              appendTextBlock(options.responderGameFacts, options.responderGameFactsBlock);
+              appendPresence();
+              appendWorldTopic();
+              appendWorldSupplemental();
+              appendWorldCurrent();
+              appendTextBlock(options.sessionTopicAnchorText, { ...options.sessionTopicAnchorBlock, stable: false, label: "Session Topic Memory" });
+              appendPriorHistory();
+              appendCurrentUser();
+              appendTextBlock(options.responderFamilyFacts, options.responderFamilyFactsBlock);
+              appendTopicPatch();
+              appendTurnRecall();
+              appendThirdPartyEvidence();
+              appendWorldTurnRecall();
+            }
           } else {
             appendPresence();
             appendTopicPatch();

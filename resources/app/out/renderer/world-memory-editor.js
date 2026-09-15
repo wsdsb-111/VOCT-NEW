@@ -215,6 +215,14 @@ export function WorldMemoryEditor({ react: R }) {
     await api.mutateCanon({ token: data.branch.token, operation: "update", id: record.recordId, revision: record.revision, payload });
     await load(sequence, data.offset);
   });
+  const deleteRecord = record => {
+    const title = String(record.title || "这条世界记忆").slice(0, 80);
+    if (typeof window.confirm === "function" && !window.confirm(`确定永久删除“${title}”吗？这会移除这条记忆及其修订记录；如果只是暂时不召回，请使用“隐藏”。`)) return;
+    return run(async sequence => {
+      await api.mutateCanon({ token: data.branch.token, operation: "delete", id: record.recordId, revision: record.revision });
+      await load(sequence, data.offset);
+    });
+  };
   const save = operation => run(async sequence => {
     if (!draft.title.trim() || !draft.content.trim()) throw new Error("请填写标题和希望世界长期记住的内容。");
     if (draft.temporalMode === "SPECIFIC_DATE") {
@@ -322,6 +330,7 @@ export function WorldMemoryEditor({ react: R }) {
       button("编辑", () => beginEdit(record), !writable || record.status === "SUPERSEDED"),
       button(record.status === "ACTIVE" ? "隐藏" : "恢复生效", () => change(record, { status: record.status === "ACTIVE" ? "HIDDEN" : "ACTIVE", revisionReason: "玩家调整显示状态" }), !writable || record.status === "SUPERSEDED"),
       button("恢复自动来源", () => change(record, { status: "RETIRED", revisionReason: "撤销补充层记录，恢复自动来源" }), !writable || record.status === "SUPERSEDED"),
+      button("删除", () => deleteRecord(record), !writable, "world-memory-danger-button"),
       button("查看修订", () => run(async sequence => { const records = await api.getCanonHistory({ token: data.branch.token, id: record.recordId }); if (mounted.current && sequence === request.current) setHistory({ id: record.recordId, offset: 0, records, hasMore: records.length === 20 }); })),
       developerMode && h("details", { className: "world-memory-developer" }, h("summary", null, "开发者详情"), h("p", null, `Record：${record.recordId}`), h("p", null, `Branch：${record.branchId} · Revision：${record.revision}`), h("p", null, `涉及人物：${(record.entities || []).join(", ") || "—"} · 知情人物：${(record.knownBy || []).join(", ") || "—"}`), h("p", null, `冲突标识：${record.conflictKey || "自动生成 / 无"}`)),
       renderTestPanel(record)

@@ -96,10 +96,13 @@ assert.strictEqual(repository.getLLMSettings().presets.filter((preset) => preset
 assert.deepStrictEqual(repository.getChatPromptV89Settings(), {
   chatPromptV89Layout: true,
   chatPromptV89OutboundDiagnostics: true,
-  chatPromptV89RuntimeProfileSplit: true
+  chatPromptV89RuntimeProfileSplit: true,
+  chatPromptV810ProviderAdapter: true
 });
 
 repository.saveChatPromptV89Settings({ chatPromptV89RuntimeProfileSplit: false });
 assert.strictEqual(new SettingsRepository().getChatPromptV89Settings().chatPromptV89RuntimeProfileSplit, false, "explicit rollback must survive restart after the one-time v7 upgrade");
+repository.saveChatPromptV89Settings({ chatPromptV810ProviderAdapter: false });
+assert.strictEqual(new SettingsRepository().getChatPromptV89Settings().chatPromptV810ProviderAdapter, false, "Provider Prompt Adapter rollback must survive restart");
 
 console.log("VOTC V8.9 provider presets: PASS (GLM/DeepSeek targets, credential reuse, idempotency, Action/Summary isolation)");

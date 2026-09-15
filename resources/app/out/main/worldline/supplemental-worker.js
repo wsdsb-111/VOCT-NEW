@@ -16,6 +16,7 @@ const { buildSupplementalIndex } = require("./supplemental-retriever");
     else if (operation === "create") result = await store.create(scope, payload);
     else if (operation === "update") result = await store.update(scope, id, payload, revision);
     else if (operation === "supersede") result = await store.supersede(scope, id, payload, revision);
+    else if (operation === "delete") result = await store.remove(scope, id, revision);
     else throw new Error("supplemental_operation_invalid");
     parentPort.postMessage({ result });
   } catch (error) { parentPort.postMessage({ error: error.message }); }

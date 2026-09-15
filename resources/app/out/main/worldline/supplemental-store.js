@@ -191,6 +191,27 @@ class SupplementalStore {
     });
   }
 
+  remove(scope, id, expectedRevision) {
+    return this.transaction(scope, (state) => {
+      const selected = state.records.find((record) => record.recordId === id);
+      if (!selected) throw new Error("supplemental_not_found");
+      if (selected.revision !== expectedRevision) throw new Error("supplemental_revision_conflict");
+      const deletedIds = new Set([id]);
+      let expanded = true;
+      while (expanded) {
+        expanded = false;
+        for (const record of state.records) {
+          if (deletedIds.has(record.recordId) || !deletedIds.has(record.supersedes) && !deletedIds.has(record.supersededBy)) continue;
+          deletedIds.add(record.recordId);
+          expanded = true;
+        }
+      }
+      state.records = state.records.filter((record) => !deletedIds.has(record.recordId));
+      state.revisions = state.revisions.filter((record) => !deletedIds.has(record.recordId));
+      return { deletedRecordId: id, deletedRecordIds: [...deletedIds] };
+    });
+  }
+
   supersede(scope, id, replacement, expectedRevision) {
     try { this.checkPayload(replacement); replacement = clone(replacement); } catch (error) { return Promise.reject(error); }
     return this.transaction(scope, (state) => {

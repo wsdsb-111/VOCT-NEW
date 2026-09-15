@@ -821,12 +821,14 @@ class Conversation {
       const memoryContext = await this.checkAndSummarizeIfNeeded(npc);
       if (!this.isResponseCurrent(responseState, npc)) throw new Error("AbortError: Message cancelled");
       const promptBuildStartedAt = Date.now();
+      const activeConfig = settingsRepository.getActiveProviderConfig();
       const promptBuild = PromptBuilder.buildMessagesWithTokenCount(
         this.getPromptHistoryForCharacter(npc.id),
         npc,
         this.gameData,
         this.getPromptSummaryForCharacter(npc.id),
-        memoryContext
+        memoryContext,
+        activeConfig
       );
       const promptBuildMs = Date.now() - promptBuildStartedAt;
       const llmMessages = promptBuild.messages;
@@ -839,7 +841,6 @@ class Conversation {
       const totalMemoryTokens = promptBlockTokens("memory-stable") + promptBlockTokens("memory-direct-frozen") + mentionedSnapshotTokens + promptBlockTokens("memory-session-topic-anchor") + turnRecallTokens + thirdPartyEvidenceTokens;
       logVerboseLLM(`[Conversation][verbose] Prompt for ${npc.fullName}:`, llmMessages);
       console.log(`[TOKEN_COUNT] Message from ${npc.fullName}:`, this.estimateTokenCount(llmMessages));
-      const activeConfig = settingsRepository.getActiveProviderConfig();
       const isOpenRouter = activeConfig?.providerType === "openrouter";
       const result = await llmManager.sendChatRequest(
         llmMessages,
@@ -847,6 +848,8 @@ class Conversation {
         void 0,
         {
           requestType: "chat",
+          conversationId: this.id,
+          responderId: npc.id,
           character: npc.shortName,
           characterId: npc.id,
           blocks: promptBlockMetadata.blocks,
@@ -855,6 +858,9 @@ class Conversation {
           stablePrefixTokens: promptBlockMetadata.stablePrefixTokens,
           dynamicSuffixTokens: promptBlockMetadata.dynamicSuffixTokens,
           prefixFingerprint: promptBlockMetadata.prefixFingerprint,
+          promptProfile: promptBuild.promptProfile,
+          staticTokens: promptBuild.staticTokens,
+          dynamicTokens: promptBuild.dynamicTokens,
           memoryStableTokens: promptBlockTokens("memory-stable"),
           memoryDirectTokens: promptBlockTokens("memory-direct-frozen"),
           memoryTopicTokens: promptBlockTokens("memory-session-topic-anchor"),

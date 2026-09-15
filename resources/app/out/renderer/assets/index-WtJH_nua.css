@@ -4490,6 +4490,52 @@ button:active {
   color: #fff3df;
   font-size: 1.25em;
 }
+.provider-diagnostic-real-summary {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  gap: 10px;
+  margin: 12px 0;
+}
+.provider-diagnostic-real-table {
+  overflow-x: auto;
+  margin: 12px 0;
+  border: 1px solid rgba(239, 177, 106, 0.38);
+  border-radius: 7px;
+}
+.provider-diagnostic-real-row {
+  min-width: 820px;
+  display: grid;
+  grid-template-columns: 1.9fr 0.75fr 0.95fr 0.95fr 0.95fr 0.95fr 1.25fr;
+  gap: 8px;
+  align-items: center;
+  padding: 8px 10px;
+  border-bottom: 1px solid rgba(239, 177, 106, 0.18);
+  color: #eee2cc;
+  font-size: 0.88em;
+}
+.provider-diagnostic-real-row:last-child {
+  border-bottom: 0;
+}
+.provider-diagnostic-real-head {
+  color: #fff3df;
+  background: rgba(0, 0, 0, 0.38);
+  font-weight: 700;
+}
+.provider-diagnostic-real-messages {
+  margin: 10px 0;
+  border-left: 2px solid rgba(239, 177, 106, 0.5);
+}
+.provider-diagnostic-real-message {
+  display: grid;
+  grid-template-columns: 2.2fr 0.9fr 1.2fr;
+  gap: 8px;
+  padding: 6px 8px;
+  border-bottom: 1px solid rgba(239, 177, 106, 0.14);
+  font-size: 0.84em;
+}
+.provider-diagnostic-real-message:last-child {
+  border-bottom: 0;
+}
 .optimization-metric.success strong {
   color: #8ee5a6;
 }
@@ -6918,6 +6964,11 @@ select,
 .world-memory-pagination button {
   min-height: 30px;
   padding: 4px 10px;
+}
+
+.world-memory-record-actions .world-memory-danger-button {
+  color: #7f2f2f;
+  border-color: rgba(127, 47, 47, 0.55);
 }
 .world-memory-form-actions .primary-button {
   min-width: 110px;

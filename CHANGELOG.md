@@ -2,6 +2,10 @@
 
 这里是版本变更的单一入口。详细设计和测试证据保留在链接目标中，本文件只维护版本顺序、用户可见摘要和文档索引。
 
+V8.9.1 后续：[真实 Request Diff 实施报告](docs/real-request-diff-implementation-report.md)。Synthetic GLM 缓存路径诊断完成后移除，诊断页改为自动捕获真实 Chat Request；新增 Route/Conversation/Responder Scoped Prefix、消息/Block/Chunk Diff、Effective Parameter/Endpoint Diff、Provider Alignment、Prefix/时间桶、同 NPC/换 NPC 聚合和脱敏导出。真实 GLM/DeepSeek、CK3、RP 与 Soak Gate 待人工运行。
+
+V8.9.2（已被测试2诊断工具替换）：原 TTL 探针代码、专项测试和实施报告已删除；正式 Prompt、Action、关系、Memory、Worldline 与 Summary 合同保持不变。
+
 V8.9.1：[缓存统计与 Runtime Profile 补全](docs/v8.9.1-cache-runtime-implementation-report.md)。修复 OpenAI-compatible 嵌套缓存计数丢失，唯一匹配 Raw Usage 恢复历史报表；新增请求间隔和公共前缀未命中诊断。此前延期的人物字段拆分启用 v7，实时状态每轮刷新，支持回退 v6/v5。299/299 发布组与隔离 Electron 通过；GLM 的服务端缓存未命中、RP 和 Soak Gate 待继续验收。
 
 V8.9：[主对话多模型缓存实施](docs/v8.9-chat-cache-implementation-report.md)。聊天 Prompt 改为 v6 稳定前缀/动态尾部布局，并保留 v5 回退；Family Facts 字节内容、关系解析、Memory/Worldline 语义及 Action/Summary Prompt 均不改。独立诊断页新增脱敏 Outbound 指纹、相邻公共前缀/首差异 Block、Provider 缓存三态和 reasoning/visible TTFT。可显式创建 `GLM53F-Low` 与 `DSV4F-0731` 两个 NPC 对话预设，创建时不切换 NPC、Action 或 Summary。Runtime Profile Split 延期到 V8.9.1。297/297 发布组、366 个文件分类和隔离 Electron 诊断页导航通过；真实双 Provider、CK3、RP 与 Soak Gate 待人工验收。

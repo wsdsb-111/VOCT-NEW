@@ -383,6 +383,57 @@ class MemoryEngine {
     return sourcePrompt;
   }
 
+  buildSourceGroundedFallbackContent(context) {
+    const participantIds = uniqueIds((context.participants || []).map((participant) => participant?.id));
+    const participantSet = new Set(participantIds);
+    const namesToIds = new Map();
+    for (const participant of context.participants || []) {
+      const participantId = Number(participant?.id);
+      if (!participantSet.has(participantId)) continue;
+      for (const name of [participant.name, participant.shortName, participant.fullName].filter(Boolean)) namesToIds.set(String(name), participantId);
+    }
+    const presence = Array.isArray(context.participantPresence) ? context.participantPresence : [];
+    const boundaries = uniqueIds(presence.flatMap((window) => [window?.joinedAtMessageId, window?.leftAtMessageId])).filter(Number.isFinite).sort((left, right) => left - right);
+    const presentIdsAt = (messageId) => {
+      if (presence.length === 0) return participantIds;
+      return uniqueIds(presence.filter((window) => {
+        const joinedAt = Number(window?.joinedAtMessageId ?? 0);
+        const leftAt = window?.leftAtMessageId == null ? Infinity : Number(window.leftAtMessageId);
+        return joinedAt <= messageId && messageId < leftAt;
+      }).map((window) => window.characterId)).filter((characterId) => participantSet.has(characterId));
+    };
+    const segments = [];
+    let current = null;
+    for (const message of context.messages || []) {
+      const messageId = Number(message?.id);
+      const content = String(message?.content || "").trim();
+      if (!Number.isFinite(messageId) || !content) continue;
+      const participants = presentIdsAt(messageId);
+      const signature = participants.slice().sort((left, right) => left - right).join(",");
+      const crossedPresenceBoundary = current && boundaries.some((boundary) => current.lastMessageId < boundary && boundary <= messageId);
+      if (!current || current.signature !== signature || crossedPresenceBoundary) {
+        current = { signature, participants, lines: [], messageIds: [], speakerIds: [], lastMessageId: messageId };
+        segments.push(current);
+      }
+      const directSpeakerId = Number(message?.speakerCharacterId ?? message?.characterId);
+      const speakerId = participantSet.has(directSpeakerId) ? directSpeakerId : namesToIds.get(String(message?.name || ""));
+      current.lines.push(`${message?.name || message?.role || "系统"}：${content}`);
+      current.messageIds.push(messageId);
+      if (Number.isFinite(speakerId)) current.speakerIds.push(speakerId);
+      current.lastMessageId = messageId;
+    }
+    return JSON.stringify({
+      summarySegments: segments.map((segment) => ({
+        content: segment.lines.join("\n"),
+        participants: segment.participants,
+        visibility: "participants",
+        messageIds: segment.messageIds,
+        speakerIds: uniqueIds(segment.speakerIds)
+      })),
+      memories: []
+    });
+  }
+
   async requestFinalSummary(context) {
     const prompt = context.buildPrompt(context);
     const resumeChunks = context.preferChunkedSummary && !context.summaryChunk && context.messages?.length >= 4;
@@ -418,37 +469,50 @@ class MemoryEngine {
       }
     }
     if (!context.summaryChunk && context.messages?.length >= 4 && /^(truncated_final_summary_response|final_summary_quality_failed:)/.test(lastError?.message || "")) {
-      const size = Math.ceil(context.messages.length / 4);
-      const summarySegments = [], memories = [];
-      const boundaries = uniqueIds((context.participantPresence || []).flatMap(window => [window.joinedAtMessageId, window.leftAtMessageId])).sort((a, b) => a - b);
-      const chunks = [];
-      let current = [], region = null;
-      for (const message of context.messages) {
-        const nextRegion = boundaries.filter(boundary => boundary <= Number(message.id)).length;
-        if (current.length && (nextRegion !== region || current.length >= size)) { chunks.push(current); current = []; }
-        current.push(message);
-        region = nextRegion;
-      }
-      if (current.length) chunks.push(current);
-      if (chunks.length > 12) throw new Error("summary_partition_limit_exceeded");
-      for (const [index, messages] of chunks.entries()) {
-        if (messages.every(message => ["presence_join", "presence_leave", "presence_temporary_leave", "presence_temporary_return"].includes(message.kind))) {
-          for (const message of messages) {
-            const present = uniqueIds((context.participantPresence || []).filter(window => Number(window.joinedAtMessageId ?? 0) <= message.id && (window.leftAtMessageId == null || message.id < Number(window.leftAtMessageId))).map(window => window.characterId));
-            summarySegments.push({ content: message.content, participants: present, visibility: "participants", messageIds: [message.id], speakerIds: [] });
-          }
-          continue;
+      try {
+        const size = Math.ceil(context.messages.length / 4);
+        const summarySegments = [], memories = [];
+        const boundaries = uniqueIds((context.participantPresence || []).flatMap(window => [window.joinedAtMessageId, window.leftAtMessageId])).sort((a, b) => a - b);
+        const chunks = [];
+        let current = [], region = null;
+        for (const message of context.messages) {
+          const nextRegion = boundaries.filter(boundary => boundary <= Number(message.id)).length;
+          if (current.length && (nextRegion !== region || current.length >= size)) { chunks.push(current); current = []; }
+          current.push(message);
+          region = nextRegion;
         }
-        const chunk = { ...context, summaryChunk: true, rollingState: null, messages };
-        this.trace.record("summary_chunk", { conversationId: context.conversationId, reason: "whole_summary_failed", attempt: index + 1 });
-        const parsed = this.extractor.parseOutput(await this.requestFinalSummary(chunk), chunk);
-        for (const segment of parsed.summarySegments) summarySegments.push({ ...segment, segmentId: null, messageIds: segment.provenance.messageIds, speakerIds: segment.provenance.speakerIds });
-        for (const memory of parsed.memories) memories.push({ ...memory, memoryId: null, messageIds: memory.provenance.messageIds, speakerIds: memory.provenance.speakerIds });
+        if (current.length) chunks.push(current);
+        if (chunks.length > 12) throw new Error("summary_partition_limit_exceeded");
+        for (const [index, messages] of chunks.entries()) {
+          if (messages.every(message => ["presence_join", "presence_leave", "presence_temporary_leave", "presence_temporary_return"].includes(message.kind))) {
+            for (const message of messages) {
+              const present = uniqueIds((context.participantPresence || []).filter(window => Number(window.joinedAtMessageId ?? 0) <= message.id && (window.leftAtMessageId == null || message.id < Number(window.leftAtMessageId))).map(window => window.characterId));
+              summarySegments.push({ content: message.content, participants: present, visibility: "participants", messageIds: [message.id], speakerIds: [] });
+            }
+            continue;
+          }
+          const chunk = { ...context, summaryChunk: true, rollingState: null, messages };
+          this.trace.record("summary_chunk", { conversationId: context.conversationId, reason: "whole_summary_failed", attempt: index + 1 });
+          const parsed = this.extractor.parseOutput(await this.requestFinalSummary(chunk), chunk);
+          for (const segment of parsed.summarySegments) summarySegments.push({ ...segment, segmentId: null, messageIds: segment.provenance.messageIds, speakerIds: segment.provenance.speakerIds });
+          for (const memory of parsed.memories) memories.push({ ...memory, memoryId: null, messageIds: memory.provenance.messageIds, speakerIds: memory.provenance.speakerIds });
+        }
+        const content = JSON.stringify({ summarySegments, memories });
+        const quality = this.evaluateFinalSummaryQuality(context, this.extractor.parseOutput(content, context));
+        if (!quality.success) throw new Error(`final_summary_quality_failed:${quality.reasons.join("|")}`);
+        return content;
+      } catch (error) {
+        lastError = error;
       }
-      const content = JSON.stringify({ summarySegments, memories });
-      const quality = this.evaluateFinalSummaryQuality(context, this.extractor.parseOutput(content, context));
-      if (!quality.success) throw new Error(`final_summary_quality_failed:${quality.reasons.join("|")}`);
-      return content;
+    }
+    if (!context.summaryChunk && context.messages?.length >= 2 && /^final_summary_quality_failed:.*structured JSON was not returned/.test(lastError?.message || "")) {
+      const fallbackContent = this.buildSourceGroundedFallbackContent(context);
+      const fallbackQuality = this.evaluateFinalSummaryQuality(context, this.extractor.parseOutput(fallbackContent, context));
+      if (fallbackQuality.success) {
+        this.trace.record("summary_source_grounded_fallback", { conversationId: context.conversationId, participantCount: uniqueIds((context.participants || []).map((participant) => participant?.id)).length, messageCount: context.messages.length, reason: lastError.message });
+        return fallbackContent;
+      }
+      lastError = new Error(`final_summary_fallback_quality_failed:${fallbackQuality.reasons.join("|")}`);
     }
     throw lastError || new Error("invalid_final_summary_response");
   }

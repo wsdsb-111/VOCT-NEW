@@ -211,11 +211,82 @@ async function assertCoverageFailureRecoversWithRegeneration() {
   }
 }
 
+async function assertFourParticipantMalformedProviderFallsBackToSourceGroundedSummary() {
+  const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "votc-v793-four-person-fallback-"));
+  const store = new MemoryStore({ baseDir: path.join(tempDir, "memory") });
+  const trace = new MemoryTrace({ logger: { log() {} } });
+  const engine = new MemoryEngine({ store, trace });
+  const fourParticipants = [
+    { id: 1, name: "玩家" },
+    { id: 2, name: "赵永昇" },
+    { id: 3, name: "吴洛熙" },
+    { id: 4, name: "吴父" }
+  ];
+  const messages = Array.from({ length: 8 }, (_, index) => {
+    const speaker = fourParticipants[index % fourParticipants.length];
+    return message(index + 1, speaker.name, `${speaker.name}说明多人会谈中的具体安排、亲属立场与后续条件。`);
+  });
+  let folderWrite = null;
+  let requestCount = 0;
+  try {
+    const result = await engine.finalizeConversation({
+      conversationId: "v793-four-person-malformed-provider",
+      participants: fourParticipants,
+      messages,
+      participantPresence: fourParticipants.map((participant) => ({ characterId: participant.id, joinedAtMessageId: 1, leftAtMessageId: null })),
+      buildPrompt: () => [],
+      requestSummary: async () => {
+        requestCount++;
+        return { content: "模型没有按要求返回 JSON。", finish_reason: "stop" };
+      },
+      persistCharacterFolders: async (finalSummary, context) => {
+        folderWrite = { finalSummary, directedSummaries: context.directedSummaries };
+        return { success: true };
+      }
+    });
+    assert.strictEqual(result.success, true, "four-person conversation must save a source-grounded fallback after malformed provider output");
+    assert(requestCount >= 4, "whole-summary retries and the first chunk retry must happen before local fallback");
+    assert.strictEqual(result.extraction.structured, true);
+    assert.strictEqual(result.extraction.memories.length, 0, "fallback must not invent durable memories from malformed provider output");
+    assert(result.extraction.summarySegments.length > 0);
+    assert(result.extraction.summarySegments.every((entry) => entry.provenance.messageIds.length > 0));
+    assert(folderWrite.finalSummary.includes("赵永昇：赵永昇说明多人会谈中的具体安排、亲属立场与后续条件。"));
+    assert.strictEqual(folderWrite.directedSummaries.size, 12, "four participants must receive every directed summary projection");
+    assert([...folderWrite.directedSummaries.values()].every((projection) => projection.summarySegmentIds.length > 0));
+    assert(trace.list().some((entry) => entry.stage === "summary_source_grounded_fallback"));
+
+    const recoveryContext = engine.prepareFinalizationContext({
+      conversationId: "v793-four-person-malformed-provider-recovery",
+      participants: fourParticipants,
+      messages,
+      participantPresence: fourParticipants.map((participant) => ({ characterId: participant.id, joinedAtMessageId: 1, leftAtMessageId: null }))
+    });
+    const recoveryPath = engine.writeRecoverySnapshot(recoveryContext, {
+      finalizationStage: "request",
+      finalizationStatus: "failed_retryable",
+      providerOutput: null,
+      parsedExtraction: null,
+      retryCount: 1,
+      lastError: "final_summary_quality_failed:structured JSON was not returned"
+    });
+    const recovered = await engine.recoverFailedFinalization(recoveryPath, {
+      buildPrompt: () => [],
+      requestSummary: async () => ({ content: "模型仍然没有按要求返回 JSON。", finish_reason: "stop" }),
+      persistCharacterFolders: async () => ({ success: true })
+    });
+    assert.strictEqual(recovered.success, true, "a four-person failed recovery snapshot must commit through the same fallback");
+    assert.strictEqual(fs.existsSync(recoveryPath), false, "successful source-grounded recovery must clear its snapshot");
+  } finally {
+    fs.rmSync(tempDir, { recursive: true, force: true });
+  }
+}
+
 (async () => {
   assertPresenceBoundaryCases();
   assertProjectionCoverageCases();
   await assertCoverageFailureRecoversWithRegeneration();
-  console.log("PASS v7.9.3 P1 presence-boundary summary and projection coverage");
+  await assertFourParticipantMalformedProviderFallsBackToSourceGroundedSummary();
+  console.log("PASS v7.9.3 P1 presence-boundary summary, projection coverage and malformed-provider fallback");
 })().catch((error) => {
   console.error(error);
   process.exitCode = 1;

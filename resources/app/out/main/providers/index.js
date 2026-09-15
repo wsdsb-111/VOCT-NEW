@@ -454,6 +454,20 @@ class OpenAICompatibleProvider extends BaseProvider {
       }
     }
   }
+  buildDiagnosticRequest(request) {
+    return {
+      model: request.model,
+      messages: request.messages,
+      stream: request.stream,
+      temperature: request.temperature,
+      max_tokens: request.max_tokens,
+      top_p: request.top_p,
+      presence_penalty: request.presence_penalty,
+      frequency_penalty: request.frequency_penalty,
+      ...request.response_format ? { response_format: request.response_format } : {},
+      ...request.stream ? { stream_options: { include_usage: true } } : {}
+    };
+  }
   chatCompletion(request, config) {
     const headers = {
       "Content-Type": "application/json",
@@ -468,18 +482,7 @@ class OpenAICompatibleProvider extends BaseProvider {
       defaultHeaders: headers,
       maxRetries: 0
     });
-    const requestParams = {
-      model: request.model,
-      messages: request.messages,
-      stream: request.stream,
-      temperature: request.temperature,
-      max_tokens: request.max_tokens,
-      top_p: request.top_p,
-      presence_penalty: request.presence_penalty,
-      frequency_penalty: request.frequency_penalty,
-      ...request.response_format ? { response_format: request.response_format } : {},
-      ...request.stream ? { stream_options: { include_usage: true } } : {}
-    };
+    const requestParams = this.buildDiagnosticRequest(request, config);
     if (requestParams.stream) {
       return this._streamChatCompletion(requestParams, openAIClient, request.signal);
     } else {
@@ -697,6 +700,9 @@ class ZhipuProvider extends OpenAICompatibleProvider {
       },
       maxRetries: 0
     });
+  }
+  buildDiagnosticRequest(request, config) {
+    return this.buildRequestParams(request, config);
   }
   chatCompletion(request, config) {
     const requestParams = this.buildRequestParams(request, config);
@@ -1229,15 +1235,9 @@ class DeepseekProvider extends BaseProvider {
       { id: "deepseek-v4.1-flash-expires-on-0910", name: "deepseek-v4.1-flash-expires-on-0910" }
     ];
   }
-  chatCompletion(request, config) {
-    const baseUrl = this.getDeepseekBaseUrl(config);
-    const openAIClient = new OpenAI({
-      apiKey: this.getAPIKey(config),
-      baseURL: baseUrl,
-      maxRetries: 0
-    });
+  buildDiagnosticRequest(request, config) {
     const transformedRequest = this.transformRequestForDeepseek(request, config);
-    const requestParams = {
+    return {
       model: transformedRequest.model,
       messages: transformedRequest.messages,
       stream: transformedRequest.stream,
@@ -1246,13 +1246,19 @@ class DeepseekProvider extends BaseProvider {
       top_p: transformedRequest.top_p,
       presence_penalty: transformedRequest.presence_penalty,
       frequency_penalty: transformedRequest.frequency_penalty,
-      // DeepSeek structured action requests disable thinking in the provider
-      // adapter; ordinary chat and summary request parameters remain unchanged.
       ...transformedRequest.thinking ? { thinking: transformedRequest.thinking } : {},
-      // Deepseek only supports json_object, not json_schema
       ...transformedRequest.response_format ? { response_format: transformedRequest.response_format } : {},
       ...transformedRequest.stream ? { stream_options: { include_usage: true } } : {}
     };
+  }
+  chatCompletion(request, config) {
+    const baseUrl = this.getDeepseekBaseUrl(config);
+    const openAIClient = new OpenAI({
+      apiKey: this.getAPIKey(config),
+      baseURL: baseUrl,
+      maxRetries: 0
+    });
+    const requestParams = this.buildDiagnosticRequest(request, config);
     if (requestParams.stream) {
       return this._streamChatCompletion(requestParams, openAIClient, request.signal);
     } else {

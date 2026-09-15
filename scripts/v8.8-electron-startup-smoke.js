@@ -82,9 +82,13 @@ async function main() {
     await clickProvider("诊断");
     assert(await evaluate("!!document.querySelector('.provider-diagnostics-view')"), "provider diagnostics page rendered an empty body");
     console.log("DIAGNOSTICS", await evaluate("document.querySelector('.provider-diagnostics-view')?.innerText.slice(0,600)"));
-    assert(await evaluate("['V8.9 主对话缓存诊断','V8.9 Chat Cache Diagnostics'].includes(document.querySelector('.provider-diagnostics-view h3')?.textContent.trim())"), "V8.9 diagnostics heading missing");
-    assert(await evaluate("[...document.querySelectorAll('.provider-diagnostics-view h4')].some(e=>['V8.9 Chat Prompt 开关','V8.9 Chat Prompt switches'].includes(e.textContent.trim()))"), "V8.9 diagnostics switches missing");
-    assert(await evaluate("document.querySelectorAll('.provider-diagnostics-view input[type=checkbox]').length===3"), "V8.9 diagnostics must expose layout, outbound and runtime profile switches");
+    assert(await evaluate("['V8.9.1 后续：真实 Request Diff 诊断','V8.9.1 Follow-up: Real Request Diff Diagnostics'].includes(document.querySelector('.provider-diagnostics-view h3')?.textContent.trim())"), "real request diff diagnostics heading missing");
+    assert(await evaluate("['导出 Real Request Diff','Export Real Request Diff'].some(label=>[...document.querySelectorAll('.provider-diagnostics-view button')].some(e=>e.textContent.trim()===label))"), "real request diff export button missing");
+    assert(await evaluate("!![...document.querySelectorAll('.provider-diagnostics-view h4')].find(e=>/Prefix Length Buckets/.test(e.textContent))"), "prefix bucket analysis missing");
+    assert(await evaluate("![...document.querySelectorAll('.provider-diagnostics-view button')].some(e=>/TTL 探针|测试缓存|运行全部测试|仅测试 Stream|仅测试 Prefix|仅测试多轮/.test(e.textContent.trim()))"), "obsolete synthetic diagnostic controls remain");
+    assert(await evaluate("[...document.querySelectorAll('.provider-diagnostics-view h4')].some(e=>['V8.9 / V8.10 Chat Prompt 开关','V8.9 / V8.10 Chat Prompt switches'].includes(e.textContent.trim()))"), "V8.10 diagnostics switches missing");
+    assert(await evaluate("document.querySelectorAll('.provider-diagnostics-view input[type=checkbox]').length===4"), "V8.10 diagnostics must expose layout, outbound, runtime profile and Provider Adapter switches");
+    assert(await evaluate("document.querySelector('.provider-diagnostics-view')?.textContent.includes('Current Prompt Profile') || document.querySelector('.provider-diagnostics-view')?.textContent.includes('当前 Prompt Profile')"), "V8.10 prompt profile diagnostics missing");
     const clicked = await evaluate("(() => { const e=[...document.querySelectorAll('button')].find(e=>['世界书','Worldline'].includes(e.textContent.trim())); if(e)e.click();return !!e; })()");
     assert(clicked, "worldline navigation missing");
     await new Promise(resolve => setTimeout(resolve, 1500));

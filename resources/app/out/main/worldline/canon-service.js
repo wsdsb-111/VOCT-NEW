@@ -160,7 +160,18 @@ class CanonService {
     if (this.identityBusy) throw new Error("branch_identity_change_in_progress");
     const scope = { ...this.branch() };
     if (!scope.branchId || token !== scope.token) throw new Error("branch_write_blocked_reload_editor");
-    if (!["create", "update", "supersede"].includes(operation)) throw new Error("supplemental_operation_invalid");
+    if (!["create", "update", "supersede", "delete"].includes(operation)) throw new Error("supplemental_operation_invalid");
+    if (operation === "delete") {
+      const state = await this.prepare();
+      if (!state || this.branch().token !== scope.token) throw new Error("branch_write_blocked_reload_editor");
+      const existing = state.records.find((record) => record.recordId === id);
+      if (!existing) throw new Error("supplemental_not_found");
+      if (existing.revision !== revision) throw new Error("supplemental_revision_conflict");
+      this.snapshot = null;
+      this.cache.clear();
+      try { return await this.run(scope, "delete", { id, revision }); }
+      finally { this.snapshot = null; this.cache.clear(); }
+    }
     const checkpoint = this.getCheckpoint();
     const live = this.getLiveState();
     const normalizationContext = { gameDate: live.gameDate || checkpoint?.snapshot?.gameDate || scope.gameDate, totalDays: Number.isSafeInteger(live.totalDays) ? live.totalDays : checkpoint?.snapshot?.totalDays };

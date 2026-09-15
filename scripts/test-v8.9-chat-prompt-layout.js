@@ -25,6 +25,8 @@ class PromptScriptLoader {
 
 let v89Layout = true;
 let runtimeProfileSplit = false;
+let v810ProviderAdapter = true;
+let providerConfig = null;
 const promptSettings = {
   mainTemplate: "STABLE_MAIN",
   blocks: [
@@ -36,7 +38,7 @@ const promptSettings = {
 };
 const settingsRepository = {
   getPromptSettings: () => promptSettings,
-  getChatPromptV89Settings: () => ({ chatPromptV89Layout: v89Layout, chatPromptV89OutboundDiagnostics: true, chatPromptV89RuntimeProfileSplit: runtimeProfileSplit })
+  getChatPromptV89Settings: () => ({ chatPromptV89Layout: v89Layout, chatPromptV89OutboundDiagnostics: true, chatPromptV89RuntimeProfileSplit: runtimeProfileSplit, chatPromptV810ProviderAdapter: v810ProviderAdapter })
 };
 const promptConfigManager = {
   getDefaultMainTemplateContent: () => "STABLE_MAIN",
@@ -96,7 +98,7 @@ const memoryContext = {
   worldTurnRecallText: "WORLD_TURN_RECALL"
 };
 
-const build = () => PromptBuilder.buildMessagesWithTokenCount(history, responder, gameData, "", memoryContext);
+const build = (sourceHistory = history) => PromptBuilder.buildMessagesWithTokenCount(sourceHistory, responder, gameData, "", memoryContext, providerConfig);
 const blockIndex = (result, id) => result.blocks.findIndex((entry) => entry.block.id === id);
 const familyContent = (result) => result.blocks.find((entry) => entry.block.id === "responder-family-facts")?.content;
 
@@ -127,6 +129,32 @@ assert(familyContent(v89));
 assert.strictEqual(familyContent(v89), familyContent(legacy), "V8.9 may move Family Facts but must not change their content");
 const payload = (result) => result.messages.slice(1).map((message) => `${message.role}\0${message.content}`).sort();
 assert.deepStrictEqual(payload(v89), payload(legacy), "V8.9 layout must preserve every non-anchor message byte-for-byte");
+
+v89Layout = true;
+providerConfig = { providerType: "deepseek", defaultModel: "deepseek-v4-flash-0731" };
+const deepseek = build();
+assert.deepStrictEqual(deepseek.messages, v89.messages, "DeepSeek must keep the V8.9 prompt bytes and order");
+assert.strictEqual(deepseek.promptProfile.label, "DeepSeek V8.9 Layout");
+
+providerConfig = { providerType: "zhipu", defaultModel: "glm-5.3-flash" };
+const glmHistory = Array.from({ length: 15 }, (_, index) => ({ role: index % 2 === 0 ? "user" : "assistant", content: `GLM_HISTORY_${index}` }));
+glmHistory.push({ role: "user", content: "GLM_CURRENT_USER" });
+const glm = build(glmHistory);
+assert.match(glm.messages[0].content, /^VOTC_CACHE_BLOCK_v8\.10/);
+assert.strictEqual(glm.promptProfile.label, "GLM Cache v1");
+assert.strictEqual(glm.promptProfile.historyWindow, 12);
+assert.strictEqual(glm.blocks.find((entry) => entry.block.id === "history").content.match(/GLM_HISTORY_/g).length, 11, "GLM must retain only the 11 prior messages adjacent to its current user message");
+assert(blockIndex(glm, "responder-game-facts") < blockIndex(glm, "history"), "GLM dynamic runtime must precede short history after the stable cache zone");
+assert(blockIndex(glm, "memory-session-topic-anchor") < blockIndex(glm, "history"), "GLM session topic memory must live in the dynamic tail");
+assert(glm.staticTokens > 0 && glm.dynamicTokens > 0);
+
+v810ProviderAdapter = false;
+const glmRollback = build();
+assert.match(glmRollback.messages[0].content, /^VOTC_CACHE_ANCHOR_v6/);
+assert.strictEqual(glmRollback.promptProfile.label, "V8.9 Default Layout");
+assert.deepStrictEqual(glmRollback.messages, v89.messages, "Disabling the adapter must restore the V8.9 prompt exactly");
+v810ProviderAdapter = true;
+providerConfig = null;
 
 console.log("VOTC V8.9 chat prompt layout: PASS (v6 order, v5 rollback, Family Facts parity, final instruction)");
 

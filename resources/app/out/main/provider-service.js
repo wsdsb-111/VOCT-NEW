@@ -185,8 +185,24 @@ class LLMManager {
     }
     const requestType = metadata.requestType || "chat";
     const v89Settings = this.settingsRepository.getChatPromptV89Settings?.() || { chatPromptV89OutboundDiagnostics: true };
-    const outboundFingerprint = requestType === "chat" && v89Settings.chatPromptV89OutboundDiagnostics !== false
-      ? this.providerDiagnostics?.prepareOutboundRequest({ provider: activeConfig.providerType, model: activeConfig.defaultModel, requestType, messages, blocks: metadata.blocks }) || null
+    const diagnosticRequest = typeof provider.buildDiagnosticRequest === "function"
+      ? provider.buildDiagnosticRequest(request, activeConfig)
+      : request;
+    const realRequestDiff = requestType === "chat" && v89Settings.chatPromptV89OutboundDiagnostics !== false
+      ? this.providerDiagnostics?.prepareOutboundRequest({
+        provider: activeConfig.providerType,
+        model: activeConfig.defaultModel,
+        requestType,
+        request: diagnosticRequest,
+        messages: diagnosticRequest.messages,
+        blocks: metadata.blocks,
+        conversationId: metadata.conversationId,
+        responderId: metadata.responderId,
+        baseUrl: activeConfig.baseUrl,
+        promptProfile: metadata.promptProfile,
+        staticTokens: metadata.staticTokens,
+        dynamicTokens: metadata.dynamicTokens
+      }) || null
       : null;
     const requestStartedAt = new Date().toISOString();
     return await this.trackUsage(provider.chatCompletion(request, activeConfig), {
@@ -195,7 +211,7 @@ class LLMManager {
       providerType: activeConfig.providerType,
       model: activeConfig.defaultModel,
       estimatedPromptTokens,
-      outboundFingerprint,
+      realRequestDiff,
       requestStartedAt,
       captureChatTiming: requestType === "chat"
     });

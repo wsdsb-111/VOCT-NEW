@@ -247,6 +247,10 @@ const schema = {
     type: "boolean",
     default: true
   },
+  chatPromptV810ProviderAdapter: {
+    type: "boolean",
+    default: true
+  },
   chatPromptRuntimeProfileVersion: {
     type: "number",
     default: 0

@@ -60,7 +60,8 @@ const blocks = [
   }
   const entry = diagnostics.getRecent(1)[0];
   assert.strictEqual(entry.provider, "openai-compatible", "chat diagnostics must cover the DeepSeek OpenAI-compatible route");
-  assert.strictEqual(entry.outboundFingerprint.outboundFingerprintVersion, 1);
+  assert.strictEqual(entry.realRequestDiff.version, "real_request_diff_v1");
+  assert.strictEqual(entry.realRequestDiff.comparisonStatus, "cold_local_baseline");
   assert(entry.requestStartedAt && entry.firstReasoningAt && entry.firstVisibleContentAt && entry.requestCompletedAt);
   assert(entry.reasoningTTFTMs >= 0 && entry.visibleTTFTMs >= 0 && entry.outputTimeMs >= 0 && entry.totalLatencyMs >= 0);
   assert.strictEqual(entry.normalizedUsage.prompt_cache_hit_tokens, 12);

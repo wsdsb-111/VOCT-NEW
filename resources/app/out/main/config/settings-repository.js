@@ -83,6 +83,9 @@ function createSettingsRepository({ Store, schema, SecureProviderSecrets, electr
       if (currentAppSettings.chatPromptV89OutboundDiagnostics === void 0) {
         this.store.set("chatPromptV89OutboundDiagnostics", true);
       }
+      if (currentAppSettings.chatPromptV810ProviderAdapter === void 0) {
+        this.store.set("chatPromptV810ProviderAdapter", true);
+      }
       if (currentAppSettings.chatPromptRuntimeProfileVersion !== 1) {
         this.store.set("chatPromptV89RuntimeProfileSplit", true);
         this.store.set("chatPromptRuntimeProfileVersion", 1);
@@ -265,7 +268,8 @@ function createSettingsRepository({ Store, schema, SecureProviderSecrets, electr
       return {
         chatPromptV89Layout: this.store.get("chatPromptV89Layout", true) !== false,
         chatPromptV89OutboundDiagnostics: this.store.get("chatPromptV89OutboundDiagnostics", true) !== false,
-        chatPromptV89RuntimeProfileSplit: this.store.get("chatPromptV89RuntimeProfileSplit", true) === true
+        chatPromptV89RuntimeProfileSplit: this.store.get("chatPromptV89RuntimeProfileSplit", true) === true,
+        chatPromptV810ProviderAdapter: this.store.get("chatPromptV810ProviderAdapter", true) !== false
       };
     }
     saveChatPromptV89Settings(settings = {}) {
@@ -273,11 +277,13 @@ function createSettingsRepository({ Store, schema, SecureProviderSecrets, electr
       const next = {
         chatPromptV89Layout: typeof settings.chatPromptV89Layout === "boolean" ? settings.chatPromptV89Layout : current.chatPromptV89Layout,
         chatPromptV89OutboundDiagnostics: typeof settings.chatPromptV89OutboundDiagnostics === "boolean" ? settings.chatPromptV89OutboundDiagnostics : current.chatPromptV89OutboundDiagnostics,
-        chatPromptV89RuntimeProfileSplit: typeof settings.chatPromptV89RuntimeProfileSplit === "boolean" ? settings.chatPromptV89RuntimeProfileSplit : current.chatPromptV89RuntimeProfileSplit
+        chatPromptV89RuntimeProfileSplit: typeof settings.chatPromptV89RuntimeProfileSplit === "boolean" ? settings.chatPromptV89RuntimeProfileSplit : current.chatPromptV89RuntimeProfileSplit,
+        chatPromptV810ProviderAdapter: typeof settings.chatPromptV810ProviderAdapter === "boolean" ? settings.chatPromptV810ProviderAdapter : current.chatPromptV810ProviderAdapter
       };
       this.store.set("chatPromptV89Layout", next.chatPromptV89Layout);
       this.store.set("chatPromptV89OutboundDiagnostics", next.chatPromptV89OutboundDiagnostics);
       this.store.set("chatPromptV89RuntimeProfileSplit", next.chatPromptV89RuntimeProfileSplit);
+      this.store.set("chatPromptV810ProviderAdapter", next.chatPromptV810ProviderAdapter);
       return next;
     }
     getLanguage() {

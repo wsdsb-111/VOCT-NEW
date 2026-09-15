@@ -60,6 +60,16 @@ const { registerIpcHandlers } = require("../resources/app/out/main/ipc/register-
     await service.mutate({ token: service.branch().token, operation: "update", id: pinned.recordId, revision: 1, payload: { status: "HIDDEN" } });
     await service.prepare();
     assert.equal(service.recall({ responderId: "1", stable: true, conversationId: "conversation" }).text, null);
+    const deletedPinned = await service.mutate({ token: service.branch().token, operation: "delete", id: pinned.recordId, revision: 2 });
+    assert(deletedPinned.deletedRecordIds.includes(pinned.recordId), "delete must report the removed record");
+    await service.prepare();
+    assert.equal((await service.list()).records.some((record) => record.recordId === pinned.recordId), false, "deleted memory must leave the current record list");
+    assert.equal((await service.history({ token: service.branch().token, id: pinned.recordId })).length, 0, "deleted memory must remove its revision history");
+    const chainBase = await service.mutate({ token: service.branch().token, operation: "create", payload: { title: "待删记忆", content: "这条记忆用于测试删除修订链", gameDate: "1171.9.20", entities: ["2"] } });
+    const chainReplacement = await service.mutate({ token: service.branch().token, operation: "supersede", id: chainBase.recordId, revision: 1, payload: { title: "待删记忆（修订）", content: "修订后的待删记忆", revisionReason: "测试替代" } });
+    const deletedChain = await service.mutate({ token: service.branch().token, operation: "delete", id: chainReplacement.recordId, revision: 1 });
+    assert(deletedChain.deletedRecordIds.includes(chainBase.recordId) && deletedChain.deletedRecordIds.includes(chainReplacement.recordId), "delete must remove a supersession chain together");
+    assert.equal((await service.list()).total, 1, "deleting a memory chain must not remove unrelated records");
 
     // Exercise the production service formatter, not a separate test-only formatter.
     checkpoint = original;

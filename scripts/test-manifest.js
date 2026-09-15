@@ -87,6 +87,7 @@ const releaseChecks = [
   { group: "v8.9-provider-presets", script: "test-v8.9-provider-presets.js" },
   { group: "v8.9.1-cache-usage", script: "test-v8.9.1-cache-usage.js" },
   { group: "v8.9.1-runtime-profile", script: "test-v8.9.1-runtime-profile.js" },
+  { group: "real-request-diff", script: "test-real-request-diff.js" },
   { group: "syntax", args: ["--check", "resources/app/out/main/main.js"] },
   { group: "v8.0-historical-baseline-parity", script: "test-v8.0-historical-baseline-parity.js" },
   { group: "v8.0-historical-schema", script: "test-v8.0-historical-schema.js" },

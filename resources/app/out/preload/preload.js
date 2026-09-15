@@ -180,14 +180,12 @@ electron.contextBridge.exposeInMainWorld("usageAPI", {
 });
 electron.contextBridge.exposeInMainWorld("providerDiagnosticsAPI", {
   getStatus: () => electron.ipcRenderer.invoke("providerDiagnostics:getStatus"),
-  testConnection: () => electron.ipcRenderer.invoke("providerDiagnostics:testConnection"),
-  runCacheProbe: () => electron.ipcRenderer.invoke("providerDiagnostics:runCacheProbe"),
-  runClearThinkingAB: () => electron.ipcRenderer.invoke("providerDiagnostics:runClearThinkingAB"),
+  getRealRequestDiff: (limit) => electron.ipcRenderer.invoke("provider-diagnostics:get-real-request-diff", limit),
+  exportRealRequestDiff: (limit) => electron.ipcRenderer.invoke("provider-diagnostics:export-real-request-diff", limit),
   getRecent: (limit) => electron.ipcRenderer.invoke("providerDiagnostics:getRecent", limit),
   exportRecent: (limit) => electron.ipcRenderer.invoke("providerDiagnostics:exportRecent", limit),
   getV89Settings: () => electron.ipcRenderer.invoke("providerDiagnostics:getV89Settings"),
-  saveV89Settings: (settings) => electron.ipcRenderer.invoke("providerDiagnostics:saveV89Settings", settings),
-  ensureV89ChatPresets: () => electron.ipcRenderer.invoke("providerDiagnostics:ensureV89ChatPresets")
+  saveV89Settings: (settings) => electron.ipcRenderer.invoke("providerDiagnostics:saveV89Settings", settings)
 });
 electron.contextBridge.exposeInMainWorld("worldlineAPI", {
   getSettings: () => electron.ipcRenderer.invoke("worldline:getSettings"),
