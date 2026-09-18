@@ -1,7 +1,7 @@
 "use strict";
 
 const { buildFamilyFactBlock } = require("../worldline/character-family-facts");
-const { resolveProviderPromptProfile } = require("./provider-prompt-adapter");
+const { resolveProviderPromptProfile, resolvePromptLayoutId } = require("./provider-prompt-adapter");
 
 function createPromptBuilder({
   TemplateEngine,
@@ -452,6 +452,7 @@ function createPromptBuilder({
       const configuredProfile = resolveProviderPromptProfile(providerConfig || settingsRepository.getActiveProviderConfig?.() || null, v89Settings.chatPromptV810ProviderAdapter !== false);
       const promptProfile = v89LayoutEnabled ? configuredProfile : resolveProviderPromptProfile(null, false);
       const glmCacheLayout = promptProfile.glmCacheLayout === true;
+      const layoutId = resolvePromptLayoutId(promptProfile, { v89LayoutEnabled, runtimeProfileSplit });
       const llmMessages = [];
       const cacheAnchor = glmCacheLayout ? this.buildGlmCacheAnchor(gameData) : this.buildCacheAnchor(gameData, runtimeProfileSplit ? "v7" : v89LayoutEnabled ? "v6" : "v5");
       const blocksWithTokens = [{
@@ -479,6 +480,7 @@ function createPromptBuilder({
         content: m.content
       })).filter((m) => !!m.content);
       const workingHistory = Number.isInteger(promptProfile.historyWindow) ? normalizedHistory.slice(-promptProfile.historyWindow) : normalizedHistory;
+      const omittedHistory = Number.isInteger(promptProfile.historyWindow) ? normalizedHistory.slice(0, Math.max(0, normalizedHistory.length - promptProfile.historyWindow)) : [];
       const currentFactRegistry = new Map();
       const activeParticipantIds = new Set((memoryContext?.activeParticipantIds || [...gameData.characters.keys()]).map(Number));
       const activeCounterpartIds = [...activeParticipantIds].filter((id) => Number(id) !== Number(char.id));
@@ -715,8 +717,10 @@ function createPromptBuilder({
           id: promptProfile.id,
           label: promptProfile.label,
           adapterEnabled: v89Settings.chatPromptV810ProviderAdapter !== false,
-          historyWindow: promptProfile.historyWindow
+          historyWindow: promptProfile.historyWindow,
+          layoutId
         },
+        omittedHistoryTokens: TokenCounter.calculateTotalTokens(omittedHistory),
         staticTokens,
         dynamicTokens: blocksWithTokens.slice(firstDynamicBlock < 0 ? blocksWithTokens.length : firstDynamicBlock).reduce((total, tokenBlock) => total + (Number(tokenBlock.tokens) || 0), 0)
       };

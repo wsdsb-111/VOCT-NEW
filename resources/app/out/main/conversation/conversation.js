@@ -209,11 +209,13 @@ class Conversation {
     const memoryRecallStartedAt = Date.now();
     let memoryContext = await this.getMemoryContextFor(npc, contextLimit);
     const memoryRecallMs = Date.now() - memoryRecallStartedAt;
+    const promptHistory = this.getPromptHistoryForCharacter(npc.id);
+    const promptSummary = this.getPromptSummaryForCharacter(npc.id);
     let currentMessages = PromptBuilder.buildMessages(
-      this.getPromptHistoryForCharacter(npc.id),
+      promptHistory,
       npc,
       this.gameData,
-      this.getPromptSummaryForCharacter(npc.id),
+      promptSummary,
       memoryContext
     );
     let estimatedTokens = this.estimateTokenCount(currentMessages);
@@ -235,10 +237,10 @@ class Conversation {
       }, null);
       memoryContext = { ...memoryContext, turnRecall: [], turnRecallText: null, turnRecallTokens: 0, turnRecallReason: reason };
       currentMessages = PromptBuilder.buildMessages(
-        this.getPromptHistoryForCharacter(npc.id),
+        promptHistory,
         npc,
         this.gameData,
-        this.getPromptSummaryForCharacter(npc.id),
+        promptSummary,
         memoryContext
       );
       estimatedTokens = this.estimateTokenCount(currentMessages);
@@ -334,8 +336,14 @@ class Conversation {
         trimMemoryTurnRecall("context_limit_exceeded_after_worldline_trim");
       }
     }
-    if (estimatedTokens > contextLimit * this.CONTEXT_LIMIT_PERCENTAGE) {
-      console.log(`Context approaching limit (${estimatedTokens}/${contextLimit}), creating rolling summary`);
+    const summaryPressureBuild = typeof PromptBuilder.buildMessagesWithTokenCount === "function"
+      ? PromptBuilder.buildMessagesWithTokenCount(promptHistory, npc, this.gameData, promptSummary, memoryContext)
+      : null;
+    const summaryPressureTokens = Number.isFinite(summaryPressureBuild?.totalTokens)
+      ? summaryPressureBuild.totalTokens + (Number(summaryPressureBuild.omittedHistoryTokens) || 0)
+      : estimatedTokens;
+    if (summaryPressureTokens > contextLimit * this.CONTEXT_LIMIT_PERCENTAGE) {
+      console.log(`Context approaching limit (${summaryPressureTokens}/${contextLimit}), creating rolling summary`);
       if (this.canUseSharedRollingSummary(npc.id)) await this.createRollingSummary(contextLimit);
     }
     return memoryContext;

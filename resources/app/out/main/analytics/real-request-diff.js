@@ -222,7 +222,8 @@ function buildRealRequestSnapshot({ providerType, model, requestType = "chat", r
     promptProfile: promptProfile && typeof promptProfile === "object" ? {
       id: safeId(promptProfile.id),
       label: safeId(promptProfile.label),
-      historyWindow: finiteNumber(promptProfile.historyWindow)
+      historyWindow: finiteNumber(promptProfile.historyWindow),
+      layoutId: safeId(promptProfile.layoutId)
     } : null,
     staticTokens: finiteNumber(staticTokens),
     dynamicTokens: finiteNumber(dynamicTokens),

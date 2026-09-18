@@ -104,6 +104,7 @@ const familyContent = (result) => result.blocks.find((entry) => entry.block.id =
 
 const v89 = build();
 assert.match(v89.messages[0].content, /^VOTC_CACHE_ANCHOR_v6/);
+assert.strictEqual(v89.promptProfile.layoutId, "v6");
 assert(blockIndex(v89, "memory-stable") < blockIndex(v89, "history"));
 assert(blockIndex(v89, "history") < blockIndex(v89, "responder-game-facts"), "prior conversation must precede current runtime facts");
 assert(blockIndex(v89, "current-presence-roster") < blockIndex(v89, "history-current-user"), "current runtime must precede current user input");
@@ -122,6 +123,7 @@ assert(metadata.blocks.filter((block) => block.tokens > 0).every((block) => bloc
 v89Layout = false;
 const legacy = build();
 assert.match(legacy.messages[0].content, /^VOTC_CACHE_ANCHOR_v5/);
+assert.strictEqual(legacy.promptProfile.layoutId, "v5");
 assert(blockIndex(legacy, "responder-family-facts") < blockIndex(legacy, "history"), "rollback must restore the v8.8.5 Family Facts position");
 assert(blockIndex(legacy, "current-presence-roster") < blockIndex(legacy, "history"), "rollback must restore the v8.8.5 runtime-before-history order");
 
@@ -135,6 +137,13 @@ providerConfig = { providerType: "deepseek", defaultModel: "deepseek-v4-flash-07
 const deepseek = build();
 assert.deepStrictEqual(deepseek.messages, v89.messages, "DeepSeek must keep the V8.9 prompt bytes and order");
 assert.strictEqual(deepseek.promptProfile.label, "DeepSeek V8.9 Layout");
+assert.strictEqual(deepseek.promptProfile.layoutId, "v6");
+
+providerConfig = { providerType: "openai-compatible", defaultModel: "deepseek-v4-flash-0731" };
+const compatibleDeepseek = build();
+assert.deepStrictEqual(compatibleDeepseek.messages, v89.messages, "the production OpenAI-compatible DeepSeek preset must keep the V8.9 prompt bytes and order");
+assert.strictEqual(compatibleDeepseek.promptProfile.label, "DeepSeek V8.9 Layout");
+assert.strictEqual(compatibleDeepseek.promptProfile.layoutId, "v6");
 
 providerConfig = { providerType: "zhipu", defaultModel: "glm-5.3-flash" };
 const glmHistory = Array.from({ length: 15 }, (_, index) => ({ role: index % 2 === 0 ? "user" : "assistant", content: `GLM_HISTORY_${index}` }));
@@ -143,10 +152,12 @@ const glm = build(glmHistory);
 assert.match(glm.messages[0].content, /^VOTC_CACHE_BLOCK_v8\.10/);
 assert.strictEqual(glm.promptProfile.label, "GLM Cache v1");
 assert.strictEqual(glm.promptProfile.historyWindow, 12);
+assert.strictEqual(glm.promptProfile.layoutId, "glm_cache_v1_v6");
 assert.strictEqual(glm.blocks.find((entry) => entry.block.id === "history").content.match(/GLM_HISTORY_/g).length, 11, "GLM must retain only the 11 prior messages adjacent to its current user message");
 assert(blockIndex(glm, "responder-game-facts") < blockIndex(glm, "history"), "GLM dynamic runtime must precede short history after the stable cache zone");
 assert(blockIndex(glm, "memory-session-topic-anchor") < blockIndex(glm, "history"), "GLM session topic memory must live in the dynamic tail");
 assert(glm.staticTokens > 0 && glm.dynamicTokens > 0);
+assert(glm.omittedHistoryTokens > 0, "GLM must preserve omitted history pressure for rolling-summary decisions");
 
 v810ProviderAdapter = false;
 const glmRollback = build();
@@ -167,6 +178,7 @@ const fresh1 = build();
 responder.gold = 200;
 const fresh2 = build();
 assert.match(fresh2.messages[0].content, /^VOTC_CACHE_ANCHOR_v7/);
+assert.strictEqual(fresh2.promptProfile.layoutId, "v7");
 assert.strictEqual(fresh1.blocks.find(b => b.block.id === "profile-stable").content, fresh2.blocks.find(b => b.block.id === "profile-stable").content);
 assert(fresh2.blocks.find(b => b.block.id === "profile-dynamic").content.includes("gold: 200"));
 assert(blockIndex(fresh2, "profile-dynamic") > blockIndex(fresh2, "history"));
@@ -175,8 +187,12 @@ assert(![...memoryContext.stableDescriptionCache.entries()].filter(([key]) => ke
 responder.shortName = "新姓名";
 assert(build().blocks.find(b => b.block.id === "profile-stable").content.includes("新姓名"));
 runtimeProfileSplit = false;
-assert.match(build().messages[0].content, /^VOTC_CACHE_ANCHOR_v6/);
+const restoredV6 = build();
+assert.match(restoredV6.messages[0].content, /^VOTC_CACHE_ANCHOR_v6/);
+assert.strictEqual(restoredV6.promptProfile.layoutId, "v6");
 v89Layout = false;
 runtimeProfileSplit = true;
-assert.match(build().messages[0].content, /^VOTC_CACHE_ANCHOR_v5/);
+const restoredV5 = build();
+assert.match(restoredV5.messages[0].content, /^VOTC_CACHE_ANCHOR_v5/);
+assert.strictEqual(restoredV5.promptProfile.layoutId, "v5");
 console.log("V8.9.1 multi-turn profile PASS: fresh runtime, stable cache, identity refresh, v7/v6/v5 rollback");

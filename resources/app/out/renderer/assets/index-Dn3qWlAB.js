@@ -22180,8 +22180,8 @@ const ProviderDiagnosticsView = () => {
         metric(text("配置", "Configured"), status.configured ? text("已配置", "Yes") : text("未配置 API Key", "API key missing")),
         metric(text("记录开关", "Capture"), status.captureEnabled ? text("开启", "ON") : text("关闭", "OFF")),
         metric(text("当前 Prompt Profile", "Current Prompt Profile"), status.promptProfile || "—"),
-        metric(text("静态 Token", "Static Tokens"), formatTokens(status.staticTokens)),
-        metric(text("动态 Token", "Dynamic Tokens"), formatTokens(status.dynamicTokens)),
+        metric(text("最近同 Profile 静态 Token", "Latest matching-profile static tokens"), formatTokens(status.staticTokens)),
+        metric(text("最近同 Profile 动态 Token", "Latest matching-profile dynamic tokens"), formatTokens(status.dynamicTokens)),
         metric(text("端点", "Endpoint"), status.baseUrl || "—")
       ] }),
       status.error && /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "optimization-error", children: status.error })
@@ -22229,6 +22229,7 @@ const ProviderDiagnosticsView = () => {
         ...intervalRows.map((row) => /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "provider-diagnostic-real-row", children: [
           /* @__PURE__ */ jsxRuntimeExports.jsx("strong", { children: row.label }),
           /* @__PURE__ */ jsxRuntimeExports.jsx("span", { children: row.requests }),
+          /* @__PURE__ */ jsxRuntimeExports.jsx("span", { children: formatTokens(row.averageEstimatedPrefixTokens) }),
           /* @__PURE__ */ jsxRuntimeExports.jsx("span", { children: row.zeroHitRequests }),
           /* @__PURE__ */ jsxRuntimeExports.jsx("span", { children: formatPercent(row.weightedHitRate) })
         ] }, row.id))
@@ -22266,7 +22267,7 @@ const ProviderDiagnosticsView = () => {
       /* @__PURE__ */ jsxRuntimeExports.jsxs("label", { className: "optimization-checkbox", children: [/* @__PURE__ */ jsxRuntimeExports.jsx("input", { type: "checkbox", checked: v89Settings.chatPromptV89Layout !== false, disabled: busy != null, onChange: (event) => updateSetting("chatPromptV89Layout", event.target.checked) }), text("启用 v6 稳定前缀与动态尾部布局", "Enable v6 stable-prefix and dynamic-tail layout")] }),
       /* @__PURE__ */ jsxRuntimeExports.jsxs("label", { className: "optimization-checkbox", children: [/* @__PURE__ */ jsxRuntimeExports.jsx("input", { type: "checkbox", checked: v89Settings.chatPromptV89RuntimeProfileSplit === true, disabled: busy != null, onChange: (event) => updateSetting("chatPromptV89RuntimeProfileSplit", event.target.checked) }), text("人物实时状态分离（v7）：每轮刷新状态，稳定身份前置", "Runtime Profile Split (v7): refresh current state each turn")] }),
       /* @__PURE__ */ jsxRuntimeExports.jsxs("label", { className: "optimization-checkbox", children: [/* @__PURE__ */ jsxRuntimeExports.jsx("input", { type: "checkbox", checked: v89Settings.chatPromptV810ProviderAdapter !== false, disabled: busy != null, onChange: (event) => updateSetting("chatPromptV810ProviderAdapter", event.target.checked) }), text("启用 V8.10 Provider Prompt Adapter（GLM Cache v1）", "Enable V8.10 Provider Prompt Adapter (GLM Cache v1)")] }),
-      /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "muted-text", children: text("GLM-5.3-flash 使用固定块、12 轮历史和动态尾部；关闭此开关立即回退原 V8.9/v7 布局。DeepSeek 保持既有 V8.9 顺序。Action、Summary 与 Memory 不受影响。", "GLM-5.3-flash uses a stable block, 12-turn history, and a dynamic tail. Disable this switch to return to the original V8.9/v7 layout. DeepSeek keeps its existing V8.9 order; Action, Summary, and Memory are unaffected.") })
+      /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "muted-text", children: text("GLM-5.3-flash 使用固定块、最近 12 条消息（含当前输入）和动态尾部；关闭此开关立即回退原 V8.9/v7 布局。DeepSeek 保持既有 V8.9 顺序。Action 与关系抽取不受影响；长历史会先正常推进滚动摘要。", "GLM-5.3-flash uses a stable block, the latest 12 messages including the current input, and a dynamic tail. Disable this switch to return to the original V8.9/v7 layout. DeepSeek keeps its existing V8.9 order. Actions and relationship extraction are unchanged; long history advances rolling summaries before trimming.") })
     ] })
   ] });
 };

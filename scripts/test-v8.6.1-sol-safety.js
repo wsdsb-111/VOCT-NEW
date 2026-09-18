@@ -49,6 +49,30 @@ async function pressureFixture(baseTokens, remainingWorldTokens, memoryExpected 
   await pressureFixture(900, 100);
   await pressureFixture(990, 10);
   await pressureFixture(1100, 0, false);
+  let rollingSummaryCalls = 0;
+  Conversation.configure({
+    memoryEngine: { syncRollingStateFromConversationFields() {}, syncConversationRollingFields() {} },
+    llmManager: { getCurrentContextLength: async () => 1000 },
+    usageAnalytics: { record() {} },
+    worldlineService: { isSubjectivePromptIntegrationEnabled: () => false },
+    PromptBuilder: {
+      buildMessages: () => [{ limited: true }],
+      buildMessagesWithTokenCount: () => ({ totalTokens: 100, omittedHistoryTokens: 700 })
+    },
+    TokenCounter: { estimateTokens: () => 0 }
+  });
+  await Conversation.prototype.checkAndSummarizeIfNeeded.call({
+    gameData: { characters: new Map() },
+    memoryState: {},
+    getMemoryContextFor: async () => ({}),
+    getPromptHistoryForCharacter: () => [{ role: "user", content: "older turn" }],
+    getPromptSummaryForCharacter: () => "",
+    estimateTokenCount: () => 100,
+    canUseSharedRollingSummary: () => true,
+    createRollingSummary: async () => { rollingSummaryCalls += 1; },
+    CONTEXT_LIMIT_PERCENTAGE: 0.75
+  }, { id: 2 });
+  assert.strictEqual(rollingSummaryCalls, 1, "omitted GLM history pressure must create a rolling summary before old turns are discarded");
   const facts = [
     { factId: "b", entityId: "2", field: "LOCATION", sourceTier: "GAME_TRUTH", value: "乙在临安" },
     { factId: "a", entityId: "1", field: "LOCATION", sourceTier: "GAME_TRUTH", value: "甲在开封" },
