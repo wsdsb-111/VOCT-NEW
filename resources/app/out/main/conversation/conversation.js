@@ -100,7 +100,8 @@ class Conversation {
         messageCount,
         tokens,
         fingerprint: createPromptFingerprint(content),
-        stable: hasExplicitStability ? block.stable === true : null
+        stable: hasExplicitStability ? block.stable === true : null,
+        lifecycle: block.lifecycle || null
       };
     });
     const firstHistoryIndex = blocks.findIndex((block) => block.type === "history" || block.type === "presence_roster" || block.type === "current_user");
@@ -109,7 +110,7 @@ class Conversation {
     const stablePrefixEndPosition = firstDynamicIndex >= 0 ? firstDynamicIndex : historyStartPosition;
     const stablePrefixTokens = blocks.slice(0, stablePrefixEndPosition).reduce((total, block) => total + (Number(block.tokens) || 0), 0);
     const dynamicSuffixTokens = blocks.slice(stablePrefixEndPosition).reduce((total, block) => total + (Number(block.tokens) || 0), 0);
-    const prefixFingerprint = createPromptFingerprint(JSON.stringify(blocks.slice(0, stablePrefixEndPosition).map((block) => [block.id, block.type, block.fingerprint, block.stable])));
+    const prefixFingerprint = createPromptFingerprint(JSON.stringify(blocks.slice(0, stablePrefixEndPosition).map((block) => [block.id, block.type, block.fingerprint, block.stable, block.lifecycle])));
     return { blocks, historyStartPosition, stablePrefixEndPosition, stablePrefixTokens, dynamicSuffixTokens, prefixFingerprint };
   }
   constructor({ conversationEpoch = null } = {}) {
@@ -130,6 +131,7 @@ class Conversation {
     this.summaryParticipantProfiles = /* @__PURE__ */ new Map();
     this.stableProfileCache = /* @__PURE__ */ new Map();
     this.stableDescriptionCache = /* @__PURE__ */ new Map();
+    this.cacheV2FrozenSnapshots = { conversation: null, responders: /* @__PURE__ */ new Map() };
     this.selectedCharacterIds = /* @__PURE__ */ new Set();
     this.presentCharacterIds = /* @__PURE__ */ new Set();
     this.waitingCharacterIds = /* @__PURE__ */ new Set();
@@ -496,6 +498,7 @@ class Conversation {
       activeParticipantIds,
       stableProfileCache: this.stableProfileCache,
       stableDescriptionCache: this.stableDescriptionCache,
+      cacheV2FrozenSnapshots: this.cacheV2FrozenSnapshots,
       presenceText: this.buildPresenceContext(),
       worldStableText: worldContext?.stableText || null,
       worldTopicText: worldContext?.topicText || null,
@@ -869,6 +872,13 @@ class Conversation {
           promptProfile: promptBuild.promptProfile,
           staticTokens: promptBuild.staticTokens,
           dynamicTokens: promptBuild.dynamicTokens,
+          globalStaticTokens: promptBuild.globalStaticTokens,
+          conversationFrozenTokens: promptBuild.conversationFrozenTokens,
+          responderFrozenTokens: promptBuild.responderFrozenTokens,
+          stableKinshipTokens: promptBuild.stableKinshipTokens,
+          actualStablePrefixTokens: promptBuild.actualStablePrefixTokens,
+          declaredStaticTokens: promptBuild.declaredStaticTokens,
+          dynamicTailTokens: promptBuild.dynamicTailTokens,
           memoryStableTokens: promptBlockTokens("memory-stable"),
           memoryDirectTokens: promptBlockTokens("memory-direct-frozen"),
           memoryTopicTokens: promptBlockTokens("memory-session-topic-anchor"),

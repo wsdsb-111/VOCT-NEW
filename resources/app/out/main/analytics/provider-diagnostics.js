@@ -116,7 +116,7 @@ function createProviderDiagnostics({ fs, path, dataDir, settingsRepository, prov
   const previousRealRequestByConversation = new Map();
 
   class ProviderDiagnostics {
-    prepareOutboundRequest({ provider, model, requestType, request, messages, blocks, conversationId, responderId, baseUrl, promptProfile, staticTokens, dynamicTokens }) {
+    prepareOutboundRequest({ provider, model, requestType, request, messages, blocks, conversationId, responderId, baseUrl, promptProfile, staticTokens, dynamicTokens, prefixFingerprint, globalStaticTokens, conversationFrozenTokens, responderFrozenTokens, stableKinshipTokens, actualStablePrefixTokens, declaredStaticTokens, dynamicTailTokens }) {
       if (requestType !== "chat") return null;
       const effectiveRequest = request && typeof request === "object" ? request : { messages };
       const current = buildRealRequestSnapshot({
@@ -131,6 +131,14 @@ function createProviderDiagnostics({ fs, path, dataDir, settingsRepository, prov
         promptProfile,
         staticTokens,
         dynamicTokens,
+        prefixFingerprint,
+        globalStaticTokens,
+        conversationFrozenTokens,
+        responderFrozenTokens,
+        stableKinshipTokens,
+        actualStablePrefixTokens,
+        declaredStaticTokens,
+        dynamicTailTokens,
         TokenCounter
       });
       const previousRoute = previousRealRequestByRoute.get(current.routeScopeKey) || null;
@@ -171,6 +179,17 @@ function createProviderDiagnostics({ fs, path, dataDir, settingsRepository, prov
           promptProfile: activePromptProfile.label,
           staticTokens: latestEntry?.realRequestDiff?.staticTokens ?? null,
           dynamicTokens: latestEntry?.realRequestDiff?.dynamicTokens ?? null,
+          globalStaticTokens: latestEntry?.realRequestDiff?.globalStaticTokens ?? null,
+          conversationFrozenTokens: latestEntry?.realRequestDiff?.conversationFrozenTokens ?? null,
+          responderFrozenTokens: latestEntry?.realRequestDiff?.responderFrozenTokens ?? null,
+          stableKinshipTokens: latestEntry?.realRequestDiff?.stableKinshipTokens ?? null,
+          actualStablePrefixTokens: latestEntry?.realRequestDiff?.actualStablePrefixTokens ?? null,
+          declaredStaticTokens: latestEntry?.realRequestDiff?.declaredStaticTokens ?? null,
+          dynamicTailTokens: latestEntry?.realRequestDiff?.dynamicTailTokens ?? null,
+          currentPrefixFingerprint: latestEntry?.realRequestDiff?.currentPrefixFingerprint ?? null,
+          previousPrefixFingerprint: latestEntry?.realRequestDiff?.previousPrefixFingerprint ?? null,
+          prefixChanged: latestEntry?.realRequestDiff?.prefixChanged ?? null,
+          firstChangedBlock: latestEntry?.realRequestDiff?.firstDifferentBlockId ?? null,
           reasoningEffort: config?.providerType === "zhipu" ? ["low", "high", "max"].includes(config.glmReasoningEffort) ? config.glmReasoningEffort : "low" : null,
           clearThinking: config?.providerType === "zhipu" ? config.glmClearThinking !== false : null,
           diagnosticsFile: filePath

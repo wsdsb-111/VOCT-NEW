@@ -161,6 +161,13 @@ function createUsageAnalytics({ fs, dataDir, analyticsFile, retention, createPro
         worldSharedCacheHit: metadata?.worldSharedCacheHit === true,
         worldSubjectiveCacheHit: metadata?.worldSubjectiveCacheHit === true,
         prefixFingerprint: metadata?.prefixFingerprint || null,
+        globalStaticTokens: Number(metadata?.globalStaticTokens) || 0,
+        conversationFrozenTokens: Number(metadata?.conversationFrozenTokens) || 0,
+        responderFrozenTokens: Number(metadata?.responderFrozenTokens) || 0,
+        stableKinshipTokens: Number(metadata?.stableKinshipTokens) || 0,
+        actualStablePrefixTokens: Number(metadata?.actualStablePrefixTokens ?? metadata?.stablePrefixTokens) || 0,
+        declaredStaticTokens: Number(metadata?.declaredStaticTokens ?? metadata?.staticTokens) || 0,
+        dynamicTailTokens: Number(metadata?.dynamicTailTokens ?? metadata?.dynamicSuffixTokens) || 0,
         blocks: Array.isArray(metadata?.blocks) ? metadata.blocks.map((block, index) => ({
           id: block.id,
           label: block.label,
@@ -168,7 +175,8 @@ function createUsageAnalytics({ fs, dataDir, analyticsFile, retention, createPro
           position: Number.isFinite(Number(block.position)) ? Number(block.position) : index,
           tokens: Number(block.tokens) || 0,
           fingerprint: block.fingerprint || createPromptFingerprint(block.content),
-          stable: block.stable === true
+          stable: block.stable === true,
+          lifecycle: block.lifecycle || null
         })) : []
       };
       const data = this.read();

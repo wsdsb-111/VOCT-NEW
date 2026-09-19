@@ -201,7 +201,15 @@ class LLMManager {
         baseUrl: activeConfig.baseUrl,
         promptProfile: metadata.promptProfile,
         staticTokens: metadata.staticTokens,
-        dynamicTokens: metadata.dynamicTokens
+        dynamicTokens: metadata.dynamicTokens,
+        prefixFingerprint: metadata.prefixFingerprint,
+        globalStaticTokens: metadata.globalStaticTokens,
+        conversationFrozenTokens: metadata.conversationFrozenTokens,
+        responderFrozenTokens: metadata.responderFrozenTokens,
+        stableKinshipTokens: metadata.stableKinshipTokens,
+        actualStablePrefixTokens: metadata.actualStablePrefixTokens,
+        declaredStaticTokens: metadata.declaredStaticTokens,
+        dynamicTailTokens: metadata.dynamicTailTokens
       }) || null
       : null;
     const requestStartedAt = new Date().toISOString();

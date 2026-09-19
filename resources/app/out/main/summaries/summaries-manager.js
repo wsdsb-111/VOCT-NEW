@@ -1,9 +1,16 @@
 "use strict";
 
-function createSummariesManager({ fs, path, summariesDir, memoryEngine, memorySystem }) {
+function createSummariesManager({ fs, path, summariesDir, memoryEngine, memorySystem, getCurrentConversation = () => null }) {
   const fs$1 = fs;
   const VOTC_SUMMARIES_DIR = summariesDir;
   class SummariesManager {
+    static refreshCurrentConversation() {
+      const conversation = getCurrentConversation();
+      if (!conversation) return;
+      memoryEngine.invalidateConversationRecallState(conversation);
+      conversation.gameData?.loadCharactersSummaries?.();
+    }
+
     static writeSummaryJsonAtomic(filePath, summaries) {
       fs$1.mkdirSync(path.dirname(filePath), { recursive: true });
       const tempPath = `${filePath}.${process.pid}.${Date.now()}.tmp`;
@@ -220,6 +227,12 @@ function createSummariesManager({ fs, path, summariesDir, memoryEngine, memorySy
         if (!Array.isArray(summaries) || summaryIndex < 0 || summaryIndex >= summaries.length) {
           return { success: false, error: "Invalid summary index" };
         }
+        const summaryRecord = summaries[summaryIndex];
+        memoryEngine.forgetSummaryProjection(summaryRecord, {
+          ownerId: playerId,
+          counterpartId: characterId,
+          invalidateConversations: [getCurrentConversation()].filter(Boolean)
+        });
         summaries.splice(summaryIndex, 1);
         if (summaries.length === 0) {
           fs$1.unlinkSync(filePath);
@@ -227,6 +240,7 @@ function createSummariesManager({ fs, path, summariesDir, memoryEngine, memorySy
           this.writeSummaryJsonAtomic(filePath, summaries);
         }
         memoryEngine.invalidateSummaryFolderCache([playerId]);
+        this.refreshCurrentConversation();
         return { success: true };
       } catch (error) {
         console.error(`Failed to delete summary for character ${characterId} from player ${playerId}:`, error);
@@ -247,8 +261,13 @@ function createSummariesManager({ fs, path, summariesDir, memoryEngine, memorySy
         return { success: false, error: "No summary files found" };
       }
       try {
+        const summaries = JSON.parse(fs$1.readFileSync(filePath, "utf8"));
+        memoryEngine.forgetOwnerConversation(playerId, characterId, Array.isArray(summaries) ? summaries : [], {
+          invalidateConversations: [getCurrentConversation()].filter(Boolean)
+        });
         fs$1.unlinkSync(filePath);
         memoryEngine.invalidateSummaryFolderCache([playerId]);
+        this.refreshCurrentConversation();
         return { success: true };
       } catch (error) {
         console.error(`Failed to delete owner summary file at ${filePath}:`, error);

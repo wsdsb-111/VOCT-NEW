@@ -15,8 +15,8 @@ const DEEPSEEK_PROFILE = Object.freeze({
 });
 
 const GLM_CACHE_PROFILE = Object.freeze({
-  id: "glm_cache_v1",
-  label: "GLM Cache v1",
+  id: "glm_cache_v2",
+  label: "GLM Cache v2",
   historyWindow: 12,
   glmCacheLayout: true
 });
@@ -30,7 +30,7 @@ function resolveProviderPromptProfile(providerConfig, adapterEnabled) {
 
 function resolvePromptLayoutId(promptProfile, { v89LayoutEnabled, runtimeProfileSplit } = {}) {
   if (v89LayoutEnabled !== true) return "v5";
-  if (promptProfile?.glmCacheLayout === true) return runtimeProfileSplit === true ? "glm_cache_v1_v7" : "glm_cache_v1_v6";
+  if (promptProfile?.glmCacheLayout === true) return "glm_cache_v2";
   return runtimeProfileSplit === true ? "v7" : "v6";
 }
 

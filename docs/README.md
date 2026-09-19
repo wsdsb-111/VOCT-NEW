@@ -4,6 +4,8 @@
 
 ## 推荐阅读顺序
 
+V8.10.2 当前入口：[V8 阶段开发记录](V8阶段开发记录.md)。先修复摘要删除只清可见文件、Structured Memory 与 Recovery/RAM 缓存残留的 P0，再将 GLM Prompt 升级为 Cache v2 生命周期布局：只把 Global、Conversation Frozen、Responder Frozen 与稳定血亲放在缓存边界前，Memory、Worldline、实时状态、社会关系、场景和历史全部后移。302/302 发布组与隔离 Electron 诊断页导航通过；真实 GLM 连续轮次命中率、CK3 删除后失忆和长时 Soak 仍待人工验收。
+
 V8.9.1 后续当前入口：[真实 Request Diff 实施报告](real-request-diff-implementation-report.md)。此前 Synthetic GLM 缓存路径诊断已完成并移除；诊断页自动捕获真实 Chat 请求，提供 Route、Conversation、Responder Scoped Prefix、消息/Block/Chunk Diff、有效参数与 Endpoint Diff、Provider Alignment、Prefix/时间桶、同 NPC/换 NPC 聚合和脱敏导出。真实 GLM/DeepSeek、CK3、RP 与 Soak 尚待人工运行。
 
 V8.9 当前入口：[主对话多模型缓存实施报告](v8.9-chat-cache-implementation-report.md)。正式聊天 Prompt 升级为 v6 稳定前缀/动态尾部布局，保留 v5 一键回退；Family Facts 仅调整位置，不修改事实构造和亲属语义。后续 Real Request Diff 继续只观察真实 Chat，不改变 Action/Summary 选择或 Provider 路由。Runtime Profile Split 默认关闭并延期到后续阶段。

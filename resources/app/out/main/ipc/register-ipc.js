@@ -826,24 +826,8 @@ function registerIpcHandlers(runtime) {
   });
   electron.ipcMain.handle("conversation:clearSummaries", async () => {
     try {
-      const fs2 = require("fs");
-      const path2 = require("path");
-      if (fs2.existsSync(VOTC_SUMMARIES_DIR)) {
-        const playerDirs = fs2.readdirSync(VOTC_SUMMARIES_DIR, { withFileTypes: true }).filter((dirent) => dirent.isDirectory()).map((dirent) => dirent.name);
-        let totalFilesDeleted = 0;
-        for (const playerDir of playerDirs) {
-          const playerPath = path2.join(VOTC_SUMMARIES_DIR, playerDir);
-          const files = fs2.readdirSync(playerPath);
-          for (const file of files) {
-            fs2.unlinkSync(path2.join(playerPath, file));
-            totalFilesDeleted++;
-          }
-          fs2.rmdirSync(playerPath);
-        }
-        console.log(`Cleared ${totalFilesDeleted} summary files and removed ${playerDirs.length} player directories`);
-      }
-      memoryEngine.invalidateSummaryFolderCache();
       const conversation = conversationManager.getCurrentConversation();
+      memoryEngine.clearAllLongTermMemory({ conversations: [conversation].filter(Boolean) });
       if (conversation) {
         conversation.gameData.loadCharactersSummaries();
       }

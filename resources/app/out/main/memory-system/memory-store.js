@@ -16,6 +16,15 @@ function removeDirectoryTree(directory) {
   fs.rmdirSync(directory);
 }
 
+function clearDirectory(directory) {
+  if (!fs.existsSync(directory)) return;
+  for (const entry of fs.readdirSync(directory, { withFileTypes: true })) {
+    const child = path.join(directory, entry.name);
+    if (entry.isDirectory() && !entry.isSymbolicLink()) removeDirectoryTree(child);
+    else fs.unlinkSync(child);
+  }
+}
+
 function mergeCharacterProfiles(...groups) {
   const profiles = new Map();
   for (const profile of groups.flat()) {
@@ -194,6 +203,18 @@ class MemoryStore {
     }
   }
 
+  revokeCharacterKnowledge(characterId, memoryId) {
+    const numericId = Number(characterId);
+    if (!Number.isFinite(numericId)) throw new Error("character_id_required");
+    const filePath = this.knowledgePath(numericId);
+    const records = this.getCharacterKnowledge(numericId);
+    const remaining = records.filter((entry) => entry.memoryId !== memoryId);
+    if (remaining.length === records.length) return false;
+    if (remaining.length > 0) this.writeJson(filePath, remaining);
+    else if (fs.existsSync(filePath)) fs.unlinkSync(filePath);
+    return true;
+  }
+
   findEpisodeByFinalization(conversationId, finalizationId) {
     if (!conversationId || !finalizationId) return null;
     return this.listAllEpisodes().find((episode) => episode.conversationId === conversationId && episode.finalizationId === finalizationId) || null;
@@ -266,6 +287,23 @@ class MemoryStore {
 
   getCharacterConsolidation(characterId) {
     return this.readJson(path.join(this.paths.characters, `${Number(characterId)}.json`), null);
+  }
+
+  deleteCharacterConsolidation(characterId) {
+    const filePath = path.join(this.paths.characters, `${Number(characterId)}.json`);
+    if (fs.existsSync(filePath)) fs.unlinkSync(filePath);
+  }
+
+  clearLongTermMemoryStorage() {
+    if (this.summaryFoldersDir) clearDirectory(this.summaryFoldersDir);
+    for (const directory of [this.paths.episodes, this.paths.characters, this.paths.pairs, this.paths.knowledge, this.paths.recovery]) {
+      clearDirectory(directory);
+    }
+    this.index = { schemaVersion: CURRENT_MEMORY_SCHEMA_VERSION, memories: {}, episodes: {} };
+    this.saveIndex();
+    this.invalidateFolderSummaryCache();
+    this.ensureDirectories();
+    return { success: true };
   }
 
   deleteOwnedSummaryFolders(characterId) {

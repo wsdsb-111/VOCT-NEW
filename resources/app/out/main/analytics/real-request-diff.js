@@ -190,7 +190,7 @@ function buildMessageSummary(message, position, blockId, TokenCounter) {
   };
 }
 
-function buildRealRequestSnapshot({ providerType, model, requestType = "chat", request = {}, conversationId = null, responderId = null, baseUrl = "", blocks = [], promptProfile = null, staticTokens = null, dynamicTokens = null, TokenCounter, timestamp = new Date().toISOString() } = {}) {
+function buildRealRequestSnapshot({ providerType, model, requestType = "chat", request = {}, conversationId = null, responderId = null, baseUrl = "", blocks = [], promptProfile = null, staticTokens = null, dynamicTokens = null, prefixFingerprint = null, globalStaticTokens = null, conversationFrozenTokens = null, responderFrozenTokens = null, stableKinshipTokens = null, actualStablePrefixTokens = null, declaredStaticTokens = null, dynamicTailTokens = null, TokenCounter, timestamp = new Date().toISOString() } = {}) {
   const messages = Array.isArray(request.messages) ? request.messages : [];
   const blockMap = buildMessageBlockMap(blocks, messages.length);
   const summaries = messages.map((message, position) => buildMessageSummary(message, position, blockMap[position], TokenCounter));
@@ -227,6 +227,14 @@ function buildRealRequestSnapshot({ providerType, model, requestType = "chat", r
     } : null,
     staticTokens: finiteNumber(staticTokens),
     dynamicTokens: finiteNumber(dynamicTokens),
+    prefixFingerprint: safeId(prefixFingerprint),
+    globalStaticTokens: finiteNumber(globalStaticTokens),
+    conversationFrozenTokens: finiteNumber(conversationFrozenTokens),
+    responderFrozenTokens: finiteNumber(responderFrozenTokens),
+    stableKinshipTokens: finiteNumber(stableKinshipTokens),
+    actualStablePrefixTokens: finiteNumber(actualStablePrefixTokens),
+    declaredStaticTokens: finiteNumber(declaredStaticTokens),
+    dynamicTailTokens: finiteNumber(dynamicTailTokens),
     estimatedPromptTokens: summaries.reduce((sum, message) => sum + message.estimatedTokens, 0),
     safeMessages: summaries
   };
@@ -368,6 +376,16 @@ function buildRealRequestDiff({ previousRoute = null, previousConversation = nul
     promptProfile: current.promptProfile,
     staticTokens: current.staticTokens,
     dynamicTokens: current.dynamicTokens,
+    globalStaticTokens: current.globalStaticTokens,
+    conversationFrozenTokens: current.conversationFrozenTokens,
+    responderFrozenTokens: current.responderFrozenTokens,
+    stableKinshipTokens: current.stableKinshipTokens,
+    actualStablePrefixTokens: current.actualStablePrefixTokens,
+    declaredStaticTokens: current.declaredStaticTokens,
+    dynamicTailTokens: current.dynamicTailTokens,
+    currentPrefixFingerprint: current.prefixFingerprint,
+    previousPrefixFingerprint: previousConversation?.prefixFingerprint || null,
+    prefixChanged: previousConversation?.prefixFingerprint && current.prefixFingerprint ? previousConversation.prefixFingerprint !== current.prefixFingerprint : null,
     estimatedPromptTokens: current.estimatedPromptTokens,
     messageCount: current.safeMessages.length,
     messages: current.safeMessages,

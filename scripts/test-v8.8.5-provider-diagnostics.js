@@ -41,7 +41,7 @@ const messagesA = [{ role: "system", content: "SECRET_SYSTEM_TEXT" }, { role: "u
 const messagesB = [{ role: "system", content: "SECRET_SYSTEM_TEXT" }, { role: "user", content: "SECRET_USER_TEXT B" }];
 const blocks = [{ id: "stable", messageStartPosition: 0, messageCount: 1 }, { id: "current_user", messageStartPosition: 1, messageCount: 1 }];
 const request = (messages) => ({ model: "glm-5.3-flash", messages, stream: true, temperature: 0.7, max_tokens: 128, thinking: { type: "enabled", clear_thinking: true }, reasoning_effort: "low" });
-const promptProfile = { id: "glm_cache_v1", label: "GLM Cache v1", historyWindow: 12, layoutId: "glm_cache_v1_v6" };
+const promptProfile = { id: "glm_cache_v2", label: "GLM Cache v2", historyWindow: 12, layoutId: "glm_cache_v2" };
 const first = service.prepareOutboundRequest({ provider: "zhipu", model: "glm-5.3-flash", requestType: "chat", request: request(messagesA), blocks, conversationId: "conv_fixture", responderId: "123", baseUrl: "https://open.bigmodel.cn/api/paas/v4", promptProfile, staticTokens: 80, dynamicTokens: 20 });
 const second = service.prepareOutboundRequest({ provider: "zhipu", model: "glm-5.3-flash", requestType: "chat", request: request(messagesB), blocks, conversationId: "conv_fixture", responderId: "123", baseUrl: "https://open.bigmodel.cn/api/paas/v4", promptProfile, staticTokens: 80, dynamicTokens: 20 });
 assert.strictEqual(first.comparisonStatus, "cold_local_baseline");
@@ -57,10 +57,10 @@ service.recordResponse({
   completedAt: "2026-09-14T10:00:01.000Z"
 });
 assert.strictEqual(service.getRecentRealRequestDiff(50).length, 1);
-assert.strictEqual(service.getStatus().promptProfile, "GLM Cache v1");
+assert.strictEqual(service.getStatus().promptProfile, "GLM Cache v2");
 assert.strictEqual(service.getStatus().staticTokens, 80);
 runtimeProfileSplit = true;
-assert.strictEqual(service.getStatus().staticTokens, null, "a different active layout must not reuse the previous layout token split");
+assert.strictEqual(service.getStatus().staticTokens, 80, "GLM Cache v2 layout must not depend on the legacy runtime-profile toggle");
 runtimeProfileSplit = false;
 adapterEnabled = false;
 assert.strictEqual(service.getStatus().promptProfile, "V8.9 Default Layout");
@@ -81,9 +81,10 @@ const ipc = fs.readFileSync(ipcPath, "utf8");
 assert.match(renderer, /真实 Request Diff 诊断/);
 assert.match(renderer, /真实请求概览/);
 assert.match(renderer, /最近同 Profile 静态 Token/);
+assert.match(renderer, /实际不变前缀/);
 assert.match(renderer, /时间间隔 Buckets[\s\S]*formatTokens\(row\.averageEstimatedPrefixTokens\)/);
 assert.match(renderer, /最近 12 条消息（含当前输入）/);
-assert.match(renderer, /长历史会先正常推进滚动摘要/);
+assert.match(renderer, /长历史仍先正常推进滚动摘要/);
 assert.match(preload, /getRealRequestDiff/);
 assert.match(ipc, /provider-diagnostics:get-real-request-diff/);
 assert.doesNotMatch(renderer, /缓存路径诊断|运行全部测试/);

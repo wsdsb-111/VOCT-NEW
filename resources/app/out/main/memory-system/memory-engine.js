@@ -37,6 +37,7 @@ class MemoryEngine {
       }
     });
     this.activeFinalizationIds = new Set();
+    this.memoryGeneration = 0;
   }
 
   createConversationState(conversationId) {
@@ -110,6 +111,100 @@ class MemoryEngine {
 
   invalidateSummaryFolderCache(characterIds = null) {
     this.store.invalidateFolderSummaryCache(characterIds);
+  }
+
+  invalidateConversationRecallState(conversation) {
+    if (!conversation) return;
+    const state = this.ensureConversationState(conversation);
+    state.mentionProfileCache = null;
+    state.mentionedRecallCache = new Map();
+    state.responderRecallCache = new Map();
+    state.turnRecallCache = new Map();
+    state.mentionState = this.mentionTracker.createState();
+    const gameData = conversation.gameData;
+    if (gameData?.mentionedCharactersInContext?.clear) gameData.mentionedCharactersInContext.clear();
+    for (const character of gameData?.characters?.values?.() || []) {
+      character.conversationSummaries = [];
+      character.conversationCache = new Map();
+      character.dynamicMemoryCache = null;
+    }
+  }
+
+  clearAllLongTermMemory({ conversations = [] } = {}) {
+    this.memoryGeneration += 1;
+    this.store.clearLongTermMemoryStorage();
+    for (const conversation of conversations) this.invalidateConversationRecallState(conversation);
+    this.trace.record("memory_clear_all", { memoryGeneration: this.memoryGeneration });
+    return { success: true, memoryGeneration: this.memoryGeneration };
+  }
+
+  refreshCharacterConsolidation(characterId) {
+    this.store.deleteCharacterConsolidation(characterId);
+    return this.consolidator.consolidateCharacter(characterId);
+  }
+
+  forgetSummaryProjection(summaryRecord, { ownerId = null, counterpartId = null, invalidateConversations = [] } = {}) {
+    const numericOwnerId = Number(ownerId ?? summaryRecord?.perspectiveOwnerId ?? summaryRecord?.playerId);
+    if (!Number.isFinite(numericOwnerId)) throw new Error("summary_owner_id_required");
+    const memoryIds = [...new Set((summaryRecord?.perspectiveMemoryIds || []).map(String).filter(Boolean))];
+    const segmentIds = new Set((summaryRecord?.perspectiveSummarySegmentIds || []).map(String).filter(Boolean));
+    const finalizationId = summaryRecord?.finalizationId ? String(summaryRecord.finalizationId) : null;
+    let revokedMemoryCount = 0;
+    let deletedMemoryCount = 0;
+    for (const memoryId of memoryIds) {
+      const memory = this.store.getMemory(memoryId);
+      if (!memory) continue;
+      this.store.revokeCharacterKnowledge(numericOwnerId, memoryId);
+      const knownBy = uniqueIds(memory.knownBy).filter((characterId) => characterId !== numericOwnerId);
+      if (knownBy.length === 0 && !["public", "world"].includes(memory.visibility)) {
+        if (this.store.deleteMemory(memoryId)) deletedMemoryCount++;
+      } else {
+        this.store.updateMemory(memoryId, { knownBy });
+        this.store.removeKnowledgeForMemory(memoryId, knownBy);
+      }
+      revokedMemoryCount++;
+    }
+    if (finalizationId || segmentIds.size > 0) {
+      for (const episode of this.store.listAllEpisodes()) {
+        if (finalizationId && String(episode.finalizationId || "") !== finalizationId) continue;
+        let changed = false;
+        const summarySegments = (episode.summarySegments || []).map((segment) => {
+          if (segmentIds.size > 0 && !segmentIds.has(String(segment.segmentId || ""))) return segment;
+          const knownBy = uniqueIds(segment.knownBy).filter((characterId) => characterId !== numericOwnerId);
+          if (knownBy.length === uniqueIds(segment.knownBy).length) return segment;
+          changed = true;
+          return { ...segment, knownBy };
+        });
+        if (changed) this.store.saveEpisode({ ...episode, summarySegments });
+      }
+    }
+    this.refreshCharacterConsolidation(numericOwnerId);
+    this.invalidateSummaryFolderCache([numericOwnerId]);
+    for (const conversation of invalidateConversations) this.invalidateConversationRecallState(conversation);
+    this.trace.record("summary_projection_forgotten", {
+      ownerId: numericOwnerId,
+      counterpartId: Number.isFinite(Number(counterpartId)) ? Number(counterpartId) : null,
+      finalizationId,
+      revokedMemoryCount,
+      deletedMemoryCount
+    });
+    return { success: true, revokedMemoryCount, deletedMemoryCount };
+  }
+
+  forgetOwnerConversation(ownerId, counterpartId, summaryRecords = [], { invalidateConversations = [] } = {}) {
+    const results = (summaryRecords || []).map((summaryRecord) => this.forgetSummaryProjection(summaryRecord, {
+      ownerId,
+      counterpartId,
+      invalidateConversations: []
+    }));
+    this.invalidateSummaryFolderCache([ownerId]);
+    for (const conversation of invalidateConversations) this.invalidateConversationRecallState(conversation);
+    return {
+      success: true,
+      summaryCount: results.length,
+      revokedMemoryCount: results.reduce((total, result) => total + result.revokedMemoryCount, 0),
+      deletedMemoryCount: results.reduce((total, result) => total + result.deletedMemoryCount, 0)
+    };
   }
 
   getMentionableProfilesFromFolderMemories(memories = []) {
@@ -530,10 +625,21 @@ class MemoryEngine {
     const finalizationId = this.getFinalizationId(context);
     return {
       ...context,
+      memoryGeneration: Number.isFinite(Number(context.memoryGeneration)) ? Number(context.memoryGeneration) : this.memoryGeneration,
       finalizationId,
       summaryRequestId: context.summaryRequestId || finalizationId,
       episodeId: context.episodeId || `episode_${context.conversationId}_${finalizationId}`
     };
+  }
+
+  isFinalizationCurrent(context) {
+    return Number(context?.memoryGeneration) === this.memoryGeneration;
+  }
+
+  cancelledFinalizationResult(context) {
+    const error = new Error("memory_cleared_during_finalization");
+    this.traceFinalization(context, "cancelled", { errorCode: error.message, recoveryState: "cleared" });
+    return { success: false, cancelled: true, error, recoveryPath: null };
   }
 
   assignStableMemoryIds(context, extraction) {
@@ -629,6 +735,7 @@ class MemoryEngine {
   }
 
   async finalizeWithAvailableOutput(context, { providerOutput = null, parsedExtraction = null, recoveryPath = null } = {}) {
+    if (!this.isFinalizationCurrent(context)) return this.cancelledFinalizationResult(context);
     const committed = this.isCommitted(context);
     if (committed) {
       return { success: true, alreadyCommitted: true, finalSummary: committed.sessionSummary || "", extraction: null, recoveryPath };
@@ -643,7 +750,9 @@ class MemoryEngine {
       });
       try {
         content = await this.requestFinalSummary(context);
+        if (!this.isFinalizationCurrent(context)) return this.cancelledFinalizationResult(context);
       } catch (error) {
+        if (!this.isFinalizationCurrent(context)) return this.cancelledFinalizationResult(context);
         snapshotPath = this.writeRecoverySnapshot(context, { finalizationStage: "request", finalizationStatus: "pending", providerOutput: null }, error);
         this.traceFinalization(context, "request", { recoveryState: "pending", errorCode: error.message });
         return { success: false, error, recoveryPath: snapshotPath };
@@ -661,6 +770,7 @@ class MemoryEngine {
       let quality = this.evaluateFinalSummaryQuality(context, extraction);
       if (!quality.success && typeof context.requestSummary === "function") {
         content = await this.requestFinalSummary(context);
+        if (!this.isFinalizationCurrent(context)) return this.cancelledFinalizationResult(context);
         extraction = this.assignStableMemoryIds(context, this.extractor.parseOutput(content, context));
         quality = this.evaluateFinalSummaryQuality(context, extraction);
       }
@@ -676,12 +786,14 @@ class MemoryEngine {
       });
       this.traceFinalization(context, "parsed", { providerSuccess: true, parseMode: extraction.structured ? "structured" : "prose_fallback", memoryCount: extraction.memories.length, recoveryState: "pending" });
     } catch (error) {
+      if (!this.isFinalizationCurrent(context)) return this.cancelledFinalizationResult(context);
       const failedPath = this.writeRecoverySnapshot(context, { finalizationStage: "parse", finalizationStatus: "pending", providerOutput: content }, error);
       this.traceFinalization(context, "parse", { providerSuccess: true, recoveryState: "pending", errorCode: error.message });
       return { success: false, error, recoveryPath: failedPath };
     }
     const persistStartedAt = Date.now();
     try {
+      if (!this.isFinalizationCurrent(context)) return this.cancelledFinalizationResult(context);
       const persisted = this.persistExtraction(context, extraction);
       const directedSummaries = buildPerspectiveSummaryMap(context, extraction);
       const projectionValidation = validatePerspectiveSummaryMap(context, extraction, directedSummaries);
@@ -710,9 +822,10 @@ class MemoryEngine {
         throw new Error(`projection_narrative_coverage_missing:${coverage.invalidPairs.map((pair) => `${pair.ownerId}->${pair.counterpartId}`).join(",")}`);
       }
       const folderPersistence = await this.persistCharacterFolders(context, extraction.sessionSummary || content, directedSummaries);
+      if (!this.isFinalizationCurrent(context)) return this.cancelledFinalizationResult(context);
       this.commitFinalization(context, extraction);
       this.trace.record("summary_persist", { conversationId: context.conversationId, finalizationId: context.finalizationId, success: true, durationMs: Date.now() - persistStartedAt, memoryCount: extraction.memories.length });
-      if (fs.existsSync(snapshotPath)) fs.unlinkSync(snapshotPath);
+      if (snapshotPath && fs.existsSync(snapshotPath)) fs.unlinkSync(snapshotPath);
       this.traceFinalization(context, "committed", {
         providerSuccess: true,
         parseMode: extraction.structured ? "structured" : "prose_fallback",
@@ -724,6 +837,7 @@ class MemoryEngine {
       });
       return { success: true, finalSummary: extraction.sessionSummary || content, extraction, directedSummaries };
     } catch (error) {
+      if (!this.isFinalizationCurrent(context)) return this.cancelledFinalizationResult(context);
       this.trace.record("summary_persist", { conversationId: context.conversationId, finalizationId: context.finalizationId, success: false, durationMs: Date.now() - persistStartedAt, memoryCount: extraction.memories.length, error: error.message || String(error) });
       const needsSummaryRegeneration = String(error?.message || error).startsWith("projection_narrative_coverage_missing:");
       const failedPath = this.writeRecoverySnapshot(context, {
@@ -769,6 +883,7 @@ class MemoryEngine {
   }
 
   writeRecoverySnapshot(context, state = {}, error = null) {
+    if (!this.isFinalizationCurrent(context)) return null;
     const safeId = String(context.conversationId || createMemoryId("conversation")).replace(/[^a-zA-Z0-9_-]/g, "_");
     const filePath = path.join(this.store.paths.recovery, `conversation_${safeId}.json`);
     const existing = this.store.readJson(filePath, {});

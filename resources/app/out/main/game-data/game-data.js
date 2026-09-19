@@ -459,6 +459,9 @@ function createGameData({ fs, path, memorySystem, memoryEngine, summariesDir, ge
       for (const character of this.characters.values()) {
         // Skip loading summaries for the player character itself
         if (character.id === this.playerID) continue;
+        character.conversationSummaries = [];
+        character.conversationCache = new Map();
+        character.dynamicMemoryCache = null;
         
         // Load summaries from player's perspective (A ↔ B conversation)
         const summaryFile = this.getConversationFilePath(
@@ -477,12 +480,8 @@ function createGameData({ fs, path, memorySystem, memoryEngine, summariesDir, ge
         // Initialize dynamic memory caches
         // conversationCache: Map for caching individual conversations
         // dynamicMemoryCache: Object for caching scan results
-        if (!character.conversationCache) {
-          character.conversationCache = new Map();
-        }
-        if (!character.dynamicMemoryCache) {
-          character.dynamicMemoryCache = {};
-        }
+        character.conversationCache = new Map();
+        character.dynamicMemoryCache = {};
       }
       
       // Initialize mentioned characters tracking

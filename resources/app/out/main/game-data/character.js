@@ -94,6 +94,7 @@ class Character {
     fs$1.writeFileSync(summariesPath, JSON.stringify(this.conversationSummaries, null, "	"));
   }
   loadSummaries(summariesPath) {
+    this.conversationSummaries = [];
     if (fs$1.existsSync(summariesPath)) {
       this.conversationSummaries = JSON.parse(fs$1.readFileSync(summariesPath, "utf8"));
     }

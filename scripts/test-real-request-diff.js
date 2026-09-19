@@ -54,9 +54,17 @@ const snapshot = (messages, conversationId = "conv_1", responderId = "12345", ti
   conversationId,
   responderId,
   blocks,
-  promptProfile: { id: "glm_cache_v1", label: "GLM Cache v1", historyWindow: 12, layoutId: "glm_cache_v1_v6" },
+  promptProfile: { id: "glm_cache_v2", label: "GLM Cache v2", historyWindow: 12, layoutId: "glm_cache_v2" },
   staticTokens: 8100,
   dynamicTokens: 1200,
+  prefixFingerprint: "prefix-v2-fixture",
+  globalStaticTokens: 5000,
+  conversationFrozenTokens: 200,
+  responderFrozenTokens: 2900,
+  stableKinshipTokens: 300,
+  actualStablePrefixTokens: 8100,
+  declaredStaticTokens: 8100,
+  dynamicTailTokens: 1200,
   TokenCounter,
   timestamp
 });
@@ -71,9 +79,19 @@ assert.strictEqual(realDiff.sameEndpoint, true);
 assert.strictEqual(realDiff.sameEffectiveParameters, true);
 assert.strictEqual(realDiff.firstDifferentMessagePosition, 1);
 assert.strictEqual(realDiff.firstDifferentBlockId, "history");
-assert.deepStrictEqual(realDiff.promptProfile, { id: "glm_cache_v1", label: "GLM Cache v1", historyWindow: 12, layoutId: "glm_cache_v1_v6" });
+assert.deepStrictEqual(realDiff.promptProfile, { id: "glm_cache_v2", label: "GLM Cache v2", historyWindow: 12, layoutId: "glm_cache_v2" });
 assert.strictEqual(realDiff.staticTokens, 8100);
 assert.strictEqual(realDiff.dynamicTokens, 1200);
+assert.strictEqual(realDiff.globalStaticTokens, 5000);
+assert.strictEqual(realDiff.conversationFrozenTokens, 200);
+assert.strictEqual(realDiff.responderFrozenTokens, 2900);
+assert.strictEqual(realDiff.stableKinshipTokens, 300);
+assert.strictEqual(realDiff.actualStablePrefixTokens, 8100);
+assert.strictEqual(realDiff.declaredStaticTokens, 8100);
+assert.strictEqual(realDiff.dynamicTailTokens, 1200);
+assert.strictEqual(realDiff.currentPrefixFingerprint, "prefix-v2-fixture");
+assert.strictEqual(realDiff.previousPrefixFingerprint, "prefix-v2-fixture");
+assert.strictEqual(realDiff.prefixChanged, false);
 assert(realDiff.firstDifferentMessage.commonPrefixEstimatedTokens > 0);
 assert(realDiff.firstDifferentMessage.previousChunks.length > 0);
 assert(realDiff.firstDifferentMessage.currentChunks.length > 0);
@@ -130,7 +148,7 @@ assert(summary.prefixBuckets.length >= 8);
     TokenCounter
   });
   const service = new ProviderDiagnostics();
-  const promptProfile = { id: "glm_cache_v1", label: "GLM Cache v1", historyWindow: 12, layoutId: "glm_cache_v1_v6" };
+  const promptProfile = { id: "glm_cache_v2", label: "GLM Cache v2", historyWindow: 12, layoutId: "glm_cache_v2" };
   const baseline = service.prepareOutboundRequest({ provider: endpoint.providerType, model: endpoint.model, requestType: "chat", request: request(messagesA), blocks, conversationId: "conv_1", responderId: "12345", baseUrl: endpoint.baseUrl, promptProfile, staticTokens: 8100, dynamicTokens: 1200 });
   const captured = service.prepareOutboundRequest({ provider: endpoint.providerType, model: endpoint.model, requestType: "chat", request: request(messagesB), blocks, conversationId: "conv_1", responderId: "12345", baseUrl: endpoint.baseUrl, promptProfile, staticTokens: 8100, dynamicTokens: 1200 });
   assert.strictEqual(baseline.comparisonStatus, "cold_local_baseline");
@@ -140,7 +158,7 @@ assert(summary.prefixBuckets.length >= 8);
   const report = service.getRealRequestDiffStatus(300);
   assert.strictEqual(report.entries.length, 1);
   assert.strictEqual(report.entries[0].realRequestDiff.firstDifferentBlockId, "history");
-  assert.strictEqual(report.entries[0].realRequestDiff.promptProfile.label, "GLM Cache v1");
+  assert.strictEqual(report.entries[0].realRequestDiff.promptProfile.label, "GLM Cache v2");
   assert.strictEqual(report.entries[0].realRequestDiff.staticTokens, 8100);
   assert.strictEqual(report.entries[0].providerUsage.cachedTokens, 9000);
   const persisted = fs.readFileSync(path.join(tempDir, "provider-diagnostics.jsonl"), "utf8");
@@ -163,9 +181,14 @@ assert.match(fs.readFileSync(providerPath, "utf8"), /buildDiagnosticRequest/);
 assert.match(fs.readFileSync(conversationPath, "utf8"), /conversationId: this\.id/);
 assert.match(fs.readFileSync(conversationPath, "utf8"), /responderId: npc\.id/);
 assert.match(renderer, /真实 Request Diff 诊断/);
-assert.match(renderer, /GLM Cache v1/);
+assert.match(renderer, /GLM Cache v2/);
 assert.match(renderer, /当前 Prompt Profile/);
-assert.match(renderer, /V8\.10 Provider Prompt Adapter/);
+assert.match(renderer, /V8\.10\.2 Provider Prompt Adapter/);
+assert.match(renderer, /Global Static/);
+assert.match(renderer, /Conversation Frozen/);
+assert.match(renderer, /Responder Frozen/);
+assert.match(renderer, /Stable Kinship/);
+assert.match(renderer, /当前 Prefix Fingerprint/);
 assert.match(renderer, /Prefix Length Buckets/);
 assert.doesNotMatch(renderer, /缓存路径诊断|运行全部测试|TTL 探针|cachePathProbe|CachePathProbe/);
 assert.match(preload, /getRealRequestDiff/);

@@ -594,7 +594,14 @@ function clearLog() {
   }
 }
 const { createSummariesManager } = require("./summaries/summaries-manager");
-const SummariesManager = createSummariesManager({ fs: fs$1, path, summariesDir: VOTC_SUMMARIES_DIR, memoryEngine, memorySystem });
+const SummariesManager = createSummariesManager({
+  fs: fs$1,
+  path,
+  summariesDir: VOTC_SUMMARIES_DIR,
+  memoryEngine,
+  memorySystem,
+  getCurrentConversation: () => conversationManager.getCurrentConversation()
+});
 const updaterTranslations = {
   en: {
     updateAvailable: {
