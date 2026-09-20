@@ -4,6 +4,8 @@
 
 ## 推荐阅读顺序
 
+V8.11 当前入口：[世界事实召回与知情边界设计](VOTC_v8.11_世界事实召回与知情边界设计.md) / [V8 阶段开发记录](V8阶段开发记录.md)。补齐活跃战争候选、动态国号、两方领国知情和明确的日期/攻守语义；行踪按亲友或直接观察授权，历史资料不再覆盖此局人物生死与去向。新增内容全部沿既有 Worldline 动态尾部接入。303/303 发布组、372 个测试文件分类与隔离 Electron 冒烟通过；实际 CK3/Provider 回答、地点本地化覆盖与 Soak 不据此宣称完成。
+
 V8.10.2 当前入口：[V8 阶段开发记录](V8阶段开发记录.md)。先修复摘要删除只清可见文件、Structured Memory 与 Recovery/RAM 缓存残留的 P0，再将 GLM Prompt 升级为 Cache v2 生命周期布局：只把 Global、Conversation Frozen、Responder Frozen 与稳定血亲放在缓存边界前，Memory、Worldline、实时状态、社会关系、场景和历史全部后移。302/302 发布组与隔离 Electron 诊断页导航通过；真实 GLM 连续轮次命中率、CK3 删除后失忆和长时 Soak 仍待人工验收。
 
 V8.9.1 后续当前入口：[真实 Request Diff 实施报告](real-request-diff-implementation-report.md)。此前 Synthetic GLM 缓存路径诊断已完成并移除；诊断页自动捕获真实 Chat 请求，提供 Route、Conversation、Responder Scoped Prefix、消息/Block/Chunk Diff、有效参数与 Endpoint Diff、Provider Alignment、Prefix/时间桶、同 NPC/换 NPC 聚合和脱敏导出。真实 GLM/DeepSeek、CK3、RP 与 Soak 尚待人工运行。

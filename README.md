@@ -26,6 +26,8 @@ Voices of the Court 是一个面向《Crusader Kings III》（CK3）的沉浸式
 
 ## 运行环境
 
+当前代码基线为 **V8.11 世界事实召回与知情边界**：[设计方案](docs/VOTC_v8.11_世界事实召回与知情边界设计.md) / [实施记录](docs/V8阶段开发记录.md)。活跃战争直接从存档召回，使用游戏动态国号和明确攻守双方；人物生死以游戏为先，行踪按亲属、正式朋友或直接观察判权。同宫廷不自动获得行踪，数字地点缺少可靠映射时不猜地名。继续保留 V8.10.2 Memory 删除合同与 GLM Cache v2：新增事实仍在 `worldline-turn-recall` 动态尾部，稳定前缀不随战争/行踪召回变化。303/303 发布组、372 个文件分类及隔离 Electron 冒烟通过；真实 CK3/Provider 对话质量、缓存命中率与长时 Soak 尚待人工验收。
+
 当前诊断施工为 **V8.9.1 后续 Real Request Diff**：[真实 Request Diff 实施报告](docs/real-request-diff-implementation-report.md)。此前 Synthetic GLM 缓存路径诊断已完成并移除；诊断页现在自动捕获真实 `requestType=chat`，按 Route、Conversation、Responder Scope 比较消息、Block、512 Estimated-token Chunk、有效 Provider 参数和 Endpoint，并将 Provider Raw Usage 与本地公共 Prefix 对齐。只保存 hash、Token、ID、时间与 Usage，不保存 Prompt 正文；真实 GLM/DeepSeek、CK3、RP 与 Soak Gate 尚待人工运行，不宣称 Provider 级缓存结论已完成。
 
 此前代码基线为 **V8.9.2**：[V8 阶段开发记录](docs/V8阶段开发记录.md)。TTL 与 Synthetic Cache Path 工具均已完成阶段性任务并移除；正式聊天 Prompt 使用 v7/v6/v5 回退合同，DeepSeek 嵌套缓存字段已统一归一化，人物实时状态按轮刷新。真实 Provider、CK3 和长时 Soak 仍待人工验收，当前不宣称 Full Freeze。

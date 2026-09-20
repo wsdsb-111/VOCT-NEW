@@ -1,7 +1,7 @@
 "use strict";
 
 const { parseCK3Date } = require("./checkpoint-freshness");
-const RETRIEVAL_POLICY_VERSION = "v8.5-retrieval-2";
+const RETRIEVAL_POLICY_VERSION = "v8.11-retrieval-1";
 const INTENTS = Object.freeze({
   CHARACTER_STATE: "CHARACTER_STATE",
   CHARACTER_LOCATION: "CHARACTER_LOCATION",
@@ -45,9 +45,9 @@ function inferIntent(text, analysis, time) {
   const broadWorldIntent = !hasCharacter && !hasTitle && /(天下|局势|发生了什么|最近.*(?:发生|战争|谁死)|今年.*(?:发生|战争|谁死)|最近有哪些战争)/u.test(text);
   if (time.mode === "AS_OF" || time.mode === "RANGE") return { intent: INTENTS.HISTORY_LOOKUP, broadWorldIntent: false };
   if (broadWorldIntent) return { intent: INTENTS.WORLD_RECENT, broadWorldIntent: true };
-  if (/(战争|战事|交战|开战|停战)/u.test(text)) return { intent: INTENTS.WAR_STATUS, broadWorldIntent: false };
+  if (/(战争|战事|交战|开战|停战|打仗|战况|战局|战火|攻打|宣战|在打|war\b|at war)/u.test(text)) return { intent: INTENTS.WAR_STATUS, broadWorldIntent: false };
   if (/(谁拥有|谁持有|归谁|领主|持有人|拥有者)/u.test(text)) return { intent: INTENTS.TITLE_HOLDER, broadWorldIntent: false };
-  if (/(在哪里|在哪儿|何处|位置|所在地)/u.test(text) && hasCharacter) return { intent: INTENTS.CHARACTER_LOCATION, broadWorldIntent: false };
+  if (/(在哪里|在哪|何处|位置|所在地|行踪|下落|去向|去了哪里|whereabouts|where is)/u.test(text)) return { intent: INTENTS.CHARACTER_LOCATION, broadWorldIntent: false };
   if (/(活着吗|还活着|是否存活|死了|死亡|去世)/u.test(text) && hasCharacter) return { intent: INTENTS.CHARACTER_STATE, broadWorldIntent: false };
   if (/(是谁|哪一位|身份)/u.test(text) && hasCharacter) return { intent: INTENTS.CHARACTER_IDENTITY, broadWorldIntent: false };
   if (hasTitle) return { intent: INTENTS.REALM_STATUS, broadWorldIntent: false };

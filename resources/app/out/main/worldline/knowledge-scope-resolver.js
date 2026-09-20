@@ -1,5 +1,26 @@
 "use strict";
 
+const { getTargetedKinshipGraph } = require("./kinship-graph-cache");
+const CLOSE_KINSHIP = ["PARENT_OF", "CHILD_OF", "SIBLING_OF", "GRANDPARENT_OF", "AUNT_UNCLE_OF", "NIECE_NEPHEW_OF", "COUSIN_OF", "SPOUSE_OF"];
+const FRIEND_LABELS = new Set(["friend", "friends", "best_friend", "best friend", "朋友", "好友", "挚友", "至交"]);
+
+function closeKnowledge(snapshot, responderId, subjectId, runtimeGameData) {
+  if (!snapshot?.characters?.[responderId] || !snapshot.characters[subjectId]) return null;
+  if (responderId === subjectId) return "SELF";
+  const graph = getTargetedKinshipGraph(snapshot, [responderId, subjectId]);
+  const relation = graph.relationBetweenOfTypes(subjectId, responderId, CLOSE_KINSHIP);
+  if (!graph.scopeTruncated && relation.relation && !relation.diagnostic) return "KINSHIP";
+  const runtimeCharacters = runtimeGameData?.characters;
+  const runtimeCharacter = key => runtimeCharacters instanceof Map ? runtimeCharacters.get(Number(key)) || runtimeCharacters.get(key) : runtimeCharacters?.[key];
+  for (const [leftId, rightId] of [[responderId, subjectId], [subjectId, responderId]]) {
+    const left = runtimeCharacter(leftId) || snapshot.characters[leftId];
+    const labels = [...(left?.relationsToCharacters?.find(item => String(item.id) === rightId)?.relations || []),
+      ...(String(runtimeGameData?.playerID) === rightId ? left?.relationsToPlayer || [] : [])];
+    if (labels.some(label => FRIEND_LABELS.has(String(label).trim().toLowerCase()))) return "FRIEND";
+  }
+  return null;
+}
+
 function id(value) {
   return value === null || value === undefined ? null : String(value);
 }
@@ -18,7 +39,7 @@ function createRealmRootIndex(snapshot = {}) {
     if (trail.has(key)) return null;
     const character = characters[key];
     if (!character) return null;
-    const liegeId = id(character.liege) || id(character.topLiege) || id(character.realm);
+    const liegeId = id(character.liege) || id(character.topLiege) || id(character.realm) || id(character.courtEmployer);
     if (!liegeId || liegeId === key) {
       roots.set(key, key);
       return key;
@@ -34,7 +55,7 @@ function createRealmRootIndex(snapshot = {}) {
   return roots;
 }
 
-function resolveKnowledgeScope({ snapshot, responderId, subjectId = null, live = null, realmRootByCharacter = null } = {}) {
+function resolveKnowledgeScope({ snapshot, responderId, subjectId = null, live = null, realmRootByCharacter = null, runtimeGameData = null, includeCloseKnowledge = false } = {}) {
   const responder = snapshot?.characters?.[id(responderId)] || null;
   const subject = subjectId === null ? null : snapshot?.characters?.[id(subjectId)] || null;
   const sameCharacter = !!responder && !!subject && id(responderId) === id(subjectId);
@@ -52,8 +73,9 @@ function resolveKnowledgeScope({ snapshot, responderId, subjectId = null, live =
     publicWorld: true,
     asOf: snapshot?.gameDate || null,
     verificationMode: "CHECKPOINT",
-    completeness: complete ? "COMPLETE" : "INCOMPLETE"
+    completeness: complete ? "COMPLETE" : "INCOMPLETE",
+    ...(includeCloseKnowledge ? { closeKnowledge: closeKnowledge(snapshot, id(responderId), id(subjectId), runtimeGameData) } : {})
   };
 }
 
-module.exports = { createRealmRootIndex, resolveKnowledgeScope };
+module.exports = { createRealmRootIndex, resolveKnowledgeScope, closeKnowledge };

@@ -1,6 +1,7 @@
 "use strict";
 
 const { analysisTextMatches } = require("./shared-query-analyzer");
+const { buildWarCandidates } = require("./war-facts");
 
 function uniqueStrings(values) {
   return [...new Set((values || []).map((value) => String(value || "").trim()).filter(Boolean))];
@@ -21,8 +22,8 @@ function runtimeIds(values) {
   });
 }
 
-function buildWorldCandidates({ snapshot, analysis, annualDelta = [], supplemental = [] } = {}) {
-  const candidates = [];
+function buildWorldCandidates({ snapshot, analysis, annualDelta = [], supplemental = [], queryPlan = null } = {}) {
+  const candidates = !queryPlan || ["WAR_STATUS", "WORLD_RECENT", "REALM_STATUS"].includes(queryPlan.intent) ? buildWarCandidates(snapshot) : [];
   const characters = snapshot?.characters || {};
   const titles = snapshot?.titles || {};
   const resolvedCharacters = analysis?.resolvedCharacters || analysis?.characters || [];

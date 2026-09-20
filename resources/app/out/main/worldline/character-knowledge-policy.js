@@ -1,7 +1,7 @@
 "use strict";
 
 const KNOWLEDGE_LEVELS = Object.freeze(["SELF", "DIRECT_OBSERVATION", "PERSONAL_MEMORY", "COURT_PUBLIC", "REALM_PUBLIC", "PUBLIC_WORLD", "SECRET", "UNKNOWN"]);
-const KNOWLEDGE_POLICY_VERSION = "v8.6-character-knowledge-1";
+const KNOWLEDGE_POLICY_VERSION = "v8.11-character-knowledge-1";
 const LEVEL_SET = new Set(KNOWLEDGE_LEVELS);
 const SELF_FIELDS = new Set(["NAME", "IDENTITY", "PRIMARY_TITLE", "SPOUSE", "CHILDREN", "COURT_POSITION", "LOCATION", "CULTURE", "FAITH", "KNOWN_ACTION"]);
 const PRIORITY = Object.freeze({ SELF: 700, DIRECT_OBSERVATION: 700, PERSONAL_MEMORY: 600, COURT_PUBLIC: 500, REALM_PUBLIC: 500, PUBLIC_WORLD: 500, SECRET: 650, UNKNOWN: 0 });
@@ -79,6 +79,13 @@ function classifyKnowledge(fact = {}, responder = {}, context = {}) {
     const allowed = includesId(fact.knownBy, responderId) || includesId(fact.directObserverIds, responderId) || includesId(fact.privateLetterRecipientIds, responderId) || idOf(fact.projectionOwnerId) === responderId || fact.participationVerified === true && includesId(fact.participantIds, responderId);
     if (allowed) return result("ALLOW", "SECRET_KNOWN");
     return fact.authorizationComplete === true ? result("DENY", "SECRET_NOT_AUTHORIZED") : result("UNKNOWN", "SECRET_KNOWLEDGE_UNPROVEN");
+  }
+
+  if (["GAME_TRUTH", "GAMESTATE"].includes(fact.sourceTier)) {
+    if (["LOCATION", "COURT_EMPLOYER"].includes(fact.field)) {
+      return context.closeKnowledge ? result("ALLOW", `WHEREABOUTS_${context.closeKnowledge}`) : result("DENY", "WHEREABOUTS_NOT_KNOWN");
+    }
+    if (context.closeKnowledge && level === "COURT_PUBLIC" && fact.public === true) return result("ALLOW", `KNOWN_PERSON_${context.closeKnowledge}`);
   }
 
   if (fact.public === false) return result("DENY", "NOT_PUBLIC");

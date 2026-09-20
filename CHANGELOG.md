@@ -2,6 +2,8 @@
 
 这里是版本变更的单一入口。详细设计和测试证据保留在链接目标中，本文件只维护版本顺序、用户可见摘要和文档索引。
 
+V8.11：[世界事实召回与知情边界](docs/VOTC_v8.11_世界事实召回与知情边界设计.md) / [实施记录](docs/V8阶段开发记录.md)。补齐无年度变化时的活跃战争召回、动态国号和攻守双方语义；以游戏生死替代历史命运，行踪仅向获准亲友或直接观察者提供。查询事实优先保留，修复跨参与者召回缓存和多战争匹配排序；新增内容保持在 GLM Cache v2 动态尾部。303/303 发布组、隔离 Electron 冒烟通过，真实 CK3/Provider 与 Soak Gate 待人工验收。
+
 V8.10.2：[Memory 删除一致性与 GLM Cache v2](docs/V8阶段开发记录.md)。清除全部摘要现在同步清理 Structured Memory、索引、人物知识、配对索引、Recovery、当前会话 Recall 和 Character 兼容缓存；单条或单人物删除按 Owner 撤销知识，不会让其他知情者错误失忆。GLM Prompt 改用四级生命周期和显式 Stable/Live DTO，缓存前缀只保留全局规则、会话日期/时代、回应者稳定身份及稳定血亲；诊断页新增各生命周期 Token、实际前缀指纹和首变化 Block。302/302 发布组及隔离 Electron 冒烟通过，真实 GLM/CK3/Soak Gate 待人工验收。
 
 V8.9.1 后续：[真实 Request Diff 实施报告](docs/real-request-diff-implementation-report.md)。Synthetic GLM 缓存路径诊断完成后移除，诊断页改为自动捕获真实 Chat Request；新增 Route/Conversation/Responder Scoped Prefix、消息/Block/Chunk Diff、Effective Parameter/Endpoint Diff、Provider Alignment、Prefix/时间桶、同 NPC/换 NPC 聚合和脱敏导出。真实 GLM/DeepSeek、CK3、RP 与 Soak Gate 待人工运行。

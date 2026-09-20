@@ -46,7 +46,7 @@ try {
   service.currentCheckpoint = { id: "checkpoint", source: { path: autosavePath }, snapshot: {
     gameDate: checkpointDate, playerId: "1", diagnostics: { characterCount: 3, activeWarCount: 1 },
     characters: {
-      "1": { id: "1", firstName: "甲", courtEmployer: "10", liege: "20" },
+      "1": { id: "1", firstName: "甲", courtEmployer: "10", liege: "20", children: ["2"] },
       "2": { id: "2", firstName: "乙", courtEmployer: "10", liege: "20" },
       "3": { id: "3", firstName: "丙", courtEmployer: "99", liege: "99" },
       "4": { id: "4", firstName: "丁", courtEmployer: "10", liege: "20" },
@@ -61,12 +61,12 @@ try {
   const owner = service.getSubjectivePromptContext({ responderId: "1", query: "乙在哪里", conversationId: "c", turnEpoch: 1, sceneRevision: "scene", presenceRevision: "1,2", directObservationFactIds: [], historicalReferenceInfo: { period: "宋", context: "旧背景", notableEvents: ["旧事"], notableFigures: ["旧人"] } });
   const outsider = service.getSubjectivePromptContext({ responderId: "3", query: "乙在哪里", conversationId: "c", turnEpoch: 1, sceneRevision: "scene", presenceRevision: "1,2", directObservationFactIds: [], historicalReferenceInfo: { period: "宋", context: "旧背景", notableEvents: [], notableFigures: [] } });
   const uninformedPeer = service.getSubjectivePromptContext({ responderId: "4", query: "乙在哪里", conversationId: "c", turnEpoch: 1, sceneRevision: "scene", presenceRevision: "1,2,4", directObservationFactIds: [], historicalReferenceInfo: { period: "宋", context: "旧背景", notableEvents: [], notableFigures: [] } });
-  assert(owner?.worldTurnRecallText.includes("乙当前位于 临安"), "same-court responder receives court-public location with checkpoint provenance");
+  assert(owner?.worldTurnRecallText.includes("乙当前位于 临安"), "verified kin receives recorded location with checkpoint provenance");
   assert(owner.worldTurnRecallText.includes("记录到一场新战争"), "same-realm annual delta reaches the responder-scoped production prompt");
   assert(!owner.worldTurnRecallText.includes("绝密计划正文") && !owner.worldTurnRecallText.includes("private-plan"), "production prompt never serializes personal secret memory");
   assert(!outsider?.worldTurnRecallText?.includes("乙") && !outsider?.worldTurnRecallText?.includes("临安"), "different-court responder does not receive an arbitrary character name or location");
   assert(!outsider?.worldTurnRecallText?.includes("记录到一场新战争"), "different-realm responder does not receive realm-scoped war history");
-  assert(uninformedPeer?.worldTurnRecallText.includes("乙当前位于 临安") && !uninformedPeer.worldTurnRecallText.includes("绝密计划正文"), "same-court peer receives only scoped public facts, not another responder's secret");
+  assert(!uninformedPeer?.worldTurnRecallText.includes("临安") && !uninformedPeer.worldTurnRecallText.includes("绝密计划正文"), "same-court peer receives neither private whereabouts nor another responder's secret");
   assert(owner.historicalReferenceInfo.context.includes("不得引用后续事件"), "Phase B replaces legacy history context with an explicit temporal boundary");
   assert(!JSON.stringify(owner.historicalReferenceInfo).includes("旧背景") && !JSON.stringify(owner.historicalReferenceInfo).includes("旧事"), "Phase B does not relabel and forward unfiltered legacy history");
 

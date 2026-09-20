@@ -17,9 +17,16 @@ function overlaps(left, right) {
 
 function entityScore(candidate, plan) {
   const refs = candidate.entityRefs || {};
+  if (candidate.kind === "WAR") {
+    const characterMatches = [...normalizedSet(plan.entities?.characters)].filter(id => normalizedSet(refs.characters).has(id)).length;
+    const titleMatches = [...normalizedSet(plan.entities?.titles)].filter(id => normalizedSet(refs.titles).has(id)).length;
+    // A war covering both named realms must outrank wars involving only one.
+    if (characterMatches || titleMatches) return 40 + 30 * Math.max(0, characterMatches + titleMatches - 1);
+  }
   if (overlaps(refs.characters, plan.entities?.characters) || overlaps(refs.titles, plan.entities?.titles)) return 40;
   if (overlaps(refs.keys, plan.entityAnchors)) return candidate.category === "SUPPLEMENTAL" ? 24 : 32;
   if (plan.broadWorldIntent && candidate.category === "DELTA") return 8;
+  if (candidate.kind === "WAR" && plan.intent === "WAR_STATUS" && !plan.entities?.characters?.length && !plan.entities?.titles?.length && !plan.entityAnchors?.length) return 8;
   return 0;
 }
 
@@ -91,6 +98,10 @@ function rankWorldCandidates(candidates, { plan, checkpointDate, includeScopedSu
       continue;
     }
     const entity = entityScore(candidate, plan);
+    if (candidate.kind === "WAR" && (!['WAR_STATUS', 'WORLD_RECENT', 'REALM_STATUS'].includes(plan.intent) || entity === 0 && !plan.broadWorldIntent)) {
+      trimmed.push({ type: "GAME_TRUTH", id: candidate.id, reason: "UNRELATED_WAR" });
+      continue;
+    }
     if (candidate.category === "DELTA" && !plan.broadWorldIntent && entity === 0) {
       trimmed.push({ type: "DELTA", id: candidate.payload?.id || candidate.id, title: candidate.title, reason: "UNRELATED_DELTA" });
       continue;

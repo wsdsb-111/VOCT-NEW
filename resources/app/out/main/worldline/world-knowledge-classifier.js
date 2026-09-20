@@ -3,6 +3,7 @@
 const { dateValue } = require("./game-state-adapter");
 const { formatStructuredCharacter } = require("./character-family-facts");
 const { currentTruthFact } = require("./current-truth-adapter");
+const { warLine } = require("./war-facts");
 
 function text(value) {
   return String(value ?? "").trim();
@@ -35,7 +36,8 @@ function fact(candidate, values) {
     ownerId: values.ownerId || null,
     authorizationComplete: values.authorizationComplete === true,
     directObserverIds: Array.isArray(values.directObserverIds) ? values.directObserverIds.slice() : undefined,
-    observationEvidenceComplete: values.observationEvidenceComplete === true
+    observationEvidenceComplete: values.observationEvidenceComplete === true,
+    scopeEntityIds: values.scopeEntityIds || undefined
   };
 }
 
@@ -55,7 +57,7 @@ function characterFacts(candidate, checkpointDate, snapshot) {
       temporalSafe,
       evidence: "CHARACTER_NAME"
     }));
-    const structured = formatStructuredCharacter(character, checkpointDate, snapshot?.characters || null);
+    const structured = formatStructuredCharacter({ ...character, location: null }, checkpointDate, snapshot?.characters || null);
     facts.push(fact(candidate, {
       entityId: id,
       field: "IDENTITY",
@@ -111,6 +113,13 @@ function titleFacts(candidate, checkpointDate) {
   })];
 }
 
+function warFacts(candidate, checkpointDate) {
+  return [fact(candidate, {
+    entityId: candidate.id, field: "WAR", value: warLine(candidate), knowledgeLevel: "REALM_PUBLIC", public: true,
+    scopeEntityIds: candidate.entityRefs.characters, temporalSafe: checkpointSafe(candidate, checkpointDate), evidence: "ACTIVE_WAR_PARTICIPANTS"
+  })];
+}
+
 function deltaFacts(candidate, checkpointDate) {
   const eventType = text(candidate?.eventType);
   const realmPublic = new Set(["WAR_STARTED", "WAR_NO_LONGER_ACTIVE", "IMPORTANT_CHARACTER_DIED", "TITLE_HOLDER_CHANGED"]);
@@ -126,7 +135,8 @@ function deltaFacts(candidate, checkpointDate) {
   return [fact(candidate, {
     entityId: actorId || candidate.id,
     field: "WORLD_EVENT",
-    value: `${candidate.gameDate || "日期未知"}：${descriptions[eventType]}`,
+    value: `${candidate.gameDate || "日期未知"}：${descriptions[eventType]}${candidate.payload?.actors?.length ? `涉及：${candidate.payload.actors.slice(0, 6).map(actor => actor.displayName || actor.rawName || `#${actor.runtimeId}`).join("、")}。` : ""}`,
+    scopeEntityIds: eventType.startsWith("WAR_") ? candidate.entityRefs?.characters : undefined,
     knowledgeLevel: "REALM_PUBLIC",
     public: true,
     temporalSafe: checkpointSafe(candidate, checkpointDate),
@@ -175,15 +185,20 @@ function supplementalFact(candidate, checkpointDate) {
   })];
 }
 
-function classifySelectedWorldFacts(selected = {}, checkpointDate = null, snapshot = null) {
+function classifySelectedWorldFacts(selected = {}, checkpointDate = null, snapshot = null, queryPlan = null) {
   const facts = [];
   for (const candidate of selected.gameTruth || []) {
     if (candidate?.kind === "CHARACTER") facts.push(...characterFacts(candidate, checkpointDate, snapshot));
     else if (candidate?.kind === "TITLE") facts.push(...titleFacts(candidate, checkpointDate));
+    else if (candidate?.kind === "WAR") facts.push(...warFacts(candidate, checkpointDate));
   }
   for (const candidate of selected.delta || []) facts.push(...deltaFacts(candidate, checkpointDate));
   for (const candidate of selected.supplemental || []) facts.push(...supplementalFact(candidate, checkpointDate));
-  return facts;
+  const queriedIds = new Set(queryPlan?.entities?.characters || []);
+  return facts.map(item => ({ ...item, queryPriority:
+    queryPlan?.intent === "WAR_STATUS" && item.field === "WAR" ? 100 :
+    queriedIds.has(item.entityId) && (queryPlan?.intent === "CHARACTER_LOCATION" && ["LOCATION", "ALIVE"].includes(item.field) || queryPlan?.intent === "CHARACTER_STATE" && ["ALIVE", "IDENTITY"].includes(item.field)) ? 100 :
+    queriedIds.has(item.entityId) ? 50 : 0 }));
 }
 
 module.exports = { classifySelectedWorldFacts };

@@ -21,6 +21,7 @@ function characterDisplay(snapshot, runtimeId) {
 
 function displayValue(snapshot, field, rawValue) {
   if (field === "alive") return rawValue ? "在世" : "已故";
+  if (field === "location" && /^\d+$/.test(String(rawValue))) return `位置编号 ${rawValue}（地名未解析，不得猜测地名）`;
   if (["liege", "courtEmployer"].includes(field)) return characterDisplay(snapshot, rawValue);
   return String(rawValue);
 }

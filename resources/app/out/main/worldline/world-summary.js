@@ -1,6 +1,7 @@
 "use strict";
 
 const { resolveLifeStatus } = require("./character-temporal-facts");
+const { warLine } = require("./war-facts");
 
 function characterLine(candidate) {
   const { id, character, match } = candidate.payload;
@@ -27,7 +28,7 @@ function deltaLine(candidate) {
 }
 
 function buildDeterministicWorldSummary({ selected = {} } = {}) {
-  const topicItems = (selected.gameTruth || []).map((candidate) => ({ candidate, text: candidate.kind === "TITLE" ? titleLine(candidate) : characterLine(candidate) }));
+  const topicItems = (selected.gameTruth || []).map((candidate) => ({ candidate, text: candidate.kind === "WAR" ? `- ${warLine(candidate)}` : candidate.kind === "TITLE" ? titleLine(candidate) : characterLine(candidate) }));
   const supplementalItems = (selected.supplemental || []).map((candidate) => ({ candidate, text: `- ${candidate.payload.title}：${candidate.payload.body}` }));
   const deltaItems = (selected.delta || []).map((candidate) => ({ candidate, text: deltaLine(candidate) }));
   const summaryLines = deltaItems.length > 1 ? [`- 本轮查询选取 ${deltaItems.length} 条相关年度变化，以下按相关度列出。`] : [];

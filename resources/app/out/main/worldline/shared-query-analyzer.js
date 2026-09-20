@@ -305,9 +305,12 @@ function analyzeSharedQuery({ snapshot, query = "", assistContext = "", mentione
     }
   }
   for (const title of Object.values(titles)) {
-    if (aliasMatches(title.key, normalizedQuery, termSet)) {
-      addResolvedTitle(title.id, "title_alias", title.key);
-      entityAnchoredTerms.add(normalize(title.key));
+    const titleName = String(title.displayName || "").trim();
+    const aliases = [title.key, titleName, ...(/^[hek]_/.test(title.key || "") && /^[\u3400-\u9fff]{1,4}$/.test(titleName) ? [`${titleName}国`, `${titleName}朝`] : [])];
+    const currentAlias = aliases.find(alias => aliasMatches(alias, normalizedQuery, termSet));
+    if (currentAlias) {
+      addResolvedTitle(title.id, "title_alias", currentAlias);
+      entityAnchoredTerms.add(normalize(currentAlias));
     }
   }
 
@@ -474,7 +477,7 @@ function analyzeSharedQuery({ snapshot, query = "", assistContext = "", mentione
   const resolvedTitles = [...resolvedTitleIds.entries()].map(([id, sources]) => {
     const title = titles[id];
     const localization = localizedReference("title", title.key, localize);
-    return { id, rawKey: title.key || `#${id}`, displayName: localization?.localizedValue || title.key || `#${id}`, holderId: title.holder || null, matchSources: [...sources] };
+    return { id, rawKey: title.key || `#${id}`, displayName: title.displayName || localization?.localizedValue || title.key || `#${id}`, holderId: title.holder || null, matchSources: [...sources] };
   });
   return {
     normalizedQuery,

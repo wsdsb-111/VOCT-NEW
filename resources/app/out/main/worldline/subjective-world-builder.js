@@ -57,7 +57,7 @@ function admitCandidates(input) {
   }).sort((left, right) => {
     const leftPriority = candidateLanePriority(left.fact);
     const rightPriority = candidateLanePriority(right.fact);
-    return leftPriority - rightPriority || left.index - right.index;
+    return (Number(right.fact.queryPriority) || 0) - (Number(left.fact.queryPriority) || 0) || leftPriority - rightPriority || left.index - right.index;
   }).slice(0, MAX_CANDIDATES).map((entry) => entry.fact);
 }
 
@@ -76,7 +76,8 @@ function safeAllowedFact(item) {
     conflictReason: item.conflictReason || null,
     asOf: item.asOf || fact.asOf || null,
     verificationMode: item.verificationMode || fact.verificationMode || "UNVERIFIED",
-    confidence: Number.isFinite(Number(fact.confidence)) ? Number(fact.confidence) : null
+    confidence: Number.isFinite(Number(fact.confidence)) ? Number(fact.confidence) : null,
+    queryPriority: Number(fact.queryPriority) || 0
   };
 }
 

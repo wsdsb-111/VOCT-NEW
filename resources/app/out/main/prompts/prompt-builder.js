@@ -3,6 +3,7 @@
 const { buildFamilyFactBlock } = require("../worldline/character-family-facts");
 const { resolveProviderPromptProfile, resolvePromptLayoutId } = require("./provider-prompt-adapter");
 const { createStableProfile, createLiveProfile, formatStableProfile, formatStableKinship, formatLiveProfile } = require("./character-profile-v2");
+const { buildHistoricalReferenceReplacement } = require("../worldline/subjective-prompt-context");
 
 const PROMPT_LIFECYCLE = Object.freeze({
   GLOBAL_STATIC: "GLOBAL_STATIC",
@@ -501,6 +502,11 @@ function createPromptBuilder({
         tokens: TokenCounter.estimateTokens(cacheAnchor)
       }];
       llmMessages.push({ role: "system", content: blocksWithTokens[0].content });
+      if (memoryContext?.subjectiveWorldPolicyActive && !memoryContext.historicalReferenceInfo) {
+        memoryContext = { ...memoryContext, historicalReferenceInfo: buildHistoricalReferenceReplacement(null, gameData?.date) || {
+          period: "当前年代未确认", context: "游戏为先，历史为次。年代与当前事实缺失时明确未知，不得以历史传记补全人物生死、行踪或战争。", notableEvents: [], notableFigures: []
+        } };
+      }
       const promptGameData = memoryContext?.historicalReferenceInfo ? Object.assign(Object.create(Object.getPrototypeOf(gameData)), gameData, {
         historicalReferenceInfo: memoryContext.historicalReferenceInfo,
         currentEmperor: null,

@@ -90,6 +90,7 @@ const releaseChecks = [
   { group: "real-request-diff", script: "test-real-request-diff.js" },
   { group: "v8.10.2-memory-deletion", script: "test-v8.10.2-memory-deletion.js" },
   { group: "v8.10.2-glm-cache-v2", script: "test-v8.10.2-glm-cache-v2.js" },
+  { group: "v8.11-world-facts", script: "test-v8.11-world-facts.js" },
   { group: "syntax", args: ["--check", "resources/app/out/main/main.js"] },
   { group: "v8.0-historical-baseline-parity", script: "test-v8.0-historical-baseline-parity.js" },
   { group: "v8.0-historical-schema", script: "test-v8.0-historical-schema.js" },

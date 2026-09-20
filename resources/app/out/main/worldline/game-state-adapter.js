@@ -240,10 +240,13 @@ function parseTitles(text, value) {
   if (!section || section.kind !== "block") return titles;
   scanDirectEntries(text, section.start, section.end, (id, record) => {
     if (record.kind !== "block") return;
-    const fields = collectFields(text, record, ["key", "holder", "date", "de_facto_liege", "de_jure_liege", "history"]);
+    const fields = collectFields(text, record, ["key", "holder", "date", "de_facto_liege", "de_jure_liege", "history", "title_name_data"]);
+    const nameFields = collectFields(text, firstField(fields.title_name_data), ["name", "localization_key"]);
     titles[String(id)] = {
       id: String(id),
       key: scalar(fields.key),
+      displayName: scalar(nameFields.name),
+      localizationKey: scalar(nameFields.localization_key),
       holder: scalar(fields.holder),
       date: scalar(fields.date),
       deFactoLiege: scalar(fields.de_facto_liege),

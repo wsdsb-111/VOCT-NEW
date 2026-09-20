@@ -42,6 +42,7 @@ function createSharedCandidatePool({ cache, key, build } = {}) {
     cacheHit: false,
     truncated: source.length > candidates.length,
     subjectId: built && !Array.isArray(built) && built.subjectId !== null && built.subjectId !== undefined ? String(built.subjectId) : null,
+    queryPlan: built?.queryPlan || null,
     queryFingerprint: built && !Array.isArray(built) && built.queryFingerprint ? String(built.queryFingerprint) : null
   };
   cache.set(key, result);

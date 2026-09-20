@@ -264,6 +264,7 @@ class Conversation {
       try {
         await worldlineService.prepareCanon?.();
         let subjectiveWorldContext = worldlineService.getSubjectivePromptContext({
+          runtimeGameData: this.gameData,
           responderId: npc.id,
           query: request.query || "",
           assistContext: request.assistContext || "",
@@ -289,6 +290,7 @@ class Conversation {
           };
         } else if (subjectiveWorldContext && stableTokens + (subjectiveWorldContext.worldTurnRecallTokens || 0) > remainingContext) {
           subjectiveWorldContext = worldlineService.getSubjectivePromptContext({
+            runtimeGameData: this.gameData,
             responderId: npc.id,
             query: request.query || "",
             assistContext: request.assistContext || "",
