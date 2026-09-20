@@ -143,10 +143,65 @@ class MemoryEngine {
     return this.consolidator.consolidateCharacter(characterId);
   }
 
-  forgetSummaryProjection(summaryRecord, { ownerId = null, counterpartId = null, invalidateConversations = [] } = {}) {
+  resolveSummaryProjection(summaryRecord, ownerId) {
     const numericOwnerId = Number(ownerId ?? summaryRecord?.perspectiveOwnerId ?? summaryRecord?.playerId);
-    if (!Number.isFinite(numericOwnerId)) throw new Error("summary_owner_id_required");
-    const memoryIds = [...new Set((summaryRecord?.perspectiveMemoryIds || []).map(String).filter(Boolean))];
+    if (!Number.isSafeInteger(numericOwnerId) || numericOwnerId <= 0) throw new Error("summary_owner_id_required");
+    const finalizationId = summaryRecord?.finalizationId ? String(summaryRecord.finalizationId) : null;
+    if (finalizationId && this.activeFinalizationIds.has(finalizationId)) throw new Error("SUMMARY_FINALIZATION_IN_PROGRESS");
+    if (finalizationId && this.listRecoverySnapshots().some(file => {
+      const recovery = this.store.readJson(file, null);
+      return recovery?.finalizationId === finalizationId && !this.isCommitted(recovery);
+    })) throw new Error("SUMMARY_FINALIZATION_RECOVERY_PENDING");
+    const episodes = finalizationId ? this.store.listAllEpisodes().filter(episode => String(episode.finalizationId || "") === finalizationId) : [];
+    let memoryIds = summaryRecord?.perspectiveMemoryIds;
+    if (!Array.isArray(memoryIds)) {
+      const ownerKnown = new Set(this.store.getCharacterKnowledge(numericOwnerId).map(record => record.memoryId));
+      const allMemories = this.store.listAllMemories();
+      const matches = finalizationId ? allMemories.filter(memory => memory.provenance?.finalizationId === finalizationId) : [];
+      const candidateIds = [...new Set([...episodes.flatMap(episode => episode.memoryIds || []), ...matches.map(memory => memory.memoryId)])];
+      memoryIds = candidateIds.filter(id => {
+        const memory = this.store.getMemory(id);
+        return memory && (ownerKnown.has(id) || memory.knownBy.includes(numericOwnerId) || memory.provenance?.folderOwnerId === numericOwnerId);
+      });
+      if (!episodes.length && !matches.length && (ownerKnown.size || allMemories.some(memory => memory.knownBy.includes(numericOwnerId) || memory.provenance?.folderOwnerId === numericOwnerId))) {
+        this.trace.record("LEGACY_SUMMARY_MEMORY_MAPPING_INCOMPLETE", { characterId: numericOwnerId, finalizationId });
+        throw new Error("LEGACY_SUMMARY_MEMORY_MAPPING_INCOMPLETE");
+      }
+    }
+    return { numericOwnerId, finalizationId, episodes, memoryIds: [...new Set(memoryIds.map(String).filter(Boolean))] };
+  }
+
+  updateSummaryProjection(summaryRecord, editedText, { ownerId = null, counterpartId = null, invalidateConversations = [], summaryPath = null, persistSummary = null } = {}) {
+    if (typeof editedText !== "string" || !editedText.trim() || editedText.length > 1048576) throw new Error("summary_content_required");
+    const mapping = this.resolveSummaryProjection(summaryRecord, ownerId);
+    const numericCounterpartId = Number(counterpartId ?? summaryRecord.characterId);
+    if (!Number.isSafeInteger(numericCounterpartId) || numericCounterpartId <= 0) throw new Error("summary_counterpart_id_required");
+    return this.store.withSummaryMutation(summaryPath, () => {
+      this.forgetSummaryProjection({ ...summaryRecord, perspectiveMemoryIds: mapping.memoryIds }, { ownerId: mapping.numericOwnerId, counterpartId: numericCounterpartId });
+      const finalizationId = mapping.finalizationId || createMemoryId("summary_edit");
+      const memory = this.store.saveMemory({
+        type: "information", subtype: "edited_summary_projection", content: editedText, canonicalText: editedText,
+        participants: [mapping.numericOwnerId, numericCounterpartId], subjects: [numericCounterpartId],
+        eventDate: summaryRecord.date, totalDays: summaryRecord.totalDays, source: "imported", updatedBy: "user",
+        visibility: "known_group", knownBy: [mapping.numericOwnerId],
+        provenance: { finalizationId, folderOwnerId: mapping.numericOwnerId, counterpartId: numericCounterpartId, extractionMode: "user_edited_summary" }
+      });
+      this.store.markKnownBy(mapping.numericOwnerId, memory.memoryId, { awareness: "imported", acquiredAt: memory.totalDays });
+      const segmentId = createMemoryId("summary_edit_segment");
+      const episode = mapping.episodes[0] ? this.store.listAllEpisodes().find(item => item.episodeId === mapping.episodes[0].episodeId) : { episodeId: createMemoryId("summary_edit_episode"), finalizationId, memoryIds: [], summarySegments: [] };
+      this.store.saveEpisode({ ...episode, memoryIds: [...(episode.memoryIds || []), memory.memoryId], summarySegments: [...(episode.summarySegments || []), { segmentId, content: editedText, knownBy: [mapping.numericOwnerId], participants: memory.participants, visibility: "known_group" }] });
+      const updatedRecord = { ...summaryRecord, content: editedText, finalizationId, perspectiveOwnerId: mapping.numericOwnerId, perspectiveMemoryIds: [memory.memoryId], perspectiveSummarySegmentIds: [segmentId], projectionHash: crypto.createHash("sha256").update(JSON.stringify([mapping.numericOwnerId, numericCounterpartId, editedText, memory.memoryId])).digest("hex") };
+      if (persistSummary) persistSummary(updatedRecord);
+      this.refreshCharacterConsolidation(mapping.numericOwnerId);
+      this.invalidateSummaryFolderCache([mapping.numericOwnerId]);
+      for (const conversation of invalidateConversations) this.invalidateConversationRecallState(conversation);
+      this.trace.record("summary_projection_updated", { ownerId: mapping.numericOwnerId, finalizationId, memoryId: memory.memoryId });
+      return { success: true, summaryRecord: updatedRecord };
+    });
+  }
+
+  forgetSummaryProjection(summaryRecord, { ownerId = null, counterpartId = null, invalidateConversations = [] } = {}) {
+    const { numericOwnerId, memoryIds } = this.resolveSummaryProjection(summaryRecord, ownerId);
     const segmentIds = new Set((summaryRecord?.perspectiveSummarySegmentIds || []).map(String).filter(Boolean));
     const finalizationId = summaryRecord?.finalizationId ? String(summaryRecord.finalizationId) : null;
     let revokedMemoryCount = 0;

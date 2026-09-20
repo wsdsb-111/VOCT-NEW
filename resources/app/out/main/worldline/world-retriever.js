@@ -22,8 +22,8 @@ function runtimeIds(values) {
   });
 }
 
-function buildWorldCandidates({ snapshot, analysis, annualDelta = [], supplemental = [], queryPlan = null } = {}) {
-  const candidates = !queryPlan || ["WAR_STATUS", "WORLD_RECENT", "REALM_STATUS"].includes(queryPlan.intent) ? buildWarCandidates(snapshot) : [];
+function buildWorldCandidates({ snapshot, analysis, annualDelta = [], supplemental = [], queryPlan = null, diagnostics = [] } = {}) {
+  const candidates = !queryPlan || ["WAR_STATUS", "WORLD_RECENT", "REALM_STATUS"].includes(queryPlan.intent) ? buildWarCandidates(snapshot, diagnostics) : [];
   const characters = snapshot?.characters || {};
   const titles = snapshot?.titles || {};
   const resolvedCharacters = analysis?.resolvedCharacters || analysis?.characters || [];

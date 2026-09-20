@@ -210,7 +210,13 @@ for (const expected of ["999", "-80", "market", "临安街市", "LONG TERM MEMOR
   assert(afterTail.includes(expected), `dynamic tail must refresh ${expected}`);
 }
 
-responder.fullName = "赵甲新名";
+responder.fullName = "宋王，赵甲";
+responder.primaryTitle = "宋王";
+child.fullName = "郡主，赵乙";
+const titleChanged = build();
+assert.strictEqual(titleChanged.metadata.prefixFingerprint, before.metadata.prefixFingerprint, "V8.11.1 styled full names of responder and kin must not change frozen prefix");
+assert(titleChanged.result.blocks.find(entry => entry.block.id === "live-character-state").content.includes("宋王，赵甲"));
+responder.shortName = "赵甲新名";
 const identityChanged = build();
 assert.notStrictEqual(identityChanged.metadata.prefixFingerprint, before.metadata.prefixFingerprint, "stable identity change may rebuild frozen prefix");
 

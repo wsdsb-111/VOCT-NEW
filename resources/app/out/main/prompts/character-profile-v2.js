@@ -81,7 +81,7 @@ function buildStableKinship(character, gameData) {
     const resolved = graph.relationBetween(edge.from, character.id)?.relation || edge;
     relations.push({
       runtimeId: numericOrNull(edge.from) ?? String(edge.from),
-      name: textOrNull(relative.fullName || relative.shortName || relative.firstName || relative.name) || `#${edge.from}`,
+      name: textOrNull(relative.shortName || relative.firstName) || `#${edge.from}`,
       sex: resolved.sex || normalizeSex(relative),
       kinshipType: resolved.label || edge.type
     });
@@ -94,7 +94,6 @@ function createStableProfile(character = {}, gameData = null) {
   return {
     id: numericOrNull(character.id) ?? textOrNull(character.id),
     name: textOrNull(character.shortName || character.firstName),
-    fullName: textOrNull(character.fullName || character.shortName || character.firstName),
     sex: normalizeSex(character),
     age: numericOrNull(character.age),
     house: textOrNull(character.house),
@@ -122,6 +121,7 @@ function createStableProfile(character = {}, gameData = null) {
 function createLiveProfile(character = {}, gameData = null, activeParticipantIds = []) {
   const classified = classifyTraits(character.traits);
   return {
+    fullName: textOrNull(character.fullName),
     gold: numericOrNull(character.gold),
     prestige: character.prestige ?? null,
     piety: character.piety ?? null,
@@ -153,7 +153,6 @@ function formatStableProfile(profile) {
   return `=== Responder Frozen Profile v2 ===
 - Runtime ID：${profile.id ?? "未知"}
 - 姓名：${profile.name || "未知"}
-- 全名：${profile.fullName || "未知"}
 - 性别：${profile.sex === "male" ? "男性" : profile.sex === "female" ? "女性" : "未知"}
 - 年龄：${profile.age ?? "未知"}
 - 家族／出身：${profile.house || profile.origin || "未知"}
@@ -178,6 +177,7 @@ function formatStableKinship(profile) {
 
 function formatLiveProfile(profile) {
   return `=== Live Character State v2（本轮 CK3 数据） ===
+- 当前全名／称号：${profile.fullName || "未知"}
 - 财富：${profile.gold ?? "未知"}
 - 威望：${profile.prestige ?? "未知"}
 - 虔诚：${profile.piety ?? "未知"}

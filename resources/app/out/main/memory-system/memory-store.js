@@ -55,6 +55,8 @@ class MemoryStore {
       index: path.join(baseDir, "index.json")
     };
     this.ensureDirectories();
+    this.summaryMutationPath = path.join(baseDir, "summary-mutation.json");
+    this.restoreSummaryMutation();
     this.index = this.readJson(this.paths.index, { schemaVersion: CURRENT_MEMORY_SCHEMA_VERSION, memories: {}, episodes: {} });
     this.folderSummaryCache = new Map();
     this.folderSummaryCacheMetrics = { hits: 0, misses: 0, invalidations: 0 };
@@ -77,10 +79,68 @@ class MemoryStore {
   }
 
   writeJson(filePath, value) {
+    this.trackSummaryMutation(filePath);
     fs.mkdirSync(path.dirname(filePath), { recursive: true });
     const tempPath = `${filePath}.${process.pid}.${Date.now()}.tmp`;
     fs.writeFileSync(tempPath, JSON.stringify(value, null, 2), "utf8");
     fs.renameSync(tempPath, filePath);
+  }
+
+  validateSummaryMutationPath(filePath) {
+    const target = path.resolve(filePath);
+    const roots = [this.baseDir, this.summaryFoldersDir].filter(Boolean).map(root => path.resolve(root));
+    if (!roots.some(root => target.startsWith(`${root}${path.sep}`)) || target === path.resolve(this.summaryMutationPath)) throw new Error("unsafe_summary_mutation_path");
+    return target;
+  }
+
+  trackSummaryMutation(filePath) {
+    if (!this.summaryMutation || filePath === this.summaryMutationPath) return;
+    const target = this.validateSummaryMutationPath(filePath);
+    if (Object.hasOwn(this.summaryMutation.files, target)) return;
+    this.summaryMutation.files[target] = fs.existsSync(target) ? fs.readFileSync(target).toString("base64") : null;
+    this.writeJson(this.summaryMutationPath, this.summaryMutation);
+  }
+
+  restoreSummaryMutation() {
+    if (!fs.existsSync(this.summaryMutationPath)) return;
+    // An interrupted edit is rolled back before any recall reads its index.
+    const journal = JSON.parse(fs.readFileSync(this.summaryMutationPath, "utf8"));
+    if (journal.version !== 1 || !journal.files || typeof journal.files !== "object") throw new Error("invalid_summary_mutation_journal");
+    const entries = Object.entries(journal.files).map(([file, content]) => {
+      if (content !== null && typeof content !== "string") throw new Error("invalid_summary_mutation_content");
+      return [this.validateSummaryMutationPath(file), content];
+    });
+    for (const [file, content] of entries) {
+      if (content === null) { if (fs.existsSync(file)) fs.unlinkSync(file); }
+      else {
+        const temp = `${file}.restore.tmp`;
+        fs.writeFileSync(temp, Buffer.from(content, "base64"));
+        fs.renameSync(temp, file);
+      }
+    }
+    fs.unlinkSync(this.summaryMutationPath);
+  }
+
+  withSummaryMutation(summaryPath, mutate) {
+    if (this.summaryMutation || fs.existsSync(this.summaryMutationPath)) throw new Error("summary_mutation_in_progress");
+    this.summaryMutation = { version: 1, files: {} };
+    try {
+      if (summaryPath) this.trackSummaryMutation(summaryPath);
+      const result = mutate();
+      if (fs.existsSync(this.summaryMutationPath)) fs.unlinkSync(this.summaryMutationPath);
+      return result;
+    } catch (error) {
+      this.summaryMutation = null;
+      this.restoreSummaryMutation();
+      this.index = this.readJson(this.paths.index, { schemaVersion: CURRENT_MEMORY_SCHEMA_VERSION, memories: {}, episodes: {} });
+      this.invalidateFolderSummaryCache();
+      throw error;
+    } finally { this.summaryMutation = null; }
+  }
+
+  removeSummaryMutationFile(filePath) {
+    this.trackSummaryMutation(filePath);
+    if (fs.existsSync(filePath)) fs.unlinkSync(filePath);
   }
 
   saveIndex() {
@@ -160,7 +220,7 @@ class MemoryStore {
     this.removeMemoryFromPairIndexes(existing);
     this.removeKnowledgeForMemory(memoryId);
     const filePath = this.memoryPath(memoryId);
-    if (fs.existsSync(filePath)) fs.unlinkSync(filePath);
+    this.removeSummaryMutationFile(filePath);
     delete this.index.memories[memoryId];
     this.saveIndex();
     return true;
@@ -211,7 +271,7 @@ class MemoryStore {
     const remaining = records.filter((entry) => entry.memoryId !== memoryId);
     if (remaining.length === records.length) return false;
     if (remaining.length > 0) this.writeJson(filePath, remaining);
-    else if (fs.existsSync(filePath)) fs.unlinkSync(filePath);
+    else this.removeSummaryMutationFile(filePath);
     return true;
   }
 
@@ -291,7 +351,7 @@ class MemoryStore {
 
   deleteCharacterConsolidation(characterId) {
     const filePath = path.join(this.paths.characters, `${Number(characterId)}.json`);
-    if (fs.existsSync(filePath)) fs.unlinkSync(filePath);
+    this.removeSummaryMutationFile(filePath);
   }
 
   clearLongTermMemoryStorage() {
@@ -300,6 +360,12 @@ class MemoryStore {
       clearDirectory(directory);
     }
     this.index = { schemaVersion: CURRENT_MEMORY_SCHEMA_VERSION, memories: {}, episodes: {} };
+    // CK3 death tombstones are game-derived, not remembered conversation facts.
+    for (const file of fs.readdirSync(this.paths.ownerStatus).filter(name => name.endsWith(".json"))) {
+      const filePath = path.join(this.paths.ownerStatus, file);
+      const record = this.readJson(filePath, null);
+      if (record?.source === "memory") fs.unlinkSync(filePath);
+    }
     this.saveIndex();
     this.invalidateFolderSummaryCache();
     this.ensureDirectories();
@@ -334,6 +400,7 @@ class MemoryStore {
       schemaVersion: CURRENT_MEMORY_SCHEMA_VERSION,
       characterId: numericId,
       status: "deceased",
+      source: details.source || "game",
       reason: details.reason || "dead",
       markedAt: details.markedAt || new Date().toISOString()
     };

@@ -12,6 +12,12 @@ V8.6.2 将应用中的可见标签更新为 Memory Engine 2.6，但内部 `MEMOR
 
 ## 存储结构
 
+### V8.11.1 编辑与遗忘一致性
+
+摘要编辑同步重建所选 Owner 的 Projection Memory、Episode Segment、Knowledge 和 Consolidation，并清除当前会话 Recall/Character 缓存；以编辑原文形成可召回记录，不调用模型重新推断事实。原共享记忆仍为其他知情者保留，其他配对的正文不自动改写。旧摘要缺少 perspectiveMemoryIds 时尝试通过 finalizationId 与 Episode 精确映射；不能证明映射时报告 `LEGACY_SUMMARY_MEMORY_MAPPING_INCOMPLETE`，不静默删除或扩大失忆范围。
+
+编辑和 UI 删除在受影响文件间使用可回滚日志 `memory/summary-mutation.json`；正常提交删除日志，中断后启动先回滚。正在最终保存或有未提交恢复快照的同一摘要暂不接受修改。全量遗忘清除 `source=memory` 的 owner-status，但保留游戏来源及旧版死亡标记，避免“清记忆”改变角色生死判定。Memory Engine 可见 2.6 / 底层 2.5 合同不变，详见 [V8.11.1 实施记录](v8.11.1-consistency-implementation-report.md)。
+
 ```text
 %APPDATA%/VOTC/votc_data/
 ├─ conversation_summaries/

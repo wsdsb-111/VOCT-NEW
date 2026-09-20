@@ -91,6 +91,8 @@ const releaseChecks = [
   { group: "v8.10.2-memory-deletion", script: "test-v8.10.2-memory-deletion.js" },
   { group: "v8.10.2-glm-cache-v2", script: "test-v8.10.2-glm-cache-v2.js" },
   { group: "v8.11-world-facts", script: "test-v8.11-world-facts.js" },
+  { group: "v8.11.1-world-boundaries", script: "test-v8.11.1-world-boundaries.js" },
+  { group: "v8.11.1-summary-consistency", script: "test-v8.11.1-summary-consistency.js" },
   { group: "syntax", args: ["--check", "resources/app/out/main/main.js"] },
   { group: "v8.0-historical-baseline-parity", script: "test-v8.0-historical-baseline-parity.js" },
   { group: "v8.0-historical-schema", script: "test-v8.0-historical-schema.js" },

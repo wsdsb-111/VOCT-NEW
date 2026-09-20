@@ -6,7 +6,7 @@ function display(localize, type, raw) {
   return resolved?.localizedValue || resolved?.displayName || String(raw);
 }
 
-function buildWarCandidates(snapshot) {
+function buildWarCandidates(snapshot, diagnostics = []) {
   const titlesByHolder = new Map();
   for (const [id, title] of Object.entries(snapshot?.titles || {})) {
     if (!title.holder) continue;
@@ -28,7 +28,10 @@ function buildWarCandidates(snapshot) {
     const attackers = (war.attacker || []).map(participant).filter(Boolean);
     const defenders = (war.defender || []).map(participant).filter(Boolean);
     // Both sides must be tied to real runtime characters; numeric metadata is not a participant.
-    if (!attackers.length || !defenders.length) return [];
+    if (!attackers.length || !defenders.length) {
+      diagnostics.push({ type: "GAME_TRUTH", id: `war:${id}`, reason: "WAR_SKIPPED_NO_RUNTIME_ACTOR" });
+      return [];
+    }
     const actors = [...attackers, ...defenders];
     const title = `${sideLabel(attackers)}与${sideLabel(defenders)}`;
     return [{

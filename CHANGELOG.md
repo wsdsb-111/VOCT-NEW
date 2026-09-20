@@ -2,6 +2,8 @@
 
 这里是版本变更的单一入口。详细设计和测试证据保留在链接目标中，本文件只维护版本顺序、用户可见摘要和文档索引。
 
+V8.11.1：[一致性与知情边界收尾](docs/v8.11.1-consistency-implementation-report.md)。旧配偶不再凭 Checkpoint 获得行踪，多人物直接观察完整接入；摘要编辑同步内部记忆，Legacy 删除安全映射，记忆派生 owner-status 纳入全量遗忘。Self 地点使用统一可读事实，当前年份查询保留当前 Intent，动态 fullName 不再影响 GLM 稳定前缀，非标准战争增加跳过诊断。305/305 发布组和隔离 Electron 冒烟通过，真实 CK3/Provider/Soak Gate 待验收。
+
 V8.11：[世界事实召回与知情边界](docs/VOTC_v8.11_世界事实召回与知情边界设计.md) / [实施记录](docs/V8阶段开发记录.md)。补齐无年度变化时的活跃战争召回、动态国号和攻守双方语义；以游戏生死替代历史命运，行踪仅向获准亲友或直接观察者提供。查询事实优先保留，修复跨参与者召回缓存和多战争匹配排序；新增内容保持在 GLM Cache v2 动态尾部。303/303 发布组、隔离 Electron 冒烟通过，真实 CK3/Provider 与 Soak Gate 待人工验收。
 
 V8.10.2：[Memory 删除一致性与 GLM Cache v2](docs/V8阶段开发记录.md)。清除全部摘要现在同步清理 Structured Memory、索引、人物知识、配对索引、Recovery、当前会话 Recall 和 Character 兼容缓存；单条或单人物删除按 Owner 撤销知识，不会让其他知情者错误失忆。GLM Prompt 改用四级生命周期和显式 Stable/Live DTO，缓存前缀只保留全局规则、会话日期/时代、回应者稳定身份及稳定血亲；诊断页新增各生命周期 Token、实际前缀指纹和首变化 Block。302/302 发布组及隔离 Electron 冒烟通过，真实 GLM/CK3/Soak Gate 待人工验收。

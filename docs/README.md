@@ -4,6 +4,8 @@
 
 ## 推荐阅读顺序
 
+V8.11.1 当前入口：[一致性与知情边界实施记录](v8.11.1-consistency-implementation-report.md)。修复实时配偶授权、多人物观察、摘要编辑双轨一致性与 Legacy 删除映射；Self Current Truth、显式当前年份查询和动态全名补齐。非标准战争仅增加遗漏诊断。305/305 发布组和隔离 Electron 冒烟通过；真实 CK3/GLM/长期 Gate 仍待验收。
+
 V8.11 当前入口：[世界事实召回与知情边界设计](VOTC_v8.11_世界事实召回与知情边界设计.md) / [V8 阶段开发记录](V8阶段开发记录.md)。补齐活跃战争候选、动态国号、两方领国知情和明确的日期/攻守语义；行踪按亲友或直接观察授权，历史资料不再覆盖此局人物生死与去向。新增内容全部沿既有 Worldline 动态尾部接入。303/303 发布组、372 个测试文件分类与隔离 Electron 冒烟通过；实际 CK3/Provider 回答、地点本地化覆盖与 Soak 不据此宣称完成。
 
 V8.10.2 当前入口：[V8 阶段开发记录](V8阶段开发记录.md)。先修复摘要删除只清可见文件、Structured Memory 与 Recovery/RAM 缓存残留的 P0，再将 GLM Prompt 升级为 Cache v2 生命周期布局：只把 Global、Conversation Frozen、Responder Frozen 与稳定血亲放在缓存边界前，Memory、Worldline、实时状态、社会关系、场景和历史全部后移。302/302 发布组与隔离 Electron 诊断页导航通过；真实 GLM 连续轮次命中率、CK3 删除后失忆和长时 Soak 仍待人工验收。

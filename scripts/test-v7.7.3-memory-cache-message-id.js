@@ -97,7 +97,8 @@ function writeOwnerSummary(summaryRoot, content) {
     const ipcSource = fs.readFileSync(path.join(__dirname, "..", "resources", "app", "out", "main", "ipc", "register-ipc.js"), "utf8");
     assert(!summaryWriteSource.includes("memoryEngine.invalidateSummaryFolderCache([owner.id])"), "partial directed writes must not invalidate cache before final persistence verification");
     assert(fs.readFileSync(path.join(__dirname, "..", "resources", "app", "out", "main", "memory-system", "memory-engine.js"), "utf8").includes("this.invalidateSummaryFolderCache((context.participants || []).map((participant) => participant.id))"), "verified folder persistence must invalidate owner caches after the transaction succeeds");
-    assert(summaryWriteSource.match(/memoryEngine\.invalidateSummaryFolderCache\(\[playerId\]\)/g)?.length >= 3, "edit and delete paths must invalidate the selected owner cache");
+    assert(summaryWriteSource.match(/memoryEngine\.invalidateSummaryFolderCache\(\[playerId\]\)/g)?.length >= 2, "delete paths must invalidate the selected owner cache");
+    assert(summaryWriteSource.includes("memoryEngine.updateSummaryProjection("), "edit must delegate cache invalidation to the projection transaction (behavior covered by V8.11.1)");
     assert(ipcSource.includes("memoryEngine.invalidateSummaryFolderCache();"), "clear-all must invalidate every owner cache");
 
     console.log("VOTC v7.7.3 Memory Engine 2.4: PASS (folder cache, write invalidation, source messageId trust and recovery)");

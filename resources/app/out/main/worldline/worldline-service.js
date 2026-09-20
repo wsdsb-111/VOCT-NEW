@@ -31,6 +31,7 @@ const { classifySelectedWorldFacts } = require("./world-knowledge-classifier");
 const { buildHistoricalReferenceReplacement, buildSubjectiveWorldTurnRecall, buildWorldStablePrompt } = require("./subjective-prompt-context");
 const { RETRIEVAL_POLICY_VERSION, buildWorldQueryPlan } = require("./world-query-planner");
 const { buildWorldCandidates } = require("./world-retriever");
+const { currentTruthFact } = require("./current-truth-adapter");
 const { localizeWarCandidate } = require("./war-facts");
 const { rankWorldCandidates } = require("./world-ranker");
 const { buildDeterministicWorldSummary } = require("./world-summary");
@@ -1251,7 +1252,7 @@ class WorldlineService {
         historicalDefinitionLookup: !["UNCONFIGURED", "FAILED", "FAILED_TRANSIENT", "FAILED_STABLE"].includes(this.historicalDefinitionIndex?.status) ? (value) => this.historicalDefinitionIndex.find(value) : null,
         historicalNameScan: !["UNCONFIGURED", "FAILED", "FAILED_TRANSIENT", "FAILED_STABLE"].includes(this.historicalDefinitionIndex?.status) && this.historicalDefinitionIndex?.scan ? (value) => this.historicalDefinitionIndex.scan(value) : null
       });
-      const queryPlan = buildWorldQueryPlan({ query, assistContext, analysis: queryAnalysis });
+      const queryPlan = buildWorldQueryPlan({ query, assistContext, analysis: queryAnalysis, checkpointDate: snapshot.gameDate });
       const activeSupplemental = this._activeLegacySupplemental();
       const supplementalRevision = relevantSupplementalRevision(activeSupplemental, queryAnalysis, includeScopedSupplemental);
       const mentionedEntityKey = [...new Set(safeMentionedEntityIds.map((id) => String(id)))].sort().join(",");
@@ -1262,13 +1263,15 @@ class WorldlineService {
       const cacheKey = `${checkpointId2}:${this.worldKnowledgeState.currentCampaignDeltaRevision}:${supplementalRevision}:${includeScopedSupplemental ? "scoped" : "public"}:${queryFingerprint}:${mentionedEntityFingerprint}:${audienceFingerprint}:${liveFingerprint}:${RETRIEVAL_POLICY_VERSION}:${this.localizationResolver?.revision || 0}:${this.historicalDefinitionIndex?.meta?.revision || this.historicalDefinitionIndex?.status || "none"}`;
       const cached = queryAnalysis.historicalPending ? null : this.worldKnowledgeState.topicPatchCache.get(cacheKey);
       if (cached) return { ...cached, stableText, cacheHit: true };
-      const candidates = buildWorldCandidates({ snapshot, analysis: queryAnalysis, queryPlan, annualDelta: this._currentCampaignDelta(), supplemental: activeSupplemental });
+      const candidateDiagnostics = [];
+      const candidates = buildWorldCandidates({ snapshot, analysis: queryAnalysis, queryPlan, annualDelta: this._currentCampaignDelta(), supplemental: activeSupplemental, diagnostics: candidateDiagnostics });
       if (candidates.some(candidate => candidate.kind === "WAR") && runtimeContext?.activeParticipantIds?.length) {
         const roots = createRealmRootIndex(snapshot);
         const audienceRealms = new Set(runtimeContext.activeParticipantIds.map(id => roots.get(String(id))).filter(Boolean));
         for (const candidate of candidates) if (candidate.kind === "WAR" && candidate.entityRefs.characters.some(id => audienceRealms.has(roots.get(id)))) candidate.responderRelationScore = 20;
       }
       const retrieval = rankWorldCandidates(candidates, { plan: queryPlan, checkpointDate: snapshot.gameDate, includeScopedSupplemental });
+      retrieval.trimmed.push(...candidateDiagnostics);
       if (queryPlan.ambiguity) retrieval.trimmed.push({ type: "GAME_TRUTH_CHARACTER", id: "historical-candidates", title: "Historical identity candidates", reason: "AMBIGUOUS_IDENTITY" });
       const selected = {
         gameTruth: retrieval.selected.gameTruth.map(candidate => candidate.kind === "WAR" ? localizeWarCandidate(candidate, (type, key) => this.localizationResolver?.resolve(type, key), queryPlan) : candidate),
@@ -1345,8 +1348,9 @@ class WorldlineService {
   _selfPolicyFacts(snapshot, responderId) {
     const character = snapshot?.characters?.[String(responderId)];
     if (!character) return [];
-    const fields = [["NAME", character.firstName], ["LOCATION", character.location], ["CULTURE", character.culture], ["FAITH", character.faith], ["SPOUSE", character.spouse], ["CHILDREN", character.children?.join(", ")], ["COURT_POSITION", character.courtEmployer]];
-    return fields.filter(([, value]) => value !== null && value !== undefined && value !== "").map(([field, value]) => ({
+    const nameOf = id => snapshot.characters[String(id)]?.fullName || snapshot.characters[String(id)]?.firstName || `#${id}`;
+    const fields = [["NAME", character.firstName], ["SPOUSE", character.spouse ? `配偶：${nameOf(character.spouse)}` : null], ["CHILDREN", character.children?.length ? `子女：${character.children.map(nameOf).join("、")}` : null]];
+    const facts = fields.filter(([, value]) => value !== null && value !== undefined && value !== "").map(([field, value]) => ({
       factId: `self:${responderId}:${field}`,
       entityId: String(responderId),
       field,
@@ -1357,6 +1361,11 @@ class WorldlineService {
       asOf: snapshot.gameDate,
       temporalSafe: true
     }));
+    for (const [field, label] of [["location", "所在地点"], ["courtEmployer", "所在宫廷"], ["liege", "直属领主"], ["alive", "生死状态"], ["culture", "文化"], ["faith", "信仰"]]) {
+      const fact = currentTruthFact(snapshot, responderId, field, { factId: `self:${responderId}:${field}`, knowledgeLevel: "SELF", selfKnowledgeVerified: true, temporalSafe: true });
+      if (fact) facts.push({ ...fact, value: `${nameOf(responderId)}的${label}：${fact.structuredDisplayValue}（截至 ${snapshot.gameDate}）` });
+    }
+    return facts;
   }
 
   _hydrateScopedSupplementalFacts(candidates = []) {
@@ -1448,7 +1457,8 @@ class WorldlineService {
     // cannot be displayed safely and must not become a different responder's
     // cache-visible candidate.
     const redactedScopedFactIds = new Set((pool.candidates || []).filter((fact) => fact?.sourceTier === "PLAYER_SUPPLEMENTAL" && ["PERSONAL_MEMORY", "SECRET"].includes(fact?.knowledgeLevel) && !fact?.value).map((fact) => String(fact.factId || "")));
-    const safeDirectObservationFacts = (Array.isArray(directObservationFacts) ? directObservationFacts : []).filter((fact) => fact && typeof fact === "object" && fact.knowledgeLevel === "DIRECT_OBSERVATION" && String(fact.entityId || "") === String(pool.subjectId || "") && Array.isArray(fact.directObserverIds) && fact.directObserverIds.map(String).includes(responderId2)).map((fact) => ({ ...fact, factId: String(fact.factId || ""), entityId: String(fact.entityId), directObserverIds: [responderId2], observationEvidenceComplete: true, temporalSafe: fact.temporalSafe === true })).sort((left, right) => left.factId.localeCompare(right.factId)).slice(0, 16);
+    const querySubjectIds = new Set((pool.queryPlan?.entities?.characters?.length ? pool.queryPlan.entities.characters : pool.candidates.filter(fact => ["NAME", "IDENTITY", "ALIVE", "LOCATION"].includes(fact.field) && snapshot.characters[String(fact.entityId)]).map(fact => fact.entityId)).map(String));
+    const safeDirectObservationFacts = (Array.isArray(directObservationFacts) ? directObservationFacts : []).filter((fact) => fact && typeof fact === "object" && fact.knowledgeLevel === "DIRECT_OBSERVATION" && querySubjectIds.has(String(fact.entityId || "")) && Array.isArray(fact.directObserverIds) && fact.directObserverIds.map(String).includes(responderId2)).map((fact) => ({ ...fact, factId: String(fact.factId || ""), entityId: String(fact.entityId), directObserverIds: [responderId2], observationEvidenceComplete: true, temporalSafe: fact.temporalSafe === true, queryPriority: 100 })).sort((left, right) => left.factId.localeCompare(right.factId)).slice(0, 16);
     const candidates = [...selfFacts, ...memoryFacts, ...pool.candidates.filter((fact) => !redactedScopedFactIds.has(String(fact.factId || ""))), ...hydratedScopedSupplemental, ...safeDirectObservationFacts];
     const closeScopeIds = new Set(pool.candidates.filter(fact => ["LOCATION", "COURT_EMPLOYER", "IDENTITY", "ALIVE"].includes(fact.field)).map(fact => String(fact.entityId)));
     const scopeIds = [...new Set(candidates.flatMap(fact => [String(fact.entityId || ""), ...(fact.scopeEntityIds || [])]).filter(Boolean))];
