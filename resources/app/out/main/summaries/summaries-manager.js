@@ -1,9 +1,41 @@
 "use strict";
 
-function createSummariesManager({ fs, path, summariesDir, memoryEngine, memorySystem, getCurrentConversation = () => null }) {
+function createSummariesManager({ fs, path, summariesDir, memoryEngine, memorySystem, getCurrentConversation = () => null, requestSummary, buildSummaryPrompt, persistRecoveredSummary }) {
   const fs$1 = fs;
   const VOTC_SUMMARIES_DIR = summariesDir;
   class SummariesManager {
+    static getRecoveryStatus() {
+      const currentId = getCurrentConversation()?.id;
+      let pending = 0, manual = 0, balanceBlocked = 0;
+      for (const file of memoryEngine.listRecoverySnapshots()) {
+        const snapshot = memoryEngine.store.readJson(file, null);
+        if (!snapshot || snapshot.conversationId === currentId || memoryEngine.activeFinalizationIds.has(snapshot.finalizationId)) continue;
+        if (memoryEngine.isCommitted(snapshot)) continue;
+        pending++;
+        if (snapshot.finalizationStatus === "failed_manual") manual++;
+        if (/402|insufficient balance/i.test(snapshot.lastError || "")) balanceBlocked++;
+      }
+      return { pending, manual, balanceBlocked, running: !!memoryEngine.pendingRecovery || memoryEngine.activeFinalizationIds.size > 0 };
+    }
+
+    static async retryFailedSummaries() {
+      const results = await memoryEngine.recoverPendingFinalizations({
+        manual: true,
+        isConversationActive: id => getCurrentConversation()?.id === id,
+        buildPrompt: buildSummaryPrompt,
+        requestSummary,
+        resolveParticipantProfiles: snapshot => memoryEngine.resolveRecoveryParticipantProfiles(snapshot),
+        persistCharacterFolders: persistRecoveredSummary
+      });
+      this.refreshCurrentConversation();
+      return {
+        success: results.every(result => result.success),
+        recovered: results.filter(result => result.success && !result.alreadyCommitted).length,
+        failed: results.filter(result => !result.success).length,
+        recoveryStatus: this.getRecoveryStatus()
+      };
+    }
+
     static refreshCurrentConversation() {
       const conversation = getCurrentConversation();
       if (!conversation) return;

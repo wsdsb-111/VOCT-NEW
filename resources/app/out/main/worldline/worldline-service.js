@@ -29,12 +29,17 @@ const { createSharedCandidatePool } = require("./shared-candidate-pool");
 const { buildSubjectiveWorldView } = require("./subjective-world-builder");
 const { classifySelectedWorldFacts } = require("./world-knowledge-classifier");
 const { buildHistoricalReferenceReplacement, buildSubjectiveWorldTurnRecall, buildWorldStablePrompt } = require("./subjective-prompt-context");
-const { RETRIEVAL_POLICY_VERSION, buildWorldQueryPlan } = require("./world-query-planner");
+const { RETRIEVAL_POLICY_VERSION, buildWorldQueryPlan, parseTimeHint } = require("./world-query-planner");
 const { buildWorldCandidates } = require("./world-retriever");
 const { currentTruthFact } = require("./current-truth-adapter");
+const { SOCIAL_FIELDS, buildSelfSocialTruth } = require("./self-social-truth");
 const { localizeWarCandidate } = require("./war-facts");
 const { rankWorldCandidates } = require("./world-ranker");
 const { buildDeterministicWorldSummary } = require("./world-summary");
+const { HistoricalCheckpointIndex } = require("./historical-checkpoint-index");
+const { TemporalArchiveStore } = require("./temporal-archive-store");
+const { retrieveHistorical } = require("./historical-retriever");
+const { buildHistoricalPrompt } = require("./historical-prompt-context");
 const { createPlayerAnnualDelta, createPlayerHistoricalCharacters, createPlayerOverview, createPlayerWorldKnowledge } = require("./world-presentation");
 const { estimateTokens } = require("../token-estimator");
 
@@ -44,6 +49,12 @@ const DEFAULT_SETTINGS = Object.freeze({
   subjectiveWorldMode: "DIAGNOSTIC",
   autoWatchEnabled: true,
   promptIntegrationEnabled: false,
+  v812TemporalArchiveEnabled: false,
+  v812TemporalArchiveShadowMode: true,
+  v812HistoricalRetrievalEnabled: true,
+  v812HistoricalPromptInjection: false,
+  v812HistoricalDiagnostics: true,
+  v812HistoricalPromptIntegration: false,
   lastValidatedAt: null,
   lastValidationStatus: "UNCONFIGURED"
 });
@@ -74,6 +85,10 @@ function promptTokenBudget(plan) {
   return entityCount === 1 ? TOKEN_BUDGETS.SINGLE_ENTITY : TOKEN_BUDGETS.SIMPLE;
 }
 
+function isHistoricalQueryPlan(plan) {
+  return ["AS_OF", "RANGE"].includes(plan?.time?.mode);
+}
+
 function relevantSupplementalRevision(entries, analysis, includeScopedSupplemental = false) {
   const relevant = (entries || []).filter((entry) => !entry.hidden && (includeScopedSupplemental || entry.visibility === "PUBLIC_WORLD") && analysisTextMatches(analysis, `${entry.title}\n${entry.body}\n${Array.isArray(entry.entities) ? entry.entities.join(" ") : ""}`));
   const signature = JSON.stringify(relevant.map((entry) => [entry.id, entry.updatedAt || "", entry.title, entry.body, entry.gameDate || "", entry.dateRange || "", entry.importance, entry.source, entry.entities || []]).sort((a, b) => String(a[0]).localeCompare(String(b[0]))));
@@ -88,6 +103,12 @@ function normalizeSettings(value) {
     subjectiveWorldMode: ["DIAGNOSTIC", "PRODUCTION"].includes(settings.subjectiveWorldMode) ? settings.subjectiveWorldMode : "DIAGNOSTIC",
     autoWatchEnabled: settings.autoWatchEnabled !== false,
     promptIntegrationEnabled: settings.promptIntegrationEnabled === true,
+    v812TemporalArchiveEnabled: settings.v812TemporalArchiveEnabled === true,
+    v812TemporalArchiveShadowMode: true,
+    v812HistoricalRetrievalEnabled: settings.v812HistoricalRetrievalEnabled !== false,
+    v812HistoricalPromptInjection: settings.v812HistoricalPromptInjection === true || settings.v812HistoricalPromptIntegration === true,
+    v812HistoricalDiagnostics: settings.v812HistoricalDiagnostics !== false,
+    v812HistoricalPromptIntegration: settings.v812HistoricalPromptInjection === true || settings.v812HistoricalPromptIntegration === true,
     lastValidatedAt: typeof settings.lastValidatedAt === "string" ? settings.lastValidatedAt : null,
     lastValidationStatus: typeof settings.lastValidationStatus === "string" ? settings.lastValidationStatus : "UNCONFIGURED"
   };
@@ -217,6 +238,7 @@ class WorldlineService {
       summaryCache: new Map(),
       sharedCandidateCache: new Map(),
       subjectiveViewCache: new Map(),
+      historicalRecallCache: new Map(),
       checkpointId: null,
       deltaRevision: 0,
       currentCampaignDeltaRevision: 0,
@@ -230,6 +252,7 @@ class WorldlineService {
         this.worldKnowledgeState.summaryCache.clear();
         this.worldKnowledgeState.sharedCandidateCache.clear();
         this.worldKnowledgeState.subjectiveViewCache.clear();
+        this.refreshRuntimeNameIndex();
         this._notifyStateChanged("localization_updated");
       }
     });
@@ -270,7 +293,7 @@ class WorldlineService {
     if (!this.currentCheckpoint?.snapshot) return false;
     let live = null;
     try { live = this.getRuntimeNames?.() || null; } catch (_error) { return false; }
-    const indexedSnapshot = attachRuntimeNameIndex(this.currentCheckpoint.snapshot, { live });
+    const indexedSnapshot = attachRuntimeNameIndex(this.currentCheckpoint.snapshot, { live, localize: (type, key) => this.localizationResolver?.resolve(type, key) });
     const before = JSON.stringify(this.currentCheckpoint.snapshot.indexes || {});
     const after = JSON.stringify(indexedSnapshot.indexes || {});
     if (before === after) return false;
@@ -368,21 +391,32 @@ class WorldlineService {
   setRecallSettings(input = {}) {
     if (!input || typeof input !== "object" || Array.isArray(input)) throw new Error("worldline_recall_settings_invalid");
     const { promptIntegrationEnabled, subjectiveWorldMode } = input;
-    if (promptIntegrationEnabled === undefined && subjectiveWorldMode === undefined) throw new Error("worldline_recall_settings_empty");
+    const archiveKeys = ["v812TemporalArchiveEnabled", "v812TemporalArchiveShadowMode", "v812HistoricalRetrievalEnabled", "v812HistoricalPromptInjection", "v812HistoricalDiagnostics", "v812HistoricalPromptIntegration"];
+    if (promptIntegrationEnabled === undefined && subjectiveWorldMode === undefined && !archiveKeys.some(key => Object.hasOwn(input, key))) throw new Error("worldline_recall_settings_empty");
+    for (const key of archiveKeys) if (Object.hasOwn(input, key) && typeof input[key] !== "boolean") throw new Error("worldline_archive_flag_invalid");
+    if (input.v812TemporalArchiveShadowMode === false) throw new Error("v812_temporal_archive_shadow_required");
     if (promptIntegrationEnabled !== undefined && typeof promptIntegrationEnabled !== "boolean") throw new Error("worldline_prompt_integration_invalid");
     const current = this._settings();
     const next = { ...current };
+    if (input.v812TemporalArchiveEnabled !== undefined) next.v812TemporalArchiveEnabled = input.v812TemporalArchiveEnabled;
+    if (input.v812HistoricalRetrievalEnabled !== undefined) next.v812HistoricalRetrievalEnabled = input.v812HistoricalRetrievalEnabled;
+    if (input.v812HistoricalDiagnostics !== undefined) next.v812HistoricalDiagnostics = input.v812HistoricalDiagnostics;
+    const historicalPromptInjection = input.v812HistoricalPromptInjection ?? input.v812HistoricalPromptIntegration;
+    if (historicalPromptInjection !== undefined) next.v812HistoricalPromptInjection = historicalPromptInjection;
+    if (next.v812HistoricalPromptInjection && !next.v812HistoricalRetrievalEnabled) throw new Error("v812_historical_retrieval_required");
+    next.v812HistoricalPromptIntegration = next.v812HistoricalPromptInjection;
     if (promptIntegrationEnabled !== undefined) next.promptIntegrationEnabled = promptIntegrationEnabled === true;
     if (subjectiveWorldMode !== undefined) {
       if (!["DIAGNOSTIC", "PRODUCTION"].includes(subjectiveWorldMode)) throw new Error("worldline_subjective_mode_invalid");
       next.subjectiveWorldMode = subjectiveWorldMode;
     }
-    const changed = next.promptIntegrationEnabled !== current.promptIntegrationEnabled || next.subjectiveWorldMode !== current.subjectiveWorldMode;
+    const changed = next.promptIntegrationEnabled !== current.promptIntegrationEnabled || next.subjectiveWorldMode !== current.subjectiveWorldMode || next.v812HistoricalRetrievalEnabled !== current.v812HistoricalRetrievalEnabled || next.v812HistoricalPromptInjection !== current.v812HistoricalPromptInjection || next.v812HistoricalDiagnostics !== current.v812HistoricalDiagnostics;
     const saved = this._saveSettings(next);
     if (changed) {
       this.worldKnowledgeState.stableRecallCache.clear();
       this.worldKnowledgeState.turnRecallCache.clear();
       this.worldKnowledgeState.subjectiveViewCache.clear();
+      this.worldKnowledgeState.historicalRecallCache.clear();
       this._notifyStateChanged("recall_settings_updated");
     }
     return { ...this.getSettings(), ...saved };
@@ -583,7 +617,7 @@ class WorldlineService {
         this._persistCheckpoint(candidate, nextAnnualDelta);
         let liveNames = null;
         try { liveNames = this.getRuntimeNames?.() || null; } catch (_error) { liveNames = null; }
-        this.currentCheckpoint = { ...candidate, snapshot: attachRuntimeNameIndex(candidate.snapshot, { live: liveNames }) };
+        this.currentCheckpoint = { ...candidate, snapshot: attachRuntimeNameIndex(candidate.snapshot, { live: liveNames, localize: (type, key) => this.localizationResolver?.resolve(type, key) }) };
         this.historicalBindingCache.clear();
         this.annualDelta = nextAnnualDelta;
         this.worldKnowledgeState.stableRecallCache.clear();
@@ -604,6 +638,7 @@ class WorldlineService {
           this.lastObservedFile = null;
         }
         this._notifyStateChanged("checkpoint_active");
+        if (this._settings().v812TemporalArchiveEnabled) await this.runTemporalArchive({ operation: "capture" });
         return { success: true, checkpoint: this.getCheckpointStatus().checkpoint, deltaAdded: delta.length };
       } catch (error) {
         if (!this._isCurrentBuild(buildRevision, buildSource)) return { success: false, error: "worldline_build_superseded", superseded: true };
@@ -1345,11 +1380,11 @@ class WorldlineService {
     return classifySelectedWorldFacts(selected, this.currentCheckpoint?.snapshot?.gameDate || null, this.currentCheckpoint?.snapshot || null, queryPlan);
   }
 
-  _selfPolicyFacts(snapshot, responderId) {
+  _selfPolicyFacts(snapshot, responderId, runtimeGameData = null) {
     const character = snapshot?.characters?.[String(responderId)];
     if (!character) return [];
     const nameOf = id => snapshot.characters[String(id)]?.fullName || snapshot.characters[String(id)]?.firstName || `#${id}`;
-    const fields = [["NAME", character.firstName], ["SPOUSE", character.spouse ? `配偶：${nameOf(character.spouse)}` : null], ["CHILDREN", character.children?.length ? `子女：${character.children.map(nameOf).join("、")}` : null]];
+    const fields = [["NAME", character.firstName], ["CHILDREN", character.children?.length ? `子女：${character.children.map(nameOf).join("、")}` : null]];
     const facts = fields.filter(([, value]) => value !== null && value !== undefined && value !== "").map(([field, value]) => ({
       factId: `self:${responderId}:${field}`,
       entityId: String(responderId),
@@ -1361,11 +1396,11 @@ class WorldlineService {
       asOf: snapshot.gameDate,
       temporalSafe: true
     }));
-    for (const [field, label] of [["location", "所在地点"], ["courtEmployer", "所在宫廷"], ["liege", "直属领主"], ["alive", "生死状态"], ["culture", "文化"], ["faith", "信仰"]]) {
+    for (const [field, label] of [["location", "所在地点"], ["alive", "生死状态"], ["culture", "文化"], ["faith", "信仰"]]) {
       const fact = currentTruthFact(snapshot, responderId, field, { factId: `self:${responderId}:${field}`, knowledgeLevel: "SELF", selfKnowledgeVerified: true, temporalSafe: true });
       if (fact) facts.push({ ...fact, value: `${nameOf(responderId)}的${label}：${fact.structuredDisplayValue}（截至 ${snapshot.gameDate}）` });
     }
-    return facts;
+    return [...facts, ...buildSelfSocialTruth(snapshot, responderId, runtimeGameData)];
   }
 
   _hydrateScopedSupplementalFacts(candidates = []) {
@@ -1450,7 +1485,7 @@ class WorldlineService {
     const memoryStartedAt = Date.now();
     const memoryFacts = memoryFactsForResponder(this.memoryEngine, responderId2);
     const memoryRecallMs = Date.now() - memoryStartedAt;
-    const selfFacts = this._selfPolicyFacts(snapshot, responderId2);
+    const selfFacts = this._selfPolicyFacts(snapshot, responderId2, runtimeGameData);
     const hydratedScopedSupplemental = this._hydrateScopedSupplementalFacts(pool.candidates);
     // Personal and secret Supplemental entries are deliberately body-less in
     // the shared pool. Never pass an unhydrated placeholder to policy: it
@@ -1459,7 +1494,7 @@ class WorldlineService {
     const redactedScopedFactIds = new Set((pool.candidates || []).filter((fact) => fact?.sourceTier === "PLAYER_SUPPLEMENTAL" && ["PERSONAL_MEMORY", "SECRET"].includes(fact?.knowledgeLevel) && !fact?.value).map((fact) => String(fact.factId || "")));
     const querySubjectIds = new Set((pool.queryPlan?.entities?.characters?.length ? pool.queryPlan.entities.characters : pool.candidates.filter(fact => ["NAME", "IDENTITY", "ALIVE", "LOCATION"].includes(fact.field) && snapshot.characters[String(fact.entityId)]).map(fact => fact.entityId)).map(String));
     const safeDirectObservationFacts = (Array.isArray(directObservationFacts) ? directObservationFacts : []).filter((fact) => fact && typeof fact === "object" && fact.knowledgeLevel === "DIRECT_OBSERVATION" && querySubjectIds.has(String(fact.entityId || "")) && Array.isArray(fact.directObserverIds) && fact.directObserverIds.map(String).includes(responderId2)).map((fact) => ({ ...fact, factId: String(fact.factId || ""), entityId: String(fact.entityId), directObserverIds: [responderId2], observationEvidenceComplete: true, temporalSafe: fact.temporalSafe === true, queryPriority: 100 })).sort((left, right) => left.factId.localeCompare(right.factId)).slice(0, 16);
-    const candidates = [...selfFacts, ...memoryFacts, ...pool.candidates.filter((fact) => !redactedScopedFactIds.has(String(fact.factId || ""))), ...hydratedScopedSupplemental, ...safeDirectObservationFacts];
+    const candidates = [...selfFacts, ...memoryFacts, ...pool.candidates.filter((fact) => !redactedScopedFactIds.has(String(fact.factId || ""))), ...hydratedScopedSupplemental, ...safeDirectObservationFacts].filter(fact => !(String(fact.entityId) === responderId2 && SOCIAL_FIELDS.has(fact.field) && fact.verificationMode !== "LIVE_RUNTIME"));
     const closeScopeIds = new Set(pool.candidates.filter(fact => ["LOCATION", "COURT_EMPLOYER", "IDENTITY", "ALIVE"].includes(fact.field)).map(fact => String(fact.entityId)));
     const scopeIds = [...new Set(candidates.flatMap(fact => [String(fact.entityId || ""), ...(fact.scopeEntityIds || [])]).filter(Boolean))];
     const scopeByEntity = new Map(scopeIds.map(entityId => [entityId, resolveKnowledgeScope({ snapshot, responderId: responderId2, subjectId: entityId, live, realmRootByCharacter, runtimeGameData, includeCloseKnowledge: closeScopeIds.has(entityId) })]));
@@ -1477,6 +1512,7 @@ class WorldlineService {
       directObservationFactIds: safeDirectObservationFactIds,
       directObservationFacts: safeDirectObservationFacts.map((fact) => [fact.factId, fact.value, fact.asOf]),
       memoryRevision,
+      selfRevision: shortFingerprint(selfFacts),
       scopeRevision,
       mode,
       knowledgePolicyVersion: KNOWLEDGE_POLICY_VERSION
@@ -1561,8 +1597,111 @@ class WorldlineService {
     finally { clearTimeout(timer); }
   }
 
+  getHistoricalQueryContext({ responderId = null, query = "", assistContext = "", queryPlan = null, queryAnalysis = null, tokenBudget = null } = {}) {
+    const settings = this._settings();
+    if (!settings.v812HistoricalRetrievalEnabled || !this.currentCheckpoint?.snapshot) return null;
+    const base = queryPlan && queryAnalysis ? { queryPlan, queryAnalysis } : this.getPromptContext({ query, assistContext, diagnostic: true });
+    if (!base?.queryPlan || !isHistoricalQueryPlan(base.queryPlan)) return null;
+    const scope = this.canon.branch();
+    const archiveRoot = this.path.join(this.dataDir, "worldline-v8.12");
+    let archiveRevision = 0;
+    try { archiveRevision = new HistoricalCheckpointIndex(archiveRoot, scope).load().archiveRevision; }
+    catch (_error) { /* The retriever returns a stable reason code below. */ }
+    const effectiveResponderId = responderId === null || responderId === undefined ? this.currentCheckpoint.snapshot.playerId : responderId;
+    const memoryFacts = memoryFactsForResponder(this.memoryEngine, effectiveResponderId);
+    const canonRevision = this.canon.snapshot?.revision || 0;
+    const cacheKey = `v8.12-history:${shortFingerprint({
+      campaignId: scope.campaignId,
+      branchId: scope.branchId,
+      archiveRevision,
+      queryPlan: base.queryPlan,
+      responderId: effectiveResponderId === null || effectiveResponderId === undefined ? null : String(effectiveResponderId),
+      memoryRevision: shortFingerprint(memoryFacts.map(fact => [fact.factId, fact.asOf, fact.ownerId, fact.knownBy, fact.participantIds])),
+      canonRevision,
+      tokenBudget: tokenBudget == null ? 900 : Number(tokenBudget)
+    })}`;
+    if (this.worldKnowledgeState.historicalRecallCache.has(cacheKey)) return { ...clone(this.worldKnowledgeState.historicalRecallCache.get(cacheKey)), cacheHit: true };
+    const store = new TemporalArchiveStore({ root: archiveRoot });
+    const retrieval = retrieveHistorical({
+      store,
+      scope,
+      queryPlan: base.queryPlan,
+      queryAnalysis: base.queryAnalysis,
+      query: `${query}\n${assistContext}`,
+      currentDate: this.currentCheckpoint.snapshot.gameDate,
+      responderId: effectiveResponderId,
+      memoryFacts
+    });
+    let canon = { text: null, tokens: 0, selected: [], revision: canonRevision };
+    if (retrieval.success && retrieval.diagnostics?.selectedHistoricalCheckpoint) {
+      const checkpointIds = Array.isArray(retrieval.diagnostics.selectedHistoricalCheckpoint) ? retrieval.diagnostics.selectedHistoricalCheckpoint : [retrieval.diagnostics.selectedHistoricalCheckpoint];
+      const projections = checkpointIds.map(checkpointId => store.read(scope, checkpointId)).filter(Boolean);
+      const projection = projections.at(-1);
+      if (projection && effectiveResponderId !== null && effectiveResponderId !== undefined) canon = this.canon.recallHistorical({
+        responderId: String(effectiveResponderId),
+        query: `${query}\n${assistContext}`,
+        entityIds: base.queryPlan.entities?.characters || [],
+        asOf: Array.isArray(retrieval.diagnostics.checkpointDate) ? retrieval.diagnostics.checkpointDate.at(-1) : retrieval.diagnostics.checkpointDate,
+        from: base.queryPlan.time?.mode === "RANGE" ? base.queryPlan.time.from : null,
+        projection,
+        projections,
+        tokenBudget: Math.min(320, Math.max(0, (tokenBudget == null ? 900 : Number(tokenBudget)) - 480))
+      });
+    }
+    const formatted = buildHistoricalPrompt(retrieval, { tokenBudget: tokenBudget == null ? 900 : Number(tokenBudget), canonText: canon.text });
+    const result = {
+      ...retrieval,
+      selected: formatted.selected,
+      trimmed: formatted.trimmed,
+      promptText: formatted.text,
+      promptTokens: formatted.tokens,
+      canon: { selected: (canon.selected || []).map(item => ({ type: "HISTORICAL_CANON", recordId: item.recordId, revision: item.revision })), selectedCount: canon.selected?.length || 0, tokens: canon.tokens || 0, revision: canon.revision || canonRevision, conflictCount: canon.conflictCount || 0, temporalBlockedCount: canon.temporalBlockedCount || 0, visibilityBlockedCount: canon.visibilityBlockedCount || 0 },
+      diagnostics: { ...retrieval.diagnostics, selectedCount: formatted.selected.length, trimmedCount: formatted.trimmed.length, canonRevision: canon.revision || canonRevision },
+      stablePrefixFingerprint: shortFingerprint(buildWorldStablePrompt({ checkpointId: this.currentCheckpoint.id, checkpointAsOf: this.currentCheckpoint.snapshot.gameDate, hasStableCanon: false }) || ""),
+      dynamicTailFingerprint: shortFingerprint(formatted.text || retrieval.reason || "empty"),
+      cacheHit: false
+    };
+    this.worldKnowledgeState.historicalRecallCache.set(cacheKey, result);
+    if (this.worldKnowledgeState.historicalRecallCache.size > 32) this.worldKnowledgeState.historicalRecallCache.delete(this.worldKnowledgeState.historicalRecallCache.keys().next().value);
+    return clone(result);
+  }
+
   getSubjectivePromptContext({ responderId, query = "", assistContext = "", mentionedEntityIds = [], activeParticipantIds = [], conversationId = null, turnEpoch = null, sceneRevision = null, presenceRevision = null, directObservationFactIds = [], directObservationFacts = [], historicalReferenceInfo = null, tokenBudget = null, runtimeGameData = null } = {}) {
     if (!this.isSubjectivePromptIntegrationEnabled()) return null;
+    const settings = this._settings();
+    const historicalHint = settings.v812HistoricalRetrievalEnabled && settings.v812HistoricalPromptInjection
+      ? parseTimeHint(`${query}\n${assistContext}`, this.currentCheckpoint?.snapshot?.gameDate) : null;
+    const historicalBase = isHistoricalQueryPlan({ time: historicalHint })
+      ? this.getPromptContext({ query, assistContext, mentionedEntityIds, runtimeContext: { activeParticipantIds }, diagnostic: true, includeScopedSupplemental: true }) : null;
+    if (settings.v812HistoricalPromptInjection && isHistoricalQueryPlan(historicalBase?.queryPlan)) {
+      const historical = this.getHistoricalQueryContext({ responderId, query, assistContext, queryPlan: historicalBase.queryPlan, queryAnalysis: historicalBase.queryAnalysis, tokenBudget });
+      const blockedText = historical?.promptText || `=== 本轮历史检索（CK3 存档时间线 / Dynamic Tail） ===\n未获得可安全使用的历史事实（${historical?.reason || "HISTORY_UNAVAILABLE"}）。不得用现实历史传记、当前关系或未来节点补全答案；应明确说明存档历史资料不足。`;
+      const referenceDate = Array.isArray(historical?.diagnostics?.checkpointDate) ? historical.diagnostics.checkpointDate.at(-1) : historical?.diagnostics?.checkpointDate || this.currentCheckpoint.snapshot.gameDate;
+      return {
+        worldStableText: buildWorldStablePrompt({ checkpointId: this.currentCheckpoint.id, checkpointAsOf: this.currentCheckpoint.snapshot.gameDate, hasStableCanon: false }),
+        worldTurnRecallText: blockedText,
+        worldTurnRecallTokens: estimateTokens(blockedText),
+        worldTurnRecallTrimmed: historical?.trimmed || [],
+        historicalReferenceInfo: buildHistoricalReferenceReplacement(historicalReferenceInfo, referenceDate),
+        queryFingerprint: historicalBase.queryFingerprint || shortFingerprint(`${query}\n${assistContext}`),
+        cacheHit: historical?.cacheHit === true,
+        metrics: {
+          queryIntent: historicalBase.queryPlan.intent,
+          historicalTimeMode: historicalBase.queryPlan.time.mode,
+          historicalCandidateCount: historical?.diagnostics?.candidateCount || 0,
+          historicalSelectedCount: historical?.diagnostics?.selectedCount || 0,
+          historicalTrimmedCount: historical?.diagnostics?.trimmedCount || 0,
+          historicalKnowledgeDeniedCount: historical?.diagnostics?.knowledgeDeniedCount || 0,
+          historicalConflictCount: historical?.diagnostics?.conflictCount || 0,
+          worldFactsRendered: historical?.diagnostics?.selectedCount || 0,
+          worldFactsTrimmed: historical?.diagnostics?.trimmedCount || 0,
+          worldRetrievalMs: 0,
+          worldPolicyMs: 0,
+          worldFormatMs: 0,
+          worldTurnRecallTokens: estimateTokens(blockedText)
+        }
+      };
+    }
     const view = this.getSubjectiveWorldView({ responderId, query, assistContext, mentionedEntityIds, activeParticipantIds, conversationId, turnEpoch, sceneRevision, presenceRevision, directObservationFactIds, directObservationFacts, runtimeGameData });
     if (!view) return null;
     const formatStartedAt = Date.now();
@@ -1668,11 +1807,14 @@ class WorldlineService {
     const candidateTotal = Math.max(analysis.identityResolution?.candidates?.length || 0, analysis.candidateCharacters?.length || 0);
     const page = Math.min(Math.max(0, Math.floor(Number(trimmedPage) || 0)), Math.max(0, Math.ceil(Math.max(trimmedItems.length, candidateTotal) / trimmedPageSize) - 1));
     const diagnosticAnalysis = { ...analysis, candidateCharacters: (analysis.candidateCharacters || []).slice(page * 50, (page + 1) * 50), identityResolution: { ...analysis.identityResolution, candidateTotal, candidates: (analysis.identityResolution?.candidates || []).slice(page * 50, (page + 1) * 50), evidence: (analysis.identityResolution?.evidence || []).slice(0, 200) } };
+    const historical = this._settings().v812HistoricalDiagnostics && isHistoricalQueryPlan(context.queryPlan)
+      ? this.getHistoricalQueryContext({ query: safeQuery, assistContext: String(assistContext || "").slice(0, 2000), queryPlan: context.queryPlan, queryAnalysis: context.queryAnalysis, tokenBudget: TOKEN_BUDGETS.COMPLEX }) : null;
     const tokenBreakdown = [
       ["worldline-stable", "Stable World Checkpoint", context.stableText],
       ["worldline-topic", "Topic Game Truth", context.topicText],
       ["worldline-supplemental", "Supplemental", context.supplementalText],
-      ["worldline-current", "Current World View", context.currentText]
+      ["worldline-current", "Current World View", context.currentText],
+      ["worldline-historical-preview", "Historical Dynamic Tail Preview", historical?.promptText]
     ].filter(([, , content]) => content).map(([id, label, content]) => ({ id, label, tokens: estimateTokens(content) }));
     return {
       promptDiagnostics: {
@@ -1689,6 +1831,20 @@ class WorldlineService {
         },
         localizationIncomplete: analysis.resolverTrace?.localization?.sourceComplete === false,
         queryPlan: context.queryPlan,
+        historicalRetrieval: historical ? {
+          success: historical.success,
+          status: historical.status,
+          reason: historical.reason,
+          diagnostics: historical.diagnostics,
+          selected: historical.selected,
+          trimmed: historical.trimmed,
+          promptText: historical.promptText,
+          promptTokens: historical.promptTokens,
+          cacheHit: historical.cacheHit === true,
+          stablePrefixFingerprint: historical.stablePrefixFingerprint,
+          dynamicTailFingerprint: historical.dynamicTailFingerprint,
+          canon: historical.canon
+        } : null,
         retrieval: {
           selected: {
             gameTruth: selected.gameTruth.map((candidate) => ({ id: candidate.id, kind: candidate.kind, score: candidate.score, scoreBreakdown: candidate.scoreBreakdown })),
@@ -1719,6 +1875,40 @@ class WorldlineService {
     };
   }
 
+  async runTemporalArchive({ operation = "inspect" } = {}) {
+    let ownedWorker = null;
+    try {
+      if (!["capture", "inspect"].includes(operation)) throw new Error("history_operation_invalid");
+      if (this.archiveWorker) throw new Error("HISTORY_BUSY");
+      const settings = this._settings();
+      if (operation === "capture" && !settings.v812TemporalArchiveEnabled) throw new Error("HISTORY_DISABLED");
+      const checkpoint = this.currentCheckpoint;
+      const scope = this.canon.branch();
+      const freshness = getCheckpointFreshness({ pipelineState: this.buildState, checkpointAsOf: checkpoint?.snapshot?.gameDate, liveDate: this.getLiveState().gameDate });
+      const input = { checkpoint, scope, pipelineState: this.buildState, freshness: freshness.freshnessStatus,
+        parserComplete: this.buildState === "ACTIVE", sourceMatches: settings.lastValidationStatus === "VALID" && this._samePath(checkpoint?.source?.path, settings.autosavePath) };
+      const result = await new Promise((resolve, reject) => {
+        const worker = new NodeWorker(this.path.join(__dirname, "temporal-archive-worker.js"), { workerData: { root: this.path.join(this.dataDir, "worldline-v8.12"), operation, input: operation === "capture" ? input : { scope } }, resourceLimits: { maxOldGenerationSizeMb: 1024 } });
+        ownedWorker = worker;
+        this.archiveWorker = worker;
+        const timeout = setTimeout(() => { worker.terminate(); reject(new Error("HISTORY_WORKER_TIMEOUT")); }, this.workerTimeoutMs);
+        let received = false;
+        worker.once("message", value => { received = true; clearTimeout(timeout); resolve(value); });
+        worker.once("error", error => { clearTimeout(timeout); reject(error); });
+        worker.once("exit", () => { clearTimeout(timeout); if (!received) reject(new Error("HISTORY_WORKER_STOPPED")); });
+      });
+      this.archiveResult = result;
+      return result;
+    } catch (error) {
+      const result = { success: false, status: "BLOCKED", error: error.message };
+      if (error.message !== "HISTORY_BUSY") this.archiveResult = result;
+      return result;
+    } finally {
+      // A concurrent diagnostic must not release another operation's worker.
+      if (ownedWorker && this.archiveWorker === ownedWorker) this.archiveWorker = null;
+    }
+  }
+
   getDiagnostics() {
     const settings = this._settings();
     const live = this.getLiveState();
@@ -1744,6 +1934,16 @@ class WorldlineService {
         deltaRevision: this.worldKnowledgeState.currentCampaignDeltaRevision,
         deltaStoredTotal: this.annualDelta.length,
         retrievalPolicyVersion: RETRIEVAL_POLICY_VERSION,
+        temporalArchive: {
+          enabled: settings.v812TemporalArchiveEnabled,
+          shadowMode: true,
+          historicalRetrievalEnabled: settings.v812HistoricalRetrievalEnabled,
+          historicalPromptInjection: settings.v812HistoricalPromptInjection,
+          historicalPromptIntegration: settings.v812HistoricalPromptInjection,
+          historicalDiagnostics: settings.v812HistoricalDiagnostics,
+          historicalCacheEntries: this.worldKnowledgeState.historicalRecallCache.size,
+          result: this.archiveResult || null
+        },
         catalogStatus: "NOT_CONNECTED",
         branchStatus: "UNKNOWN_WITHOUT_SAVE_AB_GATE",
         lastError: this.lastError
@@ -1804,6 +2004,7 @@ class WorldlineService {
   }
 
   dispose() {
+    this.archiveWorker?.terminate();
     this.stopWatcher();
     this.localizationResolver?.dispose?.();
     this.historicalDefinitionIndex?.dispose?.();

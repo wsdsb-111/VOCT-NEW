@@ -285,7 +285,44 @@ function parseParticipants(text, value, knownCharacterIds = new Set(), diagnosti
   return [...participants];
 }
 
-function parseWars(text, value, knownCharacterIds, diagnostics) {
+function parseWarActors(text, value, knownCharacterIds = new Set(), knownTitleIds = new Set(), diagnostics = { rejectedNumericTokens: [], unknownRuntimeIds: [], unresolvedActors: [] }) {
+  const selected = firstField(value);
+  if (!selected || selected.kind !== "block") return [];
+  const actors = new Map();
+  const add = (type, candidate, provenance) => {
+    const value = String(candidate || "").trim();
+    if (!value || value.length > 128 || !/^[a-zA-Z0-9_.-]+$/.test(value)) return;
+    let actor;
+    if (type === "CHARACTER" && knownCharacterIds.has(value)) actor = { type, runtimeId: value, provenance };
+    else if (type === "TITLE" && knownTitleIds.has(value)) actor = { type, titleId: value, provenance };
+    else if (type === "FACTION") actor = { type, factionId: value, provenance };
+    else {
+      actor = { type: "UNKNOWN", opaqueId: value, provenance };
+      diagnostics.unresolvedActors?.push(`${provenance}:${value}`);
+      if (type === "CHARACTER") diagnostics.unknownRuntimeIds.push(value);
+    }
+    actors.set(`${actor.type}:${actor.runtimeId || actor.titleId || actor.factionId || actor.opaqueId}`, actor);
+  };
+  const inspect = (range) => {
+    scanDirectEntries(text, range.start, range.end, (key, entry) => {
+      const normalizedKey = String(key || "").toLowerCase();
+      const type = ["character", "participant"].includes(normalizedKey) ? "CHARACTER"
+        : ["title", "landed_title"].includes(normalizedKey) ? "TITLE"
+          : normalizedKey === "faction" ? "FACTION" : null;
+      if (type) {
+        if (entry.kind === "scalar") add(type, entry.value, `EXPLICIT_${normalizedKey.toUpperCase()}`);
+        else inspect(entry);
+        return;
+      }
+      if (["participants", "actors", "members"].includes(normalizedKey) && entry.kind === "block") inspect(entry);
+      else if (entry.kind === "scalar" && /^\d+$/.test(entry.value)) diagnostics.rejectedNumericTokens.push(entry.value);
+    });
+  };
+  inspect(selected);
+  return [...actors.values()];
+}
+
+function parseWars(text, value, knownCharacterIds, diagnostics, knownTitleIds = new Set()) {
   const root = firstField(value);
   const section = firstField(collectFields(text, root, ["active_wars"]).active_wars);
   const wars = Object.create(null);
@@ -293,12 +330,16 @@ function parseWars(text, value, knownCharacterIds, diagnostics) {
   scanDirectEntries(text, section.start, section.end, (id, record) => {
     if (record.kind !== "block") return;
     const fields = collectFields(text, record, ["start_date", "end_date", "attacker", "defender", "casus_belli", "name", "result"]);
+    const attackerActors = parseWarActors(text, fields.attacker, knownCharacterIds, knownTitleIds, diagnostics);
+    const defenderActors = parseWarActors(text, fields.defender, knownCharacterIds, knownTitleIds, diagnostics);
     wars[String(id)] = {
       id: String(id),
       startDate: scalar(fields.start_date),
       endDate: scalar(fields.end_date),
-      attacker: parseParticipants(text, fields.attacker, knownCharacterIds, diagnostics),
-      defender: parseParticipants(text, fields.defender, knownCharacterIds, diagnostics),
+      attacker: attackerActors.filter(actor => actor.type === "CHARACTER").map(actor => actor.runtimeId),
+      defender: defenderActors.filter(actor => actor.type === "CHARACTER").map(actor => actor.runtimeId),
+      attackerActors,
+      defenderActors,
       casusBelli: scalar(fields.casus_belli),
       name: scalar(fields.name),
       result: scalar(fields.result)
@@ -314,7 +355,7 @@ function fingerprint(buffer) {
 function parseGameState(gamestate) {
   const text = Buffer.isBuffer(gamestate) ? gamestate.toString("utf8") : String(gamestate || "");
   const root = { start: 0, end: text.length };
-  const fields = collectFields(text, root, ["date", "playthrough_id", "played_character", "living", "dead_unprunable", "characters", "character_lookup", "landed_titles", "wars"]);
+  const fields = collectFields(text, root, ["date", "playthrough_id", "played_character", "living", "dead_unprunable", "characters", "character_lookup", "landed_titles", "wars", "dynasties"]);
   const playedCharacterFields = collectFields(text, firstField(fields.played_character), ["character"]);
   const characters = Object.create(null);
   const nameToCharacterIds = Object.create(null);
@@ -323,9 +364,16 @@ function parseGameState(gamestate) {
   const charactersRoot = firstField(fields.characters);
   parseCharacterSection(text, collectFields(text, charactersRoot, ["dead_prunable"]).dead_prunable, "dead_prunable", characters, nameToCharacterIds);
   const lookup = parseLookup(text, fields.character_lookup);
+  const dynastyHouses = Object.create(null);
+  const houseSection = firstField(collectFields(text, firstField(fields.dynasties), ["dynasty_house"]).dynasty_house);
+  if (houseSection?.kind === "block") scanDirectEntries(text, houseSection.start, houseSection.end, (id, record) => {
+    if (record.kind !== "block") return;
+    const names = collectFields(text, record, ["name", "localized_name"]);
+    dynastyHouses[String(id)] = { name: scalar(names.name), localizedName: scalar(names.localized_name) };
+  });
   const titles = parseTitles(text, fields.landed_titles);
-  const warParticipantDiagnostics = { rejectedNumericTokens: [], unknownRuntimeIds: [] };
-  const wars = parseWars(text, fields.wars, new Set(Object.keys(characters)), warParticipantDiagnostics);
+  const warParticipantDiagnostics = { rejectedNumericTokens: [], unknownRuntimeIds: [], unresolvedActors: [] };
+  const wars = parseWars(text, fields.wars, new Set(Object.keys(characters)), warParticipantDiagnostics, new Set(Object.keys(titles)));
   return {
     schemaVersion: 1,
     gameDate: scalar(fields.date),
@@ -334,6 +382,7 @@ function parseGameState(gamestate) {
     contentFingerprint: fingerprint(Buffer.isBuffer(gamestate) ? gamestate : Buffer.from(text, "utf8")),
     characters,
     nameToCharacterIds,
+    dynastyHouses,
     definitionToRuntime: lookup.definitionToRuntime,
     runtimeToDefinitions: lookup.runtimeToDefinitions,
     titles,
@@ -344,6 +393,7 @@ function parseGameState(gamestate) {
       activeWarCount: Object.keys(wars).length,
       warParticipantRejectedNumericTokens: [...new Set(warParticipantDiagnostics.rejectedNumericTokens)],
       warParticipantUnknownRuntimeIds: [...new Set(warParticipantDiagnostics.unknownRuntimeIds)],
+      warParticipantUnresolvedActors: [...new Set(warParticipantDiagnostics.unresolvedActors)],
       missingFields: [scalar(fields.date) ? null : "date", scalar(fields.played_character) || scalar(playedCharacterFields.character) ? null : "played_character"].filter(Boolean),
       parseWarnings: []
     }
@@ -354,6 +404,7 @@ module.exports = {
   collectFields,
   dateValue,
   parseParticipants,
+  parseWarActors,
   parseGameState,
   parseHistory,
   parseWars,

@@ -26,13 +26,56 @@ function dateText(year, month = 1, day = 1) {
   return `${Number(year)}.${Number(month)}.${Number(day)}`;
 }
 
-function parseTimeHint(text) {
+function chineseNumber(value) {
+  if (/^\d+$/.test(value)) return Number(value);
+  const digits = { 零: 0, 一: 1, 二: 2, 两: 2, 三: 3, 四: 4, 五: 5, 六: 6, 七: 7, 八: 8, 九: 9 };
+  if (value === "十") return 10;
+  const ten = value.match(/^([一二两三四五六七八九])?十([一二三四五六七八九])?$/u);
+  if (ten) return (ten[1] ? digits[ten[1]] : 1) * 10 + (ten[2] ? digits[ten[2]] : 0);
+  return digits[value] ?? null;
+}
+
+function relativeDate(checkpointDate, yearsAgo) {
+  const current = String(checkpointDate || "").match(/^(\d{1,6})[.\-/](\d{1,2})[.\-/](\d{1,2})$/);
+  if (!current || !Number.isInteger(yearsAgo) || yearsAgo < 0 || Number(current[1]) - yearsAgo < 1) return null;
+  const year = Number(current[1]) - yearsAgo;
+  const month = Number(current[2]);
+  const day = Number(current[3]);
+  const preferred = dateText(year, month, day);
+  if (parseCK3Date(preferred) !== null) return preferred;
+  return dateText(year, month, Math.min(day, 28));
+}
+
+function parseTimeHint(text, checkpointDate = null) {
+  const comparison = text.match(/(?<![a-z0-9_#])(\d{3,4})\s*年?\s*(?:相比|比|较之于)\s*(\d{3,4})(?![a-z0-9_])\s*年?/u);
+  if (comparison) {
+    const from = Math.min(Number(comparison[1]), Number(comparison[2]));
+    const to = Math.max(Number(comparison[1]), Number(comparison[2]));
+    return { mode: "RANGE", from: dateText(from), to: dateText(to, 12, 31), year: null, comparison: true };
+  }
   const range = text.match(/(?<![a-z0-9_#])(\d{3,4})\s*年?\s*(?:到|至|[-~—])\s*(\d{3,4})(?![a-z0-9_])\s*年?/u);
   if (range) return { mode: Number(range[1]) <= Number(range[2]) ? "RANGE" : "INVALID", from: dateText(range[1]), to: dateText(range[2], 12, 31), year: null };
   const explicit = text.match(/(?<![a-z0-9_#])(\d{3,4})\s*[.年]\s*(\d{1,2})\s*[.月]\s*(\d{1,2})(?![a-z0-9_])/u) || text.match(/(?<![a-z0-9_#])(\d{3,4})\s*年/u);
   if (explicit) {
     const from = dateText(explicit[1], explicit[2] || 1, explicit[3] || 1);
     return { mode: parseCK3Date(from) === null ? "INVALID" : "AS_OF", from, to: null, year: Number(explicit[1]) };
+  }
+  const relativeRange = text.match(/(?:过去|近|这)\s*(\d{1,3}|[一二两三四五六七八九十]+)\s*年/u);
+  if (relativeRange) {
+    const years = chineseNumber(relativeRange[1]);
+    const from = relativeDate(checkpointDate, years);
+    const to = relativeDate(checkpointDate, 0);
+    return from && to && years > 0 ? { mode: "RANGE", from, to, year: null, relativeYears: years } : { mode: "INVALID", from: null, to: null, year: null };
+  }
+  const yearsAgo = text.match(/(\d{1,3}|[一二两三四五六七八九十]+)\s*年(?:以)?前/u);
+  if (yearsAgo || /去年/u.test(text)) {
+    const years = yearsAgo ? chineseNumber(yearsAgo[1]) : 1;
+    const from = relativeDate(checkpointDate, years);
+    return from && years > 0 ? { mode: "AS_OF", from, to: null, year: Number(from.split(".")[0]), relativeYears: years } : { mode: "INVALID", from: null, to: null, year: null };
+  }
+  if (/(什么时候|何时|历年来|历史上.*(?:变化|变更|获得|失去))/u.test(text)) {
+    const to = relativeDate(checkpointDate, 0);
+    return to ? { mode: "RANGE", from: null, to, year: null, openStart: true } : { mode: "INVALID", from: null, to: null, year: null };
   }
   if (/(最近|近来|近日|今年)/u.test(text)) return { mode: "RECENT", from: null, to: null, year: null };
   if (/(现在|当前|如今|此刻)/u.test(text)) return { mode: "CURRENT", from: null, to: null, year: null };
@@ -64,7 +107,12 @@ function eventTypesForIntent(intent, text) {
 
 function buildWorldQueryPlan({ query = "", assistContext = "", analysis = {}, checkpointDate = null } = {}) {
   const text = normalize(`${query}\n${assistContext}`);
-  const time = parseTimeHint(text);
+  const time = parseTimeHint(text, checkpointDate);
+  const currentDate = parseCK3Date(checkpointDate);
+  if (time.mode === "RANGE" && time.to && currentDate !== null && parseCK3Date(time.to) > currentDate && (!time.from || parseCK3Date(time.from) <= currentDate) && Number(String(time.to).split(".")[0]) === Number(String(checkpointDate).split(".")[0])) {
+    time.to = checkpointDate;
+    time.toClampedToCheckpoint = true;
+  }
   if (time.mode === "AS_OF" && parseCK3Date(checkpointDate) !== null && /现在|当前|如今|还在|正在|此刻/u.test(query)) {
     const yearOnly = !/(?<![a-z0-9_#])\d{3,4}\s*[.年]\s*\d{1,2}/u.test(text);
     time.matchesCheckpoint = yearOnly ? time.year === Number(String(checkpointDate).split(".")[0]) : parseCK3Date(time.from) === parseCK3Date(checkpointDate);

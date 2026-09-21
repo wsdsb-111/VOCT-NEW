@@ -57,7 +57,16 @@ try {
   assert(!broad.worldTurnRecallText.includes("无关秘密"), "broad query cannot admit arbitrary observed entities");
   const self = service._selfPolicyFacts(snapshot, "1");
   assert(self.find(fact => fact.field === "LOCATION").value.includes("地名未解析"));
-  assert(self.find(fact => fact.field === "COURT_EMPLOYER").value.includes("宋帝"));
+  assert(!self.some(fact => fact.field === "COURT_EMPLOYER" || fact.field === "SPOUSE"), "V8.12 self social truth cannot fall back to checkpoint");
+  runtimeGameData.characters.set(1, { id: 1, spouses: [], liege: "本轮领主", courtEmployer: "本轮宫廷", primaryTitle: "本轮头衔" });
+  const runtimeSelf = service._selfPolicyFacts(snapshot, "1", runtimeGameData);
+  for (const [field, value] of [["LIEGE", "本轮领主"], ["COURT_EMPLOYER", "本轮宫廷"], ["PRIMARY_TITLE", "本轮头衔"]]) assert(runtimeSelf.some(fact => fact.field === field && fact.value.includes(value)));
+  assert(runtimeSelf.find(fact => fact.field === "SPOUSE").value.includes("无"));
+  const selfQuery = () => service.getSubjectiveWorldView({ responderId: 1, query: "我当前的配偶与领主", runtimeGameData, activeParticipantIds: [1], turnEpoch: 7 });
+  assert(selfQuery().promptFacts.some(fact => fact.field === "LIEGE" && fact.value.includes("本轮领主")));
+  runtimeGameData.characters.get(1).liege = "新领主";
+  assert(selfQuery().promptFacts.some(fact => fact.field === "LIEGE" && fact.value.includes("新领主")), "same-turn social runtime change invalidates cached self facts");
+  assert(!selfQuery().promptFacts.some(fact => fact.field === "SPOUSE" && fact.value.includes("岳飞")), "checkpoint self spouse cannot re-enter via shared pool");
   assert(self.find(fact => fact.field === "ALIVE"));
   for (const query of ["1150年宋金现在还在打吗", "1150.6.1宋金正在打仗吗"]) {
     const result = recall(query);

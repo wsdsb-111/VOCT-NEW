@@ -42,6 +42,8 @@ function safeEntityRef(value) {
 }
 
 function conflictKey(fact = {}) {
+  // Presence in this turn's scene conflicts with an old checkpoint location.
+  if (["LOCATION", "PRESENCE"].includes(fact.field)) return `field:${fact.entityId || "-"}:LOCATION`;
   if (fact.conflictKey) return `explicit:${boundedText(fact.conflictKey, 256)}`;
   if (["MEMORY", "WORLD_EVENT", "SUPPLEMENTAL"].includes(fact.field)) return `fact:${fact.factId || "unknown"}`;
   return `field:${fact.entityId || "-"}:${fact.field || "-"}`;

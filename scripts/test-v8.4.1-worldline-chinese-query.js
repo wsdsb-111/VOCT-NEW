@@ -53,7 +53,7 @@ assert.equal(chineseCharacter.characters[0].displayName, "李小明", "localized
 assert.ok(chineseCharacter.characters[0].matchSources.includes("runtime_native_name"), "a verified localized full-name index must disclose its Runtime-native match source");
 assert.ok(analysisTextMatches(chineseCharacter, "李小明已抵达前线"), "Supplemental matching must reuse the analyzed entity terms");
 
-assert.equal(analyzeSharedQuery({ snapshot, query: "岳飞现在在哪里", localize, findLocalizedKeys }).characters.length, 0, "historical candidates cannot use localization to bypass missing identity evidence");
+assert.equal(analyzeSharedQuery({ snapshot, query: "岳飞现在在哪里", localize, findLocalizedKeys, historicalDefinitionLookup: () => ({ status: "SOURCE_INCOMPLETE", sourceComplete: false, candidates: [] }) }).characters.length, 0, "historical candidates cannot use localization to bypass missing identity evidence");
 
 const chineseTitle = analyzeSharedQuery({ snapshot, query: "涿郡现在归谁", localize, findLocalizedKeys });
 assert.deepEqual(chineseTitle.titles.map((item) => item.id), ["500"], "a localized title query must resolve the title identity");

@@ -12,6 +12,22 @@ function createGameData({ fs, path, memorySystem, memoryEngine, summariesDir, ge
     return text.replace(/<.*?>.*?<\/.*?>/gi, "").trim();
   }
   class GameData {
+    static saveRecoveredSummary(summary, context) {
+      // A recovery snapshot owns its historical participants/date; never attach
+      // the current game's player or re-parse a different conversation's log.
+      const profiles = (context.participants || []).map(p => ({ ...p, shortName: p.shortName || p.name }));
+      const data = Object.assign(Object.create(GameData.prototype), {
+        playerID: profiles[0]?.id,
+        characters: new Map(profiles.map(p => [Number(p.id), p])),
+        date: context.date,
+        totalDays: context.totalDays
+      });
+      return data.saveCharactersSummaries(summary, profiles.map(p => p.id), {
+        ...context, participantProfiles: profiles, excludedOwnerIds: context.excludedSummaryOwnerIds,
+        presenceJoins: context.joinEvents || [], presenceLeaves: context.leaveEvents || []
+      });
+    }
+
     constructor(data) {
       this.playerID = Number(data[0]), this.playerName = removeTooltip$2(data[1]), this.aiID = Number(data[2]), this.aiName = removeTooltip$2(data[3]), this.date = data[4], this.scene = data[5].substring(11), this.location = data[6], this.locationController = data[7], this.totalDays = Number(data[8]), this.characters = /* @__PURE__ */ new Map(), this.letterData = null;
       this.relationshipDiagnostics = [];

@@ -14,7 +14,7 @@ const { MemoryConsolidator } = require("./memory-consolidator");
 const { MemoryTrace } = require("./memory-trace");
 const { MentionTracker } = require("./mention-tracker");
 const { getCharacterMentionAliases } = require("./character-identity");
-const { buildPerspectiveSummaryMap, validatePerspectiveSummaryMap, validateSummarySegmentPresenceBoundaries, validatePerspectiveCoverage } = require("./perspective-projector");
+const { buildPerspectiveSummaryMap, validatePerspectiveSummaryMap, validateSummarySegmentPresenceBoundaries, validatePerspectiveCoverage, isMemoryRelevantToPair } = require("./perspective-projector");
 const turnRecall = require("./turn-recall");
 const { buildThirdPartyEvidencePatch } = require("./third-party-evidence");
 
@@ -143,7 +143,7 @@ class MemoryEngine {
     return this.consolidator.consolidateCharacter(characterId);
   }
 
-  resolveSummaryProjection(summaryRecord, ownerId) {
+  resolveSummaryProjection(summaryRecord, ownerId, counterpartId = null) {
     const numericOwnerId = Number(ownerId ?? summaryRecord?.perspectiveOwnerId ?? summaryRecord?.playerId);
     if (!Number.isSafeInteger(numericOwnerId) || numericOwnerId <= 0) throw new Error("summary_owner_id_required");
     const finalizationId = summaryRecord?.finalizationId ? String(summaryRecord.finalizationId) : null;
@@ -155,13 +155,20 @@ class MemoryEngine {
     const episodes = finalizationId ? this.store.listAllEpisodes().filter(episode => String(episode.finalizationId || "") === finalizationId) : [];
     let memoryIds = summaryRecord?.perspectiveMemoryIds;
     if (!Array.isArray(memoryIds)) {
+      const pairId = Number(counterpartId ?? summaryRecord?.characterId);
+      if (!Number.isSafeInteger(pairId) || pairId <= 0 || pairId === numericOwnerId) {
+        this.trace.record("LEGACY_SUMMARY_MEMORY_MAPPING_INCOMPLETE", { characterId: numericOwnerId, finalizationId });
+        throw new Error("LEGACY_SUMMARY_MEMORY_MAPPING_INCOMPLETE");
+      }
       const ownerKnown = new Set(this.store.getCharacterKnowledge(numericOwnerId).map(record => record.memoryId));
       const allMemories = this.store.listAllMemories();
       const matches = finalizationId ? allMemories.filter(memory => memory.provenance?.finalizationId === finalizationId) : [];
       const candidateIds = [...new Set([...episodes.flatMap(episode => episode.memoryIds || []), ...matches.map(memory => memory.memoryId)])];
       memoryIds = candidateIds.filter(id => {
         const memory = this.store.getMemory(id);
-        return memory && (ownerKnown.has(id) || memory.knownBy.includes(numericOwnerId) || memory.provenance?.folderOwnerId === numericOwnerId);
+        const owned = memory && (ownerKnown.has(id) || memory.knownBy.includes(numericOwnerId) || memory.provenance?.folderOwnerId === numericOwnerId);
+        if (owned && !uniqueIds([...memory.subjects, ...memory.participants, ...(memory.provenance?.speakerIds || [])]).length) throw new Error("LEGACY_SUMMARY_MEMORY_MAPPING_INCOMPLETE");
+        return owned && isMemoryRelevantToPair(memory, numericOwnerId, pairId);
       });
       if (!episodes.length && !matches.length && (ownerKnown.size || allMemories.some(memory => memory.knownBy.includes(numericOwnerId) || memory.provenance?.folderOwnerId === numericOwnerId))) {
         this.trace.record("LEGACY_SUMMARY_MEMORY_MAPPING_INCOMPLETE", { characterId: numericOwnerId, finalizationId });
@@ -173,7 +180,7 @@ class MemoryEngine {
 
   updateSummaryProjection(summaryRecord, editedText, { ownerId = null, counterpartId = null, invalidateConversations = [], summaryPath = null, persistSummary = null } = {}) {
     if (typeof editedText !== "string" || !editedText.trim() || editedText.length > 1048576) throw new Error("summary_content_required");
-    const mapping = this.resolveSummaryProjection(summaryRecord, ownerId);
+    const mapping = this.resolveSummaryProjection(summaryRecord, ownerId, counterpartId);
     const numericCounterpartId = Number(counterpartId ?? summaryRecord.characterId);
     if (!Number.isSafeInteger(numericCounterpartId) || numericCounterpartId <= 0) throw new Error("summary_counterpart_id_required");
     return this.store.withSummaryMutation(summaryPath, () => {
@@ -201,9 +208,23 @@ class MemoryEngine {
   }
 
   forgetSummaryProjection(summaryRecord, { ownerId = null, counterpartId = null, invalidateConversations = [] } = {}) {
-    const { numericOwnerId, memoryIds } = this.resolveSummaryProjection(summaryRecord, ownerId);
+    const { numericOwnerId, memoryIds } = this.resolveSummaryProjection(summaryRecord, ownerId, counterpartId);
     const segmentIds = new Set((summaryRecord?.perspectiveSummarySegmentIds || []).map(String).filter(Boolean));
     const finalizationId = summaryRecord?.finalizationId ? String(summaryRecord.finalizationId) : null;
+    const pairId = Number(counterpartId ?? summaryRecord?.characterId);
+    const episodes = this.store.listAllEpisodes().filter(episode => !finalizationId || String(episode.finalizationId || "") === finalizationId);
+    // Resolve every legacy segment before revoking anything. A conversation-wide
+    // knownBy list alone is not evidence that a segment belongs to this pair.
+    const pairSegments = new Set();
+    if (!Array.isArray(summaryRecord?.perspectiveSummarySegmentIds) && finalizationId) {
+      for (const episode of episodes) for (const segment of episode.summarySegments || []) {
+        if (!uniqueIds(segment.knownBy).includes(numericOwnerId)) continue;
+        const ids = uniqueIds([...(segment.subjects || []), ...(segment.participants || []), ...(segment.provenance?.speakerIds || [])]);
+        const knownBy = uniqueIds(segment.knownBy);
+        if (!ids.length && knownBy.length !== 2) throw new Error("LEGACY_SUMMARY_MEMORY_MAPPING_INCOMPLETE");
+        if (ids.length ? isMemoryRelevantToPair(segment, numericOwnerId, pairId) : knownBy.includes(pairId)) pairSegments.add(segment);
+      }
+    }
     let revokedMemoryCount = 0;
     let deletedMemoryCount = 0;
     for (const memoryId of memoryIds) {
@@ -220,11 +241,11 @@ class MemoryEngine {
       revokedMemoryCount++;
     }
     if (finalizationId || segmentIds.size > 0) {
-      for (const episode of this.store.listAllEpisodes()) {
+      for (const episode of episodes) {
         if (finalizationId && String(episode.finalizationId || "") !== finalizationId) continue;
         let changed = false;
         const summarySegments = (episode.summarySegments || []).map((segment) => {
-          if (segmentIds.size > 0 && !segmentIds.has(String(segment.segmentId || ""))) return segment;
+          if (Array.isArray(summaryRecord?.perspectiveSummarySegmentIds) ? !segmentIds.has(String(segment.segmentId || "")) : !pairSegments.has(segment)) return segment;
           const knownBy = uniqueIds(segment.knownBy).filter((characterId) => characterId !== numericOwnerId);
           if (knownBy.length === uniqueIds(segment.knownBy).length) return segment;
           changed = true;
@@ -233,6 +254,7 @@ class MemoryEngine {
         if (changed) this.store.saveEpisode({ ...episode, summarySegments });
       }
     }
+    this.compactEpisodeReferences();
     this.refreshCharacterConsolidation(numericOwnerId);
     this.invalidateSummaryFolderCache([numericOwnerId]);
     for (const conversation of invalidateConversations) this.invalidateConversationRecallState(conversation);
@@ -244,6 +266,25 @@ class MemoryEngine {
       deletedMemoryCount
     });
     return { success: true, revokedMemoryCount, deletedMemoryCount };
+  }
+
+  compactEpisodeReferences() {
+    const retained = new Set(this.activeFinalizationIds);
+    for (const file of this.listRecoverySnapshots()) {
+      const recovery = this.store.readJson(file, null);
+      if (!recovery) return { skipped: true, reason: "RECOVERY_UNREADABLE" };
+      retained.add(String(recovery.finalizationId || ""));
+    }
+    let updated = 0;
+    for (const episode of this.store.listAllEpisodes()) {
+      if (retained.has(String(episode.finalizationId || "")) || episode.auditRequired === true) continue;
+      const memoryIds = (episode.memoryIds || []).filter(id => this.store.getMemory(id));
+      const summarySegments = (episode.summarySegments || []).filter(segment => !Array.isArray(segment.knownBy) || segment.knownBy.length || segment.auditRequired === true || segment.recoveryRequired === true);
+      if (memoryIds.length === (episode.memoryIds || []).length && summarySegments.length === (episode.summarySegments || []).length) continue;
+      this.store.saveEpisode({ ...episode, memoryIds, summarySegments });
+      updated++;
+    }
+    return { updated };
   }
 
   forgetOwnerConversation(ownerId, counterpartId, summaryRecords = [], { invalidateConversations = [] } = {}) {
@@ -533,57 +574,6 @@ class MemoryEngine {
     return sourcePrompt;
   }
 
-  buildSourceGroundedFallbackContent(context) {
-    const participantIds = uniqueIds((context.participants || []).map((participant) => participant?.id));
-    const participantSet = new Set(participantIds);
-    const namesToIds = new Map();
-    for (const participant of context.participants || []) {
-      const participantId = Number(participant?.id);
-      if (!participantSet.has(participantId)) continue;
-      for (const name of [participant.name, participant.shortName, participant.fullName].filter(Boolean)) namesToIds.set(String(name), participantId);
-    }
-    const presence = Array.isArray(context.participantPresence) ? context.participantPresence : [];
-    const boundaries = uniqueIds(presence.flatMap((window) => [window?.joinedAtMessageId, window?.leftAtMessageId])).filter(Number.isFinite).sort((left, right) => left - right);
-    const presentIdsAt = (messageId) => {
-      if (presence.length === 0) return participantIds;
-      return uniqueIds(presence.filter((window) => {
-        const joinedAt = Number(window?.joinedAtMessageId ?? 0);
-        const leftAt = window?.leftAtMessageId == null ? Infinity : Number(window.leftAtMessageId);
-        return joinedAt <= messageId && messageId < leftAt;
-      }).map((window) => window.characterId)).filter((characterId) => participantSet.has(characterId));
-    };
-    const segments = [];
-    let current = null;
-    for (const message of context.messages || []) {
-      const messageId = Number(message?.id);
-      const content = String(message?.content || "").trim();
-      if (!Number.isFinite(messageId) || !content) continue;
-      const participants = presentIdsAt(messageId);
-      const signature = participants.slice().sort((left, right) => left - right).join(",");
-      const crossedPresenceBoundary = current && boundaries.some((boundary) => current.lastMessageId < boundary && boundary <= messageId);
-      if (!current || current.signature !== signature || crossedPresenceBoundary) {
-        current = { signature, participants, lines: [], messageIds: [], speakerIds: [], lastMessageId: messageId };
-        segments.push(current);
-      }
-      const directSpeakerId = Number(message?.speakerCharacterId ?? message?.characterId);
-      const speakerId = participantSet.has(directSpeakerId) ? directSpeakerId : namesToIds.get(String(message?.name || ""));
-      current.lines.push(`${message?.name || message?.role || "系统"}：${content}`);
-      current.messageIds.push(messageId);
-      if (Number.isFinite(speakerId)) current.speakerIds.push(speakerId);
-      current.lastMessageId = messageId;
-    }
-    return JSON.stringify({
-      summarySegments: segments.map((segment) => ({
-        content: segment.lines.join("\n"),
-        participants: segment.participants,
-        visibility: "participants",
-        messageIds: segment.messageIds,
-        speakerIds: uniqueIds(segment.speakerIds)
-      })),
-      memories: []
-    });
-  }
-
   async requestFinalSummary(context) {
     const prompt = context.buildPrompt(context);
     const resumeChunks = context.preferChunkedSummary && !context.summaryChunk && context.messages?.length >= 4;
@@ -655,15 +645,8 @@ class MemoryEngine {
         lastError = error;
       }
     }
-    if (!context.summaryChunk && context.messages?.length >= 2 && /^final_summary_quality_failed:.*structured JSON was not returned/.test(lastError?.message || "")) {
-      const fallbackContent = this.buildSourceGroundedFallbackContent(context);
-      const fallbackQuality = this.evaluateFinalSummaryQuality(context, this.extractor.parseOutput(fallbackContent, context));
-      if (fallbackQuality.success) {
-        this.trace.record("summary_source_grounded_fallback", { conversationId: context.conversationId, participantCount: uniqueIds((context.participants || []).map((participant) => participant?.id)).length, messageCount: context.messages.length, reason: lastError.message });
-        return fallbackContent;
-      }
-      lastError = new Error(`final_summary_fallback_quality_failed:${fallbackQuality.reasons.join("|")}`);
-    }
+    // Raw dialogue belongs only in the recovery snapshot. Never commit it as a
+    // successful summary when the provider or structured-output validation fails.
     throw lastError || new Error("invalid_final_summary_response");
   }
 
@@ -1023,6 +1006,7 @@ class MemoryEngine {
       this.trace.record("recover", { conversationId: context.conversationId, reason: "recovered" });
       return { ...result, participants: context.participants };
     }
+    if (result.cancelled) return result;
     const retryCount = context.retryCount;
     this.writeRecoverySnapshot(context, {
       finalizationStage: this.store.readJson(filePath, snapshot)?.finalizationStage || snapshot.finalizationStage || "request",
@@ -1033,18 +1017,21 @@ class MemoryEngine {
     return { ...result, recoveryPath: filePath };
   }
 
-  async recoverPendingFinalizations({ requestSummary, buildPrompt, persistCharacterFolders, resolveParticipantProfiles } = {}) {
+  async recoverPendingFinalizations(options = {}) {
     if (this.pendingRecovery) return this.pendingRecovery;
-    this.pendingRecovery = this.runPendingFinalizations({ requestSummary, buildPrompt, persistCharacterFolders, resolveParticipantProfiles });
+    this.pendingRecovery = this.runPendingFinalizations(options);
     try { return await this.pendingRecovery; }
     finally { this.pendingRecovery = null; }
   }
 
-  async runPendingFinalizations({ requestSummary, buildPrompt, persistCharacterFolders, resolveParticipantProfiles } = {}) {
+  async runPendingFinalizations({ requestSummary, buildPrompt, persistCharacterFolders, resolveParticipantProfiles, manual = false, isConversationActive = () => false } = {}) {
     const results = [];
+    const generation = this.memoryGeneration;
     for (const filePath of this.listRecoverySnapshots()) {
+      if (generation !== this.memoryGeneration) break;
       let snapshot = this.store.readJson(filePath, null);
       if (!snapshot) continue;
+      if (isConversationActive(snapshot.conversationId)) continue;
       const obsoleteFixedLengthFailure = snapshot.finalizationStatus === "failed_manual"
         && /^final_summary_quality_failed:detailed narrative has \d+ chars; require at least \d+$/.test(String(snapshot.lastError || ""));
       if (obsoleteFixedLengthFailure) {
@@ -1062,11 +1049,11 @@ class MemoryEngine {
         this.trace.record("recover", { conversationId: snapshot.conversationId, reason: "active_finalization" });
         continue;
       }
-      if (Number(snapshot.retryCount || 0) >= RECOVERY_MAX_ATTEMPTS) {
-        if (snapshot.finalizationStatus !== "failed_manual") this.writeRecoverySnapshot(this.prepareFinalizationContext(snapshot), { finalizationStatus: "failed_manual", retryCount: snapshot.retryCount });
+      if (!manual && Number(snapshot.retryCount || 0) >= RECOVERY_MAX_ATTEMPTS) {
+        if (snapshot.finalizationStatus !== "failed_manual") this.writeRecoverySnapshot(this.prepareFinalizationContext({ ...snapshot, messages: snapshot.rawMessages }), { finalizationStatus: "failed_manual", retryCount: snapshot.retryCount });
         continue;
       }
-      results.push(await this.recoverFailedFinalization(filePath, { requestSummary, buildPrompt, persistCharacterFolders, resolveParticipantProfiles, automatic: true }));
+      results.push(await this.recoverFailedFinalization(filePath, { requestSummary, buildPrompt, persistCharacterFolders, resolveParticipantProfiles, automatic: !manual }));
     }
     return results;
   }

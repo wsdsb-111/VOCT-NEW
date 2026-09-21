@@ -165,7 +165,7 @@ async function testFinalizationRecoveryAndStructuredExtraction() {
     };
     const failed = await engine.finalizeConversation({
       ...context,
-      requestSummary: async () => { throw new Error("offline"); },
+      requestSummary: async () => ({ content: "{", finish_reason: "length" }),
       buildPrompt: () => []
     });
     assert.strictEqual(failed.success, false);

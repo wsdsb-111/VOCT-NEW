@@ -51,7 +51,8 @@ const incompleteCandidate = analyzeSharedQuery({
   historicalDefinitionLookup: () => ({ status: "FOUND", candidates: [record], candidateTotal: 500, candidateSetComplete: false, sourceComplete: true })
 });
 assert.equal(incompleteCandidate.entityResolutions[0].resolutionStatus, "SOURCE_INCOMPLETE");
-assert.equal(incompleteCandidate.entityResolutions[0].candidateTotal, 500, "Domain DTO must preserve the authoritative untruncated candidate total");
+assert.equal(incompleteCandidate.entityResolutions[0].definitionCandidateTotal, 500, "Domain DTO must preserve the authoritative untruncated definition total separately from people");
+assert.equal(incompleteCandidate.entityResolutions[0].candidateTotal, 1, "only observed unique Runtime IDs count as people; incomplete sets still cannot resolve");
 assert.equal(incompleteCandidate.characters.length, 0);
 
 function mapping(indexResult) {

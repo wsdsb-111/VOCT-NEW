@@ -211,7 +211,7 @@ async function assertCoverageFailureRecoversWithRegeneration() {
   }
 }
 
-async function assertFourParticipantMalformedProviderFallsBackToSourceGroundedSummary() {
+async function assertFourParticipantMalformedProviderRemainsRetryable() {
   const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "votc-v793-four-person-fallback-"));
   const store = new MemoryStore({ baseDir: path.join(tempDir, "memory") });
   const trace = new MemoryTrace({ logger: { log() {} } });
@@ -244,16 +244,11 @@ async function assertFourParticipantMalformedProviderFallsBackToSourceGroundedSu
         return { success: true };
       }
     });
-    assert.strictEqual(result.success, true, "four-person conversation must save a source-grounded fallback after malformed provider output");
-    assert(requestCount >= 4, "whole-summary retries and the first chunk retry must happen before local fallback");
-    assert.strictEqual(result.extraction.structured, true);
-    assert.strictEqual(result.extraction.memories.length, 0, "fallback must not invent durable memories from malformed provider output");
-    assert(result.extraction.summarySegments.length > 0);
-    assert(result.extraction.summarySegments.every((entry) => entry.provenance.messageIds.length > 0));
-    assert(folderWrite.finalSummary.includes("赵永昇：赵永昇说明多人会谈中的具体安排、亲属立场与后续条件。"));
-    assert.strictEqual(folderWrite.directedSummaries.size, 12, "four participants must receive every directed summary projection");
-    assert([...folderWrite.directedSummaries.values()].every((projection) => projection.summarySegmentIds.length > 0));
-    assert(trace.list().some((entry) => entry.stage === "summary_source_grounded_fallback"));
+    assert.strictEqual(result.success, false, "malformed output must stay retryable, never commit a transcript");
+    assert(requestCount >= 4, "whole-summary retries and the first chunk retry must call the model");
+    assert.strictEqual(folderWrite, null);
+    assert.strictEqual(engine.store.readJson(result.recoveryPath).rawMessages.length, 8);
+    assert(!trace.list().some((entry) => entry.stage === "summary_source_grounded_fallback"));
 
     const recoveryContext = engine.prepareFinalizationContext({
       conversationId: "v793-four-person-malformed-provider-recovery",
@@ -274,8 +269,8 @@ async function assertFourParticipantMalformedProviderFallsBackToSourceGroundedSu
       requestSummary: async () => ({ content: "模型仍然没有按要求返回 JSON。", finish_reason: "stop" }),
       persistCharacterFolders: async () => ({ success: true })
     });
-    assert.strictEqual(recovered.success, true, "a four-person failed recovery snapshot must commit through the same fallback");
-    assert.strictEqual(fs.existsSync(recoveryPath), false, "successful source-grounded recovery must clear its snapshot");
+    assert.strictEqual(recovered.success, false, "repeated malformed output remains a failure");
+    assert.strictEqual(fs.existsSync(recoveryPath), true, "failed generation must keep source for the next model call");
   } finally {
     fs.rmSync(tempDir, { recursive: true, force: true });
   }
@@ -285,8 +280,8 @@ async function assertFourParticipantMalformedProviderFallsBackToSourceGroundedSu
   assertPresenceBoundaryCases();
   assertProjectionCoverageCases();
   await assertCoverageFailureRecoversWithRegeneration();
-  await assertFourParticipantMalformedProviderFallsBackToSourceGroundedSummary();
-  console.log("PASS v7.9.3 P1 presence-boundary summary, projection coverage and malformed-provider fallback");
+  await assertFourParticipantMalformedProviderRemainsRetryable();
+  console.log("PASS v7.9.3 P1 presence-boundary summary, projection coverage and malformed-provider retry");
 })().catch((error) => {
   console.error(error);
   process.exitCode = 1;

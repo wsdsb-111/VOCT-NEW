@@ -2,6 +2,12 @@
 
 这里是版本变更的单一入口。详细设计和测试证据保留在链接目标中，本文件只维护版本顺序、用户可见摘要和文档索引。
 
+V8.12 第二部分：[历史检索与时间线](docs/v8.12-part2-implementation-report.md)。新增 AS_OF/RANGE、人物/头衔/战争变化点、Character/Title/Faction/Unknown WarActor、独立 Historical Scope、Historical Canon、Branch-safe Cache 与开发者诊断。历史内容只进入 Dynamic Tail，普通 Current Query 与 Stable Prefix 不变；检索默认开启、Prompt 注入默认关闭。309/309 发布组与隔离 Electron 冒烟通过，当前等待两阶段真实 CK3/GLM Gate，尚未记录 `V8.12 PART 2 = PASS`，未进入第三部分。
+
+V8.12 第一部分世界书修复：历史候选按当前存档 Runtime ID 去重，未实例化的同名模组定义不再制造假重名；修复玩家 Live 姓名源，并支持从存档家族名及可靠本地化姓名召回普通角色。保留真重名与绑定冲突保护，重启后需重建旧检查点。详见[第九十七阶段](docs/V8阶段开发记录.md)。
+
+V8.12 第一部分：[安全收口与 Temporal Archive 底座](docs/v8.12-part1-implementation-report.md)。Legacy 摘要按 Owner × Counterpart 遗忘；本轮观察压过旧地点，Self 社会关系仅 Runtime；清理 Episode 无用引用。新增默认关闭的独立 Shadow gzip 归档、索引和诊断，保留旧 Checkpoint，不注入历史 Prompt；摘要失败不再转录原文冒充成功；保留恢复快照，并可在摘要页重新调用当前摘要模型补生成。五项第一部分实机 Gate 已由用户确认通过，记录为 `V8.12 PART 1 = PASS`；随后已进入第二部分。[V8.8 用户百年验收回填](docs/v8.8-long-campaign-field-acceptance.md)与本阶段验证分开记录。
+
 V8.11.1：[一致性与知情边界收尾](docs/v8.11.1-consistency-implementation-report.md)。旧配偶不再凭 Checkpoint 获得行踪，多人物直接观察完整接入；摘要编辑同步内部记忆，Legacy 删除安全映射，记忆派生 owner-status 纳入全量遗忘。Self 地点使用统一可读事实，当前年份查询保留当前 Intent，动态 fullName 不再影响 GLM 稳定前缀，非标准战争增加跳过诊断。305/305 发布组和隔离 Electron 冒烟通过，真实 CK3/Provider/Soak Gate 待验收。
 
 V8.11：[世界事实召回与知情边界](docs/VOTC_v8.11_世界事实召回与知情边界设计.md) / [实施记录](docs/V8阶段开发记录.md)。补齐无年度变化时的活跃战争召回、动态国号和攻守双方语义；以游戏生死替代历史命运，行踪仅向获准亲友或直接观察者提供。查询事实优先保留，修复跨参与者召回缓存和多战争匹配排序；新增内容保持在 GLM Cache v2 动态尾部。303/303 发布组、隔离 Electron 冒烟通过，真实 CK3/Provider 与 Soak Gate 待人工验收。

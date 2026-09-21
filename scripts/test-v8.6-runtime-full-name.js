@@ -45,6 +45,11 @@ const collision = buildRuntimeNameIndex(snapshot, {
 });
 assert.deepEqual(collision.verifiedFullNameToRuntimeIds["同名"], ["100", "102"], "the index preserves full-name collisions for the resolver to keep ambiguous");
 
+const localizedSnapshot = { ...snapshot, characters: { ...snapshot.characters, "100": { id: "100", firstName: "Dejun_name2" } } };
+const localizedLive = { gameDate: snapshot.gameDate, playerId: "100", characters: [{ id: "100", firstName: "德俊", fullName: "上官德俊" }] };
+assert.deepEqual(buildRuntimeNameIndex(localizedSnapshot, { live: localizedLive, localize: () => ({ confidence: "CONFIRMED", localizedValue: "德俊" }) }).verifiedFullNameToRuntimeIds["上官德俊"], ["100"]);
+assert.deepEqual(buildRuntimeNameIndex(localizedSnapshot, { live: localizedLive, localize: () => ({ confidence: "CONFLICT", localizedValue: "德俊" }) }).verifiedFullNameToRuntimeIds, {}, "conflicting localization cannot validate a Live name");
+
 assert.strictEqual(getRuntimeNameIndex(snapshot), getRuntimeNameIndex(snapshot), "same snapshot without Live evidence reuses its immutable name index");
 
 console.log("V8.6 Runtime Full Name Index: PASS (trusted Live scope, provenance, collisions, given names and immutability)");

@@ -11,6 +11,7 @@ Voices of the Court 是一个面向《Crusader Kings III》（CK3）的沉浸式
 - **Campaign Identity / Worldline Store**：V8.1 从 CK3 存档读取稳定 token，以哈希隔离 `dynamic_history/<campaignId>/worldline.json`；旧模组或无效 token 只使用进程级 identity，不写世界线数据。
 - **历史人物 Definition-ID 绑定**：世界线通过 Definition-ID 与 CK3 Runtime ID 的双向绑定判定历史人物身份；来源冲突、同名歧义或非唯一映射均 fail-closed。
 - **世界线**：页面已接入年度 `autosave.ck3` Checkpoint、Worker 解析、世界概览、年度变化、世界知识、历史身份候选诊断和 Checkpoint-scoped Supplemental；CK3 事实保持只读，世界知识 Prompt 基础默认关闭。
+- **V8.12 存档历史检索**：在通过第一部分实机 Gate 的 Temporal Archive 上新增 AS_OF、RANGE、人物/头衔/战争时间线、WarActor 与独立 Historical Scope。检索诊断默认开启，Prompt 注入默认关闭；历史事实只进入 Dynamic Tail，普通 Current Query 与 GLM Stable Prefix 保持原路径。
 - **V8.5 Player Semantic Presentation + Retrieval 2.0（Luna + Terra + Sol 内审）**：世界线默认页已接入统一玩家语义展示层；后端已接入确定性 Query Planner、Retriever/Ranker、查询感知 Delta、无虚构结果摘要、additive Player DTO 与相关缓存 revision。来源、freshness、identity、来源冲突、年度事件和历史人物映射以可读文案呈现，Runtime/Definition/Raw 与 Resolver 细节保留在高级诊断。Sol 已修复诊断超大列表白屏、后台本地化阻塞及时间/缓存等正确性问题，105 组回归与隔离浏览器交互通过；真实运行 Gate 和 Astra 终审尚未完成，内部预冻结仍 NOT READY。详见 [Sol 内部审查](docs/v8.5-sol-internal-review.md)。
 - **V8.5.2 玩家语义与世界线差异 UI（Luna + Sol）**：逐实体展示 Historical / Runtime-native 身份、歧义和来源不完整状态；年龄、父母、兄弟、婚姻和子女差异只进入懒展开的可读 Worldline Difference 面板。Sol Stage 5 已修复新旧 DTO 聚合矛盾、来源优先级和降级路径 raw 值泄漏，50 条候选分页及 A/B/C 诊断分层保持不变。120 组发布回归通过，下一步 Astra 最终集成与实机 Gate。
 - **历史认知边界**：提示词要求角色只使用当前年份已经发生、写成、流传或成名的信息，避免引用未来人物、事件、诗词和典故。
@@ -25,6 +26,10 @@ Voices of the Court 是一个面向《Crusader Kings III》（CK3）的沉浸式
 - **多语言资源**：项目包含中文、英语、日语、韩语、俄语、德语、法语、西班牙语和波兰语等本地化资源。
 
 ## 运行环境
+
+V8.12 第一部分的五项实机 Gate 已由用户确认通过，`V8.12 PART 1 = PASS`。第二部分 Historical Retrieval + Timeline 已完成代码和自动化施工：AS_OF/RANGE、人物/头衔/战争变化点、WarActor、历史知情范围、Historical Canon、分支隔离与 Dynamic Tail 接入均已落地。历史 Prompt 注入默认关闭，当前状态为等待两阶段实机 Gate，**尚未记录 `V8.12 PART 2 = PASS`，不得进入第三部分**。详见[第二部分实施与实机步骤](docs/v8.12-part2-implementation-report.md)。
+
+当前施工基线为 **V8.12 第二部分：历史检索与时间线**：[实施与实机步骤](docs/v8.12-part2-implementation-report.md)。第一部分归档底座保持独立；第二部分只有历史 Query 才读取 Archive，普通 Current Query 不扫描历史。历史检索诊断默认开启、Prompt 注入默认关闭，309/309 发布组、378 个文件分类及隔离 Electron 冒烟通过。**当前停在第二部分实机 Gate，`V8.12 PART 2 != PASS`。** 第一部分记录见[安全收口与 Temporal Archive 底座](docs/v8.12-part1-implementation-report.md)，V8.8 百年旧档验收见[回填记录](docs/v8.8-long-campaign-field-acceptance.md)。以下版本段落为前置实施记录。
 
 当前收尾版本为 **V8.11.1**：[一致性与知情边界实施记录](docs/v8.11.1-consistency-implementation-report.md)。实时配偶/多人观察判权修正；摘要编辑同步重建所选 Owner 的内部记忆并支持失败回滚，Legacy 删除不再静默丢失映射；数字地点和当前年份查询边界完善，fullName 移到 GLM 动态状态。305/305 发布组、374 个测试文件分类及隔离 Electron 冒烟通过；真实 CK3/GLM 与长时 Gate 待人工验收。
 
@@ -126,7 +131,7 @@ V7.6 默认模板明确区分长期稳定记忆、当前话题记忆与本轮事
 
 V7.9.1 继续使用 Memory Engine 2.5，本次未修改摘要存储、动态召回选择或人物目录格式。旧摘要导入、跨周目摘要提示和旧格式运行路径已退休；人物目录仍是唯一摘要正文来源，2.3/2.4 视角摘要继续兼容读取。主要规则是：
 
-- 摘要 Provider 失败时不推进 rolling checkpoint，并用 recovery snapshot 保留最终失败的原始会话；
+- 摘要 Provider 请求异常时不推进 rolling checkpoint；终局最多两次整场模型请求，失败保留 recovery snapshot，不将原文写成人物摘要。摘要页“重试失败摘要”按当前模型配置补生成，可重试已达自动上限的记录；截断、来源 ID 和投影质量门禁不放宽；
 - 结构化区分事实、信念、计划、传闻、秘密、承诺和关系变化；
 - 每个 `owner → counterpart` 文件接收双方在共同在场窗口内共同知晓的详细叙事片段，并附加 owner 已知且与 counterpart 直接相关的长期事项；只由 owner 单独知晓、且只与第三人有关的秘密不会复制到该配对文件；
 - 只向 NPC 注入其本人应当知道的长期记忆，避免玩家私有摘要或未在场内容泄漏；

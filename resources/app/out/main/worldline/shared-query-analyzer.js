@@ -150,13 +150,14 @@ function historicalEntity(resolution, { definitionRecords = [], sourceComplete =
   const runtimeIds = [...new Set((resolution.candidates || []).map((candidate) => candidate.runtimeId).filter(Boolean).map(String))];
   const resolutionStatus = ["SOURCE_INCOMPLETE", "DEFINITION_FOUND_RUNTIME_MISSING"].includes(resolution.coverageStatus) ? resolution.coverageStatus : resolution.status === "REJECTED" ? "REJECTED_BY_CONFLICT" : resolution.status === "RESOLVED" || resolution.status === "AMBIGUOUS" ? resolution.status : "NO_MATCH";
   const resolved = resolution.status === "RESOLVED" && resolution.resolvedRuntimeId ? String(resolution.resolvedRuntimeId) : null;
-  const record = definitionRecords.length === 1 ? definitionRecords[0] : null;
+  const record = definitionRecords.find(record => record.definitionId === resolution.selectedDefinitionId) || (definitionRecords.length === 1 ? definitionRecords[0] : null);
   const character = resolved ? snapshot?.characters?.[resolved] : null;
   return {
     identityKind: "HISTORICAL",
     resolutionStatus,
     subjectName: resolution.alias,
-    candidateTotal: Math.max(Number(candidateTotal) || 0, resolution.definitionIds?.length || 0, runtimeIds.length),
+    candidateTotal: runtimeIds.length,
+    definitionCandidateTotal: Math.max(Number(candidateTotal) || 0, resolution.definitionIds?.length || 0),
     historicalDefinitionIds: [...new Set(resolution.definitionIds || [])],
     runtimeIds,
     identityEvidence: resolution.evidence || [],
@@ -258,11 +259,18 @@ function analyzeSharedQuery({ snapshot, query = "", assistContext = "", mentione
     const runtimeId = String(candidate?.runtimeId || candidate?.id || "");
     if (!runtimeId || !characters[runtimeId]) return;
     candidateCharacterIds.add(runtimeId);
-    const key = `${runtimeId}:${candidate?.definitionId || source}`;
-    if (candidateCharacters.has(key)) return;
+    const key = runtimeId;
+    if (candidateCharacters.has(key)) {
+      const existing = candidateCharacters.get(key);
+      existing.definitionIds = [...new Set([...existing.definitionIds, ...(candidate?.definitionIds || []), candidate?.definitionId].filter(Boolean))];
+      existing.matchSources = [...new Set([...existing.matchSources, source])];
+      existing.conflicts.push(...(candidate?.conflicts || []));
+      return;
+    }
     candidateCharacters.set(key, {
       runtimeId,
       definitionId: candidate?.definitionId || null,
+      definitionIds: [...new Set([...(candidate?.definitionIds || []), candidate?.definitionId].filter(Boolean))],
       rawName: candidate?.rawName || characters[runtimeId].firstName || null,
       aliasCandidate: candidate?.aliasCandidate || null,
       score: candidate?.score !== null && candidate?.score !== undefined && Number.isFinite(Number(candidate.score)) ? Number(candidate.score) : null,
@@ -340,6 +348,7 @@ function analyzeSharedQuery({ snapshot, query = "", assistContext = "", mentione
   });
   const nativeEntityResolutions = [];
   const nativeSubjects = new Set();
+  const resolvedNativeNames = new Map();
   const contextualRuntimeIds = new Set([...(runtimeContext?.activeParticipantIds || []), ...(runtimeContext?.recentRuntimeIds || [])].map(String));
   const addRuntimeNative = (subjectName, runtimeIds, source, candidateSetComplete = true, nameMatchKind = "GIVEN_NAME", mayResolve = false) => {
     const ids = [...new Set(runtimeIds.map(String).filter((id) => characters[id]))];
@@ -369,22 +378,41 @@ function analyzeSharedQuery({ snapshot, query = "", assistContext = "", mentione
     });
     entityAnchoredTerms.add(normalize(subjectName));
     if (!candidateSetComplete) return true;
-    if (mayResolve && ids.length === 1) addResolvedCharacter(ids[0], source === "RUNTIME_NATIVE_LOCALIZED_FULL_NAME" ? "localized_character_name" : source === "RUNTIME_NATIVE_DIRECT_ID" ? "runtime_id" : "runtime_native_name", subjectName);
+    if (mayResolve && ids.length === 1) {
+      addResolvedCharacter(ids[0], source === "RUNTIME_NATIVE_LOCALIZED_FULL_NAME" ? "localized_character_name" : source === "RUNTIME_NATIVE_DIRECT_ID" ? "runtime_id" : "runtime_native_name", subjectName);
+      if (nameMatchKind === "FULL_VERIFIED_NAME") resolvedNativeNames.set(ids[0], subjectName);
+    }
     else if (resolvedContextually) addResolvedCharacter(contextualIds[0], "runtime_contextual_given_name", subjectName);
     else for (const runtimeId of ids) addCandidateCharacter({ runtimeId, rawName: characters[runtimeId]?.firstName, aliasCandidate: subjectName }, "runtime_native_ambiguous");
     return true;
   };
+  const addSaveFullNames = (givenName, runtimeIds) => {
+    if (!isCjk(givenName) || givenName.length > 8) return false;
+    const names = new Map();
+    for (const id of runtimeIds) {
+      const house = snapshot?.dynastyHouses?.[characters[id]?.dynastyHouse];
+      let family = house?.localizedName || house?.name || "";
+      if (!isCjk(family) && family) {
+        const localized = localizedReference("dynasty", family, localize);
+        family = ["CONFIRMED", "CONFIRMED_IDENTICAL_SOURCES"].includes(localized?.confidence) ? localized.localizedValue : "";
+      }
+      if (!isCjk(family) || family.length > 8) continue;
+      const fullName = givenName.startsWith(family) ? givenName : `${family}${givenName}`;
+      if (!normalizedQuery.includes(normalize(fullName))) continue;
+      if (!names.has(fullName)) names.set(fullName, []);
+      names.get(fullName).push(String(id));
+    }
+    let matched = false;
+    for (const [fullName, ids] of names) matched = addRuntimeNative(fullName, ids, "SAVE_HOUSE_FULL_NAME", true, "FULL_VERIFIED_NAME", true) || matched;
+    return matched;
+  };
   for (const match of runtimeScan.fullMatches) addRuntimeNative(match.value, runtimeIdsForName(snapshot, match.value, "full"), "RUNTIME_NATIVE_FULL_NAME", runtimeScan.candidateSetComplete === true, "FULL_VERIFIED_NAME", true);
-  for (const match of runtimeScan.givenMatches) addRuntimeNative(match.value, runtimeIdsForName(snapshot, match.value, "given"), "RUNTIME_NATIVE_GIVEN_NAME_CANDIDATE", runtimeScan.candidateSetComplete === true, "GIVEN_NAME", false);
+  for (const match of runtimeScan.givenMatches) addSaveFullNames(match.value, runtimeIdsForName(snapshot, match.value, "given"));
   if (directRuntimeId && characters[directRuntimeId]) addRuntimeNative(characters[directRuntimeId]?.fullName || characters[directRuntimeId]?.firstName || `#${directRuntimeId}`, [directRuntimeId], "RUNTIME_NATIVE_DIRECT_ID", true, "DIRECT_RUNTIME_ID", true);
   const primaryHistoricalResolution = historicalResolutions[0];
   const historicalRuntimeIds = new Set(historicalResolutions.flatMap(resolution => (resolution.candidates || []).map(candidate => String(candidate.runtimeId))));
-  const unresolvedNativeRuntimeIds = new Set(nativeEntityResolutions.filter((entity) => entity.resolutionStatus !== "RESOLVED").flatMap((entity) => entity.runtimeIds));
-  for (const id of mentionedEntityIds) if (!historicalRuntimeIds.has(String(id)) && !unresolvedNativeRuntimeIds.has(String(id)) && !historicalResolutions.some(resolution => resolution.coverageStatus === "SOURCE_INCOMPLETE")) addResolvedCharacter(id, "shared_memory_entity");
   const historicalCoverage = historicalResolutions.map((resolution) => ({ alias: resolution.alias, status: resolution.coverageStatus, definitionIds: resolution.definitionIds, reason: resolution.reason }));
   if (indexCoverage && ["SOURCE_INCOMPLETE", "NAME_INDEX_MISS"].includes(indexCoverage.status)) historicalCoverage.push({ alias: shortCjkQuery, status: indexCoverage.status, definitionIds: [], reason: indexCoverage.status });
-  const resolvedEntityNames = new Set([...historicalDomainEntities, ...nativeEntityResolutions].map((entity) => normalize(entity.subjectName)));
-  const coverageDomainEntities = historicalCoverage.filter((item) => !resolvedEntityNames.has(normalize(item.alias)) && !(item.status === "NAME_INDEX_MISS" && nativeEntityResolutions.some(entity => normalize(item.alias).includes(normalize(entity.subjectName))))).map((item) => ({ identityKind: "UNKNOWN", resolutionStatus: item.status, subjectName: item.alias, candidateTotal: 0, historicalDefinitionIds: item.definitionIds || [], runtimeIds: [], identityEvidence: [], worldlineDifferences: [], sourceComplete: item.status !== "SOURCE_INCOMPLETE", candidateSetComplete: item.status !== "SOURCE_INCOMPLETE" }));
   const coveragePriority = { SOURCE_INCOMPLETE: 4, DEFINITION_FOUND_RUNTIME_MISSING: 3, REJECTED_BY_EVIDENCE: 2, NAME_INDEX_MISS: 1 };
   const primaryCoverage = historicalCoverage.reduce((best, item) => !best || (coveragePriority[item.status] || 0) > (coveragePriority[best.status] || 0) ? item : best, null);
   const identityResolution = primaryCoverage?.status === "SOURCE_INCOMPLETE" ? { status: "NO_MATCH", reason: primaryCoverage.reason || "SOURCE_INCOMPLETE", evidence: [], candidates: historicalResolutions.flatMap((resolution) => resolution.candidates || []) } : historicalResolutions.length === 0 ? { status: "NO_MATCH", reason: primaryCoverage?.reason || "NO_HISTORICAL_ALIAS", evidence: [], candidates: [] } : historicalResolutions.some((resolution) => resolution.status === "AMBIGUOUS") ? { status: "AMBIGUOUS", reason: "MULTIPLE_CANDIDATES", evidence: historicalResolutions.flatMap((resolution) => resolution.evidence || []), candidates: historicalResolutions.flatMap((resolution) => resolution.candidates || []) } : primaryHistoricalResolution.status === "RESOLVED" ? primaryHistoricalResolution : { status: "NO_MATCH", reason: primaryHistoricalResolution.reason, evidence: primaryHistoricalResolution.evidence || [], candidates: primaryHistoricalResolution.candidates || [] };
@@ -405,11 +433,20 @@ function analyzeSharedQuery({ snapshot, query = "", assistContext = "", mentione
       resolverTrace.localization.matchedRawKeys.push(...lookup.matchedRawKeys);
       let matched = false;
       if (type === "character") {
-        for (const match of lookup.status === "MATCHED" ? lookup.matches : []) {
+        let matches = lookup.status === "MATCHED" ? lookup.matches : [];
+        // Several localization keys may spell the same name. Resolve each key
+        // against this save before counting people, while retaining conflicts
+        // in the value of any key that actually occurs in the save.
+        if (lookup.status === "CONFLICT" && lookup.sourceComplete && lookup.matchedRawKeys.length <= 200) {
+          matches = lookup.matchedRawKeys.filter(key => runtimeIdsForName(snapshot, key, "given").length).map(key => localizedReference("character", key, localize));
+          if (matches.some(match => !["CONFIRMED", "CONFIRMED_IDENTICAL_SOURCES"].includes(match?.confidence) || normalize(match.localizedValue) !== normalize(term))) matches = [];
+        }
+        if (matches.length && lookup.sourceComplete) {
           const verifiedIds = runtimeIdsForName(snapshot, term, "full");
-          const givenIds = runtimeIdsForName(snapshot, match.rawKey, "given");
-          matched = addRuntimeNative(term, verifiedIds, "RUNTIME_NATIVE_LOCALIZED_FULL_NAME", true, "FULL_VERIFIED_NAME", true) || matched;
-          if (!verifiedIds.length) matched = addRuntimeNative(term, givenIds, "RUNTIME_NATIVE_LOCALIZED_GIVEN_NAME_CANDIDATE", true, "GIVEN_NAME", false) || matched;
+          const givenIds = [...new Set(matches.flatMap(match => runtimeIdsForName(snapshot, match.rawKey, "given")))];
+          const saveNameMatched = addSaveFullNames(term, givenIds);
+          matched = saveNameMatched || addRuntimeNative(term, verifiedIds, "RUNTIME_NATIVE_LOCALIZED_FULL_NAME", true, "FULL_VERIFIED_NAME", true);
+          if (!verifiedIds.length && !saveNameMatched) matched = addRuntimeNative(term, givenIds, "RUNTIME_NATIVE_LOCALIZED_GIVEN_NAME_CANDIDATE", true, "GIVEN_NAME", false) || matched;
         }
       } else {
         const matches = [];
@@ -436,8 +473,9 @@ function analyzeSharedQuery({ snapshot, query = "", assistContext = "", mentione
       let titleLookup = null;
       if (characterLookupAvailable) {
         characterLookup = normalizeReverseLookup(findLocalizedKeys("character", term, { typedOnly: true }));
-        localizedIdentityMatched = recordLookup("character", characterLookup, term) || localizedIdentityMatched;
-        if (["INCOMPLETE_SOURCE_SCAN", "MATCHED", "CONFLICT"].includes(characterLookup.status)) characterLookupAvailable = false;
+        const characterMatched = recordLookup("character", characterLookup, term);
+        localizedIdentityMatched = characterMatched || localizedIdentityMatched;
+        if (characterMatched || characterLookup.status === "INCOMPLETE_SOURCE_SCAN") characterLookupAvailable = false;
       }
       if (titleLookupAvailable) {
         titleLookup = normalizeReverseLookup(findLocalizedKeys("title", term, { typedOnly: true }));
@@ -453,7 +491,7 @@ function analyzeSharedQuery({ snapshot, query = "", assistContext = "", mentione
         const fallbackCharacterLookup = normalizeReverseLookup(findLocalizedKeys("character", term));
         const characterMatched = recordLookup("character", fallbackCharacterLookup, term);
         localizedIdentityMatched = characterMatched || localizedIdentityMatched;
-        if (["INCOMPLETE_SOURCE_SCAN", "MATCHED", "CONFLICT"].includes(fallbackCharacterLookup.status)) characterLookupAvailable = false;
+        if (characterMatched || fallbackCharacterLookup.status === "INCOMPLETE_SOURCE_SCAN") characterLookupAvailable = false;
         if (!characterMatched) {
           const fallbackTitleLookup = normalizeReverseLookup(findLocalizedKeys("title", term));
           localizedIdentityMatched = recordLookup("title", fallbackTitleLookup, term) || localizedIdentityMatched;
@@ -463,6 +501,14 @@ function analyzeSharedQuery({ snapshot, query = "", assistContext = "", mentione
     }
   }
 
+  for (const match of runtimeScan.givenMatches) {
+    if (nativeEntityResolutions.some(entity => entity.nameMatchKind === "FULL_VERIFIED_NAME" && normalize(entity.subjectName).includes(match.value))) continue;
+    addRuntimeNative(match.value, runtimeIdsForName(snapshot, match.value, "given"), "RUNTIME_NATIVE_GIVEN_NAME_CANDIDATE", runtimeScan.candidateSetComplete === true, "GIVEN_NAME", false);
+  }
+  const unresolvedNativeRuntimeIds = new Set(nativeEntityResolutions.filter((entity) => entity.resolutionStatus !== "RESOLVED").flatMap((entity) => entity.runtimeIds));
+  for (const id of mentionedEntityIds) if (!historicalRuntimeIds.has(String(id)) && !unresolvedNativeRuntimeIds.has(String(id)) && !historicalResolutions.some(resolution => resolution.coverageStatus === "SOURCE_INCOMPLETE")) addResolvedCharacter(id, "shared_memory_entity");
+  const resolvedEntityNames = new Set([...historicalDomainEntities, ...nativeEntityResolutions].map((entity) => normalize(entity.subjectName)));
+  const coverageDomainEntities = historicalCoverage.filter((item) => !resolvedEntityNames.has(normalize(item.alias)) && !(item.status === "NAME_INDEX_MISS" && nativeEntityResolutions.some(entity => normalize(item.alias).includes(normalize(entity.subjectName))))).map((item) => ({ identityKind: "UNKNOWN", resolutionStatus: item.status, subjectName: item.alias, candidateTotal: 0, historicalDefinitionIds: item.definitionIds || [], runtimeIds: [], identityEvidence: [], worldlineDifferences: [], sourceComplete: item.status !== "SOURCE_INCOMPLETE", candidateSetComplete: item.status !== "SOURCE_INCOMPLETE" }));
   resolverTrace.localization.missingDescriptors = [...new Set(resolverTrace.localization.missingDescriptors)];
   resolverTrace.localization.matchedRawKeys = [...new Set(resolverTrace.localization.matchedRawKeys)];
   resolverTrace.historical.aliases = [...new Set(resolverTrace.historical.aliases)];
@@ -472,7 +518,7 @@ function analyzeSharedQuery({ snapshot, query = "", assistContext = "", mentione
     const character = characters[id];
     const rawKey = character.firstName || `#${id}`;
     const localization = needsLocalizationLookup(rawKey) ? localizedReference("character", rawKey, localize) : null;
-    return { id, rawKey, displayName: resolvedHistoricalAliases.get(id) || localization?.localizedValue || character.fullName || rawKey, aliases: [character.firstName, id, `#${id}`, ...(snapshot?.runtimeToDefinitions?.[id] || [])].filter(Boolean), matchSources: [...sources] };
+    return { id, rawKey, displayName: resolvedHistoricalAliases.get(id) || resolvedNativeNames.get(id) || localization?.localizedValue || character.fullName || rawKey, aliases: [character.firstName, id, `#${id}`, ...(snapshot?.runtimeToDefinitions?.[id] || [])].filter(Boolean), matchSources: [...sources] };
   });
   const resolvedTitles = [...resolvedTitleIds.entries()].map(([id, sources]) => {
     const title = titles[id];

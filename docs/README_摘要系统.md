@@ -12,6 +12,10 @@ V8.6.2 将应用中的可见标签更新为 Memory Engine 2.6，但内部 `MEMOR
 
 ## 存储结构
 
+### V8.12 第一部分 Pair 隔离与 Episode 清理
+
+Legacy fallback 必须同时匹配 Finalization、Owner 知情和 Counterpart 主题相关性；同一多人终局的另一配对不受影响。没有明确 projection Segment IDs 时，Segment 也须能证明 Pair 相关性；多人且元数据不足时失败关闭。删除/编辑后清理不存在的 Memory ID 和 `knownBy=[]` 的无用 Segment；活动 Finalization、Recovery、明确 Audit/Recovery 保留标记不清理。继续使用既有日志事务和 2.6 可见标签 / 2.5 存储合同，详见 [V8.12 第一部分实施报告](v8.12-part1-implementation-report.md)。
+
 ### V8.11.1 编辑与遗忘一致性
 
 摘要编辑同步重建所选 Owner 的 Projection Memory、Episode Segment、Knowledge 和 Consolidation，并清除当前会话 Recall/Character 缓存；以编辑原文形成可召回记录，不调用模型重新推断事实。原共享记忆仍为其他知情者保留，其他配对的正文不自动改写。旧摘要缺少 perspectiveMemoryIds 时尝试通过 finalizationId 与 Episode 精确映射；不能证明映射时报告 `LEGACY_SUMMARY_MEMORY_MAPPING_INCOMPLETE`，不静默删除或扩大失忆范围。
@@ -86,7 +90,7 @@ ABCD 同时参与并提到 E 时，每个实际回应者分别按自己的目录
 
 ## 会话结束写入
 
-V8.5.1 摘要事故热修：正常路径仍是一场一次结构化请求；整场截断或质量重试失败后，可按实际入离场边界及消息数量分段生成，再合并为同一个 finalization。最多 12 个片段、每片最多 2 次请求，不递归扩展；各请求仍使用用户设置的输出 Token 上限。所有片段、来源 ID、在场边界与有向投影通过校验后才提交，不保存残缺 JSON。长会话失败恢复的请求数可能增加，详见 [事故修复报告](v8.5.1-summary-incident-review.md)。
+V8.5.1 摘要事故热修及 V8.12 重试修正：正常成功路径一场一次结构化请求；请求失败最多两次整场调用。整场截断或质量重试失败后，可按实际入离场边界及消息数量分段生成，再合并为同一个 finalization。最多 12 个片段、每片最多 2 次请求，不递归扩展；各请求仍使用用户设置的输出 Token 上限。所有片段、来源 ID、在场边界与有向投影通过校验后才提交，不保存残缺 JSON。Provider 异常或无效输出最终失败时，仅保留原始消息恢复快照，不生成本地转录式“摘要”，不提交 Episode。自动恢复由下一场对话初始化触发；摘要页“重试失败摘要”不依赖活动 CK3 对话，可越过自动重试上限重新调用当前摘要模型，使用同一精简正文、重点记忆、在场隔离与落盘校验流程。余额不足必须充值或配置可用摘要模型，重试本身不能修复账户状态。手动重试单航班、跳过正在进行的对话和终局，清空记忆后不能复活旧快照；已成功提交或手工编辑的摘要不自动覆盖。Memory Engine 2.6 标签 / 2.5 存储合同不变。长会话失败恢复的请求数可能增加，详见 [事故修复报告](v8.5.1-summary-incident-review.md)及 [V8 阶段记录](V8阶段开发记录.md)。
 
 `Source-ID contract v2` 在最终指令中列出当前输入允许的消息和人物 ID，禁止模型按切片重新编号。仅含程序生成入离场标记的片段保留原始标记与准确来源，不要求模型臆造一段对话。此调整仅影响摘要请求，不改变 Chat 的冻结 Prompt 前缀。
 

@@ -19,7 +19,7 @@ function add(index, name, runtimeId) {
   if (!index[key].includes(id)) index[key].push(id);
 }
 
-function buildRuntimeNameIndex(snapshot, { live = null } = {}) {
+function buildRuntimeNameIndex(snapshot, { live = null, localize = null } = {}) {
   const givenNameToRuntimeIds = Object.create(null);
   const verifiedFullNameToRuntimeIds = Object.create(null);
   const fullNameProvenanceByRuntime = Object.create(null);
@@ -32,7 +32,13 @@ function buildRuntimeNameIndex(snapshot, { live = null } = {}) {
     const id = String(candidate?.id || "");
     const character = snapshot?.characters?.[id];
     const fullName = String(candidate?.fullName || "").trim();
-    if (!character || !fullName || normalize(character.firstName) !== normalize(candidate?.firstName)) continue;
+    if (!character || !fullName) continue;
+    let givenName = character.firstName;
+    if (normalize(givenName) !== normalize(candidate?.firstName) && typeof localize === "function") {
+      const translated = localize("character", givenName);
+      if (["CONFIRMED", "CONFIRMED_IDENTICAL_SOURCES"].includes(translated?.confidence)) givenName = translated.localizedValue;
+    }
+    if (normalize(givenName) !== normalize(candidate?.firstName)) continue;
     add(verifiedFullNameToRuntimeIds, fullName, id);
     fullNameProvenanceByRuntime[id] = { kind: "LIVE_FULL_NAME", gameDate: snapshotDate, playerId: String(snapshot.playerId) };
   }

@@ -48,6 +48,13 @@ assert.equal(multipleDefinitions.status, "AMBIGUOUS");
 assert.equal(multipleDefinitions.reason, "MULTIPLE_DEFINITIONS");
 assert.equal(multipleDefinitions.resolvedRuntimeId, null);
 
+const uninstantiatedDefinition = resolve(snapshot(), { candidateDefinitionIds: ["yue", "yue_copy"], definitionRecords: [baseRecord, record("yue_copy")] });
+assert.equal(uninstantiatedDefinition.status, "RESOLVED", "an uninstantiated definition in another mod is not a second save character");
+assert.equal(uninstantiatedDefinition.resolvedRuntimeId, "100");
+const sameRuntimeConflict = resolve(snapshot({ definitionToRuntime: { yue: "100", yue_copy: "100" }, runtimeToDefinitions: { "100": ["yue", "yue_copy"] } }), { candidateDefinitionIds: ["yue", "yue_copy"], definitionRecords: [baseRecord, record("yue_copy")] });
+assert.equal(sameRuntimeConflict.candidates.length, 1, "one runtime ID must not be counted as two people");
+assert.equal(sameRuntimeConflict.status, "REJECTED", "multiple definitions bound to one runtime remain a binding conflict");
+
 const multipleRuntime = resolve(snapshot({ characters: { ...snapshot().characters, "101": { id: "101", fullName: "韩世忠", gender: "male" } }, runtimeToDefinitions: { "100": ["yue"], "101": ["yue"] } }));
 assert.equal(multipleRuntime.status, "AMBIGUOUS");
 assert.equal(multipleRuntime.reason, "DEFINITION_RUNTIME_BINDING_CONFLICT");
@@ -66,6 +73,18 @@ assert.equal(resolveHistoricalIdentity({ alias: "韩世忠", candidateDefinition
 
 const index = { revision: "sol-stage-1", state: "READY", sourceComplete: true, exactNames: { "韩世忠": ["yue"] }, exactAliases: {}, byId: { yue: baseRecord } };
 const analyze = (query, state = snapshot(), source = index, extra = {}) => analyzeSharedQuery({ snapshot: state, query, historicalNameScan: text => scanHistoricalNames(source, text), historicalDefinitionLookup: text => lookup(source, text), ...extra });
+const twoDefinitionIndex = { ...index, exactNames: { "韩世忠": ["yue_copy", "yue"] }, byId: { yue: baseRecord, yue_copy: record("yue_copy") } };
+const onePerson = analyze("韩世忠在哪里", snapshot(), twoDefinitionIndex);
+assert.equal(onePerson.entityResolutions[0].candidateTotal, 1);
+assert.equal(onePerson.entityResolutions[0].definitionCandidateTotal, 2);
+assert.deepEqual(onePerson.characters.map(item => item.id), ["100"]);
+assert(onePerson.entityResolutions[0].worldlineDifferences.some(item => item.code === "AGE_WORLDLINE_SHIFT"), "the selected bound definition still provides informational worldline differences");
+const presentation = require("../resources/app/out/renderer/worldline-player-presentation").create("zh-CN");
+assert.equal(presentation.promptSummary({ query: "韩世忠在哪里", queryAnalysis: onePerson }).candidateCount, 1, "the visible summary counts people, not mod definitions");
+const conflictingPerson = analyze("韩世忠", snapshot({ definitionToRuntime: { yue: "100", yue_copy: "100" }, runtimeToDefinitions: { "100": ["yue", "yue_copy"] } }), twoDefinitionIndex);
+assert.equal(conflictingPerson.entityResolutions[0].candidateTotal, 1);
+assert.equal(conflictingPerson.candidateCharacters.length, 1);
+assert.equal(conflictingPerson.characters.length, 0, "deduplication does not authorize conflicting provenance");
 const dated = analyze("韩世忠在1168年在哪里？", snapshot({ definitionToRuntime: { yue: "100", "1168": "1168" } }));
 assert.deepEqual(dated.characters.map(item => item.id), ["100"]);
 assert(!dated.resolvedCharacters.some(item => item.id === "1168"), "a year inside a sentence cannot enter Runtime ID namespace");

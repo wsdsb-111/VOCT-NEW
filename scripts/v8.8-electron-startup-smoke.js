@@ -79,6 +79,12 @@ async function main() {
     await clickProvider("Deepseek");
     assert(await evaluate("document.querySelector('#deepseekActionStateTransitionRecallOverlay')?.checked===true"), "DeepSeek state transition overlay must default on");
     assert(await evaluate("document.querySelector('#deepseekActionStablePrefixOptimization')?.checked===true"), "DeepSeek stable prefix must default on");
+    await clickProvider("Summaries");
+    assert(await evaluate("typeof conversationAPI.retryFailedSummaries === 'function'"), "summary retry preload bridge missing");
+    const recoveryStatus = await evaluate("conversationAPI.getSummariesDashboardData().then(data => data.recoveryStatus)");
+    assert.deepEqual(recoveryStatus, { pending: 0, manual: 0, balanceBlocked: 0, running: false });
+    assert(await evaluate("[...document.querySelectorAll('button')].some(button => button.textContent === '重试失败摘要' && button.disabled)"), "empty recovery queue must show a disabled retry button");
+    assert.equal((await evaluate("conversationAPI.retryFailedSummaries()")).recovered, 0, "empty queue must not call a provider");
     await clickProvider("诊断");
     assert(await evaluate("!!document.querySelector('.provider-diagnostics-view')"), "provider diagnostics page rendered an empty body");
     console.log("DIAGNOSTICS", await evaluate("document.querySelector('.provider-diagnostics-view')?.innerText.slice(0,600)"));
@@ -102,9 +108,16 @@ async function main() {
       assert(await evaluate(`(() => { const e=[...document.querySelectorAll('[role=tab]')].find(e=>${JSON.stringify(tab)}.includes(e.textContent.trim()));if(e)e.click();return !!e; })()`), `missing tab ${tab}`);
       await new Promise(resolve => setTimeout(resolve, 400));
       assert(await evaluate("!!document.querySelector('.worldline-view')"), `blank tab ${tab}`);
+      if (tab[1] === "Developer Diagnostics") {
+        assert(await evaluate("document.querySelector('.worldline-view').textContent.includes('V8.12 Temporal Archive')"), "archive diagnostics missing");
+        assert(await evaluate("typeof worldlineAPI.temporalArchive === 'function'"), "archive preload bridge missing");
+        const flags = await evaluate("(async () => { await worldlineAPI.setRecallSettings({v812TemporalArchiveEnabled:true}); const a=await worldlineAPI.getSettings(); await worldlineAPI.setRecallSettings({v812TemporalArchiveEnabled:false}); return [a.v812TemporalArchiveEnabled,a.v812TemporalArchiveShadowMode,a.v812HistoricalPromptIntegration]; })()");
+        assert.deepEqual(flags, [true, true, false]);
+        assert.equal((await evaluate("worldlineAPI.temporalArchive({operation:'capture'})")).error, "HISTORY_DISABLED");
+      }
     }
     assert.deepEqual(errors, [], "renderer exceptions");
-    console.log("V8.9 isolated Electron startup/navigation: PASS");
+    console.log("V8.12 Part 1 isolated Electron startup/navigation/Archive flags: PASS");
   } finally {
     console.log("RENDERER_ERRORS", JSON.stringify(errors));
     ws?.close();

@@ -1,7 +1,7 @@
 "use strict";
 
 const KNOWLEDGE_LEVELS = Object.freeze(["SELF", "DIRECT_OBSERVATION", "PERSONAL_MEMORY", "COURT_PUBLIC", "REALM_PUBLIC", "PUBLIC_WORLD", "SECRET", "UNKNOWN"]);
-const KNOWLEDGE_POLICY_VERSION = "v8.11.1-character-knowledge-1";
+const KNOWLEDGE_POLICY_VERSION = "v8.12-part1-character-knowledge-1";
 const LEVEL_SET = new Set(KNOWLEDGE_LEVELS);
 const SELF_FIELDS = new Set(["NAME", "IDENTITY", "PRIMARY_TITLE", "SPOUSE", "CHILDREN", "COURT_POSITION", "LOCATION", "CULTURE", "FAITH", "KNOWN_ACTION"]);
 const PRIORITY = Object.freeze({ SELF: 700, DIRECT_OBSERVATION: 700, PERSONAL_MEMORY: 600, COURT_PUBLIC: 500, REALM_PUBLIC: 500, PUBLIC_WORLD: 500, SECRET: 650, UNKNOWN: 0 });
@@ -9,9 +9,11 @@ const PRIORITY = Object.freeze({ SELF: 700, DIRECT_OBSERVATION: 700, PERSONAL_ME
 function factPriority(item) {
   const level = item?.knowledgeLevel || "UNKNOWN";
   const sourceTier = item?.fact?.sourceTier || null;
-  if (["GAME_TRUTH", "GAMESTATE"].includes(sourceTier) && !["SELF", "DIRECT_OBSERVATION"].includes(level)) return 900;
+  if (level === "DIRECT_OBSERVATION") return 1200;
+  if (item?.fact?.verificationMode === "LIVE_RUNTIME" && ["GAME_TRUTH", "GAMESTATE"].includes(sourceTier)) return 1100;
+  if (level === "SELF" && item?.fact?.verificationMode === "SELF_CURRENT") return 1000;
   if (level === "SELF") return 850;
-  if (level === "DIRECT_OBSERVATION") return 800;
+  if (["GAME_TRUTH", "GAMESTATE"].includes(sourceTier)) return 900;
   return PRIORITY[level] || 0;
 }
 

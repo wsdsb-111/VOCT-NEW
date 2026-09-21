@@ -396,14 +396,19 @@ const GameData = createGameData({
   summariesDir: VOTC_SUMMARIES_DIR,
   getHistoricalReferenceByYear
 });
-worldlineService.setRuntimeNameSource(() => ({
-  gameDate: GameData?.date || null,
-  playerId: GameData?.playerID ?? null,
-  characters: [...(GameData?.characters?.values?.() || [])].map((character) => ({ id: character.id, firstName: character.firstName, fullName: character.fullName }))
-}));
+let runtimeNameSource = null;
+worldlineService.setRuntimeNameSource(() => runtimeNameSource);
 const fs = require("fs");
 const { createLogParser } = require("./game-data/log-parser");
-const parseLog = createLogParser({ GameData, Character, onGameDataParsed: (gameData) => { dynamicHistoryService.updateFromGameData(gameData); worldlineService.refreshRuntimeNameIndex(); } });
+const parseLog = createLogParser({ GameData, Character, onGameDataParsed: (gameData) => {
+  runtimeNameSource = {
+    gameDate: gameData.date,
+    playerId: gameData.playerID,
+    characters: [...gameData.characters.values()].map(character => ({ id: character.id, firstName: character.firstName, fullName: character.fullName }))
+  };
+  dynamicHistoryService.updateFromGameData(gameData);
+  worldlineService.refreshRuntimeNameIndex();
+} });
 function createMessage(input) {
   return {
     ...input,
@@ -600,7 +605,10 @@ const SummariesManager = createSummariesManager({
   summariesDir: VOTC_SUMMARIES_DIR,
   memoryEngine,
   memorySystem,
-  getCurrentConversation: () => conversationManager.getCurrentConversation()
+  getCurrentConversation: () => conversationManager.getCurrentConversation(),
+  buildSummaryPrompt: context => memoryEngine.buildFinalizationPrompt({ ...context, finalInstructions: PromptBuilder.getFinalSummaryInstructions() }),
+  requestSummary: (prompt, options = {}) => llmManager.sendSummaryRequest(prompt, void 0, { requestType: "memory_recovery", summaryAttempt: options.attempt, maxTokens: PromptBuilder.getFinalSummaryMaxTokens() }),
+  persistRecoveredSummary: (summary, context) => GameData.saveRecoveredSummary(summary, context)
 });
 const updaterTranslations = {
   en: {

@@ -47,12 +47,19 @@ function resolveHistoricalIdentity({ alias, figureKey, candidateDefinitionIds = 
   const definitionIds = [...new Set(candidateDefinitionIds.filter(Boolean).map(String))];
   const recordsById = new Map(definitionRecords.map((record) => [String(record.definitionId), record]));
   const reverse = reverseIndex(snapshot?.runtimeToDefinitions);
-  const observedCandidates = [];
+  const candidatesByRuntime = new Map();
+  const boundDefinitionIds = [];
   for (const definitionId of definitionIds) {
     const forward = snapshot?.definitionToRuntime?.[definitionId];
     const runtimeIds = [...new Set([forward, ...(reverse.get(definitionId) || [])].filter(Boolean).map(String))];
-    for (const runtimeId of runtimeIds) observedCandidates.push(candidateFor({ alias, definitionId, runtimeId, character: snapshot?.characters?.[runtimeId] }));
+    if (runtimeIds.length) boundDefinitionIds.push(definitionId);
+    for (const runtimeId of runtimeIds) {
+      const existing = candidatesByRuntime.get(runtimeId);
+      if (existing) existing.definitionIds.push(definitionId);
+      else candidatesByRuntime.set(runtimeId, candidateFor({ alias, definitionId, runtimeId, character: snapshot?.characters?.[runtimeId] }));
+    }
   }
+  const observedCandidates = [...candidatesByRuntime.values()];
 
   if (sourceComplete !== true || definitionRecords.some(record => record?.sourceComplete === false)) return { status: "REJECTED", resolvedRuntimeId: null, candidates: observedCandidates, reason: "SOURCE_INCOMPLETE", evidence: [] };
   if (candidateSetComplete !== true) return { status: "REJECTED", resolvedRuntimeId: null, candidates: observedCandidates, reason: "CANDIDATE_SET_INCOMPLETE", evidence: [] };
@@ -60,9 +67,10 @@ function resolveHistoricalIdentity({ alias, figureKey, candidateDefinitionIds = 
     return { status: "REJECTED", resolvedRuntimeId: null, candidates: observedCandidates, reason: "HISTORICAL_FIGURE_UNSUPPORTED", evidence: [] };
   }
   if (definitionIds.length === 0) return { status: "NO_MATCH", resolvedRuntimeId: null, candidates: [], reason: "NO_HISTORICAL_DEFINITION", evidence: [] };
-  if (definitionIds.length > 1) return { status: "AMBIGUOUS", resolvedRuntimeId: null, candidates: observedCandidates, reason: "MULTIPLE_DEFINITIONS", evidence: [] };
+  if (boundDefinitionIds.length === 0) return { status: "NO_MATCH", resolvedRuntimeId: null, candidates: [], reason: "NO_RUNTIME_CANDIDATES", evidence: [] };
+  if (boundDefinitionIds.length > 1) return { status: observedCandidates.length > 1 ? "AMBIGUOUS" : "REJECTED", resolvedRuntimeId: null, candidates: observedCandidates, reason: observedCandidates.length > 1 ? "MULTIPLE_DEFINITIONS" : "DEFINITION_RUNTIME_BINDING_CONFLICT", evidence: [] };
 
-  const definitionId = definitionIds[0];
+  const definitionId = boundDefinitionIds[0];
   const record = recordsById.get(definitionId);
   const sourceConflicts = Array.isArray(record?.conflicts) ? record.conflicts.filter((code) => IDENTITY_HARD_CONFLICTS.has(code)) : [];
   if (sourceConflicts.length) {
@@ -110,7 +118,7 @@ function resolveHistoricalIdentity({ alias, figureKey, candidateDefinitionIds = 
   if (["male", "female"].includes(expectedGender) && gender.sex === expectedGender) evidence.push({ code: "GENDER_MATCH", category: "IDENTITY_SUPPORT" });
   else evidence.push({ code: "GENDER_UNKNOWN", category: "IDENTITY_SUPPORT" });
   const candidate = { ...candidateFor({ alias, definitionId, runtimeId: forwardId, character }), evidence };
-  return { status: "RESOLVED", resolvedRuntimeId: forwardId, candidates: [candidate], reason: "HISTORICAL_IDENTITY_CORE_CONFIRMED", evidence };
+  return { status: "RESOLVED", resolvedRuntimeId: forwardId, selectedDefinitionId: definitionId, candidates: [candidate], reason: "HISTORICAL_IDENTITY_CORE_CONFIRMED", evidence };
 }
 
 module.exports = { resolveHistoricalIdentity };

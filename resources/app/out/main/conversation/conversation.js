@@ -1500,6 +1500,7 @@ class Conversation {
   async recoverPendingMemories() {
     if (!memoryEngine || !this.gameData) return;
     const results = await memoryEngine.recoverPendingFinalizations({
+      isConversationActive: id => id === this.id && this.isActive,
       buildPrompt: (context) => memoryEngine.buildFinalizationPrompt({ ...context, finalInstructions: PromptBuilder.getFinalSummaryInstructions() }),
       requestSummary: (summaryPrompt) => llmManager.sendSummaryRequest(summaryPrompt, void 0, { requestType: "memory_recovery", maxTokens: typeof PromptBuilder.getFinalSummaryMaxTokens === "function" ? PromptBuilder.getFinalSummaryMaxTokens() : 4096 }),
       resolveParticipantProfiles: (snapshot) => memoryEngine.resolveRecoveryParticipantProfiles(snapshot, [...this.summaryParticipantProfiles.values()]),

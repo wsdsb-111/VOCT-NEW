@@ -63,6 +63,7 @@ function registerIpcHandlers(runtime) {
     }) : worldlineService.getEntityKinshipInspector(payload));
     electron.ipcMain.handle("worldline:getKinshipIntegrityReport", () => worldlineService.getKinshipIntegrityReport());
     electron.ipcMain.handle("worldline:getDiagnostics", () => worldlineService.getDiagnostics());
+    electron.ipcMain.handle("worldline:temporalArchive", (_event, payload) => worldlineService.runTemporalArchive(payload));
     electron.ipcMain.handle("worldline:getPromptDiagnostics", (_event, payload) => worldlineService.getPromptDiagnosticsAsync(payload));
     electron.ipcMain.handle("worldline:getSubjectiveResponderOptions", (_event, payload) => worldlineService.getSubjectiveResponderOptions({ query: typeof payload?.query === "string" ? payload.query : "" }));
     electron.ipcMain.handle("worldline:listCanonCharacterOptions", (_event, payload) => worldlineService.listCanonCharacterOptions({ query: typeof payload?.query === "string" ? payload.query : "" }));
@@ -858,10 +859,18 @@ function registerIpcHandlers(runtime) {
     try {
       if (options?.refresh === true) memoryEngine.invalidateSummaryFolderCache();
       const summaries = await SummariesManager.listAllSummaries();
-      return { summaries, memoryOverview: memoryEngine.getUiOverview({ summaryCatalog: summaries }) };
+      return { summaries, memoryOverview: memoryEngine.getUiOverview({ summaryCatalog: summaries }), recoveryStatus: SummariesManager.getRecoveryStatus() };
     } catch (error) {
       console.error("Failed to get summaries dashboard data:", error);
       return { summaries: [], memoryOverview: { engineVersion: "2.2", totals: {}, boundaries: [], routingPolicy: {}, characters: [], error: error.message || "Unknown error" } };
+    }
+  });
+  electron.ipcMain.handle("conversation:retryFailedSummaries", async () => {
+    try {
+      return await SummariesManager.retryFailedSummaries();
+    } catch (error) {
+      console.error("Failed to retry summaries:", error);
+      return { success: false, error: "摘要重试失败，恢复记录已保留，请检查摘要模型配置及日志。" };
     }
   });
   electron.ipcMain.handle("conversation:updateStructuredMemory", async (_, { memoryId, content }) => {
