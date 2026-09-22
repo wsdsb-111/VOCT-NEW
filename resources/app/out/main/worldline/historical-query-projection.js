@@ -34,7 +34,7 @@ function createHistoricalQueryProjection(checkpoint, scope) {
       lifeStatus: life.conflict || life.alive == null ? "UNKNOWN" : life.alive ? "ALIVE" : "DEAD", deathDate: scalar(character.deathDate),
       culture: scalar(character.culture), faith: scalar(character.faith), location: scalar(character.location),
       courtEmployerId: scalar(character.courtEmployer), liegeId: scalar(character.liege),
-      primaryTitleId: scalar(character.primaryTitleId) || ids(character.domainTitles)[0] || null, titleIds: ids(character.domainTitles), positions: ids(character.positions),
+      primaryTitleId: scalar(character.primaryTitleId), titleIds: ids(character.domainTitles), positions: ids(character.positions),
       fatherId: scalar(character.parents?.father), motherId: scalar(character.parents?.mother),
       childIds: ids([...(character.children || []), ...(childrenByParent.get(runtimeId) || [])]),
       siblingIds: ids(parents.flatMap(parent => [...(childrenByParent.get(parent) || [])])).filter(id => id !== runtimeId),

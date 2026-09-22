@@ -10,6 +10,7 @@ const { HistoricalCheckpointIndex, boundedRead } = require("../resources/app/out
 const { inspectTemporalArchive } = require("../resources/app/out/main/worldline/temporal-archive-diagnostics");
 const { parseGameState } = require("../resources/app/out/main/worldline/game-state-adapter");
 const { digest } = require("../resources/app/out/main/worldline/historical-query-projection");
+const { normalizeGameDate } = require("../resources/app/out/main/worldline/character-temporal-facts");
 const { WorldlineService, normalizeSettings } = require("../resources/app/out/main/worldline/worldline-service");
 
 const root = fs.mkdtempSync(path.join(os.tmpdir(), "votc-v812-archive-"));
@@ -37,6 +38,13 @@ function fixture(date = "1145.1.1", campaign = "fixture", revision = "") {
     assert.equal(store.commit(first).status, "COMMITTED");
     const index = new HistoricalCheckpointIndex(store.root, first.scope);
     const firstEntry = index.load().nodes[0];
+    assert.equal(index.load().indexLayoutVersion, 2);
+    assert.equal(firstEntry.characterIds, undefined, "new index nodes must not duplicate character IDs");
+    assert.equal(firstEntry.titleIds, undefined, "new index nodes must not duplicate title IDs");
+    assert.equal(firstEntry.warIds, undefined, "new index nodes must not duplicate war IDs");
+    assert.equal(firstEntry.characterCount, 3);
+    assert.equal(firstEntry.titleCount, 1);
+    assert.equal(firstEntry.warCount, 1);
     const firstFile = path.join(index.directory, firstEntry.file);
     const firstBytes = fs.readFileSync(firstFile);
     assert.equal(firstBytes[0], 0x1f);
@@ -78,6 +86,33 @@ function fixture(date = "1145.1.1", campaign = "fixture", revision = "") {
     assert.equal(index.load().nodes.length, 2);
     store.commitIndex = commitIndex;
     assert.equal(store.commit(third).nodeCount, 3);
+    const legacyIndex = JSON.parse(fs.readFileSync(index.file, "utf8"));
+    delete legacyIndex.indexLayoutVersion;
+    legacyIndex.nodes = legacyIndex.nodes.map(node => ({ ...node,
+      characterIds: Array.from({ length: node.characterCount }, (_, i) => String(i + 1)),
+      titleIds: Array.from({ length: node.titleCount }, (_, i) => String(i + 1)),
+      warIds: Array.from({ length: node.warCount }, (_, i) => String(i + 1)) }));
+    for (const node of legacyIndex.nodes) { delete node.characterCount; delete node.titleCount; delete node.warCount; }
+    fs.writeFileSync(index.file, JSON.stringify(legacyIndex));
+    const compatibleIndex = index.load();
+    assert.equal(compatibleIndex.indexLayoutVersion, 2, "legacy array index must be normalized in memory");
+    assert.equal(compatibleIndex.nodes[0].characterCount, 3);
+    assert.equal(compatibleIndex.nodes[0].characterIds, undefined);
+    assert.equal(store.commit(first).status, "IDEMPOTENT", "an idempotent capture may atomically migrate index.json only");
+    const migratedPersisted = JSON.parse(fs.readFileSync(index.file, "utf8"));
+    assert.equal(migratedPersisted.nodes[0].characterIds, undefined);
+    const linearScope = { campaignId: `campaign_${"b".repeat(64)}`, branchId: `branch_${crypto.randomUUID()}` };
+    const linearIndex = new HistoricalCheckpointIndex(path.join(root, "linear"), linearScope);
+    fs.mkdirSync(linearIndex.directory, { recursive: true });
+    const linearNodes = Array.from({ length: 120 }, (_, i) => {
+      const gameDate = `${1145 + i}.1.1`;
+      const date = normalizeGameDate(gameDate);
+      const checkpointId = i.toString(16).padStart(24, "0");
+      return { schemaVersion: 1, archiveRevision: 1, campaignId: linearScope.campaignId, branchId: linearScope.branchId, checkpointId, gameDate, totalDays: date.serial, year: date.year, playerId: "1", sourceFingerprint: "c".repeat(64), projectionKind: "HISTORICAL_CHECKPOINT", characterCount: 300000, titleCount: 100000, warCount: 20000, file: `${gameDate}_${checkpointId}.json.gz`, sha256: "d".repeat(64) };
+    });
+    fs.writeFileSync(linearIndex.file, JSON.stringify({ schemaVersion: 1, indexLayoutVersion: 2, ...linearScope, archiveRevision: linearNodes.length, migrationCompleted: true, nodes: linearNodes }));
+    assert.equal(linearIndex.load().nodes.length, 120);
+    assert(fs.statSync(linearIndex.file).size < 120 * 700, "compact index metadata must stay linear and bounded per node");
     fs.writeFileSync(firstFile, "corrupt fixture");
     assert.equal(store.read(first.scope, first.checkpoint.id), null);
     assert(diagnostics.some(item => item.code === "HISTORY_CHECKPOINT_CORRUPT"));

@@ -13,6 +13,7 @@ function memoryFactsForResponder(memoryEngine, responderId, limit = 24) {
       factId: `memory:${memory.memoryId}`,
       entityId: String(ownerId),
       field: "MEMORY",
+      structured: false,
       sourceTier: "PERSONAL_MEMORY",
       knowledgeLevel: memory.visibility === "private" || memory.type === "secret" ? "SECRET" : "PERSONAL_MEMORY",
       ownerId: String(ownerId),

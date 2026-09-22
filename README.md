@@ -29,7 +29,7 @@ Voices of the Court 是一个面向《Crusader Kings III》（CK3）的沉浸式
 
 V8.12 第一部分的五项实机 Gate 已由用户确认通过，`V8.12 PART 1 = PASS`。第二部分 Historical Retrieval + Timeline 已完成代码和自动化施工：AS_OF/RANGE、人物/头衔/战争变化点、WarActor、历史知情范围、Historical Canon、分支隔离与 Dynamic Tail 接入均已落地。历史 Prompt 注入默认关闭，当前状态为等待两阶段实机 Gate，**尚未记录 `V8.12 PART 2 = PASS`，不得进入第三部分**。详见[第二部分实施与实机步骤](docs/v8.12-part2-implementation-report.md)。
 
-当前施工基线为 **V8.12 第二部分：历史检索与时间线**：[实施与实机步骤](docs/v8.12-part2-implementation-report.md)。第一部分归档底座保持独立；第二部分只有历史 Query 才读取 Archive，普通 Current Query 不扫描历史。历史检索诊断默认开启、Prompt 注入默认关闭，309/309 发布组、378 个文件分类及隔离 Electron 冒烟通过。**当前停在第二部分实机 Gate，`V8.12 PART 2 != PASS`。** 第一部分记录见[安全收口与 Temporal Archive 底座](docs/v8.12-part1-implementation-report.md)，V8.8 百年旧档验收见[回填记录](docs/v8.8-long-campaign-field-acceptance.md)。以下版本段落为前置实施记录。
+当前施工基线为 **V8.12 第二部分：历史检索与时间线**：[实施与实机步骤](docs/v8.12-part2-implementation-report.md)。第一部分归档底座保持独立；第二部分只有历史 Query 才读取 Archive，普通 Current Query 不扫描历史。Review Fix 已补齐紧凑索引、私有历史 ACL、无实体有界范围、Realm WarActor 与可靠名称边界。历史检索诊断默认开启、Prompt 注入默认关闭，自动回归与隔离 Electron 冒烟不替代真实 CK3/GLM Gate。**当前停在第二部分实机 Gate，`V8.12 PART 2 != PASS`。** 第一部分记录见[安全收口与 Temporal Archive 底座](docs/v8.12-part1-implementation-report.md)，V8.8 百年旧档验收见[回填记录](docs/v8.8-long-campaign-field-acceptance.md)。以下版本段落为前置实施记录。
 
 当前收尾版本为 **V8.11.1**：[一致性与知情边界实施记录](docs/v8.11.1-consistency-implementation-report.md)。实时配偶/多人观察判权修正；摘要编辑同步重建所选 Owner 的内部记忆并支持失败回滚，Legacy 删除不再静默丢失映射；数字地点和当前年份查询边界完善，fullName 移到 GLM 动态状态。305/305 发布组、374 个测试文件分类及隔离 Electron 冒烟通过；真实 CK3/GLM 与长时 Gate 待人工验收。
 

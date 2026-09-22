@@ -13,7 +13,7 @@ function buildSupplementalIndex(records) {
     for (const id of [...(record.entities || []), ...(record.entityRefs || []).filter(ref => ref.namespace === "character").map(ref => ref.id)]) add(byEntity, String(id), record);
     if (record.conflictKey) add(byConflict, record.conflictKey, record);
   }
-  return { byTerm, byEntity, byConflict };
+  return { byTerm, byEntity, byConflict, records: [...records] };
 }
 
 function supplementalCandidates(index, query, entityIds) {

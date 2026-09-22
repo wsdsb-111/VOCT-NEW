@@ -10,7 +10,7 @@ const { estimateTokens } = require("../token-estimator");
 const { normalizeGameDate } = require("./character-temporal-facts");
 const { isPotentialCurrentState, normalizeCanonPayload } = require("./canon-contract");
 const { getCurrentTruth } = require("./current-truth-adapter");
-const { resolveHistoricalKnowledge } = require("./historical-scope-resolver");
+const { HISTORICAL_KNOWLEDGE_POLICY_VERSION, resolveHistoricalKnowledge } = require("./historical-scope-resolver");
 const queues = new Map();
 const NORMALIZATION_INPUT_FIELDS = new Set(["title", "content", "type", "entities", "entityRefs", "gameDate", "totalDays", "temporalMode", "temporalSemantics", "currentClaim", "conflictKey", "legacyMigrationId", "legacyContentFingerprint"]);
 const NORMALIZED_OUTPUT_FIELDS = ["gameDate", "totalDays", "temporalMode", "temporalSemantics", "currentClaim", "conflictKey"];
@@ -306,9 +306,10 @@ class CanonService {
         if (recordDate === null) return historicalProjections[0] || projection;
         return historicalProjections.filter(item => item.totalDays <= recordDate).at(-1) || historicalProjections[0] || projection;
       };
-      const key = crypto.createHash("sha256").update(JSON.stringify(["historical", scope.token, this.snapshot.revision, responderId, entityIds, query, fromDate?.canonical || null, date.canonical, historicalProjections.map(item => item.checkpointId), tokenBudget])).digest("hex");
+      const includeHighPriority = entityIds.length === 0;
+      const key = crypto.createHash("sha256").update(JSON.stringify(["historical", scope.token, this.snapshot.revision, HISTORICAL_KNOWLEDGE_POLICY_VERSION, responderId, entityIds, includeHighPriority, query, fromDate?.canonical || null, date.canonical, historicalProjections.map(item => item.checkpointId), tokenBudget])).digest("hex");
       if (this.cache.has(key)) return { ...this.cache.get(key), cacheHit: true };
-      const candidates = supplementalCandidates(this.snapshot.index, query, entityIds).map(record => ({ ...record, conflictKey: record.conflictKey ? `${record.conflictKey}:history:${record.gameDate || `${record.validFrom ?? "open"}-${record.validUntil ?? "open"}`}` : null }));
+      const candidates = supplementalCandidates(this.snapshot.index, query, entityIds, { includeHighPriority }).map(record => ({ ...record, conflictKey: record.conflictKey ? `${record.conflictKey}:history:${record.gameDate || `${record.validFrom ?? "open"}-${record.validUntil ?? "open"}`}` : null }));
       const historicalTruth = (claim, record) => {
         const scopedProjection = projectionForRecord(record);
         const character = scopedProjection.characters?.[String(claim.entityId)];

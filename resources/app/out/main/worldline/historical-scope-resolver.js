@@ -2,7 +2,7 @@
 
 const { normalizeGameDate } = require("./character-temporal-facts");
 
-const HISTORICAL_KNOWLEDGE_POLICY_VERSION = "v8.12-part2-historical-scope-1";
+const HISTORICAL_KNOWLEDGE_POLICY_VERSION = "v8.12-part2-historical-scope-2";
 const PUBLIC_WORLD_FIELDS = new Set(["NAME", "IDENTITY", "LIFE_STATUS", "PRIMARY_TITLE", "TITLE_IDS", "TITLE_HOLDER", "TITLE_CHANGE", "WAR", "WAR_PARTICIPATION"]);
 const PUBLIC_REALM_FIELDS = new Set(["LIEGE", "SPOUSE", "FRIEND", "RIVAL", "COURT", "REALM_ROOT"]);
 const PRIVATE_FIELDS = new Set(["LOCATION", "COURT_EMPLOYER"]);
@@ -46,10 +46,14 @@ function personalMemoryAllows(memoryFacts, responderId, subjectId, asOf) {
   const subject = id(subjectId);
   const requested = normalizeGameDate(asOf);
   return (Array.isArray(memoryFacts) ? memoryFacts : []).some((fact) => {
-    const authorized = id(fact.ownerId) === responder || (fact.knownBy || []).map(id).includes(responder);
-    const involvesSubject = id(fact.entityId) === subject || (fact.participantIds || []).map(id).includes(subject);
-    const event = normalizeGameDate(fact.asOf);
-    return authorized && involvesSubject && (!requested || !event || event.serial <= requested.serial);
+    const factField = String(fact.structuredField || fact.field || "").toLocaleUpperCase();
+    const targetId = id(fact.targetEntityId ?? fact.entityId);
+    const event = normalizeGameDate(fact.asOf || fact.eventDate);
+    const directObservation = fact.knowledgeLevel === "DIRECT_OBSERVATION" || fact.evidenceType === "DIRECT_OBSERVATION" || fact.sourceTier === "DIRECT_OBSERVATION";
+    const authorized = id(fact.ownerId) === responder || (fact.knownBy || []).map(id).includes(responder) || directObservation && (fact.directObserverIds || []).map(id).includes(responder);
+    if (!authorized || !targetId || targetId !== subject || !event || requested && event.serial > requested.serial) return false;
+    if (directObservation) return factField === "LOCATION" && (fact.directObserverIds || []).map(id).includes(responder);
+    return ["LOCATION", "COURT_EMPLOYER"].includes(factField) && fact.sourceTier === "PERSONAL_MEMORY";
   });
 }
 

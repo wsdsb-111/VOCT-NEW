@@ -2,6 +2,8 @@
 
 这里是版本变更的单一入口。详细设计和测试证据保留在链接目标中，本文件只维护版本顺序、用户可见摘要和文档索引。
 
+V8.12 第二部分 Review Fix：修复历史归档索引复制实体 ID、个人记忆泛化解锁私密历史、无实体 RANGE 立即失败、主头衔伪回退、人物 WarActor 漏 Realm、历史名称不可读、多实体误判、字段筛选覆盖、朋友/宿敌未启用却无诊断及索引/Checkpoint 错误码混淆；保留旧索引读取兼容和原子 `index.json` 迁移。详见[第二部分实施报告](docs/v8.12-part2-implementation-report.md)。真实 CK3/GLM Gate 仍待执行，不能记录 `V8.12 PART 2 = PASS`。
+
 V8.12 第二部分：[历史检索与时间线](docs/v8.12-part2-implementation-report.md)。新增 AS_OF/RANGE、人物/头衔/战争变化点、Character/Title/Faction/Unknown WarActor、独立 Historical Scope、Historical Canon、Branch-safe Cache 与开发者诊断。历史内容只进入 Dynamic Tail，普通 Current Query 与 Stable Prefix 不变；检索默认开启、Prompt 注入默认关闭。309/309 发布组与隔离 Electron 冒烟通过，当前等待两阶段真实 CK3/GLM Gate，尚未记录 `V8.12 PART 2 = PASS`，未进入第三部分。
 
 V8.12 第一部分世界书修复：历史候选按当前存档 Runtime ID 去重，未实例化的同名模组定义不再制造假重名；修复玩家 Live 姓名源，并支持从存档家族名及可靠本地化姓名召回普通角色。保留真重名与绑定冲突保护，重启后需重建旧检查点。详见[第九十七阶段](docs/V8阶段开发记录.md)。

@@ -23,6 +23,7 @@ const { getCheckpointFreshness } = require("./checkpoint-freshness");
 const { analysisTextMatches, analyzeSharedQuery, collectTerms } = require("./shared-query-analyzer");
 const { HISTORICAL_ALIAS_CATALOG } = require("./historical-alias-catalog");
 const { KNOWLEDGE_POLICY_VERSION } = require("./character-knowledge-policy");
+const { HISTORICAL_KNOWLEDGE_POLICY_VERSION } = require("./historical-scope-resolver");
 const { createRealmRootIndex, resolveKnowledgeScope } = require("./knowledge-scope-resolver");
 const { memoryFactsForResponder } = require("./personal-memory-policy-adapter");
 const { createSharedCandidatePool } = require("./shared-candidate-pool");
@@ -36,7 +37,7 @@ const { SOCIAL_FIELDS, buildSelfSocialTruth } = require("./self-social-truth");
 const { localizeWarCandidate } = require("./war-facts");
 const { rankWorldCandidates } = require("./world-ranker");
 const { buildDeterministicWorldSummary } = require("./world-summary");
-const { HistoricalCheckpointIndex } = require("./historical-checkpoint-index");
+const { HistoricalCheckpointIndex, INDEX_LAYOUT_VERSION } = require("./historical-checkpoint-index");
 const { TemporalArchiveStore } = require("./temporal-archive-store");
 const { retrieveHistorical } = require("./historical-retriever");
 const { buildHistoricalPrompt } = require("./historical-prompt-context");
@@ -1597,7 +1598,7 @@ class WorldlineService {
     finally { clearTimeout(timer); }
   }
 
-  getHistoricalQueryContext({ responderId = null, query = "", assistContext = "", queryPlan = null, queryAnalysis = null, tokenBudget = null } = {}) {
+  getHistoricalQueryContext({ responderId = null, query = "", assistContext = "", queryPlan = null, queryAnalysis = null, directObservationFacts = [], tokenBudget = null } = {}) {
     const settings = this._settings();
     if (!settings.v812HistoricalRetrievalEnabled || !this.currentCheckpoint?.snapshot) return null;
     const base = queryPlan && queryAnalysis ? { queryPlan, queryAnalysis } : this.getPromptContext({ query, assistContext, diagnostic: true });
@@ -1609,14 +1610,19 @@ class WorldlineService {
     catch (_error) { /* The retriever returns a stable reason code below. */ }
     const effectiveResponderId = responderId === null || responderId === undefined ? this.currentCheckpoint.snapshot.playerId : responderId;
     const memoryFacts = memoryFactsForResponder(this.memoryEngine, effectiveResponderId);
+    const safeDirectObservationFacts = (Array.isArray(directObservationFacts) ? directObservationFacts : []).filter(fact => fact && typeof fact === "object" && fact.knowledgeLevel === "DIRECT_OBSERVATION" && fact.entityId !== undefined && Array.isArray(fact.directObserverIds) && fact.directObserverIds.map(String).includes(String(effectiveResponderId)) && ["LOCATION"].includes(String(fact.field || "").toLocaleUpperCase())).map(fact => ({ ...fact, factId: String(fact.factId || ""), entityId: String(fact.entityId), directObserverIds: [String(effectiveResponderId)], observationEvidenceComplete: true })).slice(0, 16);
     const canonRevision = this.canon.snapshot?.revision || 0;
     const cacheKey = `v8.12-history:${shortFingerprint({
       campaignId: scope.campaignId,
       branchId: scope.branchId,
       archiveRevision,
+      historicalIndexLayoutVersion: INDEX_LAYOUT_VERSION,
+      historicalKnowledgePolicyVersion: HISTORICAL_KNOWLEDGE_POLICY_VERSION,
       queryPlan: base.queryPlan,
+      realmRefs: base.queryPlan.entities?.realms || [],
       responderId: effectiveResponderId === null || effectiveResponderId === undefined ? null : String(effectiveResponderId),
-      memoryRevision: shortFingerprint(memoryFacts.map(fact => [fact.factId, fact.asOf, fact.ownerId, fact.knownBy, fact.participantIds])),
+      memoryRevision: shortFingerprint(memoryFacts.map(fact => [fact.factId, fact.asOf, fact.ownerId, fact.knownBy, fact.participantIds, fact.field, fact.structured])),
+      directObservationRevision: shortFingerprint(safeDirectObservationFacts.map(fact => [fact.factId, fact.entityId, fact.field, fact.asOf])),
       canonRevision,
       tokenBudget: tokenBudget == null ? 900 : Number(tokenBudget)
     })}`;
@@ -1630,7 +1636,10 @@ class WorldlineService {
       query: `${query}\n${assistContext}`,
       currentDate: this.currentCheckpoint.snapshot.gameDate,
       responderId: effectiveResponderId,
-      memoryFacts
+      memoryFacts,
+      directObservationFacts: safeDirectObservationFacts,
+      memoryRevision: shortFingerprint(memoryFacts.map(fact => [fact.factId, fact.asOf, fact.ownerId, fact.knownBy, fact.participantIds, fact.field, fact.structured])),
+      canonRevision
     });
     let canon = { text: null, tokens: 0, selected: [], revision: canonRevision };
     if (retrieval.success && retrieval.diagnostics?.selectedHistoricalCheckpoint) {
@@ -1674,7 +1683,7 @@ class WorldlineService {
     const historicalBase = isHistoricalQueryPlan({ time: historicalHint })
       ? this.getPromptContext({ query, assistContext, mentionedEntityIds, runtimeContext: { activeParticipantIds }, diagnostic: true, includeScopedSupplemental: true }) : null;
     if (settings.v812HistoricalPromptInjection && isHistoricalQueryPlan(historicalBase?.queryPlan)) {
-      const historical = this.getHistoricalQueryContext({ responderId, query, assistContext, queryPlan: historicalBase.queryPlan, queryAnalysis: historicalBase.queryAnalysis, tokenBudget });
+      const historical = this.getHistoricalQueryContext({ responderId, query, assistContext, queryPlan: historicalBase.queryPlan, queryAnalysis: historicalBase.queryAnalysis, directObservationFacts, tokenBudget });
       const blockedText = historical?.promptText || `=== 本轮历史检索（CK3 存档时间线 / Dynamic Tail） ===\n未获得可安全使用的历史事实（${historical?.reason || "HISTORY_UNAVAILABLE"}）。不得用现实历史传记、当前关系或未来节点补全答案；应明确说明存档历史资料不足。`;
       const referenceDate = Array.isArray(historical?.diagnostics?.checkpointDate) ? historical.diagnostics.checkpointDate.at(-1) : historical?.diagnostics?.checkpointDate || this.currentCheckpoint.snapshot.gameDate;
       return {

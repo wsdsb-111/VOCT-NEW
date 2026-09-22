@@ -1,14 +1,18 @@
 "use strict";
 
 const crypto = require("crypto");
-const { HistoricalCheckpointIndex } = require("./historical-checkpoint-index");
+const { HistoricalCheckpointIndex, INDEX_LAYOUT_VERSION } = require("./historical-checkpoint-index");
 const { normalizeGameDate } = require("./character-temporal-facts");
 const { HISTORICAL_KNOWLEDGE_POLICY_VERSION, resolveHistoricalKnowledge } = require("./historical-scope-resolver");
 
-const HISTORICAL_RETRIEVAL_VERSION = "v8.12-part2-historical-retrieval-1";
+const HISTORICAL_RETRIEVAL_VERSION = "v8.12-part2-historical-retrieval-2";
 const MAX_RANGE_NODES = 256;
 const MAX_SELECTED = 24;
+const MAX_BROAD_CHARACTERS = 32;
+const MAX_BROAD_TITLES = 32;
+const MAX_BROAD_WARS = 64;
 const CHARACTER_FIELDS = ["LOCATION", "PRIMARY_TITLE", "TITLE_IDS", "LIEGE", "COURT_EMPLOYER", "LIFE_STATUS", "SPOUSE", "FRIEND", "RIVAL", "WAR_PARTICIPATION"];
+const UNAVAILABLE_CHARACTER_FIELDS = new Set(["FRIEND", "RIVAL"]);
 
 function hash(value) {
   return crypto.createHash("sha256").update(typeof value === "string" ? value : JSON.stringify(value)).digest("hex").slice(0, 24);
@@ -31,7 +35,8 @@ function warActorIds(war = {}) {
   return {
     characters: sorted(actors.map(actor => actor.runtimeId).filter(Boolean)),
     titles: sorted(actors.map(actor => actor.titleId).filter(Boolean)),
-    factions: sorted(actors.map(actor => actor.factionId).filter(Boolean))
+    factions: sorted(actors.map(actor => actor.factionId).filter(Boolean)),
+    realms: sorted(actors.map(actor => actor.realmId).filter(Boolean))
   };
 }
 
@@ -52,24 +57,23 @@ function characterValue(projection, characterId, field) {
   if (field === "COURT_EMPLOYER") return character.courtEmployerId;
   if (field === "LIFE_STATUS") return character.lifeStatus;
   if (field === "SPOUSE") return sorted(character.spouseIds);
-  if (field === "FRIEND") return sorted(character.friendIds);
-  if (field === "RIVAL") return sorted(character.rivalIds);
   if (field === "WAR_PARTICIPATION") return warParticipation(projection, characterId);
   return undefined;
 }
 
 function fieldFilter(query) {
   const text = String(query || "").toLocaleLowerCase();
-  if (/(哪里|何处|位置|所在地|行踪|下落|where)/u.test(text)) return new Set(["LOCATION"]);
-  if (/(头衔|爵位|领地|title)/u.test(text)) return new Set(["PRIMARY_TITLE", "TITLE_IDS"]);
-  if (/(生死|活着|死亡|去世|life|alive|dead)/u.test(text)) return new Set(["LIFE_STATUS"]);
-  if (/(配偶|妻子|丈夫|婚姻|spouse|marriage)/u.test(text)) return new Set(["SPOUSE"]);
-  if (/(朋友|好友|挚友|friend)/u.test(text)) return new Set(["FRIEND"]);
-  if (/(仇敌|宿敌|敌手|rival)/u.test(text)) return new Set(["RIVAL"]);
-  if (/(领主|liege)/u.test(text)) return new Set(["LIEGE"]);
-  if (/(宫廷|court)/u.test(text)) return new Set(["COURT_EMPLOYER"]);
-  if (/(战争|战事|交战|war)/u.test(text)) return new Set(["WAR_PARTICIPATION"]);
-  return new Set(CHARACTER_FIELDS);
+  const fields = new Set();
+  if (/(哪里|何处|位置|所在地|行踪|下落|where)/u.test(text)) fields.add("LOCATION");
+  if (/(头衔|爵位|领地|title)/u.test(text)) { fields.add("PRIMARY_TITLE"); fields.add("TITLE_IDS"); }
+  if (/(生死|活着|死亡|去世|life|alive|dead)/u.test(text)) fields.add("LIFE_STATUS");
+  if (/(配偶|妻子|丈夫|婚姻|spouse|marriage)/u.test(text)) fields.add("SPOUSE");
+  if (/(朋友|好友|挚友|friend)/u.test(text)) fields.add("FRIEND");
+  if (/(仇敌|宿敌|敌手|rival)/u.test(text)) fields.add("RIVAL");
+  if (/(领主|liege)/u.test(text)) fields.add("LIEGE");
+  if (/(宫廷|court)/u.test(text)) fields.add("COURT_EMPLOYER");
+  if (/(战争|战事|交战|war)/u.test(text)) fields.add("WAR_PARTICIPATION");
+  return fields.size ? fields : new Set(CHARACTER_FIELDS);
 }
 
 function nodesByDate(index) {
@@ -104,7 +108,8 @@ function selectRange(index, fromDate, toDate, currentDate, openStart = false) {
 
 function resolveCharacterIds(projections, queryPlan, queryAnalysis, query) {
   const explicit = sorted(queryPlan?.entities?.characters || []);
-  if (explicit.length) return explicit.length === 1 ? { ids: explicit } : { ids: [], error: "HISTORY_AMBIGUOUS_IDENTITY", candidateIds: explicit };
+  if (queryPlan?.ambiguity?.status === "AMBIGUOUS") return { ids: [], error: "HISTORY_AMBIGUOUS_IDENTITY", candidateIds: explicit.length ? explicit : sorted(queryPlan?.entities?.candidateCharacters || []) };
+  if (explicit.length) return { ids: explicit };
   const candidates = sorted(queryPlan?.entities?.candidateCharacters || []);
   if (candidates.length === 1) return { ids: candidates };
   const names = new Map();
@@ -122,7 +127,9 @@ function resolveCharacterIds(projections, queryPlan, queryAnalysis, query) {
 }
 
 function resolveTitleIds(projections, queryPlan, query) {
-  const explicit = sorted(queryPlan?.entities?.titles || queryPlan?.entities?.candidateTitles || []);
+  const explicitTitles = sorted(queryPlan?.entities?.titles || []);
+  const explicitCandidates = sorted(queryPlan?.entities?.candidateTitles || []);
+  const explicit = explicitTitles.length ? explicitTitles : explicitCandidates;
   if (explicit.length) return explicit;
   const normalizedQuery = String(query || "").toLocaleLowerCase();
   const found = new Set();
@@ -132,14 +139,102 @@ function resolveTitleIds(projections, queryPlan, query) {
   return [...found].sort();
 }
 
+function realmIdsForTitleIds(projections, titleIds) {
+  const realms = new Set();
+  for (const projection of projections) for (const titleId of titleIds) {
+    const title = projection.titles?.[String(titleId)];
+    if (title?.realmRootTitleId) realms.add(String(title.realmRootTitleId));
+  }
+  return [...realms].sort();
+}
+
+function realmIdsForCharacterIds(projections, characterIds) {
+  const realms = new Set();
+  for (const projection of projections) for (const characterId of characterIds) {
+    const realmRootId = projection.characters?.[String(characterId)]?.realmRootId;
+    if (realmRootId) realms.add(String(realmRootId));
+  }
+  return [...realms].sort();
+}
+
+function realmIdsForQueryRefs(projections, realmRefs) {
+  const refs = new Set(realmRefs.map(value => String(value).toLocaleLowerCase()));
+  const realms = new Set();
+  for (const projection of projections) for (const [titleId, title] of Object.entries(projection.titles || {})) {
+    if (![titleId, title.rawKey, title.localizedName].filter(Boolean).some(value => refs.has(String(value).toLocaleLowerCase()))) continue;
+    realms.add(String(title.realmRootTitleId || titleId));
+  }
+  return [...realms].sort();
+}
+
+function buildBroadScope(projections, characterIds, titleIds, realmRefs, factionIds, wantsWar) {
+  const characters = new Set(characterIds.map(String));
+  const titles = new Set(titleIds.map(String));
+  const latest = projections.at(-1) || projections[0] || {};
+  const playerId = latest.playerId && latest.characters?.[String(latest.playerId)] ? String(latest.playerId) : null;
+  if (playerId) characters.add(playerId);
+  const targetRealms = new Set([...realmIdsForTitleIds(projections, titleIds), ...realmIdsForCharacterIds(projections, characterIds), ...realmIdsForQueryRefs(projections, realmRefs)]);
+  if (!targetRealms.size && playerId) {
+    const playerRealm = latest.characters?.[playerId]?.realmRootId;
+    if (playerRealm) targetRealms.add(String(playerRealm));
+  }
+  const majorRanks = new Set(["hegemony", "empire", "kingdom"]);
+  const titleCandidates = [];
+  for (const [titleId, title] of Object.entries(latest.titles || {})) {
+    const inTargetRealm = title.realmRootTitleId && targetRealms.has(String(title.realmRootTitleId));
+    if (titles.has(titleId) || inTargetRealm || title.holderId === playerId || majorRanks.has(title.rank)) titleCandidates.push({ titleId, title, priority: titles.has(titleId) ? 4 : inTargetRealm ? 3 : title.holderId === playerId ? 2 : 1 });
+  }
+  titleCandidates.sort((left, right) => right.priority - left.priority || left.titleId.localeCompare(right.titleId));
+  for (const item of titleCandidates.slice(0, MAX_BROAD_TITLES)) {
+    titles.add(item.titleId);
+    if (item.title.holderId) characters.add(String(item.title.holderId));
+    if (item.title.realmRootTitleId) targetRealms.add(String(item.title.realmRootTitleId));
+  }
+  const wars = new Set();
+  if (wantsWar) {
+    const candidates = [];
+    for (const projection of projections) for (const [warId, war] of Object.entries(projection.wars || {})) {
+      const refs = warActorIds(war);
+      const related = refs.characters.some(id => characters.has(id)) || refs.titles.some(id => titles.has(id)) || refs.realms.some(id => targetRealms.has(id)) || refs.factions.some(id => factionIds.includes(id));
+      candidates.push({ warId, related, active: projection === latest });
+    }
+    candidates.sort((left, right) => Number(right.related) - Number(left.related) || Number(right.active) - Number(left.active) || left.warId.localeCompare(right.warId));
+    for (const candidate of candidates.slice(0, MAX_BROAD_WARS)) wars.add(candidate.warId);
+  }
+  return { characterIds: [...characters].sort().slice(0, MAX_BROAD_CHARACTERS), titleIds: [...titles].sort().slice(0, MAX_BROAD_TITLES), realmIds: [...targetRealms].sort(), warIds: [...wars].sort() };
+}
+
+function characterLabel(projection, idValue) {
+  const id = idValue === null || idValue === undefined ? null : String(idValue);
+  const character = id && projection?.characters?.[id];
+  return character?.shortName ? `${character.shortName} (#${id})` : id ? `#${id}` : "无记录";
+}
+
+function titleLabel(projection, idValue) {
+  const id = idValue === null || idValue === undefined ? null : String(idValue);
+  const title = id && projection?.titles?.[id];
+  return title ? `${title.localizedName || title.rawKey || "头衔"} (#${id})` : id ? `#${id}` : "无记录";
+}
+
+function displayValue(projection, field, value) {
+  if (value === null || value === undefined || value === "") return "无记录";
+  if (value && typeof value === "object" && !Array.isArray(value) && Object.hasOwn(value, "before") && Object.hasOwn(value, "after")) return { before: displayValue(projection, field, value.before), after: displayValue(projection, field, value.after) };
+  if (Array.isArray(value)) return value.map(item => ["PRIMARY_TITLE", "TITLE_IDS"].includes(field) ? titleLabel(projection, item) : ["LIEGE", "COURT_EMPLOYER", "SPOUSE", "FRIEND", "RIVAL"].includes(field) ? characterLabel(projection, item) : String(item));
+  if (["PRIMARY_TITLE", "TITLE_IDS"].includes(field)) return titleLabel(projection, value);
+  if (["LIEGE", "COURT_EMPLOYER", "SPOUSE", "FRIEND", "RIVAL"].includes(field)) return characterLabel(projection, value);
+  return String(value);
+}
+
 function candidateBase(type, projection, entityId, field, value, extra = {}) {
   const asOf = projection.gameDate;
+  const entityType = extra.entityType || "CHARACTER";
+  const character = entityType === "CHARACTER" ? projection.characters?.[String(entityId)] : null;
   return {
     candidateId: `${type}:${entityId || "world"}:${field}:${asOf}:${hash(value)}`,
     type,
     factId: `history:${projection.campaignId}:${projection.branchId}:${projection.checkpointId}:${entityId || "world"}:${field}`,
     entityId: entityId === null || entityId === undefined ? null : String(entityId),
-    entityType: extra.entityType || "CHARACTER",
+    entityType,
     field,
     value,
     sourceType: "HISTORICAL_CHECKPOINT",
@@ -154,8 +249,9 @@ function candidateBase(type, projection, entityId, field, value, extra = {}) {
     confidence: "EXACT_CHECKPOINT",
     eventType: extra.eventType || null,
     importance: extra.importance || "NORMAL",
-    entityRefs: extra.entityRefs || { characters: entityId ? [String(entityId)] : [], titles: [], factions: [] },
+    entityRefs: extra.entityRefs || { characters: entityType === "CHARACTER" && entityId ? [String(entityId)] : [], titles: entityType === "TITLE" && entityId ? [String(entityId)] : [], factions: [], realms: character?.realmRootId ? [String(character.realmRootId)] : [] },
     displayName: extra.displayName || null,
+    valueDisplay: extra.valueDisplay || displayValue(projection, field, value),
     unresolvedActorCount: extra.unresolvedActorCount || 0,
     integrityWarning: extra.integrityWarning || null
   };
@@ -212,7 +308,7 @@ function titleStateCandidates(projection, titleIds) {
     return [candidateBase("HISTORICAL_TITLE_STATE", projection, titleId, "TITLE_HOLDER", {
       holderId: title.holderId, liegeTitleId: title.liegeTitleId, realmRootTitleId: title.realmRootTitleId,
       rawKey: title.rawKey, localizedName: title.localizedName
-    }, { entityType: "TITLE", importance: "HIGH", displayName: title.localizedName || title.rawKey || null, entityRefs: { characters: title.holderId ? [title.holderId] : [], titles: [titleId], factions: [] } })];
+    }, { entityType: "TITLE", importance: "HIGH", displayName: title.localizedName || title.rawKey || null, valueDisplay: { holderId: characterLabel(projection, title.holderId), liegeTitleId: titleLabel(projection, title.liegeTitleId), realmRootTitleId: titleLabel(projection, title.realmRootTitleId) }, entityRefs: { characters: title.holderId ? [title.holderId] : [], titles: [titleId], factions: [], realms: title.realmRootTitleId ? [String(title.realmRootTitleId)] : [] } })];
   });
 }
 
@@ -224,9 +320,11 @@ function titleChangeCandidates(previous, current, titleIds) {
     if (!before && !after) continue;
     for (const [field, eventType] of [["holderId", "TITLE_HOLDER_CHANGED"], ["liegeTitleId", "LIEGE_TITLE_CHANGED"], ["realmRootTitleId", "REALM_ROOT_CHANGED"]]) {
       if (same(before?.[field], after?.[field])) continue;
+      const readable = value => field === "holderId" ? characterLabel(current, value) : titleLabel(current, value);
       output.push(candidateBase("HISTORICAL_TITLE_CHANGE", current, titleId, "TITLE_CHANGE", { before: before?.[field] ?? null, after: after?.[field] ?? null }, {
         entityType: "TITLE", validFrom: previous.gameDate, eventType, importance: "HIGH", displayName: after?.localizedName || before?.localizedName || after?.rawKey || before?.rawKey || null,
-        entityRefs: { characters: [before?.holderId, after?.holderId].filter(Boolean).map(String), titles: [titleId], factions: [] }
+        valueDisplay: { before: readable(before?.[field]), after: readable(after?.[field]) },
+        entityRefs: { characters: [before?.holderId, after?.holderId].filter(Boolean).map(String), titles: [titleId], factions: [], realms: [before?.realmRootTitleId, after?.realmRootTitleId].filter(Boolean).map(String) }
       }));
     }
   }
@@ -240,15 +338,18 @@ function warCandidate(projection, warId, war, eventType, value, validFrom = null
   });
 }
 
-function warStateCandidates(projection) {
-  return Object.entries(projection.wars || {}).map(([warId, war]) => warCandidate(projection, warId, war, "WAR_ACTIVE_AT", { warId, ...war }));
+function warStateCandidates(projection, warIds = null) {
+  const allowed = warIds ? new Set(warIds.map(String)) : null;
+  return Object.entries(projection.wars || {}).filter(([warId]) => !allowed || allowed.has(String(warId))).map(([warId, war]) => warCandidate(projection, warId, war, "WAR_ACTIVE_AT", { warId, ...war }));
 }
 
-function warChangeCandidates(previous, current) {
+function warChangeCandidates(previous, current, warIds = null) {
   const output = [];
   const previousWars = previous.wars || {};
   const currentWars = current.wars || {};
+  const allowed = warIds ? new Set(warIds.map(String)) : null;
   for (const [warId, war] of Object.entries(currentWars)) {
+    if (allowed && !allowed.has(String(warId))) continue;
     const old = previousWars[warId];
     if (!old) output.push(warCandidate(current, warId, war, "WAR_FIRST_SEEN", { warId, ...war }, previous.gameDate));
     else {
@@ -257,17 +358,19 @@ function warChangeCandidates(previous, current) {
       if (!same(oldSides, newSides)) output.push(warCandidate(current, warId, war, "WAR_SIDE_CHANGED", { before: oldSides, after: newSides, war: { warId, ...war } }, previous.gameDate));
     }
   }
-  for (const [warId, war] of Object.entries(previousWars)) if (!currentWars[warId]) output.push(warCandidate(current, warId, war, "WAR_NO_LONGER_ACTIVE", {
+  for (const [warId, war] of Object.entries(previousWars)) if ((!allowed || allowed.has(String(warId))) && !currentWars[warId]) output.push(warCandidate(current, warId, war, "WAR_NO_LONGER_ACTIVE", {
     warId, lastActiveAt: previous.gameDate, result: war.result || null, conclusion: war.result ? "EXPLICIT_RESULT" : "NO_LONGER_LISTED"
   }, previous.gameDate));
   return output;
 }
 
-function scoreCandidate(candidate, { characterIds, titleIds, query, requestedSerial, scopeReason }) {
+function scoreCandidate(candidate, { characterIds, titleIds, realmIds, factionIds, query, requestedSerial, scopeReason }) {
   const text = String(query || "").toLocaleLowerCase();
   let score = 20;
   if ((candidate.entityRefs?.characters || []).some(id => characterIds.includes(String(id)))) score += 100;
   if ((candidate.entityRefs?.titles || []).some(id => titleIds.includes(String(id)))) score += 100;
+  if ((candidate.entityRefs?.realms || []).some(id => realmIds.includes(String(id)))) score += 80;
+  if ((candidate.entityRefs?.factions || []).some(id => factionIds.includes(String(id)))) score += 80;
   if (candidate.field === "LOCATION" && /(哪里|位置|行踪|where)/u.test(text)) score += 60;
   if (["PRIMARY_TITLE", "TITLE_IDS", "TITLE_HOLDER", "TITLE_CHANGE"].includes(candidate.field) && /(头衔|爵位|title)/u.test(text)) score += 60;
   if (candidate.field === "WAR" && /(战争|战事|交战|war)/u.test(text)) score += 60;
@@ -279,7 +382,7 @@ function scoreCandidate(candidate, { characterIds, titleIds, query, requestedSer
   return score;
 }
 
-function applyScope(candidates, projectionsByCheckpoint, responderId, memoryFacts) {
+function applyScope(candidates, projectionsByCheckpoint, responderId, memoryFacts, directObservationFacts) {
   let denied = 0;
   const allowed = [];
   for (const candidate of candidates) {
@@ -288,7 +391,7 @@ function applyScope(candidates, projectionsByCheckpoint, responderId, memoryFact
       continue;
     }
     const projection = projectionsByCheckpoint.get(candidate.checkpointId);
-    const decision = resolveHistoricalKnowledge({ projection, responderId: responderId || projection?.playerId, subjectId: candidate.entityId, field: candidate.field, memoryFacts });
+    const decision = resolveHistoricalKnowledge({ projection, responderId: responderId || projection?.playerId, subjectId: candidate.entityId, field: candidate.field, memoryFacts: [...memoryFacts, ...directObservationFacts] });
     if (decision.decision !== "ALLOW") { denied++; continue; }
     allowed.push({ ...candidate, knowledgeDecision: decision.decision, knowledgeReason: decision.reason, knowledgeLevel: decision.knowledgeLevel });
   }
@@ -325,20 +428,25 @@ function conflictCount(candidates) {
   return [...groups.values()].filter(values => values.size > 1).length;
 }
 
+function broadChangeFields(fields) {
+  const allowed = new Set(["LIFE_STATUS", "PRIMARY_TITLE", "TITLE_IDS", "LIEGE", "WAR_PARTICIPATION"]);
+  return new Set([...fields].filter(field => allowed.has(field)));
+}
+
 function blockedResult(code, diagnostics) {
   return { success: false, status: "BLOCKED", reason: code, selected: [], trimmed: [], promptText: null, diagnostics: { ...diagnostics, selectedCount: 0, candidateCount: diagnostics?.candidateCount || 0, trimmedCount: 0, knowledgeDeniedCount: 0, futureBlockedCount: code === "HISTORY_FUTURE_BLOCKED" ? 1 : 0, conflictCount: 0, reasonCodes: [...new Set([...(diagnostics?.reasonCodes || []), code])] } };
 }
 
-function retrieveHistorical({ store, scope, queryPlan, queryAnalysis = {}, query = "", currentDate, responderId = null, memoryFacts = [], requestedFields = null } = {}) {
+function retrieveHistorical({ store, scope, queryPlan, queryAnalysis = {}, query = "", currentDate, responderId = null, memoryFacts = [], directObservationFacts = [], requestedFields = null, memoryRevision = null, canonRevision = 0 } = {}) {
   const time = queryPlan?.time || {};
   const baseDiagnostics = { queryIntent: queryPlan?.intent || null, timeMode: time.mode || "UNSPECIFIED", requestedDate: time.mode === "RANGE" ? `${time.from}..${time.to}` : time.from || null,
     selectedHistoricalCheckpoint: null, checkpointDate: null, temporalDistance: null, campaignId: scope?.campaignId || null, branchId: scope?.branchId || null,
-    archiveRevision: null, candidateCount: 0, selectedCount: 0, trimmedCount: 0, knowledgeDeniedCount: 0, futureBlockedCount: 0, conflictCount: 0, reasonCodes: [] };
+    archiveRevision: null, candidateCount: 0, selectedCount: 0, trimmedCount: 0, knowledgeDeniedCount: 0, futureBlockedCount: 0, conflictCount: 0, unsupportedFields: [], reasonCodes: [] };
   if (!store || !scope?.campaignId || !scope?.branchId || scope.reason) return blockedResult("HISTORY_BRANCH_MISMATCH", baseDiagnostics);
   if (!["AS_OF", "RANGE"].includes(time.mode)) return blockedResult("HISTORY_CHECKPOINT_NOT_FOUND", baseDiagnostics);
   let index;
   try { index = new HistoricalCheckpointIndex(store.root, scope).load(); }
-  catch (_error) { return blockedResult("HISTORY_CHECKPOINT_NOT_FOUND", baseDiagnostics); }
+  catch (error) { return blockedResult(error.message === "HISTORY_INDEX_CORRUPT" ? "HISTORY_INDEX_CORRUPT" : "HISTORY_CHECKPOINT_NOT_FOUND", baseDiagnostics); }
   baseDiagnostics.archiveRevision = index.archiveRevision;
   const latestArchiveDate = nodesByDate(index).at(-1)?.gameDate || null;
   const effectiveCurrentDate = currentDate || latestArchiveDate;
@@ -348,16 +456,27 @@ function retrieveHistorical({ store, scope, queryPlan, queryAnalysis = {}, query
   const projections = [];
   for (const entry of entries) {
     const projection = store.read(scope, entry.checkpointId);
-    if (!projection) return blockedResult("HISTORY_CHECKPOINT_NOT_FOUND", baseDiagnostics);
+    if (!projection) return blockedResult("HISTORY_CHECKPOINT_CORRUPT", baseDiagnostics);
     projections.push(projection);
   }
   const projectionsByCheckpoint = new Map(projections.map(projection => [projection.checkpointId, projection]));
   const identity = resolveCharacterIds(projections, queryPlan, queryAnalysis, query);
   if (identity.error) return blockedResult(identity.error, { ...baseDiagnostics, candidateCount: identity.candidateIds?.length || 0 });
-  const characterIds = identity.ids;
-  const titleIds = resolveTitleIds(projections, queryPlan, query);
+  const resolvedCharacterIds = identity.ids;
+  const resolvedTitleIds = resolveTitleIds(projections, queryPlan, query);
+  const queryRealmIds = realmIdsForQueryRefs(projections, queryPlan?.entities?.realms || []);
+  const factionIds = sorted(queryPlan?.entities?.factions || []);
   const fields = new Set(Array.isArray(requestedFields) && requestedFields.length ? requestedFields.filter(field => CHARACTER_FIELDS.includes(field)) : fieldFilter(query));
   const wantsWar = queryPlan?.intent === "WAR_STATUS" || /(战争|战事|交战|war)/iu.test(query);
+  const broadRange = time.mode === "RANGE" && resolvedCharacterIds.length === 0;
+  const broadScope = broadRange ? buildBroadScope(projections, resolvedCharacterIds, resolvedTitleIds, queryPlan?.entities?.realms || [], factionIds, wantsWar) : { characterIds: resolvedCharacterIds, titleIds: resolvedTitleIds, realmIds: [...new Set([...queryRealmIds, ...realmIdsForTitleIds(projections, resolvedTitleIds), ...realmIdsForCharacterIds(projections, resolvedCharacterIds)])], warIds: null };
+  const characterIds = broadScope.characterIds;
+  const titleIds = broadScope.titleIds;
+  const realmIds = broadScope.realmIds;
+  const warIds = broadRange && wantsWar ? broadScope.warIds : null;
+  const retrievalFields = broadRange ? broadChangeFields(fields) : fields;
+  for (const field of fields) if (UNAVAILABLE_CHARACTER_FIELDS.has(field)) baseDiagnostics.unsupportedFields.push(field);
+  if (baseDiagnostics.unsupportedFields.length) baseDiagnostics.reasonCodes.push("HISTORY_FIELD_UNAVAILABLE");
   let candidates = [];
   if (time.mode === "AS_OF") {
     const projection = projections[0];
@@ -366,30 +485,30 @@ function retrieveHistorical({ store, scope, queryPlan, queryAnalysis = {}, query
       candidates.push(...characterStateCandidates(projection, characterId, fields));
     }
     candidates.push(...titleStateCandidates(projection, titleIds));
-    if (wantsWar) candidates.push(...warStateCandidates(projection));
+    if (wantsWar) candidates.push(...warStateCandidates(projection, warIds));
     baseDiagnostics.selectedHistoricalCheckpoint = projection.checkpointId;
     baseDiagnostics.checkpointDate = projection.gameDate;
     baseDiagnostics.temporalDistance = selection.requested.serial - projection.totalDays;
   } else {
     const baseline = projections[0];
-    for (const characterId of characterIds) if (!baseline.characters?.[characterId] && !projections.some(projection => projection.characters?.[characterId])) return blockedResult("HISTORY_ENTITY_NOT_PRESENT", baseDiagnostics);
-    if (wantsWar) candidates.push(...warStateCandidates(baseline));
+    if (!broadRange) for (const characterId of characterIds) if (!baseline.characters?.[characterId] && !projections.some(projection => projection.characters?.[characterId])) return blockedResult("HISTORY_ENTITY_NOT_PRESENT", baseDiagnostics);
+    if (wantsWar) candidates.push(...warStateCandidates(baseline, warIds));
     for (let index2 = 1; index2 < projections.length; index2++) {
       const previous = projections[index2 - 1];
       const current = projections[index2];
-      for (const characterId of characterIds) candidates.push(...characterChangeCandidates(previous, current, characterId, fields));
+      for (const characterId of characterIds) candidates.push(...characterChangeCandidates(previous, current, characterId, retrievalFields));
       candidates.push(...titleChangeCandidates(previous, current, titleIds));
-      if (wantsWar) candidates.push(...warChangeCandidates(previous, current));
+      if (wantsWar) candidates.push(...warChangeCandidates(previous, current, warIds));
     }
     baseDiagnostics.selectedHistoricalCheckpoint = projections.map(item => item.checkpointId);
     baseDiagnostics.checkpointDate = projections.map(item => item.gameDate);
     baseDiagnostics.temporalDistance = 0;
     if (selection.trimmed) baseDiagnostics.reasonCodes.push("HISTORY_TOKEN_BUDGET");
   }
-  if (wantsWar && (characterIds.length || titleIds.length)) candidates = candidates.filter(candidate => candidate.field !== "WAR" || (candidate.entityRefs?.characters || []).some(id => characterIds.includes(String(id))) || (candidate.entityRefs?.titles || []).some(id => titleIds.includes(String(id))));
-  const scoped = applyScope(candidates, projectionsByCheckpoint, responderId, memoryFacts);
+  if (wantsWar && (resolvedCharacterIds.length || resolvedTitleIds.length || realmIds.length || factionIds.length || broadRange)) candidates = candidates.filter(candidate => candidate.field !== "WAR" || (!warIds || warIds.includes(String(candidate.entityId))) && ((candidate.entityRefs?.characters || []).some(id => characterIds.includes(String(id))) || (candidate.entityRefs?.titles || []).some(id => titleIds.includes(String(id))) || (candidate.entityRefs?.realms || []).some(id => realmIds.includes(String(id))) || (candidate.entityRefs?.factions || []).some(id => factionIds.includes(String(id))) || broadRange && !resolvedCharacterIds.length && !resolvedTitleIds.length && !realmIds.length && !factionIds.length));
+  const scoped = applyScope(candidates, projectionsByCheckpoint, responderId, memoryFacts, directObservationFacts);
   const requestedSerial = normalizeGameDate(time.mode === "RANGE" ? time.to : time.from)?.serial ?? null;
-  const ranked = selectTopK(scoped.allowed, { characterIds, titleIds, query, requestedSerial });
+  const ranked = selectTopK(scoped.allowed, { characterIds, titleIds, realmIds, factionIds, query, requestedSerial });
   const conflicts = conflictCount(ranked.selected);
   baseDiagnostics.candidateCount = candidates.length;
   baseDiagnostics.selectedCount = ranked.selected.length;
@@ -403,11 +522,11 @@ function retrieveHistorical({ store, scope, queryPlan, queryAnalysis = {}, query
   return {
     success: true,
     status: ranked.selected.length ? "READY" : "NO_MATCH",
-    reason: ranked.selected.length ? null : candidates.length && scoped.denied === candidates.length ? "HISTORY_SCOPE_DENIED" : "HISTORY_ENTITY_NOT_PRESENT",
+    reason: ranked.selected.length ? null : baseDiagnostics.unsupportedFields.length ? "HISTORY_FIELD_UNAVAILABLE" : candidates.length && scoped.denied === candidates.length ? "HISTORY_SCOPE_DENIED" : "HISTORY_ENTITY_NOT_PRESENT",
     selected: conflicts ? [] : ranked.selected,
     trimmed: ranked.trimmed,
     queryPlan,
-    cacheKeyParts: { campaignId: scope.campaignId, branchId: scope.branchId, historicalArchiveRevision: index.archiveRevision, checkpoint: baseDiagnostics.selectedHistoricalCheckpoint, queryPlanFingerprint: hash(queryPlan), responderId: responderId === null ? null : String(responderId), knowledgePolicyVersion: HISTORICAL_KNOWLEDGE_POLICY_VERSION },
+    cacheKeyParts: { campaignId: scope.campaignId, branchId: scope.branchId, historicalArchiveRevision: index.archiveRevision, historicalIndexLayoutVersion: INDEX_LAYOUT_VERSION, checkpoint: baseDiagnostics.selectedHistoricalCheckpoint, queryPlanFingerprint: hash(queryPlan), realmRefs: realmIds, responderId: responderId === null ? null : String(responderId), memoryRevision, canonRevision, knowledgePolicyVersion: HISTORICAL_KNOWLEDGE_POLICY_VERSION },
     diagnostics: baseDiagnostics,
     retrievalVersion: HISTORICAL_RETRIEVAL_VERSION
   };

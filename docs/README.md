@@ -4,7 +4,7 @@
 
 ## 推荐阅读顺序
 
-V8.12 当前入口：[第二部分历史检索与时间线实施报告](v8.12-part2-implementation-report.md) / [第一部分安全收口与 Temporal Archive 实施报告](v8.12-part1-implementation-report.md) / [V8.8 百年用户实机验收回填](v8.8-long-campaign-field-acceptance.md)。第一部分已由用户确认 `V8.12 PART 1 = PASS`；第二部分 AS_OF/RANGE、人物/头衔/战争时间线、WarActor、Historical Scope/Canon、Branch-safe Cache 与 Dynamic Tail 已完成代码和 309/309 自动发布回归。历史 Prompt 注入默认关闭，**当前等待两阶段真实 CK3/GLM Gate，尚未记录 `V8.12 PART 2 = PASS`，第三部分未开始。** 下列为前置版本记录。
+V8.12 当前入口：[第二部分历史检索与时间线实施报告](v8.12-part2-implementation-report.md) / [第一部分安全收口与 Temporal Archive 实施报告](v8.12-part1-implementation-report.md) / [V8.8 百年用户实机验收回填](v8.8-long-campaign-field-acceptance.md)。第一部分已由用户确认 `V8.12 PART 1 = PASS`；第二部分及本次 Review Fix 已完成代码和自动发布回归，历史 Prompt 注入默认关闭，**当前仍等待两阶段真实 CK3/GLM Gate，尚未记录 `V8.12 PART 2 = PASS`，第三部分未开始。** 下列为前置版本记录。
 
 V8.11.1 当前入口：[一致性与知情边界实施记录](v8.11.1-consistency-implementation-report.md)。修复实时配偶授权、多人物观察、摘要编辑双轨一致性与 Legacy 删除映射；Self Current Truth、显式当前年份查询和动态全名补齐。非标准战争仅增加遗漏诊断。305/305 发布组和隔离 Electron 冒烟通过；真实 CK3/GLM/长期 Gate 仍待验收。
 

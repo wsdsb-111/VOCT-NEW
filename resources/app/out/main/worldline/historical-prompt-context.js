@@ -6,14 +6,16 @@ function label(candidate) {
   return candidate.displayName ? `${candidate.displayName} (#${candidate.entityId})` : `#${candidate.entityId}`;
 }
 
-function list(value) {
+function list(value, displayed = null) {
   const values = Array.isArray(value) ? value : value === null || value === undefined || value === "" ? [] : [value];
-  return values.length ? values.map(item => `#${item}`).join("、") : "无记录";
+  const labels = Array.isArray(displayed) ? displayed : null;
+  return values.length ? values.map((item, index) => labels?.[index] || `#${item}`).join("、") : "无记录";
 }
 
-function changeValue(field, value) {
+function changeValue(field, value, displayed = null) {
   if (value === null || value === undefined || value === "") return "无记录";
-  if (Array.isArray(value)) return ["TITLE_IDS", "SPOUSE", "WAR_PARTICIPATION"].includes(field) ? list(value) : value.join("、") || "无记录";
+  if (Array.isArray(value)) return ["TITLE_IDS", "SPOUSE", "WAR_PARTICIPATION"].includes(field) ? list(value, displayed) : value.join("、") || "无记录";
+  if (displayed && typeof displayed !== "object") return displayed;
   return ["PRIMARY_TITLE", "LIEGE", "COURT_EMPLOYER"].includes(field) ? `#${value}` : String(value);
 }
 
@@ -34,14 +36,14 @@ function warSides(war = {}) {
 function stateLine(candidate) {
   const name = label(candidate);
   if (candidate.field === "LOCATION") return `- 截至 ${candidate.asOf}，${name}的存档位置编号为 ${candidate.value}；地名未解析时不得猜测。`;
-  if (candidate.field === "PRIMARY_TITLE") return `- 截至 ${candidate.asOf}，${name}的主头衔为 ${candidate.value ? `#${candidate.value}` : "无记录"}。`;
-  if (candidate.field === "TITLE_IDS") return `- 截至 ${candidate.asOf}，${name}持有的头衔：${list(candidate.value)}。`;
-  if (candidate.field === "LIEGE") return `- 截至 ${candidate.asOf}，${name}的直属领主为 ${candidate.value ? `#${candidate.value}` : "无记录"}。`;
-  if (candidate.field === "COURT_EMPLOYER") return `- 截至 ${candidate.asOf}，${name}所在宫廷的雇主为 ${candidate.value ? `#${candidate.value}` : "无记录"}。`;
+  if (candidate.field === "PRIMARY_TITLE") return `- 截至 ${candidate.asOf}，${name}持有的头衔记录中可确认的一项为 ${candidate.valueDisplay || "无记录"}。`;
+  if (candidate.field === "TITLE_IDS") return `- 截至 ${candidate.asOf}，${name}持有的头衔：${list(candidate.value, candidate.valueDisplay)}。`;
+  if (candidate.field === "LIEGE") return `- 截至 ${candidate.asOf}，${name}的直属领主为 ${candidate.valueDisplay || "无记录"}。`;
+  if (candidate.field === "COURT_EMPLOYER") return `- 截至 ${candidate.asOf}，${name}所在宫廷的雇主为 ${candidate.valueDisplay || "无记录"}。`;
   if (candidate.field === "LIFE_STATUS") return `- 截至 ${candidate.asOf}，${name}在此存档中的生死状态为 ${candidate.value}。`;
-  if (candidate.field === "SPOUSE") return `- 截至 ${candidate.asOf}，${name}的配偶记录：${list(candidate.value)}。`;
-  if (candidate.field === "FRIEND") return `- 截至 ${candidate.asOf}，${name}的朋友记录：${list(candidate.value)}。`;
-  if (candidate.field === "RIVAL") return `- 截至 ${candidate.asOf}，${name}的宿敌记录：${list(candidate.value)}。`;
+  if (candidate.field === "SPOUSE") return `- 截至 ${candidate.asOf}，${name}的配偶记录：${list(candidate.value, candidate.valueDisplay)}。`;
+  if (candidate.field === "FRIEND") return `- 截至 ${candidate.asOf}，${name}的朋友记录：${list(candidate.value, candidate.valueDisplay)}。`;
+  if (candidate.field === "RIVAL") return `- 截至 ${candidate.asOf}，${name}的宿敌记录：${list(candidate.value, candidate.valueDisplay)}。`;
   if (candidate.field === "WAR_PARTICIPATION") return `- 截至 ${candidate.asOf}，${name}参与的活跃战争：${list(candidate.value)}。`;
   return `- 截至 ${candidate.asOf}，${name}的 ${candidate.field}：${JSON.stringify(candidate.value)}。`;
 }
@@ -50,15 +52,15 @@ function changeLine(candidate) {
   const name = label(candidate);
   const value = candidate.value || {};
   const warning = candidate.integrityWarning ? `；完整性警告：${candidate.integrityWarning}，仍以游戏记录为准` : "";
-  if (candidate.eventType === "TITLE_GAINED") return `- ${candidate.asOf}：${name}获得头衔 #${value.after}${warning}。`;
-  if (candidate.eventType === "TITLE_LOST") return `- ${candidate.asOf}：${name}失去头衔 #${value.before}${warning}。`;
-  return `- ${candidate.asOf}：${name}的 ${candidate.field} 从 ${changeValue(candidate.field, value.before)} 变为 ${changeValue(candidate.field, value.after)}${warning}。`;
+  if (candidate.eventType === "TITLE_GAINED") return `- ${candidate.asOf}：${name}获得头衔 ${candidate.valueDisplay?.after || `#${value.after}`}${warning}。`;
+  if (candidate.eventType === "TITLE_LOST") return `- ${candidate.asOf}：${name}失去头衔 ${candidate.valueDisplay?.before || `#${value.before}`}${warning}。`;
+  return `- ${candidate.asOf}：${name}的 ${candidate.field} 从 ${changeValue(candidate.field, value.before, candidate.valueDisplay?.before)} 变为 ${changeValue(candidate.field, value.after, candidate.valueDisplay?.after)}${warning}。`;
 }
 
 function titleLine(candidate) {
   const title = candidate.displayName ? `${candidate.displayName}（#${candidate.entityId}）` : `头衔 #${candidate.entityId}`;
-  if (candidate.type === "HISTORICAL_TITLE_STATE") return `- 截至 ${candidate.asOf}，${title}的持有者为 ${candidate.value?.holderId ? `#${candidate.value.holderId}` : "无记录"}；直属上级头衔 ${candidate.value?.liegeTitleId ? `#${candidate.value.liegeTitleId}` : "无记录"}。`;
-  return `- ${candidate.asOf}：${title}发生 ${candidate.eventType}，从 ${changeValue("PRIMARY_TITLE", candidate.value?.before)} 变为 ${changeValue("PRIMARY_TITLE", candidate.value?.after)}。`;
+  if (candidate.type === "HISTORICAL_TITLE_STATE") return `- 截至 ${candidate.asOf}，${title}的持有者为 ${candidate.valueDisplay?.holderId || "无记录"}；直属上级头衔 ${candidate.valueDisplay?.liegeTitleId || "无记录"}。`;
+  return `- ${candidate.asOf}：${title}发生 ${candidate.eventType}，从 ${changeValue("PRIMARY_TITLE", candidate.value?.before, candidate.valueDisplay?.before)} 变为 ${changeValue("PRIMARY_TITLE", candidate.value?.after, candidate.valueDisplay?.after)}。`;
 }
 
 function warLine(candidate) {

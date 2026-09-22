@@ -60,6 +60,7 @@ class TemporalArchiveStore {
       if (existing) {
         if (existing.sourceFingerprint !== checkpoint.source.fingerprint) throw new Error("HISTORY_SAME_DATE_REVISION_CONFLICT");
         if (!this.read(scope, existing.checkpointId)) throw new Error("HISTORY_CHECKPOINT_CORRUPT");
+        if (index.needsMigration) this.commitIndex(indexStore.file, Buffer.from(JSON.stringify(index)));
         return { status: "IDEMPOTENT", checkpointId: existing.checkpointId, nodeCount: index.nodes.length, migrationCompleted: true };
       }
       if (index.nodes.length >= MAX_NODES) throw new Error("HISTORY_INDEX_BOUND_EXCEEDED");
@@ -69,7 +70,7 @@ class TemporalArchiveStore {
       const bytes = zlib.gzipSync(raw);
       if (bytes.length > MAX_COMPRESSED_BYTES) throw new Error("HISTORY_NODE_BOUND_EXCEEDED");
       const { characters, titles, wars, ...metadata } = projection;
-      const entry = { ...metadata, characterIds: Object.keys(characters), titleIds: Object.keys(titles), warIds: Object.keys(wars),
+      const entry = { ...metadata, characterCount: Object.keys(characters).length, titleCount: Object.keys(titles).length, warCount: Object.keys(wars).length,
         file: `${gameDate}_${checkpoint.id}.json.gz`, sha256: digest(bytes) };
       const next = { ...index, archiveRevision: index.archiveRevision + 1, migrationCompleted: true, firstCheckpointId: index.firstCheckpointId || checkpoint.id, nodes: [...index.nodes, entry] };
       const indexBytes = Buffer.from(JSON.stringify(next));
