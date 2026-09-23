@@ -1,6 +1,6 @@
 "use strict";
 
-function createSummariesManager({ fs, path, summariesDir, memoryEngine, memorySystem, getCurrentConversation = () => null, requestSummary, buildSummaryPrompt, persistRecoveredSummary }) {
+function createSummariesManager({ fs, path, summariesDir, memoryEngine, memorySystem, getCurrentConversation = () => null, requestSummary, getSummaryCapabilities, buildSummaryPrompt, persistRecoveredSummary }) {
   const fs$1 = fs;
   const VOTC_SUMMARIES_DIR = summariesDir;
   class SummariesManager {
@@ -24,6 +24,7 @@ function createSummariesManager({ fs, path, summariesDir, memoryEngine, memorySy
         isConversationActive: id => getCurrentConversation()?.id === id,
         buildPrompt: buildSummaryPrompt,
         requestSummary,
+        getSummaryCapabilities,
         resolveParticipantProfiles: snapshot => memoryEngine.resolveRecoveryParticipantProfiles(snapshot),
         persistCharacterFolders: persistRecoveredSummary
       });

@@ -153,7 +153,7 @@ const build = (history = baseHistory, summary = "ROLLING A", context = memoryCon
 const before = build();
 assert.strictEqual(before.result.promptProfile.id, "glm_cache_v2");
 assert.strictEqual(before.result.promptProfile.layoutId, "glm_cache_v2");
-assert.strictEqual(before.result.promptProfile.historyWindow, 12);
+assert.strictEqual(before.result.promptProfile.historyWindow, null);
 assert(before.result.globalStaticTokens > 0);
 assert(before.result.conversationFrozenTokens > 0);
 assert(before.result.responderFrozenTokens > 0);
@@ -232,4 +232,4 @@ const nextConversationContext = { ...memoryContext, cacheV2FrozenSnapshots: { co
 const nextConversation = build(baseHistory, "ROLLING D", nextConversationContext);
 assert.notStrictEqual(nextConversation.metadata.prefixFingerprint, sameConversation.metadata.prefixFingerprint, "new conversation may refresh date/era snapshot");
 
-console.log("VOTC v8.10.2 GLM Cache v2: PASS (lifecycle DTOs, dynamic-tail routing, 12-message window, prefix invariance)");
+console.log("VOTC v8.10.2 GLM Cache v2: PASS (lifecycle DTOs, dynamic-tail routing, append-only history, prefix invariance)");

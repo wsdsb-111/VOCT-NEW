@@ -2,6 +2,13 @@
 
 V8.6.2 将应用中的可见标签更新为 Memory Engine 2.6，但内部 `MEMORY_ENGINE_VERSION`、存储 schema、人物目录和写入合同继续保持 2.5，不执行数据迁移。系统仍以人物摘要文件夹作为唯一可见、可搜索、可编辑的长期记忆层，保留 2.4 的结构化事件、`owner × counterpart` 知情/主题/在场窗口投影及目录缓存，以及整场冻结的 Session Topic Anchor 与按轮动态 Turn Recall。旧 2.3/2.4 摘要继续兼容读取。
 
+## V8.12 Part 3 前置：对话上下文与摘要可靠性（待实机 Gate）
+
+- GLM Chat 不再固定只送最近 12 条。活动历史按原顺序追加；只有按当前 Chat Provider 的上下文、单次输出预留和安全余量计算出压力时才压缩旧消息。每次保留至少最近 6 条原文，并记录压缩后的 cache epoch。既有 Prompt Block ID、Stable Prefix、动态 Worldline/Memory 尾部位置未改。
+- Chat、Summary 分别读取所选 Provider/模型能力；元数据不可用时使用保守回退并在实际发请求前校验输入预算。最终摘要根据源消息、参与者及在场窗口估计单次输出需求，仍尊重摘要设置中的单次最大输出 Token；整场超限则先按 Presence 边界和 Token 预算分块，不再先发一次注定不安全的整场请求。分块保留原 `messageId`，过滤无关参与者，完成块写入 recovery checkpoint；续跑复用已完成块，合并后继续原有结构化/来源/在场质量门禁。余额不足、截断、上下文超限和暂时错误采用不同处理。
+- 多人滚动摘要按在场签名保存 Segment，回应者仅看到自己在场时的 Segment 与剩余原文；临时离开期间的内容不因压缩而泄露。流式和非流式 NPC 回复均检查最终 `finish_reason`；`length` 的部分文本在续写完成前不提交、不可触发 Action、不可进入历史或摘要。续写仍不完整则显示失败，不把半句当成完成回复。
+- 新增 `test-v8.12-context-summary-reliability.js`，连同摘要事故恢复、Memory 回归与 GLM Cache 回归做自动验证。此项为 Part 3 前置可靠性工程，**不等于 Memory Engine 3.0 正式发布**；可见 2.6 标签和底层 2.5 存储/人物目录合同均不变。真实 GLM 30–50 轮、多人 50+ 轮、100+ 消息终局摘要、低输出模型、截断回复及缓存/TTFT 仍需实机验证，尚未签发前置 Gate PASS。
+
 ## Memory Engine 2.6 动态召回（兼容 2.5 合同）
 
 - Session Topic Anchor 只在每名回应者首次命中时选取 Top1，随后整场冻结并放在历史前稳定区，不因后续问题重新排序。

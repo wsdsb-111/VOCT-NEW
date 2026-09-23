@@ -4,7 +4,9 @@
 
 ## 推荐阅读顺序
 
-V8.12 当前入口：[第二部分历史检索与时间线实施报告](v8.12-part2-implementation-report.md) / [第一部分安全收口与 Temporal Archive 实施报告](v8.12-part1-implementation-report.md) / [V8.8 百年用户实机验收回填](v8.8-long-campaign-field-acceptance.md)。第一部分已由用户确认 `V8.12 PART 1 = PASS`；第二部分及本次 Review Fix 已完成代码和自动发布回归，历史 Prompt 注入默认关闭，**当前仍等待两阶段真实 CK3/GLM Gate，尚未记录 `V8.12 PART 2 = PASS`，第三部分未开始。** 下列为前置版本记录。
+V8.12 当前入口：[第二部分历史检索与时间线实施报告](v8.12-part2-implementation-report.md) / [第一部分安全收口与 Temporal Archive 实施报告](v8.12-part1-implementation-report.md) / [Part 3 NPC Memory 存储结构前置分析](v8.12-part3-npc-memory-storage-analysis.md) / [V8.8 百年用户实机验收回填](v8.8-long-campaign-field-acceptance.md)。第一部分已由用户确认 `V8.12 PART 1 = PASS`；第二部分及本次 Review Fix 已完成代码和自动发布回归，历史 Prompt 注入默认关闭，**当前仍等待两阶段真实 CK3/GLM Gate，尚未记录 `V8.12 PART 2 = PASS`；第三部分尚未施工，已完成 NPC Memory 存储结构前置分析。** 下列为前置版本记录。
+
+Part 3 前置的对话上下文/摘要可靠性工程见 [摘要系统合同与实机 Gate](README_摘要系统.md#v812-part-3-前置对话上下文与摘要可靠性待实机-gate) 及 [V8 阶段开发记录](V8阶段开发记录.md)。这项前置工程不改变 Part 2 尚待验收、Part 3 主体尚未施工的状态。
 
 V8.11.1 当前入口：[一致性与知情边界实施记录](v8.11.1-consistency-implementation-report.md)。修复实时配偶授权、多人物观察、摘要编辑双轨一致性与 Legacy 删除映射；Self Current Truth、显式当前年份查询和动态全名补齐。非标准战争仅增加遗漏诊断。305/305 发布组和隔离 Electron 冒烟通过；真实 CK3/GLM/长期 Gate 仍待验收。
 
@@ -84,7 +86,7 @@ V8.5.1 历史基线：[Sol 最终审查与修复](v8.5.1-sol-final-review.md)，
 
 ## 文档分类
 
-最新阶段：[V8.9.1 后续 Real Request Diff 实施报告](real-request-diff-implementation-report.md)；完成真实 Chat 捕获、Conversation/Responder Scope、消息/Block/Chunk Diff、Effective Parameter/Endpoint Diff、Provider 对齐、桶分析和脱敏导出。真实 GLM/DeepSeek API、CK3、RP 和 Soak Gate 尚未完成，不能宣称 Full Freeze。
+最新阶段：[V8.12 Part 3 NPC Memory 存储结构前置分析](v8.12-part3-npc-memory-storage-analysis.md)；完成指定 CK3 Save 的 `character_memory_manager` 原始结构、NPC holder 反向引用、UI 回忆映射、结构化参数、跨 NPC 独立 Memory 和到期删除行为分析。第三部分尚未施工，不能把本分析记录写成实现或验收通过。
 
 ### 架构与运行规则
 

@@ -149,7 +149,7 @@ assert(rendererSource.includes('id: "finalSummaryMaxTokens"'), "summary settings
 assert(rendererSource.includes('min: 256, max: 16384'), "summary token input must keep a bounded supported range");
 assert(rendererSource.includes("handleFinalSummaryMaxTokensBlur"), "summary token input must persist after editing finishes");
 assert(rendererSource.includes("finalSummaryMaxTokens: 4096"), "summary token input must retain the existing 4096-token default");
-assert(conversationSource.includes("PromptBuilder.getFinalSummaryMaxTokens"), "finalization and recovery requests must receive the configured token limit");
+assert(conversationSource.includes("summaryOutputLimit: PromptBuilder.getFinalSummaryMaxTokens?.() || 4096"), "finalization must keep the configured per-request token ceiling while dynamically budgeting each request");
 assert(rendererSource.includes('key === "stablePrefix" ? "稳定前缀"'), "summary UI must label the stable prefix policy");
 assert(rendererSource.includes("memory-routing-grid"), "summary UI must explain direct, group and mentioned-person recall policies");
 assert(rendererSource.includes("summary-route-label"), "conversation files must display owner-to-counterpart routing");

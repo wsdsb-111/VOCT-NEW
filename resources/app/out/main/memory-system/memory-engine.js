@@ -17,9 +17,32 @@ const { getCharacterMentionAliases } = require("./character-identity");
 const { buildPerspectiveSummaryMap, validatePerspectiveSummaryMap, validateSummarySegmentPresenceBoundaries, validatePerspectiveCoverage, isMemoryRelevantToPair } = require("./perspective-projector");
 const turnRecall = require("./turn-recall");
 const { buildThirdPartyEvidencePatch } = require("./third-party-evidence");
+const { planSummaryRequest } = require("./summary-budget-planner");
+const { estimateTokens } = require("../token-estimator");
+const { validateGenerationOutcome } = require("../providers/generation-outcome");
 
 const FINAL_SUMMARY_MAX_ATTEMPTS = 2;
 const RECOVERY_MAX_ATTEMPTS = 3;
+const SUMMARY_CHUNK_ABSOLUTE_LIMIT = 512;
+
+function summaryChunkLimit(messageCount) {
+  return Math.min(SUMMARY_CHUNK_ABSOLUTE_LIMIT, Math.max(64, messageCount * 2));
+}
+
+function countSummaryTokens(messages) {
+  return (messages || []).reduce((total, message) => total + estimateTokens(message?.name ? `${message.name}: ${message.content || ""}` : message?.content || ""), 0);
+}
+
+function classifySummaryFailure(error) {
+  const message = String(error?.message || error || "");
+  if (/truncated_final_summary_response/.test(message)) return "LENGTH";
+  if (/summary_(chunk|request)_budget_exceeded|context[_ ]length[_ ]exceeded|maximum context|too many tokens|prompt is too long/i.test(message)) return "CONTEXT_EXCEEDED";
+  if (/429|rate[_ -]?limit/i.test(message)) return "RATE_LIMIT";
+  if (/402|insufficient balance|abort|cancel/i.test(message)) return "FATAL";
+  if (/final_summary_quality_failed|invalid_final_summary_response/i.test(message)) return "QUALITY";
+  if (/5\d\d|ECONN|ETIMEDOUT|fetch failed/i.test(message)) return "TRANSIENT";
+  return "UNKNOWN";
+}
 
 class MemoryEngine {
   constructor({ baseDir, summaryFoldersDir = null, recoveryDir = null, store = null, trace = null } = {}) {
@@ -384,6 +407,9 @@ class MemoryEngine {
 
   syncRollingStateFromConversationFields(conversation) {
     const rollingState = this.ensureConversationState(conversation).rollingState;
+    if (!Array.isArray(rollingState.segments)) rollingState.segments = [];
+    if (!Number.isInteger(rollingState.cacheEpoch)) rollingState.cacheEpoch = 0;
+    if (rollingState.legacySummary == null) rollingState.legacySummary = rollingState.segments.length ? "" : String(rollingState.currentSummary || "");
     if (conversation.currentSummary && !rollingState.currentSummary) rollingState.currentSummary = conversation.currentSummary;
     if (Number(conversation.lastSummarizedMessageIndex) > rollingState.committedThroughHistoryIndex) {
       rollingState.committedThroughHistoryIndex = Number(conversation.lastSummarizedMessageIndex);
@@ -393,13 +419,16 @@ class MemoryEngine {
 
   async maybeCreateRollingCheckpoint({ conversation, history, contextLimit, percentage = 0.4, estimateMessageTokens, buildPrompt, requestSummary }) {
     const state = this.syncRollingStateFromConversationFields(conversation);
+    const participantPresence = this.ensureConversationState(conversation).participantPresence;
     const result = await this.rolling.checkpoint({
       state,
       history,
       tokensToSummarize: Math.floor(contextLimit * percentage),
       estimateMessageTokens,
       buildPrompt,
-      requestSummary
+      requestSummary,
+      participantPresence: participantPresence.length ? participantPresence : null,
+      minRecentRawMessages: 6
     });
     this.syncConversationRollingFields(conversation);
     return result;
@@ -574,19 +603,45 @@ class MemoryEngine {
     return sourcePrompt;
   }
 
+  async resolveSummaryCapabilities(context) {
+    const capabilities = typeof context.getSummaryCapabilities === "function"
+      ? await context.getSummaryCapabilities(context.summaryProviderSnapshot || null)
+      : context.summaryProviderSnapshot || { providerId: null, providerType: null, modelId: null, contextWindow: 8192, maxOutputTokens: 2048, source: "fallback" };
+    context.summaryProviderSnapshot = {
+      providerId: capabilities.providerId,
+      providerType: capabilities.providerType,
+      modelId: capabilities.modelId,
+      contextWindow: capabilities.contextWindow,
+      maxOutputTokens: capabilities.maxOutputTokens,
+      capabilityRevision: capabilities.capabilityRevision || null
+    };
+    return { ...capabilities, maxOutputTokens: Math.min(capabilities.maxOutputTokens, Number(context.summaryOutputLimit) || capabilities.maxOutputTokens) };
+  }
+
   async requestFinalSummary(context) {
+    const capabilities = await this.resolveSummaryCapabilities(context);
     const prompt = context.buildPrompt(context);
-    const resumeChunks = context.preferChunkedSummary && !context.summaryChunk && context.messages?.length >= 4;
-    let lastError = resumeChunks ? new Error("truncated_final_summary_response") : null;
+    const budget = planSummaryRequest({ prompt, context, capabilities, countTokens: countSummaryTokens });
+    if (!context.summaryChunk && (context.preferChunkedSummary || !budget.wholeRequestSafe)) {
+      return this.requestChunkedSummary(context, capabilities);
+    }
+    if (context.summaryChunk && !budget.wholeRequestSafe) throw new Error("summary_chunk_budget_exceeded");
+    let lastError = null;
     let retryQuality = null;
-    for (let attempt = 1; attempt <= (resumeChunks ? 0 : FINAL_SUMMARY_MAX_ATTEMPTS); attempt++) {
+    for (let attempt = 1; attempt <= FINAL_SUMMARY_MAX_ATTEMPTS; attempt++) {
       const startedAt = Date.now();
       try {
         const requestPrompt = retryQuality ? this.buildSummaryQualityRetryPrompt(prompt, retryQuality) : prompt;
-        const result = await context.requestSummary(requestPrompt, { attempt });
-        const content = typeof result?.content === "string" ? result.content.trim() : "";
-        if (result?.finish_reason === "length") {
+        const retryBudget = planSummaryRequest({ prompt: requestPrompt, context, capabilities, countTokens: countSummaryTokens });
+        if (!retryBudget.safe) throw new Error("summary_request_budget_exceeded");
+        const result = await context.requestSummary(requestPrompt, { attempt, maxTokens: retryBudget.reservedOutputTokens, providerSnapshot: context.summaryProviderSnapshot,
+          summaryBudget: { requiredOutputTokens: retryBudget.requiredOutputTokens, sourceTokens: retryBudget.sourceTokens, wholeSafe: retryBudget.wholeRequestSafe, chunkIndex: context.summaryChunkIndex ?? null } });
+        const outcome = validateGenerationOutcome(result);
+        const content = outcome.content.trim();
+        if (outcome.truncated) {
           lastError = new Error("truncated_final_summary_response");
+        } else if (!outcome.complete) {
+          lastError = new Error(`summary_generation_incomplete:${outcome.finishReason || "unknown"}`);
         } else if (content) {
           const parsed = this.extractor.parseOutput(content, context);
           const quality = this.evaluateFinalSummaryQuality(context, parsed);
@@ -604,50 +659,140 @@ class MemoryEngine {
         lastError = error;
       }
       this.trace.record("summary_provider", { conversationId: context.conversationId, attempt, success: false, durationMs: Date.now() - startedAt, error: lastError?.message || "unknown" });
-      if (attempt < FINAL_SUMMARY_MAX_ATTEMPTS) {
-        this.trace.record("recover", { conversationId: context.conversationId, reason: "final_summary_retry" });
-      }
+      const failureKind = classifySummaryFailure(lastError);
+      if (["LENGTH", "CONTEXT_EXCEEDED", "FATAL"].includes(failureKind)) break;
+      if (failureKind === "RATE_LIMIT" && attempt < FINAL_SUMMARY_MAX_ATTEMPTS) await new Promise((resolve) => setTimeout(resolve, 500));
     }
-    if (!context.summaryChunk && context.messages?.length >= 4 && /^(truncated_final_summary_response|final_summary_quality_failed:)/.test(lastError?.message || "")) {
-      try {
-        const size = Math.ceil(context.messages.length / 4);
-        const summarySegments = [], memories = [];
-        const boundaries = uniqueIds((context.participantPresence || []).flatMap(window => [window.joinedAtMessageId, window.leftAtMessageId])).sort((a, b) => a - b);
-        const chunks = [];
-        let current = [], region = null;
-        for (const message of context.messages) {
-          const nextRegion = boundaries.filter(boundary => boundary <= Number(message.id)).length;
-          if (current.length && (nextRegion !== region || current.length >= size)) { chunks.push(current); current = []; }
-          current.push(message);
-          region = nextRegion;
-        }
-        if (current.length) chunks.push(current);
-        if (chunks.length > 12) throw new Error("summary_partition_limit_exceeded");
-        for (const [index, messages] of chunks.entries()) {
-          if (messages.every(message => ["presence_join", "presence_leave", "presence_temporary_leave", "presence_temporary_return"].includes(message.kind))) {
-            for (const message of messages) {
-              const present = uniqueIds((context.participantPresence || []).filter(window => Number(window.joinedAtMessageId ?? 0) <= message.id && (window.leftAtMessageId == null || message.id < Number(window.leftAtMessageId))).map(window => window.characterId));
-              summarySegments.push({ content: message.content, participants: present, visibility: "participants", messageIds: [message.id], speakerIds: [] });
-            }
-            continue;
-          }
-          const chunk = { ...context, summaryChunk: true, rollingState: null, messages };
-          this.trace.record("summary_chunk", { conversationId: context.conversationId, reason: "whole_summary_failed", attempt: index + 1 });
-          const parsed = this.extractor.parseOutput(await this.requestFinalSummary(chunk), chunk);
-          for (const segment of parsed.summarySegments) summarySegments.push({ ...segment, segmentId: null, messageIds: segment.provenance.messageIds, speakerIds: segment.provenance.speakerIds });
-          for (const memory of parsed.memories) memories.push({ ...memory, memoryId: null, messageIds: memory.provenance.messageIds, speakerIds: memory.provenance.speakerIds });
-        }
-        const content = JSON.stringify({ summarySegments, memories });
-        const quality = this.evaluateFinalSummaryQuality(context, this.extractor.parseOutput(content, context));
-        if (!quality.success) throw new Error(`final_summary_quality_failed:${quality.reasons.join("|")}`);
-        return content;
-      } catch (error) {
-        lastError = error;
-      }
+    if (!context.summaryChunk && context.messages?.length >= 2 && ["LENGTH", "CONTEXT_EXCEEDED"].includes(classifySummaryFailure(lastError))) {
+      return this.requestChunkedSummary(context, capabilities);
     }
-    // Raw dialogue belongs only in the recovery snapshot. Never commit it as a
-    // successful summary when the provider or structured-output validation fails.
     throw lastError || new Error("invalid_final_summary_response");
+  }
+
+  getSummaryPresenceSignature(context, message) {
+    if (!context.participantPresence?.length) return "all";
+    const messageId = Number(message.id);
+    return uniqueIds(context.participantPresence.filter((window) => Number(window.joinedAtMessageId ?? 0) <= messageId
+      && (window.leftAtMessageId == null || messageId < Number(window.leftAtMessageId))).map((window) => window.characterId)).sort((a, b) => a - b).join(",");
+  }
+
+  partitionSummaryMessages(context, capabilities) {
+    const maxSourceTokens = Math.max(512, Math.min(Math.floor(capabilities.maxOutputTokens * 1.4), Math.floor(capabilities.contextWindow * 0.3)));
+    const chunks = [];
+    let current = [];
+    let currentTokens = 0;
+    let currentSignature = null;
+    for (const message of context.messages || []) {
+      const signature = this.getSummaryPresenceSignature(context, message);
+      const messageTokens = Math.max(1, countSummaryTokens([message]));
+      if (current.length && (signature !== currentSignature || currentTokens + messageTokens > maxSourceTokens)) {
+        chunks.push(current);
+        current = [];
+        currentTokens = 0;
+      }
+      current.push(message);
+      currentTokens += messageTokens;
+      currentSignature = signature;
+    }
+    if (current.length) chunks.push(current);
+    if (chunks.length > summaryChunkLimit(context.messages?.length || 0)) throw new Error("summary_chunk_hard_limit_exceeded");
+    return chunks;
+  }
+
+  getChunkParticipants(context, messages) {
+    if (!context.participantPresence?.length) return context.participants || [];
+    const presentIds = new Set(messages.flatMap((message) => this.getSummaryPresenceSignature(context, message).split(",").map(Number).filter(Number.isFinite)));
+    const text = messages.map((message) => `${message.name || ""} ${message.content || ""}`).join("\n");
+    return (context.participants || []).filter((participant) => presentIds.has(Number(participant.id))
+      || [participant.name, participant.fullName, participant.shortName].some((name) => name && text.includes(name)));
+  }
+
+  async requestChunkedSummary(context, capabilities) {
+    const chunks = this.partitionSummaryMessages(context, capabilities);
+    if (!chunks.length) throw new Error("summary_no_source_messages");
+    if (chunks.length === 1 && chunks[0].length > 1) {
+      const middle = Math.floor(chunks[0].length / 2);
+      chunks.splice(0, 1, chunks[0].slice(0, middle), chunks[0].slice(middle));
+    }
+    const fingerprint = crypto.createHash("sha256").update(JSON.stringify({
+      conversationId: context.conversationId,
+      finalizationId: context.finalizationId,
+      chunks: chunks.map((messages) => messages.map((message) => [message.id, message.content])),
+      presence: context.participantPresence,
+      participants: context.participants,
+      provider: context.summaryProviderSnapshot,
+      instructions: context.finalInstructions
+    })).digest("hex");
+    const saved = context.summaryChunkState?.fingerprint === fingerprint ? context.summaryChunkState.outputs || {} : {};
+    const outputs = { ...saved };
+    const boundaryKinds = new Set(["presence_join", "presence_leave", "presence_temporary_leave", "presence_temporary_return"]);
+    let requestCount = 0;
+    const summarize = async (messages) => {
+      if (messages.every((message) => boundaryKinds.has(message.kind))) {
+        return {
+          summarySegments: messages.map((message) => ({ content: message.content, participants: this.getSummaryPresenceSignature(context, message).split(",").map(Number).filter(Number.isFinite), visibility: "participants", messageIds: [message.id], speakerIds: [] })),
+          memories: []
+        };
+      }
+      const participants = this.getChunkParticipants(context, messages);
+      const participantIds = new Set(participants.map((participant) => Number(participant.id)));
+      const firstId = Number(messages[0].id), lastId = Number(messages.at(-1).id);
+      const participantPresence = (context.participantPresence || []).filter((window) => participantIds.has(Number(window.characterId))
+        && Number(window.joinedAtMessageId ?? 0) <= lastId && (window.leftAtMessageId == null || Number(window.leftAtMessageId) > firstId));
+      const chunk = { ...context, summaryChunk: true, summaryChunkIndex: requestCount + 1, rollingState: null, messages, participants, participantPresence };
+      requestCount += 1;
+      if (requestCount > summaryChunkLimit(context.messages?.length || 0)) throw new Error("summary_chunk_hard_limit_exceeded");
+      try {
+        this.trace.record("summary_chunk", { conversationId: context.conversationId, reason: "preflight_or_failure", attempt: requestCount });
+        const parsed = this.extractor.parseOutput(await this.requestFinalSummary(chunk), chunk);
+        return {
+          summarySegments: parsed.summarySegments.map((segment) => ({ ...segment, segmentId: null, messageIds: segment.provenance.messageIds, speakerIds: segment.provenance.speakerIds })),
+          memories: parsed.memories.map((memory) => ({ ...memory, memoryId: null, messageIds: memory.provenance.messageIds, speakerIds: memory.provenance.speakerIds }))
+        };
+      } catch (error) {
+        if (messages.length < 2 || !["LENGTH", "CONTEXT_EXCEEDED"].includes(classifySummaryFailure(error))) throw error;
+        const middle = Math.floor(messages.length / 2);
+        const left = await summarize(messages.slice(0, middle));
+        const right = await summarize(messages.slice(middle));
+        return { summarySegments: [...left.summarySegments, ...right.summarySegments], memories: [...left.memories, ...right.memories] };
+      }
+    };
+    for (const [index, messages] of chunks.entries()) {
+      if (outputs[index]) continue;
+      outputs[index] = await summarize(messages);
+      context.summaryChunkState = { fingerprint, outputs };
+      if (context.finalizationId) this.writeRecoverySnapshot(context, { summaryChunkState: context.summaryChunkState });
+    }
+    const combined = {
+      summarySegments: chunks.flatMap((_, index) => outputs[index].summarySegments),
+      memories: chunks.flatMap((_, index) => outputs[index].memories)
+    };
+    const substantive = (context.messages || []).filter((message) => ["user", "assistant"].includes(message.role) && String(message.content || "").trim().length >= 8);
+    const covered = new Set(combined.summarySegments.flatMap((segment) => segment.messageIds || []));
+    const missing = substantive.filter((message) => !covered.has(message.id));
+    if (missing.length >= 3 && missing.length / Math.max(1, substantive.length) > 0.2) {
+      this.trace.record("summary_coverage_gap", { conversationId: context.conversationId, sourceMessageCount: substantive.length, uncoveredMessageIds: missing.map((message) => message.id) });
+      const repairContext = { ...context, messages: missing };
+      for (const repairMessages of this.partitionSummaryMessages(repairContext, capabilities)) {
+        const repair = await summarize(repairMessages);
+        combined.summarySegments.push(...repair.summarySegments);
+        combined.memories.push(...repair.memories);
+      }
+      const repaired = new Set(combined.summarySegments.flatMap((segment) => segment.messageIds || []));
+      if (missing.some((message) => !repaired.has(message.id))) throw new Error("summary_coverage_repair_failed");
+    }
+    combined.summarySegments.sort((left, right) => (left.messageIds?.[0] ?? Infinity) - (right.messageIds?.[0] ?? Infinity));
+    const memoryKeys = new Set();
+    combined.memories = combined.memories.filter((memory) => {
+      const key = JSON.stringify([memory.type, memory.canonicalText || memory.content, memory.messageIds]);
+      if (memoryKeys.has(key)) return false;
+      memoryKeys.add(key);
+      return true;
+    });
+    const content = JSON.stringify(combined);
+    const quality = this.evaluateFinalSummaryQuality(context, this.extractor.parseOutput(content, context));
+    if (!quality.success) throw new Error(`final_summary_quality_failed:${quality.reasons.join("|")}`);
+    return content;
   }
 
   getFinalizationId(context) {
@@ -787,6 +932,8 @@ class MemoryEngine {
         providerOutput: null
       });
       try {
+        await this.resolveSummaryCapabilities(context);
+        this.writeRecoverySnapshot(context, { summaryProviderSnapshot: context.summaryProviderSnapshot });
         content = await this.requestFinalSummary(context);
         if (!this.isFinalizationCurrent(context)) return this.cancelledFinalizationResult(context);
       } catch (error) {
@@ -942,7 +1089,11 @@ class MemoryEngine {
       joinEvents: context.joinEvents || [],
       leaveEvents: context.leaveEvents || [],
       rollingState: context.rollingState || this.rolling.createState(),
+      finalInstructions: context.finalInstructions || existing.finalInstructions || "",
+      summaryOutputLimit: context.summaryOutputLimit || existing.summaryOutputLimit || null,
       rawMessages: context.messages || [],
+      summaryProviderSnapshot: context.summaryProviderSnapshot || existing.summaryProviderSnapshot || null,
+      summaryChunkState: state.summaryChunkState || context.summaryChunkState || existing.summaryChunkState || null,
       finalizationStage: state.finalizationStage || existing.finalizationStage || "request",
       finalizationStatus: state.finalizationStatus || existing.finalizationStatus || "pending",
       providerOutput,
@@ -962,7 +1113,7 @@ class MemoryEngine {
     return fs.readdirSync(this.store.paths.recovery).filter((name) => name.endsWith(".json")).map((name) => path.join(this.store.paths.recovery, name));
   }
 
-  async recoverFailedFinalization(filePath, { requestSummary, buildPrompt, persistCharacterFolders, resolveParticipantProfiles, automatic = false } = {}) {
+  async recoverFailedFinalization(filePath, { requestSummary, buildPrompt, persistCharacterFolders, resolveParticipantProfiles, getSummaryCapabilities, automatic = false } = {}) {
     const snapshot = this.store.readJson(filePath, null);
     if (!snapshot) return { success: false, reason: "invalid_recovery_snapshot" };
     const participants = typeof resolveParticipantProfiles === "function" ? resolveParticipantProfiles(snapshot) : snapshot.participants;
@@ -979,6 +1130,11 @@ class MemoryEngine {
       leaveEvents: snapshot.leaveEvents || [],
       messages: snapshot.rawMessages,
       rollingState: snapshot.rollingState,
+      finalInstructions: snapshot.finalInstructions || "",
+      summaryOutputLimit: snapshot.summaryOutputLimit || 4096,
+      summaryProviderSnapshot: snapshot.summaryProviderSnapshot || null,
+      summaryChunkState: snapshot.summaryChunkState || null,
+      getSummaryCapabilities,
       retryCount: Number(snapshot.retryCount || 0) + 1,
       preferChunkedSummary: /^(truncated_final_summary_response|final_summary_quality_failed:)/.test(snapshot.lastError || ""),
       requestSummary,
@@ -1024,7 +1180,7 @@ class MemoryEngine {
     finally { this.pendingRecovery = null; }
   }
 
-  async runPendingFinalizations({ requestSummary, buildPrompt, persistCharacterFolders, resolveParticipantProfiles, manual = false, isConversationActive = () => false } = {}) {
+  async runPendingFinalizations({ requestSummary, buildPrompt, persistCharacterFolders, resolveParticipantProfiles, getSummaryCapabilities, manual = false, isConversationActive = () => false } = {}) {
     const results = [];
     const generation = this.memoryGeneration;
     for (const filePath of this.listRecoverySnapshots()) {
@@ -1053,7 +1209,7 @@ class MemoryEngine {
         if (snapshot.finalizationStatus !== "failed_manual") this.writeRecoverySnapshot(this.prepareFinalizationContext({ ...snapshot, messages: snapshot.rawMessages }), { finalizationStatus: "failed_manual", retryCount: snapshot.retryCount });
         continue;
       }
-      results.push(await this.recoverFailedFinalization(filePath, { requestSummary, buildPrompt, persistCharacterFolders, resolveParticipantProfiles, automatic: !manual }));
+      results.push(await this.recoverFailedFinalization(filePath, { requestSummary, buildPrompt, persistCharacterFolders, resolveParticipantProfiles, getSummaryCapabilities, automatic: !manual }));
     }
     return results;
   }

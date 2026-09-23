@@ -72,7 +72,7 @@ function buildContext(conversationId, participants, messageCount) {
     const fallbackEntries = trace.entries.filter((entry) => entry.stage === "summary_source_grounded_fallback");
     assert.strictEqual(fallbackEntries.length, 0, "provider errors must not trigger transcript fallback");
     assert.deepStrictEqual(results.map(result => engine.store.readJson(result.recoveryPath).rawMessages.length), [17, 10]);
-    assert.strictEqual(trace.entries.filter(entry => entry.stage === "summary_provider").length, 4, "each failure must retry the model before stopping");
+    assert.strictEqual(trace.entries.filter(entry => entry.stage === "summary_provider").length, 2, "402 balance failures must preserve recovery without retrying a non-transient request");
 
     // Restart, exhausted automatic retries, and recovery without an active CK3
     // conversation must all use the real owner-folder persistence path.

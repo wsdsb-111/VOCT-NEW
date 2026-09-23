@@ -40,7 +40,7 @@ async function main() {
     const parsed = engine.extractor.parseOutput(result, context);
     assert.equal(engine.evaluateFinalSummaryQuality(context, parsed).success, true);
     assert.deepEqual(parsed.summarySegments.flatMap(s => s.provenance.messageIds), context.messages.map(m => m.id));
-    assert.equal(calls, 6, "two whole requests plus four bounded chunks, never unbounded recursion");
+    assert.equal(calls, 7, "length must split after one whole request, without retrying the same-sized request");
     const boundaryContext = { ...context, preferChunkedSummary: true, participantPresence: [{ characterId: 1, joinedAtMessageId: 0, leftAtMessageId: null }, { characterId: 2, joinedAtMessageId: 2, leftAtMessageId: 8 }] };
     boundaryContext.requestSummary = async messages => {
       assert.ok(![2, 8].some(boundary => messages[0].id < boundary && messages.at(-1).id >= boundary), "input chunks themselves cannot cross presence boundaries");

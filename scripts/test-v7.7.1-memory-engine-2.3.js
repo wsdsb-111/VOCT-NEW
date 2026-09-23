@@ -154,10 +154,11 @@ const promptRuntimeSource = [
   "analytics/usage-analytics.js"
 ].map((relativePath) => fs.readFileSync(path.join(root, "resources", "app", "out", "main", ...relativePath.split("/")), "utf8")).join("\n");
 const providerServiceSource = fs.readFileSync(path.join(root, "resources", "app", "out", "main", "provider-service.js"), "utf8");
+const conversationSource = fs.readFileSync(path.join(root, "resources", "app", "out", "main", "conversation", "conversation.js"), "utf8");
 const extractionPrompt = new MemoryExtractor().buildPrompt({ participants })[0].content;
 assert(!providerServiceSource.includes('thinking: { type: "enabled" }, max_tokens: 12288'), "DeepSeek 终局摘要必须彻底关闭思考");
 assert(providerServiceSource.includes('thinking: { type: "disabled" }, max_tokens: structuredSummaryMaxTokens'), "终局摘要、重试与恢复必须统一关闭思考并使用配置的输出上限");
-assert(providerServiceSource.includes('metadata?.maxTokens') && providerServiceSource.includes('requestedMaxTokens >= 256 && requestedMaxTokens <= 16384'), "终局摘要输出上限必须由受限的用户配置传入请求");
+assert(providerServiceSource.includes('metadata?.maxTokens') && providerServiceSource.includes('Math.min(requestedMaxTokens, capabilities.maxOutputTokens') && conversationSource.includes('summaryOutputLimit: PromptBuilder.getFinalSummaryMaxTokens?.() || 4096'), "终局摘要单次输出预算必须受用户设置及 Summary Provider 双重限制");
 assert(extractionPrompt.includes("Do not copy every scene participant into subjects"), "摘要提取必须明确区分参与者与主题人物，避免多人场景把所有人复制为同一主题");
 assert(extractionPrompt.includes("There is no fixed character or word count"), "终局摘要不得再设置固定字数范围");
 assert(extractionPrompt.includes("attribute every action, statement, belief and emotion to the correct named character"), "摘要必须逐人归属言行、观点和情绪");

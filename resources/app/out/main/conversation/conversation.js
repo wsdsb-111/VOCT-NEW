@@ -7,6 +7,8 @@ const { buildPresenceObservationFacts } = require("../worldline/direct-observati
 const { resolveWorldlineTurnBudget, shouldTrimMemoryTurnRecall } = require("../worldline/worldline-context-budget");
 const { verifyActionConfirmation, settleActionResult } = require("../actions/action-confirmation");
 const { readActionCommandReadback } = require("../actions/action-command-readback");
+const { validateGenerationOutcome } = require("../providers/generation-outcome");
+const { planRequestBudget } = require("../providers/request-budget");
 
 let ActionEngine = null;
 let settingsRepository = null;
@@ -207,7 +209,10 @@ class Conversation {
   async checkAndSummarizeIfNeeded(npc) {
     memoryEngine?.syncRollingStateFromConversationFields(this);
     memoryEngine?.syncConversationRollingFields(this);
-    const contextLimit = await llmManager.getCurrentContextLength() || 1e4;
+    const capabilities = typeof llmManager.getProviderCapabilities === "function"
+      ? await llmManager.getProviderCapabilities("CHAT")
+      : { contextWindow: await llmManager.getCurrentContextLength() || 1e4, maxOutputTokens: 256 };
+    const contextLimit = capabilities.contextWindow;
     const memoryRecallStartedAt = Date.now();
     let memoryContext = await this.getMemoryContextFor(npc, contextLimit);
     const memoryRecallMs = Date.now() - memoryRecallStartedAt;
@@ -340,16 +345,34 @@ class Conversation {
         trimMemoryTurnRecall("context_limit_exceeded_after_worldline_trim");
       }
     }
-    const summaryPressureBuild = typeof PromptBuilder.buildMessagesWithTokenCount === "function"
-      ? PromptBuilder.buildMessagesWithTokenCount(promptHistory, npc, this.gameData, promptSummary, memoryContext)
-      : null;
-    const summaryPressureTokens = Number.isFinite(summaryPressureBuild?.totalTokens)
-      ? summaryPressureBuild.totalTokens + (Number(summaryPressureBuild.omittedHistoryTokens) || 0)
-      : estimatedTokens;
-    if (summaryPressureTokens > contextLimit * this.CONTEXT_LIMIT_PERCENTAGE) {
-      console.log(`Context approaching limit (${summaryPressureTokens}/${contextLimit}), creating rolling summary`);
-      if (this.canUseSharedRollingSummary(npc.id)) await this.createRollingSummary(contextLimit);
+    const activeProvider = settingsRepository?.getActiveProviderConfig?.();
+    const requestedOutputTokens = activeProvider?.providerType === "deepseek" ? 4096 : Number(activeProvider?.defaultParameters?.max_tokens) || 4096;
+    let budget;
+    for (let attempt = 0; attempt < 8; attempt++) {
+      const history = this.getPromptHistoryForCharacter(npc.id);
+      const summary = this.getPromptSummaryForCharacter(npc.id);
+      const messages = typeof PromptBuilder.buildMessagesWithTokenCount === "function"
+        ? PromptBuilder.buildMessagesWithTokenCount(history, npc, this.gameData, summary, memoryContext).messages
+        : PromptBuilder.buildMessages(history, npc, this.gameData, summary, memoryContext);
+      budget = planRequestBudget({ messages, capabilities, requestedOutputTokens, countTokens: (items) => this.estimateTokenCount(items) });
+      const rollingState = this.memoryState?.rollingState;
+      this.contextBudgetDiagnostics = {
+        ...budget,
+        provider: capabilities.providerType,
+        model: capabilities.modelId,
+        contextWindow: capabilities.contextWindow,
+        providerMaxOutputTokens: capabilities.maxOutputTokens,
+        softThresholdReached: budget.pressureRatio >= 0.65,
+        historyMode: rollingState?.cacheEpoch > 0 ? "COMPACTED" : "APPEND_ONLY",
+        activeRawMessageCount: history.length,
+        rollingSegmentCount: rollingState?.segments?.length || 0,
+        cacheEpoch: rollingState?.cacheEpoch || 0
+      };
+      if (budget.pressureRatio < (this.CONTEXT_LIMIT_PERCENTAGE ?? 0.75)) break;
+      const result = await this.createRollingSummary(budget.effectiveInputBudget);
+      if (!result?.committed) break;
     }
+    if (!budget.safe) throw new Error("chat_request_budget_exceeded_after_compaction");
     return memoryContext;
   }
   /**
@@ -357,16 +380,21 @@ class Conversation {
    */
   async createRollingSummary(contextLimit) {
     if (!memoryEngine) throw new Error("memory_engine_not_configured");
+    const summaryCapabilities = typeof llmManager.getProviderCapabilities === "function"
+      ? await llmManager.getProviderCapabilities("SUMMARY")
+      : { contextWindow: contextLimit, maxOutputTokens: 4096 };
+    const sourceTarget = Math.max(256, Math.min(Math.floor(contextLimit * this.MESSAGES_TO_SUMMARIZE_PERCENTAGE),
+      Math.floor(summaryCapabilities.contextWindow * 0.25), Math.floor(summaryCapabilities.maxOutputTokens * 1.5)));
     const result = await memoryEngine.maybeCreateRollingCheckpoint({
       conversation: this,
       history: this.getHistory(),
-      contextLimit,
-      percentage: this.MESSAGES_TO_SUMMARIZE_PERCENTAGE,
+      contextLimit: sourceTarget,
+      percentage: 1,
       estimateMessageTokens: (message) => this.estimateMessageTokens(message),
       buildPrompt: (messages, previousSummary) => PromptBuilder.buildResummarizePrompt(messages, previousSummary),
       requestSummary: async (summaryPrompt) => {
         console.log("[TOKEN_COUNT] Rolling summary: ", this.estimateTokenCount(summaryPrompt));
-        return llmManager.sendSummaryRequest(summaryPrompt, void 0, { requestType: "rolling_summary" });
+        return llmManager.sendSummaryRequest(summaryPrompt, void 0, { requestType: "rolling_summary", maxTokens: Math.min(2048, summaryCapabilities.maxOutputTokens) });
       }
     });
     if (result.committed) {
@@ -608,11 +636,22 @@ class Conversation {
     return windows.length === 1 && windows[0].leftAtMessageId == null && Number(windows[0].joinedAtMessageId ?? 0) <= firstMessageId;
   }
   getPromptHistoryForCharacter(characterId) {
-    const history = this.getHistoryForCharacter(characterId);
-    return this.canUseSharedRollingSummary(characterId) ? history.slice(this.lastSummarizedMessageIndex) : history;
+    const state = memoryEngine?.ensureConversationState(this).rollingState;
+    const start = Number(state?.committedThroughHistoryIndex ?? this.lastSummarizedMessageIndex) || 0;
+    const windows = this.getPresenceWindows(characterId);
+    if (!windows.length) return this.presenceInitialized ? [] : this.getHistory().slice(start);
+    if (!state?.segments?.length && !this.canUseSharedRollingSummary(characterId)) return this.getHistoryForCharacter(characterId);
+    return this.getHistory().slice(start).filter((message) => windows.some((window) => {
+      const messageId = Number(message.id);
+      return Number(window.joinedAtMessageId ?? 0) <= messageId && (window.leftAtMessageId == null || messageId < Number(window.leftAtMessageId));
+    }));
   }
   getPromptSummaryForCharacter(characterId) {
-    return this.canUseSharedRollingSummary(characterId) ? this.currentSummary : "";
+    const state = memoryEngine?.ensureConversationState(this).rollingState;
+    const segments = Array.isArray(state?.segments) ? state.segments : [];
+    if (!segments.length) return this.canUseSharedRollingSummary(characterId) ? this.currentSummary : "";
+    const legacy = this.canUseSharedRollingSummary(characterId) ? state.legacySummary || "" : "";
+    return [legacy, ...segments.filter((segment) => segment.knownBy?.includes(Number(characterId))).map((segment) => segment.content)].filter(Boolean).join("\n\n");
   }
   async joinWaitingCharacter(characterId) {
     const numericId = Number(characterId);
@@ -899,15 +938,24 @@ class Conversation {
           memoryRecallMs: memoryContext?.worldlineMetrics?.memoryRecallMs || 0,
           promptBuildMs,
           worldSharedCacheHit: memoryContext?.worldlineMetrics?.sharedWorldCacheHit === true,
-          worldSubjectiveCacheHit: memoryContext?.worldlineMetrics?.subjectiveCacheHit === true
+          worldSubjectiveCacheHit: memoryContext?.worldlineMetrics?.subjectiveCacheHit === true,
+          contextBudget: this.contextBudgetDiagnostics || null,
+          activeRawMessageCount: this.getPromptHistoryForCharacter(npc.id).length,
+          rollingSegmentCount: this.memoryState?.rollingState?.segments?.length || 0,
+          cacheEpoch: this.memoryState?.rollingState?.cacheEpoch || 0
         }
       );
       if (settingsRepository.getGlobalStreamSetting() && typeof result === "object" && typeof result[Symbol.asyncIterator] === "function") {
         try {
           const streamIterator = result;
+          let finalResponse = null;
           if (isOpenRouter) {
             const streamPromise = (async () => {
-              for await (const chunk of streamIterator) {
+              const iterator = streamIterator[Symbol.asyncIterator]();
+              while (true) {
+                const step = await iterator.next();
+                if (step.done) { finalResponse = step.value; break; }
+                const chunk = step.value;
                 if (wasCancelled || controller.signal.aborted || !this.isResponseCurrent(responseState, npc)) {
                   wasCancelled = true;
                   continue;
@@ -937,7 +985,11 @@ class Conversation {
             await Promise.race([streamPromise, checkCancellation()]);
             streamCompleted = true;
           } else {
-            for await (const chunk of streamIterator) {
+            const iterator = streamIterator[Symbol.asyncIterator]();
+            while (true) {
+              const step = await iterator.next();
+              if (step.done) { finalResponse = step.value; break; }
+              const chunk = step.value;
               if (controller.signal.aborted || !this.isResponseCurrent(responseState, npc)) {
                 wasCancelled = true;
                 throw new Error("AbortError: Message cancelled");
@@ -953,6 +1005,13 @@ class Conversation {
               }
             }
             streamCompleted = true;
+          }
+          const outcome = validateGenerationOutcome(finalResponse);
+          if (outcome.truncated) {
+            placeholder.content = await this.completeTruncatedResponse(llmMessages, placeholder.content, responseState, npc);
+            this.emitUpdate();
+          } else if (!outcome.complete) {
+            throw new Error(`chat_generation_incomplete:${outcome.finishReason || "unknown"}`);
           }
         } catch (streamError) {
           if (streamError instanceof Error && streamError.message === "AbortError: Message cancelled") {
@@ -970,7 +1029,11 @@ class Conversation {
         }
       } else if (result && typeof result === "object" && "content" in result && typeof result.content === "string") {
         if (!this.isResponseCurrent(responseState, npc)) throw new Error("AbortError: Message cancelled");
-        placeholder.content = result.content;
+        const outcome = validateGenerationOutcome(result);
+        if (!outcome.complete && !outcome.truncated) throw new Error(`chat_generation_incomplete:${outcome.finishReason || "unknown"}`);
+        placeholder.content = outcome.truncated
+          ? await this.completeTruncatedResponse(llmMessages, result.content, responseState, npc)
+          : result.content;
         placeholder.streamStatus = "generating";
         this.emitUpdate();
         placeholder.isStreaming = false;
@@ -1014,6 +1077,29 @@ class Conversation {
       return;
     }
     await this.handleActionResults(npcMessageId, npc, actionResults);
+  }
+  async completeTruncatedResponse(originalMessages, partialContent, responseState, npc) {
+    if (!partialContent?.trim()) throw new Error("chat_generation_truncated_without_content");
+    const continuationMessages = [
+      ...originalMessages,
+      { role: "assistant", content: partialContent },
+      { role: "user", content: "请从刚才截断的位置继续完成上一条回复，不要重复已写内容。" }
+    ];
+    const response = await llmManager.sendChatRequest(continuationMessages, responseState.controller.signal, true, {
+      requestType: "chat_continuation",
+      conversationId: this.id,
+      responderId: npc.id,
+      continuationAttempt: 1
+    });
+    if (!this.isResponseCurrent(responseState, npc)) throw new Error("AbortError: Message cancelled");
+    const outcome = validateGenerationOutcome(response);
+    if (!outcome.complete || !outcome.content.trim()) throw new Error("chat_continuation_incomplete");
+    let overlap = 0;
+    const maxOverlap = Math.min(160, partialContent.length, outcome.content.length);
+    for (let size = maxOverlap; size > 0; size--) {
+      if (partialContent.endsWith(outcome.content.slice(0, size))) { overlap = size; break; }
+    }
+    return partialContent + outcome.content.slice(overlap);
   }
   /**
    * Handle action results using the official VOTC 2.0.3 approval flow.
@@ -1412,7 +1498,11 @@ class Conversation {
   }
   checkpointFinalization(reason = "conversation_active") {
     if (!memoryEngine || this.getHistory().length === 0) return null;
-    return memoryEngine.checkpointConversation(this.buildFinalizationBaseContext(), { reason });
+    return memoryEngine.checkpointConversation({
+      ...this.buildFinalizationBaseContext(),
+      finalInstructions: PromptBuilder?.getFinalSummaryInstructions?.() || "",
+      summaryOutputLimit: PromptBuilder?.getFinalSummaryMaxTokens?.() || 4096
+    }, { reason });
   }
   // Create final comprehensive summary and save to characters
   async finalizeConversation(options = {}) {
@@ -1473,6 +1563,8 @@ class Conversation {
     return memoryEngine.finalizeConversation({
       ...baseContext,
       finalInstructions: PromptBuilder.getFinalSummaryInstructions(),
+      summaryOutputLimit: PromptBuilder.getFinalSummaryMaxTokens?.() || 4096,
+      getSummaryCapabilities: (snapshot) => llmManager.getProviderCapabilities("SUMMARY", snapshot),
       buildPrompt: (context) => memoryEngine.buildFinalizationPrompt(context),
       persistCharacterFolders: async (finalSummary, context) => {
         return this.gameData.saveCharactersSummaries(finalSummary, participantIds, {
@@ -1488,11 +1580,12 @@ class Conversation {
       },
       requestSummary: async (summaryPrompt, requestOptions = {}) => {
         console.log(`[TOKEN_COUNT] Final memory prompt tokens: ${this.estimateTokenCount(summaryPrompt)}`);
-        const maxTokens = typeof PromptBuilder.getFinalSummaryMaxTokens === "function" ? PromptBuilder.getFinalSummaryMaxTokens() : 4096;
         return llmManager.sendSummaryRequest(summaryPrompt, void 0, {
           requestType: "final_summary",
           summaryAttempt: requestOptions.attempt,
-          maxTokens
+          maxTokens: requestOptions.maxTokens,
+          providerSnapshot: requestOptions.providerSnapshot,
+          summaryBudget: requestOptions.summaryBudget
         });
       }
     });
@@ -1501,8 +1594,9 @@ class Conversation {
     if (!memoryEngine || !this.gameData) return;
     const results = await memoryEngine.recoverPendingFinalizations({
       isConversationActive: id => id === this.id && this.isActive,
-      buildPrompt: (context) => memoryEngine.buildFinalizationPrompt({ ...context, finalInstructions: PromptBuilder.getFinalSummaryInstructions() }),
-      requestSummary: (summaryPrompt) => llmManager.sendSummaryRequest(summaryPrompt, void 0, { requestType: "memory_recovery", maxTokens: typeof PromptBuilder.getFinalSummaryMaxTokens === "function" ? PromptBuilder.getFinalSummaryMaxTokens() : 4096 }),
+      buildPrompt: (context) => memoryEngine.buildFinalizationPrompt({ ...context, finalInstructions: context.finalInstructions || PromptBuilder.getFinalSummaryInstructions() }),
+      getSummaryCapabilities: (snapshot) => llmManager.getProviderCapabilities("SUMMARY", snapshot),
+      requestSummary: (summaryPrompt, options = {}) => llmManager.sendSummaryRequest(summaryPrompt, void 0, { requestType: "memory_recovery", maxTokens: options.maxTokens, providerSnapshot: options.providerSnapshot, summaryBudget: options.summaryBudget }),
       resolveParticipantProfiles: (snapshot) => memoryEngine.resolveRecoveryParticipantProfiles(snapshot, [...this.summaryParticipantProfiles.values()]),
       persistCharacterFolders: async (finalSummary, context) => {
         const participantIds = (context.participants || []).map((entry) => entry.id);
@@ -1523,7 +1617,7 @@ class Conversation {
   // Get conversation history
   getHistory() {
     return this.messages.filter(
-      (entry) => "role" in entry
+      (entry) => "role" in entry && entry.isStreaming !== true && entry.incomplete !== true
     );
   }
   clearHistory() {

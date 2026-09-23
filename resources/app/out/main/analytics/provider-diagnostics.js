@@ -236,7 +236,7 @@ function createProviderDiagnostics({ fs, path, dataDir, settingsRepository, prov
 
     recordResponse({ provider, model, requestType, response, usage, metadata = {}, startedAt, completedAt, firstReasoningAt, firstVisibleContentAt }) {
       const hasRealDiff = metadata.realRequestDiff && metadata.realRequestDiff.version === "real_request_diff_v1";
-      if (!hasRealDiff && provider !== "zhipu") return null;
+      if (!hasRealDiff && provider !== "zhipu" && !["summary", "final_summary", "memory_recovery", "rolling_summary"].includes(requestType)) return null;
       const usageDebug = response?.usage_debug;
       const normalizedUsage = sanitizeUsage(normalizeProviderUsage(usageDebug?.normalized_usage || usage), true);
       const rawUsage = sanitizeUsage(usageDebug?.raw_usage || response?.usage, false);
@@ -252,6 +252,22 @@ function createProviderDiagnostics({ fs, path, dataDir, settingsRepository, prov
         rawUsage,
         normalizedUsage,
         providerUsage,
+        requestBudget: metadata.requestBudget ? {
+          estimatedInputTokens: metadata.requestBudget.estimatedInputTokens,
+          reservedOutputTokens: metadata.requestBudget.reservedOutputTokens,
+          safetyMarginTokens: metadata.requestBudget.safetyMarginTokens,
+          effectiveInputBudget: metadata.requestBudget.effectiveInputBudget,
+          pressureRatio: metadata.requestBudget.pressureRatio
+        } : null,
+        contextBudget: metadata.contextBudget || null,
+        summaryBudget: metadata.summaryBudget || null,
+        activeRawMessageCount: metadata.activeRawMessageCount ?? null,
+        rollingSegmentCount: metadata.rollingSegmentCount ?? null,
+        cacheEpoch: metadata.cacheEpoch ?? null,
+        finishReason: response?.finish_reason ?? response?.finishReason ?? null,
+        truncated: ["length", "max_tokens", "max_output_tokens"].includes(response?.finish_reason ?? response?.finishReason),
+        continuationAttempt: metadata.continuationAttempt ?? 0,
+        actionDeferred: requestType === "chat" && ["length", "max_tokens", "max_output_tokens"].includes(response?.finish_reason ?? response?.finishReason),
         alignmentStatus: realRequestDiff?.alignmentStatus || null,
         realRequestDiff,
         localPrefixDiagnostics: buildLocalPrefixDiagnostics({ normalizedUsage, blocks, TokenCounter, messages }),

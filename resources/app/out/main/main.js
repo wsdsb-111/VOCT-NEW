@@ -606,8 +606,9 @@ const SummariesManager = createSummariesManager({
   memoryEngine,
   memorySystem,
   getCurrentConversation: () => conversationManager.getCurrentConversation(),
-  buildSummaryPrompt: context => memoryEngine.buildFinalizationPrompt({ ...context, finalInstructions: PromptBuilder.getFinalSummaryInstructions() }),
-  requestSummary: (prompt, options = {}) => llmManager.sendSummaryRequest(prompt, void 0, { requestType: "memory_recovery", summaryAttempt: options.attempt, maxTokens: PromptBuilder.getFinalSummaryMaxTokens() }),
+  buildSummaryPrompt: context => memoryEngine.buildFinalizationPrompt({ ...context, finalInstructions: context.finalInstructions || PromptBuilder.getFinalSummaryInstructions() }),
+  getSummaryCapabilities: snapshot => llmManager.getProviderCapabilities("SUMMARY", snapshot),
+  requestSummary: (prompt, options = {}) => llmManager.sendSummaryRequest(prompt, void 0, { requestType: "memory_recovery", summaryAttempt: options.attempt, maxTokens: options.maxTokens, providerSnapshot: options.providerSnapshot, summaryBudget: options.summaryBudget }),
   persistRecoveredSummary: (summary, context) => GameData.saveRecoveredSummary(summary, context)
 });
 const updaterTranslations = {

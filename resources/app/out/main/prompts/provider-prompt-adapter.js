@@ -17,7 +17,7 @@ const DEEPSEEK_PROFILE = Object.freeze({
 const GLM_CACHE_PROFILE = Object.freeze({
   id: "glm_cache_v2",
   label: "GLM Cache v2",
-  historyWindow: 12,
+  historyWindow: null,
   glmCacheLayout: true
 });
 

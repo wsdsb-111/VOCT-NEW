@@ -9,7 +9,10 @@ const { buildSubjectiveWorldTurnRecall } = require("../resources/app/out/main/wo
 async function pressureFixture(baseTokens, remainingWorldTokens, memoryExpected = true) {
   const budgets = [];
   const analytics = [];
-  const PromptBuilder = { buildMessages: (_history, _npc, _gameData, _summary, memoryContext) => [{ baseTokens, hasTurn: Boolean(memoryContext?.turnRecallText) }] };
+  const PromptBuilder = {
+    buildMessages: (_history, _npc, _gameData, _summary, memoryContext) => [{ baseTokens, hasTurn: Boolean(memoryContext?.turnRecallText) }],
+    buildMessagesWithTokenCount: () => ({ messages: [{ budgetOnly: true }] })
+  };
   Conversation.configure({
     memoryEngine: { syncRollingStateFromConversationFields() {}, syncConversationRollingFields() {} },
     llmManager: { getCurrentContextLength: async () => 1000 },
@@ -29,7 +32,7 @@ async function pressureFixture(baseTokens, remainingWorldTokens, memoryExpected 
     presentCharacterIds: new Set(), id: "conversation", turnEpoch: 1, memoryState: {},
     getMemoryContextFor: async () => ({ turnRecallText: "memory-turn", turnRecallTokens: 11, worldlineRequest: {} }),
     getPromptHistoryForCharacter: () => [], getPromptSummaryForCharacter: () => "",
-    estimateTokenCount: (messages) => messages[0].hasTurn ? baseTokens : baseTokens - 11,
+    estimateTokenCount: (messages) => messages[0].budgetOnly ? 100 : messages[0].hasTurn ? baseTokens : baseTokens - 11,
     canUseSharedRollingSummary: () => false
   };
   const result = await Conversation.prototype.checkAndSummarizeIfNeeded.call(fake, { id: 2 });
@@ -57,7 +60,7 @@ async function pressureFixture(baseTokens, remainingWorldTokens, memoryExpected 
     worldlineService: { isSubjectivePromptIntegrationEnabled: () => false },
     PromptBuilder: {
       buildMessages: () => [{ limited: true }],
-      buildMessagesWithTokenCount: () => ({ totalTokens: 100, omittedHistoryTokens: 700 })
+      buildMessagesWithTokenCount: () => ({ messages: [{ budgetOnly: true }], totalTokens: 100, omittedHistoryTokens: 700 })
     },
     TokenCounter: { estimateTokens: () => 0 }
   });
@@ -72,7 +75,7 @@ async function pressureFixture(baseTokens, remainingWorldTokens, memoryExpected 
     createRollingSummary: async () => { rollingSummaryCalls += 1; },
     CONTEXT_LIMIT_PERCENTAGE: 0.75
   }, { id: 2 });
-  assert.strictEqual(rollingSummaryCalls, 1, "omitted GLM history pressure must create a rolling summary before old turns are discarded");
+  assert.strictEqual(rollingSummaryCalls, 0, "append-only GLM history must not compact based on a removed fixed-window omission estimate");
   const facts = [
     { factId: "b", entityId: "2", field: "LOCATION", sourceTier: "GAME_TRUTH", value: "乙在临安" },
     { factId: "a", entityId: "1", field: "LOCATION", sourceTier: "GAME_TRUTH", value: "甲在开封" },

@@ -92,6 +92,6 @@ assert(gameDataSource.includes("memorySystem.resolveSummaryParticipants"), "fold
 assert(gameDataSource.includes("memorySystem.buildDirectedParticipantPairs"), "runtime folder persistence must use the tested all-participant directed pair builder");
 assert(!providerServiceSource.includes('thinking: { type: "enabled" }, max_tokens: 12288'), "DeepSeek final summaries must not use thinking after the P0 empty-output regression");
 assert(providerServiceSource.includes('thinking: { type: "disabled" }, max_tokens: structuredSummaryMaxTokens'), "DeepSeek final summaries and recovery must use non-thinking structured output");
-assert(providerServiceSource.includes('requestedMaxTokens >= 256 && requestedMaxTokens <= 16384'), "DeepSeek recovery must keep the configured output limit within the supported range");
+assert(providerServiceSource.includes('requestedMaxTokens >= 256 ? Math.min(requestedMaxTokens, capabilities.maxOutputTokens)'), "DeepSeek recovery must respect the selected Summary Provider output ceiling");
 
 console.log("VOTC v7.3.1 summary recovery: PASS (2-6 participants, scene-independent profiles, complete directed folders)");

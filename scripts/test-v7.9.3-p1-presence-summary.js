@@ -245,7 +245,7 @@ async function assertFourParticipantMalformedProviderRemainsRetryable() {
       }
     });
     assert.strictEqual(result.success, false, "malformed output must stay retryable, never commit a transcript");
-    assert(requestCount >= 4, "whole-summary retries and the first chunk retry must call the model");
+    assert.strictEqual(requestCount, 2, "malformed JSON gets one same-size correction retry, then preserves recovery without blind chunk retries");
     assert.strictEqual(folderWrite, null);
     assert.strictEqual(engine.store.readJson(result.recoveryPath).rawMessages.length, 8);
     assert(!trace.list().some((entry) => entry.stage === "summary_source_grounded_fallback"));

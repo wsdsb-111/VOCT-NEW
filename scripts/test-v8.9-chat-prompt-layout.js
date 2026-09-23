@@ -151,13 +151,13 @@ glmHistory.push({ role: "user", content: "GLM_CURRENT_USER" });
 const glm = build(glmHistory);
 assert.match(glm.messages[0].content, /^VOTC_CACHE_BLOCK_v8\.10/);
 assert.strictEqual(glm.promptProfile.label, "GLM Cache v2");
-assert.strictEqual(glm.promptProfile.historyWindow, 12);
+assert.strictEqual(glm.promptProfile.historyWindow, null);
 assert.strictEqual(glm.promptProfile.layoutId, "glm_cache_v2");
-assert.strictEqual(glm.blocks.find((entry) => entry.block.id === "history").content.match(/GLM_HISTORY_/g).length, 11, "GLM must retain only the 11 prior messages adjacent to its current user message");
+assert.strictEqual(glm.blocks.find((entry) => entry.block.id === "history").content.match(/GLM_HISTORY_/g).length, 15, "GLM must retain prior messages until context pressure requires compaction");
 assert(blockIndex(glm, "responder-game-facts") < blockIndex(glm, "history"), "GLM dynamic runtime must precede short history after the stable cache zone");
 assert(blockIndex(glm, "memory-session-topic-anchor") < blockIndex(glm, "history"), "GLM session topic memory must live in the dynamic tail");
 assert(glm.staticTokens > 0 && glm.dynamicTokens > 0);
-assert(glm.omittedHistoryTokens > 0, "GLM must preserve omitted history pressure for rolling-summary decisions");
+assert.strictEqual(glm.omittedHistoryTokens, 0, "GLM must not discard raw history at a fixed message count");
 
 v810ProviderAdapter = false;
 const glmRollback = build();

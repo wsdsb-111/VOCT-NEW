@@ -135,6 +135,7 @@ const releaseChecks = [
   { group: "v8.5.1-historical-index-worker", script: "test-v8.5.1-historical-index-worker.js" },
   { group: "v8.5.1-sol-safety", script: "test-v8.5.1-sol-safety.js" },
   { group: "summary-incident-recovery", script: "test-summary-incident-recovery.js" },
+  { group: "v8.12-context-summary-reliability", script: "test-v8.12-context-summary-reliability.js" },
   { group: "summary-recall-promises", script: "test-summary-recall-promises.js" },
   { group: "v8.5.2-historical-lifecycle", script: "test-v8.5.2-historical-lifecycle.js" },
   { group: "v8.5.2-long-historical-name", script: "test-v8.5.2-long-historical-name.js" },

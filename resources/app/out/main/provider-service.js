@@ -2,6 +2,7 @@
 
 const crypto = require("crypto");
 const { estimateTokens } = require("./token-estimator");
+const { resolveProviderCapabilities, planRequestBudget } = require("./providers/request-budget");
 const { OVERLAY_BLOCK_ID, OVERLAY_VERSION, prepareActionMessages } = require("./actions/action-prompt-compatibility-overlay");
 
 class ProviderRegistry {
@@ -108,6 +109,7 @@ class LLMManager {
     this.debugVerboseLLM = debugVerboseLLM;
     this.logVerboseLLM = logVerboseLLM;
     this.providers = /* @__PURE__ */ new Map();
+    this.capabilityCache = new Map();
     console.log("LLMManager initialized with refactored architecture.");
   }
   // --- Provider Instantiation ---
@@ -118,6 +120,41 @@ class LLMManager {
     const provider = this.providerRegistry.createProvider(config);
     this.providers.set(config.providerType, provider);
     return provider;
+  }
+  getRouteProviderConfig(route, snapshot = null) {
+    const selected = route === "SUMMARY" ? this.settingsRepository.getSummaryProviderConfig()
+      : route === "ACTION" ? this.settingsRepository.getActionsProviderConfig()
+      : this.settingsRepository.getActiveProviderConfig();
+    if (!snapshot) return selected;
+    const pinned = this.settingsRepository.getProviderConfigById?.(snapshot.providerId);
+    if (!pinned || pinned.defaultModel !== snapshot.modelId || pinned.providerType !== snapshot.providerType) {
+      throw new Error("summary_provider_snapshot_unavailable");
+    }
+    return pinned;
+  }
+  async getProviderCapabilities(route = "CHAT", snapshot = null) {
+    const config = this.getRouteProviderConfig(route, snapshot);
+    if (!config?.defaultModel) throw new Error(`${route.toLowerCase()}_provider_not_configured`);
+    const key = `${config.instanceId || config.providerType}:${config.defaultModel}:${config.customContextLength || ""}:${config.customMaxOutputTokens || ""}:${config.defaultParameters?.max_tokens || ""}`;
+    let cached = this.capabilityCache.get(key);
+    if (!cached || cached.expiresAt < Date.now()) {
+      let model = null;
+      if (!config.customContextLength || !config.customMaxOutputTokens) {
+        try {
+          const models = await this.getProviderInstance(config).listModels?.(config);
+          model = Array.isArray(models) ? models.find((candidate) => candidate.id === config.defaultModel) || null : null;
+        } catch (error) {
+          console.warn(`[LLMManager] ${route} capability lookup failed:`, error.message || String(error));
+        }
+      }
+      cached = { model, expiresAt: Date.now() + 5 * 60 * 1000 };
+      this.capabilityCache.set(key, cached);
+    }
+    const capabilities = resolveProviderCapabilities(config, cached.model, route);
+    if (snapshot && (capabilities.contextWindow !== snapshot.contextWindow || capabilities.maxOutputTokens !== snapshot.maxOutputTokens)) {
+      throw new Error("summary_provider_capabilities_changed");
+    }
+    return capabilities;
   }
   // --- Core Functionality ---
   async listModelsForProvider() {
@@ -177,6 +214,15 @@ class LLMManager {
       signal
       // ...params,
     };
+    const capabilities = await this.getProviderCapabilities("CHAT");
+    const requestedMaxTokens = Number(metadata.maxTokens) || Number(request.max_tokens) || capabilities.maxOutputTokens;
+    const budget = planRequestBudget({ messages, capabilities, requestedOutputTokens: requestedMaxTokens, countTokens: (items) => this.TokenCounter.calculateTotalTokens(items) });
+    if (!budget.safe) {
+      const error = new Error("chat_request_budget_exceeded");
+      error.budget = budget;
+      throw error;
+    }
+    request.max_tokens = budget.reservedOutputTokens;
     const estimatedPromptTokens = this.TokenCounter.calculateTotalTokens(messages);
     console.log(`[LLMManager] Chat request: provider=${activeConfig.providerType}, model=${activeConfig.defaultModel}, messages=${messages.length}, estimatedPromptTokens=${estimatedPromptTokens}${isDeepseekChat ? `, maxTokens=${request.max_tokens}, thinking=enabled` : ""}`);
     if (this.debugVerboseLLM) {
@@ -215,6 +261,7 @@ class LLMManager {
     const requestStartedAt = new Date().toISOString();
     return await this.trackUsage(provider.chatCompletion(request, activeConfig), {
       ...metadata,
+      requestBudget: budget,
       requestType,
       providerType: activeConfig.providerType,
       model: activeConfig.defaultModel,
@@ -404,7 +451,7 @@ class LLMManager {
    * Uses the summary provider override if set, otherwise active provider.
    */
   async sendSummaryRequest(messages, signal, metadata = {}) {
-    const config = this.settingsRepository.getSummaryProviderConfig();
+    const config = this.getRouteProviderConfig("SUMMARY", metadata.providerSnapshot);
     if (!config) {
       throw new Error("No provider configured for Summaries.");
     }
@@ -417,7 +464,8 @@ class LLMManager {
     const isStructuredSummary = ["final_summary", "memory_recovery"].includes(metadata.requestType);
     const useDeepseekNonThinking = config.providerType === "deepseek" && isStructuredSummary;
     const requestedMaxTokens = Number(metadata?.maxTokens);
-    const structuredSummaryMaxTokens = Number.isInteger(requestedMaxTokens) && requestedMaxTokens >= 256 && requestedMaxTokens <= 16384 ? requestedMaxTokens : 4096;
+    const capabilities = await this.getProviderCapabilities("SUMMARY", metadata.providerSnapshot);
+    const structuredSummaryMaxTokens = Number.isInteger(requestedMaxTokens) && requestedMaxTokens >= 256 ? Math.min(requestedMaxTokens, capabilities.maxOutputTokens) : Math.min(4096, capabilities.maxOutputTokens);
     const request = {
       model: config.defaultModel,
       messages: preparedMessages,
@@ -427,6 +475,13 @@ class LLMManager {
       ...useDeepseekNonThinking ? { thinking: { type: "disabled" }, max_tokens: structuredSummaryMaxTokens, response_format: { type: "json_object" } } : isStructuredSummary ? { max_tokens: structuredSummaryMaxTokens, response_format: { type: "json_object" } } : {},
       signal
     };
+    const budget = planRequestBudget({ messages: preparedMessages, capabilities, requestedOutputTokens: Number(request.max_tokens) || structuredSummaryMaxTokens, countTokens: (items) => this.TokenCounter.calculateTotalTokens(items) });
+    if (!budget.safe) {
+      const error = new Error("summary_request_budget_exceeded");
+      error.budget = budget;
+      throw error;
+    }
+    request.max_tokens = budget.reservedOutputTokens;
     const estimatedPromptTokens = this.TokenCounter.calculateTotalTokens(preparedMessages);
     const deepseekMode = useDeepseekNonThinking ? `, maxTokens=${structuredSummaryMaxTokens}, thinking=disabled` : "";
     console.log(`[LLMManager] Summary request: provider=${config.providerType}, model=${config.defaultModel}, messages=${preparedMessages.length}, estimatedPromptTokens=${estimatedPromptTokens}${deepseekMode}`);
@@ -434,7 +489,7 @@ class LLMManager {
       this.logVerboseLLM("[LLMManager][verbose] Summary messages:", preparedMessages);
       this.logVerboseLLM("[LLMManager][verbose] Provider config:", JSON.stringify(config).replace(/"apiKey":\s*"[^"]*"/g, "HIDDEN"));
     }
-    return await this.trackUsage(provider.chatCompletion(request, config), { ...metadata, blocks: summaryBlocks, requestType: metadata.requestType || "summary", providerType: config.providerType, model: config.defaultModel, estimatedPromptTokens });
+    return await this.trackUsage(provider.chatCompletion(request, config), { ...metadata, requestBudget: budget, blocks: summaryBlocks, requestType: metadata.requestType || "summary", providerType: config.providerType, model: config.defaultModel, estimatedPromptTokens });
   }
   async trackUsage(result, metadata) {
     const response = await result;
@@ -496,40 +551,11 @@ class LLMManager {
   }
   // Get current context length for the active provider
   async getCurrentContextLength() {
-    const activeConfig = this.settingsRepository.getActiveProviderConfig();
-    if (!activeConfig) {
-      return 9e4;
-    }
-    if (activeConfig.customContextLength !== void 0) {
-      return activeConfig.customContextLength;
-    }
-    try {
-      const models = await this.listModelsForProvider();
-      const currentModel = models.find((model) => model.id === activeConfig.defaultModel);
-      if (currentModel && currentModel.contextLength !== void 0) {
-        return currentModel.contextLength;
-      }
-    } catch (error) {
-      console.warn("Failed to fetch model context length:", error);
-    }
-    return 9e4;
+    return (await this.getProviderCapabilities("CHAT")).contextWindow;
   }
   // Get the maximum context length for the current model
   async getMaxContextLength() {
-    const activeConfig = this.settingsRepository.getActiveProviderConfig();
-    if (!activeConfig) {
-      return 9e4;
-    }
-    try {
-      const models = await this.listModelsForProvider();
-      const currentModel = models.find((model) => model.id === activeConfig.defaultModel);
-      if (currentModel && currentModel.contextLength !== void 0) {
-        return currentModel.contextLength;
-      }
-    } catch (error) {
-      console.warn("Failed to fetch model max context length:", error);
-    }
-    return 9e4;
+    return (await this.getProviderCapabilities("CHAT")).contextWindow;
   }
   // Set custom context length for the active provider
   setCustomContextLength(contextLength) {

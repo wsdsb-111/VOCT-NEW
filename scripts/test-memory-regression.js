@@ -215,8 +215,15 @@ async function testFinalizationRecoveryAndStructuredExtraction() {
     recovery.retryCount = 1;
     store.writeJson(recoveryFiles[0], recovery);
     const [recovered] = await engine.recoverPendingFinalizations({
-      requestSummary: async () => ({ content: payload }),
-      buildPrompt: () => []
+      requestSummary: async (prompt) => {
+        const ids = new Set(prompt.map((entry) => entry.id));
+        const parsed = JSON.parse(payload);
+        return { content: JSON.stringify({
+          summarySegments: parsed.summarySegments.map((segment) => ({ ...segment, messageIds: segment.messageIds.filter((id) => ids.has(id)) })).filter((segment) => segment.messageIds.length),
+          memories: parsed.memories.filter((memory) => memory.messageIds.every((id) => ids.has(id)))
+        }) };
+      },
+      buildPrompt: (chunk) => chunk.messages
     });
     assert.strictEqual(recovered.success, true);
     assert.strictEqual(engine.listRecoverySnapshots().length, 0);
