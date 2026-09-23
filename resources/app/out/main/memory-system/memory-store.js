@@ -6,6 +6,7 @@ const path = require("path");
 const { createMemoryRecord, uniqueIds } = require("./memory-types");
 const { CURRENT_MEMORY_SCHEMA_VERSION } = require("./memory-schema");
 const { MEMORY_ENGINE_VERSION } = require("../version");
+const { buildSummaryDateIndex } = require("./summary-date-index");
 
 function removeDirectoryTree(directory) {
   for (const entry of fs.readdirSync(directory, { withFileTypes: true })) {
@@ -59,6 +60,7 @@ class MemoryStore {
     this.restoreSummaryMutation();
     this.index = this.readJson(this.paths.index, { schemaVersion: CURRENT_MEMORY_SCHEMA_VERSION, memories: {}, episodes: {} });
     this.folderSummaryCache = new Map();
+    this.summaryDateIndexCache = new Map();
     this.folderSummaryCacheMetrics = { hits: 0, misses: 0, invalidations: 0 };
   }
 
@@ -436,11 +438,23 @@ class MemoryStore {
     if (characterIds == null) {
       this.folderSummaryCacheMetrics.invalidations += this.folderSummaryCache.size;
       this.folderSummaryCache.clear();
+      this.summaryDateIndexCache.clear();
       return;
     }
     for (const characterId of uniqueIds(characterIds)) {
       if (this.folderSummaryCache.delete(characterId)) this.folderSummaryCacheMetrics.invalidations++;
+      for (const key of this.summaryDateIndexCache.keys()) if (key.startsWith(String(characterId) + "|")) this.summaryDateIndexCache.delete(key);
     }
+  }
+
+  getSummaryDateIndexForPair(ownerId, counterpartId, { currentGameDate, currentTotalDays, ownerFolderMemories = null } = {}) {
+    const key = String(ownerId) + "|" + String(counterpartId);
+    const previous = this.summaryDateIndexCache.get(key);
+    if (previous?.gameDate === currentGameDate && previous?.totalDays === currentTotalDays) return previous.entries;
+    const memories = this.loadDirectPairSummaries(ownerId, counterpartId, ownerFolderMemories);
+    const entries = buildSummaryDateIndex(memories, { ownerId, counterpartId, currentGameDate, currentTotalDays });
+    this.summaryDateIndexCache.set(key, { gameDate: currentGameDate, totalDays: currentTotalDays, entries });
+    return entries;
   }
 
   getFolderSummaryCacheMetrics() {
@@ -536,7 +550,7 @@ class MemoryStore {
               counterpartIds: [counterpartId],
               counterpartNames: [counterpartName],
               participantProfiles: summaryProfiles,
-              extractionMode: summary.engineVersion === MEMORY_ENGINE_VERSION ? "folder_summary_v2_5" : summary.engineVersion === "2.4" ? "folder_summary_v2_4" : summary.engineVersion === "2.3" ? "folder_summary_v2_3" : "folder_summary_v2_1",
+              extractionMode: ["2.5", MEMORY_ENGINE_VERSION].includes(summary.engineVersion) ? "folder_summary_v2_5" : summary.engineVersion === "2.4" ? "folder_summary_v2_4" : summary.engineVersion === "2.3" ? "folder_summary_v2_3" : "folder_summary_v2_1",
               perspectiveMemoryIds: summary.perspectiveMemoryIds || [],
               projectionHash: summary.projectionHash || null,
               messageIds: [],

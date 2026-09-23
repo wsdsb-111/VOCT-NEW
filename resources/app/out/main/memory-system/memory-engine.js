@@ -20,14 +20,13 @@ const { buildThirdPartyEvidencePatch } = require("./third-party-evidence");
 const { planSummaryRequest } = require("./summary-budget-planner");
 const { estimateTokens } = require("../token-estimator");
 const { validateGenerationOutcome } = require("../providers/generation-outcome");
+const { normalizeGameDate } = require("../worldline/character-temporal-facts");
+const { resolveTemporalWindow } = require("./fuzzy-temporal-resolver");
+const { selectTemporalExtras } = require("./summary-date-index");
 
 const FINAL_SUMMARY_MAX_ATTEMPTS = 2;
 const RECOVERY_MAX_ATTEMPTS = 3;
-const SUMMARY_CHUNK_ABSOLUTE_LIMIT = 512;
-
-function summaryChunkLimit(messageCount) {
-  return Math.min(SUMMARY_CHUNK_ABSOLUTE_LIMIT, Math.max(64, messageCount * 2));
-}
+const SUMMARY_CHUNK_HARD_LIMIT = 64;
 
 function countSummaryTokens(messages) {
   return (messages || []).reduce((total, message) => total + estimateTokens(message?.name ? `${message.name}: ${message.content || ""}` : message?.content || ""), 0);
@@ -695,7 +694,7 @@ class MemoryEngine {
       currentSignature = signature;
     }
     if (current.length) chunks.push(current);
-    if (chunks.length > summaryChunkLimit(context.messages?.length || 0)) throw new Error("summary_chunk_hard_limit_exceeded");
+    if (chunks.length > SUMMARY_CHUNK_HARD_LIMIT) throw new Error("summary_chunk_hard_limit_exceeded");
     return chunks;
   }
 
@@ -741,7 +740,7 @@ class MemoryEngine {
         && Number(window.joinedAtMessageId ?? 0) <= lastId && (window.leftAtMessageId == null || Number(window.leftAtMessageId) > firstId));
       const chunk = { ...context, summaryChunk: true, summaryChunkIndex: requestCount + 1, rollingState: null, messages, participants, participantPresence };
       requestCount += 1;
-      if (requestCount > summaryChunkLimit(context.messages?.length || 0)) throw new Error("summary_chunk_hard_limit_exceeded");
+      if (requestCount > SUMMARY_CHUNK_HARD_LIMIT) throw new Error("summary_chunk_hard_limit_exceeded");
       try {
         this.trace.record("summary_chunk", { conversationId: context.conversationId, reason: "preflight_or_failure", attempt: requestCount });
         const parsed = this.extractor.parseOutput(await this.requestFinalSummary(chunk), chunk);
@@ -1222,9 +1221,8 @@ class MemoryEngine {
 
   getMemoryRecency(memory) {
     const totalDays = Number(memory.totalDays);
-    if (Number.isFinite(totalDays)) return totalDays;
-    const timestamp = Date.parse(memory.updatedAt || memory.createdAt || memory.eventDate || "");
-    return Number.isFinite(timestamp) ? timestamp : 0;
+    if (Number.isFinite(totalDays) && totalDays > 0) return totalDays;
+    return normalizeGameDate(memory.eventDate)?.serial || 0;
   }
 
   selectRoutedMemories(routeGroups, { tokenBudget, estimateTokens, mode } = {}) {
@@ -1247,7 +1245,7 @@ class MemoryEngine {
         allowTruncate: true
       });
       if (!fitted) return { added: false, merged: false };
-      const routed = { ...fitted, routeKind: mode, routeCharacterIds: [Number(routeCharacterId)] };
+      const routed = { ...fitted, routeKind: mode === "direct_legacy" ? "direct" : mode, routeCharacterIds: [Number(routeCharacterId)] };
       selected.push(routed);
       selectedByKey.set(key, routed);
       usedTokens += fitted.tokens;
@@ -1255,24 +1253,22 @@ class MemoryEngine {
     };
 
     const recentByRoute = new Map(groups.map(([routeId, entries]) => [routeId, [...entries].sort((left, right) => this.getMemoryRecency(right.memory) - this.getMemoryRecency(left.memory))]));
-    const baselineRounds = mode === "direct" ? 3 : 1;
+    const baselineRounds = mode === "direct_legacy" ? 3 : mode === "direct" ? 2 : 1;
     const recentKeys = new Set([...recentByRoute.values()].flatMap(entries => entries.slice(0, baselineRounds).map(entry => this.getRouteMemoryKey(entry.memory))));
-    const extraLimit = mode === "direct" ? (groups.length === 1 ? 1 : 2) : 0;
-    const pinnedPool = groups.flatMap(([routeId, entries]) => entries.map(entry => ({ routeId, entry })))
+    const pinnedPool = mode === "direct_legacy" ? groups.flatMap(([routeId, entries]) => entries.map(entry => ({ routeId, entry })))
       .filter(({ entry }) => !recentKeys.has(this.getRouteMemoryKey(entry.memory)) && (entry.memory.importance >= 0.9 || entry.memory.status === "open" || entry.memory.unresolved))
-      .sort((left, right) => right.entry.score - left.entry.score);
-    const pinnedKeys = new Set(pinnedPool.map(({ entry }) => this.getRouteMemoryKey(entry.memory)));
-    const baselineAllowance = Math.max(1, Math.floor(tokenBudget / Math.max(1, recentKeys.size + Math.min(extraLimit, pinnedKeys.size))));
+      .sort((left, right) => right.entry.score - left.entry.score) : [];
+    const extraLimit = mode === "direct_legacy" ? groups.length === 1 ? 1 : 2 : 0;
+    const baselineAllowance = Math.max(1, Math.floor(tokenBudget / Math.max(1, recentKeys.size + Math.min(extraLimit, pinnedPool.length))));
     for (let round = 0; round < baselineRounds; round++) {
       for (const [routeId] of groups) add(recentByRoute.get(routeId)?.[round], routeId, baselineAllowance);
     }
 
-    if (mode === "direct") {
-      let extrasAdded = 0;
+    if (mode === "direct_legacy") {
+      let added = 0;
       for (const candidate of pinnedPool) {
-        if (extrasAdded >= extraLimit || usedTokens >= tokenBudget) break;
-        const result = add(candidate.entry, candidate.routeId);
-        if (result.added) extrasAdded++;
+        if (added >= extraLimit || usedTokens >= tokenBudget) break;
+        if (add(candidate.entry, candidate.routeId).added) added++;
       }
     } else if (mode === "mentioned") {
       for (let index = 0; index < groups.length; index++) {
@@ -1285,7 +1281,7 @@ class MemoryEngine {
     return selected;
   }
 
-  retrieveForResponder({ characterId, query = "", directCounterpartIds = [], mentionedEntityIds = [], mentionedEntityNames = {}, mentionedRecallCache = null, sessionRecallCache = null, ownerFolderMemories = null, currentTotalDays = null, tokenBudget = 800, estimateTokens } = {}) {
+  retrieveForResponder({ characterId, query = "", directCounterpartIds = [], mentionedEntityIds = [], mentionedEntityNames = {}, mentionedRecallCache = null, sessionRecallCache = null, ownerFolderMemories = null, currentGameDate = null, currentTotalDays = null, memoryEngine3Enabled = true, temporalSummaryRecallEnabled = true, tokenBudget = 800, estimateTokens } = {}) {
     const startedAt = Date.now();
     const ownerId = Number(characterId);
     const directIds = uniqueIds(directCounterpartIds).filter((id) => id !== ownerId);
@@ -1328,8 +1324,7 @@ class MemoryEngine {
     // selected once per responder and then reused for the whole conversation.
     const stableRanked = this.ranker.rank(internalMemories, { query: "", entityIds: [], participantIds: [], currentTotalDays })
       .filter((entry) => entry.memory.importance >= 0.9 || entry.memory.status === "open" || entry.memory.unresolved);
-    const patchBudgetLimit = query.trim() ? Math.floor(budget * 0.12) : 0;
-    const frozenBudget = budget;
+    const frozenBudget = memoryEngine3Enabled ? Math.floor(budget * 0.65) : budget;
     const laneWeights = {
       direct: [...directGroups.values()].some((entries) => entries.length > 0) ? 55 : 0,
       mentioned: [...mentionedGroups.values()].some((entries) => entries.length > 0) ? 30 : 0,
@@ -1350,7 +1345,7 @@ class MemoryEngine {
     const stableBudget = laneBudgets.stable;
     const direct = Array.isArray(responderCache.direct)
       ? responderCache.direct
-      : this.selectRoutedMemories(directGroups, { tokenBudget: directBudget, estimateTokens, mode: "direct" });
+      : this.selectRoutedMemories(directGroups, { tokenBudget: directBudget, estimateTokens, mode: memoryEngine3Enabled ? "direct" : "direct_legacy" });
     if (!Array.isArray(responderCache.direct)) responderCache.direct = direct;
     const mentioned = [];
     for (const entityId of mentionedIds) {
@@ -1374,20 +1369,43 @@ class MemoryEngine {
       : this.ranker.selectWithinBudget(stableRanked.filter((entry) => !selectedFolderKeys.has(this.getRouteMemoryKey(entry.memory))), { tokenBudget: stableBudget, estimateTokens });
     if (!Array.isArray(responderCache.stable)) responderCache.stable = stable;
     const frozenSelectedTokens = [...direct, ...deduplicatedMentioned, ...stable].reduce((total, entry) => total + Number(entry.tokens || 0), 0);
-    const patchBudget = Math.max(0, Math.min(patchBudgetLimit, budget - frozenSelectedTokens));
-    let topicPatch = Array.isArray(responderCache.topicPatch) ? responderCache.topicPatch : [];
-    if (!responderCache.topicPatchLocked && patchBudget > 0) {
-      const rankedPatchCandidates = this.ranker.rank(folderMemories, { query, entityIds: mentionedIds, participantIds: directIds, currentTotalDays })
-        .filter((entry) => !selectedFolderKeys.has(this.getRouteMemoryKey(entry.memory)) && Number(entry.reason?.query) >= 0.28);
-      topicPatch = this.ranker.selectWithinBudget(rankedPatchCandidates.slice(0, 1), { tokenBudget: patchBudget, estimateTokens, allowTruncate: true });
-      if (topicPatch.length > 0) {
-        topicPatch = topicPatch.map((entry) => ({ ...entry, routeKind: "session_topic_anchor", routeCharacterIds: uniqueIds([...directIds, ...mentionedIds]) }));
-        responderCache.topicPatch = topicPatch;
-        responderCache.topicPatchLocked = true;
+    const extraBudget = Math.max(0, budget - frozenSelectedTokens);
+    const temporal = memoryEngine3Enabled && temporalSummaryRecallEnabled ? resolveTemporalWindow(query, { currentGameDate, currentTotalDays }) : { triggered: false, reason: "DISABLED" };
+    const directMemories = [...directGroups.values()].flat().map((entry) => entry.memory);
+    const temporalCandidates = temporal.triggered ? selectTemporalExtras(
+      directIds.flatMap((counterpartId) => this.store.getSummaryDateIndexForPair(ownerId, counterpartId, { currentGameDate, currentTotalDays, ownerFolderMemories: folderMemories })),
+      directMemories, temporal, selectedFolderKeys, 3
+    ) : [];
+    const rankedExtras = this.ranker.rank(folderMemories, { query, entityIds: mentionedIds, participantIds: directIds, currentTotalDays });
+    const topicCandidates = query.trim() ? rankedExtras.filter((entry) => Number(entry.reason?.query) >= 0.28).map((entry) => entry.memory) : [];
+    const routedKeys = new Set([...directGroups.values(), ...mentionedGroups.values()].flat().map((entry) => this.getRouteMemoryKey(entry.memory)));
+    const importantCandidates = rankedExtras.filter((entry) => routedKeys.has(this.getRouteMemoryKey(entry.memory)) && (entry.memory.importance >= 0.9 || entry.memory.status === "open" || entry.memory.unresolved || entry.memory.content?.includes("【需要长期记住的事项】"))).map((entry) => entry.memory);
+    const extra = [];
+    let extraTokens = 0;
+    for (const [source, candidates] of memoryEngine3Enabled ? [["temporal", temporalCandidates], ["topic", topicCandidates], ["important", importantCandidates]] : []) {
+      for (const memory of candidates) {
+        if (extra.length >= 3 || extraTokens >= extraBudget) break;
+        const key = this.getRouteMemoryKey(memory);
+        if (selectedFolderKeys.has(key)) continue;
+        const [fitted] = this.ranker.selectWithinBudget([{ memory, score: 0, reason: { source } }], {
+          tokenBudget: extraBudget - extraTokens, estimateTokens, allowTruncate: true
+        });
+        if (!fitted) continue;
+        extra.push({ ...fitted, routeKind: "dynamic_extra", routeCharacterIds: directIds });
+        extraTokens += fitted.tokens;
+        selectedFolderKeys.add(key);
       }
     }
+    let topicPatch = memoryEngine3Enabled ? [] : Array.isArray(responderCache.topicPatch) ? responderCache.topicPatch : [];
+    if (!memoryEngine3Enabled && !responderCache.topicPatchLocked && query.trim()) {
+      const rankedPatch = this.ranker.rank(folderMemories, { query, entityIds: mentionedIds, participantIds: directIds, currentTotalDays })
+        .filter((entry) => !selectedFolderKeys.has(this.getRouteMemoryKey(entry.memory)) && Number(entry.reason?.query) >= 0.28);
+      topicPatch = this.ranker.selectWithinBudget(rankedPatch.slice(0, 1), { tokenBudget: Math.max(0, Math.min(Math.floor(budget * 0.12), budget - frozenSelectedTokens)), estimateTokens, allowTruncate: true })
+        .map((entry) => ({ ...entry, routeKind: "session_topic_anchor", routeCharacterIds: uniqueIds([...directIds, ...mentionedIds]) }));
+      if (topicPatch.length) { responderCache.topicPatch = topicPatch; responderCache.topicPatchLocked = true; }
+    }
     if (sessionRecallCache instanceof Map) sessionRecallCache.set(ownerId, responderCache);
-    const relevant = [...direct, ...deduplicatedMentioned, ...topicPatch];
+    const relevant = [...direct, ...deduplicatedMentioned, ...extra, ...topicPatch];
     for (const entry of [...stable, ...relevant]) {
       const reason = entry.routeKind === "direct" ? "direct_pair_route" : entry.routeKind === "mentioned" ? "mentioned_entity_route" : entry.routeKind === "session_topic_anchor" ? "session_topic_anchor" : "stable_memory";
       this.trace.record("rank", { memoryId: entry.memory.memoryId, type: entry.memory.type, score: entry.score, characterId: ownerId, reason });
@@ -1406,7 +1424,9 @@ class MemoryEngine {
       directRouteCount: directIds.length,
       mentionedRouteCount: mentionedIds.length,
       mentionedCacheHit,
-      patchInserted: topicPatch.length > 0,
+      patchInserted: extra.length > 0,
+      temporalTriggered: temporal.triggered,
+      temporalExtraCount: extra.filter((entry) => entry.reason?.source === "temporal").length,
       indexSize: Object.keys(this.store.index.memories || {}).length
     });
     return {
@@ -1418,9 +1438,12 @@ class MemoryEngine {
       direct,
       mentioned: deduplicatedMentioned,
       topicPatch,
+      extra,
+      temporal,
+      temporalExtraText: this.formatMemoryBlock("动态时间与话题摘要（最多三篇）", extra),
       stableText: this.formatMemoryBlock("长期稳定记忆", stable),
       directText: this.formatMemoryBlock("与当前在场人物的直接记忆", direct),
-      directStableText: this.formatMemoryBlock("冻结的直接关系记忆（钉住项与最近记录）", direct),
+      directStableText: this.formatMemoryBlock("冻结的直接关系最近两篇摘要", direct),
       mentionedText: this.formatMemoryBlock("与被提及场外人物有关的记忆", deduplicatedMentioned),
       mentionedSnapshotText: this.formatMemoryBlock("冻结的场外人物记忆快照", deduplicatedMentioned),
       topicPatchText: this.formatMemoryBlock("会话话题记忆锚点（本场冻结）", topicPatch),
@@ -1433,8 +1456,8 @@ class MemoryEngine {
         directCounterpartIds: directIds,
         mentionedOutOfSceneIds: mentionedIds,
         mentionedSnapshot: mentionedIds.length > 0 ? capturedMentioned ? "captured" : "reused" : "empty",
-        topicPatch: topicPatch.length > 0 ? "locked" : "empty",
-        budgets: { direct: directBudget, mentioned: mentionedBudget, stable: stableBudget, topicPatch: patchBudget }
+        topicPatch: memoryEngine3Enabled ? extra.length > 0 ? "dynamic_extra" : "empty" : topicPatch.length > 0 ? "locked" : "empty",
+        budgets: { direct: directBudget, mentioned: mentionedBudget, stable: stableBudget, extra: extraBudget }
       }
     };
   }

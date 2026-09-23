@@ -196,8 +196,8 @@ try {
 
 const conversationSource = fs.readFileSync(path.join(__dirname, "../resources/app/out/main/conversation/conversation.js"), "utf8");
 const builderSource = fs.readFileSync(path.join(__dirname, "../resources/app/out/main/prompts/prompt-builder.js"), "utf8");
-assert(conversationSource.includes("isSubjectivePromptIntegrationEnabled?.()") && conversationSource.includes("getSubjectivePromptContext({"), "production Conversation path is server-side and explicitly gated");
-const productionStart = conversationSource.indexOf("getSubjectivePromptContext({");
+assert(conversationSource.includes("isSubjectivePromptIntegrationEnabled?.()") && conversationSource.includes("getSubjectivePromptContextAsync({"), "production Conversation path is server-side and explicitly gated");
+const productionStart = conversationSource.indexOf("getSubjectivePromptContextAsync({");
 const productionEnd = conversationSource.indexOf("} catch (error)", productionStart);
 assert(productionStart >= 0 && productionEnd > productionStart && !conversationSource.slice(productionStart, productionEnd).includes("getPromptContext"), "production failure cannot fall back to unfiltered legacy recall");
 assert(builderSource.includes('id: "worldline-turn-recall"') && builderSource.includes("historicalReferenceInfo: memoryContext.historicalReferenceInfo") && builderSource.includes("currentEmperor: null"), "PromptBuilder emits one responder-scoped block and replaces unfiltered legacy world fields");

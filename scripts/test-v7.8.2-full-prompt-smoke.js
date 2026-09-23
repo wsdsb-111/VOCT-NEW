@@ -182,9 +182,10 @@ try {
     [{ id: 0, role: "user", content: "今天有什么安排？" }], ai, gameData, "",
     { ...recalled, activeParticipantIds: [1, 2] }
   );
-  assert.equal(recalled.direct.length, 3);
+  assert.equal(recalled.direct.length, 2);
+  assert.equal(recalled.extra.length, 1);
   assert(recallBuild.messages.some(message => message.role === "system" && message.content.includes(promise)), "stored third summary's tail promise must reach actual Chat messages even without a recall question");
-  assert(recallBuild.blocks.some(entry => entry.block.id === "memory-direct-frozen" && entry.content.includes(promise)), "promise belongs to the frozen direct lane, not only optional Turn Recall");
+  assert(recallBuild.blocks.some(entry => entry.block.id === "memory-temporal-extra" && entry.content.includes(promise)), "older promise belongs to the shared dynamic Extra lane");
   let verboseLogCalls = 0;
   const LetterPromptBuilder = createLetterPromptBuilder({
     TemplateEngine,

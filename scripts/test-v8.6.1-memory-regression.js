@@ -35,11 +35,11 @@ try {
   assert.deepEqual(second.direct, first.direct, "frozen Direct Pair recall must not be re-ranked during the session");
   assert.deepEqual(second.stable, first.stable, "stable Memory must remain frozen during the session");
   const topic = engine.retrieveForResponder({ ...options, sessionRecallCache: new Map(), mentionedRecallCache: new Map(), query: "城门玉佩", mentionedEntityIds: [], directCounterpartIds: [] });
-  assert.deepEqual(topic.topicPatch.map((entry) => entry.memory.memoryId), ["topic-jade"], "Session Topic Anchor must select the same relevant ID");
+  assert.deepEqual(topic.extra.map((entry) => entry.memory.memoryId), ["topic-jade"], "relevant topic must enter the shared dynamic Extra pool");
   const turn = engine.retrieveTurnRecall({ characterId: 2, query: "你还记得我们下月相见的约定吗？", entityIds: [1], entityNames: ["玩家"], participantIds: [1], ownerFolderMemories: memories, currentTotalDays: 1000, tokenBudget: 256, estimateTokens: options.estimateTokens, cache: new Map(), turnEpoch: 1 });
   assert.deepEqual(turn.selected.map((entry) => entry.memory.memoryId), ["direct-player"], "Turn Recall Top1 ID must remain unchanged");
   assert(turn.tokens <= 256, "Memory Turn Recall keeps its existing 256 token cap");
-  console.log("V8.6.1 Memory Regression: PASS (stable/direct/mentioned/topic/turn selected IDs and budget)");
+  console.log("V8.6.1 Memory Regression: PASS (stable/direct/mentioned/dynamic-extra/turn selected IDs and budget)");
 } finally {
   fs.rmSync(root, { recursive: true, force: true });
 }

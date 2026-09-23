@@ -129,6 +129,8 @@ const memoryContext = {
   stableText: "LONG TERM MEMORY A",
   directStableText: "DIRECT MEMORY A",
   mentionedSnapshotText: "MENTIONED SNAPSHOT A",
+  officialRecollectionText: "OFFICIAL RECOLLECTION A",
+  temporalExtraText: "TEMPORAL EXTRA A",
   topicPatchText: "SESSION TOPIC MEMORY A",
   presenceText: "PRESENCE 1,2",
   worldStableText: "WORLD STABLE A",
@@ -162,11 +164,16 @@ assert.strictEqual(before.result.actualStablePrefixTokens, before.metadata.stabl
 assert(before.result.dynamicTailTokens > 0);
 const prefixBlocks = before.metadata.blocks.slice(0, before.metadata.stablePrefixEndPosition);
 assert(prefixBlocks.every((block) => ["GLOBAL_STATIC", "CONVERSATION_FROZEN", "RESPONDER_FROZEN"].includes(block.lifecycle)));
-const dynamicIds = new Set(["live-character-state", "live-relationships", "current-presence-roster", "memory-stable", "memory-direct-frozen", "memory-mentioned-snapshot", "memory-session-topic-anchor", "worldline-stable", "worldline-current", "worldline-topic", "worldline-supplemental", "worldline-turn-recall", "history", "history-current-user"]);
+const dynamicIds = new Set(["live-character-state", "live-relationships", "current-presence-roster", "memory-session-topic-anchor", "worldline-stable", "worldline-current", "worldline-topic", "worldline-supplemental", "worldline-turn-recall", "history", "history-current-user"]);
 for (const block of before.metadata.blocks.filter((entry) => dynamicIds.has(entry.id))) {
   assert(block.position >= before.metadata.stablePrefixEndPosition, `${block.id} must follow GLM cache boundary`);
   assert.strictEqual(block.lifecycle, "DYNAMIC", `${block.id} must be explicitly dynamic`);
 }
+for (const id of ["memory-official-recollection", "memory-stable", "memory-direct-frozen", "memory-mentioned-snapshot"]) {
+  const block = before.metadata.blocks.find((entry) => entry.id === id);
+  assert(block && block.position < before.metadata.stablePrefixEndPosition, `${id} belongs in the responder-frozen prefix in Memory Engine 3.0`);
+}
+assert(before.metadata.blocks.find((entry) => entry.id === "memory-temporal-extra").position > before.metadata.blocks.find((entry) => entry.id === "history-current-user").position);
 const kinshipText = before.result.blocks.find((entry) => entry.block.id === "responder-stable-kinship").content;
 assert(kinshipText.includes("Runtime ID：2"));
 assert(!kinshipText.includes("1170.1.1"));
@@ -188,10 +195,8 @@ gameData.scene = "market";
 gameData.location = "临安街市";
 memoryContext.activeParticipantIds = [1];
 memoryContext.presenceText = "PRESENCE 1";
-memoryContext.stableText = "LONG TERM MEMORY B";
-memoryContext.directStableText = "DIRECT MEMORY B";
-memoryContext.mentionedSnapshotText = "MENTIONED SNAPSHOT B";
 memoryContext.topicPatchText = "SESSION TOPIC MEMORY B";
+memoryContext.temporalExtraText = "TEMPORAL EXTRA B";
 memoryContext.worldStableText = "WORLD STABLE B";
 memoryContext.worldTopicText = "WORLD TOPIC B";
 memoryContext.worldSupplementalText = "WORLD SUPPLEMENTAL B";
@@ -206,7 +211,7 @@ const after = build([
 ], "ROLLING B");
 assert.strictEqual(after.metadata.prefixFingerprint, before.metadata.prefixFingerprint, "all runtime, memory, worldline, history and current-turn mutations must preserve GLM Cache v2 prefix");
 const afterTail = after.result.blocks.slice(after.metadata.stablePrefixEndPosition).map((entry) => entry.content).join("\n");
-for (const expected of ["999", "-80", "market", "临安街市", "LONG TERM MEMORY B", "WORLD CURRENT B", "ROLLING B", "当前问题 B", "重伤", "暴君", "酒鬼"]) {
+for (const expected of ["999", "-80", "market", "临安街市", "WORLD CURRENT B", "ROLLING B", "当前问题 B", "TEMPORAL EXTRA B", "重伤", "暴君", "酒鬼"]) {
   assert(afterTail.includes(expected), `dynamic tail must refresh ${expected}`);
 }
 
@@ -231,5 +236,7 @@ assert.strictEqual(sameConversation.result.blocks.find((entry) => entry.block.id
 const nextConversationContext = { ...memoryContext, cacheV2FrozenSnapshots: { conversation: null, responders: new Map() } };
 const nextConversation = build(baseHistory, "ROLLING D", nextConversationContext);
 assert.notStrictEqual(nextConversation.metadata.prefixFingerprint, sameConversation.metadata.prefixFingerprint, "new conversation may refresh date/era snapshot");
+memoryContext.directStableText = "DIRECT MEMORY B";
+assert.notStrictEqual(build().metadata.prefixFingerprint, before.metadata.prefixFingerprint, "a changed frozen summary must change the prefix in a new conversation");
 
 console.log("VOTC v8.10.2 GLM Cache v2: PASS (lifecycle DTOs, dynamic-tail routing, append-only history, prefix invariance)");

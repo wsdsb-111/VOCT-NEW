@@ -438,7 +438,7 @@ function createPromptBuilder({
           break;
         }
         case "past_summaries": {
-          if (baseContext.memoryContext?.engineVersion?.startsWith("2.")) break;
+          if (["2.", "3."].some((prefix) => baseContext.memoryContext?.engineVersion?.startsWith(prefix))) break;
           const pastSummaries = this.buildPastSummariesContext(character, gameData);
           if (pastSummaries) {
             const content = block.template ? renderTemplate(block.template, { ...baseContext, pastSummaries }) : pastSummaries;
@@ -636,6 +636,22 @@ function createPromptBuilder({
           {
             block: { id: "responder-stable-kinship", type: "responder_stable_kinship", label: "Responder Stable Blood Kinship", stable: true, lifecycle: PROMPT_LIFECYCLE.RESPONDER_FROZEN },
             content: cacheV2KinshipText
+          },
+          {
+            block: { id: "memory-official-recollection", type: "memory_official_recollection", label: "CK3 Official Recollection", stable: true, lifecycle: PROMPT_LIFECYCLE.RESPONDER_FROZEN },
+            content: memoryContext?.officialRecollectionText
+          },
+          {
+            block: { ...directMemoryBlock, stable: true, lifecycle: PROMPT_LIFECYCLE.RESPONDER_FROZEN },
+            content: memoryContext?.directStableText
+          },
+          {
+            block: { ...stableMemoryBlock, stable: true, lifecycle: PROMPT_LIFECYCLE.RESPONDER_FROZEN },
+            content: memoryContext?.stableText
+          },
+          {
+            block: { ...mentionedSnapshotBlock, stable: true, lifecycle: PROMPT_LIFECYCLE.RESPONDER_FROZEN },
+            content: memoryContext?.mentionedSnapshotText
           }
         ];
         for (const frozen of frozenBlocks) {
@@ -653,6 +669,14 @@ function createPromptBuilder({
         // Relationship and long-lived summaries are normally unchanged for a
         // responder. Keep them before date/scene state so a date advance does
         // not evict this useful prefix from the provider cache.
+        if (memoryContext?.officialRecollectionText) {
+          llmMessages.push({ role: "system", content: memoryContext.officialRecollectionText });
+          blocksWithTokens.push({
+            block: { id: "memory-official-recollection", type: "memory_official_recollection", label: "CK3 Official Recollection", stable: true },
+            content: memoryContext.officialRecollectionText,
+            tokens: TokenCounter.estimateTokens(memoryContext.officialRecollectionText)
+          });
+        }
         if (memoryContext?.stableText) {
           llmMessages.push({ role: "system", content: memoryContext.stableText });
           blocksWithTokens.push({
@@ -741,9 +765,10 @@ function createPromptBuilder({
           presenceText: memoryContext?.presenceText,
           activeParticipantRelationshipText: activeParticipantRelationshipContext,
           cacheV2LiveText,
-          memoryStableText: memoryContext?.stableText,
-          memoryDirectText: memoryContext?.directStableText,
-          memoryMentionedSnapshotText: memoryContext?.mentionedSnapshotText,
+          memoryStableText: glmCacheV2 ? null : memoryContext?.stableText,
+          memoryDirectText: glmCacheV2 ? null : memoryContext?.directStableText,
+          memoryMentionedSnapshotText: glmCacheV2 ? null : memoryContext?.mentionedSnapshotText,
+          temporalExtraText: memoryContext?.temporalExtraText,
           worldStableText: memoryContext?.worldStableText,
           topicPatchText: mentionedCharactersContext,
           worldTopicText: memoryContext?.worldTopicText,
@@ -989,7 +1014,7 @@ function createPromptBuilder({
           break;
         }
         case "past_summaries": {
-          if (baseContext.memoryContext?.engineVersion?.startsWith("2.")) break;
+          if (["2.", "3."].some((prefix) => baseContext.memoryContext?.engineVersion?.startsWith(prefix))) break;
           const pastSummaries = this.buildPastSummariesContext(character, gameData);
           if (pastSummaries) {
             const content = block.template ? renderTemplate(block.template, { ...baseContext, pastSummaries }) : pastSummaries;
@@ -1063,6 +1088,7 @@ function createPromptBuilder({
               tokens: TokenCounter.calculateTotalTokens([currentUserMessage])
             });
           };
+          const appendTemporalExtra = () => appendTextBlock(options.temporalExtraText, { id: "memory-temporal-extra", type: "memory_temporal_extra", label: "Dynamic Summary Extra", enabled: true, role: "system", stable: false });
           const appendPresence = () => appendTextBlock(options.presenceText, { id: "current-presence-roster", type: "presence_roster", label: "Current Presence and Relationships", enabled: true, role: "system", stable: false });
           const appendTopicPatch = () => appendTextBlock(options.topicPatchText, { id: "memory-topic-patch", type: "memory_topic_patch", label: "Turn Topic Memory Patch", enabled: true, role: "system", stable: false });
           const appendWorldTopic = () => appendTextBlock(options.worldTopicText, { id: "worldline-topic", type: "worldline_topic", label: "World Topic Facts", enabled: true, role: "system", stable: false });
@@ -1082,6 +1108,7 @@ function createPromptBuilder({
               appendWorldSupplemental();
               appendWorldCurrent();
               appendCurrentUser();
+              appendTemporalExtra();
               appendTextBlock(options.responderFamilyFacts, options.responderFamilyFactsBlock);
               appendTopicPatch();
               appendTurnRecall();
@@ -1106,6 +1133,7 @@ function createPromptBuilder({
               appendWorldTurnRecall();
               appendPriorHistory();
               appendCurrentUser();
+              appendTemporalExtra();
               appendTextBlock(options.responderFamilyFacts, options.responderFamilyFactsBlock);
               appendTopicPatch();
               appendTurnRecall();
@@ -1121,6 +1149,7 @@ function createPromptBuilder({
               appendTextBlock(options.sessionTopicAnchorText, { ...options.sessionTopicAnchorBlock, stable: false, label: "Session Topic Memory" });
               appendPriorHistory();
               appendCurrentUser();
+              appendTemporalExtra();
               appendTextBlock(options.responderFamilyFacts, options.responderFamilyFactsBlock);
               appendTopicPatch();
               appendTurnRecall();
@@ -1135,6 +1164,7 @@ function createPromptBuilder({
             appendWorldCurrent();
             appendPriorHistory();
             appendCurrentUser();
+            appendTemporalExtra();
             appendTurnRecall();
             appendThirdPartyEvidence();
             appendWorldTurnRecall();

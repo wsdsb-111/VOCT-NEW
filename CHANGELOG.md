@@ -2,6 +2,8 @@
 
 这里是版本变更的单一入口。详细设计和测试证据保留在链接目标中，本文件只维护版本顺序、用户可见摘要和文档索引。
 
+V8.12 第三部分：[Memory Engine 3.0 施工记录](docs/v8.12-part3-memory-engine-3.0-implementation-report.md)。Recent2 冻结、动态 Extra3、摘要分块上限 64、CK3 官方追忆只读 Shadow、GLM Cache v2 布局兼容及 Historical Retrieval Worker 已接入；2.5 存储合同保持兼容。正式追忆 Prompt 注入默认关闭；Part 3 实机 Gate 和最终冻结尚未通过。
+
 V8.12 第二部分 Review Fix：修复历史归档索引复制实体 ID、个人记忆泛化解锁私密历史、无实体 RANGE 立即失败、主头衔伪回退、人物 WarActor 漏 Realm、历史名称不可读、多实体误判、字段筛选覆盖、朋友/宿敌未启用却无诊断及索引/Checkpoint 错误码混淆；保留旧索引读取兼容和原子 `index.json` 迁移。详见[第二部分实施报告](docs/v8.12-part2-implementation-report.md)。真实 CK3/GLM Gate 仍待执行，不能记录 `V8.12 PART 2 = PASS`。
 
 V8.12 第二部分：[历史检索与时间线](docs/v8.12-part2-implementation-report.md)。新增 AS_OF/RANGE、人物/头衔/战争变化点、Character/Title/Faction/Unknown WarActor、独立 Historical Scope、Historical Canon、Branch-safe Cache 与开发者诊断。历史内容只进入 Dynamic Tail，普通 Current Query 与 Stable Prefix 不变；检索默认开启、Prompt 注入默认关闭。309/309 发布组与隔离 Electron 冒烟通过，当前等待两阶段真实 CK3/GLM Gate，尚未记录 `V8.12 PART 2 = PASS`，未进入第三部分。

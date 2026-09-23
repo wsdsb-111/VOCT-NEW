@@ -18143,7 +18143,7 @@ const useConfigStore = create()(
           return await window.conversationAPI.getMemoryOverview();
         } catch (error) {
           console.error("Failed to get Memory Engine overview:", error);
-          return { engineVersion: "2.5", totals: {}, boundaries: [], routingPolicy: {}, characters: [] };
+          return { engineVersion: "3.0", totals: {}, boundaries: [], routingPolicy: {}, characters: [] };
         }
       },
       getSummariesDashboardData: async (options = {}) => {
@@ -18151,7 +18151,7 @@ const useConfigStore = create()(
           return await window.conversationAPI.getSummariesDashboardData(options);
         } catch (error) {
           console.error("Failed to get summaries dashboard data:", error);
-          return { summaries: [], memoryOverview: { engineVersion: "2.5", totals: {}, boundaries: [], routingPolicy: {}, characters: [] } };
+          return { summaries: [], memoryOverview: { engineVersion: "3.0", totals: {}, boundaries: [], routingPolicy: {}, characters: [] } };
         }
       },
       updateStructuredMemory: async (memoryId, content) => {
@@ -21120,7 +21120,7 @@ const SummariesManager = () => {
   const openSummariesFolder = useConfigStore((state) => state.openSummariesFolder);
   const clearSummaries = useConfigStore((state) => state.clearSummaries);
   const [summaries2, setSummaries] = reactExports.useState([]);
-  const [memoryOverview, setMemoryOverview] = reactExports.useState({ engineVersion: "2.5", totals: {}, boundaries: [], routingPolicy: {}, characters: [] });
+  const [memoryOverview, setMemoryOverview] = reactExports.useState({ engineVersion: "3.0", totals: {}, boundaries: [], routingPolicy: {}, characters: [] });
   const [recoveryStatus, setRecoveryStatus] = reactExports.useState({ pending: 0, running: false });
   const [isRetryingSummaries, setIsRetryingSummaries] = reactExports.useState(false);
   const [retryResult, setRetryResult] = reactExports.useState(null);
@@ -21138,7 +21138,7 @@ const SummariesManager = () => {
     try {
       const dashboardData = await getSummariesDashboardData({ refresh });
       setSummaries(dashboardData.summaries || []);
-      setMemoryOverview(dashboardData.memoryOverview || { engineVersion: "2.5", totals: {}, boundaries: [], routingPolicy: {}, characters: [] });
+      setMemoryOverview(dashboardData.memoryOverview || { engineVersion: "3.0", totals: {}, boundaries: [], routingPolicy: {}, characters: [] });
       setRecoveryStatus(dashboardData.recoveryStatus || { pending: 0, running: false });
     } catch (error) {
       console.error("Failed to load summaries:", error);
@@ -21316,7 +21316,7 @@ const SummariesManager = () => {
     /* @__PURE__ */ jsxRuntimeExports.jsxs("section", { className: "memory-engine-overview", children: [
       /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "memory-engine-title", children: [
         /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
-          /* @__PURE__ */ jsxRuntimeExports.jsx("h5", { children: "Memory Engine 2.6 · V8.6.2" }),
+          /* @__PURE__ */ jsxRuntimeExports.jsx("h5", { children: "Memory Engine 3.0 · V8.12 Part 3" }),
           /* @__PURE__ */ jsxRuntimeExports.jsx("p", { children: "多段在场窗口隔离暂离期间内容；人物摘要缓存与来源 messageId 继续严格校验" })
         ] }),
         /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: `memory-engine-status ${memoryOverview.error ? "is-error" : ""}`, children: memoryOverview.error ? "读取异常" : "运行中" })
@@ -21850,7 +21850,7 @@ const OptimizationView = () => {
     [text("关系上下文", "Relationship context"), text("第三方角色按亲属和年龄解析，不加入发言队列。", "Mentioned third parties are resolved from kinship and age data without joining the speaker queue.")],
     [text("稳定记忆前缀", "Stable memory prefix"), text("同一场对话每轮保持一致；对话结束后的新摘要在下一场读取。", "It stays unchanged throughout one conversation; new final summaries are loaded in the next conversation.")],
     [text("场外人物快照", "Mentioned-character snapshot"), text("首次提及时按每名 NPC 的目录召回，本场后续回复复用；新增人物时扩展一次。", "Each NPC recalls from their own folder on first mention, then reuses that snapshot until another person is introduced.")],
-    [text("视角摘要与动态召回", "Perspective summaries and dynamic recall"), text("Memory Engine 2.6 按人物知情边界生成目录视图，并在明确回忆问题时追加受限 Turn Recall；继续兼容 2.5 数据合同，秘密不会复制给不知情角色。", "Memory Engine 2.6 creates knowledge-bounded folder views and adds a limited Turn Recall only for explicit memory questions. It remains compatible with the 2.5 data contract, so secrets do not leak to unaware characters.")],
+    [text("视角摘要与动态召回", "Perspective summaries and dynamic recall"), text("Memory Engine 3.0 按人物知情边界冻结最近两篇摘要，并在动态尾部补充至多三篇时间或话题摘要；继续兼容 2.5 数据合同。", "Memory Engine 3.0 freezes two recent summaries per relationship and adds up to three temporal or topical summaries in the dynamic tail. The 2.5 storage contract remains compatible.")],
     [text("摘要读取与可信度", "Summary cache and trust"), text("人物目录按需缓存，写入后精确失效；所有摘要来源 messageId 必须存在于真实对话。", "Character folders are cached on demand and invalidated after writes; every cited messageId must exist in the source conversation.")],
     [text("在场窗口", "Presence windows"), text("候场、入内和永久离场保持原语义；昏迷、睡着或暂时离开会关闭当前窗口，返回后开启新窗口，缺席期间不回应、不召回也不生成该人物的摘要内容。", "Waiting, joining, and permanent departure keep their original semantics. Unconsciousness, sleep, or temporary absence closes the current window and returning opens a new one; absent content is excluded from that character's replies, recall, and summary.")],
     [text("安全配置", "Secure configuration"), text("Provider API Key 使用 Electron safeStorage 加密落盘；明文旧配置在可用时自动迁移。", "Provider API keys are encrypted at rest with Electron safeStorage; plaintext settings migrate when encryption is available.")],
@@ -21863,7 +21863,7 @@ const OptimizationView = () => {
     /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "optimization-header", children: [
       /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
         /* @__PURE__ */ jsxRuntimeExports.jsx("h3", { children: text("系统优化与用量", "System Optimization & Usage") }),
-        /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "muted-text", children: text("V8.6.2 使用 Memory Engine 2.6 标签，并继续保持 Memory Engine 2.5 数据边界。", "V8.6.2 uses the Memory Engine 2.6 label while preserving Memory Engine 2.5 data boundaries.") })
+        /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "muted-text", children: text("V8.12 Part 3 使用 Memory Engine 3.0；人物摘要存储仍兼容 2.5。", "V8.12 Part 3 uses Memory Engine 3.0 while retaining compatibility with 2.5 summary storage.") })
       ] }),
       /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "optimization-header-actions", children: [
         /* @__PURE__ */ jsxRuntimeExports.jsx("button", { type: "button", onClick: loadReport, disabled: isLoading, children: isLoading ? text("读取中…", "Loading…") : text("刷新", "Refresh") }),
@@ -22374,6 +22374,7 @@ function WorldlineView() {
   const [usageReport, setUsageReport] = reactExports.useState(null);
   const [usageReportLoading, setUsageReportLoading] = reactExports.useState(false);
   const [usageReportError, setUsageReportError] = reactExports.useState("");
+  const [officialRecollection, setOfficialRecollection] = reactExports.useState(null);
   const [supplemental, setSupplemental] = reactExports.useState([]);
   const [activeTab, setActiveTab] = reactExports.useState("overview");
   const [showAdvancedSource, setShowAdvancedSource] = reactExports.useState(false);
@@ -23017,6 +23018,35 @@ function WorldlineView() {
     activeTab === "diagnostics" && promptHistoricalRetrievalPanel,
     activeTab === "diagnostics" && entityKinshipInspectorPanel(),
     activeTab === "diagnostics" && usageObservabilityPanel(),
+    activeTab === "diagnostics" && developerMode && /* @__PURE__ */ jsxRuntimeExports.jsxs("section", { className: "worldline-card", children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsx("h4", { children: "Memory Engine 3.0 · CK3 Official Recollection" }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx("p", { children: text("只读查看当前检查点中回应角色仍持有的追忆；未解析条目不会进入 Prompt。", "Read-only view of memories still held by the responder in the current checkpoint. Unresolved entries are not prompted.") }),
+      /* @__PURE__ */ jsxRuntimeExports.jsxs("label", { children: [/* @__PURE__ */ jsxRuntimeExports.jsx("input", { type: "checkbox", checked: diagnostics?.memoryEngine3?.enabled !== false, disabled: archiveBusy, onChange: async (event) => {
+        setArchiveBusy(true);
+        try { await invoke("setRecallSettings", { v812MemoryEngine3Enabled: event.target.checked }); await refresh(); }
+        finally { setArchiveBusy(false); }
+      } }), text("启用 Memory Engine 3.0 召回（关闭时回退旧路由）", "Enable Memory Engine 3.0 recall (disable to restore legacy routing)")] }),
+      /* @__PURE__ */ jsxRuntimeExports.jsxs("label", { children: [/* @__PURE__ */ jsxRuntimeExports.jsx("input", { type: "checkbox", checked: diagnostics?.memoryEngine3?.temporalSummaryRecallEnabled !== false, disabled: archiveBusy, onChange: async (event) => {
+        setArchiveBusy(true);
+        try { await invoke("setRecallSettings", { v812TemporalSummaryRecallEnabled: event.target.checked }); await refresh(); }
+        finally { setArchiveBusy(false); }
+      } }), text("启用动态时间摘要召回", "Enable dynamic temporal summary recall")] }),
+      /* @__PURE__ */ jsxRuntimeExports.jsxs("label", { children: [/* @__PURE__ */ jsxRuntimeExports.jsx("input", { type: "checkbox", checked: diagnostics?.memoryEngine3?.officialRecollectionEnabled !== false, disabled: archiveBusy || diagnostics?.memoryEngine3?.officialRecollectionPromptEnabled === true, onChange: async (event) => {
+        setArchiveBusy(true);
+        try { await invoke("setRecallSettings", { v812OfficialRecollectionEnabled: event.target.checked }); await refresh(); }
+        finally { setArchiveBusy(false); }
+      } }), text("读取 CK3 官方追忆（Shadow）", "Read CK3 official recollection (Shadow)")] }),
+      /* @__PURE__ */ jsxRuntimeExports.jsxs("label", { children: [/* @__PURE__ */ jsxRuntimeExports.jsx("input", { type: "checkbox", checked: diagnostics?.memoryEngine3?.officialRecollectionPromptEnabled === true, disabled: archiveBusy || diagnostics?.memoryEngine3?.officialRecollectionEnabled === false, onChange: async (event) => {
+        setArchiveBusy(true);
+        try { await invoke("setRecallSettings", { v812OfficialRecollectionPromptEnabled: event.target.checked }); await refresh(); }
+        finally { setArchiveBusy(false); }
+      } }), text("手动开启官方追忆 Prompt 注入", "Manually enable official recollection Prompt injection")] }),
+      /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "worldline-actions", children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsx("input", { value: subjectiveResponderId, onChange: (event) => setSubjectiveResponderId(event.target.value), placeholder: text("回应角色 Runtime ID", "Responder Runtime ID") }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx("button", { type: "button", disabled: !/^\d+$/.test(subjectiveResponderId), onClick: async () => setOfficialRecollection(await invoke("getOfficialRecollection", subjectiveResponderId)), children: text("读取追忆诊断", "Inspect recollection") })
+      ] }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx("pre", { style: { whiteSpace: "pre-wrap", overflowWrap: "anywhere" }, children: JSON.stringify(officialRecollection || { status: "NOT_RUN", officialMemoryCount: diagnostics?.memoryEngine3?.officialMemoryCount || 0 }, null, 2) })
+    ] }),
     activeTab === "diagnostics" && /* @__PURE__ */ jsxRuntimeExports.jsxs("section", { className: "worldline-card", children: [
       /* @__PURE__ */ jsxRuntimeExports.jsx("h4", { children: "V8.12 Temporal Archive · Historical Retrieval" }),
       /* @__PURE__ */ jsxRuntimeExports.jsx("p", { children: text("历史归档与 Current World 隔离。先用只读诊断验证 AS_OF / RANGE；确认后才手动开启历史 Prompt 注入。关闭功能不会删除已归档节点。", "History remains isolated from Current World. Validate AS_OF / RANGE in read-only diagnostics before manually enabling historical prompt injection. Disabling features preserves archived nodes.") }),
@@ -24143,7 +24173,7 @@ const promptPreview$2 = { "character": "角色", "loadingPreview": "加载预览
 const prompts$2 = { "addCustomBlock": "添加自定义块", "conversation": "对话", "customTextBlock": "自定义文本块", "delete": "删除", "deleteBlock": "删除块", "deletePreset": "删除此预设？", "edit": "编辑", "enabled": "已启用", "exportedTo": "已导出到 {{path}}", "exportZip": "导出 ZIP", "failedToExport": "导出提示词失败。", "hide": "隐藏", "label": "标签", "leaveEmptyDefault": "留空则使用默认文本", "letters": "信件", "loadingPromptConfig": "加载提示词配置中...", "mainInstruction": "主要指令（Handlebars）", "mainPrompt": "主提示词（Handlebars）", "memoriesPretext": "记忆前文（Handlebars）", "memoriesToInclude": "要包含的记忆", "openPromptsFolder": "打开提示词文件夹", "pastSummariesPretext": "历史摘要前文（Handlebars）", "pinned": "已固定", "presets": "预设", "promptBuilder": "提示词构建器", "promptBuilderHelp": "拖拽排序、启用/禁用和编辑提示词块。", "promptSet": "提示词集", "refreshFiles": "刷新文件", "resetMainPrompt": "将主提示词重置为默认模板？当前内容将被替换。", "resetToDefault": "重置为默认", "role": "角色", "rollingSummaryPretext": "滚动摘要前文（Handlebars）", "saveAsNew": "另存为新预设", "savePreset": "保存预设", "selectPreset": "选择预设...", "suffix": "后缀", "template": "模板（Handlebars）", "updatePreset": "更新预设" };
 const settings$2 = { "actionApprovalHelp": "配置哪些操作在执行前需要用户批准。危险操作（如杀死角色）无论如何都始终需要批准。", "actionApprovalSettings": "操作批准设置", "approvalMode": "批准模式", "approvalModeAll": "自动执行全部动作", "approvalModeNonDestructive": "仅危险动作需要确认", "approvalModeNone": "全部动作手动确认", "ck3UserFolder": "CK3 用户文件夹", "currentPath": "当前路径", "enableStreamingGlobally": "全局启用流式输出", "generateFollowingMessages": "生成后续消息", "globalApplicationSettings": "全局应用设置", "letterStatusHelp": "查看生成和送达流程中所有信件的状态。", "letterStatusManagement": "信件状态管理", "loadingSettings": "加载设置中...", "messageFontSize": "消息字体大小", "pauseOnApproval": "需要批准时暂停对话", "pauseOnApprovalHelp": "启用后，当操作需要批准时对话将暂停，允许您在继续之前审核。", "pauseOnRegeneration": "重新生成时暂停", "selectFolder": "选择文件夹", "showSettingsOnStartup": "启动时显示设置", "viewLettersStatus": "查看信件状态", "votcModLocation": "VOTC 模组位置", "ck3UserFolderHelp": '点击下方字段以选择/更改 CK3 文件夹路径。\n通常位于"文档"文件夹中。\nOneDrive 定位可能会失败！', "ck3UserFolderExample": "用户名", "selectedCK3FolderTitle": "已选择的 CK3 文档路径", "selectCK3UserFolderTitle": "选择 CK3 文档文件夹", "allowPrerelease": "接收测试版更新", "allowPrereleaseHelp": "启用后，您将收到测试版和预发布版本。这些版本可能不太稳定，但包含最新功能。", "egline": "如：", "ck3UserFolderClickToSelect": "点击以选择" };
 const summaries$2 = { "aboutSummaryGeneration": "关于摘要生成", "aboutSummaryGenerationHelp": "摘要在两种情况下自动生成：", "clearAllSummaries": "清除所有摘要", "clearFailed": "清除失败：{{error}}", "clearing": "清除中...", "clearSuccess": "所有摘要已清除。", "configureSummaries": "配置对话摘要的生成方式。", "confirmClearSummaries": "您确定要清除所有对话摘要吗？此操作无法撤消。", "conversationSummaryManagement": "对话摘要管理", "conversationSummaryManagementHelp": "管理角色的对话摘要。", "errors": "错误", "filesCopied": "已复制 {{count}} 个文件。", "finalSummaries": "最终摘要", "finalSummariesHelp": "在对话结束时生成。这些综合摘要保存到角色文件中，并在后续对话中用作上下文。", "finalSummaryPrompt": "最终摘要提示词", "finalSummaryPromptHelp": "在对话结束时使用此提示词创建综合摘要，并保存以供后续参考。", "importFailed": "导入失败：{{error}}", "importing": "导入中...", "importLegacySummaries": "导入旧版摘要", "importSuccess": "导入成功！", "legacyDataImport": "旧版数据导入", "legacyDataImportHelp": "从旧版 VOTC 导入对话摘要。现有摘要将被备份。", "letterSummaryPrompt": "信件摘要提示词", "letterSummaryPromptHelp": "此提示词用于生成角色之间信件交流的摘要。这些摘要保存到角色文件中，并在后续对话中用作上下文。", "loadingSummaries": "加载摘要中...", "noSummaries": "没有可用的摘要", "openSummariesFolder": "打开摘要文件夹", "promptsActiveInfo": "下方显示当前使用中的提示词。更改会在停止输入后自动保存。", "providerOverride": "指定服务商", "providerOverrideHelp": "选择用于生成对话摘要的特定服务商。默认使用当前服务商。", "resetAllDefaults": "全部重置为默认", "resetAllPrompts": "将所有摘要提示词重置为默认？当前内容将被替换。", "resetFinalPrompt": "将最终摘要提示词重置为默认？当前内容将被替换。", "resetLetterSummaryPrompt": "将信件摘要提示词重置为默认？当前内容将被替换。", "resetRollingPrompt": "将滚动摘要提示词重置为默认？当前内容将被替换。", "rollingSummaries": "滚动摘要", "rollingSummariesHelp": "当长对话接近上下文限制时自动创建，用于压缩旧消息并保留重要信息。", "rollingSummaryPrompt": "滚动摘要提示词", "rollingSummaryPromptHelp": "当对话过长需要压缩时使用此提示词，在对话过程中创建增量摘要。", "summariesView": "摘要", "summaryGenerationSettings": "摘要生成设置", "summaryProvider": "摘要服务商", "useActiveProvider": "使用当前服务商" };
-const summariesManager$2 = { "characterId": "对话人物 ID", "characters": "对话文件", "confirmDeleteCharacterSummaries": "您确定要删除此角色的所有摘要吗？此操作无法撤消。", "confirmDeleteSummary": "您确定要删除此摘要吗？", "deleteAll": "全部删除", "editSummary": "编辑摘要", "failedDeleteCharacterSummaries": "删除角色摘要失败：{{error}}", "failedDeleteSummary": "删除摘要失败：{{error}}", "failedUpdateSummary": "更新摘要失败：{{error}}", "noSearchResults": "未找到匹配的摘要。", "noSummariesFound": "未找到摘要。结束一场有效对话后，Memory Engine 2.6 会为每名参与者创建人物视角摘要目录。", "playerId": "目录人物 ID", "refresh": "刷新", "searchPlaceholder": "输入人物姓名或 ID，定位本人目录及相关摘要...", "summariesCount": "摘要", "summariesManager": "摘要与记忆管理器", "summariesManagerHelp": "通过 Memory Engine 2.6 搜索人物视角摘要目录、查看不同人物间的对话文件，并直接编辑摘要内容。", "summaryIndex": "摘要索引" };
+const summariesManager$2 = { "characterId": "对话人物 ID", "characters": "对话文件", "confirmDeleteCharacterSummaries": "您确定要删除此角色的所有摘要吗？此操作无法撤消。", "confirmDeleteSummary": "您确定要删除此摘要吗？", "deleteAll": "全部删除", "editSummary": "编辑摘要", "failedDeleteCharacterSummaries": "删除角色摘要失败：{{error}}", "failedDeleteSummary": "删除摘要失败：{{error}}", "failedUpdateSummary": "更新摘要失败：{{error}}", "noSearchResults": "未找到匹配的摘要。", "noSummariesFound": "未找到摘要。结束一场有效对话后，Memory Engine 3.0 会为每名参与者创建人物视角摘要目录。", "playerId": "目录人物 ID", "refresh": "刷新", "searchPlaceholder": "输入人物姓名或 ID，定位本人目录及相关摘要...", "summariesCount": "摘要", "summariesManager": "摘要与记忆管理器", "summariesManagerHelp": "通过 Memory Engine 3.0 搜索人物视角摘要目录、查看不同人物间的对话文件，并直接编辑摘要内容。", "summaryIndex": "摘要索引" };
 const zh = {
   actions: actions$2,
   chat: chat$2,

@@ -23,13 +23,13 @@ try {
   const topicCache = new Map();
   const firstTopic = engine.retrieveForResponder({ ...base, directCounterpartIds: [], query: "二人曾在花园约定再会", sessionRecallCache: topicCache });
   const secondTopic = engine.retrieveForResponder({ ...base, directCounterpartIds: [], query: "说说那封信", sessionRecallCache: topicCache });
-  assert.deepStrictEqual(secondTopic.topicPatch, firstTopic.topicPatch, "Session Topic Anchor must remain frozen after first selection");
-  assert.match(firstTopic.topicPatchText || "", /会话话题记忆锚点（本场冻结）/);
+  assert.notDeepStrictEqual(secondTopic.extra, firstTopic.extra, "Memory Engine 3.0 Extra is recalculated from the current query");
+  assert.match(firstTopic.temporalExtraText || "", /动态时间与话题摘要/);
 
   const promptSource = fs.readFileSync(path.join(mainDir, "prompts", "prompt-builder.js"), "utf8");
-  assert(promptSource.indexOf('id: "memory-session-topic-anchor"') < promptSource.indexOf('id: "memory-turn-recall"'), "frozen Session Topic Anchor must be defined before dynamic Turn Recall");
+  assert(promptSource.indexOf('id: "memory-temporal-extra"') < promptSource.indexOf('id: "memory-turn-recall"'), "dynamic Extra must precede Turn Recall");
   assert(promptSource.indexOf('id: `${block.id || "history"}-current-user`') < promptSource.indexOf('id: "memory-turn-recall"'), "Turn Recall must be inserted after Current User Message");
-  console.log("Memory Engine 2.5 cache preservation: PASS (frozen lanes, frozen topic anchor, dynamic tail order)");
+  console.log("Memory Engine cache preservation: PASS (frozen lanes, dynamic Extra, turn-tail order)");
 } finally {
   fs.rmSync(tempDir, { recursive: true, force: true });
 }

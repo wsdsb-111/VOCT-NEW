@@ -128,13 +128,12 @@ try {
   };
   const first = engine.retrieveForResponder({ ...common, query: "诸葛亮北伐" });
   const second = engine.retrieveForResponder({ ...common, query: "粮草运输" });
-  assert.strictEqual(first.engineVersion, "2.5");
+  assert.strictEqual(first.engineVersion, "3.0");
   assert.strictEqual(first.stableText, second.stableText, "稳定长期记忆必须整场字节冻结");
-  assert.strictEqual(first.directStableText, second.directStableText, "直接关系最近两条与钉住记忆必须整场冻结");
+  assert.strictEqual(first.directStableText, second.directStableText, "直接关系最近两条必须整场冻结");
   assert.strictEqual(first.mentionedSnapshotText, second.mentionedSnapshotText, "场外人物快照的内容和顺序必须整场冻结");
-  assert.strictEqual(first.topicPatchText, second.topicPatchText, "一场对话最多锁定一次话题补丁正文");
-  assert(first.directStableText.includes("永远守住城门"), "旧承诺不得被近期闲聊挤掉");
-  assert(first.topicPatch.length <= 1, "直接关系和场外人物必须共用一个后缀补丁预算");
+  assert(first.extra.some((entry) => entry.memory.content.includes("永远守住城门")), "旧承诺应进入共享动态 Extra 池");
+  assert(first.extra.length <= 3 && second.extra.length <= 3, "所有额外摘要共用三个槽位");
 
   const ownerFolder = path.join(summaryRoot, "2_乙");
   const beforeFiles = fs.readdirSync(ownerFolder).sort();

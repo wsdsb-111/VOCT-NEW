@@ -2,7 +2,7 @@
 
 const { normalizeGameDate } = require("./character-temporal-facts");
 
-const HISTORICAL_KNOWLEDGE_POLICY_VERSION = "v8.12-part2-historical-scope-2";
+const HISTORICAL_KNOWLEDGE_POLICY_VERSION = "v8.12-part3-historical-scope-3";
 const PUBLIC_WORLD_FIELDS = new Set(["NAME", "IDENTITY", "LIFE_STATUS", "PRIMARY_TITLE", "TITLE_IDS", "TITLE_HOLDER", "TITLE_CHANGE", "WAR", "WAR_PARTICIPATION"]);
 const PUBLIC_REALM_FIELDS = new Set(["LIEGE", "SPOUSE", "FRIEND", "RIVAL", "COURT", "REALM_ROOT"]);
 const PRIVATE_FIELDS = new Set(["LOCATION", "COURT_EMPLOYER"]);
@@ -41,7 +41,7 @@ function historicalBloodKinship(projection, leftId, rightId) {
   return [...leftAncestors].some(([ancestorId, leftDepth]) => rightAncestors.has(ancestorId) && leftDepth + rightAncestors.get(ancestorId) <= 4);
 }
 
-function personalMemoryAllows(memoryFacts, responderId, subjectId, asOf) {
+function personalMemoryAllows(memoryFacts, responderId, subjectId, asOf, field, value) {
   const responder = id(responderId);
   const subject = id(subjectId);
   const requested = normalizeGameDate(asOf);
@@ -52,12 +52,16 @@ function personalMemoryAllows(memoryFacts, responderId, subjectId, asOf) {
     const directObservation = fact.knowledgeLevel === "DIRECT_OBSERVATION" || fact.evidenceType === "DIRECT_OBSERVATION" || fact.sourceTier === "DIRECT_OBSERVATION";
     const authorized = id(fact.ownerId) === responder || (fact.knownBy || []).map(id).includes(responder) || directObservation && (fact.directObserverIds || []).map(id).includes(responder);
     if (!authorized || !targetId || targetId !== subject || !event || requested && event.serial > requested.serial) return false;
-    if (directObservation) return factField === "LOCATION" && (fact.directObserverIds || []).map(id).includes(responder);
-    return ["LOCATION", "COURT_EMPLOYER"].includes(factField) && fact.sourceTier === "PERSONAL_MEMORY";
+    if (field === "LOCATION") {
+      const observedLocation = fact.structuredValue ?? fact.value ?? fact.location;
+      return factField === "LOCATION" && observedLocation !== undefined && observedLocation !== null && String(observedLocation) === String(value)
+        && (directObservation ? (fact.directObserverIds || []).map(id).includes(responder) : fact.sourceTier === "PERSONAL_MEMORY" && fact.structured === true);
+    }
+    return factField === "COURT_EMPLOYER" && fact.sourceTier === "PERSONAL_MEMORY";
   });
 }
 
-function resolveHistoricalKnowledge({ projection, responderId, subjectId, field, memoryFacts = [] } = {}) {
+function resolveHistoricalKnowledge({ projection, responderId, subjectId, field, value = null, memoryFacts = [] } = {}) {
   const responder = id(responderId);
   const subject = id(subjectId);
   const responderState = projection?.characters?.[responder] || null;
@@ -76,9 +80,9 @@ function resolveHistoricalKnowledge({ projection, responderId, subjectId, field,
       : { ...base, decision: "DENY", reason: "HISTORY_SCOPE_DENIED", knowledgeLevel: "REALM_PUBLIC" };
   }
   if (PRIVATE_FIELDS.has(field)) {
-    if (personalMemoryAllows(memoryFacts, responder, subject, projection.gameDate)) return { ...base, decision: "ALLOW", reason: "HISTORICAL_PERSONAL_MEMORY", knowledgeLevel: "PERSONAL_MEMORY" };
+    if (personalMemoryAllows(memoryFacts, responder, subject, projection.gameDate, field, value)) return { ...base, decision: "ALLOW", reason: "HISTORICAL_PERSONAL_MEMORY", knowledgeLevel: "PERSONAL_MEMORY" };
     if (historicalBloodKinship(projection, responder, subject)) return { ...base, decision: "ALLOW", reason: "HISTORICAL_BLOOD_KINSHIP", knowledgeLevel: "PERSONAL_MEMORY" };
-    if (sameCourt) return { ...base, decision: "ALLOW", reason: "HISTORICAL_COURT", knowledgeLevel: "COURT_PUBLIC" };
+    if (sameCourt && field === "COURT_EMPLOYER") return { ...base, decision: "ALLOW", reason: "HISTORICAL_COURT", knowledgeLevel: "COURT_PUBLIC" };
     return { ...base, decision: "DENY", reason: "HISTORY_SCOPE_DENIED", knowledgeLevel: "UNKNOWN" };
   }
   return { ...base, decision: "DENY", reason: "HISTORY_SCOPE_DENIED", knowledgeLevel: "UNKNOWN" };

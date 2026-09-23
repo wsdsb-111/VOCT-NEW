@@ -39,7 +39,7 @@ async function main() {
     assert.deepEqual(prefixAnalysis.characters.map(item => item.id), ["3"], "a shorter historical name cannot replace the complete player query");
 
     let analyses = 0;
-    const stub = { currentCheckpoint: {}, historicalDefinitionIndex: { prepare: async () => {} }, localizationResolver: { pending: new Map([["lookup", {}]]), settle: async () => stub.localizationResolver.pending.clear() }, getPromptDiagnostics: () => { analyses++; return { promptDiagnostics: {} }; } };
+    const stub = { currentCheckpoint: {}, _settings: () => ({ v812HistoricalDiagnostics: false }), historicalDefinitionIndex: { prepare: async () => {} }, localizationResolver: { pending: new Map([["lookup", {}]]), settle: async () => stub.localizationResolver.pending.clear() }, getPromptDiagnostics: () => { analyses++; return { promptDiagnostics: {} }; } };
     await WorldlineService.prototype.getPromptDiagnosticsAsync.call(stub, { query: "韩世忠" });
     assert.equal(analyses, 1, "async diagnostic preparation runs the final analyzer only once");
     stub.historicalDefinitionIndex.prepare = async () => { stub.currentCheckpoint = {}; };

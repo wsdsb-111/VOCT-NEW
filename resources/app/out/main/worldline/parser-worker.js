@@ -15,9 +15,10 @@ function validateSnapshotBounds(snapshot) {
     characters: Object.keys(snapshot.characters || {}).length,
     titles: Object.keys(snapshot.titles || {}).length,
     wars: Object.keys(snapshot.wars || {}).length,
-    bindings: Object.keys(snapshot.definitionToRuntime || {}).length
+    bindings: Object.keys(snapshot.definitionToRuntime || {}).length,
+    officialMemories: Object.keys(snapshot.officialMemoryDatabase || {}).length
   };
-  if (counts.characters > 300000 || counts.titles > 100000 || counts.wars > 20000 || counts.bindings > 500000) throw new Error("gamestate_index_bounds_exceeded");
+  if (counts.characters > 300000 || counts.titles > 100000 || counts.wars > 20000 || counts.bindings > 500000 || counts.officialMemories > 1000000) throw new Error("gamestate_index_bounds_exceeded");
 }
 
 function buildResult(savePath) {

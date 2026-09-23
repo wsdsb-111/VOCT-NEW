@@ -31,16 +31,17 @@ try {
   const sessionRecallCache = new Map();
   const options = { characterId: 2, directCounterpartIds: [1], tokenBudget: 800, estimateTokens, sessionRecallCache };
   const recall = engine.retrieveForResponder(options);
-  for (const id of ["newest", "second", "old-promise"]) assert(recall.direct.some(e => e.memory.provenance.finalizationId === id), "latest THREE distinct conversations must be selected");
-  assert(recall.directStableText.includes(promise), "long-term tail promise must reach the frozen prompt block");
-  assert(recall.direct.some(e => e.memory.provenance.finalizationId === "same-copy"), "an older pinned record remains eligible after three recent ones");
+  for (const id of ["newest", "second"]) assert(recall.direct.some(e => e.memory.provenance.finalizationId === id), "latest TWO distinct conversations must be frozen");
+  assert(recall.extra.some(e => e.memory.provenance.finalizationId === "old-promise"), "older promise remains eligible in the shared dynamic Extra pool");
+  assert(recall.temporalExtraText.includes(promise), "long-term tail promise must reach the dynamic prompt block");
+  assert(recall.extra.some(e => e.memory.provenance.finalizationId === "same-copy"), "an older pinned record remains eligible in Extra");
   assert(recall.selectedTokens <= 800);
   assert(!recall.directStableText.includes("旁人只听见"));
   assert.equal(engine.retrieveForResponder({ ...options, query: "谈谈天气" }).directStableText, recall.directStableText, "ordinary turns keep recall frozen");
   assert(engine.loadOwnerFolderMemories(2).find(m => m.content === longContent), "retrieval must never rewrite stored summary bodies");
   assert.equal(engine.retrieveForResponder({ characterId: 3, directCounterpartIds: [1], tokenBudget: 800 }).direct.length, 0, "no fallback into another owner's folder");
   const group = engine.retrieveForResponder({ ...options, sessionRecallCache: new Map(), directCounterpartIds: [1, 3] });
-  assert(group.direct.some(e => e.memory.content.includes(promise)), "multiplayer de-dup cannot erase the private pair projection");
+  assert([...group.direct, ...group.extra].some(e => e.memory.content.includes(promise)), "multiplayer de-dup cannot erase the private pair projection");
   assert(group.direct.some(e => e.memory.content.includes("旁人只听见")));
   assert(group.selectedTokens <= 800);
   const ranker = new MemoryRanker();
@@ -52,7 +53,7 @@ try {
   assert.equal(ranker.selectWithinBudget([entry], { tokenBudget: 0, estimateTokens, allowTruncate: true }).length, 0);
   const short = { ...entry, memory: { ...entry.memory, content: "未分段的旧版摘要。" } };
   assert.equal(ranker.selectWithinBudget([short], { tokenBudget: 200, estimateTokens })[0].memory.content, short.memory.content);
-  console.log("Summary recall promises: PASS (direct projections, latest three, pinned tail, budget, freeze and owner isolation)");
+  console.log("Summary recall promises: PASS (direct projections, Recent2, Extra3, pinned tail, budget, freeze and owner isolation)");
 } finally {
   fs.rmSync(root, { recursive: true, force: true });
 }

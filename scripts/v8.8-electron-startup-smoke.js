@@ -109,6 +109,8 @@ async function main() {
       await new Promise(resolve => setTimeout(resolve, 400));
       assert(await evaluate("!!document.querySelector('.worldline-view')"), `blank tab ${tab}`);
       if (tab[1] === "Developer Diagnostics") {
+        assert(await evaluate("document.querySelector('.worldline-view').textContent.includes('Memory Engine 3.0 · CK3 Official Recollection')"), "Memory Engine 3.0 developer controls missing");
+        assert(await evaluate("typeof worldlineAPI.getOfficialRecollection === 'function'"), "official recollection read-only preload bridge missing");
         assert(await evaluate("document.querySelector('.worldline-view').textContent.includes('V8.12 Temporal Archive')"), "archive diagnostics missing");
         assert(await evaluate("typeof worldlineAPI.temporalArchive === 'function'"), "archive preload bridge missing");
         const flags = await evaluate("(async () => { await worldlineAPI.setRecallSettings({v812TemporalArchiveEnabled:true}); const a=await worldlineAPI.getSettings(); await worldlineAPI.setRecallSettings({v812TemporalArchiveEnabled:false}); return [a.v812TemporalArchiveEnabled,a.v812TemporalArchiveShadowMode,a.v812HistoricalPromptIntegration]; })()");
@@ -117,7 +119,7 @@ async function main() {
       }
     }
     assert.deepEqual(errors, [], "renderer exceptions");
-    console.log("V8.12 Part 1 isolated Electron startup/navigation/Archive flags: PASS");
+    console.log("V8.12 Part 3 isolated Electron startup/navigation/Archive and Memory controls: PASS");
   } finally {
     console.log("RENDERER_ERRORS", JSON.stringify(errors));
     ws?.close();

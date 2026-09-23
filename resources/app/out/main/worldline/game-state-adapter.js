@@ -2,6 +2,7 @@
 
 const crypto = require("node:crypto");
 const { normalizeGameDate } = require("./character-temporal-facts");
+const { parseHolderMemoryIds, parseOfficialMemoryDatabase } = require("../memory-system/ck3-official-memory-reader");
 
 function skipIgnored(text, cursor, end) {
   let next = cursor;
@@ -198,6 +199,7 @@ function parseCharacter(text, id, bucket, record) {
     deathDate: scalar(deadFields.date) || scalar(deadFields.death_date),
     deathReason: scalar(deadFields.reason),
     traits: scalarList(text, fields.traits),
+    officialMemoryIds: parseHolderMemoryIds(text, alive, { collectFields, readToken }),
     positions: scalarList(text, landedFields.court_positions).concat(scalarList(text, courtFields.court_positions))
   };
 }
@@ -355,7 +357,7 @@ function fingerprint(buffer) {
 function parseGameState(gamestate) {
   const text = Buffer.isBuffer(gamestate) ? gamestate.toString("utf8") : String(gamestate || "");
   const root = { start: 0, end: text.length };
-  const fields = collectFields(text, root, ["date", "playthrough_id", "played_character", "living", "dead_unprunable", "characters", "character_lookup", "landed_titles", "wars", "dynasties"]);
+  const fields = collectFields(text, root, ["date", "playthrough_id", "played_character", "living", "dead_unprunable", "characters", "character_lookup", "landed_titles", "wars", "dynasties", "character_memory_manager"]);
   const playedCharacterFields = collectFields(text, firstField(fields.played_character), ["character"]);
   const characters = Object.create(null);
   const nameToCharacterIds = Object.create(null);
@@ -387,6 +389,7 @@ function parseGameState(gamestate) {
     runtimeToDefinitions: lookup.runtimeToDefinitions,
     titles,
     wars,
+    officialMemoryDatabase: parseOfficialMemoryDatabase(text, fields.character_memory_manager, characters, scalar(fields.date), { collectFields, readBlock, readToken, scanDirectEntries }),
     diagnostics: {
       characterCount: Object.keys(characters).length,
       titleCount: Object.keys(titles).length,

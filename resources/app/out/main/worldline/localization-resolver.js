@@ -7,7 +7,8 @@ const TYPE_FILE_PATTERNS = Object.freeze({
   dynasty: /dynast/i,
   culture: /culture/i,
   faith: /(faith|religion)/i,
-  war: /war/i
+  war: /war/i,
+  memory: /(memory|memories)/i
 });
 const MAX_FILES_PER_LOOKUP = 5000;
 const MAX_DISPLAY_FILES_PER_LOOKUP = 250;

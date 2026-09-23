@@ -46,6 +46,10 @@ function registerIpcHandlers(runtime) {
       window.webContents.send("worldline:updated", payload);
     });
     electron.ipcMain.handle("worldline:getSettings", () => worldlineService.getSettings());
+    electron.ipcMain.handle("worldline:getOfficialRecollection", (_event, responderId) => {
+      if (!/^\d+$/.test(String(responderId || ""))) throw new Error("official_recollection_responder_id_required");
+      return worldlineService.getOfficialRecollectionForResponder(responderId);
+    });
     electron.ipcMain.handle("worldline:setRecallSettings", (_event, payload) => worldlineService.setRecallSettings(payload));
     electron.ipcMain.handle("worldline:setAutosavePath", (_event, candidatePath) => worldlineService.setAutosavePath(candidatePath));
     electron.ipcMain.handle("worldline:validateAutosavePath", (_event, candidatePath) => worldlineService.validateAutosavePath(candidatePath));

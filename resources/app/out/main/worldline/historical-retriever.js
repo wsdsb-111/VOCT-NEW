@@ -103,7 +103,20 @@ function selectRange(index, fromDate, toDate, currentDate, openStart = false) {
   const within = entries.filter(node => node.totalDays > baseline.totalDays && node.totalDays <= to.serial);
   const all = [baseline, ...within];
   const trimmed = Math.max(0, all.length - MAX_RANGE_NODES);
-  return { entries: all.slice(0, MAX_RANGE_NODES), from, to, trimmed };
+  if (!trimmed) return { entries: all, from, to, trimmed };
+  const selected = new Set([0, all.length - 1]);
+  const changePoints = [];
+  for (let index2 = 1; index2 < all.length - 1; index2++) {
+    if (["characterCount", "titleCount", "warCount"].some((field) => all[index2][field] !== all[index2 - 1][field])) changePoints.push(index2);
+  }
+  const pickEvenly = (positions, count) => {
+    if (positions.length <= count) return positions;
+    return Array.from({ length: count }, (_, offset) => positions[Math.floor(offset * (positions.length - 1) / Math.max(1, count - 1))]);
+  };
+  for (const position of pickEvenly(changePoints, MAX_RANGE_NODES - 2)) selected.add(position);
+  const remaining = MAX_RANGE_NODES - selected.size;
+  if (remaining > 0) for (const position of pickEvenly(all.map((_, index2) => index2).filter((index2) => !selected.has(index2)), remaining)) selected.add(position);
+  return { entries: [...selected].sort((left, right) => left - right).map((index2) => all[index2]), from, to, trimmed };
 }
 
 function resolveCharacterIds(projections, queryPlan, queryAnalysis, query) {
@@ -369,7 +382,8 @@ function scoreCandidate(candidate, { characterIds, titleIds, realmIds, factionId
   let score = 20;
   if ((candidate.entityRefs?.characters || []).some(id => characterIds.includes(String(id)))) score += 100;
   if ((candidate.entityRefs?.titles || []).some(id => titleIds.includes(String(id)))) score += 100;
-  if ((candidate.entityRefs?.realms || []).some(id => realmIds.includes(String(id)))) score += 80;
+  const realmMatches = (candidate.entityRefs?.realms || []).filter(id => realmIds.includes(String(id))).length;
+  if (realmMatches) score += realmMatches >= 2 && candidate.field === "WAR" ? 240 : 80;
   if ((candidate.entityRefs?.factions || []).some(id => factionIds.includes(String(id)))) score += 80;
   if (candidate.field === "LOCATION" && /(哪里|位置|行踪|where)/u.test(text)) score += 60;
   if (["PRIMARY_TITLE", "TITLE_IDS", "TITLE_HOLDER", "TITLE_CHANGE"].includes(candidate.field) && /(头衔|爵位|title)/u.test(text)) score += 60;
@@ -391,7 +405,7 @@ function applyScope(candidates, projectionsByCheckpoint, responderId, memoryFact
       continue;
     }
     const projection = projectionsByCheckpoint.get(candidate.checkpointId);
-    const decision = resolveHistoricalKnowledge({ projection, responderId: responderId || projection?.playerId, subjectId: candidate.entityId, field: candidate.field, memoryFacts: [...memoryFacts, ...directObservationFacts] });
+    const decision = resolveHistoricalKnowledge({ projection, responderId: responderId || projection?.playerId, subjectId: candidate.entityId, field: candidate.field, value: candidate.value?.after ?? candidate.value, memoryFacts: [...memoryFacts, ...directObservationFacts] });
     if (decision.decision !== "ALLOW") { denied++; continue; }
     allowed.push({ ...candidate, knowledgeDecision: decision.decision, knowledgeReason: decision.reason, knowledgeLevel: decision.knowledgeLevel });
   }
@@ -437,7 +451,7 @@ function blockedResult(code, diagnostics) {
   return { success: false, status: "BLOCKED", reason: code, selected: [], trimmed: [], promptText: null, diagnostics: { ...diagnostics, selectedCount: 0, candidateCount: diagnostics?.candidateCount || 0, trimmedCount: 0, knowledgeDeniedCount: 0, futureBlockedCount: code === "HISTORY_FUTURE_BLOCKED" ? 1 : 0, conflictCount: 0, reasonCodes: [...new Set([...(diagnostics?.reasonCodes || []), code])] } };
 }
 
-function retrieveHistorical({ store, scope, queryPlan, queryAnalysis = {}, query = "", currentDate, responderId = null, memoryFacts = [], directObservationFacts = [], requestedFields = null, memoryRevision = null, canonRevision = 0 } = {}) {
+function retrieveHistorical({ store, scope, queryPlan, queryAnalysis = {}, query = "", currentDate, responderId = null, memoryFacts = [], directObservationFacts = [], requestedFields = null, memoryRevision = null, canonRevision = 0, includeProjections = false } = {}) {
   const time = queryPlan?.time || {};
   const baseDiagnostics = { queryIntent: queryPlan?.intent || null, timeMode: time.mode || "UNSPECIFIED", requestedDate: time.mode === "RANGE" ? `${time.from}..${time.to}` : time.from || null,
     selectedHistoricalCheckpoint: null, checkpointDate: null, temporalDistance: null, campaignId: scope?.campaignId || null, branchId: scope?.branchId || null,
@@ -467,13 +481,13 @@ function retrieveHistorical({ store, scope, queryPlan, queryAnalysis = {}, query
   const queryRealmIds = realmIdsForQueryRefs(projections, queryPlan?.entities?.realms || []);
   const factionIds = sorted(queryPlan?.entities?.factions || []);
   const fields = new Set(Array.isArray(requestedFields) && requestedFields.length ? requestedFields.filter(field => CHARACTER_FIELDS.includes(field)) : fieldFilter(query));
-  const wantsWar = queryPlan?.intent === "WAR_STATUS" || /(战争|战事|交战|war)/iu.test(query);
   const broadRange = time.mode === "RANGE" && resolvedCharacterIds.length === 0;
+  const wantsWar = broadRange || queryPlan?.intent === "WAR_STATUS" || /(战争|战事|交战|war)/iu.test(query);
   const broadScope = broadRange ? buildBroadScope(projections, resolvedCharacterIds, resolvedTitleIds, queryPlan?.entities?.realms || [], factionIds, wantsWar) : { characterIds: resolvedCharacterIds, titleIds: resolvedTitleIds, realmIds: [...new Set([...queryRealmIds, ...realmIdsForTitleIds(projections, resolvedTitleIds), ...realmIdsForCharacterIds(projections, resolvedCharacterIds)])], warIds: null };
   const characterIds = broadScope.characterIds;
   const titleIds = broadScope.titleIds;
   const realmIds = broadScope.realmIds;
-  const warIds = broadRange && wantsWar ? broadScope.warIds : null;
+  const warIds = broadRange ? broadScope.warIds : null;
   const retrievalFields = broadRange ? broadChangeFields(fields) : fields;
   for (const field of fields) if (UNAVAILABLE_CHARACTER_FIELDS.has(field)) baseDiagnostics.unsupportedFields.push(field);
   if (baseDiagnostics.unsupportedFields.length) baseDiagnostics.reasonCodes.push("HISTORY_FIELD_UNAVAILABLE");
@@ -528,7 +542,8 @@ function retrieveHistorical({ store, scope, queryPlan, queryAnalysis = {}, query
     queryPlan,
     cacheKeyParts: { campaignId: scope.campaignId, branchId: scope.branchId, historicalArchiveRevision: index.archiveRevision, historicalIndexLayoutVersion: INDEX_LAYOUT_VERSION, checkpoint: baseDiagnostics.selectedHistoricalCheckpoint, queryPlanFingerprint: hash(queryPlan), realmRefs: realmIds, responderId: responderId === null ? null : String(responderId), memoryRevision, canonRevision, knowledgePolicyVersion: HISTORICAL_KNOWLEDGE_POLICY_VERSION },
     diagnostics: baseDiagnostics,
-    retrievalVersion: HISTORICAL_RETRIEVAL_VERSION
+    retrievalVersion: HISTORICAL_RETRIEVAL_VERSION,
+    ...(includeProjections ? { projections } : {})
   };
 }
 

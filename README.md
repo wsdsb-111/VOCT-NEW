@@ -16,7 +16,7 @@ Voices of the Court 是一个面向《Crusader Kings III》（CK3）的沉浸式
 - **V8.5.2 玩家语义与世界线差异 UI（Luna + Sol）**：逐实体展示 Historical / Runtime-native 身份、歧义和来源不完整状态；年龄、父母、兄弟、婚姻和子女差异只进入懒展开的可读 Worldline Difference 面板。Sol Stage 5 已修复新旧 DTO 聚合矛盾、来源优先级和降级路径 raw 值泄漏，50 条候选分页及 A/B/C 诊断分层保持不变。120 组发布回归通过，下一步 Astra 最终集成与实机 Gate。
 - **历史认知边界**：提示词要求角色只使用当前年份已经发生、写成、流传或成名的信息，避免引用未来人物、事件、诗词和典故。
 - **当前政局优先**：皇帝和年号从实际游戏角色数据中识别，支持玩家篡位或改变历史后的沙盒玩法。
-- **Memory Engine 2.6（可见标签）**：保留 2.5 的 `角色ID_姓名/与对方的对话.json` 人物目录、存储 schema 与写入合同；V8.6.2 新增当前轮第三人证据 Grounding，Session Topic Anchor 与 Turn Recall 合同不迁移。
+- **Memory Engine 3.0（V8.12 Part 3）**：保留 2.5 的 `角色ID_姓名/与对方的对话.json` 人物目录、存储 schema 与写入合同；冻结 Recent2、动态 Extra3 和 CK3 官方追忆只读 Shadow 已接入，正式追忆 Prompt 注入默认关闭，Part 3 实机验收待完成。
 - **Official VOTC 2.0.3 Action System**：以官方 Prompt、Schema、Registry、Sandbox、审批与 28 个标准动作作为唯一动作基线；每个 NPC 完整回复后评估一次，不再运行 AE3/AE4、Action Mode、Pending 或 Social Consequence。V8.8.3 对金币转移实行 RunFile ACK 后的 CK3 回读确认，只有双方金额精确匹配才显示完成。
 - **候场与在场窗口**：多人会话可在首句前设置候场，开始后可请入内、永久离场，或选择昏迷、睡着、暂时离开三种可返回的暂离模式；每名角色只回应、获知并保存自己实际在场区间的内容。
 - **多人对话摘要**：支持玩家与当前会话中的全部 NPC 同时对话，并将多人互动摘要按实际参与者逐对保存，避免 NPC 之间的对话内容丢失。
@@ -27,9 +27,9 @@ Voices of the Court 是一个面向《Crusader Kings III》（CK3）的沉浸式
 
 ## 运行环境
 
-V8.12 第一部分的五项实机 Gate 已由用户确认通过，`V8.12 PART 1 = PASS`。第二部分 Historical Retrieval + Timeline 已完成代码和自动化施工：AS_OF/RANGE、人物/头衔/战争变化点、WarActor、历史知情范围、Historical Canon、分支隔离与 Dynamic Tail 接入均已落地。历史 Prompt 注入默认关闭，当前状态为等待两阶段实机 Gate，**尚未记录 `V8.12 PART 2 = PASS`，不得进入第三部分**。详见[第二部分实施与实机步骤](docs/v8.12-part2-implementation-report.md)。
+V8.12 第一部分、第二部分和 Part 3 前置验收已由用户确认通过。Part 3 Memory Engine 3.0 已接入代码及自动化，**Part 3 自身的 CK3/GLM 实机 Gate 尚未签发**。详见 [Part 3 施工记录](docs/v8.12-part3-memory-engine-3.0-implementation-report.md)。
 
-当前施工基线为 **V8.12 第二部分：历史检索与时间线**：[实施与实机步骤](docs/v8.12-part2-implementation-report.md)。第一部分归档底座保持独立；第二部分只有历史 Query 才读取 Archive，普通 Current Query 不扫描历史。Review Fix 已补齐紧凑索引、私有历史 ACL、无实体有界范围、Realm WarActor 与可靠名称边界。历史检索诊断默认开启、Prompt 注入默认关闭，自动回归与隔离 Electron 冒烟不替代真实 CK3/GLM Gate。**当前停在第二部分实机 Gate，`V8.12 PART 2 != PASS`。** 第一部分记录见[安全收口与 Temporal Archive 底座](docs/v8.12-part1-implementation-report.md)，V8.8 百年旧档验收见[回填记录](docs/v8.8-long-campaign-field-acceptance.md)。以下版本段落为前置实施记录。
+当前施工基线为 **V8.12 Part 3：Memory Engine 3.0**：[施工记录与待验收项目](docs/v8.12-part3-memory-engine-3.0-implementation-report.md)。第一部分归档底座保持独立；第二部分只有历史 Query 才读取 Archive，普通 Current Query 不扫描历史。Memory 3.0 只改变召回和可见版本，2.5 存储合同保持兼容；官方追忆 Prompt 注入默认关闭。自动回归与隔离 Electron 冒烟不替代真实 CK3/GLM Gate。第一部分记录见[安全收口与 Temporal Archive 底座](docs/v8.12-part1-implementation-report.md)，V8.8 百年旧档验收见[回填记录](docs/v8.8-long-campaign-field-acceptance.md)。以下版本段落为前置实施记录。
 
 当前收尾版本为 **V8.11.1**：[一致性与知情边界实施记录](docs/v8.11.1-consistency-implementation-report.md)。实时配偶/多人观察判权修正；摘要编辑同步重建所选 Owner 的内部记忆并支持失败回滚，Legacy 删除不再静默丢失映射；数字地点和当前年份查询边界完善，fullName 移到 GLM 动态状态。305/305 发布组、374 个测试文件分类及隔离 Electron 冒烟通过；真实 CK3/GLM 与长时 Gate 待人工验收。
 
@@ -180,7 +180,7 @@ voices-of-the-court/
 ├─ resources/app/out/main/script-sandbox.js          # 提示词/动作脚本共享 VM 策略
 ├─ resources/app/out/main/window-manager.js          # Electron 窗口构造
 ├─ resources/app/out/main/secure-provider-secrets.js # safeStorage 密钥落盘
-├─ resources/app/out/main/memory-system/             # Memory Engine 2.6 标签 / 2.5 数据合同
+├─ resources/app/out/main/memory-system/             # Memory Engine 3.0 / 2.5 存储兼容
 ├─ resources/app/out/main/historical-system/         # V8 Baseline、Campaign Identity 与 Worldline Store
 ├─ resources/app/out/main/actions/                   # Official VOTC 2.0.3 Action System
 ├─ resources/app/out/main/conversation/              # 对话与在场生命周期基础设施
@@ -246,7 +246,7 @@ node scripts\test-release.js
 - UI 主题：宫廷编年史风格（深红、暗金、羊皮纸文本层级）
 - UI 主题切换：游牧、骑士纹章、水墨画卷三套完整历史风格；分别使用 `image/草原游牧.png`、`image/中世纪骑士.png`、`image/中国古典.png` 作为整块界面背景，并保留各自的边框结构、按钮造型、消息卡片、输入框、字体和滚动条，主题选择可自动保存
 - UI 素材生成提示词：参见 [docs/UI_ASSET_PROMPTS_2.0.3.md](docs/UI_ASSET_PROMPTS_2.0.3.md)
-- 当前重点：继续执行 V8.8.5 人工 Gate，验证旧英文模板中的扩展亲属/长幼称谓、各 Provider 新请求的 Token 统计与长时稳定性。关系提取和动作执行已由用户实机确认恢复；Official VOTC 2.0.3 Action 签名、Memory Engine 2.6 标签及 2.5 存储合同保持兼容
+- 当前重点：执行 V8.12 Part 3 的 CK3 官方追忆 UI 对照、多人长对话与真实 GLM 缓存 Gate；Official VOTC 2.0.3 Action 签名及 Memory Engine 2.5 存储合同保持兼容。
 
 ## 已知限制
 
@@ -256,7 +256,7 @@ node scripts\test-release.js
 - Workshop 2.0.5 的存档 token 跨重启与不同新存档隔离仍需真实 CK3 保存/读档 Gate；旧模组不会持久化世界线，但现有对话仍可运行。
 - CK3 日志格式、角色头衔语言和本地化文本变化时，可能影响年份或皇帝识别。
 - DeepSeek 等服务商的上下文缓存由服务端管理，命中率会受到请求前缀、模型、账号隔离和缓存生命周期影响。
-- 人物摘要目录是 Memory Engine 2.6 UI 所展示的长期记忆数据，底层继续使用 2.5 数据合同；清理或迁移前请先备份 `%APPDATA%/VOTC/votc_data/conversation_summaries`。
+- 人物摘要目录是 Memory Engine 3.0 UI 所展示的长期记忆数据，底层继续兼容 2.5 数据合同；清理或迁移前请先备份 `%APPDATA%/VOTC/votc_data/conversation_summaries`。
 - 结构化记忆质量仍受摘要 Provider 的 JSON 遵循能力影响；新终局请求解析失败时会自动重试，连续失败则保留 recovery snapshot，旧恢复快照仍兼容自然语言回退。
 
 ## 文档入口

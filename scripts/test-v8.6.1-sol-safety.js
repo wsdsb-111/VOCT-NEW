@@ -22,7 +22,7 @@ async function pressureFixture(baseTokens, remainingWorldTokens, memoryExpected 
   });
   Conversation.configure({ worldlineService: {
     isSubjectivePromptIntegrationEnabled: () => true,
-    getSubjectivePromptContext: (request) => {
+    getSubjectivePromptContextAsync: async (request) => {
       budgets.push(request.tokenBudget);
       return { worldStableText: "stable-checkpoint", worldTurnRecallText: request.tokenBudget > 0 ? "w".repeat(request.tokenBudget) : null, worldTurnRecallTokens: request.tokenBudget, worldTurnRecallTrimmed: [], metrics: {} };
     }

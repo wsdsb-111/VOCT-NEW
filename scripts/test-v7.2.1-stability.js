@@ -39,6 +39,7 @@ function writePair(folderRoot, owner, counterpart, summaries) {
       mentionedEntityIds: [999],
       mentionedEntityNames: { 999: ["不存在的人物"] },
       query: "继续此前的话题",
+      memoryEngine3Enabled: false,
       tokenBudget: 1000,
       estimateTokens: (text) => String(text).length
     });

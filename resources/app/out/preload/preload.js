@@ -190,6 +190,7 @@ electron.contextBridge.exposeInMainWorld("providerDiagnosticsAPI", {
 });
 electron.contextBridge.exposeInMainWorld("worldlineAPI", {
   getSettings: () => electron.ipcRenderer.invoke("worldline:getSettings"),
+  getOfficialRecollection: (responderId) => electron.ipcRenderer.invoke("worldline:getOfficialRecollection", responderId),
   setRecallSettings: (settings) => electron.ipcRenderer.invoke("worldline:setRecallSettings", settings),
   setAutosavePath: (path) => electron.ipcRenderer.invoke("worldline:setAutosavePath", path),
   validateAutosavePath: (path) => electron.ipcRenderer.invoke("worldline:validateAutosavePath", path),

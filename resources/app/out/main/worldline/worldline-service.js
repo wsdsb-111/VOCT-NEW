@@ -43,6 +43,7 @@ const { retrieveHistorical } = require("./historical-retriever");
 const { buildHistoricalPrompt } = require("./historical-prompt-context");
 const { createPlayerAnnualDelta, createPlayerHistoricalCharacters, createPlayerOverview, createPlayerWorldKnowledge } = require("./world-presentation");
 const { estimateTokens } = require("../token-estimator");
+const { compileOfficialRecollection } = require("../memory-system/official-recollection-provider");
 
 const DEFAULT_SETTINGS = Object.freeze({
   autosavePath: null,
@@ -56,6 +57,10 @@ const DEFAULT_SETTINGS = Object.freeze({
   v812HistoricalPromptInjection: false,
   v812HistoricalDiagnostics: true,
   v812HistoricalPromptIntegration: false,
+  v812MemoryEngine3Enabled: true,
+  v812OfficialRecollectionEnabled: true,
+  v812OfficialRecollectionPromptEnabled: false,
+  v812TemporalSummaryRecallEnabled: true,
   lastValidatedAt: null,
   lastValidationStatus: "UNCONFIGURED"
 });
@@ -110,6 +115,10 @@ function normalizeSettings(value) {
     v812HistoricalPromptInjection: settings.v812HistoricalPromptInjection === true || settings.v812HistoricalPromptIntegration === true,
     v812HistoricalDiagnostics: settings.v812HistoricalDiagnostics !== false,
     v812HistoricalPromptIntegration: settings.v812HistoricalPromptInjection === true || settings.v812HistoricalPromptIntegration === true,
+    v812MemoryEngine3Enabled: settings.v812MemoryEngine3Enabled !== false,
+    v812OfficialRecollectionEnabled: settings.v812OfficialRecollectionEnabled !== false,
+    v812OfficialRecollectionPromptEnabled: settings.v812OfficialRecollectionPromptEnabled === true,
+    v812TemporalSummaryRecallEnabled: settings.v812TemporalSummaryRecallEnabled !== false,
     lastValidatedAt: typeof settings.lastValidatedAt === "string" ? settings.lastValidatedAt : null,
     lastValidationStatus: typeof settings.lastValidationStatus === "string" ? settings.lastValidationStatus : "UNCONFIGURED"
   };
@@ -392,7 +401,7 @@ class WorldlineService {
   setRecallSettings(input = {}) {
     if (!input || typeof input !== "object" || Array.isArray(input)) throw new Error("worldline_recall_settings_invalid");
     const { promptIntegrationEnabled, subjectiveWorldMode } = input;
-    const archiveKeys = ["v812TemporalArchiveEnabled", "v812TemporalArchiveShadowMode", "v812HistoricalRetrievalEnabled", "v812HistoricalPromptInjection", "v812HistoricalDiagnostics", "v812HistoricalPromptIntegration"];
+    const archiveKeys = ["v812TemporalArchiveEnabled", "v812TemporalArchiveShadowMode", "v812HistoricalRetrievalEnabled", "v812HistoricalPromptInjection", "v812HistoricalDiagnostics", "v812HistoricalPromptIntegration", "v812MemoryEngine3Enabled", "v812OfficialRecollectionEnabled", "v812OfficialRecollectionPromptEnabled", "v812TemporalSummaryRecallEnabled"];
     if (promptIntegrationEnabled === undefined && subjectiveWorldMode === undefined && !archiveKeys.some(key => Object.hasOwn(input, key))) throw new Error("worldline_recall_settings_empty");
     for (const key of archiveKeys) if (Object.hasOwn(input, key) && typeof input[key] !== "boolean") throw new Error("worldline_archive_flag_invalid");
     if (input.v812TemporalArchiveShadowMode === false) throw new Error("v812_temporal_archive_shadow_required");
@@ -404,6 +413,11 @@ class WorldlineService {
     if (input.v812HistoricalDiagnostics !== undefined) next.v812HistoricalDiagnostics = input.v812HistoricalDiagnostics;
     const historicalPromptInjection = input.v812HistoricalPromptInjection ?? input.v812HistoricalPromptIntegration;
     if (historicalPromptInjection !== undefined) next.v812HistoricalPromptInjection = historicalPromptInjection;
+    if (input.v812OfficialRecollectionEnabled !== undefined) next.v812OfficialRecollectionEnabled = input.v812OfficialRecollectionEnabled;
+    if (input.v812MemoryEngine3Enabled !== undefined) next.v812MemoryEngine3Enabled = input.v812MemoryEngine3Enabled;
+    if (input.v812OfficialRecollectionPromptEnabled !== undefined) next.v812OfficialRecollectionPromptEnabled = input.v812OfficialRecollectionPromptEnabled;
+    if (input.v812TemporalSummaryRecallEnabled !== undefined) next.v812TemporalSummaryRecallEnabled = input.v812TemporalSummaryRecallEnabled;
+    if (next.v812OfficialRecollectionPromptEnabled && !next.v812OfficialRecollectionEnabled) throw new Error("official_recollection_reader_required");
     if (next.v812HistoricalPromptInjection && !next.v812HistoricalRetrievalEnabled) throw new Error("v812_historical_retrieval_required");
     next.v812HistoricalPromptIntegration = next.v812HistoricalPromptInjection;
     if (promptIntegrationEnabled !== undefined) next.promptIntegrationEnabled = promptIntegrationEnabled === true;
@@ -411,7 +425,7 @@ class WorldlineService {
       if (!["DIAGNOSTIC", "PRODUCTION"].includes(subjectiveWorldMode)) throw new Error("worldline_subjective_mode_invalid");
       next.subjectiveWorldMode = subjectiveWorldMode;
     }
-    const changed = next.promptIntegrationEnabled !== current.promptIntegrationEnabled || next.subjectiveWorldMode !== current.subjectiveWorldMode || next.v812HistoricalRetrievalEnabled !== current.v812HistoricalRetrievalEnabled || next.v812HistoricalPromptInjection !== current.v812HistoricalPromptInjection || next.v812HistoricalDiagnostics !== current.v812HistoricalDiagnostics;
+    const changed = next.promptIntegrationEnabled !== current.promptIntegrationEnabled || next.subjectiveWorldMode !== current.subjectiveWorldMode || next.v812HistoricalRetrievalEnabled !== current.v812HistoricalRetrievalEnabled || next.v812HistoricalPromptInjection !== current.v812HistoricalPromptInjection || next.v812HistoricalDiagnostics !== current.v812HistoricalDiagnostics || next.v812MemoryEngine3Enabled !== current.v812MemoryEngine3Enabled || next.v812OfficialRecollectionEnabled !== current.v812OfficialRecollectionEnabled || next.v812OfficialRecollectionPromptEnabled !== current.v812OfficialRecollectionPromptEnabled || next.v812TemporalSummaryRecallEnabled !== current.v812TemporalSummaryRecallEnabled;
     const saved = this._saveSettings(next);
     if (changed) {
       this.worldKnowledgeState.stableRecallCache.clear();
@@ -1252,6 +1266,20 @@ class WorldlineService {
     return { worldKnowledge, playerView: { worldKnowledge: createPlayerWorldKnowledge(worldKnowledge) } };
   }
 
+  getOfficialRecollectionForResponder(responderId, { estimateTokens: estimate = estimateTokens } = {}) {
+    const settings = this._settings();
+    const checkpoint = this.currentCheckpoint;
+    const sourceMatches = settings.autosavePath && checkpoint?.source?.path && this._samePath(settings.autosavePath, checkpoint.source.path);
+    if (!settings.v812OfficialRecollectionEnabled || settings.lastValidationStatus !== "VALID" || this.buildState !== "ACTIVE" || !sourceMatches || !checkpoint?.snapshot) {
+      return { status: "UNAVAILABLE", reason: "CHECKPOINT_OR_FEATURE_UNAVAILABLE", entries: [], renderedSummary: null };
+    }
+    const freshness = getCheckpointFreshness({ pipelineState: this.buildState, checkpointAsOf: checkpoint.snapshot.gameDate, liveDate: this.getLiveState().gameDate });
+    if (["STALE", "UNAVAILABLE"].includes(freshness.freshnessStatus)) return { status: "UNAVAILABLE", reason: "CHECKPOINT_STALE", entries: [], renderedSummary: null };
+    return compileOfficialRecollection({ snapshot: checkpoint.snapshot, ownerCharacterId: responderId,
+      saveFingerprint: checkpoint.source.fingerprint,
+      localize: (type, key) => this.localizationResolver?.resolveForDisplay(type, key), estimateTokens: estimate });
+  }
+
   getPromptContext({ query = "", assistContext = "", mentionedEntityIds = [], runtimeContext = null, diagnostic = false, includeScopedSupplemental = false } = {}) {
     const settings = this._settings();
     const safeMentionedEntityIds = Array.isArray(mentionedEntityIds) ? mentionedEntityIds : [];
@@ -1598,7 +1626,7 @@ class WorldlineService {
     finally { clearTimeout(timer); }
   }
 
-  getHistoricalQueryContext({ responderId = null, query = "", assistContext = "", queryPlan = null, queryAnalysis = null, directObservationFacts = [], tokenBudget = null } = {}) {
+  getHistoricalQueryContext({ responderId = null, query = "", assistContext = "", queryPlan = null, queryAnalysis = null, directObservationFacts = [], tokenBudget = null, precomputed = null } = {}) {
     const settings = this._settings();
     if (!settings.v812HistoricalRetrievalEnabled || !this.currentCheckpoint?.snapshot) return null;
     const base = queryPlan && queryAnalysis ? { queryPlan, queryAnalysis } : this.getPromptContext({ query, assistContext, diagnostic: true });
@@ -1606,7 +1634,8 @@ class WorldlineService {
     const scope = this.canon.branch();
     const archiveRoot = this.path.join(this.dataDir, "worldline-v8.12");
     let archiveRevision = 0;
-    try { archiveRevision = new HistoricalCheckpointIndex(archiveRoot, scope).load().archiveRevision; }
+    if (precomputed) archiveRevision = Number(precomputed.retrieval?.cacheKeyParts?.historicalArchiveRevision) || 0;
+    else try { archiveRevision = new HistoricalCheckpointIndex(archiveRoot, scope).load().archiveRevision; }
     catch (_error) { /* The retriever returns a stable reason code below. */ }
     const effectiveResponderId = responderId === null || responderId === undefined ? this.currentCheckpoint.snapshot.playerId : responderId;
     const memoryFacts = memoryFactsForResponder(this.memoryEngine, effectiveResponderId);
@@ -1628,7 +1657,7 @@ class WorldlineService {
     })}`;
     if (this.worldKnowledgeState.historicalRecallCache.has(cacheKey)) return { ...clone(this.worldKnowledgeState.historicalRecallCache.get(cacheKey)), cacheHit: true };
     const store = new TemporalArchiveStore({ root: archiveRoot });
-    const retrieval = retrieveHistorical({
+    const retrieval = precomputed?.retrieval || retrieveHistorical({
       store,
       scope,
       queryPlan: base.queryPlan,
@@ -1644,7 +1673,7 @@ class WorldlineService {
     let canon = { text: null, tokens: 0, selected: [], revision: canonRevision };
     if (retrieval.success && retrieval.diagnostics?.selectedHistoricalCheckpoint) {
       const checkpointIds = Array.isArray(retrieval.diagnostics.selectedHistoricalCheckpoint) ? retrieval.diagnostics.selectedHistoricalCheckpoint : [retrieval.diagnostics.selectedHistoricalCheckpoint];
-      const projections = checkpointIds.map(checkpointId => store.read(scope, checkpointId)).filter(Boolean);
+      const projections = precomputed ? precomputed.projections || [] : checkpointIds.map(checkpointId => store.read(scope, checkpointId)).filter(Boolean);
       const projection = projections.at(-1);
       if (projection && effectiveResponderId !== null && effectiveResponderId !== undefined) canon = this.canon.recallHistorical({
         responderId: String(effectiveResponderId),
@@ -1675,7 +1704,58 @@ class WorldlineService {
     return clone(result);
   }
 
-  getSubjectivePromptContext({ responderId, query = "", assistContext = "", mentionedEntityIds = [], activeParticipantIds = [], conversationId = null, turnEpoch = null, sceneRevision = null, presenceRevision = null, directObservationFactIds = [], directObservationFacts = [], historicalReferenceInfo = null, tokenBudget = null, runtimeGameData = null } = {}) {
+  async getHistoricalQueryContextAsync(args = {}) {
+    const settings = this._settings();
+    if (!settings.v812HistoricalRetrievalEnabled || !this.currentCheckpoint?.snapshot) return null;
+    const base = args.queryPlan && args.queryAnalysis ? { queryPlan: args.queryPlan, queryAnalysis: args.queryAnalysis }
+      : this.getPromptContext({ query: args.query || "", assistContext: args.assistContext || "", diagnostic: true });
+    if (!isHistoricalQueryPlan(base?.queryPlan)) return null;
+    const checkpoint = this.currentCheckpoint;
+    const scope = this.canon.branch();
+    const responderId = args.responderId ?? checkpoint.snapshot.playerId;
+    const memoryFacts = memoryFactsForResponder(this.memoryEngine, responderId);
+    const directObservationFacts = (Array.isArray(args.directObservationFacts) ? args.directObservationFacts : [])
+      .filter(fact => fact && fact.knowledgeLevel === "DIRECT_OBSERVATION" && ["LOCATION"].includes(String(fact.field || "").toLocaleUpperCase())
+        && Array.isArray(fact.directObserverIds) && fact.directObserverIds.map(String).includes(String(responderId)))
+      .map(fact => ({ ...fact, directObserverIds: [String(responderId)], observationEvidenceComplete: true })).slice(0, 16);
+    let precomputed;
+    try {
+      precomputed = await new Promise((resolve, reject) => {
+        const worker = new this.Worker(this.path.join(__dirname, "historical-retrieval-worker.js"), {
+          workerData: { root: this.path.join(this.dataDir, "worldline-v8.12"), includeCanonProjections: (this.canon.snapshot?.records?.length || 0) > 0, input: {
+            scope, queryPlan: base.queryPlan, queryAnalysis: base.queryAnalysis, query: `${args.query || ""}\n${args.assistContext || ""}`,
+            currentDate: checkpoint.snapshot.gameDate, responderId, memoryFacts, directObservationFacts,
+            memoryRevision: shortFingerprint(memoryFacts.map(fact => [fact.factId, fact.asOf, fact.ownerId, fact.knownBy, fact.participantIds, fact.field, fact.structured])),
+            canonRevision: this.canon.snapshot?.revision || 0
+          } }, resourceLimits: { maxOldGenerationSizeMb: 1024 }
+        });
+        const timeout = setTimeout(() => { worker.terminate(); reject(new Error("HISTORY_WORKER_TIMEOUT")); }, this.workerTimeoutMs);
+        let received = false;
+        worker.once("message", value => { received = true; clearTimeout(timeout); if (value.error) reject(new Error(value.error)); else resolve(value); });
+        worker.once("error", error => { clearTimeout(timeout); reject(error); });
+        worker.once("exit", () => { clearTimeout(timeout); if (!received) reject(new Error("HISTORY_WORKER_STOPPED")); });
+      });
+    } catch (error) {
+      return { success: false, status: "BLOCKED", reason: error.message || "HISTORY_WORKER_STOPPED", selected: [], trimmed: [], promptText: null, diagnostics: { reasonCodes: [error.message || "HISTORY_WORKER_STOPPED"], selectedCount: 0 } };
+    }
+    const currentScope = this.canon.branch();
+    if (this.currentCheckpoint !== checkpoint || currentScope.campaignId !== scope.campaignId || currentScope.branchId !== scope.branchId) return { success: false, status: "BLOCKED", reason: "HISTORY_CHECKPOINT_CHANGED", selected: [], trimmed: [], promptText: null };
+    return this.getHistoricalQueryContext({ ...args, queryPlan: base.queryPlan, queryAnalysis: base.queryAnalysis, precomputed });
+  }
+
+  async getSubjectivePromptContextAsync(args = {}) {
+    if (!this.isSubjectivePromptIntegrationEnabled()) return null;
+    const settings = this._settings();
+    const historicalHint = settings.v812HistoricalRetrievalEnabled && settings.v812HistoricalPromptInjection
+      ? parseTimeHint(`${args.query || ""}\n${args.assistContext || ""}`, this.currentCheckpoint?.snapshot?.gameDate) : null;
+    if (!settings.v812HistoricalPromptInjection || !isHistoricalQueryPlan({ time: historicalHint })) return this.getSubjectivePromptContext(args);
+    const historicalBase = this.getPromptContext({ query: args.query || "", assistContext: args.assistContext || "", mentionedEntityIds: args.mentionedEntityIds || [], runtimeContext: { activeParticipantIds: args.activeParticipantIds || [] }, diagnostic: true, includeScopedSupplemental: true });
+    if (!isHistoricalQueryPlan(historicalBase?.queryPlan)) return this.getSubjectivePromptContext(args);
+    const historical = await this.getHistoricalQueryContextAsync({ ...args, queryPlan: historicalBase.queryPlan, queryAnalysis: historicalBase.queryAnalysis });
+    return this.getSubjectivePromptContext({ ...args, historicalPrecomputed: historical });
+  }
+
+  getSubjectivePromptContext({ responderId, query = "", assistContext = "", mentionedEntityIds = [], activeParticipantIds = [], conversationId = null, turnEpoch = null, sceneRevision = null, presenceRevision = null, directObservationFactIds = [], directObservationFacts = [], historicalReferenceInfo = null, tokenBudget = null, runtimeGameData = null, historicalPrecomputed = undefined } = {}) {
     if (!this.isSubjectivePromptIntegrationEnabled()) return null;
     const settings = this._settings();
     const historicalHint = settings.v812HistoricalRetrievalEnabled && settings.v812HistoricalPromptInjection
@@ -1683,7 +1763,7 @@ class WorldlineService {
     const historicalBase = isHistoricalQueryPlan({ time: historicalHint })
       ? this.getPromptContext({ query, assistContext, mentionedEntityIds, runtimeContext: { activeParticipantIds }, diagnostic: true, includeScopedSupplemental: true }) : null;
     if (settings.v812HistoricalPromptInjection && isHistoricalQueryPlan(historicalBase?.queryPlan)) {
-      const historical = this.getHistoricalQueryContext({ responderId, query, assistContext, queryPlan: historicalBase.queryPlan, queryAnalysis: historicalBase.queryAnalysis, directObservationFacts, tokenBudget });
+      const historical = historicalPrecomputed === undefined ? this.getHistoricalQueryContext({ responderId, query, assistContext, queryPlan: historicalBase.queryPlan, queryAnalysis: historicalBase.queryAnalysis, directObservationFacts, tokenBudget }) : historicalPrecomputed;
       const blockedText = historical?.promptText || `=== 本轮历史检索（CK3 存档时间线 / Dynamic Tail） ===\n未获得可安全使用的历史事实（${historical?.reason || "HISTORY_UNAVAILABLE"}）。不得用现实历史传记、当前关系或未来节点补全答案；应明确说明存档历史资料不足。`;
       const referenceDate = Array.isArray(historical?.diagnostics?.checkpointDate) ? historical.diagnostics.checkpointDate.at(-1) : historical?.diagnostics?.checkpointDate || this.currentCheckpoint.snapshot.gameDate;
       return {
@@ -1764,12 +1844,18 @@ class WorldlineService {
     } else await this.historicalDefinitionIndex?.prepare?.(collectTerms(query), historicalBudgetMs);
     if (this.localizationResolver.pending?.size) await this.localizationResolver.settle(Math.max(1, deadline - Date.now()));
     if (this.currentCheckpoint !== checkpoint) return { promptDiagnostics: { available: false, reason: "CHECKPOINT_CHANGED", query: String(payload.query || "").slice(0, 1000) } };
-    const result = this.getPromptDiagnostics(payload);
+    let historicalPrecomputed;
+    if (this._settings().v812HistoricalDiagnostics) {
+      const context = this.getPromptContext({ query: String(payload.query || "").slice(0, 1000), assistContext: String(payload.assistContext || "").slice(0, 2000), diagnostic: true });
+      if (isHistoricalQueryPlan(context?.queryPlan)) historicalPrecomputed = await this.getHistoricalQueryContextAsync({ query: String(payload.query || "").slice(0, 1000), assistContext: String(payload.assistContext || "").slice(0, 2000), queryPlan: context.queryPlan, queryAnalysis: context.queryAnalysis, tokenBudget: TOKEN_BUDGETS.COMPLEX });
+    }
+    if (this.currentCheckpoint !== checkpoint) return { promptDiagnostics: { available: false, reason: "CHECKPOINT_CHANGED", query: String(payload.query || "").slice(0, 1000) } };
+    const result = this.getPromptDiagnostics({ ...payload, historicalPrecomputed });
     result.promptDiagnostics.localizationPending = this.localizationResolver.pending?.size > 0;
     return result;
   }
 
-  getPromptDiagnostics({ query = "", assistContext = "", trimmedPage = 0 } = {}) {
+  getPromptDiagnostics({ query = "", assistContext = "", trimmedPage = 0, historicalPrecomputed = undefined } = {}) {
     const safeQuery = String(query || "").slice(0, 1000);
     const context = this.getPromptContext({ query: safeQuery, assistContext: String(assistContext || "").slice(0, 2000), diagnostic: true });
     const runtime = this.getDiagnostics().diagnostics;
@@ -1817,7 +1903,7 @@ class WorldlineService {
     const page = Math.min(Math.max(0, Math.floor(Number(trimmedPage) || 0)), Math.max(0, Math.ceil(Math.max(trimmedItems.length, candidateTotal) / trimmedPageSize) - 1));
     const diagnosticAnalysis = { ...analysis, candidateCharacters: (analysis.candidateCharacters || []).slice(page * 50, (page + 1) * 50), identityResolution: { ...analysis.identityResolution, candidateTotal, candidates: (analysis.identityResolution?.candidates || []).slice(page * 50, (page + 1) * 50), evidence: (analysis.identityResolution?.evidence || []).slice(0, 200) } };
     const historical = this._settings().v812HistoricalDiagnostics && isHistoricalQueryPlan(context.queryPlan)
-      ? this.getHistoricalQueryContext({ query: safeQuery, assistContext: String(assistContext || "").slice(0, 2000), queryPlan: context.queryPlan, queryAnalysis: context.queryAnalysis, tokenBudget: TOKEN_BUDGETS.COMPLEX }) : null;
+      ? historicalPrecomputed === undefined ? this.getHistoricalQueryContext({ query: safeQuery, assistContext: String(assistContext || "").slice(0, 2000), queryPlan: context.queryPlan, queryAnalysis: context.queryAnalysis, tokenBudget: TOKEN_BUDGETS.COMPLEX }) : historicalPrecomputed : null;
     const tokenBreakdown = [
       ["worldline-stable", "Stable World Checkpoint", context.stableText],
       ["worldline-topic", "Topic Game Truth", context.topicText],
@@ -1952,6 +2038,13 @@ class WorldlineService {
           historicalDiagnostics: settings.v812HistoricalDiagnostics,
           historicalCacheEntries: this.worldKnowledgeState.historicalRecallCache.size,
           result: this.archiveResult || null
+        },
+        memoryEngine3: {
+          enabled: settings.v812MemoryEngine3Enabled,
+          officialRecollectionEnabled: settings.v812OfficialRecollectionEnabled,
+          officialRecollectionPromptEnabled: settings.v812OfficialRecollectionPromptEnabled,
+          temporalSummaryRecallEnabled: settings.v812TemporalSummaryRecallEnabled,
+          officialMemoryCount: Object.keys(this.currentCheckpoint?.snapshot?.officialMemoryDatabase || {}).length
         },
         catalogStatus: "NOT_CONNECTED",
         branchStatus: "UNKNOWN_WITHOUT_SAVE_AB_GATE",

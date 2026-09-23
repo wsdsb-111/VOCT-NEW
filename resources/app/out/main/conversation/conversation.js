@@ -268,7 +268,7 @@ class Conversation {
       const remainingContext = initialBudget.remainingContext;
       try {
         await worldlineService.prepareCanon?.();
-        let subjectiveWorldContext = worldlineService.getSubjectivePromptContext({
+        let subjectiveWorldContext = await worldlineService.getSubjectivePromptContextAsync({
           runtimeGameData: this.gameData,
           responderId: npc.id,
           query: request.query || "",
@@ -294,7 +294,7 @@ class Conversation {
             worldTurnRecallTrimmed: [...(subjectiveWorldContext.worldTurnRecallTrimmed || []), { factId: null, sourceTier: null, reason: "WORLD_STABLE_CONTEXT_HEADROOM" }]
           };
         } else if (subjectiveWorldContext && stableTokens + (subjectiveWorldContext.worldTurnRecallTokens || 0) > remainingContext) {
-          subjectiveWorldContext = worldlineService.getSubjectivePromptContext({
+          subjectiveWorldContext = await worldlineService.getSubjectivePromptContextAsync({
             runtimeGameData: this.gameData,
             responderId: npc.id,
             query: request.query || "",
@@ -447,6 +447,7 @@ class Conversation {
       return [characterId, character ? memoryEngine.getCharacterMentionAliases(character) : []];
     }));
     const currentTurnMentionedEntityNames = Object.fromEntries(currentTurnMentionedCharacterIds.map((characterId) => [characterId, mentionedEntityNames[characterId] || []]));
+    const memory3Settings = worldlineService?.getSettings?.() || {};
     const retrieved = memoryEngine.retrieveForResponder({
       characterId: npc.id,
       query,
@@ -456,10 +457,20 @@ class Conversation {
       sessionRecallCache: memoryState.responderRecallCache,
       directCounterpartIds: activeParticipantIds.filter((characterId) => characterId !== npc.id),
       ownerFolderMemories: memoryState.mentionProfileCache.ownerFolderMemoriesById.get(Number(npc.id)) || [],
+      currentGameDate: this.gameData.date,
       currentTotalDays: this.gameData.totalDays,
+      memoryEngine3Enabled: memory3Settings.v812MemoryEngine3Enabled !== false,
+      temporalSummaryRecallEnabled: memory3Settings.v812TemporalSummaryRecallEnabled !== false,
       tokenBudget: Math.min(2400, Math.max(800, Math.floor(limit * 0.08))),
       estimateTokens: (text) => TokenCounter.estimateTokens(text)
     });
+    const responderCache = memoryState.responderRecallCache.get(Number(npc.id));
+    if (responderCache && !Object.hasOwn(responderCache, "officialRecollection")) {
+      responderCache.officialRecollection = worldlineService?.getOfficialRecollectionForResponder?.(npc.id, {
+        estimateTokens: (text) => TokenCounter.estimateTokens(text)
+      }) || { status: "UNAVAILABLE", reason: "WORLDLINE_UNAVAILABLE", renderedSummary: null };
+    }
+    const officialRecollection = responderCache?.officialRecollection || null;
     const turnEntityIds = [...new Set([...activeParticipantIds, ...currentTurnMentionedCharacterIds].map(Number))].filter((characterId) => characterId !== Number(npc.id));
     const turnEntityNames = turnEntityIds.flatMap((characterId) => {
       const profile = mentionableProfiles.get(characterId) || this.gameData.characters.get(characterId);
@@ -485,6 +496,7 @@ class Conversation {
       mentionedEntityIds: currentTurnMentionedCharacterIds,
       mentionedEntityNames: currentTurnMentionedEntityNames,
       ownerFolderMemories: memoryState.mentionProfileCache.ownerFolderMemoriesById.get(Number(npc.id)) || [],
+      currentGameDate: this.gameData.date,
       currentTotalDays: this.gameData.totalDays,
       tokenBudget: 512,
       estimateTokens: (text) => TokenCounter.estimateTokens(text)
@@ -514,6 +526,8 @@ class Conversation {
     }
     return {
       ...retrieved,
+      officialRecollection,
+      officialRecollectionText: memory3Settings.v812MemoryEngine3Enabled !== false && memory3Settings.v812OfficialRecollectionPromptEnabled === true ? officialRecollection?.renderedSummary || null : null,
       turnRecall: turnRecall.selected,
       turnRecallText: turnRecall.text,
       turnRecallTokens: turnRecall.tokens,
