@@ -4,19 +4,22 @@ const { normalizeGameDate } = require("../worldline/character-temporal-facts");
 
 function buildSummaryDateIndex(memories, { ownerId, counterpartId, currentGameDate, currentTotalDays } = {}) {
   const current = normalizeGameDate(currentGameDate);
-  const today = currentTotalDays == null ? null : Number(currentTotalDays);
+  const rawToday = currentTotalDays == null ? null : Number(currentTotalDays);
+  const hasTotalDays = Number.isFinite(rawToday) && rawToday > 0;
+  const today = hasTotalDays ? rawToday : current?.serial;
   return (memories || []).filter((memory) => {
     const ids = [memory.provenance?.counterpartId, ...(memory.provenance?.counterpartIds || [])].map(Number);
-    return Number(memory.provenance?.folderOwnerId) === Number(ownerId) && ids.includes(Number(counterpartId));
+    return Number(memory.provenance?.folderOwnerId) === Number(ownerId)
+      && (counterpartId == null || ids.includes(Number(counterpartId)));
   }).map((memory) => {
     const date = normalizeGameDate(memory.eventDate);
     const rawDays = Number(memory.totalDays);
-    const totalDays = Number.isFinite(rawDays) && rawDays > 0 ? rawDays
-      : date && current && today !== null && Number.isFinite(today) ? today + date.serial - current.serial : null;
+    const totalDays = date && current && Number.isFinite(today) ? today + date.serial - current.serial
+      : hasTotalDays && Number.isFinite(rawDays) && rawDays > 0 ? rawDays : null;
     return {
       summaryId: memory.memoryId,
       ownerId: Number(ownerId),
-      counterpartId: Number(counterpartId),
+      counterpartId: counterpartId == null ? null : Number(counterpartId),
       totalDays,
       gameDate: date?.canonical || null,
       importance: Number(memory.importance) || 0,

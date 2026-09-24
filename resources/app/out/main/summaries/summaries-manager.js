@@ -233,6 +233,13 @@ function createSummariesManager({ fs, path, summariesDir, memoryEngine, memorySy
       try {
         const summaries = JSON.parse(fs$1.readFileSync(filePath, "utf8"));
         if (!Array.isArray(summaries) || summaryIndex < 0 || summaryIndex >= summaries.length) return { success: false, error: "Invalid summary index" };
+        if (summaries[summaryIndex].sourceType === "CK3_OFFICIAL_RECOLLECTION") {
+          if (typeof newContent !== "string" || !newContent.trim() || newContent.length > 1048576) throw new Error("summary_content_required");
+          summaries[summaryIndex] = { ...summaries[summaryIndex], content: newContent };
+          this.writeSummaryJsonAtomic(filePath, summaries);
+          this.refreshCurrentConversation();
+          return { success: true };
+        }
         memoryEngine.updateSummaryProjection(summaries[summaryIndex], newContent, {
           ownerId: playerId, counterpartId: characterId, summaryPath: filePath,
           invalidateConversations: [getCurrentConversation()].filter(Boolean),
@@ -268,7 +275,7 @@ function createSummariesManager({ fs, path, summariesDir, memoryEngine, memorySy
         }
         const summaryRecord = summaries[summaryIndex];
         memoryEngine.store.withSummaryMutation(filePath, () => {
-          memoryEngine.forgetSummaryProjection(summaryRecord, {
+          if (summaryRecord.sourceType !== "CK3_OFFICIAL_RECOLLECTION") memoryEngine.forgetSummaryProjection(summaryRecord, {
             ownerId: playerId,
             counterpartId: characterId,
             invalidateConversations: [getCurrentConversation()].filter(Boolean)
@@ -301,7 +308,7 @@ function createSummariesManager({ fs, path, summariesDir, memoryEngine, memorySy
       try {
         const summaries = JSON.parse(fs$1.readFileSync(filePath, "utf8"));
         memoryEngine.store.withSummaryMutation(filePath, () => {
-          memoryEngine.forgetOwnerConversation(playerId, characterId, Array.isArray(summaries) ? summaries : [], {
+          if (summaries?.[0]?.sourceType !== "CK3_OFFICIAL_RECOLLECTION") memoryEngine.forgetOwnerConversation(playerId, characterId, Array.isArray(summaries) ? summaries : [], {
             invalidateConversations: [getCurrentConversation()].filter(Boolean)
           });
           fs$1.unlinkSync(filePath);

@@ -105,7 +105,7 @@ try {
     tokenBudget: 800,
     estimateTokens: (text) => String(text).length
   });
-  assert(titleRecall.mentioned.some((entry) => entry.memory.content.includes("赈济灾民")), "title resolution must route into the same ID-owned memory records without putting the title in the filename");
+  assert(titleRecall.extra.some((entry) => entry.reason?.source === "mentioned" && entry.memory.content.includes("赈济灾民")), "title resolution must route into the same ID-owned memory records through 3.0 dynamic Extra without putting the title in the filename");
   engine.markSummaryOwnerDeceased(emperor.id, { reason: "dead" });
   assert.strictEqual(engine.isSummaryOwnerDeceased(emperor.id), true, "dead character ID must be tombstoned without deleting its history");
   assert(fs.existsSync(ownedOld) && fs.existsSync(ownedCanonical), "death tombstones must preserve all historical owner folders");

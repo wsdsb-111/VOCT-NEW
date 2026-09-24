@@ -431,6 +431,7 @@ function createPromptBuilder({
           break;
         }
         case "memories": {
+          if (baseContext.memoryContext?.engineVersion?.startsWith("3.") && baseContext.memoryContext.memoryEngine3Enabled !== false) break;
           const memoriesBlock = this.buildMemoriesBlock(gameData, character, block.limit ?? 5, block.template, baseContext);
           if (memoriesBlock) {
             messages.push({ role: block.role || "system", content: memoriesBlock });
@@ -1001,6 +1002,7 @@ function createPromptBuilder({
           break;
         }
         case "memories": {
+          if (baseContext.memoryContext?.engineVersion?.startsWith("3.") && baseContext.memoryContext.memoryEngine3Enabled !== false) break;
           try {
             const memoriesBlock = this.buildMemoriesBlock(gameData, character, block.limit ?? 5, block.template, baseContext);
             if (memoriesBlock) {

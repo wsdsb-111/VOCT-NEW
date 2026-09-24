@@ -450,10 +450,11 @@ class MemoryStore {
   getSummaryDateIndexForPair(ownerId, counterpartId, { currentGameDate, currentTotalDays, ownerFolderMemories = null } = {}) {
     const key = String(ownerId) + "|" + String(counterpartId);
     const previous = this.summaryDateIndexCache.get(key);
-    if (previous?.gameDate === currentGameDate && previous?.totalDays === currentTotalDays) return previous.entries;
+    if (previous?.gameDate === currentGameDate && previous?.totalDays === currentTotalDays
+      && previous.ownerFolderMemories === ownerFolderMemories) return previous.entries;
     const memories = this.loadDirectPairSummaries(ownerId, counterpartId, ownerFolderMemories);
     const entries = buildSummaryDateIndex(memories, { ownerId, counterpartId, currentGameDate, currentTotalDays });
-    this.summaryDateIndexCache.set(key, { gameDate: currentGameDate, totalDays: currentTotalDays, entries });
+    this.summaryDateIndexCache.set(key, { gameDate: currentGameDate, totalDays: currentTotalDays, ownerFolderMemories, entries });
     return entries;
   }
 
@@ -484,6 +485,8 @@ class MemoryStore {
         if (!Array.isArray(summaries)) continue;
         for (let index = 0; index < summaries.length; index++) {
           const summary = summaries[index];
+          // Official documents are selected once through the responder's 2+1 route.
+          if (summary?.sourceType === "CK3_OFFICIAL_RECOLLECTION") continue;
           if (!summary || typeof summary.content !== "string") continue;
           const playerId = Number(summary.playerId);
           const summaryCharacterId = Number(summary.characterId);

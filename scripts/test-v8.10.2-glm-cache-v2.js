@@ -153,6 +153,14 @@ const build = (history = baseHistory, summary = "ROLLING A", context = memoryCon
 };
 
 const before = build();
+const nativeSummaryContext = { ...memoryContext, engineVersion: "3.0", officialRecollectionText: null,
+  mentionedSnapshotText: null, directStableText: "冻结两篇对话 + 官方追忆", temporalExtraText: "只在这一轮出现的追忆" };
+const nativeFirst = build(baseHistory, "ROLLING A", nativeSummaryContext);
+const nativeLater = build([...baseHistory, { role: "assistant", content: "已答复" }, { role: "user", content: "继续" }], "ROLLING A", { ...nativeSummaryContext, temporalExtraText: null });
+assert.equal(nativeFirst.metadata.prefixFingerprint, nativeLater.metadata.prefixFingerprint,
+  "removing one-turn recall must preserve the frozen 2+1 prefix");
+assert(!nativeFirst.metadata.blocks.some(block => block.id === "memory-official-recollection" || block.id === "memory-mentioned-snapshot"));
+assert(nativeFirst.metadata.blocks.find(block => block.id === "memory-temporal-extra").position > nativeFirst.metadata.blocks.find(block => block.id === "history-current-user").position);
 assert.strictEqual(before.result.promptProfile.id, "glm_cache_v2");
 assert.strictEqual(before.result.promptProfile.layoutId, "glm_cache_v2");
 assert.strictEqual(before.result.promptProfile.historyWindow, null);

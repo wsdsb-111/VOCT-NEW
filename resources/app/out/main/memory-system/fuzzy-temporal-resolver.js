@@ -16,7 +16,8 @@ function count(value) {
 
 function resolveTemporalWindow(query, { currentGameDate, currentTotalDays, earliestTotalDays = null } = {}) {
   const current = normalizeGameDate(currentGameDate);
-  const today = Number(currentTotalDays);
+  const rawToday = Number(currentTotalDays);
+  const today = Number.isFinite(rawToday) && rawToday > 0 ? rawToday : current?.serial;
   if (!current || !Number.isFinite(today) || today <= 0) return { triggered: false, reason: "GAME_DATE_UNAVAILABLE" };
   const text = String(query || "").replace(/\s+/g, "");
   const day = 1;
@@ -57,15 +58,24 @@ function resolveTemporalWindow(query, { currentGameDate, currentTotalDays, earli
   const naturalYear = text.match(/去年|前年/);
   if (naturalYear) {
     const selected = current.year - (naturalYear[0] === "去年" ? 1 : 2);
-    return result(naturalYear[0], "PREVIOUS_YEAR", "TARGET_DATE", window(atDate(selected, 1, 1), atDate(selected + 1, 1, 1) - 1), undefined, "TARGET_DISTANCE", atDate(selected, 7, 1));
+    const from = atDate(selected, 1, 1), to = atDate(selected + 1, 1, 1);
+    return Number.isFinite(from) && Number.isFinite(to) ? { ...result(naturalYear[0], "PREVIOUS_YEAR", "TARGET_DATE",
+      window(from, to - 1), undefined, "TARGET_DISTANCE", atDate(selected, 7, 1)), targetGameYear: selected } : { triggered: false, reason: "INVALID_DATE" };
   }
   const number = "[\\d零〇一二两三四五六七八九十百]+";
   const ago = text.match(new RegExp("(" + number + ")(年|个月|月|天)前"));
   if (ago) {
     const amount = count(ago[1]);
     if (!Number.isFinite(amount) || amount <= 0) return { triggered: false, reason: "INVALID_INTERVAL" };
-    const unitDays = ago[2] === "年" ? year : ago[2] === "天" ? day : month;
-    const tolerance = ago[2] === "年" ? 183 : ago[2] === "天" ? 7 : 30;
+    if (ago[2] === "年") {
+      const selected = current.year - amount;
+      const from = atDate(selected, 1, 1), to = atDate(selected + 1, 1, 1);
+      if (!Number.isFinite(from) || !Number.isFinite(to)) return { triggered: false, reason: "INVALID_DATE" };
+      return { ...result(ago[0], "INTERVAL_AGO", "TARGET_DATE", window(from, to - 1), undefined, "TARGET_DISTANCE",
+        atDate(selected, current.month, current.day) ?? atDate(selected, current.month, 28)), targetGameYear: selected };
+    }
+    const unitDays = ago[2] === "天" ? day : month;
+    const tolerance = ago[2] === "天" ? 7 : 30;
     return target(ago[0], "INTERVAL_AGO", today - amount * unitDays, tolerance, tolerance * 2);
   }
   const interval = text.match(new RegExp("(过去|最近|近些来)(" + number + ")年"));

@@ -75,6 +75,16 @@ class MemoryRanker {
       let memory = entry.memory;
       let tokens = Math.max(1, estimate(memory.content));
       const remaining = budget - used;
+      if (tokens > remaining && memory.subtype === "official_recollection") {
+        const paragraphs = memory.content.split("\n\n");
+        const fitted = [paragraphs[0]];
+        for (const paragraph of paragraphs.slice(1)) {
+          if (estimate([...fitted, paragraph].join("\n\n")) <= remaining) fitted.push(paragraph);
+        }
+        if (fitted.length < 2) continue;
+        memory = { ...memory, content: fitted.join("\n\n") };
+        tokens = Math.max(1, estimate(memory.content));
+      }
       if (tokens > remaining && (allowTruncate || memory.importance >= 0.9) && remaining > 0) {
         // The generated perspective summary puts promises/plans at the END.
         // Prioritize that section in the recall copy, never mutate the stored body.

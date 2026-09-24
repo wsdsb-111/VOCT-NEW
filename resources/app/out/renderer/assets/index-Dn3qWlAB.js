@@ -21431,8 +21431,8 @@ const SummariesManager = () => {
             isExpanded && /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "summaries-container", children: metadata.summaries.map((summary, index) => /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "summary-item", children: [
               /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "summary-header", children: [
                 /* @__PURE__ */ jsxRuntimeExports.jsxs("span", { className: "summary-date", children: [
-                  "📅 ",
-                  summary.date
+                  summary.sourceType === "CK3_OFFICIAL_RECOLLECTION" ? "官方追忆摘要（随新对话更新）" : "📅 ",
+                  summary.sourceType === "CK3_OFFICIAL_RECOLLECTION" ? null : summary.date
                 ] }),
                 /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "summary-actions", children: [
                   /* @__PURE__ */ jsxRuntimeExports.jsx(
@@ -23020,7 +23020,7 @@ function WorldlineView() {
     activeTab === "diagnostics" && usageObservabilityPanel(),
     activeTab === "diagnostics" && developerMode && /* @__PURE__ */ jsxRuntimeExports.jsxs("section", { className: "worldline-card", children: [
       /* @__PURE__ */ jsxRuntimeExports.jsx("h4", { children: "Memory Engine 3.0 · CK3 Official Recollection" }),
-      /* @__PURE__ */ jsxRuntimeExports.jsx("p", { children: text("只读查看当前检查点中回应角色仍持有的追忆；未解析条目不会进入 Prompt。", "Read-only view of memories still held by the responder in the current checkpoint. Unresolved entries are not prompted.") }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx("p", { children: text("对话开始时，游戏日志中的原生追忆自动覆盖角色目录内的官方追忆摘要，随最近两篇摘要冻结，并使用 Memory Engine 统一预算。下方仅查看存档解析结果；完整原生文本请到摘要页查看。", "Native memories from the dialogue log replace the owner's official summary and share the frozen Memory Engine budget. The inspector below shows save parsing; view native text in Summaries.") }),
       /* @__PURE__ */ jsxRuntimeExports.jsxs("label", { children: [/* @__PURE__ */ jsxRuntimeExports.jsx("input", { type: "checkbox", checked: diagnostics?.memoryEngine3?.enabled !== false, disabled: archiveBusy, onChange: async (event) => {
         setArchiveBusy(true);
         try { await invoke("setRecallSettings", { v812MemoryEngine3Enabled: event.target.checked }); await refresh(); }
@@ -23031,16 +23031,11 @@ function WorldlineView() {
         try { await invoke("setRecallSettings", { v812TemporalSummaryRecallEnabled: event.target.checked }); await refresh(); }
         finally { setArchiveBusy(false); }
       } }), text("启用动态时间摘要召回", "Enable dynamic temporal summary recall")] }),
-      /* @__PURE__ */ jsxRuntimeExports.jsxs("label", { children: [/* @__PURE__ */ jsxRuntimeExports.jsx("input", { type: "checkbox", checked: diagnostics?.memoryEngine3?.officialRecollectionEnabled !== false, disabled: archiveBusy || diagnostics?.memoryEngine3?.officialRecollectionPromptEnabled === true, onChange: async (event) => {
+      /* @__PURE__ */ jsxRuntimeExports.jsxs("label", { children: [/* @__PURE__ */ jsxRuntimeExports.jsx("input", { type: "checkbox", checked: diagnostics?.memoryEngine3?.officialRecollectionEnabled !== false, disabled: archiveBusy, onChange: async (event) => {
         setArchiveBusy(true);
-        try { await invoke("setRecallSettings", { v812OfficialRecollectionEnabled: event.target.checked }); await refresh(); }
+        try { await invoke("setRecallSettings", { v812OfficialRecollectionEnabled: event.target.checked, v812OfficialRecollectionPromptEnabled: false }); await refresh(); }
         finally { setArchiveBusy(false); }
-      } }), text("读取 CK3 官方追忆（Shadow）", "Read CK3 official recollection (Shadow)")] }),
-      /* @__PURE__ */ jsxRuntimeExports.jsxs("label", { children: [/* @__PURE__ */ jsxRuntimeExports.jsx("input", { type: "checkbox", checked: diagnostics?.memoryEngine3?.officialRecollectionPromptEnabled === true, disabled: archiveBusy || diagnostics?.memoryEngine3?.officialRecollectionEnabled === false, onChange: async (event) => {
-        setArchiveBusy(true);
-        try { await invoke("setRecallSettings", { v812OfficialRecollectionPromptEnabled: event.target.checked }); await refresh(); }
-        finally { setArchiveBusy(false); }
-      } }), text("手动开启官方追忆 Prompt 注入", "Manually enable official recollection Prompt injection")] }),
+      } }), text("读取存档追忆诊断（Shadow）", "Read save recollection diagnostics (Shadow)")] }),
       /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "worldline-actions", children: [
         /* @__PURE__ */ jsxRuntimeExports.jsx("input", { value: subjectiveResponderId, onChange: (event) => setSubjectiveResponderId(event.target.value), placeholder: text("回应角色 Runtime ID", "Responder Runtime ID") }),
         /* @__PURE__ */ jsxRuntimeExports.jsx("button", { type: "button", disabled: !/^\d+$/.test(subjectiveResponderId), onClick: async () => setOfficialRecollection(await invoke("getOfficialRecollection", subjectiveResponderId)), children: text("读取追忆诊断", "Inspect recollection") })

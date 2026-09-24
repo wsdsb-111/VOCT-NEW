@@ -4,6 +4,7 @@ const { inferGenderFromPronoun } = require("./character");
 const { createRelationshipResolver } = require("./relationship-resolver");
 const { resolveRelationshipCurrentTruth } = require("../worldline/relationship-current-truth");
 const { MEMORY_ENGINE_VERSION } = require("../version");
+const { buildOfficialRecollectionSummary } = require("../memory-system/official-recollection-provider");
 
 function createGameData({ fs, path, memorySystem, memoryEngine, summariesDir, getHistoricalReferenceByYear }) {
   const fs$1 = fs;
@@ -465,6 +466,33 @@ function createGameData({ fs, path, memorySystem, memoryEngine, summariesDir, ge
       return dynamicMemories;
     }
     
+    syncOfficialRecollectionSummaries(sessionId) {
+      for (const character of this.characters.values()) {
+        if (character.id === this.playerID) continue;
+        const summary = buildOfficialRecollectionSummary({ character, gameData: this, sessionId,
+          schemaVersion: memorySystem.CURRENT_SUMMARY_SCHEMA_VERSION, engineVersion: MEMORY_ENGINE_VERSION });
+        if (!summary) continue;
+        const filePath = path.join(this.getCharacterFolderPath(character.id, character.shortName), "官方追忆摘要.json");
+        try {
+          if (this.readConversationSummariesFile(filePath)?.[0]?.officialCaptureSessionId === sessionId) continue;
+          this.writeConversationSummariesFile(filePath, [summary]);
+          memoryEngine?.invalidateSummaryFolderCache([character.id]);
+        } catch (error) {
+          console.error(`[OfficialRecollection] Failed to synchronize owner ${character.id}:`, error.message);
+        }
+      }
+    }
+
+    getOfficialRecollectionSummary(characterId, sessionId) {
+      const character = this.characters.get(Number(characterId));
+      if (!character || character.id === this.playerID) return null;
+      const filePath = path.join(this.getCharacterFolderPath(character.id, character.shortName), "官方追忆摘要.json");
+      const summary = this.readConversationSummariesFile(filePath)?.[0];
+      return summary?.sourceType === "CK3_OFFICIAL_RECOLLECTION" && summary.playerId === character.id
+        && summary.officialCaptureSessionId === sessionId && summary.campaignToken === (this.campaignToken || null)
+        && summary.memoryCount > 0 ? summary : null;
+    }
+
     loadCharactersSummaries() {
       // 更新当前皇帝信息（从游戏角色中获取实际的当前皇帝）
       this.updateCurrentEmperorInfo();

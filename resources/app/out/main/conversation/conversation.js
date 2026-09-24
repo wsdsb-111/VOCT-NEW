@@ -189,6 +189,7 @@ class Conversation {
       this.captureSummaryParticipantProfiles(this.gameData.characters.values());
       this.initializePresence();
       this.gameData.loadCharactersSummaries();
+      this.gameData.syncOfficialRecollectionSummaries?.(this.id);
       this.isActive = true;
       this.emitUpdate();
       this.memoryRecoveryPromise = Promise.resolve().then(() => this.recoverPendingMemories()).catch((error) => {
@@ -405,6 +406,16 @@ class Conversation {
     }
     return result;
   }
+  getMemoryTokenBudget(contextLimit, participantIds) {
+    if (!this.frozenMemoryBudget) {
+      const participantCount = new Set(participantIds.map(Number)).size;
+      const tier = Math.min(2, Math.max(0, participantCount - 2));
+      const ratio = 0.10 + tier * 0.025;
+      this.frozenMemoryBudget = { participantCount, ratio,
+        tokens: Math.max(0, Math.min(3600 + tier * 900, Math.floor(contextLimit * ratio))) };
+    }
+    return this.frozenMemoryBudget.tokens;
+  }
   async getMemoryContextFor(npc, contextLimit = null) {
     if (!memoryEngine || !npc || !this.gameData) return null;
     if (Number(npc.id) === Number(this.gameData.playerID)) return null;
@@ -414,6 +425,7 @@ class Conversation {
     const activeParticipantIds = this.getActiveConversationCharacters().map((character) => character.id);
     const mentionExcludedIds = this.gameData.getMentionExclusionIds(activeParticipantIds);
     const memoryState = memoryEngine.ensureConversationState(this);
+    this.getPromptHistoryForCharacter(npc.id);
     const participantKey = [...new Set(activeParticipantIds.map(Number))].sort((left, right) => left - right).join(",");
     if (memoryState.mentionProfileCache?.participantKey !== participantKey) {
       const profiles = new Map(this.gameData.getMentionableCharacterProfiles());
@@ -451,7 +463,7 @@ class Conversation {
     const retrieved = memoryEngine.retrieveForResponder({
       characterId: npc.id,
       query,
-      mentionedEntityIds: mentionedCharacterIds,
+      mentionedEntityIds: memory3Settings.v812MemoryEngine3Enabled !== false ? currentTurnMentionedCharacterIds : mentionedCharacterIds,
       mentionedEntityNames,
       mentionedRecallCache: memoryState.mentionedRecallCache,
       sessionRecallCache: memoryState.responderRecallCache,
@@ -461,22 +473,19 @@ class Conversation {
       currentTotalDays: this.gameData.totalDays,
       memoryEngine3Enabled: memory3Settings.v812MemoryEngine3Enabled !== false,
       temporalSummaryRecallEnabled: memory3Settings.v812TemporalSummaryRecallEnabled !== false,
-      tokenBudget: Math.min(2400, Math.max(800, Math.floor(limit * 0.08))),
+      officialSummary: this.gameData.getOfficialRecollectionSummary?.(npc.id, this.id) || null,
+      turnEpoch: this.turnEpoch,
+      tokenBudget: memory3Settings.v812MemoryEngine3Enabled !== false
+        ? this.getMemoryTokenBudget(limit, activeParticipantIds)
+        : Math.min(2400, Math.max(800, Math.floor(limit * 0.08))),
       estimateTokens: (text) => TokenCounter.estimateTokens(text)
     });
-    const responderCache = memoryState.responderRecallCache.get(Number(npc.id));
-    if (responderCache && !Object.hasOwn(responderCache, "officialRecollection")) {
-      responderCache.officialRecollection = worldlineService?.getOfficialRecollectionForResponder?.(npc.id, {
-        estimateTokens: (text) => TokenCounter.estimateTokens(text)
-      }) || { status: "UNAVAILABLE", reason: "WORLDLINE_UNAVAILABLE", renderedSummary: null };
-    }
-    const officialRecollection = responderCache?.officialRecollection || null;
     const turnEntityIds = [...new Set([...activeParticipantIds, ...currentTurnMentionedCharacterIds].map(Number))].filter((characterId) => characterId !== Number(npc.id));
     const turnEntityNames = turnEntityIds.flatMap((characterId) => {
       const profile = mentionableProfiles.get(characterId) || this.gameData.characters.get(characterId);
       return profile ? memoryEngine.getCharacterMentionAliases(profile) : [];
     });
-    const turnRecall = memoryEngine.retrieveTurnRecall({
+    const turnRecall = memory3Settings.v812MemoryEngine3Enabled !== false ? { selected: [], text: null, tokens: 0, reason: "UNIFIED_EXTRA3", triggered: false } : memoryEngine.retrieveTurnRecall({
       characterId: npc.id,
       query,
       assistContext,
@@ -490,7 +499,7 @@ class Conversation {
       cache: memoryState.turnRecallCache,
       turnEpoch: this.turnEpoch
     });
-    const thirdPartyEvidence = typeof memoryEngine.retrieveThirdPartyEvidence === "function" ? memoryEngine.retrieveThirdPartyEvidence({
+    const thirdPartyEvidence = memory3Settings.v812MemoryEngine3Enabled === false && typeof memoryEngine.retrieveThirdPartyEvidence === "function" ? memoryEngine.retrieveThirdPartyEvidence({
       characterId: npc.id,
       query,
       mentionedEntityIds: currentTurnMentionedCharacterIds,
@@ -526,8 +535,6 @@ class Conversation {
     }
     return {
       ...retrieved,
-      officialRecollection,
-      officialRecollectionText: memory3Settings.v812MemoryEngine3Enabled !== false && memory3Settings.v812OfficialRecollectionPromptEnabled === true ? officialRecollection?.renderedSummary || null : null,
       turnRecall: turnRecall.selected,
       turnRecallText: turnRecall.text,
       turnRecallTokens: turnRecall.tokens,
@@ -653,12 +660,34 @@ class Conversation {
     const state = memoryEngine?.ensureConversationState(this).rollingState;
     const start = Number(state?.committedThroughHistoryIndex ?? this.lastSummarizedMessageIndex) || 0;
     const windows = this.getPresenceWindows(characterId);
-    if (!windows.length) return this.presenceInitialized ? [] : this.getHistory().slice(start);
-    if (!state?.segments?.length && !this.canUseSharedRollingSummary(characterId)) return this.getHistoryForCharacter(characterId);
-    return this.getHistory().slice(start).filter((message) => windows.some((window) => {
+    const history = !windows.length ? this.presenceInitialized ? [] : this.getHistory().slice(start)
+      : !state?.segments?.length && !this.canUseSharedRollingSummary(characterId) ? this.getHistoryForCharacter(characterId)
+      : this.getHistory().slice(start).filter((message) => windows.some((window) => {
       const messageId = Number(message.id);
       return Number(window.joinedAtMessageId ?? 0) <= messageId && (window.leftAtMessageId == null || messageId < Number(window.leftAtMessageId));
     }));
+    const recalls = this.dynamicRecallHistory?.get(Number(characterId));
+    if (!recalls) return history;
+    const retainedIds = new Set(history.map(message => message.id));
+    const cache = this.memoryState?.responderRecallCache?.get(Number(characterId));
+    for (const [messageId, recall] of recalls) {
+      if (retainedIds.has(messageId)) continue;
+      for (const key of recall.keys) cache?.seenDynamicSummaries?.delete(key);
+      if (cache) delete cache.dynamicTurn;
+      recalls.delete(messageId);
+    }
+    return history.flatMap(message => recalls.has(message.id)
+      ? [{ role: "system", content: recalls.get(message.id).text }, message] : [message]);
+  }
+  retainDynamicSummaryRecall(characterId, messageId, promptBuild, turnEpoch) {
+    const text = promptBuild.blocks?.find(entry => entry.block?.id === "memory-temporal-extra")?.content;
+    const cache = this.memoryState?.responderRecallCache?.get(Number(characterId));
+    if (!text || cache?.dynamicTurn !== turnEpoch) return;
+    if (!this.dynamicRecallHistory) this.dynamicRecallHistory = new Map();
+    if (!this.dynamicRecallHistory.has(Number(characterId))) this.dynamicRecallHistory.set(Number(characterId), new Map());
+    this.dynamicRecallHistory.get(Number(characterId)).set(messageId, { text,
+      keys: (cache.dynamicExtra || []).map(entry => memoryEngine.getRouteMemoryKey(entry.memory)) });
+    memoryEngine.commitDynamicSummaryRecall(characterId, this.memoryState.responderRecallCache, turnEpoch);
   }
   getPromptSummaryForCharacter(characterId) {
     const state = memoryEngine?.ensureConversationState(this).rollingState;
@@ -904,7 +933,7 @@ class Conversation {
       const thirdPartyEvidenceTokens = promptBlockTokens("third-party-evidence-patch");
       const turnRecallTokens = promptBlockTokens("memory-turn-recall");
       const worldlineTokens = promptBlockTokens("worldline-stable") + promptBlockTokens("worldline-turn-recall");
-      const totalMemoryTokens = promptBlockTokens("memory-stable") + promptBlockTokens("memory-direct-frozen") + mentionedSnapshotTokens + promptBlockTokens("memory-session-topic-anchor") + turnRecallTokens + thirdPartyEvidenceTokens;
+      const totalMemoryTokens = promptBlockTokens("memory-stable") + promptBlockTokens("memory-direct-frozen") + mentionedSnapshotTokens + promptBlockTokens("memory-temporal-extra") + promptBlockTokens("memory-session-topic-anchor") + turnRecallTokens + thirdPartyEvidenceTokens;
       logVerboseLLM(`[Conversation][verbose] Prompt for ${npc.fullName}:`, llmMessages);
       console.log(`[TOKEN_COUNT] Message from ${npc.fullName}:`, this.estimateTokenCount(llmMessages));
       const isOpenRouter = activeConfig?.providerType === "openrouter";
@@ -1058,6 +1087,7 @@ class Conversation {
       } else {
         throw new Error("Bad LLM response format");
       }
+      this.retainDynamicSummaryRecall(npc.id, msgId, promptBuild, turnEpoch);
     } catch (error) {
       const staleResponse = responseState.stale || controller.signal.aborted || !this.isResponseCurrent(responseState, npc) || error instanceof Error && error.message === "AbortError: Message cancelled";
       if (staleResponse) {
@@ -1207,6 +1237,7 @@ class Conversation {
     if (!ck3DebugPath) throw new Error("ck3_debug_log_path_not_configured");
     const gameData = await parseLog(ck3DebugPath);
     gameData.loadCharactersSummaries();
+    gameData.syncOfficialRecollectionSummaries?.(this.id);
     this.gameData = gameData;
     this.gameDataRevision += 1;
     this.gameData.gameDataRevision = this.gameDataRevision;

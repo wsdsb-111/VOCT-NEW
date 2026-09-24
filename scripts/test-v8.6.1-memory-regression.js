@@ -29,7 +29,10 @@ try {
   };
   const first = engine.retrieveForResponder(options);
   assert.deepEqual(first.direct.map((entry) => entry.memory.memoryId), ["direct-player"], "Direct Pair selected ID must match the V8.6 fixture");
-  assert.deepEqual(first.mentioned.map((entry) => entry.memory.memoryId), ["mentioned-third"], "Mentioned out-of-scene selected ID must remain isolated");
+  assert.deepEqual(first.extra.filter((entry) => entry.reason?.source === "mentioned").map((entry) => entry.memory.memoryId), ["mentioned-third"], "3.0 moves the same owner-scoped mentioned ID to dynamic Extra");
+  assert.equal(first.mentionedSnapshotText, null, "3.0 mentioned recall must not grow the stable prefix");
+  const legacy = engine.retrieveForResponder({ ...options, memoryEngine3Enabled: false, sessionRecallCache: new Map() });
+  assert.deepEqual(legacy.mentioned.map((entry) => entry.memory.memoryId), ["mentioned-third"], "2.x rollback retains its frozen mentioned route");
   assert.deepEqual(first.stable.map((entry) => entry.memory.memoryId), ["stable-oath"], "long stable Memory selected ID must remain unchanged");
   const second = engine.retrieveForResponder({ ...options, query: "城门玉佩", mentionedEntityIds: [], directCounterpartIds: [] });
   assert.deepEqual(second.direct, first.direct, "frozen Direct Pair recall must not be re-ranked during the session");

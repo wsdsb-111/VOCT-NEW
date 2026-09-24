@@ -35,4 +35,28 @@ function compileOfficialRecollection({ snapshot, ownerCharacterId, saveFingerpri
   };
 }
 
-module.exports = { compileOfficialRecollection };
+// Native descriptions have already been localized by CK3, including mod memories.
+// The capture session binds this overwriteable document to the current dialogue.
+function buildOfficialRecollectionSummary({ character, gameData, sessionId, schemaVersion, engineVersion } = {}) {
+  if (!Number.isSafeInteger(character?.id) || character.id <= 0 || !sessionId || !Array.isArray(character.memories)
+    || !Number.isFinite(Number(gameData?.totalDays)) || Number(gameData.totalDays) <= 0) return null;
+  const seen = new Set();
+  const entries = character.memories.filter(memory => {
+    const days = Number(memory.creationDateTotalDays);
+    if (!memory.desc?.trim() || !memory.creationDate || !Number.isFinite(days) || days <= 0 || days > Number(gameData.totalDays)) return false;
+    const key = JSON.stringify([days, memory.desc]);
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  }).sort((left, right) => right.creationDateTotalDays - left.creationDateTotalDays);
+  return {
+    schemaVersion, engineVersion, sourceType: "CK3_OFFICIAL_RECOLLECTION",
+    playerId: character.id, playerName: character.shortName,
+    characterId: character.id, characterName: "官方追忆摘要",
+    officialCaptureSessionId: sessionId, campaignToken: gameData.campaignToken || null,
+    captureGameDate: gameData.date, memoryCount: entries.length,
+    content: entries.length ? `${PROMPT_HEADER}\n\n${entries.map(memory => `${memory.creationDate}：${memory.desc.trim()}`).join("\n\n")}` : "当前对话未导出该角色的官方追忆。"
+  };
+}
+
+module.exports = { compileOfficialRecollection, buildOfficialRecollectionSummary };

@@ -131,7 +131,8 @@ try {
   assert.strictEqual(first.engineVersion, "3.0");
   assert.strictEqual(first.stableText, second.stableText, "稳定长期记忆必须整场字节冻结");
   assert.strictEqual(first.directStableText, second.directStableText, "直接关系最近两条必须整场冻结");
-  assert.strictEqual(first.mentionedSnapshotText, second.mentionedSnapshotText, "场外人物快照的内容和顺序必须整场冻结");
+  assert.strictEqual(first.mentionedSnapshotText, null, "3.0 场外人物召回进入动态 Extra，不再插入冻结区");
+  assert.strictEqual(second.mentionedSnapshotText, null);
   assert(first.extra.some((entry) => entry.memory.content.includes("永远守住城门")), "旧承诺应进入共享动态 Extra 池");
   assert(first.extra.length <= 3 && second.extra.length <= 3, "所有额外摘要共用三个槽位");
 

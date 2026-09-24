@@ -131,7 +131,7 @@ assert(!rendererSource.includes("可访问的结构化记忆（可编辑）"), "
 assert(preloadSource.includes("updateStructuredMemory"), "preload must expose structured-memory editing");
 assert(ipcSource.includes('"conversation:updateStructuredMemory"'), "main process must provide structured-memory editing IPC");
 assert(conversationSource.includes("participantPresence"), "final summary participants must include observed session participants");
-assert(conversationSource.includes("mentionedEntityIds: mentionedCharacterIds"), "conversation retrieval must bind mentioned third-party IDs");
+assert(conversationSource.includes("mentionedEntityIds: memory3Settings.v812MemoryEngine3Enabled !== false ? currentTurnMentionedCharacterIds : mentionedCharacterIds"), "conversation retrieval must bind current-turn third-party IDs in 3.0 and retain the legacy route");
 assert(preloadSource.includes("getSummariesDashboardData"), "preload must expose the single-read summaries dashboard endpoint");
 assert(ipcSource.includes('"conversation:getSummariesDashboardData"'), "main process must provide combined catalog and overview data");
 assert(rendererSource.includes("reactExports.useDeferredValue(searchQuery)"), "summary search must defer expensive filtering while typing");

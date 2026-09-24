@@ -152,23 +152,34 @@ function buildContext(conversationId, participants, messageCount) {
     for (const id of ["cancel-first", "cancel-second"]) {
       cancelledEngine.writeRecoverySnapshot(cancelledEngine.prepareFinalizationContext(buildContext(id, participants2, 2)));
     }
-    let release, started;
+    let started;
     const entered = new Promise(resolve => { started = resolve; });
     let cancellationCalls = 0;
+    let activeCancellationCalls = 0;
+    let maxCancellationConcurrency = 0;
+    const pendingResponses = [];
     const recovery = cancelledEngine.recoverPendingFinalizations({
       manual: true, buildPrompt: () => [],
       requestSummary: async () => {
         cancellationCalls++;
-        started();
-        return new Promise(resolve => { release = resolve; });
+        activeCancellationCalls++;
+        maxCancellationConcurrency = Math.max(maxCancellationConcurrency, activeCancellationCalls);
+        if (cancellationCalls === 2) started();
+        return new Promise(resolve => pendingResponses.push(output => {
+          activeCancellationCalls--;
+          resolve(output);
+        }));
       },
       persistCharacterFolders: async () => { throw new Error("cancelled recovery must never persist"); }
     });
     await entered;
+    assert.strictEqual(maxCancellationConcurrency, 2, "manual recovery processes a bounded pair concurrently");
     cancelledEngine.clearAllLongTermMemory();
-    release({ content: compressed });
-    assert.strictEqual((await recovery)[0].cancelled, true);
-    assert.strictEqual(cancellationCalls, 1, "clearing memory stops the remaining recovery batch");
+    pendingResponses.forEach(release => release({ content: compressed }));
+    const cancelledResults = await recovery;
+    assert.strictEqual(cancelledResults.length, 2);
+    assert(cancelledResults.every(result => result.cancelled), "clearing memory cancels every in-flight recovery");
+    assert.strictEqual(cancellationCalls, 2, "manual recovery starts no more than its bounded in-flight pair");
     assert.strictEqual(cancelledEngine.listRecoverySnapshots().length, 0, "cancelled recovery must not recreate a deleted snapshot");
     assert.strictEqual(cancelledEngine.store.listAllEpisodes().length, 0);
   } finally {

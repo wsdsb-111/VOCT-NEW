@@ -30,7 +30,7 @@ function parseVariableEntries(text, variables, { collectFields, readBlock, readT
     const token = readToken(text, cursor, root.end);
     if (!token) break;
     if (token.value !== "{") { cursor = token.next; continue; }
-    const entry = readBlock(text, cursor, root.end);
+    const entry = readBlock(text, token.next - 1, root.end);
     const fields = collectFields(text, entry, ["flag", "data"]);
     const value = collectFields(text, fields.data, ["type", "identity", "flag"]);
     const flag = fieldText(fields.flag);

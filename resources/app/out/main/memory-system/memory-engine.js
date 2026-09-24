@@ -22,7 +22,7 @@ const { estimateTokens } = require("../token-estimator");
 const { validateGenerationOutcome } = require("../providers/generation-outcome");
 const { normalizeGameDate } = require("../worldline/character-temporal-facts");
 const { resolveTemporalWindow } = require("./fuzzy-temporal-resolver");
-const { selectTemporalExtras } = require("./summary-date-index");
+const { buildSummaryDateIndex, selectTemporalExtras } = require("./summary-date-index");
 
 const FINAL_SUMMARY_MAX_ATTEMPTS = 2;
 const RECOVERY_MAX_ATTEMPTS = 3;
@@ -141,6 +141,7 @@ class MemoryEngine {
     state.mentionProfileCache = null;
     state.mentionedRecallCache = new Map();
     state.responderRecallCache = new Map();
+    conversation.dynamicRecallHistory?.clear();
     state.turnRecallCache = new Map();
     state.mentionState = this.mentionTracker.createState();
     const gameData = conversation.gameData;
@@ -722,16 +723,33 @@ class MemoryEngine {
       provider: context.summaryProviderSnapshot,
       instructions: context.finalInstructions
     })).digest("hex");
-    const saved = context.summaryChunkState?.fingerprint === fingerprint ? context.summaryChunkState.outputs || {} : {};
-    const outputs = { ...saved };
+    const saved = context.summaryChunkState?.fingerprint === fingerprint ? context.summaryChunkState : {};
+    const outputs = { ...(saved.outputs || {}) };
+    const splits = { ...(saved.splits || {}) };
     const boundaryKinds = new Set(["presence_join", "presence_leave", "presence_temporary_leave", "presence_temporary_return"]);
     let requestCount = 0;
-    const summarize = async (messages) => {
+    const checkpoint = () => {
+      context.summaryChunkState = { fingerprint, outputs, splits };
+      if (context.finalizationId) this.writeRecoverySnapshot(context, { summaryChunkState: context.summaryChunkState });
+    };
+    const summarize = async (messages, key) => {
+      if (outputs[key]) return outputs[key];
+      const split = async () => {
+        const middle = Math.floor(messages.length / 2);
+        const left = await summarize(messages.slice(0, middle), `${key}.0`);
+        const right = await summarize(messages.slice(middle), `${key}.1`);
+        outputs[key] = { summarySegments: [...left.summarySegments, ...right.summarySegments], memories: [...left.memories, ...right.memories] };
+        checkpoint();
+        return outputs[key];
+      };
+      if (splits[key]) return split();
       if (messages.every((message) => boundaryKinds.has(message.kind))) {
-        return {
+        outputs[key] = {
           summarySegments: messages.map((message) => ({ content: message.content, participants: this.getSummaryPresenceSignature(context, message).split(",").map(Number).filter(Number.isFinite), visibility: "participants", messageIds: [message.id], speakerIds: [] })),
           memories: []
         };
+        checkpoint();
+        return outputs[key];
       }
       const participants = this.getChunkParticipants(context, messages);
       const participantIds = new Set(participants.map((participant) => Number(participant.id)));
@@ -741,26 +759,26 @@ class MemoryEngine {
       const chunk = { ...context, summaryChunk: true, summaryChunkIndex: requestCount + 1, rollingState: null, messages, participants, participantPresence };
       requestCount += 1;
       if (requestCount > SUMMARY_CHUNK_HARD_LIMIT) throw new Error("summary_chunk_hard_limit_exceeded");
+      let parsed;
       try {
         this.trace.record("summary_chunk", { conversationId: context.conversationId, reason: "preflight_or_failure", attempt: requestCount });
-        const parsed = this.extractor.parseOutput(await this.requestFinalSummary(chunk), chunk);
-        return {
-          summarySegments: parsed.summarySegments.map((segment) => ({ ...segment, segmentId: null, messageIds: segment.provenance.messageIds, speakerIds: segment.provenance.speakerIds })),
-          memories: parsed.memories.map((memory) => ({ ...memory, memoryId: null, messageIds: memory.provenance.messageIds, speakerIds: memory.provenance.speakerIds }))
-        };
+        parsed = this.extractor.parseOutput(await this.requestFinalSummary(chunk), chunk);
       } catch (error) {
         if (messages.length < 2 || !["LENGTH", "CONTEXT_EXCEEDED"].includes(classifySummaryFailure(error))) throw error;
-        const middle = Math.floor(messages.length / 2);
-        const left = await summarize(messages.slice(0, middle));
-        const right = await summarize(messages.slice(middle));
-        return { summarySegments: [...left.summarySegments, ...right.summarySegments], memories: [...left.memories, ...right.memories] };
+        splits[key] = true;
+        checkpoint();
+        return split();
       }
+      outputs[key] = {
+        summarySegments: parsed.summarySegments.map((segment) => ({ ...segment, segmentId: null, messageIds: segment.provenance.messageIds, speakerIds: segment.provenance.speakerIds })),
+        memories: parsed.memories.map((memory) => ({ ...memory, memoryId: null, messageIds: memory.provenance.messageIds, speakerIds: memory.provenance.speakerIds }))
+      };
+      checkpoint();
+      return outputs[key];
     };
     for (const [index, messages] of chunks.entries()) {
       if (outputs[index]) continue;
-      outputs[index] = await summarize(messages);
-      context.summaryChunkState = { fingerprint, outputs };
-      if (context.finalizationId) this.writeRecoverySnapshot(context, { summaryChunkState: context.summaryChunkState });
+      outputs[index] = await summarize(messages, String(index));
     }
     const combined = {
       summarySegments: chunks.flatMap((_, index) => outputs[index].summarySegments),
@@ -769,11 +787,19 @@ class MemoryEngine {
     const substantive = (context.messages || []).filter((message) => ["user", "assistant"].includes(message.role) && String(message.content || "").trim().length >= 8);
     const covered = new Set(combined.summarySegments.flatMap((segment) => segment.messageIds || []));
     const missing = substantive.filter((message) => !covered.has(message.id));
-    if (missing.length >= 3 && missing.length / Math.max(1, substantive.length) > 0.2) {
+    if (missing.length > 0) {
       this.trace.record("summary_coverage_gap", { conversationId: context.conversationId, sourceMessageCount: substantive.length, uncoveredMessageIds: missing.map((message) => message.id) });
       const repairContext = { ...context, messages: missing };
-      for (const repairMessages of this.partitionSummaryMessages(repairContext, capabilities)) {
-        const repair = await summarize(repairMessages);
+      for (const [repairIndex, repairMessages] of this.partitionSummaryMessages(repairContext, capabilities).entries()) {
+        const repairKey = `repair.${repairIndex}`;
+        const repair = await summarize(repairMessages, repairKey);
+        const repairedIds = new Set(repair.summarySegments.flatMap((segment) => segment.messageIds || []));
+        if (repairMessages.some((message) => !repairedIds.has(message.id))) {
+          for (const key of Object.keys(outputs)) if (key === repairKey || key.startsWith(`${repairKey}.`)) delete outputs[key];
+          for (const key of Object.keys(splits)) if (key === repairKey || key.startsWith(`${repairKey}.`)) delete splits[key];
+          checkpoint();
+          throw new Error("summary_coverage_repair_failed");
+        }
         combined.summarySegments.push(...repair.summarySegments);
         combined.memories.push(...repair.memories);
       }
@@ -1135,7 +1161,7 @@ class MemoryEngine {
       summaryChunkState: snapshot.summaryChunkState || null,
       getSummaryCapabilities,
       retryCount: Number(snapshot.retryCount || 0) + 1,
-      preferChunkedSummary: /^(truncated_final_summary_response|final_summary_quality_failed:)/.test(snapshot.lastError || ""),
+      preferChunkedSummary: /^(truncated_final_summary_response|final_summary_quality_failed:|summary_coverage_repair_failed)/.test(snapshot.lastError || ""),
       requestSummary,
       buildPrompt,
       persistCharacterFolders
@@ -1182,11 +1208,15 @@ class MemoryEngine {
   async runPendingFinalizations({ requestSummary, buildPrompt, persistCharacterFolders, resolveParticipantProfiles, getSummaryCapabilities, manual = false, isConversationActive = () => false } = {}) {
     const results = [];
     const generation = this.memoryGeneration;
-    for (const filePath of this.listRecoverySnapshots()) {
-      if (generation !== this.memoryGeneration) break;
+    const files = this.listRecoverySnapshots().map((filePath) => ({
+      filePath,
+      updatedAt: this.store.readJson(filePath, null)?.updatedAt || ""
+    })).sort((left, right) => String(right.updatedAt).localeCompare(String(left.updatedAt)));
+    const processSnapshot = async (filePath) => {
+      if (generation !== this.memoryGeneration) return null;
       let snapshot = this.store.readJson(filePath, null);
-      if (!snapshot) continue;
-      if (isConversationActive(snapshot.conversationId)) continue;
+      if (!snapshot) return null;
+      if (isConversationActive(snapshot.conversationId)) return null;
       const obsoleteFixedLengthFailure = snapshot.finalizationStatus === "failed_manual"
         && /^final_summary_quality_failed:detailed narrative has \d+ chars; require at least \d+$/.test(String(snapshot.lastError || ""));
       if (obsoleteFixedLengthFailure) {
@@ -1202,14 +1232,31 @@ class MemoryEngine {
       }
       if (snapshot.finalizationId && this.activeFinalizationIds.has(String(snapshot.finalizationId))) {
         this.trace.record("recover", { conversationId: snapshot.conversationId, reason: "active_finalization" });
-        continue;
+        return null;
       }
       if (!manual && Number(snapshot.retryCount || 0) >= RECOVERY_MAX_ATTEMPTS) {
         if (snapshot.finalizationStatus !== "failed_manual") this.writeRecoverySnapshot(this.prepareFinalizationContext({ ...snapshot, messages: snapshot.rawMessages }), { finalizationStatus: "failed_manual", retryCount: snapshot.retryCount });
-        continue;
+        return null;
       }
-      results.push(await this.recoverFailedFinalization(filePath, { requestSummary, buildPrompt, persistCharacterFolders, resolveParticipantProfiles, getSummaryCapabilities, automatic: !manual }));
-    }
+      return this.recoverFailedFinalization(filePath, { requestSummary, buildPrompt, persistCharacterFolders, resolveParticipantProfiles, getSummaryCapabilities, automatic: !manual });
+    };
+    let nextFile = 0;
+    const worker = async () => {
+      while (generation === this.memoryGeneration) {
+        const file = files[nextFile++];
+        if (!file) return;
+        let result;
+        try {
+          result = await processSnapshot(file.filePath);
+        } catch (error) {
+          this.trace.record("recover", { reason: "recovery_worker_exception", error: error.message || String(error) });
+          result = { success: false, error, recoveryPath: file.filePath };
+        }
+        if (result) results.push(result);
+      }
+    };
+    const concurrency = Math.min(manual ? 2 : 1, files.length);
+    await Promise.all(Array.from({ length: concurrency }, worker));
     return results;
   }
 
@@ -1281,7 +1328,7 @@ class MemoryEngine {
     return selected;
   }
 
-  retrieveForResponder({ characterId, query = "", directCounterpartIds = [], mentionedEntityIds = [], mentionedEntityNames = {}, mentionedRecallCache = null, sessionRecallCache = null, ownerFolderMemories = null, currentGameDate = null, currentTotalDays = null, memoryEngine3Enabled = true, temporalSummaryRecallEnabled = true, tokenBudget = 800, estimateTokens } = {}) {
+  retrieveForResponder({ characterId, query = "", directCounterpartIds = [], mentionedEntityIds = [], mentionedEntityNames = {}, mentionedRecallCache = null, sessionRecallCache = null, ownerFolderMemories = null, officialSummary = null, turnEpoch = 0, currentGameDate = null, currentTotalDays = null, memoryEngine3Enabled = true, temporalSummaryRecallEnabled = true, tokenBudget = 800, estimateTokens } = {}) {
     const startedAt = Date.now();
     const ownerId = Number(characterId);
     const directIds = uniqueIds(directCounterpartIds).filter((id) => id !== ownerId);
@@ -1318,16 +1365,23 @@ class MemoryEngine {
       ? sessionRecallCache.get(ownerId) || { mentionedSnapshots: new Map(), topicPatch: null }
       : { mentionedSnapshots: new Map(), topicPatch: null };
     if (!(responderCache.mentionedSnapshots instanceof Map)) responderCache.mentionedSnapshots = new Map();
+    const officialMemory = memoryEngine3Enabled && officialSummary?.sourceType === "CK3_OFFICIAL_RECOLLECTION"
+      && Number(officialSummary.playerId) === ownerId && officialSummary.memoryCount > 0 ? createMemoryRecord({
+        memoryId: `official_${ownerId}`, type: "folder_summary", subtype: "official_recollection",
+        content: officialSummary.content, importance: 0.95, confidence: 1, source: "game_fact",
+        participants: [ownerId], knownBy: [ownerId], visibility: "private",
+        provenance: { folderOwnerId: ownerId, extractionMode: "ck3_native_recollection" }
+      }) : null;
     // This lane is deliberately query-independent. Re-ranking the so-called
     // stable block for every line made it the first cache breakpoint in most
-    // long conversations. Direct recall and each out-of-scene entity are now
-    // selected once per responder and then reused for the whole conversation.
+    // long conversations. Direct and stable recall are selected once per
+    // responder; 3.0 out-of-scene recall belongs to the dynamic Extra pool.
     const stableRanked = this.ranker.rank(internalMemories, { query: "", entityIds: [], participantIds: [], currentTotalDays })
       .filter((entry) => entry.memory.importance >= 0.9 || entry.memory.status === "open" || entry.memory.unresolved);
     const frozenBudget = memoryEngine3Enabled ? Math.floor(budget * 0.65) : budget;
     const laneWeights = {
-      direct: [...directGroups.values()].some((entries) => entries.length > 0) ? 55 : 0,
-      mentioned: [...mentionedGroups.values()].some((entries) => entries.length > 0) ? 30 : 0,
+      direct: officialMemory || [...directGroups.values()].some((entries) => entries.length > 0) ? 55 : 0,
+      mentioned: !memoryEngine3Enabled && [...mentionedGroups.values()].some((entries) => entries.length > 0) ? 30 : 0,
       stable: stableRanked.length > 0 ? 15 : 0
     };
     const totalWeight = laneWeights.direct + laneWeights.mentioned + laneWeights.stable;
@@ -1343,12 +1397,17 @@ class MemoryEngine {
     const directBudget = laneBudgets.direct;
     const mentionedBudget = laneBudgets.mentioned;
     const stableBudget = laneBudgets.stable;
-    const direct = Array.isArray(responderCache.direct)
-      ? responderCache.direct
-      : this.selectRoutedMemories(directGroups, { tokenBudget: directBudget, estimateTokens, mode: memoryEngine3Enabled ? "direct" : "direct_legacy" });
+    const officialAllowance = [...directGroups.values()].some(entries => entries.length) ? Math.floor(directBudget / 3) : directBudget;
+    const official = !Array.isArray(responderCache.direct) && officialMemory
+      ? this.ranker.selectWithinBudget([{ memory: officialMemory, score: 1 }], { tokenBudget: officialAllowance, estimateTokens, allowTruncate: true })
+        .map(entry => ({ ...entry, routeKind: "official", routeCharacterIds: [ownerId] })) : [];
+    const direct = Array.isArray(responderCache.direct) ? responderCache.direct : [
+      ...this.selectRoutedMemories(directGroups, { tokenBudget: directBudget - official.reduce((n, e) => n + e.tokens, 0), estimateTokens, mode: memoryEngine3Enabled ? "direct" : "direct_legacy" }),
+      ...official
+    ];
     if (!Array.isArray(responderCache.direct)) responderCache.direct = direct;
     const mentioned = [];
-    for (const entityId of mentionedIds) {
+    for (const entityId of memoryEngine3Enabled ? [] : mentionedIds) {
       let snapshot = responderCache.mentionedSnapshots.get(entityId);
       if (!Array.isArray(snapshot)) {
         snapshot = this.selectRoutedMemories(new Map([[entityId, mentionedGroups.get(entityId) || []]]), { tokenBudget: Math.max(1, Math.floor(mentionedBudget / Math.max(1, mentionedIds.length))), estimateTokens, mode: "mentioned" });
@@ -1371,22 +1430,29 @@ class MemoryEngine {
     const frozenSelectedTokens = [...direct, ...deduplicatedMentioned, ...stable].reduce((total, entry) => total + Number(entry.tokens || 0), 0);
     const extraBudget = Math.max(0, budget - frozenSelectedTokens);
     const temporal = memoryEngine3Enabled && temporalSummaryRecallEnabled ? resolveTemporalWindow(query, { currentGameDate, currentTotalDays }) : { triggered: false, reason: "DISABLED" };
+    const exactTimeQuery = temporal.triggered && temporal.mode === "TARGET_DATE";
     const directMemories = [...directGroups.values()].flat().map((entry) => entry.memory);
+    const mentionedCandidates = [...mentionedGroups.values()].flat().map((entry) => entry.memory);
     const temporalCandidates = temporal.triggered ? selectTemporalExtras(
-      directIds.flatMap((counterpartId) => this.store.getSummaryDateIndexForPair(ownerId, counterpartId, { currentGameDate, currentTotalDays, ownerFolderMemories: folderMemories })),
-      directMemories, temporal, selectedFolderKeys, 3
+      [...directIds.flatMap((counterpartId) => this.store.getSummaryDateIndexForPair(ownerId, counterpartId, { currentGameDate, currentTotalDays, ownerFolderMemories: folderMemories })),
+        ...buildSummaryDateIndex(mentionedCandidates, { ownerId, currentGameDate, currentTotalDays })],
+      [...directMemories, ...mentionedCandidates], temporal, selectedFolderKeys, 3
     ) : [];
     const rankedExtras = this.ranker.rank(folderMemories, { query, entityIds: mentionedIds, participantIds: directIds, currentTotalDays });
     const topicCandidates = query.trim() ? rankedExtras.filter((entry) => Number(entry.reason?.query) >= 0.28).map((entry) => entry.memory) : [];
     const routedKeys = new Set([...directGroups.values(), ...mentionedGroups.values()].flat().map((entry) => this.getRouteMemoryKey(entry.memory)));
     const importantCandidates = rankedExtras.filter((entry) => routedKeys.has(this.getRouteMemoryKey(entry.memory)) && (entry.memory.importance >= 0.9 || entry.memory.status === "open" || entry.memory.unresolved || entry.memory.content?.includes("【需要长期记住的事项】"))).map((entry) => entry.memory);
-    const extra = [];
+    if (!(responderCache.seenDynamicSummaries instanceof Set)) responderCache.seenDynamicSummaries = new Set();
+    const sameTurn = responderCache.dynamicTurn === turnEpoch;
+    const extra = memoryEngine3Enabled && sameTurn ? responderCache.dynamicExtra || [] : [];
     let extraTokens = 0;
-    for (const [source, candidates] of memoryEngine3Enabled ? [["temporal", temporalCandidates], ["topic", topicCandidates], ["important", importantCandidates]] : []) {
+    const extraSources = exactTimeQuery ? [["temporal", temporalCandidates]]
+      : [["temporal", temporalCandidates], ["mentioned", mentionedCandidates], ["topic", topicCandidates], ["important", importantCandidates]];
+    for (const [source, candidates] of memoryEngine3Enabled && !sameTurn ? extraSources : []) {
       for (const memory of candidates) {
         if (extra.length >= 3 || extraTokens >= extraBudget) break;
         const key = this.getRouteMemoryKey(memory);
-        if (selectedFolderKeys.has(key)) continue;
+        if (selectedFolderKeys.has(key) || responderCache.seenDynamicSummaries.has(key)) continue;
         const [fitted] = this.ranker.selectWithinBudget([{ memory, score: 0, reason: { source } }], {
           tokenBudget: extraBudget - extraTokens, estimateTokens, allowTruncate: true
         });
@@ -1396,6 +1462,13 @@ class MemoryEngine {
         selectedFolderKeys.add(key);
       }
     }
+    if (memoryEngine3Enabled) {
+      responderCache.dynamicTurn = turnEpoch;
+      responderCache.dynamicExtra = extra;
+    }
+    const temporalExtraText = exactTimeQuery
+      ? `【本轮时间核对：游戏当前${normalizeGameDate(currentGameDate)?.display}；${temporal.expression}${temporal.targetGameYear ? `对应${temporal.targetGameYear}年` : ""}】${extra.length ? `以下摘要的存档日期与目标时段相符；只能引用其中确属该时段的事件。\n${this.formatMemoryBlock("本轮时间匹配摘要", extra)}` : "未检索到该时段的对话摘要；不等于当时没有发生事件。"}冻结的最近两篇对话和官方追忆可能含其他日期，不能把其他年份的事当成该时段的事。`
+      : this.formatMemoryBlock("本轮召回摘要（仅本轮注入，最多三篇）", extra);
     let topicPatch = memoryEngine3Enabled ? [] : Array.isArray(responderCache.topicPatch) ? responderCache.topicPatch : [];
     if (!memoryEngine3Enabled && !responderCache.topicPatchLocked && query.trim()) {
       const rankedPatch = this.ranker.rank(folderMemories, { query, entityIds: mentionedIds, participantIds: directIds, currentTotalDays })
@@ -1432,6 +1505,7 @@ class MemoryEngine {
     return {
       engineVersion: MEMORY_ENGINE_VERSION,
       folderSummaryCache: this.store.getFolderSummaryCacheMetrics(),
+      memoryEngine3Enabled,
       respondingCharacterId: ownerId,
       stable,
       relevant,
@@ -1440,10 +1514,10 @@ class MemoryEngine {
       topicPatch,
       extra,
       temporal,
-      temporalExtraText: this.formatMemoryBlock("动态时间与话题摘要（最多三篇）", extra),
+      temporalExtraText,
       stableText: this.formatMemoryBlock("长期稳定记忆", stable),
       directText: this.formatMemoryBlock("与当前在场人物的直接记忆", direct),
-      directStableText: this.formatMemoryBlock("冻结的直接关系最近两篇摘要", direct),
+      directStableText: this.formatMemoryBlock(officialMemory ? "本场冻结：最近两篇对话与官方追忆摘要" : "冻结的直接关系最近两篇摘要", direct),
       mentionedText: this.formatMemoryBlock("与被提及场外人物有关的记忆", deduplicatedMentioned),
       mentionedSnapshotText: this.formatMemoryBlock("冻结的场外人物记忆快照", deduplicatedMentioned),
       topicPatchText: this.formatMemoryBlock("会话话题记忆锚点（本场冻结）", topicPatch),
@@ -1460,6 +1534,12 @@ class MemoryEngine {
         budgets: { direct: directBudget, mentioned: mentionedBudget, stable: stableBudget, extra: extraBudget }
       }
     };
+  }
+
+  commitDynamicSummaryRecall(characterId, sessionRecallCache, turnEpoch) {
+    const state = sessionRecallCache?.get(Number(characterId));
+    if (!state || state.dynamicTurn !== turnEpoch) return;
+    for (const entry of state.dynamicExtra || []) state.seenDynamicSummaries.add(this.getRouteMemoryKey(entry.memory));
   }
 
   retrieveTurnRecall({ characterId, query = "", assistContext = "", entityIds = [], entityNames = [], participantIds = [], ownerFolderMemories = null, currentTotalDays = null, tokenBudget = 256, estimateTokens, cache = null, turnEpoch = 0 } = {}) {
@@ -1698,7 +1778,7 @@ class MemoryEngine {
 
   formatMemoryBlock(title, entries) {
     if (!entries || entries.length === 0) return null;
-    return `${title}（仅包含当前回应角色应当知道的内容）：\n${entries.map((entry) => `- [${entry.memory.type === "folder_summary" ? "人物目录摘要" : `${entry.memory.type}/${entry.memory.epistemicStatus}`}] ${entry.memory.eventDate || "日期不详"}：${entry.memory.content}`).join("\n")}`;
+    return `${title}（仅包含当前回应角色应当知道的内容）：\n${entries.map((entry) => entry.memory.subtype === "official_recollection" ? `- [官方追忆摘要] ${entry.memory.content}` : `- [${entry.memory.type === "folder_summary" ? "人物目录摘要" : `${entry.memory.type}/${entry.memory.epistemicStatus}`}] ${entry.memory.eventDate || "日期不详"}：${entry.memory.content}`).join("\n")}`;
   }
 
   formatTurnRecallBlock(entries) {

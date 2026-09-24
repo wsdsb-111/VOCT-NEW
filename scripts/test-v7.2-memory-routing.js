@@ -79,10 +79,10 @@ try {
   assert.deepStrictEqual(recalled.routing.mentionedOutOfSceneIds, [X.id]);
   assert(recalled.direct.some((entry) => entry.routeCharacterIds.includes(A.id)), "B-A exact relationship must be covered");
   assert(recalled.direct.some((entry) => entry.routeCharacterIds.includes(C.id)), "B-C exact relationship must be covered");
-  assert(recalled.mentioned.some((entry) => entry.routeCharacterIds.includes(X.id)), "B-X owner-folder memory must be covered");
-  assert(recalled.direct.filter((entry) => entry.routeCharacterIds.includes(A.id)).length <= 3, "1v1-style direct route must not exceed 3 selected records per counterpart");
-  assert(recalled.mentioned.filter((entry) => entry.routeCharacterIds.includes(X.id)).length <= 2, "mentioned entity route must not exceed 2 selected records");
-  const selected = [...recalled.stable, ...recalled.direct, ...recalled.mentioned].map((entry) => entry.memory);
+  assert(recalled.extra.some((entry) => entry.reason?.source === "mentioned" && entry.memory.provenance.counterpartIds.includes(X.id)), "B-X owner-folder memory must be covered by dynamic Extra");
+  assert(recalled.direct.filter((entry) => entry.routeCharacterIds.includes(A.id)).length <= 2, "3.0 direct route must not exceed two selected records per counterpart");
+  assert(recalled.extra.length <= 3, "mentioned, temporal and topic recall share three Extra slots");
+  const selected = [...recalled.stable, ...recalled.direct, ...recalled.extra].map((entry) => entry.memory);
   assert(selected.filter((memory) => memory.type === "folder_summary").every((memory) => memory.provenance.folderOwnerId === B.id), "all folder memories must belong to responder B");
   assert(!selected.some((memory) => memory.content.includes("丙夫人自己的")), "another owner's private folder must never leak");
 

@@ -20,12 +20,25 @@ function createLogParser({ GameData, Character, onGameDataParsed = null }) {
     let currentTroops = null;
     let currentChild = null;
     let currentSibling = null;
+    let pendingMemoryLine = null;
     const fileStream = fs.createReadStream(debugLogPath);
     const rl = readline.createInterface({
       input: fileStream,
       crlfDelay: Infinity
     });
-    for await (const line of rl) {
+    for await (const rawLine of rl) {
+      let line = rawLine;
+      if (pendingMemoryLine) {
+        if (line.includes("VOTC:") || /^\[.*\]\[.*\]/.test(line)) pendingMemoryLine = null;
+        else line = `${pendingMemoryLine}\n${line}`;
+      }
+      if (line.includes("VOTC:IN/;/memory/;/")) {
+        if (!/\/;\/-?\d+(?:\.\d+)?\/;\/\d+\s*$/.test(line)) {
+          pendingMemoryLine = line;
+          continue;
+        }
+        pendingMemoryLine = null;
+      }
       if (isWaitingForMultiLine) {
         let value = line.split("#")[0];
         switch (multiLineType) {
@@ -89,7 +102,7 @@ function createLogParser({ GameData, Character, onGameDataParsed = null }) {
         const rootID = Number(data[0]);
         currentRootID = rootID;
         for (let i = 0; i < data.length; i++) {
-          data[i] = removeTooltip(data[i]);
+          data[i] = dataType === "memory" && i === 3 ? removeMemoryMarkup(data[i]) : removeTooltip(data[i]);
         }
         switch (dataType) {
           case "init":
@@ -101,7 +114,7 @@ function createLogParser({ GameData, Character, onGameDataParsed = null }) {
             break;
           case "memory":
             let memory = parseMemory(data);
-            gameData.characters.get(rootID).memories.push(memory);
+            gameData?.characters.get(rootID)?.memories.push(memory);
             break;
           case "secret":
             currentSecret = parseSecretStart(data);
@@ -721,6 +734,13 @@ function createLogParser({ GameData, Character, onGameDataParsed = null }) {
       }
     });
     return newWords.join(" ").replace(/ +(?= )/g, "").trim();
+  }
+
+  function removeMemoryMarkup(str) {
+    const text = str.replace(/\u0015(?:ONCLICK|TOOLTIP):[^\u0015]*/g, "")
+      .replace(/\u0015L;?[ \t]*/g, "")
+      .replace(/\u0015!/g, "");
+    return text.includes("\u0015") ? "" : text.replace(/[ \t]{2,}/g, " ").trim();
   }
   
   return parseLog;

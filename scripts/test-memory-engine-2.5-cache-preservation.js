@@ -21,10 +21,12 @@ try {
   assert.deepStrictEqual(second.direct, first.direct, "frozen direct recall must not re-rank per turn");
   assert.deepStrictEqual(second.stable, first.stable, "stable memory must remain frozen");
   const topicCache = new Map();
-  const firstTopic = engine.retrieveForResponder({ ...base, directCounterpartIds: [], query: "二人曾在花园约定再会", sessionRecallCache: topicCache });
-  const secondTopic = engine.retrieveForResponder({ ...base, directCounterpartIds: [], query: "说说那封信", sessionRecallCache: topicCache });
-  assert.notDeepStrictEqual(secondTopic.extra, firstTopic.extra, "Memory Engine 3.0 Extra is recalculated from the current query");
-  assert.match(firstTopic.temporalExtraText || "", /动态时间与话题摘要/);
+  const firstTopic = engine.retrieveForResponder({ ...base, directCounterpartIds: [], query: "二人曾在花园约定再会", sessionRecallCache: topicCache, turnEpoch: 1 });
+  engine.commitDynamicSummaryRecall(2, topicCache, 1);
+  const secondTopic = engine.retrieveForResponder({ ...base, directCounterpartIds: [], query: "说说那封信", sessionRecallCache: topicCache, turnEpoch: 2 });
+  assert(firstTopic.extra.length > 0);
+  assert(secondTopic.extra.every(entry => !firstTopic.extra.some(previous => previous.memory.memoryId === entry.memory.memoryId)), "successful Extra stays in contextual history and must not be freshly injected again");
+  assert.match(firstTopic.temporalExtraText || "", /本轮召回摘要/);
 
   const promptSource = fs.readFileSync(path.join(mainDir, "prompts", "prompt-builder.js"), "utf8");
   assert(promptSource.indexOf('id: "memory-temporal-extra"') < promptSource.indexOf('id: "memory-turn-recall"'), "dynamic Extra must precede Turn Recall");
