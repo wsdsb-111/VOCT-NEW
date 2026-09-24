@@ -2,7 +2,9 @@
 
 这里是版本变更的单一入口。详细设计和测试证据保留在链接目标中，本文件只维护版本顺序、用户可见摘要和文档索引。
 
-V8.12.1（自动 Gate 通过，实机待验收）：[双时间记忆实施记录](docs/v8.12.1-dual-temporal-memory-implementation-report.md)。原始消息的时间证据经 Owner 投影写入摘要，按当前 CK3 日期分别检索事件与对话时间；多轮时间焦点、Campaign 隔离及动态 Extra≤3 已接入。314/314 发布组通过；本机隔离 Electron 冒烟受 GPU 子进程启动故障阻断，真实 CK3/Provider 与缓存指标待验收，不宣称全局 V8 Full Freeze。
+V8.12.1.1（本地自动 Gate 通过，实机待验收）：[双时间记忆及审查修复实施记录](docs/v8.12.1-dual-temporal-memory-implementation-report.md#v81211-审查修复2026-09-24)。收紧 Campaign 召回隔离、修复摘要编辑时间证据与私有持久记忆 Event Time、时间焦点跨日期保持及中文时间问句识别；Windows 主题测试兼容 CRLF。315/315 发布组通过；远端 CI、CK3/Provider 与打包窗口待验收。
+
+V8.12.1（原始施工，本地自动 Gate 通过）：[双时间记忆实施记录](docs/v8.12.1-dual-temporal-memory-implementation-report.md)。原始消息的时间证据经 Owner 投影写入摘要，按当前 CK3 日期分别检索事件与对话时间；多轮时间焦点及动态 Extra≤3 已接入。原始施工时 314/314 发布组通过；本机隔离 Electron 冒烟受 GPU 子进程启动故障阻断，真实 CK3/Provider 与缓存指标待验收，不宣称全局 V8 Full Freeze。
 
 V8.12 第三部分：[Memory Engine 3.0 施工与验收记录](docs/v8.12-part3-memory-engine-3.0-implementation-report.md)。Recent2 冻结、动态 Extra3、摘要分块上限 64、原生官方追忆摘要与共享预算、只读 Save Shadow、GLM Cache v2 布局兼容及 Historical Retrieval Worker 已接入；2.5 存储合同保持兼容。**2026-09-24 用户明确确认 Part 3 实机 Gates 验收通过（用户报告）**，未回填逐项实测指标，历史自动化与隔离冒烟证据类别不变。该验收不等于 V8.12.1 验收或全局 V8 Full Freeze。
 

@@ -138,6 +138,7 @@ const releaseChecks = [
   { group: "v8.12-context-summary-reliability", script: "test-v8.12-context-summary-reliability.js" },
   { group: "v8.12-memory-engine-3.0", script: "test-v8.12-memory-engine-3.0.js" },
   { group: "v8.12.1-dual-temporal-memory", script: "test-v8.12.1-dual-temporal-memory.js" },
+  { group: "v8.12.1.1-review-fixes", script: "test-v8.12.1.1-review-fixes.js" },
   { group: "v8.12.1-temporal-anchors", script: "test-v8.12.1-temporal-anchors.js" },
   { group: "v8.12.1-part3-closure", script: "test-v8.12.1-part3-closure.js" },
   { group: "summary-recall-promises", script: "test-summary-recall-promises.js" },

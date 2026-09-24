@@ -196,7 +196,7 @@ function buildPerspectiveSummaryMap(context = {}, extraction = {}) {
         content,
         memoryIds: [...memoryIds],
         summarySegmentIds: [...summarySegmentIds],
-        temporalRefs: normalizeTemporalRefs(sharedSegments.flatMap(segment => segment.temporalRefs || [])),
+        temporalRefs: normalizeTemporalRefs([...sharedSegments.flatMap(segment => segment.temporalRefs || []), ...known.flatMap(memory => memory.provenance?.temporalRefs || [])]),
         pinned,
         open,
         projectionHash
@@ -244,7 +244,7 @@ function validatePerspectiveSummaryMap(context = {}, extraction = {}, projection
       }
       const expectedMemories = (projection.memoryIds || []).map((memoryId) => memoriesById.get(memoryId)).filter(Boolean);
       const expectedSegments = (projection.summarySegmentIds || []).map((segmentId) => segmentsById.get(segmentId)).filter(Boolean);
-      const expectedRefs = normalizeTemporalRefs(expectedSegments.flatMap(segment => segment.temporalRefs || []));
+      const expectedRefs = normalizeTemporalRefs([...expectedSegments.flatMap(segment => segment.temporalRefs || []), ...expectedMemories.flatMap(memory => memory.provenance?.temporalRefs || [])]);
       if (JSON.stringify(normalizeTemporalRefs(projection.temporalRefs)) !== JSON.stringify(expectedRefs)) {
         invalidPairs.push({ ownerId, counterpartId, reason: "temporal_projection_boundary_violation" });
       }

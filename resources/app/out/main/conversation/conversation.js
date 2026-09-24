@@ -472,7 +472,8 @@ class Conversation {
       currentGameDate: this.gameData.date,
       currentTotalDays: this.gameData.totalDays,
       campaignToken: this.gameData.campaignToken || null,
-      sceneId: this.id,
+      conversationId: this.id,
+      sceneRevision: JSON.stringify([this.gameData.scene || null, this.gameData.location || null, this.gameData.locationController || null]),
       memoryEngine3Enabled: memory3Settings.v812MemoryEngine3Enabled !== false,
       temporalSummaryRecallEnabled: memory3Settings.v812TemporalSummaryRecallEnabled !== false,
       officialSummary: this.gameData.getOfficialRecollectionSummary?.(npc.id, this.id) || null,
@@ -496,6 +497,7 @@ class Conversation {
       participantIds: activeParticipantIds.filter((characterId) => characterId !== npc.id),
       ownerFolderMemories: memoryState.mentionProfileCache.ownerFolderMemoriesById.get(Number(npc.id)) || [],
       currentTotalDays: this.gameData.totalDays,
+      campaignToken: this.gameData.campaignToken || null,
       tokenBudget: 256,
       estimateTokens: (text) => TokenCounter.estimateTokens(text),
       cache: memoryState.turnRecallCache,
@@ -509,6 +511,7 @@ class Conversation {
       ownerFolderMemories: memoryState.mentionProfileCache.ownerFolderMemoriesById.get(Number(npc.id)) || [],
       currentGameDate: this.gameData.date,
       currentTotalDays: this.gameData.totalDays,
+      campaignToken: this.gameData.campaignToken || null,
       tokenBudget: 512,
       estimateTokens: (text) => TokenCounter.estimateTokens(text)
     }) : { text: null, tokens: 0, reason: "UNAVAILABLE", conflict: false };

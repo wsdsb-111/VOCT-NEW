@@ -63,7 +63,7 @@ async function main() {
     let ownerMemories = restarted.loadOwnerFolderMemories(2);
     const session = new Map();
     const input = { characterId: 2, directCounterpartIds: [1], ownerFolderMemories: ownerMemories,
-      campaignToken: "campaign-a", sceneId: "scene-a", currentGameDate: "1152.5.19", currentTotalDays: 6700,
+      campaignToken: "campaign-a", conversationId: "conversation-a", sceneRevision: "scene-a", currentGameDate: "1152.5.19", currentTotalDays: 6700,
       tokenBudget: 3600, estimateTokens: text => text.length, sessionRecallCache: session, turnEpoch: 1 };
     const first = restarted.retrieveForResponder({ ...input, query: "七年前那场战争是谁先动手的？" });
     assert.equal(first.temporal.targetGameYear, 1145);
@@ -74,7 +74,7 @@ async function main() {
     assert(first.selectedTokens <= first.tokenBudget);
     assert.equal(session.get(2).temporalFocus, undefined, "failed requests must not commit focus");
     restarted.commitDynamicSummaryRecall(2, session, 1);
-    const followup = restarted.retrieveForResponder({ ...input, turnEpoch: 2, query: "后来呢？" });
+    const followup = restarted.retrieveForResponder({ ...input, currentGameDate: "1152.5.20", currentTotalDays: 6701, turnEpoch: 2, query: "后来呢？" });
     assert.equal(followup.temporal.focusReused, true);
     assert.equal(followup.extra.length, 0, "successful Extra remains in private history instead of being injected anew");
     assert.equal(followup.directStableText, first.directStableText);
@@ -110,7 +110,7 @@ async function main() {
     assert.equal(selectDualTemporalExtras(index, pool, first.temporal, { query: "七年前那场战争", limit: 1 })[0].memory.memoryId, eventMemory.memoryId);
     assert.equal(buildDualTemporalIndex(pool, { ...options, campaignToken: "campaign-b" }).length, 0);
     const legacy = { ...conversationMemory, provenance: { ...conversationMemory.provenance, campaignToken: null } };
-    assert.equal(buildDualTemporalIndex([legacy], options).length, 1, "legacy records still have Conversation Time without inferred Event Time");
+    assert.equal(buildDualTemporalIndex([legacy], options).length, 0, "unknown-campaign records must not enter an identified campaign");
     const noDate = restarted.retrieveForResponder({ ...input, currentGameDate: null, sessionRecallCache: new Map(), query: "七年前的战争" });
     assert.equal(noDate.extra.length, 0);
 
@@ -129,7 +129,13 @@ async function main() {
     const edited = restarted.updateSummaryProjection(original, "玩家修订后的战争经过", { ownerId: 2, counterpartId: 1,
       summaryPath: file, persistSummary: summary => fs.writeFileSync(file, JSON.stringify([summary])) });
     const afterEdit = JSON.parse(fs.readFileSync(file, "utf8"))[0];
-    assert.deepEqual(afterEdit.temporalRefs, original.temporalRefs);
+    assert.deepEqual(afterEdit.temporalRefs.map(ref => ref.messageIds), original.temporalRefs.map(ref => ref.messageIds));
+    assert(afterEdit.temporalRefs.every(ref => ref.segmentIds.length === 1 && afterEdit.perspectiveSummarySegmentIds.includes(ref.segmentIds[0])));
+    assert(afterEdit.temporalRefs.every(ref => !original.perspectiveSummarySegmentIds.includes(ref.segmentIds[0])));
+    const afterEditEngine = new MemoryEngine({ baseDir: path.join(sandbox, "memory"), summaryFoldersDir: summariesDir, trace });
+    const afterEditMemories = afterEditEngine.loadOwnerFolderMemories(2);
+    const afterEditIndex = afterEditEngine.store.getSummaryDateIndexForPair(2, 1, { ...options, ownerFolderMemories: afterEditMemories, dualTemporal: true });
+    assert(afterEditIndex.some(entry => entry.axis === "event" && entry.ref.segmentIds[0] === afterEdit.perspectiveSummarySegmentIds[0]));
     fs.writeFileSync(file, "[]");
     restarted.invalidateSummaryFolderCache([2]);
     // Other pair projections may exist, but deleted 2->1 must not remain in this pair's index.

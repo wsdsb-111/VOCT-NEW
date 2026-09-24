@@ -5,11 +5,13 @@ const fs = require("fs");
 const path = require("path");
 
 const root = path.resolve(__dirname, "..");
+const normalizeLf = value => String(value).replace(/\r\n/g, "\n").replace(/\r/g, "\n");
 const rendererPath = path.join(root, "resources", "app", "out", "renderer", "assets", "index-Dn3qWlAB.js");
 const stylePath = path.join(root, "resources", "app", "out", "renderer", "assets", "index-WtJH_nua.css");
-const renderer = fs.readFileSync(rendererPath, "utf8");
-const styles = fs.readFileSync(stylePath, "utf8");
-const preview = fs.readFileSync(path.join(root, "ui-theme-preview.html"), "utf8");
+const renderer = normalizeLf(fs.readFileSync(rendererPath, "utf8"));
+const styles = normalizeLf(fs.readFileSync(stylePath, "utf8"));
+const preview = normalizeLf(fs.readFileSync(path.join(root, "ui-theme-preview.html"), "utf8"));
+assert.equal(normalizeLf("color: #263b37;\r\n  text-shadow: none;"), "color: #263b37;\n  text-shadow: none;", "CRLF checkouts must use the same assertion text");
 const finalThemeBlock = styles.slice(styles.lastIndexOf("/* V8.8 visual theme backgrounds"));
 
 const themes = [

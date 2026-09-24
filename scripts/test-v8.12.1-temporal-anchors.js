@@ -15,7 +15,7 @@ const context = { anchorGameDate: "1150.6.12", messageId: 21, speakerId: 1 };
 const anchors = (text, anchorGameDate = context.anchorGameDate) => extractTemporalAnchors(text, { ...context, anchorGameDate });
 const span = ref => [ref.precision, ref.fromGameDate, ref.toGameDate];
 const serial = date => normalizeGameDate(date).serial;
-const options = { currentGameDate: "1152.6.12", currentTotalDays: 5000, sceneId: "scene-a", turnEpoch: 10 };
+const options = { currentGameDate: "1152.6.12", currentTotalDays: 5000, conversationId: "conversation-a", sceneRevision: "scene-a", turnEpoch: 10 };
 
 test("absolute dates, exact precision and source message proof", () => {
   assert.deepEqual(span(anchors("1145年3月2日开战")[0]), ["day", "1145.3.2", "1145.3.2"]);
@@ -156,10 +156,12 @@ test("focus proposal is pure, follows anaphora, and replaces explicit dates", ()
   assert.equal(resolveTemporalFocus("那年谁被俘了", conversation.nextFocus, { ...options, turnEpoch: 11 }).axisIntent, "EVENT");
 });
 
-test("focus expiry, scene/date changes, recent and unrelated turns clear focus", () => {
+test("focus expiry, scope changes, recent and unrelated turns clear focus", () => {
   const focus = resolveTemporalFocus("七年前", null, options).nextFocus;
   assert.equal(resolveTemporalFocus("之后呢", focus, { ...options, turnEpoch: 13 }).focusReused, true);
-  for (const changed of [{ turnEpoch: 14 }, { turnEpoch: 9 }, { sceneId: "scene-b" }, { currentGameDate: "1152.6.13" }, { currentGameDate: null }, { sceneId: null }]) {
+  assert.equal(resolveTemporalFocus("之后呢", focus, { ...options, turnEpoch: 11, currentGameDate: "1152.6.13", currentTotalDays: 5001 }).focusReused, true);
+  assert.equal(resolveTemporalFocus("之后呢", focus, { ...options, turnEpoch: 11, currentGameDate: "1153.1.1", currentTotalDays: 5203 }).targetGameYear, 1145);
+  for (const changed of [{ turnEpoch: 14 }, { turnEpoch: 9 }, { conversationId: "conversation-b" }, { sceneRevision: "scene-b" }, { currentGameDate: null }, { sceneRevision: null }]) {
     const result = resolveTemporalFocus("之后呢", focus, { ...options, ...changed });
     assert.equal(result.focusReused, false);
     assert.equal(result.nextFocus, null);

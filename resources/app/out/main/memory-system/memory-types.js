@@ -15,6 +15,12 @@ function uniqueIds(values) {
   return [...new Set((Array.isArray(values) ? values : []).map(Number).filter(Number.isFinite))];
 }
 
+function memoryMatchesCampaign(memory, campaignToken) {
+  const active = typeof campaignToken === "string" && campaignToken.trim() ? campaignToken : null;
+  const stored = memory?.provenance?.campaignToken;
+  return (typeof stored === "string" && stored.trim() ? stored : null) === active;
+}
+
 function clamp(value, fallback, min = 0, max = 1) {
   const numeric = Number(value);
   return Number.isFinite(numeric) ? Math.max(min, Math.min(max, numeric)) : fallback;
@@ -92,6 +98,7 @@ function createMemoryRecord(input = {}) {
 }
 
 module.exports = {
+  memoryMatchesCampaign,
   MEMORY_TYPES,
   VISIBILITIES,
   SOURCES,

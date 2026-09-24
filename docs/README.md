@@ -4,7 +4,7 @@
 
 ## 推荐阅读顺序
 
-V8.12.1 当前入口：[双时间记忆实施记录](v8.12.1-dual-temporal-memory-implementation-report.md)。用户于 **2026-09-24** 确认 Part 3 实机 Gates 验收通过（用户报告）；V8.12.1 已完成代码与 314/314 自动发布 Gate，CK3/Provider 实机 Gate 待验收，本机隔离 Electron 冒烟受 GPU 启动故障阻断。Part 3 通过不等于 V8.12.1 已验收或全局 V8 Full Freeze。
+V8.12.1 当前入口：[双时间记忆及 V8.12.1.1 审查修复实施记录](v8.12.1-dual-temporal-memory-implementation-report.md)。用户于 **2026-09-24** 确认 Part 3 实机 Gates 验收通过（用户报告）；V8.12.1.1 已完成本地代码与 315/315 自动发布 Gate，远端 Windows CI 和 CK3/Provider 实机 Gate 待验收，本机隔离 Electron 冒烟仍受 GPU 启动故障阻断。Part 3 通过不等于 V8.12.1 已验收或全局 V8 Full Freeze。
 
 V8.12 基线入口：[Part 3 Memory Engine 3.0 施工与验收记录](v8.12-part3-memory-engine-3.0-implementation-report.md) / [第二部分历史检索与时间线实施报告](v8.12-part2-implementation-report.md) / [第一部分安全收口与 Temporal Archive 实施报告](v8.12-part1-implementation-report.md) / [Part 3 NPC Memory 存储结构前置分析](v8.12-part3-npc-memory-storage-analysis.md)。第一部分、Part 2 及 Part 3 前置验收的既有用户确认记录保留；施工时的自动化和隔离冒烟不重新分类为实机证据。原生官方追忆已走人物摘要与共享预算，存档 Shadow 保留只读诊断。下列为前置版本记录。
 

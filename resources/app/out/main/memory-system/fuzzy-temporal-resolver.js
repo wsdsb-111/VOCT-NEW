@@ -1,7 +1,7 @@
 "use strict";
 
 const { normalizeGameDate } = require("../worldline/character-temporal-facts");
-const { extractTemporalAnchors, detectTemporalAxisIntent, gameDateFromSerial } = require("./temporal-anchor-extractor");
+const { extractTemporalAnchors, detectTemporalAxisIntent, hasTemporalAxisCue, gameDateFromSerial } = require("./temporal-anchor-extractor");
 
 const DIGITS = { 零: 0, 〇: 0, 一: 1, 二: 2, 两: 2, 三: 3, 四: 4, 五: 5, 六: 6, 七: 7, 八: 8, 九: 9 };
 
@@ -120,7 +120,7 @@ function resolveTemporalWindow(query, { currentGameDate, currentTotalDays, earli
 }
 
 // Pure proposal only: the caller owns per-responder storage and successful-reply commit.
-function resolveTemporalFocus(query, previousFocus, { currentGameDate, currentTotalDays, turnEpoch, sceneId } = {}) {
+function resolveTemporalFocus(query, previousFocus, { currentGameDate, currentTotalDays, turnEpoch, conversationId, sceneRevision } = {}) {
   const text = typeof query === "string" ? query : "";
   const axisIntent = detectTemporalAxisIntent(query);
   const temporal = resolveTemporalWindow(query, { currentGameDate, currentTotalDays });
@@ -132,7 +132,7 @@ function resolveTemporalFocus(query, previousFocus, { currentGameDate, currentTo
   if (!current) return result;
   const rawToday = Number(currentTotalDays);
   const today = Number.isFinite(rawToday) && rawToday > 0 ? rawToday : current.serial;
-  const canStore = Number.isSafeInteger(turnEpoch) && turnEpoch >= 0 && sceneId != null;
+  const canStore = Number.isSafeInteger(turnEpoch) && turnEpoch >= 0 && conversationId != null && sceneRevision != null;
   if (temporal.triggered) {
     if (temporal.mode !== "TARGET_DATE" || !canStore) return result;
     const from = gameDateFromSerial(current.serial + temporal.primaryWindow.fromTotalDays - today);
@@ -142,7 +142,7 @@ function resolveTemporalFocus(query, previousFocus, { currentGameDate, currentTo
     result.nextFocus = {
       targetGameYear: from.year, fromGameDate: from.canonical, toGameDate: to.canonical,
       axisIntent, axis: axisIntent.toLowerCase(), establishedTurn: turnEpoch, lastUsedTurn: turnEpoch,
-      sceneId, currentGameDate: current.canonical
+      conversationId, sceneRevision, currentGameDate: current.canonical
     };
     return result;
   }
@@ -152,12 +152,12 @@ function resolveTemporalFocus(query, previousFocus, { currentGameDate, currentTo
       !/那一年|那年|当年|那时|当时|后来|之后|随后/.test(text)) return result;
   const gap = turnEpoch - previousFocus.lastUsedTurn;
   if (!Number.isSafeInteger(previousFocus.lastUsedTurn) || gap < 0 || gap > 3 ||
-      previousFocus.sceneId !== sceneId || previousFocus.currentGameDate !== current.canonical ||
+      previousFocus.conversationId !== conversationId || previousFocus.sceneRevision !== sceneRevision ||
       !["EVENT", "CONVERSATION", "MIXED"].includes(previousFocus.axisIntent)) return result;
   const from = normalizeGameDate(previousFocus.fromGameDate), to = normalizeGameDate(previousFocus.toGameDate);
   if (!from || !to || from.serial > to.serial || to.serial > current.serial) return result;
   const primaryWindow = { fromTotalDays: today + from.serial - current.serial, toTotalDays: today + to.serial - current.serial };
-  const inheritedAxis = /聊|谈|说|讨论|讲过|告诉|提过|提到|问过|回答|对话|发生|战争|战役|叛乱|婚礼|死亡|出生|被俘|继承|加冕|盟约|事件|那件事|那场/.test(text)
+  const inheritedAxis = hasTemporalAxisCue(text)
     ? axisIntent : previousFocus.axisIntent;
   return {
     triggered: true, requested: true, expression: text, normalizedConcept: "TEMPORAL_FOCUS", mode: "TARGET_DATE",

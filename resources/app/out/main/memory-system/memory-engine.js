@@ -4,7 +4,7 @@ const fs = require("fs");
 const path = require("path");
 const crypto = require("crypto");
 const { MEMORY_ENGINE_VERSION } = require("../version");
-const { MEMORY_TYPES, VISIBILITIES, createMemoryId, createMemoryRecord, uniqueIds } = require("./memory-types");
+const { MEMORY_TYPES, VISIBILITIES, createMemoryId, createMemoryRecord, uniqueIds, memoryMatchesCampaign } = require("./memory-types");
 const { MemoryStore } = require("./memory-store");
 const { MemoryExtractor } = require("./memory-extractor");
 const { MemoryRanker } = require("./memory-ranker");
@@ -210,18 +210,19 @@ class MemoryEngine {
     return this.store.withSummaryMutation(summaryPath, () => {
       this.forgetSummaryProjection({ ...summaryRecord, perspectiveMemoryIds: mapping.memoryIds }, { ownerId: mapping.numericOwnerId, counterpartId: numericCounterpartId });
       const finalizationId = mapping.finalizationId || createMemoryId("summary_edit");
+      const segmentId = createMemoryId("summary_edit_segment");
+      const temporalRefs = normalizeTemporalRefs((summaryRecord.temporalRefs || []).map(ref => ({ ...ref, segmentIds: [segmentId], sourceMemoryIds: [] })));
       const memory = this.store.saveMemory({
         type: "information", subtype: "edited_summary_projection", content: editedText, canonicalText: editedText,
         participants: [mapping.numericOwnerId, numericCounterpartId], subjects: [numericCounterpartId],
         eventDate: summaryRecord.date, totalDays: summaryRecord.totalDays, source: "imported", updatedBy: "user",
         visibility: "known_group", knownBy: [mapping.numericOwnerId],
-        provenance: { finalizationId, folderOwnerId: mapping.numericOwnerId, counterpartId: numericCounterpartId, extractionMode: "user_edited_summary", campaignToken: summaryRecord.campaignToken || null }
+        provenance: { finalizationId, folderOwnerId: mapping.numericOwnerId, counterpartId: numericCounterpartId, extractionMode: "user_edited_summary", campaignToken: summaryRecord.campaignToken || null, temporalRefs }
       });
       this.store.markKnownBy(mapping.numericOwnerId, memory.memoryId, { awareness: "imported", acquiredAt: memory.totalDays });
-      const segmentId = createMemoryId("summary_edit_segment");
       const episode = mapping.episodes[0] ? this.store.listAllEpisodes().find(item => item.episodeId === mapping.episodes[0].episodeId) : { episodeId: createMemoryId("summary_edit_episode"), finalizationId, memoryIds: [], summarySegments: [] };
-      this.store.saveEpisode({ ...episode, memoryIds: [...(episode.memoryIds || []), memory.memoryId], summarySegments: [...(episode.summarySegments || []), { segmentId, content: editedText, knownBy: [mapping.numericOwnerId], participants: memory.participants, visibility: "known_group" }] });
-      const updatedRecord = { ...summaryRecord, content: editedText, finalizationId, perspectiveOwnerId: mapping.numericOwnerId, perspectiveMemoryIds: [memory.memoryId], perspectiveSummarySegmentIds: [segmentId], projectionHash: crypto.createHash("sha256").update(JSON.stringify([mapping.numericOwnerId, numericCounterpartId, editedText, memory.memoryId])).digest("hex") };
+      this.store.saveEpisode({ ...episode, memoryIds: [...(episode.memoryIds || []), memory.memoryId], summarySegments: [...(episode.summarySegments || []), { segmentId, content: editedText, knownBy: [mapping.numericOwnerId], participants: memory.participants, visibility: "known_group", temporalRefs }] });
+      const updatedRecord = { ...summaryRecord, content: editedText, finalizationId, perspectiveOwnerId: mapping.numericOwnerId, perspectiveMemoryIds: [memory.memoryId], perspectiveSummarySegmentIds: [segmentId], temporalRefs, projectionHash: crypto.createHash("sha256").update(JSON.stringify([mapping.numericOwnerId, numericCounterpartId, editedText, memory.memoryId])).digest("hex") };
       if (persistSummary) persistSummary(updatedRecord);
       this.refreshCharacterConsolidation(mapping.numericOwnerId);
       this.invalidateSummaryFolderCache([mapping.numericOwnerId]);
@@ -473,8 +474,17 @@ class MemoryEngine {
         segment.temporalRefs = normalizeTemporalRefs((segment.provenance?.messageIds || []).flatMap(messageId =>
           (byMessage.get(Number(messageId)) || []).map(ref => ({ ...ref, segmentIds: [segment.segmentId] }))));
       }
+      for (const memory of extraction.memories || []) {
+        if (!memory.provenance) memory.provenance = {};
+        memory.provenance.temporalRefs = normalizeTemporalRefs((memory.provenance?.messageIds || []).flatMap(messageId =>
+          (byMessage.get(Number(messageId)) || []).map(ref => ({ ...ref, sourceMemoryIds: [memory.memoryId] }))));
+      }
     } catch (error) {
       for (const segment of extraction.summarySegments || []) segment.temporalRefs = [];
+      for (const memory of extraction.memories || []) {
+        if (!memory.provenance) memory.provenance = {};
+        memory.provenance.temporalRefs = [];
+      }
       this.trace.record("temporal_metadata_unavailable", { conversationId: context.conversationId, reason: "TEMPORAL_PARSE_FAILED" });
     }
   }
@@ -1348,10 +1358,10 @@ class MemoryEngine {
     return selected;
   }
 
-  retrieveForResponder({ characterId, query = "", directCounterpartIds = [], mentionedEntityIds = [], mentionedEntityNames = {}, mentionedRecallCache = null, sessionRecallCache = null, ownerFolderMemories = null, officialSummary = null, turnEpoch = 0, currentGameDate = null, currentTotalDays = null, campaignToken = null, sceneId = null, memoryEngine3Enabled = true, temporalSummaryRecallEnabled = true, tokenBudget = 800, estimateTokens } = {}) {
+  retrieveForResponder({ characterId, query = "", directCounterpartIds = [], mentionedEntityIds = [], mentionedEntityNames = {}, mentionedRecallCache = null, sessionRecallCache = null, ownerFolderMemories = null, officialSummary = null, turnEpoch = 0, currentGameDate = null, currentTotalDays = null, campaignToken = null, conversationId = null, sceneRevision = null, memoryEngine3Enabled = true, temporalSummaryRecallEnabled = true, tokenBudget = 800, estimateTokens } = {}) {
     const startedAt = Date.now();
     const ownerId = Number(characterId);
-    const temporalScope = JSON.stringify([campaignToken, sceneId]);
+    const temporalScope = JSON.stringify([campaignToken, conversationId, sceneRevision]);
     const previousScope = sessionRecallCache?.get(ownerId)?.temporalScope;
     if (previousScope != null && previousScope !== temporalScope) {
       sessionRecallCache.delete(ownerId);
@@ -1362,7 +1372,7 @@ class MemoryEngine {
     const budget = Math.max(0, Number(tokenBudget) || 0);
     const folderSnapshot = Array.isArray(ownerFolderMemories) ? ownerFolderMemories : directIds.length > 0 || mentionedIds.length > 0 ? this.store.loadFolderSummariesForCharacter(ownerId) : [];
     const folderMemories = folderSnapshot.filter(memory => Number(memory.provenance?.folderOwnerId) === ownerId
-      && (!memory.provenance?.campaignToken || memory.provenance.campaignToken === campaignToken));
+      && memoryMatchesCampaign(memory, campaignToken));
     const directGroups = new Map();
     for (const counterpartId of directIds) {
       const memories = this.store.loadDirectPairSummaries(ownerId, counterpartId, folderMemories);
@@ -1389,14 +1399,14 @@ class MemoryEngine {
     if (mentionedRecallCache instanceof Map && (capturedMentioned || !cachedMentioned)) mentionedRecallCache.set(ownerId, { groups: new Map([...cachedGroups, ...mentionedGroups]) });
     const mentionedCacheHit = mentionedIds.length > 0 && !capturedMentioned && cachedMentioned?.groups instanceof Map;
     const internalMemories = this.store.queryMemories({ characterId: ownerId, includeFolderSummaries: false })
-      .filter(memory => !memory.provenance?.campaignToken || memory.provenance.campaignToken === campaignToken);
+      .filter(memory => memoryMatchesCampaign(memory, campaignToken));
     const responderCache = sessionRecallCache instanceof Map
       ? sessionRecallCache.get(ownerId) || { mentionedSnapshots: new Map(), topicPatch: null }
       : { mentionedSnapshots: new Map(), topicPatch: null };
     if (!(responderCache.mentionedSnapshots instanceof Map)) responderCache.mentionedSnapshots = new Map();
     responderCache.temporalScope = temporalScope;
     const officialMemory = memoryEngine3Enabled && officialSummary?.sourceType === "CK3_OFFICIAL_RECOLLECTION"
-      && (!campaignToken || officialSummary.campaignToken === campaignToken)
+      && memoryMatchesCampaign({ provenance: { campaignToken: officialSummary.campaignToken } }, campaignToken)
       && Number(officialSummary.playerId) === ownerId && officialSummary.memoryCount > 0 ? createMemoryRecord({
         memoryId: `official_${ownerId}`, type: "folder_summary", subtype: "official_recollection",
         content: officialSummary.content, importance: 0.95, confidence: 1, source: "game_fact",
@@ -1461,7 +1471,7 @@ class MemoryEngine {
     const frozenSelectedTokens = [...direct, ...deduplicatedMentioned, ...stable].reduce((total, entry) => total + Number(entry.tokens || 0), 0);
     const extraBudget = Math.max(0, budget - frozenSelectedTokens);
     const temporal = memoryEngine3Enabled && temporalSummaryRecallEnabled
-      ? resolveTemporalFocus(query, responderCache.temporalFocus, { currentGameDate, currentTotalDays, turnEpoch, sceneId })
+      ? resolveTemporalFocus(query, responderCache.temporalFocus, { currentGameDate, currentTotalDays, turnEpoch, conversationId, sceneRevision })
       : { triggered: false, reason: "DISABLED", nextFocus: null };
     const exactTimeQuery = temporal.triggered && temporal.mode === "TARGET_DATE";
     const blockedTimeQuery = temporal.requested && !temporal.triggered;
@@ -1606,19 +1616,19 @@ class MemoryEngine {
     if (state?.dynamicTurn === turnEpoch) state.temporalFocus = state.pendingTemporalFocus || null;
   }
 
-  retrieveTurnRecall({ characterId, query = "", assistContext = "", entityIds = [], entityNames = [], participantIds = [], ownerFolderMemories = null, currentTotalDays = null, tokenBudget = 256, estimateTokens, cache = null, turnEpoch = 0 } = {}) {
+  retrieveTurnRecall({ characterId, query = "", assistContext = "", entityIds = [], entityNames = [], participantIds = [], ownerFolderMemories = null, currentTotalDays = null, campaignToken = null, tokenBudget = 256, estimateTokens, cache = null, turnEpoch = 0 } = {}) {
     const ownerId = Number(characterId);
     const expandedQuery = turnRecall.expandQuery(query);
     const lexicalQuery = turnRecall.expandQuery(turnRecall.removeEntityNames(query, entityNames));
     const fingerprint = turnRecall.createQueryFingerprint(expandedQuery);
-    const cacheKey = `${turnEpoch}:${ownerId}:${fingerprint}`;
+    const cacheKey = `${turnEpoch}:${ownerId}:${campaignToken || ""}:${fingerprint}`;
     if (cache instanceof Map && cache.has(cacheKey)) return { ...cache.get(cacheKey), cacheHit: true };
     const intent = turnRecall.detectIntent(query, { entityNames });
     const budget = Math.min(320, Math.max(0, Number(tokenBudget) || 256));
     const folderMemories = Array.isArray(ownerFolderMemories) ? ownerFolderMemories : this.store.loadFolderSummariesForCharacter(ownerId);
     const internalMemories = this.store.queryMemories({ characterId: ownerId, includeFolderSummaries: false });
     const candidatesByKey = new Map();
-    for (const memory of [...folderMemories, ...internalMemories]) candidatesByKey.set(this.getRouteMemoryKey(memory), memory);
+    for (const memory of [...folderMemories, ...internalMemories]) if (memoryMatchesCampaign(memory, campaignToken)) candidatesByKey.set(this.getRouteMemoryKey(memory), memory);
     const ranked = this.ranker.rankTurnRecall([...candidatesByKey.values()], {
       query: lexicalQuery,
       assistQuery: assistContext,
@@ -1659,9 +1669,9 @@ class MemoryEngine {
     return result;
   }
 
-  retrieveThirdPartyEvidence({ characterId, query = "", mentionedEntityIds = [], mentionedEntityNames = {}, ownerFolderMemories = null, currentTotalDays = null, tokenBudget = 512, estimateTokens } = {}) {
+  retrieveThirdPartyEvidence({ characterId, query = "", mentionedEntityIds = [], mentionedEntityNames = {}, ownerFolderMemories = null, currentTotalDays = null, campaignToken = null, tokenBudget = 512, estimateTokens } = {}) {
     const ownerId = Number(characterId);
-    const memories = Array.isArray(ownerFolderMemories) ? ownerFolderMemories : this.store.loadFolderSummariesForCharacter(ownerId);
+    const memories = (Array.isArray(ownerFolderMemories) ? ownerFolderMemories : this.store.loadFolderSummariesForCharacter(ownerId)).filter(memory => memoryMatchesCampaign(memory, campaignToken));
     const entities = uniqueIds(mentionedEntityIds).map((entityId) => {
       const aliases = Array.isArray(mentionedEntityNames) ? mentionedEntityNames : mentionedEntityNames?.[entityId] || mentionedEntityNames?.[String(entityId)] || [];
       return {
@@ -1675,7 +1685,7 @@ class MemoryEngine {
     return result;
   }
 
-  retrieveForCharacter({ characterId, query = "", entityIds = [], entityNames = [], participantIds = [], currentTotalDays = null, tokenBudget = 800, estimateTokens } = {}) {
+  retrieveForCharacter({ characterId, query = "", entityIds = [], entityNames = [], participantIds = [], currentTotalDays = null, campaignToken = null, tokenBudget = 800, estimateTokens } = {}) {
     const mentionedEntityNames = Object.fromEntries(uniqueIds(entityIds).map((entityId) => [entityId, entityNames || []]));
     return this.retrieveForResponder({
       characterId,
@@ -1684,6 +1694,7 @@ class MemoryEngine {
       mentionedEntityIds: entityIds,
       mentionedEntityNames,
       currentTotalDays,
+      campaignToken,
       tokenBudget,
       estimateTokens
     });

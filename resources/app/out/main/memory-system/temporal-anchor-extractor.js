@@ -6,11 +6,18 @@ const SOURCE = "deterministic_message_parse";
 const NUMBER = "[\\d零〇一二两三四五六七八九十百]+";
 const CONVERSATION = /聊(?:过|了|到)|谈(?:过|了|话|论|及)|讨论|交谈|说过|讲过|告诉|提过|提到|问过|回答|对话|见面时说|对我说|跟我说/;
 const EVENT = /发生|战争|开战|战役|叛乱|婚礼|死亡|出生|被俘|继承|加冕|盟约|事件|那件事|那场|议和|停战|处决/;
+const CONVERSATION_CUE = /聊(?:过|了|到|起)|谈(?:过|了|话|论|及|起)|讨论|交谈|说(?:了|过|起|到)|讲(?:了|过|起)|问(?:了|过|起)|告知|告诉|提(?:了|过|到|起)|回答|对话|见面时说|对我说|跟我说/;
+const EVENT_CUE = /发生|战争|开战|战役|叛乱|婚礼|成婚|死亡|去世|出生|被俘|继承|登基|即位|加冕|盟约|事件|那件事|那场|议和|停战|处决/;
+
+function hasTemporalAxisCue(query) {
+  const text = typeof query === "string" ? query : "";
+  return CONVERSATION_CUE.test(text) || EVENT_CUE.test(text);
+}
 
 function detectTemporalAxisIntent(query) {
   const text = typeof query === "string" ? query : "";
-  const conversation = CONVERSATION.test(text);
-  return conversation ? (EVENT.test(text) ? "MIXED" : "CONVERSATION") : "EVENT";
+  const conversation = CONVERSATION_CUE.test(text);
+  return conversation ? (EVENT_CUE.test(text) ? "MIXED" : "CONVERSATION") : "EVENT";
 }
 
 function count(value) {
@@ -74,9 +81,11 @@ function normalizeTemporalRefs(refs) {
     if (!Array.isArray(ref.messageIds) || !ref.messageIds.length || ref.messageIds.some(id => messageNumber(id) == null)) continue;
     if (ref.segmentIds != null && (!Array.isArray(ref.segmentIds) || ref.segmentIds.some(id =>
       !(typeof id === "string" && id.trim()) && !(Number.isSafeInteger(id) && id >= 0)))) continue;
+    if (ref.sourceMemoryIds != null && (!Array.isArray(ref.sourceMemoryIds) || ref.sourceMemoryIds.some(id => typeof id !== "string" || !id.trim()))) continue;
     const normalized = {
       kind: "event_time", ...expected, expression: ref.expression,
       messageIds: [...new Set(ref.messageIds.map(messageNumber))], segmentIds: [...new Set(ref.segmentIds || [])],
+      sourceMemoryIds: [...new Set(ref.sourceMemoryIds || [])],
       source: SOURCE, timeRole: ref.timeRole
     };
     const key = JSON.stringify(normalized);
@@ -152,4 +161,4 @@ function extractTemporalAnchorsFromMessages(messages, { anchorGameDate } = {}) {
   return result;
 }
 
-module.exports = { extractTemporalAnchors, extractTemporalAnchorsFromMessages, normalizeTemporalRefs, detectTemporalAxisIntent, gameDateFromSerial };
+module.exports = { extractTemporalAnchors, extractTemporalAnchorsFromMessages, normalizeTemporalRefs, detectTemporalAxisIntent, hasTemporalAxisCue, gameDateFromSerial };

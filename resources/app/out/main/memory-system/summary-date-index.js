@@ -3,6 +3,7 @@
 const { normalizeGameDate } = require("../worldline/character-temporal-facts");
 const { normalizeTemporalRefs } = require("./temporal-anchor-extractor");
 const { MemoryRanker } = require("./memory-ranker");
+const { memoryMatchesCampaign } = require("./memory-types");
 
 function buildSummaryDateIndex(memories, { ownerId, counterpartId, currentGameDate, currentTotalDays } = {}) {
   const current = normalizeGameDate(currentGameDate);
@@ -58,13 +59,13 @@ function selectTemporalExtras(index, memories, temporal, excludedSummaryIds = []
 
 function buildEventTimeIndex(memories, { ownerId, counterpartId, currentGameDate, currentTotalDays, campaignToken } = {}) {
   const current = normalizeGameDate(currentGameDate);
-  if (!current || !campaignToken) return [];
+  if (!current) return [];
   const today = Number(currentTotalDays) > 0 ? Number(currentTotalDays) : current.serial;
   return (memories || []).filter(memory => Number(memory.provenance?.folderOwnerId) === Number(ownerId)
-    && memory.provenance?.campaignToken === campaignToken
+    && memoryMatchesCampaign(memory, campaignToken)
     && memory.subtype !== "official_recollection"
     && (counterpartId == null || [memory.provenance.counterpartId, ...(memory.provenance.counterpartIds || [])].map(Number).includes(Number(counterpartId))))
-    .flatMap(memory => normalizeTemporalRefs(memory.provenance?.temporalRefs).filter(ref => ref.timeRole === "event" && ref.segmentIds.length > 0).flatMap(ref => {
+    .flatMap(memory => normalizeTemporalRefs(memory.provenance?.temporalRefs).filter(ref => ref.timeRole === "event" && (ref.segmentIds.length > 0 || ref.sourceMemoryIds.length > 0)).flatMap(ref => {
       const from = normalizeGameDate(ref.fromGameDate), to = normalizeGameDate(ref.toGameDate);
       if (from.serial > current.serial) return [];
       return [{ summaryId: memory.memoryId, ownerId: Number(ownerId), counterpartId: counterpartId ?? null,
@@ -75,7 +76,7 @@ function buildEventTimeIndex(memories, { ownerId, counterpartId, currentGameDate
 }
 
 function buildDualTemporalIndex(memories, options = {}) {
-  const scoped = (memories || []).filter(memory => !memory.provenance?.campaignToken || memory.provenance.campaignToken === options.campaignToken);
+  const scoped = (memories || []).filter(memory => memoryMatchesCampaign(memory, options.campaignToken));
   return [...buildSummaryDateIndex(scoped, options).map(entry => ({ ...entry, axis: "conversation",
     fromTotalDays: entry.totalDays, toTotalDays: entry.totalDays, precision: "day" })), ...buildEventTimeIndex(scoped, options)];
 }

@@ -180,8 +180,9 @@ async function testNativeSummaryLifecycle() {
     assert.equal(data.getOfficialRecollectionSummary(2, "different-session"), null);
     assert.deepEqual(engine.loadOwnerFolderMemories(2), [], "official summaries must not enter cross-person or date routes");
     const session = new Map();
-    const input = { characterId: 2, directCounterpartIds: [1], ownerFolderMemories: memories, officialSummary: official,
-      currentGameDate, currentTotalDays: today, tokenBudget: 3600, estimateTokens, sessionRecallCache: session, turnEpoch: 1 };
+    const scopedMemories = memories.map(memory => ({ ...memory, provenance: { ...memory.provenance, campaignToken: data.campaignToken } }));
+    const input = { characterId: 2, directCounterpartIds: [1], ownerFolderMemories: scopedMemories, officialSummary: official,
+      currentGameDate, currentTotalDays: today, campaignToken: data.campaignToken, tokenBudget: 3600, estimateTokens, sessionRecallCache: session, turnEpoch: 1 };
     const first = engine.retrieveForResponder({ ...input, query: "五年前" });
     assert.equal(first.direct.length, 3);
     assert.equal(first.direct.filter(e => e.memory.subtype === "official_recollection").length, 1);
@@ -226,6 +227,7 @@ async function testNativeSummaryLifecycle() {
     const otherOwner = engine.retrieveForResponder({ ...input, characterId: 3, sessionRecallCache: new Map() });
     assert(!otherOwner.direct.some(e => e.memory.subtype === "official_recollection"));
     const thirdPersonMemory = record("third-person", today - 8, "韩世忠亲口告诉我的往事");
+    thirdPersonMemory.provenance.campaignToken = data.campaignToken;
     thirdPersonMemory.provenance.counterpartIds = [3];
     thirdPersonMemory.provenance.counterpartId = 3;
     const mentionSession = new Map();
