@@ -4,7 +4,9 @@
 
 ## 推荐阅读顺序
 
-V8.12 当前入口：[Part 3 Memory Engine 3.0 施工记录](v8.12-part3-memory-engine-3.0-implementation-report.md) / [第二部分历史检索与时间线实施报告](v8.12-part2-implementation-report.md) / [第一部分安全收口与 Temporal Archive 实施报告](v8.12-part1-implementation-report.md) / [Part 3 NPC Memory 存储结构前置分析](v8.12-part3-npc-memory-storage-analysis.md)。第一部分与 Part 3 前置验收已由用户确认通过；用户随后确认 Part 2 验收通过并授权 Part 3 正式施工。Part 3 代码与自动化已接入，官方追忆 Prompt 注入默认关闭，**真实 CK3/GLM Part 3 Gate 与最终冻结仍待验收**。下列为前置版本记录。
+V8.12.1 当前入口：[双时间记忆实施记录](v8.12.1-dual-temporal-memory-implementation-report.md)。用户于 **2026-09-24** 确认 Part 3 实机 Gates 验收通过（用户报告）；V8.12.1 已完成代码与 314/314 自动发布 Gate，CK3/Provider 实机 Gate 待验收，本机隔离 Electron 冒烟受 GPU 启动故障阻断。Part 3 通过不等于 V8.12.1 已验收或全局 V8 Full Freeze。
+
+V8.12 基线入口：[Part 3 Memory Engine 3.0 施工与验收记录](v8.12-part3-memory-engine-3.0-implementation-report.md) / [第二部分历史检索与时间线实施报告](v8.12-part2-implementation-report.md) / [第一部分安全收口与 Temporal Archive 实施报告](v8.12-part1-implementation-report.md) / [Part 3 NPC Memory 存储结构前置分析](v8.12-part3-npc-memory-storage-analysis.md)。第一部分、Part 2 及 Part 3 前置验收的既有用户确认记录保留；施工时的自动化和隔离冒烟不重新分类为实机证据。原生官方追忆已走人物摘要与共享预算，存档 Shadow 保留只读诊断。下列为前置版本记录。
 
 Part 3 前置的对话上下文/摘要可靠性工程见 [摘要系统合同与实机 Gate](README_摘要系统.md#v812-part-3-前置对话上下文与摘要可靠性待实机-gate) 及 [V8 阶段开发记录](V8阶段开发记录.md)。前置验收由用户确认，详细实机指标未回填；Part 3 本体状态单独记录于上述施工报告。
 
@@ -86,7 +88,7 @@ V8.5.1 历史基线：[Sol 最终审查与修复](v8.5.1-sol-final-review.md)，
 
 ## 文档分类
 
-最新阶段：[V8.12 Part 3 NPC Memory 存储结构前置分析](v8.12-part3-npc-memory-storage-analysis.md)；完成指定 CK3 Save 的 `character_memory_manager` 原始结构、NPC holder 反向引用、UI 回忆映射、结构化参数、跨 NPC 独立 Memory 和到期删除行为分析。第三部分尚未施工，不能把本分析记录写成实现或验收通过。
+最新阶段：[V8.12.1 双时间记忆实施记录](v8.12.1-dual-temporal-memory-implementation-report.md)（自动 Gate 通过，实机待验收）。[V8.12 Part 3 NPC Memory 存储结构前置分析](v8.12-part3-npc-memory-storage-analysis.md) 保留为历史分析；Part 3 的实施与 2026-09-24 用户报告验收见 [Part 3 施工记录](v8.12-part3-memory-engine-3.0-implementation-report.md)，不将前置分析改写为实现或验收证据。
 
 ### 架构与运行规则
 

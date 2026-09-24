@@ -2,6 +2,7 @@
 
 const crypto = require("crypto");
 const { CURRENT_MEMORY_SCHEMA_VERSION, upgradeMemoryRecord } = require("./memory-schema");
+const { normalizeTemporalRefs } = require("./temporal-anchor-extractor");
 
 const MEMORY_TYPES = new Set([
   "event", "promise", "relationship", "secret", "belief", "plan",
@@ -50,6 +51,8 @@ function createMemoryRecord(input = {}) {
     epistemicStatus: String(input.epistemicStatus || (type === "belief" ? "believed" : type === "rumor" ? "unverified" : "asserted")),
     source,
     provenance: {
+      campaignToken: typeof provenance.campaignToken === "string" ? provenance.campaignToken : null,
+      temporalRefs: normalizeTemporalRefs(provenance.temporalRefs),
       conversationId: provenance.conversationId || null,
       messageIds: Array.isArray(provenance.messageIds) ? [...new Set(provenance.messageIds)] : [],
       speakerIds: uniqueIds(provenance.speakerIds),

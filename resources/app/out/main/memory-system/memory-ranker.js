@@ -76,10 +76,13 @@ class MemoryRanker {
       let tokens = Math.max(1, estimate(memory.content));
       const remaining = budget - used;
       if (tokens > remaining && memory.subtype === "official_recollection") {
-        const paragraphs = memory.content.split("\n\n");
-        const fitted = [paragraphs[0]];
-        for (const paragraph of paragraphs.slice(1)) {
-          if (estimate([...fitted, paragraph].join("\n\n")) <= remaining) fitted.push(paragraph);
+        const firstBreak = memory.content.indexOf("\n\n");
+        if (firstBreak < 0) continue;
+        const header = memory.content.slice(0, firstBreak);
+        const events = memory.content.slice(firstBreak + 2).split(/\n\n(?=\d+年\d+月\d+日：)/);
+        const fitted = [header];
+        for (const event of events) {
+          if (estimate([...fitted, event].join("\n\n")) <= remaining) fitted.push(event);
         }
         if (fitted.length < 2) continue;
         memory = { ...memory, content: fitted.join("\n\n") };

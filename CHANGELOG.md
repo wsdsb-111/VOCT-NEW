@@ -2,7 +2,9 @@
 
 这里是版本变更的单一入口。详细设计和测试证据保留在链接目标中，本文件只维护版本顺序、用户可见摘要和文档索引。
 
-V8.12 第三部分：[Memory Engine 3.0 施工记录](docs/v8.12-part3-memory-engine-3.0-implementation-report.md)。Recent2 冻结、动态 Extra3、摘要分块上限 64、CK3 官方追忆只读 Shadow、GLM Cache v2 布局兼容及 Historical Retrieval Worker 已接入；2.5 存储合同保持兼容。正式追忆 Prompt 注入默认关闭；Part 3 实机 Gate 和最终冻结尚未通过。
+V8.12.1（自动 Gate 通过，实机待验收）：[双时间记忆实施记录](docs/v8.12.1-dual-temporal-memory-implementation-report.md)。原始消息的时间证据经 Owner 投影写入摘要，按当前 CK3 日期分别检索事件与对话时间；多轮时间焦点、Campaign 隔离及动态 Extra≤3 已接入。314/314 发布组通过；本机隔离 Electron 冒烟受 GPU 子进程启动故障阻断，真实 CK3/Provider 与缓存指标待验收，不宣称全局 V8 Full Freeze。
+
+V8.12 第三部分：[Memory Engine 3.0 施工与验收记录](docs/v8.12-part3-memory-engine-3.0-implementation-report.md)。Recent2 冻结、动态 Extra3、摘要分块上限 64、原生官方追忆摘要与共享预算、只读 Save Shadow、GLM Cache v2 布局兼容及 Historical Retrieval Worker 已接入；2.5 存储合同保持兼容。**2026-09-24 用户明确确认 Part 3 实机 Gates 验收通过（用户报告）**，未回填逐项实测指标，历史自动化与隔离冒烟证据类别不变。该验收不等于 V8.12.1 验收或全局 V8 Full Freeze。
 
 V8.12 第二部分 Review Fix：修复历史归档索引复制实体 ID、个人记忆泛化解锁私密历史、无实体 RANGE 立即失败、主头衔伪回退、人物 WarActor 漏 Realm、历史名称不可读、多实体误判、字段筛选覆盖、朋友/宿敌未启用却无诊断及索引/Checkpoint 错误码混淆；保留旧索引读取兼容和原子 `index.json` 迁移。详见[第二部分实施报告](docs/v8.12-part2-implementation-report.md)。真实 CK3/GLM Gate 仍待执行，不能记录 `V8.12 PART 2 = PASS`。
 

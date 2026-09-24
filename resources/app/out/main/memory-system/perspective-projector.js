@@ -2,6 +2,7 @@
 
 const crypto = require("crypto");
 const { uniqueIds } = require("./memory-types");
+const { normalizeTemporalRefs } = require("./temporal-anchor-extractor");
 
 const PINNED_TYPES = new Set(["promise", "secret", "relationship", "plan", "unresolved"]);
 const PRESENCE_MARKER_KINDS = new Set(["presence_join", "presence_leave", "presence_temporary_leave", "presence_temporary_return"]);
@@ -195,6 +196,7 @@ function buildPerspectiveSummaryMap(context = {}, extraction = {}) {
         content,
         memoryIds: [...memoryIds],
         summarySegmentIds: [...summarySegmentIds],
+        temporalRefs: normalizeTemporalRefs(sharedSegments.flatMap(segment => segment.temporalRefs || [])),
         pinned,
         open,
         projectionHash
@@ -242,6 +244,10 @@ function validatePerspectiveSummaryMap(context = {}, extraction = {}, projection
       }
       const expectedMemories = (projection.memoryIds || []).map((memoryId) => memoriesById.get(memoryId)).filter(Boolean);
       const expectedSegments = (projection.summarySegmentIds || []).map((segmentId) => segmentsById.get(segmentId)).filter(Boolean);
+      const expectedRefs = normalizeTemporalRefs(expectedSegments.flatMap(segment => segment.temporalRefs || []));
+      if (JSON.stringify(normalizeTemporalRefs(projection.temporalRefs)) !== JSON.stringify(expectedRefs)) {
+        invalidPairs.push({ ownerId, counterpartId, reason: "temporal_projection_boundary_violation" });
+      }
       const expectedContent = renderPerspectiveContent(owner, expectedMemories, expectedSegments);
       const expectedHash = crypto.createHash("sha256").update(JSON.stringify({ ownerId, counterpartId, memoryIds: projection.memoryIds || [], summarySegmentIds: projection.summarySegmentIds || [], content: expectedContent })).digest("hex");
       if (projection.content !== expectedContent || projection.projectionHash !== expectedHash) {

@@ -21,8 +21,9 @@ const { planSummaryRequest } = require("./summary-budget-planner");
 const { estimateTokens } = require("../token-estimator");
 const { validateGenerationOutcome } = require("../providers/generation-outcome");
 const { normalizeGameDate } = require("../worldline/character-temporal-facts");
-const { resolveTemporalWindow } = require("./fuzzy-temporal-resolver");
-const { buildSummaryDateIndex, selectTemporalExtras } = require("./summary-date-index");
+const { resolveTemporalFocus } = require("./fuzzy-temporal-resolver");
+const { extractTemporalAnchorsFromMessages, normalizeTemporalRefs } = require("./temporal-anchor-extractor");
+const { buildDualTemporalIndex, selectDualTemporalExtras } = require("./summary-date-index");
 
 const FINAL_SUMMARY_MAX_ATTEMPTS = 2;
 const RECOVERY_MAX_ATTEMPTS = 3;
@@ -214,7 +215,7 @@ class MemoryEngine {
         participants: [mapping.numericOwnerId, numericCounterpartId], subjects: [numericCounterpartId],
         eventDate: summaryRecord.date, totalDays: summaryRecord.totalDays, source: "imported", updatedBy: "user",
         visibility: "known_group", knownBy: [mapping.numericOwnerId],
-        provenance: { finalizationId, folderOwnerId: mapping.numericOwnerId, counterpartId: numericCounterpartId, extractionMode: "user_edited_summary" }
+        provenance: { finalizationId, folderOwnerId: mapping.numericOwnerId, counterpartId: numericCounterpartId, extractionMode: "user_edited_summary", campaignToken: summaryRecord.campaignToken || null }
       });
       this.store.markKnownBy(mapping.numericOwnerId, memory.memoryId, { awareness: "imported", acquiredAt: memory.totalDays });
       const segmentId = createMemoryId("summary_edit_segment");
@@ -449,6 +450,7 @@ class MemoryEngine {
       summaryRequestId: context.summaryRequestId,
       commitMarker: context.commitMarker || null,
       date: context.date || null,
+      campaignToken: context.campaignToken || null,
       totalDays: context.totalDays ?? null,
       participants: context.participants || [],
       excludedSummaryOwnerIds: uniqueIds(context.excludedSummaryOwnerIds),
@@ -461,6 +463,20 @@ class MemoryEngine {
       perspectives,
       createdAt: new Date().toISOString()
     };
+  }
+
+  attachTemporalEvidence(context, extraction) {
+    // Recompute from the original snapshot even on recovery; never trust model metadata.
+    try {
+      const byMessage = extractTemporalAnchorsFromMessages(context.messages || [], { anchorGameDate: context.date });
+      for (const segment of extraction.summarySegments || []) {
+        segment.temporalRefs = normalizeTemporalRefs((segment.provenance?.messageIds || []).flatMap(messageId =>
+          (byMessage.get(Number(messageId)) || []).map(ref => ({ ...ref, segmentIds: [segment.segmentId] }))));
+      }
+    } catch (error) {
+      for (const segment of extraction.summarySegments || []) segment.temporalRefs = [];
+      this.trace.record("temporal_metadata_unavailable", { conversationId: context.conversationId, reason: "TEMPORAL_PARSE_FAILED" });
+    }
   }
 
   persistExtraction(context, extraction) {
@@ -511,6 +527,7 @@ class MemoryEngine {
         knownBy: [],
         provenance: {
           ...rawCandidate.provenance,
+          campaignToken: context.campaignToken || null,
           messageIds: candidateMessageIds,
           speakerIds: derivedSpeakerIds.length > 0 ? derivedSpeakerIds : uniqueIds(rawCandidate.provenance.speakerIds).filter((characterId) => allowedIds.has(characterId))
         }
@@ -986,6 +1003,7 @@ class MemoryEngine {
       }
       this.recordSummaryQualityDiagnostics(context, quality);
       if (!quality.success) throw new Error(`final_summary_quality_failed:${quality.reasons.join("|")}`);
+      this.attachTemporalEvidence(context, extraction);
       this.trace.record("extract", { conversationId: context.conversationId, reason: extraction.structured ? "structured" : "prose_fallback" });
       for (const memory of extraction.memories) this.trace.record("classify", { memoryId: memory.memoryId, type: memory.type, conversationId: context.conversationId });
       this.writeRecoverySnapshot(context, {
@@ -1107,6 +1125,7 @@ class MemoryEngine {
       finalizationId: context.finalizationId,
       summaryRequestId: context.summaryRequestId,
       date: context.date || null,
+      campaignToken: context.campaignToken || null,
       totalDays: context.totalDays ?? null,
       participants: context.participants || [],
       excludedSummaryOwnerIds: uniqueIds(context.excludedSummaryOwnerIds),
@@ -1147,6 +1166,7 @@ class MemoryEngine {
       finalizationId: snapshot.finalizationId,
       summaryRequestId: snapshot.summaryRequestId,
       date: snapshot.date,
+      campaignToken: snapshot.campaignToken || null,
       totalDays: snapshot.totalDays,
       participants,
       excludedSummaryOwnerIds: snapshot.excludedSummaryOwnerIds || [],
@@ -1328,13 +1348,21 @@ class MemoryEngine {
     return selected;
   }
 
-  retrieveForResponder({ characterId, query = "", directCounterpartIds = [], mentionedEntityIds = [], mentionedEntityNames = {}, mentionedRecallCache = null, sessionRecallCache = null, ownerFolderMemories = null, officialSummary = null, turnEpoch = 0, currentGameDate = null, currentTotalDays = null, memoryEngine3Enabled = true, temporalSummaryRecallEnabled = true, tokenBudget = 800, estimateTokens } = {}) {
+  retrieveForResponder({ characterId, query = "", directCounterpartIds = [], mentionedEntityIds = [], mentionedEntityNames = {}, mentionedRecallCache = null, sessionRecallCache = null, ownerFolderMemories = null, officialSummary = null, turnEpoch = 0, currentGameDate = null, currentTotalDays = null, campaignToken = null, sceneId = null, memoryEngine3Enabled = true, temporalSummaryRecallEnabled = true, tokenBudget = 800, estimateTokens } = {}) {
     const startedAt = Date.now();
     const ownerId = Number(characterId);
+    const temporalScope = JSON.stringify([campaignToken, sceneId]);
+    const previousScope = sessionRecallCache?.get(ownerId)?.temporalScope;
+    if (previousScope != null && previousScope !== temporalScope) {
+      sessionRecallCache.delete(ownerId);
+      mentionedRecallCache?.delete(ownerId);
+    }
     const directIds = uniqueIds(directCounterpartIds).filter((id) => id !== ownerId);
     const mentionedIds = uniqueIds(mentionedEntityIds).filter((id) => id !== ownerId && !directIds.includes(id));
     const budget = Math.max(0, Number(tokenBudget) || 0);
-    const folderMemories = Array.isArray(ownerFolderMemories) ? ownerFolderMemories : directIds.length > 0 || mentionedIds.length > 0 ? this.store.loadFolderSummariesForCharacter(ownerId) : [];
+    const folderSnapshot = Array.isArray(ownerFolderMemories) ? ownerFolderMemories : directIds.length > 0 || mentionedIds.length > 0 ? this.store.loadFolderSummariesForCharacter(ownerId) : [];
+    const folderMemories = folderSnapshot.filter(memory => Number(memory.provenance?.folderOwnerId) === ownerId
+      && (!memory.provenance?.campaignToken || memory.provenance.campaignToken === campaignToken));
     const directGroups = new Map();
     for (const counterpartId of directIds) {
       const memories = this.store.loadDirectPairSummaries(ownerId, counterpartId, folderMemories);
@@ -1360,12 +1388,15 @@ class MemoryEngine {
     }
     if (mentionedRecallCache instanceof Map && (capturedMentioned || !cachedMentioned)) mentionedRecallCache.set(ownerId, { groups: new Map([...cachedGroups, ...mentionedGroups]) });
     const mentionedCacheHit = mentionedIds.length > 0 && !capturedMentioned && cachedMentioned?.groups instanceof Map;
-    const internalMemories = this.store.queryMemories({ characterId: ownerId, includeFolderSummaries: false });
+    const internalMemories = this.store.queryMemories({ characterId: ownerId, includeFolderSummaries: false })
+      .filter(memory => !memory.provenance?.campaignToken || memory.provenance.campaignToken === campaignToken);
     const responderCache = sessionRecallCache instanceof Map
       ? sessionRecallCache.get(ownerId) || { mentionedSnapshots: new Map(), topicPatch: null }
       : { mentionedSnapshots: new Map(), topicPatch: null };
     if (!(responderCache.mentionedSnapshots instanceof Map)) responderCache.mentionedSnapshots = new Map();
+    responderCache.temporalScope = temporalScope;
     const officialMemory = memoryEngine3Enabled && officialSummary?.sourceType === "CK3_OFFICIAL_RECOLLECTION"
+      && (!campaignToken || officialSummary.campaignToken === campaignToken)
       && Number(officialSummary.playerId) === ownerId && officialSummary.memoryCount > 0 ? createMemoryRecord({
         memoryId: `official_${ownerId}`, type: "folder_summary", subtype: "official_recollection",
         content: officialSummary.content, importance: 0.95, confidence: 1, source: "game_fact",
@@ -1429,15 +1460,25 @@ class MemoryEngine {
     if (!Array.isArray(responderCache.stable)) responderCache.stable = stable;
     const frozenSelectedTokens = [...direct, ...deduplicatedMentioned, ...stable].reduce((total, entry) => total + Number(entry.tokens || 0), 0);
     const extraBudget = Math.max(0, budget - frozenSelectedTokens);
-    const temporal = memoryEngine3Enabled && temporalSummaryRecallEnabled ? resolveTemporalWindow(query, { currentGameDate, currentTotalDays }) : { triggered: false, reason: "DISABLED" };
+    const temporal = memoryEngine3Enabled && temporalSummaryRecallEnabled
+      ? resolveTemporalFocus(query, responderCache.temporalFocus, { currentGameDate, currentTotalDays, turnEpoch, sceneId })
+      : { triggered: false, reason: "DISABLED", nextFocus: null };
     const exactTimeQuery = temporal.triggered && temporal.mode === "TARGET_DATE";
+    const blockedTimeQuery = temporal.requested && !temporal.triggered;
+    responderCache.pendingTemporalFocus = temporal.nextFocus || null;
     const directMemories = [...directGroups.values()].flat().map((entry) => entry.memory);
     const mentionedCandidates = [...mentionedGroups.values()].flat().map((entry) => entry.memory);
-    const temporalCandidates = temporal.triggered ? selectTemporalExtras(
-      [...directIds.flatMap((counterpartId) => this.store.getSummaryDateIndexForPair(ownerId, counterpartId, { currentGameDate, currentTotalDays, ownerFolderMemories: folderMemories })),
-        ...buildSummaryDateIndex(mentionedCandidates, { ownerId, currentGameDate, currentTotalDays })],
-      [...directMemories, ...mentionedCandidates], temporal, selectedFolderKeys, 3
-    ) : [];
+    if (!(responderCache.seenDynamicSummaries instanceof Set)) responderCache.seenDynamicSummaries = new Set();
+    const temporalIndex = temporal.triggered
+      ? [...directIds.flatMap(counterpartId => this.store.getSummaryDateIndexForPair(ownerId, counterpartId, {
+        currentGameDate, currentTotalDays, ownerFolderMemories: folderSnapshot, campaignToken, dualTemporal: true })),
+      ...buildDualTemporalIndex(mentionedCandidates, { ownerId, currentGameDate, currentTotalDays, campaignToken })] : [];
+    const temporalSelections = selectDualTemporalExtras(temporalIndex, [...directMemories, ...mentionedCandidates], temporal, {
+      query, entityIds: mentionedIds, excludedKeys: [...selectedFolderKeys, ...responderCache.seenDynamicSummaries],
+      getKey: memory => this.getRouteMemoryKey(memory), limit: 3
+    });
+    const temporalCandidates = temporalSelections.map(entry => entry.memory);
+    const temporalReasons = new Map(temporalSelections.map(entry => [entry.memory.memoryId, entry.reason]));
     const rankedExtras = this.ranker.rank(folderMemories, { query, entityIds: mentionedIds, participantIds: directIds, currentTotalDays });
     const topicCandidates = query.trim() ? rankedExtras.filter((entry) => Number(entry.reason?.query) >= 0.28).map((entry) => entry.memory) : [];
     const routedKeys = new Set([...directGroups.values(), ...mentionedGroups.values()].flat().map((entry) => this.getRouteMemoryKey(entry.memory)));
@@ -1446,14 +1487,14 @@ class MemoryEngine {
     const sameTurn = responderCache.dynamicTurn === turnEpoch;
     const extra = memoryEngine3Enabled && sameTurn ? responderCache.dynamicExtra || [] : [];
     let extraTokens = 0;
-    const extraSources = exactTimeQuery ? [["temporal", temporalCandidates]]
+    const extraSources = exactTimeQuery || blockedTimeQuery ? [["temporal", temporalCandidates]]
       : [["temporal", temporalCandidates], ["mentioned", mentionedCandidates], ["topic", topicCandidates], ["important", importantCandidates]];
     for (const [source, candidates] of memoryEngine3Enabled && !sameTurn ? extraSources : []) {
       for (const memory of candidates) {
         if (extra.length >= 3 || extraTokens >= extraBudget) break;
         const key = this.getRouteMemoryKey(memory);
         if (selectedFolderKeys.has(key) || responderCache.seenDynamicSummaries.has(key)) continue;
-        const [fitted] = this.ranker.selectWithinBudget([{ memory, score: 0, reason: { source } }], {
+        const [fitted] = this.ranker.selectWithinBudget([{ memory, score: 0, reason: source === "temporal" ? temporalReasons.get(memory.memoryId) : { source } }], {
           tokenBudget: extraBudget - extraTokens, estimateTokens, allowTruncate: true
         });
         if (!fitted) continue;
@@ -1466,8 +1507,11 @@ class MemoryEngine {
       responderCache.dynamicTurn = turnEpoch;
       responderCache.dynamicExtra = extra;
     }
-    const temporalExtraText = exactTimeQuery
-      ? `【本轮时间核对：游戏当前${normalizeGameDate(currentGameDate)?.display}；${temporal.expression}${temporal.targetGameYear ? `对应${temporal.targetGameYear}年` : ""}】${extra.length ? `以下摘要的存档日期与目标时段相符；只能引用其中确属该时段的事件。\n${this.formatMemoryBlock("本轮时间匹配摘要", extra)}` : "未检索到该时段的对话摘要；不等于当时没有发生事件。"}冻结的最近两篇对话和官方追忆可能含其他日期，不能把其他年份的事当成该时段的事。`
+    const temporalDescription = extra.map(entry => entry.reason?.source === "temporal"
+      ? `命中依据：${entry.reason.axis === "event" ? "原始对话中的事件时间引用" : "对话发生日期"} ${entry.reason.fromGameDate || ""}～${entry.reason.toGameDate || ""}（${{ year: "年", month: "月", day: "日" }[entry.reason.precision] || "未知"}精度，不推断更精确日期）。摘要自身的对话日期仍为${entry.memory.eventDate || "未知"}。` : "").filter(Boolean).join("\n");
+    const temporalExtraText = blockedTimeQuery ? "【本轮时间核对】缺少可确认的游戏日期或时间范围，无法安全检索；不得用其他年份的记忆代答。"
+      : exactTimeQuery
+      ? `【本轮时间核对：游戏当前${normalizeGameDate(currentGameDate)?.display}；${temporal.expression}${temporal.targetGameYear ? `对应${temporal.targetGameYear}年` : ""}】时间含义：${temporal.axisIntent === "EVENT" ? "事件发生时间" : temporal.axisIntent === "CONVERSATION" ? "对话发生时间" : "事件/对话混合查询"}。${extra.length ? `${temporalDescription}\n时间引用证明当时谈及该时段，不单独证明事件属实；只引用正文实际保留的证据。\n${this.formatMemoryBlock("本轮时间匹配摘要", extra)}` : "本轮未检索到可新增的该时段对话摘要；此前已注入的对应证据仍可使用，不等于当时没有发生事件。"}冻结的最近两篇对话和官方追忆可能含其他日期，不能把其他年份的事当成该时段的事。`
       : this.formatMemoryBlock("本轮召回摘要（仅本轮注入，最多三篇）", extra);
     let topicPatch = memoryEngine3Enabled ? [] : Array.isArray(responderCache.topicPatch) ? responderCache.topicPatch : [];
     if (!memoryEngine3Enabled && !responderCache.topicPatchLocked && query.trim()) {
@@ -1487,6 +1531,8 @@ class MemoryEngine {
     }
     const selectedTokens = [...stable, ...relevant].reduce((total, entry) => total + Number(entry.tokens || 0), 0);
     const folderCandidateCount = new Set([...directGroups.values(), ...mentionedGroups.values()].flat().map((entry) => this.getRouteMemoryKey(entry.memory))).size;
+    const temporalMatches = temporalIndex.filter(entry => Number.isFinite(entry.fromTotalDays)
+      && entry.fromTotalDays <= temporal.primaryWindow?.toTotalDays && entry.toTotalDays >= temporal.primaryWindow?.fromTotalDays);
     this.trace.record("retrieval_metrics", {
       characterId: ownerId,
       durationMs: Date.now() - startedAt,
@@ -1500,6 +1546,18 @@ class MemoryEngine {
       patchInserted: extra.length > 0,
       temporalTriggered: temporal.triggered,
       temporalExtraCount: extra.filter((entry) => entry.reason?.source === "temporal").length,
+      temporalAxis: temporal.axisIntent || "none",
+      targetGameYear: temporal.targetGameYear || null,
+      eventTimeCandidates: new Set(temporalMatches.filter(entry => entry.axis === "event").map(entry => entry.summaryId)).size,
+      conversationTimeCandidates: new Set(temporalMatches.filter(entry => entry.axis === "conversation").map(entry => entry.summaryId)).size,
+      temporalEventHitCount: extra.filter(entry => entry.reason?.axis === "event").length,
+      temporalConversationHitCount: extra.filter(entry => entry.reason?.axis === "conversation").length,
+      temporalFocusReused: temporal.focusReused === true,
+      temporalFocusReuseCount: temporal.focusReused ? 1 : 0,
+      temporalMissCount: temporal.triggered && !temporalMatches.length ? 1 : 0,
+      temporalBudgetOmittedCount: temporalSelections.length - extra.filter(entry => entry.reason?.source === "temporal").length,
+      memoryStableTokens: frozenSelectedTokens,
+      memoryDynamicExtraTokens: extra.reduce((total, entry) => total + entry.tokens, 0),
       indexSize: Object.keys(this.store.index.memories || {}).length
     });
     return {
@@ -1539,7 +1597,13 @@ class MemoryEngine {
   commitDynamicSummaryRecall(characterId, sessionRecallCache, turnEpoch) {
     const state = sessionRecallCache?.get(Number(characterId));
     if (!state || state.dynamicTurn !== turnEpoch) return;
+    this.commitTemporalFocus(characterId, sessionRecallCache, turnEpoch);
     for (const entry of state.dynamicExtra || []) state.seenDynamicSummaries.add(this.getRouteMemoryKey(entry.memory));
+  }
+
+  commitTemporalFocus(characterId, sessionRecallCache, turnEpoch) {
+    const state = sessionRecallCache?.get(Number(characterId));
+    if (state?.dynamicTurn === turnEpoch) state.temporalFocus = state.pendingTemporalFocus || null;
   }
 
   retrieveTurnRecall({ characterId, query = "", assistContext = "", entityIds = [], entityNames = [], participantIds = [], ownerFolderMemories = null, currentTotalDays = null, tokenBudget = 256, estimateTokens, cache = null, turnEpoch = 0 } = {}) {

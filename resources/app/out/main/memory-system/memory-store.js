@@ -6,7 +6,8 @@ const path = require("path");
 const { createMemoryRecord, uniqueIds } = require("./memory-types");
 const { CURRENT_MEMORY_SCHEMA_VERSION } = require("./memory-schema");
 const { MEMORY_ENGINE_VERSION } = require("../version");
-const { buildSummaryDateIndex } = require("./summary-date-index");
+const { buildSummaryDateIndex, buildDualTemporalIndex } = require("./summary-date-index");
+const { normalizeTemporalRefs } = require("./temporal-anchor-extractor");
 
 function removeDirectoryTree(directory) {
   for (const entry of fs.readdirSync(directory, { withFileTypes: true })) {
@@ -447,14 +448,16 @@ class MemoryStore {
     }
   }
 
-  getSummaryDateIndexForPair(ownerId, counterpartId, { currentGameDate, currentTotalDays, ownerFolderMemories = null } = {}) {
+  getSummaryDateIndexForPair(ownerId, counterpartId, { currentGameDate, currentTotalDays, ownerFolderMemories = null, campaignToken = null, dualTemporal = false } = {}) {
     const key = String(ownerId) + "|" + String(counterpartId);
     const previous = this.summaryDateIndexCache.get(key);
     if (previous?.gameDate === currentGameDate && previous?.totalDays === currentTotalDays
+      && previous.campaignToken === campaignToken && previous.dualTemporal === dualTemporal
       && previous.ownerFolderMemories === ownerFolderMemories) return previous.entries;
     const memories = this.loadDirectPairSummaries(ownerId, counterpartId, ownerFolderMemories);
-    const entries = buildSummaryDateIndex(memories, { ownerId, counterpartId, currentGameDate, currentTotalDays });
-    this.summaryDateIndexCache.set(key, { gameDate: currentGameDate, totalDays: currentTotalDays, ownerFolderMemories, entries });
+    const build = dualTemporal ? buildDualTemporalIndex : buildSummaryDateIndex;
+    const entries = build(memories, { ownerId, counterpartId, currentGameDate, currentTotalDays, campaignToken });
+    this.summaryDateIndexCache.set(key, { gameDate: currentGameDate, totalDays: currentTotalDays, ownerFolderMemories, campaignToken, dualTemporal, entries });
     return entries;
   }
 
@@ -510,7 +513,9 @@ class MemoryStore {
           const finalizationId = summary.finalizationId || null;
           // Pair projections from one session can differ by presence and subject.
           // Only byte-identical bodies are mirrors; never discard another pair's facts.
-          const sessionKey = finalizationId ? `${ownerId}|${finalizationId}|${summary.content}` : `${ownerId}|${summary.date || ""}|${summary.totalDays ?? ""}|${summary.content}`;
+          const temporalRefs = normalizeTemporalRefs(summary.temporalRefs);
+          const temporalSignature = temporalRefs.length ? `|${JSON.stringify(temporalRefs)}` : "";
+          const sessionKey = (summary.campaignToken ? `${summary.campaignToken}|` : "") + (finalizationId ? `${ownerId}|${finalizationId}|${summary.content}${temporalSignature}` : `${ownerId}|${summary.date || ""}|${summary.totalDays ?? ""}|${summary.content}${temporalSignature}`);
           const digest = crypto.createHash("sha1").update(sessionKey).digest("hex").slice(0, 16);
           const existing = sessions.get(sessionKey);
           if (existing) {
@@ -523,6 +528,7 @@ class MemoryStore {
             existing.provenance.counterpartIds = uniqueIds([...existing.provenance.counterpartIds, counterpartId]);
             existing.provenance.counterpartNames = [...new Set([...existing.provenance.counterpartNames, counterpartName].filter(Boolean))];
             existing.provenance.participantProfiles = mergeCharacterProfiles(existing.provenance.participantProfiles || [], summaryProfiles);
+            existing.provenance.temporalRefs = normalizeTemporalRefs([...existing.provenance.temporalRefs, ...(summary.temporalRefs || [])]);
             continue;
           }
           sessions.set(sessionKey, createMemoryRecord({
@@ -543,6 +549,8 @@ class MemoryStore {
             knownBy: [ownerId],
             tags: [counterpartName, ...participantNames].filter(Boolean),
             provenance: {
+              campaignToken: summary.campaignToken || null,
+              temporalRefs: summary.temporalRefs || [],
               finalizationId,
               folderOwnerId: ownerId,
               folderName: folder.name,

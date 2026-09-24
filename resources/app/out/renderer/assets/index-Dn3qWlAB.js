@@ -21196,6 +21196,7 @@ const SummariesManager = () => {
       ownerName: metadata.ownerName || metadata.playerName,
       counterpartName: metadata.counterpartName || metadata.characterName,
       conversationFile: metadata.conversationFile,
+      sourceType: metadata.summaries[index]?.sourceType,
       index,
       content
     });
@@ -21508,6 +21509,7 @@ const SummariesManager = () => {
             editingEntry.index + 1
           ] })
         ] }),
+        editingEntry.sourceType === "CK3_OFFICIAL_RECOLLECTION" && /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "help-text", children: "官方追忆来自 CK3。本页修改作用于当前同步副本；开始新对话后，系统可能根据最新 CK3 日志重新覆盖。" }),
         /* @__PURE__ */ jsxRuntimeExports.jsx(
           "textarea",
           {

@@ -1,6 +1,7 @@
 "use strict";
 
 const { normalizeGameDate } = require("../worldline/character-temporal-facts");
+const { extractTemporalAnchors, detectTemporalAxisIntent, gameDateFromSerial } = require("./temporal-anchor-extractor");
 
 const DIGITS = { 零: 0, 〇: 0, 一: 1, 二: 2, 两: 2, 三: 3, 四: 4, 五: 5, 六: 6, 七: 7, 八: 8, 九: 9 };
 
@@ -20,7 +21,6 @@ function resolveTemporalWindow(query, { currentGameDate, currentTotalDays, earli
   const today = Number.isFinite(rawToday) && rawToday > 0 ? rawToday : current?.serial;
   if (!current || !Number.isFinite(today) || today <= 0) return { triggered: false, reason: "GAME_DATE_UNAVAILABLE" };
   const text = String(query || "").replace(/\s+/g, "");
-  const day = 1;
   const year = 365;
   const month = 30;
   const result = (expression, concept, mode, primaryWindow, expansionWindow = primaryWindow, order = "RECENT_FIRST", targetTotalDays = null) => ({
@@ -39,18 +39,18 @@ function resolveTemporalWindow(query, { currentGameDate, currentTotalDays, earli
       window(targetTotalDays - expansionToleranceDays, targetTotalDays + expansionToleranceDays),
       "TARGET_DISTANCE", targetTotalDays);
   };
-  const fullDate = text.match(/(\d{3,6})年(\d{1,2})月(\d{1,2})日/) || text.match(/(\d{3,6})[.\/-](\d{1,2})[.\/-](\d{1,2})/);
-  if (fullDate) return target(fullDate[0], "EXPLICIT_DATE", atDate(+fullDate[1], +fullDate[2], +fullDate[3]), 30, 90);
-  const yearMonth = text.match(/(\d{3,6})年(\d{1,2})月/);
+  const fullDate = text.match(/(?<!\d)(\d+)年(\d+)月(\d+)[日号]/) || text.match(/(?<![\d.\/-])(\d+)[.\/-](\d+)[.\/-](\d+)/);
+  if (fullDate) return target(fullDate[0], "EXPLICIT_DATE", atDate(+fullDate[1], +fullDate[2], +fullDate[3]), 0, 0);
+  const yearMonth = text.match(/(?<!\d)(\d+)年(\d+)月/);
   if (yearMonth) {
     const from = atDate(+yearMonth[1], +yearMonth[2], 1);
     const nextYear = +yearMonth[2] === 12 ? +yearMonth[1] + 1 : +yearMonth[1];
     const nextMonth = +yearMonth[2] === 12 ? 1 : +yearMonth[2] + 1;
     const to = atDate(nextYear, nextMonth, 1);
-    return Number.isFinite(from) && Number.isFinite(to) && from <= today ? result(yearMonth[0], "EXPLICIT_MONTH", "TARGET_DATE", window(from, to - 1), window(from - month, to + month), "TARGET_DISTANCE", (from + to) / 2) : { triggered: false, reason: "INVALID_DATE" };
+    return Number.isFinite(from) && Number.isFinite(to) && from <= today ? result(yearMonth[0], "EXPLICIT_MONTH", "TARGET_DATE", window(from, to - 1), undefined, "TARGET_DISTANCE", (from + to - 1) / 2) : { triggered: false, reason: "INVALID_DATE" };
   }
-  const explicitYear = text.match(/(\d{3,6})年(?!前|来|间)/);
-  if (explicitYear) {
+  const explicitYear = text.match(/(?<!\d)(\d+)年(?!前|来|间|后)/);
+  if (explicitYear && !/(过去|最近|近些来|历时|持续)$/.test(text.slice(0, explicitYear.index))) {
     const from = atDate(+explicitYear[1], 1, 1);
     const to = atDate(+explicitYear[1] + 1, 1, 1);
     return Number.isFinite(from) && Number.isFinite(to) && from <= today ? result(explicitYear[0], "EXPLICIT_YEAR", "TARGET_DATE", window(from, to - 1), window(from, to - 1), "TARGET_DISTANCE", (from + to) / 2) : { triggered: false, reason: "INVALID_DATE" };
@@ -74,9 +74,17 @@ function resolveTemporalWindow(query, { currentGameDate, currentTotalDays, earli
       return { ...result(ago[0], "INTERVAL_AGO", "TARGET_DATE", window(from, to - 1), undefined, "TARGET_DISTANCE",
         atDate(selected, current.month, current.day) ?? atDate(selected, current.month, 28)), targetGameYear: selected };
     }
-    const unitDays = ago[2] === "天" ? day : month;
-    const tolerance = ago[2] === "天" ? 7 : 30;
-    return target(ago[0], "INTERVAL_AGO", today - amount * unitDays, tolerance, tolerance * 2);
+    const ref = extractTemporalAnchors(ago[0], { anchorGameDate: current.canonical, messageId: 0 })[0];
+    if (!ref) return { triggered: false, reason: "INVALID_DATE" };
+    const from = today + normalizeGameDate(ref.fromGameDate).serial - current.serial;
+    const to = today + normalizeGameDate(ref.toGameDate).serial - current.serial;
+    return { ...result(ago[0], "INTERVAL_AGO", "TARGET_DATE", window(from, to), undefined, "TARGET_DISTANCE", (from + to) / 2), targetGameYear: ref.targetGameYear };
+  }
+  const calendarRef = extractTemporalAnchors(text, { anchorGameDate: current.canonical, messageId: 0 })[0];
+  if (calendarRef) {
+    const from = today + normalizeGameDate(calendarRef.fromGameDate).serial - current.serial;
+    const to = today + normalizeGameDate(calendarRef.toGameDate).serial - current.serial;
+    return { ...result(calendarRef.expression, "CALENDAR_DATE", "TARGET_DATE", window(from, to), undefined, "TARGET_DISTANCE", (from + to) / 2), targetGameYear: calendarRef.targetGameYear };
   }
   const interval = text.match(new RegExp("(过去|最近|近些来)(" + number + ")年"));
   if (interval) {
@@ -111,4 +119,52 @@ function resolveTemporalWindow(query, { currentGameDate, currentTotalDays, earli
   return { triggered: false, reason: "NO_TIME_EXPRESSION" };
 }
 
-module.exports = { resolveTemporalWindow };
+// Pure proposal only: the caller owns per-responder storage and successful-reply commit.
+function resolveTemporalFocus(query, previousFocus, { currentGameDate, currentTotalDays, turnEpoch, sceneId } = {}) {
+  const text = typeof query === "string" ? query : "";
+  const axisIntent = detectTemporalAxisIntent(query);
+  const temporal = resolveTemporalWindow(query, { currentGameDate, currentTotalDays });
+  // Intent detection needs no anchor: missing CK3 dates must not turn time requests into topic recall.
+  const requested = temporal.triggered || /\d+\s*年|\d+[./-]\d+[./-]\d+|\d+\s*月|[零〇一二两三四五六七八九十百\d]+\s*(?:年|个月|月|天|日)\s*前|去年|前年|上个月|上月|昨天|昨日|前天|前日|那一年|那年|当年|那时|当时|好多年|许多年|倏经数载|阅岁既久|很久以前|夙昔|囊昔|往昔|早先|旧时|曩昔|曩日|当初|始时|曩初|向初|前些日子|前阵子|日前|顷来|前时|隔了一阵子|过了一段日子|居顷之|既而|逾时|前些年|顷年|顷岁|这些年|近些年来|这几年|比来|比年|迩岁|往年|往岁|旧岁|早年|年轻那时候|早岁|少日|前不久|向者|迩来|昨来|近来|最近|近日|许久|多时|从前|曩时|昔时|往时|过去[零〇一二两三四五六七八九十百\d]+年/.test(text)
+    || ((previousFocus != null || /^(?:后来|之后|随后)(?:呢|如何|怎么样|发生了什么)?[？?。]*$/.test(text.trim())) && /后来|之后|随后/.test(text));
+  const result = { ...temporal, requested, axisIntent, focusReused: false, nextFocus: null };
+  const current = normalizeGameDate(currentGameDate);
+  if (!current) return result;
+  const rawToday = Number(currentTotalDays);
+  const today = Number.isFinite(rawToday) && rawToday > 0 ? rawToday : current.serial;
+  const canStore = Number.isSafeInteger(turnEpoch) && turnEpoch >= 0 && sceneId != null;
+  if (temporal.triggered) {
+    if (temporal.mode !== "TARGET_DATE" || !canStore) return result;
+    const from = gameDateFromSerial(current.serial + temporal.primaryWindow.fromTotalDays - today);
+    const to = gameDateFromSerial(current.serial + temporal.primaryWindow.toTotalDays - today);
+    if (!from || !to) return result;
+    result.targetGameYear = from.year;
+    result.nextFocus = {
+      targetGameYear: from.year, fromGameDate: from.canonical, toGameDate: to.canonical,
+      axisIntent, axis: axisIntent.toLowerCase(), establishedTurn: turnEpoch, lastUsedTurn: turnEpoch,
+      sceneId, currentGameDate: current.canonical
+    };
+    return result;
+  }
+  if (temporal.reason !== "NO_TIME_EXPRESSION" || !canStore || !previousFocus ||
+      /最近|近日|近来|现在|今天|明天|明年|未来|换个话题|说点别的|不说这个/.test(text) ||
+      /\d+\s*(?:年|月)|[零〇一二两三四五六七八九十百\d]+\s*(?:年|个月|月|天|日)\s*[前后]|今年|本月/.test(text) ||
+      !/那一年|那年|当年|那时|当时|后来|之后|随后/.test(text)) return result;
+  const gap = turnEpoch - previousFocus.lastUsedTurn;
+  if (!Number.isSafeInteger(previousFocus.lastUsedTurn) || gap < 0 || gap > 3 ||
+      previousFocus.sceneId !== sceneId || previousFocus.currentGameDate !== current.canonical ||
+      !["EVENT", "CONVERSATION", "MIXED"].includes(previousFocus.axisIntent)) return result;
+  const from = normalizeGameDate(previousFocus.fromGameDate), to = normalizeGameDate(previousFocus.toGameDate);
+  if (!from || !to || from.serial > to.serial || to.serial > current.serial) return result;
+  const primaryWindow = { fromTotalDays: today + from.serial - current.serial, toTotalDays: today + to.serial - current.serial };
+  const inheritedAxis = /聊|谈|说|讨论|讲过|告诉|提过|提到|问过|回答|对话|发生|战争|战役|叛乱|婚礼|死亡|出生|被俘|继承|加冕|盟约|事件|那件事|那场/.test(text)
+    ? axisIntent : previousFocus.axisIntent;
+  return {
+    triggered: true, requested: true, expression: text, normalizedConcept: "TEMPORAL_FOCUS", mode: "TARGET_DATE",
+    primaryWindow, expansionWindow: { ...primaryWindow }, targetTotalDays: (primaryWindow.fromTotalDays + primaryWindow.toTotalDays) / 2,
+    targetGameYear: from.year, maxResults: 3, order: "TARGET_DISTANCE", axisIntent: inheritedAxis, focusReused: true,
+    nextFocus: { ...previousFocus, axisIntent: inheritedAxis, axis: inheritedAxis.toLowerCase(), lastUsedTurn: turnEpoch }
+  };
+}
+
+module.exports = { resolveTemporalWindow, detectTemporalAxisIntent, resolveTemporalFocus };

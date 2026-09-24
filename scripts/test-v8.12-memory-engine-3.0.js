@@ -237,8 +237,8 @@ async function testNativeSummaryLifecycle() {
     engine.commitDynamicSummaryRecall(2, mentionSession, 1);
     assert.equal(engine.retrieveForResponder({ ...mentionedInput, turnEpoch: 2 }).extra.length, 0);
     const fitted = engine.ranker.selectWithinBudget([{ memory: { ...first.direct.at(-1).memory,
-      content: "说明\n\n" + "长".repeat(300) + "\n\n完整的短事件" }, score: 1 }], { tokenBudget: 30, estimateTokens, allowTruncate: true });
-    assert.equal(fitted[0].memory.content, "说明\n\n完整的短事件");
+      content: "说明\n\n1152年1月1日：" + "长".repeat(300) + "\n\n1151年1月1日：完整的短事件" }, score: 1 }], { tokenBudget: 30, estimateTokens, allowTruncate: true });
+    assert.equal(fitted[0].memory.content, "说明\n\n1151年1月1日：完整的短事件");
     const manager = createSummariesManager({ fs, path, summariesDir, memoryEngine: engine, memorySystem });
     assert((await manager.listAllSummaries()).some(entry => entry.characterName === "官方追忆摘要"));
     assert.equal((await manager.updateSummary(2, 2, 0, "手工修订追忆")).success, true);

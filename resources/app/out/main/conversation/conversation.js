@@ -471,6 +471,8 @@ class Conversation {
       ownerFolderMemories: memoryState.mentionProfileCache.ownerFolderMemoriesById.get(Number(npc.id)) || [],
       currentGameDate: this.gameData.date,
       currentTotalDays: this.gameData.totalDays,
+      campaignToken: this.gameData.campaignToken || null,
+      sceneId: this.id,
       memoryEngine3Enabled: memory3Settings.v812MemoryEngine3Enabled !== false,
       temporalSummaryRecallEnabled: memory3Settings.v812TemporalSummaryRecallEnabled !== false,
       officialSummary: this.gameData.getOfficialRecollectionSummary?.(npc.id, this.id) || null,
@@ -682,6 +684,7 @@ class Conversation {
   retainDynamicSummaryRecall(characterId, messageId, promptBuild, turnEpoch) {
     const text = promptBuild.blocks?.find(entry => entry.block?.id === "memory-temporal-extra")?.content;
     const cache = this.memoryState?.responderRecallCache?.get(Number(characterId));
+    if (cache?.dynamicTurn === turnEpoch) memoryEngine.commitTemporalFocus(characterId, this.memoryState.responderRecallCache, turnEpoch);
     if (!text || cache?.dynamicTurn !== turnEpoch) return;
     if (!this.dynamicRecallHistory) this.dynamicRecallHistory = new Map();
     if (!this.dynamicRecallHistory.has(Number(characterId))) this.dynamicRecallHistory.set(Number(characterId), new Map());
@@ -988,6 +991,7 @@ class Conversation {
           cacheEpoch: this.memoryState?.rollingState?.cacheEpoch || 0
         }
       );
+      let chatCachedTokens = null;
       if (settingsRepository.getGlobalStreamSetting() && typeof result === "object" && typeof result[Symbol.asyncIterator] === "function") {
         try {
           const streamIterator = result;
@@ -1050,6 +1054,7 @@ class Conversation {
             streamCompleted = true;
           }
           const outcome = validateGenerationOutcome(finalResponse);
+          chatCachedTokens = outcome.cachedTokens;
           if (outcome.truncated) {
             placeholder.content = await this.completeTruncatedResponse(llmMessages, placeholder.content, responseState, npc);
             this.emitUpdate();
@@ -1073,6 +1078,7 @@ class Conversation {
       } else if (result && typeof result === "object" && "content" in result && typeof result.content === "string") {
         if (!this.isResponseCurrent(responseState, npc)) throw new Error("AbortError: Message cancelled");
         const outcome = validateGenerationOutcome(result);
+        chatCachedTokens = outcome.cachedTokens;
         if (!outcome.complete && !outcome.truncated) throw new Error(`chat_generation_incomplete:${outcome.finishReason || "unknown"}`);
         placeholder.content = outcome.truncated
           ? await this.completeTruncatedResponse(llmMessages, result.content, responseState, npc)
@@ -1088,6 +1094,7 @@ class Conversation {
         throw new Error("Bad LLM response format");
       }
       this.retainDynamicSummaryRecall(npc.id, msgId, promptBuild, turnEpoch);
+      if (chatCachedTokens != null) memoryEngine.trace.record("provider_cache_usage", { characterId: npc.id, conversationId: this.id, cachedTokens: chatCachedTokens });
     } catch (error) {
       const staleResponse = responseState.stale || controller.signal.aborted || !this.isResponseCurrent(responseState, npc) || error instanceof Error && error.message === "AbortError: Message cancelled";
       if (staleResponse) {
@@ -1530,6 +1537,7 @@ class Conversation {
     return {
       conversationId: this.id,
       date: this.gameData.date,
+      campaignToken: this.gameData.campaignToken || null,
       totalDays: this.gameData.totalDays,
       messages: this.getHistory(),
       participants,
@@ -1615,6 +1623,7 @@ class Conversation {
         return this.gameData.saveCharactersSummaries(finalSummary, participantIds, {
           finalizationId: context.finalizationId,
           date: context.date,
+          campaignToken: context.campaignToken || null,
           totalDays: context.totalDays,
           excludedOwnerIds: context.excludedSummaryOwnerIds,
           participantProfiles: context.participants,
@@ -1648,6 +1657,7 @@ class Conversation {
         return this.gameData.saveCharactersSummaries(finalSummary, participantIds, {
           finalizationId: context.finalizationId,
           date: context.date,
+          campaignToken: context.campaignToken || null,
           totalDays: context.totalDays,
           excludedOwnerIds: context.excludedSummaryOwnerIds,
           participantProfiles: context.participants,

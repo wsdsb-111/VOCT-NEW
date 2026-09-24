@@ -848,6 +848,8 @@ function createGameData({ fs, path, memorySystem, memoryEngine, summariesDir, ge
           schemaVersion: memorySystem.CURRENT_SUMMARY_SCHEMA_VERSION,
           date: options.date ?? this.date,
           totalDays: options.totalDays ?? this.totalDays,
+          campaignToken: options.campaignToken || null,
+          temporalRefs: projection?.temporalRefs || [],
           content: directedContent,
           playerName: ownerName,
           playerId: owner.id,
