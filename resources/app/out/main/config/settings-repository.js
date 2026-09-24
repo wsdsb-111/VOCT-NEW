@@ -264,6 +264,9 @@ function createSettingsRepository({ Store, schema, SecureProviderSecrets, electr
       this.store.set("showSettingsOnStartup", enabled);
       console.log("Show settings on startup setting saved:", enabled);
     }
+    getChatPromptV813Layout() {
+      return true;
+    }
     getChatPromptV89Settings() {
       return {
         chatPromptV89Layout: this.store.get("chatPromptV89Layout", true) !== false,

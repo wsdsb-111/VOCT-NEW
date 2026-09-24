@@ -162,12 +162,13 @@ function createProviderDiagnostics({ fs, path, dataDir, settingsRepository, prov
         }
         const v89Settings = settingsRepository.getChatPromptV89Settings?.() || {};
         const promptBlocks = settingsRepository.getPromptSettings?.()?.blocks;
-        const v89LayoutEnabled = v89Settings.chatPromptV89Layout !== false && (!Array.isArray(promptBlocks) || promptBlocks.some((block) => block.enabled && block.type === "history"));
+        const v813Layout = settingsRepository.getChatPromptV813Layout?.() === true;
+        const v89LayoutEnabled = v813Layout || v89Settings.chatPromptV89Layout !== false && (!Array.isArray(promptBlocks) || promptBlocks.some((block) => block.enabled && block.type === "history"));
         const activePromptProfile = !v89LayoutEnabled
           ? resolveProviderPromptProfile(null, false)
           : resolveProviderPromptProfile(config, v89Settings.chatPromptV810ProviderAdapter !== false);
-        const runtimeProfileSplit = v89LayoutEnabled && v89Settings.chatPromptV89RuntimeProfileSplit === true;
-        const activeLayoutId = resolvePromptLayoutId(activePromptProfile, { v89LayoutEnabled, runtimeProfileSplit });
+        const runtimeProfileSplit = v813Layout || v89LayoutEnabled && v89Settings.chatPromptV89RuntimeProfileSplit === true;
+        const activeLayoutId = resolvePromptLayoutId(activePromptProfile, { v89LayoutEnabled, runtimeProfileSplit, v813Layout });
         const latestEntry = this.getRecentRealRequestDiff(300).find((entry) => entry.provider === config?.providerType && entry.model === config?.defaultModel && entry.realRequestDiff?.promptProfile?.id === activePromptProfile.id && entry.realRequestDiff?.promptProfile?.layoutId === activeLayoutId) || null;
         return {
           success: true,

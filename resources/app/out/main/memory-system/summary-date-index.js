@@ -5,6 +5,13 @@ const { normalizeTemporalRefs } = require("./temporal-anchor-extractor");
 const { MemoryRanker } = require("./memory-ranker");
 const { memoryMatchesCampaign } = require("./memory-types");
 
+function normalizePerspectiveTemporalRefs(refs, perspectiveMemoryIds) {
+  const allowed = new Set((Array.isArray(perspectiveMemoryIds) ? perspectiveMemoryIds : []).map(String).filter(Boolean));
+  return normalizeTemporalRefs(refs).map(ref => ({ ...ref,
+    sourceMemoryIds: ref.sourceMemoryIds.filter(id => allowed.has(id))
+  })).filter(ref => ref.segmentIds.length > 0 || ref.sourceMemoryIds.length > 0);
+}
+
 function buildSummaryDateIndex(memories, { ownerId, counterpartId, currentGameDate, currentTotalDays } = {}) {
   const current = normalizeGameDate(currentGameDate);
   const rawToday = currentTotalDays == null ? null : Number(currentTotalDays);
@@ -65,7 +72,7 @@ function buildEventTimeIndex(memories, { ownerId, counterpartId, currentGameDate
     && memoryMatchesCampaign(memory, campaignToken)
     && memory.subtype !== "official_recollection"
     && (counterpartId == null || [memory.provenance.counterpartId, ...(memory.provenance.counterpartIds || [])].map(Number).includes(Number(counterpartId))))
-    .flatMap(memory => normalizeTemporalRefs(memory.provenance?.temporalRefs).filter(ref => ref.timeRole === "event" && (ref.segmentIds.length > 0 || ref.sourceMemoryIds.length > 0)).flatMap(ref => {
+    .flatMap(memory => normalizePerspectiveTemporalRefs(memory.provenance?.temporalRefs, memory.provenance?.perspectiveMemoryIds).filter(ref => ref.timeRole === "event").flatMap(ref => {
       const from = normalizeGameDate(ref.fromGameDate), to = normalizeGameDate(ref.toGameDate);
       if (from.serial > current.serial) return [];
       return [{ summaryId: memory.memoryId, ownerId: Number(ownerId), counterpartId: counterpartId ?? null,
@@ -121,4 +128,4 @@ function selectDualTemporalExtras(index, memories, temporal, { query = "", entit
 }
 
 module.exports = { buildSummaryDateIndex, selectTemporalExtras, buildConversationTimeIndex: buildSummaryDateIndex,
-  buildEventTimeIndex, buildDualTemporalIndex, selectDualTemporalExtras };
+  buildEventTimeIndex, buildDualTemporalIndex, selectDualTemporalExtras, normalizePerspectiveTemporalRefs };

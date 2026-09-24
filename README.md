@@ -16,7 +16,7 @@ Voices of the Court 是一个面向《Crusader Kings III》（CK3）的沉浸式
 - **V8.5.2 玩家语义与世界线差异 UI（Luna + Sol）**：逐实体展示 Historical / Runtime-native 身份、歧义和来源不完整状态；年龄、父母、兄弟、婚姻和子女差异只进入懒展开的可读 Worldline Difference 面板。Sol Stage 5 已修复新旧 DTO 聚合矛盾、来源优先级和降级路径 raw 值泄漏，50 条候选分页及 A/B/C 诊断分层保持不变。120 组发布回归通过，下一步 Astra 最终集成与实机 Gate。
 - **历史认知边界**：提示词要求角色只使用当前年份已经发生、写成、流传或成名的信息，避免引用未来人物、事件、诗词和典故。
 - **当前政局优先**：皇帝和年号从实际游戏角色数据中识别，支持玩家篡位或改变历史后的沙盒玩法。
-- **Memory Engine 3.0（V8.12 Part 3）**：保留 2.5 的 `角色ID_姓名/与对方的对话.json` 人物目录、存储 schema 与写入合同；冻结 Recent2、动态 Extra3 和 CK3 官方追忆只读 Shadow 已接入，正式追忆 Prompt 注入默认关闭，Part 3 实机验收待完成。
+- **Memory Engine 3.0（V8.12 Part 3）**：保留 2.5 的 `角色ID_姓名/与对方的对话.json` 人物目录、存储 schema 与写入合同；冻结 Recent2、动态 Extra3 和 CK3 官方追忆摘要已接入。Part 3 实机 Gate 已由用户确认通过；V8.13 对话前缀缓存仍待实机验收。
 - **Official VOTC 2.0.3 Action System**：以官方 Prompt、Schema、Registry、Sandbox、审批与 28 个标准动作作为唯一动作基线；每个 NPC 完整回复后评估一次，不再运行 AE3/AE4、Action Mode、Pending 或 Social Consequence。V8.8.3 对金币转移实行 RunFile ACK 后的 CK3 回读确认，只有双方金额精确匹配才显示完成。
 - **候场与在场窗口**：多人会话可在首句前设置候场，开始后可请入内、永久离场，或选择昏迷、睡着、暂时离开三种可返回的暂离模式；每名角色只回应、获知并保存自己实际在场区间的内容。
 - **多人对话摘要**：支持玩家与当前会话中的全部 NPC 同时对话，并将多人互动摘要按实际参与者逐对保存，避免 NPC 之间的对话内容丢失。
@@ -27,9 +27,9 @@ Voices of the Court 是一个面向《Crusader Kings III》（CK3）的沉浸式
 
 ## 运行环境
 
-V8.12 第一部分、第二部分和 Part 3 前置验收已由用户确认通过。Part 3 Memory Engine 3.0 已接入代码及自动化，**Part 3 自身的 CK3/GLM 实机 Gate 尚未签发**。详见 [Part 3 施工记录](docs/v8.12-part3-memory-engine-3.0-implementation-report.md)。
+V8.12 第一部分、第二部分前置和 Part 3 实机 Gate 已由用户确认通过。V8.13 已完成本地 317/317 发布组，但真实 CK3/Provider 缓存效果仍待验收。详见 [Part 3 施工记录](docs/v8.12-part3-memory-engine-3.0-implementation-report.md)和 [V8.13 阶段记录](docs/V8阶段开发记录.md#第一百一十五阶段v813-会话冻结前缀与动态尾部)。
 
-当前施工基线为 **V8.12 Part 3：Memory Engine 3.0**：[施工记录与待验收项目](docs/v8.12-part3-memory-engine-3.0-implementation-report.md)。第一部分归档底座保持独立；第二部分只有历史 Query 才读取 Archive，普通 Current Query 不扫描历史。Memory 3.0 只改变召回和可见版本，2.5 存储合同保持兼容；官方追忆 Prompt 注入默认关闭。自动回归与隔离 Electron 冒烟不替代真实 CK3/GLM Gate。第一部分记录见[安全收口与 Temporal Archive 底座](docs/v8.12-part1-implementation-report.md)，V8.8 百年旧档验收见[回填记录](docs/v8.8-long-campaign-field-acceptance.md)。以下版本段落为前置实施记录。
+当前施工基线为 **V8.13：会话冻结前缀与动态尾部**：[阶段记录与待验收项目](docs/V8阶段开发记录.md#第一百一十五阶段v813-会话冻结前缀与动态尾部)。开场已选 NPC（含候场者）各自预取世界线视图；实时状态与新召回只在动态尾部更新，所有 Chat Provider 共用新缓存边界。Memory Engine 3.0 保持 2.5 存储兼容，历史 AS_OF/RANGE 查询仍可按单轮动态注入。自动回归不替代真实 CK3/Provider Gate；本次隔离打包 Electron 冒烟被本机 GPU 子进程错误阻断。以下版本段落为前置实施记录。
 
 当前收尾版本为 **V8.11.1**：[一致性与知情边界实施记录](docs/v8.11.1-consistency-implementation-report.md)。实时配偶/多人观察判权修正；摘要编辑同步重建所选 Owner 的内部记忆并支持失败回滚，Legacy 删除不再静默丢失映射；数字地点和当前年份查询边界完善，fullName 移到 GLM 动态状态。305/305 发布组、374 个测试文件分类及隔离 Electron 冒烟通过；真实 CK3/GLM 与长时 Gate 待人工验收。
 

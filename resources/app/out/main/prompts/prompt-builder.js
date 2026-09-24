@@ -198,8 +198,13 @@ function createPromptBuilder({
     static buildGlmCacheAnchor(gameData) {
       return this.buildCacheAnchor(gameData, "v8.10.2").replace("VOTC_CACHE_ANCHOR_v8.10.2", "VOTC_CACHE_BLOCK_v8.10.2\nProvider Prompt Profile: GLM Cache v2\nCache prefix contract: global rules, conversation date/era, responder stable identity and stable blood kinship only. Memory, Worldline, relationships and live game state always follow the cache boundary.");
     }
+    static buildV813CacheAnchor(gameData) {
+      return this.buildCacheAnchor(gameData, "v8.13")
+        .replace("后续内容视为当前游戏的动态上下文", "后续内容依次包含本场对话的冻结事实和本轮动态上下文")
+        + "\n本场冻结的世界线只代表对话开场时该角色获准知晓的事实。对话期间经 CK3 回读确认的新状态与本轮在场信息优先；不得把冻结的旧状态当作当前状态。";
+    }
 
-    static getCacheV2Snapshots(gameData, char, memoryContext) {
+    static getCacheV2Snapshots(gameData, char, memoryContext, freezeResponder = false) {
       const cache = memoryContext?.cacheV2FrozenSnapshots;
       const conversationSource = {
         date: gameData?.date || null,
@@ -218,7 +223,7 @@ function createPromptBuilder({
       if (cache?.responders instanceof Map && char?.id != null) {
         const key = String(char.id);
         const existing = cache.responders.get(key);
-        if (!existing || existing.sourceFingerprint !== sourceFingerprint) {
+        if (!existing || !freezeResponder && existing.sourceFingerprint !== sourceFingerprint) {
           cache.responders.set(key, { sourceFingerprint, profile: JSON.parse(this.stableStringify(candidateProfile)) });
         }
         stableProfile = cache.responders.get(key).profile;
@@ -488,17 +493,18 @@ function createPromptBuilder({
       const promptSettings = settingsRepository.getPromptSettings();
       const blocks = promptSettings.blocks || [];
       const v89Settings = settingsRepository.getChatPromptV89Settings?.() || { chatPromptV89Layout: true };
-      const v89LayoutEnabled = v89Settings.chatPromptV89Layout !== false && blocks.some((block) => block.enabled && block.type === "history");
-      const runtimeProfileSplit = v89LayoutEnabled && v89Settings.chatPromptV89RuntimeProfileSplit === true;
+      const v813Layout = settingsRepository.getChatPromptV813Layout?.() === true;
+      const v89LayoutEnabled = v813Layout || v89Settings.chatPromptV89Layout !== false && blocks.some((block) => block.enabled && block.type === "history");
+      const runtimeProfileSplit = v813Layout || v89LayoutEnabled && v89Settings.chatPromptV89RuntimeProfileSplit === true;
       const configuredProfile = resolveProviderPromptProfile(providerConfig || settingsRepository.getActiveProviderConfig?.() || null, v89Settings.chatPromptV810ProviderAdapter !== false);
       const promptProfile = v89LayoutEnabled ? configuredProfile : resolveProviderPromptProfile(null, false);
       const glmCacheLayout = promptProfile.glmCacheLayout === true;
-      const glmCacheV2 = promptProfile.id === "glm_cache_v2";
-      const layoutId = resolvePromptLayoutId(promptProfile, { v89LayoutEnabled, runtimeProfileSplit });
+      const glmCacheV2 = !v813Layout && promptProfile.id === "glm_cache_v2";
+      const layoutId = resolvePromptLayoutId(promptProfile, { v89LayoutEnabled, runtimeProfileSplit, v813Layout });
       const llmMessages = [];
-      const cacheAnchor = glmCacheLayout ? this.buildGlmCacheAnchor(gameData) : this.buildCacheAnchor(gameData, runtimeProfileSplit ? "v7" : v89LayoutEnabled ? "v6" : "v5");
+      const cacheAnchor = v813Layout ? this.buildV813CacheAnchor(gameData) : glmCacheLayout ? this.buildGlmCacheAnchor(gameData) : this.buildCacheAnchor(gameData, runtimeProfileSplit ? "v7" : v89LayoutEnabled ? "v6" : "v5");
       const blocksWithTokens = [{
-        block: { id: glmCacheV2 ? "cache-anchor-glm-v8.10.2" : glmCacheLayout ? "cache-anchor-glm-v8.10" : "cache-anchor", type: "cache_anchor", label: glmCacheV2 ? "GLM Cache v2 Global Anchor" : glmCacheLayout ? "GLM Stable Cache Block" : "Stable Cache Anchor", stable: true, lifecycle: PROMPT_LIFECYCLE.GLOBAL_STATIC },
+        block: { id: v813Layout ? "cache-anchor-v8.13" : glmCacheV2 ? "cache-anchor-glm-v8.10.2" : glmCacheLayout ? "cache-anchor-glm-v8.10" : "cache-anchor", type: "cache_anchor", label: v813Layout ? "V8.13 Shared Cache Anchor" : glmCacheV2 ? "GLM Cache v2 Global Anchor" : glmCacheLayout ? "GLM Stable Cache Block" : "Stable Cache Anchor", stable: true, lifecycle: PROMPT_LIFECYCLE.GLOBAL_STATIC },
         content: cacheAnchor,
         tokens: TokenCounter.estimateTokens(cacheAnchor)
       }];
@@ -521,11 +527,11 @@ function createPromptBuilder({
         summary: currentSessionSummary,
         memoryContext
       };
-      const cacheV2Snapshots = glmCacheV2 ? this.getCacheV2Snapshots(promptGameData, char, memoryContext) : null;
+      const cacheV2Snapshots = glmCacheV2 || v813Layout ? this.getCacheV2Snapshots(promptGameData, char, memoryContext, v813Layout) : null;
       const cacheV2ConversationText = cacheV2Snapshots ? this.formatConversationFrozen(cacheV2Snapshots.conversation) : null;
       const cacheV2ResponderText = cacheV2Snapshots ? formatStableProfile(cacheV2Snapshots.stableProfile) : null;
       const cacheV2KinshipText = cacheV2Snapshots ? formatStableKinship(cacheV2Snapshots.stableProfile) : null;
-      const cacheV2LiveText = glmCacheV2 ? formatLiveProfile(createLiveProfile(char, promptGameData, memoryContext?.activeParticipantIds)) : null;
+      const cacheV2LiveText = glmCacheV2 || v813Layout ? formatLiveProfile(createLiveProfile(char, promptGameData, memoryContext?.activeParticipantIds)) : null;
       const normalizedHistory = history.map((m) => ({
         role: m.role,
         name: m.name,
@@ -621,10 +627,46 @@ function createPromptBuilder({
       const deferredMainSegments = [];
       const deferredDescriptionBlocks = [];
       const deferredContextBlocks = [];
+      const hoistedMainSegments = new Map();
+      if (v813Layout) {
+        for (const block of blocks.filter((entry) => entry.enabled && entry.type === "main" && (!entry.role || entry.role === "system"))) {
+          const template = promptSettings.mainTemplate || promptConfigManager.getDefaultMainTemplateContent();
+          for (const segment of this.splitMainTemplateSegments(template)) {
+            if (!["stable_global", "stable_history_rp"].includes(segment.id) || segment.template.includes("{{")) continue;
+            const content = this.templateEngine.renderTemplateString(segment.template, context);
+            if (!content?.trim()) continue;
+            llmMessages.push({ role: block.role || "system", content });
+            blocksWithTokens.push({
+              block: { ...block, id: `${block.id || "main"}-${segment.id}`, type: "main_segment", label: segment.label, stable: true, lifecycle: PROMPT_LIFECYCLE.GLOBAL_STATIC },
+              content,
+              tokens: TokenCounter.estimateTokens(content)
+            });
+            if (!hoistedMainSegments.has(block)) hoistedMainSegments.set(block, new Set());
+            hoistedMainSegments.get(block).add(segment.id);
+          }
+        }
+      }
       let cacheV2FrozenInserted = false;
       const insertCacheV2Frozen = () => {
-        if (!glmCacheV2 || cacheV2FrozenInserted) return;
+        if (!glmCacheV2 && !v813Layout || cacheV2FrozenInserted) return;
         cacheV2FrozenInserted = true;
+        const prefixCache = v813Layout ? memoryContext?.cacheV2FrozenSnapshots?.prefixByResponder : null;
+        const responderKey = String(char?.id ?? "");
+        let frozenText = {
+          officialRecollection: memoryContext?.officialRecollectionText,
+          directMemory: memoryContext?.directStableText,
+          stableMemory: memoryContext?.stableText,
+          mentionedSnapshot: memoryContext?.mentionedSnapshotText,
+          worldStable: memoryContext?.worldStableText,
+          worldTopic: memoryContext?.worldTopicText,
+          worldSupplemental: memoryContext?.worldSupplementalText,
+          worldCurrent: memoryContext?.worldCurrentText,
+          worldRecall: memoryContext?.worldTurnRecallText
+        };
+        if (prefixCache instanceof Map && responderKey) {
+          if (!prefixCache.has(responderKey) && memoryContext?.freezePromptPrefix !== false) prefixCache.set(responderKey, { ...frozenText });
+          frozenText = prefixCache.get(responderKey) || frozenText;
+        }
         const frozenBlocks = [
           {
             block: { id: "conversation-frozen", type: "conversation_frozen", label: "Conversation Frozen Date / Era", stable: true, lifecycle: PROMPT_LIFECYCLE.CONVERSATION_FROZEN },
@@ -640,20 +682,27 @@ function createPromptBuilder({
           },
           {
             block: { id: "memory-official-recollection", type: "memory_official_recollection", label: "CK3 Official Recollection", stable: true, lifecycle: PROMPT_LIFECYCLE.RESPONDER_FROZEN },
-            content: memoryContext?.officialRecollectionText
+            content: frozenText.officialRecollection
           },
           {
             block: { ...directMemoryBlock, stable: true, lifecycle: PROMPT_LIFECYCLE.RESPONDER_FROZEN },
-            content: memoryContext?.directStableText
+            content: frozenText.directMemory
           },
           {
             block: { ...stableMemoryBlock, stable: true, lifecycle: PROMPT_LIFECYCLE.RESPONDER_FROZEN },
-            content: memoryContext?.stableText
+            content: frozenText.stableMemory
           },
-          {
+          ...(!v813Layout ? [{
             block: { ...mentionedSnapshotBlock, stable: true, lifecycle: PROMPT_LIFECYCLE.RESPONDER_FROZEN },
-            content: memoryContext?.mentionedSnapshotText
-          }
+            content: frozenText.mentionedSnapshot
+          }] : []),
+          ...(v813Layout ? [
+            { block: { ...stableWorldBlock, stable: true, lifecycle: PROMPT_LIFECYCLE.RESPONDER_FROZEN }, content: frozenText.worldStable },
+            { block: { id: "worldline-topic", type: "worldline_topic", label: "Frozen World Topic Facts", stable: true, lifecycle: PROMPT_LIFECYCLE.RESPONDER_FROZEN }, content: frozenText.worldTopic },
+            { block: { id: "worldline-supplemental", type: "worldline_supplemental", label: "Frozen World Supplemental Knowledge", stable: true, lifecycle: PROMPT_LIFECYCLE.RESPONDER_FROZEN }, content: frozenText.worldSupplemental },
+            { block: { id: "worldline-current", type: "worldline_current", label: "Frozen Current World View", stable: true, lifecycle: PROMPT_LIFECYCLE.RESPONDER_FROZEN }, content: frozenText.worldCurrent },
+            { block: { ...subjectiveWorldBlock, stable: true, lifecycle: PROMPT_LIFECYCLE.RESPONDER_FROZEN }, content: frozenText.worldRecall }
+          ] : [])
         ];
         for (const frozen of frozenBlocks) {
           if (!frozen.content) continue;
@@ -666,7 +715,7 @@ function createPromptBuilder({
         if (preHistoryContextInserted) return;
         preHistoryContextInserted = true;
         insertCacheV2Frozen();
-        if (glmCacheV2) return;
+        if (glmCacheV2 || v813Layout) return;
         // Relationship and long-lived summaries are normally unchanged for a
         // responder. Keep them before date/scene state so a date advance does
         // not evict this useful prefix from the provider cache.
@@ -752,6 +801,8 @@ function createPromptBuilder({
           }
         }
       };
+      if (v813Layout) insertCacheV2Frozen();
+      const v813FrozenBlockCount = v813Layout ? blocksWithTokens.length : 0;
       for (const block of blocks) {
         if (!block.enabled) continue;
         if (["past_summaries", "memories", "rolling_summary"].includes(block.type)) {
@@ -766,24 +817,28 @@ function createPromptBuilder({
           presenceText: memoryContext?.presenceText,
           activeParticipantRelationshipText: activeParticipantRelationshipContext,
           cacheV2LiveText,
-          memoryStableText: glmCacheV2 ? null : memoryContext?.stableText,
-          memoryDirectText: glmCacheV2 ? null : memoryContext?.directStableText,
+          memoryStableText: glmCacheV2 || v813Layout ? null : memoryContext?.stableText,
+          memoryDirectText: glmCacheV2 || v813Layout ? null : memoryContext?.directStableText,
           memoryMentionedSnapshotText: glmCacheV2 ? null : memoryContext?.mentionedSnapshotText,
           temporalExtraText: memoryContext?.temporalExtraText,
-          worldStableText: memoryContext?.worldStableText,
+          confirmedActionText: memoryContext?.confirmedActionText,
+          worldStableText: v813Layout ? null : memoryContext?.worldStableText,
           topicPatchText: mentionedCharactersContext,
-          worldTopicText: memoryContext?.worldTopicText,
-          worldSupplementalText: memoryContext?.worldSupplementalText,
+          worldTopicText: v813Layout ? null : memoryContext?.worldTopicText,
+          worldSupplementalText: v813Layout ? null : memoryContext?.worldSupplementalText,
           turnRecallText: memoryContext?.turnRecallText,
           thirdPartyEvidenceText: memoryContext?.thirdPartyEvidenceText,
-          worldCurrentText: memoryContext?.worldCurrentText,
-          worldTurnRecallText: memoryContext?.worldTurnRecallText,
+          worldCurrentText: v813Layout ? null : memoryContext?.worldCurrentText,
+          worldTurnRecallText: v813Layout ? null : memoryContext?.worldTurnRecallText,
+          historicalWorldText: v813Layout ? memoryContext?.historicalWorldText : null,
           sessionTopicAnchorText: glmCacheLayout ? memoryContext?.topicPatchText : null,
           sessionTopicAnchorBlock,
           subjectiveWorldBlock,
           v89Layout: v89LayoutEnabled,
           glmCacheLayout,
           glmCacheV2,
+          v813Layout,
+          hoistedMainSegmentIds: hoistedMainSegments.get(block),
           runtimeProfileSplit,
           deferredMainSegments,
           deferredDescriptionBlocks,
@@ -821,11 +876,14 @@ function createPromptBuilder({
           blocksWithTokens.push({ block: suffixBlock, content: "", tokens: 0, error: `Template error in Suffix block. Check Handlebars syntax.` });
         }
       }
-      for (const tokenBlock of blocksWithTokens) {
+      for (const [index, tokenBlock] of blocksWithTokens.entries()) {
         if (!tokenBlock?.block) continue;
-        if (glmCacheV2 && !tokenBlock.block.lifecycle) tokenBlock.block.lifecycle = PROMPT_LIFECYCLE.DYNAMIC;
+        if ((glmCacheV2 || v813Layout) && !tokenBlock.block.lifecycle) tokenBlock.block.lifecycle = PROMPT_LIFECYCLE.DYNAMIC;
         if (tokenBlock.block.stable === undefined) tokenBlock.block.stable = tokenBlock.block.lifecycle && tokenBlock.block.lifecycle !== PROMPT_LIFECYCLE.DYNAMIC;
-        if (glmCacheV2 && tokenBlock.block.lifecycle === PROMPT_LIFECYCLE.DYNAMIC) tokenBlock.block.stable = false;
+        if (v813Layout && index >= v813FrozenBlockCount) {
+          tokenBlock.block.lifecycle = PROMPT_LIFECYCLE.DYNAMIC;
+          tokenBlock.block.stable = false;
+        } else if (glmCacheV2 && tokenBlock.block.lifecycle === PROMPT_LIFECYCLE.DYNAMIC) tokenBlock.block.stable = false;
       }
       const totalTokens = TokenCounter.calculateTotalTokens(llmMessages);
       const firstDynamicBlock = blocksWithTokens.findIndex((tokenBlock) => tokenBlock.block?.stable !== true);
@@ -885,7 +943,7 @@ function createPromptBuilder({
           if (renderedSegments.some((segment) => segment.content === null)) {
             return { block, content: "", tokens: 0, error: `Template error in "${block.label || "Main Prompt"}" block. Check Handlebars syntax.` };
           }
-          const nonEmptySegments = renderedSegments.filter((segment) => segment.content?.trim());
+          const nonEmptySegments = renderedSegments.filter((segment) => segment.content?.trim() && !options.hoistedMainSegmentIds?.has(segment.id));
           const immediateBlocks = [];
           for (const segment of nonEmptySegments) {
             const message = { role: block.role || "system", content: segment.content };
@@ -934,7 +992,7 @@ function createPromptBuilder({
               if (descriptionBlock && !options.runtimeProfileSplit && profileCache instanceof Map) profileCache.set(cacheKey, descriptionBlock);
             }
             if (descriptionBlock) {
-              if (options.glmCacheV2) {
+              if (options.glmCacheV2 || options.v813Layout) {
                 const tokenBlock = {
                   block: { ...block, id: `${block.id || "description"}-live`, type: "description_dynamic", label: `${block.label || "Character Description"} (Live)`, stable: false, lifecycle: PROMPT_LIFECYCLE.DYNAMIC },
                   content: descriptionBlock,
@@ -992,7 +1050,7 @@ function createPromptBuilder({
             if (Array.isArray(exampleMessages) && exampleMessages.length > 0) {
               messages.push(...exampleMessages);
               const content = exampleMessages.map((m) => `${m.role}: ${m.content}`).join("\n\n");
-              return { block: { ...block, stable: options.glmCacheV2 ? false : true, lifecycle: options.glmCacheV2 ? PROMPT_LIFECYCLE.DYNAMIC : null }, content, tokens: TokenCounter.calculateTotalTokens(exampleMessages) };
+              return { block: { ...block, stable: options.glmCacheV2 || options.v813Layout ? false : true, lifecycle: options.glmCacheV2 || options.v813Layout ? PROMPT_LIFECYCLE.DYNAMIC : null }, content, tokens: TokenCounter.calculateTotalTokens(exampleMessages) };
             }
           } catch (error) {
             const errorMsg = error instanceof Error ? error.message : String(error);
@@ -1100,7 +1158,26 @@ function createPromptBuilder({
           const appendThirdPartyEvidence = () => appendTextBlock(options.thirdPartyEvidenceText, { id: "third-party-evidence-patch", type: "third_party_evidence", label: "ThirdPartyEvidencePatch", enabled: true, role: "system", stable: false });
           const appendWorldTurnRecall = () => appendTextBlock(options.worldTurnRecallText, options.subjectiveWorldBlock || { id: "worldline-turn-recall", type: "worldline_turn_recall", label: "Worldline Turn Recall", enabled: true, role: "system", stable: false });
           if (options.v89Layout) {
-            if (!options.glmCacheLayout) {
+            if (options.v813Layout) {
+              appendTextBlock(options.cacheV2LiveText, { id: "live-character-state", type: "live_character_state", label: "Live Character State" });
+              appendDeferred(options.deferredMainSegments);
+              appendDeferred(options.deferredDescriptionBlocks);
+              appendTextBlock(options.responderGameFacts, options.responderGameFactsBlock);
+              appendTextBlock(options.activeParticipantRelationshipText, { id: "live-relationships", type: "live_relationships", label: "Live Relationships" });
+              appendPresence();
+              appendTextBlock(options.sessionTopicAnchorText, { ...options.sessionTopicAnchorBlock, label: "Session Topic Memory" });
+              appendConfiguredContext(options.deferredContextBlocks);
+              appendPriorHistory();
+              appendCurrentUser();
+              appendTextBlock(options.confirmedActionText, { id: "action-confirmed-context", type: "action_confirmed_context", label: "Confirmed In-Conversation Actions", enabled: true, role: "system" });
+              appendTemporalExtra();
+              appendTextBlock(options.memoryMentionedSnapshotText, { id: "memory-mentioned-snapshot", type: "memory_mentioned_snapshot", label: "Mentioned Character Recall", enabled: true, role: "system" });
+              appendTextBlock(options.responderFamilyFacts, options.responderFamilyFactsBlock);
+              appendTopicPatch();
+              appendTurnRecall();
+              appendThirdPartyEvidence();
+              appendTextBlock(options.historicalWorldText, { id: "worldline-historical-recall", type: "worldline_historical_recall", label: "Historical Worldline Query", enabled: true, role: "system" });
+            } else if (!options.glmCacheLayout) {
               appendPriorHistory();
               appendDeferred(options.deferredMainSegments);
               appendDeferred(options.deferredDescriptionBlocks);

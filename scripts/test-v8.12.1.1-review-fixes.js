@@ -64,6 +64,7 @@ try {
   assert.deepEqual(restarted.store.getMemory(privateMemory.memoryId).provenance.temporalRefs[0].sourceMemoryIds, [privateMemory.memoryId]);
   const projected = folder("private-projection", "campaign-a");
   projected.provenance.temporalRefs = projections.get("2->1").temporalRefs;
+  projected.provenance.perspectiveMemoryIds = projections.get("2->1").memoryIds;
   assert.equal(buildDualTemporalIndex([projected], { ownerId: 2, counterpartId: 1, campaignToken: "campaign-a", currentGameDate: "1152.6.12", currentTotalDays: 6700 }).filter(entry => entry.axis === "event").length, 1);
   assert.deepEqual(normalizeTemporalRefs([{ ...privateMemory.provenance.temporalRefs[0], sourceMemoryIds: [""] }]), []);
   const unbound = folder("unbound", "campaign-a");

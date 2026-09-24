@@ -28,7 +28,8 @@ function resolveProviderPromptProfile(providerConfig, adapterEnabled) {
   return DEFAULT_PROFILE;
 }
 
-function resolvePromptLayoutId(promptProfile, { v89LayoutEnabled, runtimeProfileSplit } = {}) {
+function resolvePromptLayoutId(promptProfile, { v89LayoutEnabled, runtimeProfileSplit, v813Layout } = {}) {
+  if (v813Layout === true) return "v813";
   if (v89LayoutEnabled !== true) return "v5";
   if (promptProfile?.glmCacheLayout === true) return "glm_cache_v2";
   return runtimeProfileSplit === true ? "v7" : "v6";

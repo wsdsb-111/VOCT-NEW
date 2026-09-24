@@ -1,10 +1,12 @@
 "use strict";
 
 const { getCharacterPersonalName } = require("../memory-system/character-identity");
+const { memoryMatchesCampaign } = require("../memory-system/memory-types");
 const { createConversationRuntime } = require("./conversation-runtime");
 const participantLifecycle = require("./participant-lifecycle");
 const { buildPresenceObservationFacts } = require("../worldline/direct-observation-producer");
 const { resolveWorldlineTurnBudget, shouldTrimMemoryTurnRecall } = require("../worldline/worldline-context-budget");
+const { parseTimeHint } = require("../worldline/world-query-planner");
 const { verifyActionConfirmation, settleActionResult } = require("../actions/action-confirmation");
 const { readActionCommandReadback } = require("../actions/action-command-readback");
 const { validateGenerationOutcome } = require("../providers/generation-outcome");
@@ -134,6 +136,8 @@ class Conversation {
     this.stableProfileCache = /* @__PURE__ */ new Map();
     this.stableDescriptionCache = /* @__PURE__ */ new Map();
     this.cacheV2FrozenSnapshots = { conversation: null, responders: /* @__PURE__ */ new Map() };
+    this.cacheV2FrozenSnapshots.prefixByResponder = /* @__PURE__ */ new Map();
+    this.frozenWorldlineByResponder = /* @__PURE__ */ new Map();
     this.selectedCharacterIds = /* @__PURE__ */ new Set();
     this.presentCharacterIds = /* @__PURE__ */ new Set();
     this.waitingCharacterIds = /* @__PURE__ */ new Set();
@@ -190,6 +194,9 @@ class Conversation {
       this.initializePresence();
       this.gameData.loadCharactersSummaries();
       this.gameData.syncOfficialRecollectionSummaries?.(this.id);
+      this.worldlinePrefetchPromise = this.prefetchFrozenWorldline().catch((error) => {
+        console.warn("[Worldline] Conversation-opening recall failed:", error.message);
+      });
       this.isActive = true;
       this.emitUpdate();
       this.memoryRecoveryPromise = Promise.resolve().then(() => this.recoverPendingMemories()).catch((error) => {
@@ -205,6 +212,49 @@ class Conversation {
       });
       this.messages.push(initError);
       this.emitUpdate();
+    }
+  }
+  isV813PrefixEnabled() {
+    return settingsRepository?.getChatPromptV813Layout?.() === true;
+  }
+  async prefetchFrozenWorldline() {
+    if (!this.isV813PrefixEnabled?.() || !worldlineService) return;
+    const selectedIds = [...this.selectedCharacterIds].filter((id) => this.gameData.characters.has(id));
+    const subjective = worldlineService.isSubjectivePromptIntegrationEnabled?.() === true;
+    if (subjective) await worldlineService.prepareCanon?.();
+    for (const responderId of selectedIds) {
+      try {
+        const args = {
+          runtimeGameData: this.gameData,
+          responderId,
+          query: "",
+          assistContext: "",
+          mentionedEntityIds: selectedIds.filter((id) => id !== responderId),
+          activeParticipantIds: selectedIds,
+          runtimeContext: { activeParticipantIds: selectedIds },
+          conversationId: this.id,
+          turnEpoch: 0,
+          sceneRevision: `${this.gameData.date || ""}\n${this.gameData.scene || ""}`,
+          presenceRevision: [...this.presentCharacterIds].map(String).sort().join(","),
+          directObservationFactIds: [],
+          directObservationFacts: [],
+          historicalReferenceInfo: this.gameData.historicalReferenceInfo,
+          tokenBudget: 900
+        };
+        const context = subjective
+          ? await worldlineService.getSubjectivePromptContextAsync(args)
+          : worldlineService.getPromptContext?.(args);
+        if (context) this.frozenWorldlineByResponder.set(responderId, subjective ? context : {
+          worldStableText: context.stableText || null,
+          worldTopicText: context.topicText || null,
+          worldSupplementalText: context.supplementalText || null,
+          worldCurrentText: context.currentText || null,
+          queryFingerprint: context.queryFingerprint || null,
+          cacheHit: context.cacheHit === true
+        });
+      } catch (error) {
+        console.warn(`[Worldline] Opening recall failed for NPC ${responderId}:`, error.message);
+      }
     }
   }
   async checkAndSummarizeIfNeeded(npc) {
@@ -256,7 +306,48 @@ class Conversation {
     if (memoryContext?.turnRecallText && !productionWorldlineEnabled && shouldTrimMemoryTurnRecall({ contextLimit, basePromptTokens: estimatedTokens, worldlineEnabled: false })) {
       trimMemoryTurnRecall("context_headroom_below_192");
     }
-    if (productionWorldlineEnabled) {
+    if (this.isV813PrefixEnabled?.()) {
+      const settings = worldlineService?.getSettings?.() || {};
+      const request = memoryContext?.worldlineRequest || {};
+      const hint = parseTimeHint(`${request.query || ""}\n${request.assistContext || ""}`, this.gameData.date);
+      if (productionWorldlineEnabled && settings.v812HistoricalRetrievalEnabled && settings.v812HistoricalPromptInjection && ["AS_OF", "RANGE"].includes(hint.mode)) {
+        try {
+          const presentIds = [...this.presentCharacterIds];
+          const directObservationFacts = buildPresenceObservationFacts({
+            responderId: npc.id,
+            presentCharacterIds: presentIds,
+            characters: this.gameData.characters,
+            asOf: this.gameData.date || null
+          });
+          const historical = await worldlineService.getSubjectivePromptContextAsync({
+            runtimeGameData: this.gameData,
+            responderId: npc.id,
+            query: request.query || "",
+            assistContext: request.assistContext || "",
+            mentionedEntityIds: request.mentionedEntityIds || [],
+            activeParticipantIds: this.getActiveConversationCharacters().map((character) => character.id),
+            conversationId: this.id,
+            turnEpoch: this.turnEpoch,
+            sceneRevision: `${this.gameData.date || ""}\n${this.gameData.scene || ""}`,
+            presenceRevision: presentIds.map(String).sort().join(","),
+            directObservationFactIds: directObservationFacts.map((fact) => fact.factId),
+            directObservationFacts,
+            historicalReferenceInfo: this.gameData.historicalReferenceInfo,
+            tokenBudget: resolveWorldlineTurnBudget({ contextLimit, basePromptTokens: estimatedTokens }).turnBudget
+          });
+          if (historical?.metrics?.historicalTimeMode) memoryContext = {
+            ...memoryContext,
+            historicalWorldText: historical.worldTurnRecallText || null,
+            historicalReferenceInfo: historical.historicalReferenceInfo || memoryContext.historicalReferenceInfo
+          };
+        } catch (error) {
+          console.warn("[Worldline] Historical recall failed; continuing with frozen world view:", error.message);
+        }
+      }
+      if (memoryContext?.turnRecallText && shouldTrimMemoryTurnRecall({ contextLimit, basePromptTokens: estimatedTokens, worldlineEnabled: true })) {
+        trimMemoryTurnRecall("context_limit_exceeded_after_worldline_trim");
+      }
+    } else if (productionWorldlineEnabled) {
       const request = memoryContext?.worldlineRequest || {};
       const presentIds = [...(this.presentCharacterIds || [])];
       const directObservationFacts = buildPresenceObservationFacts({
@@ -346,6 +437,7 @@ class Conversation {
         trimMemoryTurnRecall("context_limit_exceeded_after_worldline_trim");
       }
     }
+    if (this.isV813PrefixEnabled?.()) memoryContext.freezePromptPrefix = true;
     const activeProvider = settingsRepository?.getActiveProviderConfig?.();
     const requestedOutputTokens = activeProvider?.providerType === "deepseek" ? 4096 : Number(activeProvider?.defaultParameters?.max_tokens) || 4096;
     let budget;
@@ -419,6 +511,7 @@ class Conversation {
   async getMemoryContextFor(npc, contextLimit = null) {
     if (!memoryEngine || !npc || !this.gameData) return null;
     if (Number(npc.id) === Number(this.gameData.playerID)) return null;
+    if (this.isV813PrefixEnabled?.()) await this.worldlinePrefetchPromise;
     if (memoryEngine.isSummaryOwnerDeceased(npc.id)) memoryEngine.reviveSummaryOwner(npc.id);
     const limit = contextLimit || await llmManager.getCurrentContextLength() || 1e4;
     const history = this.getHistoryForCharacter(npc.id);
@@ -427,17 +520,23 @@ class Conversation {
     const memoryState = memoryEngine.ensureConversationState(this);
     this.getPromptHistoryForCharacter(npc.id);
     const participantKey = [...new Set(activeParticipantIds.map(Number))].sort((left, right) => left - right).join(",");
-    if (memoryState.mentionProfileCache?.participantKey !== participantKey) {
+    const campaignKey = this.gameData.campaignToken ?? null;
+    if (memoryState.mentionProfileCache && memoryState.mentionProfileCache.campaignKey !== campaignKey) {
+      memoryState.mentionState = memoryEngine.mentionTracker.createState();
+      memoryState.mentionedRecallCache.clear();
+      this.gameData.mentionedCharactersInContext?.clear();
+    }
+    if (memoryState.mentionProfileCache?.participantKey !== participantKey || memoryState.mentionProfileCache?.campaignKey !== campaignKey) {
       const profiles = new Map(this.gameData.getMentionableCharacterProfiles());
       const ownerFolderMemoriesById = new Map();
       for (const ownerId of activeParticipantIds) {
-        const folderMemories = memoryEngine.loadOwnerFolderMemories(ownerId);
+        const folderMemories = memoryEngine.loadOwnerFolderMemories(ownerId).filter(memory => memoryMatchesCampaign(memory, campaignKey));
         ownerFolderMemoriesById.set(Number(ownerId), folderMemories);
         for (const [characterId, profile] of memoryEngine.getMentionableProfilesFromFolderMemories(folderMemories)) {
           if (!profiles.has(characterId)) profiles.set(characterId, profile);
         }
       }
-      memoryState.mentionProfileCache = { participantKey, profiles, ownerFolderMemoriesById };
+      memoryState.mentionProfileCache = { participantKey, campaignKey, profiles, ownerFolderMemoriesById };
     }
     const mentionableProfiles = memoryState.mentionProfileCache.profiles;
     const currentUserIndex = history.findLastIndex((entry) => entry.role === "user");
@@ -532,7 +631,9 @@ class Conversation {
     }, null);
     let worldContext = null;
     try {
-      if (!worldlineService?.isSubjectivePromptIntegrationEnabled?.()) {
+      if (this.isV813PrefixEnabled?.()) {
+        worldContext = this.frozenWorldlineByResponder?.get(Number(npc.id)) || null;
+      } else if (!worldlineService?.isSubjectivePromptIntegrationEnabled?.()) {
         worldContext = worldlineService?.getPromptContext?.({ query, assistContext, mentionedEntityIds: currentTurnMentionedCharacterIds, responderId: npc.id, conversationId: this.id, turnEpoch: this.turnEpoch }) || null;
       }
     } catch (error) {
@@ -555,14 +656,18 @@ class Conversation {
       stableProfileCache: this.stableProfileCache,
       stableDescriptionCache: this.stableDescriptionCache,
       cacheV2FrozenSnapshots: this.cacheV2FrozenSnapshots,
+      freezePromptPrefix: false,
       presenceText: this.buildPresenceContext(),
-      worldStableText: worldContext?.stableText || null,
-      worldTopicText: worldContext?.topicText || null,
-      worldSupplementalText: worldContext?.supplementalText || null,
-      worldCurrentText: worldContext?.currentText || null,
+      confirmedActionText: this.isV813PrefixEnabled?.() ? this.getConfirmedActionContextFor(npc.id) : null,
+      worldStableText: worldContext?.worldStableText || worldContext?.stableText || null,
+      worldTopicText: worldContext?.worldTopicText || worldContext?.topicText || null,
+      worldSupplementalText: worldContext?.worldSupplementalText || worldContext?.supplementalText || null,
+      worldCurrentText: worldContext?.worldCurrentText || worldContext?.currentText || null,
+      worldTurnRecallText: worldContext?.worldTurnRecallText || null,
+      worldTurnRecallTokens: worldContext?.worldTurnRecallTokens || 0,
       worldlineRequest: { query, assistContext, mentionedEntityIds: currentTurnMentionedCharacterIds },
       subjectiveWorldPolicyActive: worldlineService?.isSubjectivePromptIntegrationEnabled?.() === true,
-      historicalReferenceInfo: null,
+      historicalReferenceInfo: worldContext?.historicalReferenceInfo || null,
       worldRecallQueryFingerprint: worldContext?.queryFingerprint || null,
       worldRecallCacheHit: worldContext?.cacheHit === true
     };
@@ -701,6 +806,25 @@ class Conversation {
     if (!segments.length) return this.canUseSharedRollingSummary(characterId) ? this.currentSummary : "";
     const legacy = this.canUseSharedRollingSummary(characterId) ? state.legacySummary || "" : "";
     return [legacy, ...segments.filter((segment) => segment.knownBy?.includes(Number(characterId))).map((segment) => segment.content)].filter(Boolean).join("\n\n");
+  }
+  getConfirmedActionContextFor(characterId) {
+    const windows = this.getPresenceWindows(characterId);
+    if (!windows.length && this.presenceInitialized) return null;
+    const visible = (message) => !this.presenceInitialized || windows.some((window) =>
+      Number(window.joinedAtMessageId ?? 0) <= Number(message.id) && (window.leftAtMessageId == null || Number(message.id) < Number(window.leftAtMessageId)));
+    const lines = [];
+    for (const message of this.messages) {
+      if (!visible(message)) continue;
+      const feedbacks = message.type === "action-feedback" ? message.feedbacks || [] : message.type === "action-approval" ? [message] : [];
+      for (const feedback of feedbacks) {
+        const change = feedback.diagnostic?.confirmedStateChange;
+        if (feedback.lifecycle?.status !== "CONFIRMED" || !change) continue;
+        const state = feedback.diagnostic?.stateAfter || {};
+        if (change.type === "GOLD_TRANSFER") lines.push(`- 已确认转账：角色 ${change.sourceRuntimeId} 向角色 ${change.targetRuntimeId} 支付 ${change.amount} 金；核验后余额 ${state.sourceGold ?? "未知"} / ${state.targetGold ?? "未知"}。`);
+        if (change.type === "OPINION_CHANGE") lines.push(`- 已确认好感变化：${change.amount >= 0 ? "+" : ""}${change.amount}；核验后好感 ${state.opinion ?? "未知"}。`);
+      }
+    }
+    return lines.length ? `=== 本场已由 CK3 核验的动作结果 ===\n${lines.slice(-8).join("\n")}` : null;
   }
   async joinWaitingCharacter(characterId) {
     const numericId = Number(characterId);
@@ -890,6 +1014,7 @@ class Conversation {
   }
   // Handle response for a single NPC
   async respondAs(npc, turnEpoch = this.turnEpoch) {
+    if (this.isV813PrefixEnabled?.()) npc = this.gameData.characters.get(Number(npc?.id)) || npc;
     if (turnEpoch !== this.turnEpoch || !this.isCharacterAvailableForConversation(npc)) {
       console.log(`[Conversation] Skipping unavailable NPC response: ${npc?.shortName || npc?.id || "unknown"}`);
       return;

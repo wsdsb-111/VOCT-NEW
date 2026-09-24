@@ -6,8 +6,7 @@ const path = require("path");
 const { createMemoryRecord, uniqueIds } = require("./memory-types");
 const { CURRENT_MEMORY_SCHEMA_VERSION } = require("./memory-schema");
 const { MEMORY_ENGINE_VERSION } = require("../version");
-const { buildSummaryDateIndex, buildDualTemporalIndex } = require("./summary-date-index");
-const { normalizeTemporalRefs } = require("./temporal-anchor-extractor");
+const { buildSummaryDateIndex, buildDualTemporalIndex, normalizePerspectiveTemporalRefs } = require("./summary-date-index");
 
 function removeDirectoryTree(directory) {
   for (const entry of fs.readdirSync(directory, { withFileTypes: true })) {
@@ -513,7 +512,7 @@ class MemoryStore {
           const finalizationId = summary.finalizationId || null;
           // Pair projections from one session can differ by presence and subject.
           // Only byte-identical bodies are mirrors; never discard another pair's facts.
-          const temporalRefs = normalizeTemporalRefs(summary.temporalRefs);
+          const temporalRefs = normalizePerspectiveTemporalRefs(summary.temporalRefs, summary.perspectiveMemoryIds);
           const temporalSignature = temporalRefs.length ? `|${JSON.stringify(temporalRefs)}` : "";
           const sessionKey = (summary.campaignToken ? `${summary.campaignToken}|` : "") + (finalizationId ? `${ownerId}|${finalizationId}|${summary.content}${temporalSignature}` : `${ownerId}|${summary.date || ""}|${summary.totalDays ?? ""}|${summary.content}${temporalSignature}`);
           const digest = crypto.createHash("sha1").update(sessionKey).digest("hex").slice(0, 16);
@@ -528,7 +527,8 @@ class MemoryStore {
             existing.provenance.counterpartIds = uniqueIds([...existing.provenance.counterpartIds, counterpartId]);
             existing.provenance.counterpartNames = [...new Set([...existing.provenance.counterpartNames, counterpartName].filter(Boolean))];
             existing.provenance.participantProfiles = mergeCharacterProfiles(existing.provenance.participantProfiles || [], summaryProfiles);
-            existing.provenance.temporalRefs = normalizeTemporalRefs([...existing.provenance.temporalRefs, ...(summary.temporalRefs || [])]);
+            existing.provenance.perspectiveMemoryIds = [...new Set([...existing.provenance.perspectiveMemoryIds, ...(summary.perspectiveMemoryIds || [])].map(String).filter(Boolean))];
+            existing.provenance.temporalRefs = normalizePerspectiveTemporalRefs([...existing.provenance.temporalRefs, ...temporalRefs], existing.provenance.perspectiveMemoryIds);
             continue;
           }
           sessions.set(sessionKey, createMemoryRecord({
@@ -550,7 +550,7 @@ class MemoryStore {
             tags: [counterpartName, ...participantNames].filter(Boolean),
             provenance: {
               campaignToken: summary.campaignToken || null,
-              temporalRefs: summary.temporalRefs || [],
+              temporalRefs,
               finalizationId,
               folderOwnerId: ownerId,
               folderName: folder.name,
