@@ -849,6 +849,7 @@ function createGameData({ fs, path, memorySystem, memoryEngine, summariesDir, ge
           date: options.date ?? this.date,
           totalDays: options.totalDays ?? this.totalDays,
           campaignToken: options.campaignToken || null,
+          campaignBinding: options.campaignToken ? { status: "bound", source: "native", version: 1 } : { status: "unresolved", reason: "CAMPAIGN_TOKEN_UNAVAILABLE", version: 1 },
           temporalRefs: projection?.temporalRefs || [],
           content: directedContent,
           playerName: ownerName,

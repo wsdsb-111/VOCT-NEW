@@ -198,6 +198,7 @@ function classifySelectedWorldFacts(selected = {}, checkpointDate = null, snapsh
   const queriedIds = new Set(queryPlan?.entities?.characters || []);
   return facts.map(item => ({ ...item, queryPriority:
     queryPlan?.intent === "WAR_STATUS" && item.field === "WAR" ? 100 :
+    queryPlan?.intent === "CHARACTER_OVERVIEW" && queriedIds.has(item.entityId) && ["IDENTITY", "ALIVE", "PRIMARY_TITLE"].includes(item.field) ? 100 :
     queriedIds.has(item.entityId) && (queryPlan?.intent === "CHARACTER_LOCATION" && ["LOCATION", "ALIVE"].includes(item.field) || queryPlan?.intent === "CHARACTER_STATE" && ["ALIVE", "IDENTITY"].includes(item.field)) ? 100 :
     queriedIds.has(item.entityId) ? 50 : 0 }));
 }

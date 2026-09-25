@@ -26,7 +26,7 @@ assert(baseline.text.includes("赵甲位于临安"), "location lane must survive
 assert(baseline.tokens <= 900);
 const manifest = buildFrozenCoverageManifest({ responderId: "1", checkpointId: "cp-1", candidateSetComplete: false }, baseline.selectedFacts);
 const plan = (intent, characters = [], timeMode = "CURRENT") => ({ intent, entities: { characters, titles: [], realms: [], wars: [] }, eventTypes: [], time: { mode: timeMode } });
-assert(hasFrozenCoverage({ queryPlan: plan("WAR_STATUS"), manifest }).hit, "broad war hit");
+assert(!hasFrozenCoverage({ queryPlan: plan("WAR_STATUS"), manifest }).hit, "broad war misses when the frozen source candidate set is incomplete");
 const scopedWar = buildFrozenCoverageManifest({ responderId: "1", checkpointId: "cp-1" }, [{ ...fact("world:war:9:WAR", "war:9", "WAR", "甲乙之战"), scopeEntityIds: ["2", "3"], scopeTitleIds: ["100"] }]);
 assert(hasFrozenCoverage({ queryPlan: plan("WAR_STATUS", ["2"]), manifest: scopedWar }).hit, "named war participant hit");
 assert(!hasFrozenCoverage({ queryPlan: plan("WAR_STATUS", ["4"]), manifest: scopedWar }).hit, "other war participant miss");
@@ -87,7 +87,7 @@ const patchService = {
 };
 const allowedPatch = WorldlineService.prototype.getSubjectiveCoveragePatch.call(patchService, { responderId: 1, excludeFactIds: ["title-1"], missingFields: [{ entityId: "1", field: "LOCATION" }], tokenBudget: 300 });
 assert(allowedPatch.patchText.includes("赵甲位于临安") && !allowedPatch.patchText.includes("赵甲持有临安"), "only missing Fact IDs enter dynamic patch");
-assert(allowedPatch.patchText.includes("不是刚刚发生"));
+assert(allowedPatch.patchText.includes("不应将这些内容理解为刚刚发生的新世界事件"));
 const deniedPatch = WorldlineService.prototype.getSubjectiveCoveragePatch.call(patchService, { responderId: 2, missingFields: [{ entityId: "1", field: "LOCATION" }], tokenBudget: 300 });
 assert.strictEqual(deniedPatch.patchText, null, "ACL-denied fact must not enter patch");
 
@@ -115,10 +115,25 @@ assert(conversation.getWorldlineCoveragePatchFor(npc, { worldlineRequest: { quer
 assert.strictEqual(retrievalCount, 1, "same intent and entity reuse patch without raw-query key");
 conversation.getWorldlineCoveragePatchFor(npc, { worldlineRequest: { query: "赵甲现在在哪里？" }, confirmedActionText: "CK3 已确认变化" });
 assert.strictEqual(retrievalCount, 2, "confirmed action invalidates patch cache");
+conversation.gameDataRevision += 1;
+conversation.getWorldlineCoveragePatchFor(npc, { worldlineRequest: { query: "赵甲现在在哪里？" }, confirmedActionText: "CK3 已确认变化" });
+assert.strictEqual(retrievalCount, 3, "game-data revision invalidates patch cache");
+conversation.presentCharacterIds.add(2);
+conversation.getWorldlineCoveragePatchFor(npc, { worldlineRequest: { query: "赵甲现在在哪里？" }, confirmedActionText: "CK3 已确认变化" });
+assert.strictEqual(retrievalCount, 4, "presence change invalidates patch cache");
+conversation.gameData.scene = "议事厅";
+conversation.getWorldlineCoveragePatchFor(npc, { worldlineRequest: { query: "赵甲现在在哪里？" }, confirmedActionText: "CK3 已确认变化" });
+assert.strictEqual(retrievalCount, 5, "scene change invalidates patch cache");
+conversation.gameData.location = "临安";
+conversation.getWorldlineCoveragePatchFor(npc, { worldlineRequest: { query: "赵甲现在在哪里？" }, confirmedActionText: "CK3 已确认变化" });
+assert.strictEqual(retrievalCount, 6, "location change invalidates patch cache");
+conversation.gameData.campaignToken = "campaign-2";
+conversation.getWorldlineCoveragePatchFor(npc, { worldlineRequest: { query: "赵甲现在在哪里？" }, confirmedActionText: "CK3 已确认变化" });
+assert.strictEqual(retrievalCount, 7, "campaign change invalidates patch cache");
 checkpointId = "cp-2";
 conversation.getWorldlineCoveragePatchFor(npc, { worldlineRequest: { query: "赵甲现在在哪里？" }, confirmedActionText: "CK3 已确认变化" });
-assert.strictEqual(retrievalCount, 3, "checkpoint change invalidates patch cache and frozen coverage decision");
+assert.strictEqual(retrievalCount, 8, "checkpoint change invalidates patch cache and frozen coverage decision");
 assert.strictEqual(conversation.getWorldlineCoveragePatchFor(npc, { worldlineRequest: { query: "五年前赵甲在哪里？" } }), null);
-assert.strictEqual(retrievalCount, 3, "historical query never triggers coverage patch");
+assert.strictEqual(retrievalCount, 8, "historical query never triggers coverage patch");
 
 console.log("V8.13.1 Worldline Coverage: PASS (baseline diversity, entity-field manifest, time routing)");

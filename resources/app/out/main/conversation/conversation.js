@@ -259,11 +259,12 @@ class Conversation {
         if (subjective && context?.baselineFacts) {
           this.frozenWorldlineCoverageByResponder.set(String(responderId), buildFrozenCoverageManifest({
             responderId, checkpointId: context.checkpointId, candidateSetComplete: context.baselineCandidateSetComplete,
-            truncated: context.baselineTruncated
+            truncated: context.baselineTruncated, laneCoverage: context.baselineLaneCoverage
           }, context.baselineFacts));
           usageAnalytics?.record({ requestType: "worldline_coverage", coveragePhase: "BASELINE", characterId: responderId,
             baselineFactCount: context.baselineFacts.length, baselineTokens: context.worldTurnRecallTokens || 0,
-            baselineLanes: context.baselineLanes, baselineTruncated: context.baselineTruncated }, null);
+            baselineLanes: context.baselineLanes, baselineLaneCoverage: context.baselineLaneCoverage,
+            baselineTruncated: context.baselineTruncated }, null);
         }
       } catch (error) {
         console.warn(`[Worldline] Opening recall failed for NPC ${responderId}:`, error.message);
@@ -286,10 +287,20 @@ class Conversation {
     if (!decision.eligible) return null;
     if (decision.hit) {
       usageAnalytics?.record({ requestType: "worldline_coverage", coveragePhase: "DECISION", coverageIntent: plan.intent,
-        coverageHit: true, characterId: npc.id }, null);
+        coverageHit: true, coverageRequestedFields: plan.requestedFields, coverageLaneCoverage: manifest?.laneCoverage || null, characterId: npc.id }, null);
       return null;
     }
-    const revision = `${this.gameDataRevision}:${memoryContext?.confirmedActionText || ""}:${checkpointId}:${this.gameData.campaignToken || ""}`;
+    const presentIdsForRevision = [...(this.presentCharacterIds || [])].map(String).sort();
+    const revision = JSON.stringify({
+      gameDataRevision: this.gameDataRevision,
+      confirmedActionRevision: memoryContext?.confirmedActionText ? createPromptFingerprint?.(memoryContext.confirmedActionText) || memoryContext.confirmedActionText : "",
+      checkpointId,
+      campaignToken: this.gameData.campaignToken || "",
+      presentCharacterIds: presentIdsForRevision,
+      scene: this.gameData.scene || null,
+      location: this.gameData.location || null,
+      locationController: this.gameData.locationController || null
+    });
     let cache = this.worldlineCoveragePatchCacheByResponder.get(responderId);
     if (!cache || cache.revision !== revision) {
       cache = { revision, entries: new Map() };
@@ -305,13 +316,14 @@ class Conversation {
         mentionedEntityIds: request.mentionedEntityIds || [], activeParticipantIds: this.getActiveConversationCharacters().map(character => character.id),
         conversationId: this.id, turnEpoch: this.turnEpoch, sceneRevision: `${this.gameData.date || ""}\n${this.gameData.scene || ""}`,
         presenceRevision: presentIds.map(String).sort().join(","), directObservationFactIds: directObservationFacts.map(fact => fact.factId), directObservationFacts,
-        excludeFactIds: manifest?.factIds || [], missingFields: decision.missingFields, tokenBudget: 300
+        excludeFactIds: manifest?.factIds || [], missingFields: decision.missingFields, tokenBudget: 300, snapshotMode: "CONVERSATION_BASELINE"
       }) || null;
       cache.entries.set(key, patch);
     }
     const patch = cache.entries.get(key);
     usageAnalytics?.record({ requestType: "worldline_coverage", characterId: npc.id, conversationId: this.id,
       coveragePhase: "PATCH", coverageIntent: plan.intent, coverageHit: false, coverageMissingFields: decision.missingFields.length,
+      coverageRequestedFields: plan.requestedFields, coverageLaneCoverage: manifest?.laneCoverage || null,
       patchCacheHit: cacheHit, patchFactCount: patch?.patchFacts?.length || 0, patchTokens: patch?.patchTokens || 0,
       patchFilteredCount: patch?.filteredCount || 0, patchSecretBlockedCount: patch?.secretBlockedCount || 0 }, null);
     return patch?.patchText || null;
@@ -702,6 +714,7 @@ class Conversation {
       sessionTopicAnchorLocked: retrieved.routing?.topicPatch === "locked",
       queryFingerprint: turnRecall.queryFingerprint,
       candidateCount: turnRecall.candidateCount,
+      temporalDiagnostics: retrieved.temporalDiagnostics || null,
       turnEpoch: this.turnEpoch
     }, null);
     let worldContext = null;

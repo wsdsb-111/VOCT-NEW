@@ -85,7 +85,7 @@ function safeAllowedFact(item) {
   };
 }
 
-function buildSubjectiveWorldView({ responder, candidates = [], scope = {}, scopeResolver = null, checkpointId = null, directObservationFactIds = [], snapshotMode = null } = {}) {
+function buildSubjectiveWorldView({ responder, candidates = [], scope = {}, scopeResolver = null, checkpointId = null, directObservationFactIds = [], snapshotMode = null, baselineLaneSourceCoverage = null } = {}) {
   const input = Array.isArray(candidates) ? candidates : [];
   const bounded = admitCandidates(input);
   const decisions = bounded.map((fact) => classifyKnowledge(fact, responder, { ...scope, ...(typeof scopeResolver === "function" ? scopeResolver(fact) : {}), directObservationFactIds }));
@@ -102,7 +102,8 @@ function buildSubjectiveWorldView({ responder, candidates = [], scope = {}, scop
   const promptResolved = resolved.filter((item) => PROMPT_SOURCE_TIERS.has(item.fact?.sourceTier) && safeValue(item.fact?.value) !== null && boundedText(item.fact?.value).trim());
   const promptFacts = (snapshotMode === "CONVERSATION_BASELINE" ? promptResolved : promptResolved.slice(0, MAX_SELECTED)).map(safeAllowedFact);
   const filtered = decisions.filter((item) => item.decision !== "ALLOW");
-  const truncated = input.length > bounded.length || resolved.length > MAX_SELECTED || promptResolved.length > MAX_SELECTED;
+  const candidateSetComplete = input.length <= bounded.length;
+  const truncated = !candidateSetComplete || snapshotMode !== "CONVERSATION_BASELINE" && (resolved.length > MAX_SELECTED || promptResolved.length > MAX_SELECTED);
   const diagnostics = [
     ...filtered.map((item) => ({ factId: item.fact?.factId || null, decision: item.decision, reason: item.reason })),
     ...conflicts.map((item) => ({ factId: null, decision: item.decision, reason: item.reason }))
@@ -121,8 +122,9 @@ function buildSubjectiveWorldView({ responder, candidates = [], scope = {}, scop
     filteredCount: filtered.length,
     secretBlockedCount: filtered.filter((item) => item.knowledgeLevel === "SECRET").length,
     conflictSummary: { count: conflicts.length, reasons: [...new Set(conflicts.map((item) => item.reason))] },
-    candidateSetComplete: !truncated,
+    candidateSetComplete,
     truncated,
+    baselineLaneSourceCoverage: baselineLaneSourceCoverage || null,
     diagnostics
   };
   Object.defineProperties(view, {

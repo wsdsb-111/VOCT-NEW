@@ -3,6 +3,7 @@
 const INTENT_FIELDS = Object.freeze({
   CHARACTER_LOCATION: "LOCATION",
   CHARACTER_STATE: "ALIVE",
+  CHARACTER_OVERVIEW: "IDENTITY",
   CHARACTER_IDENTITY: "IDENTITY",
   TITLE_HOLDER: "PRIMARY_TITLE",
   REALM_STATUS: "PRIMARY_TITLE",
@@ -21,7 +22,7 @@ function buildFrozenCoverageManifest(view, selectedFacts = []) {
   const fields = new Set();
   const warScopes = [];
   for (const fact of selectedFacts) {
-    if (!fact?.field || !fact?.value) continue;
+    if (!fact?.field || fact.value === null || fact.value === undefined || fact.value === "") continue;
     const entityId = String(fact.entityId || "");
     if (entityId) (entityFields[entityId] ||= new Set()).add(fact.field);
     if (fact.factId) factIds.add(String(fact.factId));
@@ -37,6 +38,11 @@ function buildFrozenCoverageManifest(view, selectedFacts = []) {
     titleIds: sorted(titleIds),
     factIds: sorted(factIds),
     fields: sorted(fields),
+    laneCoverage: Object.fromEntries(Object.entries(view?.laneCoverage || {}).map(([lane, value]) => [lane, {
+      candidateCount: Number(value?.candidateCount) || 0,
+      selectedCount: Number(value?.selectedCount) || 0,
+      complete: value?.complete === true
+    }])),
     warScopes,
     factCount: factIds.size,
     candidateSetComplete: view?.candidateSetComplete === true,
@@ -53,8 +59,26 @@ function hasFrozenCoverage({ queryPlan, manifest } = {}) {
   const titles = sorted(entities.titles);
   const wars = sorted(entities.wars);
   if (!characters.length && !titles.length && !wars.length && intent === "GENERAL_WORLD") return { eligible: true, hit: true, missingFields: [] };
-  if (!characters.length && ["CHARACTER_LOCATION", "CHARACTER_STATE", "CHARACTER_IDENTITY"].includes(intent)) return { eligible: true, hit: false, missingFields: [{ field: INTENT_FIELDS[intent] }] };
+  if (!characters.length && ["CHARACTER_LOCATION", "CHARACTER_STATE", "CHARACTER_IDENTITY", "CHARACTER_OVERVIEW"].includes(intent)) return {
+    eligible: true, hit: false, missingFields: (queryPlan?.requestedFields || [INTENT_FIELDS[intent]]).map(field => ({ field }))
+  };
   if (!manifest) return { eligible: true, hit: false, missingFields: [{ field: INTENT_FIELDS[intent] || "UNKNOWN" }] };
+  if (intent === "WAR_STATUS" && !characters.length && !titles.length && !wars.length) {
+    const complete = manifest.laneCoverage?.WAR?.complete === true;
+    return { eligible: true, hit: complete, missingFields: complete ? [] : [{ field: "WAR", lane: "WAR" }] };
+  }
+  if (intent === "WORLD_RECENT" && !characters.length && !titles.length && !wars.length) {
+    const complete = manifest.laneCoverage?.WORLD_EVENT?.complete === true;
+    return { eligible: true, hit: complete, missingFields: complete ? [] : [{ field: "WORLD_EVENT", lane: "WORLD_EVENT" }] };
+  }
+  const requestedFields = sorted(queryPlan?.requestedFields);
+  if (characters.length && requestedFields.length > 1) {
+    const missingFields = [];
+    for (const characterId of characters) for (const field of requestedFields) {
+      if (!manifest.entityFields[characterId]?.includes(field)) missingFields.push({ entityId: characterId, field });
+    }
+    return { eligible: true, hit: missingFields.length === 0, missingFields };
+  }
   const field = INTENT_FIELDS[intent] || (characters.length ? "ALIVE" : titles.length ? "PRIMARY_TITLE" : wars.length ? "WAR" : null);
   if (!field) return { eligible: true, hit: true, missingFields: [] };
   const missingFields = [];
@@ -77,7 +101,8 @@ function buildCoveragePatchKey({ responderId, checkpointId, queryPlan } = {}) {
     responderId: String(responderId || ""), checkpointId: String(checkpointId || ""),
     intent: queryPlan?.intent || "GENERAL_WORLD",
     characters: sorted(entities.characters), titles: sorted(entities.titles),
-    realms: sorted(entities.realms), wars: sorted(entities.wars), eventTypes: sorted(queryPlan?.eventTypes)
+    realms: sorted(entities.realms), wars: sorted(entities.wars), eventTypes: sorted(queryPlan?.eventTypes),
+    requestedFields: sorted(queryPlan?.requestedFields)
   });
 }
 

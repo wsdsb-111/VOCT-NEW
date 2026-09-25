@@ -2,6 +2,8 @@
 
 这里是版本变更的单一入口。详细设计和测试证据保留在链接目标中，本文件只维护版本顺序、用户可见摘要和文档索引。
 
+V8.13.2（320/320 本地发布组通过，实机待验收）：[Temporal Recall & Worldline Coverage Closure](docs/V8阶段开发记录.md#第一百一十七阶段v8132-temporal-recall--worldline-coverage-closure)。Legacy 摘要仅在唯一终局/人物对证据下绑定战役；泛化记忆问句双轴召回并保障目标年份直接对话摘要。Broad WAR/近期事件以完整性判定覆盖，人物概况补齐多字段校验；补丁缓存绑定在场、场景、存档与战役变化。V8.13 冻结前缀合同不变。
+
 V8.13.1（本地自动 Gate 通过，实机待验收）：[Frozen Worldline Coverage 补强](docs/V8阶段开发记录.md#第一百一十六阶段v8131-frozen-worldline-coverage)。开场世界线按战争、位置、状态等领域均衡选取并生成不入 Prompt 的覆盖清单；当前问题缺口才检索 ≤300 Token 的动态补丁，历史查询维持独立路径。900 Token 冻结预算、V8.13 缓存锚点和 Memory Engine 存储合同不变；真实 CK3/Provider 效果待验收。
 
 V8.13（317/317 本地发布组通过，实机待验收）：[会话冻结前缀与动态尾部](docs/V8阶段开发记录.md#第一百一十五阶段v813-会话冻结前缀与动态尾部)。所有 Chat Provider 使用统一缓存布局；已选 NPC（含候场者）开场预取各自世界线，整场复用，实时状态、确认动作和时间召回留在动态尾部。新缓存锚点 `v8.13`；打包 Electron 冒烟受本机 GPU 子进程错误阻断，CK3/Provider 命中率待实测。

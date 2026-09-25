@@ -153,7 +153,7 @@ function resolveTemporalFocus(query, previousFocus, { currentGameDate, currentTo
   const gap = turnEpoch - previousFocus.lastUsedTurn;
   if (!Number.isSafeInteger(previousFocus.lastUsedTurn) || gap < 0 || gap > 3 ||
       previousFocus.conversationId !== conversationId || previousFocus.sceneRevision !== sceneRevision ||
-      !["EVENT", "CONVERSATION", "MIXED"].includes(previousFocus.axisIntent)) return result;
+      !["EVENT", "CONVERSATION", "MIXED", "MEMORY_RECALL"].includes(previousFocus.axisIntent)) return result;
   const from = normalizeGameDate(previousFocus.fromGameDate), to = normalizeGameDate(previousFocus.toGameDate);
   if (!from || !to || from.serial > to.serial || to.serial > current.serial) return result;
   const primaryWindow = { fromTotalDays: today + from.serial - current.serial, toTotalDays: today + to.serial - current.serial };

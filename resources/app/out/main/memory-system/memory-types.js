@@ -58,6 +58,12 @@ function createMemoryRecord(input = {}) {
     source,
     provenance: {
       campaignToken: typeof provenance.campaignToken === "string" ? provenance.campaignToken : null,
+      campaignBinding: provenance.campaignBinding && typeof provenance.campaignBinding === "object" ? {
+        status: provenance.campaignBinding.status === "bound" ? "bound" : "unresolved",
+        source: provenance.campaignBinding.source || null,
+        reason: provenance.campaignBinding.reason || null,
+        version: Number(provenance.campaignBinding.version) || 1
+      } : null,
       temporalRefs: normalizeTemporalRefs(provenance.temporalRefs),
       conversationId: provenance.conversationId || null,
       messageIds: Array.isArray(provenance.messageIds) ? [...new Set(provenance.messageIds)] : [],

@@ -12,7 +12,7 @@ Voices of the Court 是一个面向《Crusader Kings III》（CK3）的沉浸式
 - **历史人物 Definition-ID 绑定**：世界线通过 Definition-ID 与 CK3 Runtime ID 的双向绑定判定历史人物身份；来源冲突、同名歧义或非唯一映射均 fail-closed。
 - **世界线**：页面已接入年度 `autosave.ck3` Checkpoint、Worker 解析、世界概览、年度变化、世界知识、历史身份候选诊断和 Checkpoint-scoped Supplemental；CK3 事实保持只读，世界知识 Prompt 基础默认关闭。
 - **V8.12 存档历史检索**：在通过第一部分实机 Gate 的 Temporal Archive 上新增 AS_OF、RANGE、人物/头衔/战争时间线、WarActor 与独立 Historical Scope。检索诊断默认开启，Prompt 注入默认关闭；历史事实只进入 Dynamic Tail，普通 Current Query 与 GLM Stable Prefix 保持原路径。
-- **V8.13.1 世界线覆盖补强**：开场对已选 NPC 建立均衡的个人世界线基线；后续 CURRENT 问题若缺少获准事实，仅在动态区补充该缺口，不改变冻结缓存前缀。历史查询仍沿独立时间线；真实 CK3/Provider 效果待验收。
+- **V8.13.2 时间召回与世界线覆盖收口**：旧摘要仅凭唯一终局/人物对证据迁移绑定 Campaign；“记得/回忆/想起”等泛化问句双轴检索并优先保留目标年份的当前对话对象摘要。Broad WAR/近期事件仅在完整覆盖时命中；人物概况检查身份、生死、主头衔，补丁缓存随存档、战役、在场和场景变化失效。动态召回仍位于 V8.13 冻结前缀之后；CK3/Provider 实机 Gate 待验收。
 - **V8.5 Player Semantic Presentation + Retrieval 2.0（Luna + Terra + Sol 内审）**：世界线默认页已接入统一玩家语义展示层；后端已接入确定性 Query Planner、Retriever/Ranker、查询感知 Delta、无虚构结果摘要、additive Player DTO 与相关缓存 revision。来源、freshness、identity、来源冲突、年度事件和历史人物映射以可读文案呈现，Runtime/Definition/Raw 与 Resolver 细节保留在高级诊断。Sol 已修复诊断超大列表白屏、后台本地化阻塞及时间/缓存等正确性问题，105 组回归与隔离浏览器交互通过；真实运行 Gate 和 Astra 终审尚未完成，内部预冻结仍 NOT READY。详见 [Sol 内部审查](docs/v8.5-sol-internal-review.md)。
 - **V8.5.2 玩家语义与世界线差异 UI（Luna + Sol）**：逐实体展示 Historical / Runtime-native 身份、歧义和来源不完整状态；年龄、父母、兄弟、婚姻和子女差异只进入懒展开的可读 Worldline Difference 面板。Sol Stage 5 已修复新旧 DTO 聚合矛盾、来源优先级和降级路径 raw 值泄漏，50 条候选分页及 A/B/C 诊断分层保持不变。120 组发布回归通过，下一步 Astra 最终集成与实机 Gate。
 - **历史认知边界**：提示词要求角色只使用当前年份已经发生、写成、流传或成名的信息，避免引用未来人物、事件、诗词和典故。
@@ -30,7 +30,7 @@ Voices of the Court 是一个面向《Crusader Kings III》（CK3）的沉浸式
 
 V8.12 第一部分、第二部分前置和 Part 3 实机 Gate 已由用户确认通过。V8.13 已完成本地 317/317 发布组，但真实 CK3/Provider 缓存效果仍待验收。详见 [Part 3 施工记录](docs/v8.12-part3-memory-engine-3.0-implementation-report.md)和 [V8.13 阶段记录](docs/V8阶段开发记录.md#第一百一十五阶段v813-会话冻结前缀与动态尾部)。
 
-当前施工基线为 **V8.13.1：Frozen Worldline Coverage 补强**：[阶段记录与待验收项目](docs/V8阶段开发记录.md#第一百一十六阶段v8131-frozen-worldline-coverage)。V8.13 会话冻结前缀保持不变；开场已选 NPC（含候场者）各自获得均衡的世界线视图，当前知识缺口只在动态尾部补足。Memory Engine 3.0 保持 2.5 存储兼容，历史 AS_OF/RANGE 查询仍按单轮动态注入。自动回归不替代真实 CK3/Provider Gate；此前隔离打包 Electron 冒烟被本机 GPU 子进程错误阻断。以下版本段落为前置实施记录。
+当前施工基线为 **V8.13.2：Temporal Recall & Worldline Coverage Closure**：[阶段记录与待验收项目](docs/V8阶段开发记录.md#第一百一十七阶段v8132-temporal-recall--worldline-coverage-closure)。V8.13 冻结前缀和 Memory Engine 3.0 存储合同保持不变；Legacy Campaign 绑定仍 fail-closed，动态时间召回、覆盖补丁位于缓存边界后。自动回归不替代真实 CK3/Provider Gate；V8.13.1 阶段的隔离打包 Electron 冒烟曾被本机 GPU 子进程错误阻断。以下版本段落为前置实施记录。
 
 当前收尾版本为 **V8.11.1**：[一致性与知情边界实施记录](docs/v8.11.1-consistency-implementation-report.md)。实时配偶/多人观察判权修正；摘要编辑同步重建所选 Owner 的内部记忆并支持失败回滚，Legacy 删除不再静默丢失映射；数字地点和当前年份查询边界完善，fullName 移到 GLM 动态状态。305/305 发布组、374 个测试文件分类及隔离 Electron 冒烟通过；真实 CK3/GLM 与长时 Gate 待人工验收。
 

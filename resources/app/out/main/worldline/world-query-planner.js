@@ -4,6 +4,7 @@ const { parseCK3Date } = require("./checkpoint-freshness");
 const RETRIEVAL_POLICY_VERSION = "v8.11.1-retrieval-1";
 const INTENTS = Object.freeze({
   CHARACTER_STATE: "CHARACTER_STATE",
+  CHARACTER_OVERVIEW: "CHARACTER_OVERVIEW",
   CHARACTER_LOCATION: "CHARACTER_LOCATION",
   CHARACTER_IDENTITY: "CHARACTER_IDENTITY",
   TITLE_HOLDER: "TITLE_HOLDER",
@@ -93,6 +94,7 @@ function inferIntent(text, analysis, time) {
   if (/(在哪里|在哪|何处|位置|所在地|行踪|下落|去向|去了哪里|whereabouts|where is)/u.test(text)) return { intent: INTENTS.CHARACTER_LOCATION, broadWorldIntent: false };
   if (/(活着吗|还活着|是否存活|死了|死亡|去世)/u.test(text) && hasCharacter) return { intent: INTENTS.CHARACTER_STATE, broadWorldIntent: false };
   if (/(是谁|哪一位|身份)/u.test(text) && hasCharacter) return { intent: INTENTS.CHARACTER_IDENTITY, broadWorldIntent: false };
+  if (/(怎么样|如何|近况|现状|什么情况|情况如何)/u.test(text) && hasCharacter) return { intent: INTENTS.CHARACTER_OVERVIEW, broadWorldIntent: false };
   if (hasTitle) return { intent: INTENTS.REALM_STATUS, broadWorldIntent: false };
   if (hasCharacter) return { intent: INTENTS.CHARACTER_STATE, broadWorldIntent: false };
   return { intent: INTENTS.GENERAL_WORLD, broadWorldIntent: false };
@@ -121,6 +123,13 @@ function buildWorldQueryPlan({ query = "", assistContext = "", analysis = {}, ch
   const inferred = inferIntent(text, analysis, time);
   const resolvedCharacters = analysis?.resolvedCharacters || analysis?.characters || [];
   const resolvedTitles = analysis?.resolvedTitles || analysis?.titles || [];
+  const requestedFields = inferred.intent === INTENTS.CHARACTER_OVERVIEW ? ["IDENTITY", "ALIVE", "PRIMARY_TITLE"]
+    : inferred.intent === INTENTS.CHARACTER_LOCATION ? ["LOCATION"]
+      : inferred.intent === INTENTS.CHARACTER_STATE ? ["ALIVE"]
+        : inferred.intent === INTENTS.CHARACTER_IDENTITY ? ["IDENTITY"]
+          : inferred.intent === INTENTS.TITLE_HOLDER || inferred.intent === INTENTS.REALM_STATUS ? ["PRIMARY_TITLE"]
+            : inferred.intent === INTENTS.WAR_STATUS ? ["WAR"]
+              : inferred.intent === INTENTS.WORLD_RECENT ? ["WORLD_EVENT"] : [];
   return {
     version: RETRIEVAL_POLICY_VERSION,
     intent: inferred.intent,
@@ -135,6 +144,7 @@ function buildWorldQueryPlan({ query = "", assistContext = "", analysis = {}, ch
     entityAnchors: uniqueStrings(analysis?.entityAnchoredTerms),
     time,
     eventTypes: eventTypesForIntent(inferred.intent, text),
+    requestedFields,
     broadWorldIntent: inferred.broadWorldIntent,
     ambiguity: analysis?.identityResolution?.status === "AMBIGUOUS" ? {
       status: "AMBIGUOUS",

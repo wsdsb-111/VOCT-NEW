@@ -8,16 +8,21 @@ const CONVERSATION = /聊(?:过|了|到)|谈(?:过|了|话|论|及)|讨论|交�
 const EVENT = /发生|战争|开战|战役|叛乱|婚礼|死亡|出生|被俘|继承|加冕|盟约|事件|那件事|那场|议和|停战|处决/;
 const CONVERSATION_CUE = /聊(?:过|了|到|起)|谈(?:过|了|话|论|及|起)|讨论|交谈|说(?:了|过|起|到)|讲(?:了|过|起)|问(?:了|过|起)|告知|告诉|提(?:了|过|到|起)|回答|对话|见面时说|对我说|跟我说/;
 const EVENT_CUE = /发生|战争|开战|战役|叛乱|婚礼|成婚|死亡|去世|出生|被俘|继承|登基|即位|加冕|盟约|事件|那件事|那场|议和|停战|处决/;
+const MEMORY_RECALL_CUE = /记得|记不记得|记忆|回忆|想起|想起来|印象|经历|往事|故事|事情|那段(?:时间|经历|往事)|可还记得/;
 
 function hasTemporalAxisCue(query) {
   const text = typeof query === "string" ? query : "";
-  return CONVERSATION_CUE.test(text) || EVENT_CUE.test(text);
+  return CONVERSATION_CUE.test(text) || EVENT_CUE.test(text) || MEMORY_RECALL_CUE.test(text);
 }
 
 function detectTemporalAxisIntent(query) {
   const text = typeof query === "string" ? query : "";
   const conversation = CONVERSATION_CUE.test(text);
-  return conversation ? (EVENT_CUE.test(text) ? "MIXED" : "CONVERSATION") : "EVENT";
+  const event = EVENT_CUE.test(text);
+  if (conversation && event) return "MIXED";
+  if (event) return "EVENT";
+  if (conversation) return "CONVERSATION";
+  return MEMORY_RECALL_CUE.test(text) ? "MEMORY_RECALL" : "EVENT";
 }
 
 function count(value) {

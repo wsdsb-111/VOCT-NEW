@@ -9,6 +9,13 @@ V8.12 Part 3 将可见标签及 `MEMORY_ENGINE_VERSION` 更新为 3.0；底层 `
 - 所有 Chat Provider 共用 `v813` 布局与 `VOTC_CACHE_ANCHOR_v8.13`。稳定规则和本场日期／身份先于动态区；回应者的官方追忆、直接记忆、近期摘要及开场世界线视图在其首个实际 Prompt 后冻结，后续轮次仍原文发送以复用前缀缓存。不同回应者不共享个人冻结前缀。
 - 开场按**已选角色**预取各自世界线，不按当时是否在场筛选；候场角色尚未入场时不获得现场直接观察。开场后已确认 CK3 动作、实时人物状态、在场关系、当前消息、时间／他人召回（含被提及场外人物摘要）与显式历史查询均在动态尾部。冻结世界线代表开场知情背景，不压过经 CK3 回读的新事实。人物摘要文件与 3.0 共享预算、2.5 存储格式和 Extra≤3 不变。真实 Provider 缓存命中率及 CK3 对话行为待实机验证。
 
+## V8.13.2 时间召回与冻结覆盖收口（320/320 本地发布组通过，实机待验收）
+
+- 新建摘要保留原生 Campaign Token；缺失 Token 时显式标记 `campaignBinding.status=unresolved`。旧摘要仅在同一 `finalizationId`、Owner/Counterpart 参与证据以及唯一非空 Episode Campaign 同时匹配时迁移绑定，标记来源 `migration`；证据缺失或有冲突时维持 null/unresolved，不能跨入已知 Campaign。此迁移不改 Memory Engine 3.0 / `schemaVersion: 2` 存储合同。
+- “记得/记不记得/回忆/想起/印象”等无明确事件/对话轴的时间问句使用 `MEMORY_RECALL`，Conversation-Time 与 Event-Time 在目标时间窗内共同竞争；有目标年份的当前 Direct Counterpart 对话摘要时，优先保留至少一篇。明确战争等事件仍为 EVENT，明确“我们聊过”仍为 CONVERSATION；Exact-Time miss 不由其他年份 Topic/Important 摘要补位。
+- 每轮 Recall 诊断记录解析轴与目标年份、Owner/Direct Counterpart、目录和 Campaign 接受/拒绝数、双时间候选/命中、Budget/Seen 抑制及选中的摘要 ID；只记录时间表达片段，不记录完整玩家问题。Broad WAR 与 WORLD_EVENT 只有 Lane 完整时才能由冻结 Manifest 命中；人物概况必须覆盖 IDENTITY、ALIVE、PRIMARY_TITLE，合法 `false`/`0` 事实仍计入覆盖。Coverage Patch Cache Revision 包含游戏资料版本、Checkpoint、Campaign、在场人物、场景/地点与已确认动作指纹；Patch 语义明确允许包含本轮直接观察。
+- 所有 Temporal Extra 与 Coverage Patch 继续放在 V8.13 冻结缓存边界之后；不改变冻结 Prefix、Recent2、官方追忆、Extra≤3 或 GLM/Provider 稳定块布局。自动化通过不等于真实 CK3/Provider Gate 或缓存收益验收。
+
 ## V8.12.1 双时间记忆合同（自动 Gate 通过，实机待验收）
 
 - 在 `schemaVersion: 2` 下增量增加摘要对象顶层 `temporalRefs`，从原始消息的 `messageIds` 确定性解析时间表达，按 Owner 可见 Segment 投影后映射到内部 `memory.provenance.temporalRefs`；区分对话记录日期与被谈及事件日期，不改写既有 `summary.date`，旧摘要缺少新字段仍兼容读取。

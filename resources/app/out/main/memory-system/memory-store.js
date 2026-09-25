@@ -200,6 +200,55 @@ class MemoryStore {
     return Object.keys(this.index.episodes).map((episodeId) => this.readJson(this.episodePath(episodeId), null)).filter(Boolean);
   }
 
+  migrateLegacySummaryCampaignBindings(characterId) {
+    const ownerId = Number(characterId);
+    if (!Number.isSafeInteger(ownerId) || ownerId <= 0 || !this.summaryFoldersDir || !fs.existsSync(this.summaryFoldersDir)) {
+      return { boundCount: 0, unresolvedCount: 0, changedCount: 0 };
+    }
+    const episodes = this.listAllEpisodes();
+    const prefix = `${ownerId}_`;
+    const changes = [];
+    let boundCount = 0, unresolvedCount = 0;
+    for (const folder of fs.readdirSync(this.summaryFoldersDir, { withFileTypes: true }).filter(entry => entry.isDirectory() && entry.name.startsWith(prefix))) {
+      const folderPath = path.join(this.summaryFoldersDir, folder.name);
+      for (const file of fs.readdirSync(folderPath).filter(name => name.endsWith(".json"))) {
+        const filePath = path.join(folderPath, file);
+        const summaries = this.readJson(filePath, null);
+        if (!Array.isArray(summaries)) continue;
+        let changed = false;
+        const migrated = summaries.map(summary => {
+          if (!summary || typeof summary !== "object" || String(summary.campaignToken || "").trim()) return summary;
+          const playerId = Number(summary.playerId), character = Number(summary.characterId);
+          const counterpartId = playerId === ownerId ? character : character === ownerId ? playerId : null;
+          const finalizationId = String(summary.finalizationId || "");
+          const matching = Number.isSafeInteger(counterpartId) && counterpartId > 0 && finalizationId
+            ? episodes.filter(episode => String(episode.finalizationId || "") === finalizationId
+              && uniqueIds((episode.participants || []).map(participant => participant && typeof participant === "object" ? participant.id ?? participant.characterId : participant)).includes(ownerId)
+              && uniqueIds((episode.participants || []).map(participant => participant && typeof participant === "object" ? participant.id ?? participant.characterId : participant)).includes(counterpartId))
+            : [];
+          const tokens = new Set(matching.map(episode => String(episode.campaignToken || "").trim()));
+          const campaignToken = matching.length && !tokens.has("") && tokens.size === 1 ? [...tokens][0] : null;
+          if (campaignToken) {
+            boundCount++;
+            changed = true;
+            return { ...summary, campaignToken, campaignBinding: { status: "bound", source: "migration", version: 1 } };
+          }
+          unresolvedCount++;
+          const reason = !finalizationId ? "FINALIZATION_ID_MISSING" : !matching.length ? "NO_UNIQUE_EPISODE_EVIDENCE" : "AMBIGUOUS_EPISODE_CAMPAIGN";
+          if (summary.campaignBinding?.status === "unresolved" && summary.campaignBinding?.reason === reason && summary.campaignBinding?.version === 1) return summary;
+          changed = true;
+          return { ...summary, campaignBinding: { status: "unresolved", reason, version: 1 } };
+        });
+        if (changed) changes.push({ filePath, summaries: migrated });
+      }
+    }
+    if (changes.length) this.withSummaryMutation(null, () => {
+      for (const change of changes) this.writeJson(change.filePath, change.summaries);
+    });
+    if (changes.length) this.invalidateFolderSummaryCache([ownerId]);
+    return { boundCount, unresolvedCount, changedCount: changes.length };
+  }
+
   listKnowledgeCharacterIds() {
     if (!fs.existsSync(this.paths.knowledge)) return [];
     return fs.readdirSync(this.paths.knowledge).map((name) => Number(path.basename(name, ".json"))).filter(Number.isFinite);
@@ -550,6 +599,7 @@ class MemoryStore {
             tags: [counterpartName, ...participantNames].filter(Boolean),
             provenance: {
               campaignToken: summary.campaignToken || null,
+              campaignBinding: summary.campaignBinding || null,
               temporalRefs,
               finalizationId,
               folderOwnerId: ownerId,

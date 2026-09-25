@@ -31,10 +31,12 @@ function buildHistoricalReferenceReplacement(reference, checkpointAsOf) {
 
 function formatSubjectiveWorldFacts(facts) {
   if (!facts.length) return null;
-  const current = facts.filter((fact) => ["GAME_TRUTH", "GAMESTATE"].includes(fact.sourceTier));
-  const history = facts.filter((fact) => fact.sourceTier === "ANNUAL_DELTA");
-  const supplemental = facts.filter((fact) => fact.sourceTier === "PLAYER_SUPPLEMENTAL");
+  const direct = facts.filter((fact) => fact.knowledgeLevel === "DIRECT_OBSERVATION");
+  const current = facts.filter((fact) => ["GAME_TRUTH", "GAMESTATE"].includes(fact.sourceTier) && fact.knowledgeLevel !== "DIRECT_OBSERVATION");
+  const history = facts.filter((fact) => fact.sourceTier === "ANNUAL_DELTA" && fact.knowledgeLevel !== "DIRECT_OBSERVATION");
+  const supplemental = facts.filter((fact) => fact.sourceTier === "PLAYER_SUPPLEMENTAL" && fact.knowledgeLevel !== "DIRECT_OBSERVATION");
   const sections = [];
+  if (direct.length) sections.push(`【本轮直接观察】\n${direct.map((fact) => `- ${fact.value}`).join("\n")}`);
   if (current.length) sections.push(`【当前获准 CK3 事实】\n${current.map((fact) => `- ${fact.value}`).join("\n")}`);
   if (history.length) sections.push(`【相关 CK3 年度变化】\n${history.map((fact) => `- ${fact.value}`).join("\n")}`);
   if (supplemental.length) sections.push(`【获准补充知识】\n${supplemental.map((fact) => `- ${fact.value}`).join("\n")}`);
@@ -90,6 +92,16 @@ function baselineLane(fact) {
   return "GENERAL_HIGH_PRIORITY";
 }
 
+function coverageField(fact) {
+  if (fact.field === "WAR") return "WAR";
+  if (fact.field === "WORLD_EVENT") return "WORLD_EVENT";
+  if (fact.field === "LOCATION") return "LOCATION";
+  if (fact.field === "ALIVE") return "ALIVE";
+  if (["NAME", "IDENTITY"].includes(fact.field)) return "IDENTITY";
+  if (fact.field === "PRIMARY_TITLE") return "PRIMARY_TITLE";
+  return null;
+}
+
 function buildSubjectiveWorldBaselinePrompt(view, { tokenBudget = 900 } = {}) {
   const facts = (view?.promptFacts || []).filter((fact) => WORLD_SOURCE_TIERS.has(fact?.sourceTier) && text(fact?.value));
   const ranked = [...facts].sort((left, right) => (Number(right.queryPriority) || 0) - (Number(left.queryPriority) || 0)
@@ -105,8 +117,15 @@ function buildSubjectiveWorldBaselinePrompt(view, { tokenBudget = 900 } = {}) {
   }
   const value = formatSubjectiveWorldFacts(selectedFacts);
   const lanes = Object.fromEntries([...laneOrder, "GENERAL_HIGH_PRIORITY"].map((lane) => [lane, selectedFacts.filter((fact) => baselineLane(fact) === lane).length]));
+  const laneCoverage = Object.fromEntries(["WAR", "WORLD_EVENT", "LOCATION", "ALIVE", "IDENTITY", "PRIMARY_TITLE"].map((lane) => {
+    const candidateCount = facts.filter(fact => coverageField(fact) === lane).length;
+    const selectedCount = selectedFacts.filter(fact => coverageField(fact) === lane).length;
+    const source = view?.baselineLaneSourceCoverage?.[lane];
+    return [lane, { candidateCount, selectedCount, complete: view?.candidateSetComplete === true
+      && source?.complete !== false && selectedCount >= candidateCount }];
+  }));
   return { text: value, tokens: value ? estimateTokens(value) : 0, selectedFacts, lanes,
-    trimmed: facts.length > selectedFacts.length || view?.truncated === true };
+    laneCoverage, trimmed: facts.length > selectedFacts.length || view?.truncated === true };
 }
 
 function buildWorldStablePrompt({ checkpointId = null, checkpointAsOf = null, hasStableCanon = false } = {}) {

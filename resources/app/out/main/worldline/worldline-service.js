@@ -1498,30 +1498,61 @@ class WorldlineService {
     return { ...pool, key, checkpointId: this.currentCheckpoint?.id || null, queryFingerprint: pool.queryFingerprint || queryFingerprint, sharedRetrievalMs: Date.now() - startedAt };
   }
 
-  _baselinePolicyFacts(responderId, activeParticipantIds) {
+  _baselinePolicyFacts(responderId, activeParticipantIds, queryPlan = null) {
     const snapshot = this.currentCheckpoint.snapshot;
-    const primary = [...new Set([String(responderId), String(snapshot.playerId || ""), ...activeParticipantIds.map(String)].filter(id => snapshot.characters[id]))].slice(0, 8);
+    const queryCharacterIds = (queryPlan?.entities?.characters || []).map(String);
+    const primary = [...new Set([String(responderId), String(snapshot.playerId || ""), ...queryCharacterIds, ...activeParticipantIds.map(String)].filter(id => snapshot.characters[id]))].slice(0, 8);
     const close = primary.flatMap(id => {
       const character = snapshot.characters[id] || {};
       return [character.spouse, character.liege, character.parents?.father, character.parents?.mother, ...(character.children || []).slice(0, 2)].map(String);
     }).filter(id => snapshot.characters[id] && !primary.includes(id));
     const ids = [...primary, ...new Set(close)].slice(0, 12);
-    const titles = Object.entries(snapshot.titles || {}).filter(([, title]) => ids.includes(String(title?.holder || ""))).slice(0, 4)
-      .map(([id, title]) => ({ id, displayName: title.key || id }));
+    const titleEntries = Object.entries(snapshot.titles || {});
+    const titleRank = entry => ({ h: 6, e: 5, k: 4, d: 3, c: 2, b: 1 })[String(entry?.[1]?.key || entry[0])[0]] || 0;
+    const titlesByHolder = new Map();
+    for (const entry of titleEntries.filter(([, title]) => ids.includes(String(title?.holder || "")))) {
+      const holder = String(entry[1]?.holder || "");
+      if (!titlesByHolder.has(holder)) titlesByHolder.set(holder, []);
+      titlesByHolder.get(holder).push(entry);
+    }
+    const heldTitleEntries = [...titlesByHolder.values()].map(entries => entries.sort((a, b) => titleRank(b) - titleRank(a) || a[0].localeCompare(b[0]))[0]);
+    const explicitTitleEntries = (queryPlan?.entities?.titles || []).map(id => [String(id), snapshot.titles?.[String(id)]]).filter(([, title]) => title);
+    const titles = [...new Map([...explicitTitleEntries, ...heldTitleEntries].map(([id, title]) => [String(id), { id: String(id), displayName: title.key || id }])).values()];
     const plan = { intent: "WAR_STATUS", entities: { characters: ids, titles: [], realms: [], wars: [] }, eventTypes: [], time: { mode: "UNSPECIFIED" }, broadWorldIntent: true };
     const candidates = buildWorldCandidates({ snapshot, analysis: {
       resolvedCharacters: ids.map(id => ({ id, displayName: snapshot.characters[id].fullName || snapshot.characters[id].firstName || `#${id}` })), resolvedTitles: titles
     }, queryPlan: plan, annualDelta: this._currentCampaignDelta(), supplemental: this._activeLegacySupplemental() });
     for (const candidate of candidates) if (candidate.kind === "WAR" && candidate.entityRefs.characters.some(id => primary.includes(String(id)))) candidate.responderRelationScore = 30;
     const ranked = rankWorldCandidates(candidates, { plan, checkpointDate: snapshot.gameDate, includeScopedSupplemental: true }).ranked;
+    const requestedTitleHolders = new Set(queryCharacterIds);
+    const titleCandidates = ranked.filter(item => item.kind === "TITLE");
+    const selectedTitles = [...titleCandidates.filter(item => requestedTitleHolders.has(String(item.payload?.holderId || ""))), ...titleCandidates]
+      .filter((item, index, all) => all.findIndex(candidate => candidate.id === item.id) === index).slice(0, 4);
     const selected = {
-      gameTruth: [...ranked.filter(item => item.kind === "CHARACTER").slice(0, 12), ...ranked.filter(item => item.kind === "WAR").slice(0, 3), ...ranked.filter(item => item.kind === "TITLE").slice(0, 4)],
+      gameTruth: [...ranked.filter(item => item.kind === "CHARACTER").slice(0, 12), ...ranked.filter(item => item.kind === "WAR").slice(0, 3), ...selectedTitles],
       delta: ranked.filter(item => item.category === "DELTA").slice(0, 3),
       supplemental: ranked.filter(item => item.category === "SUPPLEMENTAL").slice(0, 2)
     };
-    return classifySelectedWorldFacts(selected, snapshot.gameDate, snapshot).map(fact => ({ ...fact,
+    const allFacts = classifySelectedWorldFacts({
+      gameTruth: ranked.filter(item => ["CHARACTER", "WAR", "TITLE"].includes(item.kind)),
+      delta: ranked.filter(item => item.category === "DELTA"),
+      supplemental: ranked.filter(item => item.category === "SUPPLEMENTAL")
+    }, snapshot.gameDate, snapshot);
+    const selectedFacts = classifySelectedWorldFacts(selected, snapshot.gameDate, snapshot).map(fact => ({ ...fact,
       queryPriority: fact.entityId === String(responderId) ? 60 : fact.entityId === String(snapshot.playerId) ? 50 : primary.includes(String(fact.entityId)) ? 40 : fact.field === "WAR" ? 35 : 20
     }));
+    const laneFor = fact => fact.field === "WAR" ? "WAR" : fact.field === "WORLD_EVENT" ? "WORLD_EVENT"
+      : fact.field === "LOCATION" ? "LOCATION" : fact.field === "ALIVE" ? "ALIVE"
+        : ["NAME", "IDENTITY"].includes(fact.field) ? "IDENTITY" : fact.field === "PRIMARY_TITLE" ? "PRIMARY_TITLE" : null;
+    const laneCount = (facts, lane) => new Set(facts.filter(fact => laneFor(fact) === lane)
+      .map(fact => ["WAR", "WORLD_EVENT"].includes(lane) ? fact.factId : fact.entityId)).size;
+    const skippedActiveWar = Object.values(snapshot.wars || {}).some(war => !war?.endDate)
+      && candidates.filter(candidate => candidate.kind === "WAR").length < Object.values(snapshot.wars || {}).filter(war => !war?.endDate).length;
+    Object.defineProperty(selectedFacts, "laneSourceCoverage", { value: Object.fromEntries(["WAR", "WORLD_EVENT", "LOCATION", "ALIVE", "IDENTITY", "PRIMARY_TITLE"].map(lane => {
+      const candidateCount = laneCount(allFacts, lane), selectedCount = laneCount(selectedFacts, lane);
+      return [lane, { candidateCount, selectedCount, complete: candidateCount === selectedCount && !(lane === "WAR" && skippedActiveWar) }];
+    })) });
+    return selectedFacts;
   }
 
   getSubjectiveWorldView({ responderId, query = "", assistContext = "", mentionedEntityIds = [], activeParticipantIds = [], conversationId = null, turnEpoch = null, sceneRevision = null, presenceRevision = null, directObservationFactIds = [], directObservationFacts = [], runtimeGameData = null, snapshotMode = null } = {}) {
@@ -1549,7 +1580,7 @@ class WorldlineService {
     const redactedScopedFactIds = new Set((pool.candidates || []).filter((fact) => fact?.sourceTier === "PLAYER_SUPPLEMENTAL" && ["PERSONAL_MEMORY", "SECRET"].includes(fact?.knowledgeLevel) && !fact?.value).map((fact) => String(fact.factId || "")));
     const querySubjectIds = new Set((pool.queryPlan?.entities?.characters?.length ? pool.queryPlan.entities.characters : pool.candidates.filter(fact => ["NAME", "IDENTITY", "ALIVE", "LOCATION"].includes(fact.field) && snapshot.characters[String(fact.entityId)]).map(fact => fact.entityId)).map(String));
     const safeDirectObservationFacts = (Array.isArray(directObservationFacts) ? directObservationFacts : []).filter((fact) => fact && typeof fact === "object" && fact.knowledgeLevel === "DIRECT_OBSERVATION" && querySubjectIds.has(String(fact.entityId || "")) && Array.isArray(fact.directObserverIds) && fact.directObserverIds.map(String).includes(responderId2)).map((fact) => ({ ...fact, factId: String(fact.factId || ""), entityId: String(fact.entityId), directObserverIds: [responderId2], observationEvidenceComplete: true, temporalSafe: fact.temporalSafe === true, queryPriority: 100 })).sort((left, right) => left.factId.localeCompare(right.factId)).slice(0, 16);
-    const baselineFacts = snapshotMode === "CONVERSATION_BASELINE" ? this._baselinePolicyFacts(responderId2, activeParticipantIds) : [];
+    const baselineFacts = snapshotMode === "CONVERSATION_BASELINE" ? this._baselinePolicyFacts(responderId2, activeParticipantIds, pool.queryPlan) : [];
     const candidates = [...selfFacts, ...memoryFacts, ...baselineFacts, ...pool.candidates.filter((fact) => !redactedScopedFactIds.has(String(fact.factId || ""))), ...hydratedScopedSupplemental, ...safeDirectObservationFacts].filter(fact => !(String(fact.entityId) === responderId2 && SOCIAL_FIELDS.has(fact.field) && fact.verificationMode !== "LIVE_RUNTIME"));
     const closeScopeIds = new Set(pool.candidates.filter(fact => ["LOCATION", "COURT_EMPLOYER", "IDENTITY", "ALIVE"].includes(fact.field)).map(fact => String(fact.entityId)));
     const scopeIds = [...new Set(candidates.flatMap(fact => [String(fact.entityId || ""), ...(fact.scopeEntityIds || [])]).filter(Boolean))];
@@ -1586,7 +1617,8 @@ class WorldlineService {
       scopeResolver: (fact) => fact.scopeEntityIds?.length ? { sameRealm: fact.scopeEntityIds.some(id => scopeByEntity.get(String(id))?.sameRealm === true) } : scopeByEntity.get(String(fact.entityId || "")) || { sameCourt: null, sameRealm: null, completeness: "INCOMPLETE" },
       checkpointId: this.currentCheckpoint.id,
       directObservationFactIds: safeDirectObservationFactIds,
-      snapshotMode
+      snapshotMode,
+      baselineLaneSourceCoverage: baselineFacts.laneSourceCoverage || null
     });
     const knowledgePolicyMs = Date.now() - policyStartedAt;
     const result = {
@@ -1786,16 +1818,16 @@ class WorldlineService {
 
   getSubjectiveCoveragePatch({ excludeFactIds = [], missingFields = [], tokenBudget = 300, ...args } = {}) {
     if (!this.isSubjectivePromptIntegrationEnabled()) return null;
-    const view = this.getSubjectiveWorldView(args);
+    const view = this.getSubjectiveWorldView({ ...args, snapshotMode: "CONVERSATION_BASELINE" });
     if (!view) return null;
     const frozenIds = new Set(excludeFactIds.map(String));
     const facts = view.promptFacts.filter((fact) => !frozenIds.has(String(fact.factId || "")) && (!missingFields.length || missingFields.some((missing) => {
-      if (fact.field !== missing.field) return false;
+      if (fact.field !== missing.field && !(missing.field === "LOCATION" && fact.field === "PRESENCE")) return false;
       if (!missing.entityId && !missing.entityIds?.length) return true;
       if (missing.entityIds?.length) return fact.field === "WAR" && missing.entityIds.every(id => fact.scopeEntityIds?.map(String).includes(String(id)) || fact.scopeTitleIds?.map(String).includes(String(id)) || String(fact.entityId) === String(id) || String(fact.entityId) === `war:${id}`);
       return String(fact.entityId) === String(missing.entityId) || fact.field === "PRIMARY_TITLE" && String(fact.factId || "").includes(`title:${missing.entityId}:`);
     })));
-    const prefix = "=== 本轮世界知识补充 ===\n以下是本场开始时该角色已获准知晓、但开场冻结视图未收录的事实；不是刚刚发生的新事件。\n";
+    const prefix = "=== 本轮世界知识补充 ===\n以下是当前回应角色获准知晓、但开场冻结视图未收录的事实；其中可能包含本轮直接观察。除明确标记的当前观察外，不应将这些内容理解为刚刚发生的新世界事件。\n";
     const formatted = buildSubjectiveWorldTurnRecall({ ...view, promptFacts: facts }, { tokenBudget: Math.max(0, tokenBudget - estimateTokens(prefix)) });
     const patchText = formatted.text && estimateTokens(prefix + formatted.text) <= tokenBudget ? prefix + formatted.text : null;
     return { patchText, patchFacts: patchText ? formatted.selectedFacts : [], patchTokens: patchText ? estimateTokens(patchText) : 0,
@@ -1853,7 +1885,8 @@ class WorldlineService {
       worldStableText: [buildWorldStablePrompt({ checkpointId: view.checkpointId, checkpointAsOf: view.asOf, hasStableCanon: !!stableCanon.text }), stableCanon.text?.replace("本轮玩家 Canon", "会话固定玩家 Canon（V8.7）")].filter(Boolean).join("\n\n") || null,
       worldTurnRecallText: turnText,
       worldTurnRecallTokens: turnTokens,
-      ...(baseline ? { baselineFacts: formatted.selectedFacts, baselineLanes: formatted.lanes, baselineTruncated: formatted.trimmed || view.truncated, baselineCandidateSetComplete: view.candidateSetComplete, checkpointId: view.checkpointId } : {}),
+      ...(baseline ? { baselineFacts: formatted.selectedFacts, baselineLanes: formatted.lanes, baselineLaneCoverage: formatted.laneCoverage,
+        baselineTruncated: formatted.trimmed || view.truncated, baselineCandidateSetComplete: view.candidateSetComplete, checkpointId: view.checkpointId } : {}),
       worldTurnRecallTrimmed: formatted.trimmed,
       historicalReferenceInfo: buildHistoricalReferenceReplacement(historicalReferenceInfo, view.asOf),
       queryFingerprint: view.queryFingerprint || null,

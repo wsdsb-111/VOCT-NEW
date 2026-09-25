@@ -69,7 +69,7 @@ function authorityScore(candidate) {
 function intentScore(candidate, plan) {
   if (plan.intent === "WAR_STATUS" && String(candidate.eventType || "").startsWith("WAR_")) return 10;
   if (plan.intent === "TITLE_HOLDER" && candidate.kind === "TITLE") return 10;
-  if ((plan.intent === "CHARACTER_LOCATION" || plan.intent === "CHARACTER_STATE") && candidate.kind === "CHARACTER") return 10;
+  if ((plan.intent === "CHARACTER_LOCATION" || plan.intent === "CHARACTER_STATE" || plan.intent === "CHARACTER_OVERVIEW") && candidate.kind === "CHARACTER") return 10;
   if (plan.intent === "WORLD_RECENT" && candidate.category === "DELTA") return 10;
   return 0;
 }

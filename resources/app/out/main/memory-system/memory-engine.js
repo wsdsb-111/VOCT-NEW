@@ -60,6 +60,7 @@ class MemoryEngine {
       }
     });
     this.activeFinalizationIds = new Set();
+    this.summaryCampaignMigrationOwners = new Set();
     this.memoryGeneration = 0;
   }
 
@@ -129,6 +130,18 @@ class MemoryEngine {
   }
 
   loadOwnerFolderMemories(characterId) {
+    const ownerId = Number(characterId);
+    if (Number.isSafeInteger(ownerId) && !this.summaryCampaignMigrationOwners.has(ownerId)) {
+      try {
+        const migration = this.store.migrateLegacySummaryCampaignBindings?.(ownerId);
+        this.summaryCampaignMigrationOwners.add(ownerId);
+        if (migration?.boundCount || migration?.unresolvedCount) this.trace.record("summary_campaign_binding", {
+          characterId: ownerId, boundCount: migration.boundCount, unresolvedCount: migration.unresolvedCount
+        });
+      } catch (error) {
+        this.trace.record("summary_campaign_binding", { characterId: ownerId, error: error.message });
+      }
+    }
     return this.store.loadFolderSummariesForCharacter(characterId);
   }
 
@@ -1484,7 +1497,7 @@ class MemoryEngine {
         currentGameDate, currentTotalDays, ownerFolderMemories: folderSnapshot, campaignToken, dualTemporal: true })),
       ...buildDualTemporalIndex(mentionedCandidates, { ownerId, currentGameDate, currentTotalDays, campaignToken })] : [];
     const temporalSelections = selectDualTemporalExtras(temporalIndex, [...directMemories, ...mentionedCandidates], temporal, {
-      query, entityIds: mentionedIds, excludedKeys: [...selectedFolderKeys, ...responderCache.seenDynamicSummaries],
+      query, entityIds: mentionedIds, directCounterpartIds: directIds, excludedKeys: [...selectedFolderKeys, ...responderCache.seenDynamicSummaries],
       getKey: memory => this.getRouteMemoryKey(memory), limit: 3
     });
     const temporalCandidates = temporalSelections.map(entry => entry.memory);
@@ -1519,9 +1532,12 @@ class MemoryEngine {
     }
     const temporalDescription = extra.map(entry => entry.reason?.source === "temporal"
       ? `命中依据：${entry.reason.axis === "event" ? "原始对话中的事件时间引用" : "对话发生日期"} ${entry.reason.fromGameDate || ""}～${entry.reason.toGameDate || ""}（${{ year: "年", month: "月", day: "日" }[entry.reason.precision] || "未知"}精度，不推断更精确日期）。摘要自身的对话日期仍为${entry.memory.eventDate || "未知"}。` : "").filter(Boolean).join("\n");
+    const temporalAxisLabel = temporal.axisIntent === "EVENT" ? "事件发生时间"
+      : temporal.axisIntent === "CONVERSATION" ? "对话发生日期"
+        : temporal.axisIntent === "MEMORY_RECALL" ? "记忆/事件双轴召回" : "事件/对话混合查询";
     const temporalExtraText = blockedTimeQuery ? "【本轮时间核对】缺少可确认的游戏日期或时间范围，无法安全检索；不得用其他年份的记忆代答。"
       : exactTimeQuery
-      ? `【本轮时间核对：游戏当前${normalizeGameDate(currentGameDate)?.display}；${temporal.expression}${temporal.targetGameYear ? `对应${temporal.targetGameYear}年` : ""}】时间含义：${temporal.axisIntent === "EVENT" ? "事件发生时间" : temporal.axisIntent === "CONVERSATION" ? "对话发生时间" : "事件/对话混合查询"}。${extra.length ? `${temporalDescription}\n时间引用证明当时谈及该时段，不单独证明事件属实；只引用正文实际保留的证据。\n${this.formatMemoryBlock("本轮时间匹配摘要", extra)}` : "本轮未检索到可新增的该时段对话摘要；此前已注入的对应证据仍可使用，不等于当时没有发生事件。"}冻结的最近两篇对话和官方追忆可能含其他日期，不能把其他年份的事当成该时段的事。`
+      ? `【本轮时间核对：游戏当前${normalizeGameDate(currentGameDate)?.display}；${temporal.expression}${temporal.targetGameYear ? `对应${temporal.targetGameYear}年` : ""}】时间含义：${temporalAxisLabel}。${extra.length ? `${temporalDescription}\n时间引用证明当时谈及该时段，不单独证明事件属实；只引用正文实际保留的证据。\n${this.formatMemoryBlock("本轮时间匹配摘要", extra)}` : "本轮未检索到可新增的该时段对话摘要；此前已注入的对应证据仍可使用，不等于当时没有发生事件。"}冻结的最近两篇对话和官方追忆可能含其他日期，不能把其他年份的事当成该时段的事。`
       : this.formatMemoryBlock("本轮召回摘要（仅本轮注入，最多三篇）", extra);
     let topicPatch = memoryEngine3Enabled ? [] : Array.isArray(responderCache.topicPatch) ? responderCache.topicPatch : [];
     if (!memoryEngine3Enabled && !responderCache.topicPatchLocked && query.trim()) {
@@ -1541,8 +1557,36 @@ class MemoryEngine {
     }
     const selectedTokens = [...stable, ...relevant].reduce((total, entry) => total + Number(entry.tokens || 0), 0);
     const folderCandidateCount = new Set([...directGroups.values(), ...mentionedGroups.values()].flat().map((entry) => this.getRouteMemoryKey(entry.memory))).size;
-    const temporalMatches = temporalIndex.filter(entry => Number.isFinite(entry.fromTotalDays)
-      && entry.fromTotalDays <= temporal.primaryWindow?.toTotalDays && entry.toTotalDays >= temporal.primaryWindow?.fromTotalDays);
+    const temporalRanges = [temporal.primaryWindow, ...(temporal.mode === "TARGET_DATE" ? [] : [temporal.expansionWindow])].filter(Boolean);
+    const temporalMatches = temporalIndex.filter(entry => Number.isFinite(entry.fromTotalDays) && temporalRanges.some(range =>
+      entry.fromTotalDays <= range.toTotalDays && entry.toTotalDays >= range.fromTotalDays));
+    const temporalMemoryById = new Map([...directMemories, ...mentionedCandidates].map(memory => [memory.memoryId, memory]));
+    const temporalSelectedCount = extra.filter(entry => entry.reason?.source === "temporal").length;
+    const temporalDiagnostics = {
+      requested: temporal.requested === true,
+      triggered: temporal.triggered === true,
+      axis: temporal.axisIntent || "none",
+      expression: temporal.expression || null,
+      ownerId,
+      directCounterpartIds: directIds.slice(0, 8),
+      currentGameDate: currentGameDate || null,
+      targetGameYear: temporal.targetGameYear || null,
+      folderMemoryCount: folderSnapshot.length,
+      campaignAcceptedCount: folderMemories.length,
+      campaignRejectedCount: folderSnapshot.length - folderMemories.length,
+      legacyCampaignRejectedCount: campaignToken == null ? 0 : folderSnapshot.filter(memory => memory.provenance?.campaignToken == null).length,
+      eventTimeCandidates: new Set(temporalMatches.filter(entry => entry.axis === "event").map(entry => entry.summaryId)).size,
+      conversationTimeCandidates: new Set(temporalMatches.filter(entry => entry.axis === "conversation").map(entry => entry.summaryId)).size,
+      eventHits: extra.filter(entry => entry.reason?.source === "temporal" && entry.reason.axis === "event").length,
+      conversationHits: extra.filter(entry => entry.reason?.source === "temporal" && entry.reason.axis === "conversation").length,
+      seenSuppressedCount: new Set(temporalMatches.filter(entry => {
+        const memory = temporalMemoryById.get(entry.summaryId);
+        return memory && responderCache.seenDynamicSummaries.has(this.getRouteMemoryKey(memory));
+      }).map(entry => entry.summaryId)).size,
+      budgetOmittedCount: temporalSelections.length - temporalSelectedCount,
+      selectedCount: temporalSelectedCount,
+      selectedSummaryIds: extra.filter(entry => entry.reason?.source === "temporal").map(entry => entry.memory.memoryId).slice(0, 3)
+    };
     this.trace.record("retrieval_metrics", {
       characterId: ownerId,
       durationMs: Date.now() - startedAt,
@@ -1555,17 +1599,29 @@ class MemoryEngine {
       mentionedCacheHit,
       patchInserted: extra.length > 0,
       temporalTriggered: temporal.triggered,
-      temporalExtraCount: extra.filter((entry) => entry.reason?.source === "temporal").length,
-      temporalAxis: temporal.axisIntent || "none",
-      targetGameYear: temporal.targetGameYear || null,
-      eventTimeCandidates: new Set(temporalMatches.filter(entry => entry.axis === "event").map(entry => entry.summaryId)).size,
-      conversationTimeCandidates: new Set(temporalMatches.filter(entry => entry.axis === "conversation").map(entry => entry.summaryId)).size,
+      temporalRequested: temporalDiagnostics.requested,
+      temporalExtraCount: temporalSelectedCount,
+      temporalAxis: temporalDiagnostics.axis,
+      temporalExpression: temporalDiagnostics.expression,
+      temporalOwnerId: temporalDiagnostics.ownerId,
+      temporalDirectCounterpartIds: temporalDiagnostics.directCounterpartIds,
+      temporalSelectedSummaryIds: temporalDiagnostics.selectedSummaryIds,
+      currentGameDate: temporalDiagnostics.currentGameDate,
+      targetGameYear: temporalDiagnostics.targetGameYear,
+      folderMemoryCount: temporalDiagnostics.folderMemoryCount,
+      campaignAcceptedCount: temporalDiagnostics.campaignAcceptedCount,
+      campaignRejectedCount: temporalDiagnostics.campaignRejectedCount,
+      legacyCampaignRejectedCount: temporalDiagnostics.legacyCampaignRejectedCount,
+      eventTimeCandidates: temporalDiagnostics.eventTimeCandidates,
+      conversationTimeCandidates: temporalDiagnostics.conversationTimeCandidates,
       temporalEventHitCount: extra.filter(entry => entry.reason?.axis === "event").length,
       temporalConversationHitCount: extra.filter(entry => entry.reason?.axis === "conversation").length,
+      temporalSeenSuppressedCount: temporalDiagnostics.seenSuppressedCount,
       temporalFocusReused: temporal.focusReused === true,
       temporalFocusReuseCount: temporal.focusReused ? 1 : 0,
       temporalMissCount: temporal.triggered && !temporalMatches.length ? 1 : 0,
-      temporalBudgetOmittedCount: temporalSelections.length - extra.filter(entry => entry.reason?.source === "temporal").length,
+      temporalBudgetOmittedCount: temporalDiagnostics.budgetOmittedCount,
+      selectedTemporalCount: temporalDiagnostics.selectedCount,
       memoryStableTokens: frozenSelectedTokens,
       memoryDynamicExtraTokens: extra.reduce((total, entry) => total + entry.tokens, 0),
       indexSize: Object.keys(this.store.index.memories || {}).length
@@ -1582,6 +1638,7 @@ class MemoryEngine {
       topicPatch,
       extra,
       temporal,
+      temporalDiagnostics,
       temporalExtraText,
       stableText: this.formatMemoryBlock("长期稳定记忆", stable),
       directText: this.formatMemoryBlock("与当前在场人物的直接记忆", direct),
