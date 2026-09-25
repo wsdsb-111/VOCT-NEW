@@ -4,6 +4,8 @@
 
 ## 推荐阅读顺序
 
+V8.13.2.1 当前入口：[Acceptance Hotfix](V8阶段开发记录.md#第一百一十八阶段v81321-acceptance-hotfix)。321/321 本地发布组通过；多人时间召回按实际提问者保底；摘要管理器支持逐篇确认旧摘要 Campaign 绑定；原始摘要目录统计拒绝数；终局恢复后重试迁移；Coverage Patch 对预算截断显式标记部分事实。CK3/Provider 实机 Gate 待验收。
+
 V8.13.2 当前入口：[Temporal Recall & Worldline Coverage Closure](V8阶段开发记录.md#第一百一十七阶段v8132-temporal-recall--worldline-coverage-closure)。修复 Legacy Campaign 唯一证据迁移、MEMORY_RECALL 双轴/直接对话保底、时间诊断、Broad Lane 完整性、CHARACTER_OVERVIEW 及补丁缓存修订。320/320 本地发布组通过；CK3/Provider Gate 待实测。
 
 V8.13.1 当前入口：[Frozen Worldline Coverage 补强](V8阶段开发记录.md#第一百一十六阶段v8131-frozen-worldline-coverage)。冻结世界线补齐领域多样性，以不入 Prompt 的覆盖清单判断 CURRENT/UNSPECIFIED 缺口；动态补丁不进入缓存前缀，CK3/Provider 实机 Gate 仍待验收。

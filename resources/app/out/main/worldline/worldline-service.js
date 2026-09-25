@@ -1827,10 +1827,24 @@ class WorldlineService {
       if (missing.entityIds?.length) return fact.field === "WAR" && missing.entityIds.every(id => fact.scopeEntityIds?.map(String).includes(String(id)) || fact.scopeTitleIds?.map(String).includes(String(id)) || String(fact.entityId) === String(id) || String(fact.entityId) === `war:${id}`);
       return String(fact.entityId) === String(missing.entityId) || fact.field === "PRIMARY_TITLE" && String(fact.factId || "").includes(`title:${missing.entityId}:`);
     })));
-    const prefix = "=== 本轮世界知识补充 ===\n以下是当前回应角色获准知晓、但开场冻结视图未收录的事实；其中可能包含本轮直接观察。除明确标记的当前观察外，不应将这些内容理解为刚刚发生的新世界事件。\n";
-    const formatted = buildSubjectiveWorldTurnRecall({ ...view, promptFacts: facts }, { tokenBudget: Math.max(0, tokenBudget - estimateTokens(prefix)) });
-    const patchText = formatted.text && estimateTokens(prefix + formatted.text) <= tokenBudget ? prefix + formatted.text : null;
+    const header = "=== 本轮世界知识补充 ===\n以下是当前回应角色获准知晓、但开场冻结视图未收录的事实；其中可能包含本轮直接观察。除明确标记的当前观察外，不应将这些内容理解为刚刚发生的新世界事件。\n";
+    const partialWarning = "【完整性提示】以下仅为当前上下文预算内可提供的部分获准事实，不代表完整列表。\n";
+    const format = prefix => buildSubjectiveWorldTurnRecall({ ...view, promptFacts: facts }, { tokenBudget: Math.max(0, tokenBudget - estimateTokens(prefix)) });
+    let prefix = header;
+    let formatted = format(prefix);
+    let patchTruncated = formatted.selectedFacts.length < facts.length || formatted.trimmed.length > 0;
+    if (patchTruncated) {
+      prefix = header + partialWarning;
+      formatted = format(prefix);
+      patchTruncated = formatted.selectedFacts.length < facts.length || formatted.trimmed.length > 0;
+    }
+    const fullPatchText = formatted.text && estimateTokens(prefix + formatted.text) <= tokenBudget ? prefix + formatted.text : null;
+    const noFactsFitText = facts.length ? `${header}${partialWarning}当前补充预算未能容纳任何事实；这不代表事实不存在。\n` : null;
+    const patchText = fullPatchText || (!formatted.text && patchTruncated && noFactsFitText && estimateTokens(noFactsFitText) <= tokenBudget ? noFactsFitText : null);
+    const patchSelectedCount = fullPatchText ? formatted.selectedFacts.length : 0;
+    patchTruncated = patchTruncated || patchSelectedCount < facts.length;
     return { patchText, patchFacts: patchText ? formatted.selectedFacts : [], patchTokens: patchText ? estimateTokens(patchText) : 0,
+      patchCandidateCount: facts.length, patchSelectedCount, patchTruncated,
       checkpointId: view.checkpointId, cacheHit: view.cacheHit === true,
       filteredCount: view.filteredCount, secretBlockedCount: view.secretBlockedCount };
   }

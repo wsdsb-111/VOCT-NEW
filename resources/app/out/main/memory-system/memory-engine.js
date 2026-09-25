@@ -145,6 +145,14 @@ class MemoryEngine {
     return this.store.loadFolderSummariesForCharacter(characterId);
   }
 
+  bindLegacySummaryCampaign(input = {}) {
+    const result = this.store.bindLegacySummaryCampaign(input);
+    this.summaryCampaignMigrationOwners.delete(Number(result.ownerId));
+    this.invalidateSummaryFolderCache([result.ownerId]);
+    this.trace.record("summary_campaign_binding", { characterId: result.ownerId, boundCount: result.boundCount, source: "user_confirmed_migration" });
+    return result;
+  }
+
   invalidateSummaryFolderCache(characterIds = null) {
     this.store.invalidateFolderSummaryCache(characterIds);
   }
@@ -979,6 +987,9 @@ class MemoryEngine {
       commitMarker,
       committedAt: new Date().toISOString()
     });
+    const ownerIds = uniqueIds((episode.participants || []).map(participant => participant && typeof participant === "object" ? participant.id ?? participant.characterId : participant));
+    for (const ownerId of ownerIds) this.summaryCampaignMigrationOwners.delete(ownerId);
+    this.invalidateSummaryFolderCache(ownerIds);
     return episode;
   }
 
@@ -1371,7 +1382,7 @@ class MemoryEngine {
     return selected;
   }
 
-  retrieveForResponder({ characterId, query = "", directCounterpartIds = [], mentionedEntityIds = [], mentionedEntityNames = {}, mentionedRecallCache = null, sessionRecallCache = null, ownerFolderMemories = null, officialSummary = null, turnEpoch = 0, currentGameDate = null, currentTotalDays = null, campaignToken = null, conversationId = null, sceneRevision = null, memoryEngine3Enabled = true, temporalSummaryRecallEnabled = true, tokenBudget = 800, estimateTokens } = {}) {
+  retrieveForResponder({ characterId, query = "", directCounterpartIds = [], querySpeakerId = null, mentionedEntityIds = [], mentionedEntityNames = {}, mentionedRecallCache = null, sessionRecallCache = null, ownerFolderMemories = null, officialSummary = null, turnEpoch = 0, currentGameDate = null, currentTotalDays = null, campaignToken = null, conversationId = null, sceneRevision = null, memoryEngine3Enabled = true, temporalSummaryRecallEnabled = true, tokenBudget = 800, estimateTokens } = {}) {
     const startedAt = Date.now();
     const ownerId = Number(characterId);
     const temporalScope = JSON.stringify([campaignToken, conversationId, sceneRevision]);
@@ -1497,7 +1508,7 @@ class MemoryEngine {
         currentGameDate, currentTotalDays, ownerFolderMemories: folderSnapshot, campaignToken, dualTemporal: true })),
       ...buildDualTemporalIndex(mentionedCandidates, { ownerId, currentGameDate, currentTotalDays, campaignToken })] : [];
     const temporalSelections = selectDualTemporalExtras(temporalIndex, [...directMemories, ...mentionedCandidates], temporal, {
-      query, entityIds: mentionedIds, directCounterpartIds: directIds, excludedKeys: [...selectedFolderKeys, ...responderCache.seenDynamicSummaries],
+      query, entityIds: mentionedIds, directCounterpartIds: directIds, querySpeakerId, excludedKeys: [...selectedFolderKeys, ...responderCache.seenDynamicSummaries],
       getKey: memory => this.getRouteMemoryKey(memory), limit: 3
     });
     const temporalCandidates = temporalSelections.map(entry => entry.memory);
@@ -1568,6 +1579,7 @@ class MemoryEngine {
       axis: temporal.axisIntent || "none",
       expression: temporal.expression || null,
       ownerId,
+      querySpeakerId: querySpeakerId != null && Number.isSafeInteger(Number(querySpeakerId)) ? Number(querySpeakerId) : null,
       directCounterpartIds: directIds.slice(0, 8),
       currentGameDate: currentGameDate || null,
       targetGameYear: temporal.targetGameYear || null,

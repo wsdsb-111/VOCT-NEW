@@ -21125,6 +21125,7 @@ const SummariesManager = () => {
   const [isRetryingSummaries, setIsRetryingSummaries] = reactExports.useState(false);
   const [retryResult, setRetryResult] = reactExports.useState(null);
   const [isLoadingSummaries, setIsLoadingSummaries] = reactExports.useState(false);
+  const [bindingLegacySummaryId, setBindingLegacySummaryId] = reactExports.useState(null);
   const [expandedCharacters, setExpandedCharacters] = reactExports.useState(/* @__PURE__ */ new Set());
   const [editingEntry, setEditingEntry] = reactExports.useState(null);
   const [searchQuery, setSearchQuery] = reactExports.useState("");
@@ -21235,6 +21236,22 @@ const SummariesManager = () => {
     } catch (error) {
       console.error("Failed to delete summary:", error);
       alert(t("summariesManager.failedDeleteSummary", { error: "Unknown error" }));
+    }
+  };
+  const handleBindLegacySummary = async (metadata, summary) => {
+    const ownerId = Number(metadata.ownerId ?? metadata.playerId);
+    const counterpartId = Number(metadata.counterpartId);
+    const bindingId = summary.legacyBindingId;
+    if (!bindingId || !window.confirm(`确认将“${metadata.ownerName || metadata.playerName} ↔ ${metadata.counterpartName || metadata.characterName}”的 ${summary.date || "无日期"} 这篇旧摘要绑定到当前加载的战役？只修改此摘要；已有绑定和同文件其他摘要不受影响。`)) return;
+    setBindingLegacySummaryId(bindingId);
+    try {
+      const result = await window.conversationAPI.bindLegacySummaryCampaign(ownerId, counterpartId, [bindingId]);
+      if (!result?.success) throw new Error(result?.error || "legacy_summary_binding_failed");
+      await loadSummaries(true);
+    } catch (error) {
+      alert(`旧摘要绑定失败：${error.message || "请确认已连接存档且两名角色属于当前战役。"}`);
+    } finally {
+      setBindingLegacySummaryId(null);
     }
   };
   const handleDeleteCharacterSummaries = async (playerId, characterId) => {
@@ -21436,6 +21453,14 @@ const SummariesManager = () => {
                   summary.sourceType === "CK3_OFFICIAL_RECOLLECTION" ? null : summary.date
                 ] }),
                 /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "summary-actions", children: [
+                  summary.legacyBindingId && Number.isSafeInteger(Number(metadata.ownerId ?? metadata.playerId)) && Number(metadata.ownerId ?? metadata.playerId) > 0 && Number.isSafeInteger(Number(metadata.counterpartId)) && Number(metadata.counterpartId) > 0 && Number(metadata.counterpartId) !== Number(metadata.ownerId ?? metadata.playerId) && /* @__PURE__ */ jsxRuntimeExports.jsx(
+                    "button",
+                    {
+                      disabled: bindingLegacySummaryId === summary.legacyBindingId,
+                      onClick: () => handleBindLegacySummary(metadata, summary),
+                      children: bindingLegacySummaryId === summary.legacyBindingId ? "绑定中…" : "绑定当前战役"
+                    }
+                  ),
                   /* @__PURE__ */ jsxRuntimeExports.jsx(
                     "button",
                     {

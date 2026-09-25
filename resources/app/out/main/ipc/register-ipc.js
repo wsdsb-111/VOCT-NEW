@@ -918,6 +918,19 @@ function registerIpcHandlers(runtime) {
       return [];
     }
   });
+  electron.ipcMain.handle("conversation:bindLegacySummaryCampaign", async (_, request = {}) => {
+    try {
+      if (!Array.isArray(request.summaryIds) || request.summaryIds.some(id => typeof id !== "string" || id.length > 128)) throw new Error("legacy_summary_binding_targets_required");
+      return SummariesManager.bindLegacySummaryCampaign({
+        ownerId: requireInteger(request.ownerId, "owner_id", { max: 2147483647 }),
+        counterpartId: requireInteger(request.counterpartId, "counterpart_id", { max: 2147483647 }),
+        summaryIds: request.summaryIds
+      });
+    } catch (error) {
+      console.error("Failed to bind legacy summary campaign:", error);
+      return { success: false, error: error.message || "Unknown error" };
+    }
+  });
   electron.ipcMain.handle("conversation:updateSummary", async (_, request = {}) => {
     try {
       if (typeof request.newContent !== "string" || request.newContent.length > 1048576) throw new Error("summary_content_must_be_a_string_up_to_1048576_chars");

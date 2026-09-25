@@ -88,7 +88,7 @@ function buildDualTemporalIndex(memories, options = {}) {
     fromTotalDays: entry.totalDays, toTotalDays: entry.totalDays, precision: "day" })), ...buildEventTimeIndex(scoped, options)];
 }
 
-function selectDualTemporalExtras(index, memories, temporal, { query = "", entityIds = [], directCounterpartIds = [], excludedKeys = [], getKey = memory => memory.memoryId, limit = 3 } = {}) {
+function selectDualTemporalExtras(index, memories, temporal, { query = "", entityIds = [], directCounterpartIds = [], querySpeakerId = null, excludedKeys = [], getKey = memory => memory.memoryId, limit = 3 } = {}) {
   if (!temporal?.triggered || limit <= 0) return [];
   const byId = new Map((memories || []).map(memory => [memory.memoryId, memory]));
   const excluded = new Set(excludedKeys);
@@ -121,8 +121,10 @@ function selectDualTemporalExtras(index, memories, temporal, { query = "", entit
   const ranked = [...candidatesByKey.values()].sort((a, b) => b.score - a.score || (temporal.order === "TARGET_DISTANCE" ? distance(a) - distance(b) : 0)
     || b.toTotalDays - a.toTotalDays || a.summaryId.localeCompare(b.summaryId));
   if (temporal.axisIntent === "MEMORY_RECALL") {
-    const directIds = new Set(directCounterpartIds.map(Number));
-    const directConversation = ranked.find(entry => entry.axis === "conversation" && directIds.has(Number(entry.counterpartId))
+    const speakerId = Number(querySpeakerId);
+    const preferredCounterpartIds = Number.isSafeInteger(speakerId) && speakerId > 0
+      ? new Set([speakerId]) : new Set(directCounterpartIds.map(Number));
+    const directConversation = ranked.find(entry => entry.axis === "conversation" && preferredCounterpartIds.has(Number(entry.counterpartId))
       && temporal.primaryWindow && entry.fromTotalDays >= temporal.primaryWindow.fromTotalDays && entry.toTotalDays <= temporal.primaryWindow.toTotalDays);
     if (directConversation) ranked.unshift(...ranked.splice(ranked.indexOf(directConversation), 1));
   }

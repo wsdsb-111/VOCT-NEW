@@ -160,6 +160,7 @@ electron.contextBridge.exposeInMainWorld("conversationAPI", {
   updateMemoryRecord: (memoryId, updates, advanced = false) => electron.ipcRenderer.invoke("memory:updateRecord", { memoryId, updates, advanced }),
   deleteMemoryRecord: (memoryId) => electron.ipcRenderer.invoke("memory:deleteRecord", { memoryId }),
   getSummariesForCharacter: (playerId, characterId) => electron.ipcRenderer.invoke("conversation:getSummariesForCharacter", { playerId, characterId }),
+  bindLegacySummaryCampaign: (ownerId, counterpartId, summaryIds) => electron.ipcRenderer.invoke("conversation:bindLegacySummaryCampaign", { ownerId, counterpartId, summaryIds }),
   updateSummary: (playerId, characterId, summaryIndex, newContent) => electron.ipcRenderer.invoke("conversation:updateSummary", { playerId, characterId, summaryIndex, newContent }),
   deleteSummary: (playerId, characterId, summaryIndex) => electron.ipcRenderer.invoke("conversation:deleteSummary", { playerId, characterId, summaryIndex }),
   deleteCharacterSummaries: (playerId, characterId) => electron.ipcRenderer.invoke("conversation:deleteCharacterSummaries", { playerId, characterId })

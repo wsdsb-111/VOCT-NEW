@@ -44,6 +44,22 @@ function createSummariesManager({ fs, path, summariesDir, memoryEngine, memorySy
       conversation.gameData?.loadCharactersSummaries?.();
     }
 
+    static bindLegacySummaryCampaign({ ownerId, counterpartId, summaryIds } = {}) {
+      const conversation = getCurrentConversation();
+      const gameData = conversation?.gameData;
+      const numericOwnerId = Number(ownerId), numericCounterpartId = Number(counterpartId);
+      if (!gameData || !(gameData.characters instanceof Map) || !gameData.campaignToken) throw new Error("active_campaign_required_for_legacy_binding");
+      if (!Number.isSafeInteger(numericOwnerId) || numericOwnerId <= 0 || !Number.isSafeInteger(numericCounterpartId) || numericCounterpartId <= 0 || numericOwnerId === numericCounterpartId) {
+        throw new Error("legacy_summary_binding_pair_invalid");
+      }
+      const hasUniqueCharacter = id => [...gameData.characters.values()].filter(character => Number(character?.id) === id).length === 1;
+      if (!hasUniqueCharacter(numericOwnerId) || !hasUniqueCharacter(numericCounterpartId)) throw new Error("legacy_summary_binding_character_not_in_current_campaign");
+      const result = memoryEngine.bindLegacySummaryCampaign({ ownerId: numericOwnerId, counterpartId: numericCounterpartId,
+        summaryIds, campaignToken: gameData.campaignToken, source: "user_confirmed_migration" });
+      this.refreshCurrentConversation();
+      return result;
+    }
+
     static writeSummaryJsonAtomic(filePath, summaries) {
       fs$1.mkdirSync(path.dirname(filePath), { recursive: true });
       const tempPath = `${filePath}.${process.pid}.${Date.now()}.tmp`;
@@ -86,10 +102,14 @@ function createSummariesManager({ fs, path, summariesDir, memoryEngine, memorySy
                 if (!Array.isArray(summaries) || summaries.length === 0) {
                   continue;
                 }
+                const catalogSummaries = summaries.map((summary, index) => summary && typeof summary.content === "string"
+                  && summary.sourceType !== "CK3_OFFICIAL_RECOLLECTION" && !String(summary.campaignToken || "").trim()
+                  ? { ...summary, legacyBindingId: memoryEngine.store.getLegacySummaryBindingId(filePath, index, summary) }
+                  : summary);
                 results.push(memorySystem.buildSummaryCatalogEntry({
                   folderName: characterFolderName,
                   conversationFile,
-                  summaries,
+                  summaries: catalogSummaries,
                   filePath
                 }));
               } catch (error) {

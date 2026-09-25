@@ -9,6 +9,14 @@ V8.12 Part 3 将可见标签及 `MEMORY_ENGINE_VERSION` 更新为 3.0；底层 `
 - 所有 Chat Provider 共用 `v813` 布局与 `VOTC_CACHE_ANCHOR_v8.13`。稳定规则和本场日期／身份先于动态区；回应者的官方追忆、直接记忆、近期摘要及开场世界线视图在其首个实际 Prompt 后冻结，后续轮次仍原文发送以复用前缀缓存。不同回应者不共享个人冻结前缀。
 - 开场按**已选角色**预取各自世界线，不按当时是否在场筛选；候场角色尚未入场时不获得现场直接观察。开场后已确认 CK3 动作、实时人物状态、在场关系、当前消息、时间／他人召回（含被提及场外人物摘要）与显式历史查询均在动态尾部。冻结世界线代表开场知情背景，不压过经 CK3 回读的新事实。人物摘要文件与 3.0 共享预算、2.5 存储格式和 Extra≤3 不变。真实 Provider 缓存命中率及 CK3 对话行为待实机验证。
 
+## V8.13.2.1 Acceptance Hotfix（321/321 本地发布组通过，实机待验收）
+
+- MEMORY_RECALL 的 Direct Conversation 保底使用实际提问者 `querySpeakerId`；仅在其缺失/无效时，才回退到其他直接对话对象。其余多人 NPC 仍可作为候选，但不再抢玩家提问对应的保底位。
+- 旧摘要默认保持 Campaign unresolved/fail-closed。摘要管理器每篇显示独立的“绑定当前战役”操作，二次确认后由主进程验证当前加载 Campaign、Owner/Counterpart 均在场景角色集合、摘要仍未绑定且目标键未过期；只修改用户选择项，已有 Campaign 与同文件其他记录不动。元数据继续处于动态数据侧，不进入 Stable Prefix。
+- Retrieval 使用原始摘要目录快照，Memory Engine 内部统一按 Campaign 过滤并统计 Accepted/Rejected/Legacy Rejected；Mention Profile 与候选发现仍用 scoped 视图，不扩大跨战役可见范围。新的终局 Episode 提交会清理对应人物的“已尝试迁移”标记并失效摘要缓存，使恢复证据可在同进程重试。
+- Coverage Patch 增加 `patchCandidateCount`、`patchSelectedCount`、`patchTruncated`。只要获准候选因 16 条/Token 预算而被裁剪，动态 Header 即声明“仅为部分获准事实，不代表完整列表”；任何无获准事实或未选入的情形都不推断事实不存在。Patch 上限与冻结前缀不变。
+- 保持 Memory Engine 3.0 / schemaVersion 2、Recent2、Extra≤3、官方追忆、V8.13 Cache Anchor 和 Provider Prompt Block Ordering。CK3/Provider Gate 与真实缓存命中率仍待实机。
+
 ## V8.13.2 时间召回与冻结覆盖收口（320/320 本地发布组通过，实机待验收）
 
 - 新建摘要保留原生 Campaign Token；缺失 Token 时显式标记 `campaignBinding.status=unresolved`。旧摘要仅在同一 `finalizationId`、Owner/Counterpart 参与证据以及唯一非空 Episode Campaign 同时匹配时迁移绑定，标记来源 `migration`；证据缺失或有冲突时维持 null/unresolved，不能跨入已知 Campaign。此迁移不改 Memory Engine 3.0 / `schemaVersion: 2` 存储合同。

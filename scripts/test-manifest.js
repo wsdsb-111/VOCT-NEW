@@ -144,6 +144,7 @@ const releaseChecks = [
   { group: "v8.13.1-worldline-coverage", script: "test-v8.13.1-worldline-coverage.js" },
   { group: "v8.13.2-temporal-recall", script: "test-v8.13.2-temporal-recall.js" },
   { group: "v8.13.2-worldline-closure", script: "test-v8.13.2-worldline-closure.js" },
+  { group: "v8.13.2.1-acceptance-hotfix", script: "test-v8.13.2.1-acceptance-hotfix.js" },
   { group: "v8.12.1-temporal-anchors", script: "test-v8.12.1-temporal-anchors.js" },
   { group: "v8.12.1-part3-closure", script: "test-v8.12.1-part3-closure.js" },
   { group: "summary-recall-promises", script: "test-summary-recall-promises.js" },

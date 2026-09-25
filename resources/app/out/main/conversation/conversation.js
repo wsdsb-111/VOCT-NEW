@@ -325,6 +325,7 @@ class Conversation {
       coveragePhase: "PATCH", coverageIntent: plan.intent, coverageHit: false, coverageMissingFields: decision.missingFields.length,
       coverageRequestedFields: plan.requestedFields, coverageLaneCoverage: manifest?.laneCoverage || null,
       patchCacheHit: cacheHit, patchFactCount: patch?.patchFacts?.length || 0, patchTokens: patch?.patchTokens || 0,
+      patchCandidateCount: patch?.patchCandidateCount || 0, patchSelectedCount: patch?.patchSelectedCount || 0, patchTruncated: patch?.patchTruncated === true,
       patchFilteredCount: patch?.filteredCount || 0, patchSecretBlockedCount: patch?.secretBlockedCount || 0 }, null);
     return patch?.patchText || null;
   }
@@ -616,14 +617,17 @@ class Conversation {
     if (memoryState.mentionProfileCache?.participantKey !== participantKey || memoryState.mentionProfileCache?.campaignKey !== campaignKey) {
       const profiles = new Map(this.gameData.getMentionableCharacterProfiles());
       const ownerFolderMemoriesById = new Map();
+      const ownerFolderMemoriesRawById = new Map();
       for (const ownerId of activeParticipantIds) {
-        const folderMemories = memoryEngine.loadOwnerFolderMemories(ownerId).filter(memory => memoryMatchesCampaign(memory, campaignKey));
+        const rawFolderMemories = memoryEngine.loadOwnerFolderMemories(ownerId);
+        const folderMemories = rawFolderMemories.filter(memory => memoryMatchesCampaign(memory, campaignKey));
+        ownerFolderMemoriesRawById.set(Number(ownerId), rawFolderMemories);
         ownerFolderMemoriesById.set(Number(ownerId), folderMemories);
         for (const [characterId, profile] of memoryEngine.getMentionableProfilesFromFolderMemories(folderMemories)) {
           if (!profiles.has(characterId)) profiles.set(characterId, profile);
         }
       }
-      memoryState.mentionProfileCache = { participantKey, campaignKey, profiles, ownerFolderMemoriesById };
+      memoryState.mentionProfileCache = { participantKey, campaignKey, profiles, ownerFolderMemoriesById, ownerFolderMemoriesRawById };
     }
     const mentionableProfiles = memoryState.mentionProfileCache.profiles;
     const currentUserIndex = history.findLastIndex((entry) => entry.role === "user");
@@ -654,7 +658,9 @@ class Conversation {
       mentionedRecallCache: memoryState.mentionedRecallCache,
       sessionRecallCache: memoryState.responderRecallCache,
       directCounterpartIds: activeParticipantIds.filter((characterId) => characterId !== npc.id),
-      ownerFolderMemories: memoryState.mentionProfileCache.ownerFolderMemoriesById.get(Number(npc.id)) || [],
+      querySpeakerId: this.gameData.playerID,
+      ownerFolderMemories: memoryState.mentionProfileCache.ownerFolderMemoriesRawById?.get(Number(npc.id))
+        || memoryEngine.loadOwnerFolderMemories(npc.id),
       currentGameDate: this.gameData.date,
       currentTotalDays: this.gameData.totalDays,
       campaignToken: this.gameData.campaignToken || null,

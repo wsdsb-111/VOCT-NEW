@@ -200,6 +200,71 @@ class MemoryStore {
     return Object.keys(this.index.episodes).map((episodeId) => this.readJson(this.episodePath(episodeId), null)).filter(Boolean);
   }
 
+  getLegacySummaryBindingId(filePath, index, summary) {
+    if (!this.summaryFoldersDir || !Number.isSafeInteger(Number(index)) || Number(index) < 0 || !summary || typeof summary.content !== "string") {
+      throw new Error("legacy_summary_binding_target_invalid");
+    }
+    const targetPath = this.validateSummaryMutationPath(filePath);
+    const summaryRoot = path.resolve(this.summaryFoldersDir);
+    if (!targetPath.startsWith(`${summaryRoot}${path.sep}`)) throw new Error("unsafe_legacy_summary_binding_path");
+    const relativePath = path.relative(summaryRoot, targetPath).split(path.sep).join("/");
+    const identity = JSON.stringify([relativePath, Number(index), summary.date || null, summary.totalDays ?? null, summary.content]);
+    return `legacy-summary:${crypto.createHash("sha256").update(identity).digest("hex")}`;
+  }
+
+  bindLegacySummaryCampaign({ ownerId, counterpartId, summaryIds, campaignToken, source = "user_confirmed_migration" } = {}) {
+    const numericOwnerId = Number(ownerId), numericCounterpartId = Number(counterpartId);
+    const token = typeof campaignToken === "string" ? campaignToken.trim() : "";
+    if (!Number.isSafeInteger(numericOwnerId) || numericOwnerId <= 0
+      || !Number.isSafeInteger(numericCounterpartId) || numericCounterpartId <= 0 || numericOwnerId === numericCounterpartId) {
+      throw new Error("legacy_summary_binding_pair_invalid");
+    }
+    if (!token || token.length > 512) throw new Error("legacy_summary_binding_campaign_required");
+    if (source !== "user_confirmed_migration") throw new Error("legacy_summary_binding_confirmation_required");
+    if (!Array.isArray(summaryIds) || summaryIds.length === 0 || summaryIds.length > 256) throw new Error("legacy_summary_binding_targets_required");
+    const requestedIds = new Set(summaryIds.map(String));
+    if (requestedIds.size !== summaryIds.length || [...requestedIds].some(id => !/^legacy-summary:[a-f0-9]{64}$/.test(id))) {
+      throw new Error("legacy_summary_binding_target_invalid");
+    }
+    if (!this.summaryFoldersDir || !fs.existsSync(this.summaryFoldersDir)) throw new Error("legacy_summary_binding_folder_missing");
+
+    const changes = [];
+    const matchedIds = new Set();
+    const prefix = `${numericOwnerId}_`;
+    for (const folder of fs.readdirSync(this.summaryFoldersDir, { withFileTypes: true }).filter(entry => entry.isDirectory() && entry.name.startsWith(prefix))) {
+      const folderPath = path.join(this.summaryFoldersDir, folder.name);
+      for (const file of fs.readdirSync(folderPath).filter(name => name.endsWith(".json"))) {
+        const filePath = path.join(folderPath, file);
+        const summaries = this.readJson(filePath, null);
+        if (!Array.isArray(summaries)) continue;
+        let changed = false;
+        const updated = summaries.map((summary, index) => {
+          if (!summary || typeof summary !== "object" || typeof summary.content !== "string") return summary;
+          const bindingId = this.getLegacySummaryBindingId(filePath, index, summary);
+          if (!requestedIds.has(bindingId)) return summary;
+          if (matchedIds.has(bindingId)) throw new Error("legacy_summary_binding_target_ambiguous");
+          matchedIds.add(bindingId);
+          const pairIds = uniqueIds([summary.playerId, summary.characterId]);
+          if (summary.sourceType === "CK3_OFFICIAL_RECOLLECTION" || !pairIds.includes(numericOwnerId) || !pairIds.includes(numericCounterpartId)) {
+            throw new Error("legacy_summary_binding_pair_mismatch");
+          }
+          if (String(summary.campaignToken || "").trim() || summary.campaignBinding?.status === "bound") {
+            throw new Error("legacy_summary_binding_target_already_bound");
+          }
+          changed = true;
+          return { ...summary, campaignToken: token, campaignBinding: { status: "bound", source, version: 1 } };
+        });
+        if (changed) changes.push({ filePath, summaries: updated });
+      }
+    }
+    if (matchedIds.size !== requestedIds.size) throw new Error("legacy_summary_binding_target_not_found_or_stale");
+    this.withSummaryMutation(null, () => {
+      for (const change of changes) this.writeJson(change.filePath, change.summaries);
+    });
+    this.invalidateFolderSummaryCache([numericOwnerId]);
+    return { success: true, ownerId: numericOwnerId, counterpartId: numericCounterpartId, campaignToken: token, boundCount: matchedIds.size };
+  }
+
   migrateLegacySummaryCampaignBindings(characterId) {
     const ownerId = Number(characterId);
     if (!Number.isSafeInteger(ownerId) || ownerId <= 0 || !this.summaryFoldersDir || !fs.existsSync(this.summaryFoldersDir)) {
