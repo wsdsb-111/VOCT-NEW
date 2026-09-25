@@ -61,7 +61,7 @@ for (const provider of providers) {
     stableText: "旧摘要", directStableText: "直接记忆", officialRecollectionText: "官方追忆",
     worldStableText: "甲的世界线基线", worldTurnRecallText: "甲知道的历史",
     worldCurrentText: "本轮世界状态", presenceText: "甲在场", temporalExtraText: "首轮召回",
-    confirmedActionText: null, historicalWorldText: null, mentionedSnapshotText: null
+    confirmedActionText: null, historicalWorldText: null, mentionedSnapshotText: null, coveragePatchText: null
   };
   const build = (responder, history) => PromptBuilder.buildMessagesWithTokenCount(history, responder, gameData, "", context, provider);
   const first = build(characters.get(1), [{ role: "user", content: "初始问题" }]);
@@ -86,6 +86,7 @@ for (const provider of providers) {
   context.confirmedActionText = "CK3 已确认支付 10 金";
   context.historicalWorldText = "五年前的历史事实";
   context.mentionedSnapshotText = "本轮提及丙的摘要";
+  context.coveragePatchText = "本轮补充赵甲位置";
   const second = build(characters.get(1), [{ role: "user", content: "初始问题" }, { role: "assistant", content: "初始回答" }, { role: "user", content: "新问题" }]);
   const secondMeta = Conversation.buildPromptBlockMetadata(second);
   assert.strictEqual(secondMeta.prefixFingerprint, firstMeta.prefixFingerprint, `${provider.providerType}: frozen prefix changed`);
@@ -95,6 +96,7 @@ for (const provider of providers) {
   assert(second.blocks.slice(secondMeta.stablePrefixEndPosition).some((entry) => entry.block.id === "action-confirmed-context" && entry.content.includes("支付 10 金")));
   assert(second.blocks.slice(secondMeta.stablePrefixEndPosition).some((entry) => entry.block.id === "worldline-historical-recall" && entry.content.includes("五年前")));
   assert(second.blocks.slice(secondMeta.stablePrefixEndPosition).some((entry) => entry.block.id === "memory-mentioned-snapshot" && entry.content.includes("提及丙")));
+  assert(second.blocks.slice(secondMeta.stablePrefixEndPosition).some((entry) => entry.block.id === "worldline-coverage-patch" && entry.content.includes("赵甲位置")));
   context.worldStableText = "乙的世界线基线";
   context.worldTurnRecallText = "乙知道的历史";
   const other = build(characters.get(2), [{ role: "user", content: "乙的问题" }]);
@@ -123,7 +125,8 @@ Conversation.configure({
     prepareCanon: async () => {},
     getSubjectivePromptContextAsync: async (args) => {
       calls.push(args);
-      return { worldStableText: `固定世界 ${args.responderId}`, worldTurnRecallText: `个人事实 ${args.responderId}`, worldTurnRecallTokens: 20 };
+      return { worldStableText: `固定世界 ${args.responderId}`, worldTurnRecallText: `个人事实 ${args.responderId}`, worldTurnRecallTokens: 20,
+        checkpointId: "cp-1", baselineFacts: [{ factId: `self-${args.responderId}`, entityId: String(args.responderId), field: "IDENTITY", value: "自己" }], baselineLanes: { IDENTITY: 1 } };
     }
   }
 });
@@ -133,10 +136,13 @@ conversation.gameData = gameData;
 conversation.selectedCharacterIds = new Set([1, 2]);
 conversation.presentCharacterIds = new Set([1]);
 conversation.frozenWorldlineByResponder = new Map();
+conversation.frozenWorldlineCoverageByResponder = new Map();
 (async () => {
   await conversation.prefetchFrozenWorldline();
   assert.deepStrictEqual(calls.map((call) => call.responderId), [1, 2], "waiting selected NPC must be prefetched before entry");
   assert(calls.every((call) => call.directObservationFacts.length === 0), "waiting NPC must not witness opening scene");
+  assert(calls.every((call) => call.snapshotMode === "CONVERSATION_BASELINE"), "opening recall must use baseline mode");
   assert.strictEqual(conversation.frozenWorldlineByResponder.get(2).worldTurnRecallText, "个人事实 2");
+  assert(conversation.frozenWorldlineCoverageByResponder.get("2").factIds.includes("self-2"), "waiting NPC also receives own coverage manifest");
   console.log("V8.13 Frozen Worldline Prefix: PASS (all providers, selected waiting NPC, immutable prefix, dynamic tail)");
 })().catch((error) => { console.error(error); process.exitCode = 1; });

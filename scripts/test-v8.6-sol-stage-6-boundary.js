@@ -58,7 +58,7 @@ assert(renderer.includes('SECRET: text("已授权私密信息"') && renderer.inc
 assert(renderer.includes("subjectiveSourceLabel(fact.sourceTier)") && renderer.includes('text("共享检索缓存", "Shared retrieval cache")'), "source tier and cache layers are visible in diagnostics");
 assert(renderer.includes("children: display(item.reason)"), "collapsed developer diagnostics retain the opaque policy reason code");
 assert(renderer.includes("statusLabel(diagnostics?.parserState)") && renderer.includes("statusLabel(diagnostics?.catalogStatus)"), "Worker recovery states use readable labels");
-assert.equal((conversation.match(/getPromptContext\?\.\(/g) || []).length, 2, "legacy world context is used only for V8.13 opening prefetch or older per-turn layout");
+assert.equal((conversation.match(/getPromptContext\?\.\(/g) || []).length, 3, "legacy Worldline entry, V8.13 opening fallback, and read-only coverage planning are the only direct context calls");
 assert(!conversation.includes("getSubjectiveWorldView?.("), "diagnostic Subjective DTO is not accidentally double-injected into production Prompt");
 assert(settingsSource.includes('subjectiveWorldMode: "DIAGNOSTIC"'), "Phase A remains fail-closed until a reviewed production integration exists");
 

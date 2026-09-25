@@ -831,6 +831,8 @@ function createPromptBuilder({
           worldCurrentText: v813Layout ? null : memoryContext?.worldCurrentText,
           worldTurnRecallText: v813Layout ? null : memoryContext?.worldTurnRecallText,
           historicalWorldText: v813Layout ? memoryContext?.historicalWorldText : null,
+          coveragePatchText: v813Layout ? memoryContext?.coveragePatchText : null,
+          recentWorldText: v813Layout ? memoryContext?.recentWorldText : null,
           sessionTopicAnchorText: glmCacheLayout ? memoryContext?.topicPatchText : null,
           sessionTopicAnchorBlock,
           subjectiveWorldBlock,
@@ -1172,6 +1174,8 @@ function createPromptBuilder({
               appendTextBlock(options.confirmedActionText, { id: "action-confirmed-context", type: "action_confirmed_context", label: "Confirmed In-Conversation Actions", enabled: true, role: "system" });
               appendTemporalExtra();
               appendTextBlock(options.memoryMentionedSnapshotText, { id: "memory-mentioned-snapshot", type: "memory_mentioned_snapshot", label: "Mentioned Character Recall", enabled: true, role: "system" });
+              appendTextBlock(options.coveragePatchText, { id: "worldline-coverage-patch", type: "worldline_coverage_patch", label: "Worldline Coverage Patch", enabled: true, role: "system" });
+              appendTextBlock(options.recentWorldText, { id: "worldline-recent-recall", type: "worldline_recent_recall", label: "Recent Worldline Recall", enabled: true, role: "system" });
               appendTextBlock(options.responderFamilyFacts, options.responderFamilyFactsBlock);
               appendTopicPatch();
               appendTurnRecall();

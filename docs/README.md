@@ -4,6 +4,8 @@
 
 ## 推荐阅读顺序
 
+V8.13.1 当前入口：[Frozen Worldline Coverage 补强](V8阶段开发记录.md#第一百一十六阶段v8131-frozen-worldline-coverage)。冻结世界线补齐领域多样性，以不入 Prompt 的覆盖清单判断 CURRENT/UNSPECIFIED 缺口；动态补丁不进入缓存前缀，CK3/Provider 实机 Gate 仍待验收。
+
 V8.13 当前入口：[会话冻结前缀与动态尾部实施记录](V8阶段开发记录.md#第一百一十五阶段v813-会话冻结前缀与动态尾部)。已选的候场 NPC 也在开场预取其个人世界线视图；所有 Chat Provider 共用 V8.13 缓存边界，317/317 本地发布组通过，打包 Electron 冒烟受本机 GPU 子进程错误阻断，CK3/Provider 缓存命中率仍待验收。
 
 V8.12.1 当前入口：[双时间记忆及 V8.12.1.2 遗留问题修复实施记录](v8.12.1-dual-temporal-memory-implementation-report.md)。用户于 **2026-09-24** 确认 Part 3 实机 Gates 验收通过（用户报告）；V8.12.1.2 已完成本地代码与 316/316 自动发布 Gate，远端 Windows CI 和 CK3/Provider 实机 Gate 待验收，本机隔离 Electron 冒烟此前受 GPU 启动故障阻断、本次未重试。Part 3 通过不等于 V8.12.1 已验收或全局 V8 Full Freeze。

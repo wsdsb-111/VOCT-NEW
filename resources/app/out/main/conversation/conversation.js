@@ -7,6 +7,7 @@ const participantLifecycle = require("./participant-lifecycle");
 const { buildPresenceObservationFacts } = require("../worldline/direct-observation-producer");
 const { resolveWorldlineTurnBudget, shouldTrimMemoryTurnRecall } = require("../worldline/worldline-context-budget");
 const { parseTimeHint } = require("../worldline/world-query-planner");
+const { buildFrozenCoverageManifest, hasFrozenCoverage, buildCoveragePatchKey } = require("../worldline/frozen-coverage-manifest");
 const { verifyActionConfirmation, settleActionResult } = require("../actions/action-confirmation");
 const { readActionCommandReadback } = require("../actions/action-command-readback");
 const { validateGenerationOutcome } = require("../providers/generation-outcome");
@@ -138,6 +139,8 @@ class Conversation {
     this.cacheV2FrozenSnapshots = { conversation: null, responders: /* @__PURE__ */ new Map() };
     this.cacheV2FrozenSnapshots.prefixByResponder = /* @__PURE__ */ new Map();
     this.frozenWorldlineByResponder = /* @__PURE__ */ new Map();
+    this.frozenWorldlineCoverageByResponder = /* @__PURE__ */ new Map();
+    this.worldlineCoveragePatchCacheByResponder = /* @__PURE__ */ new Map();
     this.selectedCharacterIds = /* @__PURE__ */ new Set();
     this.presentCharacterIds = /* @__PURE__ */ new Set();
     this.waitingCharacterIds = /* @__PURE__ */ new Set();
@@ -229,6 +232,7 @@ class Conversation {
           responderId,
           query: "",
           assistContext: "",
+          snapshotMode: "CONVERSATION_BASELINE",
           mentionedEntityIds: selectedIds.filter((id) => id !== responderId),
           activeParticipantIds: selectedIds,
           runtimeContext: { activeParticipantIds: selectedIds },
@@ -252,10 +256,65 @@ class Conversation {
           queryFingerprint: context.queryFingerprint || null,
           cacheHit: context.cacheHit === true
         });
+        if (subjective && context?.baselineFacts) {
+          this.frozenWorldlineCoverageByResponder.set(String(responderId), buildFrozenCoverageManifest({
+            responderId, checkpointId: context.checkpointId, candidateSetComplete: context.baselineCandidateSetComplete,
+            truncated: context.baselineTruncated
+          }, context.baselineFacts));
+          usageAnalytics?.record({ requestType: "worldline_coverage", coveragePhase: "BASELINE", characterId: responderId,
+            baselineFactCount: context.baselineFacts.length, baselineTokens: context.worldTurnRecallTokens || 0,
+            baselineLanes: context.baselineLanes, baselineTruncated: context.baselineTruncated }, null);
+        }
       } catch (error) {
         console.warn(`[Worldline] Opening recall failed for NPC ${responderId}:`, error.message);
       }
     }
+  }
+  getWorldlineCoveragePatchFor(npc, memoryContext) {
+    if (!worldlineService?.isSubjectivePromptIntegrationEnabled?.()) return null;
+    const request = memoryContext?.worldlineRequest || {};
+    const query = request.query || "";
+    if (!query.trim()) return null;
+    const plan = worldlineService.getPromptContext?.({ query, assistContext: request.assistContext || "", mentionedEntityIds: request.mentionedEntityIds || [],
+      runtimeContext: { activeParticipantIds: this.getActiveConversationCharacters().map(character => character.id) }, diagnostic: true, includeScopedSupplemental: true })?.queryPlan;
+    if (!plan) return null;
+    const responderId = String(npc.id);
+    const checkpointId = worldlineService.getCheckpointStatus?.()?.checkpoint?.id || null;
+    const frozenManifest = this.frozenWorldlineCoverageByResponder?.get(responderId);
+    const manifest = frozenManifest?.checkpointId === checkpointId ? frozenManifest : null;
+    const decision = hasFrozenCoverage({ queryPlan: plan, manifest });
+    if (!decision.eligible) return null;
+    if (decision.hit) {
+      usageAnalytics?.record({ requestType: "worldline_coverage", coveragePhase: "DECISION", coverageIntent: plan.intent,
+        coverageHit: true, characterId: npc.id }, null);
+      return null;
+    }
+    const revision = `${this.gameDataRevision}:${memoryContext?.confirmedActionText || ""}:${checkpointId}:${this.gameData.campaignToken || ""}`;
+    let cache = this.worldlineCoveragePatchCacheByResponder.get(responderId);
+    if (!cache || cache.revision !== revision) {
+      cache = { revision, entries: new Map() };
+      this.worldlineCoveragePatchCacheByResponder.set(responderId, cache);
+    }
+    const key = buildCoveragePatchKey({ responderId, checkpointId, queryPlan: plan });
+    const cacheHit = cache.entries.has(key);
+    if (!cacheHit) {
+      const presentIds = [...this.presentCharacterIds];
+      const directObservationFacts = buildPresenceObservationFacts({ responderId: npc.id, presentCharacterIds: presentIds, characters: this.gameData.characters, asOf: this.gameData.date || null });
+      const patch = worldlineService.getSubjectiveCoveragePatch?.({
+        runtimeGameData: this.gameData, responderId: npc.id, query, assistContext: request.assistContext || "",
+        mentionedEntityIds: request.mentionedEntityIds || [], activeParticipantIds: this.getActiveConversationCharacters().map(character => character.id),
+        conversationId: this.id, turnEpoch: this.turnEpoch, sceneRevision: `${this.gameData.date || ""}\n${this.gameData.scene || ""}`,
+        presenceRevision: presentIds.map(String).sort().join(","), directObservationFactIds: directObservationFacts.map(fact => fact.factId), directObservationFacts,
+        excludeFactIds: manifest?.factIds || [], missingFields: decision.missingFields, tokenBudget: 300
+      }) || null;
+      cache.entries.set(key, patch);
+    }
+    const patch = cache.entries.get(key);
+    usageAnalytics?.record({ requestType: "worldline_coverage", characterId: npc.id, conversationId: this.id,
+      coveragePhase: "PATCH", coverageIntent: plan.intent, coverageHit: false, coverageMissingFields: decision.missingFields.length,
+      patchCacheHit: cacheHit, patchFactCount: patch?.patchFacts?.length || 0, patchTokens: patch?.patchTokens || 0,
+      patchFilteredCount: patch?.filteredCount || 0, patchSecretBlockedCount: patch?.secretBlockedCount || 0 }, null);
+    return patch?.patchText || null;
   }
   async checkAndSummarizeIfNeeded(npc) {
     memoryEngine?.syncRollingStateFromConversationFields(this);
@@ -342,6 +401,22 @@ class Conversation {
           };
         } catch (error) {
           console.warn("[Worldline] Historical recall failed; continuing with frozen world view:", error.message);
+        }
+      } else if (productionWorldlineEnabled && hint.mode === "RECENT") {
+        try {
+          const recent = await worldlineService.getSubjectivePromptContextAsync({ runtimeGameData: this.gameData, responderId: npc.id,
+            query: request.query || "", assistContext: request.assistContext || "", mentionedEntityIds: request.mentionedEntityIds || [],
+            activeParticipantIds: this.getActiveConversationCharacters().map(character => character.id), conversationId: this.id,
+            turnEpoch: this.turnEpoch, tokenBudget: 300 });
+          memoryContext = { ...memoryContext, recentWorldText: recent?.worldTurnRecallText || null };
+        } catch (error) {
+          console.warn("[Worldline] Recent recall failed; continuing with frozen world view:", error.message);
+        }
+      } else if (productionWorldlineEnabled && ["CURRENT", "UNSPECIFIED"].includes(hint.mode)) {
+        try {
+          memoryContext = { ...memoryContext, coveragePatchText: this.getWorldlineCoveragePatchFor?.(npc, memoryContext) || null };
+        } catch (error) {
+          console.warn("[Worldline] Coverage patch failed; continuing with frozen world view:", error.message);
         }
       }
       if (memoryContext?.turnRecallText && shouldTrimMemoryTurnRecall({ contextLimit, basePromptTokens: estimatedTokens, worldlineEnabled: true })) {
@@ -1934,6 +2009,9 @@ class Conversation {
       closedPresence = true;
     }
     this.waitingCharacterIds?.delete(numericId);
+    this.frozenWorldlineByResponder?.delete(numericId);
+    this.frozenWorldlineCoverageByResponder?.delete(String(numericId));
+    this.worldlineCoveragePatchCacheByResponder?.delete(String(numericId));
     this.temporarilyAbsentCharacterIds?.delete(numericId);
     this.invalidateApprovalsForCharacter(numericId, "removed");
     this.gameData.characters.delete(numericId);

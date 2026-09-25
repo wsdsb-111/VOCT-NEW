@@ -2,6 +2,8 @@
 
 这里是版本变更的单一入口。详细设计和测试证据保留在链接目标中，本文件只维护版本顺序、用户可见摘要和文档索引。
 
+V8.13.1（本地自动 Gate 通过，实机待验收）：[Frozen Worldline Coverage 补强](docs/V8阶段开发记录.md#第一百一十六阶段v8131-frozen-worldline-coverage)。开场世界线按战争、位置、状态等领域均衡选取并生成不入 Prompt 的覆盖清单；当前问题缺口才检索 ≤300 Token 的动态补丁，历史查询维持独立路径。900 Token 冻结预算、V8.13 缓存锚点和 Memory Engine 存储合同不变；真实 CK3/Provider 效果待验收。
+
 V8.13（317/317 本地发布组通过，实机待验收）：[会话冻结前缀与动态尾部](docs/V8阶段开发记录.md#第一百一十五阶段v813-会话冻结前缀与动态尾部)。所有 Chat Provider 使用统一缓存布局；已选 NPC（含候场者）开场预取各自世界线，整场复用，实时状态、确认动作和时间召回留在动态尾部。新缓存锚点 `v8.13`；打包 Electron 冒烟受本机 GPU 子进程错误阻断，CK3/Provider 命中率待实测。
 
 V8.12.1.2（本地自动 Gate 通过，实机待验收）：[Campaign 元数据与时间证据收口](docs/v8.12.1-dual-temporal-memory-implementation-report.md#v81212-campaign-元数据与时间证据收口2026-09-24)。Mention Profile 按当前战役过滤并在切换时重建；Event-Time 拒绝不属于本篇投影的幽灵 Memory ID，原始摘要文件不改。316/316 发布组通过；远端 CI、CK3/Provider 和打包窗口待验收。

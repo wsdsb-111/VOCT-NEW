@@ -72,11 +72,41 @@ function buildSubjectiveWorldTurnRecall(view, { tokenBudget = null } = {}) {
     : view?.queryIntent === "WAR_STATUS" && !remaining.some(fact => fact.field === "WAR")
       ? "【本轮战争回答边界】未获得可回答本次问题的活跃战争事实；资料不足不代表没有战争，也不能用历史战役推断当前战况。" : null;
   if (boundary && (maxTokens === null || estimateTokens([textValue, boundary].filter(Boolean).join("\n")) <= maxTokens)) textValue = [textValue, boundary].filter(Boolean).join("\n");
-  return { text: textValue, tokens: textValue ? estimateTokens(textValue) : 0, trimmed, selectedCount: remaining.length };
+  return { text: textValue, tokens: textValue ? estimateTokens(textValue) : 0, trimmed, selectedCount: remaining.length, selectedFacts: remaining };
 }
 
 function buildSubjectiveWorldPrompt(view, options = {}) {
   return buildSubjectiveWorldTurnRecall(view, options).text;
+}
+
+function baselineLane(fact) {
+  if (fact.field === "WAR") return "WAR";
+  if (fact.field === "LOCATION") return "LOCATION";
+  if (fact.field === "ALIVE") return "STATE";
+  if (["NAME", "IDENTITY"].includes(fact.field)) return "IDENTITY";
+  if (["PRIMARY_TITLE", "LIEGE", "COURT_EMPLOYER"].includes(fact.field)) return "TITLE_REALM";
+  if (fact.field === "WORLD_EVENT") return "RECENT_WORLD";
+  if (fact.field === "SUPPLEMENTAL") return "SUPPLEMENTAL";
+  return "GENERAL_HIGH_PRIORITY";
+}
+
+function buildSubjectiveWorldBaselinePrompt(view, { tokenBudget = 900 } = {}) {
+  const facts = (view?.promptFacts || []).filter((fact) => WORLD_SOURCE_TIERS.has(fact?.sourceTier) && text(fact?.value));
+  const ranked = [...facts].sort((left, right) => (Number(right.queryPriority) || 0) - (Number(left.queryPriority) || 0)
+    || text(left.factId).localeCompare(text(right.factId), "en"));
+  const laneOrder = ["WAR", "LOCATION", "STATE", "IDENTITY", "TITLE_REALM", "RECENT_WORLD", "SUPPLEMENTAL"];
+  const minimum = laneOrder.map((lane) => ranked.find((fact) => baselineLane(fact) === lane)).filter(Boolean);
+  const ordered = [...minimum, ...ranked.filter((fact) => !minimum.includes(fact))];
+  const selectedFacts = [];
+  for (const fact of ordered) {
+    if (selectedFacts.length >= 16) break;
+    const next = [...selectedFacts, fact];
+    if (estimateTokens(formatSubjectiveWorldFacts(next)) <= tokenBudget) selectedFacts.push(fact);
+  }
+  const value = formatSubjectiveWorldFacts(selectedFacts);
+  const lanes = Object.fromEntries([...laneOrder, "GENERAL_HIGH_PRIORITY"].map((lane) => [lane, selectedFacts.filter((fact) => baselineLane(fact) === lane).length]));
+  return { text: value, tokens: value ? estimateTokens(value) : 0, selectedFacts, lanes,
+    trimmed: facts.length > selectedFacts.length || view?.truncated === true };
 }
 
 function buildWorldStablePrompt({ checkpointId = null, checkpointAsOf = null, hasStableCanon = false } = {}) {
@@ -85,4 +115,4 @@ function buildWorldStablePrompt({ checkpointId = null, checkpointAsOf = null, ha
   return `=== Worldline Checkpoint Anchor${hasStableCanon ? " / Canon V8.7" : ""} ===\n- Checkpoint: ${text(checkpointId) || "unknown"}\n- World facts are valid only through: ${asOf}\n- Only responder-scoped Worldline recall in this prompt may supply characters, titles, wars, deltas, or supplemental facts.\n- Do not infer or reveal facts absent from that recall.${hasStableCanon ? "\n- Canon V8.7 exception: explicitly pinned responder-authorized RP rules below may supply non-CK3 narrative rules. Current CK3 facts still take priority; personal beliefs remain subjective." : ""}`;
 }
 
-module.exports = { buildHistoricalReferenceReplacement, buildSubjectiveWorldPrompt, buildSubjectiveWorldTurnRecall, buildWorldStablePrompt };
+module.exports = { buildHistoricalReferenceReplacement, buildSubjectiveWorldPrompt, buildSubjectiveWorldTurnRecall, buildSubjectiveWorldBaselinePrompt, buildWorldStablePrompt };

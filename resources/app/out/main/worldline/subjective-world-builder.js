@@ -68,6 +68,8 @@ function safeAllowedFact(item) {
   return {
     factId: boundedText(fact.factId || "", 256) || null,
     entityId: fact.entityId === null || fact.entityId === undefined ? null : boundedText(fact.entityId, 128),
+    scopeEntityIds: Array.isArray(fact.scopeEntityIds) ? fact.scopeEntityIds.slice(0, 32).map((id) => boundedText(id, 128)) : undefined,
+    scopeTitleIds: Array.isArray(fact.scopeTitleIds) ? fact.scopeTitleIds.slice(0, 32).map((id) => boundedText(id, 128)) : undefined,
     entityRef: safeEntityRef(fact.entityRef),
     field: boundedText(fact.field || "", 64) || null,
     value: safeValue(fact.value),
@@ -83,7 +85,7 @@ function safeAllowedFact(item) {
   };
 }
 
-function buildSubjectiveWorldView({ responder, candidates = [], scope = {}, scopeResolver = null, checkpointId = null, directObservationFactIds = [] } = {}) {
+function buildSubjectiveWorldView({ responder, candidates = [], scope = {}, scopeResolver = null, checkpointId = null, directObservationFactIds = [], snapshotMode = null } = {}) {
   const input = Array.isArray(candidates) ? candidates : [];
   const bounded = admitCandidates(input);
   const decisions = bounded.map((fact) => classifyKnowledge(fact, responder, { ...scope, ...(typeof scopeResolver === "function" ? scopeResolver(fact) : {}), directObservationFactIds }));
@@ -98,7 +100,7 @@ function buildSubjectiveWorldView({ responder, candidates = [], scope = {}, scop
   const conflicts = resolutions.filter((item) => ["EQUAL_AUTHORITY_CONFLICT", "SECRET_UNAVAILABLE"].includes(item.reason));
   const policyFacts = resolved.slice(0, MAX_SELECTED).map(safeAllowedFact);
   const promptResolved = resolved.filter((item) => PROMPT_SOURCE_TIERS.has(item.fact?.sourceTier) && safeValue(item.fact?.value) !== null && boundedText(item.fact?.value).trim());
-  const promptFacts = promptResolved.slice(0, MAX_SELECTED).map(safeAllowedFact);
+  const promptFacts = (snapshotMode === "CONVERSATION_BASELINE" ? promptResolved : promptResolved.slice(0, MAX_SELECTED)).map(safeAllowedFact);
   const filtered = decisions.filter((item) => item.decision !== "ALLOW");
   const truncated = input.length > bounded.length || resolved.length > MAX_SELECTED || promptResolved.length > MAX_SELECTED;
   const diagnostics = [

@@ -37,7 +37,8 @@ function fact(candidate, values) {
     authorizationComplete: values.authorizationComplete === true,
     directObserverIds: Array.isArray(values.directObserverIds) ? values.directObserverIds.slice() : undefined,
     observationEvidenceComplete: values.observationEvidenceComplete === true,
-    scopeEntityIds: values.scopeEntityIds || undefined
+    scopeEntityIds: values.scopeEntityIds || undefined,
+    scopeTitleIds: values.scopeTitleIds || undefined
   };
 }
 
@@ -116,7 +117,7 @@ function titleFacts(candidate, checkpointDate) {
 function warFacts(candidate, checkpointDate) {
   return [fact(candidate, {
     entityId: candidate.id, field: "WAR", value: warLine(candidate), knowledgeLevel: "REALM_PUBLIC", public: true,
-    scopeEntityIds: candidate.entityRefs.characters, temporalSafe: checkpointSafe(candidate, checkpointDate), evidence: "ACTIVE_WAR_PARTICIPANTS"
+    scopeEntityIds: candidate.entityRefs.characters, scopeTitleIds: candidate.entityRefs.titles, temporalSafe: checkpointSafe(candidate, checkpointDate), evidence: "ACTIVE_WAR_PARTICIPANTS"
   })];
 }
 
