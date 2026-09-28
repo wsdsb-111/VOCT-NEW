@@ -30,6 +30,18 @@ function extractRequestedActionArgs(actionId, history = []) {
 
 function captureActionConfirmation({ actionId, expectedStateChange, gameData, gameDataRevision, dispatch = null } = {}) {
   if (expectedStateChange?.type === "OPINION_CHANGE") return { ...expectedStateChange, actionId, dispatch, requireCommandReadback: true };
+  if (expectedStateChange?.type === "TRIBUTARY_RELATION") {
+    const { sourceRuntimeId, targetRuntimeId, tributaryRuntimeId, suzerainRuntimeId } = expectedStateChange;
+    if (![sourceRuntimeId, targetRuntimeId, tributaryRuntimeId, suzerainRuntimeId].every(Number.isSafeInteger) || sourceRuntimeId === targetRuntimeId || tributaryRuntimeId === suzerainRuntimeId) return null;
+    return { ...expectedStateChange, actionId, dispatch, requireCommandReadback: true };
+  }
+  if (expectedStateChange?.type === "TRIBUTARY_CONTRACT") {
+    const { sourceRuntimeId, targetRuntimeId, tributaryRuntimeId, suzerainRuntimeId, contractGroup } = expectedStateChange;
+    if (![sourceRuntimeId, targetRuntimeId, tributaryRuntimeId, suzerainRuntimeId].every(Number.isSafeInteger) ||
+      sourceRuntimeId === targetRuntimeId || tributaryRuntimeId === suzerainRuntimeId ||
+      !new Set(["tributary_non_permanent", "tributary_permanent", "tributary_civilized", "tributary_league", "tributary_patronage", "tributary_subjugated"]).has(contractGroup)) return null;
+    return { ...expectedStateChange, actionId, dispatch, requireCommandReadback: true };
+  }
   if (!expectedStateChange || expectedStateChange.type !== "GOLD_TRANSFER") return null;
   const sourceRuntimeId = Number(expectedStateChange.sourceRuntimeId);
   const targetRuntimeId = Number(expectedStateChange.targetRuntimeId);
@@ -68,6 +80,17 @@ function verifyActionConfirmation({ confirmation, gameData, gameDataRevision, co
   if (commandReadback?.insufficientGold) return { status: "INSUFFICIENT_GOLD", stateAfter: null, confirmedStateChange: null };
   if (confirmation.type === "RUN_ACK") return { status: "ACKNOWLEDGED", stateAfter: null, confirmedStateChange: null };
   if (confirmation.type === "STATE_UNVERIFIABLE") return { status: "UNCONFIRMED", stateAfter: null, confirmedStateChange: null };
+  if (confirmation.type === "TRIBUTARY_RELATION") {
+    if (commandReadback?.tributaryEstablished && commandReadback?.tributaryRejected) return { status: "STATE_MISMATCH", stateAfter: null, confirmedStateChange: null };
+    if (commandReadback?.tributaryEstablished) return { status: "CONFIRMED", stateAfter: { tributaryRuntimeId: confirmation.tributaryRuntimeId, suzerainRuntimeId: confirmation.suzerainRuntimeId }, confirmedStateChange: { type: "TRIBUTARY_RELATION", tributaryRuntimeId: confirmation.tributaryRuntimeId, suzerainRuntimeId: confirmation.suzerainRuntimeId } };
+    return { status: commandReadback?.tributaryRejected ? "NO_EFFECT" : "UNCONFIRMED", stateAfter: null, confirmedStateChange: null };
+  }
+  if (confirmation.type === "TRIBUTARY_CONTRACT") {
+    if (commandReadback?.tributaryContractRollbackFailed || commandReadback?.tributaryContractGroup && commandReadback.tributaryContractRejected) return { status: "STATE_MISMATCH", stateAfter: null, confirmedStateChange: null };
+    if (commandReadback?.tributaryContractGroup === confirmation.contractGroup) return { status: "CONFIRMED", stateAfter: { contractGroup: confirmation.contractGroup }, confirmedStateChange: { type: "TRIBUTARY_CONTRACT", tributaryRuntimeId: confirmation.tributaryRuntimeId, suzerainRuntimeId: confirmation.suzerainRuntimeId, contractGroup: confirmation.contractGroup } };
+    if (commandReadback?.tributaryContractGroup) return { status: "STATE_MISMATCH", stateAfter: { contractGroup: commandReadback.tributaryContractGroup }, confirmedStateChange: null };
+    return { status: commandReadback?.tributaryContractRejected ? "NO_EFFECT" : "UNCONFIRMED", stateAfter: null, confirmedStateChange: null };
+  }
   if (confirmation.requireCommandReadback) {
     if (!commandReadback?.acknowledged || commandReadback.commandId !== confirmation.dispatch?.commandId) return { status: "UNCONFIRMED", stateAfter: null, confirmedStateChange: null };
     if (confirmation.type === "OPINION_CHANGE") {
@@ -133,11 +156,11 @@ function settleActionResult(result, verification) {
     INSUFFICIENT_GOLD: "执行时游戏内金币不足，未转账",
     BINDING_FAILED: "动作角色绑定缺失或不符，请重新进入对话后再操作",
     ACKNOWLEDGED: "游戏已接收动作指令；尚无该效果的状态核验，不能视为执行成功",
-    NO_EFFECT: "游戏已执行核验，但未观察到好感度变化（对话修正上限为正负10，总好感度也有上限）",
+    NO_EFFECT: result.confirmation?.type === "TRIBUTARY_RELATION" ? "CK3 未建立朝贡关系：请检查双方独立/有地、贡臣尚未朝贡及宗主资格" : result.confirmation?.type === "TRIBUTARY_CONTRACT" ? "CK3 未变更朝贡方式：须先存在指定贡臣—宗主关系、可识别的旧契约，并满足东方王朝契约条件" : "游戏已执行核验，但未观察到好感度变化（对话修正上限为正负10，总好感度也有上限）",
     QUEUE_BLOCKED: "动作尚未写入游戏：命令队列被未确认命令阻塞",
     QUEUE_EXPIRED: "动作排队超时，已取消未写入的命令",
     TIMEOUT: "动作等待 CK3 确认超时",
-    STATE_MISMATCH: "游戏状态与动作预期不一致；实测 " + JSON.stringify(verification.stateBefore || {}) + " → " + JSON.stringify(verification.stateAfter || {})
+    STATE_MISMATCH: result.confirmation?.type === "TRIBUTARY_CONTRACT" ? "朝贡方式变更或原契约恢复未得到 CK3 确认，请立即在游戏中核查贡臣关系" : "游戏状态与动作预期不一致；实测 " + JSON.stringify(verification.stateBefore || {}) + " → " + JSON.stringify(verification.stateAfter || {})
   };
   return {
     ...result,

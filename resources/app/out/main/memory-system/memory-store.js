@@ -53,6 +53,7 @@ class MemoryStore {
       knowledge: path.join(baseDir, "knowledge"),
       ownerStatus: path.join(baseDir, "owner-status"),
       recovery: recoveryDir || path.join(baseDir, "recovery"),
+      memory4Recovery: path.join(baseDir, "memory4-recovery"),
       index: path.join(baseDir, "index.json")
     };
     this.ensureDirectories();
@@ -65,7 +66,7 @@ class MemoryStore {
   }
 
   ensureDirectories() {
-    for (const directory of [this.baseDir, this.paths.episodes, this.paths.characters, this.paths.pairs, this.paths.knowledge, this.paths.ownerStatus, this.paths.recovery]) {
+    for (const directory of [this.baseDir, this.paths.episodes, this.paths.characters, this.paths.pairs, this.paths.knowledge, this.paths.ownerStatus, this.paths.recovery, this.paths.memory4Recovery]) {
       fs.mkdirSync(directory, { recursive: true });
     }
   }
@@ -212,6 +213,149 @@ class MemoryStore {
     return `legacy-summary:${crypto.createHash("sha256").update(identity).digest("hex")}`;
   }
 
+  scanLegacyCampaignBinding({ scope, ownerId, counterpartId = null, folderName = null, conversationFile = null, campaignToken } = {}) {
+    const numericOwnerId = Number(ownerId), numericCounterpartId = counterpartId == null ? null : Number(counterpartId);
+    const token = typeof campaignToken === "string" ? campaignToken.trim() : "";
+    if (!Number.isSafeInteger(numericOwnerId) || numericOwnerId <= 0) throw new Error("legacy_summary_binding_owner_invalid");
+    if (!token || token.length > 512) throw new Error("legacy_summary_binding_campaign_required");
+    if (scope !== "conversation" && scope !== "owner") throw new Error("legacy_summary_binding_scope_invalid");
+    if (scope === "conversation" && (!Number.isSafeInteger(numericCounterpartId) || numericCounterpartId <= 0 || numericCounterpartId === numericOwnerId)) {
+      throw new Error("legacy_summary_binding_pair_invalid");
+    }
+    if (!this.summaryFoldersDir || !fs.existsSync(this.summaryFoldersDir)) throw new Error("legacy_summary_binding_folder_missing");
+
+    const root = path.resolve(this.summaryFoldersDir);
+    const ownerPrefix = `${numericOwnerId}_`;
+    let targets;
+    if (scope === "conversation") {
+      if (typeof folderName !== "string" || path.basename(folderName) !== folderName || !folderName.startsWith(ownerPrefix) || folderName.length <= ownerPrefix.length
+        || typeof conversationFile !== "string" || path.basename(conversationFile) !== conversationFile || !/^与.+的对话\.json$/.test(conversationFile)) {
+        throw new Error("legacy_summary_binding_target_invalid");
+      }
+      const folderPath = path.join(root, folderName);
+      const folderStat = fs.lstatSync(folderPath);
+      if (!folderStat.isDirectory() || folderStat.isSymbolicLink()) throw new Error("legacy_summary_binding_target_invalid");
+      targets = [{ folderName, conversationFile, filePath: path.join(folderPath, conversationFile) }];
+    } else {
+      targets = [];
+      for (const folder of fs.readdirSync(root, { withFileTypes: true }).filter(entry => entry.isDirectory() && entry.name.startsWith(ownerPrefix)).sort((a, b) => a.name.localeCompare(b.name))) {
+        const folderPath = path.join(root, folder.name);
+        for (const file of fs.readdirSync(folderPath).filter(name => name.endsWith(".json")).sort()) {
+          targets.push({ folderName: folder.name, conversationFile: file, filePath: path.join(folderPath, file) });
+        }
+      }
+    }
+
+    const counts = { scannedFiles: 0, scannedSummaries: 0, bindableCount: 0, alreadyCurrentCount: 0, otherCampaignCount: 0,
+      officialCount: 0, unresolvedCounterpartCount: 0, invalidSummaryCount: 0, invalidFileCount: 0 };
+    const snapshots = [], targetIds = [], changes = new Map(), fileCounts = new Map();
+    for (const target of targets) {
+      const relativePath = path.relative(root, target.filePath).split(path.sep).join("/");
+      const fileCount = { counterpartIds: new Set(), conversationFile: target.conversationFile, scannedSummaries: 0, bindableCount: 0 };
+      fileCounts.set(relativePath, fileCount);
+      counts.scannedFiles++;
+      let raw = null, parsed = null, snapshot = { relativePath, size: null, mtimeMs: null, sha256: null, readError: null };
+      try {
+        const before = fs.lstatSync(target.filePath);
+        if (!before.isFile() || before.isSymbolicLink()) throw new Error("not_regular_file");
+        raw = fs.readFileSync(target.filePath);
+        const after = fs.lstatSync(target.filePath);
+        if (!after.isFile() || after.size !== before.size || after.mtimeMs !== before.mtimeMs) throw new Error("source_changed_during_scan");
+        snapshot.size = after.size;
+        snapshot.mtimeMs = after.mtimeMs;
+        snapshot.sha256 = crypto.createHash("sha256").update(raw).digest("hex");
+        parsed = JSON.parse(raw.toString("utf8"));
+        if (!Array.isArray(parsed)) throw new Error("summary_file_not_array");
+      } catch (error) {
+        if (error?.message === "source_changed_during_scan") throw new Error("legacy_binding_preview_source_changed_during_scan");
+        snapshot.readError = String(error?.message || "summary_file_unreadable");
+        counts.invalidFileCount++;
+        snapshots.push(snapshot);
+        continue;
+      }
+      snapshots.push(snapshot);
+      counts.scannedSummaries += parsed.length;
+      fileCount.scannedSummaries = parsed.length;
+      parsed.forEach((summary, index) => {
+        if (summary && typeof summary === "object" && (summary.sourceType === "CK3_OFFICIAL_RECOLLECTION"
+          || summary.type === "official_recollection" || summary.subtype === "official_recollection")) {
+          counts.officialCount++;
+          return;
+        }
+        if (!summary || typeof summary !== "object" || Array.isArray(summary) || typeof summary.content !== "string") {
+          counts.invalidSummaryCount++;
+          return;
+        }
+        if (summary.campaignToken !== null && summary.campaignToken !== undefined) {
+          const existingToken = typeof summary.campaignToken === "string" ? summary.campaignToken.trim() : "";
+          if (!existingToken) {
+            counts.invalidSummaryCount++;
+          } else if (existingToken === token) {
+            counts.alreadyCurrentCount++;
+          } else {
+            counts.otherCampaignCount++;
+          }
+          return;
+        }
+        if (summary.campaignBinding?.status === "bound") {
+          counts.invalidSummaryCount++;
+          return;
+        }
+        const firstId = Number(summary.playerId), secondId = Number(summary.characterId);
+        const validPair = Number.isSafeInteger(firstId) && firstId > 0 && Number.isSafeInteger(secondId) && secondId > 0 && firstId !== secondId;
+        const resolvedCounterpartId = validPair && firstId === numericOwnerId ? secondId : validPair && secondId === numericOwnerId ? firstId : null;
+        if (resolvedCounterpartId === null) {
+          if (validPair) counts.invalidSummaryCount++;
+          else counts.unresolvedCounterpartCount++;
+          return;
+        }
+        fileCount.counterpartIds.add(resolvedCounterpartId);
+        if (scope === "conversation" && resolvedCounterpartId !== numericCounterpartId) {
+          counts.invalidSummaryCount++;
+          return;
+        }
+        const bindingId = this.getLegacySummaryBindingId(target.filePath, index, summary);
+        targetIds.push(bindingId);
+        counts.bindableCount++;
+        fileCount.bindableCount++;
+        changes.set(target.filePath, changes.get(target.filePath) || parsed.slice());
+        changes.get(target.filePath)[index] = { ...summary, campaignToken: token,
+          campaignBinding: { status: "bound", source: "user_confirmed_bulk_migration", version: 1 } };
+        return;
+      });
+    }
+
+    const files = [...fileCounts.values()].map(info => ({
+      counterpartId: info.counterpartIds.size === 1 ? [...info.counterpartIds][0] : null,
+      conversationFile: info.conversationFile,
+      scannedSummaries: info.scannedSummaries,
+      bindableCount: info.bindableCount
+    }));
+    snapshots.sort((a, b) => a.relativePath.localeCompare(b.relativePath));
+    const revisionInput = JSON.stringify({ scope, ownerId: numericOwnerId, counterpartId: numericCounterpartId, folderName, conversationFile, campaignToken: token,
+      snapshots, targetIds: [...targetIds].sort() });
+    return { scope, ownerId: numericOwnerId, ...(scope === "conversation" ? { counterpartId: numericCounterpartId } : {}), campaignToken: token,
+      ...counts, files, targetIds, previewRevision: crypto.createHash("sha256").update(revisionInput).digest("hex"), changes };
+  }
+
+  previewLegacyCampaignBinding(input = {}) {
+    const { changes, ...preview } = this.scanLegacyCampaignBinding(input);
+    return preview;
+  }
+
+  bindLegacyCampaignBatch({ previewRevision, ...input } = {}) {
+    if (typeof previewRevision !== "string" || !/^[a-f0-9]{64}$/.test(previewRevision)) throw new Error("legacy_summary_binding_preview_required");
+    const scan = this.scanLegacyCampaignBinding(input);
+    if (scan.previewRevision !== previewRevision) throw new Error("legacy_binding_preview_stale");
+    if (scan.bindableCount === 0) throw new Error("legacy_summary_binding_targets_required");
+    this.withSummaryMutation(null, () => {
+      for (const [filePath, summaries] of scan.changes) this.writeJson(filePath, summaries);
+    });
+    this.invalidateFolderSummaryCache([scan.ownerId]);
+    const { changes, ...result } = scan;
+    return { ...result, success: true, boundCount: scan.bindableCount };
+  }
+
   bindLegacySummaryCampaign({ ownerId, counterpartId, summaryIds, campaignToken, source = "user_confirmed_migration" } = {}) {
     const numericOwnerId = Number(ownerId), numericCounterpartId = Number(counterpartId);
     const token = typeof campaignToken === "string" ? campaignToken.trim() : "";
@@ -282,7 +426,9 @@ class MemoryStore {
         if (!Array.isArray(summaries)) continue;
         let changed = false;
         const migrated = summaries.map(summary => {
-          if (!summary || typeof summary !== "object" || String(summary.campaignToken || "").trim()) return summary;
+          if (!summary || typeof summary !== "object" || summary.sourceType === "CK3_OFFICIAL_RECOLLECTION"
+            || summary.type === "official_recollection" || summary.subtype === "official_recollection"
+            || String(summary.campaignToken || "").trim()) return summary;
           const playerId = Number(summary.playerId), character = Number(summary.characterId);
           const counterpartId = playerId === ownerId ? character : character === ownerId ? playerId : null;
           const finalizationId = String(summary.finalizationId || "");
@@ -391,9 +537,10 @@ class MemoryStore {
     return true;
   }
 
-  findEpisodeByFinalization(conversationId, finalizationId) {
+  findEpisodeByFinalization(conversationId, finalizationId, campaignToken = undefined) {
     if (!conversationId || !finalizationId) return null;
-    return this.listAllEpisodes().find((episode) => episode.conversationId === conversationId && episode.finalizationId === finalizationId) || null;
+    return this.listAllEpisodes().find((episode) => episode.conversationId === conversationId && episode.finalizationId === finalizationId
+      && (campaignToken === undefined || (episode.campaignToken || null) === campaignToken)) || null;
   }
 
   knowledgePath(characterId) {
@@ -433,8 +580,7 @@ class MemoryStore {
     for (const memoryId of Object.keys(this.index.memories)) {
       const memory = this.getMemory(memoryId);
       if (!memory) continue;
-      const visibleWithoutKnowledge = memory.visibility === "public" || memory.visibility === "world";
-      if (knownIds && !knownIds.has(memoryId) && !visibleWithoutKnowledge) continue;
+      if (knownIds && !knownIds.has(memoryId)) continue;
       if (type && memory.type !== type) continue;
       if (subjects.size > 0 && !memory.subjects.some((id) => subjects.has(id))) continue;
       if (participants.size > 0 && !memory.participants.some((id) => participants.has(id))) continue;
@@ -450,7 +596,7 @@ class MemoryStore {
     const memoryIds = this.readJson(path.join(this.paths.pairs, `${ids[0]}_${ids[1]}.json`), []);
     const knownMemoryIds = options.characterId == null ? null : new Set(this.getCharacterKnowledge(options.characterId).map((entry) => entry.memoryId));
     return memoryIds.map((memoryId) => this.getMemory(memoryId)).filter(Boolean).filter((memory) => {
-      if (options.characterId == null || memory.visibility === "public" || memory.visibility === "world") return true;
+      if (options.characterId == null) return true;
       return knownMemoryIds.has(memory.memoryId);
     });
   }
@@ -472,7 +618,9 @@ class MemoryStore {
 
   clearLongTermMemoryStorage() {
     if (this.summaryFoldersDir) clearDirectory(this.summaryFoldersDir);
-    for (const directory of [this.paths.episodes, this.paths.characters, this.paths.pairs, this.paths.knowledge, this.paths.recovery]) {
+    const memory4Recovery = path.resolve(this.paths.memory4Recovery);
+    if (path.dirname(memory4Recovery) !== path.resolve(this.baseDir)) throw new Error("memory4_recovery_path_invalid");
+    for (const directory of [this.paths.episodes, this.paths.characters, this.paths.pairs, this.paths.knowledge, this.paths.recovery, memory4Recovery]) {
       clearDirectory(directory);
     }
     this.index = { schemaVersion: CURRENT_MEMORY_SCHEMA_VERSION, memories: {}, episodes: {} };

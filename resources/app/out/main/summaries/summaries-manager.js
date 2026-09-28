@@ -1,11 +1,12 @@
 "use strict";
 
-function createSummariesManager({ fs, path, summariesDir, memoryEngine, memorySystem, getCurrentConversation = () => null, requestSummary, getSummaryCapabilities, buildSummaryPrompt, persistRecoveredSummary }) {
+function createSummariesManager({ fs, path, summariesDir, memoryEngine, memorySystem, getCurrentConversation = () => null, requestSummary, requestDurable, getSummaryCapabilities, buildSummaryPrompt, persistRecoveredSummary }) {
   const fs$1 = fs;
   const VOTC_SUMMARIES_DIR = summariesDir;
   class SummariesManager {
     static getRecoveryStatus() {
-      const currentId = getCurrentConversation()?.id;
+      const conversation = getCurrentConversation();
+      const currentId = conversation?.id;
       let pending = 0, manual = 0, balanceBlocked = 0;
       for (const file of memoryEngine.listRecoverySnapshots()) {
         const snapshot = memoryEngine.store.readJson(file, null);
@@ -15,15 +16,21 @@ function createSummariesManager({ fs, path, summariesDir, memoryEngine, memorySy
         if (snapshot.finalizationStatus === "failed_manual") manual++;
         if (/402|insufficient balance/i.test(snapshot.lastError || "")) balanceBlocked++;
       }
-      return { pending, manual, balanceBlocked, running: !!memoryEngine.pendingRecovery || memoryEngine.activeFinalizationIds.size > 0 };
+      const durable = memoryEngine.memory4?.getRecoveryStatus(conversation?.gameData?.campaignToken || null) || { pending: 0, manual: 0, balanceBlocked: 0 };
+      return { pending: pending + durable.pending, manual: manual + durable.manual,
+        balanceBlocked: balanceBlocked + durable.balanceBlocked, narrativePending: pending, durablePending: durable.pending,
+        durableInvalid: durable.invalid || 0,
+        running: !!memoryEngine.pendingRecovery || memoryEngine.activeFinalizationIds.size > 0 || (memoryEngine.memory4?.inFlight.size || 0) > 0 };
     }
 
     static async retryFailedSummaries() {
       const results = await memoryEngine.recoverPendingFinalizations({
         manual: true,
+        activeCampaignToken: getCurrentConversation()?.gameData?.campaignToken || null,
         isConversationActive: id => getCurrentConversation()?.id === id,
         buildPrompt: buildSummaryPrompt,
         requestSummary,
+        requestDurable,
         getSummaryCapabilities,
         resolveParticipantProfiles: snapshot => memoryEngine.resolveRecoveryParticipantProfiles(snapshot),
         persistCharacterFolders: persistRecoveredSummary
@@ -44,18 +51,77 @@ function createSummariesManager({ fs, path, summariesDir, memoryEngine, memorySy
       conversation.gameData?.loadCharactersSummaries?.();
     }
 
-    static bindLegacySummaryCampaign({ ownerId, counterpartId, summaryIds } = {}) {
-      const conversation = getCurrentConversation();
-      const gameData = conversation?.gameData;
+    static async bindLegacySummaryCampaign({ ownerId, counterpartId, summaryIds } = {}) {
+      const context = await this.getLegacyBulkBindingContext(ownerId, counterpartId);
+      this.assertCurrentLegacyBindingContext(context);
       const numericOwnerId = Number(ownerId), numericCounterpartId = Number(counterpartId);
-      if (!gameData || !(gameData.characters instanceof Map) || !gameData.campaignToken) throw new Error("active_campaign_required_for_legacy_binding");
       if (!Number.isSafeInteger(numericOwnerId) || numericOwnerId <= 0 || !Number.isSafeInteger(numericCounterpartId) || numericCounterpartId <= 0 || numericOwnerId === numericCounterpartId) {
         throw new Error("legacy_summary_binding_pair_invalid");
       }
-      const hasUniqueCharacter = id => [...gameData.characters.values()].filter(character => Number(character?.id) === id).length === 1;
+      const hasUniqueCharacter = id => [...context.gameData.characters.values()].filter(character => Number(character?.id) === id).length === 1;
       if (!hasUniqueCharacter(numericOwnerId) || !hasUniqueCharacter(numericCounterpartId)) throw new Error("legacy_summary_binding_character_not_in_current_campaign");
       const result = memoryEngine.bindLegacySummaryCampaign({ ownerId: numericOwnerId, counterpartId: numericCounterpartId,
-        summaryIds, campaignToken: gameData.campaignToken, source: "user_confirmed_migration" });
+        summaryIds, campaignToken: context.campaignToken, source: "user_confirmed_migration" });
+      this.refreshCurrentConversation();
+      return result;
+    }
+
+    static async getLegacyBulkBindingContext(ownerId, counterpartId = null) {
+      const conversation = getCurrentConversation();
+      if (!conversation) throw new Error("legacy_binding_conversation_not_active");
+      if (!conversation.gameData && conversation.gameDataReady && typeof conversation.gameDataReady.then === "function") {
+        await conversation.gameDataReady;
+      }
+      if (getCurrentConversation() !== conversation) throw new Error("legacy_binding_conversation_changed");
+      const gameData = conversation.gameData;
+      const numericOwnerId = Number(ownerId), numericCounterpartId = counterpartId == null ? null : Number(counterpartId);
+      if (!gameData || !(gameData.characters instanceof Map)) throw new Error("legacy_binding_game_data_unavailable");
+      if (typeof gameData.campaignToken !== "string" || !gameData.campaignToken.trim()) throw new Error("legacy_binding_campaign_not_loaded");
+      if (!Number.isSafeInteger(numericOwnerId) || numericOwnerId <= 0) throw new Error("legacy_summary_binding_owner_invalid");
+      if (counterpartId != null && (!Number.isSafeInteger(numericCounterpartId) || numericCounterpartId <= 0 || numericCounterpartId === numericOwnerId)) {
+        throw new Error("legacy_summary_binding_pair_invalid");
+      }
+      const hasUniqueCharacter = id => [...gameData.characters.values()].filter(character => Number(character?.id) === id).length === 1;
+      if (!hasUniqueCharacter(numericOwnerId)) throw new Error("legacy_summary_binding_owner_not_in_current_campaign");
+      if (numericCounterpartId != null && !hasUniqueCharacter(numericCounterpartId)) throw new Error("legacy_summary_binding_character_not_in_current_campaign");
+      return { conversation, gameData, ownerId: numericOwnerId, counterpartId: numericCounterpartId, campaignToken: gameData.campaignToken.trim() };
+    }
+
+    static assertCurrentLegacyBindingContext(context) {
+      if (getCurrentConversation() !== context.conversation) throw new Error("legacy_binding_conversation_changed");
+    }
+
+    static async previewLegacyConversationBinding({ ownerId, counterpartId, folderName, conversationFile } = {}) {
+      const context = await this.getLegacyBulkBindingContext(ownerId, counterpartId);
+      this.assertCurrentLegacyBindingContext(context);
+      if (typeof folderName !== "string" || typeof conversationFile !== "string") throw new Error("legacy_summary_binding_target_invalid");
+      return memoryEngine.store.previewLegacyCampaignBinding({ scope: "conversation", ownerId: context.ownerId, counterpartId: context.counterpartId,
+        folderName, conversationFile, campaignToken: context.campaignToken });
+    }
+
+    static async previewLegacyOwnerBinding({ ownerId } = {}) {
+      const context = await this.getLegacyBulkBindingContext(ownerId);
+      this.assertCurrentLegacyBindingContext(context);
+      return memoryEngine.store.previewLegacyCampaignBinding({ scope: "owner", ownerId: context.ownerId, campaignToken: context.campaignToken });
+    }
+
+    static async bindLegacyConversationCampaign({ ownerId, counterpartId, folderName, conversationFile, expectedCampaignToken, previewRevision } = {}) {
+      const context = await this.getLegacyBulkBindingContext(ownerId, counterpartId);
+      this.assertCurrentLegacyBindingContext(context);
+      if (expectedCampaignToken !== context.campaignToken) throw new Error("legacy_binding_preview_stale");
+      if (typeof folderName !== "string" || typeof conversationFile !== "string") throw new Error("legacy_summary_binding_target_invalid");
+      const result = memoryEngine.bindLegacyCampaignBatch({ scope: "conversation", ownerId: context.ownerId, counterpartId: context.counterpartId,
+        folderName, conversationFile, campaignToken: context.campaignToken, previewRevision });
+      this.refreshCurrentConversation();
+      return result;
+    }
+
+    static async bindLegacyOwnerCampaign({ ownerId, expectedCampaignToken, previewRevision } = {}) {
+      const context = await this.getLegacyBulkBindingContext(ownerId);
+      this.assertCurrentLegacyBindingContext(context);
+      if (expectedCampaignToken !== context.campaignToken) throw new Error("legacy_binding_preview_stale");
+      const result = memoryEngine.bindLegacyCampaignBatch({ scope: "owner", ownerId: context.ownerId,
+        campaignToken: context.campaignToken, previewRevision });
       this.refreshCurrentConversation();
       return result;
     }

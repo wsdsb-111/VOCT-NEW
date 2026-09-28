@@ -21126,6 +21126,7 @@ const SummariesManager = () => {
   const [retryResult, setRetryResult] = reactExports.useState(null);
   const [isLoadingSummaries, setIsLoadingSummaries] = reactExports.useState(false);
   const [bindingLegacySummaryId, setBindingLegacySummaryId] = reactExports.useState(null);
+  const [bulkBindingKey, setBulkBindingKey] = reactExports.useState(null);
   const [expandedCharacters, setExpandedCharacters] = reactExports.useState(/* @__PURE__ */ new Set());
   const [editingEntry, setEditingEntry] = reactExports.useState(null);
   const [searchQuery, setSearchQuery] = reactExports.useState("");
@@ -21148,15 +21149,15 @@ const SummariesManager = () => {
     }
   };
   const handleRetrySummaries = async () => {
-    if (!window.confirm("将使用当前摘要模型重新生成失败记录，可能产生 API 费用。请先确认模型配置和余额可用。继续？")) return;
+    if (!window.confirm("将使用当前摘要模型重试失败摘要或逐角色 Durable 提取，可能产生 API 费用。请先确认模型配置和余额可用。继续？")) return;
     setIsRetryingSummaries(true);
     setRetryResult(null);
     try {
       const result = await window.conversationAPI.retryFailedSummaries();
-      setRetryResult(result.error || `本次恢复 ${result.recovered || 0} 场；失败 ${result.failed || 0} 场。${result.recoveryStatus?.balanceBlocked ? "服务商余额不足，请充值或更换摘要模型后重试。" : "失败记录保留原文快照，不会作为摘要提交。"}`);
+      setRetryResult(result.error || `本次恢复 ${result.recovered || 0} 项；失败 ${result.failed || 0} 项。${result.recoveryStatus?.balanceBlocked ? "服务商余额不足，请充值或更换摘要模型后重试。" : "失败记录保留恢复快照；已提交的 Narrative 不会重生成。"}`);
       await loadSummaries(true);
     } catch (error) {
-      setRetryResult("摘要重试失败，请检查摘要模型配置及日志；恢复记录不会删除。");
+      setRetryResult("记忆任务重试失败，请检查摘要模型配置及日志；恢复记录不会删除。");
     } finally {
       setIsRetryingSummaries(false);
     }
@@ -21254,6 +21255,54 @@ const SummariesManager = () => {
       setBindingLegacySummaryId(null);
     }
   };
+  const handleBulkLegacyBinding = async (scope, metadata) => {
+    const ownerId = Number(metadata.ownerId ?? metadata.playerId);
+    const counterpartId = Number(metadata.counterpartId);
+    const bulkKey = scope === "owner" ? `owner-${ownerId}` : `conversation-${ownerId}-${counterpartId}`;
+    if (!Number.isSafeInteger(ownerId) || ownerId <= 0 || scope === "conversation" && (!Number.isSafeInteger(counterpartId) || counterpartId <= 0 || counterpartId === ownerId)) return;
+    setBulkBindingKey(bulkKey);
+    try {
+      const preview = scope === "owner"
+        ? await window.conversationAPI.previewLegacyOwnerBinding(ownerId)
+        : await window.conversationAPI.previewLegacyConversationBinding(ownerId, counterpartId, metadata.folderName, metadata.conversationFile);
+      if (!preview?.previewRevision) throw new Error(preview?.error || "legacy_summary_binding_preview_failed");
+      if (!preview.bindableCount) {
+        alert(`扫描完成，没有可绑定的旧摘要。\n\n摘要：${preview.scannedSummaries || 0}\n已属于当前战役：${preview.alreadyCurrentCount || 0}\n属于其他战役：${preview.otherCampaignCount || 0}\n官方追忆：${preview.officialCount || 0}\n身份待核实：${preview.unresolvedCounterpartCount || 0}\n无效摘要/文件：${(preview.invalidSummaryCount || 0) + (preview.invalidFileCount || 0)}`);
+        return;
+      }
+      const scopeLabel = scope === "owner"
+        ? `“${metadata.ownerName || metadata.playerName}”的全部旧摘要`
+        : `“${metadata.ownerName || metadata.playerName} ↔ ${metadata.counterpartName || metadata.characterName}”的全部旧摘要`;
+      const previewText = scope === "owner"
+        ? `扫描对话文件：${preview.scannedFiles}\n扫描摘要：${preview.scannedSummaries}`
+        : `扫描摘要：${preview.scannedSummaries}`;
+      const detailText = `${previewText}\n待绑定旧摘要：${preview.bindableCount}\n已属于当前战役：${preview.alreadyCurrentCount}\n属于其他战役：${preview.otherCampaignCount}\n官方追忆：${preview.officialCount}\n身份待核实：${preview.unresolvedCounterpartCount}\n无效摘要/文件：${preview.invalidSummaryCount + preview.invalidFileCount}`;
+      if (!window.confirm(`确认将${scopeLabel}绑定到当前战役？\n\n当前战役：${preview.campaignToken}\n\n${detailText}\n\n本操作只修改待绑定的旧摘要，不覆盖已有 Campaign 归属，也不修改官方追忆。\n\n确认绑定 ${preview.bindableCount} 篇？`)) return;
+      const result = scope === "owner"
+        ? await window.conversationAPI.bindLegacyOwnerCampaign(ownerId, preview.campaignToken, preview.previewRevision)
+        : await window.conversationAPI.bindLegacyConversationCampaign(ownerId, counterpartId, metadata.folderName, metadata.conversationFile, preview.campaignToken, preview.previewRevision);
+      if (!result?.success) throw new Error(result?.error || "legacy_summary_bulk_binding_failed");
+      alert(`已完成旧摘要迁移${scope === "owner" ? `：${metadata.ownerName || metadata.playerName}` : ""}\n扫描对话文件：${result.scannedFiles}\n扫描摘要：${result.scannedSummaries}\n成功绑定：${result.boundCount}\n已属于当前战役：${result.alreadyCurrentCount}\n其他战役跳过：${result.otherCampaignCount}\n官方追忆跳过：${result.officialCount}\n身份待核实：${result.unresolvedCounterpartCount}\n无效摘要/文件：${result.invalidSummaryCount + result.invalidFileCount}`);
+      await loadSummaries(true);
+    } catch (error) {
+      const message = error?.message === "legacy_binding_preview_stale"
+        ? "摘要数据在确认期间发生变化。未执行任何绑定，请重新扫描。"
+        : error?.message === "legacy_binding_conversation_not_active"
+          ? "当前没有已加载的 VOTC 游戏对话。请先在目标存档中触发一次 VOTC 对话，待游戏数据加载后再进行绑定。"
+          : error?.message === "legacy_binding_game_data_unavailable"
+            ? "当前 VOTC 对话的游戏数据尚不可用。请等待解析完成后重试；本次未修改摘要。"
+            : error?.message === "legacy_binding_campaign_not_loaded"
+              ? "当前游戏数据没有可确认的 Campaign 标识。请确认模组已输出 VOTC:CAMPAIGN，并重新触发对话；本次未修改摘要。"
+              : error?.message === "legacy_binding_conversation_changed"
+                ? "操作期间游戏对话已切换。未执行绑定，请重新扫描后重试。"
+                : error?.message === "legacy_summary_binding_owner_not_in_current_campaign"
+                  ? "当前存档中无法确认该人物归属，未执行绑定。"
+                  : `旧摘要批量绑定失败，未完成迁移：${error?.message || "请确认当前存档和角色信息。"}`;
+      alert(message);
+    } finally {
+      setBulkBindingKey(null);
+    }
+  };
   const handleDeleteCharacterSummaries = async (playerId, characterId) => {
     if (!window.confirm(t("summariesManager.confirmDeleteCharacterSummaries"))) {
       return;
@@ -21323,14 +21372,15 @@ const SummariesManager = () => {
       ] }),
       /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "header-actions", children: [
         /* @__PURE__ */ jsxRuntimeExports.jsx("button", { onClick: () => loadSummaries(true), disabled: isLoadingSummaries, children: isLoadingSummaries ? t("summaries.loadingSummaries") : t("summariesManager.refresh") }),
-        /* @__PURE__ */ jsxRuntimeExports.jsx("button", { type: "button", onClick: handleRetrySummaries, disabled: isRetryingSummaries || isClearing || recoveryStatus.running || !recoveryStatus.pending, children: isRetryingSummaries ? "正在调用模型补生成…" : "重试失败摘要" }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx("button", { type: "button", onClick: handleRetrySummaries, disabled: isRetryingSummaries || isClearing || recoveryStatus.running || !recoveryStatus.pending, children: isRetryingSummaries ? "正在调用模型补生成…" : "重试失败记忆任务" }),
         /* @__PURE__ */ jsxRuntimeExports.jsx("button", { type: "button", onClick: handleOpenSummariesFolder, children: t("summaries.openSummariesFolder") }),
         /* @__PURE__ */ jsxRuntimeExports.jsx("button", { type: "button", onClick: handleClearSummaries, disabled: isLoadingSummaries || isClearing || summaryGroups.length === 0, className: "danger-button", children: isClearing ? t("summaries.clearing") : t("summaries.clearAllSummaries") })
       ] })
     ] }),
     clearResult && /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: `clear-result ${clearResult.success ? "success" : "error"}`, children: clearResult.message }),
     retryResult && /* @__PURE__ */ jsxRuntimeExports.jsx("p", { role: "status", className: "help-text", children: retryResult }),
-    (recoveryStatus.pending > 0 || recoveryStatus.running) && /* @__PURE__ */ jsxRuntimeExports.jsx("p", { role: "status", className: "help-text", children: `待恢复摘要：${recoveryStatus.pending} 场。${recoveryStatus.running ? "后台正在生成，完成后请刷新。" : recoveryStatus.balanceBlocked ? "服务商报告余额不足；充值或更换摘要模型后，点击“重试失败摘要”。" : "点击“重试失败摘要”重新调用模型；原文仅保留在恢复快照中。"}` }),
+    (recoveryStatus.pending > 0 || recoveryStatus.running) && /* @__PURE__ */ jsxRuntimeExports.jsx("p", { role: "status", className: "help-text", children: `待恢复：Narrative ${recoveryStatus.narrativePending || 0} 场，Durable ${recoveryStatus.durablePending || 0} 位角色。${recoveryStatus.running ? "后台正在生成，完成后请刷新。" : recoveryStatus.balanceBlocked ? "服务商报告余额不足；充值或更换摘要模型后重试。" : "可点击“重试失败记忆任务”；已提交的结果不会重生成。"}` }),
+    recoveryStatus.durableInvalid > 0 && /* @__PURE__ */ jsxRuntimeExports.jsx("p", { role: "alert", className: "help-text", children: `另有 ${recoveryStatus.durableInvalid} 个 Durable 恢复快照无法读取，已隔离；请保留文件并检查诊断日志。` }),
     /* @__PURE__ */ jsxRuntimeExports.jsxs("section", { className: "memory-engine-overview", children: [
       /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "memory-engine-title", children: [
         /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
@@ -21385,6 +21435,10 @@ const SummariesManager = () => {
       const playerKey = `player-${playerId}`;
       const isPlayerExpanded = expandedCharacters.has(playerKey);
       const totalSummaries = playerSummaries.reduce((sum, m) => sum + m.summaries.length, 0);
+      const ownerSummaries = summaries2.filter(metadata => String(metadata.ownerId ?? metadata.playerId) === String(playerId));
+      const ownerTotalSummaries = ownerSummaries.reduce((sum, metadata) => sum + metadata.summaries.length, 0);
+      const ownerUnboundCount = ownerSummaries.reduce((sum, metadata) => sum + metadata.summaries.filter(summary => (summary.campaignToken === null || summary.campaignToken === undefined)
+        && summary.campaignBinding?.status !== "bound" && summary.sourceType !== "CK3_OFFICIAL_RECOLLECTION" && summary.type !== "official_recollection" && summary.subtype !== "official_recollection").length, 0);
       return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "player-summary-group", children: [
         /* @__PURE__ */ jsxRuntimeExports.jsxs(
           "div",
@@ -21393,7 +21447,7 @@ const SummariesManager = () => {
             onClick: () => toggleCharacterExpanded(playerKey),
             children: [
               /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "expand-icon", children: isPlayerExpanded ? "▼" : "▶" }),
-              /* @__PURE__ */ jsxRuntimeExports.jsxs("span", { className: "player-name", children: [playerSummaries[0]?.ownerName || playerSummaries[0]?.playerName || `Player ID: ${playerId}`, /* @__PURE__ */ jsxRuntimeExports.jsxs("small", { children: ["摘要目录 · ", playerSummaries[0]?.folderName || playerId] })] }),
+              /* @__PURE__ */ jsxRuntimeExports.jsxs("span", { className: "player-name", children: [playerSummaries[0]?.ownerName || playerSummaries[0]?.playerName || `Player ID: ${playerId}`, /* @__PURE__ */ jsxRuntimeExports.jsxs("small", { children: ["摘要目录 · ", playerSummaries[0]?.folderName || playerId, " | 对话文件：", ownerSummaries.length, " | 摘要总数：", ownerTotalSummaries, " | 未绑定旧摘要：", ownerUnboundCount] })] }),
               /* @__PURE__ */ jsxRuntimeExports.jsxs("span", { className: "summary-count", children: [
                 playerSummaries.length,
                 " ",
@@ -21402,7 +21456,16 @@ const SummariesManager = () => {
                 totalSummaries,
                 " ",
                 t("summariesManager.summariesCount")
-              ] })
+              ] }),
+              ownerUnboundCount > 0 && Number.isSafeInteger(Number(playerId)) && Number(playerId) > 0 && /* @__PURE__ */ jsxRuntimeExports.jsx("button", {
+                type: "button",
+                disabled: !!bulkBindingKey || !!bindingLegacySummaryId,
+                onClick: (e) => {
+                  e.stopPropagation();
+                  handleBulkLegacyBinding("owner", playerSummaries[0]);
+                },
+                children: bulkBindingKey === `owner-${Number(playerId)}` ? "预扫描/绑定中…" : `绑定此人物全部旧摘要（${ownerUnboundCount}）`
+              })
             ]
           }
         ),
@@ -21432,6 +21495,22 @@ const SummariesManager = () => {
                     " ",
                     t("summariesManager.summariesCount")
                   ] }),
+                  (() => {
+                    const unresolvedCount = metadata.summaries.filter(summary => (summary.campaignToken === null || summary.campaignToken === undefined)
+                      && summary.campaignBinding?.status !== "bound" && summary.sourceType !== "CK3_OFFICIAL_RECOLLECTION" && summary.type !== "official_recollection" && summary.subtype !== "official_recollection").length;
+                    const ownerId = Number(metadata.ownerId ?? metadata.playerId), counterpartId = Number(metadata.counterpartId);
+                    return unresolvedCount > 0 && Number.isSafeInteger(ownerId) && ownerId > 0 && Number.isSafeInteger(counterpartId) && counterpartId > 0 && counterpartId !== ownerId
+                      ? /* @__PURE__ */ jsxRuntimeExports.jsx("button", {
+                        type: "button",
+                        disabled: !!bulkBindingKey || !!bindingLegacySummaryId,
+                        onClick: (e) => {
+                          e.stopPropagation();
+                          handleBulkLegacyBinding("conversation", metadata);
+                        },
+                        children: bulkBindingKey === `conversation-${ownerId}-${counterpartId}` ? "预扫描/绑定中…" : `绑定本对话全部旧摘要（${unresolvedCount}）`
+                      })
+                      : null;
+                  })(),
                   /* @__PURE__ */ jsxRuntimeExports.jsx(
                     "button",
                     {
@@ -21958,7 +22037,7 @@ const OptimizationView = () => {
       ] }),
       recent.length > 0 && /* @__PURE__ */ jsxRuntimeExports.jsxs("section", { className: "optimization-section", children: [
         /* @__PURE__ */ jsxRuntimeExports.jsx("h4", { children: text("最近请求", "Recent requests") }),
-        renderTable([text("时间", "Time"), text("类型", "Type"), text("命中 / 未命中", "Hit / miss"), text("首个断点", "First breakpoint")], recent.slice(0, 12).map((item) => [item.timestamp ? new Date(item.timestamp).toLocaleString(isChinese ? "zh-CN" : "en-US") : "—", item.requestType, `${formatNullableTokens(item.cacheHitTokens)} / ${formatNullableTokens(item.cacheMissTokens)}`, item.cacheAttribution?.coldStart ? text("冷启动", "Cold start") : item.cacheAttribution?.breakpoint?.label || "—"]), "recent")
+        renderTable([text("时间", "Time"), text("类型", "Type"), text("命中 / 未命中", "Hit / miss"), text("首个断点", "First breakpoint")], recent.slice(0, 12).map((item) => [item.timestamp ? new Date(item.timestamp).toLocaleString(isChinese ? "zh-CN" : "en-US") : "—", item.requestType, `${formatNullableTokens(item.cacheHitTokens)} / ${formatNullableTokens(item.cacheMissTokens)}`, item.cacheAttribution?.coldStart ? text("服务商零命中", "Provider zero hit") : item.cacheAttribution?.breakpoint?.label || "—"]), "recent")
       ] })
     ] })
   ] });

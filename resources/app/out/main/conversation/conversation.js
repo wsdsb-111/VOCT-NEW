@@ -1,5 +1,7 @@
 "use strict";
 
+const fs = require("fs");
+
 const { getCharacterPersonalName } = require("../memory-system/character-identity");
 const { memoryMatchesCampaign } = require("../memory-system/memory-types");
 const { createConversationRuntime } = require("./conversation-runtime");
@@ -151,6 +153,7 @@ class Conversation {
     this.presenceInitialized = false;
     this.pendingActionApprovals = /* @__PURE__ */ new Map();
     this.gameDataRevision = 0;
+    this.memory4RelationshipChanges = [];
     this.eventEmitter = new events.EventEmitter();
     this.runtime = createConversationRuntime(this, {
       recordSkipped: (responseState, reason) => this.recordGenerationSkippedAnalytics(responseState, reason)
@@ -158,7 +161,7 @@ class Conversation {
     this.turnManager = this.runtime.turnManager;
     this.generationManager = this.runtime.generationManager;
     this.referenceContext = this.runtime.referenceContext;
-    this.initializeGameData();
+    this.gameDataReady = this.initializeGameData();
   }
   getTurnManager() {
     const manager = this.runtime?.turnManager || this.turnManager;
@@ -169,6 +172,25 @@ class Conversation {
     const manager = this.runtime?.generationManager || this.generationManager;
     if (!manager) throw new Error("conversation_generation_manager_not_initialized");
     return manager;
+  }
+  async parseCK3GameData(ck3DebugPath, { captureForConversation = false } = {}) {
+    let before = null;
+    try { before = fs.statSync(ck3DebugPath); } catch {}
+    const gameData = await parseLog(ck3DebugPath);
+    try {
+      const after = fs.statSync(ck3DebugPath);
+      if (before && before.size === after.size && before.mtimeMs === after.mtimeMs
+        && gameData?.ck3RelationshipReadbackComplete !== false) {
+        const changes = memoryEngine?.memory4?.observeCK3Readback(gameData, { sourceId: ck3DebugPath, size: after.size,
+          mtimeMs: after.mtimeMs, complete: true });
+        if (captureForConversation && changes?.length) {
+          this.memory4RelationshipChanges = [...(this.memory4RelationshipChanges || []), ...changes];
+        }
+      }
+    } catch (error) {
+      console.warn("[Memory4] CK3 relationship readback skipped:", error.message);
+    }
+    return gameData;
   }
   async initializeGameData() {
     const ck3DebugPath = settingsRepository.getCK3DebugLogPath();
@@ -189,7 +211,7 @@ class Conversation {
       return;
     }
     try {
-      this.gameData = await parseLog(ck3DebugPath);
+      this.gameData = await this.parseCK3GameData(ck3DebugPath);
       this.gameDataRevision += 1;
       this.gameData.gameDataRevision = this.gameDataRevision;
       console.log("GameData initialized with", this.gameData.characters.size, "characters");
@@ -1124,6 +1146,7 @@ class Conversation {
     const placeholder = createMessage({
       id: msgId,
       role: "assistant",
+      speakerCharacterId: Number(npc.id),
       name: npc.fullName,
       content: "",
       isStreaming: true,
@@ -1464,7 +1487,7 @@ class Conversation {
   async refreshGameDataForActionConfirmation() {
     const ck3DebugPath = settingsRepository.getCK3DebugLogPath();
     if (!ck3DebugPath) throw new Error("ck3_debug_log_path_not_configured");
-    const gameData = await parseLog(ck3DebugPath);
+    const gameData = await this.parseCK3GameData(ck3DebugPath, { captureForConversation: true });
     gameData.loadCharactersSummaries();
     gameData.syncOfficialRecollectionSummaries?.(this.id);
     this.gameData = gameData;
@@ -1600,6 +1623,7 @@ class Conversation {
       id: this.nextId++,
       name: user.fullName,
       role: "user",
+      speakerCharacterId: Number(this.gameData.playerID),
       content: userMessage
     });
     const turnState = this.getTurnManager().startUserTurn({
@@ -1761,6 +1785,8 @@ class Conversation {
       date: this.gameData.date,
       campaignToken: this.gameData.campaignToken || null,
       totalDays: this.gameData.totalDays,
+      relationshipChanges: this.memory4RelationshipChanges || [],
+      finalizationVisibilityV1: true,
       messages: this.getHistory(),
       participants,
       excludedSummaryOwnerIds,
@@ -1863,7 +1889,10 @@ class Conversation {
           providerSnapshot: requestOptions.providerSnapshot,
           summaryBudget: requestOptions.summaryBudget
         });
-      }
+      },
+      requestDurable: (prompt, options = {}) => llmManager.sendSummaryRequest(prompt, void 0, {
+        requestType: "memory4_durable", maxTokens: options.maxTokens, providerSnapshot: options.providerSnapshot
+      })
     });
   }
   async recoverPendingMemories() {
@@ -1873,6 +1902,10 @@ class Conversation {
       buildPrompt: (context) => memoryEngine.buildFinalizationPrompt({ ...context, finalInstructions: context.finalInstructions || PromptBuilder.getFinalSummaryInstructions() }),
       getSummaryCapabilities: (snapshot) => llmManager.getProviderCapabilities("SUMMARY", snapshot),
       requestSummary: (summaryPrompt, options = {}) => llmManager.sendSummaryRequest(summaryPrompt, void 0, { requestType: "memory_recovery", maxTokens: options.maxTokens, providerSnapshot: options.providerSnapshot, summaryBudget: options.summaryBudget }),
+      requestDurable: (prompt, options = {}) => llmManager.sendSummaryRequest(prompt, void 0, {
+        requestType: "memory4_durable", maxTokens: options.maxTokens, providerSnapshot: options.providerSnapshot
+      }),
+      activeCampaignToken: this.gameData.campaignToken || null,
       resolveParticipantProfiles: (snapshot) => memoryEngine.resolveRecoveryParticipantProfiles(snapshot, [...this.summaryParticipantProfiles.values()]),
       persistCharacterFolders: async (finalSummary, context) => {
         const participantIds = (context.participants || []).map((entry) => entry.id);

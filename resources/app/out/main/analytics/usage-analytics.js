@@ -410,7 +410,7 @@ function createUsageAnalytics({ fs, dataDir, analyticsFile, retention, createPro
         if (!entry.isReconciledAggregate) recentWithAttribution.push({ ...entry, cacheAttribution });
         if (cacheAttribution?.cacheMissTokens > 0) {
           const breakpoint = cacheAttribution.breakpoint;
-          const attributionKey = cacheAttribution.coldStart ? `${entry.requestType} | cold_start | No reusable prefix` : breakpoint ? `${entry.requestType} | ${breakpoint.type || "unknown"} | ${breakpoint.label || breakpoint.id || "unknown"}` : `${entry.requestType} | unattributed | No block metadata`;
+          const attributionKey = cacheAttribution.coldStart ? `${entry.requestType} | provider_zero_hit | Provider reported zero cached tokens` : breakpoint ? `${entry.requestType} | ${breakpoint.type || "unknown"} | ${breakpoint.label || breakpoint.id || "unknown"}` : `${entry.requestType} | unattributed | No block metadata`;
           if (!missAttributionTotals[attributionKey]) {
             missAttributionTotals[attributionKey] = {
               requests: 0,

@@ -720,6 +720,10 @@ function createLogParser({ GameData, Character, onGameDataParsed = null }) {
         value: Number(splits[1])
       };
     }
+    if (gameData) Object.defineProperty(gameData, "ck3RelationshipReadbackComplete", {
+      value: !(isWaitingForMultiLine && ["relations", "new_relations"].includes(multiLineType)),
+      configurable: true
+    });
     if (gameData && typeof onGameDataParsed === "function") await onGameDataParsed(gameData);
     console.log(gameData);
     return gameData;

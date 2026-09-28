@@ -57,3 +57,25 @@ test-release.js 通过 test-manifest.js 汇总直接和嵌套检查；新增 tes
 提交信息使用简短的中文版本/阶段/修复描述。提交说明应列出受影响的打包路径、验证命令和仍待人工 Gate；UI、Token、缓存或主题改动应附视觉或统计证据。
 
 永不提交 API Key、Provider 配置、CK3 存档、日志、摘要、使用分析和 %APPDATA%/VOTC 数据。迁移或维护脚本必须先校验替代输出，再保留原始用户数据。
+
+## Subagent Model Policy
+
+### Root agent
+- The root/main agent model is controlled by the user through the Codex client model picker.
+- Do not change or override the root model selection.
+- When the root model is GPT-6 Astra, reserve Astra for high-level reasoning, architecture, difficult debugging, synthesis, and final decisions.
+
+### Default subagents
+- Ordinary subagents must use the configured default model, GPT-6 Luna, with maximum (`max`) reasoning effort.
+- Do not explicitly request GPT-6 Astra for ordinary subagents.
+- Do not override the configured subagent model or reasoning effort unless the user explicitly requests it for that task.
+- Prefer Luna subagents for codebase exploration, locating files and symbols, dependency tracing, reading modules, searching references, running tests, reproducing bugs, collecting logs, checking documentation, and other straightforward investigations.
+
+### Astra usage
+- Do not spawn GPT-6 Astra subagents by default.
+- If a Luna subagent cannot complete a difficult task, return its findings and unresolved question to the root agent.
+- Only spawn an Astra subagent when the user explicitly requests it.
+
+### Delegation discipline
+- Spawn subagents only when the work is genuinely parallelizable or delegation materially improves speed or context management.
+- Keep delegated tasks narrow and concrete; have child agents return concise evidence, paths, symbols, and conclusions.

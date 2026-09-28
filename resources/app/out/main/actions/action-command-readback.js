@@ -19,6 +19,12 @@ async function readActionCommandReadback(filePath, commandId) {
       if (!active) continue;
       if (line.includes("VOTC:ACTION_BINDING_FAILED")) result.bindingFailed = true;
       if (line.includes("VOTC:ACTION_INSUFFICIENT_GOLD")) result.insufficientGold = true;
+      if (line.includes("VOTC:TRIBUTARY_ESTABLISHED")) result.tributaryEstablished = true;
+      if (line.includes("VOTC:TRIBUTARY_REJECTED")) result.tributaryRejected = true;
+      const contractGroup = line.match(/VOTC:TRIBUTARY_CONTRACT_CONFIRMED\/(tributary_[a-z_]+)/);
+      if (contractGroup) result.tributaryContractGroup = contractGroup[1];
+      if (line.includes("VOTC:TRIBUTARY_CONTRACT_REJECTED")) result.tributaryContractRejected = true;
+      if (line.includes("VOTC:TRIBUTARY_CONTRACT_ROLLBACK_FAILED")) result.tributaryContractRollbackFailed = true;
       const binding = line.match(/VOTC:ACTION_(SOURCE|TARGET)\/;\/(\d+)/);
       if (binding) result[binding[1] === "SOURCE" ? "sourceRuntimeId" : "targetRuntimeId"] = Number(binding[2]);
       const income = line.match(/VOTC:IN\/;\/income\/;\/(\d+)\/;\/(-?\d+(?:\.\d+)?)(?=\/;\/)/);

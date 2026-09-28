@@ -48,8 +48,10 @@ assert(analyticsSource.includes("providerEfficiency"), "Action Analytics 2.0 mus
 assert(analyticsSource.includes("memoryRecall"), "Memory Engine 2.5 must expose Turn Recall metrics");
 for (const field of ["turnRecallIntent", "turnRecallSelected", "turnRecallCacheHit", "sessionTopicAnchorLocked"]) assert(analyticsSource.includes(field), `${field} must be retained in usage analytics`);
 assert(analyticsSource.includes("memoryRecall.reasons[entry.turnRecallReason]"), "Turn Recall reasons must be aggregated for long-session diagnostics");
+assert(analyticsSource.includes("provider_zero_hit | Provider reported zero cached tokens"), "zero provider cache hits must not be described as having no reusable prefix");
 assert(rendererSource.includes("服务商总 Token"), "UI must label provider-reported total tokens explicitly");
 assert(rendererSource.includes("API 请求"), "UI must exclude diagnostics from the request total label");
 assert(rendererSource.includes("诊断记录"), "UI must display diagnostic volume separately");
+assert(rendererSource.includes('text("服务商零命中", "Provider zero hit")'), "UI must not label every zero cache hit as a cold start");
 
 console.log("VOTC usage analytics retention: PASS (provider usage is retained independently from diagnostic traces)");

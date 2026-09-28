@@ -628,13 +628,18 @@ function createPromptBuilder({
       const deferredDescriptionBlocks = [];
       const deferredContextBlocks = [];
       const hoistedMainSegments = new Map();
+      let sharedHistoryUsesRolePlaceholder = false;
       if (v813Layout) {
         for (const block of blocks.filter((entry) => entry.enabled && entry.type === "main" && (!entry.role || entry.role === "system"))) {
           const template = promptSettings.mainTemplate || promptConfigManager.getDefaultMainTemplateContent();
           for (const segment of this.splitMainTemplateSegments(template)) {
-            if (!["stable_global", "stable_history_rp"].includes(segment.id) || segment.template.includes("{{")) continue;
-            const content = this.templateEngine.renderTemplateString(segment.template, context);
+            const nameOnlyRules = segment.id === "stable_history_rp" && segment.template.includes("{{fullName}}")
+              && !segment.template.replaceAll("{{fullName}}", "").includes("{{");
+            const sharedTemplate = nameOnlyRules ? segment.template.replaceAll("{{fullName}}", "【当前回应角色】") : segment.template;
+            if (!["stable_global", "stable_history_rp"].includes(segment.id) || sharedTemplate.includes("{{")) continue;
+            const content = this.templateEngine.renderTemplateString(sharedTemplate, context);
             if (!content?.trim()) continue;
+            if (nameOnlyRules) sharedHistoryUsesRolePlaceholder = true;
             llmMessages.push({ role: block.role || "system", content });
             blocksWithTokens.push({
               block: { ...block, id: `${block.id || "main"}-${segment.id}`, type: "main_segment", label: segment.label, stable: true, lifecycle: PROMPT_LIFECYCLE.GLOBAL_STATIC },
@@ -674,7 +679,8 @@ function createPromptBuilder({
           },
           {
             block: { id: "responder-frozen-profile", type: "responder_frozen", label: "Responder Frozen Profile", stable: true, lifecycle: PROMPT_LIFECYCLE.RESPONDER_FROZEN },
-            content: cacheV2ResponderText
+            content: sharedHistoryUsesRolePlaceholder
+              ? `${cacheV2ResponderText}\n- 【当前回应角色】即${char?.fullName || char?.shortName || "未知"}` : cacheV2ResponderText
           },
           {
             block: { id: "responder-stable-kinship", type: "responder_stable_kinship", label: "Responder Stable Blood Kinship", stable: true, lifecycle: PROMPT_LIFECYCLE.RESPONDER_FROZEN },

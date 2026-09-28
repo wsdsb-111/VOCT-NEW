@@ -461,7 +461,7 @@ class LLMManager {
     const provider = this.getProviderInstance(config);
     const preparedMessages = this.PromptBuilder.prepareSummaryMessages(messages);
     const summaryBlocks = Array.isArray(metadata?.blocks) && metadata.blocks.length > 0 ? metadata.blocks : this.PromptBuilder.getSummaryPromptBlocks(preparedMessages, metadata?.requestType || "summary");
-    const isStructuredSummary = ["final_summary", "memory_recovery"].includes(metadata.requestType);
+    const isStructuredSummary = ["final_summary", "memory_recovery", "memory4_durable"].includes(metadata.requestType);
     const useDeepseekNonThinking = config.providerType === "deepseek" && isStructuredSummary;
     const requestedMaxTokens = Number(metadata?.maxTokens);
     const capabilities = await this.getProviderCapabilities("SUMMARY", metadata.providerSnapshot);

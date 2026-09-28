@@ -24,6 +24,8 @@ const { normalizeGameDate } = require("../worldline/character-temporal-facts");
 const { resolveTemporalFocus } = require("./fuzzy-temporal-resolver");
 const { extractTemporalAnchorsFromMessages, normalizeTemporalRefs } = require("./temporal-anchor-extractor");
 const { buildDualTemporalIndex, selectDualTemporalExtras } = require("./summary-date-index");
+const { Memory4Coordinator } = require("./memory4-coordinator");
+const { validateVisibilityBoundaries, repairVisibilityBoundaries } = require("./finalization-visibility");
 
 const FINAL_SUMMARY_MAX_ATTEMPTS = 2;
 const RECOVERY_MAX_ATTEMPTS = 3;
@@ -48,6 +50,7 @@ class MemoryEngine {
   constructor({ baseDir, summaryFoldersDir = null, recoveryDir = null, store = null, trace = null } = {}) {
     this.trace = trace || new MemoryTrace();
     this.store = store || new MemoryStore({ baseDir, summaryFoldersDir, recoveryDir });
+    this.memory4 = this.store?.paths?.memory4Recovery ? new Memory4Coordinator(this.store, { trace: this.trace }) : null;
     this.extractor = new MemoryExtractor();
     this.ranker = new MemoryRanker();
     this.knowledge = new KnowledgeService({ store: this.store, trace: this.trace });
@@ -150,6 +153,15 @@ class MemoryEngine {
     this.summaryCampaignMigrationOwners.delete(Number(result.ownerId));
     this.invalidateSummaryFolderCache([result.ownerId]);
     this.trace.record("summary_campaign_binding", { characterId: result.ownerId, boundCount: result.boundCount, source: "user_confirmed_migration" });
+    return result;
+  }
+
+  bindLegacyCampaignBatch(input = {}) {
+    const result = this.store.bindLegacyCampaignBatch(input);
+    this.summaryCampaignMigrationOwners.delete(Number(result.ownerId));
+    this.invalidateSummaryFolderCache([result.ownerId]);
+    this.trace.record("summary_campaign_binding", { characterId: result.ownerId, boundCount: result.boundCount,
+      source: "user_confirmed_bulk_migration", scope: result.scope });
     return result;
   }
 
@@ -461,7 +473,9 @@ class MemoryEngine {
     const perspectives = [];
     for (const memory of extraction.memories) {
       for (const characterId of memory.knownBy || []) {
-        perspectives.push({ characterId, memoryId: memory.memoryId, awareness: "witnessed", content: memory.content });
+        const awareness = context.finalizationVisibilityV1 === true && memory.visibility !== "private"
+          && ["spoken", "reported", "rumor", "letter"].includes(memory.source) ? "told" : "witnessed";
+        perspectives.push({ characterId, memoryId: memory.memoryId, awareness, content: memory.content });
       }
     }
     return {
@@ -477,6 +491,8 @@ class MemoryEngine {
       participants: context.participants || [],
       excludedSummaryOwnerIds: uniqueIds(context.excludedSummaryOwnerIds),
       participantPresence: context.participantPresence || [],
+      relationshipChanges: context.relationshipChanges || [],
+      visibilityValidationVersion: context.finalizationVisibilityV1 === true ? 1 : null,
       joinEvents: context.joinEvents || [],
       leaveEvents: context.leaveEvents || [],
       sessionSummary: extraction.sessionSummary,
@@ -512,9 +528,12 @@ class MemoryEngine {
 
   persistExtraction(context, extraction) {
     const messageIds = (context.messages || []).map((message) => Number(message.id)).filter(Number.isFinite);
+    const messageById = new Map((context.messages || []).map((message) => [Number(message.id), message]));
     const episodeContext = {
       conversationId: context.conversationId,
       participantPresence: context.participantPresence || [],
+      finalizationVisibilityV1: context.finalizationVisibilityV1 === true,
+      sourceContext: context,
       conversationStartMessageId: messageIds.length > 0 ? Math.min(...messageIds) : null,
       conversationEndMessageId: messageIds.length > 0 ? Math.max(...messageIds) : null
     };
@@ -526,7 +545,6 @@ class MemoryEngine {
     for (const participant of context.participants || []) {
       for (const name of [participant.name, participant.fullName].filter(Boolean)) participantByName.set(name, Number(participant.id));
     }
-    const messageById = new Map((context.messages || []).map((message) => [Number(message.id), message]));
     extraction.summarySegments = (extraction.summarySegments || []).map((rawSegment) => {
       const segmentMessageIds = uniqueIds(rawSegment.provenance?.messageIds).filter((messageId) => messageById.has(messageId));
       const derivedSpeakerIds = segmentMessageIds.map((messageId) => participantByName.get(messageById.get(messageId)?.name)).filter(Number.isFinite);
@@ -535,12 +553,13 @@ class MemoryEngine {
       const segment = {
         ...rawSegment,
         participants: participants.length > 0 ? participants : derivedSpeakerIds,
-        visibility: ["public", "world"].includes(visibility) ? "participants" : visibility,
+        visibility: context.finalizationVisibilityV1 === true ? visibility : (["public", "world"].includes(visibility) ? "participants" : visibility),
         knownBy: [],
         provenance: {
           ...rawSegment.provenance,
           messageIds: segmentMessageIds,
-          speakerIds: derivedSpeakerIds.length > 0 ? derivedSpeakerIds : uniqueIds(rawSegment.provenance?.speakerIds).filter((characterId) => allowedIds.has(characterId))
+          speakerIds: context.finalizationVisibilityV1 === true ? uniqueIds(rawSegment.provenance?.speakerIds)
+            : (derivedSpeakerIds.length > 0 ? derivedSpeakerIds : uniqueIds(rawSegment.provenance?.speakerIds).filter((characterId) => allowedIds.has(characterId)))
         }
       };
       return { ...segment, knownBy: this.knowledge.resolveKnownBy(segment, episodeContext) };
@@ -554,19 +573,24 @@ class MemoryEngine {
         ...rawCandidate,
         participants: participants.length > 0 ? participants : derivedSpeakerIds,
         subjects: uniqueIds(rawCandidate.subjects).filter((characterId) => allowedIds.has(characterId)),
-        visibility: rawCandidate.type === "secret" ? "known_group" : (["public", "world"].includes(rawCandidate.visibility) && rawCandidate.source !== "game_fact" ? "participants" : rawCandidate.visibility),
+        visibility: context.finalizationVisibilityV1 === true ? rawCandidate.visibility
+          : (rawCandidate.type === "secret" ? "known_group" : (["public", "world"].includes(rawCandidate.visibility) && rawCandidate.source !== "game_fact" ? "participants" : rawCandidate.visibility)),
         knownBy: [],
         provenance: {
           ...rawCandidate.provenance,
           campaignToken: context.campaignToken || null,
           messageIds: candidateMessageIds,
-          speakerIds: derivedSpeakerIds.length > 0 ? derivedSpeakerIds : uniqueIds(rawCandidate.provenance.speakerIds).filter((characterId) => allowedIds.has(characterId))
+          speakerIds: context.finalizationVisibilityV1 === true ? uniqueIds(rawCandidate.provenance.speakerIds)
+            : (derivedSpeakerIds.length > 0 ? derivedSpeakerIds : uniqueIds(rawCandidate.provenance.speakerIds).filter((characterId) => allowedIds.has(characterId)))
         }
       });
       const knownBy = this.knowledge.resolveKnownBy(candidate, episodeContext);
       const memory = this.store.saveMemory({ ...candidate, knownBy });
       this.store.removeKnowledgeForMemory(memory.memoryId, knownBy);
-      this.knowledge.markKnownBy(memory.memoryId, knownBy, { awareness: memory.source === "letter" ? "told" : "witnessed", acquiredAt: memory.totalDays, confidence: memory.confidence });
+      const awareness = context.finalizationVisibilityV1 === true && memory.visibility !== "private"
+        && ["spoken", "reported", "rumor", "letter"].includes(memory.source) ? "told"
+          : memory.source === "letter" ? "told" : "witnessed";
+      this.knowledge.markKnownBy(memory.memoryId, knownBy, { awareness, acquiredAt: memory.totalDays, confidence: memory.confidence });
       saved.push(this.store.getMemory(memory.memoryId));
       this.trace.record("persist", { memoryId: memory.memoryId, type: memory.type, conversationId: context.conversationId });
     }
@@ -592,7 +616,11 @@ class MemoryEngine {
     reasons.push(...this.validateExtractionMessageIds(context, extraction).reasons);
     const presenceBoundary = validateSummarySegmentPresenceBoundaries(context, extraction);
     reasons.push(...presenceBoundary.reasons);
-    return { success: reasons.length === 0, reasons, sourceChars, messageCount, narrativeChars, presenceBoundaryFailures: presenceBoundary.failures };
+    const visibilityBoundary = context.finalizationVisibilityV1 === true
+      ? validateVisibilityBoundaries(context, extraction) : { failures: [], reasons: [] };
+    reasons.push(...visibilityBoundary.reasons);
+    return { success: reasons.length === 0, reasons, sourceChars, messageCount, narrativeChars,
+      presenceBoundaryFailures: presenceBoundary.failures, visibilityBoundaryFailures: visibilityBoundary.failures };
   }
 
   recordSummaryQualityDiagnostics(context, quality) {
@@ -606,6 +634,10 @@ class MemoryEngine {
         presenceSignatures: failure.presenceSignatures
       });
     }
+    for (const failure of quality?.visibilityBoundaryFailures || []) this.trace.record("summary_visibility_boundary_failure", {
+      conversationId: context.conversationId, finalizationId: context.finalizationId,
+      reason: failure.reason, kind: failure.kind, index: failure.index
+    });
   }
 
   validateExtractionMessageIds(context, extraction) {
@@ -640,9 +672,12 @@ class MemoryEngine {
     const boundaryCorrection = (quality.presenceBoundaryFailures || []).length > 0
       ? ` Affected segments: ${(quality.presenceBoundaryFailures || []).map((failure) => failure.segmentId || `summarySegments[${failure.index}]`).join(", ")} cross a participant-presence boundary. Split the narrative into separate chronological segments so every messageId in one segment belongs to the same participant-presence window. Keep all exact supporting messageIds in the appropriate split segments. Do not remove substantive detail, compress the narrative, or merge content across join, leave, temporary-leave, or return boundaries.`
       : "";
+    const visibilityCorrection = (quality.visibilityBoundaryFailures || []).length > 0
+      ? " Split or remove any segment or memory whose private thought, unnoticed action or whisper is combined with public content. For mixed-source messages, copy each safely shared source paragraph verbatim; do not paraphrase a shared fragment across a private paragraph. Openly spoken content uses public even when participants names only the actor. Use only source-supported speakerIds, participants and visibility; a whisper requires a named recipient in the original message. Do not broaden knownBy."
+      : "";
     const correction = {
       role: "system",
-      content: `Final-summary quality correction: the previous response was rejected (${quality.reasons.join("; ")}). Regenerate the complete JSON from the supplied conversation. Put the full chronological narrative in summarySegments, preserve concrete details and exact source messageIds without inventing facts. Do not return a shortened overview.${boundaryCorrection}`
+      content: `Final-summary quality correction: the previous response was rejected (${quality.reasons.join("; ")}). Regenerate the complete JSON from the supplied conversation. Put the full chronological narrative in summarySegments, preserve concrete details and exact source messageIds without inventing facts. Do not return a shortened overview.${boundaryCorrection}${visibilityCorrection}`
     };
     const sourcePrompt = Array.isArray(prompt) ? [...prompt] : [];
     const finalUser = sourcePrompt.at(-1)?.role === "user" ? sourcePrompt.pop() : null;
@@ -692,6 +727,7 @@ class MemoryEngine {
           lastError = new Error(`summary_generation_incomplete:${outcome.finishReason || "unknown"}`);
         } else if (content) {
           const parsed = this.extractor.parseOutput(content, context);
+          if (context.finalizationVisibilityV1 === true) repairVisibilityBoundaries(context, parsed);
           const quality = this.evaluateFinalSummaryQuality(context, parsed);
           if (quality.success) {
             this.trace.record("summary_provider", { conversationId: context.conversationId, attempt, success: true, durationMs: Date.now() - startedAt });
@@ -793,7 +829,7 @@ class MemoryEngine {
       if (splits[key]) return split();
       if (messages.every((message) => boundaryKinds.has(message.kind))) {
         outputs[key] = {
-          summarySegments: messages.map((message) => ({ content: message.content, participants: this.getSummaryPresenceSignature(context, message).split(",").map(Number).filter(Number.isFinite), visibility: "participants", messageIds: [message.id], speakerIds: [] })),
+          summarySegments: messages.map((message) => ({ content: message.content, participants: this.getSummaryPresenceSignature(context, message).split(",").map(Number).filter(Number.isFinite), visibility: "participants", source: "game_fact", messageIds: [message.id], speakerIds: [] })),
           memories: []
         };
         checkpoint();
@@ -811,6 +847,7 @@ class MemoryEngine {
       try {
         this.trace.record("summary_chunk", { conversationId: context.conversationId, reason: "preflight_or_failure", attempt: requestCount });
         parsed = this.extractor.parseOutput(await this.requestFinalSummary(chunk), chunk);
+        if (context.finalizationVisibilityV1 === true) repairVisibilityBoundaries(chunk, parsed);
       } catch (error) {
         if (messages.length < 2 || !["LENGTH", "CONTEXT_EXCEEDED"].includes(classifySummaryFailure(error))) throw error;
         splits[key] = true;
@@ -863,7 +900,9 @@ class MemoryEngine {
       return true;
     });
     const content = JSON.stringify(combined);
-    const quality = this.evaluateFinalSummaryQuality(context, this.extractor.parseOutput(content, context));
+    const parsedCombined = this.extractor.parseOutput(content, context);
+    if (context.finalizationVisibilityV1 === true) repairVisibilityBoundaries(context, parsedCombined);
+    const quality = this.evaluateFinalSummaryQuality(context, parsedCombined);
     if (!quality.success) throw new Error(`final_summary_quality_failed:${quality.reasons.join("|")}`);
     return content;
   }
@@ -950,8 +989,17 @@ class MemoryEngine {
   }
 
   isCommitted(context) {
-    const episode = this.store.findEpisodeByFinalization(context.conversationId, context.finalizationId);
+    const campaignToken = typeof context.campaignToken === "string" && context.campaignToken.trim() ? context.campaignToken : undefined;
+    const episode = this.store.findEpisodeByFinalization(context.conversationId, context.finalizationId, campaignToken);
     return episode?.commitMarker ? episode : null;
+  }
+
+  isMemory4NarrativeCommitted(context) {
+    const episode = this.isCommitted(context);
+    if (!episode || !context.campaignToken || episode.campaignToken !== context.campaignToken) return false;
+    if (context.ownerId == null) return true;
+    return uniqueIds((episode.participants || []).map(participant => participant?.id ?? participant?.characterId ?? participant))
+      .map(Number).includes(context.ownerId);
   }
 
   traceFinalization(context, stage, details = {}) {
@@ -1027,12 +1075,23 @@ class MemoryEngine {
     this.traceFinalization(context, "provider_received", { providerSuccess: true, recoveryState: "pending" });
     let extraction = this.restoreExtraction(parsedExtraction);
     try {
-      if (!extraction) extraction = this.assignStableMemoryIds(context, this.extractor.parseOutput(content, context));
+      if (!extraction) {
+        extraction = this.extractor.parseOutput(content, context);
+        if (context.finalizationVisibilityV1 === true) {
+          const repair = repairVisibilityBoundaries(context, extraction);
+          if (repair.repairedMessageIds.length) this.trace.record("summary_visibility_repair", {
+            conversationId: context.conversationId, finalizationId: context.finalizationId, reason: "source_paragraph_split"
+          });
+        }
+        extraction = this.assignStableMemoryIds(context, extraction);
+      }
       let quality = this.evaluateFinalSummaryQuality(context, extraction);
       if (!quality.success && typeof context.requestSummary === "function") {
         content = await this.requestFinalSummary(context);
         if (!this.isFinalizationCurrent(context)) return this.cancelledFinalizationResult(context);
-        extraction = this.assignStableMemoryIds(context, this.extractor.parseOutput(content, context));
+        extraction = this.extractor.parseOutput(content, context);
+        if (context.finalizationVisibilityV1 === true) repairVisibilityBoundaries(context, extraction);
+        extraction = this.assignStableMemoryIds(context, extraction);
         quality = this.evaluateFinalSummaryQuality(context, extraction);
       }
       this.recordSummaryQualityDiagnostics(context, quality);
@@ -1117,7 +1176,19 @@ class MemoryEngine {
     const prepared = this.prepareFinalizationContext(context);
     this.activeFinalizationIds.add(prepared.finalizationId);
     try {
-      return await this.finalizeWithAvailableOutput(prepared);
+      const narrative = await this.finalizeWithAvailableOutput(prepared);
+      if (!narrative.success || !this.memory4 || typeof prepared.requestDurable !== "function") return narrative;
+      try {
+        const committed = this.isCommitted(prepared);
+        const durable = await this.memory4.finalizeCommitted({ ...prepared,
+          verifiedSummarySegments: committed?.visibilityValidationVersion === 1 ? committed.summarySegments : [] }, prepared.requestDurable, {
+          isNarrativeCommitted: this.isMemory4NarrativeCommitted(prepared), isCurrent: () => this.isFinalizationCurrent(prepared)
+        });
+        return { ...narrative, durable };
+      } catch (error) {
+        this.trace.record("memory4_durable", { finalizationId: prepared.finalizationId, status: "EXTRACTION_FAILED", errorCode: error.message });
+        return { ...narrative, durable: { status: "EXTRACTION_FAILED", error: error.message } };
+      }
     } finally {
       this.activeFinalizationIds.delete(prepared.finalizationId);
     }
@@ -1170,6 +1241,7 @@ class MemoryEngine {
       finalInstructions: context.finalInstructions || existing.finalInstructions || "",
       summaryOutputLimit: context.summaryOutputLimit || existing.summaryOutputLimit || null,
       rawMessages: context.messages || [],
+      finalizationVisibilityV1: context.finalizationVisibilityV1 === true,
       summaryProviderSnapshot: context.summaryProviderSnapshot || existing.summaryProviderSnapshot || null,
       summaryChunkState: state.summaryChunkState || context.summaryChunkState || existing.summaryChunkState || null,
       finalizationStage: state.finalizationStage || existing.finalizationStage || "request",
@@ -1191,7 +1263,7 @@ class MemoryEngine {
     return fs.readdirSync(this.store.paths.recovery).filter((name) => name.endsWith(".json")).map((name) => path.join(this.store.paths.recovery, name));
   }
 
-  async recoverFailedFinalization(filePath, { requestSummary, buildPrompt, persistCharacterFolders, resolveParticipantProfiles, getSummaryCapabilities, automatic = false } = {}) {
+  async recoverFailedFinalization(filePath, { requestSummary, requestDurable, buildPrompt, persistCharacterFolders, resolveParticipantProfiles, getSummaryCapabilities, automatic = false } = {}) {
     const snapshot = this.store.readJson(filePath, null);
     if (!snapshot) return { success: false, reason: "invalid_recovery_snapshot" };
     const participants = typeof resolveParticipantProfiles === "function" ? resolveParticipantProfiles(snapshot) : snapshot.participants;
@@ -1205,9 +1277,11 @@ class MemoryEngine {
       participants,
       excludedSummaryOwnerIds: snapshot.excludedSummaryOwnerIds || [],
       participantPresence: snapshot.participantPresence,
+      relationshipChanges: snapshot.relationshipChanges || [],
       joinEvents: snapshot.joinEvents || [],
       leaveEvents: snapshot.leaveEvents || [],
       messages: snapshot.rawMessages,
+      finalizationVisibilityV1: snapshot.finalizationVisibilityV1 === true,
       rollingState: snapshot.rollingState,
       finalInstructions: snapshot.finalInstructions || "",
       summaryOutputLimit: snapshot.summaryOutputLimit || 4096,
@@ -1215,8 +1289,11 @@ class MemoryEngine {
       summaryChunkState: snapshot.summaryChunkState || null,
       getSummaryCapabilities,
       retryCount: Number(snapshot.retryCount || 0) + 1,
-      preferChunkedSummary: /^(truncated_final_summary_response|final_summary_quality_failed:|summary_coverage_repair_failed)/.test(snapshot.lastError || ""),
+      preferChunkedSummary: /^(truncated_final_summary_response|summary_coverage_repair_failed)/.test(snapshot.lastError || "")
+        || (/^final_summary_quality_failed:/.test(snapshot.lastError || "")
+          && !/visibility_|summary_segment_crosses_visibility_boundary/.test(snapshot.lastError || "")),
       requestSummary,
+      requestDurable,
       buildPrompt,
       persistCharacterFolders
     });
@@ -1239,7 +1316,15 @@ class MemoryEngine {
     });
     if (result.success) {
       this.trace.record("recover", { conversationId: context.conversationId, reason: "recovered" });
-      return { ...result, participants: context.participants };
+      let durable = null;
+      if (this.memory4 && typeof requestDurable === "function") {
+        const committed = this.isCommitted(context);
+        durable = await this.memory4.finalizeCommitted({ ...context,
+          verifiedSummarySegments: committed?.visibilityValidationVersion === 1 ? committed.summarySegments : [] }, requestDurable, {
+          isNarrativeCommitted: this.isMemory4NarrativeCommitted(context), isCurrent: () => this.isFinalizationCurrent(context)
+        }).catch(error => ({ status: "EXTRACTION_FAILED", error: error.message }));
+      }
+      return { ...result, durable, participants: context.participants };
     }
     if (result.cancelled) return result;
     const retryCount = context.retryCount;
@@ -1254,12 +1339,23 @@ class MemoryEngine {
 
   async recoverPendingFinalizations(options = {}) {
     if (this.pendingRecovery) return this.pendingRecovery;
-    this.pendingRecovery = this.runPendingFinalizations(options);
+    this.pendingRecovery = (async () => {
+      const narrative = await this.runPendingFinalizations(options);
+      if (!this.memory4 || typeof options.requestDurable !== "function") return narrative;
+      const generation = this.memoryGeneration;
+      const durable = await this.memory4.recoverPending(options.requestDurable, {
+        manual: options.manual === true, activeCampaignToken: options.activeCampaignToken || null,
+        isCurrent: () => generation === this.memoryGeneration,
+        isNarrativeCommitted: snapshot => this.isMemory4NarrativeCommitted(snapshot)
+      });
+      return [...narrative, ...durable.filter(row => !["WAITING_NARRATIVE", "CAMPAIGN_MISMATCH"].includes(row.status))
+        .map(row => ({ ...row, success: ["STORE", "NO_DURABLE_CONTENT", "NOT_PRESENT"].includes(row.status) }))];
+    })();
     try { return await this.pendingRecovery; }
     finally { this.pendingRecovery = null; }
   }
 
-  async runPendingFinalizations({ requestSummary, buildPrompt, persistCharacterFolders, resolveParticipantProfiles, getSummaryCapabilities, manual = false, isConversationActive = () => false } = {}) {
+  async runPendingFinalizations({ requestSummary, requestDurable, buildPrompt, persistCharacterFolders, resolveParticipantProfiles, getSummaryCapabilities, manual = false, isConversationActive = () => false } = {}) {
     const results = [];
     const generation = this.memoryGeneration;
     const files = this.listRecoverySnapshots().map((filePath) => ({
@@ -1292,7 +1388,7 @@ class MemoryEngine {
         if (snapshot.finalizationStatus !== "failed_manual") this.writeRecoverySnapshot(this.prepareFinalizationContext({ ...snapshot, messages: snapshot.rawMessages }), { finalizationStatus: "failed_manual", retryCount: snapshot.retryCount });
         return null;
       }
-      return this.recoverFailedFinalization(filePath, { requestSummary, buildPrompt, persistCharacterFolders, resolveParticipantProfiles, getSummaryCapabilities, automatic: !manual });
+      return this.recoverFailedFinalization(filePath, { requestSummary, requestDurable, buildPrompt, persistCharacterFolders, resolveParticipantProfiles, getSummaryCapabilities, automatic: !manual });
     };
     let nextFile = 0;
     const worker = async () => {

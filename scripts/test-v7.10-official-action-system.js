@@ -49,6 +49,7 @@ const expectedActionHashes = {
   "z_setEmotion.js": "42e11cf67fdf89cf274d86c9ae19b1c4eb29a073996f783f1981ece5f9488700"
 };
 const v883ActionOverrides = new Set(["z_paysGoldTo.js", "z_playerPaysGoldTo.js"]);
+const addedStandardActions = ["z_becomesTributaryOf.js", "z_changesTributaryContract.js"];
 // V8.8.5 changes feedback only; official source hashes above remain frozen.
 const v885ActionHashes = { "z_changeOpinionOf.js": "fc5e1f3ece104642cd3ba793cc404fb760e4761135adb4093552950c92901b96" };
 
@@ -92,7 +93,7 @@ if (fs.existsSync(officialMainPath)) {
   }
 }
 
-assert.deepStrictEqual(fs.readdirSync(currentActionsDir).filter((file) => file.endsWith(".js")).sort(), Object.keys(expectedActionHashes).sort());
+assert.deepStrictEqual(fs.readdirSync(currentActionsDir).filter((file) => file.endsWith(".js")).sort(), [...Object.keys(expectedActionHashes), ...addedStandardActions].sort());
 for (const [file, expectedHash] of Object.entries(expectedActionHashes)) {
   if (v883ActionOverrides.has(file)) continue;
   assert.strictEqual(hash(fs.readFileSync(path.join(currentActionsDir, file), "utf8")), v885ActionHashes[file] || expectedHash, `ported standard action drift: ${file}`);
@@ -114,7 +115,8 @@ try {
   registryPromise = registry.reloadActions().then(() => {
     const ids = registry.getAllActions().map((action) => action.id);
     for (const required of ["setEmotion", "isUndressed", "changeLocation", "changeOpinionOf", "playerPaysGoldTo", "paysGoldTo", "isImprisonedBy", "isInjured", "characterIsKilled", "intercourse", "becomeFriendsWith", "becomeBestFriendsWith", "isAssignedToCouncilBy", "isAssignedToCourtPositionBy"]) assert(ids.includes(required), `missing baseline action: ${required}`);
-    assert.strictEqual(ids.length, Object.keys(expectedActionHashes).length);
+    for (const file of addedStandardActions) assert(ids.includes(path.basename(file, ".js").slice(2)), `missing added standard action: ${file}`);
+    assert.strictEqual(ids.length, Object.keys(expectedActionHashes).length + addedStandardActions.length);
   });
 } finally {
   process.on("exit", () => fs.rmSync(temporaryRoot, { recursive: true, force: true }));

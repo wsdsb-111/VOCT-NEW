@@ -70,7 +70,7 @@ async function main() {
   const metadata = catalog.find(entry => entry.ownerId === 2);
   const selected = metadata?.summaries.find(summary => summary.content === "用户选中的旧摘要");
   assert.match(selected?.legacyBindingId || "", /^legacy-summary:[a-f0-9]{64}$/);
-  const bound = SummariesManager.bindLegacySummaryCampaign({ ownerId: 2, counterpartId: 1, summaryIds: [selected.legacyBindingId] });
+  const bound = await SummariesManager.bindLegacySummaryCampaign({ ownerId: 2, counterpartId: 1, summaryIds: [selected.legacyBindingId] });
   assert.equal(bound.boundCount, 1);
   const afterBinding = JSON.parse(fs.readFileSync(summariesPath, "utf8"));
   assert.equal(afterBinding[0].campaignToken, "campaign-A", "existing campaign-A summary must remain unchanged");
@@ -78,10 +78,10 @@ async function main() {
   assert.equal(afterBinding[2].campaignToken, "campaign-A");
   assert.equal(afterBinding[2].campaignBinding.source, "user_confirmed_migration");
   assert.equal(afterBinding[3].campaignToken, null, "an unselected legacy summary in the same file must remain isolated");
-  assert.throws(() => SummariesManager.bindLegacySummaryCampaign({ ownerId: 2, counterpartId: 1, summaryIds: [selected.legacyBindingId] }), /already_bound/,
+  await assert.rejects(() => SummariesManager.bindLegacySummaryCampaign({ ownerId: 2, counterpartId: 1, summaryIds: [selected.legacyBindingId] }), /already_bound/,
     "stale UI action cannot rebind an already bound target");
   conversation.gameData.characters.delete(1);
-  assert.throws(() => SummariesManager.bindLegacySummaryCampaign({ ownerId: 2, counterpartId: 1, summaryIds: [metadata.summaries[3].legacyBindingId] }), /character_not_in_current_campaign/);
+  await assert.rejects(() => SummariesManager.bindLegacySummaryCampaign({ ownerId: 2, counterpartId: 1, summaryIds: [metadata.summaries[3].legacyBindingId] }), /character_not_in_current_campaign/);
 
   const recoveryFolder = path.join(summaryFoldersDir, "4_恢复角色");
   fs.mkdirSync(recoveryFolder, { recursive: true });

@@ -4,7 +4,11 @@
 
 ## 推荐阅读顺序
 
-V8.13.2.1 当前入口：[Acceptance Hotfix](V8阶段开发记录.md#第一百一十八阶段v81321-acceptance-hotfix)。321/321 本地发布组通过；多人时间召回按实际提问者保底；摘要管理器支持逐篇确认旧摘要 Campaign 绑定；原始摘要目录统计拒绝数；终局恢复后重试迁移；Coverage Patch 对预算截断显式标记部分事实。CK3/Provider 实机 Gate 待验收。
+V8.14 施工中：[工程化施工标准](v8.14-memory-engine-4.0-implementation-spec-dual-model.md) / [A 阶段实施报告](v8.14-a-durable-core-implementation-report.md) / [Sol 独立审查及修复复测](v8.14-a-sol-independent-review.md) / [Finalization 可见性收口及 P0 修复](v8.14-a-finalization-visibility-closeout-report.md) / [B Profile 与 CK3 回读接线](v8.14-b-profile-implementation-report.md) / [总体设计 Revision 3](v8.14-memory-engine-4.0-overall-design-revision3.md)。B 已接入生产 debug.log 回读，尚未接入旧摘要、实时 Prompt 或正式 Memory4 Recall；327 组发布回归通过，A/B 实机及独立 Gate 未验收。
+
+V8.13.2.2 当前入口：[Legacy Bulk Campaign Binding 实施报告](v8.13.2.2-legacy-bulk-campaign-binding-implementation-report.md) / [阶段记录](V8阶段开发记录.md#第一百一十九阶段v81322-legacy-bulk-campaign-binding)。摘要管理器新增对话文件与 Owner 目录两级 Preview→确认→原子批量迁移；绑定等待当前会话 GameData 解析后再校验，只绑定未归属的普通旧摘要，不覆盖 Campaign Token 或官方追忆；stale revision 零写入，刷新当前 Recall 且 Frozen Prefix 不变。322/322 本地发布组通过；打包窗口、CK3/Provider 与远端 CI 仍待验收。
+
+V8.13.2.1：[Acceptance Hotfix](V8阶段开发记录.md#第一百一十八阶段v81321-acceptance-hotfix)。321/321 本地发布组通过；多人时间召回按实际提问者保底；摘要管理器支持逐篇确认旧摘要 Campaign 绑定；原始摘要目录统计拒绝数；终局恢复后重试迁移；Coverage Patch 对预算截断显式标记部分事实。CK3/Provider 实机 Gate 待验收。
 
 V8.13.2 当前入口：[Temporal Recall & Worldline Coverage Closure](V8阶段开发记录.md#第一百一十七阶段v8132-temporal-recall--worldline-coverage-closure)。修复 Legacy Campaign 唯一证据迁移、MEMORY_RECALL 双轴/直接对话保底、时间诊断、Broad Lane 完整性、CHARACTER_OVERVIEW 及补丁缓存修订。320/320 本地发布组通过；CK3/Provider Gate 待实测。
 

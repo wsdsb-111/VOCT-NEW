@@ -4,6 +4,20 @@ const { CriticalActionRecallObserver: DefaultCriticalActionRecallObserver } = re
 const { ACTION_LIFECYCLE_STATUSES, createActionLifecycle, createActionDiagnostic } = require("./types");
 const { captureActionConfirmation, detectActionArgumentDrift, extractRequestedActionArgs } = require("./action-confirmation");
 
+const RELATIONSHIP_RECALL_GUIDANCE = `
+RELATIONSHIP STATE CHANGES (apply only to the latest completed exchange):
+- In a clearly romantic scene, a genuine reciprocal confession such as "I love you" / "I love you too" can establish a soulmate-level bond now; the speakers need not literally say "soulmates". Select becomeSoulmatesWith when both accept that deep romantic bond. Use becomeLoversWith for a mutually accepted ongoing romance without that deeper declaration.
+- A mutual decision to become friends selects becomeFriendsWith; an existing friendship explicitly deepened to closest friends selects becomeBestFriendsWith. Explicitly established mutual enmity selects becomeRivalsWith; a sworn lasting mortal feud selects becomeNemesisWith. A completed oath of blood kinship selects becomeBloodBrothersWith.
+- Select at most one new relationship action for the same pair. Do not infer a relationship from one-sided affection, family love, politeness, flirting, insults, momentary anger, jokes, questions, hypothetical plans, unaccepted proposals, or descriptions of a past state. Respect every listed valid target and prerequisite; never claim CK3 confirmation before readback.`;
+const RELATIONSHIP_ACTION_IDS = new Set(["becomeFriendsWith", "becomeBestFriendsWith", "becomeLoversWith",
+  "becomeSoulmatesWith", "becomeRivalsWith", "becomeNemesisWith", "becomeBloodBrothersWith"]);
+
+function isolateRelationshipCharacter(character) {
+  return Object.assign(Object.create(Object.getPrototypeOf(character)), character, {
+    relationsToCharacters: (character.relationsToCharacters || []).map((entry) => ({ ...entry, relations: [...(entry.relations || [])] }))
+  });
+}
+
 function createActionEngine({ actionRegistry, settingsRepository, usageAnalytics, llmManager, ActionPromptBuilder, ActionSandbox, ActionEffectWriter, CriticalActionRecallObserver = DefaultCriticalActionRecallObserver, buildStructuredResponseJsonSchema, buildStructuredResponseSchema, healJsonResponseWithLogging, resolveI18nString, logVerboseLLM }) {
   return class ActionEngine {
     static async evaluateForCharacter(conv, npc, signal) {
@@ -77,7 +91,8 @@ function createActionEngine({ actionRegistry, settingsRepository, usageAnalytics
           return { autoApproved: [], needsApproval: [] };
         }
         if (signal?.aborted) return { autoApproved: [], needsApproval: [] };
-        const messages = ActionPromptBuilder.buildActionMessages(conv, npc, available);
+        const messages = ActionPromptBuilder.buildActionMessages(conv, npc, available, Math.max(8, conv.gameData.characters.size));
+        messages[0] = { ...messages[0], content: messages[0].content + RELATIONSHIP_RECALL_GUIDANCE };
         const actionsConfig = settingsRepository.getActionsProviderConfig();
         const useMinimizedSchema = actionsConfig?.useMinimizedActionsSchema !== undefined ? actionsConfig.useMinimizedActionsSchema : actionsConfig?.defaultModel?.toLowerCase().includes("gemini") ?? false;
         console.log(`[DEBUG] ActionEngine: Using minimized schema: ${useMinimizedSchema}`);
@@ -133,11 +148,12 @@ function createActionEngine({ actionRegistry, settingsRepository, usageAnalytics
           if (needsUserApproval) {
             const targetId = invocation.targetCharacterId ?? null;
             const target = targetId != null ? conv.gameData.characters.get(targetId) ?? undefined : undefined;
+            const approvalSource = ["becomesTributaryOf", "changesTributaryContract"].includes(invocation.actionId) && invocation.args?.isPlayerSource === true ? conv.gameData.characters.get(conv.gameData.playerID) : npc;
             needsApproval.push({
               actionId: invocation.actionId,
               actionTitle: loadedAction.definition.title ? resolveI18nString(loadedAction.definition.title, userLang) : undefined,
-              sourceCharacterId: npc.id,
-              sourceCharacterName: npc.shortName,
+              sourceCharacterId: approvalSource.id,
+              sourceCharacterName: approvalSource.shortName,
               targetCharacterId: targetId ?? undefined,
               targetCharacterName: target?.shortName,
               args: invocation.args ?? {},
@@ -146,7 +162,7 @@ function createActionEngine({ actionRegistry, settingsRepository, usageAnalytics
               lifecycle: createActionLifecycle({ selected: true, validated: true, confirmed: false, status: ACTION_LIFECYCLE_STATUSES.PENDING_APPROVAL }),
               diagnostic: createActionDiagnostic({
                 actionId: invocation.actionId,
-                sourceRuntimeId: npc.id,
+                sourceRuntimeId: approvalSource.id,
                 targetRuntimeId: targetId,
                 args: invocation.args ?? {},
                 selectedArgs: invocation.args ?? {},
@@ -173,8 +189,9 @@ function createActionEngine({ actionRegistry, settingsRepository, usageAnalytics
       if (!loaded || !loaded.validation.valid) return { actionId: invocation.actionId, success: false, error: "Action not found or invalid" };
       const targetId = invocation.targetCharacterId ?? null;
       const target = targetId != null ? conv.gameData.characters.get(targetId) ?? undefined : undefined;
+      const relationAction = RELATIONSHIP_ACTION_IDS.has(invocation.actionId);
       const userLang = settingsRepository.getLanguage();
-      const dispatchSourceId = invocation.actionId === "playerPaysGoldTo" ? conv.gameData.playerID : npc.id;
+      const dispatchSourceId = invocation.actionId === "playerPaysGoldTo" || ["becomesTributaryOf", "changesTributaryContract"].includes(invocation.actionId) && invocation.args?.isPlayerSource === true ? conv.gameData.playerID : npc.id;
       const dispatchRecords = [];
       const selectedArgs = invocation.args ?? {};
       const requestedArgs = invocation.requestedArgs ?? extractRequestedActionArgs(invocation.actionId, conv.getHistory?.() || conv.messages || []);
@@ -195,8 +212,8 @@ function createActionEngine({ actionRegistry, settingsRepository, usageAnalytics
       try {
         const result = await ActionSandbox.executeAction(loaded.filePath, {
           gameData: conv.gameData,
-          sourceCharacter: npc,
-          targetCharacter: target,
+          sourceCharacter: relationAction ? isolateRelationshipCharacter(npc) : npc,
+          targetCharacter: relationAction && target ? isolateRelationshipCharacter(target) : target,
           runGameEffect,
           args: executionArgs,
           conversation: conv,

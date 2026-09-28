@@ -2,6 +2,23 @@
 
 这里是版本变更的单一入口。详细设计和测试证据保留在链接目标中，本文件只维护版本顺序、用户可见摘要和文档索引。
 
+V8.14 跨 NPC 缓存前缀修正（GLM 实机待验收）：将仅以 `{{fullName}}` 区分角色的历史/RP 规则移入共用前缀，实际姓名仍随角色冻结资料绑定；其他动态模板不变。真实服务商返回零缓存 Token 的情况尚不能由本地 Prompt 修复保证消失。329 组本地发布回归通过。详见 [V8 阶段记录](docs/V8阶段开发记录.md#第一百三十阶段v814-跨-npc-缓存前缀修正实机待验收)。
+
+V8.14 东方王朝朝贡契约细化（实机待验收）：已建立朝贡关系后可另选羁縻、藩属、王化、互市、供奉或附庸契约；游戏端核验现有宗主与旧组，回读成功才显示完成，失败尝试恢复原契约。329 组本地发布回归通过，真实 CK3 模组与契约效果待验收。详见 [V8 阶段记录](docs/V8阶段开发记录.md#第一百二十九阶段v814-东方王朝朝贡契约细化实机待验收)。
+
+V8.14 双向朝贡 Action（实机待验收）：新增主动成为贡臣与宗主要求对方朝贡两种方向，支持玩家或 NPC 发起；通过 CK3 原生朝贡效果建立关系，并在同一命令内核验指定贡臣—宗主关系，不将 ACK 当成成功。329 组本地发布回归通过；合同类型和真实游戏效果仍待实测。详见 [V8 阶段记录](docs/V8阶段开发记录.md#第一百二十八阶段v814-双向朝贡-action实机待验收)。
+
+V8.14 关系 Action 召回改进（实机待验收）：扩大 Action 判断的近期对话窗口，补充双方明确确立关系的判例与误触边界；隔离七类标准关系脚本在 CK3 确认前的本地人物关系改动。`指导者`尚无正式关系 Action；关系 ACK 也不保证新 CK3 关系日志。328 组本地发布回归通过，B 回读 Gate 仍待补足和实测。详见 [V8 阶段记录](docs/V8阶段开发记录.md)。
+
+V8.14-B（CK3 回读接线，非验收版本）：新增按 Campaign/Owner 授权的人物认知画像、当前关系/Worldline 门禁，并由生产 debug.log 解析向关系变化判定供给稳定回读；只影响 Memory4 Durable 提取优先级，不接入旧摘要或实时 Prompt，正式 Recall 仍关闭。详见 [B 施工记录](docs/v8.14-b-profile-implementation-report.md)。327 组本地发布回归通过，A/B 实机 Gate 待验收。
+
+V8.14-A（施工中，非验收版本）：[Durable Core](docs/v8.14-a-durable-core-implementation-report.md)、[Sol 审查修复](docs/v8.14-a-sol-independent-review.md)与 [Finalization 可见性收口](docs/v8.14-a-finalization-visibility-closeout-report.md)。实时多人 RP 保持原样；新终局摘要按原消息、Presence、耳语对象及本地 `knownBy` 门禁写入各 Owner 的 Memory4，旧数据继续由 Legacy 召回。本地 326 组发布回归通过；本次独立复验和 CK3/Provider Gate 未完成，正式 Memory4 Recall 仍关闭。
+
+V8.14-A P0 摘要修复（实机复测待验收）：可核验的跨源/Presence 混写改为本地安全拆段，避免反复完整生成；`public/world` 对话记忆也必须经人物知识索引才能召回，阻断 B 场泄漏给未在场 C；多人 Durable 提取与恢复最多双路并行。详见[收口及 P0 修复记录](docs/v8.14-a-finalization-visibility-closeout-report.md)。7 项新增专项及 326 组发布回归通过，真实 Provider 耗时和 CK3 场景待复测。
+
+V8.14-A 摘要热修（实机复测待验收）：修复二人终局摘要将前段“心里”之后的公开段落误判为私密，以及失败恢复被强制分块的问题；三人以上沿同一校验链路修复，并补分块 Presence 来源。详见 [收口及修复记录](docs/v8.14-a-finalization-visibility-closeout-report.md)。28 项定向测试及 325 组发布回归通过；未宣称实机复测通过。
+
+V8.13.2.2（322/322 本地发布组通过，CK3/Provider 与打包 UI Gate 待验收）：[Legacy Bulk Campaign Binding](docs/v8.13.2.2-legacy-bulk-campaign-binding-implementation-report.md)。新增本对话文件和单一 Owner 目录两级 Preview→确认→原子提交；只填未绑定旧摘要，不覆盖已有 Campaign，不迁移官方追忆；等待 GameData 异步解析后再校验，缺少活动会话或 Campaign 时明确提示且不回退旧 Token；过期 Preview 零写入，当前 Recall 刷新且 Frozen Prefix 不变。未触发远端 CI。
 V8.13.2.1（321/321 本地发布组通过，CK3/Provider 实机 Gate 待验收）：[Acceptance Hotfix](docs/V8阶段开发记录.md#第一百一十八阶段v81321-acceptance-hotfix)。多人对话时间保底改为实际提问者；摘要管理器新增逐篇、用户确认的旧 Campaign 绑定，并在终局 Episode 提交后重试迁移。诊断基于原始摘要目录统计；Coverage Patch 显示候选/选入数，截断时明确提示不完整。冻结前缀与存储合同不变。
 
 V8.13.2（320/320 本地发布组通过，实机待验收）：[Temporal Recall & Worldline Coverage Closure](docs/V8阶段开发记录.md#第一百一十七阶段v8132-temporal-recall--worldline-coverage-closure)。Legacy 摘要仅在唯一终局/人物对证据下绑定战役；泛化记忆问句双轴召回并保障目标年份直接对话摘要。Broad WAR/近期事件以完整性判定覆盖，人物概况补齐多字段校验；补丁缓存绑定在场、场景、存档与战役变化。V8.13 冻结前缀合同不变。

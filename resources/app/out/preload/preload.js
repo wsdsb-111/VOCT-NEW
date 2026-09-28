@@ -161,6 +161,10 @@ electron.contextBridge.exposeInMainWorld("conversationAPI", {
   deleteMemoryRecord: (memoryId) => electron.ipcRenderer.invoke("memory:deleteRecord", { memoryId }),
   getSummariesForCharacter: (playerId, characterId) => electron.ipcRenderer.invoke("conversation:getSummariesForCharacter", { playerId, characterId }),
   bindLegacySummaryCampaign: (ownerId, counterpartId, summaryIds) => electron.ipcRenderer.invoke("conversation:bindLegacySummaryCampaign", { ownerId, counterpartId, summaryIds }),
+  previewLegacyConversationBinding: (ownerId, counterpartId, folderName, conversationFile) => electron.ipcRenderer.invoke("conversation:previewLegacyConversationBinding", { ownerId, counterpartId, folderName, conversationFile }),
+  bindLegacyConversationCampaign: (ownerId, counterpartId, folderName, conversationFile, expectedCampaignToken, previewRevision) => electron.ipcRenderer.invoke("conversation:bindLegacyConversationCampaign", { ownerId, counterpartId, folderName, conversationFile, expectedCampaignToken, previewRevision }),
+  previewLegacyOwnerBinding: (ownerId) => electron.ipcRenderer.invoke("conversation:previewLegacyOwnerBinding", { ownerId }),
+  bindLegacyOwnerCampaign: (ownerId, expectedCampaignToken, previewRevision) => electron.ipcRenderer.invoke("conversation:bindLegacyOwnerCampaign", { ownerId, expectedCampaignToken, previewRevision }),
   updateSummary: (playerId, characterId, summaryIndex, newContent) => electron.ipcRenderer.invoke("conversation:updateSummary", { playerId, characterId, summaryIndex, newContent }),
   deleteSummary: (playerId, characterId, summaryIndex) => electron.ipcRenderer.invoke("conversation:deleteSummary", { playerId, characterId, summaryIndex }),
   deleteCharacterSummaries: (playerId, characterId) => electron.ipcRenderer.invoke("conversation:deleteCharacterSummaries", { playerId, characterId })

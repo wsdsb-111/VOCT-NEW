@@ -1,6 +1,7 @@
 "use strict";
 
 const { uniqueIds } = require("./memory-types");
+const { validateSourceItem } = require("./finalization-visibility");
 
 class KnowledgeService {
   constructor({ store, trace = null } = {}) {
@@ -9,6 +10,11 @@ class KnowledgeService {
   }
 
   resolveKnownBy(memory, episode = {}) {
+    if (episode.finalizationVisibilityV1 === true) {
+      const verified = validateSourceItem(memory, episode.sourceContext || {});
+      if (!verified.success) throw new Error(`finalization_visibility_invalid:${verified.reason}`);
+      return uniqueIds(verified.audience);
+    }
     const presence = Array.isArray(episode.participantPresence) ? episode.participantPresence : [];
     const messageIds = Array.isArray(memory.provenance?.messageIds) ? memory.provenance.messageIds.map(Number).filter(Number.isFinite) : [];
     const eventStart = messageIds.length > 0 ? Math.min(...messageIds) : episode.conversationStartMessageId ?? null;

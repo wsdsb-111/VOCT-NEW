@@ -21,9 +21,10 @@ const gameData = {
   findMentionedCharacterIdsInHistory: () => [],
   getMentionedCharactersInfo: () => ""
 };
+let mainTemplate = "{{! VOTC_SEGMENT:stable_global }}固定规则\n{{! VOTC_SEGMENT:world_context }}日期={{gameData.date}}\n{{! VOTC_SEGMENT:character_state }}场景={{gameData.scene}}";
 const settingsRepository = {
   getPromptSettings: () => ({
-    mainTemplate: "{{! VOTC_SEGMENT:stable_global }}固定规则\n{{! VOTC_SEGMENT:world_context }}日期={{gameData.date}}\n{{! VOTC_SEGMENT:character_state }}场景={{gameData.scene}}",
+    mainTemplate,
     blocks: [
       { id: "main", type: "main", enabled: true, role: "system" },
       { id: "history", type: "history", enabled: true },
@@ -37,6 +38,7 @@ const PromptBuilder = createPromptBuilder({
   TemplateEngine: class {
     renderTemplateString(template, context) {
       return String(template).replace(/\{\{!\s*VOTC_SEGMENT:[^}]+\}\}/g, "")
+        .replace(/\{\{fullName\}\}/g, context.character.fullName)
         .replace(/\{\{gameData\.date\}\}/g, context.gameData.date)
         .replace(/\{\{gameData\.scene\}\}/g, context.gameData.scene);
     }
@@ -104,6 +106,26 @@ for (const provider of providers) {
   gameData.scene = "宫廷";
   characters.get(1).gold = 100;
 }
+
+mainTemplate = "{{! VOTC_SEGMENT:stable_global }}固定规则\n{{! VOTC_SEGMENT:stable_history_rp }}你是{{fullName}}。{{fullName}}须遵守共同规则。\n{{! VOTC_SEGMENT:world_context }}日期={{gameData.date}}";
+const sharedSnapshots = { conversation: null, responders: new Map(), prefixByResponder: new Map() };
+const sharedContext = { cacheV2FrozenSnapshots: sharedSnapshots, activeParticipantIds: [1, 2] };
+const sharedA = PromptBuilder.buildMessagesWithTokenCount([], characters.get(1), gameData, "", sharedContext, providers[1]);
+const sharedB = PromptBuilder.buildMessagesWithTokenCount([], characters.get(2), gameData, "", sharedContext, providers[1]);
+const sharedRuleA = sharedA.blocks.find(({ block }) => block.id?.endsWith("-stable_history_rp"));
+const sharedRuleB = sharedB.blocks.find(({ block }) => block.id?.endsWith("-stable_history_rp"));
+assert(sharedRuleA && sharedRuleB, "name-only roleplay rules must be hoisted");
+assert.strictEqual(sharedRuleA.content, sharedRuleB.content, "shared rules must be byte-identical across NPCs");
+assert(sharedRuleA.content.includes("【当前回应角色】") && !sharedRuleA.content.includes("甲") && !sharedRuleA.content.includes("乙"));
+assert(sharedA.blocks.findIndex(({ block }) => block.id?.endsWith("-stable_history_rp")) < sharedA.blocks.findIndex(({ block }) => block.id === "conversation-frozen"));
+assert(sharedA.blocks.find(({ block }) => block.id === "responder-frozen-profile").content.includes("【当前回应角色】即甲"));
+assert(sharedB.blocks.find(({ block }) => block.id === "responder-frozen-profile").content.includes("【当前回应角色】即乙"));
+
+mainTemplate = "{{! VOTC_SEGMENT:stable_global }}固定规则\n{{! VOTC_SEGMENT:stable_history_rp }}你是{{fullName}}，今天是{{gameData.date}}。";
+const unsafe = PromptBuilder.buildMessagesWithTokenCount([], characters.get(1), gameData, "", sharedContext, providers[1]);
+const unsafeRule = unsafe.blocks.find(({ block }) => block.id?.endsWith("-stable_history_rp"));
+assert(unsafeRule && unsafeRule.content.includes("甲") && unsafeRule.content.includes(gameData.date), "other dynamic expressions must preserve the original rendering");
+assert(unsafe.blocks.findIndex(({ block }) => block.id?.endsWith("-stable_history_rp")) > unsafe.blocks.findIndex(({ block }) => block.id === "conversation-frozen"));
 
 const actionConversation = Object.create(Conversation.prototype);
 actionConversation.presenceInitialized = true;

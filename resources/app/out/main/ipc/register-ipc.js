@@ -921,13 +921,69 @@ function registerIpcHandlers(runtime) {
   electron.ipcMain.handle("conversation:bindLegacySummaryCampaign", async (_, request = {}) => {
     try {
       if (!Array.isArray(request.summaryIds) || request.summaryIds.some(id => typeof id !== "string" || id.length > 128)) throw new Error("legacy_summary_binding_targets_required");
-      return SummariesManager.bindLegacySummaryCampaign({
+      return await SummariesManager.bindLegacySummaryCampaign({
         ownerId: requireInteger(request.ownerId, "owner_id", { max: 2147483647 }),
         counterpartId: requireInteger(request.counterpartId, "counterpart_id", { max: 2147483647 }),
         summaryIds: request.summaryIds
       });
     } catch (error) {
       console.error("Failed to bind legacy summary campaign:", error);
+      return { success: false, error: error.message || "Unknown error" };
+    }
+  });
+  electron.ipcMain.handle("conversation:previewLegacyConversationBinding", async (_, request = {}) => {
+    try {
+      if (typeof request.folderName !== "string" || request.folderName.length > 256
+        || typeof request.conversationFile !== "string" || request.conversationFile.length > 512) throw new Error("legacy_summary_binding_target_invalid");
+      return await SummariesManager.previewLegacyConversationBinding({
+        ownerId: requireInteger(request.ownerId, "owner_id", { max: 2147483647 }),
+        counterpartId: requireInteger(request.counterpartId, "counterpart_id", { max: 2147483647 }),
+        folderName: request.folderName,
+        conversationFile: request.conversationFile
+      });
+    } catch (error) {
+      console.error("Failed to preview legacy conversation binding:", error);
+      return { success: false, error: error.message || "Unknown error" };
+    }
+  });
+  electron.ipcMain.handle("conversation:bindLegacyConversationCampaign", async (_, request = {}) => {
+    try {
+      if (typeof request.folderName !== "string" || request.folderName.length > 256
+        || typeof request.conversationFile !== "string" || request.conversationFile.length > 512
+        || typeof request.expectedCampaignToken !== "string" || request.expectedCampaignToken.length > 512
+        || typeof request.previewRevision !== "string" || request.previewRevision.length !== 64) throw new Error("legacy_summary_binding_request_invalid");
+      return await SummariesManager.bindLegacyConversationCampaign({
+        ownerId: requireInteger(request.ownerId, "owner_id", { max: 2147483647 }),
+        counterpartId: requireInteger(request.counterpartId, "counterpart_id", { max: 2147483647 }),
+        folderName: request.folderName,
+        conversationFile: request.conversationFile,
+        expectedCampaignToken: request.expectedCampaignToken,
+        previewRevision: request.previewRevision
+      });
+    } catch (error) {
+      console.error("Failed to bind legacy conversation summaries:", error);
+      return { success: false, error: error.message || "Unknown error" };
+    }
+  });
+  electron.ipcMain.handle("conversation:previewLegacyOwnerBinding", async (_, request = {}) => {
+    try {
+      return await SummariesManager.previewLegacyOwnerBinding({ ownerId: requireInteger(request.ownerId, "owner_id", { max: 2147483647 }) });
+    } catch (error) {
+      console.error("Failed to preview legacy owner binding:", error);
+      return { success: false, error: error.message || "Unknown error" };
+    }
+  });
+  electron.ipcMain.handle("conversation:bindLegacyOwnerCampaign", async (_, request = {}) => {
+    try {
+      if (typeof request.expectedCampaignToken !== "string" || request.expectedCampaignToken.length > 512
+        || typeof request.previewRevision !== "string" || request.previewRevision.length !== 64) throw new Error("legacy_summary_binding_request_invalid");
+      return await SummariesManager.bindLegacyOwnerCampaign({
+        ownerId: requireInteger(request.ownerId, "owner_id", { max: 2147483647 }),
+        expectedCampaignToken: request.expectedCampaignToken,
+        previewRevision: request.previewRevision
+      });
+    } catch (error) {
+      console.error("Failed to bind legacy owner summaries:", error);
       return { success: false, error: error.message || "Unknown error" };
     }
   });

@@ -6,12 +6,15 @@ Voices of the Court 是一个面向《Crusader Kings III》（CK3）的沉浸式
 
 ## 主要功能
 
+V8.14 / Memory Engine 4.0 已完成 [A 阶段核心生产接线](docs/v8.14-a-durable-core-implementation-report.md)、[Finalization 可见性收口及 P0 修复](docs/v8.14-a-finalization-visibility-closeout-report.md)，并将 [B 阶段 Profile/关系变化](docs/v8.14-b-profile-implementation-report.md) 接入生产 CK3 debug.log 回读；本地 327 组发布回归通过。旧摘要、实时 RP 与正式 Memory4 Recall 路径未因 B 改动；A/B 独立与 CK3/Provider 实机 Gate 尚未验收，正式 Memory4 Recall 仍关闭。
+
 - **CK3 角色扮演对话**：根据角色的性格、头衔、关系、财富、信仰、处境和当前场景生成回复。
 - **Historical Baseline 2.0**：从游戏日期提取年份，以 V8 结构化时期、事件和人物数据生成与 v7.10.1 字节等价的唐、五代十国、北宋、南宋和元初历史背景；Temporal Knowledge Gate 在 v8.0 仅以 shadow/pure logic 运行。
 - **Campaign Identity / Worldline Store**：V8.1 从 CK3 存档读取稳定 token，以哈希隔离 `dynamic_history/<campaignId>/worldline.json`；旧模组或无效 token 只使用进程级 identity，不写世界线数据。
 - **历史人物 Definition-ID 绑定**：世界线通过 Definition-ID 与 CK3 Runtime ID 的双向绑定判定历史人物身份；来源冲突、同名歧义或非唯一映射均 fail-closed。
 - **世界线**：页面已接入年度 `autosave.ck3` Checkpoint、Worker 解析、世界概览、年度变化、世界知识、历史身份候选诊断和 Checkpoint-scoped Supplemental；CK3 事实保持只读，世界知识 Prompt 基础默认关闭。
 - **V8.12 存档历史检索**：在通过第一部分实机 Gate 的 Temporal Archive 上新增 AS_OF、RANGE、人物/头衔/战争时间线、WarActor 与独立 Historical Scope。检索诊断默认开启，Prompt 注入默认关闭；历史事实只进入 Dynamic Tail，普通 Current Query 与 GLM Stable Prefix 保持原路径。
+- **V8.13.2.2 Legacy Bulk Campaign Binding**：摘要管理器支持对当前对话文件或单一 Owner 目录批量迁移旧摘要；执行前预览并确认，Commit 复核 Campaign 和文件 revision，并以多文件 journal 原子写入。只填未绑定的普通旧摘要，不覆盖其他战役或官方追忆；成功刷新当前召回、不改 Frozen Prefix。322/322 本地发布组通过，打包 UI、CK3/Provider 与远端 CI 尚待验收。
 - **V8.13.2.1 验收 Hotfix**：多人时间召回优先实际提问者；摘要管理器可对单篇旧摘要显式确认绑定当前战役，且绑定前验证当前存档中的双方角色。原始目录计入 Campaign 拒绝诊断，终局 Episode 到达后允许迁移重试；世界线补丁在截断时标注仅为部分事实。冻结前缀、Recent2、Extra≤3、Memory Engine 3.0 存储合同不变；CK3/Provider 实机 Gate 待验收。
 - **V8.13.2 时间召回与世界线覆盖收口**：旧摘要仅凭唯一终局/人物对证据迁移绑定 Campaign；“记得/回忆/想起”等泛化问句双轴检索并优先保留目标年份的当前对话对象摘要。Broad WAR/近期事件仅在完整覆盖时命中；人物概况检查身份、生死、主头衔，补丁缓存随存档、战役、在场和场景变化失效。动态召回仍位于 V8.13 冻结前缀之后；CK3/Provider 实机 Gate 待验收。
 - **V8.5 Player Semantic Presentation + Retrieval 2.0（Luna + Terra + Sol 内审）**：世界线默认页已接入统一玩家语义展示层；后端已接入确定性 Query Planner、Retriever/Ranker、查询感知 Delta、无虚构结果摘要、additive Player DTO 与相关缓存 revision。来源、freshness、identity、来源冲突、年度事件和历史人物映射以可读文案呈现，Runtime/Definition/Raw 与 Resolver 细节保留在高级诊断。Sol 已修复诊断超大列表白屏、后台本地化阻塞及时间/缓存等正确性问题，105 组回归与隔离浏览器交互通过；真实运行 Gate 和 Astra 终审尚未完成，内部预冻结仍 NOT READY。详见 [Sol 内部审查](docs/v8.5-sol-internal-review.md)。
@@ -19,7 +22,8 @@ Voices of the Court 是一个面向《Crusader Kings III》（CK3）的沉浸式
 - **历史认知边界**：提示词要求角色只使用当前年份已经发生、写成、流传或成名的信息，避免引用未来人物、事件、诗词和典故。
 - **当前政局优先**：皇帝和年号从实际游戏角色数据中识别，支持玩家篡位或改变历史后的沙盒玩法。
 - **Memory Engine 3.0（V8.12 Part 3）**：保留 2.5 的 `角色ID_姓名/与对方的对话.json` 人物目录、存储 schema 与写入合同；冻结 Recent2、动态 Extra3 和 CK3 官方追忆摘要已接入。Part 3 实机 Gate 已由用户确认通过；V8.13 对话前缀缓存仍待实机验收。
-- **Official VOTC 2.0.3 Action System**：以官方 Prompt、Schema、Registry、Sandbox、审批与 28 个标准动作作为唯一动作基线；每个 NPC 完整回复后评估一次，不再运行 AE3/AE4、Action Mode、Pending 或 Social Consequence。V8.8.3 对金币转移实行 RunFile ACK 后的 CK3 回读确认，只有双方金额精确匹配才显示完成。
+- **V8.14 跨 NPC 缓存前缀修正**：当自定义 `stable_history_rp` 只含 `{{fullName}}` 变量时，以共用角色代称提前放置规则，并在各 NPC 冻结资料中绑定实际姓名；其他动态表达式保持原顺序。GLM 真正命中率仍取决于服务商回报，待实机复测。
+- **Official VOTC 2.0.3 Action System**：以官方 Prompt、Schema、Registry、Sandbox、审批与 28 个原版标准动作作为唯一动作基线，另有 V8.14 的双向朝贡和已建立关系后的契约细化两项扩展；每个 NPC 完整回复后评估一次，不再运行 AE3/AE4、Action Mode、Pending 或 Social Consequence。V8.8.3 对金币转移实行 RunFile ACK 后的 CK3 回读确认，只有双方金额精确匹配才显示完成。
 - **候场与在场窗口**：多人会话可在首句前设置候场，开始后可请入内、永久离场，或选择昏迷、睡着、暂时离开三种可返回的暂离模式；每名角色只回应、获知并保存自己实际在场区间的内容。
 - **多人对话摘要**：支持玩家与当前会话中的全部 NPC 同时对话，并将多人互动摘要按实际参与者逐对保存，避免 NPC 之间的对话内容丢失。
 - **动态人物关系**：提及未参与当前对话的角色时，也可以从 CK3 角色和亲属数据中加载关系；兄弟姐妹会结合出生日期或年龄判断哥哥、弟弟、姐姐和妹妹。
@@ -31,7 +35,7 @@ Voices of the Court 是一个面向《Crusader Kings III》（CK3）的沉浸式
 
 V8.12 第一部分、第二部分前置和 Part 3 实机 Gate 已由用户确认通过。V8.13 已完成本地 317/317 发布组，但真实 CK3/Provider 缓存效果仍待验收。详见 [Part 3 施工记录](docs/v8.12-part3-memory-engine-3.0-implementation-report.md)和 [V8.13 阶段记录](docs/V8阶段开发记录.md#第一百一十五阶段v813-会话冻结前缀与动态尾部)。
 
-当前施工基线为 **V8.13.2.1：Acceptance Hotfix**：[阶段记录与待验收项目](docs/V8阶段开发记录.md#第一百一十八阶段v81321-acceptance-hotfix)。旧摘要默认仍 fail-closed；只有用户在摘要管理器逐篇确认后，才可绑定到当前已加载战役。多人时间召回保底指向实际提问者；动态覆盖补丁仍处于冻结缓存边界后。自动回归不替代真实 CK3/Provider Gate，实机验收尚未完成。以下版本段落为前置实施记录。
+当前施工基线为 **V8.13.2.2：Legacy Bulk Campaign Binding**：[阶段记录与实施报告](docs/V8阶段开发记录.md#第一百一十九阶段v81322-legacy-bulk-campaign-binding)。在逐篇绑定基础上新增对话文件/单一人物目录两级预览式批量迁移；绑定会等待当前会话的 GameData 解析完成，主进程复核 Campaign 和角色，revision 过期不写入，已有归属与官方追忆保持不变。322/322 本地发布组及专项回归通过；打包 UI 人工冒烟因桌面自动化目标不可用未完成，真实 CK3/Provider 和远端 CI 待验收。以下版本段落为前置实施记录。
 
 当前收尾版本为 **V8.11.1**：[一致性与知情边界实施记录](docs/v8.11.1-consistency-implementation-report.md)。实时配偶/多人观察判权修正；摘要编辑同步重建所选 Owner 的内部记忆并支持失败回滚，Legacy 删除不再静默丢失映射；数字地点和当前年份查询边界完善，fullName 移到 GLM 动态状态。305/305 发布组、374 个测试文件分类及隔离 Electron 冒烟通过；真实 CK3/GLM 与长时 Gate 待人工验收。
 
