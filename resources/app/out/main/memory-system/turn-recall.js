@@ -2,7 +2,7 @@
 
 const crypto = require("crypto");
 
-const EXPLICIT_RECALL_INTENT = /(?:还记得|记不记得|是否记得|可记得|记得|想起|回想|之前|以前|上次|当时|曾经|那次|往日|约定|承诺|答应|说过|提到过|发生过)/i;
+const EXPLICIT_RECALL_INTENT = /(?:还记得|记不记得|是否记得|可记得|记得|想起|回想|之前|以前|上次|当时|曾经|那次|往日|约定|承诺|答应|说过|提到过|发生过|谈过|聊过|有没有印象)/i;
 const QUERY_ALIAS_GROUPS = [
   ["约定", "约好", "承诺", "答应", "允诺"],
   ["婚约", "订婚", "许婚", "婚事"],
@@ -32,6 +32,18 @@ function createQueryFingerprint(query) {
   return crypto.createHash("sha256").update(String(query || "").trim().toLowerCase()).digest("hex").slice(0, 16);
 }
 
+function focusRelevantExcerpt(content, query) {
+  const text = String(content || "");
+  const focus = String(query || "").replace(/(?:你们|我们|你|我|还|记不记得|是否记得|可记得|记得|想起|回想|之前|以前|上次|当时|曾经|那次|往日|谈过|聊过|说过|提到过|发生过|有没有印象|什么|哪些|关于|吗|呢|么)/g, "")
+    .replace(/[\s，。！？、；：,.!?;:「」『』“”‘’（）()【】\[\]《》…]+/g, "").trim();
+  if (focus.length < 2) return text;
+  const exactIndex = text.indexOf(focus);
+  if (exactIndex < 0) return text;
+  const start = Math.max(0, exactIndex - 90);
+  const end = Math.min(text.length, exactIndex + focus.length + 130);
+  return `${start > 0 ? "…" : ""}${text.slice(start, end).trim()}${end < text.length ? "…" : ""}`;
+}
+
 function removeEntityNames(query, entityNames = []) {
   let source = String(query || "");
   const names = Array.from(new Set(entityNames.map((name) => String(name || "").trim()).filter((name) => name.length >= 2)))
@@ -50,4 +62,4 @@ function detectIntent(query, { entityNames = [] } = {}) {
   return { triggered: explicit, reason: explicit ? "explicit_recall_intent" : "no_recall_intent", explicit, entityMatched };
 }
 
-module.exports = { expandQuery, createQueryFingerprint, removeEntityNames, detectIntent, EXPLICIT_RECALL_INTENT, QUERY_ALIAS_GROUPS };
+module.exports = { expandQuery, createQueryFingerprint, focusRelevantExcerpt, removeEntityNames, detectIntent, EXPLICIT_RECALL_INTENT, QUERY_ALIAS_GROUPS };

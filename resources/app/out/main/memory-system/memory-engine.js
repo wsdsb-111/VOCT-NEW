@@ -4,7 +4,7 @@ const fs = require("fs");
 const path = require("path");
 const crypto = require("crypto");
 const { MEMORY_ENGINE_VERSION } = require("../version");
-const { MEMORY_TYPES, VISIBILITIES, createMemoryId, createMemoryRecord, uniqueIds, memoryMatchesCampaign } = require("./memory-types");
+const { MEMORY_TYPES, VISIBILITIES, createMemoryId, createMemoryRecord, uniqueIds } = require("./memory-types");
 const { MemoryStore } = require("./memory-store");
 const { MemoryExtractor } = require("./memory-extractor");
 const { MemoryRanker } = require("./memory-ranker");
@@ -25,11 +25,28 @@ const { resolveTemporalFocus } = require("./fuzzy-temporal-resolver");
 const { extractTemporalAnchorsFromMessages, normalizeTemporalRefs } = require("./temporal-anchor-extractor");
 const { buildDualTemporalIndex, selectDualTemporalExtras } = require("./summary-date-index");
 const { Memory4Coordinator } = require("./memory4-coordinator");
+const { Memory4RecallPlanner, fitRecallPacket } = require("./memory4-recall-planner");
 const { validateVisibilityBoundaries, repairVisibilityBoundaries } = require("./finalization-visibility");
 
 const FINAL_SUMMARY_MAX_ATTEMPTS = 2;
 const RECOVERY_MAX_ATTEMPTS = 3;
 const SUMMARY_CHUNK_HARD_LIMIT = 64;
+
+function isValidCharacterId(value) {
+  const numericId = Number(value);
+  return Number.isSafeInteger(numericId) && numericId > 0;
+}
+
+function hasResolvedCampaignToken(value) {
+  return typeof value === "string" && value.trim().length > 0 && value.trim().length <= 512;
+}
+
+function memoryMatchesResolvedCampaign(memory, campaignToken) {
+  if (!hasResolvedCampaignToken(campaignToken) || memory?.provenance?.campaignBinding?.status === "unresolved") return false;
+  const active = campaignToken.trim();
+  const stored = memory?.provenance?.campaignToken;
+  return typeof stored === "string" && stored.trim().length > 0 && stored.trim() === active;
+}
 
 function countSummaryTokens(messages) {
   return (messages || []).reduce((total, message) => total + estimateTokens(message?.name ? `${message.name}: ${message.content || ""}` : message?.content || ""), 0);
@@ -51,6 +68,7 @@ class MemoryEngine {
     this.trace = trace || new MemoryTrace();
     this.store = store || new MemoryStore({ baseDir, summaryFoldersDir, recoveryDir });
     this.memory4 = this.store?.paths?.memory4Recovery ? new Memory4Coordinator(this.store, { trace: this.trace }) : null;
+    this.memory4Recall = this.memory4 ? new Memory4RecallPlanner(this.memory4) : null;
     this.extractor = new MemoryExtractor();
     this.ranker = new MemoryRanker();
     this.knowledge = new KnowledgeService({ store: this.store, trace: this.trace });
@@ -68,7 +86,9 @@ class MemoryEngine {
   }
 
   createConversationState(conversationId) {
-    return { conversationId, rollingState: this.rolling.createState(), participantPresence: [], mentionState: this.mentionTracker.createState(), mentionedRecallCache: new Map(), responderRecallCache: new Map(), turnRecallCache: new Map() };
+    const state = { conversationId, rollingState: this.rolling.createState(), participantPresence: [], mentionState: this.mentionTracker.createState(), mentionedRecallCache: new Map(), responderRecallCache: new Map(), turnRecallCache: new Map(), recallDiagnostics: new Map() };
+    state.responderRecallCache.recallDiagnostics = state.recallDiagnostics;
+    return state;
   }
 
   ensureConversationState(conversation) {
@@ -79,6 +99,8 @@ class MemoryEngine {
     if (!(conversation.memoryState.mentionedRecallCache instanceof Map)) conversation.memoryState.mentionedRecallCache = new Map();
     if (!(conversation.memoryState.responderRecallCache instanceof Map)) conversation.memoryState.responderRecallCache = new Map();
     if (!(conversation.memoryState.turnRecallCache instanceof Map)) conversation.memoryState.turnRecallCache = new Map();
+    if (!(conversation.memoryState.recallDiagnostics instanceof Map)) conversation.memoryState.recallDiagnostics = new Map();
+    conversation.memoryState.responderRecallCache.recallDiagnostics = conversation.memoryState.recallDiagnostics;
     return conversation.memoryState;
   }
 
@@ -175,6 +197,7 @@ class MemoryEngine {
     state.mentionProfileCache = null;
     state.mentionedRecallCache = new Map();
     state.responderRecallCache = new Map();
+    state.responderRecallCache.recallDiagnostics = state.recallDiagnostics;
     conversation.dynamicRecallHistory?.clear();
     state.turnRecallCache = new Map();
     state.mentionState = this.mentionTracker.createState();
@@ -382,8 +405,6 @@ class MemoryEngine {
     const assignLatestHonorific = (pattern, aliases) => {
       const candidates = [...profiles.values()].filter((profile) => pattern.test([
         profile.primaryTitle,
-        profile.shortName,
-        profile.fullName,
         profile.titleRankConcept
       ].filter(Boolean).join(" ").toLowerCase()));
       if (candidates.length === 0) return;
@@ -711,8 +732,10 @@ class MemoryEngine {
     if (context.summaryChunk && !budget.wholeRequestSafe) throw new Error("summary_chunk_budget_exceeded");
     let lastError = null;
     let retryQuality = null;
+    let lastOutput = null;
     for (let attempt = 1; attempt <= FINAL_SUMMARY_MAX_ATTEMPTS; attempt++) {
       const startedAt = Date.now();
+      lastOutput = null;
       try {
         const requestPrompt = retryQuality ? this.buildSummaryQualityRetryPrompt(prompt, retryQuality) : prompt;
         const retryBudget = planSummaryRequest({ prompt: requestPrompt, context, capabilities, countTokens: countSummaryTokens });
@@ -721,13 +744,17 @@ class MemoryEngine {
           summaryBudget: { requiredOutputTokens: retryBudget.requiredOutputTokens, sourceTokens: retryBudget.sourceTokens, wholeSafe: retryBudget.wholeRequestSafe, chunkIndex: context.summaryChunkIndex ?? null } });
         const outcome = validateGenerationOutcome(result);
         const content = outcome.content.trim();
+        lastOutput = content || null;
         if (outcome.truncated) {
           lastError = new Error("truncated_final_summary_response");
         } else if (!outcome.complete) {
           lastError = new Error(`summary_generation_incomplete:${outcome.finishReason || "unknown"}`);
         } else if (content) {
           const parsed = this.extractor.parseOutput(content, context);
-          if (context.finalizationVisibilityV1 === true) repairVisibilityBoundaries(context, parsed);
+          if (context.finalizationVisibilityV1 === true) {
+            repairVisibilityBoundaries(context, parsed);
+            context.finalizationRepairAttempted = true;
+          }
           const quality = this.evaluateFinalSummaryQuality(context, parsed);
           if (quality.success) {
             this.trace.record("summary_provider", { conversationId: context.conversationId, attempt, success: true, durationMs: Date.now() - startedAt });
@@ -736,6 +763,7 @@ class MemoryEngine {
           this.recordSummaryQualityDiagnostics(context, quality);
           retryQuality = quality;
           lastError = new Error(`final_summary_quality_failed:${quality.reasons.join("|")}`);
+          lastError.failureReasons = quality.reasons;
         } else {
           lastError = new Error("invalid_final_summary_response");
         }
@@ -743,6 +771,7 @@ class MemoryEngine {
         lastError = error;
       }
       this.trace.record("summary_provider", { conversationId: context.conversationId, attempt, success: false, durationMs: Date.now() - startedAt, error: lastError?.message || "unknown" });
+      if (lastError) lastError.providerOutput = lastOutput;
       const failureKind = classifySummaryFailure(lastError);
       if (["LENGTH", "CONTEXT_EXCEEDED", "FATAL"].includes(failureKind)) break;
       if (failureKind === "RATE_LIMIT" && attempt < FINAL_SUMMARY_MAX_ATTEMPTS) await new Promise((resolve) => setTimeout(resolve, 500));
@@ -1062,7 +1091,7 @@ class MemoryEngine {
         if (!this.isFinalizationCurrent(context)) return this.cancelledFinalizationResult(context);
       } catch (error) {
         if (!this.isFinalizationCurrent(context)) return this.cancelledFinalizationResult(context);
-        snapshotPath = this.writeRecoverySnapshot(context, { finalizationStage: "request", finalizationStatus: "pending", providerOutput: null }, error);
+        snapshotPath = this.writeRecoverySnapshot(context, { finalizationStage: "request", finalizationStatus: "pending", providerOutput: error.providerOutput || null }, error);
         this.traceFinalization(context, "request", { recoveryState: "pending", errorCode: error.message });
         return { success: false, error, recoveryPath: snapshotPath };
       }
@@ -1075,14 +1104,20 @@ class MemoryEngine {
     this.traceFinalization(context, "provider_received", { providerSuccess: true, recoveryState: "pending" });
     let extraction = this.restoreExtraction(parsedExtraction);
     try {
+      let visibilityRepair = null;
       if (!extraction) {
         extraction = this.extractor.parseOutput(content, context);
         if (context.finalizationVisibilityV1 === true) {
-          const repair = repairVisibilityBoundaries(context, extraction);
-          if (repair.repairedMessageIds.length) this.trace.record("summary_visibility_repair", {
+          visibilityRepair = repairVisibilityBoundaries(context, extraction);
+          context.finalizationRepairAttempted = true;
+          if (visibilityRepair.repairedMessageIds.length) this.trace.record("summary_visibility_repair", {
             conversationId: context.conversationId, finalizationId: context.finalizationId, reason: "source_paragraph_split"
           });
         }
+        extraction = this.assignStableMemoryIds(context, extraction);
+      } else if (context.finalizationVisibilityV1 === true) {
+        visibilityRepair = repairVisibilityBoundaries(context, extraction);
+        context.finalizationRepairAttempted = true;
         extraction = this.assignStableMemoryIds(context, extraction);
       }
       let quality = this.evaluateFinalSummaryQuality(context, extraction);
@@ -1090,7 +1125,10 @@ class MemoryEngine {
         content = await this.requestFinalSummary(context);
         if (!this.isFinalizationCurrent(context)) return this.cancelledFinalizationResult(context);
         extraction = this.extractor.parseOutput(content, context);
-        if (context.finalizationVisibilityV1 === true) repairVisibilityBoundaries(context, extraction);
+        if (context.finalizationVisibilityV1 === true) {
+          repairVisibilityBoundaries(context, extraction);
+          context.finalizationRepairAttempted = true;
+        }
         extraction = this.assignStableMemoryIds(context, extraction);
         quality = this.evaluateFinalSummaryQuality(context, extraction);
       }
@@ -1223,6 +1261,10 @@ class MemoryEngine {
     const lastError = error instanceof Error ? error.message : error ? String(error) : state.lastError || existing.lastError || null;
     const providerOutput = Object.prototype.hasOwnProperty.call(state, "providerOutput") ? state.providerOutput : existing.providerOutput ?? null;
     const parsedExtraction = Object.prototype.hasOwnProperty.call(state, "parsedExtraction") ? state.parsedExtraction : existing.parsedExtraction ?? null;
+    const outputFingerprint = providerOutput ? crypto.createHash("sha256").update(String(providerOutput)).digest("hex") : null;
+    const failureReasons = error ? (error.failureReasons || [lastError]).map(String).sort() : existing.lastFailureReasons || [];
+    const repeatedFailure = !!error && !!outputFingerprint && outputFingerprint === existing.lastOutputFingerprint
+      && JSON.stringify(failureReasons) === JSON.stringify(existing.lastFailureReasons || []);
     this.store.writeJson(filePath, {
       ...existing,
       schemaVersion: 2,
@@ -1235,6 +1277,7 @@ class MemoryEngine {
       participants: context.participants || [],
       excludedSummaryOwnerIds: uniqueIds(context.excludedSummaryOwnerIds),
       participantPresence: context.participantPresence || [],
+      relationshipChanges: context.relationshipChanges || existing.relationshipChanges || [],
       joinEvents: context.joinEvents || [],
       leaveEvents: context.leaveEvents || [],
       rollingState: context.rollingState || this.rolling.createState(),
@@ -1251,6 +1294,11 @@ class MemoryEngine {
       checkpointReason: state.checkpointReason || existing.checkpointReason || null,
       retryCount: Number(state.retryCount ?? existing.retryCount ?? context.retryCount ?? 0),
       lastError,
+      lastFailureClass: error ? classifySummaryFailure(error) : existing.lastFailureClass || null,
+      lastFailureReasons: failureReasons,
+      lastOutputFingerprint: outputFingerprint,
+      sameFailureCount: error ? (repeatedFailure ? Number(existing.sameFailureCount || 0) + 1 : 1) : Number(existing.sameFailureCount || 0),
+      repairAttempted: state.repairAttempted ?? (context.finalizationRepairAttempted || existing.repairAttempted || false),
       lastTriedAt: state.lastTriedAt || existing.lastTriedAt || null,
       createdAt: existing.createdAt || new Date().toISOString(),
       updatedAt: new Date().toISOString()
@@ -1301,17 +1349,67 @@ class MemoryEngine {
       fs.unlinkSync(filePath);
       return { success: true, alreadyCommitted: true, participants: context.participants };
     }
+    let recoveredExtraction = snapshot.parsedExtraction || null;
+    const isVerbatimSourceTranscript = (extraction) => {
+      if (!extraction) return false;
+      const sourceMessages = (context.messages || []).filter(message => ["user", "assistant"].includes(message.role) && String(message.content || "").trim());
+      if (!sourceMessages.length) return false;
+      const sourceById = new Map(sourceMessages.map(message => [Number(message.id), String(message.content).trim()]));
+      const segmentsById = new Map();
+      for (const segment of extraction.summarySegments || []) {
+        const ids = uniqueIds(segment.provenance?.messageIds);
+        if (ids.length !== 1 || !sourceById.has(ids[0])) return false;
+        if (!segmentsById.has(ids[0])) segmentsById.set(ids[0], []);
+        segmentsById.get(ids[0]).push(String(segment.content || ""));
+      }
+      const normalize = value => String(value || "").replace(/\s+/g, "").trim();
+      return segmentsById.size === sourceMessages.length && sourceMessages.every(message => {
+        const id = Number(message.id);
+        return normalize(segmentsById.get(id)?.join("")) === normalize(sourceById.get(id));
+      });
+    };
+    let discardedVerbatimTranscript = false;
+    if (isVerbatimSourceTranscript(recoveredExtraction)) {
+      recoveredExtraction = null;
+      discardedVerbatimTranscript = true;
+    }
+    const repeatedFailure = !!snapshot.lastOutputFingerprint && Number(snapshot.sameFailureCount || 0) >= 2;
+    const visibilityFailure = /^final_summary_quality_failed:/.test(snapshot.lastError || "")
+      && /visibility_|summary_segment_crosses_(visibility|presence)_boundary/.test(snapshot.lastError || "");
+    const shouldRepairVisibility = context.finalizationVisibilityV1 === true && (visibilityFailure || repeatedFailure);
+    if (!recoveredExtraction && snapshot.providerOutput) {
+      const parsed = this.extractor.parseOutput(snapshot.providerOutput, context);
+      if (isVerbatimSourceTranscript(parsed)) discardedVerbatimTranscript = true;
+      else if (shouldRepairVisibility) recoveredExtraction = parsed;
+    }
+    if (shouldRepairVisibility) {
+      if (recoveredExtraction) {
+        repairVisibilityBoundaries(context, recoveredExtraction);
+        if (!this.evaluateFinalSummaryQuality(context, recoveredExtraction).success) recoveredExtraction = null;
+      }
+      this.writeRecoverySnapshot(context, { repairAttempted: true });
+      if (!recoveredExtraction && repeatedFailure && automatic) {
+        this.writeRecoverySnapshot(context, { finalizationStatus: "failed_manual", retryCount: Math.max(context.retryCount, RECOVERY_MAX_ATTEMPTS) });
+        return { success: false, reason: "recovery_repeated_failure_requires_review", recoveryPath: filePath };
+      }
+    } else if (repeatedFailure && automatic) {
+      this.writeRecoverySnapshot(context, { finalizationStatus: "failed_manual", retryCount: Math.max(context.retryCount, RECOVERY_MAX_ATTEMPTS) });
+      return { success: false, reason: "recovery_repeated_failure_requires_review", recoveryPath: filePath };
+    }
+    const recoveryProviderOutput = discardedVerbatimTranscript ? null : recoveredExtraction
+      ? snapshot.providerOutput || JSON.stringify(recoveredExtraction)
+      : visibilityFailure ? null : snapshot.providerOutput || null;
     this.writeRecoverySnapshot(context, {
       finalizationStage: snapshot.finalizationStage || "request",
       finalizationStatus: "recovering",
-      providerOutput: snapshot.providerOutput || null,
-      parsedExtraction: snapshot.parsedExtraction || null,
+      providerOutput: recoveryProviderOutput,
+      parsedExtraction: recoveredExtraction,
       retryCount: context.retryCount,
       lastTriedAt: new Date().toISOString()
     });
     const result = await this.finalizeWithAvailableOutput(context, {
-      providerOutput: snapshot.providerOutput || null,
-      parsedExtraction: snapshot.parsedExtraction || null,
+      providerOutput: recoveryProviderOutput,
+      parsedExtraction: recoveredExtraction,
       recoveryPath: filePath
     });
     if (result.success) {
@@ -1333,7 +1431,7 @@ class MemoryEngine {
       finalizationStatus: automatic && retryCount >= RECOVERY_MAX_ATTEMPTS ? "failed_manual" : "failed_retryable",
       retryCount,
       lastTriedAt: new Date().toISOString()
-    }, result.error);
+    });
     return { ...result, recoveryPath: filePath };
   }
 
@@ -1411,6 +1509,7 @@ class MemoryEngine {
   }
 
   getRouteMemoryKey(memory) {
+    if (memory.memory4Key) return memory.memory4Key;
     if (memory.type === "folder_summary") return memory.memoryId;
     const finalizationId = memory.provenance?.finalizationId;
     return finalizationId ? `${memory.provenance?.folderOwnerId ?? "internal"}|${finalizationId}` : memory.memoryId;
@@ -1422,7 +1521,7 @@ class MemoryEngine {
     return normalizeGameDate(memory.eventDate)?.serial || 0;
   }
 
-  selectRoutedMemories(routeGroups, { tokenBudget, estimateTokens, mode } = {}) {
+  selectRoutedMemories(routeGroups, { tokenBudget, estimateTokens, mode, queryPrioritized = false } = {}) {
     const groups = [...routeGroups.entries()].filter(([, entries]) => entries.length > 0);
     if (groups.length === 0 || tokenBudget <= 0) return [];
     const selected = [];
@@ -1449,7 +1548,9 @@ class MemoryEngine {
       return { added: true, merged: false };
     };
 
-    const recentByRoute = new Map(groups.map(([routeId, entries]) => [routeId, [...entries].sort((left, right) => this.getMemoryRecency(right.memory) - this.getMemoryRecency(left.memory))]));
+    const recentByRoute = new Map(groups.map(([routeId, entries]) => [routeId, [...entries].sort((left, right) => queryPrioritized
+      ? right.score - left.score || this.getMemoryRecency(right.memory) - this.getMemoryRecency(left.memory)
+      : this.getMemoryRecency(right.memory) - this.getMemoryRecency(left.memory))]));
     const baselineRounds = mode === "direct_legacy" ? 3 : mode === "direct" ? 2 : 1;
     const recentKeys = new Set([...recentByRoute.values()].flatMap(entries => entries.slice(0, baselineRounds).map(entry => this.getRouteMemoryKey(entry.memory))));
     const pinnedPool = mode === "direct_legacy" ? groups.flatMap(([routeId, entries]) => entries.map(entry => ({ routeId, entry })))
@@ -1478,25 +1579,69 @@ class MemoryEngine {
     return selected;
   }
 
-  retrieveForResponder({ characterId, query = "", directCounterpartIds = [], querySpeakerId = null, mentionedEntityIds = [], mentionedEntityNames = {}, mentionedRecallCache = null, sessionRecallCache = null, ownerFolderMemories = null, officialSummary = null, turnEpoch = 0, currentGameDate = null, currentTotalDays = null, campaignToken = null, conversationId = null, sceneRevision = null, memoryEngine3Enabled = true, temporalSummaryRecallEnabled = true, tokenBudget = 800, estimateTokens } = {}) {
+  retrieveForResponder({ characterId, query = "", directCounterpartIds = [], querySpeakerId = null, mentionedEntityIds = [], mentionedEntityNames = {}, mentionedRecallCache = null, sessionRecallCache = null, ownerFolderMemories = null, officialSummary = null, turnEpoch = 0, currentGameDate = null, currentTotalDays = null, campaignToken = null, conversationId = null, sceneRevision = null, memoryEngine3Enabled = true, memory4RecallEnabled = false, gameData = null, identityUnresolved = false, queryEntityIds = null, temporalSummaryRecallEnabled = true, tokenBudget = 800, estimateTokens } = {}) {
     const startedAt = Date.now();
     const ownerId = Number(characterId);
+    const ownerValid = isValidCharacterId(ownerId);
     const temporalScope = JSON.stringify([campaignToken, conversationId, sceneRevision]);
+    const currentFolderRevision = ownerValid ? this.store.getFolderSummaryRevision(ownerId) : null;
+    const cachedResponderState = sessionRecallCache?.get(ownerId);
     const previousScope = sessionRecallCache?.get(ownerId)?.temporalScope;
-    if (previousScope != null && previousScope !== temporalScope) {
-      sessionRecallCache.delete(ownerId);
+    const cachedFolderStateStale = ownerValid && cachedResponderState?.folderSummaryRevision != null
+      && cachedResponderState.folderSummaryRevision !== currentFolderRevision;
+    const resetResponderCache = (preservedState = null) => {
+      sessionRecallCache?.delete(ownerId);
+      if (preservedState && sessionRecallCache instanceof Map) sessionRecallCache.set(ownerId, {
+        temporalScope,
+        folderSummaryRevision: currentFolderRevision,
+        temporalFocus: preservedState.temporalFocus || null,
+        memory4Focus: preservedState.memory4Focus || null,
+        seenDynamicSummaries: new Set(preservedState.seenDynamicSummaries instanceof Set ? preservedState.seenDynamicSummaries : [])
+      });
       mentionedRecallCache?.delete(ownerId);
+    };
+    if (ownerValid && ((previousScope != null && previousScope !== temporalScope) || cachedFolderStateStale)) {
+      const sameScopeRevisionChange = cachedFolderStateStale && previousScope === temporalScope
+        ? cachedResponderState : null;
+      resetResponderCache(sameScopeRevisionChange);
     }
-    const directIds = uniqueIds(directCounterpartIds).filter((id) => id !== ownerId);
-    const mentionedIds = uniqueIds(mentionedEntityIds).filter((id) => id !== ownerId && !directIds.includes(id));
+    const directIds = ownerValid ? uniqueIds(directCounterpartIds).filter((id) => isValidCharacterId(id) && id !== ownerId) : [];
+    const mentionedIds = ownerValid ? uniqueIds(mentionedEntityIds).filter((id) => isValidCharacterId(id) && id !== ownerId && !directIds.includes(id)) : [];
     const budget = Math.max(0, Number(tokenBudget) || 0);
-    const folderSnapshot = Array.isArray(ownerFolderMemories) ? ownerFolderMemories : directIds.length > 0 || mentionedIds.length > 0 ? this.store.loadFolderSummariesForCharacter(ownerId) : [];
+    const needsFolderSummaries = ownerValid && (directIds.length > 0 || mentionedIds.length > 0);
+    const suppliedSnapshot = Array.isArray(ownerFolderMemories);
+    const suppliedSnapshotRevision = suppliedSnapshot ? this.store.getFolderSummarySnapshotRevision(ownerFolderMemories) : null;
+    const suppliedSnapshotStale = suppliedSnapshot && suppliedSnapshotRevision !== currentFolderRevision;
+    const suppliedSnapshotFresh = suppliedSnapshot && !suppliedSnapshotStale;
+    if (suppliedSnapshotStale && ownerValid) {
+      const currentResponderState = sessionRecallCache?.get(ownerId);
+      resetResponderCache(previousScope === temporalScope && currentResponderState?.temporalScope === temporalScope
+        ? currentResponderState : null);
+    }
+    const folderSnapshot = !needsFolderSummaries ? []
+      : suppliedSnapshot && !suppliedSnapshotStale ? ownerFolderMemories
+        : this.store.loadFolderSummariesForCharacter(ownerId);
     const folderMemories = folderSnapshot.filter(memory => Number(memory.provenance?.folderOwnerId) === ownerId
-      && memoryMatchesCampaign(memory, campaignToken));
+      && memoryMatchesResolvedCampaign(memory, campaignToken));
     const directGroups = new Map();
     for (const counterpartId of directIds) {
       const memories = this.store.loadDirectPairSummaries(ownerId, counterpartId, folderMemories);
       directGroups.set(counterpartId, this.ranker.rank(memories, { query: "", participantIds: [counterpartId], currentTotalDays }));
+    }
+    const recallIntent = turnRecall.detectIntent(query);
+    const requestedSpeakerId = Number(querySpeakerId);
+    const temporalRequest = memoryEngine3Enabled && temporalSummaryRecallEnabled
+      && resolveTemporalFocus(query, null, { currentGameDate, currentTotalDays }).requested;
+    const useMemory4 = memory4RecallEnabled && memoryEngine3Enabled;
+    const directRecallId = !useMemory4 && !temporalRequest && recallIntent.triggered && isValidCharacterId(requestedSpeakerId) && directIds.includes(requestedSpeakerId)
+      ? requestedSpeakerId : null;
+    const directRecallGroups = new Map();
+    if (directRecallId != null) {
+      const memories = this.store.loadDirectPairSummaries(ownerId, directRecallId, folderMemories);
+      const ranked = this.ranker.rank(memories, { query: turnRecall.expandQuery(query), participantIds: [directRecallId], currentTotalDays });
+      directRecallGroups.set(directRecallId, ranked.map(entry => ({ ...entry,
+        memory: { ...entry.memory, content: turnRecall.focusRelevantExcerpt(entry.memory.content, query) }
+      })));
     }
     const namesForEntity = (entityId) => {
       if (Array.isArray(mentionedEntityNames)) return mentionedEntityNames;
@@ -1518,15 +1663,18 @@ class MemoryEngine {
     }
     if (mentionedRecallCache instanceof Map && (capturedMentioned || !cachedMentioned)) mentionedRecallCache.set(ownerId, { groups: new Map([...cachedGroups, ...mentionedGroups]) });
     const mentionedCacheHit = mentionedIds.length > 0 && !capturedMentioned && cachedMentioned?.groups instanceof Map;
-    const internalMemories = this.store.queryMemories({ characterId: ownerId, includeFolderSummaries: false })
-      .filter(memory => memoryMatchesCampaign(memory, campaignToken));
+    const allInternalMemoryCount = ownerValid ? Object.keys(this.store.index.memories || {}).length : null;
+    const knowledgeRecords = ownerValid ? this.store.getCharacterKnowledge(ownerId) : null;
+    const internalCandidates = ownerValid ? this.store.queryMemories({ characterId: ownerId, includeFolderSummaries: false }) : [];
+    const internalMemories = internalCandidates.filter(memory => memoryMatchesResolvedCampaign(memory, campaignToken));
     const responderCache = sessionRecallCache instanceof Map
       ? sessionRecallCache.get(ownerId) || { mentionedSnapshots: new Map(), topicPatch: null }
       : { mentionedSnapshots: new Map(), topicPatch: null };
     if (!(responderCache.mentionedSnapshots instanceof Map)) responderCache.mentionedSnapshots = new Map();
     responderCache.temporalScope = temporalScope;
+    if (ownerValid) responderCache.folderSummaryRevision = currentFolderRevision;
     const officialMemory = memoryEngine3Enabled && officialSummary?.sourceType === "CK3_OFFICIAL_RECOLLECTION"
-      && memoryMatchesCampaign({ provenance: { campaignToken: officialSummary.campaignToken } }, campaignToken)
+      && memoryMatchesResolvedCampaign({ provenance: { campaignToken: officialSummary.campaignToken, campaignBinding: officialSummary.campaignBinding } }, campaignToken)
       && Number(officialSummary.playerId) === ownerId && officialSummary.memoryCount > 0 ? createMemoryRecord({
         memoryId: `official_${ownerId}`, type: "folder_summary", subtype: "official_recollection",
         content: officialSummary.content, importance: 0.95, confidence: 1, source: "game_fact",
@@ -1562,11 +1710,14 @@ class MemoryEngine {
     const official = !Array.isArray(responderCache.direct) && officialMemory
       ? this.ranker.selectWithinBudget([{ memory: officialMemory, score: 1 }], { tokenBudget: officialAllowance, estimateTokens, allowTruncate: true })
         .map(entry => ({ ...entry, routeKind: "official", routeCharacterIds: [ownerId] })) : [];
-    const direct = Array.isArray(responderCache.direct) ? responderCache.direct : [
+    const direct = directRecallId != null ? [
+      ...this.selectRoutedMemories(directRecallGroups, { tokenBudget: directBudget - official.reduce((n, e) => n + e.tokens, 0), estimateTokens, mode: "direct", queryPrioritized: true }),
+      ...official
+    ] : Array.isArray(responderCache.direct) ? responderCache.direct : [
       ...this.selectRoutedMemories(directGroups, { tokenBudget: directBudget - official.reduce((n, e) => n + e.tokens, 0), estimateTokens, mode: memoryEngine3Enabled ? "direct" : "direct_legacy" }),
       ...official
     ];
-    if (!Array.isArray(responderCache.direct)) responderCache.direct = direct;
+    if (directRecallId == null && !Array.isArray(responderCache.direct)) responderCache.direct = direct;
     const mentioned = [];
     for (const entityId of memoryEngine3Enabled ? [] : mentionedIds) {
       let snapshot = responderCache.mentionedSnapshots.get(entityId);
@@ -1593,38 +1744,48 @@ class MemoryEngine {
     const temporal = memoryEngine3Enabled && temporalSummaryRecallEnabled
       ? resolveTemporalFocus(query, responderCache.temporalFocus, { currentGameDate, currentTotalDays, turnEpoch, conversationId, sceneRevision })
       : { triggered: false, reason: "DISABLED", nextFocus: null };
-    const exactTimeQuery = temporal.triggered && temporal.mode === "TARGET_DATE";
+    const targetDateQuery = temporal.triggered && temporal.mode === "TARGET_DATE";
+    const firstMeetingQuery = temporal.triggered && temporal.mode === "EARLIEST_AVAILABLE";
+    const restrictedTemporalQuery = targetDateQuery || firstMeetingQuery;
     const blockedTimeQuery = temporal.requested && !temporal.triggered;
     responderCache.pendingTemporalFocus = temporal.nextFocus || null;
-    const directMemories = [...directGroups.values()].flat().map((entry) => entry.memory);
+    const temporalDirectGroups = directRecallId == null ? directGroups : directRecallGroups;
+    const temporalDirectIds = directRecallId == null ? directIds : [directRecallId];
+    const directMemories = [...temporalDirectGroups.values()].flat().map((entry) => entry.memory);
     const mentionedCandidates = [...mentionedGroups.values()].flat().map((entry) => entry.memory);
     if (!(responderCache.seenDynamicSummaries instanceof Set)) responderCache.seenDynamicSummaries = new Set();
-    const temporalIndex = temporal.triggered
-      ? [...directIds.flatMap(counterpartId => this.store.getSummaryDateIndexForPair(ownerId, counterpartId, {
+    const temporalIndex = temporal.triggered && ownerValid && hasResolvedCampaignToken(campaignToken)
+      ? [...temporalDirectIds.flatMap(counterpartId => this.store.getSummaryDateIndexForPair(ownerId, counterpartId, {
         currentGameDate, currentTotalDays, ownerFolderMemories: folderSnapshot, campaignToken, dualTemporal: true })),
       ...buildDualTemporalIndex(mentionedCandidates, { ownerId, currentGameDate, currentTotalDays, campaignToken })] : [];
     const temporalSelections = selectDualTemporalExtras(temporalIndex, [...directMemories, ...mentionedCandidates], temporal, {
-      query, entityIds: mentionedIds, directCounterpartIds: directIds, querySpeakerId, excludedKeys: [...selectedFolderKeys, ...responderCache.seenDynamicSummaries],
+      query, entityIds: mentionedIds, directCounterpartIds: temporalDirectIds, querySpeakerId, excludedKeys: [...selectedFolderKeys, ...responderCache.seenDynamicSummaries],
       getKey: memory => this.getRouteMemoryKey(memory), limit: 3
     });
     const temporalCandidates = temporalSelections.map(entry => entry.memory);
     const temporalReasons = new Map(temporalSelections.map(entry => [entry.memory.memoryId, entry.reason]));
-    const rankedExtras = this.ranker.rank(folderMemories, { query, entityIds: mentionedIds, participantIds: directIds, currentTotalDays });
-    const topicCandidates = query.trim() ? rankedExtras.filter((entry) => Number(entry.reason?.query) >= 0.28).map((entry) => entry.memory) : [];
+    const rankedExtras = this.ranker.rank(folderMemories, { query, entityIds: mentionedIds, participantIds: temporalDirectIds, currentTotalDays });
+    const directRecallKeys = new Set([...directRecallGroups.values()].flat().map(entry => this.getRouteMemoryKey(entry.memory)));
+    const topicCandidates = query.trim() ? rankedExtras.filter((entry) => Number(entry.reason?.query) >= 0.28
+      && (directRecallId == null || directRecallKeys.has(this.getRouteMemoryKey(entry.memory)))).map((entry) => entry.memory) : [];
     const routedKeys = new Set([...directGroups.values(), ...mentionedGroups.values()].flat().map((entry) => this.getRouteMemoryKey(entry.memory)));
-    const importantCandidates = rankedExtras.filter((entry) => routedKeys.has(this.getRouteMemoryKey(entry.memory)) && (entry.memory.importance >= 0.9 || entry.memory.status === "open" || entry.memory.unresolved || entry.memory.content?.includes("【需要长期记住的事项】"))).map((entry) => entry.memory);
+    const importantCandidates = rankedExtras.filter((entry) => routedKeys.has(this.getRouteMemoryKey(entry.memory))
+      && (directRecallId == null || directRecallKeys.has(this.getRouteMemoryKey(entry.memory)))
+      && (entry.memory.importance >= 0.9 || entry.memory.status === "open" || entry.memory.unresolved || entry.memory.content?.includes("【需要长期记住的事项】"))).map((entry) => entry.memory);
     if (!(responderCache.seenDynamicSummaries instanceof Set)) responderCache.seenDynamicSummaries = new Set();
     const sameTurn = responderCache.dynamicTurn === turnEpoch;
-    const extra = memoryEngine3Enabled && sameTurn ? responderCache.dynamicExtra || [] : [];
+    let extra = memoryEngine3Enabled && sameTurn ? responderCache.dynamicExtra || [] : [];
     let extraTokens = 0;
-    const extraSources = exactTimeQuery || blockedTimeQuery ? [["temporal", temporalCandidates]]
+    const extraSources = restrictedTemporalQuery || blockedTimeQuery ? [["temporal", temporalCandidates]]
       : [["temporal", temporalCandidates], ["mentioned", mentionedCandidates], ["topic", topicCandidates], ["important", importantCandidates]];
-    for (const [source, candidates] of memoryEngine3Enabled && !sameTurn ? extraSources : []) {
+    for (const [source, candidates] of memoryEngine3Enabled && !useMemory4 && !sameTurn ? extraSources : []) {
       for (const memory of candidates) {
         if (extra.length >= 3 || extraTokens >= extraBudget) break;
         const key = this.getRouteMemoryKey(memory);
         if (selectedFolderKeys.has(key) || responderCache.seenDynamicSummaries.has(key)) continue;
-        const [fitted] = this.ranker.selectWithinBudget([{ memory, score: 0, reason: source === "temporal" ? temporalReasons.get(memory.memoryId) : { source } }], {
+        const recallMemory = directRecallId != null && directRecallKeys.has(key)
+          ? { ...memory, content: turnRecall.focusRelevantExcerpt(memory.content, query) } : memory;
+        const [fitted] = this.ranker.selectWithinBudget([{ memory: recallMemory, score: 0, reason: source === "temporal" ? temporalReasons.get(memory.memoryId) : { source } }], {
           tokenBudget: extraBudget - extraTokens, estimateTokens, allowTruncate: true
         });
         if (!fitted) continue;
@@ -1633,6 +1794,22 @@ class MemoryEngine {
         selectedFolderKeys.add(key);
       }
     }
+    let memory4Packet = null;
+    if (useMemory4 && ownerValid && hasResolvedCampaignToken(campaignToken) && this.memory4Recall) {
+      memory4Packet = this.memory4Recall.plan({ campaignToken, ownerId, query, querySpeakerId: requestedSpeakerId,
+        entityIds: queryEntityIds?.length ? queryEntityIds : mentionedIds.length ? mentionedIds : isValidCharacterId(requestedSpeakerId) && requestedSpeakerId !== ownerId ? [requestedSpeakerId] : directIds,
+        legacyMemories: folderMemories, gameData, currentGameDate, currentTotalDays, conversationId, sceneRevision, turnEpoch,
+        entityIdsExplicit: !!(queryEntityIds?.length || mentionedIds.length),
+        entityNames: uniqueIds([...(queryEntityIds || []), ...mentionedIds]).flatMap(id =>
+          gameData?.characters?.get?.(id) ? this.getCharacterMentionAliases(gameData.characters.get(id)) : namesForEntity(id)),
+        temporalRecallEnabled: temporalSummaryRecallEnabled,
+        identityUnresolved, focus: responderCache.memory4Focus, excludedKeys: [...selectedFolderKeys, ...responderCache.seenDynamicSummaries],
+        memoryEngineRemainingBudget: extraBudget, providerRemainingSafeBudget: 1200, estimateTokens });
+      extra = memory4Packet.items.map(entry => ({ ...entry, tokens: 0, routeKind: "dynamic_extra", routeCharacterIds: [ownerId] }));
+      if (extra.length) extra[0].tokens = memory4Packet.tokens;
+    } else if (useMemory4) extra = [];
+    responderCache.memory4Packet = memory4Packet;
+    responderCache.pendingMemory4Focus = memory4Packet?.focus || null;
     if (memoryEngine3Enabled) {
       responderCache.dynamicTurn = turnEpoch;
       responderCache.dynamicExtra = extra;
@@ -1642,8 +1819,12 @@ class MemoryEngine {
     const temporalAxisLabel = temporal.axisIntent === "EVENT" ? "事件发生时间"
       : temporal.axisIntent === "CONVERSATION" ? "对话发生日期"
         : temporal.axisIntent === "MEMORY_RECALL" ? "记忆/事件双轴召回" : "事件/对话混合查询";
-    const temporalExtraText = blockedTimeQuery ? "【本轮时间核对】缺少可确认的游戏日期或时间范围，无法安全检索；不得用其他年份的记忆代答。"
-      : exactTimeQuery
+    const temporalExtraText = useMemory4 ? memory4Packet?.text || null : blockedTimeQuery ? "【本轮时间核对】缺少可确认的游戏日期或时间范围，无法安全检索；不得用其他年份的记忆代答。"
+      : firstMeetingQuery
+        ? `【本轮首次相识线索核对】${extra.length
+          ? `以下是档案中正文明确提及初次相识的最早可用对话摘要；只能称为最早可用记录，不得据此断言双方人生中首次相识。\n${this.formatMemoryBlock("最早可用的相识摘要", extra)}`
+          : "本轮未新增正文明确提及初次相识的摘要；若此前已注入对应证据，仍可沿用历史原文；若无，不得用更早但无关的摘要代替。"}`
+      : targetDateQuery
       ? `【本轮时间核对：游戏当前${normalizeGameDate(currentGameDate)?.display}；${temporal.expression}${temporal.targetGameYear ? `对应${temporal.targetGameYear}年` : ""}】时间含义：${temporalAxisLabel}。${extra.length ? `${temporalDescription}\n时间引用证明当时谈及该时段，不单独证明事件属实；只引用正文实际保留的证据。\n${this.formatMemoryBlock("本轮时间匹配摘要", extra)}` : "本轮未检索到可新增的该时段对话摘要；此前已注入的对应证据仍可使用，不等于当时没有发生事件。"}冻结的最近两篇对话和官方追忆可能含其他日期，不能把其他年份的事当成该时段的事。`
       : this.formatMemoryBlock("本轮召回摘要（仅本轮注入，最多三篇）", extra);
     let topicPatch = memoryEngine3Enabled ? [] : Array.isArray(responderCache.topicPatch) ? responderCache.topicPatch : [];
@@ -1660,9 +1841,10 @@ class MemoryEngine {
       const reason = entry.routeKind === "direct" ? "direct_pair_route" : entry.routeKind === "mentioned" ? "mentioned_entity_route" : entry.routeKind === "session_topic_anchor" ? "session_topic_anchor" : "stable_memory";
       this.trace.record("rank", { memoryId: entry.memory.memoryId, type: entry.memory.type, score: entry.score, characterId: ownerId, reason });
       this.trace.record("retrieve", { memoryId: entry.memory.memoryId, type: entry.memory.type, score: entry.score, characterId: ownerId, reason });
-      this.trace.record("inject", { memoryId: entry.memory.memoryId, type: entry.memory.type, score: entry.score, characterId: ownerId, reason });
+      this.trace.record("selected", { memoryId: entry.memory.memoryId, type: entry.memory.type, score: entry.score, characterId: ownerId, reason });
     }
-    const selectedTokens = [...stable, ...relevant].reduce((total, entry) => total + Number(entry.tokens || 0), 0);
+    const selectedTokens = useMemory4 ? frozenSelectedTokens + (memory4Packet?.tokens || 0)
+      : [...stable, ...relevant].reduce((total, entry) => total + Number(entry.tokens || 0), 0);
     const folderCandidateCount = new Set([...directGroups.values(), ...mentionedGroups.values()].flat().map((entry) => this.getRouteMemoryKey(entry.memory))).size;
     const temporalRanges = [temporal.primaryWindow, ...(temporal.mode === "TARGET_DATE" ? [] : [temporal.expansionWindow])].filter(Boolean);
     const temporalMatches = temporalIndex.filter(entry => Number.isFinite(entry.fromTotalDays) && temporalRanges.some(range =>
@@ -1673,7 +1855,7 @@ class MemoryEngine {
       requested: temporal.requested === true,
       triggered: temporal.triggered === true,
       axis: temporal.axisIntent || "none",
-      expression: temporal.expression || null,
+      expression: useMemory4 ? null : temporal.expression || null,
       ownerId,
       querySpeakerId: querySpeakerId != null && Number.isSafeInteger(Number(querySpeakerId)) ? Number(querySpeakerId) : null,
       directCounterpartIds: directIds.slice(0, 8),
@@ -1695,6 +1877,93 @@ class MemoryEngine {
       selectedCount: temporalSelectedCount,
       selectedSummaryIds: extra.filter(entry => entry.reason?.source === "temporal").map(entry => entry.memory.memoryId).slice(0, 3)
     };
+    const folderLoadDiagnostics = needsFolderSummaries ? this.store.getFolderSummaryLoadDiagnostics(ownerId) : null;
+    const folderCacheHit = needsFolderSummaries ? suppliedSnapshotFresh || folderLoadDiagnostics?.cacheHit === true : null;
+    const ownerFolderCandidates = folderSnapshot.filter(memory => Number(memory.provenance?.folderOwnerId) === ownerId);
+    const campaignRejectedIds = ownerFolderCandidates.filter(memory => !memoryMatchesResolvedCampaign(memory, campaignToken))
+      .map(memory => memory.memoryId).slice(0, 50);
+    const pairAcceptedIds = directIds.filter(counterpartId => (directGroups.get(counterpartId) || []).length > 0);
+    const pairRejectedIds = directIds.filter(counterpartId => !pairAcceptedIds.includes(counterpartId));
+    const seenSuppressedIds = folderMemories.filter(memory => responderCache.seenDynamicSummaries.has(this.getRouteMemoryKey(memory)))
+      .map(memory => memory.memoryId).slice(0, 50);
+    const rankedCandidateIds = [...new Set([
+      ...[...directGroups.values()].flat().map(entry => entry.memory.memoryId),
+      ...[...mentionedGroups.values()].flat().map(entry => entry.memory.memoryId),
+      ...rankedExtras.map(entry => entry.memory.memoryId),
+      ...stableRanked.map(entry => entry.memory.memoryId)
+    ])].slice(0, 80);
+    const selectedOverviewIds = [...new Set(direct.map(entry => entry.memory.memoryId))].slice(0, 20);
+    const selectedDetailIds = [...new Set([...deduplicatedMentioned, ...extra, ...topicPatch].map(entry => entry.memory.memoryId))].slice(0, 40);
+    const recallDiagnostics = {
+      responderId: ownerValid ? ownerId : null,
+      ownerId: ownerValid ? ownerId : null,
+      campaignStatus: hasResolvedCampaignToken(campaignToken) ? "RESOLVED" : "UNRESOLVED",
+      queryFingerprint: turnRecall.createQueryFingerprint(query),
+      queryLength: String(query || "").length,
+      intent: recallIntent.triggered ? "MEMORY_RECALL" : "GENERAL",
+      granularity: temporal.axisIntent || "TOPIC",
+      folderCacheHit,
+      stages: {
+        folderSummary: {
+          status: ownerValid ? suppliedSnapshotFresh ? "SNAPSHOT_HIT" : folderLoadDiagnostics?.status || (needsFolderSummaries ? "UNKNOWN" : "NOT_REQUESTED") : "OWNER_UNRESOLVED",
+          filesFound: folderLoadDiagnostics?.filesFound ?? null,
+          filesParsed: folderLoadDiagnostics?.filesParsed ?? null,
+          recordsParsed: folderLoadDiagnostics?.recordsParsed ?? null,
+          ownerAcceptedCount: folderLoadDiagnostics?.ownerAcceptedCount ?? null,
+          ownerRejectedCount: folderLoadDiagnostics?.ownerRejectedCount ?? null,
+          malformedFileCount: folderLoadDiagnostics?.malformedFileCount ?? null,
+          cacheHit: folderCacheHit
+        },
+        pair: {
+          status: !ownerValid ? "OWNER_UNRESOLVED" : !hasResolvedCampaignToken(campaignToken) ? "CAMPAIGN_UNRESOLVED" : pairAcceptedIds.length ? "MATCHED" : "NO_MATCH",
+          requestedIds: directIds.slice(0, 40),
+          acceptedIds: pairAcceptedIds.slice(0, 40),
+          rejectedIds: pairRejectedIds.slice(0, 40),
+          candidateCount: [...directGroups.values()].reduce((count, entries) => count + entries.length, 0),
+          acceptedCount: pairAcceptedIds.length,
+          rejectedCount: pairRejectedIds.length
+        },
+        campaign: {
+          status: hasResolvedCampaignToken(campaignToken) ? "FILTERED" : "UNRESOLVED_FAIL_CLOSED",
+          acceptedCount: folderMemories.length,
+          rejectedCount: ownerFolderCandidates.length - folderMemories.length,
+          rejectedIds: campaignRejectedIds
+        },
+        knowledge: {
+          status: !ownerValid ? "OWNER_UNRESOLVED" : !hasResolvedCampaignToken(campaignToken) ? "CAMPAIGN_UNRESOLVED_FAIL_CLOSED" : "FILTERED",
+          internalIndexedCount: allInternalMemoryCount,
+          knowledgeRecordCount: knowledgeRecords?.length ?? null,
+          knowledgeAcceptedCount: internalCandidates.length,
+          knowledgeRejectedCount: allInternalMemoryCount == null ? null : Math.max(0, allInternalMemoryCount - internalCandidates.length),
+          campaignAcceptedCount: internalMemories.length,
+          campaignRejectedCount: internalCandidates.length - internalMemories.length
+        },
+        selection: {
+          rankedCandidateIds,
+          overviewIds: selectedOverviewIds,
+          detailIds: selectedDetailIds,
+          stableIds: [...new Set(stable.map(entry => entry.memory.memoryId))].slice(0, 20)
+        },
+        seen: { status: "PENDING_PROVIDER_SUCCESS", suppressedIds: seenSuppressedIds },
+        injection: { status: "PENDING", injectedBlockIds: [], injectedTokens: null }
+      },
+      rankedCandidateIds,
+      selectedOverviewIds,
+      selectedDetailIds,
+      selectedStableIds: [...new Set(stable.map(entry => entry.memory.memoryId))].slice(0, 20),
+      seenSuppressedIds,
+      injectedBlockIds: [],
+      injectedTokens: null,
+      injectionStatus: "PENDING",
+      seenCommitStatus: "PENDING_PROVIDER_SUCCESS"
+    };
+    if (memory4Packet) {
+      recallDiagnostics.memory4 = memory4Packet.diagnostics;
+      recallDiagnostics.granularity = memory4Packet.query?.granularity || null;
+    }
+    const recallDiagnosticsMap = sessionRecallCache instanceof Map && sessionRecallCache.recallDiagnostics instanceof Map
+      ? sessionRecallCache.recallDiagnostics : null;
+    if (recallDiagnosticsMap && ownerValid) recallDiagnosticsMap.set(ownerId, recallDiagnostics);
     this.trace.record("retrieval_metrics", {
       characterId: ownerId,
       durationMs: Date.now() - startedAt,
@@ -1731,7 +2000,7 @@ class MemoryEngine {
       temporalBudgetOmittedCount: temporalDiagnostics.budgetOmittedCount,
       selectedTemporalCount: temporalDiagnostics.selectedCount,
       memoryStableTokens: frozenSelectedTokens,
-      memoryDynamicExtraTokens: extra.reduce((total, entry) => total + entry.tokens, 0),
+      memoryDynamicExtraTokens: useMemory4 ? memory4Packet?.tokens || 0 : extra.reduce((total, entry) => total + entry.tokens, 0),
       indexSize: Object.keys(this.store.index.memories || {}).length
     });
     return {
@@ -1748,6 +2017,8 @@ class MemoryEngine {
       temporal,
       temporalDiagnostics,
       temporalExtraText,
+      memory4Packet,
+      memory4Diagnostics: memory4Packet?.diagnostics || null,
       stableText: this.formatMemoryBlock("长期稳定记忆", stable),
       directText: this.formatMemoryBlock("与当前在场人物的直接记忆", direct),
       directStableText: this.formatMemoryBlock(officialMemory ? "本场冻结：最近两篇对话与官方追忆摘要" : "冻结的直接关系最近两篇摘要", direct),
@@ -1769,11 +2040,36 @@ class MemoryEngine {
     };
   }
 
-  commitDynamicSummaryRecall(characterId, sessionRecallCache, turnEpoch) {
-    const state = sessionRecallCache?.get(Number(characterId));
-    if (!state || state.dynamicTurn !== turnEpoch) return;
-    this.commitTemporalFocus(characterId, sessionRecallCache, turnEpoch);
-    for (const entry of state.dynamicExtra || []) state.seenDynamicSummaries.add(this.getRouteMemoryKey(entry.memory));
+  commitDynamicSummaryRecall(characterId, sessionRecallCache, turnEpoch, evidence = {}) {
+    const ownerId = Number(characterId);
+    const state = sessionRecallCache?.get(ownerId);
+    if (!state || state.dynamicTurn !== turnEpoch || evidence.providerSucceeded !== true) return { committedCount: 0, reason: "provider_success_unverified" };
+    const injectedBlockIds = [...new Set((Array.isArray(evidence.injectedBlockIds) ? evidence.injectedBlockIds : [])
+      .map(id => String(id || "").trim()).filter(id => id && id.length <= 100))].slice(0, 20);
+    const injectedMemoryIds = new Set((Array.isArray(evidence.injectedMemoryIds) ? evidence.injectedMemoryIds : [])
+      .map(id => String(id || "").trim()).filter(Boolean));
+    const injectedTokens = Number(evidence.injectedTokens);
+    if (injectedBlockIds.length === 0 || injectedMemoryIds.size === 0 || !Number.isFinite(injectedTokens) || injectedTokens <= 0) {
+      return { committedCount: 0, reason: "injection_evidence_incomplete" };
+    }
+    const injectedEntries = (state.dynamicExtra || []).filter(entry => injectedMemoryIds.has(String(entry.memory.memoryId)));
+    if (injectedEntries.length) this.commitTemporalFocus(ownerId, sessionRecallCache, turnEpoch);
+    if (state.memory4Packet && injectedEntries.length) {
+      const packet = state.memory4Packet;
+      const selected = new Set(injectedEntries.map(entry => entry.memory.memoryId));
+      if (packet.items.every(entry => selected.has(entry.memory.memoryId))) state.memory4Focus = packet.focus;
+    }
+    for (const entry of injectedEntries) state.seenDynamicSummaries.add(this.getRouteMemoryKey(entry.memory));
+    const diagnostics = sessionRecallCache.recallDiagnostics?.get(ownerId);
+    if (diagnostics) {
+      diagnostics.injectedBlockIds = injectedBlockIds;
+      diagnostics.injectedTokens = injectedTokens;
+      diagnostics.injectionStatus = "PROVIDER_SUCCESS";
+      diagnostics.seenCommitStatus = injectedEntries.length ? "COMMITTED" : "NO_INJECTED_DYNAMIC_SUMMARY";
+      diagnostics.stages.injection = { status: "PROVIDER_SUCCESS", injectedBlockIds, injectedTokens };
+      diagnostics.stages.seen = { status: diagnostics.seenCommitStatus, committedIds: injectedEntries.map(entry => entry.memory.memoryId) };
+    }
+    return { committedCount: injectedEntries.length, reason: injectedEntries.length ? "provider_success" : "no_injected_dynamic_summary" };
   }
 
   commitTemporalFocus(characterId, sessionRecallCache, turnEpoch) {
@@ -1781,19 +2077,44 @@ class MemoryEngine {
     if (state?.dynamicTurn === turnEpoch) state.temporalFocus = state.pendingTemporalFocus || null;
   }
 
+  fitMemory4Context(context, characterId, sessionRecallCache, providerRemainingSafeBudget, estimateTokens) {
+    if (!context?.memory4Packet) return context;
+    const packet = fitRecallPacket(context.memory4Packet,
+      Math.min(context.routing?.budgets?.extra || 0, providerRemainingSafeBudget), estimateTokens);
+    if (packet.focus) packet.focus.sourceRefs = packet.sourceRefs;
+    const extra = packet.items.map(entry => ({ ...entry, tokens: 0, routeKind: "dynamic_extra", routeCharacterIds: [Number(characterId)] }));
+    if (extra.length) extra[0].tokens = packet.tokens;
+    const state = sessionRecallCache?.get(Number(characterId));
+    if (state) { state.dynamicExtra = extra; state.memory4Packet = packet; state.pendingMemory4Focus = packet.focus; }
+    const diagnostics = sessionRecallCache?.recallDiagnostics?.get(Number(characterId));
+    if (diagnostics?.memory4) {
+      diagnostics.memory4 = { ...packet.diagnostics, selectedIds: packet.items.map(entry => entry.memory.memoryId), tokens: packet.tokens };
+    }
+    return { ...context, memory4Packet: packet, temporalExtraText: packet.text, extra,
+      selectedTokens: context.selectedTokens - context.memory4Packet.tokens + packet.tokens };
+  }
+
   retrieveTurnRecall({ characterId, query = "", assistContext = "", entityIds = [], entityNames = [], participantIds = [], ownerFolderMemories = null, currentTotalDays = null, campaignToken = null, tokenBudget = 256, estimateTokens, cache = null, turnEpoch = 0 } = {}) {
     const ownerId = Number(characterId);
+    const ownerValid = isValidCharacterId(ownerId);
     const expandedQuery = turnRecall.expandQuery(query);
     const lexicalQuery = turnRecall.expandQuery(turnRecall.removeEntityNames(query, entityNames));
     const fingerprint = turnRecall.createQueryFingerprint(expandedQuery);
-    const cacheKey = `${turnEpoch}:${ownerId}:${campaignToken || ""}:${fingerprint}`;
+    const folderRevision = ownerValid ? this.store.getFolderSummaryRevision(ownerId) : null;
+    const cacheKey = `${turnEpoch}:${ownerId}:${campaignToken || ""}:${folderRevision ?? "invalid"}:${fingerprint}`;
     if (cache instanceof Map && cache.has(cacheKey)) return { ...cache.get(cacheKey), cacheHit: true };
     const intent = turnRecall.detectIntent(query, { entityNames });
     const budget = Math.min(320, Math.max(0, Number(tokenBudget) || 256));
-    const folderMemories = Array.isArray(ownerFolderMemories) ? ownerFolderMemories : this.store.loadFolderSummariesForCharacter(ownerId);
-    const internalMemories = this.store.queryMemories({ characterId: ownerId, includeFolderSummaries: false });
+    const ownerSnapshotRevision = Array.isArray(ownerFolderMemories) ? this.store.getFolderSummarySnapshotRevision(ownerFolderMemories) : null;
+    const folderMemories = ownerValid && hasResolvedCampaignToken(campaignToken)
+      ? (Array.isArray(ownerFolderMemories) && ownerSnapshotRevision === folderRevision
+        ? ownerFolderMemories : this.store.loadFolderSummariesForCharacter(ownerId)) : [];
+    const internalMemories = ownerValid && hasResolvedCampaignToken(campaignToken)
+      ? this.store.queryMemories({ characterId: ownerId, includeFolderSummaries: false }) : [];
     const candidatesByKey = new Map();
-    for (const memory of [...folderMemories, ...internalMemories]) if (memoryMatchesCampaign(memory, campaignToken)) candidatesByKey.set(this.getRouteMemoryKey(memory), memory);
+    for (const memory of folderMemories) if (Number(memory.provenance?.folderOwnerId) === ownerId
+      && memoryMatchesResolvedCampaign(memory, campaignToken)) candidatesByKey.set(this.getRouteMemoryKey(memory), memory);
+    for (const memory of internalMemories) if (memoryMatchesResolvedCampaign(memory, campaignToken)) candidatesByKey.set(this.getRouteMemoryKey(memory), memory);
     const ranked = this.ranker.rankTurnRecall([...candidatesByKey.values()], {
       query: lexicalQuery,
       assistQuery: assistContext,
@@ -1836,7 +2157,12 @@ class MemoryEngine {
 
   retrieveThirdPartyEvidence({ characterId, query = "", mentionedEntityIds = [], mentionedEntityNames = {}, ownerFolderMemories = null, currentTotalDays = null, campaignToken = null, tokenBudget = 512, estimateTokens } = {}) {
     const ownerId = Number(characterId);
-    const memories = (Array.isArray(ownerFolderMemories) ? ownerFolderMemories : this.store.loadFolderSummariesForCharacter(ownerId)).filter(memory => memoryMatchesCampaign(memory, campaignToken));
+    const folderRevision = isValidCharacterId(ownerId) ? this.store.getFolderSummaryRevision(ownerId) : null;
+    const ownerSnapshotRevision = Array.isArray(ownerFolderMemories) ? this.store.getFolderSummarySnapshotRevision(ownerFolderMemories) : null;
+    const memories = isValidCharacterId(ownerId) && hasResolvedCampaignToken(campaignToken)
+      ? (Array.isArray(ownerFolderMemories) && ownerSnapshotRevision === folderRevision
+        ? ownerFolderMemories : this.store.loadFolderSummariesForCharacter(ownerId))
+        .filter(memory => Number(memory.provenance?.folderOwnerId) === ownerId && memoryMatchesResolvedCampaign(memory, campaignToken)) : [];
     const entities = uniqueIds(mentionedEntityIds).map((entityId) => {
       const aliases = Array.isArray(mentionedEntityNames) ? mentionedEntityNames : mentionedEntityNames?.[entityId] || mentionedEntityNames?.[String(entityId)] || [];
       return {
@@ -1991,7 +2317,7 @@ class MemoryEngine {
         episodes: Object.keys(this.store.index.episodes || {}).length,
         knowledgeCharacters: this.store.listKnowledgeCharacterIds().length,
         summaryFolders: new Set(summaryCatalog.map((metadata) => metadata.folderName)).size,
-        summaryFiles: summaryCatalog.length,
+        summaryFiles: summaryCatalog.filter(metadata => !metadata.memory4Only).length,
         summaryRecords: summaryCatalog.reduce((total, metadata) => total + (metadata.summaries?.length || 0), 0)
       },
       boundaries: [
@@ -2026,12 +2352,12 @@ class MemoryEngine {
     return `=== Turn Recall：当前回应角色真实可知的过去事实 ===\n${entries.map((entry) => `- ${entry.memory.eventDate || "日期不详"}：${entry.memory.content}`).join("\n")}\n权威规则：不得否认上述明确记录。当前 CK3 数据表示现在，摘要/记忆表示过去；若信息不足，只能承认记忆模糊，不得编造。`;
   }
 
-  recordLetterMemory({ senderId, recipientId, content, date = null, totalDays = null, letterId = null }) {
+  recordLetterMemory({ senderId, recipientId, content, date = null, totalDays = null, letterId = null, campaignToken = null, campaignBinding = null }) {
     const memory = this.store.saveMemory(createMemoryRecord({
       type: "letter", subtype: "correspondence", eventDate: date, totalDays,
       participants: [senderId, recipientId], subjects: [senderId, recipientId], content,
       importance: 0.65, confidence: 1, source: "letter", visibility: "known_group",
-      knownBy: [senderId, recipientId], provenance: { conversationId: letterId, extractionMode: "letter_summary", messageIds: [], speakerIds: [senderId] }
+      knownBy: [senderId, recipientId], provenance: { conversationId: letterId, extractionMode: "letter_summary", messageIds: [], speakerIds: [senderId], campaignToken, campaignBinding }
     }));
     this.knowledge.markKnownBy(memory.memoryId, [senderId, recipientId], { awareness: "told", acquiredAt: totalDays, confidence: 1 });
     return memory;

@@ -65,12 +65,14 @@ class MentionTracker {
   }
 
   recordUnresolved(alias, reason, characterIds = []) {
+    this.lastScanUnresolved = true;
     const entry = { alias, reason, characterIds: uniqueNumericIds(characterIds) };
     this.onUnresolved?.(entry);
     return entry;
   }
 
   findMentionedCharacterIds(history = [], { candidates = [], excludedIds = [], recentCharacterId = null, resolveCoreference = true } = {}) {
+    this.lastScanUnresolved = false;
     const excluded = new Set(uniqueNumericIds(excludedIds));
     const aliases = this.buildAliases(candidates).filter((alias) => !excluded.has(alias.id));
     const mentioned = [];

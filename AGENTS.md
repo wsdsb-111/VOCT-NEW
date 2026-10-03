@@ -42,7 +42,7 @@ node --check resources\app\out\renderer\worldline-player-presentation.js
 git diff --check
 ~~~
 
-test-release.js 通过 test-manifest.js 汇总直接和嵌套检查；新增 test-*.js 必须登记到清单并明确是发布组还是历史归档。当前基线记录为 291 个发布组、360 个已分类测试文件，测试数量变化时更新相关文档，不要把旧数量硬编码为源码合同。
+test-release.js 通过 test-manifest.js 汇总直接和嵌套检查；新增 test-*.js 必须登记到清单并明确是发布组还是历史归档。当前清单为 339 个发布组、408 个已分类测试文件、68 个历史归档；完整门禁结果以当前实施报告为准。测试数量变化时更新相关文档，不要把旧数量硬编码为源码合同。
 
 修改 IPC、设置、Prompt、流式输出、动作回读、世界线或主题 UI 后，仍需启动 VOTC.exe 做对应人工冒烟。静态回归不能替代真实 CK3 存档、Provider、debug.log ACK、打包窗口和 Soak 验收。
 
@@ -63,17 +63,17 @@ test-release.js 通过 test-manifest.js 汇总直接和嵌套检查；新增 tes
 ### Root agent
 - The root/main agent model is controlled by the user through the Codex client model picker.
 - Do not change or override the root model selection.
-- When the root model is GPT-6 Astra, reserve Astra for high-level reasoning, architecture, difficult debugging, synthesis, and final decisions.
 
 ### Default subagents
-- Ordinary subagents must use the configured default model, GPT-6 Luna, with maximum (`max`) reasoning effort.
+- Per the user's 2026-10-03 instruction, ordinary subagents must use GPT-6.1 Sol (`gpt-6.1-sol`), with maximum (`max`) reasoning effort.
 - Do not explicitly request GPT-6 Astra for ordinary subagents.
 - Do not override the configured subagent model or reasoning effort unless the user explicitly requests it for that task.
-- Prefer Luna subagents for codebase exploration, locating files and symbols, dependency tracing, reading modules, searching references, running tests, reproducing bugs, collecting logs, checking documentation, and other straightforward investigations.
+- Use GPT-6.1 Sol for codebase exploration, implementation, debugging, documentation, tests, and review.
 
-### Astra usage
-- Do not spawn GPT-6 Astra subagents by default.
-- If a Luna subagent cannot complete a difficult task, return its findings and unresolved question to the root agent.
+### Implementation and review
+- The user's 2026-10-03 instruction supersedes the historical Astra/Sol division for subsequent development: GPT-6.1 Sol owns both implementation and review responsibilities.
+- Keep independent QA in a separate agent with its own adversarial fixtures and verification evidence, even when implementation and QA use the same model.
+- If a subagent cannot complete a task, return its findings and unresolved question to the root agent; do not change models automatically.
 - Only spawn an Astra subagent when the user explicitly requests it.
 
 ### Delegation discipline

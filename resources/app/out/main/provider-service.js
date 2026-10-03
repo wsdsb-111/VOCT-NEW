@@ -461,7 +461,7 @@ class LLMManager {
     const provider = this.getProviderInstance(config);
     const preparedMessages = this.PromptBuilder.prepareSummaryMessages(messages);
     const summaryBlocks = Array.isArray(metadata?.blocks) && metadata.blocks.length > 0 ? metadata.blocks : this.PromptBuilder.getSummaryPromptBlocks(preparedMessages, metadata?.requestType || "summary");
-    const isStructuredSummary = ["final_summary", "memory_recovery", "memory4_durable"].includes(metadata.requestType);
+    const isStructuredSummary = ["final_summary", "memory_recovery", "memory4_durable", "memory4_year", "memory4_life"].includes(metadata.requestType);
     const useDeepseekNonThinking = config.providerType === "deepseek" && isStructuredSummary;
     const requestedMaxTokens = Number(metadata?.maxTokens);
     const capabilities = await this.getProviderCapabilities("SUMMARY", metadata.providerSnapshot);
@@ -472,7 +472,7 @@ class LLMManager {
       stream: false,
       // summaries don't need streaming
       ...config.defaultParameters,
-      ...useDeepseekNonThinking ? { thinking: { type: "disabled" }, max_tokens: structuredSummaryMaxTokens, response_format: { type: "json_object" } } : isStructuredSummary ? { max_tokens: structuredSummaryMaxTokens, response_format: { type: "json_object" } } : {},
+      ...useDeepseekNonThinking ? { thinking: { type: "disabled" }, max_tokens: structuredSummaryMaxTokens, response_format: { type: "json_object" } } : isStructuredSummary ? { max_tokens: structuredSummaryMaxTokens, response_format: { type: "json_object" } } : Number.isInteger(requestedMaxTokens) && requestedMaxTokens >= 256 ? { max_tokens: structuredSummaryMaxTokens } : {},
       signal
     };
     const budget = planRequestBudget({ messages: preparedMessages, capabilities, requestedOutputTokens: Number(request.max_tokens) || structuredSummaryMaxTokens, countTokens: (items) => this.TokenCounter.calculateTotalTokens(items) });

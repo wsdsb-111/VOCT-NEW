@@ -21,6 +21,10 @@ try {
   const campaignA = folder("campaign-a-summary", "campaign-a");
   const campaignB = folder("campaign-b-summary", "campaign-b");
   const legacy = folder("legacy-summary", null);
+  const markFixtureSnapshot = memories => {
+    engine.store.folderSummarySnapshotRevisions.set(memories, engine.store.getFolderSummaryRevision(2));
+    return memories;
+  };
   engine.store.saveMemory(createMemoryRecord({ memoryId: "campaign-b-internal", type: "event", content: "other campaign",
     participants: [1, 2], knownBy: [2], provenance: { campaignToken: "campaign-b" } }));
   engine.store.saveMemory(createMemoryRecord({ memoryId: "legacy-internal", type: "event", content: "legacy campaign",
@@ -30,15 +34,17 @@ try {
   assert.equal(memoryMatchesCampaign(legacy, "campaign-a"), false);
   assert.equal(memoryMatchesCampaign(legacy, null), true);
   assert.equal(memoryMatchesCampaign(campaignA, null), false);
-  const input = { characterId: 2, directCounterpartIds: [1], ownerFolderMemories: [campaignA, campaignB, legacy],
+  const folderSnapshot = markFixtureSnapshot([campaignA, campaignB, legacy]);
+  const input = { characterId: 2, directCounterpartIds: [1], ownerFolderMemories: folderSnapshot,
     campaignToken: "campaign-a", query: "以前的事情", currentGameDate: "1152.6.12", currentTotalDays: 6700,
     conversationId: "conversation-a", sceneRevision: "scene-a", tokenBudget: 3000, estimateTokens: text => text.length,
     sessionRecallCache: new Map(), turnEpoch: 1 };
   const scoped = engine.retrieveForResponder(input);
   assert(scoped.direct.length > 0);
   assert(scoped.direct.concat(scoped.stable, scoped.extra).every(entry => entry.memory.memoryId === campaignA.memoryId));
-  assert.equal(engine.retrieveTurnRecall({ characterId: 2, query: "以前的事情", ownerFolderMemories: [campaignA, campaignB, legacy], campaignToken: "campaign-a" }).candidateCount, 1);
-  assert.equal(engine.retrieveForResponder({ ...input, ownerFolderMemories: [legacy], officialSummary: {
+  assert.equal(engine.retrieveTurnRecall({ characterId: 2, query: "以前的事情", ownerFolderMemories: folderSnapshot, campaignToken: "campaign-a" }).candidateCount, 1);
+  const legacySnapshot = markFixtureSnapshot([legacy]);
+  assert.equal(engine.retrieveForResponder({ ...input, ownerFolderMemories: legacySnapshot, officialSummary: {
     sourceType: "CK3_OFFICIAL_RECOLLECTION", campaignToken: "campaign-b", playerId: 2, memoryCount: 1, content: "other campaign" },
     sessionRecallCache: new Map() }).direct.length, 0);
   assert.equal(buildDualTemporalIndex([campaignA, campaignB, legacy], { ownerId: 2, counterpartId: 1, campaignToken: "campaign-a", currentGameDate: "1152.6.12", currentTotalDays: 6700 }).length, 1);

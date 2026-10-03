@@ -19,11 +19,17 @@ assert.equal((fs.readFileSync(path.join(root, "resources/app/out/main/prompts/pr
 
 const currentGameDate = "1152.1.1";
 const today = normalizeGameDate(currentGameDate).serial;
+const fixtureCampaignToken = "v8.12-memory-engine-test-campaign";
 const record = (id, days, content = `摘要${id}`) => ({
   memoryId: id, type: "folder_summary", content, canonicalText: content, eventDate: null, totalDays: days,
   importance: 0.65, confidence: 1, participants: [1, 2], subjects: [1, 2], tags: [], status: null,
-  provenance: { folderOwnerId: 2, counterpartId: 1, counterpartIds: [1], finalizationId: id }
+  provenance: { folderOwnerId: 2, counterpartId: 1, counterpartIds: [1], finalizationId: id,
+    campaignToken: fixtureCampaignToken, campaignBinding: { status: "bound", source: "test_fixture", version: 1 } }
 });
+const markFixtureSnapshot = (engine, ownerId, memories) => {
+  engine.store.folderSummarySnapshotRevisions.set(memories, engine.store.getFolderSummaryRevision(ownerId));
+  return memories;
+};
 
 const fiveYearStart = normalizeGameDate("1147.1.1").serial;
 const memories = [record("r1", today - 1), record("r2", today - 2), record("t1", fiveYearStart), record("t2", fiveYearStart + 10), record("t3", fiveYearStart + 5), record("t4", fiveYearStart + 20)];
@@ -62,8 +68,8 @@ const temp = fs.mkdtempSync(path.join(os.tmpdir(), "votc-memory-30-"));
 try {
   const engine = new MemoryEngine({ baseDir: path.join(temp, "memory"), trace: { record() {} } });
   const session = new Map();
-  const input = { characterId: 2, directCounterpartIds: [1], ownerFolderMemories: memories,
-    currentGameDate, currentTotalDays: today, tokenBudget: 800, estimateTokens: (value) => String(value).length, sessionRecallCache: session };
+  const input = { characterId: 2, directCounterpartIds: [1], ownerFolderMemories: markFixtureSnapshot(engine, 2, memories),
+    currentGameDate, currentTotalDays: today, campaignToken: fixtureCampaignToken, tokenBudget: 800, estimateTokens: (value) => String(value).length, sessionRecallCache: session };
   const first = engine.retrieveForResponder({ ...input, query: "五年前" });
   assert.deepEqual(first.direct.map((entry) => entry.memory.memoryId), ["r1", "r2"]);
   assert.deepEqual(first.extra.map((entry) => entry.memory.memoryId), ["t1", "t3", "t2"]);
@@ -73,32 +79,34 @@ try {
     { ...record("recent-b", null), eventDate: "1151.12.31" },
     { ...record("five-year-game-date", null), eventDate: "1147.8.9" }
   ];
-  const dateOnlyRecall = engine.retrieveForResponder({ ...input, ownerFolderMemories: dateStamped, currentTotalDays: null,
+  const dateOnlyRecall = engine.retrieveForResponder({ ...input, ownerFolderMemories: markFixtureSnapshot(engine, 2, dateStamped), currentTotalDays: null,
     sessionRecallCache: new Map(), query: "五年前" });
   assert.deepEqual(dateOnlyRecall.extra.map(entry => entry.memory.memoryId), ["five-year-game-date"],
     "the paused CK3 calendar date and each summary's saved CK3 date must suffice without model text or totalDays");
   assert.equal(resolveTemporalWindow("五年前", { currentGameDate: null, currentTotalDays: today }).triggered, false,
     "totalDays alone cannot invent the current CK3 calendar year");
   const nearButImportant = { ...record("wrong-era", today - 2 * 365, "五年前的事情曾被提起"), importance: 0.99 };
-  const exactTime = engine.retrieveForResponder({ ...input, ownerFolderMemories: [memories[0], memories[1], memories[2], nearButImportant],
+  const exactTime = engine.retrieveForResponder({ ...input, ownerFolderMemories: markFixtureSnapshot(engine, 2, [memories[0], memories[1], memories[2], nearButImportant]),
     sessionRecallCache: new Map(), query: "你还记得五年前的事情吗？" });
   assert.deepEqual(exactTime.extra.map((entry) => entry.memory.memoryId), ["t1"], "an explicit year must not fill spare Extra slots with a two-year-old summary");
   assert.match(exactTime.temporalExtraText, /五年前/);
-  const noMatch = engine.retrieveForResponder({ ...input, ownerFolderMemories: [memories[0], memories[1], nearButImportant],
+  const noMatch = engine.retrieveForResponder({ ...input, ownerFolderMemories: markFixtureSnapshot(engine, 2, [memories[0], memories[1], nearButImportant]),
     sessionRecallCache: new Map(), query: "你还记得五年前的事情吗？" });
   assert.deepEqual(noMatch.extra, [], "an empty five-year window must not silently substitute a recent summary");
   assert.match(noMatch.temporalExtraText, /未检索到/);
   const fourYearsAgo = record("four-years-ago", today - 4 * 365 + 1);
-  const closeYear = engine.retrieveForResponder({ ...input, ownerFolderMemories: [memories[0], memories[1], fourYearsAgo],
+  const closeYear = engine.retrieveForResponder({ ...input, ownerFolderMemories: markFixtureSnapshot(engine, 2, [memories[0], memories[1], fourYearsAgo]),
     sessionRecallCache: new Map(), query: "五年前" });
   assert.deepEqual(closeYear.extra, [], "a four-year-old summary is not a substitute for an explicit five-year request");
-  const changedFolder = engine.retrieveForResponder({ ...input, ownerFolderMemories: [memories[0], memories[1], record("new-five-year-summary", today - 5 * 365)],
+  const changedFolder = engine.retrieveForResponder({ ...input, ownerFolderMemories: markFixtureSnapshot(engine, 2, [memories[0], memories[1], record("new-five-year-summary", today - 5 * 365)]),
     sessionRecallCache: new Map(), query: "五年前" });
   assert.deepEqual(changedFolder.extra.map(entry => entry.memory.memoryId), ["new-five-year-summary"],
     "a refreshed folder at the same game date must not reuse an older date index");
   const mentionedFiveYearsAgo = { ...record("mentioned-five-years-ago", today - 5 * 365, "韩世忠当时告知的事"),
     participants: [2, 3], subjects: [3], provenance: { folderOwnerId: 2, counterpartId: 3, counterpartIds: [3] } };
-  const mentionedTime = engine.retrieveForResponder({ ...input, ownerFolderMemories: [memories[0], memories[1], mentionedFiveYearsAgo],
+  mentionedFiveYearsAgo.provenance.campaignToken = fixtureCampaignToken;
+  mentionedFiveYearsAgo.provenance.campaignBinding = { status: "bound", source: "test_fixture", version: 1 };
+  const mentionedTime = engine.retrieveForResponder({ ...input, ownerFolderMemories: markFixtureSnapshot(engine, 2, [memories[0], memories[1], mentionedFiveYearsAgo]),
     mentionedEntityIds: [3], mentionedEntityNames: { 3: ["韩世忠"] }, sessionRecallCache: new Map(), query: "五年前韩世忠的事" });
   assert.deepEqual(mentionedTime.extra.map(entry => entry.memory.memoryId), ["mentioned-five-years-ago"],
     "an exact-time question about a mentioned out-of-scene person must keep that person's owner-scoped summaries eligible");
@@ -180,8 +188,10 @@ async function testNativeSummaryLifecycle() {
     assert.equal(data.getOfficialRecollectionSummary(2, "different-session"), null);
     assert.deepEqual(engine.loadOwnerFolderMemories(2), [], "official summaries must not enter cross-person or date routes");
     const session = new Map();
-    const scopedMemories = memories.map(memory => ({ ...memory, provenance: { ...memory.provenance, campaignToken: data.campaignToken } }));
+    const scopedMemories = markFixtureSnapshot(engine, 2, memories.map(memory => ({ ...memory,
+      provenance: { ...memory.provenance, campaignToken: data.campaignToken } })));
     const input = { characterId: 2, directCounterpartIds: [1], ownerFolderMemories: scopedMemories, officialSummary: official,
+      campaignToken: data.campaignToken,
       currentGameDate, currentTotalDays: today, campaignToken: data.campaignToken, tokenBudget: 3600, estimateTokens, sessionRecallCache: session, turnEpoch: 1 };
     const first = engine.retrieveForResponder({ ...input, query: "五年前" });
     assert.equal(first.direct.length, 3);
@@ -192,7 +202,8 @@ async function testNativeSummaryLifecycle() {
     assert.deepEqual(rebuild.extra, first.extra, "same-turn prompt rebuild must retain recall");
     const retry = engine.retrieveForResponder({ ...input, query: "五年前", turnEpoch: 2 });
     assert.deepEqual(retry.extra.map(e => e.memory.memoryId), first.extra.map(e => e.memory.memoryId), "uncommitted failed response must remain recallable");
-    engine.commitDynamicSummaryRecall(2, session, 2);
+    engine.commitDynamicSummaryRecall(2, session, 2, { providerSucceeded: true, injectedBlockIds: ["memory-temporal-extra"],
+      injectedMemoryIds: retry.extra.map(entry => entry.memory.memoryId), injectedTokens: retry.extra.reduce((total, entry) => total + entry.tokens, 0) });
     const later = engine.retrieveForResponder({ ...input, query: "五年前", turnEpoch: 3 });
     assert(later.extra.every(e => !first.extra.some(old => old.memory.memoryId === e.memory.memoryId)));
     assert.equal(later.directStableText, first.directStableText);
@@ -231,28 +242,32 @@ async function testNativeSummaryLifecycle() {
     thirdPersonMemory.provenance.counterpartIds = [3];
     thirdPersonMemory.provenance.counterpartId = 3;
     const mentionSession = new Map();
-    const mentionedInput = { ...input, ownerFolderMemories: [thirdPersonMemory], mentionedEntityIds: [3], sessionRecallCache: mentionSession, officialSummary: null };
+    const mentionedInput = { ...input, ownerFolderMemories: markFixtureSnapshot(engine, 2, [thirdPersonMemory]), mentionedEntityIds: [3], sessionRecallCache: mentionSession, officialSummary: null };
     const mentioned = engine.retrieveForResponder(mentionedInput);
     assert.equal(mentioned.extra.length, 1);
     assert.equal(mentioned.extra[0].reason.source, "mentioned");
     assert.equal(mentioned.mentionedSnapshotText, null);
-    engine.commitDynamicSummaryRecall(2, mentionSession, 1);
+    engine.commitDynamicSummaryRecall(2, mentionSession, 1, { providerSucceeded: true, injectedBlockIds: ["memory-temporal-extra"],
+      injectedMemoryIds: mentioned.extra.map(entry => entry.memory.memoryId), injectedTokens: mentioned.extra.reduce((total, entry) => total + entry.tokens, 0) });
     assert.equal(engine.retrieveForResponder({ ...mentionedInput, turnEpoch: 2 }).extra.length, 0);
     const fitted = engine.ranker.selectWithinBudget([{ memory: { ...first.direct.at(-1).memory,
       content: "说明\n\n1152年1月1日：" + "长".repeat(300) + "\n\n1151年1月1日：完整的短事件" }, score: 1 }], { tokenBudget: 30, estimateTokens, allowTruncate: true });
     assert.equal(fitted[0].memory.content, "说明\n\n1151年1月1日：完整的短事件");
     const manager = createSummariesManager({ fs, path, summariesDir, memoryEngine: engine, memorySystem });
     assert((await manager.listAllSummaries()).some(entry => entry.characterName === "官方追忆摘要"));
-    assert.equal((await manager.updateSummary(2, 2, 0, "手工修订追忆")).success, true);
-    assert.equal(data.getOfficialRecollectionSummary(2, "session-a").content, "手工修订追忆");
+    const officialBeforeEdit = fs.readFileSync(officialPath);
+    assert.equal((await manager.updateSummary(2, 2, 0, "手工修订追忆")).success, false);
+    assert.deepEqual(fs.readFileSync(officialPath), officialBeforeEdit, "CK3 official recollection must stay read-only");
     data.characters.get(2).memories = [{ creationDate: "1152年1月1日", creationDateTotalDays: 5000, desc: "最新追忆" }];
     data.syncOfficialRecollectionSummaries("session-b");
     assert.equal(JSON.parse(fs.readFileSync(officialPath, "utf8")).length, 1);
     assert.match(data.getOfficialRecollectionSummary(2, "session-b").content, /最新追忆/);
     assert.equal(data.getOfficialRecollectionSummary(2, "session-a"), null);
-    assert.equal((await manager.deleteSummary(2, 2, 0)).success, true);
-    assert.equal(data.getOfficialRecollectionSummary(2, "session-b"), null);
-    console.log("Native official summary: PASS (multiline export, overwrite, 2+1, owner/session isolation, shared budget, frozen prefix, one-turn recall, edit/delete)");
+    const officialBeforeDelete = fs.readFileSync(officialPath);
+    assert.equal((await manager.deleteSummary(2, 2, 0)).success, false);
+    assert.deepEqual(fs.readFileSync(officialPath), officialBeforeDelete, "UI deletion cannot remove CK3 official recollection");
+    assert.match(data.getOfficialRecollectionSummary(2, "session-b").content, /最新追忆/);
+    console.log("Native official summary: PASS (multiline export, overwrite, 2+1, owner/session isolation, shared budget, frozen prefix, one-turn recall, read-only)");
   } finally { fs.rmSync(sandbox, { recursive: true, force: true }); }
 }
 testNativeSummaryLifecycle().catch(error => { console.error(error); process.exitCode = 1; });

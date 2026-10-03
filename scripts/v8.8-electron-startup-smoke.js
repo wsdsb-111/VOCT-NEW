@@ -82,8 +82,12 @@ async function main() {
     await clickProvider("Summaries");
     assert(await evaluate("typeof conversationAPI.retryFailedSummaries === 'function'"), "summary retry preload bridge missing");
     const recoveryStatus = await evaluate("conversationAPI.getSummariesDashboardData().then(data => data.recoveryStatus)");
-    assert.deepEqual(recoveryStatus, { pending: 0, manual: 0, balanceBlocked: 0, running: false });
-    assert(await evaluate("[...document.querySelectorAll('button')].some(button => button.textContent === '重试失败摘要' && button.disabled)"), "empty recovery queue must show a disabled retry button");
+    for (const key of ["pending", "manual", "balanceBlocked", "narrativePending", "durablePending"]) assert.equal(recoveryStatus[key], 0);
+    assert.equal(recoveryStatus.running, false);
+    assert(await evaluate("[...document.querySelectorAll('button')].some(button => button.textContent === '重试失败记忆任务' && button.disabled)"), "empty recovery queue must show a disabled retry button");
+    assert(await evaluate("['记忆召回诊断（最近实际请求）','摘要恢复诊断','Provider 缓存诊断'].every(label=>[...document.querySelectorAll('summary')].some(e=>e.textContent===label))"), "incident diagnostics panels missing");
+    const incidentDiagnostics = await evaluate("conversationAPI.getSummariesDashboardData().then(data=>data.incidentDiagnostics)");
+    for (const key of ["recall", "recovery", "providerCache"]) assert(Array.isArray(incidentDiagnostics[key]), `missing read-only diagnostics ${key}`);
     assert.equal((await evaluate("conversationAPI.retryFailedSummaries()")).recovered, 0, "empty queue must not call a provider");
     await clickProvider("诊断");
     assert(await evaluate("!!document.querySelector('.provider-diagnostics-view')"), "provider diagnostics page rendered an empty body");

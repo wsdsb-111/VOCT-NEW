@@ -20,6 +20,7 @@ function createFixture(options = {}) {
   let active = false;
   let parsedContext = options.parsedContext || null;
   const summaryCalls = [];
+  const replyCalls = [];
   const memoryRecords = [];
   const settingsRepository = {
       getCK3UserFolderPath: () => active ? ck3Dir : null,
@@ -47,7 +48,7 @@ function createFixture(options = {}) {
       buildPreview: () => ({ messages: [] })
     },
     llmManager: {
-      sendChatRequest: async () => ({ content: options.reply || "一切安好。" }),
+      sendChatRequest: async (...args) => { replyCalls.push(args); return { content: options.reply || "一切安好。" }; },
       sendSummaryRequest: async (...args) => {
         summaryCalls.push(args);
         if (options.summaryFailure) throw new Error("summary unavailable");
@@ -71,6 +72,7 @@ function createFixture(options = {}) {
     dataDir,
     debugLogPath,
     summaryCalls,
+    replyCalls,
     memoryRecords,
     runFileManager,
     createManager,
@@ -233,6 +235,83 @@ async function testTwoLettersAreSerialized() {
   }
 }
 
+async function testQueuedEffectIsNotReportedAsWritten() {
+  const fixture = createFixture();
+  try {
+    const manager = fixture.createManager();
+    fixture.activate();
+    const blocker = fixture.runFileManager.enqueueCommand({
+      owner: "test",
+      kind: "action_effect",
+      commandId: "letter_queue_blocker",
+      effectText: "add_gold = 1"
+    });
+    const letter = makeLetter("letter_queued_effect", 450, 0);
+    storeLetter(manager, letter, "队列中的回信");
+    await manager.updateCurrentDate(450);
+
+    let status = manager.getLetterStatus(letter.letterId);
+    assert.strictEqual(status.responseStatus, fixture.LetterResponseStatus.PENDING_DELIVERY, "enqueuing behind another command is not a file write");
+    assert.strictEqual(status.runCommandStatus, "queued");
+    assert.strictEqual(manager.awaitingAcceptanceLetterId, letter.letterId);
+    assert(!fs.readFileSync(fixture.effectPath, "utf8").includes("队列中的回信"), "queued letter must not be reported in the active carrier");
+
+    await manager.processLogLine(`VOTC:RUN_ACK/ACTION_EFFECT/${blocker.commandId}`);
+    assert(fs.readFileSync(fixture.effectPath, "utf8").includes("队列中的回信"), "ACK must advance the FIFO and dispatch the letter");
+    status = manager.getLetterStatus(letter.letterId);
+    assert.strictEqual(status.responseStatus, fixture.LetterResponseStatus.EFFECT_FILE_WRITTEN, "dispatching from the FIFO must update the letter status");
+    await acknowledgeWrittenEffect(manager, letter.letterId);
+    status = manager.getLetterStatus(letter.letterId);
+    assert.strictEqual(status.responseStatus, fixture.LetterResponseStatus.EFFECT_FILE_WRITTEN);
+    await manager.clearLettersFile();
+  } finally {
+    fixture.cleanup();
+  }
+}
+
+function testPolledRunCommandsAreIdempotent() {
+  const fixture = createFixture();
+  try {
+    const dateRearm = fixture.runFileManager.enqueueCommand({
+      owner: "letter",
+      kind: "date_producer_rearm",
+      commandId: "date_rearm_idempotent",
+      effectText: 'debug_log = "VOTC:DATE_PRODUCER/REARMED/date_rearm_idempotent"'
+    });
+    const commandText = fixture.runFileManager.composeCommandText(dateRearm);
+    assert(commandText.includes("votc_last_run_command"), "non-action commands need a repeat-poll guard");
+    assert(commandText.includes("global_var:votc_last_run_command = flag:date_rearm_idempotent"));
+    assert(commandText.includes("VOTC:RUN_ACK/DATE_PRODUCER_REARM/date_rearm_idempotent"));
+  } finally {
+    fixture.cleanup();
+  }
+}
+
+async function testCampaignBindingIsSavedForLetterSummary() {
+  const fixture = createFixture();
+  const savedSummaries = [];
+  try {
+    const manager = fixture.createManager();
+    const gameData = {
+      campaignToken: "votc8c-123456789012",
+      playerID: 1,
+      playerName: "玩家",
+      date: "976年5月3日",
+      totalDays: 500,
+      getAi: () => ({ id: 2, shortName: "李师师", fullName: "东京名伎李师师" }),
+      saveCharacterSummary: (characterId, summary) => savedSummaries.push({ characterId, summary })
+    };
+
+    assert.strictEqual(await manager.generateSummary(gameData, makeLetter("letter_campaign", 500, 0), "一切安好。"), true);
+    assert.strictEqual(savedSummaries[0].summary.campaignToken, gameData.campaignToken);
+    assert.deepStrictEqual(savedSummaries[0].summary.campaignBinding, { status: "bound", source: "native", version: 1 });
+    assert.strictEqual(fixture.memoryRecords[0].campaignToken, gameData.campaignToken);
+    assert.deepStrictEqual(fixture.memoryRecords[0].campaignBinding, { status: "bound", source: "native", version: 1 });
+  } finally {
+    fixture.cleanup();
+  }
+}
+
 async function testSummaryFailureDoesNotBlockImmediateDelivery() {
   const letter = makeLetter("letter_summary_failure", 500, 0, "请报平安");
   const ai = { id: 2, shortName: "李师师", fullName: "东京名伎李师师" };
@@ -262,13 +341,77 @@ async function testSummaryFailureDoesNotBlockImmediateDelivery() {
   }
 }
 
+async function testOrphanAcceptanceLockRecovery() {
+  for (const evidence of ["none", "carrier", "queue", "acknowledged", "written", "history", "missing_history"]) {
+    const fixture = createFixture();
+    try {
+      let manager = fixture.createManager();
+      fixture.activate();
+      const letter = makeLetter("letter_orphan", 600, 30);
+      storeLetter(manager, letter, "待恢复的回信");
+      manager.updateLetterStatus(letter.letterId, { responseStatus: fixture.LetterResponseStatus.PENDING_DELIVERY });
+      manager.transitionLetter(letter.letterId, fixture.LetterPipelineState.PENDING_DELIVERY);
+      manager.awaitingAcceptanceLetterId = letter.letterId;
+      if (evidence === "none") {
+        manager.savePendingLetters();
+        fixture.deactivate();
+        manager = fixture.createManager();
+        fixture.activate();
+      }
+      if (evidence === "carrier") fs.writeFileSync(fixture.effectPath, manager.buildOfficialLetterEffectBody("待恢复的回信", letter));
+      if (evidence === "queue") {
+        fixture.runFileManager.enqueueCommand({ kind: "letter_effect", effectText: manager.buildOfficialLetterEffectBody("待恢复的回信", letter) });
+      }
+      if (evidence === "acknowledged") {
+        const command = fixture.runFileManager.enqueueCommand({ kind: "letter_effect", effectText: manager.buildOfficialLetterEffectBody("待恢复的回信", letter) });
+        fixture.runFileManager.ackCommand(command.commandId, "LETTER_EFFECT");
+      }
+      if (evidence === "written") manager.updateLetterStatus(letter.letterId, { effectFileWrittenAt: 1 });
+      if (evidence === "history") manager.transitionLetter(letter.letterId, fixture.LetterPipelineState.EFFECT_FILE_WRITTEN);
+      if (evidence === "missing_history") manager.updateLetterStatus(letter.letterId, { pipelineHistory: [] });
+      await manager.updateCurrentDate(1000);
+      assert.strictEqual(fixture.runFileManager.getPendingCommands().filter(command => command.kind === "letter_effect").length, evidence === "none" || evidence === "queue" ? 1 : 0,
+        `orphan recovery must preserve any dispatch evidence (${evidence})`);
+      assert.strictEqual(manager.getLetterStatus(letter.letterId).responseStatus,
+        evidence === "none" ? fixture.LetterResponseStatus.EFFECT_FILE_WRITTEN : fixture.LetterResponseStatus.PENDING_DELIVERY);
+    } finally { fixture.cleanup(); }
+  }
+}
+
+async function testDuplicatePayloadPreservesDelivery() {
+  const letter = makeLetter("letter_duplicate", 700, 0);
+  const gameData = { playerID: 1, playerName: "玩家", date: "740.1.1", totalDays: 700, letterData: letter,
+    getAi: () => ({ id: 2, fullName: "李师师" }), saveCharacterSummary() {} };
+  const fixture = createFixture({ parsedContext: gameData });
+  try {
+    const manager = fixture.createManager();
+    fixture.activate();
+    storeLetter(manager, letter, "原有回信");
+    await manager.updateCurrentDate(700);
+    const originalStatus = manager.getLetterStatus(letter.letterId);
+    const originalCarrier = fs.readFileSync(fixture.effectPath, "utf8");
+    assert.strictEqual(await manager.processLatestLetter({ skipPayloadRequest: true }), "原有回信");
+    assert.strictEqual(fixture.replyCalls.length, 0, "duplicate payload must not regenerate the reply");
+    assert.deepStrictEqual(manager.getLetterStatus(letter.letterId), originalStatus, "duplicate payload must preserve dispatch evidence");
+    assert.strictEqual(fs.readFileSync(fixture.effectPath, "utf8"), originalCarrier);
+    gameData.letterData = { ...letter, totalDays: 701 };
+    assert.strictEqual(await manager.processLatestLetter({ skipPayloadRequest: true }), null, "a reused ID with different payload must not overwrite an in-flight letter");
+    assert.deepStrictEqual(manager.getLetterStatus(letter.letterId), originalStatus);
+  } finally { fixture.cleanup(); }
+}
+
 (async () => {
+  await testOrphanAcceptanceLockRecovery();
+  await testDuplicatePayloadPreservesDelivery();
   await testDelay(0);
   await testDelay(1);
   await testDelay(3);
   await testDateAndEscaping();
   await testRestartAndNoDuplicate();
   await testTwoLettersAreSerialized();
+  await testQueuedEffectIsNotReportedAsWritten();
+  testPolledRunCommandsAreIdempotent();
+  await testCampaignBindingIsSavedForLetterSummary();
   await testSummaryFailureDoesNotBlockImmediateDelivery();
   console.log("VOTC v7.10 Letter Delivery Recovery 2.0: PASS (delay 0/1/3, DATE, diagnostics, escaping, long text, restart, serialization, acceptance and summary independence)");
 })().catch((error) => {

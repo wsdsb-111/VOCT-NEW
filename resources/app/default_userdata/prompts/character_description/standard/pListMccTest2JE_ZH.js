@@ -67,6 +67,7 @@ module.exports = (gameData, currentCharacterId) => {
 
 function buildCharacterItems(char, gameData, isCurrent) {
   const items = [];
+  const isPlayer = Number(char.id) === Number(gameData.playerID);
 
   items.push(`id(${char.id})`);
   items.push(`名字：${char.firstName}`);
@@ -83,6 +84,15 @@ function buildCharacterItems(char, gameData, isCurrent) {
   if (char.capitalLocation) items.push(`首都：${char.capitalLocation}`);
   if (char.location) items.push(`当前位置：${char.location}`);
 
+  const appearanceAndBodyTraits = isPlayer ? classifyAppearanceAndBodyTraits(char.traits) : { appearance: [], body: [] };
+  const featuredAppearanceTraits = new Set([...appearanceAndBodyTraits.appearance, ...appearanceAndBodyTraits.body]);
+  if (isPlayer) {
+    const nickname = String(char.nickname || "").trim();
+    if (nickname && !/^(?:none(?: of| von| de)?|无|无绰号)$/i.test(nickname)) items.push(`绰号：${nickname}`);
+    if (appearanceAndBodyTraits.appearance.length) items.push(`外貌特质：${formatAppearanceTraits(appearanceAndBodyTraits.appearance)}`);
+    if (appearanceAndBodyTraits.body.length) items.push(`身体特质：${formatAppearanceTraits(appearanceAndBodyTraits.body)}`);
+  }
+
   const personalityTraits = (char.traits || []).filter((t) => t.category === "性格特质");
   if (personalityTraits.length) {
     items.push(
@@ -92,7 +102,7 @@ function buildCharacterItems(char, gameData, isCurrent) {
     );
   }
 
-  const otherTraits = (char.traits || []).filter((t) => t.category !== "性格特质");
+  const otherTraits = (char.traits || []).filter((t) => t.category !== "性格特质" && (!isPlayer || !featuredAppearanceTraits.has(t)));
   if (otherTraits.length) {
     items.push(
       `其他特质：${otherTraits
@@ -182,6 +192,25 @@ function buildCharacterItems(char, gameData, isCurrent) {
   if (family) items.push(family);
 
   return items.filter(Boolean);
+}
+
+function classifyAppearanceAndBodyTraits(traits = []) {
+  const appearance = [];
+  const body = [];
+  const physicalCategory = /physical|身体|体质|体格|健康|physique|gesundheit|físic/i;
+  const appearanceCategory = /appearance|外貌|容貌|美貌/i;
+  const appearanceWords = /外貌|容貌|美貌|外表|美丽|丑陋|貌美|俊美|俊俏|漂亮|毁容|疤痕|伤疤|beauty|beautiful|ugly|handsome|attractive|disfigured|scarred/i;
+  for (const trait of Array.isArray(traits) ? traits : []) {
+    const category = String(trait?.category || "");
+    const description = `${trait?.name || ""} ${trait?.desc || trait?.description || ""}`;
+    if (appearanceCategory.test(category) || physicalCategory.test(category) && appearanceWords.test(description)) appearance.push(trait);
+    else if (physicalCategory.test(category)) body.push(trait);
+  }
+  return { appearance, body };
+}
+
+function formatAppearanceTraits(traits) {
+  return traits.map((trait) => `${trait.name}${trait.desc ? `（${trait.desc}）` : ""}`).join("、");
 }
 
 

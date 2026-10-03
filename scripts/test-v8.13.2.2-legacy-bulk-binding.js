@@ -74,7 +74,8 @@ async function main() {
       directCounterpartIds: [1], querySpeakerId: 1, ownerFolderMemories: conversationFixture.getRefreshedMemories(),
       currentGameDate: "1170.6.1", campaignToken: "campaign-A", conversationId: "bulk-binding-test", sceneRevision: "scene", turnEpoch: 1,
       tokenBudget: 1600, estimateTokens: text => text.length });
-    assert.equal(recalled.extra.length > 0, true, "new binding is available through the temporal Extra route in the current conversation");
+    assert.equal(recalled.direct.concat(recalled.extra).some(entry => entry.memory.content === "待迁移内容二"), true,
+      "newly bound historical content remains available through the direct or temporal recall route");
     assert.equal(conversationFixture.prefixByResponder.get(2), conversationFixture.frozenSnapshot, "temporal recall leaves the frozen prefix unchanged");
 
     const ownerRoot = path.join(tempRoot, "owner");

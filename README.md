@@ -6,7 +6,9 @@ Voices of the Court 是一个面向《Crusader Kings III》（CK3）的沉浸式
 
 ## 主要功能
 
-V8.14 / Memory Engine 4.0 已完成 [A 阶段核心生产接线](docs/v8.14-a-durable-core-implementation-report.md)、[Finalization 可见性收口及 P0 修复](docs/v8.14-a-finalization-visibility-closeout-report.md)，并将 [B 阶段 Profile/关系变化](docs/v8.14-b-profile-implementation-report.md) 接入生产 CK3 debug.log 回读；本地 327 组发布回归通过。旧摘要、实时 RP 与正式 Memory4 Recall 路径未因 B 改动；A/B 独立与 CK3/Provider 实机 Gate 尚未验收，正式 Memory4 Recall 仍关闭。
+V8.14 **A/B 已由用户于 2026-10-03 确认收口；身份与 D/E 本地实现、独立 QA 和隔离 UI 通过**：[Year/Life 与长期记忆管理施工记录](docs/v8.14-de-year-life-management-implementation-report.md)。Prompt 明确后台姓名/头衔标签不能单独授权 NPC 已知玩家身份；Year/Life 派生、手工版本保护与分层记忆管理已接线。D 专项 17 项、独立 QA 37 项及三主题/窄窗口 27 张隔离打包 UI 截图通过；完整发布门禁 **339/339**，408 个测试文件分类、68 个历史归档。真实 CK3/Provider/Cache/Soak 仍待验收，不代表 Full Freeze。以下旧报告的 HOLD 与数量保留为当时证据。
+
+V8.14 / Memory Engine 4.0 已有 [A 核心生产接线](docs/v8.14-a-durable-core-implementation-report.md)、[Finalization 可见性收口](docs/v8.14-a-finalization-visibility-closeout-report.md)、[B Profile/关系回读](docs/v8.14-b-profile-implementation-report.md) 与 [C Recall Planner](docs/v8.14-c-recall-planner-implementation-report.md)。本轮 D/E 保持冻结前缀、缓存锚点、旧摘要格式及 Memory Engine 3.0 标签，Legacy 来源证据不足时继续保留原摘要。用户要求后续实现、测试、文档与审查统一使用 GPT-6.1 Sol；主 Agent 模型仍由客户端选择。完整进度和证据边界见最新 D/E 报告。
 
 - **CK3 角色扮演对话**：根据角色的性格、头衔、关系、财富、信仰、处境和当前场景生成回复。
 - **Historical Baseline 2.0**：从游戏日期提取年份，以 V8 结构化时期、事件和人物数据生成与 v7.10.1 字节等价的唐、五代十国、北宋、南宋和元初历史背景；Temporal Knowledge Gate 在 v8.0 仅以 shadow/pure logic 运行。
@@ -35,7 +37,7 @@ V8.14 / Memory Engine 4.0 已完成 [A 阶段核心生产接线](docs/v8.14-a-du
 
 V8.12 第一部分、第二部分前置和 Part 3 实机 Gate 已由用户确认通过。V8.13 已完成本地 317/317 发布组，但真实 CK3/Provider 缓存效果仍待验收。详见 [Part 3 施工记录](docs/v8.12-part3-memory-engine-3.0-implementation-report.md)和 [V8.13 阶段记录](docs/V8阶段开发记录.md#第一百一十五阶段v813-会话冻结前缀与动态尾部)。
 
-当前施工基线为 **V8.13.2.2：Legacy Bulk Campaign Binding**：[阶段记录与实施报告](docs/V8阶段开发记录.md#第一百一十九阶段v81322-legacy-bulk-campaign-binding)。在逐篇绑定基础上新增对话文件/单一人物目录两级预览式批量迁移；绑定会等待当前会话的 GameData 解析完成，主进程复核 Campaign 和角色，revision 过期不写入，已有归属与官方追忆保持不变。322/322 本地发布组及专项回归通过；打包 UI 人工冒烟因桌面自动化目标不可用未完成，真实 CK3/Provider 和远端 CI 待验收。以下版本段落为前置实施记录。
+前置施工基线 **V8.13.2.2：Legacy Bulk Campaign Binding**：[阶段记录与实施报告](docs/V8阶段开发记录.md#第一百一十九阶段v81322-legacy-bulk-campaign-binding)。在逐篇绑定基础上新增对话文件/单一人物目录两级预览式批量迁移；绑定会等待当前会话的 GameData 解析完成，主进程复核 Campaign 和角色，revision 过期不写入，已有归属与官方追忆保持不变。322/322 本地发布组及专项回归通过；打包 UI 人工冒烟因桌面自动化目标不可用未完成，真实 CK3/Provider 和远端 CI 待验收。以下版本段落为前置实施记录；最新施工进度见上方 V8.14-D/E 入口。
 
 当前收尾版本为 **V8.11.1**：[一致性与知情边界实施记录](docs/v8.11.1-consistency-implementation-report.md)。实时配偶/多人观察判权修正；摘要编辑同步重建所选 Owner 的内部记忆并支持失败回滚，Legacy 删除不再静默丢失映射；数字地点和当前年份查询边界完善，fullName 移到 GLM 动态状态。305/305 发布组、374 个测试文件分类及隔离 Electron 冒烟通过；真实 CK3/GLM 与长时 Gate 待人工验收。
 

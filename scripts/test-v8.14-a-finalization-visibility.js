@@ -80,12 +80,14 @@ async function run() {
       assert.deepEqual(extraction.summarySegments.map((segment) => validateSourceItem(segment, scene).audience), [[1], [1, 2]]);
       assert.equal(extraction.memories.length, 0);
     });
-    await check("repair never promotes malformed private or speaker-invalid claims", () => {
+    await check("repair replaces malformed claims with source-bounded private and public paragraphs", () => {
       const scene = { ...base, messages: [{ ...base.messages[0], content: "A心里决定背叛B。\nA公开说：“守城。”" }] };
       const privateOnly = { summarySegments: [{ ...item("A心里决定背叛B。", "private", [1]),
         provenance: { messageIds: [1], speakerIds: [2] } }], memories: [] };
-      assert.deepEqual(repairVisibilityBoundaries(scene, privateOnly).repairedMessageIds, []);
-      assert.equal(validateVisibilityBoundaries(scene, privateOnly).success, false);
+      assert.deepEqual(repairVisibilityBoundaries(scene, privateOnly).repairedMessageIds, [1]);
+      assert.equal(validateVisibilityBoundaries(scene, privateOnly).success, true);
+      assert.deepEqual(validateSourceItem(privateOnly.summarySegments[0], scene).audience, [1]);
+      assert.deepEqual(privateOnly.summarySegments[0].provenance.speakerIds, [1]);
     });
     await check("three-person whisper paragraph reaches B but not C", () => {
       const scene = { ...base, messages: [{ ...base.messages[0], content: "A只对B低声说秘密。\nA对众人说：“开始。”" }] };
@@ -112,10 +114,11 @@ async function run() {
           participants: participants.map((person) => person.id), visibility: "public", source: "spoken",
           messageIds: [message.id], speakerIds: [message.speakerCharacterId]
         })), memories: [] });
+        let summaryRequests = 0;
         const context = { campaignToken: `commit-${count}`, conversationId: `commit-${count}`,
           finalizationVisibilityV1: true, participants, messages,
           participantPresence: participants.map((person) => ({ characterId: person.id, joinedAtMessageId: 1, leftAtMessageId: null })),
-          buildPrompt: () => [], requestSummary: async () => ({ content: output }),
+          buildPrompt: () => [], requestSummary: async () => { summaryRequests++; return { content: output }; },
           requestDurable: async (prompt, options) => {
             if (count === 2 && options.ownerId === 2) assert.equal(JSON.stringify(prompt).includes("背叛"), false);
             if (count === 3 && options.ownerId === 3) assert.equal(JSON.stringify(prompt).includes("秘密"), false);
@@ -124,6 +127,7 @@ async function run() {
           persistCharacterFolders: async () => ({ success: true }) };
         const result = await engine.finalizeConversation(context);
         assert.equal(result.success, true, result.error?.message);
+        assert.equal(summaryRequests, 1, "deterministic source repair must satisfy visibility validation without a redundant model retry");
         assert.equal(result.durable.status, "COMPLETE");
         const episode = engine.isCommitted({ ...context, finalizationId: engine.getFinalizationId(context) });
         assert.equal(episode.visibilityValidationVersion, 1);
@@ -133,26 +137,36 @@ async function run() {
         if (count === 3) assert.equal(result.directedSummaries.get("3->1").content.includes("秘密"), false);
       }
     });
-    await check("failed two-person visibility snapshot retries without forced chunking", async () => {
-      const engine = new MemoryEngine({ store, trace: { record() {} } });
-      const messages = [
-        { id: 1, role: "user", speakerCharacterId: 2, content: "B提议守城。" },
-        { id: 2, role: "assistant", speakerCharacterId: 1, content: "A心里另有打算。\nA对B说：“我同意守城。”" }
-      ];
-      const context = { campaignToken: "retry-visibility", conversationId: "retry-visibility", finalizationVisibilityV1: true,
-        participants: people.slice(0, 2), participantPresence: presence.slice(0, 2), messages };
-      const prepared = engine.prepareFinalizationContext(context);
-      const file = engine.writeRecoverySnapshot(prepared, { finalizationStage: "request", finalizationStatus: "failed_retryable",
-        lastError: "final_summary_quality_failed:summary_segment_crosses_visibility_boundary" });
-      let requests = 0;
-      const result = await engine.recoverFailedFinalization(file, { buildPrompt: () => [],
-        requestSummary: async () => { requests++; return { content: JSON.stringify({ summarySegments: [
-          { content: messages[0].content, participants: [1, 2], visibility: "public", source: "spoken", messageIds: [1], speakerIds: [2] },
-          { content: "A同意守城。", participants: [1, 2], visibility: "public", source: "spoken", messageIds: [2], speakerIds: [1] }
-        ], memories: [] }) }; }, persistCharacterFolders: async () => ({ success: true }) });
-      assert.equal(result.success, true, result.error?.message);
-      assert.equal(requests, 1);
-      assert.equal(engine.isCommitted(prepared).visibilityValidationVersion, 1);
+    await check("two- and three-person visibility snapshots reuse locally repaired saved output", async () => {
+      for (const count of [2, 3]) {
+        const engine = new MemoryEngine({ store, trace: { record() {} } });
+        const participants = people.slice(0, count);
+        const messages = [
+          { id: 1, role: "user", speakerCharacterId: 2, content: "B提议守城。" },
+          { id: 2, role: "assistant", speakerCharacterId: 1, content: "A心里另有打算。\nA只对B低声说：“暗号竹叶。”\nA转向众人宣布：“我同意守城。”" }
+        ];
+        if (count === 3) messages.push({ id: 3, role: "user", speakerCharacterId: 3, content: "C也同意守城。" });
+        const context = { campaignToken: `retry-visibility-${count}`, conversationId: `retry-visibility-${count}`, finalizationVisibilityV1: true,
+          participants, participantPresence: participants.map(person => ({ characterId: person.id, joinedAtMessageId: 1, leftAtMessageId: null })), messages };
+        const prepared = engine.prepareFinalizationContext(context);
+        const failedOutput = JSON.stringify({ summarySegments: [
+          { content: messages[0].content, participants: participants.map(person => person.id), visibility: "public", source: "spoken", messageIds: [1], speakerIds: [2] },
+          { content: "A心里打定主意，并向众人表示同意守城。", participants: participants.map(person => person.id), visibility: "public", source: "spoken", messageIds: [2], speakerIds: [1] },
+          ...(count === 3 ? [{ content: messages[2].content, participants: participants.map(person => person.id), visibility: "public", source: "spoken", messageIds: [3], speakerIds: [3] }] : [])
+        ], memories: [] });
+        const file = engine.writeRecoverySnapshot(prepared, { finalizationStage: "request", finalizationStatus: "failed_retryable",
+          providerOutput: failedOutput,
+          lastError: "final_summary_quality_failed:summary_segment_crosses_visibility_boundary" });
+        let requests = 0;
+        const result = await engine.recoverFailedFinalization(file, { buildPrompt: () => [],
+          requestSummary: async () => { requests++; throw new Error("saved_provider_output_should_be_repaired_locally"); },
+          persistCharacterFolders: async () => ({ success: true }) });
+        assert.equal(result.success, true, result.error?.message);
+        assert.equal(requests, 0, "a saved failed response should be repaired and recovered without another model call");
+        assert.equal(engine.isCommitted(prepared).visibilityValidationVersion, 1);
+        assert.equal(result.directedSummaries.get(`${count}->1`).content.includes("心里另有打算"), false, "source-repaired private content must not leak to another participant");
+        if (count === 3) assert.equal(result.directedSummaries.get("3->1").content.includes("暗号竹叶"), false, "a third participant must not receive a whisper addressed to B");
+      }
     });
     await check("multi-person chunked Presence marker keeps verifiable game source", async () => {
       const engine = new MemoryEngine({ store, trace: { record() {} } });
@@ -282,9 +296,11 @@ async function run() {
       const extractor = new MemoryExtractor();
       const prompt = extractor.buildPrompt({ ...base, finalizationVisibilityV1: true });
       assert.match(prompt[1].content, /Finalization visibility gate/);
-      assert.equal(extractor.parseOutput(JSON.stringify({ summarySegments: [
+      const parsed = extractor.parseOutput(JSON.stringify({ summarySegments: [
         { content: "A说一。", participants: [1, 2], visibility: "participants", messageIds: [1], speakerIds: [1] }], memories: [] }),
-      { finalizationVisibilityV1: true }).structured, false);
+      { finalizationVisibilityV1: true });
+      assert.equal(parsed.structured, true);
+      assert.equal(validateSourceItem(parsed.summarySegments[0], base).success, false, "missing source stays invalid until source repair");
       const live = fs.readFileSync(path.join(__dirname, "../resources/app/out/main/conversation/conversation.js"), "utf8");
       assert.equal(live.includes("<votc-private>"), false);
       assert.equal(live.includes("<votc-group>"), false);

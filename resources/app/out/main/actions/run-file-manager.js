@@ -229,13 +229,13 @@ function createRunFileManager({ settingsRepository, path, fs, dataDir = null, no
       const payload = `${begin}${String(command.effectText).trim()}
 debug_log = "VOTC:RUN_ACK/${ackKind}/${command.commandId}"
 root = {trigger_event = mcc_event_v2.9003}`;
-      if (command.kind !== "action_effect") return payload;
-      if (!/^[A-Za-z0-9_-]+$/.test(command.commandId)) throw new Error("unsafe_action_command_id");
-      // CK3 polls the carrier repeatedly until Electron consumes ACK. Execute effects once.
-      return `if = { limit = { NOT = { has_global_variable = votc_last_action_command } } set_global_variable = { name = votc_last_action_command value = flag:votc_none } }
+      if (!/^[A-Za-z0-9_-]+$/.test(command.commandId)) throw new Error("unsafe_run_command_id");
+      const guardVariable = command.kind === "action_effect" ? "votc_last_action_command" : "votc_last_run_command";
+      // CK3 polls the carrier repeatedly until Electron consumes ACK. Execute each command once.
+      return `if = { limit = { NOT = { has_global_variable = ${guardVariable} } } set_global_variable = { name = ${guardVariable} value = flag:votc_none } }
 if = {
-limit = { NOT = { global_var:votc_last_action_command = flag:${command.commandId} } }
-set_global_variable = { name = votc_last_action_command value = flag:${command.commandId} }
+limit = { NOT = { global_var:${guardVariable} = flag:${command.commandId} } }
+set_global_variable = { name = ${guardVariable} value = flag:${command.commandId} }
 ${payload}
 }`;
     }

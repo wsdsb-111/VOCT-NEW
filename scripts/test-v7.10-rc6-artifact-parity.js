@@ -38,7 +38,7 @@ try {
   try {
     let a3 = manager.runEffectDiagnostic("A3");
     let text = fs.readFileSync(path.join(runDir, "votc.txt"), "utf8").replace(/^\uFEFF/, "");
-    assert(text.startsWith(`root = {\n\tdebug_log = "${a3.marker}"`), "A3 must use explicit root character scope");
+    assert(text.includes(`root = {\n\tdebug_log = "${a3.marker}"`), "A3 must use explicit root character scope inside the idempotent RunFileManager wrapper");
     for (const field of ["type = journal", "visuals = scroll", "creator = root", "modifier = artifact_monthly_minor_prestige_1_modifier", "wealth = scope:wealth", "save_scope_as = votc_test_letter"]) assert(text.includes(field), `A3 missing official parity field: ${field}`);
     assert(text.includes(a3.postMarker) && text.includes(a3.scopeMarker));
     now += 11;

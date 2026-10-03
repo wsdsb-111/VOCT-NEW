@@ -103,6 +103,7 @@ async function main() {
     provenance: { folderOwnerId: 2, counterpartId: 1, counterpartIds: [1], campaignToken: index < 6 ? "campaign-A" : index < 9 ? null : "campaign-B" }
   }));
   const diagnosticEngine = new MemoryEngine({ baseDir: path.join(tempRoot, "memory-diagnostics"), trace: { record: () => {} } });
+  diagnosticEngine.store.folderSummarySnapshotRevisions.set(diagnosticMemories, diagnosticEngine.store.getFolderSummaryRevision(2));
   const retrieval = diagnosticEngine.retrieveForResponder({ characterId: 2, query: "普通问题", directCounterpartIds: [1],
     ownerFolderMemories: diagnosticMemories, campaignToken: "campaign-A", currentGameDate: "1170.6.1", currentTotalDays: 9000,
     memoryEngine3Enabled: true, temporalSummaryRecallEnabled: false, tokenBudget: 1000, estimateTokens: text => String(text).length,

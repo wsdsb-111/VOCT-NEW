@@ -4,6 +4,13 @@ const { normalizeGameDate } = require("../worldline/character-temporal-facts");
 const { normalizeTemporalRefs } = require("./temporal-anchor-extractor");
 const { MemoryRanker } = require("./memory-ranker");
 const { memoryMatchesCampaign } = require("./memory-types");
+const FIRST_MEETING_SUMMARY_CUE = /第(?:一|1)次.{0,6}(?:见到|见过|见面|见你|遇见|遇到|相遇|认识|相识|相见|相逢)|初次(?:见到|见面|相遇|相识|相见|相逢)|初识|初遇|最初相识|头一回.{0,6}(?:见到|见过|见面|认识|相识)|(?:我们|我与你|我和你|你我|与你|与君|彼此).{0,4}初见/u;
+const FIRST_MEETING_NOT_ASSERTED = /(?:不是|并不是|并非|从未|未曾|不曾|没有).{0,8}(?:第(?:一|1)次|初次|初见|初识|初遇|最初相识)|(?:以后|将来|未来|下次|下一次|日后|将).{0,8}(?:第(?:一|1)次|初次|初见|初识|初遇|最初相识)/u;
+
+function isFirstMeetingSummary(memory) {
+  const content = memory?.content || memory?.canonicalText || "";
+  return FIRST_MEETING_SUMMARY_CUE.test(content) && !FIRST_MEETING_NOT_ASSERTED.test(content);
+}
 
 function normalizePerspectiveTemporalRefs(refs, perspectiveMemoryIds) {
   const allowed = new Set((Array.isArray(perspectiveMemoryIds) ? perspectiveMemoryIds : []).map(String).filter(Boolean));
@@ -92,6 +99,25 @@ function selectDualTemporalExtras(index, memories, temporal, { query = "", entit
   if (!temporal?.triggered || limit <= 0) return [];
   const byId = new Map((memories || []).map(memory => [memory.memoryId, memory]));
   const excluded = new Set(excludedKeys);
+  if (temporal.mode === "EARLIEST_AVAILABLE") {
+    const speakerId = Number(querySpeakerId);
+    const counterpartIds = Number.isSafeInteger(speakerId) && speakerId > 0
+      ? new Set([speakerId]) : new Set(directCounterpartIds.map(Number).filter(id => Number.isSafeInteger(id) && id > 0));
+    const firstMeeting = (index || []).filter(entry => {
+      const memory = byId.get(entry.summaryId);
+      return entry.axis === "conversation" && memory && counterpartIds.has(Number(entry.counterpartId))
+        && Number.isFinite(entry.fromTotalDays)
+        && Number.isFinite(entry.toTotalDays) && entry.fromTotalDays >= temporal.primaryWindow.fromTotalDays
+        && entry.toTotalDays <= temporal.primaryWindow.toTotalDays && isFirstMeetingSummary(memory);
+    }).sort((left, right) => left.fromTotalDays - right.fromTotalDays || left.summaryId.localeCompare(right.summaryId));
+    const earliest = firstMeeting[0];
+    if (!earliest || excluded.has(getKey(byId.get(earliest.summaryId)))) return [];
+    return [{ memory: byId.get(earliest.summaryId), score: 1000,
+      reason: { source: "temporal", axis: "conversation", precision: earliest.precision,
+        targetGameYear: null, matchedExpression: temporal.expression,
+        fromGameDate: earliest.gameDate || null, toGameDate: earliest.gameDate || null,
+        selectionBasis: "EARLIEST_AVAILABLE_MATCH" } }];
+  }
   // Date words and generic recall phrases must not outrank the requested subject.
   const topic = String(query).replace(temporal.focusReused ? "\u0000" : temporal.expression || "\u0000", "")
     .replace(/你还记得|还记得|记得|记忆|回忆|经历|往事|故事|事情|那段(?:时间|经历|往事)|我们|什么|那一年|当年|那年|那场|当时|后来|之后|随后|[的了吗呢？?]/g, "");
@@ -141,4 +167,4 @@ function selectDualTemporalExtras(index, memories, temporal, { query = "", entit
 }
 
 module.exports = { buildSummaryDateIndex, selectTemporalExtras, buildConversationTimeIndex: buildSummaryDateIndex,
-  buildEventTimeIndex, buildDualTemporalIndex, selectDualTemporalExtras, normalizePerspectiveTemporalRefs };
+  buildEventTimeIndex, buildDualTemporalIndex, selectDualTemporalExtras, normalizePerspectiveTemporalRefs, isFirstMeetingSummary };

@@ -1,6 +1,6 @@
 "use strict";
 
-const { createMemoryRecord } = require("./memory-types");
+const { createMemoryRecord, SOURCES, VISIBILITIES } = require("./memory-types");
 const { MEMORY_ENGINE_VERSION } = require("../version");
 
 class MemoryExtractor {
@@ -39,15 +39,13 @@ Return at most 10 high-value durable memories for retrieval. These are an index,
     if (firstBrace >= 0 && lastBrace > firstBrace) jsonText = jsonText.slice(firstBrace, lastBrace + 1);
     try {
       const parsed = JSON.parse(jsonText);
-      if (!parsed || !Array.isArray(parsed.memories)) throw new Error("missing_memories_array");
-      if (context.finalizationVisibilityV1 === true && ([...(parsed.summarySegments || []), ...parsed.memories]
-        .some((candidate) => typeof candidate?.source !== "string" || !candidate.source.trim()))) throw new Error("finalization_source_required");
+      if (!parsed || (!Array.isArray(parsed.memories) && !Array.isArray(parsed.summarySegments))) throw new Error("missing_summary_arrays");
       const summarySegments = (Array.isArray(parsed.summarySegments) ? parsed.summarySegments : []).filter((candidate) => candidate && typeof candidate.content === "string" && candidate.content.trim()).map((candidate) => ({
         segmentId: candidate.segmentId || null,
         content: candidate.content.trim(),
         participants: Array.isArray(candidate.participants) ? candidate.participants : [],
         visibility: candidate.visibility || "participants",
-        source: candidate.source || "spoken",
+        source: candidate.source || (context.finalizationVisibilityV1 === true ? null : "spoken"),
         knownBy: Array.isArray(candidate.knownBy) ? candidate.knownBy : [],
         provenance: {
           conversationId: context.conversationId || null,
@@ -57,7 +55,8 @@ Return at most 10 high-value durable memories for retrieval. These are an index,
           summaryRequestId: context.summaryRequestId || null
         }
       }));
-      const memories = parsed.memories.filter((candidate) => candidate && typeof candidate.content === "string" && candidate.content.trim()).map((candidate) => createMemoryRecord({
+      const memories = (Array.isArray(parsed.memories) ? parsed.memories : []).filter((candidate) => candidate && typeof candidate.content === "string" && candidate.content.trim()
+        && (context.finalizationVisibilityV1 !== true || (SOURCES.has(candidate.source) && VISIBILITIES.has(candidate.visibility)))).map((candidate) => createMemoryRecord({
         ...candidate,
         eventDate: candidate.eventDate || context.date || null,
         totalDays: candidate.totalDays ?? context.totalDays,

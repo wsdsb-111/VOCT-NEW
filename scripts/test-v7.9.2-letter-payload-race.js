@@ -5,6 +5,24 @@ const fs = require("fs");
 const { createHarness } = require("./letter-pipeline-test-helper");
 
 (async () => {
+  const logReceive = createHarness({ letterContent: "近来可好？\n盼复。" });
+  try {
+    await logReceive.manager.processLogLine("VOTC:LETTER_TRANSPORT/A/probe");
+    assert.equal(logReceive.providerCalls.length, 0, "diagnostic markers do not trigger reply generation");
+    fs.appendFileSync(logReceive.debugLogPath, "VOTC:LETTER_TRANSPORT/A/probe\nVOTC:LETTER_DIAG/A3/POST/probe\n", "utf8");
+    const first = logReceive.manager.processLogLine(logReceive.letterLine);
+    const duplicate = logReceive.manager.processLatestLetter({ skipPayloadRequest: true });
+    assert(await first, "the complete log payload receives a letter without clipboard notification");
+    assert(await duplicate);
+    assert.equal(logReceive.providerCalls.length, 2, "log and clipboard triggers share one reply and summary request");
+    assert.equal(logReceive.manager.storedLetters.size, 1);
+    assert.equal(logReceive.manager.storedLetters.get("letter_42").letter.content, "近来可好？\n盼复。", "multiline letter text remains complete");
+    assert.equal(logReceive.manager.lastPayloadDiagnostics.lastParseResult, "letter_payload_ready", "transport diagnostics must not replace the letter payload");
+    assert.equal(logReceive.manager.getAllLetterStatuses().letters[0].letterId, "letter_42");
+    assert.equal(logReceive.manager.getAllLetterStatuses().pipeline.letterId, "letter_42", "duplicate notification keeps the visible pipeline attached to the letter");
+  } finally {
+    logReceive.cleanup();
+  }
   const race = createHarness({
     includeLetter: false,
     onSleep: async ({ sleepCalls, debugLogPath, letterLine }) => {

@@ -142,8 +142,8 @@ async function testCanonicalFoldersDoNotLeakPlayerFallback() {
     const npcFolder = path.join(summariesDir, "2_甲");
     fs.mkdirSync(playerFolder, { recursive: true });
     fs.mkdirSync(npcFolder, { recursive: true });
-    fs.writeFileSync(path.join(playerFolder, "与乙的对话.json"), JSON.stringify([{ date: "1000年", totalDays: 10, content: "只有玩家知道的秘密", characterId: 3 }]), "utf8");
-    fs.writeFileSync(path.join(npcFolder, "与乙的对话.json"), JSON.stringify([{ date: "1001年", totalDays: 20, content: "甲亲自记得的往来", characterId: 3 }]), "utf8");
+    fs.writeFileSync(path.join(playerFolder, "与乙的对话.json"), JSON.stringify([{ date: "1000年", totalDays: 10, content: "只有玩家知道的秘密", playerId: 1, characterId: 3 }]), "utf8");
+    fs.writeFileSync(path.join(npcFolder, "与乙的对话.json"), JSON.stringify([{ date: "1001年", totalDays: 20, content: "甲亲自记得的往来", playerId: 2, characterId: 3 }]), "utf8");
     const npcMemories = store.queryMemories({ characterId: 2, includeFolderSummaries: true });
     assert(npcMemories.some((entry) => entry.content === "甲亲自记得的往来"));
     assert(!npcMemories.some((entry) => entry.content === "只有玩家知道的秘密"));

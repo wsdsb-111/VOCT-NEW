@@ -8,6 +8,9 @@ class MemoryTrace {
   }
 
   record(stage, details = {}) {
+    const derivedStage = ["memory4_derived", "memory4_legacy_recompression"].includes(stage);
+    if (derivedStage) details = Object.fromEntries(["ownerId", "status", "kind", "count", "indexRevision", "derivedRevision", "sourceHash", "durationMs", "errorCode"]
+      .map(key => [key, details[key]]));
     const safe = {
       timestamp: new Date().toISOString(),
       stage,
@@ -15,7 +18,7 @@ class MemoryTrace {
       finalizationStage: stage === "finalization" ? details.stage || null : null,
       providerSuccess: typeof details.providerSuccess === "boolean" ? details.providerSuccess : null,
       recoveryState: details.recoveryState || null,
-      error: details.error || details.errorCode || null,
+      error: derivedStage ? /^memory4_[a-z_]+$/.test(details.errorCode || "") ? details.errorCode : null : details.error || details.errorCode || null,
       attempt: Number.isInteger(details.attempt) ? details.attempt : null,
       durationMs: Number.isFinite(details.durationMs) ? details.durationMs : null,
       memoryId: details.memoryId || null,
@@ -59,6 +62,30 @@ class MemoryTrace {
       memory4OwnerId: stage === "memory4_durable" && Number.isSafeInteger(details.ownerId) ? details.ownerId : null,
       memory4EntryCount: stage === "memory4_durable" && Number.isInteger(details.entryCount) ? details.entryCount : null,
       memory4Completeness: stage === "memory4_durable" ? details.completeness || null : null,
+      memory4Derived: derivedStage ? {
+        ownerId: Number.isSafeInteger(details.ownerId) ? details.ownerId : null,
+        status: ["RUNNING", "COMPLETE", "MANUAL_OVERRIDE", "QUEUED", "REQUEUED", "FAILED", "CANCELLED", "EXTRACTION_FAILED"].includes(details.status) ? details.status : null,
+        kind: ["year", "life", "all"].includes(details.kind) ? details.kind : null,
+        count: Number.isSafeInteger(details.count) ? details.count : null,
+        indexRevision: Number.isSafeInteger(details.indexRevision) ? details.indexRevision : null,
+        derivedRevision: Number.isSafeInteger(details.derivedRevision) ? details.derivedRevision : null,
+        sourceHash: /^[a-f0-9]{64}$/.test(details.sourceHash || "") ? details.sourceHash : null,
+        durationMs: Number.isFinite(details.durationMs) ? details.durationMs : null
+      } : null,
+      memory4Recall: stage === "memory4_recall" ? {
+        ownerId: Number.isSafeInteger(details.ownerId) ? details.ownerId : null,
+        indexRevision: Number.isSafeInteger(details.indexRevision) ? details.indexRevision : null,
+        axis: ["EVENT", "CONVERSATION", "MIXED", "MEMORY_RECALL"].includes(details.axis) ? details.axis : null,
+        granularity: ["LIFE", "PERIOD", "YEAR", "EVENT", "EXACT_DATE", "FOLLOW_UP"].includes(details.granularity) ? details.granularity : null,
+        queryHash: /^[a-f0-9]{64}$/.test(details.queryHash || "") ? details.queryHash : null,
+        candidateCount: Number.isSafeInteger(details.candidateCount) ? details.candidateCount : null,
+        bodyReads: Number.isSafeInteger(details.bodyReads) ? details.bodyReads : null,
+        selectedIds: Array.isArray(details.selectedIds) ? details.selectedIds.map(String).slice(0, 3) : [],
+        rejected: Object.fromEntries(Object.entries(details.rejected || {}).filter(([key, value]) =>
+          ["identity", "visibility", "deleted", "revision", "future_knowledge", "temporal", "chain", "state", "seen"].includes(key) && Number.isSafeInteger(value))),
+        tokens: Number.isFinite(details.tokens) ? details.tokens : null,
+        elapsedMs: Number.isFinite(details.elapsedMs) ? details.elapsedMs : null
+      } : null,
       counterpartId: details.counterpartId ?? null,
       segmentId: details.segmentId || null,
       segmentMessageIds: Array.isArray(details.segmentMessageIds) ? [...details.segmentMessageIds] : [],

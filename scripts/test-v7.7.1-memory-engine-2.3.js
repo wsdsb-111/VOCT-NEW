@@ -94,6 +94,7 @@ function writeSummary(summaryRoot, owner, counterpart, values) {
     playerName: owner.name,
     characterId: counterpart.id,
     characterName: counterpart.name,
+    campaignToken: "v7.7.1-memory-engine-test",
     participants: [owner, counterpart],
     ...value
   }))), "utf8");
@@ -123,6 +124,7 @@ try {
     mentionedEntityNames: { [X.id]: [X.name] },
     sessionRecallCache,
     tokenBudget: 1200,
+    campaignToken: "v7.7.1-memory-engine-test",
     currentTotalDays: 40,
     estimateTokens: (text) => String(text).length
   };

@@ -27,6 +27,21 @@ try {
   const { LetterEffectTransport, LetterEffectTransportMode } = createLetterEffectTransport({ settingsRepository, fs, path, runFileManager, dataDir });
   const transport = new LetterEffectTransport();
 
+  const dateFilePath = path.join(runDir, "letters.txt");
+  const dateEffect = `debug_log = "[Localize('talk_event.9999.desc')]"`;
+  for (const content of ["", "\uFEFF", dateEffect, `\uFEFF${dateEffect}`]) {
+    fs.writeFileSync(dateFilePath, content, "utf8");
+    assert.strictEqual(transport.ensureDateProducerFile().success, true);
+    assert.strictEqual(fs.readFileSync(dateFilePath, "utf8"), `\uFEFF${dateEffect}`, "date query restoration must use UTF-8 BOM");
+  }
+  const unknownEffect = 'debug_log = "VOTC:LETTER_TRANSPORT/A/test-a"\nroot = { add_gold = 10 }';
+  fs.writeFileSync(dateFilePath, unknownEffect, "utf8");
+  assert.strictEqual(transport.ensureDateProducerFile().success, false);
+  assert.strictEqual(fs.readFileSync(dateFilePath, "utf8"), unknownEffect, "a diagnostic prefix must not authorize overwriting an appended effect");
+  active = false;
+  assert.strictEqual(transport.ensureDateProducerFile().success, false, "an unconfigured path must not install a date carrier");
+  active = true;
+
   const legacy = transport.writeDiagnosticEffect('debug_log = "VOTC:LETTER_TRANSPORT/A/test-a"', LetterEffectTransportMode.LEGACY);
   assert(legacy.success);
   assert.strictEqual(fs.readFileSync(path.join(runDir, "letters.txt"), "utf8"), 'debug_log = "VOTC:LETTER_TRANSPORT/A/test-a"', "T01 legacy diagnostic must be marker-only in letters.txt");

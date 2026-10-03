@@ -1,0 +1,37 @@
+hanfan_is_taishanghuang_trigger = {
+    OR = {
+        AND = {
+            exists = primary_title
+            has_primary_title = title:e_hanfan_taishang
+        }
+        has_trait = shanghuang
+    }
+}
+
+SanGong_XunGui_trigger = {
+    trigger_if = {
+        limit = {
+            is_alive = yes
+            exists = top_liege
+        }
+        is_independent_ruler = no
+        top_liege = {
+            SanGong_huangdi_trigger = yes
+        }
+        OR = {
+            has_trait = SanGong_Juewei_GongJue
+            has_trait = SanGong_Juewei_HouJue
+            has_trait = SanGong_Juewei_BoJue
+            has_trait = SanGong_Juewei_ZiJue
+        }
+    }
+    trigger_else = {
+        is_independent_ruler = no
+        OR = {
+            has_trait = SanGong_Juewei_GongJue
+            has_trait = SanGong_Juewei_HouJue
+            has_trait = SanGong_Juewei_BoJue
+            has_trait = SanGong_Juewei_ZiJue
+        }
+    }
+}

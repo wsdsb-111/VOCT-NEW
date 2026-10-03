@@ -2,15 +2,18 @@
 
 const fs = require("fs");
 const path = require("path");
-const { assertScope, hash, ids } = require("./memory4-contract");
+const { assertScope, hash, ids, strings, legacySourceHash, validateEntry } = require("./memory4-contract");
 const { projectVisibleTranscript } = require("./memory4-visibility");
 const { Memory4Store } = require("./memory4-store");
 const { Memory4ProfileService } = require("./memory4-profile");
 const { Memory4RelationshipReadback } = require("./memory4-relationship-readback");
+const { Memory4DerivedService } = require("./memory4-derived");
 const { validateGenerationOutcome } = require("../providers/generation-outcome");
 const { validateSourceItem, presentIds } = require("./finalization-visibility");
 
-const MAX_FRAGMENTS_PER_REQUEST = 64;
+const MAX_FRAGMENTS_PER_REQUEST = 128;
+const MAX_DURABLE_ENTRIES_PER_OWNER = 8;
+const DURABLE_MAX_OUTPUT_TOKENS = 4096;
 
 class Memory4Coordinator {
   constructor(store, { trace = null } = {}) {
@@ -21,10 +24,126 @@ class Memory4Coordinator {
     this.trace = trace;
     this.recoveryDir = store.paths.memory4Recovery;
     this.inFlight = new Set();
+    this.derived = new Memory4DerivedService(this);
+    this.store.derived = this.derived;
+    this.lazyInFlight = new Set();
+  }
+
+  configureDerived(options = {}) { this.derived.configure(options); }
+
+  legacySource(scope, memoryId) {
+    const memories = this.baseStore.loadFolderSummariesForCharacter(scope.ownerId);
+    return memories.find(memory => memory.memoryId === memoryId) || this.baseStore.getMemory(memoryId) || null;
+  }
+
+  legacyFacts(scope, memory) {
+    if (!memory || memory.deleted || memory.provenance?.campaignToken !== scope.campaignToken
+      || memory.provenance?.folderOwnerId !== scope.ownerId || !ids(memory.knownBy).includes(scope.ownerId)
+      || memory.subtype === "official_recollection" || memory.sourceType === "CK3_OFFICIAL_RECOLLECTION") return [];
+    const sourceIds = memory.provenance?.perspectiveMemoryIds || [];
+    if (!sourceIds.length) return memory.updatedBy === "user" && memory.provenance.extractionMode === "user_edited_summary" ? [memory] : [];
+    const sources = sourceIds.map(id => this.baseStore.getMemory(id));
+    const header = memory.content.match(/^【[^\n]*能够知道并记住的本场内容】\n/);
+    if (!header || sources.some(source => !source || source.deleted || source.provenance?.campaignToken !== scope.campaignToken
+      || source.provenance?.folderOwnerId !== scope.ownerId || !ids(source.knownBy).includes(scope.ownerId))
+      || memory.content !== header[0] + sources.map(source => `- ${source.content}`).join("\n")) return [];
+    return sources;
+  }
+
+  getLegacyCoverage(scope, memories = []) {
+    assertScope(scope);
+    scope = { campaignToken: scope.campaignToken, ownerId: scope.ownerId };
+    const index = this.store.loadIndex(scope);
+    const items = memories.map(memory => {
+      const facts = this.legacyFacts(scope, memory), refs = [];
+      for (const [entryId, row] of Object.entries(index.entries)) for (const ref of row.legacyRefs || []) {
+        if (facts.some(fact => fact.memoryId === ref.memoryId && legacySourceHash(fact) === ref.sourceHash)) refs.push({ entryId, ...ref });
+      }
+      const suppressed = new Set(refs.filter(ref => ref.complete).map(ref => ref.memoryId));
+      return { memoryId: memory.memoryId, sourceHash: legacySourceHash(memory), convertedEntryIds: strings(refs.map(ref => ref.entryId)),
+        suppressedFacts: suppressed.size, retainedFacts: Math.max(1, facts.length) - suppressed.size,
+        partial: refs.length > 0 && suppressed.size < facts.length, eligible: facts.some(fact => !refs.some(ref => ref.memoryId === fact.memoryId)),
+        reason: facts.length ? null : "UNPROVEN_FRAGMENT_BOUNDARY" };
+    });
+    return { items, counts: { eligible: items.filter(item => item.eligible).length, partial: items.filter(item => item.partial).length,
+      retained: items.filter(item => item.retainedFacts > 0).length } };
+  }
+
+  async recompressLegacy(scope, { memoryId, expectedSourceHash = null, providerSnapshot = null } = {}) {
+    assertScope(scope);
+    scope = { campaignToken: scope.campaignToken, ownerId: scope.ownerId };
+    const key = hash([scope, memoryId]);
+    if (this.lazyInFlight.has(key)) return { status: "IN_PROGRESS", sourceMemoryId: memoryId, entryIds: [], retained: true };
+    const source = this.legacySource(scope, memoryId);
+    let facts = this.legacyFacts(scope, source);
+    if (!source || expectedSourceHash && legacySourceHash(source) !== expectedSourceHash) return { status: "STALE", sourceMemoryId: memoryId, entryIds: [], retained: true };
+    if (!facts.length) return { status: "RETAINED_LEGACY", sourceMemoryId: memoryId, entryIds: [], retained: true, reason: "UNPROVEN_FRAGMENT_BOUNDARY" };
+    const index = this.store.loadIndex(scope);
+    const covered = new Set(Object.values(index.entries).flatMap(row => (row.legacyRefs || []).filter(ref =>
+      facts.some(fact => fact.memoryId === ref.memoryId && legacySourceHash(fact) === ref.sourceHash)).map(ref => ref.memoryId)));
+    facts = facts.filter(fact => !covered.has(fact.memoryId)).slice(0, MAX_DURABLE_ENTRIES_PER_OWNER);
+    if (!facts.length) return { status: "ALREADY_CONVERTED", sourceMemoryId: memoryId, entryIds: [], retained: true };
+    const sourceHash = legacySourceHash(source), proofs = facts.map(memory => [memory.memoryId, legacySourceHash(memory)]);
+    const current = () => (!this.derived.options.isCampaignCurrent || this.derived.options.isCampaignCurrent(scope.campaignToken))
+      && legacySourceHash(this.legacySource(scope, memoryId) || {}) === sourceHash
+      && proofs.every(([id, proof]) => {
+        const memory = this.baseStore.getMemory(id);
+        return memory && legacySourceHash(memory) === proof;
+      });
+    const fragments = facts.map(memory => ({ fragmentId: `legacy_${hash([memory.memoryId, legacySourceHash(memory)])}`,
+      messageId: null, sourceMessageIds: [], text: memory.content,
+      speakerId: ids(memory.provenance?.speakerIds).length === 1 ? ids(memory.provenance.speakerIds)[0] : scope.ownerId,
+      presentIds: [scope.ownerId], knownBy: [scope.ownerId], visibility: "private", sourceType: "reported", recipientIds: [],
+      entityIds: ids(memory.subjects), visibilityEvidence: "legacy_independent_owner_fact", legacyMemoryId: memory.memoryId,
+      legacySourceHash: legacySourceHash(memory), legacyAnchorGameDate: memory.eventDate || source.eventDate || null }));
+    const snapshot = { ...scope, conversationId: `legacy_${hash([memoryId, scope, proofs])}`, finalizationId: `legacy_${hash([scope, memoryId, sourceHash, proofs])}`,
+      episodeId: null, date: source.eventDate || null, totalDays: source.totalDays ?? null, sourceRevision: hash([sourceHash, proofs]),
+      fragments, presentMessageCount: 0, completeness: "partial", counterpartIds: [], summaryIds: [memoryId], legacyRetained: true, skipKnownEvidence: true };
+    const prior = this.store.loadIndex(scope).finalizations[hash(snapshot.finalizationId)];
+    if (prior) return { status: "ALREADY_CONVERTED", sourceMemoryId: memoryId, entryIds: [...prior.entryIds], retained: true };
+    if (typeof this.derived.options.requestExtraction !== "function") return { status: "EXTRACTION_FAILED", sourceMemoryId: memoryId, entryIds: [], retained: true, reason: "memory4_provider_unavailable" };
+    this.lazyInFlight.add(key);
+    const controller = new AbortController();
+    try {
+      if (!current()) return { status: "CANCELLED", sourceMemoryId: memoryId, entryIds: [], retained: true };
+      providerSnapshot ||= this.derived.options.getProviderSnapshot ? await this.derived.options.getProviderSnapshot() : null;
+      const response = await this.derived.options.requestExtraction(this.buildPrompt(snapshot, fragments), {
+        signal: controller.signal, maxTokens: DURABLE_MAX_OUTPUT_TOKENS, providerSnapshot, requestType: "memory4_durable" });
+      if (!current()) return { status: "STALE", sourceMemoryId: memoryId, entryIds: [], retained: true };
+      const result = this.parseResult(response, fragments, snapshot);
+      if (!result.entries.length) return { status: "RETAINED_LEGACY", sourceMemoryId: memoryId, entryIds: [], retained: true, reason: "NO_DURABLE_CONTENT" };
+      const committed = this.store.commitOwner(snapshot, result);
+      this.derived.schedule(scope, { providerSnapshot });
+      this.trace?.record("memory4_legacy_recompression", { ownerId: scope.ownerId, status: "COMPLETE", count: committed.entryIds.length });
+      return { status: "COMPLETE", sourceMemoryId: memoryId, entryIds: [...committed.entryIds], retained: true };
+    } catch (error) {
+      this.trace?.record("memory4_legacy_recompression", { ownerId: scope.ownerId, status: "EXTRACTION_FAILED", errorCode: error.message });
+      return { status: "EXTRACTION_FAILED", sourceMemoryId: memoryId, entryIds: [], retained: true, reason: error.message };
+    } finally { this.lazyInFlight.delete(key); }
+  }
+
+  queueLegacyRecompression(scope, { sourceRefs = [], providerSnapshot = null } = {}) {
+    assertScope(scope);
+    scope = { campaignToken: scope.campaignToken, ownerId: scope.ownerId };
+    const ids = strings(sourceRefs.filter(ref => ref.kind === "legacy").map(ref => ref.parentId || ref.id));
+    for (const memoryId of ids) setImmediate(() => this.recompressLegacy(scope, { memoryId, providerSnapshot }).catch(() => {}));
+    return { queued: ids.length };
   }
 
   getKnownEntityProfile(scope, entityId, options = {}) {
     return this.profiles.getProfile(scope, entityId, options);
+  }
+
+  createProfileReadContext(scope) {
+    assertScope(scope);
+    scope = { campaignToken: scope.campaignToken, ownerId: scope.ownerId };
+    const directory = this.store.directory(scope);
+    const context = { scope, index: this.store.loadIndex(scope),
+      metadata: this.store.read(path.join(directory, "metadata.json"), null) || {},
+      known: this.store.read(path.join(directory, "known-entities.json"), null) || { ...scope, entities: {} },
+      snapshots: new Map(), rawYears: new Map() };
+    context.derived = this.derived.list(scope, { readContext: context });
+    return context;
   }
 
   observeCK3Readback(gameData, stamp) {
@@ -116,19 +235,20 @@ class Memory4Coordinator {
       Number(right.entityIds?.some(id => priority.has(id))) - Number(left.entityIds?.some(id => priority.has(id))));
   }
 
-  buildPrompt(snapshot, fragments) {
+  buildPrompt(snapshot, fragments, remainingEntrySlots = MAX_DURABLE_ENTRIES_PER_OWNER) {
     const ordered = this.orderFragments(snapshot, fragments);
     return [
-      { role: "system", content: "VOTC Memory Engine 4.0 Durable extraction. Return JSON only: {\"status\":\"STORE|NO_DURABLE_CONTENT\",\"entries\":[{\"memoryType\":\"RELATIONSHIP_CHANGE|COMMITMENT|DURABLE_KNOWLEDGE|MAJOR_EXPERIENCE|LONG_TERM_GOAL|EMOTIONAL_ANCHOR\",\"text\":\"...\",\"fragmentIds\":[\"...\"],\"entityIds\":[],\"participantIds\":[],\"topics\":[],\"eventTime\":{\"from\":null,\"to\":null,\"precision\":\"unknown\",\"status\":\"unknown\"}}]}. Only durable facts; ordinary conversation may have zero entries. Use only supplied fragments and their exact IDs. Do not infer who heard other parts of an old message. Self-only legacy text is the author's statement, not proof of other people's private thoughts or CK3 facts. A reported event stays reported. Uncertain event dates remain unknown. Do not change Campaign or Owner. Never claim an entry without a supporting fragment. Maximum eight entries for this owner." },
+      { role: "system", content: `VOTC Memory Engine 4.0 Durable extraction. Return JSON only: {\"status\":\"STORE|NO_DURABLE_CONTENT\",\"entries\":[{\"memoryType\":\"RELATIONSHIP_CHANGE|COMMITMENT|DURABLE_KNOWLEDGE|MAJOR_EXPERIENCE|LONG_TERM_GOAL|EMOTIONAL_ANCHOR\",\"text\":\"...\",\"fragmentIds\":[\"...\"],\"entityIds\":[],\"participantIds\":[],\"topics\":[],\"eventTime\":{\"from\":null,\"to\":null,\"precision\":\"unknown\",\"status\":\"unknown\"}}]}. Only durable facts; ordinary conversation may have zero entries. Use only supplied fragments and their exact IDs. Entity IDs must be copied from the supplied fragment evidence; do not invent or infer IDs. Do not infer who heard other parts of an old message. Self-only legacy text is the author's statement, not proof of other people's private thoughts or CK3 facts. A reported event stays reported. Relative dates in Legacy fragments use their sourceAsOf, never the current runtime date or a different projection date. Uncertain event dates remain unknown. Do not change Campaign or Owner. Never claim an entry without a supporting fragment. Return no more than ${remainingEntrySlots} entries for this owner in this request.` },
       { role: "user", content: JSON.stringify({ ownerId: snapshot.ownerId, campaignToken: snapshot.campaignToken,
         conversationDate: snapshot.date, completeness: snapshot.completeness,
         fragments: ordered.map(fragment => ({ fragmentId: fragment.fragmentId, text: fragment.text,
           visibilityEvidence: fragment.visibilityEvidence, speakerId: fragment.speakerId, sourceType: fragment.sourceType,
-          entityIds: fragment.entityIds, presentIds: fragment.presentIds })) }) }
+          entityIds: fragment.entityIds, presentIds: fragment.presentIds,
+          ...(fragment.legacyMemoryId ? { sourceAsOf: fragment.legacyAnchorGameDate } : {}) })) }) }
     ];
   }
 
-  parseResult(response, allowedFragments) {
+  parseResult(response, allowedFragments, snapshot = null, maxEntries = MAX_DURABLE_ENTRIES_PER_OWNER) {
     const outcome = typeof response === "string" ? { content: response, complete: true, truncated: false }
       : validateGenerationOutcome(response);
     if (outcome.truncated || !outcome.complete) throw new Error("memory4_generation_incomplete");
@@ -136,12 +256,24 @@ class Memory4Coordinator {
     let parsed;
     try { parsed = JSON.parse(content); }
     catch { throw new Error("memory4_response_invalid_json"); }
+    const entryLimit = Math.max(0, Number.isInteger(maxEntries) ? maxEntries : MAX_DURABLE_ENTRIES_PER_OWNER);
     if (!parsed || !["STORE", "NO_DURABLE_CONTENT"].includes(parsed.status) || !Array.isArray(parsed.entries)
-      || parsed.entries.length > 8 || (parsed.status === "STORE") !== (parsed.entries.length > 0)) throw new Error("memory4_response_invalid_shape");
+      || parsed.entries.length > entryLimit || (parsed.status === "STORE") !== (parsed.entries.length > 0)) throw new Error("memory4_response_invalid_shape");
     const allowed = new Set(allowedFragments.map(fragment => fragment.fragmentId));
     if (parsed.entries.some(entry => !Array.isArray(entry.fragmentIds) || !entry.fragmentIds.length
       || entry.fragmentIds.some(id => !allowed.has(id)))) throw new Error("memory4_response_source_mismatch");
-    return parsed;
+    const entries = [];
+    let rejectedUnknownEntityCount = 0;
+    for (const candidate of parsed.entries) {
+      try {
+        if (snapshot) validateEntry(candidate, snapshot);
+        entries.push(candidate);
+      } catch (error) {
+        if (error.message !== "memory4_unknown_entity") throw error;
+        rejectedUnknownEntityCount++;
+      }
+    }
+    return { ...parsed, status: entries.length ? "STORE" : "NO_DURABLE_CONTENT", entries, rejectedUnknownEntityCount };
   }
 
   async finishOwner(snapshot, requestDurable, prior = null, isCurrent = () => true) {
@@ -164,21 +296,45 @@ class Memory4Coordinator {
       else {
         if (typeof requestDurable !== "function") throw new Error("memory4_provider_unavailable");
         const entries = [];
+        let rejectedUnknownEntityCount = 0;
         const orderedFragments = this.orderFragments(snapshot, snapshot.fragments);
+        const extractChunk = async (chunk, remainingEntrySlots) => {
+          if (!chunk.length || remainingEntrySlots <= 0) return { entries: [], rejectedUnknownEntityCount: 0 };
+          try {
+            const response = await requestDurable(this.buildPrompt(snapshot, chunk, remainingEntrySlots), { ownerId: snapshot.ownerId,
+              campaignToken: snapshot.campaignToken, maxTokens: DURABLE_MAX_OUTPUT_TOKENS, providerSnapshot: snapshot.summaryProviderSnapshot });
+            if (!isCurrent()) throw new Error("memory4_generation_changed");
+            const parsed = this.parseResult(response, chunk, snapshot, remainingEntrySlots);
+            return parsed;
+          } catch (error) {
+            if (!isCurrent()) throw new Error("memory4_generation_changed");
+            if (error.message !== "memory4_generation_incomplete") throw error;
+            if (chunk.length > 1) {
+              const midpoint = Math.ceil(chunk.length / 2);
+              const first = await extractChunk(chunk.slice(0, midpoint), remainingEntrySlots);
+              const second = await extractChunk(chunk.slice(midpoint), remainingEntrySlots - first.entries.length);
+              return { entries: [...first.entries, ...second.entries],
+                rejectedUnknownEntityCount: first.rejectedUnknownEntityCount + second.rejectedUnknownEntityCount };
+            }
+            throw error;
+          }
+        };
         for (let offset = 0; offset < orderedFragments.length; offset += MAX_FRAGMENTS_PER_REQUEST) {
           const chunk = orderedFragments.slice(offset, offset + MAX_FRAGMENTS_PER_REQUEST);
-          const response = await requestDurable(this.buildPrompt(snapshot, chunk), { ownerId: snapshot.ownerId,
-            campaignToken: snapshot.campaignToken, maxTokens: 1024, providerSnapshot: snapshot.summaryProviderSnapshot });
-          if (!isCurrent()) throw new Error("memory4_generation_changed");
-          const parsed = this.parseResult(response, chunk);
+          const parsed = await extractChunk(chunk, MAX_DURABLE_ENTRIES_PER_OWNER - entries.length);
           entries.push(...parsed.entries);
-          if (entries.length > 8) throw new Error("memory4_owner_entry_limit_exceeded");
+          rejectedUnknownEntityCount += parsed.rejectedUnknownEntityCount;
           this.saveRecovery(snapshot, { status: "PENDING", retryCount: prior?.retryCount || 0, lastError: null, completedFragmentCount: offset + chunk.length });
+          if (entries.length >= MAX_DURABLE_ENTRIES_PER_OWNER) break;
         }
+        if (rejectedUnknownEntityCount) this.trace?.record("memory4_candidate_rejected", {
+          ownerId: snapshot.ownerId, count: rejectedUnknownEntityCount, reason: "unknown_entity"
+        });
         result = { status: entries.length ? "STORE" : "NO_DURABLE_CONTENT", entries };
       }
       if (!isCurrent()) throw new Error("memory4_generation_changed");
       const persisted = this.store.commitOwner(snapshot, result);
+      if (persisted.entryIds.length) this.derived.schedule(snapshot, { providerSnapshot: snapshot.summaryProviderSnapshot, committedFinalization: true });
       if (fs.existsSync(file)) fs.unlinkSync(file);
       this.trace?.record("memory4_durable", { finalizationId: snapshot.finalizationId, ownerId: snapshot.ownerId,
         status: persisted.status, entryCount: persisted.entryIds.length, completeness: persisted.completeness });

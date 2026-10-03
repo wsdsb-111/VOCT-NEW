@@ -74,7 +74,7 @@ try {
     const a3 = manager.runEffectDiagnostic("A3");
     assert(a3.success && a3.creatorScopeName === "root");
     let text = fs.readFileSync(path.join(runDir, "votc.txt"), "utf8").replace(/^\uFEFF/, "");
-    assert(text.startsWith(`root = {\n\tdebug_log = "${a3.marker}"\n\tcreate_artifact = {`));
+    assert(text.includes(`root = {\n\tdebug_log = "${a3.marker}"\n\tcreate_artifact = {`), "A3 artifact probe keeps its explicit root scope inside the repeat-poll guard");
     assert(text.includes("creator = root"));
     assert(text.includes("modifier = artifact_monthly_minor_prestige_1_modifier"));
     assert(text.includes("wealth = scope:wealth"));
@@ -87,7 +87,7 @@ try {
       const result = manager.runEffectDiagnostic(stage, letter.letterId);
       assert(result.success, `${stage} must unlock in order`);
       text = fs.readFileSync(path.join(runDir, "votc.txt"), "utf8").replace(/^\uFEFF/, "");
-      assert(text.startsWith(`debug_log = "${result.marker}"`));
+      assert(text.includes(`debug_log = "${result.marker}"`), `${stage} execution marker must remain in the guarded RunFileManager payload`);
       if (stage === "B") assert(text.includes("creator = global_var:message_second_scope_letter_23"));
       if (stage === "C") assert(text.includes("set_global_variable = {"));
       if (stage === "D") assert(text.includes("trigger_event = message_event.362"));

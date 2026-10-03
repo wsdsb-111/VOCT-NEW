@@ -70,6 +70,7 @@ try {
     playerName: "官员乙",
     characterId: emperor.id,
     characterName: "赵佶",
+    campaignToken: "v7.3-identity-test",
     participants: [
       { id: 10, name: "官员乙", fullName: "户部尚书，官员乙", primaryTitle: "户部尚书" },
       { id: emperor.id, name: "赵佶", firstName: "赵佶", fullName: emperor.fullName, primaryTitle: emperor.primaryTitle, titleRankConcept: emperor.titleRankConcept }
@@ -84,6 +85,7 @@ try {
     playerName: "官员乙",
     characterId: 8,
     characterName: "旧帝",
+    campaignToken: "v7.3-identity-test",
     participants: [{ id: 8, name: "旧帝", fullName: "先帝，旧帝", primaryTitle: "皇帝", titleRankConcept: "concept_emperor" }],
     finalizationId: "fin-old-emperor",
     content: "旧帝曾经召见官员乙。"
@@ -102,6 +104,7 @@ try {
     mentionedEntityNames: { [emperor.id]: engine.getCharacterMentionAliases(historicalProfiles.get(emperor.id)) },
     ownerFolderMemories: ownerMemories,
     query: "陛下答应过赈灾",
+    campaignToken: "v7.3-identity-test",
     tokenBudget: 800,
     estimateTokens: (text) => String(text).length
   });

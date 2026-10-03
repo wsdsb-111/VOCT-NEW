@@ -67,8 +67,11 @@ async function run() {
       const engine = new MemoryEngine({ store, trace: { record() {} } });
       const messages = [{ id: 1, role: "user", speakerCharacterId: 1, content: "A心里决定保密。\nA公开提出守城。" },
         { id: 2, role: "assistant", speakerCharacterId: 2, content: "B同意守城。" }];
-      const output = JSON.stringify({ summarySegments: [{ content: "A心里保密，然后双方守城。", participants: [1, 2],
-        visibility: "public", source: "spoken", messageIds: [1, 2], speakerIds: [1, 2] }], memories: [] });
+      const output = JSON.stringify({ summarySegments: [
+        { content: "A心里决定保密。", participants: [1], visibility: "private", source: "spoken", messageIds: [1], speakerIds: [1] },
+        { content: "A公开提出守城。", participants: [1, 2], visibility: "public", source: "spoken", messageIds: [1], speakerIds: [1] },
+        { content: "B同意守城。", participants: [1, 2], visibility: "public", source: "spoken", messageIds: [2], speakerIds: [2] }
+      ], memories: [] });
       for (const suffix of ["one", "two"]) {
         const context = engine.prepareFinalizationContext({ conversationId: `p0-${suffix}`, campaignToken: "p0", date: "1164.1.1",
           finalizationVisibilityV1: true, participants: people.slice(0, 2), messages,
@@ -123,6 +126,57 @@ async function run() {
       assert.equal(results.filter(result => result.status === "NO_DURABLE_CONTENT").length, 3);
       assert.equal(calls, 3);
       assert.equal(peak, 2);
+    });
+    await check("truncated Durable batches split and reject only unsupported entity links", async () => {
+      const coordinator = new Memory4Coordinator(store);
+      const participants = people.slice(0, 2);
+      const messages = Array.from({ length: 4 }, (_, index) => {
+        const content = `A公开陈述第${index + 1}项安排。`;
+        return { id: index + 1, role: "user", speakerCharacterId: 1, content,
+          memory4Fragments: [{ start: 0, end: content.length, visibility: "participants", sourceType: "spoken",
+            recipientIds: [2], entityIds: [1] }] };
+      });
+      const context = { campaignToken: "durable-retry-split-p0", conversationId: "durable-retry-split-p0",
+        finalizationId: "durable-retry-split-p0", participants, date: "1164.1.1", messages,
+        participantPresence: participants.map(person => ({ characterId: person.id, joinedAtMessageId: 0, leftAtMessageId: null })) };
+      const snapshot = coordinator.buildOwnerSnapshot(context, 1);
+      let calls = 0;
+      const result = await coordinator.finishOwner(snapshot, async (prompt) => {
+        calls++;
+        const payload = JSON.parse(prompt[1].content);
+        if (payload.fragments.length > 2) return { content: "{}", finish_reason: "length" };
+        const fragment = payload.fragments[0];
+        const entry = { memoryType: "DURABLE_KNOWLEDGE", text: `安排 ${fragment.fragmentId}`,
+          fragmentIds: [fragment.fragmentId], entityIds: [fragment.speakerId], participantIds: [fragment.speakerId],
+          topics: [], eventTime: { from: null, to: null, precision: "unknown", status: "unknown" } };
+        const unsupportedEntityEntry = { ...entry, text: `未验证实体 ${fragment.fragmentId}`, entityIds: [999] };
+        return { content: JSON.stringify({ status: "STORE", entries: [entry, unsupportedEntityEntry] }), finish_reason: "stop" };
+      });
+      assert.equal(result.status, "STORE");
+      assert.equal(result.entryIds.length, 2);
+      assert.equal(calls, 3, "one incomplete batch should be retried as two smaller evidence batches");
+      assert.equal(fs.readdirSync(coordinator.recoveryDir).length, 0, "successful partial extraction must clear its recovery record");
+    });
+    await check("Durable batches allow 128 fragments with a fixed 4096-token output ceiling", async () => {
+      const coordinator = new Memory4Coordinator(store);
+      const participants = people.slice(0, 2);
+      const messages = Array.from({ length: 129 }, (_, index) => {
+        const content = `公开安排${index + 1}。`;
+        return { id: index + 1, role: "user", speakerCharacterId: 1, content,
+          memory4Fragments: [{ start: 0, end: content.length, visibility: "participants", sourceType: "spoken",
+            recipientIds: [2], entityIds: [1] }] };
+      });
+      const context = { campaignToken: "durable-cap-p0", conversationId: "durable-cap-p0", finalizationId: "durable-cap-p0",
+        participants, date: "1164.1.1", messages,
+        participantPresence: participants.map(person => ({ characterId: person.id, joinedAtMessageId: 0, leftAtMessageId: null })) };
+      const snapshot = coordinator.buildOwnerSnapshot(context, 1);
+      const requests = [];
+      const result = await coordinator.finishOwner(snapshot, async (prompt, options) => {
+        requests.push({ fragmentCount: JSON.parse(prompt[1].content).fragments.length, maxTokens: options.maxTokens });
+        return { content: JSON.stringify({ status: "NO_DURABLE_CONTENT", entries: [] }), finish_reason: "stop" };
+      });
+      assert.equal(result.status, "NO_DURABLE_CONTENT");
+      assert.deepEqual(requests, [{ fragmentCount: 128, maxTokens: 4096 }, { fragmentCount: 1, maxTokens: 4096 }]);
     });
     console.log(`V8.14-A P0 memory closeout: ${passed} PASS`);
   } finally { fs.rmSync(root, { recursive: true, force: true }); }

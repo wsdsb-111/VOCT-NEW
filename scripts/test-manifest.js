@@ -77,6 +77,7 @@ const archivedChecks = [
 ];
 
 const releaseChecks = [
+  { group: "v8.14-e-memory-ui", script: "test-v8.14-e-memory-ui.js" },
   { group: "v8.8.4-incident-regression", script: "test-v8.8.4-incident-regression.js" },
   { group: "v8.8.5-review-kinship", script: "test-v8.8.5-review-kinship.js" },
   { group: "v8.8.5-zhipu-provider", script: "test-v8.8.5-zhipu-provider.js" },
@@ -151,6 +152,15 @@ const releaseChecks = [
   { group: "v8.14-a-finalization-visibility", script: "test-v8.14-a-finalization-visibility.js" },
   { group: "v8.14-a-p0-memory-closeout", script: "test-v8.14-a-p0-memory-closeout.js" },
   { group: "v8.14-b-profile", script: "test-v8.14-b-profile.js" },
+  { group: "v8.14-c-recall-planner", script: "test-v8.14-c-recall-planner.js" },
+  { group: "v8.14-d-derived-lifecycle", script: "test-v8.14-d-derived-lifecycle.js" },
+  { group: "v8.14-player-identity-knowledge", script: "test-v8.14-player-identity-knowledge.js" },
+  { group: "v8.14-de-independent-qa", script: "test-v8.14-de-independent-qa.js" },
+  { group: "v8.14-hotfix-finalization", script: "test-v8.14-hotfix-finalization.js" },
+  { group: "v8.14-summary-manual-regeneration", script: "test-v8.14-summary-manual-regeneration.js" },
+  { group: "v8.14-hotfix-name-authority", script: "test-v8.14-hotfix-name-authority.js" },
+  { group: "v8.14-hotfix-recall", script: "test-v8.14-hotfix-recall.js" },
+  { group: "v8.14-inc05-outbound-cache-diagnostics", script: "test-v8.14-inc05-outbound-cache-diagnostics.js" },
   { group: "v8.14-relationship-action-recall", script: "test-v8.14-relationship-action-recall.js" },
   { group: "v8.14-tributary-action", script: "test-v8.14-tributary-action.js" },
   { group: "v8.12.1-temporal-anchors", script: "test-v8.12.1-temporal-anchors.js" },

@@ -52,6 +52,9 @@ async function main() {
   await manager.sendSummaryRequest([{ role: "user", content: "short" }], undefined, { requestType: "final_summary", maxTokens: 768, providerSnapshot: summaryCapabilities });
   assert.equal(submitted.config.instanceId, "summary");
   assert.equal(submitted.request.max_tokens, 768);
+  await manager.sendSummaryRequest([{ role: "user", content: "rewrite source" }], undefined, { requestType: "summary_rewrite", maxTokens: 768, providerSnapshot: summaryCapabilities });
+  assert.equal(submitted.request.max_tokens, 768, "plain-text summary rewrites must honor the requested output budget");
+  assert.equal(submitted.request.response_format, undefined, "plain-text summary rewrites must not be forced into structured extraction JSON");
   configs.summary = { ...configs.summary, defaultModel: "different" };
   await assert.rejects(manager.sendSummaryRequest([{ role: "user", content: "short" }], undefined, { requestType: "final_summary", providerSnapshot: summaryCapabilities }), /summary_provider_snapshot_unavailable/);
 

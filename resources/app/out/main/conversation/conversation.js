@@ -554,6 +554,16 @@ class Conversation {
     for (let attempt = 0; attempt < 8; attempt++) {
       const history = this.getPromptHistoryForCharacter(npc.id);
       const summary = this.getPromptSummaryForCharacter(npc.id);
+      if (memoryContext.memory4Packet) {
+        const baseContext = { ...memoryContext, temporalExtraText: null };
+        const baseMessages = typeof PromptBuilder.buildMessagesWithTokenCount === "function"
+          ? PromptBuilder.buildMessagesWithTokenCount(history, npc, this.gameData, summary, baseContext).messages
+          : PromptBuilder.buildMessages(history, npc, this.gameData, summary, baseContext);
+        const baseBudget = planRequestBudget({ messages: baseMessages, capabilities, requestedOutputTokens, countTokens: items => this.estimateTokenCount(items) });
+        const safeRemaining = Math.max(0, Math.floor((baseBudget.effectiveInputBudget - baseBudget.estimatedInputTokens - 16) / 1.1));
+        memoryContext = memoryEngine.fitMemory4Context(memoryContext, npc.id, this.memoryState.responderRecallCache,
+          safeRemaining, text => TokenCounter.estimateTokens(text));
+      }
       const messages = typeof PromptBuilder.buildMessagesWithTokenCount === "function"
         ? PromptBuilder.buildMessagesWithTokenCount(history, npc, this.gameData, summary, memoryContext).messages
         : PromptBuilder.buildMessages(history, npc, this.gameData, summary, memoryContext);
@@ -672,6 +682,11 @@ class Conversation {
     }));
     const currentTurnMentionedEntityNames = Object.fromEntries(currentTurnMentionedCharacterIds.map((characterId) => [characterId, mentionedEntityNames[characterId] || []]));
     const memory3Settings = worldlineService?.getSettings?.() || {};
+    const queryEntityIds = memoryEngine.mentionTracker.findMentionedCharacterIds([{ role: "user", content: query }], {
+      candidates: [...mentionableProfiles.values()], excludedIds: [npc.id],
+      recentCharacterId: memoryState.mentionState.recentThirdPersonCharacterId
+    });
+    const queryIdentityUnresolved = memoryEngine.mentionTracker.lastScanUnresolved === true;
     const retrieved = memoryEngine.retrieveForResponder({
       characterId: npc.id,
       query,
@@ -689,6 +704,10 @@ class Conversation {
       conversationId: this.id,
       sceneRevision: JSON.stringify([this.gameData.scene || null, this.gameData.location || null, this.gameData.locationController || null]),
       memoryEngine3Enabled: memory3Settings.v812MemoryEngine3Enabled !== false,
+      memory4RecallEnabled: true,
+      gameData: this.gameData,
+      queryEntityIds,
+      identityUnresolved: queryIdentityUnresolved,
       temporalSummaryRecallEnabled: memory3Settings.v812TemporalSummaryRecallEnabled !== false,
       officialSummary: this.gameData.getOfficialRecollectionSummary?.(npc.id, this.id) || null,
       turnEpoch: this.turnEpoch,
@@ -897,7 +916,10 @@ class Conversation {
     const retainedIds = new Set(history.map(message => message.id));
     const cache = this.memoryState?.responderRecallCache?.get(Number(characterId));
     for (const [messageId, recall] of recalls) {
-      if (retainedIds.has(messageId)) continue;
+      const sourceValid = !recall.memory4Scope || recall.memory4Scope.campaignToken === this.gameData.campaignToken
+        && recall.memory4Scope.ownerId === Number(characterId)
+        && memoryEngine.memory4Recall.validateHistory(recall.memory4Scope, recall.sourceRefs, { currentGameDate: this.gameData.date });
+      if (retainedIds.has(messageId) && sourceValid) continue;
       for (const key of recall.keys) cache?.seenDynamicSummaries?.delete(key);
       if (cache) delete cache.dynamicTurn;
       recalls.delete(messageId);
@@ -906,15 +928,27 @@ class Conversation {
       ? [{ role: "system", content: recalls.get(message.id).text }, message] : [message]);
   }
   retainDynamicSummaryRecall(characterId, messageId, promptBuild, turnEpoch) {
-    const text = promptBuild.blocks?.find(entry => entry.block?.id === "memory-temporal-extra")?.content;
+    const block = promptBuild.blocks?.find(entry => entry.block?.id === "memory-temporal-extra");
+    const text = block?.content;
     const cache = this.memoryState?.responderRecallCache?.get(Number(characterId));
-    if (cache?.dynamicTurn === turnEpoch) memoryEngine.commitTemporalFocus(characterId, this.memoryState.responderRecallCache, turnEpoch);
     if (!text || cache?.dynamicTurn !== turnEpoch) return;
+    const injectedEntries = (cache.dynamicExtra || []).filter(entry => !cache.memory4Packet || text.includes(entry.memory.memoryId));
+    const committed = memoryEngine.commitDynamicSummaryRecall(characterId, this.memoryState.responderRecallCache, turnEpoch, {
+      providerSucceeded: true, injectedBlockIds: ["memory-temporal-extra"],
+      injectedMemoryIds: injectedEntries.map(entry => entry.memory.memoryId),
+      injectedTokens: Number(block.tokens) || TokenCounter?.estimateTokens?.(text) || Math.ceil(text.length / 2)
+    });
+    if (!committed.committedCount) return;
     if (!this.dynamicRecallHistory) this.dynamicRecallHistory = new Map();
     if (!this.dynamicRecallHistory.has(Number(characterId))) this.dynamicRecallHistory.set(Number(characterId), new Map());
     this.dynamicRecallHistory.get(Number(characterId)).set(messageId, { text,
-      keys: (cache.dynamicExtra || []).map(entry => memoryEngine.getRouteMemoryKey(entry.memory)) });
-    memoryEngine.commitDynamicSummaryRecall(characterId, this.memoryState.responderRecallCache, turnEpoch);
+      keys: injectedEntries.map(entry => memoryEngine.getRouteMemoryKey(entry.memory)),
+      memory4Scope: cache.memory4Packet ? { campaignToken: this.gameData.campaignToken, ownerId: Number(characterId) } : null,
+      sourceRefs: cache.memory4Packet?.sourceRefs || [] });
+    const legacySources = (cache.memory4Packet?.sourceRefs || []).filter(ref => ref.kind === "legacy"
+      && injectedEntries.some(entry => entry.memory.memoryId === ref.id));
+    if (legacySources.length) memoryEngine.memory4?.queueLegacyRecompression({ campaignToken: this.gameData.campaignToken,
+      ownerId: Number(characterId) }, { sourceRefs: legacySources });
   }
   getPromptSummaryForCharacter(characterId) {
     const state = memoryEngine?.ensureConversationState(this).rollingState;

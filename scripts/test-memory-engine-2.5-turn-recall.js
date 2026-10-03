@@ -8,6 +8,7 @@ const path = require("path");
 const root = path.resolve(__dirname, "..");
 const { MemoryEngine, turnRecall } = require(path.join(root, "resources", "app", "out", "main", "memory-system"));
 const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "votc-memory-25-recall-"));
+const campaignToken = "turn-recall-test-campaign";
 const makeMemory = (id, content, subjects, participants, totalDays, tags = []) => ({
   memoryId: id,
   type: "folder_summary",
@@ -21,7 +22,8 @@ const makeMemory = (id, content, subjects, participants, totalDays, tags = []) =
   confidence: 1,
   totalDays,
   eventDate: "1010年3月2日",
-  provenance: { folderOwnerId: 2, finalizationId: id }
+  provenance: { folderOwnerId: 2, finalizationId: id, campaignToken,
+    campaignBinding: { status: "bound", source: "test_fixture", version: 1 } }
 });
 
 try {
@@ -33,6 +35,7 @@ try {
     makeMemory("luoyang", "李师师与玩家曾在洛阳共同平息一场旧日纠纷。", [1, 2], [1, 2], 988, ["洛阳", "旧事", "纠纷"]),
     makeMemory("noise", "李师师昨日更换了琴弦。", [2], [2], 999, ["琴弦"])
   ];
+  engine.store.folderSummarySnapshotRevisions.set(memories, engine.store.getFolderSummaryRevision(2));
   const cache = new Map();
   const input = {
     characterId: 2,
@@ -42,6 +45,7 @@ try {
     entityNames: ["玩家"],
     participantIds: [1],
     ownerFolderMemories: memories,
+    campaignToken,
     currentTotalDays: 1000,
     tokenBudget: 256,
     estimateTokens: (text) => Math.ceil(String(text).length / 2),

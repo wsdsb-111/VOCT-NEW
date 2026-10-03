@@ -170,11 +170,35 @@ function createLetterManager({ settingsRepository, fs, path, TailFile, readline,
     /**
      * Process a single log line looking for VOTC:DATE
      */
+    markLetterEffectCommandWritten(command) {
+      if (command?.kind !== "letter_effect" || !["awaiting_ack", "acknowledged"].includes(command.status)) return false;
+      const status = Array.from(this.letterStatuses.values()).find((entry) => entry.runCommandId === command.commandId);
+      if (!status || status.responseStatus !== LetterResponseStatus.PENDING_DELIVERY) return false;
+      const effectFileWrittenAt = Number(command.lastWrittenAt || command.writtenAt || command.acknowledgedAt) || Date.now();
+      this.awaitingAcceptanceLetterId = status.letterId;
+      this.updateLetterStatus(status.letterId, {
+        responseStatus: LetterResponseStatus.EFFECT_FILE_WRITTEN,
+        responseError: null,
+        effectFileWrittenAt,
+        runCommandStatus: command.status
+      });
+      this.transitionLetter(status.letterId, LetterPipelineState.EFFECT_FILE_WRITTEN, { effectTransportMode: status.effectTransportMode });
+      this.savePendingLetters();
+      return true;
+    }
     processLogLine(line) {
       this.lastLogLineReceivedAt = Date.now();
+      if (line.includes("VOTC:LETTER/;/")) {
+        return this.processLatestLetter({ skipPayloadRequest: true }).catch((error) => {
+          console.error("Failed to receive letter log payload:", error);
+          return null;
+        });
+      }
       const runAckMatch = line.match(/VOTC:RUN_ACK\/([A-Za-z0-9_-]+)\/([A-Za-z0-9_-]+)/);
       if (runAckMatch && runFileManager?.ackCommand) {
         const acknowledged = runFileManager.ackCommand(runAckMatch[2], runAckMatch[1]);
+        this.markLetterEffectCommandWritten(acknowledged);
+        this.markLetterEffectCommandWritten(runFileManager.getPendingCommands?.()[0]);
         if (acknowledged?.kind === "conversation_close") this.ensureDateProducerRunning("conversation_close_ack");
       }
       const producerMatch = line.match(/VOTC:DATE_PRODUCER\/(REARMED|BLOCKED)\/([A-Za-z0-9_-]+)/);
@@ -428,6 +452,13 @@ function createLetterManager({ settingsRepository, fs, path, TailFile, readline,
         this.dateProducerRecovery = { status: "UNAVAILABLE", reason, requestedAt: Date.now(), error: "RunFileManager unavailable" };
         return this.getDateTrackerStatus();
       }
+      const dateFile = this.activeEffectDiagnostic?.transportMode === LetterEffectTransportMode.LEGACY
+        ? { success: false, error: "letters.txt is owned by an active diagnostic." }
+        : letterEffectTransport.ensureDateProducerFile();
+      if (!dateFile.success) {
+        this.dateProducerRecovery = { status: "BLOCKED", reason, requestedAt: Date.now(), error: dateFile.error };
+        return this.getDateTrackerStatus();
+      }
       const existing = runFileManager.findPendingCommand?.((command) => command.kind === "date_producer_rearm");
       if (existing) {
         this.dateProducerRecovery = { ...(this.dateProducerRecovery || {}), status: "REQUESTED", reason, recoveryId: existing.commandId, requestedAt: this.dateProducerRecovery?.requestedAt || existing.queuedAt };
@@ -519,7 +550,35 @@ else = {
     /**
      * Check stored letters and deliver any that are ready
      */
+    recoverUndispatchedAcceptanceLock() {
+      const letterId = this.awaitingAcceptanceLetterId;
+      const status = letterId ? this.getLetterStatus(letterId) : null;
+      if (!status || status.responseStatus !== LetterResponseStatus.PENDING_DELIVERY || this.deliveryInProgress.has(letterId)) return;
+      if (status.runCommandId || status.effectFileWrittenAt != null || status.effectTransportMode || status.effectFilePath) return;
+      const history = status.pipelineHistory || [];
+      if (!history.some(entry => entry.state === LetterPipelineState.PENDING_DELIVERY) || history.some(entry => [LetterPipelineState.DELIVERY_DUE, LetterPipelineState.EFFECT_FILE_WRITTEN, LetterPipelineState.DELIVERED].includes(entry.state))) return;
+      if (!runFileManager?.isRecoveryCompleted?.() || runFileManager.stateLoadError || !runFileManager.getRecentCommands) return;
+      const marker = `votc_${letterId}`;
+      const commands = [...runFileManager.getPendingCommands(), ...runFileManager.getRecentCommands()];
+      if (commands.some(command => command.kind === "letter_effect" && String(command.effectText || "").includes(marker))) return;
+      const ck3Folder = settingsRepository.getCK3UserFolderPath();
+      if (!ck3Folder) return;
+      try {
+        for (const carrier of ["votc.txt", "letters.txt"]) {
+          const carrierPath = path.join(ck3Folder, "run", carrier);
+          if (fs$1.existsSync(carrierPath) && fs$1.readFileSync(carrierPath, "utf8").includes(marker)) return;
+        }
+      } catch (error) {
+        console.warn("LetterManager: Cannot verify orphan acceptance lock:", error);
+        return;
+      }
+      this.awaitingAcceptanceLetterId = null;
+      this.updateLetterStatus(letterId, { acceptanceLockRecoveredAt: Date.now() });
+      this.savePendingLetters();
+      console.log(`LetterManager: Released undispatched acceptance lock for ${letterId}`);
+    }
     async checkAndDeliverLetters() {
+      this.recoverUndispatchedAcceptanceLock();
       if (this.awaitingAcceptanceLetterId) return;
       for (const [letterId, storedLetter] of this.storedLetters.entries()) {
         if (!Number.isFinite(storedLetter.expectedDeliveryDay)) continue;
@@ -549,7 +608,17 @@ else = {
     /**
      * Process a new letter: generate response immediately but store it for delayed delivery
      */
-    async processLatestLetter({ triggerContext = null, skipPayloadRequest = false, payloadErrorRecordId = null } = {}) {
+    async processLatestLetter(options = {}) {
+      if (this.letterProcessing) return this.letterProcessing.then(
+        () => this.processLatestLetter(options), () => this.processLatestLetter(options));
+      this.letterProcessing = this.processLetterPayload(options);
+      try {
+        return await this.letterProcessing;
+      } finally {
+        this.letterProcessing = null;
+      }
+    }
+    async processLetterPayload({ triggerContext = null, skipPayloadRequest = false, payloadErrorRecordId = null } = {}) {
       const triggerId = triggerContext?.triggerId || `letter-trigger:${Date.now()}:${++this.pipelineSequence}`;
       this.latestPipelineStatus = { triggerId, letterId: null, state: null, history: [], startedAt: triggerContext?.startedAt || Date.now(), payloadReread: skipPayloadRequest };
       this.transitionPipeline(LetterPipelineState.TRIGGER_RECEIVED);
@@ -596,6 +665,17 @@ else = {
         return null;
       }
       const { gameData, letter } = context;
+      const pendingLetter = this.storedLetters.get(letter.letterId);
+      if (pendingLetter || this.awaitingAcceptanceLetterId === letter.letterId) {
+        const samePayload = pendingLetter && pendingLetter.letter.totalDays === letter.totalDays && pendingLetter.letter.delay === letter.delay && pendingLetter.letter.content === letter.content;
+        console.warn(`LetterManager: Ignored ${samePayload ? "duplicate" : "conflicting"} payload for pending ${letter.letterId}`);
+        if (samePayload) {
+          this.attachPipelineToLetter(letter.letterId);
+          this.latestPipelineStatus.state = this.getLetterStatus(letter.letterId)?.pipelineState || LetterPipelineState.PENDING_DELIVERY;
+        }
+        return samePayload ? pendingLetter.reply : null;
+      }
+      if (this.getLetterStatus(letter.letterId)?.responseStatus === LetterResponseStatus.GENERATING && this.failedLetterContexts.has(letter.letterId)) return null;
       const deliveryTiming = await this.resolveDeliveryTiming(letter);
       const characterName = gameData.getAi()?.fullName || "Unknown";
       this.createLetterStatus(letter, characterName, deliveryTiming);
@@ -967,6 +1047,10 @@ else = {
         summaryStatus: LetterSummaryStatus.GENERATING
       });
       this.transitionPipeline(LetterPipelineState.SUMMARY_REQUESTED);
+      const campaignToken = typeof gameData.campaignToken === "string" && gameData.campaignToken.trim() ? gameData.campaignToken.trim() : null;
+      const campaignBinding = campaignToken
+        ? { status: "bound", source: "native", version: 1 }
+        : { status: "unresolved", reason: "CAMPAIGN_TOKEN_UNAVAILABLE", version: 1 };
       const summarySettings = settingsRepository.getSummaryPromptSettings();
       const summaryPrompt = [
         {
@@ -1002,7 +1086,9 @@ else = {
         gameData.saveCharacterSummary(ai.id, {
           date: gameData.date,
           totalDays: gameData.totalDays,
-          content: summary.trim()
+          content: summary.trim(),
+          campaignToken,
+          campaignBinding
         });
         memoryEngine.recordLetterMemory({
           senderId: gameData.playerID,
@@ -1010,7 +1096,9 @@ else = {
           content: summary.trim(),
           date: gameData.date,
           totalDays: gameData.totalDays,
-          letterId: letter.letterId
+          letterId: letter.letterId,
+          campaignToken,
+          campaignBinding
         });
         this.updateLetterStatus(letter.letterId, {
           summaryStatus: LetterSummaryStatus.SAVED
@@ -1044,18 +1132,18 @@ else = {
       const outboundMode = letterEffectTransport.getOutboundMode();
       const writeResult = letterEffectTransport.writeOutboundLetterEffect(gameCommand, outboundMode);
       if (writeResult.success) {
-        const effectWrittenAt = Date.now();
         this.awaitingAcceptanceLetterId = letter.letterId;
         this.updateLetterStatus(letter.letterId, {
-          responseStatus: LetterResponseStatus.EFFECT_FILE_WRITTEN,
+          responseStatus: writeResult.commandStatus && writeResult.commandStatus !== "awaiting_ack" ? LetterResponseStatus.PENDING_DELIVERY : LetterResponseStatus.EFFECT_FILE_WRITTEN,
           responseError: null,
-          effectFileWrittenAt: effectWrittenAt,
+          effectFileWrittenAt: writeResult.commandStatus && writeResult.commandStatus !== "awaiting_ack" ? null : Date.now(),
           effectTransportMode: outboundMode,
           effectFilePath: writeResult.effectFilePath,
           runCommandId: writeResult.commandId || null,
           runCommandStatus: writeResult.commandStatus || null
         });
-        this.transitionLetter(letter.letterId, LetterPipelineState.EFFECT_FILE_WRITTEN, { effectTransportMode: outboundMode });
+        const isQueued = writeResult.commandStatus && writeResult.commandStatus !== "awaiting_ack";
+        this.transitionLetter(letter.letterId, isQueued ? LetterPipelineState.DELIVERY_DUE : LetterPipelineState.EFFECT_FILE_WRITTEN, { effectTransportMode: outboundMode, runCommandStatus: writeResult.commandStatus || null });
         this.savePendingLetters();
         return true;
       }

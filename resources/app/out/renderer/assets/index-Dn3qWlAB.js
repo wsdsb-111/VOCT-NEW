@@ -1,4 +1,5 @@
 import { WorldMemoryEditor } from "../world-memory-editor.js";
+import { Memory4Manager } from "../memory4-manager.js";
 function getDefaultExportFromCjs(x) {
   return x && x.__esModule && Object.prototype.hasOwnProperty.call(x, "default") ? x["default"] : x;
 }
@@ -21122,7 +21123,9 @@ const SummariesManager = () => {
   const [summaries2, setSummaries] = reactExports.useState([]);
   const [memoryOverview, setMemoryOverview] = reactExports.useState({ engineVersion: "3.0", totals: {}, boundaries: [], routingPolicy: {}, characters: [] });
   const [recoveryStatus, setRecoveryStatus] = reactExports.useState({ pending: 0, running: false });
+  const [incidentDiagnostics, setIncidentDiagnostics] = reactExports.useState({ recall: [], recovery: [], providerCache: [] });
   const [isRetryingSummaries, setIsRetryingSummaries] = reactExports.useState(false);
+  const [regeneratingSummaryKey, setRegeneratingSummaryKey] = reactExports.useState(null);
   const [retryResult, setRetryResult] = reactExports.useState(null);
   const [isLoadingSummaries, setIsLoadingSummaries] = reactExports.useState(false);
   const [bindingLegacySummaryId, setBindingLegacySummaryId] = reactExports.useState(null);
@@ -21142,6 +21145,7 @@ const SummariesManager = () => {
       setSummaries(dashboardData.summaries || []);
       setMemoryOverview(dashboardData.memoryOverview || { engineVersion: "3.0", totals: {}, boundaries: [], routingPolicy: {}, characters: [] });
       setRecoveryStatus(dashboardData.recoveryStatus || { pending: 0, running: false });
+      setIncidentDiagnostics(dashboardData.incidentDiagnostics || { recall: [], recovery: [], providerCache: [] });
     } catch (error) {
       console.error("Failed to load summaries:", error);
     } finally {
@@ -21192,6 +21196,8 @@ const SummariesManager = () => {
     });
   };
   const handleEditSummary = (metadata, index, content) => {
+    const summary = metadata.summaries[index];
+    if (summary?.sourceType === "CK3_OFFICIAL_RECOLLECTION" || summary?.type === "official_recollection" || summary?.subtype === "official_recollection") return;
     setEditingEntry({
       playerId: metadata.playerId,
       characterId: metadata.characterId,
@@ -21221,6 +21227,42 @@ const SummariesManager = () => {
     } catch (error) {
       console.error("Failed to update summary:", error);
       alert(t("summariesManager.failedUpdateSummary", { error: "Unknown error" }));
+    }
+  };
+  const handleRegenerateSummary = async (metadata, index, summary) => {
+    if (summary.sourceType === "CK3_OFFICIAL_RECOLLECTION" || summary.type === "official_recollection" || summary.subtype === "official_recollection") return;
+    const ownerId = Number(metadata.ownerId ?? metadata.playerId);
+    const counterpartId = Number(metadata.counterpartId ?? metadata.characterId);
+    const key = `${ownerId}:${counterpartId}:${index}`;
+    if (!window.confirm(`将把“${metadata.ownerName || metadata.playerName} ↔ ${metadata.counterpartName || metadata.characterName}”的 ${summary.date || "无日期"} 摘要正文发送给当前摘要模型整理，可能产生 API 费用。成功后只替换这一篇并同步此人物的记忆投影；其他人物摘要和 Durable 记忆不会重生成。失败时原文保持不变。继续？`)) return;
+    setRegeneratingSummaryKey(key);
+    setRetryResult(null);
+    try {
+      const result = await window.conversationAPI.regenerateSummary(ownerId, counterpartId, index, summary.content);
+      if (!result?.success) {
+        const messages = {
+          summary_regeneration_in_progress: "已有一篇摘要正在整理，请完成后再试。",
+          summary_regeneration_stale: "这篇摘要在等待期间已发生变化，未覆盖内容；请刷新后重试。",
+          summary_regeneration_no_change: "模型返回内容与原文相同，未覆盖原摘要。",
+          summary_regeneration_output_truncated: "模型输出被截断，原摘要未更改；可调高摘要 Token 上限后重试。",
+          summary_regeneration_output_incomplete: "模型没有完整结束生成，原摘要未更改；请检查服务商状态后重试。",
+          summary_regeneration_output_invalid: "模型没有返回可用正文，原摘要未更改。",
+          summary_model_unavailable: "摘要模型不可用，请先检查摘要模型配置。",
+          summary_request_budget_exceeded: "这篇摘要过长，超过当前模型上下文预算；原摘要未更改。",
+          SUMMARY_FINALIZATION_IN_PROGRESS: "该摘要正在终局写入，稍后再整理。",
+          SUMMARY_FINALIZATION_RECOVERY_PENDING: "该摘要仍有待恢复任务，完成恢复后再整理。",
+          LEGACY_SUMMARY_MEMORY_MAPPING_INCOMPLETE: "无法安全对应这篇旧摘要的记忆投影，原文未更改。",
+          official_recollection_is_not_regenerable: "官方追忆由 CK3 管理，不能从此处重新生成。"
+        };
+        setRetryResult(`摘要整理失败：${messages[result?.error] || result?.error || "未知错误"}`);
+        return;
+      }
+      setRetryResult("摘要已由模型重新整理，并同步更新了当前人物的记忆投影。");
+      await loadSummaries(true);
+    } catch (error) {
+      setRetryResult(`摘要整理失败，原文未更改：${error instanceof Error ? error.message : "请检查摘要模型配置及日志。"}`);
+    } finally {
+      setRegeneratingSummaryKey(null);
     }
   };
   const handleDeleteSummary = async (playerId, characterId, index) => {
@@ -21381,6 +21423,12 @@ const SummariesManager = () => {
     retryResult && /* @__PURE__ */ jsxRuntimeExports.jsx("p", { role: "status", className: "help-text", children: retryResult }),
     (recoveryStatus.pending > 0 || recoveryStatus.running) && /* @__PURE__ */ jsxRuntimeExports.jsx("p", { role: "status", className: "help-text", children: `待恢复：Narrative ${recoveryStatus.narrativePending || 0} 场，Durable ${recoveryStatus.durablePending || 0} 位角色。${recoveryStatus.running ? "后台正在生成，完成后请刷新。" : recoveryStatus.balanceBlocked ? "服务商报告余额不足；充值或更换摘要模型后重试。" : "可点击“重试失败记忆任务”；已提交的结果不会重生成。"}` }),
     recoveryStatus.durableInvalid > 0 && /* @__PURE__ */ jsxRuntimeExports.jsx("p", { role: "alert", className: "help-text", children: `另有 ${recoveryStatus.durableInvalid} 个 Durable 恢复快照无法读取，已隔离；请保留文件并检查诊断日志。` }),
+    ...[["记忆召回诊断（最近实际请求）", "recall"], ["摘要恢复诊断", "recovery"], ["Provider 缓存诊断", "providerCache"]].map(([label, key]) =>
+      /* @__PURE__ */ jsxRuntimeExports.jsxs("details", { className: "worldline-advanced-details", children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsx("summary", { children: label }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx("pre", { style: { whiteSpace: "pre-wrap", overflowWrap: "anywhere", maxHeight: "400px", overflow: "auto" },
+          children: incidentDiagnostics[key]?.length ? JSON.stringify(incidentDiagnostics[key], null, 2) : "暂无记录；完成一次对话请求后刷新。" })
+      ] }, key)),
     /* @__PURE__ */ jsxRuntimeExports.jsxs("section", { className: "memory-engine-overview", children: [
       /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "memory-engine-title", children: [
         /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
@@ -21469,7 +21517,8 @@ const SummariesManager = () => {
             ]
           }
         ),
-        isPlayerExpanded && /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "player-characters", children: playerSummaries.map((metadata) => {
+        isPlayerExpanded && /* @__PURE__ */ jsxRuntimeExports.jsx(Memory4Manager, { react: reactExports, ownerId: Number(playerId), refreshKey: summaries2, searchActive: !!normalizedSearchQuery,
+          legacyContent: /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "player-characters", children: playerSummaries.filter(metadata => !metadata.memory4Only).map((metadata) => {
           const characterKey = `${metadata.playerId}-${metadata.characterId}`;
           const isExpanded = expandedCharacters.has(characterKey);
           const conversationLabel = metadata.conversationFile?.replace(/\.json$/i, "") || `与${metadata.characterName}的对话`;
@@ -21511,7 +21560,7 @@ const SummariesManager = () => {
                       })
                       : null;
                   })(),
-                  /* @__PURE__ */ jsxRuntimeExports.jsx(
+                  !metadata.summaries.some(summary => summary?.sourceType === "CK3_OFFICIAL_RECOLLECTION" || summary?.type === "official_recollection" || summary?.subtype === "official_recollection") && /* @__PURE__ */ jsxRuntimeExports.jsx(
                     "button",
                     {
                       className: "delete-all-button",
@@ -21540,14 +21589,24 @@ const SummariesManager = () => {
                       children: bindingLegacySummaryId === summary.legacyBindingId ? "绑定中…" : "绑定当前战役"
                     }
                   ),
-                  /* @__PURE__ */ jsxRuntimeExports.jsx(
+                  summary.sourceType !== "CK3_OFFICIAL_RECOLLECTION" && summary.type !== "official_recollection" && summary.subtype !== "official_recollection" && /* @__PURE__ */ jsxRuntimeExports.jsx("button", {
+                    type: "button",
+                    title: "通过当前摘要模型重新整理本篇摘要",
+                    disabled: !!regeneratingSummaryKey || isClearing,
+                    onClick: (e) => {
+                      e.stopPropagation();
+                      handleRegenerateSummary(metadata, index, summary);
+                    },
+                    children: regeneratingSummaryKey === `${Number(metadata.ownerId ?? metadata.playerId)}:${Number(metadata.counterpartId ?? metadata.characterId)}:${index}` ? "模型整理中…" : "模型整理"
+                  }),
+                  summary.sourceType !== "CK3_OFFICIAL_RECOLLECTION" && summary.type !== "official_recollection" && summary.subtype !== "official_recollection" && /* @__PURE__ */ jsxRuntimeExports.jsx(
                     "button",
                     {
                       onClick: () => handleEditSummary(metadata, index, summary.content),
                       children: t("common.edit")
                     }
                   ),
-                  /* @__PURE__ */ jsxRuntimeExports.jsx(
+                  summary.sourceType !== "CK3_OFFICIAL_RECOLLECTION" && summary.type !== "official_recollection" && summary.subtype !== "official_recollection" && /* @__PURE__ */ jsxRuntimeExports.jsx(
                     "button",
                     {
                       onClick: () => handleDeleteSummary(
@@ -21567,7 +21626,7 @@ const SummariesManager = () => {
               ] })
             ] }, index)) })
           ] }, characterKey);
-        }) })
+        }) }) })
       ] }, playerKey);
     }) }),
     editingEntry && /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "modal-overlay", children: /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "modal-content summary-edit-modal", children: [

@@ -86,6 +86,7 @@ async function main() {
     fs.writeFileSync(path.join(folder, "与玩家的对话.json"), JSON.stringify([{ playerId: 2, playerName: "NPC", characterId: 1,
       characterName: "玩家", content: "1145年战争", date: "1150.6.12", campaignToken: "campaign-A",
       perspectiveMemoryIds: ["memory-valid"], temporalRefs: [{ ...baseRef, sourceMemoryIds: ["memory-ghost", "memory-valid"] }] }]));
+    engine.store.invalidateFolderSummaryCache([2]);
     const loaded = engine.store.loadFolderSummariesForCharacter(2);
     assert.equal(loaded.length, 1);
     assert.deepEqual(loaded[0].provenance.temporalRefs[0].sourceMemoryIds, ["memory-valid"]);

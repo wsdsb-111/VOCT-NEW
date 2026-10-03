@@ -1,6 +1,7 @@
 "use strict";
 
 function createLetterEffectTransport({ settingsRepository, fs, path, runFileManager = null, dataDir = null }) {
+  const dateProducerEffect = `debug_log = "[Localize('talk_event.9999.desc')]"`;
   const modes = Object.freeze({
     LEGACY: "legacy_letters_file",
     VOTC: "votc_run_file"
@@ -93,6 +94,31 @@ function createLetterEffectTransport({ settingsRepository, fs, path, runFileMana
       this.saveState();
       return this.getState();
     }
+    ensureDateProducerFile() {
+      const ck3Folder = settingsRepository.getCK3UserFolderPath();
+      if (!ck3Folder) return { success: false, error: "CK3 user folder not configured." };
+      const effectFilePath = path.join(ck3Folder, "run", "letters.txt");
+      const temporaryPath = `${effectFilePath}.tmp`;
+      try {
+        const currentText = fs.existsSync(effectFilePath) ? fs.readFileSync(effectFilePath, "utf8") : "";
+        const effectText = currentText.replace(/^\uFEFF/, "").trim();
+        // Only reclaim the date query or an abandoned marker-only A1 probe.
+        if (effectText && effectText !== dateProducerEffect && !/^debug_log\s*=\s*"VOTC:LETTER_TRANSPORT\/A\/[A-Za-z0-9_-]+"$/.test(effectText)) {
+          return { success: false, effectFilePath, error: "letters.txt contains an unknown effect; preserved without re-arm." };
+        }
+        if (effectText === dateProducerEffect && currentText.startsWith("\uFEFF")) return { success: true, effectFilePath };
+        fs.mkdirSync(path.dirname(effectFilePath), { recursive: true });
+        fs.writeFileSync(temporaryPath, `\uFEFF${dateProducerEffect}`, "utf8");
+        fs.renameSync(temporaryPath, effectFilePath);
+        return { success: true, effectFilePath };
+      } catch (error) {
+        return { success: false, effectFilePath, error: error instanceof Error ? error.message : String(error) };
+      } finally {
+        if (fs.existsSync(temporaryPath)) {
+          try { fs.unlinkSync(temporaryPath); } catch (error) { console.warn("LetterEffectTransport: Failed to remove temporary date carrier:", error); }
+        }
+      }
+    }
     clearOutboundEffect(mode = this.state.outboundMode) {
       if (mode === modes.VOTC) {
         return { success: true, mode, effectFilePath: runFileManager?.path || null, cleanupOwner: "run_command_ack_queue" };
@@ -102,7 +128,7 @@ function createLetterEffectTransport({ settingsRepository, fs, path, runFileMana
       const effectFilePath = path.join(ck3Folder, "run", "letters.txt");
       try {
         fs.mkdirSync(path.dirname(effectFilePath), { recursive: true });
-        fs.writeFileSync(effectFilePath, `debug_log = "[Localize('talk_event.9999.desc')]"`, "utf8");
+        fs.writeFileSync(effectFilePath, dateProducerEffect, "utf8");
         return { success: true, mode, effectFilePath };
       } catch (error) {
         return { success: false, mode, effectFilePath, error: error instanceof Error ? error.message : String(error) };

@@ -1,0 +1,5 @@
+l_simp_chinese:
+  SanGong_Restore_Ruler_Stage_decision:0 "恢复统治阶段特质"
+  SanGong_Restore_Ruler_Stage_decision_desc:0 "此君尚无统治阶段特质，或尚无记录一朝治绩的本纪。可依据天命局势、威望与领土规模补定；若已有统治阶段特质，则只补建本纪、不重复评定。"
+  SanGong_Restore_Ruler_Stage_decision_tooltip:0 "缺少统治阶段特质或本纪时可用；已有特质时仅补建本纪，否则沿用天家宗仪既有标准评定。"
+  SanGong_Restore_Ruler_Stage_decision_confirm:0 "补定治绩"

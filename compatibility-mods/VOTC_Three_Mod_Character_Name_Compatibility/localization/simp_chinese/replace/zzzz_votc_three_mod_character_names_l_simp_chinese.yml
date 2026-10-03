@@ -1,0 +1,10 @@
+﻿l_simp_chinese:
+ CHARACTER_VIEW_NAME: "[Character.Custom('SanGong_view_name')]"
+ CHARACTER_VIEW_NAME_SHORT: "[Character.Custom('SanGong_view_name')] "
+ CHARACTER_VIEW_NAME_TT: "[Character.Custom('SanGong_view_name_tt')]"
+ CHARACTER_VIEW_NAME_HISTORY: "[Character.Custom('SanGong_title_history')]"
+ CHARACTER_TT_NAME: "$CHARACTER_VIEW_NAME$，"
+ CHARACTER_TT_NAME_AGE: "$CHARACTER_VIEW_NAME$，#V  [Character.GetAge]岁#!"
+ OUTLINER_PINNED_CHARACTER: "$CHARACTER_VIEW_NAME$#medium ，[Character.GetAge]岁#!"
+ SanGong_view_name_fallback: "[SelectLocalization(HasMiaohaoShihao(Character.MakeScope), 'Loc_china_MiaohaoShihao', Character.Custom('OE_GetUINameNotMeNoTooltip'))]"
+ hanfan_view_name_fallback: "[SelectLocalization(HasMiaohaoShihao(Character.MakeScope), 'Loc_china_MiaohaoShihao', Character.Custom('OE_GetUINameNotMeNoTooltip'))]"

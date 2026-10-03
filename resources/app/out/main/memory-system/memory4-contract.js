@@ -8,6 +8,8 @@ const MEMORY_TYPES = new Set(["RELATIONSHIP_CHANGE", "COMMITMENT", "DURABLE_KNOW
 const hash = value => crypto.createHash("sha256").update(JSON.stringify(value)).digest("hex");
 const ids = values => [...new Set((Array.isArray(values) ? values : []).filter(value => Number.isSafeInteger(value) && value > 0))].sort((a, b) => a - b);
 const strings = values => [...new Set((Array.isArray(values) ? values : []).filter(value => typeof value === "string" && value.trim()))].sort();
+const legacySourceHash = memory => hash([memory.memoryId, memory.version, memory.content, memory.knownBy,
+  memory.provenance?.campaignToken, memory.provenance?.folderOwnerId, memory.deleted === true]);
 
 function assertScope(scope) {
   if (typeof scope?.campaignToken !== "string" || !scope.campaignToken.trim() || !Number.isSafeInteger(scope.ownerId) || scope.ownerId <= 0) {
@@ -46,7 +48,9 @@ function validateEntry(candidate, snapshot) {
   const observed = fragments.every(fragment => fragment.sourceType === "witnessed" || fragment.sourceType === "game_fact");
   if (status === "observed" && !observed) throw new Error("memory4_unverified_observation");
   const temporalRefs = fragments.flatMap(fragment => extractTemporalAnchors(fragment.text,
-    { anchorGameDate: snapshot.date, messageId: fragment.messageId }));
+    { anchorGameDate: fragment.legacyMemoryId ? fragment.legacyAnchorGameDate || snapshot.date : snapshot.date, messageId: fragment.messageId,
+      legacySource: fragment.legacyMemoryId && fragment.legacySourceHash ? { memoryId: fragment.legacyMemoryId,
+        fragmentId: fragment.fragmentId, sourceHash: fragment.legacySourceHash } : null }));
   if (from && !(observed && from === gameDate(snapshot.date) && to === from)
     && !temporalRefs.some(ref => ref.fromGameDate === from && ref.toGameDate === to && ref.precision === precision)) throw new Error("memory4_unsupported_event_date");
   if (!["day", "month", "year", "range", "unknown"].includes(precision) || from && precision === "unknown" || !from && precision !== "unknown") throw new Error("memory4_invalid_precision");
@@ -58,7 +62,11 @@ function validateEntry(candidate, snapshot) {
     summaryIds: strings(snapshot.summaryIds), episodeIds: strings([snapshot.episodeId]),
     messageIds: [...new Set(fragments.flatMap(fragment => fragment.sourceMessageIds || [fragment.messageId])
       .filter(id => Number.isSafeInteger(id) && id >= 0))].sort((a, b) => a - b),
-    segmentIds: fragmentIds, legacyMemoryIds: strings(fragments.map(fragment => fragment.legacyMemoryId))
+    segmentIds: fragmentIds, legacyMemoryIds: strings(fragments.map(fragment => fragment.legacyMemoryId)),
+    legacyRefs: fragments.filter(fragment => fragment.legacySourceHash).map(fragment => ({
+      memoryId: fragment.legacyMemoryId, sourceHash: fragment.legacySourceHash,
+      eventKey: fragment.fragmentId, complete: fragments.length === 1 && candidate.text.trim() === fragment.text.trim()
+    }))
   };
   const knownBy = ids(fragments[0].knownBy).filter(id => fragments.every(fragment => fragment.knownBy.includes(id)));
   const eventTime = { from, to, precision, status };
@@ -84,4 +92,4 @@ function validateEntry(candidate, snapshot) {
   };
 }
 
-module.exports = { MEMORY_TYPES, assertScope, gameDate, hash, ids, strings, validateEntry };
+module.exports = { MEMORY_TYPES, assertScope, gameDate, hash, ids, strings, legacySourceHash, validateEntry };

@@ -21,6 +21,7 @@ function createLogParser({ GameData, Character, onGameDataParsed = null }) {
     let currentChild = null;
     let currentSibling = null;
     let pendingMemoryLine = null;
+    let pendingLetterLine = null;
     const fileStream = fs.createReadStream(debugLogPath);
     const rl = readline.createInterface({
       input: fileStream,
@@ -28,6 +29,17 @@ function createLogParser({ GameData, Character, onGameDataParsed = null }) {
     });
     for await (const rawLine of rl) {
       let line = rawLine;
+      if (pendingLetterLine) {
+        if (line.includes("VOTC:") || /^\[.*\]\[.*\]/.test(line)) pendingLetterLine = null;
+        else line = `${pendingLetterLine}\n${line}`;
+      }
+      if (line.includes("VOTC:LETTER/;/")) {
+        if (line.split("/;/").length < 5) {
+          pendingLetterLine = line;
+          continue;
+        }
+        pendingLetterLine = null;
+      }
       if (pendingMemoryLine) {
         if (line.includes("VOTC:") || /^\[.*\]\[.*\]/.test(line)) pendingMemoryLine = null;
         else line = `${pendingMemoryLine}\n${line}`;
@@ -74,7 +86,7 @@ function createLogParser({ GameData, Character, onGameDataParsed = null }) {
         }
         continue;
       }
-      if (line.includes("VOTC:LETTER") && !line.includes("delay") && !line.includes("set to thread")) {
+      if (line.includes("VOTC:LETTER/;/")) {
         if (gameData) {
           const parts = line.split("/;/").slice(1).map(removeTooltip);
           let letterData = null;

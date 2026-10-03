@@ -1,6 +1,6 @@
 "use strict";
 
-const { assertScope, hash, ids } = require("./memory4-contract");
+const { assertScope, hash, ids, legacySourceHash } = require("./memory4-contract");
 const { normalizeGameDate } = require("../worldline/character-temporal-facts");
 
 function resolveSpeaker(message, participants) {
@@ -96,7 +96,7 @@ function projectVisibleTranscript(context, ownerId) {
     const fragmentId = `legacy_${hash([memory.memoryId, memory.version, memory.content, ownerId, context.campaignToken])}`;
     fragments.push({ fragmentId, messageId: null, text: memory.content, speakerId: ownerId, presentIds: [ownerId], knownBy: [ownerId],
       visibility: "private", sourceType: "self_report", recipientIds: [], entityIds: ids(memory.subjects),
-      visibilityEvidence: "legacy_user_confirmed_projection", legacyMemoryId: memory.memoryId });
+      visibilityEvidence: "legacy_user_confirmed_projection", legacyMemoryId: memory.memoryId, legacySourceHash: legacySourceHash(memory) });
   }
   const withheld = [...new Set(withheldMessageIds)];
   return { fragments, presentMessageCount, withheldMessageIds: withheld, interactionEvidence,

@@ -102,10 +102,12 @@ class Memory4Store {
     const now = new Date().toISOString();
     this.store.withSummaryMutation(null, () => {
       this.store.writeJson(path.join(directory, "known-entities.json"), known);
+      const affected = Object.keys(index.entries).filter(id => index.entries[id].conversationId === snapshot.conversationId);
+      const derived = this.derived?.markDirty(snapshot, { index, metadata, entryIds: affected }) || {};
       this.store.writeJson(path.join(directory, "metadata.json"), { ...metadata, memory4SchemaVersion: 1,
         campaignToken: snapshot.campaignToken, ownerId: snapshot.ownerId, revision: index.revision, indexHash: hash(index),
         knownEvidenceRevisions: { ...metadata?.knownEvidenceRevisions, [evidenceKey]: snapshot.sourceRevision },
-        updatedAt: now });
+        ...derived, updatedAt: now });
       this.store.writeJson(path.join(directory, "index.json"), index);
     });
     return { alreadyRecorded: false, entityCount: Object.keys(known.entities).length };
@@ -146,11 +148,15 @@ class Memory4Store {
       index.finalizations[key] = record;
       index.revision++;
       this.reindex(index);
-      const known = updateKnownEntities(this.read(path.join(directory, "known-entities.json"), null), snapshot);
+      const priorKnown = this.read(path.join(directory, "known-entities.json"), null);
+      const known = snapshot.skipKnownEvidence ? priorKnown || { campaignToken: snapshot.campaignToken, ownerId: snapshot.ownerId, revision: 0, entities: {} }
+        : updateKnownEntities(priorKnown, snapshot);
       this.store.writeJson(path.join(directory, "known-entities.json"), known);
+      const derived = this.derived?.markDirty(snapshot, { index, metadata, entryIds: entries.map(entry => entry.entryId) }) || {};
       this.store.writeJson(path.join(directory, "metadata.json"), { ...metadata, memory4SchemaVersion: 1, campaignToken: snapshot.campaignToken,
         ownerId: snapshot.ownerId, revision: index.revision, indexHash: hash(index), lastFinalizationId: snapshot.finalizationId,
-        derivedDirty: entries.length > 0 || metadata?.derivedDirty === true, updatedAt: now });
+        knownEvidenceRevisions: { ...metadata?.knownEvidenceRevisions, [hash([snapshot.conversationId, snapshot.ownerId])]: snapshot.sourceRevision },
+        derivedDirty: entries.length > 0 || metadata?.derivedDirty === true, ...derived, updatedAt: now });
       this.store.writeJson(path.join(directory, "index.json"), index);
     });
     this.store.invalidateFolderSummaryCache([snapshot.ownerId]);
@@ -161,16 +167,36 @@ class Memory4Store {
     return { revision: entry.revision, entityIds: entry.entityIds, topics: entry.topics, counterpartIds: entry.counterpartIds,
       eventTime: entry.eventTime, conversationDate: entry.conversationDate, acquiredDate: entry.acquiredDate,
       memoryType: entry.memoryType, status: entry.state.status, finalizationId: entry.source.finalizationId,
+      conversationId: entry.source.conversationId, legacyRefs: entry.source.legacyRefs || [],
+      legacyMemoryIds: entry.source.legacyMemoryIds || [],
+      knownBy: entry.evidence.knownBy, visibility: entry.evidence.visibility, importance: entry.importance,
+      supportedByEntryIds: entry.state.supportedByEntryIds, supersedesEntryIds: entry.state.supersedesEntryIds,
       deleted: entry.deleted, bodyHash: hash(entry) };
   }
 
-  getKnownEntityEvidence(scope, entityId) {
+  getKnownEntityEvidence(scope, entityId, options = null) {
     assertScope(scope);
-    this.loadIndex(scope);
-    const known = this.read(path.join(this.directory(scope), "known-entities.json"), null);
+    if (!options?.readContext) this.loadIndex(scope);
+    const known = options?.readContext?.known || this.read(path.join(this.directory(scope), "known-entities.json"), null);
     if (known && (known.campaignToken !== scope.campaignToken || known.ownerId !== scope.ownerId || !known.entities)) throw new Error("memory4_known_index_invalid");
     const entity = known?.entities?.[String(entityId)];
     if (!entity) return { status: "UNKNOWN", reason: "INSUFFICIENT_EVIDENCE", entityId, completeness: "partial" };
+    if (options) {
+      const current = normalizeGameDate(options.currentGameDate);
+      const metadata = options.readContext?.metadata || this.read(path.join(this.directory(scope), "metadata.json"), null);
+      const contributions = current ? Object.entries(entity.evidenceByConversation || {}).filter(([conversationId, evidence]) => {
+        const date = normalizeGameDate(evidence.date);
+        return date && date.serial <= current.serial && evidence.sourceRevision
+          && evidence.sourceRevision === metadata?.knownEvidenceRevisions?.[hash([conversationId, scope.ownerId])];
+      }).map(([, evidence]) => evidence) : [];
+      if (!contributions.length) return { status: "UNKNOWN", reason: "INSUFFICIENT_EVIDENCE", entityId, completeness: "partial" };
+      const directConversationCount = contributions.filter(evidence => evidence.types?.includes("direct_conversation")).length;
+      const sharedSceneCount = contributions.filter(evidence => evidence.types?.includes("shared_scene")).length;
+      const mentionCount = contributions.filter(evidence => evidence.types?.includes("mention")).length;
+      const dates = contributions.map(evidence => normalizeGameDate(evidence.date)).sort((a, b) => a.serial - b.serial);
+      return { ...entity, status: directConversationCount > 0 ? "DIRECT_INTERACTION" : sharedSceneCount > 0 ? "SHARED_SCENE" : "MENTION_ONLY",
+        directConversationCount, sharedSceneCount, mentionCount, firstSeenDate: dates[0].canonical, lastSeenDate: dates.at(-1).canonical };
+    }
     return { status: entity.directConversationCount > 0 ? "DIRECT_INTERACTION" : entity.sharedSceneCount > 0 ? "SHARED_SCENE" : "MENTION_ONLY", ...entity };
   }
 
@@ -201,7 +227,33 @@ class Memory4Store {
     });
   }
 
-  deleteEntry(scope, entryId) {
+  readEntry(scope, id, index = this.loadIndex(scope)) {
+    const row = index.entries[id];
+    const entry = this.read(this.entryPath(this.directory(scope), id), null);
+    if (!row || !entry || entry.entryId !== id || entry.ownerId !== scope.ownerId || entry.campaignToken !== scope.campaignToken
+      || entry.revision !== row.revision || entry.deleted !== row.deleted || hash(entry) !== row.bodyHash) throw new Error("memory4_index_body_mismatch");
+    return entry;
+  }
+
+  updateEntry(scope, entryId, text, { expectedRevision } = {}) {
+    if (typeof text !== "string" || !text.trim() || text.length > 65536) throw new Error("memory4_entry_text_invalid");
+    const index = this.loadIndex(scope), entry = this.readEntry(scope, entryId, index);
+    if (entry.deleted || !Number.isInteger(expectedRevision) || entry.revision !== expectedRevision) throw new Error("memory4_entry_edit_stale");
+    const directory = this.directory(scope), metadata = this.read(path.join(directory, "metadata.json"), null);
+    entry.text = text.trim(); entry.revision++; entry.updatedAt = new Date().toISOString();
+    entry.edit = { mode: "manual_override", editedAt: entry.updatedAt, editedBy: "user" };
+    index.entries[entryId] = this.indexRow(entry); index.revision++; this.reindex(index);
+    this.store.withSummaryMutation(null, () => {
+      this.store.writeJson(this.entryPath(directory, entryId), entry);
+      const derived = this.derived?.markDirty(scope, { index, metadata, entryIds: [entryId] }) || {};
+      this.store.writeJson(path.join(directory, "metadata.json"), { ...metadata, revision: index.revision, indexHash: hash(index), derivedDirty: true, ...derived });
+      this.store.writeJson(path.join(directory, "index.json"), index);
+    });
+    this.store.invalidateFolderSummaryCache([scope.ownerId]);
+    return { success: true, entryId, revision: entry.revision };
+  }
+
+  deleteEntry(scope, entryId, { expectedRevision } = {}) {
     if (!/^m4_[a-f0-9]{64}$/.test(entryId)) throw new Error("memory4_invalid_entry_id");
     const index = this.loadIndex(scope);
     if (!index.entries[entryId] || index.entries[entryId].deleted) return false;
@@ -209,6 +261,7 @@ class Memory4Store {
     const file = this.entryPath(directory, entryId);
     const entry = this.read(file, null);
     if (!entry || entry.ownerId !== scope.ownerId || entry.campaignToken !== scope.campaignToken || hash(entry) !== index.entries[entryId].bodyHash) throw new Error("memory4_index_body_mismatch");
+    if (expectedRevision != null && entry.revision !== expectedRevision) throw new Error("memory4_entry_edit_stale");
     entry.deleted = true; entry.revision++; entry.updatedAt = new Date().toISOString();
     index.entries[entryId] = this.indexRow(entry);
     index.revision++;
@@ -217,7 +270,8 @@ class Memory4Store {
     if (!metadata) throw new Error("memory4_metadata_missing");
     this.store.withSummaryMutation(null, () => {
       this.store.writeJson(file, entry);
-      this.store.writeJson(path.join(directory, "metadata.json"), { ...metadata, revision: index.revision, indexHash: hash(index), derivedDirty: true });
+      const derived = this.derived?.markDirty(scope, { index, metadata, entryIds: [entryId] }) || {};
+      this.store.writeJson(path.join(directory, "metadata.json"), { ...metadata, revision: index.revision, indexHash: hash(index), derivedDirty: true, ...derived });
       this.store.writeJson(path.join(directory, "index.json"), index);
     });
     this.store.invalidateFolderSummaryCache([scope.ownerId]);

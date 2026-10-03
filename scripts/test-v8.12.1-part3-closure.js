@@ -60,30 +60,27 @@ function testOfficialEvents() {
   assert.deepEqual(Buffer.from(JSON.stringify(snapshot)), snapshotBytes);
 }
 
-function testEditorHint() {
+function testEditorReadOnlyBoundary() {
   const renderer = fs.readFileSync(path.join(__dirname, "../resources/app/out/renderer/assets/index-Dn3qWlAB.js"), "utf8");
   const handlerStart = renderer.indexOf("  const handleEditSummary =");
+  assert(handlerStart >= 0, "the summary edit handler must exist");
   const handler = renderer.slice(handlerStart, renderer.indexOf("  const handleSaveEdit =", handlerStart));
-  const hint = renderer.match(/editingEntry\.sourceType === "CK3_OFFICIAL_RECOLLECTION" &&[^\n]+/);
-  assert(hint, "the official hint must render conditionally inside the summary editor");
-  const expected = "官方追忆来自 CK3。本页修改作用于当前同步副本；开始新对话后，系统可能根据最新 CK3 日志重新覆盖。";
-  for (const sourceType of ["CK3_OFFICIAL_RECOLLECTION", undefined]) {
+  for (const marker of [{ sourceType: "CK3_OFFICIAL_RECOLLECTION" }, { type: "official_recollection" }, { subtype: "official_recollection" }, {}]) {
     let editingEntry;
-    const context = { metadata: { playerId: 2, characterId: 2, ownerName: "角色二", summaries: [{ sourceType }] },
+    const metadata = { playerId: 2, characterId: 2, ownerName: "角色二", summaries: [{ content: "原文", ...marker }] };
+    const original = JSON.stringify(metadata);
+    const context = { metadata,
       setEditingEntry: value => { editingEntry = value; } };
     vm.runInNewContext(`${handler}\nhandleEditSummary(metadata, 0, "原文");`, context);
-    assert.equal(editingEntry.sourceType, sourceType);
-    const rendered = vm.runInNewContext(hint[0].replace(/,\s*$/, ""), {
-      editingEntry, jsxRuntimeExports: { jsx: (type, props) => ({ type, ...props }) }
-    });
-    if (sourceType) {
-      assert.equal(rendered.type, "p");
-      assert.equal(rendered.className, "help-text");
-      assert.equal(rendered.children, expected);
-    } else assert.equal(rendered, false, "ordinary summaries must not display the official overwrite warning");
+    if (Object.keys(marker).length) assert.equal(editingEntry, undefined, "Official recollections must never open the editable summary modal");
+    else {
+      assert.equal(editingEntry.content, "原文", "ordinary summaries remain editable");
+      assert.equal(editingEntry.playerId, 2);
+      assert.equal(editingEntry.characterId, 2);
+      assert.equal(editingEntry.sourceType, undefined);
+    }
+    assert.equal(JSON.stringify(metadata), original, "opening or refusing the editor never mutates source summaries");
   }
-  const editor = renderer.slice(renderer.indexOf('className: "modal-content summary-edit-modal"'));
-  assert(editor.indexOf(expected) >= 0 && editor.indexOf(expected) < editor.indexOf('"textarea"'), "show the hint above the editor input");
 }
 
 // Reuse the real-engine / deterministic Provider / on-disk checkpoint pattern
@@ -147,14 +144,14 @@ async function testChunkBoundaries(root) {
 
 async function main() {
   testOfficialEvents();
-  testEditorHint();
+  testEditorReadOnlyBoundary();
   const root = fs.mkdtempSync(path.join(os.tmpdir(), "votc-part3-closure-"));
   try {
     await testChunkBoundaries(root);
   } finally {
     fs.rmSync(root, { recursive: true, force: true });
   }
-  console.log("V8.12.1 Part3 closure: PASS (complete events, editor hint, 63/64/65 chunks, restart checkpoints)");
+  console.log("V8.12.1 Part3 closure: PASS (complete events, Official read-only editor boundary, 63/64/65 chunks, restart checkpoints)");
 }
 
 main().catch(error => { console.error(error); process.exitCode = 1; });

@@ -71,10 +71,11 @@ class Memory4ProfileService {
     for (const key of this.pointerCache.keys()) if (key.startsWith(prefix)) this.pointerCache.delete(key);
   }
 
-  getProfile(scope, entityId, { snapshot = null, gameData = null, legacyMemories = [] } = {}) {
+  getProfile(scope, entityId, { snapshot = null, gameData = null, currentGameDate = null, legacyMemories = [], readContext = null } = {}) {
     assertScope(scope);
     if (ids([entityId]).length !== 1 || entityId === scope.ownerId) throw new Error("memory4_profile_entity_invalid");
-    const index = this.store.loadIndex(scope);
+    if (readContext && (readContext.scope.campaignToken !== scope.campaignToken || readContext.scope.ownerId !== scope.ownerId)) throw new Error("memory4_profile_scope_mismatch");
+    const index = readContext?.index || this.store.loadIndex(scope);
     const key = `${scope.campaignToken}:${scope.ownerId}:${entityId}`;
     let pointers = this.pointerCache.get(key);
     if (!pointers || pointers.revision !== index.revision) {
@@ -82,7 +83,7 @@ class Memory4ProfileService {
         .filter(id => index.entries[id] && !index.entries[id].deleted) };
       this.pointerCache.set(key, pointers);
     }
-    const evidence = this.store.getKnownEntityEvidence(scope, entityId);
+    const evidence = this.store.getKnownEntityEvidence(scope, entityId, { currentGameDate: currentGameDate || gameData?.date || snapshot?.gameDate, readContext });
     const relationship = validLiveScope(scope, snapshot, gameData)
       ? currentRelationship(gameData, scope.ownerId, entityId)
       : { status: "UNKNOWN", types: [], source: null, knownToOwner: false };
@@ -95,7 +96,7 @@ class Memory4ProfileService {
         mentionCount: evidence.mentionCount || 0, firstSeen: evidence.firstSeenDate || null,
         lastSeen: evidence.lastSeenDate || null, evidenceCompleteness: evidence.completeness || "partial" },
       relationship, currentTruth: authorizedCurrentTruth(scope, snapshot, gameData, entityId),
-      memoryPointers: { detailIds: [...pointers.detailIds], yearKeys: [], lifeItemIds: [],
+      memoryPointers: { detailIds: [...pointers.detailIds], ...(this.store.derived?.getPointers(scope, entityId, { currentGameDate: currentGameDate || gameData?.date || snapshot?.gameDate, readContext }) || { yearKeys: [], lifeItemIds: [] }),
         legacyCoverageRefs: bridge.memories.filter(memory => ids([
           ...(memory.subjects || []), ...(memory.provenance?.counterpartIds || []), memory.provenance?.counterpartId
         ]).includes(entityId)).map(memory => memory.memoryId) } };

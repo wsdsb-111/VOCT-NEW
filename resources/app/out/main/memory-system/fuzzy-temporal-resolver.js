@@ -1,7 +1,7 @@
 "use strict";
 
 const { normalizeGameDate } = require("../worldline/character-temporal-facts");
-const { extractTemporalAnchors, detectTemporalAxisIntent, hasTemporalAxisCue, gameDateFromSerial } = require("./temporal-anchor-extractor");
+const { extractTemporalAnchors, detectTemporalAxisIntent, hasTemporalAxisCue, hasFirstMeetingCue, gameDateFromSerial } = require("./temporal-anchor-extractor");
 
 const DIGITS = { 零: 0, 〇: 0, 一: 1, 二: 2, 两: 2, 三: 3, 四: 4, 五: 5, 六: 6, 七: 7, 八: 8, 九: 9 };
 
@@ -113,6 +113,8 @@ function resolveTemporalWindow(query, { currentGameDate, currentTotalDays, earli
     if (matched) return result(matched[0], concept, "FUZZY_RECENCY",
       window(today - from, today - to), window(today - expandedFrom, today - expandedTo));
   }
+  if (hasFirstMeetingCue(text)) return result("首次相识", "EARLIEST_AVAILABLE_CONVERSATION", "EARLIEST_AVAILABLE",
+    window(0, today), window(0, today), "OLDEST_FIRST");
   const past = text.match(/从前|曩时|昔时|往时/u);
   if (past) return result(past[0], "FROM_PAST", "FUZZY_RECENCY",
     window(Number.isFinite(Number(earliestTotalDays)) ? Number(earliestTotalDays) : 0, today - 2 * year));
@@ -125,7 +127,7 @@ function resolveTemporalFocus(query, previousFocus, { currentGameDate, currentTo
   const axisIntent = detectTemporalAxisIntent(query);
   const temporal = resolveTemporalWindow(query, { currentGameDate, currentTotalDays });
   // Intent detection needs no anchor: missing CK3 dates must not turn time requests into topic recall.
-  const requested = temporal.triggered || /\d+\s*年|\d+[./-]\d+[./-]\d+|\d+\s*月|[零〇一二两三四五六七八九十百\d]+\s*(?:年|个月|月|天|日)\s*前|去年|前年|上个月|上月|昨天|昨日|前天|前日|那一年|那年|当年|那时|当时|好多年|许多年|倏经数载|阅岁既久|很久以前|夙昔|囊昔|往昔|早先|旧时|曩昔|曩日|当初|始时|曩初|向初|前些日子|前阵子|日前|顷来|前时|隔了一阵子|过了一段日子|居顷之|既而|逾时|前些年|顷年|顷岁|这些年|近些年来|这几年|比来|比年|迩岁|往年|往岁|旧岁|早年|年轻那时候|早岁|少日|前不久|向者|迩来|昨来|近来|最近|近日|许久|多时|从前|曩时|昔时|往时|过去[零〇一二两三四五六七八九十百\d]+年/.test(text)
+  const requested = temporal.triggered || hasFirstMeetingCue(text) || /\d+\s*年|\d+[./-]\d+[./-]\d+|\d+\s*月|[零〇一二两三四五六七八九十百\d]+\s*(?:年|个月|月|天|日)\s*前|去年|前年|上个月|上月|昨天|昨日|前天|前日|那一年|那年|当年|那时|当时|好多年|许多年|倏经数载|阅岁既久|很久以前|夙昔|囊昔|往昔|早先|旧时|曩昔|曩日|当初|始时|曩初|向初|前些日子|前阵子|日前|顷来|前时|隔了一阵子|过了一段日子|居顷之|既而|逾时|前些年|顷年|顷岁|这些年|近些年来|这几年|比来|比年|迩岁|往年|往岁|旧岁|早年|年轻那时候|早岁|少日|前不久|向者|迩来|昨来|近来|最近|近日|许久|多时|从前|曩时|昔时|往时|过去[零〇一二两三四五六七八九十百\d]+年/.test(text)
     || ((previousFocus != null || /^(?:后来|之后|随后)(?:呢|如何|怎么样|发生了什么)?[？?。]*$/.test(text.trim())) && /后来|之后|随后/.test(text));
   const result = { ...temporal, requested, axisIntent, focusReused: false, nextFocus: null };
   const current = normalizeGameDate(currentGameDate);

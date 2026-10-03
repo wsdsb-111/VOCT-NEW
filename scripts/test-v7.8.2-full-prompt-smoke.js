@@ -171,13 +171,14 @@ try {
     trace: { record() {} }
   });
   const promise = "约定下月初一一同入宫见皇后，尚未履行。";
+  const campaignToken = "v7.8.2-full-prompt-smoke";
   const summaryFolder = path.join(tempDir, "summaries", "2_李师师");
   fs.mkdirSync(summaryFolder, { recursive: true });
   fs.writeFileSync(path.join(summaryFolder, "与玩家的对话.json"), JSON.stringify([3, 2, 1].map(day => ({
-    playerId: 2, characterId: 1, totalDays: day, date: `1010年${day}月1日`, finalizationId: `recall-${day}`,
+    playerId: 2, characterId: 1, totalDays: day, date: `1010年${day}月1日`, finalizationId: `recall-${day}`, campaignToken,
     content: day === 1 ? `【本场经过】\n${"游览园中景色。".repeat(1000)}\n\n【需要长期记住的事项】\n- ${promise}` : `第${day}次会面。`
   }))));
-  const recalled = memoryEngine.retrieveForResponder({ characterId: 2, directCounterpartIds: [1], tokenBudget: 800, estimateTokens: text => TokenCounter.estimateTokens(text) });
+  const recalled = memoryEngine.retrieveForResponder({ characterId: 2, directCounterpartIds: [1], campaignToken, tokenBudget: 800, estimateTokens: text => TokenCounter.estimateTokens(text) });
   const recallBuild = PromptBuilder.buildMessagesWithTokenCount(
     [{ id: 0, role: "user", content: "今天有什么安排？" }], ai, gameData, "",
     { ...recalled, activeParticipantIds: [1, 2] }

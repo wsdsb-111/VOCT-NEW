@@ -106,6 +106,27 @@ function buildMessageBlockMap(blocks = [], messageCount = 0) {
   return result;
 }
 
+function buildStablePrefixMetadata(messages = [], blocks = []) {
+  const coveredByPosition = Array(messages.length).fill(false);
+  const stableByPosition = Array(messages.length).fill(true);
+  for (const block of Array.isArray(blocks) ? blocks : []) {
+    const start = Number(block?.messageStartPosition);
+    const count = Number(block?.messageCount);
+    if (!Number.isInteger(start) || !Number.isInteger(count) || start < 0 || count < 1) continue;
+    for (let position = start; position < Math.min(messages.length, start + count); position += 1) {
+      coveredByPosition[position] = true;
+      if (block.stable !== true) stableByPosition[position] = false;
+    }
+  }
+  let stablePrefixEndPosition = 0;
+  while (stablePrefixEndPosition < messages.length && coveredByPosition[stablePrefixEndPosition] && stableByPosition[stablePrefixEndPosition]) stablePrefixEndPosition += 1;
+  const serializedPrefix = JSON.stringify(messages.slice(0, stablePrefixEndPosition).map((message) => canonicalize(message)));
+  return {
+    stablePrefixEndPosition,
+    serializedPrefixSha256: hashValue(serializedPrefix)
+  };
+}
+
 function buildMessageChunks(content, TokenCounter, targetTokens = CHUNK_TARGET_TOKENS) {
   const text = String(content || "");
   if (!text) return [];
@@ -192,6 +213,7 @@ function buildMessageSummary(message, position, blockId, TokenCounter) {
 
 function buildRealRequestSnapshot({ providerType, model, requestType = "chat", request = {}, conversationId = null, responderId = null, baseUrl = "", blocks = [], promptProfile = null, staticTokens = null, dynamicTokens = null, prefixFingerprint = null, globalStaticTokens = null, conversationFrozenTokens = null, responderFrozenTokens = null, stableKinshipTokens = null, actualStablePrefixTokens = null, declaredStaticTokens = null, dynamicTailTokens = null, TokenCounter, timestamp = new Date().toISOString() } = {}) {
   const messages = Array.isArray(request.messages) ? request.messages : [];
+  const stablePrefix = buildStablePrefixMetadata(messages, blocks);
   const blockMap = buildMessageBlockMap(blocks, messages.length);
   const summaries = messages.map((message, position) => buildMessageSummary(message, position, blockMap[position], TokenCounter));
   const memoryMessages = messages.map((message, position) => ({
@@ -235,6 +257,8 @@ function buildRealRequestSnapshot({ providerType, model, requestType = "chat", r
     actualStablePrefixTokens: finiteNumber(actualStablePrefixTokens),
     declaredStaticTokens: finiteNumber(declaredStaticTokens),
     dynamicTailTokens: finiteNumber(dynamicTailTokens),
+    stablePrefixEndPosition: stablePrefix.stablePrefixEndPosition,
+    serializedPrefixSha256: stablePrefix.serializedPrefixSha256,
     estimatedPromptTokens: summaries.reduce((sum, message) => sum + message.estimatedTokens, 0),
     safeMessages: summaries
   };
@@ -383,6 +407,11 @@ function buildRealRequestDiff({ previousRoute = null, previousConversation = nul
     actualStablePrefixTokens: current.actualStablePrefixTokens,
     declaredStaticTokens: current.declaredStaticTokens,
     dynamicTailTokens: current.dynamicTailTokens,
+    serializedPrefixSha256: current.serializedPrefixSha256,
+    stablePrefixEndPosition: current.stablePrefixEndPosition,
+    stablePrefixUnchanged: previousConversation && current.stablePrefixEndPosition > 0 && previousConversation.stablePrefixEndPosition > 0
+      ? current.stablePrefixEndPosition === previousConversation.stablePrefixEndPosition && current.serializedPrefixSha256 === previousConversation.serializedPrefixSha256
+      : null,
     currentPrefixFingerprint: current.prefixFingerprint,
     previousPrefixFingerprint: previousConversation?.prefixFingerprint || null,
     prefixChanged: previousConversation?.prefixFingerprint && current.prefixFingerprint ? previousConversation.prefixFingerprint !== current.prefixFingerprint : null,

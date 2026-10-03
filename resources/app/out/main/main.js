@@ -607,10 +607,20 @@ const SummariesManager = createSummariesManager({
   memorySystem,
   getCurrentConversation: () => conversationManager.getCurrentConversation(),
   buildSummaryPrompt: context => memoryEngine.buildFinalizationPrompt({ ...context, finalInstructions: context.finalInstructions || PromptBuilder.getFinalSummaryInstructions() }),
+  getSummaryOutputLimit: () => PromptBuilder.getFinalSummaryMaxTokens?.() || 4096,
   getSummaryCapabilities: snapshot => llmManager.getProviderCapabilities("SUMMARY", snapshot),
-  requestSummary: (prompt, options = {}) => llmManager.sendSummaryRequest(prompt, void 0, { requestType: "memory_recovery", summaryAttempt: options.attempt, maxTokens: options.maxTokens, providerSnapshot: options.providerSnapshot, summaryBudget: options.summaryBudget }),
+  requestSummary: (prompt, options = {}) => llmManager.sendSummaryRequest(prompt, void 0, { requestType: options.requestType || "memory_recovery", summaryAttempt: options.attempt, maxTokens: options.maxTokens, providerSnapshot: options.providerSnapshot, summaryBudget: options.summaryBudget }),
   requestDurable: (prompt, options = {}) => llmManager.sendSummaryRequest(prompt, void 0, { requestType: "memory4_durable", maxTokens: options.maxTokens, providerSnapshot: options.providerSnapshot }),
   persistRecoveredSummary: (summary, context) => GameData.saveRecoveredSummary(summary, context)
+});
+memoryEngine.memory4?.configureDerived({
+  getProviderSnapshot: () => llmManager.getProviderCapabilities("SUMMARY"),
+  requestCompression: (prompt, options) => llmManager.sendSummaryRequest(prompt, options.signal, { requestType: options.requestType,
+    maxTokens: options.maxTokens, providerSnapshot: options.providerSnapshot }),
+  requestExtraction: (prompt, options) => llmManager.sendSummaryRequest(prompt, options.signal, { requestType: "memory4_durable",
+    maxTokens: options.maxTokens, providerSnapshot: options.providerSnapshot }),
+  isCampaignCurrent: token => conversationManager.getCurrentConversation()?.gameData?.campaignToken === token,
+  estimateTokens: text => TokenCounter.estimateTokens(text)
 });
 const updaterTranslations = {
   en: {

@@ -155,6 +155,10 @@ electron.contextBridge.exposeInMainWorld("conversationAPI", {
   listAllSummaries: () => electron.ipcRenderer.invoke("conversation:listAllSummaries"),
   getMemoryOverview: () => electron.ipcRenderer.invoke("conversation:getMemoryOverview"),
   getSummariesDashboardData: (options = {}) => electron.ipcRenderer.invoke("conversation:getSummariesDashboardData", options),
+  getMemory4OwnerData: (request) => electron.ipcRenderer.invoke("memory4:getOwnerData", request),
+  getMemory4Entry: (request) => electron.ipcRenderer.invoke("memory4:getEntry", request),
+  getMemory4Sources: (request) => electron.ipcRenderer.invoke("memory4:getSources", request),
+  mutateMemory4: (request) => electron.ipcRenderer.invoke("memory4:mutate", request),
   retryFailedSummaries: () => electron.ipcRenderer.invoke("conversation:retryFailedSummaries"),
   updateStructuredMemory: (memoryId, content) => electron.ipcRenderer.invoke("conversation:updateStructuredMemory", { memoryId, content }),
   updateMemoryRecord: (memoryId, updates, advanced = false) => electron.ipcRenderer.invoke("memory:updateRecord", { memoryId, updates, advanced }),
@@ -165,6 +169,7 @@ electron.contextBridge.exposeInMainWorld("conversationAPI", {
   bindLegacyConversationCampaign: (ownerId, counterpartId, folderName, conversationFile, expectedCampaignToken, previewRevision) => electron.ipcRenderer.invoke("conversation:bindLegacyConversationCampaign", { ownerId, counterpartId, folderName, conversationFile, expectedCampaignToken, previewRevision }),
   previewLegacyOwnerBinding: (ownerId) => electron.ipcRenderer.invoke("conversation:previewLegacyOwnerBinding", { ownerId }),
   bindLegacyOwnerCampaign: (ownerId, expectedCampaignToken, previewRevision) => electron.ipcRenderer.invoke("conversation:bindLegacyOwnerCampaign", { ownerId, expectedCampaignToken, previewRevision }),
+  regenerateSummary: (playerId, characterId, summaryIndex, expectedContent) => electron.ipcRenderer.invoke("conversation:regenerateSummary", { playerId, characterId, summaryIndex, expectedContent }),
   updateSummary: (playerId, characterId, summaryIndex, newContent) => electron.ipcRenderer.invoke("conversation:updateSummary", { playerId, characterId, summaryIndex, newContent }),
   deleteSummary: (playerId, characterId, summaryIndex) => electron.ipcRenderer.invoke("conversation:deleteSummary", { playerId, characterId, summaryIndex }),
   deleteCharacterSummaries: (playerId, characterId) => electron.ipcRenderer.invoke("conversation:deleteCharacterSummaries", { playerId, characterId })

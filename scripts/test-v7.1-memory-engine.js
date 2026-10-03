@@ -18,6 +18,7 @@ function writeSummary(folderRoot, owner, counterpart, summary) {
     playerName: owner.name,
     characterId: counterpart.id,
     characterName: counterpart.name,
+    campaignToken: "v7.1-memory-test",
     participants: summary.participants,
     finalizationId: summary.finalizationId,
     content: summary.content
@@ -74,6 +75,7 @@ try {
       entityIds: [E.id],
       entityNames: [E.name],
       participantIds: speakers.filter((entry) => entry.id !== speaker.id).map((entry) => entry.id),
+      campaignToken: "v7.1-memory-test",
       currentTotalDays: 120,
       tokenBudget: 2e3,
       estimateTokens: (text) => String(text).length

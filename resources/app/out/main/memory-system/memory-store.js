@@ -63,6 +63,9 @@ class MemoryStore {
     this.folderSummaryCache = new Map();
     this.summaryDateIndexCache = new Map();
     this.folderSummaryCacheMetrics = { hits: 0, misses: 0, invalidations: 0 };
+    this.folderSummaryRevisions = new Map();
+    this.folderSummaryLoadDiagnostics = new Map();
+    this.folderSummarySnapshotRevisions = new WeakMap();
   }
 
   ensureDirectories() {
@@ -74,7 +77,7 @@ class MemoryStore {
   readJson(filePath, fallback) {
     try {
       if (!fs.existsSync(filePath)) return fallback;
-      return JSON.parse(fs.readFileSync(filePath, "utf8"));
+      return JSON.parse(fs.readFileSync(filePath, "utf8").replace(/^\uFEFF/, ""));
     } catch (error) {
       console.error(`[MemoryStore] Failed to read ${filePath}:`, error);
       return fallback;
@@ -698,15 +701,35 @@ class MemoryStore {
 
   invalidateFolderSummaryCache(characterIds = null) {
     if (characterIds == null) {
+      const owners = new Set([...this.folderSummaryRevisions.keys(), ...this.folderSummaryCache.keys()]);
       this.folderSummaryCacheMetrics.invalidations += this.folderSummaryCache.size;
       this.folderSummaryCache.clear();
       this.summaryDateIndexCache.clear();
+      this.folderSummaryLoadDiagnostics.clear();
+      for (const characterId of owners) {
+        this.folderSummaryRevisions.set(characterId, (this.folderSummaryRevisions.get(characterId) || 0) + 1);
+      }
       return;
     }
     for (const characterId of uniqueIds(characterIds)) {
       if (this.folderSummaryCache.delete(characterId)) this.folderSummaryCacheMetrics.invalidations++;
+      this.folderSummaryRevisions.set(characterId, (this.folderSummaryRevisions.get(characterId) || 0) + 1);
+      this.folderSummaryLoadDiagnostics.delete(characterId);
       for (const key of this.summaryDateIndexCache.keys()) if (key.startsWith(String(characterId) + "|")) this.summaryDateIndexCache.delete(key);
     }
+  }
+
+  getFolderSummaryRevision(characterId) {
+    return this.folderSummaryRevisions.get(Number(characterId)) || 0;
+  }
+
+  getFolderSummarySnapshotRevision(memories) {
+    return Array.isArray(memories) ? this.folderSummarySnapshotRevisions.get(memories) ?? null : null;
+  }
+
+  getFolderSummaryLoadDiagnostics(characterId) {
+    const diagnostics = this.folderSummaryLoadDiagnostics.get(Number(characterId));
+    return diagnostics ? { ...diagnostics } : null;
   }
 
   getSummaryDateIndexForPair(ownerId, counterpartId, { currentGameDate, currentTotalDays, ownerFolderMemories = null, campaignToken = null, dualTemporal = false } = {}) {
@@ -728,15 +751,28 @@ class MemoryStore {
 
   loadFolderSummariesForCharacter(characterId) {
     const ownerId = Number(characterId);
-    if (!Number.isFinite(ownerId)) return [];
+    if (!Number.isSafeInteger(ownerId) || ownerId <= 0) return [];
     if (this.folderSummaryCache.has(ownerId)) {
       this.folderSummaryCacheMetrics.hits++;
-      return this.folderSummaryCache.get(ownerId).map((memory) => createMemoryRecord(memory));
+      const memories = this.folderSummaryCache.get(ownerId).map((memory) => createMemoryRecord(memory));
+      this.folderSummarySnapshotRevisions.set(memories, this.getFolderSummaryRevision(ownerId));
+      this.folderSummaryLoadDiagnostics.set(ownerId, {
+        status: "CACHE_HIT", cacheHit: true, filesFound: null, filesParsed: null, recordsParsed: null,
+        ownerAcceptedCount: null, ownerRejectedCount: null, malformedFileCount: null, cachedSummaryCount: memories.length
+      });
+      return memories;
     }
     this.folderSummaryCacheMetrics.misses++;
+    const loadDiagnostics = {
+      status: "LOADED", cacheHit: false, filesFound: 0, filesParsed: 0, recordsParsed: 0,
+      ownerAcceptedCount: 0, ownerRejectedCount: 0, malformedFileCount: 0, cachedSummaryCount: 0
+    };
     if (!this.summaryFoldersDir || !fs.existsSync(this.summaryFoldersDir)) {
       this.folderSummaryCache.set(ownerId, []);
-      return [];
+      const memories = [];
+      this.folderSummarySnapshotRevisions.set(memories, this.getFolderSummaryRevision(ownerId));
+      this.folderSummaryLoadDiagnostics.set(ownerId, loadDiagnostics);
+      return memories;
     }
     const prefix = `${ownerId}_`;
     const folders = fs.readdirSync(this.summaryFoldersDir, { withFileTypes: true })
@@ -744,24 +780,47 @@ class MemoryStore {
     const sessions = new Map();
     for (const folder of folders) {
       const folderPath = path.join(this.summaryFoldersDir, folder.name);
-      for (const file of fs.readdirSync(folderPath).filter((name) => name.endsWith(".json"))) {
-        const summaries = this.readJson(path.join(folderPath, file), []);
-        if (!Array.isArray(summaries)) continue;
+      const files = fs.readdirSync(folderPath).filter((name) => name.endsWith(".json"));
+      loadDiagnostics.filesFound += files.length;
+      for (const file of files) {
+        const invalidFile = Symbol("invalid_summary_file");
+        const summaries = this.readJson(path.join(folderPath, file), invalidFile);
+        if (!Array.isArray(summaries)) {
+          loadDiagnostics.malformedFileCount++;
+          continue;
+        }
+        loadDiagnostics.filesParsed++;
+        loadDiagnostics.recordsParsed += summaries.length;
         for (let index = 0; index < summaries.length; index++) {
           const summary = summaries[index];
           // Official documents are selected once through the responder's 2+1 route.
           if (summary?.sourceType === "CK3_OFFICIAL_RECOLLECTION") continue;
-          if (!summary || typeof summary.content !== "string") continue;
+          if (!summary || typeof summary !== "object" || typeof summary.content !== "string") {
+            loadDiagnostics.ownerRejectedCount++;
+            continue;
+          }
           const playerId = Number(summary.playerId);
           const summaryCharacterId = Number(summary.characterId);
-          const counterpartId = playerId === ownerId && Number.isFinite(summaryCharacterId) ? summaryCharacterId : summaryCharacterId === ownerId && Number.isFinite(playerId) ? playerId : Number.isFinite(summaryCharacterId) ? summaryCharacterId : null;
+          const explicitIds = [playerId, summaryCharacterId].filter((id) => Number.isSafeInteger(id) && id > 0);
+          const perspectiveOwnerId = summary.perspectiveOwnerId == null ? null : Number(summary.perspectiveOwnerId);
+          const hasSourceIdentity = summary.playerId != null || summary.characterId != null;
+          if ((perspectiveOwnerId !== null && (!Number.isSafeInteger(perspectiveOwnerId) || perspectiveOwnerId !== ownerId))
+            || (explicitIds.length > 0 && !explicitIds.includes(ownerId))
+            || (hasSourceIdentity && !explicitIds.includes(ownerId))) {
+            loadDiagnostics.ownerRejectedCount++;
+            continue;
+          }
+          loadDiagnostics.ownerAcceptedCount++;
+          const counterpartId = playerId === ownerId && Number.isSafeInteger(summaryCharacterId) && summaryCharacterId > 0 && summaryCharacterId !== ownerId
+            ? summaryCharacterId
+            : summaryCharacterId === ownerId && Number.isSafeInteger(playerId) && playerId > 0 && playerId !== ownerId ? playerId : null;
           const filenameMatch = file.match(/^与(.+)的对话\.json$/);
           const counterpartName = filenameMatch?.[1] || summary.characterName || null;
           const participantProfiles = Array.isArray(summary.participants) ? summary.participants : [];
           const summaryProfiles = mergeCharacterProfiles(
             participantProfiles,
-            [{ id: playerId, name: summary.playerName, shortName: summary.playerName }],
-            [{ id: summaryCharacterId, name: summary.characterName, shortName: summary.characterName }]
+            Number.isSafeInteger(playerId) && playerId > 0 ? [{ id: playerId, name: summary.playerName, shortName: summary.playerName }] : [],
+            Number.isSafeInteger(summaryCharacterId) && summaryCharacterId > 0 ? [{ id: summaryCharacterId, name: summary.characterName, shortName: summary.characterName }] : []
           );
           const participants = uniqueIds([
             ownerId,
@@ -786,7 +845,7 @@ class MemoryStore {
             existing.subjects = uniqueIds([...existing.subjects, ...participants.filter((id) => id !== ownerId)]);
             existing.tags = [...new Set([...existing.tags, counterpartName, ...participantNames].filter(Boolean))];
             existing.provenance.conversationFiles = [...new Set([...existing.provenance.conversationFiles, file])];
-            existing.provenance.counterpartIds = uniqueIds([...existing.provenance.counterpartIds, counterpartId]);
+            existing.provenance.counterpartIds = uniqueIds([...existing.provenance.counterpartIds, ...(counterpartId == null ? [] : [counterpartId])]);
             existing.provenance.counterpartNames = [...new Set([...existing.provenance.counterpartNames, counterpartName].filter(Boolean))];
             existing.provenance.participantProfiles = mergeCharacterProfiles(existing.provenance.participantProfiles || [], summaryProfiles);
             existing.provenance.perspectiveMemoryIds = [...new Set([...existing.provenance.perspectiveMemoryIds, ...(summary.perspectiveMemoryIds || [])].map(String).filter(Boolean))];
@@ -819,9 +878,9 @@ class MemoryStore {
               folderName: folder.name,
               conversationFile: file,
               conversationFiles: [file],
-              counterpartId,
+            counterpartId: counterpartId == null ? undefined : counterpartId,
               counterpartName,
-              counterpartIds: [counterpartId],
+            counterpartIds: counterpartId == null ? [] : [counterpartId],
               counterpartNames: [counterpartName],
               participantProfiles: summaryProfiles,
               extractionMode: ["2.5", MEMORY_ENGINE_VERSION].includes(summary.engineVersion) ? "folder_summary_v2_5" : summary.engineVersion === "2.4" ? "folder_summary_v2_4" : summary.engineVersion === "2.3" ? "folder_summary_v2_3" : "folder_summary_v2_1",
@@ -837,16 +896,23 @@ class MemoryStore {
     }
     const memories = [...sessions.values()];
     this.folderSummaryCache.set(ownerId, memories);
-    return memories.map((memory) => createMemoryRecord(memory));
+    loadDiagnostics.cachedSummaryCount = memories.length;
+    this.folderSummaryLoadDiagnostics.set(ownerId, loadDiagnostics);
+    const snapshot = memories.map((memory) => createMemoryRecord(memory));
+    this.folderSummarySnapshotRevisions.set(snapshot, this.getFolderSummaryRevision(ownerId));
+    return snapshot;
   }
 
   loadDirectPairSummaries(ownerId, counterpartId, ownerMemories = null) {
+    const numericOwnerId = Number(ownerId);
     const numericCounterpartId = Number(counterpartId);
-    if (!Number.isFinite(numericCounterpartId)) return [];
-    const memories = Array.isArray(ownerMemories) ? ownerMemories : this.loadFolderSummariesForCharacter(ownerId);
+    if (!Number.isSafeInteger(numericOwnerId) || numericOwnerId <= 0 || !Number.isSafeInteger(numericCounterpartId)
+      || numericCounterpartId <= 0 || numericOwnerId === numericCounterpartId) return [];
+    const memories = Array.isArray(ownerMemories) ? ownerMemories : this.loadFolderSummariesForCharacter(numericOwnerId);
     return memories.filter((memory) => {
+      if (Number(memory.provenance?.folderOwnerId) !== numericOwnerId) return false;
       const ids = uniqueIds([memory.provenance?.counterpartId, ...(memory.provenance?.counterpartIds || [])]);
-      return ids.includes(numericCounterpartId);
+      return ids.includes(numericCounterpartId) && memory.participants.includes(numericOwnerId);
     });
   }
 

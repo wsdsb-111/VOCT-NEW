@@ -8,6 +8,7 @@ const { MemoryEngine, MemoryRanker } = require("../resources/app/out/main/memory
 const { TokenCounter } = require("../resources/app/out/main/provider-service");
 
 const estimateTokens = text => TokenCounter.estimateTokens(text);
+const campaignToken = "summary-recall-test-campaign";
 const root = fs.mkdtempSync(path.join(os.tmpdir(), "votc-recall-promises-"));
 try {
   const summaries = path.join(root, "summaries");
@@ -15,7 +16,9 @@ try {
   fs.mkdirSync(folder, { recursive: true });
   const promise = "下月初一带乙入宫见皇后，若获同意再议婚事。";
   const longContent = `【本场经过】\n${"二人在城中游览谈天。".repeat(500)}\n\n【需要长期记住的事项】\n- ${promise}\n- 这是约定，尚未履行。`;
-  const row = (id, day, counterpart, content, pinned = false) => ({ finalizationId: id, totalDays: day, date: `1169年${day}月1日`, playerId: 2, characterId: counterpart, content, pinned });
+  const row = (id, day, counterpart, content, pinned = false) => ({ finalizationId: id, totalDays: day, date: `1169年${day}月1日`,
+    playerId: 2, characterId: counterpart, perspectiveOwnerId: 2, content, pinned, campaignToken,
+    campaignBinding: { status: "bound", source: "test_fixture", version: 1 } });
   // A short bystander projection sorts before the complete private pair file.
   fs.writeFileSync(path.join(folder, "与A旁人的对话.json"), JSON.stringify([row("old-promise", 1, 3, "旁人只听见寒暄。"), row("same-copy", 0, 3, "共同见闻。", true)]));
   fs.writeFileSync(path.join(folder, "与乙的对话.json"), JSON.stringify([
@@ -29,7 +32,7 @@ try {
   assert.equal(loaded.filter(m => m.provenance.finalizationId === "same-copy").length, 1, "identical session copies still deduplicate");
   assert.equal(loaded.filter(m => m.provenance.finalizationId === "old-promise").length, 2, "different directed projections retain their own content");
   const sessionRecallCache = new Map();
-  const options = { characterId: 2, directCounterpartIds: [1], tokenBudget: 800, estimateTokens, sessionRecallCache };
+  const options = { characterId: 2, directCounterpartIds: [1], campaignToken, tokenBudget: 800, estimateTokens, sessionRecallCache };
   const recall = engine.retrieveForResponder(options);
   for (const id of ["newest", "second"]) assert(recall.direct.some(e => e.memory.provenance.finalizationId === id), "latest TWO distinct conversations must be frozen");
   assert(recall.extra.some(e => e.memory.provenance.finalizationId === "old-promise"), "older promise remains eligible in the shared dynamic Extra pool");

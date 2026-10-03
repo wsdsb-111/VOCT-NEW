@@ -12,10 +12,12 @@ const { evidenceMemory } = require("./v8.6.2-test-fixtures");
   const root = fs.mkdtempSync(path.join(os.tmpdir(), "votc-v871-memory-"));
   try {
     const engine = new MemoryEngine({ baseDir: path.join(root, "memory"), summaryFoldersDir: path.join(root, "summaries"), recoveryDir: path.join(root, "recovery"), trace: { record() {} } });
-    const direct = { memoryId: "direct-v871", type: "folder_summary", epistemicStatus: "known", content: "玩家与韩世忠约定下月赴约。", canonicalText: "玩家与韩世忠约定下月赴约。", participants: [1, 2], subjects: [1, 2], importance: 0.9, confidence: 1, totalDays: 429999, eventDate: "1174年12月30日", provenance: { folderOwnerId: 2, finalizationId: "direct-v871", counterpartId: 1, counterpartIds: [1] } };
-    const retrieval = engine.retrieveForResponder({ characterId: 2, query: "还记得赴约吗？", directCounterpartIds: [1], ownerFolderMemories: [direct], currentTotalDays: 430000, tokenBudget: 800, estimateTokens: (value) => Math.ceil(String(value).length / 2), sessionRecallCache: new Map(), mentionedRecallCache: new Map() });
+    const direct = { memoryId: "direct-v871", type: "folder_summary", epistemicStatus: "known", content: "玩家与韩世忠约定下月赴约。", canonicalText: "玩家与韩世忠约定下月赴约。", participants: [1, 2], subjects: [1, 2], importance: 0.9, confidence: 1, totalDays: 429999, eventDate: "1174年12月30日", provenance: { folderOwnerId: 2, finalizationId: "direct-v871", counterpartId: 1, counterpartIds: [1], campaignToken: "v8.7.1-test" } };
+    const directSnapshot = [direct];
+    engine.store.folderSummarySnapshotRevisions.set(directSnapshot, engine.store.getFolderSummaryRevision(2));
+    const retrieval = engine.retrieveForResponder({ characterId: 2, query: "还记得赴约吗？", directCounterpartIds: [1], ownerFolderMemories: directSnapshot, campaignToken: "v8.7.1-test", currentTotalDays: 430000, tokenBudget: 800, estimateTokens: (value) => Math.ceil(String(value).length / 2), sessionRecallCache: new Map(), mentionedRecallCache: new Map() });
     assert.deepEqual(retrieval.direct.map((entry) => entry.memory.memoryId), [direct.memoryId]);
-    const turn = engine.retrieveTurnRecall({ characterId: 2, query: "还记得下月赴约吗？", entityIds: [1], entityNames: ["玩家"], participantIds: [1], ownerFolderMemories: [direct], currentTotalDays: 430000, tokenBudget: 256, estimateTokens: (value) => Math.ceil(String(value).length / 2), cache: new Map(), turnEpoch: 1 });
+    const turn = engine.retrieveTurnRecall({ characterId: 2, query: "还记得下月赴约吗？", entityIds: [1], entityNames: ["玩家"], participantIds: [1], ownerFolderMemories: directSnapshot, campaignToken: "v8.7.1-test", currentTotalDays: 430000, tokenBudget: 256, estimateTokens: (value) => Math.ceil(String(value).length / 2), cache: new Map(), turnEpoch: 1 });
     assert.deepEqual(turn.selected.map((entry) => entry.memory.memoryId), [direct.memoryId]);
     assert(turn.tokens <= 256);
     const thirdParty = buildThirdPartyEvidencePatch({ query: "韩世忠答应了吗？", entities: [{ id: 3, aliases: ["韩世忠"], memories: [evidenceMemory()] }] });

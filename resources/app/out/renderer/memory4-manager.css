@@ -1,0 +1,66 @@
+.memory4-manager {
+  --memory4-text: #ebdfc8;
+  --memory4-muted: #c5bbab;
+  --memory4-line: rgba(183, 161, 116, 0.4);
+  --memory4-alert: #f1b98a;
+  color: var(--memory4-text);
+  background: var(--votc-surface, rgba(22, 23, 28, 0.82));
+  padding: 12px;
+  min-width: 0;
+}
+:root[data-votc-theme="parchment"] .memory4-manager,
+:root[data-votc-theme="ink"] .memory4-manager {
+  --memory4-text: #273d37;
+  --memory4-muted: #4b5953;
+  --memory4-line: rgba(51, 70, 63, 0.35);
+  --memory4-alert: #8b332b;
+}
+.memory4-manager * { box-sizing: border-box; letter-spacing: 0; }
+.memory4-heading, .memory4-actions, .memory4-pager, .memory4-conflict {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.memory4-heading { justify-content: space-between; margin-bottom: 10px; }
+.memory4-heading > button { width: 34px; height: 32px; padding: 0; font-size: 20px; }
+.memory4-tabs { display: flex; flex-wrap: wrap; gap: 6px; border-bottom: 1px solid var(--memory4-line); padding-bottom: 10px; }
+.memory4-tabs button { min-height: 34px; padding: 6px 12px; font-size: 13px; white-space: normal; }
+.memory4-tabs button[aria-selected="true"] { outline: 2px solid var(--memory4-text); outline-offset: 1px; }
+.memory4-panel { padding-top: 12px; min-height: 80px; }
+.memory4-manager h5 { color: var(--memory4-text); margin: 0 0 10px; font-size: 15px; }
+.memory4-entity, .memory4-derived, .memory4-detail, .memory4-source, .memory4-legacy-row { padding: 12px 0; border-bottom: 1px solid var(--memory4-line); }
+.memory4-entity dl { display: grid; grid-template-columns: 90px minmax(0, 1fr) 90px minmax(0, 1fr); gap: 7px 12px; margin: 0 0 12px; font-size: 13px; }
+.memory4-entity dt { color: var(--memory4-muted); }
+.memory4-entity dd { margin: 0; overflow-wrap: anywhere; }
+.memory4-manager summary { cursor: pointer; padding: 6px 0; color: var(--memory4-text); overflow-wrap: anywhere; }
+.memory4-status { display: inline-block; color: var(--memory4-alert); font-size: 12px; margin-left: 12px; }
+.memory4-text { color: var(--memory4-text); white-space: pre-wrap; overflow-wrap: anywhere; line-height: 1.6; }
+.memory4-meta, .memory4-empty { color: var(--memory4-muted); font-size: 13px; line-height: 1.6; }
+.memory4-conflict { border-left: 3px solid var(--memory4-alert); padding: 10px; margin: 10px 0; color: var(--memory4-alert); }
+.memory4-error { color: var(--memory4-alert); overflow-wrap: anywhere; }
+.memory4-derived-item { padding: 8px 0; }
+.memory4-actions { margin: 10px 0; }
+.memory4-legacy-row { display: grid; gap: 8px; }
+.memory4-manager code, .memory4-manager pre { overflow-wrap: anywhere; white-space: pre-wrap; }
+.memory4-pager { justify-content: center; padding: 12px 0; }
+.memory4-modal { width: min(760px, 92vw); max-width: 92vw; min-width: 0; max-height: 88vh; border-radius: 8px; color: var(--memory4-text); background: var(--votc-surface-raised, #1f1f24); display: flex; flex-direction: column; }
+.memory4-modal .modal-header { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.memory4-modal .modal-header h4 { color: var(--memory4-text); text-shadow: none; }
+.memory4-modal .modal-header button { width: 32px; height: 32px; padding: 0; flex: 0 0 32px; font-size: 20px; }
+.memory4-modal .modal-body { overflow-y: auto; }
+.memory4-modal .memory4-text { color: var(--memory4-text); }
+.memory4-modal .memory4-meta { color: var(--memory4-muted); }
+.memory4-modal .memory4-error { color: var(--memory4-alert); }
+.memory4-modal .modal-footer { display: flex; justify-content: flex-end; gap: 8px; padding-top: 12px; }
+.memory4-modal textarea { width: 100%; min-height: 220px; padding: 10px; resize: vertical; line-height: 1.6; color: var(--votc-control-text, #eee5d6); background: var(--votc-control-bg, #0a0b0e); border: 1px solid var(--memory4-line); }
+.memory4-manager button:disabled { opacity: 0.55; cursor: default; }
+@media (max-width: 720px) {
+  .summaries-manager .player-summary-group:has(.memory4-manager) > .player-header { flex-wrap: wrap; }
+  .summaries-manager .player-summary-group:has(.memory4-manager) > .player-header .player-name { min-width: 0; overflow-wrap: anywhere; }
+  .summaries-manager .player-summary-group:has(.memory4-manager) > .player-header button { max-width: 100%; white-space: normal; }
+  .memory4-manager { padding: 8px; }
+  .memory4-entity dl { grid-template-columns: 86px minmax(0, 1fr); }
+  .memory4-tabs button { flex: 1 1 130px; }
+  .memory4-status { display: block; margin-left: 0; }
+}

@@ -1,5 +1,19 @@
 # 对话摘要系统：Memory Engine 3.0（2.5 存储兼容）
 
+## V8.14-D/E 派生与管理（本地发布与独立 QA/UI 通过，实机待验收）
+
+[D/E 施工记录](v8.14-de-year-life-management-implementation-report.md)说明 Year/Life 的来源版本、dirty/revision、异步重建、取消和 `manual_override` 保护，以及人物认知、Official、Life、Year、Detail、Legacy 分层管理。派生视图可重建，不能替代 Canonical Detail；dirty 或来源失效的片段不进入有效召回，手工保留不会把旧来源重新标为有效。编辑/删除需要当前 Campaign/Owner 和 expected revision，旧页面不能覆盖新版本；Legacy 重压缩按单篇来源核验，原摘要保留，不强制全量迁移。
+
+本轮同时增加动态玩家身份知情边界：后台标签不等于 NPC 已知身份；同场、刚开始交谈与高好感不授予姓名或头衔。明确当前关系、实际血亲、本角色获准记忆、公开事实及正文介绍仍可提供具体知识；介绍一项身份不解锁整包玩家资料。身份专项 13 项、D 专项 17 项、E 管理专项、独立 QA 37 项以及三主题/窄窗口 27 张隔离打包截图通过。完整发布 **339/339** 组、408 分类文件、68 历史归档；真实 CK3/Provider/Cache/Soak 与 Bulk Binding 存档提交仍待验收。
+
+Memory Engine 3.0 可见标签、2.5 存储兼容、Recent2、官方追忆、C 的多实体共用 2+1/整包预算与 V8.13 Cache Anchor 保持原合同。以下 C 与旧阶段记录保留原施工时点及证据范围。
+
+## V8.14-C 正式动态召回（本地实现，独立及实机 Gate 待验收）
+
+2026-10-03 用户确认 A/B 收口并进入 C。[进度与施工报告](v8.14-c-recall-planner-implementation-report.md)记录正式 Memory4/Legacy 动态读取接线：四种 Axis、六种 Granularity；所有实体共用 Overview≤1、Detail≤2（LIFE 代表细节≤1，精确日期无概览），整包包含来源/认知说明并受 `min(1200, Memory 剩余额度, Provider 安全余量)` 限制。EVENT 不借用对话日期，明确年份不补错年，第三人只读回应者自己的知情空间。
+
+冻结 Recent2、官方追忆与缓存锚点不变。成功回复并验证实际动态 block/ID/token 后提交 responder-private 历史、Seen 和最多三轮的同实体/话题/事件链 Focus；失败不提交。压缩移出、来源变更、Campaign 切换或时间倒退撤销旧块。Legacy 只有能重验完整独立来源事实时才拆分/抑制，未知边界不猜测。Year/Life 生成仍属于 D，不在本轮强制迁移旧摘要。运行时版本常量与现有可见标签未更改，下方为前置阶段合同。
+
 V8.12 Part 3 将可见标签及 `MEMORY_ENGINE_VERSION` 更新为 3.0；底层 `schemaVersion: 2`、2.5 人物目录、字段和写入合同保持兼容，不迁移用户摘要。系统仍以人物摘要文件夹作为玩家可见、可搜索、可编辑的长期记忆层。旧 2.3/2.4/2.5 摘要继续读取。V8.6.2 的 2.6 可见标签属于下述历史阶段。
 
 2026-09-24，用户明确确认 **V8.12 Part 3 实机 Gates 验收通过（用户报告）**，并授权 V8.12.1 实施。未回填逐项实测指标，既有自动化与隔离冒烟仍保持原证据范围；该确认不代表 V8.12.1 已验收或全局 V8 Full Freeze。详见 [Part 3 验收记录](v8.12-part3-memory-engine-3.0-implementation-report.md)。

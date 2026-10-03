@@ -1,0 +1,98 @@
+SanGong_Restore_Ruler_Stage_decision = {
+    picture = { reference = "gfx/interface/illustrations/decisions/SanGong_decisions_illustrations_3.dds" }
+    decision_group_type = SanGongLiuYuan
+    desc = SanGong_Restore_Ruler_Stage_decision_desc
+    should_create_alert = { always = no }
+    sort_order = 9500
+
+    is_shown = {
+        is_ai = no
+        SanGong_huangdi_trigger = yes
+        NOR = {
+            has_trait = SanGong_KaiGuo
+            has_trait = SanGong_ZhongXing
+            has_trait = SanGong_XiongZhu
+            has_trait = SanGong_ShouCheng
+            has_trait = SanGong_HunJun
+            has_trait = SanGong_YouZhu
+            has_trait = SanGong_WangGuoJunZhu
+        }
+    }
+
+    is_valid = {
+        is_ai = no
+        SanGong_huangdi_trigger = yes
+        NOR = {
+            has_trait = SanGong_KaiGuo
+            has_trait = SanGong_ZhongXing
+            has_trait = SanGong_XiongZhu
+            has_trait = SanGong_ShouCheng
+            has_trait = SanGong_HunJun
+            has_trait = SanGong_YouZhu
+            has_trait = SanGong_WangGuoJunZhu
+        }
+    }
+
+    effect = {
+        if = {
+            limit = { NOT = { has_variable = Dengji_years_var } }
+            set_variable = { name = Dengji_years_var value = 0 }
+        }
+        if = {
+            limit = { NOT = { has_variable = Dengji_sub_realm_var } }
+            set_variable = { name = Dengji_sub_realm_var value = sub_realm_size }
+        }
+        if = {
+            limit = { NOT = { has_variable = SanGong_XiongZhu_var } }
+            set_variable = { name = SanGong_XiongZhu_var value = SanGong_XiongZhu_value }
+        }
+        if = {
+            limit = { NOT = { has_variable = SanGong_HunJun_var } }
+            set_variable = { name = SanGong_HunJun_var value = SanGong_HunJun_value }
+        }
+        if = {
+            limit = {
+                NOT = { has_variable = SanGong_Zhongxing_var }
+                situation:dynastic_cycle ?= {
+                    OR = {
+                        situation_current_phase = situation_dynastic_cycle_phase_chaos
+                        situation_current_phase = situation_dynastic_cycle_phase_instability_conquest
+                        situation_current_phase = situation_dynastic_cycle_phase_instability
+                    }
+                }
+            }
+            set_variable = SanGong_Zhongxing_var
+        }
+        else_if = {
+            limit = {
+                NOT = { has_variable = SanGong_HunJun_var2 }
+                situation:dynastic_cycle ?= {
+                    OR = {
+                        situation_current_phase = situation_dynastic_cycle_phase_stability_expansion
+                        situation_current_phase = situation_dynastic_cycle_phase_stability_advancement
+                    }
+                }
+            }
+            set_variable = SanGong_HunJun_var2
+        }
+
+        if = {
+            limit = {
+                OR = {
+                    NOT = { exists = primary_title.previous_holder }
+                    AND = {
+                        exists = primary_title.previous_holder
+                        primary_title.previous_holder.dynasty != root.dynasty
+                    }
+                }
+            }
+            add_trait = SanGong_KaiGuo
+        }
+        else = {
+            HuangDi_GaiGuanDingLun_effect = yes
+        }
+        create_BenJi_story_effect = yes
+    }
+
+    ai_will_do = 0
+}

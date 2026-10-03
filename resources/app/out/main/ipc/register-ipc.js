@@ -863,7 +863,10 @@ function registerIpcHandlers(runtime) {
     try {
       if (options?.refresh === true) memoryEngine.invalidateSummaryFolderCache();
       const summaries = await SummariesManager.listAllSummaries();
-      return { summaries, memoryOverview: memoryEngine.getUiOverview({ summaryCatalog: summaries }), recoveryStatus: SummariesManager.getRecoveryStatus() };
+      const incidentDiagnostics = require("../memory-system/incident-diagnostics").buildIncidentDiagnostics({
+        memoryEngine, conversation: conversationManager.getCurrentConversation(), providerDiagnostics
+      });
+      return { summaries, memoryOverview: memoryEngine.getUiOverview({ summaryCatalog: summaries }), recoveryStatus: SummariesManager.getRecoveryStatus(), incidentDiagnostics };
     } catch (error) {
       console.error("Failed to get summaries dashboard data:", error);
       return { summaries: [], memoryOverview: { engineVersion: "2.2", totals: {}, boundaries: [], routingPolicy: {}, characters: [], error: error.message || "Unknown error" } };
@@ -877,6 +880,20 @@ function registerIpcHandlers(runtime) {
       return { success: false, error: "摘要重试失败，恢复记录已保留，请检查摘要模型配置及日志。" };
     }
   });
+  for (const [channel, method] of [["memory4:getOwnerData", "getMemory4OwnerData"], ["memory4:getEntry", "getMemory4Entry"],
+    ["memory4:getSources", "getMemory4Sources"], ["memory4:mutate", "mutateMemory4"]]) {
+    electron.ipcMain.handle(channel, async (_, request = {}) => {
+      try {
+        if (!request || typeof request !== "object" || Array.isArray(request)) throw new Error("memory4_request_required");
+        const ownerId = requireInteger(request.ownerId, "owner_id", { min: 1, max: 2147483647 });
+        if (request.expectedCampaignToken != null && (typeof request.expectedCampaignToken !== "string" || request.expectedCampaignToken.length > 256)) throw new Error("memory4_campaign_invalid");
+        if (request.entityId != null) requireInteger(request.entityId, "entity_id", { min: 1, max: 2147483647 });
+        return await SummariesManager[method]({ ...request, ownerId });
+      } catch (error) {
+        return { success: false, error: error.message || "memory4_request_failed" };
+      }
+    });
+  }
   electron.ipcMain.handle("conversation:updateStructuredMemory", async (_, { memoryId, content }) => {
     try {
       return memoryEngine.updateMemoryContent(memoryId, content);
@@ -985,6 +1002,20 @@ function registerIpcHandlers(runtime) {
     } catch (error) {
       console.error("Failed to bind legacy owner summaries:", error);
       return { success: false, error: error.message || "Unknown error" };
+    }
+  });
+  electron.ipcMain.handle("conversation:regenerateSummary", async (_, request = {}) => {
+    try {
+      if (typeof request.expectedContent !== "string" || request.expectedContent.length > 1048576) throw new Error("summary_regeneration_source_invalid");
+      return await SummariesManager.regenerateSummary(
+        requireInteger(request.playerId, "player_id", { max: 2147483647 }),
+        requireInteger(request.characterId, "character_id", { max: 2147483647 }),
+        requireInteger(request.summaryIndex, "summary_index", { max: 1000000 }),
+        request.expectedContent
+      );
+    } catch (error) {
+      console.error("Failed to regenerate saved summary:", error);
+      return { success: false, error: error.message || "summary_regeneration_failed" };
     }
   });
   electron.ipcMain.handle("conversation:updateSummary", async (_, request = {}) => {

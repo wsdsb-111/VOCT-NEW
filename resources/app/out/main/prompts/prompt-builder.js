@@ -2,8 +2,10 @@
 
 const { buildFamilyFactBlock } = require("../worldline/character-family-facts");
 const { resolveProviderPromptProfile, resolvePromptLayoutId } = require("./provider-prompt-adapter");
-const { createStableProfile, createLiveProfile, formatStableProfile, formatStableKinship, formatLiveProfile } = require("./character-profile-v2");
+const { createStableProfile, createLiveProfile, buildStableKinship, formatStableProfile, formatStableKinship, formatLiveProfile } = require("./character-profile-v2");
 const { buildHistoricalReferenceReplacement } = require("../worldline/subjective-prompt-context");
+const { currentRelationship } = require("../memory-system/memory4-profile");
+const { parseRelationIntent } = require("../worldline/relation-intent-parser");
 
 const PROMPT_LIFECYCLE = Object.freeze({
   GLOBAL_STATIC: "GLOBAL_STATIC",
@@ -169,13 +171,32 @@ function createPromptBuilder({
      * Character-description scripts can be customized or disabled. Keep exact
      * responder facts close to history so direct factual questions use CK3 data.
      */
-    static buildResponderGameFacts(char) {
+    static buildPlayerIdentityKnowledge(char, gameData) {
+      const playerId = Number(gameData?.playerID);
+      if (!gameData?.characters?.has(playerId) || Number(char?.id) === playerId) return null;
+      const formalRelationships = [
+        ...currentRelationship(gameData, Number(char.id), playerId).types,
+        ...currentRelationship(gameData, playerId, Number(char.id)).types
+      ].filter(value => /^(friend|friends|best friend|rival|nemesis|lover|soulmate|spouse|wife|husband|father|mother|parent|son|daughter|child|brother|sister|sibling|uncle|aunt|cousin|liege|vassal|guardian|ward|courtier|朋友|好友|挚友|至交|仇敌|宿敌|恋人|情人|灵魂伴侣|领主|封臣|监护人|被监护人|廷臣)$/i.test(value.replace(/_/g, " "))
+        || parseRelationIntent(value).sourcePhrase === value);
+      const relationships = [...new Set([
+        ...formalRelationships,
+        ...buildStableKinship(char, gameData).filter(relative => Number(relative.runtimeId) === playerId).map(relative => relative.kinshipType)
+      ])];
+      return `=== 玩家身份知情边界（本轮高优先级，适用于当前回应角色） ===
+  - 当前 CK3 身份识别关系证据：${relationships.join("、") || "未提供"}。关系证据支持双方相识及相应称谓，不自动授予全部后台身份资料；缺少记录不等于从未相识。
+  - 人物资料、在场表、场景说明、Runtime ID 和消息说话者前缀里的玩家姓名、全名、家族、称号、头衔与官职都是后台标签，不构成本角色已经知道玩家身份的证据。本边界优先于这些资料和标签。
+  - 只可依据当前 CK3 明确的亲属或正式关系、本角色获准的记忆、获准的公开事实，以及当前对话正文中明确说出的自我介绍或他人介绍识别玩家。只授予来源明确给出的那项姓名、称号或身份，不得据此解锁整包玩家资料；介绍中的化名不等于已得知后台真名。
+  - 当前回合开始交谈、同场、好感数值、SHARED_SCENE 或本次相遇的直接交谈次数，都不等于已知玩家身份。没有上述具体身份来源时，应按尚未识别的对方自然回应，不得主动叫出后台姓名、家族、头衔或官职，也不得因为系统提供资料而装作早已认识。`;
+    }
+    static buildResponderGameFacts(char, gameData = null) {
       if (!char) return null;
       const age = Number(char.age);
       const primaryTitle = typeof char.primaryTitle === "string" ? char.primaryTitle.trim() : "";
       const title = primaryTitle && !["None", "None of", "None von", "None de"].includes(primaryTitle) ? primaryTitle : "无主要头衔";
       const courtPosition = typeof char.heldCourtAndCouncilPositions === "string" && char.heldCourtAndCouncilPositions.trim() ? char.heldCourtAndCouncilPositions.trim() : "无";
       const titleRank = typeof char.titleRankConcept === "string" && char.titleRankConcept !== "concept_none" ? char.titleRankConcept : "无";
+      const playerIdentityKnowledge = this.buildPlayerIdentityKnowledge(char, gameData);
       return `=== 当前回应角色的权威游戏资料（本轮 CK3 数据） ===
   - 游戏姓名／称号：${char.fullName || char.shortName || "未知"}
   - 姓名：${char.shortName || char.firstName || "未知"}
@@ -183,7 +204,7 @@ function createPromptBuilder({
   - 主要头衔：${title}
   - 宫廷／议会职位：${courtPosition}
   - 头衔等级：${titleRank}
-  当被问及自己的姓名、称号、头衔、官职或年龄时，必须逐项以以上本轮游戏数据直接回答；不得根据历史、对话记忆或常识猜测，也不得用年龄阶段替代具体岁数。`;
+  当被问及自己的姓名、称号、头衔、官职或年龄时，必须逐项以以上本轮游戏数据直接回答；不得根据历史、对话记忆或常识猜测，也不得用年龄阶段替代具体岁数。${playerIdentityKnowledge ? `\n\n${playerIdentityKnowledge}` : ""}`;
     }
     /**
      * Stable, character-independent prefix for providers with prefix KV caching.
@@ -551,7 +572,7 @@ function createPromptBuilder({
         role: "system",
         stable: false
       };
-      const responderGameFacts = this.buildResponderGameFacts(char);
+      const responderGameFacts = this.buildResponderGameFacts(char, gameData);
       const latestUserQuery = [...workingHistory].reverse().find((message) => message.role === "user")?.content || "";
       const responderFamilyFacts = buildFamilyFactBlock(char, gameData, { query: latestUserQuery, currentFactRegistry });
       const mentionedCharactersContext = memoryContext?.subjectiveWorldPolicyActive ? null : this.buildMentionedCharactersContext(char, gameData, workingHistory, currentFactRegistry);
@@ -864,6 +885,11 @@ function createPromptBuilder({
         if (glmCacheV2 && block.type === "main") insertCacheV2Frozen();
       }
       insertPreHistoryContext();
+      if (responderGameFacts && !blocksWithTokens.some(entry => entry.block.id === responderGameFactsBlock.id)) {
+        llmMessages.push({ role: "system", content: responderGameFacts });
+        blocksWithTokens.push({ block: { ...responderGameFactsBlock, lifecycle: PROMPT_LIFECYCLE.DYNAMIC },
+          content: responderGameFacts, tokens: TokenCounter.estimateTokens(responderGameFacts) });
+      }
       if (promptSettings.suffix?.enabled && promptSettings.suffix.template) {
         const suffixBlock = {
           id: "suffix",

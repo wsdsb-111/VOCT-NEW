@@ -448,6 +448,7 @@ export class Character {
     /**@property {string} shortName - example: Count Janos*/
     shortName: string; 
     fullName: string;
+    nickname: string;
     primaryTitle: string;
     sheHe: string;
     age: number;
@@ -512,6 +513,7 @@ export class Character {
         this.id = Number(data[0]),
             this.shortName = data[1],
             this.fullName = data[2],
+            this.nickname = data[27] || "",
             this.primaryTitle = data[3],
             this.sheHe = data[4],
             this.age = Number(data[5]),

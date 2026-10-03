@@ -5,6 +5,7 @@ const { validateSummarySegmentPresenceBoundaries } = require("./perspective-proj
 
 const PRIVATE_CUE = /心想|心里|心底|心下|暗想|心中|内心|暗自|默念|没(?:有)?说出口|未说出口|腹诽|偷偷决定|无人察觉|趁人不注意|私下盘算|秘密决定/;
 const GROUP_CUE = /只对.{0,16}(?:低声|说|讲|耳语)|(?:凑到|靠近).{0,16}耳边|私下告诉|悄声对|低声对/;
+const PUBLIC_CUE = /公开(?:说|回应|表示|宣布)|(?:对|向|面向|转向)众人.{0,12}(?:说|回应|宣布|确认|提出)|(?:大声|朗声)(?:说|宣布)/;
 const REPORTED_CUE = /听说|据说|声称|传闻|转述|告诉.{0,20}(?:已经|曾经|将要)/;
 const PRESENCE_KINDS = new Set(["presence_join", "presence_leave", "presence_temporary_leave", "presence_temporary_return"]);
 
@@ -41,6 +42,9 @@ function isOutsideRestrictedParagraph(raw, content, cue) {
 }
 
 function validateSourceItem(item, context, { segment = false } = {}) {
+  const rawMessageIds = item?.provenance?.messageIds;
+  if (!Array.isArray(rawMessageIds) || rawMessageIds.some((id, index) => !Number.isSafeInteger(id) || id < 0
+    || (index > 0 && id <= rawMessageIds[index - 1]))) return { success: false, reason: "visibility_source_invalid" };
   const messageIds = uniqueIds(item?.provenance?.messageIds);
   const claimedSpeakers = uniqueIds(item?.provenance?.speakerIds);
   const claimedParticipants = uniqueIds(item?.participants);
@@ -100,7 +104,7 @@ function validateSourceItem(item, context, { segment = false } = {}) {
   return { success: true, audience, speakers, messageIds, visibility, source: item.source || "spoken" };
 }
 
-function sourceParagraphSegments(context, source) {
+function sourceParagraphSegments(context, source, restrictUnmarked = false) {
   const speaker = speakerId(source, context.participants);
   const present = presentIds(context, Number(source.id));
   const paragraphs = String(source.content || "").split(/\r?\n/).map((text) => text.trim()).filter(Boolean);
@@ -114,18 +118,19 @@ function sourceParagraphSegments(context, source) {
       if (targets.length === 1) { visibility = "known_group"; participants = [speaker, targets[0]]; }
       else visibility = "private";
     }
+    else if (restrictUnmarked && !PUBLIC_CUE.test(content)) visibility = "private";
     return { content, participants, visibility, source: REPORTED_CUE.test(content) ? "reported" : "spoken",
       knownBy: [], provenance: { messageIds: [Number(source.id)], speakerIds: [speaker], extractionMode: "visibility_source_paragraph" } };
   });
 }
 
-function sourcePresenceSegment(context, source) {
+function sourcePresenceSegment(context, source, restrictUnmarked = false) {
   if (source.role === "system" && PRESENCE_KINDS.has(source.kind)) return [{
     content: String(source.content || "").trim(), participants: presentIds(context, Number(source.id)),
     visibility: "participants", source: "game_fact", knownBy: [],
     provenance: { messageIds: [Number(source.id)], speakerIds: [], extractionMode: "visibility_source_presence" }
   }];
-  return ["user", "assistant"].includes(source.role) ? sourceParagraphSegments(context, source) : null;
+  return ["user", "assistant"].includes(source.role) ? sourceParagraphSegments(context, source, restrictUnmarked) : null;
 }
 
 function repairVisibilityBoundaries(context, extraction) {
@@ -135,13 +140,22 @@ function repairVisibilityBoundaries(context, extraction) {
     const validation = validateSourceItem(segment, context, { segment: true });
     const presence = validateSummarySegmentPresenceBoundaries(context, { summarySegments: [segment] });
     if (validation.success && presence.success) continue;
-    if (presence.success && !["summary_segment_crosses_visibility_boundary", "visibility_source_invalid", "visibility_presence_marker_invalid",
-      "visibility_reported_source_mismatch"].includes(validation.reason)) continue;
-    if (segment.visibility === "private" && presence.success) continue;
     const messageIds = uniqueIds(segment.provenance?.messageIds);
     if (!messageIds.length || messageIds.some((id) => !(context.messages || []).some((message) => Number(message.id) === id))) continue;
     if (messageIds.some((id) => !sourcePresenceSegment(context, (context.messages || []).find((message) => Number(message.id) === id)))) continue;
     for (const id of messageIds) if (!repairedMessageIds.includes(id)) repairedMessageIds.push(id);
+  }
+  // A replaced message can also occur in another segment. Rebuild that whole
+  // source group so an overlapping segment cannot silently lose its other IDs.
+  for (let index = 0; index < repairedMessageIds.length; index++) {
+    for (const segment of segments) {
+      const ids = uniqueIds(segment.provenance?.messageIds);
+      if (!ids.includes(repairedMessageIds[index])) continue;
+      for (const id of ids) {
+        const source = (context.messages || []).find((message) => Number(message.id) === id);
+        if (source && sourcePresenceSegment(context, source) && !repairedMessageIds.includes(id)) repairedMessageIds.push(id);
+      }
+    }
   }
   if (!repairedMessageIds.length) {
     extraction.memories = (extraction.memories || []).filter((memory) => validateSourceItem(memory, context).success);
@@ -149,22 +163,41 @@ function repairVisibilityBoundaries(context, extraction) {
   }
   const repairs = new Map(repairedMessageIds.map((id) => {
     const source = (context.messages || []).find((message) => Number(message.id) === id);
-    return [id, sourcePresenceSegment(context, source)];
+    const restrictUnmarked = segments.some(segment => ["private", "known_group"].includes(segment.visibility)
+      && uniqueIds(segment.provenance?.messageIds).includes(id));
+    return [id, sourcePresenceSegment(context, source, restrictUnmarked)];
   }));
   const inserted = new Set();
   extraction.summarySegments = segments.flatMap((segment) => {
     const ids = uniqueIds(segment.provenance?.messageIds);
-    if (!ids.some((id) => repairs.has(id))) return [segment];
+    if (!ids.length || !ids.every((id) => repairs.has(id))) return [segment];
     return ids.flatMap((id) => {
       if (!repairs.has(id) || inserted.has(id)) return [];
       inserted.add(id);
       return repairs.get(id);
     });
   });
+  extraction.summarySegments.sort((left, right) =>
+    Math.min(...(left.provenance?.messageIds || [])) - Math.min(...(right.provenance?.messageIds || [])));
   extraction.memories = (extraction.memories || []).filter((memory) =>
     !uniqueIds(memory.provenance?.messageIds).some((id) => repairs.has(id)) && validateSourceItem(memory, context).success);
   extraction.sessionSummary = extraction.summarySegments.map((segment) => segment.content).join("\n\n");
   return { repairedMessageIds };
+}
+
+function rebuildSourceNarrative(context, extraction = null) {
+  const summarySegments = [];
+  for (const source of context.messages || []) {
+    if (!String(source.content || "").trim()) continue;
+    if (source.role === "system" && !PRESENCE_KINDS.has(source.kind)) continue;
+    const restrictUnmarked = (extraction?.summarySegments || []).some(segment => ["private", "known_group"].includes(segment.visibility)
+      && uniqueIds(segment.provenance?.messageIds).includes(Number(source.id)));
+    const segments = sourcePresenceSegment(context, source, restrictUnmarked);
+    if (!segments || segments.some((segment) => !validateSourceItem(segment, context).success)) return null;
+    summarySegments.push(...segments);
+  }
+  return summarySegments.length ? { structured: true, summarySegments, memories: [],
+    sessionSummary: summarySegments.map((segment) => segment.content).join("\n\n") } : null;
 }
 
 function validateVisibilityBoundaries(context, extraction) {
@@ -178,4 +211,4 @@ function validateVisibilityBoundaries(context, extraction) {
   return { success: failures.length === 0, failures, reasons: failures.map((failure) => failure.reason) };
 }
 
-module.exports = { validateSourceItem, validateVisibilityBoundaries, repairVisibilityBoundaries, presentIds, speakerId };
+module.exports = { validateSourceItem, validateVisibilityBoundaries, repairVisibilityBoundaries, rebuildSourceNarrative, presentIds, speakerId };

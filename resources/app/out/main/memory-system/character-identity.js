@@ -77,7 +77,7 @@ function getCharacterMentionAliases(character = {}) {
   const positions = cleanText(character.heldCourtAndCouncilPositions || character.courtPosition);
   for (const position of positions.split(/[,，、;；\n]/)) add(position);
 
-  const titleText = [character.primaryTitle, character.shortName, character.fullName, character.titleRankConcept]
+  const titleText = [character.primaryTitle, character.titleRankConcept]
     .map(cleanText).join(" ").toLowerCase();
   if (character.allowDerivedHonorifics !== false && /皇帝|天子|帝国|emperor|kaiser|basileus|imperator|concept_emperor/.test(titleText)) {
     for (const alias of ["陛下", "皇帝", "天子", "官家"]) add(alias);

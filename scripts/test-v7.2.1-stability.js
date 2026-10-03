@@ -19,6 +19,7 @@ function writePair(folderRoot, owner, counterpart, summaries) {
     playerName: owner.name,
     characterId: counterpart.id,
     characterName: counterpart.name,
+    campaignToken: "v7.2.1-stability-test",
     participants: [owner, counterpart],
     finalizationId: `fin_${index}`,
     content
@@ -39,6 +40,7 @@ function writePair(folderRoot, owner, counterpart, summaries) {
       mentionedEntityIds: [999],
       mentionedEntityNames: { 999: ["不存在的人物"] },
       query: "继续此前的话题",
+      campaignToken: "v7.2.1-stability-test",
       memoryEngine3Enabled: false,
       tokenBudget: 1000,
       estimateTokens: (text) => String(text).length

@@ -18,6 +18,7 @@ function writeSummaries(folderRoot, owner, counterpart, summaries) {
     playerName: owner.name,
     characterId: counterpart.id,
     characterName: counterpart.name,
+    campaignToken: "v7.2-routing-test",
     participants: summary.participants || [{ id: owner.id, name: owner.name }, { id: counterpart.id, name: counterpart.name }],
     finalizationId: summary.finalizationId,
     content: summary.content
@@ -68,6 +69,7 @@ try {
     mentionedEntityIds: [X.id],
     mentionedEntityNames: { [X.id]: [X.name] },
     query: "粮草与玄德的旧事",
+    campaignToken: "v7.2-routing-test",
     currentTotalDays: 50,
     tokenBudget: 1200,
     estimateTokens: (text) => String(text).length

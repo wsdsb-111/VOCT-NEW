@@ -32,7 +32,8 @@ const otherFolder = buildSummaryCatalogEntry({
     characterId: 3,
     characterName: "丙",
     participants: [{ id: 1, name: "玩家" }, { id: 2, name: "乙" }, { id: 3, name: "丙" }],
-    content: "玩家与乙谈到丙。"
+    content: "玩家与乙谈到丙。",
+    campaignToken: "memory-ui-campaign"
   }]
 });
 const mentionedElsewhere = buildSummaryCatalogEntry({
@@ -88,7 +89,7 @@ try {
   assert.strictEqual(updatedMemory.content, "乙亲历了丙的再次到访。");
   assert.strictEqual(updatedMemory.canonicalText, "乙亲历了丙的再次到访。");
   assert.deepStrictEqual(updatedMemory.knownBy, [2], "editing memory text must not change its knowledge boundary");
-  const recalled = engine.retrieveForCharacter({ characterId: 2, query: "丙", entityIds: [3], tokenBudget: 500, estimateTokens: (text) => String(text).length });
+  const recalled = engine.retrieveForCharacter({ characterId: 2, query: "丙", entityIds: [3], campaignToken: "memory-ui-campaign", tokenBudget: 500, estimateTokens: (text) => String(text).length });
   assert([...recalled.stable, ...recalled.relevant].some((entry) => entry.memory.content.includes("玩家与乙谈到丙")), "NPC B must recall the prior B-C summary from B's own folder when C is mentioned");
 } finally {
   fs.rmSync(tempDir, { recursive: true, force: true });

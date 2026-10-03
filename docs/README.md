@@ -4,7 +4,15 @@
 
 ## 推荐阅读顺序
 
-V8.14 施工中：[工程化施工标准](v8.14-memory-engine-4.0-implementation-spec-dual-model.md) / [A 阶段实施报告](v8.14-a-durable-core-implementation-report.md) / [Sol 独立审查及修复复测](v8.14-a-sol-independent-review.md) / [Finalization 可见性收口及 P0 修复](v8.14-a-finalization-visibility-closeout-report.md) / [B Profile 与 CK3 回读接线](v8.14-b-profile-implementation-report.md) / [总体设计 Revision 3](v8.14-memory-engine-4.0-overall-design-revision3.md)。B 已接入生产 debug.log 回读，尚未接入旧摘要、实时 Prompt 或正式 Memory4 Recall；327 组发布回归通过，A/B 实机及独立 Gate 未验收。
+当前入口：[V8.14-D/E Year/Life 与长期记忆管理施工记录](v8.14-de-year-life-management-implementation-report.md)。用户于 2026-10-03 确认 A/B 收口并继续 C、身份修复及 D/E；身份专项 13 项、D 专项 17 项、独立 QA 37 项及三主题/窄窗口 27 张隔离打包截图通过。完整发布 **339/339** 组、408 分类文件、68 历史归档；真实 CK3/Provider/Cache/Soak 尚待验收。用户要求后续实现与审查统一使用 GPT-6.1 Sol，独立 QA 仍由不同 Agent 完成。下方 C 与 A/B HOLD、数量均保留为原阶段历史证据，以本条及最新报告为当前进度。
+
+最新事故修复：[第一百三十七阶段：信件接收失联与时间召回](V8阶段开发记录.md#第一百三十七阶段信件接收失联与时间召回事故修复2026-10-01实机待验收)。信件新增完整日志载荷接收并修正通知时机及多行解析；时间查询保留冻结 Recent2，以动态 Extra 注入目标摘要，并支持有正文依据的首次相识线索。334/334 本地发布组及隔离 Electron 启动/导航通过，需重启 CK3/VOTC 实机复测；A/B 仍 HOLD。
+
+当前优先阅读：[V8.14 二人/多人摘要生成与失败恢复可靠性修复](V8阶段开发记录.md#第一百三十四阶段v814-二人多人摘要生成与失败恢复可靠性修复实机待验收)，以及 [V8.14-B 实机事故修复与 A/B Gate 重开](v8.14-b-hotfix-incident-repair-report.md)。本轮按 V8.13.2.1 对比后移除了 V8.14 可见性源文修复成功后仍强制追加模型请求的门槛；恢复流程复用已保存输出，但必须重新通过来源、Presence 和可见性校验。逐篇摘要模型整理仍只以当前已保存正文为输入，不恢复原始对话。A/B 状态仍为 HOLD，Campaign 实机输出和真实 Provider 生成/恢复可靠性仍待实机验证。
+
+V8.14 三大 Mod 称谓兼容补丁：[施工与验证记录](v8.14-three-mod-character-name-compatibility-report.md)。补丁以天家宗仪现有称谓分派为主，保留汉番专属分支，并将普通回退接入东方王朝命名；VOCT 的 `VOTC:IN` 读取字段未变。需在 CK3 启用补丁后实机验收。
+
+V8.14 施工中：[工程化施工标准](v8.14-memory-engine-4.0-implementation-spec-dual-model.md) / [A 阶段实施报告](v8.14-a-durable-core-implementation-report.md) / [Sol 独立审查及修复复测](v8.14-a-sol-independent-review.md) / [Finalization 可见性收口及 P0 修复](v8.14-a-finalization-visibility-closeout-report.md) / [B Profile 与 CK3 回读接线](v8.14-b-profile-implementation-report.md) / [总体设计 Revision 3](v8.14-memory-engine-4.0-overall-design-revision3.md)。B 已接入生产 debug.log 回读，尚未接入旧摘要、实时 Prompt 或正式 Memory4 Recall；334 组发布回归通过，A/B 实机及独立 Gate 未验收。
 
 V8.13.2.2 当前入口：[Legacy Bulk Campaign Binding 实施报告](v8.13.2.2-legacy-bulk-campaign-binding-implementation-report.md) / [阶段记录](V8阶段开发记录.md#第一百一十九阶段v81322-legacy-bulk-campaign-binding)。摘要管理器新增对话文件与 Owner 目录两级 Preview→确认→原子批量迁移；绑定等待当前会话 GameData 解析后再校验，只绑定未归属的普通旧摘要，不覆盖 Campaign Token 或官方追忆；stale revision 零写入，刷新当前 Recall 且 Frozen Prefix 不变。322/322 本地发布组通过；打包窗口、CK3/Provider 与远端 CI 仍待验收。
 
