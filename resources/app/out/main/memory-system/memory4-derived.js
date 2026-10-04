@@ -2,7 +2,7 @@
 
 const fs = require("fs");
 const path = require("path");
-const { assertScope, hash, ids, strings, legacySourceHash } = require("./memory4-contract");
+const { assertScope, hash, ids, strings, legacySourceHash, sourceRevisionCurrent } = require("./memory4-contract");
 const { normalizeGameDate } = require("../worldline/character-temporal-facts");
 const { estimateTokens } = require("../token-estimator");
 const { validateGenerationOutcome } = require("../providers/generation-outcome");
@@ -57,6 +57,7 @@ class Memory4DerivedService {
     const record = index.finalizations[hash(row.finalizationId)];
     const revision = metadata?.knownEvidenceRevisions?.[hash([row.conversationId, scope.ownerId])];
     if (!record || revision && revision !== record.sourceRevision
+      || row.stateSource && !sourceRevisionCurrent(row.stateSource, scope, index, metadata)
       || row.legacyMemoryIds?.length && row.legacyMemoryIds.length !== (row.legacyRefs || []).length) return false;
     return (row.legacyRefs || []).every(ref => {
       const memory = this.baseStore.getMemory(ref.memoryId);
@@ -81,6 +82,7 @@ class Memory4DerivedService {
       return [id, row.revision, row.bodyHash, row.knownBy, row.visibility, row.status,
         index.finalizations[hash(row.finalizationId)]?.sourceRevision,
         metadata?.knownEvidenceRevisions?.[hash([row.conversationId, scope.ownerId])] || null,
+        row.stateSource || null, row.stateSource ? metadata?.knownEvidenceRevisions?.[hash([row.stateSource.conversationId, scope.ownerId])] || null : null,
         (row.legacyRefs || []).map(ref => [ref.memoryId, ref.sourceHash])];
     });
     const result = { index, entryIds, sourceRevisionSet: entryIds.map(id => `${id}@${index.entries[id].revision}`), sourceHash: hash(stamps) };
@@ -147,7 +149,8 @@ class Memory4DerivedService {
     const views = readContext?.derived || this.list(scope, { readContext });
     const index = readContext?.index || this.store.loadIndex(scope), current = serial(currentGameDate);
     const visible = item => ids(item.entityIds).includes(entityId) && item.sourceEntryIds?.every(id => index.entries[id]
-      && [index.entries[id].conversationDate, index.entries[id].acquiredDate].every(date => serial(date) <= current));
+      && [index.entries[id].conversationDate, index.entries[id].acquiredDate].every(date => serial(date) <= current)
+      && (!index.entries[id].stateChangedGameDate || serial(index.entries[id].stateChangedGameDate) <= current));
     return { yearKeys: views.years.filter(view => !view.dirty && view.items.some(visible)).map(view => view.eventYear),
       lifeItemIds: views.life && !views.life.dirty ? views.life.segments.filter(visible).map(item => item.segmentId) : [] };
   }
@@ -409,6 +412,7 @@ class Memory4DerivedService {
     const sourcesCurrent = item => item.sourceEntryIds?.length && item.sourceEntryIds.every(id => {
       const row = index.entries[id];
       return allowed.has(id) && row && [row.conversationDate, row.acquiredDate].every(date => serial(date) <= current)
+        && (!row.stateChangedGameDate || serial(row.stateChangedGameDate) <= current)
         && (!query.window || serial(row.eventTime.from) <= serial(query.window.to) && serial(row.eventTime.to) >= serial(query.window.from))
         && (!query.entityIds.length || row.entityIds.some(entity => query.entityIds.includes(entity)));
     });
@@ -474,6 +478,7 @@ class Memory4DerivedService {
         && hash(ref.sourceEntryIds.map(id => index.entries[id])) === ref.sourceRowsHash
         && ref.sourceEntryIds.every(id => this.sourceValid(scope, index.entries[id], index, metadata)
           && [index.entries[id].conversationDate, index.entries[id].acquiredDate].every(date => serial(date) <= serial(currentGameDate))
+          && (!index.entries[id].stateChangedGameDate || serial(index.entries[id].stateChangedGameDate) <= serial(currentGameDate))
           && !!this.store.readEntry(scope, id, index));
     }
     const view = this.read(scope, ref.kind, ref.eventYear);
@@ -484,6 +489,7 @@ class Memory4DerivedService {
       && ref.sourceEntryIds.length > 0 && ref.sourceEntryIds.length <= 32
       && ref.sourceEntryIds.every(id => this.sourceValid(scope, index.entries[id], index, metadata)
         && [index.entries[id].conversationDate, index.entries[id].acquiredDate].every(date => serial(date) <= serial(currentGameDate))
+        && (!index.entries[id].stateChangedGameDate || serial(index.entries[id].stateChangedGameDate) <= serial(currentGameDate))
         && !!this.store.readEntry(scope, id, index));
     } catch { return false; }
   }

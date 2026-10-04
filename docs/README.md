@@ -4,7 +4,11 @@
 
 ## 推荐阅读顺序
 
-当前入口：[V8.14-D/E Year/Life 与长期记忆管理施工记录](v8.14-de-year-life-management-implementation-report.md)。用户于 2026-10-03 确认 A/B 收口并继续 C、身份修复及 D/E；身份专项 13 项、D 专项 17 项、独立 QA 37 项及三主题/窄窗口 27 张隔离打包截图通过。完整发布 **339/339** 组、408 分类文件、68 历史归档；真实 CK3/Provider/Cache/Soak 尚待验收。用户要求后续实现与审查统一使用 GPT-6.1 Sol，独立 QA 仍由不同 Agent 完成。下方 C 与 A/B HOLD、数量均保留为原阶段历史证据，以本条及最新报告为当前进度。
+当前入口：[V8.14.1 前端显示内容同步](v8.14.1-frontend-content-update-implementation-report.md)。主要中文/英文标题、Memory4 策略及验收边界已同步；功能版本与 App 包版本分开，协议 3.0、存储 2.5 和现有设置键不变。Manifest 为 416 个分类测试文件、347 个发布组、68 个历史归档，最终完整门禁及隔离截图见报告。独立 QA 使用 GPT-6 Luna Max。
+
+[前次实机事故热修报告](v8.14.1-runtime-incident-hotfix-report.md)保留日期/特质提示框兼容补丁部署、Memory4 归档生命周期 10/10 和当时 346/346 门禁。用户确认首次对话/本次特质 PASS，信件 NOT TESTED；新热修、真实 Provider、完整信件及 Soak 待用户实测。GLM Cache A/B 延至 V8.14.2，不标记 Freeze Candidate；[前次改进收口](v8.14.1-improvement-closeout-implementation-report.md)的 344 组属于更早历史证据。
+
+前一阶段入口：[V8.14-D/E Year/Life 与长期记忆管理施工记录](v8.14-de-year-life-management-implementation-report.md)。该报告中的 339/339 组、408 分类文件为 D/E 当时快照，不被后续回归重写；A/B 用户确认与 D/E 隔离 UI 结果仍按原证据边界记录。
 
 最新事故修复：[第一百三十七阶段：信件接收失联与时间召回](V8阶段开发记录.md#第一百三十七阶段信件接收失联与时间召回事故修复2026-10-01实机待验收)。信件新增完整日志载荷接收并修正通知时机及多行解析；时间查询保留冻结 Recent2，以动态 Extra 注入目标摘要，并支持有正文依据的首次相识线索。334/334 本地发布组及隔离 Electron 启动/导航通过，需重启 CK3/VOTC 实机复测；A/B 仍 HOLD。
 

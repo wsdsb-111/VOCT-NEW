@@ -2,7 +2,7 @@
 
 const fs = require("fs");
 const path = require("path");
-const { assertScope, hash, ids, strings, legacySourceHash, validateEntry } = require("./memory4-contract");
+const { assertScope, hash, ids, strings, legacySourceHash, directCounterpartIds, validateEntry } = require("./memory4-contract");
 const { projectVisibleTranscript } = require("./memory4-visibility");
 const { Memory4Store } = require("./memory4-store");
 const { Memory4ProfileService } = require("./memory4-profile");
@@ -10,6 +10,7 @@ const { Memory4RelationshipReadback } = require("./memory4-relationship-readback
 const { Memory4DerivedService } = require("./memory4-derived");
 const { validateGenerationOutcome } = require("../providers/generation-outcome");
 const { validateSourceItem, presentIds } = require("./finalization-visibility");
+const { MentionTracker } = require("./mention-tracker");
 
 const MAX_FRAGMENTS_PER_REQUEST = 128;
 const MAX_DURABLE_ENTRIES_PER_OWNER = 8;
@@ -192,30 +193,65 @@ class Memory4Coordinator {
 
   buildOwnerSnapshot(context, ownerId) {
     const projection = projectVisibleTranscript(context, ownerId);
+    const verifiedTexts = new Map();
+    const entityProfiles = [...(context.participants || []), ...(context.mentionedEntities || [])];
+    const mentionTracker = new MentionTracker();
     for (const segment of context.verifiedSummarySegments || []) {
       const verified = validateSourceItem(segment, context, { segment: true });
       if (!verified.success) throw new Error(`memory4_visibility_source_invalid:${verified.reason}`);
       if (JSON.stringify(ids(segment.knownBy)) !== JSON.stringify(ids(verified.audience))) throw new Error("memory4_known_by_mismatch");
+      for (const messageId of verified.messageIds) {
+        if (!verifiedTexts.has(messageId)) verifiedTexts.set(messageId, []);
+        verifiedTexts.get(messageId).push(String(segment.content || ""));
+      }
       if (!verified.audience.includes(ownerId) || !verified.speakers.length) continue;
       if (!segment.segmentId) throw new Error("memory4_segment_id_required");
       const speaker = verified.speakers[0];
       const text = String(segment.content || "");
+      const sourceTextVerified = verified.messageIds.some(messageId => (context.messages || []).find(message => message.id === messageId)?.content
+        .split(/\r?\n/).some(paragraph => paragraph.trim() === text.trim()));
       const recipientIds = ids(verified.audience.filter((id) => {
         if (id === speaker) return false;
         if (segment.visibility === "known_group") return true;
+        if (!sourceTextVerified) return false;
         const person = (context.participants || []).find((entry) => Number(entry.id) === id);
         return [person?.name, person?.fullName, person?.shortName].filter(Boolean)
           .some((name) => ["对", "向", "告诉", "问"].some((cue) => text.includes(`${cue}${name}`)));
       }));
-      const entityIds = ids((context.participants || []).filter((person) => [person.name, person.fullName, person.shortName]
-        .some((name) => name && text.includes(name))).map((person) => Number(person.id)));
+      const entityIds = ids(mentionTracker.findMentionedCharacterIds([{ content: text }], { candidates: entityProfiles, resolveCoreference: false }));
       projection.fragments.push({ fragmentId: `segment_${segment.segmentId}`, messageId: verified.messageIds[0],
-        sourceMessageIds: verified.messageIds, text, speakerId: speaker,
+        sourceMessageIds: verified.messageIds, text, speakerId: speaker, speakerIds: verified.speakers,
+        sourceTextVerified,
         presentIds: ids(verified.messageIds.reduce((common, messageId) =>
           common === null ? presentIds(context, messageId) : common.filter((id) => presentIds(context, messageId).includes(id)), null)),
         knownBy: ids(verified.audience), visibility: segment.visibility,
         sourceType: ["spoken", "reported", "rumor"].includes(segment.source) ? segment.source : "spoken", recipientIds,
         entityIds, visibilityEvidence: "finalization_validated_segment" });
+    }
+    const classified = new Set((context.messages || []).filter(message => {
+      const texts = verifiedTexts.get(message.id);
+      return texts?.length && String(message.content || "").split(/\r?\n/).filter(text => text.trim())
+        .every(paragraph => texts.some(text => text.includes(paragraph.trim())));
+    }).map(message => message.id));
+    projection.fragments = projection.fragments.filter(fragment =>
+      fragment.visibilityEvidence !== "legacy_author_perspective" || !classified.has(fragment.messageId));
+    projection.withheldMessageIds = projection.withheldMessageIds.filter(messageId => !classified.has(messageId));
+    projection.legacyRetained = projection.withheldMessageIds.length > 0 || projection.fragments.some(fragment => fragment.legacyMemoryId);
+    projection.completeness = projection.legacyRetained ? "partial" : "complete";
+    // A reciprocal visible exchange in a two-person presence window is a
+    // direct pair; another person merely sharing the scene is not a recipient.
+    const pairs = new Map();
+    for (const fragment of projection.fragments) {
+      if (fragment.visibility === "private" || fragment.presentIds.length !== 2 || fragment.speakerIds?.length > 1
+        || !["spoken", "reported", "rumor"].includes(fragment.sourceType)) continue;
+      const key = fragment.presentIds.join(":");
+      if (!pairs.has(key)) pairs.set(key, { speakers: new Set(), fragments: [] });
+      const pair = pairs.get(key);
+      pair.speakers.add(fragment.speakerId); pair.fragments.push(fragment);
+    }
+    for (const pair of pairs.values()) if (pair.speakers.size === 2) {
+      for (const fragment of pair.fragments) fragment.recipientIds = ids([...fragment.recipientIds,
+        ...fragment.presentIds.filter(id => id !== fragment.speakerId && fragment.knownBy.includes(id))]);
     }
     projection.sourceRevision = hash([projection.sourceRevision, projection.fragments]);
     const visibleEntities = new Set(projection.fragments.flatMap(fragment => ids(fragment.entityIds)));
@@ -224,7 +260,7 @@ class Memory4Coordinator {
       && visibleEntities.has(change.entityId)).map(change => change.entityId));
     return { campaignToken: context.campaignToken, ownerId, conversationId: context.conversationId,
       finalizationId: context.finalizationId, episodeId: context.episodeId,
-      date: context.date || null, totalDays: context.totalDays ?? null, counterpartIds: [], summaryIds: [],
+      date: context.date || null, totalDays: context.totalDays ?? null, counterpartIds: directCounterpartIds(projection.fragments, ownerId), summaryIds: [],
       summaryProviderSnapshot: context.summaryProviderSnapshot || null,
       ...projection, relationshipChangeEntityIds };
   }
@@ -235,12 +271,14 @@ class Memory4Coordinator {
       Number(right.entityIds?.some(id => priority.has(id))) - Number(left.entityIds?.some(id => priority.has(id))));
   }
 
-  buildPrompt(snapshot, fragments, remainingEntrySlots = MAX_DURABLE_ENTRIES_PER_OWNER) {
+  buildPrompt(snapshot, fragments, remainingEntrySlots = MAX_DURABLE_ENTRIES_PER_OWNER, remainingTransitionSlots = MAX_DURABLE_ENTRIES_PER_OWNER) {
     const ordered = this.orderFragments(snapshot, fragments);
     return [
-      { role: "system", content: `VOTC Memory Engine 4.0 Durable extraction. Return JSON only: {\"status\":\"STORE|NO_DURABLE_CONTENT\",\"entries\":[{\"memoryType\":\"RELATIONSHIP_CHANGE|COMMITMENT|DURABLE_KNOWLEDGE|MAJOR_EXPERIENCE|LONG_TERM_GOAL|EMOTIONAL_ANCHOR\",\"text\":\"...\",\"fragmentIds\":[\"...\"],\"entityIds\":[],\"participantIds\":[],\"topics\":[],\"eventTime\":{\"from\":null,\"to\":null,\"precision\":\"unknown\",\"status\":\"unknown\"}}]}. Only durable facts; ordinary conversation may have zero entries. Use only supplied fragments and their exact IDs. Entity IDs must be copied from the supplied fragment evidence; do not invent or infer IDs. Do not infer who heard other parts of an old message. Self-only legacy text is the author's statement, not proof of other people's private thoughts or CK3 facts. A reported event stays reported. Relative dates in Legacy fragments use their sourceAsOf, never the current runtime date or a different projection date. Uncertain event dates remain unknown. Do not change Campaign or Owner. Never claim an entry without a supporting fragment. Return no more than ${remainingEntrySlots} entries for this owner in this request.` },
+      { role: "system", content: `VOTC Memory Engine 4.0 Durable extraction. Return JSON only: {\"status\":\"STORE|NO_DURABLE_CONTENT\",\"entries\":[{\"memoryType\":\"RELATIONSHIP_CHANGE|COMMITMENT|DURABLE_KNOWLEDGE|MAJOR_EXPERIENCE|LONG_TERM_GOAL|EMOTIONAL_ANCHOR\",\"text\":\"...\",\"fragmentIds\":[\"...\"],\"entityIds\":[],\"participantIds\":[],\"topics\":[],\"eventTime\":{\"from\":null,\"to\":null,\"precision\":\"unknown\",\"status\":\"unknown\"}}],\"commitmentTransitions\":[{\"entryId\":\"...\",\"expectedRevision\":1,\"status\":\"fulfilled|cancelled|superseded\",\"fragmentIds\":[\"...\"],\"commitmentQuote\":\"...\",\"evidenceQuote\":\"...\",\"replacementEntryIndex\":null}]}. Only durable facts; ordinary conversation may have zero entries. Use only supplied fragments and their exact IDs. Entity IDs must be copied from the supplied fragment evidence; do not invent or infer IDs. Do not infer who heard other parts of an old message. Self-only legacy text is the author's statement, not proof of other people's private thoughts or CK3 facts. A reported event stays reported. Relative dates in Legacy fragments use their sourceAsOf, never the current runtime date or a different projection date. Uncertain event dates remain unknown. Do not change Campaign or Owner. Never claim an entry without a supporting fragment. Return no more than ${remainingEntrySlots} entries and ${remainingTransitionSlots} commitment transitions for this owner in this request. A transition must copy an activeCommitment entryId and expectedRevision, cite a complete verbatim evidenceQuote from a verified source fragment, and bind it by an exact, concrete commitmentQuote appearing in both the original commitment and the evidence. The binding must identify exactly one supplied active commitment; generic words are invalid. Only explicit fulfilled/cancelled/replacement statements qualify. Questions, future plans, hypothetical, negation, hearsay, ambiguous references and years of silence never change status. Fulfillment needs explicit completion of every original condition; cancellation/replacement must explicitly cover the original agreement including all its conditions. For superseded, replacementEntryIndex must point to a new COMMITMENT in this response, whose text is copied verbatim from the same replacement evidence. Use NO_DURABLE_CONTENT with entries:[] when only transitions are needed. No transition is CK3 effect confirmation.` },
       { role: "user", content: JSON.stringify({ ownerId: snapshot.ownerId, campaignToken: snapshot.campaignToken,
         conversationDate: snapshot.date, completeness: snapshot.completeness,
+        activeCommitments: (snapshot.activeCommitments || []).map(entry => ({ entryId: entry.entryId,
+          expectedRevision: entry.revision, text: entry.text })),
         fragments: ordered.map(fragment => ({ fragmentId: fragment.fragmentId, text: fragment.text,
           visibilityEvidence: fragment.visibilityEvidence, speakerId: fragment.speakerId, sourceType: fragment.sourceType,
           entityIds: fragment.entityIds, presentIds: fragment.presentIds,
@@ -248,7 +286,7 @@ class Memory4Coordinator {
     ];
   }
 
-  parseResult(response, allowedFragments, snapshot = null, maxEntries = MAX_DURABLE_ENTRIES_PER_OWNER) {
+  parseResult(response, allowedFragments, snapshot = null, maxEntries = MAX_DURABLE_ENTRIES_PER_OWNER, maxTransitions = MAX_DURABLE_ENTRIES_PER_OWNER) {
     const outcome = typeof response === "string" ? { content: response, complete: true, truncated: false }
       : validateGenerationOutcome(response);
     if (outcome.truncated || !outcome.complete) throw new Error("memory4_generation_incomplete");
@@ -259,21 +297,32 @@ class Memory4Coordinator {
     const entryLimit = Math.max(0, Number.isInteger(maxEntries) ? maxEntries : MAX_DURABLE_ENTRIES_PER_OWNER);
     if (!parsed || !["STORE", "NO_DURABLE_CONTENT"].includes(parsed.status) || !Array.isArray(parsed.entries)
       || parsed.entries.length > entryLimit || (parsed.status === "STORE") !== (parsed.entries.length > 0)) throw new Error("memory4_response_invalid_shape");
+    const transitions = parsed.commitmentTransitions || [];
+    if (!Array.isArray(transitions) || transitions.length > maxTransitions) throw new Error("memory4_response_invalid_transitions");
     const allowed = new Set(allowedFragments.map(fragment => fragment.fragmentId));
     if (parsed.entries.some(entry => !Array.isArray(entry.fragmentIds) || !entry.fragmentIds.length
       || entry.fragmentIds.some(id => !allowed.has(id)))) throw new Error("memory4_response_source_mismatch");
     const entries = [];
+    const entryPositions = new Map();
     let rejectedUnknownEntityCount = 0;
-    for (const candidate of parsed.entries) {
+    for (const [position, candidate] of parsed.entries.entries()) {
       try {
         if (snapshot) validateEntry(candidate, snapshot);
-        entries.push(candidate);
+        entryPositions.set(position, entries.length); entries.push(candidate);
       } catch (error) {
         if (error.message !== "memory4_unknown_entity") throw error;
         rejectedUnknownEntityCount++;
       }
     }
-    return { ...parsed, status: entries.length ? "STORE" : "NO_DURABLE_CONTENT", entries, rejectedUnknownEntityCount };
+    for (const transition of transitions) {
+      if (!Array.isArray(transition.fragmentIds) || !transition.fragmentIds.length || transition.fragmentIds.some(id => !allowed.has(id))) throw new Error("memory4_response_source_mismatch");
+      if (transition.status === "superseded") {
+        if (!entryPositions.has(transition.replacementEntryIndex)) throw new Error("memory4_commitment_replacement_invalid");
+        transition.replacementEntryIndex = entryPositions.get(transition.replacementEntryIndex);
+      }
+    }
+    return { ...parsed, status: entries.length ? "STORE" : "NO_DURABLE_CONTENT", entries,
+      commitmentTransitions: transitions, rejectedUnknownEntityCount };
   }
 
   async finishOwner(snapshot, requestDurable, prior = null, isCurrent = () => true) {
@@ -288,6 +337,7 @@ class Memory4Coordinator {
         if (fs.existsSync(file)) fs.unlinkSync(file);
         return { ownerId: snapshot.ownerId, ...committed, alreadyCommitted: true };
       }
+      snapshot.activeCommitments ||= this.store.activeCommitments(snapshot);
       this.saveRecovery(snapshot, { status: "PENDING", retryCount: prior?.retryCount || 0, lastError: null });
       this.store.recordKnownEvidence(snapshot);
       let result;
@@ -296,24 +346,27 @@ class Memory4Coordinator {
       else {
         if (typeof requestDurable !== "function") throw new Error("memory4_provider_unavailable");
         const entries = [];
+        const commitmentTransitions = [];
         let rejectedUnknownEntityCount = 0;
         const orderedFragments = this.orderFragments(snapshot, snapshot.fragments);
-        const extractChunk = async (chunk, remainingEntrySlots) => {
-          if (!chunk.length || remainingEntrySlots <= 0) return { entries: [], rejectedUnknownEntityCount: 0 };
+        const extractChunk = async (chunk, remainingEntrySlots, remainingTransitionSlots) => {
+          if (!chunk.length) return { entries: [], commitmentTransitions: [], rejectedUnknownEntityCount: 0 };
           try {
-            const response = await requestDurable(this.buildPrompt(snapshot, chunk, remainingEntrySlots), { ownerId: snapshot.ownerId,
+            const response = await requestDurable(this.buildPrompt(snapshot, chunk, remainingEntrySlots, remainingTransitionSlots), { ownerId: snapshot.ownerId,
               campaignToken: snapshot.campaignToken, maxTokens: DURABLE_MAX_OUTPUT_TOKENS, providerSnapshot: snapshot.summaryProviderSnapshot });
             if (!isCurrent()) throw new Error("memory4_generation_changed");
-            const parsed = this.parseResult(response, chunk, snapshot, remainingEntrySlots);
+            const parsed = this.parseResult(response, chunk, snapshot, remainingEntrySlots, remainingTransitionSlots);
             return parsed;
           } catch (error) {
             if (!isCurrent()) throw new Error("memory4_generation_changed");
             if (error.message !== "memory4_generation_incomplete") throw error;
             if (chunk.length > 1) {
               const midpoint = Math.ceil(chunk.length / 2);
-              const first = await extractChunk(chunk.slice(0, midpoint), remainingEntrySlots);
-              const second = await extractChunk(chunk.slice(midpoint), remainingEntrySlots - first.entries.length);
+              const first = await extractChunk(chunk.slice(0, midpoint), remainingEntrySlots, remainingTransitionSlots);
+              const second = await extractChunk(chunk.slice(midpoint), remainingEntrySlots - first.entries.length, remainingTransitionSlots - first.commitmentTransitions.length);
               return { entries: [...first.entries, ...second.entries],
+                commitmentTransitions: [...first.commitmentTransitions, ...second.commitmentTransitions.map(transition => ({ ...transition,
+                  ...(transition.status === "superseded" ? { replacementEntryIndex: transition.replacementEntryIndex + first.entries.length } : {}) }))],
                 rejectedUnknownEntityCount: first.rejectedUnknownEntityCount + second.rejectedUnknownEntityCount };
             }
             throw error;
@@ -321,20 +374,22 @@ class Memory4Coordinator {
         };
         for (let offset = 0; offset < orderedFragments.length; offset += MAX_FRAGMENTS_PER_REQUEST) {
           const chunk = orderedFragments.slice(offset, offset + MAX_FRAGMENTS_PER_REQUEST);
-          const parsed = await extractChunk(chunk, MAX_DURABLE_ENTRIES_PER_OWNER - entries.length);
+          const parsed = await extractChunk(chunk, MAX_DURABLE_ENTRIES_PER_OWNER - entries.length, MAX_DURABLE_ENTRIES_PER_OWNER - commitmentTransitions.length);
+          commitmentTransitions.push(...parsed.commitmentTransitions.map(transition => ({ ...transition,
+            ...(transition.status === "superseded" ? { replacementEntryIndex: transition.replacementEntryIndex + entries.length } : {}) })));
           entries.push(...parsed.entries);
           rejectedUnknownEntityCount += parsed.rejectedUnknownEntityCount;
           this.saveRecovery(snapshot, { status: "PENDING", retryCount: prior?.retryCount || 0, lastError: null, completedFragmentCount: offset + chunk.length });
-          if (entries.length >= MAX_DURABLE_ENTRIES_PER_OWNER) break;
+          if (entries.length >= MAX_DURABLE_ENTRIES_PER_OWNER && commitmentTransitions.length >= MAX_DURABLE_ENTRIES_PER_OWNER) break;
         }
         if (rejectedUnknownEntityCount) this.trace?.record("memory4_candidate_rejected", {
           ownerId: snapshot.ownerId, count: rejectedUnknownEntityCount, reason: "unknown_entity"
         });
-        result = { status: entries.length ? "STORE" : "NO_DURABLE_CONTENT", entries };
+        result = { status: entries.length ? "STORE" : "NO_DURABLE_CONTENT", entries, commitmentTransitions };
       }
       if (!isCurrent()) throw new Error("memory4_generation_changed");
       const persisted = this.store.commitOwner(snapshot, result);
-      if (persisted.entryIds.length) this.derived.schedule(snapshot, { providerSnapshot: snapshot.summaryProviderSnapshot, committedFinalization: true });
+      if (persisted.entryIds.length || persisted.changedEntryIds?.length) this.derived.schedule(snapshot, { providerSnapshot: snapshot.summaryProviderSnapshot, committedFinalization: true });
       if (fs.existsSync(file)) fs.unlinkSync(file);
       this.trace?.record("memory4_durable", { finalizationId: snapshot.finalizationId, ownerId: snapshot.ownerId,
         status: persisted.status, entryCount: persisted.entryIds.length, completeness: persisted.completeness });

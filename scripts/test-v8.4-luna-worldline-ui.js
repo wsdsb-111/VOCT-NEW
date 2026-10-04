@@ -20,7 +20,7 @@ assert.ok(!worldlineSource.includes("require("), "Luna must not load filesystem 
 
 const requiredRendererMarkers = [
   "function WorldlineView()",
-  "V8.7 Worldline",
+  "Current CK3 facts are read-only",
   "window.worldlineAPI",
   "autosave.ck3 path",
   "Open Diagnostics",

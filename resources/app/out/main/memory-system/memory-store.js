@@ -653,6 +653,12 @@ class MemoryStore {
       if (path.dirname(target) !== root) throw new Error("unsafe_summary_folder_target");
       removeDirectoryTree(target);
     }
+    const sidecar = path.resolve(root, ".memory4", String(numericId));
+    if (path.dirname(sidecar) !== path.join(root, ".memory4")) throw new Error("unsafe_summary_folder_target");
+    if (fs.existsSync(sidecar)) {
+      if (fs.lstatSync(path.join(root, ".memory4")).isSymbolicLink() || fs.lstatSync(sidecar).isSymbolicLink()) throw new Error("unsafe_summary_folder_target");
+      removeDirectoryTree(sidecar);
+    }
     return { removedFolderCount: folders.length };
   }
 

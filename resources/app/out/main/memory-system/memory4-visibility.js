@@ -1,6 +1,6 @@
 "use strict";
 
-const { assertScope, hash, ids, legacySourceHash } = require("./memory4-contract");
+const { assertScope, hash, ids, legacySourceHash, directCounterpartIds } = require("./memory4-contract");
 const { normalizeGameDate } = require("../worldline/character-temporal-facts");
 
 function resolveSpeaker(message, participants) {
@@ -106,6 +106,13 @@ function projectVisibleTranscript(context, ownerId) {
     sourceRevision: hash([context.campaignToken, ownerId, context.conversationId, context.date, context.totalDays, fragments, withheld, interactionEvidence]) };
 }
 
+function evidenceCompleteness(contributions) {
+  const statuses = contributions.map(item => item.completeness || "legacy_partial");
+  if (!statuses.length) return "legacy_partial";
+  return statuses.every(status => status === "complete") ? "complete"
+    : statuses.includes("legacy_partial") ? "legacy_partial" : "partial";
+}
+
 function updateKnownEntities(previous, snapshot) {
   assertScope(snapshot);
   if (previous && (previous.campaignToken !== snapshot.campaignToken || previous.ownerId !== snapshot.ownerId)) throw new Error("memory4_scope_mismatch");
@@ -127,8 +134,7 @@ function updateKnownEntities(previous, snapshot) {
     // folder, a shared participant list, or a character mentioned in the text.
     if (fragment.visibility !== "private") {
       fragment.presentIds.forEach(id => add(id, "shared_scene"));
-      if (fragment.recipientIds.includes(snapshot.ownerId)) add(fragment.speakerId, "direct_conversation");
-      if (fragment.speakerId === snapshot.ownerId) fragment.recipientIds.forEach(id => add(id, "direct_conversation"));
+      directCounterpartIds([fragment], snapshot.ownerId).forEach(id => add(id, "direct_conversation"));
     }
     fragment.entityIds.forEach(id => add(id, "mention"));
   }
@@ -141,12 +147,13 @@ function updateKnownEntities(previous, snapshot) {
     const types = evidence.get(entityId);
     if (types?.size) row.evidenceByConversation[snapshot.conversationId] = {
       types: [...types].sort(), date: normalizeGameDate(snapshot.date)?.canonical || null,
-      episodeId: snapshot.episodeId || null, sourceRevision: snapshot.sourceRevision || null
+      episodeId: snapshot.episodeId || null, sourceRevision: snapshot.sourceRevision || null,
+      completeness: snapshot.completeness || "partial"
     };
     else delete row.evidenceByConversation[snapshot.conversationId];
     const contributions = Object.entries(row.evidenceByConversation).map(([conversationId, value]) => ({ conversationId,
       types: Array.isArray(value) ? value : value.types || [], date: Array.isArray(value) ? null : value.date,
-      episodeId: Array.isArray(value) ? null : value.episodeId }));
+      episodeId: Array.isArray(value) ? null : value.episodeId, completeness: Array.isArray(value) ? "legacy_partial" : value.completeness }));
     if (!contributions.length) { delete index.entities[key]; continue; }
     row.directConversationCount = contributions.filter(item => item.types.includes("direct_conversation")).length;
     row.sharedSceneCount = contributions.filter(item => item.types.includes("shared_scene")).length;
@@ -157,6 +164,7 @@ function updateKnownEntities(previous, snapshot) {
     const dates = contributions.map(item => normalizeGameDate(item.date)).filter(Boolean).sort((a, b) => a.serial - b.serial);
     row.firstSeenDate = dates[0]?.canonical || null;
     row.lastSeenDate = dates.at(-1)?.canonical || null;
+    row.completeness = evidenceCompleteness(contributions);
     row.revision++;
     index.entities[key] = row;
   }
@@ -164,4 +172,4 @@ function updateKnownEntities(previous, snapshot) {
   return index;
 }
 
-module.exports = { projectVisibleTranscript, updateKnownEntities };
+module.exports = { projectVisibleTranscript, updateKnownEntities, evidenceCompleteness };

@@ -20,7 +20,7 @@
 - Official VOTC 2.0.3 Action System 是当前唯一正式动作基线。动作必须经过确定性门禁、注册检查、结构化输出和本地校验；旧的自研 AE/Action Mode/Pending/Social Consequence 链路只作为历史资料，不得重新接入生产路径。
 - 涉及游戏状态的效果以 CK3 回读为准。尤其金币转移不能乐观修改本地当前状态；同一 RunFile 的 Effect、双方实时金币和 ACK 必须形成可核对证据，只有精确匹配才可视为 CONFIRMED。
 - Worldline 是 CK3 事实只读层；Current Runtime Truth、在场关系、被提及人物和 Family Fact 必须沿共享 DTO/Resolver 合同工作。历史 Definition 与 Runtime 的绑定要求一对一，冲突或缺失应 fail-closed。
-- Memory Engine 的玩家可见标签为 2.6，但现有 2.5 存储合同仍需兼容。不要随意改动摘要文件夹、字段、召回顺序、缓存键或迁移边界。
+- 当前人物记忆的玩家可见标签为 Memory Engine 4.0；既有协议 `engineVersion: 3.0` 与摘要 2.5 存储合同仍需兼容。显示标签不得作为协议升级依据，不要随意改动摘要文件夹、字段、召回顺序、缓存键或迁移边界。
 - Prompt 的稳定块应位于易变对话数据之前。任何 cache anchor 或 Prompt block ID 的改变都属于兼容性变更，必须同步版本和文档。
 - CK3 存档、debug.log、%APPDATA%/VOTC 下的摘要/设置/分析数据以及 API 凭据均为本地运行时数据，不得提交。
 
@@ -42,7 +42,7 @@ node --check resources\app\out\renderer\worldline-player-presentation.js
 git diff --check
 ~~~
 
-test-release.js 通过 test-manifest.js 汇总直接和嵌套检查；新增 test-*.js 必须登记到清单并明确是发布组还是历史归档。当前清单为 339 个发布组、408 个已分类测试文件、68 个历史归档；完整门禁结果以当前实施报告为准。测试数量变化时更新相关文档，不要把旧数量硬编码为源码合同。
+test-release.js 通过 test-manifest.js 汇总直接和嵌套检查；新增 test-*.js 必须登记到清单并明确是发布组还是历史归档。当前清单为 347 个发布组、416 个已分类测试文件、68 个历史归档；完整门禁结果以当前实施报告为准。测试数量变化时更新相关文档，不要把旧数量硬编码为源码合同。
 
 修改 IPC、设置、Prompt、流式输出、动作回读、世界线或主题 UI 后，仍需启动 VOTC.exe 做对应人工冒烟。静态回归不能替代真实 CK3 存档、Provider、debug.log ACK、打包窗口和 Soak 验收。
 
@@ -63,18 +63,20 @@ test-release.js 通过 test-manifest.js 汇总直接和嵌套检查；新增 tes
 ### Root agent
 - The root/main agent model is controlled by the user through the Codex client model picker.
 - Do not change or override the root model selection.
+- When the root model is GPT-6.1 Sol, ordinary child agents still use GPT-6 Luna with `max` reasoning.
 
 ### Default subagents
-- Per the user's 2026-10-03 instruction, ordinary subagents must use GPT-6.1 Sol (`gpt-6.1-sol`), with maximum (`max`) reasoning effort.
-- Do not explicitly request GPT-6 Astra for ordinary subagents.
+- Ordinary subagents must use GPT-6 Luna (`gpt-6-luna`) with maximum (`max`) reasoning effort, matching `.codex/config.toml`.
+- When a spawn interface would inherit the root model or accepts per-agent overrides, explicitly pass `gpt-6-luna` and `max` so a GPT-6.1 Sol root does not spawn Sol subagents.
+- Do not explicitly request GPT-6 Astra or GPT-6.1 Sol for ordinary subagents.
 - Do not override the configured subagent model or reasoning effort unless the user explicitly requests it for that task.
-- Use GPT-6.1 Sol for codebase exploration, implementation, debugging, documentation, tests, and review.
+- Use GPT-6 Luna for ordinary codebase exploration, implementation, debugging, documentation, tests, and review.
 
 ### Implementation and review
-- The user's 2026-10-03 instruction supersedes the historical Astra/Sol division for subsequent development: GPT-6.1 Sol owns both implementation and review responsibilities.
+- GPT-6 Luna subagents may perform implementation and review work under the configured default.
 - Keep independent QA in a separate agent with its own adversarial fixtures and verification evidence, even when implementation and QA use the same model.
 - If a subagent cannot complete a task, return its findings and unresolved question to the root agent; do not change models automatically.
-- Only spawn an Astra subagent when the user explicitly requests it.
+- Only spawn a GPT-6 Astra or GPT-6.1 Sol subagent when the user explicitly requests it.
 
 ### Delegation discipline
 - Spawn subagents only when the work is genuinely parallelizable or delegation materially improves speed or context management.

@@ -2,11 +2,79 @@
 
 const fs = require("fs");
 const path = require("path");
-const { assertScope, hash, validateEntry } = require("./memory4-contract");
-const { updateKnownEntities } = require("./memory4-visibility");
+const { assertScope, hash, ids, strings, gameDate, sourceRevisionCurrent, validateEntry } = require("./memory4-contract");
+const { updateKnownEntities, evidenceCompleteness } = require("./memory4-visibility");
 const { normalizeGameDate } = require("../worldline/character-temporal-facts");
 
 const INDEX_KEYS = ["byCampaign", "byOwner", "byEntity", "byTopic", "byEventYear", "byEventDate", "byConversationYear", "byAcquiredYear", "byCounterpart", "byMemoryType", "byState", "bySourceFinalization"];
+const UNCERTAIN_COMMITMENT = /[?？]|如果|假如|要是|倘若|是否|能否|会不会|听说|据说|传闻|声称|心想|心里|内心|打算|计划|希望|准备|明天|明日|明年|今后|以后|将来|届时|将要|将会|即将|尚未|还未|还没|没有|并未|未能|没能|不能|无法|从未|不曾|并非|不属实|不是真的|请|命令|要求|(?:不|未|没)(?:曾|是|能|会|再|愿|代表|意味着|完成|履行|兑现|归还|交还|交付|取消|撤销|释放|替代|取代)|(?:将|会).{0,16}(?:完成|履行|兑现|归还|交还|交付|取消|撤销|废止|作废|替代|取代)|\b(?:if|suppose|hypothetical|will|would|might|may|plan|intend|hope|tomorrow|rumor|rumour|heard|not|never|please)\b|n['’]t/i;
+const COMMITMENT_CUE = /承诺|答应|许诺|保证|约定|\b(?:promise(?:s|d)?|pledge(?:s|d)?|agree(?:s|d)?|undertake|undertakes|undertook|undertaken|vow(?:s|ed)?)\b/gi;
+const COMMITMENT_CONDITION = /(?:但(?:是)?(?:须|必须|需)?|须|必须|前提(?:是)?|条件(?:是)?|只有|只要|倘若|若|如果|\bunless\b|\bprovided\b|\bon condition\b|\bonly if\b|\bif\b)\s*([^。.!！?？;；]+)/gi;
+
+function commitmentBinding(value) {
+  return typeof value === "string" && value.trim().length >= 2 && value.trim().length <= 256
+    && !!value.replace(/事情|此事|承诺|约定|答应|完成|履行|取消|作废|替代|我|你|他|她|我们|双方|已经|了|的|原约|旧约|新约|\b(?:the|a|an|i|you|we|it|this|that|promise|commitment|agreement|pledge|fulfilled|completed|cancelled|canceled|superseded|done)\b|[\s,.。]/gi, "");
+}
+
+function commitmentCore(text) {
+  const value = typeof text === "string" ? text : "";
+  const cues = [...value.matchAll(COMMITMENT_CUE)];
+  if (cues.length !== 1) return null;
+  let core = value.slice(cues[0].index + cues[0][0].length);
+  const sentenceEnd = core.search(/[。.!！?？;；\r\n]/);
+  if (sentenceEnd >= 0) core = core.slice(0, sentenceEnd);
+  const condition = [...core.matchAll(COMMITMENT_CONDITION)][0];
+  if (condition) {
+    if (condition.index === 0) return null;
+    core = core.slice(0, condition.index);
+  }
+  core = core.trim().replace(/^[，,：:\s-]+/, "")
+    .replace(/^(?:你|你们|我|我们|他|她|双方|对方)\s*/, "")
+    .replace(/^[，,：:\s-]+/, "")
+    .replace(/^(?:to|that)\s+/i, "")
+    .replace(/^(?:将|会|必将|一定会|要)\s*/, "")
+    .replace(/[，,：:;；]+$/, "").trim();
+  return commitmentBinding(core) ? core : null;
+}
+
+function commitmentConditions(text) {
+  return [...String(text).matchAll(COMMITMENT_CONDITION)]
+    .map(match => match[1].split(/[,，]/)[0].trim().replace(/^(?:先|要|得|在)/, "")).filter(Boolean);
+}
+
+function commitmentOutcomeBound(text, core, status) {
+  const clauses = String(text).split(/[，,。.!！?？;；\r\n]+/);
+  return clauses.some(clause => {
+    let start = 0;
+    while ((start = clause.indexOf(core, start)) >= 0) {
+      const before = clause.slice(Math.max(0, start - 96), start);
+      const after = clause.slice(start + core.length, start + core.length + 48);
+      if (status === "fulfilled" && (
+        /(?:已经|已)(?:如约|依约|按约)?\s*$/.test(before)
+        || /\b(?:have|has|had)\s+(?:already\s+)?$/i.test(before)
+        || /^了(?:\s|$)/.test(after)
+        || /(?:履行|兑现|完成)了(?:我|我们|你|你们|他|她)?\s*$/.test(before) && /^(?:的)?(?:承诺|约定|原约|旧约)/.test(after)
+        || /\b(?:fulfilled|completed|kept)\s+(?:(?:my|our|the)\s+)?(?:promise|commitment|agreement)\s+to\s*$/i.test(before)
+      )) return true;
+      if (status === "cancelled" && (
+        /(?:取消|撤销|废止|作废|解除)(?:了)?(?:我|我们|你|你们|他|她|双方|对方)?\s*$/.test(before)
+        && /^(?:的)?(?:原约|旧约|承诺|约定)/.test(after)
+        || /\b(?:cancelled|canceled|revoked|withdrawn|voided)\s+(?:(?:my|our|the)\s+)?(?:promise|commitment|agreement)\s+to\s*$/i.test(before)
+        || /^(?:的)?(?:原约|旧约|承诺|约定).{0,8}(?:已经|已|正式)?(?:取消|撤销|废止|作废|解除)/.test(after)
+      )) return true;
+      if (status === "superseded" && (
+        /(?:改为|替代|取代|废止|取消|作废)(?:了)?(?:我|我们|你|你们|他|她|双方|对方)?\s*$/.test(before)
+        && /^(?:的)?(?:原约|旧约|承诺|约定)/.test(after)
+        || /(?:现)?将[“"'‘「『]?\s*$/.test(before)
+        && /^(?:[”"'’」』]\s*)?(?:的)?(?:原约|旧约|承诺|约定).{0,8}(?:已经|已|现|正式)?(?:改为|替代|取代|废止|取消|作废)/.test(after)
+        || /\b(?:replaced|superseded)\s+(?:(?:my|our|the|previous|original)\s+)*(?:promise|commitment|agreement)\s+to\s*$/i.test(before)
+        || /^(?:的)?(?:原约|旧约|承诺|约定).{0,8}(?:已经|已|现|正式)?(?:改为|替代|取代|废止|取消|作废)/.test(after)
+      )) return true;
+      start += core.length;
+    }
+    return false;
+  });
+}
 
 class Memory4Store {
   constructor(store) {
@@ -19,8 +87,12 @@ class Memory4Store {
     const root = path.resolve(this.store.summaryFoldersDir);
     const candidates = fs.existsSync(root) ? fs.readdirSync(root, { withFileTypes: true })
       .filter(entry => entry.isDirectory() && !entry.isSymbolicLink() && entry.name.startsWith(`${scope.ownerId}_`)) : [];
-    if (candidates.length !== 1) throw new Error("memory4_owner_folder_not_unique");
-    const directory = path.join(root, candidates[0].name, "memory4", hash(scope.campaignToken));
+    const canonical = path.join(root, ".memory4", String(scope.ownerId), hash(scope.campaignToken));
+    const existing = [canonical, ...candidates.map(entry => path.join(root, entry.name, "memory4", hash(scope.campaignToken)))]
+      .filter(directory => fs.existsSync(directory));
+    if (existing.length > 1) throw new Error("memory4_owner_sidecar_not_unique");
+    if (!candidates.length && !existing.length) throw new Error("memory4_owner_folder_not_unique");
+    const directory = existing[0] || canonical;
     // Do not follow a sidecar junction outside the summary tree.
     let checked = directory;
     while (checked !== root) {
@@ -50,6 +122,19 @@ class Memory4Store {
     if (!metadata || metadata.campaignToken !== scope.campaignToken || metadata.ownerId !== scope.ownerId
       || metadata.indexHash !== hash(index) || metadata.revision !== index.revision) throw new Error("memory4_metadata_index_mismatch");
     return index;
+  }
+
+  assertPersistedScope(scope) {
+    const directory = this.directory(scope);
+    const names = ["index.json", "metadata.json", "known-entities.json", "entries", "years", "life.json"];
+    const existing = names.map(name => path.join(directory, name)).filter(file => fs.existsSync(file));
+    if (!existing.length) throw new Error("memory4_scope_not_persisted");
+    for (const file of existing) if (fs.lstatSync(file).isSymbolicLink()) throw new Error("memory4_symlink_path");
+    if (!fs.existsSync(path.join(directory, "index.json")) || !fs.existsSync(path.join(directory, "metadata.json"))) {
+      throw new Error("memory4_index_missing_rebuild_required");
+    }
+    this.loadIndex(scope);
+    return directory;
   }
 
   entryPath(directory, id) {
@@ -113,6 +198,93 @@ class Memory4Store {
     return { alreadyRecorded: false, entityCount: Object.keys(known.entities).length };
   }
 
+  activeCommitments(snapshot) {
+    const index = this.loadIndex(snapshot), directory = this.directory(snapshot);
+    const metadata = this.read(path.join(directory, "metadata.json"), null);
+    const date = normalizeGameDate(snapshot.date);
+    if (!date) return [];
+    const text = snapshot.fragments.map(fragment => fragment.text).join("\n");
+    return (index.byMemoryType.COMMITMENT || []).filter(id => {
+      const row = index.entries[id];
+      return !row.deleted && row.status === "active" && row.knownBy?.includes(snapshot.ownerId)
+        && normalizeGameDate(row.acquiredDate)?.serial <= date.serial;
+    }).sort((left, right) => {
+      const score = row => row.topics.filter(topic => text.includes(topic)).length;
+      return score(index.entries[right]) - score(index.entries[left])
+        || (normalizeGameDate(index.entries[right].conversationDate)?.serial || 0) - (normalizeGameDate(index.entries[left].conversationDate)?.serial || 0)
+        || left.localeCompare(right);
+    }).slice(0, 32).flatMap(id => {
+      const entry = this.readEntry(snapshot, id, index);
+      return sourceRevisionCurrent(entry.source, snapshot, index, metadata) && !entry.source.legacyMemoryIds?.length
+        ? [{ entryId: id, revision: entry.revision, text: entry.text, bodyHash: hash(entry) }] : [];
+    });
+  }
+
+  commitmentChanges(snapshot, transitions, entries, index, metadata) {
+    if (!Array.isArray(transitions) || transitions.length > 8 || new Set(transitions.map(item => item.entryId)).size !== transitions.length) throw new Error("memory4_commitment_transitions_invalid");
+    const changes = [];
+    for (const transition of transitions) {
+      const row = index.entries[transition.entryId], offered = snapshot.activeCommitments?.find(entry => entry.entryId === transition.entryId);
+      if (!row || row.deleted || row.memoryType !== "COMMITMENT" || row.status !== "active" || !offered
+        || transition.expectedRevision !== row.revision || offered.revision !== row.revision || offered.bodyHash !== row.bodyHash) throw new Error("memory4_commitment_target_stale");
+      const entry = this.readEntry(snapshot, transition.entryId, index);
+      if (!entry.evidence.knownBy.includes(snapshot.ownerId) || !sourceRevisionCurrent(entry.source, snapshot, index, metadata)) throw new Error("memory4_commitment_target_source_invalid");
+      const date = gameDate(snapshot.date);
+      if (!date || normalizeGameDate(entry.acquiredDate)?.serial > normalizeGameDate(date).serial) throw new Error("memory4_commitment_date_invalid");
+      const fragmentIds = strings(transition.fragmentIds), fragments = fragmentIds.map(id => snapshot.fragments.find(fragment => fragment.fragmentId === id));
+      if (!fragmentIds.length || fragments.some(fragment => !fragment || !fragment.knownBy.includes(snapshot.ownerId)
+        || !["spoken", "reported", "witnessed", "game_fact"].includes(fragment.sourceType)
+        || ["spoken", "reported"].includes(fragment.sourceType) && (entry.evidence.reportedBy.length !== 1 || entry.evidence.reportedBy[0] !== fragment.speakerId)
+        || fragment.visibilityEvidence === "finalization_validated_segment" && !fragment.sourceTextVerified
+        || !Number.isSafeInteger(fragment.messageId) || fragment.messageId < 0)) throw new Error("memory4_commitment_evidence_invalid");
+      const quote = typeof transition.evidenceQuote === "string" ? transition.evidenceQuote.trim() : "";
+      const binding = typeof transition.commitmentQuote === "string" ? transition.commitmentQuote.trim() : "";
+      const core = commitmentCore(entry.text);
+      const bindingMatches = (index.byMemoryType.COMMITMENT || []).filter(id => index.entries[id].status === "active" && !index.entries[id].deleted)
+        .filter(id => {
+          const current = this.readEntry(snapshot, id, index);
+          return current.evidence.knownBy.includes(snapshot.ownerId) && commitmentCore(current.text) === binding
+            && normalizeGameDate(current.acquiredDate)?.serial <= normalizeGameDate(date).serial
+            && sourceRevisionCurrent(current.source, snapshot, index, metadata);
+        });
+      if (!quote || !core || binding !== core || !quote.includes(core)
+        || bindingMatches.length !== 1
+        || !fragments.every(fragment => fragment.text.includes(quote))) throw new Error("memory4_commitment_binding_invalid");
+      const replacement = transition.status === "superseded" ? entries[transition.replacementEntryIndex] : null;
+      if (transition.status === "superseded" && (!Number.isInteger(transition.replacementEntryIndex) || !replacement
+        || replacement.memoryType !== "COMMITMENT" || replacement.text === entry.text || !quote.includes(replacement.text)
+        || !replacement.source.segmentIds.some(id => fragmentIds.includes(id)))) throw new Error("memory4_commitment_replacement_invalid");
+      const paragraphs = fragments.flatMap(fragment => fragment.text.split(/\r?\n/).filter(paragraph => paragraph.includes(quote)));
+      if (paragraphs.some(paragraph => UNCERTAIN_COMMITMENT.test(replacement ? paragraph.replace(replacement.text, "") : paragraph))) throw new Error("memory4_commitment_evidence_uncertain");
+      const conditions = commitmentConditions(entry.text);
+      if (transition.status === "fulfilled") {
+        if (!commitmentOutcomeBound(quote, core, "fulfilled")
+          || conditions.some(condition => !quote.includes(condition) || !quote.split(/[，,。.!！;；]/).some(clause => clause.includes(condition)
+            && (clause.includes(`已经${condition}`) || clause.includes(`已${condition}`)
+              || /已经满足|已满足|已经达成|已达成|已经完成|已完成|\b(?:satisfied|completed|fulfilled)\b/i.test(clause))))) throw new Error("memory4_commitment_fulfillment_unproven");
+      } else if (transition.status === "cancelled") {
+        if (!commitmentOutcomeBound(quote, core, "cancelled")) throw new Error("memory4_commitment_cancellation_unproven");
+      } else if (transition.status === "superseded") {
+        if (!commitmentOutcomeBound(quote, core, "superseded")) throw new Error("memory4_commitment_replacement_unproven");
+      } else throw new Error("memory4_commitment_status_invalid");
+      if (conditions.length && transition.status !== "fulfilled" && !/原约|旧约|原(?:有|先)?(?:约定|承诺)|此前的(?:约定|承诺)|\b(?:original|previous|prior|old)\s+(?:agreement|promise|commitment)\b/i.test(quote)
+        || conditions.length && transition.status !== "fulfilled" && !/全部条件|所有条件|及其条件|连同.{0,12}条件|\b(?:all|its)\s+conditions\b/i.test(quote)) throw new Error("memory4_commitment_conditions_unproven");
+      const now = new Date().toISOString(), evidenceEntryIds = entries.filter(item => item.source.segmentIds.some(id => fragmentIds.includes(id))).map(item => item.entryId);
+      const sourceMessageIds = [...new Set(fragments.flatMap(fragment => fragment.sourceMessageIds || [fragment.messageId]))].sort((a, b) => a - b);
+      const observed = fragments.every(fragment => ["witnessed", "game_fact"].includes(fragment.sourceType));
+      entry.state = { ...entry.state, status: transition.status, revision: (entry.state.revision || 1) + 1,
+        changedAt: now, changedGameDate: date, evidenceEntryIds, sourceMessageIds,
+        supportedByEntryIds: strings([...entry.state.supportedByEntryIds, ...evidenceEntryIds]),
+        commitmentQuote: binding, evidenceQuote: quote, source: { conversationId: snapshot.conversationId,
+          finalizationId: snapshot.finalizationId, sourceRevision: snapshot.sourceRevision, fragmentIds, messageIds: sourceMessageIds,
+          sourceType: observed ? "witnessed" : "reported", epistemicStatus: observed ? "observed" : "reported" },
+        ...(replacement ? { supersededByEntryId: replacement.entryId } : {}) };
+      if (replacement) replacement.state.supersedesEntryIds = strings([...replacement.state.supersedesEntryIds, entry.entryId]);
+      entry.revision++; entry.updatedAt = now; changes.push(entry);
+    }
+    return changes;
+  }
+
   commitOwner(snapshot, result) {
     assertScope(snapshot);
     if (!snapshot.finalizationId || !snapshot.conversationId || !snapshot.sourceRevision) throw new Error("memory4_source_identity_missing");
@@ -133,13 +305,14 @@ class Memory4Store {
     const directory = this.directory(snapshot);
     const metadata = this.read(path.join(directory, "metadata.json"), null);
     if (metadata && (metadata.campaignToken !== snapshot.campaignToken || metadata.ownerId !== snapshot.ownerId)) throw new Error("memory4_scope_mismatch");
+    const changes = this.commitmentChanges(snapshot, result.commitmentTransitions || [], entries, index, metadata);
     const now = new Date().toISOString();
     const record = { status: result.status, entryIds: entries.map(entry => entry.entryId), sourceRevision: snapshot.sourceRevision, committedAt: now,
       completeness: snapshot.completeness, visibilityEvidence: snapshot.visibilityEvidence || null,
       evaluatedFragmentCount: snapshot.fragments.length, legacyRetained: snapshot.legacyRetained === true,
-      noDetailIsNotUnknown: true };
+      changedEntryIds: changes.map(entry => entry.entryId), commitmentTransitionCount: changes.length, noDetailIsNotUnknown: true };
     this.store.withSummaryMutation(null, () => {
-      for (const entry of entries) {
+      for (const entry of [...entries, ...changes]) {
         // Tombstones survive re-extraction; a stale job cannot resurrect a fact.
         if (index.entries[entry.entryId]?.deleted) continue;
         this.store.writeJson(this.entryPath(directory, entry.entryId), entry);
@@ -152,11 +325,11 @@ class Memory4Store {
       const known = snapshot.skipKnownEvidence ? priorKnown || { campaignToken: snapshot.campaignToken, ownerId: snapshot.ownerId, revision: 0, entities: {} }
         : updateKnownEntities(priorKnown, snapshot);
       this.store.writeJson(path.join(directory, "known-entities.json"), known);
-      const derived = this.derived?.markDirty(snapshot, { index, metadata, entryIds: entries.map(entry => entry.entryId) }) || {};
+      const derived = this.derived?.markDirty(snapshot, { index, metadata, entryIds: [...entries, ...changes].map(entry => entry.entryId) }) || {};
       this.store.writeJson(path.join(directory, "metadata.json"), { ...metadata, memory4SchemaVersion: 1, campaignToken: snapshot.campaignToken,
         ownerId: snapshot.ownerId, revision: index.revision, indexHash: hash(index), lastFinalizationId: snapshot.finalizationId,
         knownEvidenceRevisions: { ...metadata?.knownEvidenceRevisions, [hash([snapshot.conversationId, snapshot.ownerId])]: snapshot.sourceRevision },
-        derivedDirty: entries.length > 0 || metadata?.derivedDirty === true, ...derived, updatedAt: now });
+        derivedDirty: entries.length > 0 || changes.length > 0 || metadata?.derivedDirty === true, ...derived, updatedAt: now });
       this.store.writeJson(path.join(directory, "index.json"), index);
     });
     this.store.invalidateFolderSummaryCache([snapshot.ownerId]);
@@ -167,6 +340,7 @@ class Memory4Store {
     return { revision: entry.revision, entityIds: entry.entityIds, topics: entry.topics, counterpartIds: entry.counterpartIds,
       eventTime: entry.eventTime, conversationDate: entry.conversationDate, acquiredDate: entry.acquiredDate,
       memoryType: entry.memoryType, status: entry.state.status, finalizationId: entry.source.finalizationId,
+      stateChangedGameDate: entry.state.changedGameDate || null, stateSource: entry.state.source || null,
       conversationId: entry.source.conversationId, legacyRefs: entry.source.legacyRefs || [],
       legacyMemoryIds: entry.source.legacyMemoryIds || [],
       knownBy: entry.evidence.knownBy, visibility: entry.evidence.visibility, importance: entry.importance,
@@ -195,9 +369,11 @@ class Memory4Store {
       const mentionCount = contributions.filter(evidence => evidence.types?.includes("mention")).length;
       const dates = contributions.map(evidence => normalizeGameDate(evidence.date)).sort((a, b) => a.serial - b.serial);
       return { ...entity, status: directConversationCount > 0 ? "DIRECT_INTERACTION" : sharedSceneCount > 0 ? "SHARED_SCENE" : "MENTION_ONLY",
-        directConversationCount, sharedSceneCount, mentionCount, firstSeenDate: dates[0].canonical, lastSeenDate: dates.at(-1).canonical };
+        directConversationCount, sharedSceneCount, mentionCount, firstSeenDate: dates[0].canonical, lastSeenDate: dates.at(-1).canonical,
+        completeness: evidenceCompleteness(contributions) };
     }
-    return { status: entity.directConversationCount > 0 ? "DIRECT_INTERACTION" : entity.sharedSceneCount > 0 ? "SHARED_SCENE" : "MENTION_ONLY", ...entity };
+    return { ...entity, status: entity.directConversationCount > 0 ? "DIRECT_INTERACTION" : entity.sharedSceneCount > 0 ? "SHARED_SCENE" : "MENTION_ONLY",
+      completeness: evidenceCompleteness(Object.values(entity.evidenceByConversation || {})) };
   }
 
   query(scope, filters = {}) {

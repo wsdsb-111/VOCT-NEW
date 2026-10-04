@@ -21,6 +21,21 @@ function gameDate(value) {
   return value == null ? null : normalizeGameDate(value)?.canonical || null;
 }
 
+function directCounterpartIds(fragments, ownerId) {
+  return ids(fragments.flatMap(fragment => {
+    if (fragment.visibility === "private" || fragment.speakerIds?.length > 1) return [];
+    const recipients = ids(fragment.recipientIds).filter(id => fragment.knownBy.includes(id) && fragment.presentIds.includes(id));
+    return fragment.speakerId === ownerId ? recipients : recipients.includes(ownerId) ? [fragment.speakerId] : [];
+  })).filter(id => id !== ownerId);
+}
+
+function sourceRevisionCurrent(source, scope, index, metadata) {
+  const record = index.finalizations[hash(source?.finalizationId)];
+  const revision = metadata?.knownEvidenceRevisions?.[hash([source?.conversationId, scope.ownerId])];
+  return !!record && (!revision || revision === record.sourceRevision)
+    && (!source?.sourceRevision || source.sourceRevision === record.sourceRevision);
+}
+
 // Only the projected source, never model-supplied ownership or knowledge, grants access.
 function validateEntry(candidate, snapshot) {
   assertScope(snapshot);
@@ -55,8 +70,9 @@ function validateEntry(candidate, snapshot) {
     && !temporalRefs.some(ref => ref.fromGameDate === from && ref.toGameDate === to && ref.precision === precision)) throw new Error("memory4_unsupported_event_date");
   if (!["day", "month", "year", "range", "unknown"].includes(precision) || from && precision === "unknown" || !from && precision !== "unknown") throw new Error("memory4_invalid_precision");
   const text = candidate.text.trim();
-  const counterpartIds = ids(snapshot.counterpartIds);
-  if (counterpartIds.some(id => id === snapshot.ownerId || !fragments.some(fragment => fragment.presentIds.includes(id)))) throw new Error("memory4_invalid_counterpart");
+  const snapshotCounterparts = ids(snapshot.counterpartIds);
+  if (snapshotCounterparts.some(id => id === snapshot.ownerId || !snapshot.fragments.some(fragment => fragment.presentIds.includes(id)))) throw new Error("memory4_invalid_counterpart");
+  const counterpartIds = directCounterpartIds(fragments, snapshot.ownerId).filter(id => snapshotCounterparts.includes(id));
   const source = {
     conversationId: snapshot.conversationId, finalizationId: snapshot.finalizationId,
     summaryIds: strings(snapshot.summaryIds), episodeIds: strings([snapshot.episodeId]),
@@ -87,9 +103,12 @@ function validateEntry(candidate, snapshot) {
       knownBy, reportedBy: ids(fragments.map(fragment => fragment.speakerId)),
       visibilityEvidence: strings(fragments.map(fragment => fragment.visibilityEvidence)), completeness: snapshot.completeness || "partial" },
     importance: Number.isFinite(candidate.importance) ? Math.max(0, Math.min(1, candidate.importance)) : 0.5,
-    state: { status: "active", supportedByEntryIds: [], supersedesEntryIds: [] },
+    state: { status: "active", supportedByEntryIds: [], supersedesEntryIds: [],
+      ...(candidate.memoryType === "COMMITMENT" ? { changedAt: now, changedGameDate: gameDate(snapshot.date), revision: 1,
+        evidenceEntryIds: [], sourceMessageIds: source.messageIds,
+        source: { ...source, sourceRevision: snapshot.sourceRevision, sourceType: observed ? "witnessed" : "reported" } } : {}) },
     edit: { mode: "auto", editedAt: null, editedBy: null }, deleted: false, createdAt: now, updatedAt: now
   };
 }
 
-module.exports = { MEMORY_TYPES, assertScope, gameDate, hash, ids, strings, legacySourceHash, validateEntry };
+module.exports = { MEMORY_TYPES, assertScope, gameDate, hash, ids, strings, legacySourceHash, directCounterpartIds, sourceRevisionCurrent, validateEntry };

@@ -6,6 +6,7 @@ const path = require("path");
 const { Character } = require("../resources/app/out/main/game-data/character");
 const { createLogParser } = require("../resources/app/out/main/game-data/log-parser");
 const { createLetterPromptBuilder } = require("../resources/app/out/main/prompts/letter-prompt-builder");
+const { createPromptBuilder } = require("../resources/app/out/main/prompts/prompt-builder");
 const { createLetterManager } = require("../resources/app/out/main/letters/letter-manager");
 
 function render(template, context) {
@@ -19,6 +20,11 @@ class TestTemplateEngine {
 }
 
 class TestPromptScriptLoader {}
+
+const PromptBuilder = createPromptBuilder({
+  TemplateEngine: TestTemplateEngine,
+  PromptScriptLoader: TestPromptScriptLoader
+});
 
 function characterLine(id, shortName, fullName, pronoun) {
   const raw = Array(27).fill("");
@@ -108,7 +114,7 @@ function createHarness(options = {}) {
     settingsRepository,
     memoryEngine,
     memorySystem: { getCharacterMentionAliases: (character) => [character.fullName, character.shortName].filter(Boolean) },
-    PromptBuilder: {},
+    PromptBuilder,
     TokenCounter: tokenCounter,
     promptConfigManager: {
       getDefaultLetterMainTemplateContent: () => "Stable official-compatible letter roleplay.",
@@ -138,7 +144,7 @@ function createHarness(options = {}) {
     parseLog,
     letterPromptBuilder,
     llmManager,
-    PromptBuilder: {},
+    PromptBuilder,
     TokenCounter: tokenCounter,
     memoryEngine,
     dataDir,

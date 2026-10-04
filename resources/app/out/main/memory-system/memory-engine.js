@@ -510,6 +510,7 @@ class MemoryEngine {
       campaignToken: context.campaignToken || null,
       totalDays: context.totalDays ?? null,
       participants: context.participants || [],
+      mentionedEntities: context.mentionedEntities || [],
       excludedSummaryOwnerIds: uniqueIds(context.excludedSummaryOwnerIds),
       participantPresence: context.participantPresence || [],
       relationshipChanges: context.relationshipChanges || [],
@@ -1323,6 +1324,7 @@ class MemoryEngine {
       campaignToken: snapshot.campaignToken || null,
       totalDays: snapshot.totalDays,
       participants,
+      mentionedEntities: snapshot.mentionedEntities || [],
       excludedSummaryOwnerIds: snapshot.excludedSummaryOwnerIds || [],
       participantPresence: snapshot.participantPresence,
       relationshipChanges: snapshot.relationshipChanges || [],
@@ -2321,22 +2323,22 @@ class MemoryEngine {
         summaryRecords: summaryCatalog.reduce((total, metadata) => total + (metadata.summaries?.length || 0), 0)
       },
       boundaries: [
-        "每名 NPC 只读取自己的 ID_姓名目录；玩家目录保存摘要但玩家不执行提示词记忆召回。",
-        "同一场对话内，长期稳定记忆、直接关系最近记录和场外人物快照不随当前问题重排；只在新会话读取最新终局记忆。",
-        "直接参与者按自己的目录精确召回最近 3 条；预算内补充钉住记忆，超长摘要优先保留长期事项。",
-        "首次提到场外人物时，每名 NPC 分别从自己的目录建立记忆快照；Session Topic Anchor 首次命中后整场冻结。",
-        "明确回忆问题可在当前用户消息之后追加 Top1 Turn Recall；默认 256 token、硬上限 320 token，同回合查询复用缓存。",
-        "终局摘要按每名目录所有者的知情边界生成视角投影；不知情角色不会获得他人的私密内容。",
-        "同一场群聊仅合并正文相同的关系副本，保留不同知情投影；内容长度由每次 800–2400 token 的动态预算约束。"
+        "人物记忆按 Owner、Campaign、游戏日期、获得日期、knownBy 与来源版本隔离；玩家保存记忆，但不执行 NPC 提示词召回。",
+        "最近两篇直接关系摘要与合法官方追忆在本场冻结；新终局记忆在下一场加载，Memory4 动态召回位于冻结前缀之后。",
+        "Memory4 动态召回整包最多一份概览、两条细节；人生召回最多一条代表细节，精确日期不补概览。",
+        "第三人记忆只读取当前回应者自己的知情空间；候场、缺席和未收到的耳语不构成直接交谈或见证。",
+        "年度与人生记忆是 Detail 的派生视图，来源版本失效或视图变脏时不用于有效召回；无长期内容不强制生成。",
+        "Legacy 摘要继续保留，只有可核验的当前战役来源可进入新召回；CK3 官方追忆保持只读，不由模型补造。",
+        "结束对话或 Owner 不在窄角色表时，仅以已加载战役与既有侧车证明开放归档只读查看；归档不代表当前 CK3 关系或状态。"
       ],
       routingPolicy: {
-        stablePrefix: "同一场对话每轮保持一致；新会话重新读取",
-        directPair: "直接关系：最近 3 条 + 预算内钉住记忆，整场冻结",
-        group: "多人：分别按每个回应角色的知情视角召回",
-        mentioned: "场外人物：首次提及时锁定快照，整场复用",
-        sessionTopicAnchor: "首次话题命中 Top1，整场冻结并保留在历史前稳定区",
-        turnRecall: "明确回忆意图且相关度达标时 Top1；当前用户消息后插入，默认 256 token",
-        tokenBudget: "冻结记忆每名 NPC 每次回复使用上下文约 8%，最少 800、最多 2400 token"
+        stablePrefix: "最近两篇直接关系摘要与官方追忆本场冻结；动态召回不改冻结前缀",
+        directPair: "按当前回应者的直接交谈证据和 Owner 知情边界读取",
+        group: "多人分别按在场窗口、耳语对象与每名 Owner 的知情视角保存和召回",
+        mentioned: "只从当前回应者可知的来源读取第三人，不读取被提及者的私人目录",
+        sessionTopicAnchor: "仅关闭人物记忆召回、回退旧路由时使用原话题锚点",
+        turnRecall: "Memory4 按时间与人物检索有效来源：概览最多 1 份，细节最多 2 条，人生细节最多 1 条",
+        tokenBudget: "Memory4 动态整包最多 1200 Token，并受记忆剩余额度及 Provider 安全余量共同限制"
       },
       characters: []
     };

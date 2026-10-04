@@ -172,7 +172,8 @@ check("old cached dossiers and custom layouts retain a fresh knowledge guard", (
   const memory = context();
   memory.stableDescriptionCache.set("2", "Old cached player identity: 河间公张三; 河间公");
   const result = build(sample, undefined, memory);
-  assert(result.messages.some(message => message.content === memory.stableDescriptionCache.get("2")));
+  assert(!result.messages.some(message => message.content === memory.stableDescriptionCache.get("2")), "pre-Trait-routing cached dossiers must not bypass the scoped view");
+  assert([...memory.stableDescriptionCache.keys()].some(key => key.startsWith("v8.14.1:")), "fresh descriptions use the scoped cache namespace");
   assert.match(guard(result), /身份识别关系证据：未提供/);
   layout = "v813";
   historyEnabled = false;

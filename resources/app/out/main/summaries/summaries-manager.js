@@ -2,9 +2,11 @@
 
 const { validateGenerationOutcome } = require("../providers/generation-outcome");
 
-function createSummariesManager({ fs, path, summariesDir, memoryEngine, memorySystem, getCurrentConversation = () => null, requestSummary, requestDurable, getSummaryCapabilities, getSummaryOutputLimit = () => 4096, buildSummaryPrompt, persistRecoveredSummary }) {
+function createSummariesManager({ fs, path, summariesDir, memoryEngine, memorySystem, getCurrentConversation = () => null,
+  getMemory4ReadConversation = null, requestSummary, requestDurable, getSummaryCapabilities, getSummaryOutputLimit = () => 4096, buildSummaryPrompt, persistRecoveredSummary }) {
   const fs$1 = fs;
   const VOTC_SUMMARIES_DIR = summariesDir;
+  const getCurrentMemory4ReadConversation = typeof getMemory4ReadConversation === "function" ? getMemory4ReadConversation : getCurrentConversation;
   let summaryRegenerationInFlight = false;
   class SummariesManager {
     static getRecoveryStatus() {
@@ -165,10 +167,64 @@ function createSummariesManager({ fs, path, summariesDir, memoryEngine, memorySy
       const context = await this.getLegacyBulkBindingContext(request.ownerId);
       this.assertCurrentLegacyBindingContext(context);
       if (context.conversation.isActive === false) throw new Error("legacy_binding_conversation_not_active");
+      if (request.expectedContextId != null && request.expectedContextId !== context.conversation.id) throw new Error("legacy_binding_conversation_changed");
       if (requireCampaign && request.expectedCampaignToken !== context.campaignToken
         || request.expectedCampaignToken != null && request.expectedCampaignToken !== context.campaignToken) throw new Error("memory4_campaign_changed");
       if (!memoryEngine.memory4?.derived) throw new Error("memory4_unavailable");
       return context;
+    }
+
+    static async getMemory4ReadContext(request = {}, requirePersistedArchive = true) {
+      const conversation = getCurrentMemory4ReadConversation();
+      if (!conversation) throw new Error("legacy_binding_conversation_not_active");
+      if (!conversation.gameData && conversation.gameDataReady && typeof conversation.gameDataReady.then === "function") {
+        await conversation.gameDataReady;
+      }
+      if (getCurrentMemory4ReadConversation() !== conversation) throw new Error("legacy_binding_conversation_changed");
+      const gameData = conversation.gameData;
+      const ownerId = Number(request.ownerId);
+      if (!gameData || !(gameData.characters instanceof Map)) throw new Error("legacy_binding_game_data_unavailable");
+      if (typeof gameData.campaignToken !== "string" || !gameData.campaignToken.trim()) throw new Error("legacy_binding_campaign_not_loaded");
+      if (!Number.isSafeInteger(ownerId) || ownerId <= 0) throw new Error("legacy_summary_binding_owner_invalid");
+      const campaignToken = gameData.campaignToken.trim();
+      if (request.expectedCampaignToken != null && request.expectedCampaignToken !== campaignToken) throw new Error("memory4_campaign_changed");
+      if (request.expectedContextId != null && request.expectedContextId !== conversation.id) throw new Error("legacy_binding_conversation_changed");
+      const matches = [...gameData.characters.values()].filter(character => Number(character?.id) === ownerId);
+      if (matches.length > 1) throw new Error("legacy_summary_binding_owner_not_unique_in_current_campaign");
+      const ownerInRoster = matches.length === 1;
+      const readOnlyArchive = conversation.isActive === false || !ownerInRoster;
+      const context = { conversation, gameData, ownerId, campaignToken, ownerInRoster, readOnlyArchive,
+        readOnlyReason: conversation.isActive === false ? "conversation_ended" : !ownerInRoster ? "owner_not_in_current_roster" : null,
+        contextId: conversation.id, archiveAsOfDate: readOnlyArchive ? gameData.date || null : null };
+      if (readOnlyArchive && requirePersistedArchive) {
+        if (typeof memoryEngine.memory4?.store?.assertPersistedScope !== "function") throw new Error("memory4_archive_proof_unavailable");
+        try {
+          memoryEngine.memory4.store.assertPersistedScope({ ownerId, campaignToken });
+        } catch (error) {
+          if (error.message === "memory4_owner_folder_not_unique" || error.message === "memory4_scope_not_persisted") {
+            if (conversation.isActive !== false && !ownerInRoster) throw new Error("legacy_summary_binding_owner_not_in_current_campaign");
+            throw new Error("memory4_archive_scope_not_persisted");
+          }
+          throw error;
+        }
+      }
+      if (!memoryEngine.memory4?.derived) throw new Error("memory4_unavailable");
+      return context;
+    }
+
+    static assertCurrentMemory4ReadContext(context) {
+      if (getCurrentMemory4ReadConversation() !== context.conversation) throw new Error("legacy_binding_conversation_changed");
+      if (context.conversation.gameData?.campaignToken?.trim?.() !== context.campaignToken) throw new Error("memory4_campaign_changed");
+      const characters = context.conversation.gameData?.characters;
+      if (!(characters instanceof Map)) throw new Error("legacy_binding_game_data_unavailable");
+      const matches = [...characters.values()].filter(character => Number(character?.id) === context.ownerId);
+      if (matches.length > 1) throw new Error("legacy_summary_binding_owner_not_unique_in_current_campaign");
+      const ownerInRoster = matches.length === 1;
+      const readOnlyArchive = context.conversation.isActive === false || !ownerInRoster;
+      const readOnlyReason = context.conversation.isActive === false ? "conversation_ended" : !ownerInRoster ? "owner_not_in_current_roster" : null;
+      if (ownerInRoster !== context.ownerInRoster || readOnlyArchive !== context.readOnlyArchive || readOnlyReason !== context.readOnlyReason) {
+        throw new Error("legacy_binding_conversation_changed");
+      }
     }
 
     static invalidateMemory4Dynamic(context) {
@@ -189,17 +245,17 @@ function createSummariesManager({ fs, path, summariesDir, memoryEngine, memorySy
     }
 
     static async getMemory4OwnerData(request = {}) {
-      const context = await this.getMemory4Context(request, false);
+      const context = await this.getMemory4ReadContext(request, request.contextOnly !== true);
       const scope = { campaignToken: context.campaignToken, ownerId: context.ownerId };
-      if (request.contextOnly === true) return { success: true, ...scope };
+      if (request.contextOnly === true) return { success: true, ...scope, contextId: context.contextId,
+        readOnlyArchive: context.readOnlyArchive, readOnlyReason: context.readOnlyReason, archiveAsOfDate: context.archiveAsOfDate };
       const coordinator = memoryEngine.memory4;
       const readContext = coordinator.createProfileReadContext(scope);
       const index = readContext.index;
-      const directory = coordinator.store.directory(scope);
       const known = readContext.known;
       if (known && (known.ownerId !== context.ownerId || known.campaignToken !== context.campaignToken || !known.entities)) throw new Error("memory4_known_index_invalid");
       const legacy = memoryEngine.store.loadFolderSummariesForCharacter(context.ownerId);
-      const owner = context.gameData.characters.get(context.ownerId);
+      const owner = context.readOnlyArchive ? null : context.gameData.characters.get(context.ownerId);
       const entityIds = new Set([...Object.keys(known?.entities || {}), ...Object.keys(index.byEntity || {}),
         ...(owner?.relationsToCharacters || []).map(item => item.id),
         ...(owner?.relationsToPlayer?.length ? [context.gameData.playerID] : []),
@@ -212,16 +268,33 @@ function createSummariesManager({ fs, path, summariesDir, memoryEngine, memorySy
       const orderedEntities = [...entityIds].sort((left, right) => name(left).localeCompare(name(right), "zh-CN"));
       const details = Object.entries(index.entries).filter(([, row]) => !row.deleted && row.knownBy?.includes(context.ownerId)
         && (!request.entityId || row.entityIds?.includes(request.entityId))).sort((left, right) => String(right[1].eventTime?.from || right[1].conversationDate || "").localeCompare(String(left[1].eventTime?.from || left[1].conversationDate || ""), undefined, { numeric: true }));
-      const officialFile = path.join(path.dirname(path.dirname(directory)), "官方追忆摘要.json");
-      if (fs$1.existsSync(officialFile) && fs$1.lstatSync(officialFile).isSymbolicLink()) throw new Error("memory4_symlink_path");
-      const official = coordinator.store.read(officialFile, []).filter(record => record?.sourceType === "CK3_OFFICIAL_RECOLLECTION"
-        && Number(record.playerId) === context.ownerId && record.campaignToken === context.campaignToken);
+      const official = [];
+      const captures = new Map();
+      for (const folder of fs$1.readdirSync(VOTC_SUMMARIES_DIR, { withFileTypes: true }).filter(entry => entry.isDirectory()
+        && !entry.isSymbolicLink() && entry.name.startsWith(`${context.ownerId}_`))) {
+        const officialFile = path.join(VOTC_SUMMARIES_DIR, folder.name, "官方追忆摘要.json");
+        if (fs$1.existsSync(officialFile) && fs$1.lstatSync(officialFile).isSymbolicLink()) throw new Error("memory4_symlink_path");
+        for (const record of coordinator.store.read(officialFile, []).filter(record => record?.sourceType === "CK3_OFFICIAL_RECOLLECTION"
+          && Number(record.playerId) === context.ownerId && record.campaignToken === context.campaignToken)) {
+          const key = JSON.stringify([record.memoryId || record.captureId || record.finalizationId || null, record.date || null, record.totalDays ?? null]);
+          const content = JSON.stringify(record);
+          if (captures.has(key) && captures.get(key) !== content) throw new Error("memory4_official_capture_conflict");
+          if (!captures.has(key)) { captures.set(key, content); official.push(record); }
+        }
+      }
       const coverage = coordinator.getLegacyCoverage(scope, legacy.filter(memory => memory.provenance?.campaignToken === scope.campaignToken
         && memory.provenance?.folderOwnerId === scope.ownerId));
-      this.assertCurrentLegacyBindingContext(context);
+      const finalizations = Object.values(index.finalizations || {}).filter(record => ["STORE", "NO_DURABLE_CONTENT", "NOT_PRESENT"].includes(record?.status));
+      const latestFinalization = finalizations.sort((left, right) => String(right.committedAt || "").localeCompare(String(left.committedAt || "")))[0] || null;
+      this.assertCurrentMemory4ReadContext(context);
       return { success: true, ownerId: context.ownerId, campaignToken: context.campaignToken, indexRevision: index.revision,
+        contextId: context.contextId, readOnlyArchive: context.readOnlyArchive, readOnlyReason: context.readOnlyReason, archiveAsOfDate: context.archiveAsOfDate,
+        generation: { finalizationCount: finalizations.length,
+          noDurableContentCount: finalizations.filter(record => record.status === "NO_DURABLE_CONTENT").length,
+          lastStatus: latestFinalization?.status || null },
         known: { total: orderedEntities.length, offset: knownOffset, items: orderedEntities.slice(knownOffset, knownOffset + 40).map(entityId => ({
-          ...coordinator.getKnownEntityProfile(scope, entityId, { gameData: context.gameData, legacyMemories: legacy, readContext }), displayName: name(entityId)
+          ...coordinator.getKnownEntityProfile(scope, entityId, { gameData: context.readOnlyArchive ? null : context.gameData,
+            currentGameDate: context.readOnlyArchive ? context.archiveAsOfDate : undefined, legacyMemories: legacy, readContext }), displayName: name(entityId)
         })) },
         detail: { total: details.length, offset, entityId: request.entityId || null, items: details.slice(offset, offset + 40).map(([entryId, row]) => ({ entryId, ...row })) },
         derived: readContext.derived, official,
@@ -229,23 +302,30 @@ function createSummariesManager({ fs, path, summariesDir, memoryEngine, memorySy
     }
 
     static async getMemory4Entry(request = {}) {
-      const context = await this.getMemory4Context(request);
+      const context = await this.getMemory4ReadContext(request);
       const entry = memoryEngine.memory4.store.readEntry({ campaignToken: context.campaignToken, ownerId: context.ownerId }, request.entryId);
       if (entry.deleted || !entry.evidence?.knownBy?.includes(context.ownerId)) throw new Error("memory4_entry_unavailable");
-      return { success: true, entry };
+      this.assertCurrentMemory4ReadContext(context);
+      return { success: true, entry, contextId: context.contextId, campaignToken: context.campaignToken,
+        readOnlyArchive: context.readOnlyArchive, readOnlyReason: context.readOnlyReason };
     }
 
     static async getMemory4Sources(request = {}) {
-      const context = await this.getMemory4Context(request);
+      const context = await this.getMemory4ReadContext(request);
       const scope = { campaignToken: context.campaignToken, ownerId: context.ownerId };
       if (request.kind === "detail") {
         const { entry } = await this.getMemory4Entry(request);
         const valid = memoryEngine.memory4Recall.validateHistory(scope, [{ kind: "detail", id: entry.entryId,
-          bodyHash: memoryEngine.memory4.store.loadIndex(scope).entries[entry.entryId].bodyHash }], { currentGameDate: context.gameData.date });
-        return { success: true, sources: { kind: "detail", changed: !valid, entries: [{ ...entry, sourceValid: valid }], missingEntryIds: [] } };
+          bodyHash: memoryEngine.memory4.store.loadIndex(scope).entries[entry.entryId].bodyHash }], { currentGameDate: context.readOnlyArchive ? null : context.gameData.date });
+        this.assertCurrentMemory4ReadContext(context);
+        return { success: true, sources: { kind: "detail", changed: !valid, entries: [{ ...entry, sourceValid: valid }], missingEntryIds: [] },
+          contextId: context.contextId, campaignToken: context.campaignToken, readOnlyArchive: context.readOnlyArchive, readOnlyReason: context.readOnlyReason };
       }
       if (!["year", "life"].includes(request.kind)) throw new Error("memory4_source_kind_invalid");
-      return { success: true, sources: memoryEngine.memory4.derived.getSources(scope, request) };
+      const sources = memoryEngine.memory4.derived.getSources(scope, request);
+      this.assertCurrentMemory4ReadContext(context);
+      return { success: true, sources, contextId: context.contextId, campaignToken: context.campaignToken,
+        readOnlyArchive: context.readOnlyArchive, readOnlyReason: context.readOnlyReason };
     }
 
     static async mutateMemory4(request = {}) {
@@ -334,7 +414,7 @@ function createSummariesManager({ fs, path, summariesDir, memoryEngine, memorySy
         const entries = fs$1.readdirSync(VOTC_SUMMARIES_DIR, { withFileTypes: true });
         
         // Process character folders (new format)
-        const characterFolders = entries.filter((dirent) => dirent.isDirectory());
+        const characterFolders = entries.filter((dirent) => dirent.isDirectory() && !dirent.isSymbolicLink() && /^\d+_/.test(dirent.name));
         
         for (const folder of characterFolders) {
           const characterFolderName = folder.name;
@@ -369,7 +449,8 @@ function createSummariesManager({ fs, path, summariesDir, memoryEngine, memorySy
               }
             }
             if (!results.some(metadata => metadata.folderName === characterFolderName)
-              && fs$1.existsSync(path.join(characterFolderPath, "memory4"))) {
+              && (fs$1.existsSync(path.join(characterFolderPath, "memory4"))
+                || fs$1.existsSync(path.join(VOTC_SUMMARIES_DIR, ".memory4", characterFolderName.split("_")[0])))) {
               const match = characterFolderName.match(/^(\d+)_(.+)$/);
               if (match) results.push({ ownerId: Number(match[1]), playerId: Number(match[1]), ownerName: match[2], playerName: match[2],
                 folderName: characterFolderName, conversationFile: null, summaries: [], memory4Only: true });
@@ -382,7 +463,8 @@ function createSummariesManager({ fs, path, summariesDir, memoryEngine, memorySy
       } catch (error) {
         console.error("Failed to list summaries:", error);
       }
-      return results;
+      return results.filter((metadata, index) => !metadata.memory4Only || !results.some(other => !other.memory4Only && other.ownerId === metadata.ownerId)
+        && results.findIndex(other => other.memory4Only && other.ownerId === metadata.ownerId) === index);
     }
     /**
      * Helper method to find summary file paths in character folder structure

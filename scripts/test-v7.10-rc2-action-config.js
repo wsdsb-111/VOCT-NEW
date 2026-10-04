@@ -83,8 +83,8 @@ const manager = new LLMManager({
   assert(mainSource.includes('deepseekActionStablePrefixOptimization: true'), "stable-prefix optimization must default on");
   assert(mainSource.includes('actionSchemaDeliveryMode: "official_full_injected"'), "OpenAI-compatible must default to response_format JSON Schema transport");
   assert(rendererSource.includes('useMinimizedActionsSchema: false'), "UI defaults must use the official Full Action schema for DeepSeek");
-  assert(rendererSource.includes("RC3 仍构建官方 Full Schema，并在本地用于官方 ActionEngine 校验"), "Chinese UI must explain the RC3 Full Schema transport decision");
-  assert(rendererSource.includes('children: "默认开启；保持稳定 Action 前缀以提高缓存复用'), "UI must disclose the stable-prefix default");
+  assert(rendererSource.includes("完整构建官方 Full Schema，并在本地用于官方 ActionEngine 校验"), "Chinese UI must explain the unchanged Full Schema transport decision");
+  assert(rendererSource.includes('children: "默认开启；保持稳定 Action 前缀') && rendererSource.includes("实际缓存命中以服务商返回的用量为准"), "UI must disclose the stable-prefix default without promising cache hits");
   assert(rendererSource.includes('["deepseek", "openai-compatible"].includes(config2.providerType)'), "Action Schema transport selector must be visible for OpenAI-compatible");
   assert(!actionEngineSource.includes('actionsConfig?.providerType === "deepseek"'), "DeepSeek compatibility must not modify the official ActionEngine");
   assert(settingsRepositorySource.includes('useMinimizedActionsSchema: false'), "saved DeepSeek minimized settings must be normalized in the provider config layer");

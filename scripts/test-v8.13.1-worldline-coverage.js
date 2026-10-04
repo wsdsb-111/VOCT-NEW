@@ -44,7 +44,7 @@ const snapshot = { gameDate: "1162.5.19", playerId: "1", characters: {
 const baselineService = { currentCheckpoint: { snapshot }, _currentCampaignDelta: () => [], _activeLegacySupplemental: () => [] };
 const baselineCandidates = WorldlineService.prototype._baselinePolicyFacts.call(baselineService, "1", ["1", "2"]);
 assert(baselineCandidates.some((item) => item.field === "WAR"), "opening candidate pipeline must include active wars even without a war query");
-assert(baselineCandidates.some((item) => item.entityId === "2" && item.field === "LOCATION"), "selected waiting NPC enters opening work set");
+assert(baselineCandidates.some((item) => item.entityId === "2" && item.field === "LOCATION"), "actual active participant enters opening work set");
 const aclView = buildSubjectiveWorldView({ responder: { id: "1" }, candidates: baselineCandidates,
   scope: { sameCourt: true, sameRealm: true, asOf: snapshot.gameDate, verificationMode: "CHECKPOINT", completeness: "COMPLETE" },
   scopeResolver: (item) => ({ closeKnowledge: item.entityId === "2" ? "SPOUSE" : null }), snapshotMode: "CONVERSATION_BASELINE" });

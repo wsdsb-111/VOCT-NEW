@@ -1,4 +1,24 @@
-# 对话摘要系统：Memory Engine 3.0（2.5 存储兼容）
+# 对话摘要与人物记忆：Memory Engine 4.0（3.0 协议、2.5 存储兼容）
+
+## V8.14.1 前端显示同步（2026-10-04）
+
+[前端内容同步报告](v8.14.1-frontend-content-update-implementation-report.md)区分当前 Memory4 可见名称、协议 `engineVersion: 3.0`、旧摘要 2.5 兼容及 App 包版本。摘要/优化/世界书展示现行分层、Recent2、动态召回与归档只读说明；没有改召回顺序、Prompt 块或持久键。信件实机验收与 GLM V8.14.2 延期状态保留，既有旧版本报告不回写为新测试结果。
+
+## V8.14.1 归档读取热修（2026-10-04，本地通过，新热修实机待验收）
+
+[事故热修报告](v8.14.1-runtime-incident-hotfix-report.md)记录已保存人物认知被活动对话角色表错误拦截的问题。读取与写入上下文已分开：真实结束对话前只保留最小 Owner 标签、Campaign、规范日期与 Context 快照；活动 getter 仍清空。明确战役内的既有侧车经 Owner、索引、metadata 哈希及 revision 核验后可只读查看，不从其他战役回退；新对话优先，非法新上下文结束时清除旧快照。归档认知按已加载日期与来源版本过滤，不宣称当前 CK3 人物状态。
+
+只读页保留导航、刷新与来源查看，禁止编辑、删除、绑定、重压缩及派生重建；服务端继续要求活动上下文与预期版本。没有长期内容的抽取不会强制生成 Detail/Year/Life，Official 必须来自 CK3 导出。实际结束对话与跨战役等独立回归 10/10，完整发布门禁 346/346；415 个分类测试文件、68 个历史归档。用户确认首次身份边界与本次特质展示 PASS，信件 NOT TESTED；Provider 生成和新热修待实机复测。
+
+## V8.14.1 Trait 知识通道与 Memory4 边界（本地回归，实机待验收）
+
+Trait Profile 只改变每请求 Prompt 投影，不修改 CK3 `character.traits` 原值，也不更改 Memory Engine 可见版本、2.5 存储字段、人物目录、Recall 顺序、Cache Anchor 或 Prompt Block ID。回应者的 Self Profile 保留自身全部 Trait；Observed Profile 只允许 V1 明确列入的 CK3 Trait ID 与本地化可观察标签。性格、生活方式、活动、统兵、压力应对等私密类别以及未知 Mod Trait 均不经人物描写向观察者公开。
+
+Known Profile 只能以当前 Owner、Campaign、实体、游戏日期、获得日期、`knownBy`、可见性、来源类型、认知状态和可校验源引用共同授权某个具体 Trait。原文须有具名目标的正向 Trait 断言；否定、假设、未来、谣言、转述、自称、引用和玩笑不会解锁隐藏 Trait，但原记忆正文仍保留正常 Recall。收件信件同样只读取收信者自己的合规知识范围，不把发件方私人摘要或原始记忆移交给收信者。
+
+Known Entity 中来源不完整的旧记录显式保留 `legacy_partial`，不会误判为“从未认识”，也不丢弃已有识别次数；完整 Presence/Visibility/Finalization 证据仍可标为 `complete`。
+
+Trait Routing 14 项、身份知识 13 项、Memory closeout 18 项及承诺绑定修复后的 production pipeline 16 PASS / 0 FAIL（独立 QA 确认）。旧信件 fixture 已由 `scripts/letter-pipeline-test-helper.js` 按真实 PromptBuilder 调用适配，payload-race PASS；完整 `test-release.js` 344/344 发布组通过。真实 CK3 / Provider、Mod Trait 可观察证据、完整信件流程与 Soak 仍待验收；GLM 缓存 A/B 已延期至 V8.14.2。详见 [V8.14.1 改进与收口报告](v8.14.1-improvement-closeout-implementation-report.md)。
 
 ## V8.14-D/E 派生与管理（本地发布与独立 QA/UI 通过，实机待验收）
 

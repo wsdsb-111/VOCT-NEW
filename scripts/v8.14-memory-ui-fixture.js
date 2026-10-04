@@ -7,7 +7,7 @@ const { projectVisibleTranscript } = require("../resources/app/out/main/memory-s
 
 async function createMemoryUiFixture(profile) {
   const summariesDir = path.join(profile, "votc_data", "conversation_summaries");
-  for (const [id, name] of [[1, "甲"], [2, "乙"], [3, "丙"]]) fs.mkdirSync(path.join(summariesDir, `${id}_${name}`), { recursive: true });
+  for (const [id, name] of [[1, "甲"], [2, "乙"], [3, "丙"], [4, "丁"]]) fs.mkdirSync(path.join(summariesDir, `${id}_${name}`), { recursive: true });
   const engine = new MemoryEngine({ baseDir: path.join(profile, "votc_data", "memory"), summaryFoldersDir: summariesDir, trace: { record() {} } });
   const scope = { campaignToken: "memory4-ui-fixture", ownerId: 2 };
   const context = { campaignToken: scope.campaignToken, conversationId: "fixture-conversation", finalizationId: "fixture-finalization",
@@ -24,6 +24,19 @@ async function createMemoryUiFixture(profile) {
     entityIds: [1, 2], participantIds: [1, 2], topics: ["粮食"], eventTime: { status: "reported", precision: "day", from: index ? "1161.8.7" : "1158.3.12", to: index ? "1161.8.7" : "1158.3.12" }
   })) });
   engine.memory4.store.recordKnownEvidence({ ...context, ...projectVisibleTranscript(context, 3), ownerId: 3, conversationId: "third-owner", sourceRevision: "third-owner-evidence" });
+  const archiveOwnerId = 4;
+  const archiveText = "1160年6月1日，甲告知丁，粮食已经送到城门仓库。";
+  const archiveContext = { ...context, conversationId: "archive-fixture-conversation", finalizationId: "archive-fixture-finalization",
+    episodeId: "archive-fixture-episode", participants: [1, archiveOwnerId].map(id => ({ id })),
+    participantPresence: [1, archiveOwnerId].map(characterId => ({ characterId, joinedAtMessageId: 0, leftAtMessageId: null })),
+    messages: [{ id: 1, role: "assistant", speakerCharacterId: 1, content: archiveText,
+      memory4Fragments: [{ start: 0, end: archiveText.length, visibility: "participants", sourceType: "spoken", recipientIds: [archiveOwnerId], entityIds: [1, archiveOwnerId] }] }] };
+  const archiveProjection = projectVisibleTranscript(archiveContext, archiveOwnerId);
+  const archiveSnapshot = { ...archiveContext, ...archiveProjection, ownerId: archiveOwnerId, counterpartIds: [1], summaryIds: ["archive-fixture-summary"] };
+  engine.memory4.store.commitOwner(archiveSnapshot, { status: "STORE", entries: archiveProjection.fragments.map(fragment => ({
+    memoryType: "MAJOR_EXPERIENCE", text: fragment.text, fragmentIds: [fragment.fragmentId], entityIds: [1, archiveOwnerId],
+    participantIds: [1, archiveOwnerId], topics: ["粮食"], eventTime: { status: "reported", precision: "day", from: "1160.6.1", to: "1160.6.1" }
+  })) });
   let requests = 0;
   engine.memory4.configureDerived({ isCampaignCurrent: token => token === scope.campaignToken,
     requestCompression: async () => { requests++; throw new Error("fixture_must_not_call_provider"); }, estimateTokens: text => Math.ceil(text.length / 2) });
@@ -40,11 +53,14 @@ async function createMemoryUiFixture(profile) {
   fs.writeFileSync(path.join(summariesDir, "2_乙", "与甲的对话.json"), JSON.stringify([{ playerId: 2, playerName: "乙", characterId: 1, characterName: "甲",
     date: "1158.3.12", campaignToken: scope.campaignToken, campaignBinding: { status: "bound", source: "native" }, content: "乙曾与甲交谈，旧叙事没有可确认的独立片段。" },
     { playerId: 2, playerName: "乙", characterId: 1, characterName: "甲", date: "1157.1.1", content: "待绑定的旧摘要。" }]), "utf8");
+  fs.writeFileSync(path.join(summariesDir, "4_丁", "与甲的对话.json"), JSON.stringify([{ playerId: archiveOwnerId, playerName: "丁", characterId: 1,
+    characterName: "甲", date: "1160.6.1", campaignToken: scope.campaignToken, campaignBinding: { status: "bound", source: "native" }, content: archiveText }]), "utf8");
   const characters = [[1, "甲"], [2, "乙"], [3, "丙"]].map(([id, shortName]) => ({ id, shortName, fullName: shortName,
     relationsToCharacters: id === 2 ? [{ id: 1, relations: ["friend"] }] : [], relationsToPlayer: [] }));
   const conversation = { id: "isolated-ui-conversation", isActive: true, gameData: { campaignToken: scope.campaignToken, date: "1164.1.1", playerID: 1,
     characters: new Map(characters.map(character => [character.id, character])) }, memoryState: engine.createConversationState("isolated-ui-conversation"), dynamicRecallHistory: new Map() };
-  return { engine, scope, summariesDir, conversation, characters, requests, profile };
+  return { engine, scope, summariesDir, conversation, characters, requests, profile,
+    archive: { ownerId: archiveOwnerId, campaignToken: scope.campaignToken, directory: engine.memory4.store.directory({ campaignToken: scope.campaignToken, ownerId: archiveOwnerId }) } };
 }
 
 module.exports = { createMemoryUiFixture };

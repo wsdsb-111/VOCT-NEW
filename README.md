@@ -6,9 +6,9 @@ Voices of the Court 是一个面向《Crusader Kings III》（CK3）的沉浸式
 
 ## 主要功能
 
-V8.14 **A/B 已由用户于 2026-10-03 确认收口；身份与 D/E 本地实现、独立 QA 和隔离 UI 通过**：[Year/Life 与长期记忆管理施工记录](docs/v8.14-de-year-life-management-implementation-report.md)。Prompt 明确后台姓名/头衔标签不能单独授权 NPC 已知玩家身份；Year/Life 派生、手工版本保护与分层记忆管理已接线。D 专项 17 项、独立 QA 37 项及三主题/窄窗口 27 张隔离打包 UI 截图通过；完整发布门禁 **339/339**，408 个测试文件分类、68 个历史归档。真实 CK3/Provider/Cache/Soak 仍待验收，不代表 Full Freeze。以下旧报告的 HOLD 与数量保留为当时证据。
+V8.14.1 最新进度见[前端内容同步报告](docs/v8.14.1-frontend-content-update-implementation-report.md)：记忆总览、优化、世界书、官方追忆和诊断文案已更新，底部区分 V8.14.1 功能版本与 App 包版本；Memory Engine 4.0 可见名称不改变 3.0 协议和 2.5 存储兼容。Manifest 为 416 个分类测试文件、347 个发布组、68 个历史归档，最终验证以报告为准。[前次实机事故热修](docs/v8.14.1-runtime-incident-hotfix-report.md)保留用户确认的首次对话/本次特质 PASS、信件 NOT TESTED 以及 346 组历史证据；新兼容/记忆热修、真实 Provider、完整信件与 Soak 仍待用户实测，不是 Freeze。
 
-V8.14 / Memory Engine 4.0 已有 [A 核心生产接线](docs/v8.14-a-durable-core-implementation-report.md)、[Finalization 可见性收口](docs/v8.14-a-finalization-visibility-closeout-report.md)、[B Profile/关系回读](docs/v8.14-b-profile-implementation-report.md) 与 [C Recall Planner](docs/v8.14-c-recall-planner-implementation-report.md)。本轮 D/E 保持冻结前缀、缓存锚点、旧摘要格式及 Memory Engine 3.0 标签，Legacy 来源证据不足时继续保留原摘要。用户要求后续实现、测试、文档与审查统一使用 GPT-6.1 Sol；主 Agent 模型仍由客户端选择。完整进度和证据边界见最新 D/E 报告。
+V8.14 / Memory Engine 4.0 的 [A 核心生产接线](docs/v8.14-a-durable-core-implementation-report.md)、[Finalization 可见性收口](docs/v8.14-a-finalization-visibility-closeout-report.md)、[B Profile/关系回读](docs/v8.14-b-profile-implementation-report.md)、[C Recall Planner](docs/v8.14-c-recall-planner-implementation-report.md) 与 [D/E Year/Life 和长期记忆管理](docs/v8.14-de-year-life-management-implementation-report.md) 保留各阶段当时的实现证据。当前身份、Trait、信件、Presence 和 Memory4 收口以 V8.14.1 报告为准；GLM 缓存调优延期至 V8.14.2。较早阶段由 GPT-6.1 Sol 完成的实现仍按历史记录保留，当前文档/复核使用 GPT-6 Luna Max。
 
 - **CK3 角色扮演对话**：根据角色的性格、头衔、关系、财富、信仰、处境和当前场景生成回复。
 - **Historical Baseline 2.0**：从游戏日期提取年份，以 V8 结构化时期、事件和人物数据生成与 v7.10.1 字节等价的唐、五代十国、北宋、南宋和元初历史背景；Temporal Knowledge Gate 在 v8.0 仅以 shadow/pure logic 运行。
@@ -243,7 +243,7 @@ V7.7 在 V7.6 健康化基础上分阶段拆分主进程：第一阶段将六种
 node scripts\test-release.js
 ```
 
-清单会覆盖全部 `test-*.js`。当前分类为 369 个测试文件、300 个直接发布组和 68 个归档检查；已退役的 V8.3/V8.3.1 Shadow Resolver、Ground Truth 与诊断面板测试不再作为发布路径。V8.8.2 门禁继续覆盖历史基线、Campaign/Worldline、Definition-ID 双向唯一绑定、第三方亲属 Anchor、长幼/出生日歧义、性别冲突、关系类型限定、已故配偶方向、已故前配偶隔离、配偶三状态 Intent、生产 revision invariant、人口属性缓存失效、来源完整性和冻结边界；既有 Run Command Recovery T1–T18、Memory、Conversation、Action、Letter、Relationship、Date Producer 与缓存回归继续执行。
+清单会覆盖全部 `test-*.js`。当前分类为 416 个测试文件、347 个发布组和 68 个归档检查；已退役的 V8.3/V8.3.1 Shadow Resolver、Ground Truth 与诊断面板测试不再作为发布路径。V8.8.2 门禁继续覆盖历史基线、Campaign/Worldline、Definition-ID 双向唯一绑定、第三方亲属 Anchor、长幼/出生日歧义、性别冲突、关系类型限定、已故配偶方向、已故前配偶隔离、配偶三状态 Intent、生产 revision invariant、人口属性缓存失效、来源完整性和冻结边界；既有 Run Command Recovery T1–T18、Memory、Conversation、Action、Letter、Relationship、Date Producer 与缓存回归继续执行。历史归档检查不计入发布组，个别旧合同断言可能不再适用于当前生产合同。
 
 ## 版本信息
 

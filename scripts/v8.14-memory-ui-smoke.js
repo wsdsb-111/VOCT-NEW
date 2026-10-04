@@ -3,12 +3,27 @@
 // Optional real packaged UI smoke. The inspector fixture replaces only the
 // manager's current-conversation callback in this disposable app process.
 const assert = require("assert");
+const crypto = require("crypto");
 const fs = require("fs");
 const os = require("os");
 const path = require("path");
 const { spawn } = require("child_process");
 const { createMemoryUiFixture } = require("./v8.14-memory-ui-fixture");
 const delay = ms => new Promise(resolve => setTimeout(resolve, ms));
+
+function hashDirectory(directory) {
+  const files = [];
+  const visit = current => {
+    for (const entry of fs.readdirSync(current, { withFileTypes: true }).sort((left, right) => left.name.localeCompare(right.name))) {
+      const file = path.join(current, entry.name);
+      assert(!entry.isSymbolicLink(), `unexpected fixture symlink: ${file}`);
+      if (entry.isDirectory()) visit(file);
+      else files.push(`${path.relative(directory, file)}:${crypto.createHash("sha256").update(fs.readFileSync(file)).digest("hex")}`);
+    }
+  };
+  visit(directory);
+  return crypto.createHash("sha256").update(files.join("\n")).digest("hex");
+}
 
 async function connect(url, errors) {
   const socket = new WebSocket(url);
@@ -52,6 +67,7 @@ async function connect(url, errors) {
 async function run() {
   const profile = fs.mkdtempSync(path.join(os.tmpdir(), "votc-e-packaged-ui-"));
   const fixture = await createMemoryUiFixture(profile);
+  const archiveHashBefore = hashDirectory(fixture.archive.directory);
   const evidence = path.join(profile, "ui-evidence");
   fs.mkdirSync(evidence);
   const screenshots = [];
@@ -79,6 +95,7 @@ async function run() {
     main = await connect(endpoints.main, errors);
     await main.send("Runtime.enable");
     await main.send("Debugger.enable");
+    await main.evaluate("globalThis.__m4BlockedFetches=[];globalThis.fetch=async input=>{const url=String(input?.url||input);globalThis.__m4BlockedFetches.push(url);throw new Error('isolated_ui_network_blocked')}");
     console.log("Isolated main inspector ready");
     const origin = new URL(endpoints.browser).origin.replace("ws:", "http:");
     let target;
@@ -101,16 +118,26 @@ async function run() {
     assert.equal(unavailable.success, false, "absence of current Campaign must remain explicit");
     await main.evaluate(`globalThis.__m4SmokeConversation={id:'isolated-ui-conversation',isActive:true,gameData:{campaignToken:${JSON.stringify(fixture.scope.campaignToken)},date:'1164.1.1',playerID:1,characters:new Map(${JSON.stringify(fixture.characters)}.map(c=>[c.id,c]))},dynamicRecallHistory:new Map()};globalThis.__m4ProviderCalls=0;`);
     const source = fs.readFileSync(path.join(__dirname, "../resources/app/out/main/summaries/summaries-manager.js"), "utf8").split(/\r?\n/);
-    const start = source.findIndex(line => line.includes("static async getLegacyBulkBindingContext"));
-    const lineNumber = source.findIndex((line, index) => index > start && line.includes("const conversation = getCurrentConversation();"));
+    const start = source.findIndex(line => line.includes("static async getMemory4ReadContext"));
+    const lineNumber = source.findIndex((line, index) => index > start && line.includes("const conversation = getCurrentMemory4ReadConversation();"));
     assert(lineNumber > start);
-    const breakpoint = await main.send("Debugger.setBreakpointByUrl", { urlRegex: "summaries-manager\\.js$", lineNumber });
+    const managerSource = fs.readFileSync(path.join(__dirname, "../resources/app/out/main/conversation/conversation-manager.js"), "utf8").split(/\r?\n/);
+    const managerLineNumber = managerSource.findIndex(line => line.includes("return this.currentConversation || this.lastMemory4ReadContext;"));
+    assert(managerLineNumber > 0);
+    const readContextBreakpoint = await main.send("Debugger.setBreakpointByUrl", { urlRegex: "summaries-manager\\.js$", lineNumber });
+    const managerBreakpoint = await main.send("Debugger.setBreakpointByUrl", { urlRegex: "conversation-manager\\.js$", lineNumber: managerLineNumber });
     const ownerRequest = evaluate("conversationAPI.getMemory4OwnerData({ownerId:2})");
     const paused = await main.wait("Debugger.paused");
-    const injected = await main.send("Debugger.evaluateOnCallFrame", { callFrameId: paused.callFrames[0].callFrameId,
-      expression: "getCurrentConversation=()=>globalThis.__m4SmokeConversation;globalThis.__m4SmokeConversation.memoryState=memoryEngine.createConversationState('isolated-ui-conversation');memoryEngine.memory4.configureDerived({isCampaignCurrent:token=>token===globalThis.__m4SmokeConversation.gameData.campaignToken,requestCompression:async()=>{globalThis.__m4ProviderCalls++;throw new Error('fixture_provider_forbidden');},requestExtraction:async()=>{globalThis.__m4ProviderCalls++;throw new Error('fixture_provider_forbidden');}});'fixture-injected'", returnByValue: true });
-    assert(!injected.exceptionDetails, JSON.stringify(injected.exceptionDetails));
-    await main.send("Debugger.removeBreakpoint", { breakpointId: breakpoint.breakpointId });
+    const prepared = await main.send("Debugger.evaluateOnCallFrame", { callFrameId: paused.callFrames[0].callFrameId,
+      expression: "globalThis.__m4SmokeConversation.memoryState=memoryEngine.createConversationState('isolated-ui-conversation');memoryEngine.memory4.configureDerived({isCampaignCurrent:token=>token===globalThis.__m4SmokeConversation.gameData.campaignToken,requestCompression:async()=>{globalThis.__m4ProviderCalls++;throw new Error('fixture_provider_forbidden');},requestExtraction:async()=>{globalThis.__m4ProviderCalls++;throw new Error('fixture_provider_forbidden');}});'fixture-prepared'", returnByValue: true });
+    assert(!prepared.exceptionDetails, JSON.stringify(prepared.exceptionDetails));
+    await main.send("Debugger.removeBreakpoint", { breakpointId: readContextBreakpoint.breakpointId });
+    await main.send("Debugger.resume");
+    const managerPaused = await main.wait("Debugger.paused");
+    const activeInjected = await main.send("Debugger.evaluateOnCallFrame", { callFrameId: managerPaused.callFrames[0].callFrameId,
+      expression: "this.currentConversation=globalThis.__m4SmokeConversation;this.lastMemory4ReadContext=null;'fixture-active-context'", returnByValue: true });
+    assert(!activeInjected.exceptionDetails, JSON.stringify(activeInjected.exceptionDetails));
+    await main.send("Debugger.removeBreakpoint", { breakpointId: managerBreakpoint.breakpointId });
     await main.send("Debugger.resume");
     const data = await ownerRequest;
     assert.equal(data.success, true);
@@ -121,16 +148,21 @@ async function run() {
     await renderer.send("Page.reload", { ignoreCache: true });
     await waitFor("[...document.querySelectorAll('button')].some(e=>e.textContent.trim()==='Summaries')");
     await evaluate("[...document.querySelectorAll('button')].find(e=>e.textContent.trim()==='Summaries').click()");
-    await waitFor("document.querySelectorAll('.player-summary-group').length>=2");
+    await waitFor("document.querySelectorAll('.player-summary-group').length>=3");
     await evaluate("[...document.querySelectorAll('.player-header')].find(e=>e.querySelector('.player-name')?.textContent.startsWith('乙')).click()");
     await waitFor("document.querySelector('.memory4-manager .memory4-entity')");
     console.log("Memory4 owner view ready");
-    const clickTab = async label => {
-      assert(await evaluate(`(()=>{const e=[...document.querySelectorAll('.memory4-manager [role=tab]')].find(e=>e.textContent.trim()===${JSON.stringify(label)});if(e)e.click();return !!e})()`));
+    const managerFor = ownerName => ownerName
+      ? `([...document.querySelectorAll('.player-summary-group')].find(group=>group.querySelector('.player-name')?.textContent.startsWith(${JSON.stringify(ownerName)}))?.querySelector('.memory4-manager'))`
+      : `document.querySelector('.memory4-manager')`;
+    const clickTab = async (label, ownerName = null) => {
+      const manager = managerFor(ownerName);
+      assert(await evaluate(`(()=>{const root=${manager};const e=root&&[...root.querySelectorAll('[role=tab]')].find(e=>e.textContent.trim()===${JSON.stringify(label)});if(e)e.click();return !!e})()`));
       await delay(120);
     };
-    const clickButton = async label => {
-      assert(await evaluate(`(()=>{const e=[...document.querySelectorAll('.memory4-manager button')].find(e=>e.textContent.trim()===${JSON.stringify(label)}&&!e.disabled);if(e)e.click();return !!e})()`), `missing enabled button: ${label}`);
+    const clickButton = async (label, ownerName = null) => {
+      const manager = managerFor(ownerName);
+      assert(await evaluate(`(()=>{const root=${manager};const e=root&&[...root.querySelectorAll('button')].find(e=>e.textContent.trim()===${JSON.stringify(label)}&&!e.disabled);if(e)e.click();return !!e})()`), `missing enabled button: ${label}`);
       await delay(120);
     };
     const setViewport = async (width, height) => {
@@ -140,16 +172,16 @@ async function run() {
       await evaluate(`document.dispatchEvent(new MouseEvent('mousemove',{bubbles:true,clientX:${size.x + Math.min(1000, width - 60) - size.width},clientY:${size.y + height - 60 - size.height}}));document.dispatchEvent(new MouseEvent('mouseup',{bubbles:true}))`);
       await delay(80);
     };
-    const screenshot = async name => {
-      await evaluate("document.querySelector('.memory4-manager').scrollIntoView({block:'start'})");
-      const bounds = await evaluate("(()=>{const e=document.querySelector('.memory4-manager');const r=e.getBoundingClientRect();return{x:Math.max(0,r.x),y:Math.max(0,r.y),width:Math.min(r.width,innerWidth-Math.max(0,r.x)),height:Math.min(r.height,innerHeight-Math.max(0,r.y))}})()");
+    const screenshot = async (name, manager = "document.querySelector('.memory4-manager')") => {
+      await evaluate(`${manager}?.scrollIntoView({block:'start'})`);
+      const bounds = await evaluate(`(()=>{const e=${manager};if(!e)return{x:0,y:0,width:0,height:0};const r=e.getBoundingClientRect();return{x:Math.max(0,r.x),y:Math.max(0,r.y),width:Math.min(r.width,innerWidth-Math.max(0,r.x)),height:Math.min(r.height,innerHeight-Math.max(0,r.y))}})()`);
       assert(bounds.width > 200 && bounds.height > 80, "Memory UI must have a visible viewport");
       const result = await renderer.send("Page.captureScreenshot", { format: "png", captureBeyondViewport: false });
       fs.writeFileSync(path.join(evidence, `${name}.png`), Buffer.from(result.data, "base64"));
       screenshots.push(name);
-      const collisions = await evaluate("(()=>{const modal=document.querySelector('.memory4-modal');const b=[...(modal||document.querySelector('.memory4-manager')).querySelectorAll('button')].map(e=>({e,r:e.getBoundingClientRect()})).filter(x=>x.r.width&&x.r.height&&x.r.y>=0&&x.r.bottom<=innerHeight);const bad=[];for(let i=0;i<b.length;i++)for(let j=i+1;j<b.length;j++){if(b[i].e.contains(b[j].e)||b[j].e.contains(b[i].e))continue;const a=b[i].r,c=b[j].r;if(Math.min(a.right,c.right)-Math.max(a.left,c.left)>1&&Math.min(a.bottom,c.bottom)-Math.max(a.top,c.top)>1)bad.push([b[i].e.textContent,b[j].e.textContent]);}return bad})()");
+      const collisions = await evaluate(`(()=>{const modal=document.querySelector('.memory4-modal'),manager=${manager};const root=modal||manager;if(!root)return [['missing memory view']];const b=[...root.querySelectorAll('button')].map(e=>({e,r:e.getBoundingClientRect()})).filter(x=>x.r.width&&x.r.height&&x.r.y>=0&&x.r.bottom<=innerHeight);const bad=[];for(let i=0;i<b.length;i++)for(let j=i+1;j<b.length;j++){if(b[i].e.contains(b[j].e)||b[j].e.contains(b[i].e))continue;const a=b[i].r,c=b[j].r;if(Math.min(a.right,c.right)-Math.max(a.left,c.left)>1&&Math.min(a.bottom,c.bottom)-Math.max(a.top,c.top)>1)bad.push([b[i].e.textContent,b[j].e.textContent]);}return bad})()`);
       assert.deepStrictEqual(collisions, [], `overlapping buttons in ${name}`);
-      assert(await evaluate("(()=>{const e=document.querySelector('.memory4-modal')||document.querySelector('.memory4-manager');return e.scrollWidth<=e.clientWidth+2})()"), `horizontal overflow in ${name}`);
+      assert(await evaluate(`(()=>{const e=document.querySelector('.memory4-modal')||${manager};return !!e&&e.scrollWidth<=e.clientWidth+2})()`), `horizontal overflow in ${name}`);
     };
     for (const theme of ["parchment", "knight", "ink"]) {
       await evaluate(`document.documentElement.setAttribute('data-votc-theme',${JSON.stringify(theme)})`);
@@ -219,10 +251,96 @@ async function run() {
     await renderer.wait("Page.javascriptDialogOpening");
     await renderer.send("Page.handleJavaScriptDialog", { accept: false });
     await delay(100);
+    const archiveManager = managerFor("丁");
+    assert.equal(await main.evaluate("globalThis.__m4SmokeConversation.gameData.characters.has(4)"), false, "archive owner must remain outside loaded roster");
+    const archiveData = await evaluate(`conversationAPI.getMemory4OwnerData({ownerId:${fixture.archive.ownerId},expectedCampaignToken:${JSON.stringify(fixture.archive.campaignToken)},expectedContextId:'isolated-ui-conversation'})`);
+    assert.equal(archiveData.success, true, JSON.stringify(archiveData));
+    assert.equal(archiveData.readOnlyArchive, true);
+    assert.equal(archiveData.readOnlyReason, "owner_not_in_current_roster");
+    assert.equal(archiveData.campaignToken, fixture.scope.campaignToken);
+    assert(archiveData.detail.total > 0, "matching archive sidecar must remain readable");
+    assert.equal(archiveData.generation.lastStatus, "STORE");
+    const archiveGroupOpened = await evaluate(`(()=>{const group=[...document.querySelectorAll('.player-summary-group')].find(group=>group.querySelector('.player-name')?.textContent.startsWith('丁'));if(!group)return false;group.querySelector('.player-header')?.click();return true})()`);
+    assert(archiveGroupOpened, "archive owner summary group should be available");
+    await waitFor(`!!${archiveManager}`);
+    await waitFor(`${archiveManager}?.textContent.includes('已加载战役')&&(/只读|仅供查阅/.test(${archiveManager}.textContent))`);
+    const archiveBanner = await evaluate(`${archiveManager}.textContent`);
+    assert(archiveBanner.includes("已加载战役") && /只读|仅供查阅/.test(archiveBanner), "archive view must identify the loaded campaign and read-only state");
+    const refreshEnabled = await evaluate(`${archiveManager}.querySelector('[aria-label="刷新人物记忆"]')?.disabled===false`);
+    assert(refreshEnabled, "archive refresh remains available");
+    assert.equal(await evaluate(`${archiveManager}.querySelectorAll('[role=tab]:not([disabled])').length`), 6, "archive tabs remain available");
+    await evaluate("document.documentElement.setAttribute('data-votc-theme','ink')");
+    await setViewport(1280, 1000);
+    await screenshot("ink-desktop-archive-readonly", archiveManager);
+    await setViewport(540, 900);
+    await screenshot("ink-narrow-archive-readonly", archiveManager);
+    await setViewport(1280, 1000);
+    const refreshed = await evaluate(`(()=>{const button=${archiveManager}.querySelector('[aria-label="刷新人物记忆"]');button?.click();return !!button})()`);
+    assert(refreshed, "archive refresh button exists");
+    await waitFor(`${archiveManager}?.querySelector('[aria-label="刷新人物记忆"]')?.disabled===false`);
+    await clickTab("年度记忆", "丁");
+    const yearWrites = await evaluate(`${archiveManager}?[...${archiveManager}.querySelectorAll('button')].filter(button=>['从长期记忆生成年度与人生记忆','从 Detail 重新生成','从来源重新生成','重新生成并覆盖','保留手工版本'].includes(button.textContent.trim())).map(button=>({label:button.textContent.trim(),disabled:button.disabled})):[]`);
+    assert(yearWrites.length > 0 && yearWrites.every(button => button.disabled), "archive year mutations must be disabled");
+    await clickTab("人生记忆", "丁");
+    const lifeWrites = await evaluate(`${archiveManager}?[...${archiveManager}.querySelectorAll('button')].filter(button=>['从年度记忆生成人生记忆','重新生成当前阶段','编辑','停止任务'].includes(button.textContent.trim())).map(button=>({label:button.textContent.trim(),disabled:button.disabled})):[]`);
+    assert(lifeWrites.length > 0 && lifeWrites.every(button => button.disabled), "archive life mutations must be disabled");
+    await clickTab("详细长期记忆", "丁");
+    await waitFor(`${archiveManager}?.querySelector('.memory4-detail summary')`);
+    await evaluate(`(()=>{${archiveManager}?.querySelector('.memory4-detail summary')?.click()})()`);
+    await waitFor(`${archiveManager}?.querySelector('.memory4-detail[open] .memory4-text')`);
+    const detailWrites = await evaluate(`${archiveManager}?[...${archiveManager}.querySelectorAll('button')].filter(button=>['编辑','删除'].includes(button.textContent.trim())).map(button=>({label:button.textContent.trim(),disabled:button.disabled})):[]`);
+    assert(detailWrites.length >= 2 && detailWrites.every(button => button.disabled), "archive detail edit/delete must be disabled");
+    const sourceEnabled = await evaluate(`${archiveManager}&&[...${archiveManager}.querySelectorAll('button')].some(button=>button.textContent.trim()==='查看来源'&&!button.disabled)`);
+    assert(sourceEnabled, "archive source lookup remains available");
+    const managerBreakpointAfterDetach = await main.send("Debugger.setBreakpointByUrl", { urlRegex: "conversation-manager\\.js$", lineNumber: managerLineNumber });
+    const endedArchiveRequest = evaluate(`conversationAPI.getMemory4OwnerData({ownerId:${fixture.archive.ownerId},expectedCampaignToken:${JSON.stringify(fixture.archive.campaignToken)},expectedContextId:'isolated-ui-conversation'})`);
+    const detachPaused = await main.wait("Debugger.paused");
+    const detachedStateResult = await main.send("Debugger.evaluateOnCallFrame", { callFrameId: detachPaused.callFrames[0].callFrameId,
+      expression: "this.lastMemory4ReadContext=this.createMemory4ReadSnapshot(globalThis.__m4SmokeConversation);this.currentConversation=null;JSON.stringify({strictCurrentIsNull:this.getCurrentConversation()===null,snapshotInactive:this.lastMemory4ReadContext?.isActive===false})", returnByValue: true });
+    assert(!detachedStateResult.exceptionDetails, JSON.stringify(detachedStateResult.exceptionDetails));
+    const detachedState = JSON.parse(detachedStateResult.result.value);
+    assert.deepStrictEqual(detachedState, { strictCurrentIsNull: true, snapshotInactive: true }, "detached snapshot must remain separate from strict current conversation");
+    await main.send("Debugger.removeBreakpoint", { breakpointId: managerBreakpointAfterDetach.breakpointId });
+    await main.send("Debugger.resume");
+    const endedArchiveData = await endedArchiveRequest;
+    assert.equal(endedArchiveData.success, true, JSON.stringify(endedArchiveData));
+    assert.equal(endedArchiveData.readOnlyArchive, true);
+    assert.equal(endedArchiveData.readOnlyReason, "conversation_ended");
+    const refreshedAfterDetach = await evaluate(`(()=>{const button=${archiveManager}?.querySelector('[aria-label="刷新人物记忆"]');button?.click();return !!button&&!button.disabled})()`);
+    assert(refreshedAfterDetach, "detached archive refresh remains available");
+    await waitFor(`${archiveManager}?.querySelector('.memory4-archive-notice')?.textContent.includes('已结束对话所属战役')`);
+    await waitFor(`${archiveManager}?.querySelector('.memory4-detail summary')`);
+    await evaluate(`(()=>{${archiveManager}?.querySelector('.memory4-detail summary')?.click()})()`);
+    await waitFor(`${archiveManager}?.querySelector('.memory4-detail[open] .memory4-text')`);
+    const endedDetailWrites = await evaluate(`${archiveManager}?[...${archiveManager}.querySelectorAll('button')].filter(button=>['编辑','删除'].includes(button.textContent.trim())).map(button=>({label:button.textContent.trim(),disabled:button.disabled})):[]`);
+    assert(endedDetailWrites.length >= 2 && endedDetailWrites.every(button => button.disabled), "ended archive detail edit/delete must remain disabled");
+    assert(await evaluate(`${archiveManager}&&[...${archiveManager}.querySelectorAll('button')].some(button=>button.textContent.trim()==='查看来源'&&!button.disabled)`), "ended archive source lookup remains available");
+    const archiveWritePayload = { ownerId: fixture.archive.ownerId, expectedCampaignToken: fixture.archive.campaignToken,
+      expectedContextId: "isolated-ui-conversation", operation: "updateDetail", entryId: archiveData.detail.items[0].entryId,
+      text: "ARCHIVE_WRITE_MUST_BE_REJECTED", expectedRevision: archiveData.detail.items[0].revision };
+    const archiveWriteRequest = await evaluate(`(async()=>{try{return await conversationAPI.mutateMemory4(${JSON.stringify(archiveWritePayload)})}catch(error){return {success:false,error:String(error?.message||error)}}})()`);
+    assert.equal(archiveWriteRequest.success, false, "strict mutation gate must reject writes after manager detach");
+    await clickButton("查看来源", "丁");
+    await waitFor(`${archiveManager}?.querySelector('.memory4-source')`);
+    await screenshot("ink-desktop-archive-source", archiveManager);
+    const archiveHashAfter = hashDirectory(fixture.archive.directory);
+    assert.equal(archiveHashAfter, archiveHashBefore, "archive read/source/rejected mutation must not change persisted sidecar");
+    assert.equal(await main.evaluate("globalThis.__m4ProviderCalls"), 0, "archive UI and source lookup must not call a model");
     assert.equal(await main.evaluate("globalThis.__m4ProviderCalls"), 0, "packaged UI smoke must not call a model");
+    const blockedFetchUrls = await main.evaluate("globalThis.__m4BlockedFetches");
+    assert(blockedFetchUrls.every(url => url === "http://127.0.0.1:4315/v1/health"), `unexpected network request was blocked: ${JSON.stringify(blockedFetchUrls)}`);
     assert.deepStrictEqual(errors, [], "renderer/main exceptions");
-    fs.writeFileSync(path.join(evidence, "result.json"), JSON.stringify({ passed: true, themes: ["parchment", "knight", "ink"], desktop: [1280, 1000], narrow: [540, 900], screenshotCount: screenshots.length, screenshots,
-      providerRequests: 0, realCK3Gate: false, profile, checks: ["missing Campaign", "wrong Campaign", "strict owner data", "six views", "readonly Official", "source modal", "manual conflict preservation", "manual edit", "delete cancellation", "accepted Detail deletion", "existing binding preview cancellation", "nonoverlapping tool buttons", "no horizontal overflow"] }, null, 2));
+    assert.equal(screenshots.length, 30, "original 27 screens plus three archive screens");
+    fs.writeFileSync(path.join(evidence, "result.json"), JSON.stringify({ passed: true, themes: ["parchment", "knight", "ink"], desktop: [1280, 1000], narrow: [540, 900], baseScreenshotCount: 27,
+      archiveScreenshotCount: 3, screenshotCount: screenshots.length, screenshots, providerRequests: 0, blockedNetworkFetches: blockedFetchUrls.length,
+      blockedNetworkUrls: blockedFetchUrls, realCK3Gate: false, profile,
+      archive: { ownerId: fixture.archive.ownerId, campaignToken: fixture.archive.campaignToken, readOnlyReasons: [archiveData.readOnlyReason, endedArchiveData.readOnlyReason],
+        strictCurrentIsNullAfterDetach: detachedState.strictCurrentIsNull, sidecarHashBefore: archiveHashBefore, sidecarHashAfter: archiveHashAfter, rejectedWriteError: archiveWriteRequest.error || null },
+      checks: ["missing Campaign", "wrong Campaign", "strict owner data", "six views", "readonly Official", "source modal", "manual conflict preservation", "manual edit", "delete cancellation",
+        "accepted Detail deletion", "existing binding preview cancellation", "nonoverlapping tool buttons", "no horizontal overflow", "same-campaign archive outside loaded roster", "loaded-campaign readonly banner",
+        "archive refresh/tabs/source remain available", "archive year/life/detail mutation controls disabled", "manager detach leaves strict current null and read snapshot available",
+        "archive IPC mutation rejected after manager detach", "archive sidecar hash unchanged", "ended-conversation banner, detail and source remain available",
+        "all main-process fetch blocked before I/O; only fixed localhost health check may be attempted"] }, null, 2));
     console.log(`V8.14 E isolated packaged UI: PASS; evidence ${evidence}`);
   } catch (error) {
     console.error("Isolated Electron diagnostics:", stderrTail);

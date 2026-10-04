@@ -41,7 +41,7 @@ for (const forbiddenText of [
 }
 
 for (const marker of [
-  "V8.7 Worldline",
+  "Current CK3 facts are read-only",
   "worldline-player-summary-grid",
   "showAdvancedSource",
   "player.connection",

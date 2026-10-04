@@ -107,7 +107,8 @@ try {
     let nodes = 0, state = 0;
     const react = { useState: initial => { const index = state++; return [index === 12 ? diagnostic : index === 15 ? "diagnostics" : initial, () => {}]; }, useRef: current => ({current}), useEffect: () => {} };
     const jsx = { jsx: () => { nodes++; return null; }, jsxs: () => { nodes++; return null; } };
-    const render = new Function("reactExports", "jsxRuntimeExports", "useTranslation", "window", "navigator", "WorldMemoryEditor", `${component}; return WorldlineView;`)(react, jsx, () => ({i18n:{language:"zh-CN"}}), { VOTCWorldlinePlayerPresentation: presentation }, {}, () => null);
+    const featureVersion = JSON.parse(source.match(/const VOTC_FEATURE_VERSION = ("[^"]+");/)[1]);
+    const render = new Function("reactExports", "jsxRuntimeExports", "useTranslation", "window", "navigator", "WorldMemoryEditor", "VOTC_FEATURE_VERSION", `${component}; return WorldlineView;`)(react, jsx, () => ({i18n:{language:"zh-CN"}}), { VOTCWorldlinePlayerPresentation: presentation }, {}, () => null, featureVersion);
     render();
     assert.ok(nodes < 1500, `created ${nodes} nodes`);
   });

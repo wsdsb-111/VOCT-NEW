@@ -1,0 +1,92 @@
+types oe_gui{
+	type oe_timeline_widget = widget {
+		name = "oe_timeline_widget"
+		visible = "[And(And( Not(IsGameViewOpen('barbershop')), And( Not( IsPauseMenuShown ), Not(GetVariableSystem.Exists('royal_court_screenshot_window')))), Not( GreaterThan_CFixedPoint( GetPlayer.MakeScope.Var('hide_ui_timeline').GetValue, '(CFixedPoint)0' ) ))]"
+		size = { 100 65 }
+		position = { -355 15 }
+		parentanchor = bottom|right
+		filter_mouse = all
+		alwaystransparent = yes
+		layer = top
+		allow_outside = yes
+
+		using = Animation_ShowHide_Quick
+
+		hbox = {
+			layoutpolicy_horizontal = expanding
+			margin_top = 2
+			margin_right = 2
+
+			expand = {}
+		}
+	}
+
+	type oe_main_tabs_widget = widget {
+		name = "oe_ingame_sidebar"
+		visible = "[And(IsCelestialRuler(GetPlayer), InGameTopbar.ShouldBeVisible)]"
+		size = { 100% 100% }
+		layer = hud_layer
+
+		### Main Tabs
+		widget = {
+			name = "main_tabs"
+			visible = "[ShouldShowGui]"
+			parentanchor = top|right
+			position = { 0 590 }
+			size = { 50 0 }
+			allow_outside = yes
+
+			using = Animation_ShowHide_Quick
+
+			vbox = {
+				alwaystransparent = no
+				filter_mouse = all
+				visible = "[Not(IsGameViewOpen('barbershop'))]"
+				margin = { 5 10 }
+
+				Background = {
+					texture = "gfx/interface/skinned/hud_maintab_bg_middle.dds"
+					spriteType = CorneredTiled
+					texture_density = 1
+					margin = { 5 -40 }
+				}
+
+				Background = {
+					spriteType = CorneredStretched
+					spriteborder_top = 100
+					parentanchor = top|right
+					texture_density = 3
+					size = { 250 100 }
+					texture = "gfx/interface/skinned/hud_maintab_bg_top.dds"
+				}
+
+				Background = {
+					spriteType = CorneredStretched
+					spriteborder_bottom = 50
+					parentanchor = top|right
+					texture_density = 2
+					size = { 150 100 }
+					texture = "gfx/interface/skinned/hud_maintab_bg_bottom.dds"
+				}
+
+				# keep vanilla order so some weird clan+celestial won't mess up
+				widget_hud_main_tab = {
+					name = "oe_tab_government_administration"
+
+					blockoverride "maintab_button"
+					{
+						texture = "gfx/interface/skinned/hud_maintab/maintab_administrative.dds"
+
+						onclick = "[ToggleGameView( 'government_administration' )]"
+						down = "[IsGameViewOpen( 'government_administration' )]"
+
+						using = tooltip_ws
+						tooltipwidget = {
+							administrative_button_tooltip = {}
+						}
+					}
+				}
+			}
+		}
+	}
+}

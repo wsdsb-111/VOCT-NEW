@@ -452,7 +452,7 @@ export function WorldMemoryEditor({ react: R }) {
     renderHistory()
   ] : [];
   return h("section", { className: "worldline-card worldline-editor worldline-editor-v87 worldline-editor-luna" },
-    h("div", { className: "world-memory-heading" }, h("div", null, h("h4", null, "世界记忆"), h("p", null, "记录 CK3 没有保存、但希望世界长期承认的 RP 事实。")), h("span", { className: "world-memory-version " + (data ? "is-ready" : "") }, "V8.7.2")),
+    h("div", { className: "world-memory-heading" }, h("div", null, h("h4", null, "世界记忆"), h("p", null, "记录 CK3 没有保存、但希望世界长期承认的 RP 事实。")), h("span", { className: "world-memory-version " + (data ? "is-ready" : "") }, "当前分支")),
     button(data ? "刷新" : "打开世界记忆", () => run(sequence => load(sequence)), busy, "world-memory-refresh"),
     busy && h("p", { className: "world-memory-feedback", role: "status" }, "正在处理，请稍候……"),
     error && h("p", { className: "world-memory-feedback is-error", role: "alert" }, "操作未完成：" + error),

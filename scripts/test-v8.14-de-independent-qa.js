@@ -493,10 +493,12 @@ async function main() {
     await assert.rejects(manager.getMemory4Entry({ ...request, expectedCampaignToken: "other-campaign" }), /campaign_changed/);
     await assert.rejects(manager.getMemory4Entry({ ...request, ownerId: 3 }), /index_body_mismatch/);
     conversation.isActive = false;
-    await assert.rejects(manager.getMemory4Entry(request), /conversation_not_active/);
+    const archivedEntry = await manager.getMemory4Entry(request);
+    assert.equal(archivedEntry.readOnlyArchive, true);
+    await assert.rejects(manager.mutateMemory4({ ...request, operation: "deleteDetail", expectedRevision: 1 }), /conversation_not_active/);
     conversation.isActive = true;
     conversation.gameData.characters.set("duplicate", { id: 2 });
-    await assert.rejects(manager.getMemory4Entry(request), /owner_not_in_current_campaign/);
+    await assert.rejects(manager.getMemory4Entry(request), /owner_not_unique_in_current_campaign/);
     context.current = null;
     await assert.rejects(manager.getMemory4Entry(request), /conversation_not_active/);
   });

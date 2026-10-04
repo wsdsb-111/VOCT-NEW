@@ -117,7 +117,7 @@ const manager = new LLMManager({
   assert(mainSource.includes("deepseekActionStateTransitionRecallOverlay: true"), "overlay must default on");
   assert(settingsSource.includes("deepseekActionStateTransitionRecallOverlay: config.deepseekActionStateTransitionRecallOverlay !== false"), "overlay must preserve explicit opt-out while defaulting on");
   assert(rendererSource.includes("关键动作召回"));
-  assert(rendererSource.includes("RC5 Action A/B/C 元数据"));
+  assert(rendererSource.includes("历史动作实验统计（已退役）"));
   assert(rendererSource.includes("可用但未选择不自动算 SELECTOR_MISS"));
   console.log("VOTC v7.10-RC5 Overlay/Stable Prefix: PASS (A/B/C isolation, <=450 tokens, blockId order, fail-open metadata, UI)");
 })().catch((error) => {

@@ -1,9 +1,12 @@
 "use strict";
 
+const { normalizeGameDate } = require("../worldline/character-temporal-facts");
+
 function createConversationManager({ events, memorySystem, Conversation, PromptBuilder, createActionFeedback, logVerboseLLM, runFileManager = null }) {
   class ConversationManager {
     constructor() {
       this.currentConversation = null;
+      this.lastMemory4ReadContext = null;
       this.conversationEpoch = 0;
       this.eventEmitter = new events.EventEmitter();
       this.finalizationCoordinator = new memorySystem.FinalizationCoordinator({ logger: console });
@@ -51,6 +54,23 @@ function createConversationManager({ events, memorySystem, Conversation, PromptB
      */
     getCurrentConversation() {
       return this.currentConversation;
+    }
+    getMemory4ReadConversation() {
+      return this.currentConversation || this.lastMemory4ReadContext;
+    }
+    createMemory4ReadSnapshot(conversation) {
+      const gameData = conversation?.gameData;
+      const date = normalizeGameDate(gameData?.date);
+      if (typeof conversation?.id !== "string" || !conversation.id || typeof gameData?.campaignToken !== "string"
+        || !gameData.campaignToken.trim() || !date || !(gameData.characters instanceof Map)) return null;
+      const characters = new Map();
+      for (const character of gameData.characters.values()) {
+        const id = Number(character?.id);
+        if (!Number.isSafeInteger(id) || id <= 0 || characters.has(id)) return null;
+        characters.set(id, { id, shortName: typeof character.shortName === "string" ? character.shortName : "",
+          fullName: typeof character.fullName === "string" ? character.fullName : "" });
+      }
+      return { id: conversation.id, isActive: false, gameData: { campaignToken: gameData.campaignToken.trim(), date: date.canonical, characters } };
     }
     /**
      * Send a message in the current conversation
@@ -150,6 +170,7 @@ function createConversationManager({ events, memorySystem, Conversation, PromptB
      */
     endCurrentConversation(options = {}) {
       const conversation = this.currentConversation;
+      if (conversation) this.lastMemory4ReadContext = this.createMemory4ReadSnapshot(conversation);
       this.currentConversation = null;
       if (!conversation) return Promise.resolve(null);
       console.log(`Conversation ${conversation.id} detached; finalization queued`);

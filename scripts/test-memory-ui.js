@@ -80,8 +80,8 @@ try {
   assert.strictEqual(overview.totals.summaryFolders, 3, "overview must count canonical character folders");
   assert.strictEqual(overview.totals.summaryFiles, 3, "overview must count visible conversation files");
   assert.strictEqual(overview.totals.summaryRecords, 3, "overview must count player-editable summaries");
-  assert.strictEqual(overview.routingPolicy.stablePrefix, "同一场对话每轮保持一致；新会话重新读取", "overview must expose the stable-memory cache boundary");
-  assert(overview.boundaries.some((boundary) => boundary.includes("长期稳定记忆") && boundary.includes("不随当前问题重排")), "overview must explain when stable memory changes");
+  assert.strictEqual(overview.routingPolicy.stablePrefix, "最近两篇直接关系摘要与官方追忆本场冻结；动态召回不改冻结前缀", "overview must expose the current Recent2 stable-memory boundary");
+  assert(overview.boundaries.some((boundary) => boundary.includes("本场冻结") && boundary.includes("下一场加载")), "overview must explain when stable memory changes");
   assert.deepStrictEqual(overview.characters, [], "the UI overview must not duplicate the folder tree with a structured-memory tree");
   const updated = engine.updateMemoryContent("memory_known", "乙亲历了丙的再次到访。");
   assert.strictEqual(updated.success, true, "players must be able to edit a readable structured memory");
@@ -142,7 +142,7 @@ assert(rendererSource.includes("const groups = new Map()"), "numeric character I
 assert(!rendererSource.includes("Object.entries(summariesByPlayer)"), "search result groups must not use numeric object-key enumeration");
 assert(!rendererSource.includes('className: "memory-character-coverage"'), "the duplicate per-character structured-memory tree must be removed");
 assert(!rendererSource.includes("Promise.all([listAllSummaries(), getMemoryOverview()])"), "summary dashboard must not parse every JSON file twice");
-assert(rendererSource.includes("Memory Engine 3.0 · V8.12 Part 3"), "summary UI must expose the Memory Engine 3.0 label");
+assert(rendererSource.includes("Memory Engine 4.0 · ${VOTC_FEATURE_VERSION}"), "summary UI must expose the current Memory4 feature label without changing its storage protocol");
 assert(!rendererSource.includes('className: "form-group summary-management"'), "summary folder actions must not remain in a duplicate standalone block");
 assert(rendererSource.includes("onClick: handleOpenSummariesFolder") && rendererSource.includes("onClick: handleClearSummaries"), "the summary manager header must contain the consolidated folder and clear actions");
 assert(!rendererSource.includes("警告：此操作将删除所有玩家的所有对话摘要"), "the duplicate hardcoded clear-summary handler must be removed");

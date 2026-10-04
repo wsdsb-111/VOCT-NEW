@@ -2,7 +2,7 @@
 
 const path = require("path");
 const fs = require("fs");
-const { assertScope, ids, hash, legacySourceHash } = require("./memory4-contract");
+const { assertScope, ids, hash, legacySourceHash, sourceRevisionCurrent } = require("./memory4-contract");
 const { resolveTemporalFocus, detectTemporalAxisIntent } = require("./fuzzy-temporal-resolver");
 const { gameDateFromSerial, hasFirstMeetingCue } = require("./temporal-anchor-extractor");
 const { normalizeGameDate } = require("../worldline/character-temporal-facts");
@@ -114,9 +114,8 @@ class Memory4RecallPlanner {
   }
 
   currentSource(scope, entry, index, metadata) {
-    const record = index.finalizations[hash(entry.source.finalizationId)];
-    const revision = metadata?.knownEvidenceRevisions?.[hash([entry.source.conversationId, scope.ownerId])];
-    if (!record || revision && revision !== record.sourceRevision) return false;
+    if (!sourceRevisionCurrent(entry.source, scope, index, metadata)
+      || entry.state.source && !sourceRevisionCurrent(entry.state.source, scope, index, metadata)) return false;
     const refs = entry.source.legacyRefs || [];
     if (entry.source.legacyMemoryIds?.length && refs.length !== entry.source.legacyMemoryIds.length) return false;
     return refs.every(ref => this.validLegacyRef(scope, ref));
@@ -165,7 +164,7 @@ class Memory4RecallPlanner {
         const row = index.entries[ref.id];
         if (!row || row.deleted || row.bodyHash !== ref.bodyHash) return false;
         const entry = this.store.readEntry(scope, ref.id, index);
-        if (currentGameDate && [entry.conversationDate, entry.acquiredDate].some(date => serial(date) > serial(currentGameDate))) return false;
+        if (currentGameDate && [entry.conversationDate, entry.acquiredDate, entry.state.changedGameDate].some(date => serial(date) > serial(currentGameDate))) return false;
         return this.currentSource(scope, entry, index, metadata) && ids(entry.evidence.knownBy).includes(scope.ownerId);
       }
       return availableLegacy.some(memory => (memory.provenance?.legacyParentId || memory.memoryId) === ref.parentId
@@ -208,6 +207,10 @@ class Memory4RecallPlanner {
       || (options.temporalRecallEnabled === false && query.temporalRequested ? "TEMPORAL_RECALL_DISABLED" : null)
       || (options.identityUnresolved ? "IDENTITY_UNRESOLVED" : null);
     const relevantEntities = query.entityIds;
+    const queryText = query.text || options.query || "";
+    const commitmentQuery = /承诺|答应|约定|promise|commitment|pledge/i.test(queryText);
+    const activeCommitmentQuery = commitmentQuery && /仍然|尚未|还未|还没|未完成|未履行|还欠|尚欠|有效|待履行|pending|outstanding|unfulfilled|still|active/i.test(queryText);
+    const genericCommitmentQuery = commitmentQuery && !queryText.replace(/还有|哪些|以前|曾经|过去|当时|尚未|还未|还没|未完成|未履行|承诺|答应|约定|履行|仍然|有效|待履行|还欠|尚欠|过|什么|的|了|吗|呢|你|我|我们|[？?，。\s]|what|which|are|were|your|our|my|promises?|commitments?|pledges?|pending|outstanding|unfulfilled|still|active|before|previously|have|you|i|made/gi, "");
     diagnostics.blockedReason = blocked;
     const requested = query.temporalRequested || query.firstMeeting || query.granularity === "FOLLOW_UP"
       || /记得|记忆|回忆|答应|承诺|约定|后来|经历|往事|当时|还欠|remember|recall|promise/i.test(query.text || options.query || "")
@@ -224,11 +227,13 @@ class Memory4RecallPlanner {
       if (relevantEntities.length && !relevantEntities.some(entity => row.entityIds.includes(entity))) { reject("identity"); return []; }
       if (row.knownBy && (!row.knownBy.includes(scope.ownerId) || !["private", "participants", "known_group"].includes(row.visibility))) { reject("visibility"); return []; }
       if (row.deleted) { reject("deleted"); return []; }
+      if (commitmentQuery && row.memoryType !== "COMMITMENT" || activeCommitmentQuery && row.status !== "active") { reject("state"); return []; }
       const record = index.finalizations[hash(row.finalizationId)];
       const revision = row.conversationId && metadata?.knownEvidenceRevisions?.[hash([row.conversationId, scope.ownerId])];
       if (!record || revision && revision !== record.sourceRevision
+        || row.stateSource && !sourceRevisionCurrent(row.stateSource, scope, index, metadata)
         || (row.legacyRefs || []).some(ref => !this.baseStore.index.memories[ref.memoryId])) { reject("revision"); return []; }
-      if ([row.conversationDate, row.acquiredDate].some(date => serial(date) > serial(options.currentGameDate))) { reject("future_knowledge"); return []; }
+      if ([row.conversationDate, row.acquiredDate, row.stateChangedGameDate].some(date => serial(date) > serial(options.currentGameDate))) { reject("future_knowledge"); return []; }
       const matched = temporalMatch(row, query, options);
       if (!matched) { reject("temporal"); return []; }
       if (query.firstMeeting && !row.counterpartIds.includes(query.querySpeakerId)) return [];
@@ -260,7 +265,7 @@ class Memory4RecallPlanner {
       const entry = readCandidate(candidate.id);
       if (!ids(entry.evidence?.knownBy).includes(scope.ownerId) || !["private", "participants", "known_group"].includes(entry.evidence?.visibility)) { reject("visibility"); continue; }
       if (!this.currentSource(scope, entry, index, metadata)) { reject("revision"); continue; }
-      if (!query.firstMeeting && query.granularity !== "FOLLOW_UP" && !queryTopics.length && searchText
+      if (!genericCommitmentQuery && !query.firstMeeting && query.granularity !== "FOLLOW_UP" && !queryTopics.length && searchText
         && this.ranker.rank([{ content: entry.text, tags: entry.topics }], { query: searchText })[0].reason.query < 0.28) continue;
       if (query.firstMeeting && !isFirstMeetingSummary({ content: entry.text })) continue;
       if (query.firstMeeting) firstMeetingDate = serial(entry.conversationDate);
@@ -270,11 +275,13 @@ class Memory4RecallPlanner {
         type: "memory4_detail", eventDate: entry.conversationDate, importance: entry.importance },
       score: candidate.score, reason: candidate.matched, chainId: entry.source.finalizationId,
       annotation: `对话日期 ${entry.conversationDate || "未知"}；获知日期 ${entry.acquiredDate || "未知"}；事件 ${entry.eventTime.status}；证据 ${entry.evidence.sourceType}/${entry.evidence.epistemicStatus}；状态 ${entry.state.status}。`,
+      traitKnowledgeEvidence: { campaignToken: entry.campaignToken, ownerId: entry.ownerId, entityIds: entry.entityIds,
+        acquiredDate: entry.acquiredDate, conversationDate: entry.conversationDate, text: entry.text, evidence: entry.evidence, source: entry.source },
       sourceRef: { kind: "detail", id: entry.entryId, bodyHash: candidate.row.bodyHash } });
       if (details.length >= (query.granularity === "LIFE" || query.firstMeeting ? 1 : 2)) break;
     }
     const bridge = buildLegacyBridge(options.legacyMemories || [], { ...scope, currentGameDate: options.currentGameDate, currentTotalDays: options.currentTotalDays });
-    const legacy = blocked ? [] : this.legacyCandidates(bridge.memories.filter(memory => !relevantEntities.length
+    const legacy = blocked || activeCommitmentQuery ? [] : this.legacyCandidates(bridge.memories.filter(memory => !relevantEntities.length
       || relevantEntities.some(entity => entitySet(memory).includes(entity))), scope, index);
     const legacyRanked = this.ranker.rank(legacy, { query: query.text || options.query, entityIds: relevantEntities });
     let overview = blocked ? null : this.coordinator.derived?.selectSlice(scope, { query, index,
@@ -285,7 +292,7 @@ class Memory4RecallPlanner {
       for (const id of overview.sourceRef.sourceEntryIds) {
         const entry = readCandidate(id);
         if (!this.currentSource(scope, entry, index, metadata) || !ids(entry.evidence.knownBy).includes(scope.ownerId)
-          || !queryTopics.length && searchText && this.ranker.rank([{ content: entry.text, tags: entry.topics }], { query: searchText })[0].reason.query < 0.28) {
+          || !genericCommitmentQuery && !queryTopics.length && searchText && this.ranker.rank([{ content: entry.text, tags: entry.topics }], { query: searchText })[0].reason.query < 0.28) {
           reject("revision"); overview = null; break;
         }
       }
@@ -295,7 +302,7 @@ class Memory4RecallPlanner {
       for (const candidate of rows.slice(0, Math.max(0, 32 - diagnostics.bodyReads))) {
         const entry = readCandidate(candidate.id);
         if (!this.currentSource(scope, entry, index, metadata) || !ids(entry.evidence.knownBy).includes(scope.ownerId)
-          || !queryTopics.length && searchText && this.ranker.rank([{ content: entry.text, tags: entry.topics }], { query: searchText })[0].reason.query < 0.28) continue;
+          || !genericCommitmentQuery && !queryTopics.length && searchText && this.ranker.rank([{ content: entry.text, tags: entry.topics }], { query: searchText })[0].reason.query < 0.28) continue;
         const text = `${entry.conversationDate}（${entry.evidence.sourceType}/${entry.evidence.epistemicStatus}；${entry.state.status}）：${entry.text}`;
         if ((options.estimateTokens || estimateDefault)([...texts, text].join("\n")) > 400) continue;
         texts.push(text); items.push(entry.entryId);
@@ -307,6 +314,7 @@ class Memory4RecallPlanner {
     }
     for (const candidate of legacyRanked) {
       const memory = candidate.memory;
+      if (commitmentQuery && !/承诺|答应|约定|promise|commitment|pledge/i.test(memory.content)) continue;
       if (serial(memory.eventDate) > serial(options.currentGameDate)) continue;
       const key = memory.memoryId;
       if (seen.has(key) && !query.firstMeeting) continue;
@@ -320,7 +328,7 @@ class Memory4RecallPlanner {
       if (!matched && (query.axis !== "EVENT" || !query.window && !query.firstMeeting)) matched = temporalMatch(pseudo, query, options);
       if (!matched || query.granularity === "FOLLOW_UP" || !requested && candidate.reason.query < 0.28) continue;
       if (queryTopics.length && !queryTopics.some(topic => memory.content.includes(topic))) continue;
-      if (!query.firstMeeting && !queryTopics.length && searchText
+      if (!genericCommitmentQuery && !query.firstMeeting && !queryTopics.length && searchText
         && this.ranker.rank([memory], { query: searchText })[0].reason.query < 0.28) continue;
       if (query.firstMeeting && (!pseudo.counterpartIds.includes(query.querySpeakerId) || !isFirstMeetingSummary(memory))) continue;
       const item = { memory: { ...memory, memory4Key: key }, reason: matched, score: candidate.score,

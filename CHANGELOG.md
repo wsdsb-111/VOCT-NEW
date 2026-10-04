@@ -2,6 +2,12 @@
 
 这里是版本变更的单一入口。详细设计和测试证据保留在链接目标中，本文件只维护版本顺序、用户可见摘要和文档索引。
 
+V8.14.1 前端内容同步（2026-10-04）：记忆、优化、世界书和诊断文案更新到当前实现，移除旧阶段标题；底部区分功能版本与 App 包版本。当前 Memory4 策略、官方/归档只读、无内容不强制生成，以及信件待实机和 GLM 调优延期边界同步显示；协议 3.0、2.5 存储、持久设置键与业务行为保持不变。详见[前端内容同步报告](docs/v8.14.1-frontend-content-update-implementation-report.md)。
+
+V8.14.1 实机事故热修（2026-10-04）：用户已确认陌生人首次对话和本次特质展示 PASS，信件未测试。兼容 Mod 1.0.1 已部署日期去重和 CK3 1.20 Rite 特质描述接口修复；Memory4 修复已保存认知被窄角色表或结束对话拦截的问题，归档按明确战役与日期只读查看，不能写入或跨战役回退。真实结束对话生命周期独立回归 10/10，完整发布 346/346，415 个分类文件、68 个历史归档。长期内容为空与缺官方导出继续显示真实空状态；新热修和真实 Provider/信件/Soak 待用户复测。详见 [事故热修报告](docs/v8.14.1-runtime-incident-hotfix-report.md)。
+
+V8.14.1 Traits 与 Memory4 收口（本地完整发布门禁通过，实机待验收）：开场世界线限于真实在场人物；Memory4 对话对象、承诺状态与信件历史按来源、Owner、Campaign、获得时间和知识 ACL 判定；Trait 分离 Self / Observed / Known，未知 Mod Trait 默认不向陌生观察者暴露。承诺绑定 P1 已修复并由独立 QA 确认；生产链 QA 16 PASS / 0 FAIL、Memory closeout 18/18；旧信件 fixture 由 `scripts/letter-pipeline-test-helper.js` 按真实 PromptBuilder 调用形态适配。`test-release.js` 344/344 发布组通过，manifest 413 个测试文件 / 344 个发布组 / 68 个历史归档，21 个 runtime 文件及 helper 语法检查通过。GLM Cache A/B 延至 V8.14.2，CK3 / Provider / 完整信件往返 / Soak 待人工 Gate；不等于 Freeze。详见 [V8.14.1 改进与收口报告](docs/v8.14.1-improvement-closeout-implementation-report.md)。
+
 V8.14-D/E Year/Life 与长期记忆管理（本地发布、独立 QA/隔离 UI 通过，实机待验收）：新增可追溯的年度/人生派生视图、手工冲突与重建，以及人物认知、Detail、来源和 Legacy 分层管理。D 专项 17 项、独立 QA 37 项与三主题/窄窗口 27 张隔离打包截图通过；完整发布 339/339 组、408 分类文件、68 历史归档。原摘要、旧存储与冻结前缀保留，真实 CK3/Provider/Cache/Soak 尚待验收。详见 [D/E 施工记录](docs/v8.14-de-year-life-management-implementation-report.md)。
 
 V8.14 玩家身份知情修复（本地输入合同及独立反例通过，实机待验收）：Prompt 明确后台姓名、头衔、在场或好感不能单独授权 NPC 识别玩家；明确关系、获准记忆、公开事实和正文介绍继续提供相应知识，化名不能授权后台真名。身份专项 13 组通过，缓存锚点和布局版本不变。详见 [本轮施工记录](docs/v8.14-de-year-life-management-implementation-report.md#陌生人身份修复)。

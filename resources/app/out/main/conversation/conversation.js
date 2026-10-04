@@ -4,6 +4,7 @@ const fs = require("fs");
 
 const { getCharacterPersonalName } = require("../memory-system/character-identity");
 const { memoryMatchesCampaign } = require("../memory-system/memory-types");
+const { MentionTracker } = require("../memory-system/mention-tracker");
 const { createConversationRuntime } = require("./conversation-runtime");
 const participantLifecycle = require("./participant-lifecycle");
 const { buildPresenceObservationFacts } = require("../worldline/direct-observation-producer");
@@ -245,6 +246,7 @@ class Conversation {
   async prefetchFrozenWorldline() {
     if (!this.isV813PrefixEnabled?.() || !worldlineService) return;
     const selectedIds = [...this.selectedCharacterIds].filter((id) => this.gameData.characters.has(id));
+    const presentIds = [...this.presentCharacterIds].filter((id) => this.gameData.characters.has(id));
     const subjective = worldlineService.isSubjectivePromptIntegrationEnabled?.() === true;
     if (subjective) await worldlineService.prepareCanon?.();
     for (const responderId of selectedIds) {
@@ -255,13 +257,13 @@ class Conversation {
           query: "",
           assistContext: "",
           snapshotMode: "CONVERSATION_BASELINE",
-          mentionedEntityIds: selectedIds.filter((id) => id !== responderId),
-          activeParticipantIds: selectedIds,
-          runtimeContext: { activeParticipantIds: selectedIds },
+          mentionedEntityIds: [],
+          activeParticipantIds: presentIds,
+          runtimeContext: { activeParticipantIds: presentIds },
           conversationId: this.id,
           turnEpoch: 0,
           sceneRevision: `${this.gameData.date || ""}\n${this.gameData.scene || ""}`,
-          presenceRevision: [...this.presentCharacterIds].map(String).sort().join(","),
+          presenceRevision: presentIds.map(String).sort().join(","),
           directObservationFactIds: [],
           directObservationFacts: [],
           historicalReferenceInfo: this.gameData.historicalReferenceInfo,
@@ -1814,6 +1816,12 @@ class Conversation {
       .filter(([characterId, stateValue]) => stateValue === "dead" && Number(characterId) !== Number(this.gameData.playerID))
       .map(([characterId]) => Number(characterId));
     const state = memoryEngine.ensureConversationState(this);
+    const messages = this.getHistory();
+    const mentionableProfiles = [...(this.gameData.getMentionableCharacterProfiles?.() || this.gameData.characters).values()]
+      .map(character => ({ id: Number(character.id), firstName: character.firstName, name: character.name,
+        shortName: character.shortName, fullName: character.fullName, allowDerivedHonorifics: false }));
+    const mentionedIds = new MentionTracker().findMentionedCharacterIds(messages, { candidates: mentionableProfiles,
+      excludedIds: participantIds, resolveCoreference: false });
     return {
       conversationId: this.id,
       date: this.gameData.date,
@@ -1821,8 +1829,9 @@ class Conversation {
       totalDays: this.gameData.totalDays,
       relationshipChanges: this.memory4RelationshipChanges || [],
       finalizationVisibilityV1: true,
-      messages: this.getHistory(),
+      messages,
       participants,
+      mentionedEntities: mentionableProfiles.filter(character => mentionedIds.includes(character.id)),
       excludedSummaryOwnerIds,
       participantPresence: state.participantPresence,
       joinEvents: this.joinEvents,

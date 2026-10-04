@@ -606,6 +606,7 @@ const SummariesManager = createSummariesManager({
   memoryEngine,
   memorySystem,
   getCurrentConversation: () => conversationManager.getCurrentConversation(),
+  getMemory4ReadConversation: () => conversationManager.getMemory4ReadConversation(),
   buildSummaryPrompt: context => memoryEngine.buildFinalizationPrompt({ ...context, finalInstructions: context.finalInstructions || PromptBuilder.getFinalSummaryInstructions() }),
   getSummaryOutputLimit: () => PromptBuilder.getFinalSummaryMaxTokens?.() || 4096,
   getSummaryCapabilities: snapshot => llmManager.getProviderCapabilities("SUMMARY", snapshot),

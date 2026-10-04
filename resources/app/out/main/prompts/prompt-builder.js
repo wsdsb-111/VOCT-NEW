@@ -6,6 +6,9 @@ const { createStableProfile, createLiveProfile, buildStableKinship, formatStable
 const { buildHistoricalReferenceReplacement } = require("../worldline/subjective-prompt-context");
 const { currentRelationship } = require("../memory-system/memory4-profile");
 const { parseRelationIntent } = require("../worldline/relation-intent-parser");
+const { createTraitProfileView } = require("./trait-profile-selector");
+
+const traitProfileContexts = new WeakSet();
 
 const PROMPT_LIFECYCLE = Object.freeze({
   GLOBAL_STATIC: "GLOBAL_STATIC",
@@ -151,9 +154,10 @@ function createPromptBuilder({
         return "You are characters in a medieval strategy game. Engage in conversation naturally.";
       }
       try {
+        const view = createTraitProfileView(gameData, char);
         const rendered = this.templateEngine.renderTemplate(templatePath, {
-          character: char,
-          gameData
+          character: view.character,
+          gameData: view.gameData
         });
         return rendered;
       } catch (error) {
@@ -407,7 +411,16 @@ function createPromptBuilder({
       }
       return segments;
     }
+    static scopeTraitProfileContext(context) {
+      if (traitProfileContexts.has(context)) return context;
+      const view = createTraitProfileView(context.gameData, context.character, context.memoryContext);
+      const scoped = { ...context, ...view };
+      if (context.stableCharacter) scoped.stableCharacter = createTraitProfileView(view.gameData, context.stableCharacter, context.memoryContext).character;
+      traitProfileContexts.add(scoped);
+      return scoped;
+    }
     static applyBlock(block, messages, history, baseContext, promptSettings) {
+      baseContext = this.scopeTraitProfileContext(baseContext);
       const { character, gameData, summary } = baseContext;
       const renderTemplate = (template, context) => {
         try {
@@ -511,6 +524,9 @@ function createPromptBuilder({
      * Build messages with token counting for preview
      */
     static buildMessagesWithTokenCount(history, char, gameData, currentSessionSummary, memoryContext = null, providerConfig = null) {
+      const profileView = createTraitProfileView(gameData, char, memoryContext);
+      gameData = profileView.gameData;
+      char = profileView.character;
       const promptSettings = settingsRepository.getPromptSettings();
       const blocks = promptSettings.blocks || [];
       const v89Settings = settingsRepository.getChatPromptV89Settings?.() || { chatPromptV89Layout: true };
@@ -548,6 +564,8 @@ function createPromptBuilder({
         summary: currentSessionSummary,
         memoryContext
       };
+      if (context.stableCharacter !== char) context.stableCharacter = createTraitProfileView(promptGameData, context.stableCharacter, memoryContext).character;
+      traitProfileContexts.add(context);
       const cacheV2Snapshots = glmCacheV2 || v813Layout ? this.getCacheV2Snapshots(promptGameData, char, memoryContext, v813Layout) : null;
       const cacheV2ConversationText = cacheV2Snapshots ? this.formatConversationFrozen(cacheV2Snapshots.conversation) : null;
       const cacheV2ResponderText = cacheV2Snapshots ? formatStableProfile(cacheV2Snapshots.stableProfile) : null;
@@ -956,6 +974,7 @@ function createPromptBuilder({
      * Template errors are caught and returned as error info in the result rather than thrown.
      */
     static applyBlockWithTokenCount(block, messages, history, baseContext, promptSettings, options = {}) {
+      baseContext = this.scopeTraitProfileContext(baseContext);
       const { character, gameData, summary } = baseContext;
       const renderTemplate = (template, context) => {
         try {
@@ -1019,7 +1038,10 @@ function createPromptBuilder({
           const descScriptPath = promptConfigManager.resolvePath(block.scriptPath);
           try {
             const profileCache = baseContext.memoryContext?.stableDescriptionCache;
-            const cacheKey = options.runtimeProfileSplit ? `v7:${descScriptPath}:${character.id}` : String(character.id);
+            const traitScope = [...(gameData.characters || [])].filter(([id]) => Number(id) !== Number(character.id))
+              .map(([id, person]) => [id, person.traits || []]);
+            const cacheKey = options.runtimeProfileSplit ? `v7:${descScriptPath}:${character.id}`
+              : `v8.14.1:${descScriptPath}:${character.id}:${createPromptFingerprint(this.stableStringify(traitScope))}`;
             let descriptionBlock = !options.runtimeProfileSplit && profileCache instanceof Map ? profileCache.get(cacheKey) : null;
             if (!descriptionBlock) {
               descriptionBlock = this.scriptLoader.executeDescription(descScriptPath, gameData, character.id);

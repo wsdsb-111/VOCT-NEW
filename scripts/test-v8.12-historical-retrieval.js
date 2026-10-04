@@ -219,7 +219,7 @@ function archiveInput(date, variant) {
     assert.equal(rangeHistoricalPrompt.worldStableText, currentPrompt.worldStableText, "range and WarActor queries must not alter the stable prefix block");
     assert.notEqual(preview.dynamicTailFingerprint, preview.stablePrefixFingerprint);
     const renderer = fs.readFileSync(path.join(__dirname, "..", "resources", "app", "out", "renderer", "assets", "index-Dn3qWlAB.js"), "utf8");
-    for (const marker of ["V8.12 历史检索与时间线", "v812HistoricalRetrievalEnabled", "v812HistoricalPromptInjection", "Stable Prefix Fingerprint", "Dynamic Tail Fingerprint"]) assert(renderer.includes(marker), marker);
+    for (const marker of ["历史检索与时间线", "v812HistoricalRetrievalEnabled", "v812HistoricalPromptInjection", "Stable Prefix Fingerprint", "Dynamic Tail Fingerprint"]) assert(renderer.includes(marker), marker);
     console.log("V8.12 Part 2 Historical Retrieval: PASS (AS_OF, RANGE, timelines, scope, WarActor, branch, Dynamic Tail)");
   } finally {
     service?.dispose();

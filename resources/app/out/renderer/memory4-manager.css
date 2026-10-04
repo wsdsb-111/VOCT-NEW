@@ -55,6 +55,7 @@
 .memory4-modal .modal-footer { display: flex; justify-content: flex-end; gap: 8px; padding-top: 12px; }
 .memory4-modal textarea { width: 100%; min-height: 220px; padding: 10px; resize: vertical; line-height: 1.6; color: var(--votc-control-text, #eee5d6); background: var(--votc-control-bg, #0a0b0e); border: 1px solid var(--memory4-line); }
 .memory4-manager button:disabled { opacity: 0.55; cursor: default; }
+.player-summary-group:has(.memory4-archive-notice, .memory4-context-unavailable) > .player-header > button { display: none; }
 @media (max-width: 720px) {
   .summaries-manager .player-summary-group:has(.memory4-manager) > .player-header { flex-wrap: wrap; }
   .summaries-manager .player-summary-group:has(.memory4-manager) > .player-header .player-name { min-width: 0; overflow-wrap: anywhere; }
