@@ -23,7 +23,7 @@ Do not reformat, rebundle or broadly refactor generated code. Preserve IPC names
 - Run Command Queue recovery must fail closed: durable awaiting_ack precedes physical write; a write without ACK is STALLED, not replayable automatically; corrupt state, stale ACK and ambiguous carrier must not dispatch a duplicate effect.
 - Worldline facts are read-only CK3 evidence. Current Runtime Truth is shared by in-scene participants, mentioned characters and Family Fact; canonical runtime gender wins and missing/conflicting gender remains neutral. Memory or historical identity must not override current runtime state.
 - Historical Definition↔Runtime binding is one-to-one and evidence-gated. Ambiguous, incomplete or stale source must not resolve into Game Truth. Do not revive the retired V8.3 Shadow chain.
-- Memory Engine displays 2.6 while preserving the 2.5 storage contract. Treat summary files, folder layout, cache/revision keys and recall limits as compatibility surfaces.
+- Memory Engine displays 4.0 while preserving the 2.5 storage contract. Treat summary files, folder layout, cache/revision keys and recall limits as compatibility surfaces.
 
 ## Prompt and provider rules
 

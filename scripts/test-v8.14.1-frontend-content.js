@@ -22,8 +22,8 @@ const check = (condition, message) => {
   if (!condition) failures.push(message);
 };
 
-const featureVersionDeclaration = /\bconst\s+VOTC_FEATURE_VERSION\s*=\s*["']V8\.14\.1["']/.test(renderer);
-check(featureVersionDeclaration, "Renderer must define VOTC_FEATURE_VERSION = \"V8.14.1\"");
+const featureVersionDeclaration = /\bconst\s+VOTC_FEATURE_VERSION\s*=\s*["']V8\.14\.2["']/.test(renderer);
+check(featureVersionDeclaration, "Renderer must define VOTC_FEATURE_VERSION = \"V8.14.2\"");
 check((renderer.match(/\bVOTC_FEATURE_VERSION\b/g) || []).length >= 2, "Renderer must display the feature version constant");
 check(renderer.includes("window.electronAPI.getAppVersion()"), "footer must continue reading the package version through getAppVersion()");
 const footerStart = renderer.indexOf('className: "app-version"');
@@ -55,12 +55,13 @@ const experimentLabel = experimentIndex < 0 ? "" : renderer.slice(Math.max(0, ex
 check(experimentIndex >= 0 && /历史/.test(experimentLabel) && /已退役|已停用/.test(experimentLabel), "legacy action experiment metrics must be marked historical and retired");
 check(!renderer.includes("RC5 分阶段动作请求"), "retired RC5 action experiment copy must not imply a current experiment");
 
-check(/(?:完整)?信件[^"\n]{0,80}(?:待|尚未|仍未)[^"\n]{0,30}(?:实机|CK3|VOTC)[^"\n]{0,20}(?:验收|验证|测试)?/i.test(renderer), "Renderer must state that the complete letter flow awaits in-game acceptance");
+check(renderer.includes("V8.14.1 完整信件实机流程已由玩家确认") && renderer.includes("V8.14.2 信件公开功能仍待实机复测"), "Renderer must separate the passed legacy letter gate from new disclosure retesting");
 const rendererStringLiterals = [
   ...renderer.matchAll(/"([^"\\]*(?:\\.[^"\\]*)*)"/g),
   ...renderer.matchAll(/`([^`\\]*(?:\\.[^`\\]*)*)`/g)
 ].map(match => match[1]);
-check(rendererStringLiterals.some(copy => /GLM/i.test(copy) && /V8\.14\.2/i.test(copy) && /延|推迟|延期|延后|待|defer|postpone/i.test(copy)), "Renderer must state GLM cache tuning is deferred to V8.14.2");
+check(rendererStringLiterals.some(copy => /GLM/i.test(copy) && /前缀布局保留|prefix layout is preserved/i.test(copy)
+  && /待实机验证|require in-game validation/i.test(copy)), "Renderer must distinguish preserved GLM layout from pending telemetry validation");
 check(!/(?:提高|提升|保证|确保)[^"\n]{0,14}(?:缓存命中|缓存复用|命中率)|(?:缓存命中|缓存复用|命中率)[^"\n]{0,14}(?:提高|提升|保证|确保)/i.test(renderer), "Renderer must not promise cache hits or increased cache reuse");
 
 for (const persistentKey of ["v812MemoryEngine3Enabled", "chatPromptV89Layout", "chatPromptV810ProviderAdapter"]) {

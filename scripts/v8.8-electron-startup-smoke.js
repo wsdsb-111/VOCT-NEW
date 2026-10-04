@@ -249,7 +249,7 @@ async function main() {
         await clickButton(["Summaries", "摘要"]);
         assert(await evaluate("!!document.querySelector('.memory-engine-overview')"), "memory overview page missing");
         assert(await evaluate("document.querySelector('.memory-engine-overview')?.textContent.includes('Memory Engine 4.0')"), "Memory Engine 4.0 overview heading missing");
-        assert(await evaluate("/^V8\\.14\\.1\\s*·\\s*App v2\\.0\\.4$/.test(document.querySelector('.app-version')?.textContent.trim() || '')"), "feature and packaged-app versions are not both shown in the footer");
+        assert(await evaluate("/^V8\\.14\\.2\\s*·\\s*App v2\\.0\\.4$/.test(document.querySelector('.app-version')?.textContent.trim() || '')"), "feature and packaged-app versions are not both shown in the footer");
         await evaluate("document.querySelector('.memory-engine-overview')?.scrollIntoView({block:'start'})");
         await assertScreenshotLayout(`${viewName} Memory`);
         screenshotPaths.push(await captureScreenshot(`${viewName}-memory`));
@@ -272,9 +272,9 @@ async function main() {
         const optimizationText = await evaluate("document.querySelector('.optimization-view:not(.provider-diagnostics-view)')?.innerText || ''");
         assert(/当前功能与验收边界|Current capabilities and acceptance boundaries/i.test(optimizationText), "current optimization capabilities heading missing");
         assert(!/查看 V7\.10 适配状态|View V7\.10 integration status/i.test(optimizationText), "obsolete V7.10 capability heading remains");
-        assert(optimizationText.includes("V8.14.1") && optimizationText.includes("Memory Engine 4.0"), "optimization overview does not show current feature content");
-        assert(/GLM 缓存调优延后至 V8\.14\.2|GLM cache tuning is deferred to V8\.14\.2/i.test(optimizationText), "GLM deferral is missing from optimization overview");
-        assert(/完整信件流程尚未完成实机验收|Full letter in-game acceptance is still pending/i.test(optimizationText), "letter in-game acceptance boundary is missing from capabilities");
+        assert(optimizationText.includes("V8.14.2") && optimizationText.includes("Memory Engine 4.0"), "optimization overview does not show current feature content");
+        assert(/GLM 前缀布局保留|GLM prefix layout is preserved/i.test(optimizationText), "GLM layout boundary is missing from optimization overview");
+        assert(/V8\.14\.2 信件公开功能仍待实机复测|V8\.14\.2 letter disclosure still awaits in-game retesting/i.test(optimizationText), "new letter disclosure acceptance boundary is missing from capabilities");
         await assertScreenshotLayout(`${viewName} Optimization`);
         screenshotPaths.push(await captureScreenshot(`${viewName}-optimization`));
         const letterCapabilityVisible = await evaluate(`(() => {
@@ -288,7 +288,7 @@ async function main() {
 
         await clickButton(["世界书", "Worldline"]);
         let worldlineText = await evaluate("document.querySelector('.worldline-view')?.innerText || ''");
-        assert(worldlineText.includes("V8.14.1") && /CK3 当前事实只读|Current CK3 facts are read-only/i.test(worldlineText), "current worldline heading/read-only statement missing");
+        assert(worldlineText.includes("V8.14.2") && /CK3 当前事实只读|Current CK3 facts are read-only/i.test(worldlineText), "current worldline heading/read-only statement missing");
         await assertScreenshotLayout(`${viewName} Worldline`);
         screenshotPaths.push(await captureScreenshot(`${viewName}-worldline`));
 
@@ -317,7 +317,7 @@ async function main() {
     console.log("UI_EVIDENCE", JSON.stringify({ directory: screenshotDirectory, screenshots: screenshotPaths }));
     assert.deepEqual(layoutFailures, [], `UI layout checks failed: ${layoutFailures.join("; ")}`);
     assert.deepEqual(errors, [], "renderer exceptions");
-    console.log("V8.14.1 isolated Electron startup, current-content navigation, and three-theme desktop/narrow-window screenshots: PASS");
+    console.log("V8.14.2 isolated Electron startup, current-content navigation, and three-theme desktop/narrow-window screenshots: PASS");
   } finally {
     console.log("RENDERER_ERRORS", JSON.stringify(errors));
     ws?.close();

@@ -332,12 +332,25 @@ function createSummariesManager({ fs, path, summariesDir, memoryEngine, memorySy
       const context = await this.getMemory4Context(request);
       const scope = { campaignToken: context.campaignToken, ownerId: context.ownerId };
       const coordinator = memoryEngine.memory4;
-      const operations = ["updateDetail", "deleteDetail", "updateYear", "updateLife", "keepManual", "rebuild", "recompressLegacy", "cancelDerived"];
+      const operations = ["updateDetail", "deleteDetail", "updateYear", "updateLife", "keepManual", "rebuild", "recompressLegacy", "cancelDerived", "setManualDisclosure", "deleteDisclosure"];
       if (!operations.includes(request.operation)) throw new Error("memory4_operation_invalid");
       if (!["recompressLegacy", "cancelDerived"].includes(request.operation) && (!Number.isSafeInteger(request.expectedRevision) || request.expectedRevision < 0)) throw new Error("memory4_expected_revision_required");
       if (request.operation.startsWith("update") && (typeof request.text !== "string" || !request.text.trim() || request.text.length > 16384)) throw new Error("memory4_text_required");
       let result;
-      if (request.operation === "updateDetail") result = coordinator.store.updateEntry(scope, request.entryId, request.text, { expectedRevision: request.expectedRevision });
+      if (["setManualDisclosure", "deleteDisclosure"].includes(request.operation)) {
+        const entityId = Number(request.entityId);
+        const factRef = request.factRef;
+        if (!Number.isSafeInteger(entityId) || entityId <= 0 || entityId === context.ownerId) throw new Error("memory4_disclosure_entity_invalid");
+        if (!factRef || typeof factRef !== "object" || !["TITLE", "TRAIT"].includes(factRef.factType)
+          || typeof factRef.factKey !== "string" || !factRef.factKey.trim() || factRef.factKey.length > 256
+          || typeof factRef.value !== "string" || !factRef.value.trim() || factRef.value.length > 256) throw new Error("memory4_disclosure_fact_invalid");
+        if (request.operation === "setManualDisclosure") {
+          if (!["MANUAL_KNOWN", "MANUAL_HIDDEN"].includes(request.status)) throw new Error("memory4_disclosure_status_invalid");
+          result = coordinator.updateManualDisclosure(scope, entityId, factRef, request.status, context.gameData,
+            { expectedRevision: request.expectedRevision });
+        } else result = coordinator.deleteDisclosure(scope, entityId, factRef, context.gameData,
+          { expectedRevision: request.expectedRevision });
+      } else if (request.operation === "updateDetail") result = coordinator.store.updateEntry(scope, request.entryId, request.text, { expectedRevision: request.expectedRevision });
       else if (request.operation === "deleteDetail") result = coordinator.store.deleteEntry(scope, request.entryId, { expectedRevision: request.expectedRevision });
       else if (request.operation === "updateYear") result = coordinator.derived.updateYear(scope, request);
       else if (request.operation === "updateLife") result = coordinator.derived.updateLife(scope, request);

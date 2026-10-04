@@ -1,6 +1,7 @@
 "use strict";
 
 const { normalizeGameDate } = require("../worldline/character-temporal-facts");
+const { getCharacterPersonalName } = require("../memory-system/character-identity");
 
 // Names are localized CK3 labels; canonical IDs also cover integrations that supply them.
 const observableAliases = [
@@ -101,6 +102,12 @@ function normalizeTraitKey(trait) {
 function getTraitsForSelfProfile(character) {
   return Array.isArray(character?.traits) ? character.traits : [];
 }
+function getTraitAliases(trait) {
+  const key = normalizeTraitKey(trait);
+  return [...new Set([typeof trait === "string" ? trait : trait?.name, trait?.localizedName,
+    trait?.traitId, trait?.key, trait?.id, ...([...observableAliases, ...hiddenAliases].find(row => row[0] === key) || [])]
+    .filter(value => typeof value === "string" && value.trim()))];
+}
 function observable(trait) {
   const key = normalizeTraitKey(trait);
   return !PRIVATE_CATEGORY.test(String(trait?.category || "")) && !NON_OBSERVABLE_TO_OTHERS.has(key) && OBSERVABLE_TO_OTHERS.has(key);
@@ -144,9 +151,37 @@ function getTraitsForKnownProfile(observer, target, knowledgeContext = {}) {
     && knowledgeContext.campaignToken.trim() ? observer?.knownSecrets || [] : [];
   const secretTraits = { secret_bastard: "bastard", secret_disputed_heritage: "disputed_heritage", secret_witch: "witch",
     secret_cannibal: "cannibal", secret_deviant: "deviant", secret_incest: "incestuous", secret_adulterer: "adulterer" };
-  return getTraitsForSelfProfile(target).filter(trait => observable(trait)
-    || entries.some(entry => authorizedEntry(entry, observer, target, knowledgeContext) && explicitTraitClaim(entry, target, trait, knowledgeContext.gameData))
-    || secrets.some(secret => Number(secret.ownerId) === Number(target?.id) && secretTraits[secret.type] === normalizeTraitKey(trait)));
+  return getTraitsForSelfProfile(target).filter(trait => {
+    if (observable(trait)) return true;
+    const facts = scopedDisclosureFacts(observer, target, knowledgeContext).filter(fact => fact.factType === "TRAIT"
+      && fact.factKey === `trait_${normalizeTraitKey(trait)}`);
+    if (facts.some(fact => fact.status === "MANUAL_HIDDEN")) return false;
+    return facts.some(fact => fact.effectiveKnown === true)
+      || entries.some(entry => authorizedEntry(entry, observer, target, knowledgeContext) && explicitTraitClaim(entry, target, trait, knowledgeContext.gameData))
+      || secrets.some(secret => Number(secret.ownerId) === Number(target?.id) && secretTraits[secret.type] === normalizeTraitKey(trait));
+  });
+}
+
+function scopedDisclosureFacts(observer, target, context) {
+  const current = normalizeGameDate(context?.currentGameDate);
+  const facts = context?.disclosureProfiles instanceof Map ? context.disclosureProfiles.get(Number(target?.id)) || [] : [];
+  return facts.filter(fact => current && fact.campaignToken === context.campaignToken
+    && Number(fact.ownerId) === Number(observer?.id) && Number(fact.entityId) === Number(target?.id)
+    && fact.current === true && ["AUTO_DISCLOSED", "MANUAL_KNOWN", "MANUAL_HIDDEN"].includes(fact.status)
+    && (fact.status === "MANUAL_HIDDEN" || normalizeGameDate(fact.firstAcquiredDate)?.serial <= current.serial));
+}
+
+function knownTitle(observer, target, value, context) {
+  if (!value || /^none(?:\s|$)|^concept_none$/i.test(value)) return "";
+  const normalize = text => String(text).normalize("NFKC").trim();
+  const facts = scopedDisclosureFacts(observer, target, context).filter(fact => fact.factType === "TITLE"
+    && (normalize(fact.value) === normalize(value)
+      || /^concept_/.test(value) && fact.aliases?.includes(normalize(value).toLowerCase())));
+  if (facts.some(fact => fact.status === "MANUAL_HIDDEN")) return "";
+  if (facts.some(fact => fact.effectiveKnown === true)) return value;
+  const entries = (context.memory4Packet?.details || []).map(item => item.traitKnowledgeEvidence).filter(Boolean);
+  return entries.some(entry => authorizedEntry(entry, observer, target, context)
+    && explicitTraitClaim(entry, target, { name: value }, context.gameData)) ? value : "";
 }
 
 // A per-request presentation copy protects custom templates and scripts as well as bundled ones.
@@ -154,7 +189,8 @@ function createTraitProfileView(gameData, character, memoryContext = null) {
   const observer = gameData?.characters?.get(Number(character?.id)) || character;
   const knowledge = { ...memoryContext, campaignToken: gameData?.campaignToken, currentGameDate: gameData?.date, gameData };
   const copies = new Map();
-  const copy = value => {
+  const relativeFields = new Set(["parents", "children", "siblings", "spouses", "concubines", "otherParent", "concubineOf", "betrothed"]);
+  const copy = (value, relative = false) => {
     if (!value || typeof value !== "object") return value;
     if (copies.has(value)) return copies.get(value);
     if (value instanceof Date) return new Date(value);
@@ -164,11 +200,20 @@ function createTraitProfileView(gameData, character, memoryContext = null) {
     if (value instanceof Map) for (const [key, item] of value) result.set(key, copy(item));
     else if (value instanceof Set) for (const item of value) result.add(copy(item));
     else {
-      for (const key of Object.keys(value)) result[key] = copy(value[key]);
-      if (Array.isArray(value.traits) || Object.hasOwn(value, "personality") || Array.isArray(value.secrets)) {
+      for (const key of Object.keys(value)) result[key] = copy(value[key], relativeFields.has(key) || relative && Array.isArray(value));
+      if (relative && Number(value.id) > 0 || Array.isArray(value.traits) || Object.hasOwn(value, "personality") || Array.isArray(value.secrets) || Object.hasOwn(value, "primaryTitle")) {
         const isSelf = Number(value.id) > 0 && Number(value.id) === Number(observer?.id);
-        if (Array.isArray(value.traits)) result.traits = (isSelf ? getTraitsForSelfProfile(value) : getTraitsForKnownProfile(observer, value, knowledge)).map(copy);
+        if (Array.isArray(value.traits)) result.traits = (isSelf ? getTraitsForSelfProfile(value) : getTraitsForKnownProfile(observer, value, knowledge)).map(trait => copy(trait));
         if (!isSelf) {
+          for (const key of ["primaryTitle", "titleRankConcept", "heldCourtAndCouncilPositions"]) {
+            if (key in result) result[key] = key === "heldCourtAndCouncilPositions"
+              ? String(value[key] || "").split(/[,，、;；\n|]/).map(title => knownTitle(observer, value, title.trim(), knowledge)).filter(Boolean).join("、")
+              : knownTitle(observer, value, String(value[key] || ""), knowledge);
+          }
+          const personalName = getCharacterPersonalName(gameData?.characters?.get(Number(value.id)) || value, value.name);
+          if ("name" in result) result.name = personalName;
+          result.shortName = personalName;
+          result.fullName = value.nickname ? `${personalName} '${value.nickname}'` : personalName;
           for (const key of PRIVATE_FIELDS) delete result[key];
           for (const key of ["secrets", "knownSecrets", "memories", "conversationSummaries"]) if (key in result) result[key] = [];
         }
@@ -179,5 +224,5 @@ function createTraitProfileView(gameData, character, memoryContext = null) {
   return { gameData: copy(gameData), character: copy(character) };
 }
 
-module.exports = { NON_OBSERVABLE_TO_OTHERS, OBSERVABLE_TO_OTHERS, normalizeTraitKey,
+module.exports = { NON_OBSERVABLE_TO_OTHERS, OBSERVABLE_TO_OTHERS, normalizeTraitKey, getTraitAliases,
   getTraitsForSelfProfile, getTraitsForObservedProfile, getTraitsForKnownProfile, createTraitProfileView };

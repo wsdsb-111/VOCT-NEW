@@ -1,5 +1,13 @@
 # 对话摘要与人物记忆：Memory Engine 4.0（3.0 协议、2.5 存储兼容）
 
+## V8.14.2 Owner-scoped Disclosure（本地回归与 UI 通过；实机 Gate 待验收）
+
+[实施报告](v8.14.2-owner-scoped-disclosure-implementation-report.md)将明确说出的当前头衔/特质作为 Owner × Campaign × Entity × Fact 范围的 Known Entity evidence。扫描只读取经过可见性与来源校验的 spoken fragments，限于当前结构化事实候选；不确定、否定、假设、传闻或歧义绑定均拒绝。手动已知/未知使用 revision 与 tombstone 管理，当前 Profile 仍从 CK3 GameData 校验事实是否存在。Nickname 默认可见，姓名继续走身份识别。
+
+披露在本场 Finalization 后对下一场生效。收到的游戏原信 payload 通过校验后、回复生成前记录为玩家 → 收件 NPC 的 recipient-only 事实；NPC 回信仅在 CK3 `LETTER_ACCEPTED` effect 已写、接受回调清理载体并复核原 payload 后写给玩家 Owner。用户已确认 V8.14.1 完整信件往返实机 PASS；该确认不改写历史报告形成时的 `NOT TESTED`。完整发布 `352/352`、Letter 专项 `7/7`、独立 adversarial QA `31 PASS/0 FAIL`；隔离 UI Smoke `34` 张截图、startup smoke `36/36` 通过。Disclosure CK3/Provider、cache telemetry 与 Soak 仍待用户实测。
+
+Memory Engine 4.0 是当前可见标签，不升级 `engineVersion: 3.0` 或摘要 2.5 存储，也不改 Recent2、Recall 顺序、Cache Anchor、Prompt Block ID 或 GLM 静态布局。V8.14.2 尚不满足 Acceptance 或 Full Freeze。
+
 ## V8.14.1 前端显示同步（2026-10-04）
 
 [前端内容同步报告](v8.14.1-frontend-content-update-implementation-report.md)区分当前 Memory4 可见名称、协议 `engineVersion: 3.0`、旧摘要 2.5 兼容及 App 包版本。摘要/优化/世界书展示现行分层、Recent2、动态召回与归档只读说明；没有改召回顺序、Prompt 块或持久键。信件实机验收与 GLM V8.14.2 延期状态保留，既有旧版本报告不回写为新测试结果。

@@ -189,8 +189,8 @@ function createPromptBuilder({
       ])];
       return `=== 玩家身份知情边界（本轮高优先级，适用于当前回应角色） ===
   - 当前 CK3 身份识别关系证据：${relationships.join("、") || "未提供"}。关系证据支持双方相识及相应称谓，不自动授予全部后台身份资料；缺少记录不等于从未相识。
-  - 人物资料、在场表、场景说明、Runtime ID 和消息说话者前缀里的玩家姓名、全名、家族、称号、头衔与官职都是后台标签，不构成本角色已经知道玩家身份的证据。本边界优先于这些资料和标签。
-  - 只可依据当前 CK3 明确的亲属或正式关系、本角色获准的记忆、获准的公开事实，以及当前对话正文中明确说出的自我介绍或他人介绍识别玩家。只授予来源明确给出的那项姓名、称号或身份，不得据此解锁整包玩家资料；介绍中的化名不等于已得知后台真名。
+  - 人物资料、在场表、场景说明、Runtime ID 和消息说话者前缀里的玩家姓名、全名、家族、头衔与官职都是后台标签，不构成本角色已经知道玩家身份的证据。本边界优先于这些资料和标签。称号（Nickname）默认可见，用于角色扮演，但不授予真名、精确头衔或官职。
+  - 只可依据当前 CK3 明确的亲属或正式关系、本角色获准的记忆、获准的公开事实，以及当前对话正文中明确说出的自我介绍或他人介绍识别玩家。只授予来源明确给出的那项姓名或身份，不得据此解锁整包玩家资料；介绍中的化名不等于已得知后台真名。已公开的头衔和特质逐项限定于获知的角色；旧头衔不代表自动知道新头衔，已消失特质不作为当前属性。
   - 当前回合开始交谈、同场、好感数值、SHARED_SCENE 或本次相遇的直接交谈次数，都不等于已知玩家身份。没有上述具体身份来源时，应按尚未识别的对方自然回应，不得主动叫出后台姓名、家族、头衔或官职，也不得因为系统提供资料而装作早已认识。`;
     }
     static buildResponderGameFacts(char, gameData = null) {
@@ -1039,9 +1039,10 @@ function createPromptBuilder({
           try {
             const profileCache = baseContext.memoryContext?.stableDescriptionCache;
             const traitScope = [...(gameData.characters || [])].filter(([id]) => Number(id) !== Number(character.id))
-              .map(([id, person]) => [id, person.traits || []]);
+              .map(([id, person]) => [id, person.traits || [], person.primaryTitle || "", person.titleRankConcept || "",
+                person.heldCourtAndCouncilPositions || "", person.nickname || ""]);
             const cacheKey = options.runtimeProfileSplit ? `v7:${descScriptPath}:${character.id}`
-              : `v8.14.1:${descScriptPath}:${character.id}:${createPromptFingerprint(this.stableStringify(traitScope))}`;
+              : `v8.14.2:${descScriptPath}:${character.id}:${createPromptFingerprint(this.stableStringify(traitScope))}`;
             let descriptionBlock = !options.runtimeProfileSplit && profileCache instanceof Map ? profileCache.get(cacheKey) : null;
             if (!descriptionBlock) {
               descriptionBlock = this.scriptLoader.executeDescription(descScriptPath, gameData, character.id);

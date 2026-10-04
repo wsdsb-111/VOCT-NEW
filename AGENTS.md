@@ -42,7 +42,7 @@ node --check resources\app\out\renderer\worldline-player-presentation.js
 git diff --check
 ~~~
 
-test-release.js 通过 test-manifest.js 汇总直接和嵌套检查；新增 test-*.js 必须登记到清单并明确是发布组还是历史归档。当前清单为 347 个发布组、416 个已分类测试文件、68 个历史归档；完整门禁结果以当前实施报告为准。测试数量变化时更新相关文档，不要把旧数量硬编码为源码合同。
+test-release.js 通过 test-manifest.js 汇总直接和嵌套检查；新增 test-*.js 必须登记到清单并明确是发布组还是历史归档。当前清单为 352 个发布组、421 个已分类测试文件、68 个历史归档；完整门禁结果以当前实施报告为准。测试数量变化时更新相关文档，不要把旧数量硬编码为源码合同。
 
 修改 IPC、设置、Prompt、流式输出、动作回读、世界线或主题 UI 后，仍需启动 VOTC.exe 做对应人工冒烟。静态回归不能替代真实 CK3 存档、Provider、debug.log ACK、打包窗口和 Soak 验收。
 

@@ -3,6 +3,7 @@
 const fs = require("fs");
 
 const { getCharacterPersonalName } = require("../memory-system/character-identity");
+const { getFactCandidates } = require("../memory-system/memory4-disclosure");
 const { memoryMatchesCampaign } = require("../memory-system/memory-types");
 const { MentionTracker } = require("../memory-system/mention-tracker");
 const { createConversationRuntime } = require("./conversation-runtime");
@@ -139,6 +140,7 @@ class Conversation {
     this.summaryParticipantProfiles = /* @__PURE__ */ new Map();
     this.stableProfileCache = /* @__PURE__ */ new Map();
     this.stableDescriptionCache = /* @__PURE__ */ new Map();
+    this.disclosureProfilesByResponder = /* @__PURE__ */ new Map();
     this.cacheV2FrozenSnapshots = { conversation: null, responders: /* @__PURE__ */ new Map() };
     this.cacheV2FrozenSnapshots.prefixByResponder = /* @__PURE__ */ new Map();
     this.frozenWorldlineByResponder = /* @__PURE__ */ new Map();
@@ -219,6 +221,7 @@ class Conversation {
       this.captureSummaryParticipantProfiles(this.gameData.characters.values());
       this.initializePresence();
       this.gameData.loadCharactersSummaries();
+      this.captureDisclosureProfiles();
       this.gameData.syncOfficialRecollectionSummaries?.(this.id);
       this.worldlinePrefetchPromise = this.prefetchFrozenWorldline().catch((error) => {
         console.warn("[Worldline] Conversation-opening recall failed:", error.message);
@@ -242,6 +245,27 @@ class Conversation {
   }
   isV813PrefixEnabled() {
     return settingsRepository?.getChatPromptV813Layout?.() === true;
+  }
+  captureDisclosureProfiles() {
+    const campaignToken = this.gameData?.campaignToken;
+    if (!campaignToken || !memoryEngine?.memory4?.getCurrentDisclosures) return;
+    for (const ownerId of this.gameData.characters.keys()) {
+      const key = `${campaignToken}:${ownerId}`;
+      if (this.disclosureProfilesByResponder.has(key)) continue;
+      const scope = { campaignToken, ownerId: Number(ownerId) };
+      const profiles = new Map();
+      try {
+        const readContext = memoryEngine.memory4.createProfileReadContext(scope);
+        for (const entityId of this.gameData.characters.keys()) {
+          if (Number(entityId) === Number(ownerId)) continue;
+          profiles.set(Number(entityId), memoryEngine.memory4.getCurrentDisclosures(scope, Number(entityId), this.gameData, { readContext }));
+        }
+      } catch (error) {
+        profiles.clear();
+        if (error.message !== "memory4_owner_folder_not_unique") console.warn("[Memory4] Opening knowledge unavailable:", error.message);
+      }
+      this.disclosureProfilesByResponder.set(key, profiles);
+    }
   }
   async prefetchFrozenWorldline() {
     if (!this.isV813PrefixEnabled?.() || !worldlineService) return;
@@ -792,6 +816,7 @@ class Conversation {
       activeParticipantIds,
       stableProfileCache: this.stableProfileCache,
       stableDescriptionCache: this.stableDescriptionCache,
+      disclosureProfiles: this.disclosureProfilesByResponder?.get(`${this.gameData.campaignToken}:${npc.id}`) || new Map(),
       cacheV2FrozenSnapshots: this.cacheV2FrozenSnapshots,
       freezePromptPrefix: false,
       presenceText: this.buildPresenceContext(),
@@ -1832,6 +1857,9 @@ class Conversation {
       messages,
       participants,
       mentionedEntities: mentionableProfiles.filter(character => mentionedIds.includes(character.id)),
+      disclosureCharacters: [...this.gameData.characters.values()].map(character => ({ id: Number(character.id),
+        names: [...new Set([character.firstName, character.shortName, character.fullName, character.name].filter(Boolean))],
+        nickname: character.nickname || null, facts: getFactCandidates(character) })),
       excludedSummaryOwnerIds,
       participantPresence: state.participantPresence,
       joinEvents: this.joinEvents,

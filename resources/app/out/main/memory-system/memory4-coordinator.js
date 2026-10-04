@@ -4,6 +4,7 @@ const fs = require("fs");
 const path = require("path");
 const { assertScope, hash, ids, strings, legacySourceHash, directCounterpartIds, validateEntry } = require("./memory4-contract");
 const { projectVisibleTranscript } = require("./memory4-visibility");
+const { getFactCandidates, disclosureFactId, scanVisibleDisclosures, scanLetterDisclosures } = require("./memory4-disclosure");
 const { Memory4Store } = require("./memory4-store");
 const { Memory4ProfileService } = require("./memory4-profile");
 const { Memory4RelationshipReadback } = require("./memory4-relationship-readback");
@@ -11,10 +12,39 @@ const { Memory4DerivedService } = require("./memory4-derived");
 const { validateGenerationOutcome } = require("../providers/generation-outcome");
 const { validateSourceItem, presentIds } = require("./finalization-visibility");
 const { MentionTracker } = require("./mention-tracker");
+const { normalizeGameDate } = require("../worldline/character-temporal-facts");
 
 const MAX_FRAGMENTS_PER_REQUEST = 128;
 const MAX_DURABLE_ENTRIES_PER_OWNER = 8;
 const DURABLE_MAX_OUTPUT_TOKENS = 4096;
+
+function disclosureCharacterRows(value) {
+  const rows = value instanceof Map ? [...value.values()] : Array.isArray(value) ? value
+    : value && typeof value === "object" ? Object.values(value) : [];
+  return rows.map(character => {
+    const id = Number(character?.id);
+    if (!Number.isSafeInteger(id) || id <= 0) return null;
+    const names = [...new Set((Array.isArray(character.names) ? character.names
+      : [character.firstName, character.shortName, character.fullName, character.name])
+      .filter(name => typeof name === "string" && name.trim()).map(name => name.trim()))];
+    return { id, names, nickname: typeof character.nickname === "string" && character.nickname.trim() ? character.nickname.trim() : null,
+      facts: getFactCandidates(character) };
+  }).filter(Boolean);
+}
+
+function disclosureCharacterMap(rows) {
+  const characters = disclosureCharacterRows(rows);
+  const result = new Map();
+  for (const character of characters) {
+    if (result.has(character.id)) throw new Error("memory4_disclosure_character_duplicate");
+    result.set(character.id, character);
+  }
+  return result;
+}
+
+function disclosureCharacterHash(characters) {
+  return hash([...characters.values()].sort((left, right) => left.id - right.id));
+}
 
 class Memory4Coordinator {
   constructor(store, { trace = null } = {}) {
@@ -135,6 +165,95 @@ class Memory4Coordinator {
     return this.profiles.getProfile(scope, entityId, options);
   }
 
+  getCurrentDisclosures(scope, entityId, gameData, { readContext = null, currentGameDate = null } = {}) {
+    return this.store.getCurrentDisclosures(scope, Number(entityId), gameData, { readContext, currentGameDate });
+  }
+
+  updateManualDisclosure(scope, entityId, factRef, status, gameData, { expectedRevision } = {}) {
+    assertScope(scope);
+    const targetId = Number(entityId);
+    if (gameData?.campaignToken !== scope.campaignToken || !gameData?.date || !Number.isSafeInteger(targetId)
+      || targetId <= 0 || targetId === scope.ownerId) throw new Error("memory4_disclosure_current_scope_invalid");
+    const rows = disclosureCharacterRows(gameData.characters);
+    const character = rows.find(candidate => candidate.id === targetId);
+    const candidate = getFactCandidates(character).find(item => item.factType === factRef?.factType
+      && item.factKey === factRef?.factKey && item.value === factRef?.value);
+    if (!candidate || factRef.factId != null
+      && factRef.factId !== disclosureFactId(scope, targetId, candidate.factType, candidate.factKey)) {
+      throw new Error("memory4_disclosure_fact_not_current");
+    }
+    this.store.updateManualDisclosure(scope, targetId, candidate, status, gameData.date, expectedRevision);
+    this.profiles.invalidate(scope);
+    const factId = disclosureFactId(scope, targetId, candidate.factType, candidate.factKey);
+    return this.getCurrentDisclosures(scope, targetId, gameData).find(row => row.factId === factId) || null;
+  }
+
+  deleteDisclosure(scope, entityId, factRef, gameData, { expectedRevision } = {}) {
+    return this.updateManualDisclosure(scope, entityId, factRef, "MANUAL_HIDDEN", gameData, { expectedRevision });
+  }
+
+  recordDisclosures(snapshot, { campaignToken = snapshot?.campaignToken, date = snapshot?.date, characters = snapshot?.disclosureCharacters } = {}) {
+    if (!Array.isArray(snapshot?.disclosureCharacters) || !snapshot.disclosureCharacters.length) {
+      return { status: "SKIPPED", changed: false, count: 0, entityIds: [], skipped: "disclosure_characters_missing" };
+    }
+    if (campaignToken !== snapshot.campaignToken || date !== snapshot.date) {
+      throw new Error("memory4_disclosure_snapshot_mismatch");
+    }
+    const snapshotCharacters = disclosureCharacterMap(snapshot.disclosureCharacters);
+    const sourceCharacters = disclosureCharacterMap(characters);
+    if (disclosureCharacterHash(snapshotCharacters) !== disclosureCharacterHash(sourceCharacters)) {
+      throw new Error("memory4_disclosure_characters_mismatch");
+    }
+    const gameData = { campaignToken, date, characters: snapshotCharacters };
+    const scanned = snapshot.sourceKind === "LETTER"
+      ? scanLetterDisclosures(snapshot, gameData, "LETTER", { letterId: snapshot.letterId,
+        senderId: Number(snapshot.senderId), recipientId: Number(snapshot.recipientId) })
+      : scanVisibleDisclosures(snapshot, gameData);
+    if (scanned.skipped) return { status: "SKIPPED", changed: false, count: 0, entityIds: [], skipped: scanned.skipped };
+    if (snapshot.sourceKind === "LETTER") {
+      const letterScope = { campaignToken: snapshot.campaignToken, ownerId: snapshot.ownerId };
+      if (scanned.disclosures.length) this.store.ensureDisclosureScope(letterScope);
+      else {
+        try { this.store.directory(letterScope); }
+        catch (error) {
+          if (error.message === "memory4_owner_folder_not_unique") {
+            return { status: "NO_DISCLOSURE", changed: false, count: 0, entityIds: [], skipped: null };
+          }
+          throw error;
+        }
+      }
+    }
+    const persisted = this.store.recordDisclosures(snapshot, scanned.disclosures);
+    if (persisted.changed) this.profiles.invalidate({ campaignToken: snapshot.campaignToken, ownerId: snapshot.ownerId });
+    this.trace?.record("memory4_disclosure", { ownerId: snapshot.ownerId, campaignToken: snapshot.campaignToken,
+      sourceKind: snapshot.sourceKind === "LETTER" ? "LETTER" : "CONVERSATION", count: persisted.count,
+      changed: persisted.changed });
+    return { status: persisted.stale ? "SKIPPED" : persisted.count ? "RECORDED" : "NO_DISCLOSURE", ...persisted,
+      skipped: persisted.stale ? "source_revision_stale" : null };
+  }
+
+  recordLetterDisclosures({ campaignToken, date, ownerId, senderId, recipientId, letterId, text, characters }) {
+    const owner = ids([ownerId])[0], sender = ids([senderId])[0], recipient = ids([recipientId])[0];
+    const disclosureCharacters = disclosureCharacterRows(characters);
+    if (!campaignToken || !normalizeGameDate(date) || !owner || owner !== recipient || !sender || sender === recipient
+      || typeof letterId !== "string" || !letterId.trim() || typeof text !== "string" || !text.trim()
+      || !disclosureCharacters.some(character => character.id === sender)
+      || !disclosureCharacters.some(character => character.id === recipient)) {
+      throw new Error("memory4_disclosure_letter_invalid");
+    }
+    const snapshot = { campaignToken, ownerId: owner, sourceKind: "LETTER", senderId: sender, recipientId: recipient,
+      letterId: letterId.trim(), date: normalizeGameDate(date).canonical,
+      sourceRevision: hash(["LETTER", campaignToken, owner, sender, recipient, letterId.trim(),
+        normalizeGameDate(date).canonical, hash(text)]), disclosureCharacters,
+      fragments: [{ fragmentId: `letter_${hash([letterId.trim(), sender, recipient])}`, sourceLetterId: letterId.trim(),
+        sourceType: "spoken", text: text.trim(), speakerId: sender, presentIds: [sender, recipient],
+        knownBy: [recipient], visibility: "private", entityIds: disclosureCharacters.map(character => character.id),
+        visibilityEvidence: "validated_letter" }] };
+    const result = this.recordDisclosures(snapshot, { campaignToken, date: snapshot.date,
+      characters: new Map(disclosureCharacters.map(character => [character.id, character])) });
+    return result;
+  }
+
   createProfileReadContext(scope) {
     assertScope(scope);
     scope = { campaignToken: scope.campaignToken, ownerId: scope.ownerId };
@@ -225,7 +344,7 @@ class Memory4Coordinator {
         presentIds: ids(verified.messageIds.reduce((common, messageId) =>
           common === null ? presentIds(context, messageId) : common.filter((id) => presentIds(context, messageId).includes(id)), null)),
         knownBy: ids(verified.audience), visibility: segment.visibility,
-        sourceType: ["spoken", "reported", "rumor"].includes(segment.source) ? segment.source : "spoken", recipientIds,
+        sourceType: segment.source, recipientIds,
         entityIds, visibilityEvidence: "finalization_validated_segment" });
     }
     const classified = new Set((context.messages || []).filter(message => {
@@ -253,7 +372,8 @@ class Memory4Coordinator {
       for (const fragment of pair.fragments) fragment.recipientIds = ids([...fragment.recipientIds,
         ...fragment.presentIds.filter(id => id !== fragment.speakerId && fragment.knownBy.includes(id))]);
     }
-    projection.sourceRevision = hash([projection.sourceRevision, projection.fragments]);
+    const disclosureCharacters = disclosureCharacterRows(context.disclosureCharacters);
+    projection.sourceRevision = hash([projection.sourceRevision, projection.fragments, disclosureCharacters]);
     const visibleEntities = new Set(projection.fragments.flatMap(fragment => ids(fragment.entityIds)));
     const relationshipChangeEntityIds = ids((context.relationshipChanges || []).filter(change =>
       change.detected === true && change.campaignToken === context.campaignToken && change.ownerId === ownerId
@@ -262,7 +382,7 @@ class Memory4Coordinator {
       finalizationId: context.finalizationId, episodeId: context.episodeId,
       date: context.date || null, totalDays: context.totalDays ?? null, counterpartIds: directCounterpartIds(projection.fragments, ownerId), summaryIds: [],
       summaryProviderSnapshot: context.summaryProviderSnapshot || null,
-      ...projection, relationshipChangeEntityIds };
+      ...projection, disclosureCharacters, relationshipChangeEntityIds };
   }
 
   orderFragments(snapshot, fragments) {
@@ -334,6 +454,8 @@ class Memory4Coordinator {
       const committed = this.store.loadIndex(snapshot).finalizations[hash(snapshot.finalizationId)];
       if (committed) {
         if (committed.sourceRevision !== snapshot.sourceRevision) throw new Error("memory4_source_revision_conflict");
+        this.recordDisclosures(snapshot, { campaignToken: snapshot.campaignToken, date: snapshot.date,
+          characters: new Map((snapshot.disclosureCharacters || []).map(character => [character.id, character])) });
         if (fs.existsSync(file)) fs.unlinkSync(file);
         return { ownerId: snapshot.ownerId, ...committed, alreadyCommitted: true };
       }
@@ -389,6 +511,8 @@ class Memory4Coordinator {
       }
       if (!isCurrent()) throw new Error("memory4_generation_changed");
       const persisted = this.store.commitOwner(snapshot, result);
+      this.recordDisclosures(snapshot, { campaignToken: snapshot.campaignToken, date: snapshot.date,
+        characters: new Map((snapshot.disclosureCharacters || []).map(character => [character.id, character])) });
       if (persisted.entryIds.length || persisted.changedEntryIds?.length) this.derived.schedule(snapshot, { providerSnapshot: snapshot.summaryProviderSnapshot, committedFinalization: true });
       if (fs.existsSync(file)) fs.unlinkSync(file);
       this.trace?.record("memory4_durable", { finalizationId: snapshot.finalizationId, ownerId: snapshot.ownerId,

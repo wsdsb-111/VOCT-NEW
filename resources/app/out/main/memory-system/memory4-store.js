@@ -4,9 +4,11 @@ const fs = require("fs");
 const path = require("path");
 const { assertScope, hash, ids, strings, gameDate, sourceRevisionCurrent, validateEntry } = require("./memory4-contract");
 const { updateKnownEntities, evidenceCompleteness } = require("./memory4-visibility");
+const { getFactCandidates, disclosureFactId } = require("./memory4-disclosure");
 const { normalizeGameDate } = require("../worldline/character-temporal-facts");
 
 const INDEX_KEYS = ["byCampaign", "byOwner", "byEntity", "byTopic", "byEventYear", "byEventDate", "byConversationYear", "byAcquiredYear", "byCounterpart", "byMemoryType", "byState", "bySourceFinalization"];
+const DISCLOSURE_STATUSES = new Set(["AUTO_DISCLOSED", "MANUAL_KNOWN", "MANUAL_HIDDEN"]);
 const UNCERTAIN_COMMITMENT = /[?？]|如果|假如|要是|倘若|是否|能否|会不会|听说|据说|传闻|声称|心想|心里|内心|打算|计划|希望|准备|明天|明日|明年|今后|以后|将来|届时|将要|将会|即将|尚未|还未|还没|没有|并未|未能|没能|不能|无法|从未|不曾|并非|不属实|不是真的|请|命令|要求|(?:不|未|没)(?:曾|是|能|会|再|愿|代表|意味着|完成|履行|兑现|归还|交还|交付|取消|撤销|释放|替代|取代)|(?:将|会).{0,16}(?:完成|履行|兑现|归还|交还|交付|取消|撤销|废止|作废|替代|取代)|\b(?:if|suppose|hypothetical|will|would|might|may|plan|intend|hope|tomorrow|rumor|rumour|heard|not|never|please)\b|n['’]t/i;
 const COMMITMENT_CUE = /承诺|答应|许诺|保证|约定|\b(?:promise(?:s|d)?|pledge(?:s|d)?|agree(?:s|d)?|undertake|undertakes|undertook|undertaken|vow(?:s|ed)?)\b/gi;
 const COMMITMENT_CONDITION = /(?:但(?:是)?(?:须|必须|需)?|须|必须|前提(?:是)?|条件(?:是)?|只有|只要|倘若|若|如果|\bunless\b|\bprovided\b|\bon condition\b|\bonly if\b|\bif\b)\s*([^。.!！?？;；]+)/gi;
@@ -76,6 +78,37 @@ function commitmentOutcomeBound(text, core, status) {
   });
 }
 
+function latestDate(left, right) {
+  const a = normalizeGameDate(left), b = normalizeGameDate(right);
+  if (!a) return b?.canonical || null;
+  if (!b) return a.canonical;
+  return (a.serial >= b.serial ? a : b).canonical;
+}
+
+function effectiveDisclosure(record, asOf, ownerId, metadata) {
+  const current = normalizeGameDate(asOf);
+  const evidenceBySource = Object.fromEntries(Object.entries(record.evidenceBySource || {}).filter(([, proof]) => {
+    const acquired = normalizeGameDate(proof?.acquiredDate);
+    const sourceCurrent = proof?.sourceKind !== "CONVERSATION"
+      || metadata?.knownEvidenceRevisions?.[hash([proof.sourceConversationId, ownerId])] === proof.sourceRevision;
+    return current && acquired && acquired.serial <= current.serial && ids(proof.knownBy).join() === String(ownerId) && sourceCurrent;
+  }));
+  const manualDate = normalizeGameDate(record.manualMarkedDate);
+  const manualApplies = manualDate && current && manualDate.serial <= current.serial
+    && ["MANUAL_KNOWN", "MANUAL_HIDDEN"].includes(record.status);
+  const hasAutoEvidence = Object.keys(evidenceBySource).length > 0;
+  const status = manualApplies ? record.status : hasAutoEvidence ? "AUTO_DISCLOSED" : null;
+  if (!status) return { status: null, effectiveKnown: false, evidenceBySource, firstAcquiredDate: null, lastConfirmedDate: null };
+  const dates = Object.values(evidenceBySource).map(proof => normalizeGameDate(proof.acquiredDate)).filter(Boolean);
+  const evidenceDates = [...dates].sort((a, b) => a.serial - b.serial);
+  if (manualApplies && record.status === "MANUAL_KNOWN") dates.push(manualDate);
+  dates.sort((a, b) => a.serial - b.serial);
+  return { status, effectiveKnown: status !== "MANUAL_HIDDEN", evidenceBySource,
+    firstAcquiredDate: dates[0]?.canonical || null,
+    lastConfirmedDate: evidenceDates.at(-1)?.canonical || null,
+    tombstone: status === "MANUAL_HIDDEN" ? record.tombstone || null : null };
+}
+
 class Memory4Store {
   constructor(store) {
     this.store = store;
@@ -122,6 +155,54 @@ class Memory4Store {
     if (!metadata || metadata.campaignToken !== scope.campaignToken || metadata.ownerId !== scope.ownerId
       || metadata.indexHash !== hash(index) || metadata.revision !== index.revision) throw new Error("memory4_metadata_index_mismatch");
     return index;
+  }
+
+  ensureDisclosureScope(scope) {
+    assertScope(scope);
+    if (!this.store.summaryFoldersDir) throw new Error("memory4_summary_root_missing");
+    const root = path.resolve(this.store.summaryFoldersDir);
+    if (!fs.existsSync(root) || !fs.statSync(root).isDirectory() || fs.lstatSync(root).isSymbolicLink()) {
+      throw new Error("memory4_summary_root_invalid");
+    }
+    let directory;
+    try { directory = this.directory(scope); }
+    catch (error) {
+      if (error.message !== "memory4_owner_folder_not_unique") throw error;
+      directory = path.join(root, ".memory4", String(scope.ownerId), hash(scope.campaignToken));
+    }
+    const target = path.resolve(directory);
+    const relative = path.relative(root, target);
+    if (!relative || relative === ".." || relative.startsWith(`..${path.sep}`) || path.isAbsolute(relative)) {
+      throw new Error("memory4_disclosure_path_invalid");
+    }
+    const assertNoSymlink = () => {
+      let checked = target;
+      while (checked !== root) {
+        if (!checked.startsWith(`${root}${path.sep}`)) throw new Error("memory4_disclosure_path_invalid");
+        if (fs.existsSync(checked) && fs.lstatSync(checked).isSymbolicLink()) throw new Error("memory4_symlink_path");
+        checked = path.dirname(checked);
+      }
+    };
+    assertNoSymlink();
+    fs.mkdirSync(target, { recursive: true });
+    assertNoSymlink();
+    const indexPath = path.join(target, "index.json");
+    const metadataPath = path.join(target, "metadata.json");
+    if (fs.existsSync(indexPath) || fs.existsSync(metadataPath) || fs.existsSync(path.join(target, "entries"))) {
+      this.loadIndex(scope);
+      return target;
+    }
+    const index = { campaignToken: scope.campaignToken, ownerId: scope.ownerId, revision: 0, entries: {}, finalizations: {},
+      ...Object.fromEntries(INDEX_KEYS.map(key => [key, {}])) };
+    const metadata = { memory4SchemaVersion: 1, campaignToken: scope.campaignToken, ownerId: scope.ownerId,
+      revision: 0, indexHash: hash(index), knownEvidenceRevisions: {} };
+    const known = { campaignToken: scope.campaignToken, ownerId: scope.ownerId, revision: 0, entities: {} };
+    this.store.withSummaryMutation(null, () => {
+      this.store.writeJson(path.join(target, "known-entities.json"), known);
+      this.store.writeJson(metadataPath, metadata);
+      this.store.writeJson(indexPath, index);
+    });
+    return target;
   }
 
   assertPersistedScope(scope) {
@@ -374,6 +455,274 @@ class Memory4Store {
     }
     return { ...entity, status: entity.directConversationCount > 0 ? "DIRECT_INTERACTION" : entity.sharedSceneCount > 0 ? "SHARED_SCENE" : "MENTION_ONLY",
       completeness: evidenceCompleteness(Object.values(entity.evidenceByConversation || {})) };
+  }
+
+  readKnownEntities(scope, readContext = null) {
+    assertScope(scope);
+    if (readContext && (readContext.scope?.campaignToken !== scope.campaignToken || readContext.scope?.ownerId !== scope.ownerId)) {
+      throw new Error("memory4_profile_scope_mismatch");
+    }
+    if (!readContext) this.loadIndex(scope);
+    const known = readContext && Object.hasOwn(readContext, "known")
+      ? readContext.known : this.read(path.join(this.directory(scope), "known-entities.json"), null);
+    if (known && (known.campaignToken !== scope.campaignToken || known.ownerId !== scope.ownerId
+      || !known.entities || typeof known.entities !== "object" || Array.isArray(known.entities))) {
+      throw new Error("memory4_known_index_invalid");
+    }
+    return known || { ...scope, revision: 0, entities: {} };
+  }
+
+  getDisclosedFacts(scope, entityId, { readContext = null } = {}) {
+    assertScope(scope);
+    const targetId = ids([entityId])[0];
+    if (!targetId || targetId === scope.ownerId) throw new Error("memory4_profile_entity_invalid");
+    const known = this.readKnownEntities(scope, readContext);
+    const facts = known.entities[String(targetId)]?.disclosedFacts;
+    if (facts && (typeof facts !== "object" || Array.isArray(facts))) throw new Error("memory4_disclosure_index_invalid");
+    return Object.entries(facts || {}).map(([factId, fact]) => {
+      const proofs = Object.entries(fact?.evidenceBySource || {});
+      if (!fact || !DISCLOSURE_STATUSES.has(fact.status) || !["TITLE", "TRAIT"].includes(fact.factType)
+        || typeof fact.factKey !== "string" || !fact.factKey || typeof fact.value !== "string" || !fact.value.trim()
+        || fact.factId !== factId || fact.factId !== disclosureFactId(scope, targetId, fact.factType, fact.factKey)
+        || ids(fact.knownBy).join() !== String(scope.ownerId)
+        || !Number.isSafeInteger(fact.revision) || fact.revision < 1
+        || !fact.evidenceBySource || typeof fact.evidenceBySource !== "object" || Array.isArray(fact.evidenceBySource)
+        || fact.status === "AUTO_DISCLOSED" && !proofs.length
+        || [fact.firstAcquiredDate, fact.lastConfirmedDate, fact.manualMarkedDate].some(date => date != null && !gameDate(date))
+        || fact.status !== "AUTO_DISCLOSED" && !gameDate(fact.manualMarkedDate)
+        || fact.status === "MANUAL_HIDDEN" && (fact.tombstone?.status !== "MANUAL_HIDDEN" || !gameDate(fact.tombstone.markedDate))) {
+        throw new Error("memory4_disclosure_index_invalid");
+      }
+      for (const [sourceKey, proof] of proofs) {
+        const conversation = proof?.sourceKind === "CONVERSATION";
+        const letter = proof?.sourceKind === "LETTER";
+        const sourceId = proof?.sourceId;
+        if ((!conversation && !letter) || typeof sourceId !== "string" || !sourceId
+          || sourceKey !== hash([proof.sourceKind, sourceId]) || !/^[a-f0-9]{64}$/.test(proof.sourceRevision || "")
+          || !gameDate(proof.acquiredDate) || ids(proof.knownBy).join() !== String(scope.ownerId)
+          || !Array.isArray(proof.sourceFragmentIds) || !proof.sourceFragmentIds.length
+          || proof.sourceFragmentIds.some(id => typeof id !== "string" || !id)
+          || !Array.isArray(proof.sourceTextHashes) || !proof.sourceTextHashes.length
+          || proof.sourceTextHashes.some(value => !/^[a-f0-9]{64}$/.test(value))
+          || !Array.isArray(proof.visibilityEvidence) || !proof.visibilityEvidence.length
+          || conversation && (proof.sourceFinalizationId !== sourceId || typeof proof.sourceConversationId !== "string"
+            || !proof.sourceConversationId || !Array.isArray(proof.sourceMessageIds) || !proof.sourceMessageIds.length
+            || proof.sourceMessageIds.some(id => !Number.isSafeInteger(id) || id < 0)
+            || proof.visibilityEvidence.some(value => !["application_fragment", "finalization_validated_segment"].includes(value)))
+          || letter && (proof.sourceLetterId !== sourceId || proof.recipientId !== scope.ownerId
+            || !Number.isSafeInteger(proof.senderId) || proof.senderId <= 0 || proof.senderId === scope.ownerId
+            || !Array.isArray(proof.sourceMessageIds) || proof.sourceMessageIds.length !== 0
+            || proof.visibilityEvidence.length !== 1 || proof.visibilityEvidence[0] !== "validated_letter")) {
+          throw new Error("memory4_disclosure_proof_invalid");
+        }
+      }
+      return JSON.parse(JSON.stringify(fact));
+    });
+  }
+
+  getCurrentDisclosures(scope, entityId, gameData, { readContext = null, currentGameDate = null } = {}) {
+    assertScope(scope);
+    const records = this.getDisclosedFacts(scope, entityId, { readContext });
+    if (gameData != null && (gameData.campaignToken !== scope.campaignToken || !normalizeGameDate(gameData.date))) {
+      throw new Error("memory4_disclosure_current_scope_invalid");
+    }
+    const asOf = gameData == null ? normalizeGameDate(currentGameDate) : normalizeGameDate(gameData.date);
+    if (!asOf) return [];
+    const metadata = readContext ? readContext.metadata : this.read(path.join(this.directory(scope), "metadata.json"), null);
+    if (gameData == null) return records.map(record => {
+      const effective = effectiveDisclosure(record, asOf.canonical, scope.ownerId, metadata);
+      return { ...scope, ...record, entityId, current: false, status: effective.status,
+        effectiveKnown: effective.effectiveKnown, firstAcquiredDate: effective.firstAcquiredDate,
+        lastConfirmedDate: effective.lastConfirmedDate, evidenceBySource: effective.evidenceBySource,
+        tombstone: effective.tombstone || null };
+    }).filter(record => record.status);
+    const characters = gameData.characters instanceof Map ? gameData.characters
+      : Array.isArray(gameData.characters) ? new Map(gameData.characters.map(character => [Number(character.id), character]))
+        : gameData.characters && typeof gameData.characters === "object"
+          ? new Map(Object.values(gameData.characters).map(character => [Number(character.id), character])) : new Map();
+    const character = characters.get(entityId) || characters.get(String(entityId))
+      || [...characters.values()].find(candidate => Number(candidate?.id) === entityId) || null;
+    if (!character || Number(character.id) !== entityId) return [];
+    const byId = new Map(records.map(record => [record.factId, record]));
+    return getFactCandidates(character).map(candidate => {
+      const factId = disclosureFactId(scope, entityId, candidate.factType, candidate.factKey);
+      const record = byId.get(factId) || null;
+      const effective = record ? effectiveDisclosure(record, gameData.date, scope.ownerId, metadata) : null;
+      return { ...scope, entityId, ...candidate, factId, current: true, status: effective?.status || null,
+        effectiveKnown: effective?.effectiveKnown || false, revision: record?.revision || 0,
+        firstAcquiredDate: effective?.firstAcquiredDate || null, lastConfirmedDate: effective?.lastConfirmedDate || null,
+        manualMarkedDate: effective?.status?.startsWith("MANUAL_") ? record.manualMarkedDate || null : null,
+        evidenceBySource: effective?.evidenceBySource || {}, tombstone: effective?.tombstone || null };
+    });
+  }
+
+  persistDisclosureState(scope, index, known, metadata) {
+    index.revision++;
+    known.revision = (Number.isSafeInteger(known.revision) ? known.revision : 0) + 1;
+    const now = new Date().toISOString();
+    const directory = this.directory(scope);
+    this.store.withSummaryMutation(null, () => {
+      this.store.writeJson(path.join(directory, "known-entities.json"), known);
+      this.store.writeJson(path.join(directory, "metadata.json"), { ...metadata, memory4SchemaVersion: 1,
+        campaignToken: scope.campaignToken, ownerId: scope.ownerId, revision: index.revision, indexHash: hash(index),
+        disclosureRevision: (Number(metadata.disclosureRevision) || 0) + 1, updatedAt: now });
+      this.store.writeJson(path.join(directory, "index.json"), index);
+    });
+    this.store.invalidateFolderSummaryCache([scope.ownerId]);
+  }
+
+  recordDisclosures(snapshot, disclosures) {
+    assertScope(snapshot);
+    const sourceKind = snapshot.sourceKind || "CONVERSATION";
+    if (!["LETTER", "CONVERSATION"].includes(sourceKind)) throw new Error("memory4_disclosure_source_invalid");
+    const sourceId = sourceKind === "LETTER" ? snapshot.letterId : snapshot.finalizationId;
+    const sourceRevision = String(snapshot.sourceRevision || "");
+    const acquiredDate = gameDate(snapshot.date);
+    if (!sourceId || !/^[a-f0-9]{64}$/.test(sourceRevision) || !acquiredDate || !Array.isArray(disclosures)) throw new Error("memory4_disclosure_source_invalid");
+    if (sourceKind === "CONVERSATION" && !snapshot.conversationId
+      || sourceKind === "LETTER" && (Number(snapshot.ownerId) !== Number(snapshot.recipientId) || !snapshot.senderId || !snapshot.recipientId)) {
+      throw new Error("memory4_disclosure_source_invalid");
+    }
+    const scope = { campaignToken: snapshot.campaignToken, ownerId: snapshot.ownerId };
+    const index = this.loadIndex(scope);
+    const directory = this.directory(scope);
+    const metadata = this.read(path.join(directory, "metadata.json"), null) || { campaignToken: scope.campaignToken,
+      ownerId: scope.ownerId, revision: index.revision, indexHash: hash(index), knownEvidenceRevisions: {} };
+    if (sourceKind === "CONVERSATION"
+      && metadata.knownEvidenceRevisions?.[hash([snapshot.conversationId, scope.ownerId])] !== sourceRevision) {
+      return { changed: false, count: 0, entityIds: [], stale: true };
+    }
+    const previous = this.readKnownEntities(scope);
+    const known = JSON.parse(JSON.stringify(previous));
+    known.disclosureSchemaVersion = 1;
+    const sourceKey = hash([sourceKind, sourceId]);
+    const incomingFactIds = new Set(disclosures.map(disclosure => disclosure?.factId).filter(value => typeof value === "string"));
+    let changed = false;
+    const touched = new Set();
+    for (const [entityKey, entity] of Object.entries(known.entities)) {
+      const facts = entity.disclosedFacts || {};
+      let entityChanged = false;
+      for (const [factId, fact] of Object.entries(facts)) {
+        const evidenceBySource = fact.evidenceBySource || {};
+        let evidenceChanged = false;
+        for (const [key, proof] of Object.entries(evidenceBySource)) {
+          const staleConversation = sourceKind === "CONVERSATION" && proof?.sourceKind === "CONVERSATION"
+            && proof.sourceConversationId === snapshot.conversationId
+            && (proof.sourceFinalizationId !== snapshot.finalizationId || proof.sourceRevision !== sourceRevision);
+          const staleSource = key === sourceKey && proof?.sourceRevision !== sourceRevision;
+          if (staleConversation || staleSource) {
+            delete evidenceBySource[key];
+            evidenceChanged = true;
+          }
+        }
+        if (!evidenceChanged) continue;
+        fact.revision = (Number(fact.revision) || 0) + 1;
+        if (fact.status === "AUTO_DISCLOSED" && !Object.keys(fact.evidenceBySource).length && !incomingFactIds.has(factId)) delete facts[factId];
+        entity.revision = (Number(entity.revision) || 0) + 1;
+        changed = true; entityChanged = true;
+      }
+      if (entity.disclosedFacts && !Object.keys(entity.disclosedFacts).length) delete entity.disclosedFacts;
+      if (entityChanged && entityKey) touched.add(Number(entityKey));
+    }
+    const characterRows = snapshot.disclosureCharacters instanceof Map ? [...snapshot.disclosureCharacters.values()]
+      : Array.isArray(snapshot.disclosureCharacters) ? snapshot.disclosureCharacters : [];
+    const characterMap = new Map(characterRows.map(character => [Number(character.id), character]));
+    for (const disclosure of disclosures) {
+      const entityId = Number(disclosure?.entityId);
+      if (!Number.isSafeInteger(entityId) || entityId <= 0 || entityId === scope.ownerId
+        || !["TITLE", "TRAIT"].includes(disclosure.factType) || typeof disclosure.factKey !== "string"
+        || typeof disclosure.value !== "string" || !disclosure.value.trim()
+        || disclosure.factId !== disclosureFactId(scope, entityId, disclosure.factType, disclosure.factKey)) {
+        throw new Error("memory4_disclosure_fact_invalid");
+      }
+      const current = getFactCandidates(characterMap.get(entityId)).find(candidate => candidate.factType === disclosure.factType
+        && candidate.factKey === disclosure.factKey && candidate.value === disclosure.value);
+      if (!current) throw new Error("memory4_disclosure_fact_not_current");
+      const evidence = disclosure.evidence || {};
+      const messageIds = Array.isArray(evidence.sourceMessageIds) ? evidence.sourceMessageIds : [];
+      const fragmentIds = Array.isArray(evidence.sourceFragmentIds) ? evidence.sourceFragmentIds : [];
+      const sourceTextHashes = Array.isArray(evidence.sourceTextHashes) ? evidence.sourceTextHashes : [];
+      const visibilityEvidence = Array.isArray(evidence.visibilityEvidence) ? evidence.visibilityEvidence : [];
+      if (sourceKind === "CONVERSATION" && (!messageIds.length || messageIds.some(id => !Number.isSafeInteger(id) || id < 0)
+        || !fragmentIds.length || !visibilityEvidence.some(value => ["application_fragment", "finalization_validated_segment"].includes(value)))
+        || sourceKind === "LETTER" && (!fragmentIds.length || visibilityEvidence.length !== 1 || visibilityEvidence[0] !== "validated_letter")) {
+        throw new Error("memory4_disclosure_proof_invalid");
+      }
+      if (fragmentIds.some(id => typeof id !== "string" || !id) || sourceTextHashes.some(value => !/^[a-f0-9]{64}$/.test(value))) {
+        throw new Error("memory4_disclosure_proof_invalid");
+      }
+      const sourceEvidence = { sourceKind, sourceId, sourceRevision,
+        sourceConversationId: sourceKind === "CONVERSATION" ? snapshot.conversationId : null,
+        sourceFinalizationId: sourceKind === "CONVERSATION" ? snapshot.finalizationId : null,
+        sourceLetterId: sourceKind === "LETTER" ? snapshot.letterId : null,
+        sourceMessageIds: [...new Set(messageIds)].sort((a, b) => a - b),
+        sourceFragmentIds: [...new Set(fragmentIds)].sort(), knownBy: [scope.ownerId], acquiredDate,
+        visibilityEvidence: [...new Set(visibilityEvidence)].sort(), sourceTextHashes: [...new Set(sourceTextHashes)].sort(),
+        ...(sourceKind === "LETTER" ? { senderId: snapshot.senderId, recipientId: snapshot.recipientId } : {}) };
+      const entityKey = String(entityId);
+      const entity = known.entities[entityKey] || { entityId, evidenceTypes: [], directConversationCount: 0, sharedSceneCount: 0,
+        mentionCount: 0, firstSeenDate: null, lastSeenDate: null, sourceEpisodeIds: [], sourceConversationIds: [],
+        evidenceByConversation: {}, completeness: "partial", revision: 0 };
+      const facts = entity.disclosedFacts || (entity.disclosedFacts = {});
+      const previousFact = facts[disclosure.factId];
+      const next = { ...(previousFact || {}), factId: disclosure.factId, factType: disclosure.factType,
+        factKey: disclosure.factKey, value: disclosure.value,
+        status: previousFact?.status === "MANUAL_KNOWN" || previousFact?.status === "MANUAL_HIDDEN" ? previousFact.status : "AUTO_DISCLOSED",
+        firstAcquiredDate: previousFact?.firstAcquiredDate || acquiredDate,
+        lastConfirmedDate: latestDate(previousFact?.lastConfirmedDate, acquiredDate), knownBy: [scope.ownerId],
+        evidenceBySource: { ...(previousFact?.evidenceBySource || {}) }, tombstone: previousFact?.tombstone || null };
+      const priorProof = next.evidenceBySource[sourceKey];
+      const proofChanged = JSON.stringify(priorProof || null) !== JSON.stringify(sourceEvidence);
+      const factChanged = !previousFact || previousFact.factType !== next.factType || previousFact.factKey !== next.factKey
+        || previousFact.value !== next.value || previousFact.status !== next.status || proofChanged
+        || previousFact.lastConfirmedDate !== next.lastConfirmedDate;
+      if (!factChanged) continue;
+      next.evidenceBySource[sourceKey] = sourceEvidence;
+      next.revision = (Number(previousFact?.revision) || 0) + 1;
+      if (next.status === "MANUAL_HIDDEN") next.tombstone = previousFact.tombstone || { status: "MANUAL_HIDDEN", markedDate: previousFact.manualMarkedDate || acquiredDate };
+      else if (next.status !== "MANUAL_HIDDEN") next.tombstone = null;
+      facts[disclosure.factId] = next;
+      entity.revision = (Number(entity.revision) || 0) + 1;
+      known.entities[entityKey] = entity;
+      touched.add(entityId);
+      changed = true;
+    }
+    if (changed) this.persistDisclosureState(scope, index, known, metadata);
+    return { changed, count: disclosures.length, entityIds: [...touched].filter(Number.isSafeInteger).sort((a, b) => a - b) };
+  }
+
+  updateManualDisclosure(scope, entityId, fact, status, date, expectedRevision) {
+    assertScope(scope);
+    if (ids([entityId]).length !== 1 || entityId === scope.ownerId || !["MANUAL_KNOWN", "MANUAL_HIDDEN"].includes(status)
+      || !Number.isSafeInteger(expectedRevision) || expectedRevision < 0 || !gameDate(date)) throw new Error("memory4_disclosure_manual_invalid");
+    const candidate = getFactCandidates({ facts: [fact] })[0];
+    if (!candidate || candidate.factType !== fact.factType || candidate.factKey !== fact.factKey || candidate.value !== fact.value) {
+      throw new Error("memory4_disclosure_fact_invalid");
+    }
+    const factId = disclosureFactId(scope, entityId, candidate.factType, candidate.factKey);
+    const index = this.loadIndex(scope);
+    const directory = this.directory(scope);
+    const metadata = this.read(path.join(directory, "metadata.json"), null) || { campaignToken: scope.campaignToken,
+      ownerId: scope.ownerId, revision: index.revision, indexHash: hash(index), knownEvidenceRevisions: {} };
+    const known = this.readKnownEntities(scope);
+    const entityKey = String(entityId);
+    const entity = known.entities[entityKey] || { entityId, evidenceTypes: [], directConversationCount: 0, sharedSceneCount: 0,
+      mentionCount: 0, firstSeenDate: null, lastSeenDate: null, sourceEpisodeIds: [], sourceConversationIds: [],
+      evidenceByConversation: {}, completeness: "partial", revision: 0 };
+    const facts = entity.disclosedFacts || (entity.disclosedFacts = {});
+    const previous = facts[factId];
+    if ((Number(previous?.revision) || 0) !== expectedRevision) throw new Error("memory4_disclosure_revision_stale");
+    const nextRevision = expectedRevision + 1;
+    const next = { ...(previous || {}), factId, factType: candidate.factType, factKey: candidate.factKey, value: candidate.value,
+      status, revision: nextRevision, firstAcquiredDate: previous?.firstAcquiredDate || (status === "MANUAL_KNOWN" ? gameDate(date) : null),
+      lastConfirmedDate: previous?.lastConfirmedDate || null, manualMarkedDate: gameDate(date), knownBy: [scope.ownerId],
+      evidenceBySource: { ...(previous?.evidenceBySource || {}) }, tombstone: status === "MANUAL_HIDDEN"
+        ? { status, markedDate: gameDate(date), revision: nextRevision } : null };
+    facts[factId] = next;
+    entity.revision = (Number(entity.revision) || 0) + 1;
+    known.entities[entityKey] = entity;
+    this.persistDisclosureState(scope, index, known, metadata);
+    return { ...next, effectiveKnown: status === "MANUAL_KNOWN", current: true };
   }
 
   query(scope, filters = {}) {

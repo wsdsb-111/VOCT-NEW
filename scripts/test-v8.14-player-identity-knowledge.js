@@ -75,7 +75,8 @@ function guard(result) {
   if (["v813", "glm_cache_v2"].includes(layout)) assert.strictEqual(entry.block.lifecycle, "DYNAMIC");
   assert.match(entry.content, /后台标签，不构成本角色已经知道玩家身份的证据/);
   assert.match(entry.content, /当前回合开始交谈、同场、好感数值/);
-  assert.match(entry.content, /只授予来源明确给出的那项姓名、称号或身份/);
+  assert.match(entry.content, /只授予来源明确给出的那项姓名或身份/);
+  assert.match(entry.content, /称号（Nickname）默认可见.*不授予真名、精确头衔或官职/);
   assert.match(entry.content, /不得据此解锁整包玩家资料/);
   return entry.content;
 }
@@ -134,7 +135,8 @@ check("runtime blood kinship remains legitimate without memory entries", () => {
   sample.player.children = [{ id: 2, name: sample.npc.fullName, gender: "male" }];
   const result = build(sample);
   assert.match(guard(result), /身份识别关系证据：父亲/);
-  assert(result.messages.some(message => message.content.includes("父亲：河间公张三")));
+  assert(result.messages.some(message => message.content.includes("父亲：张三")));
+  assert(!result.messages.some(message => message.content.includes("父亲：河间公张三")), "kinship must not automatically disclose an exact title");
 });
 check("authorized prior memory and public identity remain available without blanket stranger claims", () => {
   const sample = fixture();
@@ -173,7 +175,7 @@ check("old cached dossiers and custom layouts retain a fresh knowledge guard", (
   memory.stableDescriptionCache.set("2", "Old cached player identity: 河间公张三; 河间公");
   const result = build(sample, undefined, memory);
   assert(!result.messages.some(message => message.content === memory.stableDescriptionCache.get("2")), "pre-Trait-routing cached dossiers must not bypass the scoped view");
-  assert([...memory.stableDescriptionCache.keys()].some(key => key.startsWith("v8.14.1:")), "fresh descriptions use the scoped cache namespace");
+  assert([...memory.stableDescriptionCache.keys()].some(key => key.startsWith("v8.14.2:")), "fresh descriptions use the scoped disclosure cache namespace");
   assert.match(guard(result), /身份识别关系证据：未提供/);
   layout = "v813";
   historyEnabled = false;

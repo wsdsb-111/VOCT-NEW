@@ -1,5 +1,7 @@
 "use strict";
 
+const { normalizeGameDate } = require("../worldline/character-temporal-facts");
+
 function createLetterManager({ settingsRepository, fs, path, TailFile, readline, parseLog, letterPromptBuilder, llmManager, PromptBuilder, TokenCounter, memoryEngine, dataDir, letterEffectTransport = null, runFileManager = null, scanRunAcksForPendingCommands = null, autoStartLogTailing = true, sleep = (milliseconds) => new Promise((resolve) => setTimeout(resolve, milliseconds)), letterPayloadRetryDelays = [100, 200, 350, 600, 1e3], dateHeartbeatIntervalMs = 5e3, dateStaleMs = 2e4, dateScanBytes = 1024 * 1024, diagnosticExecutionTimeoutMs = 15e3, runCommandAckTimeoutMs = 3e4, runCommandWatchdogIntervalMs = 5e3, setIntervalFn = setInterval, clearIntervalFn = clearInterval, setRunCommandIntervalFn = setInterval, clearRunCommandIntervalFn = clearInterval }) {
   const fs$1 = fs;
   const readline$1 = readline;
@@ -670,12 +672,16 @@ else = {
         const samePayload = pendingLetter && pendingLetter.letter.totalDays === letter.totalDays && pendingLetter.letter.delay === letter.delay && pendingLetter.letter.content === letter.content;
         console.warn(`LetterManager: Ignored ${samePayload ? "duplicate" : "conflicting"} payload for pending ${letter.letterId}`);
         if (samePayload) {
+          const disclosureBinding = this.buildLetterDisclosureBinding(gameData, letter);
+          if (disclosureBinding) await this.recordLetterDisclosure(gameData, letter, gameData.playerID, gameData.aiID, letter.content);
           this.attachPipelineToLetter(letter.letterId);
           this.latestPipelineStatus.state = this.getLetterStatus(letter.letterId)?.pipelineState || LetterPipelineState.PENDING_DELIVERY;
         }
         return samePayload ? pendingLetter.reply : null;
       }
       if (this.getLetterStatus(letter.letterId)?.responseStatus === LetterResponseStatus.GENERATING && this.failedLetterContexts.has(letter.letterId)) return null;
+      const disclosureBinding = this.buildLetterDisclosureBinding(gameData, letter);
+      if (disclosureBinding) await this.recordLetterDisclosure(gameData, letter, gameData.playerID, gameData.aiID, letter.content);
       const deliveryTiming = await this.resolveDeliveryTiming(letter);
       const characterName = gameData.getAi()?.fullName || "Unknown";
       this.createLetterStatus(letter, characterName, deliveryTiming);
@@ -700,7 +706,7 @@ else = {
         });
         return null;
       }
-      this.failedLetterContexts.set(letter.letterId, { letter, messages, characterName, promptMode, deliveryTiming });
+      this.failedLetterContexts.set(letter.letterId, { letter, messages, characterName, promptMode, deliveryTiming, disclosureBinding });
       this.updateLetterStatus(letter.letterId, { promptMode, promptBuildError });
       this.transitionPipeline(LetterPipelineState.PROMPT_READY, { promptMode, promptBuildError });
       let reply = null;
@@ -739,6 +745,7 @@ else = {
         reply,
         expectedDeliveryDay,
         characterName,
+        disclosureBinding,
         ...deliveryTiming
       };
       this.storedLetters.set(letter.letterId, storedLetter);
@@ -760,6 +767,67 @@ else = {
       }
       await this.generateSummary(gameData, letter, reply);
       return reply;
+    }
+    buildLetterDisclosureBinding(gameData, letter) {
+      const campaignToken = typeof gameData?.campaignToken === "string" ? gameData.campaignToken.trim() : "";
+      const playerId = Number(gameData?.playerID);
+      const aiId = Number(gameData?.aiID);
+      const totalDays = Number(gameData?.totalDays);
+      const sourceDate = normalizeGameDate(gameData?.date);
+      if (!campaignToken || !sourceDate
+        || !Number.isSafeInteger(playerId) || playerId <= 0 || !Number.isSafeInteger(aiId) || aiId <= 0 || playerId === aiId
+        || !Number.isSafeInteger(totalDays) || totalDays < 0 || !Number.isSafeInteger(letter?.totalDays)
+        || letter.totalDays > totalDays || !gameData.characters?.has?.(playerId) || !gameData.characters?.has?.(aiId)) return null;
+      return { campaignToken, playerId, aiId, sourceDate: sourceDate.canonical, sourceTotalDays: totalDays };
+    }
+    async recordLetterDisclosure(gameData, letter, senderId, recipientId, text) {
+      const coordinator = memoryEngine?.memory4;
+      if (typeof coordinator?.recordLetterDisclosures !== "function") return null;
+      const binding = this.buildLetterDisclosureBinding(gameData, letter);
+      const sender = Number(senderId);
+      const recipient = Number(recipientId);
+      const isPlayerNpcExchange = sender === binding?.playerId && recipient === binding?.aiId
+        || sender === binding?.aiId && recipient === binding?.playerId;
+      if (!binding || !isPlayerNpcExchange) return null;
+      try {
+        return await coordinator.recordLetterDisclosures({
+          campaignToken: binding.campaignToken,
+          date: gameData.date,
+          ownerId: recipient,
+          senderId: sender,
+          recipientId: recipient,
+          letterId: letter.letterId,
+          text,
+          characters: gameData.characters
+        });
+      } catch (error) {
+        console.warn(`LetterManager: Memory4 letter disclosure skipped (${error instanceof Error ? error.message : "unknown_error"})`);
+        return null;
+      }
+    }
+    async recordAcceptedLetterDisclosure(storedLetter) {
+      const binding = storedLetter?.disclosureBinding;
+      const debugLogPath = settingsRepository.getCK3DebugLogPath();
+      if (!binding || !debugLogPath) return null;
+      try {
+        const gameData = await parseLog(debugLogPath);
+        const validation = this.validateLetterPayload(gameData?.letterData);
+        const currentBinding = this.buildLetterDisclosureBinding(gameData, validation.valid ? validation.letter : null);
+        const sourceDate = normalizeGameDate(binding.sourceDate);
+        const acceptedDate = normalizeGameDate(gameData?.date);
+        if (!currentBinding || !validation.valid || currentBinding.campaignToken !== binding.campaignToken
+          || currentBinding.playerId !== binding.playerId || currentBinding.aiId !== binding.aiId
+          || !sourceDate || !acceptedDate || acceptedDate.serial < sourceDate.serial
+          || validation.letter.letterId !== storedLetter.letter.letterId
+          || validation.letter.content !== storedLetter.letter.content
+          || validation.letter.totalDays !== storedLetter.letter.totalDays || validation.letter.delay !== storedLetter.letter.delay
+          || currentBinding.sourceTotalDays < Number(storedLetter.expectedDeliveryDay)
+          || currentBinding.sourceTotalDays < binding.sourceTotalDays) return null;
+        return await this.recordLetterDisclosure(gameData, validation.letter, currentBinding.aiId, currentBinding.playerId, storedLetter.reply);
+      } catch (error) {
+        console.warn(`LetterManager: Accepted letter disclosure skipped (${error instanceof Error ? error.message : "unknown_error"})`);
+        return null;
+      }
     }
     validateLetterPayload(letter) {
       const rawTotalDays = letter?.totalDays;
@@ -866,7 +934,7 @@ else = {
         const deliveryTiming = context.deliveryTiming || await this.resolveDeliveryTiming(context.letter);
         const expectedDeliveryDay = deliveryTiming.expectedDeliveryDay;
         const effectiveCurrentDay = this.getEffectiveDeliveryCurrentDay(deliveryTiming);
-        const storedLetter = { letter: context.letter, reply, expectedDeliveryDay, characterName: context.characterName, ...deliveryTiming };
+        const storedLetter = { letter: context.letter, reply, expectedDeliveryDay, characterName: context.characterName, disclosureBinding: context.disclosureBinding || null, ...deliveryTiming };
         this.storedLetters.set(normalizedLetterId, storedLetter);
         this.failedLetterContexts.delete(normalizedLetterId);
         this.updateLetterStatus(normalizedLetterId, {
@@ -1231,7 +1299,8 @@ ${"  \t"}modifier = artifact_monthly_minor_prestige_1_modifier
             letter: validation.letter,
             messages: failedContext.messages,
             characterName: failedContext.characterName || "Unknown",
-            promptMode: failedContext.promptMode || "official_votc_2.0.3"
+            promptMode: failedContext.promptMode || "official_votc_2.0.3",
+            disclosureBinding: failedContext.disclosureBinding || null
           });
           if (failedContext.status) this.letterStatuses.set(letterId, failedContext.status);
           else {
@@ -1282,6 +1351,9 @@ ${"  \t"}modifier = artifact_monthly_minor_prestige_1_modifier
       }
       const acceptedLetterId = this.awaitingAcceptanceLetterId;
       const acceptedStatus = acceptedLetterId ? this.getLetterStatus(acceptedLetterId) : null;
+      const acceptedLetter = acceptedLetterId ? this.storedLetters.get(acceptedLetterId) : null;
+      const acceptedEffectWritten = acceptedStatus?.responseStatus === LetterResponseStatus.EFFECT_FILE_WRITTEN
+        && Number.isFinite(Number(acceptedStatus.effectFileWrittenAt)) && Number(acceptedStatus.effectFileWrittenAt) > 0;
       const acceptedTransportMode = acceptedStatus?.effectTransportMode || LetterEffectTransportMode.VOTC;
       const clearResult = letterEffectTransport.clearOutboundEffect(acceptedTransportMode);
       if (!clearResult.success) console.warn(`LetterManager.clearLettersFile: ${clearResult.error}`);
@@ -1304,6 +1376,7 @@ ${"  \t"}modifier = artifact_monthly_minor_prestige_1_modifier
         this.transitionLetter(acceptedLetterId, LetterPipelineState.DELIVERED);
         this.storedLetters.delete(acceptedLetterId);
         this.savePendingLetters();
+        if (acceptedEffectWritten && acceptedLetter) await this.recordAcceptedLetterDisclosure(acceptedLetter);
       }
       this.syncDateTrackerSupervisor();
       await this.checkAndDeliverLetters();

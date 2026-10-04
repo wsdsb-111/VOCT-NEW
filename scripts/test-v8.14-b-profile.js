@@ -21,7 +21,8 @@ const index = { revision: 1, byEntity: { "2": ["m4_known"] }, entries: { m4_know
 const known = { status: "UNKNOWN", reason: "INSUFFICIENT_EVIDENCE", completeness: "partial" };
 const store = {
   loadIndex: () => index,
-  getKnownEntityEvidence: () => known
+  getKnownEntityEvidence: () => known,
+  getCurrentDisclosures: () => []
 };
 const profileService = new Memory4ProfileService(store);
 const snapshot = { campaignToken: "campaign-A", gameDate: "1164.1.1", characters: {

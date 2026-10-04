@@ -6,9 +6,9 @@ Voices of the Court 是一个面向《Crusader Kings III》（CK3）的沉浸式
 
 ## 主要功能
 
-V8.14.1 最新进度见[前端内容同步报告](docs/v8.14.1-frontend-content-update-implementation-report.md)：记忆总览、优化、世界书、官方追忆和诊断文案已更新，底部区分 V8.14.1 功能版本与 App 包版本；Memory Engine 4.0 可见名称不改变 3.0 协议和 2.5 存储兼容。Manifest 为 416 个分类测试文件、347 个发布组、68 个历史归档，最终验证以报告为准。[前次实机事故热修](docs/v8.14.1-runtime-incident-hotfix-report.md)保留用户确认的首次对话/本次特质 PASS、信件 NOT TESTED 以及 346 组历史证据；新兼容/记忆热修、真实 Provider、完整信件与 Soak 仍待用户实测，不是 Freeze。
+V8.14.2 最新进度见[Owner-scoped Disclosure 实施报告](docs/v8.14.2-owner-scoped-disclosure-implementation-report.md)：对话 Finalization 与合规信件来源中的明确头衔/特质披露按 Campaign × Owner × Entity × Fact 隔离，在下一场生效；人物认知 UI 支持逐项手动已知/未知，当前 CK3 真值仍约束展示。当前清单为 421 个分类测试文件、352 个发布组、68 个历史归档；完整发布门禁 352/352、独立 QA 31 PASS/0 FAIL，隔离 UI Smoke 34 张截图与 startup smoke 36/36 通过。用户确认 V8.14.1 完整信件往返实机 PASS；前次热修报告的 `NOT TESTED` 保留为历史快照。V8.14.2 的 CK3 Disclosure、Provider、cacheTelemetry 和 Soak 仍待用户 Gate，不是 Full Freeze。
 
-V8.14 / Memory Engine 4.0 的 [A 核心生产接线](docs/v8.14-a-durable-core-implementation-report.md)、[Finalization 可见性收口](docs/v8.14-a-finalization-visibility-closeout-report.md)、[B Profile/关系回读](docs/v8.14-b-profile-implementation-report.md)、[C Recall Planner](docs/v8.14-c-recall-planner-implementation-report.md) 与 [D/E Year/Life 和长期记忆管理](docs/v8.14-de-year-life-management-implementation-report.md) 保留各阶段当时的实现证据。当前身份、Trait、信件、Presence 和 Memory4 收口以 V8.14.1 报告为准；GLM 缓存调优延期至 V8.14.2。较早阶段由 GPT-6.1 Sol 完成的实现仍按历史记录保留，当前文档/复核使用 GPT-6 Luna Max。
+V8.14 / Memory Engine 4.0 的 [A 核心生产接线](docs/v8.14-a-durable-core-implementation-report.md)、[Finalization 可见性收口](docs/v8.14-a-finalization-visibility-closeout-report.md)、[B Profile/关系回读](docs/v8.14-b-profile-implementation-report.md)、[C Recall Planner](docs/v8.14-c-recall-planner-implementation-report.md) 与 [D/E Year/Life 和长期记忆管理](docs/v8.14-de-year-life-management-implementation-report.md) 保留各阶段当时的实现证据。V8.14.1 用户侧既有确认与 V8.14.2 Disclosure 的实现/验证边界见各自报告；协议 3.0、摘要 2.5 与 App 包 2.0.4 合同继续保持。
 
 - **CK3 角色扮演对话**：根据角色的性格、头衔、关系、财富、信仰、处境和当前场景生成回复。
 - **Historical Baseline 2.0**：从游戏日期提取年份，以 V8 结构化时期、事件和人物数据生成与 v7.10.1 字节等价的唐、五代十国、北宋、南宋和元初历史背景；Temporal Knowledge Gate 在 v8.0 仅以 shadow/pure logic 运行。
@@ -243,18 +243,18 @@ V7.7 在 V7.6 健康化基础上分阶段拆分主进程：第一阶段将六种
 node scripts\test-release.js
 ```
 
-清单会覆盖全部 `test-*.js`。当前分类为 416 个测试文件、347 个发布组和 68 个归档检查；已退役的 V8.3/V8.3.1 Shadow Resolver、Ground Truth 与诊断面板测试不再作为发布路径。V8.8.2 门禁继续覆盖历史基线、Campaign/Worldline、Definition-ID 双向唯一绑定、第三方亲属 Anchor、长幼/出生日歧义、性别冲突、关系类型限定、已故配偶方向、已故前配偶隔离、配偶三状态 Intent、生产 revision invariant、人口属性缓存失效、来源完整性和冻结边界；既有 Run Command Recovery T1–T18、Memory、Conversation、Action、Letter、Relationship、Date Producer 与缓存回归继续执行。历史归档检查不计入发布组，个别旧合同断言可能不再适用于当前生产合同。
+清单会覆盖全部 `test-*.js`。当前分类为 421 个测试文件、352 个发布组和 68 个归档检查；最终 V8.14.2 门禁结果以 [实施报告](docs/v8.14.2-owner-scoped-disclosure-implementation-report.md) 为准。已退役的 V8.3/V8.3.1 Shadow Resolver、Ground Truth 与诊断面板测试不再作为发布路径。V8.8.2 门禁继续覆盖历史基线、Campaign/Worldline、Definition-ID 双向唯一绑定、第三方亲属 Anchor、长幼/出生日歧义、性别冲突、关系类型限定、已故配偶方向、已故前配偶隔离、配偶三状态 Intent、生产 revision invariant、人口属性缓存失效、来源完整性和冻结边界；既有 Run Command Recovery T1–T18、Memory、Conversation、Action、Letter、Relationship、Date Producer 与缓存回归继续执行。历史归档检查不计入发布组，个别旧合同断言可能不再适用于当前生产合同。
 
 ## 版本信息
 
 - 外挂 UI 版本：v2.0.4
-- 当前应用功能基线：V8.8.2 Worldline Definition-ID、第三方亲属关系 Anchor、长幼与出生日歧义、关系类型限定、配偶三状态查询、已故前配偶隔离、生产/运行时缓存失效、结构化关系事实、按需完整性扫描与游牧/骑士/水墨三主题整块背景已完成；Stage 8 真实 CK3/Provider/长时 Electron Gate、三主题人工视觉与 Stage 9 Final Freeze 尚未完成
+- 当前应用功能基线：V8.14.2 Owner-scoped Disclosure 已接入 Memory4 Owner/Campaign/Profile 与对话/信件来源门禁；完整发布 352/352、独立 QA 31 PASS/0 FAIL 与隔离 UI Smoke 通过。CK3 Disclosure、Provider、Cache Telemetry 与 Soak 仍待用户 Gate，不签发 Full Freeze
 - CK3 模组版本：Voices of the Court 2.0.5
 - 模组支持版本：CK3 1.18.*
 - UI 主题：宫廷编年史风格（深红、暗金、羊皮纸文本层级）
 - UI 主题切换：游牧、骑士纹章、水墨画卷三套完整历史风格；分别使用 `image/草原游牧.png`、`image/中世纪骑士.png`、`image/中国古典.png` 作为整块界面背景，并保留各自的边框结构、按钮造型、消息卡片、输入框、字体和滚动条，主题选择可自动保存
 - UI 素材生成提示词：参见 [docs/UI_ASSET_PROMPTS_2.0.3.md](docs/UI_ASSET_PROMPTS_2.0.3.md)
-- 当前重点：执行 V8.12 Part 3 的 CK3 官方追忆 UI 对照、多人长对话与真实 GLM 缓存 Gate；Official VOTC 2.0.3 Action 签名及 Memory Engine 2.5 存储合同保持兼容。
+- 当前重点：完成 V8.14.2 Disclosure 的真实 CK3 知情范围、Provider、GLM/DeepSeek cache telemetry 与 Soak Gate；Official VOTC 2.0.3 Action 签名、Memory Engine 3.0 协议、摘要 2.5 存储与 App 2.0.4 保持兼容。
 
 ## 已知限制
 
@@ -264,7 +264,7 @@ node scripts\test-release.js
 - Workshop 2.0.5 的存档 token 跨重启与不同新存档隔离仍需真实 CK3 保存/读档 Gate；旧模组不会持久化世界线，但现有对话仍可运行。
 - CK3 日志格式、角色头衔语言和本地化文本变化时，可能影响年份或皇帝识别。
 - DeepSeek 等服务商的上下文缓存由服务端管理，命中率会受到请求前缀、模型、账号隔离和缓存生命周期影响。
-- 人物摘要目录是 Memory Engine 3.0 UI 所展示的长期记忆数据，底层继续兼容 2.5 数据合同；清理或迁移前请先备份 `%APPDATA%/VOTC/votc_data/conversation_summaries`。
+- 人物摘要目录是 Memory Engine 4.0 可见界面所展示的长期记忆数据，底层继续兼容 `engineVersion: 3.0` 与摘要 2.5 数据合同；清理或迁移前请先备份 `%APPDATA%/VOTC/votc_data/conversation_summaries`。
 - 结构化记忆质量仍受摘要 Provider 的 JSON 遵循能力影响；新终局请求解析失败时会自动重试，连续失败则保留 recovery snapshot，旧恢复快照仍兼容自然语言回退。
 
 ## 文档入口

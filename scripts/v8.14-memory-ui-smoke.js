@@ -9,6 +9,8 @@ const os = require("os");
 const path = require("path");
 const { spawn } = require("child_process");
 const { createMemoryUiFixture } = require("./v8.14-memory-ui-fixture");
+const { disclosureFactId } = require("../resources/app/out/main/memory-system/memory4-disclosure");
+const { projectVisibleTranscript } = require("../resources/app/out/main/memory-system/memory4-visibility");
 const delay = ms => new Promise(resolve => setTimeout(resolve, ms));
 
 function hashDirectory(directory) {
@@ -67,6 +69,31 @@ async function connect(url, errors) {
 async function run() {
   const profile = fs.mkdtempSync(path.join(os.tmpdir(), "votc-e-packaged-ui-"));
   const fixture = await createMemoryUiFixture(profile);
+  const targetCharacter = fixture.characters.find(character => character.id === 1);
+  Object.assign(targetCharacter, { primaryTitle: "明王", nickname: "北地之虎", traits: [{ id: "bastard", name: "私生子" }] });
+  fixture.conversation.gameData.characters.set(targetCharacter.id, targetCharacter);
+  const disclosureText = "甲现在是明王。";
+  const disclosureContext = { ...fixture.scope, conversationId: "isolated-ui-conversation", finalizationId: "ui-smoke-disclosure-finalization",
+    episodeId: "ui-smoke-disclosure-episode", date: "1164.1.1", totalDays: 425000,
+    participants: [1, 2].map(id => ({ id })), participantPresence: [1, 2].map(characterId => ({ characterId, joinedAtMessageId: 0, leftAtMessageId: null })),
+    messages: [{ id: 93, role: "assistant", speakerCharacterId: 1, content: disclosureText,
+      memory4Fragments: [{ start: 0, end: disclosureText.length, visibility: "participants", sourceType: "spoken", recipientIds: [2], entityIds: [1, 2] }] }] };
+  const disclosureProjection = projectVisibleTranscript(disclosureContext, fixture.scope.ownerId);
+  fixture.engine.memory4.store.recordKnownEvidence({ ...disclosureContext, ...disclosureProjection, ownerId: fixture.scope.ownerId });
+  const disclosureSnapshot = { ...disclosureContext, ...disclosureProjection, ownerId: fixture.scope.ownerId,
+    sourceKind: "CONVERSATION", disclosureCharacters: fixture.characters };
+  const seededDisclosure = fixture.engine.memory4.store.recordDisclosures(disclosureSnapshot, [{
+    factId: disclosureFactId(fixture.scope, targetCharacter.id, "TITLE", "title_明王"), entityId: targetCharacter.id,
+    factType: "TITLE", factKey: "title_明王", value: "明王", evidence: {
+      sourceMessageIds: disclosureProjection.fragments.map(fragment => fragment.messageId),
+      sourceFragmentIds: disclosureProjection.fragments.map(fragment => fragment.fragmentId),
+      visibilityEvidence: disclosureProjection.fragments.map(fragment => fragment.visibilityEvidence),
+      sourceTextHashes: disclosureProjection.fragments.map(fragment => crypto.createHash("sha256").update(fragment.text).digest("hex"))
+    }
+  }]);
+  assert.equal(seededDisclosure.changed, true, "isolated fixture should seed one source-backed public fact");
+  fixture.engine.memory4.store.updateManualDisclosure({ campaignToken: fixture.archive.campaignToken, ownerId: fixture.archive.ownerId }, 1,
+    { factType: "TITLE", factKey: "title_明王", value: "明王" }, "MANUAL_KNOWN", "1160.6.1", 0);
   const archiveHashBefore = hashDirectory(fixture.archive.directory);
   const evidence = path.join(profile, "ui-evidence");
   fs.mkdirSync(evidence);
@@ -95,7 +122,9 @@ async function run() {
     main = await connect(endpoints.main, errors);
     await main.send("Runtime.enable");
     await main.send("Debugger.enable");
-    await main.evaluate("globalThis.__m4BlockedFetches=[];globalThis.fetch=async input=>{const url=String(input?.url||input);globalThis.__m4BlockedFetches.push(url);throw new Error('isolated_ui_network_blocked')}");
+    const blockerSetup = await main.send("Runtime.evaluate", { expression: "globalThis.__m4BlockedFetches=[];globalThis.fetch=async input=>{const url=String(input?.url||input);globalThis.__m4BlockedFetches.push(url);throw new Error('isolated_ui_network_blocked')};'network-blocker-installed'", returnByValue: true });
+    assert(!blockerSetup.exceptionDetails, JSON.stringify(blockerSetup.exceptionDetails));
+    assert.equal(blockerSetup.result?.value, "network-blocker-installed");
     console.log("Isolated main inspector ready");
     const origin = new URL(endpoints.browser).origin.replace("ws:", "http:");
     let target;
@@ -152,6 +181,11 @@ async function run() {
     await evaluate("[...document.querySelectorAll('.player-header')].find(e=>e.querySelector('.player-name')?.textContent.startsWith('乙')).click()");
     await waitFor("document.querySelector('.memory4-manager .memory4-entity')");
     console.log("Memory4 owner view ready");
+    await waitFor("document.querySelector('.memory4-manager .memory4-disclosures')");
+    const disclosureView = await evaluate("document.querySelector('.memory4-manager').textContent");
+    assert(disclosureView.includes("明王") && disclosureView.includes("对话公开") && disclosureView.includes("1164.1.1"),
+      "current profile should show the exact disclosed title, source and acquired date");
+    assert(disclosureView.includes("北地之虎") && disclosureView.includes("默认可见"), "nickname must stay visible without disclosure");
     const managerFor = ownerName => ownerName
       ? `([...document.querySelectorAll('.player-summary-group')].find(group=>group.querySelector('.player-name')?.textContent.startsWith(${JSON.stringify(ownerName)}))?.querySelector('.memory4-manager'))`
       : `document.querySelector('.memory4-manager')`;
@@ -197,6 +231,26 @@ async function run() {
       await setViewport(540, 900);
       await screenshot(`${theme}-narrow-known`);
     }
+    await setViewport(1280, 1000);
+    const titleHide = clickButton("设为未知");
+    await renderer.wait("Page.javascriptDialogOpening");
+    await renderer.send("Page.handleJavaScriptDialog", { accept: false });
+    await titleHide;
+    const afterCancelledHide = await evaluate(`conversationAPI.getMemory4OwnerData({ownerId:2}).then(data=>data.known.items.find(item=>item.entityId===1)?.disclosedFacts.find(fact=>fact.value==='明王'))`);
+    assert.equal(afterCancelledHide.status, "AUTO_DISCLOSED", "cancelled hide must leave the source-backed title untouched");
+    const openedTraitCandidates = await evaluate("(()=>{const e=[...document.querySelectorAll('.memory4-disclosures details')].find(node=>node.querySelector('summary')?.textContent.includes('当前特质候选'));e?.querySelector('summary').click();return !!e})()");
+    assert(openedTraitCandidates, "current trait candidates should be expandable");
+    await screenshot("ink-desktop-disclosure-source");
+    await setViewport(540, 900);
+    await screenshot("ink-narrow-disclosure-source");
+    await setViewport(1280, 1000);
+    await clickButton("设为已知");
+    await waitFor("document.querySelector('.memory4-manager').textContent.includes('手动标记')");
+    const manualFact = await evaluate(`conversationAPI.getMemory4OwnerData({ownerId:2}).then(data=>data.known.items.find(item=>item.entityId===1)?.disclosedFacts.find(fact=>fact.value==='私生子'))`);
+    assert.equal(manualFact.status, "MANUAL_KNOWN", "manual UI write should persist an owner-scoped known mark");
+    await screenshot("ink-desktop-disclosure-manual");
+    await setViewport(540, 900);
+    await screenshot("ink-narrow-disclosure-manual");
     await setViewport(1280, 1000);
     await clickTab("年度记忆");
     await evaluate("(()=>{const e=document.querySelector('.memory4-derived');if(!e.open)e.querySelector('summary').click();})()");
@@ -269,6 +323,11 @@ async function run() {
     const refreshEnabled = await evaluate(`${archiveManager}.querySelector('[aria-label="刷新人物记忆"]')?.disabled===false`);
     assert(refreshEnabled, "archive refresh remains available");
     assert.equal(await evaluate(`${archiveManager}.querySelectorAll('[role=tab]:not([disabled])').length`), 6, "archive tabs remain available");
+    await clickTab("人物认知", "丁");
+    await waitFor(`${archiveManager}?.textContent.includes('归档披露记录')`);
+    const archiveDisclosureView = await evaluate(`(()=>{const root=${archiveManager};return{text:root?.textContent||'',writeControls:root?.querySelectorAll('.memory4-disclosure-row button').length||0}})()`);
+    assert(archiveDisclosureView.text.includes("明王") && archiveDisclosureView.text.includes("当前状态未回读"), "archive disclosure should be visible without claiming current truth");
+    assert.equal(archiveDisclosureView.writeControls, 0, "archive disclosures must not expose mutation controls");
     await evaluate("document.documentElement.setAttribute('data-votc-theme','ink')");
     await setViewport(1280, 1000);
     await screenshot("ink-desktop-archive-readonly", archiveManager);
@@ -330,13 +389,14 @@ async function run() {
     const blockedFetchUrls = await main.evaluate("globalThis.__m4BlockedFetches");
     assert(blockedFetchUrls.every(url => url === "http://127.0.0.1:4315/v1/health"), `unexpected network request was blocked: ${JSON.stringify(blockedFetchUrls)}`);
     assert.deepStrictEqual(errors, [], "renderer/main exceptions");
-    assert.equal(screenshots.length, 30, "original 27 screens plus three archive screens");
+    assert.equal(screenshots.length, 34, "original 27 screens, four disclosure screens and three archive screens");
     fs.writeFileSync(path.join(evidence, "result.json"), JSON.stringify({ passed: true, themes: ["parchment", "knight", "ink"], desktop: [1280, 1000], narrow: [540, 900], baseScreenshotCount: 27,
+      disclosureScreenshotCount: 4,
       archiveScreenshotCount: 3, screenshotCount: screenshots.length, screenshots, providerRequests: 0, blockedNetworkFetches: blockedFetchUrls.length,
       blockedNetworkUrls: blockedFetchUrls, realCK3Gate: false, profile,
       archive: { ownerId: fixture.archive.ownerId, campaignToken: fixture.archive.campaignToken, readOnlyReasons: [archiveData.readOnlyReason, endedArchiveData.readOnlyReason],
         strictCurrentIsNullAfterDetach: detachedState.strictCurrentIsNull, sidecarHashBefore: archiveHashBefore, sidecarHashAfter: archiveHashAfter, rejectedWriteError: archiveWriteRequest.error || null },
-      checks: ["missing Campaign", "wrong Campaign", "strict owner data", "six views", "readonly Official", "source modal", "manual conflict preservation", "manual edit", "delete cancellation",
+      checks: ["missing Campaign", "wrong Campaign", "strict owner data", "six views", "readonly Official", "disclosure source/date/nickname", "manual disclosure write", "disclosure hide cancellation", "archive disclosure readonly", "source modal", "manual conflict preservation", "manual edit", "delete cancellation",
         "accepted Detail deletion", "existing binding preview cancellation", "nonoverlapping tool buttons", "no horizontal overflow", "same-campaign archive outside loaded roster", "loaded-campaign readonly banner",
         "archive refresh/tabs/source remain available", "archive year/life/detail mutation controls disabled", "manager detach leaves strict current null and read snapshot available",
         "archive IPC mutation rejected after manager detach", "archive sidecar hash unchanged", "ended-conversation banner, detail and source remain available",

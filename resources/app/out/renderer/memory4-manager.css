@@ -33,6 +33,13 @@
 .memory4-entity dl { display: grid; grid-template-columns: 90px minmax(0, 1fr) 90px minmax(0, 1fr); gap: 7px 12px; margin: 0 0 12px; font-size: 13px; }
 .memory4-entity dt { color: var(--memory4-muted); }
 .memory4-entity dd { margin: 0; overflow-wrap: anywhere; }
+.memory4-nickname { margin: 0 0 10px; }
+.memory4-disclosures { display: grid; gap: 8px; padding: 10px 0; border-top: 1px solid var(--memory4-line); }
+.memory4-disclosures h6 { margin: 0; font-size: 14px; }
+.memory4-disclosure-row { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 4px 12px; align-items: center; padding: 6px 0; border-bottom: 1px solid var(--memory4-line); }
+.memory4-disclosure-row strong, .memory4-disclosure-row .memory4-meta { min-width: 0; overflow-wrap: anywhere; }
+.memory4-disclosure-row button { grid-column: 2; grid-row: 1 / span 2; white-space: normal; }
+.memory4-disclosures details { min-width: 0; }
 .memory4-manager summary { cursor: pointer; padding: 6px 0; color: var(--memory4-text); overflow-wrap: anywhere; }
 .memory4-status { display: inline-block; color: var(--memory4-alert); font-size: 12px; margin-left: 12px; }
 .memory4-text { color: var(--memory4-text); white-space: pre-wrap; overflow-wrap: anywhere; line-height: 1.6; }
@@ -62,6 +69,8 @@
   .summaries-manager .player-summary-group:has(.memory4-manager) > .player-header button { max-width: 100%; white-space: normal; }
   .memory4-manager { padding: 8px; }
   .memory4-entity dl { grid-template-columns: 86px minmax(0, 1fr); }
+  .memory4-disclosure-row { grid-template-columns: minmax(0, 1fr); }
+  .memory4-disclosure-row button { grid-column: 1; grid-row: auto; justify-self: start; }
   .memory4-tabs button { flex: 1 1 130px; }
   .memory4-status { display: block; margin-left: 0; }
 }

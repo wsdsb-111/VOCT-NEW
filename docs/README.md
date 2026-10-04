@@ -4,9 +4,11 @@
 
 ## 推荐阅读顺序
 
-当前入口：[V8.14.1 前端显示内容同步](v8.14.1-frontend-content-update-implementation-report.md)。主要中文/英文标题、Memory4 策略及验收边界已同步；功能版本与 App 包版本分开，协议 3.0、存储 2.5 和现有设置键不变。Manifest 为 416 个分类测试文件、347 个发布组、68 个历史归档，最终完整门禁及隔离截图见报告。独立 QA 使用 GPT-6 Luna Max。
+当前入口：[V8.14.2 Owner-scoped Disclosure 实施报告](v8.14.2-owner-scoped-disclosure-implementation-report.md) / [第一百四十八阶段记录](V8阶段开发记录.md#第一百四十八阶段v8142-owner-scoped-disclosure)。披露按 Campaign × Owner × Entity × Fact 限定，接入 Memory4 Known Entity、对话 Finalization、收信/回信 Gate 与人物认知 UI。清单为 421 个分类测试文件、352 个发布组、68 个历史归档；最终完整发布门禁 352/352。独立 adversarial QA 31 PASS/0 FAIL，隔离 UI Smoke 34 张截图、startup smoke 36/36 通过。Disclosure CK3/Provider/cacheTelemetry/Soak Gate 仍待用户实测，不宣称 Full Freeze。
 
-[前次实机事故热修报告](v8.14.1-runtime-incident-hotfix-report.md)保留日期/特质提示框兼容补丁部署、Memory4 归档生命周期 10/10 和当时 346/346 门禁。用户确认首次对话/本次特质 PASS，信件 NOT TESTED；新热修、真实 Provider、完整信件及 Soak 待用户实测。GLM Cache A/B 延至 V8.14.2，不标记 Freeze Candidate；[前次改进收口](v8.14.1-improvement-closeout-implementation-report.md)的 344 组属于更早历史证据。
+[V8.14.1 前端内容同步](v8.14.1-frontend-content-update-implementation-report.md)保留当时的 Memory4 策略、协议 3.0/存储 2.5 和 App 版本证据。前次实机事故报告记载的信件 `NOT TESTED` 是报告形成时的状态；用户随后确认完整信件往返实机 PASS，详见 V8.14.2 报告，不回写历史报告。
+
+[前次实机事故热修报告](v8.14.1-runtime-incident-hotfix-report.md)保留日期/特质提示框兼容补丁部署、Memory4 归档生命周期 10/10 和当时 346/346 门禁；该报告形成时信件为 `NOT TESTED`，用户随后确认完整信件往返实机 PASS，详见 V8.14.2。新热修、真实 Provider 与 Soak 仍待用户实测。GLM Cache A/B 延至 V8.14.2，不标记 Freeze Candidate；[前次改进收口](v8.14.1-improvement-closeout-implementation-report.md)的 344 组属于更早历史证据。
 
 前一阶段入口：[V8.14-D/E Year/Life 与长期记忆管理施工记录](v8.14-de-year-life-management-implementation-report.md)。该报告中的 339/339 组、408 分类文件为 D/E 当时快照，不被后续回归重写；A/B 用户确认与 D/E 隔离 UI 结果仍按原证据边界记录。
 
@@ -105,7 +107,7 @@ V8.5.1 历史基线：[Sol 最终审查与修复](v8.5.1-sol-final-review.md)，
 35. [V8.8.1 第三方亲属关系锚点](v8.8.1-implementation-report.md)：第三方 Anchor、自然中文关系意图、性别 fail-closed、子女 alias、诊断与自动化证据。
 36. [V8.8 UI 主题背景补充](v8.8-ui-theme-backgrounds.md)：游牧、骑士、水墨三套背景映射、控件可读性覆盖层与验证结果。
 37. [V8.8.2 亲属关系正确性闭环](v8.8.2-correctness-closure.md)：长幼参照、性别冲突、多重角色、身份一对一、配偶三状态、已故配偶方向、生产/运行时缓存、截断与来源完整性修复及门禁。
-38. [README_摘要系统.md](README_摘要系统.md)：Memory Engine 2.6 可见标签、2.5 存储合同、冻结召回、Turn Recall、第三人证据与生命周期规则。
+38. [README_摘要系统.md](README_摘要系统.md)：Memory Engine 4.0 可见标签、3.0 协议、2.5 存储合同、Owner-scoped Disclosure、冻结召回与生命周期规则。
 39. [V7阶段优化记录.md](V7阶段优化记录.md)：V7/V7.x 的连续阶段记录。
 40. [V6阶段优化记录.md](V6阶段优化记录.md)：V6.2 至当前 V6.x 的动作系统和基础设施记录。
 41. 需要核对具体方案时，再阅读版本设计文档和实施报告。
@@ -188,12 +190,13 @@ V8.5.1 历史基线：[Sol 最终审查与修复](v8.5.1-sol-final-review.md)，
 - [v8.0-historical-baseline-2.0-implementation-report.md](v8.0-historical-baseline-2.0-implementation-report.md)：V8.0 结构化历史基线、兼容适配、shadow Temporal Gate、Prompt/cache 等价和发布验证边界。
 - [VOTC_v7.8_main.js第一轮模块化拆分实施记录.md](VOTC_v7.8_main.js第一轮模块化拆分实施记录.md)：Pre-V8 组合根、游戏数据、Prompt、摘要、信件和运行服务拆分边界及验证结果。
 - [VOTC_v7.7_main.js架构拆分与迁移清单.md](VOTC_v7.7_main.js架构拆分与迁移清单.md)：V7.7 Provider Service、Provider 与 IPC 分阶段拆分范围、依赖边界和验证清单。
-- [README_摘要系统.md](README_摘要系统.md)：Memory Engine 2.6 可见标签、2.5 数据合同和人物目录视角摘要系统。
+- [README_摘要系统.md](README_摘要系统.md)：Memory Engine 4.0 可见标签、3.0 协议、2.5 数据合同和人物目录视角摘要系统。
 - [V7阶段优化记录.md](V7阶段优化记录.md)：V7.0 至当前 V7.x 的功能、修复和验收边界。
 - [V6阶段优化记录.md](V6阶段优化记录.md)：V6.2 至 V6.9.1 的动作系统、缓存和架构记录。
 
 ### 版本设计与实施报告
 
+- [v8.14.2-owner-scoped-disclosure-implementation-report.md](v8.14.2-owner-scoped-disclosure-implementation-report.md)：Known Entity Owner-scoped Disclosure、Finalization/Letter 来源门禁、Current Truth、手工覆盖、人物认知 UI 与待验收 Gate。
 - [v8.4-gamestate-performance-benchmark.md](v8.4-gamestate-performance-benchmark.md)：指定存档的只读性能勘探基准；不是发布 SLA。
 - [v8.4-gamestate-capability-report.md](v8.4-gamestate-capability-report.md)
 - [v8.4-ck3-save-container-report.md](v8.4-ck3-save-container-report.md)

@@ -5,6 +5,17 @@ const { memoryMatchesCampaign } = require("../memory-system/memory-types");
 const { normalizeGameDate } = require("../worldline/character-temporal-facts");
 const { gameDateFromSerial } = require("../memory-system/temporal-anchor-extractor");
 
+function letterKnowledgeDate(gameData, letter) {
+  const day = value => value == null || value === "" || !Number.isFinite(Number(value)) ? null : Number(value);
+  const gameDay = day(gameData.totalDays);
+  const sentDay = day(letter.totalDays);
+  const asOfDay = gameDay == null ? sentDay : sentDay == null ? gameDay : Math.min(gameDay, sentDay);
+  const currentDate = normalizeGameDate(gameData.date);
+  const asOfDate = currentDate && gameDay != null && asOfDay != null
+    ? gameDateFromSerial(currentDate.serial + asOfDay - gameDay) : currentDate;
+  return { day, asOfDay, asOfDate };
+}
+
 function createLetterPromptBuilder({ TemplateEngine, PromptScriptLoader, settingsRepository, promptConfigManager, memoryEngine, PromptBuilder, TokenCounter }) {
   class LetterPromptBuilder {
     constructor() {
@@ -13,7 +24,24 @@ function createLetterPromptBuilder({ TemplateEngine, PromptScriptLoader, setting
     }
 
     buildMessages(gameData, letter) {
-      gameData = createTraitProfileView(gameData, gameData.getAi()).gameData;
+      const disclosureProfiles = new Map();
+      const ownerId = Number(gameData.getAi()?.id);
+      const { asOfDate } = letterKnowledgeDate(gameData, letter);
+      if (asOfDate && gameData.campaignToken && memoryEngine?.memory4?.getCurrentDisclosures) {
+        try {
+          const scope = { campaignToken: gameData.campaignToken, ownerId };
+          const readContext = memoryEngine.memory4.createProfileReadContext(scope);
+          for (const entityId of gameData.characters.keys()) {
+            if (Number(entityId) === ownerId) continue;
+            disclosureProfiles.set(Number(entityId), memoryEngine.memory4.getCurrentDisclosures(scope, Number(entityId),
+              { campaignToken: gameData.campaignToken, date: asOfDate.canonical, characters: gameData.characters }, { readContext }));
+          }
+        } catch (error) {
+          disclosureProfiles.clear();
+          if (error.message !== "memory4_owner_folder_not_unique") console.warn("[Memory4] Letter knowledge unavailable:", error.message);
+        }
+      }
+      gameData = createTraitProfileView(gameData, gameData.getAi(), { disclosureProfiles }).gameData;
       const ai = gameData.getAi();
       const player = gameData.getPlayer();
       if (!ai || !player) throw new Error("Missing player or AI character data for letter prompt");
@@ -90,13 +118,7 @@ Reply as {{character.fullName}}.`;
 
     buildLetterKnowledge(ai, player, gameData, letter) {
       const ownerId = Number(ai.id);
-      const day = value => value == null || value === "" || !Number.isFinite(Number(value)) ? null : Number(value);
-      const gameDay = day(gameData.totalDays);
-      const sentDay = day(letter.totalDays);
-      const asOfDay = gameDay == null ? sentDay : sentDay == null ? gameDay : Math.min(gameDay, sentDay);
-      const currentDate = normalizeGameDate(gameData.date);
-      const asOfDate = currentDate && gameDay != null && asOfDay != null
-        ? gameDateFromSerial(currentDate.serial + asOfDay - gameDay) : currentDate;
+      const { day, asOfDay, asOfDate } = letterKnowledgeDate(gameData, letter);
       const beforeSend = memory => {
         const totalDays = day(memory.totalDays ?? memory.creationDateTotalDays);
         const date = normalizeGameDate(memory.eventDate || memory.creationDate);

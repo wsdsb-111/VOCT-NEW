@@ -15,6 +15,7 @@ const ERRORS = {
   legacy_binding_conversation_changed: "游戏对话已切换，请刷新后重试。",
   memory4_revision_conflict: "记忆已发生变化，未覆盖内容。请刷新后重试。",
   memory4_derived_revision_conflict: "来源或版本已变化，未覆盖内容。请刷新后重试。",
+  memory4_disclosure_revision_conflict: "人物认知已发生变化，未覆盖标记。请刷新后重试。",
   memory4_owner_folder_not_unique: "此人物的摘要目录存在缺失或冲突。",
   memory4_unavailable: "人物记忆暂不可用。"
 };
@@ -119,7 +120,8 @@ export function Memory4Manager({ react: R, ownerId, refreshKey, searchActive = f
       if (!result?.success) throw new Error(result?.error);
       const status = result.result?.status;
       if (["FAILED", "EXTRACTION_FAILED", "STALE"].includes(status)) throw new Error(result.result.reason || status);
-      setMessage(payload.operation === "cancelDerived" ? "已请求停止派生记忆任务。" : payload.operation === "keepManual" ? "已保留手工文本；底层记忆变化仍待处理。"
+      setMessage(["setManualDisclosure", "deleteDisclosure"].includes(payload.operation) ? "人物认知标记已更新。"
+        : payload.operation === "cancelDerived" ? "已请求停止派生记忆任务。" : payload.operation === "keepManual" ? "已保留手工文本；底层记忆变化仍待处理。"
         : status === "IN_PROGRESS" ? "已有重压缩任务正在进行。" : status === "ALREADY_CONVERTED" ? "可核验内容已转为长期记忆，原摘要继续保留。"
           : status === "RETAINED_LEGACY" ? result.result.reason === "NO_DURABLE_CONTENT" ? "未提取出可确认的长期记忆，原摘要继续保留。" : "来源证据不足，原摘要继续保留。"
           : status === "CANCELLED" ? "任务已停止。" : status === "MANUAL_OVERRIDE" ? "手工版本已保留，自动生成未覆盖。"
@@ -149,6 +151,31 @@ export function Memory4Manager({ react: R, ownerId, refreshKey, searchActive = f
     button("上一页", () => load({ [option]: Math.max(0, section.offset - 40), entityId }), { disabled: busy || loading || !section.offset }),
     h("span", null, `${section.offset + 1} - ${Math.min(section.total, section.offset + 40)} / ${section.total}`),
     button("下一页", () => load({ [option]: section.offset + 40, entityId }), { disabled: busy || loading || section.offset + 40 >= section.total }));
+  const disclosureFactRef = fact => ({ factType: fact.factType, factKey: fact.factKey, value: fact.value });
+  const disclosureAction = (profile, fact) => {
+    const request = { entityId: profile.entityId, factRef: disclosureFactRef(fact), expectedRevision: fact.revision };
+    if (fact.effectiveKnown && fact.status !== "MANUAL_HIDDEN") {
+      if (!window.confirm("将此事实从该人物的 Owner 认知中设为未知？")) return;
+      mutate({ operation: "deleteDisclosure", ...request });
+    }
+    else mutate({ operation: "setManualDisclosure", status: "MANUAL_KNOWN", ...request });
+  };
+  const disclosureFactRow = (profile, fact) => {
+    const known = !!fact.effectiveKnown && fact.status !== "MANUAL_HIDDEN";
+    const evidence = Object.values(fact.evidenceBySource || {});
+    const source = fact.status === "AUTO_DISCLOSED" ? [...new Set(evidence.map(row => row.sourceKind)
+      .filter(Boolean).map(kind => kind === "LETTER" ? "信件公开" : kind === "CONVERSATION" ? "对话公开" : "结构化来源"))].join("、") || "对话公开"
+      : fact.status === "MANUAL_KNOWN" ? "手动标记" : "尚未获知";
+    const acquiredDate = fact.firstAcquiredDate || fact.manualMarkedDate || evidence[0]?.acquiredDate || "未知";
+    return h("div", { className: "memory4-disclosure-row", key: fact.factId },
+      h("strong", null, `${fact.factType === "TITLE" ? "头衔" : "特质"}：${fact.value}`),
+      h("span", { className: "memory4-meta" }, data.readOnlyArchive
+        ? `${fact.status === "MANUAL_HIDDEN" ? "手动设为未知" : `来源：${source}`} · 获知时间：${acquiredDate} · 当前状态未回读`
+        : known ? `来源：${source} · 获知时间：${acquiredDate}`
+          : fact.status === "MANUAL_HIDDEN" ? "你已将此项设为未知。" : "当前未标记为已知。"),
+      !data.readOnlyArchive && writeButton(known ? "设为未知" : "设为已知", () => disclosureAction(profile, fact),
+        { disabled: busy || loading, title: known ? "从此 Owner 的人物认知中隐藏此事实" : "将此当前事实标记为此 Owner 已知" }));
+  };
   const editButton = (payload, text, title) => writeButton("编辑", () => setEditor({ ...payload, text, title }));
   let content;
   if (tab === "legacy") content = h(R.Fragment, null,
@@ -165,11 +192,28 @@ export function Memory4Manager({ react: R, ownerId, refreshKey, searchActive = f
       const recognition = profile.recognition;
       const relation = profile.relationship?.status === "CONFIRMED" ? profile.relationship.types.map(type => RELATIONS[type] || type).join(" / ") : "未知";
       const count = value => `${value || 0} 次${recognition.evidenceCompleteness === "complete" ? "" : "（部分记录）"}`;
+      const facts = Array.isArray(profile.disclosedFacts) ? profile.disclosedFacts.filter(fact => data.readOnlyArchive
+        ? fact.current === false : fact.current === true) : [];
+      const titles = facts.filter(fact => fact.factType === "TITLE");
+      const traits = facts.filter(fact => fact.factType === "TRAIT");
+      const knownTitles = titles.filter(fact => fact.effectiveKnown && fact.status !== "MANUAL_HIDDEN");
+      const knownTraits = traits.filter(fact => fact.effectiveKnown && fact.status !== "MANUAL_HIDDEN");
       return h("article", { className: "memory4-entity", key: profile.entityId }, h("h5", null, profile.displayName),
         h("dl", null, ...[["认识方式", LEVELS[recognition.level] || "未知（证据不足）"], [data.readOnlyArchive ? "当前关系（未回读）" : "当前关系", relation], ["直接交谈", count(recognition.directConversationCount)],
           ["共同场景", count(recognition.sharedSceneCount)], ["提及", count(recognition.mentionCount)], ["首次记录", recognition.firstSeen || "未知"],
           ["最近记录", recognition.lastSeen || "未知"], ["证据完整度", recognition.evidenceCompleteness === "complete" ? "完整" : recognition.evidenceCompleteness === "legacy_partial" ? "旧记录不完整" : "部分"]]
           .flatMap(([label, value]) => [h("dt", { key: label }, label), h("dd", { key: `${label}-value` }, value)])),
+        profile.nickname && h("p", { className: "memory4-meta memory4-nickname" }, `称号：${profile.nickname} · 默认可见`),
+        h("section", { className: "memory4-disclosures" }, h("h6", null, "人物认知"), data.readOnlyArchive
+          ? h(R.Fragment, null, h("strong", null, "归档披露记录"), facts.length ? facts.map(fact => disclosureFactRow(profile, fact))
+            : h("p", { className: "memory4-empty" }, "没有已保存的披露记录。"))
+          : h(R.Fragment, null,
+            h("strong", null, "已知头衔"), knownTitles.length ? knownTitles.map(fact => disclosureFactRow(profile, fact)) : h("p", { className: "memory4-empty" }, "暂无已知头衔。"),
+            h("details", null, h("summary", null, `当前头衔候选（${titles.length - knownTitles.length}）`),
+              titles.filter(fact => !knownTitles.includes(fact)).map(fact => disclosureFactRow(profile, fact))),
+            h("strong", null, "已知特质"), knownTraits.length ? knownTraits.map(fact => disclosureFactRow(profile, fact)) : h("p", { className: "memory4-empty" }, "暂无已知特质。"),
+            h("details", null, h("summary", null, `当前特质候选（${traits.length - knownTraits.length}）`),
+              traits.filter(fact => !knownTraits.includes(fact)).map(fact => disclosureFactRow(profile, fact))))),
         button("查看相关记忆", () => { setEntityId(profile.entityId); setTab("detail"); load({ entityId: profile.entityId }); }));
     }) : h("p", { className: "memory4-empty" }, "暂无可确认的人物认知记录。"), pages(data.known, "knownOffset"));
   else if (tab === "official") content = h(R.Fragment, null,

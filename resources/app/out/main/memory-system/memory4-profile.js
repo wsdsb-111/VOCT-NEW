@@ -96,6 +96,10 @@ class Memory4ProfileService {
         mentionCount: evidence.mentionCount || 0, firstSeen: evidence.firstSeenDate || null,
         lastSeen: evidence.lastSeenDate || null, evidenceCompleteness: evidence.completeness || "partial" },
       relationship, currentTruth: authorizedCurrentTruth(scope, snapshot, gameData, entityId),
+      nickname: validLiveScope(scope, snapshot, gameData) ? runtimeCharacter(gameData, entityId)?.nickname || null : null,
+      disclosedFacts: this.store.getCurrentDisclosures(scope, entityId,
+        validLiveScope(scope, snapshot, gameData) ? gameData : null,
+        { readContext, currentGameDate: currentGameDate || gameData?.date || snapshot?.gameDate }),
       memoryPointers: { detailIds: [...pointers.detailIds], ...(this.store.derived?.getPointers(scope, entityId, { currentGameDate: currentGameDate || gameData?.date || snapshot?.gameDate, readContext }) || { yearKeys: [], lifeItemIds: [] }),
         legacyCoverageRefs: bridge.memories.filter(memory => ids([
           ...(memory.subjects || []), ...(memory.provenance?.counterpartIds || []), memory.provenance?.counterpartId
