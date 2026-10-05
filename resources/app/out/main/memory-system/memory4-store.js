@@ -209,6 +209,71 @@ class Memory4Store {
     return target;
   }
 
+  listExistingDisclosureOwners(campaignToken) {
+    if (!campaignToken || !this.store.summaryFoldersDir) return [];
+    const root = path.resolve(this.store.summaryFoldersDir);
+    if (!fs.existsSync(root)) return [];
+    const rootStat = fs.lstatSync(root);
+    if (!rootStat.isDirectory() || rootStat.isSymbolicLink()) return [];
+    const campaignDirectory = hash(campaignToken);
+    const directoriesByOwner = new Map();
+    const addDirectory = (ownerId, directory) => {
+      const target = path.resolve(directory), relative = path.relative(root, target);
+      if (!relative || relative === ".." || relative.startsWith(`..${path.sep}`) || path.isAbsolute(relative)) return;
+      let checked = target;
+      while (checked !== root) {
+        if (fs.existsSync(checked)) {
+          const stat = fs.lstatSync(checked);
+          if (!stat.isDirectory() || stat.isSymbolicLink()) return;
+        }
+        checked = path.dirname(checked);
+      }
+      if (!fs.existsSync(target)) return;
+      if (!directoriesByOwner.has(ownerId)) directoriesByOwner.set(ownerId, []);
+      directoriesByOwner.get(ownerId).push(target);
+    };
+    const rootEntries = fs.readdirSync(root, { withFileTypes: true });
+    const sidecarRoot = path.join(root, ".memory4");
+    if (fs.existsSync(sidecarRoot)) {
+      const sidecarStat = fs.lstatSync(sidecarRoot);
+      if (sidecarStat.isDirectory() && !sidecarStat.isSymbolicLink()) {
+        for (const entry of fs.readdirSync(sidecarRoot, { withFileTypes: true })) {
+          if (!entry.isDirectory() || entry.isSymbolicLink() || !/^[1-9]\d*$/.test(entry.name)) continue;
+          const ownerId = Number(entry.name);
+          if (Number.isSafeInteger(ownerId)) addDirectory(ownerId, path.join(sidecarRoot, entry.name, campaignDirectory));
+        }
+      }
+    }
+    for (const entry of rootEntries) {
+      const match = entry.name.match(/^([1-9]\d*)_.+$/);
+      if (!entry.isDirectory() || entry.isSymbolicLink() || !match) continue;
+      const ownerId = Number(match[1]);
+      if (Number.isSafeInteger(ownerId)) addDirectory(ownerId, path.join(root, entry.name, "memory4", campaignDirectory));
+    }
+
+    const owners = [];
+    for (const [ownerId, directories] of directoriesByOwner) {
+      if (directories.length !== 1) continue;
+      const directory = directories[0];
+      const metadataPath = path.join(directory, "metadata.json"), indexPath = path.join(directory, "index.json");
+      const knownPath = path.join(directory, "known-entities.json");
+      if ([metadataPath, indexPath, knownPath].some(file => fs.existsSync(file) && fs.lstatSync(file).isSymbolicLink())
+        || !fs.existsSync(metadataPath) || !fs.existsSync(indexPath)) continue;
+      try {
+        const metadata = JSON.parse(fs.readFileSync(metadataPath, "utf8"));
+        const index = JSON.parse(fs.readFileSync(indexPath, "utf8"));
+        const known = fs.existsSync(knownPath) ? JSON.parse(fs.readFileSync(knownPath, "utf8")) : null;
+        if (metadata.campaignToken !== campaignToken || metadata.ownerId !== ownerId
+          || index.campaignToken !== campaignToken || index.ownerId !== ownerId || metadata.revision !== index.revision
+          || metadata.indexHash !== hash(index) || !index.entries || !index.finalizations
+          || known && (known.campaignToken !== campaignToken || known.ownerId !== ownerId || !known.entities)
+          || !Object.keys(index.entries).length && !Object.keys(known?.entities || {}).length) continue;
+        owners.push(ownerId);
+      } catch {}
+    }
+    return owners.sort((left, right) => left - right);
+  }
+
   assertPersistedScope(scope) {
     const directory = this.directory(scope);
     const names = ["index.json", "metadata.json", "known-entities.json", "entries", "years", "life.json"];

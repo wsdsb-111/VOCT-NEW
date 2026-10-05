@@ -277,7 +277,8 @@ function scanSource(snapshot, gameData, sourceKind, letterProof = null) {
     if (!eligibleFragment(snapshot, fragment, sourceKind, letterProof)) continue;
     const messageIds = sourceMessageIds(fragment, sourceKind);
     const scanTexts = fragment.sourceRole === "mixed" ? [] : fragment.sourceRole === "assistant"
-      ? directSpeechSpans(fragment.text, characterAliases(characters.get(Number(fragment.speakerId)))).map(span => span.text)
+      ? directSpeechSpans(fragment.text, characterAliases(characters.get(Number(fragment.speakerId))),
+        { speakerId: fragment.speakerId, characters }).map(span => span.text)
       : [fragment.text];
     for (const scanText of scanTexts) {
       const pieces = scanText.split(/([。.!！?？;；\r\n]+)/);

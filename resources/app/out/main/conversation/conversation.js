@@ -250,7 +250,9 @@ class Conversation {
   captureDisclosureProfiles() {
     const campaignToken = this.gameData?.campaignToken;
     if (!campaignToken || !memoryEngine?.memory4?.getCurrentDisclosures) return;
-    for (const ownerId of this.gameData.characters.keys()) {
+    const ownerIds = new Set([Number(this.gameData.playerID), ...this.selectedCharacterIds].filter(Number.isSafeInteger));
+    for (const ownerId of ownerIds) {
+      if (!this.gameData.characters.has(ownerId)) continue;
       const key = `${campaignToken}:${ownerId}`;
       if (this.disclosureProfilesByResponder.has(key)) continue;
       const scope = { campaignToken, ownerId: Number(ownerId) };

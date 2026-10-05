@@ -412,8 +412,8 @@ class Memory4Coordinator {
   observeCK3Readback(gameData, stamp) {
     const changes = this.relationshipReadback.observe(gameData, stamp);
     if (stamp?.complete === true && gameData?.campaignToken && normalizeGameDate(gameData.date)) {
-      for (const owner of disclosureCharacterRows(gameData.characters)) {
-        this.refreshCurrentFactState({ campaignToken: gameData.campaignToken, ownerId: owner.id }, gameData);
+      for (const ownerId of this.store.listExistingDisclosureOwners(gameData.campaignToken)) {
+        this.refreshCurrentFactState({ campaignToken: gameData.campaignToken, ownerId }, gameData);
       }
     }
     for (const change of changes) this.profiles.invalidate({ campaignToken: change.campaignToken, ownerId: change.ownerId });
@@ -563,7 +563,8 @@ class Memory4Coordinator {
     const disclosureCharacters = disclosureCharacterRows(context.disclosureCharacters);
     const entityContext = buildMemory4EntityContext({ ownerId, campaignToken: context.campaignToken, date: context.date,
       fragments: projection.fragments, participantProfiles: context.participants,
-      mentionedEntities: context.mentionedEntities, relationshipEvidence: context.memory4RelationshipEvidence });
+      mentionedEntities: context.mentionedEntities, relationshipEvidence: context.memory4RelationshipEvidence,
+      speechAttributionCharacters: disclosureCharacters });
     const disclosureFactEpochs = context.disclosureFactEpochsByOwner?.[ownerId] || null;
     projection.sourceRevision = hash([projection.sourceRevision, projection.fragments, disclosureCharacters, entityContext,
       ...(disclosureFactEpochs ? [disclosureFactEpochs] : [])]);
