@@ -268,7 +268,7 @@ export function Memory4Manager({ react: R, ownerId, refreshKey, searchActive = f
       ? `最近一次归档未提取出可确认的长期事实；Legacy 对话摘要仍保留（${data.generation.noDurableContentCount} 次无长期事实结果）。`
       : "暂无详细长期记忆。"), pages(data.detail, "detailOffset"));
   return h("div", { className: `memory4-manager${data ? "" : " memory4-context-unavailable"}` },
-    h("div", { className: "memory4-heading" }, h("strong", null, "人物记忆"), button("\u21bb", () => load({ entityId }), { title: "刷新人物记忆", "aria-label": "刷新人物记忆" })),
+    h("div", { className: "memory4-heading" }, h("strong", null, "人物记忆"), button("\u21bb", () => load({ entityId, refreshCurrentFacts: true }), { title: "刷新人物记忆", "aria-label": "刷新人物记忆" })),
     h("nav", { className: "memory4-tabs", role: "tablist", "aria-label": "人物记忆" }, TABS.map(([key, label]) => h("button", {
       key, type: "button", role: "tab", "aria-selected": tab === key, onClick: () => setTab(key), className: tab === key ? "active" : ""
     }, label))),

@@ -85,17 +85,21 @@ function latestDate(left, right) {
   return (a.serial >= b.serial ? a : b).canonical;
 }
 
-function effectiveDisclosure(record, asOf, ownerId, metadata) {
+function effectiveDisclosure(record, asOf, ownerId, metadata, factState = null) {
   const current = normalizeGameDate(asOf);
   const evidenceBySource = Object.fromEntries(Object.entries(record.evidenceBySource || {}).filter(([, proof]) => {
     const acquired = normalizeGameDate(proof?.acquiredDate);
     const sourceCurrent = proof?.sourceKind !== "CONVERSATION"
       || metadata?.knownEvidenceRevisions?.[hash([proof.sourceConversationId, ownerId])] === proof.sourceRevision;
-    return current && acquired && acquired.serial <= current.serial && ids(proof.knownBy).join() === String(ownerId) && sourceCurrent;
+    const continuous = record.factType === "AGE" || !factState
+      || factState.present && (proof.factEpoch || 0) === factState.epoch
+        && (factState.legacyContinuous === true || normalizeGameDate(factState.epochStartedDate)?.serial <= acquired?.serial);
+    return current && acquired && acquired.serial <= current.serial && ids(proof.knownBy).join() === String(ownerId) && sourceCurrent && continuous;
   }));
   const manualDate = normalizeGameDate(record.manualMarkedDate);
   const manualApplies = manualDate && current && manualDate.serial <= current.serial
-    && ["MANUAL_KNOWN", "MANUAL_HIDDEN"].includes(record.status);
+    && ["MANUAL_KNOWN", "MANUAL_HIDDEN"].includes(record.status)
+    && (record.status === "MANUAL_HIDDEN" || !factState || factState.present && record.manualFactEpoch === factState.epoch);
   const hasAutoEvidence = Object.keys(evidenceBySource).length > 0;
   const status = manualApplies ? record.status : hasAutoEvidence ? "AUTO_DISCLOSED" : null;
   if (!status) return { status: null, effectiveKnown: false, evidenceBySource, firstAcquiredDate: null, lastConfirmedDate: null };
@@ -469,7 +473,100 @@ class Memory4Store {
       || !known.entities || typeof known.entities !== "object" || Array.isArray(known.entities))) {
       throw new Error("memory4_known_index_invalid");
     }
+    if (known?.currentFactState != null) {
+      if (typeof known.currentFactState !== "object" || Array.isArray(known.currentFactState)) throw new Error("memory4_fact_state_invalid");
+      for (const [entityId, facts] of Object.entries(known.currentFactState)) {
+        if (ids([Number(entityId)]).length !== 1 || !facts || typeof facts !== "object" || Array.isArray(facts)) throw new Error("memory4_fact_state_invalid");
+        for (const [key, state] of Object.entries(facts)) {
+          if (!/^(TITLE|TRAIT):.+/.test(key) || !state || typeof state.present !== "boolean"
+            || !Number.isSafeInteger(state.epoch) || state.epoch < 0 || state.present && state.epoch < 1
+            || !gameDate(state.lastObservedDate) || state.epoch > 0 && !gameDate(state.epochStartedDate)) throw new Error("memory4_fact_state_invalid");
+        }
+      }
+    }
+    if (known?.currentFactObservedDates != null && (typeof known.currentFactObservedDates !== "object"
+      || Array.isArray(known.currentFactObservedDates) || Object.entries(known.currentFactObservedDates)
+        .some(([entityId, date]) => ids([Number(entityId)]).length !== 1 || !gameDate(date)))) throw new Error("memory4_fact_state_invalid");
     return known || { ...scope, revision: 0, entities: {} };
+  }
+
+  refreshCurrentFactState(scope, gameData, { historical = false } = {}) {
+    assertScope(scope);
+    const observed = normalizeGameDate(gameData?.date);
+    if (gameData?.campaignToken !== scope.campaignToken || !observed) throw new Error("memory4_disclosure_current_scope_invalid");
+    const characters = gameData.characters instanceof Map ? [...gameData.characters.values()]
+      : Array.isArray(gameData.characters) ? gameData.characters : Object.values(gameData.characters || {});
+    const index = this.loadIndex(scope);
+    const known = this.readKnownEntities(scope);
+    const states = known.currentFactState || (known.currentFactState = {});
+    const observationDates = known.currentFactObservedDates || (known.currentFactObservedDates = {});
+    let changed = false;
+    for (const character of characters) {
+      const entityId = ids([Number(character?.id)])[0];
+      if (!entityId || entityId === scope.ownerId) continue;
+      const observedTypes = new Set(Array.isArray(character.facts) ? ["TITLE", "TRAIT"] : [
+        ...(["primaryTitle", "titleRankConcept", "heldCourtAndCouncilPositions", "titles", "titleCandidates"]
+          .some(key => Object.hasOwn(character, key)) ? ["TITLE"] : []),
+        ...(Array.isArray(character.traits) ? ["TRAIT"] : [])]);
+      const entityObserved = normalizeGameDate(observationDates[entityId]);
+      if (!observedTypes.size || entityObserved && (observed.serial < entityObserved.serial
+        || historical && observed.serial === entityObserved.serial)) continue;
+      if (!entityObserved || observed.serial > entityObserved.serial) {
+        observationDates[entityId] = observed.canonical;
+        changed = true;
+      }
+      const current = new Set(getFactCandidates(character).filter(fact => fact.factType !== "AGE")
+        .map(fact => `${fact.factType}:${fact.factKey}`));
+      const previousStates = states[entityId] || {};
+      const facts = known.entities[entityId]?.disclosedFacts || {};
+      const keys = new Set([...current, ...Object.keys(previousStates), ...Object.values(facts)
+        .filter(fact => fact.factType !== "AGE").map(fact => `${fact.factType}:${fact.factKey}`)]);
+      for (const key of keys) {
+        if (!observedTypes.has(key.split(":")[0])) continue;
+        const previous = previousStates[key];
+        const lastObserved = normalizeGameDate(previous?.lastObservedDate);
+        const present = current.has(key);
+        if (lastObserved && (observed.serial < lastObserved.serial
+          || historical && observed.serial === lastObserved.serial && present !== previous.present)) continue;
+        if (previous?.present === present) continue;
+        const next = { present, epoch: (previous?.epoch || 0) + (present ? 1 : 0),
+          legacyContinuous: !previous && present,
+          epochStartedDate: present ? observed.canonical : previous?.epochStartedDate || null,
+          lastObservedDate: observed.canonical };
+        previousStates[key] = next;
+        // Legacy evidence can join the first observed continuous lifetime only.
+        if (!previous && present) for (const fact of Object.values(facts)) {
+          if (`${fact.factType}:${fact.factKey}` !== key) continue;
+          for (const proof of Object.values(fact.evidenceBySource || {})) {
+            if (proof.factEpoch == null) {
+              proof.factEpoch = 1;
+              const acquired = normalizeGameDate(proof.acquiredDate);
+              if (acquired && acquired.serial < normalizeGameDate(next.epochStartedDate).serial) next.epochStartedDate = acquired.canonical;
+            }
+          }
+          if (fact.status === "MANUAL_KNOWN" && fact.manualFactEpoch == null) {
+            fact.manualFactEpoch = 1;
+            const marked = normalizeGameDate(fact.manualMarkedDate);
+            if (marked && marked.serial < normalizeGameDate(next.epochStartedDate).serial) next.epochStartedDate = marked.canonical;
+          }
+        }
+        changed = true;
+      }
+      // Advance the high-water mark even when a fact stays present/absent.
+      for (const [key, state] of Object.entries(previousStates)) {
+        if (observedTypes.has(key.split(":")[0]) && observed.serial > normalizeGameDate(state.lastObservedDate).serial) {
+          state.lastObservedDate = observed.canonical;
+          changed = true;
+        }
+      }
+      if (Object.keys(previousStates).length) states[entityId] = previousStates;
+    }
+    if (changed) {
+      const metadata = this.read(path.join(this.directory(scope), "metadata.json"), null) || { ...scope,
+        revision: index.revision, indexHash: hash(index), knownEvidenceRevisions: {} };
+      this.persistDisclosureState(scope, index, known, metadata);
+    }
+    return { changed, currentFactState: JSON.parse(JSON.stringify(states)) };
   }
 
   getDisclosedFacts(scope, entityId, { readContext = null } = {}) {
@@ -488,6 +585,7 @@ class Memory4Store {
         || fact.factId !== factId || fact.factId !== disclosureFactId(scope, targetId, fact.factType, fact.factKey)
         || ids(fact.knownBy).join() !== String(scope.ownerId)
         || !Number.isSafeInteger(fact.revision) || fact.revision < 1
+        || fact.manualFactEpoch != null && (!Number.isSafeInteger(fact.manualFactEpoch) || fact.manualFactEpoch < 0)
         || !fact.evidenceBySource || typeof fact.evidenceBySource !== "object" || Array.isArray(fact.evidenceBySource)
         || fact.status === "AUTO_DISCLOSED" && !proofs.length
         || [fact.firstAcquiredDate, fact.lastConfirmedDate, fact.manualMarkedDate].some(date => date != null && !gameDate(date))
@@ -502,6 +600,7 @@ class Memory4Store {
         if ((!conversation && !letter) || typeof sourceId !== "string" || !sourceId
           || sourceKey !== hash([proof.sourceKind, sourceId]) || !/^[a-f0-9]{64}$/.test(proof.sourceRevision || "")
           || !gameDate(proof.acquiredDate) || ids(proof.knownBy).join() !== String(scope.ownerId)
+          || proof.factEpoch != null && (!Number.isSafeInteger(proof.factEpoch) || proof.factEpoch < 0)
           || !Array.isArray(proof.sourceFragmentIds) || !proof.sourceFragmentIds.length
           || proof.sourceFragmentIds.some(id => typeof id !== "string" || !id)
           || !Array.isArray(proof.sourceTextHashes) || !proof.sourceTextHashes.length
@@ -546,11 +645,13 @@ class Memory4Store {
       || [...characters.values()].find(candidate => Number(candidate?.id) === entityId) || null;
     if (!character || Number(character.id) !== entityId) return [];
     const byId = new Map(records.map(record => [record.factId, record]));
+    const states = this.readKnownEntities(scope, readContext).currentFactState?.[entityId] || {};
     const currentFacts = getFactCandidates(character).filter(candidate => candidate.factType !== "AGE").map(candidate => {
       const factId = disclosureFactId(scope, entityId, candidate.factType, candidate.factKey);
       const record = byId.get(factId) || null;
-      const effective = record ? effectiveDisclosure(record, gameData.date, scope.ownerId, metadata) : null;
-      return { ...scope, entityId, ...candidate, factId, current: true, status: effective?.status || null,
+      const state = states[`${candidate.factType}:${candidate.factKey}`] || null;
+      const effective = record ? effectiveDisclosure(record, gameData.date, scope.ownerId, metadata, state) : null;
+      return { ...scope, entityId, ...candidate, factId, factEpoch: state?.epoch || 0, current: true, status: effective?.status || null,
         effectiveKnown: effective?.effectiveKnown || false, revision: record?.revision || 0,
         firstAcquiredDate: effective?.firstAcquiredDate || null, lastConfirmedDate: effective?.lastConfirmedDate || null,
         manualMarkedDate: effective?.status?.startsWith("MANUAL_") ? record.manualMarkedDate || null : null,
@@ -606,8 +707,14 @@ class Memory4Store {
     const known = JSON.parse(JSON.stringify(previous));
     known.disclosureSchemaVersion = 1;
     const sourceKey = hash([sourceKind, sourceId]);
+    const priorLetterEpochs = sourceKind === "LETTER" ? new Map(Object.values(known.entities).flatMap(entity =>
+      Object.values(entity.disclosedFacts || {}).filter(fact => fact.factType !== "AGE" && fact.evidenceBySource?.[sourceKey])
+        .map(fact => [fact.factId, fact.evidenceBySource[sourceKey].factEpoch || 0]))) : null;
+    const capturedFactEpoch = (entityId, fact) => fact.factType === "AGE" ? null
+      : snapshot.disclosureFactEpochs?.[entityId]?.[`${fact.factType}:${fact.factKey}`] ?? (snapshot.disclosureFactEpochs != null ? 0 : 1);
     const incomingFactIds = new Set(disclosures.map(disclosure => disclosure?.factId).filter(value => typeof value === "string"));
     let changed = false;
+    let count = 0;
     const touched = new Set();
     for (const [entityKey, entity] of Object.entries(known.entities)) {
       const facts = entity.disclosedFacts || {};
@@ -619,7 +726,8 @@ class Memory4Store {
           const staleConversation = sourceKind === "CONVERSATION" && proof?.sourceKind === "CONVERSATION"
             && proof.sourceConversationId === snapshot.conversationId
             && (proof.sourceFinalizationId !== snapshot.finalizationId || proof.sourceRevision !== sourceRevision);
-          const staleSource = key === sourceKey && proof?.sourceRevision !== sourceRevision;
+          const staleSource = key === sourceKey && proof?.sourceRevision !== sourceRevision
+            && !(priorLetterEpochs?.has(factId) && priorLetterEpochs.get(factId) !== capturedFactEpoch(entityKey, fact));
           if (staleConversation || staleSource) {
             delete evidenceBySource[key];
             evidenceChanged = true;
@@ -650,6 +758,13 @@ class Memory4Store {
       const current = getFactCandidates(characterMap.get(entityId)).find(candidate => candidate.factType === disclosure.factType
         && candidate.factKey === disclosure.factKey && candidate.value === disclosure.value);
       if (!current) throw new Error("memory4_disclosure_fact_not_current");
+      const state = known.currentFactState?.[entityId]?.[`${disclosure.factType}:${disclosure.factKey}`];
+      const factEpoch = capturedFactEpoch(entityId, disclosure);
+      if (state && disclosure.factType !== "AGE" && (!state.present || factEpoch !== state.epoch
+        || snapshot.disclosureFactEpochs == null && state.legacyContinuous !== true
+        || state.legacyContinuous !== true && normalizeGameDate(acquiredDate).serial < normalizeGameDate(state.epochStartedDate).serial)) continue;
+      if (priorLetterEpochs?.has(disclosure.factId) && priorLetterEpochs.get(disclosure.factId) !== factEpoch) continue;
+      count++;
       const evidence = disclosure.evidence || {};
       const messageIds = Array.isArray(evidence.sourceMessageIds) ? evidence.sourceMessageIds : [];
       const fragmentIds = Array.isArray(evidence.sourceFragmentIds) ? evidence.sourceFragmentIds : [];
@@ -663,7 +778,7 @@ class Memory4Store {
       if (fragmentIds.some(id => typeof id !== "string" || !id) || sourceTextHashes.some(value => !/^[a-f0-9]{64}$/.test(value))) {
         throw new Error("memory4_disclosure_proof_invalid");
       }
-      const sourceEvidence = { sourceKind, sourceId, sourceRevision,
+      const sourceEvidence = { sourceKind, sourceId, sourceRevision, ...(factEpoch != null ? { factEpoch } : {}),
         sourceConversationId: sourceKind === "CONVERSATION" ? snapshot.conversationId : null,
         sourceFinalizationId: sourceKind === "CONVERSATION" ? snapshot.finalizationId : null,
         sourceLetterId: sourceKind === "LETTER" ? snapshot.letterId : null,
@@ -679,7 +794,8 @@ class Memory4Store {
       const previousFact = facts[disclosure.factId];
       const next = { ...(previousFact || {}), factId: disclosure.factId, factType: disclosure.factType,
         factKey: disclosure.factKey, value: disclosure.value,
-        status: previousFact?.status === "MANUAL_KNOWN" || previousFact?.status === "MANUAL_HIDDEN" ? previousFact.status : "AUTO_DISCLOSED",
+        status: previousFact?.status === "MANUAL_HIDDEN" || previousFact?.status === "MANUAL_KNOWN"
+          && (!state || previousFact.manualFactEpoch === state.epoch) ? previousFact.status : "AUTO_DISCLOSED",
         firstAcquiredDate: previousFact?.firstAcquiredDate || acquiredDate,
         lastConfirmedDate: latestDate(previousFact?.lastConfirmedDate, acquiredDate), knownBy: [scope.ownerId],
         evidenceBySource: { ...(previousFact?.evidenceBySource || {}) }, tombstone: previousFact?.tombstone || null };
@@ -700,7 +816,7 @@ class Memory4Store {
       changed = true;
     }
     if (changed) this.persistDisclosureState(scope, index, known, metadata);
-    return { changed, count: disclosures.length, entityIds: [...touched].filter(Number.isSafeInteger).sort((a, b) => a - b) };
+    return { changed, count, entityIds: [...touched].filter(Number.isSafeInteger).sort((a, b) => a - b) };
   }
 
   updateManualDisclosure(scope, entityId, fact, status, date, expectedRevision) {
@@ -726,6 +842,7 @@ class Memory4Store {
     if ((Number(previous?.revision) || 0) !== expectedRevision) throw new Error("memory4_disclosure_revision_stale");
     const nextRevision = expectedRevision + 1;
     const next = { ...(previous || {}), factId, factType: candidate.factType, factKey: candidate.factKey, value: candidate.value,
+      manualFactEpoch: known.currentFactState?.[entityId]?.[`${candidate.factType}:${candidate.factKey}`]?.epoch || 0,
       status, revision: nextRevision, firstAcquiredDate: previous?.firstAcquiredDate || (status === "MANUAL_KNOWN" ? gameDate(date) : null),
       lastConfirmedDate: previous?.lastConfirmedDate || null, manualMarkedDate: gameDate(date), knownBy: [scope.ownerId],
       evidenceBySource: { ...(previous?.evidenceBySource || {}) }, tombstone: status === "MANUAL_HIDDEN"

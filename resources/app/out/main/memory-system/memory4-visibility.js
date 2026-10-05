@@ -154,7 +154,7 @@ function updateKnownEntities(previous, snapshot) {
     const contributions = Object.entries(row.evidenceByConversation).map(([conversationId, value]) => ({ conversationId,
       types: Array.isArray(value) ? value : value.types || [], date: Array.isArray(value) ? null : value.date,
       episodeId: Array.isArray(value) ? null : value.episodeId, completeness: Array.isArray(value) ? "legacy_partial" : value.completeness }));
-    if (!contributions.length) { delete index.entities[key]; continue; }
+    if (!contributions.length && !Object.keys(row.disclosedFacts || {}).length) { delete index.entities[key]; continue; }
     row.directConversationCount = contributions.filter(item => item.types.includes("direct_conversation")).length;
     row.sharedSceneCount = contributions.filter(item => item.types.includes("shared_scene")).length;
     row.mentionCount = contributions.filter(item => item.types.includes("mention")).length;

@@ -343,6 +343,10 @@ function createSummariesManager({ fs, path, summariesDir, memoryEngine, memorySy
       if (request.contextOnly === true) return { success: true, ...scope, contextId: context.contextId,
         readOnlyArchive: context.readOnlyArchive, readOnlyReason: context.readOnlyReason, archiveAsOfDate: context.archiveAsOfDate };
       const coordinator = memoryEngine.memory4;
+      if (request.refreshCurrentFacts === true && !context.readOnlyArchive) {
+        this.assertCurrentMemory4ReadContext(context);
+        coordinator.refreshCurrentFactState(scope, context.gameData, { historical: true });
+      }
       const readContext = coordinator.createProfileReadContext(scope);
       const index = readContext.index;
       const known = readContext.known;

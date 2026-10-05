@@ -1,5 +1,9 @@
 # 对话摘要与人物记忆：Memory Engine 4.0（3.0 协议、2.5 存储兼容）
 
+## V8.14.2 收口修复（2026-10-05）
+
+[实施报告](v8.14.2-closeout-fix-implementation-report.md)：Assistant 第三人披露只采信安全直接对白；唯一昵称可绑定当前 Fact，但不授予真名。Owner/Campaign 的旁路 Fact Epoch 区分同头衔/特质连续存在与消失后再出现，旧 AUTO 与 MANUAL_KNOWN 不跨生命周期，MANUAL_HIDDEN 继续优先。旧无编号记录只在尚未观察到中断的首段兼容迁移；更早/同日冲突恢复快照不回退事实状态。显式刷新和冻结来源传递已接线，普通 getter/归档不写数据，新知情仍下一场生效。完整门禁 367/367、独立 QA、隔离 UI 38 张截图通过；协议 3.0、存储 2.5、Recent2、Recall 与 Cache Anchor 不变，真实 CK3/Provider/cache telemetry/Soak 待用户 Gate。
+
 ## V8.14.2 信件与摘要重试（2026-10-05）
 
 [实施报告](v8.14.2-letter-memory-retry-hotfix-report.md)：完整信件交换仅在可信游戏接受后归档，以冻结来源生成双向 Legacy 与逐 Owner Detail，再重建 Year/Life；失败只补未完成阶段，不重发 Effect。不虚构物理在场或消息 ID；明确时间词由真实 letter ID/正文哈希验证，相对时间使用原信日期。模型整理所选摘要也联动重建；失败进入已有恢复队列，手工版本保留，无长期事实/未知事件日期不补造。结束对话的可信 read snapshot 可用于恢复与来源证明重建，不开放任意归档写入。协议、存储与召回兼容合同未升级，下方为既有阶段记录。

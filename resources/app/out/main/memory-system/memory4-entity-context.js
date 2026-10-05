@@ -6,6 +6,10 @@ const { normalizeGameDate } = require("../worldline/character-temporal-facts");
 
 const CURRENT_RELATIONSHIP_SOURCE = "CURRENT_RUNTIME_RELATIONSHIP";
 const QUOTE_CLOSE = new Map([["“", "”"], ["‘", "’"], ["「", "」"], ["『", "』"], ["\"", "\""]]);
+const QUOTE_CLOSERS = new Set(QUOTE_CLOSE.values());
+const INNER_THOUGHT_OR_REPORT = /心想|心道|心知|心里|内心|暗自|想着|想起|想到|思忖|思量|琢磨|以为|觉得|认为|怀疑|听说|据说|传闻|传言|谣言|相传|旁白|叙述|描写|有人说|别人说|他人说|他说|她说|他们说|某人说|被告知|转述|引用|thought|thinking|believed|thought to|heard|rumou?r|report|according to|someone said|he said|she said/iu;
+const ATTRIBUTION_END = /(?:说(?:道|过)?|曰|道|表示|宣称|转述|引用|告诉|提到|say|says|said|tell|tells|told|claim|claims|claimed|declare|declares|declared|remark|remarks|remarked)\s*[：:,，]?$/iu;
+const WRITTEN_QUOTE = /写下|写道|写着|书写|记下|刻下|刻有|题写|纸上|纸条|字条|碑文|字迹|牌匾|\b(?:wrote|written|writes?|inscribed|inscription)\b/iu;
 
 function rows(value) {
   if (value instanceof Map) return [...value.values()];
@@ -52,6 +56,58 @@ function sourceIds(fragment) {
   return [...new Set(values.filter(value => Number.isSafeInteger(value) && value >= 0))].sort((left, right) => left - right);
 }
 
+function safeDirectSpeechContext(text, start, speakerAliases) {
+  const prefix = text.slice(0, start - 1);
+  const boundaries = [...prefix.matchAll(/[。.!！?？;；\r\n]/gu)];
+  const boundary = boundaries.at(-1);
+  const context = prefix.slice(boundary ? boundary.index + 1 : 0).trim();
+  if (!context) return true;
+  if (INNER_THOUGHT_OR_REPORT.test(context) || WRITTEN_QUOTE.test(context)) return false;
+  if (!ATTRIBUTION_END.test(context)) return true;
+  const normalized = context.normalize("NFKC").toLowerCase();
+  return /^(?:我|吾|朕|寡人|孤|本王|在下|鄙人|本人)(?:对|向)?/u.test(context)
+    || /^i(?:\s|$|said\b|say\b)/iu.test(context)
+    || speakerAliases.some(alias => typeof alias === "string" && alias.trim()
+      && normalized.startsWith(alias.normalize("NFKC").trim().toLowerCase()));
+}
+
+function directSpeechSpans(text, speakerAliases = []) {
+  if (typeof text !== "string" || !text) return [];
+  const spans = [];
+  const stack = [];
+  for (let index = 0; index < text.length; index++) {
+    const character = text[index];
+    if (stack.length) {
+      const active = stack[stack.length - 1];
+      if (character === active.close) {
+        stack.pop();
+        if (!stack.length) {
+          const start = active.start + 1;
+          const end = index;
+          const value = text.slice(start, end);
+          if (!active.nested && value.trim() && safeDirectSpeechContext(text, start, speakerAliases)) {
+            spans.push({ start, end, text: value, source: "DIRECT_SPEECH" });
+          }
+        }
+        continue;
+      }
+      if (QUOTE_CLOSE.has(character)) {
+        for (const frame of stack) frame.nested = true;
+        stack.push({ start: index, close: QUOTE_CLOSE.get(character), nested: true });
+        continue;
+      }
+      if (QUOTE_CLOSERS.has(character)) return spans;
+      continue;
+    }
+    if (QUOTE_CLOSE.has(character)) {
+      stack.push({ start: index, close: QUOTE_CLOSE.get(character), nested: false });
+      continue;
+    }
+    if (QUOTE_CLOSERS.has(character)) return spans;
+  }
+  return spans;
+}
+
 function aliasOccurrences(text, alias) {
   const matches = [];
   let offset = 0;
@@ -66,19 +122,10 @@ function aliasOccurrences(text, alias) {
   return matches;
 }
 
-function explicitNameTexts(fragment, text) {
+function explicitNameTexts(fragment, text, speakerAliases = []) {
   if (fragment.sourceRole === "mixed") return [];
   if (fragment.sourceRole !== "assistant") return [text];
-  const quoted = [];
-  for (let index = 0; index < text.length; index++) {
-    const close = QUOTE_CLOSE.get(text[index]);
-    if (!close) continue;
-    const end = text.indexOf(close, index + 1);
-    if (end <= index + 1) continue;
-    quoted.push(text.slice(index + 1, end));
-    index = end;
-  }
-  return quoted;
+  return directSpeechSpans(text, speakerAliases).map(span => span.text);
 }
 
 function sourceParagraphs(fragment) {
@@ -135,7 +182,8 @@ function buildMemory4EntityContext({ ownerId, campaignToken, date, fragments = [
     const explicit = new Map();
     for (const paragraph of paragraphs) {
       const matches = [];
-      for (const text of explicitNameTexts(fragment, paragraph.text)) {
+      const speakerAliases = profileAliases(profiles.get(Number(fragment.speakerId)));
+      for (const text of explicitNameTexts(fragment, paragraph.text, speakerAliases)) {
         for (const [alias, owners] of profileAliasOwners) {
           if (owners.size !== 1) continue;
           const entityId = [...owners][0];
@@ -188,4 +236,4 @@ function buildMemory4EntityContext({ ownerId, campaignToken, date, fragments = [
   return { entityNameEvidence, relationshipEvidence: scopedRelationships };
 }
 
-module.exports = { buildCurrentMemory4RelationshipEvidence, buildMemory4EntityContext };
+module.exports = { directSpeechSpans, buildCurrentMemory4RelationshipEvidence, buildMemory4EntityContext };

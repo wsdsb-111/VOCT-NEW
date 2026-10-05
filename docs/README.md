@@ -4,7 +4,9 @@
 
 ## 推荐阅读顺序
 
-本轮最新入口：[V8.14.2 信件调度与记忆重试热修](v8.14.2-letter-memory-retry-hotfix-report.md)。接受后信件摘要、Detail/Year/Life 和失败重试独立于游戏 Effect；模型整理联动重建并保留手工版本。当前清单 363 发布组、432 分类文件、68 历史归档，最终验证与 CK3 Gate 见报告。以下为先前阶段快照。
+本轮最新入口：[V8.14.2 收口修复](v8.14.2-closeout-fix-implementation-report.md) / [App 与 Mod 外部运行依赖](EXTERNAL_RUNTIME_DEPENDENCIES.md)。第三人直接对白、唯一昵称绑定、Fact Epoch 防旧认知复活已接通；完整发布 367/367、独立 QA、隔离 UI 38 张截图通过，清单 367 发布组、436 分类文件、68 历史归档。真实 CK3/Provider/cache telemetry/Soak 待用户 Gate，不签发 Full Freeze。以下为先前阶段快照。
+
+前次入口：[V8.14.2 信件调度与记忆重试热修](v8.14.2-letter-memory-retry-hotfix-report.md)。接受后信件摘要、Detail/Year/Life 和失败重试独立于游戏 Effect；模型整理联动重建并保留手工版本。该阶段清单 363 发布组、432 分类文件、68 历史归档。
 
 最新入口：[V8.14.2 姓名、关系上下文与人物披露热修](v8.14.2-entity-naming-disclosure-hotfix-report.md) / [第一百五十阶段](V8阶段开发记录.md#第一百五十阶段v8142-姓名关系上下文与人物披露热修2026-10-05)。接入已有 Owner 关系与来源姓名、原话披露及历史年龄/日期；用户确认长期记忆生成 PASS。完整发布 359/359、独立 QA 14/14、隔离窗口 38 张截图通过；清单 428 分类文件、359 发布组、68 历史归档。既有数据不自动重写，本次新改动的 Provider/CK3/Soak Gate 仍待用户验收。下方为先前阶段快照。
 

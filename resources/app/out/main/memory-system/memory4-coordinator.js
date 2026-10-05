@@ -284,6 +284,21 @@ class Memory4Coordinator {
     return this.store.getCurrentDisclosures(scope, Number(entityId), gameData, { readContext, currentGameDate });
   }
 
+  refreshCurrentFactState(scope, gameData, options = {}) {
+    assertScope(scope);
+    if (gameData?.campaignToken !== scope.campaignToken || !normalizeGameDate(gameData?.date)) throw new Error("memory4_disclosure_current_scope_invalid");
+    this.store.ensureDisclosureScope(scope);
+    const result = this.store.refreshCurrentFactState(scope, gameData, options);
+    if (result.changed) this.profiles.invalidate(scope);
+    return result;
+  }
+
+  captureDisclosureFactEpochs(scope, gameData) {
+    const { currentFactState } = this.refreshCurrentFactState(scope, gameData);
+    return Object.fromEntries(Object.entries(currentFactState).map(([entityId, facts]) => [entityId,
+      Object.fromEntries(Object.entries(facts).filter(([, state]) => state.present).map(([key, state]) => [key, state.epoch]))]));
+  }
+
   updateManualDisclosure(scope, entityId, factRef, status, gameData, { expectedRevision } = {}) {
     assertScope(scope);
     const targetId = Number(entityId);
@@ -297,6 +312,9 @@ class Memory4Coordinator {
       && factRef.factId !== disclosureFactId(scope, targetId, candidate.factType, candidate.factKey)) {
       throw new Error("memory4_disclosure_fact_not_current");
     }
+    this.refreshCurrentFactState(scope, gameData);
+    const current = this.getCurrentDisclosures(scope, targetId, gameData).find(item => item.factType === candidate.factType && item.factKey === candidate.factKey);
+    if (factRef.factEpoch != null && factRef.factEpoch !== current?.factEpoch) throw new Error("memory4_disclosure_revision_stale");
     this.store.updateManualDisclosure(scope, targetId, candidate, status, gameData.date, expectedRevision);
     this.profiles.invalidate(scope);
     const factId = disclosureFactId(scope, targetId, candidate.factType, candidate.factKey);
@@ -338,6 +356,15 @@ class Memory4Coordinator {
         }
       }
     }
+    const scope = { campaignToken: snapshot.campaignToken, ownerId: snapshot.ownerId };
+    if (snapshot.sourceKind !== "LETTER") {
+      const metadata = this.store.read(path.join(this.store.directory(scope), "metadata.json"), null);
+      if (metadata?.knownEvidenceRevisions?.[hash([snapshot.conversationId, scope.ownerId])] !== snapshot.sourceRevision) {
+        return { status: "SKIPPED", changed: false, count: 0, entityIds: [], stale: true, skipped: "source_revision_stale" };
+      }
+    }
+    // Frozen recovery is not a newer CK3 observation, especially within the same game day.
+    this.refreshCurrentFactState(scope, gameData, { historical: true });
     const persisted = this.store.recordDisclosures(snapshot, scanned.disclosures);
     if (persisted.changed) this.profiles.invalidate({ campaignToken: snapshot.campaignToken, ownerId: snapshot.ownerId });
     this.trace?.record("memory4_disclosure", { ownerId: snapshot.ownerId, campaignToken: snapshot.campaignToken,
@@ -358,6 +385,7 @@ class Memory4Coordinator {
     }
     const snapshot = { campaignToken, ownerId: owner, sourceKind: "LETTER", senderId: sender, recipientId: recipient,
       letterId: letterId.trim(), date: normalizeGameDate(date).canonical,
+      disclosureFactEpochs: this.captureDisclosureFactEpochs({ campaignToken, ownerId: owner }, { campaignToken, date, characters }),
       sourceRevision: hash(["LETTER", campaignToken, owner, sender, recipient, letterId.trim(),
         normalizeGameDate(date).canonical, hash(text)]), disclosureCharacters,
       fragments: [{ fragmentId: `letter_${hash([letterId.trim(), sender, recipient])}`, sourceLetterId: letterId.trim(),
@@ -383,6 +411,11 @@ class Memory4Coordinator {
 
   observeCK3Readback(gameData, stamp) {
     const changes = this.relationshipReadback.observe(gameData, stamp);
+    if (stamp?.complete === true && gameData?.campaignToken && normalizeGameDate(gameData.date)) {
+      for (const owner of disclosureCharacterRows(gameData.characters)) {
+        this.refreshCurrentFactState({ campaignToken: gameData.campaignToken, ownerId: owner.id }, gameData);
+      }
+    }
     for (const change of changes) this.profiles.invalidate({ campaignToken: change.campaignToken, ownerId: change.ownerId });
     return changes;
   }
@@ -531,7 +564,9 @@ class Memory4Coordinator {
     const entityContext = buildMemory4EntityContext({ ownerId, campaignToken: context.campaignToken, date: context.date,
       fragments: projection.fragments, participantProfiles: context.participants,
       mentionedEntities: context.mentionedEntities, relationshipEvidence: context.memory4RelationshipEvidence });
-    projection.sourceRevision = hash([projection.sourceRevision, projection.fragments, disclosureCharacters, entityContext]);
+    const disclosureFactEpochs = context.disclosureFactEpochsByOwner?.[ownerId] || null;
+    projection.sourceRevision = hash([projection.sourceRevision, projection.fragments, disclosureCharacters, entityContext,
+      ...(disclosureFactEpochs ? [disclosureFactEpochs] : [])]);
     const visibleEntities = new Set(projection.fragments.flatMap(fragment => ids(fragment.entityIds)));
     const relationshipChangeEntityIds = ids((context.relationshipChanges || []).filter(change =>
       change.detected === true && change.campaignToken === context.campaignToken && change.ownerId === ownerId
@@ -540,7 +575,7 @@ class Memory4Coordinator {
       finalizationId: context.finalizationId, episodeId: context.episodeId,
       date: context.date || null, totalDays: context.totalDays ?? null, counterpartIds: directCounterpartIds(projection.fragments, ownerId), summaryIds: [],
       summaryProviderSnapshot: context.summaryProviderSnapshot || null,
-      ...projection, disclosureCharacters, relationshipChangeEntityIds, ...entityContext };
+      ...projection, disclosureCharacters, disclosureFactEpochs, relationshipChangeEntityIds, ...entityContext };
   }
 
   orderFragments(snapshot, fragments) {

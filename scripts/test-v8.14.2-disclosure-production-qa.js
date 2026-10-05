@@ -264,7 +264,7 @@ async function main() {
   await check("3P: all present Owners learn the same public Fact, but self facts are not stored", async () => {
     const sample = await fixture({ titleById: { 2: "枢密使" } });
     await sample.conversation.joinWaitingCharacter(3);
-    sample.response = id => Number(id) === 2 ? "我乃枢密使。" : "乙听见了。";
+    sample.response = id => Number(id) === 2 ? "“我乃枢密使。”" : "乙听见了。";
     await send(sample, "甲，请告诉众人你的身份。" );
     await finalize(sample);
     assert(disclosureRecords(sample, 3, 2).some(item => item.factType === "TITLE" && item.value === "枢密使"));
@@ -628,6 +628,36 @@ async function main() {
     assert(line.includes("北地之虎"));
     assert(!profileLine(sample, 2, "PLAYER_TRAITS").includes("九天玄月灵猫血统"));
     assert.deepEqual(disclosureRecords(sample, 2, 1), []);
+  });
+
+  await check("Fact epochs survive real Conversation snapshots and reach only the next Prompt", async () => {
+    const sample = await fixture({ titleById: { 1: "明王" },
+      traitsById: { 1: [{ id: "trait_bastard", name: "私生子", category: "Other" }] } });
+    await send(sample, "我乃明王，也是私生子。" );
+    await finalize(sample);
+    sample.titleById[1] = "";
+    sample.traitsById[1] = [];
+    await sample.open("1164.5.21", 2);
+    sample.titleById[1] = "明王";
+    sample.traitsById[1] = [{ id: "trait_bastard", name: "私生子", category: "Other" }];
+    await sample.open("1164.5.22", 2);
+    await send(sample, "请谈谈我的身份。" );
+    assert(!profileLine(sample, 2, "PLAYER_TITLE").includes("明王"));
+    assert(!profileLine(sample, 2, "PLAYER_TRAITS").includes("私生子"));
+    await send(sample, "我乃明王，也是私生子。" );
+    const base = sample.conversation.buildFinalizationBaseContext();
+    assert.equal(base.disclosureFactEpochsByOwner[2][1]["TITLE:title_明王"], 2);
+    let finalSnapshot;
+    await finalize(sample, snapshot => { if (snapshot.ownerId === 2) finalSnapshot = snapshot; });
+    assert.equal(finalSnapshot.disclosureFactEpochs[1]["TITLE:title_明王"], 2);
+    assert(currentDisclosureRows(sample, 2, 1).filter(row => ["TITLE", "TRAIT"].includes(row.factType))
+      .every(row => row.effectiveKnown && row.factEpoch === 2));
+    assert(!sample.conversation.disclosureProfilesByResponder.get(`${sample.scope.campaignToken}:2`).get(1)
+      .some(row => row.effectiveKnown), "current session keeps its frozen opening knowledge");
+    await sample.open("1164.5.23", 2);
+    await send(sample, "请再谈谈我的身份。" );
+    assert(profileLine(sample, 2, "PLAYER_TITLE").includes("明王"));
+    assert(profileLine(sample, 2, "PLAYER_TRAITS").includes("私生子"));
   });
 }
 

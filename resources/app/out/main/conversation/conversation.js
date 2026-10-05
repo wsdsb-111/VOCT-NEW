@@ -256,6 +256,7 @@ class Conversation {
       const scope = { campaignToken, ownerId: Number(ownerId) };
       const profiles = new Map();
       try {
+        memoryEngine.memory4.refreshCurrentFactState?.(scope, this.gameData);
         const readContext = memoryEngine.memory4.createProfileReadContext(scope);
         for (const entityId of this.gameData.characters.keys()) {
           if (Number(entityId) === Number(ownerId)) continue;
@@ -1851,6 +1852,16 @@ class Conversation {
     const mentionedEntities = mentionableProfiles.filter(character => mentionedIds.includes(character.id));
     const memory4RelationshipEvidence = buildCurrentMemory4RelationshipEvidence({ gameData: this.gameData,
       ownerIds: participantIds, entityIds: [...participantIds, ...mentionedIds] });
+    const disclosureFactEpochsByOwner = {};
+    for (const ownerId of participantIds) {
+      try {
+        disclosureFactEpochsByOwner[ownerId] = memoryEngine.memory4?.captureDisclosureFactEpochs?.(
+          { campaignToken: this.gameData.campaignToken, ownerId }, this.gameData) || {};
+      } catch (error) {
+        console.warn("[Memory4] Fact epoch capture unavailable:", error.message);
+        disclosureFactEpochsByOwner[ownerId] = {};
+      }
+    }
     return {
       conversationId: this.id,
       date: this.gameData.date,
@@ -1862,6 +1873,7 @@ class Conversation {
       participants,
       mentionedEntities,
       memory4RelationshipEvidence,
+      disclosureFactEpochsByOwner,
       disclosureCharacters: [...this.gameData.characters.values()].map(character => ({ id: Number(character.id),
         names: [...new Set([character.firstName, character.shortName, character.fullName, character.name].filter(Boolean))],
         nickname: character.nickname || null, facts: getFactCandidates(character) })),

@@ -3,6 +3,7 @@
 const { assertScope, hash, ids } = require("./memory4-contract");
 const { normalizeGameDate } = require("../worldline/character-temporal-facts");
 const { normalizeTraitKey, getTraitAliases } = require("../prompts/trait-profile-selector");
+const { directSpeechSpans } = require("./memory4-entity-context");
 
 const TITLE_RANKS = new Map([
   ["barony", { value: "男爵", aliases: ["Baron", "男爵领"] }],
@@ -150,7 +151,7 @@ function characterId(character) {
 
 function characterAliases(character) {
   return uniqueText([...(Array.isArray(character?.names) ? character.names : []), character?.fullName,
-    character?.shortName, character?.firstName, character?.name]);
+    character?.shortName, character?.firstName, character?.name, character?.nickname]);
 }
 
 function occurrences(text, alias) {
@@ -172,10 +173,19 @@ function longestOccurrences(items) {
 
 function matchedTargetAliases(text, characters, fragment) {
   const rows = [];
+  const aliasOwners = new Map();
   for (const character of characters.values()) {
     const id = characterId(character);
     if (!id) continue;
-    for (const alias of characterAliases(character)) for (const occurrence of occurrences(text, alias)) rows.push({ ...occurrence, id });
+    for (const alias of characterAliases(character)) {
+      if (!aliasOwners.has(alias)) aliasOwners.set(alias, new Set());
+      aliasOwners.get(alias).add(id);
+    }
+  }
+  for (const [alias, owners] of aliasOwners) {
+    if (owners.size !== 1) continue;
+    const id = [...owners][0];
+    for (const occurrence of occurrences(text, alias)) rows.push({ ...occurrence, id });
   }
   const spans = new Map();
   for (const row of longestOccurrences(rows)) {
@@ -266,45 +276,46 @@ function scanSource(snapshot, gameData, sourceKind, letterProof = null) {
   for (const fragment of fragments) {
     if (!eligibleFragment(snapshot, fragment, sourceKind, letterProof)) continue;
     const messageIds = sourceMessageIds(fragment, sourceKind);
-    const pieces = fragment.text.split(/([。.!！?？;；\r\n]+)/);
-    for (let index = 0; index < pieces.length; index += 2) {
-      const sentence = `${pieces[index] || ""}${pieces[index + 1] || ""}`.trim();
-      if (!sentence) continue;
-      if (UNCERTAIN.test(sentence)) continue;
-      // A speaker's own delivery cue is not somebody else's attributed claim.
-      const attributedSpeech = [...sentence.matchAll(/说(?:道|过)?|表示|宣称|转述|引用/g)].some(match => {
-        const subject = sentence.slice(0, match.index).split(/[,，:：]/).at(-1).trim();
-        return !subject || !/^(?:我|吾|朕|寡人|孤|本王|在下|鄙人|本人)?(?:低声|轻声|高声|大声|小声|悄声)?$/.test(subject);
-      });
-      if (attributedSpeech) continue;
-      const targetAliasesById = matchedTargetAliases(sentence, characters, fragment);
-      for (const [entityId, targetAliases] of targetAliasesById) {
-        if (entityId === snapshot.ownerId) continue;
-        const character = characters.get(entityId);
-        const facts = getFactCandidates(character);
-        const matched = new Set(matchedFacts(sentence, facts));
-        const otherTargetAliases = uniqueText([...characters.values()].filter(candidate => characterId(candidate) !== entityId)
-          .flatMap(characterAliases));
-        for (const fact of facts) {
-          const aliases = uniqueText([...targetAliases]);
-          const ageAssertion = fact.factType === "AGE"
-            ? isCurrentAgeAssertion(sentence.replace(/[。.!！?？;；]+$/u, "").trim(), aliases, fact, fragment) : false;
-          if (fact.factType === "AGE" ? !ageAssertion : !matched.has(fact.factKey)) continue;
-          if (fragment.sourceRole === "mixed") continue;
-          if (fragment.sourceRole === "assistant"
-            && (entityId !== Number(fragment.speakerId) || !aliases.some(alias => SPEAKER_SELF_ALIASES.has(alias)))) continue;
-          if (fact.factType !== "AGE" && !assertedBetween(sentence, aliases, fact.aliases, otherTargetAliases)) continue;
-          const factId = disclosureFactId(snapshot, entityId, fact.factType, fact.factKey);
-          let disclosure = byFact.get(factId);
-          if (!disclosure) {
-            disclosure = { factId, entityId, factType: fact.factType, factKey: fact.factKey, value: fact.value, evidence: {
-              sourceMessageIds: [], sourceFragmentIds: [], visibilityEvidence: [], sourceTextHashes: [] } };
-            byFact.set(factId, disclosure);
+    const scanTexts = fragment.sourceRole === "mixed" ? [] : fragment.sourceRole === "assistant"
+      ? directSpeechSpans(fragment.text, characterAliases(characters.get(Number(fragment.speakerId)))).map(span => span.text)
+      : [fragment.text];
+    for (const scanText of scanTexts) {
+      const pieces = scanText.split(/([。.!！?？;；\r\n]+)/);
+      for (let index = 0; index < pieces.length; index += 2) {
+        const sentence = `${pieces[index] || ""}${pieces[index + 1] || ""}`.trim();
+        if (!sentence || UNCERTAIN.test(sentence)) continue;
+        // A speaker's own delivery cue is not somebody else's attributed claim.
+        const attributedSpeech = [...sentence.matchAll(/说(?:道|过)?|告诉|提到|表示|宣称|转述|引用/g)].some(match => {
+          const subject = sentence.slice(0, match.index).split(/[,，:：]/).at(-1).trim();
+          return !subject || !/^(?:我|吾|朕|寡人|孤|本王|在下|鄙人|本人)?(?:低声|轻声|高声|大声|小声|悄声)?$/.test(subject);
+        });
+        if (attributedSpeech) continue;
+        const targetAliasesById = matchedTargetAliases(sentence, characters, fragment);
+        for (const [entityId, targetAliases] of targetAliasesById) {
+          if (entityId === snapshot.ownerId) continue;
+          const character = characters.get(entityId);
+          const facts = getFactCandidates(character);
+          const matched = new Set(matchedFacts(sentence, facts));
+          const otherTargetAliases = uniqueText([...characters.values()].filter(candidate => characterId(candidate) !== entityId)
+            .flatMap(characterAliases));
+          for (const fact of facts) {
+            const aliases = uniqueText([...targetAliases]);
+            const ageAssertion = fact.factType === "AGE"
+              ? isCurrentAgeAssertion(sentence.replace(/[。.!！?？;；]+$/u, "").trim(), aliases, fact, fragment) : false;
+            if (fact.factType === "AGE" ? !ageAssertion : !matched.has(fact.factKey)) continue;
+            if (fact.factType !== "AGE" && !assertedBetween(sentence, aliases, fact.aliases, otherTargetAliases)) continue;
+            const factId = disclosureFactId(snapshot, entityId, fact.factType, fact.factKey);
+            let disclosure = byFact.get(factId);
+            if (!disclosure) {
+              disclosure = { factId, entityId, factType: fact.factType, factKey: fact.factKey, value: fact.value, evidence: {
+                sourceMessageIds: [], sourceFragmentIds: [], visibilityEvidence: [], sourceTextHashes: [] } };
+              byFact.set(factId, disclosure);
+            }
+            disclosure.evidence.sourceMessageIds.push(...messageIds);
+            disclosure.evidence.sourceFragmentIds.push(fragment.fragmentId);
+            disclosure.evidence.visibilityEvidence.push(fragment.visibilityEvidence);
+            disclosure.evidence.sourceTextHashes.push(hash(fragment.text));
           }
-          disclosure.evidence.sourceMessageIds.push(...messageIds);
-          disclosure.evidence.sourceFragmentIds.push(fragment.fragmentId);
-          disclosure.evidence.visibilityEvidence.push(fragment.visibilityEvidence);
-          disclosure.evidence.sourceTextHashes.push(hash(fragment.text));
         }
       }
     }
