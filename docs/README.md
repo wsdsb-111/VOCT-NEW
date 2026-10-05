@@ -4,6 +4,12 @@
 
 ## 推荐阅读顺序
 
+本轮最新入口：[V8.14.2 信件调度与记忆重试热修](v8.14.2-letter-memory-retry-hotfix-report.md)。接受后信件摘要、Detail/Year/Life 和失败重试独立于游戏 Effect；模型整理联动重建并保留手工版本。当前清单 363 发布组、432 分类文件、68 历史归档，最终验证与 CK3 Gate 见报告。以下为先前阶段快照。
+
+最新入口：[V8.14.2 姓名、关系上下文与人物披露热修](v8.14.2-entity-naming-disclosure-hotfix-report.md) / [第一百五十阶段](V8阶段开发记录.md#第一百五十阶段v8142-姓名关系上下文与人物披露热修2026-10-05)。接入已有 Owner 关系与来源姓名、原话披露及历史年龄/日期；用户确认长期记忆生成 PASS。完整发布 359/359、独立 QA 14/14、隔离窗口 38 张截图通过；清单 428 分类文件、359 发布组、68 历史归档。既有数据不自动重写，本次新改动的 Provider/CK3/Soak Gate 仍待用户验收。下方为先前阶段快照。
+
+最新事故入口：[V8.14.2 摘要编辑与长期记忆热修](v8.14.2-summary-memory-incident-hotfix-report.md)。普通 Legacy 编辑不再误受 Memory4 归档只读限制；长期抽取补齐已证明知情的 Owner 实体授权，全部候选校验失败保留恢复快照，不再冒充无长期事实。完整发布 355/355、独立 QA 8/8、隔离窗口 36 张截图与普通摘要实际保存通过；清单为 424 分类文件、355 发布组、68 历史归档。真实 Provider/CK3 生成仍交用户复测，旧数据不自动回填。下方 Disclosure 结果为热修前的阶段快照。
+
 当前入口：[V8.14.2 Owner-scoped Disclosure 实施报告](v8.14.2-owner-scoped-disclosure-implementation-report.md) / [第一百四十八阶段记录](V8阶段开发记录.md#第一百四十八阶段v8142-owner-scoped-disclosure)。披露按 Campaign × Owner × Entity × Fact 限定，接入 Memory4 Known Entity、对话 Finalization、收信/回信 Gate 与人物认知 UI。清单为 421 个分类测试文件、352 个发布组、68 个历史归档；最终完整发布门禁 352/352。独立 adversarial QA 31 PASS/0 FAIL，隔离 UI Smoke 34 张截图、startup smoke 36/36 通过。Disclosure CK3/Provider/cacheTelemetry/Soak Gate 仍待用户实测，不宣称 Full Freeze。
 
 [V8.14.1 前端内容同步](v8.14.1-frontend-content-update-implementation-report.md)保留当时的 Memory4 策略、协议 3.0/存储 2.5 和 App 版本证据。前次实机事故报告记载的信件 `NOT TESTED` 是报告形成时的状态；用户随后确认完整信件往返实机 PASS，详见 V8.14.2 报告，不回写历史报告。
@@ -196,6 +202,7 @@ V8.5.1 历史基线：[Sol 最终审查与修复](v8.5.1-sol-final-review.md)，
 
 ### 版本设计与实施报告
 
+- [v8.14.2-entity-naming-disclosure-hotfix-report.md](v8.14.2-entity-naming-disclosure-hotfix-report.md)：已有关系与源文姓名进入 Durable、原话披露事故修复、历史年龄与获知日期及离线/实机边界。
 - [v8.14.2-owner-scoped-disclosure-implementation-report.md](v8.14.2-owner-scoped-disclosure-implementation-report.md)：Known Entity Owner-scoped Disclosure、Finalization/Letter 来源门禁、Current Truth、手工覆盖、人物认知 UI 与待验收 Gate。
 - [v8.4-gamestate-performance-benchmark.md](v8.4-gamestate-performance-benchmark.md)：指定存档的只读性能勘探基准；不是发布 SLA。
 - [v8.4-gamestate-capability-report.md](v8.4-gamestate-capability-report.md)

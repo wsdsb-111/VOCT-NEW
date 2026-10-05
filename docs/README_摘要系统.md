@@ -1,5 +1,23 @@
 # 对话摘要与人物记忆：Memory Engine 4.0（3.0 协议、2.5 存储兼容）
 
+## V8.14.2 信件与摘要重试（2026-10-05）
+
+[实施报告](v8.14.2-letter-memory-retry-hotfix-report.md)：完整信件交换仅在可信游戏接受后归档，以冻结来源生成双向 Legacy 与逐 Owner Detail，再重建 Year/Life；失败只补未完成阶段，不重发 Effect。不虚构物理在场或消息 ID；明确时间词由真实 letter ID/正文哈希验证，相对时间使用原信日期。模型整理所选摘要也联动重建；失败进入已有恢复队列，手工版本保留，无长期事实/未知事件日期不补造。结束对话的可信 read snapshot 可用于恢复与来源证明重建，不开放任意归档写入。协议、存储与召回兼容合同未升级，下方为既有阶段记录。
+
+## V8.14.2 姓名、关系与披露热修（2026-10-05）
+
+[热修报告](v8.14.2-entity-naming-disclosure-hotfix-report.md)：长期抽取接入现有关系回读及来源姓名，按 Owner/Campaign/片段/日期限定；Owner 是记忆持有人，不是“主人”。明确原话中的唯一姓名或已确认直接关系可帮助归档区分人物，同名、泛称和未知真名不猜测。当前关系不制造历史关系变化，恢复沿用原始关系快照。用户已确认长期记忆正常生成 PASS；本次新姓名及披露规则仍待实机复测，旧错误正文不自动重写。
+
+原生 Finalization 的 `finalization_source_paragraph` 保留可重验原话，不要求摘要整段逐字复述；已有 annotation、私语/小组边界与消息 0 保留。没有 native flag 的旧未标注消息不扩权，伪造摘要和 assistant 第三人称旁白不自动披露。`AGE` 只记录与当时 CK3 年龄相符的本人当前年龄明示，人物认知展示“披露时年龄 + 获知日期”，始终 `current:false`，以后变龄不重算，不开放手工当前年龄按钮。头衔/特质当前事实校验、手动覆盖、归档只读和信件 Gate 继续保留。
+
+内部抽取 `entityNames`/`relationships` 与原话证据纳入 source revision；不改变显示 4.0、协议 3.0、存储 2.5、IPC、Recent2、Recall 顺序、Cache Anchor 或 Prompt Block ID。当前本地完整发布 359/359、独立 QA 14/14、隔离 UI 38 张截图通过；下方各阶段数字和“摘要逐字”限制为历史快照，最新原话桥接以上述合同为准。
+
+## V8.14.2 摘要编辑与长期抽取事故热修（2026-10-04）
+
+[热修报告](v8.14.2-summary-memory-incident-hotfix-report.md)：普通 Legacy 摘要的手工编辑/删除不要求活动对话，也不受 Memory4 归档只读包装限制；Official 保护及 Memory4 的活动 Owner/Campaign/revision 写入门禁保留。下方历史“只读页禁止修改”范围应理解为 Memory4 操作，不再延伸至普通 Legacy 内容。
+
+长期抽取以引用片段的 `knownBy` 证明 Owner 知情后，允许该 Owner 成为相关实体；`allowedEntityIds` 与出席 `participantIds` 分开，不向其他在场者授予未知实体信息。所有候选因实体引用非法被拒且没有其他有效结果时，记录抽取失败并保留恢复快照；真实空结果仍正常保留 Legacy。旧误记空归档不自动回填；有有效 Detail 才派生年度/人生。显示 4.0、协议 3.0、存储 2.5 及冻结/召回合同不变，真实 Provider 生成率待用户复测。
+
 ## V8.14.2 Owner-scoped Disclosure（本地回归与 UI 通过；实机 Gate 待验收）
 
 [实施报告](v8.14.2-owner-scoped-disclosure-implementation-report.md)将明确说出的当前头衔/特质作为 Owner × Campaign × Entity × Fact 范围的 Known Entity evidence。扫描只读取经过可见性与来源校验的 spoken fragments，限于当前结构化事实候选；不确定、否定、假设、传闻或歧义绑定均拒绝。手动已知/未知使用 revision 与 tombstone 管理，当前 Profile 仍从 CK3 GameData 校验事实是否存在。Nickname 默认可见，姓名继续走身份识别。

@@ -891,6 +891,19 @@ const letterPromptBuilder = new LetterPromptBuilder();
 const { createLetterEffectTransport } = require("./letters/letter-effect-transport");
 const { LetterEffectTransport } = createLetterEffectTransport({ settingsRepository, fs: fs$1, path, runFileManager, dataDir: VOTC_DATA_DIR });
 const letterEffectTransport = new LetterEffectTransport();
+const { LetterMemoryFinalization } = require("./memory-system/letter-memory-finalization");
+memoryEngine.letterMemoryFinalization = new LetterMemoryFinalization({
+  memoryEngine,
+  getSummarySettings: () => settingsRepository.getSummaryPromptSettings(),
+  getProviderSnapshot: () => llmManager.getProviderCapabilities("SUMMARY"),
+  requestSummary: (prompt, options = {}) => llmManager.sendSummaryRequest(prompt, void 0, {
+    requestType: "letter_summary", summaryAttempt: options.attempt, maxTokens: options.maxTokens, providerSnapshot: options.providerSnapshot
+  }),
+  requestDurable: (prompt, options = {}) => llmManager.sendSummaryRequest(prompt, void 0, {
+    requestType: "memory4_durable", maxTokens: options.maxTokens, providerSnapshot: options.providerSnapshot
+  }),
+  persistSummary: (summary, context) => GameData.saveRecoveredSummary(summary, context)
+});
 const { createLetterManager } = require("./letters/letter-manager");
 const { LetterManager, LetterResponseStatus, LetterSummaryStatus } = createLetterManager({
   settingsRepository, fs: fs$1, path, TailFile, readline: readline$1, parseLog,

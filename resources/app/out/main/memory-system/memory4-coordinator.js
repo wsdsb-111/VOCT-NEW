@@ -9,8 +9,9 @@ const { Memory4Store } = require("./memory4-store");
 const { Memory4ProfileService } = require("./memory4-profile");
 const { Memory4RelationshipReadback } = require("./memory4-relationship-readback");
 const { Memory4DerivedService } = require("./memory4-derived");
+const { buildMemory4EntityContext } = require("./memory4-entity-context");
 const { validateGenerationOutcome } = require("../providers/generation-outcome");
-const { validateSourceItem, presentIds } = require("./finalization-visibility");
+const { validateSourceItem, presentIds, sourceParagraphSegments } = require("./finalization-visibility");
 const { MentionTracker } = require("./mention-tracker");
 const { normalizeGameDate } = require("../worldline/character-temporal-facts");
 
@@ -81,6 +82,24 @@ class Memory4Coordinator {
     return sources;
   }
 
+  isLegacyRecompressionSnapshotCurrent(snapshot) {
+    if (snapshot?.legacyRecompression !== true || snapshot.summaryIds?.length !== 1
+      || snapshot.summaryIds[0] !== snapshot.legacySourceMemoryId || !Array.isArray(snapshot.fragments) || !snapshot.fragments.length) return false;
+    try {
+      const scope = { campaignToken: snapshot.campaignToken, ownerId: snapshot.ownerId };
+      const source = this.legacySource(scope, snapshot.legacySourceMemoryId);
+      if (snapshot.legacyArchiveScope === true) this.store.assertPersistedScope(scope);
+      if (!source || legacySourceHash(source) !== snapshot.legacySourceProof) return false;
+      const facts = new Map(this.legacyFacts(scope, source).map(fact => [fact.memoryId, fact]));
+      if (!Array.isArray(snapshot.legacySourceFactProofs) || snapshot.legacySourceFactProofs.length !== facts.size
+        || !snapshot.legacySourceFactProofs.every(([id, proof]) => facts.has(id) && legacySourceHash(facts.get(id)) === proof)) return false;
+      return snapshot.fragments.every(fragment => {
+        const fact = facts.get(fragment.legacyMemoryId);
+        return !!fact && fragment.text === fact.content && fragment.legacySourceHash === legacySourceHash(fact);
+      });
+    } catch { return false; }
+  }
+
   getLegacyCoverage(scope, memories = []) {
     assertScope(scope);
     scope = { campaignToken: scope.campaignToken, ownerId: scope.ownerId };
@@ -100,55 +119,151 @@ class Memory4Coordinator {
       retained: items.filter(item => item.retainedFacts > 0).length } };
   }
 
-  async recompressLegacy(scope, { memoryId, expectedSourceHash = null, providerSnapshot = null } = {}) {
+  async recompressLegacy(scope, { memoryId, expectedSourceHash = null, providerSnapshot = null,
+    isCurrent = () => true, allowPersistedArchive = false, rebuildDerived = false } = {}) {
     assertScope(scope);
     scope = { campaignToken: scope.campaignToken, ownerId: scope.ownerId };
+    if (allowPersistedArchive) this.store.assertPersistedScope(scope);
     const key = hash([scope, memoryId]);
+    const rebuildDerivedViews = proof => this.derived.rebuild(scope, { kind: "all", providerSnapshot, committedFinalization: true,
+      finalizationProof: proof }).catch(error => ({ status: "FAILED", kind: "all", reason: String(error?.message || error) }));
     if (this.lazyInFlight.has(key)) return { status: "IN_PROGRESS", sourceMemoryId: memoryId, entryIds: [], retained: true };
     const source = this.legacySource(scope, memoryId);
-    let facts = this.legacyFacts(scope, source);
+    const sourceFacts = this.legacyFacts(scope, source);
+    let facts = sourceFacts;
     if (!source || expectedSourceHash && legacySourceHash(source) !== expectedSourceHash) return { status: "STALE", sourceMemoryId: memoryId, entryIds: [], retained: true };
     if (!facts.length) return { status: "RETAINED_LEGACY", sourceMemoryId: memoryId, entryIds: [], retained: true, reason: "UNPROVEN_FRAGMENT_BOUNDARY" };
-    const index = this.store.loadIndex(scope);
-    const covered = new Set(Object.values(index.entries).flatMap(row => (row.legacyRefs || []).filter(ref =>
-      facts.some(fact => fact.memoryId === ref.memoryId && legacySourceHash(fact) === ref.sourceHash)).map(ref => ref.memoryId)));
-    facts = facts.filter(fact => !covered.has(fact.memoryId)).slice(0, MAX_DURABLE_ENTRIES_PER_OWNER);
-    if (!facts.length) return { status: "ALREADY_CONVERTED", sourceMemoryId: memoryId, entryIds: [], retained: true };
-    const sourceHash = legacySourceHash(source), proofs = facts.map(memory => [memory.memoryId, legacySourceHash(memory)]);
-    const current = () => (!this.derived.options.isCampaignCurrent || this.derived.options.isCampaignCurrent(scope.campaignToken))
-      && legacySourceHash(this.legacySource(scope, memoryId) || {}) === sourceHash
-      && proofs.every(([id, proof]) => {
+    const sourceHash = legacySourceHash(source), sourceProofs = sourceFacts.map(memory => [memory.memoryId, legacySourceHash(memory)]);
+    const current = () => (allowPersistedArchive || !this.derived.options.isCampaignCurrent || this.derived.options.isCampaignCurrent(scope.campaignToken))
+      && isCurrent() && legacySourceHash(this.legacySource(scope, memoryId) || {}) === sourceHash
+      && sourceProofs.every(([id, proof]) => {
         const memory = this.baseStore.getMemory(id);
         return memory && legacySourceHash(memory) === proof;
       });
-    const fragments = facts.map(memory => ({ fragmentId: `legacy_${hash([memory.memoryId, legacySourceHash(memory)])}`,
+    const legacyFragments = memories => memories.map(memory => ({ fragmentId: `legacy_${hash([memory.memoryId, legacySourceHash(memory)])}`,
       messageId: null, sourceMessageIds: [], text: memory.content,
       speakerId: ids(memory.provenance?.speakerIds).length === 1 ? ids(memory.provenance.speakerIds)[0] : scope.ownerId,
       presentIds: [scope.ownerId], knownBy: [scope.ownerId], visibility: "private", sourceType: "reported", recipientIds: [],
       entityIds: ids(memory.subjects), visibilityEvidence: "legacy_independent_owner_fact", legacyMemoryId: memory.memoryId,
       legacySourceHash: legacySourceHash(memory), legacyAnchorGameDate: memory.eventDate || source.eventDate || null }));
+    const index = this.store.loadIndex(scope);
+    const covered = new Set(Object.values(index.entries).flatMap(row => (row.legacyRefs || []).filter(ref =>
+      facts.some(fact => fact.memoryId === ref.memoryId && legacySourceHash(fact) === ref.sourceHash)).map(ref => ref.memoryId)));
+    facts = facts.filter(fact => !covered.has(fact.memoryId)).slice(0, MAX_DURABLE_ENTRIES_PER_OWNER);
+    if (!facts.length) {
+      if (rebuildDerived) {
+        const coveredProof = Object.entries(index.entries).filter(([entryId, row]) => !row.deleted
+          && (row.legacyRefs || []).some(ref => sourceFacts.some(fact =>
+            fact.memoryId === ref.memoryId && legacySourceHash(fact) === ref.sourceHash))
+          && index.finalizations[hash(row.finalizationId)]?.status === "STORE"
+          && index.finalizations[hash(row.finalizationId)]?.entryIds?.includes(entryId))
+          .sort((left, right) => String(left[1].finalizationId).localeCompare(String(right[1].finalizationId)))[0];
+        const record = coveredProof && index.finalizations[hash(coveredProof[1].finalizationId)];
+        if (coveredProof && record?.sourceRevision) {
+          if (!current()) return { status: "CANCELLED", sourceMemoryId: memoryId, entryIds: [], retained: true };
+          const snapshot = { ...scope, conversationId: `legacy_${hash([memoryId, scope, sourceProofs])}`,
+            finalizationId: coveredProof[1].finalizationId, sourceRevision: record.sourceRevision,
+            episodeId: null, date: source.eventDate || null, totalDays: source.totalDays ?? null,
+            fragments: legacyFragments(sourceFacts), presentMessageCount: 0, completeness: "partial", counterpartIds: [], summaryIds: [memoryId],
+            legacyRetained: true, skipKnownEvidence: true, legacyRecompression: true, legacySourceMemoryId: memoryId,
+            legacySourceProof: sourceHash, legacySourceFactProofs: sourceProofs, legacyArchiveScope: allowPersistedArchive === true,
+            summaryProviderSnapshot: providerSnapshot };
+          const recoveryFile = this.recoveryPath(snapshot), priorRecovery = this.readRecovery(recoveryFile);
+          this.saveRecovery(snapshot, { status: "PENDING", retryCount: priorRecovery?.retryCount || 0, lastError: null });
+          const derived = await rebuildDerivedViews({ finalizationId: coveredProof[1].finalizationId, sourceRevision: record.sourceRevision });
+          if (["COMPLETE", "MANUAL_OVERRIDE"].includes(derived?.status)) {
+            if (fs.existsSync(recoveryFile)) { this.readRecovery(recoveryFile); fs.unlinkSync(recoveryFile); }
+          } else this.saveRecovery(snapshot, { status: "DERIVED_REBUILD_FAILED", retryCount: priorRecovery?.retryCount || 0,
+            lastError: String(derived?.reason || derived?.status || "memory4_derived_failed") });
+          return { status: "ALREADY_CONVERTED", canonical: { status: "ALREADY_CONVERTED", entryIds: [] }, derived,
+            sourceMemoryId: memoryId, entryIds: [], retained: true };
+        }
+        return { status: "ALREADY_CONVERTED", canonical: { status: "ALREADY_CONVERTED", entryIds: [] },
+          derived: { status: "FAILED", kind: "all", reason: "COMMITTED_SOURCE_PROOF_UNAVAILABLE" },
+          sourceMemoryId: memoryId, entryIds: [], retained: true };
+      }
+      return { status: "ALREADY_CONVERTED", sourceMemoryId: memoryId, entryIds: [], retained: true };
+    }
+    const proofs = facts.map(memory => [memory.memoryId, legacySourceHash(memory)]);
+    const fragments = legacyFragments(facts);
     const snapshot = { ...scope, conversationId: `legacy_${hash([memoryId, scope, proofs])}`, finalizationId: `legacy_${hash([scope, memoryId, sourceHash, proofs])}`,
       episodeId: null, date: source.eventDate || null, totalDays: source.totalDays ?? null, sourceRevision: hash([sourceHash, proofs]),
-      fragments, presentMessageCount: 0, completeness: "partial", counterpartIds: [], summaryIds: [memoryId], legacyRetained: true, skipKnownEvidence: true };
+      fragments, presentMessageCount: 0, completeness: "partial", counterpartIds: [], summaryIds: [memoryId], legacyRetained: true, skipKnownEvidence: true,
+      legacyRecompression: true, legacySourceMemoryId: memoryId, legacySourceProof: sourceHash, legacySourceFactProofs: sourceProofs,
+      legacyArchiveScope: allowPersistedArchive === true };
+    const recoveryFile = this.recoveryPath(snapshot);
+    const priorRecovery = this.readRecovery(recoveryFile);
+    const clearRecovery = () => {
+      if (!fs.existsSync(recoveryFile)) return;
+      this.readRecovery(recoveryFile);
+      fs.unlinkSync(recoveryFile);
+    };
+    const persistDerivedRecovery = derived => {
+      if (["COMPLETE", "MANUAL_OVERRIDE"].includes(derived?.status)) { clearRecovery(); return; }
+      const priorAttempt = this.readRecovery(recoveryFile);
+      this.saveRecovery(snapshot, { status: "DERIVED_REBUILD_FAILED", retryCount: priorAttempt?.retryCount || 0,
+        lastError: String(derived?.reason || derived?.status || "memory4_derived_failed") });
+    };
     const prior = this.store.loadIndex(scope).finalizations[hash(snapshot.finalizationId)];
-    if (prior) return { status: "ALREADY_CONVERTED", sourceMemoryId: memoryId, entryIds: [...prior.entryIds], retained: true };
-    if (typeof this.derived.options.requestExtraction !== "function") return { status: "EXTRACTION_FAILED", sourceMemoryId: memoryId, entryIds: [], retained: true, reason: "memory4_provider_unavailable" };
+    if (prior) {
+      if (rebuildDerived) {
+        if (!current()) return { status: "CANCELLED", sourceMemoryId: memoryId, entryIds: [], retained: true };
+        const derived = await rebuildDerivedViews({ finalizationId: snapshot.finalizationId, sourceRevision: snapshot.sourceRevision });
+        persistDerivedRecovery(derived);
+        return { status: "ALREADY_CONVERTED", canonical: { status: "ALREADY_CONVERTED", entryIds: [...prior.entryIds] }, derived,
+          sourceMemoryId: memoryId, entryIds: [...prior.entryIds], retained: true };
+      }
+      return { status: "ALREADY_CONVERTED", sourceMemoryId: memoryId, entryIds: [...prior.entryIds], retained: true };
+    }
+    if (typeof this.derived.options.requestExtraction !== "function") {
+      this.saveRecovery(snapshot, { status: "EXTRACTION_FAILED", retryCount: Number(priorRecovery?.retryCount || 0) + 1,
+        lastError: "memory4_provider_unavailable" });
+      return { status: "EXTRACTION_FAILED", sourceMemoryId: memoryId, entryIds: [], retained: true, reason: "memory4_provider_unavailable" };
+    }
     this.lazyInFlight.add(key);
     const controller = new AbortController();
     try {
       if (!current()) return { status: "CANCELLED", sourceMemoryId: memoryId, entryIds: [], retained: true };
+      this.saveRecovery(snapshot, { status: "PENDING", retryCount: priorRecovery?.retryCount || 0, lastError: null });
       providerSnapshot ||= this.derived.options.getProviderSnapshot ? await this.derived.options.getProviderSnapshot() : null;
+      snapshot.summaryProviderSnapshot = providerSnapshot;
+      this.saveRecovery(snapshot, { status: "PENDING", retryCount: priorRecovery?.retryCount || 0, lastError: null });
+      if (!current()) return { status: this.isLegacyRecompressionSnapshotCurrent(snapshot) ? "CANCELLED" : "STALE",
+        sourceMemoryId: memoryId, entryIds: [], retained: true };
       const response = await this.derived.options.requestExtraction(this.buildPrompt(snapshot, fragments), {
         signal: controller.signal, maxTokens: DURABLE_MAX_OUTPUT_TOKENS, providerSnapshot, requestType: "memory4_durable" });
-      if (!current()) return { status: "STALE", sourceMemoryId: memoryId, entryIds: [], retained: true };
+      if (!current()) {
+        const sourceCurrent = this.isLegacyRecompressionSnapshotCurrent(snapshot);
+        if (!sourceCurrent) clearRecovery();
+        return { status: sourceCurrent ? "CANCELLED" : "STALE", sourceMemoryId: memoryId, entryIds: [], retained: true };
+      }
       const result = this.parseResult(response, fragments, snapshot);
-      if (!result.entries.length) return { status: "RETAINED_LEGACY", sourceMemoryId: memoryId, entryIds: [], retained: true, reason: "NO_DURABLE_CONTENT" };
+      if (result.rejectedUnknownEntityCount) this.trace?.record("memory4_candidate_rejected", {
+        ownerId: scope.ownerId, count: result.rejectedUnknownEntityCount, reason: "unknown_entity"
+      });
+      if (!result.entries.length && !result.commitmentTransitions.length && result.rejectedUnknownEntityCount > 0) {
+        throw new Error("memory4_response_no_valid_entries");
+      }
+      if (!result.entries.length && !rebuildDerived) {
+        clearRecovery();
+        return { status: "RETAINED_LEGACY", sourceMemoryId: memoryId, entryIds: [], retained: true, reason: "NO_DURABLE_CONTENT" };
+      }
       const committed = this.store.commitOwner(snapshot, result);
-      this.derived.schedule(scope, { providerSnapshot });
-      this.trace?.record("memory4_legacy_recompression", { ownerId: scope.ownerId, status: "COMPLETE", count: committed.entryIds.length });
-      return { status: "COMPLETE", sourceMemoryId: memoryId, entryIds: [...committed.entryIds], retained: true };
+      let derived = null;
+      if (rebuildDerived) {
+        derived = await rebuildDerivedViews({ finalizationId: snapshot.finalizationId, sourceRevision: snapshot.sourceRevision });
+        persistDerivedRecovery(derived);
+      } else if (committed.entryIds.length || committed.changedEntryIds?.length) this.derived.schedule(snapshot, { providerSnapshot, committedFinalization: true });
+      else clearRecovery();
+      const status = result.status === "NO_DURABLE_CONTENT" ? "NO_DURABLE_CONTENT" : "COMPLETE";
+      this.trace?.record("memory4_legacy_recompression", { ownerId: scope.ownerId, status, count: committed.entryIds.length });
+      return { status, ...(rebuildDerived ? { canonical: { status, entryIds: [...committed.entryIds] }, derived } : {}),
+        sourceMemoryId: memoryId, entryIds: [...committed.entryIds], retained: true };
     } catch (error) {
       this.trace?.record("memory4_legacy_recompression", { ownerId: scope.ownerId, status: "EXTRACTION_FAILED", errorCode: error.message });
+      if (!this.isLegacyRecompressionSnapshotCurrent(snapshot)) clearRecovery();
+      else if (current()) this.saveRecovery(snapshot, { status: "EXTRACTION_FAILED", retryCount: Number(this.readRecovery(recoveryFile)?.retryCount || 0) + 1,
+        lastError: String(error?.message || error) });
       return { status: "EXTRACTION_FAILED", sourceMemoryId: memoryId, entryIds: [], retained: true, reason: error.message };
     } finally { this.lazyInFlight.delete(key); }
   }
@@ -337,15 +452,55 @@ class Memory4Coordinator {
         return [person?.name, person?.fullName, person?.shortName].filter(Boolean)
           .some((name) => ["对", "向", "告诉", "问"].some((cue) => text.includes(`${cue}${name}`)));
       }));
+      const sourceRole = verified.messageIds.length === 1 && verified.speakers.length === 1
+        ? (context.messages || []).find(message => Number(message.id) === verified.messageIds[0])?.role : "mixed";
       const entityIds = ids(mentionTracker.findMentionedCharacterIds([{ content: text }], { candidates: entityProfiles, resolveCoreference: false }));
       projection.fragments.push({ fragmentId: `segment_${segment.segmentId}`, messageId: verified.messageIds[0],
         sourceMessageIds: verified.messageIds, text, speakerId: speaker, speakerIds: verified.speakers,
-        sourceTextVerified,
+        sourceTextVerified, sourceRole,
         presentIds: ids(verified.messageIds.reduce((common, messageId) =>
           common === null ? presentIds(context, messageId) : common.filter((id) => presentIds(context, messageId).includes(id)), null)),
         knownBy: ids(verified.audience), visibility: segment.visibility,
         sourceType: segment.source, recipientIds,
         entityIds, visibilityEvidence: "finalization_validated_segment" });
+    }
+    for (const message of context.messages || []) {
+      // Only native Finalization can authorize raw paragraphs; legacy gaps stay withheld.
+      if (context.finalizationVisibilityV1 !== true) continue;
+      if (!Number.isSafeInteger(message.id) || !["user", "assistant"].includes(message.role)) continue;
+      // Existing annotations own this message's boundaries; unmarked gaps remain withheld.
+      if (Array.isArray(message.memory4Fragments) && message.memory4Fragments.length) continue;
+      const restrictUnmarked = (context.verifiedSummarySegments || []).some(segment =>
+        ["private", "known_group"].includes(segment.visibility)
+          && Array.isArray(segment.provenance?.messageIds) && segment.provenance.messageIds.includes(message.id));
+      const sourceParagraphs = sourceParagraphSegments(context, message, restrictUnmarked);
+      if (!sourceParagraphs) continue;
+      for (const [paragraphIndex, paragraph] of sourceParagraphs.entries()) {
+        const verified = validateSourceItem(paragraph, context, { segment: true });
+        if (!verified.success || verified.source !== "spoken" || !verified.audience.includes(ownerId)
+          || verified.speakers.length !== 1) continue;
+        const text = String(paragraph.content || "");
+        if (message.role === "assistant" && !/"[^"]+"|“[^”]+”|‘[^’]+’|'[^']+'|「[^」]+」|『[^』]+』/u.test(text)
+          && !/^(?:我|吾|朕|寡人|孤|本王|在下|鄙人|本人)/u.test(text.trim())) continue;
+        const sourceTextVerified = String(message.content || "").split(/\r?\n/)
+          .some(sourceParagraph => sourceParagraph.trim() === text.trim());
+        if (!sourceTextVerified) continue;
+        const speaker = verified.speakers[0];
+        const sameSourceFragment = projection.fragments.some(fragment => fragment.text === text
+          && fragment.sourceType === "spoken"
+          && (Array.isArray(fragment.sourceMessageIds) ? fragment.sourceMessageIds : [fragment.messageId]).includes(message.id)
+          && ids(fragment.knownBy).join() === ids(verified.audience).join());
+        if (sameSourceFragment) continue;
+        const entityIds = ids(mentionTracker.findMentionedCharacterIds([{ content: text }], {
+          candidates: entityProfiles, resolveCoreference: false
+        }));
+        projection.fragments.push({ fragmentId: `source_${hash([context.conversationId, message.id, paragraphIndex,
+          text, verified.audience, verified.visibility])}`, messageId: message.id, sourceMessageIds: verified.messageIds,
+        text, speakerId: speaker, speakerIds: verified.speakers, sourceRole: message.role, sourceTextVerified,
+        presentIds: presentIds(context, message.id), knownBy: ids(verified.audience), visibility: verified.visibility,
+        sourceType: verified.source, recipientIds: ids(verified.audience.filter(id => id !== speaker)), entityIds,
+        visibilityEvidence: "finalization_source_paragraph" });
+      }
     }
     const classified = new Set((context.messages || []).filter(message => {
       const texts = verifiedTexts.get(message.id);
@@ -373,7 +528,10 @@ class Memory4Coordinator {
         ...fragment.presentIds.filter(id => id !== fragment.speakerId && fragment.knownBy.includes(id))]);
     }
     const disclosureCharacters = disclosureCharacterRows(context.disclosureCharacters);
-    projection.sourceRevision = hash([projection.sourceRevision, projection.fragments, disclosureCharacters]);
+    const entityContext = buildMemory4EntityContext({ ownerId, campaignToken: context.campaignToken, date: context.date,
+      fragments: projection.fragments, participantProfiles: context.participants,
+      mentionedEntities: context.mentionedEntities, relationshipEvidence: context.memory4RelationshipEvidence });
+    projection.sourceRevision = hash([projection.sourceRevision, projection.fragments, disclosureCharacters, entityContext]);
     const visibleEntities = new Set(projection.fragments.flatMap(fragment => ids(fragment.entityIds)));
     const relationshipChangeEntityIds = ids((context.relationshipChanges || []).filter(change =>
       change.detected === true && change.campaignToken === context.campaignToken && change.ownerId === ownerId
@@ -382,7 +540,7 @@ class Memory4Coordinator {
       finalizationId: context.finalizationId, episodeId: context.episodeId,
       date: context.date || null, totalDays: context.totalDays ?? null, counterpartIds: directCounterpartIds(projection.fragments, ownerId), summaryIds: [],
       summaryProviderSnapshot: context.summaryProviderSnapshot || null,
-      ...projection, disclosureCharacters, relationshipChangeEntityIds };
+      ...projection, disclosureCharacters, relationshipChangeEntityIds, ...entityContext };
   }
 
   orderFragments(snapshot, fragments) {
@@ -393,17 +551,28 @@ class Memory4Coordinator {
 
   buildPrompt(snapshot, fragments, remainingEntrySlots = MAX_DURABLE_ENTRIES_PER_OWNER, remainingTransitionSlots = MAX_DURABLE_ENTRIES_PER_OWNER) {
     const ordered = this.orderFragments(snapshot, fragments);
-    return [
-      { role: "system", content: `VOTC Memory Engine 4.0 Durable extraction. Return JSON only: {\"status\":\"STORE|NO_DURABLE_CONTENT\",\"entries\":[{\"memoryType\":\"RELATIONSHIP_CHANGE|COMMITMENT|DURABLE_KNOWLEDGE|MAJOR_EXPERIENCE|LONG_TERM_GOAL|EMOTIONAL_ANCHOR\",\"text\":\"...\",\"fragmentIds\":[\"...\"],\"entityIds\":[],\"participantIds\":[],\"topics\":[],\"eventTime\":{\"from\":null,\"to\":null,\"precision\":\"unknown\",\"status\":\"unknown\"}}],\"commitmentTransitions\":[{\"entryId\":\"...\",\"expectedRevision\":1,\"status\":\"fulfilled|cancelled|superseded\",\"fragmentIds\":[\"...\"],\"commitmentQuote\":\"...\",\"evidenceQuote\":\"...\",\"replacementEntryIndex\":null}]}. Only durable facts; ordinary conversation may have zero entries. Use only supplied fragments and their exact IDs. Entity IDs must be copied from the supplied fragment evidence; do not invent or infer IDs. Do not infer who heard other parts of an old message. Self-only legacy text is the author's statement, not proof of other people's private thoughts or CK3 facts. A reported event stays reported. Relative dates in Legacy fragments use their sourceAsOf, never the current runtime date or a different projection date. Uncertain event dates remain unknown. Do not change Campaign or Owner. Never claim an entry without a supporting fragment. Return no more than ${remainingEntrySlots} entries and ${remainingTransitionSlots} commitment transitions for this owner in this request. A transition must copy an activeCommitment entryId and expectedRevision, cite a complete verbatim evidenceQuote from a verified source fragment, and bind it by an exact, concrete commitmentQuote appearing in both the original commitment and the evidence. The binding must identify exactly one supplied active commitment; generic words are invalid. Only explicit fulfilled/cancelled/replacement statements qualify. Questions, future plans, hypothetical, negation, hearsay, ambiguous references and years of silence never change status. Fulfillment needs explicit completion of every original condition; cancellation/replacement must explicitly cover the original agreement including all its conditions. For superseded, replacementEntryIndex must point to a new COMMITMENT in this response, whose text is copied verbatim from the same replacement evidence. Use NO_DURABLE_CONTENT with entries:[] when only transitions are needed. No transition is CK3 effect confirmation.` },
+    const prompt = [
+      { role: "system", content: `VOTC Memory Engine 4.0 Durable extraction. Return JSON only: {\"status\":\"STORE|NO_DURABLE_CONTENT\",\"entries\":[{\"memoryType\":\"RELATIONSHIP_CHANGE|COMMITMENT|DURABLE_KNOWLEDGE|MAJOR_EXPERIENCE|LONG_TERM_GOAL|EMOTIONAL_ANCHOR\",\"text\":\"...\",\"fragmentIds\":[\"...\"],\"entityIds\":[],\"participantIds\":[],\"topics\":[],\"eventTime\":{\"from\":null,\"to\":null,\"precision\":\"unknown\",\"status\":\"unknown\"}}],\"commitmentTransitions\":[{\"entryId\":\"...\",\"expectedRevision\":1,\"status\":\"fulfilled|cancelled|superseded\",\"fragmentIds\":[\"...\"],\"commitmentQuote\":\"...\",\"evidenceQuote\":\"...\",\"replacementEntryIndex\":null}]}. Only durable facts; ordinary conversation may have zero entries. Use only supplied fragments and their exact IDs. For entityIds, each fragment's allowedEntityIds is the complete numeric allowlist; copy only those IDs. The Owner ID may be used when listed in allowedEntityIds for a fact about the Owner as its own subject or as the listener; include it only when relevant. participantIds are presence evidence only and never authorize entityIds. Do not infer or invent entity IDs. Do not infer who heard other parts of an old message. Self-only legacy text is the author's statement, not proof of other people's private thoughts or CK3 facts. A reported event stays reported. Relative dates in Legacy fragments use their sourceAsOf, never the current runtime date or a different projection date. Uncertain event dates remain unknown. Do not change Campaign or Owner. Never claim an entry without a supporting fragment. Return no more than ${remainingEntrySlots} entries and ${remainingTransitionSlots} commitment transitions for this owner in this request. A transition must copy an activeCommitment entryId and expectedRevision, cite a complete verbatim evidenceQuote from a verified source fragment, and bind it by an exact, concrete commitmentQuote appearing in both the original commitment and the evidence. The binding must identify exactly one supplied active commitment; generic words are invalid. Only explicit fulfilled/cancelled/replacement statements qualify. Questions, future plans, hypothetical, negation, hearsay, ambiguous references and years of silence never change status. Fulfillment needs explicit completion of every original condition; cancellation/replacement must explicitly cover the original agreement including all its conditions. For superseded, replacementEntryIndex must point to a new COMMITMENT in this response, whose text is copied verbatim from the same replacement evidence. Use NO_DURABLE_CONTENT with entries:[] when only transitions are needed. No transition is CK3 effect confirmation.` },
       { role: "user", content: JSON.stringify({ ownerId: snapshot.ownerId, campaignToken: snapshot.campaignToken,
         conversationDate: snapshot.date, completeness: snapshot.completeness,
         activeCommitments: (snapshot.activeCommitments || []).map(entry => ({ entryId: entry.entryId,
           expectedRevision: entry.revision, text: entry.text })),
-        fragments: ordered.map(fragment => ({ fragmentId: fragment.fragmentId, text: fragment.text,
+        fragments: ordered.map(fragment => {
+          const eventDate = normalizeGameDate(fragment.eventDate)?.canonical || null;
+          const acquiredDate = normalizeGameDate(fragment.acquiredDate)?.canonical || null;
+          return { fragmentId: fragment.fragmentId, text: fragment.text,
           visibilityEvidence: fragment.visibilityEvidence, speakerId: fragment.speakerId, sourceType: fragment.sourceType,
           entityIds: fragment.entityIds, presentIds: fragment.presentIds,
-          ...(fragment.legacyMemoryId ? { sourceAsOf: fragment.legacyAnchorGameDate } : {}) })) }) }
+          entityNames: (snapshot.entityNameEvidence || []).filter(row => row.fragmentId === fragment.fragmentId),
+          relationships: (snapshot.relationshipEvidence || []).filter(row => row.fragmentId === fragment.fragmentId),
+          allowedEntityIds: ids([...(fragment.knownBy?.includes(snapshot.ownerId) ? [snapshot.ownerId] : []),
+            fragment.speakerId, ...fragment.entityIds]), participantIds: ids(fragment.presentIds),
+          ...(fragment.legacyMemoryId ? { sourceAsOf: fragment.legacyAnchorGameDate } : {}),
+          ...(eventDate ? { eventDate } : {}), ...(acquiredDate ? { acquiredDate } : {}) };
+        }) }) }
     ];
+    prompt[0].content += " Owner means the memory holder (记忆持有人), never a master or 主人. Write archival prose in third person, identifying people by the evidence-backed names in the cited fragment's entityNames instead of bare 主人, 玩家, 师父 or 天师. A role may supplement an authorized name (师父 + 姓名) only when the source or scoped relationships proves that role. entityNames supplies only names this Owner can know from that fragment; absent names remain unknown and must not be obtained from a different Owner, unseen paragraph or backend profile. Preserve verbatim quotations required for commitments. relationships is the existing CK3 relationship readback scoped to this Owner and source date: use it to distinguish known people, not to manufacture an event, historical relationship change, current effect confirmation or a third person's private knowledge. Ambiguous roles and pronouns must remain ambiguous; do not guess an entity. Cite the original supporting fragments when their named entities were lost in a paraphrased summary.";
+    return prompt;
   }
 
   parseResult(response, allowedFragments, snapshot = null, maxEntries = MAX_DURABLE_ENTRIES_PER_OWNER, maxTransitions = MAX_DURABLE_ENTRIES_PER_OWNER) {
@@ -454,6 +623,17 @@ class Memory4Coordinator {
       const committed = this.store.loadIndex(snapshot).finalizations[hash(snapshot.finalizationId)];
       if (committed) {
         if (committed.sourceRevision !== snapshot.sourceRevision) throw new Error("memory4_source_revision_conflict");
+        if (snapshot.legacyRecompression === true) {
+          const derived = await this.derived.rebuild(snapshot, { kind: "all", providerSnapshot: snapshot.summaryProviderSnapshot,
+            committedFinalization: true, finalizationProof: { finalizationId: snapshot.finalizationId, sourceRevision: snapshot.sourceRevision } });
+          const derivedComplete = ["COMPLETE", "MANUAL_OVERRIDE"].includes(derived.status);
+          if (derivedComplete) {
+            if (fs.existsSync(file)) fs.unlinkSync(file);
+          } else this.saveRecovery(snapshot, { status: "DERIVED_REBUILD_FAILED", retryCount: prior?.retryCount || 0,
+            lastError: String(derived.reason || derived.status || "memory4_derived_failed") });
+          return { ownerId: snapshot.ownerId, ...committed,
+            ...(derivedComplete ? { alreadyCommitted: true, derivedRecovered: true } : { status: "DERIVED_REBUILD_FAILED" }), derived };
+        }
         this.recordDisclosures(snapshot, { campaignToken: snapshot.campaignToken, date: snapshot.date,
           characters: new Map((snapshot.disclosureCharacters || []).map(character => [character.id, character])) });
         if (fs.existsSync(file)) fs.unlinkSync(file);
@@ -461,7 +641,7 @@ class Memory4Coordinator {
       }
       snapshot.activeCommitments ||= this.store.activeCommitments(snapshot);
       this.saveRecovery(snapshot, { status: "PENDING", retryCount: prior?.retryCount || 0, lastError: null });
-      this.store.recordKnownEvidence(snapshot);
+      if (!snapshot.skipKnownEvidence) this.store.recordKnownEvidence(snapshot);
       let result;
       if (!snapshot.presentMessageCount && !snapshot.fragments.length) result = { status: "NOT_PRESENT", entries: [] };
       else if (!snapshot.fragments.length) result = { status: "NO_DURABLE_CONTENT", entries: [] };
@@ -507,12 +687,28 @@ class Memory4Coordinator {
         if (rejectedUnknownEntityCount) this.trace?.record("memory4_candidate_rejected", {
           ownerId: snapshot.ownerId, count: rejectedUnknownEntityCount, reason: "unknown_entity"
         });
+        if (!entries.length && !commitmentTransitions.length && rejectedUnknownEntityCount > 0) {
+          throw new Error("memory4_response_no_valid_entries");
+        }
         result = { status: entries.length ? "STORE" : "NO_DURABLE_CONTENT", entries, commitmentTransitions };
       }
       if (!isCurrent()) throw new Error("memory4_generation_changed");
       const persisted = this.store.commitOwner(snapshot, result);
       this.recordDisclosures(snapshot, { campaignToken: snapshot.campaignToken, date: snapshot.date,
         characters: new Map((snapshot.disclosureCharacters || []).map(character => [character.id, character])) });
+      if (snapshot.legacyRecompression === true) {
+        const derived = await this.derived.rebuild(snapshot, { kind: "all", providerSnapshot: snapshot.summaryProviderSnapshot,
+          committedFinalization: true, finalizationProof: { finalizationId: snapshot.finalizationId, sourceRevision: snapshot.sourceRevision } })
+          .catch(error => ({ status: "FAILED", kind: "all", reason: String(error?.message || error) }));
+        if (["COMPLETE", "MANUAL_OVERRIDE"].includes(derived.status)) {
+          if (fs.existsSync(file)) fs.unlinkSync(file);
+        } else this.saveRecovery(snapshot, { status: "DERIVED_REBUILD_FAILED", retryCount: prior?.retryCount || 0,
+          lastError: String(derived.reason || derived.status || "memory4_derived_failed") });
+        this.trace?.record("memory4_durable", { finalizationId: snapshot.finalizationId, ownerId: snapshot.ownerId,
+          status: persisted.status, entryCount: persisted.entryIds.length, derivedStatus: derived.status });
+        return { ownerId: snapshot.ownerId, ...persisted,
+          ...( ["COMPLETE", "MANUAL_OVERRIDE"].includes(derived.status) ? {} : { status: "DERIVED_REBUILD_FAILED" }), derived };
+      }
       if (persisted.entryIds.length || persisted.changedEntryIds?.length) this.derived.schedule(snapshot, { providerSnapshot: snapshot.summaryProviderSnapshot, committedFinalization: true });
       if (fs.existsSync(file)) fs.unlinkSync(file);
       this.trace?.record("memory4_durable", { finalizationId: snapshot.finalizationId, ownerId: snapshot.ownerId,
@@ -566,9 +762,26 @@ class Memory4Coordinator {
           const record = this.readRecovery(path.join(this.recoveryDir, files[index]));
           const snapshot = record.snapshot;
           if (!activeCampaignToken || snapshot.campaignToken !== activeCampaignToken) { results[index] = { status: "CAMPAIGN_MISMATCH", ownerId: snapshot.ownerId }; continue; }
-          if (!isNarrativeCommitted(snapshot)) { results[index] = { status: "WAITING_NARRATIVE", ownerId: snapshot.ownerId }; continue; }
+          const legacyRecompression = snapshot.legacyRecompression === true;
+          const file = path.join(this.recoveryDir, files[index]);
+          const discardStaleLegacy = () => {
+            if (!fs.existsSync(file)) return;
+            this.readRecovery(file);
+            fs.unlinkSync(file);
+          };
+          if (legacyRecompression && !this.isLegacyRecompressionSnapshotCurrent(snapshot)) {
+            discardStaleLegacy();
+            results[index] = { status: "STALE", ownerId: snapshot.ownerId };
+            continue;
+          }
+          if (!isNarrativeCommitted(snapshot) && !legacyRecompression) { results[index] = { status: "WAITING_NARRATIVE", ownerId: snapshot.ownerId }; continue; }
           if (!manual && Number(record.retryCount || 0) >= 3) { results[index] = { status: "FAILED_MANUAL", ownerId: snapshot.ownerId }; continue; }
-          results[index] = await this.finishOwner(snapshot, requestDurable, record, isCurrent);
+          const recoveryIsCurrent = () => isCurrent() && (!legacyRecompression || this.isLegacyRecompressionSnapshotCurrent(snapshot));
+          results[index] = await this.finishOwner(snapshot, requestDurable, record, recoveryIsCurrent);
+          if (legacyRecompression && results[index].status === "CANCELLED" && !this.isLegacyRecompressionSnapshotCurrent(snapshot)) {
+            discardStaleLegacy();
+            results[index] = { status: "STALE", ownerId: snapshot.ownerId };
+          }
         } catch (error) {
           results[index] = { status: "EXTRACTION_FAILED", error: String(error?.message || error) };
         }

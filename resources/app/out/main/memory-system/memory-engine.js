@@ -1276,8 +1276,10 @@ class MemoryEngine {
       campaignToken: context.campaignToken || null,
       totalDays: context.totalDays ?? null,
       participants: context.participants || [],
+      mentionedEntities: context.mentionedEntities || existing.mentionedEntities || [],
       excludedSummaryOwnerIds: uniqueIds(context.excludedSummaryOwnerIds),
       disclosureCharacters: context.disclosureCharacters || [],
+      memory4RelationshipEvidence: context.memory4RelationshipEvidence || existing.memory4RelationshipEvidence || [],
       participantPresence: context.participantPresence || [],
       relationshipChanges: context.relationshipChanges || existing.relationshipChanges || [],
       joinEvents: context.joinEvents || [],
@@ -1326,6 +1328,7 @@ class MemoryEngine {
       totalDays: snapshot.totalDays,
       participants,
       mentionedEntities: snapshot.mentionedEntities || [],
+      memory4RelationshipEvidence: snapshot.memory4RelationshipEvidence || [],
       disclosureCharacters: snapshot.disclosureCharacters || [],
       excludedSummaryOwnerIds: snapshot.excludedSummaryOwnerIds || [],
       participantPresence: snapshot.participantPresence,
@@ -1445,9 +1448,15 @@ class MemoryEngine {
       const narrative = await this.runPendingFinalizations(options);
       if (!this.memory4 || typeof options.requestDurable !== "function") return narrative;
       const generation = this.memoryGeneration;
+      const isRecoveryCurrent = () => {
+        try {
+          return generation === this.memoryGeneration
+            && (typeof options.isMemory4RecoveryCurrent !== "function" || options.isMemory4RecoveryCurrent() === true);
+        } catch { return false; }
+      };
       const durable = await this.memory4.recoverPending(options.requestDurable, {
         manual: options.manual === true, activeCampaignToken: options.activeCampaignToken || null,
-        isCurrent: () => generation === this.memoryGeneration,
+        isCurrent: isRecoveryCurrent,
         isNarrativeCommitted: snapshot => this.isMemory4NarrativeCommitted(snapshot)
       });
       return [...narrative, ...durable.filter(row => !["WAITING_NARRATIVE", "CAMPAIGN_MISMATCH"].includes(row.status))

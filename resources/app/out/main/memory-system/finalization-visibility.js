@@ -211,4 +211,5 @@ function validateVisibilityBoundaries(context, extraction) {
   return { success: failures.length === 0, failures, reasons: failures.map((failure) => failure.reason) };
 }
 
-module.exports = { validateSourceItem, validateVisibilityBoundaries, repairVisibilityBoundaries, rebuildSourceNarrative, presentIds, speakerId };
+module.exports = { validateSourceItem, validateVisibilityBoundaries, repairVisibilityBoundaries, rebuildSourceNarrative,
+  presentIds, speakerId, sourceParagraphSegments };

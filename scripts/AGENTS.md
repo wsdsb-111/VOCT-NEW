@@ -32,4 +32,4 @@ node --check resources\app\out\renderer\worldline-player-presentation.js
 git diff --check
 ~~~
 
-The release suite is the authoritative aggregate gate; the current documented inventory is 352 release groups, 421 classified test files, and 68 historical archives, and may change as the manifest evolves. Static/script checks do not prove real CK3, Provider, packaged Electron, remote CI or long-running behavior, so reports must state those boundaries separately.
+The release suite is the authoritative aggregate gate; the current documented inventory is 363 release groups, 432 classified test files, and 68 historical archives, and may change as the manifest evolves. Static/script checks do not prove real CK3, Provider, packaged Electron, remote CI or long-running behavior, so reports must state those boundaries separately.

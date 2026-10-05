@@ -70,9 +70,9 @@ async function run() {
   const profile = fs.mkdtempSync(path.join(os.tmpdir(), "votc-e-packaged-ui-"));
   const fixture = await createMemoryUiFixture(profile);
   const targetCharacter = fixture.characters.find(character => character.id === 1);
-  Object.assign(targetCharacter, { primaryTitle: "明王", nickname: "北地之虎", traits: [{ id: "bastard", name: "私生子" }] });
+  Object.assign(targetCharacter, { primaryTitle: "明王", nickname: "北地之虎", age: 23, traits: [{ id: "bastard", name: "私生子" }] });
   fixture.conversation.gameData.characters.set(targetCharacter.id, targetCharacter);
-  const disclosureText = "甲现在是明王。";
+  const disclosureText = "甲现在是明王。我今年23岁。";
   const disclosureContext = { ...fixture.scope, conversationId: "isolated-ui-conversation", finalizationId: "ui-smoke-disclosure-finalization",
     episodeId: "ui-smoke-disclosure-episode", date: "1164.1.1", totalDays: 425000,
     participants: [1, 2].map(id => ({ id })), participantPresence: [1, 2].map(characterId => ({ characterId, joinedAtMessageId: 0, leftAtMessageId: null })),
@@ -85,6 +85,14 @@ async function run() {
   const seededDisclosure = fixture.engine.memory4.store.recordDisclosures(disclosureSnapshot, [{
     factId: disclosureFactId(fixture.scope, targetCharacter.id, "TITLE", "title_明王"), entityId: targetCharacter.id,
     factType: "TITLE", factKey: "title_明王", value: "明王", evidence: {
+      sourceMessageIds: disclosureProjection.fragments.map(fragment => fragment.messageId),
+      sourceFragmentIds: disclosureProjection.fragments.map(fragment => fragment.fragmentId),
+      visibilityEvidence: disclosureProjection.fragments.map(fragment => fragment.visibilityEvidence),
+      sourceTextHashes: disclosureProjection.fragments.map(fragment => crypto.createHash("sha256").update(fragment.text).digest("hex"))
+    }
+  }, {
+    factId: disclosureFactId(fixture.scope, targetCharacter.id, "AGE", "age_23"), entityId: targetCharacter.id,
+    factType: "AGE", factKey: "age_23", value: "23", evidence: {
       sourceMessageIds: disclosureProjection.fragments.map(fragment => fragment.messageId),
       sourceFragmentIds: disclosureProjection.fragments.map(fragment => fragment.fragmentId),
       visibilityEvidence: disclosureProjection.fragments.map(fragment => fragment.visibilityEvidence),
@@ -206,14 +214,14 @@ async function run() {
       await evaluate(`document.dispatchEvent(new MouseEvent('mousemove',{bubbles:true,clientX:${size.x + Math.min(1000, width - 60) - size.width},clientY:${size.y + height - 60 - size.height}}));document.dispatchEvent(new MouseEvent('mouseup',{bubbles:true}))`);
       await delay(80);
     };
-    const screenshot = async (name, manager = "document.querySelector('.memory4-manager')") => {
-      await evaluate(`${manager}?.scrollIntoView({block:'start'})`);
+    const screenshot = async (name, manager = "document.querySelector('.memory4-manager')", scrollToStart = true) => {
+      if (scrollToStart) await evaluate(`${manager}?.scrollIntoView({block:'start'})`);
       const bounds = await evaluate(`(()=>{const e=${manager};if(!e)return{x:0,y:0,width:0,height:0};const r=e.getBoundingClientRect();return{x:Math.max(0,r.x),y:Math.max(0,r.y),width:Math.min(r.width,innerWidth-Math.max(0,r.x)),height:Math.min(r.height,innerHeight-Math.max(0,r.y))}})()`);
       assert(bounds.width > 200 && bounds.height > 80, "Memory UI must have a visible viewport");
       const result = await renderer.send("Page.captureScreenshot", { format: "png", captureBeyondViewport: false });
       fs.writeFileSync(path.join(evidence, `${name}.png`), Buffer.from(result.data, "base64"));
       screenshots.push(name);
-      const collisions = await evaluate(`(()=>{const modal=document.querySelector('.memory4-modal'),manager=${manager};const root=modal||manager;if(!root)return [['missing memory view']];const b=[...root.querySelectorAll('button')].map(e=>({e,r:e.getBoundingClientRect()})).filter(x=>x.r.width&&x.r.height&&x.r.y>=0&&x.r.bottom<=innerHeight);const bad=[];for(let i=0;i<b.length;i++)for(let j=i+1;j<b.length;j++){if(b[i].e.contains(b[j].e)||b[j].e.contains(b[i].e))continue;const a=b[i].r,c=b[j].r;if(Math.min(a.right,c.right)-Math.max(a.left,c.left)>1&&Math.min(a.bottom,c.bottom)-Math.max(a.top,c.top)>1)bad.push([b[i].e.textContent,b[j].e.textContent]);}return bad})()`);
+      const collisions = await evaluate(`(()=>{const modal=document.querySelector('.memory4-modal'),manager=${manager};const root=modal||manager;if(!root)return [['missing memory view']];const b=[...root.querySelectorAll('button')].filter(e=>e.checkVisibility()).map(e=>({e,r:e.getBoundingClientRect()})).filter(x=>x.r.width&&x.r.height&&x.r.y>=0&&x.r.bottom<=innerHeight);const bad=[];for(let i=0;i<b.length;i++)for(let j=i+1;j<b.length;j++){if(b[i].e.contains(b[j].e)||b[j].e.contains(b[i].e))continue;const a=b[i].r,c=b[j].r;if(Math.min(a.right,c.right)-Math.max(a.left,c.left)>1&&Math.min(a.bottom,c.bottom)-Math.max(a.top,c.top)>1)bad.push([b[i].e.textContent,b[j].e.textContent]);}return bad})()`);
       assert.deepStrictEqual(collisions, [], `overlapping buttons in ${name}`);
       assert(await evaluate(`(()=>{const e=document.querySelector('.memory4-modal')||${manager};return !!e&&e.scrollWidth<=e.clientWidth+2})()`), `horizontal overflow in ${name}`);
     };
@@ -231,6 +239,19 @@ async function run() {
       await setViewport(540, 900);
       await screenshot(`${theme}-narrow-known`);
     }
+    await setViewport(1280, 1000);
+    await waitFor("document.querySelector('.memory4-manager').textContent.includes('披露时年龄：23岁')");
+    const ageProfile = await evaluate("conversationAPI.getMemory4OwnerData({ownerId:2}).then(data=>data.known.items.find(item=>item.entityId===1)?.disclosedFacts.find(fact=>fact.factType==='AGE'))");
+    assert.equal(ageProfile.value, "23");
+    assert.equal(ageProfile.current, false, "disclosed age is a historical observation, never current age truth");
+    assert.equal(ageProfile.firstAcquiredDate, "1164.1.1");
+    assert(await evaluate("(()=>{const row=[...document.querySelectorAll('.memory4-disclosure-row')].find(row=>row.textContent.includes('披露时年龄'));return !!row&&row.textContent.includes('历史披露记录')&&!row.querySelector('button')})()"), "historical age must show date and no current/manual mutation control");
+    await screenshot("ink-desktop-disclosed-age-history");
+    await setViewport(540, 900);
+    await evaluate("[...document.querySelectorAll('.memory4-disclosure-row')].find(row=>row.textContent.includes('披露时年龄'))?.scrollIntoView({block:'center',behavior:'instant'})");
+    await delay(250);
+    assert(await evaluate("(()=>{const row=[...document.querySelectorAll('.memory4-disclosure-row')].find(row=>row.textContent.includes('披露时年龄'));const rect=row?.getBoundingClientRect();return !!rect&&rect.top>=0&&rect.bottom<=innerHeight})()"), "historical age row must be visible in the narrow screenshot");
+    await screenshot("ink-narrow-disclosed-age-history", undefined, false);
     await setViewport(1280, 1000);
     const titleHide = clickButton("设为未知");
     await renderer.wait("Page.javascriptDialogOpening");
@@ -384,22 +405,39 @@ async function run() {
     await screenshot("ink-desktop-archive-source", archiveManager);
     const archiveHashAfter = hashDirectory(fixture.archive.directory);
     assert.equal(archiveHashAfter, archiveHashBefore, "archive read/source/rejected mutation must not change persisted sidecar");
+    await evaluate("document.querySelector('[aria-label=关闭来源]').click()");
+    await clickTab("Legacy 对话摘要", "丁");
+    await evaluate(`(()=>{${archiveManager}.querySelector('.character-header').click()})()`);
+    await waitFor(`${archiveManager}?.querySelector('.summary-item')`);
+    const legacyButtons = await evaluate(`${archiveManager}?[...${archiveManager}.querySelectorAll('.summary-actions button')].map(button=>({label:button.textContent.trim(),disabled:button.disabled})):[]`);
+    await screenshot("ink-desktop-ended-legacy-editable", archiveManager);
+    assert(legacyButtons.some(button => ["编辑", "Edit"].includes(button.label) && !button.disabled), `ordinary Legacy edit must remain available after conversation detach: ${JSON.stringify(legacyButtons)}`);
+    assert(legacyButtons.some(button => ["删除", "Delete"].includes(button.label) && !button.disabled), "ordinary Legacy delete must remain available after conversation detach");
+    await evaluate(`(()=>{[...${archiveManager}.querySelectorAll('.summary-actions button')].find(button=>['编辑','Edit'].includes(button.textContent.trim())).click()})()`);
+    await waitFor("!!document.querySelector('.summary-edit-modal textarea')");
+    await screenshot("ink-desktop-ended-legacy-edit-dialog", "document.querySelector('.summary-edit-modal')");
+    const editedLegacyText = "丁保留与甲交谈的旧摘要；隔离窗口手工编辑保存成功。";
+    await evaluate(`(()=>{const e=document.querySelector('.summary-edit-modal textarea');Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype,'value').set.call(e,${JSON.stringify(editedLegacyText)});e.dispatchEvent(new Event('input',{bubbles:true}));})()`);
+    await evaluate("(()=>{[...document.querySelectorAll('.summary-edit-modal button')].find(button=>['保存','Save'].includes(button.textContent.trim())).click()})()");
+    await waitFor("!document.querySelector('.summary-edit-modal')");
+    const editedLegacy = JSON.parse(fs.readFileSync(path.join(fixture.summariesDir, "4_丁", "与甲的对话.json"), "utf8"));
+    assert.equal(editedLegacy[0].content, editedLegacyText, "ordinary Legacy edit must persist through real preload/IPC while detached");
     assert.equal(await main.evaluate("globalThis.__m4ProviderCalls"), 0, "archive UI and source lookup must not call a model");
     assert.equal(await main.evaluate("globalThis.__m4ProviderCalls"), 0, "packaged UI smoke must not call a model");
     const blockedFetchUrls = await main.evaluate("globalThis.__m4BlockedFetches");
     assert(blockedFetchUrls.every(url => url === "http://127.0.0.1:4315/v1/health"), `unexpected network request was blocked: ${JSON.stringify(blockedFetchUrls)}`);
     assert.deepStrictEqual(errors, [], "renderer/main exceptions");
-    assert.equal(screenshots.length, 34, "original 27 screens, four disclosure screens and three archive screens");
+    assert.equal(screenshots.length, 38, "original 36 screens and two historical age disclosure screens");
     fs.writeFileSync(path.join(evidence, "result.json"), JSON.stringify({ passed: true, themes: ["parchment", "knight", "ink"], desktop: [1280, 1000], narrow: [540, 900], baseScreenshotCount: 27,
       disclosureScreenshotCount: 4,
-      archiveScreenshotCount: 3, screenshotCount: screenshots.length, screenshots, providerRequests: 0, blockedNetworkFetches: blockedFetchUrls.length,
+      archiveScreenshotCount: 3, legacyEditScreenshotCount: 2, ageDisclosureScreenshotCount: 2, screenshotCount: screenshots.length, screenshots, providerRequests: 0, blockedNetworkFetches: blockedFetchUrls.length,
       blockedNetworkUrls: blockedFetchUrls, realCK3Gate: false, profile,
       archive: { ownerId: fixture.archive.ownerId, campaignToken: fixture.archive.campaignToken, readOnlyReasons: [archiveData.readOnlyReason, endedArchiveData.readOnlyReason],
         strictCurrentIsNullAfterDetach: detachedState.strictCurrentIsNull, sidecarHashBefore: archiveHashBefore, sidecarHashAfter: archiveHashAfter, rejectedWriteError: archiveWriteRequest.error || null },
       checks: ["missing Campaign", "wrong Campaign", "strict owner data", "six views", "readonly Official", "disclosure source/date/nickname", "manual disclosure write", "disclosure hide cancellation", "archive disclosure readonly", "source modal", "manual conflict preservation", "manual edit", "delete cancellation",
         "accepted Detail deletion", "existing binding preview cancellation", "nonoverlapping tool buttons", "no horizontal overflow", "same-campaign archive outside loaded roster", "loaded-campaign readonly banner",
         "archive refresh/tabs/source remain available", "archive year/life/detail mutation controls disabled", "manager detach leaves strict current null and read snapshot available",
-        "archive IPC mutation rejected after manager detach", "archive sidecar hash unchanged", "ended-conversation banner, detail and source remain available",
+        "archive IPC mutation rejected after manager detach", "archive sidecar hash unchanged", "ended-conversation banner, detail and source remain available", "ordinary Legacy edit/delete enabled after detach", "ordinary Legacy manual edit persisted through real preload/IPC after detach", "disclosed age retains historical value/date without current-age or mutation controls",
         "all main-process fetch blocked before I/O; only fixed localhost health check may be attempted"] }, null, 2));
     console.log(`V8.14 E isolated packaged UI: PASS; evidence ${evidence}`);
   } catch (error) {

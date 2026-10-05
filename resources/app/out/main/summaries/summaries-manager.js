@@ -8,10 +8,14 @@ function createSummariesManager({ fs, path, summariesDir, memoryEngine, memorySy
   const VOTC_SUMMARIES_DIR = summariesDir;
   const getCurrentMemory4ReadConversation = typeof getMemory4ReadConversation === "function" ? getMemory4ReadConversation : getCurrentConversation;
   let summaryRegenerationInFlight = false;
+  let summaryRetryInFlight = null;
   class SummariesManager {
     static getRecoveryStatus() {
       const conversation = getCurrentConversation();
       const currentId = conversation?.id;
+      const memory4ReadConversation = getCurrentMemory4ReadConversation();
+      const activeCampaignToken = typeof memory4ReadConversation?.gameData?.campaignToken === "string"
+        ? memory4ReadConversation.gameData.campaignToken.trim() || null : null;
       let pending = 0, manual = 0, balanceBlocked = 0;
       for (const file of memoryEngine.listRecoverySnapshots()) {
         const snapshot = memoryEngine.store.readJson(file, null);
@@ -21,32 +25,64 @@ function createSummariesManager({ fs, path, summariesDir, memoryEngine, memorySy
         if (snapshot.finalizationStatus === "failed_manual") manual++;
         if (/402|insufficient balance/i.test(snapshot.lastError || "")) balanceBlocked++;
       }
-      const durable = memoryEngine.memory4?.getRecoveryStatus(conversation?.gameData?.campaignToken || null) || { pending: 0, manual: 0, balanceBlocked: 0 };
-      return { pending: pending + durable.pending, manual: manual + durable.manual,
-        balanceBlocked: balanceBlocked + durable.balanceBlocked, narrativePending: pending, durablePending: durable.pending,
-        durableInvalid: durable.invalid || 0,
+      const durable = memoryEngine.memory4?.getRecoveryStatus(activeCampaignToken) || { pending: 0, manual: 0, balanceBlocked: 0 };
+      let letters = { pending: 0, manual: 0, balanceBlocked: 0 };
+      try {
+        letters = memoryEngine.letterMemoryFinalization?.getRecoveryStatus(activeCampaignToken) || letters;
+      } catch (error) {
+        letters = { ...letters, invalid: 1, error: String(error?.message || error) };
+      }
+      return { pending: pending + durable.pending + Number(letters.pending || 0), manual: manual + durable.manual + Number(letters.manual || 0),
+        balanceBlocked: balanceBlocked + durable.balanceBlocked + Number(letters.balanceBlocked || 0), narrativePending: pending, durablePending: durable.pending,
+        letterPending: Number(letters.pending || 0), letterManual: Number(letters.manual || 0),
+        durableInvalid: durable.invalid || 0, letterInvalid: Number(letters.invalid || 0),
         running: !!memoryEngine.pendingRecovery || memoryEngine.activeFinalizationIds.size > 0 || (memoryEngine.memory4?.inFlight.size || 0) > 0 };
     }
 
     static async retryFailedSummaries() {
-      const results = await memoryEngine.recoverPendingFinalizations({
-        manual: true,
-        activeCampaignToken: getCurrentConversation()?.gameData?.campaignToken || null,
-        isConversationActive: id => getCurrentConversation()?.id === id,
-        buildPrompt: buildSummaryPrompt,
-        requestSummary,
-        requestDurable,
-        getSummaryCapabilities,
-        resolveParticipantProfiles: snapshot => memoryEngine.resolveRecoveryParticipantProfiles(snapshot),
-        persistCharacterFolders: persistRecoveredSummary
-      });
-      this.refreshCurrentConversation();
-      return {
-        success: results.every(result => result.success),
-        recovered: results.filter(result => result.success && !result.alreadyCommitted).length,
-        failed: results.filter(result => !result.success).length,
-        recoveryStatus: this.getRecoveryStatus()
-      };
+      if (summaryRetryInFlight) return summaryRetryInFlight;
+      const readConversation = getCurrentMemory4ReadConversation();
+      const activeCampaignToken = typeof readConversation?.gameData?.campaignToken === "string"
+        ? readConversation.gameData.campaignToken.trim() || null : null;
+      summaryRetryInFlight = (async () => {
+        const results = await memoryEngine.recoverPendingFinalizations({
+          manual: true,
+          activeCampaignToken,
+          isMemory4RecoveryCurrent: () => getCurrentMemory4ReadConversation() === readConversation
+            && (readConversation?.gameData?.campaignToken?.trim?.() || null) === activeCampaignToken,
+          isConversationActive: id => getCurrentConversation()?.id === id,
+          buildPrompt: buildSummaryPrompt,
+          requestSummary,
+          requestDurable,
+          getSummaryCapabilities,
+          resolveParticipantProfiles: snapshot => memoryEngine.resolveRecoveryParticipantProfiles(snapshot),
+          persistCharacterFolders: persistRecoveredSummary
+        });
+        let letterResults = [];
+        const letterFinalization = memoryEngine.letterMemoryFinalization;
+        if (typeof letterFinalization?.retryPending === "function") {
+          try {
+            const retried = await letterFinalization.retryPending({ activeCampaignToken, manual: true });
+            letterResults = Array.isArray(retried) ? retried : Array.isArray(retried?.jobs) ? retried.jobs : retried ? [retried] : [];
+          } catch (error) {
+            letterResults = [{ status: "FAILED", error: String(error?.message || error) }];
+          }
+        }
+        this.refreshCurrentConversation();
+        const succeeded = result => result?.success === true
+          || ["COMPLETE", "STORE", "NO_DURABLE_CONTENT", "NOT_PRESENT", "ALREADY_COMMITTED"].includes(result?.status);
+        const letterRecovered = letterResults.filter(result => succeeded(result) && !result.alreadyCommitted).length;
+        const letterFailed = letterResults.filter(result => !succeeded(result)).length;
+        return {
+          success: results.every(result => result.success) && letterFailed === 0,
+          recovered: results.filter(result => result.success && (!result.alreadyCommitted || result.derivedRecovered)).length + letterRecovered,
+          failed: results.filter(result => !result.success).length + letterFailed,
+          letterResults,
+          recoveryStatus: this.getRecoveryStatus()
+        };
+      })();
+      try { return await summaryRetryInFlight; }
+      finally { summaryRetryInFlight = null; }
     }
 
     static refreshCurrentConversation() {
@@ -114,12 +150,69 @@ function createSummariesManager({ fs, path, summariesDir, memoryEngine, memorySy
         }
         const result = await this.updateSummary(playerId, characterId, summaryIndex, regeneratedContent);
         if (!result.success) return result;
-        return { success: true, content: regeneratedContent };
+        const updatedRows = JSON.parse(fs$1.readFileSync(filePath, "utf8"));
+        const memoryRebuild = await this.rebuildRegeneratedSummaryMemory(playerId, updatedRows[summaryIndex]);
+        const canonicalStatus = memoryRebuild.canonical.status;
+        const derivedStatus = memoryRebuild.derived.status;
+        const canonicalComplete = ["COMPLETE", "ALREADY_CONVERTED", "NO_DURABLE_CONTENT"].includes(canonicalStatus);
+        const derivedComplete = ["COMPLETE", "MANUAL_OVERRIDE"].includes(derivedStatus);
+        const success = canonicalComplete && derivedComplete;
+        return { success, partial: !success, summaryUpdated: true, content: regeneratedContent, memoryRebuild };
       } catch (error) {
         console.error(`Failed to regenerate summary for character ${characterId} from owner ${playerId}:`, error);
         return { success: false, error: error instanceof Error ? error.message : "summary_regeneration_failed" };
       } finally {
         summaryRegenerationInFlight = false;
+      }
+    }
+
+    static async rebuildRegeneratedSummaryMemory(ownerId, summaryRecord) {
+      const skipped = (reason, status = "SKIPPED") => ({ canonical: { status, reason }, derived: { status: "SKIPPED", reason } });
+      const coordinator = memoryEngine.memory4;
+      const campaignToken = typeof summaryRecord?.campaignToken === "string" ? summaryRecord.campaignToken.trim() : "";
+      const memoryId = summaryRecord?.perspectiveMemoryIds?.[0];
+      if (!coordinator?.derived || !campaignToken || typeof memoryId !== "string") return skipped("SCOPED_SOURCE_UNAVAILABLE");
+
+      let context;
+      try {
+        context = await this.getMemory4ReadContext({ ownerId, expectedCampaignToken: campaignToken }, true);
+        this.assertCurrentMemory4ReadContext(context);
+      } catch (error) {
+        if (error.message === "memory4_archive_scope_not_persisted" || error.message === "memory4_archive_proof_unavailable") {
+          return skipped(error.message, "BLOCKED_ARCHIVE_PROOF");
+        }
+        if (error.message === "legacy_binding_conversation_not_active" || error.message === "legacy_binding_game_data_unavailable") {
+          return skipped("TRUSTED_READ_CONTEXT_UNAVAILABLE");
+        }
+        return skipped(error.message || "TRUSTED_READ_CONTEXT_INVALID", "BLOCKED_CONTEXT");
+      }
+      const isCurrent = () => {
+        try { this.assertCurrentMemory4ReadContext(context); return true; }
+        catch { return false; }
+      };
+      const source = memoryEngine.store.getMemory(memoryId);
+      if (!source || source.content !== summaryRecord.content || source.provenance?.campaignToken !== campaignToken
+        || Number(source.provenance?.folderOwnerId) !== context.ownerId) {
+        return { canonical: { status: "SOURCE_INVALID" }, derived: { status: "SKIPPED", reason: "SOURCE_INVALID" } };
+      }
+      const sourceProof = coordinator.getLegacyCoverage({ campaignToken, ownerId: context.ownerId }, [source]).items[0];
+      if (!sourceProof?.eligible || !/^[a-f0-9]{64}$/.test(sourceProof.sourceHash || "")) {
+        return { canonical: { status: "SOURCE_INVALID" }, derived: { status: "SKIPPED", reason: "SOURCE_INVALID" } };
+      }
+      try {
+        const result = await coordinator.recompressLegacy({ campaignToken, ownerId: context.ownerId }, {
+          memoryId, expectedSourceHash: sourceProof.sourceHash, isCurrent,
+          allowPersistedArchive: context.readOnlyArchive, rebuildDerived: true
+        });
+        const canonicalStatus = result.canonical?.status || result.status;
+        return {
+          canonical: { status: canonicalStatus, entryIds: result.entryIds || result.canonical?.entryIds || [], reason: result.reason || null },
+          derived: result.derived || { status: ["COMPLETE", "ALREADY_CONVERTED", "NO_DURABLE_CONTENT"].includes(canonicalStatus) ? "PENDING" : "SKIPPED",
+            kind: "all", reason: result.reason || "CANONICAL_NOT_COMMITTED" }
+        };
+      } catch (error) {
+        return { canonical: { status: "EXTRACTION_FAILED", reason: String(error?.message || error) },
+          derived: { status: "SKIPPED", reason: "CANONICAL_NOT_COMMITTED" } };
       }
     }
 

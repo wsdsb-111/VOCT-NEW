@@ -27,6 +27,9 @@ assert(rendererSource.includes("对话公开"));
 assert(rendererSource.includes("MANUAL_HIDDEN"));
 assert(rendererSource.includes("MANUAL_KNOWN"));
 assert(rendererSource.includes("disclosedFacts"));
+assert(rendererSource.includes("披露时年龄"));
+assert(rendererSource.includes("历史披露记录"));
+assert(rendererSource.includes('fact.factType !== "AGE" && !data.readOnlyArchive'), "historical ages must not expose current/manual fact controls");
 assert(rendererSource.includes("readOnlyArchive"), "archive cognition must retain the existing read-only control gate");
 assert(preloadSource.includes('mutateMemory4: (request) => electron.ipcRenderer.invoke("memory4:mutate", request)'),
   "disclosure changes should reuse the existing Memory4 IPC bridge");

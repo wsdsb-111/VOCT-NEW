@@ -29,8 +29,47 @@ function uniqueText(values) {
   return [...new Set(values.map(normalizedText).filter(Boolean))];
 }
 
+function spokenAgeNumber(value) {
+  if (/^\d{1,4}$/.test(value)) return Number(value);
+  if (!/^[零〇一二两三四五六七八九十百千]+$/.test(value) || value.length > 1 && !/[十百千]/.test(value)) return null;
+  const digits = { 零: 0, 〇: 0, 一: 1, 二: 2, 两: 2, 三: 3, 四: 4, 五: 5, 六: 6, 七: 7, 八: 8, 九: 9 };
+  const units = { 十: 10, 百: 100, 千: 1000 };
+  let total = 0, pending = null;
+  for (const character of value) {
+    if (Object.hasOwn(digits, character)) pending = digits[character];
+    else if (Object.hasOwn(units, character)) {
+      total += (pending ?? 1) * units[character];
+      pending = null;
+    } else return null;
+  }
+  return total + (pending ?? 0);
+}
+
+function isCurrentAgeAssertion(sentence, targetAliases, fact, fragment) {
+  const age = Number(fact?.value);
+  const selfAliases = new Set(["我", "吾", "朕", "寡人", "孤", "本王", "在下", "鄙人", "本人"]);
+  if (fact?.factType !== "AGE" || !Number.isSafeInteger(age) || age < 0
+    || !Number.isSafeInteger(Number(fragment?.speakerId)) || Number(fragment.speakerId) <= 0
+    || !Array.isArray(targetAliases) || !targetAliases.some(alias => selfAliases.has(normalizedText(alias)))) return false;
+  const match = String(sentence || "").normalize("NFKC").trim().match(/^(?:我|吾|朕|寡人|孤|本王|在下|鄙人|本人)\s*(?:(?:今年|现在|如今|当前)\s*)?([0-9]{1,4}|[零〇一二两三四五六七八九十百千]+)\s*岁(?:了)?$/);
+  return !!match && spokenAgeNumber(match[1]) === age;
+}
+
+function ageFactKey(age) {
+  return `age_${age}`;
+}
+
 function normalizeCandidate(candidate) {
-  if (!candidate || !["TITLE", "TRAIT"].includes(candidate.factType)) return null;
+  if (!candidate || !["TITLE", "TRAIT", "AGE"].includes(candidate.factType)) return null;
+  if (candidate.factType === "AGE") {
+    const value = typeof candidate.value === "number" ? candidate.value
+      : typeof candidate.value === "string" && /^\d+$/.test(candidate.value.trim()) ? Number(candidate.value.trim()) : NaN;
+    if (!Number.isSafeInteger(value) || value < 0) return null;
+    const canonicalKey = String(value);
+    const factKey = ageFactKey(canonicalKey);
+    if (candidate.factKey && candidate.factKey !== factKey) return null;
+    return { factType: "AGE", factKey, canonicalKey, value: canonicalKey, aliases: [] };
+  }
   const value = typeof candidate.value === "string" ? candidate.value.trim() : "";
   if (!value) return null;
   if (candidate.factType === "TITLE" && /^(?:none(?:\s|$)|concept_none|无|无主要头衔)$/i.test(value)) return null;
@@ -48,11 +87,15 @@ function normalizeCandidate(candidate) {
 
 function getFactCandidates(character) {
   if (!character || typeof character !== "object") return [];
+  const currentAge = normalizeCandidate({ factType: "AGE", value: character.age });
   if (Array.isArray(character.facts)) {
-    const candidates = character.facts.map(normalizeCandidate).filter(Boolean);
+    const facts = character.facts.map(candidate => candidate?.factType === "AGE" && !candidate.factKey ? null : normalizeCandidate(candidate)).filter(Boolean);
+    const embeddedAges = new Map(facts.filter(candidate => candidate.factType === "AGE").map(candidate => [candidate.factKey, candidate]));
+    const age = currentAge || (character.age == null && embeddedAges.size === 1 ? [...embeddedAges.values()][0] : null);
+    const candidates = [...facts.filter(candidate => candidate.factType !== "AGE"), ...(age ? [age] : [])];
     return mergeCandidates(candidates);
   }
-  const candidates = [];
+  const candidates = currentAge ? [currentAge] : [];
   const addTitle = (value, extraAliases = []) => {
     const candidate = normalizeCandidate({ factType: "TITLE", value: typeof value === "string" ? value : value?.value || value?.name || value?.localizedName,
       aliases: [...(typeof value === "object" && Array.isArray(value.aliases) ? value.aliases : []), ...extraAliases] });
@@ -175,6 +218,7 @@ function matchedFacts(text, facts) {
 const UNCERTAIN = /[?？]|吗|么|可否|能否|是不是|是否|不是|并非|并不|未必|没有|从未|不曾|未曾|不再是|不属实|否认|听说|据说|传闻|传言|谣言|相传|声称|自称|据传|可能|也许|或许|似乎|疑似|假如|如果|要是|倘若|将来|未来|终将|迟早|尚未|未证实|玩笑|虚构|误传|我猜|猜测|我想|以为|怀疑|认为|觉得|心想|心里|内心|心中|暗自|旁白|叙述|描写|\b(?:not|never|rumou?r|heard|alleged|claims?|said|might|may|perhaps|possibly|suppose|think|thought|thinking|believe|seem|if|whether|unless|will|would|future|intends?|intention|joking|fiction|unconfirmed|narration|aside)\b/i;
 const DISCOURSE = /说|告诉|提到|声称|认为|觉得|怀疑|听说|据说|传闻|引用|否认|谣传/;
 const PREDICATES = /(?:(?:当前|如今|当今|现在|其实|确实|仍然|本来|向来|天生|生性|真正|正是|就是|确为|乃是|是|乃|为|系|拥有|具有|具备|患有|身患|有|很|非常|十分|极其|异常)|\b(?:am|is|are|has|have|possesses|born|very)\b|['’]s\b)/i;
+const SPEAKER_SELF_ALIASES = new Set(["我", "吾", "朕", "寡人", "孤", "本王", "在下", "鄙人", "本人", "i", "myself"]);
 
 function assertedBetween(text, targetAliases, factAliases, otherTargetAliases = []) {
   for (const targetAlias of targetAliases) for (const target of occurrences(text, targetAlias)) {
@@ -206,7 +250,8 @@ function eligibleFragment(snapshot, fragment, sourceKind, letterProof = null) {
     && fragment.visibility === "private";
   if (!["public", "participants", "known_group"].includes(fragment.visibility)) return false;
   if (fragment.visibilityEvidence === "application_fragment") return sourceMessageIds(fragment, "CONVERSATION").length > 0;
-  return fragment.visibilityEvidence === "finalization_validated_segment" && fragment.sourceTextVerified === true
+  return ["finalization_validated_segment", "finalization_source_paragraph"].includes(fragment.visibilityEvidence)
+    && fragment.sourceTextVerified === true
     && sourceMessageIds(fragment, "CONVERSATION").length > 0;
 }
 
@@ -241,7 +286,14 @@ function scanSource(snapshot, gameData, sourceKind, letterProof = null) {
         const otherTargetAliases = uniqueText([...characters.values()].filter(candidate => characterId(candidate) !== entityId)
           .flatMap(characterAliases));
         for (const fact of facts) {
-          if (!matched.has(fact.factKey) || !assertedBetween(sentence, uniqueText([...targetAliases]), fact.aliases, otherTargetAliases)) continue;
+          const aliases = uniqueText([...targetAliases]);
+          const ageAssertion = fact.factType === "AGE"
+            ? isCurrentAgeAssertion(sentence.replace(/[。.!！?？;；]+$/u, "").trim(), aliases, fact, fragment) : false;
+          if (fact.factType === "AGE" ? !ageAssertion : !matched.has(fact.factKey)) continue;
+          if (fragment.sourceRole === "mixed") continue;
+          if (fragment.sourceRole === "assistant"
+            && (entityId !== Number(fragment.speakerId) || !aliases.some(alias => SPEAKER_SELF_ALIASES.has(alias)))) continue;
+          if (fact.factType !== "AGE" && !assertedBetween(sentence, aliases, fact.aliases, otherTargetAliases)) continue;
           const factId = disclosureFactId(snapshot, entityId, fact.factType, fact.factKey);
           let disclosure = byFact.get(factId);
           if (!disclosure) {
@@ -273,4 +325,4 @@ function scanVisibleDisclosures(snapshot, gameData) {
   return scanSource(snapshot, gameData, "CONVERSATION");
 }
 
-module.exports = { getFactCandidates, disclosureFactId, scanVisibleDisclosures, scanLetterDisclosures: scanSource };
+module.exports = { getFactCandidates, disclosureFactId, isCurrentAgeAssertion, scanVisibleDisclosures, scanLetterDisclosures: scanSource };

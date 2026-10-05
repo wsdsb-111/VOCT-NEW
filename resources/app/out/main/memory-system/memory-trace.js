@@ -59,9 +59,11 @@ class MemoryTrace {
       conversationId: details.conversationId || null,
       finalizationId: details.finalizationId || null,
       memory4Status: stage === "memory4_durable" ? details.status || null : null,
-      memory4OwnerId: stage === "memory4_durable" && Number.isSafeInteger(details.ownerId) ? details.ownerId : null,
+      memory4OwnerId: ["memory4_durable", "memory4_candidate_rejected"].includes(stage) && Number.isSafeInteger(details.ownerId) ? details.ownerId : null,
       memory4EntryCount: stage === "memory4_durable" && Number.isInteger(details.entryCount) ? details.entryCount : null,
       memory4Completeness: stage === "memory4_durable" ? details.completeness || null : null,
+      memory4RejectedUnknownEntityCount: stage === "memory4_candidate_rejected" && details.reason === "unknown_entity"
+        && Number.isSafeInteger(details.count) ? details.count : null,
       memory4Derived: derivedStage ? {
         ownerId: Number.isSafeInteger(details.ownerId) ? details.ownerId : null,
         status: ["RUNNING", "COMPLETE", "MANUAL_OVERRIDE", "QUEUED", "REQUEUED", "FAILED", "CANCELLED", "EXTRACTION_FAILED"].includes(details.status) ? details.status : null,

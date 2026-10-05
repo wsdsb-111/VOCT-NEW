@@ -583,6 +583,24 @@ else = {
       this.recoverUndispatchedAcceptanceLock();
       if (this.awaitingAcceptanceLetterId) return;
       for (const [letterId, storedLetter] of this.storedLetters.entries()) {
+        if (this.getLetterStatus(letterId)?.responseStatus === LetterResponseStatus.SENT) {
+          if (storedLetter.acceptedMemoryContext) {
+            try {
+              this.finalizeAcceptedLetterMemory(storedLetter, storedLetter.acceptedMemoryContext);
+              this.storedLetters.delete(letterId);
+              this.savePendingLetters();
+            } catch (error) {
+              console.warn(`LetterManager: Accepted memory capture remains pending (${error instanceof Error ? error.message : "unknown_error"})`);
+            }
+          } else if (storedLetter.acceptedMemoryAwaitingProof) {
+            const result = await this.recordAcceptedLetterDisclosure(storedLetter);
+            if (result?.archiveCaptured) {
+              this.storedLetters.delete(letterId);
+              this.savePendingLetters();
+            }
+          }
+          continue;
+        }
         if (!Number.isFinite(storedLetter.expectedDeliveryDay)) continue;
         const effectiveCurrentDay = this.getEffectiveDeliveryCurrentDay(storedLetter);
         if (effectiveCurrentDay >= storedLetter.expectedDeliveryDay && !this.deliveryInProgress.has(letterId)) {
@@ -765,7 +783,7 @@ else = {
         console.log(`Letter ${letter.letterId} is ready for immediate delivery`);
         await this.checkAndDeliverLetters();
       }
-      await this.generateSummary(gameData, letter, reply);
+      if (!memoryEngine?.letterMemoryFinalization) await this.generateSummary(gameData, letter, reply);
       return reply;
     }
     buildLetterDisclosureBinding(gameData, letter) {
@@ -823,11 +841,47 @@ else = {
           || validation.letter.totalDays !== storedLetter.letter.totalDays || validation.letter.delay !== storedLetter.letter.delay
           || currentBinding.sourceTotalDays < Number(storedLetter.expectedDeliveryDay)
           || currentBinding.sourceTotalDays < binding.sourceTotalDays) return null;
-        return await this.recordLetterDisclosure(gameData, validation.letter, currentBinding.aiId, currentBinding.playerId, storedLetter.reply);
+        const archive = memoryEngine?.letterMemoryFinalization;
+        if (archive) {
+          const { buildCurrentMemory4RelationshipEvidence } = require("../memory-system/memory4-entity-context");
+          const participantProfiles = [binding.playerId, binding.aiId].map(id => {
+            const character = gameData.characters.get(id);
+            return { id, name: character?.name, shortName: character?.shortName, firstName: character?.firstName, fullName: character?.fullName };
+          });
+          storedLetter.acceptedMemoryContext = { campaignToken: binding.campaignToken, letterId: storedLetter.letter.letterId,
+            senderId: binding.playerId, recipientId: binding.aiId, sourceDate: binding.sourceDate, acceptedDate: acceptedDate.canonical,
+            sourceTotalDays: binding.sourceTotalDays, acceptedTotalDays: currentBinding.sourceTotalDays,
+            text: storedLetter.letter.content, reply: storedLetter.reply, participantProfiles,
+            relationshipEvidence: buildCurrentMemory4RelationshipEvidence({ gameData, ownerIds: [binding.playerId, binding.aiId],
+              entityIds: [binding.playerId, binding.aiId] }) };
+          this.savePendingLetters();
+          this.finalizeAcceptedLetterMemory(storedLetter, storedLetter.acceptedMemoryContext);
+        }
+        const disclosure = await this.recordLetterDisclosure(gameData, validation.letter, currentBinding.aiId, currentBinding.playerId, storedLetter.reply);
+        return archive ? { disclosure, archiveCaptured: true } : disclosure;
       } catch (error) {
         console.warn(`LetterManager: Accepted letter disclosure skipped (${error instanceof Error ? error.message : "unknown_error"})`);
+        if (storedLetter.acceptedMemoryContext) {
+          this.updateLetterStatus(storedLetter.letter.letterId, { summaryStatus: LetterSummaryStatus.SAVE_FAILED,
+            summaryError: error instanceof Error ? error.message : "letter_memory_capture_failed" });
+          this.savePendingLetters();
+          throw error;
+        }
         return null;
       }
+    }
+    finalizeAcceptedLetterMemory(storedLetter, context) {
+      const archive = memoryEngine?.letterMemoryFinalization;
+      const job = archive.captureAccepted(context);
+      const letterId = storedLetter.letter.letterId;
+      this.updateLetterStatus(letterId, { summaryStatus: LetterSummaryStatus.GENERATING, summaryError: null });
+      void archive.finalize(job).then(result => {
+        this.updateLetterStatus(letterId, { summaryStatus: result.status === "COMPLETE" ? LetterSummaryStatus.SAVED : LetterSummaryStatus.GENERATION_FAILED,
+          summaryError: result.status === "COMPLETE" ? null : result.errorCode || "letter_memory_finalization_pending" });
+      }).catch(error => {
+        this.updateLetterStatus(letterId, { summaryStatus: LetterSummaryStatus.GENERATION_FAILED,
+          summaryError: error instanceof Error ? error.message : "letter_memory_finalization_failed" });
+      });
     }
     validateLetterPayload(letter) {
       const rawTotalDays = letter?.totalDays;
@@ -950,9 +1004,11 @@ else = {
         this.transitionLetter(normalizedLetterId, LetterPipelineState.PENDING_DELIVERY, { expectedDeliveryDay, retryAttemptCount, ...deliveryTiming });
         this.savePendingLetters();
         if (effectiveCurrentDay >= expectedDeliveryDay) await this.checkAndDeliverLetters();
-        const latestContext = await this.loadLatestGameDataWithLetter();
-        if (latestContext?.letter?.letterId === normalizedLetterId) await this.generateSummary(latestContext.gameData, context.letter, reply);
-        else this.updateLetterStatus(normalizedLetterId, { summaryStatus: LetterSummaryStatus.GENERATION_FAILED, summaryError: "Retry succeeded, but matching letter context was unavailable for summary." });
+        if (!memoryEngine?.letterMemoryFinalization) {
+          const latestContext = await this.loadLatestGameDataWithLetter();
+          if (latestContext?.letter?.letterId === normalizedLetterId) await this.generateSummary(latestContext.gameData, context.letter, reply);
+          else this.updateLetterStatus(normalizedLetterId, { summaryStatus: LetterSummaryStatus.GENERATION_FAILED, summaryError: "Retry succeeded, but matching letter context was unavailable for summary." });
+        }
         return { success: true, letterId: normalizedLetterId, responseStatus: LetterResponseStatus.PENDING_DELIVERY };
       } catch (error) {
         const responseErrorDetails = this.classifyProviderError(error);
@@ -1354,6 +1410,10 @@ ${"  \t"}modifier = artifact_monthly_minor_prestige_1_modifier
       const acceptedLetter = acceptedLetterId ? this.storedLetters.get(acceptedLetterId) : null;
       const acceptedEffectWritten = acceptedStatus?.responseStatus === LetterResponseStatus.EFFECT_FILE_WRITTEN
         && Number.isFinite(Number(acceptedStatus.effectFileWrittenAt)) && Number(acceptedStatus.effectFileWrittenAt) > 0;
+      if (!acceptedEffectWritten || !acceptedLetter) {
+        console.warn("LetterManager.clearLettersFile: Ignoring LETTER_ACCEPTED without a matching written Letter Effect.");
+        return { success: false, reason: "letter_effect_not_written", letterId: acceptedLetterId };
+      }
       const acceptedTransportMode = acceptedStatus?.effectTransportMode || LetterEffectTransportMode.VOTC;
       const clearResult = letterEffectTransport.clearOutboundEffect(acceptedTransportMode);
       if (!clearResult.success) console.warn(`LetterManager.clearLettersFile: ${clearResult.error}`);
@@ -1374,9 +1434,12 @@ ${"  \t"}modifier = artifact_monthly_minor_prestige_1_modifier
           suspicious_immediate_letter_acceptance: acceptLatencyMs !== null && acceptLatencyMs < 500
         });
         this.transitionLetter(acceptedLetterId, LetterPipelineState.DELIVERED);
-        this.storedLetters.delete(acceptedLetterId);
+        const memoryAccepted = acceptedEffectWritten && acceptedLetter ? await this.recordAcceptedLetterDisclosure(acceptedLetter) : null;
+        if (memoryEngine?.letterMemoryFinalization && !memoryAccepted?.archiveCaptured) {
+          acceptedLetter.acceptedMemoryAwaitingProof = true;
+          this.updateLetterStatus(acceptedLetterId, { summaryStatus: LetterSummaryStatus.SAVE_FAILED, summaryError: "letter_memory_acceptance_proof_unavailable" });
+        } else this.storedLetters.delete(acceptedLetterId);
         this.savePendingLetters();
-        if (acceptedEffectWritten && acceptedLetter) await this.recordAcceptedLetterDisclosure(acceptedLetter);
       }
       this.syncDateTrackerSupervisor();
       await this.checkAndDeliverLetters();

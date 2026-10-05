@@ -481,8 +481,10 @@ class Memory4Store {
     if (facts && (typeof facts !== "object" || Array.isArray(facts))) throw new Error("memory4_disclosure_index_invalid");
     return Object.entries(facts || {}).map(([factId, fact]) => {
       const proofs = Object.entries(fact?.evidenceBySource || {});
-      if (!fact || !DISCLOSURE_STATUSES.has(fact.status) || !["TITLE", "TRAIT"].includes(fact.factType)
+      if (!fact || !DISCLOSURE_STATUSES.has(fact.status) || !["TITLE", "TRAIT", "AGE"].includes(fact.factType)
         || typeof fact.factKey !== "string" || !fact.factKey || typeof fact.value !== "string" || !fact.value.trim()
+        || fact.factType === "AGE" && (!Number.isSafeInteger(Number(fact.value)) || Number(fact.value) < 0
+          || String(Number(fact.value)) !== fact.value || fact.factKey !== `age_${Number(fact.value)}` || fact.status !== "AUTO_DISCLOSED")
         || fact.factId !== factId || fact.factId !== disclosureFactId(scope, targetId, fact.factType, fact.factKey)
         || ids(fact.knownBy).join() !== String(scope.ownerId)
         || !Number.isSafeInteger(fact.revision) || fact.revision < 1
@@ -508,7 +510,7 @@ class Memory4Store {
           || conversation && (proof.sourceFinalizationId !== sourceId || typeof proof.sourceConversationId !== "string"
             || !proof.sourceConversationId || !Array.isArray(proof.sourceMessageIds) || !proof.sourceMessageIds.length
             || proof.sourceMessageIds.some(id => !Number.isSafeInteger(id) || id < 0)
-            || proof.visibilityEvidence.some(value => !["application_fragment", "finalization_validated_segment"].includes(value)))
+            || proof.visibilityEvidence.some(value => !["application_fragment", "finalization_validated_segment", "finalization_source_paragraph"].includes(value)))
           || letter && (proof.sourceLetterId !== sourceId || proof.recipientId !== scope.ownerId
             || !Number.isSafeInteger(proof.senderId) || proof.senderId <= 0 || proof.senderId === scope.ownerId
             || !Array.isArray(proof.sourceMessageIds) || proof.sourceMessageIds.length !== 0
@@ -544,7 +546,7 @@ class Memory4Store {
       || [...characters.values()].find(candidate => Number(candidate?.id) === entityId) || null;
     if (!character || Number(character.id) !== entityId) return [];
     const byId = new Map(records.map(record => [record.factId, record]));
-    return getFactCandidates(character).map(candidate => {
+    const currentFacts = getFactCandidates(character).filter(candidate => candidate.factType !== "AGE").map(candidate => {
       const factId = disclosureFactId(scope, entityId, candidate.factType, candidate.factKey);
       const record = byId.get(factId) || null;
       const effective = record ? effectiveDisclosure(record, gameData.date, scope.ownerId, metadata) : null;
@@ -554,6 +556,14 @@ class Memory4Store {
         manualMarkedDate: effective?.status?.startsWith("MANUAL_") ? record.manualMarkedDate || null : null,
         evidenceBySource: effective?.evidenceBySource || {}, tombstone: effective?.tombstone || null };
     });
+    const ageHistory = records.filter(record => record.factType === "AGE").map(record => {
+      const effective = effectiveDisclosure(record, gameData.date, scope.ownerId, metadata);
+      if (effective.status !== "AUTO_DISCLOSED" || !effective.effectiveKnown) return null;
+      return { ...scope, ...record, entityId, current: false, status: effective.status,
+        effectiveKnown: true, firstAcquiredDate: effective.firstAcquiredDate,
+        lastConfirmedDate: effective.lastConfirmedDate, evidenceBySource: effective.evidenceBySource };
+    }).filter(Boolean);
+    return [...currentFacts, ...ageHistory];
   }
 
   persistDisclosureState(scope, index, known, metadata) {
@@ -630,8 +640,10 @@ class Memory4Store {
     for (const disclosure of disclosures) {
       const entityId = Number(disclosure?.entityId);
       if (!Number.isSafeInteger(entityId) || entityId <= 0 || entityId === scope.ownerId
-        || !["TITLE", "TRAIT"].includes(disclosure.factType) || typeof disclosure.factKey !== "string"
+        || !["TITLE", "TRAIT", "AGE"].includes(disclosure.factType) || typeof disclosure.factKey !== "string"
         || typeof disclosure.value !== "string" || !disclosure.value.trim()
+        || disclosure.factType === "AGE" && (!Number.isSafeInteger(Number(disclosure.value)) || Number(disclosure.value) < 0
+          || String(Number(disclosure.value)) !== disclosure.value || disclosure.factKey !== `age_${Number(disclosure.value)}`)
         || disclosure.factId !== disclosureFactId(scope, entityId, disclosure.factType, disclosure.factKey)) {
         throw new Error("memory4_disclosure_fact_invalid");
       }
@@ -644,7 +656,7 @@ class Memory4Store {
       const sourceTextHashes = Array.isArray(evidence.sourceTextHashes) ? evidence.sourceTextHashes : [];
       const visibilityEvidence = Array.isArray(evidence.visibilityEvidence) ? evidence.visibilityEvidence : [];
       if (sourceKind === "CONVERSATION" && (!messageIds.length || messageIds.some(id => !Number.isSafeInteger(id) || id < 0)
-        || !fragmentIds.length || !visibilityEvidence.some(value => ["application_fragment", "finalization_validated_segment"].includes(value)))
+        || !fragmentIds.length || !visibilityEvidence.some(value => ["application_fragment", "finalization_validated_segment", "finalization_source_paragraph"].includes(value)))
         || sourceKind === "LETTER" && (!fragmentIds.length || visibilityEvidence.length !== 1 || visibilityEvidence[0] !== "validated_letter")) {
         throw new Error("memory4_disclosure_proof_invalid");
       }
@@ -694,7 +706,7 @@ class Memory4Store {
   updateManualDisclosure(scope, entityId, fact, status, date, expectedRevision) {
     assertScope(scope);
     if (ids([entityId]).length !== 1 || entityId === scope.ownerId || !["MANUAL_KNOWN", "MANUAL_HIDDEN"].includes(status)
-      || !Number.isSafeInteger(expectedRevision) || expectedRevision < 0 || !gameDate(date)) throw new Error("memory4_disclosure_manual_invalid");
+      || fact?.factType === "AGE" || !Number.isSafeInteger(expectedRevision) || expectedRevision < 0 || !gameDate(date)) throw new Error("memory4_disclosure_manual_invalid");
     const candidate = getFactCandidates({ facts: [fact] })[0];
     if (!candidate || candidate.factType !== fact.factType || candidate.factKey !== fact.factKey || candidate.value !== fact.value) {
       throw new Error("memory4_disclosure_fact_invalid");

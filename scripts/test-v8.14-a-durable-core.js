@@ -156,6 +156,8 @@ try {
     assert.throws(() => validateEntry({ ...candidate, ownerId: 3 }, snapshot), /scope_mismatch/);
     assert.throws(() => validateEntry({ ...candidate, campaignToken: "other" }, snapshot), /scope_mismatch/);
     assert.throws(() => validateEntry({ ...candidate, entityIds: [99] }, snapshot), /unknown_entity/);
+    assert.doesNotThrow(() => validateEntry({ ...candidate, entityIds: [snapshot.ownerId] }, snapshot), "the scoped owner can be named in their own visible memory");
+    assert.throws(() => validateEntry({ ...candidate, entityIds: [String(snapshot.ownerId)] }, snapshot), /unknown_entity/, "entity IDs remain numeric");
     assert.throws(() => validateEntry(candidate, { ...snapshot, counterpartIds: [999999] }), /invalid_counterpart/);
     assert.throws(() => validateEntry({ ...candidate, eventTime: { from: "1154.1.1", to: "1154.12.31", precision: "year", status: "reported" } }, snapshot), /unsupported_event_date/);
     assert.throws(() => validateEntry({ ...candidate, eventTime: { status: "observed" } }, snapshot), /unverified_observation/);

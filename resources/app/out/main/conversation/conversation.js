@@ -4,6 +4,7 @@ const fs = require("fs");
 
 const { getCharacterPersonalName } = require("../memory-system/character-identity");
 const { getFactCandidates } = require("../memory-system/memory4-disclosure");
+const { buildCurrentMemory4RelationshipEvidence } = require("../memory-system/memory4-entity-context");
 const { memoryMatchesCampaign } = require("../memory-system/memory-types");
 const { MentionTracker } = require("../memory-system/mention-tracker");
 const { createConversationRuntime } = require("./conversation-runtime");
@@ -1847,6 +1848,9 @@ class Conversation {
         shortName: character.shortName, fullName: character.fullName, allowDerivedHonorifics: false }));
     const mentionedIds = new MentionTracker().findMentionedCharacterIds(messages, { candidates: mentionableProfiles,
       excludedIds: participantIds, resolveCoreference: false });
+    const mentionedEntities = mentionableProfiles.filter(character => mentionedIds.includes(character.id));
+    const memory4RelationshipEvidence = buildCurrentMemory4RelationshipEvidence({ gameData: this.gameData,
+      ownerIds: participantIds, entityIds: [...participantIds, ...mentionedIds] });
     return {
       conversationId: this.id,
       date: this.gameData.date,
@@ -1856,7 +1860,8 @@ class Conversation {
       finalizationVisibilityV1: true,
       messages,
       participants,
-      mentionedEntities: mentionableProfiles.filter(character => mentionedIds.includes(character.id)),
+      mentionedEntities,
+      memory4RelationshipEvidence,
       disclosureCharacters: [...this.gameData.characters.values()].map(character => ({ id: Number(character.id),
         names: [...new Set([character.firstName, character.shortName, character.fullName, character.name].filter(Boolean))],
         nickname: character.nickname || null, facts: getFactCandidates(character) })),

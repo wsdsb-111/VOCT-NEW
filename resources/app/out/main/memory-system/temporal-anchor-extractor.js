@@ -4,6 +4,7 @@ const { normalizeGameDate } = require("../worldline/character-temporal-facts");
 
 const SOURCE = "deterministic_message_parse";
 const LEGACY_SOURCE = "deterministic_legacy_parse";
+const LETTER_SOURCE = "deterministic_letter_parse";
 const NUMBER = "[\\d零〇一二两三四五六七八九十百]+";
 const CONVERSATION = /聊(?:过|了|到)|谈(?:过|了|话|论|及)|讨论|交谈|说过|讲过|告诉|提过|提到|问过|回答|对话|见面时说|对我说|跟我说/;
 const EVENT = /发生|战争|开战|战役|叛乱|婚礼|死亡|出生|被俘|继承|加冕|盟约|事件|那件事|那场|议和|停战|处决/;
@@ -74,12 +75,12 @@ function messageNumber(value) {
   return Number.isSafeInteger(id) && id >= 0 ? id : null;
 }
 
-function normalizeTemporalRefs(refs, { allowLegacy = false } = {}) {
+function normalizeTemporalRefs(refs, { allowLegacy = false, allowLetter = false } = {}) {
   if (!Array.isArray(refs)) return [];
   const result = [];
   const seen = new Set();
   for (const ref of refs) {
-    if (!ref || typeof ref !== "object" || ref.kind !== "event_time" || !(ref.source === SOURCE || allowLegacy && ref.source === LEGACY_SOURCE) ||
+    if (!ref || typeof ref !== "object" || ref.kind !== "event_time" || !(ref.source === SOURCE || allowLegacy && ref.source === LEGACY_SOURCE || allowLetter && ref.source === LETTER_SOURCE) ||
         !["year", "month", "day"].includes(ref.precision) ||
         !["event", "past_conversation", "unknown"].includes(ref.timeRole) ||
         typeof ref.expression !== "string" || !ref.expression.trim() ||
@@ -91,6 +92,8 @@ function normalizeTemporalRefs(refs, { allowLegacy = false } = {}) {
     // Do not drop invalid proof IDs and accidentally widen the visibility of a ref.
     if (!Array.isArray(ref.messageIds) || ref.messageIds.some(id => messageNumber(id) == null)) continue;
     if (ref.source === SOURCE && !ref.messageIds.length) continue;
+    if (ref.source === LETTER_SOURCE && (ref.messageIds.length || typeof ref.sourceLetterId !== "string" || !ref.sourceLetterId.trim()
+      || !/^[a-f0-9]{64}$/.test(ref.sourceTextHash || "") || !Array.isArray(ref.segmentIds) || ref.segmentIds.length !== 1)) continue;
     if (ref.source === LEGACY_SOURCE && (ref.messageIds.length || !/^[a-f0-9]{64}$/.test(ref.legacySourceHash || "")
       || !Array.isArray(ref.sourceMemoryIds) || ref.sourceMemoryIds.length !== 1
       || !Array.isArray(ref.segmentIds) || ref.segmentIds.length !== 1 || typeof ref.segmentIds[0] !== "string")) continue;
@@ -102,7 +105,8 @@ function normalizeTemporalRefs(refs, { allowLegacy = false } = {}) {
       messageIds: [...new Set(ref.messageIds.map(messageNumber))], segmentIds: [...new Set(ref.segmentIds || [])],
       sourceMemoryIds: [...new Set(ref.sourceMemoryIds || [])],
       source: ref.source, timeRole: ref.timeRole,
-      ...(ref.source === LEGACY_SOURCE ? { legacySourceHash: ref.legacySourceHash } : {})
+      ...(ref.source === LEGACY_SOURCE ? { legacySourceHash: ref.legacySourceHash } : {}),
+      ...(ref.source === LETTER_SOURCE ? { sourceLetterId: ref.sourceLetterId, sourceTextHash: ref.sourceTextHash } : {})
     };
     const key = JSON.stringify(normalized);
     if (!seen.has(key)) result.push(normalized);
@@ -111,12 +115,14 @@ function normalizeTemporalRefs(refs, { allowLegacy = false } = {}) {
   return result;
 }
 
-function extractTemporalAnchors(text, { anchorGameDate, messageId, speakerId, legacySource = null } = {}) {
+function extractTemporalAnchors(text, { anchorGameDate, messageId, speakerId, legacySource = null, letterSource = null } = {}) {
   const current = normalizeGameDate(anchorGameDate);
   const id = messageNumber(messageId);
   const legacy = id == null && typeof legacySource?.memoryId === "string" && legacySource.memoryId.trim()
     && typeof legacySource.fragmentId === "string" && legacySource.fragmentId.trim() && /^[a-f0-9]{64}$/.test(legacySource.sourceHash || "");
-  if (!current || id == null && !legacy || typeof text !== "string") return [];
+  const letter = id == null && !legacy && typeof letterSource?.letterId === "string" && letterSource.letterId.trim()
+    && typeof letterSource.fragmentId === "string" && letterSource.fragmentId.trim() && /^[a-f0-9]{64}$/.test(letterSource.sourceTextHash || "");
+  if (!current || id == null && !legacy && !letter || typeof text !== "string") return [];
   // Longest alternatives consume invalid dates too, so they cannot fall back to a valid year.
   const pattern = new RegExp("(?<![\\d./-])(?:" + NUMBER + "\\s*(?:年|个月|月|天|日)\\s*前|" +
     "\\d+\\s*[./-]\\s*\\d+\\s*[./-]\\s*\\d+|" +
@@ -161,11 +167,12 @@ function extractTemporalAnchors(text, { anchorGameDate, messageId, speakerId, le
     if (conversationAt < 0 && eventAt < 0 && CONVERSATION.test(before)) timeRole = "unknown";
     if (/大约|大概|约莫|也许|或许|可能|不确定|似乎|左右/.test(clause) || /约\s*$/.test(before)) timeRole = "unknown";
     // An event reference (including a bare year or a question) is NOT proof the event happened.
-    refs.push({ kind: "event_time", ...range, expression, messageIds: legacy ? [] : [id],
-      segmentIds: legacy ? [legacySource.fragmentId] : [], source: legacy ? LEGACY_SOURCE : SOURCE, timeRole,
-      ...(legacy ? { sourceMemoryIds: [legacySource.memoryId], legacySourceHash: legacySource.sourceHash } : {}) });
+    refs.push({ kind: "event_time", ...range, expression, messageIds: legacy || letter ? [] : [id],
+      segmentIds: legacy ? [legacySource.fragmentId] : letter ? [letterSource.fragmentId] : [], source: legacy ? LEGACY_SOURCE : letter ? LETTER_SOURCE : SOURCE, timeRole,
+      ...(legacy ? { sourceMemoryIds: [legacySource.memoryId], legacySourceHash: legacySource.sourceHash } : {}),
+      ...(letter ? { sourceLetterId: letterSource.letterId, sourceTextHash: letterSource.sourceTextHash } : {}) });
   }
-  return normalizeTemporalRefs(refs, { allowLegacy: !!legacy });
+  return normalizeTemporalRefs(refs, { allowLegacy: !!legacy, allowLetter: !!letter });
 }
 
 function extractTemporalAnchorsFromMessages(messages, { anchorGameDate } = {}) {

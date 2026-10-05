@@ -21154,7 +21154,7 @@ const SummariesManager = () => {
     }
   };
   const handleRetrySummaries = async () => {
-    if (!window.confirm("将使用当前摘要模型重试失败摘要或逐角色 Durable 提取，可能产生 API 费用。请先确认模型配置和余额可用。继续？")) return;
+    if (!window.confirm("将使用当前摘要模型重试失败的对话、信件归档或长期记忆提取，可能产生 API 费用。不会重新发送信件。请先确认模型配置和余额可用。继续？")) return;
     setIsRetryingSummaries(true);
     setRetryResult(null);
     try {
@@ -21235,11 +21235,22 @@ const SummariesManager = () => {
     const ownerId = Number(metadata.ownerId ?? metadata.playerId);
     const counterpartId = Number(metadata.counterpartId ?? metadata.characterId);
     const key = `${ownerId}:${counterpartId}:${index}`;
-    if (!window.confirm(`将把“${metadata.ownerName || metadata.playerName} ↔ ${metadata.counterpartName || metadata.characterName}”的 ${summary.date || "无日期"} 摘要正文发送给当前摘要模型整理，可能产生 API 费用。成功后只替换这一篇并同步此人物的记忆投影；其他人物摘要和 Durable 记忆不会重生成。失败时原文保持不变。继续？`)) return;
+    if (!window.confirm(`将把“${metadata.ownerName || metadata.playerName} ↔ ${metadata.counterpartName || metadata.characterName}”的 ${summary.date || "无日期"} 摘要正文发送给当前摘要模型整理，并重建此人物对应的长期、年度和人生记忆，可能产生 API 费用。手工版本保留，其他人物摘要不变。正文生成失败时保留原文；记忆重建失败时保留恢复记录。继续？`)) return;
     setRegeneratingSummaryKey(key);
     setRetryResult(null);
     try {
       const result = await window.conversationAPI.regenerateSummary(ownerId, counterpartId, index, summary.content);
+      if (result?.summaryUpdated) {
+        const memoryStatuses = { COMPLETE: "已完成", ALREADY_CONVERTED: "已同步", NO_DURABLE_CONTENT: "未提取出长期事实",
+          MANUAL_OVERRIDE: "手工版本已保留", PENDING: "等待处理", SKIPPED: "尚未重建", EXTRACTION_FAILED: "提取失败",
+          SOURCE_INVALID: "来源失效", STALE: "来源已变化", CANCELLED: "已取消", FAILED: "重建失败", REQUEUED: "等待重试",
+          BLOCKED_CONTEXT: "缺少可信战役上下文", BLOCKED_ARCHIVE_PROOF: "归档来源无法确认" };
+        const canonical = memoryStatuses[result.memoryRebuild?.canonical?.status] || "尚未完成";
+        const derived = memoryStatuses[result.memoryRebuild?.derived?.status] || "尚未完成";
+        setRetryResult(`摘要正文已更新；长期记忆：${canonical}；年度与人生记忆：${derived}。${result.success ? "手工版本保留。" : "部分记忆重建尚未完成，请检查恢复任务与摘要模型配置。"}`);
+        await loadSummaries(true);
+        return;
+      }
       if (!result?.success) {
         const messages = {
           summary_regeneration_in_progress: "已有一篇摘要正在整理，请完成后再试。",
@@ -21422,7 +21433,7 @@ const SummariesManager = () => {
     ] }),
     clearResult && /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: `clear-result ${clearResult.success ? "success" : "error"}`, children: clearResult.message }),
     retryResult && /* @__PURE__ */ jsxRuntimeExports.jsx("p", { role: "status", className: "help-text", children: retryResult }),
-    (recoveryStatus.pending > 0 || recoveryStatus.running) && /* @__PURE__ */ jsxRuntimeExports.jsx("p", { role: "status", className: "help-text", children: `待恢复：Narrative ${recoveryStatus.narrativePending || 0} 场，Durable ${recoveryStatus.durablePending || 0} 位角色。${recoveryStatus.running ? "后台正在生成，完成后请刷新。" : recoveryStatus.balanceBlocked ? "服务商报告余额不足；充值或更换摘要模型后重试。" : "可点击“重试失败记忆任务”；已提交的结果不会重生成。"}` }),
+    (recoveryStatus.pending > 0 || recoveryStatus.running) && /* @__PURE__ */ jsxRuntimeExports.jsx("p", { role: "status", className: "help-text", children: `待恢复：对话摘要 ${recoveryStatus.narrativePending || 0} 场，长期记忆 ${recoveryStatus.durablePending || 0} 位角色，信件归档 ${recoveryStatus.letterPending || 0} 封。${recoveryStatus.running ? "后台正在生成，完成后请刷新。" : recoveryStatus.balanceBlocked ? "服务商报告余额不足；充值或更换摘要模型后重试。" : "可点击“重试失败记忆任务”；已提交结果不重生成，已接受信件不重发。"}` }),
     recoveryStatus.durableInvalid > 0 && /* @__PURE__ */ jsxRuntimeExports.jsx("p", { role: "alert", className: "help-text", children: `另有 ${recoveryStatus.durableInvalid} 个 Durable 恢复快照无法读取，已隔离；请保留文件并检查诊断日志。` }),
     ...[["记忆召回诊断（最近实际请求）", "recall"], ["摘要恢复诊断", "recovery"], ["Provider 缓存诊断", "providerCache"]].map(([label, key]) =>
       /* @__PURE__ */ jsxRuntimeExports.jsxs("details", { className: "worldline-advanced-details", children: [

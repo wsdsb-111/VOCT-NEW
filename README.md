@@ -6,7 +6,9 @@ Voices of the Court 是一个面向《Crusader Kings III》（CK3）的沉浸式
 
 ## 主要功能
 
-V8.14.2 最新进度见[Owner-scoped Disclosure 实施报告](docs/v8.14.2-owner-scoped-disclosure-implementation-report.md)：对话 Finalization 与合规信件来源中的明确头衔/特质披露按 Campaign × Owner × Entity × Fact 隔离，在下一场生效；人物认知 UI 支持逐项手动已知/未知，当前 CK3 真值仍约束展示。当前清单为 421 个分类测试文件、352 个发布组、68 个历史归档；完整发布门禁 352/352、独立 QA 31 PASS/0 FAIL，隔离 UI Smoke 34 张截图与 startup smoke 36/36 通过。用户确认 V8.14.1 完整信件往返实机 PASS；前次热修报告的 `NOT TESTED` 保留为历史快照。V8.14.2 的 CK3 Disclosure、Provider、cacheTelemetry 和 Soak 仍待用户 Gate，不是 Full Freeze。
+V8.14.2 本轮最新入口：[信件调度与记忆重试热修](docs/v8.14.2-letter-memory-retry-hotfix-report.md)。信件接受门禁、接受后双向摘要及逐 Owner Memory4 恢复已接通；模型整理联动重建长期、年度和人生记忆，手工版本保留，失败任务可重试且不重发信件。当前清单 432 分类文件、363 发布组、68 历史归档；最终门禁与游戏加载后日期回传修复证据见报告。真实 CK3/Provider Gate 仍交用户，下段为前一阶段快照。
+
+V8.14.2 最新进度见[姓名、关系上下文与人物披露热修](docs/v8.14.2-entity-naming-disclosure-hotfix-report.md)：长期抽取接入已有 Owner-scoped 关系与可验证姓名，Owner 明确为记忆持有人而非“主人”；原话披露不再因摘要改写而丢失，人物认知加入披露时年龄及获知日期。用户确认长期记忆正常生成 PASS；已有错误正文不自动重写。当前清单为 428 个分类测试文件、359 个发布组、68 个历史归档；完整发布 359/359、独立 QA 14/14、隔离 UI Smoke 38 张截图通过。[摘要编辑热修](docs/v8.14.2-summary-memory-incident-hotfix-report.md) 与 [Owner-scoped Disclosure](docs/v8.14.2-owner-scoped-disclosure-implementation-report.md) 的官方/归档保护和知情边界继续保留。用户已有完整信件往返、陌生人首次身份及特质展示 PASS 保留；本次新姓名/披露的真实 Provider/CK3、cacheTelemetry 和 Soak 仍待用户 Gate，不是 Full Freeze。
 
 V8.14 / Memory Engine 4.0 的 [A 核心生产接线](docs/v8.14-a-durable-core-implementation-report.md)、[Finalization 可见性收口](docs/v8.14-a-finalization-visibility-closeout-report.md)、[B Profile/关系回读](docs/v8.14-b-profile-implementation-report.md)、[C Recall Planner](docs/v8.14-c-recall-planner-implementation-report.md) 与 [D/E Year/Life 和长期记忆管理](docs/v8.14-de-year-life-management-implementation-report.md) 保留各阶段当时的实现证据。V8.14.1 用户侧既有确认与 V8.14.2 Disclosure 的实现/验证边界见各自报告；协议 3.0、摘要 2.5 与 App 包 2.0.4 合同继续保持。
 
@@ -243,12 +245,12 @@ V7.7 在 V7.6 健康化基础上分阶段拆分主进程：第一阶段将六种
 node scripts\test-release.js
 ```
 
-清单会覆盖全部 `test-*.js`。当前分类为 421 个测试文件、352 个发布组和 68 个归档检查；最终 V8.14.2 门禁结果以 [实施报告](docs/v8.14.2-owner-scoped-disclosure-implementation-report.md) 为准。已退役的 V8.3/V8.3.1 Shadow Resolver、Ground Truth 与诊断面板测试不再作为发布路径。V8.8.2 门禁继续覆盖历史基线、Campaign/Worldline、Definition-ID 双向唯一绑定、第三方亲属 Anchor、长幼/出生日歧义、性别冲突、关系类型限定、已故配偶方向、已故前配偶隔离、配偶三状态 Intent、生产 revision invariant、人口属性缓存失效、来源完整性和冻结边界；既有 Run Command Recovery T1–T18、Memory、Conversation、Action、Letter、Relationship、Date Producer 与缓存回归继续执行。历史归档检查不计入发布组，个别旧合同断言可能不再适用于当前生产合同。
+清单会覆盖全部 `test-*.js`。当前分类为 432 个测试文件、363 个发布组和 68 个归档检查；最新 V8.14.2 门禁结果以 [信件与记忆重试热修报告](docs/v8.14.2-letter-memory-retry-hotfix-report.md) 为准。已退役的 V8.3/V8.3.1 Shadow Resolver、Ground Truth 与诊断面板测试不再作为发布路径。V8.8.2 门禁继续覆盖历史基线、Campaign/Worldline、Definition-ID 双向唯一绑定、第三方亲属 Anchor、长幼/出生日歧义、性别冲突、关系类型限定、已故配偶方向、已故前配偶隔离、配偶三状态 Intent、生产 revision invariant、人口属性缓存失效、来源完整性和冻结边界；既有 Run Command Recovery T1–T18、Memory、Conversation、Action、Letter、Relationship、Date Producer 与缓存回归继续执行。历史归档检查不计入发布组，个别旧合同断言可能不再适用于当前生产合同。
 
 ## 版本信息
 
 - 外挂 UI 版本：v2.0.4
-- 当前应用功能基线：V8.14.2 Owner-scoped Disclosure 已接入 Memory4 Owner/Campaign/Profile 与对话/信件来源门禁；完整发布 352/352、独立 QA 31 PASS/0 FAIL 与隔离 UI Smoke 通过。CK3 Disclosure、Provider、Cache Telemetry 与 Soak 仍待用户 Gate，不签发 Full Freeze
+- 当前应用功能基线：V8.14.2 Owner-scoped Disclosure 与摘要/长期记忆事故热修；最新回归见热修报告，隔离 UI 36 张截图及普通摘要真实保存通过。CK3 Disclosure、Provider、Cache Telemetry 与 Soak 仍待用户 Gate，不签发 Full Freeze
 - CK3 模组版本：Voices of the Court 2.0.5
 - 模组支持版本：CK3 1.18.*
 - UI 主题：宫廷编年史风格（深红、暗金、羊皮纸文本层级）

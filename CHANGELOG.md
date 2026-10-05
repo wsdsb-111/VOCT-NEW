@@ -2,6 +2,12 @@
 
 这里是版本变更的单一入口。详细设计和测试证据保留在链接目标中，本文件只维护版本顺序、用户可见摘要和文档索引。
 
+V8.14.2 信件与记忆重试热修（2026-10-05）：防止旧接受通知提前消费排队回信；信件接受后生成双向摘要和长期记忆，失败只补归档、不重发。对话结束后恢复重试，模型整理联动长期、年度和人生记忆，手工版本保留，部分失败明确展示。详见[本轮实施报告](docs/v8.14.2-letter-memory-retry-hotfix-report.md)，实机宝物与弹窗仍需用户验收。
+
+V8.14.2 姓名/关系/披露热修（2026-10-05）：长期记忆接入已有关系和来源姓名，区分“记忆持有人”与“主人”；原话可验证披露不再依赖摘要逐字复述，人物认知展示披露时年龄与获知日期。用户确认长期记忆生成 PASS；旧错误正文不自动修改。本地完整发布 359/359、独立 QA 14/14、隔离 UI 38 张截图通过，新改动实机 Gate 仍交用户。详见[姓名与披露热修报告](docs/v8.14.2-entity-naming-disclosure-hotfix-report.md)，下方结果保留为历史快照。
+
+V8.14.2 摘要/记忆事故热修（2026-10-04）：恢复对话结束后普通 Legacy 摘要编辑；当前知情 Owner 可成为相关记忆实体，全部候选校验失败不再记为无长期事实，恢复快照与原摘要保留。官方只读及 Memory4 跨战役/归档写入限制不变，旧空记录不自动补生成。隔离窗口 36 张截图与普通摘要实际保存通过，真实 Provider/CK3 复测交用户。详见[热修报告](docs/v8.14.2-summary-memory-incident-hotfix-report.md)。下方 352/352 等为 Disclosure 阶段历史快照。
+
 V8.14.2 Owner-scoped Disclosure（本地实现与门禁通过；CK3/Provider Gate 待验收）：对话 Finalization 与校验通过的信件正文可逐项记录当前头衔/特质披露，仅进入合法收听者自己的 Memory4 Known Entity；手动已知/未知受 revision 保护，当前 GameData 限制当前事实展示。新披露下一场生效，Nickname 默认可见，真名仍走身份识别。用户确认 V8.14.1 完整信件往返实机 PASS，历史 `NOT TESTED` 记录保留。当前 Manifest 为 352 个发布组、421 个分类文件、68 个历史归档；完整发布 352/352、独立 QA 31 PASS/0 FAIL、Letter 专项 7/7，隔离 UI Smoke 34 张截图与 startup smoke 36/36 通过。Disclosure CK3/Provider、cacheTelemetry 与 Soak 仍待用户 Gate，不宣称 Full Freeze。详见 [V8.14.2 实施报告](docs/v8.14.2-owner-scoped-disclosure-implementation-report.md) / [阶段148](docs/V8阶段开发记录.md#第一百四十八阶段v8142-owner-scoped-disclosure)。
 
 V8.14.1 前端内容同步（2026-10-04）：记忆、优化、世界书和诊断文案更新到当前实现，移除旧阶段标题；底部区分功能版本与 App 包版本。当前 Memory4 策略、官方/归档只读、无内容不强制生成，以及信件待实机和 GLM 调优延期边界同步显示；协议 3.0、2.5 存储、持久设置键与业务行为保持不变。详见[前端内容同步报告](docs/v8.14.1-frontend-content-update-implementation-report.md)。

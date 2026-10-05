@@ -86,13 +86,6 @@ export function Memory4Manager({ react: R, ownerId, refreshKey, searchActive = f
   const button = (label, onClick, extra = {}) => h("button", { type: "button", onClick, disabled: busy || loading, ...extra }, label);
   const writeButton = (label, onClick, extra = {}) => button(label, onClick,
     { ...extra, disabled: !data || !!data.readOnlyArchive || busy || loading || !!extra.disabled });
-  const readOnlyLegacyContent = node => {
-    if (Array.isArray(node)) return node.map(readOnlyLegacyContent);
-    if (!node || typeof node !== "object" || !node.type) return node;
-    const props = { ...node.props, children: readOnlyLegacyContent(node.props.children) };
-    if (node.type === "button") { props.disabled = true; props.onClick = undefined; }
-    return typeof R.cloneElement === "function" ? R.cloneElement(node, props) : h(node.type, { ...props, key: node.key });
-  };
   const showSources = async payload => {
     const epoch = contextEpoch.current;
     setBusy(true);
@@ -168,12 +161,14 @@ export function Memory4Manager({ react: R, ownerId, refreshKey, searchActive = f
       : fact.status === "MANUAL_KNOWN" ? "手动标记" : "尚未获知";
     const acquiredDate = fact.firstAcquiredDate || fact.manualMarkedDate || evidence[0]?.acquiredDate || "未知";
     return h("div", { className: "memory4-disclosure-row", key: fact.factId },
-      h("strong", null, `${fact.factType === "TITLE" ? "头衔" : "特质"}：${fact.value}`),
-      h("span", { className: "memory4-meta" }, data.readOnlyArchive
+      h("strong", null, fact.factType === "AGE" ? `披露时年龄：${fact.value}岁` : `${fact.factType === "TITLE" ? "头衔" : "特质"}：${fact.value}`),
+      h("span", { className: "memory4-meta" }, fact.factType === "AGE"
+        ? `来源：${source} · 获知时间：${acquiredDate} · 历史披露记录`
+        : data.readOnlyArchive
         ? `${fact.status === "MANUAL_HIDDEN" ? "手动设为未知" : `来源：${source}`} · 获知时间：${acquiredDate} · 当前状态未回读`
         : known ? `来源：${source} · 获知时间：${acquiredDate}`
           : fact.status === "MANUAL_HIDDEN" ? "你已将此项设为未知。" : "当前未标记为已知。"),
-      !data.readOnlyArchive && writeButton(known ? "设为未知" : "设为已知", () => disclosureAction(profile, fact),
+      fact.factType !== "AGE" && !data.readOnlyArchive && writeButton(known ? "设为未知" : "设为已知", () => disclosureAction(profile, fact),
         { disabled: busy || loading, title: known ? "从此 Owner 的人物认知中隐藏此事实" : "将此当前事实标记为此 Owner 已知" }));
   };
   const editButton = (payload, text, title) => writeButton("编辑", () => setEditor({ ...payload, text, title }));
@@ -185,7 +180,7 @@ export function Memory4Manager({ react: R, ownerId, refreshKey, searchActive = f
         h("code", null, item.memoryId), h("span", null, item.partial ? "部分覆盖，剩余事实保留" : item.eligible ? "来源可核验" : "来源证据不足，保留原文"),
         writeButton("重压缩为长期记忆", () => {
           if (window.confirm("将使用当前摘要模型重压缩这篇旧摘要中可核验的内容，可能产生 API 费用。原摘要继续保留。继续？")) mutate({ operation: "recompressLegacy", memoryId: item.memoryId, expectedSourceHash: item.sourceHash });
-        }, { disabled: busy || loading || !item.eligible })))), !data || data.readOnlyArchive ? readOnlyLegacyContent(legacyContent) : legacyContent);
+        }, { disabled: busy || loading || !item.eligible })))), legacyContent);
   else if (!data) content = h("p", { className: "memory4-empty" }, loading ? "读取人物记忆中…" : "人物记忆尚不可用。");
   else if (tab === "known") content = h(R.Fragment, null,
     data.known.items.length ? data.known.items.map(profile => {
@@ -193,9 +188,10 @@ export function Memory4Manager({ react: R, ownerId, refreshKey, searchActive = f
       const relation = profile.relationship?.status === "CONFIRMED" ? profile.relationship.types.map(type => RELATIONS[type] || type).join(" / ") : "未知";
       const count = value => `${value || 0} 次${recognition.evidenceCompleteness === "complete" ? "" : "（部分记录）"}`;
       const facts = Array.isArray(profile.disclosedFacts) ? profile.disclosedFacts.filter(fact => data.readOnlyArchive
-        ? fact.current === false : fact.current === true) : [];
+        ? fact.current === false : fact.current === true || fact.factType === "AGE" && fact.effectiveKnown) : [];
       const titles = facts.filter(fact => fact.factType === "TITLE");
       const traits = facts.filter(fact => fact.factType === "TRAIT");
+      const ages = facts.filter(fact => fact.factType === "AGE" && fact.effectiveKnown);
       const knownTitles = titles.filter(fact => fact.effectiveKnown && fact.status !== "MANUAL_HIDDEN");
       const knownTraits = traits.filter(fact => fact.effectiveKnown && fact.status !== "MANUAL_HIDDEN");
       return h("article", { className: "memory4-entity", key: profile.entityId }, h("h5", null, profile.displayName),
@@ -213,7 +209,9 @@ export function Memory4Manager({ react: R, ownerId, refreshKey, searchActive = f
               titles.filter(fact => !knownTitles.includes(fact)).map(fact => disclosureFactRow(profile, fact))),
             h("strong", null, "已知特质"), knownTraits.length ? knownTraits.map(fact => disclosureFactRow(profile, fact)) : h("p", { className: "memory4-empty" }, "暂无已知特质。"),
             h("details", null, h("summary", null, `当前特质候选（${traits.length - knownTraits.length}）`),
-              traits.filter(fact => !knownTraits.includes(fact)).map(fact => disclosureFactRow(profile, fact))))),
+              traits.filter(fact => !knownTraits.includes(fact)).map(fact => disclosureFactRow(profile, fact))),
+            h("strong", null, "已披露年龄"), ages.length ? ages.map(fact => disclosureFactRow(profile, fact))
+              : h("p", { className: "memory4-empty" }, "暂无已披露年龄。"))),
         button("查看相关记忆", () => { setEntityId(profile.entityId); setTab("detail"); load({ entityId: profile.entityId }); }));
     }) : h("p", { className: "memory4-empty" }, "暂无可确认的人物认知记录。"), pages(data.known, "knownOffset"));
   else if (tab === "official") content = h(R.Fragment, null,

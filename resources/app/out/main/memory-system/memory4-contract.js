@@ -44,7 +44,7 @@ function validateEntry(candidate, snapshot) {
   const fragmentIds = strings(candidate.fragmentIds);
   const fragments = fragmentIds.map(id => snapshot.fragments.find(fragment => fragment.fragmentId === id));
   if (!fragments.length || fragments.some(fragment => !fragment || !fragment.knownBy.includes(snapshot.ownerId))) throw new Error("memory4_invisible_source");
-  const availableEntities = ids(fragments.flatMap(fragment => [fragment.speakerId, ...fragment.entityIds]));
+  const availableEntities = ids([snapshot.ownerId, ...fragments.flatMap(fragment => [fragment.speakerId, ...fragment.entityIds])]);
   const entityIds = ids(candidate.entityIds);
   if ((candidate.entityIds || []).length !== entityIds.length || entityIds.some(id => !availableEntities.includes(id))) throw new Error("memory4_unknown_entity");
   const participantIds = ids(candidate.participantIds);
@@ -62,10 +62,17 @@ function validateEntry(candidate, snapshot) {
   // Spoken accounts are not CK3/witnessed facts. A model cannot promote hearsay.
   const observed = fragments.every(fragment => fragment.sourceType === "witnessed" || fragment.sourceType === "game_fact");
   if (status === "observed" && !observed) throw new Error("memory4_unverified_observation");
-  const temporalRefs = fragments.flatMap(fragment => extractTemporalAnchors(fragment.text,
-    { anchorGameDate: fragment.legacyMemoryId ? fragment.legacyAnchorGameDate || snapshot.date : snapshot.date, messageId: fragment.messageId,
+  const temporalRefs = fragments.flatMap(fragment => {
+    const letterDate = snapshot.sourceKind === "LETTER" && fragment.visibilityEvidence === "validated_letter" && fragment.sourceTextVerified === true
+      && typeof fragment.sourceLetterId === "string" && fragment.sourceLetterId === snapshot.letterId && gameDate(fragment.eventDate);
+    const datedLetter = letterDate && gameDate(snapshot.date)
+      && normalizeGameDate(letterDate).serial <= normalizeGameDate(snapshot.date).serial;
+    return extractTemporalAnchors(fragment.text,
+    { anchorGameDate: fragment.legacyMemoryId ? fragment.legacyAnchorGameDate || snapshot.date : datedLetter ? letterDate : snapshot.date, messageId: fragment.messageId,
+      letterSource: datedLetter ? { letterId: fragment.sourceLetterId, fragmentId: fragment.fragmentId, sourceTextHash: hash(fragment.text) } : null,
       legacySource: fragment.legacyMemoryId && fragment.legacySourceHash ? { memoryId: fragment.legacyMemoryId,
-        fragmentId: fragment.fragmentId, sourceHash: fragment.legacySourceHash } : null }));
+        fragmentId: fragment.fragmentId, sourceHash: fragment.legacySourceHash } : null });
+  });
   if (from && !(observed && from === gameDate(snapshot.date) && to === from)
     && !temporalRefs.some(ref => ref.fromGameDate === from && ref.toGameDate === to && ref.precision === precision)) throw new Error("memory4_unsupported_event_date");
   if (!["day", "month", "year", "range", "unknown"].includes(precision) || from && precision === "unknown" || !from && precision !== "unknown") throw new Error("memory4_invalid_precision");
