@@ -736,6 +736,7 @@ class Conversation {
       memoryEngine3Enabled: memory3Settings.v812MemoryEngine3Enabled !== false,
       memory4RecallEnabled: true,
       gameData: this.gameData,
+      entityProfiles: [...mentionableProfiles.values()],
       queryEntityIds,
       identityUnresolved: queryIdentityUnresolved,
       temporalSummaryRecallEnabled: memory3Settings.v812TemporalSummaryRecallEnabled !== false,

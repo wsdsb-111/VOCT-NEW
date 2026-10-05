@@ -9,6 +9,7 @@ const { normalizeGameDate } = require("../worldline/character-temporal-facts");
 const { buildLegacyBridge } = require("./memory4-legacy-bridge");
 const { MemoryRanker } = require("./memory-ranker");
 const { normalizePerspectiveTemporalRefs, isFirstMeetingSummary } = require("./summary-date-index");
+const { MentionTracker } = require("./mention-tracker");
 const { removeEntityNames } = require("./turn-recall");
 const projectionHash = memory => hash([memory.memoryId, memory.content, memory.eventDate, memory.knownBy, memory.provenance]);
 
@@ -17,6 +18,12 @@ const GRANULARITIES = new Set(["LIFE", "PERIOD", "YEAR", "EVENT", "EXACT_DATE", 
 const estimateDefault = text => Math.ceil(text.length / 2);
 const serial = value => normalizeGameDate(value)?.serial;
 const entitySet = memory => ids([...(memory.subjects || []), ...(memory.provenance?.counterpartIds || []), memory.provenance?.counterpartId]);
+
+function containsEntityAlias(content, entityIds, aliasIndex, tracker) {
+  if (!entityIds.size) return false;
+  const mentionedIds = tracker.findMentionedCharacterIds([{ content }], { aliasIndex, resolveCoreference: false });
+  return mentionedIds.some(entityId => entityIds.has(entityId));
+}
 
 function parseRecallQuery(text, options = {}) {
   const query = String(text || "");
@@ -207,6 +214,19 @@ class Memory4RecallPlanner {
       || (options.temporalRecallEnabled === false && query.temporalRequested ? "TEMPORAL_RECALL_DISABLED" : null)
       || (options.identityUnresolved ? "IDENTITY_UNRESOLVED" : null);
     const relevantEntities = query.entityIds;
+    const aliasTracker = new MentionTracker();
+    const profileMap = options.gameData?.getMentionableCharacterProfiles?.() || options.gameData?.characters;
+    const profiles = Array.isArray(options.entityProfiles) ? options.entityProfiles
+      : profileMap instanceof Map ? [...profileMap.values()] : [];
+    const aliasIndex = aliasTracker.buildAliases(profiles);
+    const legacyAliasesByEntity = new Map();
+    for (const alias of aliasIndex) {
+      const allowedNames = options.entityNamesById?.[alias.id] || options.entityNamesById?.[String(alias.id)];
+      if (!relevantEntities.includes(alias.id) || !Array.isArray(allowedNames) || !allowedNames.includes(alias.name)) continue;
+      if (!legacyAliasesByEntity.has(alias.id)) legacyAliasesByEntity.set(alias.id, []);
+      legacyAliasesByEntity.get(alias.id).push(alias.name);
+    }
+    const legacyEntityIds = new Set(legacyAliasesByEntity.keys());
     const queryText = query.text || options.query || "";
     const commitmentQuery = /承诺|答应|约定|promise|commitment|pledge/i.test(queryText);
     const activeCommitmentQuery = commitmentQuery && /仍然|尚未|还未|还没|未完成|未履行|还欠|尚欠|有效|待履行|pending|outstanding|unfulfilled|still|active/i.test(queryText);
@@ -282,7 +302,8 @@ class Memory4RecallPlanner {
     }
     const bridge = buildLegacyBridge(options.legacyMemories || [], { ...scope, currentGameDate: options.currentGameDate, currentTotalDays: options.currentTotalDays });
     const legacy = blocked || activeCommitmentQuery ? [] : this.legacyCandidates(bridge.memories.filter(memory => !relevantEntities.length
-      || relevantEntities.some(entity => entitySet(memory).includes(entity))), scope, index);
+      || relevantEntities.some(entity => entitySet(memory).includes(entity))
+      || containsEntityAlias(memory.content, legacyEntityIds, aliasIndex, aliasTracker)), scope, index);
     const legacyRanked = this.ranker.rank(legacy, { query: query.text || options.query, entityIds: relevantEntities });
     let overview = blocked ? null : this.coordinator.derived?.selectSlice(scope, { query, index,
       eligibleEntryIds: rows.slice(0, Math.max(0, 32 - diagnostics.bodyReads)).map(candidate => candidate.id), currentGameDate: options.currentGameDate,

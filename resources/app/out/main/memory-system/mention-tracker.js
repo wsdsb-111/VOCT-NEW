@@ -71,10 +71,10 @@ class MentionTracker {
     return entry;
   }
 
-  findMentionedCharacterIds(history = [], { candidates = [], excludedIds = [], recentCharacterId = null, resolveCoreference = true } = {}) {
+  findMentionedCharacterIds(history = [], { candidates = [], aliasIndex = null, excludedIds = [], recentCharacterId = null, resolveCoreference = true } = {}) {
     this.lastScanUnresolved = false;
     const excluded = new Set(uniqueNumericIds(excludedIds));
-    const aliases = this.buildAliases(candidates).filter((alias) => !excluded.has(alias.id));
+    const aliases = (aliasIndex || this.buildAliases(candidates)).filter((alias) => !excluded.has(alias.id));
     const mentioned = [];
     const seen = new Set();
 
@@ -145,10 +145,13 @@ class MentionTracker {
     target.mentionedCharacterIds = uniqueNumericIds([...(target.mentionedCharacterIds || []), ...newlyMentioned]);
     target.processedThroughIndex = history.length;
     target.lastProcessedMessageKey = history.length > 0 ? this.getMessageKey(history[history.length - 1], history.length - 1) : null;
-    const latestUserMessage = [...history].reverse().find((message) => message?.role === "user");
-    target.currentTurnMentionedCharacterIds = latestUserMessage
-      ? this.findMentionedCharacterIds([latestUserMessage], { candidates, excludedIds, recentCharacterId: previousRecentCharacterId })
-      : [];
+    const latestUserIndex = history.findLastIndex((message) => message?.role === "user");
+    const latestUserMessage = latestUserIndex >= 0 ? history[latestUserIndex] : null;
+    const currentTurnHistory = latestUserIndex >= 0 ? history.slice(latestUserIndex) : [];
+    const explicitlyMentionedThisTurn = this.findMentionedCharacterIds(currentTurnHistory, { candidates, excludedIds, resolveCoreference: false });
+    const latestUserMentions = latestUserMessage
+      ? this.findMentionedCharacterIds([latestUserMessage], { candidates, excludedIds, recentCharacterId: previousRecentCharacterId }) : [];
+    target.currentTurnMentionedCharacterIds = uniqueNumericIds([...explicitlyMentionedThisTurn, ...latestUserMentions]);
     const currentRecentId = this.lastScanRecentCharacterId;
     const explicitIds = latestUserMessage ? this.findMentionedCharacterIds([latestUserMessage], { candidates, excludedIds, resolveCoreference: false }) : [];
     if (explicitIds.length === 1) {

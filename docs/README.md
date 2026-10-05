@@ -4,7 +4,11 @@
 
 ## 推荐阅读顺序
 
-本轮最新入口：[V8.14.2 收口修复](v8.14.2-closeout-fix-implementation-report.md) / [App 与 Mod 外部运行依赖](EXTERNAL_RUNTIME_DEPENDENCIES.md)。第三人直接对白、唯一昵称绑定、Fact Epoch 防旧认知复活已接通；完整发布 367/367、独立 QA、隔离 UI 38 张截图通过，清单 367 发布组、436 分类文件、68 历史归档。真实 CK3/Provider/cache telemetry/Soak 待用户 Gate，不签发 Full Freeze。以下为先前阶段快照。
+本轮最新入口：[V8.14.2 P0 第三人记忆召回热修](v8.14.2-third-party-memory-recall-hotfix-report.md)。当前轮提及范围扩至回应者可见的 NPC 发言，Memory4 合并玩家查询和 NPC 本轮实体；Legacy 姓名回退采用最长唯一 alias 匹配。40 组专项及当前轮/代词 TTL 回归通过；完整发布门禁在首组临时原子重命名处报 EPERM。以下为先前阶段快照。
+
+前次入口：[V8.14.2 修复4实施报告](v8.14.2-fix4-implementation-report.md) / [第一百五十四阶段](V8阶段开发记录.md#第一百五十四阶段v8142-修复4收口)。动作型直接引语采用 identity-first speaker provenance，第三人/歧义归属 fail-closed；完整发布 367/367、独立 QA 与隔离 UI 38 张截图通过。CK3 L1-L4、真实 Provider/cache telemetry/Soak 待用户 Gate，不签发 Full Freeze。以下为先前阶段快照。
+
+前次入口：[V8.14.2 收口修复](v8.14.2-closeout-fix-implementation-report.md) / [App 与 Mod 外部运行依赖](EXTERNAL_RUNTIME_DEPENDENCIES.md)。第三人直接对白、唯一昵称绑定、Fact Epoch 防旧认知复活已接通；完整发布 367/367、独立 QA、隔离 UI 38 张截图通过，清单 367 发布组、436 分类文件、68 历史归档。真实 CK3/Provider/cache telemetry/Soak 待用户 Gate，不签发 Full Freeze。以下为先前阶段快照。
 
 前次入口：[V8.14.2 信件调度与记忆重试热修](v8.14.2-letter-memory-retry-hotfix-report.md)。接受后信件摘要、Detail/Year/Life 和失败重试独立于游戏 Effect；模型整理联动重建并保留手工版本。该阶段清单 363 发布组、432 分类文件、68 历史归档。
 
@@ -204,6 +208,8 @@ V8.5.1 历史基线：[Sol 最终审查与修复](v8.5.1-sol-final-review.md)，
 
 ### 版本设计与实施报告
 
+- [v8.14.2-third-party-memory-recall-hotfix-report.md](v8.14.2-third-party-memory-recall-hotfix-report.md)：A/B/C 多人对话中 NPC 发言提及 D 的当前轮召回、Memory4 实体合并、Legacy 正文姓名消歧及发布门禁限制。
+- [v8.14.2-fix4-implementation-report.md](v8.14.2-fix4-implementation-report.md)：第三人动作型直接引语 speaker provenance 收口、回归证据与待 CK3/Provider/Soak Gate。
 - [v8.14.2-entity-naming-disclosure-hotfix-report.md](v8.14.2-entity-naming-disclosure-hotfix-report.md)：已有关系与源文姓名进入 Durable、原话披露事故修复、历史年龄与获知日期及离线/实机边界。
 - [v8.14.2-owner-scoped-disclosure-implementation-report.md](v8.14.2-owner-scoped-disclosure-implementation-report.md)：Known Entity Owner-scoped Disclosure、Finalization/Letter 来源门禁、Current Truth、手工覆盖、人物认知 UI 与待验收 Gate。
 - [v8.4-gamestate-performance-benchmark.md](v8.4-gamestate-performance-benchmark.md)：指定存档的只读性能勘探基准；不是发布 SLA。

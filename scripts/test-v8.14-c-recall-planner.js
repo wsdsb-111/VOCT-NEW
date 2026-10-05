@@ -113,6 +113,132 @@ try {
     assert(packet.profileText.includes("MENTION_ONLY"));
     assert.equal(packet.text.includes('"memoryPointers"'), false);
   });
+  const groupSummary = (ownerId, memoryId, content) => createMemoryRecord({ memoryId, type: "folder_summary",
+    subtype: "conversation_summary", content, eventDate: "1175.1.1", participants: [1, 2, 3],
+    subjects: [1, 2, 3].filter(id => id !== ownerId), knownBy: [ownerId],
+    provenance: { campaignToken: scope.campaignToken, folderOwnerId: ownerId, counterpartId: 1, counterpartIds: [1],
+      campaignBinding: { status: "bound" }, participantProfiles: [1, 2, 3].map(id => ({ id, name: `人物${id}` })) } });
+  const groupProfiles = new Map([
+    [1, { id: 1, firstName: "赵太初", shortName: "赵太初", fullName: "赵太初" }],
+    [2, { id: 2, firstName: "张道素", shortName: "张道素", fullName: "张道素" }],
+    [3, { id: 3, firstName: "王道一", shortName: "王道一", fullName: "王道一" }],
+    [4, { id: 4, firstName: "李道远", shortName: "李道远", fullName: "李道远" }]
+  ]);
+  const ambiguousGroupProfiles = new Map([...groupProfiles, [5, { id: 5, firstName: "李道远", shortName: "李道远", fullName: "李道远" }]]);
+  const ownerBGroupMemory = groupSummary(2, "group-B-D", "李道远曾与赵太初谈论北境防务，并约定来年共同巡边。");
+  const ownerCGroupMemory = groupSummary(3, "group-C-D", "李道远曾与王道一谈论北境防务，并约定来年共同巡边。");
+  const groupRecall = (ownerId, memories, extra = {}) => planner.plan({ ...options, ownerId, querySpeakerId: 1,
+    entityIds: [4], entityNamesById: { 4: ["李道远"] }, gameData: { characters: groupProfiles },
+    entityProfiles: [...groupProfiles.values()],
+    legacyMemories: memories, query: "你还记得李道远谈过的北境防务吗？", ...extra });
+  check("text-only third-party mentions recall each present Owner's own group summary", () => {
+    const fromB = groupRecall(2, [ownerBGroupMemory, ownerCGroupMemory]);
+    const fromC = groupRecall(3, [ownerCGroupMemory, ownerBGroupMemory]);
+    assert(fromB.text.includes("group-B-D"));
+    assert.equal(fromB.text.includes("group-C-D"), false);
+    assert(fromC.text.includes("group-C-D"));
+    assert.equal(fromC.text.includes("group-B-D"), false);
+    const historicalProfile = groupRecall(2, [ownerBGroupMemory], {
+      gameData: { characters: new Map([...groupProfiles].filter(([id]) => id !== 4)) }
+    });
+    assert(historicalProfile.text.includes("group-B-D"));
+    const gameDataOnly = groupRecall(2, [ownerBGroupMemory], { entityProfiles: null });
+    assert(gameDataOnly.text.includes("group-B-D"));
+  });
+  check("ambiguous third-party names do not broaden Legacy recall", () => {
+    const packet = groupRecall(2, [ownerBGroupMemory], { gameData: { characters: ambiguousGroupProfiles },
+      entityProfiles: [...ambiguousGroupProfiles.values()] });
+    assert.equal(packet.items.length, 0);
+  });
+  check("NPC speech mentions are current-turn entities, while prior-turn mentions expire", () => {
+    const tracker = new MentionTracker();
+    const state = tracker.createState();
+    const candidates = [...groupProfiles.values()];
+    tracker.update(state, { history: [
+      { id: 1, role: "user", content: "谈谈边境防务。" },
+      { id: 2, role: "assistant", content: "李道远曾与我商议巡边。" }
+    ], candidates, excludedIds: [1, 2, 3] });
+    assert.deepEqual(state.currentTurnMentionedCharacterIds, [4]);
+    tracker.update(state, { history: [
+      { id: 1, role: "user", content: "谈谈边境防务。" },
+      { id: 2, role: "assistant", content: "李道远曾与我商议巡边。" },
+      { id: 3, role: "user", content: "继续谈谈边境防务。" },
+      { id: 4, role: "assistant", content: "他也赞成。" }
+    ], candidates, excludedIds: [1, 2, 3] });
+    assert.deepEqual(state.currentTurnMentionedCharacterIds, []);
+  });
+  check("text-only Legacy recall keeps campaign, Owner knowledge and future-date gates", () => {
+    const rejected = [
+      { ...ownerBGroupMemory, memoryId: "group-wrong-campaign", provenance: { ...ownerBGroupMemory.provenance, campaignToken: "other-campaign" } },
+      { ...ownerBGroupMemory, memoryId: "group-wrong-knownby", knownBy: [3] },
+      { ...ownerBGroupMemory, memoryId: "group-unresolved-binding", provenance: { ...ownerBGroupMemory.provenance,
+        campaignBinding: { status: "unresolved" } } },
+      { ...ownerBGroupMemory, memoryId: "group-future", eventDate: "1185.1.1" }
+    ];
+    for (const memory of rejected) assert.equal(groupRecall(2, [memory]).items.length, 0, memory.memoryId);
+  });
+  check("MemoryEngine routes resolved third-party aliases by entity ID", () => {
+    const routedEngine = new MemoryEngine({ store: base, trace: { record() {} } });
+    const otherProfile = { id: 5, firstName: "王五", shortName: "王五", fullName: "王五" };
+    const resolvedThirdProfile = { ...groupProfiles.get(4), mentionAliases: ["李道远旧称"] };
+    const routeProfiles = [...groupProfiles.values()].map(profile => profile.id === 4 ? resolvedThirdProfile : profile).concat(otherProfile);
+    let recallOptions;
+    routedEngine.memory4Recall = { plan: value => {
+      recallOptions = value;
+      return { items: [], details: [], overview: null, text: null, tokens: 0, focus: null, sourceRefs: [] };
+    } };
+    const routedState = routedEngine.createConversationState("third-party-alias-route");
+    routedEngine.retrieveForResponder({ characterId: 2, query: "你还记得王五吗？", querySpeakerId: 1,
+      directCounterpartIds: [1, 3], mentionedEntityIds: [4], mentionedEntityNames: { 4: ["李道远", "李道远旧称"], 5: ["王五"] },
+      queryEntityIds: [5], currentGameDate, currentTotalDays: options.currentTotalDays, campaignToken: scope.campaignToken,
+      conversationId: "third-party-alias-route", sceneRevision: "scene", turnEpoch: 1,
+      memoryEngine3Enabled: true, memory4RecallEnabled: true, gameData: { characters: new Map([...groupProfiles, [5, otherProfile]]) },
+      entityProfiles: routeProfiles,
+      sessionRecallCache: routedState.responderRecallCache, tokenBudget: 800, estimateTokens: options.estimateTokens });
+    assert.deepEqual(recallOptions.entityIds, [5, 4]);
+    assert.deepEqual(recallOptions.entityNamesById, { 4: ["李道远", "李道远旧称"], 5: ["王五"] });
+    const historicalAliasMemory = groupSummary(2, "group-resolved-alias", "李道远旧称曾与赵太初谈论北境防务。");
+    const resolvedAliasRecall = planner.plan({ ...options, query: "你还记得李道远旧称谈过的北境防务吗？", entityIds: [4],
+      entityNamesById: recallOptions.entityNamesById, entityNames: Object.values(recallOptions.entityNamesById).flat(),
+      gameData: { characters: new Map([...groupProfiles, [5, otherProfile]]) }, entityProfiles: routeProfiles,
+      legacyMemories: [historicalAliasMemory] });
+    assert(resolvedAliasRecall.items.some(item => item.memory.memoryId === "group-resolved-alias"));
+
+    const folderPath = path.join(folders, "2_fixture", "与旁人甲的对话.json");
+    base.writeJson(folderPath, [{ playerId: 99, characterId: 2, playerName: "旁人甲", characterName: "乙",
+      date: "1175.1.1", totalDays: normalizeGameDate("1175.1.1").serial, campaignToken: scope.campaignToken,
+      campaignBinding: { status: "bound" }, participants: [2, 99].map(id => ({ id, name: `人物${id}` })),
+      content: ownerBGroupMemory.content }]);
+    base.invalidateFolderSummaryCache([2]);
+    const pipelineEngine = new MemoryEngine({ store: base, trace: { record() {} } });
+    const pipelineState = pipelineEngine.createConversationState("third-party-text-recall");
+    const pipelineContext = pipelineEngine.retrieveForResponder({ characterId: 2,
+      query: "你还记得谈过的北境防务吗？", querySpeakerId: 1, directCounterpartIds: [1, 3],
+      mentionedEntityIds: [4], mentionedEntityNames: { 4: ["李道远"] }, queryEntityIds: [],
+      currentGameDate, currentTotalDays: options.currentTotalDays, campaignToken: scope.campaignToken,
+      conversationId: "third-party-text-recall", sceneRevision: "scene", turnEpoch: 1,
+      memoryEngine3Enabled: true, memory4RecallEnabled: true,
+      gameData: { characters: new Map([...groupProfiles].filter(([id]) => id !== 4)) },
+      entityProfiles: [...groupProfiles.values()], ownerFolderMemories: pipelineEngine.loadOwnerFolderMemories(2),
+      sessionRecallCache: pipelineState.responderRecallCache, tokenBudget: 2400, estimateTokens: options.estimateTokens });
+    assert(pipelineContext.temporalExtraText.includes(ownerBGroupMemory.content), JSON.stringify({
+      snapshotCount: pipelineContext.temporalDiagnostics.folderMemoryCount,
+      memory4Diagnostics: pipelineContext.memory4Diagnostics,
+      packet: pipelineContext.memory4Packet
+    }));
+  });
+  check("short entity aliases do not match inside a longer character name", () => {
+    const shortName = { id: 4, firstName: "张三", shortName: "张三", fullName: "张三" };
+    const longName = { id: 5, firstName: "张三丰", shortName: "张三丰", fullName: "张三丰" };
+    const query = "你还记得张三谈过的北境防务吗？";
+    const recall = memory => planner.plan({ ...options, query, entityIds: [4], entityNamesById: { 4: ["张三"] },
+      gameData: { characters: new Map([[4, shortName], [5, longName]]) }, entityProfiles: [shortName, longName],
+      legacyMemories: [memory] });
+    const falseMatch = recall(groupSummary(2, "group-overlapping-name", "张三丰曾与赵太初谈论北境防务。"));
+    assert.equal(falseMatch.items.some(item => item.memory.memoryId === "group-overlapping-name"), false);
+    const exactMatch = recall(groupSummary(2, "group-exact-short-name", "张三曾与赵太初谈论北境防务。"));
+    assert(exactMatch.items.some(item => item.memory.memoryId === "group-exact-short-name"));
+  });
   check("multiple entities share one 2+1 budget and LIFE allows one Detail", () => {
     add("1176.1.1", "一号与三号共同议和。", { entityIds: [1, 3] });
     const packet = planner.plan({ ...options, entityIds: [1, 3], query: "一号与三号的议和约定呢？" });

@@ -2,6 +2,10 @@
 
 这里是版本变更的单一入口。详细设计和测试证据保留在链接目标中，本文件只维护版本顺序、用户可见摘要和文档索引。
 
+V8.14.2 P0 第三人记忆召回修复（2026-10-05）：当前轮 NPC 发言提到 D 时，B/C 可召回各自保存、正文提到 D 的旧摘要；Memory4 合并玩家查询与 NPC 本轮提及实体，并用最长唯一姓名匹配避免短名误命中长名。Owner、Campaign、knownBy、歧义及未来日期门禁保持。专项 40 组与当前轮/代词 TTL 回归通过；完整发布门禁在首组被 Windows 沙箱原子重命名 EPERM 阻断。详见[实施报告](docs/v8.14.2-third-party-memory-recall-hotfix-report.md)。
+
+V8.14.2 修复4收口（2026-10-05）：动作型直接引语不再因缺少冒号/标准说话动词而误归给当前 fragment speaker；先按最长唯一角色姓名/昵称解析说话者，第三人、歧义、复合主语与随从归属 fail-closed，内心/转述/书写来源门禁保留。完整发布 367/367、独立复审与隔离 UI 38 张截图通过；CK3 L1-L4、Provider/缓存/Soak 仍交用户，不签发 Full Freeze。详见[修复4实施报告](docs/v8.14.2-fix4-implementation-report.md)。
+
 V8.14.2 收口修复（2026-10-05）：第三人明确对白可披露当前头衔/特质，唯一昵称可绑定人物但不暴露真名；旁白、传闻、歧义仍拒绝。Fact Epoch 防止同事实消失再出现时复活旧自动/手工认知，隐藏标记保留。App/Mod 按方案 B 独立发布并明确必需日期补丁。完整发布 367/367、独立 GPT-6 Luna Max QA、隔离 UI 38 张截图通过，真实 CK3/Provider/缓存/Soak 仍交用户，不签发 Full Freeze。详见[收口修复报告](docs/v8.14.2-closeout-fix-implementation-report.md)和[外部运行依赖](docs/EXTERNAL_RUNTIME_DEPENDENCIES.md)。
 
 V8.14.2 信件与记忆重试热修（2026-10-05）：防止旧接受通知提前消费排队回信；信件接受后生成双向摘要和长期记忆，失败只补归档、不重发。对话结束后恢复重试，模型整理联动长期、年度和人生记忆，手工版本保留，部分失败明确展示。详见[本轮实施报告](docs/v8.14.2-letter-memory-retry-hotfix-report.md)，实机宝物与弹窗仍需用户验收。

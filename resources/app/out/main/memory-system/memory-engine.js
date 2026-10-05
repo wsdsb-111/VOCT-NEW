@@ -1594,7 +1594,7 @@ class MemoryEngine {
     return selected;
   }
 
-  retrieveForResponder({ characterId, query = "", directCounterpartIds = [], querySpeakerId = null, mentionedEntityIds = [], mentionedEntityNames = {}, mentionedRecallCache = null, sessionRecallCache = null, ownerFolderMemories = null, officialSummary = null, turnEpoch = 0, currentGameDate = null, currentTotalDays = null, campaignToken = null, conversationId = null, sceneRevision = null, memoryEngine3Enabled = true, memory4RecallEnabled = false, gameData = null, identityUnresolved = false, queryEntityIds = null, temporalSummaryRecallEnabled = true, tokenBudget = 800, estimateTokens } = {}) {
+  retrieveForResponder({ characterId, query = "", directCounterpartIds = [], querySpeakerId = null, mentionedEntityIds = [], mentionedEntityNames = {}, entityProfiles = null, mentionedRecallCache = null, sessionRecallCache = null, ownerFolderMemories = null, officialSummary = null, turnEpoch = 0, currentGameDate = null, currentTotalDays = null, campaignToken = null, conversationId = null, sceneRevision = null, memoryEngine3Enabled = true, memory4RecallEnabled = false, gameData = null, identityUnresolved = false, queryEntityIds = null, temporalSummaryRecallEnabled = true, tokenBudget = 800, estimateTokens } = {}) {
     const startedAt = Date.now();
     const ownerId = Number(characterId);
     const ownerValid = isValidCharacterId(ownerId);
@@ -1811,12 +1811,19 @@ class MemoryEngine {
     }
     let memory4Packet = null;
     if (useMemory4 && ownerValid && hasResolvedCampaignToken(campaignToken) && this.memory4Recall) {
+      const explicitMemory4EntityIds = uniqueIds([...(queryEntityIds || []), ...mentionedIds]);
+      const memory4EntityIds = explicitMemory4EntityIds.length ? explicitMemory4EntityIds
+        : isValidCharacterId(requestedSpeakerId) && requestedSpeakerId !== ownerId ? [requestedSpeakerId] : directIds;
+      const memory4EntityNamesById = Object.fromEntries(memory4EntityIds.map(id => {
+        const currentNames = gameData?.characters?.get?.(id) ? this.getCharacterMentionAliases(gameData.characters.get(id)) : [];
+        const resolvedNames = Array.isArray(mentionedEntityNames) ? [] : namesForEntity(id);
+        return [id, [...new Set([...currentNames, ...resolvedNames])]];
+      }));
       memory4Packet = this.memory4Recall.plan({ campaignToken, ownerId, query, querySpeakerId: requestedSpeakerId,
-        entityIds: queryEntityIds?.length ? queryEntityIds : mentionedIds.length ? mentionedIds : isValidCharacterId(requestedSpeakerId) && requestedSpeakerId !== ownerId ? [requestedSpeakerId] : directIds,
-        legacyMemories: folderMemories, gameData, currentGameDate, currentTotalDays, conversationId, sceneRevision, turnEpoch,
-        entityIdsExplicit: !!(queryEntityIds?.length || mentionedIds.length),
-        entityNames: uniqueIds([...(queryEntityIds || []), ...mentionedIds]).flatMap(id =>
-          gameData?.characters?.get?.(id) ? this.getCharacterMentionAliases(gameData.characters.get(id)) : namesForEntity(id)),
+        entityIds: memory4EntityIds,
+        legacyMemories: folderMemories, entityProfiles, gameData, currentGameDate, currentTotalDays, conversationId, sceneRevision, turnEpoch,
+        entityIdsExplicit: explicitMemory4EntityIds.length > 0,
+        entityNames: Object.values(memory4EntityNamesById).flat(), entityNamesById: memory4EntityNamesById,
         temporalRecallEnabled: temporalSummaryRecallEnabled,
         identityUnresolved, focus: responderCache.memory4Focus, excludedKeys: [...selectedFolderKeys, ...responderCache.seenDynamicSummaries],
         memoryEngineRemainingBudget: extraBudget, providerRemainingSafeBudget: 1200, estimateTokens });

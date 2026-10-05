@@ -8,7 +8,6 @@ const CURRENT_RELATIONSHIP_SOURCE = "CURRENT_RUNTIME_RELATIONSHIP";
 const QUOTE_CLOSE = new Map([["“", "”"], ["‘", "’"], ["「", "」"], ["『", "』"], ["\"", "\""]]);
 const QUOTE_CLOSERS = new Set(QUOTE_CLOSE.values());
 const INNER_THOUGHT_OR_REPORT = /心想|心道|心知|心里|内心|暗自|想着|想起|想到|思忖|思量|琢磨|以为|觉得|认为|怀疑|听说|听闻|耳闻|闻说|听到|据说|传闻|传言|谣言|相传|旁白|叙述|描写|有人说|别人说|他人说|他说|她说|他们说|某人说|被告知|转述|引用|thought|thinking|believed|thought to|heard|rumou?r|report|according to|someone said|he said|she said/iu;
-const ATTRIBUTION_END = /(?:说(?:道|过)?|曰|道|表示|宣称|转述|引用|告诉|提到|say|says|said|tell|tells|told|claim|claims|claimed|declare|declares|declared|remark|remarks|remarked)\s*[：:,，]?$/iu;
 const WRITTEN_QUOTE = /写下|写道|写着|书写|记下|刻下|刻有|题写|纸上|纸条|字条|碑文|字迹|牌匾|\b(?:wrote|written|writes?|inscribed|inscription)\b/iu;
 const REPORTED_SPEECH = /听[^。.!！?？;；，,\r\n]{0,24}(?:说(?:道|过)?|曰|道|表示|宣称|转述|闻|到)|耳闻|闻说/u;
 const SELF_ATTRIBUTION = /^(?:我|吾|朕|寡人|孤|本王|在下|鄙人|本人)(?:(?:对|向)[^，,：:。.!！?？;；\r\n]{1,20})?(?:说(?:道|过)?|曰|道|表示|宣称|告诉|提到|问(?:道)?|答(?:道)?|回答|回应|追问|喊(?:道)?)\s*[：:,，]?$/u;
@@ -66,52 +65,65 @@ function sourceIds(fragment) {
   return [...new Set(values.filter(value => Number.isSafeInteger(value) && value >= 0))].sort((left, right) => left - right);
 }
 
-function resolveAttributedSpeaker(context, characters, speakerId) {
-  const hasColonAttribution = /[:：]\s*$/u.test(context);
-  if (!hasColonAttribution && !ATTRIBUTION_END.test(context)) return { kind: "none" };
+function latestAttributionClause(context) {
+  return context.split(/[，,]|[—–]+/u).map(value => value.trim()).filter(Boolean).at(-1) || "";
+}
+
+function resolveLeadingAttributedIdentity(clause, characters, speakerId) {
+  if (!clause) return { kind: "none" };
   const candidates = rows(characters);
   if (!candidates.length) return { kind: "none" };
   if (!Number.isSafeInteger(Number(speakerId))) return { kind: "ambiguous" };
-  const clauses = context.replace(/[:：]\s*$/u, "").split(/[，,]/u).map(value => value.trim()).filter(Boolean);
-  for (const clause of clauses.reverse()) {
-    const normalized = clause.normalize("NFKC").toLowerCase();
-    const matches = [];
-    for (const character of candidates) {
-      const id = characterId(character);
-      if (!id) continue;
-      for (const alias of identityAliases(character)) {
-        const normalizedAlias = alias.normalize("NFKC").toLowerCase();
-        if (normalized.startsWith(normalizedAlias)) matches.push({ id, alias: normalizedAlias });
-      }
+  const normalized = clause.normalize("NFKC").toLowerCase();
+  const matches = [];
+  for (const character of candidates) {
+    const id = characterId(character);
+    if (!id) continue;
+    for (const alias of identityAliases(character)) {
+      const normalizedAlias = alias.normalize("NFKC").toLowerCase();
+      if (normalized.startsWith(normalizedAlias)) matches.push({ id, alias: normalizedAlias });
     }
-    if (!matches.length) continue;
-    const longest = Math.max(...matches.map(match => match.alias.length));
-    const matchedIds = [...new Set(matches.filter(match => match.alias.length === longest).map(match => match.id))];
-    const suffix = normalized.slice(longest).trimStart();
-    if (/^(?:的|之|手下|属下|部下|麾下|帐下|幕下|门下|身边|身侧|身旁|随从|侍从|家臣)/u.test(suffix)
-      || matchedIds.length !== 1) return { kind: "ambiguous" };
-    return { kind: matchedIds[0] === Number(speakerId) ? "self" : "other", characterId: matchedIds[0] };
   }
-  return { kind: "none" };
+  if (!matches.length) return { kind: "none" };
+  const longest = Math.max(...matches.map(match => match.alias.length));
+  const matchedIds = [...new Set(matches.filter(match => match.alias.length === longest).map(match => match.id))];
+  const suffix = normalized.slice(longest).trimStart();
+  if (/^(?:的|之|和|与|同|及|跟|并|以及|一同|共同|二人|两人|、|手下|属下|部下|麾下|帐下|幕下|门下|身边|身侧|身旁|随从|侍从|家臣)/u.test(suffix)
+    || matchedIds.length !== 1) return { kind: "ambiguous" };
+  return { kind: matchedIds[0] === Number(speakerId) ? "self" : "other", characterId: matchedIds[0] };
 }
 
-function safeDirectSpeechContext(text, start, speakerAliases, attribution) {
+function trailingAttributionClause(text, end) {
+  const following = text.slice(end + 1);
+  const boundary = following.search(/[。.!！?？;；\r\n]/u);
+  const nextQuote = following.search(/[“‘「『"]/u);
+  if (nextQuote >= 0 && (boundary < 0 || nextQuote < boundary)) return "";
+  return following.slice(0, boundary < 0 ? following.length : boundary)
+    .replace(/^[\s，,:：、—–-]+/u, "").trim();
+}
+
+function safeDirectSpeechContext(text, start, end, speakerAliases, attribution) {
   const prefix = text.slice(0, start - 1);
-  const boundaries = [...prefix.matchAll(/[。.!！?？;；\r\n]/gu)];
+  const boundaries = [...prefix.matchAll(/[。.!！?？;；\r\n]|[”’」』"]/gu)];
   const boundary = boundaries.at(-1);
   const context = prefix.slice(boundary ? boundary.index + 1 : 0).trim();
-  if (!context) return true;
-  if (INNER_THOUGHT_OR_REPORT.test(context) || WRITTEN_QUOTE.test(context)) return false;
-  const attributionClause = context.replace(/[:：]\s*$/u, "").split(/[，,]/u).at(-1).trim();
-  if (REPORTED_SPEECH.test(attributionClause)) return false;
-  const hasAttribution = /[:：]\s*$/u.test(context) || ATTRIBUTION_END.test(context);
-  const attributedSpeaker = resolveAttributedSpeaker(context, attribution?.characters, attribution?.speakerId);
-  if (attributedSpeaker.kind !== "none") return attributedSpeaker.kind === "self";
-  if (hasAttribution && (SELF_ATTRIBUTION.test(attributionClause) || SELF_ATTRIBUTION_EN.test(attributionClause))) return true;
-  if (!/[:：]\s*$/u.test(context) && !ATTRIBUTION_END.test(context)) return true;
-  const normalized = context.normalize("NFKC").toLowerCase();
+  const trailingClause = trailingAttributionClause(text, end);
+  if ([context, trailingClause].some(clause => INNER_THOUGHT_OR_REPORT.test(clause) || WRITTEN_QUOTE.test(clause))) return false;
+  const attributionClause = latestAttributionClause(context);
+  if (REPORTED_SPEECH.test(attributionClause) || REPORTED_SPEECH.test(trailingClause)) return false;
+  const attributedSpeaker = resolveLeadingAttributedIdentity(attributionClause, attribution?.characters, attribution?.speakerId);
+  const trailingSpeaker = resolveLeadingAttributedIdentity(trailingClause, attribution?.characters, attribution?.speakerId);
+  if ([attributedSpeaker, trailingSpeaker].some(result => result.kind === "other" || result.kind === "ambiguous")) return false;
+  if (attributedSpeaker.kind === "self" || trailingSpeaker.kind === "self") return true;
+  if (SELF_ATTRIBUTION.test(attributionClause) || SELF_ATTRIBUTION_EN.test(attributionClause)
+    || /^(?:我|吾|朕|寡人|孤|本王|在下|鄙人|本人)(?!(?:的|之|家|身边|身侧|身旁))|^i(?:\s|$)/iu.test(attributionClause)) return true;
+  if (!attributionClause) return true;
+  const normalized = attributionClause.normalize("NFKC").toLowerCase();
+  if (speakerAliases.some(alias => typeof alias === "string" && alias.trim()
+    && normalized.startsWith(alias.normalize("NFKC").trim().toLowerCase()))) return true;
+  const trailingNormalized = trailingClause.normalize("NFKC").toLowerCase();
   return speakerAliases.some(alias => typeof alias === "string" && alias.trim()
-      && normalized.startsWith(alias.normalize("NFKC").trim().toLowerCase()));
+    && trailingNormalized.startsWith(alias.normalize("NFKC").trim().toLowerCase()));
 }
 
 function directSpeechSpans(text, speakerAliases = [], attribution = null) {
@@ -128,7 +140,7 @@ function directSpeechSpans(text, speakerAliases = [], attribution = null) {
           const start = active.start + 1;
           const end = index;
           const value = text.slice(start, end);
-          if (!active.nested && value.trim() && safeDirectSpeechContext(text, start, speakerAliases, attribution)) {
+          if (!active.nested && value.trim() && safeDirectSpeechContext(text, start, end, speakerAliases, attribution)) {
             spans.push({ start, end, text: value, source: "DIRECT_SPEECH" });
           }
         }
