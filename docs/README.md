@@ -4,6 +4,8 @@
 
 ## 推荐阅读顺序
 
+当前修复入口：[V8.15 修复1实施报告](v8.15-fix1-implementation-report.md)。显式人物的最终入选、预算裁剪与实际 Provider Input 联动验证；不确定遗忘 fail-closed，旧残留使用只读 Audit 与明确确认 Forget。报告包含诊断接口、共享来源保护和验收证据；不自动修改旧数据，不签发 Full Freeze。下方为前置阶段快照。
+
 当前开发入口：[V8.15 Memory4 召回与删除一致性实施报告](v8.15-memory-recall-forget-implementation-report.md)。显式人物目标不受在场状态排除；删除按 Campaign/Owner/人物对持久遗忘并阻止恢复复活，Legacy 仅在证明完整覆盖时退役。独立生产 Prompt/重启夹具、完整门禁和隔离窗口证据集中在报告；协议 3.0、存储 2.5 保持兼容，真实 CK3/Provider/Soak 仍待用户 Gate。以下为前置版本与 Mod 排查快照。
 
 本轮只读排查：[2026 年 10 月征召兵减少调查](v8.14.2-october-levy-mod-investigation-report.md)。三位 GPT-6 Luna Max 核查完整 45 项加载链；用户实机确认仅东方王朝的 1032 开局仍低兵，1066 宋征召兵恢复至 11111/11111。复现场景已收敛，早期建筑初始化为主要解释方向，未唯一定位代码故障；没有修改游戏、Mod 或存档，也未发布增兵补丁。

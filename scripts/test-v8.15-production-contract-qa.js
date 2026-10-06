@@ -20,6 +20,7 @@ const { TokenCounter } = require("../resources/app/out/main/provider-service");
 const { normalizeGameDate } = require("../resources/app/out/main/worldline/character-temporal-facts");
 const { hash } = require("../resources/app/out/main/memory-system/memory4-contract");
 const { createProjectionLineage } = require("../resources/app/out/main/memory-system/memory4-forget");
+const { Memory4OrphanAudit } = require("../resources/app/out/main/memory-system/memory4-orphan-audit");
 const { createMemoryRecord } = require("../resources/app/out/main/memory-system/memory-types");
 const { createSummariesManager } = require("../resources/app/out/main/summaries/summaries-manager");
 
@@ -76,6 +77,24 @@ function summaryRow({ ownerId = 2, counterpartId = 5, subjectIds = [], content, 
     totalDays: normalizeGameDate(date)?.serial ?? null, campaignToken: campaign, campaignBinding: { status: "bound" },
     finalizationId, conversationId, perspectiveSummarySegmentIds: [segmentId], perspectiveMemoryIds,
     ...(projectionId ? { projectionId } : {}), participants: profiles };
+}
+
+function commitCanonicalFacts(engine, { finalizationId, conversationId, date = "1164.1.1", facts, projectionLineages = [] }) {
+  const ownerId = 2;
+  const fragmentId = `${finalizationId}-fragment`;
+  const entityIds = [...new Set(facts.flatMap(fact => fact.entityIds))];
+  const visibleIds = [...new Set([1, ownerId, ...entityIds])];
+  const snapshot = { campaignToken, ownerId, conversationId, finalizationId, episodeId: `${finalizationId}-episode`, date,
+    totalDays: normalizeGameDate(date).serial, sourceRevision: hash([finalizationId, "source"]), presentMessageCount: 1,
+    completeness: "complete", summaryIds: [], counterpartIds: visibleIds.filter(id => id !== ownerId),
+    fragments: [{ fragmentId, messageId: 10, sourceMessageIds: [10], text: facts.map(fact => fact.text).join("\n"),
+      speakerId: ownerId, speakerIds: [ownerId], sourceTextVerified: true, sourceRole: "assistant", presentIds: visibleIds,
+      knownBy: visibleIds, visibility: "participants", sourceType: "spoken", recipientIds: visibleIds,
+      entityIds, visibilityEvidence: "application_fragment" }], projectionLineages };
+  return engine.memory4.store.commitOwner(snapshot, { status: "STORE", entries: facts.map(fact => ({
+    memoryType: "DURABLE_KNOWLEDGE", text: fact.text, fragmentIds: [fragmentId], participantIds: visibleIds,
+    entityIds: fact.entityIds, topics: fact.topics, eventTime: { status: "unknown" }
+  })) });
 }
 
 function createHarness({ directory, rows = [], activeIds = [1, 2], date = "1180.8.11" }) {
@@ -240,6 +259,81 @@ async function testPartialAndOversizedLegacyReachProvider() {
   assert(longInput.text.includes("LONG_MIDDLE_EXCERPT_SENTINEL"), "query-relevant middle evidence must survive packet fitting");
   assert(longInput.memoryContext.memory4Packet.items.some(item => item.memory.content.length < longRow.content.length),
     "oversized legacy source must be excerpted rather than injected whole");
+}
+
+async function testExplicitLegacyFinalSelectionReachesProvider() {
+  const directory = path.join(root, "explicit-final-selection");
+  const harness = createHarness({ directory, activeIds: [1, 2, 3] });
+  const sourceId = "explicit-final-selection-source-C";
+  const legacyContent = "赵光义在北境旧事中谈及门关。C_SPLIT_LEGACY_FINAL_SELECTION_SENTINEL";
+  harness.engine.store.saveMemory({ memoryId: sourceId, type: "information", content: legacyContent,
+    participants: [2, 3], subjects: [3], knownBy: [2], visibility: "private",
+    provenance: { campaignToken, folderOwnerId: 2, finalizationId: "explicit-final-selection-legacy" } });
+  const legacyParent = summaryRow({ counterpartId: 3, subjectIds: [3], perspectiveMemoryIds: [sourceId],
+    content: `【张道素能够知道并记住的本场内容】\n- ${legacyContent}`,
+    finalizationId: "explicit-final-selection-legacy", conversationId: "explicit-final-selection-legacy-conversation" });
+  writeRows(path.join(harness.ownerFolder, "与赵光义的对话.json"), [legacyParent]);
+  commitCanonicalFacts(harness.engine, { finalizationId: "explicit-final-selection-canonical",
+    conversationId: "explicit-final-selection-canonical-conversation", facts: [
+      { entityIds: [4], topics: ["北境"], text: "北境曾出现另一场争议 CANONICAL_UNRELATED_D_SENTINEL。" },
+      { entityIds: [5], topics: ["北境"], text: "北境议和中有使者往返 CANONICAL_UNRELATED_E_SENTINEL。" }
+    ] });
+
+  const input = await providerInput(harness, "赵光义北境那件事后来怎么样？");
+  const packet = input.memoryContext.memory4Packet;
+  assert(packet.details.some(item => item.sourceRef.kind === "legacy" && item.memory.content.includes("C_SPLIT_LEGACY_FINAL_SELECTION_SENTINEL")),
+    `the explicit C split-Legacy detail must survive final packet selection: ${JSON.stringify({
+      selectedIds: packet.items.map(item => item.memory.memoryId), diagnostics: packet.diagnostics })}`);
+  assert(input.memoryContext.temporalExtraText.includes("C_SPLIT_LEGACY_FINAL_SELECTION_SENTINEL"),
+    "the final Conversation temporalExtraText must contain the selected target history");
+  assert(input.messages.some(message => String(message.content || "").includes("C_SPLIT_LEGACY_FINAL_SELECTION_SENTINEL")),
+    "the final PromptBuilder provider messages must contain the selected target history");
+  assert(packet.details.length <= 2);
+  assert(packet.details.filter(item => item.sourceRef.kind === "detail" && !item.explicitTargetEntityIds?.includes(3)).length <= 1,
+    "at most one unrelated Canonical detail may remain beside the explicit target");
+  assert(packet.tokens <= 1200, "final target selection must retain the packet cap");
+}
+
+async function testOrphanForgetReachesProvider() {
+  const directory = path.join(root, "orphan-provider");
+  const harness = createHarness({ directory, activeIds: [1, 2] });
+  const scope = { campaignToken, ownerId: 2 };
+  const finalizationId = "orphan-provider-finalization", conversationId = "orphan-provider-conversation";
+  const lineage = createProjectionLineage({ ...scope, conversationId, finalizationId, counterpartId: 3,
+    segmentIds: ["orphan-provider-summary"], sourceSegmentIds: ["orphan-provider-fragment"], sourceMessageIds: [10] });
+  const committed = commitCanonicalFacts(harness.engine, { finalizationId, conversationId, projectionLineages: [lineage],
+    facts: [{ entityIds: [3], topics: ["北境守门之约"],
+      text: "赵光义在北境守门之约中留下 ORPHAN_FORGET_PROVIDER_SENTINEL。" }] });
+  const query = "赵光义谈过的北境守门之约是什么？";
+  const before = await providerInput(harness, query);
+  assert(before.memoryContext.memory4Packet.items.some(item => item.memory.content.includes("ORPHAN_FORGET_PROVIDER_SENTINEL")),
+    "the pre-forget orphan canonical fact must be visible to the real recall path");
+  assert(before.memoryContext.temporalExtraText.includes("ORPHAN_FORGET_PROVIDER_SENTINEL"));
+  assert(before.messages.some(message => String(message.content || "").includes("ORPHAN_FORGET_PROVIDER_SENTINEL")));
+
+  const orphanAudit = new Memory4OrphanAudit(harness.engine);
+  const audit = orphanAudit.audit(scope);
+  const orphan = audit.items.find(item => item.projectionId === lineage.projectionId);
+  assert.equal(orphan?.status, "ORPHANED_PRE_V815_PROJECTION", JSON.stringify(orphan));
+  assert(orphan.canonicalEntryIds.includes(committed.entryIds[0]));
+  orphanAudit.forget(scope, { projectionId: lineage.projectionId, expectedAuditToken: audit.auditToken, confirmed: true });
+
+  const restarted = new MemoryEngine({ baseDir: path.join(directory, "memory"), summaryFoldersDir: path.join(directory, "summaries"),
+    trace: { record() {} } });
+  const resumedHarness = createHarness({ directory: path.join(directory, "prompt"), activeIds: [1, 2] });
+  resumedHarness.engine = restarted;
+  Conversation.configure({ memoryEngine: restarted, settingsRepository: settings,
+    llmManager: { getCurrentContextLength: async () => 65536 }, PromptBuilder, TokenCounter,
+    usageAnalytics: { record() {} }, createPromptFingerprint: fingerprint, path,
+    worldlineService: { getSettings: () => ({ v812MemoryEngine3Enabled: true, v812TemporalSummaryRecallEnabled: true }),
+      isSubjectivePromptIntegrationEnabled: () => false, getPromptContext: () => null } });
+  const after = await providerInput(resumedHarness, query);
+  assert.equal(after.memoryContext.memory4Packet.items.some(item => item.memory.content.includes("ORPHAN_FORGET_PROVIDER_SENTINEL")), false,
+    "the forgotten orphan must stay absent from the restarted Memory4 packet");
+  assert.equal(after.memoryContext.temporalExtraText?.includes("ORPHAN_FORGET_PROVIDER_SENTINEL"), false,
+    "the forgotten orphan must stay absent from Conversation temporalExtraText");
+  assert.equal(after.messages.some(message => String(message.content || "").includes("ORPHAN_FORGET_PROVIDER_SENTINEL")), false,
+    "the forgotten orphan must stay absent from final provider messages");
 }
 
 async function testManagerDeletionAndLateRecovery() {
@@ -416,6 +510,8 @@ async function main() {
   const cases = [
     [testPromptRoutingAndScope, "PromptBuilder: explicit C history across duo/trio/four-person presence, absent D, generic negative, identity and scope gates"],
     [testPartialAndOversizedLegacyReachProvider, "Conversation -> PromptBuilder: partial legacy retention and query-focused middle excerpt"],
+    [testExplicitLegacyFinalSelectionReachesProvider, "Conversation -> final selection -> temporalExtraText -> PromptBuilder: explicit C Legacy survives two unrelated Canonical details"],
+    [testOrphanForgetReachesProvider, "orphan audit/forget -> restart -> Memory4 packet, temporalExtraText and Provider messages stay clear"],
     [testSharedSourceProjectionAndReadDtos, "shared A/C source -> delete A -> owner/detail/year DTOs and readSources -> restart keeps C only"],
     [testManagerDeletionAndLateRecovery, "SummariesManager deletion -> restart -> late A+C recovery, C-only durable/provider recall"],
     [testUnknownSourceResponseRejected, "durable finalization rejects a mixed valid/unknown-fragment provider response without partial commit"]

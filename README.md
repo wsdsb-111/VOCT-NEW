@@ -6,6 +6,8 @@ Voices of the Court 是一个面向《Crusader Kings III》（CK3）的沉浸式
 
 ## 主要功能
 
+V8.15 修复1当前入口：[实施报告与旧残留审计接口](docs/v8.15-fix1-implementation-report.md)。显式人物优先进入最终 Recall Packet 和 Provider Input；不确定的持久遗忘拒绝并回滚，只在证明零 footprint 时安全跳过。旧残留先只读审计，逐条核对并明确确认后复用既有遗忘链路，不自动清理。最新验证见报告，真实 CK3/Provider/Soak 仍交用户，不签发 Full Freeze。
+
 V8.15 当前入口：[Memory4 召回与删除一致性实施报告](docs/v8.15-memory-recall-forget-implementation-report.md)。明确询问人物时，其在场与否不改变历史召回资格；删除摘要按 Owner 人物对投影持久遗忘，联动长期、年度、人生、披露、恢复与冻结记忆缓存，不误删同场其他人物对。部分迁移和超长 Legacy 摘要继续保留可验证历史。协议 3.0、存储 2.5、Prompt Block IDs 与 App 包 2.0.4 不变；发布回归与隔离窗口证据见报告，真实 CK3/Provider/Soak 仍待用户验收，不签发 Full Freeze。以下版本数字为历史阶段快照。
 
 V8.14.2 本轮最新入口：[收口修复报告](docs/v8.14.2-closeout-fix-implementation-report.md)。第三人直接对白可逐 Owner 披露当前头衔/特质；唯一昵称可绑定事实，旁白、转述和歧义仍拒绝。Fact Epoch 防止同头衔/特质消失后恢复时复活旧认知。完整发布 367/367、独立 GPT-6 Luna Max QA、隔离 UI 38 张截图通过；当前清单 436 分类文件、367 发布组、68 历史归档。App/Mod 按[外部运行依赖方案 B](docs/EXTERNAL_RUNTIME_DEPENDENCIES.md)独立发布，CK3/Provider/cache telemetry/Soak 仍交用户，不签发 Full Freeze。以下为前一阶段快照。

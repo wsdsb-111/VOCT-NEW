@@ -5,7 +5,27 @@ const fs = require("fs");
 const os = require("os");
 const path = require("path");
 const { MemoryEngine } = require("../resources/app/out/main/memory-system");
+const { createProjectionLineage } = require("../resources/app/out/main/memory-system/memory4-forget");
+const { hash } = require("../resources/app/out/main/memory-system/memory4-contract");
 const { createSummariesManager } = require("../resources/app/out/main/summaries/summaries-manager");
+
+function seedMemory4Projection(engine, { campaignToken, conversationId, finalizationId, ownerId, counterpartId, segmentId, text }) {
+  const fragmentId = `${segmentId}-source`;
+  const messageId = 1;
+  const lineage = createProjectionLineage({ campaignToken, ownerId, counterpartId, conversationId, finalizationId,
+    segmentIds: [segmentId], sourceSegmentIds: [fragmentId], sourceMessageIds: [messageId] });
+  const snapshot = { campaignToken, ownerId, conversationId, finalizationId, episodeId: `${finalizationId}-episode`,
+    date: "1164.1.1", totalDays: 425000, sourceRevision: hash([campaignToken, finalizationId, "source"]),
+    presentMessageCount: 1, completeness: "complete", summaryIds: [], counterpartIds: [counterpartId],
+    fragments: [{ fragmentId, messageId, sourceMessageIds: [messageId], text, speakerId: ownerId, speakerIds: [ownerId],
+      sourceTextVerified: true, sourceRole: "assistant", presentIds: [ownerId, counterpartId], knownBy: [ownerId, counterpartId],
+      visibility: "participants", sourceType: "spoken", recipientIds: [counterpartId], entityIds: [counterpartId],
+      visibilityEvidence: "application_fragment" }], projectionLineages: [lineage] };
+  engine.memory4.store.commitOwner(snapshot, { status: "STORE", entries: [{ memoryType: "DURABLE_KNOWLEDGE", text,
+    fragmentIds: [fragmentId], participantIds: [ownerId, counterpartId], entityIds: [counterpartId], topics: ["fixture"],
+    eventTime: { status: "unknown" } }] });
+  return lineage;
+}
 
 (async () => {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), "votc-v8111-summary-"));
@@ -15,13 +35,20 @@ const { createSummariesManager } = require("../resources/app/out/main/summaries/
     const traces = [];
     engine.trace = { record: (type, details) => traces.push({ type, details }) };
     const store = engine.store;
-    const memory = store.saveMemory({ memoryId: "original", content: "赵构答应给黄金", participants: [1, 2], subjects: [2], knownBy: [1, 2], visibility: "known_group", provenance: { finalizationId: "final" } });
-    for (const id of [1, 2]) store.markKnownBy(id, memory.memoryId);
-    store.saveEpisode({ episodeId: "episode", finalizationId: "final", memoryIds: [memory.memoryId], summarySegments: [{ segmentId: "segment", content: memory.content, knownBy: [1, 2] }] });
+    const campaignToken = "campaign-v8111-summary";
+    const conversationId = "conversation-v8111-summary";
     const folder = path.join(options.summaryFoldersDir, "1_甲");
-    const file = path.join(folder, "与乙的对话.json");
     fs.mkdirSync(folder, { recursive: true });
-    const record = { playerId: 1, characterId: 2, playerName: "甲", characterName: "乙", finalizationId: "final", perspectiveOwnerId: 1, content: memory.content };
+    const memory = store.saveMemory({ memoryId: "original", content: "赵构答应给黄金", participants: [1, 2], subjects: [2], knownBy: [1, 2], visibility: "known_group", provenance: { finalizationId: "final", campaignToken, folderOwnerId: 1, counterpartId: 2, conversationId } });
+    for (const id of [1, 2]) store.markKnownBy(id, memory.memoryId);
+    store.saveEpisode({ episodeId: "episode", conversationId, finalizationId: "final", campaignToken, memoryIds: [memory.memoryId], summarySegments: [{ segmentId: "segment", content: memory.content, knownBy: [1, 2] }] });
+    const lineage = seedMemory4Projection(engine, { campaignToken, conversationId, finalizationId: "final", ownerId: 1,
+      counterpartId: 2, segmentId: "segment", text: "赵构答应给黄金" });
+    const file = path.join(folder, "与乙的对话.json");
+    const record = { playerId: 1, characterId: 2, playerName: "甲", characterName: "乙", campaignToken, conversationId,
+      finalizationId: "final", perspectiveOwnerId: 1, perspectiveSummarySegmentIds: ["segment"],
+      projectionId: lineage.projectionId, sourceSegmentIds: lineage.sourceSegmentIds, sourceMessageIds: lineage.sourceMessageIds,
+      content: memory.content };
     store.writeJson(file, [record]);
     const conversation = { id: "active", gameData: { characters: new Map(), mentionedCharactersInContext: new Set() } };
     engine.ensureConversationState(conversation).turnRecallCache.set("stale", "赵构答应给黄金");

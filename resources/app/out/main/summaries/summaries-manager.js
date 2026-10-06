@@ -1,6 +1,7 @@
 "use strict";
 
 const { validateGenerationOutcome } = require("../providers/generation-outcome");
+const { Memory4OrphanAudit } = require("../memory-system/memory4-orphan-audit");
 
 function createSummariesManager({ fs, path, summariesDir, memoryEngine, memorySystem, getCurrentConversation = () => null,
   getMemory4ReadConversation = null, requestSummary, requestDurable, getSummaryCapabilities, getSummaryOutputLimit = () => 4096, buildSummaryPrompt, persistRecoveredSummary }) {
@@ -406,6 +407,25 @@ function createSummariesManager({ fs, path, summariesDir, memoryEngine, memorySy
       this.assertCurrentMemory4ReadContext(context);
       return { success: true, entry, contextId: context.contextId, campaignToken: context.campaignToken,
         readOnlyArchive: context.readOnlyArchive, readOnlyReason: context.readOnlyReason };
+    }
+
+    static async auditMemory4Orphans(request = {}) {
+      const context = await this.getMemory4ReadContext(request);
+      const result = new Memory4OrphanAudit(memoryEngine).audit({ campaignToken: context.campaignToken, ownerId: context.ownerId });
+      this.assertCurrentMemory4ReadContext(context);
+      memoryEngine.trace.record("memory4_orphan_audit", { ownerId: context.ownerId,
+        candidateCount: result.items.filter(item => item.status === "ORPHANED_PRE_V815_PROJECTION").length,
+        unknownCount: result.items.filter(item => item.status === "UNKNOWN").length });
+      return { success: true, ...result, contextId: context.contextId, readOnlyArchive: context.readOnlyArchive };
+    }
+
+    static async forgetMemory4Orphan(request = {}) {
+      const context = await this.getMemory4Context(request);
+      const result = new Memory4OrphanAudit(memoryEngine).forget({ campaignToken: context.campaignToken, ownerId: context.ownerId }, request);
+      this.invalidateMemory4Dynamic(context);
+      memoryEngine.trace.record("memory4_orphan_forget", { ownerId: context.ownerId, projectionId: request.projectionId,
+        canonicalEntriesForgotten: result.canonicalEntriesForgotten || 0 });
+      return { success: true, result };
     }
 
     static async getMemory4Sources(request = {}) {

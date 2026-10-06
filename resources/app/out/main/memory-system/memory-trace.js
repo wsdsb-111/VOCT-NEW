@@ -65,6 +65,12 @@ class MemoryTrace {
       derivedInvalidated: Number.isSafeInteger(details.derivedInvalidated) ? details.derivedInvalidated : null,
       disclosureEvidenceRevoked: Number.isSafeInteger(details.disclosureEvidenceRevoked) ? details.disclosureEvidenceRevoked : null,
       recoveryDeleted: Number.isSafeInteger(details.recoveryDeleted) ? details.recoveryDeleted : null,
+      memory4Orphan: ["memory4_orphan_audit", "memory4_orphan_forget"].includes(stage) ? {
+        ownerId: Number.isSafeInteger(details.ownerId) ? details.ownerId : null,
+        candidateCount: Number.isSafeInteger(details.candidateCount) ? details.candidateCount : null,
+        unknownCount: Number.isSafeInteger(details.unknownCount) ? details.unknownCount : null,
+        canonicalEntriesForgotten: Number.isSafeInteger(details.canonicalEntriesForgotten) ? details.canonicalEntriesForgotten : null
+      } : null,
       memory4Status: stage === "memory4_durable" ? details.status || null : null,
       memory4OwnerId: ["memory4_durable", "memory4_candidate_rejected"].includes(stage) && Number.isSafeInteger(details.ownerId) ? details.ownerId : null,
       memory4EntryCount: stage === "memory4_durable" && Number.isInteger(details.entryCount) ? details.entryCount : null,

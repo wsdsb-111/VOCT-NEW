@@ -305,7 +305,7 @@ class MemoryEngine {
     const numericCounterpartId = Number(counterpartId ?? summaryRecord.characterId);
     if (!Number.isSafeInteger(numericCounterpartId) || numericCounterpartId <= 0) throw new Error("summary_counterpart_id_required");
     return this.store.withSummaryMutation(summaryPath, () => {
-      this.forgetSummaryProjection({ ...summaryRecord, perspectiveMemoryIds: mapping.memoryIds }, {
+      this.forgetSummaryProjection(summaryRecord, {
         ownerId: mapping.numericOwnerId, counterpartId: numericCounterpartId, reason: "SUMMARY_EDIT" });
       const finalizationId = mapping.finalizationId || createMemoryId("summary_edit");
       const segmentId = createMemoryId("summary_edit_segment");
@@ -337,6 +337,11 @@ class MemoryEngine {
     });
   }
 
+  canProveNoMemory4Footprint(summaryRecord, { ownerId, counterpartId, legacyMemoryIds = [] } = {}) {
+    if (!this.memory4) return false;
+    return this.memory4.canProveNoSummaryProjectionFootprint(summaryRecord, { ownerId, counterpartId, legacyMemoryIds }) === true;
+  }
+
   forgetSummaryProjection(summaryRecord, { ownerId = null, counterpartId = null, invalidateConversations = [], reason = "USER_DELETE_SUMMARY" } = {}) {
     const { numericOwnerId, memoryIds, sourceLetterId } = this.resolveSummaryProjection(summaryRecord, ownerId, counterpartId);
     const segmentIds = new Set((summaryRecord?.perspectiveSummarySegmentIds || []).map(String).filter(Boolean));
@@ -366,9 +371,23 @@ class MemoryEngine {
     const sourceMessageIds = [...new Set([...(summaryRecord.sourceMessageIds || []),
       ...sourceSegments.flatMap(segment => segment.provenance?.messageIds || segment.messageIds || [])])]
       .filter(id => Number.isSafeInteger(id) && id >= 0);
-    const durable = this.memory4?.forgetSummaryProjection({ ...summaryRecord, sourceMessageIds, sourceLetterId }, {
-      ownerId: numericOwnerId, counterpartId: pairId, legacyMemoryIds: [...memoryIds, ...legacyMemoryIds], reason
+    const durableRecord = { ...summaryRecord, sourceMessageIds, sourceLetterId };
+    const durableLegacyMemoryIds = [...memoryIds, ...legacyMemoryIds];
+    const durable = this.memory4?.forgetSummaryProjection(durableRecord, {
+      ownerId: numericOwnerId, counterpartId: pairId, legacyMemoryIds: durableLegacyMemoryIds, reason
     }) || { status: "SKIPPED" };
+    const safeSkip = durable.status === "SKIPPED_SAFE_NO_FOOTPRINT"
+      && this.canProveNoMemory4Footprint(durableRecord, { ownerId: numericOwnerId, counterpartId: pairId,
+        legacyMemoryIds: durableLegacyMemoryIds });
+    if (durable.status !== "FORGOTTEN" && !safeSkip) {
+      const failureReason = durable.status === "SKIPPED_SAFE_NO_FOOTPRINT"
+        ? "NO_FOOTPRINT_UNPROVEN" : durable.reason || durable.status || "UNKNOWN";
+      const error = new Error(`MEMORY4_FORGET_INCOMPLETE:${failureReason}`);
+      error.code = "MEMORY4_FORGET_INCOMPLETE";
+      error.reason = failureReason;
+      this.trace.record("memory4_forget_failed_closed", { ownerId: numericOwnerId, counterpartId: pairId, reason: failureReason });
+      throw error;
+    }
     let revokedMemoryCount = 0;
     let deletedMemoryCount = 0;
     for (const memoryId of memoryIds) {

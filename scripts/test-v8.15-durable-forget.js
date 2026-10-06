@@ -4,10 +4,12 @@ const assert = require("node:assert/strict");
 const fs = require("node:fs");
 const path = require("node:path");
 const { MemoryStore } = require("../resources/app/out/main/memory-system/memory-store");
+const { MemoryEngine } = require("../resources/app/out/main/memory-system/memory-engine");
 const { Memory4Coordinator } = require("../resources/app/out/main/memory-system/memory4-coordinator");
 const { hash } = require("../resources/app/out/main/memory-system/memory4-contract");
 const { disclosureFactId } = require("../resources/app/out/main/memory-system/memory4-disclosure");
 const { createProjectionLineage, disclosureProofForgetMatch } = require("../resources/app/out/main/memory-system/memory4-forget");
+const { createSummariesManager } = require("../resources/app/out/main/summaries/summaries-manager");
 
 const root = fs.mkdtempSync(path.join(__dirname, ".tmp-votc-v815-forget-"));
 const campaignToken = "campaign-forget-fixture";
@@ -71,8 +73,118 @@ function knownDisclosure({ sourceId, conversationId, sourceRevision, sourceMessa
   return { campaignToken, ownerId, revision: 1, entities: { [entityId]: { entityId, revision: 1, disclosedFacts: { [factId]: fact } } } };
 }
 
+function createManagerFixture(name, summaryRecord, ownerFolderName = `${ownerId}_owner`) {
+  const directory = path.join(root, `manager-${name}`);
+  const summariesDir = path.join(directory, "summaries");
+  const ownerFolder = path.join(summariesDir, ownerFolderName);
+  fs.mkdirSync(ownerFolder, { recursive: true });
+  const summaryPath = path.join(ownerFolder, "pair.json");
+  const record = { playerId: ownerId, characterId: 1, ...summaryRecord };
+  fs.writeFileSync(summaryPath, JSON.stringify([record], null, 2), "utf8");
+  const engine = new MemoryEngine({ baseDir: path.join(directory, "memory"), summaryFoldersDir: summariesDir,
+    trace: { record() {} } });
+  const manager = createSummariesManager({ fs, path, summariesDir, memoryEngine: engine, memorySystem: {},
+    getCurrentConversation: () => null });
+  return { directory, summariesDir, ownerFolder, summaryPath, record, engine, manager };
+}
+
+function snapshotTree(directory) {
+  if (!fs.existsSync(directory)) return null;
+  const rows = [];
+  const visit = (current, relative = "") => {
+    for (const entry of fs.readdirSync(current, { withFileTypes: true })) {
+      const child = path.join(current, entry.name);
+      const childRelative = path.join(relative, entry.name);
+      if (entry.isSymbolicLink()) rows.push([childRelative, `symlink:${fs.readlinkSync(child)}`]);
+      else if (entry.isDirectory()) {
+        rows.push([childRelative, "directory"]);
+        visit(child, childRelative);
+      } else rows.push([childRelative, `file:${fs.readFileSync(child).toString("base64")}`]);
+    }
+  };
+  visit(directory);
+  return rows.sort(([left], [right]) => left.localeCompare(right));
+}
+
+async function testProductionManagerForgetGate() {
+  const incomplete = createManagerFixture("incomplete-lineage", {
+    campaignToken, perspectiveOwnerId: ownerId, content: "Lineage-less summary with a live Memory4 scope.", date: "1164.1.1"
+  });
+  const incompleteScope = { campaignToken, ownerId };
+  const incompleteScopeDir = incomplete.engine.memory4.store.ensureDisclosureScope(incompleteScope);
+  const incompleteVisibleBefore = snapshotTree(incomplete.summariesDir);
+  const incompleteStoreBefore = snapshotTree(incomplete.engine.store.baseDir);
+  const incompleteResult = await incomplete.manager.deleteSummary(ownerId, 1, 0);
+  assert.equal(incompleteResult.success, false);
+  assert.equal(incompleteResult.error, "MEMORY4_FORGET_INCOMPLETE:PROJECTION_LINEAGE_UNAVAILABLE");
+  assert.deepEqual(snapshotTree(incomplete.summariesDir), incompleteVisibleBefore,
+    "unmapped visible summary and every sidecar must remain byte-for-byte unchanged");
+  assert.deepEqual(snapshotTree(incomplete.engine.store.baseDir), incompleteStoreBefore,
+    "failed delete must not alter base index or recovery files");
+  assert.equal(fs.existsSync(path.join(incompleteScopeDir, "forgotten-projections.json")), false,
+    "unknown lineage must not create a projection tombstone");
+
+  const unavailable = createManagerFixture("owner-folder-unavailable", {
+    campaignToken, perspectiveOwnerId: ownerId, finalizationId: "owner-folder-unavailable-finalization",
+    content: "Lineage points at an unavailable owner folder.", date: "1164.1.1"
+  }, "OwnerName");
+  const unavailableVisibleBefore = snapshotTree(unavailable.summariesDir);
+  const unavailableStoreBefore = snapshotTree(unavailable.engine.store.baseDir);
+  const unavailableResult = await unavailable.manager.deleteSummary(ownerId, 1, 0);
+  assert.equal(unavailableResult.success, false);
+  assert.equal(unavailableResult.error, "MEMORY4_FORGET_INCOMPLETE:OWNER_FOLDER_UNAVAILABLE");
+  assert.deepEqual(snapshotTree(unavailable.summariesDir), unavailableVisibleBefore);
+  assert.deepEqual(snapshotTree(unavailable.engine.store.baseDir), unavailableStoreBefore);
+
+  const legacy = createManagerFixture("pure-legacy", {
+    campaignToken, perspectiveOwnerId: ownerId, content: "Legacy summary with no Memory4 references.", date: "1164.1.1"
+  });
+  const legacyResult = await legacy.manager.deleteSummary(ownerId, 1, 0);
+  assert.equal(legacyResult.success, true, JSON.stringify(legacyResult));
+  assert.equal(legacyResult.diagnostics.status, "SKIPPED_SAFE_NO_FOOTPRINT");
+  assert.equal(fs.existsSync(legacy.summaryPath), false);
+  assert.equal(fs.existsSync(path.join(legacy.summariesDir, ".memory4", String(ownerId), hash(campaignToken))), false,
+    "pure Legacy deletion must not manufacture an empty Memory4 sidecar");
+
+  const rollback = context("manager-rollback");
+  const rollbackFixture = createManagerFixture("post-forget-failure", {
+    ...rollback.summaryA, content: "Rollback summary", date: "1164.1.1", playerId: ownerId,
+    sourceSegmentIds: [rollback.snapshot.fragments[0].fragmentId], sourceMessageIds: [10]
+  });
+  const rollbackScope = { campaignToken, ownerId };
+  rollbackFixture.engine.memory4.store.commitOwner(rollback.snapshot, { status: "STORE", entries: [rollback.candidateA] });
+  const rollbackScopeDir = rollbackFixture.engine.memory4.store.directory(rollbackScope);
+  rollbackFixture.engine.store.writeJson(path.join(rollbackScopeDir, "known-entities.json"), knownDisclosure({
+    sourceId: rollback.snapshot.finalizationId, conversationId: rollback.snapshot.conversationId,
+    sourceRevision: rollback.snapshot.sourceRevision, sourceMessageIds: [10],
+    sourceFragmentIds: [rollback.snapshot.fragments[0].fragmentId],
+    projectionLineages: [rollback.snapshot.projectionLineages[0]]
+  }));
+  rollbackFixture.engine.memory4.saveRecovery(rollback.snapshot, { status: "PENDING", retryCount: 0 });
+  const rollbackVisibleBefore = snapshotTree(rollbackFixture.summariesDir);
+  const rollbackStoreBefore = snapshotTree(rollbackFixture.engine.store.baseDir);
+  const forget = rollbackFixture.engine.memory4.forgetSummaryProjection.bind(rollbackFixture.engine.memory4);
+  rollbackFixture.engine.memory4.forgetSummaryProjection = (...args) => {
+    const result = forget(...args);
+    assert.equal(result.status, "FORGOTTEN", JSON.stringify(result));
+    throw new Error("INJECTED_POST_FORGET_FAILURE");
+  };
+  const rollbackResult = await rollbackFixture.manager.deleteSummary(ownerId, 1, 0);
+  assert.equal(rollbackResult.success, false);
+  assert.equal(rollbackResult.error, "INJECTED_POST_FORGET_FAILURE");
+  assert.deepEqual(snapshotTree(rollbackFixture.summariesDir), rollbackVisibleBefore,
+    "post-forget failure must restore the visible file, canonical entries, metadata and known entities");
+  assert.deepEqual(snapshotTree(rollbackFixture.engine.store.baseDir), rollbackStoreBefore,
+    "post-forget failure must restore recovery snapshots and all MemoryStore files");
+  assert.equal(fs.existsSync(path.join(rollbackScopeDir, "forgotten-projections.json")), false,
+    "rollback must remove the transient tombstone");
+}
+
 async function run() {
   try {
+    await testProductionManagerForgetGate();
+    console.log("PASS production SummariesManager blocks uncertain skips, permits proven pure Legacy and fully rolls back failures");
+
     const pending = context("finalization-pending");
     const coordinator = createCoordinator("pending");
     coordinator.saveRecovery(pending.snapshot, { status: "PENDING", retryCount: 0 });

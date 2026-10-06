@@ -7,7 +7,33 @@ const os = require("node:os");
 const path = require("node:path");
 const { createMemoryUiFixture } = require("./v8.14-memory-ui-fixture");
 const { createSummariesManager } = require("../resources/app/out/main/summaries/summaries-manager");
+const { createProjectionLineage } = require("../resources/app/out/main/memory-system/memory4-forget");
+const { projectVisibleTranscript } = require("../resources/app/out/main/memory-system/memory4-visibility");
 const memorySystem = require("../resources/app/out/main/memory-system");
+
+function addLegacySummarySource(engine, row, index, campaignToken) {
+  const ownerId = Number(row.playerId), counterpartId = Number(row.characterId);
+  const conversationId = `legacy-ui-conversation-${index}`;
+  const finalizationId = `legacy-ui-finalization-${index}`;
+  const date = row.date || "1164.1.1";
+  const context = { campaignToken, conversationId, finalizationId, episodeId: `${finalizationId}-episode`, date,
+    participants: [{ id: ownerId }, { id: counterpartId }],
+    participantPresence: [ownerId, counterpartId].map(characterId => ({ characterId, joinedAtMessageId: 1, leftAtMessageId: null })),
+    messages: [{ id: 1, role: "assistant", speakerCharacterId: counterpartId, content: row.content,
+      memory4Fragments: [{ start: 0, end: row.content.length, visibility: "participants", sourceType: "spoken",
+        recipientIds: [ownerId], entityIds: [ownerId, counterpartId] }] }] };
+  const projection = projectVisibleTranscript(context, ownerId);
+  const lineage = createProjectionLineage({ campaignToken, ownerId, counterpartId, conversationId, finalizationId,
+    sourceSegmentIds: projection.fragments.map(fragment => fragment.fragmentId), sourceMessageIds: [1] });
+  engine.memory4.store.commitOwner({ ...context, ...projection, ownerId, counterpartIds: [counterpartId],
+    summaryIds: [`legacy-ui-summary-${index}`], projectionLineages: [lineage] }, { status: "STORE",
+    entries: projection.fragments.map(fragment => ({ memoryType: "DURABLE_KNOWLEDGE", text: fragment.text,
+      fragmentIds: [fragment.fragmentId], entityIds: [counterpartId], participantIds: [ownerId, counterpartId],
+      topics: ["archive-summary-fixture"], eventTime: { status: "unknown" } })) });
+  return { campaignToken, campaignBinding: { status: "bound", source: "native" }, conversationId, finalizationId,
+    perspectiveOwnerId: ownerId, projectionId: lineage.projectionId,
+    sourceSegmentIds: lineage.sourceSegmentIds, sourceMessageIds: lineage.sourceMessageIds };
+}
 
 function hashTree(root) {
   const rows = [];
@@ -69,7 +95,11 @@ async function main() {
       memorySystem, getCurrentConversation: () => currentConversation, getMemory4ReadConversation: () => currentConversation });
     const legacyFile = path.join(fixture.summariesDir, "2_乙", "与甲的对话.json");
     const legacyRows = JSON.parse(fs.readFileSync(legacyFile, "utf8"));
-    legacyRows.forEach(row => { row.perspectiveMemoryIds = []; row.perspectiveSummarySegmentIds = []; });
+    legacyRows.forEach((row, index) => {
+      Object.assign(row, addLegacySummarySource(fixture.engine, row, index, fixture.scope.campaignToken));
+      row.perspectiveMemoryIds = [];
+      row.perspectiveSummarySegmentIds = [];
+    });
     fs.writeFileSync(legacyFile, JSON.stringify(legacyRows), "utf8");
 
     currentConversation.isActive = false;

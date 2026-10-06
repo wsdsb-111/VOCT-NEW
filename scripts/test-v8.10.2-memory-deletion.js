@@ -7,11 +7,30 @@ const path = require("path");
 
 const root = path.resolve(__dirname, "..");
 const { MemoryEngine } = require(path.join(root, "resources", "app", "out", "main", "memory-system"));
+const { createProjectionLineage } = require(path.join(root, "resources", "app", "out", "main", "memory-system", "memory4-forget"));
+const { hash } = require(path.join(root, "resources", "app", "out", "main", "memory-system", "memory4-contract"));
 const { Character } = require(path.join(root, "resources", "app", "out", "main", "game-data", "character"));
 const { createSummariesManager } = require(path.join(root, "resources", "app", "out", "main", "summaries", "summaries-manager"));
 
 function filesIn(directory) {
   return fs.existsSync(directory) ? fs.readdirSync(directory) : [];
+}
+
+function seedMemory4Projection(engine, { ownerId, counterpartId, campaignToken, conversationId, finalizationId, segmentId, messageId, text }) {
+  const fragmentId = `${segmentId}-source`;
+  const lineage = createProjectionLineage({ campaignToken, ownerId, counterpartId, conversationId, finalizationId,
+    segmentIds: [segmentId], sourceSegmentIds: [fragmentId], sourceMessageIds: [messageId] });
+  const snapshot = { campaignToken, ownerId, conversationId, finalizationId, episodeId: `${finalizationId}-episode`,
+    date: "1164.1.1", totalDays: 425000, sourceRevision: hash([campaignToken, finalizationId, "source"]),
+    presentMessageCount: 1, completeness: "complete", summaryIds: [], counterpartIds: [counterpartId],
+    fragments: [{ fragmentId, messageId, sourceMessageIds: [messageId], text, speakerId: ownerId, speakerIds: [ownerId],
+      sourceTextVerified: true, sourceRole: "assistant", presentIds: [ownerId, counterpartId], knownBy: [ownerId, counterpartId],
+      visibility: "participants", sourceType: "spoken", recipientIds: [counterpartId], entityIds: [counterpartId],
+      visibilityEvidence: "application_fragment" }], projectionLineages: [lineage] };
+  engine.memory4.store.commitOwner(snapshot, { status: "STORE", entries: [{ memoryType: "DURABLE_KNOWLEDGE", text,
+    fragmentIds: [fragmentId], participantIds: [ownerId, counterpartId], entityIds: [counterpartId], topics: ["fixture"],
+    eventTime: { status: "unknown" } }] });
+  return lineage;
 }
 
 function createConversation() {
@@ -50,6 +69,8 @@ function createConversation() {
       summaryFoldersDir: summaryRoot,
       trace: { record(type, details) { traces.push({ type, details }); } }
     });
+    const ownerFolder = path.join(summaryRoot, "1_甲");
+    fs.mkdirSync(ownerFolder, { recursive: true });
     const memory = engine.store.saveMemory({
       memoryId: "shared-memory",
       type: "event",
@@ -68,14 +89,22 @@ function createConversation() {
       memoryIds: [memory.memoryId],
       summarySegments: [{ segmentId: "segment-shared", content: "旧日密谈。", knownBy: [1, 2] }]
     });
+    const sharedLineage = seedMemory4Projection(engine, { ownerId: 1, counterpartId: 2, campaignToken: "campaign-v8102-shared",
+      conversationId: "old-conversation", finalizationId: "fin-shared", segmentId: "segment-shared", messageId: 1,
+      text: "Memory4 fixture for the shared projection." });
     engine.store.saveCharacterConsolidation(1, { derivedFrom: [memory.memoryId] });
-    const ownerFolder = path.join(summaryRoot, "1_甲");
-    fs.mkdirSync(ownerFolder, { recursive: true });
     fs.writeFileSync(path.join(ownerFolder, "与乙的对话.json"), JSON.stringify([{
+      playerId: 1,
+      characterId: 2,
+      campaignToken: "campaign-v8102-shared",
+      conversationId: "old-conversation",
       finalizationId: "fin-shared",
       perspectiveOwnerId: 1,
       perspectiveMemoryIds: [memory.memoryId],
       perspectiveSummarySegmentIds: ["segment-shared"],
+      projectionId: sharedLineage.projectionId,
+      sourceSegmentIds: sharedLineage.sourceSegmentIds,
+      sourceMessageIds: sharedLineage.sourceMessageIds,
       content: "旧日密谈。"
     }]), "utf8");
     const oldContext = engine.prepareFinalizationContext({ conversationId: "old-recovery", participants: [], messages: [] });
@@ -84,10 +113,17 @@ function createConversation() {
     assert(engine.store.getFolderSummaryCacheMetrics().entries > 0, "fixture must populate folder summary cache");
 
     const projectionResult = engine.forgetSummaryProjection({
+      playerId: 1,
+      characterId: 2,
+      campaignToken: "campaign-v8102-shared",
+      conversationId: "old-conversation",
       finalizationId: "fin-shared",
       perspectiveOwnerId: 1,
       perspectiveMemoryIds: [memory.memoryId],
-      perspectiveSummarySegmentIds: ["segment-shared"]
+      perspectiveSummarySegmentIds: ["segment-shared"],
+      projectionId: sharedLineage.projectionId,
+      sourceSegmentIds: sharedLineage.sourceSegmentIds,
+      sourceMessageIds: sharedLineage.sourceMessageIds
     });
     assert.strictEqual(projectionResult.revokedMemoryCount, 1, "single projection deletion must revoke its owner knowledge");
     assert.strictEqual(engine.store.queryMemories({ characterId: 1 }).length, 0, "owner A must no longer recall shared memory");
@@ -161,15 +197,23 @@ function createConversation() {
     const uiFolder = path.join(summaryRoot, "1_甲");
     const uiFile = path.join(uiFolder, "与乙的对话.json");
     fs.mkdirSync(uiFolder, { recursive: true });
+    const uiLineage = seedMemory4Projection(engine, { ownerId: 1, counterpartId: 2, campaignToken: "campaign-v8102-ui",
+      conversationId: "ui-conversation", finalizationId: "fin-ui", segmentId: "segment-ui", messageId: 2,
+      text: "Memory4 fixture for the UI projection." });
     fs.writeFileSync(uiFile, JSON.stringify([{
       playerId: 1,
       playerName: "甲",
       characterId: 2,
       characterName: "乙",
+      campaignToken: "campaign-v8102-ui",
+      conversationId: "ui-conversation",
       finalizationId: "fin-ui",
       perspectiveOwnerId: 1,
       perspectiveMemoryIds: [uiMemory.memoryId],
-      perspectiveSummarySegmentIds: [],
+      perspectiveSummarySegmentIds: ["segment-ui"],
+      projectionId: uiLineage.projectionId,
+      sourceSegmentIds: uiLineage.sourceSegmentIds,
+      sourceMessageIds: uiLineage.sourceMessageIds,
       content: "UI 删除路径共享记忆。"
     }]), "utf8");
     const SummariesManager = createSummariesManager({

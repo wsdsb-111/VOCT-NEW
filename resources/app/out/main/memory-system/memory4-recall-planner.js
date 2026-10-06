@@ -100,6 +100,10 @@ function renderPacket(packet) {
     })].filter(Boolean).join("\n\n");
 }
 
+function isExplicitTargetItem(item) {
+  return item?.routeKind === "entity_target" || (item?.explicitTargetEntityIds?.length || 0) > 0;
+}
+
 function legacyExcerpt(content, query, tokenBudget, estimateTokens = estimateDefault) {
   const source = String(content || "");
   const estimate = value => Math.ceil(estimateTokens(value));
@@ -134,30 +138,58 @@ function fitRecallPacket(packet, budget, estimateTokens = estimateDefault) {
   const result = { ...packet, details: [...packet.details] };
   const count = () => { result.text = renderPacket(result); result.tokens = result.text ? Math.ceil(estimateTokens(result.text)) : 0; };
   count();
+  const excerptLegacyItem = (target, explicitOnly = false) => {
+    const item = target.overview ? result.overview : result.details[target.index];
+    const content = item?.memory?.content;
+    if (!item || item.sourceRef?.kind !== "legacy" || !content || (explicitOnly && !isExplicitTargetItem(item))) return false;
+    const base = { ...result, details: [...result.details] };
+    const blankItem = { ...item, memory: { ...item.memory, content: "" } };
+    if (target.overview) base.overview = blankItem;
+    else base.details[target.index] = blankItem;
+    const available = limit - Math.ceil(estimateTokens(renderPacket(base)));
+    const excerpt = legacyExcerpt(content, result.query?.text || "", available, estimateTokens);
+    if (!excerpt || excerpt.length >= content.length) return false;
+    if (target.overview) result.overview = { ...item, memory: { ...item.memory, content: excerpt } };
+    else result.details[target.index] = { ...item, memory: { ...item.memory, content: excerpt } };
+    count();
+    return true;
+  };
   if (result.tokens > limit) {
     const targets = [result.overview && result.overview.sourceRef?.kind === "legacy" ? { overview: true } : null,
       ...result.details.map((item, index) => item.sourceRef?.kind === "legacy" ? { index } : null)].filter(Boolean);
+    targets.sort((left, right) => {
+      const leftItem = left.overview ? result.overview : result.details[left.index];
+      const rightItem = right.overview ? result.overview : result.details[right.index];
+      return Number(isExplicitTargetItem(rightItem)) - Number(isExplicitTargetItem(leftItem));
+    });
     for (const target of targets) {
-      const item = target.overview ? result.overview : result.details[target.index];
-      const content = item?.memory?.content;
-      if (!content) continue;
-      const base = { ...result, details: [...result.details] };
-      const blankItem = { ...item, memory: { ...item.memory, content: "" } };
-      if (target.overview) base.overview = blankItem;
-      else base.details[target.index] = blankItem;
-      const available = limit - Math.ceil(estimateTokens(renderPacket(base)));
-      const excerpt = legacyExcerpt(content, result.query?.text || "", available, estimateTokens);
-      if (excerpt && excerpt.length < content.length) {
-        if (target.overview) result.overview = { ...item, memory: { ...item.memory, content: excerpt } };
-        else result.details[target.index] = { ...item, memory: { ...item.memory, content: excerpt } };
-        count();
-        if (result.tokens <= limit) break;
-      }
+      excerptLegacyItem(target);
+      if (result.tokens <= limit) break;
     }
   }
   if (result.tokens > limit && result.overview && packet.query?.granularity === "EVENT"
-    && result.overview.sourceRef?.kind !== "legacy") { result.overview = null; count(); }
-  while (result.tokens > limit && result.details.length) { result.details.pop(); count(); }
+    && result.overview.sourceRef?.kind !== "legacy" && !isExplicitTargetItem(result.overview)) { result.overview = null; count(); }
+  const hasExplicitTarget = [result.overview, ...result.details].some(isExplicitTargetItem);
+  if (hasExplicitTarget) {
+    while (result.tokens > limit) {
+      const unrelatedDetailIndex = result.details.findLastIndex(item => !isExplicitTargetItem(item));
+      if (unrelatedDetailIndex >= 0) result.details.splice(unrelatedDetailIndex, 1);
+      else if (result.overview && !isExplicitTargetItem(result.overview)) result.overview = null;
+      else if (result.profileText) result.profileText = null;
+      else if (result.notice) result.notice = null;
+      else if (result.details.length) {
+        const legacyTargetIndex = result.details.findLastIndex(item => item.sourceRef?.kind === "legacy" && isExplicitTargetItem(item));
+        if (legacyTargetIndex >= 0 && excerptLegacyItem({ index: legacyTargetIndex }, true)) continue;
+        result.details.pop();
+      } else if (result.overview) {
+        if (excerptLegacyItem({ overview: true }, true)) continue;
+        result.overview = null;
+      } else break;
+      count();
+    }
+  } else {
+    while (result.tokens > limit && result.details.length) { result.details.pop(); count(); }
+  }
   if (result.tokens > limit && result.overview) { result.overview = null; count(); }
   if (result.tokens > limit && result.profileText) { result.profileText = null; count(); }
   if (result.tokens > limit) { result.notice = null; count(); }
@@ -459,6 +491,20 @@ class Memory4RecallPlanner {
         reason: { axis: "conversation", ...query.window, precision: "year" }, annotation: "交谈年份即时概览；不属于磁盘事件年度记忆。",
         sourceRef: { kind: "conversation_year", id: key, sourceEntryIds: items, sourceRowsHash: hash(items.map(id => index.entries[id])) } };
     }
+    const explicitTargetIdsForItem = item => {
+      if (!item || !explicitTargetEntityIds.length) return [];
+      if (item.sourceRef?.kind === "detail") {
+        return explicitTargetEntityIds.filter(id => index.entries[item.sourceRef.id]?.entityIds?.includes(id));
+      }
+      if (item.sourceRef?.kind === "legacy") {
+        return explicitTargetEntityIds.filter(id => entitySet(item.memory).includes(id)
+          || containsEntityAlias(item.memory.content, new Set([id]), aliasIndex, aliasTracker));
+      }
+      if (["year", "life", "conversation_year"].includes(item.sourceRef?.kind)) {
+        return explicitTargetEntityIds.filter(id => item.sourceRef.sourceEntryIds?.some(sourceId => index.entries[sourceId]?.entityIds?.includes(id)));
+      }
+      return [];
+    };
     for (const candidate of legacyRanked) {
       const memory = candidate.memory;
       if (commitmentQuery && !/承诺|答应|约定|promise|commitment|pledge/i.test(memory.content)) continue;
@@ -501,16 +547,22 @@ class Memory4RecallPlanner {
         continue;
       }
       const canBeDetail = memory.provenance?.legacyParentId || query.granularity === "EXACT_DATE" || query.firstMeeting;
-      if (canBeDetail && details.length < (query.granularity === "LIFE" || query.firstMeeting ? 1 : 2)) details.push(item);
+      const detailLimit = query.granularity === "LIFE" || query.firstMeeting ? 1 : 2;
+      if (canBeDetail && details.length < detailLimit) details.push(item);
+      else if (canBeDetail && explicitTargetIdsForItem(item).length) {
+        let replaceIndex = -1;
+        for (let indexInDetails = 0; indexInDetails < details.length; indexInDetails++) {
+          if (explicitTargetIdsForItem(details[indexInDetails]).length) continue;
+          if (replaceIndex < 0 || (Number(details[indexInDetails].score) || 0) < (Number(details[replaceIndex].score) || 0)) {
+            replaceIndex = indexInDetails;
+          }
+        }
+        if (replaceIndex >= 0) details[replaceIndex] = item;
+      }
       else if (!canBeDetail && query.granularity !== "EXACT_DATE" && !overview) overview = item;
     }
     for (const item of [overview, ...details].filter(Boolean)) {
-      const targetIds = item.sourceRef.kind === "detail"
-        ? explicitTargetEntityIds.filter(id => index.entries[item.sourceRef.id]?.entityIds.includes(id))
-        : item.sourceRef.kind === "legacy"
-          ? explicitTargetEntityIds.filter(id => entitySet(item.memory).includes(id)
-            || containsEntityAlias(item.memory.content, new Set([id]), aliasIndex, aliasTracker))
-          : explicitTargetEntityIds.filter(id => item.sourceRef.sourceEntryIds?.some(sourceId => index.entries[sourceId]?.entityIds.includes(id)));
+      const targetIds = explicitTargetIdsForItem(item);
       if (!targetIds.length) continue;
       item.routeKind = "entity_target";
       item.routeKinds = ["entity_target"];

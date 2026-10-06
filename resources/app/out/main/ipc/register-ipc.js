@@ -881,7 +881,8 @@ function registerIpcHandlers(runtime) {
     }
   });
   for (const [channel, method] of [["memory4:getOwnerData", "getMemory4OwnerData"], ["memory4:getEntry", "getMemory4Entry"],
-    ["memory4:getSources", "getMemory4Sources"], ["memory4:mutate", "mutateMemory4"]]) {
+    ["memory4:getSources", "getMemory4Sources"], ["memory4:mutate", "mutateMemory4"],
+    ["memory4:auditOrphans", "auditMemory4Orphans"], ["memory4:forgetOrphan", "forgetMemory4Orphan"]]) {
     electron.ipcMain.handle(channel, async (_, request = {}) => {
       try {
         if (!request || typeof request !== "object" || Array.isArray(request)) throw new Error("memory4_request_required");

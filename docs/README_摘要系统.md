@@ -1,5 +1,11 @@
 # 对话摘要与人物记忆：Memory Engine 4.0（3.0 协议、2.5 存储兼容）
 
+## V8.15 修复1（2026-10-06）
+
+[实施报告](v8.15-fix1-implementation-report.md)：显式人物优先级延续至 Canonical/Legacy/Derived 的最终选择与预算裁剪，必要时只替换最低分非目标 Detail；清除无关预算后再次尝试超长目标 Legacy 片段。Detail 数量、1200 token 上限及无显式目标行为保持。
+
+持久遗忘不确定时返回 `MEMORY4_FORGET_INCOMPLETE` 并回滚；运行时计算的 folder-summary ID 不证明持久来源。只有明确 Campaign/Owner/人物对、无来源引用、合法 sidecar 均不存在且无相关 Recovery 时允许 `SKIPPED_SAFE_NO_FOOTPRINT`。旧残留只读审计返回 ID、来源和状态，不返回正文；来源不明、正在生成、共享正文无法分离或可见映射不确定均为 UNKNOWN。必须重新审计并核对 token、逐条明确确认后才复用既有遗忘链路；归档审计不绕过当前写门禁，没有自动启动清理。Owner/Campaign、知情、时间、协议和冻结前缀合同不放宽。
+
 ## V8.15 召回与删除一致性（2026-10-06）
 
 [实施报告](v8.15-memory-recall-forget-implementation-report.md)：明确查询人物时独立传递 `explicitTargetEntityIds`，不因其已在 `activeParticipantIds` 中而排除。搜索回应者自己的全部人物摘要，不读取目标的私人目录；Entity/Topic/Lexical 命中任一可建立候选，唯一完整姓名优先于相邻歧义称号。泛问不自动把所有在场者变成检索目标，Owner/Campaign/knownBy/未来日期门禁不放宽。

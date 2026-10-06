@@ -54,7 +54,10 @@ async function createMemoryUiFixture(profile) {
     date: "1158.3.12", campaignToken: scope.campaignToken, campaignBinding: { status: "bound", source: "native" }, content: "乙曾与甲交谈，旧叙事没有可确认的独立片段。" },
     { playerId: 2, playerName: "乙", characterId: 1, characterName: "甲", date: "1157.1.1", content: "待绑定的旧摘要。" }]), "utf8");
   fs.writeFileSync(path.join(summariesDir, "4_丁", "与甲的对话.json"), JSON.stringify([{ playerId: archiveOwnerId, playerName: "丁", characterId: 1,
-    characterName: "甲", date: "1160.6.1", campaignToken: scope.campaignToken, campaignBinding: { status: "bound", source: "native" }, content: archiveText }]), "utf8");
+    characterName: "甲", date: "1160.6.1", campaignToken: scope.campaignToken, campaignBinding: { status: "bound", source: "native" }, content: archiveText,
+    conversationId: archiveContext.conversationId, finalizationId: archiveContext.finalizationId, perspectiveOwnerId: archiveOwnerId,
+    perspectiveMemoryIds: [], perspectiveSummarySegmentIds: archiveProjection.fragments.map(fragment => fragment.fragmentId),
+    sourceSegmentIds: archiveProjection.fragments.map(fragment => fragment.fragmentId), sourceMessageIds: [1] }]), "utf8");
   const characters = [[1, "甲"], [2, "乙"], [3, "丙"]].map(([id, shortName]) => ({ id, shortName, fullName: shortName,
     relationsToCharacters: id === 2 ? [{ id: 1, relations: ["friend"] }] : [], relationsToPlayer: [] }));
   const conversation = { id: "isolated-ui-conversation", isActive: true, gameData: { campaignToken: scope.campaignToken, date: "1164.1.1", playerID: 1,

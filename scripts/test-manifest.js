@@ -82,6 +82,8 @@ const releaseChecks = [
   { group: "v8.15-legacy-recall", script: "test-v8.15-legacy-recall.js" },
   { group: "v8.15-memory-prefix-invalidation", script: "test-v8.15-memory-prefix-invalidation.js" },
   { group: "v8.15-production-contract-qa", script: "test-v8.15-production-contract-qa.js" },
+  { group: "v8.15-orphan-audit", script: "test-v8.15-orphan-audit.js" },
+  { group: "v8.15-fix1-independent-qa", script: "test-v8.15-fix1-independent-qa.js" },
   { group: "v8.14-e-memory-ui", script: "test-v8.14-e-memory-ui.js" },
   { group: "v8.8.4-incident-regression", script: "test-v8.8.4-incident-regression.js" },
   { group: "v8.8.5-review-kinship", script: "test-v8.8.5-review-kinship.js" },

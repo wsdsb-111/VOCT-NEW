@@ -4,7 +4,7 @@ const assert = require("node:assert/strict");
 const fs = require("node:fs");
 const os = require("node:os");
 const path = require("node:path");
-const { Memory4RecallPlanner } = require("../resources/app/out/main/memory-system/memory4-recall-planner");
+const { Memory4RecallPlanner, fitRecallPacket } = require("../resources/app/out/main/memory-system/memory4-recall-planner");
 const { createMemoryRecord } = require("../resources/app/out/main/memory-system/memory-types");
 const { hash, legacySourceHash } = require("../resources/app/out/main/memory-system/memory4-contract");
 
@@ -50,6 +50,27 @@ try {
       eventDate: "1190.1.1", knownBy: [2], subjects, tags: topics,
       provenance: { ...scope, folderOwnerId: 2, counterpartId: 1, counterpartIds: [1],
         campaignBinding: { status: "bound" }, ...provenanceExtra } });
+  };
+  const setCanonicalRows = rows => {
+    entryRecords.clear();
+    const entries = {}, finalizations = {}, byTopic = {};
+    for (const row of rows) {
+      const finalizationId = `selection-${row.entryId}`;
+      const sourceRevision = `revision-${row.entryId}`;
+      const entry = { entryId: row.entryId, campaignToken: scope.campaignToken, ownerId: scope.ownerId,
+        conversationDate: "1190.1.1", acquiredDate: "1190.1.1", text: row.text, topics: row.topics,
+        entityIds: row.entityIds, counterpartIds: [1], importance: 0.5, eventTime: { status: "unknown" },
+        evidence: { knownBy: [2], visibility: "participants", sourceType: "spoken", epistemicStatus: "reported" },
+        state: { status: "active" }, source: { finalizationId, conversationId: finalizationId, sourceRevision, legacyRefs: [] } };
+      entryRecords.set(row.entryId, entry);
+      entries[row.entryId] = { entityIds: row.entityIds, topics: row.topics, counterpartIds: [1], knownBy: [2],
+        visibility: "participants", deleted: false, memoryType: "DURABLE_KNOWLEDGE", status: "active",
+        finalizationId, conversationId: finalizationId, conversationDate: "1190.1.1", acquiredDate: "1190.1.1",
+        stateChangedGameDate: null, legacyRefs: [], bodyHash: `body-${row.entryId}`, importance: 0.5 };
+      finalizations[hash(finalizationId)] = { sourceRevision };
+      for (const topic of row.topics) (byTopic[topic] ||= []).push(row.entryId);
+    }
+    activeIndex = { revision: 1, entries, byTopic, finalizations };
   };
 
   const alpha = source("source-alpha", "甲曾参与边境议和。");
@@ -154,6 +175,139 @@ try {
     const canonicalTopicPacket = planner.plan({ ...options, entityIds: [44], explicitTargetEntityIds: [44], topics: ["边境"],
       query: "你还记得葡萄酒的来历吗？" });
     assert(canonicalTopicPacket.items.some(item => item.memory.memoryId === canonicalEntry.entryId));
+    activeIndex = { entries: {}, byTopic: {}, finalizations: {} };
+    entryRecords.clear();
+  });
+
+  check("explicit Legacy target replaces only unrelated Canonical details", () => {
+    const query = "赵光义北境那件事后来怎么样？";
+    const queryModel = { axis: "EVENT", granularity: "EVENT", entityIds: [44], querySpeakerId: 1,
+      window: null, blockedReason: null, firstMeeting: false, temporalRequested: false, expression: null,
+      topics: ["北境"], text: query };
+    const canonical = [
+      { entryId: "selection-unrelated-D", entityIds: [45], topics: ["北境"], text: "北境曾出现另一场争议。" },
+      { entryId: "selection-unrelated-E", entityIds: [46], topics: ["北境"], text: "北境议和中有使者往返。" }
+    ];
+    const targetProfile = { id: 44, firstName: "李道远", shortName: "李道远", fullName: "李道远" };
+    const selectionSource = source("selection-explicit-C-source", "李道远在北境争议中留下 EXPLICIT_C_SPLIT_LEGACY_SENTINEL。");
+    const explicitLegacyParent = legacy("selection-explicit-C-parent",
+      `【李道远能够知道并记住的本场内容】\n- ${selectionSource.content}`,
+      { subjects: [44], perspectiveMemoryIds: [selectionSource.memoryId] });
+    const explicitLegacy = planner.legacyCandidates([explicitLegacyParent], scope, { entries: {} })[0];
+    const plan = (rows, explicitTargetEntityIds) => {
+      setCanonicalRows(rows);
+      return planner.plan({ ...options, query, queryModel, entityIds: [44], explicitTargetEntityIds,
+        topics: ["北境"], entityNames: ["李道远"], entityNamesById: { 44: ["李道远"] },
+        entityProfiles: [targetProfile], gameData: { characters: new Map([[44, targetProfile]]) },
+        legacyMemories: [explicitLegacy] });
+    };
+
+    const packet = plan(canonical, [44]);
+    assert(packet.details.some(item => item.memory.memoryId === explicitLegacy.memoryId),
+      `an explicit target split Legacy detail must enter the final packet: ${JSON.stringify({
+        expectedId: explicitLegacy?.memoryId, legacyCandidates: packet.diagnostics.legacyCandidateCount,
+        selectedIds: packet.items.map(item => item.memory.memoryId), explicitTargets: packet.diagnostics.explicitTargetEntityIds,
+        candidateCount: packet.diagnostics.entityTargetCandidateCount, rejected: packet.diagnostics.legacyRejected })}`);
+    assert(packet.details.length <= 2);
+    assert(packet.details.filter(item => item.sourceRef.kind === "detail" && !item.routeCharacterIds?.includes(44)).length <= 1,
+      "the explicit target can replace at most one of the two unrelated Canonical details");
+    assert(packet.tokens <= 1200);
+
+    const targetCanonical = [
+      { entryId: "selection-target-C1", entityIds: [44], topics: ["北境"], text: "李道远记得北境旧约一。" },
+      { entryId: "selection-target-C2", entityIds: [44], topics: ["北境"], text: "李道远记得北境旧约二。" }
+    ];
+    const protectedPacket = plan(targetCanonical, [44]);
+    assert.deepEqual(protectedPacket.details.map(item => item.memory.memoryId), ["selection-target-C1", "selection-target-C2"],
+      "an explicit Legacy candidate must not evict either of two explicit Canonical details");
+
+    const highSource = source("selection-high-explicit-source", "李道远在北境守门约定中交出玉印，守将依约开启城门。HIGH_EXPLICIT_RANK_SENTINEL");
+    const lowSource = source("selection-low-explicit-source", "李道远早年曾在北境宴饮，席间有乐舞。LOW_EXPLICIT_RANK_SENTINEL");
+    const splitParent = (id, memory) => legacy(id, `【李道远能够知道并记住的本场内容】\n- ${memory.content}`,
+      { subjects: [44], perspectiveMemoryIds: [memory.memoryId] });
+    const rankedLegacy = planner.legacyCandidates([
+      splitParent("selection-high-explicit-parent", highSource), splitParent("selection-low-explicit-parent", lowSource)
+    ], scope, { entries: {} });
+    const rankingQuery = "李道远北境守门约定玉印后来如何？";
+    const rankedTargets = planner.ranker.rank(rankedLegacy, { query: rankingQuery, entityIds: [44] });
+    assert.match(rankedTargets[0].memory.content, /HIGH_EXPLICIT_RANK_SENTINEL/);
+    setCanonicalRows([]);
+    const multiTargetPacket = planner.plan({ ...options, query: rankingQuery,
+      queryModel: { ...queryModel, granularity: "LIFE", text: rankingQuery }, entityIds: [44], explicitTargetEntityIds: [44],
+      topics: ["北境"], entityNames: ["李道远"], entityNamesById: { 44: ["李道远"] },
+      entityProfiles: [targetProfile], gameData: { characters: new Map([[44, targetProfile]]) }, legacyMemories: rankedLegacy });
+    assert.equal(multiTargetPacket.details.length, 1);
+    assert.match(multiTargetPacket.details[0].memory.content, /HIGH_EXPLICIT_RANK_SENTINEL/,
+      "when one detail slot remains, the better-ranked Explicit Target Legacy item must survive");
+
+    const unforcedPacket = plan(canonical, []);
+    assert.deepEqual(unforcedPacket.details.map(item => item.memory.memoryId), ["selection-unrelated-D", "selection-unrelated-E"],
+      "an empty Explicit Target set must preserve the existing Canonical-first selection");
+
+    coordinator.derived.selectSlice = () => ({ memory: { memoryId: "selection-target-derived", content: "李道远北境旧约概览。", tags: ["北境"] },
+      reason: { axis: "event", from: "1190.1.1", to: "1190.1.1", precision: "day" }, annotation: "derived fixture",
+      sourceRef: { kind: "year", id: "selection-target-derived", sourceEntryIds: ["selection-target-C1"] } });
+    const derivedPacket = plan(targetCanonical, [44]);
+    assert.equal(derivedPacket.overview.routeKind, "entity_target",
+      "a Derived overview backed by an Explicit Target Canonical source keeps target priority metadata");
+
+    const budgetedPacket = fitRecallPacket({ query: { granularity: "PERIOD", text: query },
+      overview: { memory: { memoryId: "unrelated-derived", content: "北境旧闻无关材料。".repeat(300), tags: ["北境"] },
+        reason: { axis: "year", from: "1190.1.1", to: "1190.12.31", precision: "year" }, annotation: "derived",
+        sourceRef: { kind: "year", id: "unrelated-derived", sourceEntryIds: [] } },
+      details: [
+        { memory: { memoryId: "unrelated-canonical", content: "北境使者的无关记录。".repeat(80), tags: ["北境"] },
+          reason: { axis: "event", from: "1190.1.1", to: "1190.1.1", precision: "day" }, annotation: "canonical", score: 1,
+          sourceRef: { kind: "detail", id: "unrelated-canonical" } },
+        { memory: { memoryId: "budget-explicit-legacy", content: "EXPLICIT_TARGET_BUDGET_SENTINEL", tags: ["北境"] },
+          reason: { axis: "event", from: "1190.1.1", to: "1190.1.1", precision: "day" }, annotation: "legacy", score: 1,
+          routeKind: "entity_target", explicitTargetEntityIds: [44], sourceRef: { kind: "legacy", id: "budget-explicit-legacy" } }
+      ], profileText: null, notice: null, focus: null }, 500, text => Math.ceil(String(text || "").length / 2));
+    assert(budgetedPacket.items.some(item => item.memory.memoryId === "budget-explicit-legacy"),
+      "budget fitting must retain the Explicit Target Legacy item ahead of unrelated Canonical/Derived items");
+    assert.equal(budgetedPacket.items.some(item => item.memory.memoryId === "unrelated-derived"), false);
+    assert.equal(budgetedPacket.items.some(item => item.memory.memoryId === "unrelated-canonical"), false);
+    assert(budgetedPacket.tokens <= 500);
+
+    const oversizedFiller = "南方宫宴按旧礼延续，账册详记宴席席次与乐舞编排。".repeat(700);
+    const oversizedTargetContent = `${oversizedFiller}\n赵光义在北境守门约定中留下 EXPLICIT_OVERSIZE_MIDDLE_SENTINEL，应由门吏开启城门。\n${oversizedFiller}`;
+    const oversizedTargetPacket = fitRecallPacket({ query: { granularity: "PERIOD", text: "赵光义北境守门约定如何？" },
+      overview: { memory: { memoryId: "oversized-unrelated-derived", content: "无关的宫宴礼乐安排。".repeat(220), tags: [] },
+        reason: { axis: "year", from: "1190.1.1", to: "1190.12.31", precision: "year" }, annotation: "derived",
+        sourceRef: { kind: "year", id: "oversized-unrelated-derived", sourceEntryIds: [] } },
+      details: [
+        { memory: { memoryId: "oversized-unrelated-canonical", content: "无关的宫廷事务记录。".repeat(360), tags: [] },
+          reason: { axis: "event", from: "1190.1.1", to: "1190.1.1", precision: "day" }, annotation: "canonical", score: 1,
+          sourceRef: { kind: "detail", id: "oversized-unrelated-canonical" } },
+        { memory: { memoryId: "oversized-explicit-legacy", content: oversizedTargetContent, tags: [] },
+          reason: { axis: "event", from: "1190.1.1", to: "1190.1.1", precision: "day" }, annotation: "legacy", score: 1,
+          routeKind: "entity_target", explicitTargetEntityIds: [44], sourceRef: { kind: "legacy", id: "oversized-explicit-legacy" } }
+      ], profileText: null, notice: null, focus: null }, 1200, text => Math.ceil(String(text || "").length / 2));
+    const fittedOversizedTarget = oversizedTargetPacket.details.find(item => item.memory.memoryId === "oversized-explicit-legacy");
+    assert(fittedOversizedTarget, "the explicit oversized Legacy detail must survive after unrelated items are removed");
+    assert(fittedOversizedTarget.memory.content.includes("EXPLICIT_OVERSIZE_MIDDLE_SENTINEL"),
+      "retrying the excerpt after freeing non-target budget must preserve the relevant middle sentence");
+    assert(fittedOversizedTarget.memory.content.length < oversizedTargetContent.length);
+    assert(oversizedTargetPacket.tokens <= 1200);
+
+    const smallBudgetTargetContent = `${"甲".repeat(400)}\n赵光义在北境守门约定中留下 EXPLICIT_SMALL_BUDGET_MIDDLE_SENTINEL，现由门吏看守。\n${"乙".repeat(400)}`;
+    const smallBudgetPacket = fitRecallPacket({ query: { granularity: "PERIOD", text: "赵光义北境守门约定如何？" }, overview: null,
+      details: [
+        { memory: { memoryId: "small-budget-unrelated-canonical", content: "无关记录。".repeat(160), tags: [] },
+          reason: { axis: "event", from: "1190.1.1", to: "1190.1.1", precision: "day" }, annotation: "canonical", score: 1,
+          sourceRef: { kind: "detail", id: "small-budget-unrelated-canonical" } },
+        { memory: { memoryId: "small-budget-explicit-legacy", content: smallBudgetTargetContent, tags: [] },
+          reason: { axis: "event", from: "1190.1.1", to: "1190.1.1", precision: "day" }, annotation: "legacy", score: 1,
+          routeKind: "entity_target", explicitTargetEntityIds: [44], sourceRef: { kind: "legacy", id: "small-budget-explicit-legacy" } }
+      ], profileText: "人物认知补充。".repeat(40), notice: "其他非目标说明。".repeat(20), focus: null }, 200,
+    text => Math.ceil(String(text || "").length / 2));
+    assert(smallBudgetPacket.details.some(item => item.memory.content.includes("EXPLICIT_SMALL_BUDGET_MIDDLE_SENTINEL")),
+      "the explicit Legacy excerpt must survive a smaller provider budget after unrelated text is removed");
+    assert.equal(smallBudgetPacket.profileText, null);
+    assert.equal(smallBudgetPacket.notice, null);
+    assert(smallBudgetPacket.tokens <= 200);
+
+    coordinator.derived.selectSlice = () => null;
     activeIndex = { entries: {}, byTopic: {}, finalizations: {} };
     entryRecords.clear();
   });

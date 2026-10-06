@@ -281,14 +281,94 @@ class Memory4Coordinator {
     return { queued: ids.length };
   }
 
+  canProveNoSummaryProjectionFootprint(summaryRecord, { ownerId = null, counterpartId = null, legacyMemoryIds = [] } = {}) {
+    try {
+      const provenance = summaryRecord?.provenance || {};
+      const campaignToken = summaryRecord?.campaignToken || provenance.campaignToken;
+      const numericOwnerId = Number(ownerId ?? summaryRecord?.perspectiveOwnerId ?? provenance.folderOwnerId);
+      const numericCounterpartId = Number(counterpartId ?? summaryRecord?.characterId ?? provenance.counterpartId);
+      if (typeof campaignToken !== "string" || !campaignToken.trim() || !Number.isSafeInteger(numericOwnerId)
+        || numericOwnerId <= 0 || !Number.isSafeInteger(numericCounterpartId) || numericCounterpartId <= 0
+        || numericCounterpartId === numericOwnerId) return false;
+      if ([summaryRecord?.perspectiveOwnerId, summaryRecord?.playerId, provenance.folderOwnerId].some(value =>
+        value != null && Number(value) !== numericOwnerId)) return false;
+
+      const hasValue = value => typeof value === "string" && value.trim().length > 0;
+      const hasIds = value => Array.isArray(value) ? value.length > 0 : hasValue(value);
+      const lineageFields = [summaryRecord?.projectionId, provenance.projectionId,
+        summaryRecord?.conversationId, provenance.conversationId,
+        summaryRecord?.finalizationId, provenance.finalizationId,
+        summaryRecord?.sourceLetterId, summaryRecord?.letterId, provenance.sourceLetterId, provenance.letterId];
+      const sourceFields = [summaryRecord?.perspectiveMemoryIds, summaryRecord?.legacyMemoryIds,
+        summaryRecord?.perspectiveSummarySegmentIds, summaryRecord?.segmentIds,
+        summaryRecord?.sourceSegmentIds, summaryRecord?.sourceMessageIds,
+        summaryRecord?.projectionLineages, provenance.perspectiveMemoryIds, provenance.legacyMemoryIds,
+        provenance.perspectiveSummarySegmentIds, provenance.segmentIds,
+        provenance.sourceSegmentIds, provenance.sourceMessageIds, provenance.projectionLineages];
+      if (lineageFields.some(hasValue) || sourceFields.some(hasIds)) return false;
+
+      const summaryRoot = this.baseStore.summaryFoldersDir;
+      if (!summaryRoot) return false;
+      const root = path.resolve(summaryRoot);
+      if (!fs.existsSync(root) || !fs.lstatSync(root).isDirectory() || fs.lstatSync(root).isSymbolicLink()) return false;
+      const campaignDirectory = hash(campaignToken);
+      const targetExists = target => {
+        const resolvedTarget = path.resolve(target);
+        let checked = resolvedTarget;
+        while (checked !== root) {
+          if (!checked.startsWith(`${root}${path.sep}`)) return true;
+          if (fs.existsSync(checked)) {
+            const stat = fs.lstatSync(checked);
+            if (stat.isSymbolicLink() || !stat.isDirectory()) return true;
+            if (checked === resolvedTarget) return true;
+          }
+          checked = path.dirname(checked);
+        }
+        return false;
+      };
+      const canonicalOwner = path.join(root, ".memory4", String(numericOwnerId));
+      if (fs.existsSync(path.join(root, ".memory4"))) {
+        const sidecarRoot = path.join(root, ".memory4");
+        if (!fs.lstatSync(sidecarRoot).isDirectory() || fs.lstatSync(sidecarRoot).isSymbolicLink()) return false;
+      }
+      if (targetExists(path.join(canonicalOwner, campaignDirectory))) return false;
+      for (const entry of fs.readdirSync(root, { withFileTypes: true })) {
+        if (!entry.name.startsWith(`${numericOwnerId}_`)) continue;
+        if (entry.isSymbolicLink()) return false;
+        if (!entry.isDirectory()) continue;
+        const ownerFolder = path.join(root, entry.name);
+        const memory4Root = path.join(ownerFolder, "memory4");
+        if (fs.existsSync(memory4Root) && (!fs.lstatSync(memory4Root).isDirectory() || fs.lstatSync(memory4Root).isSymbolicLink())) return false;
+        if (targetExists(path.join(memory4Root, campaignDirectory))) return false;
+      }
+
+      if (!fs.existsSync(this.recoveryDir) || !fs.lstatSync(this.recoveryDir).isDirectory()
+        || fs.lstatSync(this.recoveryDir).isSymbolicLink()) return false;
+      for (const entry of fs.readdirSync(this.recoveryDir, { withFileTypes: true })) {
+        if (!entry.isFile() || entry.isSymbolicLink() || !/^[a-f0-9]{64}\.json$/.test(entry.name)) return false;
+        const record = this.readRecovery(path.join(this.recoveryDir, entry.name));
+        const snapshot = record?.snapshot;
+        if (snapshot?.campaignToken === campaignToken && Number(snapshot.ownerId) === numericOwnerId) return false;
+      }
+      return true;
+    } catch {
+      return false;
+    }
+  }
+
   getKnownEntityProfile(scope, entityId, options = {}) {
     return this.profiles.getProfile(scope, entityId, options);
   }
 
   forgetSummaryProjection(summaryRecord, { ownerId = null, counterpartId = null, reason = "USER_DELETE_SUMMARY", legacyMemoryIds = [] } = {}) {
-    const lineage = projectionLineageFromSummary(summaryRecord, { ownerId, counterpartId, legacyMemoryIds });
-    if (!lineage) return { status: "SKIPPED", reason: "PROJECTION_LINEAGE_UNAVAILABLE", canonicalEntriesForgotten: 0,
-      derivedInvalidated: 0, disclosureEvidenceRevoked: 0, recoveryDeleted: 0, recoveryUpdated: 0 };
+    const baseResult = { canonicalEntriesForgotten: 0, derivedInvalidated: 0,
+      disclosureEvidenceRevoked: 0, recoveryDeleted: 0, recoveryUpdated: 0 };
+    const lineage = projectionLineageFromSummary(summaryRecord, { ownerId, counterpartId });
+    if (!lineage) {
+      const safeToSkip = this.canProveNoSummaryProjectionFootprint(summaryRecord, { ownerId, counterpartId, legacyMemoryIds });
+      return { status: safeToSkip ? "SKIPPED_SAFE_NO_FOOTPRINT" : "SKIPPED",
+        reason: safeToSkip ? "NO_MEMORY4_FOOTPRINT" : "PROJECTION_LINEAGE_UNAVAILABLE", ...baseResult };
+    }
     const scope = { campaignToken: lineage.campaignToken, ownerId: lineage.ownerId };
     try { this.store.directory(scope); }
     catch (error) {

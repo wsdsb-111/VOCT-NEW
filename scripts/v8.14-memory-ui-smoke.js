@@ -11,6 +11,7 @@ const { spawn } = require("child_process");
 const { createMemoryUiFixture } = require("./v8.14-memory-ui-fixture");
 const { disclosureFactId } = require("../resources/app/out/main/memory-system/memory4-disclosure");
 const { projectVisibleTranscript } = require("../resources/app/out/main/memory-system/memory4-visibility");
+const { createProjectionLineage } = require("../resources/app/out/main/memory-system/memory4-forget");
 const delay = ms => new Promise(resolve => setTimeout(resolve, ms));
 
 function hashDirectory(directory) {
@@ -69,6 +70,22 @@ async function connect(url, errors) {
 async function run() {
   const profile = fs.mkdtempSync(path.join(os.tmpdir(), "votc-e-packaged-ui-"));
   const fixture = await createMemoryUiFixture(profile);
+  const orphanScope = { campaignToken: fixture.scope.campaignToken, ownerId: 1 };
+  const orphanText = "乙曾告知甲一个仅用于隔离审计的旧事实。";
+  const orphanContext = { ...orphanScope, conversationId: "ui-orphan-conversation", finalizationId: "ui-orphan-finalization",
+    episodeId: "ui-orphan-episode", date: "1164.1.1", totalDays: 425000, participants: [1, 2].map(id => ({ id })),
+    participantPresence: [1, 2].map(characterId => ({ characterId, joinedAtMessageId: 0, leftAtMessageId: null })),
+    messages: [{ id: 94, role: "assistant", speakerCharacterId: 2, content: orphanText,
+      memory4Fragments: [{ start: 0, end: orphanText.length, visibility: "participants", sourceType: "spoken", recipientIds: [1], entityIds: [1, 2] }] }] };
+  const orphanProjection = projectVisibleTranscript(orphanContext, orphanScope.ownerId);
+  const orphanLineage = createProjectionLineage({ ...orphanScope, counterpartId: 2,
+    conversationId: orphanContext.conversationId, finalizationId: orphanContext.finalizationId,
+    segmentIds: ["ui-orphan-summary"], sourceSegmentIds: orphanProjection.fragments.map(fragment => fragment.fragmentId), sourceMessageIds: [94] });
+  fixture.engine.memory4.store.commitOwner({ ...orphanContext, ...orphanProjection, summaryIds: [],
+    counterpartIds: [2], projectionLineages: [orphanLineage] }, { status: "STORE", entries: [{
+    memoryType: "DURABLE_KNOWLEDGE", text: orphanText, fragmentIds: orphanProjection.fragments.map(fragment => fragment.fragmentId),
+    entityIds: [2], participantIds: [1, 2], topics: ["审计"], eventTime: { status: "unknown" }
+  }] });
   const targetCharacter = fixture.characters.find(character => character.id === 1);
   Object.assign(targetCharacter, { primaryTitle: "明王", nickname: "北地之虎", age: 23, traits: [{ id: "bastard", name: "私生子" }] });
   fixture.conversation.gameData.characters.set(targetCharacter.id, targetCharacter);
@@ -181,6 +198,27 @@ async function run() {
     assert.equal(data.detail.total, 2);
     console.log("Isolated real preload/IPC fixture ready");
     assert.equal((await evaluate("conversationAPI.getMemory4OwnerData({ownerId:2,expectedCampaignToken:'wrong-campaign'})")).success, false);
+    const orphanRequest = { ownerId: 2, expectedCampaignToken: fixture.scope.campaignToken, expectedContextId: "isolated-ui-conversation" };
+    const auditHashBefore = hashDirectory(fixture.summariesDir);
+    const orphanAudit = await evaluate(`conversationAPI.auditMemory4Orphans(${JSON.stringify(orphanRequest)})`);
+    assert.equal(orphanAudit.success, true, JSON.stringify(orphanAudit));
+    assert(/^[a-f0-9]{64}$/.test(orphanAudit.auditToken));
+    assert.equal((await evaluate("conversationAPI.auditMemory4Orphans({ownerId:2,expectedCampaignToken:'wrong-campaign'})")).success, false);
+    const unconfirmedForget = await evaluate(`conversationAPI.forgetMemory4Orphan(${JSON.stringify({ ...orphanRequest,
+      expectedAuditToken: orphanAudit.auditToken, projectionId: orphanAudit.items[0]?.projectionId, confirmed: false })})`);
+    assert.equal(unconfirmedForget.success, false);
+    assert.equal(unconfirmedForget.error, "memory4_orphan_confirmation_required");
+    assert.equal(hashDirectory(fixture.summariesDir), auditHashBefore, "orphan audit and rejected confirmation leave sidecars unchanged");
+    const ghostRequest = { ...orphanRequest, ownerId: orphanScope.ownerId };
+    const ghostAudit = await evaluate(`conversationAPI.auditMemory4Orphans(${JSON.stringify(ghostRequest)})`);
+    assert.equal(ghostAudit.success, true, JSON.stringify(ghostAudit));
+    assert.equal(ghostAudit.items.find(item => item.projectionId === orphanLineage.projectionId)?.status, "ORPHANED_PRE_V815_PROJECTION");
+    const acceptedForget = await evaluate(`conversationAPI.forgetMemory4Orphan(${JSON.stringify({ ...ghostRequest,
+      projectionId: orphanLineage.projectionId, expectedAuditToken: ghostAudit.auditToken, confirmed: true })})`);
+    assert.equal(acceptedForget.success, true, JSON.stringify(acceptedForget));
+    assert.equal(acceptedForget.result.status, "FORGOTTEN");
+    const afterGhostForget = await evaluate(`conversationAPI.auditMemory4Orphans(${JSON.stringify(ghostRequest)})`);
+    assert.equal(afterGhostForget.items.find(item => item.projectionId === orphanLineage.projectionId)?.status, "FORGOTTEN");
     await evaluate("localStorage.setItem('votc-developer-mode','true');localStorage.setItem('config-panel-state',JSON.stringify({position:{x:40,y:30},size:{width:1000,height:840}}))");
     await renderer.send("Page.reload", { ignoreCache: true });
     await waitFor("[...document.querySelectorAll('button')].some(e=>e.textContent.trim()==='Summaries')");
@@ -434,7 +472,7 @@ async function run() {
       blockedNetworkUrls: blockedFetchUrls, realCK3Gate: false, profile,
       archive: { ownerId: fixture.archive.ownerId, campaignToken: fixture.archive.campaignToken, readOnlyReasons: [archiveData.readOnlyReason, endedArchiveData.readOnlyReason],
         strictCurrentIsNullAfterDetach: detachedState.strictCurrentIsNull, sidecarHashBefore: archiveHashBefore, sidecarHashAfter: archiveHashAfter, rejectedWriteError: archiveWriteRequest.error || null },
-      checks: ["missing Campaign", "wrong Campaign", "strict owner data", "six views", "readonly Official", "disclosure source/date/nickname", "manual disclosure write", "disclosure hide cancellation", "archive disclosure readonly", "source modal", "manual conflict preservation", "manual edit", "delete cancellation",
+      checks: ["missing Campaign", "wrong Campaign", "strict owner data", "orphan audit real IPC read-only", "orphan forget requires explicit confirmation", "confirmed orphan forget through real preload/IPC", "six views", "readonly Official", "disclosure source/date/nickname", "manual disclosure write", "disclosure hide cancellation", "archive disclosure readonly", "source modal", "manual conflict preservation", "manual edit", "delete cancellation",
         "accepted Detail deletion", "existing binding preview cancellation", "nonoverlapping tool buttons", "no horizontal overflow", "same-campaign archive outside loaded roster", "loaded-campaign readonly banner",
         "archive refresh/tabs/source remain available", "archive year/life/detail mutation controls disabled", "manager detach leaves strict current null and read snapshot available",
         "archive IPC mutation rejected after manager detach", "archive sidecar hash unchanged", "ended-conversation banner, detail and source remain available", "ordinary Legacy edit/delete enabled after detach", "ordinary Legacy manual edit persisted through real preload/IPC after detach", "disclosed age retains historical value/date without current-age or mutation controls",
