@@ -4,13 +4,14 @@ const fs = require("fs");
 const path = require("path");
 const { buildMemory4EntityContext } = require("./memory4-entity-context");
 const { gameDate, hash, ids } = require("./memory4-contract");
+const { createProjectionLineage } = require("./memory4-forget");
 const { normalizeGameDate } = require("../worldline/character-temporal-facts");
 const { validateGenerationOutcome } = require("../providers/generation-outcome");
 
 const SCHEMA_VERSION = 1;
 const MAX_AUTOMATIC_FAILURES = 3;
 const MAX_LETTER_LENGTH = 65536;
-const COMPLETED_OWNER_STATUSES = new Set(["STORE", "NO_DURABLE_CONTENT", "NOT_PRESENT"]);
+const COMPLETED_OWNER_STATUSES = new Set(["STORE", "NO_DURABLE_CONTENT", "NOT_PRESENT", "FORGOTTEN"]);
 
 function ownerComplete(owner) {
   if (!COMPLETED_OWNER_STATUSES.has(owner.status)) return false;
@@ -215,13 +216,29 @@ class LetterMemoryFinalization {
     ];
   }
 
+  getForgottenOwnerIds(job) {
+    const store = this.memoryEngine.memory4?.store;
+    if (typeof store?.isProjectionLineageForgotten !== "function") return [];
+    return [job.context.senderId, job.context.recipientId].filter(ownerId => {
+      const lineage = createProjectionLineage({ campaignToken: job.context.campaignToken, ownerId,
+        counterpartId: ownerId === job.context.senderId ? job.context.recipientId : job.context.senderId,
+        conversationId: job.conversationId, finalizationId: job.finalizationId });
+      try { return store.isProjectionLineageForgotten(lineage, lineage); }
+      catch (error) {
+        if (error.message === "memory4_owner_folder_not_unique") return false;
+        throw error;
+      }
+    });
+  }
+
   summaryContext(job) {
     return {
       conversationId: job.conversationId, finalizationId: job.finalizationId, episodeId: job.episodeId,
       commitMarker: job.commitMarker, campaignToken: job.context.campaignToken,
+      sourceLetterId: job.context.letterId,
       currentCampaignNative: true, date: job.context.acceptedDate, totalDays: job.context.acceptedTotalDays,
       participants: job.context.participantProfiles, participantIds: [job.context.senderId, job.context.recipientId],
-      participantProfiles: job.context.participantProfiles, excludedSummaryOwnerIds: [],
+      participantProfiles: job.context.participantProfiles, excludedSummaryOwnerIds: this.getForgottenOwnerIds(job),
       joinEvents: [], leaveEvents: [], presenceJoins: [], presenceLeaves: []
     };
   }
@@ -274,6 +291,14 @@ class LetterMemoryFinalization {
         } catch { throw new Error("LETTER_MEMORY_LEGACY_SAVE_FAILED"); }
       }
       if (!saved?.memoryId) throw new Error("LETTER_MEMORY_LEGACY_SAVE_FAILED");
+      const forgottenOwners = this.getForgottenOwnerIds(job);
+      if (forgottenOwners.length) {
+        const store = this.memoryEngine.store;
+        for (const ownerId of forgottenOwners) store.revokeCharacterKnowledge(ownerId, saved.memoryId);
+        const knownBy = saved.knownBy.filter(ownerId => !forgottenOwners.includes(ownerId));
+        if (knownBy.length) store.updateMemory(saved.memoryId, { knownBy });
+        else store.deleteMemory(saved.memoryId);
+      }
       narrative.memoryId = saved.memoryId;
       narrative.legacyStatus = "COMPLETE";
       this.writeJob(job);
@@ -341,13 +366,17 @@ class LetterMemoryFinalization {
     }
     const sourceRevision = hash([job.payloadHash, context.sourceDate, context.acceptedDate,
       context.sourceTotalDays, context.acceptedTotalDays, ownerId, entityNameEvidence, relationshipEvidence]);
+    const counterpartId = ownerId === context.senderId ? context.recipientId : context.senderId;
+    const projectionLineages = [createProjectionLineage({ campaignToken: context.campaignToken, ownerId,
+      counterpartId, conversationId: job.conversationId, finalizationId: job.finalizationId,
+      legacyMemoryIds: [job.narrative.memoryId], sourceSegmentIds: fragments.map(fragment => fragment.fragmentId) })];
     return {
       campaignToken: context.campaignToken, ownerId, sourceKind: "LETTER", letterId: context.letterId,
       senderId: context.senderId, recipientId: context.recipientId,
       conversationId: job.conversationId, finalizationId: job.finalizationId, episodeId: job.episodeId,
       sourceRevision, date: context.acceptedDate, totalDays: context.acceptedTotalDays,
       summaryProviderSnapshot: providerSnapshot, summaryIds: [job.narrative.memoryId],
-      counterpartIds: [], fragments, presentMessageCount: 0, completeness: "complete",
+      counterpartIds: [], projectionLineages, fragments, presentMessageCount: 0, completeness: "complete",
       legacyRetained: true, skipKnownEvidence: true, entityNameEvidence, relationshipEvidence
     };
   }

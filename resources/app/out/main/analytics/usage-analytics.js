@@ -184,6 +184,17 @@ function createUsageAnalytics({ fs, dataDir, analyticsFile, retention, createPro
         patchSecretBlockedCount: Number(metadata?.patchSecretBlockedCount) || 0,
         worldFactsTrimmed: Number(metadata?.worldFactsTrimmed) || 0,
         memoryRecallMs: Number(metadata?.memoryRecallMs) || 0,
+        entityRecallDiagnostics: metadata?.entityRecallDiagnostics && typeof metadata.entityRecallDiagnostics === "object" ? {
+          explicitTargetEntityIds: Array.isArray(metadata.entityRecallDiagnostics.explicitTargetEntityIds) ? metadata.entityRecallDiagnostics.explicitTargetEntityIds.map(Number).filter(Number.isSafeInteger).slice(0, 32) : [],
+          activeParticipantIds: Array.isArray(metadata.entityRecallDiagnostics.activeParticipantIds) ? metadata.entityRecallDiagnostics.activeParticipantIds.map(Number).filter(Number.isSafeInteger).slice(0, 32) : [],
+          mentionedOutOfSceneIds: Array.isArray(metadata.entityRecallDiagnostics.mentionedOutOfSceneIds) ? metadata.entityRecallDiagnostics.mentionedOutOfSceneIds.map(Number).filter(Number.isSafeInteger).slice(0, 32) : [],
+          entityTargetCandidateCount: Math.max(0, Number(metadata.entityRecallDiagnostics.entityTargetCandidateCount) || 0),
+          entityTargetSelectedIds: Array.isArray(metadata.entityRecallDiagnostics.entityTargetSelectedIds) ? metadata.entityRecallDiagnostics.entityTargetSelectedIds.map(String).slice(0, 40) : [],
+          legacyCandidateCount: Math.max(0, Number(metadata.entityRecallDiagnostics.legacyCandidateCount) || 0),
+          legacyRejected: Object.fromEntries(["identity", "lexical", "topic", "budget", "stale", "forgotten"].map(key =>
+            [key, Math.max(0, Number(metadata.entityRecallDiagnostics.legacyRejected?.[key]) || 0)])),
+          memory4SelectedIds: Array.isArray(metadata.entityRecallDiagnostics.memory4SelectedIds) ? metadata.entityRecallDiagnostics.memory4SelectedIds.map(String).slice(0, 40) : []
+        } : null,
         temporalDiagnostics: metadata?.temporalDiagnostics && typeof metadata.temporalDiagnostics === "object" ? {
           requested: metadata.temporalDiagnostics.requested === true,
           triggered: metadata.temporalDiagnostics.triggered === true,

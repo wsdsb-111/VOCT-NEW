@@ -12,6 +12,24 @@ const { buildDualTemporalIndex, selectDualTemporalExtras } = require("../resourc
 const { resolveTemporalFocus } = require("../resources/app/out/main/memory-system/fuzzy-temporal-resolver");
 const { buildPerspectiveSummaryMap, validatePerspectiveSummaryMap } = require("../resources/app/out/main/memory-system/perspective-projector");
 const { createGameData } = require("../resources/app/out/main/game-data/game-data");
+const { createProjectionLineage } = require("../resources/app/out/main/memory-system/memory4-forget");
+
+function withFreshProjectionLineage(record) {
+  const provenance = record.provenance || {};
+  const lineage = createProjectionLineage({
+    campaignToken: record.campaignToken || provenance.campaignToken,
+    ownerId: Number(record.perspectiveOwnerId ?? provenance.folderOwnerId ?? record.playerId),
+    conversationId: record.conversationId || provenance.conversationId,
+    finalizationId: record.finalizationId || provenance.finalizationId,
+    counterpartId: Number(record.characterId ?? provenance.counterpartId),
+    segmentIds: record.perspectiveSummarySegmentIds || provenance.perspectiveSummarySegmentIds || provenance.segmentIds || []
+  });
+  return {
+    ...record,
+    projectionId: lineage.projectionId,
+    ...(record.provenance ? { provenance: { ...provenance, projectionId: lineage.projectionId, projectionLineages: [lineage] } } : {})
+  };
+}
 
 async function main() {
   const sandbox = fs.mkdtempSync(path.join(os.tmpdir(), "votc-dual-time-"));
@@ -51,12 +69,17 @@ async function main() {
     assert.equal(original.campaignToken, "campaign-a");
     assert.deepEqual(original.temporalRefs, b.temporalRefs);
     assert.equal(original.date, "1150.6.12");
+    const verifiedSegments = finalized.extraction.summarySegments.filter(segment => b.summarySegmentIds.includes(segment.segmentId));
+    const expectedSourceMessageIds = [...new Set(verifiedSegments.flatMap(segment =>
+      segment.provenance?.messageIds || segment.messageIds || []))].filter(id => Number.isSafeInteger(id) && id >= 0).sort((left, right) => left - right);
+    assert.deepEqual(original.sourceMessageIds, expectedSourceMessageIds);
+    assert.deepEqual(original.sourceSegmentIds, verifiedSegments.map(segment => segment.segmentId));
     // A fresh process must find metadata from disk, not an in-memory episode shortcut.
     const restarted = new MemoryEngine({ baseDir: path.join(sandbox, "memory"), summaryFoldersDir: summariesDir, trace });
     const loaded = restarted.loadOwnerFolderMemories(2);
     assert(loaded.some(memory => memory.provenance.temporalRefs.some(ref => ref.targetGameYear === 1145)));
     assert.deepEqual(createMemoryRecord(loaded[0]).provenance.temporalRefs, loaded[0].provenance.temporalRefs);
-    const recent = ["1152.1.1", "1151.12.30"].map((date, i) => ({ ...original, date, totalDays: 6600 - i,
+    const recent = ["1152.1.1", "1151.12.30"].map((date, i) => withFreshProjectionLineage({ ...original, date, totalDays: 6600 - i,
       finalizationId: `recent-${i}`, content: `近日归还书籍${i}`, temporalRefs: [] }));
     fs.writeFileSync(file, JSON.stringify([...recent, original]));
     restarted.invalidateSummaryFolderCache([2]);
@@ -80,7 +103,7 @@ async function main() {
     assert.equal(followup.extra.length, 0, "successful Extra remains in private history instead of being injected anew");
     assert.equal(followup.directStableText, first.directStableText);
     restarted.commitTemporalFocus(2, session, 2);
-    const next = { ...original, finalizationId: "another-1145", content: "1145年战争中守军另救回一名俘虏。" };
+    const next = withFreshProjectionLineage({ ...original, finalizationId: "another-1145", content: "1145年战争中守军另救回一名俘虏。" });
     fs.writeFileSync(file, JSON.stringify([...recent, original, next]));
     restarted.invalidateSummaryFolderCache([2]);
     ownerMemories = restarted.loadOwnerFolderMemories(2);
@@ -190,10 +213,10 @@ async function main() {
     assert.match(repeatedTimeQuery.temporalExtraText, /此前已注入的对应证据仍可使用/);
 
     const eventMemory = ownerMemories.find(memory => memory.provenance.finalizationId === original.finalizationId);
-    const conversationMemory = { ...eventMemory, memoryId: "conversation-1145", eventDate: "1145.5.1", content: "我们讨论城防", canonicalText: "我们讨论城防",
-      provenance: { ...eventMemory.provenance, finalizationId: "conversation-1145", temporalRefs: [] } };
-    const weddingMemory = { ...eventMemory, memoryId: "wedding-1145", content: "婚礼宾客入席", canonicalText: "婚礼宾客入席",
-      provenance: { ...eventMemory.provenance, finalizationId: "wedding-1145" } };
+    const conversationMemory = withFreshProjectionLineage({ ...eventMemory, memoryId: "conversation-1145", eventDate: "1145.5.1", content: "我们讨论城防", canonicalText: "我们讨论城防",
+      provenance: { ...eventMemory.provenance, finalizationId: "conversation-1145", temporalRefs: [] } });
+    const weddingMemory = withFreshProjectionLineage({ ...eventMemory, memoryId: "wedding-1145", content: "婚礼宾客入席", canonicalText: "婚礼宾客入席",
+      provenance: { ...eventMemory.provenance, finalizationId: "wedding-1145" } });
     const pool = [weddingMemory, eventMemory, conversationMemory];
     const options = { ownerId: 2, counterpartId: 1, campaignToken: "campaign-a", currentGameDate: input.currentGameDate, currentTotalDays: input.currentTotalDays };
     const index = buildDualTemporalIndex(pool, options);
@@ -201,7 +224,7 @@ async function main() {
     assert.equal(selectDualTemporalExtras(index, pool, conv, { query: "七年前我们聊了什么？" })[0].memory.memoryId, conversationMemory.memoryId);
     assert.equal(selectDualTemporalExtras(index, pool, first.temporal, { query: "七年前那场战争", limit: 1 })[0].memory.memoryId, eventMemory.memoryId);
     assert.equal(buildDualTemporalIndex(pool, { ...options, campaignToken: "campaign-b" }).length, 0);
-    const legacy = { ...conversationMemory, provenance: { ...conversationMemory.provenance, campaignToken: null } };
+    const legacy = { ...conversationMemory, provenance: { ...conversationMemory.provenance, campaignToken: null, projectionId: null, projectionLineages: [] } };
     assert.equal(buildDualTemporalIndex([legacy], options).length, 0, "unknown-campaign records must not enter an identified campaign");
     const noDate = restarted.retrieveForResponder({ ...input, currentGameDate: null, sessionRecallCache: new Map(), query: "七年前的战争" });
     assert.equal(noDate.extra.length, 0);

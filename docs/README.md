@@ -4,6 +4,12 @@
 
 ## 推荐阅读顺序
 
+当前开发入口：[V8.15 Memory4 召回与删除一致性实施报告](v8.15-memory-recall-forget-implementation-report.md)。显式人物目标不受在场状态排除；删除按 Campaign/Owner/人物对持久遗忘并阻止恢复复活，Legacy 仅在证明完整覆盖时退役。独立生产 Prompt/重启夹具、完整门禁和隔离窗口证据集中在报告；协议 3.0、存储 2.5 保持兼容，真实 CK3/Provider/Soak 仍待用户 Gate。以下为前置版本与 Mod 排查快照。
+
+本轮只读排查：[2026 年 10 月征召兵减少调查](v8.14.2-october-levy-mod-investigation-report.md)。三位 GPT-6 Luna Max 核查完整 45 项加载链；用户实机确认仅东方王朝的 1032 开局仍低兵，1066 宋征召兵恢复至 11111/11111。复现场景已收敛，早期建筑初始化为主要解释方向，未唯一定位代码故障；没有修改游戏、Mod 或存档，也未发布增兵补丁。
+
+本轮最新入口：[V8.14.2 天朝制低级头衔任命热修](v8.14.2-celestial-succession-compatibility-hotfix-report.md)。Three-Mod 1.0.2 已安装；文武总督任命对王国级及以上封臣降级竞争额外扣 10000 分，原有 UI 兼容保留。专项、独立 QA、正常环境完整发布 367/367 通过，CK3 候选评分及继承 Gate 待用户。以下为先前阶段快照。
+
 本轮最新入口：[V8.14.2 P0 第三人记忆召回热修](v8.14.2-third-party-memory-recall-hotfix-report.md)。当前轮提及范围扩至回应者可见的 NPC 发言，Memory4 合并玩家查询和 NPC 本轮实体；Legacy 姓名回退采用最长唯一 alias 匹配。40 组专项及当前轮/代词 TTL 回归通过；完整发布门禁在首组临时原子重命名处报 EPERM。以下为先前阶段快照。
 
 前次入口：[V8.14.2 修复4实施报告](v8.14.2-fix4-implementation-report.md) / [第一百五十四阶段](V8阶段开发记录.md#第一百五十四阶段v8142-修复4收口)。动作型直接引语采用 identity-first speaker provenance，第三人/歧义归属 fail-closed；完整发布 367/367、独立 QA 与隔离 UI 38 张截图通过。CK3 L1-L4、真实 Provider/cache telemetry/Soak 待用户 Gate，不签发 Full Freeze。以下为先前阶段快照。

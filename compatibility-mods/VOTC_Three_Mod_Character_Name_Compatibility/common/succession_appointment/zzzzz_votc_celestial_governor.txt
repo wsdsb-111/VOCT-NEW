@@ -1,0 +1,36 @@
+# Retain Hanfan's two appointment definitions; apply the rank penalty last.
+celestial_civic_governor = {
+	allowed_candidate_tier = lower_or_equal
+	cooldown = yes
+	level = merit
+
+	candidate_score = {
+		value = {
+			add = appointment_score_base
+			add = appointment_score_civic
+			add = appointment_score_celestial
+			add = appointment_score_governor
+			add = appointment_score_non_military
+			add = hanfan_appointment_score_civic
+			add = votc_celestial_lower_title_penalty
+		}
+	}
+}
+
+celestial_military_governor = {
+	allowed_candidate_tier = lower_or_equal
+	cooldown = yes
+	level = merit
+
+	candidate_score = {
+		value = {
+			add = appointment_score_base
+			add = appointment_score_military
+			add = appointment_score_celestial
+			add = appointment_score_governor
+			add = appointment_score_final_factors
+			add = hanfan_appointment_score_military
+			add = votc_celestial_lower_title_penalty
+		}
+	}
+}

@@ -1,0 +1,15 @@
+votc_celestial_lower_title_penalty = {
+	value = 0
+	if = {
+		limit = {
+			exists = scope:title
+			exists = liege
+			highest_held_title_tier >= tier_kingdom
+			highest_held_title_tier > scope:title.tier
+		}
+		subtract = {
+			value = 10000
+			desc = votc_celestial_lower_title_penalty_desc
+		}
+	}
+}

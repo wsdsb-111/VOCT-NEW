@@ -6,6 +6,8 @@ Voices of the Court 是一个面向《Crusader Kings III》（CK3）的沉浸式
 
 ## 主要功能
 
+V8.15 当前入口：[Memory4 召回与删除一致性实施报告](docs/v8.15-memory-recall-forget-implementation-report.md)。明确询问人物时，其在场与否不改变历史召回资格；删除摘要按 Owner 人物对投影持久遗忘，联动长期、年度、人生、披露、恢复与冻结记忆缓存，不误删同场其他人物对。部分迁移和超长 Legacy 摘要继续保留可验证历史。协议 3.0、存储 2.5、Prompt Block IDs 与 App 包 2.0.4 不变；发布回归与隔离窗口证据见报告，真实 CK3/Provider/Soak 仍待用户验收，不签发 Full Freeze。以下版本数字为历史阶段快照。
+
 V8.14.2 本轮最新入口：[收口修复报告](docs/v8.14.2-closeout-fix-implementation-report.md)。第三人直接对白可逐 Owner 披露当前头衔/特质；唯一昵称可绑定事实，旁白、转述和歧义仍拒绝。Fact Epoch 防止同头衔/特质消失后恢复时复活旧认知。完整发布 367/367、独立 GPT-6 Luna Max QA、隔离 UI 38 张截图通过；当前清单 436 分类文件、367 发布组、68 历史归档。App/Mod 按[外部运行依赖方案 B](docs/EXTERNAL_RUNTIME_DEPENDENCIES.md)独立发布，CK3/Provider/cache telemetry/Soak 仍交用户，不签发 Full Freeze。以下为前一阶段快照。
 
 V8.14.2 前次入口：[信件调度与记忆重试热修](docs/v8.14.2-letter-memory-retry-hotfix-report.md)。信件接受门禁、接受后双向摘要及逐 Owner Memory4 恢复已接通；模型整理联动重建长期、年度和人生记忆，手工版本保留，失败任务可重试且不重发信件。该阶段清单 432 分类文件、363 发布组、68 历史归档；游戏加载后日期回传修复证据见报告。

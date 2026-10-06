@@ -1,4 +1,4 @@
-version="1.0.1"
+version="1.0.2"
 tags={
 	"Fixes"
 	"Utilities"
@@ -6,7 +6,7 @@ tags={
 name="VOTC Three-Mod Character Name Compatibility"
 dependencies={
 	"Oriental Empires (All Under Heaven)"
-	"Eastern Ritual and Governance 1.99 (oe ver.0.5)"
+	"Eastern Ritual and Governance 1.99 (oe ver.0.55)"
 	"天家宗仪 V0.76"
 }
 supported_version="1.20.*"

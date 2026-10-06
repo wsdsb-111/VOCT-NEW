@@ -54,6 +54,7 @@ class Memory4DerivedService {
   sourceValid(scope, row, index, metadata) {
     if (!row || row.deleted || !ids(row.knownBy).includes(scope.ownerId)
       || !["private", "participants", "known_group"].includes(row.visibility)) return false;
+    if (this.store.isEntryForgotten(scope, row)) return false;
     const record = index.finalizations[hash(row.finalizationId)];
     const revision = metadata?.knownEvidenceRevisions?.[hash([row.conversationId, scope.ownerId])];
     if (!record || revision && revision !== record.sourceRevision
@@ -145,6 +146,42 @@ class Memory4DerivedService {
       derivedRevision: (metadata?.derivedRevision || 0) + (entryIds.length ? 1 : 0) };
   }
 
+  forgetEntries(scope, { forgottenEntryIds = [] } = {}) {
+    const forgotten = new Set(strings(forgottenEntryIds));
+    if (!forgotten.size) return 0;
+    let changedCount = 0;
+    const scrub = (kind, eventYear = null) => {
+      const view = this.read(scope, kind, eventYear);
+      if (!view) return;
+      const collection = kind === "year" ? view.items : view.segments;
+      let changed = false;
+      const retained = collection.flatMap(item => {
+        const sourceIds = strings(item.sourceEntryIds);
+        const ambiguous = !sourceIds.length && (view.sourceRevisionSet || []).some(stamp =>
+          forgotten.has(String(stamp).split("@")[0]));
+        if (ambiguous || sourceIds.some(id => forgotten.has(id))) { changed = true; return []; }
+        if (kind !== "life" || !Array.isArray(item.items)) return [item];
+        const items = item.items.filter(child => !strings(child.sourceEntryIds).some(id => forgotten.has(id)));
+        if (items.length === item.items.length) return [item];
+        changed = true;
+        if (!items.length) return [];
+        const nextIds = strings(items.flatMap(child => child.sourceEntryIds));
+        return [{ ...item, items, sourceEntryIds: nextIds, text: items.map(child => child.text).join("\n") }];
+      });
+      if (!changed) return;
+      const next = { ...view, revision: view.revision + 1, dirty: true,
+        ...(kind === "year" ? { items: retained, tokens: this.count(retained.map(item => item.text).join("\n")) } : { segments: retained }) };
+      this.baseStore.writeJson(this.file(scope, kind, eventYear), next);
+      changedCount++;
+    };
+    const yearsDir = path.dirname(this.file(scope, "year", 1));
+    if (fs.existsSync(yearsDir)) for (const name of fs.readdirSync(yearsDir).filter(value => /^[1-9]\d{0,3}\.json$/.test(value))) {
+      scrub("year", Number(name.slice(0, -5)));
+    }
+    scrub("life");
+    return changedCount;
+  }
+
   getPointers(scope, entityId, { currentGameDate = null, readContext = null } = {}) {
     const views = readContext?.derived || this.list(scope, { readContext });
     const index = readContext?.index || this.store.loadIndex(scope), current = serial(currentGameDate);
@@ -166,9 +203,10 @@ class Memory4DerivedService {
     const metadata = this.store.read(path.join(this.store.directory(scope), "metadata.json"), null);
     for (const id of sourceIds) {
       if (!index.entries[id]) { missingEntryIds.push(id); continue; }
+      if (!this.sourceValid(scope, index.entries[id], index, metadata)) { missingEntryIds.push(id); continue; }
       const entry = this.store.readEntry(scope, id, index);
       if (!ids(entry.evidence.knownBy).includes(scope.ownerId)) { missingEntryIds.push(id); continue; }
-      entries.push({ ...entry, sourceValid: this.sourceValid(scope, index.entries[id], index, metadata) });
+      entries.push({ ...entry, sourceValid: true });
     }
     const current = this.snapshot(scope, kind === "year" ? { eventYear } : {}, index);
     return { kind, eventYear, segmentId, sourceRevisionSet: [...view.sourceRevisionSet], currentRevisionSet: current.sourceRevisionSet,

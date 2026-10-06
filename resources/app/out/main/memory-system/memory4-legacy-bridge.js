@@ -20,7 +20,9 @@ function buildLegacyBridge(memories, scope) {
     temporalIndex: buildDualTemporalIndex(candidates, scope),
     coverage: candidates.map(memory => ({ summaryId: memory.memoryId, ownerId: scope.ownerId, campaignToken: scope.campaignToken,
       completeness: "partial", visibilityEvidence: "legacy visibility evidence", retained: true, forcedMigration: false,
-      perspectiveMemoryIds: [...(memory.provenance.perspectiveMemoryIds || [])], projectionHash: memory.provenance.projectionHash || null }))
+      perspectiveMemoryIds: [...(memory.provenance.perspectiveMemoryIds || [])], projectionHash: memory.provenance.projectionHash || null,
+      ...(Array.isArray(memory.provenance.projectionLineages) && memory.provenance.projectionLineages.length
+        ? { projectionLineages: memory.provenance.projectionLineages.map(lineage => ({ ...lineage })) } : {}) }))
   };
 }
 

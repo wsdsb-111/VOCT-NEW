@@ -1,5 +1,13 @@
 # 对话摘要与人物记忆：Memory Engine 4.0（3.0 协议、2.5 存储兼容）
 
+## V8.15 召回与删除一致性（2026-10-06）
+
+[实施报告](v8.15-memory-recall-forget-implementation-report.md)：明确查询人物时独立传递 `explicitTargetEntityIds`，不因其已在 `activeParticipantIds` 中而排除。搜索回应者自己的全部人物摘要，不读取目标的私人目录；Entity/Topic/Lexical 命中任一可建立候选，唯一完整姓名优先于相邻歧义称号。泛问不自动把所有在场者变成检索目标，Owner/Campaign/knownBy/未来日期门禁不放宽。
+
+摘要编辑/删除按稳定 `projectionId` 在 Campaign/Owner 的 `forgotten-projections.json` 持久记录，与现有多文件 mutation journal 一同提交或回滚；联动 Base、Canonical、Year/Life 正文、Disclosure、Recovery 和实际 Frozen Prefix。多人同 finalization 的各人物对分别遗忘，共享来源仍保留未删除人物对的真实证据；信件也以可信来源定位并阻止迟到归档复活。无法精确映射的相关旧证据拒绝修改，不整场猜测删除，也不宣称已成功。
+
+部分迁移、未知标题、缺失来源及过时哈希不 suppress 整篇 Legacy；超长摘要可召回相关中段，旧承诺仅证明历史，不单独证明当前有效。摘要 mutation 清理冻结记忆前缀，普通召回继续保持其稳定；当前消息、滚动摘要和角色快照不自动删除，冻结披露只撤销旧授权，不添加本场新知情。新增有限 ID/计数诊断，不增加完整正文日志。显示 4.0、协议 `engineVersion: 3.0`、摘要 2.5、目录、Prompt Block IDs 和 Cache Anchor 均保持兼容；实机 Gate 待用户。
+
 ## V8.14.2 收口修复（2026-10-05）
 
 [实施报告](v8.14.2-closeout-fix-implementation-report.md)：Assistant 第三人披露只采信安全直接对白；唯一昵称可绑定当前 Fact，但不授予真名。Owner/Campaign 的旁路 Fact Epoch 区分同头衔/特质连续存在与消失后再出现，旧 AUTO 与 MANUAL_KNOWN 不跨生命周期，MANUAL_HIDDEN 继续优先。旧无编号记录只在尚未观察到中断的首段兼容迁移；更早/同日冲突恢复快照不回退事实状态。显式刷新和冻结来源传递已接线，普通 getter/归档不写数据，新知情仍下一场生效。完整门禁 367/367、独立 QA、隔离 UI 38 张截图通过；协议 3.0、存储 2.5、Recent2、Recall 与 Cache Anchor 不变，真实 CK3/Provider/cache telemetry/Soak 待用户 Gate。

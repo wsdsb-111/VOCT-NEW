@@ -77,6 +77,11 @@ const archivedChecks = [
 ];
 
 const releaseChecks = [
+  { group: "v8.15-entity-recall", script: "test-v8.15-entity-recall.js" },
+  { group: "v8.15-durable-forget", script: "test-v8.15-durable-forget.js" },
+  { group: "v8.15-legacy-recall", script: "test-v8.15-legacy-recall.js" },
+  { group: "v8.15-memory-prefix-invalidation", script: "test-v8.15-memory-prefix-invalidation.js" },
+  { group: "v8.15-production-contract-qa", script: "test-v8.15-production-contract-qa.js" },
   { group: "v8.14-e-memory-ui", script: "test-v8.14-e-memory-ui.js" },
   { group: "v8.8.4-incident-regression", script: "test-v8.8.4-incident-regression.js" },
   { group: "v8.8.5-review-kinship", script: "test-v8.8.5-review-kinship.js" },

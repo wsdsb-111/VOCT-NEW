@@ -322,7 +322,8 @@ async function testRealMemory4CoordinatorAcceptsLetterSnapshots() {
     }
   });
   try {
-    const accepted = { ...context(), text: "赵祯把玉印交托给李师师。", reply: "李师师已收到玉印，回信赵祯。" };
+    const accepted = { ...context(), text: "我今年30岁。赵祯把玉印交托给李师师。", reply: "李师师已收到玉印，回信赵祯。",
+      participantProfiles: context().participantProfiles.map(person => ({ ...person, age: person.id === 1 ? 30 : 20 })) };
     const job = service.captureAccepted(accepted);
     const first = await service.finalize(job);
     assert.equal(first.status, "PARTIAL_FAILURE", JSON.stringify(first));
@@ -333,6 +334,7 @@ async function testRealMemory4CoordinatorAcceptsLetterSnapshots() {
     assert.equal(derivedCalls, 3, "derived rebuild retries without re-running durable extraction");
     assert.deepEqual(durableOwners.sort(), [1, 2], "a committed Canonical owner is not extracted again while Year/Life is repaired");
     const [sender, recipient] = accepted.participantProfiles;
+    const projectedFiles = new Map();
     for (const [owner, other] of [[sender, recipient], [recipient, sender]]) {
       const folder = path.join(summariesDir, memorySystem.getCharacterStorageDirectoryName(owner, owner.shortName));
       const summaryFile = path.join(folder, `与${memorySystem.getCharacterPersonalName(other, other.shortName)}的对话.json`);
@@ -343,6 +345,7 @@ async function testRealMemory4CoordinatorAcceptsLetterSnapshots() {
       assert.equal(projected.totalDays, accepted.acceptedTotalDays);
       assert.equal(projected.campaignToken, campaignToken);
       assert.deepEqual(projected.participants.map(person => person.id).sort(), [1, 2]);
+      projectedFiles.set(owner.id, { summaryFile, projected });
     }
     for (const ownerId of [1, 2]) {
       const scope = { campaignToken, ownerId };
@@ -371,6 +374,46 @@ async function testRealMemory4CoordinatorAcceptsLetterSnapshots() {
       assert.equal(derived.list(scope).years.length, 0,
         "unknown event time does not fabricate an annual-memory entry");
     }
+    const { summaryFile, projected } = projectedFiles.get(2);
+    const characters = new Map(accepted.participantProfiles.map(person => [person.id, person]));
+    memoryEngine.memory4.recordLetterDisclosures({ campaignToken, date: accepted.acceptedDate, ownerId: 2,
+      senderId: 1, recipientId: 2, letterId: accepted.letterId, text: accepted.text, characters });
+    const gameData = { campaignToken, date: accepted.acceptedDate, characters };
+    assert(memoryEngine.memory4.getCurrentDisclosures({ campaignToken, ownerId: 2 }, 1, gameData)
+      .some(fact => fact.factType === "AGE" && fact.effectiveKnown));
+    memoryEngine.store.withSummaryMutation(summaryFile, () => {
+      const forgotten = memoryEngine.forgetSummaryProjection(projected, { ownerId: 2, counterpartId: 1 });
+      assert.equal(forgotten.memory4EntriesForgotten, 1);
+      memoryEngine.store.writeJson(summaryFile, []);
+    });
+    const restarted = new MemoryEngine({ baseDir: path.join(root, "memory"), summaryFoldersDir: summariesDir,
+      trace: { record() {} } });
+    assert.equal(restarted.memory4.store.query({ campaignToken, ownerId: 2 }).length, 0);
+    assert.equal(restarted.memory4.store.query({ campaignToken, ownerId: 1 }).length, 1);
+    assert.equal(restarted.memory4.getCurrentDisclosures({ campaignToken, ownerId: 2 }, 1, gameData)
+      .some(fact => fact.factType === "AGE" && fact.effectiveKnown), false, "deleted letter revokes its recipient-only disclosure proof");
+    const letterMemory = restarted.store.listAllMemories().find(memory => memory.type === "letter");
+    assert.deepEqual(letterMemory.knownBy, [1], "deleted recipient summary also revokes the exact shared legacy letter memory");
+    const lateJob = service.readJob(job.jobId);
+    lateJob.owners[2].status = "PENDING";
+    lateJob.narrative.projectionStatus = "PENDING";
+    lateJob.narrative.legacyStatus = "PENDING";
+    service.writeJob(lateJob);
+    const RestartedGameData = createGameData({ fs, path, memorySystem, memoryEngine: restarted, summariesDir,
+      getHistoricalReferenceByYear: () => null });
+    const restartedService = new LetterMemoryFinalization({ memoryEngine: restarted,
+      requestSummary: service.requestSummary, requestDurable: service.requestDurable,
+      persistSummary: async (summary, summaryContext) => RestartedGameData.saveRecoveredSummary(summary, summaryContext),
+      isCampaignCurrent: token => token === campaignToken });
+    const resumed = await restartedService.finalize(job, { manual: true });
+    assert.equal(resumed.ownerStatuses.find(owner => owner.ownerId === 2).status, "FORGOTTEN");
+    assert.deepEqual(durableOwners.sort(), [1, 2], "forgotten letter projection is not re-extracted by a pending owner retry");
+    assert.deepEqual(JSON.parse(fs.readFileSync(summaryFile, "utf8")), [],
+      "a restarted pending projection write must not recreate the deleted recipient's visible summary");
+    assert.equal(JSON.parse(fs.readFileSync(projectedFiles.get(1).summaryFile, "utf8")).length, 1,
+      "the sender's retained visible summary is neither removed nor duplicated");
+    assert.deepEqual(restarted.store.getMemory(letterMemory.memoryId).knownBy, [1]);
+    assert.equal(restarted.memory4.store.query({ campaignToken, ownerId: 2 }).length, 0);
   } finally {
     await new Promise(resolve => setTimeout(resolve, 20));
     fs.rmSync(root, { recursive: true, force: true });

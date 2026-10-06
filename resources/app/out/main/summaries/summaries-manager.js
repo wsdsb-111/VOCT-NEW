@@ -324,17 +324,18 @@ function createSummariesManager({ fs, path, summariesDir, memoryEngine, memorySy
       this.assertCurrentLegacyBindingContext(context);
       const conversation = context.conversation;
       const state = memoryEngine.ensureConversationState(conversation);
-      const cache = state.responderRecallCache?.get(context.ownerId);
-      for (const recall of conversation.dynamicRecallHistory?.get(context.ownerId)?.values() || []) {
-        for (const key of recall.keys || []) cache?.seenDynamicSummaries?.delete(key);
-      }
+      state.responderRecallCache.delete(context.ownerId);
+      state.mentionedRecallCache.delete(context.ownerId);
+      state.turnRecallCache.clear();
       conversation.dynamicRecallHistory?.delete(context.ownerId);
-      if (cache) {
-        for (const key of ["dynamicTurn", "dynamicExtra", "memory4Packet", "memory4Focus", "pendingMemory4Focus", "temporalFocus", "pendingTemporalFocus"]) delete cache[key];
-        cache.folderSummaryRevision = memoryEngine.store.getFolderSummaryRevision(context.ownerId);
-      }
+      conversation.cacheV2FrozenSnapshots?.prefixByResponder?.delete(String(context.ownerId));
+      memoryEngine.pruneConversationDisclosures(conversation, context.ownerId);
       const character = context.gameData.characters.get(context.ownerId);
-      if (character) character.dynamicMemoryCache = null;
+      if (character) {
+        character.conversationSummaries = [];
+        character.conversationCache = new Map();
+        character.dynamicMemoryCache = null;
+      }
     }
 
     static async getMemory4OwnerData(request = {}) {
@@ -739,8 +740,9 @@ function createSummariesManager({ fs, path, summariesDir, memoryEngine, memorySy
         }
         const summaryRecord = summaries[summaryIndex];
         if (summaryRecord.sourceType === "CK3_OFFICIAL_RECOLLECTION" || summaryRecord.type === "official_recollection" || summaryRecord.subtype === "official_recollection") throw new Error("official_recollection_read_only");
+        let forgotten;
         memoryEngine.store.withSummaryMutation(filePath, () => {
-          if (summaryRecord.sourceType !== "CK3_OFFICIAL_RECOLLECTION") memoryEngine.forgetSummaryProjection(summaryRecord, {
+          if (summaryRecord.sourceType !== "CK3_OFFICIAL_RECOLLECTION") forgotten = memoryEngine.forgetSummaryProjection(summaryRecord, {
             ownerId: playerId,
             counterpartId: characterId,
             invalidateConversations: [getCurrentConversation()].filter(Boolean)
@@ -751,7 +753,9 @@ function createSummariesManager({ fs, path, summariesDir, memoryEngine, memorySy
         });
         memoryEngine.invalidateSummaryFolderCache([playerId]);
         this.refreshCurrentConversation();
-        return { success: true };
+        const diagnostics = { ...forgotten, visibleDeleted: 1 };
+        memoryEngine.trace.record("summary_delete_committed", diagnostics);
+        return { success: true, diagnostics };
       } catch (error) {
         console.error(`Failed to delete summary for character ${characterId} from player ${playerId}:`, error);
         return {
@@ -773,15 +777,18 @@ function createSummariesManager({ fs, path, summariesDir, memoryEngine, memorySy
       try {
         const summaries = JSON.parse(fs$1.readFileSync(filePath, "utf8"));
         if (Array.isArray(summaries) && summaries.some(summary => summary?.sourceType === "CK3_OFFICIAL_RECOLLECTION" || summary?.type === "official_recollection" || summary?.subtype === "official_recollection")) throw new Error("official_recollection_read_only");
+        let forgotten;
         memoryEngine.store.withSummaryMutation(filePath, () => {
-          if (summaries?.[0]?.sourceType !== "CK3_OFFICIAL_RECOLLECTION") memoryEngine.forgetOwnerConversation(playerId, characterId, Array.isArray(summaries) ? summaries : [], {
+          if (summaries?.[0]?.sourceType !== "CK3_OFFICIAL_RECOLLECTION") forgotten = memoryEngine.forgetOwnerConversation(playerId, characterId, Array.isArray(summaries) ? summaries : [], {
             invalidateConversations: [getCurrentConversation()].filter(Boolean)
           });
           fs$1.unlinkSync(filePath);
         });
         memoryEngine.invalidateSummaryFolderCache([playerId]);
         this.refreshCurrentConversation();
-        return { success: true };
+        const diagnostics = { ...forgotten, visibleDeleted: Array.isArray(summaries) ? summaries.length : 0 };
+        memoryEngine.trace.record("summary_delete_committed", diagnostics);
+        return { success: true, diagnostics };
       } catch (error) {
         console.error(`Failed to delete owner summary file at ${filePath}:`, error);
         return {

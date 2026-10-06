@@ -6,6 +6,7 @@ const { assertScope, hash, ids, strings, legacySourceHash, directCounterpartIds,
 const { projectVisibleTranscript } = require("./memory4-visibility");
 const { getFactCandidates, disclosureFactId, scanVisibleDisclosures, scanLetterDisclosures } = require("./memory4-disclosure");
 const { Memory4Store } = require("./memory4-store");
+const { projectionLineageFromSummary, createProjectionLineage } = require("./memory4-forget");
 const { Memory4ProfileService } = require("./memory4-profile");
 const { Memory4RelationshipReadback } = require("./memory4-relationship-readback");
 const { Memory4DerivedService } = require("./memory4-derived");
@@ -45,6 +46,10 @@ function disclosureCharacterMap(rows) {
 
 function disclosureCharacterHash(characters) {
   return hash([...characters.values()].sort((left, right) => left.id - right.id));
+}
+
+function safeMessageIds(values) {
+  return [...new Set((Array.isArray(values) ? values : []).filter(id => Number.isSafeInteger(id) && id >= 0))].sort((a, b) => a - b);
 }
 
 class Memory4Coordinator {
@@ -280,6 +285,53 @@ class Memory4Coordinator {
     return this.profiles.getProfile(scope, entityId, options);
   }
 
+  forgetSummaryProjection(summaryRecord, { ownerId = null, counterpartId = null, reason = "USER_DELETE_SUMMARY", legacyMemoryIds = [] } = {}) {
+    const lineage = projectionLineageFromSummary(summaryRecord, { ownerId, counterpartId, legacyMemoryIds });
+    if (!lineage) return { status: "SKIPPED", reason: "PROJECTION_LINEAGE_UNAVAILABLE", canonicalEntriesForgotten: 0,
+      derivedInvalidated: 0, disclosureEvidenceRevoked: 0, recoveryDeleted: 0, recoveryUpdated: 0 };
+    const scope = { campaignToken: lineage.campaignToken, ownerId: lineage.ownerId };
+    try { this.store.directory(scope); }
+    catch (error) {
+      if (error.message === "memory4_owner_folder_not_unique") return { status: "SKIPPED", reason: "OWNER_FOLDER_UNAVAILABLE",
+        projectionId: lineage.projectionId, canonicalEntriesForgotten: 0, derivedInvalidated: 0,
+        disclosureEvidenceRevoked: 0, recoveryDeleted: 0, recoveryUpdated: 0 };
+      throw error;
+    }
+    const mutate = () => {
+      this.store.persistForgottenProjection(scope, lineage, reason);
+      const canonical = this.store.forgetProjectionEntries(scope, lineage);
+      const disclosures = this.store.revokeProjectionDisclosures(scope, lineage);
+      let recoveryDeleted = 0, recoveryUpdated = 0;
+      if (fs.existsSync(this.recoveryDir)) for (const name of fs.readdirSync(this.recoveryDir).filter(value => /^[a-f0-9]{64}\.json$/.test(value))) {
+        const file = path.join(this.recoveryDir, name), record = this.readRecovery(file), snapshot = record.snapshot;
+        if (snapshot.campaignToken !== scope.campaignToken || snapshot.ownerId !== scope.ownerId) continue;
+        const result = this.store.filterForgottenSnapshot(snapshot);
+        if (!result.forgottenProjectionIds.length && !result.removedFragmentCount) {
+          if (lineage.finalizationId && snapshot.finalizationId === lineage.finalizationId
+            && ids(snapshot.counterpartIds).includes(lineage.counterpartId) && !(snapshot.projectionLineages || []).length) {
+            throw new Error("memory4_projection_recovery_unmapped");
+          }
+          continue;
+        }
+        if (result.snapshot.fragments.length === 0) {
+          this.baseStore.removeSummaryMutationFile(file);
+          recoveryDeleted++;
+        } else {
+          const { schemaVersion, snapshot: _oldSnapshot, updatedAt: _oldUpdatedAt, ...state } = record;
+          this.saveRecovery(result.snapshot, { ...state,
+            forgottenFragmentIds: strings([...(state.forgottenFragmentIds || []), ...(result.removedFragmentIds || [])]) });
+          recoveryUpdated++;
+        }
+      }
+      this.profiles.invalidate(scope);
+      return { status: "FORGOTTEN", projectionId: lineage.projectionId,
+        canonicalEntriesForgotten: canonical.canonicalEntriesForgotten,
+        derivedInvalidated: canonical.derivedInvalidated,
+        disclosureEvidenceRevoked: disclosures.disclosureEvidenceRevoked, recoveryDeleted, recoveryUpdated };
+    };
+    return this.baseStore.summaryMutation ? mutate() : this.baseStore.withSummaryMutation(null, mutate);
+  }
+
   getCurrentDisclosures(scope, entityId, gameData, { readContext = null, currentGameDate = null } = {}) {
     return this.store.getCurrentDisclosures(scope, Number(entityId), gameData, { readContext, currentGameDate });
   }
@@ -326,6 +378,8 @@ class Memory4Coordinator {
   }
 
   recordDisclosures(snapshot, { campaignToken = snapshot?.campaignToken, date = snapshot?.date, characters = snapshot?.disclosureCharacters } = {}) {
+    const filtered = snapshot ? this.store.filterForgottenSnapshot(snapshot) : null;
+    if (filtered && (filtered.forgottenProjectionIds.length || filtered.removedFragmentCount)) snapshot = filtered.snapshot;
     if (!Array.isArray(snapshot?.disclosureCharacters) || !snapshot.disclosureCharacters.length) {
       return { status: "SKIPPED", changed: false, count: 0, entityIds: [], skipped: "disclosure_characters_missing" };
     }
@@ -401,7 +455,10 @@ class Memory4Coordinator {
     assertScope(scope);
     scope = { campaignToken: scope.campaignToken, ownerId: scope.ownerId };
     const directory = this.store.directory(scope);
-    const context = { scope, index: this.store.loadIndex(scope),
+    const forgottenProjections = this.store.listForgottenProjections(scope);
+    const projectionForgetGeneration = this.store.projectionForgetGeneration(scope);
+    const context = { scope, forgottenProjections, projectionForgetGeneration,
+      index: this.store.loadIndex(scope, { forgottenProjections }),
       metadata: this.store.read(path.join(directory, "metadata.json"), null) || {},
       known: this.store.read(path.join(directory, "known-entities.json"), null) || { ...scope, entities: {} },
       snapshots: new Map(), rawYears: new Map() };
@@ -572,11 +629,43 @@ class Memory4Coordinator {
     const relationshipChangeEntityIds = ids((context.relationshipChanges || []).filter(change =>
       change.detected === true && change.campaignToken === context.campaignToken && change.ownerId === ownerId
       && visibleEntities.has(change.entityId)).map(change => change.entityId));
-    return { campaignToken: context.campaignToken, ownerId, conversationId: context.conversationId,
+    const projectionLineages = this.projectionLineagesForSnapshot(context, ownerId, projection.fragments);
+    const snapshot = { campaignToken: context.campaignToken, ownerId, conversationId: context.conversationId,
       finalizationId: context.finalizationId, episodeId: context.episodeId,
       date: context.date || null, totalDays: context.totalDays ?? null, counterpartIds: directCounterpartIds(projection.fragments, ownerId), summaryIds: [],
       summaryProviderSnapshot: context.summaryProviderSnapshot || null,
-      ...projection, disclosureCharacters, disclosureFactEpochs, relationshipChangeEntityIds, ...entityContext };
+      ...projection, projectionLineages, disclosureCharacters, disclosureFactEpochs, relationshipChangeEntityIds, ...entityContext };
+    return this.store.filterForgottenSnapshot(snapshot).snapshot;
+  }
+
+  projectionLineagesForSnapshot(context, ownerId, fragments) {
+    const rows = context.directedSummaries instanceof Map ? [...context.directedSummaries.entries()]
+      : Object.entries(context.directedSummaries || {});
+    const segments = new Map((context.verifiedSummarySegments || []).filter(segment => segment?.segmentId)
+      .map(segment => [String(segment.segmentId), segment]));
+    const lineages = [];
+    for (const [key, projection] of rows) {
+      const projectedOwner = Number(projection?.ownerId ?? String(key).split("->")[0]);
+      const counterpartId = Number(projection?.counterpartId ?? String(key).split("->")[1]);
+      if (projectedOwner !== ownerId || !Number.isSafeInteger(counterpartId) || counterpartId <= 0 || counterpartId === ownerId) continue;
+      const segmentIds = strings(projection.summarySegmentIds);
+      const sourceMessages = safeMessageIds(segmentIds.flatMap(id => {
+        const segment = segments.get(id);
+        return segment?.provenance?.messageIds || segment?.messageIds || [];
+      }));
+      const mappedFragments = fragments.filter(fragment => segmentIds.some(id =>
+        fragment.fragmentId === id || fragment.fragmentId === `segment_${id}` || fragment.segmentId === id)
+        || sourceMessages.some(id => (fragment.sourceMessageIds || [fragment.messageId]).includes(id))
+        || fragment.knownBy?.includes(ownerId) && fragment.knownBy?.includes(counterpartId)
+          && (fragment.recipientIds?.includes(counterpartId) || fragment.speakerId === counterpartId && fragment.recipientIds?.includes(ownerId)));
+      const mappedMessageIds = safeMessageIds([...sourceMessages, ...mappedFragments.flatMap(fragment => fragment.sourceMessageIds || [fragment.messageId])]);
+      lineages.push(createProjectionLineage({ campaignToken: context.campaignToken, ownerId,
+        conversationId: context.conversationId, finalizationId: context.finalizationId, counterpartId,
+        segmentIds, legacyMemoryIds: projection.memoryIds || [],
+        sourceSegmentIds: mappedFragments.map(fragment => fragment.fragmentId || fragment.segmentId),
+        sourceMessageIds: mappedMessageIds }));
+    }
+    return lineages;
   }
 
   orderFragments(snapshot, fragments) {
@@ -611,7 +700,8 @@ class Memory4Coordinator {
     return prompt;
   }
 
-  parseResult(response, allowedFragments, snapshot = null, maxEntries = MAX_DURABLE_ENTRIES_PER_OWNER, maxTransitions = MAX_DURABLE_ENTRIES_PER_OWNER) {
+  parseResult(response, allowedFragments, snapshot = null, maxEntries = MAX_DURABLE_ENTRIES_PER_OWNER,
+    maxTransitions = MAX_DURABLE_ENTRIES_PER_OWNER, forgottenFragmentIds = []) {
     const outcome = typeof response === "string" ? { content: response, complete: true, truncated: false }
       : validateGenerationOutcome(response);
     if (outcome.truncated || !outcome.complete) throw new Error("memory4_generation_incomplete");
@@ -625,8 +715,14 @@ class Memory4Coordinator {
     const transitions = parsed.commitmentTransitions || [];
     if (!Array.isArray(transitions) || transitions.length > maxTransitions) throw new Error("memory4_response_invalid_transitions");
     const allowed = new Set(allowedFragments.map(fragment => fragment.fragmentId));
-    if (parsed.entries.some(entry => !Array.isArray(entry.fragmentIds) || !entry.fragmentIds.length
-      || entry.fragmentIds.some(id => !allowed.has(id)))) throw new Error("memory4_response_source_mismatch");
+    const forgotten = new Set(strings(forgottenFragmentIds));
+    const validateLateSources = candidate => {
+      if (!Array.isArray(candidate?.fragmentIds) || !candidate.fragmentIds.length
+        || candidate.fragmentIds.some(id => typeof id !== "string" || !id
+          || !allowed.has(id) && !forgotten.has(id))) throw new Error("memory4_response_source_mismatch");
+      return !candidate.fragmentIds.some(id => forgotten.has(id));
+    };
+    parsed.entries = parsed.entries.filter(validateLateSources);
     const entries = [];
     const entryPositions = new Map();
     let rejectedUnknownEntityCount = 0;
@@ -639,22 +735,37 @@ class Memory4Coordinator {
         rejectedUnknownEntityCount++;
       }
     }
-    for (const transition of transitions) {
-      if (!Array.isArray(transition.fragmentIds) || !transition.fragmentIds.length || transition.fragmentIds.some(id => !allowed.has(id))) throw new Error("memory4_response_source_mismatch");
+    const retainedTransitions = transitions.filter(validateLateSources);
+    for (const transition of retainedTransitions) {
       if (transition.status === "superseded") {
         if (!entryPositions.has(transition.replacementEntryIndex)) throw new Error("memory4_commitment_replacement_invalid");
         transition.replacementEntryIndex = entryPositions.get(transition.replacementEntryIndex);
       }
     }
     return { ...parsed, status: entries.length ? "STORE" : "NO_DURABLE_CONTENT", entries,
-      commitmentTransitions: transitions, rejectedUnknownEntityCount };
+      commitmentTransitions: retainedTransitions, rejectedUnknownEntityCount };
   }
 
   async finishOwner(snapshot, requestDurable, prior = null, isCurrent = () => true) {
     const file = this.recoveryPath(snapshot);
     if (this.inFlight.has(file)) return { status: "IN_PROGRESS", ownerId: snapshot.ownerId };
     this.inFlight.add(file);
+    const forgottenFragmentIds = new Set(strings(prior?.forgottenFragmentIds));
     try {
+      const hadFragments = Array.isArray(snapshot.fragments) && snapshot.fragments.length > 0;
+      let sourceFilteredByForget = false;
+      const filtered = this.store.filterForgottenSnapshot(snapshot);
+      snapshot = filtered.snapshot;
+      if (filtered.forgottenProjectionIds.length || filtered.removedFragmentCount) {
+        (filtered.removedFragmentIds || []).forEach(id => forgottenFragmentIds.add(id));
+        sourceFilteredByForget = true;
+        const { schemaVersion: _schemaVersion, snapshot: _oldSnapshot, updatedAt: _updatedAt, ...priorState } = prior || {};
+        this.saveRecovery(snapshot, { ...priorState, forgottenFragmentIds: [...forgottenFragmentIds], status: "PENDING", lastError: null });
+      }
+      if (hadFragments && !snapshot.fragments.length && (filtered.forgottenProjectionIds.length || filtered.removedFragmentCount)) {
+        if (fs.existsSync(file)) this.baseStore.removeSummaryMutationFile(file);
+        return { ownerId: snapshot.ownerId, status: "FORGOTTEN", forgottenProjectionIds: filtered.forgottenProjectionIds };
+      }
       if (!isCurrent()) throw new Error("memory4_generation_changed");
       const committed = this.store.loadIndex(snapshot).finalizations[hash(snapshot.finalizationId)];
       if (committed) {
@@ -676,7 +787,7 @@ class Memory4Coordinator {
         return { ownerId: snapshot.ownerId, ...committed, alreadyCommitted: true };
       }
       snapshot.activeCommitments ||= this.store.activeCommitments(snapshot);
-      this.saveRecovery(snapshot, { status: "PENDING", retryCount: prior?.retryCount || 0, lastError: null });
+      this.saveRecovery(snapshot, { forgottenFragmentIds: [...forgottenFragmentIds], status: "PENDING", retryCount: prior?.retryCount || 0, lastError: null });
       if (!snapshot.skipKnownEvidence) this.store.recordKnownEvidence(snapshot);
       let result;
       if (!snapshot.presentMessageCount && !snapshot.fragments.length) result = { status: "NOT_PRESENT", entries: [] };
@@ -693,7 +804,15 @@ class Memory4Coordinator {
             const response = await requestDurable(this.buildPrompt(snapshot, chunk, remainingEntrySlots, remainingTransitionSlots), { ownerId: snapshot.ownerId,
               campaignToken: snapshot.campaignToken, maxTokens: DURABLE_MAX_OUTPUT_TOKENS, providerSnapshot: snapshot.summaryProviderSnapshot });
             if (!isCurrent()) throw new Error("memory4_generation_changed");
-            const parsed = this.parseResult(response, chunk, snapshot, remainingEntrySlots, remainingTransitionSlots);
+            const latest = this.store.filterForgottenSnapshot(snapshot);
+            if (latest.forgottenProjectionIds.length || latest.removedFragmentCount) {
+              (latest.removedFragmentIds || []).forEach(id => forgottenFragmentIds.add(id));
+              snapshot = latest.snapshot;
+              sourceFilteredByForget = true;
+            }
+            const allowedChunk = chunk.filter(fragment => snapshot.fragments.some(current => current.fragmentId === fragment.fragmentId));
+            const parsed = this.parseResult(response, allowedChunk, snapshot, remainingEntrySlots, remainingTransitionSlots,
+              [...forgottenFragmentIds]);
             return parsed;
           } catch (error) {
             if (!isCurrent()) throw new Error("memory4_generation_changed");
@@ -717,7 +836,8 @@ class Memory4Coordinator {
             ...(transition.status === "superseded" ? { replacementEntryIndex: transition.replacementEntryIndex + entries.length } : {}) })));
           entries.push(...parsed.entries);
           rejectedUnknownEntityCount += parsed.rejectedUnknownEntityCount;
-          this.saveRecovery(snapshot, { status: "PENDING", retryCount: prior?.retryCount || 0, lastError: null, completedFragmentCount: offset + chunk.length });
+          this.saveRecovery(snapshot, { forgottenFragmentIds: [...forgottenFragmentIds], status: "PENDING",
+            retryCount: prior?.retryCount || 0, lastError: null, completedFragmentCount: offset + chunk.length });
           if (entries.length >= MAX_DURABLE_ENTRIES_PER_OWNER && commitmentTransitions.length >= MAX_DURABLE_ENTRIES_PER_OWNER) break;
         }
         if (rejectedUnknownEntityCount) this.trace?.record("memory4_candidate_rejected", {
@@ -729,6 +849,25 @@ class Memory4Coordinator {
         result = { status: entries.length ? "STORE" : "NO_DURABLE_CONTENT", entries, commitmentTransitions };
       }
       if (!isCurrent()) throw new Error("memory4_generation_changed");
+      const latest = this.store.filterForgottenSnapshot(snapshot);
+      if (latest.forgottenProjectionIds.length || latest.removedFragmentCount) {
+        snapshot = latest.snapshot;
+        (latest.removedFragmentIds || []).forEach(id => forgottenFragmentIds.add(id));
+        sourceFilteredByForget = true;
+        if (snapshot.fragments.length === 0) {
+          if (fs.existsSync(file)) this.baseStore.removeSummaryMutationFile(file);
+          return { ownerId: snapshot.ownerId, status: "FORGOTTEN", forgottenProjectionIds: latest.forgottenProjectionIds };
+        }
+        const allowedFragments = new Set(snapshot.fragments.map(fragment => fragment.fragmentId));
+        result.entries = result.entries.filter(entry => entry.fragmentIds.every(id => allowedFragments.has(id)));
+        result.commitmentTransitions = (result.commitmentTransitions || []).filter(transition =>
+          transition.fragmentIds.every(id => allowedFragments.has(id)));
+        result.status = result.entries.length ? "STORE" : "NO_DURABLE_CONTENT";
+      }
+      if (sourceFilteredByForget && snapshot.fragments.length === 0) {
+        if (fs.existsSync(file)) this.baseStore.removeSummaryMutationFile(file);
+        return { ownerId: snapshot.ownerId, status: "FORGOTTEN" };
+      }
       const persisted = this.store.commitOwner(snapshot, result);
       this.recordDisclosures(snapshot, { campaignToken: snapshot.campaignToken, date: snapshot.date,
         characters: new Map((snapshot.disclosureCharacters || []).map(character => [character.id, character])) });
@@ -753,7 +892,8 @@ class Memory4Coordinator {
     } catch (error) {
       if (!isCurrent()) return { ownerId: snapshot.ownerId, status: "CANCELLED" };
       const retryCount = Number(prior?.retryCount || 0) + 1;
-      this.saveRecovery(snapshot, { status: "EXTRACTION_FAILED", retryCount, lastError: String(error?.message || error) });
+      this.saveRecovery(snapshot, { forgottenFragmentIds: [...forgottenFragmentIds], status: "EXTRACTION_FAILED",
+        retryCount, lastError: String(error?.message || error) });
       this.trace?.record("memory4_durable", { finalizationId: snapshot.finalizationId, ownerId: snapshot.ownerId,
         status: "EXTRACTION_FAILED", errorCode: String(error?.message || error) });
       return { ownerId: snapshot.ownerId, status: "EXTRACTION_FAILED", retryCount, error: String(error?.message || error), recoveryPath: file };

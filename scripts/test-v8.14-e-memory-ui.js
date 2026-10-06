@@ -48,11 +48,8 @@ const { hash } = require("../resources/app/out/main/memory-system/memory4-contra
     conversation.dynamicRecallHistory.set(2, new Map([[1, { keys: ["retained-dynamic"] }]]));
     conversation.dynamicRecallHistory.set(3, new Map([[1, { keys: ["other-key"] }]]));
     await manager.mutateMemory4({ ...request, operation: "updateDetail", entryId: id, text: "乙再次核对粮食运送约定。", expectedRevision: entry.revision });
-    assert.strictEqual(cache.direct, direct);
-    assert.strictEqual(cache.stable, stable);
-    assert.equal(cache.topicPatch[0].text, "frozen-topic");
-    assert(cache.mentionedSnapshots.has(1));
-    assert.equal(cache.seenDynamicSummaries.has("retained-dynamic"), false);
+    assert.equal(conversation.memoryState.responderRecallCache.has(2), false,
+      "V8.15 invalidates the affected owner's frozen and dynamic memory together");
     assert.equal(conversation.dynamicRecallHistory.has(2), false);
     assert.strictEqual(conversation.memoryState.responderRecallCache.get(3), otherCache);
     assert(conversation.dynamicRecallHistory.has(3));

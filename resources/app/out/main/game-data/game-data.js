@@ -5,6 +5,7 @@ const { createRelationshipResolver } = require("./relationship-resolver");
 const { resolveRelationshipCurrentTruth } = require("../worldline/relationship-current-truth");
 const { MEMORY_ENGINE_VERSION } = require("../version");
 const { buildOfficialRecollectionSummary } = require("../memory-system/official-recollection-provider");
+const { createProjectionLineage } = require("../memory-system/memory4-forget");
 
 function createGameData({ fs, path, memorySystem, memoryEngine, summariesDir, getHistoricalReferenceByYear }) {
   const fs$1 = fs;
@@ -842,6 +843,14 @@ function createGameData({ fs, path, memorySystem, memoryEngine, summariesDir, ge
         : options.directedSummaries?.[projectionKey];
       if (options.directedSummaries && !projection) throw new Error(`missing_directed_summary_projection:${projectionKey}`);
       const directedContent = projection?.content || finalSummary;
+      const projectionSegments = (options.verifiedSummarySegments || []).filter(segment =>
+        (projection?.summarySegmentIds || []).includes(segment.segmentId));
+      const sourceMessageIds = [...new Set(projectionSegments.flatMap(segment =>
+        segment.provenance?.messageIds || segment.messageIds || []))].filter(id => Number.isSafeInteger(id) && id >= 0);
+      const lineage = options.campaignToken && (options.conversationId || options.finalizationId || projection?.summarySegmentIds?.length)
+        ? createProjectionLineage({ campaignToken: options.campaignToken, ownerId: Number(owner.id),
+          conversationId: options.conversationId, finalizationId: options.finalizationId,
+          counterpartId: Number(other.id), segmentIds: projection?.summarySegmentIds || [] }) : null;
       const alreadySaved = summaries.some((summary) => options.finalizationId ? summary.finalizationId === options.finalizationId : summary.totalDays === this.totalDays && summary.content === directedContent && summary.playerId === owner.id && summary.characterId === other.id);
       if (!alreadySaved) {
         summaries.unshift({
@@ -859,10 +868,15 @@ function createGameData({ fs, path, memorySystem, memoryEngine, summariesDir, ge
           conversationType: participantMetadata.length > 2 ? "group" : "pair",
           participants: participantMetadata,
           finalizationId: options.finalizationId || null,
+          conversationId: options.conversationId || null,
+          projectionId: lineage?.projectionId || null,
+          ...(options.sourceLetterId ? { sourceLetterId: options.sourceLetterId } : {}),
           engineVersion: projection ? MEMORY_ENGINE_VERSION : "2.2",
           perspectiveOwnerId: projection?.ownerId ?? owner.id,
           perspectiveMemoryIds: projection?.memoryIds || [],
           perspectiveSummarySegmentIds: projection?.summarySegmentIds || [],
+          sourceMessageIds,
+          sourceSegmentIds: projectionSegments.map(segment => segment.segmentId),
           projectionHash: projection?.projectionHash || null,
           presenceJoins: Array.isArray(options.presenceJoins) ? options.presenceJoins : [],
           presenceLeaves: Array.isArray(options.presenceLeaves) ? options.presenceLeaves : [],

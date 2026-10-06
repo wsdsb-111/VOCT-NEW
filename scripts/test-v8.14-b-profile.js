@@ -6,6 +6,7 @@ const os = require("node:os");
 const path = require("node:path");
 const { Memory4ProfileService, detectRelationshipChange } = require("../resources/app/out/main/memory-system/memory4-profile");
 const { Memory4Coordinator } = require("../resources/app/out/main/memory-system/memory4-coordinator");
+const { snapshotForgottenFragments } = require("../resources/app/out/main/memory-system/memory4-forget");
 const { Memory4RelationshipReadback } = require("../resources/app/out/main/memory-system/memory4-relationship-readback");
 const { Conversation } = require("../resources/app/out/main/conversation/conversation");
 const { createLogParser } = require("../resources/app/out/main/game-data/log-parser");
@@ -156,6 +157,7 @@ check("Owner priority requires that Owner actually sees a related source fragmen
     relationshipChanges: [{ campaignToken: "campaign-A", ownerId: 2, entityId: 1, detected: true },
       { campaignToken: "campaign-A", ownerId: 3, entityId: 2, detected: true }] };
   const coordinator = Object.create(Memory4Coordinator.prototype);
+  coordinator.store = { filterForgottenSnapshot: snapshot => snapshotForgottenFragments(snapshot, []) };
   assert.deepEqual(coordinator.buildOwnerSnapshot(context, 2).relationshipChangeEntityIds, []);
   assert.deepEqual(coordinator.buildOwnerSnapshot(context, 3).relationshipChangeEntityIds, []);
   context.relationshipChanges[0].entityId = 2;

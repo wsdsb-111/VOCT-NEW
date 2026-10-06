@@ -128,14 +128,18 @@ async function drainJobs() {
 function management(sample) {
   const state = { responderRecallCache: new Map([[2, { stableText: "FROZEN_OWNER_2", directStableText: "FROZEN_DIRECT_2",
     seenDynamicSummaries: new Set(["old-owner-2"]), dynamicExtra: [], memory4Focus: {} }],
-  [3, { stableText: "FROZEN_OWNER_3", seenDynamicSummaries: new Set(["keep-owner-3"]), memory4Focus: {} }]]) };
+  [3, { stableText: "FROZEN_OWNER_3", seenDynamicSummaries: new Set(["keep-owner-3"]), memory4Focus: {} }]]),
+    mentionedRecallCache: new Map([[2, {}], [3, {}]]), turnRecallCache: new Map() };
   const conversation = { id: "qa-management", isActive: true, memoryState: state,
+    cacheV2FrozenSnapshots: { prefixByResponder: new Map([["2", { directMemory: "FROZEN_DIRECT_2" }],
+      ["3", { directMemory: "FROZEN_DIRECT_3" }]]) },
     dynamicRecallHistory: new Map([[2, new Map([[1, { keys: ["old-owner-2"] }]])], [3, new Map([[1, { keys: ["keep-owner-3"] }]])]]),
     gameData: { campaignToken: sample.scope.campaignToken, date: sample.options.currentGameDate, playerID: 1,
       characters: new Map([1, 2, 3, 4, ...Array.from({ length: 40 }, (_, index) => index + 99)]
         .map(id => [id, { id, shortName: `人物${id}` }])) } };
   const context = { current: conversation };
   const engine = { store: sample.base, memory4: sample.coordinator, memory4Recall: sample.planner,
+    pruneConversationDisclosures: MemoryEngine.prototype.pruneConversationDisclosures,
     ensureConversationState: () => state, invalidateConversationRecallState: () => {}, invalidateSummaryFolderCache: () => {} };
   const manager = createSummariesManager({ fs, path, summariesDir: sample.base.summaryFoldersDir, memoryEngine: engine,
     memorySystem: { buildSummaryCatalogEntry }, getCurrentConversation: () => context.current,
@@ -502,16 +506,18 @@ async function main() {
     context.current = null;
     await assert.rejects(manager.getMemory4Entry(request), /conversation_not_active/);
   });
-  await check("management: canonical mutation clears only its owner's dynamic history and preserves frozen text", async () => {
+  await check("management: canonical mutation clears its owner's frozen and dynamic memory, preserving other owners", async () => {
     const sample = fixture();
     const { entryId } = addEvent(sample);
     const { manager, conversation, state } = management(sample);
     const result = await manager.mutateMemory4({ ownerId: 2, expectedCampaignToken: sample.scope.campaignToken,
       operation: "updateDetail", entryId, expectedRevision: 1, text: "1164年手工修订。" });
     assert(result.success);
-    assert.equal(state.responderRecallCache.get(2).stableText, "FROZEN_OWNER_2");
-    assert.equal(state.responderRecallCache.get(2).directStableText, "FROZEN_DIRECT_2");
-    assert.equal(state.responderRecallCache.get(2).seenDynamicSummaries.has("old-owner-2"), false);
+    assert.equal(state.responderRecallCache.has(2), false);
+    assert.equal(state.mentionedRecallCache.has(2), false);
+    assert.equal(conversation.cacheV2FrozenSnapshots.prefixByResponder.has("2"), false);
+    assert.equal(conversation.cacheV2FrozenSnapshots.prefixByResponder.get("3").directMemory, "FROZEN_DIRECT_3");
+    assert(state.mentionedRecallCache.has(3));
     assert.equal(conversation.dynamicRecallHistory.has(2), false);
     assert(conversation.dynamicRecallHistory.has(3));
     assert(state.responderRecallCache.get(3).seenDynamicSummaries.has("keep-owner-3"));

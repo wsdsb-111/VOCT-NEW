@@ -712,7 +712,7 @@ class Conversation {
     }));
     const currentTurnMentionedEntityNames = Object.fromEntries(currentTurnMentionedCharacterIds.map((characterId) => [characterId, mentionedEntityNames[characterId] || []]));
     const memory3Settings = worldlineService?.getSettings?.() || {};
-    const queryEntityIds = memoryEngine.mentionTracker.findMentionedCharacterIds([{ role: "user", content: query }], {
+    const explicitTargetEntityIds = memoryEngine.mentionTracker.findMentionedCharacterIds([{ role: "user", content: query }], {
       candidates: [...mentionableProfiles.values()], excludedIds: [npc.id],
       recentCharacterId: memoryState.mentionState.recentThirdPersonCharacterId
     });
@@ -721,6 +721,7 @@ class Conversation {
       characterId: npc.id,
       query,
       mentionedEntityIds: memory3Settings.v812MemoryEngine3Enabled !== false ? currentTurnMentionedCharacterIds : mentionedCharacterIds,
+      activeParticipantIds,
       mentionedEntityNames,
       mentionedRecallCache: memoryState.mentionedRecallCache,
       sessionRecallCache: memoryState.responderRecallCache,
@@ -737,7 +738,7 @@ class Conversation {
       memory4RecallEnabled: true,
       gameData: this.gameData,
       entityProfiles: [...mentionableProfiles.values()],
-      queryEntityIds,
+      explicitTargetEntityIds,
       identityUnresolved: queryIdentityUnresolved,
       temporalSummaryRecallEnabled: memory3Settings.v812TemporalSummaryRecallEnabled !== false,
       officialSummary: this.gameData.getOfficialRecollectionSummary?.(npc.id, this.id) || null,
@@ -793,6 +794,7 @@ class Conversation {
       queryFingerprint: turnRecall.queryFingerprint,
       candidateCount: turnRecall.candidateCount,
       temporalDiagnostics: retrieved.temporalDiagnostics || null,
+      entityRecallDiagnostics: retrieved.entityRecallDiagnostics || null,
       turnEpoch: this.turnEpoch
     }, null);
     let worldContext = null;
@@ -1961,12 +1963,14 @@ class Conversation {
       persistCharacterFolders: async (finalSummary, context) => {
         return this.gameData.saveCharactersSummaries(finalSummary, participantIds, {
           finalizationId: context.finalizationId,
+          conversationId: context.conversationId,
           date: context.date,
           campaignToken: context.campaignToken || null,
           totalDays: context.totalDays,
           excludedOwnerIds: context.excludedSummaryOwnerIds,
           participantProfiles: context.participants,
           directedSummaries: context.directedSummaries,
+          verifiedSummarySegments: context.verifiedSummarySegments,
           presenceJoins: context.joinEvents || [],
           presenceLeaves: context.leaveEvents || []
         });
@@ -2002,12 +2006,14 @@ class Conversation {
         const participantIds = (context.participants || []).map((entry) => entry.id);
         return this.gameData.saveCharactersSummaries(finalSummary, participantIds, {
           finalizationId: context.finalizationId,
+          conversationId: context.conversationId,
           date: context.date,
           campaignToken: context.campaignToken || null,
           totalDays: context.totalDays,
           excludedOwnerIds: context.excludedSummaryOwnerIds,
           participantProfiles: context.participants,
           directedSummaries: context.directedSummaries,
+          verifiedSummarySegments: context.verifiedSummarySegments,
           presenceJoins: context.joinEvents || [],
           presenceLeaves: context.leaveEvents || []
         });

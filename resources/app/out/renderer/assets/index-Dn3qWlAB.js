@@ -1,6 +1,6 @@
 import { WorldMemoryEditor } from "../world-memory-editor.js";
 import { Memory4Manager } from "../memory4-manager.js";
-const VOTC_FEATURE_VERSION = "V8.14.2";
+const VOTC_FEATURE_VERSION = "V8.15";
 function getDefaultExportFromCjs(x) {
   return x && x.__esModule && Object.prototype.hasOwnProperty.call(x, "default") ? x["default"] : x;
 }

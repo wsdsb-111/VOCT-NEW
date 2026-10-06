@@ -67,9 +67,10 @@ async function main() {
     assert.equal(conversationAfter[2].campaignToken, "campaign-A");
     assert.equal(conversationAfter[3].campaignToken, "campaign-B", "other campaign is never overwritten");
     assert.deepEqual(conversationAfter[4], summary(2, 1, "1145.1.1", "官方追忆不迁移", { sourceType: "CK3_OFFICIAL_RECOLLECTION" }), "official recollection is preserved by bulk binding and automatic legacy migration");
-    assert.equal(conversationFixture.prefixByResponder.get(2), conversationFixture.frozenSnapshot, "bulk binding does not rewrite or replace the frozen prefix snapshot");
+    assert.equal(conversationFixture.prefixByResponder.has(2), false, "V8.15 summary mutations invalidate the old frozen memory prefix");
     assert.equal(conversationFixture.getRefreshedMemories().some(memory => memory.content === "待迁移内容一" && memory.provenance.campaignToken === "campaign-A"), true,
       "the current conversation refresh sees the newly bound summary");
+    conversationFixture.prefixByResponder.set(2, conversationFixture.frozenSnapshot);
     const recalled = conversationFixture.engine.retrieveForResponder({ characterId: 2, query: "你还记得二十三年前的事情吗？",
       directCounterpartIds: [1], querySpeakerId: 1, ownerFolderMemories: conversationFixture.getRefreshedMemories(),
       currentGameDate: "1170.6.1", campaignToken: "campaign-A", conversationId: "bulk-binding-test", sceneRevision: "scene", turnEpoch: 1,

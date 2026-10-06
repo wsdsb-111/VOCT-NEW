@@ -2,6 +2,10 @@
 
 这里是版本变更的单一入口。详细设计和测试证据保留在链接目标中，本文件只维护版本顺序、用户可见摘要和文档索引。
 
+V8.15 Memory4 召回与删除一致性（2026-10-06）：修复多人在场遮蔽显式人物历史召回；摘要删除接入持久遗忘，覆盖长期、年度、人生、披露、恢复和缓存，保留同场其他人物对的有效来源。部分迁移、超长 Legacy 与历史承诺仍可安全召回。验证与旧数据限制见[实施报告](docs/v8.15-memory-recall-forget-implementation-report.md)；真实 CK3/Provider/Soak 待用户 Gate。
+
+V8.14.2 天朝制任命兼容热修（2026-10-05）：Three-Mod 1.0.2 对已持有王国级及以上头衔的封臣竞争较低头衔额外扣 10000 分，接入文武总督两条任命链，保留其他继承规则；同步汉番依赖名 0.55。已部署本地 Mod，专项、独立 QA 和完整发布 367/367 通过；扣分不等于硬移除候选，CK3 实机仍待用户确认。详见[实施报告](docs/v8.14.2-celestial-succession-compatibility-hotfix-report.md)。
+
 V8.14.2 P0 第三人记忆召回修复（2026-10-05）：当前轮 NPC 发言提到 D 时，B/C 可召回各自保存、正文提到 D 的旧摘要；Memory4 合并玩家查询与 NPC 本轮提及实体，并用最长唯一姓名匹配避免短名误命中长名。Owner、Campaign、knownBy、歧义及未来日期门禁保持。专项 40 组与当前轮/代词 TTL 回归通过；完整发布门禁在首组被 Windows 沙箱原子重命名 EPERM 阻断。详见[实施报告](docs/v8.14.2-third-party-memory-recall-hotfix-report.md)。
 
 V8.14.2 修复4收口（2026-10-05）：动作型直接引语不再因缺少冒号/标准说话动词而误归给当前 fragment speaker；先按最长唯一角色姓名/昵称解析说话者，第三人、歧义、复合主语与随从归属 fail-closed，内心/转述/书写来源门禁保留。完整发布 367/367、独立复审与隔离 UI 38 张截图通过；CK3 L1-L4、Provider/缓存/Soak 仍交用户，不签发 Full Freeze。详见[修复4实施报告](docs/v8.14.2-fix4-implementation-report.md)。

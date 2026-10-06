@@ -5,10 +5,12 @@ const path = require("path");
 const { assertScope, hash, ids, strings, gameDate, sourceRevisionCurrent, validateEntry } = require("./memory4-contract");
 const { updateKnownEntities, evidenceCompleteness } = require("./memory4-visibility");
 const { getFactCandidates, disclosureFactId } = require("./memory4-disclosure");
+const { createProjectionLineage, projectionLineageFromSummary, matchesProjectionLineage, disclosureProofForgetMatch, entryForgotten, snapshotForgottenFragments, segmentAliases } = require("./memory4-forget");
 const { normalizeGameDate } = require("../worldline/character-temporal-facts");
 
 const INDEX_KEYS = ["byCampaign", "byOwner", "byEntity", "byTopic", "byEventYear", "byEventDate", "byConversationYear", "byAcquiredYear", "byCounterpart", "byMemoryType", "byState", "bySourceFinalization"];
 const DISCLOSURE_STATUSES = new Set(["AUTO_DISCLOSED", "MANUAL_KNOWN", "MANUAL_HIDDEN"]);
+const projectionForgetGenerations = new Map();
 const UNCERTAIN_COMMITMENT = /[?？]|如果|假如|要是|倘若|是否|能否|会不会|听说|据说|传闻|声称|心想|心里|内心|打算|计划|希望|准备|明天|明日|明年|今后|以后|将来|届时|将要|将会|即将|尚未|还未|还没|没有|并未|未能|没能|不能|无法|从未|不曾|并非|不属实|不是真的|请|命令|要求|(?:不|未|没)(?:曾|是|能|会|再|愿|代表|意味着|完成|履行|兑现|归还|交还|交付|取消|撤销|释放|替代|取代)|(?:将|会).{0,16}(?:完成|履行|兑现|归还|交还|交付|取消|撤销|废止|作废|替代|取代)|\b(?:if|suppose|hypothetical|will|would|might|may|plan|intend|hope|tomorrow|rumor|rumour|heard|not|never|please)\b|n['’]t/i;
 const COMMITMENT_CUE = /承诺|答应|许诺|保证|约定|\b(?:promise(?:s|d)?|pledge(?:s|d)?|agree(?:s|d)?|undertake|undertakes|undertook|undertaken|vow(?:s|ed)?)\b/gi;
 const COMMITMENT_CONDITION = /(?:但(?:是)?(?:须|必须|需)?|须|必须|前提(?:是)?|条件(?:是)?|只有|只要|倘若|若|如果|\bunless\b|\bprovided\b|\bon condition\b|\bonly if\b|\bif\b)\s*([^。.!！?？;；]+)/gi;
@@ -116,6 +118,7 @@ function effectiveDisclosure(record, asOf, ownerId, metadata, factState = null) 
 class Memory4Store {
   constructor(store) {
     this.store = store;
+    this.readContextForgetCache = new WeakMap();
   }
 
   directory(scope) {
@@ -145,8 +148,248 @@ class Memory4Store {
     catch { throw new Error("memory4_corrupt_json"); }
   }
 
-  loadIndex(scope) {
+  forgottenProjectionsPath(scope) {
+    return path.join(this.directory(scope), "forgotten-projections.json");
+  }
+
+  projectionForgetGeneration(scope) {
+    return projectionForgetGenerations.get(path.resolve(this.forgottenProjectionsPath(scope))) || 0;
+  }
+
+  forgottenProjectionsForRead(scope, readContext = null) {
+    if (!readContext) return this.listForgottenProjections(scope);
+    if (readContext.scope && (readContext.scope.campaignToken !== scope.campaignToken || readContext.scope.ownerId !== scope.ownerId)) {
+      throw new Error("memory4_profile_scope_mismatch");
+    }
+    const generation = this.projectionForgetGeneration(scope);
+    const cached = this.readContextForgetCache.get(readContext);
+    if (cached?.generation === generation) return cached.projections;
+    if (readContext.projectionForgetGeneration === generation && Array.isArray(readContext.forgottenProjections)) {
+      this.readContextForgetCache.set(readContext, { generation, projections: readContext.forgottenProjections });
+      return readContext.forgottenProjections;
+    }
+    const projections = this.listForgottenProjections(scope);
+    this.readContextForgetCache.set(readContext, { generation, projections });
+    return projections;
+  }
+
+  listForgottenProjections(scope) {
+    assertScope(scope);
+    const file = this.forgottenProjectionsPath(scope);
+    if (fs.existsSync(file) && fs.lstatSync(file).isSymbolicLink()) throw new Error("memory4_symlink_path");
+    const record = this.read(file, null);
+    if (!record) return [];
+    if (record.schemaVersion !== 1 || record.campaignToken !== scope.campaignToken || record.ownerId !== scope.ownerId
+      || !record.projections || typeof record.projections !== "object" || Array.isArray(record.projections)) {
+      throw new Error("memory4_forgotten_projections_invalid");
+    }
+    return Object.entries(record.projections).map(([projectionId, item]) => {
+      let lineage;
+      try { lineage = createProjectionLineage({ ...item, projectionId }); }
+      catch { throw new Error("memory4_forgotten_projections_invalid"); }
+      if (lineage.campaignToken !== scope.campaignToken || lineage.ownerId !== scope.ownerId
+        || typeof item.reason !== "string" || !item.reason || !Number.isFinite(Date.parse(item.forgottenAt || ""))) {
+        throw new Error("memory4_forgotten_projections_invalid");
+      }
+      return { ...lineage, reason: item.reason, forgottenAt: item.forgottenAt };
+    });
+  }
+
+  isProjectionLineageForgotten(scope, lineage, forgottenProjections = null) {
+    return (forgottenProjections || this.listForgottenProjections(scope)).some(target => matchesProjectionLineage(target, lineage));
+  }
+
+  isEntryForgotten(scope, entryOrRow, forgottenProjections = null) {
+    const targets = forgottenProjections || this.listForgottenProjections(scope);
+    return entryForgotten(scope, entryOrRow, targets);
+  }
+
+  isSnapshotForgotten(snapshot) {
+    const result = snapshotForgottenFragments(snapshot, this.listForgottenProjections(snapshot));
+    return result.removedFragmentCount > 0 || result.forgottenProjectionIds.length > 0;
+  }
+
+  filterForgottenSnapshot(snapshot) {
+    return snapshotForgottenFragments(snapshot, this.listForgottenProjections(snapshot));
+  }
+
+  persistForgottenProjection(scope, lineage, reason = "USER_DELETE_SUMMARY") {
+    assertScope(scope);
+    if (typeof reason !== "string" || !reason.trim()) throw new Error("memory4_forget_reason_invalid");
+    const normalized = createProjectionLineage(lineage);
+    if (normalized.campaignToken !== scope.campaignToken || normalized.ownerId !== scope.ownerId) {
+      throw new Error("memory4_projection_scope_mismatch");
+    }
+    const file = this.forgottenProjectionsPath(scope);
+    const existing = this.read(file, null);
+    const record = existing || { schemaVersion: 1, ...scope, projections: {} };
+    if (record.schemaVersion !== 1 || record.campaignToken !== scope.campaignToken || record.ownerId !== scope.ownerId
+      || !record.projections || typeof record.projections !== "object" || Array.isArray(record.projections)) {
+      throw new Error("memory4_forgotten_projections_invalid");
+    }
+    const previous = record.projections[normalized.projectionId];
+    if (previous) {
+      const stored = createProjectionLineage({ ...previous, projectionId: normalized.projectionId });
+      if (hash(stored) !== hash(normalized)) throw new Error("memory4_projection_id_conflict");
+      return { projectionId: normalized.projectionId, created: false };
+    }
+    record.projections[normalized.projectionId] = { ...normalized, forgottenAt: new Date().toISOString(), reason: reason.trim() };
+    this.store.writeJson(file, record);
+    const key = path.resolve(file);
+    projectionForgetGenerations.set(key, (projectionForgetGenerations.get(key) || 0) + 1);
+    return { projectionId: normalized.projectionId, created: true };
+  }
+
+  activeProjectionLineagesForProof(scope, proof, forgotten = this.listForgottenProjections(scope)) {
+    if (typeof this.store.loadFolderSummariesForCharacter !== "function") return [];
+    if (!Array.isArray(proof.sourceFragmentIds) || !Array.isArray(proof.sourceMessageIds)) {
+      throw new Error("memory4_disclosure_proof_invalid");
+    }
+    const fragments = strings(proof.sourceFragmentIds), messages = proof.sourceMessageIds;
+    const coversProof = lineage => fragments.length > 0 && fragments.every(id =>
+      (lineage.sourceSegmentIds || []).some(sourceId => segmentAliases([sourceId]).has(id) || segmentAliases([id]).has(sourceId)))
+      || messages.length > 0 && messages.every(id => (lineage.sourceMessageIds || []).includes(id));
+    const lineages = [];
+    for (const memory of this.store.loadFolderSummariesForCharacter(scope.ownerId) || []) {
+      if (memory.provenance?.campaignToken !== scope.campaignToken || memory.provenance?.folderOwnerId !== scope.ownerId) continue;
+      let candidates = Array.isArray(memory.provenance.projectionLineages) ? memory.provenance.projectionLineages : [];
+      if (!candidates.length) {
+        const candidate = projectionLineageFromSummary(memory, { ownerId: scope.ownerId,
+          counterpartId: memory.provenance.counterpartId });
+        if (candidate) candidates = [candidate];
+      }
+      for (const candidate of candidates) {
+        if (candidate.campaignToken !== scope.campaignToken || candidate.ownerId !== scope.ownerId
+          || !coversProof(candidate) || forgotten.some(target => matchesProjectionLineage(target, candidate))) continue;
+        lineages.push(createProjectionLineage(candidate));
+      }
+    }
+    return [...new Map(lineages.map(lineage => [lineage.projectionId, lineage])).values()];
+  }
+
+  projectionLineagesForEntry(snapshot, entry) {
+    const sourceSegments = entry.source.segmentIds || [];
+    const sourceMessages = entry.source.messageIds || [];
+    return (snapshot.projectionLineages || []).filter(lineage => {
+      if (lineage.campaignToken !== snapshot.campaignToken || lineage.ownerId !== snapshot.ownerId) return false;
+      if (lineage.sourceSegmentIds?.some(id => sourceSegments.includes(id))) return true;
+      return lineage.sourceMessageIds?.some(id => sourceMessages.includes(id)) === true;
+    }).map(lineage => createProjectionLineage(lineage));
+  }
+
+  forgetProjectionEntries(scope, target) {
+    const index = this.loadIndex(scope);
     const directory = this.directory(scope);
+    const metadata = this.read(path.join(directory, "metadata.json"), null);
+    if (!metadata) return { canonicalEntriesForgotten: 0, derivedInvalidated: 0 };
+    const forgotten = this.listForgottenProjections(scope);
+    const changedIds = [];
+    const deletedIds = [];
+    let canonicalEntriesForgotten = 0;
+    for (const [id, row] of Object.entries(index.entries)) {
+      if (row.deleted) continue;
+      const file = this.entryPath(directory, id), entry = this.read(file, null);
+      if (!entry || entry.entryId !== id || entry.ownerId !== scope.ownerId || entry.campaignToken !== scope.campaignToken
+        || hash(entry) !== row.bodyHash) throw new Error("memory4_index_body_mismatch");
+      const lineages = entry.source.projectionLineages || [];
+      const matching = lineages.filter(lineage => matchesProjectionLineage(target, lineage));
+      if (!lineages.length && target.finalizationId && row.finalizationId === target.finalizationId
+        && ids(row.counterpartIds).includes(target.counterpartId) && !entryForgotten(scope, entry, forgotten)) {
+        throw new Error("memory4_projection_canonical_unmapped");
+      }
+      if (!this.isEntryForgotten(scope, entry, forgotten)) {
+        if (!matching.length) continue;
+        const sourceSegments = entry.source.segmentIds || [];
+        const active = lineages.filter(lineage => !forgotten.some(item => matchesProjectionLineage(item, lineage))
+          && sourceSegments.length && sourceSegments.every(id => segmentAliases(lineage.sourceSegmentIds || []).has(id)));
+        if (!active.length) continue;
+        entry.source.projectionLineages = lineages.filter(lineage => !forgotten.some(item => matchesProjectionLineage(item, lineage)));
+        const revokedCounterparts = new Set(lineages.filter(lineage => forgotten.some(item => matchesProjectionLineage(item, lineage)))
+          .map(lineage => Number(lineage.counterpartId)));
+        entry.counterpartIds = entry.counterpartIds.filter(id => !revokedCounterparts.has(id));
+        entry.revision++;
+        entry.updatedAt = new Date().toISOString();
+        changedIds.push(id);
+        this.store.writeJson(file, entry);
+        index.entries[id] = this.indexRow(entry);
+        continue;
+      }
+      entry.deleted = true;
+      entry.revision++;
+      entry.updatedAt = new Date().toISOString();
+      changedIds.push(id);
+      deletedIds.push(id);
+      canonicalEntriesForgotten++;
+      this.store.writeJson(file, entry);
+      index.entries[id] = this.indexRow(entry);
+    }
+    if (!changedIds.length) return { canonicalEntriesForgotten, derivedInvalidated: 0 };
+    index.revision++;
+    this.reindex(index);
+    this.derived?.forgetEntries(scope, { forgottenEntryIds: deletedIds });
+    const derived = this.derived?.markDirty(scope, { index, metadata, entryIds: changedIds }) || {};
+    this.store.writeJson(path.join(directory, "metadata.json"), { ...metadata, revision: index.revision,
+      indexHash: hash(index), derivedDirty: true, ...derived, updatedAt: new Date().toISOString() });
+    this.store.writeJson(path.join(directory, "index.json"), index);
+    this.store.invalidateFolderSummaryCache([scope.ownerId]);
+    return { canonicalEntriesForgotten, derivedInvalidated: changedIds.length };
+  }
+
+  revokeProjectionDisclosures(scope, target) {
+    const index = this.loadIndex(scope), directory = this.directory(scope);
+    const metadata = this.read(path.join(directory, "metadata.json"), null);
+    const known = this.readKnownEntities(scope);
+    let disclosureEvidenceRevoked = 0, changed = false;
+    for (const entity of Object.values(known.entities)) {
+      const facts = entity.disclosedFacts || {};
+      let entityChanged = false;
+      for (const [factId, fact] of Object.entries(facts)) {
+        let factChanged = false;
+        for (const [key, proof] of Object.entries(fact.evidenceBySource || {})) {
+          let lineages = Array.isArray(proof.projectionLineages) ? proof.projectionLineages : [];
+          let inferredLineages = false;
+          if (!lineages.length) {
+            lineages = this.activeProjectionLineagesForProof(scope, proof);
+            if (lineages.length) { proof.projectionLineages = lineages; inferredLineages = true; }
+          }
+          if (lineages.length) {
+            const active = lineages.filter(lineage => !matchesProjectionLineage(target, lineage));
+            if (active.length === lineages.length && !inferredLineages) continue;
+            if (active.length < lineages.length) disclosureEvidenceRevoked++;
+            if (active.length) proof.projectionLineages = active;
+            else delete fact.evidenceBySource[key];
+            factChanged = true;
+          } else {
+            const match = disclosureProofForgetMatch(target, proof);
+            if (match == null) throw new Error("memory4_projection_disclosure_unmapped");
+            if (!match) continue;
+            delete fact.evidenceBySource[key];
+            disclosureEvidenceRevoked++;
+            factChanged = true;
+          }
+        }
+        if (!factChanged) continue;
+        entityChanged = true;
+        fact.revision = (Number(fact.revision) || 0) + 1;
+        if (fact.status === "AUTO_DISCLOSED" && !Object.keys(fact.evidenceBySource || {}).length) delete facts[factId];
+        changed = true;
+      }
+      if (entityChanged) {
+        if (Object.keys(facts).length) entity.disclosedFacts = facts;
+        else delete entity.disclosedFacts;
+        entity.revision = (Number(entity.revision) || 0) + 1;
+      }
+    }
+    if (changed) this.persistDisclosureState(scope, index, known, metadata || { ...scope, revision: index.revision,
+      indexHash: hash(index), knownEvidenceRevisions: {} });
+    return { disclosureEvidenceRevoked };
+  }
+
+  loadIndex(scope, { forgottenProjections = null } = {}) {
+    const directory = this.directory(scope);
+    if (forgottenProjections == null) this.listForgottenProjections(scope);
+    else if (!Array.isArray(forgottenProjections) || forgottenProjections.some(item =>
+      item.campaignToken !== scope.campaignToken || item.ownerId !== scope.ownerId)) throw new Error("memory4_forgotten_projections_invalid");
     const index = this.read(path.join(directory, "index.json"), null);
     if (!index) {
       if (fs.existsSync(path.join(directory, "metadata.json")) || fs.existsSync(path.join(directory, "entries"))) throw new Error("memory4_index_missing_rebuild_required");
@@ -438,6 +681,7 @@ class Memory4Store {
   commitOwner(snapshot, result) {
     assertScope(snapshot);
     if (!snapshot.finalizationId || !snapshot.conversationId || !snapshot.sourceRevision) throw new Error("memory4_source_identity_missing");
+    if (this.isSnapshotForgotten(snapshot)) throw new Error("memory4_projection_forgotten");
     if (!["STORE", "NO_DURABLE_CONTENT", "NOT_PRESENT"].includes(result?.status)) throw new Error("memory4_invalid_result_status");
     if (!Array.isArray(result.entries) || result.entries.length > 8 || (result.status === "STORE") !== (result.entries.length > 0)) throw new Error("memory4_invalid_result_entries");
     const hasSource = snapshot.presentMessageCount > 0 || snapshot.fragments.length > 0;
@@ -450,7 +694,12 @@ class Memory4Store {
       if (committed.sourceRevision !== snapshot.sourceRevision) throw new Error("memory4_source_revision_conflict");
       return { ...committed, alreadyCommitted: true };
     }
-    const entries = result.entries.map(candidate => validateEntry(candidate, snapshot));
+    const entries = result.entries.map(candidate => {
+      const entry = validateEntry(candidate, snapshot);
+      const projectionLineages = this.projectionLineagesForEntry(snapshot, entry);
+      if (projectionLineages.length) entry.source.projectionLineages = projectionLineages;
+      return entry;
+    });
     if (new Set(entries.map(entry => entry.entryId)).size !== entries.length) throw new Error("memory4_duplicate_fact");
     const directory = this.directory(snapshot);
     const metadata = this.read(path.join(directory, "metadata.json"), null);
@@ -492,7 +741,8 @@ class Memory4Store {
       memoryType: entry.memoryType, status: entry.state.status, finalizationId: entry.source.finalizationId,
       stateChangedGameDate: entry.state.changedGameDate || null, stateSource: entry.state.source || null,
       conversationId: entry.source.conversationId, legacyRefs: entry.source.legacyRefs || [],
-      legacyMemoryIds: entry.source.legacyMemoryIds || [],
+      legacyMemoryIds: entry.source.legacyMemoryIds || [], segmentIds: entry.source.segmentIds || [],
+      projectionLineages: entry.source.projectionLineages || [],
       knownBy: entry.evidence.knownBy, visibility: entry.evidence.visibility, importance: entry.importance,
       supportedByEntryIds: entry.state.supportedByEntryIds, supersedesEntryIds: entry.state.supersedesEntryIds,
       deleted: entry.deleted, bodyHash: hash(entry) };
@@ -641,6 +891,7 @@ class Memory4Store {
     const known = this.readKnownEntities(scope, readContext);
     const facts = known.entities[String(targetId)]?.disclosedFacts;
     if (facts && (typeof facts !== "object" || Array.isArray(facts))) throw new Error("memory4_disclosure_index_invalid");
+    const forgotten = this.forgottenProjectionsForRead(scope, readContext);
     return Object.entries(facts || {}).map(([factId, fact]) => {
       const proofs = Object.entries(fact?.evidenceBySource || {});
       if (!fact || !DISCLOSURE_STATUSES.has(fact.status) || !["TITLE", "TRAIT", "AGE"].includes(fact.factType)
@@ -675,6 +926,13 @@ class Memory4Store {
             || !proof.sourceConversationId || !Array.isArray(proof.sourceMessageIds) || !proof.sourceMessageIds.length
             || proof.sourceMessageIds.some(id => !Number.isSafeInteger(id) || id < 0)
             || proof.visibilityEvidence.some(value => !["application_fragment", "finalization_validated_segment", "finalization_source_paragraph"].includes(value)))
+          || proof.projectionLineages != null && (!Array.isArray(proof.projectionLineages)
+            || proof.projectionLineages.some(lineage => {
+              try {
+                const normalized = createProjectionLineage(lineage);
+                return normalized.campaignToken !== scope.campaignToken || normalized.ownerId !== scope.ownerId;
+              } catch { return true; }
+            }))
           || letter && (proof.sourceLetterId !== sourceId || proof.recipientId !== scope.ownerId
             || !Number.isSafeInteger(proof.senderId) || proof.senderId <= 0 || proof.senderId === scope.ownerId
             || !Array.isArray(proof.sourceMessageIds) || proof.sourceMessageIds.length !== 0
@@ -682,7 +940,23 @@ class Memory4Store {
           throw new Error("memory4_disclosure_proof_invalid");
         }
       }
-      return JSON.parse(JSON.stringify(fact));
+      const activeProofs = Object.fromEntries(proofs.filter(([, proof]) => {
+        const lineages = Array.isArray(proof.projectionLineages) && proof.projectionLineages.length
+          ? proof.projectionLineages : this.activeProjectionLineagesForProof(scope, proof, forgotten);
+        if (lineages.length) return lineages.some(lineage => !forgotten.some(target => matchesProjectionLineage(target, lineage)));
+        for (const target of forgotten) {
+          const match = disclosureProofForgetMatch(target, proof);
+          if (match == null) throw new Error("memory4_projection_disclosure_unmapped");
+          if (match) return false;
+        }
+        return true;
+      }).map(([key, proof]) => {
+        const candidates = Array.isArray(proof.projectionLineages) && proof.projectionLineages.length
+          ? proof.projectionLineages : this.activeProjectionLineagesForProof(scope, proof, forgotten);
+        const lineages = candidates.length ? candidates.filter(lineage => !forgotten.some(target => matchesProjectionLineage(target, lineage))) : null;
+        return [key, lineages ? { ...proof, projectionLineages: lineages } : proof];
+      }));
+      return { ...JSON.parse(JSON.stringify(fact)), evidenceBySource: activeProofs };
     });
   }
 
@@ -737,18 +1011,21 @@ class Memory4Store {
     known.revision = (Number.isSafeInteger(known.revision) ? known.revision : 0) + 1;
     const now = new Date().toISOString();
     const directory = this.directory(scope);
-    this.store.withSummaryMutation(null, () => {
+    const persist = () => {
       this.store.writeJson(path.join(directory, "known-entities.json"), known);
       this.store.writeJson(path.join(directory, "metadata.json"), { ...metadata, memory4SchemaVersion: 1,
         campaignToken: scope.campaignToken, ownerId: scope.ownerId, revision: index.revision, indexHash: hash(index),
         disclosureRevision: (Number(metadata.disclosureRevision) || 0) + 1, updatedAt: now });
       this.store.writeJson(path.join(directory, "index.json"), index);
-    });
+    };
+    if (this.store.summaryMutation) persist();
+    else this.store.withSummaryMutation(null, persist);
     this.store.invalidateFolderSummaryCache([scope.ownerId]);
   }
 
   recordDisclosures(snapshot, disclosures) {
     assertScope(snapshot);
+    if (this.isSnapshotForgotten(snapshot)) throw new Error("memory4_projection_forgotten");
     const sourceKind = snapshot.sourceKind || "CONVERSATION";
     if (!["LETTER", "CONVERSATION"].includes(sourceKind)) throw new Error("memory4_disclosure_source_invalid");
     const sourceId = sourceKind === "LETTER" ? snapshot.letterId : snapshot.finalizationId;
@@ -850,6 +1127,9 @@ class Memory4Store {
         sourceMessageIds: [...new Set(messageIds)].sort((a, b) => a - b),
         sourceFragmentIds: [...new Set(fragmentIds)].sort(), knownBy: [scope.ownerId], acquiredDate,
         visibilityEvidence: [...new Set(visibilityEvidence)].sort(), sourceTextHashes: [...new Set(sourceTextHashes)].sort(),
+        projectionLineages: (snapshot.projectionLineages || []).filter(lineage =>
+          lineage.sourceSegmentIds?.some(id => fragmentIds.includes(id))
+          || lineage.sourceMessageIds?.some(id => messageIds.includes(id))),
         ...(sourceKind === "LETTER" ? { senderId: snapshot.senderId, recipientId: snapshot.recipientId } : {}) };
       const entityKey = String(entityId);
       const entity = known.entities[entityKey] || { entityId, evidenceTypes: [], directConversationCount: 0, sharedSceneCount: 0,
@@ -921,6 +1201,7 @@ class Memory4Store {
 
   query(scope, filters = {}) {
     const index = this.loadIndex(scope);
+    const forgotten = this.listForgottenProjections(scope);
     let selected = new Set(index.byOwner[String(scope.ownerId)] || []);
     for (const [axis, value] of Object.entries(filters)) {
       if (!INDEX_KEYS.includes(axis)) throw new Error("memory4_invalid_index_axis");
@@ -942,8 +1223,9 @@ class Memory4Store {
       const entry = this.read(this.entryPath(directory, id), null);
       if (!entry || entry.entryId !== id || entry.ownerId !== scope.ownerId || entry.campaignToken !== scope.campaignToken
         || entry.deleted || hash(entry) !== index.entries[id]?.bodyHash) throw new Error("memory4_index_body_mismatch");
+      if (entryForgotten(scope, entry, forgotten)) return null;
       return entry;
-    });
+    }).filter(Boolean);
   }
 
   readEntry(scope, id, index = this.loadIndex(scope)) {
@@ -951,6 +1233,7 @@ class Memory4Store {
     const entry = this.read(this.entryPath(this.directory(scope), id), null);
     if (!row || !entry || entry.entryId !== id || entry.ownerId !== scope.ownerId || entry.campaignToken !== scope.campaignToken
       || entry.revision !== row.revision || entry.deleted !== row.deleted || hash(entry) !== row.bodyHash) throw new Error("memory4_index_body_mismatch");
+    if (entryForgotten(scope, entry, this.listForgottenProjections(scope))) throw new Error("memory4_projection_forgotten");
     return entry;
   }
 

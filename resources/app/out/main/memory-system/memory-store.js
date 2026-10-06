@@ -7,6 +7,8 @@ const { createMemoryRecord, uniqueIds } = require("./memory-types");
 const { CURRENT_MEMORY_SCHEMA_VERSION } = require("./memory-schema");
 const { MEMORY_ENGINE_VERSION } = require("../version");
 const { buildSummaryDateIndex, buildDualTemporalIndex, normalizePerspectiveTemporalRefs } = require("./summary-date-index");
+const { Memory4Store } = require("./memory4-store");
+const { projectionLineageFromSummary, matchesProjectionLineage } = require("./memory4-forget");
 
 function removeDirectoryTree(directory) {
   for (const entry of fs.readdirSync(directory, { withFileTypes: true })) {
@@ -784,6 +786,8 @@ class MemoryStore {
     const folders = fs.readdirSync(this.summaryFoldersDir, { withFileTypes: true })
       .filter((entry) => entry.isDirectory() && entry.name.startsWith(prefix));
     const sessions = new Map();
+    const forgetStore = new Memory4Store({ summaryFoldersDir: this.summaryFoldersDir });
+    const forgottenByCampaign = new Map();
     for (const folder of folders) {
       const folderPath = path.join(this.summaryFoldersDir, folder.name);
       const files = fs.readdirSync(folderPath).filter((name) => name.endsWith(".json"));
@@ -820,6 +824,19 @@ class MemoryStore {
           const counterpartId = playerId === ownerId && Number.isSafeInteger(summaryCharacterId) && summaryCharacterId > 0 && summaryCharacterId !== ownerId
             ? summaryCharacterId
             : summaryCharacterId === ownerId && Number.isSafeInteger(playerId) && playerId > 0 && playerId !== ownerId ? playerId : null;
+          let projectionLineage = null;
+          if (counterpartId && summary.campaignToken) {
+            try {
+              const lineageKey = `${ownerId}|${summary.campaignToken}`;
+              if (!forgottenByCampaign.has(lineageKey)) forgottenByCampaign.set(lineageKey,
+                forgetStore.listForgottenProjections({ campaignToken: summary.campaignToken, ownerId }));
+              projectionLineage = projectionLineageFromSummary(summary, { ownerId, counterpartId });
+              if (projectionLineage && forgottenByCampaign.get(lineageKey).some(target => matchesProjectionLineage(target, projectionLineage))) continue;
+            } catch {
+              loadDiagnostics.ownerRejectedCount++;
+              continue;
+            }
+          }
           const filenameMatch = file.match(/^与(.+)的对话\.json$/);
           const counterpartName = filenameMatch?.[1] || summary.characterName || null;
           const participantProfiles = Array.isArray(summary.participants) ? summary.participants : [];
@@ -855,6 +872,19 @@ class MemoryStore {
             existing.provenance.counterpartNames = [...new Set([...existing.provenance.counterpartNames, counterpartName].filter(Boolean))];
             existing.provenance.participantProfiles = mergeCharacterProfiles(existing.provenance.participantProfiles || [], summaryProfiles);
             existing.provenance.perspectiveMemoryIds = [...new Set([...existing.provenance.perspectiveMemoryIds, ...(summary.perspectiveMemoryIds || [])].map(String).filter(Boolean))];
+            existing.provenance.sourceSegmentIds = [...new Set([...(existing.provenance.sourceSegmentIds || []), ...(Array.isArray(summary.sourceSegmentIds) ? summary.sourceSegmentIds : [])].map(String).filter(Boolean))];
+            existing.provenance.sourceMessageIds = [...new Set([...(existing.provenance.sourceMessageIds || []), ...(Array.isArray(summary.sourceMessageIds) ? summary.sourceMessageIds : [])]
+              .filter(id => Number.isSafeInteger(id) && id >= 0))].sort((a, b) => a - b);
+            existing.provenance.sourceLetterId ||= summary.sourceLetterId || summary.letterId || null;
+            existing.provenance.projectionLineages = [...new Map([...(existing.provenance.projectionLineages || []),
+              ...(projectionLineage ? [projectionLineage] : [])].filter(item => item?.projectionId)
+              .map(item => [item.projectionId, item])).values()];
+            existing.provenance.projectionId ||= summary.projectionId || null;
+            existing.provenance.conversationId ||= summary.conversationId || null;
+            existing.provenance.finalizationId ||= summary.finalizationId || null;
+            existing.provenance.segmentIds = [...new Set([...existing.provenance.segmentIds, ...(summary.perspectiveSummarySegmentIds || [])].map(String).filter(Boolean))];
+            existing.provenance.perspectiveSummarySegmentIds = [...new Set([...existing.provenance.perspectiveSummarySegmentIds,
+              ...(summary.perspectiveSummarySegmentIds || [])].map(String).filter(Boolean))];
             existing.provenance.temporalRefs = normalizePerspectiveTemporalRefs([...existing.provenance.temporalRefs, ...temporalRefs], existing.provenance.perspectiveMemoryIds);
             continue;
           }
@@ -889,6 +919,15 @@ class MemoryStore {
             counterpartIds: counterpartId == null ? [] : [counterpartId],
               counterpartNames: [counterpartName],
               participantProfiles: summaryProfiles,
+              conversationId: summary.conversationId || null,
+              projectionId: summary.projectionId || null,
+              sourceSegmentIds: Array.isArray(summary.sourceSegmentIds) ? summary.sourceSegmentIds : [],
+              sourceMessageIds: [...new Set((Array.isArray(summary.sourceMessageIds) ? summary.sourceMessageIds : [])
+                .filter(id => Number.isSafeInteger(id) && id >= 0))].sort((a, b) => a - b),
+              sourceLetterId: summary.sourceLetterId || summary.letterId || null,
+              segmentIds: summary.perspectiveSummarySegmentIds || [],
+              perspectiveSummarySegmentIds: summary.perspectiveSummarySegmentIds || [],
+              projectionLineages: projectionLineage ? [projectionLineage] : [],
               extractionMode: ["2.5", MEMORY_ENGINE_VERSION].includes(summary.engineVersion) ? "folder_summary_v2_5" : summary.engineVersion === "2.4" ? "folder_summary_v2_4" : summary.engineVersion === "2.3" ? "folder_summary_v2_3" : "folder_summary_v2_1",
               perspectiveMemoryIds: summary.perspectiveMemoryIds || [],
               projectionHash: summary.projectionHash || null,

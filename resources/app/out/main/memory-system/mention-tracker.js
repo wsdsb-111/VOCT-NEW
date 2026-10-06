@@ -82,9 +82,6 @@ class MentionTracker {
     for (const message of history || []) {
       const content = typeof message?.content === "string" ? message.content : "";
       if (!content) continue;
-      for (const ambiguous of this.lastAmbiguousAliases) {
-        if (content.includes(ambiguous.name)) this.recordUnresolved(ambiguous.name, "ambiguous_alias", ambiguous.characterIds);
-      }
       const matches = [];
       for (const alias of aliases) {
         let start = content.indexOf(alias.name);
@@ -93,6 +90,17 @@ class MentionTracker {
             matches.push({ start, end: start + alias.name.length, ...alias });
           }
           start = content.indexOf(alias.name, start + alias.name.length);
+        }
+      }
+      for (const ambiguous of this.lastAmbiguousAliases) {
+        let start = content.indexOf(ambiguous.name);
+        while (start !== -1) {
+          const end = start + ambiguous.name.length;
+          if (!matches.some((match) => ambiguous.characterIds.includes(match.id)
+            && (start < match.end && end > match.start || end === match.start || match.end === start))) {
+            this.recordUnresolved(ambiguous.name, "ambiguous_alias", ambiguous.characterIds);
+          }
+          start = content.indexOf(ambiguous.name, start + ambiguous.name.length);
         }
       }
       matches.sort((left, right) => left.start - right.start || right.name.length - left.name.length);

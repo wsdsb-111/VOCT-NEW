@@ -44,12 +44,112 @@ function assertBalancedGuiBraces(source, fileName) {
 assertBalancedGuiBraces(gui, "oe_hud.gui");
 assertBalancedGuiBraces(traitGui, "00_votc_trait_tooltip.gui");
 
+// Parse the delivered scoring rules so fixtures exercise the Mod, not a JS copy.
+function parseRules(source) {
+  const plain = source.replace(/#[^\r\n]*/g, "");
+  const tokens = plain.match(/[A-Za-z_][\w:.]*|\d+|>=|>|=|[{}]/g) || [];
+  assert.equal(tokens.join(""), plain.replace(/\s/g, ""), "unsupported script syntax in scoring fixture");
+  let index = 0;
+  function block(nested = false) {
+    const entries = [];
+    while (index < tokens.length && tokens[index] !== "}") {
+      const key = tokens[index++];
+      const operator = tokens[index++];
+      assert(["=", ">", ">="].includes(operator), `unsupported operator: ${operator}`);
+      const token = tokens[index++];
+      entries.push({ key, operator, value: token === "{" ? block(true) : token });
+    }
+    if (nested) assert.equal(tokens[index++], "}", "missing block close");
+    return entries;
+  }
+  const result = block();
+  assert.equal(index, tokens.length, "unexpected trailing script");
+  return result;
+}
+
+function one(entries, key) {
+  const matches = entries.filter((entry) => entry.key === key);
+  assert.equal(matches.length, 1, `expected one ${key}`);
+  return matches[0].value;
+}
+
+const scoringPath = "common/script_values/votc_celestial_succession_values.txt";
+const scoringSource = fs.readFileSync(path.join(modRoot, scoringPath), "utf8");
+assertBalancedGuiBraces(scoringSource, scoringPath);
+const penalty = one(parseRules(scoringSource), "votc_celestial_lower_title_penalty");
+assert.deepEqual(penalty.map((entry) => entry.key), ["value", "if"]);
+const conditional = one(penalty, "if");
+assert.deepEqual(conditional.map((entry) => entry.key), ["limit", "subtract"]);
+const limits = one(conditional, "limit");
+assert.equal(limits.length, 4);
+assert.equal(one(one(conditional, "subtract"), "desc"), "votc_celestial_lower_title_penalty_desc");
+
+function evaluatePenalty({ held, target, vassal = true }) {
+  const applies = limits.every(({ key, operator, value }) => {
+    if (key === "exists") {
+      assert.equal(operator, "=");
+      assert(["scope:title", "liege"].includes(value));
+      return value === "scope:title" ? target !== undefined : vassal;
+    }
+    assert.equal(key, "highest_held_title_tier");
+    assert([">=", ">"].includes(operator));
+    assert(["tier_kingdom", "scope:title.tier"].includes(value));
+    const right = value === "tier_kingdom" ? 4 : target;
+    return operator === ">=" ? held >= right : held > right;
+  });
+  return Number(one(penalty, "value")) - (applies ? Number(one(one(conditional, "subtract"), "value")) : 0);
+}
+
+const rankCases = [
+  ["king to duchy", { held: 4, target: 3 }, -10000],
+  ["king to county", { held: 4, target: 2 }, -10000],
+  ["emperor to duchy", { held: 5, target: 3 }, -10000],
+  ["emperor to kingdom", { held: 5, target: 4 }, -10000],
+  ["hegemony to empire", { held: 6, target: 5 }, -10000],
+  ["same-rank king", { held: 4, target: 4 }, 0],
+  ["same-rank emperor", { held: 5, target: 5 }, 0],
+  ["king promotion", { held: 4, target: 5 }, 0],
+  ["duke promotion", { held: 3, target: 4 }, 0],
+  ["ordinary duke to county", { held: 3, target: 2 }, 0],
+  ["unlanded candidate", { held: 0, target: 3 }, 0],
+  ["independent king", { held: 4, target: 3, vassal: false }, 0],
+  ["missing appointment title", { held: 5 }, 0]
+];
+for (const [label, candidate, expected] of rankCases) assert.equal(evaluatePenalty(candidate), expected, label);
+
+const appointmentName = "zzzzz_votc_celestial_governor.txt";
+const appointmentSource = fs.readFileSync(path.join(modRoot, "common/succession_appointment", appointmentName), "utf8");
+assertBalancedGuiBraces(appointmentSource, appointmentName);
+const appointments = parseRules(appointmentSource);
+assert.deepEqual(appointments.map((entry) => entry.key), ["celestial_civic_governor", "celestial_military_governor"]);
+assert(appointmentName > "zzzz_celestial_governor.txt", "script override must sort after Hanfan's definition");
+for (const [type, retained] of [
+  ["civic", ["base", "civic", "celestial", "governor", "non_military"]],
+  ["military", ["base", "military", "celestial", "governor", "final_factors"]]
+]) {
+  const definition = one(appointments, `celestial_${type}_governor`);
+  assert.deepEqual(definition.map((entry) => entry.key), ["allowed_candidate_tier", "cooldown", "level", "candidate_score"]);
+  assert.equal(one(definition, "allowed_candidate_tier"), "lower_or_equal");
+  assert.equal(one(definition, "cooldown"), "yes");
+  assert.equal(one(definition, "level"), "merit");
+  const adds = one(one(definition, "candidate_score"), "value");
+  assert(adds.every((entry) => entry.key === "add" && entry.operator === "="));
+  assert.deepEqual(adds.map((entry) => entry.value), [
+    ...retained.map((suffix) => `appointment_score_${suffix}`),
+    `hanfan_appointment_score_${type}`,
+    "votc_celestial_lower_title_penalty"
+  ], "preserve upstream scoring and apply the fixed penalty after all existing factors");
+}
+const penaltyLoc = fs.readFileSync(path.join(modRoot, "localization/simp_chinese/votc_celestial_succession_l_simp_chinese.yml"), "utf8");
+assert(penaltyLoc.startsWith("\uFEFFl_simp_chinese:"), "CK3 localization must have UTF-8 BOM and language header");
+assert.match(penaltyLoc, /^\s+votc_celestial_lower_title_penalty_desc:0 "[^"\r\n]+"$/m);
+
 for (const descriptor of descriptors) {
-  assert.match(descriptor, /^version="1\.0\.1"$/m);
+  assert.match(descriptor, /^version="1\.0\.2"$/m);
   assert.match(descriptor, /^supported_version="1\.20\.\*"$/m);
   for (const dependency of [
     "Oriental Empires (All Under Heaven)",
-    "Eastern Ritual and Governance 1.99 (oe ver.0.5)",
+    "Eastern Ritual and Governance 1.99 (oe ver.0.55)",
     "天家宗仪 V0.76"
   ]) assert(descriptor.includes(`"${dependency}"`), `missing dependency: ${dependency}`);
 }
@@ -71,4 +171,4 @@ assert(!/has_trait\s*=|remove_trait|Trait\.GetTraits/.test(traitGui), "trait fix
 assert(Buffer.compare(Buffer.from(path.basename(traitGuiPath)), Buffer.from("cooltip.gui")) < 0,
   "FIOS requires the template override filename before cooltip.gui");
 
-console.log("Three-Mod Character Name Compatibility: PASS (1.20 descriptors, single calendar render path, Rite tooltip API, FIOS order)");
+console.log(`Three-Mod Character Name Compatibility: PASS (1.0.2 descriptors, calendar/trait UI, both celestial appointments, ${rankCases.length} rank fixtures)`);

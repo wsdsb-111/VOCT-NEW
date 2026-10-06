@@ -25,6 +25,7 @@ const { resolveTemporalFocus } = require("./fuzzy-temporal-resolver");
 const { extractTemporalAnchorsFromMessages, normalizeTemporalRefs } = require("./temporal-anchor-extractor");
 const { buildDualTemporalIndex, selectDualTemporalExtras } = require("./summary-date-index");
 const { Memory4Coordinator } = require("./memory4-coordinator");
+const { createProjectionLineage } = require("./memory4-forget");
 const { Memory4RecallPlanner, fitRecallPacket } = require("./memory4-recall-planner");
 const { validateVisibilityBoundaries, repairVisibilityBoundaries } = require("./finalization-visibility");
 
@@ -191,6 +192,27 @@ class MemoryEngine {
     this.store.invalidateFolderSummaryCache(characterIds);
   }
 
+  pruneConversationDisclosures(conversation, ownerId = null) {
+    const gameData = conversation?.gameData;
+    if (!gameData?.campaignToken || !this.memory4) return;
+    for (const [key, profiles] of conversation.disclosureProfilesByResponder || []) {
+      const id = Number(key.slice(gameData.campaignToken.length + 1));
+      if (!key.startsWith(`${gameData.campaignToken}:`) || ownerId !== null && id !== ownerId) continue;
+      const scope = { campaignToken: gameData.campaignToken, ownerId: id };
+      let readContext;
+      try { readContext = this.memory4.createProfileReadContext(scope); }
+      catch (_) { profiles.clear(); continue; }
+      for (const [entityId, frozenFacts] of profiles) {
+        let current = [];
+        try { current = this.memory4.getCurrentDisclosures(scope, entityId, gameData, { readContext }); }
+        catch (_) { /* Unverifiable disclosure evidence cannot remain known. */ }
+        // Revoke deleted evidence without granting disclosures acquired mid-scene.
+        profiles.set(entityId, frozenFacts.filter(fact => !fact.effectiveKnown || current.some(row =>
+          row.factId === fact.factId && row.factEpoch === fact.factEpoch && row.effectiveKnown)));
+      }
+    }
+  }
+
   invalidateConversationRecallState(conversation) {
     if (!conversation) return;
     const state = this.ensureConversationState(conversation);
@@ -199,6 +221,8 @@ class MemoryEngine {
     state.responderRecallCache = new Map();
     state.responderRecallCache.recallDiagnostics = state.recallDiagnostics;
     conversation.dynamicRecallHistory?.clear();
+    conversation.cacheV2FrozenSnapshots?.prefixByResponder?.clear();
+    this.pruneConversationDisclosures(conversation);
     state.turnRecallCache = new Map();
     state.mentionState = this.mentionTracker.createState();
     const gameData = conversation.gameData;
@@ -234,6 +258,23 @@ class MemoryEngine {
     })) throw new Error("SUMMARY_FINALIZATION_RECOVERY_PENDING");
     const episodes = finalizationId ? this.store.listAllEpisodes().filter(episode => String(episode.finalizationId || "") === finalizationId) : [];
     let memoryIds = summaryRecord?.perspectiveMemoryIds;
+    let sourceLetterId = summaryRecord?.sourceLetterId || null;
+    if (Array.isArray(memoryIds) && memoryIds.length === 0) {
+      const pairId = Number(counterpartId ?? summaryRecord?.characterId);
+      const letters = episodes.filter(episode => episode.letterId && episode.letterPayloadHash
+        && episode.campaignToken === summaryRecord.campaignToken && episode.sessionSummary === summaryRecord.content
+        && episode.date === summaryRecord.date
+        && uniqueIds((episode.participants || []).map(person => person.id)).sort((a, b) => a - b).join()
+          === uniqueIds([numericOwnerId, pairId]).sort((a, b) => a - b).join());
+      memoryIds = letters.flatMap(episode => (episode.memoryIds || []).filter(id => {
+        const memory = this.store.getMemory(id);
+        return memory?.provenance?.extractionMode === "letter_summary"
+          && memory.provenance.conversationId === episode.letterId && memory.provenance.campaignToken === episode.campaignToken
+          && memory.content === summaryRecord.content && memory.knownBy.includes(numericOwnerId)
+          && isMemoryRelevantToPair(memory, numericOwnerId, pairId);
+      }));
+      if (letters.length === 1) sourceLetterId = letters[0].letterId;
+    }
     if (!Array.isArray(memoryIds)) {
       const pairId = Number(counterpartId ?? summaryRecord?.characterId);
       if (!Number.isSafeInteger(pairId) || pairId <= 0 || pairId === numericOwnerId) {
@@ -255,7 +296,7 @@ class MemoryEngine {
         throw new Error("LEGACY_SUMMARY_MEMORY_MAPPING_INCOMPLETE");
       }
     }
-    return { numericOwnerId, finalizationId, episodes, memoryIds: [...new Set(memoryIds.map(String).filter(Boolean))] };
+    return { numericOwnerId, finalizationId, episodes, sourceLetterId, memoryIds: [...new Set(memoryIds.map(String).filter(Boolean))] };
   }
 
   updateSummaryProjection(summaryRecord, editedText, { ownerId = null, counterpartId = null, invalidateConversations = [], summaryPath = null, persistSummary = null } = {}) {
@@ -264,7 +305,8 @@ class MemoryEngine {
     const numericCounterpartId = Number(counterpartId ?? summaryRecord.characterId);
     if (!Number.isSafeInteger(numericCounterpartId) || numericCounterpartId <= 0) throw new Error("summary_counterpart_id_required");
     return this.store.withSummaryMutation(summaryPath, () => {
-      this.forgetSummaryProjection({ ...summaryRecord, perspectiveMemoryIds: mapping.memoryIds }, { ownerId: mapping.numericOwnerId, counterpartId: numericCounterpartId });
+      this.forgetSummaryProjection({ ...summaryRecord, perspectiveMemoryIds: mapping.memoryIds }, {
+        ownerId: mapping.numericOwnerId, counterpartId: numericCounterpartId, reason: "SUMMARY_EDIT" });
       const finalizationId = mapping.finalizationId || createMemoryId("summary_edit");
       const segmentId = createMemoryId("summary_edit_segment");
       const temporalRefs = normalizeTemporalRefs((summaryRecord.temporalRefs || []).map(ref => ({ ...ref, segmentIds: [segmentId], sourceMemoryIds: [] })));
@@ -278,7 +320,14 @@ class MemoryEngine {
       this.store.markKnownBy(mapping.numericOwnerId, memory.memoryId, { awareness: "imported", acquiredAt: memory.totalDays });
       const episode = mapping.episodes[0] ? this.store.listAllEpisodes().find(item => item.episodeId === mapping.episodes[0].episodeId) : { episodeId: createMemoryId("summary_edit_episode"), finalizationId, memoryIds: [], summarySegments: [] };
       this.store.saveEpisode({ ...episode, memoryIds: [...(episode.memoryIds || []), memory.memoryId], summarySegments: [...(episode.summarySegments || []), { segmentId, content: editedText, knownBy: [mapping.numericOwnerId], participants: memory.participants, visibility: "known_group", temporalRefs }] });
-      const updatedRecord = { ...summaryRecord, content: editedText, finalizationId, perspectiveOwnerId: mapping.numericOwnerId, perspectiveMemoryIds: [memory.memoryId], perspectiveSummarySegmentIds: [segmentId], temporalRefs, projectionHash: crypto.createHash("sha256").update(JSON.stringify([mapping.numericOwnerId, numericCounterpartId, editedText, memory.memoryId])).digest("hex") };
+      const updatedRecord = { ...summaryRecord, content: editedText, finalizationId, perspectiveOwnerId: mapping.numericOwnerId, perspectiveMemoryIds: [memory.memoryId], perspectiveSummarySegmentIds: [segmentId], sourceMessageIds: [], sourceSegmentIds: [segmentId], sourceLetterId: null, temporalRefs, projectionHash: crypto.createHash("sha256").update(JSON.stringify([mapping.numericOwnerId, numericCounterpartId, editedText, memory.memoryId])).digest("hex") };
+      updatedRecord.projectionId = updatedRecord.campaignToken ? createProjectionLineage({
+        campaignToken: updatedRecord.campaignToken, ownerId: mapping.numericOwnerId,
+        counterpartId: numericCounterpartId, conversationId: updatedRecord.conversationId,
+        finalizationId, segmentIds: [segmentId] }).projectionId : null;
+      this.store.updateMemory(memory.memoryId, { provenance: { ...memory.provenance,
+        projectionId: updatedRecord.projectionId, conversationId: updatedRecord.conversationId || null,
+        segmentIds: [segmentId], perspectiveSummarySegmentIds: [segmentId] } });
       if (persistSummary) persistSummary(updatedRecord);
       this.refreshCharacterConsolidation(mapping.numericOwnerId);
       this.invalidateSummaryFolderCache([mapping.numericOwnerId]);
@@ -288,8 +337,8 @@ class MemoryEngine {
     });
   }
 
-  forgetSummaryProjection(summaryRecord, { ownerId = null, counterpartId = null, invalidateConversations = [] } = {}) {
-    const { numericOwnerId, memoryIds } = this.resolveSummaryProjection(summaryRecord, ownerId, counterpartId);
+  forgetSummaryProjection(summaryRecord, { ownerId = null, counterpartId = null, invalidateConversations = [], reason = "USER_DELETE_SUMMARY" } = {}) {
+    const { numericOwnerId, memoryIds, sourceLetterId } = this.resolveSummaryProjection(summaryRecord, ownerId, counterpartId);
     const segmentIds = new Set((summaryRecord?.perspectiveSummarySegmentIds || []).map(String).filter(Boolean));
     const finalizationId = summaryRecord?.finalizationId ? String(summaryRecord.finalizationId) : null;
     const pairId = Number(counterpartId ?? summaryRecord?.characterId);
@@ -306,6 +355,20 @@ class MemoryEngine {
         if (ids.length ? isMemoryRelevantToPair(segment, numericOwnerId, pairId) : knownBy.includes(pairId)) pairSegments.add(segment);
       }
     }
+    const legacyMemoryIds = this.store.loadFolderSummariesForCharacter(numericOwnerId).filter(memory =>
+      memory.content === summaryRecord.content && memory.eventDate === (summaryRecord.date || null)
+      && memory.provenance?.campaignToken === (summaryRecord.campaignToken || null)
+      && memory.provenance?.finalizationId === finalizationId
+      && uniqueIds([memory.provenance?.counterpartId, ...(memory.provenance?.counterpartIds || [])]).includes(pairId))
+      .map(memory => memory.memoryId);
+    const sourceSegments = episodes.flatMap(episode => episode.summarySegments || []).filter(segment =>
+      segmentIds.has(String(segment.segmentId || "")) || pairSegments.has(segment));
+    const sourceMessageIds = [...new Set([...(summaryRecord.sourceMessageIds || []),
+      ...sourceSegments.flatMap(segment => segment.provenance?.messageIds || segment.messageIds || [])])]
+      .filter(id => Number.isSafeInteger(id) && id >= 0);
+    const durable = this.memory4?.forgetSummaryProjection({ ...summaryRecord, sourceMessageIds, sourceLetterId }, {
+      ownerId: numericOwnerId, counterpartId: pairId, legacyMemoryIds: [...memoryIds, ...legacyMemoryIds], reason
+    }) || { status: "SKIPPED" };
     let revokedMemoryCount = 0;
     let deletedMemoryCount = 0;
     for (const memoryId of memoryIds) {
@@ -343,10 +406,17 @@ class MemoryEngine {
       ownerId: numericOwnerId,
       counterpartId: Number.isFinite(Number(counterpartId)) ? Number(counterpartId) : null,
       finalizationId,
+      projectionId: durable.projectionId || null,
+      baseMemoryDeleted: deletedMemoryCount,
+      memory4EntriesForgotten: durable.canonicalEntriesForgotten || 0,
+      derivedInvalidated: durable.derivedInvalidated || 0,
+      disclosureEvidenceRevoked: durable.disclosureEvidenceRevoked || 0,
+      recoveryDeleted: durable.recoveryDeleted || 0,
       revokedMemoryCount,
       deletedMemoryCount
     });
-    return { success: true, revokedMemoryCount, deletedMemoryCount };
+    return { success: true, revokedMemoryCount, deletedMemoryCount, ...durable,
+      baseMemoryDeleted: deletedMemoryCount, memory4EntriesForgotten: durable.canonicalEntriesForgotten || 0 };
   }
 
   compactEpisodeReferences() {
@@ -380,7 +450,13 @@ class MemoryEngine {
       success: true,
       summaryCount: results.length,
       revokedMemoryCount: results.reduce((total, result) => total + result.revokedMemoryCount, 0),
-      deletedMemoryCount: results.reduce((total, result) => total + result.deletedMemoryCount, 0)
+      deletedMemoryCount: results.reduce((total, result) => total + result.deletedMemoryCount, 0),
+      projections: results.map(result => result.projectionId).filter(Boolean),
+      baseMemoryDeleted: results.reduce((total, result) => total + result.baseMemoryDeleted, 0),
+      memory4EntriesForgotten: results.reduce((total, result) => total + result.memory4EntriesForgotten, 0),
+      derivedInvalidated: results.reduce((total, result) => total + (result.derivedInvalidated || 0), 0),
+      disclosureEvidenceRevoked: results.reduce((total, result) => total + (result.disclosureEvidenceRevoked || 0), 0),
+      recoveryDeleted: results.reduce((total, result) => total + (result.recoveryDeleted || 0), 0)
     };
   }
 
@@ -1181,7 +1257,7 @@ class MemoryEngine {
         }
         throw new Error(`projection_narrative_coverage_missing:${coverage.invalidPairs.map((pair) => `${pair.ownerId}->${pair.counterpartId}`).join(",")}`);
       }
-      const folderPersistence = await this.persistCharacterFolders(context, extraction.sessionSummary || content, directedSummaries);
+      const folderPersistence = await this.persistCharacterFolders({ ...context, verifiedSummarySegments: extraction.summarySegments }, extraction.sessionSummary || content, directedSummaries);
       if (!this.isFinalizationCurrent(context)) return this.cancelledFinalizationResult(context);
       this.commitFinalization(context, extraction);
       this.trace.record("summary_persist", { conversationId: context.conversationId, finalizationId: context.finalizationId, success: true, durationMs: Date.now() - persistStartedAt, memoryCount: extraction.memories.length });
@@ -1220,6 +1296,7 @@ class MemoryEngine {
       try {
         const committed = this.isCommitted(prepared);
         const durable = await this.memory4.finalizeCommitted({ ...prepared,
+          directedSummaries: narrative.directedSummaries,
           verifiedSummarySegments: committed?.visibilityValidationVersion === 1 ? committed.summarySegments : [] }, prepared.requestDurable, {
           isNarrativeCommitted: this.isMemory4NarrativeCommitted(prepared), isCurrent: () => this.isFinalizationCurrent(prepared)
         });
@@ -1427,6 +1504,7 @@ class MemoryEngine {
       if (this.memory4 && typeof requestDurable === "function") {
         const committed = this.isCommitted(context);
         durable = await this.memory4.finalizeCommitted({ ...context,
+          directedSummaries: result.directedSummaries,
           verifiedSummarySegments: committed?.visibilityValidationVersion === 1 ? committed.summarySegments : [] }, requestDurable, {
           isNarrativeCommitted: this.isMemory4NarrativeCommitted(context), isCurrent: () => this.isFinalizationCurrent(context)
         }).catch(error => ({ status: "EXTRACTION_FAILED", error: error.message }));
@@ -1594,7 +1672,7 @@ class MemoryEngine {
     return selected;
   }
 
-  retrieveForResponder({ characterId, query = "", directCounterpartIds = [], querySpeakerId = null, mentionedEntityIds = [], mentionedEntityNames = {}, entityProfiles = null, mentionedRecallCache = null, sessionRecallCache = null, ownerFolderMemories = null, officialSummary = null, turnEpoch = 0, currentGameDate = null, currentTotalDays = null, campaignToken = null, conversationId = null, sceneRevision = null, memoryEngine3Enabled = true, memory4RecallEnabled = false, gameData = null, identityUnresolved = false, queryEntityIds = null, temporalSummaryRecallEnabled = true, tokenBudget = 800, estimateTokens } = {}) {
+  retrieveForResponder({ characterId, query = "", directCounterpartIds = [], activeParticipantIds = [], querySpeakerId = null, mentionedEntityIds = [], mentionedEntityNames = {}, entityProfiles = null, mentionedRecallCache = null, sessionRecallCache = null, ownerFolderMemories = null, officialSummary = null, turnEpoch = 0, currentGameDate = null, currentTotalDays = null, campaignToken = null, conversationId = null, sceneRevision = null, memoryEngine3Enabled = true, memory4RecallEnabled = false, gameData = null, identityUnresolved = false, explicitTargetEntityIds = null, queryEntityIds = null, temporalSummaryRecallEnabled = true, tokenBudget = 800, estimateTokens } = {}) {
     const startedAt = Date.now();
     const ownerId = Number(characterId);
     const ownerValid = isValidCharacterId(ownerId);
@@ -1622,8 +1700,13 @@ class MemoryEngine {
     }
     const directIds = ownerValid ? uniqueIds(directCounterpartIds).filter((id) => isValidCharacterId(id) && id !== ownerId) : [];
     const mentionedIds = ownerValid ? uniqueIds(mentionedEntityIds).filter((id) => isValidCharacterId(id) && id !== ownerId && !directIds.includes(id)) : [];
+    const explicitTargetIds = ownerValid ? uniqueIds(explicitTargetEntityIds ?? queryEntityIds)
+      .filter((id) => isValidCharacterId(id) && id !== ownerId) : [];
+    const activeIds = uniqueIds(Array.isArray(activeParticipantIds) && activeParticipantIds.length
+      ? activeParticipantIds : [...directIds, ownerId])
+      .filter((id) => isValidCharacterId(id));
     const budget = Math.max(0, Number(tokenBudget) || 0);
-    const needsFolderSummaries = ownerValid && (directIds.length > 0 || mentionedIds.length > 0);
+    const needsFolderSummaries = ownerValid && (directIds.length > 0 || mentionedIds.length > 0 || explicitTargetIds.length > 0);
     const suppliedSnapshot = Array.isArray(ownerFolderMemories);
     const suppliedSnapshotRevision = suppliedSnapshot ? this.store.getFolderSummarySnapshotRevision(ownerFolderMemories) : null;
     const suppliedSnapshotStale = suppliedSnapshot && suppliedSnapshotRevision !== currentFolderRevision;
@@ -1658,9 +1741,20 @@ class MemoryEngine {
         memory: { ...entry.memory, content: turnRecall.focusRelevantExcerpt(entry.memory.content, query) }
       })));
     }
+    const profileSource = entityProfiles || gameData?.getMentionableCharacterProfiles?.() || gameData?.characters;
+    const profilesForAliases = Array.isArray(profileSource) ? profileSource
+      : profileSource instanceof Map ? [...profileSource.values()] : [];
+    const profilesById = new Map(profilesForAliases.map((profile) => [Number(profile?.id), profile]).filter(([id]) => Number.isFinite(id)));
+    const uniqueAliasesByEntity = new Map();
+    for (const alias of this.mentionTracker.buildAliases(profilesForAliases)) {
+      if (!uniqueAliasesByEntity.has(alias.id)) uniqueAliasesByEntity.set(alias.id, []);
+      uniqueAliasesByEntity.get(alias.id).push(alias.name);
+    }
     const namesForEntity = (entityId) => {
-      if (Array.isArray(mentionedEntityNames)) return mentionedEntityNames;
-      return mentionedEntityNames?.[entityId] || mentionedEntityNames?.[String(entityId)] || [];
+      const id = Number(entityId);
+      const allowed = new Set(uniqueAliasesByEntity.get(id) || []);
+      const profile = profilesById.get(id);
+      return profile ? getCharacterMentionAliases(profile).filter((name) => allowed.has(name)) : [];
     };
     const cachedMentioned = mentionedRecallCache instanceof Map ? mentionedRecallCache.get(ownerId) : null;
     const cachedGroups = cachedMentioned?.groups instanceof Map ? cachedMentioned.groups : new Map();
@@ -1676,6 +1770,24 @@ class MemoryEngine {
       mentionedGroups.set(entityId, this.ranker.rank(memories, { query: [query, ...names].filter(Boolean).join(" "), entityIds: [entityId], currentTotalDays }));
       capturedMentioned = true;
     }
+    const entityTargetGroups = new Map();
+    for (const entityId of explicitTargetIds) {
+      const names = namesForEntity(entityId);
+      const memories = this.store.searchOwnerFolderForEntity(ownerId, entityId, names, folderMemories);
+      entityTargetGroups.set(entityId, this.ranker.rank(memories, { query, entityIds: [entityId], currentTotalDays }));
+    }
+    const entityTargetCandidatesByKey = new Map();
+    for (const [entityId, entries] of entityTargetGroups) {
+      for (const entry of entries) {
+        const key = this.getRouteMemoryKey(entry.memory);
+        const existing = entityTargetCandidatesByKey.get(key);
+        if (existing) existing.explicitTargetEntityIds.push(entityId);
+        else entityTargetCandidatesByKey.set(key, { ...entry, explicitTargetEntityIds: [entityId] });
+      }
+    }
+    const entityTargetCandidates = [...entityTargetCandidatesByKey.values()]
+      .map((entry) => ({ ...entry, explicitTargetEntityIds: [...new Set(entry.explicitTargetEntityIds)] }))
+      .sort((left, right) => right.score - left.score || this.getMemoryRecency(right.memory) - this.getMemoryRecency(left.memory));
     if (mentionedRecallCache instanceof Map && (capturedMentioned || !cachedMentioned)) mentionedRecallCache.set(ownerId, { groups: new Map([...cachedGroups, ...mentionedGroups]) });
     const mentionedCacheHit = mentionedIds.length > 0 && !capturedMentioned && cachedMentioned?.groups instanceof Map;
     const allInternalMemoryCount = ownerValid ? Object.keys(this.store.index.memories || {}).length : null;
@@ -1703,29 +1815,32 @@ class MemoryEngine {
     const stableRanked = this.ranker.rank(internalMemories, { query: "", entityIds: [], participantIds: [], currentTotalDays })
       .filter((entry) => entry.memory.importance >= 0.9 || entry.memory.status === "open" || entry.memory.unresolved);
     const frozenBudget = memoryEngine3Enabled ? Math.floor(budget * 0.65) : budget;
+    const hasEntityTargetCandidates = [...entityTargetGroups.values()].some((entries) => entries.length > 0);
     const laneWeights = {
       direct: officialMemory || [...directGroups.values()].some((entries) => entries.length > 0) ? 55 : 0,
       mentioned: !memoryEngine3Enabled && [...mentionedGroups.values()].some((entries) => entries.length > 0) ? 30 : 0,
+      entityTarget: !memoryEngine3Enabled && hasEntityTargetCandidates ? 30 : 0,
       stable: stableRanked.length > 0 ? 15 : 0
     };
-    const totalWeight = laneWeights.direct + laneWeights.mentioned + laneWeights.stable;
-    const laneBudgets = { direct: 0, mentioned: 0, stable: 0 };
+    const totalWeight = laneWeights.direct + laneWeights.mentioned + laneWeights.entityTarget + laneWeights.stable;
+    const laneBudgets = { direct: 0, mentioned: 0, entityTarget: 0, stable: 0 };
     if (totalWeight > 0) {
-      for (const lane of ["direct", "mentioned", "stable"]) {
+      for (const lane of ["direct", "mentioned", "entityTarget", "stable"]) {
         laneBudgets[lane] = Math.floor(frozenBudget * laneWeights[lane] / totalWeight);
       }
-      const remainder = frozenBudget - laneBudgets.direct - laneBudgets.mentioned - laneBudgets.stable;
-      const firstActiveLane = ["direct", "mentioned", "stable"].find((lane) => laneWeights[lane] > 0);
+      const remainder = frozenBudget - laneBudgets.direct - laneBudgets.mentioned - laneBudgets.entityTarget - laneBudgets.stable;
+      const firstActiveLane = ["direct", "entityTarget", "mentioned", "stable"].find((lane) => laneWeights[lane] > 0);
       if (firstActiveLane) laneBudgets[firstActiveLane] += remainder;
     }
     const directBudget = laneBudgets.direct;
     const mentionedBudget = laneBudgets.mentioned;
+    const entityTargetBudget = laneBudgets.entityTarget;
     const stableBudget = laneBudgets.stable;
     const officialAllowance = [...directGroups.values()].some(entries => entries.length) ? Math.floor(directBudget / 3) : directBudget;
     const official = !Array.isArray(responderCache.direct) && officialMemory
       ? this.ranker.selectWithinBudget([{ memory: officialMemory, score: 1 }], { tokenBudget: officialAllowance, estimateTokens, allowTruncate: true })
         .map(entry => ({ ...entry, routeKind: "official", routeCharacterIds: [ownerId] })) : [];
-    const direct = directRecallId != null ? [
+    let direct = directRecallId != null ? [
       ...this.selectRoutedMemories(directRecallGroups, { tokenBudget: directBudget - official.reduce((n, e) => n + e.tokens, 0), estimateTokens, mode: "direct", queryPrioritized: true }),
       ...official
     ] : Array.isArray(responderCache.direct) ? responderCache.direct : [
@@ -1733,6 +1848,7 @@ class MemoryEngine {
       ...official
     ];
     if (directRecallId == null && !Array.isArray(responderCache.direct)) responderCache.direct = direct;
+    direct = direct.map((entry) => ({ ...entry }));
     const mentioned = [];
     for (const entityId of memoryEngine3Enabled ? [] : mentionedIds) {
       let snapshot = responderCache.mentionedSnapshots.get(entityId);
@@ -1740,8 +1856,10 @@ class MemoryEngine {
         snapshot = this.selectRoutedMemories(new Map([[entityId, mentionedGroups.get(entityId) || []]]), { tokenBudget: Math.max(1, Math.floor(mentionedBudget / Math.max(1, mentionedIds.length))), estimateTokens, mode: "mentioned" });
         responderCache.mentionedSnapshots.set(entityId, snapshot);
       }
-      mentioned.push(...snapshot);
+      mentioned.push(...snapshot.map((entry) => ({ ...entry })));
     }
+    const entityTargetSnapshot = !memoryEngine3Enabled && hasEntityTargetCandidates
+      ? this.selectRoutedMemories(entityTargetGroups, { tokenBudget: entityTargetBudget, estimateTokens, mode: "entity_target", queryPrioritized: true }) : [];
     const directByKey = new Map(direct.map((entry) => [this.getRouteMemoryKey(entry.memory), entry]));
     const deduplicatedMentioned = mentioned.filter((entry) => {
       const directEntry = directByKey.get(this.getRouteMemoryKey(entry.memory));
@@ -1749,12 +1867,36 @@ class MemoryEngine {
       directEntry.mentionedCharacterIds = [...new Set([...(directEntry.mentionedCharacterIds || []), ...entry.routeCharacterIds])];
       return false;
     });
-    const selectedFolderKeys = new Set([...direct, ...deduplicatedMentioned].map((entry) => this.getRouteMemoryKey(entry.memory)));
+    const frozenRouteByKey = new Map([...direct, ...deduplicatedMentioned].map((entry) => [this.getRouteMemoryKey(entry.memory), entry]));
+    const deduplicatedEntityTargetSnapshot = entityTargetSnapshot.filter((entry) => {
+      const key = this.getRouteMemoryKey(entry.memory);
+      const existing = frozenRouteByKey.get(key);
+      if (!existing) {
+        frozenRouteByKey.set(key, entry);
+        entry.explicitTargetEntityIds = [...new Set(entry.routeCharacterIds.map(Number))];
+        entry.routeKinds = [...new Set([...(entry.routeKinds || []), "entity_target"] )];
+        return true;
+      }
+      existing.explicitTargetEntityIds = [...new Set([...(existing.explicitTargetEntityIds || []), ...entry.routeCharacterIds.map(Number)])];
+      existing.routeKinds = [...new Set([...(existing.routeKinds || (existing.routeKind ? [existing.routeKind] : [])), "entity_target"])];
+      return false;
+    });
+    const entityTargetSelectedIds = new Set(deduplicatedEntityTargetSnapshot.map((entry) => entry.memory.memoryId));
+    for (const candidate of entityTargetCandidates) {
+      const existing = frozenRouteByKey.get(this.getRouteMemoryKey(candidate.memory));
+      if (!existing) continue;
+      existing.explicitTargetEntityIds = [...new Set([...(existing.explicitTargetEntityIds || []), ...candidate.explicitTargetEntityIds])];
+      existing.routeKinds = [...new Set([...(existing.routeKinds || (existing.routeKind ? [existing.routeKind] : [])), "entity_target"])];
+      entityTargetSelectedIds.add(candidate.memory.memoryId);
+    }
+    const selectedFolderKeys = new Set([...direct, ...deduplicatedMentioned, ...deduplicatedEntityTargetSnapshot]
+      .map((entry) => this.getRouteMemoryKey(entry.memory)));
     const stable = Array.isArray(responderCache.stable)
       ? responderCache.stable
       : this.ranker.selectWithinBudget(stableRanked.filter((entry) => !selectedFolderKeys.has(this.getRouteMemoryKey(entry.memory))), { tokenBudget: stableBudget, estimateTokens });
     if (!Array.isArray(responderCache.stable)) responderCache.stable = stable;
-    const frozenSelectedTokens = [...direct, ...deduplicatedMentioned, ...stable].reduce((total, entry) => total + Number(entry.tokens || 0), 0);
+    const frozenSelectedTokens = [...direct, ...deduplicatedMentioned, ...deduplicatedEntityTargetSnapshot, ...stable]
+      .reduce((total, entry) => total + Number(entry.tokens || 0), 0);
     const extraBudget = Math.max(0, budget - frozenSelectedTokens);
     const temporal = memoryEngine3Enabled && temporalSummaryRecallEnabled
       ? resolveTemporalFocus(query, responderCache.temporalFocus, { currentGameDate, currentTotalDays, turnEpoch, conversationId, sceneRevision })
@@ -1783,7 +1925,8 @@ class MemoryEngine {
     const directRecallKeys = new Set([...directRecallGroups.values()].flat().map(entry => this.getRouteMemoryKey(entry.memory)));
     const topicCandidates = query.trim() ? rankedExtras.filter((entry) => Number(entry.reason?.query) >= 0.28
       && (directRecallId == null || directRecallKeys.has(this.getRouteMemoryKey(entry.memory)))).map((entry) => entry.memory) : [];
-    const routedKeys = new Set([...directGroups.values(), ...mentionedGroups.values()].flat().map((entry) => this.getRouteMemoryKey(entry.memory)));
+    const routedKeys = new Set([...directGroups.values(), ...mentionedGroups.values(), ...entityTargetGroups.values()]
+      .flat().map((entry) => this.getRouteMemoryKey(entry.memory)));
     const importantCandidates = rankedExtras.filter((entry) => routedKeys.has(this.getRouteMemoryKey(entry.memory))
       && (directRecallId == null || directRecallKeys.has(this.getRouteMemoryKey(entry.memory)))
       && (entry.memory.importance >= 0.9 || entry.memory.status === "open" || entry.memory.unresolved || entry.memory.content?.includes("【需要长期记住的事项】"))).map((entry) => entry.memory);
@@ -1792,42 +1935,69 @@ class MemoryEngine {
     let extra = memoryEngine3Enabled && sameTurn ? responderCache.dynamicExtra || [] : [];
     let extraTokens = 0;
     const extraSources = restrictedTemporalQuery || blockedTimeQuery ? [["temporal", temporalCandidates]]
-      : [["temporal", temporalCandidates], ["mentioned", mentionedCandidates], ["topic", topicCandidates], ["important", importantCandidates]];
+      : [["temporal", temporalCandidates], ["entity_target", entityTargetCandidates], ["mentioned", mentionedCandidates], ["topic", topicCandidates], ["important", importantCandidates]];
+    const dynamicRouteByKey = new Map([...frozenRouteByKey.values(), ...deduplicatedEntityTargetSnapshot]
+      .map((entry) => [this.getRouteMemoryKey(entry.memory), entry]));
+    const mergeEntityTargetRoute = (entry, targetIds) => {
+      entry.explicitTargetEntityIds = [...new Set([...(entry.explicitTargetEntityIds || []), ...targetIds.map(Number)])];
+      entry.routeKinds = [...new Set([...(entry.routeKinds || (entry.routeKind ? [entry.routeKind] : [])), "entity_target"])];
+      entry.routeCharacterIds = [...new Set([...(entry.routeCharacterIds || []), ...targetIds.map(Number)])];
+    };
     for (const [source, candidates] of memoryEngine3Enabled && !useMemory4 && !sameTurn ? extraSources : []) {
-      for (const memory of candidates) {
+      for (const candidate of candidates) {
         if (extra.length >= 3 || extraTokens >= extraBudget) break;
+        const memory = source === "entity_target" ? candidate.memory : candidate;
         const key = this.getRouteMemoryKey(memory);
+        if (source === "entity_target" && selectedFolderKeys.has(key)) {
+          const existing = dynamicRouteByKey.get(key);
+          if (existing) {
+            mergeEntityTargetRoute(existing, candidate.explicitTargetEntityIds);
+            entityTargetSelectedIds.add(memory.memoryId);
+          }
+          continue;
+        }
         if (selectedFolderKeys.has(key) || responderCache.seenDynamicSummaries.has(key)) continue;
         const recallMemory = directRecallId != null && directRecallKeys.has(key)
           ? { ...memory, content: turnRecall.focusRelevantExcerpt(memory.content, query) } : memory;
-        const [fitted] = this.ranker.selectWithinBudget([{ memory: recallMemory, score: 0, reason: source === "temporal" ? temporalReasons.get(memory.memoryId) : { source } }], {
+        const [fitted] = this.ranker.selectWithinBudget([{ memory: recallMemory, score: candidate.score || 0,
+          reason: source === "temporal" ? temporalReasons.get(memory.memoryId) : source === "entity_target" ? candidate.reason : { source } }], {
           tokenBudget: extraBudget - extraTokens, estimateTokens, allowTruncate: true
         });
         if (!fitted) continue;
-        extra.push({ ...fitted, routeKind: "dynamic_extra", routeCharacterIds: directIds });
+        const routeCharacterIds = source === "entity_target" ? candidate.explicitTargetEntityIds : directIds;
+        const routed = { ...fitted, routeKind: source === "entity_target" ? "entity_target" : "dynamic_extra",
+          routeKinds: [source === "entity_target" ? "entity_target" : "dynamic_extra"], routeCharacterIds };
+        if (source === "entity_target") {
+          routed.explicitTargetEntityIds = [...candidate.explicitTargetEntityIds];
+          entityTargetSelectedIds.add(memory.memoryId);
+        }
+        extra.push(routed);
         extraTokens += fitted.tokens;
         selectedFolderKeys.add(key);
+        dynamicRouteByKey.set(key, routed);
       }
     }
     let memory4Packet = null;
     if (useMemory4 && ownerValid && hasResolvedCampaignToken(campaignToken) && this.memory4Recall) {
-      const explicitMemory4EntityIds = uniqueIds([...(queryEntityIds || []), ...mentionedIds]);
+      const explicitMemory4EntityIds = uniqueIds([...explicitTargetIds, ...mentionedIds]);
       const memory4EntityIds = explicitMemory4EntityIds.length ? explicitMemory4EntityIds
-        : isValidCharacterId(requestedSpeakerId) && requestedSpeakerId !== ownerId ? [requestedSpeakerId] : directIds;
-      const memory4EntityNamesById = Object.fromEntries(memory4EntityIds.map(id => {
-        const currentNames = gameData?.characters?.get?.(id) ? this.getCharacterMentionAliases(gameData.characters.get(id)) : [];
-        const resolvedNames = Array.isArray(mentionedEntityNames) ? [] : namesForEntity(id);
-        return [id, [...new Set([...currentNames, ...resolvedNames])]];
-      }));
+        : isValidCharacterId(requestedSpeakerId) && requestedSpeakerId !== ownerId ? [requestedSpeakerId] : [];
+      const memory4EntityNamesById = Object.fromEntries(memory4EntityIds.map(id => [id, namesForEntity(id)]));
       memory4Packet = this.memory4Recall.plan({ campaignToken, ownerId, query, querySpeakerId: requestedSpeakerId,
         entityIds: memory4EntityIds,
+        explicitTargetEntityIds: explicitTargetIds,
+        mentionedOutOfSceneIds: mentionedIds,
+        activeParticipantIds: activeIds,
         legacyMemories: folderMemories, entityProfiles, gameData, currentGameDate, currentTotalDays, conversationId, sceneRevision, turnEpoch,
-        entityIdsExplicit: explicitMemory4EntityIds.length > 0,
+        entityIdsExplicit: explicitTargetIds.length > 0,
         entityNames: Object.values(memory4EntityNamesById).flat(), entityNamesById: memory4EntityNamesById,
         temporalRecallEnabled: temporalSummaryRecallEnabled,
         identityUnresolved, focus: responderCache.memory4Focus, excludedKeys: [...selectedFolderKeys, ...responderCache.seenDynamicSummaries],
         memoryEngineRemainingBudget: extraBudget, providerRemainingSafeBudget: 1200, estimateTokens });
-      extra = memory4Packet.items.map(entry => ({ ...entry, tokens: 0, routeKind: "dynamic_extra", routeCharacterIds: [ownerId] }));
+      for (const id of memory4Packet.diagnostics?.entityTargetSelectedIds || []) entityTargetSelectedIds.add(id);
+      extra = memory4Packet.items.map(entry => ({ ...entry, tokens: 0,
+        routeKind: entry.routeKind || "dynamic_extra", routeKinds: entry.routeKinds || [entry.routeKind || "dynamic_extra"],
+        routeCharacterIds: entry.routeCharacterIds || [ownerId] }));
       if (extra.length) extra[0].tokens = memory4Packet.tokens;
     } else if (useMemory4) extra = [];
     responderCache.memory4Packet = memory4Packet;
@@ -1841,6 +2011,12 @@ class MemoryEngine {
     const temporalAxisLabel = temporal.axisIntent === "EVENT" ? "事件发生时间"
       : temporal.axisIntent === "CONVERSATION" ? "对话发生日期"
         : temporal.axisIntent === "MEMORY_RECALL" ? "记忆/事件双轴召回" : "事件/对话混合查询";
+    const entityTargetExtra = extra.filter((entry) => entry.routeKind === "entity_target");
+    const otherExtra = extra.filter((entry) => entry.routeKind !== "entity_target");
+    const standardExtraText = entityTargetExtra.length
+      ? [this.formatMemoryBlock("明确询问人物的历史摘要", entityTargetExtra),
+        this.formatMemoryBlock("其他本轮召回摘要", otherExtra)].filter(Boolean).join("\n\n")
+      : this.formatMemoryBlock("本轮召回摘要（仅本轮注入，最多三篇）", extra);
     const temporalExtraText = useMemory4 ? memory4Packet?.text || null : blockedTimeQuery ? "【本轮时间核对】缺少可确认的游戏日期或时间范围，无法安全检索；不得用其他年份的记忆代答。"
       : firstMeetingQuery
         ? `【本轮首次相识线索核对】${extra.length
@@ -1848,7 +2024,7 @@ class MemoryEngine {
           : "本轮未新增正文明确提及初次相识的摘要；若此前已注入对应证据，仍可沿用历史原文；若无，不得用更早但无关的摘要代替。"}`
       : targetDateQuery
       ? `【本轮时间核对：游戏当前${normalizeGameDate(currentGameDate)?.display}；${temporal.expression}${temporal.targetGameYear ? `对应${temporal.targetGameYear}年` : ""}】时间含义：${temporalAxisLabel}。${extra.length ? `${temporalDescription}\n时间引用证明当时谈及该时段，不单独证明事件属实；只引用正文实际保留的证据。\n${this.formatMemoryBlock("本轮时间匹配摘要", extra)}` : "本轮未检索到可新增的该时段对话摘要；此前已注入的对应证据仍可使用，不等于当时没有发生事件。"}冻结的最近两篇对话和官方追忆可能含其他日期，不能把其他年份的事当成该时段的事。`
-      : this.formatMemoryBlock("本轮召回摘要（仅本轮注入，最多三篇）", extra);
+      : standardExtraText;
     let topicPatch = memoryEngine3Enabled ? [] : Array.isArray(responderCache.topicPatch) ? responderCache.topicPatch : [];
     if (!memoryEngine3Enabled && !responderCache.topicPatchLocked && query.trim()) {
       const rankedPatch = this.ranker.rank(folderMemories, { query, entityIds: mentionedIds, participantIds: directIds, currentTotalDays })
@@ -1858,16 +2034,20 @@ class MemoryEngine {
       if (topicPatch.length) { responderCache.topicPatch = topicPatch; responderCache.topicPatchLocked = true; }
     }
     if (sessionRecallCache instanceof Map) sessionRecallCache.set(ownerId, responderCache);
-    const relevant = [...direct, ...deduplicatedMentioned, ...extra, ...topicPatch];
+    const relevant = [...direct, ...deduplicatedMentioned, ...deduplicatedEntityTargetSnapshot, ...extra, ...topicPatch];
     for (const entry of [...stable, ...relevant]) {
-      const reason = entry.routeKind === "direct" ? "direct_pair_route" : entry.routeKind === "mentioned" ? "mentioned_entity_route" : entry.routeKind === "session_topic_anchor" ? "session_topic_anchor" : "stable_memory";
-      this.trace.record("rank", { memoryId: entry.memory.memoryId, type: entry.memory.type, score: entry.score, characterId: ownerId, reason });
-      this.trace.record("retrieve", { memoryId: entry.memory.memoryId, type: entry.memory.type, score: entry.score, characterId: ownerId, reason });
-      this.trace.record("selected", { memoryId: entry.memory.memoryId, type: entry.memory.type, score: entry.score, characterId: ownerId, reason });
+      const reason = entry.routeKind === "entity_target" ? "explicit_entity_target_route"
+        : entry.routeKind === "direct" ? "direct_pair_route" : entry.routeKind === "mentioned" ? "mentioned_entity_route"
+          : entry.routeKind === "session_topic_anchor" ? "session_topic_anchor" : "stable_memory";
+      const routeMetadata = { explicitTargetEntityIds: entry.explicitTargetEntityIds || [], routeKinds: entry.routeKinds || [] };
+      this.trace.record("rank", { memoryId: entry.memory.memoryId, type: entry.memory.type, score: entry.score, characterId: ownerId, reason, ...routeMetadata });
+      this.trace.record("retrieve", { memoryId: entry.memory.memoryId, type: entry.memory.type, score: entry.score, characterId: ownerId, reason, ...routeMetadata });
+      this.trace.record("selected", { memoryId: entry.memory.memoryId, type: entry.memory.type, score: entry.score, characterId: ownerId, reason, ...routeMetadata });
     }
     const selectedTokens = useMemory4 ? frozenSelectedTokens + (memory4Packet?.tokens || 0)
       : [...stable, ...relevant].reduce((total, entry) => total + Number(entry.tokens || 0), 0);
-    const folderCandidateCount = new Set([...directGroups.values(), ...mentionedGroups.values()].flat().map((entry) => this.getRouteMemoryKey(entry.memory))).size;
+    const folderCandidateCount = new Set([...directGroups.values(), ...mentionedGroups.values(), ...entityTargetGroups.values()]
+      .flat().map((entry) => this.getRouteMemoryKey(entry.memory))).size;
     const temporalRanges = [temporal.primaryWindow, ...(temporal.mode === "TARGET_DATE" ? [] : [temporal.expansionWindow])].filter(Boolean);
     const temporalMatches = temporalIndex.filter(entry => Number.isFinite(entry.fromTotalDays) && temporalRanges.some(range =>
       entry.fromTotalDays <= range.toTotalDays && entry.toTotalDays >= range.fromTotalDays));
@@ -1911,14 +2091,21 @@ class MemoryEngine {
     const rankedCandidateIds = [...new Set([
       ...[...directGroups.values()].flat().map(entry => entry.memory.memoryId),
       ...[...mentionedGroups.values()].flat().map(entry => entry.memory.memoryId),
+      ...entityTargetCandidates.map(entry => entry.memory.memoryId),
       ...rankedExtras.map(entry => entry.memory.memoryId),
       ...stableRanked.map(entry => entry.memory.memoryId)
     ])].slice(0, 80);
     const selectedOverviewIds = [...new Set(direct.map(entry => entry.memory.memoryId))].slice(0, 20);
-    const selectedDetailIds = [...new Set([...deduplicatedMentioned, ...extra, ...topicPatch].map(entry => entry.memory.memoryId))].slice(0, 40);
+    const selectedDetailIds = [...new Set([...deduplicatedMentioned, ...deduplicatedEntityTargetSnapshot, ...extra, ...topicPatch]
+      .map(entry => entry.memory.memoryId))].slice(0, 40);
     const recallDiagnostics = {
       responderId: ownerValid ? ownerId : null,
       ownerId: ownerValid ? ownerId : null,
+      explicitTargetEntityIds: explicitTargetIds.slice(0, 40),
+      activeParticipantIds: activeIds.slice(0, 40),
+      mentionedOutOfSceneIds: mentionedIds.slice(0, 40),
+      entityTargetCandidateCount: entityTargetCandidates.length,
+      entityTargetSelectedIds: [...entityTargetSelectedIds].slice(0, 40),
       campaignStatus: hasResolvedCampaignToken(campaignToken) ? "RESOLVED" : "UNRESOLVED",
       queryFingerprint: turnRecall.createQueryFingerprint(query),
       queryLength: String(query || "").length,
@@ -1983,6 +2170,27 @@ class MemoryEngine {
       recallDiagnostics.memory4 = memory4Packet.diagnostics;
       recallDiagnostics.granularity = memory4Packet.query?.granularity || null;
     }
+    const plannerDiagnostics = memory4Packet?.diagnostics || {};
+    const legacyRejected = plannerDiagnostics.legacyRejected || {};
+    const entityRecallDiagnostics = {
+      explicitTargetEntityIds: recallDiagnostics.explicitTargetEntityIds,
+      activeParticipantIds: recallDiagnostics.activeParticipantIds,
+      mentionedOutOfSceneIds: recallDiagnostics.mentionedOutOfSceneIds,
+      entityTargetCandidateCount: Number(plannerDiagnostics.entityTargetCandidateCount ?? entityTargetCandidates.length),
+      entityTargetSelectedIds: [...new Set([...entityTargetSelectedIds, ...(plannerDiagnostics.entityTargetSelectedIds || [])])].slice(0, 40),
+      legacyCandidateCount: Number(plannerDiagnostics.legacyCandidateCount ?? entityTargetCandidates.length),
+      legacyRejected: {
+        identity: Number(legacyRejected.identity || 0),
+        lexical: Number(legacyRejected.lexical || 0),
+        topic: Number(legacyRejected.topic || 0),
+        budget: Number(legacyRejected.budget || 0),
+        stale: Number(legacyRejected.stale || 0),
+        forgotten: Number(legacyRejected.forgotten || 0)
+      },
+      memory4SelectedIds: (plannerDiagnostics.memory4SelectedIds || plannerDiagnostics.selectedIds || memory4Packet?.items?.map(item => item.memory.memoryId) || []).slice(0, 40)
+    };
+    Object.assign(recallDiagnostics, entityRecallDiagnostics);
+    recallDiagnostics.entityRecallDiagnostics = entityRecallDiagnostics;
     const recallDiagnosticsMap = sessionRecallCache instanceof Map && sessionRecallCache.recallDiagnostics instanceof Map
       ? sessionRecallCache.recallDiagnostics : null;
     if (recallDiagnosticsMap && ownerValid) recallDiagnosticsMap.set(ownerId, recallDiagnostics);
@@ -1995,6 +2203,10 @@ class MemoryEngine {
       tokenBudget: budget,
       directRouteCount: directIds.length,
       mentionedRouteCount: mentionedIds.length,
+      explicitTargetEntityIds: explicitTargetIds.slice(0, 40),
+      activeParticipantIds: activeIds.slice(0, 40),
+      entityTargetCandidateCount: entityTargetCandidates.length,
+      entityTargetSelectedIds: [...entityTargetSelectedIds].slice(0, 40),
       mentionedCacheHit,
       patchInserted: extra.length > 0,
       temporalTriggered: temporal.triggered,
@@ -2025,6 +2237,10 @@ class MemoryEngine {
       memoryDynamicExtraTokens: useMemory4 ? memory4Packet?.tokens || 0 : extra.reduce((total, entry) => total + entry.tokens, 0),
       indexSize: Object.keys(this.store.index.memories || {}).length
     });
+    const mentionedSnapshotText = [
+      this.formatMemoryBlock("冻结的场外人物记忆快照", deduplicatedMentioned),
+      this.formatMemoryBlock("明确询问人物的历史记忆", deduplicatedEntityTargetSnapshot)
+    ].filter(Boolean).join("\n\n") || null;
     return {
       engineVersion: MEMORY_ENGINE_VERSION,
       folderSummaryCache: this.store.getFolderSummaryCacheMetrics(),
@@ -2045,7 +2261,15 @@ class MemoryEngine {
       directText: this.formatMemoryBlock("与当前在场人物的直接记忆", direct),
       directStableText: this.formatMemoryBlock(officialMemory ? "本场冻结：最近两篇对话与官方追忆摘要" : "冻结的直接关系最近两篇摘要", direct),
       mentionedText: this.formatMemoryBlock("与被提及场外人物有关的记忆", deduplicatedMentioned),
-      mentionedSnapshotText: this.formatMemoryBlock("冻结的场外人物记忆快照", deduplicatedMentioned),
+      mentionedSnapshotText,
+      entityTargetText: this.formatMemoryBlock("明确询问人物的历史记忆", [...deduplicatedEntityTargetSnapshot, ...entityTargetExtra]),
+      entityTargetRecall: {
+        explicitTargetEntityIds: explicitTargetIds,
+        candidateCount: entityRecallDiagnostics.entityTargetCandidateCount,
+        candidateIds: entityTargetCandidates.map(entry => entry.memory.memoryId),
+        selectedIds: entityRecallDiagnostics.entityTargetSelectedIds
+      },
+      entityRecallDiagnostics,
       topicPatchText: this.formatMemoryBlock("会话话题记忆锚点（本场冻结）", topicPatch),
       relevantText: this.formatMemoryBlock("与当前话题相关的记忆", relevant),
       tokenBudget: budget,
@@ -2054,10 +2278,12 @@ class MemoryEngine {
       routing: {
         ownerId,
         directCounterpartIds: directIds,
+        activeParticipantIds: activeIds,
+        explicitTargetEntityIds: explicitTargetIds,
         mentionedOutOfSceneIds: mentionedIds,
         mentionedSnapshot: mentionedIds.length > 0 ? capturedMentioned ? "captured" : "reused" : "empty",
         topicPatch: memoryEngine3Enabled ? extra.length > 0 ? "dynamic_extra" : "empty" : topicPatch.length > 0 ? "locked" : "empty",
-        budgets: { direct: directBudget, mentioned: mentionedBudget, stable: stableBudget, extra: extraBudget }
+        budgets: { direct: directBudget, mentioned: mentionedBudget, entityTarget: entityTargetBudget, stable: stableBudget, extra: extraBudget }
       }
     };
   }

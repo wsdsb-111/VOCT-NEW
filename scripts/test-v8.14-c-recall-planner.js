@@ -328,13 +328,14 @@ try {
     coordinator.store.deleteEntry(scope, convertedId);
     assert.equal(planner.legacyCandidates([five], scope, coordinator.store.loadIndex(scope)).length, 4);
   });
-  check("Legacy source edit/delete invalidates old conversion and coverage", () => {
+  check("Legacy source changes invalidate coverage, not the unsplittable parent narrative", () => {
     base.updateMemory(parts[2].memoryId, { content: "修订后是另一项约定。" });
-    assert.equal(planner.legacyCandidates([five], scope, coordinator.store.loadIndex(scope)).length, 0);
+    assert.deepEqual(planner.legacyCandidates([five], scope, coordinator.store.loadIndex(scope)).map(memory => memory.content), [five.content],
+      "V8.15 incomplete coverage retains the independently owned visible parent until explicit forget");
     const updated = { ...five, content: `【乙能够知道并记住的本场内容】\n${parts.map(part => `- ${base.getMemory(part.memoryId).content}`).join("\n")}` };
     assert.equal(planner.legacyCandidates([updated], scope, coordinator.store.loadIndex(scope)).length, 5);
     base.deleteMemory(parts[1].memoryId);
-    assert.equal(planner.legacyCandidates([five], scope, coordinator.store.loadIndex(scope)).length, 0);
+    assert.deepEqual(planner.legacyCandidates([five], scope, coordinator.store.loadIndex(scope)).map(memory => memory.content), [five.content]);
   });
   check("first meeting chooses earliest explicit evidence across both lanes, not arbitrary earliest chat", () => {
     add("1100.1.1", "这并非第一次见到你。");
@@ -481,7 +482,9 @@ try {
     const plan = () => planner.plan({ ...options, entityIds: [77], query: "你还记得七十七号人物吗？" });
     assert.equal(plan().details[0].memory.memoryId, id);
     base.updateMemory(source.memoryId, { content: "用户修订后的另一项内容。" });
-    assert.equal(plan().details.length, 0);
+    assert.equal(plan().details.some(item => item.memory.memoryId === id), false, "stale canonical conversion is excluded");
+    assert.equal(plan().text.includes(source.content), false, "old source text is not resurrected");
+    assert.equal(plan().details.length, 0, "no unrelated history replaces the invalidated conversion");
     base.deleteMemory(source.memoryId);
     assert.equal(plan().details.length, 0);
   });

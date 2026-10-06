@@ -7,6 +7,7 @@ const { resolveTemporalFocus, detectTemporalAxisIntent } = require("./fuzzy-temp
 const { gameDateFromSerial, hasFirstMeetingCue } = require("./temporal-anchor-extractor");
 const { normalizeGameDate } = require("../worldline/character-temporal-facts");
 const { buildLegacyBridge } = require("./memory4-legacy-bridge");
+const { projectionLineageFromSummary } = require("./memory4-forget");
 const { MemoryRanker } = require("./memory-ranker");
 const { normalizePerspectiveTemporalRefs, isFirstMeetingSummary } = require("./summary-date-index");
 const { MentionTracker } = require("./mention-tracker");
@@ -23,6 +24,19 @@ function containsEntityAlias(content, entityIds, aliasIndex, tracker) {
   if (!entityIds.size) return false;
   const mentionedIds = tracker.findMentionedCharacterIds([{ content }], { aliasIndex, resolveCoreference: false });
   return mentionedIds.some(entityId => entityIds.has(entityId));
+}
+
+function hasLexicalOverlap(query, content) {
+  const features = value => {
+    const text = String(value || "").toLowerCase();
+    const result = new Set(text.match(/[a-z0-9]+/g) || []);
+    for (const match of text.matchAll(/[\u3400-\u9fff]+/g)) {
+      for (let index = 0; index + 1 < match[0].length; index++) result.add(match[0].slice(index, index + 2));
+    }
+    return result;
+  };
+  const queryFeatures = features(query);
+  return [...features(content)].some(feature => queryFeatures.has(feature));
 }
 
 function parseRecallQuery(text, options = {}) {
@@ -81,8 +95,38 @@ function renderPacket(packet) {
   return ["【本轮个人记忆核对】历史记忆不是当前游戏状态；转述、传闻与计划不得当成已发生的事实。",
     packet.notice, packet.profileText, ...items.map(item => {
       const reason = item.reason;
-      return `【${item === packet.overview ? "概览" : "细节"}；来源 ${item.memory.memoryId}；${reason.axis} ${reason.from || "时间未知"}${reason.to && reason.to !== reason.from ? `~${reason.to}` : ""}；${reason.precision}】\n${item.annotation}\n${item.memory.content}`;
+      const route = item.routeKind === "entity_target" ? "明确询问人物的历史记忆；" : "";
+      return `【${route}${item === packet.overview ? "概览" : "细节"}；来源 ${item.memory.memoryId}；${reason.axis} ${reason.from || "时间未知"}${reason.to && reason.to !== reason.from ? `~${reason.to}` : ""}；${reason.precision}】\n${item.annotation}\n${item.memory.content}`;
     })].filter(Boolean).join("\n\n");
+}
+
+function legacyExcerpt(content, query, tokenBudget, estimateTokens = estimateDefault) {
+  const source = String(content || "");
+  const estimate = value => Math.ceil(estimateTokens(value));
+  if (estimate(source) <= tokenBudget) return source;
+  if (tokenBudget <= 0 || !source) return null;
+
+  let center = Math.floor(source.length / 2);
+  const segments = [...source.matchAll(/[^\n。！？!?；;]+(?:[\n。！？!?；;]+|$)/g)]
+    .map(match => ({ text: match[0], start: match.index, end: match.index + match[0].length }));
+  if (segments.length) {
+    const ranked = new MemoryRanker().rank(segments.map((segment, index) => ({ memoryId: String(index), content: segment.text })), { query });
+    if (ranked[0]?.reason.query > 0) {
+      const best = segments[Number(ranked[0].memory.memoryId)];
+      center = Math.floor((best.start + best.end) / 2);
+    }
+  }
+
+  let low = 1, high = source.length, best = null;
+  while (low <= high) {
+    const length = Math.floor((low + high) / 2);
+    const start = Math.max(0, Math.min(source.length - length, center - Math.floor(length / 2)));
+    const end = start + length;
+    const candidate = `${start > 0 ? "…" : ""}${source.slice(start, end)}${end < source.length ? "…" : ""}`;
+    if (estimate(candidate) <= tokenBudget) { best = candidate; low = length + 1; }
+    else high = length - 1;
+  }
+  return best;
 }
 
 function fitRecallPacket(packet, budget, estimateTokens = estimateDefault) {
@@ -90,7 +134,29 @@ function fitRecallPacket(packet, budget, estimateTokens = estimateDefault) {
   const result = { ...packet, details: [...packet.details] };
   const count = () => { result.text = renderPacket(result); result.tokens = result.text ? Math.ceil(estimateTokens(result.text)) : 0; };
   count();
-  if (result.tokens > limit && result.overview && packet.query?.granularity === "EVENT") { result.overview = null; count(); }
+  if (result.tokens > limit) {
+    const targets = [result.overview && result.overview.sourceRef?.kind === "legacy" ? { overview: true } : null,
+      ...result.details.map((item, index) => item.sourceRef?.kind === "legacy" ? { index } : null)].filter(Boolean);
+    for (const target of targets) {
+      const item = target.overview ? result.overview : result.details[target.index];
+      const content = item?.memory?.content;
+      if (!content) continue;
+      const base = { ...result, details: [...result.details] };
+      const blankItem = { ...item, memory: { ...item.memory, content: "" } };
+      if (target.overview) base.overview = blankItem;
+      else base.details[target.index] = blankItem;
+      const available = limit - Math.ceil(estimateTokens(renderPacket(base)));
+      const excerpt = legacyExcerpt(content, result.query?.text || "", available, estimateTokens);
+      if (excerpt && excerpt.length < content.length) {
+        if (target.overview) result.overview = { ...item, memory: { ...item.memory, content: excerpt } };
+        else result.details[target.index] = { ...item, memory: { ...item.memory, content: excerpt } };
+        count();
+        if (result.tokens <= limit) break;
+      }
+    }
+  }
+  if (result.tokens > limit && result.overview && packet.query?.granularity === "EVENT"
+    && result.overview.sourceRef?.kind !== "legacy") { result.overview = null; count(); }
   while (result.tokens > limit && result.details.length) { result.details.pop(); count(); }
   if (result.tokens > limit && result.overview) { result.overview = null; count(); }
   if (result.tokens > limit && result.profileText) { result.profileText = null; count(); }
@@ -120,6 +186,16 @@ class Memory4RecallPlanner {
       && ref.sourceHash === legacySourceHash(memory);
   }
 
+  legacyProjectionForgotten(scope, memory) {
+    if (typeof this.store.isProjectionLineageForgotten !== "function") return false;
+    const provenance = memory.provenance || {};
+    const stored = Array.isArray(provenance.projectionLineages) ? provenance.projectionLineages : [];
+    const counterpartIds = ids([provenance.counterpartId, ...(provenance.counterpartIds || [])]).filter(id => id !== scope.ownerId);
+    const lineages = stored.length ? stored : counterpartIds.map(counterpartId => projectionLineageFromSummary(memory,
+      { ownerId: scope.ownerId, counterpartId, legacyMemoryIds: provenance.perspectiveMemoryIds || [] })).filter(Boolean);
+    return lineages.some(lineage => this.store.isProjectionLineageForgotten(scope, lineage));
+  }
+
   currentSource(scope, entry, index, metadata) {
     if (!sourceRevisionCurrent(entry.source, scope, index, metadata)
       || entry.state.source && !sourceRevisionCurrent(entry.state.source, scope, index, metadata)) return false;
@@ -130,28 +206,27 @@ class Memory4RecallPlanner {
 
   // Only a provably complete, independent legacy fact can be suppressed. An
   // unsplittable narrative stays intact, even when it shares a source ID.
-  legacyCandidates(memories, scope, index) {
+  legacyCandidates(memories, scope, index, rejected = null) {
     const suppress = new Map();
-    const trackedSources = new Set();
     const requestedSources = new Set(memories.flatMap(memory => memory.provenance?.perspectiveMemoryIds || []));
     for (const row of Object.values(index.entries)) for (const ref of row.legacyRefs || []) {
       if (!requestedSources.has(ref.memoryId)) continue;
-      trackedSources.add(ref.memoryId);
-      if (ref.complete && this.validLegacyRef(scope, ref)) suppress.set(ref.memoryId, ref.sourceHash);
+      if (!ref.complete) continue;
+      if (this.validLegacyRef(scope, ref)) suppress.set(ref.memoryId, ref.sourceHash);
     }
     return memories.flatMap(memory => {
+      if (this.legacyProjectionForgotten(scope, memory)) { if (rejected) rejected.forgotten++; return []; }
       const sourceIds = memory.provenance?.perspectiveMemoryIds || [];
       if (!sourceIds.length) return [memory];
       const sources = sourceIds.map(id => this.baseStore.getMemory(id));
       if (sources.some(source => !source || source.provenance?.campaignToken !== scope.campaignToken
         || source.provenance?.folderOwnerId !== scope.ownerId || !ids(source.knownBy).includes(scope.ownerId))) {
-        return sourceIds.some(id => trackedSources.has(id)) ? [] : [memory];
+        return [memory];
       }
-      const header = memory.content.match(/^【[^\n]*能够知道并记住的本场内容】\n/);
-      const staleTracked = sourceIds.some(id => trackedSources.has(id) && !suppress.has(id));
-      if (staleTracked && (!header || memory.content !== header[0] + sources.map(source => `- ${source.content}`).join("\n"))) return [];
-      if (!header || memory.content !== header[0] + sources.map(source => `- ${source.content}`).join("\n")) return [memory];
-      return sources.flatMap(source => suppress.get(source.memoryId) === legacySourceHash(source) ? [] : [{ ...memory,
+      const header = memory.content.match(/^【[^\n]*能够知道并记住的本场(?:内容|经过)】\n/);
+      const exactProjection = header && memory.content === header[0] + sources.map(source => `- ${source.content}`).join("\n");
+      if (!exactProjection) return [memory];
+      return sources.flatMap(source => source.deleted || suppress.get(source.memoryId) === legacySourceHash(source) ? [] : [{ ...memory,
         memoryId: `${memory.memoryId}#${source.memoryId}`, content: source.content,
         provenance: { ...memory.provenance, legacyParentId: memory.memoryId, legacyParentHash: projectionHash(memory),
           perspectiveMemoryIds: [source.memoryId], temporalRefs: (memory.provenance.temporalRefs || [])
@@ -194,12 +269,20 @@ class Memory4RecallPlanner {
     const index = this.store.loadIndex(scope);
     const metadata = this.store.read(path.join(this.store.directory(scope), "metadata.json"), null);
     const parsed = options.queryModel || parseRecallQuery(options.query, options);
-    const query = { ...parsed, entityIds: [...parsed.entityIds], topics: [...(parsed.topics || [])] };
+    const explicitTargetEntityIds = Object.prototype.hasOwnProperty.call(options, "explicitTargetEntityIds")
+      ? ids(options.explicitTargetEntityIds) : ids(parsed.entityIds);
+    const mentionedOutOfSceneIds = ids(options.mentionedOutOfSceneIds);
+    const activeParticipantIds = ids(options.activeParticipantIds);
+    const query = { ...parsed, entityIds: ids([...(parsed.entityIds || []), ...explicitTargetEntityIds, ...mentionedOutOfSceneIds]),
+      topics: [...(parsed.topics || [])] };
     if (!AXES.has(query.axis) || !GRANULARITIES.has(query.granularity) || ids(query.entityIds).length !== query.entityIds.length) throw new Error("memory4_recall_query_invalid");
     const focus = options.focus;
     const seen = new Set(options.excludedKeys || []);
     const diagnostics = { ownerId: scope.ownerId, indexRevision: index.revision, axis: query.axis, granularity: query.granularity,
-      queryHash: hash(options.query || ""), candidateCount: 0, bodyReads: 0, rejected: {}, elapsedMs: 0 };
+      queryHash: hash(options.query || ""), candidateCount: 0, bodyReads: 0, rejected: {}, elapsedMs: 0,
+      explicitTargetEntityIds, activeParticipantIds, mentionedOutOfSceneIds, entityTargetCandidateCount: 0,
+      entityTargetSelectedIds: [], legacyCandidateCount: 0,
+      legacyRejected: { identity: 0, lexical: 0, topic: 0, budget: 0, stale: 0, forgotten: 0 }, memory4SelectedIds: [] };
     const reject = name => { diagnostics.rejected[name] = (diagnostics.rejected[name] || 0) + 1; };
     const focusValid = query.granularity === "FOLLOW_UP" && focus && focus.campaignToken === scope.campaignToken && focus.ownerId === scope.ownerId
       && focus.conversationId === options.conversationId && focus.sceneRevision === options.sceneRevision
@@ -209,7 +292,7 @@ class Memory4RecallPlanner {
     if (query.granularity === "FOLLOW_UP" && focusValid) {
       query.entityIds = [...focus.entityIds]; query.topics = [...focus.topics]; query.axis = focus.axis;
     }
-    const blocked = query.blockedReason || (!normalizeGameDate(options.currentGameDate) ? "GAME_DATE_UNAVAILABLE" : null)
+    let blocked = query.blockedReason || (!normalizeGameDate(options.currentGameDate) ? "GAME_DATE_UNAVAILABLE" : null)
       || (query.granularity === "FOLLOW_UP" && !focusValid ? "FOCUS_UNAVAILABLE" : null)
       || (options.temporalRecallEnabled === false && query.temporalRequested ? "TEMPORAL_RECALL_DISABLED" : null)
       || (options.identityUnresolved ? "IDENTITY_UNRESOLVED" : null);
@@ -228,6 +311,19 @@ class Memory4RecallPlanner {
     }
     const legacyEntityIds = new Set(legacyAliasesByEntity.keys());
     const queryText = query.text || options.query || "";
+    const queryMentionedEntityIds = aliasTracker.findMentionedCharacterIds([{ content: queryText }], { aliasIndex, resolveCoreference: false });
+    if (aliasTracker.lastScanUnresolved) blocked = "IDENTITY_UNRESOLVED";
+    if (/陌生的[\u3400-\u9fff]{2,4}/u.test(queryText) && !queryMentionedEntityIds.length) blocked = "IDENTITY_UNRESOLVED";
+    const hasLongerAliasConflict = content => {
+      const contentEntityIds = new Set(aliasTracker.findMentionedCharacterIds([{ content }], { aliasIndex, resolveCoreference: false }));
+      for (const [targetId, names] of legacyAliasesByEntity) {
+        if (!queryMentionedEntityIds.includes(targetId) || contentEntityIds.has(targetId)) continue;
+        const longerAliasIds = new Set(aliasIndex.filter(alias => alias.id !== targetId
+          && names.some(name => alias.name.length > name.length && alias.name.startsWith(name))).map(alias => alias.id));
+        if ([...longerAliasIds].some(id => contentEntityIds.has(id))) return true;
+      }
+      return false;
+    };
     const commitmentQuery = /承诺|答应|约定|promise|commitment|pledge/i.test(queryText);
     const activeCommitmentQuery = commitmentQuery && /仍然|尚未|还未|还没|未完成|未履行|还欠|尚欠|有效|待履行|pending|outstanding|unfulfilled|still|active/i.test(queryText);
     const genericCommitmentQuery = commitmentQuery && !queryText.replace(/还有|哪些|以前|曾经|过去|当时|尚未|还未|还没|未完成|未履行|承诺|答应|约定|履行|仍然|有效|待履行|还欠|尚欠|过|什么|的|了|吗|呢|你|我|我们|[？?，。\s]|what|which|are|were|your|our|my|promises?|commitments?|pledges?|pending|outstanding|unfulfilled|still|active|before|previously|have|you|i|made/gi, "");
@@ -241,10 +337,11 @@ class Memory4RecallPlanner {
     const searchText = removeEntityNames(query.text || options.query, options.entityNames || [])
       .replace(query.expression || "\u0000", "")
       .replace(/\d+[./-]\d+[./-]\d+|\d+年(?:\d+月(?:\d+[日号])?)?/g, "")
-      .replace(/你还记得|还记得|记得|记忆|回忆|我们|你我|他们|她们|你|我|他|她|一生|生平|总体|一路|这些|当时|当年|那年|事情|事件|发生|故事|情形|经历|往事|历史|聊过|谈过|说过|聊|什么|如何|怎么样|后来|之后|随后|[的了吗呢？?，。\s]/g, "");
+      .replace(/[〇零一二两三四五六七八九十百千万亿\d]+号(?:人物|人)|完全陌生(?:的)?|你还记得|还记得|记得|记忆|回忆|我们|你我|他们|她们|你|我|他|她|一生|生平|总体|一路|这些|当时|当年|那年|事情|事件|发生|故事|情形|经历|往事|历史|聊过|谈过|说过|聊|什么|如何|怎么样|后来|之后|随后|[的了吗呢？?，。\s]/g, "");
     const rows = blocked ? [] : Object.entries(index.entries).flatMap(([id, row]) => {
       // Scope is authenticated by loadIndex; body ACL is verified again below.
-      if (relevantEntities.length && !relevantEntities.some(entity => row.entityIds.includes(entity))) { reject("identity"); return []; }
+      const targetHit = relevantEntities.some(entity => row.entityIds.includes(entity));
+      if (relevantEntities.length && !targetHit && !matchesTopic(row) && !searchText) { reject("identity"); return []; }
       if (row.knownBy && (!row.knownBy.includes(scope.ownerId) || !["private", "participants", "known_group"].includes(row.visibility))) { reject("visibility"); return []; }
       if (row.deleted) { reject("deleted"); return []; }
       if (commitmentQuery && row.memoryType !== "COMMITMENT" || activeCommitmentQuery && row.status !== "active") { reject("state"); return []; }
@@ -261,11 +358,13 @@ class Memory4RecallPlanner {
         || !(focus.chainIds.includes(row.finalizationId) || (row.supportedByEntryIds || []).some(key => focus.entryIds.includes(key))
           || (row.supersedesEntryIds || []).some(key => focus.entryIds.includes(key))))) { reject("chain"); return []; }
       if (/仍然|尚未|还未|有效|未完成|still|active/i.test(query.text || options.query || "") && row.status !== "active") { reject("state"); return []; }
-      if (queryTopics.length && !matchesTopic(row)) return [];
-      if (!requested && !matchesTopic(row)) return [];
+      const topicHit = matchesTopic(row);
+      if (queryTopics.length && !topicHit && !targetHit && !searchText) return [];
+      if (!requested && !topicHit && !targetHit && !searchText) return [];
       const entityScore = relevantEntities.filter(entity => row.entityIds.includes(entity)).length;
+      const explicitTargetScore = explicitTargetEntityIds.filter(entity => row.entityIds.includes(entity)).length;
       const direct = query.axis === "MEMORY_RECALL" && matched.axis === "conversation" && row.counterpartIds.includes(query.querySpeakerId);
-      return [{ id, row, matched, score: (direct ? 100 : 0) + (matchesTopic(row) ? 20 : 0) + entityScore * 5 + (row.importance || 0) }];
+      return [{ id, row, matched, score: explicitTargetScore * 1000 + (direct ? 100 : 0) + (matchesTopic(row) ? 20 : 0) + entityScore * 5 + (row.importance || 0) }];
     });
     diagnostics.candidateCount = rows.length;
     rows.sort((a, b) => query.firstMeeting ? serial(a.row.conversationDate) - serial(b.row.conversationDate) || a.id.localeCompare(b.id)
@@ -285,8 +384,11 @@ class Memory4RecallPlanner {
       const entry = readCandidate(candidate.id);
       if (!ids(entry.evidence?.knownBy).includes(scope.ownerId) || !["private", "participants", "known_group"].includes(entry.evidence?.visibility)) { reject("visibility"); continue; }
       if (!this.currentSource(scope, entry, index, metadata)) { reject("revision"); continue; }
-      if (!genericCommitmentQuery && !query.firstMeeting && query.granularity !== "FOLLOW_UP" && !queryTopics.length && searchText
-        && this.ranker.rank([{ content: entry.text, tags: entry.topics }], { query: searchText })[0].reason.query < 0.28) continue;
+      const targetHit = relevantEntities.some(entity => candidate.row.entityIds.includes(entity));
+      const topicHit = matchesTopic(candidate.row);
+      const lexicalHit = !!searchText && hasLexicalOverlap(searchText, `${entry.text} ${(entry.topics || []).join(" ")}`);
+      if (!genericCommitmentQuery && !query.firstMeeting && query.granularity !== "FOLLOW_UP"
+        && !targetHit && !topicHit && !lexicalHit) { reject("lexical"); continue; }
       if (query.firstMeeting && !isFirstMeetingSummary({ content: entry.text })) continue;
       if (query.firstMeeting) firstMeetingDate = serial(entry.conversationDate);
       const key = `memory4:${scope.campaignToken}:${scope.ownerId}:${entry.entryId}`;
@@ -301,10 +403,25 @@ class Memory4RecallPlanner {
       if (details.length >= (query.granularity === "LIFE" || query.firstMeeting ? 1 : 2)) break;
     }
     const bridge = buildLegacyBridge(options.legacyMemories || [], { ...scope, currentGameDate: options.currentGameDate, currentTotalDays: options.currentTotalDays });
-    const legacy = blocked || activeCommitmentQuery ? [] : this.legacyCandidates(bridge.memories.filter(memory => !relevantEntities.length
-      || relevantEntities.some(entity => entitySet(memory).includes(entity))
-      || containsEntityAlias(memory.content, legacyEntityIds, aliasIndex, aliasTracker)), scope, index);
-    const legacyRanked = this.ranker.rank(legacy, { query: query.text || options.query, entityIds: relevantEntities });
+    diagnostics.legacyRejected.forgotten = (options.legacyMemories || []).filter(memory => memory?.deleted).length;
+    const authorizedLegacy = bridge.memories.filter(memory => {
+      const targetHit = relevantEntities.some(entity => entitySet(memory).includes(entity))
+        || containsEntityAlias(memory.content, legacyEntityIds, aliasIndex, aliasTracker);
+      const topicHit = queryTopics.some(topic => memory.content.includes(topic) || (memory.tags || []).includes(topic));
+      const lexicalHit = !!searchText && hasLexicalOverlap(searchText, `${memory.content} ${(memory.tags || []).join(" ")}`);
+      if (targetHit || !hasLongerAliasConflict(memory.content) && (!relevantEntities.length || topicHit || lexicalHit)) return true;
+      diagnostics.legacyRejected.identity++;
+      return false;
+    });
+    const legacy = blocked ? [] : this.legacyCandidates(authorizedLegacy, scope, index, diagnostics.legacyRejected);
+    diagnostics.legacyCandidateCount = legacy.length;
+    diagnostics.entityTargetCandidateCount = rows.filter(candidate => explicitTargetEntityIds.some(id => candidate.row.entityIds.includes(id))).length
+      + legacy.filter(memory => explicitTargetEntityIds.some(id => entitySet(memory).includes(id))
+        || containsEntityAlias(memory.content, new Set(explicitTargetEntityIds), aliasIndex, aliasTracker)).length;
+    const legacyRanked = this.ranker.rank(legacy, { query: query.text || options.query, entityIds: relevantEntities })
+      .map(candidate => ({ ...candidate, score: candidate.score + (explicitTargetEntityIds.some(id => entitySet(candidate.memory).includes(id)
+        || containsEntityAlias(candidate.memory.content, new Set([id]), aliasIndex, aliasTracker)) ? 1 : 0) }))
+      .sort((left, right) => right.score - left.score);
     let overview = blocked ? null : this.coordinator.derived?.selectSlice(scope, { query, index,
       eligibleEntryIds: rows.slice(0, Math.max(0, 32 - diagnostics.bodyReads)).map(candidate => candidate.id), currentGameDate: options.currentGameDate,
       maxTokens: Math.min(400, options.memoryEngineRemainingBudget || 0), estimateTokens: options.estimateTokens, excludedKeys: [...seen],
@@ -312,18 +429,27 @@ class Memory4RecallPlanner {
     if (overview) {
       for (const id of overview.sourceRef.sourceEntryIds) {
         const entry = readCandidate(id);
-        if (!this.currentSource(scope, entry, index, metadata) || !ids(entry.evidence.knownBy).includes(scope.ownerId)
-          || !genericCommitmentQuery && !queryTopics.length && searchText && this.ranker.rank([{ content: entry.text, tags: entry.topics }], { query: searchText })[0].reason.query < 0.28) {
+        if (!this.currentSource(scope, entry, index, metadata) || !ids(entry.evidence.knownBy).includes(scope.ownerId)) {
           reject("revision"); overview = null; break;
         }
+        const row = index.entries[id];
+        const targetHit = relevantEntities.some(entity => row.entityIds.includes(entity));
+        const topicHit = matchesTopic(row);
+        const lexicalHit = !!searchText && hasLexicalOverlap(searchText, `${entry.text} ${(entry.topics || []).join(" ")}`);
+        if (!genericCommitmentQuery && !query.firstMeeting && query.granularity !== "FOLLOW_UP"
+          && !targetHit && !topicHit && !lexicalHit) { reject("lexical"); overview = null; break; }
       }
     }
     if (!overview && !blocked && query.axis === "CONVERSATION" && query.granularity === "YEAR" && rows.length > 2) {
       const items = [], texts = [];
       for (const candidate of rows.slice(0, Math.max(0, 32 - diagnostics.bodyReads))) {
         const entry = readCandidate(candidate.id);
-        if (!this.currentSource(scope, entry, index, metadata) || !ids(entry.evidence.knownBy).includes(scope.ownerId)
-          || !genericCommitmentQuery && !queryTopics.length && searchText && this.ranker.rank([{ content: entry.text, tags: entry.topics }], { query: searchText })[0].reason.query < 0.28) continue;
+        if (!this.currentSource(scope, entry, index, metadata) || !ids(entry.evidence.knownBy).includes(scope.ownerId)) continue;
+        const targetHit = relevantEntities.some(entity => candidate.row.entityIds.includes(entity));
+        const topicHit = matchesTopic(candidate.row);
+        const lexicalHit = !!searchText && hasLexicalOverlap(searchText, `${entry.text} ${(entry.topics || []).join(" ")}`);
+        if (!genericCommitmentQuery && !query.firstMeeting && query.granularity !== "FOLLOW_UP"
+          && !targetHit && !topicHit && !lexicalHit) { reject("lexical"); continue; }
         const text = `${entry.conversationDate}（${entry.evidence.sourceType}/${entry.evidence.epistemicStatus}；${entry.state.status}）：${entry.text}`;
         if ((options.estimateTokens || estimateDefault)([...texts, text].join("\n")) > 400) continue;
         texts.push(text); items.push(entry.entryId);
@@ -347,13 +473,24 @@ class Memory4RecallPlanner {
         if (matched) break;
       }
       if (!matched && (query.axis !== "EVENT" || !query.window && !query.firstMeeting)) matched = temporalMatch(pseudo, query, options);
-      if (!matched || query.granularity === "FOLLOW_UP" || !requested && candidate.reason.query < 0.28) continue;
-      if (queryTopics.length && !queryTopics.some(topic => memory.content.includes(topic))) continue;
-      if (!genericCommitmentQuery && !query.firstMeeting && !queryTopics.length && searchText
-        && this.ranker.rank([memory], { query: searchText })[0].reason.query < 0.28) continue;
+      if (!matched || query.granularity === "FOLLOW_UP") continue;
+      const targetHit = relevantEntities.some(entity => entitySet(memory).includes(entity))
+        || legacyEntityIds.size > 0 && containsEntityAlias(memory.content, legacyEntityIds, aliasIndex, aliasTracker);
+      const topicHit = queryTopics.some(topic => memory.content.includes(topic) || (memory.tags || []).includes(topic));
+      const lexicalHit = !!searchText && hasLexicalOverlap(searchText, `${memory.content} ${(memory.tags || []).join(" ")}`);
+      const temporalHit = !!query.window || query.firstMeeting;
+      if (!targetHit && hasLongerAliasConflict(memory.content)) {
+        diagnostics.legacyRejected.identity++;
+        continue;
+      }
+      if (!targetHit && !topicHit && !lexicalHit && !temporalHit && !genericCommitmentQuery) {
+        diagnostics.legacyRejected.lexical++;
+        if (queryTopics.length) diagnostics.legacyRejected.topic++;
+        continue;
+      }
       if (query.firstMeeting && (!pseudo.counterpartIds.includes(query.querySpeakerId) || !isFirstMeetingSummary(memory))) continue;
       const item = { memory: { ...memory, memory4Key: key }, reason: matched, score: candidate.score,
-        annotation: `旧个人投影；可见性证据不完整；对话日期 ${memory.eventDate || "未知"}；时间引用不单独证明事件属实。`,
+        annotation: `旧个人投影；可见性证据不完整${activeCommitmentQuery ? "；只证明过去曾有此承诺，不证明当前仍然有效" : ""}；对话日期 ${memory.eventDate || "未知"}；时间引用不单独证明事件属实。`,
         chainId: memory.provenance?.finalizationId,
         sourceRef: { kind: "legacy", id: memory.memoryId, parentId: memory.provenance?.legacyParentId || memory.memoryId,
           bodyHash: memory.provenance?.legacyParentHash || projectionHash(memory) } };
@@ -367,6 +504,20 @@ class Memory4RecallPlanner {
       if (canBeDetail && details.length < (query.granularity === "LIFE" || query.firstMeeting ? 1 : 2)) details.push(item);
       else if (!canBeDetail && query.granularity !== "EXACT_DATE" && !overview) overview = item;
     }
+    for (const item of [overview, ...details].filter(Boolean)) {
+      const targetIds = item.sourceRef.kind === "detail"
+        ? explicitTargetEntityIds.filter(id => index.entries[item.sourceRef.id]?.entityIds.includes(id))
+        : item.sourceRef.kind === "legacy"
+          ? explicitTargetEntityIds.filter(id => entitySet(item.memory).includes(id)
+            || containsEntityAlias(item.memory.content, new Set([id]), aliasIndex, aliasTracker))
+          : explicitTargetEntityIds.filter(id => item.sourceRef.sourceEntryIds?.some(sourceId => index.entries[sourceId]?.entityIds.includes(id)));
+      if (!targetIds.length) continue;
+      item.routeKind = "entity_target";
+      item.routeKinds = ["entity_target"];
+      item.routeCharacterIds = targetIds;
+      item.explicitTargetEntityIds = targetIds;
+      if (!String(item.annotation || "").includes("明确询问人物的历史记忆")) item.annotation = `明确询问人物的历史记忆；${item.annotation || ""}`;
+    }
     let profileText = null;
     if (!blocked && requested && relevantEntities.some(entity => entity !== query.querySpeakerId)) {
       profileText = relevantEntities.filter(entity => entity !== scope.ownerId).slice(0, 3).map(entity => {
@@ -377,11 +528,18 @@ class Memory4RecallPlanner {
     const notice = blocked ? "无法确认本轮时间、人物或已成功建立的事件焦点；不得用无关年份、人物或日历下一条记录代答。"
       : query.firstMeeting ? "以下仅为正文明确记载初次相识的最早可用记录，不保证人生中真正的第一次。"
         : query.window && !details.length && !overview ? "本轮没有可新增的目标时段证据；此前已注入的匹配历史仍可用，不代表当时没有发生。" : null;
+    const selectedLegacyBeforeFit = new Set([overview, ...details].filter(item => item?.sourceRef?.kind === "legacy")
+      .map(item => item.memory.memoryId));
     const packet = fitRecallPacket({ query, overview, details, profileText, notice, diagnostics,
       focus: { ...scope, conversationId: options.conversationId, sceneRevision: options.sceneRevision,
         turnEpoch: options.turnEpoch, axis: query.axis, entityIds: [...relevantEntities] } },
     Math.min(1200, Number(options.memoryEngineRemainingBudget) || 0, Number(options.providerRemainingSafeBudget ?? 1200)), options.estimateTokens);
     if (packet.focus) packet.focus.sourceRefs = packet.sourceRefs;
+    diagnostics.legacyRejected.budget += [...selectedLegacyBeforeFit].filter(id =>
+      !packet.items.some(item => item.sourceRef.kind === "legacy" && item.memory.memoryId === id)).length;
+    diagnostics.entityTargetSelectedIds = packet.items.filter(item => item.routeKind === "entity_target")
+      .map(item => item.memory.memoryId);
+    diagnostics.memory4SelectedIds = packet.items.filter(item => item.sourceRef.kind === "detail").map(item => item.memory.memoryId);
     diagnostics.selectedIds = packet.items.map(item => item.memory.memoryId); diagnostics.tokens = packet.tokens; diagnostics.elapsedMs = Date.now() - started;
     this.coordinator.trace?.record("memory4_recall", diagnostics);
     return packet;
