@@ -1,5 +1,15 @@
 # 对话摘要与人物记忆：Memory Engine 4.0（3.0 协议、2.5 存储兼容）
 
+## V8.15.1（2026-10-06）
+
+[实施报告](v8.15.1-implementation-report.md)：姓名继续作为角色绑定标识，由 Prompt 限制陌生人的身份认知，不新增 NAME 披露类型。当前身份使用现有 TITLE 的主要头衔、等级和职位候选，特质使用 TRAIT，年龄沿用披露时 AGE 与获知日期。保存真实 sourceRole，区分玩家原话、NPC 可绑定直接对白及严格第一人称肯定自报；他人直接公开也可记录，旁白/内心/传闻/否认/歧义与不在场片段不授权。已验证披露在叙事提交、遗忘过滤和来源校验后持久保存，不依赖长期抽取成功；新知情仍下一场生效，手工隐藏、Fact Epoch 与删除撤销保持优先。
+
+叙事 Recovery 保留到逐 Owner 的可验证终态或持久任务交接，提交过的 Detail 不重新抽取，dirty Year/Life 完成或保留可重试任务后才清理恢复材料。canonical-only 与 Legacy 目录共用 Store 解析合同；详情响应绑定列表请求世代，刷新后不接纳旧正文/错误。未知事件日期不借交谈日期补年，旧正文不自动改写。完全离线且无可信会话/Campaign 时的独立档案浏览仍未新增。显示 4.0、协议 3.0、存储 2.5、App 2.0.4、Prompt Block IDs、Cache Anchor 与 Owner/Campaign 授权保持兼容。
+
+## V8.15 修复1.1（2026-10-06）
+
+[小修报告](v8.15-fix1.1-implementation-report.md)：没有 `legacyParentId` 的完整 Narrative 在命中显式目标时，可替换非目标 overview；已命中目标的 Derived/Legacy 不被另一个目标强制覆盖。无显式目标与普通 Legacy 保持原行为；超长正文仍走已有 excerpt，Packet ≤1200，协议/存储、授权、持久遗忘、Orphan 与缓存合同不变。真实 L5-L9、Provider/Soak 仍待用户验收。
+
 ## V8.15 修复1（2026-10-06）
 
 [实施报告](v8.15-fix1-implementation-report.md)：显式人物优先级延续至 Canonical/Legacy/Derived 的最终选择与预算裁剪，必要时只替换最低分非目标 Detail；清除无关预算后再次尝试超长目标 Legacy 片段。Detail 数量、1200 token 上限及无显式目标行为保持。

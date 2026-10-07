@@ -282,10 +282,17 @@ class Memory4DerivedService {
 
   schedule(scope, options = {}) {
     const finalizationProof = options.committedFinalization ? { finalizationId: scope.finalizationId, sourceRevision: scope.sourceRevision } : null;
-    if (options.committedFinalization && !this.committedProof(scope, finalizationProof)) return;
-    if (!options.committedFinalization && (!this.options.isCampaignCurrent || !this.options.isCampaignCurrent(scope.campaignToken))) return;
-    setImmediate(() => this.rebuild(scopeDto(scope), { kind: "all", ...options, finalizationProof }).catch(error => {
-      this.coordinator.trace?.record("memory4_derived", { ownerId: scope.ownerId, status: "FAILED", errorCode: error.message });
+    if (options.committedFinalization && !this.committedProof(scope, finalizationProof)) {
+      return Promise.resolve({ status: "FAILED", kind: "all", reason: "COMMITTED_SOURCE_PROOF_UNAVAILABLE" });
+    }
+    if (!options.committedFinalization && (!this.options.isCampaignCurrent || !this.options.isCampaignCurrent(scope.campaignToken))) {
+      return Promise.resolve({ status: "CANCELLED", kind: "all", reason: "CAMPAIGN_NOT_CURRENT" });
+    }
+    return new Promise(resolve => setImmediate(() => {
+      this.rebuild(scopeDto(scope), { kind: "all", ...options, finalizationProof }).then(resolve).catch(error => {
+        this.coordinator.trace?.record("memory4_derived", { ownerId: scope.ownerId, status: "FAILED", errorCode: error.message });
+        resolve({ status: "FAILED", kind: "all", reason: String(error?.message || error) });
+      });
     }));
   }
 

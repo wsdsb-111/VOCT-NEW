@@ -1166,7 +1166,7 @@ class MemoryEngine {
     return episode;
   }
 
-  async finalizeWithAvailableOutput(context, { providerOutput = null, parsedExtraction = null, recoveryPath = null } = {}) {
+  async finalizeWithAvailableOutput(context, { providerOutput = null, parsedExtraction = null, recoveryPath = null, deferRecoveryCleanup = false } = {}) {
     if (!this.isFinalizationCurrent(context)) return this.cancelledFinalizationResult(context);
     const committed = this.isCommitted(context);
     if (committed) {
@@ -1280,7 +1280,7 @@ class MemoryEngine {
       if (!this.isFinalizationCurrent(context)) return this.cancelledFinalizationResult(context);
       this.commitFinalization(context, extraction);
       this.trace.record("summary_persist", { conversationId: context.conversationId, finalizationId: context.finalizationId, success: true, durationMs: Date.now() - persistStartedAt, memoryCount: extraction.memories.length });
-      if (snapshotPath && fs.existsSync(snapshotPath)) fs.unlinkSync(snapshotPath);
+      if (!deferRecoveryCleanup && snapshotPath && fs.existsSync(snapshotPath)) fs.unlinkSync(snapshotPath);
       this.traceFinalization(context, "committed", {
         providerSuccess: true,
         parseMode: extraction.structured ? "structured" : "prose_fallback",
@@ -1290,7 +1290,8 @@ class MemoryEngine {
         summaryFoldersSaved: folderPersistence.saved === true,
         recoveryState: "committed"
       });
-      return { success: true, finalSummary: extraction.sessionSummary || content, extraction, directedSummaries };
+      return { success: true, finalSummary: extraction.sessionSummary || content, extraction, directedSummaries,
+        ...(deferRecoveryCleanup ? { recoveryPath: snapshotPath } : {}) };
     } catch (error) {
       if (!this.isFinalizationCurrent(context)) return this.cancelledFinalizationResult(context);
       this.trace.record("summary_persist", { conversationId: context.conversationId, finalizationId: context.finalizationId, success: false, durationMs: Date.now() - persistStartedAt, memoryCount: extraction.memories.length, error: error.message || String(error) });
@@ -1310,8 +1311,13 @@ class MemoryEngine {
     const prepared = this.prepareFinalizationContext(context);
     this.activeFinalizationIds.add(prepared.finalizationId);
     try {
-      const narrative = await this.finalizeWithAvailableOutput(prepared);
-      if (!narrative.success || !this.memory4 || typeof prepared.requestDurable !== "function") return narrative;
+      const narrative = await this.finalizeWithAvailableOutput(prepared, { deferRecoveryCleanup: true });
+      if (!narrative.success) return narrative;
+      if (!this.memory4 || !hasResolvedCampaignToken(prepared.campaignToken)) {
+        if (narrative.recoveryPath && fs.existsSync(narrative.recoveryPath)) fs.unlinkSync(narrative.recoveryPath);
+        return narrative;
+      }
+      if (typeof prepared.requestDurable !== "function") return narrative;
       try {
         const committed = this.isCommitted(prepared);
         const durable = await this.memory4.finalizeCommitted({ ...prepared,
@@ -1319,6 +1325,9 @@ class MemoryEngine {
           verifiedSummarySegments: committed?.visibilityValidationVersion === 1 ? committed.summarySegments : [] }, prepared.requestDurable, {
           isNarrativeCommitted: this.isMemory4NarrativeCommitted(prepared), isCurrent: () => this.isFinalizationCurrent(prepared)
         });
+        if (durable.durableHandoffComplete === true && narrative.recoveryPath && fs.existsSync(narrative.recoveryPath)) {
+          fs.unlinkSync(narrative.recoveryPath);
+        }
         return { ...narrative, durable };
       } catch (error) {
         this.trace.record("memory4_durable", { finalizationId: prepared.finalizationId, status: "EXTRACTION_FAILED", errorCode: error.message });
@@ -1450,9 +1459,22 @@ class MemoryEngine {
       buildPrompt,
       persistCharacterFolders
     });
-    if (this.isCommitted(context)) {
-      fs.unlinkSync(filePath);
-      return { success: true, alreadyCommitted: true, participants: context.participants };
+    const committedEpisode = this.isCommitted(context);
+    if (committedEpisode) {
+      if (!this.memory4 || !hasResolvedCampaignToken(context.campaignToken)) {
+        if (fs.existsSync(filePath)) fs.unlinkSync(filePath);
+        return { success: true, alreadyCommitted: true, participants: context.participants };
+      }
+      if (typeof requestDurable !== "function") return { success: true, narrativeCommitted: true, alreadyCommitted: true,
+        participants: context.participants, recoveryPath: filePath };
+      const durable = await this.memory4.finalizeCommitted({ ...context,
+        verifiedSummarySegments: committedEpisode.visibilityValidationVersion === 1 ? committedEpisode.summarySegments : [] }, requestDurable, {
+        isNarrativeCommitted: this.isMemory4NarrativeCommitted(context),
+        isCurrent: () => this.isFinalizationCurrent(context), handoffOnly: true
+      });
+      if (durable.durableHandoffComplete === true && fs.existsSync(filePath)) fs.unlinkSync(filePath);
+      return { success: durable.durableHandoffComplete === true, narrativeCommitted: true, alreadyCommitted: true, participants: context.participants, durable,
+        ...(fs.existsSync(filePath) ? { recoveryPath: filePath } : {}) };
     }
     let recoveredExtraction = snapshot.parsedExtraction || null;
     const isVerbatimSourceTranscript = (extraction) => {
@@ -1515,20 +1537,27 @@ class MemoryEngine {
     const result = await this.finalizeWithAvailableOutput(context, {
       providerOutput: recoveryProviderOutput,
       parsedExtraction: recoveredExtraction,
-      recoveryPath: filePath
+      recoveryPath: filePath,
+      deferRecoveryCleanup: true
     });
     if (result.success) {
       this.trace.record("recover", { conversationId: context.conversationId, reason: "recovered" });
       let durable = null;
-      if (this.memory4 && typeof requestDurable === "function") {
+      const memory4Applicable = !!this.memory4 && hasResolvedCampaignToken(context.campaignToken);
+      if (memory4Applicable && typeof requestDurable === "function") {
         const committed = this.isCommitted(context);
         durable = await this.memory4.finalizeCommitted({ ...context,
           directedSummaries: result.directedSummaries,
           verifiedSummarySegments: committed?.visibilityValidationVersion === 1 ? committed.summarySegments : [] }, requestDurable, {
-          isNarrativeCommitted: this.isMemory4NarrativeCommitted(context), isCurrent: () => this.isFinalizationCurrent(context)
+          isNarrativeCommitted: this.isMemory4NarrativeCommitted(context), isCurrent: () => this.isFinalizationCurrent(context), handoffOnly: true
         }).catch(error => ({ status: "EXTRACTION_FAILED", error: error.message }));
       }
-      return { ...result, durable, participants: context.participants };
+      if (!memory4Applicable || durable?.durableHandoffComplete === true) {
+        if (fs.existsSync(filePath)) fs.unlinkSync(filePath);
+      }
+      return { ...result, success: !memory4Applicable || typeof requestDurable !== "function" || durable?.durableHandoffComplete === true,
+        narrativeCommitted: true, durable, participants: context.participants,
+        ...(fs.existsSync(filePath) ? { recoveryPath: filePath } : {}) };
     }
     if (result.cancelled) return result;
     const retryCount = context.retryCount;

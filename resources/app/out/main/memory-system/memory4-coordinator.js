@@ -715,7 +715,7 @@ class Memory4Coordinator {
       date: context.date || null, totalDays: context.totalDays ?? null, counterpartIds: directCounterpartIds(projection.fragments, ownerId), summaryIds: [],
       summaryProviderSnapshot: context.summaryProviderSnapshot || null,
       ...projection, projectionLineages, disclosureCharacters, disclosureFactEpochs, relationshipChangeEntityIds, ...entityContext };
-    return this.store.filterForgottenSnapshot(snapshot).snapshot;
+    return snapshot;
   }
 
   projectionLineagesForSnapshot(context, ownerId, fragments) {
@@ -826,15 +826,17 @@ class Memory4Coordinator {
       commitmentTransitions: retainedTransitions, rejectedUnknownEntityCount };
   }
 
-  async finishOwner(snapshot, requestDurable, prior = null, isCurrent = () => true) {
+  async finishOwner(snapshot, requestDurable, prior = null, isCurrent = () => true, { handoffOnly = false } = {}) {
     const file = this.recoveryPath(snapshot);
     if (this.inFlight.has(file)) return { status: "IN_PROGRESS", ownerId: snapshot.ownerId };
     this.inFlight.add(file);
     const forgottenFragmentIds = new Set(strings(prior?.forgottenFragmentIds));
+    let forgetFilterPassed = false;
     try {
       const hadFragments = Array.isArray(snapshot.fragments) && snapshot.fragments.length > 0;
       let sourceFilteredByForget = false;
       const filtered = this.store.filterForgottenSnapshot(snapshot);
+      forgetFilterPassed = true;
       snapshot = filtered.snapshot;
       if (filtered.forgottenProjectionIds.length || filtered.removedFragmentCount) {
         (filtered.removedFragmentIds || []).forEach(id => forgottenFragmentIds.add(id));
@@ -850,6 +852,11 @@ class Memory4Coordinator {
       const committed = this.store.loadIndex(snapshot).finalizations[hash(snapshot.finalizationId)];
       if (committed) {
         if (committed.sourceRevision !== snapshot.sourceRevision) throw new Error("memory4_source_revision_conflict");
+        if (handoffOnly) {
+          this.saveRecovery(snapshot, { status: "PENDING", retryCount: Number(prior?.retryCount || 0), lastError: null });
+          this.recordDisclosures(snapshot);
+          return { ownerId: snapshot.ownerId, status: "RECOVERY_PENDING", alreadyCommitted: true, recoveryPath: file };
+        }
         if (snapshot.legacyRecompression === true) {
           const derived = await this.derived.rebuild(snapshot, { kind: "all", providerSnapshot: snapshot.summaryProviderSnapshot,
             committedFinalization: true, finalizationProof: { finalizationId: snapshot.finalizationId, sourceRevision: snapshot.sourceRevision } });
@@ -859,16 +866,20 @@ class Memory4Coordinator {
           } else this.saveRecovery(snapshot, { status: "DERIVED_REBUILD_FAILED", retryCount: prior?.retryCount || 0,
             lastError: String(derived.reason || derived.status || "memory4_derived_failed") });
           return { ownerId: snapshot.ownerId, ...committed,
-            ...(derivedComplete ? { alreadyCommitted: true, derivedRecovered: true } : { status: "DERIVED_REBUILD_FAILED" }), derived };
+            ...(derivedComplete ? { alreadyCommitted: true, derivedRecovered: true } : { status: "DERIVED_REBUILD_FAILED", recoveryPath: file }), derived };
         }
         this.recordDisclosures(snapshot, { campaignToken: snapshot.campaignToken, date: snapshot.date,
           characters: new Map((snapshot.disclosureCharacters || []).map(character => [character.id, character])) });
-        if (fs.existsSync(file)) fs.unlinkSync(file);
-        return { ownerId: snapshot.ownerId, ...committed, alreadyCommitted: true };
+        const derived = await this.finishCommittedDerived(snapshot, prior, file);
+        const derivedComplete = !derived || !derived.status || ["COMPLETE", "MANUAL_OVERRIDE"].includes(derived.status);
+        return { ownerId: snapshot.ownerId, ...committed, alreadyCommitted: true,
+          ...(derived ? { derived } : {}), ...(derivedComplete ? {} : { status: "DERIVED_REBUILD_FAILED", recoveryPath: file }) };
       }
       snapshot.activeCommitments ||= this.store.activeCommitments(snapshot);
       this.saveRecovery(snapshot, { forgottenFragmentIds: [...forgottenFragmentIds], status: "PENDING", retryCount: prior?.retryCount || 0, lastError: null });
       if (!snapshot.skipKnownEvidence) this.store.recordKnownEvidence(snapshot);
+      this.recordDisclosures(snapshot);
+      if (handoffOnly) return { ownerId: snapshot.ownerId, status: "RECOVERY_PENDING", recoveryPath: file };
       let result;
       if (!snapshot.presentMessageCount && !snapshot.fragments.length) result = { status: "NOT_PRESENT", entries: [] };
       else if (!snapshot.fragments.length) result = { status: "NO_DURABLE_CONTENT", entries: [] };
@@ -962,48 +973,88 @@ class Memory4Coordinator {
         this.trace?.record("memory4_durable", { finalizationId: snapshot.finalizationId, ownerId: snapshot.ownerId,
           status: persisted.status, entryCount: persisted.entryIds.length, derivedStatus: derived.status });
         return { ownerId: snapshot.ownerId, ...persisted,
-          ...( ["COMPLETE", "MANUAL_OVERRIDE"].includes(derived.status) ? {} : { status: "DERIVED_REBUILD_FAILED" }), derived };
+          ...( ["COMPLETE", "MANUAL_OVERRIDE"].includes(derived.status) ? {} : { status: "DERIVED_REBUILD_FAILED", recoveryPath: file }), derived };
       }
-      if (persisted.entryIds.length || persisted.changedEntryIds?.length) this.derived.schedule(snapshot, { providerSnapshot: snapshot.summaryProviderSnapshot, committedFinalization: true });
-      if (fs.existsSync(file)) fs.unlinkSync(file);
+      const derived = await this.finishCommittedDerived(snapshot, prior, file);
+      const derivedComplete = !derived || !derived.status || ["COMPLETE", "MANUAL_OVERRIDE"].includes(derived.status);
       this.trace?.record("memory4_durable", { finalizationId: snapshot.finalizationId, ownerId: snapshot.ownerId,
-        status: persisted.status, entryCount: persisted.entryIds.length, completeness: persisted.completeness });
-      return { ownerId: snapshot.ownerId, ...persisted };
+        status: persisted.status, entryCount: persisted.entryIds.length, completeness: persisted.completeness,
+        ...(derived ? { derivedStatus: derived.status } : {}) });
+      return { ownerId: snapshot.ownerId, ...persisted, ...(derived ? { derived } : {}),
+        ...(derivedComplete ? {} : { status: "DERIVED_REBUILD_FAILED", recoveryPath: file }) };
     } catch (error) {
-      if (!isCurrent()) return { ownerId: snapshot.ownerId, status: "CANCELLED" };
+      if (!isCurrent()) return { ownerId: snapshot.ownerId, status: "CANCELLED",
+        ...(fs.existsSync(file) ? { recoveryPath: file } : {}) };
       const retryCount = Number(prior?.retryCount || 0) + 1;
-      this.saveRecovery(snapshot, { forgottenFragmentIds: [...forgottenFragmentIds], status: "EXTRACTION_FAILED",
+      if (forgetFilterPassed) this.saveRecovery(snapshot, { forgottenFragmentIds: [...forgottenFragmentIds], status: "EXTRACTION_FAILED",
         retryCount, lastError: String(error?.message || error) });
       this.trace?.record("memory4_durable", { finalizationId: snapshot.finalizationId, ownerId: snapshot.ownerId,
         status: "EXTRACTION_FAILED", errorCode: String(error?.message || error) });
-      return { ownerId: snapshot.ownerId, status: "EXTRACTION_FAILED", retryCount, error: String(error?.message || error), recoveryPath: file };
+      return { ownerId: snapshot.ownerId, status: "EXTRACTION_FAILED", retryCount, error: String(error?.message || error),
+        ...(forgetFilterPassed && fs.existsSync(file) ? { recoveryPath: file } : {}) };
     } finally { this.inFlight.delete(file); }
   }
 
-  async finalizeCommitted(context, requestDurable, { isNarrativeCommitted, isCurrent = () => true } = {}) {
+  async finishCommittedDerived(snapshot, prior, file) {
+    if (!this.derived.list(snapshot).dirty) {
+      if (fs.existsSync(file)) { this.readRecovery(file); fs.unlinkSync(file); }
+      return null;
+    }
+    const derived = await this.derived.schedule(snapshot, { providerSnapshot: snapshot.summaryProviderSnapshot, committedFinalization: true });
+    if (!derived?.status || ["COMPLETE", "MANUAL_OVERRIDE"].includes(derived.status)) {
+      if (fs.existsSync(file)) { this.readRecovery(file); fs.unlinkSync(file); }
+      return derived || null;
+    }
+    this.saveRecovery(snapshot, { status: "DERIVED_REBUILD_FAILED", retryCount: Number(prior?.retryCount || 0),
+      lastError: String(derived.reason || derived.status || "memory4_derived_failed") });
+    return derived;
+  }
+
+  async finalizeCommitted(context, requestDurable, { isNarrativeCommitted, isCurrent = () => true, handoffOnly = false } = {}) {
     if (!isNarrativeCommitted) throw new Error("memory4_narrative_commit_required");
-    if (typeof context.campaignToken !== "string" || !context.campaignToken.trim()) return { status: "CAMPAIGN_UNAVAILABLE", owners: [] };
-    const owners = ids((context.participants || []).map(participant => participant.id))
-      .filter(id => !ids(context.excludedSummaryOwnerIds).includes(id));
+    if (typeof context.campaignToken !== "string" || !context.campaignToken.trim()) {
+      return { status: "CAMPAIGN_UNAVAILABLE", owners: [], durableHandoffComplete: false };
+    }
+    const participantIds = ids((context.participants || []).map(participant => participant.id));
+    const excludedOwnerIds = ids(context.excludedSummaryOwnerIds);
+    const intentionalExclusions = participantIds.filter(id => excludedOwnerIds.includes(id));
+    const owners = participantIds.filter(id => !excludedOwnerIds.includes(id));
     const results = new Array(owners.length);
+    const sourceRevisions = new Array(owners.length);
     let nextOwner = 0;
     const worker = async () => {
       while (nextOwner < owners.length) {
         const index = nextOwner++;
         const ownerId = owners[index];
+        let snapshot;
         try {
-          const snapshot = this.buildOwnerSnapshot(context, ownerId);
-          results[index] = await this.finishOwner(snapshot, requestDurable, null, isCurrent);
+          snapshot = this.buildOwnerSnapshot(context, ownerId);
+          sourceRevisions[index] = snapshot.sourceRevision;
+          const prior = this.readRecovery(this.recoveryPath(snapshot));
+          results[index] = await this.finishOwner(snapshot, requestDurable, prior, isCurrent, { handoffOnly });
         } catch (error) {
-          results[index] = { ownerId, status: "EXTRACTION_FAILED", error: String(error?.message || error) };
+          results[index] = { ownerId, status: "EXTRACTION_FAILED", error: String(error?.message || error),
+            ...(snapshot && fs.existsSync(this.recoveryPath(snapshot)) ? { recoveryPath: this.recoveryPath(snapshot) } : {}) };
         }
       }
     };
     await Promise.all(Array.from({ length: Math.min(2, owners.length) }, worker));
-    const status = results.some(result => result.status === "EXTRACTION_FAILED") ? "PARTIAL_FAILURE"
+    const status = results.some(result => ["EXTRACTION_FAILED", "DERIVED_REBUILD_FAILED"].includes(result.status)) ? "PARTIAL_FAILURE"
       : results.some(result => result.status === "CANCELLED") ? "CANCELLED"
-      : results.some(result => result.status === "IN_PROGRESS") ? "IN_PROGRESS" : "COMPLETE";
-    return { status, owners: results };
+      : results.some(result => result.status === "IN_PROGRESS") ? "IN_PROGRESS"
+      : results.some(result => result.status === "RECOVERY_PENDING") ? "HANDOFF_PENDING" : "COMPLETE";
+    const terminal = new Set(["STORE", "NO_DURABLE_CONTENT", "NOT_PRESENT", "FORGOTTEN"]);
+    const durableHandoffComplete = participantIds.length > 0 && owners.length + intentionalExclusions.length === participantIds.length
+      && results.length === owners.length && results.every((result, index) => {
+      if (terminal.has(result.status)) return true;
+      if (!["EXTRACTION_FAILED", "DERIVED_REBUILD_FAILED", "RECOVERY_PENDING"].includes(result.status) || !result.recoveryPath) return false;
+      try {
+        const record = this.readRecovery(result.recoveryPath);
+        return record.snapshot.ownerId === result.ownerId && record.snapshot.finalizationId === context.finalizationId
+          && record.snapshot.campaignToken === context.campaignToken && record.snapshot.sourceRevision === sourceRevisions[index];
+      } catch { return false; }
+    });
+    return { status, owners: results, durableHandoffComplete };
   }
 
   async recoverPending(requestDurable, { manual = false, activeCampaignToken = null, isCurrent = () => true, isNarrativeCommitted = () => false } = {}) {

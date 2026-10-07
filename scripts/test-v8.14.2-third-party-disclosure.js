@@ -117,7 +117,8 @@ assert.deepEqual(disclosures("“有人说甲是明王。”"), [], "quoted thir
 assert.deepEqual(disclosures("“我听说甲是明王。”"), [], "quoted hearsay cannot disclose a fact");
 assert.deepEqual(disclosures("“甲不是明王。”"), [], "a direct negation cannot disclose the denied fact");
 assert.deepEqual(disclosures("“甲是明王。”", { sourceRole: "mixed" }), [], "mixed-role fragments fail closed");
-assert.deepEqual(disclosures("我乃枢密使。"), [], "unquoted assistant self-claims remain ineligible");
+assert(hasDisclosure(disclosures("我乃枢密使。"), 3, "TITLE", "枢密使"),
+  "an explicit first-person current self-claim can disclose the assistant speaker's own fact");
 assert(hasDisclosure(disclosures("“我是枢密使。”"), 3, "TITLE", "枢密使"),
   "a self-claim remains eligible inside direct speech");
 assert(hasDisclosure(disclosures("甲是明王。", { sourceRole: "user" }), 1, "TITLE", "明王"),

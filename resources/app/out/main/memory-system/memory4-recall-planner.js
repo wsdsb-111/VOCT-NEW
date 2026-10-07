@@ -1,7 +1,6 @@
 "use strict";
 
 const path = require("path");
-const fs = require("fs");
 const { assertScope, ids, hash, legacySourceHash, sourceRevisionCurrent } = require("./memory4-contract");
 const { resolveTemporalFocus, detectTemporalAxisIntent } = require("./fuzzy-temporal-resolver");
 const { gameDateFromSerial, hasFirstMeetingCue } = require("./temporal-anchor-extractor");
@@ -293,13 +292,15 @@ class Memory4RecallPlanner {
     const started = Date.now();
     assertScope(options);
     const scope = { campaignToken: options.campaignToken, ownerId: options.ownerId };
-    const root = this.baseStore.summaryFoldersDir;
-    const ownerFolders = root && fs.existsSync(root) ? fs.readdirSync(root, { withFileTypes: true })
-      .filter(entry => entry.isDirectory() && entry.name.startsWith(`${scope.ownerId}_`)) : [];
-    if (root && !ownerFolders.length) return fitRecallPacket({ overview: null, details: [], profileText: null,
-      notice: null, focus: null, diagnostics: { ownerId: scope.ownerId, reason: "OWNER_FOLDER_MISSING", bodyReads: 0 } }, 0);
+    let directory;
+    try { directory = this.store.directory(scope); }
+    catch (error) {
+      if (error.message !== "memory4_owner_folder_not_unique") throw error;
+      return fitRecallPacket({ overview: null, details: [], profileText: null,
+        notice: null, focus: null, diagnostics: { ownerId: scope.ownerId, reason: "OWNER_FOLDER_MISSING", bodyReads: 0 } }, 0);
+    }
     const index = this.store.loadIndex(scope);
-    const metadata = this.store.read(path.join(this.store.directory(scope), "metadata.json"), null);
+    const metadata = this.store.read(path.join(directory, "metadata.json"), null);
     const parsed = options.queryModel || parseRecallQuery(options.query, options);
     const explicitTargetEntityIds = Object.prototype.hasOwnProperty.call(options, "explicitTargetEntityIds")
       ? ids(options.explicitTargetEntityIds) : ids(parsed.entityIds);
@@ -559,7 +560,8 @@ class Memory4RecallPlanner {
         }
         if (replaceIndex >= 0) details[replaceIndex] = item;
       }
-      else if (!canBeDetail && query.granularity !== "EXACT_DATE" && !overview) overview = item;
+      else if (!canBeDetail && query.granularity !== "EXACT_DATE"
+        && (!overview || explicitTargetIdsForItem(item).length && !explicitTargetIdsForItem(overview).length)) overview = item;
     }
     for (const item of [overview, ...details].filter(Boolean)) {
       const targetIds = explicitTargetIdsForItem(item);

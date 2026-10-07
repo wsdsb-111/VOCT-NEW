@@ -312,6 +312,50 @@ try {
     entryRecords.clear();
   });
 
+  check("unsplit explicit Legacy replaces only non-target overviews within the packet cap", () => {
+    const query = "李道远这些年在北境的事情怎么样？";
+    const queryModel = { axis: "EVENT", granularity: "LIFE", entityIds: [44], querySpeakerId: 1,
+      window: null, blockedReason: null, firstMeeting: false, temporalRequested: false, expression: null,
+      topics: ["北境"], text: query };
+    const target = legacy("unsplit-c-legacy",
+      "【乙能够知道并记住的本场经过】\n李道远在北境守门，留下 UNSPLIT_C_TARGET_SENTINEL。其后还有连续叙事，无法可靠拆分。",
+      { subjects: [44], topics: ["北境"] });
+    assert.equal(planner.legacyCandidates([target], scope, { entries: {} })[0].provenance.legacyParentId, undefined);
+    const profile = { id: 44, firstName: "李道远", shortName: "李道远", fullName: "李道远" };
+    const plan = (derivedEntityId, explicitIds, memories = [target]) => {
+      setCanonicalRows([{ entryId: "unsplit-derived-source", entityIds: [derivedEntityId], topics: ["北境"],
+        text: "北境旧事的年度记录。" }]);
+      coordinator.derived.selectSlice = () => ({ memory: { memoryId: "unsplit-derived-overview", content: "北境旧事概览。", tags: ["北境"] },
+        reason: { axis: "event", from: "1190.1.1", to: "1190.12.31", precision: "year" }, annotation: "derived fixture",
+        sourceRef: { kind: "year", id: "unsplit-derived-overview", sourceEntryIds: ["unsplit-derived-source"] } });
+      return planner.plan({ ...options, query, queryModel, entityIds: [44], explicitTargetEntityIds: explicitIds,
+        topics: ["北境"], entityNames: ["李道远"], entityNamesById: { 44: ["李道远"] },
+        entityProfiles: [profile], gameData: { characters: new Map([[44, profile]]) }, legacyMemories: memories });
+    };
+    const packet = plan(45, [44]);
+    assert.equal(packet.overview?.memory.memoryId, target.memoryId);
+    assert(packet.items.some(item => item.memory.content.includes("UNSPLIT_C_TARGET_SENTINEL")));
+    assert.equal(packet.overview.routeKind, "entity_target");
+    assert.equal(packet.details.some(item => item.sourceRef.kind === "legacy"), false);
+    assert(packet.tokens <= 1200);
+    assert.equal(plan(44, [44]).overview.memory.memoryId, "unsplit-derived-overview",
+      "an explicit Derived overview must not be replaced by an explicit Legacy candidate");
+    assert.equal(plan(45, []).overview.memory.memoryId, "unsplit-derived-overview",
+      "without explicit targets, the existing Derived overview must remain");
+    const ordinary = legacy("unsplit-non-target", "北境旧事属于另一个人物。", { subjects: [45], topics: ["北境"] });
+    assert.equal(plan(45, [44], [ordinary]).overview.memory.memoryId, "unsplit-derived-overview",
+      "a non-target Legacy cannot force an overview replacement");
+    const filler = "宫廷礼节和宴席席次记录。".repeat(700);
+    const oversized = { ...target, content: `${filler}\n李道远在北境守门，留下 UNSPLIT_C_TARGET_SENTINEL。\n${filler}` };
+    const budgeted = plan(45, [44], [oversized]);
+    assert.equal(budgeted.overview?.memory.memoryId, oversized.memoryId);
+    assert(budgeted.overview.memory.content.includes("UNSPLIT_C_TARGET_SENTINEL"));
+    assert(budgeted.overview.memory.content.length < oversized.content.length);
+    assert(budgeted.tokens <= 1200);
+    coordinator.derived.selectSlice = () => null;
+    setCanonicalRows([]);
+  });
+
   check("short explicit aliases do not accept topic hits from longer identities", () => {
     const shortProfile = { id: 4, firstName: "张三", shortName: "张三", fullName: "张三" };
     const longProfile = { id: 5, firstName: "张三丰", shortName: "张三丰", fullName: "张三丰" };

@@ -85,7 +85,18 @@ async function run() {
         persistCharacterFolders: async () => ({ success: true }) });
       assert.equal(results.filter(result => result.success).length, 2);
       assert.equal(requests, 2);
+      assert.equal(engine.listRecoverySnapshots().length, 2, "committed narratives retain their handoff until the durable provider is available");
+      let durableRequests = 0;
+      await engine.recoverPendingFinalizations({ manual: true, activeCampaignToken: "p0",
+        requestSummary: async () => { requests++; throw new Error("committed narrative must not be requested again"); },
+        requestDurable: async () => {
+          durableRequests++;
+          return { content: JSON.stringify({ status: "NO_DURABLE_CONTENT", entries: [] }), finish_reason: "stop" };
+        } });
+      assert.equal(requests, 2);
+      assert.equal(durableRequests, 4, "each conversation hands off exactly two owners without regenerating its narrative");
       assert.equal(engine.listRecoverySnapshots().length, 0);
+      assert.equal(engine.memory4.getRecoveryStatus("p0").pending, 0);
     });
     await check("multi-owner Durable extraction runs with bounded parallelism", async () => {
       const coordinator = new Memory4Coordinator(store);

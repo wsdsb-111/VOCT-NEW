@@ -59,6 +59,7 @@ function projectVisibleTranscript(context, ownerId) {
       const fragmentId = `fragment_${hash([context.conversationId, message.id, start, end, text, knownBy])}`;
       fragments.push({ fragmentId, messageId: message.id, text, speakerId, presentIds: selfOnly ? ids([...presentIds, ownerId]) : presentIds, knownBy,
         visibility: fallback ? "private" : source.visibility, sourceType: fallback ? "self_report" : source.sourceType,
+        sourceRole: message.role,
         recipientIds: fallback ? [] : ids(source.recipientIds).filter(id => knownBy.includes(id)),
         entityIds: fallback ? [] : ids(source.entityIds),
         visibilityEvidence: fallback ? "legacy_author_perspective" : "application_fragment" });

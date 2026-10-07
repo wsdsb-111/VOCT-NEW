@@ -225,15 +225,37 @@ function matchedFacts(text, facts) {
   return [...new Set(longest.filter(row => spans.get(`${row.start}:${row.end}`)?.size === 1).map(row => row.factId))];
 }
 
-const UNCERTAIN = /[?？]|吗|么|可否|能否|是不是|是否|不是|并非|并不|未必|没有|从未|不曾|未曾|不再是|不属实|否认|听说|据说|传闻|传言|谣言|相传|声称|自称|据传|可能|也许|或许|似乎|疑似|假如|如果|要是|倘若|将来|未来|终将|迟早|尚未|未证实|玩笑|虚构|误传|我猜|猜测|我想|以为|怀疑|认为|觉得|心想|心里|内心|心中|暗自|旁白|叙述|描写|\b(?:not|never|rumou?r|heard|alleged|claims?|said|might|may|perhaps|possibly|suppose|think|thought|thinking|believe|seem|if|whether|unless|will|would|future|intends?|intention|joking|fiction|unconfirmed|narration|aside)\b/i;
+const UNCERTAIN = /[?？]|吗|么|可否|能否|是不是|是否|不是|并非|并不|未必|没有|从未|不曾|未曾|不再是|不属实|否认|听说|据说|传闻|传言|谣言|相传|声称|自称|据传|可能|也许|或许|似乎|疑似|假如|如果|要是|倘若|将来|未来|明年|后年|终将|迟早|尚未|未证实|曾经|曾为|曾任|当年|昔日|往日|过去|以前|原先|玩笑|虚构|误传|我猜|猜测|我想|以为|怀疑|认为|觉得|心想|暗想|心里|内心|心中|暗自|旁白|叙述|描写|\b(?:not|never|rumou?r|heard|alleged|claims?|said|might|may|perhaps|possibly|suppose|think|thought|thinking|believe|seem|if|whether|unless|will|would|future|intends?|intention|joking|fiction|unconfirmed|narration|aside)\b/i;
 const DISCOURSE = /说|告诉|提到|声称|认为|觉得|怀疑|听说|据说|传闻|引用|否认|谣传/;
 const PREDICATES = /(?:(?:当前|如今|当今|现在|其实|确实|仍然|本来|向来|天生|生性|真正|正是|就是|确为|乃是|是|乃|为|系|拥有|具有|具备|患有|身患|有|很|非常|十分|极其|异常)|\b(?:am|is|are|has|have|possesses|born|very)\b|['’]s\b)/i;
 const SPEAKER_SELF_ALIASES = new Set(["我", "吾", "朕", "寡人", "孤", "本王", "在下", "鄙人", "本人", "i", "myself"]);
+const SELF_PRONOUN_PREFIX = /^(?:我|吾|朕|寡人|孤|本王|在下|鄙人|本人)\s*/u;
+const SELF_ATTRIBUTE_HEAD = /^(?:现在|如今|当前|现任|现为|其实|确实|仍然|本来|向来|天生|生性|正是|就是|确为|乃是|乃|是|为|系|拥有|具有|具备|患有|身患|有|很|非常|十分|极其|异常)/u;
+const SELF_LABELED_FACT_HEAD = /^(?:的)?(?:头衔|身份|职位|官职|特质|性格|特点|能力)\s*(?:(?:现在|如今|当前)\s*)?(?:是|为|乃|确为|就是)/u;
+const SELF_AGE_HEAD = /^(?:(?:今年|现在|如今|当前)\s*)?(?:[0-9]{1,4}|[零〇一二两三四五六七八九十百千]+)\s*岁(?:了)?/u;
+const ENGLISH_SELF_ASSERTION_HEAD = /^(?:i\s*(?:am|'m)|myself\s+(?:am|is|are|have|has|possess(?:es)?|born|very)\b)/i;
+const RELATIONAL_FACT_SUFFIX = /^\s*(?:(?:的|之)\s*[\p{L}\p{N}_]|['’]s\s*[\p{L}\p{N}_])/iu;
+
+function assistantSelfAssertions(text) {
+  const pieces = String(text || "").split(/([。.!！?？;；\r\n]+)/u);
+  const sentences = [];
+  for (let index = 0; index < pieces.length; index += 2) {
+    const sentence = `${pieces[index] || ""}${pieces[index + 1] || ""}`.trim();
+    const selfPrefix = sentence.match(SELF_PRONOUN_PREFIX);
+    const remainder = selfPrefix ? sentence.slice(selfPrefix[0].length) : "";
+    const explicitSelfAssertion = selfPrefix
+      ? SELF_ATTRIBUTE_HEAD.test(remainder) || SELF_LABELED_FACT_HEAD.test(remainder) || SELF_AGE_HEAD.test(remainder)
+      : ENGLISH_SELF_ASSERTION_HEAD.test(sentence);
+    if (sentence && explicitSelfAssertion && !UNCERTAIN.test(sentence)) sentences.push(sentence);
+  }
+  return sentences;
+}
 
 function assertedBetween(text, targetAliases, factAliases, otherTargetAliases = []) {
   for (const targetAlias of targetAliases) for (const target of occurrences(text, targetAlias)) {
     for (const factAlias of factAliases) for (const fact of occurrences(text, factAlias)) {
       if (fact.start < target.end || fact.start - target.end > 40) continue;
+      if (RELATIONAL_FACT_SUFFIX.test(text.slice(fact.end))) continue;
       const between = text.slice(target.end, fact.start);
       if (otherTargetAliases.some(alias => occurrences(between, alias).length) || DISCOURSE.test(between)
         || /不|未|没|非|无/.test(between)) continue;
@@ -276,11 +298,16 @@ function scanSource(snapshot, gameData, sourceKind, letterProof = null) {
   for (const fragment of fragments) {
     if (!eligibleFragment(snapshot, fragment, sourceKind, letterProof)) continue;
     const messageIds = sourceMessageIds(fragment, sourceKind);
-    const scanTexts = fragment.sourceRole === "mixed" ? [] : fragment.sourceRole === "assistant"
-      ? directSpeechSpans(fragment.text, characterAliases(characters.get(Number(fragment.speakerId))),
-        { speakerId: fragment.speakerId, characters }).map(span => span.text)
-      : [fragment.text];
-    for (const scanText of scanTexts) {
+    const sourceRole = sourceKind === "LETTER" ? "user" : fragment.sourceRole;
+    if (!["user", "assistant"].includes(sourceRole)) continue;
+    const scanTexts = sourceRole === "assistant"
+      ? [
+        ...directSpeechSpans(fragment.text, characterAliases(characters.get(Number(fragment.speakerId))),
+          { speakerId: fragment.speakerId, characters }).map(span => ({ text: span.text, speakerSelfOnly: false })),
+        ...assistantSelfAssertions(fragment.text).map(text => ({ text, speakerSelfOnly: true }))
+      ]
+      : [{ text: fragment.text, speakerSelfOnly: false }];
+    for (const { text: scanText, speakerSelfOnly } of scanTexts) {
       const pieces = scanText.split(/([。.!！?？;；\r\n]+)/);
       for (let index = 0; index < pieces.length; index += 2) {
         const sentence = `${pieces[index] || ""}${pieces[index + 1] || ""}`.trim();
@@ -293,6 +320,7 @@ function scanSource(snapshot, gameData, sourceKind, letterProof = null) {
         if (attributedSpeech) continue;
         const targetAliasesById = matchedTargetAliases(sentence, characters, fragment);
         for (const [entityId, targetAliases] of targetAliasesById) {
+          if (speakerSelfOnly && entityId !== Number(fragment.speakerId)) continue;
           if (entityId === snapshot.ownerId) continue;
           const character = characters.get(entityId);
           const facts = getFactCandidates(character);

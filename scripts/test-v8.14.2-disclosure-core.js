@@ -22,7 +22,7 @@ const gameData = { campaignToken: scope.campaignToken, date: "1164.5.20", charac
 const makeSnapshot = (text = "我乃明王，也是私生子。", overrides = {}) => ({ ...scope, conversationId: "conversation-1",
   finalizationId: "finalization-1", date: gameData.date, sourceRevision: hash("source-revision-1"),
   disclosureCharacters: [...characters.values()], fragments: [{ fragmentId: "segment-1", sourceMessageIds: [11], messageId: 11,
-    text, speakerId: 1, entityIds: [1], knownBy: [1, 2], visibility: "participants", sourceType: "spoken",
+    text, speakerId: 1, sourceRole: "user", entityIds: [1], knownBy: [1, 2], visibility: "participants", sourceType: "spoken",
     sourceTextVerified: true, visibilityEvidence: "finalization_validated_segment" }], ...overrides });
 const factRow = (rows, type, value) => rows.find(row => row.factType === type && row.value === value);
 function markSnapshotCommitted(snapshot) {

@@ -251,12 +251,13 @@ export function Memory4Manager({ react: R, ownerId, refreshKey, searchActive = f
           setOpenEntryId(row.entryId);
           if (entry) return;
           const epoch = contextEpoch.current;
+          const sequence = requestSequence.current;
           try {
             const result = await api.getMemory4Entry({ ...scope, entryId: row.entryId });
-            if (epoch !== contextEpoch.current) return;
+            if (epoch !== contextEpoch.current || sequence !== requestSequence.current) return;
             if (!result?.success) throw new Error(result?.error);
             setEntries(previous => ({ ...previous, [row.entryId]: result.entry }));
-          } catch (cause) { if (epoch === contextEpoch.current) setError(errorText(cause?.message)); }
+          } catch (cause) { if (epoch === contextEpoch.current && sequence === requestSequence.current) setError(errorText(cause?.message)); }
         } }, `${TYPES[row.memoryType] || "长期记忆"} · ${eventDate(row.eventTime)}`),
         entry ? h(R.Fragment, null, h("p", { className: "memory4-text" }, entry.text),
           h("p", { className: "memory4-meta" }, `交谈日期：${entry.conversationDate || "未知"} · 获知日期：${entry.acquiredDate || "未知"}`),

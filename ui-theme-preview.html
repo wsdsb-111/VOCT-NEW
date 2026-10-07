@@ -5,27 +5,28 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>VOTC 2.0.4 主题预览</title>
   <link rel="stylesheet" href="resources/app/out/renderer/assets/index-WtJH_nua.css">
+  <link rel="stylesheet" href="resources/app/out/renderer/ui-comfort.css">
   <style>
-    html, body { overflow: auto; min-width: 1080px; background: #242326; }
-    body { padding: 24px; box-sizing: border-box; }
-    .preview-toolbar { width: 1040px; margin: 0 auto 18px; padding: 10px 14px; display: flex; align-items: center; gap: 10px; color: #eee3cd; background: #161416; border: 1px solid #8d7449; border-radius: 8px; box-sizing: border-box; }
+    html, body { overflow: auto; background: #242326; }
+    body { padding: 20px; box-sizing: border-box; }
+    .preview-toolbar { max-width: 1200px; margin: 0 auto 18px; padding: 10px 14px; display: flex; flex-wrap: wrap; align-items: center; gap: 10px; color: #eee3cd; background: #161416; border: 1px solid #8d7449; border-radius: 8px; box-sizing: border-box; }
     .preview-toolbar strong { margin-right: auto; }
-    .preview-stage { width: 1040px; margin: 0 auto; display: grid; grid-template-columns: 610px 410px; gap: 20px; align-items: stretch; }
+    .preview-stage { max-width: 1200px; margin: 0 auto; display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 20px; align-items: stretch; }
     .preview-stage .chat-box, .preview-stage .config-panel-container { position: relative !important; inset: auto !important; width: 100% !important; height: 720px !important; box-sizing: border-box; }
     .preview-stage .config-panel-container { right: auto; top: auto; }
     .preview-stage .messages-container { height: calc(100% - 196px); box-sizing: border-box; }
     .preview-stage .config-main-content { height: calc(100% - 66px); box-sizing: border-box; }
     .preview-stage .chat-controls-container { height: 170px; }
     .preview-stage .config-header { overflow: visible; flex-wrap: wrap; }
-    .preview-stage .config-header button { font-size: 12px; }
     .preview-card-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin: 12px 0; }
     .preview-card-grid .optimization-metric { min-height: 74px; }
     .preview-label { font-size: 12px; color: inherit; opacity: .7; }
+    @media (max-width: 860px) { .preview-stage { grid-template-columns: minmax(0, 1fr); } body { padding: 12px; } }
   </style>
 </head>
 <body>
   <div class="preview-toolbar">
-    <strong>VOTC 2.0.4 · 完整主题视觉验证</strong>
+    <strong>VOTC V8.15.1 · 三主题预览</strong>
     <button type="button" data-theme="parchment">游牧</button>
     <button type="button" data-theme="knight">骑士</button>
     <button type="button" data-theme="ink">水墨</button>

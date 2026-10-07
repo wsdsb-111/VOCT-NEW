@@ -564,13 +564,15 @@ async function main() {
     assert(renderAt("1164.5.20").includes("LETTER_PLAYER_TITLE=明王"), "the same letter scope reveals the fact on its acquisition date");
   });
 
-  await check("durable failure recovery replays disclosure exactly once from the committed finalization", async () => {
+  await check("validated disclosure survives durable failure and recovery remains idempotent", async () => {
     const sample = await fixture({ titleById: { 1: "明王" } });
     await send(sample, "我乃明王。" );
     sample.failDurable = true;
     const result = await finalize(sample);
     assert.equal(result.durable?.status, "PARTIAL_FAILURE", "the fixture must create a durable recovery record");
-    assert.deepEqual(disclosureRecords(sample, 2, 1), [], "failed owner commit cannot publish disclosure");
+    const disclosedBeforeRetry = disclosureRecords(sample, 2, 1);
+    assert.equal(disclosedBeforeRetry.length, 1, "V8.15.1 records source-verified disclosure independently of durable extraction");
+    assert.equal(disclosedBeforeRetry[0].status, "AUTO_DISCLOSED");
 
     sample.failDurable = false;
     const recovered = await sample.engine.memory4.recoverPending(async () => JSON.stringify({ status: "NO_DURABLE_CONTENT", entries: [] }), {
@@ -579,6 +581,7 @@ async function main() {
     assert(recovered.length > 0 && recovered.every(item => ["NO_DURABLE_CONTENT", "NOT_PRESENT"].includes(item.status)),
       "recovery commits each pending owner without adding durable entries");
     assert(disclosureRecords(sample, 2, 1).some(item => item.status === "AUTO_DISCLOSED"));
+    assert.deepEqual(disclosureRecords(sample, 2, 1), disclosedBeforeRetry, "recovery must not duplicate disclosure evidence or bump its revision");
     assert.deepEqual(await sample.engine.memory4.recoverPending(async () => JSON.stringify({ status: "NO_DURABLE_CONTENT", entries: [] }), {
       activeCampaignToken: sample.scope.campaignToken, isNarrativeCommitted: () => true
     }), [], "a completed recovery cannot duplicate the source");

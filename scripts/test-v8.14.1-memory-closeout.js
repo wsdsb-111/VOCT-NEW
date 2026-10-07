@@ -153,7 +153,8 @@ async function main() {
       assert(f.planner.plan({ ...options, query: "你以前答应过什么？" }).text.includes("fulfilled"));
       assert.equal(f.planner.plan({ ...options, currentGameDate: "1180.1.1", query: "你以前答应过什么？" }).items.length, 0);
       const metadata = f.coordinator.store.read(path.join(f.coordinator.store.directory(f.scope), "metadata.json"));
-      assert.equal(metadata.derivedDirty, true);
+      assert.equal(metadata.derivedDirty, false, "committed recovery waits for derived reconciliation before completing");
+      assert.equal(f.coordinator.derived.list(f.scope).dirty, false);
     });
     await checkAsync("explicit cancellation closes only the original active promise", async () => {
       const f = fixture("cancelled"), saved = newPromise(f, "cancelled");

@@ -9,7 +9,7 @@ const Handlebars = require("../resources/app/node_modules/handlebars");
 const memorySystem = require("../resources/app/out/main/memory-system");
 const { MemoryEngine } = memorySystem;
 const { Memory4OrphanAudit } = require("../resources/app/out/main/memory-system/memory4-orphan-audit");
-const { fitRecallPacket } = require("../resources/app/out/main/memory-system/memory4-recall-planner");
+const { Memory4RecallPlanner, fitRecallPacket } = require("../resources/app/out/main/memory-system/memory4-recall-planner");
 const { createProjectionLineage } = require("../resources/app/out/main/memory-system/memory4-forget");
 const { hash } = require("../resources/app/out/main/memory-system/memory4-contract");
 const { Conversation } = require("../resources/app/out/main/conversation/conversation");
@@ -185,6 +185,62 @@ async function providerInput(harness, query) {
   return { memoryContext, messages, text: messages.map(message => message.content || "").join("\n") };
 }
 
+function createPlannerSelectionHarness(directory) {
+  const summariesDir = path.join(directory, "summaries");
+  fs.mkdirSync(path.join(summariesDir, "2_fixture"), { recursive: true });
+  const entries = new Map();
+  let index = { revision: 1, entries: {}, byTopic: {}, finalizations: {} };
+  const baseStore = { summaryFoldersDir: summariesDir, index: { memories: {} }, getMemory: () => null,
+    loadFolderSummariesForCharacter: () => [] };
+  const store = { loadIndex: () => index, directory: () => path.join(directory, "memory4"), read: (_file, fallback = null) => fallback,
+    readEntry: (_scope, id) => entries.get(id), isProjectionLineageForgotten: () => false };
+  const targetProfile = { id: 3, firstName: names.get(3), shortName: names.get(3), fullName: names.get(3) };
+  const coordinator = { baseStore, store, derived: { selectSlice: () => null },
+    getKnownEntityProfile: () => ({ recognition: { level: "KNOWN" }, relationship: { status: "UNKNOWN", types: [] } }) };
+  const planner = new Memory4RecallPlanner(coordinator);
+  const setRows = rows => {
+    entries.clear();
+    const indexedEntries = {}, byTopic = {}, finalizations = {};
+    for (const row of rows) {
+      const finalizationId = `qa-${row.entryId}`;
+      const sourceRevision = `revision-${row.entryId}`;
+      const entry = { entryId: row.entryId, campaignToken, ownerId, conversationDate: summaryDate, acquiredDate: summaryDate,
+        text: row.text, topics: row.topics, entityIds: row.entityIds, counterpartIds: [1], importance: 0.5,
+        eventTime: { status: "unknown" }, evidence: { knownBy: [ownerId], visibility: "participants",
+          sourceType: "spoken", epistemicStatus: "reported" }, state: { status: "active" },
+        source: { finalizationId, conversationId: finalizationId, sourceRevision, legacyRefs: [] } };
+      entries.set(row.entryId, entry);
+      indexedEntries[row.entryId] = { entityIds: row.entityIds, topics: row.topics, counterpartIds: [1], knownBy: [ownerId],
+        visibility: "participants", deleted: false, memoryType: "DURABLE_KNOWLEDGE", status: "active", finalizationId,
+        conversationId: finalizationId, conversationDate: summaryDate, acquiredDate: summaryDate, stateChangedGameDate: null,
+        legacyRefs: [], bodyHash: `body-${row.entryId}`, importance: 0.5 };
+      finalizations[hash(finalizationId)] = { sourceRevision };
+      for (const topic of row.topics) (byTopic[topic] ||= []).push(row.entryId);
+    }
+    index = { revision: 1, entries: indexedEntries, byTopic, finalizations };
+  };
+  const makeLegacy = (memoryId, content, subjects = [3]) => ({ memoryId, type: "folder_summary", subtype: "conversation_summary",
+    content, eventDate: summaryDate, knownBy: [ownerId], subjects, tags: ["北境"], deleted: false,
+    provenance: { campaignToken, folderOwnerId: ownerId, counterpartId: 5, counterpartIds: [5],
+      campaignBinding: { status: "bound" }, extractionMode: "user_edited_summary" } });
+  const makeDerived = (memoryId, content, sourceEntryIds = []) => ({ memory: { memoryId, content, tags: ["北境"] },
+    reason: { axis: "life", from: summaryDate, to: summaryDate, precision: "year" }, annotation: "derived fixture",
+    sourceRef: { kind: "life", id: memoryId, sourceEntryIds } });
+  const plan = ({ query, explicitTargetEntityIds = [3], legacyMemories = [], rows = [], overview = null }) => {
+    setRows(rows);
+    coordinator.derived.selectSlice = () => overview;
+    const entityIds = [...explicitTargetEntityIds];
+    const queryModel = { axis: "EVENT", granularity: "EVENT", entityIds, querySpeakerId: 1, window: null,
+      blockedReason: null, firstMeeting: false, temporalRequested: false, expression: null, topics: ["北境"], text: query };
+    return planner.plan({ campaignToken, ownerId, currentGameDate: currentDate, currentTotalDays: 0, conversationId: "qa-selection",
+      sceneRevision: "qa-selection", turnEpoch: 1, query, queryModel, entityIds, explicitTargetEntityIds,
+      topics: ["北境"], entityProfiles: [targetProfile], gameData: { characters: new Map([[3, targetProfile]]) },
+      legacyMemories, memoryEngineRemainingBudget: 1200, providerRemainingSafeBudget: 1200,
+      estimateTokens: text => Math.ceil(String(text || "").length / 2) });
+  };
+  return { makeDerived, makeLegacy, plan, planner, setRows };
+}
+
 function fragment(fragmentId, counterpartIds) {
   return { fragmentId, messageId: fragmentId, sourceMessageIds: [fragmentId], text: `source ${fragmentId}`,
     speakerId: ownerId, speakerIds: [ownerId], sourceTextVerified: true, sourceRole: "assistant",
@@ -287,6 +343,57 @@ function summaryManagerFixture(directory, { durableFootprint = false } = {}) {
 
 async function run() {
   try {
+    await check("unsplit Explicit Target Legacy replaces non-target Derived overview and survives the packet cap", () => {
+      const selection = createPlannerSelectionHarness(path.join(root, "unsplit-overview-selection"));
+      const filler = "南方宫宴礼乐席次与账册往来。".repeat(600);
+      const sentinel = "赵光义在北境守门约定中留下 UNSPLIT_OVERVIEW_SENTINEL，守将依约开启城门。";
+      const legacy = selection.makeLegacy("unsplit-explicit-target", `【张道素能够知道并记住的本场经过】\n${filler}\n${sentinel}\n${filler}`);
+      assert.equal(legacy.provenance.legacyParentId, undefined, "fixture must remain a whole unsplit narrative");
+      const packet = selection.plan({ query: "赵光义北境守门约定玉印后来如何？",
+        rows: [{ entryId: "unrelated-derived-source", entityIds: [4], topics: ["北境"], text: "北境行程年度记载。" }],
+        legacyMemories: [legacy], overview: selection.makeDerived("unrelated-derived", "北境行程年度概览，不含赵光义。",
+          ["unrelated-derived-source"]) });
+      assert.equal(packet.overview?.memory.memoryId, legacy.memoryId,
+        `Explicit Target unsplit Legacy must replace non-target Derived overview: ${JSON.stringify(packet.items.map(item => item.memory.memoryId))}`);
+      assert(packet.overview.memory.content.includes("UNSPLIT_OVERVIEW_SENTINEL"), "oversize excerpt must retain the target sentence");
+      assert(packet.tokens <= 1200, `packet exceeded 1200 tokens: ${packet.tokens}`);
+    });
+
+    await check("explicit Derived and higher-ranked Explicit Legacy overviews remain protected", () => {
+      const selection = createPlannerSelectionHarness(path.join(root, "explicit-overview-protection"));
+      const query = "赵光义北境守门约定玉印后来如何？";
+      const derivedId = "explicit-derived-overview";
+      const derived = selection.makeDerived(derivedId, "赵光义在北境守门约定中的经历概览。", ["explicit-derived-source"]);
+      const derivedPacket = selection.plan({ query, rows: [{ entryId: "explicit-derived-source", entityIds: [3], topics: ["北境"],
+        text: "赵光义在北境守门约定中的经历。" }], legacyMemories: [selection.makeLegacy("competing-explicit-legacy",
+        "赵光义在北境守门约定中交出玉印；COMPETING_EXPLICIT_LEGACY_SENTINEL")], overview: derived });
+      assert.equal(derivedPacket.overview?.memory.memoryId, derivedId,
+        "an Explicit Target Derived overview must not be replaced by Explicit Target Legacy");
+      assert.equal(derivedPacket.overview.routeKind, "entity_target");
+      assert.equal(derivedPacket.items.some(item => item.memory.memoryId === "competing-explicit-legacy"), false);
+
+      const high = selection.makeLegacy("ranked-explicit-legacy-high",
+        "赵光义在北境守门约定中交出玉印，守将依约开启城门。HIGH_EXPLICIT_OVERVIEW_SENTINEL");
+      const low = selection.makeLegacy("ranked-explicit-legacy-low", "赵光义早年在北境宫宴中听曲赏舞。LOW_EXPLICIT_OVERVIEW_SENTINEL");
+      const nonTarget = selection.makeLegacy("non-target-legacy", "北境另一场宫宴只记有乐舞席次。", [45]);
+      const ranked = selection.planner.ranker.rank([low, nonTarget, high], { query, entityIds: [3] });
+      assert.equal(ranked[0].memory.memoryId, high.memoryId, "fixture must put the better matching target Legacy first");
+      const legacyPacket = selection.plan({ query, legacyMemories: [low, nonTarget, high] });
+      assert.equal(legacyPacket.overview?.memory.memoryId, high.memoryId,
+        "later Explicit or non-target Legacy candidates must not replace the better-ranked Explicit Legacy overview");
+    });
+
+    await check("an empty Explicit Target set preserves the existing Derived overview", () => {
+      const selection = createPlannerSelectionHarness(path.join(root, "generic-overview-selection"));
+      const derived = selection.makeDerived("generic-derived-overview", "北境旧事的年度概览。", ["generic-derived-source"]);
+      const packet = selection.plan({ query: "你还记得北境旧事吗？", explicitTargetEntityIds: [],
+        rows: [{ entryId: "generic-derived-source", entityIds: [4], topics: ["北境"], text: "北境旧事中的行程记录。" }],
+        legacyMemories: [selection.makeLegacy("generic-legacy", "北境旧事另有一段旧叙事。", [45])], overview: derived });
+      assert.equal(packet.overview?.memory.memoryId, derived.memory.memoryId);
+      assert.equal(packet.items.some(item => item.memory.memoryId === "generic-legacy"), false,
+        "ordinary Legacy must not force its way into the overview without an Explicit Target");
+    });
+
     await check("oversize explicit Legacy target is re-excerpted after dropping competing items", () => {
       const content = "赵光义所涉事件 ".repeat(200);
       const target = { routeKind: "entity_target", explicitTargetEntityIds: [3], sourceRef: { kind: "legacy" },

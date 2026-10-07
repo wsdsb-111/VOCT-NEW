@@ -6,6 +6,12 @@ Voices of the Court 是一个面向《Crusader Kings III》（CK3）的沉浸式
 
 ## 主要功能
 
+V8.15.1 界面优化：[三主题阅读与布局报告](docs/v8.15.1-ui-comfort-implementation-report.md)。正文和控件采用清晰中文字体，降低背景干扰，整理导航、人物记忆/世界书及提示词的窄窗排列；修复语言菜单浅色文字、出屏定位和顶部拖动层遮挡按钮。主题资产、用户字号与功能合同保持。
+
+V8.15.1 当前入口：[世界线、记忆恢复与披露一致性实施报告](docs/v8.15.1-implementation-report.md)。接入新版存档信仰/文化映射，补齐逐 Owner 恢复及 Year/Life 交接、canonical-only 召回和详情刷新竞态；自报与他人直接公开的当前头衔/特质按知情 Owner 保存，不再等待长期抽取成功。姓名保留为主体标识，不新增 NAME 披露类型。兼容合同、验证与人工 Gate 见报告；以下为前置阶段快照。
+
+V8.15 修复1.1当前入口：[小型收口报告](docs/v8.15-fix1.1-implementation-report.md)。未拆分的显式人物 Legacy 可替换非目标 Derived Overview，目标之间不强制覆盖，预算与知情边界不变；删除误留空文件 `__invalid__`。验证及 L5-L9 实机边界见报告，不签发 Full Freeze。
+
 V8.15 修复1当前入口：[实施报告与旧残留审计接口](docs/v8.15-fix1-implementation-report.md)。显式人物优先进入最终 Recall Packet 和 Provider Input；不确定的持久遗忘拒绝并回滚，只在证明零 footprint 时安全跳过。旧残留先只读审计，逐条核对并明确确认后复用既有遗忘链路，不自动清理。最新验证见报告，真实 CK3/Provider/Soak 仍交用户，不签发 Full Freeze。
 
 V8.15 当前入口：[Memory4 召回与删除一致性实施报告](docs/v8.15-memory-recall-forget-implementation-report.md)。明确询问人物时，其在场与否不改变历史召回资格；删除摘要按 Owner 人物对投影持久遗忘，联动长期、年度、人生、披露、恢复与冻结记忆缓存，不误删同场其他人物对。部分迁移和超长 Legacy 摘要继续保留可验证历史。协议 3.0、存储 2.5、Prompt Block IDs 与 App 包 2.0.4 不变；发布回归与隔离窗口证据见报告，真实 CK3/Provider/Soak 仍待用户验收，不签发 Full Freeze。以下版本数字为历史阶段快照。

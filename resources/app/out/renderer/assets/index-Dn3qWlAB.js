@@ -1,6 +1,6 @@
 import { WorldMemoryEditor } from "../world-memory-editor.js";
 import { Memory4Manager } from "../memory4-manager.js";
-const VOTC_FEATURE_VERSION = "V8.15";
+const VOTC_FEATURE_VERSION = "V8.15.1";
 function getDefaultExportFromCjs(x) {
   return x && x.__esModule && Object.prototype.hasOwnProperty.call(x, "default") ? x["default"] : x;
 }
@@ -22164,8 +22164,7 @@ function LanguageSelector() {
       const rect = buttonRef.current.getBoundingClientRect();
       setPosition({
         top: rect.bottom + 8,
-        left: rect.right - 220
-        // Align right with min-width
+        left: Math.max(16, Math.min(rect.right - 220, window.innerWidth - 236))
       });
     }
   }, [isOpen]);

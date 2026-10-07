@@ -4,6 +4,14 @@
 
 ## 推荐阅读顺序
 
+本轮界面优化：[V8.15.1 三主题阅读与布局优化](v8.15.1-ui-comfort-implementation-report.md)。中文界面字体、低亮度阅读面、导航/记忆/世界书换行与窄面板布局；保留三主题图像、用户对话字号及全部运行时合同。打包窗口证据与人工边界见报告。
+
+当前施工入口：[V8.15.1 世界线、记忆恢复与披露一致性实施报告](v8.15.1-implementation-report.md)。对应下方审查的 W1-W3、M1-M4，补齐公开头衔/特质的逐 Owner 保存；保留姓名绑定、Fact Epoch、持久遗忘及协议边界。验证证据与人工 Gate 以实施报告为准，下方审查结果为修复前快照。
+
+当前只读审查：[V8.15 世界线与 Memory4 逐链路审查](v8.15-worldline-memory-detail-review.md)。核对实际 autosave、checkpoint、100 条长期记忆的文件完整性及生产接线，确认信仰/文化适配、恢复与派生、canonical-only 召回、详情缓存和关系空值共七项缺口；人物披露专项单列证据与待确认条件。本轮原始完整门禁 374/374 通过，但未修复生产代码或做 CK3/Provider/窗口/Soak 验收。
+
+当前小修入口：[V8.15 修复1.1实施报告](v8.15-fix1.1-implementation-report.md)。补齐显式未拆分 Narrative 对非目标 Derived 的最终入选优先级，既有目标之间不强制覆盖；保留预算/授权边界，删除误留空文件。验证和 L9 新实机用例见报告。下方为前置阶段快照。
+
 当前修复入口：[V8.15 修复1实施报告](v8.15-fix1-implementation-report.md)。显式人物的最终入选、预算裁剪与实际 Provider Input 联动验证；不确定遗忘 fail-closed，旧残留使用只读 Audit 与明确确认 Forget。报告包含诊断接口、共享来源保护和验收证据；不自动修改旧数据，不签发 Full Freeze。下方为前置阶段快照。
 
 当前开发入口：[V8.15 Memory4 召回与删除一致性实施报告](v8.15-memory-recall-forget-implementation-report.md)。显式人物目标不受在场状态排除；删除按 Campaign/Owner/人物对持久遗忘并阻止恢复复活，Legacy 仅在证明完整覆盖时退役。独立生产 Prompt/重启夹具、完整门禁和隔离窗口证据集中在报告；协议 3.0、存储 2.5 保持兼容，真实 CK3/Provider/Soak 仍待用户 Gate。以下为前置版本与 Mod 排查快照。

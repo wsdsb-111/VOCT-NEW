@@ -129,6 +129,11 @@ function scalar(value) {
   return selected?.kind === "scalar" ? selected.value : null;
 }
 
+function relationScalar(value) {
+  const selected = scalar(value);
+  return selected === "0" ? null : selected;
+}
+
 function scalarList(text, value) {
   const selected = firstField(value);
   if (!selected) return [];
@@ -142,6 +147,69 @@ function scalarList(text, value) {
     cursor = token.next;
   }
   return values;
+}
+
+function relationList(text, value) {
+  return scalarList(text, value).filter((item) => item !== "0");
+}
+
+function parseIdentifierMap(text, value, collectionName, valueName) {
+  const root = firstField(value);
+  const collection = firstField(collectFields(text, root, [collectionName])[collectionName]);
+  const records = collection?.kind === "block" ? collection : root;
+  const result = Object.create(null);
+  if (!records || records.kind !== "block") return result;
+  scanDirectEntries(text, records.start, records.end, (id, record) => {
+    if (record.kind !== "block") return;
+    const resolved = scalar(collectFields(text, record, [valueName])[valueName]);
+    if (resolved !== null && resolved.trim()) result[String(id)] = resolved;
+  });
+  return result;
+}
+
+function createIdentifierDiagnostics() {
+  const diagnostic = {
+    unresolvedRiteIds: [],
+    unresolvedFaithIds: [],
+    unresolvedCultureIds: []
+  };
+  diagnostic.indexes = {
+    unresolvedRiteIds: Object.create(null),
+    unresolvedFaithIds: Object.create(null),
+    unresolvedCultureIds: Object.create(null)
+  };
+  return diagnostic;
+}
+
+function recordUnresolvedIdentifier(diagnostics, field, id, characterId) {
+  const key = String(id);
+  const index = diagnostics.indexes[field];
+  let entry = index[key];
+  if (!entry) {
+    entry = { id: key, count: 0, characterIds: [] };
+    index[key] = entry;
+    diagnostics[field].push(entry);
+  }
+  entry.count += 1;
+  if (entry.characterIds.length < 10 && !entry.characterIds.includes(String(characterId))) entry.characterIds.push(String(characterId));
+}
+
+function resolveIdentifier(value, lookup, diagnostics, diagnosticField, characterId) {
+  if (value === null || value === undefined || value === "") return null;
+  const identifier = String(value);
+  if (!/^\d+$/.test(identifier)) return identifier;
+  if (Object.hasOwn(lookup, identifier)) return lookup[identifier];
+  recordUnresolvedIdentifier(diagnostics, diagnosticField, identifier, characterId);
+  return null;
+}
+
+function resolveCharacterFaith(fields, lookups, diagnostics, characterId) {
+  const direct = scalar(fields.faith);
+  if (direct !== null) return resolveIdentifier(direct, lookups.faiths, diagnostics, "unresolvedFaithIds", characterId);
+  const riteId = scalar(fields.rite);
+  if (riteId === null) return null;
+  const faithId = resolveIdentifier(riteId, lookups.rites, diagnostics, "unresolvedRiteIds", characterId);
+  return faithId === null ? null : resolveIdentifier(faithId, lookups.faiths, diagnostics, "unresolvedFaithIds", characterId);
 }
 
 function normalizeName(value) {
@@ -164,8 +232,8 @@ function parseHistory(text, value) {
   return entries.sort((left, right) => (dateValue(left.date) || 0) - (dateValue(right.date) || 0));
 }
 
-function parseCharacter(text, id, bucket, record) {
-  const fields = collectFields(text, record, ["first_name", "birth", "female", "culture", "faith", "dynasty_house", "family_data", "alive_data", "landed_data", "court_data", "dead_data", "traits"]);
+function parseCharacter(text, id, bucket, record, lookups, identifierDiagnostics) {
+  const fields = collectFields(text, record, ["first_name", "birth", "female", "culture", "faith", "rite", "dynasty_house", "family_data", "alive_data", "landed_data", "court_data", "dead_data", "traits"]);
   const family = firstField(fields.family_data);
   const alive = firstField(fields.alive_data);
   const landed = firstField(fields.landed_data);
@@ -184,15 +252,15 @@ function parseCharacter(text, id, bucket, record) {
     firstName: scalar(fields.first_name),
     birth: scalar(fields.birth),
     gender: scalar(fields.female) === "yes" ? "female" : scalar(fields.female) === "no" ? "male" : "unknown",
-    culture: scalar(fields.culture),
-    faith: scalar(fields.faith),
+    culture: resolveIdentifier(scalar(fields.culture), lookups.cultures, identifierDiagnostics, "unresolvedCultureIds", id),
+    faith: resolveCharacterFaith(fields, lookups, identifierDiagnostics, id),
     dynastyHouse: scalar(fields.dynasty_house),
-    spouse: scalar(familyFields.spouse) || scalar(familyFields.primary_spouse),
-    parents: { father: scalar(familyFields.real_father) || scalar(familyFields.father), mother: scalar(familyFields.real_mother) || scalar(familyFields.mother) },
-    children: scalarList(text, familyFields.child),
+    spouse: relationScalar(familyFields.spouse) || relationScalar(familyFields.primary_spouse),
+    parents: { father: relationScalar(familyFields.real_father) || relationScalar(familyFields.father), mother: relationScalar(familyFields.real_mother) || relationScalar(familyFields.mother) },
+    children: relationList(text, familyFields.child),
     domainTitles: scalarList(text, landedFields.domain),
-    liege: scalar(landedFields.liege),
-    courtEmployer: scalar(courtFields.employer),
+    liege: relationScalar(landedFields.liege),
+    courtEmployer: relationScalar(courtFields.employer),
     location: scalar(locationFields.location) || scalar(aliveFields.location),
     gold: scalar(goldFields.value) || scalar(aliveFields.gold),
     alive: bucket === "living",
@@ -204,12 +272,12 @@ function parseCharacter(text, id, bucket, record) {
   };
 }
 
-function parseCharacterSection(text, value, bucket, characters, nameToCharacterIds) {
+function parseCharacterSection(text, value, bucket, characters, nameToCharacterIds, lookups, identifierDiagnostics) {
   const section = firstField(value);
   if (!section || section.kind !== "block") return;
   scanDirectEntries(text, section.start, section.end, (id, record) => {
     if (record.kind !== "block") return;
-    const character = parseCharacter(text, id, bucket, record);
+    const character = parseCharacter(text, id, bucket, record, lookups, identifierDiagnostics);
     characters[character.id] = character;
     const name = normalizeName(character.firstName);
     if (name) {
@@ -357,14 +425,20 @@ function fingerprint(buffer) {
 function parseGameState(gamestate) {
   const text = Buffer.isBuffer(gamestate) ? gamestate.toString("utf8") : String(gamestate || "");
   const root = { start: 0, end: text.length };
-  const fields = collectFields(text, root, ["date", "playthrough_id", "played_character", "living", "dead_unprunable", "characters", "character_lookup", "landed_titles", "wars", "dynasties", "character_memory_manager"]);
+  const fields = collectFields(text, root, ["date", "playthrough_id", "played_character", "living", "dead_unprunable", "characters", "character_lookup", "landed_titles", "wars", "dynasties", "character_memory_manager", "rites", "faiths", "culture_manager"]);
   const playedCharacterFields = collectFields(text, firstField(fields.played_character), ["character"]);
+  const lookups = {
+    rites: parseIdentifierMap(text, fields.rites, "database", "faith"),
+    faiths: parseIdentifierMap(text, fields.faiths, "database", "faith_type"),
+    cultures: parseIdentifierMap(text, fields.culture_manager, "cultures", "name")
+  };
+  const identifierDiagnostics = createIdentifierDiagnostics();
   const characters = Object.create(null);
   const nameToCharacterIds = Object.create(null);
-  parseCharacterSection(text, fields.living, "living", characters, nameToCharacterIds);
-  parseCharacterSection(text, fields.dead_unprunable, "dead_unprunable", characters, nameToCharacterIds);
+  parseCharacterSection(text, fields.living, "living", characters, nameToCharacterIds, lookups, identifierDiagnostics);
+  parseCharacterSection(text, fields.dead_unprunable, "dead_unprunable", characters, nameToCharacterIds, lookups, identifierDiagnostics);
   const charactersRoot = firstField(fields.characters);
-  parseCharacterSection(text, collectFields(text, charactersRoot, ["dead_prunable"]).dead_prunable, "dead_prunable", characters, nameToCharacterIds);
+  parseCharacterSection(text, collectFields(text, charactersRoot, ["dead_prunable"]).dead_prunable, "dead_prunable", characters, nameToCharacterIds, lookups, identifierDiagnostics);
   const lookup = parseLookup(text, fields.character_lookup);
   const dynastyHouses = Object.create(null);
   const houseSection = firstField(collectFields(text, firstField(fields.dynasties), ["dynasty_house"]).dynasty_house);
@@ -376,6 +450,11 @@ function parseGameState(gamestate) {
   const titles = parseTitles(text, fields.landed_titles);
   const warParticipantDiagnostics = { rejectedNumericTokens: [], unknownRuntimeIds: [], unresolvedActors: [] };
   const wars = parseWars(text, fields.wars, new Set(Object.keys(characters)), warParticipantDiagnostics, new Set(Object.keys(titles)));
+  const characterValues = Object.values(characters);
+  const fieldCoverage = Object.fromEntries(["faith", "culture"].map((field) => [field, {
+    total: characterValues.length,
+    available: characterValues.filter((character) => character[field] !== null && character[field] !== undefined && character[field] !== "").length
+  }]));
   return {
     schemaVersion: 1,
     gameDate: scalar(fields.date),
@@ -397,6 +476,10 @@ function parseGameState(gamestate) {
       warParticipantRejectedNumericTokens: [...new Set(warParticipantDiagnostics.rejectedNumericTokens)],
       warParticipantUnknownRuntimeIds: [...new Set(warParticipantDiagnostics.unknownRuntimeIds)],
       warParticipantUnresolvedActors: [...new Set(warParticipantDiagnostics.unresolvedActors)],
+      unresolvedRiteIds: identifierDiagnostics.unresolvedRiteIds,
+      unresolvedFaithIds: identifierDiagnostics.unresolvedFaithIds,
+      unresolvedCultureIds: identifierDiagnostics.unresolvedCultureIds,
+      fieldCoverage,
       missingFields: [scalar(fields.date) ? null : "date", scalar(fields.played_character) || scalar(playedCharacterFields.character) ? null : "played_character"].filter(Boolean),
       parseWarnings: []
     }

@@ -11,6 +11,8 @@ const stylePath = path.join(root, "resources", "app", "out", "renderer", "assets
 const renderer = normalizeLf(fs.readFileSync(rendererPath, "utf8"));
 const styles = normalizeLf(fs.readFileSync(stylePath, "utf8"));
 const preview = normalizeLf(fs.readFileSync(path.join(root, "ui-theme-preview.html"), "utf8"));
+const rendererHtml = fs.readFileSync(path.join(root, "resources/app/out/renderer/index.html"), "utf8");
+const comfort = normalizeLf(fs.readFileSync(path.join(root, "resources/app/out/renderer/ui-comfort.css"), "utf8"));
 assert.equal(normalizeLf("color: #263b37;\r\n  text-shadow: none;"), "color: #263b37;\n  text-shadow: none;", "CRLF checkouts must use the same assertion text");
 const finalThemeBlock = styles.slice(styles.lastIndexOf("/* V8.8 visual theme backgrounds"));
 
@@ -100,4 +102,47 @@ assert.match(renderer, /title: "游牧风格"/);
 assert.match(renderer, /children: "世界书"/);
 assert.ok(!renderer.includes('children: "世界线"'), "配置导航不能继续显示旧称世界线");
 
-console.log("V8.8 UI style backgrounds, nomad icon and readability: PASS");
+assert.ok(rendererHtml.indexOf('./ui-comfort.css') > rendererHtml.indexOf('./memory4-manager.css'), "Reading layer must follow existing theme and Memory CSS");
+assert.ok(preview.includes('href="resources/app/out/renderer/ui-comfort.css"'), "Preview must load the delivered reading layer");
+assert.match(comfort, /--ui-font: "Microsoft YaHei", "PingFang SC", "Noto Sans CJK SC", sans-serif/);
+assert.match(comfort, /body \* \{ letter-spacing: 0 !important; \}/);
+assert.match(comfort, /font-size: var\(--message-font-size, 17px\)/, "User message font setting must remain authoritative");
+assert.match(comfort, /container-type: inline-size/);
+assert.match(comfort, /@container \(max-width: 520px\)/, "Narrow panel layout must not depend only on window width");
+assert.match(comfort, /:focus-visible/);
+assert.match(comfort, /\.memory4-tabs button:focus-visible/, "Selected Memory tabs must retain keyboard focus");
+assert.match(comfort, /\.worldline-tabs \{\s*flex-wrap: wrap/, "Worldbook tabs must wrap rather than hide offscreen");
+assert.match(comfort, /\.config-header \{\s*z-index: 11;\s*pointer-events: none;/, "Header controls must sit above the drag overlay without blocking blank drag space");
+assert.match(comfort, /\.config-header > \* \{ pointer-events: auto; \}/, "Header controls must remain clickable");
+assert.match(comfort, /\.prompts-view :is\(\.header-row, \.card-header, \.block-header, \.block-title\) \{\s*flex-wrap: wrap;/, "Prompt block controls must not create horizontal overflow in narrow panels");
+assert.match(comfort, /\.language-option \.lang-name \{ color: var\(--ui-text\); \}/, "Language names must not retain pale legacy text on light controls");
+assert.match(comfort, /\.language-option\.active :is\(\.lang-name, \.lang-code, \.checkmark\) \{\s*color: #f0f3ec;/, "Selected language text must match its filled background");
+assert.match(comfort, /\.language-option\.active:hover:not\(:disabled\) \{\s*background: var\(--ui-selected\);/, "Selected language hover must not restore a pale background below white text");
+assert.match(comfort, /width: min\(220px, calc\(100vw - 32px\)\);/, "Language menu width must fit its clamped anchor");
+const languageAnchor = renderer.match(/left: (Math\.max\(16, Math\.min\(rect\.right - 220, window\.innerWidth - 236\)\))/);
+assert.ok(languageAnchor, "Language menu anchor must stay within the viewport");
+const positionLanguage = new Function("rect", "window", `return ${languageAnchor[1]};`);
+for (const [right, width, expected] of [[80, 540, 16], [1000, 540, 304], [400, 1280, 180], [60, 200, 16]]) {
+  assert.equal(positionLanguage({ right }, { innerWidth: width }), expected, "Language menu must clamp both viewport edges");
+}
+assert.match(comfort, /prefers-reduced-motion: reduce/);
+assert.ok(!/font-size:[^;]*\b(?:vw|vh|cqw)\b/.test(comfort), "Reading font size must not shrink with the viewport");
+assert.ok(!/background-image:/.test(comfort), "Comfort layer must preserve existing theme artwork");
+
+const luminance = hex => {
+  const channels = hex.match(/[\da-f]{2}/gi).map(channel => parseInt(channel, 16) / 255);
+  const linear = channels.map(channel => channel <= 0.04045 ? channel / 12.92 : ((channel + 0.055) / 1.055) ** 2.4);
+  return linear[0] * 0.2126 + linear[1] * 0.7152 + linear[2] * 0.0722;
+};
+const palette = block => Object.fromEntries(Array.from(block.matchAll(/--ui-([\w-]+): (#[\da-f]{6});/g), match => [match[1], match[2]]));
+const palettes = Array.from(comfort.matchAll(/:root\[data-votc-theme(?:="[^"]+")?\] \{([^}]+)\}/g), match => palette(match[1]));
+for (const [index, overrides] of palettes.entries()) {
+  const colors = { ...palettes[0], ...overrides };
+  for (const key of ["text", "muted", "danger", "success", "warning"]) {
+    const [light, dark] = [luminance(colors[key]), luminance(colors.surface)].sort((a, b) => b - a);
+    assert.ok((light + 0.05) / (dark + 0.05) >= 4.5, `Theme ${index} ${key} must meet 4.5:1 on its solid reading surface`);
+  }
+  const selectedText = luminance("#f0f3ec"), selectedBackground = luminance(colors.selected);
+  assert.ok((selectedText + 0.05) / (selectedBackground + 0.05) >= 4.5, `Theme ${index} selected control must retain readable text`);
+}
+console.log("UI theme artwork and reading-layer contracts: PASS");

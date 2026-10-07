@@ -93,7 +93,7 @@ function commitCanonicalFacts(engine, { finalizationId, conversationId, date = "
       entityIds, visibilityEvidence: "application_fragment" }], projectionLineages };
   return engine.memory4.store.commitOwner(snapshot, { status: "STORE", entries: facts.map(fact => ({
     memoryType: "DURABLE_KNOWLEDGE", text: fact.text, fragmentIds: [fragmentId], participantIds: visibleIds,
-    entityIds: fact.entityIds, topics: fact.topics, eventTime: { status: "unknown" }
+    entityIds: fact.entityIds, topics: fact.topics, eventTime: fact.eventTime || { status: "unknown" }
   })) });
 }
 
@@ -142,8 +142,9 @@ function createHarness({ directory, rows = [], activeIds = [1, 2], date = "1180.
   return { directory, summariesDir, ownerFolder, engine, gameData, createConversation };
 }
 
-async function providerInput(harness, query) {
+async function providerInput(harness, query, extraMessages = []) {
   const conversation = harness.createConversation(query);
+  conversation.messages.push(...extraMessages);
   const responder = harness.gameData.characters.get(2);
   const memoryContext = await conversation.getMemoryContextFor(responder, 65536);
   const messages = PromptBuilder.buildMessagesWithTokenCount(conversation.messages, responder, harness.gameData, "", memoryContext).messages;
@@ -292,6 +293,46 @@ async function testExplicitLegacyFinalSelectionReachesProvider() {
   assert(packet.details.filter(item => item.sourceRef.kind === "detail" && !item.explicitTargetEntityIds?.includes(3)).length <= 1,
     "at most one unrelated Canonical detail may remain beside the explicit target");
   assert(packet.tokens <= 1200, "final target selection must retain the packet cap");
+}
+
+async function testUnsplitExplicitOverviewReachesProvider() {
+  const harness = createHarness({ directory: path.join(root, "unsplit-explicit-overview"), activeIds: [1, 2, 3] });
+  const committed = commitCanonicalFacts(harness.engine, { finalizationId: "unsplit-unrelated-derived-final",
+    conversationId: "unsplit-unrelated-derived-conversation", date: "1165.1.1", facts: [{ entityIds: [4], topics: ["北境"],
+      text: "1164年赵匡胤在北境议和，留下 NON_TARGET_DERIVED_OVERVIEW_SENTINEL。",
+      eventTime: { from: "1164.1.1", to: "1164.12.31", precision: "year", status: "reported" } }] });
+  const rebuilt = await harness.engine.memory4.derived.rebuild({ campaignToken, ownerId: 2 }, { kind: "all" });
+  assert.equal(rebuilt.status, "COMPLETE");
+  const query = "赵光义一生在北境的经历是什么？";
+  const npcMessage = [{ id: 2, role: "assistant", speakerCharacterId: 3, content: "赵匡胤也曾在北境议和。" }];
+  const baseline = await providerInput(harness, query, npcMessage);
+  const baselinePacket = baseline.memoryContext.memory4Packet;
+  assert.deepEqual(baselinePacket.diagnostics.explicitTargetEntityIds, [3]);
+  assert(baselinePacket.diagnostics.mentionedOutOfSceneIds.includes(4));
+  assert.equal(baselinePacket.query.granularity, "LIFE");
+  assert(["year", "life"].includes(baselinePacket.overview?.sourceRef.kind),
+    "a real non-target Derived overview must occupy the slot before Legacy is added");
+  assert.deepEqual(baselinePacket.overview.sourceRef.sourceEntryIds, committed.entryIds);
+  assert.equal(baselinePacket.overview.explicitTargetEntityIds?.includes(3) || false, false);
+
+  const content = "【张道素能够知道并记住的本场经过】\n赵光义在北境守门，留下 UNSPLIT_C_TARGET_SENTINEL。其后还有连续叙事，无法可靠拆分。";
+  const row = summaryRow({ subjectIds: [3], content });
+  const file = path.join(harness.ownerFolder, "与旧友的对话.json");
+  for (const body of [content, `${"宫廷礼节与宴席席次记录。".repeat(700)}\n${content}\n${"旧日使者往返记录。".repeat(700)}`]) {
+    writeRows(file, [{ ...row, content: body }]);
+    harness.engine.store.invalidateFolderSummaryCache([2]);
+    const input = await providerInput(harness, query, npcMessage);
+    const packet = input.memoryContext.memory4Packet;
+    assert.equal(packet.overview?.sourceRef.kind, "legacy");
+    assert.equal(packet.overview.memory.provenance.legacyParentId, undefined,
+      "the target must remain an unsplit Narrative, not a split Legacy detail");
+    assert(packet.overview.memory.content.includes("UNSPLIT_C_TARGET_SENTINEL"));
+    assert(packet.items.some(item => item.memory.content.includes("UNSPLIT_C_TARGET_SENTINEL")));
+    assert(input.memoryContext.temporalExtraText.includes("UNSPLIT_C_TARGET_SENTINEL"));
+    assert(input.messages.some(message => String(message.content || "").includes("UNSPLIT_C_TARGET_SENTINEL")));
+    assert(packet.tokens <= 1200);
+    if (body !== content) assert(packet.overview.memory.content.length < body.length);
+  }
 }
 
 async function testOrphanForgetReachesProvider() {
@@ -511,6 +552,7 @@ async function main() {
     [testPromptRoutingAndScope, "PromptBuilder: explicit C history across duo/trio/four-person presence, absent D, generic negative, identity and scope gates"],
     [testPartialAndOversizedLegacyReachProvider, "Conversation -> PromptBuilder: partial legacy retention and query-focused middle excerpt"],
     [testExplicitLegacyFinalSelectionReachesProvider, "Conversation -> final selection -> temporalExtraText -> PromptBuilder: explicit C Legacy survives two unrelated Canonical details"],
+    [testUnsplitExplicitOverviewReachesProvider, "Conversation -> real Derived -> unsplit explicit Legacy overview -> final Provider messages, including oversize excerpt"],
     [testOrphanForgetReachesProvider, "orphan audit/forget -> restart -> Memory4 packet, temporalExtraText and Provider messages stay clear"],
     [testSharedSourceProjectionAndReadDtos, "shared A/C source -> delete A -> owner/detail/year DTOs and readSources -> restart keeps C only"],
     [testManagerDeletionAndLateRecovery, "SummariesManager deletion -> restart -> late A+C recovery, C-only durable/provider recall"],

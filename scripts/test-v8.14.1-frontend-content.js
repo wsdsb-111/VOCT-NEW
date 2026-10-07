@@ -22,8 +22,8 @@ const check = (condition, message) => {
   if (!condition) failures.push(message);
 };
 
-const featureVersionDeclaration = /\bconst\s+VOTC_FEATURE_VERSION\s*=\s*["']V8\.15["']/.test(renderer);
-check(featureVersionDeclaration, "Renderer must define VOTC_FEATURE_VERSION = \"V8.15\"");
+const featureVersionDeclaration = /\bconst\s+VOTC_FEATURE_VERSION\s*=\s*["']V8\.15\.1["']/.test(renderer);
+check(featureVersionDeclaration, "Renderer must define VOTC_FEATURE_VERSION = \"V8.15.1\"");
 check((renderer.match(/\bVOTC_FEATURE_VERSION\b/g) || []).length >= 2, "Renderer must display the feature version constant");
 check(renderer.includes("window.electronAPI.getAppVersion()"), "footer must continue reading the package version through getAppVersion()");
 const footerStart = renderer.indexOf('className: "app-version"');
