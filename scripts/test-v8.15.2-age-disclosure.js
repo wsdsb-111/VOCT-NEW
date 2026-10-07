@@ -34,10 +34,10 @@ function scan(text, { targetId = 2, ownerId = 1, sourceRole = "assistant", speak
     sourceRevision: "a".repeat(64), fragments: [fragment] }, candidateData);
 }
 
-function scanAgeAnswer(answer) {
+function scanAgeAnswer(answer, responderHeardQuestion = true) {
   const fragments = [
     { fragmentId: "age-question", messageId: 0, sourceMessageIds: [0], text: "你今年多少岁？", sourceRole: "user",
-      speakerId: 1, entityIds: [2], presentIds: [1, 2], knownBy: [1], sourceType: "spoken", visibility: "participants",
+      speakerId: 1, entityIds: [2], presentIds: [1, 2], knownBy: responderHeardQuestion ? [1, 2] : [1], sourceType: "spoken", visibility: "participants",
       visibilityEvidence: "application_fragment" },
     { fragmentId: "age-answer", messageId: 1, sourceMessageIds: [1], text: answer, sourceRole: "assistant",
       speakerId: 2, entityIds: [2], presentIds: [1, 2], knownBy: [1, 2], sourceType: "spoken", visibility: "participants",
@@ -88,6 +88,8 @@ async function run() {
     const quotedAnswer = ageFact(scanAgeAnswer("“今年13岁。”").disclosures, 13);
     assert(quotedAnswer, "a bare age inside a validated direct-speech span can answer the Owner's current-age question");
     assert.deepEqual(quotedAnswer.evidence.sourceMessageIds, [0, 1], "quoted age proof retains the question and response");
+    assert.equal(ageFact(scanAgeAnswer("“今年13岁。”", false).disclosures, 13), undefined,
+      "a responder who did not hear the question cannot authorize a bare age answer");
 
     for (const text of ["今年13岁。", "我明年13岁。", "我今年12岁。", "我今年13岁左右。", "听说我今年13岁。"] ) {
       assert.equal(ageFact(scan(text).disclosures, 13), undefined, `missing, future, approximate, or wrong age stays unknown: ${text}`);

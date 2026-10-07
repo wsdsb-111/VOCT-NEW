@@ -87,10 +87,10 @@ async function run() {
     entityIds: [2], participantIds: [1, 2], topics: ["审计"], eventTime: { status: "unknown" }
   }] });
   const targetCharacter = fixture.characters.find(character => character.id === 1);
-  Object.assign(targetCharacter, { primaryTitle: "明王", nickname: "北地之虎", age: 23,
+  Object.assign(targetCharacter, { primaryTitle: "明王", nickname: "北地之虎", age: 14,
     traits: [{ id: "bastard", name: "私生子" }, { traitId: "beauty_good_3", name: "倾国倾城" }] });
   fixture.conversation.gameData.characters.set(targetCharacter.id, targetCharacter);
-  const disclosureText = "甲现在是明王。我今年23岁。";
+  const disclosureText = "甲现在是明王。";
   const disclosureContext = { ...fixture.scope, conversationId: "isolated-ui-conversation", finalizationId: "ui-smoke-disclosure-finalization",
     episodeId: "ui-smoke-disclosure-episode", date: "1164.1.1", totalDays: 425000,
     participants: [1, 2].map(id => ({ id })), participantPresence: [1, 2].map(characterId => ({ characterId, joinedAtMessageId: 0, leftAtMessageId: null })),
@@ -108,16 +108,25 @@ async function run() {
       visibilityEvidence: disclosureProjection.fragments.map(fragment => fragment.visibilityEvidence),
       sourceTextHashes: disclosureProjection.fragments.map(fragment => crypto.createHash("sha256").update(fragment.text).digest("hex"))
     }
-  }, {
-    factId: disclosureFactId(fixture.scope, targetCharacter.id, "AGE", "age_23"), entityId: targetCharacter.id,
-    factType: "AGE", factKey: "age_23", value: "23", evidence: {
-      sourceMessageIds: disclosureProjection.fragments.map(fragment => fragment.messageId),
-      sourceFragmentIds: disclosureProjection.fragments.map(fragment => fragment.fragmentId),
-      visibilityEvidence: disclosureProjection.fragments.map(fragment => fragment.visibilityEvidence),
-      sourceTextHashes: disclosureProjection.fragments.map(fragment => crypto.createHash("sha256").update(fragment.text).digest("hex"))
-    }
   }]);
   assert.equal(seededDisclosure.changed, true, "isolated fixture should seed one source-backed public fact");
+  const ageCharacters = fixture.characters.map(character => character.id === 1 ? { ...character, age: 13 } : character);
+  const ageContext = { campaignToken: fixture.scope.campaignToken, conversationId: "ui-listener-age-source",
+    finalizationId: "ui-listener-age-finalization", episodeId: "ui-listener-age-episode", date: "1163.1.1",
+    participants: ageCharacters, disclosureCharacters: ageCharacters,
+    participantPresence: ageCharacters.map(character => ({ characterId: character.id, joinedAtMessageId: 0, leftAtMessageId: null })),
+    messages: [[95, 3, "甲，你今年多少岁？"], [96, 1, "今年13岁。"]].map(([id, speakerCharacterId, content]) => ({
+      id, role: "assistant", speakerCharacterId, content, memory4Fragments: [{ start: 0, end: content.length,
+        visibility: "participants", sourceType: "spoken", entityIds: [1, 2, 3] }] })) };
+  const ageSnapshot = fixture.engine.memory4.buildOwnerSnapshot(ageContext, fixture.scope.ownerId);
+  fixture.engine.memory4.store.recordKnownEvidence(ageSnapshot);
+  assert.equal(fixture.engine.memory4.recordDisclosures(ageSnapshot, { campaignToken: fixture.scope.campaignToken,
+    date: ageContext.date, characters: new Map(ageCharacters.map(character => [character.id, character])) }).status, "RECORDED",
+  "the UI age is produced by a real three-person listener Q&A, not a manually seeded AGE proof");
+  const listenerAge = fixture.engine.memory4.store.getDisclosedFacts(fixture.scope, 1).find(fact => fact.factType === "AGE");
+  const listenerProof = Object.values(listenerAge.evidenceBySource).find(proof => proof.sourceKind === "CONVERSATION");
+  assert.deepEqual(listenerProof.sourceMessageIds, [95, 96]);
+  assert.deepEqual(listenerProof.knownBy, [2], "the bystander's proof remains Owner-scoped");
   const directObservationContext = { conversationId: fixture.conversation.id, campaignToken: fixture.scope.campaignToken,
     gameDate: fixture.conversation.gameData.date, messageBoundary: 94, participantPresence: disclosureContext.participantPresence };
   fixture.conversation.gameData.directObservationContext = directObservationContext;
@@ -297,14 +306,14 @@ async function run() {
     await setViewport(540, 900);
     await screenshot("ink-narrow-direct-observation");
     await setViewport(1280, 1000);
-    await waitFor("document.querySelector('.memory4-manager').textContent.includes('披露时年龄：23岁')");
+    await waitFor("document.querySelector('.memory4-manager').textContent.includes('披露时年龄：13岁')");
     const ageProfile = await evaluate("conversationAPI.getMemory4OwnerData({ownerId:2}).then(data=>data.known.items.find(item=>item.entityId===1)?.disclosedFacts.find(fact=>fact.factType==='AGE'))");
-    assert.equal(ageProfile.value, "23");
+    assert.equal(ageProfile.value, "13");
     assert.equal(ageProfile.current, false, "disclosed age is a historical observation, never current age truth");
-    assert.equal(ageProfile.firstAcquiredDate, "1164.1.1");
-    assert.equal(ageProfile.currentKnownAge, 23, "a disclosed age authorizes current CK3 age projection without rewriting the historical value");
+    assert.equal(ageProfile.firstAcquiredDate, "1163.1.1");
+    assert.equal(ageProfile.currentKnownAge, 14, "a listener's disclosed age authorizes current CK3 age projection without rewriting the historical value");
     assert.equal(ageProfile.currentAgeReadDate, "1164.1.1");
-    assert(await evaluate("document.querySelector('.memory4-manager').textContent.includes('当前年龄：23岁')"), "authorized current age must be rendered separately from disclosure history");
+    assert(await evaluate("document.querySelector('.memory4-manager').textContent.includes('当前年龄：14岁')"), "authorized current age must be rendered separately from disclosure history");
     assert(await evaluate("(()=>{const row=[...document.querySelectorAll('.memory4-disclosure-row')].find(row=>row.textContent.includes('披露时年龄'));return !!row&&row.textContent.includes('历史披露记录')&&!row.querySelector('button')})()"), "historical age must show date and no current/manual mutation control");
     await screenshot("ink-desktop-disclosed-age-history");
     await setViewport(540, 900);
@@ -497,7 +506,7 @@ async function run() {
       checks: ["missing Campaign", "wrong Campaign", "strict owner data", "orphan audit real IPC read-only", "orphan forget requires explicit confirmation", "confirmed orphan forget through real preload/IPC", "six views", "readonly Official", "disclosure source/date/nickname", "manual disclosure write", "disclosure hide cancellation", "archive disclosure readonly", "source modal", "manual conflict preservation", "manual edit", "delete cancellation",
         "accepted Detail deletion", "existing binding preview cancellation", "nonoverlapping tool buttons", "no horizontal overflow", "same-campaign archive outside loaded roster", "loaded-campaign readonly banner",
         "archive refresh/tabs/source remain available", "archive year/life/detail mutation controls disabled", "manager detach leaves strict current null and read snapshot available",
-        "archive IPC mutation rejected after manager detach", "archive sidecar hash unchanged", "ended-conversation banner, detail and source remain available", "ordinary Legacy edit/delete enabled after detach", "ordinary Legacy manual edit persisted through real preload/IPC after detach", "disclosed age authorizes separate current CK3 age while retaining historical value/date without mutation controls",
+        "archive IPC mutation rejected after manager detach", "archive sidecar hash unchanged", "ended-conversation banner, detail and source remain available", "ordinary Legacy edit/delete enabled after detach", "ordinary Legacy manual edit persisted through real preload/IPC after detach", "three-person listener Q&A persisted and reloaded through real preload/IPC: current CK3 age 14, historical age 13 and source date retained without mutation controls",
         "all main-process fetch blocked before I/O; only fixed localhost health check may be attempted"] }, null, 2));
     console.log(`V8.14 E isolated packaged UI: PASS; evidence ${evidence}`);
   } catch (error) {

@@ -264,11 +264,11 @@ function matchedFacts(text, facts) {
 
 const UNCERTAIN = /[?？]|吗|么|可否|能否|是不是|是否|不是|并非|并不|未必|没有|从未|不曾|未曾|不再是|不属实|否认|听说|据说|传闻|传言|谣言|相传|声称|自称|据传|可能|也许|或许|似乎|疑似|假如|如果|要是|倘若|将来|未来|明年|后年|终将|迟早|尚未|未证实|曾经|曾为|曾任|当年|昔日|往日|过去|以前|原先|玩笑|虚构|误传|我猜|猜测|我想|以为|怀疑|认为|觉得|心想|暗想|心里|内心|心中|暗自|旁白|叙述|描写|\b(?:not|never|rumou?r|heard|alleged|claims?|said|might|may|perhaps|possibly|suppose|think|thought|thinking|believe|seem|if|whether|unless|will|would|future|intends?|intention|joking|fiction|unconfirmed|narration|aside)\b/i;
 const DISCOURSE = /说|告诉|提到|声称|认为|觉得|怀疑|听说|据说|传闻|引用|否认|谣传/;
-const FUTURE_INTENT = /(?:即将|将要|马上要|快要|准备|打算|计划|想要|要成为|\b(?:will|intend(?:s)?\s+to|plan(?:s)?\s+to|be\s+going\s+to|about\s+to)\b)/iu;
+const FUTURE_INTENT = /(?:即将|将要|将会|将成为|将任|将担任|会成为|会是|以后会|之后会|届时会|未来会|马上要|快要|准备|打算|计划|想要|要成为|\b(?:will|intend(?:s)?\s+to|plan(?:s)?\s+to|be\s+going\s+to|about\s+to)\b)/iu;
 const PREDICATES = /(?:(?:当前|如今|当今|现在|其实|确实|仍然|本来|向来|天生|生性|真正|正是|就是|确为|乃是|已(?:经)?成为|是|乃|为|系|拥有|具有|具备|患有|身患|有|很|非常|十分|极其|异常)|\b(?:am|is|are|has|have|possesses|born|very)\b|['’]s\b)/i;
 const SPEAKER_SELF_ALIASES = new Set(["我", "吾", "朕", "寡人", "孤", "本王", "在下", "鄙人", "本人", "i", "myself"]);
 const SELF_PRONOUN_PREFIX = /^(?:我|吾|朕|寡人|孤|本王|在下|鄙人|本人)\s*/u;
-const SELF_ATTRIBUTE_HEAD = /^(?:即将|将要|马上要|快要|准备|打算|计划|想要|要|已(?:经)?成为|现在|如今|当前|现任|现为|其实|确实|仍然|本来|向来|天生|生性|正是|就是|确为|乃是|乃|是|为|系|拥有|具有|具备|患有|身患|有|很|非常|十分|极其|异常)/u;
+const SELF_ATTRIBUTE_HEAD = /^(?:即将|将要|将会|将成为|将任|将担任|会成为|会是|以后会|之后会|届时会|未来会|马上要|快要|准备|打算|计划|想要|要|已(?:经)?成为|现在|如今|当前|目前|现任|现为|其实|确实|仍然|本来|向来|天生|生性|正是|就是|确为|乃是|乃|是|为|系|拥有|具有|具备|患有|身患|有|很|非常|十分|极其|异常)/u;
 const SELF_LABELED_FACT_HEAD = /^(?:的)?(?:头衔|身份|职位|官职|特质|性格|特点|能力|年龄)\s*(?:(?:现在|如今|当前|今年)\s*)?(?:是|为|乃|确为|就是)/u;
 const SELF_AGE_HEAD = /^(?:(?:(?:今年|现在|如今|当前)\s*)?(?:[0-9]{1,4}|[零〇一二两三四五六七八九十百千]+)\s*岁|(?:已经|已)?活了\s*(?:[0-9]{1,4}|[零〇一二两三四五六七八九十百千]+)\s*(?:岁|年|载))/u;
 const ENGLISH_SELF_ASSERTION_HEAD = /^(?:i\s*(?:am|'m)|myself\s+(?:am|is|are|have|has|possess(?:es)?|born|very)\b)/i;
@@ -329,12 +329,41 @@ function eligibleFragment(snapshot, fragment, sourceKind, letterProof = null) {
     && sourceMessageIds(fragment, "CONVERSATION").length > 0;
 }
 
-function latestAgeQuestion(snapshot, answerFragment, sourceKind) {
+function ageQuestionTarget(fragment, characters) {
+  const texts = [fragment.text, ...(fragment.sourceRole === "assistant"
+    ? directSpeechSpans(fragment.text, characterAliases(characters.get(Number(fragment.speakerId))),
+      { speakerId: fragment.speakerId, characters }).map(span => span.text) : [])];
+  const questionEnd = /^(?:(?:今年|现在|如今|当前))?(?:多少岁|几岁|多大)[?？。！!\s]*$/u;
+  const targets = new Set();
+  for (const sourceText of texts) {
+    const text = normalizedText(sourceText);
+    const namedTargets = new Set();
+    for (const character of characters.values()) {
+      for (const alias of characterAliases(character)) {
+        if (!text.startsWith(alias)) continue;
+        const remainder = text.slice(alias.length).replace(/^[,，:：\s]+/u, "").replace(/^(?:你|您)/u, "");
+        if (questionEnd.test(remainder)) namedTargets.add(characterId(character));
+      }
+    }
+    if (namedTargets.size > 1) return null;
+    if (namedTargets.size === 1) { targets.add([...namedTargets][0]); continue; }
+    if (!/^(?:你|您)/u.test(text) || !questionEnd.test(text.replace(/^(?:你|您)/u, ""))) continue;
+    // Recipient IDs may denote the whole audience, not the addressed responder.
+    const present = ids(fragment.presentIds);
+    const others = present.filter(id => id !== Number(fragment.speakerId));
+    if (present.length !== 2 || others.length !== 1) return null;
+    targets.add(others[0]);
+  }
+  return targets.size === 1 ? [...targets][0] : null;
+}
+
+function latestAgeQuestion(snapshot, answerFragment, sourceKind, characters) {
   const ownerId = Number(snapshot.ownerId);
   const speakerId = Number(answerFragment.speakerId);
   const answerMessageIds = sourceMessageIds(answerFragment, sourceKind);
   if (sourceKind !== "CONVERSATION" || answerFragment.sourceRole !== "assistant"
     || !Number.isSafeInteger(ownerId) || !Number.isSafeInteger(speakerId) || speakerId <= 0 || speakerId === ownerId
+    || !eligibleFragment(snapshot, answerFragment, sourceKind)
     || answerMessageIds.length !== 1 || !ids(answerFragment.presentIds).includes(ownerId)
     || !ids(answerFragment.presentIds).includes(speakerId)) return null;
   const answerMessageId = answerMessageIds[0];
@@ -345,15 +374,20 @@ function latestAgeQuestion(snapshot, answerFragment, sourceKind) {
       if (messageId < answerMessageId && messageId > latestPriorMessageId) latestPriorMessageId = messageId;
     }
   }
+  let question = null;
   for (const fragment of snapshot.fragments || []) {
-    if (!eligibleFragment(snapshot, fragment, sourceKind) || !["user", "assistant"].includes(fragment.sourceRole)
-      || Number(fragment.speakerId) !== ownerId || !ids(fragment.presentIds).includes(ownerId)
-      || !ids(fragment.presentIds).includes(speakerId) || !/^\s*(?:你|您)(?:(?:今年|现在|如今|当前))?(?:多少岁|几岁|多大)[?？。！!\s]*$/u.test(fragment.text)) continue;
+    if (!eligibleFragment(snapshot, fragment, sourceKind) || !["user", "assistant"].includes(fragment.sourceRole)) continue;
     const questionMessageIds = sourceMessageIds(fragment, sourceKind);
     if (questionMessageIds.length === 1 && questionMessageIds[0] === latestPriorMessageId
-      && questionMessageIds[0] < answerMessageId) return fragment;
+      && questionMessageIds[0] < answerMessageId) {
+      const questionSpeakerId = Number(fragment.speakerId);
+      if (!ids(fragment.presentIds).includes(ownerId) || !ids(fragment.presentIds).includes(speakerId)
+        || !ids(fragment.presentIds).includes(questionSpeakerId) || questionSpeakerId === speakerId
+        || !ids(fragment.knownBy).includes(speakerId) || ageQuestionTarget(fragment, characters) !== speakerId) return null;
+      question = fragment;
+    }
   }
-  return null;
+  return question;
 }
 
 function scanSource(snapshot, gameData, sourceKind, letterProof = null) {
@@ -369,7 +403,7 @@ function scanSource(snapshot, gameData, sourceKind, letterProof = null) {
     if (!eligibleFragment(snapshot, fragment, sourceKind, letterProof)) continue;
     const sourceRole = sourceKind === "LETTER" ? "user" : fragment.sourceRole;
     if (!["user", "assistant"].includes(sourceRole)) continue;
-    const ageQuestion = latestAgeQuestion(snapshot, fragment, sourceKind);
+    const ageQuestion = latestAgeQuestion(snapshot, fragment, sourceKind, characters);
     const directSpeech = sourceRole === "assistant"
       ? directSpeechSpans(fragment.text, characterAliases(characters.get(Number(fragment.speakerId))),
         { speakerId: fragment.speakerId, characters }) : [];
