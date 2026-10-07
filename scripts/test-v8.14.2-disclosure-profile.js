@@ -14,7 +14,7 @@ assert.equal(view.heldCourtAndCouncilPositions, "", "stranger must not receive c
 assert.equal(view.titleRankConcept, "", "stranger must not receive rank identity");
 assert(!view.fullName.includes("明王"), "composite name must not bypass title gate");
 assert.equal(view.nickname, "北地之虎", "nickname is visible without disclosure");
-assert.deepEqual(view.traits.map(trait => trait.name), ["独眼"]);
+assert.deepEqual(view.traits, [], "raw visibility alone must not fabricate observation of an off-scene target");
 assert.equal(createTraitProfileView(gameData, target).character.primaryTitle, "明王");
 assert.deepEqual(createTraitProfileView(gameData, target).character.traits, target.traits);
 assert.equal(target.primaryTitle, "明王", "presentation must not modify CK3 source");
@@ -33,6 +33,10 @@ const fact = (factType, factKey, value, status = "AUTO_DISCLOSED") => ({ campaig
   firstAcquiredDate: "1164.5.20" });
 const knowledge = { campaignToken: gameData.campaignToken, currentGameDate: gameData.date, gameData,
   disclosureProfiles: new Map([[1, [fact("TITLE", "title_明王", "明王"), fact("TRAIT", "trait_bastard", "私生子")]]]) };
+const observedKnowledge = { ...knowledge, disclosureProfiles: new Map([[1, [{
+  ...fact("TRAIT", "trait_one_eyed", "独眼"), sourceKind: "DIRECT_OBSERVATION", currentDirectObservation: true
+}]]]) };
+assert.deepEqual(getTraitsForKnownProfile(observer, target, observedKnowledge).map(trait => trait.name), ["独眼"]);
 assert(getTraitsForKnownProfile(observer, target, knowledge).some(trait => trait.name === "私生子"));
 assert.equal(createTraitProfileView(gameData, observer, knowledge).gameData.characters.get(1).primaryTitle, "明王");
 assert.equal(createTraitProfileView(gameData, observer, knowledge).gameData.characters.get(1).heldCourtAndCouncilPositions, "", "one known title must not unlock all positions");

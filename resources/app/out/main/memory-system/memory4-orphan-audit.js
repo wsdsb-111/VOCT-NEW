@@ -107,6 +107,7 @@ class Memory4OrphanAudit {
     const known = store.readKnownEntities(scope);
     for (const entity of Object.values(known.entities)) for (const [factId, fact] of Object.entries(entity.disclosedFacts || {})) {
       for (const proof of Object.values(fact.evidenceBySource || {})) {
+        if (proof.sourceKind === "DIRECT_OBSERVATION") continue;
         addSource({ ...proof, conversationId: proof.sourceConversationId, finalizationId: proof.sourceFinalizationId,
           segmentIds: proof.sourceFragmentIds, messageIds: proof.sourceMessageIds }, [], { disclosureFactIds: [factId] });
       }

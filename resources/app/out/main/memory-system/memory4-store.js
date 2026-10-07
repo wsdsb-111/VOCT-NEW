@@ -7,6 +7,7 @@ const { updateKnownEntities, evidenceCompleteness } = require("./memory4-visibil
 const { getFactCandidates, disclosureFactId } = require("./memory4-disclosure");
 const { createProjectionLineage, projectionLineageFromSummary, matchesProjectionLineage, disclosureProofForgetMatch, entryForgotten, snapshotForgottenFragments, segmentAliases } = require("./memory4-forget");
 const { normalizeGameDate } = require("../worldline/character-temporal-facts");
+const { resolveTraitVisibility } = require("../prompts/trait-visibility-policy");
 
 const INDEX_KEYS = ["byCampaign", "byOwner", "byEntity", "byTopic", "byEventYear", "byEventDate", "byConversationYear", "byAcquiredYear", "byCounterpart", "byMemoryType", "byState", "bySourceFinalization"];
 const DISCLOSURE_STATUSES = new Set(["AUTO_DISCLOSED", "MANUAL_KNOWN", "MANUAL_HIDDEN"]);
@@ -87,16 +88,60 @@ function latestDate(left, right) {
   return (a.serial >= b.serial ? a : b).canonical;
 }
 
+function directObservationSourceKey(conversationId, factEpoch, observedGameDate) {
+  return hash(["DIRECT_OBSERVATION", conversationId, factEpoch, observedGameDate]);
+}
+
+function visibilityTrait(candidate) {
+  return { traitId: candidate.canonicalKey, name: candidate.value,
+    localizedName: candidate.localizedName, category: candidate.category };
+}
+
+function activeAtBoundary(participantPresence, entityId, boundary) {
+  return Array.isArray(participantPresence) && participantPresence.some(window => {
+    const joined = Number(window?.joinedAtMessageId ?? 0);
+    const left = window?.leftAtMessageId == null ? Infinity : Number(window.leftAtMessageId);
+    return Number(window?.characterId) === entityId && Number.isSafeInteger(joined) && joined <= boundary
+      && (left === Infinity || Number.isSafeInteger(left) && boundary < left);
+  });
+}
+
+function matchesCurrentDirectObservation(proof, scope, entityId, state, candidate, gameData, rawEvidenceBySource = {}) {
+  const context = gameData?.directObservationContext;
+  const date = normalizeGameDate(gameData?.date), contextDate = normalizeGameDate(context?.gameDate);
+  const boundary = Number(context?.messageBoundary);
+  const observedDate = normalizeGameDate(proof?.observedGameDate);
+  const latestForEpoch = observedDate && !Object.values(rawEvidenceBySource).some(other => {
+    if (other?.sourceKind !== "DIRECT_OBSERVATION" || other.observerId !== scope.ownerId
+      || other.targetId !== entityId || other.factEpoch !== proof.factEpoch) return false;
+    const otherDate = normalizeGameDate(other.observedGameDate);
+    return otherDate && otherDate.serial > observedDate.serial;
+  });
+  return proof?.sourceKind === "DIRECT_OBSERVATION" && proof.acquisitionKind === "VISIBLE_TRAIT"
+    && proof.sourceConversationId === context?.conversationId && typeof context?.conversationId === "string"
+    && !!context.conversationId.trim() && context.campaignToken === scope.campaignToken
+    && date && contextDate && date.canonical === contextDate.canonical
+    && Number.isSafeInteger(boundary) && boundary >= 0 && proof.messageBoundary <= boundary
+    && proof.observedGameDate === date.canonical && latestForEpoch
+    && proof.observerId === scope.ownerId && proof.targetId === entityId
+    && proof.current === true && state?.present === true && proof.factEpoch === state.epoch
+    && resolveTraitVisibility(visibilityTrait(candidate)).status === "OBSERVABLE"
+    && activeAtBoundary(context.participantPresence, scope.ownerId, boundary)
+    && activeAtBoundary(context.participantPresence, entityId, boundary);
+}
+
 function effectiveDisclosure(record, asOf, ownerId, metadata, factState = null) {
   const current = normalizeGameDate(asOf);
   const evidenceBySource = Object.fromEntries(Object.entries(record.evidenceBySource || {}).filter(([, proof]) => {
     const acquired = normalizeGameDate(proof?.acquiredDate);
+    const confirmed = normalizeGameDate(proof?.sourceKind === "DIRECT_OBSERVATION" ? proof.observedGameDate : proof?.acquiredDate);
     const sourceCurrent = proof?.sourceKind !== "CONVERSATION"
       || metadata?.knownEvidenceRevisions?.[hash([proof.sourceConversationId, ownerId])] === proof.sourceRevision;
     const continuous = record.factType === "AGE" || !factState
       || factState.present && (proof.factEpoch || 0) === factState.epoch
         && (factState.legacyContinuous === true || normalizeGameDate(factState.epochStartedDate)?.serial <= acquired?.serial);
-    return current && acquired && acquired.serial <= current.serial && ids(proof.knownBy).join() === String(ownerId) && sourceCurrent && continuous;
+    return current && acquired && confirmed && acquired.serial <= current.serial && confirmed.serial <= current.serial
+      && ids(proof.knownBy).join() === String(ownerId) && sourceCurrent && continuous;
   }));
   const manualDate = normalizeGameDate(record.manualMarkedDate);
   const manualApplies = manualDate && current && manualDate.serial <= current.serial
@@ -106,7 +151,9 @@ function effectiveDisclosure(record, asOf, ownerId, metadata, factState = null) 
   const status = manualApplies ? record.status : hasAutoEvidence ? "AUTO_DISCLOSED" : null;
   if (!status) return { status: null, effectiveKnown: false, evidenceBySource, firstAcquiredDate: null, lastConfirmedDate: null };
   const dates = Object.values(evidenceBySource).map(proof => normalizeGameDate(proof.acquiredDate)).filter(Boolean);
-  const evidenceDates = [...dates].sort((a, b) => a.serial - b.serial);
+  const evidenceDates = Object.values(evidenceBySource)
+    .map(proof => normalizeGameDate(proof.sourceKind === "DIRECT_OBSERVATION" ? proof.observedGameDate : proof.acquiredDate))
+    .filter(Boolean).sort((a, b) => a.serial - b.serial);
   if (manualApplies && record.status === "MANUAL_KNOWN") dates.push(manualDate);
   dates.sort((a, b) => a.serial - b.serial);
   return { status, effectiveKnown: status !== "MANUAL_HIDDEN", evidenceBySource,
@@ -346,6 +393,7 @@ class Memory4Store {
       for (const [factId, fact] of Object.entries(facts)) {
         let factChanged = false;
         for (const [key, proof] of Object.entries(fact.evidenceBySource || {})) {
+          if (proof.sourceKind === "DIRECT_OBSERVATION") continue;
           let lineages = Array.isArray(proof.projectionLineages) ? proof.projectionLineages : [];
           let inferredLineages = false;
           if (!lineages.length) {
@@ -884,6 +932,110 @@ class Memory4Store {
     return { changed, currentFactState: JSON.parse(JSON.stringify(states)) };
   }
 
+  observeVisibleTraits(scope, targetId, gameData, { conversationId, messageBoundary } = {}) {
+    assertScope(scope);
+    if (!Number.isSafeInteger(targetId) || targetId <= 0 || targetId === scope.ownerId
+      || typeof conversationId !== "string" || !conversationId.trim()
+      || !Number.isSafeInteger(messageBoundary) || messageBoundary < 0
+      || gameData?.campaignToken !== scope.campaignToken || !normalizeGameDate(gameData?.date)) {
+      throw new Error("memory4_observation_scope_invalid");
+    }
+    this.ensureDisclosureScope(scope);
+    const characters = gameData.characters instanceof Map ? [...gameData.characters.values()]
+      : Array.isArray(gameData.characters) ? gameData.characters : Object.values(gameData.characters || {});
+    const target = characters.find(character => Number(character?.id) === targetId);
+    if (!target) throw new Error("memory4_observation_target_invalid");
+
+    const mutate = () => {
+      const priorStates = JSON.parse(JSON.stringify(this.readKnownEntities(scope).currentFactState?.[targetId] || {}));
+      const refreshed = this.refreshCurrentFactState(scope, gameData);
+      const index = this.loadIndex(scope);
+      const directory = this.directory(scope);
+      const metadata = this.read(path.join(directory, "metadata.json"), null) || { campaignToken: scope.campaignToken,
+        ownerId: scope.ownerId, revision: index.revision, indexHash: hash(index), knownEvidenceRevisions: {} };
+      const known = JSON.parse(JSON.stringify(this.readKnownEntities(scope)));
+      known.disclosureSchemaVersion = 1;
+      const states = known.currentFactState?.[targetId] || {};
+      const epochChanged = refreshed.changed;
+      const date = gameDate(gameData.date);
+      const observationDate = normalizeGameDate(date);
+      const entityKey = String(targetId);
+      const entity = known.entities[entityKey] || { entityId: targetId, evidenceTypes: [], directConversationCount: 0,
+        sharedSceneCount: 0, mentionCount: 0, firstSeenDate: null, lastSeenDate: null, sourceEpisodeIds: [],
+        sourceConversationIds: [], evidenceByConversation: {}, completeness: "partial", revision: 0 };
+      const facts = entity.disclosedFacts || (entity.disclosedFacts = {});
+      const observedFactKeys = [];
+      const diagnostics = [];
+      let observationChanged = false;
+
+      for (const candidate of getFactCandidates(target).filter(fact => fact.factType === "TRAIT")) {
+        const visibility = resolveTraitVisibility(visibilityTrait(candidate));
+        if (visibility.status === "UNKNOWN") {
+          const canonicalKey = visibility.canonicalKey || candidate.canonicalKey || candidate.factKey;
+          diagnostics.push({ reason: "visible_trait_unknown_policy", canonicalKey },
+            { reason: "trait_identity_unresolved", canonicalKey });
+          continue;
+        }
+        if (visibility.status !== "OBSERVABLE") continue;
+        if (!["CANONICAL_ID", "CANONICAL_ALIAS"].includes(visibility.reason)) {
+          diagnostics.push({ reason: "trait_identity_fallback_used", canonicalKey: visibility.canonicalKey || candidate.factKey });
+        }
+        const factKey = `${candidate.factType}:${candidate.factKey}`;
+        const state = states[factKey];
+        if (!state?.present || !Number.isSafeInteger(state.epoch) || state.epoch < 1
+          || observationDate.serial < normalizeGameDate(state.epochStartedDate)?.serial
+          || observationDate.serial < normalizeGameDate(state.lastObservedDate)?.serial) continue;
+
+        const factId = disclosureFactId(scope, targetId, candidate.factType, candidate.factKey);
+        const sourceKey = directObservationSourceKey(conversationId, state.epoch, date);
+        const previousFact = facts[factId];
+        const previousProof = previousFact?.evidenceBySource?.[sourceKey];
+        const sourceEvidence = { sourceKind: "DIRECT_OBSERVATION", acquisitionKind: "VISIBLE_TRAIT",
+          sourceId: conversationId, sourceConversationId: conversationId, observedGameDate: date,
+          messageBoundary: previousProof?.observedGameDate === date && Number.isSafeInteger(previousProof.messageBoundary)
+            ? Math.min(previousProof.messageBoundary, messageBoundary) : messageBoundary,
+          observerId: scope.ownerId, targetId, current: true, factEpoch: state.epoch,
+          acquiredDate: previousProof?.acquiredDate || date, knownBy: [scope.ownerId] };
+        const next = { ...(previousFact || {}), factId, factType: candidate.factType, factKey: candidate.factKey,
+          value: candidate.value,
+          status: previousFact?.status === "MANUAL_HIDDEN" || previousFact?.status === "MANUAL_KNOWN"
+            && (!state || previousFact.manualFactEpoch === state.epoch) ? previousFact.status : "AUTO_DISCLOSED",
+          firstAcquiredDate: previousFact?.firstAcquiredDate || date,
+          lastConfirmedDate: latestDate(previousFact?.lastConfirmedDate, date), knownBy: [scope.ownerId],
+          evidenceBySource: { ...(previousFact?.evidenceBySource || {}) }, tombstone: previousFact?.tombstone || null };
+        const proofChanged = JSON.stringify(next.evidenceBySource[sourceKey] || null) !== JSON.stringify(sourceEvidence);
+        const factChanged = !previousFact || previousFact.factType !== next.factType || previousFact.factKey !== next.factKey
+          || previousFact.value !== next.value || previousFact.status !== next.status || proofChanged
+          || previousFact.lastConfirmedDate !== next.lastConfirmedDate;
+        observedFactKeys.push(candidate.factKey);
+        if (!factChanged) continue;
+        if (!previousProof) diagnostics.push({ reason: "visible_trait_observed", canonicalKey: visibility.canonicalKey || candidate.factKey });
+        next.evidenceBySource[sourceKey] = sourceEvidence;
+        next.revision = (Number(previousFact?.revision) || 0) + 1;
+        if (next.status === "MANUAL_HIDDEN") next.tombstone = previousFact.tombstone || {
+          status: "MANUAL_HIDDEN", markedDate: previousFact.manualMarkedDate || date };
+        else next.tombstone = null;
+        facts[factId] = next;
+        entity.revision = (Number(entity.revision) || 0) + 1;
+        observationChanged = true;
+      }
+
+      const removedCurrentFactKeys = Object.entries(priorStates)
+        .filter(([key, state]) => key.startsWith("TRAIT:") && state?.present === true && states[key]?.present === false)
+        .map(([key]) => key.slice("TRAIT:".length)).sort();
+      for (const factKey of removedCurrentFactKeys) diagnostics.push({ reason: "visible_trait_removed_current", canonicalKey: factKey });
+      if (Object.keys(facts).length) {
+        entity.disclosedFacts = facts;
+        known.entities[entityKey] = entity;
+      }
+      if (observationChanged) this.persistDisclosureState(scope, index, known, metadata);
+      return { status: observationChanged ? "OBSERVED" : observedFactKeys.length ? "NO_CHANGE" : "NO_VISIBLE_TRAITS",
+        changed: observationChanged || epochChanged, observedFactKeys: [...new Set(observedFactKeys)].sort(), removedCurrentFactKeys, diagnostics };
+    };
+
+    return this.store.summaryMutation ? mutate() : this.store.withSummaryMutation(null, mutate);
+  }
+
   getDisclosedFacts(scope, entityId, { readContext = null } = {}) {
     assertScope(scope);
     const targetId = ids([entityId])[0];
@@ -910,22 +1062,34 @@ class Memory4Store {
         throw new Error("memory4_disclosure_index_invalid");
       }
       for (const [sourceKey, proof] of proofs) {
+        const directObservation = proof?.sourceKind === "DIRECT_OBSERVATION";
         const conversation = proof?.sourceKind === "CONVERSATION";
         const letter = proof?.sourceKind === "LETTER";
         const sourceId = proof?.sourceId;
-        if ((!conversation && !letter) || typeof sourceId !== "string" || !sourceId
-          || sourceKey !== hash([proof.sourceKind, sourceId]) || !/^[a-f0-9]{64}$/.test(proof.sourceRevision || "")
+        const expectedSourceKey = directObservation
+          ? directObservationSourceKey(sourceId, proof?.factEpoch, gameDate(proof?.observedGameDate))
+          : hash([proof?.sourceKind, sourceId]);
+        if ((!conversation && !letter && !directObservation) || typeof sourceId !== "string" || !sourceId
+          || sourceKey !== expectedSourceKey || !directObservation && !/^[a-f0-9]{64}$/.test(proof.sourceRevision || "")
           || !gameDate(proof.acquiredDate) || ids(proof.knownBy).join() !== String(scope.ownerId)
           || proof.factEpoch != null && (!Number.isSafeInteger(proof.factEpoch) || proof.factEpoch < 0)
-          || !Array.isArray(proof.sourceFragmentIds) || !proof.sourceFragmentIds.length
-          || proof.sourceFragmentIds.some(id => typeof id !== "string" || !id)
-          || !Array.isArray(proof.sourceTextHashes) || !proof.sourceTextHashes.length
-          || proof.sourceTextHashes.some(value => !/^[a-f0-9]{64}$/.test(value))
-          || !Array.isArray(proof.visibilityEvidence) || !proof.visibilityEvidence.length
+          || !directObservation && (!Array.isArray(proof.sourceFragmentIds) || !proof.sourceFragmentIds.length
+            || proof.sourceFragmentIds.some(id => typeof id !== "string" || !id)
+            || !Array.isArray(proof.sourceTextHashes) || !proof.sourceTextHashes.length
+            || proof.sourceTextHashes.some(value => !/^[a-f0-9]{64}$/.test(value))
+            || !Array.isArray(proof.visibilityEvidence) || !proof.visibilityEvidence.length)
           || conversation && (proof.sourceFinalizationId !== sourceId || typeof proof.sourceConversationId !== "string"
             || !proof.sourceConversationId || !Array.isArray(proof.sourceMessageIds) || !proof.sourceMessageIds.length
             || proof.sourceMessageIds.some(id => !Number.isSafeInteger(id) || id < 0)
             || proof.visibilityEvidence.some(value => !["application_fragment", "finalization_validated_segment", "finalization_source_paragraph"].includes(value)))
+          || directObservation && (fact.factType !== "TRAIT" || proof.acquisitionKind !== "VISIBLE_TRAIT"
+            || proof.sourceConversationId !== sourceId || !gameDate(proof.observedGameDate)
+            || normalizeGameDate(proof.acquiredDate).serial > normalizeGameDate(proof.observedGameDate).serial
+            || proof.observerId !== scope.ownerId || proof.targetId !== targetId || proof.current !== true
+            || !Number.isSafeInteger(proof.messageBoundary) || proof.messageBoundary < 0
+            || !Number.isSafeInteger(proof.factEpoch) || proof.factEpoch < 1
+            || ["sourceRevision", "sourceFinalizationId", "sourceMessageIds", "sourceFragmentIds", "sourceTextHashes", "visibilityEvidence", "speakerId", "projectionLineages"]
+              .some(key => Object.hasOwn(proof, key)))
           || proof.projectionLineages != null && (!Array.isArray(proof.projectionLineages)
             || proof.projectionLineages.some(lineage => {
               try {
@@ -941,6 +1105,7 @@ class Memory4Store {
         }
       }
       const activeProofs = Object.fromEntries(proofs.filter(([, proof]) => {
+        if (proof.sourceKind === "DIRECT_OBSERVATION") return true;
         const lineages = Array.isArray(proof.projectionLineages) && proof.projectionLineages.length
           ? proof.projectionLineages : this.activeProjectionLineagesForProof(scope, proof, forgotten);
         if (lineages.length) return lineages.some(lineage => !forgotten.some(target => matchesProjectionLineage(target, lineage)));
@@ -951,6 +1116,7 @@ class Memory4Store {
         }
         return true;
       }).map(([key, proof]) => {
+        if (proof.sourceKind === "DIRECT_OBSERVATION") return [key, proof];
         const candidates = Array.isArray(proof.projectionLineages) && proof.projectionLineages.length
           ? proof.projectionLineages : this.activeProjectionLineagesForProof(scope, proof, forgotten);
         const lineages = candidates.length ? candidates.filter(lineage => !forgotten.some(target => matchesProjectionLineage(target, lineage))) : null;
@@ -971,9 +1137,14 @@ class Memory4Store {
     const metadata = readContext ? readContext.metadata : this.read(path.join(this.directory(scope), "metadata.json"), null);
     if (gameData == null) return records.map(record => {
       const effective = effectiveDisclosure(record, asOf.canonical, scope.ownerId, metadata);
+      const sourceProof = Object.values(effective.evidenceBySource).find(proof => proof.sourceKind === "DIRECT_OBSERVATION")
+        || Object.values(effective.evidenceBySource)[0] || null;
       return { ...scope, ...record, entityId, current: false, status: effective.status,
         effectiveKnown: effective.effectiveKnown, firstAcquiredDate: effective.firstAcquiredDate,
         lastConfirmedDate: effective.lastConfirmedDate, evidenceBySource: effective.evidenceBySource,
+        sourceKind: sourceProof?.sourceKind || null, acquisitionKind: sourceProof?.acquisitionKind || null,
+        currentDirectObservation: false,
+        ...(record.factType === "AGE" ? { currentKnownAge: null, currentAgeReadDate: null } : {}),
         tombstone: effective.tombstone || null };
     }).filter(record => record.status);
     const characters = gameData.characters instanceof Map ? gameData.characters
@@ -983,6 +1154,8 @@ class Memory4Store {
     const character = characters.get(entityId) || characters.get(String(entityId))
       || [...characters.values()].find(candidate => Number(candidate?.id) === entityId) || null;
     if (!character || Number(character.id) !== entityId) return [];
+    const currentAge = getFactCandidates({ age: character.age }).find(candidate => candidate.factType === "AGE");
+    const currentKnownAge = currentAge ? Number(currentAge.value) : null;
     const byId = new Map(records.map(record => [record.factId, record]));
     const states = this.readKnownEntities(scope, readContext).currentFactState?.[entityId] || {};
     const currentFacts = getFactCandidates(character).filter(candidate => candidate.factType !== "AGE").map(candidate => {
@@ -990,18 +1163,27 @@ class Memory4Store {
       const record = byId.get(factId) || null;
       const state = states[`${candidate.factType}:${candidate.factKey}`] || null;
       const effective = record ? effectiveDisclosure(record, gameData.date, scope.ownerId, metadata, state) : null;
-      return { ...scope, entityId, ...candidate, factId, factEpoch: state?.epoch || 0, current: true, status: effective?.status || null,
-        effectiveKnown: effective?.effectiveKnown || false, revision: record?.revision || 0,
+      const currentDirectObservation = !!effective && Object.values(effective.evidenceBySource)
+        .some(proof => matchesCurrentDirectObservation(proof, scope, entityId, state, candidate, gameData,
+          record?.evidenceBySource || {}));
+      const sourceProof = Object.values(effective?.evidenceBySource || {})
+        .find(proof => proof.sourceKind === "DIRECT_OBSERVATION") || Object.values(effective?.evidenceBySource || {})[0] || null;
+      const status = currentDirectObservation ? "AUTO_DISCLOSED" : effective?.status || null;
+      return { ...scope, entityId, ...candidate, factId, factEpoch: state?.epoch || 0, current: true, status,
+        effectiveKnown: currentDirectObservation || effective?.effectiveKnown || false, revision: record?.revision || 0,
         firstAcquiredDate: effective?.firstAcquiredDate || null, lastConfirmedDate: effective?.lastConfirmedDate || null,
-        manualMarkedDate: effective?.status?.startsWith("MANUAL_") ? record.manualMarkedDate || null : null,
-        evidenceBySource: effective?.evidenceBySource || {}, tombstone: effective?.tombstone || null };
+        manualMarkedDate: status?.startsWith("MANUAL_") ? record.manualMarkedDate || null : null,
+        evidenceBySource: effective?.evidenceBySource || {}, tombstone: currentDirectObservation ? null : effective?.tombstone || null,
+        sourceKind: sourceProof?.sourceKind || null, acquisitionKind: sourceProof?.acquisitionKind || null,
+        currentDirectObservation };
     });
     const ageHistory = records.filter(record => record.factType === "AGE").map(record => {
       const effective = effectiveDisclosure(record, gameData.date, scope.ownerId, metadata);
       if (effective.status !== "AUTO_DISCLOSED" || !effective.effectiveKnown) return null;
       return { ...scope, ...record, entityId, current: false, status: effective.status,
         effectiveKnown: true, firstAcquiredDate: effective.firstAcquiredDate,
-        lastConfirmedDate: effective.lastConfirmedDate, evidenceBySource: effective.evidenceBySource };
+        lastConfirmedDate: effective.lastConfirmedDate, evidenceBySource: effective.evidenceBySource,
+        currentKnownAge, currentAgeReadDate: currentKnownAge == null ? null : asOf.canonical };
     }).filter(Boolean);
     return [...currentFacts, ...ageHistory];
   }

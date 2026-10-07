@@ -2,6 +2,12 @@
 
 日期：2026-10-05。本文记录 V8.14.2 信件 Date Runner 的 App/Mod 发布依赖；这是外部运行依赖合同，不代表 CK3 实机 Gate 已通过。
 
+## V8.15.2 Canonical Trait 输出补充（2026-10-07）
+
+App 与 Workshop item `3346777360` 仍独立发布。V8.15.2 App 可读旧特质行，但稳定 canonical ID 需要 Mod 的 `common/scripted_effects/log_character_v2_effect.txt` 配套更新：角色、子女、兄弟姐妹三条 `VOTC:IN` 特质流在 category 字段前输出 `[THIS.Trait.GetKey]`。新解析保留 traitId、localizedName、category、name、desc，不改变其他字段。
+
+本机该文件 SHA-256 为 `B567FFBEF3B7FF720630D9D9C60ACDB3FFF3AFAE4E883D38639FCC890CE10DE2`。这表示本次核查内容，不证明 Steam 已发布；仅更新 App 或对照 descriptor 版本不能保证补丁存在。独立打包 Mod 时须携带该文件并保留下方 Date Runner 链，Steam 覆盖后须重新复核。未修改 Three-Mod 兼容补丁。真实 trait key 输出与 L10-L15 验收见 [V8.15.2 报告](v8.15.2-implementation-report.md)，下方哈希表为前置日期补丁快照。
+
 ## 发布关系与依赖范围
 
 VOTC App 与 Steam Workshop Mod 是独立发布物。本文所述的信件日期恢复依赖 CK3 加载并启用 Workshop item `3346777360`。App 不包含、复制或更新该 Mod，也没有 Mod 版本握手；仅更新 App 不能补上 CK3 读档后的日期 runner 自举入口。

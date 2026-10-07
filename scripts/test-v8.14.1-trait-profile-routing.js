@@ -65,19 +65,32 @@ const memoryContext = () => ({ activeParticipantIds: [1, 2], stableDescriptionCa
   cacheV2FrozenSnapshots: { responders: new Map(), prefixByResponder: new Map() } });
 const build = (sample, memory = memoryContext()) => PromptBuilder.buildMessagesWithTokenCount([], sample.responder,
   sample.data, "", memory, layout === "glm_cache_v2" ? { providerType: "zhipu", defaultModel: "glm-5.3-flash" } : null);
+const selector = require("../resources/app/out/main/prompts/trait-profile-selector");
+function directObservationContext(sample, base = memoryContext()) {
+  const facts = sample.player.traits.map(trait => ({ trait, policy: selector.resolveTraitVisibility(trait) }))
+    .filter(item => item.policy.status === "OBSERVABLE")
+    .map(({ trait, policy }) => ({ campaignToken: sample.data.campaignToken, ownerId: sample.responder.id,
+      entityId: sample.player.id, factType: "TRAIT", factKey: `trait_${policy.canonicalKey}`, value: trait.name,
+      status: "AUTO_DISCLOSED", current: true, effectiveKnown: true, currentDirectObservation: true,
+      sourceKind: "DIRECT_OBSERVATION", acquisitionKind: "VISIBLE_TRAIT", firstAcquiredDate: sample.data.date }));
+  return { ...base, disclosureProfiles: new Map([[sample.player.id, facts]]) };
+}
 let checks = 0;
 function check(name, run) { run(); checks++; console.log(`PASS ${name}`); }
-check("production custom template preserves all self traits and withholds others' private profile", () => {
+check("production custom template includes only scoped direct observations for others", () => {
   const sample = fixture();
   const before = JSON.stringify([...sample.data.characters]);
-  const result = build(sample);
+  const result = build(sample, directObservationContext(sample));
   const text = result.blocks.find(item => item.content.startsWith("SELF=")).content;
   assert(text.includes(`SELF=Beautiful,${hidden.join(",")},One-eyed,`));
   assert(text.includes("OTHER=Target:Beautiful,One-eyed,||"), text);
   assert.equal(JSON.stringify([...sample.data.characters]), before, "prompt routing must not alter runtime character data");
 });
-
-const selector = require("../resources/app/out/main/prompts/trait-profile-selector");
+check("raw observable traits remain absent without current direct-observation disclosure", () => {
+  const sample = fixture();
+  const view = selector.createTraitProfileView(sample.data, sample.responder);
+  assert.deepEqual(view.gameData.getPlayer().traits, []);
+});
 check("V1 aliases, ALL categories and unknown Mod traits stay out of observed profiles", () => {
   const sample = fixture();
   sample.player.traits.push(trait("天才"), trait("聪慧"), trait("敏锐"), trait("Dynastic Kinslayer"),
@@ -90,7 +103,7 @@ check("nested family and custom script receive the same scoped profile", () => {
   sample.responder.children = [{ ...sample.player, id: 3, shortName: "Relative", firstName: "Relative", fullName: "Relative" }];
   const view = selector.createTraitProfileView(sample.data, sample.responder);
   assert.equal(Object.getPrototypeOf(view.gameData), GameData.prototype);
-  assert.deepEqual(view.character.children[0].traits.map(value => value.name), ["Beautiful", "One-eyed"]);
+  assert.deepEqual(view.character.children[0].traits, [], "off-scene relatives do not inherit the responder's observations");
   assert.equal(view.character.children[0].personality, undefined);
   assert.deepEqual(view.character.children[0].secrets, []);
   assert.equal(view.character.personality, sample.responder.personality);
@@ -102,7 +115,8 @@ check("custom VM description scripts and prototype methods cannot recover raw ot
   try {
     script = path.join(temporary, "custom.js");
     fs.writeFileSync(script, "module.exports = data => JSON.stringify({self: data.getAi().hasTrait('Genius'), other: data.getPlayer().hasTrait('Genius'), personality: data.getPlayer().personality, secrets: data.getPlayer().secrets, traits: data.getPlayer().traits.map(t => t.name)});", "utf8");
-    const result = build(fixture());
+    const sample = fixture();
+    const result = build(sample, directObservationContext(sample));
     const description = result.blocks.find(item => item.block.id === "description-live");
     assert.deepEqual(JSON.parse(description.content), { self: true, other: false, secrets: [], traits: ["Beautiful", "One-eyed"] });
   } finally {
@@ -115,7 +129,8 @@ for (const value of ["v5", "v6", "v7", "glm_cache_v2", "v813"]) {
     layout = value;
     for (const name of ["pListMccTest2.js", "pListMccTest2JE.js", "pListMccTest2_ZH.js", "pListMccTest2JE_ZH.js"]) {
       script = path.join(promptsDir, "character_description/standard", name);
-      const text = build(fixture()).messages.map(message => message.content).join("\n");
+      const sample = fixture();
+      const text = build(sample, directObservationContext(sample)).messages.map(message => message.content).join("\n");
       for (const name of hidden) assert(!text.includes(`other-${name}-detail`), `${value}: ${script}: ${name}`);
       assert(!text.includes("Target-private-personality") && !text.includes("Target-private-secret"));
       assert(text.includes("self-Genius-detail") || text.includes("Genius"), "Self traits remain available");
@@ -134,15 +149,15 @@ check("Known Profile requires one concrete trait claim rather than recognition o
   const sample = fixture();
   sample.responder.relationsToPlayer = ["friend"];
   const known = selector.createTraitProfileView(sample.data, sample.responder, knownContext(evidence()));
-  assert.deepEqual(known.gameData.getPlayer().traits.map(value => value.name), ["Beautiful", "Bastard", "One-eyed"]);
+  assert.deepEqual(known.gameData.getPlayer().traits.map(value => value.name), ["Bastard"]);
   const recognition = selector.createTraitProfileView(sample.data, sample.responder, { knownEntities: [{ entityId: 1, recognition: "DIRECT_RELATIONSHIP" }] });
-  assert.deepEqual(recognition.gameData.getPlayer().traits.map(value => value.name), ["Beautiful", "One-eyed"]);
+  assert.deepEqual(recognition.gameData.getPlayer().traits, []);
 });
 check("specific proof can restore an unknown Mod trait without declaring it observable", () => {
   const sample = fixture();
   sample.player.traits.push(trait("Mod Lineage"));
   const view = selector.createTraitProfileView(sample.data, sample.responder, knownContext(evidence("Target has Mod Lineage.")));
-  assert.deepEqual(view.gameData.getPlayer().traits.map(value => value.name), ["Beautiful", "One-eyed", "Mod Lineage"]);
+  assert.deepEqual(view.gameData.getPlayer().traits.map(value => value.name), ["Mod Lineage"]);
   assert(!selector.getTraitsForObservedProfile(sample.player).some(value => value.name === "Mod Lineage"));
 });
 check("only responder-owned current CK3 known secrets restore their exact trait", () => {
@@ -150,10 +165,10 @@ check("only responder-owned current CK3 known secrets restore their exact trait"
   sample.responder.knownSecrets = [{ type: "secret_bastard", ownerId: 1 }];
   sample.player.knownSecrets = [{ type: "secret_witch", ownerId: 2 }];
   const view = selector.createTraitProfileView(sample.data, sample.responder);
-  assert.deepEqual(view.gameData.getPlayer().traits.map(value => value.name), ["Beautiful", "Bastard", "One-eyed"]);
+  assert.deepEqual(view.gameData.getPlayer().traits.map(value => value.name), ["Bastard"]);
   assert.deepEqual(view.gameData.getPlayer().knownSecrets, []);
   sample.data.date = "invalid";
-  assert.deepEqual(selector.createTraitProfileView(sample.data, sample.responder).gameData.getPlayer().traits.map(value => value.name), ["Beautiful", "One-eyed"]);
+  assert.deepEqual(selector.createTraitProfileView(sample.data, sample.responder).gameData.getPlayer().traits, []);
 });
 check("wrong Owner/Campaign/date/visibility, negation, hypotheses and hearsay cannot promote raw traits", () => {
   const sample = fixture();
@@ -170,7 +185,7 @@ check("wrong Owner/Campaign/date/visibility, negation, hypotheses and hearsay ca
     { ...evidence(), evidence: { ...evidence().evidence, sourceType: "reported", epistemicStatus: "reported" } }
   ];
   for (const source of cases) assert.deepEqual(selector.createTraitProfileView(sample.data, sample.responder,
-    knownContext(source)).gameData.getPlayer().traits.map(value => value.name), ["Beautiful", "One-eyed"]);
+    knownContext(source)).gameData.getPlayer().traits, []);
 });
 check("production Memory4 detail verifies scope, then only its witnessed trait enters the prompt view", () => {
   const temporary = fs.mkdtempSync(path.join(os.tmpdir(), "votc-trait-routing-"));
@@ -195,7 +210,7 @@ check("production Memory4 detail verifies scope, then only its witnessed trait e
       currentTotalDays: sample.data.totalDays, memoryEngineRemainingBudget: 1200 });
     assert.equal(packet.details.length, 1);
     assert.equal(packet.details[0].traitKnowledgeEvidence.ownerId, 2);
-    const result = build(sample, { ...memoryContext(), memory4Packet: packet, temporalExtraText: packet.text });
+    const result = build(sample, { ...directObservationContext(sample), memory4Packet: packet, temporalExtraText: packet.text });
     assert(result.blocks.find(item => item.content.startsWith("SELF=")).content.includes("OTHER=Target:Beautiful,Bastard,One-eyed,||"));
   } finally {
     fs.rmSync(temporary, { recursive: true, force: true });

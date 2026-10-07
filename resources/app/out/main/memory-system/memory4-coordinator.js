@@ -416,6 +416,27 @@ class Memory4Coordinator {
     return this.store.getCurrentDisclosures(scope, Number(entityId), gameData, { readContext, currentGameDate });
   }
 
+  observeVisibleTraits({ campaignToken, gameDate, observerId, targetId, participantPresence, gameData,
+    conversationId, messageBoundary } = {}) {
+    const active = id => (participantPresence || []).some(window => Number(window.characterId) === id
+      && Number(window.joinedAtMessageId) <= messageBoundary
+      && (window.leftAtMessageId == null || messageBoundary < Number(window.leftAtMessageId)));
+    const scope = { campaignToken, ownerId: Number(observerId) };
+    const target = Number(targetId);
+    if (!Number.isSafeInteger(scope.ownerId) || scope.ownerId <= 0 || !Number.isSafeInteger(target) || target <= 0
+      || target === scope.ownerId || !conversationId || !Number.isSafeInteger(messageBoundary) || messageBoundary < 0
+      || !normalizeGameDate(gameDate) || gameData?.date !== gameDate || gameData?.campaignToken !== campaignToken
+      || !active(scope.ownerId) || !active(target)) {
+      return { status: "SKIPPED", changed: false, observedFactKeys: [], removedCurrentFactKeys: [], diagnostics: [] };
+    }
+    this.store.ensureDisclosureScope(scope);
+    const result = this.store.observeVisibleTraits(scope, target, gameData, { conversationId, messageBoundary });
+    if (result.changed) this.profiles.invalidate(scope);
+    for (const diagnostic of result.diagnostics || []) this.trace?.record(diagnostic.reason, {
+      ownerId: scope.ownerId, targetId: target, canonicalKey: diagnostic.canonicalKey || null });
+    return result;
+  }
+
   refreshCurrentFactState(scope, gameData, options = {}) {
     assertScope(scope);
     if (gameData?.campaignToken !== scope.campaignToken || !normalizeGameDate(gameData?.date)) throw new Error("memory4_disclosure_current_scope_invalid");
@@ -446,6 +467,7 @@ class Memory4Coordinator {
     }
     this.refreshCurrentFactState(scope, gameData);
     const current = this.getCurrentDisclosures(scope, targetId, gameData).find(item => item.factType === candidate.factType && item.factKey === candidate.factKey);
+    if (status === "MANUAL_HIDDEN" && current?.currentDirectObservation) throw new Error("memory4_disclosure_directly_observable");
     if (factRef.factEpoch != null && factRef.factEpoch !== current?.factEpoch) throw new Error("memory4_disclosure_revision_stale");
     this.store.updateManualDisclosure(scope, targetId, candidate, status, gameData.date, expectedRevision);
     this.profiles.invalidate(scope);
@@ -476,6 +498,8 @@ class Memory4Coordinator {
       ? scanLetterDisclosures(snapshot, gameData, "LETTER", { letterId: snapshot.letterId,
         senderId: Number(snapshot.senderId), recipientId: Number(snapshot.recipientId) })
       : scanVisibleDisclosures(snapshot, gameData);
+    for (const diagnostic of scanned.diagnostics || []) this.trace?.record(diagnostic.code, {
+      ownerId: snapshot.ownerId, targetId: diagnostic.targetId, factKey: diagnostic.factKey });
     if (scanned.skipped) return { status: "SKIPPED", changed: false, count: 0, entityIds: [], skipped: scanned.skipped };
     if (snapshot.sourceKind === "LETTER") {
       const letterScope = { campaignToken: snapshot.campaignToken, ownerId: snapshot.ownerId };

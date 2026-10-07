@@ -87,7 +87,8 @@ async function run() {
     entityIds: [2], participantIds: [1, 2], topics: ["审计"], eventTime: { status: "unknown" }
   }] });
   const targetCharacter = fixture.characters.find(character => character.id === 1);
-  Object.assign(targetCharacter, { primaryTitle: "明王", nickname: "北地之虎", age: 23, traits: [{ id: "bastard", name: "私生子" }] });
+  Object.assign(targetCharacter, { primaryTitle: "明王", nickname: "北地之虎", age: 23,
+    traits: [{ id: "bastard", name: "私生子" }, { traitId: "beauty_good_3", name: "倾国倾城" }] });
   fixture.conversation.gameData.characters.set(targetCharacter.id, targetCharacter);
   const disclosureText = "甲现在是明王。我今年23岁。";
   const disclosureContext = { ...fixture.scope, conversationId: "isolated-ui-conversation", finalizationId: "ui-smoke-disclosure-finalization",
@@ -117,6 +118,11 @@ async function run() {
     }
   }]);
   assert.equal(seededDisclosure.changed, true, "isolated fixture should seed one source-backed public fact");
+  const directObservationContext = { conversationId: fixture.conversation.id, campaignToken: fixture.scope.campaignToken,
+    gameDate: fixture.conversation.gameData.date, messageBoundary: 94, participantPresence: disclosureContext.participantPresence };
+  fixture.conversation.gameData.directObservationContext = directObservationContext;
+  fixture.engine.memory4.observeVisibleTraits({ ...directObservationContext, observerId: 2, targetId: 1,
+    gameData: fixture.conversation.gameData });
   fixture.engine.memory4.store.updateManualDisclosure({ campaignToken: fixture.archive.campaignToken, ownerId: fixture.archive.ownerId }, 1,
     { factType: "TITLE", factKey: "title_明王", value: "明王" }, "MANUAL_KNOWN", "1160.6.1", 0);
   const archiveHashBefore = hashDirectory(fixture.archive.directory);
@@ -171,6 +177,7 @@ async function run() {
     const unavailable = await evaluate("conversationAPI.getMemory4OwnerData({ownerId:2})");
     assert.equal(unavailable.success, false, "absence of current Campaign must remain explicit");
     await main.evaluate(`globalThis.__m4SmokeConversation={id:'isolated-ui-conversation',isActive:true,gameData:{campaignToken:${JSON.stringify(fixture.scope.campaignToken)},date:'1164.1.1',playerID:1,characters:new Map(${JSON.stringify(fixture.characters)}.map(c=>[c.id,c]))},dynamicRecallHistory:new Map()};globalThis.__m4ProviderCalls=0;`);
+    await main.evaluate(`globalThis.__m4SmokeConversation.gameData.directObservationContext=${JSON.stringify(directObservationContext)};`);
     const source = fs.readFileSync(path.join(__dirname, "../resources/app/out/main/summaries/summaries-manager.js"), "utf8").split(/\r?\n/);
     const start = source.findIndex(line => line.includes("static async getMemory4ReadContext"));
     const lineNumber = source.findIndex((line, index) => index > start && line.includes("const conversation = getCurrentMemory4ReadConversation();"));
@@ -278,11 +285,26 @@ async function run() {
       await screenshot(`${theme}-narrow-known`);
     }
     await setViewport(1280, 1000);
+    const observedFact = await evaluate("conversationAPI.getMemory4OwnerData({ownerId:2}).then(data=>data.known.items.find(item=>item.entityId===1)?.disclosedFacts.find(fact=>fact.factKey==='trait_beauty_good_3'))");
+    assert.equal(observedFact.sourceKind, "DIRECT_OBSERVATION");
+    assert.equal(observedFact.currentDirectObservation, true);
+    assert(await evaluate("(()=>{const row=[...document.querySelectorAll('.memory4-disclosure-row')].find(row=>row.textContent.includes('倾国倾城'));return !!row&&row.textContent.includes('直接观察')&&!row.querySelector('button:not([disabled])')})()"), "current observed trait shows direct source and cannot be hidden");
+    const rejectedObservationHide = await evaluate(`conversationAPI.mutateMemory4(${JSON.stringify({ ownerId: 2,
+      operation: "setManualDisclosure", entityId: 1, status: "MANUAL_HIDDEN", expectedRevision: observedFact.revision,
+      factRef: { factType: "TRAIT", factKey: observedFact.factKey, value: observedFact.value, factEpoch: observedFact.factEpoch } })})`);
+    assert.equal(rejectedObservationHide.success, false);
+    await screenshot("ink-desktop-direct-observation");
+    await setViewport(540, 900);
+    await screenshot("ink-narrow-direct-observation");
+    await setViewport(1280, 1000);
     await waitFor("document.querySelector('.memory4-manager').textContent.includes('披露时年龄：23岁')");
     const ageProfile = await evaluate("conversationAPI.getMemory4OwnerData({ownerId:2}).then(data=>data.known.items.find(item=>item.entityId===1)?.disclosedFacts.find(fact=>fact.factType==='AGE'))");
     assert.equal(ageProfile.value, "23");
     assert.equal(ageProfile.current, false, "disclosed age is a historical observation, never current age truth");
     assert.equal(ageProfile.firstAcquiredDate, "1164.1.1");
+    assert.equal(ageProfile.currentKnownAge, 23, "a disclosed age authorizes current CK3 age projection without rewriting the historical value");
+    assert.equal(ageProfile.currentAgeReadDate, "1164.1.1");
+    assert(await evaluate("document.querySelector('.memory4-manager').textContent.includes('当前年龄：23岁')"), "authorized current age must be rendered separately from disclosure history");
     assert(await evaluate("(()=>{const row=[...document.querySelectorAll('.memory4-disclosure-row')].find(row=>row.textContent.includes('披露时年龄'));return !!row&&row.textContent.includes('历史披露记录')&&!row.querySelector('button')})()"), "historical age must show date and no current/manual mutation control");
     await screenshot("ink-desktop-disclosed-age-history");
     await setViewport(540, 900);
@@ -465,17 +487,17 @@ async function run() {
     const blockedFetchUrls = await main.evaluate("globalThis.__m4BlockedFetches");
     assert(blockedFetchUrls.every(url => url === "http://127.0.0.1:4315/v1/health"), `unexpected network request was blocked: ${JSON.stringify(blockedFetchUrls)}`);
     assert.deepStrictEqual(errors, [], "renderer/main exceptions");
-    assert.equal(screenshots.length, 38, "original 36 screens and two historical age disclosure screens");
+    assert.equal(screenshots.length, 40, "original 38 screens and two direct observation screens");
     fs.writeFileSync(path.join(evidence, "result.json"), JSON.stringify({ passed: true, themes: ["parchment", "knight", "ink"], desktop: [1280, 1000], narrow: [540, 900], baseScreenshotCount: 27,
       disclosureScreenshotCount: 4,
-      archiveScreenshotCount: 3, legacyEditScreenshotCount: 2, ageDisclosureScreenshotCount: 2, screenshotCount: screenshots.length, screenshots, providerRequests: 0, blockedNetworkFetches: blockedFetchUrls.length,
+      archiveScreenshotCount: 3, legacyEditScreenshotCount: 2, ageDisclosureScreenshotCount: 2, directObservationScreenshotCount: 2, screenshotCount: screenshots.length, screenshots, providerRequests: 0, blockedNetworkFetches: blockedFetchUrls.length,
       blockedNetworkUrls: blockedFetchUrls, realCK3Gate: false, profile,
       archive: { ownerId: fixture.archive.ownerId, campaignToken: fixture.archive.campaignToken, readOnlyReasons: [archiveData.readOnlyReason, endedArchiveData.readOnlyReason],
         strictCurrentIsNullAfterDetach: detachedState.strictCurrentIsNull, sidecarHashBefore: archiveHashBefore, sidecarHashAfter: archiveHashAfter, rejectedWriteError: archiveWriteRequest.error || null },
       checks: ["missing Campaign", "wrong Campaign", "strict owner data", "orphan audit real IPC read-only", "orphan forget requires explicit confirmation", "confirmed orphan forget through real preload/IPC", "six views", "readonly Official", "disclosure source/date/nickname", "manual disclosure write", "disclosure hide cancellation", "archive disclosure readonly", "source modal", "manual conflict preservation", "manual edit", "delete cancellation",
         "accepted Detail deletion", "existing binding preview cancellation", "nonoverlapping tool buttons", "no horizontal overflow", "same-campaign archive outside loaded roster", "loaded-campaign readonly banner",
         "archive refresh/tabs/source remain available", "archive year/life/detail mutation controls disabled", "manager detach leaves strict current null and read snapshot available",
-        "archive IPC mutation rejected after manager detach", "archive sidecar hash unchanged", "ended-conversation banner, detail and source remain available", "ordinary Legacy edit/delete enabled after detach", "ordinary Legacy manual edit persisted through real preload/IPC after detach", "disclosed age retains historical value/date without current-age or mutation controls",
+        "archive IPC mutation rejected after manager detach", "archive sidecar hash unchanged", "ended-conversation banner, detail and source remain available", "ordinary Legacy edit/delete enabled after detach", "ordinary Legacy manual edit persisted through real preload/IPC after detach", "disclosed age authorizes separate current CK3 age while retaining historical value/date without mutation controls",
         "all main-process fetch blocked before I/O; only fixed localhost health check may be attempted"] }, null, 2));
     console.log(`V8.14 E isolated packaged UI: PASS; evidence ${evidence}`);
   } catch (error) {

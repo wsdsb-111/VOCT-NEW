@@ -192,8 +192,7 @@ checkAsync("Conversation CK3 refresh feeds readback after a stable log parse wit
         changes.push(...result);
         return result;
       } } } });
-    const conversation = { id: "conversation-A", gameDataRevision: 0,
-      parseCK3GameData: Conversation.prototype.parseCK3GameData };
+    const conversation = Object.assign(Object.create(Conversation.prototype), { id: "conversation-A", gameDataRevision: 0 });
     await Conversation.prototype.refreshGameDataForActionConfirmation.call(conversation);
     fs.appendFileSync(file, lines("rival"));
     await Conversation.prototype.refreshGameDataForActionConfirmation.call(conversation);

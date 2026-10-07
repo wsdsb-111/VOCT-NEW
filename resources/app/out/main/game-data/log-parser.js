@@ -517,11 +517,7 @@ function createLogParser({ GameData, Character, onGameDataParsed = null }) {
             break;
           case "kid_trait":
             if (currentChild && currentChild.traits) {
-              currentChild.traits.push({
-                category: data[2],
-                name: data[3],
-                desc: data[4]
-              });
+              currentChild.traits.push(parseTrait(data, true));
             }
             break;
           case "kid_is_concubine":
@@ -603,11 +599,7 @@ function createLogParser({ GameData, Character, onGameDataParsed = null }) {
             break;
           case "sibling_trait":
             if (currentSibling && currentSibling.traits) {
-              currentSibling.traits.push({
-                category: data[2],
-                name: data[3],
-                desc: data[4]
-              });
+              currentSibling.traits.push(parseTrait(data, true));
             }
             break;
           case "sibling_is_concubine":
@@ -714,12 +706,22 @@ function createLogParser({ GameData, Character, onGameDataParsed = null }) {
         knowers: []
       };
     }
-    function parseTrait(data) {
-      return {
-        category: data[1],
-        name: data[2],
-        desc: data[3]
+    function parseTrait(data, relative = false) {
+      const categoryIndex = relative ? 2 : 1;
+      const legacyLength = relative ? 5 : 4;
+      const hasTraitId = data.length > legacyLength;
+      const offset = hasTraitId ? 1 : 0;
+      const name = data[categoryIndex + offset + 1];
+      const trait = {
+        category: data[categoryIndex + offset],
+        name,
+        desc: data[categoryIndex + offset + 2]
       };
+      if (hasTraitId) {
+        trait.traitId = data[categoryIndex];
+        trait.localizedName = name;
+      }
+      return trait;
     }
     function parseOpinionModifier(line) {
       line = line.replace(/ *\([^)]*\) */g, "");

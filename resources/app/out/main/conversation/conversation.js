@@ -4,6 +4,7 @@ const fs = require("fs");
 
 const { getCharacterPersonalName } = require("../memory-system/character-identity");
 const { getFactCandidates } = require("../memory-system/memory4-disclosure");
+const { resolveTraitVisibility } = require("../prompts/trait-visibility-policy");
 const { buildCurrentMemory4RelationshipEvidence } = require("../memory-system/memory4-entity-context");
 const { memoryMatchesCampaign } = require("../memory-system/memory-types");
 const { MentionTracker } = require("../memory-system/mention-tracker");
@@ -223,6 +224,7 @@ class Conversation {
       this.initializePresence();
       this.gameData.loadCharactersSummaries();
       this.captureDisclosureProfiles();
+      this.observeVisibleTraits();
       this.gameData.syncOfficialRecollectionSummaries?.(this.id);
       this.worldlinePrefetchPromise = this.prefetchFrozenWorldline().catch((error) => {
         console.warn("[Worldline] Conversation-opening recall failed:", error.message);
@@ -269,6 +271,48 @@ class Conversation {
         if (error.message !== "memory4_owner_folder_not_unique") console.warn("[Memory4] Opening knowledge unavailable:", error.message);
       }
       this.disclosureProfilesByResponder.set(key, profiles);
+    }
+  }
+  observeVisibleTraits() {
+    if (!this.presenceInitialized || !this.gameData?.campaignToken || !memoryEngine?.memory4?.observeVisibleTraits) return;
+    const participantPresence = memoryEngine.ensureConversationState(this).participantPresence;
+    const messageBoundary = this.nextId;
+    this.gameData.directObservationContext = { conversationId: this.id, campaignToken: this.gameData.campaignToken,
+      gameDate: this.gameData.date, messageBoundary, participantPresence: participantPresence.map(window => ({ ...window })) };
+    const activeIds = [...new Set(participantPresence.filter(window => Number(window.joinedAtMessageId) <= messageBoundary
+      && (window.leftAtMessageId == null || messageBoundary < Number(window.leftAtMessageId)))
+      .map(window => Number(window.characterId)))].filter(id => this.gameData.characters.has(id)
+        && this.isCharacterAvailableForConversation(this.gameData.characters.get(id)));
+    let changed = false;
+    for (const observerId of activeIds) for (const targetId of activeIds) {
+      if (observerId === targetId) continue;
+      const result = memoryEngine.memory4.observeVisibleTraits({ ...this.gameData.directObservationContext,
+        observerId, targetId, gameData: this.gameData });
+      changed ||= result.changed;
+    }
+    this.captureDisclosureProfiles();
+    for (const [key, profiles] of this.disclosureProfilesByResponder) {
+      if (!key.startsWith(`${this.gameData.campaignToken}:`)) continue;
+      const scope = { campaignToken: this.gameData.campaignToken, ownerId: Number(key.slice(this.gameData.campaignToken.length + 1)) };
+      const readContext = memoryEngine.memory4.createProfileReadContext(scope);
+      for (const entityId of this.gameData.characters.keys()) {
+        if (Number(entityId) === scope.ownerId) continue;
+        const current = memoryEngine.memory4.getCurrentDisclosures(scope, Number(entityId), this.gameData, { readContext });
+        const visible = fact => fact.factType === "TRAIT" && resolveTraitVisibility({ traitId: fact.canonicalKey,
+          name: fact.value, category: fact.category }).status === "OBSERVABLE";
+        // Only current observation may extend the opening knowledge snapshot.
+        const next = [...(profiles.get(Number(entityId)) || []).filter(fact => !visible(fact)
+          && current.some(row => row.factId === fact.factId && row.factEpoch === fact.factEpoch
+            && (!fact.effectiveKnown || row.effectiveKnown))), ...current.filter(visible)];
+        if (JSON.stringify(next) !== JSON.stringify(profiles.get(Number(entityId)) || [])) changed = true;
+        profiles.set(Number(entityId), next);
+      }
+    }
+    if (changed) {
+      this.stableProfileCache.clear();
+      this.stableDescriptionCache.clear();
+      this.cacheV2FrozenSnapshots.responders.clear();
+      this.cacheV2FrozenSnapshots.prefixByResponder.clear();
     }
   }
   async prefetchFrozenWorldline() {
@@ -660,6 +704,7 @@ class Conversation {
   }
   async getMemoryContextFor(npc, contextLimit = null) {
     if (!memoryEngine || !npc || !this.gameData) return null;
+    this.observeVisibleTraits();
     if (Number(npc.id) === Number(this.gameData.playerID)) return null;
     if (this.isV813PrefixEnabled?.()) await this.worldlinePrefetchPromise;
     if (memoryEngine.isSummaryOwnerDeceased(npc.id)) memoryEngine.reviveSummaryOwner(npc.id);
@@ -871,6 +916,7 @@ class Conversation {
     this.joinEvents = [];
     this.leaveEvents = [];
     this.presenceInitialized = true;
+    memoryEngine?.observeParticipants(this, [Number(this.gameData.playerID), ...initialIds], this.nextId);
     return this.getPresenceState();
   }
   canManagePresence() {
@@ -1025,6 +1071,7 @@ class Conversation {
     const message = createMessage({ id: this.nextId++, role: "system", kind: "presence_join", characterId: numericId, content: `【${character.shortName || character.fullName}入内】` });
     this.messages.push(message);
     memoryEngine?.observeParticipants(this, [numericId], message.id);
+    this.observeVisibleTraits();
     this.joinEvents.push({ characterId: numericId, atMessageId: message.id, atHistoryIndex: this.getHistory().length - 1 });
     this.emitUpdate();
     return { success: true, status: "present", messageId: message.id };
@@ -1038,9 +1085,11 @@ class Conversation {
     if (!character || numericId === Number(this.gameData.playerID)) return { success: false, error: "character_unavailable" };
     this.captureSummaryParticipantProfiles([character]);
     const hasConversation = this.getHistory().some((message) => message.role === "user" || message.role === "assistant");
-    if (!hasConversation && this.getPresenceWindows(numericId).length === 0) {
+    if (!hasConversation) {
+      memoryEngine?.markParticipantLeft(this, numericId, this.nextId);
       this.presentCharacterIds.delete(numericId);
       this.waitingCharacterIds.add(numericId);
+      this.observeVisibleTraits();
       this.emitUpdate();
       return { success: true, status: "waiting", summaryGenerated: false };
     }
@@ -1049,6 +1098,7 @@ class Conversation {
     memoryEngine?.markParticipantLeft(this, numericId, message.id);
     this.presentCharacterIds.delete(numericId);
     this.departedCharacterIds.add(numericId);
+    this.observeVisibleTraits();
     this.npcQueue = this.npcQueue.filter((candidate) => Number(candidate?.id) !== numericId);
     if (this.customQueue) this.customQueue = this.customQueue.filter((candidate) => Number(candidate?.id) !== numericId);
     this.invalidateApprovalsForCharacter(numericId, "left");
@@ -1079,6 +1129,7 @@ class Conversation {
     memoryEngine?.markParticipantLeft(this, numericId, message.id);
     this.presentCharacterIds.delete(numericId);
     this.temporarilyAbsentCharacterIds.set(numericId, { mode, leftAtMessageId: message.id });
+    this.observeVisibleTraits();
     this.npcQueue = this.npcQueue.filter((candidate) => Number(candidate?.id) !== numericId);
     if (this.customQueue) this.customQueue = this.customQueue.filter((candidate) => Number(candidate?.id) !== numericId);
     this.invalidateApprovalsForCharacter(numericId, "temporarily_absent");
@@ -1109,6 +1160,7 @@ class Conversation {
     });
     this.messages.push(message);
     memoryEngine?.observeParticipants(this, [numericId], message.id);
+    this.observeVisibleTraits();
     this.joinEvents.push({ characterId: numericId, atMessageId: message.id, atHistoryIndex: this.getHistory().length - 1, temporaryReturn: true, mode: temporaryAbsence.mode });
     this.emitUpdate();
     return { success: true, status: "present", mode: temporaryAbsence.mode, messageId: message.id };
@@ -1150,6 +1202,7 @@ class Conversation {
     this.temporarilyAbsentCharacterIds?.delete(Number(characterId));
     this.departedCharacterIds?.add(Number(characterId));
     const deactivated = participantLifecycle.deactivate(this, characterId, reason);
+    this.observeVisibleTraits();
     if (reason === "dead" && Number(characterId) !== Number(this.gameData?.playerID)) {
       try {
         memoryEngine?.markSummaryOwnerDeceased(characterId, { reason });
@@ -1561,6 +1614,7 @@ class Conversation {
     this.gameData = gameData;
     this.gameDataRevision += 1;
     this.gameData.gameDataRevision = this.gameDataRevision;
+    this.observeVisibleTraits();
     return this.gameData;
   }
   async waitForActionConfirmation(result, { timeoutMs = 12e3, pollMs = 500 } = {}) {
@@ -2032,6 +2086,7 @@ class Conversation {
   }
   end() {
     this.isActive = false;
+    if (this.gameData) delete this.gameData.directObservationContext;
     this.clearHistory();
   }
   // Emit conversation update event
@@ -2164,6 +2219,7 @@ class Conversation {
     this.temporarilyAbsentCharacterIds?.delete(numericId);
     this.invalidateApprovalsForCharacter(numericId, "removed");
     this.gameData.characters.delete(numericId);
+    this.observeVisibleTraits();
     if (closedPresence) this.checkpointFinalization("action_participant_left");
     const initialQueueLength = this.npcQueue.length;
     this.npcQueue = this.npcQueue.filter((char) => Number(char.id) !== numericId);

@@ -111,7 +111,9 @@ function makeConversation() {
   assert.strictEqual(stagedConversation.messages.at(-1).content, "【乙入内】");
   assert.strictEqual(stagedConversation.npcQueue.length, 0, "加入当轮不得热插队补嘴");
   assert.deepStrictEqual(stagedConversation.getNpcList().map((character) => character.id).sort(), [2, 3]);
-  assert.deepStrictEqual(stagedConversation.memoryState.participantPresence, [{ characterId: 3, joinedAtMessageId: 0, leftAtMessageId: null }]);
+  assert.deepStrictEqual(stagedConversation.memoryState.participantPresence, [1, 2, 3].map(characterId => ({
+    characterId, joinedAtMessageId: 0, leftAtMessageId: null
+  })), "开场实际在场者在首句前即有窗口，候场者只在真正入内时新增窗口");
 
   const leavingConversation = makeConversation();
   leavingConversation.initializePresence([npcA.id, npcB.id]);
