@@ -29,6 +29,25 @@ function disclosure(text, factType, value, options) {
 }
 
 for (const [text, factType, value] of [
+  ["我将是皇帝。", "TITLE", "皇帝"],
+  ["我将为皇帝。", "TITLE", "皇帝"],
+  ["我会任宰相。", "TITLE", "宰相"],
+  ["我会担任宰相。", "TITLE", "宰相"],
+  ["我以后是皇帝。", "TITLE", "皇帝"],
+  ["我之后就是皇帝。", "TITLE", "皇帝"],
+  ["我届时是皇帝。", "TITLE", "皇帝"],
+  ["我未来是皇帝。", "TITLE", "皇帝"],
+  ["我明天是皇帝。", "TITLE", "皇帝"],
+  ["我明日就是皇帝。", "TITLE", "皇帝"],
+  ["我下个月是皇帝。", "TITLE", "皇帝"],
+  ["我来年是皇帝。", "TITLE", "皇帝"],
+  ["明天我是皇帝。", "TITLE", "皇帝"],
+  ["明日我就是皇帝。", "TITLE", "皇帝"],
+  ["下月我是皇帝。", "TITLE", "皇帝"],
+  ["来月我是皇帝。", "TITLE", "皇帝"],
+  ["后天我是皇帝。", "TITLE", "皇帝"],
+  ["我明天就是一个勤勉的人。", "TRAIT", "勤勉"],
+  ["明天我就是一个勤勉的人。", "TRAIT", "勤勉"],
   ["我将成为皇帝。", "TITLE", "皇帝"],
   ["我将会成为皇帝。", "TITLE", "皇帝"],
   ["我会成为皇帝。", "TITLE", "皇帝"],
@@ -50,7 +69,8 @@ for (const [text, factType, value] of [
 }
 
 for (const text of ["赵光义将成为皇帝。", "赵光义会成为皇帝。", "赵光义以后会是皇帝。",
-  "赵光义将任宰相。", "赵光义将担任宰相。"]) {
+  "赵光义将任宰相。", "赵光义将担任宰相。", "赵光义将是皇帝。",
+  "赵光义明日就是皇帝。", "明天赵光义就是皇帝。"]) {
   const result = disclosure(text, "TITLE", "皇帝", { sourceRole: "user", speakerId: 1, targetIds: [2] });
   assert.equal(result.disclosures.some(row => row.factType === "TITLE"), false,
     `a named third party's future role is not a current disclosure: ${text}`);
@@ -84,6 +104,11 @@ for (const [text, factType, value] of [
   ["我很勇敢。", "TRAIT", "勇敢"],
   ["我是勇敢的。", "TRAIT", "勇敢"],
   ["我现在是皇帝。", "TITLE", "皇帝"],
+  ["我目前是皇帝。", "TITLE", "皇帝"],
+  ["我如今是皇帝。", "TITLE", "皇帝"],
+  ["我已经是皇帝了。", "TITLE", "皇帝"],
+  ["我现在担任宰相。", "TITLE", "宰相"],
+  ["我现在很勤勉。", "TRAIT", "勤勉"],
   ["我确实是皇帝。", "TITLE", "皇帝"],
   ["我就是皇帝。", "TITLE", "皇帝"],
   ["我已经成为皇帝了。", "TITLE", "皇帝"],
@@ -91,9 +116,11 @@ for (const [text, factType, value] of [
   ["我目前是宰相。", "TITLE", "宰相"],
   ["我的特质是勇敢。", "TRAIT", "勇敢"]
 ]) {
-  const result = disclosure(text, factType, value);
-  assert(result.disclosures.some(row => row.factType === factType && row.value === value),
-    `a current positive assertion remains accepted: ${text}`);
+  for (const sourceRole of ["user", "assistant"]) {
+    const result = disclosure(text, factType, value, { sourceRole });
+    assert(result.disclosures.some(row => row.factType === factType && row.value === value),
+      `a current positive assertion remains accepted (${sourceRole}): ${text}`);
+  }
 }
 
 for (const text of ["我很勇敢地冲锋。", "我即将成为皇帝。", "我准备成为皇帝。", "赵光义将要成为皇帝。"] ) {

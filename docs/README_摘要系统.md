@@ -1,5 +1,9 @@
 # 对话摘要与人物记忆：Memory Engine 4.0（3.0 协议、2.5 存储兼容）
 
+## V8.15.2 修复2（2026-10-07）
+
+[实施报告](v8.15.2-fix2-implementation-report.md)：Future Modal 与 Future Time 在当前谓词之前否决，包含主体前的“明天我是”及将是/将为。合法裸年龄回答允许真实 user/assistant，不改变目标、CK3 数值、听众与 Presence 验证。投影附带仅消息 ID 的 spokenMessageIds，覆盖完整私密注解和已验证 Finalization 来源；与 withheldMessageIds 一起拒绝问答中间的发言或未验证来源，不暴露隐藏正文。系统 trace 及已标注非 spoken 来源不打断，完整自报不依赖 prior question。sourceRevision 纳入 ID 边界；问答双证明、per-owner knownBy、Forget、当前/历史年龄及协议合同保持，不改观察白名单或主架构。
+
 ## V8.15.2 修复1（2026-10-07）
 
 [实施报告](v8.15.2-fix1-implementation-report.md)：未来/意图先于当前谓词拥有否决权，即使后台头衔或特质相同也不授权。年龄省主语问答不再要求 Owner 本人提问；听见完整问答且被问者也听见问题的 Owner，可获得唯一目标的 AGE。具名优先，双人无名按唯一另一在场者绑定；多人无可靠被问者归属时 fail-closed，不把 recipientIds 听众集合当作当轮目标。沿用紧邻有效 spoken 消息、问答双证据和 per-owner knownBy；遗忘来源撤销授权，当前 CK3 年龄与历史值/日期分离。未改变 Recall/Forget/Recovery/Derived、Fact Epoch/Presence、42 项白名单、协议 3.0、存储 2.5、App 2.0.4 或 Mod 发布结构。

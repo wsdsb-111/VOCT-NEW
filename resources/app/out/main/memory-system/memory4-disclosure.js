@@ -264,11 +264,12 @@ function matchedFacts(text, facts) {
 
 const UNCERTAIN = /[?？]|吗|么|可否|能否|是不是|是否|不是|并非|并不|未必|没有|从未|不曾|未曾|不再是|不属实|否认|听说|据说|传闻|传言|谣言|相传|声称|自称|据传|可能|也许|或许|似乎|疑似|假如|如果|要是|倘若|将来|未来|明年|后年|终将|迟早|尚未|未证实|曾经|曾为|曾任|当年|昔日|往日|过去|以前|原先|玩笑|虚构|误传|我猜|猜测|我想|以为|怀疑|认为|觉得|心想|暗想|心里|内心|心中|暗自|旁白|叙述|描写|\b(?:not|never|rumou?r|heard|alleged|claims?|said|might|may|perhaps|possibly|suppose|think|thought|thinking|believe|seem|if|whether|unless|will|would|future|intends?|intention|joking|fiction|unconfirmed|narration|aside)\b/i;
 const DISCOURSE = /说|告诉|提到|声称|认为|觉得|怀疑|听说|据说|传闻|引用|否认|谣传/;
-const FUTURE_INTENT = /(?:即将|将要|将会|将成为|将任|将担任|会成为|会是|以后会|之后会|届时会|未来会|马上要|快要|准备|打算|计划|想要|要成为|\b(?:will|intend(?:s)?\s+to|plan(?:s)?\s+to|be\s+going\s+to|about\s+to)\b)/iu;
+const FUTURE_MODAL = /(?:即将|将要|将会|将是|将为|将成为|将任|将担任|会成为|会是|会任|会担任|马上要|快要|准备|打算|计划|想要|要成为|\b(?:will|intend(?:s)?\s+to|plan(?:s)?\s+to|be\s+going\s+to|about\s+to)\b)/iu;
+const FUTURE_TIME = /(?:明天|明日|后天|下月|下个月|来月|来年|以后|之后|届时|未来|将来)/iu;
 const PREDICATES = /(?:(?:当前|如今|当今|现在|其实|确实|仍然|本来|向来|天生|生性|真正|正是|就是|确为|乃是|已(?:经)?成为|是|乃|为|系|拥有|具有|具备|患有|身患|有|很|非常|十分|极其|异常)|\b(?:am|is|are|has|have|possesses|born|very)\b|['’]s\b)/i;
 const SPEAKER_SELF_ALIASES = new Set(["我", "吾", "朕", "寡人", "孤", "本王", "在下", "鄙人", "本人", "i", "myself"]);
 const SELF_PRONOUN_PREFIX = /^(?:我|吾|朕|寡人|孤|本王|在下|鄙人|本人)\s*/u;
-const SELF_ATTRIBUTE_HEAD = /^(?:即将|将要|将会|将成为|将任|将担任|会成为|会是|以后会|之后会|届时会|未来会|马上要|快要|准备|打算|计划|想要|要|已(?:经)?成为|现在|如今|当前|目前|现任|现为|其实|确实|仍然|本来|向来|天生|生性|正是|就是|确为|乃是|乃|是|为|系|拥有|具有|具备|患有|身患|有|很|非常|十分|极其|异常)/u;
+const SELF_ATTRIBUTE_HEAD = /^(?:即将|将要|将会|将是|将为|将成为|将任|将担任|会成为|会是|会任|会担任|以后会|之后会|届时会|未来会|马上要|快要|准备|打算|计划|想要|要|已(?:经)?(?:成为|是)|现在|如今|当前|目前|现任|现为|其实|确实|仍然|本来|向来|天生|生性|正是|就是|确为|乃是|乃|是|为|系|拥有|具有|具备|患有|身患|有|很|非常|十分|极其|异常)/u;
 const SELF_LABELED_FACT_HEAD = /^(?:的)?(?:头衔|身份|职位|官职|特质|性格|特点|能力|年龄)\s*(?:(?:现在|如今|当前|今年)\s*)?(?:是|为|乃|确为|就是)/u;
 const SELF_AGE_HEAD = /^(?:(?:(?:今年|现在|如今|当前)\s*)?(?:[0-9]{1,4}|[零〇一二两三四五六七八九十百千]+)\s*岁|(?:已经|已)?活了\s*(?:[0-9]{1,4}|[零〇一二两三四五六七八九十百千]+)\s*(?:岁|年|载))/u;
 const ENGLISH_SELF_ASSERTION_HEAD = /^(?:i\s*(?:am|'m)|myself\s+(?:am|is|are|have|has|possess(?:es)?|born|very)\b)/i;
@@ -300,7 +301,7 @@ function assertedBetween(text, targetAliases, factAliases, otherTargetAliases = 
       const between = text.slice(target.end, fact.start);
       if (otherTargetAliases.some(alias => occurrences(between, alias).length) || DISCOURSE.test(between)
         || /不|未|没|非|无/.test(between)) continue;
-      if (FUTURE_INTENT.test(between)) { reasonCode = "disclosure_future_rejected"; continue; }
+      if (FUTURE_MODAL.test(text) || FUTURE_TIME.test(text)) { reasonCode = "disclosure_future_rejected"; continue; }
       if (PREDICATES.test(between)) return { accepted: true, reasonCode: null };
     }
   }
@@ -361,7 +362,7 @@ function latestAgeQuestion(snapshot, answerFragment, sourceKind, characters) {
   const ownerId = Number(snapshot.ownerId);
   const speakerId = Number(answerFragment.speakerId);
   const answerMessageIds = sourceMessageIds(answerFragment, sourceKind);
-  if (sourceKind !== "CONVERSATION" || answerFragment.sourceRole !== "assistant"
+  if (sourceKind !== "CONVERSATION" || !["user", "assistant"].includes(answerFragment.sourceRole)
     || !Number.isSafeInteger(ownerId) || !Number.isSafeInteger(speakerId) || speakerId <= 0 || speakerId === ownerId
     || !eligibleFragment(snapshot, answerFragment, sourceKind)
     || answerMessageIds.length !== 1 || !ids(answerFragment.presentIds).includes(ownerId)
@@ -387,6 +388,8 @@ function latestAgeQuestion(snapshot, answerFragment, sourceKind, characters) {
       question = fragment;
     }
   }
+  if (question && [...(snapshot.withheldMessageIds || []), ...(snapshot.spokenMessageIds || [])].some(messageId =>
+    Number.isSafeInteger(messageId) && messageId > latestPriorMessageId && messageId < answerMessageId)) return null;
   return question;
 }
 

@@ -628,6 +628,7 @@ class Memory4Coordinator {
       const verified = validateSourceItem(segment, context, { segment: true });
       if (!verified.success) throw new Error(`memory4_visibility_source_invalid:${verified.reason}`);
       if (JSON.stringify(ids(segment.knownBy)) !== JSON.stringify(ids(verified.audience))) throw new Error("memory4_known_by_mismatch");
+      if (verified.source === "spoken") projection.spokenMessageIds.push(...verified.messageIds);
       for (const messageId of verified.messageIds) {
         if (!verifiedTexts.has(messageId)) verifiedTexts.set(messageId, []);
         verifiedTexts.get(messageId).push(String(segment.content || ""));
@@ -727,7 +728,8 @@ class Memory4Coordinator {
       mentionedEntities: context.mentionedEntities, relationshipEvidence: context.memory4RelationshipEvidence,
       speechAttributionCharacters: disclosureCharacters });
     const disclosureFactEpochs = context.disclosureFactEpochsByOwner?.[ownerId] || null;
-    projection.sourceRevision = hash([projection.sourceRevision, projection.fragments, disclosureCharacters, entityContext,
+    projection.spokenMessageIds = [...new Set(projection.spokenMessageIds)].sort((a, b) => a - b);
+    projection.sourceRevision = hash([projection.sourceRevision, projection.fragments, projection.spokenMessageIds, disclosureCharacters, entityContext,
       ...(disclosureFactEpochs ? [disclosureFactEpochs] : [])]);
     const visibleEntities = new Set(projection.fragments.flatMap(fragment => ids(fragment.entityIds)));
     const relationshipChangeEntityIds = ids((context.relationshipChanges || []).filter(change =>

@@ -102,11 +102,14 @@ function makeGameData(characters = makeCharacters(), date = sourceDate) {
     loadCharactersSummaries() {}, syncOfficialRecollectionSummaries() {} };
 }
 
-function makeMessage(id, role, speakerId, text, { visibility = "participants", knownBy = null, entityIds = [1, 2, 3, 4] } = {}) {
+function makeMessage(id, role, speakerId, text, { visibility = "participants", knownBy = null, entityIds = [1, 2, 3, 4],
+  recipientIds = [1, 2, 3, 4].filter(characterId => characterId !== speakerId), sourceType = "spoken",
+  annotated = true, fragmentEnd = text.length } = {}) {
   const character = makeCharacters().get(speakerId);
-  return { id, role, speakerCharacterId: speakerId, name: character?.shortName || "", content: text,
-    memory4Fragments: [{ start: 0, end: text.length, visibility, sourceType: "spoken",
-      ...(knownBy ? { knownBy } : {}), recipientIds: [1, 2, 3, 4].filter(id => id !== speakerId), entityIds }] };
+  const message = { id, role, speakerCharacterId: speakerId, name: character?.shortName || "", content: text };
+  if (annotated) message.memory4Fragments = [{ start: 0, end: fragmentEnd, visibility, sourceType,
+    ...(knownBy ? { knownBy } : {}), recipientIds, entityIds }];
+  return message;
 }
 
 function makeOwnerSnapshot(engine, messages, { npcAge = 13, ownerId = 1, conversationId = "age-negative-fixture" } = {}) {
@@ -278,6 +281,7 @@ async function main() {
 
   const reopened = new MemoryEngine({ baseDir, summaryFoldersDir: summariesDir, trace: { record() {} } });
   const currentTruth = makeGameData(makeCharacters({ npcAge: 14 }), nextDate);
+  currentTruth.characters.get(1).age = 17;
   const afterRestart = reopened.memory4.getCurrentDisclosures(scope, 2, currentTruth)
     .find(fact => fact.factType === "AGE");
   assert.equal(afterRestart?.value, "13", "restart reads the spoken age rather than replacing it with backend age 14");
@@ -365,6 +369,119 @@ async function main() {
   assert(listenerProviderTurn.providerInput.includes("[2:乙;AGE=14]"),
     "the real PromptBuilder and captured Provider request contain the listener-authorized current age");
 
+  const playerAnswerConversation = makeConversationFixture(reopened, "age-player-user-answer");
+  appendConversationMessage(playerAnswerConversation, "assistant", 3, "甲，你今年多少岁？");
+  appendConversationMessage(playerAnswerConversation, "user", 1, "今年16岁。");
+  const playerAnswerSnapshots = new Map();
+  for (const ownerId of [4, 2]) {
+    const { snapshot: playerSnapshot, result: playerResult } = scanConversation(reopened, playerAnswerConversation, ownerId);
+    const playerAnswerFragment = playerSnapshot.fragments.find(fragment => fragment.messageId === 1);
+    assert.equal(playerAnswerFragment?.sourceRole, "user", "the player's answer keeps its real user role");
+    assert.equal(playerAnswerFragment?.speakerId, 1, "the player remains the source speaker");
+    const playerAge = playerResult.disclosures.find(row => row.entityId === 1 && row.factType === "AGE" && row.value === "16");
+    assert(playerAge, `Owner ${ownerId} learns the player's matching bare age answer to an NPC question`);
+    assert.deepEqual(playerAge.evidence.sourceMessageIds, [0, 1], "the player's question and answer sources remain paired");
+    const playerRecorded = recordConversationDisclosures(reopened, playerSnapshot);
+    assert.equal(playerRecorded.status, "RECORDED", `Owner ${ownerId} persists the player's age answer`);
+    const playerFact = reopened.memory4.store.getDisclosedFacts({ campaignToken, ownerId }, 1)
+      .find(row => row.factType === "AGE" && row.value === "16");
+    const playerProof = Object.values(playerFact?.evidenceBySource || {}).find(row => row.sourceKind === "CONVERSATION");
+    assert(playerProof, `Owner ${ownerId} receives a persisted player-age proof`);
+    assert.deepEqual(playerProof.knownBy, [ownerId], "player-age evidence remains isolated per Owner");
+    assert.deepEqual(playerProof.sourceMessageIds, [0, 1], "persisted player-age proof keeps both source messages");
+    playerAnswerSnapshots.set(ownerId, playerSnapshot);
+  }
+
+  const restartedPlayerEngine = new MemoryEngine({ baseDir, summaryFoldersDir: summariesDir, trace: { record() {} } });
+  const playerOwner4Scope = { campaignToken, ownerId: 4 };
+  const playerOwner4Age = restartedPlayerEngine.memory4.getCurrentDisclosures(playerOwner4Scope, 1, currentTruth)
+    .find(row => row.factType === "AGE");
+  assert.equal(playerOwner4Age?.value, "16", "restart preserves the player's spoken age as historical evidence");
+  assert.equal(playerOwner4Age?.firstAcquiredDate, sourceDate);
+  assert.equal(playerOwner4Age?.current, false, "the saved player age remains historical after CK3 advances");
+  assert.equal(playerOwner4Age?.currentKnownAge, 17, "the historical proof authorizes a separate current CK3 age");
+  assert.equal(playerOwner4Age?.currentAgeReadDate, nextDate);
+  const playerOwner2Age = restartedPlayerEngine.memory4.getCurrentDisclosures({ campaignToken, ownerId: 2 }, 1, currentTruth)
+    .find(row => row.factType === "AGE");
+  assert.equal(playerOwner2Age?.value, "16", "a second Owner recovers its independent copy of the player's age");
+  assert.equal(playerOwner2Age?.currentKnownAge, 17);
+
+  const playerUiConversation = { id: playerAnswerConversation.id, isActive: true, gameData: currentTruth };
+  const playerSummariesManager = createSummariesManager({ fs, path, summariesDir, memoryEngine: restartedPlayerEngine, memorySystem,
+    getCurrentConversation: () => playerUiConversation,
+    requestSummary: async () => { throw new Error("player AGE UI DTO read must not call a provider"); } });
+  const playerUiData = await playerSummariesManager.getMemory4OwnerData({ ownerId: 4,
+    expectedCampaignToken: campaignToken, expectedContextId: playerUiConversation.id });
+  const playerUiAge = playerUiData.known.items.find(item => item.entityId === 1)?.disclosedFacts
+    .find(row => row.factType === "AGE");
+  assert.equal(playerUiAge?.value, "16", "the UI DTO keeps the player's historical spoken age");
+  assert.equal(playerUiAge?.current, false);
+  assert.equal(playerUiAge?.currentKnownAge, 17, "the UI DTO separates the current CK3 age from the spoken value");
+  assert.equal(playerUiAge?.currentAgeReadDate, nextDate);
+
+  Conversation.configure({ memoryEngine: restartedPlayerEngine, settingsRepository, llmManager, PromptBuilder, TokenCounter,
+    usageAnalytics: { record() {} },
+    worldlineService: { getSettings: () => ({ v812MemoryEngine3Enabled: true, v812TemporalSummaryRecallEnabled: true }),
+      isSubjectivePromptIntegrationEnabled: () => false },
+    createPromptFingerprint: value => crypto.createHash("sha256").update(String(value || "")).digest("hex"),
+    runFileManager: { isAvailable: () => true }, parseLog: async () => currentTruth,
+    createError: input => ({ type: "error", ...input }), createMessage: input => ({ type: "message", ...input }),
+    events, uuid: { v4: () => `v8152-player-age-provider-${++conversationSequence}` }, path });
+  playerAnswerConversation.gameData = currentTruth;
+  playerAnswerConversation.disclosureProfilesByResponder.clear();
+  const playerProviderTurn = await providerTurn(playerAnswerConversation, 4);
+  const playerPromptAge = playerProviderTurn.memoryContext.disclosureProfiles.get(1)
+    .find(row => row.factType === "AGE");
+  assert.equal(playerPromptAge?.value, "16", "the NPC prompt retains the historical player age");
+  assert.equal(playerPromptAge?.currentKnownAge, 17, "the NPC prompt receives the authorized current player age");
+  assert(playerProviderTurn.providerInput.includes("[1:甲;AGE=17]"),
+    "the captured real Provider request contains the current player age authorized by its proof");
+
+  const playerOwner2Snapshot = playerAnswerSnapshots.get(2);
+  const forgottenPlayerProjection = restartedPlayerEngine.memory4.forgetSummaryProjection({ campaignToken,
+    perspectiveOwnerId: 2, characterId: 1, conversationId: playerOwner2Snapshot.conversationId,
+    finalizationId: playerOwner2Snapshot.finalizationId, sourceMessageIds: [0, 1],
+    segmentIds: playerOwner2Snapshot.fragments.map(fragment => fragment.fragmentId) }, { ownerId: 2, counterpartId: 1 });
+  assert(forgottenPlayerProjection.disclosureEvidenceRevoked > 0, "forgetting revokes the player's age proof for that Owner");
+  assert.equal(restartedPlayerEngine.memory4.getCurrentDisclosures({ campaignToken, ownerId: 2 }, 1, currentTruth)
+    .find(row => row.factType === "AGE")?.currentKnownAge ?? null, null,
+  "forgetting the source removes Owner 2's current-age authorization");
+  assert.equal(restartedPlayerEngine.memory4.getCurrentDisclosures(playerOwner4Scope, 1, currentTruth)
+    .find(row => row.factType === "AGE")?.currentKnownAge, 17,
+  "forgetting Owner 2's source leaves Owner 4's independent proof intact");
+  playerAnswerConversation.disclosureProfilesByResponder.clear();
+  const forgottenPlayerProviderTurn = await providerTurn(playerAnswerConversation, 2);
+  assert.equal(forgottenPlayerProviderTurn.memoryContext.disclosureProfiles.get(1)
+    .some(row => row.factType === "AGE"), false, "the refreshed NPC context drops the forgotten player age");
+  assert.equal(forgottenPlayerProviderTurn.providerInput.includes("[1:甲;AGE=17]"), false,
+    "the real Provider request no longer contains current player age after Forget");
+
+  const playerOwner4Snapshot = playerAnswerSnapshots.get(4);
+  assert.deepEqual(playerOwner4Snapshot.projectionLineages, [],
+    "this direct disclosure fixture has no directed-summary projection lineage");
+  const owner4NpcAgeProof = Object.values(reopened.memory4.store.getDisclosedFacts({ campaignToken, ownerId: 4 }, 2)
+    .find(row => row.factType === "AGE" && row.value === "13")?.evidenceBySource || {})
+    .find(proof => proof.sourceKind === "CONVERSATION");
+  const owner4PlayerAgeProof = Object.values(reopened.memory4.store.getDisclosedFacts({ campaignToken, ownerId: 4 }, 1)
+    .find(row => row.factType === "AGE" && row.value === "16")?.evidenceBySource || {})
+    .find(proof => proof.sourceKind === "CONVERSATION");
+  assert.deepEqual(owner4NpcAgeProof?.sourceMessageIds, [1, 2]);
+  assert.deepEqual(owner4PlayerAgeProof?.sourceMessageIds, [0, 1]);
+  assert.notEqual(owner4NpcAgeProof?.sourceConversationId, owner4PlayerAgeProof?.sourceConversationId,
+    "the synthetic cross-conversation fallback repro uses distinct conversation scopes with overlapping local IDs");
+  assert.throws(() => restartedPlayerEngine.memory4.forgetSummaryProjection({ campaignToken,
+    perspectiveOwnerId: 4, characterId: 1, conversationId: playerOwner4Snapshot.conversationId,
+    finalizationId: playerOwner4Snapshot.finalizationId, sourceMessageIds: [0, 1],
+    segmentIds: playerOwner4Snapshot.fragments.map(fragment => fragment.fragmentId) }, { ownerId: 4, counterpartId: 1 }),
+  /memory4_projection_disclosure_unmapped/,
+  "the legacy no-lineage fallback fails closed when a different conversation has a partially overlapping local message ID");
+  assert.equal(restartedPlayerEngine.memory4.getCurrentDisclosures(playerOwner4Scope, 1, currentTruth)
+    .find(row => row.factType === "AGE")?.currentKnownAge, 17,
+  "the fail-closed cross-conversation Forget rejection preserves the Owner's valid player-age proof");
+  assert.equal(restartedPlayerEngine.memory4.getCurrentDisclosures(playerOwner4Scope, 2, currentTruth)
+    .find(row => row.factType === "AGE")?.currentKnownAge, 14,
+  "the fail-closed cross-conversation Forget rejection preserves the unrelated NPC-age proof");
+
   const forgottenProjection = reopened.memory4.forgetSummaryProjection({ campaignToken, perspectiveOwnerId: 1,
     characterId: 2, conversationId: ownerSnapshot.conversationId, finalizationId: ownerSnapshot.finalizationId,
     sourceMessageIds: [1, 2], segmentIds: ownerSnapshot.fragments.map(fragment => fragment.fragmentId) },
@@ -429,6 +546,104 @@ async function main() {
     events, uuid: { v4: () => `v8152-age-boundary-${++conversationSequence}` }, path });
   const hasAge = (result, entityId = null) => result.disclosures.some(row => row.factType === "AGE"
     && (entityId == null || row.entityId === entityId));
+
+  const playerBareAnswer = makeConversationFixture(engine, "age-player-bare-user-answer");
+  appendConversationMessage(playerBareAnswer, "assistant", 3, "甲，你今年多少岁？");
+  appendConversationMessage(playerBareAnswer, "user", 1, "今年16岁。");
+  const playerBareOwner = scanConversation(engine, playerBareAnswer, 4);
+  const playerBareFragment = playerBareOwner.snapshot.fragments.find(fragment => fragment.messageId === 1);
+  assert.equal(playerBareFragment?.sourceRole, "user", "a player answer retains its real user role");
+  assert.equal(playerBareFragment?.speakerId, 1, "the bare answer is spoken by the player character");
+  assert(hasAge(playerBareOwner.result, 1), "an NPC's question and the player's bare current-age answer authorize a listener");
+
+  const hiddenSpoken = makeConversationFixture(engine, "age-hidden-spoken-interruption");
+  appendConversationMessage(hiddenSpoken, "assistant", 3, "甲，你今年多少岁？");
+  const hiddenSpokenId = appendConversationMessage(hiddenSpoken, "assistant", 2, "乙悄声对丙说：稍后再说。",
+    { visibility: "known_group", recipientIds: [3], entityIds: [2, 3] });
+  appendConversationMessage(hiddenSpoken, "user", 1, "今年16岁。");
+  const hiddenSpokenOwner = scanConversation(engine, hiddenSpoken, 4);
+  assert.equal(hiddenSpokenOwner.snapshot.fragments.some(fragment => fragment.messageId === hiddenSpokenId), false,
+    "the real projection omits the private spoken source from an unrelated Owner");
+  assert(hiddenSpokenOwner.snapshot.spokenMessageIds.includes(hiddenSpokenId),
+    "the projection retains only the source ID for the hidden spoken message");
+  assert.equal(hiddenSpokenOwner.snapshot.withheldMessageIds.includes(hiddenSpokenId), false,
+    "a complete hidden annotation is not misrepresented as a withheld gap");
+  assert.equal(hasAge(hiddenSpokenOwner.result, 1), false,
+    "an Owner-invisible but verified spoken message breaks bare-age question binding");
+
+  const withheldSpoken = makeConversationFixture(engine, "age-withheld-spoken-gap");
+  appendConversationMessage(withheldSpoken, "assistant", 3, "甲，你今年多少岁？");
+  const spokenPrefix = "乙悄声对丙说：稍后再说。";
+  const withheldSpokenId = appendConversationMessage(withheldSpoken, "assistant", 2, `${spokenPrefix}未分类尾注`,
+    { visibility: "known_group", recipientIds: [3], entityIds: [2, 3], fragmentEnd: spokenPrefix.length });
+  appendConversationMessage(withheldSpoken, "user", 1, "今年16岁。");
+  const withheldSpokenOwner = scanConversation(engine, withheldSpoken, 4);
+  assert(withheldSpokenOwner.snapshot.spokenMessageIds.includes(withheldSpokenId),
+    "the source ID comes from the actual annotated spoken span");
+  assert(withheldSpokenOwner.snapshot.withheldMessageIds.includes(withheldSpokenId),
+    "projectVisibleTranscript marks the unclassified tail as a real withheld message ID");
+  assert.equal(hasAge(withheldSpokenOwner.result, 1), false,
+    "a production withheld spoken-message ID breaks bare-age binding");
+
+  const finalizationClassified = makeConversationFixture(engine, "age-finalization-classified-interruption");
+  appendConversationMessage(finalizationClassified, "assistant", 3, "甲，你今年多少岁？");
+  const classifiedText = "乙悄声对丙说：稍后再说。";
+  const classifiedId = appendConversationMessage(finalizationClassified, "assistant", 2, classifiedText, { annotated: false });
+  appendConversationMessage(finalizationClassified, "user", 1, "今年16岁。");
+  const classifiedContext = finalizationClassified.buildFinalizationBaseContext();
+  classifiedContext.finalizationId = `${finalizationClassified.id}-finalization`;
+  classifiedContext.episodeId = `${finalizationClassified.id}-episode`;
+  classifiedContext.verifiedSummarySegments = [{ segmentId: "age-hidden-classified-segment", content: classifiedText,
+    participants: [2, 3], knownBy: [2, 3], visibility: "known_group", source: "spoken",
+    provenance: { messageIds: [classifiedId], speakerIds: [2], extractionMode: "visibility_source_paragraph" } }];
+  const classifiedSnapshot = engine.memory4.buildOwnerSnapshot(classifiedContext, 4);
+  const classifiedResult = scanVisibleDisclosures(classifiedSnapshot, { campaignToken,
+    date: classifiedSnapshot.date, characters: new Map(classifiedSnapshot.disclosureCharacters.map(character => [character.id, character])) });
+  assert.equal(classifiedSnapshot.fragments.some(fragment => fragment.messageId === classifiedId), false,
+    "a verified private finalization source remains absent from an Owner outside its audience");
+  assert.equal(classifiedSnapshot.withheldMessageIds.includes(classifiedId), false,
+    "the coordinator removes a message classified by verified finalization evidence from withheld IDs");
+  assert(classifiedSnapshot.spokenMessageIds.includes(classifiedId),
+    "the verified source message ID still reaches the Owner projection without its content");
+  assert.equal(hasAge(classifiedResult, 1), false,
+    "finalization-classified invisible speech breaks bare-age binding after withheld cleanup");
+
+  const nonSpokenTrace = makeConversationFixture(engine, "age-nonspoken-trace-between-answer");
+  appendConversationMessage(nonSpokenTrace, "assistant", 3, "甲，你今年多少岁？");
+  const traceId = nonSpokenTrace.nextId++;
+  nonSpokenTrace.messages.push({ id: traceId, role: "system", kind: "internal_trace", content: "state refresh" });
+  appendConversationMessage(nonSpokenTrace, "user", 1, "今年16岁。");
+  const nonSpokenOwner = scanConversation(engine, nonSpokenTrace, 4);
+  assert.equal(nonSpokenOwner.snapshot.spokenMessageIds.includes(traceId), false,
+    "a system/internal trace is not recorded as a spoken source");
+  assert.equal(nonSpokenOwner.snapshot.withheldMessageIds.includes(traceId), false,
+    "a nonspoken trace does not become a withheld spoken source");
+  assert(hasAge(nonSpokenOwner.result, 1), "a nonspoken internal trace does not break a bare-age exchange");
+
+  for (const sourceType of ["witnessed", "game_fact"]) {
+    const nonSpokenSource = makeConversationFixture(engine, `age-${sourceType}-interruption`);
+    appendConversationMessage(nonSpokenSource, "user", 1, "乙，你今年多少岁？");
+    const nonSpokenMessageId = appendConversationMessage(nonSpokenSource, "assistant", 3, "丙的当前状态已确认。",
+      { sourceType });
+    appendConversationMessage(nonSpokenSource, "assistant", 2, "今年13岁。");
+    const nonSpokenSourceOwner = scanConversation(engine, nonSpokenSource, 4);
+    assert(nonSpokenSourceOwner.snapshot.fragments.some(fragment => fragment.messageId === nonSpokenMessageId
+      && fragment.sourceType === sourceType), `${sourceType} remains a real annotated nonspoken fragment`);
+    assert.equal(nonSpokenSourceOwner.snapshot.spokenMessageIds.includes(nonSpokenMessageId), false,
+      `${sourceType} is excluded from spoken-message provenance`);
+    assert(hasAge(nonSpokenSourceOwner.result, 2), `${sourceType} does not break question-to-answer binding`);
+  }
+
+  const explicitAfterHidden = makeConversationFixture(engine, "age-explicit-self-after-hidden-message");
+  appendConversationMessage(explicitAfterHidden, "assistant", 3, "甲，你今年多少岁？");
+  appendConversationMessage(explicitAfterHidden, "assistant", 2, "乙悄声对丙说：稍后再说。",
+    { visibility: "known_group", recipientIds: [3], entityIds: [2, 3] });
+  appendConversationMessage(explicitAfterHidden, "user", 1, "我今年16岁。");
+  const explicitAfterHiddenOwner = scanConversation(engine, explicitAfterHidden, 4);
+  const explicitPlayerAge = explicitAfterHiddenOwner.result.disclosures.find(row => row.entityId === 1 && row.factType === "AGE");
+  assert(explicitPlayerAge, "an explicit player self-age remains admissible after an unrelated hidden message");
+  assert.deepEqual(explicitPlayerAge.evidence.sourceMessageIds, [2],
+    "an explicit self-age stands on its own answer source without reusing the old question");
 
   const threePerson = makeConversationFixture(engine, "age-three-person", { presentIds: [1, 2, 3] });
   appendConversationMessage(threePerson, "user", 1, "乙，你今年多少岁？");
@@ -534,6 +749,20 @@ async function main() {
   assert.equal(hasAge(scanConversation(engine, wrongAge, 3).result, 2), false,
     "a bare answer that disagrees with the responder's current CK3 age is rejected");
 
+  const playerWrongSpeaker = makeConversationFixture(engine, "age-player-wrong-speaker");
+  appendConversationMessage(playerWrongSpeaker, "assistant", 3, "甲，你今年多少岁？");
+  appendConversationMessage(playerWrongSpeaker, "assistant", 2, "今年13岁。");
+  assert.equal(hasAge(scanConversation(engine, playerWrongSpeaker, 4).result, 1), false,
+    "an NPC answer cannot be rebound as the player's answer to an NPC question");
+
+  const playerWrongAge = makeConversationFixture(engine, "age-player-wrong-backend-age", {
+    characters: makeCharacters() });
+  playerWrongAge.gameData.characters.get(1).age = 17;
+  appendConversationMessage(playerWrongAge, "assistant", 3, "甲，你今年多少岁？");
+  appendConversationMessage(playerWrongAge, "user", 1, "今年16岁。");
+  assert.equal(hasAge(scanConversation(engine, playerWrongAge, 4).result, 1), false,
+    "a player's bare answer that disagrees with current CK3 age is rejected");
+
   const thirdPersonAttribution = makeConversationFixture(engine, "age-third-person-attribution");
   appendConversationMessage(thirdPersonAttribution, "assistant", 4, "甲问道：“乙，你今年多少岁？”");
   appendConversationMessage(thirdPersonAttribution, "assistant", 2, "今年13岁。");
@@ -560,10 +789,27 @@ async function main() {
     ["我将成为皇帝。", "TITLE", "皇帝"],
     ["我会成为皇帝。", "TITLE", "皇帝"],
     ["我以后会是皇帝。", "TITLE", "皇帝"],
+    ["我将是皇帝。", "TITLE", "皇帝"],
+    ["我将为皇帝。", "TITLE", "皇帝"],
+    ["我明天是皇帝。", "TITLE", "皇帝"],
+    ["我明日就是皇帝。", "TITLE", "皇帝"],
+    ["我下个月是皇帝。", "TITLE", "皇帝"],
+    ["我来年是皇帝。", "TITLE", "皇帝"],
+    ["我以后是皇帝。", "TITLE", "皇帝"],
+    ["我之后就是皇帝。", "TITLE", "皇帝"],
+    ["我届时是皇帝。", "TITLE", "皇帝"],
     ["乙将成为皇帝。", "TITLE", "皇帝"],
-    ["我以后会变得勇敢。", "TRAIT", "勇敢"]
+    ["乙将是皇帝。", "TITLE", "皇帝"],
+    ["赵光义将是皇帝。", "TITLE", "皇帝"],
+    ["赵光义明天就是皇帝。", "TITLE", "皇帝"],
+    ["我以后会变得勇敢。", "TRAIT", "勇敢"],
+    ["我明天就是一个勤勉的人。", "TRAIT", "勤勉"],
+    ["我将成为一个勇敢的人。", "TRAIT", "勇敢"]
   ]) {
-    const future = makeConversationFixture(engine, `future-${Buffer.from(text).toString("hex").slice(0, 12)}`);
+    const characters = makeCharacters();
+    if (value === "勤勉") characters.get(2).traits.push({ traitId: "diligent", name: "勤勉", localizedName: "勤勉",
+      category: "Personality Trait" });
+    const future = makeConversationFixture(engine, `future-${Buffer.from(text).toString("hex").slice(0, 12)}`, { characters });
     const speakerId = text.startsWith("我") ? 2 : 1;
     appendConversationMessage(future, speakerId === 1 ? "user" : "assistant", speakerId, text);
     const result = scanConversation(engine, future, 1).result;
@@ -571,8 +817,19 @@ async function main() {
       `future language cannot disclose a matching backend ${factType}: ${text}`);
   }
 
-  for (const [text, factType, value] of [["我现在是皇帝。", "TITLE", "皇帝"], ["我很勇敢。", "TRAIT", "勇敢"]]) {
-    const current = makeConversationFixture(engine, `current-${factType}`);
+  for (const [text, factType, value] of [
+    ["我现在是皇帝。", "TITLE", "皇帝"], ["我目前是皇帝。", "TITLE", "皇帝"],
+    ["我如今是皇帝。", "TITLE", "皇帝"], ["我确实是皇帝。", "TITLE", "皇帝"],
+    ["我就是皇帝。", "TITLE", "皇帝"], ["我已经成为皇帝了。", "TITLE", "皇帝"],
+    ["我已经是皇帝了。", "TITLE", "皇帝"], ["我现在担任宰相。", "TITLE", "宰相"],
+    ["我很勇敢。", "TRAIT", "勇敢"], ["我是勇敢的。", "TRAIT", "勇敢"],
+    ["我的特质是勇敢。", "TRAIT", "勇敢"], ["我现在很勤勉。", "TRAIT", "勤勉"]
+  ]) {
+    const characters = makeCharacters();
+    if (value === "宰相") characters.get(2).heldCourtAndCouncilPositions = "宰相";
+    if (value === "勤勉") characters.get(2).traits.push({ traitId: "diligent", name: "勤勉", localizedName: "勤勉",
+      category: "Personality Trait" });
+    const current = makeConversationFixture(engine, `current-${factType}`, { characters });
     appendConversationMessage(current, "assistant", 2, text);
     assert(scanConversation(engine, current, 1).result.disclosures
       .some(row => row.entityId === 2 && row.factType === factType && row.value === value),

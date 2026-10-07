@@ -18,12 +18,15 @@ function projectVisibleTranscript(context, ownerId) {
   const participantIds = ids((context.participants || []).map(participant => participant.id));
   const fragments = [];
   const withheldMessageIds = [];
+  const spokenMessageIds = [];
   const interactionEvidence = [];
   let usesLegacyEvidence = false;
   let presentMessageCount = 0;
   for (const message of context.messages || []) {
     if (!Number.isSafeInteger(message.id) || message.id < 0 || !["user", "assistant"].includes(message.role)
       || message.isStreaming || typeof message.content !== "string" || !message.content.trim()) continue;
+    // Speech boundaries are IDs only, including speech the Owner cannot hear.
+    if (Array.isArray(message.memory4Fragments) && message.memory4Fragments.some(source => source.sourceType === "spoken")) spokenMessageIds.push(message.id);
     const presentIds = ids((context.participantPresence || []).filter(window =>
       Number.isSafeInteger(window.joinedAtMessageId) && window.joinedAtMessageId <= message.id
       && (window.leftAtMessageId == null || message.id < window.leftAtMessageId)).map(window => window.characterId))
@@ -100,11 +103,12 @@ function projectVisibleTranscript(context, ownerId) {
       visibilityEvidence: "legacy_user_confirmed_projection", legacyMemoryId: memory.memoryId, legacySourceHash: legacySourceHash(memory) });
   }
   const withheld = [...new Set(withheldMessageIds)];
-  return { fragments, presentMessageCount, withheldMessageIds: withheld, interactionEvidence,
+  const spoken = [...new Set(spokenMessageIds)].sort((a, b) => a - b);
+  return { fragments, presentMessageCount, withheldMessageIds: withheld, spokenMessageIds: spoken, interactionEvidence,
     completeness: usesLegacyEvidence ? "partial" : "complete",
     visibilityEvidence: usesLegacyEvidence ? "legacy visibility evidence" : "application_fragment",
     legacyRetained: usesLegacyEvidence,
-    sourceRevision: hash([context.campaignToken, ownerId, context.conversationId, context.date, context.totalDays, fragments, withheld, interactionEvidence]) };
+    sourceRevision: hash([context.campaignToken, ownerId, context.conversationId, context.date, context.totalDays, fragments, withheld, spoken, interactionEvidence]) };
 }
 
 function evidenceCompleteness(contributions) {
