@@ -34,7 +34,7 @@ try {
     dataDir: root,
     memoryEngine: { store: {
       getCharacterKnowledge: (id) => String(id) === "1" ? [{ memoryId: "private-plan" }] : [],
-      getMemory: (id) => id === "private-plan" ? { memoryId: id, visibility: "private", type: "secret", participants: [1], eventDate: checkpointDate, content: "绝密计划正文" } : null
+      getMemory: (id) => id === "private-plan" ? { memoryId: id, visibility: "private", type: "secret", participants: [1], knownBy: [1], eventDate: checkpointDate, content: "绝密计划正文" } : null
     } },
     settingsRepository: {
       getWorldlineSettings: () => settings,

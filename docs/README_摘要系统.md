@@ -1,5 +1,19 @@
 # 对话摘要与人物记忆：Memory Engine 4.0（3.0 协议、2.5 存储兼容）
 
+## V8.15.2 隐私与信件日期后续修复（2026-10-08）
+
+[后续报告](v8.15.2-privacy-letter-world-memory-followup-report.md)：人物的头衔/控制者字符串别名从唯一已投影角色重建，无源和歧义 fail-closed；远程 Letter 不读取发送方现场地点，正文明确披露的地点与收件人 Self 完整资料保留。信件日期按日志身份及物理 LOAD_SESSION 边界隔离，重复 epoch 不能沿用旧日；Mod runner 不在对话时自毁，自举移至玩家已确定的 after-lobby 入口。待发队列不清空、不盲重发，官方接收确认后才生成摘要。世界记忆保存就地反馈、全名查询/当前玩家选择与各范围 ACL 单列验证，不改人物记忆协议、生命周期或缓存锚点。
+
+## V8.15.2 陌生角色记忆授权防护（2026-10-08）
+
+[排查与修复报告](v8.15.2-stranger-memory-isolation-report.md)：人物范围内部召回同时要求知情索引与原始 `knownBy` 授权，Worldline 个人记忆适配器同样复核。显式转述必须由两份证据均授权的来源角色发起；只写错误索引不能读内容或转授。旧摘要兼容字段按准确玩家/NPC ID 与非空当前 Campaign 过滤，防止同名异人或跨战役加载。正常授权、逐条转述及全球维护查询保留。
+
+非本人 Prompt 资料不再无条件注入 `capitalLocation`，Self 仍完整，原始 GameData 与 Worldline 的 LOCATION 授权不变，不把首都等同于当前行踪。现有动态身份知识提示明确私聊/信件不会自动成为全球传闻，`public` 不自动授予未听见的陌生人；无来源不能编造传播渠道。事故首轮指纹只匹配 D 自身官方追忆，未证实 ABC 摘要注入或缓存串场。生成层约束与确定性 ACL 分开验证，真实 Provider / CK3 Gate 待用户。不改 4.0 显示、3.0 协议、2.5 存储、IPC、Block IDs、Cache Anchor 或 GLM 配置。
+
+## V8.15.2 摘要日期显示热修（2026-10-07）
+
+[热修报告](v8.15.2-world-memory-summary-date-hotfix-report.md)：每个对话文件的摘要默认按游戏日期降序显示，最近在上；“按日期排序”可切换回原文件顺序，失败摘要重试后刷新沿用所选模式。同日稳定，无日期/非法日期在最后。只排序显示投影，编辑、删除和模型整理传原文件索引；不重排持久化 JSON，不改变召回、遗忘、恢复或 Derived 的合同。世界记忆同期修复后台更新吞掉保存结果的竞态，分支 token 与服务端日期核验保持。
+
 ## V8.15.2 修复2（2026-10-07）
 
 [实施报告](v8.15.2-fix2-implementation-report.md)：Future Modal 与 Future Time 在当前谓词之前否决，包含主体前的“明天我是”及将是/将为。合法裸年龄回答允许真实 user/assistant，不改变目标、CK3 数值、听众与 Presence 验证。投影附带仅消息 ID 的 spokenMessageIds，覆盖完整私密注解和已验证 Finalization 来源；与 withheldMessageIds 一起拒绝问答中间的发言或未验证来源，不暴露隐藏正文。系统 trace 及已标注非 spoken 来源不打断，完整自报不依赖 prior question。sourceRevision 纳入 ID 边界；问答双证明、per-owner knownBy、Forget、当前/历史年龄及协议合同保持，不改观察白名单或主架构。

@@ -8,7 +8,7 @@ function memoryFactsForResponder(memoryEngine, responderId, limit = 24) {
   const facts = [];
   for (const entry of knowledge.slice(0, limit)) {
     const memory = store.getMemory?.(entry.memoryId);
-    if (!memory) continue;
+    if (!memory || !Array.isArray(memory.knownBy) || !memory.knownBy.includes(ownerId)) continue;
     facts.push({
       factId: `memory:${memory.memoryId}`,
       entityId: String(ownerId),

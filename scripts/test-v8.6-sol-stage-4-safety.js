@@ -120,7 +120,7 @@ try {
       const state = { known: [{ memoryId: "memory-secret" }] };
       state.store = {
         getCharacterKnowledge: (id) => Number(id) === 1 ? state.known : [],
-        getMemory: (id) => id === "memory-secret" ? { memoryId: id, visibility: "private", type: "secret", participants: [1], eventDate: "1170.6.6" } : null
+        getMemory: (id) => id === "memory-secret" ? { memoryId: id, visibility: "private", type: "secret", participants: [1], knownBy: [1], eventDate: "1170.6.6" } : null
       };
       return state;
     })(),

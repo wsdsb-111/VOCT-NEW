@@ -62,8 +62,10 @@ class KnowledgeService {
   }
 
   transferKnowledge(memoryId, { fromCharacterId, toCharacterId, acquiredAt = null, awareness = "told" } = {}) {
-    const sourceKnows = this.store.getCharacterKnowledge(fromCharacterId).some((entry) => entry.memoryId === memoryId);
-    if (!sourceKnows) return false;
+    const sourceId = Number(fromCharacterId);
+    const memory = this.store.getMemory(memoryId);
+    const sourceKnows = this.store.getCharacterKnowledge(sourceId).some((entry) => entry.memoryId === memoryId);
+    if (!sourceKnows || !memory?.knownBy.includes(sourceId)) return false;
     this.store.markKnownBy(toCharacterId, memoryId, { awareness, acquiredAt, sourceCharacterId: fromCharacterId });
     this.store.updateMemory(memoryId, (memory) => ({ knownBy: uniqueIds([...memory.knownBy, toCharacterId]) }));
     this.trace?.record("knowledge", { memoryId, characterId: toCharacterId, reason: "explicit_transfer" });

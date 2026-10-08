@@ -68,7 +68,7 @@ function retrieve(engine, state, options) {
     ], { bom: true });
 
     const known = store.saveMemory({ memoryId: "known-durable", type: "promise", content: "角色知晓的长期约定。",
-      participants: [20, 10], subjects: [10], importance: 0.95, provenance: { campaignToken } });
+      participants: [20, 10], subjects: [10], knownBy: [20], importance: 0.95, provenance: { campaignToken } });
     store.markKnownBy(20, known.memoryId);
     store.saveMemory({ memoryId: "unknown-durable", type: "promise", content: "未进入角色知识索引的约定。",
       participants: [20, 10], subjects: [10], importance: 0.95, provenance: { campaignToken } });

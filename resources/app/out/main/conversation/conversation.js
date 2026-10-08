@@ -955,8 +955,9 @@ class Conversation {
     const present = participants.filter((participant) => participant.status === "present");
     const temporarilyAbsent = participants.filter((participant) => participant.status === "temporarily_absent");
     if (present.length === 0) return "";
-    const absenceText = temporarilyAbsent.length > 0 ? `\n暂时缺席：${temporarilyAbsent.map((participant) => `${participant.fullName}（${participant.temporaryAbsenceLabel}）`).join("、")}。这些人物不能感知缺席期间的内容。` : "";
-    return `=== 当前在场人物（仅本轮有效） ===\n${present.map((participant) => `- ${participant.fullName}`).join("\n")}\n只能把当前在场人物视为听见本轮对话并可直接回应的人；候场、暂时缺席或已离场人物不在当前对话现场。${absenceText}`;
+    const name = participant => getCharacterPersonalName(this.gameData.characters.get(Number(participant.id)) || {}, `角色${participant.id}`);
+    const absenceText = temporarilyAbsent.length > 0 ? `\n暂时缺席：${temporarilyAbsent.map((participant) => `${name(participant)}（${participant.temporaryAbsenceLabel}）`).join("、")}。这些人物不能感知缺席期间的内容。` : "";
+    return `=== 当前在场人物（仅本轮有效） ===\n${present.map((participant) => `- ${name(participant)}`).join("\n")}\n只能把当前在场人物视为听见本轮对话并可直接回应的人；候场、暂时缺席或已离场人物不在当前对话现场。${absenceText}`;
   }
   getPresenceWindows(characterId) {
     const state = memoryEngine?.ensureConversationState(this);

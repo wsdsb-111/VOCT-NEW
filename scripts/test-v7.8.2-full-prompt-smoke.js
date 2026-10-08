@@ -207,7 +207,8 @@ try {
   const letterText = letterMessages.map((message) => message.content).join("\n");
   assert(letterText.includes("仅以"));
   assert(letterText.includes("请于明日来园中相见"));
-  assert(letterText.includes("Current location: 开封"), "真实 pListLetter.js 必须实际执行");
+  assert(letterText.includes("Current location:"), "真实 pListLetter.js 必须实际执行");
+  assert(!letterText.includes("Current location: 开封"), "远程收件人不能直接读取发送方的现场地点");
   assert.strictEqual(verboseLogCalls, 0, "官方 VOTC 2.0.3 LetterPromptBuilder 不得被 verbose logger 包装改变");
 
   console.log("VOTC v7.8.2 full prompt smoke: PASS (real templates, helpers, scripts, cache blocks, chat and letter assembly)");

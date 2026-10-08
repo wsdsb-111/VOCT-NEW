@@ -12,7 +12,7 @@ fs.writeFileSync(autosavePath, "fixture");
 const settings = { autosavePath, autoWatchEnabled: false, promptIntegrationEnabled: true, subjectiveWorldMode: "DIAGNOSTIC", lastValidatedAt: "fixture", lastValidationStatus: "VALID" };
 const memoryEngine = { store: {
   getCharacterKnowledge: (id) => String(id) === "1" ? [{ memoryId: "secret-1" }] : [],
-  getMemory: (id) => id === "secret-1" ? { memoryId: id, visibility: "private", type: "secret", participants: [1], eventDate: "1170.6.6", content: "绝不能发送给其他人" } : null
+  getMemory: (id) => id === "secret-1" ? { memoryId: id, visibility: "private", type: "secret", participants: [1], knownBy: [1], eventDate: "1170.6.6", content: "绝不能发送给其他人" } : null
 } };
 
 try {

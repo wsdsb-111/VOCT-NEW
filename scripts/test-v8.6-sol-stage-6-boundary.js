@@ -50,7 +50,7 @@ const renderer = fs.readFileSync(path.join(__dirname, "../resources/app/out/rend
 const conversation = fs.readFileSync(path.join(__dirname, "../resources/app/out/main/conversation/conversation.js"), "utf8");
 const settingsSource = fs.readFileSync(path.join(__dirname, "../resources/app/out/main/config/settings-repository.js"), "utf8");
 
-const responderMethod = serviceSource.slice(serviceSource.indexOf("getSubjectiveResponderOptions"), serviceSource.indexOf("getAnnualDelta", serviceSource.indexOf("getSubjectiveResponderOptions")));
+const responderMethod = serviceSource.slice(serviceSource.indexOf("getSubjectiveResponderOptions"), serviceSource.indexOf("listCanonCharacterOptions", serviceSource.indexOf("getSubjectiveResponderOptions")));
 assert(!responderMethod.includes("Object.entries") && !responderMethod.includes(".sort("), "responder picker does not allocate and sort the full snapshot");
 assert(renderer.includes('if (activeTab !== "diagnostics") return;'), "responder inventory is not loaded merely by opening Worldline");
 assert(renderer.includes("subjectiveResponderRequestRef.current"), "stale responder searches cannot overwrite a newer result");

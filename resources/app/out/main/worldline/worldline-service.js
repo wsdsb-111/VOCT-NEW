@@ -791,15 +791,24 @@ class WorldlineService {
     const liveIds = new Set((this.getLiveState().characters || []).map((item) => String(item.runtimeId || "")).filter(Boolean));
     const presentIds = new Set((Array.isArray(snapshot?.presentCharacterIds) ? snapshot.presentCharacterIds : []).map(String));
     const search = String(query || "").trim().toLocaleLowerCase().slice(0, 120);
+    const namesById = new Map();
+    for (const [name, ids] of Object.entries(snapshot?.indexes?.verifiedFullNameToRuntimeIds || {})) {
+      for (const id of ids) {
+        if (!namesById.has(String(id))) namesById.set(String(id), []);
+        namesById.get(String(id)).push(name);
+      }
+    }
     const options = [];
     let total = 0;
     const add = (runtimeId, character) => {
+      if (!search && options.length >= 50) { total += 1; return; }
       character ||= {};
       const title = Array.isArray(character.domainTitles) ? character.domainTitles[0] || null : null;
       const court = character.courtEmployer || null;
       const realm = character.liege || null;
-      const displayName = character.fullName || character.firstName || `#${runtimeId}`;
-      const searchable = [runtimeId, displayName, character.firstName, title, court, realm].filter(Boolean).join(" ").toLocaleLowerCase();
+      const names = namesById.get(String(runtimeId)) || [];
+      const displayName = names.length === 1 ? names[0] : character.fullName || character.firstName || `#${runtimeId}`;
+      const searchable = [runtimeId, displayName, ...names, character.firstName, title, court, realm].filter(Boolean).join(" ").toLocaleLowerCase();
       if (search && !searchable.includes(search)) return;
       total += 1;
       if (options.length >= 50) return;
@@ -808,9 +817,12 @@ class WorldlineService {
     if (playerId && Object.hasOwn(characters, playerId)) add(playerId, characters[playerId]);
     for (const runtimeId in characters) {
       if (!Object.hasOwn(characters, runtimeId) || runtimeId === playerId) continue;
-      add(runtimeId, characters[runtimeId]);
+      add(runtimeId, search || options.length < 50 ? characters[runtimeId] : null);
     }
-    return { options, total, truncated: total > options.length, checkpointId: this.currentCheckpoint?.id || null };
+    const player = characters[playerId];
+    const playerNames = namesById.get(playerId) || [];
+    const currentPlayer = player ? { runtimeId: playerId, displayName: playerNames.length === 1 ? playerNames[0] : player.fullName || player.firstName || `#${playerId}` } : null;
+    return { options, total, truncated: total > options.length, checkpointId: this.currentCheckpoint?.id || null, currentPlayer };
   }
 
   getAnnualDelta() {

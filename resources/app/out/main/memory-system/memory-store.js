@@ -578,14 +578,15 @@ class MemoryStore {
   }
 
   queryMemories({ characterId = null, type = null, subjectIds = [], participantIds = [], includeFolderSummaries = false } = {}) {
-    const knownIds = characterId == null ? null : new Set(this.getCharacterKnowledge(characterId).map((entry) => entry.memoryId));
+    const ownerId = characterId == null ? null : Number(characterId);
+    const knownIds = ownerId == null ? null : new Set(this.getCharacterKnowledge(ownerId).map((entry) => entry.memoryId));
     const subjects = new Set(uniqueIds(subjectIds));
     const participants = new Set(uniqueIds(participantIds));
     const results = [];
     for (const memoryId of Object.keys(this.index.memories)) {
       const memory = this.getMemory(memoryId);
       if (!memory) continue;
-      if (knownIds && !knownIds.has(memoryId)) continue;
+      if (knownIds && (!knownIds.has(memoryId) || !memory.knownBy.includes(ownerId))) continue;
       if (type && memory.type !== type) continue;
       if (subjects.size > 0 && !memory.subjects.some((id) => subjects.has(id))) continue;
       if (participants.size > 0 && !memory.participants.some((id) => participants.has(id))) continue;
@@ -599,10 +600,11 @@ class MemoryStore {
   getPairMemories(leftId, rightId, options = {}) {
     const ids = [Number(leftId), Number(rightId)].sort((a, b) => a - b);
     const memoryIds = this.readJson(path.join(this.paths.pairs, `${ids[0]}_${ids[1]}.json`), []);
-    const knownMemoryIds = options.characterId == null ? null : new Set(this.getCharacterKnowledge(options.characterId).map((entry) => entry.memoryId));
+    const ownerId = options.characterId == null ? null : Number(options.characterId);
+    const knownMemoryIds = ownerId == null ? null : new Set(this.getCharacterKnowledge(ownerId).map((entry) => entry.memoryId));
     return memoryIds.map((memoryId) => this.getMemory(memoryId)).filter(Boolean).filter((memory) => {
-      if (options.characterId == null) return true;
-      return knownMemoryIds.has(memory.memoryId);
+      if (knownMemoryIds == null) return true;
+      return knownMemoryIds.has(memory.memoryId) && memory.knownBy.includes(ownerId);
     });
   }
 

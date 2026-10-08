@@ -1,5 +1,6 @@
 import { WorldMemoryEditor } from "../world-memory-editor.js";
 import { Memory4Manager } from "../memory4-manager.js";
+import { getSummaryDisplayEntries } from "../summary-date-order.js";
 const VOTC_FEATURE_VERSION = "V8.15.2";
 function getDefaultExportFromCjs(x) {
   return x && x.__esModule && Object.prototype.hasOwnProperty.call(x, "default") ? x["default"] : x;
@@ -21135,6 +21136,7 @@ const SummariesManager = () => {
   const [editingEntry, setEditingEntry] = reactExports.useState(null);
   const [searchQuery, setSearchQuery] = reactExports.useState("");
   const [isClearing, setIsClearing] = reactExports.useState(false);
+  const [sortByDate, setSortByDate] = reactExports.useState(true);
   const [clearResult, setClearResult] = reactExports.useState(null);
   reactExports.useEffect(() => {
     loadSummaries();
@@ -21427,6 +21429,7 @@ const SummariesManager = () => {
       /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "header-actions", children: [
         /* @__PURE__ */ jsxRuntimeExports.jsx("button", { onClick: () => loadSummaries(true), disabled: isLoadingSummaries, children: isLoadingSummaries ? t("summaries.loadingSummaries") : t("summariesManager.refresh") }),
         /* @__PURE__ */ jsxRuntimeExports.jsx("button", { type: "button", onClick: handleRetrySummaries, disabled: isRetryingSummaries || isClearing || recoveryStatus.running || !recoveryStatus.pending, children: isRetryingSummaries ? "正在调用模型补生成…" : "重试失败记忆任务" }),
+        /* @__PURE__ */ jsxRuntimeExports.jsxs("button", { type: "button", className: sortByDate ? "primary-button" : "", "aria-pressed": sortByDate, title: sortByDate ? "最近日期在上；点击切换为原文件顺序" : "点击按日期排序，最近日期在上", onClick: () => setSortByDate(value => !value), disabled: isLoadingSummaries || isClearing, children: [/* @__PURE__ */ jsxRuntimeExports.jsx("span", { "aria-hidden": true, children: "↓ " }), "按日期排序"] }),
         /* @__PURE__ */ jsxRuntimeExports.jsx("button", { type: "button", onClick: handleOpenSummariesFolder, children: t("summaries.openSummariesFolder") }),
         /* @__PURE__ */ jsxRuntimeExports.jsx("button", { type: "button", onClick: handleClearSummaries, disabled: isLoadingSummaries || isClearing || summaryGroups.length === 0, className: "danger-button", children: isClearing ? t("summaries.clearing") : t("summaries.clearAllSummaries") })
       ] })
@@ -21586,7 +21589,7 @@ const SummariesManager = () => {
                 ]
               }
             ),
-            isExpanded && /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "summaries-container", children: metadata.summaries.map((summary, index) => /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "summary-item", children: [
+            isExpanded && /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "summaries-container", children: getSummaryDisplayEntries(metadata.summaries, sortByDate).map(({ summary, index }) => /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "summary-item", children: [
               /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "summary-header", children: [
                 /* @__PURE__ */ jsxRuntimeExports.jsxs("span", { className: "summary-date", children: [
                   summary.sourceType === "CK3_OFFICIAL_RECOLLECTION" ? "官方追忆摘要（随新对话更新）" : "📅 ",

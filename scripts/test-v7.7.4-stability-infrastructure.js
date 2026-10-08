@@ -42,7 +42,7 @@ function writeOwnerSummary(summaryRoot, content) {
     writeOwnerSummary(summaryRoot, "刷新后的磁盘内容");
     assert.strictEqual(engine.loadOwnerFolderMemories(2)[0].content, "刷新后的磁盘内容", "refresh invalidation must force a new folder scan");
 
-    engine.store.saveMemory({ memoryId: "private_pair", type: "secret", participants: [1, 2], subjects: [], content: "仅乙知道", canonicalText: "仅乙知道", visibility: "private" });
+    engine.store.saveMemory({ memoryId: "private_pair", type: "secret", participants: [1, 2], subjects: [], content: "仅乙知道", canonicalText: "仅乙知道", visibility: "private", knownBy: [2] });
     engine.store.markKnownBy(2, "private_pair");
     const originalGetKnowledge = engine.store.getCharacterKnowledge.bind(engine.store);
     let knowledgeReads = 0;

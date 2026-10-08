@@ -65,7 +65,9 @@ const CANON_ERROR_MESSAGES = {
   supplemental_specific_date_invalid: "指定日期无效，请输入例如 1175.8.23。",
   supplemental_specific_date_required: "指定日期无效，请填写日期。",
   supplemental_planned_date_invalid: "计划日期无效，请输入例如 1175.8.23。",
-  supplemental_current_date_unavailable: "当前游戏日期暂不可用，请刷新存档后重试。"
+  supplemental_current_date_unavailable: "当前游戏日期暂不可用，请刷新存档后重试。",
+  supplemental_scope_character_required: "请先选择范围人物，或选择当前玩家，再保存宫廷或领地记忆。",
+  supplemental_known_by_required: "请先选择明确知情的人物，再保存个人记忆或秘密。"
 };
 
 function isValidGameDateInput(value) {
@@ -129,13 +131,25 @@ function CharacterPicker({ react: R, api, label, help, value, onChange, multiple
   const [options, setOptions] = R.useState(initialOptions);
   const [loading, setLoading] = R.useState(false);
   const [error, setError] = R.useState("");
+  const [currentPlayer, setCurrentPlayer] = R.useState(null);
   R.useEffect(() => { if (initialOptions.length) setOptions(initialOptions); }, [initialOptions]);
+  R.useEffect(() => {
+    if (typeof api?.listCanonCharacterOptions !== "function") return;
+    let active = true;
+    api.listCanonCharacterOptions({ query: "" }).then(result => {
+      if (!active) return;
+      setOptions((result?.options || []).map(cloneOption));
+      setCurrentPlayer(result?.currentPlayer ? cloneOption(result.currentPlayer) : null);
+    }).catch(cause => { if (active) setError(String(cause?.message || cause).slice(0, 160)); });
+    return () => { active = false; };
+  }, [api]);
   const search = async () => {
     if (typeof api?.listCanonCharacterOptions !== "function") { setError("当前版本没有角色选择接口。"); return; }
     setLoading(true); setError("");
     try {
       const result = await api.listCanonCharacterOptions({ query: query.trim().slice(0, 120) });
       setOptions((result?.options || []).map(cloneOption));
+      setCurrentPlayer(result?.currentPlayer ? cloneOption(result.currentPlayer) : null);
     } catch (cause) { setError(String(cause?.message || cause).slice(0, 160)); }
     finally { setLoading(false); }
   };
@@ -151,6 +165,7 @@ function CharacterPicker({ react: R, api, label, help, value, onChange, multiple
       h("input", { value: query, disabled: disabled || loading, placeholder: "搜索人物姓名", onChange: event => setQuery(event.target.value), onKeyDown: event => { if (event.key === "Enter") { event.preventDefault(); search(); } } }),
       h("button", { type: "button", disabled: disabled || loading, onClick: search }, loading ? "搜索中…" : "搜索")
     ),
+    currentPlayer && h("button", { type: "button", disabled: disabled || selected.some(item => item.runtimeId === currentPlayer.runtimeId), onClick: () => pick(currentPlayer) }, "选择当前玩家"),
     error && h("small", { className: "world-memory-picker-error" }, error),
     selected.length > 0 && h("div", { className: "world-memory-chips" }, selected.map(option => h("span", { className: "world-memory-chip", key: option.runtimeId }, option.displayName, h("button", { type: "button", disabled, "aria-label": `移除${option.displayName}`, onClick: () => remove(option.runtimeId) }, "×")))),
     options.length > 0 && h("div", { className: "world-memory-picker-options" }, options.slice(0, 20).map(option => h("button", { type: "button", key: option.runtimeId, disabled: disabled || selected.some(item => item.runtimeId === option.runtimeId && !multiple), className: selected.some(item => item.runtimeId === option.runtimeId) ? "is-selected" : "", onClick: () => pick(option) }, h("strong", null, option.displayName), option.currentlyPresent && h("small", null, "当前场景"), !option.currentlyPresent && option.recentlyMentioned && h("small", null, "最近提及"))))
@@ -163,6 +178,7 @@ export function WorldMemoryEditor({ react: R }) {
   const [data, setData] = R.useState(null);
   const [busy, setBusy] = R.useState(false);
   const [error, setError] = R.useState("");
+  const [success, setSuccess] = R.useState("");
   const [draft, setDraft] = R.useState(empty);
   const [editing, setEditing] = R.useState(null);
   const [history, setHistory] = R.useState(null);
@@ -175,14 +191,29 @@ export function WorldMemoryEditor({ react: R }) {
   const [legacyMigration, setLegacyMigration] = R.useState(null);
   const request = R.useRef(0);
   const mounted = R.useRef(true);
+  const busyRef = R.useRef(false);
+  const pendingUpdate = R.useRef(false);
   const api = window.worldlineAPI;
 
   const run = async action => {
     const sequence = ++request.current;
-    setBusy(true); setError("");
+    busyRef.current = true;
+    setBusy(true); setError(""); setSuccess("");
+    let actionError = null;
     try { await action(sequence); }
-    catch (cause) { if (mounted.current && sequence === request.current) setError(formatCanonError(cause, developerMode)); }
-    finally { if (mounted.current && sequence === request.current) setBusy(false); }
+    catch (cause) { actionError = cause; if (mounted.current && sequence === request.current) setError(formatCanonError(cause, developerMode)); }
+    finally {
+      if (mounted.current && sequence === request.current) {
+        let refreshSequence = sequence;
+        while (mounted.current && refreshSequence === request.current && pendingUpdate.current) {
+          pendingUpdate.current = false;
+          refreshSequence = ++request.current;
+          try { await load(refreshSequence); }
+          catch (cause) { if (mounted.current && refreshSequence === request.current && !actionError) setError(formatCanonError(cause, developerMode)); }
+        }
+        if (mounted.current && refreshSequence === request.current) { busyRef.current = false; setBusy(false); }
+      }
+    }
   };
   const defaultDate = result => result?.defaultGameDate || result?.branch?.gameDate || "";
   const load = async (sequence, offset = 0) => {
@@ -196,9 +227,10 @@ export function WorldMemoryEditor({ react: R }) {
     mounted.current = true;
     const unsubscribe = api?.onUpdated?.((payload) => {
       if (payload?.reason === "recall_settings_updated" || EDITOR_PRESERVING_UPDATE_REASONS.has(payload?.reason)) return;
+      if (busyRef.current) { pendingUpdate.current = true; return; }
       request.current++; setData(null); setLegacyState({ supplemental: [], readOnly: true, legacyCount: 0 }); setLegacyMigration(null); setHistory(null); setEditing(null); setBusy(false);
     });
-    return () => { mounted.current = false; request.current++; unsubscribe?.(); };
+    return () => { mounted.current = false; request.current++; busyRef.current = false; pendingUpdate.current = false; unsubscribe?.(); };
   }, []);
 
   const branchState = data?.branch?.state || "BRANCH_UNKNOWN";
@@ -232,6 +264,8 @@ export function WorldMemoryEditor({ react: R }) {
     if (draft.temporalMode === "PLANNED" && draft.gameDate.trim() && !isValidGameDateInput(draft.gameDate)) throw new Error("supplemental_planned_date_invalid");
     const entities = draft.selectedEntities.map(item => item.runtimeId).filter(Boolean);
     const knownBy = draft.selectedKnownBy.map(item => item.runtimeId).filter(Boolean);
+    if (["COURT_PUBLIC", "REALM_PUBLIC"].includes(draft.visibility) && !draft.scopeEntityId && !entities.length) throw new Error("supplemental_scope_character_required");
+    if (["PERSONAL", "SECRET"].includes(draft.visibility) && !knownBy.length) throw new Error("supplemental_known_by_required");
     let currentClaim = null;
     if (draft.currentStateEnabled) {
       const entityId = draft.currentClaimEntityId || entities[0] || "";
@@ -250,6 +284,7 @@ export function WorldMemoryEditor({ react: R }) {
     };
     await api.mutateCanon({ token: data.branch.token, operation, id: editing?.recordId, revision: editing?.revision, payload });
     await load(sequence, data.offset);
+    if (mounted.current && sequence === request.current) setSuccess(editing ? "世界记忆修订已保存。" : "世界记忆已保存。");
   });
   const beginEdit = record => {
     const selectedEntities = optionsFromIds(record.entities);
@@ -371,7 +406,9 @@ export function WorldMemoryEditor({ react: R }) {
     ["PERSONAL", "SECRET"].includes(draft.visibility) && h(CharacterPicker, { react: R, api, label: "谁明确知道？", help: "个人记忆和秘密必须用人物列表授权；不会自动把正文共享给其他 NPC。", value: draft.selectedKnownBy, onChange: values => setField("selectedKnownBy", values), disabled: busy }),
     ["COURT_PUBLIC", "REALM_PUBLIC"].includes(draft.visibility) && h("label", { className: "world-memory-field" }, h("span", null, "范围以谁为准？"), h("select", { value: draft.scopeEntityId || draft.selectedEntities[0]?.runtimeId || "", disabled: busy || draft.selectedEntities.length === 0, onChange: event => setField("scopeEntityId", event.target.value) }, h("option", { value: "" }, draft.selectedEntities.length ? "默认使用第一个涉及人物" : "请先选择涉及人物"), draft.selectedEntities.map(option => h("option", { key: option.runtimeId, value: option.runtimeId }, option.displayName)))),
     h("details", { className: "world-memory-advanced" }, h("summary", null, "对话提醒"), h("label", { className: "world-memory-check" }, h("input", { type: "checkbox", checked: stableEligible && draft.conversationStable === true, disabled: busy || !stableEligible, onChange: event => setField("conversationStable", event.target.checked) }), h("span", null, "在本次对话中持续提醒 NPC")), h("small", { className: "world-memory-help" }, stableEligible ? "仍受权限、时间和 CK3 当前事实限制。" : "仅适合重要 / 关键级别的长期世界规则或政治决定。"), developerMode && h("div", { className: "world-memory-developer-fields" }, h("p", null, `涉及人物 Runtime ID：${draft.selectedEntities.map(item => item.runtimeId).join(", ") || "—"}`), h("p", null, `知情人物 Runtime ID：${draft.selectedKnownBy.map(item => item.runtimeId).join(", ") || "—"}`), h("p", null, `范围人物 Runtime ID：${draft.scopeEntityId || draft.selectedEntities[0]?.runtimeId || "—"}`), field("conflictKey", "冲突标识（通常留空）", false, "系统会按人物、类型和标题自动生成；只有需要合并同一事项时才覆盖。"))),
-    h("div", { className: "world-memory-form-actions" }, button(editing ? "保存修订" : "确认新增", () => save(editing ? "update" : "create"), !writable, "primary-button"), editing && button("以新记录替代", () => save("supersede"), !writable), editing && button("取消", cancelEdit, busy))
+    h("div", { className: "world-memory-form-actions" }, button(editing ? "保存修订" : "确认新增", () => save(editing ? "update" : "create"), !writable, "primary-button"), editing && button("以新记录替代", () => save("supersede"), !writable), editing && button("取消", cancelEdit, busy),
+      error && h("p", { className: "world-memory-feedback is-error", role: "alert" }, "操作未完成：" + error),
+      success && h("p", { className: "world-memory-feedback", role: "status" }, success))
   );
 
   const renderBranchStatus = () => {

@@ -85,6 +85,11 @@ function createLetterManager({ settingsRepository, fs, path, TailFile, readline,
       this.lastProgressDateValue = null;
       this.lastProgressAt = null;
       this.lastDateMarkerSource = null;
+      this.dateSessionId = null;
+      this.dateSessionLogIdentity = null;
+      this.dateSessionBoundaryOffset = null;
+      this.dateSessionLogSize = null;
+      this.dateSessionScanCache = null;
       this.debugLogPath = null;
       this.debugLogExists = false;
       this.debugLogSize = null;
@@ -172,6 +177,61 @@ function createLetterManager({ settingsRepository, fs, path, TailFile, readline,
     /**
      * Process a single log line looking for VOTC:DATE
      */
+    clearDateMarkerState() {
+      this.currentTotalDays = 0;
+      this.lastDateLogReceivedAt = null;
+      this.lastDateValue = null;
+      this.lastObservedDateValue = null;
+      this.lastObservedDateMarkerAt = null;
+      this.lastProgressDateValue = null;
+      this.lastProgressAt = null;
+      this.lastDateMarkerSource = null;
+      this.dateSourceState = "DATE_MARKER_MISSING";
+      this.dateProducerState = "UNKNOWN";
+      this.lastDateReconciliationAt = null;
+      this.lastDateScanResult = null;
+    }
+    resetDateSession() {
+      if (this.dateSessionId) this.clearDateMarkerState();
+      this.dateSessionId = null;
+      this.dateSessionLogIdentity = null;
+      this.dateSessionBoundaryOffset = null;
+      this.dateSessionLogSize = null;
+      this.dateSessionScanCache = null;
+    }
+    beginDateSession(sessionId, { logIdentity = null, boundaryOffset = null, logSize = null } = {}) {
+      if (!sessionId) return false;
+      const observedLogIdentity = logIdentity || this.debugLogIdentity || null;
+      const sameLog = !observedLogIdentity || !this.dateSessionLogIdentity || observedLogIdentity === this.dateSessionLogIdentity;
+      const logChanged = (observedLogIdentity && this.dateSessionLogIdentity && observedLogIdentity !== this.dateSessionLogIdentity) ||
+        (Number.isFinite(logSize) && Number.isFinite(this.dateSessionLogSize) && logSize < this.dateSessionLogSize);
+      const newerBoundary = Number.isFinite(boundaryOffset) && Number.isFinite(this.dateSessionBoundaryOffset) && boundaryOffset > this.dateSessionBoundaryOffset;
+      if (sessionId === this.dateSessionId && sameLog && !logChanged && !newerBoundary) {
+        if (!this.dateSessionLogIdentity && logIdentity) this.dateSessionLogIdentity = logIdentity;
+        if (this.dateSessionBoundaryOffset === null && Number.isFinite(boundaryOffset)) this.dateSessionBoundaryOffset = boundaryOffset;
+        if (Number.isFinite(logSize)) this.dateSessionLogSize = Math.max(this.dateSessionLogSize || 0, logSize);
+        return false;
+      }
+      this.clearDateMarkerState();
+      this.dateSessionId = sessionId;
+      this.dateSessionLogIdentity = logIdentity || this.debugLogIdentity || null;
+      this.dateSessionBoundaryOffset = Number.isFinite(boundaryOffset) ? boundaryOffset : null;
+      this.dateSessionLogSize = Number.isFinite(logSize) ? logSize : null;
+      return true;
+    }
+    beginDateSessionFromScan(sessionId, sessionScan) {
+      const logIdentity = sessionScan.logIdentity || this.debugLogIdentity;
+      const sameLog = logIdentity && logIdentity === this.dateSessionLogIdentity;
+      const logChanged = (logIdentity && this.dateSessionLogIdentity && logIdentity !== this.dateSessionLogIdentity) ||
+        (Number.isFinite(sessionScan.logSize) && Number.isFinite(this.dateSessionLogSize) && sessionScan.logSize < this.dateSessionLogSize);
+      const olderBoundary = this.dateSessionId && sameLog && !logChanged && Number.isFinite(sessionScan.sessionBoundaryOffset) && Number.isFinite(this.dateSessionBoundaryOffset) && sessionScan.sessionBoundaryOffset < this.dateSessionBoundaryOffset;
+      if (olderBoundary) return false;
+      return this.beginDateSession(sessionId, {
+        logIdentity,
+        boundaryOffset: sessionScan.sessionBoundaryOffset,
+        logSize: sessionScan.logSize
+      });
+    }
     markLetterEffectCommandWritten(command) {
       if (command?.kind !== "letter_effect" || !["awaiting_ack", "acknowledged"].includes(command.status)) return false;
       const status = Array.from(this.letterStatuses.values()).find((entry) => entry.runCommandId === command.commandId);
@@ -195,6 +255,19 @@ function createLetterManager({ settingsRepository, fs, path, TailFile, readline,
           console.error("Failed to receive letter log payload:", error);
           return null;
         });
+      }
+      const loadSessionMatch = line.match(/VOTC:LOAD_SESSION\/;\/([A-Za-z0-9_.-]+)/);
+      if (loadSessionMatch) {
+        const sessionScan = this.scanLatestDateMarker();
+        if (sessionScan.sessionId === loadSessionMatch[1]) {
+          this.beginDateSessionFromScan(loadSessionMatch[1], sessionScan);
+        } else if (!sessionScan.sessionId && !this.dateSessionId) {
+          this.beginDateSession(loadSessionMatch[1], {
+            logIdentity: sessionScan.logIdentity || this.debugLogIdentity,
+            boundaryOffset: null,
+            logSize: sessionScan.logSize
+          });
+        }
       }
       const runAckMatch = line.match(/VOTC:RUN_ACK\/([A-Za-z0-9_-]+)\/([A-Za-z0-9_-]+)/);
       if (runAckMatch && runFileManager?.ackCommand) {
@@ -222,6 +295,18 @@ function createLetterManager({ settingsRepository, fs, path, TailFile, readline,
       const match = line.match(dateRegex);
       if (match) {
         const newTotalDays = Number(match[1]);
+        const sessionScan = this.scanLatestDateMarker();
+        if (sessionScan.sessionId) {
+          this.beginDateSessionFromScan(sessionScan.sessionId, sessionScan);
+        }
+        if (this.dateSessionId) {
+          const matchesBoundSession = sessionScan.sessionId === this.dateSessionId &&
+            typeof sessionScan.logIdentity === "string" &&
+            sessionScan.logIdentity === this.dateSessionLogIdentity &&
+            Number.isFinite(sessionScan.sessionBoundaryOffset) &&
+            sessionScan.sessionBoundaryOffset === this.dateSessionBoundaryOffset;
+          if (!matchesBoundSession || !sessionScan.found || sessionScan.value !== newTotalDays) return Promise.resolve();
+        }
         const observedAt = Date.now();
         const previousObservedValue = this.lastObservedDateValue;
         this.lastDateLogReceivedAt = observedAt;
@@ -358,6 +443,9 @@ function createLetterManager({ settingsRepository, fs, path, TailFile, readline,
         mtimeMs: Number(stat.mtimeMs) || 0,
         identity: `${Number(stat.birthtimeMs) || 0}:${Number(stat.ino) || 0}`
       };
+      const identityChanged = this.debugLogIdentity && this.debugLogIdentity !== metadata.identity;
+      const truncated = Number.isFinite(this.debugLogSize) && metadata.size < this.debugLogSize;
+      if (identityChanged || truncated) this.resetDateSession();
       this.debugLogExists = true;
       this.debugLogSize = metadata.size;
       this.debugLogMtime = metadata.mtimeMs;
@@ -415,22 +503,137 @@ function createLetterManager({ settingsRepository, fs, path, TailFile, readline,
       const debugLogPath = settingsRepository.getCK3DebugLogPath();
       if (!debugLogPath || !fs$1.existsSync(debugLogPath)) return { found: false, value: null, reason: "log_file_missing" };
       const stat = fs$1.statSync(debugLogPath);
-      const bytesToRead = Math.min(Number(stat.size) || 0, dateScanBytes);
-      if (bytesToRead <= 0) return { found: false, value: null, reason: "empty_log" };
-      const buffer = Buffer.alloc(bytesToRead);
+      const logSize = Number(stat.size) || 0;
+      const logMtimeMs = Number(stat.mtimeMs) || 0;
+      const logIdentity = `${Number(stat.birthtimeMs) || 0}:${Number(stat.ino) || 0}`;
+      const cache = this.dateSessionScanCache;
+      if (cache && cache.logIdentity === logIdentity && cache.logSize === logSize && cache.logMtimeMs === logMtimeMs) {
+        return { ...cache.result };
+      }
+      const bytesToRead = Math.min(logSize, dateScanBytes);
+      if (bytesToRead <= 0) {
+        const result = { found: false, value: null, reason: "empty_log", sessionId: null, sessionBoundaryOffset: null, previousSessionId: null, logIdentity, logSize, logMtimeMs };
+        this.dateSessionScanCache = { logIdentity, logSize, logMtimeMs, result };
+        return result;
+      }
       const fileDescriptor = fs$1.openSync(debugLogPath, "r");
+      let scanResult;
       try {
-        fs$1.readSync(fileDescriptor, buffer, 0, bytesToRead, Math.max(0, stat.size - bytesToRead));
+        const readRange = (start, length) => {
+          const buffer = Buffer.alloc(length);
+          let bytesRead = 0;
+          while (bytesRead < length) {
+            const count = fs$1.readSync(fileDescriptor, buffer, bytesRead, length - bytesRead, start + bytesRead);
+            if (count <= 0) break;
+            bytesRead += count;
+          }
+          return buffer.subarray(0, bytesRead).toString("utf8");
+        };
+        const tailStart = Math.max(0, logSize - bytesToRead);
+        const tailText = readRange(tailStart, bytesToRead);
+        const sessionState = { sessionId: null, boundaryOffset: null, previousSessionId: null };
+        if (tailStart > 0) {
+          let scanEnd = tailStart;
+          let followingPrefix = tailText.slice(0, 256);
+          const chunkBytes = Math.max(bytesToRead, 64 * 1024);
+          while (scanEnd > 0) {
+            const chunkStart = Math.max(0, scanEnd - chunkBytes);
+            const chunkText = readRange(chunkStart, scanEnd - chunkStart);
+            const combined = `${chunkText}${followingPrefix}`;
+            const matches = [...combined.matchAll(/VOTC:LOAD_SESSION\/;\/([A-Za-z0-9_.-]+)/g)]
+              .filter((match) => match.index < chunkText.length);
+            for (let index = matches.length - 1; index >= 0; index--) {
+              const match = matches[index];
+              const markerOffset = chunkStart + Buffer.byteLength(combined.slice(0, match.index), "utf8");
+              if (!sessionState.sessionId) {
+                sessionState.sessionId = match[1];
+                sessionState.boundaryOffset = markerOffset;
+              } else {
+                sessionState.previousSessionId = match[1];
+                break;
+              }
+            }
+            if (sessionState.previousSessionId) break;
+            followingPrefix = chunkText.slice(0, 256);
+            scanEnd = chunkStart;
+          }
+        }
+        let sessionDate = null;
+        let legacyDate = null;
+        const events = [...tailText.matchAll(/VOTC:(?:LOAD_SESSION\/;\/([A-Za-z0-9_.-]+)|DATE\/;\/(\d+))/g)];
+        for (const event of events) {
+          if (event[1]) {
+            const boundaryOffset = tailStart + Buffer.byteLength(tailText.slice(0, event.index), "utf8");
+            if (boundaryOffset !== sessionState.boundaryOffset) {
+              sessionState.previousSessionId = sessionState.sessionId;
+              sessionState.sessionId = event[1];
+              sessionState.boundaryOffset = boundaryOffset;
+              sessionDate = null;
+            }
+          } else if (sessionState.sessionId) {
+            sessionDate = Number(event[2]);
+          } else {
+            legacyDate = Number(event[2]);
+          }
+        }
+        scanResult = sessionState.sessionId
+          ? sessionDate === null
+            ? { found: false, value: null, reason: "date_marker_missing", sessionId: sessionState.sessionId }
+            : { found: true, value: sessionDate, reason: "tail_scan", sessionId: sessionState.sessionId }
+          : legacyDate === null
+            ? { found: false, value: null, reason: "date_marker_missing", sessionId: null }
+            : { found: true, value: legacyDate, reason: "tail_scan", sessionId: null };
+        scanResult = {
+          ...scanResult,
+          sessionBoundaryOffset: sessionState.boundaryOffset,
+          previousSessionId: sessionState.previousSessionId,
+          logIdentity,
+          logSize,
+          logMtimeMs
+        };
       } finally {
         fs$1.closeSync(fileDescriptor);
       }
-      const matches = [...buffer.toString("utf8").matchAll(/VOTC:DATE\/;\/(\d+)/g)];
-      if (matches.length === 0) return { found: false, value: null, reason: "date_marker_missing" };
-      return { found: true, value: Number(matches[matches.length - 1][1]), reason: "tail_scan" };
+      this.dateSessionScanCache = { logIdentity, logSize, logMtimeMs, result: scanResult };
+      return { ...scanResult };
     }
     async reconcileLatestDateMarker(source = "manual") {
       const scannedAt = Date.now();
-      const scan = this.scanLatestDateMarker();
+      const currentMetadata = this.captureDebugLogMetadata();
+      const sessionScan = this.scanLatestDateMarker();
+      const scannedSessionId = sessionScan.sessionId || null;
+      const scanLogIdentity = sessionScan.logIdentity || null;
+      const scanBoundaryOffset = Number.isFinite(sessionScan.sessionBoundaryOffset) ? sessionScan.sessionBoundaryOffset : null;
+      const scannedPreviousSessionId = sessionScan.previousSessionId || null;
+      const scanLogSize = Number.isFinite(sessionScan.logSize) ? sessionScan.logSize : null;
+      let { sessionId: _sessionId, sessionBoundaryOffset: _boundaryOffset, previousSessionId: _previousSessionId, logIdentity: _logIdentity, logSize: _logSize, logMtimeMs: _logMtimeMs, ...scan } = sessionScan;
+      if (sessionScan.logIdentity && currentMetadata?.identity && sessionScan.logIdentity !== currentMetadata.identity) {
+        scan = { found: false, value: null, reason: "log_identity_changed_during_scan" };
+      } else {
+        const sessionLogChanged = this.dateSessionId && this.dateSessionLogIdentity && scanLogIdentity !== this.dateSessionLogIdentity;
+        const sessionLogTruncated = this.dateSessionId && Number.isFinite(this.dateSessionLogSize) && Number.isFinite(scanLogSize) && scanLogSize < this.dateSessionLogSize;
+        if (sessionLogChanged || sessionLogTruncated) this.resetDateSession();
+        if (scannedSessionId) {
+          if (!this.dateSessionId) {
+            this.beginDateSession(scannedSessionId, { logIdentity: scanLogIdentity, boundaryOffset: scanBoundaryOffset, logSize: scanLogSize });
+          } else {
+            const sameSessionLog = scanLogIdentity === this.dateSessionLogIdentity;
+            const newerBoundary = sameSessionLog && Number.isFinite(scanBoundaryOffset) && Number.isFinite(this.dateSessionBoundaryOffset) && scanBoundaryOffset > this.dateSessionBoundaryOffset;
+            const followsCurrentBoundary = sameSessionLog && scannedPreviousSessionId === this.dateSessionId && Number.isFinite(scanBoundaryOffset) && (!Number.isFinite(this.dateSessionBoundaryOffset) || scanBoundaryOffset > this.dateSessionBoundaryOffset);
+            const sameBoundary = sameSessionLog && scannedSessionId === this.dateSessionId && scanBoundaryOffset === this.dateSessionBoundaryOffset;
+            const olderBoundary = sameSessionLog && Number.isFinite(scanBoundaryOffset) && Number.isFinite(this.dateSessionBoundaryOffset) && scanBoundaryOffset < this.dateSessionBoundaryOffset;
+            if (newerBoundary || followsCurrentBoundary) {
+              this.beginDateSession(scannedSessionId, { logIdentity: scanLogIdentity, boundaryOffset: scanBoundaryOffset, logSize: scanLogSize });
+            } else if (sameBoundary || (sameSessionLog && scannedSessionId === this.dateSessionId && this.dateSessionBoundaryOffset === null)) {
+              this.beginDateSession(scannedSessionId, { logIdentity: scanLogIdentity, boundaryOffset: scanBoundaryOffset, logSize: scanLogSize });
+            } else {
+              scan = { found: false, value: null, reason: olderBoundary ? "date_session_stale_scan" : "date_session_mismatch" };
+            }
+          }
+        } else if (this.dateSessionId) {
+          scan = { found: false, value: null, reason: "date_session_missing" };
+        }
+      }
       this.lastDateReconciliationAt = scannedAt;
       this.lastDateScanResult = { ...scan, source, scannedAt };
       if (!scan.found) {

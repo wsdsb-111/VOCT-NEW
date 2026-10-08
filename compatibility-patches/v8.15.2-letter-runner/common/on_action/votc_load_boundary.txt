@@ -1,0 +1,26 @@
+# A monotonically increasing value saved with the campaign.  Every CK3 start
+# (including loading a save) advances it before emitting a VOTC log marker.
+# The desktop side uses only this opaque marker to stop same-path cross-save
+# auto-continuation; it never changes game facts or player-visible state.
+on_game_start = {
+	effect = {
+		change_global_variable = {
+			name = votc_load_epoch
+			add = 1
+		}
+		debug_log = "VOTC:LOAD_SESSION/;/votc-load-[GetGlobalVariable('votc_load_epoch').GetValue]"
+	}
+}
+
+# Player scopes are established after the lobby, not during on_game_start.
+on_game_start_after_lobby = {
+	effect = {
+		debug_log = "[Localize('talk_event.9999.desc')]"
+		every_player = {
+			trigger_event = {
+				id = mcc_event_v2.9998
+				days = 1
+			}
+		}
+	}
+}

@@ -6,6 +6,7 @@ const os = require("node:os");
 const path = require("node:path");
 const { MemoryStore } = require("../resources/app/out/main/memory-system/memory-store");
 const { MemoryEngine } = require("../resources/app/out/main/memory-system/memory-engine");
+const { KnowledgeService } = require("../resources/app/out/main/memory-system/knowledge-service");
 const { Memory4Coordinator } = require("../resources/app/out/main/memory-system/memory4-coordinator");
 const { repairVisibilityBoundaries, validateVisibilityBoundaries } = require("../resources/app/out/main/memory-system/finalization-visibility");
 const { validateSummarySegmentPresenceBoundaries } = require("../resources/app/out/main/memory-system/perspective-projector");
@@ -29,6 +30,8 @@ async function run() {
       assert.equal(store.queryMemories({ characterId: 3 }).some(memory => memory.memoryId === "public-ab"), false);
       assert.equal(store.getPairMemories(1, 2, { characterId: 3 }).some(memory => memory.memoryId === "public-ab"), false);
       store.markKnownBy(3, "public-ab");
+      assert.equal(store.queryMemories({ characterId: 3 }).some(memory => memory.memoryId === "public-ab"), false);
+      assert.equal(new KnowledgeService({ store }).transferKnowledge("public-ab", { fromCharacterId: 1, toCharacterId: 3 }), true);
       assert.equal(store.queryMemories({ characterId: 3 }).some(memory => memory.memoryId === "public-ab"), true);
     });
     await check("mixed-source visibility failure repairs from source paragraphs in one pass", () => {

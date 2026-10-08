@@ -78,6 +78,9 @@ function guard(result) {
   assert.match(entry.content, /只授予来源明确给出的那项姓名或身份/);
   assert.match(entry.content, /称号（Nickname）默认可见.*不授予真名、精确头衔或官职/);
   assert.match(entry.content, /不得据此解锁整包玩家资料/);
+  assert.match(entry.content, /私下交谈和信件不会自动变成全世界的传闻/);
+  assert.match(entry.content, /public.*当场公开.*不是全球公开/);
+  assert.match(entry.content, /不得用.*听说.*传闻.*补造/);
   return entry.content;
 }
 let checks = 0;

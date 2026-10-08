@@ -2,7 +2,7 @@
 
 const { normalizeGameDate } = require("../worldline/character-temporal-facts");
 const { getCharacterPersonalName } = require("../memory-system/character-identity");
-const PRIVATE_FIELDS = ["personality", "sexuality", "boldness", "compassion", "energy", "greed", "honor", "rationality", "sociability", "vengefulness", "zeal"];
+const PRIVATE_FIELDS = ["personality", "sexuality", "boldness", "compassion", "energy", "greed", "honor", "rationality", "sociability", "vengefulness", "zeal", "capitalLocation"];
 
 const { NON_OBSERVABLE_TO_OTHERS, OBSERVABLE_TO_OTHERS, getTraitAliases, normalizeTraitKey, resolveTraitVisibility } = require("./trait-visibility-policy");
 
@@ -125,7 +125,25 @@ function createTraitProfileView(gameData, character, memoryContext = null) {
     }
     return result;
   };
-  return { gameData: copy(gameData), character: copy(character) };
+  const view = copy(gameData);
+  for (const [alias, id] of [["playerName", gameData?.playerID], ["aiName", gameData?.aiID]]) {
+    if (alias in view) view[alias] = view.characters?.get(Number(id))?.fullName || "";
+  }
+  const people = gameData?.characters instanceof Map ? [...gameData.characters.values()] : [];
+  // String aliases must not bypass the character projection used by templates.
+  if (gameData?.currentEmperor || gameData?.currentEmperorTitle) {
+    const sources = people.filter(person => person.shortName === gameData.currentEmperor
+      && person.primaryTitle === gameData.currentEmperorTitle);
+    const emperor = sources.length === 1 ? view.characters.get(Number(sources[0].id)) : null;
+    view.currentEmperor = emperor?.shortName || "";
+    view.currentEmperorTitle = emperor?.primaryTitle || "";
+    if (!view.currentEmperorTitle) view.currentEraName = "";
+  }
+  if (gameData?.locationController) {
+    const sources = people.filter(person => person.fullName === gameData.locationController);
+    view.locationController = sources.length === 1 ? view.characters.get(Number(sources[0].id))?.shortName || "" : "";
+  }
+  return { gameData: view, character: copy(character) };
 }
 
 module.exports = { NON_OBSERVABLE_TO_OTHERS, OBSERVABLE_TO_OTHERS, normalizeTraitKey, getTraitAliases, resolveTraitVisibility,

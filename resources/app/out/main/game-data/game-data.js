@@ -517,6 +517,11 @@ function createGameData({ fs, path, memorySystem, memoryEngine, summariesDir, ge
         );
         
         character.loadSummaries(summaryFile);
+        // Names are not unique; the compatibility field must not authorize a namesake's record.
+        character.conversationSummaries = character.conversationSummaries.filter(summary =>
+          Number(summary.playerId) === this.playerID && Number(summary.characterId) === character.id
+          && typeof this.campaignToken === "string" && !!this.campaignToken.trim()
+          && summary.campaignToken === this.campaignToken);
         
         // ❌ 不再自动加载所有跨角色对话
         // 改为：只在对话中提到其他角色时动态加载

@@ -2,6 +2,17 @@
 
 日期：2026-10-05。本文记录 V8.14.2 信件 Date Runner 的 App/Mod 发布依赖；这是外部运行依赖合同，不代表 CK3 实机 Gate 已通过。
 
+## V8.15.2 信件启动与暂停恢复补充（2026-10-08）
+
+本轮本机 Mod `3346777360` 的两个 Date Runner 文件已更新，App 与 Mod 仍按方案 B 独立发布。配套原样快照与部署说明见 [信件执行器补丁](../compatibility-patches/v8.15.2-letter-runner/README.md)，事故证据见 [后续修复报告](v8.15.2-privacy-letter-world-memory-followup-report.md)。
+
+| 最新必需 Mod 文件 | SHA-256 |
+|---|---|
+| `common/on_action/votc_load_boundary.txt` | `AE8DFB076413696F9DA9FF477FC0872D14AB0BDA9FAF256F16B882A1688E920C` |
+| `gui/custom_gui/letters_runner.gui` | `D375A9189ECF9BF5E37E6A6D6A1FDFB6065B929F0D4C6DC62C9A7BBEAD9ACC34` |
+
+`on_game_start` 保留载入标记；玩家 runner 在 `on_game_start_after_lobby` 启动，先直接记录一次 DATE，再延迟一天触发既有 `.9998`。对话中保留 runner，只暂停文件执行。App 日期跟踪以日志身份和载入边界偏移隔离会话，重复 epoch 不跨载入使用旧 DATE；不重发未知效果或修改待投递信件。Steam 更新可能覆盖本机补丁，重启 CK3 才能载入 GUI/on_action 修改。下方 V8.14.2 表格、检查命令与清理 runner 描述为历史快照，不作为这两个文件的最新内容验收值。
+
 ## V8.15.2 Canonical Trait 输出补充（2026-10-07）
 
 App 与 Workshop item `3346777360` 仍独立发布。V8.15.2 App 可读旧特质行，但稳定 canonical ID 需要 Mod 的 `common/scripted_effects/log_character_v2_effect.txt` 配套更新：角色、子女、兄弟姐妹三条 `VOTC:IN` 特质流在 category 字段前输出 `[THIS.Trait.GetKey]`。新解析保留 traitId、localizedName、category、name、desc，不改变其他字段。

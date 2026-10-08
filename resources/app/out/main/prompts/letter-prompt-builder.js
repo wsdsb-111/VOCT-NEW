@@ -42,6 +42,9 @@ function createLetterPromptBuilder({ TemplateEngine, PromptScriptLoader, setting
         }
       }
       gameData = createTraitProfileView(gameData, gameData.getAi(), { disclosureProfiles }).gameData;
+      // A remote recipient cannot observe the sender's current scene.
+      gameData.location = "";
+      gameData.locationController = "";
       const ai = gameData.getAi();
       const player = gameData.getPlayer();
       if (!ai || !player) throw new Error("Missing player or AI character data for letter prompt");

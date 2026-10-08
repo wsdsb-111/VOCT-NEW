@@ -70,6 +70,15 @@ async function connect(url, errors) {
 async function run() {
   const profile = fs.mkdtempSync(path.join(os.tmpdir(), "votc-e-packaged-ui-"));
   const fixture = await createMemoryUiFixture(profile);
+  const dateOrderFile = path.join(fixture.summariesDir, "3_丙", "与甲的对话.json");
+  const dateOrderRecords = [
+    { playerId: 3, playerName: "丙", characterId: 1, characterName: "甲", date: "1163.8.1", content: "八月失败摘要补生成后仍应排在九月之后。" },
+    { playerId: 3, playerName: "丙", characterId: 1, characterName: "甲", date: "1163.9.1", content: "九月较新的摘要应默认显示在上方。" }
+  ].map((record, index) => ({ ...record, campaignToken: fixture.scope.campaignToken,
+    campaignBinding: { status: "bound", source: "native" }, conversationId: `date-order-conversation-${index}`,
+    finalizationId: `date-order-finalization-${index}`, perspectiveOwnerId: 3, perspectiveMemoryIds: [],
+    perspectiveSummarySegmentIds: [`date-order-segment-${index}`], sourceSegmentIds: [`date-order-segment-${index}`], sourceMessageIds: [index] }));
+  fs.writeFileSync(dateOrderFile, JSON.stringify(dateOrderRecords), "utf8");
   const orphanScope = { campaignToken: fixture.scope.campaignToken, ownerId: 1 };
   const orphanText = "乙曾告知甲一个仅用于隔离审计的旧事实。";
   const orphanContext = { ...orphanScope, conversationId: "ui-orphan-conversation", finalizationId: "ui-orphan-finalization",
@@ -491,15 +500,53 @@ async function run() {
     await waitFor("!document.querySelector('.summary-edit-modal')");
     const editedLegacy = JSON.parse(fs.readFileSync(path.join(fixture.summariesDir, "4_丁", "与甲的对话.json"), "utf8"));
     assert.equal(editedLegacy[0].content, editedLegacyText, "ordinary Legacy edit must persist through real preload/IPC while detached");
+    await evaluate("[...document.querySelectorAll('.player-header')].find(e=>e.querySelector('.player-name')?.textContent.startsWith('丙')).click()");
+    await waitFor(`!!${managerFor("丙")}`);
+    await clickTab("Legacy 对话摘要", "丙");
+    const sortedGroup = `${managerFor("丙")}?.querySelector('.character-summary-group')`;
+    await evaluate(`(${sortedGroup})?.querySelector('.character-header').click()`);
+    await waitFor(`(${sortedGroup})?.querySelectorAll('.summary-item').length===2`);
+    const readDates = () => evaluate(`[...(${sortedGroup}).querySelectorAll('.summary-date')].map(e=>e.textContent.trim().replace(/^📅\\s*/,''))`);
+    const toggleDateOrder = () => evaluate("document.querySelector('.summaries-manager .header-actions button[aria-pressed]').click()");
+    assert.deepEqual(await readDates(), ["1163.9.1", "1163.8.1"], "retry-like August insertion cannot outrank September");
+    const orderHash = hashDirectory(fixture.summariesDir);
+    await toggleDateOrder();
+    assert.deepEqual(await readDates(), ["1163.8.1", "1163.9.1"], "toggle can show the original file order");
+    await toggleDateOrder();
+    assert.deepEqual(await readDates(), ["1163.9.1", "1163.8.1"]);
+    assert.equal(hashDirectory(fixture.summariesDir), orderHash, "view sorting must not rewrite any summary or sidecar");
+    for (const [viewport, width, height] of [["desktop", 1280, 1000], ["narrow", 540, 900]]) {
+      await setViewport(width, height);
+      await screenshot(`ink-${viewport}-summary-date-toolbar`, "document.querySelector('.summaries-manager')");
+      await screenshot(`ink-${viewport}-summary-date-list`, sortedGroup);
+    }
+    await setViewport(1280, 1000);
+    await evaluate(`[...(${sortedGroup}).querySelector('.summary-item').querySelectorAll('button')].find(e=>['编辑','Edit'].includes(e.textContent.trim())).click()`);
+    await waitFor("!!document.querySelector('.summary-edit-modal textarea')");
+    assert.equal(await evaluate("document.querySelector('.summary-edit-modal textarea').value"), dateOrderRecords[1].content);
+    const dateOrderEdited = "九月摘要经日期排序后编辑，仍保存到原文件索引一。";
+    await evaluate(`(()=>{const e=document.querySelector('.summary-edit-modal textarea');Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype,'value').set.call(e,${JSON.stringify(dateOrderEdited)});e.dispatchEvent(new Event('input',{bubbles:true}));})()`);
+    await evaluate("[...document.querySelectorAll('.summary-edit-modal button')].find(e=>['保存','Save'].includes(e.textContent.trim())).click()");
+    await waitFor("!document.querySelector('.summary-edit-modal')");
+    const savedDateOrder = JSON.parse(fs.readFileSync(dateOrderFile, "utf8"));
+    assert.equal(savedDateOrder[0].content, dateOrderRecords[0].content);
+    assert.equal(savedDateOrder[1].content, dateOrderEdited, "sorted first row edits source index one, not zero");
+    const sortedDeletion = evaluate(`[...(${sortedGroup}).querySelector('.summary-item').querySelectorAll('button')].find(e=>['删除','Delete'].includes(e.textContent.trim())).click()`);
+    await renderer.wait("Page.javascriptDialogOpening");
+    await renderer.send("Page.handleJavaScriptDialog", { accept: true });
+    await sortedDeletion;
+    await waitFor(`(${sortedGroup})?.querySelectorAll('.summary-item').length===1`);
+    assert.equal(JSON.parse(fs.readFileSync(dateOrderFile, "utf8"))[0].content, dateOrderRecords[0].content,
+      "sorted first row deletes September and preserves August through real IPC");
     assert.equal(await main.evaluate("globalThis.__m4ProviderCalls"), 0, "archive UI and source lookup must not call a model");
     assert.equal(await main.evaluate("globalThis.__m4ProviderCalls"), 0, "packaged UI smoke must not call a model");
     const blockedFetchUrls = await main.evaluate("globalThis.__m4BlockedFetches");
     assert(blockedFetchUrls.every(url => url === "http://127.0.0.1:4315/v1/health"), `unexpected network request was blocked: ${JSON.stringify(blockedFetchUrls)}`);
     assert.deepStrictEqual(errors, [], "renderer/main exceptions");
-    assert.equal(screenshots.length, 40, "original 38 screens and two direct observation screens");
+    assert.equal(screenshots.length, 44, "original 40 screens plus desktop/narrow date toolbar and list");
     fs.writeFileSync(path.join(evidence, "result.json"), JSON.stringify({ passed: true, themes: ["parchment", "knight", "ink"], desktop: [1280, 1000], narrow: [540, 900], baseScreenshotCount: 27,
       disclosureScreenshotCount: 4,
-      archiveScreenshotCount: 3, legacyEditScreenshotCount: 2, ageDisclosureScreenshotCount: 2, directObservationScreenshotCount: 2, screenshotCount: screenshots.length, screenshots, providerRequests: 0, blockedNetworkFetches: blockedFetchUrls.length,
+      archiveScreenshotCount: 3, legacyEditScreenshotCount: 2, ageDisclosureScreenshotCount: 2, directObservationScreenshotCount: 2, summaryDateScreenshotCount: 4, screenshotCount: screenshots.length, screenshots, providerRequests: 0, blockedNetworkFetches: blockedFetchUrls.length,
       blockedNetworkUrls: blockedFetchUrls, realCK3Gate: false, profile,
       archive: { ownerId: fixture.archive.ownerId, campaignToken: fixture.archive.campaignToken, readOnlyReasons: [archiveData.readOnlyReason, endedArchiveData.readOnlyReason],
         strictCurrentIsNullAfterDetach: detachedState.strictCurrentIsNull, sidecarHashBefore: archiveHashBefore, sidecarHashAfter: archiveHashAfter, rejectedWriteError: archiveWriteRequest.error || null },
@@ -507,6 +554,7 @@ async function run() {
         "accepted Detail deletion", "existing binding preview cancellation", "nonoverlapping tool buttons", "no horizontal overflow", "same-campaign archive outside loaded roster", "loaded-campaign readonly banner",
         "archive refresh/tabs/source remain available", "archive year/life/detail mutation controls disabled", "manager detach leaves strict current null and read snapshot available",
         "archive IPC mutation rejected after manager detach", "archive sidecar hash unchanged", "ended-conversation banner, detail and source remain available", "ordinary Legacy edit/delete enabled after detach", "ordinary Legacy manual edit persisted through real preload/IPC after detach", "NPC asks player, user-role bare answer persisted for listener and reloaded through real preload/IPC: current CK3 age 17, historical age 16 and source date retained without mutation controls",
+        "summary date sorting defaults to newest-first, toggles without writes, sorted edit/delete preserve original source indices through real IPC",
         "all main-process fetch blocked before I/O; only fixed localhost health check may be attempted"] }, null, 2));
     console.log(`V8.14 E isolated packaged UI: PASS; evidence ${evidence}`);
   } catch (error) {
