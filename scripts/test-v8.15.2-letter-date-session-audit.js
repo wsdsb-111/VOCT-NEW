@@ -517,7 +517,7 @@ async function legacyLogWithoutLoadBoundaryRemainsCompatible() {
   assert.equal(manager.getCurrentTotalDays(), legacyDay);
 }
 
-async function missingRunnerCannotConsumeItsOwnRecoveryCommand() {
+async function missingNativeBridgeDoesNotRecreateLegacyRunner() {
   const logText = "VOTC:LOAD_SESSION/;/votc-load-3";
   const pendingCommands = [];
   const runFileManager = {
@@ -539,13 +539,11 @@ async function missingRunnerCannotConsumeItsOwnRecoveryCommand() {
   const status = await manager.runDateTrackerHeartbeat({ forceReconcile: true });
 
   assert.equal(status.lastDateScanResult.found, false);
-  assert.equal(status.dateProducerRecovery.status, "REQUESTED");
-  assert.equal(pendingCommands.length, 1);
-  assert.equal(pendingCommands[0].kind, "date_producer_rearm");
-  assert.match(pendingCommands[0].effectText, /trigger_event\s*=\s*mcc_event_v2\.9998/);
+  assert.equal(status.dateProducerRecovery.status, "NATIVE_BRIDGE_WAITING");
+  assert.equal(pendingCommands.length, 0, "missing native DATE must not recreate the retired runner");
   assert.equal(manager.getCurrentTotalDays(), 0,
-    "without a CK3 runner consuming the queued votc.txt command, no fresh date is observed");
-  assert.equal(status.runCommands[0].status, "awaiting_ack");
+    "without a live CK3 DATE marker, recovery cannot synthesize a current date");
+  assert.deepEqual(status.runCommands, []);
 }
 
 (async () => {
@@ -566,7 +564,7 @@ async function missingRunnerCannotConsumeItsOwnRecoveryCommand() {
   await replacementAndTruncationRebuildSessionBoundary();
   await unchangedLogScanIsCachedAndUsesOneDescriptor();
   await legacyLogWithoutLoadBoundaryRemainsCompatible();
-  await missingRunnerCannotConsumeItsOwnRecoveryCommand();
+  await missingNativeBridgeDoesNotRecreateLegacyRunner();
   console.log("Letter DATE session-boundary checks passed.");
 })().catch(error => {
   console.error(error);

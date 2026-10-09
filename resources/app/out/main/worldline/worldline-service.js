@@ -178,17 +178,25 @@ function readLiveProbe({ fs, debugLogPath }) {
   try {
     const tail = readTail(fs, debugLogPath);
     const text = tail.text;
-    const inMatches = [...text.matchAll(/VOTC:IN\/;\/init\/;\/[^\r\n]*?\/;\/([^/\r\n]+)\/;\/[^/\r\n]*?\/;\/[^/\r\n]*?\/;\/(\d+)/g)];
-    const dateMatches = [...text.matchAll(/VOTC:TEST_DATE\/;\/([^/\r\n]+)\/;\/(?:days=)?(\d+)/g)];
-    const characterMatches = [...text.matchAll(/VOTC:TEST_CHAR\/;\/runtime=([^/\r\n]+)\/;\/history=([^/\r\n]*)\/;\/date=([^/\r\n]+)(?:\/;\/days=(\d+))?/g)];
     const loadMatches = [...text.matchAll(/VOTC:LOAD_SESSION\/;\/([A-Za-z0-9_.-]{8,160})(?:\/;\/[^\r\n]*)?/g)];
+    const boundary = loadMatches.at(-1)?.index ?? -1;
+    // init uses the same positional fields as GameData: date at 4, totalDays at 8.
+    const inMatches = [...text.matchAll(/VOTC:IN\/;\/init\/;\/([^\r\n]+)/g)].filter(match => match.index > boundary).map(match => {
+      const fields = match[1].split("/;/");
+      return { index: match.index, gameDate: fields[4]?.trim(), totalDays: /^\d+$/.test(fields[8]?.trim()) ? Number(fields[8].trim()) : null, complete: fields.length >= 9 };
+    }).filter(marker => marker.complete && marker.gameDate);
+    const clockMatches = [...text.matchAll(/VOTC:DATE\/;\/(\d+)\/;\/([^\r\n]+)/g)].filter(match => match.index > boundary);
+    const dateMatches = [...text.matchAll(/VOTC:TEST_DATE\/;\/([^/\r\n]+)\/;\/(?:days=)?(\d+)/g)].filter(match => match.index > boundary);
+    const characterMatches = [...text.matchAll(/VOTC:TEST_CHAR\/;\/runtime=([^/\r\n]+)\/;\/history=([^/\r\n]*)\/;\/date=([^/\r\n]+)(?:\/;\/days=(\d+))?/g)].filter(match => match.index > boundary);
     const latestCharacterById = new Map();
     for (const match of characterMatches) latestCharacterById.set(match[1].trim(), { runtimeId: match[1].trim(), historyId: match[2].trim() || null, gameDate: match[3].trim(), totalDays: match[4] ? Number(match[4]) : null });
     const latestDate = dateMatches.at(-1);
     const latestIn = inMatches.at(-1);
+    const latestClock = clockMatches.at(-1);
     const latestCharacter = characterMatches.at(-1);
     const markers = [
-      latestIn && { index: latestIn.index, gameDate: latestIn[1].trim(), totalDays: Number(latestIn[2]) },
+      latestIn && { index: latestIn.index, gameDate: latestIn.gameDate, totalDays: latestIn.totalDays },
+      latestClock && { index: latestClock.index, gameDate: latestClock[2].trim(), totalDays: Number(latestClock[1]) },
       latestDate && { index: latestDate.index, gameDate: latestDate[1].trim(), totalDays: Number(latestDate[2]) },
       latestCharacter && { index: latestCharacter.index, gameDate: latestCharacter[3].trim(), totalDays: latestCharacter[4] ? Number(latestCharacter[4]) : null }
     ].filter(Boolean).sort((left, right) => left.index - right.index);

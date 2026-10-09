@@ -120,6 +120,7 @@ export function Memory4Manager({ react: R, ownerId, refreshKey, searchActive = f
       const status = result.result?.status;
       if (["FAILED", "EXTRACTION_FAILED", "STALE"].includes(status)) throw new Error(result.result.reason || status);
       setMessage(["setManualDisclosure", "deleteDisclosure"].includes(payload.operation) ? "人物认知标记已更新。"
+        : payload.operation === "rebuild" && result.result?.reason === "NO_ELIGIBLE_SOURCES" ? "没有可归档的来源：需要可确认的事件日期或获知日期。原始长期记忆已保留。"
         : payload.operation === "cancelDerived" ? "已请求停止派生记忆任务。" : payload.operation === "keepManual" ? "已保留手工文本；底层记忆变化仍待处理。"
         : status === "IN_PROGRESS" ? "已有重压缩任务正在进行。" : status === "ALREADY_CONVERTED" ? "可核验内容已转为长期记忆，原摘要继续保留。"
           : status === "RETAINED_LEGACY" ? result.result.reason === "NO_DURABLE_CONTENT" ? "未提取出可确认的长期记忆，原摘要继续保留。" : "来源证据不足，原摘要继续保留。"
@@ -234,7 +235,8 @@ export function Memory4Manager({ react: R, ownerId, refreshKey, searchActive = f
     data.official.length ? data.official.map((record, index) => h("section", { className: "memory4-official", key: index },
       h("small", null, `采集日期：${record.captureGameDate || "未知"}`), h("p", { className: "memory4-text" }, record.content))) : h("p", { className: "memory4-empty" }, "当前战役尚未导出此人物的官方追忆。"));
   else if (tab === "year") content = h(R.Fragment, null,
-    !data.derived.years.length && h("p", { className: "memory4-empty" }, data.detail.total ? "暂无年度记忆。" : "暂无可用于生成年度记忆的详细长期记忆来源。"),
+    h("p", { className: "memory4-empty" }, "事件日期明确时按发生年份归档；事件日期未知时按获知年份归档，并保留未知标注。"),
+    !data.derived.years.length && h("p", { className: "memory4-empty" }, data.detail.total ? "暂无年度记忆，可从有效长期记忆来源生成。" : "暂无可用于生成年度记忆的详细长期记忆来源。"),
     writeButton("从长期记忆生成年度与人生记忆", () => regenerate("all", { revision: data.derived.derivedRevision || 0 }), { disabled: !data.detail.total }),
     data.derived.years.map(year => h("details", { className: "memory4-derived", key: year.eventYear },
       h("summary", null, `${year.eventYear} 年`, year.dirty && h("span", { className: "memory4-status" }, "底层记忆已变化"),

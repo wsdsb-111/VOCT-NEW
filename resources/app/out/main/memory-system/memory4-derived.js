@@ -20,6 +20,25 @@ function eventYears(row) {
   return Array.from({ length: to.year - from.year + 1 }, (_, index) => from.year + index);
 }
 
+function archiveYears(row) {
+  const years = eventYears(row);
+  if (years.length) return years;
+  const time = row?.eventTime;
+  if (!time || time.from || time.to || time.precision !== "unknown" || !["unknown", "observed", "reported"].includes(time.status)) return [];
+  const acquired = normalizeGameDate(row.acquiredDate);
+  return acquired ? [acquired.year] : [];
+}
+
+function archiveItem(item, entries) {
+  const sources = entries.filter(entry => item.sourceEntryIds.includes(entry.entryId));
+  const acquired = sources.filter(entry => !eventYears(entry).length && archiveYears(entry).length);
+  if (!acquired.length) return { ...item, timeAxis: "event" };
+  const dates = strings(acquired.map(entry => normalizeGameDate(entry.acquiredDate).canonical));
+  const text = item.text.replace(/^【本年获知，事件日期未知；获知日期：[^】]+】\s*/, "");
+  return { ...item, timeAxis: acquired.length === sources.length ? "acquired" : "mixed",
+    text: `【本年获知，事件日期未知；获知日期：${dates.join("、")}】${text}` };
+}
+
 class Memory4DerivedService {
   constructor(coordinator) {
     this.coordinator = coordinator;
@@ -73,7 +92,7 @@ class Memory4DerivedService {
     if (readContext?.snapshots.has(cacheKey)) return readContext.snapshots.get(cacheKey);
     const metadata = readContext?.metadata || this.store.read(path.join(this.store.directory(scope), "metadata.json"), null);
     const entryIds = Object.keys(index.entries).filter(id => {
-      const row = index.entries[id], years = eventYears(row);
+      const row = index.entries[id], years = archiveYears(row);
       return years.length && (eventYear == null || years.includes(eventYear))
         && (!period || years.some(year => year >= period.fromYear && year <= period.toYear))
         && this.sourceValid(scope, row, index, metadata);
@@ -84,7 +103,8 @@ class Memory4DerivedService {
         index.finalizations[hash(row.finalizationId)]?.sourceRevision,
         metadata?.knownEvidenceRevisions?.[hash([row.conversationId, scope.ownerId])] || null,
         row.stateSource || null, row.stateSource ? metadata?.knownEvidenceRevisions?.[hash([row.stateSource.conversationId, scope.ownerId])] || null : null,
-        (row.legacyRefs || []).map(ref => [ref.memoryId, ref.sourceHash])];
+        (row.legacyRefs || []).map(ref => [ref.memoryId, ref.sourceHash]),
+        ...(!eventYears(row).length ? [row.acquiredDate] : [])];
     });
     const result = { index, entryIds, sourceRevisionSet: entryIds.map(id => `${id}@${index.entries[id].revision}`), sourceHash: hash(stamps) };
     if (readContext) readContext.snapshots.set(cacheKey, result);
@@ -133,7 +153,7 @@ class Memory4DerivedService {
   markDirty(scope, { index, metadata, entryIds = [] } = {}) {
     const changed = new Set(entryIds);
     const directory = path.dirname(this.file(scope, "year", 1));
-    const affectedYears = new Set(entryIds.flatMap(id => eventYears(index.entries[id])));
+    const affectedYears = new Set(entryIds.flatMap(id => archiveYears(index.entries[id])));
     if (fs.existsSync(directory)) for (const name of fs.readdirSync(directory).filter(name => /^[1-9]\d{0,3}\.json$/.test(name))) {
       const year = Number(name.slice(0, -5)), view = this.read(scope, "year", year);
       if (affectedYears.has(year) || view.items.some(item => item.sourceEntryIds.some(id => changed.has(id)))) {
@@ -307,11 +327,12 @@ class Memory4DerivedService {
     if (typeof this.options.requestCompression !== "function") throw new Error("memory4_compression_unavailable");
     providerSnapshot ||= this.options.getProviderSnapshot ? await this.options.getProviderSnapshot() : null;
     const prompt = [
-      { role: "system", content: "Compress this owner's supplied historical memory items into JSON {\"items\":[{\"text\":\"...\",\"sourceEntryIds\":[\"...\"]}]}. Use only supplied facts. Retain every source ID exactly once, all commitment conditions, negations, reported/rumor uncertainty and status. Do not invent events, motives, dates, identities, knowledge or CK3 truth. Prefer merging duplicate text. Preserve Chinese source language. Text total must fit 700 tokens and never exceed 1000. Return only JSON." },
+      { role: "system", content: "Compress this owner's supplied historical memory items into JSON {\"items\":[{\"text\":\"...\",\"sourceEntryIds\":[\"...\"]}]}. Use only supplied facts. Retain every source ID exactly once, all commitment conditions, negations, reported/rumor uncertainty and status. For acquisition-dated sources retain the exact qualifier 本年获知，事件日期未知 in the item's text: acquiredDate is when this Owner learned the fact, never proof the event happened then. Do not merge acquisition-dated and event-dated items. Do not invent events, motives, dates, identities, knowledge or CK3 truth. Prefer merging duplicate text. Preserve Chinese source language. Text total must fit 700 tokens and never exceed 1000. Return only JSON." },
       { role: "user", content: JSON.stringify({ ...scope, items: items.map(item => ({ ...item,
         evidence: entries.filter(entry => item.sourceEntryIds.includes(entry.entryId)).map(entry => ({ sourceEntryId: entry.entryId,
           sourceType: entry.evidence.sourceType, epistemicStatus: entry.evidence.epistemicStatus,
-          stateStatus: entry.state.status, eventTimeStatus: entry.eventTime.status })) })) }) }
+          stateStatus: entry.state.status, eventTimeStatus: entry.eventTime.status,
+          eventTime: entry.eventTime, acquiredDate: entry.acquiredDate, timeAxis: eventYears(entry).length ? "event" : "acquired" })) })) }) }
     ];
     const response = await this.options.requestCompression(prompt, { signal: task.controller.signal, maxTokens: 4096, providerSnapshot,
       requestType: kind === "year" ? "memory4_year" : "memory4_life", ownerId: scope.ownerId });
@@ -327,14 +348,20 @@ class Memory4DerivedService {
     const generatedIds = result.items.flatMap(item => item.sourceEntryIds);
     if (new Set(generatedIds).size !== generatedIds.length || hash(strings(generatedIds)) !== hash(sourceIds)) throw new Error("memory4_compression_source_mismatch");
     const text = result.items.map(item => item.text).join("\n");
-    if (this.count(text) > YEAR_MAX_TOKENS || result.items.some(item =>
-      !this.guardedText(entries.filter(entry => item.sourceEntryIds.includes(entry.entryId)), item.text))) throw new Error("memory4_compression_quality_failed");
-    return result.items.map(item => {
+    if (this.count(text) > YEAR_MAX_TOKENS || result.items.some(item => {
       const sources = entries.filter(entry => item.sourceEntryIds.includes(entry.entryId));
-      return { itemId: `year_item_${hash(item.sourceEntryIds)}`, text: item.text.trim(), sourceEntryIds: strings(item.sourceEntryIds),
+      const acquiredCount = sources.filter(entry => !eventYears(entry).length).length;
+      return !this.guardedText(sources, item.text) || acquiredCount &&
+        (acquiredCount !== sources.length || !item.text.includes("本年获知，事件日期未知"));
+    })) throw new Error("memory4_compression_quality_failed");
+    const compressed = result.items.map(item => {
+      const sources = entries.filter(entry => item.sourceEntryIds.includes(entry.entryId));
+      return archiveItem({ itemId: `year_item_${hash(item.sourceEntryIds)}`, text: item.text.trim(), sourceEntryIds: strings(item.sourceEntryIds),
         entityIds: ids(sources.flatMap(entry => entry.entityIds)), topics: strings(sources.flatMap(entry => entry.topics)),
-        importance: Math.max(...sources.map(entry => entry.importance)) };
+        importance: Math.max(...sources.map(entry => entry.importance)) }, sources);
     });
+    if (this.count(compressed.map(item => item.text).join("\n")) > YEAR_MAX_TOKENS) throw new Error("memory4_compression_quality_failed");
+    return compressed;
   }
 
   async buildYear(scope, eventYear, task, request, providerSnapshot) {
@@ -347,8 +374,8 @@ class Memory4DerivedService {
     const entries = snapshot.entryIds.map(id => this.store.readEntry(scope, id, snapshot.index));
     if (entries.some(entry => entry.source.legacyMemoryIds?.length
       && entry.source.legacyMemoryIds.length !== (entry.source.legacyRefs || []).length)) throw new Error("memory4_derived_source_unproven");
-    let items = entries.map(entry => ({ itemId: `year_item_${hash([eventYear, entry.entryId])}`, text: entry.text,
-      sourceEntryIds: [entry.entryId], entityIds: [...entry.entityIds], topics: [...entry.topics], importance: entry.importance }));
+    let items = entries.map(entry => archiveItem({ itemId: `year_item_${hash([eventYear, entry.entryId])}`, text: entry.text,
+      sourceEntryIds: [entry.entryId], entityIds: [...entry.entityIds], topics: [...entry.topics], importance: entry.importance }, [entry]));
     items = await this.compress(scope, "year", items, entries, task, providerSnapshot);
     if (!this.current(scope, task)) throw new Error("memory4_derived_cancelled");
     if (hash(this.read(scope, "year", eventYear)) !== hash(prior) || this.snapshot(scope, { eventYear }).sourceHash !== snapshot.sourceHash) throw new Error("memory4_derived_source_changed");
@@ -425,12 +452,13 @@ class Memory4DerivedService {
       const results = [];
       if (kind !== "life") {
         const views = this.list(scope).years, index = this.store.loadIndex(scope);
-        const years = kind === "year" ? [request.eventYear] : [...new Set([...Object.values(index.entries).flatMap(eventYears), ...views.map(view => view.eventYear)])].sort((a, b) => a - b);
+        const years = kind === "year" ? [request.eventYear] : [...new Set([...Object.values(index.entries).flatMap(archiveYears), ...views.map(view => view.eventYear)])].sort((a, b) => a - b);
         for (const year of years) results.push(await this.buildYear(scope, year, task, kind === "all" ? {} : request, providerSnapshot));
       }
       if (kind !== "year") results.push(await this.buildLife(scope, task, request, providerSnapshot));
       const status = results.some(result => result.status === "MANUAL_OVERRIDE") ? "MANUAL_OVERRIDE" : "COMPLETE";
-      const result = { status, kind, results };
+      const sourceCount = kind === "year" ? this.snapshot(scope, { eventYear: request.eventYear }).entryIds.length : this.snapshot(scope).entryIds.length;
+      const result = { status, kind, results, sourceCount, ...(sourceCount ? {} : { reason: "NO_ELIGIBLE_SOURCES" }) };
       this.jobs.set(key, { kind, status, reason: null });
       const metadata = this.store.read(path.join(this.store.directory(scope), "metadata.json"), null);
       this.coordinator.trace?.record("memory4_derived", { ownerId: scope.ownerId, status, kind, count: results.length,
@@ -503,12 +531,15 @@ class Memory4DerivedService {
     }
     if (!chosen.length) return null;
     const first = chosen[0], sourceIds = strings(chosen.flatMap(item => item.sourceEntryIds));
-    const dates = sourceIds.flatMap(id => [index.entries[id].eventTime.from, index.entries[id].eventTime.to]).sort((a, b) => serial(a) - serial(b));
+    const acquiredCount = sourceIds.filter(id => !eventYears(index.entries[id]).length).length;
+    const axis = !acquiredCount ? "event" : acquiredCount === sourceIds.length ? "acquired" : "mixed";
+    const dates = (axis === "mixed" ? [] : sourceIds.flatMap(id => axis === "acquired" ? [index.entries[id].acquiredDate]
+      : [index.entries[id].eventTime.from, index.entries[id].eventTime.to])).filter(Boolean).sort((a, b) => serial(a) - serial(b));
     const memoryId = `${first.kind}_${hash([scope, first.view.revision, chosen.map(item => item.itemId)])}`;
     return { memory: { memoryId, memory4Key: first.key, content: texts.join("\n"), tags: strings(chosen.flatMap(item => item.topics)), type: `memory4_${first.kind}` },
-      reason: { axis: "event", from: query.window?.from || dates[0],
-        to: query.window?.to || dates.at(-1), precision: first.kind === "year" ? "year" : "range" },
-      annotation: `${first.kind === "year" ? "年度" : "人生"}派生片段；来源版本 ${first.view.revision}。`,
+      reason: { axis, from: query.window?.from || dates[0] || null,
+        to: query.window?.to || dates.at(-1) || null, precision: axis === "mixed" ? "unknown" : first.kind === "year" ? "year" : "range" },
+      annotation: `${first.kind === "year" ? "年度" : "人生"}派生片段；来源版本 ${first.view.revision}。${acquiredCount ? "获知日期不是事件发生日期，未知事件日期保持未知。" : ""}`,
       sourceRef: { kind: first.kind, id: memoryId, eventYear: first.view.eventYear, revision: first.view.revision,
         viewHash: hash(first.view), sourceEntryIds: sourceIds, sourceRowsHash: hash(sourceIds.map(id => index.entries[id])) },
       score: first.importance || 0 };

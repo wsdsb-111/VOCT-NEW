@@ -28,7 +28,7 @@ const { Character } = require("./game-data/character");
 const log = require("electron-log");
 const electronUpdater = require("electron-updater");
 const activeWin = require("active-win");
-const TailFile = require("@logdna/tail-file");
+const LetterLogReader = require("./letters/letter-log-reader");
 const readline$1 = require("node:readline");
 const archiver = require("archiver");
 const PROVIDER_TYPES = ["player2", "openrouter", "openai-compatible", "ollama", "deepseek", "gemini", "zhipu"];
@@ -906,7 +906,7 @@ memoryEngine.letterMemoryFinalization = new LetterMemoryFinalization({
 });
 const { createLetterManager } = require("./letters/letter-manager");
 const { LetterManager, LetterResponseStatus, LetterSummaryStatus } = createLetterManager({
-  settingsRepository, fs: fs$1, path, TailFile, readline: readline$1, parseLog,
+  settingsRepository, fs: fs$1, path, TailFile: LetterLogReader, readline: readline$1, parseLog,
   letterPromptBuilder, llmManager, PromptBuilder, TokenCounter, memoryEngine, dataDir: VOTC_DATA_DIR, letterEffectTransport, runFileManager, scanRunAcksForPendingCommands, autoStartLogTailing: false
 });
 const letterManager = new LetterManager();
@@ -1083,7 +1083,7 @@ electron.app.on("ready", async () => {
     }
   });
   clipboardListener.on("VOTC:LETTER_ACCEPTED", async () => {
-    console.log("VOTC:LETTER_ACCEPTED detected - clearing letters.txt");
+    console.log("VOTC:LETTER_ACCEPTED detected - processing letter receipt");
     try {
       await letterManager.clearLettersFile();
     } catch (error) {

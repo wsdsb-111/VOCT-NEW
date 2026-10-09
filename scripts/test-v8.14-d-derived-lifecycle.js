@@ -57,11 +57,16 @@ async function main() {
       assert.equal(views.years[0].dirty, false); assert.equal(views.life.dirty, false);
       assert.equal(views.life.segments[0].sourceEntryIds.length, 2);
     });
-    await check("unknown event time never acquires the conversation year", async () => {
-      const f = fixture(); f.add("答应以后再讨论此事。", { eventYear: null });
+    await check("undated memory archives by acquisition year without inventing an event date", async () => {
+      const f = fixture(), detail = f.add("曾在异乡学习医术，具体年份不详。", { eventYear: null });
       await f.coordinator.derived.rebuild(f.scope, { kind: "all" });
-      assert.deepEqual(f.coordinator.derived.list(f.scope).years, []);
-      assert.deepEqual(f.coordinator.derived.list(f.scope).life.segments, []);
+      const views = f.coordinator.derived.list(f.scope);
+      assert.equal(views.years[0].eventYear, 1164);
+      assert.equal(views.years[0].items[0].timeAxis, "acquired");
+      assert(views.years[0].items[0].text.includes("本年获知，事件日期未知"));
+      assert(views.life.segments[0].text.includes("本年获知，事件日期未知"));
+      assert.deepEqual(f.coordinator.store.readEntry(f.scope, detail.id).eventTime,
+        { from: null, to: null, precision: "unknown", status: "unknown" });
     });
     await check("normal detached finalization schedules only its proven private scope", async () => {
       const f = fixture(); f.coordinator.configureDerived({ isCampaignCurrent: () => false });

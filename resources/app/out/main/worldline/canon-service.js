@@ -143,7 +143,7 @@ class CanonService {
     const offset = Number.isSafeInteger(options.offset) && options.offset >= 0 ? options.offset : 0;
     const records = state?.records || [];
     const live = this.getLiveState();
-    const gameDate = live.gameDate || scope.gameDate;
+    const gameDate = live.loadSessionId && !live.gameDate ? null : live.gameDate || scope.gameDate;
     const date = normalizeGameDate(gameDate);
     const conflicts = new Map();
     for (const record of records) if (record.status === "ACTIVE" && record.conflictKey) {
@@ -175,7 +175,8 @@ class CanonService {
     }
     const checkpoint = this.getCheckpoint();
     const live = this.getLiveState();
-    const normalizationContext = { gameDate: live.gameDate || checkpoint?.snapshot?.gameDate || scope.gameDate, totalDays: Number.isSafeInteger(live.totalDays) ? live.totalDays : checkpoint?.snapshot?.totalDays };
+    const awaitingLiveDate = live.loadSessionId && !live.gameDate;
+    const normalizationContext = { gameDate: awaitingLiveDate ? null : live.gameDate || checkpoint?.snapshot?.gameDate || scope.gameDate, totalDays: awaitingLiveDate ? null : Number.isSafeInteger(live.totalDays) ? live.totalDays : checkpoint?.snapshot?.totalDays };
     let normalizedPayload;
     let effectiveRecord;
     if (operation === "create") normalizedPayload = normalizeCanonPayload(payload, normalizationContext);

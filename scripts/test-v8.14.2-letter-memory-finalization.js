@@ -369,10 +369,15 @@ async function testRealMemory4CoordinatorAcceptsLetterSnapshots() {
         if (derived.read(scope, "life")) break;
         await new Promise(resolve => setTimeout(resolve, 5));
       }
-      assert.equal(derived.read(scope, "life")?.segments.length, 0,
-        "unknown event time is archived without inventing a life/year date");
-      assert.equal(derived.list(scope).years.length, 0,
-        "unknown event time does not fabricate an annual-memory entry");
+      const views = derived.list(scope);
+      assert.deepEqual(views.years.map(view => view.eventYear), [1038],
+        "undated letter memories archive by acquisition year without inventing an event date");
+      assert.equal(views.years[0].items[0].timeAxis, "acquired");
+      assert(views.years[0].items[0].text.includes(`本年获知，事件日期未知；获知日期：${accepted.acceptedDate}`));
+      assert.equal(views.life?.segments.length, 1);
+      assert(views.life.segments[0].text.includes("本年获知，事件日期未知"));
+      assert.equal(entry.eventTime.from, null);
+      assert.equal(entry.eventTime.to, null);
     }
     const { summaryFile, projected } = projectedFiles.get(2);
     const characters = new Map(accepted.participantProfiles.map(person => [person.id, person]));

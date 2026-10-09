@@ -1,0 +1,10 @@
+# Read CK3's current date directly, without a Run File carrier.
+votc_runtime_clock = {
+  scope = character
+  is_valid = {
+    is_ai = no
+  }
+  effect = {
+    debug_log = "VOTC:DATE/;/[GetCurrentDate.GetDateAsTotalDays]/;/[GetCurrentDate.GetStringShort]"
+  }
+}

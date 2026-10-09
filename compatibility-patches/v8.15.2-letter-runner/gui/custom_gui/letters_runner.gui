@@ -6,29 +6,6 @@ window = {
 	#position = { -80 130 }
 	layer = bottom_bottom
 	
-	state = {
-		name = itsshowtime
-		trigger_on_create = yes
-		on_finish = "[GetVariableSystem.Set( 'blur', '1' )]"
-		
-	}
-
-	hbox = {
-		name = "letters_runner_counter"
-	
-		state = {
-			name = _show
-			trigger_on_create = yes
-			duration = 0.1
-			next = _show_votc
-			on_start = "[ExecuteConsoleCommand(Select_CString(GetGlobalVariable('talk_scene').IsSet, '', 'run letters.txt'))]"
-		}
-		# Reuse the same widget for every polling cycle.
-		state = {
-			name = _show_votc
-			duration = 1.9
-			next = _show
-			on_start = "[ExecuteConsoleCommand(Select_CString(GetGlobalVariable('talk_scene').IsSet, '', 'run votc.txt'))]"
-		}
-	}
+	# Retired target: no timers, commands, or global blur changes.
+	alwaystransparent = yes
 }

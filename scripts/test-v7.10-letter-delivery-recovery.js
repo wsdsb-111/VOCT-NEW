@@ -160,8 +160,10 @@ async function testDateAndEscaping() {
     storeLetter(manager, letter, longText);
     const beforeDeliveryDiagnostics = manager.getAllLetterStatuses();
     assert.strictEqual(beforeDeliveryDiagnostics.awaitingAcceptanceLetterId, null);
-    assert.strictEqual(beforeDeliveryDiagnostics.effectFileExists, false);
-    assert.strictEqual(beforeDeliveryDiagnostics.effectFileAge, null);
+    assert.strictEqual(beforeDeliveryDiagnostics.effectFileExists, true, "diagnostics inspect the existing formal RunFile carrier");
+    assert(Number.isFinite(beforeDeliveryDiagnostics.effectFileAge));
+    assert.strictEqual(beforeDeliveryDiagnostics.inspectedEffectFilePath, fixture.effectPath);
+    assert.strictEqual(beforeDeliveryDiagnostics.effectPayloadPresent, false, "an idle formal carrier is not a Letter Effect");
     assert.strictEqual(beforeDeliveryDiagnostics.storedLettersCount, 1);
     await manager.processLogLine("[debug] VOTC:DATE/;/201");
     assert.strictEqual(manager.getCurrentTotalDays(), 201);

@@ -1,6 +1,7 @@
 "use strict";
 
 const { normalizeGameDate } = require("../worldline/character-temporal-facts");
+const { randomBytes } = require("crypto");
 
 function createLetterManager({ settingsRepository, fs, path, TailFile, readline, parseLog, letterPromptBuilder, llmManager, PromptBuilder, TokenCounter, memoryEngine, dataDir, letterEffectTransport = null, runFileManager = null, scanRunAcksForPendingCommands = null, autoStartLogTailing = true, sleep = (milliseconds) => new Promise((resolve) => setTimeout(resolve, milliseconds)), letterPayloadRetryDelays = [100, 200, 350, 600, 1e3], dateHeartbeatIntervalMs = 5e3, dateStaleMs = 2e4, dateScanBytes = 1024 * 1024, diagnosticExecutionTimeoutMs = 15e3, runCommandAckTimeoutMs = 3e4, runCommandWatchdogIntervalMs = 5e3, setIntervalFn = setInterval, clearIntervalFn = clearInterval, setRunCommandIntervalFn = setInterval, clearRunCommandIntervalFn = clearInterval }) {
   const fs$1 = fs;
@@ -71,6 +72,8 @@ function createLetterManager({ settingsRepository, fs, path, TailFile, readline,
       this.awaitingAcceptanceLetterId = null;
       this.tailFile = null;
       this.readline = null;
+      this.logTailingTransition = Promise.resolve();
+      this.letterAcceptanceTransition = Promise.resolve();
       this.tailRestartTimer = null;
       this.dateHeartbeatTimer = null;
       this.runCommandWatchdogTimer = null;
@@ -122,7 +125,15 @@ function createLetterManager({ settingsRepository, fs, path, TailFile, readline,
     /**
      * Start tailing the debug.log file to track VOTC:DATE updates
      */
-    async startLogTailing() {
+    queueLogTailingTransition(operation) {
+      const transition = this.logTailingTransition.catch(() => {}).then(operation);
+      this.logTailingTransition = transition;
+      return transition;
+    }
+    startLogTailing() {
+      return this.queueLogTailingTransition(() => this.startLogTailingNow());
+    }
+    async startLogTailingNow() {
       const ck3UserPath = settingsRepository.getCK3UserFolderPath();
       console.log(`LetterManager: CK3 user path from settings: ${ck3UserPath}`);
       const debugLogPath = settingsRepository.getCK3DebugLogPath();
@@ -143,21 +154,32 @@ function createLetterManager({ settingsRepository, fs, path, TailFile, readline,
         return;
       }
       try {
+        if (this.tailFile) await this.stopLogTailingNow(false);
         this.captureDebugLogMetadata(debugLogPath);
         this.tailState = "STARTING";
-        this.tailFile = new TailFile(debugLogPath, { encoding: "utf8" }).on("tail_error", (err) => {
+        const reader = new TailFile(debugLogPath, { encoding: "utf8" });
+        this.tailFile = reader;
+        reader.on("tail_error", (err) => {
+          if (this.tailFile !== reader) return;
           console.error("Tail error:", err);
           this.tailState = "ERROR";
           this.dateSourceState = "TAIL_RESTARTING";
           this.scheduleLogTailingRestart();
         });
-        await this.tailFile.start();
+        reader.on("log_reset", () => {
+          if (this.tailFile !== reader) return;
+          this.resetDateSession();
+          this.clearDateMarkerState();
+          this.captureDebugLogMetadata(debugLogPath);
+        });
+        await reader.start();
         this.tailState = "ACTIVE";
         this.tailStartedAt = Date.now();
         console.log(`Started tailing debug log: ${debugLogPath}`);
-        this.readline = readline$1.createInterface({ input: this.tailFile });
+        this.readline = readline$1.createInterface({ input: reader });
         this.readline.on("line", (line) => {
-          this.processLogLine(line);
+          if (this.tailFile !== reader || this.tailState !== "ACTIVE") return;
+          Promise.resolve(this.processLogLine(line)).catch((error) => console.error("LetterManager: Failed to process log line:", error));
         });
       } catch (error) {
         this.tailState = "ERROR";
@@ -250,6 +272,10 @@ function createLetterManager({ settingsRepository, fs, path, TailFile, readline,
     }
     processLogLine(line) {
       this.lastLogLineReceivedAt = Date.now();
+      const receiptMatch = line.match(/VOTC:LETTER_RECEIPT\/;\/([A-Za-z0-9_.:-]+)\/;\/([a-f0-9]{32})\/;\/([A-Za-z0-9_.-]+)\/;\/(\d+)\/;\/(\d+)\/;\/(\d+)\/;\/([^\r\n]+)/);
+      if (receiptMatch) return this.clearLettersFile({ letterId: receiptMatch[1], token: receiptMatch[2],
+        campaignToken: receiptMatch[3], playerId: Number(receiptMatch[4]), aiId: Number(receiptMatch[5]),
+        totalDays: Number(receiptMatch[6]), date: receiptMatch[7].trim() });
       if (line.includes("VOTC:LETTER/;/")) {
         return this.processLatestLetter({ skipPayloadRequest: true }).catch((error) => {
           console.error("Failed to receive letter log payload:", error);
@@ -325,7 +351,7 @@ function createLetterManager({ settingsRepository, fs, path, TailFile, readline,
         if (this.dateProducerRecovery && observedAt >= this.dateProducerRecovery.requestedAt) {
           this.dateProducerRecovery = { ...this.dateProducerRecovery, status: "RECOVERED", recoveredAt: observedAt, freshDateValue: newTotalDays };
         }
-        console.log(`LetterManager: VOTC:DATE received (${newTotalDays})`);
+        if (previousObservedValue !== newTotalDays) console.log(`LetterManager: VOTC:DATE received (${newTotalDays})`);
         return this.updateCurrentDate(newTotalDays);
       }
       return Promise.resolve();
@@ -653,35 +679,8 @@ function createLetterManager({ settingsRepository, fs, path, TailFile, readline,
       return this.runDateTrackerHeartbeat({ forceReconcile: true });
     }
     ensureDateProducerRunning(reason = "unspecified") {
-      if (!runFileManager?.enqueueCommand || !runFileManager.isAvailable?.()) {
-        this.dateProducerRecovery = { status: "UNAVAILABLE", reason, requestedAt: Date.now(), error: "RunFileManager unavailable" };
-        return this.getDateTrackerStatus();
-      }
-      const dateFile = this.activeEffectDiagnostic?.transportMode === LetterEffectTransportMode.LEGACY
-        ? { success: false, error: "letters.txt is owned by an active diagnostic." }
-        : letterEffectTransport.ensureDateProducerFile();
-      if (!dateFile.success) {
-        this.dateProducerRecovery = { status: "BLOCKED", reason, requestedAt: Date.now(), error: dateFile.error };
-        return this.getDateTrackerStatus();
-      }
-      const existing = runFileManager.findPendingCommand?.((command) => command.kind === "date_producer_rearm");
-      if (existing) {
-        this.dateProducerRecovery = { ...(this.dateProducerRecovery || {}), status: "REQUESTED", reason, recoveryId: existing.commandId, requestedAt: this.dateProducerRecovery?.requestedAt || existing.queuedAt };
-        return this.getDateTrackerStatus();
-      }
-      const now = Date.now();
-      if (this.dateProducerRecovery && ["REQUESTED", "WAITING_FOR_FRESH_MARKER"].includes(this.dateProducerRecovery.status) && now - this.dateProducerRecovery.requestedAt < dateStaleMs) return this.getDateTrackerStatus();
-      const recoveryId = `rc6-date-${now.toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
-      const effectText = `if = {
-	limit = { NOT = { has_global_variable = talk_scene } }
-	root = { trigger_event = mcc_event_v2.9998 }
-	debug_log = "VOTC:DATE_PRODUCER/REARMED/${recoveryId}"
-}
-else = {
-	debug_log = "VOTC:DATE_PRODUCER/BLOCKED/${recoveryId}"
-}`;
-      const command = runFileManager.enqueueCommand({ commandId: recoveryId, owner: "letter", kind: "date_producer_rearm", effectText });
-      this.dateProducerRecovery = { status: "REQUESTED", reason, recoveryId: command.commandId, requestedAt: now };
+      // The global native clock owns dates; never rebuild the retired event runner.
+      this.dateProducerRecovery = { status: "NATIVE_BRIDGE_WAITING", reason, requestedAt: Date.now() };
       return this.getDateTrackerStatus();
     }
     isValidGameDay(value) {
@@ -845,21 +844,7 @@ else = {
       const triggerId = triggerContext?.triggerId || `letter-trigger:${Date.now()}:${++this.pipelineSequence}`;
       this.latestPipelineStatus = { triggerId, letterId: null, state: null, history: [], startedAt: triggerContext?.startedAt || Date.now(), payloadReread: skipPayloadRequest };
       this.transitionPipeline(LetterPipelineState.TRIGGER_RECEIVED);
-      const ck3UserPath = settingsRepository.getCK3UserFolderPath();
-      if (ck3UserPath && !skipPayloadRequest) {
-        const runFolder = path.join(ck3UserPath, "run");
-        const letterFilePath = path.join(runFolder, "letters.txt");
-        console.log(`LetterManager: Resolved letters.txt path: ${letterFilePath}`);
-        try {
-          fs$1.mkdirSync(runFolder, { recursive: true });
-          fs$1.writeFileSync(letterFilePath, `debug_log = "[Localize('talk_event.9999.desc')]"`, "utf-8");
-          console.log("Created letters.txt file");
-        } catch (error) {
-          const contextError = `Failed to request letter payload: ${error instanceof Error ? error.message : String(error)}`;
-          this.transitionPipeline(LetterPipelineState.CONTEXT_TIMEOUT, { contextError, debugLogPath: settingsRepository.getCK3DebugLogPath?.() || null });
-          return null;
-        }
-      }
+      // The send event already emits the complete payload into debug.log.
       this.transitionPipeline(LetterPipelineState.CONTEXT_WAITING, { debugLogPath: settingsRepository.getCK3DebugLogPath?.() || null });
       const context = await this.loadLatestGameDataWithLetter();
       if (!context) {
@@ -927,7 +912,8 @@ else = {
         });
         return null;
       }
-      this.failedLetterContexts.set(letter.letterId, { letter, messages, characterName, promptMode, deliveryTiming, disclosureBinding });
+      const sourceMemoryContext = this.buildLetterSourceMemoryContext(gameData, disclosureBinding);
+      this.failedLetterContexts.set(letter.letterId, { letter, messages, characterName, promptMode, deliveryTiming, disclosureBinding, sourceMemoryContext });
       this.updateLetterStatus(letter.letterId, { promptMode, promptBuildError });
       this.transitionPipeline(LetterPipelineState.PROMPT_READY, { promptMode, promptBuildError });
       let reply = null;
@@ -967,6 +953,7 @@ else = {
         expectedDeliveryDay,
         characterName,
         disclosureBinding,
+        sourceMemoryContext,
         ...deliveryTiming
       };
       this.storedLetters.set(letter.letterId, storedLetter);
@@ -1001,6 +988,29 @@ else = {
         || letter.totalDays > totalDays || !gameData.characters?.has?.(playerId) || !gameData.characters?.has?.(aiId)) return null;
       return { campaignToken, playerId, aiId, sourceDate: sourceDate.canonical, sourceTotalDays: totalDays };
     }
+    buildLetterSourceMemoryContext(gameData, binding) {
+      if (!binding) return null;
+      const { buildCurrentMemory4RelationshipEvidence } = require("../memory-system/memory4-entity-context");
+      const pair = [binding.playerId, binding.aiId];
+      return {
+        participantProfiles: pair.map(id => {
+          const character = gameData.characters.get(id);
+          return { id, name: character?.name, shortName: character?.shortName,
+            firstName: character?.firstName, fullName: character?.fullName };
+        }),
+        relationshipEvidence: buildCurrentMemory4RelationshipEvidence({ gameData, ownerIds: pair, entityIds: pair })
+      };
+    }
+    validateLetterReceipt(storedLetter, receipt) {
+      const binding = storedLetter?.disclosureBinding;
+      const date = normalizeGameDate(receipt?.date);
+      const sourceDate = normalizeGameDate(binding?.sourceDate);
+      return !!(binding && date && sourceDate && date.serial >= sourceDate.serial
+        && receipt.letterId === storedLetter.letter.letterId && receipt.token === storedLetter.receiptToken
+        && receipt.campaignToken === binding.campaignToken && receipt.playerId === binding.playerId
+        && receipt.aiId === binding.aiId && Number.isSafeInteger(receipt.totalDays)
+        && receipt.totalDays >= storedLetter.expectedDeliveryDay && receipt.totalDays >= binding.sourceTotalDays);
+    }
     async recordLetterDisclosure(gameData, letter, senderId, recipientId, text) {
       const coordinator = memoryEngine?.memory4;
       if (typeof coordinator?.recordLetterDisclosures !== "function") return null;
@@ -1028,6 +1038,25 @@ else = {
     }
     async recordAcceptedLetterDisclosure(storedLetter) {
       const binding = storedLetter?.disclosureBinding;
+      const receipt = storedLetter?.acceptedReceipt;
+      if (this.validateLetterReceipt(storedLetter, receipt) && storedLetter.sourceMemoryContext
+        && memoryEngine?.letterMemoryFinalization) {
+        storedLetter.acceptedMemoryContext = { ...storedLetter.sourceMemoryContext,
+          campaignToken: binding.campaignToken, letterId: storedLetter.letter.letterId,
+          senderId: binding.playerId, recipientId: binding.aiId, sourceDate: binding.sourceDate,
+          acceptedDate: normalizeGameDate(receipt.date).canonical, sourceTotalDays: binding.sourceTotalDays,
+          acceptedTotalDays: receipt.totalDays, text: storedLetter.letter.content, reply: storedLetter.reply };
+        this.savePendingLetters();
+        this.finalizeAcceptedLetterMemory(storedLetter, storedLetter.acceptedMemoryContext);
+        try {
+          const current = await parseLog(settingsRepository.getCK3DebugLogPath());
+          if (current?.campaignToken === binding.campaignToken && current.playerID === binding.playerId
+            && current.aiID === binding.aiId && current.totalDays === receipt.totalDays) {
+            await this.recordLetterDisclosure(current, storedLetter.letter, binding.aiId, binding.playerId, storedLetter.reply);
+          }
+        } catch { /* The durable archive uses the validated source snapshot, not a later dialogue. */ }
+        return { archiveCaptured: true };
+      }
       const debugLogPath = settingsRepository.getCK3DebugLogPath();
       if (!binding || !debugLogPath) return null;
       try {
@@ -1191,7 +1220,8 @@ else = {
         const deliveryTiming = context.deliveryTiming || await this.resolveDeliveryTiming(context.letter);
         const expectedDeliveryDay = deliveryTiming.expectedDeliveryDay;
         const effectiveCurrentDay = this.getEffectiveDeliveryCurrentDay(deliveryTiming);
-        const storedLetter = { letter: context.letter, reply, expectedDeliveryDay, characterName: context.characterName, disclosureBinding: context.disclosureBinding || null, ...deliveryTiming };
+        const storedLetter = { letter: context.letter, reply, expectedDeliveryDay, characterName: context.characterName,
+          disclosureBinding: context.disclosureBinding || null, sourceMemoryContext: context.sourceMemoryContext || null, ...deliveryTiming };
         this.storedLetters.set(normalizedLetterId, storedLetter);
         this.failedLetterContexts.delete(normalizedLetterId);
         this.updateLetterStatus(normalizedLetterId, {
@@ -1455,6 +1485,11 @@ else = {
         this.transitionLetter(letter.letterId, LetterPipelineState.DELIVERY_FAILED, { deliveryError: "CK3 user folder not configured" });
         return false;
       }
+      const storedLetter = this.storedLetters.get(letter.letterId);
+      if (memoryEngine?.letterMemoryFinalization && storedLetter?.sourceMemoryContext && storedLetter.disclosureBinding) {
+        storedLetter.receiptToken ||= randomBytes(16).toString("hex");
+        this.savePendingLetters();
+      }
       const gameCommand = this.buildOfficialLetterEffectBody(reply, letter);
       const outboundMode = letterEffectTransport.getOutboundMode();
       const writeResult = letterEffectTransport.writeOutboundLetterEffect(gameCommand, outboundMode);
@@ -1490,6 +1525,14 @@ else = {
         description: reply,
         saveScopeAs: "votc_latest_letter"
       });
+      const storedLetter = this.storedLetters.get(letter.letterId);
+      const campaignExpression = "votc8c-" + Array.from({ length: 12 }, (_, index) =>
+        `[GetGlobalVariable('votc_campaign_digit_${String(index + 1).padStart(2, "0")}').GetFlagName]`).join("");
+      const receiptEffect = storedLetter?.receiptToken ? `
+if = {
+  limit = { exists = scope:votc_latest_letter }
+  debug_log = "VOTC:LETTER_RECEIPT/;/${letter.letterId}/;/${storedLetter.receiptToken}/;/${campaignExpression}/;/[GetPlayer.GetID]/;/[GetGlobalVariable('message_second_scope_${letter.letterId}').GetCharacter.GetID]/;/[GetCurrentDate.GetDateAsTotalDays]/;/[GetCurrentDate.GetStringShort]"
+}` : "";
       return `debug_log = "[Localize('talk_event.9999.desc')]"
 remove_global_variable ?= votc_${letter.letterId}
 ${artifactBody}
@@ -1500,7 +1543,7 @@ set_global_variable = {
 	name = votc_latest_letter
 	value = scope:votc_latest_letter
 }
-trigger_event = message_event.362`;
+trigger_event = message_event.362${receiptEffect}`;
     }
     buildLetterArtifactBody({ creatorScope, name, description, saveScopeAs }) {
       const escapedDescription = String(description).replace(/"/g, '\\"');
@@ -1559,7 +1602,8 @@ ${"  \t"}modifier = artifact_monthly_minor_prestige_1_modifier
             messages: failedContext.messages,
             characterName: failedContext.characterName || "Unknown",
             promptMode: failedContext.promptMode || "official_votc_2.0.3",
-            disclosureBinding: failedContext.disclosureBinding || null
+            disclosureBinding: failedContext.disclosureBinding || null,
+            sourceMemoryContext: failedContext.sourceMemoryContext || null
           });
           if (failedContext.status) this.letterStatuses.set(letterId, failedContext.status);
           else {
@@ -1601,7 +1645,12 @@ ${"  \t"}modifier = artifact_monthly_minor_prestige_1_modifier
     /**
      * Clear the letters.txt file
      */
-    async clearLettersFile() {
+    async clearLettersFile(receipt = null) {
+      const pending = this.letterAcceptanceTransition.then(() => this.clearLettersFileNow(receipt));
+      this.letterAcceptanceTransition = pending.catch(() => {});
+      return pending;
+    }
+    async clearLettersFileNow(receipt) {
       const ck3Folder = settingsRepository.getCK3UserFolderPath();
       console.log(`LetterManager.clearLettersFile: CK3 user path: ${ck3Folder}`);
       if (!ck3Folder) {
@@ -1617,6 +1666,10 @@ ${"  \t"}modifier = artifact_monthly_minor_prestige_1_modifier
         console.warn("LetterManager.clearLettersFile: Ignoring LETTER_ACCEPTED without a matching written Letter Effect.");
         return { success: false, reason: "letter_effect_not_written", letterId: acceptedLetterId };
       }
+      if (acceptedLetter.receiptToken && !this.validateLetterReceipt(acceptedLetter, receipt)) {
+        return { success: false, reason: "letter_receipt_not_matched", letterId: acceptedLetterId };
+      }
+      if (receipt) acceptedLetter.acceptedReceipt = receipt;
       const acceptedTransportMode = acceptedStatus?.effectTransportMode || LetterEffectTransportMode.VOTC;
       const clearResult = letterEffectTransport.clearOutboundEffect(acceptedTransportMode);
       if (!clearResult.success) console.warn(`LetterManager.clearLettersFile: ${clearResult.error}`);
@@ -1637,6 +1690,8 @@ ${"  \t"}modifier = artifact_monthly_minor_prestige_1_modifier
           suspicious_immediate_letter_acceptance: acceptLatencyMs !== null && acceptLatencyMs < 500
         });
         this.transitionLetter(acceptedLetterId, LetterPipelineState.DELIVERED);
+        acceptedLetter.acceptedMemoryAwaitingProof = true;
+        this.savePendingLetters();
         const memoryAccepted = acceptedEffectWritten && acceptedLetter ? await this.recordAcceptedLetterDisclosure(acceptedLetter) : null;
         if (memoryEngine?.letterMemoryFinalization && !memoryAccepted?.archiveCaptured) {
           acceptedLetter.acceptedMemoryAwaitingProof = true;
@@ -1690,18 +1745,23 @@ ${"  \t"}modifier = artifact_monthly_minor_prestige_1_modifier
     /**
      * Stop log tailing (cleanup)
      */
-    async stopLogTailing(stopSupervisor = true) {
+    stopLogTailing(stopSupervisor = true) {
+      return this.queueLogTailingTransition(() => this.stopLogTailingNow(stopSupervisor));
+    }
+    async stopLogTailingNow(stopSupervisor = true) {
       if (this.tailRestartTimer) {
         clearTimeout(this.tailRestartTimer);
         this.tailRestartTimer = null;
       }
+      const reader = this.tailFile;
+      this.tailFile = null;
       if (this.readline) {
+        this.readline.removeAllListeners?.("line");
         this.readline.close();
         this.readline = null;
       }
-      if (this.tailFile) {
-        await this.tailFile.quit();
-        this.tailFile = null;
+      if (reader) {
+        await reader.quit();
         console.log("Stopped log tailing");
       }
       this.tailState = "STOPPED";
@@ -1717,12 +1777,14 @@ ${"  \t"}modifier = artifact_monthly_minor_prestige_1_modifier
     /**
      * Restart log tailing (useful when CK3 path is updated)
      */
-    async restartLogTailing() {
-      console.log("Restarting log tailing...");
-      this.tailState = "RESTARTING";
-      this.dateSourceState = "TAIL_RESTARTING";
-      await this.stopLogTailing(false);
-      await this.startLogTailing();
+    restartLogTailing() {
+      return this.queueLogTailingTransition(async () => {
+        console.log("Restarting log tailing...");
+        this.tailState = "RESTARTING";
+        this.dateSourceState = "TAIL_RESTARTING";
+        await this.stopLogTailingNow(false);
+        await this.startLogTailingNow();
+      });
     }
     /**
      * Get current tracked date
@@ -1872,12 +1934,12 @@ ${"  \t"}modifier = artifact_monthly_minor_prestige_1_modifier
       const diagnosticStage = String(stage || "").toUpperCase();
       const stages = ["A1", "A2", "A3", "B", "C", "D"];
       if (!stages.includes(diagnosticStage)) return "未知诊断阶段";
+      if (diagnosticStage === "A1") return "旧 letters.txt 管道已停用；请从 A2 开始";
       const busyReason = this.getDiagnosticPipelineBusyReason();
       if (busyReason) return busyReason;
       this.refreshEffectDiagnosticTimeout();
       if (this.activeEffectDiagnostic && this.activeEffectDiagnostic.executionStatus !== "EXECUTION_CONFIRMED") return `${this.activeEffectDiagnostic.stage} 正在等待 CK3 Execution Marker`;
       if (["ARTIFACT_VISUAL_CHECK_REQUIRED", "A3_VISUAL_CHECK_REQUIRED"].includes(this.activeEffectDiagnostic?.result)) return `${this.activeEffectDiagnostic.stage} 已执行，请先确认 CK3 可见结果`;
-      if (diagnosticStage === "A2" && !["PASS", "RUN_FILE_NOT_EXECUTED"].includes(this.effectDiagnosticStages.A1?.result)) return "A1 尚未完成 letters.txt Execution 判定";
       if (diagnosticStage === "A3" && this.effectDiagnosticStages.A2?.result !== "PASS") return "A2 votc.txt Execution Marker 尚未通过";
       if (["B", "C", "D"].includes(diagnosticStage)) {
         const normalizedLetterId = typeof letterId === "string" ? letterId.trim() : "";
@@ -2066,7 +2128,7 @@ set_global_variable = {
       if (ck3Folder) {
         const diagnosticIsLatest = Number(this.lastEffectDiagnostic?.writtenAt || 0) >= Number(statusWithEffect?.effectFileWrittenAt || 0);
         const effectFilePath = diagnosticIsLatest ? this.lastEffectDiagnostic?.effectFilePath : statusWithEffect?.effectFilePath;
-        const resolvedEffectFilePath = effectFilePath || path.join(ck3Folder, "run", "letters.txt");
+        const resolvedEffectFilePath = effectFilePath || path.join(ck3Folder, "run", "votc.txt");
         inspectedEffectFilePath = resolvedEffectFilePath;
         try {
           effectFileExists = fs$1.existsSync(resolvedEffectFilePath);

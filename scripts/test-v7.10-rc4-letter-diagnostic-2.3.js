@@ -40,13 +40,9 @@ try {
   Date.now = () => now;
   try {
     const a1 = manager.runEffectDiagnostic("A1");
-    assert(a1.success);
-    const lettersText = fs.readFileSync(path.join(runDir, "letters.txt"), "utf8");
-    assert.strictEqual(lettersText, `debug_log = "${a1.marker}"`, "A1 must contain only its transport marker");
-    assert.strictEqual(manager.runEffectDiagnostic("A2").success, false, "A2 must remain locked before A1 is decided");
-    now += 11;
-    manager.getAllLetterStatuses();
-    assert.strictEqual(manager.effectDiagnosticStages.A1.result, "RUN_FILE_NOT_EXECUTED");
+    assert.strictEqual(a1.success, false, "retired A1 must not reactivate letters.txt");
+    assert.strictEqual(fs.existsSync(path.join(runDir, "letters.txt")), false);
+    assert.strictEqual(runFileManager.getPendingCommands().length, 0);
 
     const a2 = manager.runEffectDiagnostic("A2");
     assert(a2.success);
@@ -55,7 +51,7 @@ try {
     manager.processLogLine(`[debug] ${a2.marker}`);
     manager.processLogLine(`[debug] VOTC:RUN_ACK/LETTER_DIAGNOSTIC/${a2.runCommandId}`);
     assert.strictEqual(manager.effectDiagnosticStages.A2.result, "PASS");
-    assert.strictEqual(transport.getState().contractDriftConfirmed, true);
+    assert.strictEqual(transport.getState().contractDriftConfirmed, false, "retiring A1 does not fabricate an A1 failure or transport comparison");
     assert(!fs.readFileSync(path.join(runDir, "votc.txt"), "utf8").includes(a2.marker), "completed transport diagnostics must be removed without clearing the root contract");
 
     const confirmArtifact = (result) => {
@@ -94,16 +90,17 @@ try {
       confirmArtifact(result);
     }
     manager.awaitingAcceptanceLetterId = letter.letterId;
-    assert.strictEqual(manager.runEffectDiagnostic("A1").success, false, "formal delivery busy state must block diagnostics");
+    assert.strictEqual(manager.runEffectDiagnostic("A2").success, false, "formal delivery busy state must block diagnostics");
   } finally {
     Date.now = originalNow;
   }
 
   const renderer = fs.readFileSync(path.join(__dirname, "..", "resources", "app", "out", "renderer", "assets", "index-Dn3qWlAB.js"), "utf8");
-  assert(renderer.includes("A1 → A2 → A3 → B → C → D"));
+  assert(renderer.includes("A2 → A3 → B → C → D"));
+  assert(renderer.includes("旧 A1 管道已停用"));
   assert(renderer.includes("选择 Known Letter ID（B/C/D 必填）"));
   assert(renderer.includes('snapshot?.letterTransport?.outboundMode'));
-  console.log("VOTC v7.10-RC4 Letter Diagnostic 2.3: PASS (A1/A2/A3/B/C/D strict sequence and busy lock)");
+  console.log("VOTC Letter Diagnostic: PASS (A1 retired, A2/A3/B/C/D strict sequence and busy lock)");
 } finally {
   fs.rmSync(tempDir, { recursive: true, force: true });
 }

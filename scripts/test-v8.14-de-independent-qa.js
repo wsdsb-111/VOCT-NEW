@@ -263,7 +263,7 @@ async function main() {
     assert.deepEqual(profile.memoryPointers.yearKeys, []);
     assert.deepEqual(profile.memoryPointers.lifeItemIds, []);
   });
-  await check("derived: Year is keyed by known event year and excludes planned or unknown event time", async () => {
+  await check("derived: Year uses event year or explicitly labeled acquisition year and excludes plans", async () => {
     const sample = fixture();
     addEvent(sample, { year: 1154, date: "1164.1.1", text: "1154年九十九号人物曾迁居。" });
     addSource(sample, { date: "1164.1.1", text: "当时商谈了另一件事，但发生年份未知。", durable: true });
@@ -271,10 +271,12 @@ async function main() {
       eventTime: { from: "1190.1.1", to: "1190.12.31", precision: "year", status: "planned" } });
     assert.equal((await sample.coordinator.derived.rebuild(sample.scope)).status, "COMPLETE");
     const views = sample.coordinator.derived.list(sample.scope);
-    assert.deepEqual(views.years.map(view => view.eventYear), [1154]);
+    assert.deepEqual(views.years.map(view => view.eventYear), [1154, 1164]);
     assert(views.years[0].items[0].text.includes("1154年"));
     assert.equal(JSON.stringify(views).includes("PLANNED_TIME"), false);
-    assert.equal(JSON.stringify(views).includes("发生年份未知"), false);
+    assert(views.years[1].items[0].text.includes("本年获知，事件日期未知"));
+    assert(views.years[1].items[0].text.includes("发生年份未知"));
+    assert.equal(views.years[1].items[0].timeAxis, "acquired");
   });
   await check("derived: related slice withholds other entities and future-acquired facts", async () => {
     const sample = fixture();

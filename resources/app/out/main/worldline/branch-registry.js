@@ -133,6 +133,12 @@ class BranchRegistry {
         const oldDate = normalizeGameDate(current.latestGameDate).serial;
         const newDate = normalizeGameDate(evidence.gameDate).serial;
         if (newDate === oldDate && current.fingerprint === evidence.fingerprint) {
+          if ((evidence.loadSessionId || current.loadSessionId) && evidence.loadSessionId !== current.loadSessionId) return {
+            state: "LOAD_BOUNDARY_CANDIDATE",
+            campaignId: current.campaignId,
+            branchId: current.branchId,
+            reason: evidence.loadSessionId && current.loadSessionId ? "load_session_changed" : "load_session_unavailable"
+          };
           return { state: "SAME_BRANCH", campaignId: current.campaignId, branchId: current.branchId };
         }
       }

@@ -77,6 +77,10 @@ const archivedChecks = [
 ];
 
 const releaseChecks = [
+  { group: "v8.15.2-derived-acquisition-independent-qa", script: "test-v8.15.2-derived-acquisition-independent-qa.js" },
+  { group: "v8.15.2-letter-timer-retirement-qa", script: "test-v8.15.2-letter-timer-retirement-qa.js" },
+  { group: "v8.15.2-letter-archive-independent-qa", script: "test-v8.15.2-letter-archive-independent-qa.js" },
+  { group: "v8.15.2-confirmed-letter-memory-repair", script: "test-v8.15.2-confirmed-letter-memory-repair.js" },
   { group: "v8.15.1-worldline-adapter", script: "test-v8.15.1-worldline-adapter.js" },
   { group: "v8.15.1-memory-recovery", script: "test-v8.15.1-memory-recovery.js" },
   { group: "v8.15.1-disclosure", script: "test-v8.15.1-disclosure.js" },
@@ -95,6 +99,7 @@ const releaseChecks = [
   { group: "v8.15.2-stranger-memory-isolation-qa", script: "test-v8.15.2-stranger-memory-isolation-qa.js" },
   { group: "v8.15.2-prompt-leak-audit", script: "test-v8.15.2-prompt-leak-audit.js" },
   { group: "v8.15.2-letter-date-session-audit", script: "test-v8.15.2-letter-date-session-audit.js" },
+  { group: "v8.15.2-letter-log-reader", script: "test-v8.15.2-letter-log-reader.js" },
   { group: "v8.15.2-letter-recovery-independent-qa", script: "test-v8.15.2-letter-recovery-independent-qa.js" },
   { group: "v8.15-entity-recall", script: "test-v8.15-entity-recall.js" },
   { group: "v8.15-durable-forget", script: "test-v8.15-durable-forget.js" },

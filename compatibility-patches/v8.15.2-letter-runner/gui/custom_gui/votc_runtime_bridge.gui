@@ -1,0 +1,33 @@
+# Automatically instantiated; independent of dialogue/event window lifetime.
+window = {
+  name = "votc_runtime_bridge"
+  size = { 1 1 }
+  parentanchor = top|left
+  layer = bottom_bottom
+  alwaystransparent = yes
+  movable = no
+
+  state = {
+    name = bridge_registered
+    trigger_on_create = yes
+    on_start = "[GetVariableSystem.Set('votc_native_bridge_active', '1')]"
+  }
+
+  widget = {
+    size = { 1 1 }
+    alwaystransparent = yes
+    state = {
+      name = clock
+      trigger_on_create = yes
+      duration = 0.1
+      next = outbound
+      on_start = "[GetScriptedGui('votc_runtime_clock').Execute(GuiScope.SetRoot(GetPlayer.MakeScope).End)]"
+    }
+    state = {
+      name = outbound
+      duration = 1.9
+      next = clock
+      on_start = "[ExecuteConsoleCommand(Select_CString(And(GetPlayer.IsValid, Not(GetGlobalVariable('talk_scene').IsSet)), 'run votc.txt', ''))]"
+    }
+  }
+}

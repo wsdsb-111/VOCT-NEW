@@ -220,8 +220,10 @@ async function run() {
     const syntheticCk3Folder = path.join(fixtureDir, "synthetic-ck3-user");
     const syntheticDebugLog = path.join(syntheticCk3Folder, "logs", "debug.log");
     fs.mkdirSync(path.dirname(syntheticDebugLog), { recursive: true });
-    const setSyntheticDebugDate = async date => {
-      fs.writeFileSync(syntheticDebugLog, `VOTC:TEST_DATE/;/${date}/;/days=420001\n`, "utf8");
+    const setSyntheticDebugDate = async (date, useClock = false) => {
+      const initDate = useClock ? "1170年1月1日" : date;
+      const clockLine = useClock ? `VOTC:DATE/;/420002/;/${date}\n` : "";
+      fs.writeFileSync(syntheticDebugLog, `VOTC:IN/;/init/;/1/;/TITLE Player/;/2/;/TITLE NPC/;/${initDate}/;/talk_scene_court/;/Court 9/;/Controller/;/420001\n${clockLine}`, "utf8");
       const result = await renderer.evaluate(`llmConfigAPI.setCK3Folder(${JSON.stringify(syntheticCk3Folder)})`);
       assert.equal(result.success, true, JSON.stringify(result));
     };
@@ -241,6 +243,20 @@ async function run() {
     assert(liveDateRecord, `the valid live-date fixture should save through the UI; feedback=${await evaluate("document.querySelector('.world-memory-form .world-memory-feedback')?.textContent.trim()||null")}`);
     assert.equal(liveDateRecord.gameDate, "1170.1.2", "CURRENT_DATE must use the valid live date even when it differs from checkpoint");
 
+    await setSyntheticDebugDate("1170年1月3日", true);
+    await waitForCanon(result => result.defaultGameDate === "1170年1月3日");
+    await setText("标题", "rich DATE 当前日期 fixture");
+    await setText("希望世界长期记住的内容", "合成事件：持续日期推进后以新日期保存。");
+    await setSelect("这件事从什么时候成立？", "CURRENT_DATE");
+    await setSelect("谁可以知道？", "PUBLIC_WORLD");
+    await addPlayer("涉及人物");
+    await evaluate("[...document.querySelectorAll('.world-memory-form-actions button')].find(e=>e.textContent.trim()==='确认新增').click()");
+    await waitFor("[...document.querySelectorAll('.world-memory-record')].some(e=>e.textContent.includes('rich DATE 当前日期 fixture'))||!!document.querySelector('.world-memory-feedback.is-error')");
+    const richDateRecord = (await readCanon()).records.find(record => record.title === "rich DATE 当前日期 fixture");
+    assert(richDateRecord, "the rich DATE fixture should save through the packaged UI");
+    assert.equal(richDateRecord.gameDate, "1170.1.3");
+    assert.equal(richDateRecord.totalDays, 420002);
+
     await setSyntheticDebugDate("August 24, 1170");
     await waitForCanon(result => result.defaultGameDate === "August 24, 1170");
     await evaluate("document.querySelector('.world-memory-refresh').click()");
@@ -258,7 +274,7 @@ async function run() {
     assert(dateErrorVisibility.errorPresent, JSON.stringify(dateErrorVisibility));
     assert(dateErrorVisibility.visibleInViewport, JSON.stringify(dateErrorVisibility));
     assert.equal(dateErrorVisibility.persisted, false, "invalid live date must not persist a Canon record");
-    const dateAudit = { liveDateRecord: { gameDate: liveDateRecord.gameDate, temporalMode: liveDateRecord.temporalMode }, invalidDateErrorVisibility: dateErrorVisibility };
+    const dateAudit = { liveDateRecord: { gameDate: liveDateRecord.gameDate, temporalMode: liveDateRecord.temporalMode }, richDateRecord: { gameDate: richDateRecord.gameDate, totalDays: richDateRecord.totalDays }, invalidDateErrorVisibility: dateErrorVisibility };
 
     const blockedUrls = await main.evaluate("globalThis.__worldMemoryBlocked");
     assert(blockedUrls.every(url => url === "http://127.0.0.1:4315/v1/health"), `only the local Player2 health check may be blocked: ${JSON.stringify(blockedUrls)}`);

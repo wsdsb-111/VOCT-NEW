@@ -1,7 +1,8 @@
 "use strict";
 
 function createLetterEffectTransport({ settingsRepository, fs, path, runFileManager = null, dataDir = null }) {
-  const dateProducerEffect = `debug_log = "[Localize('talk_event.9999.desc')]"`;
+  const legacyDateProducerEffect = `debug_log = "[Localize('talk_event.9999.desc')]"`;
+  const dateProducerEffect = `debug_log = "VOTC:DATE/;/[GetCurrentDate.GetDateAsTotalDays]/;/[GetCurrentDate.GetStringShort]"`;
   const modes = Object.freeze({
     LEGACY: "legacy_letters_file",
     VOTC: "votc_run_file"
@@ -103,7 +104,7 @@ function createLetterEffectTransport({ settingsRepository, fs, path, runFileMana
         const currentText = fs.existsSync(effectFilePath) ? fs.readFileSync(effectFilePath, "utf8") : "";
         const effectText = currentText.replace(/^\uFEFF/, "").trim();
         // Only reclaim the date query or an abandoned marker-only A1 probe.
-        if (effectText && effectText !== dateProducerEffect && !/^debug_log\s*=\s*"VOTC:LETTER_TRANSPORT\/A\/[A-Za-z0-9_-]+"$/.test(effectText)) {
+        if (effectText && effectText !== dateProducerEffect && effectText !== legacyDateProducerEffect && !/^debug_log\s*=\s*"VOTC:LETTER_TRANSPORT\/A\/[A-Za-z0-9_-]+"$/.test(effectText)) {
           return { success: false, effectFilePath, error: "letters.txt contains an unknown effect; preserved without re-arm." };
         }
         if (effectText === dateProducerEffect && currentText.startsWith("\uFEFF")) return { success: true, effectFilePath };

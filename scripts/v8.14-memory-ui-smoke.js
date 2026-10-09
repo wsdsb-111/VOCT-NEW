@@ -70,6 +70,16 @@ async function connect(url, errors) {
 async function run() {
   const profile = fs.mkdtempSync(path.join(os.tmpdir(), "votc-e-packaged-ui-"));
   const fixture = await createMemoryUiFixture(profile);
+  const acquisitionText = "甲曾在异乡学习医术，具体年份不详。";
+  const acquisitionContext = { campaignToken: fixture.scope.campaignToken, conversationId: "ui-acquisition-conversation",
+    finalizationId: "ui-acquisition-finalization", date: "1164.1.1", totalDays: 425000, participants: [1, 3].map(id => ({ id })),
+    participantPresence: [1, 3].map(characterId => ({ characterId, joinedAtMessageId: 0, leftAtMessageId: null })),
+    messages: [{ id: 90, role: "assistant", speakerCharacterId: 1, content: acquisitionText,
+      memory4Fragments: [{ start: 0, end: acquisitionText.length, visibility: "participants", sourceType: "spoken", recipientIds: [3], entityIds: [1] }] }] };
+  const acquisitionProjection = projectVisibleTranscript(acquisitionContext, 3);
+  fixture.engine.memory4.store.commitOwner({ ...acquisitionContext, ...acquisitionProjection, ownerId: 3, counterpartIds: [1], summaryIds: [] },
+    { status: "STORE", entries: [{ memoryType: "MAJOR_EXPERIENCE", text: acquisitionText, entityIds: [1], topics: ["医术"],
+      fragmentIds: acquisitionProjection.fragments.map(fragment => fragment.fragmentId), eventTime: { status: "unknown" } }] });
   const dateOrderFile = path.join(fixture.summariesDir, "3_丙", "与甲的对话.json");
   const dateOrderRecords = [
     { playerId: 3, playerName: "丙", characterId: 1, characterName: "甲", date: "1163.8.1", content: "八月失败摘要补生成后仍应排在九月之后。" },
@@ -288,6 +298,33 @@ async function run() {
       assert.deepStrictEqual(collisions, [], `overlapping buttons in ${name}`);
       assert(await evaluate(`(()=>{const e=document.querySelector('.memory4-modal')||${manager};return !!e&&e.scrollWidth<=e.clientWidth+2})()`), `horizontal overflow in ${name}`);
     };
+    await evaluate("document.documentElement.setAttribute('data-votc-theme','ink')");
+    await evaluate("[...document.querySelectorAll('.player-header')].find(e=>e.querySelector('.player-name')?.textContent.startsWith('丙')).click()");
+    await waitFor("[...document.querySelectorAll('.player-summary-group')].find(e=>e.querySelector('.player-name')?.textContent.startsWith('丙'))?.querySelector('.memory4-manager')");
+    const acquisitionManager = "[...document.querySelectorAll('.player-summary-group')].find(e=>e.querySelector('.player-name')?.textContent.startsWith('丙')).querySelector('.memory4-manager')";
+    await evaluate(`(()=>{[...(${acquisitionManager}).querySelectorAll('[role=tab]')].find(e=>e.textContent.trim()==='年度记忆').click()})()`);
+    const acquisitionBuild = evaluate(`(()=>{[...(${acquisitionManager}).querySelectorAll('button')].find(e=>e.textContent.trim()==='从长期记忆生成年度与人生记忆').click()})()`);
+    await renderer.wait("Page.javascriptDialogOpening");
+    await renderer.send("Page.handleJavaScriptDialog", { accept: true });
+    await acquisitionBuild;
+    await waitFor(`(${acquisitionManager}).textContent.includes('1164 年')&&(${acquisitionManager}).textContent.includes('记忆已更新')`);
+    await evaluate(`(${acquisitionManager}).querySelector('.memory4-derived summary').click()`);
+    assert(await evaluate(`(${acquisitionManager}).textContent.includes('本年获知，事件日期未知')`));
+    await screenshot("ink-desktop-acquisition-year", `(${acquisitionManager})`);
+    await setViewport(540, 900);
+    await screenshot("ink-narrow-acquisition-year", `(${acquisitionManager})`);
+    await setViewport(1280, 1000);
+    await evaluate(`(()=>{[...(${acquisitionManager}).querySelectorAll('[role=tab]')].find(e=>e.textContent.trim()==='人生记忆').click()})()`);
+    await waitFor(`(${acquisitionManager}).textContent.includes('本年获知，事件日期未知')`);
+    const acquisitionData = await evaluate("conversationAPI.getMemory4OwnerData({ownerId:3})");
+    assert.equal(acquisitionData.derived.years[0].items[0].timeAxis, "acquired");
+    assert.equal(acquisitionData.derived.life.segments.length, 1);
+    await evaluate(`(${acquisitionManager}).querySelector('.memory4-derived summary').click()`);
+    await screenshot("ink-desktop-acquisition-life", `(${acquisitionManager})`);
+    await setViewport(540, 900);
+    await screenshot("ink-narrow-acquisition-life", `(${acquisitionManager})`);
+    await setViewport(1280, 1000);
+    await evaluate("[...document.querySelectorAll('.player-header')].find(e=>e.querySelector('.player-name')?.textContent.startsWith('丙')).click()");
     for (const theme of ["parchment", "knight", "ink"]) {
       await evaluate(`document.documentElement.setAttribute('data-votc-theme',${JSON.stringify(theme)})`);
       await setViewport(1280, 1000);
@@ -543,14 +580,15 @@ async function run() {
     const blockedFetchUrls = await main.evaluate("globalThis.__m4BlockedFetches");
     assert(blockedFetchUrls.every(url => url === "http://127.0.0.1:4315/v1/health"), `unexpected network request was blocked: ${JSON.stringify(blockedFetchUrls)}`);
     assert.deepStrictEqual(errors, [], "renderer/main exceptions");
-    assert.equal(screenshots.length, 44, "original 40 screens plus desktop/narrow date toolbar and list");
+    assert.equal(screenshots.length, 48, "original 44 screens plus acquisition-year/life desktop and narrow views");
     fs.writeFileSync(path.join(evidence, "result.json"), JSON.stringify({ passed: true, themes: ["parchment", "knight", "ink"], desktop: [1280, 1000], narrow: [540, 900], baseScreenshotCount: 27,
       disclosureScreenshotCount: 4,
-      archiveScreenshotCount: 3, legacyEditScreenshotCount: 2, ageDisclosureScreenshotCount: 2, directObservationScreenshotCount: 2, summaryDateScreenshotCount: 4, screenshotCount: screenshots.length, screenshots, providerRequests: 0, blockedNetworkFetches: blockedFetchUrls.length,
+      archiveScreenshotCount: 3, legacyEditScreenshotCount: 2, ageDisclosureScreenshotCount: 2, directObservationScreenshotCount: 2, summaryDateScreenshotCount: 4, acquisitionDerivedScreenshotCount: 4, screenshotCount: screenshots.length, screenshots, providerRequests: 0, blockedNetworkFetches: blockedFetchUrls.length,
       blockedNetworkUrls: blockedFetchUrls, realCK3Gate: false, profile,
       archive: { ownerId: fixture.archive.ownerId, campaignToken: fixture.archive.campaignToken, readOnlyReasons: [archiveData.readOnlyReason, endedArchiveData.readOnlyReason],
         strictCurrentIsNullAfterDetach: detachedState.strictCurrentIsNull, sidecarHashBefore: archiveHashBefore, sidecarHashAfter: archiveHashAfter, rejectedWriteError: archiveWriteRequest.error || null },
       checks: ["missing Campaign", "wrong Campaign", "strict owner data", "orphan audit real IPC read-only", "orphan forget requires explicit confirmation", "confirmed orphan forget through real preload/IPC", "six views", "readonly Official", "disclosure source/date/nickname", "manual disclosure write", "disclosure hide cancellation", "archive disclosure readonly", "source modal", "manual conflict preservation", "manual edit", "delete cancellation",
+        "undated Detail manually generates acquisition-year and Life through actual Renderer/preload/IPC; event date remains unknown",
         "accepted Detail deletion", "existing binding preview cancellation", "nonoverlapping tool buttons", "no horizontal overflow", "same-campaign archive outside loaded roster", "loaded-campaign readonly banner",
         "archive refresh/tabs/source remain available", "archive year/life/detail mutation controls disabled", "manager detach leaves strict current null and read snapshot available",
         "archive IPC mutation rejected after manager detach", "archive sidecar hash unchanged", "ended-conversation banner, detail and source remain available", "ordinary Legacy edit/delete enabled after detach", "ordinary Legacy manual edit persisted through real preload/IPC after detach", "NPC asks player, user-role bare answer persisted for listener and reloaded through real preload/IPC: current CK3 age 17, historical age 16 and source date retained without mutation controls",

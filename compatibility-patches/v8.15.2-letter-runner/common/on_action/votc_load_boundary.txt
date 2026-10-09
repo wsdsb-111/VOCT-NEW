@@ -3,7 +3,19 @@
 # The desktop side uses only this opaque marker to stop same-path cross-save
 # auto-continuation; it never changes game facts or player-visible state.
 on_game_start = {
+	on_actions = { votc_load_boundary_on_game_start }
+}
+
+on_game_start_after_lobby = {
+	on_actions = { votc_load_boundary_after_lobby }
+}
+
+votc_load_boundary_on_game_start = {
 	effect = {
+		if = {
+			limit = { NOT = { has_global_variable = votc_load_epoch } }
+			set_global_variable = { name = votc_load_epoch value = 0 }
+		}
 		change_global_variable = {
 			name = votc_load_epoch
 			add = 1
@@ -13,14 +25,8 @@ on_game_start = {
 }
 
 # Player scopes are established after the lobby, not during on_game_start.
-on_game_start_after_lobby = {
+votc_load_boundary_after_lobby = {
 	effect = {
-		debug_log = "[Localize('talk_event.9999.desc')]"
-		every_player = {
-			trigger_event = {
-				id = mcc_event_v2.9998
-				days = 1
-			}
-		}
+		debug_log = "VOTC:DATE/;/[GetCurrentDate.GetDateAsTotalDays]/;/[GetCurrentDate.GetStringShort]"
 	}
 }

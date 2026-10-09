@@ -19468,7 +19468,7 @@ function LettersStatusModal({ onClose }) {
     const active = Object.values(snapshot?.effectDiagnostics || {}).find((item) => ["WAITING_FOR_CK3_EXECUTION", "A3_PRE_WAIT", "A3_EFFECT_ENTERED", "A3_POST_WAIT", "A3_SCOPE_CONFIRMED", "ARTIFACT_VISUAL_CHECK_REQUIRED", "A3_VISUAL_CHECK_REQUIRED"].includes(item?.result));
     if (active) return ["ARTIFACT_VISUAL_CHECK_REQUIRED", "A3_VISUAL_CHECK_REQUIRED"].includes(active.result) ? `${active.stage} 已执行，请先确认 CK3 可见结果` : `${active.stage} 正在等待 CK3 Execution Marker`;
     if (["B", "C", "D"].includes(stage) && !diagnosticLetterId) return "请选择 Known Letter ID";
-    if (stage === "A2" && !["PASS", "RUN_FILE_NOT_EXECUTED"].includes(snapshot?.effectDiagnostics?.A1?.result)) return "A1 尚未完成 letters.txt Execution 判定";
+    if (stage === "A1") return "旧 letters.txt 管道已停用；请从 A2 开始";
     if (stage === "A3" && snapshot?.effectDiagnostics?.A2?.result !== "PASS") return "A2 votc.txt Execution Marker 尚未通过";
     if (["B", "C", "D"].includes(stage)) {
       const previousStage = stage === "B" ? "A3" : String.fromCharCode(stage.charCodeAt(0) - 1);
@@ -19572,7 +19572,7 @@ function LettersStatusModal({ onClose }) {
       ] }),
       /* @__PURE__ */ jsxRuntimeExports.jsxs("section", { className: "letter-details", children: [
         /* @__PURE__ */ jsxRuntimeExports.jsx("h5", { children: "Effect 实机诊断 3.0（Transport → CK3 EXECUTE → Scope → 可见结果确认）" }),
-        /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "muted-text", children: "严格按 A1 → A2 → A3 → B → C → D 执行；文件写入不代表 CK3 已执行。B/C/D 只能选择当前已知 Letter ID，正式投递繁忙时诊断会锁定。" }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "muted-text", children: "按 A2 → A3 → B → C → D 执行；旧 A1 管道已停用。文件写入不代表 CK3 已执行。B/C/D 只能选择当前已知 Letter ID，正式投递繁忙时诊断会锁定。" }),
         /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { className: "muted-text", children: [
           "正式 Outbound Transport: ",
           snapshot?.letterTransport?.outboundMode || "votc_run_file",

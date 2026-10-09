@@ -113,7 +113,11 @@ try {
     const dateDebugLogPath = path.join(dateCk3Dir, "logs", "debug.log");
     fs.mkdirSync(dateRunDir, { recursive: true });
     fs.mkdirSync(path.dirname(dateDebugLogPath), { recursive: true });
-    fs.writeFileSync(path.join(dateRunDir, "votc.txt"), "", "utf8");
+    const dateLettersCarrierPath = path.join(dateRunDir, "letters.txt");
+    const dateOutboundCarrierPath = path.join(dateRunDir, "votc.txt");
+    const dateLettersCarrier = 'debug_log = "VOTC:LETTER_TRANSPORT/A/retired-carrier"';
+    const dateOutboundCarrier = "root = { add_gold = 7 }";
+    fs.writeFileSync(dateLettersCarrierPath, dateLettersCarrier, "utf8");
     fs.writeFileSync(dateDebugLogPath, "VOTC:DATE/;/100\n", "utf8");
     const dateSettingsRepository = {
       getCK3UserFolderPath: () => dateCk3Dir,
@@ -123,6 +127,7 @@ try {
     const DateRunFileManager = createRunFileManager({ settingsRepository: dateSettingsRepository, path, fs, dataDir: dateDataDir, now: () => fakeNow });
     const dateRunFileManager = new DateRunFileManager();
     dateRunFileManager.initializeAfterAckReconciliation();
+    fs.writeFileSync(dateOutboundCarrierPath, dateOutboundCarrier, "utf8");
     const { LetterManager: DateLetterManager } = createLetterManager({
       settingsRepository: dateSettingsRepository,
       fs,
@@ -161,38 +166,28 @@ try {
     dateManager.savePendingLetters();
 
     await dateManager.runDateTrackerHeartbeat();
-    const firstRearm = dateRunFileManager.getPendingCommands()[0];
-    assert.strictEqual(firstRearm.kind, "date_producer_rearm");
-    assert.strictEqual(firstRearm.status, "awaiting_ack");
-    assert.strictEqual(firstRearm.writeAttempts, 1);
-    await dateManager.processLogLine(`VOTC:DATE_PRODUCER/BLOCKED/${firstRearm.commandId}`);
-    await dateManager.processLogLine(`VOTC:RUN_ACK/DATE_PRODUCER_REARM/${firstRearm.commandId}`);
+    assert.strictEqual(dateManager.getDateTrackerStatus().dateProducerRecovery.status, "NATIVE_BRIDGE_WAITING");
+    assert.deepStrictEqual(dateRunFileManager.getPendingCommands(), [], "stale DATE waits for the native bridge without queuing a recovery command");
+    assert.strictEqual(fs.readFileSync(dateLettersCarrierPath, "utf8"), dateLettersCarrier, "stale DATE must not rewrite the retired letters.txt carrier");
+    assert.strictEqual(fs.readFileSync(dateOutboundCarrierPath, "utf8"), dateOutboundCarrier, "stale DATE must not overwrite a pending outbound carrier");
     assert.strictEqual(dateManager.awaitingAcceptanceLetterId, "already_accepted_letter", "an old acceptance lock must not be cleared by unrelated date recovery");
 
     fakeNow += 20_001;
     await dateManager.runDateTrackerHeartbeat();
-    const secondRearm = dateRunFileManager.getPendingCommands()[0];
-    assert.notStrictEqual(secondRearm.commandId, firstRearm.commandId, "no fresh DATE after a blocked ACK must schedule a new date rearm");
-    assert.strictEqual(secondRearm.kind, "date_producer_rearm");
-    assert.strictEqual(secondRearm.writeAttempts, 1, "date recovery must not replay an already-dispatched command");
-
-    fakeNow += 30_001;
-    dateManager.runCommandWatchdog();
-    assert.strictEqual(dateRunFileManager.getPendingCommands().length, 0, "expired date rearm must be quarantined and removed");
-    assert.strictEqual(dateRunFileManager.getRecentCommands().find(command => command.commandId === secondRearm.commandId).status, "quarantined");
-    assert.strictEqual(fs.readFileSync(path.join(dateRunDir, "votc.txt"), "utf8"), "", "quarantine must neutralize only the expired matching date command");
+    assert.strictEqual(dateManager.getDateTrackerStatus().dateProducerRecovery.status, "NATIVE_BRIDGE_WAITING");
+    assert.deepStrictEqual(dateRunFileManager.getPendingCommands(), [], "repeated stale heartbeats must not create or replay commands");
+    assert.strictEqual(fs.readFileSync(dateLettersCarrierPath, "utf8"), dateLettersCarrier);
+    assert.strictEqual(fs.readFileSync(dateOutboundCarrierPath, "utf8"), dateOutboundCarrier);
 
     fakeNow += 20_001;
     await dateManager.runDateTrackerHeartbeat();
-    const thirdRearm = dateRunFileManager.getPendingCommands()[0];
-    assert.notStrictEqual(thirdRearm.commandId, secondRearm.commandId, "a long-future pending letter must keep requesting date recovery after safe quarantine");
-    assert.strictEqual(thirdRearm.kind, "date_producer_rearm");
-    assert.strictEqual(thirdRearm.writeAttempts, 1);
+    assert.strictEqual(dateManager.getDateTrackerStatus().dateProducerRecovery.status, "NATIVE_BRIDGE_WAITING");
+    assert.deepStrictEqual(dateRunFileManager.getPendingCommands(), [], "a future-due letter does not trigger carrier or queue recovery");
     assert.strictEqual(dateManager.getLetterStatus(pendingLetter.letterId).responseStatus, "pending_delivery");
-    assert.strictEqual(dateManager.awaitingAcceptanceLetterId, "already_accepted_letter", "the old acceptance lock may block delivery but not date re-arming");
+    assert.strictEqual(dateManager.awaitingAcceptanceLetterId, "already_accepted_letter", "date waiting does not clear an unrelated acceptance lock");
+    assert.strictEqual(fs.readFileSync(dateLettersCarrierPath, "utf8"), dateLettersCarrier);
+    assert.strictEqual(fs.readFileSync(dateOutboundCarrierPath, "utf8"), dateOutboundCarrier);
 
-    await dateManager.processLogLine(`VOTC:DATE_PRODUCER/REARMED/${thirdRearm.commandId}`);
-    await dateManager.processLogLine(`VOTC:RUN_ACK/DATE_PRODUCER_REARM/${thirdRearm.commandId}`);
     await dateManager.processLogLine("VOTC:DATE/;/500");
     assert.strictEqual(dateManager.currentTotalDays, 500, "a fresh DATE marker must catch up a letter beyond its due day");
     assert.strictEqual(dateManager.storedLetters.has(pendingLetter.letterId), true, "a stale acceptance lock may block delivery without blocking date receipt");
@@ -211,7 +206,7 @@ try {
     Date.now = originalNow;
   }
 
-  console.log("VOTC v8.14.2 Letter Delivery Incident: PASS (acceptance guard, persistent date re-arm after ACK/TTL, overdue catch-up)");
+  console.log("VOTC v8.14.2 Letter Delivery Incident: PASS (acceptance guard, native bridge waiting without carrier writes, overdue catch-up)");
 } finally {
   fs.rmSync(tempDir, { recursive: true, force: true });
 }

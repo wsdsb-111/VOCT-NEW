@@ -28,8 +28,9 @@ try {
   const transport = new LetterEffectTransport();
 
   const dateFilePath = path.join(runDir, "letters.txt");
-  const dateEffect = `debug_log = "[Localize('talk_event.9999.desc')]"`;
-  for (const content of ["", "\uFEFF", dateEffect, `\uFEFF${dateEffect}`]) {
+  const legacyDateEffect = `debug_log = "[Localize('talk_event.9999.desc')]"`;
+  const dateEffect = `debug_log = "VOTC:DATE/;/[GetCurrentDate.GetDateAsTotalDays]/;/[GetCurrentDate.GetStringShort]"`;
+  for (const content of ["", "\uFEFF", legacyDateEffect, `\uFEFF${legacyDateEffect}`, dateEffect, `\uFEFF${dateEffect}`]) {
     fs.writeFileSync(dateFilePath, content, "utf8");
     assert.strictEqual(transport.ensureDateProducerFile().success, true);
     assert.strictEqual(fs.readFileSync(dateFilePath, "utf8"), `\uFEFF${dateEffect}`, "date query restoration must use UTF-8 BOM");
