@@ -165,6 +165,7 @@ async function testDateAndEscaping() {
     assert.strictEqual(beforeDeliveryDiagnostics.inspectedEffectFilePath, fixture.effectPath);
     assert.strictEqual(beforeDeliveryDiagnostics.effectPayloadPresent, false, "an idle formal carrier is not a Letter Effect");
     assert.strictEqual(beforeDeliveryDiagnostics.storedLettersCount, 1);
+    fs.appendFileSync(fixture.debugLogPath, "[debug] VOTC:DATE/;/201\n", "utf8");
     await manager.processLogLine("[debug] VOTC:DATE/;/201");
     assert.strictEqual(manager.getCurrentTotalDays(), 201);
     assert(Number.isFinite(manager.lastDateLogReceivedAt));

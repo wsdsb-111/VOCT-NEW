@@ -54,13 +54,13 @@ const { LetterManager } = createLetterManager({
     await manager.processLogLine("VOTC:DATE/;/419336");
     assert.strictEqual(manager.getDateTrackerStatus().dateProducerState, "LIVE_NO_PROGRESS", "same-day fresh marker must remain live without claiming date progress");
     assert.strictEqual(manager.lastProgressAt, firstProgressAt, "same value must not update Last Progress");
+    fs.appendFileSync(debugLogPath, "VOTC:DATE/;/419337\n", "utf8");
     await manager.processLogLine("VOTC:DATE/;/419337");
     assert.strictEqual(manager.lastProgressDateValue, 419337);
     assert.strictEqual(manager.getDateTrackerStatus().dateProducerState, "LIVE");
 
     manager.lastObservedDateMarkerAt = Date.now() - 1000;
     const oldObservedAt = manager.lastObservedDateMarkerAt;
-    fs.writeFileSync(debugLogPath, "VOTC:DATE/;/419337\n", "utf8");
     const reconciled = await manager.reconcileLatestDateMarker("manual");
     assert.strictEqual(reconciled.dateSourceState, "DATE_SOURCE_STALLED", "old scanned marker must not be promoted to HEALTHY");
     assert.strictEqual(reconciled.dateProducerState, "STALLED");
@@ -77,6 +77,7 @@ const { LetterManager } = createLetterManager({
     assert.strictEqual(fs.readFileSync(dateFilePath, "utf8"), lettersCarrier, "stalled-date handling must not rewrite the retired letters.txt carrier");
     assert.strictEqual(fs.readFileSync(outboundFilePath, "utf8"), outboundCarrier, "stalled-date handling must not touch the active outbound carrier");
     assert.deepStrictEqual(runFileManager.getPendingCommands(), pendingBeforeRecovery, "stalled-date handling must not enqueue a recovery command");
+    fs.appendFileSync(debugLogPath, "VOTC:DATE/;/419338\n", "utf8");
     await manager.processLogLine("VOTC:DATE/;/419338");
     assert.strictEqual(manager.dateProducerRecovery.status, "RECOVERED", "a fresh native DATE marker clears the waiting state");
     const originalNow = Date.now;

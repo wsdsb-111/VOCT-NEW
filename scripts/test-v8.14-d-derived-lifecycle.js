@@ -89,7 +89,7 @@ async function main() {
     });
     await check("over-budget compression uses real purpose and source IDs with a hard cap", async () => {
       const f = fixture(); let calls = 0, purpose;
-      f.add("1158年迁居邢州。" + "路途详细记录。".repeat(220));
+      f.add("1158年迁居邢州。" + "路途详细记录。".repeat(440));
       f.coordinator.configureDerived({ getProviderSnapshot: async () => ({ providerId: "fixture", modelId: "fixture" }),
         requestCompression: async (prompt, options) => {
           calls++; purpose = options.requestType; assert(options.signal instanceof AbortSignal);
@@ -103,7 +103,7 @@ async function main() {
     });
     await check("compression cannot discard a commitment condition to meet its budget", async () => {
       const f = fixture();
-      f.add("1158年答应议和，但须先释放俘虏。" + "详细记录。".repeat(300));
+      f.add("1158年答应议和，但须先释放俘虏。" + "详细记录。".repeat(600));
       f.coordinator.configureDerived({ requestCompression: async prompt => JSON.stringify({ items: [{
         text: "1158年答应议和。", sourceEntryIds: JSON.parse(prompt[1].content).items.flatMap(item => item.sourceEntryIds)
       }] }) });
@@ -113,7 +113,7 @@ async function main() {
     });
     await check("compression cannot move one source condition to an unrelated output item", async () => {
       const f = fixture();
-      const commitment = f.add("1158年答应议和，但须先释放俘虏。" + "详细记录。".repeat(300));
+      const commitment = f.add("1158年答应议和，但须先释放俘虏。" + "详细记录。".repeat(600));
       const unrelated = f.add("1158年迁居邢州。");
       f.coordinator.configureDerived({ requestCompression: async prompt => {
         const items = JSON.parse(prompt[1].content).items;

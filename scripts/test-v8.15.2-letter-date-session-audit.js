@@ -7,18 +7,19 @@ const { createLetterManager } = require("../resources/app/out/main/letters/lette
 const LOG_PATH = path.join("C:\\synthetic-votc", "debug.log");
 
 function createReadOnlyMemoryFs(logText) {
-  let bytes = Buffer.from(logText, "utf8");
+  const complete = value => value.endsWith("\n") ? value : `${value}\n`;
+  let bytes = Buffer.from(complete(logText), "utf8");
   let identity = "1:7";
   let mtimeMs = 1000;
   let openCount = 0;
   let available = true;
   return {
     append(text) {
-      bytes = Buffer.concat([bytes, Buffer.from(text, "utf8")]);
+      bytes = Buffer.concat([bytes, Buffer.from(complete(text), "utf8")]);
       mtimeMs++;
     },
     replace(text, { nextIdentity = identity } = {}) {
-      bytes = Buffer.from(text, "utf8");
+      bytes = Buffer.from(complete(text), "utf8");
       identity = nextIdentity;
       mtimeMs++;
     },
@@ -26,6 +27,7 @@ function createReadOnlyMemoryFs(logText) {
     existsSync(file) { return available && file === LOG_PATH; },
     statSync(file) {
       assert.equal(file, LOG_PATH);
+      if (!available) throw Object.assign(new Error("missing fixture log"), { code: "ENOENT" });
       const [birthtimeMs, ino] = identity.split(":").map(Number);
       return { size: bytes.length, mtimeMs, birthtimeMs, ino };
     },
@@ -45,7 +47,7 @@ function createReadOnlyMemoryFs(logText) {
   };
 }
 
-function createManager({ logText, runFileManager = null, dateScanBytes = 1024 * 1024 } = {}) {
+function createManager({ logText, runFileManager = null, dateChunkBytes = 64 * 1024 } = {}) {
   const fs = createReadOnlyMemoryFs(logText);
   const letterEffectTransport = {
     ensureDateProducerFile() { return { success: true, effectFilePath: null }; }
@@ -69,11 +71,12 @@ function createManager({ logText, runFileManager = null, dateScanBytes = 1024 * 
     letterEffectTransport,
     runFileManager,
     autoStartLogTailing: false,
-    dateScanBytes,
     setIntervalFn: () => null,
     clearIntervalFn: () => null
   });
-  return { manager: new LetterManager(), fs, logSize: Buffer.byteLength(logText, "utf8") };
+  const manager = new LetterManager();
+  manager.dateSessionScanner.chunkBytes = dateChunkBytes;
+  return { manager, fs, logSize: fs.statSync(LOG_PATH).size };
 }
 
 async function staleDateDoesNotCrossLoadBoundary() {
@@ -139,7 +142,7 @@ async function sameTokenPhysicalLoadOutsideTailStartsNewSession() {
     "VOTC:LOAD_SESSION/;/votc-load-2",
     "x".repeat(200)
   ].join("\n");
-  const { manager } = createManager({ logText, dateScanBytes: 100 });
+  const { manager } = createManager({ logText, dateChunkBytes: 100 });
 
   const result = await manager.reconcileLatestDateMarker("synthetic_duplicate_tail_audit");
 
@@ -283,8 +286,8 @@ async function boundSessionRejectsUnverifiableDate() {
   fs.replace(`VOTC:DATE/;/${day}`);
   await manager.processLogLine(`VOTC:DATE/;/${day}`);
 
-  assert.equal(manager.getCurrentTotalDays(), day,
-    "an unverifiable tail date must not update a previously bound session");
+  assert.equal(manager.getCurrentTotalDays(), 0,
+    "invalidated physical evidence withdraws the old current date and never authorizes the unverifiable callback");
   assert.equal(deliveryChecks, 0,
     "an unreadable or markerless log must not send a bound session's tail date to delivery");
   assert.equal(manager.storedLetters.get("unverifiable-pending"), pendingLetter);
@@ -328,24 +331,19 @@ async function olderSameTokenScanCannotMoveTailSessionBackward() {
 
   await manager.processLogLine("VOTC:LOAD_SESSION/;/votc-load-2");
   await manager.processLogLine(`VOTC:DATE/;/${currentDay}`);
-  const latestScan = manager.scanLatestDateMarker();
+  const latestScan = await manager.scanLatestDateMarker();
   const currentBoundaryOffset = manager.dateSessionBoundaryOffset;
   let deliveryChecks = 0;
   manager.checkAndDeliverLetters = () => {
     deliveryChecks++;
     return Promise.resolve();
   };
-  manager.dateSessionScanCache = {
-    logIdentity: latestScan.logIdentity,
-    logSize: latestScan.logSize,
-    logMtimeMs: latestScan.logMtimeMs,
-    result: {
+  manager.scanLatestDateMarker = async () => ({
       ...latestScan,
       found: true,
       value: oldDay,
       sessionBoundaryOffset: 0
-    }
-  };
+  });
 
   await manager.processLogLine("VOTC:LOAD_SESSION/;/votc-load-2");
   await manager.processLogLine(`VOTC:DATE/;/${oldDay}`);
@@ -432,7 +430,8 @@ async function oldBoundaryCannotOverrideNewerTailSession() {
   assert.equal(result.lastDateScanResult.found, false,
     "a lower byte-offset boundary in the same log must be rejected");
   assert.equal(manager.dateSessionId, "votc-load-1");
-  assert.equal(manager.getCurrentTotalDays(), currentDay);
+  assert.equal(manager.getCurrentTotalDays(), 0,
+    "a rewritten log withdraws its previously current date until a valid physical scan recovers");
 }
 
 async function replacementAndTruncationRebuildSessionBoundary() {
@@ -455,7 +454,10 @@ async function replacementAndTruncationRebuildSessionBoundary() {
   ].join("\n"), { nextIdentity: "2:8" });
   replacementFixture.manager.captureDebugLogMetadata();
 
-  const replaced = await replacementFixture.manager.reconcileLatestDateMarker("synthetic_log_replacement_audit");
+  const invalidatedReplacement = await replacementFixture.manager.reconcileLatestDateMarker("synthetic_log_replacement_audit");
+  assert.equal(invalidatedReplacement.lastDateScanResult.found, false);
+  assert.equal(replacementFixture.manager.getCurrentTotalDays(), 0);
+  const replaced = await replacementFixture.manager.reconcileLatestDateMarker("synthetic_log_replacement_recovery");
 
   assert.equal(replaced.lastDateScanResult.found, true);
   assert.equal(replacementFixture.manager.dateSessionId, "votc-load-2");
@@ -478,7 +480,10 @@ async function replacementAndTruncationRebuildSessionBoundary() {
   ].join("\n"));
   truncatedFixture.manager.captureDebugLogMetadata();
 
-  const truncated = await truncatedFixture.manager.reconcileLatestDateMarker("synthetic_log_truncation_audit");
+  const invalidatedTruncation = await truncatedFixture.manager.reconcileLatestDateMarker("synthetic_log_truncation_audit");
+  assert.equal(invalidatedTruncation.lastDateScanResult.found, false);
+  assert.equal(truncatedFixture.manager.getCurrentTotalDays(), 0);
+  const truncated = await truncatedFixture.manager.reconcileLatestDateMarker("synthetic_log_truncation_recovery");
 
   assert.equal(truncated.lastDateScanResult.found, true);
   assert.equal(truncatedFixture.manager.dateSessionId, "votc-load-4");
@@ -493,7 +498,7 @@ async function unchangedLogScanIsCachedAndUsesOneDescriptor() {
       "x".repeat(160000),
       "VOTC:DATE/;/395246"
     ].join("\n"),
-    dateScanBytes: 100
+    dateChunkBytes: 100
   });
 
   await manager.reconcileLatestDateMarker("synthetic_scan_cache_audit");
@@ -502,8 +507,8 @@ async function unchangedLogScanIsCachedAndUsesOneDescriptor() {
     "one complete scan should reuse a single file descriptor");
   await manager.reconcileLatestDateMarker("synthetic_scan_cache_audit_repeat");
 
-  assert.equal(fs.openCount, openedAfterFirstScan,
-    "unchanged size/mtime should reuse the cached scan without reopening the log");
+  assert.equal(fs.openCount, openedAfterFirstScan + 1,
+    "unchanged logs revalidate the bounded anchor using one descriptor, without a history scan");
 }
 
 async function legacyLogWithoutLoadBoundaryRemainsCompatible() {

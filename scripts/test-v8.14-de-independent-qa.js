@@ -328,7 +328,7 @@ async function main() {
     const sample = fixture();
     const paused = compressionPause();
     sample.coordinator.configureDerived({ requestCompression: paused.requestCompression, estimateTokens: sample.options.estimateTokens });
-    const { entryId } = addEvent(sample, { text: `1164年旧来源 ${"长篇经历".repeat(600)}` });
+    const { entryId } = addEvent(sample, { text: `1164年旧来源 ${"长篇经历".repeat(1200)}` });
     const running = sample.coordinator.derived.rebuild(sample.scope, { kind: "year", eventYear: 1164 });
     await waitForCompression(paused, running);
     sample.coordinator.store.updateEntry(sample.scope, entryId, "1164年修订后的短来源 NEW_SOURCE。", { expectedRevision: 1 });
@@ -343,7 +343,7 @@ async function main() {
     const sample = fixture();
     const { entryId } = addEvent(sample);
     await sample.coordinator.derived.rebuild(sample.scope, { kind: "year", eventYear: 1164 });
-    sample.coordinator.store.updateEntry(sample.scope, entryId, `1164年长来源 ${"长篇经历".repeat(600)}`, { expectedRevision: 1 });
+    sample.coordinator.store.updateEntry(sample.scope, entryId, `1164年长来源 ${"长篇经历".repeat(1200)}`, { expectedRevision: 1 });
     const paused = compressionPause();
     sample.coordinator.configureDerived({ requestCompression: paused.requestCompression, estimateTokens: sample.options.estimateTokens });
     const running = sample.coordinator.derived.rebuild(sample.scope, { kind: "year", eventYear: 1164 });
@@ -363,7 +363,7 @@ async function main() {
     const sample = fixture();
     const paused = compressionPause();
     sample.coordinator.configureDerived({ requestCompression: paused.requestCompression, estimateTokens: sample.options.estimateTokens });
-    addEvent(sample, { text: `1164年长来源 ${"长篇经历".repeat(600)}` });
+    addEvent(sample, { text: `1164年长来源 ${"长篇经历".repeat(1200)}` });
     addEvent(sample, { ownerId: 3, text: "1164年三号人物的独立来源。" });
     const running = sample.coordinator.derived.rebuild(sample.scope, { kind: "year", eventYear: 1164 });
     await waitForCompression(paused, running);
@@ -728,7 +728,7 @@ async function main() {
     const paused = compressionPause();
     sample.coordinator.configureDerived({ requestCompression: paused.requestCompression, estimateTokens: sample.options.estimateTokens,
       isCampaignCurrent: token => conversation.gameData.campaignToken === token });
-    addEvent(sample, { text: `1164年长来源 ${"长篇经历".repeat(600)}` });
+    addEvent(sample, { text: `1164年长来源 ${"长篇经历".repeat(1200)}` });
     const running = manager.mutateMemory4({ ownerId: 2, expectedCampaignToken: sample.scope.campaignToken, operation: "rebuild",
       kind: "year", eventYear: 1164, overwriteManual: false, expectedRevision: 0, committedFinalization: true });
     await waitForCompression(paused, running);

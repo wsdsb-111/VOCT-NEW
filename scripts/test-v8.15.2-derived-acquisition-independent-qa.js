@@ -152,7 +152,7 @@ async function main() {
     const sample = fixture();
     const sourceTexts = ["甲方在边境记录了一件平常经历。", "乙方在城中记录了一件平常经历。"];
     const sources = sourceTexts.map((prefix, index) => addEntry(sample, { date: index ? "1164.3.1" : "1164.1.1",
-      text: prefix + "普通事实记录。".repeat(190) }));
+      text: prefix + "普通事实记录。".repeat(380) }));
     const calls = [];
     sample.coordinator.configureDerived({ estimateTokens, requestCompression: async (prompt, options) => {
       calls.push(options.requestType);
@@ -177,7 +177,7 @@ async function main() {
 
   await check("Year compression fails closed when the model removes the unknown-event qualifier", async () => {
     const sample = fixture();
-    addEntry(sample, { text: "平常事实记录。".repeat(340) });
+    addEntry(sample, { text: "平常事实记录。".repeat(680) });
     sample.coordinator.configureDerived({ estimateTokens, requestCompression: async prompt => {
       const input = JSON.parse(prompt[1].content);
       return compressionResponse(input.items, "压缩后的文字没有保留事件日期未知标记。" );

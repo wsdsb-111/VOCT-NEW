@@ -11,7 +11,12 @@ const serial = value => normalizeGameDate(value)?.serial;
 const copy = value => JSON.parse(JSON.stringify(value));
 const scopeKey = scope => hash([scope.campaignToken, scope.ownerId]);
 const scopeDto = scope => { assertScope(scope); return { campaignToken: scope.campaignToken, ownerId: scope.ownerId }; };
-const YEAR_MAX_TOKENS = 1000;
+const YEAR_MAX_TOKENS = 1500;
+const LIFE_SEGMENT_MAX_TOKENS = 1000;
+const YEAR_TARGET_TOKENS = 1200;
+const LIFE_SEGMENT_TARGET_TOKENS = 700;
+const derivedLimitFor = kind => kind === "year" ? YEAR_MAX_TOKENS : LIFE_SEGMENT_MAX_TOKENS;
+const derivedTargetFor = kind => kind === "year" ? YEAR_TARGET_TOKENS : LIFE_SEGMENT_TARGET_TOKENS;
 
 function eventYears(row) {
   const time = row?.eventTime;
@@ -323,11 +328,12 @@ class Memory4DerivedService {
 
   async compress(scope, kind, items, entries, task, providerSnapshot) {
     scope = scopeDto(scope);
-    if (this.count(items.map(item => item.text).join("\n")) <= YEAR_MAX_TOKENS) return items;
+    const hardLimit = derivedLimitFor(kind), softTarget = derivedTargetFor(kind);
+    if (this.count(items.map(item => item.text).join("\n")) <= hardLimit) return items;
     if (typeof this.options.requestCompression !== "function") throw new Error("memory4_compression_unavailable");
     providerSnapshot ||= this.options.getProviderSnapshot ? await this.options.getProviderSnapshot() : null;
     const prompt = [
-      { role: "system", content: "Compress this owner's supplied historical memory items into JSON {\"items\":[{\"text\":\"...\",\"sourceEntryIds\":[\"...\"]}]}. Use only supplied facts. Retain every source ID exactly once, all commitment conditions, negations, reported/rumor uncertainty and status. For acquisition-dated sources retain the exact qualifier 本年获知，事件日期未知 in the item's text: acquiredDate is when this Owner learned the fact, never proof the event happened then. Do not merge acquisition-dated and event-dated items. Do not invent events, motives, dates, identities, knowledge or CK3 truth. Prefer merging duplicate text. Preserve Chinese source language. Text total must fit 700 tokens and never exceed 1000. Return only JSON." },
+      { role: "system", content: `Compress this owner's supplied historical memory items into JSON {\"items\":[{\"text\":\"...\",\"sourceEntryIds\":[\"...\"]}]}. Use only supplied facts. Retain every source ID exactly once, all commitment conditions, negations, reported/rumor uncertainty and status. For acquisition-dated sources retain the exact qualifier 本年获知，事件日期未知 in the item's text: acquiredDate is when this Owner learned the fact, never proof the event happened then. Do not merge acquisition-dated and event-dated items. Do not invent events, motives, dates, identities, knowledge or CK3 truth. Prefer merging duplicate text. Preserve Chinese source language. Text total must fit ${softTarget} tokens and never exceed ${hardLimit}. Return only JSON.` },
       { role: "user", content: JSON.stringify({ ...scope, items: items.map(item => ({ ...item,
         evidence: entries.filter(entry => item.sourceEntryIds.includes(entry.entryId)).map(entry => ({ sourceEntryId: entry.entryId,
           sourceType: entry.evidence.sourceType, epistemicStatus: entry.evidence.epistemicStatus,
@@ -348,7 +354,7 @@ class Memory4DerivedService {
     const generatedIds = result.items.flatMap(item => item.sourceEntryIds);
     if (new Set(generatedIds).size !== generatedIds.length || hash(strings(generatedIds)) !== hash(sourceIds)) throw new Error("memory4_compression_source_mismatch");
     const text = result.items.map(item => item.text).join("\n");
-    if (this.count(text) > YEAR_MAX_TOKENS || result.items.some(item => {
+    if (this.count(text) > hardLimit || result.items.some(item => {
       const sources = entries.filter(entry => item.sourceEntryIds.includes(entry.entryId));
       const acquiredCount = sources.filter(entry => !eventYears(entry).length).length;
       return !this.guardedText(sources, item.text) || acquiredCount &&
@@ -360,7 +366,7 @@ class Memory4DerivedService {
         entityIds: ids(sources.flatMap(entry => entry.entityIds)), topics: strings(sources.flatMap(entry => entry.topics)),
         importance: Math.max(...sources.map(entry => entry.importance)) }, sources);
     });
-    if (this.count(compressed.map(item => item.text).join("\n")) > YEAR_MAX_TOKENS) throw new Error("memory4_compression_quality_failed");
+    if (this.count(compressed.map(item => item.text).join("\n")) > hardLimit) throw new Error("memory4_compression_quality_failed");
     return compressed;
   }
 
@@ -571,4 +577,4 @@ class Memory4DerivedService {
   }
 }
 
-module.exports = { Memory4DerivedService, eventYears, YEAR_MAX_TOKENS };
+module.exports = { Memory4DerivedService, eventYears, YEAR_MAX_TOKENS, LIFE_SEGMENT_MAX_TOKENS };

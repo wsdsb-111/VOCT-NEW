@@ -77,6 +77,10 @@ const archivedChecks = [
 ];
 
 const releaseChecks = [
+  { group: "v8.15.2-letter-receipt-startup-recovery", script: "test-v8.15.2-letter-receipt-startup-recovery.js" },
+  { group: "v8.15.2-date-scan-incremental", script: "test-v8.15.2-date-scan-incremental.js" },
+  { group: "v8.15.2-derived-budget-split", script: "test-v8.15.2-derived-budget-split.js" },
+  { group: "v8.15.2-fix5-independent-qa", script: "test-v8.15.2-fix5-independent-qa.js" },
   { group: "v8.15.2-derived-acquisition-independent-qa", script: "test-v8.15.2-derived-acquisition-independent-qa.js" },
   { group: "v8.15.2-letter-timer-retirement-qa", script: "test-v8.15.2-letter-timer-retirement-qa.js" },
   { group: "v8.15.2-letter-archive-independent-qa", script: "test-v8.15.2-letter-archive-independent-qa.js" },

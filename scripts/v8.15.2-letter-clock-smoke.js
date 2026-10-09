@@ -1,6 +1,6 @@
 "use strict";
 
-// Optional packaged-app smoke for rich DATE ingestion and same-path tail restart.
+// Optional packaged-app smoke for rich DATE ingestion, restart and receipt recovery.
 const assert = require("node:assert/strict");
 const fs = require("node:fs");
 const os = require("node:os");
@@ -284,6 +284,42 @@ async function run() {
     assert.equal(diagnosticControls.nativeSequenceVisible, true);
     report.diagnosticControls = diagnosticControls;
     report.progress = "renderer_status_ui_verified";
+
+    // Bind an isolated real Manager fixture to the existing preload IPC channel.
+    // The fixture supplies only synthetic campaign data and local model responses.
+    const receiptFixture = await main.evaluate(`(async()=>{
+      const req=process.mainModule.require.bind(process.mainModule);
+      const helpers=req(${JSON.stringify(path.resolve(__dirname, "test-v8.15.2-letter-archive-independent-qa.js"))});
+      const fixture=helpers.createFixture();
+      globalThis.__fix5ReceiptFixture=fixture;
+      fixture.managerDependencies.TailFile=req(${JSON.stringify(path.resolve(__dirname, "../resources/app/out/main/letters/letter-log-reader.js"))});
+      fixture.managerDependencies.readline=req('node:readline');
+      const fileFs=req('node:fs');
+      fileFs.writeFileSync(fixture.debugLogPath,'VOTC:LOAD_SESSION/;/packaged-receipt-load\\nVOTC:DATE/;/103\\n');
+      const sender=fixture.createManager();
+      helpers.pendingLetter(fixture,sender,fixture.originalLetter,'隔离回信：已经妥善收存。',103);
+      await sender.writeLetterEffect(sender.storedLetters.get(fixture.originalLetter.letterId).reply,fixture.originalLetter);
+      const token=sender.storedLetters.get(fixture.originalLetter.letterId).receiptToken;
+      fileFs.appendFileSync(fixture.debugLogPath,helpers.makeReceiptLine({token})+'\\n');
+      const recovering=fixture.createManager();
+      globalThis.__fix5ReceiptManager=recovering;
+      const ipc=req('electron').ipcMain;
+      ipc.removeHandler('letters:getStatuses');
+      ipc.handle('letters:getStatuses',()=>recovering.getAllLetterStatuses());
+      await recovering.startLogTailing();
+      await helpers.waitFor(()=>fixture.summaryCalls.length===1&&fixture.durableOwners.length===2,'packaged receipt archive');
+      await recovering.restartLogTailing();
+      return {effectWrites:fixture.effectWrites,summaryCalls:fixture.summaryCalls.length,
+        owners:fixture.durableOwners.length,lock:recovering.awaitingAcceptanceLetterId};
+    })()`);
+    assert.deepEqual(receiptFixture, { effectWrites: 1, summaryCalls: 1, owners: 2, lock: null });
+    const receiptStatus = await readStatuses();
+    assert.equal(receiptStatus.dateTracker.receiptRecovery.status, "RECOVERED_VERIFIED");
+    assert(receiptStatus.letters.some(letter => letter.letterId === "letter_archive_1" && letter.responseStatus === "sent"));
+    report.receiptRecovery = { ...receiptFixture, status: receiptStatus.dateTracker.receiptRecovery.status,
+      fixtureMode: "real Manager/reader/finalization in packaged Main; synthetic campaign and local responses; existing preload IPC" };
+    report.phases.push({ name: "offline_receipt_restart_preload_IPC", result: report.receiptRecovery });
+    await main.evaluate("globalThis.__fix5ReceiptFixture.close().then(()=>true)");
 
     const screenshot = await renderer.send("Page.captureScreenshot", { format: "png", captureBeyondViewport: false });
     fs.writeFileSync(screenshotPath, Buffer.from(screenshot.data, "base64"));

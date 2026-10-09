@@ -192,7 +192,7 @@ function makeReceiptLine({ letterId = LETTER_ID, token, campaignToken = CAMPAIGN
 function loadHeadLetterManagerFactory() {
   const repositoryRoot = path.resolve(__dirname, "..");
   const filename = path.join(repositoryRoot, "resources", "app", "out", "main", "letters", "letter-manager.js");
-  const source = execFileSync("git", ["show", "HEAD:resources/app/out/main/letters/letter-manager.js"], {
+  const source = execFileSync("git", ["show", "fda1b8e:resources/app/out/main/letters/letter-manager.js"], {
     cwd: repositoryRoot, encoding: "utf8", windowsHide: true, maxBuffer: 4 * 1024 * 1024
   });
   const headModule = new Module(filename, module);
@@ -293,7 +293,7 @@ async function testReceiptArchiveRetryAndIsolation() {
 
     const accepted = await restoredManager.processLogLine(makeReceiptLine({ ...baseReceipt,
       date: "1038年4月4日", prefix: "[debug_log: 2026-10-08 12:00:00] " }));
-    assert.equal(accepted, undefined, "the accepted receipt is processed through LetterManager");
+    assert.deepEqual(accepted, { success: true, letterId: LETTER_ID }, "the accepted receipt is processed through LetterManager");
     assert.equal(fixture.effectWrites, 2, "accepting the first letter may dispatch the next due letter exactly once");
     assert.equal(restoredManager.awaitingAcceptanceLetterId, secondLetter.letterId);
     assert.equal(restoredManager.getLetterStatus(LETTER_ID).responseStatus, "sent");
@@ -405,7 +405,7 @@ async function testLegacyClipboardAcceptanceRemainsSupported() {
     fixture.memoryEngine.letterMemoryFinalization = null;
 
     const result = await manager.clearLettersFile();
-    assert.equal(result, undefined, "legacy acceptance remains handled by the prior callback contract");
+    assert.deepEqual(result, { success: true, letterId: legacyLetter.letterId }, "legacy acceptance remains handled by the prior callback contract");
     assert.equal(manager.getLetterStatus(legacyLetter.letterId).responseStatus, "sent");
     assert.equal(manager.awaitingAcceptanceLetterId, null);
     assert.equal(manager.storedLetters.has(legacyLetter.letterId), false);
@@ -460,4 +460,5 @@ async function main() {
   console.log("V8.15.2 letter archive independent QA: PASS (receipt binding, in-memory HEAD baseline, restart, stale/duplicate isolation, real directed summaries, both Memory4 owners and derived views, retry without redelivery, legacy callback)");
 }
 
-main().catch(error => { console.error(error); process.exitCode = 1; });
+module.exports = { createFixture, pendingLetter, makeReceiptLine, waitFor };
+if (require.main === module) main().catch(error => { console.error(error); process.exitCode = 1; });

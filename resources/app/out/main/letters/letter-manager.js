@@ -2,8 +2,10 @@
 
 const { normalizeGameDate } = require("../worldline/character-temporal-facts");
 const { randomBytes } = require("crypto");
+const { parseReceipt, captureSessionProof, findReceipt } = require("./letter-receipt-recovery");
+const { LetterDateSessionScanner } = require("./letter-date-session-scanner");
 
-function createLetterManager({ settingsRepository, fs, path, TailFile, readline, parseLog, letterPromptBuilder, llmManager, PromptBuilder, TokenCounter, memoryEngine, dataDir, letterEffectTransport = null, runFileManager = null, scanRunAcksForPendingCommands = null, autoStartLogTailing = true, sleep = (milliseconds) => new Promise((resolve) => setTimeout(resolve, milliseconds)), letterPayloadRetryDelays = [100, 200, 350, 600, 1e3], dateHeartbeatIntervalMs = 5e3, dateStaleMs = 2e4, dateScanBytes = 1024 * 1024, diagnosticExecutionTimeoutMs = 15e3, runCommandAckTimeoutMs = 3e4, runCommandWatchdogIntervalMs = 5e3, setIntervalFn = setInterval, clearIntervalFn = clearInterval, setRunCommandIntervalFn = setInterval, clearRunCommandIntervalFn = clearInterval }) {
+function createLetterManager({ settingsRepository, fs, path, TailFile, readline, parseLog, letterPromptBuilder, llmManager, PromptBuilder, TokenCounter, memoryEngine, dataDir, letterEffectTransport = null, runFileManager = null, scanRunAcksForPendingCommands = null, autoStartLogTailing = true, sleep = (milliseconds) => new Promise((resolve) => setTimeout(resolve, milliseconds)), letterPayloadRetryDelays = [100, 200, 350, 600, 1e3], dateHeartbeatIntervalMs = 5e3, dateStaleMs = 2e4, diagnosticExecutionTimeoutMs = 15e3, runCommandAckTimeoutMs = 3e4, runCommandWatchdogIntervalMs = 5e3, setIntervalFn = setInterval, clearIntervalFn = clearInterval, setRunCommandIntervalFn = setInterval, clearRunCommandIntervalFn = clearInterval }) {
   const fs$1 = fs;
   const readline$1 = readline;
   if (!scanRunAcksForPendingCommands) ({ scanRunAcksForPendingCommands } = require("../actions/run-command-recovery"));
@@ -74,6 +76,7 @@ function createLetterManager({ settingsRepository, fs, path, TailFile, readline,
       this.readline = null;
       this.logTailingTransition = Promise.resolve();
       this.letterAcceptanceTransition = Promise.resolve();
+      this.receiptRecoveryStatus = null;
       this.tailRestartTimer = null;
       this.dateHeartbeatTimer = null;
       this.runCommandWatchdogTimer = null;
@@ -92,7 +95,7 @@ function createLetterManager({ settingsRepository, fs, path, TailFile, readline,
       this.dateSessionLogIdentity = null;
       this.dateSessionBoundaryOffset = null;
       this.dateSessionLogSize = null;
-      this.dateSessionScanCache = null;
+      this.dateSessionScanner = new LetterDateSessionScanner({ fs: fs$1 });
       this.debugLogPath = null;
       this.debugLogExists = false;
       this.debugLogSize = null;
@@ -179,8 +182,9 @@ function createLetterManager({ settingsRepository, fs, path, TailFile, readline,
         this.readline = readline$1.createInterface({ input: reader });
         this.readline.on("line", (line) => {
           if (this.tailFile !== reader || this.tailState !== "ACTIVE") return;
-          Promise.resolve(this.processLogLine(line)).catch((error) => console.error("LetterManager: Failed to process log line:", error));
+          Promise.resolve(this.processLogLine(line, reader)).catch((error) => console.error("LetterManager: Failed to process log line:", error));
         });
+        await this.recoverPendingLetterReceipt();
       } catch (error) {
         this.tailState = "ERROR";
         this.dateSourceState = "ERROR";
@@ -219,7 +223,7 @@ function createLetterManager({ settingsRepository, fs, path, TailFile, readline,
       this.dateSessionLogIdentity = null;
       this.dateSessionBoundaryOffset = null;
       this.dateSessionLogSize = null;
-      this.dateSessionScanCache = null;
+      this.dateSessionScanner.reset();
     }
     beginDateSession(sessionId, { logIdentity = null, boundaryOffset = null, logSize = null } = {}) {
       if (!sessionId) return false;
@@ -270,12 +274,11 @@ function createLetterManager({ settingsRepository, fs, path, TailFile, readline,
       this.savePendingLetters();
       return true;
     }
-    processLogLine(line) {
+    async processLogLine(line, reader = null) {
+      if (reader && (reader !== this.tailFile || this.tailState !== "ACTIVE")) return;
       this.lastLogLineReceivedAt = Date.now();
-      const receiptMatch = line.match(/VOTC:LETTER_RECEIPT\/;\/([A-Za-z0-9_.:-]+)\/;\/([a-f0-9]{32})\/;\/([A-Za-z0-9_.-]+)\/;\/(\d+)\/;\/(\d+)\/;\/(\d+)\/;\/([^\r\n]+)/);
-      if (receiptMatch) return this.clearLettersFile({ letterId: receiptMatch[1], token: receiptMatch[2],
-        campaignToken: receiptMatch[3], playerId: Number(receiptMatch[4]), aiId: Number(receiptMatch[5]),
-        totalDays: Number(receiptMatch[6]), date: receiptMatch[7].trim() });
+      const receipt = parseReceipt(line);
+      if (receipt) return this.clearLettersFile(receipt);
       if (line.includes("VOTC:LETTER/;/")) {
         return this.processLatestLetter({ skipPayloadRequest: true }).catch((error) => {
           console.error("Failed to receive letter log payload:", error);
@@ -284,7 +287,9 @@ function createLetterManager({ settingsRepository, fs, path, TailFile, readline,
       }
       const loadSessionMatch = line.match(/VOTC:LOAD_SESSION\/;\/([A-Za-z0-9_.-]+)/);
       if (loadSessionMatch) {
-        const sessionScan = this.scanLatestDateMarker();
+        const sessionScan = await this.scanLatestDateMarker();
+        if (reader && (reader !== this.tailFile || this.tailState !== "ACTIVE")) return;
+        if (sessionScan.reason === "scan_invalidated") return;
         if (sessionScan.sessionId === loadSessionMatch[1]) {
           this.beginDateSessionFromScan(loadSessionMatch[1], sessionScan);
         } else if (!sessionScan.sessionId && !this.dateSessionId) {
@@ -321,7 +326,8 @@ function createLetterManager({ settingsRepository, fs, path, TailFile, readline,
       const match = line.match(dateRegex);
       if (match) {
         const newTotalDays = Number(match[1]);
-        const sessionScan = this.scanLatestDateMarker();
+        const sessionScan = await this.scanLatestDateMarker();
+        if (reader && (reader !== this.tailFile || this.tailState !== "ACTIVE")) return;
         if (sessionScan.sessionId) {
           this.beginDateSessionFromScan(sessionScan.sessionId, sessionScan);
         }
@@ -333,6 +339,7 @@ function createLetterManager({ settingsRepository, fs, path, TailFile, readline,
             sessionScan.sessionBoundaryOffset === this.dateSessionBoundaryOffset;
           if (!matchesBoundSession || !sessionScan.found || sessionScan.value !== newTotalDays) return Promise.resolve();
         }
+        if (!sessionScan.found) return;
         const observedAt = Date.now();
         const previousObservedValue = this.lastObservedDateValue;
         this.lastDateLogReceivedAt = observedAt;
@@ -525,108 +532,17 @@ function createLetterManager({ settingsRepository, fs, path, TailFile, readline,
         this.dateHeartbeatRunning = false;
       }
     }
-    scanLatestDateMarker() {
-      const debugLogPath = settingsRepository.getCK3DebugLogPath();
-      if (!debugLogPath || !fs$1.existsSync(debugLogPath)) return { found: false, value: null, reason: "log_file_missing" };
-      const stat = fs$1.statSync(debugLogPath);
-      const logSize = Number(stat.size) || 0;
-      const logMtimeMs = Number(stat.mtimeMs) || 0;
-      const logIdentity = `${Number(stat.birthtimeMs) || 0}:${Number(stat.ino) || 0}`;
-      const cache = this.dateSessionScanCache;
-      if (cache && cache.logIdentity === logIdentity && cache.logSize === logSize && cache.logMtimeMs === logMtimeMs) {
-        return { ...cache.result };
-      }
-      const bytesToRead = Math.min(logSize, dateScanBytes);
-      if (bytesToRead <= 0) {
-        const result = { found: false, value: null, reason: "empty_log", sessionId: null, sessionBoundaryOffset: null, previousSessionId: null, logIdentity, logSize, logMtimeMs };
-        this.dateSessionScanCache = { logIdentity, logSize, logMtimeMs, result };
-        return result;
-      }
-      const fileDescriptor = fs$1.openSync(debugLogPath, "r");
-      let scanResult;
-      try {
-        const readRange = (start, length) => {
-          const buffer = Buffer.alloc(length);
-          let bytesRead = 0;
-          while (bytesRead < length) {
-            const count = fs$1.readSync(fileDescriptor, buffer, bytesRead, length - bytesRead, start + bytesRead);
-            if (count <= 0) break;
-            bytesRead += count;
-          }
-          return buffer.subarray(0, bytesRead).toString("utf8");
-        };
-        const tailStart = Math.max(0, logSize - bytesToRead);
-        const tailText = readRange(tailStart, bytesToRead);
-        const sessionState = { sessionId: null, boundaryOffset: null, previousSessionId: null };
-        if (tailStart > 0) {
-          let scanEnd = tailStart;
-          let followingPrefix = tailText.slice(0, 256);
-          const chunkBytes = Math.max(bytesToRead, 64 * 1024);
-          while (scanEnd > 0) {
-            const chunkStart = Math.max(0, scanEnd - chunkBytes);
-            const chunkText = readRange(chunkStart, scanEnd - chunkStart);
-            const combined = `${chunkText}${followingPrefix}`;
-            const matches = [...combined.matchAll(/VOTC:LOAD_SESSION\/;\/([A-Za-z0-9_.-]+)/g)]
-              .filter((match) => match.index < chunkText.length);
-            for (let index = matches.length - 1; index >= 0; index--) {
-              const match = matches[index];
-              const markerOffset = chunkStart + Buffer.byteLength(combined.slice(0, match.index), "utf8");
-              if (!sessionState.sessionId) {
-                sessionState.sessionId = match[1];
-                sessionState.boundaryOffset = markerOffset;
-              } else {
-                sessionState.previousSessionId = match[1];
-                break;
-              }
-            }
-            if (sessionState.previousSessionId) break;
-            followingPrefix = chunkText.slice(0, 256);
-            scanEnd = chunkStart;
-          }
-        }
-        let sessionDate = null;
-        let legacyDate = null;
-        const events = [...tailText.matchAll(/VOTC:(?:LOAD_SESSION\/;\/([A-Za-z0-9_.-]+)|DATE\/;\/(\d+))/g)];
-        for (const event of events) {
-          if (event[1]) {
-            const boundaryOffset = tailStart + Buffer.byteLength(tailText.slice(0, event.index), "utf8");
-            if (boundaryOffset !== sessionState.boundaryOffset) {
-              sessionState.previousSessionId = sessionState.sessionId;
-              sessionState.sessionId = event[1];
-              sessionState.boundaryOffset = boundaryOffset;
-              sessionDate = null;
-            }
-          } else if (sessionState.sessionId) {
-            sessionDate = Number(event[2]);
-          } else {
-            legacyDate = Number(event[2]);
-          }
-        }
-        scanResult = sessionState.sessionId
-          ? sessionDate === null
-            ? { found: false, value: null, reason: "date_marker_missing", sessionId: sessionState.sessionId }
-            : { found: true, value: sessionDate, reason: "tail_scan", sessionId: sessionState.sessionId }
-          : legacyDate === null
-            ? { found: false, value: null, reason: "date_marker_missing", sessionId: null }
-            : { found: true, value: legacyDate, reason: "tail_scan", sessionId: null };
-        scanResult = {
-          ...scanResult,
-          sessionBoundaryOffset: sessionState.boundaryOffset,
-          previousSessionId: sessionState.previousSessionId,
-          logIdentity,
-          logSize,
-          logMtimeMs
-        };
-      } finally {
-        fs$1.closeSync(fileDescriptor);
-      }
-      this.dateSessionScanCache = { logIdentity, logSize, logMtimeMs, result: scanResult };
-      return { ...scanResult };
+    async scanLatestDateMarker() {
+      if (!this.dateSessionScanner.state) this.dateSourceState = "DATE_SOURCE_RECOVERING";
+      const result = await this.dateSessionScanner.scan(settingsRepository.getCK3DebugLogPath());
+      if (["scan_invalidated", "log_file_missing"].includes(result.reason)) this.clearDateMarkerState();
+      this.lastDateScanResult = { ...result, source: "log_scan", scannedAt: Date.now() };
+      return result;
     }
     async reconcileLatestDateMarker(source = "manual") {
       const scannedAt = Date.now();
       const currentMetadata = this.captureDebugLogMetadata();
-      const sessionScan = this.scanLatestDateMarker();
+      const sessionScan = await this.scanLatestDateMarker();
       const scannedSessionId = sessionScan.sessionId || null;
       const scanLogIdentity = sessionScan.logIdentity || null;
       const scanBoundaryOffset = Number.isFinite(sessionScan.sessionBoundaryOffset) ? sessionScan.sessionBoundaryOffset : null;
@@ -663,7 +579,8 @@ function createLetterManager({ settingsRepository, fs, path, TailFile, readline,
       this.lastDateReconciliationAt = scannedAt;
       this.lastDateScanResult = { ...scan, source, scannedAt };
       if (!scan.found) {
-        this.dateSourceState = scan.reason === "log_file_missing" ? "LOG_FILE_MISSING" : "DATE_MARKER_MISSING";
+        this.dateSourceState = scan.reason === "scan_invalidated" ? "DATE_SOURCE_RECOVERING"
+          : scan.reason === "log_file_missing" ? "LOG_FILE_MISSING" : "DATE_MARKER_MISSING";
         return this.getDateTrackerStatus();
       }
       this.lastDateValue = scan.value;
@@ -745,6 +662,7 @@ function createLetterManager({ settingsRepository, fs, path, TailFile, readline,
         dateProducerState: this.dateProducerState,
         markerAgeMs: this.lastObservedDateMarkerAt ? Math.max(0, Date.now() - this.lastObservedDateMarkerAt) : null,
         dateProducerRecovery: this.dateProducerRecovery ? { ...this.dateProducerRecovery } : null,
+        receiptRecovery: this.receiptRecoveryStatus ? { ...this.receiptRecoveryStatus } : null,
         runCommands: runFileManager?.getPendingCommands ? runFileManager.getPendingCommands().map(({ effectText, ...command }) => command) : [],
         runCommandHealth: runFileManager?.getQueueHealth ? runFileManager.getQueueHealth() : null,
         lastDateReconciliationAt: this.lastDateReconciliationAt,
@@ -1488,7 +1406,14 @@ function createLetterManager({ settingsRepository, fs, path, TailFile, readline,
       const storedLetter = this.storedLetters.get(letter.letterId);
       if (memoryEngine?.letterMemoryFinalization && storedLetter?.sourceMemoryContext && storedLetter.disclosureBinding) {
         storedLetter.receiptToken ||= randomBytes(16).toString("hex");
-        this.savePendingLetters();
+        if (!storedLetter.receiptSessionProof) {
+          try {
+            const scan = await this.scanLatestDateMarker();
+            if (scan.reason === "scan_invalidated") return false;
+            storedLetter.receiptSessionProof = captureSessionProof(fs$1, settingsRepository.getCK3DebugLogPath(), scan);
+          } catch { /* Unproven sessions cannot use automatic receipt recovery. */ }
+        }
+        if (!this.savePendingLetters()) return false;
       }
       const gameCommand = this.buildOfficialLetterEffectBody(reply, letter);
       const outboundMode = letterEffectTransport.getOutboundMode();
@@ -1636,21 +1561,76 @@ ${"  \t"}modifier = artifact_monthly_minor_prestige_1_modifier
           ...failedContext,
           status: this.letterStatuses.get(letterId) || null
         }));
-        fs$1.writeFileSync(this.pendingLettersFile, JSON.stringify({ version: 4, awaitingAcceptanceLetterId: this.awaitingAcceptanceLetterId, letters, failedLetters }, null, 2), "utf8");
+        const temporaryPath = `${this.pendingLettersFile}.${process.pid}.${randomBytes(6).toString("hex")}.tmp`;
+        try {
+          fs$1.writeFileSync(temporaryPath, JSON.stringify({ version: 4, awaitingAcceptanceLetterId: this.awaitingAcceptanceLetterId, letters, failedLetters }, null, 2), "utf8");
+          const fd = fs$1.openSync(temporaryPath, "r+");
+          try { fs$1.fsyncSync(fd); } finally { fs$1.closeSync(fd); }
+          fs$1.renameSync(temporaryPath, this.pendingLettersFile);
+        } finally {
+          if (fs$1.existsSync(temporaryPath)) fs$1.unlinkSync(temporaryPath);
+        }
         this.syncDateTrackerSupervisor();
+        return true;
       } catch (error) {
         console.error("LetterManager: Failed to save pending letters:", error);
+        return false;
       }
     }
     /**
      * Clear the letters.txt file
      */
-    async clearLettersFile(receipt = null) {
-      const pending = this.letterAcceptanceTransition.then(() => this.clearLettersFileNow(receipt));
+    async recoverPendingLetterReceipt() {
+      const resumeAccepted = this.letterAcceptanceTransition.then(async () => {
+        for (const [id, pending] of this.storedLetters) {
+          if (this.getLetterStatus(id)?.responseStatus !== LetterResponseStatus.SENT || !pending.acceptedReceiptRecorded
+            || !this.validateLetterReceipt(pending, pending.acceptedReceipt)) continue;
+          const captured = await this.recordAcceptedLetterDisclosure(pending);
+          if (captured?.archiveCaptured) {
+            this.storedLetters.delete(id);
+            if (!this.savePendingLetters()) this.storedLetters.set(id, pending);
+          }
+        }
+      });
+      this.letterAcceptanceTransition = resumeAccepted.catch(() => {});
+      await resumeAccepted;
+      const letterId = this.awaitingAcceptanceLetterId;
+      const stored = letterId ? this.storedLetters.get(letterId) : null;
+      const status = letterId ? this.getLetterStatus(letterId) : null;
+      if (!stored || status?.responseStatus !== LetterResponseStatus.EFFECT_FILE_WRITTEN
+        || !/^[a-f0-9]{32}$/.test(stored.receiptToken || "") || !stored.disclosureBinding
+        || !stored.sourceMemoryContext?.participantProfiles?.some(row => row.id === stored.disclosureBinding.playerId)
+        || !stored.sourceMemoryContext?.participantProfiles?.some(row => row.id === stored.disclosureBinding.aiId)) return null;
+      if (stored.acceptedReceiptRecorded && this.validateLetterReceipt(stored, stored.acceptedReceipt)) {
+        return this.clearLettersFile(stored.acceptedReceipt, { persisted: true });
+      }
+      if (stored.acceptedMemoryContext) return null;
+      const filePath = settingsRepository.getCK3DebugLogPath();
+      try {
+        const current = await parseLog(filePath);
+        if (current?.campaignToken !== stored.disclosureBinding.campaignToken || current.playerID !== stored.disclosureBinding.playerId) {
+          this.receiptRecoveryStatus = { status: "AMBIGUOUS_OR_STALE", reason: "RECEIPT_CAMPAIGN_UNPROVEN" };
+          return this.receiptRecoveryStatus;
+        }
+        const result = await findReceipt(fs$1, filePath, stored.receiptSessionProof, await this.scanLatestDateMarker(),
+          receipt => this.validateLetterReceipt(stored, receipt));
+        const { receipt, ...diagnostic } = result;
+        this.receiptRecoveryStatus = diagnostic;
+        if (result.status !== "RECOVERED_VERIFIED") return diagnostic;
+        const accepted = await this.clearLettersFile(receipt, result);
+        if (!accepted?.success) this.receiptRecoveryStatus = { status: "AMBIGUOUS_OR_STALE", reason: accepted?.reason || "RECEIPT_ALREADY_PROCESSED" };
+        return this.receiptRecoveryStatus;
+      } catch {
+        this.receiptRecoveryStatus = { status: "AMBIGUOUS_OR_STALE", reason: "RECEIPT_RECOVERY_UNAVAILABLE" };
+        return this.receiptRecoveryStatus;
+      }
+    }
+    async clearLettersFile(receipt = null, recovery = null) {
+      const pending = this.letterAcceptanceTransition.then(() => this.clearLettersFileNow(receipt, recovery));
       this.letterAcceptanceTransition = pending.catch(() => {});
       return pending;
     }
-    async clearLettersFileNow(receipt) {
+    async clearLettersFileNow(receipt, recovery = null) {
       const ck3Folder = settingsRepository.getCK3UserFolderPath();
       console.log(`LetterManager.clearLettersFile: CK3 user path: ${ck3Folder}`);
       if (!ck3Folder) {
@@ -1669,7 +1649,23 @@ ${"  \t"}modifier = artifact_monthly_minor_prestige_1_modifier
       if (acceptedLetter.receiptToken && !this.validateLetterReceipt(acceptedLetter, receipt)) {
         return { success: false, reason: "letter_receipt_not_matched", letterId: acceptedLetterId };
       }
-      if (receipt) acceptedLetter.acceptedReceipt = receipt;
+      if (recovery && !recovery.persisted) {
+        const verified = await findReceipt(fs$1, settingsRepository.getCK3DebugLogPath(), acceptedLetter.receiptSessionProof,
+          await this.scanLatestDateMarker(), candidate => this.validateLetterReceipt(acceptedLetter, candidate));
+        if (verified.status !== "RECOVERED_VERIFIED" || JSON.stringify(verified.receipt) !== JSON.stringify(receipt)) {
+          return { success: false, reason: verified.reason || "receipt_recovery_changed" };
+        }
+      }
+      if (receipt) {
+        const priorReceipt = acceptedLetter.acceptedReceipt;
+        acceptedLetter.acceptedReceipt = receipt;
+        acceptedLetter.acceptedReceiptRecorded = true;
+        if (!this.savePendingLetters()) {
+          acceptedLetter.acceptedReceipt = priorReceipt;
+          delete acceptedLetter.acceptedReceiptRecorded;
+          return { success: false, reason: "letter_acceptance_persist_failed" };
+        }
+      }
       const acceptedTransportMode = acceptedStatus?.effectTransportMode || LetterEffectTransportMode.VOTC;
       const clearResult = letterEffectTransport.clearOutboundEffect(acceptedTransportMode);
       if (!clearResult.success) console.warn(`LetterManager.clearLettersFile: ${clearResult.error}`);
@@ -1691,7 +1687,7 @@ ${"  \t"}modifier = artifact_monthly_minor_prestige_1_modifier
         });
         this.transitionLetter(acceptedLetterId, LetterPipelineState.DELIVERED);
         acceptedLetter.acceptedMemoryAwaitingProof = true;
-        this.savePendingLetters();
+        if (!this.savePendingLetters()) throw new Error("letter_acceptance_persist_failed");
         const memoryAccepted = acceptedEffectWritten && acceptedLetter ? await this.recordAcceptedLetterDisclosure(acceptedLetter) : null;
         if (memoryEngine?.letterMemoryFinalization && !memoryAccepted?.archiveCaptured) {
           acceptedLetter.acceptedMemoryAwaitingProof = true;
@@ -1700,7 +1696,8 @@ ${"  \t"}modifier = artifact_monthly_minor_prestige_1_modifier
         this.savePendingLetters();
       }
       this.syncDateTrackerSupervisor();
-      await this.checkAndDeliverLetters();
+      if (!recovery) await this.checkAndDeliverLetters();
+      return { success: true, letterId: acceptedLetterId };
     }
     clearPendingLetters() {
       const pendingIds = new Set(this.storedLetters.keys());

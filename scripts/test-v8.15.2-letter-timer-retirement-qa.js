@@ -235,7 +235,7 @@ function createFixture(managerFactory = createLetterManager) {
 }
 
 function writeDateLog(fixture, day, date) {
-  fs.writeFileSync(fixture.debugLogPath,
+  fs.appendFileSync(fixture.debugLogPath,
     "VOTC:LOAD_SESSION/;/timer-qa\nVOTC:DATE/;/" + day + "/;/" + date + "\n", "utf8");
 }
 
@@ -380,7 +380,7 @@ function testGameScriptStructure() {
 function loadHeadManagerFactory() {
   const root = path.resolve(__dirname, "..");
   const filename = path.join(root, "resources", "app", "out", "main", "letters", "letter-manager.js");
-  const source = execFileSync("git", ["show", "HEAD:resources/app/out/main/letters/letter-manager.js"], {
+  const source = execFileSync("git", ["show", "fda1b8e:resources/app/out/main/letters/letter-manager.js"], {
     cwd: root, encoding: "utf8", windowsHide: true, maxBuffer: 4 * 1024 * 1024
   });
   const headModule = new Module(filename, module);

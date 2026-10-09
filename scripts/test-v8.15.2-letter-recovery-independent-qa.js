@@ -93,11 +93,12 @@ assert.match(nativeClock, /scope\s*=\s*character[\s\S]*is_ai\s*=\s*no[\s\S]*VOTC
 assert(nativeClock.includes(richDateProducer));
 
 function createReadOnlyMemoryFs(logText) {
-  let bytes = Buffer.from(logText, "utf8");
+  const complete = value => value.endsWith("\n") ? value : `${value}\n`;
+  let bytes = Buffer.from(complete(logText), "utf8");
   let mtimeMs = 1000;
   return {
     append(text) {
-      bytes = Buffer.concat([bytes, Buffer.from(text, "utf8")]);
+      bytes = Buffer.concat([bytes, Buffer.from(complete(text), "utf8")]);
       mtimeMs++;
     },
     existsSync(file) { return file === LOG_PATH; },
@@ -574,7 +575,7 @@ async function a2ExecutionMarkerCanPassWithoutAnyDateMarker() {
 }
 
 async function repeatedLiveDateDoesNotDeclareProducerStalled() {
-  const { manager } = createManager("");
+  const { manager } = createManager("VOTC:DATE/;/420000/;/1/1/1200\n");
   manager.tailState = "ACTIVE";
   let producerRestarts = 0;
   manager.ensureDateProducerRunning = async () => { producerRestarts++; };
