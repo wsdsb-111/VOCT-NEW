@@ -20,6 +20,7 @@ const { compareCharacterSeniority } = require("../resources/app/out/main/worldli
 const { Character } = require("../resources/app/out/main/game-data/character");
 const { createGameData } = require("../resources/app/out/main/game-data/game-data");
 
+const IDLE_CARRIER = '\uFEFFif = { limit = { always = no } debug_log = "VOTC:IDLE_NOOP" }';
 const failures = [];
 async function check(name, fn) {
   try { await fn(); console.log("PASS " + name); }
@@ -209,7 +210,7 @@ async function run() {
       time += 31000;
       manager.markActiveCommandStalledIfNeeded();
       assert.strictEqual(manager.getPendingCommands()[0].status, "stalled");
-      assert.strictEqual(fs.readFileSync(path.join(ck3, "run", "votc.txt"), "utf8"), "");
+      assert.strictEqual(fs.readFileSync(path.join(ck3, "run", "votc.txt"), "utf8"), IDLE_CARRIER);
 
       const Writer = createActionEffectWriter({ runFileManager: manager });
       const dispatched = Writer.writeEffect({ playerID: 1, characters: new Map([[1, { id: 1 }], [2, { id: 2 }]]) }, 1, 2, "add_gold = 2", { scopeId: "new-conversation", epoch: 2 });

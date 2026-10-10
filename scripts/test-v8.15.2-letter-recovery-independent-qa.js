@@ -595,7 +595,8 @@ function nativeBridgeProvidesDialogueIndependentClockAndVotcPolling() {
   assert.match(nativeBridge, /duration\s*=\s*0\.1[\s\S]*next\s*=\s*outbound/);
   assert.match(nativeBridge, /duration\s*=\s*1\.9[\s\S]*next\s*=\s*clock/);
   assert.match(nativeBridge, /GetScriptedGui\('votc_runtime_clock'\)\.Execute/);
-  assert.match(nativeBridge, /Select_CString\(And\(GetPlayer\.IsValid, Not\(GetGlobalVariable\('talk_scene'\)\.IsSet\)\), 'run votc\.txt', ''\)/);
+  assert.match(nativeBridge, /Select_CString\(GetPlayer\.IsValid, 'run votc\.txt', ''\)/,
+    "outbound polling must depend only on player validity, not dialogue-window lifetime");
   const runFileCommands = [...nativeBridge.matchAll(/\brun\s+([A-Za-z0-9_.-]+\.txt)\b/g)].map(match => match[1]);
   assert.deepEqual(runFileCommands, ["votc.txt"], "the native bridge polls only the outbound votc.txt carrier");
   assert.doesNotMatch(nativeBridge, /letters\.txt/);

@@ -7,6 +7,7 @@ const path = require("path");
 const { createRunFileManager } = require("../resources/app/out/main/actions/run-file-manager");
 const { createLetterEffectTransport } = require("../resources/app/out/main/letters/letter-effect-transport");
 
+const IDLE_CARRIER = '\uFEFFif = { limit = { always = no } debug_log = "VOTC:IDLE_NOOP" }';
 const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "votc-v710-rc4-runfile-"));
 try {
   const ck3Dir = path.join(tempDir, "ck3");
@@ -41,7 +42,7 @@ try {
   assert(text.includes(letterMarker), "matching Action ACK must promote the queued Letter command");
   assert(text.includes(`VOTC:RUN_ACK/LETTER_DIAGNOSTIC/${letterCommand.commandId}`));
   assert(runFileManager.ackCommand(letterCommand.commandId));
-  assert.strictEqual(fs.readFileSync(runFileManager.path, "utf8"), "");
+  assert.strictEqual(fs.readFileSync(runFileManager.path, "utf8"), IDLE_CARRIER);
   console.log("VOTC v7.10-RC6 Rev2 RunFile Non-regression: PASS (shared serial queue, command ACK, no overwrite)");
 } finally {
   fs.rmSync(tempDir, { recursive: true, force: true });

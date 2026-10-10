@@ -14,6 +14,7 @@ const { resolveRelationshipCurrentTruth } = require("../resources/app/out/main/w
 const { verifyActionConfirmation, settleActionResult } = require("../resources/app/out/main/actions/action-confirmation");
 const { readActionCommandReadback } = require("../resources/app/out/main/actions/action-command-readback");
 const { createActionEffectWriter } = require("../resources/app/out/main/actions/action-effect-writer");
+const IDLE_CARRIER = '\uFEFFif = { limit = { always = no } debug_log = "VOTC:IDLE_NOOP" }';
 const temp = fs.mkdtempSync(path.join(os.tmpdir(), "votc-v884-incident-"));
 
 async function run() {
@@ -80,7 +81,7 @@ async function run() {
     const manager = new Manager();
     manager.initializeAfterAckReconciliation();
     assert.strictEqual(manager.getPendingCommands().length, 0);
-    assert.strictEqual(fs.readFileSync(carrier, "utf8"), "");
+    assert.strictEqual(fs.readFileSync(carrier, "utf8"), IDLE_CARRIER);
     assert(manager.getRecentCommands().some(c => c.commandId === "old-date" && c.status === "quarantined"));
     const fresh = manager.write("add_gold = 1", { kind: "action_effect" });
     assert.strictEqual(fresh.status, "awaiting_ack");

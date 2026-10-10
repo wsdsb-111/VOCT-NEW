@@ -218,7 +218,7 @@ async function run() {
     const ownerRequest = evaluate("conversationAPI.getMemory4OwnerData({ownerId:2})");
     const paused = await main.wait("Debugger.paused");
     const prepared = await main.send("Debugger.evaluateOnCallFrame", { callFrameId: paused.callFrames[0].callFrameId,
-      expression: "globalThis.__m4SmokeConversation.memoryState=memoryEngine.createConversationState('isolated-ui-conversation');memoryEngine.memory4.configureDerived({isCampaignCurrent:token=>token===globalThis.__m4SmokeConversation.gameData.campaignToken,requestCompression:async()=>{globalThis.__m4ProviderCalls++;throw new Error('fixture_provider_forbidden');},requestExtraction:async()=>{globalThis.__m4ProviderCalls++;throw new Error('fixture_provider_forbidden');}});'fixture-prepared'", returnByValue: true });
+      expression: "globalThis.__m4SmokeMemoryEngine=memoryEngine;globalThis.__m4SmokeConversation.memoryState=memoryEngine.createConversationState('isolated-ui-conversation');memoryEngine.memory4.configureDerived({isCampaignCurrent:token=>token===globalThis.__m4SmokeConversation.gameData.campaignToken,requestCompression:async()=>{globalThis.__m4ProviderCalls++;throw new Error('fixture_provider_forbidden');},requestExtraction:async()=>{globalThis.__m4ProviderCalls++;throw new Error('fixture_provider_forbidden');}});'fixture-prepared'", returnByValue: true });
     assert(!prepared.exceptionDetails, JSON.stringify(prepared.exceptionDetails));
     await main.send("Debugger.removeBreakpoint", { breakpointId: readContextBreakpoint.breakpointId });
     await main.send("Debugger.resume");
@@ -290,7 +290,7 @@ async function run() {
     const screenshot = async (name, manager = "document.querySelector('.memory4-manager')", scrollToStart = true) => {
       if (scrollToStart) await evaluate(`${manager}?.scrollIntoView({block:'start'})`);
       const bounds = await evaluate(`(()=>{const e=${manager};if(!e)return{x:0,y:0,width:0,height:0};const r=e.getBoundingClientRect();return{x:Math.max(0,r.x),y:Math.max(0,r.y),width:Math.min(r.width,innerWidth-Math.max(0,r.x)),height:Math.min(r.height,innerHeight-Math.max(0,r.y))}})()`);
-      assert(bounds.width > 200 && bounds.height > 80, "Memory UI must have a visible viewport");
+      assert(bounds.width > 200 && bounds.height > 80, `Memory UI must have a visible viewport: ${name} ${JSON.stringify(bounds)}`);
       const result = await renderer.send("Page.captureScreenshot", { format: "png", captureBeyondViewport: false });
       fs.writeFileSync(path.join(evidence, `${name}.png`), Buffer.from(result.data, "base64"));
       screenshots.push(name);
@@ -324,6 +324,29 @@ async function run() {
     await setViewport(540, 900);
     await screenshot("ink-narrow-acquisition-life", `(${acquisitionManager})`);
     await setViewport(1280, 1000);
+    await main.evaluate(`(()=>{const engine=globalThis.__m4SmokeMemoryEngine,scope={campaignToken:${JSON.stringify(fixture.scope.campaignToken)},ownerId:3};const row=engine.memory4.store.query(scope)[0];engine.memory4.store.updateEntry(scope,row.entryId,'曾在邢州习得医术，但须先获得师傅许可才能传授。'+'详细学习记录。'.repeat(400),{expectedRevision:row.revision});globalThis.__m4CompressionStubCalls=0;globalThis.__m4CompressionAccept=false;engine.memory4.configureDerived({requestCompression:async prompt=>{globalThis.__m4CompressionStubCalls++;await new Promise(resolve=>setTimeout(resolve,250));const input=JSON.parse(prompt[1].content);return JSON.stringify({items:[{text:globalThis.__m4CompressionAccept?'本年获知，事件日期未知；曾在邢州习得医术，但须先获得师傅许可才能传授。':'压缩内容。'.repeat(500),sourceEntryIds:input.items.flatMap(item=>item.sourceEntryIds)}]});}});})()`);
+    await clickTab("年度记忆", "丙");
+    await clickButton("\u21bb", "丙");
+    const failedCompression = clickButton("从长期记忆生成年度与人生记忆", "丙");
+    await renderer.wait("Page.javascriptDialogOpening");
+    await renderer.send("Page.handleJavaScriptDialog", { accept: true });
+    await failedCompression;
+    await waitFor(`(${acquisitionManager}).textContent.includes('派生记忆生成失败（1164 年）')`);
+    assert(await evaluate(`(${acquisitionManager}).textContent.includes('模型压缩未通过')`));
+    assert.equal(await evaluate(`(${acquisitionManager}).textContent.includes('派生记忆正在生成')||[...(${acquisitionManager}).querySelectorAll('button')].some(e=>e.textContent.trim()==='停止任务')`), false);
+    assert.equal(await main.evaluate("globalThis.__m4CompressionStubCalls"), 2);
+    await screenshot("ink-desktop-compression-failed", `(${acquisitionManager})`);
+    await main.evaluate("globalThis.__m4CompressionAccept=true");
+    const recoveredCompression = clickButton("从长期记忆生成年度与人生记忆", "丙");
+    await renderer.wait("Page.javascriptDialogOpening");
+    await renderer.send("Page.handleJavaScriptDialog", { accept: true });
+    await recoveredCompression;
+    await waitFor(`(${acquisitionManager}).textContent.includes('记忆已更新')`);
+    const recoveredData = await evaluate("conversationAPI.getMemory4OwnerData({ownerId:3})");
+    assert.equal(recoveredData.derived.jobs[0].status, "COMPLETE");
+    assert.equal(recoveredData.derived.years[0].dirty, false);
+    assert.equal(recoveredData.derived.life.dirty, false);
+    assert.equal(await main.evaluate("globalThis.__m4CompressionStubCalls"), 3);
     await evaluate("[...document.querySelectorAll('.player-header')].find(e=>e.querySelector('.player-name')?.textContent.startsWith('丙')).click()");
     for (const theme of ["parchment", "knight", "ink"]) {
       await evaluate(`document.documentElement.setAttribute('data-votc-theme',${JSON.stringify(theme)})`);
@@ -580,15 +603,16 @@ async function run() {
     const blockedFetchUrls = await main.evaluate("globalThis.__m4BlockedFetches");
     assert(blockedFetchUrls.every(url => url === "http://127.0.0.1:4315/v1/health"), `unexpected network request was blocked: ${JSON.stringify(blockedFetchUrls)}`);
     assert.deepStrictEqual(errors, [], "renderer/main exceptions");
-    assert.equal(screenshots.length, 48, "original 44 screens plus acquisition-year/life desktop and narrow views");
+    assert.equal(screenshots.length, 49, "original 48 screens plus final compression failure state");
     fs.writeFileSync(path.join(evidence, "result.json"), JSON.stringify({ passed: true, themes: ["parchment", "knight", "ink"], desktop: [1280, 1000], narrow: [540, 900], baseScreenshotCount: 27,
       disclosureScreenshotCount: 4,
-      archiveScreenshotCount: 3, legacyEditScreenshotCount: 2, ageDisclosureScreenshotCount: 2, directObservationScreenshotCount: 2, summaryDateScreenshotCount: 4, acquisitionDerivedScreenshotCount: 4, screenshotCount: screenshots.length, screenshots, providerRequests: 0, blockedNetworkFetches: blockedFetchUrls.length,
+      archiveScreenshotCount: 3, legacyEditScreenshotCount: 2, ageDisclosureScreenshotCount: 2, directObservationScreenshotCount: 2, summaryDateScreenshotCount: 4, acquisitionDerivedScreenshotCount: 4, compressionFailureScreenshotCount: 1, compressionStubCalls: 3, screenshotCount: screenshots.length, screenshots, providerRequests: 0, blockedNetworkFetches: blockedFetchUrls.length,
       blockedNetworkUrls: blockedFetchUrls, realCK3Gate: false, profile,
       archive: { ownerId: fixture.archive.ownerId, campaignToken: fixture.archive.campaignToken, readOnlyReasons: [archiveData.readOnlyReason, endedArchiveData.readOnlyReason],
         strictCurrentIsNullAfterDetach: detachedState.strictCurrentIsNull, sidecarHashBefore: archiveHashBefore, sidecarHashAfter: archiveHashAfter, rejectedWriteError: archiveWriteRequest.error || null },
       checks: ["missing Campaign", "wrong Campaign", "strict owner data", "orphan audit real IPC read-only", "orphan forget requires explicit confirmation", "confirmed orphan forget through real preload/IPC", "six views", "readonly Official", "disclosure source/date/nickname", "manual disclosure write", "disclosure hide cancellation", "archive disclosure readonly", "source modal", "manual conflict preservation", "manual edit", "delete cancellation",
         "undated Detail manually generates acquisition-year and Life through actual Renderer/preload/IPC; event date remains unknown",
+        "over-budget model fixture fails after two attempts; Renderer refreshes FAILED year, retains error and removes running/stop UI; later valid compression regenerates Year and Life",
         "accepted Detail deletion", "existing binding preview cancellation", "nonoverlapping tool buttons", "no horizontal overflow", "same-campaign archive outside loaded roster", "loaded-campaign readonly banner",
         "archive refresh/tabs/source remain available", "archive year/life/detail mutation controls disabled", "manager detach leaves strict current null and read snapshot available",
         "archive IPC mutation rejected after manager detach", "archive sidecar hash unchanged", "ended-conversation banner, detail and source remain available", "ordinary Legacy edit/delete enabled after detach", "ordinary Legacy manual edit persisted through real preload/IPC after detach", "NPC asks player, user-role bare answer persisted for listener and reloaded through real preload/IPC: current CK3 age 17, historical age 16 and source date retained without mutation controls",

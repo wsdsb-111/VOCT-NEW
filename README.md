@@ -6,6 +6,12 @@ Voices of the Court 是一个面向《Crusader Kings III》（CK3）的沉浸式
 
 ## 主要功能
 
+Three-Mod 1.0.6 后续修复（2026-10-10）：[同级流官官职唯一持有规则](docs/v8.15.2-celestial-same-tier-office-report.md)。中国天朝流官获授新的同级任命头衔后，卸任旧同级官职并按其合法继任者交接；覆盖伯爵、公爵、国王及帝国等级，世袭与其他政府例外保持。前版[1.0.5 报告](docs/v8.15.2-celestial-lateral-appointment-report.md)保留。
+
+V8.15.2 运行与流官兼容修复（2026-10-10）：[空闲控制台报错](docs/v8.15.2-idle-run-carrier-report.md)、[信件消费缺口](docs/v8.15.2-outbound-bridge-followup-report.md)、[Three-Mod 官职交接](docs/v8.15.2-celestial-office-compatibility-report.md)。正式后台消费不再依赖对话窗口；兼容层限制跨官区归位并处理旧低级流官头衔，世袭保留。本轮实机验证与此前用户验收分开记录，需重启 App／CK3。
+
+V8.15.2 密集年度压缩修复（2026-10-09）：[审查与实施报告](docs/v8.15.2-derived-compression-followup-report.md)。修复大批来源压缩失败后中断后续年度的问题；补齐校验约束与一次反馈修正，失败后刷新具体年份和状态。原始记忆保留，真实 Provider 重建待本轮验收。
+
 V8.15.2 修复5（2026-10-09）：[实施报告](docs/v8.15.2-fix5-implementation-report.md)。同物理加载会话可验证的停机回执安全续归档，日期改用分块冷扫描与增量读取；年度硬限 1500 Token，人生片段仍为 1000。保留此前用户验收，已有年度/人生重建及真实压缩仍待用户验证。
 
 V8.15.2 年度与人生记忆热修（2026-10-09）：[根因与修复报告](docs/v8.15.2-derived-acquisition-hotfix-report.md)。修复事件日期未知的长期记忆被年度生成全部排除；按用户确认的获知年份归档并保留未知事件日期标注，人生记忆沿年度来源生成。隔离打包按钮验证通过，真实已有记忆重建待本轮验收。

@@ -4,6 +4,7 @@ const RUN_COMMAND_QUEUE_VERSION = 3;
 const CONVERSATION_CLOSE_TTL_MS = 15e3;
 const ACTION_COMMAND_TTL_MS = 120e3;
 const DATE_REARM_TTL_MS = 30e3;
+const IDLE_RUN_FILE_EFFECT = 'if = { limit = { always = no } debug_log = "VOTC:IDLE_NOOP" }';
 const PENDING_COMMAND_STATUSES = ["queued", "blocked", "awaiting_ack", "stalled"];
 const TERMINAL_COMMAND_STATUSES = ["failed", "acknowledged", "cancelled", "expired", "quarantined"];
 
@@ -141,9 +142,18 @@ function createRunFileManager({ settingsRepository, path, fs, dataDir = null, no
     neutralizeExecutableFile({ expectedCommandId, command = null, reason = "unspecified" } = {}) {
       if (this.stateLoadError || !expectedCommandId || !this.resolvePath()) return false;
       try {
-        if (!fs$1.existsSync(this.path)) return true;
-        const text = fs$1.readFileSync(this.path, "utf8");
+        if (!fs$1.existsSync(this.path)) {
+          this.writeCarrierFile("");
+          this.logRunCommand("neutralized", command || { commandId: expectedCommandId, kind: "unknown", owner: "unknown", queuedAt: now(), writeAttempts: 0, status: "-" }, null, `${reason}_missing`);
+          return true;
+        }
+        const text = fs$1.readFileSync(this.path, "utf8").replace(/^\uFEFF/, "");
+        if (text === IDLE_RUN_FILE_EFFECT) {
+          this.logRunCommand("neutralized", command || { commandId: expectedCommandId, kind: "unknown", owner: "unknown", queuedAt: now(), writeAttempts: 0, status: "-" }, null, `${reason}_already_idle`);
+          return true;
+        }
         if (!text) {
+          this.writeCarrierFile("");
           this.logRunCommand("neutralized", command || { commandId: expectedCommandId, kind: "unknown", owner: "unknown", queuedAt: now(), writeAttempts: 0, status: "-" }, null, `${reason}_already_empty`);
           return true;
         }
@@ -241,7 +251,7 @@ ${payload}
     }
     writeCarrierFile(text) {
       if (!this.path) throw new Error("run_command_path_unavailable");
-      const content = text ? `\uFEFF${text}` : "";
+      const content = `\uFEFF${text || IDLE_RUN_FILE_EFFECT}`;
       if (typeof fs$1.renameSync !== "function") {
         fs$1.writeFileSync(this.path, content, "utf8");
         return;
@@ -430,7 +440,12 @@ ${payload}
         return null;
       }
       this.logRunCommand("ack", active, previousStatus);
-      if (this.recoveryCompleted) this.writeActiveCommand();
+      if (this.recoveryCompleted) {
+        if (this.pendingCommands.length === 0) {
+          this.neutralizeExecutableFile({ expectedCommandId: active.commandId, command: active, reason: "acknowledged" });
+        }
+        this.writeActiveCommand();
+      }
       return this.snapshot(active);
     }
     reconcileAcknowledgedCommands(ackEntries = []) {
@@ -463,6 +478,10 @@ ${payload}
           this.pendingCommands.unshift(command);
         }
         throw error;
+      }
+      if (this.pendingCommands.length === 0) {
+        const lastAcknowledged = reconciled[reconciled.length - 1];
+        this.neutralizeExecutableFile({ expectedCommandId: lastAcknowledged.commandId, command: lastAcknowledged, reason: "startup_acknowledged" });
       }
       if (this.recoveryCompleted) this.writeActiveCommand();
       return reconciled.map((command) => this.snapshot(command));
@@ -793,9 +812,14 @@ ${payload}
       if (this.stateLoadError) return false;
       if (this.pendingCommands.length > 0 || !this.resolvePath()) return false;
       try {
-        if (fs$1.existsSync(this.path)) fs$1.writeFileSync(this.path, "", "utf8");
+        if (fs$1.existsSync(this.path)) {
+          const text = fs$1.readFileSync(this.path, "utf8").replace(/^\uFEFF/, "");
+          if (text === IDLE_RUN_FILE_EFFECT) return true;
+          if (text) return false;
+        }
+        this.writeCarrierFile("");
       } catch (error) {
-        console.warn("RunFileManager: Failed to clear empty run file:", error);
+        console.warn("RunFileManager: Failed to write idle run file:", error);
         return false;
       }
       return true;
@@ -809,9 +833,7 @@ ${payload}
         console.warn("RunFileManager: Refusing to clear votc.txt while commands are awaiting CK3 ACK.");
         return false;
       }
-      if (!this.resolvePath()) return false;
-        this.writeCarrierFile("");
-      return true;
+      return this.writeEmptyRunFileIfSafe();
     }
     createRunFolder(userFolderPath) {
       const runFolderPath = path.join(userFolderPath, "run");

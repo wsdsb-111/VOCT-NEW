@@ -17,6 +17,8 @@ const ERRORS = {
   memory4_derived_revision_conflict: "来源或版本已变化，未覆盖内容。请刷新后重试。",
   memory4_disclosure_revision_conflict: "人物认知已发生变化，未覆盖标记。请刷新后重试。",
   memory4_owner_folder_not_unique: "此人物的摘要目录存在缺失或冲突。",
+  memory4_compression_quality_failed: "模型压缩未通过预算、条件或日期校验，原始记忆已保留。可重新生成。",
+  memory4_life_year_missing: "仍有年份尚未生成年度记忆，请先重新生成年度与人生记忆。",
   memory4_unavailable: "人物记忆暂不可用。"
 };
 const errorText = value => ERRORS[value] || (/revision|stale|source_changed/.test(String(value)) ? "来源或版本已变化，未覆盖内容。请刷新后重试。" : `操作未完成：${String(value || "未知错误").slice(0, 180)}`);
@@ -128,7 +130,13 @@ export function Memory4Manager({ react: R, ownerId, refreshKey, searchActive = f
             : payload.operation === "deleteDetail" ? "已删除长期记忆。" : "记忆已更新。" );
       if (closeEditor) setEditor(null);
       await load({ entityId });
-    } catch (cause) { if (epoch === contextEpoch.current) setError(errorText(cause?.message)); }
+    } catch (cause) {
+      clearTimeout(refreshTimer);
+      if (epoch === contextEpoch.current) {
+        if (payload.operation === "rebuild") await load({ entityId });
+        if (epoch === contextEpoch.current) setError(errorText(cause?.message));
+      }
+    }
     finally { clearTimeout(refreshTimer); if (!isCancel && epoch === contextEpoch.current) setBusy(false); }
   };
   const regenerate = (kind, view, extra = {}) => {
@@ -297,7 +305,7 @@ export function Memory4Manager({ react: R, ownerId, refreshKey, searchActive = f
     error && h("p", { className: "memory4-error", role: "alert" }, error), message && h("p", { role: "status" }, message),
     (busy || loading) && h("p", { role: "status" }, busy ? "处理中…" : "读取中…"),
     data?.derived.jobs?.some(job => ["QUEUED", "RUNNING", "FAILED", "REQUEUED"].includes(job.status)) && h("p", { className: "memory4-meta", role: "status" },
-      data.derived.jobs.some(job => job.status === "FAILED") ? "派生记忆生成失败，可重新生成。" : data.derived.jobs.some(job => job.status === "RUNNING") ? "派生记忆正在生成，完成后刷新。" : "派生记忆已排队，等待生成。",
+      data.derived.jobs.some(job => job.status === "FAILED") ? `派生记忆生成失败${data.derived.jobs.find(job => job.status === "FAILED").eventYear ? `（${data.derived.jobs.find(job => job.status === "FAILED").eventYear} 年）` : ""}，可重新生成。` : data.derived.jobs.some(job => job.status === "RUNNING") ? "派生记忆正在生成，完成后刷新。" : "派生记忆已排队，等待生成。",
       data.derived.jobs.some(job => ["RUNNING", "QUEUED", "REQUEUED"].includes(job.status)) && writeButton("停止任务", () => mutate({ operation: "cancelDerived" }), { title: "停止当前人物的派生记忆任务" })),
     h("div", { className: "memory4-panel", role: "tabpanel" }, content),
     editor && h("div", { className: "modal-overlay" }, h("form", { className: "modal-content memory4-modal", onSubmit: event => { event.preventDefault(); mutate(editor, true); } },

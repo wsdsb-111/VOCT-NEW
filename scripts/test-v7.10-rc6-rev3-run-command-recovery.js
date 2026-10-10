@@ -9,6 +9,7 @@ const { scanRunAcksForPendingCommands } = require("../resources/app/out/main/act
 const { registerIpcHandlers } = require("../resources/app/out/main/ipc/register-ipc");
 
 const root = path.join(__dirname, "..");
+const IDLE_CARRIER = '\uFEFFif = { limit = { always = no } debug_log = "VOTC:IDLE_NOOP" }';
 const tempRoot = fs.mkdtempSync(path.join(os.tmpdir(), "votc-rc6-rev3-recovery-"));
 
 function createHarness(name, { fsImpl = fs } = {}) {
@@ -72,7 +73,7 @@ async function run() {
     restarted.initializeAfterAckReconciliation();
     assert.strictEqual(reconciled.length, 1, "T2 historical ACK must be reconciled");
     assert.strictEqual(restarted.getPendingCommands().length, 0, "T2 acknowledged command must not remain pending");
-    assert.strictEqual(fs.readFileSync(harness.runFile, "utf8"), "", "T2 acknowledged command must not replay");
+    assert.strictEqual(fs.readFileSync(harness.runFile, "utf8"), IDLE_CARRIER, "T2 acknowledged command must not replay");
     assert.strictEqual(restarted.getRecentCommands().at(-1).ackSource, "startup_debug_log_reconciliation");
   }
 
@@ -89,7 +90,7 @@ async function run() {
     assert.strictEqual(active.status, "stalled", "T3 unacknowledged head must become STALLED after restart");
     assert.strictEqual(active.failureReason, "startup_ack_unconfirmed", "T3 restart must record the ACK uncertainty reason");
     assert.strictEqual(active.writeAttempts, 1, "T3 restart must not increase writeAttempts");
-    assert.strictEqual(fs.readFileSync(harness.runFile, "utf8"), "", "T3 restart must neutralize the unconfirmed carrier without replay");
+    assert.strictEqual(fs.readFileSync(harness.runFile, "utf8"), IDLE_CARRIER, "T3 restart must neutralize the unconfirmed carrier without replay");
   }
 
   {
@@ -146,7 +147,7 @@ async function run() {
       "T8 enqueue must fail closed when durable persistence fails"
     );
     assert.strictEqual(manager.getPendingCommands().length, 0);
-    assert.strictEqual(fs.readFileSync(harness.runFile, "utf8"), "", "T8 persistence failure must not dispatch Effect");
+    assert.strictEqual(fs.readFileSync(harness.runFile, "utf8"), IDLE_CARRIER, "T8 persistence failure must not dispatch Effect");
   }
 
   {
@@ -259,7 +260,7 @@ async function run() {
 
     const restarted = harness.createManager();
     restarted.initializeAfterAckReconciliation();
-    assert.strictEqual(fs.readFileSync(harness.runFile, "utf8"), "", "T16 restart must neutralize the carrier without replaying the Effect");
+    assert.strictEqual(fs.readFileSync(harness.runFile, "utf8"), IDLE_CARRIER, "T16 restart must neutralize the carrier without replaying the Effect");
     assert.strictEqual(restarted.getPendingCommands()[0].status, "stalled");
   }
 

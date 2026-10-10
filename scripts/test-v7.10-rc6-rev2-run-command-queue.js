@@ -7,6 +7,7 @@ const path = require("path");
 const { createRunFileManager } = require("../resources/app/out/main/actions/run-file-manager");
 
 const root = path.join(__dirname, "..");
+const IDLE_CARRIER = '\uFEFFif = { limit = { always = no } debug_log = "VOTC:IDLE_NOOP" }';
 const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "votc-rc6-rev2-queue-"));
 try {
   const ck3Dir = path.join(tempDir, "ck3");
@@ -42,11 +43,11 @@ try {
   assert.strictEqual(restarted.getPendingCommands()[0].commandId, letter.commandId);
   restarted.initializeAfterAckReconciliation();
   assert.strictEqual(restarted.getPendingCommands()[0].status, "stalled", "D4 restart must retain unconfirmed command as STALLED");
-  assert.strictEqual(fs.readFileSync(restarted.path, "utf8"), "", "D4 startup must neutralize the unconfirmed carrier without replay");
+  assert.strictEqual(fs.readFileSync(restarted.path, "utf8"), IDLE_CARRIER, "D4 startup must neutralize the unconfirmed carrier without replay");
   restarted.retryStalledCommand(letter.commandId);
   assert(fs.readFileSync(restarted.path, "utf8").includes(letter.ackMarker));
   assert(restarted.ackCommand(letter.commandId));
-  assert.strictEqual(fs.readFileSync(restarted.path, "utf8"), "");
+  assert.strictEqual(fs.readFileSync(restarted.path, "utf8"), IDLE_CARRIER);
 
   const conversationSource = fs.readFileSync(path.join(root, "resources", "app", "out", "main", "conversation", "conversation.js"), "utf8");
   const mainSource = fs.readFileSync(path.join(root, "resources", "app", "out", "main", "main.js"), "utf8");

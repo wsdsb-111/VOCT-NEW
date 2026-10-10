@@ -1,0 +1,319 @@
+# Repair only cross-region administrative vassals. A valid regional de-jure
+# liege receives the vassal; otherwise the landed Chinese Celestial top liege does.
+votc_celestial_repair_foreign_admin_vassals_effect = {
+	save_temporary_scope_as = votc_celestial_cleanup_root
+	top_liege = { save_temporary_scope_as = votc_celestial_cleanup_emperor }
+	if = {
+		limit = {
+			any_vassal = { votc_celestial_foreign_admin_vassal_trigger = yes }
+		}
+		create_title_and_vassal_change = {
+			type = appointment
+			save_scope_as = votc_celestial_vassal_repair_change
+		}
+		every_vassal = {
+			limit = { votc_celestial_foreign_admin_vassal_trigger = yes }
+			save_temporary_scope_as = votc_celestial_foreign_vassal
+			if = {
+				limit = {
+					exists = primary_title.de_jure_liege.holder
+					primary_title.de_jure_liege.holder = {
+						is_alive = yes
+						is_landed = yes
+						this != scope:votc_celestial_cleanup_root
+						this != scope:votc_celestial_foreign_vassal
+						top_liege = scope:votc_celestial_cleanup_emperor
+						highest_held_title_tier > scope:votc_celestial_foreign_vassal.primary_title.tier
+					}
+				}
+				primary_title.de_jure_liege.holder = {
+					save_temporary_scope_as = votc_celestial_foreign_vassal_de_jure_holder
+				}
+				change_liege = {
+					liege = scope:votc_celestial_foreign_vassal_de_jure_holder
+					change = scope:votc_celestial_vassal_repair_change
+				}
+			}
+			else_if = {
+				limit = {
+					scope:votc_celestial_cleanup_emperor = {
+						is_alive = yes
+						is_landed = yes
+						this != scope:votc_celestial_foreign_vassal
+						highest_held_title_tier > scope:votc_celestial_foreign_vassal.primary_title.tier
+					}
+				}
+				change_liege = {
+					liege = scope:votc_celestial_cleanup_emperor
+					change = scope:votc_celestial_vassal_repair_change
+				}
+			}
+		}
+		resolve_title_and_vassal_change = scope:votc_celestial_vassal_repair_change
+	}
+}
+
+# Transfer only the selected office title. Each held county office is processed
+# separately, and take_baronies keeps its baronies with it without recursively
+# consuming a protected hereditary title below a higher office.
+votc_celestial_release_office_title_effect = {
+	scope:votc_celestial_cleanup_emperor = { save_temporary_scope_as = votc_celestial_release_recipient }
+	if = {
+		limit = {
+			exists = current_heir
+			current_heir = { votc_celestial_office_release_heir_trigger = yes }
+		}
+		current_heir = { save_temporary_scope_as = votc_celestial_release_recipient }
+	}
+	create_title_and_vassal_change = {
+		type = appointment
+		save_scope_as = votc_celestial_release_change
+	}
+	if = {
+		limit = { tier = tier_county }
+		change_title_holder = {
+			holder = scope:votc_celestial_release_recipient
+			change = scope:votc_celestial_release_change
+			take_baronies = yes
+		}
+	}
+	else = {
+		change_title_holder = {
+			holder = scope:votc_celestial_release_recipient
+			change = scope:votc_celestial_release_change
+			take_baronies = no
+		}
+	}
+	resolve_title_and_vassal_change = scope:votc_celestial_release_change
+}
+
+votc_celestial_release_lower_offices_effect = {
+	save_temporary_scope_as = votc_celestial_cleanup_root
+	top_liege = { save_temporary_scope_as = votc_celestial_cleanup_emperor }
+	# Process higher office titles first, then each eligible county independently;
+	# county baronies move with that county and are never enumerated as offices.
+	every_held_title = {
+		limit = {
+			votc_celestial_office_release_title_trigger = yes
+			tier > tier_county
+		}
+		save_temporary_scope_as = votc_celestial_release_title
+		votc_celestial_release_office_title_effect = yes
+	}
+	every_held_title = {
+		limit = {
+			votc_celestial_office_release_title_trigger = yes
+			tier = tier_county
+		}
+		save_temporary_scope_as = votc_celestial_release_title
+		votc_celestial_release_office_title_effect = yes
+	}
+}
+
+votc_celestial_release_lateral_title_effect = {
+	scope:votc_celestial_cleanup_emperor = { save_temporary_scope_as = votc_celestial_release_recipient }
+	if = {
+		limit = {
+			exists = current_heir
+			current_heir = { votc_celestial_lateral_release_heir_trigger = yes }
+		}
+		current_heir = { save_temporary_scope_as = votc_celestial_release_recipient }
+	}
+	clear_variable_list = votc_celestial_lateral_handoff_path
+	scope:votc_celestial_lateral_target_title = {
+		every_in_list = {
+			variable = votc_celestial_lateral_handoff_path
+			save_temporary_scope_as = votc_celestial_lateral_path_member
+			scope:votc_celestial_lateral_release_title = {
+				add_to_variable_list = {
+					name = votc_celestial_lateral_handoff_path
+					target = scope:votc_celestial_lateral_path_member
+				}
+			}
+		}
+	}
+	set_variable = { name = votc_celestial_lateral_handoff_ready }
+	create_title_and_vassal_change = {
+		type = appointment
+		save_scope_as = votc_celestial_lateral_release_change
+	}
+	if = {
+		limit = { tier = tier_county }
+		change_title_holder = {
+			holder = scope:votc_celestial_release_recipient
+			change = scope:votc_celestial_lateral_release_change
+			take_baronies = yes
+		}
+	}
+	else = {
+		change_title_holder = {
+			holder = scope:votc_celestial_release_recipient
+			change = scope:votc_celestial_lateral_release_change
+			take_baronies = no
+		}
+	}
+	resolve_title_and_vassal_change = scope:votc_celestial_lateral_release_change
+}
+
+votc_celestial_release_same_tier_offices_effect = {
+	save_temporary_scope_as = votc_celestial_cleanup_root
+	top_liege = { save_temporary_scope_as = votc_celestial_cleanup_emperor }
+	scope:votc_celestial_lateral_target_title = {
+		add_to_variable_list = {
+			name = votc_celestial_lateral_handoff_path
+			target = scope:votc_celestial_cleanup_root
+		}
+	}
+	if = {
+		limit = {
+			scope:votc_celestial_lateral_target_title = { tier = root.highest_held_title_tier }
+		}
+		set_primary_title_to = scope:votc_celestial_lateral_target_title
+	}
+	every_held_title = {
+		limit = {
+			votc_celestial_lateral_release_title_trigger = yes
+			this != scope:votc_celestial_lateral_target_title
+		}
+		save_temporary_scope_as = votc_celestial_lateral_release_title
+		votc_celestial_release_lateral_title_effect = yes
+	}
+}
+
+votc_celestial_repair_legacy_foreign_state_effect = {
+	save_temporary_scope_as = votc_celestial_cleanup_root
+	top_liege = { save_temporary_scope_as = votc_celestial_cleanup_emperor }
+	votc_celestial_repair_foreign_admin_vassals_effect = yes
+	every_held_title = {
+		limit = { votc_celestial_legacy_foreign_office_title_trigger = yes }
+		save_temporary_scope_as = votc_celestial_release_title
+		votc_celestial_release_office_title_effect = yes
+	}
+	votc_celestial_repair_foreign_admin_vassals_effect = yes
+	if = {
+		limit = { exists = liege }
+		liege = {
+			if = {
+				limit = { votc_celestial_office_cleanup_root_trigger = yes }
+				votc_celestial_repair_foreign_admin_vassals_effect = yes
+			}
+		}
+	}
+}
+
+votc_celestial_office_schedule_region_recheck_effect = {
+	set_variable = {
+		name = votc_celestial_office_region_pending
+		days = 2
+	}
+	trigger_event = {
+		id = votc_celestial_office_release.0002
+		days = 1
+	}
+}
+
+votc_celestial_office_schedule_lateral_recheck_effect = {
+	if = {
+		limit = { scope:title = { tier = tier_empire } }
+		if = {
+			limit = { exists = var:votc_celestial_lateral_empire_target }
+			var:votc_celestial_lateral_empire_target = { save_temporary_scope_as = votc_celestial_lateral_previous_target }
+			votc_celestial_merge_lateral_handoff_path_effect = yes
+		}
+		set_variable = {
+			name = votc_celestial_lateral_empire_target
+			value = scope:title
+			days = 2
+		}
+	}
+	else_if = {
+		limit = { scope:title = { tier = tier_kingdom } }
+		if = {
+			limit = { exists = var:votc_celestial_lateral_target }
+			var:votc_celestial_lateral_target = { save_temporary_scope_as = votc_celestial_lateral_previous_target }
+			votc_celestial_merge_lateral_handoff_path_effect = yes
+		}
+		set_variable = {
+			name = votc_celestial_lateral_target
+			value = scope:title
+			days = 2
+		}
+	}
+	else_if = {
+		limit = { scope:title = { tier = tier_duchy } }
+		if = {
+			limit = { exists = var:votc_celestial_lateral_duchy_target }
+			var:votc_celestial_lateral_duchy_target = { save_temporary_scope_as = votc_celestial_lateral_previous_target }
+			votc_celestial_merge_lateral_handoff_path_effect = yes
+		}
+		set_variable = {
+			name = votc_celestial_lateral_duchy_target
+			value = scope:title
+			days = 2
+		}
+	}
+	else = {
+		if = {
+			limit = { exists = var:votc_celestial_lateral_county_target }
+			var:votc_celestial_lateral_county_target = { save_temporary_scope_as = votc_celestial_lateral_previous_target }
+			votc_celestial_merge_lateral_handoff_path_effect = yes
+		}
+		set_variable = {
+			name = votc_celestial_lateral_county_target
+			value = scope:title
+			days = 2
+		}
+	}
+	votc_celestial_office_schedule_lateral_event_effect = yes
+}
+
+votc_celestial_office_schedule_lateral_event_effect = {
+	if = {
+		limit = { NOT = { has_variable = votc_celestial_office_lateral_pending } }
+		set_variable = {
+			name = votc_celestial_office_lateral_pending
+			days = 2
+		}
+		trigger_event = {
+			id = votc_celestial_office_release.0003
+			days = 1
+		}
+	}
+}
+
+votc_celestial_office_lateral_cleanup_effect = {
+	votc_celestial_release_same_tier_offices_effect = yes
+	if = {
+		limit = { votc_celestial_office_cleanup_root_trigger = yes }
+		votc_celestial_repair_legacy_foreign_state_effect = yes
+	}
+}
+
+votc_celestial_office_promotion_cleanup_effect = {
+	if = {
+		limit = { votc_celestial_office_cleanup_root_trigger = yes }
+		votc_celestial_repair_foreign_admin_vassals_effect = yes
+		votc_celestial_release_lower_offices_effect = yes
+		votc_celestial_repair_foreign_admin_vassals_effect = yes
+	}
+	remove_variable = votc_celestial_office_release_pending
+}
+
+# Preserve visited governors when two real same-tier appointments share a batch.
+votc_celestial_merge_lateral_handoff_path_effect = {
+	if = {
+		limit = { scope:votc_celestial_lateral_previous_target != scope:title }
+		scope:votc_celestial_lateral_previous_target = {
+			every_in_list = {
+				variable = votc_celestial_lateral_handoff_path
+				save_temporary_scope_as = votc_celestial_lateral_path_member
+				scope:title = {
+					add_to_variable_list = {
+						name = votc_celestial_lateral_handoff_path
+						target = scope:votc_celestial_lateral_path_member
+					}
+				}
+			}
+		}
+	}
+}

@@ -106,6 +106,34 @@ async function run() {
       error => error.message === "memory4_compression_quality_failed");
   });
 
+  await check("compression supplies literal conditions and repairs a rejected paraphrase once", async () => {
+    const entry = eventEntry("condition_retry", "答应议和，但须先释放俘虏。" + "s".repeat(1800));
+    const { service, calls } = fixture("答应议和，条件是释放俘虏。");
+    service.configure({ requestCompression: async (prompt, options) => {
+      calls.push({ prompt, options });
+      const input = JSON.parse(prompt[1].content);
+      assert.deepEqual(input.items[0].evidence[0].requiredVerbatim, ["但须先释放俘虏"]);
+      if (calls.length === 2) {
+        const feedback = JSON.parse(prompt.at(-1).content);
+        assert.deepEqual(feedback.missingGuards[0], { sourceEntryId: entry.entryId, text: "但须先释放俘虏" });
+        assert.equal(feedback.hardLimit, 1500);
+      }
+      return JSON.stringify({ items: [{ text: calls.length === 1 ? "答应议和，条件是释放俘虏。" : "答应议和，但须先释放俘虏。", sourceEntryIds: [entry.entryId] }] });
+    } });
+    const result = await service.compress(scope, "year", [sourceItem(entry)], [entry], task, null);
+    assert.equal(calls.length, 2);
+    assert.match(result[0].text, /但须先释放俘虏/);
+  });
+
+  await check("a repeatedly over-budget response stops after two attempts", async () => {
+    const entry = eventEntry("bounded_retry", "s".repeat(1800));
+    const { service, calls } = fixture("y".repeat(1501));
+    await assert.rejects(service.compress(scope, "year", [sourceItem(entry)], [entry], task, null),
+      error => error.message === "memory4_compression_quality_failed");
+    assert.equal(calls.length, 2);
+    assert.equal(JSON.parse(calls[1].prompt.at(-1).content).finalTokens, 1501);
+  });
+
   await check("Year acquisition labels are retained after compression", async () => {
     const first = acquiredEntry("acquired_1", "1164.1.1", "获知旧事一。" + "detail。".repeat(500));
     const second = acquiredEntry("acquired_2", "1164.2.1", "获知旧事二。" + "detail。".repeat(500));

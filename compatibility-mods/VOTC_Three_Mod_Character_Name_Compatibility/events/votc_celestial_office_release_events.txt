@@ -1,0 +1,120 @@
+namespace = votc_celestial_office_release
+
+votc_celestial_office_release.0001 = {
+	hidden = yes
+	trigger = {
+		has_variable = votc_celestial_office_release_pending
+	}
+	immediate = {
+		if = {
+			limit = {
+				is_alive = yes
+				votc_celestial_office_cleanup_root_trigger = yes
+			}
+			votc_celestial_office_promotion_cleanup_effect = yes
+		}
+	}
+}
+
+votc_celestial_office_release.0002 = {
+	hidden = yes
+	trigger = {
+		has_variable = votc_celestial_office_region_pending
+	}
+	immediate = {
+		if = {
+			limit = {
+				is_alive = yes
+				votc_celestial_office_cleanup_root_trigger = yes
+			}
+			votc_celestial_repair_legacy_foreign_state_effect = yes
+		}
+		remove_variable = votc_celestial_office_region_pending
+	}
+}
+
+votc_celestial_office_release.0003 = {
+	hidden = yes
+	trigger = {
+		has_variable = votc_celestial_office_lateral_pending
+	}
+	immediate = {
+		if = {
+			limit = { exists = var:votc_celestial_lateral_empire_target }
+			var:votc_celestial_lateral_empire_target = { save_temporary_scope_as = votc_celestial_lateral_target_title }
+			remove_variable = votc_celestial_lateral_empire_target
+			if = {
+				limit = { votc_celestial_office_lateral_cleanup_trigger = yes }
+				votc_celestial_office_lateral_cleanup_effect = yes
+			}
+			scope:votc_celestial_lateral_target_title = {
+				if = {
+					limit = { holder = root }
+					clear_variable_list = votc_celestial_lateral_handoff_path
+				}
+			}
+		}
+		else = { remove_variable = votc_celestial_lateral_empire_target }
+		if = {
+			limit = { exists = var:votc_celestial_lateral_target }
+			var:votc_celestial_lateral_target = { save_temporary_scope_as = votc_celestial_lateral_target_title }
+			remove_variable = votc_celestial_lateral_target
+			if = {
+				limit = { votc_celestial_office_lateral_cleanup_trigger = yes }
+				votc_celestial_office_lateral_cleanup_effect = yes
+			}
+			scope:votc_celestial_lateral_target_title = {
+				if = {
+					limit = { holder = root }
+					clear_variable_list = votc_celestial_lateral_handoff_path
+				}
+			}
+		}
+		else = { remove_variable = votc_celestial_lateral_target }
+		if = {
+			limit = { exists = var:votc_celestial_lateral_duchy_target }
+			var:votc_celestial_lateral_duchy_target = { save_temporary_scope_as = votc_celestial_lateral_target_title }
+			remove_variable = votc_celestial_lateral_duchy_target
+			if = {
+				limit = { votc_celestial_office_lateral_cleanup_trigger = yes }
+				votc_celestial_office_lateral_cleanup_effect = yes
+			}
+			scope:votc_celestial_lateral_target_title = {
+				if = {
+					limit = { holder = root }
+					clear_variable_list = votc_celestial_lateral_handoff_path
+				}
+			}
+		}
+		else = { remove_variable = votc_celestial_lateral_duchy_target }
+		if = {
+			limit = { exists = var:votc_celestial_lateral_county_target }
+			var:votc_celestial_lateral_county_target = { save_temporary_scope_as = votc_celestial_lateral_target_title }
+			remove_variable = votc_celestial_lateral_county_target
+			if = {
+				limit = { votc_celestial_office_lateral_cleanup_trigger = yes }
+				votc_celestial_office_lateral_cleanup_effect = yes
+			}
+			scope:votc_celestial_lateral_target_title = {
+				if = {
+					limit = { holder = root }
+					clear_variable_list = votc_celestial_lateral_handoff_path
+				}
+			}
+		}
+		else = { remove_variable = votc_celestial_lateral_county_target }
+		remove_variable = votc_celestial_office_lateral_pending
+		remove_variable = votc_celestial_office_lateral_ambiguous
+		if = {
+			limit = {
+				OR = {
+					has_variable = votc_celestial_lateral_empire_target
+					has_variable = votc_celestial_lateral_target
+					has_variable = votc_celestial_lateral_duchy_target
+					has_variable = votc_celestial_lateral_county_target
+				}
+			}
+			votc_celestial_office_schedule_lateral_event_effect = yes
+		}
+	}
+}

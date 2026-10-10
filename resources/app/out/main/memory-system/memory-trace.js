@@ -9,7 +9,7 @@ class MemoryTrace {
 
   record(stage, details = {}) {
     const derivedStage = ["memory4_derived", "memory4_legacy_recompression"].includes(stage);
-    if (derivedStage) details = Object.fromEntries(["ownerId", "status", "kind", "count", "indexRevision", "derivedRevision", "sourceHash", "durationMs", "errorCode"]
+    if (derivedStage) details = Object.fromEntries(["ownerId", "status", "kind", "count", "indexRevision", "derivedRevision", "sourceHash", "durationMs", "errorCode", "eventYear", "quality"]
       .map(key => [key, details[key]]));
     const safe = {
       timestamp: new Date().toISOString(),
@@ -82,6 +82,9 @@ class MemoryTrace {
         status: ["RUNNING", "COMPLETE", "MANUAL_OVERRIDE", "QUEUED", "REQUEUED", "FAILED", "CANCELLED", "EXTRACTION_FAILED"].includes(details.status) ? details.status : null,
         kind: ["year", "life", "all"].includes(details.kind) ? details.kind : null,
         count: Number.isSafeInteger(details.count) ? details.count : null,
+        ...(Number.isSafeInteger(details.eventYear) ? { eventYear: details.eventYear } : {}),
+        ...(details.quality ? { quality: Object.fromEntries(["outputTokens", "finalTokens", "hardLimit", "missingGuardCount", "invalidTimeAxisCount"]
+          .filter(key => Number.isSafeInteger(details.quality[key]) && details.quality[key] >= 0).map(key => [key, details.quality[key]])) } : {}),
         indexRevision: Number.isSafeInteger(details.indexRevision) ? details.indexRevision : null,
         derivedRevision: Number.isSafeInteger(details.derivedRevision) ? details.derivedRevision : null,
         sourceHash: /^[a-f0-9]{64}$/.test(details.sourceHash || "") ? details.sourceHash : null,

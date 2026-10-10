@@ -8,6 +8,7 @@ const { createRunFileManager } = require("../resources/app/out/main/actions/run-
 const { createLetterEffectTransport } = require("../resources/app/out/main/letters/letter-effect-transport");
 const { createLetterManager } = require("../resources/app/out/main/letters/letter-manager");
 
+const IDLE_CARRIER = '\uFEFFif = { limit = { always = no } debug_log = "VOTC:IDLE_NOOP" }';
 const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "votc-v710-rc4-transport-"));
 try {
   const ck3Dir = path.join(tempDir, "ck3");
@@ -104,7 +105,7 @@ trigger_event = message_event.362`;
   assert.strictEqual(manager.getLetterStatus(letter.letterId).responseStatus, "cancelled", "one-click clear must release pending delivery without deleting its status history");
   const afterClear = fs.readFileSync(path.join(runDir, "votc.txt"), "utf8");
   assert(!afterClear.includes(expectedBody), "one-click clear must remove the pending Letter Effect");
-  assert.strictEqual(afterClear, "", "one-click clear may cancel its own queued Letter command after the earlier diagnostic was ACKed");
+  assert.strictEqual(afterClear, IDLE_CARRIER, "one-click clear may cancel its own queued Letter command after the earlier diagnostic was ACKed");
   console.log("VOTC v7.10-RC4 Letter Transport: PASS (T01-T06 + one-click pending clear)");
 } finally {
   fs.rmSync(tempDir, { recursive: true, force: true });

@@ -1,0 +1,148 @@
+on_primary_title_change = {
+	on_actions = {
+		votc_celestial_office_release_primary_title
+		votc_celestial_office_region_recheck
+	}
+}
+
+on_title_gain = {
+	on_actions = {
+		votc_celestial_office_region_title_gain
+		votc_celestial_office_lateral_title_gain
+	}
+}
+
+on_title_lost = {
+	on_actions = { votc_celestial_office_region_recheck }
+}
+
+on_vassal_change = {
+	on_actions = { votc_celestial_office_region_recheck }
+}
+
+on_vassal_gained = {
+	on_actions = { votc_celestial_office_region_vassal_gain }
+}
+
+on_government_change = {
+	on_actions = { votc_celestial_office_region_government_change }
+}
+
+on_liege_government_change = {
+	on_actions = { votc_celestial_office_region_government_change }
+}
+
+votc_celestial_office_release_primary_title = {
+	trigger = {
+		votc_celestial_office_promotion_trigger = yes
+		NOT = { has_variable = votc_celestial_office_release_pending }
+	}
+	effect = {
+		set_variable = {
+			name = votc_celestial_office_release_pending
+			days = 2
+		}
+		trigger_event = {
+			id = votc_celestial_office_release.0001
+			days = 1
+		}
+	}
+}
+
+# One-time migration: repair cross-region administrative vassals and release
+# only lower appointed titles demonstrably outside the ruler's region.
+# Local lower titles, independent realms and inherited titles are not released.
+on_game_start_after_lobby = {
+	on_actions = { votc_celestial_office_legacy_vassal_cleanup }
+}
+
+votc_celestial_office_legacy_vassal_cleanup = {
+	effect = {
+		every_ruler = {
+			limit = {
+				votc_celestial_office_cleanup_root_trigger = yes
+				NOT = { has_character_flag = votc_celestial_office_v104_state_checked }
+			}
+			add_character_flag = votc_celestial_office_legacy_state_checked
+			add_character_flag = votc_celestial_office_v104_state_checked
+			votc_celestial_repair_legacy_foreign_state_effect = yes
+		}
+	}
+}
+
+votc_celestial_office_region_recheck = {
+	trigger = {
+		votc_celestial_office_region_candidate_trigger = yes
+		NOT = { has_variable = votc_celestial_office_region_pending }
+	}
+	effect = { votc_celestial_office_schedule_region_recheck_effect = yes }
+}
+
+votc_celestial_office_region_title_gain = {
+	trigger = {
+		votc_celestial_office_region_character_trigger = yes
+		NOT = { has_variable = votc_celestial_office_region_pending }
+		OR = {
+			primary_title = { votc_celestial_office_region_title_trigger = yes }
+			scope:title = { votc_celestial_office_region_title_trigger = yes }
+		}
+	}
+	effect = { votc_celestial_office_schedule_region_recheck_effect = yes }
+}
+
+votc_celestial_office_region_vassal_gain = {
+	trigger = {
+		votc_celestial_office_region_candidate_trigger = yes
+		NOT = { has_variable = votc_celestial_office_region_pending }
+		scope:vassal = {
+			is_alive = yes
+			is_landed = yes
+			exists = primary_title
+			primary_title = {
+				votc_celestial_office_region_title_trigger = yes
+				root = { save_temporary_scope_as = votc_celestial_region_holder }
+				NOT = { votc_celestial_title_in_holder_region_trigger = yes }
+			}
+		}
+	}
+	effect = { votc_celestial_office_schedule_region_recheck_effect = yes }
+}
+
+votc_celestial_office_region_government_change = {
+	trigger = {
+		votc_celestial_office_region_character_trigger = yes
+		NOT = { has_variable = votc_celestial_office_region_pending }
+	}
+	effect = { votc_celestial_office_schedule_region_recheck_effect = yes }
+}
+
+votc_celestial_office_lateral_title_gain = {
+	trigger = {
+		exists = scope:title
+		scope:title = { holder = root }
+	}
+	effect = {
+		scope:title = {
+			if = {
+				limit = {
+					NOT = { has_variable = votc_celestial_lateral_handoff_ready }
+					NOT = { votc_celestial_lateral_target_pending_trigger = yes }
+				}
+				clear_variable_list = votc_celestial_lateral_handoff_path
+			}
+		}
+		if = {
+			limit = { votc_celestial_office_lateral_gain_trigger = yes }
+			votc_celestial_office_schedule_lateral_recheck_effect = yes
+		}
+		else = {
+			scope:title = {
+				if = {
+					limit = { NOT = { votc_celestial_lateral_target_pending_trigger = yes } }
+					clear_variable_list = votc_celestial_lateral_handoff_path
+				}
+			}
+		}
+		scope:title = { remove_variable = votc_celestial_lateral_handoff_ready }
+	}
+}

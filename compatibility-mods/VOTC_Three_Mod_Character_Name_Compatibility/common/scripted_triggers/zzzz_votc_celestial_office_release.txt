@@ -1,0 +1,254 @@
+# Keep Chinese Celestial repair inside the target's de-jure region.
+# Other OE repair callers retain their original title filters.
+oe_stream_patch_attachable_trigger = {
+	is_title_created = yes
+	tier >= tier_county
+	is_landless_type_title = no
+	is_noble_family_title = no
+	is_leased_out = no
+	tier < scope:oe_stream_fix_target.highest_held_title_tier
+	OR = {
+		AND = {
+			scope:oe_stream_fix_target = {
+				top_liege = {
+					has_primary_title = title:h_china
+					government_has_flag = government_is_celestial
+				}
+			}
+			has_title_law_flag = appointment_type_succession
+			NOT = { has_title_law = SanGong_zongfan_succession_law }
+			is_oe_noble_family_title = no
+			scope:oe_stream_fix_target = { save_temporary_scope_as = votc_celestial_region_holder }
+			votc_celestial_title_in_holder_region_trigger = yes
+		}
+		NOT = {
+			scope:oe_stream_fix_target = {
+				top_liege = {
+					has_primary_title = title:h_china
+					government_has_flag = government_is_celestial
+				}
+			}
+		}
+	}
+}
+
+votc_celestial_office_region_title_trigger = {
+	has_title_law_flag = appointment_type_succession
+	is_oe_noble_family_title = no
+	NOT = { has_title_law = SanGong_zongfan_succession_law }
+}
+
+votc_celestial_office_region_character_trigger = {
+	is_alive = yes
+	is_landed = yes
+	is_independent_ruler = no
+	top_liege = {
+		is_alive = yes
+		is_landed = yes
+		government_has_flag = government_is_celestial
+		has_primary_title = title:h_china
+	}
+}
+
+votc_celestial_office_region_candidate_trigger = {
+	votc_celestial_office_region_character_trigger = yes
+	primary_title = { votc_celestial_office_region_title_trigger = yes }
+}
+
+votc_celestial_office_lateral_gain_trigger = {
+	exists = scope:title
+	scope:title = {
+		holder = root
+		tier >= tier_county
+		tier <= tier_empire
+		votc_celestial_office_region_title_trigger = yes
+		is_landless_type_title = no
+		is_noble_family_title = no
+		is_leased_out = no
+	}
+	root = {
+		votc_celestial_office_region_character_trigger = yes
+		any_held_title = {
+			this != scope:title
+			tier = scope:title.tier
+			votc_celestial_office_region_title_trigger = yes
+			is_landless_type_title = no
+			is_noble_family_title = no
+			is_leased_out = no
+		}
+	}
+}
+
+votc_celestial_office_cleanup_root_trigger = {
+	votc_celestial_office_region_candidate_trigger = yes
+	OR = {
+		government_has_flag = government_is_celestial
+		government_has_flag = government_use_bureaucracy
+	}
+}
+
+votc_celestial_office_lateral_cleanup_trigger = {
+	votc_celestial_office_region_character_trigger = yes
+	government_has_flag = government_is_celestial
+	scope:votc_celestial_lateral_target_title = {
+		holder = root
+		tier >= tier_county
+		tier <= tier_empire
+		votc_celestial_office_region_title_trigger = yes
+		is_landless_type_title = no
+		is_noble_family_title = no
+		is_leased_out = no
+	}
+}
+
+votc_celestial_title_in_holder_region_trigger = {
+	save_temporary_scope_as = votc_celestial_region_checked_title
+	OR = {
+		target_is_de_jure_liege_or_above = scope:votc_celestial_region_holder.primary_title
+		scope:votc_celestial_region_holder = {
+			any_held_title = {
+				this != scope:votc_celestial_region_checked_title
+				tier > scope:votc_celestial_region_checked_title.tier
+				is_landless_type_title = no
+				is_noble_family_title = no
+				is_oe_noble_family_title = no
+				is_leased_out = no
+				scope:votc_celestial_region_checked_title = {
+					target_is_de_jure_liege_or_above = prev
+				}
+			}
+		}
+	}
+}
+
+votc_celestial_office_promotion_trigger = {
+	exists = scope:previous_title
+	exists = scope:transfer_type
+	OR = {
+		scope:transfer_type = flag:appointment
+		scope:transfer_type = flag:appointment_succession
+		scope:transfer_type = flag:granted
+		scope:transfer_type = flag:stepped_down
+	}
+	root = {
+		votc_celestial_office_region_candidate_trigger = yes
+		scope:previous_title = {
+			tier < root.primary_title.tier
+		}
+	}
+}
+
+votc_celestial_office_release_title_trigger = {
+	holder = scope:votc_celestial_cleanup_root
+	tier >= tier_county
+	tier < scope:votc_celestial_cleanup_root.primary_title.tier
+	has_title_law_flag = appointment_type_succession
+	NOT = { has_title_law = SanGong_zongfan_succession_law }
+	is_landless_type_title = no
+	is_noble_family_title = no
+	is_oe_noble_family_title = no
+	is_leased_out = no
+}
+
+votc_celestial_office_release_heir_trigger = {
+	this != scope:votc_celestial_cleanup_root
+	is_alive = yes
+	OR = {
+		AND = {
+			is_landed = yes
+			top_liege = scope:votc_celestial_cleanup_emperor
+			highest_held_title_tier < scope:votc_celestial_release_title.tier
+		}
+		AND = {
+			is_landed = no
+			OR = {
+				top_liege = scope:votc_celestial_cleanup_emperor
+				is_courtier_of = scope:votc_celestial_cleanup_root
+				is_courtier_of = scope:votc_celestial_cleanup_emperor
+				employer = {
+					OR = {
+						this = scope:votc_celestial_cleanup_emperor
+						top_liege = scope:votc_celestial_cleanup_emperor
+					}
+				}
+			}
+		}
+	}
+}
+
+votc_celestial_lateral_release_heir_trigger = {
+	save_temporary_scope_as = votc_celestial_lateral_candidate
+	scope:votc_celestial_lateral_target_title = {
+		NOT = {
+			is_target_in_variable_list = {
+				name = votc_celestial_lateral_handoff_path
+				target = scope:votc_celestial_lateral_candidate
+			}
+		}
+	}
+	this != scope:votc_celestial_cleanup_root
+	is_alive = yes
+	OR = {
+		AND = {
+			is_landed = yes
+			top_liege = scope:votc_celestial_cleanup_emperor
+			highest_held_title_tier <= scope:votc_celestial_lateral_release_title.tier
+		}
+		AND = {
+			is_landed = no
+			OR = {
+				top_liege = scope:votc_celestial_cleanup_emperor
+				is_courtier_of = scope:votc_celestial_cleanup_root
+				is_courtier_of = scope:votc_celestial_cleanup_emperor
+				employer = {
+					OR = {
+						this = scope:votc_celestial_cleanup_emperor
+						top_liege = scope:votc_celestial_cleanup_emperor
+					}
+				}
+			}
+		}
+	}
+}
+
+votc_celestial_lateral_release_title_trigger = {
+	holder = scope:votc_celestial_cleanup_root
+	tier = scope:votc_celestial_lateral_target_title.tier
+	has_title_law_flag = appointment_type_succession
+	NOT = { has_title_law = SanGong_zongfan_succession_law }
+	is_landless_type_title = no
+	is_noble_family_title = no
+	is_oe_noble_family_title = no
+	is_leased_out = no
+}
+
+votc_celestial_legacy_foreign_office_title_trigger = {
+	votc_celestial_office_release_title_trigger = yes
+	scope:votc_celestial_cleanup_root = { save_temporary_scope_as = votc_celestial_region_holder }
+	NOT = {
+		votc_celestial_title_in_holder_region_trigger = yes
+	}
+}
+
+votc_celestial_foreign_admin_vassal_trigger = {
+	scope:votc_celestial_cleanup_root = { votc_celestial_office_cleanup_root_trigger = yes }
+	votc_celestial_office_cleanup_root_trigger = yes
+	primary_title = {
+		scope:votc_celestial_cleanup_root = { save_temporary_scope_as = votc_celestial_region_holder }
+		NOT = {
+			votc_celestial_title_in_holder_region_trigger = yes
+		}
+	}
+}
+
+# Title scope: duplicate gain notifications must retain an existing task's path.
+votc_celestial_lateral_target_pending_trigger = {
+	root = {
+		OR = {
+			AND = { has_variable = votc_celestial_lateral_empire_target var:votc_celestial_lateral_empire_target = scope:title }
+			AND = { has_variable = votc_celestial_lateral_target var:votc_celestial_lateral_target = scope:title }
+			AND = { has_variable = votc_celestial_lateral_duchy_target var:votc_celestial_lateral_duchy_target = scope:title }
+			AND = { has_variable = votc_celestial_lateral_county_target var:votc_celestial_lateral_county_target = scope:title }
+		}
+	}
+}

@@ -8,6 +8,7 @@ const path = require("path");
 const { createRunFileManager } = require("../resources/app/out/main/actions/run-file-manager");
 const { createConversationManager } = require("../resources/app/out/main/conversation/conversation-manager");
 
+const IDLE_CARRIER = '\uFEFFif = { limit = { always = no } debug_log = "VOTC:IDLE_NOOP" }';
 const tempRoot = fs.mkdtempSync(path.join(os.tmpdir(), "votc-v842-run-command-lifecycle-"));
 
 function createHarness(name) {
@@ -77,7 +78,7 @@ async function run() {
       assert.strictEqual(superseded.length, 1);
       assert.strictEqual(superseded[0].status, "quarantined", "a newer conversation epoch must quarantine the old close");
       assert.strictEqual(manager.getPendingCommands().length, 0);
-      assert.strictEqual(fs.readFileSync(harness.runFile, "utf8"), "", "superseded close must neutralize its carrier");
+      assert.strictEqual(fs.readFileSync(harness.runFile, "utf8"), IDLE_CARRIER, "superseded close must neutralize its carrier");
       assert.strictEqual(manager.ackCommand(close.commandId, close.kind), null, "ACK after quarantine must not revive the old close");
       assert.strictEqual(manager.getQueueHealth().lateAckCount, 1);
     }
@@ -91,7 +92,7 @@ async function run() {
       restarted.initializeAfterAckReconciliation();
       assert.strictEqual(restarted.getPendingCommands().length, 0, "startup must not retain an unconfirmed destructive close as a runnable head");
       assert.strictEqual(restarted.getRecentCommands().at(-1).status, "quarantined");
-      assert.strictEqual(fs.readFileSync(harness.runFile, "utf8"), "", "startup recovery must neutralize the stale close carrier");
+      assert.strictEqual(fs.readFileSync(harness.runFile, "utf8"), IDLE_CARRIER, "startup recovery must neutralize the stale close carrier");
     }
 
     {
@@ -101,7 +102,7 @@ async function run() {
       const restarted = harness.createManager();
       restarted.initializeAfterAckReconciliation();
       assert.strictEqual(restarted.getPendingCommands()[0].status, "stalled", "unconfirmed ordinary action must remain durable STALLED");
-      assert.strictEqual(fs.readFileSync(harness.runFile, "utf8"), "", "startup must neutralize an unconfirmed ordinary action carrier");
+      assert.strictEqual(fs.readFileSync(harness.runFile, "utf8"), IDLE_CARRIER, "startup must neutralize an unconfirmed ordinary action carrier");
       const retry = restarted.retryStalledCommand(action.commandId);
       assert.strictEqual(retry.status, "awaiting_ack", "ordinary action retry still requires explicit authorization");
       assert.strictEqual(retry.writeAttempts, 2);
@@ -179,7 +180,7 @@ async function run() {
       const persisted = JSON.parse(fs.readFileSync(path.join(harness.dataDir, "run-command-queue.json"), "utf8"));
       assert.strictEqual(persisted.version, 3, "legacy v2 queue must migrate to version 3");
       assert.strictEqual(persisted.recentCommands.at(-1).status, "quarantined", "legacy stalled close must be quarantined on startup");
-      assert.strictEqual(fs.readFileSync(harness.runFile, "utf8"), "", "legacy stalled close carrier must be neutralized");
+      assert.strictEqual(fs.readFileSync(harness.runFile, "utf8"), IDLE_CARRIER, "legacy stalled close carrier must be neutralized");
     }
 
     {

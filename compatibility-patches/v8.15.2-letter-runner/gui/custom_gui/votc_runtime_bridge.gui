@@ -27,7 +27,7 @@ window = {
       name = outbound
       duration = 1.9
       next = clock
-      on_start = "[ExecuteConsoleCommand(Select_CString(And(GetPlayer.IsValid, Not(GetGlobalVariable('talk_scene').IsSet)), 'run votc.txt', ''))]"
+      on_start = "[ExecuteConsoleCommand(Select_CString(GetPlayer.IsValid, 'run votc.txt', ''))]"
     }
   }
 }

@@ -321,9 +321,8 @@ class Memory4DerivedService {
     }));
   }
 
-  guardedText(entries, text) {
-    const guards = entries.flatMap(entry => entry.text.match(/(?:除非|必须|须|前提|但|只有|只要|如果|倘若|若|并非|尚未|不曾|未曾|未|不|没有|听说|声称|传闻|unless|only if|if|not)[^，。；;\r\n]*/gi) || []);
-    return guards.every(guard => text.includes(guard));
+  requiredGuards(entry) {
+    return strings(entry.text.match(/(?:除非|必须|须|前提|但|只有|只要|如果|倘若|若|并非|尚未|不曾|未曾|未|不|没有|听说|声称|传闻|unless|only if|if|not)[^，。；;\r\n]*/gi) || []);
   }
 
   async compress(scope, kind, items, entries, task, providerSnapshot) {
@@ -333,41 +332,54 @@ class Memory4DerivedService {
     if (typeof this.options.requestCompression !== "function") throw new Error("memory4_compression_unavailable");
     providerSnapshot ||= this.options.getProviderSnapshot ? await this.options.getProviderSnapshot() : null;
     const prompt = [
-      { role: "system", content: `Compress this owner's supplied historical memory items into JSON {\"items\":[{\"text\":\"...\",\"sourceEntryIds\":[\"...\"]}]}. Use only supplied facts. Retain every source ID exactly once, all commitment conditions, negations, reported/rumor uncertainty and status. For acquisition-dated sources retain the exact qualifier 本年获知，事件日期未知 in the item's text: acquiredDate is when this Owner learned the fact, never proof the event happened then. Do not merge acquisition-dated and event-dated items. Do not invent events, motives, dates, identities, knowledge or CK3 truth. Prefer merging duplicate text. Preserve Chinese source language. Text total must fit ${softTarget} tokens and never exceed ${hardLimit}. Return only JSON.` },
+      { role: "system", content: `Compress this owner's supplied historical memory items into JSON {\"items\":[{\"text\":\"...\",\"sourceEntryIds\":[\"...\"]}]}. Use only supplied facts. Retain every source ID exactly once, all commitment conditions, negations, reported/rumor uncertainty and status. Copy each source's requiredVerbatim phrases exactly into the text of the item citing that source; do not paraphrase them or move them to unrelated items. For acquisition-dated sources retain the exact qualifier 本年获知，事件日期未知 in the item's text: acquiredDate is when this Owner learned the fact, never proof the event happened then. Do not merge acquisition-dated and event-dated items. Do not invent events, motives, dates, identities, knowledge or CK3 truth. Prefer merging duplicate text and sources sharing the same time axis. Acquisition-date annotations will be rebuilt from all cited sources and count toward the budget; reserve room for them. Preserve Chinese source language. Text total should fit ${softTarget} tokens and never exceed ${hardLimit}. Retaining requiredVerbatim takes precedence over the soft target, but never over the hard limit. Return only JSON.` },
       { role: "user", content: JSON.stringify({ ...scope, items: items.map(item => ({ ...item,
         evidence: entries.filter(entry => item.sourceEntryIds.includes(entry.entryId)).map(entry => ({ sourceEntryId: entry.entryId,
           sourceType: entry.evidence.sourceType, epistemicStatus: entry.evidence.epistemicStatus,
           stateStatus: entry.state.status, eventTimeStatus: entry.eventTime.status,
-          eventTime: entry.eventTime, acquiredDate: entry.acquiredDate, timeAxis: eventYears(entry).length ? "event" : "acquired" })) })) }) }
+          eventTime: entry.eventTime, acquiredDate: entry.acquiredDate, timeAxis: eventYears(entry).length ? "event" : "acquired",
+          requiredVerbatim: this.requiredGuards(entry) })) })) }) }
     ];
-    const response = await this.options.requestCompression(prompt, { signal: task.controller.signal, maxTokens: 4096, providerSnapshot,
-      requestType: kind === "year" ? "memory4_year" : "memory4_life", ownerId: scope.ownerId });
-    if (!this.current(scope, task)) throw new Error("memory4_derived_cancelled");
-    const outcome = typeof response === "string" ? { content: response, complete: true, truncated: false } : validateGenerationOutcome(response);
-    if (!outcome.complete || outcome.truncated) throw new Error("memory4_compression_incomplete");
-    let result;
-    try { result = JSON.parse(outcome.content.trim().replace(/^```(?:json)?\s*/i, "").replace(/\s*```$/, "")); }
-    catch { throw new Error("memory4_compression_invalid"); }
-    if (!Array.isArray(result?.items) || !result.items.length || result.items.some(item => typeof item.text !== "string" || !item.text.trim()
-      || !Array.isArray(item.sourceEntryIds) || !item.sourceEntryIds.length)) throw new Error("memory4_compression_invalid");
-    const sourceIds = strings(items.flatMap(item => item.sourceEntryIds));
-    const generatedIds = result.items.flatMap(item => item.sourceEntryIds);
-    if (new Set(generatedIds).size !== generatedIds.length || hash(strings(generatedIds)) !== hash(sourceIds)) throw new Error("memory4_compression_source_mismatch");
-    const text = result.items.map(item => item.text).join("\n");
-    if (this.count(text) > hardLimit || result.items.some(item => {
-      const sources = entries.filter(entry => item.sourceEntryIds.includes(entry.entryId));
-      const acquiredCount = sources.filter(entry => !eventYears(entry).length).length;
-      return !this.guardedText(sources, item.text) || acquiredCount &&
-        (acquiredCount !== sources.length || !item.text.includes("本年获知，事件日期未知"));
-    })) throw new Error("memory4_compression_quality_failed");
-    const compressed = result.items.map(item => {
-      const sources = entries.filter(entry => item.sourceEntryIds.includes(entry.entryId));
-      return archiveItem({ itemId: `year_item_${hash(item.sourceEntryIds)}`, text: item.text.trim(), sourceEntryIds: strings(item.sourceEntryIds),
-        entityIds: ids(sources.flatMap(entry => entry.entityIds)), topics: strings(sources.flatMap(entry => entry.topics)),
-        importance: Math.max(...sources.map(entry => entry.importance)) }, sources);
-    });
-    if (this.count(compressed.map(item => item.text).join("\n")) > hardLimit) throw new Error("memory4_compression_quality_failed");
-    return compressed;
+    for (let attempt = 0; attempt < 2; attempt++) {
+      if (!this.current(scope, task)) throw new Error("memory4_derived_cancelled");
+      const response = await this.options.requestCompression(prompt, { signal: task.controller.signal, maxTokens: 4096, providerSnapshot,
+        requestType: kind === "year" ? "memory4_year" : "memory4_life", ownerId: scope.ownerId });
+      if (!this.current(scope, task)) throw new Error("memory4_derived_cancelled");
+      const outcome = typeof response === "string" ? { content: response, complete: true, truncated: false } : validateGenerationOutcome(response);
+      if (!outcome.complete || outcome.truncated) throw new Error("memory4_compression_incomplete");
+      let result;
+      try { result = JSON.parse(outcome.content.trim().replace(/^```(?:json)?\s*/i, "").replace(/\s*```$/, "")); }
+      catch { throw new Error("memory4_compression_invalid"); }
+      if (!Array.isArray(result?.items) || !result.items.length || result.items.some(item => typeof item.text !== "string" || !item.text.trim()
+        || !Array.isArray(item.sourceEntryIds) || !item.sourceEntryIds.length)) throw new Error("memory4_compression_invalid");
+      const sourceIds = strings(items.flatMap(item => item.sourceEntryIds));
+      const generatedIds = result.items.flatMap(item => item.sourceEntryIds);
+      if (new Set(generatedIds).size !== generatedIds.length || hash(strings(generatedIds)) !== hash(sourceIds)) throw new Error("memory4_compression_source_mismatch");
+      const missingGuards = [], invalidTimeAxisItems = [];
+      for (const [itemIndex, item] of result.items.entries()) {
+        const sources = entries.filter(entry => item.sourceEntryIds.includes(entry.entryId));
+        const acquiredCount = sources.filter(entry => !eventYears(entry).length).length;
+        for (const source of sources) for (const guard of this.requiredGuards(source)) {
+          if (!item.text.includes(guard)) missingGuards.push({ sourceEntryId: source.entryId, text: guard });
+        }
+        if (acquiredCount && (acquiredCount !== sources.length || !item.text.includes("本年获知，事件日期未知"))) invalidTimeAxisItems.push(itemIndex);
+      }
+      const compressed = result.items.map(item => {
+        const sources = entries.filter(entry => item.sourceEntryIds.includes(entry.entryId));
+        return archiveItem({ itemId: `year_item_${hash(item.sourceEntryIds)}`, text: item.text.trim(), sourceEntryIds: strings(item.sourceEntryIds),
+          entityIds: ids(sources.flatMap(entry => entry.entityIds)), topics: strings(sources.flatMap(entry => entry.topics)),
+          importance: Math.max(...sources.map(entry => entry.importance)) }, sources);
+      });
+      const outputTokens = this.count(result.items.map(item => item.text).join("\n"));
+      const finalTokens = this.count(compressed.map(item => item.text).join("\n"));
+      if (outputTokens <= hardLimit && finalTokens <= hardLimit && !missingGuards.length && !invalidTimeAxisItems.length) return compressed;
+      const quality = { outputTokens, finalTokens, hardLimit, missingGuardCount: missingGuards.length, invalidTimeAxisCount: invalidTimeAxisItems.length };
+      if (attempt === 1) throw Object.assign(new Error("memory4_compression_quality_failed"), { quality });
+      prompt.push({ role: "assistant", content: outcome.content }, { role: "user", content: JSON.stringify({
+        instruction: "Correct the rejected compression using the original sources. Keep every source ID exactly once. Preserve requiredVerbatim phrases in their own cited item, separate time axes and include the exact acquisition qualifier. Reduce repeated narrative to fit the final annotated text budget. Return only corrected JSON.",
+        ...quality, softTarget, missingGuards, invalidTimeAxisItems
+      }) });
+    }
   }
 
   async buildYear(scope, eventYear, task, request, providerSnapshot) {
@@ -401,6 +413,7 @@ class Memory4DerivedService {
     const snapshot = this.snapshot(scope);
     const views = this.list(scope).years;
     if (views.some(view => view.dirty)) throw new Error("memory4_life_year_dirty");
+    if (snapshot.entryIds.some(id => archiveYears(snapshot.index.entries[id]).some(year => !views.some(view => view.eventYear === year)))) throw new Error("memory4_life_year_missing");
     const yearStamp = hash(views.map(view => [view.eventYear, view.revision, view.sourceHash, view.items]));
     const grouped = new Map();
     for (const view of views) for (const item of view.items) {
@@ -459,8 +472,18 @@ class Memory4DerivedService {
       if (kind !== "life") {
         const views = this.list(scope).years, index = this.store.loadIndex(scope);
         const years = kind === "year" ? [request.eventYear] : [...new Set([...Object.values(index.entries).flatMap(archiveYears), ...views.map(view => view.eventYear)])].sort((a, b) => a - b);
-        for (const year of years) results.push(await this.buildYear(scope, year, task, kind === "all" ? {} : request, providerSnapshot));
+        for (const year of years) {
+          this.jobs.set(key, { kind, status: "RUNNING", reason: null, eventYear: year });
+          try { results.push(await this.buildYear(scope, year, task, kind === "all" ? {} : request, providerSnapshot)); }
+          catch (error) {
+            if (kind !== "all" || !this.current(scope, task) || !/^memory4_compression_/.test(error.message)) throw error;
+            results.push({ status: "FAILED", eventYear: year, reason: error.message, ...(error.quality ? { quality: error.quality } : {}) });
+          }
+        }
+        const failures = results.filter(result => result.status === "FAILED");
+        if (failures.length) throw Object.assign(new Error(failures[0].reason), { results, failedYears: failures.map(result => result.eventYear), quality: failures[0].quality });
       }
+      this.jobs.set(key, { kind, status: "RUNNING", reason: null, segmentId: request.segmentId });
       if (kind !== "year") results.push(await this.buildLife(scope, task, request, providerSnapshot));
       const status = results.some(result => result.status === "MANUAL_OVERRIDE") ? "MANUAL_OVERRIDE" : "COMPLETE";
       const sourceCount = kind === "year" ? this.snapshot(scope, { eventYear: request.eventYear }).entryIds.length : this.snapshot(scope).entryIds.length;
@@ -472,10 +495,12 @@ class Memory4DerivedService {
       return result;
     } catch (error) {
       const status = !this.current(scope, task) ? "CANCELLED" : error.message === "memory4_derived_source_changed" ? "REQUEUED" : "FAILED";
-      this.jobs.set(key, { kind, status, reason: error.message });
-      this.coordinator.trace?.record("memory4_derived", { ownerId: scope.ownerId, status, kind, errorCode: error.message, durationMs: Date.now() - started });
+      const failure = { ...(error.failedYears ? { failedYears: error.failedYears } : {}), ...(error.quality ? { quality: error.quality } : {}),
+        eventYear: error.failedYears?.[0] ?? this.jobs.get(key)?.eventYear };
+      this.jobs.set(key, { kind, status, reason: error.message, ...failure });
+      this.coordinator.trace?.record("memory4_derived", { ownerId: scope.ownerId, status, kind, errorCode: error.message, ...failure, durationMs: Date.now() - started });
       if (status === "REQUEUED" && !request.requeued) setImmediate(() => this.rebuild(scope, { ...request, overwriteManual: false, requeued: true }).catch(() => {}));
-      return { status, kind, reason: error.message };
+      return { status, kind, reason: error.message, ...failure, ...(error.results ? { results: error.results } : {}) };
     } finally {
       this.active.delete(key);
       if (task.queuedRequest && this.current(scope, task)) setImmediate(() => this.rebuild(scope, task.queuedRequest).catch(() => {}));

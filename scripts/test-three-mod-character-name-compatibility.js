@@ -140,12 +140,41 @@ for (const [type, retained] of [
     "votc_celestial_lower_title_penalty"
   ], "preserve upstream scoring and apply the fixed penalty after all existing factors");
 }
+
+// Exercise the configured candidate-tier policy independently from candidate_score.
+// These deterministic fixtures are not a simulation of CK3's appointment engine.
+function evaluateCandidateTier({ policy, candidateLanded, candidateOfficeTier, targetTier }) {
+  if (!candidateLanded) return true;
+  assert(Number.isInteger(candidateOfficeTier), "landed candidate fixture needs an office tier");
+  if (policy === "lower_or_equal") return candidateOfficeTier <= targetTier;
+  if (policy === "lower") return candidateOfficeTier < targetTier;
+  if (policy === "any") return true;
+  assert.fail(`unsupported candidate-tier policy: ${policy}`);
+}
+
+const candidateTierCases = [
+  ["king to non-de-jure duchy", { candidateLanded: true, candidateOfficeTier: 4, targetTier: 3, deJureLiege: false }, false],
+  ["king to non-de-jure county", { candidateLanded: true, candidateOfficeTier: 4, targetTier: 2, deJureLiege: false }, false],
+  ["duke to non-de-jure county", { candidateLanded: true, candidateOfficeTier: 3, targetTier: 2, deJureLiege: false }, false],
+  ["same-rank king sidegrade", { candidateLanded: true, candidateOfficeTier: 4, targetTier: 4 }, true],
+  ["same-rank duke sidegrade", { candidateLanded: true, candidateOfficeTier: 3, targetTier: 3 }, true],
+  ["duke promotion to kingdom", { candidateLanded: true, candidateOfficeTier: 3, targetTier: 4 }, true],
+  ["unlanded family title is not an office tier", { candidateLanded: false, candidateOfficeTier: null, familyTitleTier: 5, targetTier: 3 }, true]
+];
+for (const type of ["celestial_civic_governor", "celestial_military_governor"]) {
+  const policy = one(one(appointments, type), "allowed_candidate_tier");
+  for (const [label, candidate, expected] of candidateTierCases) {
+    if (candidate.deJureLiege !== undefined) assert.equal(candidate.deJureLiege, false, `${label} fixture must remain non-de-jure`);
+    assert.equal(evaluateCandidateTier({ ...candidate, policy }), expected, `${type}: ${label}`);
+  }
+}
+
 const penaltyLoc = fs.readFileSync(path.join(modRoot, "localization/simp_chinese/votc_celestial_succession_l_simp_chinese.yml"), "utf8");
 assert(penaltyLoc.startsWith("\uFEFFl_simp_chinese:"), "CK3 localization must have UTF-8 BOM and language header");
 assert.match(penaltyLoc, /^\s+votc_celestial_lower_title_penalty_desc:0 "[^"\r\n]+"$/m);
 
 for (const descriptor of descriptors) {
-  assert.match(descriptor, /^version="1\.0\.2"$/m);
+  assert.match(descriptor, /^version="1\.0\.6"$/m);
   assert.match(descriptor, /^supported_version="1\.20\.\*"$/m);
   for (const dependency of [
     "Oriental Empires (All Under Heaven)",
@@ -171,4 +200,4 @@ assert(!/has_trait\s*=|remove_trait|Trait\.GetTraits/.test(traitGui), "trait fix
 assert(Buffer.compare(Buffer.from(path.basename(traitGuiPath)), Buffer.from("cooltip.gui")) < 0,
   "FIOS requires the template override filename before cooltip.gui");
 
-console.log(`Three-Mod Character Name Compatibility: PASS (1.0.2 descriptors, calendar/trait UI, both celestial appointments, ${rankCases.length} rank fixtures)`);
+console.log(`Three-Mod Character Name Compatibility: PASS (1.0.6 descriptors, calendar/trait UI, both celestial appointments, ${rankCases.length} score fixtures, ${candidateTierCases.length} candidate-tier fixtures per appointment type)`);
