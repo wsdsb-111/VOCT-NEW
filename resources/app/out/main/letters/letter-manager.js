@@ -5,7 +5,36 @@ const { randomBytes } = require("crypto");
 const { parseReceipt, captureSessionProof, findReceipt } = require("./letter-receipt-recovery");
 const { LetterDateSessionScanner } = require("./letter-date-session-scanner");
 
-function createLetterManager({ settingsRepository, fs, path, TailFile, readline, parseLog, letterPromptBuilder, llmManager, PromptBuilder, TokenCounter, memoryEngine, dataDir, letterEffectTransport = null, runFileManager = null, scanRunAcksForPendingCommands = null, autoStartLogTailing = true, sleep = (milliseconds) => new Promise((resolve) => setTimeout(resolve, milliseconds)), letterPayloadRetryDelays = [100, 200, 350, 600, 1e3], dateHeartbeatIntervalMs = 5e3, dateStaleMs = 2e4, diagnosticExecutionTimeoutMs = 15e3, runCommandAckTimeoutMs = 3e4, runCommandWatchdogIntervalMs = 5e3, setIntervalFn = setInterval, clearIntervalFn = clearInterval, setRunCommandIntervalFn = setInterval, clearRunCommandIntervalFn = clearInterval }) {
+function startPerformanceSpan(trace, step, fields) {
+  try { return trace?.enabled ? trace.startSpan(step, fields) : null; } catch (_error) { return null; }
+}
+
+function finishPerformanceSpan(finish, fields) {
+  try { finish?.(fields); } catch (_error) {}
+}
+
+function traceOperation(trace, step, fields, operation) {
+  if (!trace?.enabled) return operation();
+  const finish = startPerformanceSpan(trace, step, fields);
+  let result;
+  try { result = operation(); } catch (error) {
+    finishPerformanceSpan(finish, { result: "ERROR", errorCode: "unknown_error" });
+    throw error;
+  }
+  if (result && typeof result.then === "function") {
+    return result.then((value) => {
+      finishPerformanceSpan(finish, { result: "OK" });
+      return value;
+    }, (error) => {
+      finishPerformanceSpan(finish, { result: "ERROR", errorCode: "unknown_error" });
+      throw error;
+    });
+  }
+  finishPerformanceSpan(finish, { result: "OK" });
+  return result;
+}
+
+function createLetterManager({ settingsRepository, fs, path, TailFile, readline, parseLog, letterPromptBuilder, llmManager, PromptBuilder, TokenCounter, memoryEngine, dataDir, letterEffectTransport = null, runFileManager = null, scanRunAcksForPendingCommands = null, autoStartLogTailing = true, sleep = (milliseconds) => new Promise((resolve) => setTimeout(resolve, milliseconds)), letterPayloadRetryDelays = [100, 200, 350, 600, 1e3], dateHeartbeatIntervalMs = 5e3, dateStaleMs = 2e4, diagnosticExecutionTimeoutMs = 15e3, runCommandAckTimeoutMs = 3e4, runCommandWatchdogIntervalMs = 5e3, setIntervalFn = setInterval, clearIntervalFn = clearInterval, setRunCommandIntervalFn = setInterval, clearRunCommandIntervalFn = clearInterval, performanceTrace = null }) {
   const fs$1 = fs;
   const readline$1 = readline;
   if (!scanRunAcksForPendingCommands) ({ scanRunAcksForPendingCommands } = require("../actions/run-command-recovery"));
@@ -63,6 +92,7 @@ function createLetterManager({ settingsRepository, fs, path, TailFile, readline,
   class LetterManager {
     // 5 minutes
     constructor() {
+      this.performanceTrace = performanceTrace;
       this.currentTotalDays = 0;
       this.storedLetters = /* @__PURE__ */ new Map();
       this.failedLetterContexts = /* @__PURE__ */ new Map();
@@ -175,16 +205,27 @@ function createLetterManager({ settingsRepository, fs, path, TailFile, readline,
           this.clearDateMarkerState();
           this.captureDebugLogMetadata(debugLogPath);
         });
-        await reader.start();
+        await traceOperation(this.performanceTrace, "letterReader.start", { attribution: "CK3_LOG" }, () => reader.start());
         this.tailState = "ACTIVE";
         this.tailStartedAt = Date.now();
         console.log(`Started tailing debug log: ${debugLogPath}`);
         this.readline = readline$1.createInterface({ input: reader });
         this.readline.on("line", (line) => {
           if (this.tailFile !== reader || this.tailState !== "ACTIVE") return;
-          Promise.resolve(this.processLogLine(line, reader)).catch((error) => console.error("LetterManager: Failed to process log line:", error));
+          if (!this.performanceTrace?.enabled) {
+            Promise.resolve(this.processLogLine(line, reader)).catch((error) => console.error("LetterManager: Failed to process log line:", error));
+            return;
+          }
+          const traceMarker = line.includes("VOTC:DATE/;/") || line.includes("VOTC:LOAD_SESSION/;/") || line.includes("VOTC:RUN_ACK/") || line.includes("VOTC:LETTER/;/");
+          const finish = traceMarker ? startPerformanceSpan(this.performanceTrace, "background.letter.logReader", { attribution: "CK3_LOG" }) : null;
+          Promise.resolve(this.processLogLine(line, reader)).then(() => {
+            finishPerformanceSpan(finish, { result: "OK" });
+          }, (error) => {
+            finishPerformanceSpan(finish, { result: "ERROR", errorCode: "unknown_error" });
+            console.error("LetterManager: Failed to process log line:", error);
+          });
         });
-        await this.recoverPendingLetterReceipt();
+        await traceOperation(this.performanceTrace, "pendingReceipt.recovery", { attribution: "CK3_LOG" }, () => this.recoverPendingLetterReceipt());
       } catch (error) {
         this.tailState = "ERROR";
         this.dateSourceState = "ERROR";
@@ -359,7 +400,7 @@ function createLetterManager({ settingsRepository, fs, path, TailFile, readline,
           this.dateProducerRecovery = { ...this.dateProducerRecovery, status: "RECOVERED", recoveredAt: observedAt, freshDateValue: newTotalDays };
         }
         if (previousObservedValue !== newTotalDays) console.log(`LetterManager: VOTC:DATE received (${newTotalDays})`);
-        return this.updateCurrentDate(newTotalDays);
+        return traceOperation(this.performanceTrace, "bridge.date", { attribution: "CK3_LOG", count: 1 }, () => this.updateCurrentDate(newTotalDays));
       }
       return Promise.resolve();
     }
@@ -369,16 +410,33 @@ function createLetterManager({ settingsRepository, fs, path, TailFile, readline,
       }
     }
     runCommandWatchdog() {
-      if (!runFileManager?.isRecoveryCompleted?.()) return { reconciled: [], stalled: null };
-      if (!runFileManager.getPendingCommands?.().length) return { reconciled: [], stalled: null };
-      const debugLogPath = settingsRepository.getCK3DebugLogPath();
-      const acknowledgements = scanRunAcksForPendingCommands(debugLogPath, { fs: fs$1, pendingCommands: runFileManager.getPendingCommands() });
-      const reconciled = runFileManager.reconcileAcknowledgedCommands(acknowledgements);
-      this.handleReconciledRunCommands(reconciled, "watchdog");
-      const stalled = runFileManager.markActiveCommandStalledIfNeeded({ ackTimeoutMs: runCommandAckTimeoutMs });
-      const active = runFileManager.getPendingCommands()[0];
-      if (active && ["queued", "blocked"].includes(active.status) && Number(active.writeAttempts) === 0) runFileManager.writeActiveCommand();
-      return { reconciled, stalled };
+      const finish = startPerformanceSpan(this.performanceTrace, "background.runCommand.ackWatchdog", { attribution: "CK3_LOG" });
+      let result = "OK";
+      let count = 0;
+      try {
+        if (!runFileManager?.isRecoveryCompleted?.()) {
+          result = "SKIPPED";
+          return { reconciled: [], stalled: null };
+        }
+        if (!runFileManager.getPendingCommands?.().length) {
+          result = "SKIPPED";
+          return { reconciled: [], stalled: null };
+        }
+        const debugLogPath = settingsRepository.getCK3DebugLogPath();
+        const acknowledgements = scanRunAcksForPendingCommands(debugLogPath, { fs: fs$1, pendingCommands: runFileManager.getPendingCommands() });
+        const reconciled = runFileManager.reconcileAcknowledgedCommands(acknowledgements);
+        count = reconciled.length;
+        this.handleReconciledRunCommands(reconciled, "watchdog");
+        const stalled = runFileManager.markActiveCommandStalledIfNeeded({ ackTimeoutMs: runCommandAckTimeoutMs });
+        const active = runFileManager.getPendingCommands()[0];
+        if (active && ["queued", "blocked"].includes(active.status) && Number(active.writeAttempts) === 0) runFileManager.writeActiveCommand();
+        return { reconciled, stalled };
+      } catch (error) {
+        result = "ERROR";
+        throw error;
+      } finally {
+        finishPerformanceSpan(finish, { result, count, errorCode: result === "ERROR" ? "unknown_error" : undefined });
+      }
     }
     startRunCommandWatchdog() {
       if (this.runCommandWatchdogTimer) return;
@@ -534,7 +592,28 @@ function createLetterManager({ settingsRepository, fs, path, TailFile, readline,
     }
     async scanLatestDateMarker() {
       if (!this.dateSessionScanner.state) this.dateSourceState = "DATE_SOURCE_RECOVERING";
-      const result = await this.dateSessionScanner.scan(settingsRepository.getCK3DebugLogPath());
+      const scanErrorSpan = startPerformanceSpan(this.performanceTrace, "background.dateScanCold", { attribution: "CK3_LOG" });
+      let result;
+      try {
+        result = await this.dateSessionScanner.scan(settingsRepository.getCK3DebugLogPath());
+      } catch (error) {
+        finishPerformanceSpan(scanErrorSpan, { result: "ERROR", mode: "INVALIDATED", errorCode: "unknown_error" });
+        throw error;
+      }
+      if (this.performanceTrace?.enabled) {
+        const scan = result?.scan || {};
+        const step = scan.mode === "INCREMENTAL" ? "background.dateScanIncremental" : "background.dateScanCold";
+        try {
+          this.performanceTrace.record(step, {
+            attribution: "CK3_LOG",
+            wallMs: scan.durationMs,
+            bytesRead: scan.bytesRead,
+            maxBlockMs: scan.maxBlockMs,
+            mode: scan.mode,
+            result: scan.mode === "INVALIDATED" ? "STALE" : "OK"
+          });
+        } catch (_traceError) {}
+      }
       if (["scan_invalidated", "log_file_missing"].includes(result.reason)) this.clearDateMarkerState();
       this.lastDateScanResult = { ...result, source: "log_scan", scannedAt: Date.now() };
       return result;

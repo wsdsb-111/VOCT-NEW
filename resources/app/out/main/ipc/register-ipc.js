@@ -1,6 +1,7 @@
 "use strict";
 
 const path = require("path");
+const fs = require("fs");
 
 function requireInteger(value, label, { min = 0, max = Number.MAX_SAFE_INTEGER } = {}) {
   if (!Number.isInteger(value) || value < min || value > max) throw new Error(`${label}_must_be_an_integer_between_${min}_and_${max}`);
@@ -29,6 +30,38 @@ function validateActionFilePath(filePath, actionsRoot) {
 
 function registerIpcHandlers(runtime) {
   const { electron, settingsRepository, promptConfigManager, uuid, VOTC_PROMPTS_DIR, TemplateEngine, exportPromptsZip, letterManager, runFileManager, llmManager, providerRegistry, usageAnalytics, providerDiagnostics, actionRegistry, VOTC_ACTIONS_DIR, resolveI18nString, conversationManager, ActionEngine, VOTC_SUMMARIES_DIR, SummariesManager, memoryEngine, worldlineService } = runtime;
+
+  const performanceTrace = runtime.performanceTrace;
+  const emptyPerformanceReport = () => ({ traceVersion: 1, enabled: false, sampledWindow: true, events: [], statistics: [] });
+  electron.ipcMain.handle("performance:get-state", () => ({ traceVersion: 1, enabled: performanceTrace?.enabled === true }));
+  electron.ipcMain.handle("performance:snapshot", () => performanceTrace?.snapshot() || emptyPerformanceReport());
+  electron.ipcMain.handle("performance:record-renderer", (_event, payload) => {
+    if (!performanceTrace?.enabled) return false;
+    const metrics = Array.isArray(payload) ? payload : [payload];
+    const steps = new Set(["renderer.longTask", "renderer.frameGap", "renderer.inputToFrame", "renderer.firstReady"]);
+    const results = new Set(["OK", "ERROR", "CANCELLED", "STALE", "SKIPPED"]);
+    if (!metrics.length || metrics.length > 32 || metrics.some(metric => !metric || typeof metric !== "object"
+      || Object.keys(metric).some(key => !["step", "wallMs", "count", "result"].includes(key))
+      || !steps.has(metric.step) || !Number.isFinite(metric.wallMs) || metric.wallMs < 0 || metric.wallMs > 60000
+      || !Number.isSafeInteger(metric.count) || metric.count < 0 || metric.count > 1000000
+      || !results.has(metric.result))) return false;
+    return performanceTrace.recordRendererMetrics(metrics);
+  });
+  electron.ipcMain.handle("performance:export-report", async () => {
+    if (!performanceTrace?.enabled) return { exported: false, reason: "DIAGNOSTICS_DISABLED" };
+    try {
+      const selection = await electron.dialog.showSaveDialog({
+        title: "导出性能诊断",
+        defaultPath: "votc-performance.json",
+        filters: [{ name: "JSON", extensions: ["json"] }]
+      });
+      if (selection.canceled || !selection.filePath) return { exported: false, reason: "CANCELLED" };
+      await fs.promises.writeFile(selection.filePath, JSON.stringify(performanceTrace.exportReport(), null, 2), "utf8");
+      return { exported: true };
+    } catch (_error) {
+      return { exported: false, reason: "PERFORMANCE_EXPORT_FAILED" };
+    }
+  });
 
   electron.ipcMain.handle("toggle-config-panel", () => {
     if (runtime.chatWindow) {

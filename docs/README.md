@@ -4,9 +4,17 @@
 
 ## 推荐阅读顺序
 
+当前主线 V9.0：[实施／验证](current/v9/V9_0_VERIFICATION_REPORT.md)、[设计规格](current/v9/V9_0_IMPLEMENTATION_SPEC.md)、[总路线](current/v9/V9_ROADMAP.md)、[V8冻结证据](current/v9/V8_FREEZE_EVIDENCE.md)。
+
+当前版本合同：[版本对齐与验证](current/v9/V9_VERSION_ALIGNMENT.md)。项目 V9.0／App 包 9.0.0／VOTC Workshop Mod 2.0.5／Memory Engine 4.0；协议 3.0、摘要存储 2.5、Official Action 2.0.3 和独立 Three-Mod 1.0.6 保留。原始路线与冻结文件中的旧包版本是制定或备份时的快照，本轮按用户后续要求更新发行版本。
+
+V9工程合同：[永久行为](current/v9/V9_BASELINE_BEHAVIOR_CONTRACTS.md)、[架构边界](current/v9/V9_ARCHITECTURE_BOUNDARY.md)、[数据责任](current/v9/V9_DATA_OWNERSHIP_LEDGER.md)、[退役台账](current/v9/V9_DECOMMISSION_LEDGER.md)、[性能调查](current/v9/V9_STARTUP_PERFORMANCE_INVESTIGATION.md)、[独立兼容迁移](current/v9/V9_COMPATIBILITY_MOD_SEPARATION.md)。
+
+以下V8报告保留当时验证快照，不自动作为V9本轮结果。
+
 最新运行修复：[空闲载体控制台报错](v8.15.2-idle-run-carrier-report.md) 与 [信件首次写出后消费缺口](v8.15.2-outbound-bridge-followup-report.md)。苏轼旧信已进入正式队列，手动重试后 ACK；历史日志不足以认定唯一根因。消除已构造的后台消费缺口，当前另一封尚未到期的信与旧 ACK 保留。
 
-最新 Three-Mod 修复：[同级流官官职唯一持有规则](v8.15.2-celestial-same-tier-office-report.md)。兼容层 1.0.6 覆盖县、公、王、帝的新同级任命及旧职交接，各等级分别记录最后实际获授目标；前版[1.0.5 报告](v8.15.2-celestial-lateral-appointment-report.md)、[1.0.4 报告](v8.15.2-celestial-hierarchy-followup-report.md)保留。
+独立可选兼容项目：[CK3-Three-Mod-Compatibility](https://github.com/wsdsb-111/CK3-Three-Mod-Compatibility)；迁移边界见V9报告。历史[1.0.6 官职报告](v8.15.2-celestial-same-tier-office-report.md)、[1.0.5 报告](v8.15.2-celestial-lateral-appointment-report.md)、[1.0.4 报告](v8.15.2-celestial-hierarchy-followup-report.md)保持可查。
 
 最新记忆修复：[V8.15.2 密集年度压缩中断](v8.15.2-derived-compression-followup-report.md)。补齐原文约束、一次反馈修正、单年失败后继续后年与最终 FAILED 页面；原始记忆保留，真实密集来源重建待用户验证。
 

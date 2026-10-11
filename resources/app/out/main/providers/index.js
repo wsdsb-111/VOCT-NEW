@@ -1,5 +1,6 @@
 "use strict";
 const OpenAI = require("openai");
+const { VOTC_CORE_VERSION, VOTC_APP_VERSION } = require("../version");
 
 function isOpenRouterErrorResponse(e) {
   return typeof e === "object" && e !== null && "error" in e && typeof e.error === "object" && typeof e.error.message === "string" && typeof e.error.code === "number";
@@ -188,7 +189,7 @@ class OpenRouterProvider extends BaseProvider {
       baseURL: "https://openrouter.ai/api/v1",
       defaultHeaders: {
         "HTTP-Referer": "https://github.com/Voices-of-the-Court/VOTC",
-        "X-Title": "Voices of the Court 2.0"
+        "X-Title": `Voices of the Court V${VOTC_CORE_VERSION}`
       }
     });
     const requestParams = {
@@ -405,8 +406,8 @@ class OpenAICompatibleProvider extends BaseProvider {
   async listModels(config) {
     const headers = {
       "Content-Type": "application/json",
-      "X-Title": "Voices of the Court 2.0",
-      "User-Agent": "VOTC/2.0.4",
+      "X-Title": `Voices of the Court V${VOTC_CORE_VERSION}`,
+      "User-Agent": `VOTC/${VOTC_APP_VERSION}`,
       // Custom User-Agent to avoid Cloudflare blocking
       ...this.getAPIKey(config) && { "Authorization": `Bearer ${this.getAPIKey(config)}` }
     };
@@ -471,8 +472,8 @@ class OpenAICompatibleProvider extends BaseProvider {
   chatCompletion(request, config) {
     const headers = {
       "Content-Type": "application/json",
-      "X-Title": "Voices of the Court 2.0",
-      "User-Agent": "VOTC/2.0.4",
+      "X-Title": `Voices of the Court V${VOTC_CORE_VERSION}`,
+      "User-Agent": `VOTC/${VOTC_APP_VERSION}`,
       // Custom User-Agent to avoid Cloudflare blocking
       ...config.apiKey && { "Authorization": `Bearer ${config.apiKey}` }
     };
@@ -695,7 +696,7 @@ class ZhipuProvider extends OpenAICompatibleProvider {
       baseURL: this.getBaseUrl(config),
       defaultHeaders: {
         "Content-Type": "application/json",
-        "User-Agent": "VOTC/2.0.4",
+        "User-Agent": `VOTC/${VOTC_APP_VERSION}`,
         "Authorization": `Bearer ${this.getAPIKey(config)}`
       },
       maxRetries: 0

@@ -2,6 +2,8 @@
 
 These rules apply to resources/app/out/main/, especially main.js, the service modules, providers and IPC registration.
 
+Current project/core version is V9.0/9.0, Electron App package version is 9.0.0 and VOTC Workshop Mod is 2.0.5. Provider User-Agent reads the App version from package.json via version.js. Memory Engine display 4.0, protocol 3.0, summary storage 2.5 and Official Action 2.0.3 retain their existing contracts.
+
 ## Scope and architecture
 
 main.js is the shipped Electron composition root. Keep orchestration and dependency wiring there; make behavior changes in the smallest owning module. The current layout includes:

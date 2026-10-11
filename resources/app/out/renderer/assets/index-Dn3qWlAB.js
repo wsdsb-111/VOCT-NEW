@@ -1,7 +1,8 @@
 import { WorldMemoryEditor } from "../world-memory-editor.js";
 import { Memory4Manager } from "../memory4-manager.js";
 import { getSummaryDisplayEntries } from "../summary-date-order.js";
-const VOTC_FEATURE_VERSION = "V8.15.2";
+const VOTC_FEATURE_VERSION = "V9.0";
+const VOTC_WORKSHOP_MOD_VERSION = "2.0.5";
 function getDefaultExportFromCjs(x) {
   return x && x.__esModule && Object.prototype.hasOwnProperty.call(x, "default") ? x["default"] : x;
 }
@@ -23655,10 +23656,7 @@ function ConfigPanel({ onClose }) {
           currentTab === "worldline" && /* @__PURE__ */ jsxRuntimeExports.jsx(WorldlineView, {}),
           currentTab === "providerDiagnostics" && /* @__PURE__ */ jsxRuntimeExports.jsx(ProviderDiagnosticsView, {})
         ] }),
-        /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "app-version", children: [
-          `${VOTC_FEATURE_VERSION} · App v`,
-          appVersion
-        ] })
+        /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "app-version", title: `VOTC App ${appVersion}`, children: `${VOTC_FEATURE_VERSION} · Mod v${VOTC_WORKSHOP_MOD_VERSION}` })
       ]
     }
   );

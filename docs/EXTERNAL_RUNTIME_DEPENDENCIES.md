@@ -2,6 +2,10 @@
 
 日期：2026-10-05。本文记录 V8.14.2 信件 Date Runner 的 App/Mod 发布依赖；这是外部运行依赖合同，不代表 CK3 实机 Gate 已通过。
 
+## V9.0 当前发行版本（2026-10-11）
+
+项目／UI V9.0，App 包 9.0.0，本机 VOTC Workshop item `3346777360` 的内容 descriptor 与启动器 descriptor 均为 2.0.5。`name="Voices of the Court 2.0"` 保留用于 Mod 身份与依赖兼容。Memory Engine 4.0／协议 3.0／摘要存储 2.5、Official Action 2.0.3 和独立 Three-Mod 1.0.6 保持；版本号不能代替配套桥文件指纹或 Steam 发布证据。[版本对齐记录](current/v9/V9_VERSION_ALIGNMENT.md)为当前入口，下方 V8 表格和检查脚本保留历史快照。
+
 ## V8.15.2 独立日期桥与信件运行依赖（2026-10-10）
 
 本机 Mod `3346777360` 的最新配套文件如下，App 与 Mod 仍按方案 B 独立发布。配套原样快照与部署说明见 [信件执行器补丁](../compatibility-patches/v8.15.2-letter-runner/README.md)，最新主动运行合同见 [首次写出后消费缺口审查](v8.15.2-outbound-bridge-followup-report.md)。此前日期／信件／归档及退役后卡顿改善保留用户验收；本次苏轼旧信的消费延迟与新增门禁修复单独待实测。
@@ -18,7 +22,7 @@
 
 主日期入口为原生 registry 的全局透明桥，每两秒直接读取 rich DATE，并在玩家有效时持续执行正式 `votc.txt`，不再以 `talk_scene` 停止后台消费；既有对话 consumer 保留，沿用同 command ID 游戏侧去重。旧 `letters.txt` 轮询、runner 计时器与 blur 设置、App stale/close ACK 的日期 rearm 均停用；旧事件窗口只保留无行为兼容目标，A1 禁用、A2 起步。after-lobby 仅保留一次 DATE，LOAD_SESSION/epoch 与增量 reader 会话隔离不变。既有未知队列与载体证据保留，不重放。必须完全重启 App/CK3 以加载新循环；下方 V8.14.2 合同、哈希和 Gate 为历史快照，不作为最新主动运行合同。
 
-中国流官规则另依赖 `VOTC Three-Mod Character Name Compatibility` 1.0.6，安装在 CK3 用户目录的 `mod/VOTC_Three_Mod_Character_Name_Compatibility`，需位于天家宗仪、汉番礼制和东方王朝之后。同级任命唯一持有和旧职交接见[同级官职报告](v8.15.2-celestial-same-tier-office-report.md)，前版哈希保留于[1.0.5 报告](v8.15.2-celestial-lateral-appointment-report.md)；它是独立本地兼容 Mod，不包含在 App 或上述 VOTC Workshop 七文件快照中。
+中国流官／称谓规则属于可选独立工程 [CK3-Three-Mod-Compatibility](https://github.com/wsdsb-111/CK3-Three-Mod-Compatibility)，不是VOTC核心的必需依赖。安装目录及历史1.0.6证据保留于[同级官职报告](v8.15.2-celestial-same-tier-office-report.md)，本轮分离见[V9迁移](current/v9/V9_COMPATIBILITY_MOD_SEPARATION.md)；VOTC自身Workshop七文件Bridge快照继续保留并独立管理。
 
 ## V8.15.2 Canonical Trait 输出补充（2026-10-07）
 

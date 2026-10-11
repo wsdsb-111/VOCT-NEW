@@ -2,7 +2,7 @@
 
 ## 项目定位与结构
 
-本仓库是面向 Crusader Kings III 的 Windows 打包版 VOTC（Voices of the Court）Electron 应用。当前代码基线为 V8.8.5；关系提取与动作执行已由用户实机确认恢复，扩展亲属矩阵、跨 Provider Token 与长时间运行仍待实测。代码回归与隔离 Electron 冒烟不等于真实 CK3、Provider 和长时间运行 Gate，不能宣称 Full Freeze。
+本仓库是面向 Crusader Kings III 的 Windows 打包版 VOTC（Voices of the Court）Electron 应用。当前开发主线为 V9.0，继承 V8.15.2 冻结行为；冻结提交 3c49364 与本轮证据见 docs/current/v9/V8_FREEZE_EVIDENCE.md。用户此前跨 Provider、缓存、长时间运行、信件、日期与多人披露验收保留；新启动卡顿、V9远端CI和实机采样单独记录。代码回归与隔离 Electron 冒烟不等于真实 CK3、Provider 和性能 Gate，不能宣称 Full Freeze。
 
 - resources/app/out/main/main.js 是 Electron 主进程组合根；主进程实现已按职责拆分到 actions/、conversation/、memory-system/、summaries/、worldline/、game-data/、historical-system/、letters/、providers/、ipc/、analytics/、runtime/、config/ 等目录，action-system/ 保留为历史目录结构。
 - resources/app/out/main/provider-service.js、providers/index.js、ipc/register-ipc.js、window-manager.js 等是打包后的主进程服务和边界；不要把 out/ 当作可任意重打包的源代码目录。
@@ -11,7 +11,7 @@
 - resources/app/default_userdata/ 保存默认 Prompt、本地化和标准 Action；它不是用户运行时数据目录。
 - scripts/ 保存迁移工具、专项回归和发布门禁；scripts/test-manifest.js 是测试清单的唯一编排入口。
 - docs/README.md 是文档入口，docs/V8阶段开发记录.md 是 V8 连续实施记录，docs/README_摘要系统.md 是摘要/Memory 合同；根目录 CHANGELOG.md 只维护版本索引和用户可见摘要。
-- VOTC.exe 是打包应用入口；resources/app/package.json 的 Electron 包版本与 V8 功能版本是两个概念，不要混用。
+- VOTC.exe 是打包应用入口。当前项目版本为 V9.0，核心版本为 `9.0`，resources/app/package.json 的 Electron 包版本为 `9.0.0`，VOTC Workshop Mod 为 `2.0.5`；前端显示 `V9.0 · Mod v2.0.5`，App 包版本在提示中显示。Memory Engine 保持 4.0，协议 3.0、摘要存储 2.5 和 Official Action 2.0.3 不随项目版本升级；独立 Three-Mod 兼容工程仍为 1.0.6。
 
 ## 当前稳定合同
 
@@ -30,7 +30,7 @@
 
 ~~~powershell
 node scripts\test-v8.8-ui-style-backgrounds.js
-node scripts\test-action-system.js
+node scripts\test-v7.10-official-action-system.js
 node scripts\test-release.js
 node --check resources\app\out\main\main.js
 node --check resources\app\out\main\provider-service.js
@@ -42,7 +42,7 @@ node --check resources\app\out\renderer\worldline-player-presentation.js
 git diff --check
 ~~~
 
-test-release.js 通过 test-manifest.js 汇总直接和嵌套检查；新增 test-*.js 必须登记到清单并明确是发布组还是历史归档。当前清单为 367 个发布组、436 个已分类测试文件、68 个历史归档；完整门禁结果以当前实施报告为准。测试数量变化时更新相关文档，不要把旧数量硬编码为源码合同。
+test-release.js 通过 test-manifest.js 汇总直接和嵌套检查；新增 test-*.js 必须登记到清单并明确是发布组还是历史归档。清单数量以 scripts/test-manifest.js 的实际输出为准；完整门禁结果以当前实施报告为准。测试数量变化时更新相关文档，不要把旧数量硬编码为源码合同。
 
 修改 IPC、设置、Prompt、流式输出、动作回读、世界线或主题 UI 后，仍需启动 VOTC.exe 做对应人工冒烟。静态回归不能替代真实 CK3 存档、Provider、debug.log ACK、打包窗口和 Soak 验收。
 

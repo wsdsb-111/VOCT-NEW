@@ -4,9 +4,13 @@ Voices of the Court 是一个面向《Crusader Kings III》（CK3）的沉浸式
 
 本仓库保存的是 VOTC 的 Windows 打包版本及默认用户数据，适合直接运行、测试和二次配置。
 
+当前主线 **V9.0 工程基线**（2026-10-11）：[实施与验证](docs/current/v9/V9_0_VERIFICATION_REPORT.md)、[路线](docs/current/v9/V9_ROADMAP.md)、[冻结证据](docs/current/v9/V8_FREEZE_EVIDENCE.md)。本地409/409发布门禁和隔离打包诊断冒烟通过；远端CI／真实CK3与Provider结果分别记录，总体HOLD，尚未完整验收。
+
 ## 主要功能
 
-Three-Mod 1.0.6 后续修复（2026-10-10）：[同级流官官职唯一持有规则](docs/v8.15.2-celestial-same-tier-office-report.md)。中国天朝流官获授新的同级任命头衔后，卸任旧同级官职并按其合法继任者交接；覆盖伯爵、公爵、国王及帝国等级，世袭与其他政府例外保持。前版[1.0.5 报告](docs/v8.15.2-celestial-lateral-appointment-report.md)保留。
+当前版本：项目 **V9.0**，Electron App 包 **9.0.0**，VOTC Workshop Mod **2.0.5**，人物记忆 **Memory Engine 4.0**。前端显示 `V9.0 · Mod v2.0.5`，悬停可见 App 包版本；记忆协议 3.0、摘要存储 2.5 保持兼容。独立 Three-Mod 兼容工程仍为 1.0.6。[版本对齐与验证](docs/current/v9/V9_VERSION_ALIGNMENT.md)。以下 V8 报告保留历史版本和当时验收快照。
+
+可选兼容工程已完成本地迁移：[CK3-Three-Mod-Compatibility](https://github.com/wsdsb-111/CK3-Three-Mod-Compatibility)，工作目录 `C:/Users/97330/Documents/Codex/CK3-Three-Mod-Compatibility`。官职／称谓规则不属于 VOTC 运行必需依赖，历史[1.0.6 报告](docs/v8.15.2-celestial-same-tier-office-report.md)保留；当前安装 Mod 不卸载。独立CI与CK3验收待执行。
 
 V8.15.2 运行与流官兼容修复（2026-10-10）：[空闲控制台报错](docs/v8.15.2-idle-run-carrier-report.md)、[信件消费缺口](docs/v8.15.2-outbound-bridge-followup-report.md)、[Three-Mod 官职交接](docs/v8.15.2-celestial-office-compatibility-report.md)。正式后台消费不再依赖对话窗口；兼容层限制跨官区归位并处理旧低级流官头衔，世袭保留。本轮实机验证与此前用户验收分开记录，需重启 App／CK3。
 
@@ -291,18 +295,18 @@ V7.7 在 V7.6 健康化基础上分阶段拆分主进程：第一阶段将六种
 node scripts\test-release.js
 ```
 
-清单会覆盖全部 `test-*.js`。当前分类为 436 个测试文件、367 个发布组和 68 个归档检查；最新 V8.14.2 门禁结果以 [收口修复报告](docs/v8.14.2-closeout-fix-implementation-report.md) 为准。已退役的 V8.3/V8.3.1 Shadow Resolver、Ground Truth 与诊断面板测试不再作为发布路径。V8.8.2 门禁继续覆盖历史基线、Campaign/Worldline、Definition-ID 双向唯一绑定、第三方亲属 Anchor、长幼/出生日歧义、性别冲突、关系类型限定、已故配偶方向、已故前配偶隔离、配偶三状态 Intent、生产 revision invariant、人口属性缓存失效、来源完整性和冻结边界；既有 Run Command Recovery T1–T18、Memory、Conversation、Action、Letter、Relationship、Date Producer 与缓存回归继续执行。历史归档检查不计入发布组，个别旧合同断言可能不再适用于当前生产合同。
+清单会覆盖全部 `test-*.js`。当前分类为 478 个测试文件、409 个发布组和 68 个归档检查；最新 V9.0 门禁结果以 [实施与验证](docs/current/v9/V9_0_VERIFICATION_REPORT.md)及[版本对齐](docs/current/v9/V9_VERSION_ALIGNMENT.md)为准。已退役的 V8.3/V8.3.1 Shadow Resolver、Ground Truth 与诊断面板测试不再作为发布路径。V8.8.2 门禁继续覆盖历史基线、Campaign/Worldline、Definition-ID 双向唯一绑定、第三方亲属 Anchor、长幼/出生日歧义、性别冲突、关系类型限定、已故配偶方向、已故前配偶隔离、配偶三状态 Intent、生产 revision invariant、人口属性缓存失效、来源完整性和冻结边界；既有 Run Command Recovery T1–T18、Memory、Conversation、Action、Letter、Relationship、Date Producer 与缓存回归继续执行。历史归档检查不计入发布组，个别旧合同断言可能不再适用于当前生产合同。
 
 ## 版本信息
 
-- 外挂 UI 版本：v2.0.4
-- 当前应用功能基线：V8.14.2 收口修复；完整发布 367/367、隔离 UI 38 张截图及普通摘要真实保存通过。CK3 Disclosure、Provider、Cache Telemetry 与 Soak 仍待用户 Gate，不签发 Full Freeze
-- 本机 CK3 模组 descriptor：Voices of the Court 2.0，version 2.0.4，Workshop 3346777360；必需 Date Runner 补丁按[外部运行依赖](docs/EXTERNAL_RUNTIME_DEPENDENCIES.md)核对，不单凭版本号判定
+- 项目／前端版本：V9.0；底部显示 `V9.0 · Mod v2.0.5`，App 包版本为 9.0.0
+- 当前开发基线：V9.0，继承 V8.15.2 行为和用户既有验收。V9 本地工程验证通过，远端 CI、新启动性能采样及 CK3 对照仍待完成，总体 HOLD；各轮证据单独记录
+- 本机 CK3 模组 descriptor：Voices of the Court 2.0，version 2.0.5，Workshop 3346777360（Mod 名称保留以兼容依赖）；必需 Date Runner 补丁按[外部运行依赖](docs/EXTERNAL_RUNTIME_DEPENDENCIES.md)核对，不单凭版本号判定
 - 本机模组 descriptor 支持版本：CK3 1.20.*（元数据声明，不替代实机兼容性 Gate）
 - UI 主题：宫廷编年史风格（深红、暗金、羊皮纸文本层级）
 - UI 主题切换：游牧、骑士纹章、水墨画卷三套完整历史风格；分别使用 `image/草原游牧.png`、`image/中世纪骑士.png`、`image/中国古典.png` 作为整块界面背景，并保留各自的边框结构、按钮造型、消息卡片、输入框、字体和滚动条，主题选择可自动保存
 - UI 素材生成提示词：参见 [docs/UI_ASSET_PROMPTS_2.0.3.md](docs/UI_ASSET_PROMPTS_2.0.3.md)
-- 当前重点：完成 V8.14.2 Disclosure 的真实 CK3 知情范围、Provider、GLM/DeepSeek cache telemetry 与 Soak Gate；Official VOTC 2.0.3 Action 签名、Memory Engine 3.0 协议、摘要 2.5 存储与 App 2.0.4 保持兼容。
+- 当前重点：完成 V9.0 远端 CI、真实 CK3 对照和启动卡顿采样；既有 Provider、缓存与长时间运行用户验收保留。Official VOTC 2.0.3 Action、Memory Engine 4.0 显示／3.0 协议和摘要 2.5 存储保持兼容。
 
 ## 已知限制
 

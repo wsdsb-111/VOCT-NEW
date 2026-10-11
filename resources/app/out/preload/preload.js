@@ -187,6 +187,13 @@ electron.contextBridge.exposeInMainWorld("actionsAPI", {
   getDetails: (actionId, sourceCharacterId) => electron.ipcRenderer.invoke("actions:getDetails", { actionId, sourceCharacterId }),
   execute: (params) => electron.ipcRenderer.invoke("actions:execute", params)
 });
+electron.contextBridge.exposeInMainWorld("performanceDiagnosticsAPI", {
+  getState: () => electron.ipcRenderer.invoke("performance:get-state"),
+  snapshot: () => electron.ipcRenderer.invoke("performance:snapshot"),
+  recordRendererMetrics: (payload) => electron.ipcRenderer.invoke("performance:record-renderer", payload),
+  exportReport: () => electron.ipcRenderer.invoke("performance:export-report")
+});
+
 electron.contextBridge.exposeInMainWorld("usageAPI", {
   getReport: () => electron.ipcRenderer.invoke("usage:getReport"),
   clear: () => electron.ipcRenderer.invoke("usage:clear")

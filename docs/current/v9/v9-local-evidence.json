@@ -1,0 +1,129 @@
+{
+  "date": "2026-10-11",
+  "freezeCommit": "3c49364fb1f9d4f1a90c6c09df3cc3966a01b8c4",
+  "branch": "codex/v9.0-engineering-baseline",
+  "v9Commit": "NOT_CREATED",
+  "sourceTreeSha256": "cc5570e28d364594d2b1558b5f5fb0bd3f1a7643dd11753104133e7e8d3be2fb",
+  "fingerprints": [
+    {
+      "path": ".github/workflows/regression.yml",
+      "sha256": "2c8679f06645d46c62edb6f867b965e49f68d7378833326d250d0f35dcbfed48"
+    },
+    {
+      "path": "resources/app/out/main/conversation/conversation.js",
+      "sha256": "a6f20a3822c99bce0f5700de36c3e93883614f8af32a6784963b79f5d5cc7c9a"
+    },
+    {
+      "path": "resources/app/out/main/ipc/register-ipc.js",
+      "sha256": "ba04cff3472f3b2a8c39bf9c1c40e93da92d6253ff6cbbeb6762a8918ac7592d"
+    },
+    {
+      "path": "resources/app/out/main/letters/letter-manager.js",
+      "sha256": "734a054bc5168fd03baa157d6bfb3781c4a1685b5462780891c3db5dba6275e9"
+    },
+    {
+      "path": "resources/app/out/main/main.js",
+      "sha256": "ae21ee6d2af02bd4fe38500a8c51c88d713838723e5bab857fd763ad09844720"
+    },
+    {
+      "path": "resources/app/out/main/provider-service.js",
+      "sha256": "9f5fa2079568b616dd3a6d6eb97b10aaeed63e1494658b96bd810770a43dfb2e"
+    },
+    {
+      "path": "resources/app/out/main/runtime/startup-performance-trace.js",
+      "sha256": "858192cf1b7ad482917d850f3f586e08ed270651c874e9914c41719256a590eb"
+    },
+    {
+      "path": "resources/app/out/preload/preload.js",
+      "sha256": "1cd6ef3550522fa372566886c818d715ac8158cbf4bc925028287a4d39c2ab93"
+    },
+    {
+      "path": "resources/app/out/renderer/index.html",
+      "sha256": "3eb48f3eaac2e544b5761d1bd57f4f5941877e04a585b1896001663ce9531f24"
+    },
+    {
+      "path": "resources/app/out/renderer/startup-performance-observer.js",
+      "sha256": "5a9bcae8ade157c739569d28a3f31fb1e386815d3fd57e5a70b5a95bf44f7893"
+    },
+    {
+      "path": "scripts/AGENTS.md",
+      "sha256": "d91fe37908b22cd5335c46c63d1263a7e296a0d2ba54d073b5fccfa65b1c2bb1"
+    },
+    {
+      "path": "scripts/test-manifest.js",
+      "sha256": "bf9e6b6a6c90f87d4c8cc07d061b4bbc228a5de01fd2682b7a5ebc190115a6c9"
+    },
+    {
+      "path": "scripts/test-v9.0-ci-history.js",
+      "sha256": "bbf7b4d769f02991161aef729a6e38d253b3d68c1b6873dcb59419eb36b4e53c"
+    },
+    {
+      "path": "scripts/test-v9.0-independent-qa.js",
+      "sha256": "b84414a77ce6cbb25cf462130e2048d6a51f2f2204e52c261dc8251e4968357b"
+    },
+    {
+      "path": "scripts/test-v9.0-performance-trace.js",
+      "sha256": "026c894ffc347186157ee703d423d68aef115b50db968489763fe41e7630e945"
+    },
+    {
+      "path": "scripts/v9.0-performance-packaged-smoke.js",
+      "sha256": "c35c496a1dca8d408daf59028da4d249ea55ac54c13a9acc22901ff35ae2a65c"
+    }
+  ],
+  "deleted": [
+    "compatibility-mods/VOTC_Three_Mod_Character_Name_Compatibility.mod",
+    "compatibility-mods/VOTC_Three_Mod_Character_Name_Compatibility/common/on_action/zzzz_votc_celestial_office_release.txt",
+    "compatibility-mods/VOTC_Three_Mod_Character_Name_Compatibility/common/script_values/votc_celestial_succession_values.txt",
+    "compatibility-mods/VOTC_Three_Mod_Character_Name_Compatibility/common/scripted_effects/zzzz_votc_celestial_office_release.txt",
+    "compatibility-mods/VOTC_Three_Mod_Character_Name_Compatibility/common/scripted_triggers/votc_three_mod_render_safety.txt",
+    "compatibility-mods/VOTC_Three_Mod_Character_Name_Compatibility/common/scripted_triggers/zzzz_votc_celestial_office_release.txt",
+    "compatibility-mods/VOTC_Three_Mod_Character_Name_Compatibility/common/succession_appointment/zzzzz_votc_celestial_governor.txt",
+    "compatibility-mods/VOTC_Three_Mod_Character_Name_Compatibility/descriptor.mod",
+    "compatibility-mods/VOTC_Three_Mod_Character_Name_Compatibility/events/votc_celestial_office_release_events.txt",
+    "compatibility-mods/VOTC_Three_Mod_Character_Name_Compatibility/gui/oe_hud.gui",
+    "compatibility-mods/VOTC_Three_Mod_Character_Name_Compatibility/gui/shared/00_votc_trait_tooltip.gui",
+    "compatibility-mods/VOTC_Three_Mod_Character_Name_Compatibility/localization/simp_chinese/replace/zzzz_votc_three_mod_character_names_l_simp_chinese.yml",
+    "compatibility-mods/VOTC_Three_Mod_Character_Name_Compatibility/localization/simp_chinese/votc_celestial_succession_l_simp_chinese.yml",
+    "compatibility-patches/tianjia-benji-repair/README.md",
+    "compatibility-patches/tianjia-benji-repair/SanGong_Restore_Ruler_Stage_decisions.txt",
+    "compatibility-patches/tianjia-benji-repair/SanGong_Restore_Ruler_Stage_l_simp_chinese.yml",
+    "scripts/test-three-mod-character-name-compatibility.js",
+    "scripts/test-v8.15.2-celestial-office-independent-qa.js",
+    "scripts/test-v8.15.2-celestial-office-release.js"
+  ],
+  "manifest": {
+    "releaseGroups": 409,
+    "classifiedFiles": 478,
+    "archivedChecks": 68
+  },
+  "releaseGate": "PASS",
+  "packagedSmoke": {
+    "defaultOff": "PASS",
+    "diagnosticsOn": "PASS",
+    "exitCode": 0,
+    "rendererEvidence": {
+      "enabled": true,
+      "exported": true,
+      "syntheticLongTask": true,
+      "eventCount": 44,
+      "steps": [
+        "settings.load",
+        "prompt.seed",
+        "runqueue.recovery",
+        "app.launch",
+        "worldline.start",
+        "background.clipboard.poll",
+        "renderer.firstReady",
+        "renderer.frameGap",
+        "renderer.inputToFrame",
+        "renderer.longTask"
+      ]
+    },
+    "realCk3": "NOT_RUN",
+    "liveProvider": "NOT_RUN"
+  },
+  "remoteCi": "PENDING_NO_UPLOAD",
+  "releaseExitCode": 0,
+  "releaseLogSha256": "412ff500dc4e1f79f1e5ded1d5d00f0380fb9eedbb5eea4e1f0ad6a61f052454",
+  "executedReleaseGroups": 409
+}

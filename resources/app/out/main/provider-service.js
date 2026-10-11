@@ -99,11 +99,12 @@ class TokenCounter {
 
 class LLMManager {
   // Cache instantiated providers
-  constructor({ settingsRepository, providerRegistry, usageAnalytics, providerDiagnostics = null, TokenCounter, PromptBuilder, debugVerboseLLM = false, logVerboseLLM = () => {} }) {
+  constructor({ settingsRepository, providerRegistry, usageAnalytics, providerDiagnostics = null, performanceTrace = null, TokenCounter, PromptBuilder, debugVerboseLLM = false, logVerboseLLM = () => {} }) {
     this.settingsRepository = settingsRepository;
     this.providerRegistry = providerRegistry;
     this.usageAnalytics = usageAnalytics;
     this.providerDiagnostics = providerDiagnostics;
+    this.performanceTrace = performanceTrace;
     this.TokenCounter = TokenCounter;
     this.PromptBuilder = PromptBuilder;
     this.debugVerboseLLM = debugVerboseLLM;
@@ -259,8 +260,16 @@ class LLMManager {
       }) || null
       : null;
     const requestStartedAt = new Date().toISOString();
-    return await this.trackUsage(provider.chatCompletion(request, activeConfig), {
-      ...metadata,
+    const { performanceTraceContext, ...usageMetadata } = metadata;
+    const traceRequest = this.performanceTrace?.enabled && performanceTraceContext
+      && (requestType === "chat" || requestType === "chat_continuation");
+    const providerSpan = traceRequest
+      ? this.performanceTrace.startSpan("provider.requestStart", { attribution: "PROVIDER", context: performanceTraceContext })
+      : null;
+    if (providerSpan) this.performanceTrace.record("provider.requestStart", { attribution: "PROVIDER", context: performanceTraceContext, wallMs: 0, result: "OK" });
+    try {
+      return await this.trackUsage(provider.chatCompletion(request, activeConfig), {
+      ...usageMetadata,
       requestBudget: budget,
       requestType,
       providerType: activeConfig.providerType,
@@ -269,7 +278,11 @@ class LLMManager {
       realRequestDiff,
       requestStartedAt,
       captureChatTiming: requestType === "chat"
-    });
+      }, providerSpan);
+    } catch (error) {
+      try { providerSpan?.({ step: "provider.streamEnd", result: "ERROR", errorCode: "provider_error" }); } catch (_traceError) {}
+      throw error;
+    }
   }
   /**
    * Send a structured JSON request for Actions.
@@ -491,7 +504,10 @@ class LLMManager {
     }
     return await this.trackUsage(provider.chatCompletion(request, config), { ...metadata, requestBudget: budget, blocks: summaryBlocks, requestType: metadata.requestType || "summary", providerType: config.providerType, model: config.defaultModel, estimatedPromptTokens });
   }
-  async trackUsage(result, metadata) {
+  async trackUsage(result, metadata, performanceSpan = null) {
+    const finishPerformanceSpan = (result, errorCode) => {
+      try { performanceSpan?.({ step: "provider.streamEnd", result, errorCode }); } catch (_traceError) {}
+    };
     const response = await result;
     const recordUsage = (finalResponse, timing = {}) => {
       const usage = this.buildUsageRecord(finalResponse, metadata);
@@ -516,20 +532,48 @@ class LLMManager {
         async *[Symbol.asyncIterator]() {
           let firstReasoningAt = null;
           let firstVisibleContentAt = null;
-          while (true) {
-            const step = await iterator.next();
-            if (step.done) {
-              recordUsage(step.value, { firstReasoningAt, firstVisibleContentAt, completedAt: new Date().toISOString() });
-              return step.value;
+          let firstByteTraced = false;
+          let firstVisibleTraced = false;
+          let traceFinished = false;
+          try {
+            while (true) {
+              const step = await iterator.next();
+              if (step.done) {
+                recordUsage(step.value, { firstReasoningAt, firstVisibleContentAt, completedAt: new Date().toISOString() });
+                finishPerformanceSpan("OK");
+                traceFinished = true;
+                return step.value;
+              }
+              if (performanceSpan && !firstByteTraced) {
+                try { performanceSpan.mark("provider.firstByte", { attribution: "PROVIDER" }); } catch (_traceError) {}
+                firstByteTraced = true;
+              }
+              if (metadata.captureChatTiming && !firstReasoningAt && step.value?.delta?.reasoning) firstReasoningAt = new Date().toISOString();
+              if (metadata.captureChatTiming && !firstVisibleContentAt && step.value?.delta?.content) firstVisibleContentAt = new Date().toISOString();
+              if (performanceSpan && !firstVisibleTraced && typeof step.value?.delta?.content === "string" && step.value.delta.content.length > 0) {
+                try { performanceSpan.mark("provider.firstVisibleToken", { attribution: "PROVIDER" }); } catch (_traceError) {}
+                firstVisibleTraced = true;
+              }
+              yield step.value;
             }
-            if (metadata.captureChatTiming && !firstReasoningAt && step.value?.delta?.reasoning) firstReasoningAt = new Date().toISOString();
-            if (metadata.captureChatTiming && !firstVisibleContentAt && step.value?.delta?.content) firstVisibleContentAt = new Date().toISOString();
-            yield step.value;
+          } catch (error) {
+            finishPerformanceSpan("ERROR", "provider_error");
+            traceFinished = true;
+            throw error;
+          } finally {
+            if (!traceFinished) finishPerformanceSpan("CANCELLED", "cancelled");
           }
         }
       };
     }
     const completedAt = new Date().toISOString();
+    if (performanceSpan) {
+      try { performanceSpan.mark("provider.firstByte", { attribution: "PROVIDER" }); } catch (_traceError) {}
+      if (typeof response?.content === "string" && response.content.length > 0) {
+        try { performanceSpan.mark("provider.firstVisibleToken", { attribution: "PROVIDER" }); } catch (_traceError) {}
+      }
+      finishPerformanceSpan("OK");
+    }
     recordUsage(response, {
       firstReasoningAt: metadata.captureChatTiming && (response?.reasoning || response?.reasoning_content) ? completedAt : null,
       firstVisibleContentAt: metadata.captureChatTiming && response?.content ? completedAt : null,

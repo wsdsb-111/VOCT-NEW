@@ -1,0 +1,242 @@
+{
+  "date": "2026-10-11",
+  "branch": "codex/v9.0-engineering-baseline",
+  "v9Commit": "NOT_CREATED",
+  "versions": {
+    "project": "V9.0",
+    "core": "9.0",
+    "app": "9.0.0",
+    "workshopMod": "2.0.5",
+    "memoryDisplay": "4.0",
+    "memoryProtocol": "3.0",
+    "summaryStorage": "2.5",
+    "summarySchema": 2,
+    "action": "official-votc-2.0.3",
+    "threeModCompatibility": "1.0.6"
+  },
+  "fingerprints": [
+    {
+      "path": ".github/workflows/regression.yml",
+      "sha256": "2c8679f06645d46c62edb6f867b965e49f68d7378833326d250d0f35dcbfed48"
+    },
+    {
+      "path": "AGENTS.md",
+      "sha256": "ec28c4dbe795245d56538f927956db7e1ee5676db2f5a0c44cdd8cd2314ad8c6"
+    },
+    {
+      "path": "CHANGELOG.md",
+      "sha256": "231b62836d8bead9375e88726b38aa5648faee4b506f61eb7ec1fbfb082f1e05"
+    },
+    {
+      "path": "README.md",
+      "sha256": "203d0a3438a8f197d509a9a074581f05a0fd543ffcbe87af2a2756ba3210bf24"
+    },
+    {
+      "path": "docs/AGENTS.md",
+      "sha256": "29123551828ccf3ecd5d52062072a5ec17a986dc07704741129ed00a444a5a3b"
+    },
+    {
+      "path": "docs/EXTERNAL_RUNTIME_DEPENDENCIES.md",
+      "sha256": "23bf44a717e0c6965abe088ece17ae8183d4233cd470d7c20d3c9b65be7d9f37"
+    },
+    {
+      "path": "docs/README.md",
+      "sha256": "09d539105c4ed1230004ae138310ad1306ab4008f61a8bea38c700b46e3badef"
+    },
+    {
+      "path": "docs/README_摘要系统.md",
+      "sha256": "b68025f17efd237ff267f7ccdce956d87d5ba2573205ea213d2e7fd900a23560"
+    },
+    {
+      "path": "docs/current/v9/V9_0_VERIFICATION_REPORT.md",
+      "sha256": "1f14b45b47fdc967e838a6b72250969cb5300711b4b436b1262b814732cdfcbc"
+    },
+    {
+      "path": "docs/current/v9/V9_ARCHITECTURE_BOUNDARY.md",
+      "sha256": "30413970bf204409b7029d327b89a242e317ebb27f60fb3143e193aaa315f4f3"
+    },
+    {
+      "path": "docs/current/v9/V9_VERSION_ALIGNMENT.md",
+      "sha256": "34b3e0036e77ec1efbef2e4c8e24a9bdd8dda70c3b742ec8eef348c834eac8ce"
+    },
+    {
+      "path": "resources/app/out/main/AGENTS.md",
+      "sha256": "54042a06c5490a154621379f1d9969c3a41675bdce99ec644a9b684d6eea9f3c"
+    },
+    {
+      "path": "resources/app/out/main/conversation/conversation.js",
+      "sha256": "a6f20a3822c99bce0f5700de36c3e93883614f8af32a6784963b79f5d5cc7c9a"
+    },
+    {
+      "path": "resources/app/out/main/ipc/register-ipc.js",
+      "sha256": "ba04cff3472f3b2a8c39bf9c1c40e93da92d6253ff6cbbeb6762a8918ac7592d"
+    },
+    {
+      "path": "resources/app/out/main/letters/letter-manager.js",
+      "sha256": "734a054bc5168fd03baa157d6bfb3781c4a1685b5462780891c3db5dba6275e9"
+    },
+    {
+      "path": "resources/app/out/main/main.js",
+      "sha256": "ae21ee6d2af02bd4fe38500a8c51c88d713838723e5bab857fd763ad09844720"
+    },
+    {
+      "path": "resources/app/out/main/provider-service.js",
+      "sha256": "9f5fa2079568b616dd3a6d6eb97b10aaeed63e1494658b96bd810770a43dfb2e"
+    },
+    {
+      "path": "resources/app/out/main/providers/index.js",
+      "sha256": "d35b6efe64781753d21e247e65ee1388fba1a4cc7650202678c7649fb45a836c"
+    },
+    {
+      "path": "resources/app/out/main/runtime/startup-performance-trace.js",
+      "sha256": "858192cf1b7ad482917d850f3f586e08ed270651c874e9914c41719256a590eb"
+    },
+    {
+      "path": "resources/app/out/main/version.js",
+      "sha256": "e962977533f4f344da5e2023f9ebb59bbf737abab76b716d97ba1fc137a789f3"
+    },
+    {
+      "path": "resources/app/out/preload/preload.js",
+      "sha256": "1cd6ef3550522fa372566886c818d715ac8158cbf4bc925028287a4d39c2ab93"
+    },
+    {
+      "path": "resources/app/out/renderer/assets/index-Dn3qWlAB.js",
+      "sha256": "6d8fc9b0548088344c6a9f87058386569f4a7830475b69eb671a5481a60d727b"
+    },
+    {
+      "path": "resources/app/out/renderer/index.html",
+      "sha256": "ed93f4eb0000df0d864ae4746ac4f70d13b006f14ef0cfeeb39b95a1e03fcf42"
+    },
+    {
+      "path": "resources/app/out/renderer/startup-performance-observer.js",
+      "sha256": "5a9bcae8ade157c739569d28a3f31fb1e386815d3fd57e5a70b5a95bf44f7893"
+    },
+    {
+      "path": "resources/app/package.json",
+      "sha256": "4c96675dfb95c76bb3cd4414c7036e135f3f7331b9a9d3472d6ca7c24a7fce14"
+    },
+    {
+      "path": "scripts/AGENTS.md",
+      "sha256": "3f627190fa54d9fb9436aa98b573518783229ebe7f47c2fc0d2af33abdcc3c0b"
+    },
+    {
+      "path": "scripts/test-manifest.js",
+      "sha256": "bf9e6b6a6c90f87d4c8cc07d061b4bbc228a5de01fd2682b7a5ebc190115a6c9"
+    },
+    {
+      "path": "scripts/test-v7.7.4-stability-infrastructure.js",
+      "sha256": "cbfca6828cf5a7709da8740a0e91bc1df034063241ce8e9f35997596bdce7731"
+    },
+    {
+      "path": "scripts/test-v7.8-main-modularization.js",
+      "sha256": "6e62c51400b8a74fcbca45f40d2bfca3de4815773396f75359ecafa20b75219d"
+    },
+    {
+      "path": "scripts/test-v8.14.1-frontend-content.js",
+      "sha256": "84b6710ffa04b8d54cf0c858d2416d7732ed01e591920251bd3056c0755bd411"
+    },
+    {
+      "path": "scripts/test-v9.0-ci-history.js",
+      "sha256": "bbf7b4d769f02991161aef729a6e38d253b3d68c1b6873dcb59419eb36b4e53c"
+    },
+    {
+      "path": "scripts/test-v9.0-independent-qa.js",
+      "sha256": "b84414a77ce6cbb25cf462130e2048d6a51f2f2204e52c261dc8251e4968357b"
+    },
+    {
+      "path": "scripts/test-v9.0-performance-trace.js",
+      "sha256": "026c894ffc347186157ee703d423d68aef115b50db968489763fe41e7630e945"
+    },
+    {
+      "path": "scripts/v9.0-performance-packaged-smoke.js",
+      "sha256": "1c94e1abbf653991fabfcde54009023fa0ec16f4382ad42a361183a206fdd7ed"
+    },
+    {
+      "path": "ui-theme-preview.html",
+      "sha256": "e8c9c0dc06293e43479aac40ad519d53649929efa07881a1b9d935672965c678"
+    }
+  ],
+  "sourceTreeSha256": "6c51f636d1941e244a8b19f08399fa74f60a067ddaf289da9c6cfc6b1c4cf641",
+  "descriptors": [
+    {
+      "path": "D:/SteamLibrary/steamapps/workshop/content/1158310/3346777360/descriptor.mod",
+      "version": "2.0.5",
+      "sha256": "c77060613e6cf45e9a2aa6b2215f4d689104a90d25791aa421794199a8fefa80"
+    },
+    {
+      "path": "E:/Documents/Paradox Interactive/Crusader Kings III/mod/ugc_3346777360.mod",
+      "version": "2.0.5",
+      "sha256": "9194b7cfa3e9f6d270bf5a24e7e75c94262e30e7830ebb46abf5448142311aa5"
+    }
+  ],
+  "workshopBridge": [
+    {
+      "path": "gui/custom_gui/letters_runner.gui",
+      "sha256": "2181018c19f3884dc13f49252ef0caa9ffd71c9951b4192f83cea654ea1a4e1a",
+      "unchanged": true
+    },
+    {
+      "path": "gui/custom_gui/votc_runtime_bridge.gui",
+      "sha256": "4d105bb42313d8da71514cacdf394799642c29869a0e41653a5cab8947d87155",
+      "unchanged": true
+    },
+    {
+      "path": "gui/event_windows/votc_invisible_event.gui",
+      "sha256": "fbf75b792f69f047427fcffa87d2a133eeb9cfbb2ce9cff1cee88c776b6b4bd3",
+      "unchanged": true
+    },
+    {
+      "path": "gui/event_window_widgets/event_window_widget_message_clear.gui",
+      "sha256": "162d17b1cca59a83a37fbeef1bf0f8055e6462083c1bddd6e691ca4043a89858",
+      "unchanged": true
+    },
+    {
+      "path": "gui/scripted_widgets/votc_runtime_bridge.txt",
+      "sha256": "dcfd3b6ddebc561f19f268f33efddf20550df0ace5d30f58bb6087ce065c9306",
+      "unchanged": true
+    },
+    {
+      "path": "common/on_action/votc_load_boundary.txt",
+      "sha256": "4f14470dbbefd198bf6736eb925040e47ec3c9a73c90bec20d41294860e60df1",
+      "unchanged": true
+    },
+    {
+      "path": "common/scripted_guis/votc_runtime_clock.txt",
+      "sha256": "fde0259f116a66e602b0fd7e7b14e617ec8680a35024b582f1f696e8ba1be004",
+      "unchanged": true
+    }
+  ],
+  "packagedSmoke": {
+    "status": "PASS",
+    "exitCode": 0,
+    "profiles": [
+      "disabled",
+      "enabled"
+    ],
+    "evidenceRoot": "C:/Users/97330/AppData/Local/Temp/votc-v9-performance-smoke-CTC0OD",
+    "screenshotSha256": "7ae1886d02c1df2cd293e7a4ffa094b25237fa762d7d093fb4b946ec991472d6",
+    "actualVersionReadback": {
+      "app": "9.0.0",
+      "title": "VOTC V9.0",
+      "footer": "V9.0 · Mod v2.0.5",
+      "tooltip": "VOTC App 9.0.0"
+    },
+    "ck3Configured": false,
+    "network": "BLOCKED"
+  },
+  "release": {
+    "status": "PASS",
+    "logFile": "votc-v9-version-final-release-20261011.log",
+    "groups": 409,
+    "classifiedTests": 478,
+    "archivedTests": 68,
+    "exitCode": 0,
+    "logSha256": "59d2ee63908c13f72f3bc362c1d411d5bc577140d918692856dd13da57c17cea",
+    "nodeVersion": "v24.13.0"
+  },
+  "remoteCi": "PENDING_USER_UPLOAD",
+  "ck3Live": "NOT_RUN",
+  "providerLive": "NOT_RUN",
+  "exeFileMetadata": "UNCHANGED_2.0.3",
+  "previousEvidence": "v9-local-evidence.json is the pre-version-alignment snapshot"
+}

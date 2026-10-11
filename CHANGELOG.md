@@ -2,6 +2,12 @@
 
 这里是版本变更的单一入口。详细设计和测试证据保留在链接目标中，本文件只维护版本顺序、用户可见摘要和文档索引。
 
+V9.0（2026-10-11，本地工程LOCAL_PASS）：[实施与验证](docs/current/v9/V9_0_VERIFICATION_REPORT.md)。冻结V8，保留历史反例修复CI checkout；加入默认关闭的有限脱敏性能诊断；Three-Mod工程和QA独立迁出，本体保留正式CK3 Bridge。本地409/409发布组和隔离实际窗口诊断通过；远端CI／实机采样待上传与复测，总体HOLD，未签发完整PASS。
+
+V9.0 版本对齐（2026-10-11）：[版本与验证](docs/current/v9/V9_VERSION_ALIGNMENT.md)。核心 9.0、App 包 9.0.0、VOTC Workshop Mod 2.0.5，前端与主题预览同步；Memory Engine 4.0、协议 3.0 和摘要存储 2.5 保持。AGENTS、README 与当前文档同步，历史记录不改写。
+
+以下兼容版本为V8历史记录，独立项目当前维护入口见 [CK3-Three-Mod-Compatibility](https://github.com/wsdsb-111/CK3-Three-Mod-Compatibility)。
+
 Three-Mod 1.0.6（2026-10-10）：[同级官职唯一持有](docs/v8.15.2-celestial-same-tier-office-report.md)。新同级任命必须交接旧同级官职，扩展至县、公、王、帝；各级分别保留最后获授目标，县携男爵领，世袭和其他政府例外保持。实际 CK3 结果仍待重启验收。
 
 Three-Mod 1.0.5（2026-10-10）：[王国平级调任复查](docs/v8.15.2-celestial-lateral-appointment-report.md)。保留平级候任，补查实际获授新王国后未交出的旧任命王国及其外区公爵；追加政府转换复查。多目标不猜测，世袭和军镇兼任保留。具体游戏结果仍待重启 CK3 验收。

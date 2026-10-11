@@ -24,6 +24,34 @@ const { CampaignIdentityResolver } = require("./historical-system/campaign-ident
 const { WorldlineStore } = require("./historical-system/worldline-store");
 const { DynamicHistoryService } = require("./historical-system/dynamic-history-service");
 const { Character } = require("./game-data/character");
+const { createStartupPerformanceTrace } = require("./runtime/startup-performance-trace");
+
+const performanceTrace = createStartupPerformanceTrace();
+const appLaunchSpan = performanceTrace.startSpan("app.launch", { attribution: "MAIN" });
+
+function traceMainOperation(step, operation, attribution = "MAIN") {
+  if (!performanceTrace.enabled) return operation();
+  let finish;
+  try { finish = performanceTrace.startSpan(step, { attribution }); } catch (_error) {}
+  let result;
+  try {
+    result = operation();
+  } catch (error) {
+    try { finish?.({ result: "ERROR", errorCode: "initialization_error" }); } catch (_traceError) {}
+    throw error;
+  }
+  if (result && typeof result.then === "function") {
+    return result.then((value) => {
+      try { finish?.({ result: "OK" }); } catch (_traceError) {}
+      return value;
+    }, (error) => {
+      try { finish?.({ result: "ERROR", errorCode: "initialization_error" }); } catch (_traceError) {}
+      throw error;
+    });
+  }
+  try { finish?.({ result: "OK" }); } catch (_traceError) {}
+  return result;
+}
 
 const log = require("electron-log");
 const electronUpdater = require("electron-updater");
@@ -352,7 +380,7 @@ const SettingsRepository = createSettingsRepository({
   defaultMainTemplatePath: DEFAULT_MAIN_TEMPLATE_PATH,
   legacyBundledPromptHashes: LEGACY_BUNDLED_PROMPT_HASHES
 });
-const settingsRepository = new SettingsRepository();
+const settingsRepository = traceMainOperation("settings.load", () => new SettingsRepository());
 const worldlineService = new WorldlineService({
   settingsRepository,
   dataDir: VOTC_DATA_DIR,
@@ -471,6 +499,7 @@ const llmManager = new LLMManager({
   providerRegistry,
   usageAnalytics,
   providerDiagnostics,
+  performanceTrace,
   TokenCounter,
   PromptBuilder,
   debugVerboseLLM: DEBUG_VERBOSE_LLM,
@@ -523,6 +552,7 @@ Conversation.configure({
   events,
   uuid,
   path,
+  performanceTrace,
   memoryEngine,
   worldlineService
 });
@@ -558,8 +588,24 @@ class ClipboardListener extends events.EventEmitter {
     this.isListening = false;
   }
   readClipboard() {
+    if (!performanceTrace.enabled) {
+      this.readClipboardOperation();
+      return;
+    }
+    const finish = performanceTrace.startSpan("background.clipboard.poll", { attribution: "MAIN" });
+    let result = "OK";
+    try {
+      result = this.readClipboardOperation();
+    } catch (error) {
+      result = "ERROR";
+      throw error;
+    } finally {
+      try { finish({ result, errorCode: result === "ERROR" ? "unknown_error" : undefined }); } catch (_traceError) {}
+    }
+  }
+  readClipboardOperation() {
     let currentClipboard = electron.clipboard.readText();
-    if (this.previousClipboard == currentClipboard) return;
+    if (this.previousClipboard == currentClipboard) return "SKIPPED";
     if (currentClipboard.startsWith("VOTC:")) {
       let command = currentClipboard.split(":")[1];
       switch (command) {
@@ -580,6 +626,7 @@ class ClipboardListener extends events.EventEmitter {
     } else {
       this.previousClipboard = electron.clipboard.readText();
     }
+    return "OK";
   }
 }
 function initLogger() {
@@ -907,7 +954,7 @@ memoryEngine.letterMemoryFinalization = new LetterMemoryFinalization({
 const { createLetterManager } = require("./letters/letter-manager");
 const { LetterManager, LetterResponseStatus, LetterSummaryStatus } = createLetterManager({
   settingsRepository, fs: fs$1, path, TailFile: LetterLogReader, readline: readline$1, parseLog,
-  letterPromptBuilder, llmManager, PromptBuilder, TokenCounter, memoryEngine, dataDir: VOTC_DATA_DIR, letterEffectTransport, runFileManager, scanRunAcksForPendingCommands, autoStartLogTailing: false
+  letterPromptBuilder, llmManager, PromptBuilder, TokenCounter, memoryEngine, dataDir: VOTC_DATA_DIR, letterEffectTransport, runFileManager, scanRunAcksForPendingCommands, autoStartLogTailing: false, performanceTrace
 });
 const letterManager = new LetterManager();
 const initializeRunCommandQueue = async () => {
@@ -987,6 +1034,7 @@ const setupIpcHandlers = () => {
     SummariesManager,
     memoryEngine,
     worldlineService,
+    performanceTrace,
     get chatWindow() {
       return chatWindow;
     }
@@ -1012,15 +1060,21 @@ electron.app.on("ready", async () => {
   console.log(electron.app.getPath("userData"));
   clearLog();
   settingsRepository.migrateProviderSecrets();
-  promptConfigManager.seedDefaults();
+  traceMainOperation("prompt.seed", () => promptConfigManager.seedDefaults());
   try {
-    await initializeRunCommandQueue();
+    await traceMainOperation("runqueue.recovery", () => initializeRunCommandQueue());
   } catch (error) {
     console.error("Run Command Queue startup recovery failed; dispatch remains disabled:", error);
   }
   setupIpcHandlers();
-  worldlineService.start().catch((error) => console.error("[Worldline] Startup failed:", error));
-  chatWindow = createWindow();
+  traceMainOperation("worldline.start", () => worldlineService.start()).catch((error) => console.error("[Worldline] Startup failed:", error));
+  try {
+    chatWindow = createWindow();
+    appLaunchSpan({ result: "OK" });
+  } catch (error) {
+    try { appLaunchSpan({ result: "ERROR", errorCode: "initialization_error" }); } catch (_traceError) {}
+    throw error;
+  }
   appUpdater.setMainWindow(chatWindow);
   if (electron.app.isPackaged && VOTC_FORK_IDENTITY.autoUpdateEnabled) {
     appUpdater.checkForUpdates();
@@ -1066,7 +1120,7 @@ electron.app.on("ready", async () => {
       console.log("Creating new chat window");
       chatWindow = createWindow();
     }
-    conversationManager.createConversation();
+    traceMainOperation("ck3.gameLoad", () => conversationManager.createConversation(), "CK3_LOG");
     chatWindow.show();
     chatWindow.focus();
     chatWindow.webContents.send("chat-reset");

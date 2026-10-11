@@ -38,6 +38,44 @@ let uuid = null;
 let path = null;
 let memoryEngine = null;
 let worldlineService = null;
+let performanceTrace = null;
+
+function startTraceSpan(trace, step, fields) {
+  try {
+    return trace?.enabled ? trace.startSpan(step, fields) : null;
+  } catch (_error) {
+    return null;
+  }
+}
+
+function finishTraceSpan(finish, fields) {
+  try {
+    finish?.(fields);
+  } catch (_error) {}
+}
+
+function traceOperation(trace, step, fields, operation) {
+  if (!trace?.enabled) return operation();
+  const finish = startTraceSpan(trace, step, fields);
+  let result;
+  try {
+    result = operation();
+  } catch (error) {
+    finishTraceSpan(finish, { result: "ERROR", errorCode: "initialization_error" });
+    throw error;
+  }
+  if (result && typeof result.then === "function") {
+    return result.then((value) => {
+      finishTraceSpan(finish, { result: "OK" });
+      return value;
+    }, (error) => {
+      finishTraceSpan(finish, { result: error instanceof Error && error.message === "AbortError: Message cancelled" ? "CANCELLED" : "ERROR", errorCode: "initialization_error" });
+      throw error;
+    });
+  }
+  finishTraceSpan(finish, { result: "OK" });
+  return result;
+}
 
 const TEMPORARY_ABSENCE_MODES = Object.freeze({
   unconscious: {
@@ -81,6 +119,7 @@ class Conversation {
     path = dependencies.path || path;
     memoryEngine = dependencies.memoryEngine || memoryEngine;
     worldlineService = dependencies.worldlineService || worldlineService;
+    performanceTrace = dependencies.performanceTrace || performanceTrace;
     return this;
   }
   static buildPromptBlockMetadata(promptBuild = {}) {
@@ -163,6 +202,7 @@ class Conversation {
     this.runtime = createConversationRuntime(this, {
       recordSkipped: (responseState, reason) => this.recordGenerationSkippedAnalytics(responseState, reason)
     });
+    this.performanceTraceContext = performanceTrace?.enabled ? performanceTrace.forConversation(this.id) : null;
     this.turnManager = this.runtime.turnManager;
     this.generationManager = this.runtime.generationManager;
     this.referenceContext = this.runtime.referenceContext;
@@ -198,12 +238,14 @@ class Conversation {
     return gameData;
   }
   async initializeGameData() {
+    const conversationOpenSpan = startTraceSpan(performanceTrace, "conversation.open", { attribution: "MAIN" });
     const ck3DebugPath = settingsRepository.getCK3DebugLogPath();
     console.log(`Conversation.initializeGameData: CK3 debug log path: ${ck3DebugPath}`);
     if (!runFileManager.isAvailable()) {
       console.warn("Conversation.initializeGameData: RunFileManager not available - CK3 path not configured");
     }
     if (!ck3DebugPath) {
+      finishTraceSpan(conversationOpenSpan, { result: "ERROR", errorCode: "initialization_error" });
       console.error("Conversation.initializeGameData: CK3 debug log path is not configured");
       this.isActive = false;
       const initError = createError({
@@ -216,25 +258,27 @@ class Conversation {
       return;
     }
     try {
-      this.gameData = await this.parseCK3GameData(ck3DebugPath);
+      this.gameData = await traceOperation(performanceTrace, "gameData.logParse", { attribution: "MAIN" }, () => this.parseCK3GameData(ck3DebugPath));
       this.gameDataRevision += 1;
       this.gameData.gameDataRevision = this.gameDataRevision;
       console.log("GameData initialized with", this.gameData.characters.size, "characters");
       this.captureSummaryParticipantProfiles(this.gameData.characters.values());
       this.initializePresence();
-      this.gameData.loadCharactersSummaries();
-      this.captureDisclosureProfiles();
-      this.observeVisibleTraits();
-      this.gameData.syncOfficialRecollectionSummaries?.(this.id);
-      this.worldlinePrefetchPromise = this.prefetchFrozenWorldline().catch((error) => {
+      traceOperation(performanceTrace, "summary.load", { attribution: "MAIN", count: this.gameData.characters.size }, () => this.gameData.loadCharactersSummaries());
+      traceOperation(performanceTrace, "knowledge.disclosureSnapshot", { attribution: "MAIN", count: (this.selectedCharacterIds?.size || 0) + 1 }, () => this.captureDisclosureProfiles());
+      traceOperation(performanceTrace, "knowledge.directObservation", { attribution: "MAIN", count: this.presentCharacterIds?.size || 0 }, () => this.observeVisibleTraits());
+      traceOperation(performanceTrace, "officialRecollection.sync", { attribution: "MAIN" }, () => this.gameData.syncOfficialRecollectionSummaries?.(this.id));
+      this.worldlinePrefetchPromise = traceOperation(performanceTrace, "worldline.frozenPrefetch", { attribution: "MAIN" }, () => this.prefetchFrozenWorldline()).catch((error) => {
         console.warn("[Worldline] Conversation-opening recall failed:", error.message);
       });
       this.isActive = true;
       this.emitUpdate();
-      this.memoryRecoveryPromise = Promise.resolve().then(() => this.recoverPendingMemories()).catch((error) => {
+      this.memoryRecoveryPromise = Promise.resolve().then(() => traceOperation(performanceTrace, "memoryRecovery.pending", { attribution: "MAIN" }, () => this.recoverPendingMemories())).catch((error) => {
         console.error("[Summary] Background recovery failed; snapshots retained:", error);
       });
+      finishTraceSpan(conversationOpenSpan, { result: "OK", count: this.gameData.characters.size });
     } catch (error) {
+      finishTraceSpan(conversationOpenSpan, { result: "ERROR", errorCode: "initialization_error" });
       console.error("Failed to parse log file:", error);
       this.isActive = false;
       const initError = createError({
@@ -425,7 +469,7 @@ class Conversation {
       patchFilteredCount: patch?.filteredCount || 0, patchSecretBlockedCount: patch?.secretBlockedCount || 0 }, null);
     return patch?.patchText || null;
   }
-  async checkAndSummarizeIfNeeded(npc) {
+  async checkAndSummarizeIfNeeded(npc, diagnosticsContext = null) {
     memoryEngine?.syncRollingStateFromConversationFields(this);
     memoryEngine?.syncConversationRollingFields(this);
     const capabilities = typeof llmManager.getProviderCapabilities === "function"
@@ -433,7 +477,7 @@ class Conversation {
       : { contextWindow: await llmManager.getCurrentContextLength() || 1e4, maxOutputTokens: 256 };
     const contextLimit = capabilities.contextWindow;
     const memoryRecallStartedAt = Date.now();
-    let memoryContext = await this.getMemoryContextFor(npc, contextLimit);
+    let memoryContext = await traceOperation(performanceTrace, "memory.recall", { attribution: "MAIN", context: diagnosticsContext }, () => this.getMemoryContextFor(npc, contextLimit));
     const memoryRecallMs = Date.now() - memoryRecallStartedAt;
     const promptHistory = this.getPromptHistoryForCharacter(npc.id);
     const promptSummary = this.getPromptSummaryForCharacter(npc.id);
@@ -487,7 +531,7 @@ class Conversation {
             characters: this.gameData.characters,
             asOf: this.gameData.date || null
           });
-          const historical = await worldlineService.getSubjectivePromptContextAsync({
+          const historical = await traceOperation(performanceTrace, "worldline.turnQuery", { attribution: "MAIN", context: diagnosticsContext }, () => worldlineService.getSubjectivePromptContextAsync({
             runtimeGameData: this.gameData,
             responderId: npc.id,
             query: request.query || "",
@@ -502,7 +546,7 @@ class Conversation {
             directObservationFacts,
             historicalReferenceInfo: this.gameData.historicalReferenceInfo,
             tokenBudget: resolveWorldlineTurnBudget({ contextLimit, basePromptTokens: estimatedTokens }).turnBudget
-          });
+          }));
           if (historical?.metrics?.historicalTimeMode) memoryContext = {
             ...memoryContext,
             historicalWorldText: historical.worldTurnRecallText || null,
@@ -513,17 +557,17 @@ class Conversation {
         }
       } else if (productionWorldlineEnabled && hint.mode === "RECENT") {
         try {
-          const recent = await worldlineService.getSubjectivePromptContextAsync({ runtimeGameData: this.gameData, responderId: npc.id,
+          const recent = await traceOperation(performanceTrace, "worldline.turnQuery", { attribution: "MAIN", context: diagnosticsContext }, () => worldlineService.getSubjectivePromptContextAsync({ runtimeGameData: this.gameData, responderId: npc.id,
             query: request.query || "", assistContext: request.assistContext || "", mentionedEntityIds: request.mentionedEntityIds || [],
             activeParticipantIds: this.getActiveConversationCharacters().map(character => character.id), conversationId: this.id,
-            turnEpoch: this.turnEpoch, tokenBudget: 300 });
+            turnEpoch: this.turnEpoch, tokenBudget: 300 }));
           memoryContext = { ...memoryContext, recentWorldText: recent?.worldTurnRecallText || null };
         } catch (error) {
           console.warn("[Worldline] Recent recall failed; continuing with frozen world view:", error.message);
         }
       } else if (productionWorldlineEnabled && ["CURRENT", "UNSPECIFIED"].includes(hint.mode)) {
         try {
-          memoryContext = { ...memoryContext, coveragePatchText: this.getWorldlineCoveragePatchFor?.(npc, memoryContext) || null };
+          memoryContext = { ...memoryContext, coveragePatchText: traceOperation(performanceTrace, "worldline.turnQuery", { attribution: "MAIN", context: diagnosticsContext }, () => this.getWorldlineCoveragePatchFor?.(npc, memoryContext)) || null };
         } catch (error) {
           console.warn("[Worldline] Coverage patch failed; continuing with frozen world view:", error.message);
         }
@@ -543,8 +587,8 @@ class Conversation {
       const initialBudget = resolveWorldlineTurnBudget({ contextLimit, basePromptTokens: estimatedTokens });
       const remainingContext = initialBudget.remainingContext;
       try {
-        await worldlineService.prepareCanon?.();
-        let subjectiveWorldContext = await worldlineService.getSubjectivePromptContextAsync({
+        await traceOperation(performanceTrace, "worldline.turnQuery", { attribution: "MAIN", context: diagnosticsContext }, () => worldlineService.prepareCanon?.());
+        let subjectiveWorldContext = await traceOperation(performanceTrace, "worldline.turnQuery", { attribution: "MAIN", context: diagnosticsContext }, () => worldlineService.getSubjectivePromptContextAsync({
           runtimeGameData: this.gameData,
           responderId: npc.id,
           query: request.query || "",
@@ -559,7 +603,7 @@ class Conversation {
           directObservationFacts,
           historicalReferenceInfo: this.gameData.historicalReferenceInfo,
           tokenBudget: initialBudget.turnBudget
-        }) || null;
+        })) || null;
         const stableTokens = TokenCounter.estimateTokens(subjectiveWorldContext?.worldStableText || "");
         if (subjectiveWorldContext && stableTokens > remainingContext) {
           subjectiveWorldContext = {
@@ -570,7 +614,7 @@ class Conversation {
             worldTurnRecallTrimmed: [...(subjectiveWorldContext.worldTurnRecallTrimmed || []), { factId: null, sourceTier: null, reason: "WORLD_STABLE_CONTEXT_HEADROOM" }]
           };
         } else if (subjectiveWorldContext && stableTokens + (subjectiveWorldContext.worldTurnRecallTokens || 0) > remainingContext) {
-          subjectiveWorldContext = await worldlineService.getSubjectivePromptContextAsync({
+          subjectiveWorldContext = await traceOperation(performanceTrace, "worldline.turnQuery", { attribution: "MAIN", context: diagnosticsContext }, () => worldlineService.getSubjectivePromptContextAsync({
             runtimeGameData: this.gameData,
             responderId: npc.id,
             query: request.query || "",
@@ -585,7 +629,7 @@ class Conversation {
             directObservationFacts,
             historicalReferenceInfo: this.gameData.historicalReferenceInfo,
             tokenBudget: resolveWorldlineTurnBudget({ contextLimit, basePromptTokens: estimatedTokens, stableWorldTokens: stableTokens }).turnBudget
-          }) || null;
+          })) || null;
         }
         memoryContext = {
           ...memoryContext,
@@ -1257,6 +1301,10 @@ class Conversation {
       console.log(`[Conversation] Skipping unavailable NPC response: ${npc?.shortName || npc?.id || "unknown"}`);
       return;
     }
+    let diagnosticsContext = null;
+    try { diagnosticsContext = this.performanceTraceContext?.nextTurn?.() || null; } catch (_error) {}
+    const conversationTurnSpan = startTraceSpan(performanceTrace, "conversation.turn", { attribution: "MAIN", context: diagnosticsContext });
+    let conversationTurnResult = "OK";
     // Clear mentioned characters from previous message
     // NOTE: We don't clear the cache here because we want to reuse it
     // within the same conversation if the player hasn't sent new messages
@@ -1283,18 +1331,18 @@ class Conversation {
     let wasCancelled = false;
     let streamCompleted = false;
     try {
-      const memoryContext = await this.checkAndSummarizeIfNeeded(npc);
+      const memoryContext = await this.checkAndSummarizeIfNeeded(npc, diagnosticsContext);
       if (!this.isResponseCurrent(responseState, npc)) throw new Error("AbortError: Message cancelled");
       const promptBuildStartedAt = Date.now();
       const activeConfig = settingsRepository.getActiveProviderConfig();
-      const promptBuild = PromptBuilder.buildMessagesWithTokenCount(
+      const promptBuild = traceOperation(performanceTrace, "prompt.build", { attribution: "MAIN", context: diagnosticsContext }, () => PromptBuilder.buildMessagesWithTokenCount(
         this.getPromptHistoryForCharacter(npc.id),
         npc,
         this.gameData,
         this.getPromptSummaryForCharacter(npc.id),
         memoryContext,
         activeConfig
-      );
+      ));
       const promptBuildMs = Date.now() - promptBuildStartedAt;
       const llmMessages = promptBuild.messages;
       const promptBlockMetadata = Conversation.buildPromptBlockMetadata(promptBuild);
@@ -1305,7 +1353,8 @@ class Conversation {
       const worldlineTokens = promptBlockTokens("worldline-stable") + promptBlockTokens("worldline-turn-recall");
       const totalMemoryTokens = promptBlockTokens("memory-stable") + promptBlockTokens("memory-direct-frozen") + mentionedSnapshotTokens + promptBlockTokens("memory-temporal-extra") + promptBlockTokens("memory-session-topic-anchor") + turnRecallTokens + thirdPartyEvidenceTokens;
       logVerboseLLM(`[Conversation][verbose] Prompt for ${npc.fullName}:`, llmMessages);
-      console.log(`[TOKEN_COUNT] Message from ${npc.fullName}:`, this.estimateTokenCount(llmMessages));
+      const estimatedTokenCount = traceOperation(performanceTrace, "tokenEstimate", { attribution: "MAIN", context: diagnosticsContext, count: llmMessages.length }, () => this.estimateTokenCount(llmMessages));
+      console.log(`[TOKEN_COUNT] Message from ${npc.fullName}:`, estimatedTokenCount);
       const isOpenRouter = activeConfig?.providerType === "openrouter";
       const result = await llmManager.sendChatRequest(
         llmMessages,
@@ -1315,6 +1364,7 @@ class Conversation {
           requestType: "chat",
           conversationId: this.id,
           responderId: npc.id,
+          ...(diagnosticsContext ? { performanceTraceContext: diagnosticsContext } : {}),
           character: npc.shortName,
           characterId: npc.id,
           blocks: promptBlockMetadata.blocks,
@@ -1423,7 +1473,7 @@ class Conversation {
           const outcome = validateGenerationOutcome(finalResponse);
           chatCachedTokens = outcome.cachedTokens;
           if (outcome.truncated) {
-            placeholder.content = await this.completeTruncatedResponse(llmMessages, placeholder.content, responseState, npc);
+            placeholder.content = await this.completeTruncatedResponse(llmMessages, placeholder.content, responseState, npc, diagnosticsContext);
             this.emitUpdate();
           } else if (!outcome.complete) {
             throw new Error(`chat_generation_incomplete:${outcome.finishReason || "unknown"}`);
@@ -1448,7 +1498,7 @@ class Conversation {
         chatCachedTokens = outcome.cachedTokens;
         if (!outcome.complete && !outcome.truncated) throw new Error(`chat_generation_incomplete:${outcome.finishReason || "unknown"}`);
         placeholder.content = outcome.truncated
-          ? await this.completeTruncatedResponse(llmMessages, result.content, responseState, npc)
+          ? await this.completeTruncatedResponse(llmMessages, result.content, responseState, npc, diagnosticsContext)
           : result.content;
         placeholder.streamStatus = "generating";
         this.emitUpdate();
@@ -1465,10 +1515,12 @@ class Conversation {
     } catch (error) {
       const staleResponse = responseState.stale || controller.signal.aborted || !this.isResponseCurrent(responseState, npc) || error instanceof Error && error.message === "AbortError: Message cancelled";
       if (staleResponse) {
+        conversationTurnResult = "CANCELLED";
         wasCancelled = true;
         this.messages = this.messages.filter((msg) => msg.id !== msgId || !msg.isStreaming);
         this.recordGenerationSkipped(responseState, responseState.staleReason || (this.isCharacterAvailableForConversation(npc) ? "stale_generation" : "inactive_participant_generation"));
       } else {
+        conversationTurnResult = "ERROR";
         this.getGenerationManager().fail(responseState);
         console.error("Failed to get response for", npc.shortName, ":", error);
         this.messages = this.messages.filter((msg) => msg.id !== msgId);
@@ -1481,7 +1533,11 @@ class Conversation {
         if (this.npcQueue.length > 0) this.pauseConversation();
       }
     } finally {
-      this.getGenerationManager().finish(responseState, { wasCancelled });
+      try {
+        this.getGenerationManager().finish(responseState, { wasCancelled });
+      } finally {
+        finishTraceSpan(conversationTurnSpan, { result: conversationTurnResult, errorCode: conversationTurnResult === "ERROR" ? "provider_error" : undefined });
+      }
     }
   }
   async evaluateCompletedActions(npc, npcMessageId, npcMessage, responseState) {
@@ -1496,7 +1552,7 @@ class Conversation {
     }
     await this.handleActionResults(npcMessageId, npc, actionResults);
   }
-  async completeTruncatedResponse(originalMessages, partialContent, responseState, npc) {
+  async completeTruncatedResponse(originalMessages, partialContent, responseState, npc, diagnosticsContext = null) {
     if (!partialContent?.trim()) throw new Error("chat_generation_truncated_without_content");
     const continuationMessages = [
       ...originalMessages,
@@ -1507,6 +1563,7 @@ class Conversation {
       requestType: "chat_continuation",
       conversationId: this.id,
       responderId: npc.id,
+      ...(diagnosticsContext ? { performanceTraceContext: diagnosticsContext } : {}),
       continuationAttempt: 1
     });
     if (!this.isResponseCurrent(responseState, npc)) throw new Error("AbortError: Message cancelled");

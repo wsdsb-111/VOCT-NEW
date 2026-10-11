@@ -1,0 +1,80 @@
+{
+  "B-MEM-01": {
+    "behavior": "Campaign/Owner/跨NPC隔离",
+    "tests": [
+      "test-v8.15.2-stranger-memory-isolation-qa.js"
+    ]
+  },
+  "B-MEM-02": {
+    "behavior": "Forget/Tombstone及重启不复活",
+    "tests": [
+      "test-v8.15-durable-forget.js"
+    ]
+  },
+  "B-MEM-03": {
+    "behavior": "合法Presence/直接观察/Disclosure",
+    "tests": [
+      "test-v8.14.1-opening-presence.js",
+      "test-v8.15.1-disclosure.js"
+    ]
+  },
+  "B-MEM-04": {
+    "behavior": "Narrative provenance及事件/获知时间",
+    "tests": [
+      "test-v8.15.2-derived-acquisition-independent-qa.js"
+    ]
+  },
+  "B-MEM-05": {
+    "behavior": "Legacy保守读取与迁移",
+    "tests": [
+      "test-v8.15-legacy-recall.js"
+    ]
+  },
+  "B-WORLD-01": {
+    "behavior": "Current Truth与时点历史边界",
+    "tests": [
+      "test-v8.15.2-world-memory-scope-audit.js"
+    ]
+  },
+  "B-ACT-01": {
+    "behavior": "FIFO/ACK/CONFIRMED及STALLED不重放",
+    "tests": [
+      "test-v7.10-rc6-rev3-run-command-recovery.js",
+      "test-v8.8.4-incident-regression.js"
+    ]
+  },
+  "B-LETTER-01": {
+    "behavior": "LOAD/DATE及收信一次归档",
+    "tests": [
+      "test-v8.15.2-letter-receipt-startup-recovery.js",
+      "test-v8.15.2-outbound-bridge.js"
+    ]
+  },
+  "B-PROMPT-01": {
+    "behavior": "Provider不使用越权或被忘记忆",
+    "tests": [
+      "test-v8.15.1-recall-ui.js",
+      "test-v8.15.1-disclosure.js"
+    ]
+  },
+  "B-UI-01": {
+    "behavior": "三主题/Memory页面与异步状态",
+    "tests": [
+      "test-v8.14-e-memory-ui.js",
+      "test-v8.15.2-ui-races.js"
+    ]
+  },
+  "B-PERF-01": {
+    "behavior": "默认关闭/有界诊断/错误隔离",
+    "tests": [
+      "test-v9.0-performance-trace.js",
+      "test-v9.0-independent-qa.js"
+    ]
+  },
+  "B-MOD-01": {
+    "behavior": "独立兼容非生产必需/保留Bridge",
+    "tests": [
+      "test-v9.0-independent-qa.js"
+    ]
+  }
+}

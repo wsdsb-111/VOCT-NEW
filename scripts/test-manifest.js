@@ -77,6 +77,8 @@ const archivedChecks = [
 ];
 
 const releaseChecks = [
+  { group: "v9.0-performance-trace", script: "test-v9.0-performance-trace.js" },
+  { group: "v9.0-independent-diagnostics-qa", script: "test-v9.0-independent-qa.js" },
   { group: "v8.15.2-letter-receipt-startup-recovery", script: "test-v8.15.2-letter-receipt-startup-recovery.js" },
   { group: "v8.15.2-date-scan-incremental", script: "test-v8.15.2-date-scan-incremental.js" },
   { group: "v8.15.2-derived-budget-split", script: "test-v8.15.2-derived-budget-split.js" },
@@ -89,6 +91,7 @@ const releaseChecks = [
   { group: "v8.15.2-derived-acquisition-independent-qa", script: "test-v8.15.2-derived-acquisition-independent-qa.js" },
   { group: "v8.15.2-letter-timer-retirement-qa", script: "test-v8.15.2-letter-timer-retirement-qa.js" },
   { group: "v8.15.2-letter-archive-independent-qa", script: "test-v8.15.2-letter-archive-independent-qa.js" },
+  { group: "v9.0-ci-history", script: "test-v9.0-ci-history.js" },
   { group: "v8.15.2-confirmed-letter-memory-repair", script: "test-v8.15.2-confirmed-letter-memory-repair.js" },
   { group: "v8.15.1-worldline-adapter", script: "test-v8.15.1-worldline-adapter.js" },
   { group: "v8.15.1-memory-recovery", script: "test-v8.15.1-memory-recovery.js" },
@@ -183,9 +186,6 @@ const releaseChecks = [
   { group: "v8.12.1.2-review-closure", script: "test-v8.12.1.2-review-closure.js" },
   { group: "v8.13-frozen-worldline-prefix", script: "test-v8.13-frozen-worldline-prefix.js" },
   { group: "v8.14.1-opening-presence", script: "test-v8.14.1-opening-presence.js" },
-  { group: "three-mod-character-name-compatibility", script: "test-three-mod-character-name-compatibility.js" },
-  { group: "v8.15.2-celestial-office-release", script: "test-v8.15.2-celestial-office-release.js" },
-  { group: "v8.15.2-celestial-office-independent-qa", script: "test-v8.15.2-celestial-office-independent-qa.js" },
   { group: "v8.14.1-letter-knowledge", script: "test-v8.14.1-letter-knowledge.js" },
   { group: "v8.13.1-worldline-coverage", script: "test-v8.13.1-worldline-coverage.js" },
   { group: "v8.13.2-temporal-recall", script: "test-v8.13.2-temporal-recall.js" },
