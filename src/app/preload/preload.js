@@ -1,0 +1,251 @@
+"use strict";
+const electron = require("electron");
+electron.contextBridge.exposeInMainWorld("electronAPI", {
+  /**
+   * Sends a message to the main process to set the window's mouse event ignoring state.
+   * @param ignore True to ignore mouse events (click-through), false to capture them.
+   */
+  setIgnoreMouseEvents: (ignore) => {
+    electron.ipcRenderer.send("set-ignore-mouse-events", ignore);
+  },
+  toggleConfigPanel: () => electron.ipcRenderer.invoke("toggle-config-panel"),
+  hideWindow: () => electron.ipcRenderer.send("chat-hide"),
+  onChatReset: (callback) => {
+    electron.ipcRenderer.on("chat-reset", callback);
+    return () => electron.ipcRenderer.removeListener("chat-reset", callback);
+  },
+  onToggleSettings: (callback) => {
+    electron.ipcRenderer.on("toggle-settings", callback);
+    return () => electron.ipcRenderer.removeListener("toggle-settings", callback);
+  },
+  onHideChat: (callback) => {
+    electron.ipcRenderer.on("chat-hide", callback);
+    return () => electron.ipcRenderer.removeListener("chat-hide", callback);
+  },
+  onToggleMinimize: (callback) => {
+    electron.ipcRenderer.on("toggle-minimize", callback);
+    return () => electron.ipcRenderer.removeListener("toggle-minimize", callback);
+  },
+  openExternal: (url) => electron.ipcRenderer.invoke("shell:openExternal", url),
+  openPlayer2: () => electron.ipcRenderer.invoke("shell:openPlayer2"),
+  collectAndOpenLogs: () => electron.ipcRenderer.invoke("logs:collectAndOpen"),
+  getAppVersion: () => electron.ipcRenderer.invoke("app:getVersion"),
+  onOverlayVisibilityChange: (callback) => {
+    const subscription = (_event, value) => callback(value);
+    electron.ipcRenderer.on("overlay-visibility-change", subscription);
+    return () => electron.ipcRenderer.removeListener("overlay-visibility-change", subscription);
+  }
+});
+electron.contextBridge.exposeInMainWorld("llmConfigAPI", {
+  getAppSettings: () => electron.ipcRenderer.invoke("llm:getAppSettings"),
+  saveProviderConfig: (config) => electron.ipcRenderer.invoke("llm:saveProviderConfig", config),
+  deletePreset: (instanceId) => electron.ipcRenderer.invoke("llm:deletePreset", instanceId),
+  // Renamed
+  setActiveProvider: (instanceId) => electron.ipcRenderer.invoke("llm:setActiveProvider", instanceId),
+  listModels: () => electron.ipcRenderer.invoke("llm:listModels"),
+  testConnection: () => electron.ipcRenderer.invoke("llm:testConnection"),
+  checkPlayer2Health: () => electron.ipcRenderer.invoke("llm:checkPlayer2Health"),
+  setCK3Folder: (path) => electron.ipcRenderer.invoke("llm:setCK3Folder", path),
+  setModLocationPath: (path) => electron.ipcRenderer.invoke("llm:setModLocationPath", path),
+  selectFolder: () => electron.ipcRenderer.invoke("dialog:selectFolder"),
+  saveGlobalStreamSetting: (enabled) => electron.ipcRenderer.invoke("llm:saveGlobalStreamSetting", enabled),
+  savePauseOnRegenerationSetting: (enabled) => electron.ipcRenderer.invoke("llm:savePauseOnRegenerationSetting", enabled),
+  saveGenerateFollowingMessagesSetting: (enabled) => electron.ipcRenderer.invoke("llm:saveGenerateFollowingMessagesSetting", enabled),
+  saveMessageFontSize: (fontSize) => electron.ipcRenderer.invoke("llm:saveMessageFontSize", fontSize),
+  saveShowSettingsOnStartupSetting: (enabled) => electron.ipcRenderer.invoke("llm:saveShowSettingsOnStartupSetting", enabled),
+  getLanguage: () => electron.ipcRenderer.invoke("llm:getLanguage"),
+  saveLanguage: (language) => electron.ipcRenderer.invoke("llm:saveLanguage", language),
+  getAllowPrerelease: () => electron.ipcRenderer.invoke("llm:getAllowPrerelease"),
+  saveAllowPrerelease: (allow) => electron.ipcRenderer.invoke("llm:saveAllowPrerelease", allow),
+  getCurrentContextLength: () => electron.ipcRenderer.invoke("llm:getCurrentContextLength"),
+  getMaxContextLength: () => electron.ipcRenderer.invoke("llm:getMaxContextLength"),
+  setCustomContextLength: (contextLength) => electron.ipcRenderer.invoke("llm:setCustomContextLength", contextLength),
+  clearCustomContextLength: () => electron.ipcRenderer.invoke("llm:clearCustomContextLength"),
+  // Provider override methods
+  getActionsProviderId: () => electron.ipcRenderer.invoke("llm:getActionsProviderId"),
+  setActionsProviderId: (instanceId) => electron.ipcRenderer.invoke("llm:setActionsProviderId", instanceId),
+  getSummaryProviderId: () => electron.ipcRenderer.invoke("llm:getSummaryProviderId"),
+  setSummaryProviderId: (instanceId) => electron.ipcRenderer.invoke("llm:setSummaryProviderId", instanceId),
+  getActionApprovalSettings: () => electron.ipcRenderer.invoke("llm:getActionApprovalSettings"),
+  saveActionApprovalSettings: (settings) => electron.ipcRenderer.invoke("llm:saveActionApprovalSettings", settings),
+  getSummaryPromptSettings: () => electron.ipcRenderer.invoke("llm:getSummaryPromptSettings"),
+  saveSummaryPromptSettings: (settings) => electron.ipcRenderer.invoke("llm:saveSummaryPromptSettings", settings)
+});
+electron.contextBridge.exposeInMainWorld("promptsAPI", {
+  getSettings: () => electron.ipcRenderer.invoke("prompts:getSettings"),
+  saveSettings: (settings) => electron.ipcRenderer.invoke("prompts:saveSettings", settings),
+  getLetterSettings: () => electron.ipcRenderer.invoke("prompts:getLetterSettings"),
+  saveLetterSettings: (settings) => electron.ipcRenderer.invoke("prompts:saveLetterSettings", settings),
+  listFiles: (category) => electron.ipcRenderer.invoke("prompts:list", category),
+  readFile: (relativePath) => electron.ipcRenderer.invoke("prompts:readFile", relativePath),
+  saveFile: (relativePath, content) => electron.ipcRenderer.invoke("prompts:saveFile", relativePath, content),
+  getDefaultMain: () => electron.ipcRenderer.invoke("prompts:getDefaultMain"),
+  getDefaultLetterMain: () => electron.ipcRenderer.invoke("prompts:getDefaultLetterMain"),
+  listPresets: () => electron.ipcRenderer.invoke("prompts:listPresets"),
+  savePreset: (preset) => electron.ipcRenderer.invoke("prompts:savePreset", preset),
+  deletePreset: (id) => electron.ipcRenderer.invoke("prompts:deletePreset", id),
+  openPromptsFolder: () => electron.ipcRenderer.invoke("prompts:openPromptsFolder"),
+  openPromptFile: (relativePath) => electron.ipcRenderer.invoke("prompts:openPromptFile", relativePath),
+  exportZip: (payload) => electron.ipcRenderer.invoke("prompts:exportZip", payload),
+  validateTemplate: (templateString) => electron.ipcRenderer.invoke("prompts:validateTemplate", templateString)
+});
+electron.contextBridge.exposeInMainWorld("lettersAPI", {
+  getPromptPreview: () => electron.ipcRenderer.invoke("letter:getPromptPreview"),
+  getStatuses: () => electron.ipcRenderer.invoke("letters:getStatuses"),
+  getLetterDetails: (letterId) => electron.ipcRenderer.invoke("letters:getLetterDetails", letterId),
+  runEffectDiagnostic: (stage, letterId) => electron.ipcRenderer.invoke("letters:runEffectDiagnostic", { stage, letterId }),
+  resyncGameDate: () => electron.ipcRenderer.invoke("letters:resyncGameDate"),
+  retryBlockedRunCommand: (commandId) => electron.ipcRenderer.invoke("letters:retryBlockedRunCommand", commandId),
+  cancelBlockedRunCommand: (commandId) => electron.ipcRenderer.invoke("letters:cancelBlockedRunCommand", commandId),
+  retryStalledRunCommand: (commandId) => electron.ipcRenderer.invoke("letters:retryStalledRunCommand", commandId),
+  cancelStalledRunCommand: (commandId) => electron.ipcRenderer.invoke("letters:cancelStalledRunCommand", commandId),
+  confirmEffectDiagnostic: (stage, passed) => electron.ipcRenderer.invoke("letters:confirmEffectDiagnostic", { stage, passed }),
+  retryFailed: (letterId) => electron.ipcRenderer.invoke("letters:retryFailed", letterId),
+  retryPayload: (errorRecordId) => electron.ipcRenderer.invoke("letters:retryPayload", errorRecordId),
+  clearPending: () => electron.ipcRenderer.invoke("letters:clearPending"),
+  clearOldStatuses: (daysThreshold) => electron.ipcRenderer.invoke("letters:clearOldStatuses", daysThreshold)
+});
+electron.contextBridge.exposeInMainWorld("conversationAPI", {
+  sendMessage: (userMessage) => {
+    return electron.ipcRenderer.invoke("conversation:sendMessage", { message: userMessage });
+  },
+  reset: () => {
+    return electron.ipcRenderer.invoke("conversation:reset");
+  },
+  getConversationEntries: () => {
+    return electron.ipcRenderer.invoke("conversation:getEntries");
+  },
+  onConversationUpdate: (callback) => {
+    const handler = (_event, entries) => callback(entries);
+    electron.ipcRenderer.on("conversation:updated", handler);
+    return () => electron.ipcRenderer.removeListener("conversation:updated", handler);
+  },
+  cancelStream: () => {
+    return electron.ipcRenderer.invoke("conversation:cancelStream");
+  },
+  pauseConversation: () => {
+    return electron.ipcRenderer.invoke("conversation:pause");
+  },
+  resumeConversation: () => {
+    return electron.ipcRenderer.invoke("conversation:resume");
+  },
+  getConversationState: () => {
+    return electron.ipcRenderer.invoke("conversation:getState");
+  },
+  joinWaitingCharacter: (characterId) => electron.ipcRenderer.invoke("conversation:joinWaitingCharacter", { characterId }),
+  leavePresentCharacter: (characterId) => electron.ipcRenderer.invoke("conversation:leavePresentCharacter", { characterId }),
+  temporarilyLeaveCharacter: (characterId, mode) => electron.ipcRenderer.invoke("conversation:temporarilyLeaveCharacter", { characterId, mode }),
+  returnTemporaryCharacter: (characterId) => electron.ipcRenderer.invoke("conversation:returnTemporaryCharacter", { characterId }),
+  regenerateMessage: (messageId) => {
+    return electron.ipcRenderer.invoke("conversation:regenerateMessage", { messageId });
+  },
+  editUserMessage: (messageId, newContent) => {
+    return electron.ipcRenderer.invoke("conversation:editUserMessage", { messageId, newContent });
+  },
+  regenerateError: (messageId) => {
+    return electron.ipcRenderer.invoke("conversation:regenerateError", { messageId });
+  },
+  getActiveConversationData: () => electron.ipcRenderer.invoke("conversation:getActiveConversationData"),
+  getPromptPreview: (characterId) => electron.ipcRenderer.invoke("conversation:getPromptPreview", { characterId }),
+  openSummariesFolder: () => electron.ipcRenderer.invoke("conversation:openSummariesFolder"),
+  clearSummaries: () => electron.ipcRenderer.invoke("conversation:clearSummaries"),
+  approveActions: (approvalEntryId) => electron.ipcRenderer.invoke("conversation:approveActions", { approvalEntryId }),
+  declineActions: (approvalEntryId) => electron.ipcRenderer.invoke("conversation:declineActions", { approvalEntryId }),
+  // Summaries manager methods
+  listAllSummaries: () => electron.ipcRenderer.invoke("conversation:listAllSummaries"),
+  getMemoryOverview: () => electron.ipcRenderer.invoke("conversation:getMemoryOverview"),
+  getSummariesDashboardData: (options = {}) => electron.ipcRenderer.invoke("conversation:getSummariesDashboardData", options),
+  getMemory4OwnerData: (request) => electron.ipcRenderer.invoke("memory4:getOwnerData", request),
+  getMemory4Entry: (request) => electron.ipcRenderer.invoke("memory4:getEntry", request),
+  getMemory4Sources: (request) => electron.ipcRenderer.invoke("memory4:getSources", request),
+  mutateMemory4: (request) => electron.ipcRenderer.invoke("memory4:mutate", request),
+  auditMemory4Orphans: (request) => electron.ipcRenderer.invoke("memory4:auditOrphans", request),
+  forgetMemory4Orphan: (request) => electron.ipcRenderer.invoke("memory4:forgetOrphan", request),
+  retryFailedSummaries: () => electron.ipcRenderer.invoke("conversation:retryFailedSummaries"),
+  updateStructuredMemory: (memoryId, content) => electron.ipcRenderer.invoke("conversation:updateStructuredMemory", { memoryId, content }),
+  updateMemoryRecord: (memoryId, updates, advanced = false) => electron.ipcRenderer.invoke("memory:updateRecord", { memoryId, updates, advanced }),
+  deleteMemoryRecord: (memoryId) => electron.ipcRenderer.invoke("memory:deleteRecord", { memoryId }),
+  getSummariesForCharacter: (playerId, characterId) => electron.ipcRenderer.invoke("conversation:getSummariesForCharacter", { playerId, characterId }),
+  bindLegacySummaryCampaign: (ownerId, counterpartId, summaryIds) => electron.ipcRenderer.invoke("conversation:bindLegacySummaryCampaign", { ownerId, counterpartId, summaryIds }),
+  previewLegacyConversationBinding: (ownerId, counterpartId, folderName, conversationFile) => electron.ipcRenderer.invoke("conversation:previewLegacyConversationBinding", { ownerId, counterpartId, folderName, conversationFile }),
+  bindLegacyConversationCampaign: (ownerId, counterpartId, folderName, conversationFile, expectedCampaignToken, previewRevision) => electron.ipcRenderer.invoke("conversation:bindLegacyConversationCampaign", { ownerId, counterpartId, folderName, conversationFile, expectedCampaignToken, previewRevision }),
+  previewLegacyOwnerBinding: (ownerId) => electron.ipcRenderer.invoke("conversation:previewLegacyOwnerBinding", { ownerId }),
+  bindLegacyOwnerCampaign: (ownerId, expectedCampaignToken, previewRevision) => electron.ipcRenderer.invoke("conversation:bindLegacyOwnerCampaign", { ownerId, expectedCampaignToken, previewRevision }),
+  regenerateSummary: (playerId, characterId, summaryIndex, expectedContent) => electron.ipcRenderer.invoke("conversation:regenerateSummary", { playerId, characterId, summaryIndex, expectedContent }),
+  updateSummary: (playerId, characterId, summaryIndex, newContent) => electron.ipcRenderer.invoke("conversation:updateSummary", { playerId, characterId, summaryIndex, newContent }),
+  deleteSummary: (playerId, characterId, summaryIndex) => electron.ipcRenderer.invoke("conversation:deleteSummary", { playerId, characterId, summaryIndex }),
+  deleteCharacterSummaries: (playerId, characterId) => electron.ipcRenderer.invoke("conversation:deleteCharacterSummaries", { playerId, characterId })
+});
+electron.contextBridge.exposeInMainWorld("actionsAPI", {
+  reload: () => electron.ipcRenderer.invoke("actions:reload"),
+  getAll: () => electron.ipcRenderer.invoke("actions:getAll"),
+  setDisabled: (actionId, disabled) => electron.ipcRenderer.invoke("actions:setDisabled", { actionId, disabled }),
+  setDestructiveOverride: (actionId, isDestructive) => electron.ipcRenderer.invoke("actions:setDestructiveOverride", { actionId, isDestructive }),
+  getSettings: () => electron.ipcRenderer.invoke("actions:getSettings"),
+  openFolder: () => electron.ipcRenderer.invoke("actions:openFolder"),
+  openFile: (filePath) => electron.ipcRenderer.invoke("actions:openFile", { filePath }),
+  getDetails: (actionId, sourceCharacterId) => electron.ipcRenderer.invoke("actions:getDetails", { actionId, sourceCharacterId }),
+  execute: (params) => electron.ipcRenderer.invoke("actions:execute", params)
+});
+electron.contextBridge.exposeInMainWorld("performanceDiagnosticsAPI", {
+  getState: () => electron.ipcRenderer.invoke("performance:get-state"),
+  snapshot: () => electron.ipcRenderer.invoke("performance:snapshot"),
+  recordRendererMetrics: (payload) => electron.ipcRenderer.invoke("performance:record-renderer", payload),
+  exportReport: () => electron.ipcRenderer.invoke("performance:export-report")
+});
+
+electron.contextBridge.exposeInMainWorld("usageAPI", {
+  getReport: () => electron.ipcRenderer.invoke("usage:getReport"),
+  clear: () => electron.ipcRenderer.invoke("usage:clear")
+});
+electron.contextBridge.exposeInMainWorld("providerDiagnosticsAPI", {
+  getStatus: () => electron.ipcRenderer.invoke("providerDiagnostics:getStatus"),
+  getRealRequestDiff: (limit) => electron.ipcRenderer.invoke("provider-diagnostics:get-real-request-diff", limit),
+  exportRealRequestDiff: (limit) => electron.ipcRenderer.invoke("provider-diagnostics:export-real-request-diff", limit),
+  getRecent: (limit) => electron.ipcRenderer.invoke("providerDiagnostics:getRecent", limit),
+  exportRecent: (limit) => electron.ipcRenderer.invoke("providerDiagnostics:exportRecent", limit),
+  getV89Settings: () => electron.ipcRenderer.invoke("providerDiagnostics:getV89Settings"),
+  saveV89Settings: (settings) => electron.ipcRenderer.invoke("providerDiagnostics:saveV89Settings", settings)
+});
+electron.contextBridge.exposeInMainWorld("worldlineAPI", {
+  getSettings: () => electron.ipcRenderer.invoke("worldline:getSettings"),
+  getOfficialRecollection: (responderId) => electron.ipcRenderer.invoke("worldline:getOfficialRecollection", responderId),
+  setRecallSettings: (settings) => electron.ipcRenderer.invoke("worldline:setRecallSettings", settings),
+  setAutosavePath: (path) => electron.ipcRenderer.invoke("worldline:setAutosavePath", path),
+  validateAutosavePath: (path) => electron.ipcRenderer.invoke("worldline:validateAutosavePath", path),
+  selectAutosaveFile: () => electron.ipcRenderer.invoke("worldline:selectAutosaveFile"),
+  getCheckpointStatus: () => electron.ipcRenderer.invoke("worldline:getCheckpointStatus"),
+  rebuildCheckpoint: () => electron.ipcRenderer.invoke("worldline:rebuildCheckpoint"),
+  getOverview: () => electron.ipcRenderer.invoke("worldline:getOverview"),
+  getAnnualDelta: () => electron.ipcRenderer.invoke("worldline:getAnnualDelta"),
+  getWorldKnowledge: () => electron.ipcRenderer.invoke("worldline:getWorldKnowledge"),
+  getHistoricalBindings: (payload) => electron.ipcRenderer.invoke("worldline:getHistoricalBindings", payload),
+  getEntityKinshipInspector: (payload) => electron.ipcRenderer.invoke("worldline:getEntityKinshipInspector", payload),
+  getKinshipIntegrityReport: () => electron.ipcRenderer.invoke("worldline:getKinshipIntegrityReport"),
+  getDiagnostics: () => electron.ipcRenderer.invoke("worldline:getDiagnostics"),
+  temporalArchive: (payload) => electron.ipcRenderer.invoke("worldline:temporalArchive", payload),
+  getPromptDiagnostics: (payload) => electron.ipcRenderer.invoke("worldline:getPromptDiagnostics", payload),
+  getSubjectiveResponderOptions: (payload) => electron.ipcRenderer.invoke("worldline:getSubjectiveResponderOptions", payload),
+  listCanonCharacterOptions: (payload) => electron.ipcRenderer.invoke("worldline:listCanonCharacterOptions", payload),
+  getSubjectiveWorldView: (payload) => electron.ipcRenderer.invoke("worldline:getSubjectiveWorldView", payload),
+  listSupplemental: () => electron.ipcRenderer.invoke("worldline:listSupplemental"),
+  listCanon: (options) => electron.ipcRenderer.invoke("worldline:listCanon", options),
+  mutateCanon: (payload) => electron.ipcRenderer.invoke("worldline:mutateCanon", payload),
+  getCanonCurrentTruth: (payload) => electron.ipcRenderer.invoke("worldline:getCanonCurrentTruth", payload),
+  getCanonHistory: (payload) => electron.ipcRenderer.invoke("worldline:getCanonHistory", payload),
+  getLegacySupplementalMigration: (payload) => electron.ipcRenderer.invoke("worldline:getLegacySupplementalMigration", payload),
+  migrateLegacySupplemental: (payload) => electron.ipcRenderer.invoke("worldline:migrateLegacySupplemental", payload),
+  confirmCanonBranch: (token) => electron.ipcRenderer.invoke("worldline:confirmCanonBranch", token),
+  forkCanonBranch: (token) => electron.ipcRenderer.invoke("worldline:forkCanonBranch", token),
+  resumeCanonBranch: (payload) => electron.ipcRenderer.invoke("worldline:resumeCanonBranch", payload),
+  renameCanonBranch: (payload) => electron.ipcRenderer.invoke("worldline:renameCanonBranch", payload),
+  testCanonRecall: (payload) => electron.ipcRenderer.invoke("worldline:testCanonRecall", payload),
+  createSupplemental: (payload) => electron.ipcRenderer.invoke("worldline:createSupplemental", payload),
+  updateSupplemental: (id, payload) => electron.ipcRenderer.invoke("worldline:updateSupplemental", id, payload),
+  deleteSupplemental: (id) => electron.ipcRenderer.invoke("worldline:deleteSupplemental", id),
+  onUpdated: (callback) => {
+    const handler = (_event, payload) => callback(payload);
+    electron.ipcRenderer.on("worldline:updated", handler);
+    return () => electron.ipcRenderer.removeListener("worldline:updated", handler);
+  }
+});

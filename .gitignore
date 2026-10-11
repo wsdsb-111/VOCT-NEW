@@ -1,4 +1,5 @@
 *.log
 /.codex-staging/
 /output/playwright/v8.7/
+/.build/
 

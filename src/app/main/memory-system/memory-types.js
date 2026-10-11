@@ -1,0 +1,122 @@
+"use strict";
+
+const crypto = require("crypto");
+const { CURRENT_MEMORY_SCHEMA_VERSION, upgradeMemoryRecord } = require("./memory-schema");
+const { normalizeTemporalRefs } = require("./temporal-anchor-extractor");
+
+const MEMORY_TYPES = new Set([
+  "event", "promise", "relationship", "secret", "belief", "plan",
+  "conflict", "information", "rumor", "unresolved", "letter", "folder_summary"
+]);
+const VISIBILITIES = new Set(["private", "participants", "known_group", "public", "world"]);
+const SOURCES = new Set(["witnessed", "spoken", "letter", "game_fact", "reported", "rumor", "inferred", "imported"]);
+
+function uniqueIds(values) {
+  return [...new Set((Array.isArray(values) ? values : []).map(Number).filter(Number.isFinite))];
+}
+
+function memoryMatchesCampaign(memory, campaignToken) {
+  const active = typeof campaignToken === "string" && campaignToken.trim() ? campaignToken : null;
+  const stored = memory?.provenance?.campaignToken;
+  return (typeof stored === "string" && stored.trim() ? stored : null) === active;
+}
+
+function clamp(value, fallback, min = 0, max = 1) {
+  const numeric = Number(value);
+  return Number.isFinite(numeric) ? Math.max(min, Math.min(max, numeric)) : fallback;
+}
+
+function createMemoryId(prefix = "memory") {
+  return `${prefix}_${crypto.randomUUID()}`;
+}
+
+function createMemoryRecord(input = {}) {
+  input = upgradeMemoryRecord(input);
+  const now = new Date().toISOString();
+  const type = MEMORY_TYPES.has(input.type) ? input.type : "information";
+  const visibility = VISIBILITIES.has(input.visibility) ? input.visibility : "participants";
+  const source = SOURCES.has(input.source) ? input.source : "spoken";
+  const content = String(input.content || "").trim();
+  const provenance = input.provenance && typeof input.provenance === "object" ? input.provenance : {};
+  return {
+    schemaVersion: CURRENT_MEMORY_SCHEMA_VERSION,
+    memoryId: input.memoryId || createMemoryId(),
+    version: Number.isFinite(Number(input.version)) ? Number(input.version) : 1,
+    updatedBy: String(input.updatedBy || "system"),
+    editHistory: Array.isArray(input.editHistory) ? input.editHistory.slice(-20).map((entry) => ({ ...entry })) : [],
+    type,
+    subtype: String(input.subtype || "").trim(),
+    eventDate: input.eventDate || null,
+    totalDays: Number.isFinite(Number(input.totalDays)) ? Number(input.totalDays) : null,
+    participants: uniqueIds(input.participants),
+    subjects: uniqueIds(input.subjects),
+    content,
+    canonicalText: String(input.canonicalText || content).trim(),
+    importance: clamp(input.importance, type === "secret" || type === "promise" ? 0.8 : 0.5),
+    confidence: clamp(input.confidence, source === "rumor" || type === "rumor" ? 0.45 : 0.8),
+    epistemicStatus: String(input.epistemicStatus || (type === "belief" ? "believed" : type === "rumor" ? "unverified" : "asserted")),
+    source,
+    provenance: {
+      campaignToken: typeof provenance.campaignToken === "string" ? provenance.campaignToken : null,
+      campaignBinding: provenance.campaignBinding && typeof provenance.campaignBinding === "object" ? {
+        status: provenance.campaignBinding.status === "bound" ? "bound" : "unresolved",
+        source: provenance.campaignBinding.source || null,
+        reason: provenance.campaignBinding.reason || null,
+        version: Number(provenance.campaignBinding.version) || 1
+      } : null,
+      temporalRefs: normalizeTemporalRefs(provenance.temporalRefs),
+      conversationId: provenance.conversationId || null,
+      messageIds: Array.isArray(provenance.messageIds) ? [...new Set(provenance.messageIds)] : [],
+      speakerIds: uniqueIds(provenance.speakerIds),
+      extractionMode: provenance.extractionMode || "structured",
+      summaryRequestId: provenance.summaryRequestId || null,
+      finalizationId: provenance.finalizationId || null,
+      projectionId: provenance.projectionId || null,
+      projectionLineages: Array.isArray(provenance.projectionLineages) ? JSON.parse(JSON.stringify(provenance.projectionLineages)) : [],
+      sourceSegmentIds: Array.isArray(provenance.sourceSegmentIds) ? [...new Set(provenance.sourceSegmentIds.map(String).filter(Boolean))] : [],
+      sourceMessageIds: Array.isArray(provenance.sourceMessageIds)
+        ? [...new Set(provenance.sourceMessageIds.filter(id => Number.isSafeInteger(id) && id >= 0))].sort((a, b) => a - b) : [],
+      sourceLetterId: typeof provenance.sourceLetterId === "string" ? provenance.sourceLetterId : null,
+      segmentIds: Array.isArray(provenance.segmentIds) ? [...new Set(provenance.segmentIds.map(String).filter(Boolean))] : [],
+      perspectiveSummarySegmentIds: Array.isArray(provenance.perspectiveSummarySegmentIds) ? [...new Set(provenance.perspectiveSummarySegmentIds.map(String).filter(Boolean))] : [],
+      folderOwnerId: Number.isFinite(Number(provenance.folderOwnerId)) ? Number(provenance.folderOwnerId) : null,
+      folderName: provenance.folderName || null,
+      conversationFile: provenance.conversationFile || null,
+      conversationFiles: Array.isArray(provenance.conversationFiles) ? [...new Set(provenance.conversationFiles.map(String))] : [],
+      counterpartId: Number.isFinite(Number(provenance.counterpartId)) ? Number(provenance.counterpartId) : null,
+      counterpartName: provenance.counterpartName || null,
+      counterpartIds: uniqueIds(provenance.counterpartIds),
+      counterpartNames: Array.isArray(provenance.counterpartNames) ? [...new Set(provenance.counterpartNames.map(String).filter(Boolean))] : [],
+      participantProfiles: Array.isArray(provenance.participantProfiles) ? provenance.participantProfiles.map((profile) => ({
+        id: Number(profile?.id ?? profile?.characterId),
+        name: profile?.name || null,
+        shortName: profile?.shortName || null,
+        firstName: profile?.firstName || null,
+        fullName: profile?.fullName || null,
+        primaryTitle: profile?.primaryTitle || null,
+        heldCourtAndCouncilPositions: profile?.heldCourtAndCouncilPositions || null,
+        titleRankConcept: profile?.titleRankConcept || null
+      })).filter((profile) => Number.isFinite(profile.id)) : [],
+      perspectiveMemoryIds: Array.isArray(provenance.perspectiveMemoryIds) ? [...new Set(provenance.perspectiveMemoryIds.map(String).filter(Boolean))] : [],
+      projectionHash: provenance.projectionHash || null
+    },
+    relationshipImpact: input.relationshipImpact && typeof input.relationshipImpact === "object" ? input.relationshipImpact : null,
+    unresolved: input.unresolved === true || type === "unresolved",
+    status: input.status || (type === "promise" || type === "plan" || type === "unresolved" ? "open" : null),
+    visibility,
+    knownBy: uniqueIds(input.knownBy),
+    tags: Array.isArray(input.tags) ? [...new Set(input.tags.map((tag) => String(tag).trim()).filter(Boolean))] : [],
+    createdAt: input.createdAt || now,
+    updatedAt: input.updatedAt || now
+  };
+}
+
+module.exports = {
+  memoryMatchesCampaign,
+  MEMORY_TYPES,
+  VISIBILITIES,
+  SOURCES,
+  createMemoryId,
+  createMemoryRecord,
+  uniqueIds
+};

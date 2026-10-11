@@ -23,7 +23,7 @@ When adding or changing an action, extend the narrowest current focused test for
 Verify:
 
 ~~~powershell
-node scripts\test-action-system.js
+node scripts\test-v7.10-official-action-system.js
 node scripts\test-release.js
 ~~~
 

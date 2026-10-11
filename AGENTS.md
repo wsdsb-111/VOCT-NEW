@@ -2,16 +2,16 @@
 
 ## 项目定位与结构
 
-本仓库是面向 Crusader Kings III 的 Windows 打包版 VOTC（Voices of the Court）Electron 应用。当前开发主线为 V9.0，继承 V8.15.2 冻结行为；冻结提交 3c49364 与本轮证据见 docs/current/v9/V8_FREEZE_EVIDENCE.md。用户此前跨 Provider、缓存、长时间运行、信件、日期与多人披露验收保留；新启动卡顿、V9远端CI和实机采样单独记录。代码回归与隔离 Electron 冒烟不等于真实 CK3、Provider 和性能 Gate，不能宣称 Full Freeze。
+本仓库是面向 Crusader Kings III 的 Windows 打包版 VOTC（Voices of the Court）Electron 应用。当前开发主线为 V9.1，按旧总路线仅实施源码与构建，继承 V8.15.2 冻结行为；V9.0 对照提交为 c819c85，证据见 docs/current/v9/V9_1_VERIFICATION_REPORT.md。用户此前跨 Provider、缓存、长时间运行、信件、日期与多人披露验收保留；新启动卡顿、V9远端CI和实机采样单独记录。代码回归与隔离 Electron 冒烟不等于真实 CK3、Provider 和性能 Gate，不能宣称 Full Freeze。
 
 - resources/app/out/main/main.js 是 Electron 主进程组合根；主进程实现已按职责拆分到 actions/、conversation/、memory-system/、summaries/、worldline/、game-data/、historical-system/、letters/、providers/、ipc/、analytics/、runtime/、config/ 等目录，action-system/ 保留为历史目录结构。
-- resources/app/out/main/provider-service.js、providers/index.js、ipc/register-ipc.js、window-manager.js 等是打包后的主进程服务和边界；不要把 out/ 当作可任意重打包的源代码目录。
+- src/app/ 是可编辑 Runtime 源；build/runtime-inputs.json 显式映射 Main/Preload/Renderer 与默认数据。先编辑源、构建并部署，再核验 resources/app 生成资源；不要单独编辑 out/。源码和构建边界遵循 src/AGENTS.md，详情见 docs/current/v9/V9_1_SOURCE_BUILD.md。
 - resources/app/out/renderer/ 是随应用交付的 Renderer 资源。world-memory-editor.js 负责世界记忆编辑器，worldline-player-presentation.js 负责世界线玩家展示；assets/ 内包含三套主题背景和打包 CSS/JS。
 - ui-theme-preview.html 是本地三主题视觉预览页，主题内部键为 parchment、knight、ink，玩家可见名称为“游牧”“骑士”“水墨”。
 - resources/app/default_userdata/ 保存默认 Prompt、本地化和标准 Action；它不是用户运行时数据目录。
 - scripts/ 保存迁移工具、专项回归和发布门禁；scripts/test-manifest.js 是测试清单的唯一编排入口。
 - docs/README.md 是文档入口，docs/V8阶段开发记录.md 是 V8 连续实施记录，docs/README_摘要系统.md 是摘要/Memory 合同；根目录 CHANGELOG.md 只维护版本索引和用户可见摘要。
-- VOTC.exe 是打包应用入口。当前项目版本为 V9.0，核心版本为 `9.0`，resources/app/package.json 的 Electron 包版本为 `9.0.0`，VOTC Workshop Mod 为 `2.0.5`；前端显示 `V9.0 · Mod v2.0.5`，App 包版本在提示中显示。Memory Engine 保持 4.0，协议 3.0、摘要存储 2.5 和 Official Action 2.0.3 不随项目版本升级；独立 Three-Mod 兼容工程仍为 1.0.6。
+- VOTC.exe 是复用的打包壳入口，未重写 Windows 文件属性版本。当前项目版本为 V9.1，核心版本为 `9.1`，resources/app/package.json 的 Electron 包版本为 `9.1.0`，VOTC Workshop Mod 为 `2.0.5`；前端显示 `V9.1 · Mod v2.0.5`，App 包版本在提示中显示。Memory Engine 保持 4.0，协议 3.0、摘要存储 2.5 和 Official Action 2.0.3 不随项目版本升级；独立 Three-Mod 兼容工程仍为 1.0.6。
 
 ## 当前稳定合同
 
@@ -29,6 +29,11 @@
 从仓库根目录在 PowerShell 中执行。先跑与改动直接相关的专项测试，再跑完整发布门禁：
 
 ~~~powershell
+node scripts\runtime-dependencies.js
+node scripts\build-runtime.js
+node scripts\verify-runtime-build.js
+node scripts\deploy-runtime-build.js
+node scripts\verify-runtime-build.js --deployed
 node scripts\test-v8.8-ui-style-backgrounds.js
 node scripts\test-v7.10-official-action-system.js
 node scripts\test-release.js

@@ -85,7 +85,7 @@ async function launch(enabled, evidenceRoot) {
     assert.equal((await renderer.evaluate("performanceDiagnosticsAPI.getState()")).enabled, enabled);
     await delay(1500);
     const version = await renderer.evaluate("(async()=>({app:await window.electronAPI.getAppVersion(),title:document.title,footer:document.querySelector('.app-version')?.textContent,tooltip:document.querySelector('.app-version')?.title}))()");
-    assert.deepEqual(version, { app: "9.0.0", title: "VOTC V9.0", footer: "V9.0 · Mod v2.0.5", tooltip: "VOTC App 9.0.0" });
+    assert.deepEqual(version, { app: "9.1.0", title: "VOTC V9.1", footer: "V9.1 · Mod v2.0.5", tooltip: "VOTC App 9.1.0" });
     console.log(`Packaged version: ${JSON.stringify(version)}`);
     if (!enabled) {
       const screenshot = await renderer.send("Page.captureScreenshot", { format: "png" });

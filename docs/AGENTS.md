@@ -5,12 +5,12 @@
 - docs/README.md 是分类、推荐阅读顺序和当前版本入口的唯一索引。
 - 根目录 README.md 负责项目简介、安装运行和当前基线；根目录 CHANGELOG.md 只维护版本顺序、用户可见摘要和详细文档链接，不复制完整实现记录。
 - docs/V8阶段开发记录.md 是 V8.0 起的连续阶段记录；docs/README_摘要系统.md 维护当前 Memory Engine 4.0 可见标签、既有 3.0 协议与 2.5 存储合同、召回和生命周期边界。
-- 当前入口为 docs/current/v9/ 的V9.0路线、实施与验证，V8.15.2及更早报告保留历史证据。既有用户验收不降级，新V9的CI／打包／CK3／Provider／性能结果单独记录，不得将 ACK 或静态通过写成效果验收通过。
+- 当前入口为 docs/current/v9/ 的 V9.1 源码构建、架构移交与验证；V9.0 及更早报告保留历史证据。按旧总路线分期，不把重新审查方案中的六项业务重构写成本版完成。既有用户验收不降级，新V9的CI／打包／CK3／Provider／性能结果单独记录，不得将 ACK 或静态通过写成效果验收通过。
 - V6/V7 阶段文档和 V8.3 历史文档仍是历史证据。若功能已退役，应在当前入口标注历史/废止，不因整理而删除文件或破坏旧链接。
 
 ## 编写规则
 
-- 当前版本写法统一为项目 V9.0、App 包 9.0.0、VOTC Workshop Mod 2.0.5、Memory Engine 4.0；底层协议 3.0、摘要存储 2.5、Official Action 2.0.3 和独立 Three-Mod 1.0.6 分别保留。历史报告、原始设计与冻结证据保留当时版本，最新变更以 current/v9/V9_VERSION_ALIGNMENT.md 为准。
+- 当前版本写法统一为项目 V9.1、App 包 9.1.0、VOTC Workshop Mod 2.0.5、Memory Engine 4.0；底层协议 3.0、摘要存储 2.5、Official Action 2.0.3 和独立 Three-Mod 1.0.6 分别保留。历史报告、原始设计与冻结证据保留当时版本，最新变更以 current/v9/V9_1_VERIFICATION_REPORT.md 为准。
 
 - 只记录仓库中实际存在、已经实现或明确标注为限制的内容；区分“代码/自动化通过”和“真实 CK3、Provider、Electron、远端 CI 或 Soak 已验收”。
 - 新文档沿用仓库已有的版本、阶段、主题和 implementation-report/review 命名风格；不要为了统一而重命名历史中文文件或另造根目录版本散文档。

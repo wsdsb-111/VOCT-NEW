@@ -1,5 +1,7 @@
 # V9.0 当前架构与权限边界
 
+V9.1 更新：可编辑源现为 `src/app/`，`resources/app/out` 是经校验生成的资源；本文件下方保留 V9.0 审查快照。最新路径与阶段归属见 [V9.1 架构移交](V9_1_ARCHITECTURE_HANDOFF.md)，构建与版本见 [源码构建](V9_1_SOURCE_BUILD.md)。本次没有改变下方业务权限边界。
+
 日期：2026-10-11。下表是实际打包源码地图，非V9.1重建成果。
 
 发行版本：项目 V9.0／核心 9.0／App 包 9.0.0／VOTC Workshop Mod 2.0.5。Memory Engine 4.0、协议 3.0、摘要存储 2.5、Official Action 2.0.3 保留；独立 Three-Mod 仍为 1.0.6。当前版本更新记录见[版本对齐](V9_VERSION_ALIGNMENT.md)。

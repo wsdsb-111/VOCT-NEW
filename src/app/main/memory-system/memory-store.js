@@ -1,0 +1,988 @@
+"use strict";
+
+const crypto = require("crypto");
+const fs = require("fs");
+const path = require("path");
+const { createMemoryRecord, uniqueIds } = require("./memory-types");
+const { CURRENT_MEMORY_SCHEMA_VERSION } = require("./memory-schema");
+const { MEMORY_ENGINE_VERSION } = require("../version");
+const { buildSummaryDateIndex, buildDualTemporalIndex, normalizePerspectiveTemporalRefs } = require("./summary-date-index");
+const { Memory4Store } = require("./memory4-store");
+const { projectionLineageFromSummary, matchesProjectionLineage } = require("./memory4-forget");
+
+function removeDirectoryTree(directory) {
+  for (const entry of fs.readdirSync(directory, { withFileTypes: true })) {
+    const child = path.join(directory, entry.name);
+    if (entry.isDirectory() && !entry.isSymbolicLink()) removeDirectoryTree(child);
+    else fs.unlinkSync(child);
+  }
+  fs.rmdirSync(directory);
+}
+
+function clearDirectory(directory) {
+  if (!fs.existsSync(directory)) return;
+  for (const entry of fs.readdirSync(directory, { withFileTypes: true })) {
+    const child = path.join(directory, entry.name);
+    if (entry.isDirectory() && !entry.isSymbolicLink()) removeDirectoryTree(child);
+    else fs.unlinkSync(child);
+  }
+}
+
+function mergeCharacterProfiles(...groups) {
+  const profiles = new Map();
+  for (const profile of groups.flat()) {
+    const id = Number(profile?.id ?? profile?.characterId);
+    if (!Number.isFinite(id)) continue;
+    const previous = profiles.get(id) || { id };
+    const next = { ...previous };
+    for (const key of ["name", "shortName", "firstName", "fullName", "primaryTitle", "heldCourtAndCouncilPositions", "titleRankConcept"]) {
+      if (profile?.[key]) next[key] = profile[key];
+    }
+    profiles.set(id, next);
+  }
+  return [...profiles.values()];
+}
+
+class MemoryStore {
+  constructor({ baseDir, summaryFoldersDir = null, recoveryDir = null } = {}) {
+    if (!baseDir) throw new Error("memory_store_base_dir_required");
+    this.baseDir = baseDir;
+    this.summaryFoldersDir = summaryFoldersDir;
+    this.paths = {
+      episodes: path.join(baseDir, "episodes"),
+      characters: path.join(baseDir, "characters"),
+      pairs: path.join(baseDir, "pairs"),
+      knowledge: path.join(baseDir, "knowledge"),
+      ownerStatus: path.join(baseDir, "owner-status"),
+      recovery: recoveryDir || path.join(baseDir, "recovery"),
+      memory4Recovery: path.join(baseDir, "memory4-recovery"),
+      index: path.join(baseDir, "index.json")
+    };
+    this.ensureDirectories();
+    this.summaryMutationPath = path.join(baseDir, "summary-mutation.json");
+    this.restoreSummaryMutation();
+    this.index = this.readJson(this.paths.index, { schemaVersion: CURRENT_MEMORY_SCHEMA_VERSION, memories: {}, episodes: {} });
+    this.folderSummaryCache = new Map();
+    this.summaryDateIndexCache = new Map();
+    this.folderSummaryCacheMetrics = { hits: 0, misses: 0, invalidations: 0 };
+    this.folderSummaryRevisions = new Map();
+    this.folderSummaryLoadDiagnostics = new Map();
+    this.folderSummarySnapshotRevisions = new WeakMap();
+  }
+
+  ensureDirectories() {
+    for (const directory of [this.baseDir, this.paths.episodes, this.paths.characters, this.paths.pairs, this.paths.knowledge, this.paths.ownerStatus, this.paths.recovery, this.paths.memory4Recovery]) {
+      fs.mkdirSync(directory, { recursive: true });
+    }
+  }
+
+  readJson(filePath, fallback) {
+    try {
+      if (!fs.existsSync(filePath)) return fallback;
+      return JSON.parse(fs.readFileSync(filePath, "utf8").replace(/^\uFEFF/, ""));
+    } catch (error) {
+      console.error(`[MemoryStore] Failed to read ${filePath}:`, error);
+      return fallback;
+    }
+  }
+
+  writeJson(filePath, value) {
+    this.trackSummaryMutation(filePath);
+    fs.mkdirSync(path.dirname(filePath), { recursive: true });
+    const tempPath = `${filePath}.${process.pid}.${Date.now()}.tmp`;
+    fs.writeFileSync(tempPath, JSON.stringify(value, null, 2), "utf8");
+    fs.renameSync(tempPath, filePath);
+  }
+
+  validateSummaryMutationPath(filePath) {
+    const target = path.resolve(filePath);
+    const roots = [this.baseDir, this.summaryFoldersDir].filter(Boolean).map(root => path.resolve(root));
+    if (!roots.some(root => target.startsWith(`${root}${path.sep}`)) || target === path.resolve(this.summaryMutationPath)) throw new Error("unsafe_summary_mutation_path");
+    return target;
+  }
+
+  trackSummaryMutation(filePath) {
+    if (!this.summaryMutation || filePath === this.summaryMutationPath) return;
+    const target = this.validateSummaryMutationPath(filePath);
+    if (Object.hasOwn(this.summaryMutation.files, target)) return;
+    this.summaryMutation.files[target] = fs.existsSync(target) ? fs.readFileSync(target).toString("base64") : null;
+    this.writeJson(this.summaryMutationPath, this.summaryMutation);
+  }
+
+  restoreSummaryMutation() {
+    if (!fs.existsSync(this.summaryMutationPath)) return;
+    // An interrupted edit is rolled back before any recall reads its index.
+    const journal = JSON.parse(fs.readFileSync(this.summaryMutationPath, "utf8"));
+    if (journal.version !== 1 || !journal.files || typeof journal.files !== "object") throw new Error("invalid_summary_mutation_journal");
+    const entries = Object.entries(journal.files).map(([file, content]) => {
+      if (content !== null && typeof content !== "string") throw new Error("invalid_summary_mutation_content");
+      return [this.validateSummaryMutationPath(file), content];
+    });
+    for (const [file, content] of entries) {
+      if (content === null) { if (fs.existsSync(file)) fs.unlinkSync(file); }
+      else {
+        const temp = `${file}.restore.tmp`;
+        fs.writeFileSync(temp, Buffer.from(content, "base64"));
+        fs.renameSync(temp, file);
+      }
+    }
+    fs.unlinkSync(this.summaryMutationPath);
+  }
+
+  withSummaryMutation(summaryPath, mutate) {
+    if (this.summaryMutation || fs.existsSync(this.summaryMutationPath)) throw new Error("summary_mutation_in_progress");
+    this.summaryMutation = { version: 1, files: {} };
+    try {
+      if (summaryPath) this.trackSummaryMutation(summaryPath);
+      const result = mutate();
+      if (fs.existsSync(this.summaryMutationPath)) fs.unlinkSync(this.summaryMutationPath);
+      return result;
+    } catch (error) {
+      this.summaryMutation = null;
+      this.restoreSummaryMutation();
+      this.index = this.readJson(this.paths.index, { schemaVersion: CURRENT_MEMORY_SCHEMA_VERSION, memories: {}, episodes: {} });
+      this.invalidateFolderSummaryCache();
+      throw error;
+    } finally { this.summaryMutation = null; }
+  }
+
+  removeSummaryMutationFile(filePath) {
+    this.trackSummaryMutation(filePath);
+    if (fs.existsSync(filePath)) fs.unlinkSync(filePath);
+  }
+
+  saveIndex() {
+    this.writeJson(this.paths.index, this.index);
+  }
+
+  memoryPath(memoryId) {
+    return path.join(this.paths.episodes, `memory_${String(memoryId).replace(/[^a-zA-Z0-9_-]/g, "_")}.json`);
+  }
+
+  episodePath(episodeId) {
+    return path.join(this.paths.episodes, `episode_${String(episodeId).replace(/[^a-zA-Z0-9_-]/g, "_")}.json`);
+  }
+
+  saveEpisode(episode) {
+    if (!episode?.episodeId) throw new Error("episode_id_required");
+    const record = { schemaVersion: CURRENT_MEMORY_SCHEMA_VERSION, ...episode };
+    const filePath = this.episodePath(record.episodeId);
+    this.writeJson(filePath, record);
+    this.index.episodes[record.episodeId] = { file: path.basename(filePath), conversationId: record.conversationId || null };
+    this.saveIndex();
+    return record;
+  }
+
+  saveMemory(input) {
+    const record = createMemoryRecord(input);
+    const previous = this.getMemory(record.memoryId);
+    this.writeJson(this.memoryPath(record.memoryId), record);
+    this.index.memories[record.memoryId] = {
+      type: record.type,
+      participants: record.participants,
+      subjects: record.subjects,
+      totalDays: record.totalDays,
+      visibility: record.visibility
+    };
+    this.saveIndex();
+    // A corrected memory may change participants/subjects. Remove its old
+    // pair references first so edits and recovery retries never leave stale
+    // entries that would make an unrelated pair recall it.
+    if (previous) this.removeMemoryFromPairIndexes(previous);
+    this.updatePairIndexes(record);
+    return record;
+  }
+
+  getMemory(memoryId) {
+    const record = this.readJson(this.memoryPath(memoryId), null);
+    return record ? createMemoryRecord(record) : null;
+  }
+
+  listAllMemories() {
+    return Object.keys(this.index.memories).map((memoryId) => this.getMemory(memoryId)).filter(Boolean);
+  }
+
+  listAllEpisodes() {
+    return Object.keys(this.index.episodes).map((episodeId) => this.readJson(this.episodePath(episodeId), null)).filter(Boolean);
+  }
+
+  getLegacySummaryBindingId(filePath, index, summary) {
+    if (!this.summaryFoldersDir || !Number.isSafeInteger(Number(index)) || Number(index) < 0 || !summary || typeof summary.content !== "string") {
+      throw new Error("legacy_summary_binding_target_invalid");
+    }
+    const targetPath = this.validateSummaryMutationPath(filePath);
+    const summaryRoot = path.resolve(this.summaryFoldersDir);
+    if (!targetPath.startsWith(`${summaryRoot}${path.sep}`)) throw new Error("unsafe_legacy_summary_binding_path");
+    const relativePath = path.relative(summaryRoot, targetPath).split(path.sep).join("/");
+    const identity = JSON.stringify([relativePath, Number(index), summary.date || null, summary.totalDays ?? null, summary.content]);
+    return `legacy-summary:${crypto.createHash("sha256").update(identity).digest("hex")}`;
+  }
+
+  scanLegacyCampaignBinding({ scope, ownerId, counterpartId = null, folderName = null, conversationFile = null, campaignToken } = {}) {
+    const numericOwnerId = Number(ownerId), numericCounterpartId = counterpartId == null ? null : Number(counterpartId);
+    const token = typeof campaignToken === "string" ? campaignToken.trim() : "";
+    if (!Number.isSafeInteger(numericOwnerId) || numericOwnerId <= 0) throw new Error("legacy_summary_binding_owner_invalid");
+    if (!token || token.length > 512) throw new Error("legacy_summary_binding_campaign_required");
+    if (scope !== "conversation" && scope !== "owner") throw new Error("legacy_summary_binding_scope_invalid");
+    if (scope === "conversation" && (!Number.isSafeInteger(numericCounterpartId) || numericCounterpartId <= 0 || numericCounterpartId === numericOwnerId)) {
+      throw new Error("legacy_summary_binding_pair_invalid");
+    }
+    if (!this.summaryFoldersDir || !fs.existsSync(this.summaryFoldersDir)) throw new Error("legacy_summary_binding_folder_missing");
+
+    const root = path.resolve(this.summaryFoldersDir);
+    const ownerPrefix = `${numericOwnerId}_`;
+    let targets;
+    if (scope === "conversation") {
+      if (typeof folderName !== "string" || path.basename(folderName) !== folderName || !folderName.startsWith(ownerPrefix) || folderName.length <= ownerPrefix.length
+        || typeof conversationFile !== "string" || path.basename(conversationFile) !== conversationFile || !/^与.+的对话\.json$/.test(conversationFile)) {
+        throw new Error("legacy_summary_binding_target_invalid");
+      }
+      const folderPath = path.join(root, folderName);
+      const folderStat = fs.lstatSync(folderPath);
+      if (!folderStat.isDirectory() || folderStat.isSymbolicLink()) throw new Error("legacy_summary_binding_target_invalid");
+      targets = [{ folderName, conversationFile, filePath: path.join(folderPath, conversationFile) }];
+    } else {
+      targets = [];
+      for (const folder of fs.readdirSync(root, { withFileTypes: true }).filter(entry => entry.isDirectory() && entry.name.startsWith(ownerPrefix)).sort((a, b) => a.name.localeCompare(b.name))) {
+        const folderPath = path.join(root, folder.name);
+        for (const file of fs.readdirSync(folderPath).filter(name => name.endsWith(".json")).sort()) {
+          targets.push({ folderName: folder.name, conversationFile: file, filePath: path.join(folderPath, file) });
+        }
+      }
+    }
+
+    const counts = { scannedFiles: 0, scannedSummaries: 0, bindableCount: 0, alreadyCurrentCount: 0, otherCampaignCount: 0,
+      officialCount: 0, unresolvedCounterpartCount: 0, invalidSummaryCount: 0, invalidFileCount: 0 };
+    const snapshots = [], targetIds = [], changes = new Map(), fileCounts = new Map();
+    for (const target of targets) {
+      const relativePath = path.relative(root, target.filePath).split(path.sep).join("/");
+      const fileCount = { counterpartIds: new Set(), conversationFile: target.conversationFile, scannedSummaries: 0, bindableCount: 0 };
+      fileCounts.set(relativePath, fileCount);
+      counts.scannedFiles++;
+      let raw = null, parsed = null, snapshot = { relativePath, size: null, mtimeMs: null, sha256: null, readError: null };
+      try {
+        const before = fs.lstatSync(target.filePath);
+        if (!before.isFile() || before.isSymbolicLink()) throw new Error("not_regular_file");
+        raw = fs.readFileSync(target.filePath);
+        const after = fs.lstatSync(target.filePath);
+        if (!after.isFile() || after.size !== before.size || after.mtimeMs !== before.mtimeMs) throw new Error("source_changed_during_scan");
+        snapshot.size = after.size;
+        snapshot.mtimeMs = after.mtimeMs;
+        snapshot.sha256 = crypto.createHash("sha256").update(raw).digest("hex");
+        parsed = JSON.parse(raw.toString("utf8"));
+        if (!Array.isArray(parsed)) throw new Error("summary_file_not_array");
+      } catch (error) {
+        if (error?.message === "source_changed_during_scan") throw new Error("legacy_binding_preview_source_changed_during_scan");
+        snapshot.readError = String(error?.message || "summary_file_unreadable");
+        counts.invalidFileCount++;
+        snapshots.push(snapshot);
+        continue;
+      }
+      snapshots.push(snapshot);
+      counts.scannedSummaries += parsed.length;
+      fileCount.scannedSummaries = parsed.length;
+      parsed.forEach((summary, index) => {
+        if (summary && typeof summary === "object" && (summary.sourceType === "CK3_OFFICIAL_RECOLLECTION"
+          || summary.type === "official_recollection" || summary.subtype === "official_recollection")) {
+          counts.officialCount++;
+          return;
+        }
+        if (!summary || typeof summary !== "object" || Array.isArray(summary) || typeof summary.content !== "string") {
+          counts.invalidSummaryCount++;
+          return;
+        }
+        if (summary.campaignToken !== null && summary.campaignToken !== undefined) {
+          const existingToken = typeof summary.campaignToken === "string" ? summary.campaignToken.trim() : "";
+          if (!existingToken) {
+            counts.invalidSummaryCount++;
+          } else if (existingToken === token) {
+            counts.alreadyCurrentCount++;
+          } else {
+            counts.otherCampaignCount++;
+          }
+          return;
+        }
+        if (summary.campaignBinding?.status === "bound") {
+          counts.invalidSummaryCount++;
+          return;
+        }
+        const firstId = Number(summary.playerId), secondId = Number(summary.characterId);
+        const validPair = Number.isSafeInteger(firstId) && firstId > 0 && Number.isSafeInteger(secondId) && secondId > 0 && firstId !== secondId;
+        const resolvedCounterpartId = validPair && firstId === numericOwnerId ? secondId : validPair && secondId === numericOwnerId ? firstId : null;
+        if (resolvedCounterpartId === null) {
+          if (validPair) counts.invalidSummaryCount++;
+          else counts.unresolvedCounterpartCount++;
+          return;
+        }
+        fileCount.counterpartIds.add(resolvedCounterpartId);
+        if (scope === "conversation" && resolvedCounterpartId !== numericCounterpartId) {
+          counts.invalidSummaryCount++;
+          return;
+        }
+        const bindingId = this.getLegacySummaryBindingId(target.filePath, index, summary);
+        targetIds.push(bindingId);
+        counts.bindableCount++;
+        fileCount.bindableCount++;
+        changes.set(target.filePath, changes.get(target.filePath) || parsed.slice());
+        changes.get(target.filePath)[index] = { ...summary, campaignToken: token,
+          campaignBinding: { status: "bound", source: "user_confirmed_bulk_migration", version: 1 } };
+        return;
+      });
+    }
+
+    const files = [...fileCounts.values()].map(info => ({
+      counterpartId: info.counterpartIds.size === 1 ? [...info.counterpartIds][0] : null,
+      conversationFile: info.conversationFile,
+      scannedSummaries: info.scannedSummaries,
+      bindableCount: info.bindableCount
+    }));
+    snapshots.sort((a, b) => a.relativePath.localeCompare(b.relativePath));
+    const revisionInput = JSON.stringify({ scope, ownerId: numericOwnerId, counterpartId: numericCounterpartId, folderName, conversationFile, campaignToken: token,
+      snapshots, targetIds: [...targetIds].sort() });
+    return { scope, ownerId: numericOwnerId, ...(scope === "conversation" ? { counterpartId: numericCounterpartId } : {}), campaignToken: token,
+      ...counts, files, targetIds, previewRevision: crypto.createHash("sha256").update(revisionInput).digest("hex"), changes };
+  }
+
+  previewLegacyCampaignBinding(input = {}) {
+    const { changes, ...preview } = this.scanLegacyCampaignBinding(input);
+    return preview;
+  }
+
+  bindLegacyCampaignBatch({ previewRevision, ...input } = {}) {
+    if (typeof previewRevision !== "string" || !/^[a-f0-9]{64}$/.test(previewRevision)) throw new Error("legacy_summary_binding_preview_required");
+    const scan = this.scanLegacyCampaignBinding(input);
+    if (scan.previewRevision !== previewRevision) throw new Error("legacy_binding_preview_stale");
+    if (scan.bindableCount === 0) throw new Error("legacy_summary_binding_targets_required");
+    this.withSummaryMutation(null, () => {
+      for (const [filePath, summaries] of scan.changes) this.writeJson(filePath, summaries);
+    });
+    this.invalidateFolderSummaryCache([scan.ownerId]);
+    const { changes, ...result } = scan;
+    return { ...result, success: true, boundCount: scan.bindableCount };
+  }
+
+  bindLegacySummaryCampaign({ ownerId, counterpartId, summaryIds, campaignToken, source = "user_confirmed_migration" } = {}) {
+    const numericOwnerId = Number(ownerId), numericCounterpartId = Number(counterpartId);
+    const token = typeof campaignToken === "string" ? campaignToken.trim() : "";
+    if (!Number.isSafeInteger(numericOwnerId) || numericOwnerId <= 0
+      || !Number.isSafeInteger(numericCounterpartId) || numericCounterpartId <= 0 || numericOwnerId === numericCounterpartId) {
+      throw new Error("legacy_summary_binding_pair_invalid");
+    }
+    if (!token || token.length > 512) throw new Error("legacy_summary_binding_campaign_required");
+    if (source !== "user_confirmed_migration") throw new Error("legacy_summary_binding_confirmation_required");
+    if (!Array.isArray(summaryIds) || summaryIds.length === 0 || summaryIds.length > 256) throw new Error("legacy_summary_binding_targets_required");
+    const requestedIds = new Set(summaryIds.map(String));
+    if (requestedIds.size !== summaryIds.length || [...requestedIds].some(id => !/^legacy-summary:[a-f0-9]{64}$/.test(id))) {
+      throw new Error("legacy_summary_binding_target_invalid");
+    }
+    if (!this.summaryFoldersDir || !fs.existsSync(this.summaryFoldersDir)) throw new Error("legacy_summary_binding_folder_missing");
+
+    const changes = [];
+    const matchedIds = new Set();
+    const prefix = `${numericOwnerId}_`;
+    for (const folder of fs.readdirSync(this.summaryFoldersDir, { withFileTypes: true }).filter(entry => entry.isDirectory() && entry.name.startsWith(prefix))) {
+      const folderPath = path.join(this.summaryFoldersDir, folder.name);
+      for (const file of fs.readdirSync(folderPath).filter(name => name.endsWith(".json"))) {
+        const filePath = path.join(folderPath, file);
+        const summaries = this.readJson(filePath, null);
+        if (!Array.isArray(summaries)) continue;
+        let changed = false;
+        const updated = summaries.map((summary, index) => {
+          if (!summary || typeof summary !== "object" || typeof summary.content !== "string") return summary;
+          const bindingId = this.getLegacySummaryBindingId(filePath, index, summary);
+          if (!requestedIds.has(bindingId)) return summary;
+          if (matchedIds.has(bindingId)) throw new Error("legacy_summary_binding_target_ambiguous");
+          matchedIds.add(bindingId);
+          const pairIds = uniqueIds([summary.playerId, summary.characterId]);
+          if (summary.sourceType === "CK3_OFFICIAL_RECOLLECTION" || !pairIds.includes(numericOwnerId) || !pairIds.includes(numericCounterpartId)) {
+            throw new Error("legacy_summary_binding_pair_mismatch");
+          }
+          if (String(summary.campaignToken || "").trim() || summary.campaignBinding?.status === "bound") {
+            throw new Error("legacy_summary_binding_target_already_bound");
+          }
+          changed = true;
+          return { ...summary, campaignToken: token, campaignBinding: { status: "bound", source, version: 1 } };
+        });
+        if (changed) changes.push({ filePath, summaries: updated });
+      }
+    }
+    if (matchedIds.size !== requestedIds.size) throw new Error("legacy_summary_binding_target_not_found_or_stale");
+    this.withSummaryMutation(null, () => {
+      for (const change of changes) this.writeJson(change.filePath, change.summaries);
+    });
+    this.invalidateFolderSummaryCache([numericOwnerId]);
+    return { success: true, ownerId: numericOwnerId, counterpartId: numericCounterpartId, campaignToken: token, boundCount: matchedIds.size };
+  }
+
+  migrateLegacySummaryCampaignBindings(characterId) {
+    const ownerId = Number(characterId);
+    if (!Number.isSafeInteger(ownerId) || ownerId <= 0 || !this.summaryFoldersDir || !fs.existsSync(this.summaryFoldersDir)) {
+      return { boundCount: 0, unresolvedCount: 0, changedCount: 0 };
+    }
+    const episodes = this.listAllEpisodes();
+    const prefix = `${ownerId}_`;
+    const changes = [];
+    let boundCount = 0, unresolvedCount = 0;
+    for (const folder of fs.readdirSync(this.summaryFoldersDir, { withFileTypes: true }).filter(entry => entry.isDirectory() && entry.name.startsWith(prefix))) {
+      const folderPath = path.join(this.summaryFoldersDir, folder.name);
+      for (const file of fs.readdirSync(folderPath).filter(name => name.endsWith(".json"))) {
+        const filePath = path.join(folderPath, file);
+        const summaries = this.readJson(filePath, null);
+        if (!Array.isArray(summaries)) continue;
+        let changed = false;
+        const migrated = summaries.map(summary => {
+          if (!summary || typeof summary !== "object" || summary.sourceType === "CK3_OFFICIAL_RECOLLECTION"
+            || summary.type === "official_recollection" || summary.subtype === "official_recollection"
+            || String(summary.campaignToken || "").trim()) return summary;
+          const playerId = Number(summary.playerId), character = Number(summary.characterId);
+          const counterpartId = playerId === ownerId ? character : character === ownerId ? playerId : null;
+          const finalizationId = String(summary.finalizationId || "");
+          const matching = Number.isSafeInteger(counterpartId) && counterpartId > 0 && finalizationId
+            ? episodes.filter(episode => String(episode.finalizationId || "") === finalizationId
+              && uniqueIds((episode.participants || []).map(participant => participant && typeof participant === "object" ? participant.id ?? participant.characterId : participant)).includes(ownerId)
+              && uniqueIds((episode.participants || []).map(participant => participant && typeof participant === "object" ? participant.id ?? participant.characterId : participant)).includes(counterpartId))
+            : [];
+          const tokens = new Set(matching.map(episode => String(episode.campaignToken || "").trim()));
+          const campaignToken = matching.length && !tokens.has("") && tokens.size === 1 ? [...tokens][0] : null;
+          if (campaignToken) {
+            boundCount++;
+            changed = true;
+            return { ...summary, campaignToken, campaignBinding: { status: "bound", source: "migration", version: 1 } };
+          }
+          unresolvedCount++;
+          const reason = !finalizationId ? "FINALIZATION_ID_MISSING" : !matching.length ? "NO_UNIQUE_EPISODE_EVIDENCE" : "AMBIGUOUS_EPISODE_CAMPAIGN";
+          if (summary.campaignBinding?.status === "unresolved" && summary.campaignBinding?.reason === reason && summary.campaignBinding?.version === 1) return summary;
+          changed = true;
+          return { ...summary, campaignBinding: { status: "unresolved", reason, version: 1 } };
+        });
+        if (changed) changes.push({ filePath, summaries: migrated });
+      }
+    }
+    if (changes.length) this.withSummaryMutation(null, () => {
+      for (const change of changes) this.writeJson(change.filePath, change.summaries);
+    });
+    if (changes.length) this.invalidateFolderSummaryCache([ownerId]);
+    return { boundCount, unresolvedCount, changedCount: changes.length };
+  }
+
+  listKnowledgeCharacterIds() {
+    if (!fs.existsSync(this.paths.knowledge)) return [];
+    return fs.readdirSync(this.paths.knowledge).map((name) => Number(path.basename(name, ".json"))).filter(Number.isFinite);
+  }
+
+  updateMemory(memoryId, updater) {
+    const existing = this.getMemory(memoryId);
+    if (!existing) return null;
+    const updates = typeof updater === "function" ? updater({ ...existing }) : updater;
+    return this.saveMemory({ ...existing, ...updates, memoryId, version: existing.version + 1, updatedAt: new Date().toISOString() });
+  }
+
+  updateMemoryStatus(memoryId, status) {
+    return this.updateMemory(memoryId, { status });
+  }
+
+  deleteMemory(memoryId) {
+    const existing = this.getMemory(memoryId);
+    if (!existing) return false;
+    this.removeMemoryFromPairIndexes(existing);
+    this.removeKnowledgeForMemory(memoryId);
+    const filePath = this.memoryPath(memoryId);
+    this.removeSummaryMutationFile(filePath);
+    delete this.index.memories[memoryId];
+    this.saveIndex();
+    return true;
+  }
+
+  updatePairIndexes(memory) {
+    const ids = uniqueIds([...memory.participants, ...memory.subjects]).sort((a, b) => a - b);
+    for (let left = 0; left < ids.length; left++) {
+      for (let right = left + 1; right < ids.length; right++) {
+        const pairPath = path.join(this.paths.pairs, `${ids[left]}_${ids[right]}.json`);
+        const memoryIds = this.readJson(pairPath, []);
+        if (!memoryIds.includes(memory.memoryId)) {
+          memoryIds.unshift(memory.memoryId);
+          this.writeJson(pairPath, memoryIds);
+        }
+      }
+    }
+  }
+
+  removeMemoryFromPairIndexes(memory) {
+    const ids = uniqueIds([...memory.participants, ...memory.subjects]).sort((a, b) => a - b);
+    for (let left = 0; left < ids.length; left++) {
+      for (let right = left + 1; right < ids.length; right++) {
+        const pairPath = path.join(this.paths.pairs, `${ids[left]}_${ids[right]}.json`);
+        const memoryIds = this.readJson(pairPath, []);
+        if (!Array.isArray(memoryIds) || !memoryIds.includes(memory.memoryId)) continue;
+        const remaining = memoryIds.filter((memoryId) => memoryId !== memory.memoryId);
+        this.writeJson(pairPath, remaining);
+      }
+    }
+  }
+
+  removeKnowledgeForMemory(memoryId, keepCharacterIds = []) {
+    const keep = new Set(uniqueIds(keepCharacterIds));
+    for (const characterId of this.listKnowledgeCharacterIds()) {
+      if (keep.has(characterId)) continue;
+      const records = this.getCharacterKnowledge(characterId);
+      const remaining = records.filter((entry) => entry.memoryId !== memoryId);
+      if (remaining.length !== records.length) this.writeJson(this.knowledgePath(characterId), remaining);
+    }
+  }
+
+  revokeCharacterKnowledge(characterId, memoryId) {
+    const numericId = Number(characterId);
+    if (!Number.isFinite(numericId)) throw new Error("character_id_required");
+    const filePath = this.knowledgePath(numericId);
+    const records = this.getCharacterKnowledge(numericId);
+    const remaining = records.filter((entry) => entry.memoryId !== memoryId);
+    if (remaining.length === records.length) return false;
+    if (remaining.length > 0) this.writeJson(filePath, remaining);
+    else this.removeSummaryMutationFile(filePath);
+    return true;
+  }
+
+  findEpisodeByFinalization(conversationId, finalizationId, campaignToken = undefined) {
+    if (!conversationId || !finalizationId) return null;
+    return this.listAllEpisodes().find((episode) => episode.conversationId === conversationId && episode.finalizationId === finalizationId
+      && (campaignToken === undefined || (episode.campaignToken || null) === campaignToken)) || null;
+  }
+
+  knowledgePath(characterId) {
+    return path.join(this.paths.knowledge, `${Number(characterId)}.json`);
+  }
+
+  getCharacterKnowledge(characterId) {
+    const records = this.readJson(this.knowledgePath(characterId), []);
+    return Array.isArray(records) ? records : [];
+  }
+
+  markKnownBy(characterId, memoryId, details = {}) {
+    const numericId = Number(characterId);
+    if (!Number.isFinite(numericId)) return null;
+    const records = this.getCharacterKnowledge(numericId);
+    const existingIndex = records.findIndex((entry) => entry.memoryId === memoryId);
+    const record = {
+      schemaVersion: CURRENT_MEMORY_SCHEMA_VERSION,
+      characterId: numericId,
+      memoryId,
+      awareness: details.awareness || "witnessed",
+      confidence: Number.isFinite(Number(details.confidence)) ? Number(details.confidence) : 1,
+      acquiredAt: details.acquiredAt ?? null,
+      sourceCharacterId: Number.isFinite(Number(details.sourceCharacterId)) ? Number(details.sourceCharacterId) : null
+    };
+    if (existingIndex >= 0) records[existingIndex] = { ...records[existingIndex], ...record };
+    else records.push(record);
+    this.writeJson(this.knowledgePath(numericId), records);
+    return record;
+  }
+
+  queryMemories({ characterId = null, type = null, subjectIds = [], participantIds = [], includeFolderSummaries = false } = {}) {
+    const ownerId = characterId == null ? null : Number(characterId);
+    const knownIds = ownerId == null ? null : new Set(this.getCharacterKnowledge(ownerId).map((entry) => entry.memoryId));
+    const subjects = new Set(uniqueIds(subjectIds));
+    const participants = new Set(uniqueIds(participantIds));
+    const results = [];
+    for (const memoryId of Object.keys(this.index.memories)) {
+      const memory = this.getMemory(memoryId);
+      if (!memory) continue;
+      if (knownIds && (!knownIds.has(memoryId) || !memory.knownBy.includes(ownerId))) continue;
+      if (type && memory.type !== type) continue;
+      if (subjects.size > 0 && !memory.subjects.some((id) => subjects.has(id))) continue;
+      if (participants.size > 0 && !memory.participants.some((id) => participants.has(id))) continue;
+      results.push(memory);
+    }
+    if (includeFolderSummaries && characterId != null) results.push(...this.loadFolderSummariesForCharacter(characterId));
+    const deduped = new Map(results.map((entry) => [entry.memoryId, entry]));
+    return [...deduped.values()];
+  }
+
+  getPairMemories(leftId, rightId, options = {}) {
+    const ids = [Number(leftId), Number(rightId)].sort((a, b) => a - b);
+    const memoryIds = this.readJson(path.join(this.paths.pairs, `${ids[0]}_${ids[1]}.json`), []);
+    const ownerId = options.characterId == null ? null : Number(options.characterId);
+    const knownMemoryIds = ownerId == null ? null : new Set(this.getCharacterKnowledge(ownerId).map((entry) => entry.memoryId));
+    return memoryIds.map((memoryId) => this.getMemory(memoryId)).filter(Boolean).filter((memory) => {
+      if (knownMemoryIds == null) return true;
+      return knownMemoryIds.has(memory.memoryId) && memory.knownBy.includes(ownerId);
+    });
+  }
+
+  saveCharacterConsolidation(characterId, consolidation) {
+    const filePath = path.join(this.paths.characters, `${Number(characterId)}.json`);
+    this.writeJson(filePath, { schemaVersion: CURRENT_MEMORY_SCHEMA_VERSION, characterId: Number(characterId), ...consolidation, updatedAt: new Date().toISOString() });
+    return filePath;
+  }
+
+  getCharacterConsolidation(characterId) {
+    return this.readJson(path.join(this.paths.characters, `${Number(characterId)}.json`), null);
+  }
+
+  deleteCharacterConsolidation(characterId) {
+    const filePath = path.join(this.paths.characters, `${Number(characterId)}.json`);
+    this.removeSummaryMutationFile(filePath);
+  }
+
+  clearLongTermMemoryStorage() {
+    if (this.summaryFoldersDir) clearDirectory(this.summaryFoldersDir);
+    const memory4Recovery = path.resolve(this.paths.memory4Recovery);
+    if (path.dirname(memory4Recovery) !== path.resolve(this.baseDir)) throw new Error("memory4_recovery_path_invalid");
+    for (const directory of [this.paths.episodes, this.paths.characters, this.paths.pairs, this.paths.knowledge, this.paths.recovery, memory4Recovery]) {
+      clearDirectory(directory);
+    }
+    this.index = { schemaVersion: CURRENT_MEMORY_SCHEMA_VERSION, memories: {}, episodes: {} };
+    // CK3 death tombstones are game-derived, not remembered conversation facts.
+    for (const file of fs.readdirSync(this.paths.ownerStatus).filter(name => name.endsWith(".json"))) {
+      const filePath = path.join(this.paths.ownerStatus, file);
+      const record = this.readJson(filePath, null);
+      if (record?.source === "memory") fs.unlinkSync(filePath);
+    }
+    this.saveIndex();
+    this.invalidateFolderSummaryCache();
+    this.ensureDirectories();
+    return { success: true };
+  }
+
+  deleteOwnedSummaryFolders(characterId) {
+    const numericId = Number(characterId);
+    if (!Number.isFinite(numericId)) throw new Error("character_id_required");
+    this.invalidateFolderSummaryCache([numericId]);
+    if (!this.summaryFoldersDir || !fs.existsSync(this.summaryFoldersDir)) return { removedFolderCount: 0 };
+    const root = path.resolve(this.summaryFoldersDir);
+    const prefix = `${numericId}_`;
+    const folders = fs.readdirSync(root, { withFileTypes: true })
+      .filter((entry) => entry.isDirectory() && entry.name.startsWith(prefix));
+    for (const folder of folders) {
+      const target = path.resolve(root, folder.name);
+      if (path.dirname(target) !== root) throw new Error("unsafe_summary_folder_target");
+      removeDirectoryTree(target);
+    }
+    const sidecar = path.resolve(root, ".memory4", String(numericId));
+    if (path.dirname(sidecar) !== path.join(root, ".memory4")) throw new Error("unsafe_summary_folder_target");
+    if (fs.existsSync(sidecar)) {
+      if (fs.lstatSync(path.join(root, ".memory4")).isSymbolicLink() || fs.lstatSync(sidecar).isSymbolicLink()) throw new Error("unsafe_summary_folder_target");
+      removeDirectoryTree(sidecar);
+    }
+    return { removedFolderCount: folders.length };
+  }
+
+  summaryOwnerStatusPath(characterId) {
+    return path.join(this.paths.ownerStatus, `${Number(characterId)}.json`);
+  }
+
+  markSummaryOwnerDeceased(characterId, details = {}) {
+    const numericId = Number(characterId);
+    if (!Number.isFinite(numericId)) throw new Error("character_id_required");
+    const record = {
+      schemaVersion: CURRENT_MEMORY_SCHEMA_VERSION,
+      characterId: numericId,
+      status: "deceased",
+      source: details.source || "game",
+      reason: details.reason || "dead",
+      markedAt: details.markedAt || new Date().toISOString()
+    };
+    this.writeJson(this.summaryOwnerStatusPath(numericId), record);
+    return record;
+  }
+
+  reviveSummaryOwner(characterId) {
+    const numericId = Number(characterId);
+    if (!Number.isFinite(numericId)) throw new Error("character_id_required");
+    const filePath = this.summaryOwnerStatusPath(numericId);
+    if (fs.existsSync(filePath)) fs.unlinkSync(filePath);
+    return { characterId: numericId, status: "active" };
+  }
+
+  isSummaryOwnerDeceased(characterId) {
+    return this.readJson(this.summaryOwnerStatusPath(characterId), null)?.status === "deceased";
+  }
+
+  getSummaryFolderProfile(characterId) {
+    const numericId = Number(characterId);
+    if (!Number.isFinite(numericId) || !this.summaryFoldersDir || !fs.existsSync(this.summaryFoldersDir)) return null;
+    const prefix = `${numericId}_`;
+    const folders = fs.readdirSync(this.summaryFoldersDir, { withFileTypes: true })
+      .filter((entry) => entry.isDirectory() && entry.name.startsWith(prefix))
+      .map((entry) => entry.name.slice(prefix.length).trim())
+      .filter(Boolean)
+      .sort((left, right) => left.length - right.length || left.localeCompare(right));
+    return folders.length > 0 ? { id: numericId, name: folders[0], shortName: folders[0] } : null;
+  }
+
+  invalidateFolderSummaryCache(characterIds = null) {
+    if (characterIds == null) {
+      const owners = new Set([...this.folderSummaryRevisions.keys(), ...this.folderSummaryCache.keys()]);
+      this.folderSummaryCacheMetrics.invalidations += this.folderSummaryCache.size;
+      this.folderSummaryCache.clear();
+      this.summaryDateIndexCache.clear();
+      this.folderSummaryLoadDiagnostics.clear();
+      for (const characterId of owners) {
+        this.folderSummaryRevisions.set(characterId, (this.folderSummaryRevisions.get(characterId) || 0) + 1);
+      }
+      return;
+    }
+    for (const characterId of uniqueIds(characterIds)) {
+      if (this.folderSummaryCache.delete(characterId)) this.folderSummaryCacheMetrics.invalidations++;
+      this.folderSummaryRevisions.set(characterId, (this.folderSummaryRevisions.get(characterId) || 0) + 1);
+      this.folderSummaryLoadDiagnostics.delete(characterId);
+      for (const key of this.summaryDateIndexCache.keys()) if (key.startsWith(String(characterId) + "|")) this.summaryDateIndexCache.delete(key);
+    }
+  }
+
+  getFolderSummaryRevision(characterId) {
+    return this.folderSummaryRevisions.get(Number(characterId)) || 0;
+  }
+
+  getFolderSummarySnapshotRevision(memories) {
+    return Array.isArray(memories) ? this.folderSummarySnapshotRevisions.get(memories) ?? null : null;
+  }
+
+  getFolderSummaryLoadDiagnostics(characterId) {
+    const diagnostics = this.folderSummaryLoadDiagnostics.get(Number(characterId));
+    return diagnostics ? { ...diagnostics } : null;
+  }
+
+  getSummaryDateIndexForPair(ownerId, counterpartId, { currentGameDate, currentTotalDays, ownerFolderMemories = null, campaignToken = null, dualTemporal = false } = {}) {
+    const key = String(ownerId) + "|" + String(counterpartId);
+    const previous = this.summaryDateIndexCache.get(key);
+    if (previous?.gameDate === currentGameDate && previous?.totalDays === currentTotalDays
+      && previous.campaignToken === campaignToken && previous.dualTemporal === dualTemporal
+      && previous.ownerFolderMemories === ownerFolderMemories) return previous.entries;
+    const memories = this.loadDirectPairSummaries(ownerId, counterpartId, ownerFolderMemories);
+    const build = dualTemporal ? buildDualTemporalIndex : buildSummaryDateIndex;
+    const entries = build(memories, { ownerId, counterpartId, currentGameDate, currentTotalDays, campaignToken });
+    this.summaryDateIndexCache.set(key, { gameDate: currentGameDate, totalDays: currentTotalDays, ownerFolderMemories, campaignToken, dualTemporal, entries });
+    return entries;
+  }
+
+  getFolderSummaryCacheMetrics() {
+    return { ...this.folderSummaryCacheMetrics, entries: this.folderSummaryCache.size };
+  }
+
+  loadFolderSummariesForCharacter(characterId) {
+    const ownerId = Number(characterId);
+    if (!Number.isSafeInteger(ownerId) || ownerId <= 0) return [];
+    if (this.folderSummaryCache.has(ownerId)) {
+      this.folderSummaryCacheMetrics.hits++;
+      const memories = this.folderSummaryCache.get(ownerId).map((memory) => createMemoryRecord(memory));
+      this.folderSummarySnapshotRevisions.set(memories, this.getFolderSummaryRevision(ownerId));
+      this.folderSummaryLoadDiagnostics.set(ownerId, {
+        status: "CACHE_HIT", cacheHit: true, filesFound: null, filesParsed: null, recordsParsed: null,
+        ownerAcceptedCount: null, ownerRejectedCount: null, malformedFileCount: null, cachedSummaryCount: memories.length
+      });
+      return memories;
+    }
+    this.folderSummaryCacheMetrics.misses++;
+    const loadDiagnostics = {
+      status: "LOADED", cacheHit: false, filesFound: 0, filesParsed: 0, recordsParsed: 0,
+      ownerAcceptedCount: 0, ownerRejectedCount: 0, malformedFileCount: 0, cachedSummaryCount: 0
+    };
+    if (!this.summaryFoldersDir || !fs.existsSync(this.summaryFoldersDir)) {
+      this.folderSummaryCache.set(ownerId, []);
+      const memories = [];
+      this.folderSummarySnapshotRevisions.set(memories, this.getFolderSummaryRevision(ownerId));
+      this.folderSummaryLoadDiagnostics.set(ownerId, loadDiagnostics);
+      return memories;
+    }
+    const prefix = `${ownerId}_`;
+    const folders = fs.readdirSync(this.summaryFoldersDir, { withFileTypes: true })
+      .filter((entry) => entry.isDirectory() && entry.name.startsWith(prefix));
+    const sessions = new Map();
+    const forgetStore = new Memory4Store({ summaryFoldersDir: this.summaryFoldersDir });
+    const forgottenByCampaign = new Map();
+    for (const folder of folders) {
+      const folderPath = path.join(this.summaryFoldersDir, folder.name);
+      const files = fs.readdirSync(folderPath).filter((name) => name.endsWith(".json"));
+      loadDiagnostics.filesFound += files.length;
+      for (const file of files) {
+        const invalidFile = Symbol("invalid_summary_file");
+        const summaries = this.readJson(path.join(folderPath, file), invalidFile);
+        if (!Array.isArray(summaries)) {
+          loadDiagnostics.malformedFileCount++;
+          continue;
+        }
+        loadDiagnostics.filesParsed++;
+        loadDiagnostics.recordsParsed += summaries.length;
+        for (let index = 0; index < summaries.length; index++) {
+          const summary = summaries[index];
+          // Official documents are selected once through the responder's 2+1 route.
+          if (summary?.sourceType === "CK3_OFFICIAL_RECOLLECTION") continue;
+          if (!summary || typeof summary !== "object" || typeof summary.content !== "string") {
+            loadDiagnostics.ownerRejectedCount++;
+            continue;
+          }
+          const playerId = Number(summary.playerId);
+          const summaryCharacterId = Number(summary.characterId);
+          const explicitIds = [playerId, summaryCharacterId].filter((id) => Number.isSafeInteger(id) && id > 0);
+          const perspectiveOwnerId = summary.perspectiveOwnerId == null ? null : Number(summary.perspectiveOwnerId);
+          const hasSourceIdentity = summary.playerId != null || summary.characterId != null;
+          if ((perspectiveOwnerId !== null && (!Number.isSafeInteger(perspectiveOwnerId) || perspectiveOwnerId !== ownerId))
+            || (explicitIds.length > 0 && !explicitIds.includes(ownerId))
+            || (hasSourceIdentity && !explicitIds.includes(ownerId))) {
+            loadDiagnostics.ownerRejectedCount++;
+            continue;
+          }
+          loadDiagnostics.ownerAcceptedCount++;
+          const counterpartId = playerId === ownerId && Number.isSafeInteger(summaryCharacterId) && summaryCharacterId > 0 && summaryCharacterId !== ownerId
+            ? summaryCharacterId
+            : summaryCharacterId === ownerId && Number.isSafeInteger(playerId) && playerId > 0 && playerId !== ownerId ? playerId : null;
+          let projectionLineage = null;
+          if (counterpartId && summary.campaignToken) {
+            try {
+              const lineageKey = `${ownerId}|${summary.campaignToken}`;
+              if (!forgottenByCampaign.has(lineageKey)) forgottenByCampaign.set(lineageKey,
+                forgetStore.listForgottenProjections({ campaignToken: summary.campaignToken, ownerId }));
+              projectionLineage = projectionLineageFromSummary(summary, { ownerId, counterpartId });
+              if (projectionLineage && forgottenByCampaign.get(lineageKey).some(target => matchesProjectionLineage(target, projectionLineage))) continue;
+            } catch {
+              loadDiagnostics.ownerRejectedCount++;
+              continue;
+            }
+          }
+          const filenameMatch = file.match(/^与(.+)的对话\.json$/);
+          const counterpartName = filenameMatch?.[1] || summary.characterName || null;
+          const participantProfiles = Array.isArray(summary.participants) ? summary.participants : [];
+          const summaryProfiles = mergeCharacterProfiles(
+            participantProfiles,
+            Number.isSafeInteger(playerId) && playerId > 0 ? [{ id: playerId, name: summary.playerName, shortName: summary.playerName }] : [],
+            Number.isSafeInteger(summaryCharacterId) && summaryCharacterId > 0 ? [{ id: summaryCharacterId, name: summary.characterName, shortName: summary.characterName }] : []
+          );
+          const participants = uniqueIds([
+            ownerId,
+            counterpartId,
+            playerId,
+            summaryCharacterId,
+            ...participantProfiles.map((participant) => participant && typeof participant === "object" ? participant.id ?? participant.characterId : participant)
+          ]);
+          const participantNames = participantProfiles.flatMap((participant) => participant && typeof participant === "object" ? [participant.name, participant.shortName, participant.fullName] : []).filter(Boolean);
+          const finalizationId = summary.finalizationId || null;
+          // Pair projections from one session can differ by presence and subject.
+          // Only byte-identical bodies are mirrors; never discard another pair's facts.
+          const temporalRefs = normalizePerspectiveTemporalRefs(summary.temporalRefs, summary.perspectiveMemoryIds);
+          const temporalSignature = temporalRefs.length ? `|${JSON.stringify(temporalRefs)}` : "";
+          const sessionKey = (summary.campaignToken ? `${summary.campaignToken}|` : "") + (finalizationId ? `${ownerId}|${finalizationId}|${summary.content}${temporalSignature}` : `${ownerId}|${summary.date || ""}|${summary.totalDays ?? ""}|${summary.content}${temporalSignature}`);
+          const digest = crypto.createHash("sha1").update(sessionKey).digest("hex").slice(0, 16);
+          const existing = sessions.get(sessionKey);
+          if (existing) {
+            existing.importance = Math.max(existing.importance, summary.pinned === true ? 0.95 : 0.65);
+            if (summary.open === true) existing.status = "open";
+            existing.participants = uniqueIds([...existing.participants, ...participants]);
+            existing.subjects = uniqueIds([...existing.subjects, ...participants.filter((id) => id !== ownerId)]);
+            existing.tags = [...new Set([...existing.tags, counterpartName, ...participantNames].filter(Boolean))];
+            existing.provenance.conversationFiles = [...new Set([...existing.provenance.conversationFiles, file])];
+            existing.provenance.counterpartIds = uniqueIds([...existing.provenance.counterpartIds, ...(counterpartId == null ? [] : [counterpartId])]);
+            existing.provenance.counterpartNames = [...new Set([...existing.provenance.counterpartNames, counterpartName].filter(Boolean))];
+            existing.provenance.participantProfiles = mergeCharacterProfiles(existing.provenance.participantProfiles || [], summaryProfiles);
+            existing.provenance.perspectiveMemoryIds = [...new Set([...existing.provenance.perspectiveMemoryIds, ...(summary.perspectiveMemoryIds || [])].map(String).filter(Boolean))];
+            existing.provenance.sourceSegmentIds = [...new Set([...(existing.provenance.sourceSegmentIds || []), ...(Array.isArray(summary.sourceSegmentIds) ? summary.sourceSegmentIds : [])].map(String).filter(Boolean))];
+            existing.provenance.sourceMessageIds = [...new Set([...(existing.provenance.sourceMessageIds || []), ...(Array.isArray(summary.sourceMessageIds) ? summary.sourceMessageIds : [])]
+              .filter(id => Number.isSafeInteger(id) && id >= 0))].sort((a, b) => a - b);
+            existing.provenance.sourceLetterId ||= summary.sourceLetterId || summary.letterId || null;
+            existing.provenance.projectionLineages = [...new Map([...(existing.provenance.projectionLineages || []),
+              ...(projectionLineage ? [projectionLineage] : [])].filter(item => item?.projectionId)
+              .map(item => [item.projectionId, item])).values()];
+            existing.provenance.projectionId ||= summary.projectionId || null;
+            existing.provenance.conversationId ||= summary.conversationId || null;
+            existing.provenance.finalizationId ||= summary.finalizationId || null;
+            existing.provenance.segmentIds = [...new Set([...existing.provenance.segmentIds, ...(summary.perspectiveSummarySegmentIds || [])].map(String).filter(Boolean))];
+            existing.provenance.perspectiveSummarySegmentIds = [...new Set([...existing.provenance.perspectiveSummarySegmentIds,
+              ...(summary.perspectiveSummarySegmentIds || [])].map(String).filter(Boolean))];
+            existing.provenance.temporalRefs = normalizePerspectiveTemporalRefs([...existing.provenance.temporalRefs, ...temporalRefs], existing.provenance.perspectiveMemoryIds);
+            continue;
+          }
+          sessions.set(sessionKey, createMemoryRecord({
+            schemaVersion: CURRENT_MEMORY_SCHEMA_VERSION,
+            memoryId: `folder_${digest}`,
+            type: "folder_summary",
+            subtype: "conversation_summary",
+            eventDate: summary.date || null,
+            totalDays: summary.totalDays,
+            participants,
+            subjects: participants.filter((id) => id !== ownerId),
+            content: summary.content,
+            canonicalText: summary.content,
+            importance: summary.pinned === true ? 0.95 : 0.65,
+            confidence: 0.9,
+            source: "imported",
+            visibility: "known_group",
+            knownBy: [ownerId],
+            tags: [counterpartName, ...participantNames].filter(Boolean),
+            provenance: {
+              campaignToken: summary.campaignToken || null,
+              campaignBinding: summary.campaignBinding || null,
+              temporalRefs,
+              finalizationId,
+              folderOwnerId: ownerId,
+              folderName: folder.name,
+              conversationFile: file,
+              conversationFiles: [file],
+            counterpartId: counterpartId == null ? undefined : counterpartId,
+              counterpartName,
+            counterpartIds: counterpartId == null ? [] : [counterpartId],
+              counterpartNames: [counterpartName],
+              participantProfiles: summaryProfiles,
+              conversationId: summary.conversationId || null,
+              projectionId: summary.projectionId || null,
+              sourceSegmentIds: Array.isArray(summary.sourceSegmentIds) ? summary.sourceSegmentIds : [],
+              sourceMessageIds: [...new Set((Array.isArray(summary.sourceMessageIds) ? summary.sourceMessageIds : [])
+                .filter(id => Number.isSafeInteger(id) && id >= 0))].sort((a, b) => a - b),
+              sourceLetterId: summary.sourceLetterId || summary.letterId || null,
+              segmentIds: summary.perspectiveSummarySegmentIds || [],
+              perspectiveSummarySegmentIds: summary.perspectiveSummarySegmentIds || [],
+              projectionLineages: projectionLineage ? [projectionLineage] : [],
+              extractionMode: ["2.5", MEMORY_ENGINE_VERSION].includes(summary.engineVersion) ? "folder_summary_v2_5" : summary.engineVersion === "2.4" ? "folder_summary_v2_4" : summary.engineVersion === "2.3" ? "folder_summary_v2_3" : "folder_summary_v2_1",
+              perspectiveMemoryIds: summary.perspectiveMemoryIds || [],
+              projectionHash: summary.projectionHash || null,
+              messageIds: [],
+              speakerIds: []
+            },
+            status: summary.open === true ? "open" : null
+          }));
+        }
+      }
+    }
+    const memories = [...sessions.values()];
+    this.folderSummaryCache.set(ownerId, memories);
+    loadDiagnostics.cachedSummaryCount = memories.length;
+    this.folderSummaryLoadDiagnostics.set(ownerId, loadDiagnostics);
+    const snapshot = memories.map((memory) => createMemoryRecord(memory));
+    this.folderSummarySnapshotRevisions.set(snapshot, this.getFolderSummaryRevision(ownerId));
+    return snapshot;
+  }
+
+  loadDirectPairSummaries(ownerId, counterpartId, ownerMemories = null) {
+    const numericOwnerId = Number(ownerId);
+    const numericCounterpartId = Number(counterpartId);
+    if (!Number.isSafeInteger(numericOwnerId) || numericOwnerId <= 0 || !Number.isSafeInteger(numericCounterpartId)
+      || numericCounterpartId <= 0 || numericOwnerId === numericCounterpartId) return [];
+    const memories = Array.isArray(ownerMemories) ? ownerMemories : this.loadFolderSummariesForCharacter(numericOwnerId);
+    return memories.filter((memory) => {
+      if (Number(memory.provenance?.folderOwnerId) !== numericOwnerId) return false;
+      const ids = uniqueIds([memory.provenance?.counterpartId, ...(memory.provenance?.counterpartIds || [])]);
+      return ids.includes(numericCounterpartId) && memory.participants.includes(numericOwnerId);
+    });
+  }
+
+  searchOwnerFolderForEntity(ownerId, entityId, entityNames = [], ownerMemories = null) {
+    const numericEntityId = Number(entityId);
+    const names = [...new Set((entityNames || []).map((name) => String(name || "").trim()).filter(Boolean))];
+    const memories = Array.isArray(ownerMemories) ? ownerMemories : this.loadFolderSummariesForCharacter(ownerId);
+    return memories.filter((memory) => {
+      const counterpartIds = uniqueIds([memory.provenance?.counterpartId, ...(memory.provenance?.counterpartIds || [])]);
+      if (Number.isFinite(numericEntityId) && (counterpartIds.includes(numericEntityId) || memory.participants.includes(numericEntityId) || memory.subjects.includes(numericEntityId))) return true;
+      if (names.length === 0) return false;
+      const searchable = [
+        memory.content,
+        memory.canonicalText,
+        ...(memory.tags || []),
+        memory.provenance?.counterpartName,
+        ...(memory.provenance?.counterpartNames || []),
+        ...(memory.provenance?.conversationFiles || [])
+      ].filter(Boolean).join("\n");
+      return names.some((name) => searchable.includes(name));
+    });
+  }
+
+}
+
+module.exports = { MemoryStore };

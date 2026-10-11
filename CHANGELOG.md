@@ -2,6 +2,8 @@
 
 这里是版本变更的单一入口。详细设计和测试证据保留在链接目标中，本文件只维护版本顺序、用户可见摘要和文档索引。
 
+V9.1（2026-10-11，源码与构建）：[构建说明](docs/current/v9/V9_1_SOURCE_BUILD.md)、[验证](docs/current/v9/V9_1_VERIFICATION_REPORT.md)、[架构移交](docs/current/v9/V9_1_ARCHITECTURE_HANDOFF.md)。按旧总路线建立 282 文件可编辑 JS 源与确定性 Main/Preload/Renderer 资源构建；锁定既有 vendor 和许可清单，CI 先构建再运行原门禁。项目／UI V9.1、App 9.1.0，Mod 2.0.5 和 Memory4 保持；业务重构留至后续阶段，旧 Electron 壳未重编译。
+
 V9.0（2026-10-11，本地工程LOCAL_PASS）：[实施与验证](docs/current/v9/V9_0_VERIFICATION_REPORT.md)。冻结V8，保留历史反例修复CI checkout；加入默认关闭的有限脱敏性能诊断；Three-Mod工程和QA独立迁出，本体保留正式CK3 Bridge。本地409/409发布组和隔离实际窗口诊断通过；远端CI／实机采样待上传与复测，总体HOLD，未签发完整PASS。
 
 V9.0 版本对齐（2026-10-11）：[版本与验证](docs/current/v9/V9_VERSION_ALIGNMENT.md)。核心 9.0、App 包 9.0.0、VOTC Workshop Mod 2.0.5，前端与主题预览同步；Memory Engine 4.0、协议 3.0 和摘要存储 2.5 保持。AGENTS、README 与当前文档同步，历史记录不改写。

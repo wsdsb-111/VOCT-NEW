@@ -23,5 +23,17 @@ jobs:
         uses: actions/setup-node@v5
         with:
           node-version: 22
+      - name: Verify locked runtime dependencies
+        run: node scripts/runtime-dependencies.js
+      - name: Build runtime from source
+        run: node scripts/build-runtime.js
+      - name: Verify and materialize generated runtime
+        run: |
+          node scripts/verify-runtime-build.js
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          node scripts/deploy-runtime-build.js
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          node scripts/verify-runtime-build.js --deployed
       - name: Run release regression
+        # Existing tests now exercise source-generated resources/app/out.
         run: node scripts/test-release.js

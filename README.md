@@ -2,13 +2,13 @@
 
 Voices of the Court 是一个面向《Crusader Kings III》（CK3）的沉浸式 AI 宫廷对话工具。它读取 CK3 的游戏日志和角色数据，将当前日期、朝代、角色关系、场景、记忆与历史背景整理为提示词，再通过兼容 OpenAI Chat Completions 格式的 API 生成角色扮演回复。
 
-本仓库保存的是 VOTC 的 Windows 打包版本及默认用户数据，适合直接运行、测试和二次配置。
+本仓库保存 VOTC 的可编辑 JavaScript 源、可重复生成的运行资源、既有 Windows 壳与锁定依赖，适合运行、开发与回归验证。
 
-当前主线 **V9.0 工程基线**（2026-10-11）：[实施与验证](docs/current/v9/V9_0_VERIFICATION_REPORT.md)、[路线](docs/current/v9/V9_ROADMAP.md)、[冻结证据](docs/current/v9/V8_FREEZE_EVIDENCE.md)。本地409/409发布门禁和隔离打包诊断冒烟通过；远端CI／真实CK3与Provider结果分别记录，总体HOLD，尚未完整验收。
+当前主线 **V9.1 源码与构建**（2026-10-11）：[构建说明](docs/current/v9/V9_1_SOURCE_BUILD.md)、[本轮验证](docs/current/v9/V9_1_VERIFICATION_REPORT.md)、[架构移交](docs/current/v9/V9_1_ARCHITECTURE_HANDOFF.md)。按用户确认的[旧总路线](docs/current/v9/V9_ROADMAP.md)分期开发，Context／Memory／Bridge 重构分别留到后续阶段。V9.0 提交 c819c85 的远端 CI 已确认成功；V9.1 远端 CI 需上传后确认。真实 CK3、Provider 与启动性能采样单独记录。
 
 ## 主要功能
 
-当前版本：项目 **V9.0**，Electron App 包 **9.0.0**，VOTC Workshop Mod **2.0.5**，人物记忆 **Memory Engine 4.0**。前端显示 `V9.0 · Mod v2.0.5`，悬停可见 App 包版本；记忆协议 3.0、摘要存储 2.5 保持兼容。独立 Three-Mod 兼容工程仍为 1.0.6。[版本对齐与验证](docs/current/v9/V9_VERSION_ALIGNMENT.md)。以下 V8 报告保留历史版本和当时验收快照。
+当前版本：项目 **V9.1**，Electron App 包 **9.1.0**，VOTC Workshop Mod **2.0.5**，人物记忆 **Memory Engine 4.0**。前端显示 `V9.1 · Mod v2.0.5`，悬停可见 App 包版本；记忆协议 3.0、摘要存储 2.5 保持兼容。独立 Three-Mod 兼容工程仍为 1.0.6。VOTC.exe 的旧壳属性版本未改写。以下历史报告保留当时版本和验收快照。
 
 可选兼容工程已完成本地迁移：[CK3-Three-Mod-Compatibility](https://github.com/wsdsb-111/CK3-Three-Mod-Compatibility)，工作目录 `C:/Users/97330/Documents/Codex/CK3-Three-Mod-Compatibility`。官职／称谓规则不属于 VOTC 运行必需依赖，历史[1.0.6 报告](docs/v8.15.2-celestial-same-tier-office-report.md)保留；当前安装 Mod 不卸载。独立CI与CK3验收待执行。
 
@@ -177,9 +177,9 @@ V7.6 起，Provider API Key 使用 Electron `safeStorage` 加密后写入独立�
 
 历史认知规则还会要求模型在提及人物、事件、书籍、诗词、典故、制度或技术时，先将其出现、发生、写成、成名或流传时间与当前年份比较。年份不确定时，角色应回答“不曾听闻”或“并不知晓”，而不是用现代知识补全。
 
-默认提示词及其动态 `world_context` 段位于：
+默认提示词及其动态 `world_context` 段的可编辑源位于：
 
-`resources/app/default_userdata/prompts/system/default.hbs`
+`src/app/default_userdata/prompts/system/default.hbs`，构建后生成 `resources/app/default_userdata/prompts/system/default.hbs`。
 
 V8.0 将旧年份分支迁移到 `resources/app/out/main/historical-system/`，并通过兼容适配器继续向 `GameData.historicalReferenceInfo` 返回原来的 `period / context / notableEvents / notableFigures`。当前 Prompt 文本、block 顺序、stable/dynamic 标记和 cache anchor 均未改变；Temporal Knowledge Gate 对无效日期和未知来源时间 fail-safe，但本阶段不改写最终 Prompt。
 
@@ -233,6 +233,10 @@ V7.9.1 继续使用 Memory Engine 2.5，本次未修改摘要存储、动态召�
 
 ```text
 voices-of-the-court/
+├─ src/app/                                         # 可编辑 Main、Preload、Renderer 与默认数据
+├─ build/                                           # 映射、V9.0 对照与 vendor 依赖锁
+├─ scripts/build-runtime.js                         # 确定性资源构建（Node 内置模块）
+├─ scripts/deploy-runtime-build.js                  # 校验后部署生成资源
 ├─ resources/app/out/main/main.js                    # 主程序逻辑
 ├─ resources/app/out/main/provider-service.js        # 模型选择、请求参数、Token 与用量编排
 ├─ resources/app/out/main/providers/                 # 六种模型 Provider 实现与注册
@@ -287,26 +291,26 @@ V8.4 世界线页面已接入 `autosave.ck3` Save Reader、Worker、原子 Check
 
 V8.4.1 已完成 Terra-3、Luna-1/2/3、Terra-4/5、Luna-6 与 Sol-3：title、character first-name key、dynasty、culture、faith 与 war 输出均保留 raw identity、显示值和来源证据；不同启用 Mod/base 来源的文本冲突保持 raw key，不猜测覆盖 winner。真实 `h_china` 发现“中华/华夏”冲突并正确降级；世界概览已展示玩家主要头衔、直属领主、顶层 Realm、统治者以及 Checkpoint/Live 新鲜度，长 key 支持 tooltip/复制。中文世界查询改为实体级 CJK/ID/alias 分析；中文 Live 日期不再被误判为 STALE，Prompt 明确区分 Checkpoint as-of 与 Live 日期，并声明 Live/回应角色权威资料/场景直接事实优先于 Checkpoint，后者再优先于 Supplemental、Personal Memory 与模型推断。STALE/wrong-source Checkpoint 不会注入；诊断页可只读检查 Query、命中事实、Token、缓存和裁剪项，且不会打开生产 Prompt Integration。静态回归已通过，三套主题人工视觉 Gate 与 Provider/Cache Gate 待完成。详见 [Terra Localization 实施报告](docs/v8.4.1-terra-localization-implementation-report.md)、[Luna UI 实施报告](docs/v8.4.1-luna-ui-implementation-report.md)、[Terra Query/Freshness 实施报告](docs/v8.4.1-terra-query-freshness-implementation-report.md)、[Luna Prompt Diagnostics 实施报告](docs/v8.4.1-luna-prompt-diagnostics-implementation-report.md)和 [Sol-3 Prompt Source Boundary Review](docs/v8.4.1-sol-3-prompt-source-boundary-review.md)。
 
-V7.7 在 V7.6 健康化基础上分阶段拆分主进程：第一阶段将六种模型 Provider 迁入 `providers/index.js`、92 个既有 IPC 注册迁入 `ipc/register-ipc.js`；第二阶段把 `ProviderRegistry`、`TokenCounter` 和 `LLMManager` 迁入 `provider-service.js`，通过显式依赖继续读取用户分别选择的对话、摘要和动作模型。`main.js` 由约 9477 行降至约 6612 行。动作语义同时补齐“共度春宵/鱼水之欢已发生”和“从今以后成为情人/认定灵魂伴侣”等自然完成态表达，并继续排除请求、计划、假设、回忆与失败尝试。当前仓库仍是可运行打包产物，没有能够重新生成这些文件的完整 `src` 工程，因此本阶段不伪造源码构建链。
+V7.7 在 V7.6 健康化基础上分阶段拆分主进程：第一阶段将六种模型 Provider 迁入 `providers/index.js`、92 个既有 IPC 注册迁入 `ipc/register-ipc.js`；第二阶段把 `ProviderRegistry`、`TokenCounter` 和 `LLMManager` 迁入 `provider-service.js`，通过显式依赖继续读取用户分别选择的对话、摘要和动作模型。`main.js` 由约 9477 行降至约 6612 行。动作语义同时补齐“共度春宵/鱼水之欢已发生”和“从今以后成为情人/认定灵魂伴侣”等自然完成态表达，并继续排除请求、计划、假设、回忆与失败尝试。V7.7 当时仅有可运行打包产物，未建立完整 `src` 工程；V9.1 现已建立可编辑 JS 源与确定性资源构建，见上方构建入口。
 
-发布测试统一由 `scripts/test-manifest.js` 声明。本地与 CI 都运行：
+发布测试统一由 `scripts/test-manifest.js` 声明。本地先按[构建说明](docs/current/v9/V9_1_SOURCE_BUILD.md)生成、部署并校验资源；CI 自动完成同一过程，然后运行：
 
 ```powershell
 node scripts\test-release.js
 ```
 
-清单会覆盖全部 `test-*.js`。当前分类为 478 个测试文件、409 个发布组和 68 个归档检查；最新 V9.0 门禁结果以 [实施与验证](docs/current/v9/V9_0_VERIFICATION_REPORT.md)及[版本对齐](docs/current/v9/V9_VERSION_ALIGNMENT.md)为准。已退役的 V8.3/V8.3.1 Shadow Resolver、Ground Truth 与诊断面板测试不再作为发布路径。V8.8.2 门禁继续覆盖历史基线、Campaign/Worldline、Definition-ID 双向唯一绑定、第三方亲属 Anchor、长幼/出生日歧义、性别冲突、关系类型限定、已故配偶方向、已故前配偶隔离、配偶三状态 Intent、生产 revision invariant、人口属性缓存失效、来源完整性和冻结边界；既有 Run Command Recovery T1–T18、Memory、Conversation、Action、Letter、Relationship、Date Producer 与缓存回归继续执行。历史归档检查不计入发布组，个别旧合同断言可能不再适用于当前生产合同。
+清单会覆盖全部 `test-*.js`。当前分类为 482 个测试文件、413 个发布组和 68 个归档检查；最新门禁结果以 [V9.1 验证](docs/current/v9/V9_1_VERIFICATION_REPORT.md)为准。已退役的 V8.3/V8.3.1 Shadow Resolver、Ground Truth 与诊断面板测试不再作为发布路径。V8.8.2 门禁继续覆盖历史基线、Campaign/Worldline、Definition-ID 双向唯一绑定、第三方亲属 Anchor、长幼/出生日歧义、性别冲突、关系类型限定、已故配偶方向、已故前配偶隔离、配偶三状态 Intent、生产 revision invariant、人口属性缓存失效、来源完整性和冻结边界；既有 Run Command Recovery T1–T18、Memory、Conversation、Action、Letter、Relationship、Date Producer 与缓存回归继续执行。历史归档检查不计入发布组，个别旧合同断言可能不再适用于当前生产合同。
 
 ## 版本信息
 
-- 项目／前端版本：V9.0；底部显示 `V9.0 · Mod v2.0.5`，App 包版本为 9.0.0
-- 当前开发基线：V9.0，继承 V8.15.2 行为和用户既有验收。V9 本地工程验证通过，远端 CI、新启动性能采样及 CK3 对照仍待完成，总体 HOLD；各轮证据单独记录
+- 项目／前端版本：V9.1；底部显示 `V9.1 · Mod v2.0.5`，App 包版本为 9.1.0
+- 当前开发基线：V9.1 源码与构建，继承 V8.15.2 行为和用户既有验收。V9.0 远端 CI 已成功；V9.1 的上传后 CI、新启动性能采样及 CK3 对照分别记录
 - 本机 CK3 模组 descriptor：Voices of the Court 2.0，version 2.0.5，Workshop 3346777360（Mod 名称保留以兼容依赖）；必需 Date Runner 补丁按[外部运行依赖](docs/EXTERNAL_RUNTIME_DEPENDENCIES.md)核对，不单凭版本号判定
 - 本机模组 descriptor 支持版本：CK3 1.20.*（元数据声明，不替代实机兼容性 Gate）
 - UI 主题：宫廷编年史风格（深红、暗金、羊皮纸文本层级）
 - UI 主题切换：游牧、骑士纹章、水墨画卷三套完整历史风格；分别使用 `image/草原游牧.png`、`image/中世纪骑士.png`、`image/中国古典.png` 作为整块界面背景，并保留各自的边框结构、按钮造型、消息卡片、输入框、字体和滚动条，主题选择可自动保存
 - UI 素材生成提示词：参见 [docs/UI_ASSET_PROMPTS_2.0.3.md](docs/UI_ASSET_PROMPTS_2.0.3.md)
-- 当前重点：完成 V9.0 远端 CI、真实 CK3 对照和启动卡顿采样；既有 Provider、缓存与长时间运行用户验收保留。Official VOTC 2.0.3 Action、Memory Engine 4.0 显示／3.0 协议和摘要 2.5 存储保持兼容。
+- 当前重点：V9.1 源生成 Runtime 的 CI 与实际窗口验证，后续按路线进入 V9.2；真实 CK3 对照和启动卡顿采样继续单列。既有 Provider、缓存与长时间运行用户验收保留。Official VOTC 2.0.3 Action、Memory Engine 4.0 显示／3.0 协议和摘要 2.5 存储保持兼容。
 
 ## 已知限制
 

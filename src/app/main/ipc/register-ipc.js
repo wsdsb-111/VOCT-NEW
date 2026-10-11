@@ -1,0 +1,1107 @@
+"use strict";
+
+const path = require("path");
+const fs = require("fs");
+
+function requireInteger(value, label, { min = 0, max = Number.MAX_SAFE_INTEGER } = {}) {
+  if (!Number.isInteger(value) || value < min || value > max) throw new Error(`${label}_must_be_an_integer_between_${min}_and_${max}`);
+  return value;
+}
+
+function validateExternalHttpUrl(value) {
+  if (typeof value !== "string") throw new Error("external_url_must_be_a_string");
+  let parsed;
+  try {
+    parsed = new URL(value);
+  } catch (_error) {
+    throw new Error("external_url_must_be_valid");
+  }
+  if (!["http:", "https:"].includes(parsed.protocol)) throw new Error("external_url_protocol_not_allowed");
+  return parsed.toString();
+}
+
+function validateActionFilePath(filePath, actionsRoot) {
+  if (typeof filePath !== "string" || !filePath) throw new Error("action_file_path_required");
+  const root = path.resolve(actionsRoot);
+  const relative = path.relative(root, path.resolve(filePath));
+  if (!relative || relative.startsWith("..") || path.isAbsolute(relative)) throw new Error("action_file_path_outside_actions_root");
+  return path.join(root, relative);
+}
+
+function registerIpcHandlers(runtime) {
+  const { electron, settingsRepository, promptConfigManager, uuid, VOTC_PROMPTS_DIR, TemplateEngine, exportPromptsZip, letterManager, runFileManager, llmManager, providerRegistry, usageAnalytics, providerDiagnostics, actionRegistry, VOTC_ACTIONS_DIR, resolveI18nString, conversationManager, ActionEngine, VOTC_SUMMARIES_DIR, SummariesManager, memoryEngine, worldlineService } = runtime;
+
+  const performanceTrace = runtime.performanceTrace;
+  const emptyPerformanceReport = () => ({ traceVersion: 1, enabled: false, sampledWindow: true, events: [], statistics: [] });
+  electron.ipcMain.handle("performance:get-state", () => ({ traceVersion: 1, enabled: performanceTrace?.enabled === true }));
+  electron.ipcMain.handle("performance:snapshot", () => performanceTrace?.snapshot() || emptyPerformanceReport());
+  electron.ipcMain.handle("performance:record-renderer", (_event, payload) => {
+    if (!performanceTrace?.enabled) return false;
+    const metrics = Array.isArray(payload) ? payload : [payload];
+    const steps = new Set(["renderer.longTask", "renderer.frameGap", "renderer.inputToFrame", "renderer.firstReady"]);
+    const results = new Set(["OK", "ERROR", "CANCELLED", "STALE", "SKIPPED"]);
+    if (!metrics.length || metrics.length > 32 || metrics.some(metric => !metric || typeof metric !== "object"
+      || Object.keys(metric).some(key => !["step", "wallMs", "count", "result"].includes(key))
+      || !steps.has(metric.step) || !Number.isFinite(metric.wallMs) || metric.wallMs < 0 || metric.wallMs > 60000
+      || !Number.isSafeInteger(metric.count) || metric.count < 0 || metric.count > 1000000
+      || !results.has(metric.result))) return false;
+    return performanceTrace.recordRendererMetrics(metrics);
+  });
+  electron.ipcMain.handle("performance:export-report", async () => {
+    if (!performanceTrace?.enabled) return { exported: false, reason: "DIAGNOSTICS_DISABLED" };
+    try {
+      const selection = await electron.dialog.showSaveDialog({
+        title: "导出性能诊断",
+        defaultPath: "votc-performance.json",
+        filters: [{ name: "JSON", extensions: ["json"] }]
+      });
+      if (selection.canceled || !selection.filePath) return { exported: false, reason: "CANCELLED" };
+      await fs.promises.writeFile(selection.filePath, JSON.stringify(performanceTrace.exportReport(), null, 2), "utf8");
+      return { exported: true };
+    } catch (_error) {
+      return { exported: false, reason: "PERFORMANCE_EXPORT_FAILED" };
+    }
+  });
+
+  electron.ipcMain.handle("toggle-config-panel", () => {
+    if (runtime.chatWindow) {
+      runtime.chatWindow.webContents.send("toggle-settings");
+    }
+    return true;
+  });
+  electron.ipcMain.handle("llm:getAppSettings", () => {
+    return settingsRepository.getAppSettings();
+  });
+  if (worldlineService) {
+    worldlineService.setStateListener?.((payload) => {
+      const window = runtime.chatWindow;
+      if (!window || window.isDestroyed()) return;
+      window.webContents.send("worldline:updated", payload);
+    });
+    electron.ipcMain.handle("worldline:getSettings", () => worldlineService.getSettings());
+    electron.ipcMain.handle("worldline:getOfficialRecollection", (_event, responderId) => {
+      if (!/^\d+$/.test(String(responderId || ""))) throw new Error("official_recollection_responder_id_required");
+      return worldlineService.getOfficialRecollectionForResponder(responderId);
+    });
+    electron.ipcMain.handle("worldline:setRecallSettings", (_event, payload) => worldlineService.setRecallSettings(payload));
+    electron.ipcMain.handle("worldline:setAutosavePath", (_event, candidatePath) => worldlineService.setAutosavePath(candidatePath));
+    electron.ipcMain.handle("worldline:validateAutosavePath", (_event, candidatePath) => worldlineService.validateAutosavePath(candidatePath));
+    electron.ipcMain.handle("worldline:selectAutosaveFile", () => worldlineService.selectAutosaveFile());
+    electron.ipcMain.handle("worldline:getCheckpointStatus", () => worldlineService.getCheckpointStatus());
+    electron.ipcMain.handle("worldline:rebuildCheckpoint", () => worldlineService.rebuildCheckpoint());
+    electron.ipcMain.handle("worldline:getOverview", () => worldlineService.getOverview());
+    electron.ipcMain.handle("worldline:getAnnualDelta", () => worldlineService.getAnnualDelta());
+    electron.ipcMain.handle("worldline:getWorldKnowledge", () => worldlineService.getWorldKnowledge());
+    electron.ipcMain.handle("worldline:getHistoricalBindings", (_event, payload) => worldlineService.getHistoricalBindingsAsync ? worldlineService.getHistoricalBindingsAsync(payload) : worldlineService.getHistoricalBindings(payload));
+    electron.ipcMain.handle("worldline:getEntityKinshipInspector", (_event, payload) => worldlineService.getEntityKinshipInspectorAsync ? worldlineService.getEntityKinshipInspectorAsync({
+      query: typeof payload?.query === "string" ? payload.query : "",
+      responderId: typeof payload?.responderId === "string" || Number.isSafeInteger(payload?.responderId) ? payload.responderId : null,
+      targetId: typeof payload?.targetId === "string" || Number.isSafeInteger(payload?.targetId) ? payload.targetId : null
+    }) : worldlineService.getEntityKinshipInspector(payload));
+    electron.ipcMain.handle("worldline:getKinshipIntegrityReport", () => worldlineService.getKinshipIntegrityReport());
+    electron.ipcMain.handle("worldline:getDiagnostics", () => worldlineService.getDiagnostics());
+    electron.ipcMain.handle("worldline:temporalArchive", (_event, payload) => worldlineService.runTemporalArchive(payload));
+    electron.ipcMain.handle("worldline:getPromptDiagnostics", (_event, payload) => worldlineService.getPromptDiagnosticsAsync(payload));
+    electron.ipcMain.handle("worldline:getSubjectiveResponderOptions", (_event, payload) => worldlineService.getSubjectiveResponderOptions({ query: typeof payload?.query === "string" ? payload.query : "" }));
+    electron.ipcMain.handle("worldline:listCanonCharacterOptions", (_event, payload) => worldlineService.listCanonCharacterOptions({ query: typeof payload?.query === "string" ? payload.query : "" }));
+    electron.ipcMain.handle("worldline:getSubjectiveWorldView", (_event, payload) => worldlineService.getSubjectiveWorldView({
+      responderId: typeof payload?.responderId === "string" || Number.isSafeInteger(payload?.responderId) ? payload.responderId : null,
+      query: typeof payload?.query === "string" ? payload.query : ""
+    }));
+    electron.ipcMain.handle("worldline:listSupplemental", () => worldlineService.listSupplemental());
+    electron.ipcMain.handle("worldline:listCanon", (_event, options) => worldlineService.listCanon(options));
+    electron.ipcMain.handle("worldline:mutateCanon", (_event, payload) => worldlineService.mutateCanon(payload));
+    electron.ipcMain.handle("worldline:getCanonCurrentTruth", (_event, payload) => worldlineService.getCanonCurrentTruth({ entityId: payload?.entityId, field: payload?.field }));
+    electron.ipcMain.handle("worldline:getCanonHistory", (_event, payload) => worldlineService.getCanonHistory(payload));
+    electron.ipcMain.handle("worldline:getLegacySupplementalMigration", (_event, payload) => worldlineService.getLegacySupplementalMigration({ id: payload?.id }));
+    electron.ipcMain.handle("worldline:migrateLegacySupplemental", (_event, payload) => worldlineService.migrateLegacySupplemental({ token: payload?.token, id: payload?.id, payload: payload?.payload || null }));
+    electron.ipcMain.handle("worldline:confirmCanonBranch", (_event, token) => worldlineService.confirmCanonBranch(token));
+    electron.ipcMain.handle("worldline:forkCanonBranch", (_event, token) => worldlineService.forkCanonBranch(token));
+    electron.ipcMain.handle("worldline:resumeCanonBranch", (_event, payload) => worldlineService.resumeCanonBranch({ token: payload?.token, branchId: payload?.branchId }));
+    electron.ipcMain.handle("worldline:renameCanonBranch", (_event, payload) => worldlineService.renameCanonBranch(payload));
+    electron.ipcMain.handle("worldline:testCanonRecall", (_event, payload) => worldlineService.testCanonRecall({ token: payload?.token, recordId: payload?.recordId, responderId: payload?.responderId, query: payload?.query }));
+    electron.ipcMain.handle("worldline:createSupplemental", () => { throw new Error("legacy_supplemental_read_only"); });
+    electron.ipcMain.handle("worldline:updateSupplemental", () => { throw new Error("legacy_supplemental_read_only"); });
+    electron.ipcMain.handle("worldline:deleteSupplemental", () => { throw new Error("legacy_supplemental_read_only"); });
+  }
+  electron.ipcMain.handle("prompts:getSettings", () => {
+    return settingsRepository.getPromptSettings();
+  });
+  electron.ipcMain.handle("prompts:saveSettings", (_event, settings) => {
+    settingsRepository.savePromptSettings(settings);
+    return true;
+  });
+  electron.ipcMain.handle("prompts:getLetterSettings", () => {
+    return settingsRepository.getLetterPromptSettings();
+  });
+  electron.ipcMain.handle("prompts:saveLetterSettings", (_event, settings) => {
+    settingsRepository.saveLetterPromptSettings(settings);
+    return true;
+  });
+  electron.ipcMain.handle("prompts:list", (_event, category) => {
+    try {
+      return promptConfigManager.listFiles(category);
+    } catch (error) {
+      console.error("Failed to list prompt files:", error);
+      return [];
+    }
+  });
+  electron.ipcMain.handle("prompts:readFile", (_event, relativePath) => {
+    try {
+      return promptConfigManager.readPromptFile(relativePath);
+    } catch (error) {
+      console.error("Failed to read prompt file:", error);
+      throw error;
+    }
+  });
+  electron.ipcMain.handle("prompts:saveFile", (_event, relativePath, content) => {
+    try {
+      promptConfigManager.savePromptFile(relativePath, content);
+      return true;
+    } catch (error) {
+      console.error("Failed to save prompt file:", error);
+      throw error;
+    }
+  });
+  electron.ipcMain.handle("prompts:getDefaultMain", () => {
+    return promptConfigManager.getDefaultMainTemplateContent();
+  });
+  electron.ipcMain.handle("prompts:getDefaultLetterMain", () => {
+    return promptConfigManager.getDefaultLetterMainTemplateContent();
+  });
+  electron.ipcMain.handle("prompts:listPresets", () => {
+    return promptConfigManager.getPresets();
+  });
+  electron.ipcMain.handle("prompts:savePreset", (_event, preset) => {
+    const normalizedSettings = promptConfigManager.normalizeSettings(preset.settings);
+    const now = (/* @__PURE__ */ new Date()).toISOString();
+    const toSave = {
+      id: preset.id || uuid.v4(),
+      name: preset.name || "Prompt Preset",
+      createdAt: preset.createdAt || now,
+      updatedAt: now,
+      settings: normalizedSettings
+    };
+    return promptConfigManager.savePreset(toSave);
+  });
+  electron.ipcMain.handle("prompts:deletePreset", (_event, id) => {
+    promptConfigManager.deletePreset(id);
+    return true;
+  });
+  electron.ipcMain.handle("prompts:openPromptsFolder", async () => {
+    await electron.shell.openPath(VOTC_PROMPTS_DIR);
+    return true;
+  });
+  electron.ipcMain.handle("prompts:openPromptFile", async (_event, relativePath) => {
+    const full = promptConfigManager.resolvePath(relativePath);
+    await electron.shell.openPath(full);
+    return true;
+  });
+  electron.ipcMain.handle("prompts:validateTemplate", (_event, templateString) => {
+    return TemplateEngine.validateTemplate(templateString);
+  });
+  electron.ipcMain.handle("prompts:exportZip", async (_event, payload) => {
+    promptConfigManager.ensurePromptDirs();
+    const normalizedSettings = promptConfigManager.normalizeSettings(payload?.settings || settingsRepository.getPromptSettings());
+    const presets = promptConfigManager.getPresets();
+    let targetPath = payload?.path;
+    if (!targetPath) {
+      const result = await electron.dialog.showSaveDialog({
+        title: "Export prompt configuration",
+        defaultPath: "prompts-export.zip",
+        filters: [{ name: "Zip Archive", extensions: ["zip"] }]
+      });
+      if (result.canceled || !result.filePath) {
+        return { cancelled: true };
+      }
+      targetPath = result.filePath;
+    }
+    await exportPromptsZip(targetPath, normalizedSettings, presets);
+    return { success: true, path: targetPath };
+  });
+  electron.ipcMain.handle("letter:getPromptPreview", async () => {
+    try {
+      return await letterManager.buildPromptPreview();
+    } catch (error) {
+      console.error("Failed to build letter prompt preview:", error);
+      return null;
+    }
+  });
+  electron.ipcMain.handle("letters:getStatuses", async () => {
+    try {
+      return letterManager.getAllLetterStatuses();
+    } catch (error) {
+      console.error("Failed to get letter statuses:", error);
+      return {
+        letters: [],
+        currentTotalDays: 0,
+        timestamp: Date.now()
+      };
+    }
+  });
+  electron.ipcMain.handle("letters:getLetterDetails", async (_, letterId) => {
+    try {
+      return letterManager.getLetterStatus(letterId);
+    } catch (error) {
+      console.error("Failed to get letter details:", error);
+      return null;
+    }
+  });
+  electron.ipcMain.handle("letters:runEffectDiagnostic", async (_, payload) => {
+    try {
+      return letterManager.runEffectDiagnostic(payload?.stage, payload?.letterId);
+    } catch (error) {
+      console.error("Failed to run letter effect diagnostic:", error);
+      return { success: false, error: error instanceof Error ? error.message : "Unknown error" };
+    }
+  });
+  electron.ipcMain.handle("letters:resyncGameDate", async () => {
+    try {
+      return await letterManager.resyncGameDate();
+    } catch (error) {
+      console.error("Failed to resync letter game date:", error);
+      return { dateSourceState: "ERROR", error: error instanceof Error ? error.message : "Unknown error" };
+    }
+  });
+  electron.ipcMain.handle("letters:retryStalledRunCommand", async (_, commandId) => {
+    return letterManager.retryStalledRunCommand(commandId);
+  });
+  electron.ipcMain.handle("letters:retryBlockedRunCommand", async (_, commandId) => {
+    return letterManager.retryBlockedRunCommand(commandId);
+  });
+  electron.ipcMain.handle("letters:cancelBlockedRunCommand", async (_, commandId) => {
+    return letterManager.cancelBlockedRunCommand(commandId);
+  });
+  electron.ipcMain.handle("letters:cancelStalledRunCommand", async (_, commandId) => {
+    return letterManager.cancelStalledRunCommand(commandId);
+  });
+  electron.ipcMain.handle("letters:confirmEffectDiagnostic", async (_, payload) => {
+    try {
+      return letterManager.confirmEffectDiagnostic(payload?.stage, payload?.passed === true);
+    } catch (error) {
+      console.error("Failed to confirm letter effect diagnostic:", error);
+      return { success: false, error: error instanceof Error ? error.message : "Unknown error" };
+    }
+  });
+  electron.ipcMain.handle("letters:retryFailed", async (_, letterId) => {
+    try {
+      return await letterManager.retryFailedLetter(letterId);
+    } catch (error) {
+      console.error("Failed to retry letter reply:", error);
+      return { success: false, error: error instanceof Error ? error.message : "Unknown error" };
+    }
+  });
+  electron.ipcMain.handle("letters:retryPayload", async (_, errorRecordId) => {
+    try {
+      return await letterManager.retryIncompletePayload(errorRecordId);
+    } catch (error) {
+      console.error("Failed to reread letter payload:", error);
+      return { success: false, error: error instanceof Error ? error.message : "Unknown error" };
+    }
+  });
+  electron.ipcMain.handle("letters:clearPending", async () => {
+    try {
+      return letterManager.clearPendingLetters();
+    } catch (error) {
+      console.error("Failed to clear pending letters:", error);
+      return { success: false, error: error instanceof Error ? error.message : "Unknown error" };
+    }
+  });
+  electron.ipcMain.handle("letters:clearOldStatuses", async (_, daysThreshold) => {
+    try {
+      letterManager.clearOldStatuses(daysThreshold);
+      return { success: true };
+    } catch (error) {
+      console.error("Failed to clear old statuses:", error);
+      return { success: false, error: error.message };
+    }
+  });
+  electron.ipcMain.handle("llm:saveProviderConfig", (_, config) => {
+    return settingsRepository.saveProviderConfig(config);
+  });
+  electron.ipcMain.handle("llm:deletePreset", (_, instanceId) => {
+    settingsRepository.deletePreset(instanceId);
+  });
+  electron.ipcMain.handle("llm:setActiveProvider", (_, instanceId) => {
+    settingsRepository.setActiveProviderInstanceId(instanceId);
+  });
+  electron.ipcMain.handle("llm:listModels", async () => {
+    try {
+      return await llmManager.listModelsForProvider();
+    } catch (error) {
+      console.error("IPC llm:listModels error:", error);
+      return { error: error.message || "Failed to list models" };
+    }
+  });
+  electron.ipcMain.handle("llm:testConnection", async () => {
+    return await llmManager.testProviderConnection();
+  });
+  electron.ipcMain.handle("llm:checkPlayer2Health", async () => {
+    const config = settingsRepository.getActiveProviderConfig();
+    if (!config || config.providerType !== "player2") {
+      return { success: false, error: "Player2 is not the active provider." };
+    }
+    try {
+      const provider = providerRegistry.createProvider(config);
+      if (provider?.checkHealth) {
+        return await provider.checkHealth();
+      }
+      return { success: false, error: "Provider does not support health check." };
+    } catch (error) {
+      console.error(`Error checking Player2 health (${config.customName || config.providerType}):`, error);
+      return { success: false, error: error.message || "Unknown error during Player2 health check." };
+    }
+  });
+  electron.ipcMain.handle("llm:setCK3Folder", async (_, path2) => {
+    const previousPath = settingsRepository.getCK3UserFolderPath() || null;
+    settingsRepository.setCK3UserFolderPath(path2);
+    let tailSwitchStarted = false;
+    try {
+      runFileManager.refreshPathFromSettings();
+      tailSwitchStarted = true;
+      if (path2) {
+        await letterManager.restartLogTailing();
+        const tailStatus = letterManager.getDateTrackerStatus?.();
+        if (tailStatus?.tailState === "ERROR") throw new Error("log_tailing_restart_failed");
+      } else await letterManager.stopLogTailing(false);
+      try {
+        await worldlineService?.syncAutosaveFromCK3Folder?.(previousPath);
+      } catch (worldlineError) {
+        console.error("[Worldline] CK3 folder sync failed without affecting the base CK3 path:", worldlineError);
+      }
+      console.log("CK3 path and log tailing updated");
+      return { success: true };
+    } catch (error) {
+      settingsRepository.setCK3UserFolderPath(previousPath);
+      try {
+        runFileManager.refreshPathFromSettings();
+        if (tailSwitchStarted) {
+          if (previousPath) await letterManager.restartLogTailing();
+          else await letterManager.stopLogTailing(false);
+        }
+      } catch (rollbackError) {
+        console.error("Failed to restore the previous CK3 path and log tailing:", rollbackError);
+      }
+      return { success: false, error: error instanceof Error ? error.message : String(error) };
+    }
+  });
+  electron.ipcMain.handle("llm:setModLocationPath", (_, path2) => {
+    settingsRepository.setModLocationPath(path2);
+  });
+  electron.ipcMain.handle("dialog:selectFolder", async () => {
+    const result = await electron.dialog.showOpenDialog({
+      properties: ["openDirectory"]
+    });
+    if (!result.canceled && result.filePaths.length > 0) {
+      return result.filePaths[0];
+    }
+    return null;
+  });
+  electron.ipcMain.handle("llm:saveGlobalStreamSetting", (_, enabled) => {
+    settingsRepository.saveGlobalStreamSetting(enabled);
+  });
+  electron.ipcMain.handle("llm:savePauseOnRegenerationSetting", (_, enabled) => {
+    settingsRepository.savePauseOnRegenerationSetting(enabled);
+  });
+  electron.ipcMain.handle("llm:saveGenerateFollowingMessagesSetting", (_, enabled) => {
+    settingsRepository.saveGenerateFollowingMessagesSetting(enabled);
+  });
+  electron.ipcMain.handle("llm:saveMessageFontSize", (_, fontSize) => {
+    settingsRepository.saveMessageFontSize(fontSize);
+  });
+  electron.ipcMain.handle("llm:saveShowSettingsOnStartupSetting", (_, enabled) => {
+    settingsRepository.saveShowSettingsOnStartupSetting(enabled);
+  });
+  electron.ipcMain.handle("llm:getLanguage", () => {
+    return settingsRepository.getLanguage();
+  });
+  electron.ipcMain.handle("llm:saveLanguage", (_, language) => {
+    settingsRepository.saveLanguage(language);
+  });
+  electron.ipcMain.handle("llm:getAllowPrerelease", () => {
+    return settingsRepository.getAllowPrerelease();
+  });
+  electron.ipcMain.handle("llm:saveAllowPrerelease", (_, allow) => {
+    settingsRepository.saveAllowPrerelease(allow);
+  });
+  electron.ipcMain.handle("llm:getCurrentContextLength", async () => {
+    try {
+      return await llmManager.getCurrentContextLength();
+    } catch (error) {
+      console.error("IPC llm:getCurrentContextLength error:", error);
+      return 9e4;
+    }
+  });
+  electron.ipcMain.handle("llm:getMaxContextLength", async () => {
+    try {
+      return await llmManager.getMaxContextLength();
+    } catch (error) {
+      console.error("IPC llm:getMaxContextLength error:", error);
+      return 9e4;
+    }
+  });
+  electron.ipcMain.handle("llm:setCustomContextLength", (_, contextLength) => {
+    try {
+      llmManager.setCustomContextLength(contextLength);
+    } catch (error) {
+      console.error("IPC llm:setCustomContextLength error:", error);
+      throw error;
+    }
+  });
+  electron.ipcMain.handle("llm:clearCustomContextLength", () => {
+    try {
+      llmManager.clearCustomContextLength();
+    } catch (error) {
+      console.error("IPC llm:clearCustomContextLength error:", error);
+      throw error;
+    }
+  });
+  electron.ipcMain.handle("llm:getActionsProviderId", () => {
+    return settingsRepository.getActionsProviderInstanceId();
+  });
+  electron.ipcMain.handle("llm:setActionsProviderId", (_, instanceId) => {
+    settingsRepository.setActionsProviderInstanceId(instanceId);
+  });
+  electron.ipcMain.handle("llm:getSummaryProviderId", () => {
+    return settingsRepository.getSummaryProviderInstanceId();
+  });
+  electron.ipcMain.handle("llm:setSummaryProviderId", (_, instanceId) => {
+    settingsRepository.setSummaryProviderInstanceId(instanceId);
+  });
+  electron.ipcMain.handle("llm:getActionApprovalSettings", () => {
+    return settingsRepository.getActionApprovalSettings();
+  });
+  electron.ipcMain.handle("llm:saveActionApprovalSettings", (_, settings) => {
+    settingsRepository.saveActionApprovalSettings(settings);
+    return true;
+  });
+  electron.ipcMain.handle("llm:getSummaryPromptSettings", () => {
+    return settingsRepository.getSummaryPromptSettings();
+  });
+  electron.ipcMain.handle("usage:getReport", () => usageAnalytics.getReport());
+  electron.ipcMain.handle("usage:clear", () => {
+    usageAnalytics.clear();
+    return { success: true };
+  });
+  electron.ipcMain.handle("providerDiagnostics:getStatus", () => providerDiagnostics?.getStatus() || { success: false, error: "provider_diagnostics_unavailable" });
+  electron.ipcMain.handle("provider-diagnostics:get-real-request-diff", (_, limit) => providerDiagnostics?.getRealRequestDiffStatus(limit) || { success: false, error: "provider_diagnostics_unavailable" });
+  electron.ipcMain.handle("provider-diagnostics:export-real-request-diff", (_, limit) => providerDiagnostics?.exportRealRequestDiff(limit) || { success: false, error: "provider_diagnostics_unavailable" });
+  electron.ipcMain.handle("providerDiagnostics:getRecent", (_, limit) => providerDiagnostics?.getRecent(limit) || []);
+  electron.ipcMain.handle("providerDiagnostics:exportRecent", (_, limit) => providerDiagnostics?.exportRecent(limit) || { success: false, error: "provider_diagnostics_unavailable" });
+  electron.ipcMain.handle("providerDiagnostics:getV89Settings", () => settingsRepository.getChatPromptV89Settings());
+  electron.ipcMain.handle("providerDiagnostics:saveV89Settings", (_, settings) => settingsRepository.saveChatPromptV89Settings(settings));
+  electron.ipcMain.handle("llm:saveSummaryPromptSettings", (_, settings) => {
+    if (!settings || typeof settings !== "object" || Array.isArray(settings)) throw new Error("summary_prompt_settings_must_be_an_object");
+    requireInteger(Number(settings.finalSummaryMaxTokens), "final_summary_max_tokens", { min: 256, max: 16384 });
+    settingsRepository.saveSummaryPromptSettings(settings);
+    return true;
+  });
+  console.log("Setting up action system IPC handlers...");
+  electron.ipcMain.handle("actions:reload", async () => {
+    try {
+      await actionRegistry.reloadActions();
+      return { success: true };
+    } catch (error) {
+      console.error("Failed to reload actions:", error);
+      return { success: false, error: error.message || "Unknown error" };
+    }
+  });
+  electron.ipcMain.handle("actions:getAll", async () => {
+    try {
+      const actions = actionRegistry.getAllActions(
+        /* includeDisabled = */
+        true
+      );
+      const userLang = settingsRepository.getLanguage();
+      return actions.map((a) => ({
+          id: a.id,
+          title: a.definition.title ? resolveI18nString(a.definition.title, userLang) : a.id,
+          scope: a.scope,
+          filePath: a.filePath,
+          validation: a.validation,
+          disabled: actionRegistry.isActionDisabled(a.id),
+          isDestructive: actionRegistry.getEffectiveDestructive(a.id),
+          hasDestructiveOverride: actionRegistry.hasDestructiveOverride(a.id)
+        }));
+    } catch (error) {
+      console.error("Failed to get actions:", error);
+      return [];
+    }
+  });
+  electron.ipcMain.handle("actions:setDisabled", async (_, { actionId, disabled }) => {
+    try {
+      actionRegistry.setActionDisabled(actionId, disabled);
+      const settings = actionRegistry.getSettings();
+      settingsRepository.saveActionSettings(settings);
+      return { success: true };
+    } catch (error) {
+      console.error("Failed to set action disabled state:", error);
+      return { success: false, error: error.message || "Unknown error" };
+    }
+  });
+  electron.ipcMain.handle("actions:setDestructiveOverride", async (_, { actionId, isDestructive }) => {
+    try {
+      actionRegistry.setDestructiveOverride(actionId, isDestructive);
+      const settings = actionRegistry.getSettings();
+      settingsRepository.saveActionSettings(settings);
+      return { success: true };
+    } catch (error) {
+      console.error("Failed to set action destructive override:", error);
+      return { success: false, error: error.message || "Unknown error" };
+    }
+  });
+  electron.ipcMain.handle("actions:getSettings", async () => {
+    try {
+      return settingsRepository.getActionSettings();
+    } catch (error) {
+      console.error("Failed to get action settings:", error);
+      return { disabledActions: [], validation: {} };
+    }
+  });
+  electron.ipcMain.handle("actions:openFolder", async () => {
+    try {
+      await electron.shell.openPath(VOTC_ACTIONS_DIR);
+      return;
+    } catch (error) {
+      console.error("Failed to open actions folder:", error);
+      throw error;
+    }
+  });
+  electron.ipcMain.handle("actions:openFile", async (_, request = {}) => {
+    try {
+      await electron.shell.openPath(validateActionFilePath(request.filePath, VOTC_ACTIONS_DIR));
+      return { success: true };
+    } catch (error) {
+      console.error("Failed to open action file:", error);
+      return { success: false, error: error.message || "Unknown error" };
+    }
+  });
+  electron.ipcMain.handle("actions:getDetails", async (_, { actionId, sourceCharacterId }) => {
+    try {
+      const userLang = settingsRepository.getLanguage();
+      const loaded = actionRegistry.getById(actionId);
+      if (!loaded || !loaded.validation.valid) {
+        return { error: "Action not found or invalid", valid: false };
+      }
+      const conv = conversationManager.getCurrentConversation();
+      if (!conv) {
+        return { error: "No active conversation", valid: false };
+      }
+      const sourceCharacter = conv.gameData.characters.get(sourceCharacterId);
+      if (!sourceCharacter) {
+        return { error: "Source character not found", valid: false };
+      }
+      const checkResult = await loaded.definition.check({
+        gameData: conv.gameData,
+        sourceCharacter
+      });
+      if (!checkResult?.canExecute) {
+        return { error: checkResult?.reason || "Action cannot be executed", valid: false, canExecute: false };
+      }
+      let args;
+      if (typeof loaded.definition.args === "function") {
+        args = loaded.definition.args({ gameData: conv.gameData, sourceCharacter });
+      } else {
+        args = loaded.definition.args;
+      }
+      const resolvedArgs = args.map((arg) => ({
+        ...arg,
+        description: resolveI18nString(arg.description, userLang),
+        displayName: arg.displayName ? resolveI18nString(arg.displayName, userLang) : void 0
+      }));
+      return {
+        valid: true,
+        canExecute: true,
+        id: loaded.id,
+        title: loaded.definition.title ? resolveI18nString(loaded.definition.title, userLang) : loaded.id,
+        args: resolvedArgs,
+        requiresTarget: typeof checkResult.requiresTarget === "boolean" ? checkResult.requiresTarget : !!(checkResult.validTargetCharacterIds && checkResult.validTargetCharacterIds.length > 0),
+        validTargetCharacterIds: checkResult.validTargetCharacterIds || [],
+        isDestructive: actionRegistry.getEffectiveDestructive(actionId)
+      };
+    } catch (error) {
+      console.error("Failed to get action details:", error);
+      return { error: error.message || "Unknown error", valid: false };
+    }
+  });
+  electron.ipcMain.handle("actions:execute", async (_, { actionId, sourceCharacterId, targetCharacterId, args }) => {
+    try {
+      const conv = conversationManager.getCurrentConversation();
+      if (!conv) {
+        return { success: false, error: "No active conversation" };
+      }
+      const sourceCharacter = conv.gameData.characters.get(sourceCharacterId);
+      if (!sourceCharacter) {
+        return { success: false, error: "Source character not found" };
+      }
+      const invocation = {
+        actionId,
+        sourceCharacterId: sourceCharacter.id,
+        targetCharacterId: targetCharacterId ?? null,
+        args,
+        bindingId: `manual:${sourceCharacter.id}:${targetCharacterId ?? "none"}:${actionId}`,
+        eventId: "manual_action",
+        traceId: `manual:${actionId}`
+      };
+      const result = await ActionEngine.runInvocation(conv, sourceCharacter, invocation);
+      if (result.feedback) {
+        conversationManager.addManualActionFeedback({
+          actionId: result.actionId,
+          success: result.success,
+          message: result.feedback.message,
+          sentiment: result.feedback.sentiment
+        });
+      } else if (result.success) {
+        conversationManager.addManualActionFeedback({
+          actionId: result.actionId,
+          success: true,
+          message: `Action ${result.actionId} executed successfully`,
+          sentiment: "neutral"
+        });
+      } else {
+        conversationManager.addManualActionFeedback({
+          actionId: result.actionId,
+          success: false,
+          message: result.error || `Action ${result.actionId} failed`,
+          sentiment: "negative"
+        });
+      }
+      return result;
+    } catch (error) {
+      console.error("Failed to execute action:", error);
+      return { success: false, error: error.message || "Unknown error", actionId };
+    }
+  });
+  electron.ipcMain.handle("shell:openExternal", async (_, url) => {
+    try {
+      await electron.shell.openExternal(validateExternalHttpUrl(url));
+      return { success: true };
+    } catch (error) {
+      console.error("Failed to open external URL:", error);
+      return { success: false, error: error.message || "Unknown error" };
+    }
+  });
+  electron.ipcMain.handle("logs:collectAndOpen", async () => {
+    try {
+      const os = require("os");
+      const path2 = require("path");
+      const fs2 = require("fs");
+      const logsFolder = path2.join(os.tmpdir(), "VOTC-all-logs");
+      if (fs2.existsSync(logsFolder)) {
+        const files = fs2.readdirSync(logsFolder);
+        for (const file of files) {
+          const filePath = path2.join(logsFolder, file);
+          fs2.unlinkSync(filePath);
+        }
+      } else {
+        fs2.mkdirSync(logsFolder, { recursive: true });
+      }
+      const userDataPath = electron.app.getPath("userData");
+      const appLogsPath = path2.join(userDataPath, "votc_data", "logs");
+      if (fs2.existsSync(appLogsPath)) {
+        const appLogFiles = fs2.readdirSync(appLogsPath);
+        for (const file of appLogFiles) {
+          const srcPath = path2.join(appLogsPath, file);
+          const destPath = path2.join(logsFolder, `app-${file}`);
+          fs2.copyFileSync(srcPath, destPath);
+        }
+      }
+      const ck3Path = settingsRepository.getCK3UserFolderPath();
+      if (ck3Path) {
+        const ck3LogsPath = path2.join(ck3Path, "logs");
+        const debugLogPath = path2.join(ck3LogsPath, "debug.log");
+        if (fs2.existsSync(debugLogPath)) {
+          fs2.copyFileSync(debugLogPath, path2.join(logsFolder, "debug.log"));
+        }
+        const gameLogPath = path2.join(ck3LogsPath, "game.log");
+        if (fs2.existsSync(gameLogPath)) {
+          fs2.copyFileSync(gameLogPath, path2.join(logsFolder, "game.log"));
+        }
+        const errorLogPath = path2.join(ck3LogsPath, "error.log");
+        if (fs2.existsSync(errorLogPath)) {
+          fs2.copyFileSync(errorLogPath, path2.join(logsFolder, "error.log"));
+        }
+      }
+      const summary = {
+        timestamp: (/* @__PURE__ */ new Date()).toISOString(),
+        platform: os.platform(),
+        arch: os.arch(),
+        nodeVersion: process.version,
+        electronVersion: process.versions.electron,
+        appVersion: electron.app.getVersion(),
+        ck3Path: ck3Path || "Not set"
+      };
+      fs2.writeFileSync(
+        path2.join(logsFolder, "system-info.json"),
+        JSON.stringify(summary, null, 2)
+      );
+      await electron.shell.openPath(logsFolder);
+      return {
+        success: true,
+        path: logsFolder
+      };
+    } catch (error) {
+      console.error("Failed to collect logs:", error);
+      return {
+        success: false,
+        error: error.message || "Unknown error"
+      };
+    }
+  });
+  electron.ipcMain.handle("app:getVersion", () => {
+    return electron.app.getVersion();
+  });
+  console.log("Setting up conversation IPC handlers...");
+  electron.ipcMain.handle("conversation:sendMessage", async (_, requestArgs) => {
+    const { message } = requestArgs;
+    try {
+      console.log("IPC: Sending message:", message);
+      const streaming = settingsRepository.getGlobalStreamSetting() || true;
+      const result = await conversationManager.sendMessage(message, streaming);
+      console.log("IPC: Message sent successfully, result type:", typeof result);
+      return { streamStarted: false, message: result };
+    } catch (error) {
+      console.error("IPC: Failed to send message:", error);
+      return {
+        streamStarted: false,
+        error: error instanceof Error ? error.message : "Unknown error"
+      };
+    }
+  });
+  electron.ipcMain.handle("conversation:reset", () => {
+    conversationManager.endCurrentConversation();
+    return true;
+  });
+  electron.ipcMain.handle("conversation:getEntries", () => {
+    return conversationManager.getConversationEntries();
+  });
+  electron.ipcMain.handle("conversation:cancelStream", () => {
+    conversationManager.cancelCurrentStream();
+  });
+  electron.ipcMain.handle("conversation:pause", () => {
+    conversationManager.pauseConversation();
+  });
+  electron.ipcMain.handle("conversation:resume", () => {
+    conversationManager.resumeConversation();
+  });
+  electron.ipcMain.handle("conversation:getState", () => {
+    return conversationManager.getConversationState();
+  });
+  electron.ipcMain.handle("conversation:joinWaitingCharacter", async (_, { characterId }) => {
+    return conversationManager.joinWaitingCharacter(characterId);
+  });
+  electron.ipcMain.handle("conversation:leavePresentCharacter", async (_, { characterId }) => {
+    return conversationManager.leavePresentCharacter(characterId);
+  });
+  electron.ipcMain.handle("conversation:temporarilyLeaveCharacter", async (_, { characterId, mode }) => {
+    return conversationManager.temporarilyLeaveCharacter(characterId, mode);
+  });
+  electron.ipcMain.handle("conversation:returnTemporaryCharacter", async (_, { characterId }) => {
+    return conversationManager.returnTemporaryCharacter(characterId);
+  });
+  electron.ipcMain.handle("conversation:regenerateMessage", async (_, requestArgs = {}) => {
+    const messageId = requireInteger(requestArgs.messageId, "message_id", { min: 0, max: 2147483647 });
+    try {
+      console.log("IPC: Regenerating message:", messageId);
+      const conversation = conversationManager.getCurrentConversation();
+      if (!conversation) {
+        throw new Error("No active conversation");
+      }
+      await conversation.regenerateMessage(messageId);
+      return { success: true };
+    } catch (error) {
+      console.error("IPC: Failed to regenerate message:", error);
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : "Unknown error"
+      };
+    }
+  });
+  electron.ipcMain.handle("conversation:editUserMessage", async (_, requestArgs) => {
+    const { messageId, newContent } = requestArgs;
+    try {
+      console.log("IPC: Editing user message:", messageId);
+      const conversation = conversationManager.getCurrentConversation();
+      if (!conversation) {
+        throw new Error("No active conversation");
+      }
+      await conversation.editUserMessage(messageId, newContent);
+      return { success: true };
+    } catch (error) {
+      console.error("IPC: Failed to edit user message:", error);
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : "Unknown error"
+      };
+    }
+  });
+  electron.ipcMain.handle("conversation:regenerateError", async (_, requestArgs) => {
+    const { messageId } = requestArgs;
+    try {
+      console.log("IPC: Regenerating error:", messageId);
+      const conversation = conversationManager.getCurrentConversation();
+      if (!conversation) {
+        throw new Error("No active conversation");
+      }
+      await conversationManager.regenerateError(messageId);
+      return { success: true };
+    } catch (error) {
+      console.error("IPC: Failed to regenerate error:", error);
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : "Unknown error"
+      };
+    }
+  });
+  electron.ipcMain.handle("conversation:openSummariesFolder", async () => {
+    try {
+      await electron.shell.openPath(VOTC_SUMMARIES_DIR);
+      return { success: true };
+    } catch (error) {
+      console.error("Failed to open summaries folder:", error);
+      return { success: false, error: error.message || "Unknown error" };
+    }
+  });
+  electron.ipcMain.handle("conversation:clearSummaries", async () => {
+    try {
+      const conversation = conversationManager.getCurrentConversation();
+      memoryEngine.clearAllLongTermMemory({ conversations: [conversation].filter(Boolean) });
+      if (conversation) {
+        conversation.gameData.loadCharactersSummaries();
+      }
+      return { success: true };
+    } catch (error) {
+      console.error("Failed to clear summaries:", error);
+      return { success: false, error: error.message || "Unknown error" };
+    }
+  });
+  electron.ipcMain.handle("conversation:listAllSummaries", async () => {
+    try {
+      return await SummariesManager.listAllSummaries();
+    } catch (error) {
+      console.error("Failed to list all summaries:", error);
+      return [];
+    }
+  });
+  electron.ipcMain.handle("conversation:getMemoryOverview", async () => {
+    try {
+      const summaryCatalog = await SummariesManager.listAllSummaries();
+      return memoryEngine.getUiOverview({ summaryCatalog });
+    } catch (error) {
+      console.error("Failed to get Memory Engine overview:", error);
+      return { engineVersion: "2.2", totals: {}, boundaries: [], routingPolicy: {}, characters: [], error: error.message || "Unknown error" };
+    }
+  });
+  electron.ipcMain.handle("conversation:getSummariesDashboardData", async (_, options = {}) => {
+    try {
+      if (options?.refresh === true) memoryEngine.invalidateSummaryFolderCache();
+      const summaries = await SummariesManager.listAllSummaries();
+      const incidentDiagnostics = require("../memory-system/incident-diagnostics").buildIncidentDiagnostics({
+        memoryEngine, conversation: conversationManager.getCurrentConversation(), providerDiagnostics
+      });
+      return { summaries, memoryOverview: memoryEngine.getUiOverview({ summaryCatalog: summaries }), recoveryStatus: SummariesManager.getRecoveryStatus(), incidentDiagnostics };
+    } catch (error) {
+      console.error("Failed to get summaries dashboard data:", error);
+      return { summaries: [], memoryOverview: { engineVersion: "2.2", totals: {}, boundaries: [], routingPolicy: {}, characters: [], error: error.message || "Unknown error" } };
+    }
+  });
+  electron.ipcMain.handle("conversation:retryFailedSummaries", async () => {
+    try {
+      return await SummariesManager.retryFailedSummaries();
+    } catch (error) {
+      console.error("Failed to retry summaries:", error);
+      return { success: false, error: "摘要重试失败，恢复记录已保留，请检查摘要模型配置及日志。" };
+    }
+  });
+  for (const [channel, method] of [["memory4:getOwnerData", "getMemory4OwnerData"], ["memory4:getEntry", "getMemory4Entry"],
+    ["memory4:getSources", "getMemory4Sources"], ["memory4:mutate", "mutateMemory4"],
+    ["memory4:auditOrphans", "auditMemory4Orphans"], ["memory4:forgetOrphan", "forgetMemory4Orphan"]]) {
+    electron.ipcMain.handle(channel, async (_, request = {}) => {
+      try {
+        if (!request || typeof request !== "object" || Array.isArray(request)) throw new Error("memory4_request_required");
+        const ownerId = requireInteger(request.ownerId, "owner_id", { min: 1, max: 2147483647 });
+        if (request.expectedCampaignToken != null && (typeof request.expectedCampaignToken !== "string" || request.expectedCampaignToken.length > 256)) throw new Error("memory4_campaign_invalid");
+        if (request.entityId != null) requireInteger(request.entityId, "entity_id", { min: 1, max: 2147483647 });
+        return await SummariesManager[method]({ ...request, ownerId });
+      } catch (error) {
+        return { success: false, error: error.message || "memory4_request_failed" };
+      }
+    });
+  }
+  electron.ipcMain.handle("conversation:updateStructuredMemory", async (_, { memoryId, content }) => {
+    try {
+      return memoryEngine.updateMemoryContent(memoryId, content);
+    } catch (error) {
+      console.error("Failed to update structured memory:", error);
+      return { success: false, error: error.message || "Unknown error" };
+    }
+  });
+  electron.ipcMain.handle("shell:openPlayer2", async () => {
+    try {
+      await electron.shell.openExternal("player2://");
+      return { success: true };
+    } catch (error) {
+      console.error("Failed to open Player2 app:", error);
+      return { success: false, error: error.message || "Unknown error" };
+    }
+  });
+  electron.ipcMain.handle("memory:updateRecord", async (_, { memoryId, updates, advanced = false }) => {
+    try {
+      return memoryEngine.updateMemory(memoryId, updates, { advanced });
+    } catch (error) {
+      console.error("Failed to update memory record:", error);
+      return { success: false, error: error.message || "Unknown error" };
+    }
+  });
+  electron.ipcMain.handle("memory:deleteRecord", async (_, { memoryId }) => {
+    try {
+      return memoryEngine.deleteMemory(memoryId);
+    } catch (error) {
+      console.error("Failed to delete memory record:", error);
+      return { success: false, error: error.message || "Unknown error" };
+    }
+  });
+  electron.ipcMain.handle("conversation:getSummariesForCharacter", async (_, request = {}) => {
+    try {
+      return await SummariesManager.getSummariesForCharacter(requireInteger(request.playerId, "player_id", { max: 2147483647 }), requireInteger(request.characterId, "character_id", { max: 2147483647 }));
+    } catch (error) {
+      console.error("Failed to get summaries for character:", error);
+      return [];
+    }
+  });
+  electron.ipcMain.handle("conversation:bindLegacySummaryCampaign", async (_, request = {}) => {
+    try {
+      if (!Array.isArray(request.summaryIds) || request.summaryIds.some(id => typeof id !== "string" || id.length > 128)) throw new Error("legacy_summary_binding_targets_required");
+      return await SummariesManager.bindLegacySummaryCampaign({
+        ownerId: requireInteger(request.ownerId, "owner_id", { max: 2147483647 }),
+        counterpartId: requireInteger(request.counterpartId, "counterpart_id", { max: 2147483647 }),
+        summaryIds: request.summaryIds
+      });
+    } catch (error) {
+      console.error("Failed to bind legacy summary campaign:", error);
+      return { success: false, error: error.message || "Unknown error" };
+    }
+  });
+  electron.ipcMain.handle("conversation:previewLegacyConversationBinding", async (_, request = {}) => {
+    try {
+      if (typeof request.folderName !== "string" || request.folderName.length > 256
+        || typeof request.conversationFile !== "string" || request.conversationFile.length > 512) throw new Error("legacy_summary_binding_target_invalid");
+      return await SummariesManager.previewLegacyConversationBinding({
+        ownerId: requireInteger(request.ownerId, "owner_id", { max: 2147483647 }),
+        counterpartId: requireInteger(request.counterpartId, "counterpart_id", { max: 2147483647 }),
+        folderName: request.folderName,
+        conversationFile: request.conversationFile
+      });
+    } catch (error) {
+      console.error("Failed to preview legacy conversation binding:", error);
+      return { success: false, error: error.message || "Unknown error" };
+    }
+  });
+  electron.ipcMain.handle("conversation:bindLegacyConversationCampaign", async (_, request = {}) => {
+    try {
+      if (typeof request.folderName !== "string" || request.folderName.length > 256
+        || typeof request.conversationFile !== "string" || request.conversationFile.length > 512
+        || typeof request.expectedCampaignToken !== "string" || request.expectedCampaignToken.length > 512
+        || typeof request.previewRevision !== "string" || request.previewRevision.length !== 64) throw new Error("legacy_summary_binding_request_invalid");
+      return await SummariesManager.bindLegacyConversationCampaign({
+        ownerId: requireInteger(request.ownerId, "owner_id", { max: 2147483647 }),
+        counterpartId: requireInteger(request.counterpartId, "counterpart_id", { max: 2147483647 }),
+        folderName: request.folderName,
+        conversationFile: request.conversationFile,
+        expectedCampaignToken: request.expectedCampaignToken,
+        previewRevision: request.previewRevision
+      });
+    } catch (error) {
+      console.error("Failed to bind legacy conversation summaries:", error);
+      return { success: false, error: error.message || "Unknown error" };
+    }
+  });
+  electron.ipcMain.handle("conversation:previewLegacyOwnerBinding", async (_, request = {}) => {
+    try {
+      return await SummariesManager.previewLegacyOwnerBinding({ ownerId: requireInteger(request.ownerId, "owner_id", { max: 2147483647 }) });
+    } catch (error) {
+      console.error("Failed to preview legacy owner binding:", error);
+      return { success: false, error: error.message || "Unknown error" };
+    }
+  });
+  electron.ipcMain.handle("conversation:bindLegacyOwnerCampaign", async (_, request = {}) => {
+    try {
+      if (typeof request.expectedCampaignToken !== "string" || request.expectedCampaignToken.length > 512
+        || typeof request.previewRevision !== "string" || request.previewRevision.length !== 64) throw new Error("legacy_summary_binding_request_invalid");
+      return await SummariesManager.bindLegacyOwnerCampaign({
+        ownerId: requireInteger(request.ownerId, "owner_id", { max: 2147483647 }),
+        expectedCampaignToken: request.expectedCampaignToken,
+        previewRevision: request.previewRevision
+      });
+    } catch (error) {
+      console.error("Failed to bind legacy owner summaries:", error);
+      return { success: false, error: error.message || "Unknown error" };
+    }
+  });
+  electron.ipcMain.handle("conversation:regenerateSummary", async (_, request = {}) => {
+    try {
+      if (typeof request.expectedContent !== "string" || request.expectedContent.length > 1048576) throw new Error("summary_regeneration_source_invalid");
+      return await SummariesManager.regenerateSummary(
+        requireInteger(request.playerId, "player_id", { max: 2147483647 }),
+        requireInteger(request.characterId, "character_id", { max: 2147483647 }),
+        requireInteger(request.summaryIndex, "summary_index", { max: 1000000 }),
+        request.expectedContent
+      );
+    } catch (error) {
+      console.error("Failed to regenerate saved summary:", error);
+      return { success: false, error: error.message || "summary_regeneration_failed" };
+    }
+  });
+  electron.ipcMain.handle("conversation:updateSummary", async (_, request = {}) => {
+    try {
+      if (typeof request.newContent !== "string" || request.newContent.length > 1048576) throw new Error("summary_content_must_be_a_string_up_to_1048576_chars");
+      return await SummariesManager.updateSummary(requireInteger(request.playerId, "player_id", { max: 2147483647 }), requireInteger(request.characterId, "character_id", { max: 2147483647 }), requireInteger(request.summaryIndex, "summary_index", { max: 1000000 }), request.newContent);
+    } catch (error) {
+      console.error("Failed to update summary:", error);
+      return { success: false, error: error.message || "Unknown error" };
+    }
+  });
+  electron.ipcMain.handle("conversation:deleteSummary", async (_, request = {}) => {
+    try {
+      return await SummariesManager.deleteSummary(requireInteger(request.playerId, "player_id", { max: 2147483647 }), requireInteger(request.characterId, "character_id", { max: 2147483647 }), requireInteger(request.summaryIndex, "summary_index", { max: 1000000 }));
+    } catch (error) {
+      console.error("Failed to delete summary:", error);
+      return { success: false, error: error.message || "Unknown error" };
+    }
+  });
+  electron.ipcMain.handle("conversation:deleteCharacterSummaries", async (_, request = {}) => {
+    try {
+      return await SummariesManager.deleteCharacterSummaries(requireInteger(request.playerId, "player_id", { max: 2147483647 }), requireInteger(request.characterId, "character_id", { max: 2147483647 }));
+    } catch (error) {
+      console.error("Failed to delete character summaries:", error);
+      return { success: false, error: error.message || "Unknown error" };
+    }
+  });
+  electron.ipcMain.handle("conversation:approveActions", async (_, { approvalEntryId }) => {
+    const conversation = conversationManager.getCurrentConversation();
+    if (!conversation) throw new Error("No active conversation");
+    await conversation.approveActions(approvalEntryId);
+    return { success: true };
+  });
+  electron.ipcMain.handle("conversation:declineActions", async (_, { approvalEntryId }) => {
+    const conversation = conversationManager.getCurrentConversation();
+    if (!conversation) throw new Error("No active conversation");
+    await conversation.declineActions(approvalEntryId);
+    return { success: true };
+  });
+  electron.ipcMain.handle("conversation:getActiveConversationData", () => {
+    return conversationManager.getActiveConversationData();
+  });
+  electron.ipcMain.handle("conversation:getPromptPreview", (_, { characterId }) => {
+    return conversationManager.getPromptPreview(characterId);
+  });
+  const conversationUpdateCallback = (entries) => {
+    if (runtime.chatWindow && !runtime.chatWindow.isDestroyed()) {
+      runtime.chatWindow.webContents.send("conversation:updated", entries);
+    }
+  };
+  conversationManager.onConversationUpdate(conversationUpdateCallback);
+  console.log("Conversation IPC handlers registered successfully");
+}
+
+module.exports = { registerIpcHandlers, requireInteger, validateExternalHttpUrl, validateActionFilePath };

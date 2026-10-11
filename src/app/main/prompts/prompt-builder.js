@@ -1,0 +1,1340 @@
+"use strict";
+
+const { buildFamilyFactBlock } = require("../worldline/character-family-facts");
+const { resolveProviderPromptProfile, resolvePromptLayoutId } = require("./provider-prompt-adapter");
+const { createStableProfile, createLiveProfile, buildStableKinship, formatStableProfile, formatStableKinship, formatLiveProfile } = require("./character-profile-v2");
+const { buildHistoricalReferenceReplacement } = require("../worldline/subjective-prompt-context");
+const { currentRelationship } = require("../memory-system/memory4-profile");
+const { parseRelationIntent } = require("../worldline/relation-intent-parser");
+const { createTraitProfileView } = require("./trait-profile-selector");
+
+const traitProfileContexts = new WeakSet();
+
+const PROMPT_LIFECYCLE = Object.freeze({
+  GLOBAL_STATIC: "GLOBAL_STATIC",
+  CONVERSATION_FROZEN: "CONVERSATION_FROZEN",
+  RESPONDER_FROZEN: "RESPONDER_FROZEN",
+  DYNAMIC: "DYNAMIC"
+});
+
+function createPromptBuilder({
+  TemplateEngine,
+  PromptScriptLoader,
+  promptConfigManager,
+  settingsRepository,
+  path,
+  TokenCounter,
+  createPromptFingerprint,
+  defaultChatInstruction
+}) {
+  const DEFAULT_CHAT_INSTRUCTION = defaultChatInstruction;
+  class PromptBuilder {
+    static {
+      this.templateEngine = new TemplateEngine();
+    }
+    static {
+      this.scriptLoader = new PromptScriptLoader();
+    }
+    static splitDescriptionForCache(description) {
+      if (typeof description !== "string") return { stableContent: "", dynamicContent: "" };
+      const match = /\n(\[date\([^\n]*\)\])\s*$/.exec(description);
+      if (!match || match.index <= 0) return { stableContent: description, dynamicContent: "" };
+      return {
+        stableContent: description.slice(0, match.index).trimEnd(),
+        dynamicContent: match[1]
+      };
+    }
+    static stableStringify(value) {
+      if (Array.isArray(value)) return `[${value.map((item) => this.stableStringify(item)).join(",")}]`;
+      if (value && typeof value === "object") {
+        return `{${Object.keys(value).sort().filter((key) => value[key] !== undefined && typeof value[key] !== "function").map((key) => `${JSON.stringify(key)}:${this.stableStringify(value[key])}`).join(",")}}`;
+      }
+      return JSON.stringify(value ?? null);
+    }
+    static getFrozenCharacterProfile(character, memoryContext) {
+      const cache = memoryContext?.stableProfileCache;
+      if (!(cache instanceof Map) || !character?.id) return character;
+      const key = String(character.id);
+      if (!cache.has(key)) cache.set(key, JSON.parse(this.stableStringify(character)));
+      return cache.get(key);
+    }
+    static buildSummaryCacheAnchor() {
+      return `VOTC_SUMMARY_CACHE_ANCHOR_v1
+  You summarize CK3 roleplay records. Preserve concrete names, relationships, dates, places, amounts, decisions, promises, conflicts, emotional changes and unresolved plans that appear in the supplied material. Do not invent facts, merge different people, add later historical knowledge, or turn a proposal into a completed event. Follow the requested language and format. Output only the requested summary.`;
+    }
+    static prepareSummaryMessages(messages) {
+      const prepared = Array.isArray(messages) ? messages.map((message) => ({ ...message })) : [];
+      const alreadyAnchored = prepared.some((message) => typeof message.content === "string" && message.content.startsWith("VOTC_SUMMARY_CACHE_ANCHOR_"));
+      if (!alreadyAnchored) prepared.unshift({ role: "system", content: this.buildSummaryCacheAnchor() });
+      return prepared;
+    }
+    static getSummaryPromptBlocks(messages, requestType = "summary") {
+      return messages.map((message, index) => {
+        const content = typeof message.content === "string" ? message.content : "";
+        let label = "Summary Dynamic Context";
+        let type = "summary_dynamic";
+        if (content.startsWith("VOTC_SUMMARY_CACHE_ANCHOR_")) {
+          label = "Stable Summary Cache Anchor";
+          type = "summary_cache_anchor";
+        } else if (content.startsWith("Stable rolling-summary instructions:")) {
+          label = "Stable Rolling Summary Instructions";
+          type = "summary_stable";
+        } else if (content.startsWith("Stable final-summary instructions:")) {
+          label = "Stable Final Summary Instructions";
+          type = "summary_stable";
+        } else if (content.startsWith("Stable letter-summary instructions:")) {
+          label = "Stable Letter Summary Instructions";
+          type = "summary_stable";
+        } else if (content.startsWith("Stable leaving-summary instructions:")) {
+          label = "Stable Leaving Summary Instructions";
+          type = "summary_stable";
+        } else if (content.startsWith("Previous summary") || content.startsWith("此对话的先前摘要：")) {
+          label = "Previous Summary";
+        } else if (content.startsWith("New messages") || content.startsWith("完整对话：") || content.startsWith("最近的对话：") || content.startsWith("Full conversation:")) {
+          label = "Summary Conversation Content";
+        } else if (content.startsWith("Conversation participants:")) {
+          label = "Summary Participant Context";
+        } else if (content.startsWith("Dynamic leaving character:")) {
+          label = "Leaving Character Context";
+        } else if (message.role === "user" && index === messages.length - 1) {
+          label = "Summary Generation Request";
+        }
+        return {
+          id: `${requestType}-${index}`,
+          label,
+          type,
+          position: index,
+          tokens: TokenCounter.estimateMessageTokens(message),
+          fingerprint: createPromptFingerprint(content)
+        };
+      });
+    }
+    /**
+    * Build prompt for resummarization
+    */
+    static buildResummarizePrompt(messagesToSummarize, existingSummary) {
+      const summarySettings = settingsRepository.getSummaryPromptSettings();
+      const prompt = [{
+        role: "system",
+        content: `Stable rolling-summary instructions:\n${summarySettings.rollingPrompt}`
+      }];
+      if (existingSummary) {
+        prompt.push({
+          role: "system",
+          content: `Previous summary of this conversation:
+  
+  ${existingSummary}`
+        });
+      }
+      prompt.push({
+        role: "system",
+        content: "New messages to incorporate into the summary:\n\n" + messagesToSummarize.map((m) => `${m.name}: ${m.content}`).join("\n")
+      });
+      prompt.push({
+        role: "user",
+        content: "Generate the updated rolling summary now."
+      });
+      return prompt;
+    }
+    static getFinalSummaryInstructions() {
+      const summarySettings = settingsRepository.getSummaryPromptSettings();
+      return `${summarySettings.finalPrompt}\n\n本次最终摘要最多输出 ${summarySettings.finalSummaryMaxTokens} Token；请在该上限内优先保留具体事实。`;
+    }
+    static getFinalSummaryMaxTokens() {
+      return settingsRepository.getSummaryPromptSettings().finalSummaryMaxTokens;
+    }
+    /**
+     * Generate a system prompt based on the characters in the conversation
+     */
+    static generateSystemPrompt(char, gameData) {
+      const promptSettings = settingsRepository.getPromptSettings();
+      const templatePath = promptConfigManager.resolvePath(promptSettings.defaultMainTemplatePath);
+      if (gameData.characters.size === 0 || !char) {
+        console.log("No characters or main character missing for system prompt");
+        return "You are characters in a medieval strategy game. Engage in conversation naturally.";
+      }
+      try {
+        const view = createTraitProfileView(gameData, char);
+        const rendered = this.templateEngine.renderTemplate(templatePath, {
+          character: view.character,
+          gameData: view.gameData
+        });
+        return rendered;
+      } catch (error) {
+        console.error("Failed to render system template, using fallback:", error);
+      }
+      return "You are characters in a medieval strategy game. Engage in conversation naturally.";
+    }
+    static buildMessages(history, char, gameData, currentSessionSummary, memoryContext = null) {
+      // Keep context-length checks and actual requests byte-for-byte aligned.
+      // The token-counting builder owns cache-aware ordering and still returns
+      // the same message data used by this legacy convenience method.
+      return this.buildMessagesWithTokenCount(history, char, gameData, currentSessionSummary, memoryContext).messages;
+    }
+    /**
+     * Character-description scripts can be customized or disabled. Keep exact
+     * responder facts close to history so direct factual questions use CK3 data.
+     */
+    static buildPlayerIdentityKnowledge(char, gameData) {
+      const playerId = Number(gameData?.playerID);
+      if (!gameData?.characters?.has(playerId) || Number(char?.id) === playerId) return null;
+      const formalRelationships = [
+        ...currentRelationship(gameData, Number(char.id), playerId).types,
+        ...currentRelationship(gameData, playerId, Number(char.id)).types
+      ].filter(value => /^(friend|friends|best friend|rival|nemesis|lover|soulmate|spouse|wife|husband|father|mother|parent|son|daughter|child|brother|sister|sibling|uncle|aunt|cousin|liege|vassal|guardian|ward|courtier|朋友|好友|挚友|至交|仇敌|宿敌|恋人|情人|灵魂伴侣|领主|封臣|监护人|被监护人|廷臣)$/i.test(value.replace(/_/g, " "))
+        || parseRelationIntent(value).sourcePhrase === value);
+      const relationships = [...new Set([
+        ...formalRelationships,
+        ...buildStableKinship(char, gameData).filter(relative => Number(relative.runtimeId) === playerId).map(relative => relative.kinshipType)
+      ])];
+      return `=== 玩家身份知情边界（本轮高优先级，适用于当前回应角色） ===
+  - 当前 CK3 身份识别关系证据：${relationships.join("、") || "未提供"}。关系证据支持双方相识及相应称谓，不自动授予全部后台身份资料；缺少记录不等于从未相识。
+  - 人物资料、在场表、场景说明、Runtime ID 和消息说话者前缀里的玩家姓名、全名、家族、头衔与官职都是后台标签，不构成本角色已经知道玩家身份的证据。本边界优先于这些资料和标签。称号（Nickname）默认可见，用于角色扮演，但不授予真名、精确头衔或官职。
+  - 只可依据当前 CK3 明确的亲属或正式关系、本角色获准的记忆、获准的公开事实，以及当前对话正文中明确说出的自我介绍或他人介绍识别玩家。只授予来源明确给出的那项姓名或身份，不得据此解锁整包玩家资料；介绍中的化名不等于已得知后台真名。已公开的头衔和特质逐项限定于获知的角色；旧头衔不代表自动知道新头衔，已消失特质不作为当前属性。
+  - 当前回合开始交谈、同场、好感数值、SHARED_SCENE 或本次相遇的直接交谈次数，都不等于已知玩家身份。没有上述具体身份来源时，应按尚未识别的对方自然回应，不得主动叫出后台姓名、家族、头衔或官职，也不得因为系统提供资料而装作早已认识。
+  - 私下交谈和信件不会自动变成全世界的传闻。对话记忆中的 public 只表示当场公开说出，不是全球公开；只有该记忆明确授权的知情者可以引用。亲友、同国、同地、身份声望和时间流逝都不是获得他人私聊的证据。
+  - 只能引用本请求为当前回应角色提供的获准记忆、来源明确的公开事实或本人已听见的当前对话。没有具体来源时，不得用“听说”“传闻”“有人告诉我”补造玩家过去的谈话、经历、交易或秘密，也不得为后台人物资料编造传播渠道；可以询问，但不能装作已经知道。`;
+    }
+    static buildResponderGameFacts(char, gameData = null) {
+      if (!char) return null;
+      const age = Number(char.age);
+      const primaryTitle = typeof char.primaryTitle === "string" ? char.primaryTitle.trim() : "";
+      const title = primaryTitle && !["None", "None of", "None von", "None de"].includes(primaryTitle) ? primaryTitle : "无主要头衔";
+      const courtPosition = typeof char.heldCourtAndCouncilPositions === "string" && char.heldCourtAndCouncilPositions.trim() ? char.heldCourtAndCouncilPositions.trim() : "无";
+      const titleRank = typeof char.titleRankConcept === "string" && char.titleRankConcept !== "concept_none" ? char.titleRankConcept : "无";
+      const playerIdentityKnowledge = this.buildPlayerIdentityKnowledge(char, gameData);
+      return `=== 当前回应角色的权威游戏资料（本轮 CK3 数据） ===
+  - 游戏姓名／称号：${char.fullName || char.shortName || "未知"}
+  - 姓名：${char.shortName || char.firstName || "未知"}
+  - 年龄：${Number.isFinite(age) ? `${Math.floor(age)}岁` : "游戏未提供"}
+  - 主要头衔：${title}
+  - 宫廷／议会职位：${courtPosition}
+  - 头衔等级：${titleRank}
+  当被问及自己的姓名、称号、头衔、官职或年龄时，必须逐项以以上本轮游戏数据直接回答；不得根据历史、对话记忆或常识猜测，也不得用年龄阶段替代具体岁数。${playerIdentityKnowledge ? `\n\n${playerIdentityKnowledge}` : ""}`;
+    }
+    /**
+     * Stable, character-independent prefix for providers with prefix KV caching.
+     * Keep this before all character-specific prompt blocks. It deliberately does
+     * not include conversation history or memory, so the existing memory/history
+     * behavior remains unchanged.
+     */
+    static buildCacheAnchor(gameData, version = "v6") {
+      return `VOTC_CACHE_ANCHOR_${version}
+  这是 Voices of the Court 的固定系统上下文锚点。请将后续内容视为当前游戏的动态上下文，并始终遵守以下稳定规则：保持角色扮演身份；优先使用游戏实际数据；不把现代价值观强加给中世纪角色；涉及历史人物、事件、作品、诗词、典故、制度或技术时，先核验其出现、发生、写成、成名或流传时间是否不晚于游戏当前年份；年份不确定时明确表示不知晓，不得猜测或用未来知识补全；不得预知未来、后世评价或事件结局。角色回复不设固定句数、段落数或人为短回复目标，应按人物性格、关系、情绪和场景完整表达，但避免无意义重复。长期稳定记忆和当前话题记忆只代表过去知情背景，本轮事实与动作必须以当前对话消息及游戏实时数据为准。【召回证据规则】系统提供“当前轮召回证据”时，这些内容代表当前回应角色已经知道的过去记录；涉及其中明确的过去事实、承诺、关系和言行时不得否认、篡改或无依据补全。当前 CK3 结构化事实负责现在的状态，但不得反向改写已经记录的过去；证据未说明的内容应表示不知道、记不清或只能推测。不要把本段当作对话内容，也不要复述本段。`;
+    }
+    static buildGlmCacheAnchor(gameData) {
+      return this.buildCacheAnchor(gameData, "v8.10.2").replace("VOTC_CACHE_ANCHOR_v8.10.2", "VOTC_CACHE_BLOCK_v8.10.2\nProvider Prompt Profile: GLM Cache v2\nCache prefix contract: global rules, conversation date/era, responder stable identity and stable blood kinship only. Memory, Worldline, relationships and live game state always follow the cache boundary.");
+    }
+    static buildV813CacheAnchor(gameData) {
+      return this.buildCacheAnchor(gameData, "v8.13")
+        .replace("后续内容视为当前游戏的动态上下文", "后续内容依次包含本场对话的冻结事实和本轮动态上下文")
+        + "\n本场冻结的世界线只代表对话开场时该角色获准知晓的事实。对话期间经 CK3 回读确认的新状态与本轮在场信息优先；不得把冻结的旧状态当作当前状态。";
+    }
+
+    static getCacheV2Snapshots(gameData, char, memoryContext, freezeResponder = false) {
+      const cache = memoryContext?.cacheV2FrozenSnapshots;
+      const conversationSource = {
+        date: gameData?.date || null,
+        year: gameData?.year ?? null,
+        dynasty: gameData?.dynasty || null,
+        era: gameData?.currentEraName || gameData?.historicalReferenceInfo?.period || null
+      };
+      let conversation = conversationSource;
+      if (cache && typeof cache === "object") {
+        if (!cache.conversation) cache.conversation = JSON.parse(this.stableStringify(conversationSource));
+        conversation = cache.conversation;
+      }
+      const candidateProfile = createStableProfile(char, gameData);
+      const sourceFingerprint = createPromptFingerprint(this.stableStringify(candidateProfile));
+      let stableProfile = candidateProfile;
+      if (cache?.responders instanceof Map && char?.id != null) {
+        const key = String(char.id);
+        const existing = cache.responders.get(key);
+        if (!existing || !freezeResponder && existing.sourceFingerprint !== sourceFingerprint) {
+          cache.responders.set(key, { sourceFingerprint, profile: JSON.parse(this.stableStringify(candidateProfile)) });
+        }
+        stableProfile = cache.responders.get(key).profile;
+      }
+      return { conversation, stableProfile };
+    }
+
+    static formatConversationFrozen(snapshot) {
+      return `=== Conversation Frozen Date / Era ===\n- 日期：${snapshot.date || "未知"}\n- 年份：${snapshot.year ?? "未知"}\n- 朝代：${snapshot.dynasty || "未知"}\n- 时代／年号：${snapshot.era || "未知"}`;
+    }
+    /**
+    * Build the stable portion of a character's past conversation summaries.
+    * Third-party memories and relationship data are deliberately built by
+    * buildMentionedCharactersContext() and placed near conversation history, so
+    * changing the mentioned person does not invalidate this earlier cache prefix.
+    *
+    * @param {Character} char - The character
+    * @param {GameData} gameData - The game data
+    */
+    static buildPastSummariesContext(char, gameData) {
+      if (!char.conversationSummaries || char.conversationSummaries.length === 0) {
+        return null;
+      }
+      
+      let context = `以下是 ${char.shortName}、${gameData.playerName} 及其他角色之间最近的对话摘要：
+  
+  `;
+      
+      const recentSummaries = char.conversationSummaries.slice(0, 5);
+      for (const summary of recentSummaries) {
+        const absoluteDate = summary.date || "日期不详";
+        context += `${absoluteDate}：${summary.content}
+  `;
+      }
+      
+      return context;
+    }
+    /**
+     * Build volatile third-party memory and relationship context. The content is
+     * unchanged in meaning, but is emitted immediately before conversation
+     * history rather than inside the earlier stable summaries block.
+     */
+    static buildMentionedCharactersContext(char, gameData, history = null, currentFactRegistry = null) {
+      if (!history || history.length === 0) return null;
+      const mentionedCharacterIds = gameData.findMentionedCharacterIdsInHistory(history, char);
+      if (!gameData.mentionedCharactersInContext) gameData.mentionedCharactersInContext = /* @__PURE__ */ new Set();
+      for (const characterId of mentionedCharacterIds) {
+        gameData.mentionedCharactersInContext.add(characterId);
+      }
+      let context = "";
+      const mentionedCharsInfo = gameData.getMentionedCharactersInfo(char, { currentFactRegistry });
+      if (mentionedCharsInfo) context += mentionedCharsInfo;
+      return context.trim() ? context : null;
+    }
+    /**
+     * Build a final, comprehensive summary using all roleplay messages.
+     */
+    static buildFinalSummary(gameData, history, currentSummary, lastSummarizedMessageIndex) {
+      const characters = Array.from(gameData.characters.values()).map((c) => c.shortName).join("、");
+      const summarySettings = settingsRepository.getSummaryPromptSettings();
+      const stableInstructions = {
+        role: "system",
+        content: `Stable final-summary instructions:\n${summarySettings.finalPrompt}`
+      };
+      const baseSystem = {
+        role: "system",
+        content: `Conversation participants: ${characters}. This is a medieval roleplay conversation.`
+      };
+      const buildConversationText = (msgs, title) => ({
+        role: "system",
+        content: `${title}
+  ` + msgs.map((m) => `${m.name}：${m.content}`).join("\n")
+      });
+      const userPrompt = {
+        role: "user",
+        content: "Generate the final conversation summary now."
+      };
+      if (lastSummarizedMessageIndex == null) {
+        return [
+          stableInstructions,
+          baseSystem,
+          buildConversationText(history, "完整对话："),
+          userPrompt
+        ];
+      }
+      const newMessages = history.slice(lastSummarizedMessageIndex);
+      return [
+        stableInstructions,
+        baseSystem,
+        { role: "system", content: "此对话的先前摘要：\n" + currentSummary },
+        buildConversationText(newMessages, "最近的对话："),
+        userPrompt
+      ];
+    }
+    /**
+     * Calculate relative time between dates
+     */
+    static getRelativeTime(pastDateTotalDays, currentDateTotalDays) {
+      if (pastDateTotalDays === void 0) {
+        return null;
+      }
+      const timeDifference = currentDateTotalDays - pastDateTotalDays;
+      if (timeDifference < 1) {
+        return "不到一天前";
+      }
+      if (timeDifference < 7) {
+        return `${timeDifference}天前`;
+      }
+      if (timeDifference < 30) {
+        return `${Math.floor(timeDifference / 7)}周前`;
+      }
+      if (timeDifference < 365) {
+        return `${Math.floor(timeDifference / 30)}个月前`;
+      }
+      return `${Math.floor(timeDifference / 365)}年前`;
+    }
+    static buildMemoriesBlock(gameData, character, limit = 5, template, context = {}) {
+      const allMemories = Array.isArray(character?.memories) ? [...character.memories] : [];
+      if (allMemories.length === 0) return null;
+      const sorted = allMemories.sort((a, b) => (b.relevanceWeight ?? 0) - (a.relevanceWeight ?? 0));
+      const selected = sorted.slice(0, limit);
+      const tpl = template || "相关记忆：\n{{#each memories}}- {{this.creationDate}}：{{this.desc}}\n{{/each}}";
+      return this.templateEngine.renderTemplateString(tpl, { ...context, memories: selected });
+    }
+    /**
+     * Split the bundled main template into cache-aware system messages. Custom
+     * templates without VOTC_SEGMENT markers remain a single backwards-compatible
+     * main block. Markers are Handlebars comments, so they are harmless in the
+     * prompt editor and in older builds.
+     */
+    static splitMainTemplateSegments(template) {
+      const markerPattern = /\{\{!\s*VOTC_SEGMENT:([a-z0-9_-]+)\s*\}\}/gi;
+      const labels = {
+        stable_global: "Stable Global Rules",
+        stable_history_rp: "Stable History and Roleplay Rules",
+        world_context: "World and Historical Context",
+        character_base: "Character Base Profile",
+        character_state: "Character State, Relations and Scene"
+      };
+      const segments = [];
+      let currentId = "main";
+      let contentStart = 0;
+      let markerFound = false;
+      let match;
+      while ((match = markerPattern.exec(template)) !== null) {
+        markerFound = true;
+        const content = template.slice(contentStart, match.index);
+        if (content.trim()) {
+          segments.push({ id: currentId, label: labels[currentId] || "Main Prompt Preamble", template: content });
+        }
+        currentId = match[1].toLowerCase();
+        contentStart = markerPattern.lastIndex;
+      }
+      const remaining = template.slice(contentStart);
+      if (remaining.trim()) {
+        segments.push({ id: currentId, label: labels[currentId] || currentId, template: remaining });
+      }
+      if (!markerFound) {
+        return [{ id: "main", label: "Main System Prompt", template }];
+      }
+      return segments;
+    }
+    static scopeTraitProfileContext(context) {
+      if (traitProfileContexts.has(context)) return context;
+      const view = createTraitProfileView(context.gameData, context.character, context.memoryContext);
+      const scoped = { ...context, ...view };
+      if (context.stableCharacter) scoped.stableCharacter = createTraitProfileView(view.gameData, context.stableCharacter, context.memoryContext).character;
+      traitProfileContexts.add(scoped);
+      return scoped;
+    }
+    static applyBlock(block, messages, history, baseContext, promptSettings) {
+      baseContext = this.scopeTraitProfileContext(baseContext);
+      const { character, gameData, summary } = baseContext;
+      const renderTemplate = (template, context) => {
+        try {
+          return this.templateEngine.renderTemplateString(template, context);
+        } catch (error) {
+          const blockLabel = block.label || block.type;
+          const errorMsg = error instanceof Error ? error.message : String(error);
+          throw new Error(`Template error in block "${blockLabel}" (${block.type}): ${errorMsg}`);
+        }
+      };
+      switch (block.type) {
+        case "main": {
+          const template = promptSettings.mainTemplate || promptConfigManager.getDefaultMainTemplateContent();
+          const segments = this.splitMainTemplateSegments(template);
+          for (const segment of segments) {
+            const content = renderTemplate(segment.template, baseContext);
+            if (content?.trim()) {
+              messages.push({ role: block.role || "system", content });
+            }
+          }
+          break;
+        }
+        case "description": {
+          if (!block.scriptPath) break;
+          const descScriptPath = promptConfigManager.resolvePath(block.scriptPath);
+          try {
+            const descriptionBlock = this.scriptLoader.executeDescription(descScriptPath, gameData, character.id);
+            if (descriptionBlock) {
+              messages.push({ role: "system", content: descriptionBlock });
+            } 
+          } catch (error) {
+            console.error("Failed to run description script:", error);
+          }
+          break;
+        }
+        case "examples": {
+          if (!block.scriptPath) break;
+          const examplesScriptPath = promptConfigManager.resolvePath(block.scriptPath);
+          try {
+            const exampleMessages = this.scriptLoader.executeExamples(examplesScriptPath, gameData, character.id);
+            if (Array.isArray(exampleMessages) && exampleMessages.length > 0) {
+              messages.push(...exampleMessages);
+            }
+          } catch (error) {
+            console.error("Failed to run example script:", error); 
+          }
+          break;
+        }
+        case "memories": {
+          if (baseContext.memoryContext?.engineVersion?.startsWith("3.") && baseContext.memoryContext.memoryEngine3Enabled !== false) break;
+          const memoriesBlock = this.buildMemoriesBlock(gameData, character, block.limit ?? 5, block.template, baseContext);
+          if (memoriesBlock) {
+            messages.push({ role: block.role || "system", content: memoriesBlock });
+          }
+          break;
+        }
+        case "past_summaries": {
+          if (["2.", "3."].some((prefix) => baseContext.memoryContext?.engineVersion?.startsWith(prefix))) break;
+          const pastSummaries = this.buildPastSummariesContext(character, gameData);
+          if (pastSummaries) {
+            const content = block.template ? renderTemplate(block.template, { ...baseContext, pastSummaries }) : pastSummaries;
+            messages.push({ role: block.role || "system", content });
+          }
+          break;
+        }
+        case "rolling_summary": {
+          if (summary) {
+            const tpl = block.template || "此对话中较早消息的摘要：\n{{summary}}";
+            const content = renderTemplate(tpl, { ...baseContext, summary });
+            messages.push({ role: block.role || "system", content });
+          }
+          break;
+        }
+        case "history": {
+          messages.push(
+            ...history.map((m) => ({
+              role: m.role,
+              content: m.name ? `${m.name}: ${m.content}` : m.content
+            }))
+          );
+          break;
+        }
+        case "instruction": {
+          const tpl = block.template || DEFAULT_CHAT_INSTRUCTION;
+          const content = renderTemplate(tpl, baseContext);
+          messages.push({
+            role: block.role || "user",
+            content
+          });
+          break;
+        }
+        case "custom": {
+          if (!block.template) break;
+          const content = renderTemplate(block.template, baseContext);
+          messages.push({ role: block.role || "system", content });
+          break;
+        }
+      }
+    }
+    /**
+     * Build messages with token counting for preview
+     */
+    static buildMessagesWithTokenCount(history, char, gameData, currentSessionSummary, memoryContext = null, providerConfig = null) {
+      const profileView = createTraitProfileView(gameData, char, memoryContext);
+      gameData = profileView.gameData;
+      char = profileView.character;
+      const promptSettings = settingsRepository.getPromptSettings();
+      const blocks = promptSettings.blocks || [];
+      const v89Settings = settingsRepository.getChatPromptV89Settings?.() || { chatPromptV89Layout: true };
+      const v813Layout = settingsRepository.getChatPromptV813Layout?.() === true;
+      const v89LayoutEnabled = v813Layout || v89Settings.chatPromptV89Layout !== false && blocks.some((block) => block.enabled && block.type === "history");
+      const runtimeProfileSplit = v813Layout || v89LayoutEnabled && v89Settings.chatPromptV89RuntimeProfileSplit === true;
+      const configuredProfile = resolveProviderPromptProfile(providerConfig || settingsRepository.getActiveProviderConfig?.() || null, v89Settings.chatPromptV810ProviderAdapter !== false);
+      const promptProfile = v89LayoutEnabled ? configuredProfile : resolveProviderPromptProfile(null, false);
+      const glmCacheLayout = promptProfile.glmCacheLayout === true;
+      const glmCacheV2 = !v813Layout && promptProfile.id === "glm_cache_v2";
+      const layoutId = resolvePromptLayoutId(promptProfile, { v89LayoutEnabled, runtimeProfileSplit, v813Layout });
+      const llmMessages = [];
+      const cacheAnchor = v813Layout ? this.buildV813CacheAnchor(gameData) : glmCacheLayout ? this.buildGlmCacheAnchor(gameData) : this.buildCacheAnchor(gameData, runtimeProfileSplit ? "v7" : v89LayoutEnabled ? "v6" : "v5");
+      const blocksWithTokens = [{
+        block: { id: v813Layout ? "cache-anchor-v8.13" : glmCacheV2 ? "cache-anchor-glm-v8.10.2" : glmCacheLayout ? "cache-anchor-glm-v8.10" : "cache-anchor", type: "cache_anchor", label: v813Layout ? "V8.13 Shared Cache Anchor" : glmCacheV2 ? "GLM Cache v2 Global Anchor" : glmCacheLayout ? "GLM Stable Cache Block" : "Stable Cache Anchor", stable: true, lifecycle: PROMPT_LIFECYCLE.GLOBAL_STATIC },
+        content: cacheAnchor,
+        tokens: TokenCounter.estimateTokens(cacheAnchor)
+      }];
+      llmMessages.push({ role: "system", content: blocksWithTokens[0].content });
+      if (memoryContext?.subjectiveWorldPolicyActive && !memoryContext.historicalReferenceInfo) {
+        memoryContext = { ...memoryContext, historicalReferenceInfo: buildHistoricalReferenceReplacement(null, gameData?.date) || {
+          period: "当前年代未确认", context: "游戏为先，历史为次。年代与当前事实缺失时明确未知，不得以历史传记补全人物生死、行踪或战争。", notableEvents: [], notableFigures: []
+        } };
+      }
+      const promptGameData = memoryContext?.historicalReferenceInfo ? Object.assign(Object.create(Object.getPrototypeOf(gameData)), gameData, {
+        historicalReferenceInfo: memoryContext.historicalReferenceInfo,
+        currentEmperor: null,
+        currentEmperorTitle: null,
+        currentEraName: null
+      }) : gameData;
+      const context = {
+        character: char,
+        stableCharacter: runtimeProfileSplit ? char : this.getFrozenCharacterProfile(char, memoryContext),
+        gameData: promptGameData,
+        summary: currentSessionSummary,
+        memoryContext
+      };
+      if (context.stableCharacter !== char) context.stableCharacter = createTraitProfileView(promptGameData, context.stableCharacter, memoryContext).character;
+      traitProfileContexts.add(context);
+      const cacheV2Snapshots = glmCacheV2 || v813Layout ? this.getCacheV2Snapshots(promptGameData, char, memoryContext, v813Layout) : null;
+      const cacheV2ConversationText = cacheV2Snapshots ? this.formatConversationFrozen(cacheV2Snapshots.conversation) : null;
+      const cacheV2ResponderText = cacheV2Snapshots ? formatStableProfile(cacheV2Snapshots.stableProfile) : null;
+      const cacheV2KinshipText = cacheV2Snapshots ? formatStableKinship(cacheV2Snapshots.stableProfile) : null;
+      const cacheV2LiveText = glmCacheV2 || v813Layout ? formatLiveProfile(createLiveProfile(char, promptGameData, memoryContext?.activeParticipantIds)) : null;
+      const normalizedHistory = history.map((m) => ({
+        role: m.role,
+        name: m.name,
+        content: m.content
+      })).filter((m) => !!m.content);
+      const workingHistory = Number.isInteger(promptProfile.historyWindow) ? normalizedHistory.slice(-promptProfile.historyWindow) : normalizedHistory;
+      const omittedHistory = Number.isInteger(promptProfile.historyWindow) ? normalizedHistory.slice(0, Math.max(0, normalizedHistory.length - promptProfile.historyWindow)) : [];
+      const currentFactRegistry = new Map();
+      const activeParticipantIds = new Set((memoryContext?.activeParticipantIds || [...gameData.characters.keys()]).map(Number));
+      const activeCounterpartIds = [...activeParticipantIds].filter((id) => Number(id) !== Number(char.id));
+      const activeParticipantRelationshipContext = gameData.getActiveParticipantRelationshipInfo(char, activeCounterpartIds, currentFactRegistry);
+      const activeParticipantRelationshipBlock = {
+        id: "active-participant-relationship",
+        type: "participant_relationship",
+        label: "Active Participant Relationship",
+        enabled: true,
+        role: "system",
+        stable: false
+      };
+      const responderGameFacts = this.buildResponderGameFacts(char, gameData);
+      const latestUserQuery = [...workingHistory].reverse().find((message) => message.role === "user")?.content || "";
+      const responderFamilyFacts = buildFamilyFactBlock(char, gameData, { query: latestUserQuery, currentFactRegistry });
+      const mentionedCharactersContext = memoryContext?.subjectiveWorldPolicyActive ? null : this.buildMentionedCharactersContext(char, gameData, workingHistory, currentFactRegistry);
+      const responderGameFactsBlock = {
+        id: "responder-game-facts",
+        type: "responder_game_facts",
+        label: "Responder Authoritative Game Facts",
+        enabled: true,
+        role: "system",
+        stable: false
+      };
+      const stableMemoryBlock = {
+        id: "memory-stable",
+        type: "memory_stable",
+        label: "Stable Long-term Memory",
+        enabled: true,
+        role: "system",
+        stable: !glmCacheV2,
+        lifecycle: glmCacheV2 ? PROMPT_LIFECYCLE.DYNAMIC : null
+      };
+      const responderFamilyFactsBlock = {
+        id: "responder-family-facts",
+        type: "responder_family_facts",
+        label: "Current Structured Family Facts",
+        enabled: true,
+        role: "system",
+        stable: false
+      };
+      const stableWorldBlock = {
+        id: "worldline-stable",
+        type: "worldline_stable",
+        label: "Stable World Checkpoint Recall",
+        enabled: true,
+        role: "system",
+        stable: !glmCacheV2,
+        lifecycle: glmCacheV2 ? PROMPT_LIFECYCLE.DYNAMIC : null
+      };
+      const subjectiveWorldBlock = {
+        id: "worldline-turn-recall",
+        type: "worldline_turn_recall",
+        label: "Worldline Turn Recall",
+        enabled: true,
+        role: "system",
+        stable: false
+      };
+      const directMemoryBlock = {
+        id: "memory-direct-frozen",
+        type: "memory_direct_frozen",
+        label: "Frozen Direct Relationship Memory",
+        enabled: true,
+        role: "system",
+        stable: !glmCacheV2,
+        lifecycle: glmCacheV2 ? PROMPT_LIFECYCLE.DYNAMIC : null
+      };
+      const mentionedSnapshotBlock = {
+        id: "memory-mentioned-snapshot",
+        type: "memory_mentioned_snapshot",
+        label: "Frozen Mentioned Character Snapshot",
+        enabled: true,
+        role: "system",
+        stable: !glmCacheV2,
+        lifecycle: glmCacheV2 ? PROMPT_LIFECYCLE.DYNAMIC : null
+      };
+      const sessionTopicAnchorBlock = {
+        id: "memory-session-topic-anchor",
+        type: "memory_session_topic_anchor",
+        label: "Frozen Session Topic Anchor",
+        enabled: true,
+        role: "system",
+        stable: !glmCacheV2,
+        lifecycle: glmCacheV2 ? PROMPT_LIFECYCLE.DYNAMIC : null
+      };
+      const deferredMainSegments = [];
+      const deferredDescriptionBlocks = [];
+      const deferredContextBlocks = [];
+      const hoistedMainSegments = new Map();
+      let sharedHistoryUsesRolePlaceholder = false;
+      if (v813Layout) {
+        for (const block of blocks.filter((entry) => entry.enabled && entry.type === "main" && (!entry.role || entry.role === "system"))) {
+          const template = promptSettings.mainTemplate || promptConfigManager.getDefaultMainTemplateContent();
+          for (const segment of this.splitMainTemplateSegments(template)) {
+            const nameOnlyRules = segment.id === "stable_history_rp" && segment.template.includes("{{fullName}}")
+              && !segment.template.replaceAll("{{fullName}}", "").includes("{{");
+            const sharedTemplate = nameOnlyRules ? segment.template.replaceAll("{{fullName}}", "【当前回应角色】") : segment.template;
+            if (!["stable_global", "stable_history_rp"].includes(segment.id) || sharedTemplate.includes("{{")) continue;
+            const content = this.templateEngine.renderTemplateString(sharedTemplate, context);
+            if (!content?.trim()) continue;
+            if (nameOnlyRules) sharedHistoryUsesRolePlaceholder = true;
+            llmMessages.push({ role: block.role || "system", content });
+            blocksWithTokens.push({
+              block: { ...block, id: `${block.id || "main"}-${segment.id}`, type: "main_segment", label: segment.label, stable: true, lifecycle: PROMPT_LIFECYCLE.GLOBAL_STATIC },
+              content,
+              tokens: TokenCounter.estimateTokens(content)
+            });
+            if (!hoistedMainSegments.has(block)) hoistedMainSegments.set(block, new Set());
+            hoistedMainSegments.get(block).add(segment.id);
+          }
+        }
+      }
+      let cacheV2FrozenInserted = false;
+      const insertCacheV2Frozen = () => {
+        if (!glmCacheV2 && !v813Layout || cacheV2FrozenInserted) return;
+        cacheV2FrozenInserted = true;
+        const prefixCache = v813Layout ? memoryContext?.cacheV2FrozenSnapshots?.prefixByResponder : null;
+        const responderKey = String(char?.id ?? "");
+        let frozenText = {
+          officialRecollection: memoryContext?.officialRecollectionText,
+          directMemory: memoryContext?.directStableText,
+          stableMemory: memoryContext?.stableText,
+          mentionedSnapshot: memoryContext?.mentionedSnapshotText,
+          worldStable: memoryContext?.worldStableText,
+          worldTopic: memoryContext?.worldTopicText,
+          worldSupplemental: memoryContext?.worldSupplementalText,
+          worldCurrent: memoryContext?.worldCurrentText,
+          worldRecall: memoryContext?.worldTurnRecallText
+        };
+        if (prefixCache instanceof Map && responderKey) {
+          if (!prefixCache.has(responderKey) && memoryContext?.freezePromptPrefix !== false) prefixCache.set(responderKey, { ...frozenText });
+          frozenText = prefixCache.get(responderKey) || frozenText;
+        }
+        const frozenBlocks = [
+          {
+            block: { id: "conversation-frozen", type: "conversation_frozen", label: "Conversation Frozen Date / Era", stable: true, lifecycle: PROMPT_LIFECYCLE.CONVERSATION_FROZEN },
+            content: cacheV2ConversationText
+          },
+          {
+            block: { id: "responder-frozen-profile", type: "responder_frozen", label: "Responder Frozen Profile", stable: true, lifecycle: PROMPT_LIFECYCLE.RESPONDER_FROZEN },
+            content: sharedHistoryUsesRolePlaceholder
+              ? `${cacheV2ResponderText}\n- 【当前回应角色】即${char?.fullName || char?.shortName || "未知"}` : cacheV2ResponderText
+          },
+          {
+            block: { id: "responder-stable-kinship", type: "responder_stable_kinship", label: "Responder Stable Blood Kinship", stable: true, lifecycle: PROMPT_LIFECYCLE.RESPONDER_FROZEN },
+            content: cacheV2KinshipText
+          },
+          {
+            block: { id: "memory-official-recollection", type: "memory_official_recollection", label: "CK3 Official Recollection", stable: true, lifecycle: PROMPT_LIFECYCLE.RESPONDER_FROZEN },
+            content: frozenText.officialRecollection
+          },
+          {
+            block: { ...directMemoryBlock, stable: true, lifecycle: PROMPT_LIFECYCLE.RESPONDER_FROZEN },
+            content: frozenText.directMemory
+          },
+          {
+            block: { ...stableMemoryBlock, stable: true, lifecycle: PROMPT_LIFECYCLE.RESPONDER_FROZEN },
+            content: frozenText.stableMemory
+          },
+          ...(!v813Layout ? [{
+            block: { ...mentionedSnapshotBlock, stable: true, lifecycle: PROMPT_LIFECYCLE.RESPONDER_FROZEN },
+            content: frozenText.mentionedSnapshot
+          }] : []),
+          ...(v813Layout ? [
+            { block: { ...stableWorldBlock, stable: true, lifecycle: PROMPT_LIFECYCLE.RESPONDER_FROZEN }, content: frozenText.worldStable },
+            { block: { id: "worldline-topic", type: "worldline_topic", label: "Frozen World Topic Facts", stable: true, lifecycle: PROMPT_LIFECYCLE.RESPONDER_FROZEN }, content: frozenText.worldTopic },
+            { block: { id: "worldline-supplemental", type: "worldline_supplemental", label: "Frozen World Supplemental Knowledge", stable: true, lifecycle: PROMPT_LIFECYCLE.RESPONDER_FROZEN }, content: frozenText.worldSupplemental },
+            { block: { id: "worldline-current", type: "worldline_current", label: "Frozen Current World View", stable: true, lifecycle: PROMPT_LIFECYCLE.RESPONDER_FROZEN }, content: frozenText.worldCurrent },
+            { block: { ...subjectiveWorldBlock, stable: true, lifecycle: PROMPT_LIFECYCLE.RESPONDER_FROZEN }, content: frozenText.worldRecall }
+          ] : [])
+        ];
+        for (const frozen of frozenBlocks) {
+          if (!frozen.content) continue;
+          llmMessages.push({ role: "system", content: frozen.content });
+          blocksWithTokens.push({ ...frozen, tokens: TokenCounter.estimateTokens(frozen.content) });
+        }
+      };
+      let preHistoryContextInserted = false;
+      const insertPreHistoryContext = () => {
+        if (preHistoryContextInserted) return;
+        preHistoryContextInserted = true;
+        insertCacheV2Frozen();
+        if (glmCacheV2 || v813Layout) return;
+        // Relationship and long-lived summaries are normally unchanged for a
+        // responder. Keep them before date/scene state so a date advance does
+        // not evict this useful prefix from the provider cache.
+        if (memoryContext?.officialRecollectionText) {
+          llmMessages.push({ role: "system", content: memoryContext.officialRecollectionText });
+          blocksWithTokens.push({
+            block: { id: "memory-official-recollection", type: "memory_official_recollection", label: "CK3 Official Recollection", stable: true },
+            content: memoryContext.officialRecollectionText,
+            tokens: TokenCounter.estimateTokens(memoryContext.officialRecollectionText)
+          });
+        }
+        if (memoryContext?.stableText) {
+          llmMessages.push({ role: "system", content: memoryContext.stableText });
+          blocksWithTokens.push({
+            block: stableMemoryBlock,
+            content: memoryContext.stableText,
+            tokens: TokenCounter.estimateTokens(memoryContext.stableText)
+          });
+        }
+        if (memoryContext?.directStableText) {
+          llmMessages.push({ role: "system", content: memoryContext.directStableText });
+          blocksWithTokens.push({
+            block: directMemoryBlock,
+            content: memoryContext.directStableText,
+            tokens: TokenCounter.estimateTokens(memoryContext.directStableText)
+          });
+        }
+        if (memoryContext?.mentionedSnapshotText) {
+          llmMessages.push({ role: "system", content: memoryContext.mentionedSnapshotText });
+          blocksWithTokens.push({
+            block: mentionedSnapshotBlock,
+            content: memoryContext.mentionedSnapshotText,
+            tokens: TokenCounter.estimateTokens(memoryContext.mentionedSnapshotText)
+          });
+        }
+        if (memoryContext?.worldStableText) {
+          llmMessages.push({ role: "system", content: memoryContext.worldStableText });
+          blocksWithTokens.push({
+            block: stableWorldBlock,
+            content: memoryContext.worldStableText,
+            tokens: TokenCounter.estimateTokens(memoryContext.worldStableText)
+          });
+        }
+        if (memoryContext?.topicPatchText) {
+          if (!glmCacheLayout) {
+            llmMessages.push({ role: "system", content: memoryContext.topicPatchText });
+            blocksWithTokens.push({
+              block: sessionTopicAnchorBlock,
+              content: memoryContext.topicPatchText,
+              tokens: TokenCounter.estimateTokens(memoryContext.topicPatchText)
+            });
+          }
+        }
+        for (const block of deferredContextBlocks) {
+          const result = this.applyBlockWithTokenCount(block, llmMessages, workingHistory, context, promptSettings);
+          if (Array.isArray(result)) blocksWithTokens.push(...result);
+          else if (result) blocksWithTokens.push(result);
+        }
+        if (!v89LayoutEnabled) {
+          for (const deferred of deferredMainSegments) {
+            llmMessages.push(deferred.message);
+            blocksWithTokens.push(deferred.tokenBlock);
+          }
+          for (const deferred of deferredDescriptionBlocks) {
+            llmMessages.push(deferred.message);
+            blocksWithTokens.push(deferred.tokenBlock);
+          }
+          if (responderGameFacts) {
+            llmMessages.push({ role: "system", content: responderGameFacts });
+            blocksWithTokens.push({
+              block: responderGameFactsBlock,
+              content: responderGameFacts,
+              tokens: TokenCounter.estimateTokens(responderGameFacts)
+            });
+          }
+          if (responderFamilyFacts) {
+            llmMessages.push({ role: "system", content: responderFamilyFacts });
+            blocksWithTokens.push({
+              block: responderFamilyFactsBlock,
+              content: responderFamilyFacts,
+              tokens: TokenCounter.estimateTokens(responderFamilyFacts)
+            });
+          }
+        }
+      };
+      if (v813Layout) insertCacheV2Frozen();
+      const v813FrozenBlockCount = v813Layout ? blocksWithTokens.length : 0;
+      for (const block of blocks) {
+        if (!block.enabled) continue;
+        if (["past_summaries", "memories", "rolling_summary"].includes(block.type)) {
+          deferredContextBlocks.push(block);
+          continue;
+        }
+        if (glmCacheV2 && block.type !== "main") insertCacheV2Frozen();
+        if (block.type === "history" || block.type === "instruction") insertPreHistoryContext();
+        const result = this.applyBlockWithTokenCount(block, llmMessages, workingHistory, context, promptSettings, {
+          deferredMainSegments,
+          deferredDescriptionBlocks,
+          presenceText: memoryContext?.presenceText,
+          activeParticipantRelationshipText: activeParticipantRelationshipContext,
+          cacheV2LiveText,
+          memoryStableText: glmCacheV2 || v813Layout ? null : memoryContext?.stableText,
+          memoryDirectText: glmCacheV2 || v813Layout ? null : memoryContext?.directStableText,
+          memoryMentionedSnapshotText: glmCacheV2 ? null : memoryContext?.mentionedSnapshotText,
+          temporalExtraText: memoryContext?.temporalExtraText,
+          confirmedActionText: memoryContext?.confirmedActionText,
+          worldStableText: v813Layout ? null : memoryContext?.worldStableText,
+          topicPatchText: mentionedCharactersContext,
+          worldTopicText: v813Layout ? null : memoryContext?.worldTopicText,
+          worldSupplementalText: v813Layout ? null : memoryContext?.worldSupplementalText,
+          turnRecallText: memoryContext?.turnRecallText,
+          thirdPartyEvidenceText: memoryContext?.thirdPartyEvidenceText,
+          worldCurrentText: v813Layout ? null : memoryContext?.worldCurrentText,
+          worldTurnRecallText: v813Layout ? null : memoryContext?.worldTurnRecallText,
+          historicalWorldText: v813Layout ? memoryContext?.historicalWorldText : null,
+          coveragePatchText: v813Layout ? memoryContext?.coveragePatchText : null,
+          recentWorldText: v813Layout ? memoryContext?.recentWorldText : null,
+          sessionTopicAnchorText: glmCacheLayout ? memoryContext?.topicPatchText : null,
+          sessionTopicAnchorBlock,
+          subjectiveWorldBlock,
+          v89Layout: v89LayoutEnabled,
+          glmCacheLayout,
+          glmCacheV2,
+          v813Layout,
+          hoistedMainSegmentIds: hoistedMainSegments.get(block),
+          runtimeProfileSplit,
+          deferredMainSegments,
+          deferredDescriptionBlocks,
+          deferredContextBlocks,
+          responderGameFacts,
+          responderGameFactsBlock,
+          responderFamilyFacts,
+          responderFamilyFactsBlock
+        });
+        if (Array.isArray(result)) {
+          blocksWithTokens.push(...result);
+        } else if (result) {
+          blocksWithTokens.push(result);
+        }
+        if (glmCacheV2 && block.type === "main") insertCacheV2Frozen();
+      }
+      insertPreHistoryContext();
+      if (responderGameFacts && !blocksWithTokens.some(entry => entry.block.id === responderGameFactsBlock.id)) {
+        llmMessages.push({ role: "system", content: responderGameFacts });
+        blocksWithTokens.push({ block: { ...responderGameFactsBlock, lifecycle: PROMPT_LIFECYCLE.DYNAMIC },
+          content: responderGameFacts, tokens: TokenCounter.estimateTokens(responderGameFacts) });
+      }
+      if (promptSettings.suffix?.enabled && promptSettings.suffix.template) {
+        const suffixBlock = {
+          id: "suffix",
+          type: "custom",
+          label: promptSettings.suffix.label || "Suffix",
+          enabled: true,
+          role: "system",
+          template: promptSettings.suffix.template
+        };
+        try {
+          const suffixContent = this.templateEngine.renderTemplateString(promptSettings.suffix.template, context);
+          const suffixTokens = TokenCounter.estimateTokens(suffixContent);
+          llmMessages.push({ role: "system", content: suffixContent });
+          blocksWithTokens.push({ block: suffixBlock, content: suffixContent, tokens: suffixTokens });
+        } catch (error) {
+          const errorMsg = error instanceof Error ? error.message : String(error);
+          console.error("Template error in Suffix block:", errorMsg);
+          blocksWithTokens.push({ block: suffixBlock, content: "", tokens: 0, error: `Template error in Suffix block. Check Handlebars syntax.` });
+        }
+      }
+      for (const [index, tokenBlock] of blocksWithTokens.entries()) {
+        if (!tokenBlock?.block) continue;
+        if ((glmCacheV2 || v813Layout) && !tokenBlock.block.lifecycle) tokenBlock.block.lifecycle = PROMPT_LIFECYCLE.DYNAMIC;
+        if (tokenBlock.block.stable === undefined) tokenBlock.block.stable = tokenBlock.block.lifecycle && tokenBlock.block.lifecycle !== PROMPT_LIFECYCLE.DYNAMIC;
+        if (v813Layout && index >= v813FrozenBlockCount) {
+          tokenBlock.block.lifecycle = PROMPT_LIFECYCLE.DYNAMIC;
+          tokenBlock.block.stable = false;
+        } else if (glmCacheV2 && tokenBlock.block.lifecycle === PROMPT_LIFECYCLE.DYNAMIC) tokenBlock.block.stable = false;
+      }
+      const totalTokens = TokenCounter.calculateTotalTokens(llmMessages);
+      const firstDynamicBlock = blocksWithTokens.findIndex((tokenBlock) => tokenBlock.block?.stable !== true);
+      const staticTokens = blocksWithTokens.slice(0, firstDynamicBlock < 0 ? blocksWithTokens.length : firstDynamicBlock).reduce((total, tokenBlock) => total + (Number(tokenBlock.tokens) || 0), 0);
+      const lifecycleTokens = Object.values(PROMPT_LIFECYCLE).reduce((result, lifecycle) => {
+        result[lifecycle] = blocksWithTokens.filter((tokenBlock) => tokenBlock.block?.lifecycle === lifecycle).reduce((total, tokenBlock) => total + (Number(tokenBlock.tokens) || 0), 0);
+        return result;
+      }, {});
+      const declaredStaticTokens = blocksWithTokens.filter((tokenBlock) => tokenBlock.block?.stable === true).reduce((total, tokenBlock) => total + (Number(tokenBlock.tokens) || 0), 0);
+      const stableKinshipTokens = blocksWithTokens.filter((tokenBlock) => tokenBlock.block?.id === "responder-stable-kinship").reduce((total, tokenBlock) => total + (Number(tokenBlock.tokens) || 0), 0);
+      return {
+        messages: llmMessages,
+        blocks: blocksWithTokens,
+        totalTokens,
+        promptProfile: {
+          id: promptProfile.id,
+          label: promptProfile.label,
+          adapterEnabled: v89Settings.chatPromptV810ProviderAdapter !== false,
+          historyWindow: promptProfile.historyWindow,
+          layoutId
+        },
+        omittedHistoryTokens: TokenCounter.calculateTotalTokens(omittedHistory),
+        staticTokens,
+        dynamicTokens: blocksWithTokens.slice(firstDynamicBlock < 0 ? blocksWithTokens.length : firstDynamicBlock).reduce((total, tokenBlock) => total + (Number(tokenBlock.tokens) || 0), 0),
+        globalStaticTokens: lifecycleTokens[PROMPT_LIFECYCLE.GLOBAL_STATIC],
+        conversationFrozenTokens: lifecycleTokens[PROMPT_LIFECYCLE.CONVERSATION_FROZEN],
+        responderFrozenTokens: lifecycleTokens[PROMPT_LIFECYCLE.RESPONDER_FROZEN],
+        stableKinshipTokens,
+        actualStablePrefixTokens: staticTokens,
+        declaredStaticTokens,
+        dynamicTailTokens: blocksWithTokens.slice(firstDynamicBlock < 0 ? blocksWithTokens.length : firstDynamicBlock).reduce((total, tokenBlock) => total + (Number(tokenBlock.tokens) || 0), 0)
+      };
+    }
+    /**
+     * Apply a single block with token counting.
+     * Template errors are caught and returned as error info in the result rather than thrown.
+     */
+    static applyBlockWithTokenCount(block, messages, history, baseContext, promptSettings, options = {}) {
+      baseContext = this.scopeTraitProfileContext(baseContext);
+      const { character, gameData, summary } = baseContext;
+      const renderTemplate = (template, context) => {
+        try {
+          return this.templateEngine.renderTemplateString(template, context);
+        } catch (error) {
+          const errorMsg = error instanceof Error ? error.message : String(error);
+          console.error(`Template error in block "${block.label || block.type}":`, errorMsg);
+          return null;
+        }
+      };
+      switch (block.type) {
+        case "main": {
+          const template = promptSettings.mainTemplate || promptConfigManager.getDefaultMainTemplateContent();
+          const segments = this.splitMainTemplateSegments(template);
+          const renderedSegments = segments.map((segment) => ({
+            ...segment,
+            content: renderTemplate(segment.template, segment.id === "character_base" ? { ...baseContext, character: baseContext.stableCharacter || character } : baseContext)
+          }));
+          if (renderedSegments.some((segment) => segment.content === null)) {
+            return { block, content: "", tokens: 0, error: `Template error in "${block.label || "Main Prompt"}" block. Check Handlebars syntax.` };
+          }
+          const nonEmptySegments = renderedSegments.filter((segment) => segment.content?.trim() && !options.hoistedMainSegmentIds?.has(segment.id));
+          const immediateBlocks = [];
+          for (const segment of nonEmptySegments) {
+            const message = { role: block.role || "system", content: segment.content };
+            const tokenBlock = {
+              block: {
+                ...block,
+                id: `${block.id || "main"}-${segment.id}`,
+                type: "main_segment",
+                label: segment.label,
+                stable: ["stable_global", "stable_history_rp", "character_base"].includes(segment.id),
+                lifecycle: options.glmCacheV2 && ["stable_global", "stable_history_rp"].includes(segment.id)
+                  ? PROMPT_LIFECYCLE.GLOBAL_STATIC
+                  : options.glmCacheV2 ? PROMPT_LIFECYCLE.DYNAMIC : null
+              },
+              content: segment.content,
+              tokens: TokenCounter.estimateTokens(segment.content)
+            };
+            if (options.glmCacheV2) tokenBlock.block.stable = ["stable_global", "stable_history_rp"].includes(segment.id);
+            // Date, world state and scene must stay near the history tail. This
+            // leaves character profile, examples and persisted summaries in the
+            // reusable prefix when a game day advances.
+            if (options.deferredMainSegments && (options.glmCacheV2 && !["stable_global", "stable_history_rp"].includes(segment.id) || segment.id === "world_context" || segment.id === "character_state" || options.runtimeProfileSplit && segment.id === "character_base")) {
+              tokenBlock.block.stable = false;
+              options.deferredMainSegments.push({ message, tokenBlock });
+            } else {
+              messages.push(message);
+              immediateBlocks.push(tokenBlock);
+            }
+          }
+          if (nonEmptySegments.length === 1 && nonEmptySegments[0].id === "main") {
+            const content = nonEmptySegments[0].content;
+            return { block, content, tokens: TokenCounter.estimateTokens(content) };
+          }
+          if (immediateBlocks.length > 0) return immediateBlocks;
+          break;
+        }
+        case "description": {
+          if (!block.scriptPath) break;
+          const descScriptPath = promptConfigManager.resolvePath(block.scriptPath);
+          try {
+            const profileCache = baseContext.memoryContext?.stableDescriptionCache;
+            const traitScope = [...(gameData.characters || [])].filter(([id]) => Number(id) !== Number(character.id))
+              .map(([id, person]) => [id, person.traits || [], person.primaryTitle || "", person.titleRankConcept || "",
+                person.heldCourtAndCouncilPositions || "", person.nickname || ""]);
+            const cacheKey = options.runtimeProfileSplit ? `v7:${descScriptPath}:${character.id}`
+              : `v8.14.2:${descScriptPath}:${character.id}:${createPromptFingerprint(this.stableStringify(traitScope))}`;
+            let descriptionBlock = !options.runtimeProfileSplit && profileCache instanceof Map ? profileCache.get(cacheKey) : null;
+            if (!descriptionBlock) {
+              descriptionBlock = this.scriptLoader.executeDescription(descScriptPath, gameData, character.id);
+              if (descriptionBlock && !options.runtimeProfileSplit && profileCache instanceof Map) profileCache.set(cacheKey, descriptionBlock);
+            }
+            if (descriptionBlock) {
+              if (options.glmCacheV2 || options.v813Layout) {
+                const tokenBlock = {
+                  block: { ...block, id: `${block.id || "description"}-live`, type: "description_dynamic", label: `${block.label || "Character Description"} (Live)`, stable: false, lifecycle: PROMPT_LIFECYCLE.DYNAMIC },
+                  content: descriptionBlock,
+                  tokens: TokenCounter.estimateTokens(descriptionBlock)
+                };
+                if (options.deferredDescriptionBlocks) options.deferredDescriptionBlocks.push({ message: { role: "system", content: descriptionBlock }, tokenBlock });
+                else messages.push({ role: "system", content: descriptionBlock });
+                return options.deferredDescriptionBlocks ? [] : tokenBlock;
+              }
+              let { stableContent, dynamicContent } = options.runtimeProfileSplit
+                ? require("./character-profile-split").splitCharacterProfile(descriptionBlock)
+                : this.splitDescriptionForCache(descriptionBlock);
+              if (options.runtimeProfileSplit && profileCache instanceof Map) {
+                // Only stable text is retained. Changes of identity, participants,
+                // script, culture or traits replace it; runtime is always fresh.
+                if (profileCache.get(cacheKey) !== stableContent) profileCache.set(cacheKey, stableContent);
+                stableContent = profileCache.get(cacheKey);
+              }
+              const tokenBlocks = [];
+              if (stableContent) {
+                messages.push({ role: "system", content: stableContent });
+                tokenBlocks.push({
+                  block: { ...block, id: `${block.id || "description"}-stable`, type: "description", label: `${block.label || "Character Description"} (Stable Profile)`, stable: true },
+                  content: stableContent,
+                  tokens: TokenCounter.estimateTokens(stableContent)
+                });
+              }
+              if (dynamicContent) {
+                const tokenBlock = {
+                  block: { ...block, id: `${block.id || "description"}-dynamic`, type: "description_dynamic", label: `${block.label || "Character Description"} (Dynamic Scene)`, stable: false },
+                  content: dynamicContent,
+                  tokens: TokenCounter.estimateTokens(dynamicContent)
+                };
+                if (options.deferredDescriptionBlocks) {
+                  options.deferredDescriptionBlocks.push({ message: { role: "system", content: dynamicContent }, tokenBlock });
+                } else {
+                  messages.push({ role: "system", content: dynamicContent });
+                  tokenBlocks.push(tokenBlock);
+                }
+              }
+              return tokenBlocks.length === 1 ? tokenBlocks[0] : tokenBlocks;
+            }
+          } catch (error) {
+            const errorMsg = error instanceof Error ? error.message : String(error);
+            console.error("Failed to run description script:", error);
+            return { block, content: "", tokens: 0, error: `Script error: ${errorMsg}` };
+          }
+          break;
+        }
+        case "examples": {
+          if (!block.scriptPath) break;
+          const examplesScriptPath = promptConfigManager.resolvePath(block.scriptPath);
+          try {
+            const exampleMessages = this.scriptLoader.executeExamples(examplesScriptPath, gameData, character.id);
+            if (Array.isArray(exampleMessages) && exampleMessages.length > 0) {
+              messages.push(...exampleMessages);
+              const content = exampleMessages.map((m) => `${m.role}: ${m.content}`).join("\n\n");
+              return { block: { ...block, stable: options.glmCacheV2 || options.v813Layout ? false : true, lifecycle: options.glmCacheV2 || options.v813Layout ? PROMPT_LIFECYCLE.DYNAMIC : null }, content, tokens: TokenCounter.calculateTotalTokens(exampleMessages) };
+            }
+          } catch (error) {
+            const errorMsg = error instanceof Error ? error.message : String(error);
+            console.error("Failed to run example script:", error);
+            return { block, content: "", tokens: 0, error: `Script error: ${errorMsg}` };
+          }
+          break;
+        }
+        case "memories": {
+          if (baseContext.memoryContext?.engineVersion?.startsWith("3.") && baseContext.memoryContext.memoryEngine3Enabled !== false) break;
+          try {
+            const memoriesBlock = this.buildMemoriesBlock(gameData, character, block.limit ?? 5, block.template, baseContext);
+            if (memoriesBlock) {
+              messages.push({ role: block.role || "system", content: memoriesBlock });
+              return { block, content: memoriesBlock, tokens: TokenCounter.estimateTokens(memoriesBlock) };
+            }
+          } catch (error) {
+            const errorMsg = error instanceof Error ? error.message : String(error);
+            return { block, content: "", tokens: 0, error: `Template error in "${block.label || "Memories"}" block: ${errorMsg}` };
+          }
+          break;
+        }
+        case "past_summaries": {
+          if (["2.", "3."].some((prefix) => baseContext.memoryContext?.engineVersion?.startsWith(prefix))) break;
+          const pastSummaries = this.buildPastSummariesContext(character, gameData);
+          if (pastSummaries) {
+            const content = block.template ? renderTemplate(block.template, { ...baseContext, pastSummaries }) : pastSummaries;
+            if (content === null) {
+              return { block, content: "", tokens: 0, error: `Template error in "${block.label || "Past Summaries"}" block. Check Handlebars syntax.` };
+            }
+            messages.push({ role: block.role || "system", content });
+            return { block, content, tokens: TokenCounter.estimateTokens(content) };
+          }
+          break;
+        }
+        case "rolling_summary": {
+          if (summary) {
+            const tpl = block.template || "此对话中较早消息的摘要：\n{{summary}}";
+            const content = renderTemplate(tpl, { ...baseContext, summary });
+            if (content === null) {
+              return { block, content: "", tokens: 0, error: `模板错误："${block.label || "Rolling Summary"}" block。请检查 Handlebars 语法。` };
+            }
+            messages.push({ role: block.role || "system", content });
+            return { block, content, tokens: TokenCounter.estimateTokens(content) };
+          }
+          break;
+        }
+        case "history": {
+          const historyMessages = history.map((m) => ({
+            role: m.role,
+            content: m.name ? `${m.name}: ${m.content}` : m.content
+          }));
+          const hasCurrentUserMessage = historyMessages.at(-1)?.role === "user";
+          const priorHistory = hasCurrentUserMessage ? historyMessages.slice(0, -1) : historyMessages;
+          const currentUserMessage = hasCurrentUserMessage ? historyMessages.at(-1) : null;
+          const tokenBlocks = [];
+          const appendPriorHistory = () => {
+            if (priorHistory.length === 0) return;
+            messages.push(...priorHistory);
+            tokenBlocks.push({
+              block: { ...block, stable: false, lifecycle: PROMPT_LIFECYCLE.DYNAMIC },
+              content: priorHistory.map((message) => `${message.role}: ${message.content}`).join("\n\n"),
+              tokens: TokenCounter.calculateTotalTokens(priorHistory)
+            });
+          };
+          const appendTextBlock = (content, blockDefinition) => {
+            if (!content) return;
+            messages.push({ role: "system", content });
+            tokenBlocks.push({
+              block: { ...blockDefinition, stable: false, lifecycle: PROMPT_LIFECYCLE.DYNAMIC },
+              content,
+              tokens: TokenCounter.estimateTokens(content)
+            });
+          };
+          const appendDeferred = (deferred = []) => {
+            for (const item of deferred) {
+              messages.push(item.message);
+              tokenBlocks.push({ ...item.tokenBlock, block: { ...item.tokenBlock.block, stable: false, lifecycle: PROMPT_LIFECYCLE.DYNAMIC } });
+            }
+          };
+          const appendConfiguredContext = (configuredBlocks = []) => {
+            for (const configuredBlock of configuredBlocks) {
+              const result = this.applyBlockWithTokenCount(configuredBlock, messages, history, baseContext, promptSettings);
+              for (const entry of Array.isArray(result) ? result : result ? [result] : []) {
+                tokenBlocks.push({ ...entry, block: { ...entry.block, stable: false, lifecycle: PROMPT_LIFECYCLE.DYNAMIC } });
+              }
+            }
+          };
+          const appendCurrentUser = () => {
+            if (!currentUserMessage) return;
+            messages.push(currentUserMessage);
+            tokenBlocks.push({
+              block: { ...block, id: `${block.id || "history"}-current-user`, type: "current_user", label: "Current User Message", stable: false },
+              content: `user: ${currentUserMessage.content}`,
+              tokens: TokenCounter.calculateTotalTokens([currentUserMessage])
+            });
+          };
+          const appendTemporalExtra = () => appendTextBlock(options.temporalExtraText, { id: "memory-temporal-extra", type: "memory_temporal_extra", label: "Dynamic Summary Extra", enabled: true, role: "system", stable: false });
+          const appendPresence = () => appendTextBlock(options.presenceText, { id: "current-presence-roster", type: "presence_roster", label: "Current Presence and Relationships", enabled: true, role: "system", stable: false });
+          const appendTopicPatch = () => appendTextBlock(options.topicPatchText, { id: "memory-topic-patch", type: "memory_topic_patch", label: "Turn Topic Memory Patch", enabled: true, role: "system", stable: false });
+          const appendWorldTopic = () => appendTextBlock(options.worldTopicText, { id: "worldline-topic", type: "worldline_topic", label: "World Topic Facts", enabled: true, role: "system", stable: false });
+          const appendWorldSupplemental = () => appendTextBlock(options.worldSupplementalText, { id: "worldline-supplemental", type: "worldline_supplemental", label: "World Supplemental Knowledge", enabled: true, role: "system", stable: false });
+          const appendWorldCurrent = () => appendTextBlock(options.worldCurrentText, { id: "worldline-current", type: "worldline_current", label: "Current World View", enabled: true, role: "system", stable: false });
+          const appendTurnRecall = () => appendTextBlock(options.turnRecallText, { id: "memory-turn-recall", type: "memory_turn_recall", label: "Turn Recall", enabled: true, role: "system", stable: false });
+          const appendThirdPartyEvidence = () => appendTextBlock(options.thirdPartyEvidenceText, { id: "third-party-evidence-patch", type: "third_party_evidence", label: "ThirdPartyEvidencePatch", enabled: true, role: "system", stable: false });
+          const appendWorldTurnRecall = () => appendTextBlock(options.worldTurnRecallText, options.subjectiveWorldBlock || { id: "worldline-turn-recall", type: "worldline_turn_recall", label: "Worldline Turn Recall", enabled: true, role: "system", stable: false });
+          if (options.v89Layout) {
+            if (options.v813Layout) {
+              appendTextBlock(options.cacheV2LiveText, { id: "live-character-state", type: "live_character_state", label: "Live Character State" });
+              appendDeferred(options.deferredMainSegments);
+              appendDeferred(options.deferredDescriptionBlocks);
+              appendTextBlock(options.responderGameFacts, options.responderGameFactsBlock);
+              appendTextBlock(options.activeParticipantRelationshipText, { id: "live-relationships", type: "live_relationships", label: "Live Relationships" });
+              appendPresence();
+              appendTextBlock(options.sessionTopicAnchorText, { ...options.sessionTopicAnchorBlock, label: "Session Topic Memory" });
+              appendConfiguredContext(options.deferredContextBlocks);
+              appendPriorHistory();
+              appendCurrentUser();
+              appendTextBlock(options.confirmedActionText, { id: "action-confirmed-context", type: "action_confirmed_context", label: "Confirmed In-Conversation Actions", enabled: true, role: "system" });
+              appendTemporalExtra();
+              appendTextBlock(options.memoryMentionedSnapshotText, { id: "memory-mentioned-snapshot", type: "memory_mentioned_snapshot", label: "Mentioned Character Recall", enabled: true, role: "system" });
+              appendTextBlock(options.coveragePatchText, { id: "worldline-coverage-patch", type: "worldline_coverage_patch", label: "Worldline Coverage Patch", enabled: true, role: "system" });
+              appendTextBlock(options.recentWorldText, { id: "worldline-recent-recall", type: "worldline_recent_recall", label: "Recent Worldline Recall", enabled: true, role: "system" });
+              appendTextBlock(options.responderFamilyFacts, options.responderFamilyFactsBlock);
+              appendTopicPatch();
+              appendTurnRecall();
+              appendThirdPartyEvidence();
+              appendTextBlock(options.historicalWorldText, { id: "worldline-historical-recall", type: "worldline_historical_recall", label: "Historical Worldline Query", enabled: true, role: "system" });
+            } else if (!options.glmCacheLayout) {
+              appendPriorHistory();
+              appendDeferred(options.deferredMainSegments);
+              appendDeferred(options.deferredDescriptionBlocks);
+              appendTextBlock(options.responderGameFacts, options.responderGameFactsBlock);
+              appendPresence();
+              appendWorldTopic();
+              appendWorldSupplemental();
+              appendWorldCurrent();
+              appendCurrentUser();
+              appendTemporalExtra();
+              appendTextBlock(options.responderFamilyFacts, options.responderFamilyFactsBlock);
+              appendTopicPatch();
+              appendTurnRecall();
+              appendThirdPartyEvidence();
+              appendWorldTurnRecall();
+            } else if (options.glmCacheV2) {
+              appendTextBlock(options.cacheV2LiveText, { id: "live-character-state", type: "live_character_state", label: "Live Character State" });
+              appendDeferred(options.deferredMainSegments);
+              appendDeferred(options.deferredDescriptionBlocks);
+              appendTextBlock(options.responderGameFacts, options.responderGameFactsBlock);
+              appendTextBlock(options.activeParticipantRelationshipText, { id: "live-relationships", type: "live_relationships", label: "Live Relationships" });
+              appendPresence();
+              appendTextBlock(options.memoryStableText, { id: "memory-stable", type: "memory_stable", label: "Long-term Memory" });
+              appendTextBlock(options.memoryDirectText, { id: "memory-direct-frozen", type: "memory_direct_frozen", label: "Direct Memory" });
+              appendTextBlock(options.memoryMentionedSnapshotText, { id: "memory-mentioned-snapshot", type: "memory_mentioned_snapshot", label: "Mentioned Character Snapshot" });
+              appendTextBlock(options.sessionTopicAnchorText, { ...options.sessionTopicAnchorBlock, label: "Session Topic Memory" });
+              appendConfiguredContext(options.deferredContextBlocks);
+              appendTextBlock(options.worldStableText, { id: "worldline-stable", type: "worldline_stable", label: "Worldline Stable Facts (Dynamic Tail)" });
+              appendWorldCurrent();
+              appendWorldTopic();
+              appendWorldSupplemental();
+              appendWorldTurnRecall();
+              appendPriorHistory();
+              appendCurrentUser();
+              appendTemporalExtra();
+              appendTextBlock(options.responderFamilyFacts, options.responderFamilyFactsBlock);
+              appendTopicPatch();
+              appendTurnRecall();
+              appendThirdPartyEvidence();
+            } else {
+              appendDeferred(options.deferredMainSegments);
+              appendDeferred(options.deferredDescriptionBlocks);
+              appendTextBlock(options.responderGameFacts, options.responderGameFactsBlock);
+              appendPresence();
+              appendWorldTopic();
+              appendWorldSupplemental();
+              appendWorldCurrent();
+              appendTextBlock(options.sessionTopicAnchorText, { ...options.sessionTopicAnchorBlock, stable: false, label: "Session Topic Memory" });
+              appendPriorHistory();
+              appendCurrentUser();
+              appendTemporalExtra();
+              appendTextBlock(options.responderFamilyFacts, options.responderFamilyFactsBlock);
+              appendTopicPatch();
+              appendTurnRecall();
+              appendThirdPartyEvidence();
+              appendWorldTurnRecall();
+            }
+          } else {
+            appendPresence();
+            appendTopicPatch();
+            appendWorldTopic();
+            appendWorldSupplemental();
+            appendWorldCurrent();
+            appendPriorHistory();
+            appendCurrentUser();
+            appendTemporalExtra();
+            appendTurnRecall();
+            appendThirdPartyEvidence();
+            appendWorldTurnRecall();
+          }
+          return tokenBlocks;
+        }
+        case "instruction": {
+          const tpl = block.template || DEFAULT_CHAT_INSTRUCTION;
+          const content = renderTemplate(tpl, baseContext);
+          if (content === null) {
+            return { block, content: "", tokens: 0, error: `模板错误："${block.label || "Instruction"}" block。请检查 Handlebars 语法。` };
+          }
+          messages.push({ role: block.role || "user", content });
+          return { block, content, tokens: TokenCounter.estimateTokens(content) };
+        }
+        case "custom": {
+          if (!block.template) break;
+          const content = renderTemplate(block.template, baseContext);
+          if (content === null) {
+            return { block, content: "", tokens: 0, error: `模板错误："${block.label || "Custom"}" block。请检查 Handlebars 语法。` };
+          }
+          messages.push({ role: block.role || "system", content });
+          return { block, content, tokens: TokenCounter.estimateTokens(content) };
+        }
+      }
+      return null;
+    }
+  }
+  
+  return PromptBuilder;
+}
+
+module.exports = { createPromptBuilder };

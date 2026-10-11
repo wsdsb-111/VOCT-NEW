@@ -1,0 +1,2299 @@
+"use strict";
+
+const fs = require("fs");
+
+const { getCharacterPersonalName } = require("../memory-system/character-identity");
+const { getFactCandidates } = require("../memory-system/memory4-disclosure");
+const { resolveTraitVisibility } = require("../prompts/trait-visibility-policy");
+const { buildCurrentMemory4RelationshipEvidence } = require("../memory-system/memory4-entity-context");
+const { memoryMatchesCampaign } = require("../memory-system/memory-types");
+const { MentionTracker } = require("../memory-system/mention-tracker");
+const { createConversationRuntime } = require("./conversation-runtime");
+const participantLifecycle = require("./participant-lifecycle");
+const { buildPresenceObservationFacts } = require("../worldline/direct-observation-producer");
+const { resolveWorldlineTurnBudget, shouldTrimMemoryTurnRecall } = require("../worldline/worldline-context-budget");
+const { parseTimeHint } = require("../worldline/world-query-planner");
+const { buildFrozenCoverageManifest, hasFrozenCoverage, buildCoveragePatchKey } = require("../worldline/frozen-coverage-manifest");
+const { verifyActionConfirmation, settleActionResult } = require("../actions/action-confirmation");
+const { readActionCommandReadback } = require("../actions/action-command-readback");
+const { validateGenerationOutcome } = require("../providers/generation-outcome");
+const { planRequestBudget } = require("../providers/request-budget");
+
+let ActionEngine = null;
+let settingsRepository = null;
+let usageAnalytics = null;
+let llmManager = null;
+let runFileManager = null;
+let parseLog = null;
+let createError = null;
+let createMessage = null;
+let createActionApproval = null;
+let createActionFeedback = null;
+let createPromptFingerprint = null;
+let PromptBuilder = null;
+let TokenCounter = null;
+let logVerboseLLM = null;
+let events = null;
+let uuid = null;
+let path = null;
+let memoryEngine = null;
+let worldlineService = null;
+let performanceTrace = null;
+
+function startTraceSpan(trace, step, fields) {
+  try {
+    return trace?.enabled ? trace.startSpan(step, fields) : null;
+  } catch (_error) {
+    return null;
+  }
+}
+
+function finishTraceSpan(finish, fields) {
+  try {
+    finish?.(fields);
+  } catch (_error) {}
+}
+
+function traceOperation(trace, step, fields, operation) {
+  if (!trace?.enabled) return operation();
+  const finish = startTraceSpan(trace, step, fields);
+  let result;
+  try {
+    result = operation();
+  } catch (error) {
+    finishTraceSpan(finish, { result: "ERROR", errorCode: "initialization_error" });
+    throw error;
+  }
+  if (result && typeof result.then === "function") {
+    return result.then((value) => {
+      finishTraceSpan(finish, { result: "OK" });
+      return value;
+    }, (error) => {
+      finishTraceSpan(finish, { result: error instanceof Error && error.message === "AbortError: Message cancelled" ? "CANCELLED" : "ERROR", errorCode: "initialization_error" });
+      throw error;
+    });
+  }
+  finishTraceSpan(finish, { result: "OK" });
+  return result;
+}
+
+const TEMPORARY_ABSENCE_MODES = Object.freeze({
+  unconscious: {
+    statusLabel: "昏迷中",
+    returnLabel: "唤醒",
+    leaveText: (name) => `【${name}突然昏迷，暂时无法感知或参与接下来的对话】`,
+    returnText: (name) => `【${name}恢复意识。${name}清楚自己刚才曾经昏迷，但对昏迷期间发生的对话和事件没有记忆，也不得据此作出反应。】`
+  },
+  asleep: {
+    statusLabel: "睡着了",
+    returnLabel: "叫醒",
+    leaveText: (name) => `【${name}睡着了，暂时无法感知或参与接下来的对话】`,
+    returnText: (name) => `【${name}醒来。${name}知道自己刚才睡着了，但没有听见睡着期间的对话，也不知道期间发生的事件。】`
+  },
+  away: {
+    statusLabel: "暂时离开",
+    returnLabel: "请回来",
+    leaveText: (name) => `【${name}暂时离开现场，无法感知或参与接下来的对话】`,
+    returnText: (name) => `【${name}回到现场。${name}知道自己刚才暂时离开过，但不知道离开期间发生的对话和事件。】`
+  }
+});
+
+class Conversation {
+  static configure(dependencies = {}) {
+    ActionEngine = dependencies.ActionEngine || ActionEngine;
+    settingsRepository = dependencies.settingsRepository || settingsRepository;
+    usageAnalytics = dependencies.usageAnalytics || usageAnalytics;
+    llmManager = dependencies.llmManager || llmManager;
+    runFileManager = dependencies.runFileManager || runFileManager;
+    parseLog = dependencies.parseLog || parseLog;
+    createError = dependencies.createError || createError;
+    createMessage = dependencies.createMessage || createMessage;
+    createActionApproval = dependencies.createActionApproval || createActionApproval;
+    createActionFeedback = dependencies.createActionFeedback || createActionFeedback;
+    createPromptFingerprint = dependencies.createPromptFingerprint || createPromptFingerprint;
+    PromptBuilder = dependencies.PromptBuilder || PromptBuilder;
+    TokenCounter = dependencies.TokenCounter || TokenCounter;
+    logVerboseLLM = dependencies.logVerboseLLM || logVerboseLLM;
+    events = dependencies.events || events;
+    uuid = dependencies.uuid || uuid;
+    path = dependencies.path || path;
+    memoryEngine = dependencies.memoryEngine || memoryEngine;
+    worldlineService = dependencies.worldlineService || worldlineService;
+    performanceTrace = dependencies.performanceTrace || performanceTrace;
+    return this;
+  }
+  static buildPromptBlockMetadata(promptBuild = {}) {
+    const hasExplicitStability = (promptBuild.blocks || []).some(({ block }) => block?.stable !== undefined);
+    const messages = Array.isArray(promptBuild.messages) ? promptBuild.messages : [];
+    let messageCursor = 0;
+    const blocks = (promptBuild.blocks || []).map(({ block, content, tokens }, index) => {
+      let messageStartPosition = null;
+      let messageCount = 0;
+      const blockContent = typeof content === "string" ? content : "";
+      for (let end = messageCursor + 1; blockContent && end <= messages.length; end += 1) {
+        const candidate = messages.slice(messageCursor, end);
+        const directContent = candidate.length === 1 ? candidate[0]?.content : null;
+        const roleContent = candidate.map((message) => `${message.role}: ${message.content}`).join("\n\n");
+        if (directContent === blockContent || roleContent === blockContent) {
+          messageStartPosition = messageCursor;
+          messageCount = candidate.length;
+          messageCursor = end;
+          break;
+        }
+      }
+      return {
+        id: block.id,
+        label: block.label,
+        type: block.type,
+        position: index,
+        messageStartPosition,
+        messageCount,
+        tokens,
+        fingerprint: createPromptFingerprint(content),
+        stable: hasExplicitStability ? block.stable === true : null,
+        lifecycle: block.lifecycle || null
+      };
+    });
+    const firstHistoryIndex = blocks.findIndex((block) => block.type === "history" || block.type === "presence_roster" || block.type === "current_user");
+    const historyStartPosition = firstHistoryIndex >= 0 ? firstHistoryIndex : blocks.length;
+    const firstDynamicIndex = hasExplicitStability ? blocks.findIndex((block) => block.stable === false) : -1;
+    const stablePrefixEndPosition = firstDynamicIndex >= 0 ? firstDynamicIndex : historyStartPosition;
+    const stablePrefixTokens = blocks.slice(0, stablePrefixEndPosition).reduce((total, block) => total + (Number(block.tokens) || 0), 0);
+    const dynamicSuffixTokens = blocks.slice(stablePrefixEndPosition).reduce((total, block) => total + (Number(block.tokens) || 0), 0);
+    const prefixFingerprint = createPromptFingerprint(JSON.stringify(blocks.slice(0, stablePrefixEndPosition).map((block) => [block.id, block.type, block.fingerprint, block.stable, block.lifecycle])));
+    return { blocks, historyStartPosition, stablePrefixEndPosition, stablePrefixTokens, dynamicSuffixTokens, prefixFingerprint };
+  }
+  constructor({ conversationEpoch = null } = {}) {
+    this.id = uuid.v4();
+    this.conversationEpoch = conversationEpoch != null && Number.isInteger(Number(conversationEpoch)) ? Number(conversationEpoch) : null;
+    this.messages = [];
+    this.isActive = false;
+    this.nextId = 0;
+    this.currentSummary = "";
+    this.lastSummarizedMessageIndex = 0;
+    this.memoryState = memoryEngine?.createConversationState(this.id) || null;
+    this.CONTEXT_LIMIT_PERCENTAGE = 0.75;
+    this.MESSAGES_TO_SUMMARIZE_PERCENTAGE = 0.4;
+    this.customQueue = null;
+    this.isPaused = false;
+    this.persistCustomQueue = false;
+    this.inactiveParticipantIds = /* @__PURE__ */ new Map();
+    this.summaryParticipantProfiles = /* @__PURE__ */ new Map();
+    this.stableProfileCache = /* @__PURE__ */ new Map();
+    this.stableDescriptionCache = /* @__PURE__ */ new Map();
+    this.disclosureProfilesByResponder = /* @__PURE__ */ new Map();
+    this.cacheV2FrozenSnapshots = { conversation: null, responders: /* @__PURE__ */ new Map() };
+    this.cacheV2FrozenSnapshots.prefixByResponder = /* @__PURE__ */ new Map();
+    this.frozenWorldlineByResponder = /* @__PURE__ */ new Map();
+    this.frozenWorldlineCoverageByResponder = /* @__PURE__ */ new Map();
+    this.worldlineCoveragePatchCacheByResponder = /* @__PURE__ */ new Map();
+    this.selectedCharacterIds = /* @__PURE__ */ new Set();
+    this.presentCharacterIds = /* @__PURE__ */ new Set();
+    this.waitingCharacterIds = /* @__PURE__ */ new Set();
+    this.temporarilyAbsentCharacterIds = /* @__PURE__ */ new Map();
+    this.departedCharacterIds = /* @__PURE__ */ new Set();
+    this.joinEvents = [];
+    this.leaveEvents = [];
+    this.presenceInitialized = false;
+    this.pendingActionApprovals = /* @__PURE__ */ new Map();
+    this.gameDataRevision = 0;
+    this.memory4RelationshipChanges = [];
+    this.eventEmitter = new events.EventEmitter();
+    this.runtime = createConversationRuntime(this, {
+      recordSkipped: (responseState, reason) => this.recordGenerationSkippedAnalytics(responseState, reason)
+    });
+    this.performanceTraceContext = performanceTrace?.enabled ? performanceTrace.forConversation(this.id) : null;
+    this.turnManager = this.runtime.turnManager;
+    this.generationManager = this.runtime.generationManager;
+    this.referenceContext = this.runtime.referenceContext;
+    this.gameDataReady = this.initializeGameData();
+  }
+  getTurnManager() {
+    const manager = this.runtime?.turnManager || this.turnManager;
+    if (!manager) throw new Error("conversation_turn_manager_not_initialized");
+    return manager;
+  }
+  getGenerationManager() {
+    const manager = this.runtime?.generationManager || this.generationManager;
+    if (!manager) throw new Error("conversation_generation_manager_not_initialized");
+    return manager;
+  }
+  async parseCK3GameData(ck3DebugPath, { captureForConversation = false } = {}) {
+    let before = null;
+    try { before = fs.statSync(ck3DebugPath); } catch {}
+    const gameData = await parseLog(ck3DebugPath);
+    try {
+      const after = fs.statSync(ck3DebugPath);
+      if (before && before.size === after.size && before.mtimeMs === after.mtimeMs
+        && gameData?.ck3RelationshipReadbackComplete !== false) {
+        const changes = memoryEngine?.memory4?.observeCK3Readback(gameData, { sourceId: ck3DebugPath, size: after.size,
+          mtimeMs: after.mtimeMs, complete: true });
+        if (captureForConversation && changes?.length) {
+          this.memory4RelationshipChanges = [...(this.memory4RelationshipChanges || []), ...changes];
+        }
+      }
+    } catch (error) {
+      console.warn("[Memory4] CK3 relationship readback skipped:", error.message);
+    }
+    return gameData;
+  }
+  async initializeGameData() {
+    const conversationOpenSpan = startTraceSpan(performanceTrace, "conversation.open", { attribution: "MAIN" });
+    const ck3DebugPath = settingsRepository.getCK3DebugLogPath();
+    console.log(`Conversation.initializeGameData: CK3 debug log path: ${ck3DebugPath}`);
+    if (!runFileManager.isAvailable()) {
+      console.warn("Conversation.initializeGameData: RunFileManager not available - CK3 path not configured");
+    }
+    if (!ck3DebugPath) {
+      finishTraceSpan(conversationOpenSpan, { result: "ERROR", errorCode: "initialization_error" });
+      console.error("Conversation.initializeGameData: CK3 debug log path is not configured");
+      this.isActive = false;
+      const initError = createError({
+        id: this.nextId++,
+        content: "CK3 debug log path is not configured",
+        details: "Please configure the CK3 user folder path in settings"
+      });
+      this.messages.push(initError);
+      this.emitUpdate();
+      return;
+    }
+    try {
+      this.gameData = await traceOperation(performanceTrace, "gameData.logParse", { attribution: "MAIN" }, () => this.parseCK3GameData(ck3DebugPath));
+      this.gameDataRevision += 1;
+      this.gameData.gameDataRevision = this.gameDataRevision;
+      console.log("GameData initialized with", this.gameData.characters.size, "characters");
+      this.captureSummaryParticipantProfiles(this.gameData.characters.values());
+      this.initializePresence();
+      traceOperation(performanceTrace, "summary.load", { attribution: "MAIN", count: this.gameData.characters.size }, () => this.gameData.loadCharactersSummaries());
+      traceOperation(performanceTrace, "knowledge.disclosureSnapshot", { attribution: "MAIN", count: (this.selectedCharacterIds?.size || 0) + 1 }, () => this.captureDisclosureProfiles());
+      traceOperation(performanceTrace, "knowledge.directObservation", { attribution: "MAIN", count: this.presentCharacterIds?.size || 0 }, () => this.observeVisibleTraits());
+      traceOperation(performanceTrace, "officialRecollection.sync", { attribution: "MAIN" }, () => this.gameData.syncOfficialRecollectionSummaries?.(this.id));
+      this.worldlinePrefetchPromise = traceOperation(performanceTrace, "worldline.frozenPrefetch", { attribution: "MAIN" }, () => this.prefetchFrozenWorldline()).catch((error) => {
+        console.warn("[Worldline] Conversation-opening recall failed:", error.message);
+      });
+      this.isActive = true;
+      this.emitUpdate();
+      this.memoryRecoveryPromise = Promise.resolve().then(() => traceOperation(performanceTrace, "memoryRecovery.pending", { attribution: "MAIN" }, () => this.recoverPendingMemories())).catch((error) => {
+        console.error("[Summary] Background recovery failed; snapshots retained:", error);
+      });
+      finishTraceSpan(conversationOpenSpan, { result: "OK", count: this.gameData.characters.size });
+    } catch (error) {
+      finishTraceSpan(conversationOpenSpan, { result: "ERROR", errorCode: "initialization_error" });
+      console.error("Failed to parse log file:", error);
+      this.isActive = false;
+      const initError = createError({
+        id: this.nextId++,
+        content: "Failed to initialize conversation",
+        details: error instanceof Error ? error.message : String(error)
+      });
+      this.messages.push(initError);
+      this.emitUpdate();
+    }
+  }
+  isV813PrefixEnabled() {
+    return settingsRepository?.getChatPromptV813Layout?.() === true;
+  }
+  captureDisclosureProfiles() {
+    const campaignToken = this.gameData?.campaignToken;
+    if (!campaignToken || !memoryEngine?.memory4?.getCurrentDisclosures) return;
+    const ownerIds = new Set([Number(this.gameData.playerID), ...this.selectedCharacterIds].filter(Number.isSafeInteger));
+    for (const ownerId of ownerIds) {
+      if (!this.gameData.characters.has(ownerId)) continue;
+      const key = `${campaignToken}:${ownerId}`;
+      if (this.disclosureProfilesByResponder.has(key)) continue;
+      const scope = { campaignToken, ownerId: Number(ownerId) };
+      const profiles = new Map();
+      try {
+        memoryEngine.memory4.refreshCurrentFactState?.(scope, this.gameData);
+        const readContext = memoryEngine.memory4.createProfileReadContext(scope);
+        for (const entityId of this.gameData.characters.keys()) {
+          if (Number(entityId) === Number(ownerId)) continue;
+          profiles.set(Number(entityId), memoryEngine.memory4.getCurrentDisclosures(scope, Number(entityId), this.gameData, { readContext }));
+        }
+      } catch (error) {
+        profiles.clear();
+        if (error.message !== "memory4_owner_folder_not_unique") console.warn("[Memory4] Opening knowledge unavailable:", error.message);
+      }
+      this.disclosureProfilesByResponder.set(key, profiles);
+    }
+  }
+  observeVisibleTraits() {
+    if (!this.presenceInitialized || !this.gameData?.campaignToken || !memoryEngine?.memory4?.observeVisibleTraits) return;
+    const participantPresence = memoryEngine.ensureConversationState(this).participantPresence;
+    const messageBoundary = this.nextId;
+    this.gameData.directObservationContext = { conversationId: this.id, campaignToken: this.gameData.campaignToken,
+      gameDate: this.gameData.date, messageBoundary, participantPresence: participantPresence.map(window => ({ ...window })) };
+    const activeIds = [...new Set(participantPresence.filter(window => Number(window.joinedAtMessageId) <= messageBoundary
+      && (window.leftAtMessageId == null || messageBoundary < Number(window.leftAtMessageId)))
+      .map(window => Number(window.characterId)))].filter(id => this.gameData.characters.has(id)
+        && this.isCharacterAvailableForConversation(this.gameData.characters.get(id)));
+    let changed = false;
+    for (const observerId of activeIds) for (const targetId of activeIds) {
+      if (observerId === targetId) continue;
+      const result = memoryEngine.memory4.observeVisibleTraits({ ...this.gameData.directObservationContext,
+        observerId, targetId, gameData: this.gameData });
+      changed ||= result.changed;
+    }
+    this.captureDisclosureProfiles();
+    for (const [key, profiles] of this.disclosureProfilesByResponder) {
+      if (!key.startsWith(`${this.gameData.campaignToken}:`)) continue;
+      const scope = { campaignToken: this.gameData.campaignToken, ownerId: Number(key.slice(this.gameData.campaignToken.length + 1)) };
+      const readContext = memoryEngine.memory4.createProfileReadContext(scope);
+      for (const entityId of this.gameData.characters.keys()) {
+        if (Number(entityId) === scope.ownerId) continue;
+        const current = memoryEngine.memory4.getCurrentDisclosures(scope, Number(entityId), this.gameData, { readContext });
+        const visible = fact => fact.factType === "TRAIT" && resolveTraitVisibility({ traitId: fact.canonicalKey,
+          name: fact.value, category: fact.category }).status === "OBSERVABLE";
+        // Only current observation may extend the opening knowledge snapshot.
+        const next = [...(profiles.get(Number(entityId)) || []).filter(fact => !visible(fact)
+          && current.some(row => row.factId === fact.factId && row.factEpoch === fact.factEpoch
+            && (!fact.effectiveKnown || row.effectiveKnown))), ...current.filter(visible)];
+        if (JSON.stringify(next) !== JSON.stringify(profiles.get(Number(entityId)) || [])) changed = true;
+        profiles.set(Number(entityId), next);
+      }
+    }
+    if (changed) {
+      this.stableProfileCache.clear();
+      this.stableDescriptionCache.clear();
+      this.cacheV2FrozenSnapshots.responders.clear();
+      this.cacheV2FrozenSnapshots.prefixByResponder.clear();
+    }
+  }
+  async prefetchFrozenWorldline() {
+    if (!this.isV813PrefixEnabled?.() || !worldlineService) return;
+    const selectedIds = [...this.selectedCharacterIds].filter((id) => this.gameData.characters.has(id));
+    const presentIds = [...this.presentCharacterIds].filter((id) => this.gameData.characters.has(id));
+    const subjective = worldlineService.isSubjectivePromptIntegrationEnabled?.() === true;
+    if (subjective) await worldlineService.prepareCanon?.();
+    for (const responderId of selectedIds) {
+      try {
+        const args = {
+          runtimeGameData: this.gameData,
+          responderId,
+          query: "",
+          assistContext: "",
+          snapshotMode: "CONVERSATION_BASELINE",
+          mentionedEntityIds: [],
+          activeParticipantIds: presentIds,
+          runtimeContext: { activeParticipantIds: presentIds },
+          conversationId: this.id,
+          turnEpoch: 0,
+          sceneRevision: `${this.gameData.date || ""}\n${this.gameData.scene || ""}`,
+          presenceRevision: presentIds.map(String).sort().join(","),
+          directObservationFactIds: [],
+          directObservationFacts: [],
+          historicalReferenceInfo: this.gameData.historicalReferenceInfo,
+          tokenBudget: 900
+        };
+        const context = subjective
+          ? await worldlineService.getSubjectivePromptContextAsync(args)
+          : worldlineService.getPromptContext?.(args);
+        if (context) this.frozenWorldlineByResponder.set(responderId, subjective ? context : {
+          worldStableText: context.stableText || null,
+          worldTopicText: context.topicText || null,
+          worldSupplementalText: context.supplementalText || null,
+          worldCurrentText: context.currentText || null,
+          queryFingerprint: context.queryFingerprint || null,
+          cacheHit: context.cacheHit === true
+        });
+        if (subjective && context?.baselineFacts) {
+          this.frozenWorldlineCoverageByResponder.set(String(responderId), buildFrozenCoverageManifest({
+            responderId, checkpointId: context.checkpointId, candidateSetComplete: context.baselineCandidateSetComplete,
+            truncated: context.baselineTruncated, laneCoverage: context.baselineLaneCoverage
+          }, context.baselineFacts));
+          usageAnalytics?.record({ requestType: "worldline_coverage", coveragePhase: "BASELINE", characterId: responderId,
+            baselineFactCount: context.baselineFacts.length, baselineTokens: context.worldTurnRecallTokens || 0,
+            baselineLanes: context.baselineLanes, baselineLaneCoverage: context.baselineLaneCoverage,
+            baselineTruncated: context.baselineTruncated }, null);
+        }
+      } catch (error) {
+        console.warn(`[Worldline] Opening recall failed for NPC ${responderId}:`, error.message);
+      }
+    }
+  }
+  getWorldlineCoveragePatchFor(npc, memoryContext) {
+    if (!worldlineService?.isSubjectivePromptIntegrationEnabled?.()) return null;
+    const request = memoryContext?.worldlineRequest || {};
+    const query = request.query || "";
+    if (!query.trim()) return null;
+    const plan = worldlineService.getPromptContext?.({ query, assistContext: request.assistContext || "", mentionedEntityIds: request.mentionedEntityIds || [],
+      runtimeContext: { activeParticipantIds: this.getActiveConversationCharacters().map(character => character.id) }, diagnostic: true, includeScopedSupplemental: true })?.queryPlan;
+    if (!plan) return null;
+    const responderId = String(npc.id);
+    const checkpointId = worldlineService.getCheckpointStatus?.()?.checkpoint?.id || null;
+    const frozenManifest = this.frozenWorldlineCoverageByResponder?.get(responderId);
+    const manifest = frozenManifest?.checkpointId === checkpointId ? frozenManifest : null;
+    const decision = hasFrozenCoverage({ queryPlan: plan, manifest });
+    if (!decision.eligible) return null;
+    if (decision.hit) {
+      usageAnalytics?.record({ requestType: "worldline_coverage", coveragePhase: "DECISION", coverageIntent: plan.intent,
+        coverageHit: true, coverageRequestedFields: plan.requestedFields, coverageLaneCoverage: manifest?.laneCoverage || null, characterId: npc.id }, null);
+      return null;
+    }
+    const presentIdsForRevision = [...(this.presentCharacterIds || [])].map(String).sort();
+    const revision = JSON.stringify({
+      gameDataRevision: this.gameDataRevision,
+      confirmedActionRevision: memoryContext?.confirmedActionText ? createPromptFingerprint?.(memoryContext.confirmedActionText) || memoryContext.confirmedActionText : "",
+      checkpointId,
+      campaignToken: this.gameData.campaignToken || "",
+      presentCharacterIds: presentIdsForRevision,
+      scene: this.gameData.scene || null,
+      location: this.gameData.location || null,
+      locationController: this.gameData.locationController || null
+    });
+    let cache = this.worldlineCoveragePatchCacheByResponder.get(responderId);
+    if (!cache || cache.revision !== revision) {
+      cache = { revision, entries: new Map() };
+      this.worldlineCoveragePatchCacheByResponder.set(responderId, cache);
+    }
+    const key = buildCoveragePatchKey({ responderId, checkpointId, queryPlan: plan });
+    const cacheHit = cache.entries.has(key);
+    if (!cacheHit) {
+      const presentIds = [...this.presentCharacterIds];
+      const directObservationFacts = buildPresenceObservationFacts({ responderId: npc.id, presentCharacterIds: presentIds, characters: this.gameData.characters, asOf: this.gameData.date || null });
+      const patch = worldlineService.getSubjectiveCoveragePatch?.({
+        runtimeGameData: this.gameData, responderId: npc.id, query, assistContext: request.assistContext || "",
+        mentionedEntityIds: request.mentionedEntityIds || [], activeParticipantIds: this.getActiveConversationCharacters().map(character => character.id),
+        conversationId: this.id, turnEpoch: this.turnEpoch, sceneRevision: `${this.gameData.date || ""}\n${this.gameData.scene || ""}`,
+        presenceRevision: presentIds.map(String).sort().join(","), directObservationFactIds: directObservationFacts.map(fact => fact.factId), directObservationFacts,
+        excludeFactIds: manifest?.factIds || [], missingFields: decision.missingFields, tokenBudget: 300, snapshotMode: "CONVERSATION_BASELINE"
+      }) || null;
+      cache.entries.set(key, patch);
+    }
+    const patch = cache.entries.get(key);
+    usageAnalytics?.record({ requestType: "worldline_coverage", characterId: npc.id, conversationId: this.id,
+      coveragePhase: "PATCH", coverageIntent: plan.intent, coverageHit: false, coverageMissingFields: decision.missingFields.length,
+      coverageRequestedFields: plan.requestedFields, coverageLaneCoverage: manifest?.laneCoverage || null,
+      patchCacheHit: cacheHit, patchFactCount: patch?.patchFacts?.length || 0, patchTokens: patch?.patchTokens || 0,
+      patchCandidateCount: patch?.patchCandidateCount || 0, patchSelectedCount: patch?.patchSelectedCount || 0, patchTruncated: patch?.patchTruncated === true,
+      patchFilteredCount: patch?.filteredCount || 0, patchSecretBlockedCount: patch?.secretBlockedCount || 0 }, null);
+    return patch?.patchText || null;
+  }
+  async checkAndSummarizeIfNeeded(npc, diagnosticsContext = null) {
+    memoryEngine?.syncRollingStateFromConversationFields(this);
+    memoryEngine?.syncConversationRollingFields(this);
+    const capabilities = typeof llmManager.getProviderCapabilities === "function"
+      ? await llmManager.getProviderCapabilities("CHAT")
+      : { contextWindow: await llmManager.getCurrentContextLength() || 1e4, maxOutputTokens: 256 };
+    const contextLimit = capabilities.contextWindow;
+    const memoryRecallStartedAt = Date.now();
+    let memoryContext = await traceOperation(performanceTrace, "memory.recall", { attribution: "MAIN", context: diagnosticsContext }, () => this.getMemoryContextFor(npc, contextLimit));
+    const memoryRecallMs = Date.now() - memoryRecallStartedAt;
+    const promptHistory = this.getPromptHistoryForCharacter(npc.id);
+    const promptSummary = this.getPromptSummaryForCharacter(npc.id);
+    let currentMessages = PromptBuilder.buildMessages(
+      promptHistory,
+      npc,
+      this.gameData,
+      promptSummary,
+      memoryContext
+    );
+    let estimatedTokens = this.estimateTokenCount(currentMessages);
+    const productionWorldlineEnabled = worldlineService?.isSubjectivePromptIntegrationEnabled?.() === true;
+    const trimMemoryTurnRecall = (reason) => {
+      usageAnalytics.record({
+        requestType: "memory_recall",
+        characterId: npc.id,
+        memoryOutcome: "skipped_context_pressure",
+        turnRecallReason: reason,
+        turnRecallTokens: memoryContext.turnRecallTokens,
+        turnRecallIntent: true,
+        turnRecallSelected: false,
+        turnRecallCacheHit: memoryContext.turnRecallCacheHit,
+        sessionTopicAnchorLocked: memoryContext.routing?.topicPatch === "locked",
+        queryFingerprint: memoryContext.turnRecallQueryFingerprint,
+        candidateCount: memoryContext.turnRecallCandidateCount,
+        turnEpoch: this.turnEpoch
+      }, null);
+      memoryContext = { ...memoryContext, turnRecall: [], turnRecallText: null, turnRecallTokens: 0, turnRecallReason: reason };
+      currentMessages = PromptBuilder.buildMessages(
+        promptHistory,
+        npc,
+        this.gameData,
+        promptSummary,
+        memoryContext
+      );
+      estimatedTokens = this.estimateTokenCount(currentMessages);
+    };
+    if (memoryContext?.turnRecallText && !productionWorldlineEnabled && shouldTrimMemoryTurnRecall({ contextLimit, basePromptTokens: estimatedTokens, worldlineEnabled: false })) {
+      trimMemoryTurnRecall("context_headroom_below_192");
+    }
+    if (this.isV813PrefixEnabled?.()) {
+      const settings = worldlineService?.getSettings?.() || {};
+      const request = memoryContext?.worldlineRequest || {};
+      const hint = parseTimeHint(`${request.query || ""}\n${request.assistContext || ""}`, this.gameData.date);
+      if (productionWorldlineEnabled && settings.v812HistoricalRetrievalEnabled && settings.v812HistoricalPromptInjection && ["AS_OF", "RANGE"].includes(hint.mode)) {
+        try {
+          const presentIds = [...this.presentCharacterIds];
+          const directObservationFacts = buildPresenceObservationFacts({
+            responderId: npc.id,
+            presentCharacterIds: presentIds,
+            characters: this.gameData.characters,
+            asOf: this.gameData.date || null
+          });
+          const historical = await traceOperation(performanceTrace, "worldline.turnQuery", { attribution: "MAIN", context: diagnosticsContext }, () => worldlineService.getSubjectivePromptContextAsync({
+            runtimeGameData: this.gameData,
+            responderId: npc.id,
+            query: request.query || "",
+            assistContext: request.assistContext || "",
+            mentionedEntityIds: request.mentionedEntityIds || [],
+            activeParticipantIds: this.getActiveConversationCharacters().map((character) => character.id),
+            conversationId: this.id,
+            turnEpoch: this.turnEpoch,
+            sceneRevision: `${this.gameData.date || ""}\n${this.gameData.scene || ""}`,
+            presenceRevision: presentIds.map(String).sort().join(","),
+            directObservationFactIds: directObservationFacts.map((fact) => fact.factId),
+            directObservationFacts,
+            historicalReferenceInfo: this.gameData.historicalReferenceInfo,
+            tokenBudget: resolveWorldlineTurnBudget({ contextLimit, basePromptTokens: estimatedTokens }).turnBudget
+          }));
+          if (historical?.metrics?.historicalTimeMode) memoryContext = {
+            ...memoryContext,
+            historicalWorldText: historical.worldTurnRecallText || null,
+            historicalReferenceInfo: historical.historicalReferenceInfo || memoryContext.historicalReferenceInfo
+          };
+        } catch (error) {
+          console.warn("[Worldline] Historical recall failed; continuing with frozen world view:", error.message);
+        }
+      } else if (productionWorldlineEnabled && hint.mode === "RECENT") {
+        try {
+          const recent = await traceOperation(performanceTrace, "worldline.turnQuery", { attribution: "MAIN", context: diagnosticsContext }, () => worldlineService.getSubjectivePromptContextAsync({ runtimeGameData: this.gameData, responderId: npc.id,
+            query: request.query || "", assistContext: request.assistContext || "", mentionedEntityIds: request.mentionedEntityIds || [],
+            activeParticipantIds: this.getActiveConversationCharacters().map(character => character.id), conversationId: this.id,
+            turnEpoch: this.turnEpoch, tokenBudget: 300 }));
+          memoryContext = { ...memoryContext, recentWorldText: recent?.worldTurnRecallText || null };
+        } catch (error) {
+          console.warn("[Worldline] Recent recall failed; continuing with frozen world view:", error.message);
+        }
+      } else if (productionWorldlineEnabled && ["CURRENT", "UNSPECIFIED"].includes(hint.mode)) {
+        try {
+          memoryContext = { ...memoryContext, coveragePatchText: traceOperation(performanceTrace, "worldline.turnQuery", { attribution: "MAIN", context: diagnosticsContext }, () => this.getWorldlineCoveragePatchFor?.(npc, memoryContext)) || null };
+        } catch (error) {
+          console.warn("[Worldline] Coverage patch failed; continuing with frozen world view:", error.message);
+        }
+      }
+      if (memoryContext?.turnRecallText && shouldTrimMemoryTurnRecall({ contextLimit, basePromptTokens: estimatedTokens, worldlineEnabled: true })) {
+        trimMemoryTurnRecall("context_limit_exceeded_after_worldline_trim");
+      }
+    } else if (productionWorldlineEnabled) {
+      const request = memoryContext?.worldlineRequest || {};
+      const presentIds = [...(this.presentCharacterIds || [])];
+      const directObservationFacts = buildPresenceObservationFacts({
+        responderId: npc.id,
+        presentCharacterIds: presentIds,
+        characters: this.gameData?.characters,
+        asOf: this.gameData?.date || null
+      });
+      const initialBudget = resolveWorldlineTurnBudget({ contextLimit, basePromptTokens: estimatedTokens });
+      const remainingContext = initialBudget.remainingContext;
+      try {
+        await traceOperation(performanceTrace, "worldline.turnQuery", { attribution: "MAIN", context: diagnosticsContext }, () => worldlineService.prepareCanon?.());
+        let subjectiveWorldContext = await traceOperation(performanceTrace, "worldline.turnQuery", { attribution: "MAIN", context: diagnosticsContext }, () => worldlineService.getSubjectivePromptContextAsync({
+          runtimeGameData: this.gameData,
+          responderId: npc.id,
+          query: request.query || "",
+          assistContext: request.assistContext || "",
+          mentionedEntityIds: request.mentionedEntityIds || [],
+          activeParticipantIds: this.getActiveConversationCharacters?.().map((character) => character.id) || [],
+          conversationId: this.id,
+          turnEpoch: this.turnEpoch,
+          sceneRevision: `${this.gameData.date || ""}\n${this.gameData.scene || ""}`,
+          presenceRevision: presentIds.map(String).sort().join(","),
+          directObservationFactIds: directObservationFacts.map((fact) => fact.factId),
+          directObservationFacts,
+          historicalReferenceInfo: this.gameData.historicalReferenceInfo,
+          tokenBudget: initialBudget.turnBudget
+        })) || null;
+        const stableTokens = TokenCounter.estimateTokens(subjectiveWorldContext?.worldStableText || "");
+        if (subjectiveWorldContext && stableTokens > remainingContext) {
+          subjectiveWorldContext = {
+            ...subjectiveWorldContext,
+            worldStableText: null,
+            worldTurnRecallText: null,
+            worldTurnRecallTokens: 0,
+            worldTurnRecallTrimmed: [...(subjectiveWorldContext.worldTurnRecallTrimmed || []), { factId: null, sourceTier: null, reason: "WORLD_STABLE_CONTEXT_HEADROOM" }]
+          };
+        } else if (subjectiveWorldContext && stableTokens + (subjectiveWorldContext.worldTurnRecallTokens || 0) > remainingContext) {
+          subjectiveWorldContext = await traceOperation(performanceTrace, "worldline.turnQuery", { attribution: "MAIN", context: diagnosticsContext }, () => worldlineService.getSubjectivePromptContextAsync({
+            runtimeGameData: this.gameData,
+            responderId: npc.id,
+            query: request.query || "",
+            assistContext: request.assistContext || "",
+            mentionedEntityIds: request.mentionedEntityIds || [],
+            activeParticipantIds: this.getActiveConversationCharacters?.().map((character) => character.id) || [],
+            conversationId: this.id,
+            turnEpoch: this.turnEpoch,
+            sceneRevision: `${this.gameData.date || ""}\n${this.gameData.scene || ""}`,
+            presenceRevision: presentIds.map(String).sort().join(","),
+            directObservationFactIds: directObservationFacts.map((fact) => fact.factId),
+            directObservationFacts,
+            historicalReferenceInfo: this.gameData.historicalReferenceInfo,
+            tokenBudget: resolveWorldlineTurnBudget({ contextLimit, basePromptTokens: estimatedTokens, stableWorldTokens: stableTokens }).turnBudget
+          })) || null;
+        }
+        memoryContext = {
+          ...memoryContext,
+          worldStableText: subjectiveWorldContext?.worldStableText || null,
+          worldTurnRecallText: subjectiveWorldContext?.worldTurnRecallText || null,
+          worldTurnRecallTokens: subjectiveWorldContext?.worldTurnRecallTokens || 0,
+          worldTurnRecallTrimmed: subjectiveWorldContext?.worldTurnRecallTrimmed || [],
+          historicalReferenceInfo: subjectiveWorldContext?.historicalReferenceInfo || null,
+          worldRecallQueryFingerprint: subjectiveWorldContext?.queryFingerprint || null,
+          worldRecallCacheHit: subjectiveWorldContext?.cacheHit === true,
+          worldlineHeadroom: remainingContext,
+          worldlineMetrics: subjectiveWorldContext?.metrics ? { ...subjectiveWorldContext.metrics, memoryRecallMs } : null
+        };
+        if (subjectiveWorldContext?.metrics) {
+          usageAnalytics?.record({
+            requestType: "worldline_recall",
+            characterId: npc.id,
+            conversationId: this.id,
+            cacheHit: subjectiveWorldContext.cacheHit === true,
+            ...subjectiveWorldContext.metrics,
+            worldSharedCacheHit: subjectiveWorldContext.metrics.sharedWorldCacheHit === true,
+            worldSubjectiveCacheHit: subjectiveWorldContext.metrics.subjectiveCacheHit === true,
+            worldTurnRecallTokens: subjectiveWorldContext.worldTurnRecallTokens || 0,
+            worldTurnRecallTrimmed: subjectiveWorldContext.worldTurnRecallTrimmed?.length || 0,
+            memoryRecallMs
+          }, null);
+        }
+      } catch (error) {
+        console.warn("[Worldline] World recall failed; continuing without world recall:", error.message);
+      }
+      if (memoryContext?.turnRecallText && shouldTrimMemoryTurnRecall({ contextLimit, basePromptTokens: estimatedTokens, worldlineEnabled: true })) {
+        memoryContext = { ...memoryContext, worldStableText: null, worldTurnRecallText: null, worldTurnRecallTokens: 0 };
+        trimMemoryTurnRecall("context_limit_exceeded_after_worldline_trim");
+      }
+    }
+    if (this.isV813PrefixEnabled?.()) memoryContext.freezePromptPrefix = true;
+    const activeProvider = settingsRepository?.getActiveProviderConfig?.();
+    const requestedOutputTokens = activeProvider?.providerType === "deepseek" ? 4096 : Number(activeProvider?.defaultParameters?.max_tokens) || 4096;
+    let budget;
+    for (let attempt = 0; attempt < 8; attempt++) {
+      const history = this.getPromptHistoryForCharacter(npc.id);
+      const summary = this.getPromptSummaryForCharacter(npc.id);
+      if (memoryContext.memory4Packet) {
+        const baseContext = { ...memoryContext, temporalExtraText: null };
+        const baseMessages = typeof PromptBuilder.buildMessagesWithTokenCount === "function"
+          ? PromptBuilder.buildMessagesWithTokenCount(history, npc, this.gameData, summary, baseContext).messages
+          : PromptBuilder.buildMessages(history, npc, this.gameData, summary, baseContext);
+        const baseBudget = planRequestBudget({ messages: baseMessages, capabilities, requestedOutputTokens, countTokens: items => this.estimateTokenCount(items) });
+        const safeRemaining = Math.max(0, Math.floor((baseBudget.effectiveInputBudget - baseBudget.estimatedInputTokens - 16) / 1.1));
+        memoryContext = memoryEngine.fitMemory4Context(memoryContext, npc.id, this.memoryState.responderRecallCache,
+          safeRemaining, text => TokenCounter.estimateTokens(text));
+      }
+      const messages = typeof PromptBuilder.buildMessagesWithTokenCount === "function"
+        ? PromptBuilder.buildMessagesWithTokenCount(history, npc, this.gameData, summary, memoryContext).messages
+        : PromptBuilder.buildMessages(history, npc, this.gameData, summary, memoryContext);
+      budget = planRequestBudget({ messages, capabilities, requestedOutputTokens, countTokens: (items) => this.estimateTokenCount(items) });
+      const rollingState = this.memoryState?.rollingState;
+      this.contextBudgetDiagnostics = {
+        ...budget,
+        provider: capabilities.providerType,
+        model: capabilities.modelId,
+        contextWindow: capabilities.contextWindow,
+        providerMaxOutputTokens: capabilities.maxOutputTokens,
+        softThresholdReached: budget.pressureRatio >= 0.65,
+        historyMode: rollingState?.cacheEpoch > 0 ? "COMPACTED" : "APPEND_ONLY",
+        activeRawMessageCount: history.length,
+        rollingSegmentCount: rollingState?.segments?.length || 0,
+        cacheEpoch: rollingState?.cacheEpoch || 0
+      };
+      if (budget.pressureRatio < (this.CONTEXT_LIMIT_PERCENTAGE ?? 0.75)) break;
+      const result = await this.createRollingSummary(budget.effectiveInputBudget);
+      if (!result?.committed) break;
+    }
+    if (!budget.safe) throw new Error("chat_request_budget_exceeded_after_compaction");
+    return memoryContext;
+  }
+  /**
+   * Create a rolling summary of older messages to compress context
+   */
+  async createRollingSummary(contextLimit) {
+    if (!memoryEngine) throw new Error("memory_engine_not_configured");
+    const summaryCapabilities = typeof llmManager.getProviderCapabilities === "function"
+      ? await llmManager.getProviderCapabilities("SUMMARY")
+      : { contextWindow: contextLimit, maxOutputTokens: 4096 };
+    const sourceTarget = Math.max(256, Math.min(Math.floor(contextLimit * this.MESSAGES_TO_SUMMARIZE_PERCENTAGE),
+      Math.floor(summaryCapabilities.contextWindow * 0.25), Math.floor(summaryCapabilities.maxOutputTokens * 1.5)));
+    const result = await memoryEngine.maybeCreateRollingCheckpoint({
+      conversation: this,
+      history: this.getHistory(),
+      contextLimit: sourceTarget,
+      percentage: 1,
+      estimateMessageTokens: (message) => this.estimateMessageTokens(message),
+      buildPrompt: (messages, previousSummary) => PromptBuilder.buildResummarizePrompt(messages, previousSummary),
+      requestSummary: async (summaryPrompt) => {
+        console.log("[TOKEN_COUNT] Rolling summary: ", this.estimateTokenCount(summaryPrompt));
+        return llmManager.sendSummaryRequest(summaryPrompt, void 0, { requestType: "rolling_summary", maxTokens: Math.min(2048, summaryCapabilities.maxOutputTokens) });
+      }
+    });
+    if (result.committed) {
+      console.log(`Updated rolling summary v${this.memoryState.rollingState.summaryVersion} (${this.currentSummary.length} characters)`);
+      logVerboseLLM("[Summary][verbose] Updated rolling summary:", this.currentSummary);
+    } else if (result.reason !== "no_messages") {
+      console.error(`Failed to create rolling summary: ${result.reason}`);
+    }
+    return result;
+  }
+  getMemoryTokenBudget(contextLimit, participantIds) {
+    if (!this.frozenMemoryBudget) {
+      const participantCount = new Set(participantIds.map(Number)).size;
+      const tier = Math.min(2, Math.max(0, participantCount - 2));
+      const ratio = 0.10 + tier * 0.025;
+      this.frozenMemoryBudget = { participantCount, ratio,
+        tokens: Math.max(0, Math.min(3600 + tier * 900, Math.floor(contextLimit * ratio))) };
+    }
+    return this.frozenMemoryBudget.tokens;
+  }
+  async getMemoryContextFor(npc, contextLimit = null) {
+    if (!memoryEngine || !npc || !this.gameData) return null;
+    this.observeVisibleTraits();
+    if (Number(npc.id) === Number(this.gameData.playerID)) return null;
+    if (this.isV813PrefixEnabled?.()) await this.worldlinePrefetchPromise;
+    if (memoryEngine.isSummaryOwnerDeceased(npc.id)) memoryEngine.reviveSummaryOwner(npc.id);
+    const limit = contextLimit || await llmManager.getCurrentContextLength() || 1e4;
+    const history = this.getHistoryForCharacter(npc.id);
+    const activeParticipantIds = this.getActiveConversationCharacters().map((character) => character.id);
+    const mentionExcludedIds = this.gameData.getMentionExclusionIds(activeParticipantIds);
+    const memoryState = memoryEngine.ensureConversationState(this);
+    this.getPromptHistoryForCharacter(npc.id);
+    const participantKey = [...new Set(activeParticipantIds.map(Number))].sort((left, right) => left - right).join(",");
+    const campaignKey = this.gameData.campaignToken ?? null;
+    if (memoryState.mentionProfileCache && memoryState.mentionProfileCache.campaignKey !== campaignKey) {
+      memoryState.mentionState = memoryEngine.mentionTracker.createState();
+      memoryState.mentionedRecallCache.clear();
+      this.gameData.mentionedCharactersInContext?.clear();
+    }
+    if (memoryState.mentionProfileCache?.participantKey !== participantKey || memoryState.mentionProfileCache?.campaignKey !== campaignKey) {
+      const profiles = new Map(this.gameData.getMentionableCharacterProfiles());
+      const ownerFolderMemoriesById = new Map();
+      const ownerFolderMemoriesRawById = new Map();
+      for (const ownerId of activeParticipantIds) {
+        const rawFolderMemories = memoryEngine.loadOwnerFolderMemories(ownerId);
+        const folderMemories = rawFolderMemories.filter(memory => memoryMatchesCampaign(memory, campaignKey));
+        ownerFolderMemoriesRawById.set(Number(ownerId), rawFolderMemories);
+        ownerFolderMemoriesById.set(Number(ownerId), folderMemories);
+        for (const [characterId, profile] of memoryEngine.getMentionableProfilesFromFolderMemories(folderMemories)) {
+          if (!profiles.has(characterId)) profiles.set(characterId, profile);
+        }
+      }
+      memoryState.mentionProfileCache = { participantKey, campaignKey, profiles, ownerFolderMemoriesById, ownerFolderMemoriesRawById };
+    }
+    const mentionableProfiles = memoryState.mentionProfileCache.profiles;
+    const currentUserIndex = history.findLastIndex((entry) => entry.role === "user");
+    const query = currentUserIndex >= 0 ? history[currentUserIndex].content || "" : "";
+    const assistContext = (currentUserIndex > 0 ? history.slice(Math.max(0, currentUserIndex - 2), currentUserIndex) : []).map((entry) => entry.content || "").filter(Boolean).join("\n");
+    const mentionedCharacterIds = memoryEngine.findMentionedOutOfSceneCharacters({
+      conversation: this,
+      history,
+      candidates: [...mentionableProfiles.values()],
+      excludedIds: mentionExcludedIds
+    });
+    const currentTurnMentionedCharacterIds = typeof memoryEngine.getCurrentTurnMentionedOutOfSceneCharacters === "function"
+      ? memoryEngine.getCurrentTurnMentionedOutOfSceneCharacters({ conversation: this, excludedIds: mentionExcludedIds })
+      : mentionedCharacterIds;
+    if (!this.gameData.mentionedCharactersInContext) this.gameData.mentionedCharactersInContext = /* @__PURE__ */ new Set();
+    for (const characterId of mentionedCharacterIds) this.gameData.mentionedCharactersInContext.add(characterId);
+    const mentionedEntityNames = Object.fromEntries(mentionedCharacterIds.map((characterId) => {
+      const character = mentionableProfiles.get(characterId);
+      return [characterId, character ? memoryEngine.getCharacterMentionAliases(character) : []];
+    }));
+    const currentTurnMentionedEntityNames = Object.fromEntries(currentTurnMentionedCharacterIds.map((characterId) => [characterId, mentionedEntityNames[characterId] || []]));
+    const memory3Settings = worldlineService?.getSettings?.() || {};
+    const explicitTargetEntityIds = memoryEngine.mentionTracker.findMentionedCharacterIds([{ role: "user", content: query }], {
+      candidates: [...mentionableProfiles.values()], excludedIds: [npc.id],
+      recentCharacterId: memoryState.mentionState.recentThirdPersonCharacterId
+    });
+    const queryIdentityUnresolved = memoryEngine.mentionTracker.lastScanUnresolved === true;
+    const retrieved = memoryEngine.retrieveForResponder({
+      characterId: npc.id,
+      query,
+      mentionedEntityIds: memory3Settings.v812MemoryEngine3Enabled !== false ? currentTurnMentionedCharacterIds : mentionedCharacterIds,
+      activeParticipantIds,
+      mentionedEntityNames,
+      mentionedRecallCache: memoryState.mentionedRecallCache,
+      sessionRecallCache: memoryState.responderRecallCache,
+      directCounterpartIds: activeParticipantIds.filter((characterId) => characterId !== npc.id),
+      querySpeakerId: this.gameData.playerID,
+      ownerFolderMemories: memoryState.mentionProfileCache.ownerFolderMemoriesRawById?.get(Number(npc.id))
+        || memoryEngine.loadOwnerFolderMemories(npc.id),
+      currentGameDate: this.gameData.date,
+      currentTotalDays: this.gameData.totalDays,
+      campaignToken: this.gameData.campaignToken || null,
+      conversationId: this.id,
+      sceneRevision: JSON.stringify([this.gameData.scene || null, this.gameData.location || null, this.gameData.locationController || null]),
+      memoryEngine3Enabled: memory3Settings.v812MemoryEngine3Enabled !== false,
+      memory4RecallEnabled: true,
+      gameData: this.gameData,
+      entityProfiles: [...mentionableProfiles.values()],
+      explicitTargetEntityIds,
+      identityUnresolved: queryIdentityUnresolved,
+      temporalSummaryRecallEnabled: memory3Settings.v812TemporalSummaryRecallEnabled !== false,
+      officialSummary: this.gameData.getOfficialRecollectionSummary?.(npc.id, this.id) || null,
+      turnEpoch: this.turnEpoch,
+      tokenBudget: memory3Settings.v812MemoryEngine3Enabled !== false
+        ? this.getMemoryTokenBudget(limit, activeParticipantIds)
+        : Math.min(2400, Math.max(800, Math.floor(limit * 0.08))),
+      estimateTokens: (text) => TokenCounter.estimateTokens(text)
+    });
+    const turnEntityIds = [...new Set([...activeParticipantIds, ...currentTurnMentionedCharacterIds].map(Number))].filter((characterId) => characterId !== Number(npc.id));
+    const turnEntityNames = turnEntityIds.flatMap((characterId) => {
+      const profile = mentionableProfiles.get(characterId) || this.gameData.characters.get(characterId);
+      return profile ? memoryEngine.getCharacterMentionAliases(profile) : [];
+    });
+    const turnRecall = memory3Settings.v812MemoryEngine3Enabled !== false ? { selected: [], text: null, tokens: 0, reason: "UNIFIED_EXTRA3", triggered: false } : memoryEngine.retrieveTurnRecall({
+      characterId: npc.id,
+      query,
+      assistContext,
+      entityIds: turnEntityIds,
+      entityNames: turnEntityNames,
+      participantIds: activeParticipantIds.filter((characterId) => characterId !== npc.id),
+      ownerFolderMemories: memoryState.mentionProfileCache.ownerFolderMemoriesById.get(Number(npc.id)) || [],
+      currentTotalDays: this.gameData.totalDays,
+      campaignToken: this.gameData.campaignToken || null,
+      tokenBudget: 256,
+      estimateTokens: (text) => TokenCounter.estimateTokens(text),
+      cache: memoryState.turnRecallCache,
+      turnEpoch: this.turnEpoch
+    });
+    const thirdPartyEvidence = memory3Settings.v812MemoryEngine3Enabled === false && typeof memoryEngine.retrieveThirdPartyEvidence === "function" ? memoryEngine.retrieveThirdPartyEvidence({
+      characterId: npc.id,
+      query,
+      mentionedEntityIds: currentTurnMentionedCharacterIds,
+      mentionedEntityNames: currentTurnMentionedEntityNames,
+      ownerFolderMemories: memoryState.mentionProfileCache.ownerFolderMemoriesById.get(Number(npc.id)) || [],
+      currentGameDate: this.gameData.date,
+      currentTotalDays: this.gameData.totalDays,
+      campaignToken: this.gameData.campaignToken || null,
+      tokenBudget: 512,
+      estimateTokens: (text) => TokenCounter.estimateTokens(text)
+    }) : { text: null, tokens: 0, reason: "UNAVAILABLE", conflict: false };
+    usageAnalytics.record({
+      requestType: "memory_recall",
+      character: npc.shortName,
+      characterId: npc.id,
+      memoryOutcome: turnRecall.triggered ? "inserted" : "skipped",
+      turnRecallReason: turnRecall.reason,
+      turnRecallTokens: turnRecall.tokens,
+      turnRecallIntent: turnRecall.intentTriggered,
+      turnRecallSelected: turnRecall.triggered,
+      turnRecallCacheHit: turnRecall.cacheHit,
+      sessionTopicAnchorLocked: retrieved.routing?.topicPatch === "locked",
+      queryFingerprint: turnRecall.queryFingerprint,
+      candidateCount: turnRecall.candidateCount,
+      temporalDiagnostics: retrieved.temporalDiagnostics || null,
+      entityRecallDiagnostics: retrieved.entityRecallDiagnostics || null,
+      turnEpoch: this.turnEpoch
+    }, null);
+    let worldContext = null;
+    try {
+      if (this.isV813PrefixEnabled?.()) {
+        worldContext = this.frozenWorldlineByResponder?.get(Number(npc.id)) || null;
+      } else if (!worldlineService?.isSubjectivePromptIntegrationEnabled?.()) {
+        worldContext = worldlineService?.getPromptContext?.({ query, assistContext, mentionedEntityIds: currentTurnMentionedCharacterIds, responderId: npc.id, conversationId: this.id, turnEpoch: this.turnEpoch }) || null;
+      }
+    } catch (error) {
+      console.warn("[Worldline] World recall failed; continuing without world recall:", error.message);
+    }
+    return {
+      ...retrieved,
+      turnRecall: turnRecall.selected,
+      turnRecallText: turnRecall.text,
+      turnRecallTokens: turnRecall.tokens,
+      turnRecallReason: turnRecall.reason,
+      turnRecallQueryFingerprint: turnRecall.queryFingerprint,
+      turnRecallCandidateCount: turnRecall.candidateCount,
+      turnRecallCacheHit: turnRecall.cacheHit,
+      thirdPartyEvidenceText: thirdPartyEvidence.text,
+      thirdPartyEvidenceTokens: thirdPartyEvidence.tokens,
+      thirdPartyEvidenceReason: thirdPartyEvidence.reason,
+      thirdPartyEvidenceConflict: thirdPartyEvidence.conflict,
+      activeParticipantIds,
+      stableProfileCache: this.stableProfileCache,
+      stableDescriptionCache: this.stableDescriptionCache,
+      disclosureProfiles: this.disclosureProfilesByResponder?.get(`${this.gameData.campaignToken}:${npc.id}`) || new Map(),
+      cacheV2FrozenSnapshots: this.cacheV2FrozenSnapshots,
+      freezePromptPrefix: false,
+      presenceText: this.buildPresenceContext(),
+      confirmedActionText: this.isV813PrefixEnabled?.() ? this.getConfirmedActionContextFor(npc.id) : null,
+      worldStableText: worldContext?.worldStableText || worldContext?.stableText || null,
+      worldTopicText: worldContext?.worldTopicText || worldContext?.topicText || null,
+      worldSupplementalText: worldContext?.worldSupplementalText || worldContext?.supplementalText || null,
+      worldCurrentText: worldContext?.worldCurrentText || worldContext?.currentText || null,
+      worldTurnRecallText: worldContext?.worldTurnRecallText || null,
+      worldTurnRecallTokens: worldContext?.worldTurnRecallTokens || 0,
+      worldlineRequest: { query, assistContext, mentionedEntityIds: currentTurnMentionedCharacterIds },
+      subjectiveWorldPolicyActive: worldlineService?.isSubjectivePromptIntegrationEnabled?.() === true,
+      historicalReferenceInfo: worldContext?.historicalReferenceInfo || null,
+      worldRecallQueryFingerprint: worldContext?.queryFingerprint || null,
+      worldRecallCacheHit: worldContext?.cacheHit === true
+    };
+  }
+  /**
+   * Estimate token count (simple approximation)
+   */
+  estimateTokenCount(messages) {
+    return TokenCounter.calculateTotalTokens(messages);
+  }
+  estimateMessageTokens(message) {
+    return TokenCounter.estimateMessageTokens(message);
+  }
+  // Get list of all NPCs (characters except the player)
+  getNpcList() {
+    return this.getActiveConversationCharacters().filter((c) => c.id !== this.gameData.playerID);
+  }
+  getActiveConversationCharacters() {
+    return [...this.gameData.characters.values()].filter((character) => this.isCharacterAvailableForConversation(character));
+  }
+  initializePresence(initialPresentIds = null) {
+    const selectedIds = [...this.gameData.characters.keys()].map(Number).filter((characterId) => Number.isFinite(characterId) && characterId !== Number(this.gameData.playerID));
+    this.selectedCharacterIds = new Set(selectedIds);
+    const primaryCharacterId = Number(this.gameData.aiID);
+    const defaultPresentIds = this.selectedCharacterIds.has(primaryCharacterId) ? [primaryCharacterId] : selectedIds.slice(0, 1);
+    const requested = Array.isArray(initialPresentIds) ? initialPresentIds.map(Number).filter((characterId) => this.selectedCharacterIds.has(characterId)) : defaultPresentIds;
+    const initialIds = requested.length > 0 ? requested : defaultPresentIds;
+    this.presentCharacterIds = new Set(initialIds);
+    this.waitingCharacterIds = new Set(selectedIds.filter((characterId) => !this.presentCharacterIds.has(characterId)));
+    this.temporarilyAbsentCharacterIds = new Map();
+    this.departedCharacterIds = new Set();
+    this.joinEvents = [];
+    this.leaveEvents = [];
+    this.presenceInitialized = true;
+    memoryEngine?.observeParticipants(this, [Number(this.gameData.playerID), ...initialIds], this.nextId);
+    return this.getPresenceState();
+  }
+  canManagePresence() {
+    return !this.activeResponse && this.npcQueue.length === 0 && !this.isPaused;
+  }
+  getPresenceState() {
+    if (!this.presenceInitialized && this.gameData?.characters) this.initializePresence();
+    const participants = [...(this.selectedCharacterIds || [])].map((characterId) => {
+      const character = this.gameData.characters.get(characterId) || this.summaryParticipantProfiles?.get(characterId);
+      const temporaryAbsence = this.temporarilyAbsentCharacterIds?.get(characterId) || null;
+      const status = this.waitingCharacterIds.has(characterId) ? "waiting" : this.inactiveParticipantIds?.has(characterId) ? this.inactiveParticipantIds.get(characterId) : temporaryAbsence ? "temporarily_absent" : this.departedCharacterIds.has(characterId) ? "departed" : "present";
+      return {
+        id: characterId,
+        name: character?.shortName || character?.name || character?.fullName || `角色${characterId}`,
+        fullName: character?.fullName || character?.shortName || character?.name || `角色${characterId}`,
+        status,
+        temporaryAbsenceMode: temporaryAbsence?.mode || null,
+        temporaryAbsenceLabel: temporaryAbsence ? TEMPORARY_ABSENCE_MODES[temporaryAbsence.mode]?.statusLabel || "暂时离场" : null,
+        returnLabel: temporaryAbsence ? TEMPORARY_ABSENCE_MODES[temporaryAbsence.mode]?.returnLabel || "请回来" : null
+      };
+    });
+    return {
+      participants,
+      presentIds: [...this.presentCharacterIds],
+      waitingIds: [...this.waitingCharacterIds],
+      temporarilyAbsentIds: [...(this.temporarilyAbsentCharacterIds?.keys() || [])],
+      departedIds: [...this.departedCharacterIds],
+      canManage: this.canManagePresence(),
+      canLeave: this.presentCharacterIds.size > 1,
+      canTemporarilyLeave: this.presentCharacterIds.size > 0,
+      beforeFirstMessage: !this.getHistory().some((message) => message.role === "user" || message.role === "assistant")
+    };
+  }
+  buildPresenceContext() {
+    const participants = this.getPresenceState().participants;
+    const present = participants.filter((participant) => participant.status === "present");
+    const temporarilyAbsent = participants.filter((participant) => participant.status === "temporarily_absent");
+    if (present.length === 0) return "";
+    const name = participant => getCharacterPersonalName(this.gameData.characters.get(Number(participant.id)) || {}, `角色${participant.id}`);
+    const absenceText = temporarilyAbsent.length > 0 ? `\n暂时缺席：${temporarilyAbsent.map((participant) => `${name(participant)}（${participant.temporaryAbsenceLabel}）`).join("、")}。这些人物不能感知缺席期间的内容。` : "";
+    return `=== 当前在场人物（仅本轮有效） ===\n${present.map((participant) => `- ${name(participant)}`).join("\n")}\n只能把当前在场人物视为听见本轮对话并可直接回应的人；候场、暂时缺席或已离场人物不在当前对话现场。${absenceText}`;
+  }
+  getPresenceWindows(characterId) {
+    const state = memoryEngine?.ensureConversationState(this);
+    return (state?.participantPresence || []).filter((window) => Number(window.characterId) === Number(characterId));
+  }
+  getHistoryForCharacter(characterId) {
+    const history = this.getHistory();
+    const windows = this.getPresenceWindows(characterId);
+    if (windows.length === 0) return this.presenceInitialized ? [] : history;
+    return history.filter((message) => windows.some((window) => {
+      const messageId = Number(message.id);
+      if (!Number.isFinite(messageId)) return false;
+      const joined = Number(window.joinedAtMessageId ?? 0);
+      const left = window.leftAtMessageId == null ? Infinity : Number(window.leftAtMessageId);
+      return joined <= messageId && messageId < left;
+    }));
+  }
+  canUseSharedRollingSummary(characterId) {
+    const history = this.getHistory();
+    const firstMessageId = history.map((message) => Number(message.id)).filter(Number.isFinite).sort((left, right) => left - right)[0];
+    if (!Number.isFinite(firstMessageId)) return true;
+    const windows = this.getPresenceWindows(characterId);
+    return windows.length === 1 && windows[0].leftAtMessageId == null && Number(windows[0].joinedAtMessageId ?? 0) <= firstMessageId;
+  }
+  getPromptHistoryForCharacter(characterId) {
+    const state = memoryEngine?.ensureConversationState(this).rollingState;
+    const start = Number(state?.committedThroughHistoryIndex ?? this.lastSummarizedMessageIndex) || 0;
+    const windows = this.getPresenceWindows(characterId);
+    const history = !windows.length ? this.presenceInitialized ? [] : this.getHistory().slice(start)
+      : !state?.segments?.length && !this.canUseSharedRollingSummary(characterId) ? this.getHistoryForCharacter(characterId)
+      : this.getHistory().slice(start).filter((message) => windows.some((window) => {
+      const messageId = Number(message.id);
+      return Number(window.joinedAtMessageId ?? 0) <= messageId && (window.leftAtMessageId == null || messageId < Number(window.leftAtMessageId));
+    }));
+    const recalls = this.dynamicRecallHistory?.get(Number(characterId));
+    if (!recalls) return history;
+    const retainedIds = new Set(history.map(message => message.id));
+    const cache = this.memoryState?.responderRecallCache?.get(Number(characterId));
+    for (const [messageId, recall] of recalls) {
+      const sourceValid = !recall.memory4Scope || recall.memory4Scope.campaignToken === this.gameData.campaignToken
+        && recall.memory4Scope.ownerId === Number(characterId)
+        && memoryEngine.memory4Recall.validateHistory(recall.memory4Scope, recall.sourceRefs, { currentGameDate: this.gameData.date });
+      if (retainedIds.has(messageId) && sourceValid) continue;
+      for (const key of recall.keys) cache?.seenDynamicSummaries?.delete(key);
+      if (cache) delete cache.dynamicTurn;
+      recalls.delete(messageId);
+    }
+    return history.flatMap(message => recalls.has(message.id)
+      ? [{ role: "system", content: recalls.get(message.id).text }, message] : [message]);
+  }
+  retainDynamicSummaryRecall(characterId, messageId, promptBuild, turnEpoch) {
+    const block = promptBuild.blocks?.find(entry => entry.block?.id === "memory-temporal-extra");
+    const text = block?.content;
+    const cache = this.memoryState?.responderRecallCache?.get(Number(characterId));
+    if (!text || cache?.dynamicTurn !== turnEpoch) return;
+    const injectedEntries = (cache.dynamicExtra || []).filter(entry => !cache.memory4Packet || text.includes(entry.memory.memoryId));
+    const committed = memoryEngine.commitDynamicSummaryRecall(characterId, this.memoryState.responderRecallCache, turnEpoch, {
+      providerSucceeded: true, injectedBlockIds: ["memory-temporal-extra"],
+      injectedMemoryIds: injectedEntries.map(entry => entry.memory.memoryId),
+      injectedTokens: Number(block.tokens) || TokenCounter?.estimateTokens?.(text) || Math.ceil(text.length / 2)
+    });
+    if (!committed.committedCount) return;
+    if (!this.dynamicRecallHistory) this.dynamicRecallHistory = new Map();
+    if (!this.dynamicRecallHistory.has(Number(characterId))) this.dynamicRecallHistory.set(Number(characterId), new Map());
+    this.dynamicRecallHistory.get(Number(characterId)).set(messageId, { text,
+      keys: injectedEntries.map(entry => memoryEngine.getRouteMemoryKey(entry.memory)),
+      memory4Scope: cache.memory4Packet ? { campaignToken: this.gameData.campaignToken, ownerId: Number(characterId) } : null,
+      sourceRefs: cache.memory4Packet?.sourceRefs || [] });
+    const legacySources = (cache.memory4Packet?.sourceRefs || []).filter(ref => ref.kind === "legacy"
+      && injectedEntries.some(entry => entry.memory.memoryId === ref.id));
+    if (legacySources.length) memoryEngine.memory4?.queueLegacyRecompression({ campaignToken: this.gameData.campaignToken,
+      ownerId: Number(characterId) }, { sourceRefs: legacySources });
+  }
+  getPromptSummaryForCharacter(characterId) {
+    const state = memoryEngine?.ensureConversationState(this).rollingState;
+    const segments = Array.isArray(state?.segments) ? state.segments : [];
+    if (!segments.length) return this.canUseSharedRollingSummary(characterId) ? this.currentSummary : "";
+    const legacy = this.canUseSharedRollingSummary(characterId) ? state.legacySummary || "" : "";
+    return [legacy, ...segments.filter((segment) => segment.knownBy?.includes(Number(characterId))).map((segment) => segment.content)].filter(Boolean).join("\n\n");
+  }
+  getConfirmedActionContextFor(characterId) {
+    const windows = this.getPresenceWindows(characterId);
+    if (!windows.length && this.presenceInitialized) return null;
+    const visible = (message) => !this.presenceInitialized || windows.some((window) =>
+      Number(window.joinedAtMessageId ?? 0) <= Number(message.id) && (window.leftAtMessageId == null || Number(message.id) < Number(window.leftAtMessageId)));
+    const lines = [];
+    for (const message of this.messages) {
+      if (!visible(message)) continue;
+      const feedbacks = message.type === "action-feedback" ? message.feedbacks || [] : message.type === "action-approval" ? [message] : [];
+      for (const feedback of feedbacks) {
+        const change = feedback.diagnostic?.confirmedStateChange;
+        if (feedback.lifecycle?.status !== "CONFIRMED" || !change) continue;
+        const state = feedback.diagnostic?.stateAfter || {};
+        if (change.type === "GOLD_TRANSFER") lines.push(`- 已确认转账：角色 ${change.sourceRuntimeId} 向角色 ${change.targetRuntimeId} 支付 ${change.amount} 金；核验后余额 ${state.sourceGold ?? "未知"} / ${state.targetGold ?? "未知"}。`);
+        if (change.type === "OPINION_CHANGE") lines.push(`- 已确认好感变化：${change.amount >= 0 ? "+" : ""}${change.amount}；核验后好感 ${state.opinion ?? "未知"}。`);
+      }
+    }
+    return lines.length ? `=== 本场已由 CK3 核验的动作结果 ===\n${lines.slice(-8).join("\n")}` : null;
+  }
+  async joinWaitingCharacter(characterId) {
+    const numericId = Number(characterId);
+    if (!this.canManagePresence()) return { success: false, error: "presence_change_busy" };
+    if (this.departedCharacterIds.has(numericId)) return { success: false, error: "departed_character_cannot_rejoin" };
+    if (!this.waitingCharacterIds.has(numericId)) return { success: false, error: "character_not_waiting" };
+    const character = this.gameData.characters.get(numericId);
+    if (!character || this.inactiveParticipantIds.has(numericId) || character.isDead === true || character.dead === true || character.alive === false) {
+      return { success: false, error: "character_unavailable" };
+    }
+    this.captureSummaryParticipantProfiles([character]);
+    this.waitingCharacterIds.delete(numericId);
+    this.presentCharacterIds.add(numericId);
+    const message = createMessage({ id: this.nextId++, role: "system", kind: "presence_join", characterId: numericId, content: `【${character.shortName || character.fullName}入内】` });
+    this.messages.push(message);
+    memoryEngine?.observeParticipants(this, [numericId], message.id);
+    this.observeVisibleTraits();
+    this.joinEvents.push({ characterId: numericId, atMessageId: message.id, atHistoryIndex: this.getHistory().length - 1 });
+    this.emitUpdate();
+    return { success: true, status: "present", messageId: message.id };
+  }
+  async leavePresentCharacter(characterId) {
+    const numericId = Number(characterId);
+    if (!this.canManagePresence()) return { success: false, error: "presence_change_busy" };
+    if (!this.presentCharacterIds.has(numericId)) return { success: false, error: "character_not_present" };
+    if (this.presentCharacterIds.size <= 1) return { success: false, error: "last_present_character_required" };
+    const character = this.gameData.characters.get(numericId);
+    if (!character || numericId === Number(this.gameData.playerID)) return { success: false, error: "character_unavailable" };
+    this.captureSummaryParticipantProfiles([character]);
+    const hasConversation = this.getHistory().some((message) => message.role === "user" || message.role === "assistant");
+    if (!hasConversation) {
+      memoryEngine?.markParticipantLeft(this, numericId, this.nextId);
+      this.presentCharacterIds.delete(numericId);
+      this.waitingCharacterIds.add(numericId);
+      this.observeVisibleTraits();
+      this.emitUpdate();
+      return { success: true, status: "waiting", summaryGenerated: false };
+    }
+    const message = createMessage({ id: this.nextId++, role: "system", kind: "presence_leave", characterId: numericId, content: `【${character.shortName || character.fullName}离场】` });
+    this.messages.push(message);
+    memoryEngine?.markParticipantLeft(this, numericId, message.id);
+    this.presentCharacterIds.delete(numericId);
+    this.departedCharacterIds.add(numericId);
+    this.observeVisibleTraits();
+    this.npcQueue = this.npcQueue.filter((candidate) => Number(candidate?.id) !== numericId);
+    if (this.customQueue) this.customQueue = this.customQueue.filter((candidate) => Number(candidate?.id) !== numericId);
+    this.invalidateApprovalsForCharacter(numericId, "left");
+    this.leaveEvents.push({ characterId: numericId, atMessageId: message.id, atHistoryIndex: this.getHistory().length - 1 });
+    this.emitUpdate();
+    const recoveryPath = this.checkpointFinalization("participant_left");
+    return { success: true, status: "departed", messageId: message.id, summaryCheckpointed: !!recoveryPath, recoveryPath };
+  }
+  async temporarilyLeaveCharacter(characterId, mode) {
+    const numericId = Number(characterId);
+    const absenceMode = TEMPORARY_ABSENCE_MODES[mode];
+    if (!this.canManagePresence()) return { success: false, error: "presence_change_busy" };
+    if (!absenceMode) return { success: false, error: "invalid_temporary_absence_mode" };
+    if (!this.presentCharacterIds.has(numericId)) return { success: false, error: "character_not_present" };
+    const character = this.gameData.characters.get(numericId);
+    if (!character || numericId === Number(this.gameData.playerID)) return { success: false, error: "character_unavailable" };
+    this.captureSummaryParticipantProfiles([character]);
+    const name = character.shortName || character.fullName;
+    const message = createMessage({
+      id: this.nextId++,
+      role: "system",
+      kind: "presence_temporary_leave",
+      characterId: numericId,
+      absenceMode: mode,
+      content: absenceMode.leaveText(name)
+    });
+    this.messages.push(message);
+    memoryEngine?.markParticipantLeft(this, numericId, message.id);
+    this.presentCharacterIds.delete(numericId);
+    this.temporarilyAbsentCharacterIds.set(numericId, { mode, leftAtMessageId: message.id });
+    this.observeVisibleTraits();
+    this.npcQueue = this.npcQueue.filter((candidate) => Number(candidate?.id) !== numericId);
+    if (this.customQueue) this.customQueue = this.customQueue.filter((candidate) => Number(candidate?.id) !== numericId);
+    this.invalidateApprovalsForCharacter(numericId, "temporarily_absent");
+    this.leaveEvents.push({ characterId: numericId, atMessageId: message.id, atHistoryIndex: this.getHistory().length - 1, temporary: true, mode });
+    this.emitUpdate();
+    return { success: true, status: "temporarily_absent", mode, messageId: message.id, summaryGenerated: false };
+  }
+  async returnTemporaryCharacter(characterId) {
+    const numericId = Number(characterId);
+    if (!this.canManagePresence()) return { success: false, error: "presence_change_busy" };
+    const temporaryAbsence = this.temporarilyAbsentCharacterIds?.get(numericId);
+    if (!temporaryAbsence) return { success: false, error: "character_not_temporarily_absent" };
+    const character = this.gameData.characters.get(numericId);
+    if (!character || this.inactiveParticipantIds.has(numericId) || character.isDead === true || character.dead === true || character.alive === false) {
+      return { success: false, error: "character_unavailable" };
+    }
+    const absenceMode = TEMPORARY_ABSENCE_MODES[temporaryAbsence.mode];
+    const name = character.shortName || character.fullName;
+    this.temporarilyAbsentCharacterIds.delete(numericId);
+    this.presentCharacterIds.add(numericId);
+    const message = createMessage({
+      id: this.nextId++,
+      role: "system",
+      kind: "presence_temporary_return",
+      characterId: numericId,
+      absenceMode: temporaryAbsence.mode,
+      content: absenceMode.returnText(name)
+    });
+    this.messages.push(message);
+    memoryEngine?.observeParticipants(this, [numericId], message.id);
+    this.observeVisibleTraits();
+    this.joinEvents.push({ characterId: numericId, atMessageId: message.id, atHistoryIndex: this.getHistory().length - 1, temporaryReturn: true, mode: temporaryAbsence.mode });
+    this.emitUpdate();
+    return { success: true, status: "present", mode: temporaryAbsence.mode, messageId: message.id };
+  }
+  captureSummaryParticipantProfiles(characters = []) {
+    if (!this.summaryParticipantProfiles) this.summaryParticipantProfiles = /* @__PURE__ */ new Map();
+    for (const character of characters || []) {
+      const id = Number(character?.id);
+      if (!Number.isFinite(id)) continue;
+      const personalName = getCharacterPersonalName(character, character.shortName || character.name || character.fullName);
+      this.summaryParticipantProfiles.set(id, {
+        id,
+        name: personalName,
+        firstName: character.firstName,
+        shortName: personalName,
+        fullName: character.fullName || character.shortName || personalName,
+        primaryTitle: character.primaryTitle,
+        heldCourtAndCouncilPositions: character.heldCourtAndCouncilPositions,
+        titleRankConcept: character.titleRankConcept
+      });
+    }
+    return this.summaryParticipantProfiles;
+  }
+  getSummaryParticipantProfile(characterId) {
+    const numericId = Number(characterId);
+    const current = this.gameData.characters.get(numericId);
+    if (current) this.captureSummaryParticipantProfiles([current]);
+    return this.summaryParticipantProfiles?.get(numericId) || null;
+  }
+  isCharacterAvailableForConversation(character) {
+    if (!character || this.inactiveParticipantIds?.has(character.id)) return false;
+    if (this.presenceInitialized && Number(character.id) !== Number(this.gameData?.playerID) && !this.presentCharacterIds.has(Number(character.id))) return false;
+    return character.isDead !== true && character.dead !== true && character.alive !== false;
+  }
+  markParticipantInactive(characterId, reason) {
+    memoryEngine?.markParticipantLeft(this, characterId, this.nextId);
+    this.presentCharacterIds?.delete(Number(characterId));
+    this.waitingCharacterIds?.delete(Number(characterId));
+    this.temporarilyAbsentCharacterIds?.delete(Number(characterId));
+    this.departedCharacterIds?.add(Number(characterId));
+    const deactivated = participantLifecycle.deactivate(this, characterId, reason);
+    this.observeVisibleTraits();
+    if (reason === "dead" && Number(characterId) !== Number(this.gameData?.playerID)) {
+      try {
+        memoryEngine?.markSummaryOwnerDeceased(characterId, { reason });
+      } catch (error) {
+        console.error(`[Memory] Failed to mark summary owner ${characterId} as deceased:`, error);
+      }
+    }
+    return deactivated;
+  }
+  invalidatePendingActionApproval(approvalId, reason) {
+    const pending = this.pendingActionApprovals.get(approvalId);
+    if (!pending) return false;
+    this.pendingActionApprovals.delete(approvalId);
+    const index = this.messages.findIndex((entry) => entry.type === "action-approval" && entry.id === approvalId);
+    if (index !== -1) this.messages.splice(index, 1);
+    console.log(`[Conversation] Removed unavailable action approval ${approvalId}: ${reason}`);
+    this.emitUpdate();
+    return true;
+  }
+  invalidateApprovalsForCharacter(characterId) {
+    const numericId = Number(characterId);
+    for (const [approvalId, pending] of [...this.pendingActionApprovals.entries()]) {
+      const action = pending.action;
+      if (Number(pending.npc?.id) === numericId || Number(action?.sourceCharacterId) === numericId || Number(action?.targetCharacterId) === numericId) {
+        this.invalidatePendingActionApproval(approvalId, "character_unavailable");
+      }
+    }
+  }
+  isResponseCurrent(responseState, npc = null) {
+    return this.getGenerationManager().isCurrent(responseState, npc);
+  }
+  recordGenerationSkippedAnalytics(responseState, reason) {
+    usageAnalytics.record({
+      requestType: "generation_skipped",
+      reason,
+      turnEpoch: responseState.turnEpoch,
+      responseId: responseState.responseId,
+      characterId: responseState.npcId
+    }, null);
+  }
+  recordGenerationSkipped(responseState, reason) {
+    this.getGenerationManager().recordSkipped(responseState, reason);
+  }
+  cancelActiveResponse(reason = "explicit_abort") {
+    return this.getGenerationManager().cancel(reason);
+  }
+  // Handle response for a single NPC
+  async respondAs(npc, turnEpoch = this.turnEpoch) {
+    if (this.isV813PrefixEnabled?.()) npc = this.gameData.characters.get(Number(npc?.id)) || npc;
+    if (turnEpoch !== this.turnEpoch || !this.isCharacterAvailableForConversation(npc)) {
+      console.log(`[Conversation] Skipping unavailable NPC response: ${npc?.shortName || npc?.id || "unknown"}`);
+      return;
+    }
+    let diagnosticsContext = null;
+    try { diagnosticsContext = this.performanceTraceContext?.nextTurn?.() || null; } catch (_error) {}
+    const conversationTurnSpan = startTraceSpan(performanceTrace, "conversation.turn", { attribution: "MAIN", context: diagnosticsContext });
+    let conversationTurnResult = "OK";
+    // Clear mentioned characters from previous message
+    // NOTE: We don't clear the cache here because we want to reuse it
+    // within the same conversation if the player hasn't sent new messages
+    if (this.gameData.mentionedCharactersInContext) {
+      this.gameData.mentionedCharactersInContext.clear();
+    }
+    
+    const msgId = this.nextId++;
+    const placeholder = createMessage({
+      id: msgId,
+      role: "assistant",
+      speakerCharacterId: Number(npc.id),
+      name: npc.fullName,
+      content: "",
+      isStreaming: true,
+      // DeepSeek can stream hidden reasoning before visible dialogue. The UI
+      // receives only its state, never the reasoning text.
+      streamStatus: "thinking"
+    });
+    const responseState = this.getGenerationManager().start({ turnEpoch, messageId: msgId, npcId: npc.id });
+    const controller = responseState.controller;
+    this.messages.push(placeholder);
+    this.emitUpdate();
+    let wasCancelled = false;
+    let streamCompleted = false;
+    try {
+      const memoryContext = await this.checkAndSummarizeIfNeeded(npc, diagnosticsContext);
+      if (!this.isResponseCurrent(responseState, npc)) throw new Error("AbortError: Message cancelled");
+      const promptBuildStartedAt = Date.now();
+      const activeConfig = settingsRepository.getActiveProviderConfig();
+      const promptBuild = traceOperation(performanceTrace, "prompt.build", { attribution: "MAIN", context: diagnosticsContext }, () => PromptBuilder.buildMessagesWithTokenCount(
+        this.getPromptHistoryForCharacter(npc.id),
+        npc,
+        this.gameData,
+        this.getPromptSummaryForCharacter(npc.id),
+        memoryContext,
+        activeConfig
+      ));
+      const promptBuildMs = Date.now() - promptBuildStartedAt;
+      const llmMessages = promptBuild.messages;
+      const promptBlockMetadata = Conversation.buildPromptBlockMetadata(promptBuild);
+      const promptBlockTokens = (id) => promptBlockMetadata.blocks.filter((block) => block.id === id).reduce((total, block) => total + (Number(block.tokens) || 0), 0);
+      const mentionedSnapshotTokens = promptBlockTokens("memory-mentioned-snapshot");
+      const thirdPartyEvidenceTokens = promptBlockTokens("third-party-evidence-patch");
+      const turnRecallTokens = promptBlockTokens("memory-turn-recall");
+      const worldlineTokens = promptBlockTokens("worldline-stable") + promptBlockTokens("worldline-turn-recall");
+      const totalMemoryTokens = promptBlockTokens("memory-stable") + promptBlockTokens("memory-direct-frozen") + mentionedSnapshotTokens + promptBlockTokens("memory-temporal-extra") + promptBlockTokens("memory-session-topic-anchor") + turnRecallTokens + thirdPartyEvidenceTokens;
+      logVerboseLLM(`[Conversation][verbose] Prompt for ${npc.fullName}:`, llmMessages);
+      const estimatedTokenCount = traceOperation(performanceTrace, "tokenEstimate", { attribution: "MAIN", context: diagnosticsContext, count: llmMessages.length }, () => this.estimateTokenCount(llmMessages));
+      console.log(`[TOKEN_COUNT] Message from ${npc.fullName}:`, estimatedTokenCount);
+      const isOpenRouter = activeConfig?.providerType === "openrouter";
+      const result = await llmManager.sendChatRequest(
+        llmMessages,
+        isOpenRouter ? void 0 : controller.signal,
+        void 0,
+        {
+          requestType: "chat",
+          conversationId: this.id,
+          responderId: npc.id,
+          ...(diagnosticsContext ? { performanceTraceContext: diagnosticsContext } : {}),
+          character: npc.shortName,
+          characterId: npc.id,
+          blocks: promptBlockMetadata.blocks,
+          historyStartPosition: promptBlockMetadata.historyStartPosition,
+          stablePrefixEndPosition: promptBlockMetadata.stablePrefixEndPosition,
+          stablePrefixTokens: promptBlockMetadata.stablePrefixTokens,
+          dynamicSuffixTokens: promptBlockMetadata.dynamicSuffixTokens,
+          prefixFingerprint: promptBlockMetadata.prefixFingerprint,
+          promptProfile: promptBuild.promptProfile,
+          staticTokens: promptBuild.staticTokens,
+          dynamicTokens: promptBuild.dynamicTokens,
+          globalStaticTokens: promptBuild.globalStaticTokens,
+          conversationFrozenTokens: promptBuild.conversationFrozenTokens,
+          responderFrozenTokens: promptBuild.responderFrozenTokens,
+          stableKinshipTokens: promptBuild.stableKinshipTokens,
+          actualStablePrefixTokens: promptBuild.actualStablePrefixTokens,
+          declaredStaticTokens: promptBuild.declaredStaticTokens,
+          dynamicTailTokens: promptBuild.dynamicTailTokens,
+          memoryStableTokens: promptBlockTokens("memory-stable"),
+          memoryDirectTokens: promptBlockTokens("memory-direct-frozen"),
+          memoryTopicTokens: promptBlockTokens("memory-session-topic-anchor"),
+          memoryMentionedSnapshotTokens: mentionedSnapshotTokens,
+          mentionedSnapshotTokens,
+          memoryTurnRecallTokens: turnRecallTokens,
+          turnRecallTokens,
+          thirdPartyEvidenceTokens,
+          totalMemoryTokens,
+          worldStableTokens: promptBlockTokens("worldline-stable"),
+          worldTurnRecallTokens: promptBlockTokens("worldline-turn-recall"),
+          worldlineTokens,
+          worldRetrievalMs: memoryContext?.worldlineMetrics?.worldRetrievalMs || 0,
+          worldPolicyMs: memoryContext?.worldlineMetrics?.worldPolicyMs || 0,
+          worldFormatMs: memoryContext?.worldlineMetrics?.worldFormatMs || 0,
+          memoryRecallMs: memoryContext?.worldlineMetrics?.memoryRecallMs || 0,
+          promptBuildMs,
+          worldSharedCacheHit: memoryContext?.worldlineMetrics?.sharedWorldCacheHit === true,
+          worldSubjectiveCacheHit: memoryContext?.worldlineMetrics?.subjectiveCacheHit === true,
+          contextBudget: this.contextBudgetDiagnostics || null,
+          activeRawMessageCount: this.getPromptHistoryForCharacter(npc.id).length,
+          rollingSegmentCount: this.memoryState?.rollingState?.segments?.length || 0,
+          cacheEpoch: this.memoryState?.rollingState?.cacheEpoch || 0
+        }
+      );
+      let chatCachedTokens = null;
+      if (settingsRepository.getGlobalStreamSetting() && typeof result === "object" && typeof result[Symbol.asyncIterator] === "function") {
+        try {
+          const streamIterator = result;
+          let finalResponse = null;
+          if (isOpenRouter) {
+            const streamPromise = (async () => {
+              const iterator = streamIterator[Symbol.asyncIterator]();
+              while (true) {
+                const step = await iterator.next();
+                if (step.done) { finalResponse = step.value; break; }
+                const chunk = step.value;
+                if (wasCancelled || controller.signal.aborted || !this.isResponseCurrent(responseState, npc)) {
+                  wasCancelled = true;
+                  continue;
+                }
+                if (chunk.delta?.reasoning) {
+                  placeholder.streamStatus = "thinking";
+                  this.emitUpdate();
+                }
+                if (chunk.delta?.content) {
+                  placeholder.streamStatus = "generating";
+                  placeholder.content += chunk.delta.content;
+                  this.emitUpdate();
+                }
+              }
+            })();
+            const checkCancellation = async () => {
+              while (!streamCompleted && !wasCancelled) {
+                if (controller.signal.aborted || !this.isResponseCurrent(responseState, npc)) {
+                  wasCancelled = true;
+                  console.log("[OpenRouter] Cancellation detected - stream will continue in background");
+                  streamPromise.catch((err) => console.error("[OpenRouter] Background stream error:", err));
+                  throw new Error("AbortError: Message cancelled");
+                }
+                await new Promise((resolve) => setTimeout(resolve, 100));
+              }
+            };
+            await Promise.race([streamPromise, checkCancellation()]);
+            streamCompleted = true;
+          } else {
+            const iterator = streamIterator[Symbol.asyncIterator]();
+            while (true) {
+              const step = await iterator.next();
+              if (step.done) { finalResponse = step.value; break; }
+              const chunk = step.value;
+              if (controller.signal.aborted || !this.isResponseCurrent(responseState, npc)) {
+                wasCancelled = true;
+                throw new Error("AbortError: Message cancelled");
+              }
+              if (chunk.delta?.reasoning) {
+                placeholder.streamStatus = "thinking";
+                this.emitUpdate();
+              }
+              if (chunk.delta?.content) {
+                placeholder.streamStatus = "generating";
+                placeholder.content += chunk.delta.content;
+                this.emitUpdate();
+              }
+            }
+            streamCompleted = true;
+          }
+          const outcome = validateGenerationOutcome(finalResponse);
+          chatCachedTokens = outcome.cachedTokens;
+          if (outcome.truncated) {
+            placeholder.content = await this.completeTruncatedResponse(llmMessages, placeholder.content, responseState, npc, diagnosticsContext);
+            this.emitUpdate();
+          } else if (!outcome.complete) {
+            throw new Error(`chat_generation_incomplete:${outcome.finishReason || "unknown"}`);
+          }
+        } catch (streamError) {
+          if (streamError instanceof Error && streamError.message === "AbortError: Message cancelled") {
+            wasCancelled = true;
+            throw streamError;
+          }
+          throw streamError;
+        }
+        if (!this.isResponseCurrent(responseState, npc)) throw new Error("AbortError: Message cancelled");
+        placeholder.isStreaming = false;
+        delete placeholder.streamStatus;
+        if (streamCompleted && !wasCancelled) {
+          this.getGenerationManager().markPhase(responseState, "evaluating_actions");
+          await this.evaluateCompletedActions(npc, msgId, placeholder, responseState);
+        }
+      } else if (result && typeof result === "object" && "content" in result && typeof result.content === "string") {
+        if (!this.isResponseCurrent(responseState, npc)) throw new Error("AbortError: Message cancelled");
+        const outcome = validateGenerationOutcome(result);
+        chatCachedTokens = outcome.cachedTokens;
+        if (!outcome.complete && !outcome.truncated) throw new Error(`chat_generation_incomplete:${outcome.finishReason || "unknown"}`);
+        placeholder.content = outcome.truncated
+          ? await this.completeTruncatedResponse(llmMessages, result.content, responseState, npc, diagnosticsContext)
+          : result.content;
+        placeholder.streamStatus = "generating";
+        this.emitUpdate();
+        placeholder.isStreaming = false;
+        delete placeholder.streamStatus;
+        streamCompleted = true;
+        this.getGenerationManager().markPhase(responseState, "evaluating_actions");
+        await this.evaluateCompletedActions(npc, msgId, placeholder, responseState);
+      } else {
+        throw new Error("Bad LLM response format");
+      }
+      this.retainDynamicSummaryRecall(npc.id, msgId, promptBuild, turnEpoch);
+      if (chatCachedTokens != null) memoryEngine.trace.record("provider_cache_usage", { characterId: npc.id, conversationId: this.id, cachedTokens: chatCachedTokens });
+    } catch (error) {
+      const staleResponse = responseState.stale || controller.signal.aborted || !this.isResponseCurrent(responseState, npc) || error instanceof Error && error.message === "AbortError: Message cancelled";
+      if (staleResponse) {
+        conversationTurnResult = "CANCELLED";
+        wasCancelled = true;
+        this.messages = this.messages.filter((msg) => msg.id !== msgId || !msg.isStreaming);
+        this.recordGenerationSkipped(responseState, responseState.staleReason || (this.isCharacterAvailableForConversation(npc) ? "stale_generation" : "inactive_participant_generation"));
+      } else {
+        conversationTurnResult = "ERROR";
+        this.getGenerationManager().fail(responseState);
+        console.error("Failed to get response for", npc.shortName, ":", error);
+        this.messages = this.messages.filter((msg) => msg.id !== msgId);
+        const err = createError({
+          id: this.nextId++,
+          content: `Failed to get response from ${npc.shortName}`,
+          details: error instanceof Error ? error.message : String(error)
+        });
+        this.messages.push(err);
+        if (this.npcQueue.length > 0) this.pauseConversation();
+      }
+    } finally {
+      try {
+        this.getGenerationManager().finish(responseState, { wasCancelled });
+      } finally {
+        finishTraceSpan(conversationTurnSpan, { result: conversationTurnResult, errorCode: conversationTurnResult === "ERROR" ? "provider_error" : undefined });
+      }
+    }
+  }
+  async evaluateCompletedActions(npc, npcMessageId, npcMessage, responseState) {
+    if (!this.isResponseCurrent(responseState, npc)) {
+      this.recordGenerationSkipped(responseState, responseState?.staleReason || "stale_action_evaluation");
+      return;
+    }
+    const actionResults = await ActionEngine.evaluateForCharacter(this, npc, responseState.controller.signal);
+    if (!this.isResponseCurrent(responseState, npc)) {
+      this.recordGenerationSkipped(responseState, responseState?.staleReason || "stale_action_evaluation");
+      return;
+    }
+    await this.handleActionResults(npcMessageId, npc, actionResults);
+  }
+  async completeTruncatedResponse(originalMessages, partialContent, responseState, npc, diagnosticsContext = null) {
+    if (!partialContent?.trim()) throw new Error("chat_generation_truncated_without_content");
+    const continuationMessages = [
+      ...originalMessages,
+      { role: "assistant", content: partialContent },
+      { role: "user", content: "请从刚才截断的位置继续完成上一条回复，不要重复已写内容。" }
+    ];
+    const response = await llmManager.sendChatRequest(continuationMessages, responseState.controller.signal, true, {
+      requestType: "chat_continuation",
+      conversationId: this.id,
+      responderId: npc.id,
+      ...(diagnosticsContext ? { performanceTraceContext: diagnosticsContext } : {}),
+      continuationAttempt: 1
+    });
+    if (!this.isResponseCurrent(responseState, npc)) throw new Error("AbortError: Message cancelled");
+    const outcome = validateGenerationOutcome(response);
+    if (!outcome.complete || !outcome.content.trim()) throw new Error("chat_continuation_incomplete");
+    let overlap = 0;
+    const maxOverlap = Math.min(160, partialContent.length, outcome.content.length);
+    for (let size = maxOverlap; size > 0; size--) {
+      if (partialContent.endsWith(outcome.content.slice(0, size))) { overlap = size; break; }
+    }
+    return partialContent + outcome.content.slice(overlap);
+  }
+  /**
+   * Handle action results using the official VOTC 2.0.3 approval flow.
+   */
+  async handleActionResults(associatedMessageId, npc, actionResults) {
+    const autoFeedbackResults = [...actionResults.autoApproved];
+    for (const action of actionResults.needsApproval) {
+      let previewFeedback;
+      let previewSentiment;
+      try {
+        const previewResult = await ActionEngine.runInvocation(this, npc, action.invocation, { dryRun: true });
+        if (previewResult.feedback?.message) {
+          previewFeedback = previewResult.feedback.message;
+          previewSentiment = previewResult.feedback.sentiment || "neutral";
+        } else {
+          const executed = await ActionEngine.runInvocation(this, npc, action.invocation);
+          autoFeedbackResults.push(executed);
+          continue;
+        }
+      } catch (error) {
+        console.error("[Conversation] Preview action failed:", error);
+      }
+      const approvalEntry = createActionApproval({
+        id: this.nextId++,
+        associatedMessageId,
+        action: {
+          actionId: action.actionId,
+          actionTitle: action.actionTitle,
+          sourceCharacterId: action.sourceCharacterId,
+          sourceCharacterName: action.sourceCharacterName,
+          targetCharacterId: action.targetCharacterId,
+          targetCharacterName: action.targetCharacterName,
+          args: action.args,
+          isDestructive: action.isDestructive
+        },
+        previewFeedback,
+        previewSentiment,
+        lifecycle: action.lifecycle || null,
+        diagnostic: action.diagnostic || null
+      });
+      this.messages.push(approvalEntry);
+      this.pendingActionApprovals.set(approvalEntry.id, {
+        npc,
+        action,
+        previewFeedback,
+        previewSentiment,
+        approvalEntryId: approvalEntry.id
+      });
+    }
+    if (autoFeedbackResults.length > 0) {
+      this.addActionFeedback(associatedMessageId, autoFeedbackResults);
+      for (const result of autoFeedbackResults) this.scheduleActionConfirmation(associatedMessageId, result);
+    }
+    const approvalSettings = settingsRepository.getActionApprovalSettings();
+    if (this.pendingActionApprovals.size > 0 && approvalSettings.pauseOnApproval && this.npcQueue.length > 0) this.pauseConversation();
+    if (this.pendingActionApprovals.size > 0) this.emitUpdate();
+  }
+  addActionFeedback(associatedMessageId, actionResults) {
+    console.log("[Conversation] addActionFeedback called with results:", actionResults);
+    const feedbackItems = actionResults.filter((r) => r.feedback || r.error || r.lifecycle || r.diagnostic).map((r) => ({
+      actionId: r.actionId,
+      success: r.success,
+      message: r.feedback?.message || r.error || (r.success === false ? "Unknown error" : "Action completed"),
+      sentiment: r.feedback?.sentiment || "negative",
+      lifecycle: r.lifecycle || null,
+      diagnostic: r.diagnostic || null
+    }));
+    console.log("[Conversation] Filtered feedback items:", feedbackItems);
+    if (feedbackItems.length > 0) {
+      const feedbackEntry = createActionFeedback({
+        id: this.nextId++,
+        associatedMessageId,
+        feedbacks: feedbackItems
+      });
+      console.log("[Conversation] Creating feedback entry:", feedbackEntry);
+      this.messages.push(feedbackEntry);
+      this.emitUpdate();
+      console.log("[Conversation] Feedback entry added and update emitted");
+      return feedbackEntry;
+    } else {
+      console.log("[Conversation] No feedback items to display");
+      return null;
+    }
+  }
+  getRunCommand(commandId) {
+    if (!commandId || !runFileManager) return null;
+    return [...runFileManager.getPendingCommands(), ...runFileManager.getRecentCommands()].find((command) => command.commandId === commandId) || null;
+  }
+  async refreshGameDataForActionConfirmation() {
+    const ck3DebugPath = settingsRepository.getCK3DebugLogPath();
+    if (!ck3DebugPath) throw new Error("ck3_debug_log_path_not_configured");
+    const gameData = await this.parseCK3GameData(ck3DebugPath, { captureForConversation: true });
+    gameData.loadCharactersSummaries();
+    gameData.syncOfficialRecollectionSummaries?.(this.id);
+    this.gameData = gameData;
+    this.gameDataRevision += 1;
+    this.gameData.gameDataRevision = this.gameDataRevision;
+    this.observeVisibleTraits();
+    return this.gameData;
+  }
+  async waitForActionConfirmation(result, { timeoutMs = 12e3, pollMs = 500 } = {}) {
+    if (!result?.confirmation) return result;
+    let observedWriteAt = null;
+    while (true) {
+      // Queue TTL belongs to RunFileManager; ACK time starts only after a write.
+      runFileManager.expireQueuedActions?.();
+      const command = this.getRunCommand(result.confirmation.dispatch?.commandId);
+      if (!command) return settleActionResult(result, { status: "UNCONFIRMED", stateAfter: null });
+      if (command?.status === "acknowledged") {
+        try {
+          const commandReadback = result.confirmation.requireCommandReadback
+            ? await readActionCommandReadback(settingsRepository.getCK3DebugLogPath(), command.commandId) : null;
+          if (!result.confirmation.requireCommandReadback && result.confirmation.type !== "RUN_ACK") await this.refreshGameDataForActionConfirmation();
+          const verification = verifyActionConfirmation({
+            confirmation: result.confirmation,
+            gameData: this.gameData,
+            gameDataRevision: this.gameDataRevision,
+            commandReadback
+          });
+          if (verification.status !== "PENDING") {
+            if (result.confirmation.requireCommandReadback && ["GOLD_TRANSFER", "OPINION_CHANGE"].includes(result.confirmation.type)) {
+              try { await this.refreshGameDataForActionConfirmation(); }
+              catch (error) { console.warn("[ActionConfirmation] post-verification balance refresh failed:", error.message); }
+            }
+            runFileManager.recordActionVerification?.(command.commandId, verification);
+            return settleActionResult(result, { ...verification, commandStatus: command.status });
+          }
+        } catch (error) {
+          console.warn("[ActionConfirmation] runtime refresh failed:", error);
+        }
+      } else if (command && ["failed", "cancelled", "expired", "quarantined"].includes(command.status)) {
+        return settleActionResult(result, { status: command.status === "expired" && !runFileManager.hasWriteHistory(command) ? "QUEUE_EXPIRED" : "UNCONFIRMED", stateAfter: null, revisionAfter: this.gameDataRevision, confirmedStateChange: null, commandStatus: command.status });
+      }
+      if (runFileManager.hasWriteHistory(command)) {
+        observedWriteAt ??= Date.now();
+        const writtenAt = command.lastWrittenAt ?? command.writtenAt ?? observedWriteAt;
+        if (Date.now() - writtenAt >= timeoutMs) break;
+      }
+      await new Promise((resolve) => setTimeout(resolve, pollMs));
+    }
+    return settleActionResult(result, { status: "TIMEOUT", stateAfter: null, revisionAfter: this.gameDataRevision, confirmedStateChange: null });
+  }
+  replaceActionFeedback(associatedMessageId, provisional, settled) {
+    const commandId = provisional?.diagnostic?.commandId || null;
+    for (const message of this.messages) {
+      if (message.type !== "action-feedback" || message.associatedMessageId !== associatedMessageId) continue;
+      const feedback = message.feedbacks?.find((item) => item.actionId === provisional.actionId && (!commandId || item.diagnostic?.commandId === commandId));
+      if (!feedback) continue;
+      feedback.success = settled.success;
+      feedback.message = settled.feedback?.message || settled.error || feedback.message;
+      feedback.sentiment = settled.feedback?.sentiment || (settled.success ? "neutral" : "negative");
+      feedback.lifecycle = settled.lifecycle || feedback.lifecycle;
+      feedback.diagnostic = settled.diagnostic || feedback.diagnostic;
+      this.emitUpdate();
+      return;
+    }
+  }
+  scheduleActionConfirmation(associatedMessageId, result, approvalEntry = null) {
+    if (!result?.confirmation) return;
+    void this.waitForActionConfirmation(result).then((settled) => {
+      if (approvalEntry) {
+        approvalEntry.lifecycle = settled.lifecycle;
+        approvalEntry.diagnostic = settled.diagnostic;
+        approvalEntry.resultFeedback = settled.feedback?.message || approvalEntry.resultFeedback;
+        approvalEntry.resultSentiment = settled.feedback?.sentiment || (settled.success ? "neutral" : "negative");
+        this.emitUpdate();
+      } else this.replaceActionFeedback(associatedMessageId, result, settled);
+    }).catch((error) => console.error("[ActionConfirmation] unexpected failure:", error));
+  }
+  cancelCurrentStream() {
+    console.log("Cancelling current stream");
+    this.getGenerationManager().cancelCurrent("explicit_abort");
+  }
+  pauseConversation() {
+    console.log("Pausing conversation");
+    this.isPaused = true;
+    this.emitUpdate();
+  }
+  resumeConversation() {
+    console.log("Resuming conversation");
+    this.isPaused = false;
+    this.emitUpdate();
+    if (this.npcQueue.length > 0) {
+      this.processQueue();
+    }
+  }
+  // setCustomQueue(queue: []): void {
+  //     // TODO: use ids instead. Frontend side of the app should send an array of character ids in order of custom queue.
+  //     // Additionally we need to send to UI participating charaters as id's and their names to use for creation of custom queue.
+  //     this.emitUpdate();
+  // }
+  // Fill NPC queue with shuffled characters or custom queue
+  fillNpcQueue() {
+    const result = this.getTurnManager().fillQueue({
+      customQueue: this.customQueue,
+      npcs: this.getNpcList(),
+      persistCustomQueue: this.persistCustomQueue
+    });
+    if (result.mode === "custom") {
+      console.log("Using custom queue:", this.npcQueue.map((c) => c.shortName));
+      if (result.consumeCustomQueue) this.customQueue = null;
+    } else {
+      console.log("Filled shuffled queue:", this.npcQueue.map((c) => c.shortName));
+    }
+  }
+  async processQueue(turnEpoch = this.turnEpoch) {
+    return this.getTurnManager().processQueue(turnEpoch);
+  }
+  // Send a user message and trigger responses from all NPCs
+  async sendMessage(userMessage) {
+    console.log(`Conversation.sendMessage called (characters=${typeof userMessage === "string" ? userMessage.length : 0})`);
+    logVerboseLLM("[Conversation][verbose] User message:", userMessage);
+    console.log("Conversation active:", this.isActive);
+    console.log("Characters in conversation:", this.gameData.characters.size);
+    const user = this.gameData.characters.get(this.gameData.playerID);
+    this.captureSummaryParticipantProfiles?.(this.gameData.characters.values());
+    if (!this.isActive) {
+      console.warn("Conversation is not active");
+      return;
+    }
+    if (this.gameData.characters.size === 0) {
+      console.error("No characters in conversation");
+      return;
+    }
+    const userMsg = createMessage({
+      id: this.nextId++,
+      name: user.fullName,
+      role: "user",
+      speakerCharacterId: Number(this.gameData.playerID),
+      content: userMessage
+    });
+    const turnState = this.getTurnManager().startUserTurn({
+      playerMessageId: userMsg.id,
+      activeParticipantIds: this.getActiveConversationCharacters().map((character) => character.id)
+    });
+    this.messages.push(userMsg);
+    memoryEngine?.observeParticipants(this, turnState.activeParticipantIds, userMsg.id);
+    if (this.memoryState?.turnRecallCache instanceof Map) this.memoryState.turnRecallCache.clear();
+    this.emitUpdate();
+    this.fillNpcQueue();
+    this.resumeConversation();
+  }
+  // Regenerate assistant message and refill queue
+  async regenerateMessage(messageId) {
+    console.log("Regenerating message with ID:", messageId);
+    const targetIndex = this.messages.findIndex((msg) => "id" in msg && msg.id === messageId);
+    if (targetIndex === -1) {
+      console.error("Message not found for regeneration:", messageId);
+      return;
+    }
+    const targetMessage = this.messages[targetIndex];
+    if (targetMessage.role !== "assistant") {
+      console.error("Can only regenerate assistant messages:", targetMessage.role);
+      return;
+    }
+    this.getTurnManager().supersede("superseded_by_regeneration");
+    for (let i = this.messages.length - 1; i >= targetIndex; i--) {
+      this.messages.splice(i, 1);
+    }
+    const targetCharacter = this.getNpcList().find((c) => c.fullName === targetMessage.name);
+    if (!targetCharacter) {
+      console.error("Could not find character for message:", targetMessage.name);
+      this.emitUpdate();
+      return;
+    }
+    const generateFollowing = settingsRepository.getGenerateFollowingMessagesSetting();
+    if (generateFollowing) {
+      let latestUserIndex = -1;
+      for (let i = targetIndex - 1; i >= 0; i--) {
+        const msg = this.messages[i];
+        if ("role" in msg && msg.role === "user") {
+          latestUserIndex = i;
+          break;
+        }
+      }
+      if (latestUserIndex >= 0) {
+        const respondedCharacters = /* @__PURE__ */ new Set();
+        for (let i = latestUserIndex + 1; i < targetIndex; i++) {
+          const msg = this.messages[i];
+          if (msg.role === "assistant" && msg.name) {
+            respondedCharacters.add(msg.name);
+          }
+        }
+        const allNpcs = this.getNpcList();
+        const remainingCharacters = allNpcs.filter(
+          (c) => !respondedCharacters.has(c.fullName) && c.fullName !== targetCharacter.fullName
+        );
+        this.npcQueue = [targetCharacter, ...remainingCharacters];
+        console.log("Refilled queue for regeneration:", this.npcQueue.map((c) => c.shortName));
+      } else {
+        this.npcQueue = [targetCharacter];
+      }
+    } else {
+      this.npcQueue = [targetCharacter];
+    }
+    this.emitUpdate();
+    const pauseOnRegeneration = settingsRepository.getPauseOnRegenerationSetting();
+    this.processQueue();
+    if (pauseOnRegeneration) {
+      this.pauseConversation();
+    }
+  }
+  // Regenerate error message and retry the operation
+  async regenerateError(messageId) {
+    console.log("Regenerating error with ID:", messageId);
+    const targetIndex = this.messages.findIndex((msg) => "id" in msg && msg.id === messageId);
+    if (targetIndex === -1) {
+      console.error("Error not found for regeneration:", messageId);
+      return;
+    }
+    const targetError = this.messages[targetIndex];
+    if (targetError.type !== "error") {
+      console.error("Can only regenerate error entries:", targetError.type);
+      return;
+    }
+    this.messages.splice(targetIndex, 1);
+    if (targetError.content === "Failed to initialize conversation") {
+      await this.initializeGameData();
+    } else {
+      const userMessages = this.messages.filter((msg) => "role" in msg && msg.role === "user");
+      if (userMessages.length > 0) {
+        const latestUserMessage = userMessages[userMessages.length - 1];
+        for (let i = this.messages.length - 1; i >= 0; i--) {
+          const msg = this.messages[i];
+          if ("role" in msg && msg.role === "user" && msg.id === latestUserMessage.id || msg.type === "action-feedback" && msg.associatedMessageId === latestUserMessage.id) {
+            break;
+          }
+          if ("role" in msg && msg.role === "assistant" || msg.type === "error") {
+            this.messages.splice(i, 1);
+          }
+        }
+        if (this.npcQueue.length === 0) {
+          this.fillNpcQueue();
+        }
+        this.emitUpdate();
+        this.resumeConversation();
+      }
+    }
+    this.emitUpdate();
+  }
+  // Edit user message and resend
+  async editUserMessage(messageId, newContent) {
+    console.log("Editing message with ID:", messageId);
+    const targetIndex = this.messages.findIndex((msg) => "id" in msg && msg.id === messageId);
+    if (targetIndex === -1) {
+      console.error("Message not found for editing:", messageId);
+      return;
+    }
+    const targetMessage = this.messages[targetIndex];
+    if (targetMessage.role !== "user" && targetMessage.role !== "assistant") {
+      console.error("Can only edit user or assistant messages:", targetMessage.role);
+      return;
+    }
+    if (targetMessage.role === "user") {
+      for (let i = this.messages.length - 1; i >= targetIndex; i--) {
+        this.messages.splice(i, 1);
+      }
+      this.emitUpdate();
+      await this.sendMessage(newContent);
+    } else {
+      targetMessage.content = newContent;
+      this.emitUpdate();
+    }
+  }
+  getSummaryParticipantIds() {
+    this.captureSummaryParticipantProfiles(this.gameData.characters.values());
+    const participantIds = [this.gameData.playerID];
+    const seen = /* @__PURE__ */ new Set(participantIds);
+    const addParticipant = (characterId) => {
+      const numericId = Number(characterId);
+      if (!Number.isFinite(numericId) || seen.has(numericId) || !this.getSummaryParticipantProfile(numericId)) return;
+      seen.add(numericId);
+      participantIds.push(numericId);
+    };
+    const participantPresence = memoryEngine?.ensureConversationState(this).participantPresence || [];
+    for (const participant of participantPresence) addParticipant(participant.characterId);
+    return participantIds;
+  }
+  buildFinalizationBaseContext() {
+    const participantIds = this.getSummaryParticipantIds();
+    const participants = participantIds.map((id) => this.getSummaryParticipantProfile(id)).filter(Boolean);
+    const excludedSummaryOwnerIds = [...this.inactiveParticipantIds.entries()]
+      .filter(([characterId, stateValue]) => stateValue === "dead" && Number(characterId) !== Number(this.gameData.playerID))
+      .map(([characterId]) => Number(characterId));
+    const state = memoryEngine.ensureConversationState(this);
+    const messages = this.getHistory();
+    const mentionableProfiles = [...(this.gameData.getMentionableCharacterProfiles?.() || this.gameData.characters).values()]
+      .map(character => ({ id: Number(character.id), firstName: character.firstName, name: character.name,
+        shortName: character.shortName, fullName: character.fullName, allowDerivedHonorifics: false }));
+    const mentionedIds = new MentionTracker().findMentionedCharacterIds(messages, { candidates: mentionableProfiles,
+      excludedIds: participantIds, resolveCoreference: false });
+    const mentionedEntities = mentionableProfiles.filter(character => mentionedIds.includes(character.id));
+    const memory4RelationshipEvidence = buildCurrentMemory4RelationshipEvidence({ gameData: this.gameData,
+      ownerIds: participantIds, entityIds: [...participantIds, ...mentionedIds] });
+    const disclosureFactEpochsByOwner = {};
+    for (const ownerId of participantIds) {
+      try {
+        disclosureFactEpochsByOwner[ownerId] = memoryEngine.memory4?.captureDisclosureFactEpochs?.(
+          { campaignToken: this.gameData.campaignToken, ownerId }, this.gameData) || {};
+      } catch (error) {
+        console.warn("[Memory4] Fact epoch capture unavailable:", error.message);
+        disclosureFactEpochsByOwner[ownerId] = {};
+      }
+    }
+    return {
+      conversationId: this.id,
+      date: this.gameData.date,
+      campaignToken: this.gameData.campaignToken || null,
+      totalDays: this.gameData.totalDays,
+      relationshipChanges: this.memory4RelationshipChanges || [],
+      finalizationVisibilityV1: true,
+      messages,
+      participants,
+      mentionedEntities,
+      memory4RelationshipEvidence,
+      disclosureFactEpochsByOwner,
+      disclosureCharacters: [...this.gameData.characters.values()].map(character => ({ id: Number(character.id),
+        names: [...new Set([character.firstName, character.shortName, character.fullName, character.name].filter(Boolean))],
+        nickname: character.nickname || null, facts: getFactCandidates(character) })),
+      excludedSummaryOwnerIds,
+      participantPresence: state.participantPresence,
+      joinEvents: this.joinEvents,
+      leaveEvents: this.leaveEvents,
+      rollingState: state.rollingState,
+      __conversation: this
+    };
+  }
+  checkpointFinalization(reason = "conversation_active") {
+    if (!memoryEngine || this.getHistory().length === 0) return null;
+    return memoryEngine.checkpointConversation({
+      ...this.buildFinalizationBaseContext(),
+      finalInstructions: PromptBuilder?.getFinalSummaryInstructions?.() || "",
+      summaryOutputLimit: PromptBuilder?.getFinalSummaryMaxTokens?.() || 4096
+    }, { reason });
+  }
+  // Create final comprehensive summary and save to characters
+  async finalizeConversation(options = {}) {
+    if (options.closeGameScene !== false) {
+      try {
+        runFileManager.write("trigger_event = mcc_event_v2.9002", {
+          owner: "conversation",
+          kind: "conversation_close",
+          scopeId: options.conversationId || this.id,
+          epoch: options.epoch ?? this.conversationEpoch,
+          expiresInMs: 15e3,
+          destructive: true,
+          supersedable: true
+        });
+      } catch (error) {
+        console.error("[Summary] Game scene close failed; continuing memory finalization:", error);
+      }
+    } else {
+      console.log(`[Conversation] game scene close skipped id=${this.id} reason=${options.reason || "conversation_rollover"}`);
+    }
+    
+    // PERFORMANCE: Clear caches when conversation ends
+    if (this.gameData) {
+      // Clear mentioned characters
+      if (this.gameData.mentionedCharactersInContext) {
+        this.gameData.mentionedCharactersInContext.clear();
+      }
+      
+      // Clear dynamic memory caches for all characters
+      for (const char of this.gameData.characters.values()) {
+        if (char.dynamicMemoryCache) {
+          char.dynamicMemoryCache = null;
+        }
+      }
+      console.log("[Performance] Cleared all character dynamic memory caches");
+    }
+    
+    if (this.messages.length < 2) {
+      console.log("Not enough messages for final summarization");
+      this.end();
+      return;
+    }
+    console.log("Creating final conversation memory extraction...");
+    const finalResult = await this.createFinalSummary();
+    if (finalResult?.success && finalResult.finalSummary) {
+      console.log("Final conversation summary committed to structured memory and participant folders");
+    } else if (finalResult?.recoveryPath) {
+      console.error(`Final summary failed; recovery snapshot preserved at ${finalResult.recoveryPath}`);
+    }
+    this.end();
+    return finalResult;
+  }
+  //  Create final comprehensive summary using ALL messages
+  async createFinalSummary() {
+    if (!memoryEngine) throw new Error("memory_engine_not_configured");
+    const baseContext = this.buildFinalizationBaseContext();
+    const participantIds = baseContext.participants.map((entry) => entry.id);
+    return memoryEngine.finalizeConversation({
+      ...baseContext,
+      finalInstructions: PromptBuilder.getFinalSummaryInstructions(),
+      summaryOutputLimit: PromptBuilder.getFinalSummaryMaxTokens?.() || 4096,
+      getSummaryCapabilities: (snapshot) => llmManager.getProviderCapabilities("SUMMARY", snapshot),
+      buildPrompt: (context) => memoryEngine.buildFinalizationPrompt(context),
+      persistCharacterFolders: async (finalSummary, context) => {
+        return this.gameData.saveCharactersSummaries(finalSummary, participantIds, {
+          finalizationId: context.finalizationId,
+          conversationId: context.conversationId,
+          date: context.date,
+          campaignToken: context.campaignToken || null,
+          totalDays: context.totalDays,
+          excludedOwnerIds: context.excludedSummaryOwnerIds,
+          participantProfiles: context.participants,
+          directedSummaries: context.directedSummaries,
+          verifiedSummarySegments: context.verifiedSummarySegments,
+          presenceJoins: context.joinEvents || [],
+          presenceLeaves: context.leaveEvents || []
+        });
+      },
+      requestSummary: async (summaryPrompt, requestOptions = {}) => {
+        console.log(`[TOKEN_COUNT] Final memory prompt tokens: ${this.estimateTokenCount(summaryPrompt)}`);
+        return llmManager.sendSummaryRequest(summaryPrompt, void 0, {
+          requestType: "final_summary",
+          summaryAttempt: requestOptions.attempt,
+          maxTokens: requestOptions.maxTokens,
+          providerSnapshot: requestOptions.providerSnapshot,
+          summaryBudget: requestOptions.summaryBudget
+        });
+      },
+      requestDurable: (prompt, options = {}) => llmManager.sendSummaryRequest(prompt, void 0, {
+        requestType: "memory4_durable", maxTokens: options.maxTokens, providerSnapshot: options.providerSnapshot
+      })
+    });
+  }
+  async recoverPendingMemories() {
+    if (!memoryEngine || !this.gameData) return;
+    const results = await memoryEngine.recoverPendingFinalizations({
+      isConversationActive: id => id === this.id && this.isActive,
+      buildPrompt: (context) => memoryEngine.buildFinalizationPrompt({ ...context, finalInstructions: context.finalInstructions || PromptBuilder.getFinalSummaryInstructions() }),
+      getSummaryCapabilities: (snapshot) => llmManager.getProviderCapabilities("SUMMARY", snapshot),
+      requestSummary: (summaryPrompt, options = {}) => llmManager.sendSummaryRequest(summaryPrompt, void 0, { requestType: "memory_recovery", maxTokens: options.maxTokens, providerSnapshot: options.providerSnapshot, summaryBudget: options.summaryBudget }),
+      requestDurable: (prompt, options = {}) => llmManager.sendSummaryRequest(prompt, void 0, {
+        requestType: "memory4_durable", maxTokens: options.maxTokens, providerSnapshot: options.providerSnapshot
+      }),
+      activeCampaignToken: this.gameData.campaignToken || null,
+      resolveParticipantProfiles: (snapshot) => memoryEngine.resolveRecoveryParticipantProfiles(snapshot, [...this.summaryParticipantProfiles.values()]),
+      persistCharacterFolders: async (finalSummary, context) => {
+        const participantIds = (context.participants || []).map((entry) => entry.id);
+        return this.gameData.saveCharactersSummaries(finalSummary, participantIds, {
+          finalizationId: context.finalizationId,
+          conversationId: context.conversationId,
+          date: context.date,
+          campaignToken: context.campaignToken || null,
+          totalDays: context.totalDays,
+          excludedOwnerIds: context.excludedSummaryOwnerIds,
+          participantProfiles: context.participants,
+          directedSummaries: context.directedSummaries,
+          verifiedSummarySegments: context.verifiedSummarySegments,
+          presenceJoins: context.joinEvents || [],
+          presenceLeaves: context.leaveEvents || []
+        });
+      }
+    });
+    return results;
+  }
+  // Get conversation history
+  getHistory() {
+    return this.messages.filter(
+      (entry) => "role" in entry && entry.isStreaming !== true && entry.incomplete !== true
+    );
+  }
+  clearHistory() {
+    this.messages = [];
+  }
+  end() {
+    this.isActive = false;
+    if (this.gameData) delete this.gameData.directObservationContext;
+    this.clearHistory();
+  }
+  // Emit conversation update event
+  emitUpdate() {
+    this.eventEmitter.emit("conversation-updated", [...this.messages]);
+  }
+  // Subscribe to conversation updates
+  onConversationUpdate(callback) {
+    this.eventEmitter.on("conversation-updated", callback);
+  }
+  // Unsubscribe from conversation updates
+  offConversationUpdate(callback) {
+    this.eventEmitter.off("conversation-updated", callback);
+  }
+  /**
+   * Approve actions for pending approval
+   */
+  async approveActions(approvalEntryId) {
+    const pending = this.pendingActionApprovals.get(approvalEntryId);
+    if (!pending) throw new Error(`No pending approval found for ID ${approvalEntryId}`);
+    const entryIndex = this.messages.findIndex((message) => message.type === "action-approval" && message.id === approvalEntryId);
+    if (entryIndex === -1) throw new Error(`Approval entry not found for ID ${approvalEntryId}`);
+    const approvalEntry = this.messages[entryIndex];
+    if (approvalEntry.type !== "action-approval") throw new Error(`Entry ${approvalEntryId} is not an action-approval entry`);
+    approvalEntry.status = "approved";
+    approvalEntry.lifecycle = approvalEntry.lifecycle ? { ...approvalEntry.lifecycle, status: "VALIDATED", dispatched: false, confirmed: false } : null;
+    approvalEntry.resultFeedback = pending.previewFeedback || pending.action.actionTitle || pending.action.actionId;
+    approvalEntry.resultSentiment = pending.previewSentiment || "neutral";
+    this.pendingActionApprovals.delete(approvalEntryId);
+    this.emitUpdate();
+    try {
+      const result = await ActionEngine.runInvocation(this, pending.npc, pending.action.invocation);
+      approvalEntry.lifecycle = result.lifecycle || approvalEntry.lifecycle || null;
+      approvalEntry.diagnostic = result.diagnostic || approvalEntry.diagnostic || null;
+      if (result.feedback?.message && result.feedback.message !== approvalEntry.resultFeedback) {
+        approvalEntry.resultFeedback = result.feedback.message;
+        approvalEntry.resultSentiment = result.feedback.sentiment || "neutral";
+        this.emitUpdate();
+      }
+      this.scheduleActionConfirmation(approvalEntry.associatedMessageId, result, approvalEntry);
+    } catch (error) {
+      console.error("[Conversation] Background action execution failed:", error);
+      approvalEntry.resultFeedback = `Failed: ${error instanceof Error ? error.message : String(error)}`;
+      approvalEntry.resultSentiment = "negative";
+      this.emitUpdate();
+    }
+    const approvalSettings = settingsRepository.getActionApprovalSettings();
+    if (approvalSettings.pauseOnApproval && this.isPaused && this.npcQueue.length > 0) this.resumeConversation();
+  }
+  /**
+   * Decline actions for pending approval
+   */
+  async declineActions(approvalEntryId) {
+    const pending = this.pendingActionApprovals.get(approvalEntryId);
+    if (!pending) throw new Error(`No pending approval found for ID ${approvalEntryId}`);
+    const entryIndex = this.messages.findIndex((message) => message.type === "action-approval" && message.id === approvalEntryId);
+    if (entryIndex === -1) throw new Error(`Approval entry not found for ID ${approvalEntryId}`);
+    const approvalEntry = this.messages[entryIndex];
+    if (approvalEntry.type !== "action-approval") throw new Error(`Entry ${approvalEntryId} is not an action-approval entry`);
+    this.messages.splice(entryIndex, 1);
+    this.pendingActionApprovals.delete(approvalEntryId);
+    this.emitUpdate();
+    const approvalSettings = settingsRepository.getActionApprovalSettings();
+    if (approvalSettings.pauseOnApproval && this.isPaused && this.npcQueue.length > 0) this.resumeConversation();
+  }
+  /**
+   * Create a presence-safe summary for the official leavesConversation action.
+   * The caller remains responsible for persistence and participant removal.
+   */
+  async createCharacterLeavingSummary(characterId, summaryPrompt) {
+    const numericId = Number(characterId);
+    const character = this.gameData?.characters?.get(numericId);
+    if (!character) {
+      console.error(`Character ${characterId} not found for leaving summary`);
+      return null;
+    }
+    try {
+      const suppliedPrompt = Array.isArray(summaryPrompt) ? summaryPrompt : [];
+      const visibleHistory = this.getHistoryForCharacter(numericId);
+      const safePrompt = [];
+      const perspectiveInstruction = suppliedPrompt.find((message) => message?.role === "system" && !String(message.content || "").startsWith("Previous summary of this conversation:") && !String(message.content || "").startsWith("Full conversation:"));
+      if (perspectiveInstruction) safePrompt.push({ ...perspectiveInstruction });
+      if (this.canUseSharedRollingSummary(numericId) && this.currentSummary) {
+        safePrompt.push({ role: "system", content: `Previous summary of this conversation:\n\n${this.currentSummary}` });
+      }
+      safePrompt.push({
+        role: "system",
+        content: `Full conversation:\n${visibleHistory.map((message) => `${message.name || "System"}: ${message.content}`).join("\n")}`
+      });
+      const finalInstruction = [...suppliedPrompt].reverse().find((message) => message?.role === "user");
+      if (finalInstruction) safePrompt.push({ ...finalInstruction });
+      console.log(`[TOKEN_COUNT] Character leaving summary for ${character.fullName}: ${this.estimateTokenCount(safePrompt)}`);
+      const result = await llmManager.sendSummaryRequest(safePrompt, void 0, { requestType: "character_leaving_summary" });
+      const summary = result && typeof result === "object" && typeof result.content === "string" ? result.content.trim() : "";
+      if (!summary) {
+        console.error("Invalid response format for character leaving summary");
+        return null;
+      }
+      console.log(`Generated leaving summary for ${character.fullName}: ${summary.substring(0, 100)}...`);
+      return summary;
+    } catch (error) {
+      console.error(`Failed to create leaving summary for ${character.fullName}:`, error);
+      return null;
+    }
+  }
+  /**
+   * Remove a character from the conversation entirely
+   */
+  removeCharacterFromConversation(characterId) {
+    const numericId = Number(characterId);
+    const character = this.gameData.characters.get(numericId);
+    if (!character) {
+      console.warn(`Character ${characterId} not found in conversation`);
+      return;
+    }
+    this.captureSummaryParticipantProfiles?.([character]);
+    console.log(`Removing ${character.fullName} from conversation`);
+    let closedPresence = false;
+    if (this.presentCharacterIds?.has(numericId)) {
+      memoryEngine?.markParticipantLeft(this, numericId, this.nextId);
+      this.presentCharacterIds.delete(numericId);
+      this.departedCharacterIds?.add(numericId);
+      this.leaveEvents?.push({ characterId: numericId, atMessageId: this.nextId, atHistoryIndex: this.getHistory().length, source: "action" });
+      closedPresence = true;
+    }
+    this.waitingCharacterIds?.delete(numericId);
+    this.frozenWorldlineByResponder?.delete(numericId);
+    this.frozenWorldlineCoverageByResponder?.delete(String(numericId));
+    this.worldlineCoveragePatchCacheByResponder?.delete(String(numericId));
+    this.temporarilyAbsentCharacterIds?.delete(numericId);
+    this.invalidateApprovalsForCharacter(numericId, "removed");
+    this.gameData.characters.delete(numericId);
+    this.observeVisibleTraits();
+    if (closedPresence) this.checkpointFinalization("action_participant_left");
+    const initialQueueLength = this.npcQueue.length;
+    this.npcQueue = this.npcQueue.filter((char) => Number(char.id) !== numericId);
+    if (this.npcQueue.length < initialQueueLength) {
+      console.log(`Removed ${character.fullName} from NPC queue`);
+    }
+    if (this.customQueue) {
+      const initialCustomQueueLength = this.customQueue.length;
+      this.customQueue = this.customQueue.filter((char) => Number(char.id) !== numericId);
+      if (this.customQueue.length < initialCustomQueueLength) {
+        console.log(`Removed ${character.fullName} from custom queue`);
+      }
+    }
+    console.log(`Character ${character.fullName} successfully removed from conversation`);
+    this.emitUpdate();
+  }
+}
+
+module.exports = { Conversation };

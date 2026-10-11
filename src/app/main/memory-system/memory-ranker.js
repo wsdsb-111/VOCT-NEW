@@ -1,0 +1,125 @@
+"use strict";
+
+function textFeatures(value) {
+  const normalized = String(value || "").toLowerCase().replace(/[\s\p{P}\p{S}]+/gu, "");
+  const features = new Set();
+  for (let index = 0; index < normalized.length; index++) {
+    features.add(normalized[index]);
+    if (index + 1 < normalized.length) features.add(normalized.slice(index, index + 2));
+  }
+  return features;
+}
+
+function overlapScore(left, right) {
+  if (left.size === 0 || right.size === 0) return 0;
+  let overlap = 0;
+  for (const feature of left) if (right.has(feature)) overlap++;
+  return overlap / Math.max(1, Math.min(left.size, right.size));
+}
+
+class MemoryRanker {
+  rank(memories, context = {}) {
+    const queryFeatures = textFeatures(context.query);
+    const entityIds = new Set((context.entityIds || []).map(Number));
+    const participantIds = new Set((context.participantIds || []).map(Number));
+    const currentDays = Number(context.currentTotalDays);
+    return (Array.isArray(memories) ? memories : []).map((memory) => {
+      const memoryFeatures = textFeatures(`${memory.canonicalText || memory.content} ${(memory.tags || []).join(" ")}`);
+      const query = overlapScore(queryFeatures, memoryFeatures);
+      const entity = memory.subjects?.some((id) => entityIds.has(Number(id))) ? 1 : 0;
+      const importance = Number(memory.importance) || 0;
+      const elapsed = Number.isFinite(currentDays) && Number.isFinite(Number(memory.totalDays)) ? Math.max(0, currentDays - Number(memory.totalDays)) : 180;
+      const recency = 1 / (1 + elapsed / 180);
+      const relationship = memory.participants?.some((id) => participantIds.has(Number(id))) ? 1 : 0;
+      const confidence = Number(memory.confidence) || 0;
+      const score = 0.30 * query + 0.20 * entity + 0.20 * importance + 0.15 * recency + 0.10 * relationship + 0.05 * confidence;
+      return { memory, score, reason: { query, entity, importance, recency, relationship, confidence } };
+    }).sort((left, right) => {
+      const criticalDifference = Number(right.memory.importance >= 0.9) - Number(left.memory.importance >= 0.9);
+      return criticalDifference || right.score - left.score;
+    });
+  }
+
+  rankTurnRecall(memories, context = {}) {
+    const queryFeatures = textFeatures(context.query);
+    const assistFeatures = textFeatures(context.assistQuery);
+    const entityIds = new Set((context.entityIds || []).map(Number));
+    const participantIds = new Set((context.participantIds || []).map(Number));
+    const currentDays = Number(context.currentTotalDays);
+    return (Array.isArray(memories) ? memories : []).map((memory) => {
+      const memoryFeatures = textFeatures(`${memory.canonicalText || memory.content} ${(memory.tags || []).join(" ")}`);
+      const primaryQuery = overlapScore(queryFeatures, memoryFeatures);
+      const assistQuery = overlapScore(assistFeatures, memoryFeatures);
+      const query = 0.8 * primaryQuery + 0.2 * assistQuery;
+      const entity = memory.subjects?.some((id) => entityIds.has(Number(id))) ? 1 : 0;
+      const importance = Number(memory.importance) || 0;
+      const elapsed = Number.isFinite(currentDays) && Number.isFinite(Number(memory.totalDays)) ? Math.max(0, currentDays - Number(memory.totalDays)) : 180;
+      const recency = 1 / (1 + elapsed / 180);
+      const relationship = memory.participants?.some((id) => participantIds.has(Number(id))) ? 1 : 0;
+      const confidence = Number(memory.confidence) || 0;
+      const score = 0.40 * query + 0.20 * entity + 0.15 * importance + 0.10 * recency + 0.10 * relationship + 0.05 * confidence;
+      return { memory, score, reason: { query, primaryQuery, assistQuery, entity, importance, recency, relationship, confidence } };
+    }).sort((left, right) => right.score - left.score);
+  }
+
+  selectWithinBudget(ranked, { tokenBudget, estimateTokens, allowTruncate = false } = {}) {
+    const budget = Math.max(0, Number(tokenBudget) || 0);
+    const estimate = estimateTokens || ((text) => Math.ceil(String(text || "").length / 2));
+    const selected = [];
+    let used = 0;
+    const ordered = [...ranked].sort((left, right) => {
+      const criticalDifference = Number(right.memory.importance >= 0.9) - Number(left.memory.importance >= 0.9);
+      return criticalDifference || right.score - left.score;
+    });
+    for (const entry of ordered) {
+      let memory = entry.memory;
+      let tokens = Math.max(1, estimate(memory.content));
+      const remaining = budget - used;
+      if (tokens > remaining && memory.subtype === "official_recollection") {
+        const firstBreak = memory.content.indexOf("\n\n");
+        if (firstBreak < 0) continue;
+        const header = memory.content.slice(0, firstBreak);
+        const events = memory.content.slice(firstBreak + 2).split(/\n\n(?=\d+年\d+月\d+日：)/);
+        const fitted = [header];
+        for (const event of events) {
+          if (estimate([...fitted, event].join("\n\n")) <= remaining) fitted.push(event);
+        }
+        if (fitted.length < 2) continue;
+        memory = { ...memory, content: fitted.join("\n\n") };
+        tokens = Math.max(1, estimate(memory.content));
+      }
+      if (tokens > remaining && (allowTruncate || memory.importance >= 0.9) && remaining > 0) {
+        // The generated perspective summary puts promises/plans at the END.
+        // Prioritize that section in the recall copy, never mutate the stored body.
+        const marker = "【需要长期记住的事项】";
+        const markerIndex = memory.type === "folder_summary" ? memory.content.indexOf(marker) : -1;
+        const recallContent = markerIndex >= 0
+          ? `${memory.content.slice(markerIndex).trim()}\n\n${memory.content.slice(0, markerIndex).trim()}`
+          : memory.content;
+        let low = 1;
+        let high = recallContent.length;
+        let fitted = "";
+        while (low <= high) {
+          const middle = Math.floor((low + high) / 2);
+          const candidate = `${recallContent.slice(0, middle)}…`;
+          if (estimate(candidate) <= remaining) {
+            fitted = candidate;
+            low = middle + 1;
+          } else {
+            high = middle - 1;
+          }
+        }
+        if (fitted) {
+          memory = { ...memory, content: fitted };
+          tokens = Math.max(1, estimate(fitted));
+        }
+      }
+      if (used + tokens > budget) continue;
+      selected.push({ ...entry, memory, tokens });
+      used += tokens;
+    }
+    return selected;
+  }
+}
+
+module.exports = { MemoryRanker, textFeatures };

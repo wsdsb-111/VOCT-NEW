@@ -2,9 +2,9 @@
 
 日期：2026-10-05。本文记录 V8.14.2 信件 Date Runner 的 App/Mod 发布依赖；这是外部运行依赖合同，不代表 CK3 实机 Gate 已通过。
 
-## V9.0 当前发行版本（2026-10-11）
+## V9.1 当前发行版本（2026-10-11）
 
-项目／UI V9.0，App 包 9.0.0，本机 VOTC Workshop item `3346777360` 的内容 descriptor 与启动器 descriptor 均为 2.0.5。`name="Voices of the Court 2.0"` 保留用于 Mod 身份与依赖兼容。Memory Engine 4.0／协议 3.0／摘要存储 2.5、Official Action 2.0.3 和独立 Three-Mod 1.0.6 保持；版本号不能代替配套桥文件指纹或 Steam 发布证据。[版本对齐记录](current/v9/V9_VERSION_ALIGNMENT.md)为当前入口，下方 V8 表格和检查脚本保留历史快照。
+项目／UI V9.1，App 包 9.1.0，本机 VOTC Workshop item `3346777360` 的内容 descriptor 与启动器 descriptor 保持 2.0.5。`name="Voices of the Court 2.0"` 保留用于 Mod 身份与依赖兼容。Memory Engine 4.0／协议 3.0／摘要存储 2.5、Official Action 2.0.3 和独立 Three-Mod 1.0.6 保持；版本号不能代替配套桥文件指纹或 Steam 发布证据。[V9.1 构建](current/v9/V9_1_SOURCE_BUILD.md)为当前源码／依赖入口，下方 V8 表格和检查脚本保留历史快照。本次未修改游戏或 Workshop 文件。
 
 ## V8.15.2 独立日期桥与信件运行依赖（2026-10-10）
 

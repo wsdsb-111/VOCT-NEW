@@ -1,0 +1,12 @@
+{
+  "name": "votc-build-workspace",
+  "private": true,
+  "version": "9.1.0",
+  "engines": { "node": ">=22" },
+  "scripts": {
+    "build": "node scripts/build-runtime.js",
+    "verify:build": "node scripts/verify-runtime-build.js",
+    "deploy:build": "node scripts/deploy-runtime-build.js",
+    "test": "node scripts/test-release.js"
+  }
+}

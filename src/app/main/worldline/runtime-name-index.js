@@ -1,0 +1,59 @@
+"use strict";
+
+const indexes = new WeakMap();
+const { normalizeGameDate } = require("./character-temporal-facts");
+
+function normalize(value) {
+  return String(value || "").trim().toLocaleLowerCase();
+}
+
+function canonicalDate(value) {
+  return normalizeGameDate(value)?.canonical || null;
+}
+
+function add(index, name, runtimeId) {
+  const key = String(name || "").trim();
+  const id = String(runtimeId || "").trim();
+  if (!key || !id) return;
+  if (!index[key]) index[key] = [];
+  if (!index[key].includes(id)) index[key].push(id);
+}
+
+function buildRuntimeNameIndex(snapshot, { live = null, localize = null } = {}) {
+  const givenNameToRuntimeIds = Object.create(null);
+  const verifiedFullNameToRuntimeIds = Object.create(null);
+  const fullNameProvenanceByRuntime = Object.create(null);
+  for (const [name, ids] of Object.entries(snapshot?.nameToCharacterIds || {})) for (const id of Array.isArray(ids) ? ids : []) add(givenNameToRuntimeIds, name, id);
+  const snapshotDate = canonicalDate(snapshot?.gameDate);
+  const liveDate = canonicalDate(live?.gameDate);
+  const sameScope = snapshotDate && snapshotDate === liveDate && String(snapshot?.playerId || "") === String(live?.playerId || "");
+  if (!sameScope) return { givenNameToRuntimeIds, verifiedFullNameToRuntimeIds, fullNameProvenanceByRuntime };
+  for (const candidate of Array.isArray(live?.characters) ? live.characters : []) {
+    const id = String(candidate?.id || "");
+    const character = snapshot?.characters?.[id];
+    const fullName = String(candidate?.fullName || "").trim();
+    if (!character || !fullName) continue;
+    let givenName = character.firstName;
+    if (normalize(givenName) !== normalize(candidate?.firstName) && typeof localize === "function") {
+      const translated = localize("character", givenName);
+      if (["CONFIRMED", "CONFIRMED_IDENTICAL_SOURCES"].includes(translated?.confidence)) givenName = translated.localizedValue;
+    }
+    if (normalize(givenName) !== normalize(candidate?.firstName)) continue;
+    add(verifiedFullNameToRuntimeIds, fullName, id);
+    fullNameProvenanceByRuntime[id] = { kind: "LIVE_FULL_NAME", gameDate: snapshotDate, playerId: String(snapshot.playerId) };
+  }
+  return { givenNameToRuntimeIds, verifiedFullNameToRuntimeIds, fullNameProvenanceByRuntime };
+}
+
+function getRuntimeNameIndex(snapshot) {
+  if (!snapshot || typeof snapshot !== "object") return buildRuntimeNameIndex(null);
+  if (!indexes.has(snapshot)) indexes.set(snapshot, buildRuntimeNameIndex(snapshot));
+  return indexes.get(snapshot);
+}
+
+function attachRuntimeNameIndex(snapshot, options) {
+  if (!snapshot || typeof snapshot !== "object") return snapshot;
+  return { ...snapshot, indexes: { ...(snapshot.indexes || {}), ...buildRuntimeNameIndex(snapshot, options) } };
+}
+
+module.exports = { attachRuntimeNameIndex, buildRuntimeNameIndex, canonicalDate, getRuntimeNameIndex };

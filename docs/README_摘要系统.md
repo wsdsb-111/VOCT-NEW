@@ -1,6 +1,6 @@
 # 对话摘要与人物记忆：Memory Engine 4.0（3.0 协议、2.5 存储兼容）
 
-当前项目为 V9.0，App 包 9.0.0，VOTC Workshop Mod 2.0.5；本次仅对齐发行版本与界面，人物记忆仍为 Memory Engine 4.0。`engineVersion: 3.0`、摘要 2.5／schemaVersion 2、目录、召回顺序、缓存键与迁移边界保持。详见[版本对齐](current/v9/V9_VERSION_ALIGNMENT.md)；下方保留各阶段的原始版本与验收快照。
+当前项目为 V9.1，App 包 9.1.0，VOTC Workshop Mod 2.0.5；本次仅建立源码与构建，人物记忆仍为 Memory Engine 4.0。`engineVersion: 3.0`、摘要 2.5／schemaVersion 2、目录、召回顺序、缓存键与迁移边界保持。详见[V9.1 验证](current/v9/V9_1_VERIFICATION_REPORT.md)；下方保留各阶段的原始版本与验收快照。
 
 ## V8.15.2 密集年度压缩与失败状态（2026-10-09）
 

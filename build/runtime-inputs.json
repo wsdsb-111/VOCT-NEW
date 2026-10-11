@@ -1,0 +1,1133 @@
+{
+  "schemaVersion": 1,
+  "files": [
+    {
+      "source": "default_userdata/actions/standard/AGENTS.md",
+      "target": "default_userdata/actions/standard/AGENTS.md"
+    },
+    {
+      "source": "default_userdata/actions/standard/z_agreedToTruceWith.js",
+      "target": "default_userdata/actions/standard/z_agreedToTruceWith.js"
+    },
+    {
+      "source": "default_userdata/actions/standard/z_becomeBestFriendsWith.js",
+      "target": "default_userdata/actions/standard/z_becomeBestFriendsWith.js"
+    },
+    {
+      "source": "default_userdata/actions/standard/z_becomeBloodBrothersWith.js",
+      "target": "default_userdata/actions/standard/z_becomeBloodBrothersWith.js"
+    },
+    {
+      "source": "default_userdata/actions/standard/z_becomeFriendsWith.js",
+      "target": "default_userdata/actions/standard/z_becomeFriendsWith.js"
+    },
+    {
+      "source": "default_userdata/actions/standard/z_becomeLoversWith.js",
+      "target": "default_userdata/actions/standard/z_becomeLoversWith.js"
+    },
+    {
+      "source": "default_userdata/actions/standard/z_becomeNemesisWith.js",
+      "target": "default_userdata/actions/standard/z_becomeNemesisWith.js"
+    },
+    {
+      "source": "default_userdata/actions/standard/z_becomeRivalsWith.js",
+      "target": "default_userdata/actions/standard/z_becomeRivalsWith.js"
+    },
+    {
+      "source": "default_userdata/actions/standard/z_becomeSoulmatesWith.js",
+      "target": "default_userdata/actions/standard/z_becomeSoulmatesWith.js"
+    },
+    {
+      "source": "default_userdata/actions/standard/z_becomesTributaryOf.js",
+      "target": "default_userdata/actions/standard/z_becomesTributaryOf.js"
+    },
+    {
+      "source": "default_userdata/actions/standard/z_changeLocation.js",
+      "target": "default_userdata/actions/standard/z_changeLocation.js"
+    },
+    {
+      "source": "default_userdata/actions/standard/z_changeOpinionOf.js",
+      "target": "default_userdata/actions/standard/z_changeOpinionOf.js"
+    },
+    {
+      "source": "default_userdata/actions/standard/z_changesTributaryContract.js",
+      "target": "default_userdata/actions/standard/z_changesTributaryContract.js"
+    },
+    {
+      "source": "default_userdata/actions/standard/z_characterIsKilled.js",
+      "target": "default_userdata/actions/standard/z_characterIsKilled.js"
+    },
+    {
+      "source": "default_userdata/actions/standard/z_convertsToReligionOf.js",
+      "target": "default_userdata/actions/standard/z_convertsToReligionOf.js"
+    },
+    {
+      "source": "default_userdata/actions/standard/z_intercourse.js",
+      "target": "default_userdata/actions/standard/z_intercourse.js"
+    },
+    {
+      "source": "default_userdata/actions/standard/z_isAssignedToCouncilBy.js",
+      "target": "default_userdata/actions/standard/z_isAssignedToCouncilBy.js"
+    },
+    {
+      "source": "default_userdata/actions/standard/z_isAssignedToCourtPositionBy.js",
+      "target": "default_userdata/actions/standard/z_isAssignedToCourtPositionBy.js"
+    },
+    {
+      "source": "default_userdata/actions/standard/z_isEmployedAsKnightBy.js",
+      "target": "default_userdata/actions/standard/z_isEmployedAsKnightBy.js"
+    },
+    {
+      "source": "default_userdata/actions/standard/z_isEmployedBy.js",
+      "target": "default_userdata/actions/standard/z_isEmployedBy.js"
+    },
+    {
+      "source": "default_userdata/actions/standard/z_isFiredFromCouncilOf.js",
+      "target": "default_userdata/actions/standard/z_isFiredFromCouncilOf.js"
+    },
+    {
+      "source": "default_userdata/actions/standard/z_isImprisonedBy.js",
+      "target": "default_userdata/actions/standard/z_isImprisonedBy.js"
+    },
+    {
+      "source": "default_userdata/actions/standard/z_isInjured.js",
+      "target": "default_userdata/actions/standard/z_isInjured.js"
+    },
+    {
+      "source": "default_userdata/actions/standard/z_isUndressed.js",
+      "target": "default_userdata/actions/standard/z_isUndressed.js"
+    },
+    {
+      "source": "default_userdata/actions/standard/z_isVassalizedBy.js",
+      "target": "default_userdata/actions/standard/z_isVassalizedBy.js"
+    },
+    {
+      "source": "default_userdata/actions/standard/z_leavesConversation.js",
+      "target": "default_userdata/actions/standard/z_leavesConversation.js"
+    },
+    {
+      "source": "default_userdata/actions/standard/z_makeAlliance.js",
+      "target": "default_userdata/actions/standard/z_makeAlliance.js"
+    },
+    {
+      "source": "default_userdata/actions/standard/z_noOp.js",
+      "target": "default_userdata/actions/standard/z_noOp.js"
+    },
+    {
+      "source": "default_userdata/actions/standard/z_paysGoldTo.js",
+      "target": "default_userdata/actions/standard/z_paysGoldTo.js"
+    },
+    {
+      "source": "default_userdata/actions/standard/z_playerPaysGoldTo.js",
+      "target": "default_userdata/actions/standard/z_playerPaysGoldTo.js"
+    },
+    {
+      "source": "default_userdata/actions/standard/z_setEmotion.js",
+      "target": "default_userdata/actions/standard/z_setEmotion.js"
+    },
+    {
+      "source": "default_userdata/gamedata_typedefs.js",
+      "target": "default_userdata/gamedata_typedefs.js"
+    },
+    {
+      "source": "default_userdata/prompts/character_description/letter/pListLetter.js",
+      "target": "default_userdata/prompts/character_description/letter/pListLetter.js"
+    },
+    {
+      "source": "default_userdata/prompts/character_description/standard/pListMccTest2_DE.js",
+      "target": "default_userdata/prompts/character_description/standard/pListMccTest2_DE.js"
+    },
+    {
+      "source": "default_userdata/prompts/character_description/standard/pListMccTest2_ES.js",
+      "target": "default_userdata/prompts/character_description/standard/pListMccTest2_ES.js"
+    },
+    {
+      "source": "default_userdata/prompts/character_description/standard/pListMccTest2_FR.js",
+      "target": "default_userdata/prompts/character_description/standard/pListMccTest2_FR.js"
+    },
+    {
+      "source": "default_userdata/prompts/character_description/standard/pListMccTest2_JA.js",
+      "target": "default_userdata/prompts/character_description/standard/pListMccTest2_JA.js"
+    },
+    {
+      "source": "default_userdata/prompts/character_description/standard/pListMccTest2_KO.js",
+      "target": "default_userdata/prompts/character_description/standard/pListMccTest2_KO.js"
+    },
+    {
+      "source": "default_userdata/prompts/character_description/standard/pListMccTest2_PL.js",
+      "target": "default_userdata/prompts/character_description/standard/pListMccTest2_PL.js"
+    },
+    {
+      "source": "default_userdata/prompts/character_description/standard/pListMccTest2_RU.js",
+      "target": "default_userdata/prompts/character_description/standard/pListMccTest2_RU.js"
+    },
+    {
+      "source": "default_userdata/prompts/character_description/standard/pListMccTest2_ZH.js",
+      "target": "default_userdata/prompts/character_description/standard/pListMccTest2_ZH.js"
+    },
+    {
+      "source": "default_userdata/prompts/character_description/standard/pListMccTest2.js",
+      "target": "default_userdata/prompts/character_description/standard/pListMccTest2.js"
+    },
+    {
+      "source": "default_userdata/prompts/character_description/standard/pListMccTest2JE_DE.js",
+      "target": "default_userdata/prompts/character_description/standard/pListMccTest2JE_DE.js"
+    },
+    {
+      "source": "default_userdata/prompts/character_description/standard/pListMccTest2JE_ES.js",
+      "target": "default_userdata/prompts/character_description/standard/pListMccTest2JE_ES.js"
+    },
+    {
+      "source": "default_userdata/prompts/character_description/standard/pListMccTest2JE_FR.js",
+      "target": "default_userdata/prompts/character_description/standard/pListMccTest2JE_FR.js"
+    },
+    {
+      "source": "default_userdata/prompts/character_description/standard/pListMccTest2JE_JA.js",
+      "target": "default_userdata/prompts/character_description/standard/pListMccTest2JE_JA.js"
+    },
+    {
+      "source": "default_userdata/prompts/character_description/standard/pListMccTest2JE_KO.js",
+      "target": "default_userdata/prompts/character_description/standard/pListMccTest2JE_KO.js"
+    },
+    {
+      "source": "default_userdata/prompts/character_description/standard/pListMccTest2JE_PL.js",
+      "target": "default_userdata/prompts/character_description/standard/pListMccTest2JE_PL.js"
+    },
+    {
+      "source": "default_userdata/prompts/character_description/standard/pListMccTest2JE_RU.js",
+      "target": "default_userdata/prompts/character_description/standard/pListMccTest2JE_RU.js"
+    },
+    {
+      "source": "default_userdata/prompts/character_description/standard/pListMccTest2JE_ZH.js",
+      "target": "default_userdata/prompts/character_description/standard/pListMccTest2JE_ZH.js"
+    },
+    {
+      "source": "default_userdata/prompts/character_description/standard/pListMccTest2JE.js",
+      "target": "default_userdata/prompts/character_description/standard/pListMccTest2JE.js"
+    },
+    {
+      "source": "default_userdata/prompts/character_description/standard/pListSimple.js",
+      "target": "default_userdata/prompts/character_description/standard/pListSimple.js"
+    },
+    {
+      "source": "default_userdata/prompts/example_messages/standard/empty.js",
+      "target": "default_userdata/prompts/example_messages/standard/empty.js"
+    },
+    {
+      "source": "default_userdata/prompts/example_messages/standard/mccAliChat_DE.js",
+      "target": "default_userdata/prompts/example_messages/standard/mccAliChat_DE.js"
+    },
+    {
+      "source": "default_userdata/prompts/example_messages/standard/mccAliChat_ES.js",
+      "target": "default_userdata/prompts/example_messages/standard/mccAliChat_ES.js"
+    },
+    {
+      "source": "default_userdata/prompts/example_messages/standard/mccAliChat_FR.js",
+      "target": "default_userdata/prompts/example_messages/standard/mccAliChat_FR.js"
+    },
+    {
+      "source": "default_userdata/prompts/example_messages/standard/mccAliChat_JA.js",
+      "target": "default_userdata/prompts/example_messages/standard/mccAliChat_JA.js"
+    },
+    {
+      "source": "default_userdata/prompts/example_messages/standard/mccAliChat_KO.js",
+      "target": "default_userdata/prompts/example_messages/standard/mccAliChat_KO.js"
+    },
+    {
+      "source": "default_userdata/prompts/example_messages/standard/mccAliChat_PL.js",
+      "target": "default_userdata/prompts/example_messages/standard/mccAliChat_PL.js"
+    },
+    {
+      "source": "default_userdata/prompts/example_messages/standard/mccAliChat_RU.js",
+      "target": "default_userdata/prompts/example_messages/standard/mccAliChat_RU.js"
+    },
+    {
+      "source": "default_userdata/prompts/example_messages/standard/mccAliChat_ZH.js",
+      "target": "default_userdata/prompts/example_messages/standard/mccAliChat_ZH.js"
+    },
+    {
+      "source": "default_userdata/prompts/example_messages/standard/mccAliChat.js",
+      "target": "default_userdata/prompts/example_messages/standard/mccAliChat.js"
+    },
+    {
+      "source": "default_userdata/prompts/helpers/default.js",
+      "target": "default_userdata/prompts/helpers/default.js"
+    },
+    {
+      "source": "default_userdata/prompts/helpers/mainAi.js",
+      "target": "default_userdata/prompts/helpers/mainAi.js"
+    },
+    {
+      "source": "default_userdata/prompts/system/default_with_memory_guide.hbs",
+      "target": "default_userdata/prompts/system/default_with_memory_guide.hbs"
+    },
+    {
+      "source": "default_userdata/prompts/system/default.hbs",
+      "target": "default_userdata/prompts/system/default.hbs"
+    },
+    {
+      "source": "default_userdata/prompts/system/letter.hbs",
+      "target": "default_userdata/prompts/system/letter.hbs"
+    },
+    {
+      "source": "main/actions/action-command-readback.js",
+      "target": "out/main/actions/action-command-readback.js"
+    },
+    {
+      "source": "main/actions/action-confirmation.js",
+      "target": "out/main/actions/action-confirmation.js"
+    },
+    {
+      "source": "main/actions/action-effect-writer.js",
+      "target": "out/main/actions/action-effect-writer.js"
+    },
+    {
+      "source": "main/actions/action-engine.js",
+      "target": "out/main/actions/action-engine.js"
+    },
+    {
+      "source": "main/actions/action-prompt-builder.js",
+      "target": "out/main/actions/action-prompt-builder.js"
+    },
+    {
+      "source": "main/actions/action-prompt-compatibility-overlay.js",
+      "target": "out/main/actions/action-prompt-compatibility-overlay.js"
+    },
+    {
+      "source": "main/actions/action-registry.js",
+      "target": "out/main/actions/action-registry.js"
+    },
+    {
+      "source": "main/actions/action-sandbox.js",
+      "target": "out/main/actions/action-sandbox.js"
+    },
+    {
+      "source": "main/actions/critical-action-recall-diagnostics.js",
+      "target": "out/main/actions/critical-action-recall-diagnostics.js"
+    },
+    {
+      "source": "main/actions/i18n-utils.js",
+      "target": "out/main/actions/i18n-utils.js"
+    },
+    {
+      "source": "main/actions/index.js",
+      "target": "out/main/actions/index.js"
+    },
+    {
+      "source": "main/actions/response-healing.js",
+      "target": "out/main/actions/response-healing.js"
+    },
+    {
+      "source": "main/actions/run-command-recovery.js",
+      "target": "out/main/actions/run-command-recovery.js"
+    },
+    {
+      "source": "main/actions/run-file-manager.js",
+      "target": "out/main/actions/run-file-manager.js"
+    },
+    {
+      "source": "main/actions/schema.js",
+      "target": "out/main/actions/schema.js"
+    },
+    {
+      "source": "main/actions/types.js",
+      "target": "out/main/actions/types.js"
+    },
+    {
+      "source": "main/AGENTS.md",
+      "target": "out/main/AGENTS.md"
+    },
+    {
+      "source": "main/analytics/cache-usage-reconciliation.js",
+      "target": "out/main/analytics/cache-usage-reconciliation.js"
+    },
+    {
+      "source": "main/analytics/provider-diagnostics.js",
+      "target": "out/main/analytics/provider-diagnostics.js"
+    },
+    {
+      "source": "main/analytics/real-request-diff.js",
+      "target": "out/main/analytics/real-request-diff.js"
+    },
+    {
+      "source": "main/analytics/usage-analytics.js",
+      "target": "out/main/analytics/usage-analytics.js"
+    },
+    {
+      "source": "main/app/app-updater.js",
+      "target": "out/main/app/app-updater.js"
+    },
+    {
+      "source": "main/app/focus-monitor.js",
+      "target": "out/main/app/focus-monitor.js"
+    },
+    {
+      "source": "main/chunks/icon-BljXrxwL.ico",
+      "target": "out/main/chunks/icon-BljXrxwL.ico"
+    },
+    {
+      "source": "main/config/paths.js",
+      "target": "out/main/config/paths.js"
+    },
+    {
+      "source": "main/config/settings-repository.js",
+      "target": "out/main/config/settings-repository.js"
+    },
+    {
+      "source": "main/conversation/conversation-manager.js",
+      "target": "out/main/conversation/conversation-manager.js"
+    },
+    {
+      "source": "main/conversation/conversation-runtime.js",
+      "target": "out/main/conversation/conversation-runtime.js"
+    },
+    {
+      "source": "main/conversation/conversation-turn-manager.js",
+      "target": "out/main/conversation/conversation-turn-manager.js"
+    },
+    {
+      "source": "main/conversation/conversation.js",
+      "target": "out/main/conversation/conversation.js"
+    },
+    {
+      "source": "main/conversation/generation-manager.js",
+      "target": "out/main/conversation/generation-manager.js"
+    },
+    {
+      "source": "main/conversation/participant-lifecycle.js",
+      "target": "out/main/conversation/participant-lifecycle.js"
+    },
+    {
+      "source": "main/conversation/reference-context.js",
+      "target": "out/main/conversation/reference-context.js"
+    },
+    {
+      "source": "main/game-data/character.js",
+      "target": "out/main/game-data/character.js"
+    },
+    {
+      "source": "main/game-data/game-data.js",
+      "target": "out/main/game-data/game-data.js"
+    },
+    {
+      "source": "main/game-data/legacy-historical-reference.js",
+      "target": "out/main/game-data/legacy-historical-reference.js"
+    },
+    {
+      "source": "main/game-data/log-parser.js",
+      "target": "out/main/game-data/log-parser.js"
+    },
+    {
+      "source": "main/game-data/relationship-resolver.js",
+      "target": "out/main/game-data/relationship-resolver.js"
+    },
+    {
+      "source": "main/historical-system/campaign-identity.js",
+      "target": "out/main/historical-system/campaign-identity.js"
+    },
+    {
+      "source": "main/historical-system/compatibility-adapter.js",
+      "target": "out/main/historical-system/compatibility-adapter.js"
+    },
+    {
+      "source": "main/historical-system/dynamic-history-service.js",
+      "target": "out/main/historical-system/dynamic-history-service.js"
+    },
+    {
+      "source": "main/historical-system/historical-baseline.js",
+      "target": "out/main/historical-system/historical-baseline.js"
+    },
+    {
+      "source": "main/historical-system/historical-data/events.js",
+      "target": "out/main/historical-system/historical-data/events.js"
+    },
+    {
+      "source": "main/historical-system/historical-data/facts.js",
+      "target": "out/main/historical-system/historical-data/facts.js"
+    },
+    {
+      "source": "main/historical-system/historical-data/figure-matching.js",
+      "target": "out/main/historical-system/historical-data/figure-matching.js"
+    },
+    {
+      "source": "main/historical-system/historical-data/figures.js",
+      "target": "out/main/historical-system/historical-data/figures.js"
+    },
+    {
+      "source": "main/historical-system/historical-data/periods.js",
+      "target": "out/main/historical-system/historical-data/periods.js"
+    },
+    {
+      "source": "main/historical-system/historical-data/rulers.js",
+      "target": "out/main/historical-system/historical-data/rulers.js"
+    },
+    {
+      "source": "main/historical-system/README.md",
+      "target": "out/main/historical-system/README.md"
+    },
+    {
+      "source": "main/historical-system/schema.js",
+      "target": "out/main/historical-system/schema.js"
+    },
+    {
+      "source": "main/historical-system/temporal-knowledge-gate.js",
+      "target": "out/main/historical-system/temporal-knowledge-gate.js"
+    },
+    {
+      "source": "main/historical-system/worldline-store.js",
+      "target": "out/main/historical-system/worldline-store.js"
+    },
+    {
+      "source": "main/ipc/register-ipc.js",
+      "target": "out/main/ipc/register-ipc.js"
+    },
+    {
+      "source": "main/letters/letter-date-session-scanner.js",
+      "target": "out/main/letters/letter-date-session-scanner.js"
+    },
+    {
+      "source": "main/letters/letter-effect-transport.js",
+      "target": "out/main/letters/letter-effect-transport.js"
+    },
+    {
+      "source": "main/letters/letter-log-reader.js",
+      "target": "out/main/letters/letter-log-reader.js"
+    },
+    {
+      "source": "main/letters/letter-manager.js",
+      "target": "out/main/letters/letter-manager.js"
+    },
+    {
+      "source": "main/letters/letter-receipt-recovery.js",
+      "target": "out/main/letters/letter-receipt-recovery.js"
+    },
+    {
+      "source": "main/main.js",
+      "target": "out/main/main.js"
+    },
+    {
+      "source": "main/memory-system/character-identity.js",
+      "target": "out/main/memory-system/character-identity.js"
+    },
+    {
+      "source": "main/memory-system/ck3-memory-text-renderer.js",
+      "target": "out/main/memory-system/ck3-memory-text-renderer.js"
+    },
+    {
+      "source": "main/memory-system/ck3-official-memory-reader.js",
+      "target": "out/main/memory-system/ck3-official-memory-reader.js"
+    },
+    {
+      "source": "main/memory-system/finalization-coordinator.js",
+      "target": "out/main/memory-system/finalization-coordinator.js"
+    },
+    {
+      "source": "main/memory-system/finalization-visibility.js",
+      "target": "out/main/memory-system/finalization-visibility.js"
+    },
+    {
+      "source": "main/memory-system/fuzzy-temporal-resolver.js",
+      "target": "out/main/memory-system/fuzzy-temporal-resolver.js"
+    },
+    {
+      "source": "main/memory-system/incident-diagnostics.js",
+      "target": "out/main/memory-system/incident-diagnostics.js"
+    },
+    {
+      "source": "main/memory-system/index.js",
+      "target": "out/main/memory-system/index.js"
+    },
+    {
+      "source": "main/memory-system/knowledge-service.js",
+      "target": "out/main/memory-system/knowledge-service.js"
+    },
+    {
+      "source": "main/memory-system/letter-memory-finalization.js",
+      "target": "out/main/memory-system/letter-memory-finalization.js"
+    },
+    {
+      "source": "main/memory-system/memory-consolidator.js",
+      "target": "out/main/memory-system/memory-consolidator.js"
+    },
+    {
+      "source": "main/memory-system/memory-engine.js",
+      "target": "out/main/memory-system/memory-engine.js"
+    },
+    {
+      "source": "main/memory-system/memory-extractor.js",
+      "target": "out/main/memory-system/memory-extractor.js"
+    },
+    {
+      "source": "main/memory-system/memory-ranker.js",
+      "target": "out/main/memory-system/memory-ranker.js"
+    },
+    {
+      "source": "main/memory-system/memory-schema.js",
+      "target": "out/main/memory-system/memory-schema.js"
+    },
+    {
+      "source": "main/memory-system/memory-store.js",
+      "target": "out/main/memory-system/memory-store.js"
+    },
+    {
+      "source": "main/memory-system/memory-trace.js",
+      "target": "out/main/memory-system/memory-trace.js"
+    },
+    {
+      "source": "main/memory-system/memory-types.js",
+      "target": "out/main/memory-system/memory-types.js"
+    },
+    {
+      "source": "main/memory-system/memory4-contract.js",
+      "target": "out/main/memory-system/memory4-contract.js"
+    },
+    {
+      "source": "main/memory-system/memory4-coordinator.js",
+      "target": "out/main/memory-system/memory4-coordinator.js"
+    },
+    {
+      "source": "main/memory-system/memory4-derived.js",
+      "target": "out/main/memory-system/memory4-derived.js"
+    },
+    {
+      "source": "main/memory-system/memory4-disclosure.js",
+      "target": "out/main/memory-system/memory4-disclosure.js"
+    },
+    {
+      "source": "main/memory-system/memory4-entity-context.js",
+      "target": "out/main/memory-system/memory4-entity-context.js"
+    },
+    {
+      "source": "main/memory-system/memory4-forget.js",
+      "target": "out/main/memory-system/memory4-forget.js"
+    },
+    {
+      "source": "main/memory-system/memory4-legacy-bridge.js",
+      "target": "out/main/memory-system/memory4-legacy-bridge.js"
+    },
+    {
+      "source": "main/memory-system/memory4-orphan-audit.js",
+      "target": "out/main/memory-system/memory4-orphan-audit.js"
+    },
+    {
+      "source": "main/memory-system/memory4-profile.js",
+      "target": "out/main/memory-system/memory4-profile.js"
+    },
+    {
+      "source": "main/memory-system/memory4-recall-planner.js",
+      "target": "out/main/memory-system/memory4-recall-planner.js"
+    },
+    {
+      "source": "main/memory-system/memory4-relationship-readback.js",
+      "target": "out/main/memory-system/memory4-relationship-readback.js"
+    },
+    {
+      "source": "main/memory-system/memory4-store.js",
+      "target": "out/main/memory-system/memory4-store.js"
+    },
+    {
+      "source": "main/memory-system/memory4-visibility.js",
+      "target": "out/main/memory-system/memory4-visibility.js"
+    },
+    {
+      "source": "main/memory-system/mention-tracker.js",
+      "target": "out/main/memory-system/mention-tracker.js"
+    },
+    {
+      "source": "main/memory-system/official-recollection-provider.js",
+      "target": "out/main/memory-system/official-recollection-provider.js"
+    },
+    {
+      "source": "main/memory-system/perspective-projector.js",
+      "target": "out/main/memory-system/perspective-projector.js"
+    },
+    {
+      "source": "main/memory-system/rolling-summary-manager.js",
+      "target": "out/main/memory-system/rolling-summary-manager.js"
+    },
+    {
+      "source": "main/memory-system/summary-budget-planner.js",
+      "target": "out/main/memory-system/summary-budget-planner.js"
+    },
+    {
+      "source": "main/memory-system/summary-catalog.js",
+      "target": "out/main/memory-system/summary-catalog.js"
+    },
+    {
+      "source": "main/memory-system/summary-date-index.js",
+      "target": "out/main/memory-system/summary-date-index.js"
+    },
+    {
+      "source": "main/memory-system/summary-folder-verifier.js",
+      "target": "out/main/memory-system/summary-folder-verifier.js"
+    },
+    {
+      "source": "main/memory-system/temporal-anchor-extractor.js",
+      "target": "out/main/memory-system/temporal-anchor-extractor.js"
+    },
+    {
+      "source": "main/memory-system/third-party-evidence.js",
+      "target": "out/main/memory-system/third-party-evidence.js"
+    },
+    {
+      "source": "main/memory-system/turn-recall.js",
+      "target": "out/main/memory-system/turn-recall.js"
+    },
+    {
+      "source": "main/prompts/character-profile-split.js",
+      "target": "out/main/prompts/character-profile-split.js"
+    },
+    {
+      "source": "main/prompts/character-profile-v2.js",
+      "target": "out/main/prompts/character-profile-v2.js"
+    },
+    {
+      "source": "main/prompts/letter-prompt-builder.js",
+      "target": "out/main/prompts/letter-prompt-builder.js"
+    },
+    {
+      "source": "main/prompts/prompt-builder.js",
+      "target": "out/main/prompts/prompt-builder.js"
+    },
+    {
+      "source": "main/prompts/prompt-config-manager.js",
+      "target": "out/main/prompts/prompt-config-manager.js"
+    },
+    {
+      "source": "main/prompts/prompt-script-loader.js",
+      "target": "out/main/prompts/prompt-script-loader.js"
+    },
+    {
+      "source": "main/prompts/prompt-script-sandbox.js",
+      "target": "out/main/prompts/prompt-script-sandbox.js"
+    },
+    {
+      "source": "main/prompts/provider-prompt-adapter.js",
+      "target": "out/main/prompts/provider-prompt-adapter.js"
+    },
+    {
+      "source": "main/prompts/template-engine.js",
+      "target": "out/main/prompts/template-engine.js"
+    },
+    {
+      "source": "main/prompts/trait-profile-selector.js",
+      "target": "out/main/prompts/trait-profile-selector.js"
+    },
+    {
+      "source": "main/prompts/trait-visibility-policy.js",
+      "target": "out/main/prompts/trait-visibility-policy.js"
+    },
+    {
+      "source": "main/provider-service.js",
+      "target": "out/main/provider-service.js"
+    },
+    {
+      "source": "main/providers/generation-outcome.js",
+      "target": "out/main/providers/generation-outcome.js"
+    },
+    {
+      "source": "main/providers/index.js",
+      "target": "out/main/providers/index.js"
+    },
+    {
+      "source": "main/providers/request-budget.js",
+      "target": "out/main/providers/request-budget.js"
+    },
+    {
+      "source": "main/providers/usage-normalization.js",
+      "target": "out/main/providers/usage-normalization.js"
+    },
+    {
+      "source": "main/runtime/startup-performance-trace.js",
+      "target": "out/main/runtime/startup-performance-trace.js"
+    },
+    {
+      "source": "main/script-sandbox.js",
+      "target": "out/main/script-sandbox.js"
+    },
+    {
+      "source": "main/secure-provider-secrets.js",
+      "target": "out/main/secure-provider-secrets.js"
+    },
+    {
+      "source": "main/summaries/summaries-manager.js",
+      "target": "out/main/summaries/summaries-manager.js"
+    },
+    {
+      "source": "main/token-estimator.js",
+      "target": "out/main/token-estimator.js"
+    },
+    {
+      "source": "main/usage-analytics-retention.js",
+      "target": "out/main/usage-analytics-retention.js"
+    },
+    {
+      "source": "main/version.js",
+      "target": "out/main/version.js"
+    },
+    {
+      "source": "main/window-manager.js",
+      "target": "out/main/window-manager.js"
+    },
+    {
+      "source": "main/worldline/anchored-relation-resolver.js",
+      "target": "out/main/worldline/anchored-relation-resolver.js"
+    },
+    {
+      "source": "main/worldline/branch-registry.js",
+      "target": "out/main/worldline/branch-registry.js"
+    },
+    {
+      "source": "main/worldline/canon-contract.js",
+      "target": "out/main/worldline/canon-contract.js"
+    },
+    {
+      "source": "main/worldline/canon-service.js",
+      "target": "out/main/worldline/canon-service.js"
+    },
+    {
+      "source": "main/worldline/canonical-spouse-record.js",
+      "target": "out/main/worldline/canonical-spouse-record.js"
+    },
+    {
+      "source": "main/worldline/character-age-service.js",
+      "target": "out/main/worldline/character-age-service.js"
+    },
+    {
+      "source": "main/worldline/character-demographic-normalizer.js",
+      "target": "out/main/worldline/character-demographic-normalizer.js"
+    },
+    {
+      "source": "main/worldline/character-family-facts.js",
+      "target": "out/main/worldline/character-family-facts.js"
+    },
+    {
+      "source": "main/worldline/character-kinship-graph.js",
+      "target": "out/main/worldline/character-kinship-graph.js"
+    },
+    {
+      "source": "main/worldline/character-knowledge-policy.js",
+      "target": "out/main/worldline/character-knowledge-policy.js"
+    },
+    {
+      "source": "main/worldline/character-temporal-facts.js",
+      "target": "out/main/worldline/character-temporal-facts.js"
+    },
+    {
+      "source": "main/worldline/checkpoint-freshness.js",
+      "target": "out/main/worldline/checkpoint-freshness.js"
+    },
+    {
+      "source": "main/worldline/current-truth-adapter.js",
+      "target": "out/main/worldline/current-truth-adapter.js"
+    },
+    {
+      "source": "main/worldline/direct-observation-producer.js",
+      "target": "out/main/worldline/direct-observation-producer.js"
+    },
+    {
+      "source": "main/worldline/family-entity-fact-bundle.js",
+      "target": "out/main/worldline/family-entity-fact-bundle.js"
+    },
+    {
+      "source": "main/worldline/frozen-coverage-manifest.js",
+      "target": "out/main/worldline/frozen-coverage-manifest.js"
+    },
+    {
+      "source": "main/worldline/game-state-adapter.js",
+      "target": "out/main/worldline/game-state-adapter.js"
+    },
+    {
+      "source": "main/worldline/historical-alias-catalog.js",
+      "target": "out/main/worldline/historical-alias-catalog.js"
+    },
+    {
+      "source": "main/worldline/historical-checkpoint-index.js",
+      "target": "out/main/worldline/historical-checkpoint-index.js"
+    },
+    {
+      "source": "main/worldline/historical-definition-index.js",
+      "target": "out/main/worldline/historical-definition-index.js"
+    },
+    {
+      "source": "main/worldline/historical-entity-binding.js",
+      "target": "out/main/worldline/historical-entity-binding.js"
+    },
+    {
+      "source": "main/worldline/historical-identity-resolver.js",
+      "target": "out/main/worldline/historical-identity-resolver.js"
+    },
+    {
+      "source": "main/worldline/historical-name-scanner.js",
+      "target": "out/main/worldline/historical-name-scanner.js"
+    },
+    {
+      "source": "main/worldline/historical-prompt-context.js",
+      "target": "out/main/worldline/historical-prompt-context.js"
+    },
+    {
+      "source": "main/worldline/historical-query-projection.js",
+      "target": "out/main/worldline/historical-query-projection.js"
+    },
+    {
+      "source": "main/worldline/historical-retrieval-worker.js",
+      "target": "out/main/worldline/historical-retrieval-worker.js"
+    },
+    {
+      "source": "main/worldline/historical-retriever.js",
+      "target": "out/main/worldline/historical-retriever.js"
+    },
+    {
+      "source": "main/worldline/historical-scope-resolver.js",
+      "target": "out/main/worldline/historical-scope-resolver.js"
+    },
+    {
+      "source": "main/worldline/historical-source-probe.js",
+      "target": "out/main/worldline/historical-source-probe.js"
+    },
+    {
+      "source": "main/worldline/kinship-graph-cache.js",
+      "target": "out/main/worldline/kinship-graph-cache.js"
+    },
+    {
+      "source": "main/worldline/kinship-integrity-scan.js",
+      "target": "out/main/worldline/kinship-integrity-scan.js"
+    },
+    {
+      "source": "main/worldline/kinship-label-resolver.js",
+      "target": "out/main/worldline/kinship-label-resolver.js"
+    },
+    {
+      "source": "main/worldline/knowledge-scope-resolver.js",
+      "target": "out/main/worldline/knowledge-scope-resolver.js"
+    },
+    {
+      "source": "main/worldline/legacy-family-presentation.js",
+      "target": "out/main/worldline/legacy-family-presentation.js"
+    },
+    {
+      "source": "main/worldline/localization-resolver.js",
+      "target": "out/main/worldline/localization-resolver.js"
+    },
+    {
+      "source": "main/worldline/localization-worker-client.js",
+      "target": "out/main/worldline/localization-worker-client.js"
+    },
+    {
+      "source": "main/worldline/parser-worker.js",
+      "target": "out/main/worldline/parser-worker.js"
+    },
+    {
+      "source": "main/worldline/personal-memory-policy-adapter.js",
+      "target": "out/main/worldline/personal-memory-policy-adapter.js"
+    },
+    {
+      "source": "main/worldline/political-context.js",
+      "target": "out/main/worldline/political-context.js"
+    },
+    {
+      "source": "main/worldline/relation-anchor-resolver.js",
+      "target": "out/main/worldline/relation-anchor-resolver.js"
+    },
+    {
+      "source": "main/worldline/relation-intent-parser.js",
+      "target": "out/main/worldline/relation-intent-parser.js"
+    },
+    {
+      "source": "main/worldline/relation-mention-resolver.js",
+      "target": "out/main/worldline/relation-mention-resolver.js"
+    },
+    {
+      "source": "main/worldline/relationship-current-truth.js",
+      "target": "out/main/worldline/relationship-current-truth.js"
+    },
+    {
+      "source": "main/worldline/runtime-definition-index.js",
+      "target": "out/main/worldline/runtime-definition-index.js"
+    },
+    {
+      "source": "main/worldline/runtime-name-index.js",
+      "target": "out/main/worldline/runtime-name-index.js"
+    },
+    {
+      "source": "main/worldline/save-container.js",
+      "target": "out/main/worldline/save-container.js"
+    },
+    {
+      "source": "main/worldline/self-social-truth.js",
+      "target": "out/main/worldline/self-social-truth.js"
+    },
+    {
+      "source": "main/worldline/shared-candidate-pool.js",
+      "target": "out/main/worldline/shared-candidate-pool.js"
+    },
+    {
+      "source": "main/worldline/shared-query-analyzer.js",
+      "target": "out/main/worldline/shared-query-analyzer.js"
+    },
+    {
+      "source": "main/worldline/subjective-prompt-context.js",
+      "target": "out/main/worldline/subjective-prompt-context.js"
+    },
+    {
+      "source": "main/worldline/subjective-world-builder.js",
+      "target": "out/main/worldline/subjective-world-builder.js"
+    },
+    {
+      "source": "main/worldline/supplemental-retriever.js",
+      "target": "out/main/worldline/supplemental-retriever.js"
+    },
+    {
+      "source": "main/worldline/supplemental-store.js",
+      "target": "out/main/worldline/supplemental-store.js"
+    },
+    {
+      "source": "main/worldline/supplemental-worker.js",
+      "target": "out/main/worldline/supplemental-worker.js"
+    },
+    {
+      "source": "main/worldline/temporal-archive-diagnostics.js",
+      "target": "out/main/worldline/temporal-archive-diagnostics.js"
+    },
+    {
+      "source": "main/worldline/temporal-archive-store.js",
+      "target": "out/main/worldline/temporal-archive-store.js"
+    },
+    {
+      "source": "main/worldline/temporal-archive-worker.js",
+      "target": "out/main/worldline/temporal-archive-worker.js"
+    },
+    {
+      "source": "main/worldline/war-facts.js",
+      "target": "out/main/worldline/war-facts.js"
+    },
+    {
+      "source": "main/worldline/world-knowledge-classifier.js",
+      "target": "out/main/worldline/world-knowledge-classifier.js"
+    },
+    {
+      "source": "main/worldline/world-presentation.js",
+      "target": "out/main/worldline/world-presentation.js"
+    },
+    {
+      "source": "main/worldline/world-query-planner.js",
+      "target": "out/main/worldline/world-query-planner.js"
+    },
+    {
+      "source": "main/worldline/world-ranker.js",
+      "target": "out/main/worldline/world-ranker.js"
+    },
+    {
+      "source": "main/worldline/world-retriever.js",
+      "target": "out/main/worldline/world-retriever.js"
+    },
+    {
+      "source": "main/worldline/world-summary.js",
+      "target": "out/main/worldline/world-summary.js"
+    },
+    {
+      "source": "main/worldline/worldline-context-budget.js",
+      "target": "out/main/worldline/worldline-context-budget.js"
+    },
+    {
+      "source": "main/worldline/worldline-service.js",
+      "target": "out/main/worldline/worldline-service.js"
+    },
+    {
+      "source": "preload/preload.js",
+      "target": "out/preload/preload.js"
+    },
+    {
+      "source": "renderer/assets/Alert-FVm_0HKZ.png",
+      "target": "out/renderer/assets/Alert-FVm_0HKZ.png"
+    },
+    {
+      "source": "renderer/assets/background_area_light-Bpu6TAku.png",
+      "target": "out/renderer/assets/background_area_light-Bpu6TAku.png"
+    },
+    {
+      "source": "renderer/assets/background-ink-v1.png",
+      "target": "out/renderer/assets/background-ink-v1.png"
+    },
+    {
+      "source": "renderer/assets/background-knight-v1.png",
+      "target": "out/renderer/assets/background-knight-v1.png"
+    },
+    {
+      "source": "renderer/assets/background-parchment-v1.png",
+      "target": "out/renderer/assets/background-parchment-v1.png"
+    },
+    {
+      "source": "renderer/assets/button-BbNez-YQ.png",
+      "target": "out/renderer/assets/button-BbNez-YQ.png"
+    },
+    {
+      "source": "renderer/assets/cursor-DOS5RQ7t.png",
+      "target": "out/renderer/assets/cursor-DOS5RQ7t.png"
+    },
+    {
+      "source": "renderer/assets/GitanLatin-Regular-C_7d6E69.otf",
+      "target": "out/renderer/assets/GitanLatin-Regular-C_7d6E69.otf"
+    },
+    {
+      "source": "renderer/assets/index-Dn3qWlAB.js",
+      "target": "out/renderer/assets/index-Dn3qWlAB.js"
+    },
+    {
+      "source": "renderer/assets/index-WtJH_nua.css",
+      "target": "out/renderer/assets/index-WtJH_nua.css"
+    },
+    {
+      "source": "renderer/assets/theme-ink-v1.png",
+      "target": "out/renderer/assets/theme-ink-v1.png"
+    },
+    {
+      "source": "renderer/assets/theme-knight-v1.png",
+      "target": "out/renderer/assets/theme-knight-v1.png"
+    },
+    {
+      "source": "renderer/assets/theme-parchment-v1.png",
+      "target": "out/renderer/assets/theme-parchment-v1.png"
+    },
+    {
+      "source": "renderer/assets/tooltip2-RduFwM5h.png",
+      "target": "out/renderer/assets/tooltip2-RduFwM5h.png"
+    },
+    {
+      "source": "renderer/index.html",
+      "target": "out/renderer/index.html"
+    },
+    {
+      "source": "renderer/memory4-manager.css",
+      "target": "out/renderer/memory4-manager.css"
+    },
+    {
+      "source": "renderer/memory4-manager.js",
+      "target": "out/renderer/memory4-manager.js"
+    },
+    {
+      "source": "renderer/startup-performance-observer.js",
+      "target": "out/renderer/startup-performance-observer.js"
+    },
+    {
+      "source": "renderer/summary-date-order.js",
+      "target": "out/renderer/summary-date-order.js"
+    },
+    {
+      "source": "renderer/ui-comfort.css",
+      "target": "out/renderer/ui-comfort.css"
+    },
+    {
+      "source": "renderer/world-memory-editor.js",
+      "target": "out/renderer/world-memory-editor.js"
+    },
+    {
+      "source": "renderer/worldline-player-presentation.js",
+      "target": "out/renderer/worldline-player-presentation.js"
+    },
+    {
+      "source": "package.json",
+      "target": "package.json"
+    }
+  ]
+}

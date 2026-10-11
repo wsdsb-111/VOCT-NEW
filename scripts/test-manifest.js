@@ -77,6 +77,10 @@ const archivedChecks = [
 ];
 
 const releaseChecks = [
+  { group: "v9.1-source-build", script: "test-v9.1-source-build.js" },
+  { group: "v9.1-runtime-dependencies", script: "test-v9.1-runtime-dependencies.js" },
+  { group: "v9.1-independent-build-qa", script: "test-v9.1-independent-qa.js" },
+  { group: "v9.1-clean-source-build", script: "test-v9.1-clean-source-build.js" },
   { group: "v9.0-performance-trace", script: "test-v9.0-performance-trace.js" },
   { group: "v9.0-independent-diagnostics-qa", script: "test-v9.0-independent-qa.js" },
   { group: "v8.15.2-letter-receipt-startup-recovery", script: "test-v8.15.2-letter-receipt-startup-recovery.js" },
