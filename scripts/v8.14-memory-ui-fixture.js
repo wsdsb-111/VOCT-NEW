@@ -4,6 +4,7 @@ const fs = require("fs");
 const path = require("path");
 const { MemoryEngine } = require("../resources/app/out/main/memory-system/memory-engine");
 const { projectVisibleTranscript } = require("../resources/app/out/main/memory-system/memory4-visibility");
+const { seedDerivedHistory } = require("./fixtures/v923-derived-history");
 
 async function createMemoryUiFixture(profile) {
   const summariesDir = path.join(profile, "votc_data", "conversation_summaries");
@@ -40,7 +41,7 @@ async function createMemoryUiFixture(profile) {
   let requests = 0;
   engine.memory4.configureDerived({ isCampaignCurrent: token => token === scope.campaignToken,
     requestCompression: async () => { requests++; throw new Error("fixture_must_not_call_provider"); }, estimateTokens: text => Math.ceil(text.length / 2) });
-  await engine.memory4.derived.rebuild(scope, { kind: "all", overwriteManual: false });
+  seedDerivedHistory(engine, scope);
   const views = engine.memory4.derived.list(scope);
   const year = views.years[0];
   engine.memory4.derived.updateYear(scope, { eventYear: year.eventYear, itemId: year.items[0].itemId,

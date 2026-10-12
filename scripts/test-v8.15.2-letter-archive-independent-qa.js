@@ -375,12 +375,14 @@ async function testReceiptArchiveRetryAndIsolation() {
       assert.deepEqual(entry.evidence.visibilityEvidence, ["validated_letter"]);
       assert.deepEqual(entry.evidence.knownBy, [1, 2]);
       assert.equal(ownerStatuses.get(ownerId).status, "STORE");
-      assert.equal(ownerStatuses.get(ownerId).derivedStatus, "COMPLETE");
+      assert.equal(ownerStatuses.get(ownerId).derivedStatus, "SKIPPED_DERIVED_POLICY");
+      assert.equal(job.owners[String(ownerId)].derivedGenerated, false);
+      assert.equal(job.owners[String(ownerId)].derivedProviderRequests, 0);
       const year = fixture.memoryEngine.memory4.derived.read(scope, "year", 1038);
       const life = fixture.memoryEngine.memory4.derived.read(scope, "life");
-      safeAssert(year?.items.length > 0 && life?.segments.length > 0,
-        "both owners receive year and life derived views from accepted letter evidence");
-      assert.equal(fixture.memoryEngine.memory4.derived.list(scope).dirty, false);
+      assert.equal(year, null, "letter Durable memories stay stored without generated Year views");
+      assert.equal(life, null, "letter Durable memories stay stored without a generated Life view");
+      assert.equal(fixture.memoryEngine.memory4.derived.list(scope).generationPolicy, "RETIRED");
     }
   } finally {
     await fixture.close();
@@ -457,7 +459,7 @@ async function main() {
   await testReceiptArchiveRetryAndIsolation();
   await testHeadBaselineDoesNotAcceptNewReceiptProtocol();
   await testLegacyClipboardAcceptanceRemainsSupported();
-  console.log("V8.15.2 letter archive independent QA: PASS (receipt binding, in-memory HEAD baseline, restart, stale/duplicate isolation, real directed summaries, both Memory4 owners and derived views, retry without redelivery, legacy callback)");
+  console.log("V8.15.2 letter archive independent QA: PASS (receipt binding, in-memory HEAD baseline, restart, stale/duplicate isolation, real directed summaries, both Memory4 owners with retired derived generation, retry without redelivery, legacy callback)");
 }
 
 module.exports = { createFixture, pendingLetter, makeReceiptLine, waitFor };

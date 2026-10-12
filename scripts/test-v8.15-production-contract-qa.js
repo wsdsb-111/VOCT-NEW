@@ -19,6 +19,7 @@ const { PromptScriptSandbox } = require("../resources/app/out/main/prompts/promp
 const { TokenCounter } = require("../resources/app/out/main/provider-service");
 const { normalizeGameDate } = require("../resources/app/out/main/worldline/character-temporal-facts");
 const { hash } = require("../resources/app/out/main/memory-system/memory4-contract");
+const { seedDerivedHistory } = require("./fixtures/v923-derived-history");
 const { createProjectionLineage } = require("../resources/app/out/main/memory-system/memory4-forget");
 const { Memory4OrphanAudit } = require("../resources/app/out/main/memory-system/memory4-orphan-audit");
 const { createMemoryRecord } = require("../resources/app/out/main/memory-system/memory-types");
@@ -301,8 +302,7 @@ async function testUnsplitExplicitOverviewReachesProvider() {
     conversationId: "unsplit-unrelated-derived-conversation", date: "1165.1.1", facts: [{ entityIds: [4], topics: ["北境"],
       text: "1164年赵匡胤在北境议和，留下 NON_TARGET_DERIVED_OVERVIEW_SENTINEL。",
       eventTime: { from: "1164.1.1", to: "1164.12.31", precision: "year", status: "reported" } }] });
-  const rebuilt = await harness.engine.memory4.derived.rebuild({ campaignToken, ownerId: 2 }, { kind: "all" });
-  assert.equal(rebuilt.status, "COMPLETE");
+  seedDerivedHistory(harness.engine, { campaignToken, ownerId: 2 });
   const query = "赵光义一生在北境的经历是什么？";
   const npcMessage = [{ id: 2, role: "assistant", speakerCharacterId: 3, content: "赵匡胤也曾在北境议和。" }];
   const baseline = await providerInput(harness, query, npcMessage);
@@ -484,8 +484,7 @@ async function testSharedSourceProjectionAndReadDtos() {
   const initialEntry = engine.memory4.store.readEntry(scope, entryId);
   assert.deepEqual(initialEntry.source.projectionLineages.map(lineage => lineage.counterpartId).sort(), [1, 3],
     "the canonical source must retain both independently-addressable projections before deletion");
-  const built = await engine.memory4.derived.rebuild(scope, { kind: "all", overwriteManual: false });
-  assert.equal(built.status, "COMPLETE", JSON.stringify(built));
+  seedDerivedHistory(engine, scope);
 
   const rowA = summaryRow({ counterpartId: 1, subjectIds: [1], content: "VISIBLE_A_SUMMARY_TO_DELETE", date,
     finalizationId, conversationId, segmentId: "summary-shared-A", projectionId: projectionA.projectionId });

@@ -666,10 +666,25 @@ async function run() {
     ["rotated scanner blocks first Effect", rotatedScannerCannotWriteFirstLetterEffect],
     ["rotated old-reader DATE callback", oldReaderDateCallbackCannotPublishAfterRotation]
   ];
+  const archivedNames = new Set([
+    "LIFE cap and source retention",
+    "independent YEAR and LIFE limits"
+  ]);
+  for (const name of archivedNames) {
+    assert(cases.some(([caseName]) => caseName === name), `archived case remains classified: ${name}`);
+  }
   const failures = [];
+  let passed = 0;
+  let skippedArchive = 0;
   for (const [name, test] of cases) {
+    if (archivedNames.has(name)) {
+      skippedArchive++;
+      console.log(`ARCHIVED ${name}: automatic Year/Life compression is retired`);
+      continue;
+    }
     try {
       await test();
+      passed++;
       console.log(`PASS ${name}`);
     } catch (error) {
       failures.push({ name, error });
@@ -677,7 +692,7 @@ async function run() {
     }
   }
   if (failures.length) process.exitCode = 1;
-  else console.log(`V8.15.2 fix5 independent adversarial QA: PASS (${cases.length} cases)`);
+  else console.log(`V8.15.2 fix5 independent adversarial QA: ${passed} PASS, ${failures.length} FAIL, ${skippedArchive} ARCHIVED`);
 }
 
 if (require.main === module) run().catch(error => { console.error(error); process.exitCode = 1; });

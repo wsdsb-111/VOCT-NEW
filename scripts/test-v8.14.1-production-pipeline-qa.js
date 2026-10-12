@@ -9,6 +9,7 @@ const path = require("node:path");
 const Handlebars = require("../resources/app/node_modules/handlebars");
 const memorySystem = require("../resources/app/out/main/memory-system");
 const { MemoryEngine } = memorySystem;
+const { seedDerivedHistory } = require("./fixtures/v923-derived-history");
 const { Conversation } = require("../resources/app/out/main/conversation/conversation");
 const { createGameData } = require("../resources/app/out/main/game-data/game-data");
 const { Character } = require("../resources/app/out/main/game-data/character");
@@ -316,7 +317,7 @@ async function main() {
     dated.reply = () => "我对玩家说：1142年6月3日我在渡口收到地图，记得第一件往事。\n我对玩家说：1142年6月3日我保管地图，记得第二件往事。\n我对玩家说：1143年1月1日我修补地图，记得第三件往事。\n我对玩家说：1143年2月1日我携带地图，记得第四件往事。";
     await send(dated, "我对甲说：1142年6月3日我在渡口交给你地图，这是往事，不是1170年刚刚发生的事。" );
     await finalize(dated);
-    await dated.engine.memory4.derived.rebuild(dated.scope, { kind: "all" });
+    seedDerivedHistory(dated.engine, dated.scope);
     const years = dated.engine.memory4.derived.list(dated.scope).years.map(view => view.eventYear);
     assert(years.includes(1142) && years.includes(1143));
     assert(!years.includes(1170), "the extraction may not relabel the event as the conversation year");
@@ -367,7 +368,7 @@ async function main() {
     await finalize(sample);
     const original = entries(sample).find(entry => entry.memoryType === "COMMITMENT");
     assert(original && original.state.status === "active");
-    await sample.engine.memory4.derived.rebuild(sample.scope, { kind: "all" });
+    seedDerivedHistory(sample.engine, sample.scope);
     const beforeViews = sample.engine.memory4.derived.list(sample.scope);
     assert(beforeViews.years.length && beforeViews.life.segments.length);
     const dirtyPublications = [];
@@ -398,7 +399,8 @@ async function main() {
     assert.equal(fulfilled.state.source.sourceType, "reported");
     assert(fulfilled.state.sourceMessageIds.length && fulfilled.state.source.finalizationId);
     assert(dirtyPublications.some(publication => publication.result.derivedDirty && publication.year.dirty && publication.life.dirty),
-      "the canonical state transition must publish dirty before its scheduled rebuild clears it");
+      "the canonical state transition must publish dirty for retained historical views");
+    assert.equal(sample.engine.memory4.derived.list(sample.scope).generationPolicy, "RETIRED");
     await sample.open("1166.1.1");
     await send(sample, "还有哪些未完成的承诺？" );
     assert(!packet(sample).items.some(item => item.memory.memoryId === original.entryId));

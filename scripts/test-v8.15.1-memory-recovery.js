@@ -4,6 +4,7 @@ const assert = require("node:assert/strict");
 const fs = require("node:fs");
 const path = require("node:path");
 const { MemoryEngine } = require("../resources/app/out/main/memory-system/memory-engine");
+const { seedDerivedHistory } = require("./fixtures/v923-derived-history");
 
 const root = fs.mkdtempSync(path.join(__dirname, ".v8.15.1-memory-recovery-"));
 let checks = 0;
@@ -134,7 +135,7 @@ function candidateFor(snapshot) {
   };
 }
 
-async function committedRecoveryWaitsForDerivedRebuild(rootDir) {
+async function committedRecoveryRetiresDerivedWork(rootDir) {
   const engine = makeEngine(path.join(rootDir, "derived-restart"));
   const context = fixtureContext("v8151-derived-restart", "derived");
   const coordinator = engine.memory4;
@@ -143,32 +144,24 @@ async function committedRecoveryWaitsForDerivedRebuild(rootDir) {
   coordinator.store.commitOwner(snapshot, { status: "STORE", entries: [candidateFor(snapshot)] });
 
   const restarted = new MemoryEngine({ store: engine.store, trace: { record() {} } }).memory4;
-  restarted.configureDerived({ isCampaignCurrent: () => true });
-  const originalSchedule = restarted.derived.schedule.bind(restarted.derived);
-  let announceStarted;
-  const started = new Promise(resolve => { announceStarted = resolve; });
-  let releaseRebuild;
-  const gate = new Promise(resolve => { releaseRebuild = resolve; });
-  restarted.derived.schedule = async (...args) => {
-    announceStarted();
-    const result = await originalSchedule(...args);
-    await gate;
-    return result;
-  };
+  let scheduleCalls = 0, compressionCalls = 0;
+  restarted.configureDerived({ isCampaignCurrent: () => true,
+    requestCompression: async () => { compressionCalls++; throw new Error("retired_derived_provider_must_not_run"); } });
+  restarted.derived.schedule = async () => { scheduleCalls++; return { status: "UNEXPECTED_SCHEDULE" }; };
   let extractionCalls = 0;
   const recoveryPromise = restarted.recoverPending(async () => { extractionCalls++; throw new Error("committed owner must not be extracted twice"); }, {
     activeCampaignToken: context.campaignToken,
     isNarrativeCommitted: () => true
   });
-  await started;
-  check("committed recovery record remains while async Year/Life completion is unresolved", fs.existsSync(recoveryFile));
-  releaseRebuild();
   const results = await recoveryPromise;
   const derived = restarted.derived.list(snapshot);
-  check("restart rebuilds clean Year and Life views before clearing recovery", !derived.dirty && derived.years.some(view => view.eventYear === 1164 && !view.dirty)
-    && derived.life && !derived.life.dirty && !fs.existsSync(recoveryFile));
+  check("verified Durable recovery retires Derived work and clears only its committed recovery record",
+    restarted.inspectCommittedSnapshot(snapshot).state === "COMMITTED" && !fs.existsSync(recoveryFile)
+      && results.length === 1 && results[0].status === "SKIPPED_DERIVED_POLICY"
+      && results[0].durableStatus === "STORE" && results[0].derivedGenerationStatus === "SKIPPED_DERIVED_POLICY");
+  check("recovery does not schedule Year/Life work or call its Provider", scheduleCalls === 0 && compressionCalls === 0
+    && derived.generationPolicy === "RETIRED" && derived.years.length === 0 && derived.life === null);
   check("already-committed canonical owner does not repeat provider extraction", extractionCalls === 0);
-  check("recovered owner keeps its canonical success status", results.length === 1 && results[0].status === "STORE");
 }
 
 async function preserveManualOverrideAndForget(rootDir) {
@@ -177,9 +170,7 @@ async function preserveManualOverrideAndForget(rootDir) {
   const first = committedSnapshot(engine, firstContext);
   const coordinator = engine.memory4;
   coordinator.store.commitOwner(first, { status: "STORE", entries: [candidateFor(first)] });
-  const firstDerived = await coordinator.derived.rebuild(first, { kind: "all", committedFinalization: true,
-    finalizationProof: { finalizationId: first.finalizationId, sourceRevision: first.sourceRevision } });
-  assert.equal(firstDerived.status, "COMPLETE");
+  seedDerivedHistory(engine, { campaignToken: first.campaignToken, ownerId: first.ownerId });
   let year = coordinator.derived.list(first).years.find(view => view.eventYear === 1164);
   assert(year?.items.length);
   coordinator.derived.updateYear(first, { eventYear: 1164, itemId: year.items[0].itemId,
@@ -194,13 +185,18 @@ async function preserveManualOverrideAndForget(rootDir) {
   const recoveryFile = coordinator.saveRecovery(second, { status: "PENDING", retryCount: 0 });
   coordinator.store.commitOwner(second, { status: "STORE", entries: [candidateFor(second)] });
   const restarted = new MemoryEngine({ store: engine.store, trace: { record() {} } }).memory4;
+  assert.equal(restarted.inspectCommittedSnapshot(second).state, "COMMITTED",
+    "recovery cleanup requires a matching Durable commit, source revision, and current Forget proof");
   const recovered = await restarted.recoverPending(async () => { throw new Error("canonical retry must not invoke provider"); }, {
     activeCampaignToken: second.campaignToken,
     isNarrativeCommitted: () => true
   });
   year = restarted.derived.read(second, "year", 1164);
-  check("manual Year text survives a dirty rebuild and recovery remains retryable", year.items[0].text === "手工保留的年度记忆。"
-    && fs.existsSync(recoveryFile) && recovered[0].status === "DERIVED_REBUILD_FAILED");
+  check("manual historical Year text survives as dirty data after verified Durable recovery",
+    year.items[0].text === "手工保留的年度记忆。" && restarted.derived.list(second).years[0].dirty);
+  check("retired Derived work does not pin or mislabel a verified recovery record",
+    !fs.existsSync(recoveryFile) && recovered[0].status === "SKIPPED_DERIVED_POLICY"
+      && recovered[0].durableStatus === "STORE" && recovered[0].derivedGenerationStatus === "SKIPPED_DERIVED_POLICY");
 
   const forgetContext = fixtureContext("v8151-forgotten", "forgotten");
   const forgottenSnapshot = committedSnapshot(engine, forgetContext);
@@ -304,7 +300,7 @@ async function explicitExclusionDoesNotPinNarrativeRecovery(rootDir) {
 async function run() {
   try {
     await transientForgetReadRetainsNarrative(root);
-    await committedRecoveryWaitsForDerivedRebuild(root);
+    await committedRecoveryRetiresDerivedWork(root);
     await preserveManualOverrideAndForget(root);
     await staleCampaignAndRevisionDoNotHandoff(root);
     await explicitForgottenOwnerIsTerminal(root);

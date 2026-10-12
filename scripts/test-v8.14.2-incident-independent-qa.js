@@ -70,18 +70,6 @@ function promptPayload(prompt) {
   return JSON.parse(prompt[1].content);
 }
 
-function derivedKey(scope) { return hash([scope.campaignToken, scope.ownerId]); }
-
-async function waitForDerived(coordinator, scope) {
-  for (let attempt = 0; attempt < 30; attempt++) {
-    const job = coordinator.derived.jobs.get(derivedKey(scope));
-    const views = coordinator.derived.list(scope);
-    if (job?.status === "COMPLETE" && views.years.length && views.life) return views;
-    await new Promise(resolve => setImmediate(resolve));
-  }
-  throw new Error("memory4_derived_timeout");
-}
-
 async function main() {
   const profile = fs.mkdtempSync(path.join(os.tmpdir(), "votc-v8142-incident-independent-"));
   try {
@@ -250,19 +238,15 @@ async function main() {
       const canonical = env.coordinator.store.query(scope);
       assert.equal(canonical.length, 1, "finishOwner must persist canonical Detail");
       assert.deepEqual(canonical[0].eventTime, { from: "1164.1.1", to: "1164.1.1", precision: "day", status: "reported" });
-      const views = await waitForDerived(env.coordinator, scope);
-      assert.equal(views.dirty, false);
-      assert.equal(views.years.length, 1);
-      assert.equal(views.years[0].eventYear, 1164);
-      assert.equal(views.years[0].dirty, false);
-      assert.deepEqual(views.years[0].items[0].sourceEntryIds, [canonical[0].entryId]);
-      assert(views.life);
-      assert.equal(views.life.dirty, false);
-      assert.equal(views.life.segments.length, 1);
-      assert.equal(views.life.segments[0].segmentId, "life_1160s");
-      assert.deepEqual(views.life.segments[0].sourceEntryIds, [canonical[0].entryId]);
-      assert.equal(env.coordinator.derived.options.requestCompression, undefined, "small derived views must complete without provider access");
-      check("finishOwner persists canonical Detail and builds real Year and Life views");
+      assert.equal(result.derivedGenerationStatus, "SKIPPED_DERIVED_POLICY");
+      assert.equal(result.derived.status, "SKIPPED_DERIVED_POLICY");
+      assert.equal(result.derived.generated, false);
+      assert.equal(result.derived.providerRequests, 0);
+      const views = env.coordinator.derived.list(scope);
+      assert.equal(views.generationPolicy, "RETIRED");
+      assert.deepEqual(views.years, []);
+      assert.equal(views.life, null);
+      check("finishOwner stores canonical Detail while keeping derived generation retired");
     }
 
     console.log(`Memory4 incident independent QA: ${passed} checks passed`);

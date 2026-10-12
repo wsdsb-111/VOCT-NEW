@@ -211,7 +211,7 @@ async function testCommittedDetailRecovery() {
   fixture.coordinator.store.ensureDisclosureScope(scope);
   const snapshot = makeCanonicalSnapshot(scope, "m2-primary");
   snapshot.fragments[0].text = "1164年1月1日，甲与乙完成了边境议和。";
-  fixture.coordinator.store.commitOwner(snapshot, { status: "STORE",
+  const committed = fixture.coordinator.store.commitOwner(snapshot, { status: "STORE",
     entries: [canonicalEntry(snapshot.fragments[0].fragmentId, snapshot.fragments[0].text, [1],
       { status: "reported", precision: "day", from: "1164.1.1", to: "1164.1.1" })] });
   fixture.coordinator.saveRecovery(snapshot, { status: "PENDING", retryCount: 0, lastError: null });
@@ -222,15 +222,15 @@ async function testCommittedDetailRecovery() {
     estimateTokens: text => Math.ceil(String(text || "").length / 2) });
   const recovered = await restarted.memory4.recoverPending(null,
     { activeCampaignToken: campaignToken, isNarrativeCommitted: () => true });
-  assert(recovered.some(owner => owner.alreadyCommitted === true || owner.derivedRecovered === true
-    || owner.status === "COMPLETE"), "recovery must recognize the already committed detail: " + JSON.stringify(recovered));
-  for (let attempt = 0; attempt < 20; attempt++) {
-    if (restarted.memory4.derived.list(scope).years.length) break;
-    await new Promise(resolve => setTimeout(resolve, 5));
-  }
+  assert.deepEqual(recovered, [{ ownerId: 2, status: "SKIPPED_DERIVED_POLICY", durableStatus: "STORE",
+    derivedGenerationStatus: "SKIPPED_DERIVED_POLICY", generated: false, providerRequests: 0 }],
+  "recovery accepts only the verified Durable commit and typed derived retirement: " + JSON.stringify(recovered));
+  assert.deepEqual(restarted.memory4.store.query(scope).map(entry => entry.entryId), committed.entryIds,
+    "verified retirement preserves the original committed Detail");
   const derived = restarted.memory4.derived.list(scope);
-  assert(derived.years.some(year => year.eventYear === 1164 && year.items.some(item => item.text.includes("边境议和"))),
-    "restarting from an already-committed Detail must still rebuild its eligible Year view");
+  assert.equal(derived.generationPolicy, "RETIRED");
+  assert.deepEqual(derived.years, []);
+  assert.equal(derived.life, null);
   assert.equal(fs.readdirSync(restarted.memory4.recoveryDir).filter(name => name.endsWith(".json")).length, 0);
 }
 
@@ -557,7 +557,7 @@ async function main() {
   const cases = [
     [testWorldlineNormalization, "worldline rite/culture mapping, zero relationship sentinels, unresolved IDs and legacy fields"],
     [testMemory4LifecycleRecovery, "Owner snapshot failure recovery survives restart and records self-disclosed title/trait"],
-    [testCommittedDetailRecovery, "already-committed Detail recovery rebuilds eligible Year memory"],
+    [testCommittedDetailRecovery, "committed Detail recovery closes after verified retired derived policy"],
     [testCanonicalOnlyRecall, "canonical-only sidecar recall preserves scope and fail-closed index validation"],
     [testDisclosureDirectionAndEpochs, "self and third-party disclosures retain Owner direction, manual hidden and fact epochs"],
     [testLatePresenceAndAtomicDisclosureWrite, "per-message presence and disclosure persistence rollback under injected failure"],

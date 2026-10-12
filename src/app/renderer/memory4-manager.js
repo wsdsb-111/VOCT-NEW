@@ -19,6 +19,7 @@ const ERRORS = {
   memory4_owner_folder_not_unique: "此人物的摘要目录存在缺失或冲突。",
   memory4_compression_quality_failed: "模型压缩未通过预算、条件或日期校验，原始记忆已保留。可重新生成。",
   memory4_life_year_missing: "仍有年份尚未生成年度记忆，请先重新生成年度与人生记忆。",
+  memory4_derived_llm_retired: "年度与人生记忆的模型生成已退役；历史结果和原始长期记忆保留。",
   memory4_unavailable: "人物记忆暂不可用。"
 };
 const errorText = value => ERRORS[value] || (/revision|stale|source_changed/.test(String(value)) ? "来源或版本已变化，未覆盖内容。请刷新后重试。" : `操作未完成：${String(value || "未知错误").slice(0, 180)}`);
@@ -42,6 +43,7 @@ export function Memory4Manager({ react: R, ownerId, refreshKey, searchActive = f
   const contextEpoch = R.useRef(0);
   const expectedScope = data?.ownerId === ownerId ? { expectedCampaignToken: data.campaignToken, expectedContextId: data.contextId } : {};
   const scope = { ownerId, ...expectedScope };
+  const derivedGenerationRetired = data?.derived?.generationPolicy === "RETIRED";
   const load = async (options = {}) => {
     const sequence = ++requestSequence.current;
     setLoading(true);
@@ -122,6 +124,7 @@ export function Memory4Manager({ react: R, ownerId, refreshKey, searchActive = f
       const status = result.result?.status;
       if (["FAILED", "EXTRACTION_FAILED", "STALE"].includes(status)) throw new Error(result.result.reason || status);
       setMessage(["setManualDisclosure", "deleteDisclosure"].includes(payload.operation) ? "人物认知标记已更新。"
+        : status === "SKIPPED_DERIVED_POLICY" ? errorText("memory4_derived_llm_retired")
         : payload.operation === "rebuild" && result.result?.reason === "NO_ELIGIBLE_SOURCES" ? "没有可归档的来源：需要可确认的事件日期或获知日期。原始长期记忆已保留。"
         : payload.operation === "cancelDerived" ? "已请求停止派生记忆任务。" : payload.operation === "keepManual" ? "已保留手工文本；底层记忆变化仍待处理。"
         : status === "IN_PROGRESS" ? "已有重压缩任务正在进行。" : status === "ALREADY_CONVERTED" ? "可核验内容已转为长期记忆，原摘要继续保留。"
@@ -141,6 +144,7 @@ export function Memory4Manager({ react: R, ownerId, refreshKey, searchActive = f
   };
   const regenerate = (kind, view, extra = {}) => {
     if (!data || data.readOnlyArchive) { setError(errorText(data ? "memory4_archive_read_only" : "memory4_unavailable")); return; }
+    if (derivedGenerationRetired) { setMessage(errorText("memory4_derived_llm_retired")); return; }
     const manual = kind === "year" ? view.generationMode === "manual_override" || view.manual?.mode === "manual_override"
       : extra.segmentId ? view.segments?.find(segment => segment.segmentId === extra.segmentId)?.manual?.mode === "manual_override" : view.manual?.mode === "manual_override";
     if (!window.confirm(manual ? "重新生成将覆盖这个阶段的手工版本，并使用当前摘要模型。继续？" : "将使用当前摘要模型从有效来源生成记忆，可能产生 API 费用。继续？")) return;
@@ -153,7 +157,7 @@ export function Memory4Manager({ react: R, ownerId, refreshKey, searchActive = f
     return h("div", { className: "memory4-conflict", role: "status" }, h("strong", null, "底层记忆已变化"),
       button("查看来源变化", () => showSources({ kind, ...extra })),
       manual && writeButton("保留手工版本", () => mutate({ operation: "keepManual", kind, expectedRevision: view.revision, ...extra })),
-      writeButton(manual ? "重新生成并覆盖" : "从来源重新生成", () => regenerate(kind, view, extra)));
+      writeButton(manual ? "重新生成并覆盖" : "从来源重新生成", () => regenerate(kind, view, extra), { disabled: derivedGenerationRetired }));
   };
   const pages = (section, option) => section?.total > 40 && h("div", { className: "memory4-pager" },
     button("上一页", () => load({ [option]: Math.max(0, section.offset - 40), entityId }), { disabled: busy || loading || !section.offset }),
@@ -244,27 +248,30 @@ export function Memory4Manager({ react: R, ownerId, refreshKey, searchActive = f
       h("small", null, `采集日期：${record.captureGameDate || "未知"}`), h("p", { className: "memory4-text" }, record.content))) : h("p", { className: "memory4-empty" }, "当前战役尚未导出此人物的官方追忆。"));
   else if (tab === "year") content = h(R.Fragment, null,
     h("p", { className: "memory4-empty" }, "事件日期明确时按发生年份归档；事件日期未知时按获知年份归档，并保留未知标注。"),
-    !data.derived.years.length && h("p", { className: "memory4-empty" }, data.detail.total ? "暂无年度记忆，可从有效长期记忆来源生成。" : "暂无可用于生成年度记忆的详细长期记忆来源。"),
-    writeButton("从长期记忆生成年度与人生记忆", () => regenerate("all", { revision: data.derived.derivedRevision || 0 }), { disabled: !data.detail.total }),
+    derivedGenerationRetired && h("p", { className: "memory4-meta", role: "status" }, errorText("memory4_derived_llm_retired")),
+    !data.derived.years.length && h("p", { className: "memory4-empty" }, derivedGenerationRetired ? "暂无历史年度结果；跨年代事实仍可从详细长期记忆与 Legacy 召回。" : data.detail.total ? "暂无年度记忆，可从有效长期记忆来源生成。" : "暂无可用于生成年度记忆的详细长期记忆来源。"),
+    writeButton("从长期记忆生成年度与人生记忆", () => regenerate("all", { revision: data.derived.derivedRevision || 0 }), { disabled: derivedGenerationRetired || !data.detail.total }),
     data.derived.years.map(year => h("details", { className: "memory4-derived", key: year.eventYear },
       h("summary", null, `${year.eventYear} 年`, year.dirty && h("span", { className: "memory4-status" }, "底层记忆已变化"),
         year.generationMode === "manual_override" && h("span", { className: "memory4-status" }, "手工版本")),
       conflict("year", year, { eventYear: year.eventYear }),
       h("div", { className: "memory4-actions" }, button("查看来源", () => showSources({ kind: "year", eventYear: year.eventYear })),
-        writeButton("从 Detail 重新生成", () => regenerate("year", year, { eventYear: year.eventYear }), { disabled: !data.detail.total })),
+        writeButton("从 Detail 重新生成", () => regenerate("year", year, { eventYear: year.eventYear }), { disabled: derivedGenerationRetired || !data.detail.total })),
       year.items.map(item => h("section", { className: "memory4-derived-item", key: item.itemId }, h("p", { className: "memory4-text" }, item.text),
         editButton({ operation: "updateYear", eventYear: year.eventYear, itemId: item.itemId, expectedRevision: year.revision }, item.text, `${year.eventYear} 年`))))));
   else if (tab === "life") {
     const life = data.derived.life;
-    content = h(R.Fragment, null, writeButton("从年度记忆生成人生记忆", () => regenerate("life", life || { revision: 0 }), { disabled: !data.derived.years.length }),
+    content = h(R.Fragment, null,
+      derivedGenerationRetired && h("p", { className: "memory4-meta", role: "status" }, errorText("memory4_derived_llm_retired")),
+      writeButton("从年度记忆生成人生记忆", () => regenerate("life", life || { revision: 0 }), { disabled: derivedGenerationRetired || !data.derived.years.length }),
       life?.segments?.length ? life.segments.map(segment => h("details", { className: "memory4-derived", key: segment.segmentId },
         h("summary", null, `${segment.period.fromYear} - ${segment.period.toYear}`, life.dirty && h("span", { className: "memory4-status" }, "底层记忆已变化"),
           segment.manual?.mode === "manual_override" && h("span", { className: "memory4-status" }, "手工版本")),
         conflict("life", life, { segmentId: segment.segmentId }), h("p", { className: "memory4-text" }, segment.text),
         h("div", { className: "memory4-actions" }, editButton({ operation: "updateLife", segmentId: segment.segmentId, expectedRevision: life.revision }, segment.text, `${segment.period.fromYear} - ${segment.period.toYear}`),
           button("查看来源", () => showSources({ kind: "life", segmentId: segment.segmentId })), writeButton("重新生成当前阶段", () => regenerate("life", life, { segmentId: segment.segmentId }),
-            { disabled: !data.derived.years.length }))))
-        : h("p", { className: "memory4-empty" }, data.derived.years.length ? "暂无人生记忆。" : "暂无人生记忆；当前没有可用的年度记忆来源。"));
+            { disabled: derivedGenerationRetired || !data.derived.years.length }))))
+        : h("p", { className: "memory4-empty" }, derivedGenerationRetired ? "暂无历史人生结果；原始长期记忆与承诺状态保留。" : data.derived.years.length ? "暂无人生记忆。" : "暂无人生记忆；当前没有可用的年度记忆来源。"));
   } else if (tab === "detail") content = h(R.Fragment, null,
     entityId && h("div", { className: "memory4-actions" }, h("span", null, "仅显示相关人物记忆"), button("显示全部", () => { setEntityId(null); load({ entityId: null }); })),
     data.detail.items.length ? data.detail.items.map(row => {
@@ -304,7 +311,7 @@ export function Memory4Manager({ react: R, ownerId, refreshKey, searchActive = f
         : `此为已加载战役中该人物的已保存归档${data.archiveAsOfDate ? `（截至 ${data.archiveAsOfDate}）` : ""}，仅供查阅；当前人物关系和状态未重新回读。`),
     error && h("p", { className: "memory4-error", role: "alert" }, error), message && h("p", { role: "status" }, message),
     (busy || loading) && h("p", { role: "status" }, busy ? "处理中…" : "读取中…"),
-    data?.derived.jobs?.some(job => ["QUEUED", "RUNNING", "FAILED", "REQUEUED"].includes(job.status)) && h("p", { className: "memory4-meta", role: "status" },
+    !derivedGenerationRetired && data?.derived.jobs?.some(job => ["QUEUED", "RUNNING", "FAILED", "REQUEUED"].includes(job.status)) && h("p", { className: "memory4-meta", role: "status" },
       data.derived.jobs.some(job => job.status === "FAILED") ? `派生记忆生成失败${data.derived.jobs.find(job => job.status === "FAILED").eventYear ? `（${data.derived.jobs.find(job => job.status === "FAILED").eventYear} 年）` : ""}，可重新生成。` : data.derived.jobs.some(job => job.status === "RUNNING") ? "派生记忆正在生成，完成后刷新。" : "派生记忆已排队，等待生成。",
       data.derived.jobs.some(job => ["RUNNING", "QUEUED", "REQUEUED"].includes(job.status)) && writeButton("停止任务", () => mutate({ operation: "cancelDerived" }), { title: "停止当前人物的派生记忆任务" })),
     h("div", { className: "memory4-panel", role: "tabpanel" }, content),

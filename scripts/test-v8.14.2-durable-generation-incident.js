@@ -50,7 +50,12 @@ function fixture(label, { annotated = false, sourceText = spokenText, segmentTex
   const trace = new MemoryTrace({ logger: null });
   const coordinator = new Memory4Coordinator(store, { trace });
   const scheduled = [];
-  coordinator.derived.schedule = (scope, options) => scheduled.push({ scope, options });
+  const schedule = coordinator.derived.schedule.bind(coordinator.derived);
+  coordinator.derived.schedule = async (scope, options) => {
+    const result = await schedule(scope, options);
+    scheduled.push({ scope, options, result });
+    return result;
+  };
   const message = { id: 1, role: "assistant", speakerCharacterId: 1, content: sourceText,
     ...(annotated ? { memory4Fragments: [{ start: 0, end: sourceText.length, visibility: "participants",
       sourceType: "spoken", recipientIds: [2, 3], entityIds: [] }] } : {}) };
@@ -116,7 +121,7 @@ async function run() {
       assert.deepEqual(promptFragmentTwo.allowedEntityIds, [1, 2]);
       assert.deepEqual(promptFragmentThree.allowedEntityIds, [1, 3]);
     });
-    await checkAsync("Owner-scoped entity candidate stores canonical Detail and schedules derived refresh", async () => {
+    await checkAsync("Owner-scoped entity candidate stores canonical Detail while derived generation stays retired", async () => {
       const promptFragment = JSON.parse(shared.coordinator.buildPrompt(ownerTwo, ownerTwo.fragments)[1].content).fragments[0];
       const result = await shared.coordinator.finishOwner(ownerTwo, requestFor(payload => [
         durableCandidate(ownerTwo, ownerTwo.fragments[0], [payload.fragments[0].allowedEntityIds[1]])
@@ -126,6 +131,11 @@ async function run() {
       assert.equal(shared.coordinator.store.query(ownerTwo).length, 1);
       assert.equal(shared.coordinator.store.query(ownerThree).length, 0);
       assert.equal(shared.scheduled.length, 1);
+      assert.equal(result.derivedGenerationStatus, "SKIPPED_DERIVED_POLICY");
+      assert.equal(result.derived.status, "SKIPPED_DERIVED_POLICY");
+      assert.equal(result.derived.generated, false);
+      assert.equal(result.derived.providerRequests, 0);
+      assert.equal(shared.coordinator.derived.list(ownerTwo).generationPolicy, "RETIRED");
       assert.equal(promptFragment.allowedEntityIds.includes(2), true);
     });
     await checkAsync("all unknown third-party IDs remain rejected and keep a retryable recovery snapshot", async () => {
@@ -219,14 +229,17 @@ async function run() {
       assert.equal(empty.reason, "NO_DURABLE_CONTENT");
       assert.equal(f.coordinator.store.query(scope).length, 0);
     });
-    await checkAsync("genuine zero-memory response commits NO_DURABLE_CONTENT without recovery or derived work", async () => {
+    await checkAsync("genuine zero-memory response commits NO_DURABLE_CONTENT without recovery or Provider requests", async () => {
       const f = fixture("genuine-empty", { annotated: true });
       const snapshot = f.coordinator.buildOwnerSnapshot(f.context, 2);
       const result = await f.coordinator.finishOwner(snapshot, requestFor([], "NO_DURABLE_CONTENT"));
       assert.equal(result.status, "NO_DURABLE_CONTENT");
       assert.equal(result.entryIds.length, 0);
+      assert.equal(result.derivedGenerationStatus, "SKIPPED_DERIVED_POLICY");
+      assert.equal(result.derived.generated, false);
+      assert.equal(result.derived.providerRequests, 0);
       assert.equal(f.coordinator.getRecoveryStatus(snapshot.campaignToken).pending, 0);
-      assert.equal(f.scheduled.length, 0);
+      assert.equal(f.scheduled.length, 1);
     });
     assert.deepEqual(failures, [], failures.join("\n"));
     console.log(`V8.14.2 Durable generation incident: ${assertions} checks passed`);

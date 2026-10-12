@@ -6,6 +6,7 @@ const os = require("node:os");
 const path = require("node:path");
 const { MemoryEngine } = require("../resources/app/out/main/memory-system/memory-engine");
 const { createSummariesManager } = require("../resources/app/out/main/summaries/summaries-manager");
+const { seedDerivedHistory } = require("./fixtures/v923-derived-history");
 
 function validSummary(context) {
   return JSON.stringify({
@@ -179,7 +180,7 @@ async function retryDetachedMemory4AndLetters(root) {
   assert.equal(engine.memory4.getRecoveryStatus(context.campaignToken).pending, 0);
 }
 
-async function retryPersistedLegacyExtractionAndDerivedFailures(root) {
+async function retryPersistedLegacyExtractionWithRetiredDerived(root) {
   const summariesDir = path.join(root, "legacy-recovery", "summaries");
   const ownerDir = path.join(summariesDir, "2_乙");
   fs.mkdirSync(ownerDir, { recursive: true });
@@ -195,21 +196,12 @@ async function retryPersistedLegacyExtractionAndDerivedFailures(root) {
   const conversation = { id: "legacy-recovery-conversation", isActive: true, gameData: {
     campaignToken, date: "1165.1.1", characters: new Map([[2, { id: 2, shortName: "乙" }], [3, { id: 3, shortName: "丙" }]])
   }, memoryState: engine.createConversationState("legacy-recovery-conversation"), dynamicRecallHistory: new Map() };
-  let requestExtractionCalls = 0, durableRetryCalls = 0, compressionCalls = 0, failCompressionCount = 1;
+  let requestExtractionCalls = 0, durableRetryCalls = 0, compressionCalls = 0;
   engine.memory4.configureDerived({
     isCampaignCurrent: token => token === campaignToken,
     estimateTokens: text => Math.ceil(text.length / 2),
     requestExtraction: async () => { requestExtractionCalls++; throw new Error("fixture_extraction_failure"); },
-    requestCompression: async prompt => {
-      compressionCalls++;
-      if (failCompressionCount > 0) {
-        failCompressionCount--;
-        throw new Error("fixture_derived_failure");
-      }
-      const payload = JSON.parse(prompt[1].content);
-      const sourceEntryIds = [...new Set(payload.items.flatMap(item => item.sourceEntryIds))];
-      return { content: JSON.stringify({ items: [{ text: "乙在宫廷宴席中见到丙。", sourceEntryIds }] }), finish_reason: "stop" };
-    }
+    requestCompression: async () => { compressionCalls++; throw new Error("retired_derived_provider_must_not_run"); }
   });
   const manager = createSummariesManager({
     fs, path, summariesDir, memoryEngine: engine, memorySystem: {},
@@ -235,21 +227,12 @@ async function retryPersistedLegacyExtractionAndDerivedFailures(root) {
   assert.equal(requestExtractionCalls, 1);
 
   const canonicalRetry = await manager.retryFailedSummaries();
-  assert.equal(canonicalRetry.failed, 1, "a canonical success with failed derived rebuild must remain a visible failure");
+  assert.equal(canonicalRetry.failed, 0, "verified Durable recovery must finish without waiting for retired Derived generation");
+  assert.equal(canonicalRetry.recovered, 1);
   assert.equal(durableRetryCalls, 1, "retry must recover the saved legacy snapshot without re-running summary extraction");
-  assert.equal(engine.memory4.getRecoveryStatus(campaignToken).pending, 1, "derived failure must keep the same recovery snapshot pending");
-
-  const derivedRetry = await manager.retryFailedSummaries();
-  assert.equal(derivedRetry.success, true);
-  assert.equal(derivedRetry.recovered, 1);
-  assert.equal(derivedRetry.failed, 0);
-  assert.equal(requestExtractionCalls, 1, "a successful canonical owner must not be extracted again to retry Year/Life");
-  assert.equal(durableRetryCalls, 1, "derived-only retry must not replay a successful owner extraction");
-  assert.equal(compressionCalls, 2);
   assert.equal(engine.memory4.getRecoveryStatus(campaignToken).pending, 0);
-  const derived = engine.memory4.derived.list({ campaignToken, ownerId: 2 });
-  assert(JSON.stringify(derived.years).includes("乙在宫廷宴席中见到丙。"));
-  assert(JSON.stringify(derived.life).includes("乙在宫廷宴席中见到丙。"));
+  assert.equal(requestExtractionCalls, 1, "a successful canonical owner must not be extracted again for retired Year/Life work");
+  assert.equal(compressionCalls, 0);
 
   const summary = JSON.parse(fs.readFileSync(filePath, "utf8"))[0];
   const sourceMemory = engine.store.getMemory(summary.perspectiveMemoryIds[0]);
@@ -260,23 +243,24 @@ async function retryPersistedLegacyExtractionAndDerivedFailures(root) {
   const index = engine.memory4.store.loadIndex(scope);
   const metadata = engine.store.readJson(path.join(engine.memory4.store.directory(scope), "metadata.json"), null);
   engine.memory4.derived.markDirty(scope, { index, metadata, entryIds: canonicalEntries.map(entry => entry.entryId) });
-  failCompressionCount = 1;
   const coveredRebuild = await engine.memory4.recompressLegacy(scope, {
     memoryId: sourceMemory.memoryId, expectedSourceHash: coverage.sourceHash, rebuildDerived: true
   });
   assert.equal(coveredRebuild.status, "ALREADY_CONVERTED");
-  assert.equal(coveredRebuild.derived.status, "FAILED");
-  assert.equal(engine.memory4.getRecoveryStatus(campaignToken).pending, 1,
-    "derived-only failure for an already-covered canonical must persist in the same recovery queue");
+  assert.equal(coveredRebuild.derived.status, "SKIPPED_DERIVED_POLICY");
+  assert.equal(coveredRebuild.derived.providerRequests, 0);
+  assert.equal(engine.memory4.getRecoveryStatus(campaignToken).pending, 0,
+    "a verified covered Durable source must not create a Derived-only recovery loop");
   const coveredRetry = await manager.retryFailedSummaries();
   assert.equal(coveredRetry.success, true);
-  assert.equal(coveredRetry.recovered, 1);
+  assert.equal(coveredRetry.recovered, 0);
   assert.equal(requestExtractionCalls, 1, "a covered canonical retry must not extract its source again");
   assert.equal(durableRetryCalls, 1, "a covered canonical retry must not replay durable extraction");
   assert.equal(engine.memory4.getRecoveryStatus(campaignToken).pending, 0);
+  assert.equal(compressionCalls, 0);
 }
 
-async function regenerateRebuildsCurrentLegacySource(root) {
+async function regenerateRewritesLegacySourceWithoutDerivedGeneration(root) {
   const summariesDir = path.join(root, "regenerate", "summaries");
   const ownerDir = path.join(summariesDir, "2_乙");
   fs.mkdirSync(ownerDir, { recursive: true });
@@ -320,21 +304,20 @@ async function regenerateRebuildsCurrentLegacySource(root) {
   const first = await manager.regenerateSummary(2, 3, 0, initialContent);
   assert.equal(first.success, true, JSON.stringify(first));
   assert.equal(first.memoryRebuild.canonical.status, "COMPLETE");
-  assert.equal(first.memoryRebuild.derived.status, "COMPLETE");
+  assert.equal(first.memoryRebuild.derived.status, "SKIPPED_DERIVED_POLICY");
   const scope = { campaignToken, ownerId: 2 };
   const firstEntry = engine.memory4.store.query(scope)[0];
   assert(firstEntry.text.includes("改为承诺"));
-  const firstViews = engine.memory4.derived.list(scope);
+  const firstViews = seedDerivedHistory(engine, scope);
   assert(firstViews.years.some(view => view.eventYear === 1164));
   assert(firstViews.life.segments.length > 0);
   engine.memory4.store.updateEntry(scope, firstEntry.entryId, "手工保留的旧来源长期记忆。", { expectedRevision: firstEntry.revision });
-  await engine.memory4.derived.rebuild(scope, { kind: "all" });
   const current = JSON.parse(fs.readFileSync(filePath, "utf8"))[0].content;
   conversation.isActive = false;
   const second = await manager.regenerateSummary(2, 3, 0, current);
   assert.equal(second.success, true);
   assert.equal(second.memoryRebuild.canonical.status, "COMPLETE");
-  assert.equal(second.memoryRebuild.derived.status, "COMPLETE");
+  assert.equal(second.memoryRebuild.derived.status, "SKIPPED_DERIVED_POLICY");
   const currentEntries = engine.memory4.store.query(scope);
   assert(currentEntries.some(entry => entry.text.includes("确认秋收后")));
   assert(!currentEntries.some(entry => entry.text.includes("改为承诺")), "old canonicals bound to the replaced Legacy source must become ineligible");
@@ -342,19 +325,18 @@ async function regenerateRebuildsCurrentLegacySource(root) {
   assert.equal(preservedManual.text, "手工保留的旧来源长期记忆。");
   assert.equal(preservedManual.edit.mode, "manual_override");
   const rebuilt = engine.memory4.derived.list(scope);
-  assert(rebuilt.years.some(view => view.eventYear === 1164));
-  assert(rebuilt.life.segments.length > 0);
-  assert(JSON.stringify(rebuilt.years).includes(expectedOutputs[1]), "year memories must contain the newly rewritten source");
-  assert(JSON.stringify(rebuilt.life).includes(expectedOutputs[1]), "life memories must contain the newly rewritten source");
-  assert(!JSON.stringify(rebuilt.years).includes("改为承诺"));
-  assert(!JSON.stringify(rebuilt.life).includes("改为承诺"));
+  assert(rebuilt.years.some(view => view.eventYear === 1164 && view.dirty));
+  assert(rebuilt.life?.dirty, "source replacement leaves persisted historical views stale instead of rebuilding them");
+  assert.deepEqual(engine.memory4.derived.getPointers(scope, 3, { currentGameDate: "1165.1.1" }).yearKeys, []);
+  assert.deepEqual(engine.memory4.derived.getPointers(scope, 3, { currentGameDate: "1165.1.1" }).lifeItemIds, []);
 
   const third = await manager.regenerateSummary(2, 3, 0, expectedOutputs[1]);
   assert.equal(third.success, true);
   assert.equal(third.memoryRebuild.canonical.status, "NO_DURABLE_CONTENT");
-  assert.equal(third.memoryRebuild.derived.status, "COMPLETE");
+  assert.equal(third.memoryRebuild.derived.status, "SKIPPED_DERIVED_POLICY");
   assert(!engine.memory4.store.query(scope).some(entry => entry.text.includes("无可确认")), "NO_DURABLE_CONTENT must not fabricate a Detail entry");
-  assert(!JSON.stringify(engine.memory4.derived.list(scope)).includes(expectedOutputs[1]), "Year/Life must drop the superseded source when no durable replacement exists");
+  assert(engine.memory4.derived.list(scope).years.every(view => view.dirty), "old Year files stay stale after a rewrite with no Durable replacement");
+  assert.deepEqual(engine.memory4.derived.getPointers(scope, 3, { currentGameDate: "1165.1.1" }).yearKeys, []);
   assert(Object.values(engine.memory4.store.loadIndex(scope).finalizations).some(record => record.status === "NO_DURABLE_CONTENT"),
     "the empty extraction outcome must remain explicit and source-bound");
   assert.deepEqual(extractionContents, expectedOutputs, "each successful rewrite must extract exactly its new source body");
@@ -366,8 +348,8 @@ async function main() {
     validatedLetterDatesReachDurablePrompt(root);
     await retryBadNarrativeOutput(root);
     await retryDetachedMemory4AndLetters(root);
-    await retryPersistedLegacyExtractionAndDerivedFailures(root);
-    await regenerateRebuildsCurrentLegacySource(root);
+    await retryPersistedLegacyExtractionWithRetiredDerived(root);
+    await regenerateRewritesLegacySourceWithoutDerivedGeneration(root);
     console.log("V8.14.2 summary retry and rebuild incident: PASS");
   } finally {
     const target = path.resolve(root);

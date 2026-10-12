@@ -157,7 +157,7 @@ function createSummariesManager({ fs, path, summariesDir, memoryEngine, memorySy
         const canonicalStatus = memoryRebuild.canonical.status;
         const derivedStatus = memoryRebuild.derived.status;
         const canonicalComplete = ["COMPLETE", "ALREADY_CONVERTED", "NO_DURABLE_CONTENT"].includes(canonicalStatus);
-        const derivedComplete = ["COMPLETE", "MANUAL_OVERRIDE"].includes(derivedStatus);
+        const derivedComplete = ["COMPLETE", "MANUAL_OVERRIDE", "SKIPPED_DERIVED_POLICY"].includes(derivedStatus);
         const success = canonicalComplete && derivedComplete;
         return { success, partial: !success, summaryUpdated: true, content: regeneratedContent, memoryRebuild };
       } catch (error) {

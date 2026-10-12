@@ -138,23 +138,41 @@ async function main() {
         assert.equal(f.coordinator.store.readEntry(f.scope, saved.entryId).state.status, "active", name);
       }
     });
-    await checkAsync("production fulfillment persists evidence, game time and revisions without CK3 confirmation", async () => {
+    await checkAsync("production fulfillment preserves source proofs while derived generation is retired", async () => {
       const f = fixture("fulfilled"), saved = newPromise(f, "fulfilled");
+      const originalEntry = f.coordinator.store.readEntry(f.scope, saved.entryId);
+      const originalSourceHash = hash([originalEntry.text, originalEntry.source, originalEntry.evidence]);
+      const originalSourceRevision = saved.snapshot.sourceRevision;
+      const originalFinalizationKey = hash(saved.snapshot.finalizationId);
       const result = await transition(f, saved, "fulfilled-end", "我已经归还玉印，履行了归还玉印的承诺。", "fulfilled");
       assert.equal(result.commitmentTransitionCount, 1);
+      assert.equal(result.derivedGenerationStatus, "SKIPPED_DERIVED_POLICY");
+      assert.equal(result.derived.status, "SKIPPED_DERIVED_POLICY");
+      assert.equal(result.derived.generated, false);
+      assert.equal(result.derived.providerRequests, 0);
       const entry = f.coordinator.store.readEntry(f.scope, saved.entryId);
       assert.equal(entry.state.status, "fulfilled"); assert.equal(entry.revision, 2); assert.equal(entry.state.revision, 2);
       assert.equal(entry.state.changedGameDate, "1181.1.1"); assert(entry.state.changedAt);
       assert.deepEqual(entry.state.sourceMessageIds, [1]); assert.equal(entry.state.source.sourceType, "reported");
       assert.equal(entry.state.source.finalizationId, "final-fulfilled-end");
+      assert.equal(hash([entry.text, entry.source, entry.evidence]), originalSourceHash,
+        "the state transition preserves the original canonical Detail and its source hash");
+      assert.equal(entry.source.conversationId, saved.snapshot.conversationId);
+      assert.equal(entry.source.finalizationId, saved.snapshot.finalizationId);
+      const index = f.coordinator.store.loadIndex(f.scope);
+      assert.equal(index.finalizations[originalFinalizationKey].sourceRevision, originalSourceRevision);
       const options = { ...f.scope, currentGameDate: "1182.1.1", entityIds: [1], querySpeakerId: 1,
         memoryEngineRemainingBudget: 1200, providerRemainingSafeBudget: 1200, legacyMemories: [] };
       assert.equal(f.planner.plan({ ...options, query: "还有哪些未完成的承诺？" }).items.length, 0);
       assert(f.planner.plan({ ...options, query: "你以前答应过什么？" }).text.includes("fulfilled"));
       assert.equal(f.planner.plan({ ...options, currentGameDate: "1180.1.1", query: "你以前答应过什么？" }).items.length, 0);
       const metadata = f.coordinator.store.read(path.join(f.coordinator.store.directory(f.scope), "metadata.json"));
-      assert.equal(metadata.derivedDirty, false, "committed recovery waits for derived reconciliation before completing");
-      assert.equal(f.coordinator.derived.list(f.scope).dirty, false);
+      assert.equal(metadata.knownEvidenceRevisions[hash([saved.snapshot.conversationId, f.scope.ownerId])], originalSourceRevision,
+        "derived retirement must not clear the original source revision proof");
+      assert.equal(metadata.derivedDirty, true, "retirement preserves the source invalidation marker instead of pretending views were reconciled");
+      const derived = f.coordinator.derived.list(f.scope);
+      assert.equal(derived.generationPolicy, "RETIRED");
+      assert.equal(derived.dirty, true);
     });
     await checkAsync("explicit cancellation closes only the original active promise", async () => {
       const f = fixture("cancelled"), saved = newPromise(f, "cancelled");

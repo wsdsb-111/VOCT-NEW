@@ -21245,7 +21245,7 @@ const SummariesManager = () => {
       const result = await window.conversationAPI.regenerateSummary(ownerId, counterpartId, index, summary.content);
       if (result?.summaryUpdated) {
         const memoryStatuses = { COMPLETE: "已完成", ALREADY_CONVERTED: "已同步", NO_DURABLE_CONTENT: "未提取出长期事实",
-          MANUAL_OVERRIDE: "手工版本已保留", PENDING: "等待处理", SKIPPED: "尚未重建", EXTRACTION_FAILED: "提取失败",
+          MANUAL_OVERRIDE: "手工版本已保留", SKIPPED_DERIVED_POLICY: "自动生成已退役，历史结果保留", PENDING: "等待处理", SKIPPED: "尚未重建", EXTRACTION_FAILED: "提取失败",
           SOURCE_INVALID: "来源失效", STALE: "来源已变化", CANCELLED: "已取消", FAILED: "重建失败", REQUEUED: "等待重试",
           BLOCKED_CONTEXT: "缺少可信战役上下文", BLOCKED_ARCHIVE_PROOF: "归档来源无法确认" };
         const canonical = memoryStatuses[result.memoryRebuild?.canonical?.status] || "尚未完成";

@@ -332,7 +332,7 @@ async function testRealMemory4CoordinatorAcceptsLetterSnapshots() {
     const retried = await service.retryPending({ activeCampaignToken: campaignToken, manual: true });
     assert(retried.some(row => row.status === "COMPLETE"));
     assert.equal(derivedCalls, 3, "derived rebuild retries without re-running durable extraction");
-    assert.deepEqual(durableOwners.sort(), [1, 2], "a committed Canonical owner is not extracted again while Year/Life is repaired");
+    assert.deepEqual(durableOwners.sort(), [1, 2], "a committed Canonical owner is not extracted again when derived generation is retired");
     const [sender, recipient] = accepted.participantProfiles;
     const projectedFiles = new Map();
     for (const [owner, other] of [[sender, recipient], [recipient, sender]]) {
@@ -365,17 +365,16 @@ async function testRealMemory4CoordinatorAcceptsLetterSnapshots() {
       assert.equal(known?.directConversationCount || 0, 0);
       assert.equal(known?.sharedSceneCount || 0, 0);
 
-      for (let attempt = 0; attempt < 200; attempt++) {
-        if (derived.read(scope, "life")) break;
-        await new Promise(resolve => setTimeout(resolve, 5));
-      }
+      const completedOwner = service.readJob(job.jobId).owners[String(ownerId)];
+      assert.equal(completedOwner.derivedStatus, "SKIPPED_DERIVED_POLICY");
+      assert.equal(completedOwner.derivedGenerated, false);
+      assert.equal(completedOwner.derivedProviderRequests, 0);
       const views = derived.list(scope);
-      assert.deepEqual(views.years.map(view => view.eventYear), [1038],
-        "undated letter memories archive by acquisition year without inventing an event date");
-      assert.equal(views.years[0].items[0].timeAxis, "acquired");
-      assert(views.years[0].items[0].text.includes(`本年获知，事件日期未知；获知日期：${accepted.acceptedDate}`));
-      assert.equal(views.life?.segments.length, 1);
-      assert(views.life.segments[0].text.includes("本年获知，事件日期未知"));
+      assert.equal(views.generationPolicy, "RETIRED");
+      assert.deepEqual(views.years, [], "letter Durable memories remain stored without generated Year views");
+      assert.equal(views.life, null, "letter Durable memories remain stored without a generated Life view");
+      assert.equal(derived.read(scope, "year", 1038), null);
+      assert.equal(derived.read(scope, "life"), null);
       assert.equal(entry.eventTime.from, null);
       assert.equal(entry.eventTime.to, null);
     }

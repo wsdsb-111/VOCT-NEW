@@ -12,11 +12,26 @@ const { extractTemporalAnchors, normalizeTemporalRefs } = require("../resources/
 const { projectVisibleTranscript } = require("../resources/app/out/main/memory-system/memory4-visibility");
 const { hash, legacySourceHash } = require("../resources/app/out/main/memory-system/memory4-contract");
 const { normalizeGameDate } = require("../resources/app/out/main/worldline/character-temporal-facts");
+const { seedDerivedHistory } = require("./fixtures/v923-derived-history");
 
 const root = fs.mkdtempSync(path.join(os.tmpdir(), "votc-memory4-d-"));
 const tick = () => new Promise(resolve => setImmediate(resolve));
-let checks = 0, sequence = 0;
-async function check(name, run) { await run(); checks++; console.log("PASS " + name); }
+let checks = 0, skippedArchive = 0, sequence = 0;
+const archivedGenerationChecks = new Set([
+  "structured Year and Life preserve provenance without a Provider request",
+  "undated memory archives by acquisition year without inventing an event date",
+  "over-budget compression uses real purpose and source IDs with a hard cap",
+  "compression cannot discard a commitment condition to meet its budget",
+  "compression cannot move one source condition to an unrelated output item"
+]);
+async function check(name, run) {
+  if (archivedGenerationChecks.has(name)) {
+    skippedArchive++;
+    console.log("ARCHIVED " + name + ": automatic Year/Life generation is retired");
+    return;
+  }
+  await run(); checks++; console.log("PASS " + name);
+}
 function fixture() {
   const directory = path.join(root, "fixture-" + sequence++);
   const summaries = path.join(directory, "summaries");
@@ -69,23 +84,34 @@ async function main() {
         { from: null, to: null, precision: "unknown", status: "unknown" });
     });
     await check("normal detached finalization schedules only its proven private scope", async () => {
-      const f = fixture(); f.coordinator.configureDerived({ isCampaignCurrent: () => false });
+      const f = fixture(); let compressionCalls = 0;
+      f.coordinator.configureDerived({ isCampaignCurrent: () => false,
+        requestCompression: async () => { compressionCalls++; throw new Error("retired_derived_provider_must_not_run"); } });
       const data = f.snapshot("1158年迁居邢州。");
       const result = await f.coordinator.finishOwner(data.source, async () => JSON.stringify({ status: "STORE", entries: [data.entry] }));
       assert.equal(result.status, "STORE");
-      for (let index = 0; index < 8; index++) await tick();
-      assert.equal(f.coordinator.derived.list(f.scope).years[0].dirty, false);
-      assert.equal(f.coordinator.derived.list(f.scope).life.dirty, false);
-      assert.equal((await f.coordinator.derived.rebuild(f.scope, { kind: "all", committedFinalization: true })).status, "CANCELLED");
+      assert.equal(result.durableStatus, "STORE");
+      assert.equal(result.derivedGenerationStatus, "SKIPPED_DERIVED_POLICY");
+      assert.equal(result.derived.providerRequests, 0);
+      const views = f.coordinator.derived.list(f.scope);
+      assert.equal(views.generationPolicy, "RETIRED");
+      assert.deepEqual(views.years, []); assert.equal(views.life, null);
+      assert.equal(compressionCalls, 0);
     });
     await check("a clear before a scheduled build cannot recreate a committed sidecar", async () => {
-      const f = fixture(); f.coordinator.configureDerived({ isCampaignCurrent: () => false });
-      const data = f.snapshot("1158年迁居邢州。");
-      await f.coordinator.finishOwner(data.source, async () => JSON.stringify({ status: "STORE", entries: [data.entry] }));
+      const f = fixture(); let compressionCalls = 0;
+      f.coordinator.configureDerived({ isCampaignCurrent: () => false,
+        requestCompression: async () => { compressionCalls++; throw new Error("retired_derived_provider_must_not_run"); } });
+      f.add("1158年迁居邢州。");
       const directory = f.coordinator.store.directory(f.scope);
       fs.rmSync(directory, { recursive: true, force: true });
+      const result = await f.coordinator.derived.schedule(f.scope, { committedFinalization: true,
+        finalizationProof: { finalizationId: "missing-finalization", sourceRevision: hash("missing-source") } });
+      assert.equal(result.status, "SKIPPED_DERIVED_POLICY");
+      assert.equal(result.providerRequests, 0);
       for (let index = 0; index < 8; index++) await tick();
       assert.equal(fs.existsSync(directory), false);
+      assert.equal(compressionCalls, 0);
     });
     await check("over-budget compression uses real purpose and source IDs with a hard cap", async () => {
       const f = fixture(); let calls = 0, purpose;
@@ -127,22 +153,26 @@ async function main() {
     });
     await check("manual conflict keeps user text dirty until an explicit revision-checked overwrite", async () => {
       const f = fixture(), detail = f.add("1158年迁居邢州。");
-      await f.coordinator.derived.rebuild(f.scope, { kind: "all" });
+      seedDerivedHistory(f.coordinator, f.scope);
       const year = f.coordinator.derived.list(f.scope).years[0];
       f.coordinator.derived.updateYear(f.scope, { eventYear: 1158, itemId: year.items[0].itemId, text: "用户的年度文字。", expectedRevision: year.revision });
       f.coordinator.store.updateEntry(f.scope, detail.id, "1158年迁居途中停留。", { expectedRevision: 1 });
       const changed = f.coordinator.derived.list(f.scope).years[0];
-      assert.equal((await f.coordinator.derived.rebuild(f.scope, { kind: "year", eventYear: 1158 })).status, "MANUAL_OVERRIDE");
+      assert.equal((await f.coordinator.derived.rebuild(f.scope, { kind: "year", eventYear: 1158 })).status, "SKIPPED_DERIVED_POLICY");
       f.coordinator.derived.keepManual(f.scope, { kind: "year", eventYear: 1158, expectedRevision: changed.revision });
       const kept = f.coordinator.derived.list(f.scope).years[0];
       assert.equal(kept.dirty, true); assert.equal(kept.items[0].text, "用户的年度文字。");
-      assert.equal((await f.coordinator.derived.rebuild(f.scope, { kind: "year", eventYear: 1158, overwriteManual: true,
-        expectedRevision: kept.revision })).status, "COMPLETE");
-      assert.equal(f.coordinator.derived.list(f.scope).years[0].items[0].text, "1158年迁居途中停留。");
+      assert.throws(() => f.coordinator.derived.keepManual(f.scope, { kind: "year", eventYear: 1158, expectedRevision: changed.revision }), /memory4_derived_edit_stale/);
+      const overwrite = await f.coordinator.derived.rebuild(f.scope, { kind: "year", eventYear: 1158, overwriteManual: true,
+        expectedRevision: kept.revision });
+      assert.equal(overwrite.status, "SKIPPED_DERIVED_POLICY");
+      assert.equal(f.coordinator.derived.list(f.scope).years[0].items[0].text, "用户的年度文字。");
     });
     await check("canonical edit and derived dirty flags roll back together after a write failure", async () => {
       const f = fixture(), detail = f.add("1158年迁居邢州。");
-      await f.coordinator.derived.rebuild(f.scope, { kind: "all" });
+      seedDerivedHistory(f.coordinator, f.scope);
+      const beforeYear = f.coordinator.derived.read(f.scope, "year", 1158);
+      const beforeLife = f.coordinator.derived.read(f.scope, "life");
       const write = f.base.writeJson.bind(f.base); let injected = false;
       f.base.writeJson = (file, value) => {
         if (!injected && file.endsWith("metadata.json")) { injected = true; throw new Error("fixture_write_failure"); }
@@ -153,11 +183,13 @@ async function main() {
       assert.equal(f.coordinator.store.readEntry(f.scope, detail.id).text, "1158年迁居邢州。");
       assert.equal(f.coordinator.derived.list(f.scope).years[0].dirty, false);
       assert.equal(f.coordinator.derived.list(f.scope).life.dirty, false);
+      assert.equal(hash(f.coordinator.derived.read(f.scope, "year", 1158)), hash(beforeYear));
+      assert.equal(hash(f.coordinator.derived.read(f.scope, "life")), hash(beforeLife));
     });
     await check("Planner overview and Detail share verified reads and one dynamic budget", async () => {
       const f = fixture();
       for (let index = 0; index < 24; index++) f.add("1158年记录事项" + index + "。");
-      await f.coordinator.derived.rebuild(f.scope, { kind: "all" });
+      seedDerivedHistory(f.coordinator, f.scope);
       const read = f.coordinator.store.readEntry.bind(f.coordinator.store); let reads = 0;
       f.coordinator.store.readEntry = (...arguments_) => { reads++; return read(...arguments_); };
       const planner = new Memory4RecallPlanner(f.coordinator);
@@ -171,7 +203,7 @@ async function main() {
     });
     await check("a shared profile read context is bounded and new requests revalidate edited sources", async () => {
       const f = fixture(), detail = f.add("1158年迁居邢州。");
-      await f.coordinator.derived.rebuild(f.scope, { kind: "all" });
+      seedDerivedHistory(f.coordinator, f.scope);
       const loadIndex = f.coordinator.store.loadIndex.bind(f.coordinator.store);
       const read = f.coordinator.store.read.bind(f.coordinator.store); let indexReads = 0, metadataReads = 0, knownReads = 0, viewReads = 0;
       f.coordinator.store.loadIndex = (...args) => { indexReads++; return loadIndex(...args); };
@@ -200,7 +232,7 @@ async function main() {
       const f = fixture(), data = f.snapshot("1158年迁居邢州。");
       for (const fragment of data.source.fragments) fragment.sourceType = "rumor";
       const committed = f.coordinator.store.commitOwner(data.source, { status: "STORE", entries: [data.entry] });
-      await f.coordinator.derived.rebuild(f.scope, { kind: "all" });
+      seedDerivedHistory(f.coordinator, f.scope);
       const slice = f.coordinator.derived.selectSlice(f.scope, { query: { granularity: "YEAR", axis: "EVENT", entityIds: [1],
         window: { from: "1158.1.1", to: "1158.12.31" } }, index: f.coordinator.store.loadIndex(f.scope),
         eligibleEntryIds: committed.entryIds, currentGameDate: "1184.8.11" });
@@ -216,7 +248,7 @@ async function main() {
       f.base.writeJson(path.join(directory, "index.json"), index);
       const metadata = f.coordinator.store.read(path.join(directory, "metadata.json"), null);
       f.base.writeJson(path.join(directory, "metadata.json"), { ...metadata, indexHash: hash(index) });
-      await f.coordinator.derived.rebuild(f.scope, { kind: "year", eventYear: 1158 });
+      seedDerivedHistory(f.coordinator, f.scope, { yearKeys: [1158] });
       const slice = f.coordinator.derived.selectSlice(f.scope, { query: { granularity: "YEAR", axis: "EVENT", entityIds: [1],
         window: { from: "1158.1.1", to: "1158.12.31" } }, index, eligibleEntryIds: [detail.id], currentGameDate: "1184.8.11" });
       assert(slice); assert.equal(slice.sourceRef.eventYear, 1158);
@@ -234,10 +266,14 @@ async function main() {
       assert.equal(trace.record("memory4_legacy_recompression", { status: "EXTRACTION_FAILED", errorCode: "memory4_provider_unavailable" }).error,
         "memory4_provider_unavailable");
       const f = fixture(); f.coordinator.trace = trace; f.add("1158年迁居邢州。");
-      await f.coordinator.derived.rebuild(f.scope, { kind: "all" });
-      const logged = trace.list().at(-1).memory4Derived;
-      assert.equal(logged.status, "COMPLETE"); assert.equal(logged.count, 2); assert(logged.indexRevision > 0);
-      assert(logged.derivedRevision > 0); assert(logged.durationMs >= 0);
+      const retired = await f.coordinator.derived.rebuild(f.scope, { kind: "all" });
+      assert.equal(retired.status, "SKIPPED_DERIVED_POLICY");
+      assert.equal(retired.providerRequests, 0);
+      const logged = trace.record("memory4_derived", { ownerId: 2, status: retired.status, kind: retired.kind, count: 0,
+        indexRevision: 1, derivedRevision: 0, sourceHash: hash("safe"), durationMs: 0,
+        text: "SECRET_BODY", providerSnapshot: { apiKey: "SECRET_KEY" } }).memory4Derived;
+      assert.equal(logged.status, "SKIPPED_DERIVED_POLICY"); assert.equal(logged.count, 0);
+      assert(logged.indexRevision > 0); assert.equal(logged.derivedRevision, 0); assert.equal(logged.durationMs, 0);
     });
     await check("Lazy conversion progresses remaining proven facts and preserves original bytes", async () => {
       const f = fixture();
@@ -317,7 +353,8 @@ async function main() {
       } });
       assert.equal((await unsupported.coordinator.recompressLegacy(unsupported.scope, { memoryId: source.memoryId })).reason, "memory4_unsupported_event_date");
     });
-    console.log("V8.14-D lifecycle: " + checks + " PASS (deterministic fixtures only)");
+    assert.equal(skippedArchive, archivedGenerationChecks.size);
+    console.log("V8.14-D lifecycle: " + checks + " PASS, 0 FAIL, " + skippedArchive + " ARCHIVED (deterministic fixtures only)");
   } finally {
     for (let index = 0; index < 8; index++) await tick();
     assert(path.resolve(root).startsWith(path.resolve(os.tmpdir()) + path.sep));

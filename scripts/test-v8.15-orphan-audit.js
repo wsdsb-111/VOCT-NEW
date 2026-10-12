@@ -9,6 +9,7 @@ const { Memory4OrphanAudit } = require("../resources/app/out/main/memory-system/
 const { createProjectionLineage } = require("../resources/app/out/main/memory-system/memory4-forget");
 const { hash } = require("../resources/app/out/main/memory-system/memory4-contract");
 const { disclosureFactId } = require("../resources/app/out/main/memory-system/memory4-disclosure");
+const { seedDerivedHistory } = require("./fixtures/v923-derived-history");
 
 const root = fs.mkdtempSync(path.join(os.tmpdir(), "votc-v815-orphan-audit-"));
 const scope = { campaignToken: "orphan-campaign", ownerId: 2 };
@@ -84,7 +85,7 @@ async function run() {
     const orphan = fixture("orphan");
     seedDisclosure(orphan);
     orphan.engine.memory4.saveRecovery(orphan.snapshot, { status: "PENDING", retryCount: 0 });
-    await orphan.engine.memory4.derived.rebuild(scope, { kind: "all", overwriteManual: false });
+    seedDerivedHistory(orphan.engine, scope);
     const before = treeHashes(root);
     const audited = orphan.audit.audit(scope);
     assert.deepEqual(treeHashes(root), before, "audit must not create or mutate any persisted file");

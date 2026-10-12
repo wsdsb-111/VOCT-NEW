@@ -6,6 +6,10 @@ const actionChecks = [];
 const followupChecks = [];
 
 const archivedChecks = [
+  // V9.2.3 retires paid Year/Life generation; readonly/source safety remains in release fixtures.
+  "test-v8.15.2-derived-budget-split.js",
+  "test-v8.15.2-derived-compression-independent-qa.js",
+  "test-v8.15.2-derived-acquisition-independent-qa.js",
   "test-action-participant-binding.js",
   "test-action-participants.js",
   "test-action-phase-0.6.js",
@@ -77,6 +81,10 @@ const archivedChecks = [
 ];
 
 const releaseChecks = [
+  { group: "v9.2.3-derived-retirement", script: "test-v9.2.3-derived-retirement.js" },
+  { group: "v9.2.3-derived-recovery", script: "test-v9.2.3-derived-recovery.js" },
+  { group: "v9.2.3-glm-outbound-equivalence", script: "test-v9.2.3-glm-outbound-equivalence.js" },
+  { group: "v9.2.3-glm-native-usage", script: "test-v9.2.3-glm-native-usage.js" },
   { group: "v9.2.1-durable-cache-policy", script: "test-v9.2.1-durable-cache-policy.js" },
   { group: "v9.2.1-glm-v813-prefix", script: "test-v9.2.1-glm-v813-prefix.js" },
   { group: "v9.2.1-cache-native-usage", script: "test-v9.2.1-cache-native-usage.js" },
@@ -98,14 +106,11 @@ const releaseChecks = [
   { group: "v9.0-independent-diagnostics-qa", script: "test-v9.0-independent-qa.js" },
   { group: "v8.15.2-letter-receipt-startup-recovery", script: "test-v8.15.2-letter-receipt-startup-recovery.js" },
   { group: "v8.15.2-date-scan-incremental", script: "test-v8.15.2-date-scan-incremental.js" },
-  { group: "v8.15.2-derived-budget-split", script: "test-v8.15.2-derived-budget-split.js" },
-  { group: "v8.15.2-derived-compression-independent-qa", script: "test-v8.15.2-derived-compression-independent-qa.js" },
   { group: "v8.15.2-idle-run-carrier", script: "test-v8.15.2-idle-run-carrier.js" },
   { group: "v8.15.2-runtime-followup-independent-qa", script: "test-v8.15.2-runtime-followup-independent-qa.js" },
   { group: "v8.15.2-outbound-bridge", script: "test-v8.15.2-outbound-bridge.js" },
   { group: "v8.15.2-outbound-bridge-independent-qa", script: "test-v8.15.2-outbound-bridge-independent-qa.js" },
   { group: "v8.15.2-fix5-independent-qa", script: "test-v8.15.2-fix5-independent-qa.js" },
-  { group: "v8.15.2-derived-acquisition-independent-qa", script: "test-v8.15.2-derived-acquisition-independent-qa.js" },
   { group: "v8.15.2-letter-timer-retirement-qa", script: "test-v8.15.2-letter-timer-retirement-qa.js" },
   { group: "v8.15.2-letter-archive-independent-qa", script: "test-v8.15.2-letter-archive-independent-qa.js" },
   { group: "v9.0-ci-history", script: "test-v9.0-ci-history.js" },
@@ -218,9 +223,9 @@ const releaseChecks = [
   { group: "v8.14-b-profile", script: "test-v8.14-b-profile.js" },
   { group: "v8.14.1-trait-profile-routing", script: "test-v8.14.1-trait-profile-routing.js" },
   { group: "v8.14-c-recall-planner", script: "test-v8.14-c-recall-planner.js" },
-  { group: "v8.14-d-derived-lifecycle", script: "test-v8.14-d-derived-lifecycle.js" },
   { group: "v8.14-player-identity-knowledge", script: "test-v8.14-player-identity-knowledge.js" },
   { group: "v8.14-de-independent-qa", script: "test-v8.14-de-independent-qa.js" },
+  { group: "v8.14-d-derived-lifecycle", script: "test-v8.14-d-derived-lifecycle.js" },
   { group: "v8.14.1-production-pipeline-qa", script: "test-v8.14.1-production-pipeline-qa.js" },
   { group: "v8.14.1-memory4-archival-readonly", script: "test-v8.14.1-memory4-archival-readonly.js" },
   { group: "v8.14.1-frontend-content", script: "test-v8.14.1-frontend-content.js" },
