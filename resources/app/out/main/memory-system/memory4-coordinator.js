@@ -53,6 +53,22 @@ function safeMessageIds(values) {
   return [...new Set((Array.isArray(values) ? values : []).filter(id => Number.isSafeInteger(id) && id >= 0))].sort((a, b) => a - b);
 }
 
+function durableTraceFailure(error, attempt = null) {
+  const errorCode = typeof error?.message === "string" ? error.message : "UNKNOWN";
+  if (errorCode === "memory4_request_source_changed_before_send") {
+    const sent = typeof attempt?.providerAttemptCount === "number" && Number.isSafeInteger(attempt.providerAttemptCount)
+      && attempt.providerAttemptCount > 0;
+    return { status: sent ? "FAILED" : "FAILED_PRE_SEND", parseStatus: "NOT_ATTEMPTED", errorCode };
+  }
+  if (errorCode.startsWith("provider_")) return { errorCode };
+  if (errorCode === "memory4_generation_incomplete") return { status: "INCOMPLETE", parseStatus: "INCOMPLETE", errorCode };
+  if (errorCode === "memory4_response_invalid_json") return { status: "INVALID_JSON", parseStatus: "INVALID_JSON", errorCode };
+  if (errorCode === "memory4_response_invalid_shape") return { status: "INVALID_SHAPE", parseStatus: "INVALID_SHAPE", errorCode };
+  if (errorCode === "memory4_response_invalid_transitions") return { status: "INVALID_SHAPE", parseStatus: "INVALID_TRANSITIONS", errorCode };
+  if (errorCode === "memory4_response_source_mismatch") return { status: "REJECTED", parseStatus: "SOURCE_REJECTED", errorCode };
+  return { status: "FAILED", parseStatus: "ERROR", errorCode };
+}
+
 class Memory4Coordinator {
   constructor(store, { trace = null } = {}) {
     this.store = new Memory4Store(store);
@@ -61,6 +77,7 @@ class Memory4Coordinator {
     this.relationshipReadback = new Memory4RelationshipReadback();
     this.baseStore = store;
     this.trace = trace;
+    this.durableRequestTrace = null;
     this.recoveryDir = store.paths.memory4Recovery;
     this.inFlight = new Set();
     this.derived = new Memory4DerivedService(this);
@@ -69,6 +86,26 @@ class Memory4Coordinator {
   }
 
   configureDerived(options = {}) { this.derived.configure(options); }
+
+  beginDurableTraceRun(snapshot, options) {
+    try { return this.durableRequestTrace?.beginRun(snapshot, options) || null; }
+    catch { return null; }
+  }
+
+  beginDurableTraceAttempt(run, chunk, retry) {
+    try { return this.durableRequestTrace?.beginAttempt(run, chunk, retry) || null; }
+    catch { return null; }
+  }
+
+  recordDurableTrace(attempt, fields) {
+    try { this.durableRequestTrace?.record(attempt, fields); }
+    catch { /* Diagnostics must never affect Memory4. */ }
+  }
+
+  durableTraceHash(domain, value) {
+    try { return this.durableRequestTrace?.hashValue(domain, JSON.stringify(value)) || null; }
+    catch { return null; }
+  }
 
   legacySource(scope, memoryId) {
     const memories = this.baseStore.loadFolderSummariesForCharacter(scope.ownerId);
@@ -229,6 +266,7 @@ class Memory4Coordinator {
     }
     this.lazyInFlight.add(key);
     const controller = new AbortController();
+    let durableTrace = null;
     try {
       if (!current()) return { status: "CANCELLED", sourceMemoryId: memoryId, entryIds: [], retained: true };
       this.saveRecovery(snapshot, { status: "PENDING", retryCount: priorRecovery?.retryCount || 0, lastError: null });
@@ -237,14 +275,21 @@ class Memory4Coordinator {
       this.saveRecovery(snapshot, { status: "PENDING", retryCount: priorRecovery?.retryCount || 0, lastError: null });
       if (!current()) return { status: this.isLegacyRecompressionSnapshotCurrent(snapshot) ? "CANCELLED" : "STALE",
         sourceMemoryId: memoryId, entryIds: [], retained: true };
+      const traceRun = this.beginDurableTraceRun(snapshot, { origin: "legacy_recompression", operation: "legacy_recompression" });
+      durableTrace = this.beginDurableTraceAttempt(traceRun, { ownerId: scope.ownerId, campaignToken: scope.campaignToken,
+        finalizationId: snapshot.finalizationId, chunkIndex: 0, chunkTotal: 1, chunkPath: [0], fragmentCount: fragments.length,
+        origin: "legacy_recompression", operation: "legacy_recompression",
+        sourceDigest: this.durableTraceHash("source_digest", [snapshot.sourceRevision, fragments]) });
       const response = await this.derived.options.requestExtraction(this.buildPrompt(snapshot, fragments), {
-        signal: controller.signal, maxTokens: DURABLE_MAX_OUTPUT_TOKENS, providerSnapshot, requestType: "memory4_durable" });
+        signal: controller.signal, maxTokens: DURABLE_MAX_OUTPUT_TOKENS, providerSnapshot, requestType: "memory4_durable", durableTrace,
+        beforeSendGuard: this.makeDurableSendGuard(snapshot, fragments, current) });
       if (!current()) {
         const sourceCurrent = this.isLegacyRecompressionSnapshotCurrent(snapshot);
         if (!sourceCurrent) clearRecovery();
         return { status: sourceCurrent ? "CANCELLED" : "STALE", sourceMemoryId: memoryId, entryIds: [], retained: true };
       }
       const result = this.parseResult(response, fragments, snapshot);
+      this.recordDurableTrace(durableTrace, { status: "PARSED_OK", parseStatus: "PARSED_OK", complete: true, truncated: false });
       if (result.rejectedUnknownEntityCount) this.trace?.record("memory4_candidate_rejected", {
         ownerId: scope.ownerId, count: result.rejectedUnknownEntityCount, reason: "unknown_entity"
       });
@@ -256,6 +301,7 @@ class Memory4Coordinator {
         return { status: "RETAINED_LEGACY", sourceMemoryId: memoryId, entryIds: [], retained: true, reason: "NO_DURABLE_CONTENT" };
       }
       const committed = this.store.commitOwner(snapshot, result);
+      this.recordDurableTrace(durableTrace, { status: "COMMITTED" });
       let derived = null;
       if (rebuildDerived) {
         derived = await rebuildDerivedViews({ finalizationId: snapshot.finalizationId, sourceRevision: snapshot.sourceRevision });
@@ -267,6 +313,7 @@ class Memory4Coordinator {
       return { status, ...(rebuildDerived ? { canonical: { status, entryIds: [...committed.entryIds] }, derived } : {}),
         sourceMemoryId: memoryId, entryIds: [...committed.entryIds], retained: true };
     } catch (error) {
+      this.recordDurableTrace(durableTrace, durableTraceFailure(error, durableTrace));
       this.trace?.record("memory4_legacy_recompression", { ownerId: scope.ownerId, status: "EXTRACTION_FAILED", errorCode: error.message });
       if (!this.isLegacyRecompressionSnapshotCurrent(snapshot)) clearRecovery();
       else if (current()) this.saveRecovery(snapshot, { status: "EXTRACTION_FAILED", retryCount: Number(this.readRecovery(recoveryFile)?.retryCount || 0) + 1,
@@ -854,10 +901,33 @@ class Memory4Coordinator {
       commitmentTransitions: retainedTransitions, rejectedUnknownEntityCount };
   }
 
-  async finishOwner(snapshot, requestDurable, prior = null, isCurrent = () => true, { handoffOnly = false } = {}) {
+  makeDurableSendGuard(snapshot, chunk, isCurrent = () => true) {
+    const sourceIdentity = value => hash([value.campaignToken, value.ownerId, value.conversationId,
+      value.finalizationId, value.sourceRevision, value.date, value.completeness, value.fragments, value.activeCommitments,
+      value.entityNameEvidence, value.relationshipEvidence, value.projectionLineages]);
+    const expectedIdentity = sourceIdentity(snapshot);
+    const expectedChunk = hash(chunk);
+    return () => {
+      let latest, recovery;
+      try {
+        latest = this.store.filterForgottenSnapshot(snapshot).snapshot;
+        recovery = this.readRecovery(this.recoveryPath(snapshot));
+      } catch { throw new Error("memory4_request_source_changed_before_send"); }
+      if (!isCurrent() || sourceIdentity(latest) !== expectedIdentity || hash(chunk) !== expectedChunk
+        || !recovery || sourceIdentity(recovery.snapshot) !== expectedIdentity
+        || snapshot.legacyRecompression === true && !this.isLegacyRecompressionSnapshotCurrent(snapshot)) {
+        throw new Error("memory4_request_source_changed_before_send");
+      }
+    };
+  }
+
+  async finishOwner(snapshot, requestDurable, prior = null, isCurrent = () => true,
+    { handoffOnly = false, durableTraceRun = null, origin = "other", operation = null } = {}) {
     const file = this.recoveryPath(snapshot);
     if (this.inFlight.has(file)) return { status: "IN_PROGRESS", ownerId: snapshot.ownerId };
     this.inFlight.add(file);
+    const traceRun = durableTraceRun || this.beginDurableTraceRun(snapshot, { origin, operation });
+    const parsedAttempts = [];
     const forgottenFragmentIds = new Set(strings(prior?.forgottenFragmentIds));
     let forgetFilterPassed = false;
     try {
@@ -917,7 +987,7 @@ class Memory4Coordinator {
         const commitmentTransitions = [];
         let rejectedUnknownEntityCount = 0;
         const orderedFragments = this.orderFragments(snapshot, snapshot.fragments);
-        const extractChunk = async (chunk, remainingEntrySlots, remainingTransitionSlots) => {
+        const extractChunk = async (chunk, remainingEntrySlots, remainingTransitionSlots, lineage, refreshCount = 0) => {
           if (!isCurrent()) throw new Error("memory4_generation_changed");
           const beforeRequest = this.store.filterForgottenSnapshot(snapshot);
           if (beforeRequest.forgottenProjectionIds.length || beforeRequest.removedFragmentCount) {
@@ -927,9 +997,15 @@ class Memory4Coordinator {
           }
           chunk = chunk.filter(fragment => snapshot.fragments.some(current => current.fragmentId === fragment.fragmentId));
           if (!chunk.length) return { entries: [], commitmentTransitions: [], rejectedUnknownEntityCount: 0 };
+          const durableTrace = this.beginDurableTraceAttempt(traceRun, { ownerId: snapshot.ownerId, campaignToken: snapshot.campaignToken,
+            finalizationId: snapshot.finalizationId, chunkIndex: lineage.chunkIndex, chunkTotal: lineage.chunkTotal,
+            chunkPath: lineage.chunkPath, fragmentCount: chunk.length, origin, operation,
+            sourceDigest: this.durableTraceHash("source_digest", [snapshot.sourceRevision, chunk]) }, { parentAttemptId: lineage.parentAttemptId,
+            retryDepth: lineage.retryDepth, retryReason: lineage.retryReason });
           try {
             const response = await requestDurable(this.buildPrompt(snapshot, chunk, remainingEntrySlots, remainingTransitionSlots), { ownerId: snapshot.ownerId,
-              campaignToken: snapshot.campaignToken, maxTokens: DURABLE_MAX_OUTPUT_TOKENS, providerSnapshot: snapshot.summaryProviderSnapshot });
+              campaignToken: snapshot.campaignToken, maxTokens: DURABLE_MAX_OUTPUT_TOKENS, providerSnapshot: snapshot.summaryProviderSnapshot,
+              durableTrace, beforeSendGuard: this.makeDurableSendGuard(snapshot, chunk, isCurrent) });
             if (!isCurrent()) throw new Error("memory4_generation_changed");
             const latest = this.store.filterForgottenSnapshot(snapshot);
             if (latest.forgottenProjectionIds.length || latest.removedFragmentCount) {
@@ -940,14 +1016,35 @@ class Memory4Coordinator {
             const allowedChunk = chunk.filter(fragment => snapshot.fragments.some(current => current.fragmentId === fragment.fragmentId));
             const parsed = this.parseResult(response, allowedChunk, snapshot, remainingEntrySlots, remainingTransitionSlots,
               [...forgottenFragmentIds]);
+            this.recordDurableTrace(durableTrace, { status: "PARSED_OK", parseStatus: "PARSED_OK", complete: true, truncated: false });
+            if (durableTrace) parsedAttempts.push(durableTrace);
             return parsed;
           } catch (error) {
+            this.recordDurableTrace(durableTrace, durableTraceFailure(error, durableTrace));
             if (!isCurrent()) throw new Error("memory4_generation_changed");
+            if (error.message === "memory4_request_source_changed_before_send" && refreshCount < 1) {
+              let refreshed;
+              try { refreshed = this.store.filterForgottenSnapshot(snapshot); }
+              catch { throw error; }
+              if (!refreshed.removedFragmentCount && !refreshed.forgottenProjectionIds.length) throw error;
+              (refreshed.removedFragmentIds || []).forEach(id => forgottenFragmentIds.add(id));
+              snapshot = refreshed.snapshot;
+              sourceFilteredByForget = true;
+              return extractChunk(chunk, remainingEntrySlots, remainingTransitionSlots, { ...lineage,
+                parentAttemptId: durableTrace?.durableAttemptId || lineage.parentAttemptId,
+                retryDepth: lineage.retryDepth + 1, retryReason: "source_changed_before_send" }, refreshCount + 1);
+            }
             if (error.message !== "memory4_generation_incomplete") throw error;
             if (chunk.length > 1) {
               const midpoint = Math.ceil(chunk.length / 2);
-              const first = await extractChunk(chunk.slice(0, midpoint), remainingEntrySlots, remainingTransitionSlots);
-              const second = await extractChunk(chunk.slice(midpoint), remainingEntrySlots - first.entries.length, remainingTransitionSlots - first.commitmentTransitions.length);
+              const parentAttemptId = typeof durableTrace?.durableAttemptId === "string"
+                ? durableTrace.durableAttemptId : lineage.parentAttemptId;
+              const retryDepth = Number.isSafeInteger(durableTrace?.retryDepth) ? durableTrace.retryDepth + 1 : lineage.retryDepth + 1;
+              const retry = (branch) => ({ ...lineage, chunkPath: [...lineage.chunkPath, branch], parentAttemptId,
+                retryDepth, retryReason: "output_truncated" });
+              const first = await extractChunk(chunk.slice(0, midpoint), remainingEntrySlots, remainingTransitionSlots, retry(0));
+              const second = await extractChunk(chunk.slice(midpoint), remainingEntrySlots - first.entries.length,
+                remainingTransitionSlots - first.commitmentTransitions.length, retry(1));
               return { entries: [...first.entries, ...second.entries],
                 commitmentTransitions: [...first.commitmentTransitions, ...second.commitmentTransitions.map(transition => ({ ...transition,
                   ...(transition.status === "superseded" ? { replacementEntryIndex: transition.replacementEntryIndex + first.entries.length } : {}) }))],
@@ -956,9 +1053,12 @@ class Memory4Coordinator {
             throw error;
           }
         };
-        for (let offset = 0; offset < orderedFragments.length; offset += MAX_FRAGMENTS_PER_REQUEST) {
+        const chunkTotal = Math.ceil(orderedFragments.length / MAX_FRAGMENTS_PER_REQUEST);
+        for (let offset = 0, chunkIndex = 0; offset < orderedFragments.length; offset += MAX_FRAGMENTS_PER_REQUEST, chunkIndex++) {
           const chunk = orderedFragments.slice(offset, offset + MAX_FRAGMENTS_PER_REQUEST);
-          const parsed = await extractChunk(chunk, MAX_DURABLE_ENTRIES_PER_OWNER - entries.length, MAX_DURABLE_ENTRIES_PER_OWNER - commitmentTransitions.length);
+          const parsed = await extractChunk(chunk, MAX_DURABLE_ENTRIES_PER_OWNER - entries.length,
+            MAX_DURABLE_ENTRIES_PER_OWNER - commitmentTransitions.length, { chunkIndex, chunkTotal, chunkPath: [chunkIndex],
+              parentAttemptId: null, retryDepth: 0, retryReason: "other" });
           commitmentTransitions.push(...parsed.commitmentTransitions.map(transition => ({ ...transition,
             ...(transition.status === "superseded" ? { replacementEntryIndex: transition.replacementEntryIndex + entries.length } : {}) })));
           entries.push(...parsed.entries);
@@ -996,6 +1096,7 @@ class Memory4Coordinator {
         return { ownerId: snapshot.ownerId, status: "FORGOTTEN" };
       }
       const persisted = this.repository.commitOwner(snapshot, result);
+      parsedAttempts.forEach(attempt => this.recordDurableTrace(attempt, { status: "COMMITTED" }));
       this.recordDisclosures(snapshot, { campaignToken: snapshot.campaignToken, date: snapshot.date,
         characters: new Map((snapshot.disclosureCharacters || []).map(character => [character.id, character])) });
       if (snapshot.legacyRecompression === true) {
@@ -1022,7 +1123,7 @@ class Memory4Coordinator {
       if (!isCurrent()) return { ownerId: snapshot.ownerId, status: "CANCELLED",
         ...(fs.existsSync(file) ? { recoveryPath: file } : {}) };
       const retryCount = Number(prior?.retryCount || 0) + 1;
-      if (forgetFilterPassed) this.saveRecovery(snapshot, { forgottenFragmentIds: [...forgottenFragmentIds], status: "EXTRACTION_FAILED",
+      if (forgetFilterPassed && error.message !== "memory4_request_source_changed_before_send") this.saveRecovery(snapshot, { forgottenFragmentIds: [...forgottenFragmentIds], status: "EXTRACTION_FAILED",
         retryCount, lastError: String(error?.message || error) });
       this.trace?.record("memory4_durable", { finalizationId: snapshot.finalizationId, ownerId: snapshot.ownerId,
         status: "EXTRACTION_FAILED", errorCode: String(error?.message || error) });
@@ -1052,6 +1153,7 @@ class Memory4Coordinator {
       return { status: "CAMPAIGN_UNAVAILABLE", owners: [], durableHandoffComplete: false };
     }
     const participantIds = ids((context.participants || []).map(participant => participant.id));
+    const traceRun = this.beginDurableTraceRun(context, { origin: "finalization" });
     const excludedOwnerIds = ids(context.excludedSummaryOwnerIds);
     const intentionalExclusions = participantIds.filter(id => excludedOwnerIds.includes(id));
     const owners = participantIds.filter(id => !excludedOwnerIds.includes(id));
@@ -1067,7 +1169,8 @@ class Memory4Coordinator {
           snapshot = this.buildOwnerSnapshot(context, ownerId);
           sourceRevisions[index] = snapshot.sourceRevision;
           const prior = this.readRecovery(this.recoveryPath(snapshot));
-          results[index] = await this.finishOwner(snapshot, requestDurable, prior, isCurrent, { handoffOnly });
+          results[index] = await this.finishOwner(snapshot, requestDurable, prior, isCurrent,
+            { handoffOnly, durableTraceRun: traceRun, origin: "finalization" });
         } catch (error) {
           results[index] = { ownerId, status: "EXTRACTION_FAILED", error: String(error?.message || error),
             ...(snapshot && fs.existsSync(this.recoveryPath(snapshot)) ? { recoveryPath: this.recoveryPath(snapshot) } : {}) };
@@ -1120,7 +1223,10 @@ class Memory4Coordinator {
           if (!isNarrativeCommitted(snapshot) && !legacyRecompression) { results[index] = { status: "WAITING_NARRATIVE", ownerId: snapshot.ownerId }; continue; }
           if (!manual && Number(record.retryCount || 0) >= 3) { results[index] = { status: "FAILED_MANUAL", ownerId: snapshot.ownerId }; continue; }
           const recoveryIsCurrent = () => isCurrent() && (!legacyRecompression || this.isLegacyRecompressionSnapshotCurrent(snapshot));
-          results[index] = await this.finishOwner(snapshot, requestDurable, record, recoveryIsCurrent);
+          const traceRun = this.beginDurableTraceRun(snapshot, { origin: "recovery",
+            operation: legacyRecompression ? "legacy_recompression" : null });
+          results[index] = await this.finishOwner(snapshot, requestDurable, record, recoveryIsCurrent,
+            { durableTraceRun: traceRun, origin: "recovery", operation: legacyRecompression ? "legacy_recompression" : null });
           if (legacyRecompression && results[index].status === "CANCELLED" && !this.isLegacyRecompressionSnapshotCurrent(snapshot)) {
             discardStaleLegacy();
             results[index] = { status: "STALE", ownerId: snapshot.ownerId };

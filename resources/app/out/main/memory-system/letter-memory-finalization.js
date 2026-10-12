@@ -467,7 +467,8 @@ class LetterMemoryFinalization {
           let result;
           try {
             result = await this.memoryEngine.memory4.finishOwner(snapshot, this.requestDurable,
-              this.coordinatorPrior(snapshot), () => this.isCurrent(job));
+              this.coordinatorPrior(snapshot), () => this.isCurrent(job),
+              { origin: "letter_finalization", operation: "letter_finalization" });
           } catch { result = { status: "EXTRACTION_FAILED" }; }
           if (COMPLETED_OWNER_STATUSES.has(result?.status)) {
             owner.status = result.status;

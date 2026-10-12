@@ -354,6 +354,10 @@
       "target": "out/main/analytics/usage-analytics.js"
     },
     {
+      "source": "main/analytics/durable-request-trace.js",
+      "target": "out/main/analytics/durable-request-trace.js"
+    },
+    {
       "source": "main/app/app-updater.js",
       "target": "out/main/app/app-updater.js"
     },

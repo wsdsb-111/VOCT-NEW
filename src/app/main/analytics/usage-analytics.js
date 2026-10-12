@@ -2,6 +2,60 @@
 
 const { normalizeProviderUsage } = require("../providers/usage-normalization");
 
+const DURABLE_ORIGINS = new Set(["finalization", "recovery", "legacy_recompression", "letter_finalization", "other"]);
+const DURABLE_SCOPE_HASH_FIELDS = ["ownerScopeHash", "campaignScopeHash", "endpointHash", "effectiveParameterHash", "policyHash"];
+const DURABLE_HASH_PATTERN = /^[a-f0-9]{64}$/i;
+const DURABLE_ATTEMPT_ID_PATTERN = /^[a-f0-9]{8}-[a-f0-9]{4}-[1-8][a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}$/i;
+
+function projectDurableTrace(value) {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return null;
+  const projected = {
+    durableAttemptId: typeof value.durableAttemptId === "string" && DURABLE_ATTEMPT_ID_PATTERN.test(value.durableAttemptId) ? value.durableAttemptId.toLowerCase() : null,
+    origin: DURABLE_ORIGINS.has(value.origin) ? value.origin : "UNKNOWN",
+    inputReported: value.inputReported === true,
+    hitReported: value.hitReported === true,
+    missReported: value.missReported === true,
+    outputReported: value.outputReported === true
+  };
+  for (const field of DURABLE_SCOPE_HASH_FIELDS) {
+    projected[field] = typeof value[field] === "string" && DURABLE_HASH_PATTERN.test(value[field]) ? value[field].toLowerCase() : null;
+  }
+  return projected;
+}
+
+function buildDurableComparisonKey(entry) {
+  if (entry?.requestType !== "memory4_durable") return null;
+  const trace = entry.durableTrace;
+  if (!trace || !DURABLE_SCOPE_HASH_FIELDS.every((field) => typeof trace[field] === "string" && DURABLE_HASH_PATTERN.test(trace[field]))) return null;
+  return JSON.stringify([entry.requestType, entry.providerType, entry.model, ...DURABLE_SCOPE_HASH_FIELDS.map((field) => trace[field].toLowerCase())]);
+}
+
+function buildDurableBaseKey(entry) {
+  return JSON.stringify([entry?.requestType, entry?.providerType, entry?.model]);
+}
+
+function compareExactPromptBlocks(entry, previousEntry) {
+  if (!previousEntry) return { status: "no_same_scope_predecessor", firstChangedBlock: null };
+  const currentBlocks = Array.isArray(entry?.blocks) ? entry.blocks : null;
+  const previousBlocks = Array.isArray(previousEntry?.blocks) ? previousEntry.blocks : null;
+  if (!currentBlocks || !previousBlocks || currentBlocks.length === 0 || previousBlocks.length === 0) {
+    return { status: "unknown_fingerprints", firstChangedBlock: null };
+  }
+  const maxLength = Math.max(currentBlocks.length, previousBlocks.length);
+  for (let index = 0; index < maxLength; index++) {
+    const current = currentBlocks[index];
+    const previous = previousBlocks[index];
+    if (!current || !previous) return { status: "changed", firstChangedBlock: { id: current?.id || null, position: index } };
+    if (typeof current.fingerprint !== "string" || !current.fingerprint || typeof previous.fingerprint !== "string" || !previous.fingerprint) {
+      return { status: "unknown_fingerprints", firstChangedBlock: null };
+    }
+    if (current.id !== previous.id || current.fingerprint !== previous.fingerprint) {
+      return { status: "changed", firstChangedBlock: { id: current.id || null, position: index } };
+    }
+  }
+  return { status: "unchanged", firstChangedBlock: null };
+}
+
 function createUsageAnalytics({ fs, dataDir, analyticsFile, retention, createPromptFingerprint }) {
   const fs$1 = fs;
   const VOTC_DATA_DIR = dataDir;
@@ -240,6 +294,9 @@ function createUsageAnalytics({ fs, dataDir, analyticsFile, retention, createPro
           lifecycle: block.lifecycle || null
         })) : []
       };
+      if (entry.requestType === "memory4_durable") {
+        entry.durableTrace = projectDurableTrace(metadata?.durableTrace);
+      }
       const data = this.read();
       data.version = 4;
       data.entries.push(entry);
@@ -286,6 +343,7 @@ function createUsageAnalytics({ fs, dataDir, analyticsFile, retention, createPro
       const missAttributionTotals = {};
       const changesSincePreviousTotals = {};
       const previousByRequest = /* @__PURE__ */ new Map();
+      const lastDurableScopeByRequest = /* @__PURE__ */ new Map();
       const recentWithAttribution = [];
       const structuredSchemas = { requests: 0, schemaTokenEstimate: 0, byCacheRole: {}, bySerializedOrder: {} };
       const actionOutcomes = {
@@ -413,11 +471,50 @@ function createUsageAnalytics({ fs, dataDir, analyticsFile, retention, createPro
           blockTotals[blockKey].requests++;
           blockTotals[blockKey].tokens += block.tokens || 0;
         }
-        const responderKey = entry.characterId ?? entry.character ?? "";
-        const previousKey = `${entry.requestType} | ${entry.providerType} | ${entry.model} | ${responderKey}`;
-        const previousEntry = previousByRequest.get(previousKey);
+        const isDurableRequest = entry.requestType === "memory4_durable";
+        let previousKey;
+        let previousEntry;
+        let durableScopeKey = null;
+        let interveningScopeChange = null;
+        if (isDurableRequest) {
+          durableScopeKey = buildDurableComparisonKey(entry);
+          const baseKey = buildDurableBaseKey(entry);
+          const lastScopeKey = lastDurableScopeByRequest.get(baseKey);
+          if (durableScopeKey) {
+            previousKey = durableScopeKey;
+            previousEntry = previousByRequest.get(previousKey);
+            if (previousEntry) interveningScopeChange = lastScopeKey == null ? null : lastScopeKey !== durableScopeKey;
+            previousByRequest.set(previousKey, entry);
+          }
+          lastDurableScopeByRequest.set(baseKey, durableScopeKey);
+        } else {
+          const responderKey = entry.characterId ?? entry.character ?? "";
+          previousKey = `${entry.requestType} | ${entry.providerType} | ${entry.model} | ${responderKey}`;
+          previousEntry = previousByRequest.get(previousKey);
+          previousByRequest.set(previousKey, entry);
+        }
         const cacheAttribution = this.attributeCacheMiss(entry, previousEntry);
-        previousByRequest.set(previousKey, entry);
+        if (isDurableRequest) {
+          const exactDiff = durableScopeKey
+            ? compareExactPromptBlocks(entry, previousEntry)
+            : { status: "unattributable_cross_owner", firstChangedBlock: null };
+          entry.durableAttribution = {
+            provider_native: {
+              status: entry.durableTrace?.durableAttemptId ? "requires_trace_join" : "unknown",
+              promptTokens: null,
+              cacheHitTokens: null,
+              cacheMissTokens: null,
+              outputTokens: null
+            },
+            exact_app_content_diff: { ...exactDiff, interveningScopeChange },
+            local_estimation: cacheAttribution ? {
+              status: "estimated",
+              method: cacheAttribution.method,
+              breakpoint: cacheAttribution.breakpoint ? { id: cacheAttribution.breakpoint.id, type: cacheAttribution.breakpoint.type, position: cacheAttribution.breakpoint.position } : null,
+              downstreamMissTokens: cacheAttribution.downstreamMissTokens
+            } : { status: "unknown", method: null, breakpoint: null, downstreamMissTokens: null }
+          };
+        }
         if (!entry.isReconciledAggregate) recentWithAttribution.push({ ...entry, cacheAttribution });
         if (cacheAttribution?.cacheMissTokens > 0) {
           const breakpoint = cacheAttribution.breakpoint;
@@ -586,4 +683,4 @@ function createUsageAnalytics({ fs, dataDir, analyticsFile, retention, createPro
   return UsageAnalytics;
 }
 
-module.exports = { createUsageAnalytics };
+module.exports = { createUsageAnalytics, projectDurableTrace, buildDurableComparisonKey };

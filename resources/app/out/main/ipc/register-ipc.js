@@ -57,7 +57,8 @@ function registerIpcHandlers(runtime) {
         filters: [{ name: "JSON", extensions: ["json"] }]
       });
       if (selection.canceled || !selection.filePath) return { exported: false, reason: "CANCELLED" };
-      await fs.promises.writeFile(selection.filePath, JSON.stringify(performanceTrace.exportReport(), null, 2), "utf8");
+      await fs.promises.writeFile(selection.filePath, JSON.stringify({ ...performanceTrace.exportReport(),
+        durableTrace: llmManager?.durableRequestTrace?.exportReport() || { version: 1, enabled: false, attempts: [] } }, null, 2), "utf8");
       return { exported: true };
     } catch (_error) {
       return { exported: false, reason: "PERFORMANCE_EXPORT_FAILED" };

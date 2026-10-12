@@ -2100,7 +2100,8 @@ class Conversation {
         });
       },
       requestDurable: (prompt, options = {}) => llmManager.sendSummaryRequest(prompt, void 0, {
-        requestType: "memory4_durable", maxTokens: options.maxTokens, providerSnapshot: options.providerSnapshot
+        requestType: "memory4_durable", maxTokens: options.maxTokens, providerSnapshot: options.providerSnapshot,
+        durableTrace: options.durableTrace, beforeSendGuard: options.beforeSendGuard
       })
     });
   }
@@ -2112,7 +2113,8 @@ class Conversation {
       getSummaryCapabilities: (snapshot) => llmManager.getProviderCapabilities("SUMMARY", snapshot),
       requestSummary: (summaryPrompt, options = {}) => llmManager.sendSummaryRequest(summaryPrompt, void 0, { requestType: "memory_recovery", maxTokens: options.maxTokens, providerSnapshot: options.providerSnapshot, summaryBudget: options.summaryBudget }),
       requestDurable: (prompt, options = {}) => llmManager.sendSummaryRequest(prompt, void 0, {
-        requestType: "memory4_durable", maxTokens: options.maxTokens, providerSnapshot: options.providerSnapshot
+        requestType: "memory4_durable", maxTokens: options.maxTokens, providerSnapshot: options.providerSnapshot,
+        durableTrace: options.durableTrace, beforeSendGuard: options.beforeSendGuard
       }),
       activeCampaignToken: this.gameData.campaignToken || null,
       resolveParticipantProfiles: (snapshot) => memoryEngine.resolveRecoveryParticipantProfiles(snapshot, [...this.summaryParticipantProfiles.values()]),

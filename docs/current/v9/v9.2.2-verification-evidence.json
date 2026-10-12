@@ -1,0 +1,175 @@
+{
+  "schemaVersion": 1,
+  "analysisVersion": "V9.2.2",
+  "baselineCommit": "edb389623ba34e8a668779b74509d8f1b2bf78cb",
+  "candidateCommit": null,
+  "branch": "main",
+  "formalAppVersion": "9.2.0",
+  "formalUiVersion": "V9.2",
+  "stageStatus": "LOCAL_SAFETY_DIAGNOSTICS_CANDIDATE_CACHE_GAIN_HOLD",
+  "build": {
+    "mappings": 287,
+    "payloadSha256": "969d94d2c5c9c471ffa99960f0b02850086af5e69ea206679c9e191a5b7d7895",
+    "deployedParity": true,
+    "receiptStatus": "COMPLETED"
+  },
+  "sourceAndDeployed": [
+    {
+      "source": "src/app/main/main.js",
+      "deployed": "resources/app/out/main/main.js",
+      "sourceSha256": "0eea4a069db0615e43dbad1ea4825f0fa3fd96e5a98a0765d52910d944d493e6",
+      "deployedSha256": "0eea4a069db0615e43dbad1ea4825f0fa3fd96e5a98a0765d52910d944d493e6"
+    },
+    {
+      "source": "src/app/main/provider-service.js",
+      "deployed": "resources/app/out/main/provider-service.js",
+      "sourceSha256": "e91ac6d93ad5a6c803ca756f74a4863ee5b11e7de233ab4f159828988ca67612",
+      "deployedSha256": "e91ac6d93ad5a6c803ca756f74a4863ee5b11e7de233ab4f159828988ca67612"
+    },
+    {
+      "source": "src/app/main/providers/index.js",
+      "deployed": "resources/app/out/main/providers/index.js",
+      "sourceSha256": "58c680715e0aafab8b4e045826fdf764061b1021cc99e016178dfbde55756e33",
+      "deployedSha256": "58c680715e0aafab8b4e045826fdf764061b1021cc99e016178dfbde55756e33"
+    },
+    {
+      "source": "src/app/main/ipc/register-ipc.js",
+      "deployed": "resources/app/out/main/ipc/register-ipc.js",
+      "sourceSha256": "40f2bc661a96fee9b66b088876b1e534939320a58532de5c64ba4cd592286927",
+      "deployedSha256": "40f2bc661a96fee9b66b088876b1e534939320a58532de5c64ba4cd592286927"
+    },
+    {
+      "source": "src/app/main/analytics/durable-request-trace.js",
+      "deployed": "resources/app/out/main/analytics/durable-request-trace.js",
+      "sourceSha256": "7333cacc3422b0dc9a9134fe72eed5add6eda995615918a3ae22e1289a323731",
+      "deployedSha256": "7333cacc3422b0dc9a9134fe72eed5add6eda995615918a3ae22e1289a323731"
+    },
+    {
+      "source": "src/app/main/analytics/usage-analytics.js",
+      "deployed": "resources/app/out/main/analytics/usage-analytics.js",
+      "sourceSha256": "5b350ad1226dcf3362387906bfaea2db4fc5500dcf810b7bbebdcb7161a117f9",
+      "deployedSha256": "5b350ad1226dcf3362387906bfaea2db4fc5500dcf810b7bbebdcb7161a117f9"
+    },
+    {
+      "source": "src/app/main/conversation/conversation.js",
+      "deployed": "resources/app/out/main/conversation/conversation.js",
+      "sourceSha256": "cc7bbeb770ff8b141b00fd83b89c7533e0aa4361d1ab9ee70add2d5cbfc6951f",
+      "deployedSha256": "cc7bbeb770ff8b141b00fd83b89c7533e0aa4361d1ab9ee70add2d5cbfc6951f"
+    },
+    {
+      "source": "src/app/main/memory-system/memory4-coordinator.js",
+      "deployed": "resources/app/out/main/memory-system/memory4-coordinator.js",
+      "sourceSha256": "63380462b4b4b0bc5c8b30d954f043388d5df5038d3f68f7a2ee56bc2691fb13",
+      "deployedSha256": "63380462b4b4b0bc5c8b30d954f043388d5df5038d3f68f7a2ee56bc2691fb13"
+    },
+    {
+      "source": "src/app/main/memory-system/letter-memory-finalization.js",
+      "deployed": "resources/app/out/main/memory-system/letter-memory-finalization.js",
+      "sourceSha256": "6b873685518a7bc0fbe9eb56e73ae6e42aa0e87029464d1a9cfac3cda75ddfba",
+      "deployedSha256": "6b873685518a7bc0fbe9eb56e73ae6e42aa0e87029464d1a9cfac3cda75ddfba"
+    }
+  ],
+  "regression": {
+    "baselineGroups": 422,
+    "finalGroups": 426,
+    "classifiedFiles": 495,
+    "historicalChecks": 68,
+    "result": "PASS",
+    "baselineLogSha256": "6350422bc30b97bd74658066545ddc89b6fdaa2d251756b3553296909de41c6f",
+    "finalLogSha256": "5141e96c6f1ba84ea54fce238c3c9d9de1d108f32707f9a223ab49d9ef4d1e2f"
+  },
+  "redGreen": {
+    "baselineRed": true,
+    "finalGreen": true,
+    "redLogSha256": "28feb2104a3949b3679ac2492ecd1fc69c326057e1f3b03a55c115a431e7b4a0",
+    "greenLogSha256": "4f483f7cc166e6f0f40bda178af0a7a99f984e21e522045f88ea38bc4e661835",
+    "newerRecoveryPreserved": true,
+    "corruptRecoveryPreserved": true,
+    "allSevenNonstreamAdapters": true
+  },
+  "tests": [
+    {
+      "file": "scripts/test-v9.2.2-durable-lineage.js",
+      "sha256": "9d0b96acfd619c51d57adea3e6d20bcd0e6311908d3c46597f64b079bfcef7c3",
+      "result": "PASS"
+    },
+    {
+      "file": "scripts/test-v9.2.2-durable-attribution.js",
+      "sha256": "749ec022f000c0b9a73e2437b0826bfb72a454ba82e281abd4bf93564f89fa1f",
+      "result": "PASS"
+    },
+    {
+      "file": "scripts/test-v9.2.2-presend-forget.js",
+      "sha256": "793450fdb54f900bfbd4ba8fe7e9d7de4c809bf80e7c9740df6b8cba4012b478",
+      "result": "PASS"
+    },
+    {
+      "file": "scripts/test-v9.2.2-durable-chunking.js",
+      "sha256": "f23e53a9350fb7d4505cfc48bec70389f33d761026bebc5a22abede69738df4d",
+      "result": "PASS"
+    }
+  ],
+  "testManifestSha256": "b65dbd5566b61d92d52fb4d666216687dbceb017e631e1bbe03ef4e6fd61d5cf",
+  "reportToolSha256": "80e51983d2264f0becdf061abb5054f2195557361efa6d680fc988e6c1be06c3",
+  "attributionParity": {
+    "sameSampleRequests": 14,
+    "nativeTotalUnchanged": true,
+    "nativeModelGroupsUnchanged": true,
+    "scopeUnknownRequests": 14,
+    "total": {
+      "requests": 14,
+      "estimatedPromptTokens": 527960,
+      "promptTokens": 729898,
+      "completionTokens": 19029,
+      "reasoningTokens": 0,
+      "visibleCompletionTokens": 19029,
+      "totalTokens": 748927,
+      "cacheReportedRequests": 14,
+      "cacheHitTokens": 70144,
+      "cacheMissTokens": 659754,
+      "cacheHitRate": 0.09610109905767655
+    }
+  },
+  "userdata": {
+    "expectedFiles": 3791,
+    "actualFiles": 3791,
+    "changedFiles": 0,
+    "newFiles": 0,
+    "inventorySha256": "d5eb658ba48f20d2574658269510c82ae1f91cd26bfef473c9a19bb49307cfb0",
+    "bytes": 612412864
+  },
+  "packagedSmoke": {
+    "diagnosticsOff": "PASS",
+    "diagnosticsOn": "PASS",
+    "actualDurableTraceExport": true,
+    "isolatedProfile": true,
+    "networkBlocked": true,
+    "logSha256": "a8384859ae4a2fb428b38ce6fa16021763ba370b460a2242cb594ef346d532e3"
+  },
+  "nativeExperiment": {
+    "attempts": 28,
+    "parsedOK": 28,
+    "costUpperBoundYuan": 1.00864056,
+    "budgetYuan": 10,
+    "effect": "HOLD",
+    "actualConversationSent": false,
+    "evidenceSha256": "5084ed082621db6a48b9e58578094ca56cfaf4f4f5ac11bbe1e19bf77390a5b6"
+  },
+  "gates": {
+    "G0": "PASS",
+    "G1": "AUTOMATED_PASS_HISTORICAL_LINEAGE_MISSING",
+    "G2": "PASS",
+    "G3": "MEASURED_NO_SPECULATIVE_CHUNK_CHANGE",
+    "G4": "AUTOMATED_PASS_MANUAL_PENDING",
+    "G5_CACHE": "HOLD",
+    "G6": "LOCAL_PASS_FINAL_SHA_CI_CK3_SOAK_PENDING"
+  },
+  "documentHashes": {
+    "V9_2_2_BASELINE.md": "2f99f90b677db6ffc3522f411cd5e7731698c4b330bb6d5a1a75d89168fcbf88",
+    "V9_2_2_DURABLE_INCIDENT_PLAN.md": "86a1a6657fc84c2d157edd1677ab9dc470d5590dd5243618afc7797731a27e82",
+    "V9_2_2_IMPLEMENTATION_REPORT.md": "e97fd7a17f235b160b04c3d5ed143a06221ee7d2fd6dd0d2d5566e08898733a2",
+    "V9_2_2_VERIFICATION_REPORT.md": "bf3aeb7c956b4e9fe5424b4a2e25ab403650209e45f67d2a410c7a75111ca6ef",
+    "V9_2_2_P_ISSUE_LEDGER.md": "30a435d1143f10b58dcb389b7919ca7be21816358afaa13bc9c879e6330c26aa",
+    "V9_2_2_HANDOFF_TO_V9_3.md": "eeea4a3b3a9c11f2fe93e4d9146de13ee076b76816f3ce00f3300e7c5fecdf21"
+  }
+}

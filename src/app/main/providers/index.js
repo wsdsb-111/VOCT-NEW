@@ -183,8 +183,9 @@ class OpenRouterProvider extends BaseProvider {
       throw error;
     }
   }
-  chatCompletion(request, config) {
+  chatCompletion(request, config, requestControl = null) {
     const openAIClient = new OpenAI({
+      ...requestControl ? { maxRetries: 0 } : {},
       apiKey: this.getAPIKey(config),
       baseURL: "https://openrouter.ai/api/v1",
       defaultHeaders: {
@@ -210,13 +211,16 @@ class OpenRouterProvider extends BaseProvider {
     if (requestParams.stream) {
       return this._streamChatCompletion(requestParams, openAIClient, request.signal);
     } else {
-      return this._nonStreamChatCompletion(requestParams, openAIClient);
+      return this._nonStreamChatCompletion(requestParams, openAIClient, requestControl);
     }
   }
-  async _nonStreamChatCompletion(request, openAIClient) {
+  async _nonStreamChatCompletion(request, openAIClient, requestControl = null) {
     try {
       const data = await this.retryWithBackoff(
-        () => openAIClient.chat.completions.create(request),
+        () => {
+          requestControl?.beforeSend?.();
+          return openAIClient.chat.completions.create(request, requestControl?.signal ? { signal: requestControl.signal } : void 0);
+        },
         3,
         1e3,
         this.shouldRetryOpenRouter.bind(this)
@@ -243,6 +247,7 @@ class OpenRouterProvider extends BaseProvider {
         } : void 0
       };
     } catch (error) {
+      if (requestControl && (error.message === "memory4_request_source_changed_before_send" || requestControl.signal?.aborted)) throw error;
       if (error instanceof OpenAI.APIError) {
         console.error(
           `[OpenRouterProvider] API error for model ${request.model}:`,
@@ -469,7 +474,7 @@ class OpenAICompatibleProvider extends BaseProvider {
       ...request.stream ? { stream_options: { include_usage: true } } : {}
     };
   }
-  chatCompletion(request, config) {
+  chatCompletion(request, config, requestControl = null) {
     const headers = {
       "Content-Type": "application/json",
       "X-Title": `Voices of the Court V${VOTC_CORE_VERSION}`,
@@ -487,13 +492,16 @@ class OpenAICompatibleProvider extends BaseProvider {
     if (requestParams.stream) {
       return this._streamChatCompletion(requestParams, openAIClient, request.signal);
     } else {
-      return this._nonStreamChatCompletion(requestParams, openAIClient);
+      return this._nonStreamChatCompletion(requestParams, openAIClient, requestControl);
     }
   }
-  async _nonStreamChatCompletion(request, openAIClient) {
+  async _nonStreamChatCompletion(request, openAIClient, requestControl = null) {
     try {
       const data = await this.retryWithBackoff(
-        () => openAIClient.chat.completions.create(request),
+        () => {
+          requestControl?.beforeSend?.();
+          return openAIClient.chat.completions.create(request, requestControl?.signal ? { signal: requestControl.signal } : void 0);
+        },
         3,
         1e3,
         this.shouldRetry.bind(this)
@@ -520,6 +528,7 @@ class OpenAICompatibleProvider extends BaseProvider {
         } : void 0
       };
     } catch (error) {
+      if (requestControl && (error.message === "memory4_request_source_changed_before_send" || requestControl.signal?.aborted)) throw error;
       if (error instanceof OpenAI.APIError) {
         console.error(
           `[OpenAICompatibleProvider] API error for model ${request.model}:`,
@@ -705,13 +714,13 @@ class ZhipuProvider extends OpenAICompatibleProvider {
   buildDiagnosticRequest(request, config) {
     return this.buildRequestParams(request, config);
   }
-  chatCompletion(request, config) {
+  chatCompletion(request, config, requestControl = null) {
     const requestParams = this.buildRequestParams(request, config);
     const openAIClient = this.createOpenAIClient(config);
-    return requestParams.stream ? this._streamZhipuChatCompletion(requestParams, openAIClient, request.signal) : this._nonStreamZhipuChatCompletion(requestParams, openAIClient);
+    return requestParams.stream ? this._streamZhipuChatCompletion(requestParams, openAIClient, request.signal) : this._nonStreamZhipuChatCompletion(requestParams, openAIClient, requestControl);
   }
-  async _nonStreamZhipuChatCompletion(request, openAIClient) {
-    const response = await super._nonStreamChatCompletion(request, openAIClient);
+  async _nonStreamZhipuChatCompletion(request, openAIClient, requestControl = null) {
+    const response = await super._nonStreamChatCompletion(request, openAIClient, requestControl);
     const normalizedUsage = this.normalizeUsage(response.usage);
     return { ...response, usage: normalizedUsage, usage_debug: this.buildUsageDebug(response.usage, normalizedUsage) };
   }
@@ -797,7 +806,7 @@ class OllamaProvider {
     }
   }
   // Implementation
-  chatCompletion(request, config) {
+  chatCompletion(request, config, requestControl = null) {
     const providerConfig = this.getConfig(config);
     const endpoint = `${providerConfig.baseUrl.replace(/\/$/, "")}/api/chat`;
     const ollamaMessages = request.messages.map((msg) => ({
@@ -833,11 +842,13 @@ class OllamaProvider {
     if (request.stream) {
       return this._streamChatCompletion(request, endpoint, body);
     } else {
-      return this._nonStreamChatCompletion(request, endpoint, body);
+      return this._nonStreamChatCompletion(request, endpoint, body, requestControl);
     }
   }
-  async _nonStreamChatCompletion(request, endpoint, body) {
+  async _nonStreamChatCompletion(request, endpoint, body, requestControl = null) {
+    requestControl?.beforeSend?.();
     const response = await fetch(endpoint, {
+      ...requestControl?.signal ? { signal: requestControl.signal } : {},
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ ...body, stream: false })
@@ -981,8 +992,9 @@ class Player2Provider extends BaseProvider {
     }
     return error.code === "ECONNRESET" || error.code === "ETIMEDOUT" || error.code === "ENOTFOUND";
   }
-  chatCompletion(request) {
+  chatCompletion(request, _config, requestControl = null) {
     const openAIClient = new OpenAI({
+      ...requestControl ? { maxRetries: 0 } : {},
       apiKey: "sk-dummy-key",
       baseURL: this.player2BaseUrl,
       defaultHeaders: {
@@ -1003,13 +1015,16 @@ class Player2Provider extends BaseProvider {
     if (requestParams.stream) {
       return this._streamChatCompletion(requestParams, openAIClient, request.signal);
     } else {
-      return this._nonStreamChatCompletion(requestParams, openAIClient);
+      return this._nonStreamChatCompletion(requestParams, openAIClient, requestControl);
     }
   }
-  async _nonStreamChatCompletion(request, openAIClient) {
+  async _nonStreamChatCompletion(request, openAIClient, requestControl = null) {
     try {
       const data = await this.retryWithBackoff(
-        () => openAIClient.chat.completions.create(request),
+        () => {
+          requestControl?.beforeSend?.();
+          return openAIClient.chat.completions.create(request, requestControl?.signal ? { signal: requestControl.signal } : void 0);
+        },
         3,
         1e3,
         this.shouldRetryPlayer2.bind(this)
@@ -1032,6 +1047,7 @@ class Player2Provider extends BaseProvider {
         } : void 0
       };
     } catch (error) {
+      if (requestControl && (error.message === "memory4_request_source_changed_before_send" || requestControl.signal?.aborted)) throw error;
       if (error instanceof OpenAI.APIError) {
         console.error(
           `[Player2Provider] API error for model ${request.model}:`,
@@ -1252,7 +1268,7 @@ class DeepseekProvider extends BaseProvider {
       ...transformedRequest.stream ? { stream_options: { include_usage: true } } : {}
     };
   }
-  chatCompletion(request, config) {
+  chatCompletion(request, config, requestControl = null) {
     const baseUrl = this.getDeepseekBaseUrl(config);
     const openAIClient = new OpenAI({
       apiKey: this.getAPIKey(config),
@@ -1263,7 +1279,7 @@ class DeepseekProvider extends BaseProvider {
     if (requestParams.stream) {
       return this._streamChatCompletion(requestParams, openAIClient, request.signal);
     } else {
-      return this._nonStreamChatCompletion(requestParams, openAIClient);
+      return this._nonStreamChatCompletion(requestParams, openAIClient, requestControl);
     }
   }
   /**
@@ -1396,10 +1412,13 @@ IMPORTANT: Your response must be ONLY valid JSON. No prose, no code fences, no e
     }
     return result;
   }
-  async _nonStreamChatCompletion(request, openAIClient) {
+  async _nonStreamChatCompletion(request, openAIClient, requestControl = null) {
     try {
       const data = await this.retryWithBackoff(
-        () => openAIClient.chat.completions.create(request),
+        () => {
+          requestControl?.beforeSend?.();
+          return openAIClient.chat.completions.create(request, requestControl?.signal ? { signal: requestControl.signal } : void 0);
+        },
         3,
         1e3,
         this.shouldRetry.bind(this)
@@ -1422,6 +1441,7 @@ IMPORTANT: Your response must be ONLY valid JSON. No prose, no code fences, no e
         } : void 0
       };
     } catch (error) {
+      if (requestControl && (error.message === "memory4_request_source_changed_before_send" || requestControl.signal?.aborted)) throw error;
       if (error instanceof OpenAI.APIError) {
         console.error(
           `[DeepseekProvider] API error for model ${request.model}:`,
@@ -1744,22 +1764,24 @@ class GeminiProvider extends BaseProvider {
       { id: "gemini-2.0-flash", name: "Gemini 2.0 Flash", contextLength: 1e6 }
     ];
   }
-  chatCompletion(request, config) {
+  chatCompletion(request, config, requestControl = null) {
     const baseUrl = this.getGeminiBaseUrl(config);
     const apiKey = this.getAPIKey(config);
     const modelName = request.model.startsWith("models/") ? request.model : `models/${request.model}`;
     if (request.stream) {
       return this._streamChatCompletion(baseUrl, apiKey, modelName, request);
     } else {
-      return this._nonStreamChatCompletion(baseUrl, apiKey, modelName, request);
+      return this._nonStreamChatCompletion(baseUrl, apiKey, modelName, request, requestControl);
     }
   }
-  async _nonStreamChatCompletion(baseUrl, apiKey, modelName, request) {
+  async _nonStreamChatCompletion(baseUrl, apiKey, modelName, request, requestControl = null) {
     const body = this.buildRequestBody(request);
     try {
       const response = await this.retryWithBackoff(
         async () => {
+          requestControl?.beforeSend?.();
           const res = await fetch(`${baseUrl}/${modelName}:generateContent?key=${apiKey}`, {
+            ...requestControl?.signal ? { signal: requestControl.signal } : {},
             method: "POST",
             headers: {
               "Content-Type": "application/json"
@@ -1780,6 +1802,7 @@ class GeminiProvider extends BaseProvider {
       );
       return this.parseGeminiResponse(response);
     } catch (error) {
+      if (requestControl && (error.message === "memory4_request_source_changed_before_send" || requestControl.signal?.aborted)) throw error;
       console.error(`[GeminiProvider] API error for model ${request.model}:`, error);
       throw new Error(`Gemini API error: ${error.message || error}`);
     }

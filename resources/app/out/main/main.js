@@ -28,6 +28,8 @@ const { Character } = require("./game-data/character");
 const { createStartupPerformanceTrace } = require("./runtime/startup-performance-trace");
 
 const performanceTrace = createStartupPerformanceTrace();
+const { DurableRequestTrace } = require("./analytics/durable-request-trace");
+const durableRequestTrace = new DurableRequestTrace({ enabled: performanceTrace.enabled === true });
 const appLaunchSpan = performanceTrace.startSpan("app.launch", { attribution: "MAIN" });
 
 function traceMainOperation(step, operation, attribution = "MAIN") {
@@ -133,6 +135,7 @@ const {
   DEFAULT_PROMPTS_DIR
 } = createPaths(electron.app);
 const memoryEngine = new memorySystem.MemoryEngine({ baseDir: VOTC_MEMORY_DIR, summaryFoldersDir: VOTC_SUMMARIES_DIR, recoveryDir: VOTC_MEMORY_RECOVERY_DIR });
+memoryEngine.memory4.durableRequestTrace = durableRequestTrace;
 const dynamicHistoryService = new DynamicHistoryService({
   identityResolver: new CampaignIdentityResolver(),
   worldlineStore: new WorldlineStore({ rootDir: VOTC_DYNAMIC_HISTORY_DIR })
@@ -501,6 +504,7 @@ const llmManager = new LLMManager({
   usageAnalytics,
   providerDiagnostics,
   performanceTrace,
+  durableRequestTrace,
   TokenCounter,
   PromptBuilder,
   debugVerboseLLM: DEBUG_VERBOSE_LLM,
@@ -659,7 +663,8 @@ const SummariesManager = createSummariesManager({
   getSummaryOutputLimit: () => PromptBuilder.getFinalSummaryMaxTokens?.() || 4096,
   getSummaryCapabilities: snapshot => llmManager.getProviderCapabilities("SUMMARY", snapshot),
   requestSummary: (prompt, options = {}) => llmManager.sendSummaryRequest(prompt, void 0, { requestType: options.requestType || "memory_recovery", summaryAttempt: options.attempt, maxTokens: options.maxTokens, providerSnapshot: options.providerSnapshot, summaryBudget: options.summaryBudget }),
-  requestDurable: (prompt, options = {}) => llmManager.sendSummaryRequest(prompt, void 0, { requestType: "memory4_durable", maxTokens: options.maxTokens, providerSnapshot: options.providerSnapshot }),
+  requestDurable: (prompt, options = {}) => llmManager.sendSummaryRequest(prompt, void 0, { requestType: "memory4_durable", maxTokens: options.maxTokens, providerSnapshot: options.providerSnapshot,
+    beforeSendGuard: options.beforeSendGuard, durableTrace: options.durableTrace }),
   persistRecoveredSummary: (summary, context) => GameData.saveRecoveredSummary(summary, context)
 });
 memoryEngine.memory4?.configureDerived({
@@ -667,7 +672,7 @@ memoryEngine.memory4?.configureDerived({
   requestCompression: (prompt, options) => llmManager.sendSummaryRequest(prompt, options.signal, { requestType: options.requestType,
     maxTokens: options.maxTokens, providerSnapshot: options.providerSnapshot }),
   requestExtraction: (prompt, options) => llmManager.sendSummaryRequest(prompt, options.signal, { requestType: "memory4_durable",
-    maxTokens: options.maxTokens, providerSnapshot: options.providerSnapshot }),
+    maxTokens: options.maxTokens, providerSnapshot: options.providerSnapshot, beforeSendGuard: options.beforeSendGuard, durableTrace: options.durableTrace }),
   isCampaignCurrent: token => conversationManager.getCurrentConversation()?.gameData?.campaignToken === token,
   estimateTokens: text => TokenCounter.estimateTokens(text)
 });
@@ -948,7 +953,8 @@ memoryEngine.letterMemoryFinalization = new LetterMemoryFinalization({
     requestType: "letter_summary", summaryAttempt: options.attempt, maxTokens: options.maxTokens, providerSnapshot: options.providerSnapshot
   }),
   requestDurable: (prompt, options = {}) => llmManager.sendSummaryRequest(prompt, void 0, {
-    requestType: "memory4_durable", maxTokens: options.maxTokens, providerSnapshot: options.providerSnapshot
+    requestType: "memory4_durable", maxTokens: options.maxTokens, providerSnapshot: options.providerSnapshot,
+    beforeSendGuard: options.beforeSendGuard, durableTrace: options.durableTrace
   }),
   persistSummary: (summary, context) => GameData.saveRecoveredSummary(summary, context)
 });

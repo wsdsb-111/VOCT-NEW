@@ -5,6 +5,17 @@ const { estimateTokens } = require("./token-estimator");
 const { resolveProviderCapabilities, planRequestBudget } = require("./providers/request-budget");
 const { OVERLAY_BLOCK_ID, OVERLAY_VERSION, prepareActionMessages } = require("./actions/action-prompt-compatibility-overlay");
 
+function durableNativeUsage(response) {
+  const usage = response?.usage;
+  const count = value => typeof value === "number" && Number.isSafeInteger(value) && value >= 0 ? value : "UNKNOWN";
+  const tokens = { inputTokens: count(usage?.prompt_tokens),
+    hitTokens: count(usage?.prompt_cache_hit_tokens ?? usage?.prompt_tokens_details?.cached_tokens),
+    missTokens: count(response?.usage_debug ? response.usage_debug.raw_usage?.prompt_cache_miss_tokens : usage?.prompt_cache_miss_tokens),
+    outputTokens: count(usage?.completion_tokens) };
+  return { ...tokens, inputReported: tokens.inputTokens !== "UNKNOWN", hitReported: tokens.hitTokens !== "UNKNOWN",
+    missReported: tokens.missTokens !== "UNKNOWN", outputReported: tokens.outputTokens !== "UNKNOWN" };
+}
+
 class ProviderRegistry {
   constructor() {
     this.providers = /* @__PURE__ */ new Map();
@@ -99,12 +110,13 @@ class TokenCounter {
 
 class LLMManager {
   // Cache instantiated providers
-  constructor({ settingsRepository, providerRegistry, usageAnalytics, providerDiagnostics = null, performanceTrace = null, TokenCounter, PromptBuilder, debugVerboseLLM = false, logVerboseLLM = () => {} }) {
+  constructor({ settingsRepository, providerRegistry, usageAnalytics, providerDiagnostics = null, performanceTrace = null, durableRequestTrace = null, TokenCounter, PromptBuilder, debugVerboseLLM = false, logVerboseLLM = () => {} }) {
     this.settingsRepository = settingsRepository;
     this.providerRegistry = providerRegistry;
     this.usageAnalytics = usageAnalytics;
     this.providerDiagnostics = providerDiagnostics;
     this.performanceTrace = performanceTrace;
+    this.durableRequestTrace = durableRequestTrace;
     this.TokenCounter = TokenCounter;
     this.PromptBuilder = PromptBuilder;
     this.debugVerboseLLM = debugVerboseLLM;
@@ -477,7 +489,16 @@ class LLMManager {
     const isStructuredSummary = ["final_summary", "memory_recovery", "memory4_durable", "memory4_year", "memory4_life"].includes(metadata.requestType);
     const useDeepseekNonThinking = config.providerType === "deepseek" && isStructuredSummary;
     const requestedMaxTokens = Number(metadata?.maxTokens);
-    const capabilities = await this.getProviderCapabilities("SUMMARY", metadata.providerSnapshot);
+    let capabilities;
+    try {
+      capabilities = await this.getProviderCapabilities("SUMMARY", metadata.providerSnapshot);
+    } catch (error) {
+      if (metadata.requestType === "memory4_durable") {
+        try { this.durableRequestTrace?.record(metadata.durableTrace, { status: "FAILED_PRE_SEND",
+          errorCode: signal?.aborted ? "provider_cancelled" : "provider_error" }); } catch (_traceError) {}
+      }
+      throw error;
+    }
     const structuredSummaryMaxTokens = Number.isInteger(requestedMaxTokens) && requestedMaxTokens >= 256 ? Math.min(requestedMaxTokens, capabilities.maxOutputTokens) : Math.min(4096, capabilities.maxOutputTokens);
     const request = {
       model: config.defaultModel,
@@ -502,7 +523,62 @@ class LLMManager {
       this.logVerboseLLM("[LLMManager][verbose] Summary messages:", preparedMessages);
       this.logVerboseLLM("[LLMManager][verbose] Provider config:", JSON.stringify(config).replace(/"apiKey":\s*"[^"]*"/g, "HIDDEN"));
     }
-    return await this.trackUsage(provider.chatCompletion(request, config), { ...metadata, requestBudget: budget, blocks: summaryBlocks, requestType: metadata.requestType || "summary", providerType: config.providerType, model: config.defaultModel, estimatedPromptTokens });
+    const isDurable = metadata.requestType === "memory4_durable";
+    const trace = isDurable ? this.durableRequestTrace : null;
+    const attempt = isDurable ? metadata.durableTrace : null;
+    let providerAttemptCount = 0;
+    const record = fields => { try { trace?.record(attempt, fields); } catch (_traceError) {} };
+    if (attempt && trace?.enabled) {
+      try {
+        const hasWireSerialization = typeof provider.buildDiagnosticRequest === "function";
+        const serialized = hasWireSerialization ? provider.buildDiagnosticRequest(request, config) : request;
+        const { messages: _messages, signal: _signal, ...parameters } = serialized;
+        const systemMessages = preparedMessages.filter(message => message.role === "system");
+        const hashValue = (domain, value) => trace.hashValue(domain, JSON.stringify(value));
+        Object.assign(attempt, {
+          endpointHash: hashValue("endpoint", [config.providerType, config.baseUrl || provider.DEFAULT_BASE_URL || "UNKNOWN"]),
+          effectiveParameterHash: hasWireSerialization ? hashValue("effective_parameter", parameters) : null,
+          policyHash: hashValue("policy", systemMessages.slice(1)),
+          systemHash: hashValue("system", systemMessages),
+          anchorHash: hashValue("anchor", systemMessages[0]),
+          userHash: hashValue("user", preparedMessages.filter(message => message.role === "user")),
+          requestHash: hasWireSerialization ? hashValue("request", { ...parameters, messages: serialized.messages }) : null
+        });
+        record({ status: "AUTHORIZED_TO_SEND", ...attempt, requestedOutputTokens: Number.isInteger(requestedMaxTokens) && requestedMaxTokens >= 256 ? requestedMaxTokens : 4096,
+          effectiveOutputTokens: budget.reservedOutputTokens, tokenEstimate: estimatedPromptTokens });
+      } catch (_traceError) {}
+    }
+    const beforeSend = () => {
+      signal?.throwIfAborted();
+      if (isDurable && typeof metadata.beforeSendGuard === "function") metadata.beforeSendGuard();
+    };
+    const beforeTransport = () => {
+      if (isDurable) beforeSend();
+      providerAttemptCount++;
+      try {
+        if (providerAttemptCount > 1) trace?.beginTransportRetry(attempt, { providerAttemptCount: 1 });
+      } catch (_traceError) {}
+      record({ status: "PROVIDER_SENT", providerAttemptCount: 1, providerSendStartedAt: new Date().toISOString() });
+    };
+    try {
+      if (isDurable) beforeSend();
+      const control = isDurable ? { beforeSend: beforeTransport, signal } : undefined;
+      const response = await this.trackUsage(provider.chatCompletion(request, config, control), { ...metadata,
+        requestBudget: budget, blocks: summaryBlocks, requestType: metadata.requestType || "summary",
+        providerType: config.providerType, model: config.defaultModel, estimatedPromptTokens });
+      if (isDurable) {
+        record({ status: "PROVIDER_COMPLETED", providerAttemptCount: providerAttemptCount ? 1 : "UNKNOWN",
+          providerCompletedAt: new Date().toISOString(), finishReason: response?.finish_reason,
+          truncated: ["length", "max_tokens", "max_output_tokens"].includes(response?.finish_reason),
+          ...durableNativeUsage(response) });
+      }
+      return response;
+    } catch (error) {
+      record({ status: providerAttemptCount ? "FAILED" : "FAILED_PRE_SEND", providerAttemptCount: providerAttemptCount ? 1 : 0,
+        errorCode: error.message === "memory4_request_source_changed_before_send" ? error.message
+          : signal?.aborted ? "provider_cancelled" : error.name === "TimeoutError" ? "provider_timeout" : "provider_error" });
+      throw error;
+    }
   }
   async trackUsage(result, metadata, performanceSpan = null) {
     const finishPerformanceSpan = (result, errorCode) => {
@@ -511,6 +587,12 @@ class LLMManager {
     const response = await result;
     const recordUsage = (finalResponse, timing = {}) => {
       const usage = this.buildUsageRecord(finalResponse, metadata);
+      if (metadata.requestType === "memory4_durable" && metadata.durableTrace) {
+        const nativeUsage = durableNativeUsage(finalResponse);
+        for (const flag of ["inputReported", "hitReported", "missReported", "outputReported"]) {
+          metadata.durableTrace[flag] = nativeUsage[flag];
+        }
+      }
       this.usageAnalytics.record(metadata, usage);
       this.providerDiagnostics?.recordResponse({
         provider: metadata.providerType,

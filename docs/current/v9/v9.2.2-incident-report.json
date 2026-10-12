@@ -1,0 +1,255 @@
+{
+  "schemaVersion": 1,
+  "traceEnabled": false,
+  "traceRetention": {
+    "droppedCount": 0,
+    "truncatedWindow": false
+  },
+  "attributionLayers": {
+    "provider_native": {
+      "source": "unique sent trace rows plus raw-usage presence flags; Usage reconciliation uses exact durableAttemptId joins",
+      "attempts": 0,
+      "duplicateSentIdGroups": 0,
+      "invalidSentAttemptIdRows": 0,
+      "tokenMetrics": {
+        "inputTokens": {
+          "knownSubtotal": 0,
+          "reportedCount": 0,
+          "unknownCount": 0
+        },
+        "hitTokens": {
+          "knownSubtotal": 0,
+          "reportedCount": 0,
+          "unknownCount": 0
+        },
+        "missTokens": {
+          "knownSubtotal": 0,
+          "reportedCount": 0,
+          "unknownCount": 0
+        },
+        "outputTokens": {
+          "knownSubtotal": 0,
+          "reportedCount": 0,
+          "unknownCount": 0
+        }
+      },
+      "byOrigin": {},
+      "reconciliation": {
+        "inputTokens": {
+          "matches": 0,
+          "mismatches": 0,
+          "missingStoredValue": 0,
+          "normalizedOrDerivedUnknown": 0,
+          "unknown": 0
+        },
+        "hitTokens": {
+          "matches": 0,
+          "mismatches": 0,
+          "missingStoredValue": 0,
+          "normalizedOrDerivedUnknown": 0,
+          "unknown": 0
+        },
+        "missTokens": {
+          "matches": 0,
+          "mismatches": 0,
+          "missingStoredValue": 0,
+          "normalizedOrDerivedUnknown": 0,
+          "unknown": 0
+        },
+        "outputTokens": {
+          "matches": 0,
+          "mismatches": 0,
+          "missingStoredValue": 0,
+          "normalizedOrDerivedUnknown": 0,
+          "unknown": 0
+        }
+      }
+    },
+    "exact_app_content_diff": {
+      "compared": 0,
+      "unchanged": 0,
+      "changed": 0,
+      "unknownFingerprints": 0,
+      "noSameScopePredecessor": 0,
+      "unattributableScopeAssociation": 14,
+      "interveningScopeChangeProven": 0,
+      "interveningScopeChangeNotObserved": 0,
+      "interveningScopeChangeUnknown": 0
+    },
+    "local_estimation": {
+      "method": "ordered_prefix_estimate_v1",
+      "requests": 14,
+      "withBlocks": 14,
+      "estimatedBlockTokens": 527960,
+      "allocatedMissTokens": 659754,
+      "downstreamMissTokens": 314530,
+      "missProvenanceUnknown": 14
+    }
+  },
+  "attempts": {
+    "traceRows": 0,
+    "providerSends": 0,
+    "providerSendCountCoverage": {
+      "observed": 0,
+      "lowerBound": 0,
+      "complete": false
+    },
+    "providerAttemptCount": {
+      "knownSubtotal": 0,
+      "reportedRows": 0,
+      "unknownRows": 0,
+      "observed": 0,
+      "lowerBound": 0,
+      "complete": false
+    },
+    "sendTimestampUnknown": 0,
+    "origin": {}
+  },
+  "usageJoin": {
+    "usageRows": 14,
+    "joinedRows": 0,
+    "sendsWithoutUsageRow": 0,
+    "usageRowsWithoutTrace": 0,
+    "usageRowsMissingValidAttemptId": 14,
+    "duplicateTraceIdGroups": 0,
+    "duplicateUsageIdGroups": 0
+  },
+  "tree": {
+    "attempts": 0,
+    "validUniqueAttemptIds": 0,
+    "duplicateIdGroups": 0,
+    "invalidAttemptIds": 0,
+    "roots": 0,
+    "childrenWithKnownParent": 0,
+    "unknownParent": 0,
+    "danglingParent": 0,
+    "cycles": 0,
+    "status": "complete",
+    "complete": false,
+    "byRun": {
+      "runGroups": 0,
+      "rowsWithUnknownRunId": 0,
+      "completeRuns": 0,
+      "incompleteRuns": 0,
+      "maxAttemptsPerRun": 0
+    }
+  },
+  "hashCoverage": {
+    "sourceDigest": {
+      "present": 0,
+      "missing": 0,
+      "distinct": 0,
+      "repeated": 0
+    },
+    "systemHash": {
+      "present": 0,
+      "missing": 0,
+      "distinct": 0,
+      "repeated": 0
+    },
+    "anchorHash": {
+      "present": 0,
+      "missing": 0,
+      "distinct": 0,
+      "repeated": 0
+    },
+    "userHash": {
+      "present": 0,
+      "missing": 0,
+      "distinct": 0,
+      "repeated": 0
+    },
+    "requestHash": {
+      "present": 0,
+      "missing": 0,
+      "distinct": 0,
+      "repeated": 0
+    },
+    "ownerScopeHash": {
+      "present": 0,
+      "missing": 0,
+      "distinct": 0,
+      "repeated": 0
+    },
+    "campaignScopeHash": {
+      "present": 0,
+      "missing": 0,
+      "distinct": 0,
+      "repeated": 0
+    },
+    "finalizationHash": {
+      "present": 0,
+      "missing": 0,
+      "distinct": 0,
+      "repeated": 0
+    },
+    "endpointHash": {
+      "present": 0,
+      "missing": 0,
+      "distinct": 0,
+      "repeated": 0
+    },
+    "effectiveParameterHash": {
+      "present": 0,
+      "missing": 0,
+      "distinct": 0,
+      "repeated": 0
+    },
+    "policyHash": {
+      "present": 0,
+      "missing": 0,
+      "distinct": 0,
+      "repeated": 0
+    }
+  },
+  "scopeAssociationMeaning": "unattributable_cross_owner means scope association is unavailable; it does not prove a cross-owner transition.",
+  "hashMeaning": "HMAC equality identifies the same hashed input only; it does not prove provider cache use.",
+  "tokenCostProxy": {
+    "basis": "provider_native_token_components_only",
+    "currency": null,
+    "total": {
+      "inputTokens": {
+        "knownSubtotal": 0,
+        "reportedCount": 0,
+        "unknownCount": 0
+      },
+      "hitTokens": {
+        "knownSubtotal": 0,
+        "reportedCount": 0,
+        "unknownCount": 0
+      },
+      "missTokens": {
+        "knownSubtotal": 0,
+        "reportedCount": 0,
+        "unknownCount": 0
+      },
+      "outputTokens": {
+        "knownSubtotal": 0,
+        "reportedCount": 0,
+        "unknownCount": 0
+      }
+    },
+    "byOwnerScopeHash": []
+  },
+  "historicalBaseline": {
+    "requestCount": 14,
+    "recordedTotals": {
+      "promptTokens": 729898,
+      "cacheHitTokens": 70144,
+      "cacheMissTokens": 659754,
+      "outputTokens": 19029
+    },
+    "rowTotals": {
+      "promptTokens": 729898,
+      "cacheHitTokens": 70144,
+      "cacheMissTokens": 659754,
+      "outputTokens": 19029
+    },
+    "origins": {
+      "UNKNOWN": 14
+    },
+    "parentUnknown": 14,
+    "attribution": "historical_usage_without_attempt_lineage",
+    "sourceMatchCandidatesUsedForIdentity": false
+  }
+}

@@ -4,6 +4,8 @@
 
 ## 推荐阅读顺序
 
+V9.2.2 Durable 事故候选：[施工方案](current/v9/V9_2_2_DURABLE_INCIDENT_PLAN.md)、[事故基线](current/v9/V9_2_2_BASELINE.md)、[实施](current/v9/V9_2_2_IMPLEMENTATION_REPORT.md)、[验证](current/v9/V9_2_2_VERIFICATION_REPORT.md)、[问题台账](current/v9/V9_2_2_P_ISSUE_LEDGER.md)、[移交](current/v9/V9_2_2_HANDOFF_TO_V9_3.md)。已修复发送前 Forget 竞争与跨范围归因；原生合成暖缓存正常，真实长冷输入／恢复成本继续取证，收益 HOLD，正式版本不升级。
+
 V9.2.1 缓存专项候选：[施工规格](current/v9/V9_2_1_IMPLEMENTATION_SPEC.md)、[基线](current/v9/V9_2_1_BASELINE.md)、[验证](current/v9/V9_2_1_VERIFICATION_REPORT.md)、[问题台账](current/v9/V9_2_1_P_ISSUE_LEDGER.md)、[移交](current/v9/V9_2_1_HANDOFF_TO_V9_3.md)。安全/诊断修复与原生收益分开；效果 HOLD，App/UI 暂保留 9.2.0/V9.2。
 
 当前主线 V9.2：[施工原文](current/v9/V9_2_IMPLEMENTATION_SPEC.md)、[实施／验证](current/v9/V9_2_VERIFICATION_REPORT.md)、[七域端口](current/v9/V9_2_SERVICE_PORTS.md)、[JSON 权威与恢复](current/v9/V9_2_JSON_AUTHORITY_AND_RECOVERY.md)、[问题台账](current/v9/V9_2_P_ISSUE_LEDGER.md)、[V9.3 移交](current/v9/V9_2_HANDOFF_TO_V9_3.md)。按[旧总路线](current/v9/V9_ROADMAP.md) §7.3 分期；[V9.1 构建说明](current/v9/V9_1_SOURCE_BUILD.md)和旧实施报告保留历史证据。

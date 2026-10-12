@@ -2,6 +2,8 @@
 
 这里是版本变更的单一入口。详细设计和测试证据保留在链接目标中，本文件只维护版本顺序、用户可见摘要和文档索引。
 
+V9.2.2 候选（2026-10-12，缓存收益 HOLD）：[事故与实施](docs/current/v9/V9_2_2_IMPLEMENTATION_REPORT.md)、[验证](docs/current/v9/V9_2_2_VERIFICATION_REPORT.md)、[台账](docs/current/v9/V9_2_2_P_ISSUE_LEDGER.md)。核对 14 次 Durable 低命中事故，修复异步等待后及内部重试前的 Forget 来源竞争和跨 Owner 归因；增加默认关闭、内存有上限的匿名请求树诊断。合成重复来源暖缓存正常，长冷证据／恢复成本仍需实机追踪；正式 App/UI 保持 9.2.0/V9.2。
+
 V9.2.1 候选（2026-10-12，缓存效果 HOLD）：[验证](docs/current/v9/V9_2_1_VERIFICATION_REPORT.md)、[基线](docs/current/v9/V9_2_1_BASELINE.md)、[移交](docs/current/v9/V9_2_1_HANDOFF_TO_V9_3.md)。固定 Durable System、动态 User 额度；每次请求前刷新 Forget，避免二分重试及后续分块发送已忘内容。修正跨端点零命中诊断并明确实际 v813 布局；新增只读匿名缓存报告。未取得可比原生增益，不升级正式版本、不签发冻结。
 
 V9.2（2026-10-11，应用边界与 JSON 仓储）：[验证](docs/current/v9/V9_2_VERIFICATION_REPORT.md)、[端口](docs/current/v9/V9_2_SERVICE_PORTS.md)、[权威与恢复](docs/current/v9/V9_2_JSON_AUTHORITY_AND_RECOVERY.md)。七域薄边界委托既有服务；Memory4 候选帧与授权正文分离，修复遗忘竞争和链接路径缺口，复用现有多文件 journal；构建输出保护和部署回执恢复加固。新增同 ID 改名摘要目录自动合并、日期排序及长期／年度／人生记忆保留，合并前备份、冲突阻止覆盖、中断可回滚。项目／UI V9.2、App 9.2.0；其他协议版本保留。
