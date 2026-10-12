@@ -191,39 +191,47 @@ class Memory4Coordinator {
       entityIds: ids(memory.subjects), visibilityEvidence: "legacy_independent_owner_fact", legacyMemoryId: memory.memoryId,
       legacySourceHash: legacySourceHash(memory), legacyAnchorGameDate: memory.eventDate || source.eventDate || null }));
     const index = this.store.loadIndex(scope);
-    const covered = new Set(Object.values(index.entries).flatMap(row => (row.legacyRefs || []).filter(ref =>
-      facts.some(fact => fact.memoryId === ref.memoryId && legacySourceHash(fact) === ref.sourceHash)).map(ref => ref.memoryId)));
+    const metadata = this.store.read(path.join(this.store.directory(scope), "metadata.json"), null);
+    const covered = new Set();
+    const coveredRows = [];
+    for (const [entryId, row] of Object.entries(index.entries)) {
+      const record = index.finalizations[hash(row.finalizationId)];
+      if (row.deleted || record?.status !== "STORE" || !record.entryIds?.includes(entryId)) continue;
+      try {
+        const entry = this.store.readEntry(scope, entryId, index);
+        if (!this.derived.sourceValid(scope, row, index, metadata) || entry.source.finalizationId !== row.finalizationId) continue;
+        const validRefs = (row.legacyRefs || []).filter(ref => facts.some(fact =>
+          fact.memoryId === ref.memoryId && legacySourceHash(fact) === ref.sourceHash));
+        if (validRefs.length) {
+          validRefs.forEach(ref => covered.add(ref.memoryId));
+          coveredRows.push({ entryId, row, record });
+        }
+      } catch { /* Invalid or forgotten legacy coverage stays eligible for normal Durable recovery. */ }
+    }
     facts = facts.filter(fact => !covered.has(fact.memoryId)).slice(0, MAX_DURABLE_ENTRIES_PER_OWNER);
     if (!facts.length) {
       if (rebuildDerived) {
-        const coveredProof = Object.entries(index.entries).filter(([entryId, row]) => !row.deleted
-          && (row.legacyRefs || []).some(ref => sourceFacts.some(fact =>
-            fact.memoryId === ref.memoryId && legacySourceHash(fact) === ref.sourceHash))
-          && index.finalizations[hash(row.finalizationId)]?.status === "STORE"
-          && index.finalizations[hash(row.finalizationId)]?.entryIds?.includes(entryId))
-          .sort((left, right) => String(left[1].finalizationId).localeCompare(String(right[1].finalizationId)))[0];
-        const record = coveredProof && index.finalizations[hash(coveredProof[1].finalizationId)];
+        const coveredProof = coveredRows.sort((left, right) => String(left.row.finalizationId).localeCompare(String(right.row.finalizationId)))[0];
+        const record = coveredProof?.record;
+        if (sourceFacts.some(fact => !covered.has(fact.memoryId))) return { status: "RECOVERY_UNVERIFIED",
+          reason: "LEGACY_DURABLE_COVERAGE_INCOMPLETE", sourceMemoryId: memoryId, entryIds: [], retained: true };
         if (coveredProof && record?.sourceRevision) {
           if (!current()) return { status: "CANCELLED", sourceMemoryId: memoryId, entryIds: [], retained: true };
           const snapshot = { ...scope, conversationId: `legacy_${hash([memoryId, scope, sourceProofs])}`,
-            finalizationId: coveredProof[1].finalizationId, sourceRevision: record.sourceRevision,
+            finalizationId: coveredProof.row.finalizationId, sourceRevision: record.sourceRevision,
             episodeId: null, date: source.eventDate || null, totalDays: source.totalDays ?? null,
             fragments: legacyFragments(sourceFacts), presentMessageCount: 0, completeness: "partial", counterpartIds: [], summaryIds: [memoryId],
             legacyRetained: true, skipKnownEvidence: true, legacyRecompression: true, legacySourceMemoryId: memoryId,
             legacySourceProof: sourceHash, legacySourceFactProofs: sourceProofs, legacyArchiveScope: allowPersistedArchive === true,
             summaryProviderSnapshot: providerSnapshot };
-          const recoveryFile = this.recoveryPath(snapshot), priorRecovery = this.readRecovery(recoveryFile);
-          this.saveRecovery(snapshot, { status: "PENDING", retryCount: priorRecovery?.retryCount || 0, lastError: null });
-          const derived = await rebuildDerivedViews({ finalizationId: coveredProof[1].finalizationId, sourceRevision: record.sourceRevision });
-          if (["COMPLETE", "MANUAL_OVERRIDE"].includes(derived?.status)) {
-            if (fs.existsSync(recoveryFile)) { this.readRecovery(recoveryFile); fs.unlinkSync(recoveryFile); }
-          } else this.saveRecovery(snapshot, { status: "DERIVED_REBUILD_FAILED", retryCount: priorRecovery?.retryCount || 0,
-            lastError: String(derived?.reason || derived?.status || "memory4_derived_failed") });
-          return { status: "ALREADY_CONVERTED", canonical: { status: "ALREADY_CONVERTED", entryIds: [] }, derived,
-            sourceMemoryId: memoryId, entryIds: [], retained: true };
+          const recoveryFile = this.recoveryPath(snapshot);
+          const derived = await rebuildDerivedViews({ finalizationId: coveredProof.row.finalizationId, sourceRevision: record.sourceRevision });
+          this.clearVerifiedRecovery(snapshot, recoveryFile);
+          return { status: "ALREADY_CONVERTED", canonical: { status: "ALREADY_CONVERTED", entryIds: [] },
+            durableStatus: record.status, derivedGenerationStatus: derived?.status || "SKIPPED_DERIVED_POLICY", derived,
+            ...(fs.existsSync(recoveryFile) ? { recoveryPath: recoveryFile } : {}), sourceMemoryId: memoryId, entryIds: [], retained: true };
         }
-        return { status: "ALREADY_CONVERTED", canonical: { status: "ALREADY_CONVERTED", entryIds: [] },
-          derived: { status: "FAILED", kind: "all", reason: "COMMITTED_SOURCE_PROOF_UNAVAILABLE" },
+        return { status: "RECOVERY_UNVERIFIED", reason: "LEGACY_DURABLE_COVERAGE_UNVERIFIED",
           sourceMemoryId: memoryId, entryIds: [], retained: true };
       }
       return { status: "ALREADY_CONVERTED", sourceMemoryId: memoryId, entryIds: [], retained: true };
@@ -237,27 +245,26 @@ class Memory4Coordinator {
       legacyArchiveScope: allowPersistedArchive === true };
     const recoveryFile = this.recoveryPath(snapshot);
     const priorRecovery = this.readRecovery(recoveryFile);
-    const clearRecovery = () => {
+    const clearAttemptRecovery = () => {
       if (!fs.existsSync(recoveryFile)) return;
-      this.readRecovery(recoveryFile);
-      fs.unlinkSync(recoveryFile);
-    };
-    const persistDerivedRecovery = derived => {
-      if (["COMPLETE", "MANUAL_OVERRIDE"].includes(derived?.status)) { clearRecovery(); return; }
-      const priorAttempt = this.readRecovery(recoveryFile);
-      this.saveRecovery(snapshot, { status: "DERIVED_REBUILD_FAILED", retryCount: priorAttempt?.retryCount || 0,
-        lastError: String(derived?.reason || derived?.status || "memory4_derived_failed") });
+      try {
+        const recovery = this.readRecovery(recoveryFile);
+        if (!recovery || hash(recovery.snapshot) !== hash(snapshot)) return;
+        this.baseStore.removeSummaryMutationFile(recoveryFile);
+      } catch { /* Preserve recovery whose contents cannot be verified. */ }
     };
     const prior = this.store.loadIndex(scope).finalizations[hash(snapshot.finalizationId)];
     if (prior) {
-      if (rebuildDerived) {
-        if (!current()) return { status: "CANCELLED", sourceMemoryId: memoryId, entryIds: [], retained: true };
-        const derived = await rebuildDerivedViews({ finalizationId: snapshot.finalizationId, sourceRevision: snapshot.sourceRevision });
-        persistDerivedRecovery(derived);
-        return { status: "ALREADY_CONVERTED", canonical: { status: "ALREADY_CONVERTED", entryIds: [...prior.entryIds] }, derived,
-          sourceMemoryId: memoryId, entryIds: [...prior.entryIds], retained: true };
-      }
-      return { status: "ALREADY_CONVERTED", sourceMemoryId: memoryId, entryIds: [...prior.entryIds], retained: true };
+      const committedProof = this.inspectCommittedSnapshot(snapshot);
+      if (committedProof.state !== "COMMITTED") return { status: "RECOVERY_UNVERIFIED", reason: committedProof.reason || "LEGACY_COMMIT_UNVERIFIED",
+        ...(fs.existsSync(recoveryFile) ? { recoveryPath: recoveryFile } : {}), sourceMemoryId: memoryId, entryIds: [], retained: true };
+      if (!current()) return { status: "CANCELLED", sourceMemoryId: memoryId, entryIds: [], retained: true };
+      const derived = await rebuildDerivedViews({ finalizationId: snapshot.finalizationId, sourceRevision: snapshot.sourceRevision });
+      this.clearVerifiedRecovery(snapshot, recoveryFile);
+      return { status: "ALREADY_CONVERTED", canonical: { status: "ALREADY_CONVERTED", entryIds: [...prior.entryIds] },
+        durableStatus: committedProof.record.status, derivedGenerationStatus: derived?.status || "SKIPPED_DERIVED_POLICY", derived,
+        ...(fs.existsSync(recoveryFile) ? { recoveryPath: recoveryFile } : {}),
+        sourceMemoryId: memoryId, entryIds: [...prior.entryIds], retained: true };
     }
     if (typeof this.derived.options.requestExtraction !== "function") {
       this.saveRecovery(snapshot, { status: "EXTRACTION_FAILED", retryCount: Number(priorRecovery?.retryCount || 0) + 1,
@@ -284,9 +291,8 @@ class Memory4Coordinator {
         signal: controller.signal, maxTokens: DURABLE_MAX_OUTPUT_TOKENS, providerSnapshot, requestType: "memory4_durable", durableTrace,
         beforeSendGuard: this.makeDurableSendGuard(snapshot, fragments, current) });
       if (!current()) {
-        const sourceCurrent = this.isLegacyRecompressionSnapshotCurrent(snapshot);
-        if (!sourceCurrent) clearRecovery();
-        return { status: sourceCurrent ? "CANCELLED" : "STALE", sourceMemoryId: memoryId, entryIds: [], retained: true };
+        return { status: this.isLegacyRecompressionSnapshotCurrent(snapshot) ? "CANCELLED" : "STALE",
+          sourceMemoryId: memoryId, entryIds: [], retained: true };
       }
       const result = this.parseResult(response, fragments, snapshot);
       this.recordDurableTrace(durableTrace, { status: "PARSED_OK", parseStatus: "PARSED_OK", complete: true, truncated: false });
@@ -297,26 +303,23 @@ class Memory4Coordinator {
         throw new Error("memory4_response_no_valid_entries");
       }
       if (!result.entries.length && !rebuildDerived) {
-        clearRecovery();
+        clearAttemptRecovery();
         return { status: "RETAINED_LEGACY", sourceMemoryId: memoryId, entryIds: [], retained: true, reason: "NO_DURABLE_CONTENT" };
       }
       const committed = this.store.commitOwner(snapshot, result);
       this.recordDurableTrace(durableTrace, { status: "COMMITTED" });
-      let derived = null;
-      if (rebuildDerived) {
-        derived = await rebuildDerivedViews({ finalizationId: snapshot.finalizationId, sourceRevision: snapshot.sourceRevision });
-        persistDerivedRecovery(derived);
-      } else if (committed.entryIds.length || committed.changedEntryIds?.length) this.derived.schedule(snapshot, { providerSnapshot, committedFinalization: true });
-      else clearRecovery();
+      const derived = await rebuildDerivedViews({ finalizationId: snapshot.finalizationId, sourceRevision: snapshot.sourceRevision });
+      this.clearVerifiedRecovery(snapshot, recoveryFile);
       const status = result.status === "NO_DURABLE_CONTENT" ? "NO_DURABLE_CONTENT" : "COMPLETE";
       this.trace?.record("memory4_legacy_recompression", { ownerId: scope.ownerId, status, count: committed.entryIds.length });
-      return { status, ...(rebuildDerived ? { canonical: { status, entryIds: [...committed.entryIds] }, derived } : {}),
+      return { status, durableStatus: committed.status, derivedGenerationStatus: derived?.status || "SKIPPED_DERIVED_POLICY",
+        ...(rebuildDerived ? { canonical: { status, entryIds: [...committed.entryIds] } } : {}), derived,
+        ...(fs.existsSync(recoveryFile) ? { recoveryPath: recoveryFile } : {}),
         sourceMemoryId: memoryId, entryIds: [...committed.entryIds], retained: true };
     } catch (error) {
       this.recordDurableTrace(durableTrace, durableTraceFailure(error, durableTrace));
       this.trace?.record("memory4_legacy_recompression", { ownerId: scope.ownerId, status: "EXTRACTION_FAILED", errorCode: error.message });
-      if (!this.isLegacyRecompressionSnapshotCurrent(snapshot)) clearRecovery();
-      else if (current()) this.saveRecovery(snapshot, { status: "EXTRACTION_FAILED", retryCount: Number(this.readRecovery(recoveryFile)?.retryCount || 0) + 1,
+      if (this.isLegacyRecompressionSnapshotCurrent(snapshot) && current()) this.saveRecovery(snapshot, { status: "EXTRACTION_FAILED", retryCount: Number(this.readRecovery(recoveryFile)?.retryCount || 0) + 1,
         lastError: String(error?.message || error) });
       return { status: "EXTRACTION_FAILED", sourceMemoryId: memoryId, entryIds: [], retained: true, reason: error.message };
     } finally { this.lazyInFlight.delete(key); }
@@ -653,6 +656,94 @@ class Memory4Coordinator {
     return file;
   }
 
+  inspectCommittedSnapshot(snapshot, { sourceFilteredByForget = false } = {}) {
+    const unverified = reason => ({ state: "UNVERIFIED", reason });
+    let scope, index, record;
+    try {
+      scope = { campaignToken: snapshot?.campaignToken, ownerId: snapshot?.ownerId };
+      assertScope(scope);
+      if (typeof snapshot.finalizationId !== "string" || !snapshot.finalizationId.trim()
+        || typeof snapshot.conversationId !== "string" || !snapshot.conversationId.trim()
+        || !/^[a-f0-9]{64}$/.test(snapshot.sourceRevision || "")) return unverified("SOURCE_IDENTITY_UNAVAILABLE");
+      index = this.store.loadIndex(scope);
+      record = index.finalizations[hash(snapshot.finalizationId)];
+    } catch { return unverified("DURABLE_INDEX_UNAVAILABLE"); }
+    if (!record) return Object.values(index.entries).some(row => row.finalizationId === snapshot.finalizationId)
+      ? unverified("DURABLE_COMMIT_RECORD_MISSING") : { state: "UNCOMMITTED" };
+    if (sourceFilteredByForget) return unverified("SOURCE_CHANGED_BY_FORGET");
+    if (record.sourceRevision !== snapshot.sourceRevision) return unverified("SOURCE_REVISION_MISMATCH");
+    let filtered;
+    try { filtered = this.store.filterForgottenSnapshot(snapshot); }
+    catch { return unverified("FORGET_STATE_UNAVAILABLE"); }
+    if (filtered.removedFragmentCount || filtered.forgottenProjectionIds.length || hash(filtered.snapshot) !== hash(snapshot)) {
+      return unverified("SOURCE_CHANGED_BY_FORGET");
+    }
+    const metadata = this.store.read(path.join(this.store.directory(scope), "metadata.json"), null);
+    if (!metadata || metadata.knownEvidenceRevisions?.[hash([snapshot.conversationId, snapshot.ownerId])] !== snapshot.sourceRevision) {
+      return unverified("SOURCE_REVISION_EVIDENCE_MISSING");
+    }
+    if (!Array.isArray(snapshot.fragments) || !["STORE", "NO_DURABLE_CONTENT", "NOT_PRESENT"].includes(record.status)
+      || record.evaluatedFragmentCount !== snapshot.fragments.length || record.completeness !== snapshot.completeness
+      || record.legacyRetained !== (snapshot.legacyRetained === true) || record.noDetailIsNotUnknown !== true
+      || hash(record.visibilityEvidence ?? null) !== hash(snapshot.visibilityEvidence ?? null)
+      || typeof record.committedAt !== "string" || !Number.isFinite(Date.parse(record.committedAt))) {
+      return unverified("DURABLE_COMMIT_RECORD_INVALID");
+    }
+    const hasSource = Number(snapshot.presentMessageCount || 0) > 0 || snapshot.fragments.length > 0;
+    const entryIds = record.entryIds;
+    const changedEntryIds = record.changedEntryIds;
+    if (!Array.isArray(entryIds) || new Set(entryIds).size !== entryIds.length
+      || !Array.isArray(changedEntryIds) || new Set(changedEntryIds).size !== changedEntryIds.length
+      || record.commitmentTransitionCount !== changedEntryIds.length
+      || (record.status === "STORE") !== (entryIds.length > 0)
+      || record.status === "NOT_PRESENT" && hasSource || record.status !== "NOT_PRESENT" && !hasSource
+      || record.status !== "STORE" && entryIds.length || entryIds.some(id => changedEntryIds.includes(id))) {
+      return unverified("DURABLE_COMMIT_ENTRIES_INVALID");
+    }
+    const indexedEntryIds = index.bySourceFinalization?.[snapshot.finalizationId] || [];
+    if (!Array.isArray(indexedEntryIds) || hash([...indexedEntryIds].sort()) !== hash([...entryIds].sort())) {
+      return unverified("DURABLE_COMMIT_ENTRY_INDEX_MISMATCH");
+    }
+    const validEntry = (entryId, entryKind) => {
+      if (typeof entryId !== "string" || !/^m4_[a-f0-9]{64}$/.test(entryId)) return false;
+      const row = index.entries[entryId];
+      if (!row || row.deleted || !ids(row.knownBy).includes(scope.ownerId) || entryKind === "finalization"
+          && (row.finalizationId !== snapshot.finalizationId || row.conversationId !== snapshot.conversationId)) return false;
+      if (entryKind === "changed" && (row.stateSource?.finalizationId !== snapshot.finalizationId
+        || row.stateSource?.conversationId !== snapshot.conversationId || row.stateSource?.sourceRevision !== snapshot.sourceRevision)) return false;
+      try {
+        const entry = this.store.readEntry(scope, entryId, index);
+        if (!entry || entry.deleted || entry.ownerId !== scope.ownerId || entry.campaignToken !== scope.campaignToken
+          || !ids(entry.evidence?.knownBy).includes(scope.ownerId)
+          || entry.source?.finalizationId !== row.finalizationId || entry.source?.conversationId !== row.conversationId
+          || entryKind === "changed" && (entry.state?.source?.finalizationId !== snapshot.finalizationId
+            || entry.state?.source?.conversationId !== snapshot.conversationId || entry.state?.source?.sourceRevision !== snapshot.sourceRevision)
+          || !this.derived.sourceValid(scope, row, index, metadata)) return false;
+        const sourceRecord = index.finalizations[hash(entry.source.finalizationId)];
+        const sourceRevision = metadata.knownEvidenceRevisions?.[hash([entry.source.conversationId, scope.ownerId])];
+        return !!sourceRecord?.sourceRevision && sourceRevision === sourceRecord.sourceRevision
+          && (entry.source.sourceRevision == null || entry.source.sourceRevision === sourceRecord.sourceRevision);
+      } catch { return false; }
+    };
+    if (entryIds.some(id => !validEntry(id, "finalization")) || changedEntryIds.some(id => !validEntry(id, "changed"))) {
+      return unverified("DURABLE_COMMIT_BODY_INVALID");
+    }
+    return { state: "COMMITTED", record };
+  }
+
+  clearVerifiedRecovery(snapshot, file, { sourceFilteredByForget = false } = {}) {
+    if (!fs.existsSync(file)) return true;
+    try {
+      const recovery = this.readRecovery(file);
+      if (!recovery || recovery.snapshot.campaignToken !== snapshot.campaignToken || recovery.snapshot.ownerId !== snapshot.ownerId
+        || recovery.snapshot.conversationId !== snapshot.conversationId || recovery.snapshot.finalizationId !== snapshot.finalizationId
+        || recovery.snapshot.sourceRevision !== snapshot.sourceRevision) return false;
+      if (this.inspectCommittedSnapshot(recovery.snapshot, { sourceFilteredByForget }).state !== "COMMITTED") return false;
+      this.baseStore.removeSummaryMutationFile(file);
+      return true;
+    } catch { return false; }
+  }
+
   getRecoveryStatus(activeCampaignToken) {
     if (!activeCampaignToken || !fs.existsSync(this.recoveryDir)) return { pending: 0, manual: 0, balanceBlocked: 0 };
     let pending = 0, manual = 0, balanceBlocked = 0, invalid = 0;
@@ -939,39 +1030,30 @@ class Memory4Coordinator {
       if (filtered.forgottenProjectionIds.length || filtered.removedFragmentCount) {
         (filtered.removedFragmentIds || []).forEach(id => forgottenFragmentIds.add(id));
         sourceFilteredByForget = true;
-        const { schemaVersion: _schemaVersion, snapshot: _oldSnapshot, updatedAt: _updatedAt, ...priorState } = prior || {};
-        this.saveRecovery(snapshot, { ...priorState, forgottenFragmentIds: [...forgottenFragmentIds], status: "PENDING", lastError: null });
+        if (prior?.status !== "DERIVED_REBUILD_FAILED") {
+          const { schemaVersion: _schemaVersion, snapshot: _oldSnapshot, updatedAt: _updatedAt, ...priorState } = prior || {};
+          this.saveRecovery(snapshot, { ...priorState, forgottenFragmentIds: [...forgottenFragmentIds], status: "PENDING", lastError: null });
+        }
       }
       if (hadFragments && !snapshot.fragments.length && (filtered.forgottenProjectionIds.length || filtered.removedFragmentCount)) {
+        if (prior?.status === "DERIVED_REBUILD_FAILED") return { ownerId: snapshot.ownerId, status: "RECOVERY_UNVERIFIED",
+          reason: "DERIVED_RECOVERY_SOURCE_FORGOTTEN", recoveryPath: file };
         if (fs.existsSync(file)) this.baseStore.removeSummaryMutationFile(file);
         return { ownerId: snapshot.ownerId, status: "FORGOTTEN", forgottenProjectionIds: filtered.forgottenProjectionIds };
       }
       if (!isCurrent()) throw new Error("memory4_generation_changed");
-      const committed = this.store.loadIndex(snapshot).finalizations[hash(snapshot.finalizationId)];
-      if (committed) {
-        if (committed.sourceRevision !== snapshot.sourceRevision) throw new Error("memory4_source_revision_conflict");
-        if (handoffOnly) {
-          this.saveRecovery(snapshot, { status: "PENDING", retryCount: Number(prior?.retryCount || 0), lastError: null });
-          this.recordDisclosures(snapshot);
-          return { ownerId: snapshot.ownerId, status: "RECOVERY_PENDING", alreadyCommitted: true, recoveryPath: file };
-        }
-        if (snapshot.legacyRecompression === true) {
-          const derived = await this.derived.rebuild(snapshot, { kind: "all", providerSnapshot: snapshot.summaryProviderSnapshot,
-            committedFinalization: true, finalizationProof: { finalizationId: snapshot.finalizationId, sourceRevision: snapshot.sourceRevision } });
-          const derivedComplete = ["COMPLETE", "MANUAL_OVERRIDE"].includes(derived.status);
-          if (derivedComplete) {
-            if (fs.existsSync(file)) fs.unlinkSync(file);
-          } else this.saveRecovery(snapshot, { status: "DERIVED_REBUILD_FAILED", retryCount: prior?.retryCount || 0,
-            lastError: String(derived.reason || derived.status || "memory4_derived_failed") });
-          return { ownerId: snapshot.ownerId, ...committed,
-            ...(derivedComplete ? { alreadyCommitted: true, derivedRecovered: true } : { status: "DERIVED_REBUILD_FAILED", recoveryPath: file }), derived };
-        }
+      const committedProof = this.inspectCommittedSnapshot(snapshot, { sourceFilteredByForget });
+      if (committedProof.state === "COMMITTED") {
         this.recordDisclosures(snapshot, { campaignToken: snapshot.campaignToken, date: snapshot.date,
           characters: new Map((snapshot.disclosureCharacters || []).map(character => [character.id, character])) });
-        const derived = await this.finishCommittedDerived(snapshot, prior, file);
-        const derivedComplete = !derived || !derived.status || ["COMPLETE", "MANUAL_OVERRIDE"].includes(derived.status);
-        return { ownerId: snapshot.ownerId, ...committed, alreadyCommitted: true,
-          ...(derived ? { derived } : {}), ...(derivedComplete ? {} : { status: "DERIVED_REBUILD_FAILED", recoveryPath: file }) };
+        const derived = await this.finishCommittedDerived(snapshot, prior, file, { sourceFilteredByForget });
+        return { ownerId: snapshot.ownerId, ...committedProof.record, alreadyCommitted: true,
+          durableStatus: committedProof.record.status, derivedGenerationStatus: derived.status, derived,
+          ...(fs.existsSync(file) ? { recoveryPath: file } : {}) };
+      }
+      if (committedProof.state === "UNVERIFIED" || prior?.status === "DERIVED_REBUILD_FAILED") {
+        return { ownerId: snapshot.ownerId, status: "RECOVERY_UNVERIFIED", reason: committedProof.reason || "DERIVED_RECOVERY_COMMIT_UNVERIFIED",
+          recoveryPath: file };
       }
       snapshot.activeCommitments ||= this.store.activeCommitments(snapshot);
       this.saveRecovery(snapshot, { forgottenFragmentIds: [...forgottenFragmentIds], status: "PENDING", retryCount: prior?.retryCount || 0, lastError: null });
@@ -1099,26 +1181,13 @@ class Memory4Coordinator {
       parsedAttempts.forEach(attempt => this.recordDurableTrace(attempt, { status: "COMMITTED" }));
       this.recordDisclosures(snapshot, { campaignToken: snapshot.campaignToken, date: snapshot.date,
         characters: new Map((snapshot.disclosureCharacters || []).map(character => [character.id, character])) });
-      if (snapshot.legacyRecompression === true) {
-        const derived = await this.derived.rebuild(snapshot, { kind: "all", providerSnapshot: snapshot.summaryProviderSnapshot,
-          committedFinalization: true, finalizationProof: { finalizationId: snapshot.finalizationId, sourceRevision: snapshot.sourceRevision } })
-          .catch(error => ({ status: "FAILED", kind: "all", reason: String(error?.message || error) }));
-        if (["COMPLETE", "MANUAL_OVERRIDE"].includes(derived.status)) {
-          if (fs.existsSync(file)) fs.unlinkSync(file);
-        } else this.saveRecovery(snapshot, { status: "DERIVED_REBUILD_FAILED", retryCount: prior?.retryCount || 0,
-          lastError: String(derived.reason || derived.status || "memory4_derived_failed") });
-        this.trace?.record("memory4_durable", { finalizationId: snapshot.finalizationId, ownerId: snapshot.ownerId,
-          status: persisted.status, entryCount: persisted.entryIds.length, derivedStatus: derived.status });
-        return { ownerId: snapshot.ownerId, ...persisted,
-          ...( ["COMPLETE", "MANUAL_OVERRIDE"].includes(derived.status) ? {} : { status: "DERIVED_REBUILD_FAILED", recoveryPath: file }), derived };
-      }
       const derived = await this.finishCommittedDerived(snapshot, prior, file);
-      const derivedComplete = !derived || !derived.status || ["COMPLETE", "MANUAL_OVERRIDE"].includes(derived.status);
       this.trace?.record("memory4_durable", { finalizationId: snapshot.finalizationId, ownerId: snapshot.ownerId,
         status: persisted.status, entryCount: persisted.entryIds.length, completeness: persisted.completeness,
         ...(derived ? { derivedStatus: derived.status } : {}) });
-      return { ownerId: snapshot.ownerId, ...persisted, ...(derived ? { derived } : {}),
-        ...(derivedComplete ? {} : { status: "DERIVED_REBUILD_FAILED", recoveryPath: file }) };
+      return { ownerId: snapshot.ownerId, ...persisted, durableStatus: persisted.status,
+        ...(derived ? { derivedGenerationStatus: derived.status, derived } : {}),
+        ...(fs.existsSync(file) ? { recoveryPath: file } : {}) };
     } catch (error) {
       if (!isCurrent()) return { ownerId: snapshot.ownerId, status: "CANCELLED",
         ...(fs.existsSync(file) ? { recoveryPath: file } : {}) };
@@ -1132,14 +1201,14 @@ class Memory4Coordinator {
     } finally { this.inFlight.delete(file); }
   }
 
-  async finishCommittedDerived(snapshot, prior, file) {
-    if (!this.derived.list(snapshot).dirty) {
-      if (fs.existsSync(file)) { this.readRecovery(file); fs.unlinkSync(file); }
-      return null;
-    }
+  async finishCommittedDerived(snapshot, prior, file, { sourceFilteredByForget = false } = {}) {
     const derived = await this.derived.schedule(snapshot, { providerSnapshot: snapshot.summaryProviderSnapshot, committedFinalization: true });
+    if (derived?.status === "SKIPPED_DERIVED_POLICY") {
+      const cleared = this.clearVerifiedRecovery(snapshot, file, { sourceFilteredByForget });
+      return { ...derived, ...(cleared ? {} : { recoveryRetained: true, recoveryPath: file }) };
+    }
     if (!derived?.status || ["COMPLETE", "MANUAL_OVERRIDE"].includes(derived.status)) {
-      if (fs.existsSync(file)) { this.readRecovery(file); fs.unlinkSync(file); }
+      this.clearVerifiedRecovery(snapshot, file, { sourceFilteredByForget });
       return derived || null;
     }
     this.saveRecovery(snapshot, { status: "DERIVED_REBUILD_FAILED", retryCount: Number(prior?.retryCount || 0),
@@ -1178,7 +1247,7 @@ class Memory4Coordinator {
       }
     };
     await Promise.all(Array.from({ length: Math.min(2, owners.length) }, worker));
-    const status = results.some(result => ["EXTRACTION_FAILED", "DERIVED_REBUILD_FAILED"].includes(result.status)) ? "PARTIAL_FAILURE"
+    const status = results.some(result => ["EXTRACTION_FAILED", "DERIVED_REBUILD_FAILED", "RECOVERY_UNVERIFIED"].includes(result.status)) ? "PARTIAL_FAILURE"
       : results.some(result => result.status === "CANCELLED") ? "CANCELLED"
       : results.some(result => result.status === "IN_PROGRESS") ? "IN_PROGRESS"
       : results.some(result => result.status === "RECOVERY_PENDING") ? "HANDOFF_PENDING" : "COMPLETE";
@@ -1186,7 +1255,7 @@ class Memory4Coordinator {
     const durableHandoffComplete = participantIds.length > 0 && owners.length + intentionalExclusions.length === participantIds.length
       && results.length === owners.length && results.every((result, index) => {
       if (terminal.has(result.status)) return true;
-      if (!["EXTRACTION_FAILED", "DERIVED_REBUILD_FAILED", "RECOVERY_PENDING"].includes(result.status) || !result.recoveryPath) return false;
+      if (!["EXTRACTION_FAILED", "DERIVED_REBUILD_FAILED", "RECOVERY_UNVERIFIED", "RECOVERY_PENDING"].includes(result.status) || !result.recoveryPath) return false;
       try {
         const record = this.readRecovery(result.recoveryPath);
         return record.snapshot.ownerId === result.ownerId && record.snapshot.finalizationId === context.finalizationId
@@ -1204,16 +1273,41 @@ class Memory4Coordinator {
     const worker = async () => {
       while (nextFile < files.length) {
         const index = nextFile++;
+        const file = path.join(this.recoveryDir, files[index]);
         try {
-          const record = this.readRecovery(path.join(this.recoveryDir, files[index]));
+          const record = this.readRecovery(file);
           const snapshot = record.snapshot;
           if (!activeCampaignToken || snapshot.campaignToken !== activeCampaignToken) { results[index] = { status: "CAMPAIGN_MISMATCH", ownerId: snapshot.ownerId }; continue; }
           const legacyRecompression = snapshot.legacyRecompression === true;
-          const file = path.join(this.recoveryDir, files[index]);
+          if (!["PENDING", "EXTRACTION_FAILED", "DERIVED_REBUILD_FAILED"].includes(record.status)) {
+            results[index] = { status: "RECOVERY_UNVERIFIED", ownerId: snapshot.ownerId, recoveryPath: file,
+              reason: "RECOVERY_STATUS_UNKNOWN" };
+            continue;
+          }
+          const committedProof = this.inspectCommittedSnapshot(snapshot);
+          if (committedProof.state === "COMMITTED") {
+            if (legacyRecompression && !this.isLegacyRecompressionSnapshotCurrent(snapshot)) {
+              results[index] = { status: "RECOVERY_UNVERIFIED", ownerId: snapshot.ownerId, recoveryPath: file,
+                reason: "LEGACY_SOURCE_CHANGED_AFTER_COMMIT" };
+              continue;
+            }
+            const cleared = this.clearVerifiedRecovery(snapshot, file);
+            results[index] = cleared
+              ? { ownerId: snapshot.ownerId, status: "SKIPPED_DERIVED_POLICY", durableStatus: committedProof.record.status,
+                derivedGenerationStatus: "SKIPPED_DERIVED_POLICY", generated: false, providerRequests: 0 }
+              : { ownerId: snapshot.ownerId, status: "RECOVERY_UNVERIFIED", recoveryPath: file,
+                reason: "DURABLE_RECOVERY_CLEANUP_UNVERIFIED" };
+            continue;
+          }
+          if (committedProof.state === "UNVERIFIED" || record.status === "DERIVED_REBUILD_FAILED") {
+            results[index] = { ownerId: snapshot.ownerId, status: "RECOVERY_UNVERIFIED", recoveryPath: file,
+              reason: committedProof.reason || "DERIVED_RECOVERY_COMMIT_UNVERIFIED" };
+            continue;
+          }
           const discardStaleLegacy = () => {
             if (!fs.existsSync(file)) return;
             this.readRecovery(file);
-            fs.unlinkSync(file);
+            this.baseStore.removeSummaryMutationFile(file);
           };
           if (legacyRecompression && !this.isLegacyRecompressionSnapshotCurrent(snapshot)) {
             discardStaleLegacy();
@@ -1232,7 +1326,8 @@ class Memory4Coordinator {
             results[index] = { status: "STALE", ownerId: snapshot.ownerId };
           }
         } catch (error) {
-          results[index] = { status: "EXTRACTION_FAILED", error: String(error?.message || error) };
+          const reason = String(error?.message || error);
+          results[index] = { status: "RECOVERY_UNVERIFIED", recoveryPath: file, reason, error: reason };
         }
       }
     };

@@ -15,7 +15,9 @@ const COMPLETED_OWNER_STATUSES = new Set(["STORE", "NO_DURABLE_CONTENT", "NOT_PR
 
 function ownerComplete(owner) {
   if (!COMPLETED_OWNER_STATUSES.has(owner.status)) return false;
-  return owner.status !== "STORE" || !owner.entryIds?.length || owner.derivedStatus === "COMPLETE";
+  return owner.status !== "STORE" || !owner.entryIds?.length || owner.derivedStatus === "COMPLETE"
+    || owner.derivedStatus === "SKIPPED_DERIVED_POLICY"
+      && owner.derivedGenerated === false && owner.derivedProviderRequests === 0;
 }
 
 function freezeDeep(value) {
@@ -486,11 +488,17 @@ class LetterMemoryFinalization {
             continue;
           }
         }
-        if (owner.status === "STORE" && owner.entryIds?.length && owner.derivedStatus !== "COMPLETE") {
+        if (owner.status === "STORE" && owner.entryIds?.length && !ownerComplete(owner)) {
           let derivedResult = { status: "FAILED" };
           try { derivedResult = await this.rebuildDerived(snapshot, providerSnapshot); } catch { /* retry only the derived archive */ }
-          if (derivedResult?.status === "COMPLETE") {
-            owner.derivedStatus = "COMPLETE";
+          if (derivedResult?.status === "COMPLETE"
+            || derivedResult?.status === "SKIPPED_DERIVED_POLICY"
+              && derivedResult.generated === false && derivedResult.providerRequests === 0) {
+            owner.derivedStatus = derivedResult.status;
+            if (derivedResult.status === "SKIPPED_DERIVED_POLICY") {
+              owner.derivedGenerated = false;
+              owner.derivedProviderRequests = 0;
+            }
             owner.derivedCompletedAt = new Date().toISOString();
             owner.derivedErrorCode = null;
           } else {

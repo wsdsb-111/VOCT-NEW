@@ -79,7 +79,7 @@ class MemoryTrace {
         && Number.isSafeInteger(details.count) ? details.count : null,
       memory4Derived: derivedStage ? {
         ownerId: Number.isSafeInteger(details.ownerId) ? details.ownerId : null,
-        status: ["RUNNING", "COMPLETE", "MANUAL_OVERRIDE", "QUEUED", "REQUEUED", "FAILED", "CANCELLED", "EXTRACTION_FAILED"].includes(details.status) ? details.status : null,
+        status: ["RUNNING", "COMPLETE", "MANUAL_OVERRIDE", "QUEUED", "REQUEUED", "FAILED", "CANCELLED", "EXTRACTION_FAILED", "SKIPPED_DERIVED_POLICY"].includes(details.status) ? details.status : null,
         kind: ["year", "life", "all"].includes(details.kind) ? details.kind : null,
         count: Number.isSafeInteger(details.count) ? details.count : null,
         ...(Number.isSafeInteger(details.eventYear) ? { eventYear: details.eventYear } : {}),
