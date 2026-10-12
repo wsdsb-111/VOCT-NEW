@@ -1,0 +1,353 @@
+{
+  "schemaVersion": 1,
+  "candidate": "V9.2.3",
+  "formalApp": "9.2.0",
+  "formalUI": "V9.2",
+  "fullFreeze": false,
+  "baselineSha": "071f62b73d27cf4bd37309e5e836335f914c174d",
+  "codeCandidateSha": "202f98ced8e26373035c5b0b7ee53194b8789e07",
+  "workPackages": [
+    {
+      "workPackage": "C1",
+      "sha": "6c60fca4c2ea0e0fd63da87ba8fcc8f491dca9cc"
+    },
+    {
+      "workPackage": "C2",
+      "sha": "32d38a47cb3d148adaae93500b20ce9c3ad1557a"
+    },
+    {
+      "workPackage": "C3",
+      "sha": "4ac118a03780dd4d810a3b8ff2b7496715b84111"
+    },
+    {
+      "workPackage": "C4",
+      "sha": "1d4f9f4765232b33abb9c40e8448aac54dd55971"
+    },
+    {
+      "workPackage": "C5",
+      "sha": "bd259a76f36a6aff5961d0f37c36acbdcd6754b9"
+    },
+    {
+      "workPackage": "C6",
+      "sha": "202f98ced8e26373035c5b0b7ee53194b8789e07"
+    }
+  ],
+  "runtime": {
+    "mappings": 287,
+    "payloadSha256": "5c20f6c789af82bd473d79db40d809cc2ed56e7112c54376669ab2d761c4ec05",
+    "parity": true,
+    "sources": [
+      {
+        "file": "main/main.js",
+        "sourceSha256": "edf04e1c7edf80bae2921be1c135af0850c379c5e815ebea9db2837084617fa3",
+        "deployedSha256": "edf04e1c7edf80bae2921be1c135af0850c379c5e815ebea9db2837084617fa3"
+      },
+      {
+        "file": "main/memory-system/memory4-derived.js",
+        "sourceSha256": "d6c4191af72a8e55bdfd1380d7355a041bfde54e417417a3443d0d8a01877ae8",
+        "deployedSha256": "d6c4191af72a8e55bdfd1380d7355a041bfde54e417417a3443d0d8a01877ae8"
+      },
+      {
+        "file": "main/memory-system/memory4-coordinator.js",
+        "sourceSha256": "2b8e727c562d72389cfc4575dd4c61c6cc3094b9726ee9dce88bc07a733cedfe",
+        "deployedSha256": "2b8e727c562d72389cfc4575dd4c61c6cc3094b9726ee9dce88bc07a733cedfe"
+      },
+      {
+        "file": "main/memory-system/letter-memory-finalization.js",
+        "sourceSha256": "a75ceba68dfc4e856f3e919401c9e01ee105eca6e2ff612cfc6254aec04ff300",
+        "deployedSha256": "a75ceba68dfc4e856f3e919401c9e01ee105eca6e2ff612cfc6254aec04ff300"
+      },
+      {
+        "file": "main/memory-system/memory-trace.js",
+        "sourceSha256": "ede36ed37ebb93677bc36d10cfaffe240ff9edf7191953dc96ede1fac8f2d640",
+        "deployedSha256": "ede36ed37ebb93677bc36d10cfaffe240ff9edf7191953dc96ede1fac8f2d640"
+      },
+      {
+        "file": "main/summaries/summaries-manager.js",
+        "sourceSha256": "f7c3aa86122bc31539246ed873f10991f905a1ae20a7f2d0f7633b02aaa7aa16",
+        "deployedSha256": "f7c3aa86122bc31539246ed873f10991f905a1ae20a7f2d0f7633b02aaa7aa16"
+      },
+      {
+        "file": "renderer/memory4-manager.js",
+        "sourceSha256": "3a3923061f7b65a744487436aa18585f0730288abbb949f2e8445551076ec811",
+        "deployedSha256": "3a3923061f7b65a744487436aa18585f0730288abbb949f2e8445551076ec811"
+      },
+      {
+        "file": "renderer/assets/index-Dn3qWlAB.js",
+        "sourceSha256": "601e15c6b5f1a83fafbb23a7537b92e1e86a30395b74561f6ba9f1053eb7844b",
+        "deployedSha256": "601e15c6b5f1a83fafbb23a7537b92e1e86a30395b74561f6ba9f1053eb7844b"
+      }
+    ]
+  },
+  "userData": {
+    "expectedFiles": 3877,
+    "actualFiles": 3877,
+    "changedFiles": 0,
+    "newFiles": 0,
+    "inventorySha256": "bd0116d7b5f16daabbf373a5feb83089f052c0e40b2764f1dbb69b026e040dc3",
+    "bytes": 616403261
+  },
+  "regression": {
+    "status": "PASS",
+    "releaseGroups": 427,
+    "archivedChecks": 71,
+    "retirement": {
+      "pass": 8,
+      "fail": 0,
+      "network": 0
+    },
+    "recovery": {
+      "pass": 8,
+      "fail": 0,
+      "network": 0
+    },
+    "core": {
+      "pass": 26
+    },
+    "wire": {
+      "versions": 3,
+      "scenarios": 101,
+      "network": 0
+    },
+    "usage": {
+      "versions": 3,
+      "fixtures": 4,
+      "network": 0
+    }
+  },
+  "logHashes": [
+    {
+      "file": ".build/v923-final-release.log",
+      "sha256": "bceae8cb74b31bc56535257fc2eef0319b29182683c1f762804154d5aef4bd8f"
+    },
+    {
+      "file": ".build/v923-final-retirement.log",
+      "sha256": "1499d3309f5942bb492cbee4a936b1da8bc1ba6b59ca6755a4870a85a3c37118"
+    },
+    {
+      "file": ".build/v923-final-recovery.log",
+      "sha256": "ffc1e77f0c9f00edf242ca34ca0139a476854b365e93f06bcc388d3c8b71574e"
+    },
+    {
+      "file": ".build/v923-final-glm-wire.log",
+      "sha256": "a10241bf0ee54cf8b3986c7c74f7fdac13d5a02445f6c6426c96635cc1dbac54"
+    },
+    {
+      "file": ".build/v923-final-glm-usage.log",
+      "sha256": "d07ab2b2af920c6470a44531d2eee13196280105ff7c2099386355eb9275e80b"
+    },
+    {
+      "file": ".build/v923-final-presend.log",
+      "sha256": "4f483f7cc166e6f0f40bda178af0a7a99f984e21e522045f88ea38bc4e661835"
+    },
+    {
+      "file": ".build/v923-final-lineage.log",
+      "sha256": "958f6c2199873151198be075efce555c98a489d20ceceeb0e85a17af40ee921f"
+    },
+    {
+      "file": ".build/v923-final-attribution.log",
+      "sha256": "8735539cd5d2cc131c45e0114d30e9f99cff5408c2016bbda8f3df87a492f2f7"
+    },
+    {
+      "file": ".build/v923-final-chunking.log",
+      "sha256": "9f24febbcd8155d7b1f9efeb3f1aafa5f1ec0b841bdc7c87fbd1f2cc97052cc2"
+    },
+    {
+      "file": ".build/v923-final-core.log",
+      "sha256": "1b0b14129429bf2448153a6547867f5a39f2e7dd740e7d11057035b59311be5e"
+    },
+    {
+      "file": ".build/v923-retirement-ui-smoke.log",
+      "sha256": "f0146660fe9d4e2ffdf57bc480fc7d0e94d0a20eb3c836d85d0be577ba5e7ff6"
+    },
+    {
+      "file": ".build/v923-packaged-smoke.log",
+      "sha256": "5a2be5a5a0e8a5fa6398efb0668aa893df142e35c991af3023e51878ef1a2e58"
+    },
+    {
+      "file": ".build/v923-final-dependencies.log",
+      "sha256": "8cfef508707cff4b3132f61c578494d33cb70800ec42656ae5f1a0287839b546"
+    }
+  ],
+  "native": {
+    "evidence": "v9.2.3-glm-native-evidence.json",
+    "sha256": "fb8fc422c26d8b976c091501e7a6556d22899a079e39286cdf5f756920e572c4",
+    "original": {
+      "attempted": 125,
+      "notExercised": 0,
+      "completeNativeUsage": 125,
+      "unknownOrFailed": 0,
+      "zeroCacheHit": 14,
+      "nativeCacheHitReported": 111,
+      "ttft": {
+        "n": 125,
+        "p50Ms": 843.0302,
+        "p95Ms": 2090.3338
+      },
+      "spentUpperBoundCny": 0.6484010400000001,
+      "heldReserveCny": 0,
+      "usedBudgetCny": 0.6484010400000001
+    },
+    "combined": {
+      "attempts": 128,
+      "httpStatusCounts": {
+        "200": 128
+      },
+      "stateCounts": {
+        "SETTLED_USAGE": 128
+      },
+      "errorCategoryCounts": {
+        "NONE": 128
+      },
+      "nativeUsageComplete": 128,
+      "unknownUsage": 0,
+      "zeroCacheHitAttempts": 15,
+      "positiveCacheHitAttempts": 113,
+      "nativeInputBins": {
+        "2000": {
+          "attempts": 20,
+          "nativeTokens": {
+            "min": 1682,
+            "median": 2262,
+            "max": 2987
+          }
+        },
+        "15000": {
+          "attempts": 68,
+          "nativeTokens": {
+            "min": 13723,
+            "median": 14366,
+            "max": 15526
+          }
+        },
+        "25000": {
+          "attempts": 20,
+          "nativeTokens": {
+            "min": 23167,
+            "median": 23747,
+            "max": 24472
+          }
+        },
+        "35000": {
+          "attempts": 20,
+          "nativeTokens": {
+            "min": 32610,
+            "median": 33190,
+            "max": 33915
+          }
+        }
+      },
+      "ttftMs": {
+        "n": 128,
+        "p50": 843.0302,
+        "p95": 2090.3338
+      },
+      "schema": {
+        "FAIL": 18,
+        "PASS": 110
+      },
+      "scopeSentinel": {
+        "NOT_CHECKED": 18,
+        "PASS": 110
+      },
+      "ownerSentinel": {
+        "NOT_CHECKED": 18,
+        "PASS": 110
+      },
+      "finishReason": {
+        "stop": 128
+      },
+      "responseQuality": {
+        "FAIL": 18,
+        "PASS": 110
+      },
+      "settledChargeUpperBoundCny": 0.6663780000000001,
+      "heldReserveCny": 0,
+      "budgetCny": 10,
+      "withinBudget": true,
+      "cacheCandidateBreakdown": {
+        "originalBatchFirstRequests": {
+          "attempts": 14,
+          "zero": 14,
+          "positive": 0
+        },
+        "originalWithinBatchWarmRequests": {
+          "attempts": 111,
+          "zero": 0,
+          "positive": 111
+        },
+        "exactBodySupplement": {
+          "attempts": 3,
+          "comparableProviderZero": 1,
+          "positiveHit": 2,
+          "unknownResidency": true
+        }
+      }
+    },
+    "supplement": {
+      "bodyEqualsApprovedDLong": true,
+      "summary": {
+        "attempted": 3,
+        "notExercised": 0,
+        "completeNativeUsage": 3,
+        "unknownOrFailed": 0,
+        "zeroCacheHit": 1,
+        "nativeCacheHitReported": 2,
+        "ttft": {
+          "n": 3,
+          "p50Ms": 890.2187,
+          "p95Ms": 1025.7056
+        },
+        "supplementChargeUpperBoundCny": 0.017976960000000042,
+        "combinedSpentUpperBoundCny": 0.6663780000000001,
+        "heldReserveCny": 0,
+        "combinedUsedBudgetCny": 0.6663780000000001
+      },
+      "sameBodyProbe": {
+        "allPayloadHashesEqual": true,
+        "allClientParamsEqual": true,
+        "bridge": {
+          "sequence": 126,
+          "condition": "baseline D-long to exact-body bridge; the baseline's matching previous same-body completion is used",
+          "priorSameBodyFinishedAt": "2026-10-12T16:40:18.983Z",
+          "requestFinishedAt": "2026-10-12T16:58:45.851Z",
+          "actualIntervalMs": 1105571,
+          "cacheClassification": "COMPARABLE_PROVIDER_ZERO",
+          "nativeCachedTokens": 0,
+          "interpretation": "zero after a long prior-body interval; cache residency is unknown; not classified as EXPECTED_COLD; no TTL inference"
+        },
+        "afterTwoSeconds": {
+          "sequence": 127,
+          "priorSameBodyFinishedAt": "2026-10-12T16:58:45.851Z",
+          "requestFinishedAt": "2026-10-12T16:58:48.908Z",
+          "requestedIntervalMs": 2000,
+          "actualIntervalMs": 2015,
+          "nativeCachedTokens": 13696,
+          "cacheClassification": "POSITIVE_PROVIDER_HIT"
+        },
+        "afterSixtySeconds": {
+          "sequence": 128,
+          "priorSameBodyFinishedAt": "2026-10-12T16:58:48.908Z",
+          "requestFinishedAt": "2026-10-12T16:59:50.426Z",
+          "requestedIntervalMs": 60000,
+          "actualIntervalMs": 60011,
+          "nativeCachedTokens": 13696,
+          "cacheClassification": "POSITIVE_PROVIDER_HIT"
+        },
+        "interpretationLimit": "Three exact-body attempts are a small sample and do not establish cache TTL or residency behavior beyond the observed provider usage fields."
+      }
+    }
+  },
+  "gates": {
+    "G0": "PASS",
+    "G1": "AUTOMATED_PASS_CK3_NOT_VERIFIED",
+    "G2": "AUTOMATED_PASS_CK3_NOT_VERIFIED",
+    "G3": "AUTOMATED_PASS",
+    "G4": "AUTOMATED_PASS_CK3_NOT_VERIFIED",
+    "G5": "HOLD_UPSTREAM_OR_UNRESOLVED",
+    "G6": "HOLD_NO_PROVEN_APP_DEFECT",
+    "G7": "LOCAL_PASS_REMOTE_CI_CHECK_AT_FINAL_DELIVERY_CK3_NOT_VERIFIED",
+    "G8": "CANDIDATE_VERSION_FORMAL_BUMP_HOLD"
+  },
+  "boundary": "Synthetic automated and paid native tests only; no production memory replay, CK3 effect replay or provider-cache repair claimed. Final documentation commit and remote CI are independently identified at delivery."
+}

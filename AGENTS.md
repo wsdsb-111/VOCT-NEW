@@ -17,6 +17,8 @@ V9.2.1 缓存专项目前为安全／诊断候选，证据见 docs/current/v9/V9
 
 ## 当前稳定合同
 
+- V9.2.3 候选固定退役 Memory4 Year/Life 自动模型生成及后台重建；历史合法视图可查看和手改，Detail/Legacy、Durable、Commitment、Forget与来源校验保持。跳过必须显示 `SKIPPED_DERIVED_POLICY`，不能冒充已生成。旧 Recovery 只有真实提交证据闭合才可清除；坏记录、未知状态与其他 Campaign保留。候选仍按 docs/current/v9/V9_2_3_VERIFICATION_REPORT.md 分别签署自动化、原生Provider、CI和人工Gate，正式App/UI暂保持9.2.0/V9.2。
+
 - V8.8.4 动作区分 QUEUED、ACKNOWLEDGED 与 CONFIRMED。NPC 列表不含玩家，玩家绑定 root；金币/好感度以同命令 BEGIN—ACK 的真实前后状态确认。游戏侧同命令去重和旧会话零写入隔离不可移除；其他动作只有 ACK 时不宣称效果成功。
 - V8.8.5 排队 TTL 归 RunFileManager，ACK 计时从实际写入开始；`votc.txt` 必须以 UTF-8 BOM 临时文件原子替换。新动作可在载体已安全清空后隔离旧 STALLED 动作，但绝不重放未知效果。多个金额不做确定性覆盖，好感度确认前不能使用成功文案。DeepSeek 两项 Action 优化默认开启且可关闭；OpenAI-compatible 提供 Action Schema 标准/兼容传输模式。独立 `zhipu` Provider 的 GLM 推理强度和 `clear_thinking` 不得与 DeepSeek 专属配置交叉；缓存/推理 Token 必须先归一化。流式 Provider 必须保留 usage-only 尾块，Gemini `usageMetadata` 统一记账；端点不返回 usage 时只能记录明确标记的估算 Token。空年龄保持未知；扩展亲属依赖实际家谱，伯叔与父亲比较长幼，堂表亲与主体比较长幼，旧英文模板只做动态事实接入、不扩充动作参与者。
 - Official VOTC 2.0.3 Action System 是当前唯一正式动作基线。动作必须经过确定性门禁、注册检查、结构化输出和本地校验；旧的自研 AE/Action Mode/Pending/Social Consequence 链路只作为历史资料，不得重新接入生产路径。

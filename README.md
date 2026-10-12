@@ -10,6 +10,8 @@ V9.2.1 缓存专项安全／诊断候选（2026-10-12）：[验证](docs/current
 
 ## 主要功能
 
+V9.2.3候选（2026-10-13）：[实施](docs/current/v9/V9_2_3_IMPLEMENTATION_REPORT.md)、[验证](docs/current/v9/V9_2_3_VERIFICATION_REPORT.md)。Year/Life自动模型生成已退役；保留Durable、Detail/Legacy及合法旧档查看和手改。以下旧年度压缩／重建记录为历史合同，不能据此重新启用生成。GLM旧新出站一致，原生长上下文另有取证，实机问题仍HOLD；正式App/UI保持9.2.0/V9.2，未签完整冻结。
+
 当前版本：项目 **V9.2**，Electron App 包 **9.2.0**，VOTC Workshop Mod **2.0.5**，人物记忆 **Memory Engine 4.0**。前端显示 `V9.2 · Mod v2.0.5`，悬停可见 App 包版本；记忆协议 3.0、摘要 2.5 保持兼容。独立 Three-Mod 工程仍为 1.0.6；VOTC.exe 的旧壳属性版本未改写。以下历史报告保留当时版本和验收快照。
 
 可选兼容工程已完成本地迁移：[CK3-Three-Mod-Compatibility](https://github.com/wsdsb-111/CK3-Three-Mod-Compatibility)，工作目录 `C:/Users/97330/Documents/Codex/CK3-Three-Mod-Compatibility`。官职／称谓规则不属于 VOTC 运行必需依赖，历史[1.0.6 报告](docs/v8.15.2-celestial-same-tier-office-report.md)保留；当前安装 Mod 不卸载。独立CI与CK3验收待执行。
