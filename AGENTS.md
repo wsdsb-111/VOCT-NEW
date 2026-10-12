@@ -4,6 +4,8 @@
 
 本仓库是面向 Crusader Kings III 的 Windows 打包版 VOTC Electron 应用。当前主线 V9.2／App 9.2.0，按旧总路线实施 Application Boundary & JSON Repository；V9.1 f9c088f 的远端 CI 和用户功能确认已补记，证据见 docs/current/v9/V9_2_VERIFICATION_REPORT.md。既有用户验收保留；新 CK3、Provider、性能、CI 与 Soak 结果独立记录，不能宣称 Full Freeze。
 
+V9.2.1 缓存专项目前为安全／诊断候选，证据见 docs/current/v9/V9_2_1_VERIFICATION_REPORT.md。Durable 固定 Policy 与 User 动态 limits 分离；每次请求前复核 Forget，二分及后续 chunk 不重发已忘源。GLM 保持 v813，原生收益 HOLD；按施工规格 Gate 暂不升级正式版本或自动进入 V9.3。V9.2 6026713 的远端 CI 已核验 Success，新候选仍需最终 SHA 独立核验。
+
 - resources/app/out/main/main.js 是 Electron 主进程组合根；主进程实现已按职责拆分到 actions/、conversation/、memory-system/、summaries/、worldline/、game-data/、historical-system/、letters/、providers/、ipc/、analytics/、runtime/、config/ 等目录，action-system/ 保留为历史目录结构。
 - src/app/ 是可编辑 Runtime 源；build/runtime-inputs.json 显式映射 Main/Preload/Renderer 与默认数据。先编辑源、构建并部署，再核验 resources/app 生成资源；不要单独编辑 out/。源码和构建边界遵循 src/AGENTS.md，详情见 docs/current/v9/V9_1_SOURCE_BUILD.md。
 - resources/app/out/renderer/ 是随应用交付的 Renderer 资源。world-memory-editor.js 负责世界记忆编辑器，worldline-player-presentation.js 负责世界线玩家展示；assets/ 内包含三套主题背景和打包 CSS/JS。

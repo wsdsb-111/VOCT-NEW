@@ -1,0 +1,697 @@
+{
+  "schemaVersion": 1,
+  "analysisVersion": "v9.2.1",
+  "baselineCommit": "6026713d88deeafef6cf45e6a07405908c98e030",
+  "candidateCommit": null,
+  "source": "native_usage_plus_redacted_diff",
+  "status": "HOLD",
+  "timezone": "Asia/Shanghai",
+  "budget": {
+    "maximumYuan": 10,
+    "costUpperBoundYuan": 0.16258380000000006,
+    "priceBasis": "official_public_list_prices_with_50_percent_contingency",
+    "billedCost": null,
+    "pricingSources": [
+      "https://bigmodel.cn/pricing",
+      "https://api-docs.deepseek.com/zh-cn/quick_start/pricing/"
+    ],
+    "automaticRetries": 0
+  },
+  "chat": {
+    "status": "INCONCLUSIVE_NO_LAYOUT_CHANGE",
+    "requestCount": 96,
+    "from": "2026-10-12T04:14:22.217Z",
+    "to": "2026-10-12T04:17:42.732Z",
+    "layoutId": "v813",
+    "reasoningEffort": "high",
+    "clearThinking": true,
+    "outputLimit": 4096,
+    "groups": [
+      {
+        "variant": "A",
+        "cohort": "GLM-A",
+        "all": {
+          "requestCount": 20,
+          "nativeHitRequests": 20,
+          "nativeHitStatus": {
+            "positive": 19,
+            "zero": 1,
+            "missing": 0
+          },
+          "weightedCacheRequests": 20,
+          "cacheHitTokens": 36288,
+          "cacheMissTokens": 3062,
+          "weightedNativeHitRate": 0.9221855146124524,
+          "nativeReportingCoverage": 1,
+          "missProvenance": {
+            "providerNative": 0,
+            "promptMinusNativeHit": 20,
+            "storedUnknown": 0,
+            "unknown": 0
+          },
+          "localStructureEstimate": {
+            "requests": 19,
+            "estimatedCommonPrefixTokens": 36442
+          },
+          "stablePrefix": {
+            "unchanged": 19,
+            "changed": 0,
+            "unknown": 1
+          },
+          "switches": {
+            "endpoint": 0,
+            "responder": 0,
+            "conversation": 0
+          },
+          "switchUnknown": {
+            "endpoint": 1,
+            "responder": 1,
+            "conversation": 1
+          },
+          "sameEndpointZeroHitAnomalies": null
+        },
+        "warm": {
+          "requestCount": 19,
+          "nativeHitRequests": 19,
+          "nativeHitStatus": {
+            "positive": 19,
+            "zero": 0,
+            "missing": 0
+          },
+          "weightedCacheRequests": 19,
+          "cacheHitTokens": 36288,
+          "cacheMissTokens": 1484,
+          "weightedNativeHitRate": 0.9607116382505559,
+          "nativeReportingCoverage": 1,
+          "missProvenance": {
+            "providerNative": 0,
+            "promptMinusNativeHit": 19,
+            "storedUnknown": 0,
+            "unknown": 0
+          },
+          "localStructureEstimate": {
+            "requests": 19,
+            "estimatedCommonPrefixTokens": 36442
+          },
+          "stablePrefix": {
+            "unchanged": 19,
+            "changed": 0,
+            "unknown": 0
+          },
+          "switches": {
+            "endpoint": 0,
+            "responder": 0,
+            "conversation": 0
+          },
+          "switchUnknown": {
+            "endpoint": 0,
+            "responder": 0,
+            "conversation": 0
+          },
+          "sameEndpointZeroHitAnomalies": null
+        },
+        "p50VisibleTtftMs": 714,
+        "p95TotalLatencyMs": 1893,
+        "validLocalResults": 20,
+        "rejectedLocalResults": 0,
+        "actualModels": [
+          "glm-5.3-flash"
+        ]
+      },
+      {
+        "variant": "A",
+        "cohort": "GLM-B",
+        "all": {
+          "requestCount": 18,
+          "nativeHitRequests": 18,
+          "nativeHitStatus": {
+            "positive": 16,
+            "zero": 2,
+            "missing": 0
+          },
+          "weightedCacheRequests": 18,
+          "cacheHitTokens": 27136,
+          "cacheMissTokens": 8453,
+          "weightedNativeHitRate": 0.762482789626008,
+          "nativeReportingCoverage": 1,
+          "missProvenance": {
+            "providerNative": 0,
+            "promptMinusNativeHit": 18,
+            "storedUnknown": 0,
+            "unknown": 0
+          },
+          "localStructureEstimate": {
+            "requests": 15,
+            "estimatedCommonPrefixTokens": 28210
+          },
+          "stablePrefix": {
+            "unchanged": 15,
+            "changed": 0,
+            "unknown": 3
+          },
+          "switches": {
+            "endpoint": 0,
+            "responder": 0,
+            "conversation": 0
+          },
+          "switchUnknown": {
+            "endpoint": 3,
+            "responder": 3,
+            "conversation": 3
+          },
+          "sameEndpointZeroHitAnomalies": null
+        },
+        "warm": {
+          "requestCount": 15,
+          "nativeHitRequests": 15,
+          "nativeHitStatus": {
+            "positive": 15,
+            "zero": 0,
+            "missing": 0
+          },
+          "weightedCacheRequests": 15,
+          "cacheHitTokens": 26752,
+          "cacheMissTokens": 3828,
+          "weightedNativeHitRate": 0.874820143884892,
+          "nativeReportingCoverage": 1,
+          "missProvenance": {
+            "providerNative": 0,
+            "promptMinusNativeHit": 15,
+            "storedUnknown": 0,
+            "unknown": 0
+          },
+          "localStructureEstimate": {
+            "requests": 15,
+            "estimatedCommonPrefixTokens": 28210
+          },
+          "stablePrefix": {
+            "unchanged": 15,
+            "changed": 0,
+            "unknown": 0
+          },
+          "switches": {
+            "endpoint": 0,
+            "responder": 0,
+            "conversation": 0
+          },
+          "switchUnknown": {
+            "endpoint": 0,
+            "responder": 0,
+            "conversation": 0
+          },
+          "sameEndpointZeroHitAnomalies": null
+        },
+        "p50VisibleTtftMs": 797,
+        "p95TotalLatencyMs": 4701,
+        "validLocalResults": 18,
+        "rejectedLocalResults": 0,
+        "actualModels": [
+          "glm-5.3-flash"
+        ]
+      },
+      {
+        "variant": "A",
+        "cohort": "GLM-C",
+        "all": {
+          "requestCount": 10,
+          "nativeHitRequests": 10,
+          "nativeHitStatus": {
+            "positive": 8,
+            "zero": 2,
+            "missing": 0
+          },
+          "weightedCacheRequests": 10,
+          "cacheHitTokens": 5632,
+          "cacheMissTokens": 11993,
+          "weightedNativeHitRate": 0.31954609929078015,
+          "nativeReportingCoverage": 1,
+          "missProvenance": {
+            "providerNative": 0,
+            "promptMinusNativeHit": 10,
+            "storedUnknown": 0,
+            "unknown": 0
+          },
+          "localStructureEstimate": {
+            "requests": 9,
+            "estimatedCommonPrefixTokens": 6084
+          },
+          "stablePrefix": {
+            "unchanged": 9,
+            "changed": 0,
+            "unknown": 1
+          },
+          "switches": {
+            "endpoint": 0,
+            "responder": 0,
+            "conversation": 0
+          },
+          "switchUnknown": {
+            "endpoint": 1,
+            "responder": 1,
+            "conversation": 1
+          },
+          "sameEndpointZeroHitAnomalies": null
+        },
+        "warm": {
+          "requestCount": 9,
+          "nativeHitRequests": 9,
+          "nativeHitStatus": {
+            "positive": 8,
+            "zero": 1,
+            "missing": 0
+          },
+          "weightedCacheRequests": 9,
+          "cacheHitTokens": 5632,
+          "cacheMissTokens": 10415,
+          "weightedNativeHitRate": 0.35096902847884337,
+          "nativeReportingCoverage": 1,
+          "missProvenance": {
+            "providerNative": 0,
+            "promptMinusNativeHit": 9,
+            "storedUnknown": 0,
+            "unknown": 0
+          },
+          "localStructureEstimate": {
+            "requests": 9,
+            "estimatedCommonPrefixTokens": 6084
+          },
+          "stablePrefix": {
+            "unchanged": 9,
+            "changed": 0,
+            "unknown": 0
+          },
+          "switches": {
+            "endpoint": 0,
+            "responder": 0,
+            "conversation": 0
+          },
+          "switchUnknown": {
+            "endpoint": 0,
+            "responder": 0,
+            "conversation": 0
+          },
+          "sameEndpointZeroHitAnomalies": null
+        },
+        "p50VisibleTtftMs": 1033,
+        "p95TotalLatencyMs": 4343,
+        "validLocalResults": 10,
+        "rejectedLocalResults": 0,
+        "actualModels": [
+          "glm-5.3-flash"
+        ]
+      },
+      {
+        "variant": "B",
+        "cohort": "GLM-A",
+        "all": {
+          "requestCount": 20,
+          "nativeHitRequests": 20,
+          "nativeHitStatus": {
+            "positive": 19,
+            "zero": 1,
+            "missing": 0
+          },
+          "weightedCacheRequests": 20,
+          "cacheHitTokens": 36288,
+          "cacheMissTokens": 3062,
+          "weightedNativeHitRate": 0.9221855146124524,
+          "nativeReportingCoverage": 1,
+          "missProvenance": {
+            "providerNative": 0,
+            "promptMinusNativeHit": 20,
+            "storedUnknown": 0,
+            "unknown": 0
+          },
+          "localStructureEstimate": {
+            "requests": 19,
+            "estimatedCommonPrefixTokens": 36442
+          },
+          "stablePrefix": {
+            "unchanged": 19,
+            "changed": 0,
+            "unknown": 1
+          },
+          "switches": {
+            "endpoint": 0,
+            "responder": 0,
+            "conversation": 0
+          },
+          "switchUnknown": {
+            "endpoint": 1,
+            "responder": 1,
+            "conversation": 1
+          },
+          "sameEndpointZeroHitAnomalies": null
+        },
+        "warm": {
+          "requestCount": 19,
+          "nativeHitRequests": 19,
+          "nativeHitStatus": {
+            "positive": 19,
+            "zero": 0,
+            "missing": 0
+          },
+          "weightedCacheRequests": 19,
+          "cacheHitTokens": 36288,
+          "cacheMissTokens": 1484,
+          "weightedNativeHitRate": 0.9607116382505559,
+          "nativeReportingCoverage": 1,
+          "missProvenance": {
+            "providerNative": 0,
+            "promptMinusNativeHit": 19,
+            "storedUnknown": 0,
+            "unknown": 0
+          },
+          "localStructureEstimate": {
+            "requests": 19,
+            "estimatedCommonPrefixTokens": 36442
+          },
+          "stablePrefix": {
+            "unchanged": 19,
+            "changed": 0,
+            "unknown": 0
+          },
+          "switches": {
+            "endpoint": 0,
+            "responder": 0,
+            "conversation": 0
+          },
+          "switchUnknown": {
+            "endpoint": 0,
+            "responder": 0,
+            "conversation": 0
+          },
+          "sameEndpointZeroHitAnomalies": null
+        },
+        "p50VisibleTtftMs": 1029,
+        "p95TotalLatencyMs": 2584,
+        "validLocalResults": 20,
+        "rejectedLocalResults": 0,
+        "actualModels": [
+          "glm-5.3-flash"
+        ]
+      },
+      {
+        "variant": "B",
+        "cohort": "GLM-B",
+        "all": {
+          "requestCount": 18,
+          "nativeHitRequests": 18,
+          "nativeHitStatus": {
+            "positive": 16,
+            "zero": 2,
+            "missing": 0
+          },
+          "weightedCacheRequests": 18,
+          "cacheHitTokens": 27136,
+          "cacheMissTokens": 8453,
+          "weightedNativeHitRate": 0.762482789626008,
+          "nativeReportingCoverage": 1,
+          "missProvenance": {
+            "providerNative": 0,
+            "promptMinusNativeHit": 18,
+            "storedUnknown": 0,
+            "unknown": 0
+          },
+          "localStructureEstimate": {
+            "requests": 15,
+            "estimatedCommonPrefixTokens": 28210
+          },
+          "stablePrefix": {
+            "unchanged": 15,
+            "changed": 0,
+            "unknown": 3
+          },
+          "switches": {
+            "endpoint": 0,
+            "responder": 0,
+            "conversation": 0
+          },
+          "switchUnknown": {
+            "endpoint": 3,
+            "responder": 3,
+            "conversation": 3
+          },
+          "sameEndpointZeroHitAnomalies": null
+        },
+        "warm": {
+          "requestCount": 15,
+          "nativeHitRequests": 15,
+          "nativeHitStatus": {
+            "positive": 15,
+            "zero": 0,
+            "missing": 0
+          },
+          "weightedCacheRequests": 15,
+          "cacheHitTokens": 26752,
+          "cacheMissTokens": 3828,
+          "weightedNativeHitRate": 0.874820143884892,
+          "nativeReportingCoverage": 1,
+          "missProvenance": {
+            "providerNative": 0,
+            "promptMinusNativeHit": 15,
+            "storedUnknown": 0,
+            "unknown": 0
+          },
+          "localStructureEstimate": {
+            "requests": 15,
+            "estimatedCommonPrefixTokens": 28210
+          },
+          "stablePrefix": {
+            "unchanged": 15,
+            "changed": 0,
+            "unknown": 0
+          },
+          "switches": {
+            "endpoint": 0,
+            "responder": 0,
+            "conversation": 0
+          },
+          "switchUnknown": {
+            "endpoint": 0,
+            "responder": 0,
+            "conversation": 0
+          },
+          "sameEndpointZeroHitAnomalies": null
+        },
+        "p50VisibleTtftMs": 1080,
+        "p95TotalLatencyMs": 3878,
+        "validLocalResults": 18,
+        "rejectedLocalResults": 0,
+        "actualModels": [
+          "glm-5.3-flash"
+        ]
+      },
+      {
+        "variant": "B",
+        "cohort": "GLM-C",
+        "all": {
+          "requestCount": 10,
+          "nativeHitRequests": 10,
+          "nativeHitStatus": {
+            "positive": 8,
+            "zero": 2,
+            "missing": 0
+          },
+          "weightedCacheRequests": 10,
+          "cacheHitTokens": 5632,
+          "cacheMissTokens": 11993,
+          "weightedNativeHitRate": 0.31954609929078015,
+          "nativeReportingCoverage": 1,
+          "missProvenance": {
+            "providerNative": 0,
+            "promptMinusNativeHit": 10,
+            "storedUnknown": 0,
+            "unknown": 0
+          },
+          "localStructureEstimate": {
+            "requests": 9,
+            "estimatedCommonPrefixTokens": 6084
+          },
+          "stablePrefix": {
+            "unchanged": 9,
+            "changed": 0,
+            "unknown": 1
+          },
+          "switches": {
+            "endpoint": 0,
+            "responder": 0,
+            "conversation": 0
+          },
+          "switchUnknown": {
+            "endpoint": 1,
+            "responder": 1,
+            "conversation": 1
+          },
+          "sameEndpointZeroHitAnomalies": null
+        },
+        "warm": {
+          "requestCount": 9,
+          "nativeHitRequests": 9,
+          "nativeHitStatus": {
+            "positive": 8,
+            "zero": 1,
+            "missing": 0
+          },
+          "weightedCacheRequests": 9,
+          "cacheHitTokens": 5632,
+          "cacheMissTokens": 10415,
+          "weightedNativeHitRate": 0.35096902847884337,
+          "nativeReportingCoverage": 1,
+          "missProvenance": {
+            "providerNative": 0,
+            "promptMinusNativeHit": 9,
+            "storedUnknown": 0,
+            "unknown": 0
+          },
+          "localStructureEstimate": {
+            "requests": 9,
+            "estimatedCommonPrefixTokens": 6084
+          },
+          "stablePrefix": {
+            "unchanged": 9,
+            "changed": 0,
+            "unknown": 0
+          },
+          "switches": {
+            "endpoint": 0,
+            "responder": 0,
+            "conversation": 0
+          },
+          "switchUnknown": {
+            "endpoint": 0,
+            "responder": 0,
+            "conversation": 0
+          },
+          "sameEndpointZeroHitAnomalies": null
+        },
+        "p50VisibleTtftMs": 1208,
+        "p95TotalLatencyMs": 3877,
+        "validLocalResults": 10,
+        "rejectedLocalResults": 0,
+        "actualModels": [
+          "glm-5.3-flash"
+        ]
+      }
+    ],
+    "qualityEvidence": "96 nonempty stop responses and synthetic forbidden-sentinel checks; not full RP/CK3 quality or Soak acceptance",
+    "phaseDefinition": "First scheduled request per conversation/responder is cold; later requests are warm attempts, not a claim of vendor residency.",
+    "limitations": [
+      "Same production Chat layout for A and B; no cache benefit claim.",
+      "Synthetic inputs roughly 1.6K-2.6K tokens, not the historical 23K average Chat context.",
+      "Equal-size experiment labels isolate first-message prefixes; no production anchor changed.",
+      "Sequential A then B, network/TTL/routing not controlled; latency is observational."
+    ]
+  },
+  "durable": {
+    "status": "QUALITY_HOLD",
+    "requestCount": 2,
+    "candidateRequests": 0,
+    "from": "2026-10-12T04:09:48.449Z",
+    "to": "2026-10-12T04:09:51.234Z",
+    "groups": [
+      {
+        "variant": "A",
+        "cohort": "LIMIT_CHANGE",
+        "all": {
+          "requestCount": 2,
+          "nativeHitRequests": 2,
+          "nativeHitStatus": {
+            "positive": 1,
+            "zero": 1,
+            "missing": 0
+          },
+          "weightedCacheRequests": 2,
+          "cacheHitTokens": 256,
+          "cacheMissTokens": 9088,
+          "weightedNativeHitRate": 0.0273972602739726,
+          "nativeReportingCoverage": 1,
+          "missProvenance": {
+            "providerNative": 2,
+            "promptMinusNativeHit": 0,
+            "storedUnknown": 0,
+            "unknown": 0
+          },
+          "localStructureEstimate": {
+            "requests": 1,
+            "estimatedCommonPrefixTokens": 501
+          },
+          "stablePrefix": {
+            "unchanged": 0,
+            "changed": 1,
+            "unknown": 1
+          },
+          "switches": {
+            "endpoint": 0,
+            "responder": 0,
+            "conversation": 0
+          },
+          "switchUnknown": {
+            "endpoint": 1,
+            "responder": 1,
+            "conversation": 1
+          },
+          "sameEndpointZeroHitAnomalies": null
+        },
+        "warm": {
+          "requestCount": 1,
+          "nativeHitRequests": 1,
+          "nativeHitStatus": {
+            "positive": 1,
+            "zero": 0,
+            "missing": 0
+          },
+          "weightedCacheRequests": 1,
+          "cacheHitTokens": 256,
+          "cacheMissTokens": 4416,
+          "weightedNativeHitRate": 0.0547945205479452,
+          "nativeReportingCoverage": 1,
+          "missProvenance": {
+            "providerNative": 1,
+            "promptMinusNativeHit": 0,
+            "storedUnknown": 0,
+            "unknown": 0
+          },
+          "localStructureEstimate": {
+            "requests": 1,
+            "estimatedCommonPrefixTokens": 501
+          },
+          "stablePrefix": {
+            "unchanged": 0,
+            "changed": 1,
+            "unknown": 0
+          },
+          "switches": {
+            "endpoint": 0,
+            "responder": 0,
+            "conversation": 0
+          },
+          "switchUnknown": {
+            "endpoint": 0,
+            "responder": 0,
+            "conversation": 0
+          },
+          "sameEndpointZeroHitAnomalies": null
+        },
+        "p50VisibleTtftMs": null,
+        "p95TotalLatencyMs": 2776,
+        "validLocalResults": 1,
+        "rejectedLocalResults": 1,
+        "actualModels": [
+          "deepseek-flash"
+        ]
+      }
+    ],
+    "limitations": [
+      "Old V9.2 baseline response 2 failed unchanged local parseResult after stop; experiment stopped immediately.",
+      "The exact rejection code and raw response were not retained; no claim about the provider root cause.",
+      "No complete 20-pair experiment or unchanged-limit control; candidate native-cache benefit UNKNOWN."
+    ]
+  },
+  "candidateSourceHashes": {
+    "memory-system/memory4-coordinator.js": "befc9d0337a7f47ee24a172981d236399871276b8ea163d9e4ee8d55f479e1e6",
+    "prompts/prompt-builder.js": "5d644ed6932cd7a9e368ddeb15184da9dc42431b9b83704a7dbae1d994e5fa16",
+    "analytics/real-request-diff.js": "cb3507e02c9a4d00a333a4c7516b4db77447e0119710b4d447dd3ed398f5858f",
+    "analytics/provider-diagnostics.js": "65bd78da812a5571b0899e6ab233509f9f7604dcedda095f8d3e8cc1ff9ce93c"
+  }
+}

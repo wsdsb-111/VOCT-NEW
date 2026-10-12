@@ -77,6 +77,10 @@ const archivedChecks = [
 ];
 
 const releaseChecks = [
+  { group: "v9.2.1-durable-cache-policy", script: "test-v9.2.1-durable-cache-policy.js" },
+  { group: "v9.2.1-glm-v813-prefix", script: "test-v9.2.1-glm-v813-prefix.js" },
+  { group: "v9.2.1-cache-native-usage", script: "test-v9.2.1-cache-native-usage.js" },
+  { group: "v9.2.1-cache-invariants", script: "test-v9.2.1-cache-invariants.js" },
   { group: "v9.2-build-guard", script: "test-v9.2-build-guard.js" },
   { group: "v9.2-service-ports", script: "test-v9.2-service-ports.js" },
   { group: "v9.2-scoped-json", script: "test-v9.2-scoped-json.js" },

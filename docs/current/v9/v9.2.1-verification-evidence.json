@@ -1,0 +1,116 @@
+{
+  "schemaVersion": 1,
+  "analysisVersion": "v9.2.1",
+  "baselineCommit": "6026713d88deeafef6cf45e6a07405908c98e030",
+  "candidateCommit": null,
+  "branch": "main",
+  "stageStatus": "LOCAL_SAFE_CANDIDATE_CACHE_EFFECT_HOLD",
+  "formalReleaseVersion": "9.2.0",
+  "build": {
+    "mappings": 286,
+    "payloadSha256": "24f1e6a85edf555fc3e9bf2467d367300cdb3c648b14c8006704a58b1abbf66a",
+    "deployedParity": true
+  },
+  "sourceAndDeployed": [
+    {
+      "source": "src/app/main/memory-system/memory4-coordinator.js",
+      "deployed": "resources/app/out/main/memory-system/memory4-coordinator.js",
+      "sourceSha256": "befc9d0337a7f47ee24a172981d236399871276b8ea163d9e4ee8d55f479e1e6",
+      "deployedSha256": "befc9d0337a7f47ee24a172981d236399871276b8ea163d9e4ee8d55f479e1e6"
+    },
+    {
+      "source": "src/app/main/prompts/prompt-builder.js",
+      "deployed": "resources/app/out/main/prompts/prompt-builder.js",
+      "sourceSha256": "5d644ed6932cd7a9e368ddeb15184da9dc42431b9b83704a7dbae1d994e5fa16",
+      "deployedSha256": "5d644ed6932cd7a9e368ddeb15184da9dc42431b9b83704a7dbae1d994e5fa16"
+    },
+    {
+      "source": "src/app/main/analytics/real-request-diff.js",
+      "deployed": "resources/app/out/main/analytics/real-request-diff.js",
+      "sourceSha256": "cb3507e02c9a4d00a333a4c7516b4db77447e0119710b4d447dd3ed398f5858f",
+      "deployedSha256": "cb3507e02c9a4d00a333a4c7516b4db77447e0119710b4d447dd3ed398f5858f"
+    },
+    {
+      "source": "src/app/main/analytics/provider-diagnostics.js",
+      "deployed": "resources/app/out/main/analytics/provider-diagnostics.js",
+      "sourceSha256": "65bd78da812a5571b0899e6ab233509f9f7604dcedda095f8d3e8cc1ff9ce93c",
+      "deployedSha256": "65bd78da812a5571b0899e6ab233509f9f7604dcedda095f8d3e8cc1ff9ce93c"
+    }
+  ],
+  "tests": [
+    {
+      "file": "scripts/test-v9.2.1-durable-cache-policy.js",
+      "sha256": "598116da8cc9537878ab197dc095e6dc27bfeddb0e7de4c2748676a42c2dc362",
+      "result": "PASS"
+    },
+    {
+      "file": "scripts/test-v9.2.1-glm-v813-prefix.js",
+      "sha256": "27ac1017a28f569c1036f6dbd8040940e882594c8b0c1270a3874330bc9f0117",
+      "result": "PASS"
+    },
+    {
+      "file": "scripts/test-v9.2.1-cache-native-usage.js",
+      "sha256": "9a8db0991f09cb3602df17ded1bdca3efd2d3c8d9b560961684baf4dfb662bb9",
+      "result": "PASS"
+    },
+    {
+      "file": "scripts/test-v9.2.1-cache-invariants.js",
+      "sha256": "a07a5e16c239cdb34d60f846c6bdc8ae6573393eb53a5252e24ee1d3f42db944",
+      "result": "PASS"
+    }
+  ],
+  "baselinePolicyFixtureSha256": "fe468ab960f6bf79c879caa0ebfe7a4e0b5e58ab317c807eaa0625f8baf323fc",
+  "testManifestSha256": "bb997788cd1a1035cb612eff6718e6dd7e4b0e464560240e7f73db0f6f8d914e",
+  "reportToolSha256": "75901896922a2d6337125639bdceb1f35aaec4721d85df84bc0aa71b777fbe86",
+  "baselineRelease": {
+    "groups": 418,
+    "result": "PASS",
+    "logSha256": "ee8eeeca60b8319304de08e5a2ace6401679cec09b71d326c5db8038d0b2149a"
+  },
+  "release": {
+    "groups": 422,
+    "classifiedFiles": 491,
+    "historicalFiles": 68,
+    "result": "PASS",
+    "exitCode": 0,
+    "logSha256": "50636d98942292b2f0b98f5d0683873e633f33ce2d4ba105f2031459e5c62969"
+  },
+  "packagedSmoke": {
+    "diagnosticsOff": "PASS",
+    "diagnosticsOn": "PASS",
+    "presenceIpc": "PASS",
+    "unauthorizedMemoryAudit": "PASS",
+    "renamedSummaryIpc": "PASS",
+    "logSha256": "5af063858d4ea7a6da8ade4942a5c6626e736730227f2f0e317845a4458e0b49"
+  },
+  "userdata": {
+    "expectedFiles": 3758,
+    "actualFiles": 3758,
+    "changedFiles": 0,
+    "newFiles": 0,
+    "inventorySha256": "c9c90020cb0954c8e3371fa6aba021d0733714dd4721a3c0c2b0a03a184446c4",
+    "bytes": 626496659
+  },
+  "gates": {
+    "G0": "PASS",
+    "G1": "ENGINEERING_PASS_NATIVE_HOLD",
+    "G2": "PATH_AND_SAFETY_PASS_NO_GAIN",
+    "G3": "PASS",
+    "G4": "HOLD",
+    "G5": "LOCAL_ONLY_PENDING_FINAL_SHA_CI_AND_CK3"
+  },
+  "privacy": {
+    "noRealChatSentToProviders": true,
+    "noPublicKeysPromptsOrUserInventory": true,
+    "debugVerboseLlmEnabled": false
+  },
+  "abEvidenceSha256": "ed834e37e63a6d23be0b4af4696490db05b9f518cdb4a9349184905c714c1b58",
+  "baselineEvidenceSha256": "6384c995f46befac571232f7e538f9dc36ac5a72615bff0070f69e43b43e2f36",
+  "documentHashes": {
+    "V9_2_1_BASELINE.md": "6f9c16c204d65a48aece9343ef2952383a8eef7ef1fecaba407adcd42089bc90",
+    "V9_2_1_IMPLEMENTATION_SPEC.md": "2de851b9b31fb410a67a5ab5b14470c119a7d3a301b7102478c92b4121e9e092",
+    "V9_2_1_VERIFICATION_REPORT.md": "2376d9f0130e831a03c07de5cae18af847d81829c3a54558876557ef2ea0bf31",
+    "V9_2_1_P_ISSUE_LEDGER.md": "aa4e9fa283ecb5c98d5fd9866a6a146c1f6660a05094d0b76aa5fd8547f98f40",
+    "V9_2_1_HANDOFF_TO_V9_3.md": "92e6f69b539855f7b0e680efa4c5a1ecf14999bd0d215bd8c27bbe671d20c95a"
+  }
+}

@@ -1,5 +1,7 @@
 # VOCT V9 阶段开发总路线（修订版）
 
+实施索引补记（2026-10-12）：[V9.2.1 缓存专项候选](V9_2_1_VERIFICATION_REPORT.md) 仅修复现有 Durable 前缀/Forget 重试及诊断，缓存效果 HOLD。此索引不修改下方历史路线、阶段承诺或 V9.3/V9.4 范围。
+
 > **文档类型**：Roadmap / Architecture Charter / ADR 索引（路线与边界，不代替逐文件施工文档）  
 > **文档版本**：V9 Roadmap Revision 2 · 2026-10-11  
 > **审查对象**：[wsdsb-111/VOCT-NEW](https://github.com/wsdsb-111/VOCT-NEW)，`main`  

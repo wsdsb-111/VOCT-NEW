@@ -76,6 +76,11 @@ function createPromptBuilder({
         if (content.startsWith("VOTC_SUMMARY_CACHE_ANCHOR_")) {
           label = "Stable Summary Cache Anchor";
           type = "summary_cache_anchor";
+        } else if (requestType === "memory4_durable" && message.role === "system"
+          && content.startsWith("VOTC Memory Engine 4.0 Durable extraction.")
+          && content.includes("Follow the dynamic request limits:")) {
+          label = "Stable Memory4 Durable Policy v9.2.1";
+          type = "summary_stable";
         } else if (content.startsWith("Stable rolling-summary instructions:")) {
           label = "Stable Rolling Summary Instructions";
           type = "summary_stable";

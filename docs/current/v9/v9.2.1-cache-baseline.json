@@ -1,0 +1,1485 @@
+{
+  "schemaVersion": 1,
+  "baselineCommit": "6026713d88deeafef6cf45e6a07405908c98e030",
+  "population": "history",
+  "usage": {
+    "schemaVersion": 1,
+    "source": "usage",
+    "population": "history",
+    "window": {
+      "from": "2026-10-08T14:36:08.307Z",
+      "to": "2026-10-11T18:01:40.502Z",
+      "endExclusive": true
+    },
+    "requestCount": 2000,
+    "estimatedUsageTokenRecordsExcluded": 29,
+    "actionOutcomeExcluded": 0,
+    "groups": [
+      {
+        "provider": "deepseek",
+        "model": "deepseek-v4-flash",
+        "requestType": "action",
+        "layoutId": "UNKNOWN",
+        "endpointHash": "UNKNOWN",
+        "cohortHash": "UNKNOWN",
+        "all": {
+          "requestCount": 535,
+          "nativeHitRequests": 535,
+          "nativeHitStatus": {
+            "positive": 535,
+            "zero": 0,
+            "missing": 0
+          },
+          "weightedCacheRequests": 535,
+          "cacheHitTokens": 1502080,
+          "cacheMissTokens": 1263061,
+          "weightedNativeHitRate": 0.5432200383271595,
+          "nativeReportingCoverage": 1,
+          "missProvenance": {
+            "providerNative": 0,
+            "promptMinusNativeHit": 535,
+            "storedUnknown": 0,
+            "unknown": 0
+          },
+          "localStructureEstimate": {
+            "requests": 0,
+            "estimatedCommonPrefixTokens": null
+          },
+          "stablePrefix": {
+            "unchanged": 0,
+            "changed": 0,
+            "unknown": 535
+          },
+          "switches": {
+            "endpoint": 0,
+            "responder": 0,
+            "conversation": 0
+          },
+          "switchUnknown": {
+            "endpoint": 535,
+            "responder": 535,
+            "conversation": 535
+          },
+          "sameEndpointZeroHitAnomalies": null
+        },
+        "warm": {
+          "requestCount": 0,
+          "nativeHitRequests": 0,
+          "nativeHitStatus": {
+            "positive": 0,
+            "zero": 0,
+            "missing": 0
+          },
+          "weightedCacheRequests": 0,
+          "cacheHitTokens": 0,
+          "cacheMissTokens": 0,
+          "weightedNativeHitRate": null,
+          "nativeReportingCoverage": null,
+          "missProvenance": {
+            "providerNative": 0,
+            "promptMinusNativeHit": 0,
+            "storedUnknown": 0,
+            "unknown": 0
+          },
+          "localStructureEstimate": {
+            "requests": 0,
+            "estimatedCommonPrefixTokens": null
+          },
+          "stablePrefix": {
+            "unchanged": 0,
+            "changed": 0,
+            "unknown": 0
+          },
+          "switches": {
+            "endpoint": 0,
+            "responder": 0,
+            "conversation": 0
+          },
+          "switchUnknown": {
+            "endpoint": 0,
+            "responder": 0,
+            "conversation": 0
+          },
+          "sameEndpointZeroHitAnomalies": null
+        },
+        "warmSampleStatus": "unknown"
+      },
+      {
+        "provider": "deepseek",
+        "model": "deepseek-v4-flash",
+        "requestType": "final_summary",
+        "layoutId": "UNKNOWN",
+        "endpointHash": "UNKNOWN",
+        "cohortHash": "UNKNOWN",
+        "all": {
+          "requestCount": 155,
+          "nativeHitRequests": 155,
+          "nativeHitStatus": {
+            "positive": 155,
+            "zero": 0,
+            "missing": 0
+          },
+          "weightedCacheRequests": 155,
+          "cacheHitTokens": 343040,
+          "cacheMissTokens": 355911,
+          "weightedNativeHitRate": 0.4907926306708196,
+          "nativeReportingCoverage": 1,
+          "missProvenance": {
+            "providerNative": 0,
+            "promptMinusNativeHit": 155,
+            "storedUnknown": 0,
+            "unknown": 0
+          },
+          "localStructureEstimate": {
+            "requests": 0,
+            "estimatedCommonPrefixTokens": null
+          },
+          "stablePrefix": {
+            "unchanged": 0,
+            "changed": 0,
+            "unknown": 155
+          },
+          "switches": {
+            "endpoint": 0,
+            "responder": 0,
+            "conversation": 0
+          },
+          "switchUnknown": {
+            "endpoint": 155,
+            "responder": 155,
+            "conversation": 155
+          },
+          "sameEndpointZeroHitAnomalies": null
+        },
+        "warm": {
+          "requestCount": 0,
+          "nativeHitRequests": 0,
+          "nativeHitStatus": {
+            "positive": 0,
+            "zero": 0,
+            "missing": 0
+          },
+          "weightedCacheRequests": 0,
+          "cacheHitTokens": 0,
+          "cacheMissTokens": 0,
+          "weightedNativeHitRate": null,
+          "nativeReportingCoverage": null,
+          "missProvenance": {
+            "providerNative": 0,
+            "promptMinusNativeHit": 0,
+            "storedUnknown": 0,
+            "unknown": 0
+          },
+          "localStructureEstimate": {
+            "requests": 0,
+            "estimatedCommonPrefixTokens": null
+          },
+          "stablePrefix": {
+            "unchanged": 0,
+            "changed": 0,
+            "unknown": 0
+          },
+          "switches": {
+            "endpoint": 0,
+            "responder": 0,
+            "conversation": 0
+          },
+          "switchUnknown": {
+            "endpoint": 0,
+            "responder": 0,
+            "conversation": 0
+          },
+          "sameEndpointZeroHitAnomalies": null
+        },
+        "warmSampleStatus": "unknown"
+      },
+      {
+        "provider": "deepseek",
+        "model": "deepseek-v4-flash",
+        "requestType": "letter_summary",
+        "layoutId": "UNKNOWN",
+        "endpointHash": "UNKNOWN",
+        "cohortHash": "UNKNOWN",
+        "all": {
+          "requestCount": 1,
+          "nativeHitRequests": 1,
+          "nativeHitStatus": {
+            "positive": 1,
+            "zero": 0,
+            "missing": 0
+          },
+          "weightedCacheRequests": 1,
+          "cacheHitTokens": 128,
+          "cacheMissTokens": 1017,
+          "weightedNativeHitRate": 0.11179039301310044,
+          "nativeReportingCoverage": 1,
+          "missProvenance": {
+            "providerNative": 0,
+            "promptMinusNativeHit": 1,
+            "storedUnknown": 0,
+            "unknown": 0
+          },
+          "localStructureEstimate": {
+            "requests": 0,
+            "estimatedCommonPrefixTokens": null
+          },
+          "stablePrefix": {
+            "unchanged": 0,
+            "changed": 0,
+            "unknown": 1
+          },
+          "switches": {
+            "endpoint": 0,
+            "responder": 0,
+            "conversation": 0
+          },
+          "switchUnknown": {
+            "endpoint": 1,
+            "responder": 1,
+            "conversation": 1
+          },
+          "sameEndpointZeroHitAnomalies": null
+        },
+        "warm": {
+          "requestCount": 0,
+          "nativeHitRequests": 0,
+          "nativeHitStatus": {
+            "positive": 0,
+            "zero": 0,
+            "missing": 0
+          },
+          "weightedCacheRequests": 0,
+          "cacheHitTokens": 0,
+          "cacheMissTokens": 0,
+          "weightedNativeHitRate": null,
+          "nativeReportingCoverage": null,
+          "missProvenance": {
+            "providerNative": 0,
+            "promptMinusNativeHit": 0,
+            "storedUnknown": 0,
+            "unknown": 0
+          },
+          "localStructureEstimate": {
+            "requests": 0,
+            "estimatedCommonPrefixTokens": null
+          },
+          "stablePrefix": {
+            "unchanged": 0,
+            "changed": 0,
+            "unknown": 0
+          },
+          "switches": {
+            "endpoint": 0,
+            "responder": 0,
+            "conversation": 0
+          },
+          "switchUnknown": {
+            "endpoint": 0,
+            "responder": 0,
+            "conversation": 0
+          },
+          "sameEndpointZeroHitAnomalies": null
+        },
+        "warmSampleStatus": "unknown"
+      },
+      {
+        "provider": "deepseek",
+        "model": "deepseek-v4-flash",
+        "requestType": "memory_recovery",
+        "layoutId": "UNKNOWN",
+        "endpointHash": "UNKNOWN",
+        "cohortHash": "UNKNOWN",
+        "all": {
+          "requestCount": 15,
+          "nativeHitRequests": 15,
+          "nativeHitStatus": {
+            "positive": 15,
+            "zero": 0,
+            "missing": 0
+          },
+          "weightedCacheRequests": 15,
+          "cacheHitTokens": 31232,
+          "cacheMissTokens": 33142,
+          "weightedNativeHitRate": 0.48516481809426165,
+          "nativeReportingCoverage": 1,
+          "missProvenance": {
+            "providerNative": 0,
+            "promptMinusNativeHit": 15,
+            "storedUnknown": 0,
+            "unknown": 0
+          },
+          "localStructureEstimate": {
+            "requests": 0,
+            "estimatedCommonPrefixTokens": null
+          },
+          "stablePrefix": {
+            "unchanged": 0,
+            "changed": 0,
+            "unknown": 15
+          },
+          "switches": {
+            "endpoint": 0,
+            "responder": 0,
+            "conversation": 0
+          },
+          "switchUnknown": {
+            "endpoint": 15,
+            "responder": 15,
+            "conversation": 15
+          },
+          "sameEndpointZeroHitAnomalies": null
+        },
+        "warm": {
+          "requestCount": 0,
+          "nativeHitRequests": 0,
+          "nativeHitStatus": {
+            "positive": 0,
+            "zero": 0,
+            "missing": 0
+          },
+          "weightedCacheRequests": 0,
+          "cacheHitTokens": 0,
+          "cacheMissTokens": 0,
+          "weightedNativeHitRate": null,
+          "nativeReportingCoverage": null,
+          "missProvenance": {
+            "providerNative": 0,
+            "promptMinusNativeHit": 0,
+            "storedUnknown": 0,
+            "unknown": 0
+          },
+          "localStructureEstimate": {
+            "requests": 0,
+            "estimatedCommonPrefixTokens": null
+          },
+          "stablePrefix": {
+            "unchanged": 0,
+            "changed": 0,
+            "unknown": 0
+          },
+          "switches": {
+            "endpoint": 0,
+            "responder": 0,
+            "conversation": 0
+          },
+          "switchUnknown": {
+            "endpoint": 0,
+            "responder": 0,
+            "conversation": 0
+          },
+          "sameEndpointZeroHitAnomalies": null
+        },
+        "warmSampleStatus": "unknown"
+      },
+      {
+        "provider": "deepseek",
+        "model": "deepseek-v4-flash",
+        "requestType": "memory4_durable",
+        "layoutId": "UNKNOWN",
+        "endpointHash": "UNKNOWN",
+        "cohortHash": "UNKNOWN",
+        "all": {
+          "requestCount": 372,
+          "nativeHitRequests": 372,
+          "nativeHitStatus": {
+            "positive": 372,
+            "zero": 0,
+            "missing": 0
+          },
+          "weightedCacheRequests": 372,
+          "cacheHitTokens": 12004452,
+          "cacheMissTokens": 8026546,
+          "weightedNativeHitRate": 0.5992937546097303,
+          "nativeReportingCoverage": 1,
+          "missProvenance": {
+            "providerNative": 0,
+            "promptMinusNativeHit": 372,
+            "storedUnknown": 0,
+            "unknown": 0
+          },
+          "localStructureEstimate": {
+            "requests": 0,
+            "estimatedCommonPrefixTokens": null
+          },
+          "stablePrefix": {
+            "unchanged": 0,
+            "changed": 0,
+            "unknown": 372
+          },
+          "switches": {
+            "endpoint": 0,
+            "responder": 0,
+            "conversation": 0
+          },
+          "switchUnknown": {
+            "endpoint": 372,
+            "responder": 372,
+            "conversation": 372
+          },
+          "sameEndpointZeroHitAnomalies": null
+        },
+        "warm": {
+          "requestCount": 0,
+          "nativeHitRequests": 0,
+          "nativeHitStatus": {
+            "positive": 0,
+            "zero": 0,
+            "missing": 0
+          },
+          "weightedCacheRequests": 0,
+          "cacheHitTokens": 0,
+          "cacheMissTokens": 0,
+          "weightedNativeHitRate": null,
+          "nativeReportingCoverage": null,
+          "missProvenance": {
+            "providerNative": 0,
+            "promptMinusNativeHit": 0,
+            "storedUnknown": 0,
+            "unknown": 0
+          },
+          "localStructureEstimate": {
+            "requests": 0,
+            "estimatedCommonPrefixTokens": null
+          },
+          "stablePrefix": {
+            "unchanged": 0,
+            "changed": 0,
+            "unknown": 0
+          },
+          "switches": {
+            "endpoint": 0,
+            "responder": 0,
+            "conversation": 0
+          },
+          "switchUnknown": {
+            "endpoint": 0,
+            "responder": 0,
+            "conversation": 0
+          },
+          "sameEndpointZeroHitAnomalies": null
+        },
+        "warmSampleStatus": "unknown"
+      },
+      {
+        "provider": "deepseek",
+        "model": "deepseek-v4-flash",
+        "requestType": "memory4_life",
+        "layoutId": "UNKNOWN",
+        "endpointHash": "UNKNOWN",
+        "cohortHash": "UNKNOWN",
+        "all": {
+          "requestCount": 244,
+          "nativeHitRequests": 244,
+          "nativeHitStatus": {
+            "positive": 244,
+            "zero": 0,
+            "missing": 0
+          },
+          "weightedCacheRequests": 244,
+          "cacheHitTokens": 3543296,
+          "cacheMissTokens": 100116,
+          "weightedNativeHitRate": 0.9725213618443371,
+          "nativeReportingCoverage": 1,
+          "missProvenance": {
+            "providerNative": 0,
+            "promptMinusNativeHit": 244,
+            "storedUnknown": 0,
+            "unknown": 0
+          },
+          "localStructureEstimate": {
+            "requests": 0,
+            "estimatedCommonPrefixTokens": null
+          },
+          "stablePrefix": {
+            "unchanged": 0,
+            "changed": 0,
+            "unknown": 244
+          },
+          "switches": {
+            "endpoint": 0,
+            "responder": 0,
+            "conversation": 0
+          },
+          "switchUnknown": {
+            "endpoint": 244,
+            "responder": 244,
+            "conversation": 244
+          },
+          "sameEndpointZeroHitAnomalies": null
+        },
+        "warm": {
+          "requestCount": 0,
+          "nativeHitRequests": 0,
+          "nativeHitStatus": {
+            "positive": 0,
+            "zero": 0,
+            "missing": 0
+          },
+          "weightedCacheRequests": 0,
+          "cacheHitTokens": 0,
+          "cacheMissTokens": 0,
+          "weightedNativeHitRate": null,
+          "nativeReportingCoverage": null,
+          "missProvenance": {
+            "providerNative": 0,
+            "promptMinusNativeHit": 0,
+            "storedUnknown": 0,
+            "unknown": 0
+          },
+          "localStructureEstimate": {
+            "requests": 0,
+            "estimatedCommonPrefixTokens": null
+          },
+          "stablePrefix": {
+            "unchanged": 0,
+            "changed": 0,
+            "unknown": 0
+          },
+          "switches": {
+            "endpoint": 0,
+            "responder": 0,
+            "conversation": 0
+          },
+          "switchUnknown": {
+            "endpoint": 0,
+            "responder": 0,
+            "conversation": 0
+          },
+          "sameEndpointZeroHitAnomalies": null
+        },
+        "warmSampleStatus": "unknown"
+      },
+      {
+        "provider": "deepseek",
+        "model": "deepseek-v4-flash",
+        "requestType": "memory4_year",
+        "layoutId": "UNKNOWN",
+        "endpointHash": "UNKNOWN",
+        "cohortHash": "UNKNOWN",
+        "all": {
+          "requestCount": 92,
+          "nativeHitRequests": 92,
+          "nativeHitStatus": {
+            "positive": 90,
+            "zero": 2,
+            "missing": 0
+          },
+          "weightedCacheRequests": 92,
+          "cacheHitTokens": 929408,
+          "cacheMissTokens": 41283,
+          "weightedNativeHitRate": 0.9574705029715944,
+          "nativeReportingCoverage": 1,
+          "missProvenance": {
+            "providerNative": 0,
+            "promptMinusNativeHit": 92,
+            "storedUnknown": 0,
+            "unknown": 0
+          },
+          "localStructureEstimate": {
+            "requests": 0,
+            "estimatedCommonPrefixTokens": null
+          },
+          "stablePrefix": {
+            "unchanged": 0,
+            "changed": 0,
+            "unknown": 92
+          },
+          "switches": {
+            "endpoint": 0,
+            "responder": 0,
+            "conversation": 0
+          },
+          "switchUnknown": {
+            "endpoint": 92,
+            "responder": 92,
+            "conversation": 92
+          },
+          "sameEndpointZeroHitAnomalies": null
+        },
+        "warm": {
+          "requestCount": 0,
+          "nativeHitRequests": 0,
+          "nativeHitStatus": {
+            "positive": 0,
+            "zero": 0,
+            "missing": 0
+          },
+          "weightedCacheRequests": 0,
+          "cacheHitTokens": 0,
+          "cacheMissTokens": 0,
+          "weightedNativeHitRate": null,
+          "nativeReportingCoverage": null,
+          "missProvenance": {
+            "providerNative": 0,
+            "promptMinusNativeHit": 0,
+            "storedUnknown": 0,
+            "unknown": 0
+          },
+          "localStructureEstimate": {
+            "requests": 0,
+            "estimatedCommonPrefixTokens": null
+          },
+          "stablePrefix": {
+            "unchanged": 0,
+            "changed": 0,
+            "unknown": 0
+          },
+          "switches": {
+            "endpoint": 0,
+            "responder": 0,
+            "conversation": 0
+          },
+          "switchUnknown": {
+            "endpoint": 0,
+            "responder": 0,
+            "conversation": 0
+          },
+          "sameEndpointZeroHitAnomalies": null
+        },
+        "warmSampleStatus": "unknown"
+      },
+      {
+        "provider": "openai-compatible",
+        "model": "deepseek-v4-flash-0731",
+        "requestType": "chat",
+        "layoutId": "UNKNOWN",
+        "endpointHash": "UNKNOWN",
+        "cohortHash": "UNKNOWN",
+        "all": {
+          "requestCount": 20,
+          "nativeHitRequests": 20,
+          "nativeHitStatus": {
+            "positive": 18,
+            "zero": 2,
+            "missing": 0
+          },
+          "weightedCacheRequests": 20,
+          "cacheHitTokens": 198656,
+          "cacheMissTokens": 241337,
+          "weightedNativeHitRate": 0.4514980920151002,
+          "nativeReportingCoverage": 1,
+          "missProvenance": {
+            "providerNative": 0,
+            "promptMinusNativeHit": 20,
+            "storedUnknown": 0,
+            "unknown": 0
+          },
+          "localStructureEstimate": {
+            "requests": 0,
+            "estimatedCommonPrefixTokens": null
+          },
+          "stablePrefix": {
+            "unchanged": 0,
+            "changed": 0,
+            "unknown": 20
+          },
+          "switches": {
+            "endpoint": 0,
+            "responder": 0,
+            "conversation": 0
+          },
+          "switchUnknown": {
+            "endpoint": 20,
+            "responder": 20,
+            "conversation": 20
+          },
+          "sameEndpointZeroHitAnomalies": null
+        },
+        "warm": {
+          "requestCount": 0,
+          "nativeHitRequests": 0,
+          "nativeHitStatus": {
+            "positive": 0,
+            "zero": 0,
+            "missing": 0
+          },
+          "weightedCacheRequests": 0,
+          "cacheHitTokens": 0,
+          "cacheMissTokens": 0,
+          "weightedNativeHitRate": null,
+          "nativeReportingCoverage": null,
+          "missProvenance": {
+            "providerNative": 0,
+            "promptMinusNativeHit": 0,
+            "storedUnknown": 0,
+            "unknown": 0
+          },
+          "localStructureEstimate": {
+            "requests": 0,
+            "estimatedCommonPrefixTokens": null
+          },
+          "stablePrefix": {
+            "unchanged": 0,
+            "changed": 0,
+            "unknown": 0
+          },
+          "switches": {
+            "endpoint": 0,
+            "responder": 0,
+            "conversation": 0
+          },
+          "switchUnknown": {
+            "endpoint": 0,
+            "responder": 0,
+            "conversation": 0
+          },
+          "sameEndpointZeroHitAnomalies": null
+        },
+        "warmSampleStatus": "unknown"
+      },
+      {
+        "provider": "zhipu",
+        "model": "glm-5.3-flash",
+        "requestType": "chat_continuation",
+        "layoutId": "UNKNOWN",
+        "endpointHash": "UNKNOWN",
+        "cohortHash": "UNKNOWN",
+        "all": {
+          "requestCount": 1,
+          "nativeHitRequests": 1,
+          "nativeHitStatus": {
+            "positive": 1,
+            "zero": 0,
+            "missing": 0
+          },
+          "weightedCacheRequests": 1,
+          "cacheHitTokens": 17728,
+          "cacheMissTokens": 234,
+          "weightedNativeHitRate": 0.986972497494711,
+          "nativeReportingCoverage": 1,
+          "missProvenance": {
+            "providerNative": 0,
+            "promptMinusNativeHit": 1,
+            "storedUnknown": 0,
+            "unknown": 0
+          },
+          "localStructureEstimate": {
+            "requests": 0,
+            "estimatedCommonPrefixTokens": null
+          },
+          "stablePrefix": {
+            "unchanged": 0,
+            "changed": 0,
+            "unknown": 1
+          },
+          "switches": {
+            "endpoint": 0,
+            "responder": 0,
+            "conversation": 0
+          },
+          "switchUnknown": {
+            "endpoint": 1,
+            "responder": 1,
+            "conversation": 1
+          },
+          "sameEndpointZeroHitAnomalies": null
+        },
+        "warm": {
+          "requestCount": 0,
+          "nativeHitRequests": 0,
+          "nativeHitStatus": {
+            "positive": 0,
+            "zero": 0,
+            "missing": 0
+          },
+          "weightedCacheRequests": 0,
+          "cacheHitTokens": 0,
+          "cacheMissTokens": 0,
+          "weightedNativeHitRate": null,
+          "nativeReportingCoverage": null,
+          "missProvenance": {
+            "providerNative": 0,
+            "promptMinusNativeHit": 0,
+            "storedUnknown": 0,
+            "unknown": 0
+          },
+          "localStructureEstimate": {
+            "requests": 0,
+            "estimatedCommonPrefixTokens": null
+          },
+          "stablePrefix": {
+            "unchanged": 0,
+            "changed": 0,
+            "unknown": 0
+          },
+          "switches": {
+            "endpoint": 0,
+            "responder": 0,
+            "conversation": 0
+          },
+          "switchUnknown": {
+            "endpoint": 0,
+            "responder": 0,
+            "conversation": 0
+          },
+          "sameEndpointZeroHitAnomalies": null
+        },
+        "warmSampleStatus": "unknown"
+      },
+      {
+        "provider": "zhipu",
+        "model": "glm-5.3-flash",
+        "requestType": "chat",
+        "layoutId": "UNKNOWN",
+        "endpointHash": "UNKNOWN",
+        "cohortHash": "UNKNOWN",
+        "all": {
+          "requestCount": 563,
+          "nativeHitRequests": 534,
+          "nativeHitStatus": {
+            "positive": 364,
+            "zero": 170,
+            "missing": 29
+          },
+          "weightedCacheRequests": 534,
+          "cacheHitTokens": 4621056,
+          "cacheMissTokens": 8209252,
+          "weightedNativeHitRate": 0.3601671916215885,
+          "nativeReportingCoverage": 0.9484902309058615,
+          "missProvenance": {
+            "providerNative": 0,
+            "promptMinusNativeHit": 534,
+            "storedUnknown": 0,
+            "unknown": 0
+          },
+          "localStructureEstimate": {
+            "requests": 0,
+            "estimatedCommonPrefixTokens": null
+          },
+          "stablePrefix": {
+            "unchanged": 0,
+            "changed": 0,
+            "unknown": 563
+          },
+          "switches": {
+            "endpoint": 0,
+            "responder": 0,
+            "conversation": 0
+          },
+          "switchUnknown": {
+            "endpoint": 563,
+            "responder": 563,
+            "conversation": 563
+          },
+          "sameEndpointZeroHitAnomalies": null
+        },
+        "warm": {
+          "requestCount": 0,
+          "nativeHitRequests": 0,
+          "nativeHitStatus": {
+            "positive": 0,
+            "zero": 0,
+            "missing": 0
+          },
+          "weightedCacheRequests": 0,
+          "cacheHitTokens": 0,
+          "cacheMissTokens": 0,
+          "weightedNativeHitRate": null,
+          "nativeReportingCoverage": null,
+          "missProvenance": {
+            "providerNative": 0,
+            "promptMinusNativeHit": 0,
+            "storedUnknown": 0,
+            "unknown": 0
+          },
+          "localStructureEstimate": {
+            "requests": 0,
+            "estimatedCommonPrefixTokens": null
+          },
+          "stablePrefix": {
+            "unchanged": 0,
+            "changed": 0,
+            "unknown": 0
+          },
+          "switches": {
+            "endpoint": 0,
+            "responder": 0,
+            "conversation": 0
+          },
+          "switchUnknown": {
+            "endpoint": 0,
+            "responder": 0,
+            "conversation": 0
+          },
+          "sameEndpointZeroHitAnomalies": null
+        },
+        "warmSampleStatus": "unknown"
+      },
+      {
+        "provider": "zhipu",
+        "model": "glm-5.3-flash",
+        "requestType": "letter",
+        "layoutId": "UNKNOWN",
+        "endpointHash": "UNKNOWN",
+        "cohortHash": "UNKNOWN",
+        "all": {
+          "requestCount": 2,
+          "nativeHitRequests": 2,
+          "nativeHitStatus": {
+            "positive": 0,
+            "zero": 2,
+            "missing": 0
+          },
+          "weightedCacheRequests": 2,
+          "cacheHitTokens": 0,
+          "cacheMissTokens": 7451,
+          "weightedNativeHitRate": 0,
+          "nativeReportingCoverage": 1,
+          "missProvenance": {
+            "providerNative": 0,
+            "promptMinusNativeHit": 2,
+            "storedUnknown": 0,
+            "unknown": 0
+          },
+          "localStructureEstimate": {
+            "requests": 0,
+            "estimatedCommonPrefixTokens": null
+          },
+          "stablePrefix": {
+            "unchanged": 0,
+            "changed": 0,
+            "unknown": 2
+          },
+          "switches": {
+            "endpoint": 0,
+            "responder": 0,
+            "conversation": 0
+          },
+          "switchUnknown": {
+            "endpoint": 2,
+            "responder": 2,
+            "conversation": 2
+          },
+          "sameEndpointZeroHitAnomalies": null
+        },
+        "warm": {
+          "requestCount": 0,
+          "nativeHitRequests": 0,
+          "nativeHitStatus": {
+            "positive": 0,
+            "zero": 0,
+            "missing": 0
+          },
+          "weightedCacheRequests": 0,
+          "cacheHitTokens": 0,
+          "cacheMissTokens": 0,
+          "weightedNativeHitRate": null,
+          "nativeReportingCoverage": null,
+          "missProvenance": {
+            "providerNative": 0,
+            "promptMinusNativeHit": 0,
+            "storedUnknown": 0,
+            "unknown": 0
+          },
+          "localStructureEstimate": {
+            "requests": 0,
+            "estimatedCommonPrefixTokens": null
+          },
+          "stablePrefix": {
+            "unchanged": 0,
+            "changed": 0,
+            "unknown": 0
+          },
+          "switches": {
+            "endpoint": 0,
+            "responder": 0,
+            "conversation": 0
+          },
+          "switchUnknown": {
+            "endpoint": 0,
+            "responder": 0,
+            "conversation": 0
+          },
+          "sameEndpointZeroHitAnomalies": null
+        },
+        "warmSampleStatus": "unknown"
+      }
+    ]
+  },
+  "diagnostics": {
+    "schemaVersion": 1,
+    "source": "diagnostics",
+    "population": "history",
+    "window": {
+      "from": "2026-10-09T15:52:31.635Z",
+      "to": "2026-10-11T17:55:52.576Z",
+      "endExclusive": true
+    },
+    "requestCount": 500,
+    "estimatedUsageTokenRecordsExcluded": 23,
+    "actionOutcomeExcluded": 0,
+    "groups": [
+      {
+        "provider": "deepseek",
+        "model": "deepseek-v4-flash",
+        "requestType": "final_summary",
+        "layoutId": "UNKNOWN",
+        "endpointHash": "UNKNOWN",
+        "cohortHash": "UNKNOWN",
+        "all": {
+          "requestCount": 103,
+          "nativeHitRequests": 103,
+          "nativeHitStatus": {
+            "positive": 103,
+            "zero": 0,
+            "missing": 0
+          },
+          "weightedCacheRequests": 103,
+          "cacheHitTokens": 233856,
+          "cacheMissTokens": 239392,
+          "weightedNativeHitRate": 0.4941510582189465,
+          "nativeReportingCoverage": 1,
+          "missProvenance": {
+            "providerNative": 0,
+            "promptMinusNativeHit": 103,
+            "storedUnknown": 0,
+            "unknown": 0
+          },
+          "localStructureEstimate": {
+            "requests": 0,
+            "estimatedCommonPrefixTokens": null
+          },
+          "stablePrefix": {
+            "unchanged": 0,
+            "changed": 0,
+            "unknown": 103
+          },
+          "switches": {
+            "endpoint": 0,
+            "responder": 0,
+            "conversation": 0
+          },
+          "switchUnknown": {
+            "endpoint": 103,
+            "responder": 103,
+            "conversation": 103
+          },
+          "sameEndpointZeroHitAnomalies": null
+        },
+        "warm": {
+          "requestCount": 0,
+          "nativeHitRequests": 0,
+          "nativeHitStatus": {
+            "positive": 0,
+            "zero": 0,
+            "missing": 0
+          },
+          "weightedCacheRequests": 0,
+          "cacheHitTokens": 0,
+          "cacheMissTokens": 0,
+          "weightedNativeHitRate": null,
+          "nativeReportingCoverage": null,
+          "missProvenance": {
+            "providerNative": 0,
+            "promptMinusNativeHit": 0,
+            "storedUnknown": 0,
+            "unknown": 0
+          },
+          "localStructureEstimate": {
+            "requests": 0,
+            "estimatedCommonPrefixTokens": null
+          },
+          "stablePrefix": {
+            "unchanged": 0,
+            "changed": 0,
+            "unknown": 0
+          },
+          "switches": {
+            "endpoint": 0,
+            "responder": 0,
+            "conversation": 0
+          },
+          "switchUnknown": {
+            "endpoint": 0,
+            "responder": 0,
+            "conversation": 0
+          },
+          "sameEndpointZeroHitAnomalies": null
+        },
+        "warmSampleStatus": "unknown"
+      },
+      {
+        "provider": "deepseek",
+        "model": "deepseek-v4-flash",
+        "requestType": "memory_recovery",
+        "layoutId": "UNKNOWN",
+        "endpointHash": "UNKNOWN",
+        "cohortHash": "UNKNOWN",
+        "all": {
+          "requestCount": 15,
+          "nativeHitRequests": 15,
+          "nativeHitStatus": {
+            "positive": 15,
+            "zero": 0,
+            "missing": 0
+          },
+          "weightedCacheRequests": 15,
+          "cacheHitTokens": 31232,
+          "cacheMissTokens": 33142,
+          "weightedNativeHitRate": 0.48516481809426165,
+          "nativeReportingCoverage": 1,
+          "missProvenance": {
+            "providerNative": 0,
+            "promptMinusNativeHit": 15,
+            "storedUnknown": 0,
+            "unknown": 0
+          },
+          "localStructureEstimate": {
+            "requests": 0,
+            "estimatedCommonPrefixTokens": null
+          },
+          "stablePrefix": {
+            "unchanged": 0,
+            "changed": 0,
+            "unknown": 15
+          },
+          "switches": {
+            "endpoint": 0,
+            "responder": 0,
+            "conversation": 0
+          },
+          "switchUnknown": {
+            "endpoint": 15,
+            "responder": 15,
+            "conversation": 15
+          },
+          "sameEndpointZeroHitAnomalies": null
+        },
+        "warm": {
+          "requestCount": 0,
+          "nativeHitRequests": 0,
+          "nativeHitStatus": {
+            "positive": 0,
+            "zero": 0,
+            "missing": 0
+          },
+          "weightedCacheRequests": 0,
+          "cacheHitTokens": 0,
+          "cacheMissTokens": 0,
+          "weightedNativeHitRate": null,
+          "nativeReportingCoverage": null,
+          "missProvenance": {
+            "providerNative": 0,
+            "promptMinusNativeHit": 0,
+            "storedUnknown": 0,
+            "unknown": 0
+          },
+          "localStructureEstimate": {
+            "requests": 0,
+            "estimatedCommonPrefixTokens": null
+          },
+          "stablePrefix": {
+            "unchanged": 0,
+            "changed": 0,
+            "unknown": 0
+          },
+          "switches": {
+            "endpoint": 0,
+            "responder": 0,
+            "conversation": 0
+          },
+          "switchUnknown": {
+            "endpoint": 0,
+            "responder": 0,
+            "conversation": 0
+          },
+          "sameEndpointZeroHitAnomalies": null
+        },
+        "warmSampleStatus": "unknown"
+      },
+      {
+        "provider": "openai-compatible",
+        "model": "deepseek-v4-flash-0731",
+        "requestType": "chat",
+        "layoutId": "v813",
+        "endpointHash": "bbe129616ac7fcdc9cecf82c2edaa249d3101c7d8a77b17d46eef29e5da507f9",
+        "cohortHash": "UNKNOWN",
+        "all": {
+          "requestCount": 20,
+          "nativeHitRequests": 20,
+          "nativeHitStatus": {
+            "positive": 18,
+            "zero": 2,
+            "missing": 0
+          },
+          "weightedCacheRequests": 20,
+          "cacheHitTokens": 198656,
+          "cacheMissTokens": 241337,
+          "weightedNativeHitRate": 0.4514980920151002,
+          "nativeReportingCoverage": 1,
+          "missProvenance": {
+            "providerNative": 0,
+            "promptMinusNativeHit": 20,
+            "storedUnknown": 0,
+            "unknown": 0
+          },
+          "localStructureEstimate": {
+            "requests": 9,
+            "estimatedCommonPrefixTokens": 154808
+          },
+          "stablePrefix": {
+            "unchanged": 9,
+            "changed": 0,
+            "unknown": 11
+          },
+          "switches": {
+            "endpoint": 0,
+            "responder": 16,
+            "conversation": 1
+          },
+          "switchUnknown": {
+            "endpoint": 11,
+            "responder": 2,
+            "conversation": 2
+          },
+          "sameEndpointZeroHitAnomalies": null
+        },
+        "warm": {
+          "requestCount": 0,
+          "nativeHitRequests": 0,
+          "nativeHitStatus": {
+            "positive": 0,
+            "zero": 0,
+            "missing": 0
+          },
+          "weightedCacheRequests": 0,
+          "cacheHitTokens": 0,
+          "cacheMissTokens": 0,
+          "weightedNativeHitRate": null,
+          "nativeReportingCoverage": null,
+          "missProvenance": {
+            "providerNative": 0,
+            "promptMinusNativeHit": 0,
+            "storedUnknown": 0,
+            "unknown": 0
+          },
+          "localStructureEstimate": {
+            "requests": 0,
+            "estimatedCommonPrefixTokens": null
+          },
+          "stablePrefix": {
+            "unchanged": 0,
+            "changed": 0,
+            "unknown": 0
+          },
+          "switches": {
+            "endpoint": 0,
+            "responder": 0,
+            "conversation": 0
+          },
+          "switchUnknown": {
+            "endpoint": 0,
+            "responder": 0,
+            "conversation": 0
+          },
+          "sameEndpointZeroHitAnomalies": null
+        },
+        "warmSampleStatus": "unknown"
+      },
+      {
+        "provider": "zhipu",
+        "model": "glm-5.3-flash",
+        "requestType": "chat",
+        "layoutId": "v813",
+        "endpointHash": "a8cdc0f3bda011f722e44f7d72d6446f23a67b6fdd86721133370766b09a7a8d",
+        "cohortHash": "UNKNOWN",
+        "all": {
+          "requestCount": 361,
+          "nativeHitRequests": 338,
+          "nativeHitStatus": {
+            "positive": 237,
+            "zero": 101,
+            "missing": 23
+          },
+          "weightedCacheRequests": 338,
+          "cacheHitTokens": 2987264,
+          "cacheMissTokens": 5264897,
+          "weightedNativeHitRate": 0.3619977845803057,
+          "nativeReportingCoverage": 0.9362880886426593,
+          "missProvenance": {
+            "providerNative": 0,
+            "promptMinusNativeHit": 338,
+            "storedUnknown": 0,
+            "unknown": 0
+          },
+          "localStructureEstimate": {
+            "requests": 319,
+            "estimatedCommonPrefixTokens": 5601499
+          },
+          "stablePrefix": {
+            "unchanged": 317,
+            "changed": 2,
+            "unknown": 42
+          },
+          "switches": {
+            "endpoint": 0,
+            "responder": 224,
+            "conversation": 10
+          },
+          "switchUnknown": {
+            "endpoint": 42,
+            "responder": 4,
+            "conversation": 4
+          },
+          "sameEndpointZeroHitAnomalies": 62
+        },
+        "warm": {
+          "requestCount": 0,
+          "nativeHitRequests": 0,
+          "nativeHitStatus": {
+            "positive": 0,
+            "zero": 0,
+            "missing": 0
+          },
+          "weightedCacheRequests": 0,
+          "cacheHitTokens": 0,
+          "cacheMissTokens": 0,
+          "weightedNativeHitRate": null,
+          "nativeReportingCoverage": null,
+          "missProvenance": {
+            "providerNative": 0,
+            "promptMinusNativeHit": 0,
+            "storedUnknown": 0,
+            "unknown": 0
+          },
+          "localStructureEstimate": {
+            "requests": 0,
+            "estimatedCommonPrefixTokens": null
+          },
+          "stablePrefix": {
+            "unchanged": 0,
+            "changed": 0,
+            "unknown": 0
+          },
+          "switches": {
+            "endpoint": 0,
+            "responder": 0,
+            "conversation": 0
+          },
+          "switchUnknown": {
+            "endpoint": 0,
+            "responder": 0,
+            "conversation": 0
+          },
+          "sameEndpointZeroHitAnomalies": null
+        },
+        "warmSampleStatus": "unknown"
+      },
+      {
+        "provider": "zhipu",
+        "model": "glm-5.3-flash",
+        "requestType": "letter",
+        "layoutId": "UNKNOWN",
+        "endpointHash": "UNKNOWN",
+        "cohortHash": "UNKNOWN",
+        "all": {
+          "requestCount": 1,
+          "nativeHitRequests": 1,
+          "nativeHitStatus": {
+            "positive": 0,
+            "zero": 1,
+            "missing": 0
+          },
+          "weightedCacheRequests": 1,
+          "cacheHitTokens": 0,
+          "cacheMissTokens": 3283,
+          "weightedNativeHitRate": 0,
+          "nativeReportingCoverage": 1,
+          "missProvenance": {
+            "providerNative": 0,
+            "promptMinusNativeHit": 1,
+            "storedUnknown": 0,
+            "unknown": 0
+          },
+          "localStructureEstimate": {
+            "requests": 0,
+            "estimatedCommonPrefixTokens": null
+          },
+          "stablePrefix": {
+            "unchanged": 0,
+            "changed": 0,
+            "unknown": 1
+          },
+          "switches": {
+            "endpoint": 0,
+            "responder": 0,
+            "conversation": 0
+          },
+          "switchUnknown": {
+            "endpoint": 1,
+            "responder": 1,
+            "conversation": 1
+          },
+          "sameEndpointZeroHitAnomalies": null
+        },
+        "warm": {
+          "requestCount": 0,
+          "nativeHitRequests": 0,
+          "nativeHitStatus": {
+            "positive": 0,
+            "zero": 0,
+            "missing": 0
+          },
+          "weightedCacheRequests": 0,
+          "cacheHitTokens": 0,
+          "cacheMissTokens": 0,
+          "weightedNativeHitRate": null,
+          "nativeReportingCoverage": null,
+          "missProvenance": {
+            "providerNative": 0,
+            "promptMinusNativeHit": 0,
+            "storedUnknown": 0,
+            "unknown": 0
+          },
+          "localStructureEstimate": {
+            "requests": 0,
+            "estimatedCommonPrefixTokens": null
+          },
+          "stablePrefix": {
+            "unchanged": 0,
+            "changed": 0,
+            "unknown": 0
+          },
+          "switches": {
+            "endpoint": 0,
+            "responder": 0,
+            "conversation": 0
+          },
+          "switchUnknown": {
+            "endpoint": 0,
+            "responder": 0,
+            "conversation": 0
+          },
+          "sameEndpointZeroHitAnomalies": null
+        },
+        "warmSampleStatus": "unknown"
+      }
+    ],
+    "invalidLines": 0
+  },
+  "attributionMatrix": {
+    "reproducedAppGlobalStaticJitter": {
+      "status": "NOT_REPRODUCED",
+      "offlineGroups": 12
+    },
+    "naturalSwitches": {
+      "status": "OBSERVED",
+      "responderSwitchCount": 224,
+      "conversationSwitchCount": 10
+    },
+    "nativeZeroWithLargeEstimatedPrefix": {
+      "status": "OBSERVED_CAUSE_UNKNOWN",
+      "count": 62
+    },
+    "changedFrozenPrefix": {
+      "status": "OBSERVED_CAUSE_NOT_PROVEN",
+      "count": 2,
+      "earliestBlock": "memory-direct-frozen"
+    },
+    "missingNativeCacheFields": {
+      "status": "UNKNOWN",
+      "retainedGlmChatCount": 29
+    },
+    "note": "Counts use different/overlapping populations. They are not additive savings or vendor cache breakpoints."
+  }
+}

@@ -178,6 +178,7 @@ function createProviderDiagnostics({ fs, path, dataDir, settingsRepository, prov
           baseUrl,
           captureEnabled: v89Settings.chatPromptV89OutboundDiagnostics !== false,
           promptProfile: activePromptProfile.label,
+          layoutId: activeLayoutId,
           staticTokens: latestEntry?.realRequestDiff?.staticTokens ?? null,
           dynamicTokens: latestEntry?.realRequestDiff?.dynamicTokens ?? null,
           globalStaticTokens: latestEntry?.realRequestDiff?.globalStaticTokens ?? null,

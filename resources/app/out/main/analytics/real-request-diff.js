@@ -454,7 +454,8 @@ function buildProviderUsage(normalizedUsage) {
   };
 }
 
-function classifyAlignment({ cachedTokens, estimatedCommonPrefixTokens, sameEffectiveParameters, intervalMs, anomalyPrefixTokens = DEFAULT_ANOMALY_PREFIX_TOKENS, maxIntervalMs = DEFAULT_MAX_INTERVAL_MS } = {}) {
+function classifyAlignment({ cachedTokens, estimatedCommonPrefixTokens, sameEffectiveParameters, sameEndpoint, intervalMs, anomalyPrefixTokens = DEFAULT_ANOMALY_PREFIX_TOKENS, maxIntervalMs = DEFAULT_MAX_INTERVAL_MS } = {}) {
+  if (sameEndpoint === false) return "insufficient";
   if (cachedTokens == null || estimatedCommonPrefixTokens == null || estimatedCommonPrefixTokens <= 0) return "insufficient";
   if (cachedTokens === 0 && estimatedCommonPrefixTokens >= anomalyPrefixTokens && sameEffectiveParameters === true && (intervalMs == null || intervalMs <= maxIntervalMs)) return "provider_zero_despite_large_prefix";
   if (cachedTokens === 0) return "insufficient";
@@ -470,6 +471,7 @@ function attachProviderObservation(realRequestDiff, normalizedUsage, options = {
     cachedTokens: providerUsage.cachedTokens,
     estimatedCommonPrefixTokens: realRequestDiff?.estimatedCommonPrefixTokens,
     sameEffectiveParameters: realRequestDiff?.sameEffectiveParameters,
+    sameEndpoint: realRequestDiff?.sameEndpoint,
     intervalMs: realRequestDiff?.intervalMs,
     anomalyPrefixTokens: options.anomalyPrefixTokens,
     maxIntervalMs: options.maxIntervalMs
