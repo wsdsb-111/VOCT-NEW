@@ -15,8 +15,10 @@ const YEAR_MAX_TOKENS = 1500;
 const LIFE_SEGMENT_MAX_TOKENS = 1000;
 const YEAR_TARGET_TOKENS = 1200;
 const LIFE_SEGMENT_TARGET_TOKENS = 700;
+const DERIVED_AUTO_GENERATION_ENABLED = false;
 const derivedLimitFor = kind => kind === "year" ? YEAR_MAX_TOKENS : LIFE_SEGMENT_MAX_TOKENS;
 const derivedTargetFor = kind => kind === "year" ? YEAR_TARGET_TOKENS : LIFE_SEGMENT_TARGET_TOKENS;
+const retiredGenerationResult = kind => ({ status: "SKIPPED_DERIVED_POLICY", kind, generated: false, providerRequests: 0 });
 
 function eventYears(row) {
   const time = row?.eventTime;
@@ -55,6 +57,8 @@ class Memory4DerivedService {
   }
 
   configure(options = {}) { this.options = { ...this.options, ...options }; }
+
+  isAutoGenerationRetired() { return !DERIVED_AUTO_GENERATION_ENABLED; }
 
   count(text) { return Math.ceil((this.options.estimateTokens || estimateTokens)(text)); }
 
@@ -147,7 +151,7 @@ class Memory4DerivedService {
       .sort((a, b) => a.eventYear - b.eventYear) : [];
     const life = this.read(scope, "life");
     const lifeDirty = !!life && !this.validView(scope, life, "life", context);
-    return { ...scope, indexRevision: index.revision, derivedRevision: metadata?.derivedRevision || 0,
+    return { ...scope, indexRevision: index.revision, derivedRevision: metadata?.derivedRevision || 0, generationPolicy: "RETIRED",
       dirty: metadata?.derivedDirty === true || years.some(view => view.dirty) || lifeDirty,
       years, life: life ? { ...life, dirty: lifeDirty } : null,
       jobs: this.jobs.has(scopeKey(scope)) ? [copy(this.jobs.get(scopeKey(scope)))] : [] };
@@ -298,7 +302,7 @@ class Memory4DerivedService {
   }
 
   current(scope, task) {
-    if (task.cancelled) return false;
+    if (task.cancelled || this.isAutoGenerationRetired()) return false;
     try {
       return task.committedFinalization ? this.committedProof(scope, task.finalizationProof)
         : !this.options.isCampaignCurrent || this.options.isCampaignCurrent(scope.campaignToken);
@@ -306,7 +310,14 @@ class Memory4DerivedService {
   }
 
   schedule(scope, options = {}) {
-    const finalizationProof = options.committedFinalization ? { finalizationId: scope.finalizationId, sourceRevision: scope.sourceRevision } : null;
+    const proofSource = scope;
+    scope = scopeDto(scope);
+    const finalizationProof = options.committedFinalization ? options.finalizationProof || {
+      finalizationId: proofSource.finalizationId, sourceRevision: proofSource.sourceRevision } : null;
+    if (this.isAutoGenerationRetired()) {
+      this.cancel(scope);
+      return Promise.resolve(retiredGenerationResult("all"));
+    }
     if (options.committedFinalization && !this.committedProof(scope, finalizationProof)) {
       return Promise.resolve({ status: "FAILED", kind: "all", reason: "COMMITTED_SOURCE_PROOF_UNAVAILABLE" });
     }
@@ -327,6 +338,7 @@ class Memory4DerivedService {
 
   async compress(scope, kind, items, entries, task, providerSnapshot) {
     scope = scopeDto(scope);
+    if (this.isAutoGenerationRetired()) throw new Error("memory4_derived_llm_retired");
     const hardLimit = derivedLimitFor(kind), softTarget = derivedTargetFor(kind);
     if (this.count(items.map(item => item.text).join("\n")) <= hardLimit) return items;
     if (typeof this.options.requestCompression !== "function") throw new Error("memory4_compression_unavailable");
@@ -384,6 +396,7 @@ class Memory4DerivedService {
 
   async buildYear(scope, eventYear, task, request, providerSnapshot) {
     scope = scopeDto(scope);
+    if (this.isAutoGenerationRetired()) return retiredGenerationResult("year");
     const prior = this.read(scope, "year", eventYear);
     if (this.validView(scope, prior, "year") && !request.overwriteManual) return { status: "COMPLETE", eventYear, revision: prior.revision, alreadyCurrent: true };
     if (prior?.manual?.mode === "manual_override" && !request.overwriteManual) return { status: "MANUAL_OVERRIDE", eventYear };
@@ -406,6 +419,7 @@ class Memory4DerivedService {
 
   async buildLife(scope, task, request, providerSnapshot) {
     scope = scopeDto(scope);
+    if (this.isAutoGenerationRetired()) return retiredGenerationResult("life");
     const prior = this.read(scope, "life");
     if (this.validView(scope, prior, "life") && !request.overwriteManual && !request.segmentId) return { status: "COMPLETE", revision: prior.revision, alreadyCurrent: true };
     if (prior?.manual?.mode === "manual_override" && !request.overwriteManual && !request.segmentId) return { status: "MANUAL_OVERRIDE" };
@@ -455,6 +469,10 @@ class Memory4DerivedService {
     scope = scopeDto(scope);
     const kind = request.kind || "all";
     if (!["all", "year", "life"].includes(kind)) throw new Error("memory4_derived_kind_invalid");
+    if (this.isAutoGenerationRetired()) {
+      this.cancel(scope);
+      return retiredGenerationResult(kind);
+    }
     const key = scopeKey(scope);
     if (this.active.has(key)) {
       this.active.get(key).queuedRequest = request;
@@ -499,11 +517,15 @@ class Memory4DerivedService {
         eventYear: error.failedYears?.[0] ?? this.jobs.get(key)?.eventYear };
       this.jobs.set(key, { kind, status, reason: error.message, ...failure });
       this.coordinator.trace?.record("memory4_derived", { ownerId: scope.ownerId, status, kind, errorCode: error.message, ...failure, durationMs: Date.now() - started });
-      if (status === "REQUEUED" && !request.requeued) setImmediate(() => this.rebuild(scope, { ...request, overwriteManual: false, requeued: true }).catch(() => {}));
+      if (!this.isAutoGenerationRetired() && status === "REQUEUED" && !request.requeued) {
+        setImmediate(() => this.rebuild(scope, { ...request, overwriteManual: false, requeued: true }).catch(() => {}));
+      }
       return { status, kind, reason: error.message, ...failure, ...(error.results ? { results: error.results } : {}) };
     } finally {
       this.active.delete(key);
-      if (task.queuedRequest && this.current(scope, task)) setImmediate(() => this.rebuild(scope, task.queuedRequest).catch(() => {}));
+      if (!this.isAutoGenerationRetired() && task.queuedRequest && this.current(scope, task)) {
+        setImmediate(() => this.rebuild(scope, task.queuedRequest).catch(() => {}));
+      }
     }
   }
 

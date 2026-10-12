@@ -669,8 +669,7 @@ const SummariesManager = createSummariesManager({
 });
 memoryEngine.memory4?.configureDerived({
   getProviderSnapshot: () => llmManager.getProviderCapabilities("SUMMARY"),
-  requestCompression: (prompt, options) => llmManager.sendSummaryRequest(prompt, options.signal, { requestType: options.requestType,
-    maxTokens: options.maxTokens, providerSnapshot: options.providerSnapshot }),
+  requestCompression: () => { throw new Error("memory4_derived_llm_retired"); },
   requestExtraction: (prompt, options) => llmManager.sendSummaryRequest(prompt, options.signal, { requestType: "memory4_durable",
     maxTokens: options.maxTokens, providerSnapshot: options.providerSnapshot, beforeSendGuard: options.beforeSendGuard, durableTrace: options.durableTrace }),
   isCampaignCurrent: token => conversationManager.getCurrentConversation()?.gameData?.campaignToken === token,
