@@ -160,6 +160,7 @@ electron.contextBridge.exposeInMainWorld("conversationAPI", {
   getMemory4Sources: (request) => electron.ipcRenderer.invoke("memory4:getSources", request),
   mutateMemory4: (request) => electron.ipcRenderer.invoke("memory4:mutate", request),
   auditMemory4Orphans: (request) => electron.ipcRenderer.invoke("memory4:auditOrphans", request),
+  auditMemory4Integrity: (request) => electron.ipcRenderer.invoke("memory4:integrityAudit", request),
   forgetMemory4Orphan: (request) => electron.ipcRenderer.invoke("memory4:forgetOrphan", request),
   retryFailedSummaries: () => electron.ipcRenderer.invoke("conversation:retryFailedSummaries"),
   updateStructuredMemory: (memoryId, content) => electron.ipcRenderer.invoke("conversation:updateStructuredMemory", { memoryId, content }),

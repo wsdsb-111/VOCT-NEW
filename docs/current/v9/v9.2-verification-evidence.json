@@ -1,0 +1,612 @@
+{
+  "schemaVersion": 1,
+  "date": "2026-10-11",
+  "phase": "V9.2 Application Boundary and JSON Repository",
+  "branch": "main",
+  "baselineCommit": "f9c088ff384597fa9e07db248a6cc8c6be68113e",
+  "worktreeState": "uncommitted; no push",
+  "versions": {
+    "project": "V9.2",
+    "core": "9.2",
+    "app": "9.2.0",
+    "workshop": "2.0.5",
+    "memoryDisplay": "4.0",
+    "memoryProtocol": "3.0",
+    "summaryStorage": "2.5",
+    "officialAction": "2.0.3",
+    "threeMod": "1.0.6"
+  },
+  "build": {
+    "status": "PASS",
+    "mappings": 286,
+    "payloadSha256": "4c192c9f2f421f3589858a296cecffb0e08eaff8329be57fd8b50506b7642f04",
+    "manifestSha256": "2ad8c0cf3958f1452563344d03cf6cd13a43694ede73db08ab330bf60dec67ec",
+    "launcherSha256": "287e302fb03013240cef38e3084af5a87d2dfc188e72594189cca8875381bb6a",
+    "deployedParity": "PASS"
+  },
+  "release": {
+    "status": "PASS",
+    "exitCode": 0,
+    "groups": 418,
+    "classifiedTestFiles": 487,
+    "archivedTestFiles": 68,
+    "logSha256": "10614a4608e2d5da4922f86455662bf4d267da4a2ff94da1a812d8ffb5eb9017"
+  },
+  "independentQa": {
+    "pass": 21,
+    "fail": 0,
+    "nativeFileLinksUnverified": 4,
+    "simulatedFileLinksPass": 4,
+    "nativeRootAndJournalJunctions": "PASS",
+    "realProcessCrashPoints": 5,
+    "doubleRestart": "PASS"
+  },
+  "renamedFolders": {
+    "status": "PASS_LOCAL_FIXTURES_AND_PACKAGED_UI",
+    "scenarios": 12,
+    "realUserOwnerFoldersInspected": 22,
+    "realUserDuplicateOwnerGroups": 0,
+    "realUserMergePerformed": false,
+    "conflicts": "leave source data and block automatic consolidation",
+    "backupLocation": "MemoryStore baseDir/renamed-summary-folders outside recall"
+  },
+  "packagedSmoke": {
+    "status": "PASS",
+    "diagnosticsOffAndOn": true,
+    "presenceIpc": true,
+    "unknownAuditScopeRejected": true,
+    "versionTitleFooterTooltip": true,
+    "renamedSummaryListingAndDateOrder": true,
+    "loadedMainMatchesDeployedArtifact": true,
+    "networkAndCk3": "disabled; disposable profiles only",
+    "logSha256": "0222bd1c64c8c76ecd044c4048a7411f9930787c2d8358ab53d83c80e17d5c32"
+  },
+  "userdataPreservation": {
+    "filesCompared": 3549,
+    "bytesCompared": 606044541,
+    "changedFiles": 0,
+    "unchanged": true,
+    "currentFileCount": 3549,
+    "separateVerifiedBackupCounts": {
+      "code": 572,
+      "bridge": 8
+    }
+  },
+  "performance": {
+    "sameV92FullApiVsSubset": {
+      "fixture": "synthetic-48-entries",
+      "samples": 30,
+      "candidateCount": 12,
+      "resultHash": "89871cc2a0dcf149a9d771d7a05950943be49f128dd5b7c0ab0c78c2d727d608",
+      "old": {
+        "bodyReads": 360,
+        "bodyBytes": 708660,
+        "p50Ms": 52.28060000000005,
+        "p95Ms": 78.33820000000014
+      },
+      "lazy": {
+        "bodyReads": 60,
+        "bodyBytes": 118080,
+        "p50Ms": 33.446100000001024,
+        "p95Ms": 49.942699999999604
+      }
+    },
+    "frozenV91VsV92": {
+      "fixture": "synthetic-48-entries",
+      "comparison": "frozen-V9.1-full-query-versus-V9.2-two-authorized-bodies",
+      "baselineCommit": "f9c088ff384597fa9e07db248a6cc8c6be68113e",
+      "baselineStoreSha256": "1e58bdf5424134bcd8821900cbb2fe038e2b41dae9c5421682c775d7eb24b9ed",
+      "temperature": "warm-process OS cache uncontrolled",
+      "samples": 30,
+      "candidateCount": 12,
+      "resultHash": "546091df86df6fc8403d29c4cd1af98bdb004ca0b499456781ed3cf6a16eb31b",
+      "old": {
+        "bodyReads": 360,
+        "bodyBytes": 708660,
+        "p50Ms": 8.068900000000212,
+        "p95Ms": 11.148000000001048
+      },
+      "lazy": {
+        "bodyReads": 60,
+        "bodyBytes": 118080,
+        "p50Ms": 32.9945000000007,
+        "p95Ms": 41.05030000000079
+      }
+    },
+    "scope": "synthetic 48 entries, 30 warm-process samples; OS cache uncontrolled",
+    "limitation": "fewer body reads but greater measured latency than frozen V9.1; no cold disk or CK3 frame measurement"
+  },
+  "gates": {
+    "G0": "PASS_LOCAL",
+    "G1": "PASS_LOCAL",
+    "G2": "PASS_LOCAL",
+    "G3": "PASS_LOCAL",
+    "G4": "PASS_LOCAL",
+    "G5": "PASS_LOCAL",
+    "G6": "PASS_LOCAL",
+    "G7": "PENDING_FINAL_SHA_REMOTE_CI_USER_UPLOAD",
+    "G8": "PENDING_REAL_CK3_PROVIDER_SOAK"
+  },
+  "formalStageComplete": false,
+  "tests": [
+    {
+      "id": "T-SCOPE-01",
+      "fixture": "campaign and owner isolate files and index reads",
+      "positive": "same scope returns authorized entries",
+      "negative": "foreign Campaign and Owner return no private bodies",
+      "files": [
+        {
+          "path": "scripts/test-v8.14-a-durable-core.js",
+          "sha256": "c2d8fea60c986b4811d2044ebf861fddcae3163e4e62a012c0d744ff51e1258c"
+        },
+        {
+          "path": "scripts/test-v9.2-scoped-json.js",
+          "sha256": "36ebce6128ed571ef38551cffb6fdb9918d94db286a74f35e0d11f0d82f7a1b8"
+        }
+      ],
+      "result": "PASS_LOCAL_FIXTURES",
+      "evidence": {
+        "path": ".build/v9.2-release-final.log",
+        "sha256": "10614a4608e2d5da4922f86455662bf4d267da4a2ff94da1a812d8ffb5eb9017"
+      }
+    },
+    {
+      "id": "T-SCOPE-02",
+      "fixture": "private fragment cannot be referenced by another owner; knownBy guard",
+      "positive": "explicit recipients receive their projected source",
+      "negative": "private fragments and missing Owner knownBy are rejected",
+      "files": [
+        {
+          "path": "scripts/test-v8.14-a-durable-core.js",
+          "sha256": "c2d8fea60c986b4811d2044ebf861fddcae3163e4e62a012c0d744ff51e1258c"
+        },
+        {
+          "path": "scripts/test-v9.2-independent-qa.js",
+          "sha256": "cb29661a52d99dc9b4fecf2c48144682de118b576e7c1947d9e34034839c7001"
+        }
+      ],
+      "result": "PASS_LOCAL_FIXTURES",
+      "evidence": {
+        "path": ".build/v9.2-release-final.log",
+        "sha256": "10614a4608e2d5da4922f86455662bf4d267da4a2ff94da1a812d8ffb5eb9017"
+      }
+    },
+    {
+      "id": "T-SCOPE-03",
+      "fixture": "Presence half-open windows and inactive participants",
+      "positive": "join and return use legitimate visibility windows",
+      "negative": "leave and unconscious periods grant no observation",
+      "files": [
+        {
+          "path": "scripts/test-v7.7.2-staged-presence.js",
+          "sha256": "c851d3f87f8952c1d9a1037991167a948b198cad5bde2752725a92fa217749b1"
+        },
+        {
+          "path": "scripts/test-v8.14-a-finalization-visibility.js",
+          "sha256": "52e03bf82c7c56fb85641e70bca0184564419606778efb39fa698c9b32ee4896"
+        },
+        {
+          "path": "scripts/test-v8.14.1-opening-presence.js",
+          "sha256": "53739590b63a41bfb13c88f4de8521f26fef486e5543c1f63f15c188b0258200"
+        }
+      ],
+      "result": "PASS_LOCAL_FIXTURES",
+      "evidence": {
+        "path": ".build/v9.2-release-final.log",
+        "sha256": "10614a4608e2d5da4922f86455662bf4d267da4a2ff94da1a812d8ffb5eb9017"
+      }
+    },
+    {
+      "id": "T-SCOPE-04",
+      "fixture": "Self preservation and full direct-observation whitelist",
+      "positive": "visible trait observation reaches the next ProviderInput",
+      "negative": "private, hidden and off-scene traits do not leak",
+      "files": [
+        {
+          "path": "scripts/test-v8.15.2-provider-visible-traits.js",
+          "sha256": "8b3f00a778b618d0634d5e6beedcf8a95af5dc5408f4931103a6bfdb23f96e2e"
+        }
+      ],
+      "result": "PASS_LOCAL_FIXTURES",
+      "evidence": {
+        "path": ".build/v9.2-release-final.log",
+        "sha256": "10614a4608e2d5da4922f86455662bf4d267da4a2ff94da1a812d8ffb5eb9017"
+      }
+    },
+    {
+      "id": "T-FORGET-01",
+      "fixture": "durable Forget restart and tombstone precedence",
+      "positive": "unrelated source lineages remain readable",
+      "negative": "forgotten sources stay hidden after restart and retry",
+      "files": [
+        {
+          "path": "scripts/test-v8.15-durable-forget.js",
+          "sha256": "361479609efdf9bc6e33b12b2aa1756c4c476cf821b793d0059be7491df08766"
+        },
+        {
+          "path": "scripts/test-v8.14-a-durable-core.js",
+          "sha256": "c2d8fea60c986b4811d2044ebf861fddcae3163e4e62a012c0d744ff51e1258c"
+        }
+      ],
+      "result": "PASS_LOCAL_FIXTURES",
+      "evidence": {
+        "path": ".build/v9.2-release-final.log",
+        "sha256": "10614a4608e2d5da4922f86455662bf4d267da4a2ff94da1a812d8ffb5eb9017"
+      }
+    },
+    {
+      "id": "T-FORGET-02",
+      "fixture": "fresh Forget and frame-to-body read interleaving",
+      "positive": "current candidate reads an authorized unchanged body",
+      "negative": "Forget after selection prevents output",
+      "files": [
+        {
+          "path": "scripts/test-v9.2-independent-qa.js",
+          "sha256": "cb29661a52d99dc9b4fecf2c48144682de118b576e7c1947d9e34034839c7001"
+        }
+      ],
+      "result": "PASS_LOCAL_FIXTURES",
+      "evidence": {
+        "path": ".build/v9.2-release-final.log",
+        "sha256": "10614a4608e2d5da4922f86455662bf4d267da4a2ff94da1a812d8ffb5eb9017"
+      }
+    },
+    {
+      "id": "T-INDEX-01",
+      "fixture": "33 query axis and oracle cases",
+      "positive": "legal sets and order match the original filter oracle",
+      "negative": "unsupported axes and foreign candidate frames reject",
+      "files": [
+        {
+          "path": "scripts/test-v9.2-scoped-json.js",
+          "sha256": "36ebce6128ed571ef38551cffb6fdb9918d94db286a74f35e0d11f0d82f7a1b8"
+        }
+      ],
+      "result": "PASS_LOCAL_FIXTURES",
+      "evidence": {
+        "path": ".build/v9.2-release-final.log",
+        "sha256": "10614a4608e2d5da4922f86455662bf4d267da4a2ff94da1a812d8ffb5eb9017"
+      }
+    },
+    {
+      "id": "T-INDEX-02",
+      "fixture": "index metadata and body corruption",
+      "positive": "consistent hashes permit authorized reads",
+      "negative": "corrupt state rejects without overwriting bytes",
+      "files": [
+        {
+          "path": "scripts/test-v9.2-independent-qa.js",
+          "sha256": "cb29661a52d99dc9b4fecf2c48144682de118b576e7c1947d9e34034839c7001"
+        },
+        {
+          "path": "scripts/test-v8.14-a-durable-core.js",
+          "sha256": "c2d8fea60c986b4811d2044ebf861fddcae3163e4e62a012c0d744ff51e1258c"
+        }
+      ],
+      "result": "PASS_LOCAL_FIXTURES",
+      "evidence": {
+        "path": ".build/v9.2-release-final.log",
+        "sha256": "10614a4608e2d5da4922f86455662bf4d267da4a2ff94da1a812d8ffb5eb9017"
+      }
+    },
+    {
+      "id": "T-INDEX-03",
+      "fixture": "missing and corrupt index fail closed",
+      "positive": "indexed committed entries can be queried",
+      "negative": "remaining bodies without index cannot imply trusted recovery",
+      "files": [
+        {
+          "path": "scripts/test-v8.14-a-durable-core.js",
+          "sha256": "c2d8fea60c986b4811d2044ebf861fddcae3163e4e62a012c0d744ff51e1258c"
+        }
+      ],
+      "result": "PASS_LOCAL_FIXTURES",
+      "evidence": {
+        "path": ".build/v9.2-release-final.log",
+        "sha256": "10614a4608e2d5da4922f86455662bf4d267da4a2ff94da1a812d8ffb5eb9017"
+      }
+    },
+    {
+      "id": "T-REV-01",
+      "fixture": "stale Memory4 update and delete revisions",
+      "positive": "matching revision permits an edit",
+      "negative": "old revision preserves the newer edit byte for byte",
+      "files": [
+        {
+          "path": "scripts/test-v9.2-scoped-json.js",
+          "sha256": "36ebce6128ed571ef38551cffb6fdb9918d94db286a74f35e0d11f0d82f7a1b8"
+        },
+        {
+          "path": "scripts/test-v9.2-independent-qa.js",
+          "sha256": "cb29661a52d99dc9b4fecf2c48144682de118b576e7c1947d9e34034839c7001"
+        }
+      ],
+      "result": "PASS_LOCAL_FIXTURES",
+      "evidence": {
+        "path": ".build/v9.2-release-final.log",
+        "sha256": "10614a4608e2d5da4922f86455662bf4d267da4a2ff94da1a812d8ffb5eb9017"
+      }
+    },
+    {
+      "id": "T-REC-01",
+      "fixture": "hard process stop after body rename and configured recovery directory",
+      "positive": "restart restores the old committed tree and active snapshots remain private",
+      "negative": "half-written new body never becomes an authorized ghost; active work is not replayed",
+      "files": [
+        {
+          "path": "scripts/test-v9.2-independent-qa.js",
+          "sha256": "cb29661a52d99dc9b4fecf2c48144682de118b576e7c1947d9e34034839c7001"
+        },
+        {
+          "path": "scripts/v9.2-qa-child.js",
+          "sha256": "8fe4205388e06354d28a0ef9cfabb34c009d8900002f568410e44cda6449b15f"
+        },
+        {
+          "path": "scripts/test-v7.6.1-recovery-race.js",
+          "sha256": "7bd82ba5aad309dd7b95e8512a3824feca2f781e187ab126bdb4f6ed2efb7a30"
+        }
+      ],
+      "result": "PASS_LOCAL_FIXTURES",
+      "evidence": {
+        "path": ".build/v9.2-release-final.log",
+        "sha256": "10614a4608e2d5da4922f86455662bf4d267da4a2ff94da1a812d8ffb5eb9017"
+      }
+    },
+    {
+      "id": "T-REC-02",
+      "fixture": "hard process stops after metadata and index rename",
+      "positive": "old index and metadata are restored together",
+      "negative": "partial mutation blocks reads",
+      "files": [
+        {
+          "path": "scripts/test-v9.2-independent-qa.js",
+          "sha256": "cb29661a52d99dc9b4fecf2c48144682de118b576e7c1947d9e34034839c7001"
+        },
+        {
+          "path": "scripts/v9.2-qa-child.js",
+          "sha256": "8fe4205388e06354d28a0ef9cfabb34c009d8900002f568410e44cda6449b15f"
+        }
+      ],
+      "result": "PASS_LOCAL_FIXTURES",
+      "evidence": {
+        "path": ".build/v9.2-release-final.log",
+        "sha256": "10614a4608e2d5da4922f86455662bf4d267da4a2ff94da1a812d8ffb5eb9017"
+      }
+    },
+    {
+      "id": "T-REC-03",
+      "fixture": "two startup recovery executions",
+      "positive": "second startup has the same bytes and recall",
+      "negative": "unknown paths and malformed journals block writes",
+      "files": [
+        {
+          "path": "scripts/test-v9.2-independent-qa.js",
+          "sha256": "cb29661a52d99dc9b4fecf2c48144682de118b576e7c1947d9e34034839c7001"
+        }
+      ],
+      "result": "PASS_LOCAL_FIXTURES",
+      "evidence": {
+        "path": ".build/v9.2-release-final.log",
+        "sha256": "10614a4608e2d5da4922f86455662bf4d267da4a2ff94da1a812d8ffb5eb9017"
+      }
+    },
+    {
+      "id": "T-REC-04",
+      "fixture": "duplicate finalization and duplicate letter receipt",
+      "positive": "valid source commits once and derived source views remain bounded",
+      "negative": "retry returns alreadyCommitted and receipt does not replay Effect or archive twice",
+      "files": [
+        {
+          "path": "scripts/test-v8.14-hotfix-finalization.js",
+          "sha256": "552d6e63adb2f78499fe6b0dc76180e7b65a9c748be4d98c0e7ff88cb538f3ed"
+        },
+        {
+          "path": "scripts/test-v8.14-d-derived-lifecycle.js",
+          "sha256": "46a082f1c3ae1515b87b47301628b215eaad109a622c36fb5fb7ec87eedf598a"
+        },
+        {
+          "path": "scripts/test-v8.15.2-letter-receipt-startup-recovery.js",
+          "sha256": "e8259aaad53533d36a68829127557f2b78d7c458cbf811cbc58594f9362f3b9f"
+        }
+      ],
+      "result": "PASS_LOCAL_FIXTURES",
+      "evidence": {
+        "path": ".build/v9.2-release-final.log",
+        "sha256": "10614a4608e2d5da4922f86455662bf4d267da4a2ff94da1a812d8ffb5eb9017"
+      }
+    },
+    {
+      "id": "T-LEGACY-01",
+      "fixture": "fill-empty-only scoped Legacy binding",
+      "positive": "explicitly scoped historical Legacy projection remains available",
+      "negative": "unknown Campaign is not guessed; stale preview rejects",
+      "files": [
+        {
+          "path": "scripts/test-v8.13.2.2-legacy-bulk-binding.js",
+          "sha256": "934db6e52dd3d9b21eb4c5f66e7ffaa411321d8df949847edd945d5743aed2d4"
+        },
+        {
+          "path": "scripts/test-v8.14-a-durable-core.js",
+          "sha256": "c2d8fea60c986b4811d2044ebf861fddcae3163e4e62a012c0d744ff51e1258c"
+        }
+      ],
+      "result": "PASS_LOCAL_FIXTURES",
+      "evidence": {
+        "path": ".build/v9.2-release-final.log",
+        "sha256": "10614a4608e2d5da4922f86455662bf4d267da4a2ff94da1a812d8ffb5eb9017"
+      }
+    },
+    {
+      "id": "T-OFFICIAL-01",
+      "fixture": "Official recollection frozen lane",
+      "positive": "official dated provenance remains displayed",
+      "negative": "edit delete and regeneration leave Official bytes unchanged",
+      "files": [
+        {
+          "path": "scripts/test-v8.14-e-memory-ui.js",
+          "sha256": "4b84521fdb6888b1346cd93a95b4612cecb47c79e04d5564090eef61aa221f29"
+        },
+        {
+          "path": "scripts/test-v8.14.1-memory4-archival-readonly.js",
+          "sha256": "9ec95901cd3dfe071f6485751e204224c0490da56870527f112a35dbf0786c0d"
+        }
+      ],
+      "result": "PASS_LOCAL_FIXTURES",
+      "evidence": {
+        "path": ".build/v9.2-release-final.log",
+        "sha256": "10614a4608e2d5da4922f86455662bf4d267da4a2ff94da1a812d8ffb5eb9017"
+      }
+    },
+    {
+      "id": "T-WORLD-01",
+      "fixture": "runtime current-truth resolver plus static historical arbitration contract",
+      "positive": "runtime relationship and adapter facts remain canonical",
+      "negative": "historical evidence cannot override current facts; unresolved values remain unknown",
+      "files": [
+        {
+          "path": "scripts/test-v8.8.3-sol-current-truth.js",
+          "sha256": "958159ecc49e30f9c1001300d11afed1a1e9e1ef1caccb71a53d2ade119c42d1"
+        },
+        {
+          "path": "scripts/test-v8.6.2-grounding-worldline-arbitration.js",
+          "sha256": "0ae7f93b32ce22f8bdea1365e4df843c5b4735e8149aa374a44136dd5de95275"
+        },
+        {
+          "path": "scripts/test-v8.15.1-worldline-adapter.js",
+          "sha256": "450d79c203a43c855656a40f05f7d9850c15b9674d337fb76cf1cb39018d3336"
+        }
+      ],
+      "result": "PASS_LOCAL_FIXTURES",
+      "evidence": {
+        "path": ".build/v9.2-release-final.log",
+        "sha256": "10614a4608e2d5da4922f86455662bf4d267da4a2ff94da1a812d8ffb5eb9017"
+      }
+    },
+    {
+      "id": "T-ACTION-01",
+      "fixture": "ACK STALLED recovery and real state confirmation",
+      "positive": "matching before-after facts confirm an effect",
+      "negative": "unknown effect is not replayed and unchanged gold is not CONFIRMED",
+      "files": [
+        {
+          "path": "scripts/test-v7.10-rc6-rev3-run-command-recovery.js",
+          "sha256": "7c55511e2cd1649fbb19a475302eccea1179c6a2238acf5e43b1fd3c8e73a84c"
+        },
+        {
+          "path": "scripts/test-v8.8.3-action-gold-confirmation.js",
+          "sha256": "75c84414f772c1aa949f09568372ea6efd6e9e9707dd648222736ba8eb176194"
+        }
+      ],
+      "result": "PASS_LOCAL_FIXTURES",
+      "evidence": {
+        "path": ".build/v9.2-release-final.log",
+        "sha256": "10614a4608e2d5da4922f86455662bf4d267da4a2ff94da1a812d8ffb5eb9017"
+      }
+    },
+    {
+      "id": "T-LETTER-01",
+      "fixture": "receipt-bound archive and offline restart",
+      "positive": "verified receipt archives both owners once",
+      "negative": "ACK alone is not receipt; duplicate receipt never rewrites Effect",
+      "files": [
+        {
+          "path": "scripts/test-v8.15.2-letter-receipt-startup-recovery.js",
+          "sha256": "e8259aaad53533d36a68829127557f2b78d7c458cbf811cbc58594f9362f3b9f"
+        },
+        {
+          "path": "scripts/test-v8.15.2-letter-archive-independent-qa.js",
+          "sha256": "dc2533bd8076b54e150c520e2064fc08a04f0e842bbeec1c8c304cf4d8549f77"
+        }
+      ],
+      "result": "PASS_LOCAL_FIXTURES",
+      "evidence": {
+        "path": ".build/v9.2-release-final.log",
+        "sha256": "10614a4608e2d5da4922f86455662bf4d267da4a2ff94da1a812d8ffb5eb9017"
+      }
+    },
+    {
+      "id": "T-IPC-01",
+      "fixture": "registered production IPC handlers and Port owner binding",
+      "positive": "existing asynchronous IPC delegates preserve signatures",
+      "negative": "missing methods and invalid audit scope fail with established errors",
+      "files": [
+        {
+          "path": "scripts/test-v9.2-service-ports.js",
+          "sha256": "4c600b23b107f25c2c98e28d7d91790cda95da467981661dc82325fa7c1d54b6"
+        },
+        {
+          "path": "scripts/test-v8.14-e-memory-ui.js",
+          "sha256": "4b84521fdb6888b1346cd93a95b4612cecb47c79e04d5564090eef61aa221f29"
+        }
+      ],
+      "result": "PASS_LOCAL_FIXTURES",
+      "evidence": {
+        "path": ".build/v9.2-release-final.log",
+        "sha256": "10614a4608e2d5da4922f86455662bf4d267da4a2ff94da1a812d8ffb5eb9017"
+      }
+    },
+    {
+      "id": "T-BUILD-01",
+      "fixture": "source dependency and manifest tamper",
+      "positive": "locked source-only build reproduces runtime bytes",
+      "negative": "tampering unlisted files and source drift reject",
+      "files": [
+        {
+          "path": "scripts/test-v9.1-source-build.js",
+          "sha256": "879a47bbd6ec90d58efef6b7659bb0f8ef430a1b978f4fa8c275ac238722d81d"
+        },
+        {
+          "path": "scripts/test-v9.1-runtime-dependencies.js",
+          "sha256": "a63e7b4148f0d4bb817ea6896bc148100cd5a903a2b49ae3d932c2e6d65278e6"
+        },
+        {
+          "path": "scripts/test-v9.1-independent-qa.js",
+          "sha256": "88c08f4394787aabc3cdb649593f4428beee0bf31046cae16226ba2596445a89"
+        }
+      ],
+      "result": "PASS_LOCAL_FIXTURES",
+      "evidence": {
+        "path": ".build/v9.2-release-final.log",
+        "sha256": "10614a4608e2d5da4922f86455662bf4d267da4a2ff94da1a812d8ffb5eb9017"
+      }
+    },
+    {
+      "id": "T-BUILD-02",
+      "fixture": "deployment crash receipt and target edit after preflight",
+      "positive": "known interrupted deployment restores validated bytes",
+      "negative": "protected output and unknown target edit block recovery without overwriting",
+      "files": [
+        {
+          "path": "scripts/test-v9.2-build-guard.js",
+          "sha256": "0382b4331ccde7d7c46699f4d11732f55fab0ca657cc1cfdf6a823e925bd1c04"
+        },
+        {
+          "path": "scripts/test-v9.2-independent-qa.js",
+          "sha256": "cb29661a52d99dc9b4fecf2c48144682de118b576e7c1947d9e34034839c7001"
+        }
+      ],
+      "result": "PASS_LOCAL_FIXTURES",
+      "evidence": {
+        "path": ".build/v9.2-release-final.log",
+        "sha256": "10614a4608e2d5da4922f86455662bf4d267da4a2ff94da1a812d8ffb5eb9017"
+      }
+    },
+    {
+      "id": "T-RENAME-01",
+      "fixture": "12 production-store rename scenarios and canonical sidecar hard crash",
+      "positive": "same IDs coalesce; dated summary and derived content retains independent sources",
+      "negative": "different IDs Campaigns manual conflicts Forget links and concurrent source edits never overwrite or leak",
+      "files": [
+        {
+          "path": "scripts/test-v9.2-renamed-summary-folders.js",
+          "sha256": "6f00b063d3e5557e689f9c95fdb182d95deed54d1d09d8d70d8ac62b6d76d9c6"
+        }
+      ],
+      "result": "PASS_LOCAL_FIXTURES",
+      "evidence": {
+        "path": ".build/v9.2-release-final.log",
+        "sha256": "10614a4608e2d5da4922f86455662bf4d267da4a2ff94da1a812d8ffb5eb9017"
+      }
+    }
+  ]
+}

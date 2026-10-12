@@ -4,9 +4,9 @@
 
 ## 推荐阅读顺序
 
-当前主线 V9.1：[源码构建](current/v9/V9_1_SOURCE_BUILD.md)、[实施／验证](current/v9/V9_1_VERIFICATION_REPORT.md)、[架构审查与移交](current/v9/V9_1_ARCHITECTURE_HANDOFF.md)、[用户方案原文](current/v9/V9_1_REVIEWED_PROPOSAL.md)。按用户确认的[旧总路线](current/v9/V9_ROADMAP.md)分期，不在 V9.1 一次重构全部系统。前置 [V9.0 报告](current/v9/V9_0_VERIFICATION_REPORT.md)和[V8冻结证据](current/v9/V8_FREEZE_EVIDENCE.md)保留历史快照。
+当前主线 V9.2：[施工原文](current/v9/V9_2_IMPLEMENTATION_SPEC.md)、[实施／验证](current/v9/V9_2_VERIFICATION_REPORT.md)、[七域端口](current/v9/V9_2_SERVICE_PORTS.md)、[JSON 权威与恢复](current/v9/V9_2_JSON_AUTHORITY_AND_RECOVERY.md)、[问题台账](current/v9/V9_2_P_ISSUE_LEDGER.md)、[V9.3 移交](current/v9/V9_2_HANDOFF_TO_V9_3.md)。按[旧总路线](current/v9/V9_ROADMAP.md) §7.3 分期；[V9.1 构建说明](current/v9/V9_1_SOURCE_BUILD.md)和旧实施报告保留历史证据。
 
-当前版本合同见 [V9.1 验证](current/v9/V9_1_VERIFICATION_REPORT.md)：项目 V9.1／App 包 9.1.0／VOTC Workshop Mod 2.0.5／Memory Engine 4.0；协议 3.0、摘要存储 2.5、Official Action 2.0.3 和独立 Three-Mod 1.0.6 保留。原始路线、V9.0 版本对齐和冻结文件保留当时快照。
+当前版本合同见[V9.2 验证](current/v9/V9_2_VERIFICATION_REPORT.md)：项目 V9.2／App 9.2.0／Workshop 2.0.5／Memory Engine 4.0；协议 3.0、存储 2.5、Official Action 2.0.3 和 Three-Mod 1.0.6 保留。
 
 V9工程合同：[永久行为](current/v9/V9_BASELINE_BEHAVIOR_CONTRACTS.md)、[架构边界](current/v9/V9_ARCHITECTURE_BOUNDARY.md)、[数据责任](current/v9/V9_DATA_OWNERSHIP_LEDGER.md)、[退役台账](current/v9/V9_DECOMMISSION_LEDGER.md)、[性能调查](current/v9/V9_STARTUP_PERFORMANCE_INVESTIGATION.md)、[独立兼容迁移](current/v9/V9_COMPATIBILITY_MOD_SEPARATION.md)。
 

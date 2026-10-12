@@ -32,6 +32,7 @@ function registerIpcHandlers(runtime) {
   const { electron, settingsRepository, promptConfigManager, uuid, VOTC_PROMPTS_DIR, TemplateEngine, exportPromptsZip, letterManager, runFileManager, llmManager, providerRegistry, usageAnalytics, providerDiagnostics, actionRegistry, VOTC_ACTIONS_DIR, resolveI18nString, conversationManager, ActionEngine, VOTC_SUMMARIES_DIR, SummariesManager, memoryEngine, worldlineService } = runtime;
 
   const performanceTrace = runtime.performanceTrace;
+  const services = runtime.applicationServices;
   const emptyPerformanceReport = () => ({ traceVersion: 1, enabled: false, sampledWindow: true, events: [], statistics: [] });
   electron.ipcMain.handle("performance:get-state", () => ({ traceVersion: 1, enabled: performanceTrace?.enabled === true }));
   electron.ipcMain.handle("performance:snapshot", () => performanceTrace?.snapshot() || emptyPerformanceReport());
@@ -87,7 +88,7 @@ function registerIpcHandlers(runtime) {
     electron.ipcMain.handle("worldline:setAutosavePath", (_event, candidatePath) => worldlineService.setAutosavePath(candidatePath));
     electron.ipcMain.handle("worldline:validateAutosavePath", (_event, candidatePath) => worldlineService.validateAutosavePath(candidatePath));
     electron.ipcMain.handle("worldline:selectAutosaveFile", () => worldlineService.selectAutosaveFile());
-    electron.ipcMain.handle("worldline:getCheckpointStatus", () => worldlineService.getCheckpointStatus());
+    electron.ipcMain.handle("worldline:getCheckpointStatus", () => (services?.worldline || worldlineService).getCheckpointStatus());
     electron.ipcMain.handle("worldline:rebuildCheckpoint", () => worldlineService.rebuildCheckpoint());
     electron.ipcMain.handle("worldline:getOverview", () => worldlineService.getOverview());
     electron.ipcMain.handle("worldline:getAnnualDelta", () => worldlineService.getAnnualDelta());
@@ -229,7 +230,7 @@ function registerIpcHandlers(runtime) {
   });
   electron.ipcMain.handle("letters:getStatuses", async () => {
     try {
-      return letterManager.getAllLetterStatuses();
+      return (services?.letter || letterManager).getAllLetterStatuses();
     } catch (error) {
       console.error("Failed to get letter statuses:", error);
       return {
@@ -643,7 +644,7 @@ function registerIpcHandlers(runtime) {
         eventId: "manual_action",
         traceId: `manual:${actionId}`
       };
-      const result = await ActionEngine.runInvocation(conv, sourceCharacter, invocation);
+      const result = await (services?.action || ActionEngine).runInvocation(conv, sourceCharacter, invocation);
       if (result.feedback) {
         conversationManager.addManualActionFeedback({
           actionId: result.actionId,
@@ -757,7 +758,7 @@ function registerIpcHandlers(runtime) {
     try {
       console.log("IPC: Sending message:", message);
       const streaming = settingsRepository.getGlobalStreamSetting() || true;
-      const result = await conversationManager.sendMessage(message, streaming);
+      const result = await (services?.conversation || conversationManager).sendMessage(message, streaming);
       console.log("IPC: Message sent successfully, result type:", typeof result);
       return { streamStarted: false, message: result };
     } catch (error) {
@@ -785,19 +786,19 @@ function registerIpcHandlers(runtime) {
     conversationManager.resumeConversation();
   });
   electron.ipcMain.handle("conversation:getState", () => {
-    return conversationManager.getConversationState();
+    return (services?.presence || conversationManager).getConversationState();
   });
   electron.ipcMain.handle("conversation:joinWaitingCharacter", async (_, { characterId }) => {
-    return conversationManager.joinWaitingCharacter(characterId);
+    return (services?.presence || conversationManager).joinWaitingCharacter(characterId);
   });
   electron.ipcMain.handle("conversation:leavePresentCharacter", async (_, { characterId }) => {
-    return conversationManager.leavePresentCharacter(characterId);
+    return (services?.presence || conversationManager).leavePresentCharacter(characterId);
   });
   electron.ipcMain.handle("conversation:temporarilyLeaveCharacter", async (_, { characterId, mode }) => {
-    return conversationManager.temporarilyLeaveCharacter(characterId, mode);
+    return (services?.presence || conversationManager).temporarilyLeaveCharacter(characterId, mode);
   });
   electron.ipcMain.handle("conversation:returnTemporaryCharacter", async (_, { characterId }) => {
-    return conversationManager.returnTemporaryCharacter(characterId);
+    return (services?.presence || conversationManager).returnTemporaryCharacter(characterId);
   });
   electron.ipcMain.handle("conversation:regenerateMessage", async (_, requestArgs = {}) => {
     const messageId = requireInteger(requestArgs.messageId, "message_id", { min: 0, max: 2147483647 });
@@ -915,14 +916,15 @@ function registerIpcHandlers(runtime) {
   });
   for (const [channel, method] of [["memory4:getOwnerData", "getMemory4OwnerData"], ["memory4:getEntry", "getMemory4Entry"],
     ["memory4:getSources", "getMemory4Sources"], ["memory4:mutate", "mutateMemory4"],
-    ["memory4:auditOrphans", "auditMemory4Orphans"], ["memory4:forgetOrphan", "forgetMemory4Orphan"]]) {
+    ["memory4:auditOrphans", "auditMemory4Orphans"], ["memory4:forgetOrphan", "forgetMemory4Orphan"],
+    ["memory4:integrityAudit", "auditMemory4Integrity"]]) {
     electron.ipcMain.handle(channel, async (_, request = {}) => {
       try {
         if (!request || typeof request !== "object" || Array.isArray(request)) throw new Error("memory4_request_required");
         const ownerId = requireInteger(request.ownerId, "owner_id", { min: 1, max: 2147483647 });
         if (request.expectedCampaignToken != null && (typeof request.expectedCampaignToken !== "string" || request.expectedCampaignToken.length > 256)) throw new Error("memory4_campaign_invalid");
         if (request.entityId != null) requireInteger(request.entityId, "entity_id", { min: 1, max: 2147483647 });
-        return await SummariesManager[method]({ ...request, ownerId });
+        return await SummariesManager[method]({ ...request, ownerId }, services?.persistence);
       } catch (error) {
         return { success: false, error: error.message || "memory4_request_failed" };
       }

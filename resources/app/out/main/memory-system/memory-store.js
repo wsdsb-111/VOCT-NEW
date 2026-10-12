@@ -9,6 +9,8 @@ const { MEMORY_ENGINE_VERSION } = require("../version");
 const { buildSummaryDateIndex, buildDualTemporalIndex, normalizePerspectiveTemporalRefs } = require("./summary-date-index");
 const { Memory4Store } = require("./memory4-store");
 const { projectionLineageFromSummary, matchesProjectionLineage } = require("./memory4-forget");
+const { assertNoLinks } = require("./scoped-path");
+const { mergeRenamedSummaryFolders, getSummaryConversationFile } = require("./summary-folder-merge");
 
 function removeDirectoryTree(directory) {
   for (const entry of fs.readdirSync(directory, { withFileTypes: true })) {
@@ -61,17 +63,23 @@ class MemoryStore {
     this.ensureDirectories();
     this.summaryMutationPath = path.join(baseDir, "summary-mutation.json");
     this.restoreSummaryMutation();
-    this.index = this.readJson(this.paths.index, { schemaVersion: CURRENT_MEMORY_SCHEMA_VERSION, memories: {}, episodes: {} });
+    assertNoLinks(this.paths.index);
+    this.index = fs.existsSync(this.paths.index)
+      ? JSON.parse(fs.readFileSync(this.paths.index, "utf8").replace(/^\uFEFF/, ""))
+      : { schemaVersion: CURRENT_MEMORY_SCHEMA_VERSION, memories: {}, episodes: {} };
+    if (!this.index || !this.index.memories || !this.index.episodes) throw new Error("memory_store_index_invalid");
     this.folderSummaryCache = new Map();
     this.summaryDateIndexCache = new Map();
     this.folderSummaryCacheMetrics = { hits: 0, misses: 0, invalidations: 0 };
     this.folderSummaryRevisions = new Map();
     this.folderSummaryLoadDiagnostics = new Map();
     this.folderSummarySnapshotRevisions = new WeakMap();
+    this.summaryConversationFileCache = new Map();
   }
 
   ensureDirectories() {
     for (const directory of [this.baseDir, this.paths.episodes, this.paths.characters, this.paths.pairs, this.paths.knowledge, this.paths.ownerStatus, this.paths.recovery, this.paths.memory4Recovery]) {
+      assertNoLinks(directory);
       fs.mkdirSync(directory, { recursive: true });
     }
   }
@@ -87,17 +95,71 @@ class MemoryStore {
   }
 
   writeJson(filePath, value) {
+    assertNoLinks(filePath);
     this.trackSummaryMutation(filePath);
-    fs.mkdirSync(path.dirname(filePath), { recursive: true });
+    if (this.summaryMutation) this.ensureSummaryMutationDirectory(path.dirname(filePath));
+    else fs.mkdirSync(path.dirname(filePath), { recursive: true });
     const tempPath = `${filePath}.${process.pid}.${Date.now()}.tmp`;
-    fs.writeFileSync(tempPath, JSON.stringify(value, null, 2), "utf8");
+    fs.writeFileSync(tempPath, JSON.stringify(value, null, 2), { encoding: "utf8", flag: "wx" });
     fs.renameSync(tempPath, filePath);
+  }
+
+  writeRawFile(filePath, bytes) {
+    const target = this.validateSummaryMutationPath(filePath);
+    if (!Buffer.isBuffer(bytes)) throw new Error("summary_mutation_bytes_required");
+    this.trackSummaryMutation(target);
+    this.ensureSummaryMutationDirectory(path.dirname(target));
+    const tempPath = `${target}.${process.pid}.${Date.now()}.tmp`;
+    assertNoLinks(tempPath);
+    fs.writeFileSync(tempPath, bytes, { flag: "wx" });
+    fs.renameSync(tempPath, target);
+  }
+
+  validateSummaryMutationDirectory(directoryPath) {
+    const target = path.resolve(directoryPath);
+    const roots = [this.baseDir, this.summaryFoldersDir].filter(Boolean).map(root => path.resolve(root));
+    if (!roots.some(root => target === root || target.startsWith(`${root}${path.sep}`))) throw new Error("unsafe_summary_mutation_path");
+    assertNoLinks(target);
+    if (fs.existsSync(target) && !fs.lstatSync(target).isDirectory()) throw new Error("summary_mutation_directory_invalid");
+    return target;
+  }
+
+  trackSummaryMutationDirectory(directoryPath, field) {
+    if (!this.summaryMutation) return;
+    const target = this.validateSummaryMutationDirectory(directoryPath);
+    if (this.summaryMutation[field].includes(target)) return;
+    this.summaryMutation[field].push(target);
+    this.writeJson(this.summaryMutationPath, this.summaryMutation);
+  }
+
+  ensureSummaryMutationDirectory(directoryPath) {
+    const target = this.validateSummaryMutationDirectory(directoryPath);
+    if (fs.existsSync(target)) {
+      if (!fs.lstatSync(target).isDirectory()) throw new Error("summary_mutation_directory_invalid");
+      return target;
+    }
+    const missing = [];
+    let current = target;
+    while (!fs.existsSync(current)) {
+      assertNoLinks(current);
+      missing.push(current);
+      const parent = path.dirname(current);
+      if (parent === current) throw new Error("summary_mutation_directory_invalid");
+      current = parent;
+    }
+    if (!fs.lstatSync(current).isDirectory()) throw new Error("summary_mutation_directory_invalid");
+    for (const directory of missing.reverse()) {
+      this.trackSummaryMutationDirectory(directory, "createdDirectories");
+      fs.mkdirSync(directory);
+    }
+    return target;
   }
 
   validateSummaryMutationPath(filePath) {
     const target = path.resolve(filePath);
     const roots = [this.baseDir, this.summaryFoldersDir].filter(Boolean).map(root => path.resolve(root));
     if (!roots.some(root => target.startsWith(`${root}${path.sep}`)) || target === path.resolve(this.summaryMutationPath)) throw new Error("unsafe_summary_mutation_path");
+    assertNoLinks(target);
     return target;
   }
 
@@ -110,28 +172,51 @@ class MemoryStore {
   }
 
   restoreSummaryMutation() {
+    assertNoLinks(this.summaryMutationPath);
     if (!fs.existsSync(this.summaryMutationPath)) return;
     // An interrupted edit is rolled back before any recall reads its index.
     const journal = JSON.parse(fs.readFileSync(this.summaryMutationPath, "utf8"));
-    if (journal.version !== 1 || !journal.files || typeof journal.files !== "object") throw new Error("invalid_summary_mutation_journal");
+    if (journal.version !== 1 || !journal.files || typeof journal.files !== "object" || Array.isArray(journal.files)
+      || journal.createdDirectories != null && (!Array.isArray(journal.createdDirectories) || journal.createdDirectories.some(value => typeof value !== "string"))
+      || journal.removedDirectories != null && (!Array.isArray(journal.removedDirectories) || journal.removedDirectories.some(value => typeof value !== "string"))) {
+      throw new Error("invalid_summary_mutation_journal");
+    }
+    const createdDirectories = (journal.createdDirectories || []).map(directory => this.validateSummaryMutationDirectory(directory));
+    const removedDirectories = (journal.removedDirectories || []).map(directory => this.validateSummaryMutationDirectory(directory));
     const entries = Object.entries(journal.files).map(([file, content]) => {
       if (content !== null && typeof content !== "string") throw new Error("invalid_summary_mutation_content");
+      if (content !== null && Buffer.from(content, "base64").toString("base64") !== content) throw new Error("invalid_summary_mutation_content");
       return [this.validateSummaryMutationPath(file), content];
     });
+    for (const directory of [...new Set(removedDirectories)].sort((left, right) => left.split(path.sep).length - right.split(path.sep).length)) {
+      if (!fs.existsSync(directory)) fs.mkdirSync(directory, { recursive: true });
+      if (!fs.lstatSync(directory).isDirectory()) throw new Error("summary_mutation_directory_invalid");
+    }
     for (const [file, content] of entries) {
       if (content === null) { if (fs.existsSync(file)) fs.unlinkSync(file); }
       else {
-        const temp = `${file}.restore.tmp`;
-        fs.writeFileSync(temp, Buffer.from(content, "base64"));
+        const parent = path.dirname(file);
+        if (!fs.existsSync(parent)) fs.mkdirSync(parent, { recursive: true });
+        assertNoLinks(file);
+        const temp = `${file}.${process.pid}.${Date.now()}.restore.tmp`;
+        assertNoLinks(temp);
+        fs.writeFileSync(temp, Buffer.from(content, "base64"), { flag: "wx" });
         fs.renameSync(temp, file);
       }
+    }
+    for (const directory of [...new Set(createdDirectories)].sort((left, right) => right.split(path.sep).length - left.split(path.sep).length)) {
+      if (!fs.existsSync(directory)) continue;
+      const stat = fs.lstatSync(directory);
+      if (!stat.isDirectory() || stat.isSymbolicLink()) throw new Error("summary_mutation_directory_invalid");
+      if (fs.readdirSync(directory).length === 0) fs.rmdirSync(directory);
     }
     fs.unlinkSync(this.summaryMutationPath);
   }
 
   withSummaryMutation(summaryPath, mutate) {
+    assertNoLinks(this.summaryMutationPath);
     if (this.summaryMutation || fs.existsSync(this.summaryMutationPath)) throw new Error("summary_mutation_in_progress");
-    this.summaryMutation = { version: 1, files: {} };
+    this.summaryMutation = { version: 1, files: {}, createdDirectories: [], removedDirectories: [] };
     try {
       if (summaryPath) this.trackSummaryMutation(summaryPath);
       const result = mutate();
@@ -149,6 +234,17 @@ class MemoryStore {
   removeSummaryMutationFile(filePath) {
     this.trackSummaryMutation(filePath);
     if (fs.existsSync(filePath)) fs.unlinkSync(filePath);
+  }
+
+  removeSummaryMutationDirectory(directoryPath) {
+    const target = this.validateSummaryMutationDirectory(directoryPath);
+    if (target === path.resolve(this.baseDir) || target === path.resolve(this.summaryFoldersDir || "")) throw new Error("unsafe_summary_mutation_path");
+    if (!fs.existsSync(target)) return;
+    const stat = fs.lstatSync(target);
+    if (!stat.isDirectory() || stat.isSymbolicLink()) throw new Error("summary_mutation_directory_invalid");
+    if (fs.readdirSync(target).length !== 0) return;
+    this.trackSummaryMutationDirectory(target, "removedDirectories");
+    fs.rmdirSync(target);
   }
 
   saveIndex() {
@@ -207,6 +303,12 @@ class MemoryStore {
   }
 
   getLegacySummaryBindingId(filePath, index, summary) {
+    if (summary?.legacyBindingId != null) {
+      if (typeof summary.legacyBindingId !== "string" || !/^legacy-summary:[a-f0-9]{64}$/.test(summary.legacyBindingId)) {
+        throw new Error("legacy_summary_binding_target_invalid");
+      }
+      return summary.legacyBindingId;
+    }
     if (!this.summaryFoldersDir || !Number.isSafeInteger(Number(index)) || Number(index) < 0 || !summary || typeof summary.content !== "string") {
       throw new Error("legacy_summary_binding_target_invalid");
     }
@@ -709,6 +811,16 @@ class MemoryStore {
     return folders.length > 0 ? { id: numericId, name: folders[0], shortName: folders[0] } : null;
   }
 
+  mergeRenamedSummaryFolders(ownerId, preferredName = null) {
+    const result = mergeRenamedSummaryFolders(this, ownerId, preferredName);
+    if (result.changed) this.invalidateFolderSummaryCache([Number(ownerId)]);
+    return result;
+  }
+
+  getSummaryConversationFile(ownerId, counterpartCharacterId, fallbackName = null) {
+    return getSummaryConversationFile(this, ownerId, counterpartCharacterId, fallbackName);
+  }
+
   invalidateFolderSummaryCache(characterIds = null) {
     if (characterIds == null) {
       const owners = new Set([...this.folderSummaryRevisions.keys(), ...this.folderSummaryCache.keys()]);
@@ -716,12 +828,14 @@ class MemoryStore {
       this.folderSummaryCache.clear();
       this.summaryDateIndexCache.clear();
       this.folderSummaryLoadDiagnostics.clear();
+      this.summaryConversationFileCache.clear();
       for (const characterId of owners) {
         this.folderSummaryRevisions.set(characterId, (this.folderSummaryRevisions.get(characterId) || 0) + 1);
       }
       return;
     }
     for (const characterId of uniqueIds(characterIds)) {
+      this.summaryConversationFileCache.delete(characterId);
       if (this.folderSummaryCache.delete(characterId)) this.folderSummaryCacheMetrics.invalidations++;
       this.folderSummaryRevisions.set(characterId, (this.folderSummaryRevisions.get(characterId) || 0) + 1);
       this.folderSummaryLoadDiagnostics.delete(characterId);

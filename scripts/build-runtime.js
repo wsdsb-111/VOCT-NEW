@@ -41,6 +41,52 @@ function safeRelative(value) {
   return value;
 }
 
+function pathKey(value) {
+  const resolved = path.resolve(value);
+  return process.platform === "win32" ? resolved.toLowerCase() : resolved;
+}
+
+function isWithin(base, candidate) {
+  const baseKey = pathKey(base);
+  const candidateKey = pathKey(candidate);
+  return candidateKey.startsWith(baseKey + path.sep) && candidateKey !== baseKey;
+}
+
+function assertSafeOutputDir(rootDir, outputDir) {
+  if (String(outputDir).split(/[\\/]+/).includes("..")) throw new Error("build_protected_output");
+  rootDir = path.resolve(rootDir);
+  outputDir = path.resolve(outputDir);
+  const projectRoot = path.resolve(__dirname, "..");
+  if (!isWithin(rootDir, outputDir)) throw new Error("build_protected_output");
+  const relativeParts = path.relative(rootDir, outputDir).split(path.sep);
+  if (relativeParts.some(part => /[. ]$/.test(part) || /^(?:con|prn|aux|nul|com[1-9]|lpt[1-9])(?:\.|$)/i.test(part))) {
+    throw new Error("build_protected_output");
+  }
+
+  const buildRoot = path.join(rootDir, ".build");
+  const runtimeOutput = path.join(buildRoot, "runtime");
+  if (pathKey(outputDir) === pathKey(buildRoot)
+    || isWithin(buildRoot, outputDir) && pathKey(outputDir) !== pathKey(runtimeOutput)) {
+    throw new Error("build_protected_output");
+  }
+
+  if (pathKey(rootDir) === pathKey(projectRoot)
+    && pathKey(outputDir) !== pathKey(runtimeOutput)) {
+    throw new Error("build_protected_output");
+  }
+
+  const protectedDirectories = [
+    ".git", "scripts", "docs", "build", "src", "resources", "node_modules", ".codex", ".agents", ".aws",
+    ".build/runtime-deploy-state"
+  ];
+  for (const relative of protectedDirectories) {
+    const protectedPath = path.join(rootDir, relative);
+    if (pathKey(outputDir) === pathKey(protectedPath) || isWithin(protectedPath, outputDir)) {
+      throw new Error("build_protected_output");
+    }
+  }
+}
+
 function renameStage(source, target) {
   for (let attempt = 0; ; attempt++) {
     try { fs.renameSync(source, target); return; } catch (error) {
@@ -113,19 +159,13 @@ function verifyArtifacts(outputDir, expectedFiles = null) {
 
 function buildRuntime({ rootDir = root, outputDir = path.join(rootDir, ".build/runtime") } = {}) {
   rootDir = path.resolve(rootDir);
+  assertSafeOutputDir(rootDir, outputDir);
   outputDir = path.resolve(outputDir);
-  // Staging cannot overwrite source, vendored dependencies, or the installed application.
-  const outputKey = process.platform === "win32" ? outputDir.toLowerCase() : outputDir;
-  for (const protectedPath of [rootDir, path.join(rootDir, "src"), path.join(rootDir, "resources"), path.join(rootDir, "build")]) {
-    const protectedKey = process.platform === "win32" ? protectedPath.toLowerCase() : protectedPath;
-    if (outputKey === protectedKey || outputKey.startsWith(protectedKey + path.sep) && protectedPath !== rootDir) throw new Error("build_protected_output");
-  }
   rejectLinks(outputDir);
   const payload = readPayload(rootDir);
   const files = payload.map(item => ({ path: item.target, bytes: item.bytes.length, sha256: item.sha256 }));
   if (fs.existsSync(outputDir) && fs.readdirSync(outputDir).length) {
-    const old = verifyArtifacts(outputDir);
-    if (JSON.stringify(old.files.map(item => item.path)) !== JSON.stringify(files.map(item => item.path))) throw new Error("build_use_fresh_output");
+    verifyArtifacts(outputDir);
     if (fs.readdirSync(outputDir).some(name => !["app", "runtime-build-manifest.json"].includes(name))) throw new Error("build_foreign_output");
   }
   const appPackage = JSON.parse(payload.find(item => item.target === "package.json").bytes.toString("utf8"));
@@ -176,4 +216,5 @@ if (require.main === module) {
   console.log(`VOTC source build: PASS (${manifest.files.length} files, App ${manifest.appVersion}, ${manifest.payloadSha256})`);
 }
 
-module.exports = { buildRuntime, readPayload, verifyArtifacts, listFiles, rejectLinks, sha256 };
+module.exports = { buildRuntime, readPayload, verifyArtifacts, listFiles, rejectLinks, sha256,
+  assertSafeOutputDir, pathKey, isWithin };

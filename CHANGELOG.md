@@ -2,6 +2,8 @@
 
 这里是版本变更的单一入口。详细设计和测试证据保留在链接目标中，本文件只维护版本顺序、用户可见摘要和文档索引。
 
+V9.2（2026-10-11，应用边界与 JSON 仓储）：[验证](docs/current/v9/V9_2_VERIFICATION_REPORT.md)、[端口](docs/current/v9/V9_2_SERVICE_PORTS.md)、[权威与恢复](docs/current/v9/V9_2_JSON_AUTHORITY_AND_RECOVERY.md)。七域薄边界委托既有服务；Memory4 候选帧与授权正文分离，修复遗忘竞争和链接路径缺口，复用现有多文件 journal；构建输出保护和部署回执恢复加固。新增同 ID 改名摘要目录自动合并、日期排序及长期／年度／人生记忆保留，合并前备份、冲突阻止覆盖、中断可回滚。项目／UI V9.2、App 9.2.0；其他协议版本保留。
+
 V9.1（2026-10-11，源码与构建）：[构建说明](docs/current/v9/V9_1_SOURCE_BUILD.md)、[验证](docs/current/v9/V9_1_VERIFICATION_REPORT.md)、[架构移交](docs/current/v9/V9_1_ARCHITECTURE_HANDOFF.md)。按旧总路线建立 282 文件可编辑 JS 源与确定性 Main/Preload/Renderer 资源构建；锁定既有 vendor 和许可清单，CI 先构建再运行原门禁。项目／UI V9.1、App 9.1.0，Mod 2.0.5 和 Memory4 保持；业务重构留至后续阶段，旧 Electron 壳未重编译。
 
 V9.0（2026-10-11，本地工程LOCAL_PASS）：[实施与验证](docs/current/v9/V9_0_VERIFICATION_REPORT.md)。冻结V8，保留历史反例修复CI checkout；加入默认关闭的有限脱敏性能诊断；Three-Mod工程和QA独立迁出，本体保留正式CK3 Bridge。本地409/409发布组和隔离实际窗口诊断通过；远端CI／实机采样待上传与复测，总体HOLD，未签发完整PASS。

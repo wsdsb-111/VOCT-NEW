@@ -2,7 +2,9 @@
 
 These rules apply to editable src/app/main/ and its generated resources/app/out/main/ output, especially main.js, services, providers and IPC. Edit source and rebuild; do not edit generated output alone.
 
-Current project/core version is V9.1/9.1, Electron App package version is 9.1.0 and VOTC Workshop Mod is 2.0.5. Provider User-Agent reads the App version from package.json via version.js. Memory Engine display 4.0, protocol 3.0, summary storage 2.5 and Official Action 2.0.3 retain their existing contracts.
+Current project/core version is V9.2/9.2, Electron App package version is 9.2.0 and VOTC Workshop Mod is 2.0.5. Provider User-Agent reads the App version from package.json via version.js. Memory Engine display 4.0, protocol 3.0, summary storage 2.5 and Official Action 2.0.3 retain their existing contracts.
+
+Renamed summary folders consolidate only by numeric Owner ID, with counterpart files resolved by numeric ID. Summary listing and GameData paths delegate to MemoryStore; raw verified backups stay outside recall under baseDir/renamed-summary-folders. Preserve Campaign scopes, Legacy binding IDs, manual edits, Forget and tombstones. Conflicting sidecars block consolidation. Directory creation/removal is recorded in the existing version 1 summary mutation journal for rollback.
 
 ## Scope and architecture
 
@@ -37,7 +39,7 @@ For each behavior change, add/update the narrowest matching deterministic test a
 
 ~~~powershell
 node scripts\test-release.js
-node scripts\test-action-system.js
+node scripts\test-v7.10-official-action-system.js
 node --check resources\app\out\main\main.js
 node --check resources\app\out\main\provider-service.js
 node --check resources\app\out\main\providers\index.js

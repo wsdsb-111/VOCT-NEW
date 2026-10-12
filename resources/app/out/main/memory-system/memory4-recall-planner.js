@@ -405,10 +405,11 @@ class Memory4RecallPlanner {
     diagnostics.shortlistLimited = rows.length > 32;
     let details = [];
     const verifiedEntries = new Map();
+    const candidates = this.coordinator.repository?.queryCandidates(scope);
     const readCandidate = id => {
       if (!verifiedEntries.has(id)) {
         diagnostics.bodyReads++;
-        verifiedEntries.set(id, this.store.readEntry(scope, id, index));
+        verifiedEntries.set(id, candidates ? this.coordinator.repository.readEntry(scope, id, { candidates }) : this.store.readEntry(scope, id, index));
       }
       return verifiedEntries.get(id);
     };

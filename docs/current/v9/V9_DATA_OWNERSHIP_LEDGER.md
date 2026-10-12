@@ -18,3 +18,7 @@
 | 性能诊断 | `runtime/startup-performance-trace.js` | 每次启动随机盐、匿名会话、有限样本 | 默认关闭，有限内存，用户触发脱敏JSON导出；诊断失败不能阻塞业务，无恢复重放职责 |
 
 每项的备份程序为V9私有冻结副本加哈希校验；恢复必须核对Scope/当前版本，不覆盖唯一存档或撤销已确认ACK。JsonRepository规划端口尚未实现；V9.2才治理多文件事务与索引闭环。
+
+## V9.2 更新
+
+上文 JsonRepository 尚未实现为前阶段快照。当前 ScopedJsonRepository 注入同一个 Memory4Store／MemoryStore，仅协调授权读取、候选、原写命令和只读审计。完整 logicalKey／canonicalOwner／writer／scope／schemaVersion／revision／hash／indexType／recoveryAuthority／legacyReader／cleanupPolicy／proof 映射见 [V9.2 数据权威与恢复](V9_2_JSON_AUTHORITY_AND_RECOVERY.md)。RunFile、Letter、Worldline、设置和凭据仍归各自 owner。

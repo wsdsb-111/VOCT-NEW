@@ -60,3 +60,9 @@ Release Regression 保留 Windows/Node 22、LFS 和全历史 checkout；先核�
 回退优先恢复整个已确认 Git 版本的源、清单、工具与锁，重建后关闭应用并部署。不要将旧 `out` 局部覆盖到新源，也不要回退、删除或重放用户记忆、信件、队列或 ACK。Three-Mod 的独立仓库、已安装 Mod 和 CK3 bridge 快照不参与本次迁移。
 
 结果与限制见 [本轮验证](V9_1_VERIFICATION_REPORT.md)，后续重构的逐阶段归属见 [架构移交](V9_1_ARCHITECTURE_HANDOFF.md)。
+
+## V9.2 当前部署合同
+
+以上 V9.1 部署恢复描述为历史记录。V9.2 继续使用相同构建、校验、部署命令，但代码备份与持久 receipt 位于仓库忽略目录 `.build/runtime-deploy-state/`。部署先保存受校验的差异备份及 `IN_PROGRESS` receipt，再逐项替换资源；完成后复验并记录 `COMPLETED`。App 必须关闭。
+
+中断部署后，`verify-runtime-build.js --deployed` 拒绝不完整状态。重新运行 `deploy-runtime-build.js` 会先完整预验证 receipt、备份哈希和所有当前目标，恢复上次一致版本，再部署新构建。恢复执行每项替换前再次检查目标哈希。未知目标内容、缺失或损坏备份会保留 receipt 并阻止写入；不能删除 receipt 强行继续。首次无 receipt 的旧安装仅允许已知一致内容或严格 UTF-8 换行差异初始化。用户记忆、信件、ACK 和队列均不属于此部署事务。

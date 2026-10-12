@@ -17,6 +17,7 @@ const { registerProviderImplementations } = require("./providers");
 const { ProviderRegistry, TokenCounter, LLMManager } = require("./provider-service");
 const { MEMORY_ENGINE_VERSION } = require("./version");
 const { registerIpcHandlers } = require("./ipc/register-ipc");
+const { createApplicationServices } = require("./application/service-ports");
 const { WorldlineService } = require("./worldline/worldline-service");
 const { createPaths } = require("./config/paths");
 const { getHistoricalReferenceByYear } = require("./game-data/legacy-historical-reference");
@@ -1002,6 +1003,16 @@ const exportPromptsZip = (destination, settings, presets) => {
     }
   });
 };
+const applicationServices = createApplicationServices({
+  conversation: conversationManager,
+  presence: conversationManager,
+  memory: memoryEngine,
+  worldline: worldlineService,
+  action: ActionEngine,
+  letter: letterManager,
+  persistence: memoryEngine.memory4.repository
+});
+Conversation.configure({ applicationServices });
 const createWindow = () => {
   return createChatWindow({
     electron,
@@ -1012,6 +1023,7 @@ const createWindow = () => {
 };
 const setupIpcHandlers = () => {
   registerIpcHandlers({
+    applicationServices,
     electron,
     settingsRepository,
     promptConfigManager,
@@ -1120,7 +1132,7 @@ electron.app.on("ready", async () => {
       console.log("Creating new chat window");
       chatWindow = createWindow();
     }
-    traceMainOperation("ck3.gameLoad", () => conversationManager.createConversation(), "CK3_LOG");
+    traceMainOperation("ck3.gameLoad", () => applicationServices.conversation.createConversation(), "CK3_LOG");
     chatWindow.show();
     chatWindow.focus();
     chatWindow.webContents.send("chat-reset");
@@ -1131,7 +1143,7 @@ electron.app.on("ready", async () => {
   clipboardListener.on("VOTC:LETTER", async () => {
     console.log("VOTC:LETTER detected - generating reply");
     try {
-      await letterManager.processLatestLetter();
+      await applicationServices.letter.processLatestLetter();
     } catch (error) {
       console.error("Failed to process letter:", error);
     }

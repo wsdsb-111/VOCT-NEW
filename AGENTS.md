@@ -2,7 +2,7 @@
 
 ## 项目定位与结构
 
-本仓库是面向 Crusader Kings III 的 Windows 打包版 VOTC（Voices of the Court）Electron 应用。当前开发主线为 V9.1，按旧总路线仅实施源码与构建，继承 V8.15.2 冻结行为；V9.0 对照提交为 c819c85，证据见 docs/current/v9/V9_1_VERIFICATION_REPORT.md。用户此前跨 Provider、缓存、长时间运行、信件、日期与多人披露验收保留；新启动卡顿、V9远端CI和实机采样单独记录。代码回归与隔离 Electron 冒烟不等于真实 CK3、Provider 和性能 Gate，不能宣称 Full Freeze。
+本仓库是面向 Crusader Kings III 的 Windows 打包版 VOTC Electron 应用。当前主线 V9.2／App 9.2.0，按旧总路线实施 Application Boundary & JSON Repository；V9.1 f9c088f 的远端 CI 和用户功能确认已补记，证据见 docs/current/v9/V9_2_VERIFICATION_REPORT.md。既有用户验收保留；新 CK3、Provider、性能、CI 与 Soak 结果独立记录，不能宣称 Full Freeze。
 
 - resources/app/out/main/main.js 是 Electron 主进程组合根；主进程实现已按职责拆分到 actions/、conversation/、memory-system/、summaries/、worldline/、game-data/、historical-system/、letters/、providers/、ipc/、analytics/、runtime/、config/ 等目录，action-system/ 保留为历史目录结构。
 - src/app/ 是可编辑 Runtime 源；build/runtime-inputs.json 显式映射 Main/Preload/Renderer 与默认数据。先编辑源、构建并部署，再核验 resources/app 生成资源；不要单独编辑 out/。源码和构建边界遵循 src/AGENTS.md，详情见 docs/current/v9/V9_1_SOURCE_BUILD.md。
@@ -11,7 +11,7 @@
 - resources/app/default_userdata/ 保存默认 Prompt、本地化和标准 Action；它不是用户运行时数据目录。
 - scripts/ 保存迁移工具、专项回归和发布门禁；scripts/test-manifest.js 是测试清单的唯一编排入口。
 - docs/README.md 是文档入口，docs/V8阶段开发记录.md 是 V8 连续实施记录，docs/README_摘要系统.md 是摘要/Memory 合同；根目录 CHANGELOG.md 只维护版本索引和用户可见摘要。
-- VOTC.exe 是复用的打包壳入口，未重写 Windows 文件属性版本。当前项目版本为 V9.1，核心版本为 `9.1`，resources/app/package.json 的 Electron 包版本为 `9.1.0`，VOTC Workshop Mod 为 `2.0.5`；前端显示 `V9.1 · Mod v2.0.5`，App 包版本在提示中显示。Memory Engine 保持 4.0，协议 3.0、摘要存储 2.5 和 Official Action 2.0.3 不随项目版本升级；独立 Three-Mod 兼容工程仍为 1.0.6。
+- VOTC.exe 是复用打包壳，Windows 文件属性版本未重写。项目／核心 V9.2／9.2，App 包 9.2.0，前端 `V9.2 · Mod v2.0.5`；Workshop 2.0.5、Memory 4.0／协议 3.0／存储 2.5／Official Action 2.0.3、Three-Mod 1.0.6 保留。
 
 ## 当前稳定合同
 
@@ -86,3 +86,9 @@ test-release.js 通过 test-manifest.js 汇总直接和嵌套检查；新增 tes
 ### Delegation discipline
 - Spawn subagents only when the work is genuinely parallelizable or delegation materially improves speed or context management.
 - Keep delegated tasks narrow and concrete; have child agents return concise evidence, paths, symbols, and conclusions.
+
+## V9.2 施工约束
+
+用户授权的改名目录合并只按数字 Owner ID 归并、按 counterpart ID 定位对话文件；保持不同 Campaign、Legacy binding ID、手改和 Forget。先逐字节备份至 MemoryStore baseDir/renamed-summary-folders（不参与召回），共享 sidecar 冲突时保留原目录并阻止合并。目录创建/移除继续使用 version 1 summary mutation journal 恢复。不得用名字合并不同 ID。
+
+按用户明确要求在 main 开发；未经新的用户指示不创建分支或 worktree。七域 applicationServices 由 main.js 注入，绑定现有 owner 的语义方法；ScopedJsonRepository 委托现有 Memory4Store，不拥有第二份 JSON。候选帧绑定 Campaign×Owner、revision/indexHash，输出前再验证正文及当前 Forget。恢复和只读审计不能重放未知 Action／Letter 效果；维护部署回执只在 .build，不扫描 APPDATA。

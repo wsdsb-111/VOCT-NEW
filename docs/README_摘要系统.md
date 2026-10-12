@@ -1,6 +1,12 @@
 # 对话摘要与人物记忆：Memory Engine 4.0（3.0 协议、2.5 存储兼容）
 
-当前项目为 V9.1，App 包 9.1.0，VOTC Workshop Mod 2.0.5；本次仅建立源码与构建，人物记忆仍为 Memory Engine 4.0。`engineVersion: 3.0`、摘要 2.5／schemaVersion 2、目录、召回顺序、缓存键与迁移边界保持。详见[V9.1 验证](current/v9/V9_1_VERIFICATION_REPORT.md)；下方保留各阶段的原始版本与验收快照。
+当前项目 V9.2、App 9.2.0、Workshop 2.0.5、Memory Engine 4.0。ScopedJsonRepository 委托既有 Memory4Store；候选与授权正文分离，保留所有索引轴、范围日期、当前 Forget 与来源校验。协议 3.0、存储 2.5／schema 2、目录、召回顺序和缓存合同兼容。详见[V9.2 数据权威](current/v9/V9_2_JSON_AUTHORITY_AND_RECOVERY.md)；下方历史验收快照保留。
+
+## V9.2 改名目录合并（2026-10-11）
+
+打开摘要列表或保存／读取人物对话时，系统按数字 ID 检测并合并多个改名目录；唯一目录继续复用，不因改名另建目录。合并目标采用当前可确认的姓名；没有当前人物资料时，以最近有效日期的姓名确定目录。同 ID 对话文件归并后按游戏日期从新到旧排列，年度条目与人生阶段合并时按时间先后排序。不同 ID 的同名人物、不同 Campaign 的记录保持隔离，未绑定 Legacy 记录保留原绑定 ID。长期正文、官方追忆、手动披露、Forget 与 tombstone 均保留；共享 Memory4 sidecar 的正文或手动版本冲突时阻止自动合并，不挑选一份覆盖另一份。
+
+迁移前原目录和 canonical sidecar 的原始字节备份到 MemoryStore `baseDir/renamed-summary-folders`，不参与召回；计划到备份之间源数据改变时拒绝迁移。沿用 version 1 journal 记录文件与目录变更，中断后恢复原字节及目录。派生视图合并后标为 dirty，经过原来源校验／重建才能继续召回。正常唯一目录走轻量路径，对话文件按 ID 缓存定位。协议 3.0、存储 2.5、召回与缓存块合同保持。
 
 ## V8.15.2 密集年度压缩与失败状态（2026-10-09）
 

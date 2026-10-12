@@ -362,6 +362,10 @@
       "target": "out/main/app/focus-monitor.js"
     },
     {
+      "source": "main/application/service-ports.js",
+      "target": "out/main/application/service-ports.js"
+    },
+    {
       "source": "main/chunks/icon-BljXrxwL.ico",
       "target": "out/main/chunks/icon-BljXrxwL.ico"
     },
@@ -644,6 +648,18 @@
     {
       "source": "main/memory-system/rolling-summary-manager.js",
       "target": "out/main/memory-system/rolling-summary-manager.js"
+    },
+    {
+      "source": "main/memory-system/scoped-json-repository.js",
+      "target": "out/main/memory-system/scoped-json-repository.js"
+    },
+    {
+      "source": "main/memory-system/scoped-path.js",
+      "target": "out/main/memory-system/scoped-path.js"
+    },
+    {
+      "source": "main/memory-system/summary-folder-merge.js",
+      "target": "out/main/memory-system/summary-folder-merge.js"
     },
     {
       "source": "main/memory-system/summary-budget-planner.js",
@@ -1034,6 +1050,10 @@
       "target": "out/main/worldline/worldline-service.js"
     },
     {
+      "source": "package.json",
+      "target": "package.json"
+    },
+    {
       "source": "preload/preload.js",
       "target": "out/preload/preload.js"
     },
@@ -1124,10 +1144,6 @@
     {
       "source": "renderer/worldline-player-presentation.js",
       "target": "out/renderer/worldline-player-presentation.js"
-    },
-    {
-      "source": "package.json",
-      "target": "package.json"
     }
   ]
 }

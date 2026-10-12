@@ -6,6 +6,7 @@ const { assertScope, hash, ids, strings, legacySourceHash, directCounterpartIds,
 const { projectVisibleTranscript } = require("./memory4-visibility");
 const { getFactCandidates, disclosureFactId, scanVisibleDisclosures, scanLetterDisclosures } = require("./memory4-disclosure");
 const { Memory4Store } = require("./memory4-store");
+const { ScopedJsonRepository } = require("./scoped-json-repository");
 const { projectionLineageFromSummary, createProjectionLineage } = require("./memory4-forget");
 const { Memory4ProfileService } = require("./memory4-profile");
 const { Memory4RelationshipReadback } = require("./memory4-relationship-readback");
@@ -55,6 +56,7 @@ function safeMessageIds(values) {
 class Memory4Coordinator {
   constructor(store, { trace = null } = {}) {
     this.store = new Memory4Store(store);
+    this.repository = new ScopedJsonRepository({ memory4Store: this.store, memoryStore: store });
     this.profiles = new Memory4ProfileService(this.store);
     this.relationshipReadback = new Memory4RelationshipReadback();
     this.baseStore = store;
@@ -985,7 +987,7 @@ class Memory4Coordinator {
         if (fs.existsSync(file)) this.baseStore.removeSummaryMutationFile(file);
         return { ownerId: snapshot.ownerId, status: "FORGOTTEN" };
       }
-      const persisted = this.store.commitOwner(snapshot, result);
+      const persisted = this.repository.commitOwner(snapshot, result);
       this.recordDisclosures(snapshot, { campaignToken: snapshot.campaignToken, date: snapshot.date,
         characters: new Map((snapshot.disclosureCharacters || []).map(character => [character.id, character])) });
       if (snapshot.legacyRecompression === true) {

@@ -38,6 +38,7 @@ let uuid = null;
 let path = null;
 let memoryEngine = null;
 let worldlineService = null;
+let applicationServices = null;
 let performanceTrace = null;
 
 function startTraceSpan(trace, step, fields) {
@@ -100,6 +101,7 @@ const TEMPORARY_ABSENCE_MODES = Object.freeze({
 
 class Conversation {
   static configure(dependencies = {}) {
+    applicationServices = dependencies.applicationServices || null;
     ActionEngine = dependencies.ActionEngine || ActionEngine;
     settingsRepository = dependencies.settingsRepository || settingsRepository;
     usageAnalytics = dependencies.usageAnalytics || usageAnalytics;
@@ -806,7 +808,7 @@ class Conversation {
       recentCharacterId: memoryState.mentionState.recentThirdPersonCharacterId
     });
     const queryIdentityUnresolved = memoryEngine.mentionTracker.lastScanUnresolved === true;
-    const retrieved = memoryEngine.retrieveForResponder({
+    const retrieved = (applicationServices?.memory || memoryEngine).retrieveForResponder({
       characterId: npc.id,
       query,
       mentionedEntityIds: memory3Settings.v812MemoryEngine3Enabled !== false ? currentTurnMentionedCharacterIds : mentionedCharacterIds,

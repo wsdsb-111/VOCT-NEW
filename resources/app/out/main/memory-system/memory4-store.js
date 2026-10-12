@@ -8,6 +8,7 @@ const { getFactCandidates, disclosureFactId } = require("./memory4-disclosure");
 const { createProjectionLineage, projectionLineageFromSummary, matchesProjectionLineage, disclosureProofForgetMatch, entryForgotten, snapshotForgottenFragments, segmentAliases } = require("./memory4-forget");
 const { normalizeGameDate } = require("../worldline/character-temporal-facts");
 const { resolveTraitVisibility } = require("../prompts/trait-visibility-policy");
+const { assertNoLinks } = require("./scoped-path");
 
 const INDEX_KEYS = ["byCampaign", "byOwner", "byEntity", "byTopic", "byEventYear", "byEventDate", "byConversationYear", "byAcquiredYear", "byCounterpart", "byMemoryType", "byState", "bySourceFinalization"];
 const DISCLOSURE_STATUSES = new Set(["AUTO_DISCLOSED", "MANUAL_KNOWN", "MANUAL_HIDDEN"]);
@@ -172,24 +173,23 @@ class Memory4Store {
     assertScope(scope);
     if (!this.store.summaryFoldersDir) throw new Error("memory4_summary_root_missing");
     const root = path.resolve(this.store.summaryFoldersDir);
+    assertNoLinks(root, "memory4_symlink_path");
     const candidates = fs.existsSync(root) ? fs.readdirSync(root, { withFileTypes: true })
       .filter(entry => entry.isDirectory() && !entry.isSymbolicLink() && entry.name.startsWith(`${scope.ownerId}_`)) : [];
     const canonical = path.join(root, ".memory4", String(scope.ownerId), hash(scope.campaignToken));
     const existing = [canonical, ...candidates.map(entry => path.join(root, entry.name, "memory4", hash(scope.campaignToken)))]
       .filter(directory => fs.existsSync(directory));
     if (existing.length > 1) throw new Error("memory4_owner_sidecar_not_unique");
+    if (candidates.length > 1 && !existing.length) throw new Error("memory4_owner_folder_not_unique");
     if (!candidates.length && !existing.length) throw new Error("memory4_owner_folder_not_unique");
     const directory = existing[0] || canonical;
     // Do not follow a sidecar junction outside the summary tree.
-    let checked = directory;
-    while (checked !== root) {
-      if (fs.existsSync(checked) && fs.lstatSync(checked).isSymbolicLink()) throw new Error("memory4_symlink_path");
-      checked = path.dirname(checked);
-    }
+    assertNoLinks(directory, "memory4_symlink_path");
     return directory;
   }
 
   read(file, fallback) {
+    assertNoLinks(file, "memory4_symlink_path");
     if (!fs.existsSync(file)) return fallback;
     try { return JSON.parse(fs.readFileSync(file, "utf8")); }
     catch { throw new Error("memory4_corrupt_json"); }
@@ -1381,9 +1381,8 @@ class Memory4Store {
     return { ...next, effectiveKnown: status === "MANUAL_KNOWN", current: true };
   }
 
-  query(scope, filters = {}) {
+  queryCandidates(scope, filters = {}) {
     const index = this.loadIndex(scope);
-    const forgotten = this.listForgottenProjections(scope);
     let selected = new Set(index.byOwner[String(scope.ownerId)] || []);
     for (const [axis, value] of Object.entries(filters)) {
       if (!INDEX_KEYS.includes(axis)) throw new Error("memory4_invalid_index_axis");
@@ -1399,18 +1398,49 @@ class Memory4Store {
       }
       selected = new Set([...selected].filter(id => allowed.has(id)));
     }
-    const directory = this.directory(scope);
-    return [...selected].map(id => {
+    const entryIds = [...selected];
+    for (const id of entryIds) {
       if (!/^m4_[a-f0-9]{64}$/.test(id)) throw new Error("memory4_invalid_entry_id");
-      const entry = this.read(this.entryPath(directory, id), null);
-      if (!entry || entry.entryId !== id || entry.ownerId !== scope.ownerId || entry.campaignToken !== scope.campaignToken
-        || entry.deleted || hash(entry) !== index.entries[id]?.bodyHash) throw new Error("memory4_index_body_mismatch");
-      if (entryForgotten(scope, entry, forgotten)) return null;
-      return entry;
-    }).filter(Boolean);
+      if (!index.entries[id] || index.entries[id].deleted) throw new Error("memory4_index_body_mismatch");
+    }
+    return Object.freeze({ scope: Object.freeze({ campaignToken: scope.campaignToken, ownerId: scope.ownerId }),
+      revision: index.revision, indexHash: hash(index), entryIds: Object.freeze(entryIds) });
+  }
+
+  validateCandidates(scope, candidates) {
+    assertScope(scope);
+    if (!candidates || candidates.scope?.campaignToken !== scope.campaignToken || candidates.scope?.ownerId !== scope.ownerId) {
+      throw new Error("memory4_candidate_scope_mismatch");
+    }
+    if (!Array.isArray(candidates.entryIds) || new Set(candidates.entryIds).size !== candidates.entryIds.length
+      || candidates.entryIds.some(id => !/^m4_[a-f0-9]{64}$/.test(id))) throw new Error("memory4_invalid_entry_id");
+    const index = this.loadIndex(scope);
+    if (index.revision !== candidates.revision || hash(index) !== candidates.indexHash) throw new Error("memory4_candidate_stale");
+    if (candidates.entryIds.some(id => !index.entries[id] || index.entries[id].deleted)) throw new Error("memory4_index_body_mismatch");
+    return index;
+  }
+
+  readCandidateEntries(scope, candidates, entryIds = candidates?.entryIds) {
+    const index = this.validateCandidates(scope, candidates);
+    if (!Array.isArray(entryIds) || new Set(entryIds).size !== entryIds.length
+      || entryIds.some(id => !candidates.entryIds.includes(id))) throw new Error("memory4_candidate_not_selected");
+    return entryIds.map(id => this.readEntry(scope, id, index));
+  }
+
+  query(scope, filters = {}) {
+    const candidates = this.queryCandidates(scope, filters);
+    const index = this.validateCandidates(scope, candidates);
+    return candidates.entryIds.flatMap(id => {
+      try { return [this.readEntry(scope, id, index)]; }
+      catch (error) {
+        if (error.message === "memory4_projection_forgotten") return [];
+        throw error;
+      }
+    });
   }
 
   readEntry(scope, id, index = this.loadIndex(scope)) {
+    assertScope(scope);
     const row = index.entries[id];
     const entry = this.read(this.entryPath(this.directory(scope), id), null);
     if (!row || !entry || entry.entryId !== id || entry.ownerId !== scope.ownerId || entry.campaignToken !== scope.campaignToken

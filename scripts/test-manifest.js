@@ -77,6 +77,11 @@ const archivedChecks = [
 ];
 
 const releaseChecks = [
+  { group: "v9.2-build-guard", script: "test-v9.2-build-guard.js" },
+  { group: "v9.2-service-ports", script: "test-v9.2-service-ports.js" },
+  { group: "v9.2-scoped-json", script: "test-v9.2-scoped-json.js" },
+  { group: "v9.2-independent-qa", script: "test-v9.2-independent-qa.js" },
+  { group: "v9.2-renamed-summary-folders", script: "test-v9.2-renamed-summary-folders.js" },
   { group: "v9.1-source-build", script: "test-v9.1-source-build.js" },
   { group: "v9.1-runtime-dependencies", script: "test-v9.1-runtime-dependencies.js" },
   { group: "v9.1-independent-build-qa", script: "test-v9.1-independent-qa.js" },

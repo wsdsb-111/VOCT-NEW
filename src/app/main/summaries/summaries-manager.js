@@ -2,6 +2,7 @@
 
 const { validateGenerationOutcome } = require("../providers/generation-outcome");
 const { Memory4OrphanAudit } = require("../memory-system/memory4-orphan-audit");
+const { getCharacterPersonalName } = require("../memory-system/character-identity");
 
 function createSummariesManager({ fs, path, summariesDir, memoryEngine, memorySystem, getCurrentConversation = () => null,
   getMemory4ReadConversation = null, requestSummary, requestDurable, getSummaryCapabilities, getSummaryOutputLimit = () => 4096, buildSummaryPrompt, persistRecoveredSummary }) {
@@ -402,11 +403,18 @@ function createSummariesManager({ fs, path, summariesDir, memoryEngine, memorySy
 
     static async getMemory4Entry(request = {}) {
       const context = await this.getMemory4ReadContext(request);
-      const entry = memoryEngine.memory4.store.readEntry({ campaignToken: context.campaignToken, ownerId: context.ownerId }, request.entryId);
+      const entry = memoryEngine.memory4.repository.readEntry({ campaignToken: context.campaignToken, ownerId: context.ownerId }, request.entryId);
       if (entry.deleted || !entry.evidence?.knownBy?.includes(context.ownerId)) throw new Error("memory4_entry_unavailable");
       this.assertCurrentMemory4ReadContext(context);
       return { success: true, entry, contextId: context.contextId, campaignToken: context.campaignToken,
         readOnlyArchive: context.readOnlyArchive, readOnlyReason: context.readOnlyReason };
+    }
+
+    static async auditMemory4Integrity(request = {}, persistence = memoryEngine.memory4.repository) {
+      const context = await this.getMemory4ReadContext(request);
+      const result = persistence.audit({ campaignToken: context.campaignToken, ownerId: context.ownerId });
+      this.assertCurrentMemory4ReadContext(context);
+      return result;
     }
 
     static async auditMemory4Orphans(request = {}) {
@@ -529,6 +537,26 @@ function createSummariesManager({ fs, path, summariesDir, memoryEngine, memorySy
       fs$1.writeFileSync(tempPath, JSON.stringify(summaries, null, "\t"), "utf8");
       fs$1.renameSync(tempPath, filePath);
     }
+
+    static consolidateRenamedFolders(ownerIds = null, continueOnError = false) {
+      const store = memoryEngine?.store;
+      if (typeof store?.mergeRenamedSummaryFolders !== "function" || !fs$1.existsSync(VOTC_SUMMARIES_DIR)) return;
+      const owners = ownerIds || [...new Set(fs$1.readdirSync(VOTC_SUMMARIES_DIR, { withFileTypes: true })
+        .filter(entry => entry.isDirectory() && !entry.isSymbolicLink() && /^\d+_/.test(entry.name))
+        .map(entry => Number(entry.name.split("_")[0])))];
+      const gameData = getCurrentMemory4ReadConversation()?.gameData;
+      for (const ownerId of owners) {
+        if (!Number.isSafeInteger(Number(ownerId)) || Number(ownerId) <= 0) continue;
+        const character = gameData?.characters?.get(Number(ownerId));
+        const resolvedName = character ? getCharacterPersonalName(character, character.shortName) : null;
+        const name = resolvedName === "unknown" ? null : resolvedName;
+        try { store.mergeRenamedSummaryFolders(Number(ownerId), name); }
+        catch (error) {
+          if (!continueOnError) throw error;
+          console.warn(`[Summary] 改名目录合并被阻止 (${Number(ownerId)}): ${error.message}`);
+        }
+      }
+    }
     
     /**
      * List all summaries across all character folders with metadata
@@ -540,6 +568,7 @@ function createSummariesManager({ fs, path, summariesDir, memoryEngine, memorySy
         if (!fs$1.existsSync(VOTC_SUMMARIES_DIR)) {
           return results;
         }
+        this.consolidateRenamedFolders(null, true);
         
         // Read all entries in the summaries directory
         const entries = fs$1.readdirSync(VOTC_SUMMARIES_DIR, { withFileTypes: true });
@@ -602,6 +631,7 @@ function createSummariesManager({ fs, path, summariesDir, memoryEngine, memorySy
      * Returns an object with both character perspectives' file paths
      */
     static findSummaryFilePath(playerId, characterId, playerName = null, characterName = null) {
+      this.consolidateRenamedFolders([Number(playerId), Number(characterId)]);
       const result = {
         playerPerspectivePath: null,
         characterPerspectivePath: null
@@ -679,7 +709,11 @@ function createSummariesManager({ fs, path, summariesDir, memoryEngine, memorySy
     static async getSummariesForCharacter(playerId, characterId) {
       // Try new format first: look for character folders
       // The playerId could be a character name (folder name) or an ID
-      const characterFolderPath = path.join(VOTC_SUMMARIES_DIR, playerId);
+      const ownerId = Number(String(playerId).match(/^(\d+)_/)?.[1]);
+      const merged = Number.isSafeInteger(ownerId) && ownerId > 0
+        && typeof memoryEngine?.store?.mergeRenamedSummaryFolders === "function"
+        ? memoryEngine.store.mergeRenamedSummaryFolders(ownerId) : null;
+      const characterFolderPath = merged?.folderPath || path.join(VOTC_SUMMARIES_DIR, playerId);
       
       if (fs$1.existsSync(characterFolderPath) && fs$1.statSync(characterFolderPath).isDirectory()) {
         // New format: look for conversation files in the character folder

@@ -2,6 +2,7 @@
 
 // Optional actual Electron smoke in a disposable profile; no CK3 or Provider fixture.
 const assert = require("assert");
+const crypto = require("crypto");
 const fs = require("fs");
 const os = require("os");
 const path = require("path");
@@ -85,8 +86,33 @@ async function launch(enabled, evidenceRoot) {
     assert.equal((await renderer.evaluate("performanceDiagnosticsAPI.getState()")).enabled, enabled);
     await delay(1500);
     const version = await renderer.evaluate("(async()=>({app:await window.electronAPI.getAppVersion(),title:document.title,footer:document.querySelector('.app-version')?.textContent,tooltip:document.querySelector('.app-version')?.title}))()");
-    assert.deepEqual(version, { app: "9.1.0", title: "VOTC V9.1", footer: "V9.1 · Mod v2.0.5", tooltip: "VOTC App 9.1.0" });
+    assert.deepEqual(version, { app: "9.2.0", title: "VOTC V9.2", footer: "V9.2 · Mod v2.0.5", tooltip: "VOTC App 9.2.0" });
     console.log(`Packaged version: ${JSON.stringify(version)}`);
+    const loadedMainHash = await main.evaluate("process.mainModule.require('crypto').createHash('sha256').update(process.mainModule.require('fs').readFileSync(process.mainModule.filename)).digest('hex')");
+    const expectedMainHash = crypto.createHash("sha256").update(fs.readFileSync(path.resolve(__dirname, "../resources/app/out/main/main.js"))).digest("hex");
+    assert.equal(loadedMainHash, expectedMainHash, "the launched Electron Main must match the deployed artifact");
+    console.log(`Packaged main artifact hash: ${loadedMainHash}`);
+    const boundary = await renderer.evaluate("(async()=>({presence:await window.conversationAPI.getConversationState(),audit:await window.conversationAPI.auditMemory4Integrity({ownerId:1})}))()");
+    assert.equal(boundary.audit.success, false, "isolated empty profile cannot authorize Memory4 audit");
+    assert.equal(typeof boundary.audit.error, "string");
+    assert(!JSON.stringify(boundary.audit).includes(profile));
+    console.log("Packaged V9.2 service boundary: PASS (Presence IPC and fail-closed Memory4 audit)");
+    const summaryRoot = await main.evaluate("process.mainModule.require('path').join(process.mainModule.require('electron').app.getPath('userData'),'votc_data','conversation_summaries')");
+    assert(path.resolve(summaryRoot).startsWith(path.resolve(profile) + path.sep), "rename smoke must stay within its disposable profile");
+    for (const [name, counterpart, date, content] of [["旧名", "旧对象", "1080.1.1", "较早对话"], ["新名", "新对象", "1088.1.1", "较晚对话"]]) {
+      const folder = path.join(summaryRoot, `9992_${name}`);
+      fs.mkdirSync(folder, { recursive: true });
+      fs.writeFileSync(path.join(folder, `与${counterpart}的对话.json`), JSON.stringify([{
+        date, content, campaignToken: "isolated-rename-fixture", playerId: 9992, playerName: name,
+        characterId: 9993, characterName: counterpart, finalizationId: `isolated-${date}`
+      }]), "utf8");
+    }
+    const renamed = (await renderer.evaluate("window.conversationAPI.listAllSummaries()")).filter(item => item.ownerId === 9992);
+    assert.equal(renamed.length, 1);
+    assert.equal(renamed[0].folderName, "9992_新名");
+    assert.deepEqual(renamed[0].summaries.map(row => row.content), ["较晚对话", "较早对话"]);
+    assert(!fs.existsSync(path.join(summaryRoot, "9992_旧名")));
+    console.log("Packaged renamed summary folders: PASS (real Renderer/Preload/IPC, one owner folder, date order)");
     if (!enabled) {
       const screenshot = await renderer.send("Page.captureScreenshot", { format: "png" });
       fs.writeFileSync(path.join(profile, "version-window.png"), Buffer.from(screenshot.data, "base64"));

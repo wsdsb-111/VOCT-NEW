@@ -41,3 +41,7 @@ V9.0 指定 SHA 的 [GitHub Actions](https://github.com/wsdsb-111/VOCT-NEW/actio
 本地 Source/Build 交付完成；V9.1 远端 CI 需用户上传后核验。后续按[架构移交](V9_1_ARCHITECTURE_HANDOFF.md)推进 V9.2；启动卡顿仍需现场诊断，不能用本版字节等价或合成长任务宣称已解决。
 
 操作与回退见[构建说明](V9_1_SOURCE_BUILD.md)。历史设计、冻结报告、V9.0 实施与版本证据没有回写或删除。
+
+## V9.2 开工补记（2026-10-11）
+
+本报告上述 CI_PENDING 是 V9.1 施工时快照，保留不回写。开工时实际 main HEAD 为 `f9c088ff384597fa9e07db248a6cc8c6be68113e`，GitHub [Release Regression 38117263132](https://github.com/wsdsb-111/VOCT-NEW/actions/runs/38117263132) 已核验同 SHA、completed/success。用户在 V9.2 施工原文中确认 V9.1 功能正常，记 USER_CONFIRMED（未逐项量化），不冒充新的 CK3／Provider／Soak 日志。V9.2 本地改动待用户上传后再核验新 SHA。

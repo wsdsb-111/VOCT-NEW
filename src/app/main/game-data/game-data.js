@@ -151,6 +151,11 @@ function createGameData({ fs, path, memorySystem, memoryEngine, summariesDir, ge
     getCharacterFolderPath(characterId, characterName) {
       const character = this.characters?.get(Number(characterId)) || { id: characterId, shortName: characterName };
       const folderName = memorySystem.getCharacterStorageDirectoryName(character, characterName);
+      if (typeof memoryEngine?.store?.mergeRenamedSummaryFolders === "function") {
+        const name = this.getCharacterPersonalName(characterId, characterName);
+        return memoryEngine.store.mergeRenamedSummaryFolders(Number(characterId),
+          name === "unknown" ? null : name).folderPath || path.join(VOTC_SUMMARIES_DIR, folderName);
+      }
       return path.join(VOTC_SUMMARIES_DIR, folderName);
     }
     
@@ -159,6 +164,10 @@ function createGameData({ fs, path, memorySystem, memoryEngine, summariesDir, ge
       const fromFolder = this.getCharacterFolderPath(fromCharId, fromCharName);
       const toName = this.sanitizeFileName(this.getCharacterPersonalName(toCharId, toCharName));
       const fileName = `与${toName}的对话.json`;
+      if (typeof memoryEngine?.store?.getSummaryConversationFile === "function") {
+        return memoryEngine.store.getSummaryConversationFile(Number(fromCharId), Number(toCharId), toName)
+          || path.join(fromFolder, fileName);
+      }
       return path.join(fromFolder, fileName);
     }
     
