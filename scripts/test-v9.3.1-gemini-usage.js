@@ -443,6 +443,25 @@ async function main() {
     }
   });
 
+  test("G19", "partial Gemini totals cannot be below any confirmed base component", () => {
+    for (const metadata of [
+      { promptTokenCount: 100, totalTokenCount: 50 },
+      { candidatesTokenCount: 20, totalTokenCount: 10 },
+      { thoughtsTokenCount: 30, totalTokenCount: 20 }
+    ]) {
+      const normalized = normalizeGemini({ usageMetadata: metadata });
+      assert.equal(normalized.native.totalTokens, metadata.totalTokenCount);
+      assert.equal(normalized.provenance.status, "INCONSISTENT");
+      assert.equal(normalized.provenance.accountingStatus, "INCONSISTENT");
+      assert.ok(normalized.provenance.inconsistentFields.includes("totalTokens"));
+    }
+    const validPartial = normalizeGemini({ usageMetadata: { promptTokenCount: 100, totalTokenCount: 150 } });
+    assert.equal(validPartial.provenance.status, "PARTIAL");
+    assert.equal(validPartial.provenance.accountingStatus, "UNKNOWN");
+    assert.equal(validPartial.native.outputTokens, null);
+    assert.equal(validPartial.native.reasoningTokens, null);
+  });
+
   test("G13", "non-Gemini strict total equality validation remains enabled", () => {
     const normalized = normalizeUsage({ prompt_tokens: 10, completion_tokens: 5, total_tokens: 99 }, { providerType: "openai-compatible" });
     assert.equal(normalized.native.totalTokens, 99);

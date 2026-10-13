@@ -162,7 +162,10 @@ const service = new LLMManager({
     }
     assert.deepStrictEqual(finalResponse.usage, usageOnlyChunk.usage, `${provider.providerId} must retain a final usage-only stream chunk`);
   }
-  assert.deepStrictEqual(new GeminiProvider().parseGeminiStreamChunk({ responseId: "gemini", usageMetadata: { promptTokenCount: 8, candidatesTokenCount: 3, totalTokenCount: 11 } }).usage, { prompt_tokens: 8, completion_tokens: 3, total_tokens: 11 });
+  assert.deepStrictEqual(new GeminiProvider().parseGeminiStreamChunk({ responseId: "gemini", usageMetadata: { promptTokenCount: 8, candidatesTokenCount: 3, totalTokenCount: 11 } }).usage, {
+    prompt_tokens: 8, completion_tokens: 3, total_tokens: 11,
+    usageMetadata: { promptTokenCount: 8, candidatesTokenCount: 3, totalTokenCount: 11 }
+  });
 
   const estimatedRecords = [];
   const estimateManager = new LLMManager({

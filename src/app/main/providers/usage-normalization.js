@@ -17,15 +17,13 @@ const GEMINI_METADATA_FIELDS = new Set([
 ]);
 
 function geminiAccountingStatus(input, output, reasoning, total) {
-  if (input.value == null || output.value == null || total.value == null
-    || input.source === "INVALID" || output.source === "INVALID" || total.source === "INVALID") return "UNKNOWN";
-  const minimumTotal = input.value + output.value;
-  if (total.value < minimumTotal) return "INCONSISTENT";
+  if (total.value == null || total.source === "INVALID") return "UNKNOWN";
+  const knownMinimum = [input, output, reasoning].reduce((sum, field) => field.value == null ? sum : sum + field.value, 0);
+  if (total.value < knownMinimum) return "INCONSISTENT";
+  if (input.value == null || output.value == null || input.source === "INVALID" || output.source === "INVALID") return "UNKNOWN";
   if (reasoning.source === "INVALID") return "UNKNOWN";
   if (reasoning.value == null) return "UNRECONCILED";
-  const reportedTotal = minimumTotal + reasoning.value;
-  if (total.value < reportedTotal) return "INCONSISTENT";
-  return total.value === reportedTotal ? "RECONCILED" : "UNRECONCILED";
+  return total.value === knownMinimum ? "RECONCILED" : "UNRECONCILED";
 }
 
 function readNumber(sources) {
@@ -88,6 +86,7 @@ function normalizeUsage(usage, options = {}) {
   const miss = field(["prompt_cache_miss_tokens", "cache_miss_tokens", "cache_creation_input_tokens"]);
   const reasoning = field(["reasoning_tokens", "thoughtsTokenCount", "reasoningTokenCount"], [nested(sources, "reasoning_tokens")], "thoughtsTokenCount");
   const toolUse = field(["toolUsePromptTokenCount"], [], "toolUsePromptTokenCount");
+  const accountingStatus = gemini && !votcEstimated ? geminiAccountingStatus(input, output, reasoning, total) : "UNKNOWN";
   const inconsistentFields = [];
 
   if (!votcEstimated) {
@@ -99,12 +98,8 @@ function normalizeUsage(usage, options = {}) {
     if (reasoning.source === "INVALID") inconsistentFields.push("reasoningTokens");
     if (gemini && toolUse.source === "INVALID") inconsistentFields.push("toolUsePromptTokens");
     if (input.value != null && cached.value != null && cached.value > input.value) inconsistentFields.push("cachedInputTokens");
-    if (input.value != null && output.value != null && total.value != null) {
-      const minimumTotal = input.value + output.value;
-      const knownTotal = minimumTotal + (reasoning.value ?? 0);
-      if (gemini ? total.value < (reasoning.value == null ? minimumTotal : knownTotal)
-        : total.value !== minimumTotal) inconsistentFields.push("totalTokens");
-    }
+    if (gemini ? accountingStatus === "INCONSISTENT"
+      : input.value != null && output.value != null && total.value != null && total.value !== input.value + output.value) inconsistentFields.push("totalTokens");
   }
 
   const derivedCacheMiss = !votcEstimated && miss.source === "NOT_REPORTED" && input.value != null && cached.value != null && cached.value <= input.value
@@ -163,7 +158,7 @@ function normalizeUsage(usage, options = {}) {
       inconsistentFields,
       ...(gemini ? {
         providerComponents: { toolUsePromptTokens: votcEstimated ? null : toolUse.value },
-        accountingStatus: votcEstimated ? "UNKNOWN" : geminiAccountingStatus(input, output, reasoning, total)
+        accountingStatus
       } : {}),
       ...(votcEstimated ? { estimatedSource: "votc_estimated" } : {})
     }
