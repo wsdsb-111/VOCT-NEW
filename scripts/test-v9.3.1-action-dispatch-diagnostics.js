@@ -3,6 +3,8 @@
 const assert = require("assert");
 const path = require("path");
 const { createActionEngine } = require(path.join(__dirname, "..", "src", "app", "main", "actions", "action-engine"));
+const { verifyActionConfirmation, settleActionResult } = require(path.join(__dirname, "..", "src", "app", "main", "actions", "action-confirmation"));
+const { createActionDiagnostic } = require(path.join(__dirname, "..", "src", "app", "main", "actions", "types"));
 
 const failures = [];
 
@@ -148,6 +150,18 @@ async function main() {
   expect("A06_sandbox_error_pending_ack", sandboxFailure.result.diagnostic.confirmationStatus, "PENDING_CONFIRMATION");
   expect("A06_sandbox_error_not_confirmed", sandboxFailure.result.lifecycle.confirmed, false);
   expect("A06_sandbox_error_no_replay", sandboxFailure.writes.length, 1);
+  const unconfirmed = verifyActionConfirmation({ confirmation: sandboxFailure.result.confirmation,
+    commandReadback: { acknowledged: true, commandId: "synthetic-accepted-before-sandbox-error" } });
+  const settled = settleActionResult(sandboxFailure.result, unconfirmed);
+  expect("A06_settled_still_unsuccessful", settled.success, false);
+  expect("A06_settled_still_unconfirmed", settled.lifecycle.confirmed, false);
+  expect("A06_settled_attempt_preserved", settled.diagnostic.dispatchAttempted, true);
+  expect("A06_settled_acceptance_preserved", settled.diagnostic.dispatchAccepted, true);
+
+  const legacyDiagnostic = createActionDiagnostic({ actionId: "synthetic" });
+  expect("A10_old_diagnostic_shape_has_no_new_flags", Object.hasOwn(legacyDiagnostic, "dispatchAttempted") || Object.hasOwn(legacyDiagnostic, "dispatchAccepted"), false);
+  const malformedDiagnostic = createActionDiagnostic({ dispatchAttempted: 1, dispatchAccepted: "true" });
+  expect("A10_non_boolean_flags_not_accepted", Object.hasOwn(malformedDiagnostic, "dispatchAttempted") || Object.hasOwn(malformedDiagnostic, "dispatchAccepted"), false);
 
   // If a sandbox invokes runGameEffect again and that later write fails, the
   // first accepted command remains authoritative evidence and is not replayed.
