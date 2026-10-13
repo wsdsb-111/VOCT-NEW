@@ -7,7 +7,8 @@
     "C1": "7e5b053edde8f5bc94ed6e24354c472081ba59fa",
     "C2": "c4a36ff60f098e650b1f9ed174695296f8ae597c",
     "C1Supplement": "097cf9d0793291c207bdccdbf10b410492675ea3",
-    "C2Supplement": "cef7ea74250dce6780e01964151727e58f5adf0c"
+    "C2Supplement": "cef7ea74250dce6780e01964151727e58f5adf0c",
+    "DocumentationAndQA": "cbf54f3a0705641b7bbc35c33b8f3e25705e4784"
   },
   "runtimeInputDigest": "69e4a579ca28cace8d467601fc3ad36873ff28f808824576bdb4eb6bac034565",
   "mappedFiles": 293,
@@ -151,7 +152,7 @@
     }
   },
   "release": {
-    "state": "RUNNING",
+    "state": "PASS",
     "groups": 435,
     "classifiedFiles": 507,
     "archivedChecks": 71,
@@ -164,7 +165,10 @@
       "groups": 435,
       "inputDigest": "c6fd2d1ee686ceb8b65ffc88a673c9f5983b72875289d5900dc45b8741601750",
       "logSHA256": "ef54beb32273ef4f2a715889718b66a825858be0b1656bd21137deb7a07f40c0"
-    }
+    },
+    "exitCode": 0,
+    "logSHA256": "0b2596a78fd52fa8c948df98f27bc2a3fcb6e4ec4c2fa5cc883ba6ba9f171781",
+    "finalInputDigest": "69e4a579ca28cace8d467601fc3ad36873ff28f808824576bdb4eb6bac034565"
   },
   "packagedSmoke": {
     "state": "PASS",
