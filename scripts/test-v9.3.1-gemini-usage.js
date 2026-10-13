@@ -82,6 +82,21 @@ function usageMetadata(override = {}) {
   };
 }
 
+function geminiSseResponse(events) {
+  const bytes = Buffer.from(events.map(event => `data: ${JSON.stringify(event)}\r\n\r\n`).join(""));
+  const splitAt = Math.floor(bytes.length / 2);
+  const chunks = [bytes.subarray(0, splitAt), bytes.subarray(splitAt)];
+  let index = 0;
+  const reader = {
+    async read() {
+      return index < chunks.length ? { done: false, value: chunks[index++] } : { done: true, value: void 0 };
+    },
+    async cancel() {},
+    releaseLock() {}
+  };
+  return { ok: true, body: { getReader: () => reader } };
+}
+
 function normalizeGemini(raw, options = {}) {
   return normalizeUsage(raw, { providerType: "gemini", ...options });
 }
@@ -128,7 +143,8 @@ test("G02", "explicit Gemini zero counts remain reported zero", () => {
   assert.equal(normalized.provenance.cacheStatus, "REPORTED_ZERO");
   assert.equal(normalized.provenance.fieldSources.reasoningTokens, "PROVIDER_REPORTED");
   assert.equal(normalized.provenance.fieldSources.cachedInputTokens, "PROVIDER_REPORTED");
-  assert.equal(normalized.provenance.accountingStatus, "RECONCILED");
+  assert.equal(normalized.provenance.accountingStatus, "RECONCILED",
+    "reported zero thoughts reconciles without adding separately reported tool use");
 });
 
 test("G03", "missing thoughts and cache stay unknown", () => {
@@ -141,7 +157,8 @@ test("G03", "missing thoughts and cache stay unknown", () => {
   assert.equal(normalized.provenance.fieldSources.cachedInputTokens, "NOT_REPORTED");
   assert.equal(normalized.provenance.providerComponents.toolUsePromptTokens, null);
   assert.equal(normalized.provenance.fieldSources.toolUsePromptTokens, "NOT_REPORTED");
-  assert.equal(normalized.provenance.accountingStatus, "RECONCILED");
+  assert.equal(normalized.provenance.accountingStatus, "UNRECONCILED",
+    "missing thoughts must not be silently treated as a reported zero");
 });
 
 test("G04", "unexplained Gemini total is preserved as unreconciled", () => {
@@ -264,6 +281,49 @@ async function runStream(chunks) {
 }
 
 async function main() {
+  await testAsync("G15", "real Gemini SSE usage-only partial and empty tails retain earlier reported fields", async () => {
+    const events = [
+      {
+        responseId: "synthetic-sse",
+        candidates: [{ content: { parts: [{ text: "synthetic answer" }] }, finishReason: "STOP" }],
+        usageMetadata: { promptTokenCount: 100, candidatesTokenCount: 20, totalTokenCount: 127 }
+      },
+      { responseId: "synthetic-sse", usageMetadata: {
+        candidatesTokenCount: 20, thoughtsTokenCount: 7, cachedContentTokenCount: 30,
+        toolUsePromptTokenCount: "sse-private-sentinel", futurePrivateField: "unknown-private-sentinel"
+      } },
+      { responseId: "synthetic-sse", usageMetadata: {} }
+    ];
+    const previousFetch = global.fetch;
+    global.fetch = async () => geminiSseResponse(events);
+    try {
+      const { chunks, final } = await collect(adapter.chatCompletion({ ...request, stream: true }, {
+        ...config, apiKey: "synthetic-only", baseUrl: "https://gemini.fixture.invalid/v1beta"
+      }));
+      assert.equal(chunks.length, 3);
+      assert.equal(chunks[0].finish_reason, "stop");
+      assert.equal(chunks[1].usage.prompt_tokens, 100, "partial usage tail must retain the known prompt counter");
+      assert.equal(chunks[1].usage.completion_tokens, 20, "partial usage tail must retain the known candidate counter");
+      assert.equal(chunks[1].usage.total_tokens, 127, "partial usage tail must retain the known total");
+      assert.deepStrictEqual(chunks[1].usage.usageMetadataInvalidFields, ["toolUsePromptTokenCount"]);
+      assert.equal(chunks[2].usage, undefined, "an empty usage metadata event remains empty on the wire-facing chunk");
+      assert.deepStrictEqual(final.usage.usageMetadata, {
+        promptTokenCount: 100, candidatesTokenCount: 20, totalTokenCount: 127,
+        cachedContentTokenCount: 30, thoughtsTokenCount: 7
+      });
+      assert.deepStrictEqual(normalizeGemini(final.usage).native, {
+        inputTokens: 100, outputTokens: 20, cachedInputTokens: 30,
+        cacheMissTokens: null, reasoningTokens: 7, totalTokens: 127
+      });
+      assert.deepStrictEqual(final.usage.usageMetadataInvalidFields, ["toolUsePromptTokenCount"]);
+      noSecrets(final.usage, "sse-private-sentinel", "unknown-private-sentinel");
+      assert.equal(final.finish_reason, "stop", "usage-only tails must not alter finish semantics");
+      assert.equal(final.content, "synthetic answer", "usage-only tails must not alter SSE content");
+    } finally {
+      global.fetch = previousFetch;
+    }
+  });
+
   await testAsync("G10", "partial stream keeps observed usage and never records completion", async () => {
     const partial = adapter.parseGeminiStreamChunk({
       candidates: [{ content: { parts: [{ text: "partial answer" }] } }],
@@ -361,6 +421,26 @@ async function main() {
     assert.deepStrictEqual(diagnostic.canonicalUsage.native, usageEntry.providerUsage.native);
     assert.deepStrictEqual(diagnostic.canonicalUsage.provenance, usageEntry.providerUsage.provenance);
     noSecrets(diagnostic, "diagnostic-private-sentinel");
+  });
+
+  test("G16", "valid Gemini candidates take priority over a legacy visible projection", () => {
+    const projected = normalizeProviderUsage({ usageMetadata: usageMetadata(), visible_completion_tokens: 5 });
+    assert.equal(projected.visible_completion_tokens, 20);
+  });
+
+  test("G17", "Gemini invalid marker cannot be hidden by a legacy numeric alias", () => {
+    const normalized = normalizeGemini({ usageMetadata: { candidatesTokenCount: 2, totalTokenCount: 200 },
+      prompt_tokens: 99, usageMetadataInvalidFields: ["promptTokenCount"] });
+    assert.equal(normalized.native.inputTokens, null);
+    assert.equal(normalized.provenance.fieldSources.inputTokens, "INVALID");
+    assert.equal(normalized.provenance.status, "INCONSISTENT");
+  });
+
+  test("G18", "an explicit non-Gemini provider keeps strict total checks with metadata present", () => {
+    for (const providerType of ["zhipu", "deepseek", "openrouter", "openai-compatible", "player2", "ollama"]) {
+      const normalized = normalizeUsage({ usageMetadata: usageMetadata() }, { providerType });
+      assert.equal(normalized.provenance.status, "INCONSISTENT", providerType);
+    }
   });
 
   test("G13", "non-Gemini strict total equality validation remains enabled", () => {

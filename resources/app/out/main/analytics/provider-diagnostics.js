@@ -1,7 +1,8 @@
 "use strict";
 
 const { resolveProviderPromptProfile, resolvePromptLayoutId } = require("../prompts/provider-prompt-adapter");
-const { normalizeProviderUsage } = require("../providers/usage-normalization");
+const { normalizeProviderUsage, normalizeUsage } = require("../providers/usage-normalization");
+const { projectProviderUsage } = require("./usage-analytics");
 const {
   buildRealRequestSnapshot,
   buildRealRequestDiff,
@@ -254,6 +255,7 @@ function createProviderDiagnostics({ fs, path, dataDir, settingsRepository, prov
         rawUsage,
         normalizedUsage,
         providerUsage,
+        ...(provider === "gemini" ? { canonicalUsage: projectProviderUsage(metadata.providerUsage || normalizeUsage(response?.usage || usage, { providerType: provider })) } : {}),
         requestBudget: metadata.requestBudget ? {
           estimatedInputTokens: metadata.requestBudget.estimatedInputTokens,
           reservedOutputTokens: metadata.requestBudget.reservedOutputTokens,

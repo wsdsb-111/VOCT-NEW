@@ -11,6 +11,23 @@ function hasOwn(object, key) {
   return !!object && Object.prototype.hasOwnProperty.call(object, key);
 }
 
+const GEMINI_METADATA_FIELDS = new Set([
+  "promptTokenCount", "candidatesTokenCount", "totalTokenCount",
+  "cachedContentTokenCount", "thoughtsTokenCount", "toolUsePromptTokenCount"
+]);
+
+function geminiAccountingStatus(input, output, reasoning, total) {
+  if (input.value == null || output.value == null || total.value == null
+    || input.source === "INVALID" || output.source === "INVALID" || total.source === "INVALID") return "UNKNOWN";
+  const minimumTotal = input.value + output.value;
+  if (total.value < minimumTotal) return "INCONSISTENT";
+  if (reasoning.source === "INVALID") return "UNKNOWN";
+  if (reasoning.value == null) return "UNRECONCILED";
+  const reportedTotal = minimumTotal + reasoning.value;
+  if (total.value < reportedTotal) return "INCONSISTENT";
+  return total.value === reportedTotal ? "RECONCILED" : "UNRECONCILED";
+}
+
 function readNumber(sources) {
   let present = false;
   for (const [object, key] of sources) {
@@ -37,7 +54,7 @@ function nested(sources, field) {
 
 function usageShape(usage, providerType, source) {
   const provider = String(providerType || "").toLowerCase();
-  if (provider === "gemini" || hasOwn(usage, "usageMetadata") || hasOwn(usage, "usage_metadata")) return "gemini_metadata";
+  if (provider === "gemini" || !provider && (hasOwn(usage, "usageMetadata") || hasOwn(usage, "usage_metadata") || hasOwn(usage, "usageMetadataInvalidFields"))) return "gemini_metadata";
   if (provider === "ollama" || ["prompt_eval_count", "eval_count", "promptEvalCount", "evalCount"].some(key => hasOwn(source, key))) return "ollama_native";
   if (provider === "zhipu" && (hasOwn(source, "prompt_tokens_details") || hasOwn(source, "completion_tokens_details"))) return "zhipu_nested";
   if (provider === "zhipu") return "zhipu_native";
@@ -51,17 +68,26 @@ function normalizeUsage(usage, options = {}) {
   const votcEstimated = source?.votc_estimated === true;
   const metadata = source?.usageMetadata || source?.usage_metadata || source;
   const sources = metadata === source ? [source] : [metadata, source];
-  const field = (keys, extras = []) => readNumber([
-    ...sources.flatMap(object => keys.map(key => [object, key])),
-    ...extras
-  ]);
+  const provider = String(options.providerType || "").toLowerCase();
+  const gemini = provider === "gemini" || !provider && (hasOwn(source, "usageMetadata") || hasOwn(source, "usage_metadata") || hasOwn(source, "usageMetadataInvalidFields"));
+  const invalidGeminiFields = new Set(Array.isArray(source?.usageMetadataInvalidFields)
+    ? source.usageMetadataInvalidFields.filter(key => GEMINI_METADATA_FIELDS.has(key))
+    : []);
+  const field = (keys, extras = [], geminiField = null) => {
+    if (gemini && geminiField && invalidGeminiFields.has(geminiField)) return { value: null, present: true, source: "INVALID" };
+    return readNumber([
+      ...sources.flatMap(object => keys.map(key => [object, key])),
+      ...extras
+    ]);
+  };
 
-  const input = field(["prompt_tokens", "input_tokens", "promptTokenCount", "inputTokenCount", "prompt_eval_count", "promptEvalCount"]);
-  const output = field(["completion_tokens", "output_tokens", "candidatesTokenCount", "candidates_token_count", "eval_count", "evalCount"]);
-  const total = field(["total_tokens", "totalTokenCount", "total_token_count"]);
-  const cached = field(["prompt_cache_hit_tokens", "cached_tokens", "cachedContentTokenCount", "cache_read_input_tokens"], [nested(sources, "cached_tokens")]);
+  const input = field(["prompt_tokens", "input_tokens", "promptTokenCount", "inputTokenCount", "prompt_eval_count", "promptEvalCount"], [], "promptTokenCount");
+  const output = field(["completion_tokens", "output_tokens", "candidatesTokenCount", "candidates_token_count", "eval_count", "evalCount"], [], "candidatesTokenCount");
+  const total = field(["total_tokens", "totalTokenCount", "total_token_count"], [], "totalTokenCount");
+  const cached = field(["prompt_cache_hit_tokens", "cached_tokens", "cachedContentTokenCount", "cache_read_input_tokens"], [nested(sources, "cached_tokens")], "cachedContentTokenCount");
   const miss = field(["prompt_cache_miss_tokens", "cache_miss_tokens", "cache_creation_input_tokens"]);
-  const reasoning = field(["reasoning_tokens", "thoughtsTokenCount", "reasoningTokenCount"], [nested(sources, "reasoning_tokens")]);
+  const reasoning = field(["reasoning_tokens", "thoughtsTokenCount", "reasoningTokenCount"], [nested(sources, "reasoning_tokens")], "thoughtsTokenCount");
+  const toolUse = field(["toolUsePromptTokenCount"], [], "toolUsePromptTokenCount");
   const inconsistentFields = [];
 
   if (!votcEstimated) {
@@ -71,8 +97,14 @@ function normalizeUsage(usage, options = {}) {
     if (cached.source === "INVALID") inconsistentFields.push("cachedInputTokens");
     if (miss.source === "INVALID") inconsistentFields.push("cacheMissTokens");
     if (reasoning.source === "INVALID") inconsistentFields.push("reasoningTokens");
+    if (gemini && toolUse.source === "INVALID") inconsistentFields.push("toolUsePromptTokens");
     if (input.value != null && cached.value != null && cached.value > input.value) inconsistentFields.push("cachedInputTokens");
-    if (input.value != null && output.value != null && total.value != null && total.value !== input.value + output.value) inconsistentFields.push("totalTokens");
+    if (input.value != null && output.value != null && total.value != null) {
+      const minimumTotal = input.value + output.value;
+      const knownTotal = minimumTotal + (reasoning.value ?? 0);
+      if (gemini ? total.value < (reasoning.value == null ? minimumTotal : knownTotal)
+        : total.value !== minimumTotal) inconsistentFields.push("totalTokens");
+    }
   }
 
   const derivedCacheMiss = !votcEstimated && miss.source === "NOT_REPORTED" && input.value != null && cached.value != null && cached.value <= input.value
@@ -82,7 +114,7 @@ function normalizeUsage(usage, options = {}) {
     ? "INCONSISTENT"
     : cached.value == null ? "NOT_REPORTED" : cached.value === 0 ? "REPORTED_ZERO" : "REPORTED_POSITIVE";
   const usageFields = [input, output, total, cached, miss, reasoning];
-  const hasReportedUsage = !votcEstimated && usageFields.some(item => item.value != null);
+  const hasReportedUsage = !votcEstimated && (usageFields.some(item => item.value != null) || gemini && toolUse.value != null);
   const terminalStatus = String(options.terminalStatus || "").toUpperCase();
   const noUsageStatus = ["ABORTED", "CANCELLED", "CANCELED", "FAILED", "ERROR", "PARTIAL", "UNKNOWN"].includes(terminalStatus) ? "UNKNOWN" : "NOT_REPORTED";
   const status = votcEstimated ? noUsageStatus : inconsistentFields.length
@@ -97,6 +129,7 @@ function normalizeUsage(usage, options = {}) {
     reasoningTokens: votcEstimated ? "NOT_REPORTED" : reasoning.source,
     totalTokens: votcEstimated ? "NOT_REPORTED" : total.source
   };
+  if (gemini) fieldSources.toolUsePromptTokens = votcEstimated ? "NOT_REPORTED" : toolUse.source;
   const estimatedInputTokens = votcEstimated ? input.value : usageNumber(options.estimatedInputTokens);
   const explicitEstimatedOutput = votcEstimated ? output.value : usageNumber(options.estimatedOutputTokens);
   const estimatedOutputTokens = explicitEstimatedOutput != null
@@ -128,6 +161,10 @@ function normalizeUsage(usage, options = {}) {
       fieldSources,
       derived: { cacheMissTokens: derivedCacheMiss },
       inconsistentFields,
+      ...(gemini ? {
+        providerComponents: { toolUsePromptTokens: votcEstimated ? null : toolUse.value },
+        accountingStatus: votcEstimated ? "UNKNOWN" : geminiAccountingStatus(input, output, reasoning, total)
+      } : {}),
       ...(votcEstimated ? { estimatedSource: "votc_estimated" } : {})
     }
   };
@@ -147,9 +184,10 @@ function normalizeProviderUsage(usage) {
   const flatMiss = reportedMiss ?? normalized.provenance.derived.cacheMissTokens;
   const completionReasoning = normalized.native.reasoningTokens;
   const explicitVisible = usageNumber(usage.visible_completion_tokens);
-  const visibleCompletion = explicitVisible ?? (normalized.native.outputTokens != null
-    ? Math.max(0, normalized.native.outputTokens - (completionReasoning || 0))
-    : null);
+  const isGemini = normalized.provenance.providerUsageShape === "gemini_metadata";
+  const visibleCompletion = isGemini && normalized.native.outputTokens != null ? normalized.native.outputTokens
+    : explicitVisible ?? (normalized.native.outputTokens != null
+      ? Math.max(0, normalized.native.outputTokens - (completionReasoning || 0)) : null);
   const result = {};
   if (inputPresent) result.prompt_tokens = normalized.native.inputTokens;
   if (outputPresent) result.completion_tokens = normalized.native.outputTokens;

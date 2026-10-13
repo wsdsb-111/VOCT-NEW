@@ -7,6 +7,30 @@ const DURABLE_SCOPE_HASH_FIELDS = ["ownerScopeHash", "campaignScopeHash", "endpo
 const DURABLE_HASH_PATTERN = /^[a-f0-9]{64}$/i;
 const DURABLE_ATTEMPT_ID_PATTERN = /^[a-f0-9]{8}-[a-f0-9]{4}-[1-8][a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}$/i;
 
+function projectProviderUsage(usage) {
+  if (!usage || typeof usage !== "object") return null;
+  const nativeFields = ["inputTokens", "outputTokens", "cachedInputTokens", "cacheMissTokens", "reasoningTokens", "totalTokens"];
+  const safeCount = value => Number.isSafeInteger(value) && value >= 0 ? value : null;
+  const provenance = usage.provenance || {};
+  return {
+    native: Object.fromEntries(nativeFields.map(key => [key, safeCount(usage.native?.[key])])),
+    estimated: Object.fromEntries(["inputTokens", "outputTokens"].map(key => [key, safeCount(usage.estimated?.[key])])),
+    provenance: {
+      status: ["REPORTED", "PARTIAL", "NOT_REPORTED", "UNKNOWN", "INCONSISTENT"].includes(provenance.status) ? provenance.status : "UNKNOWN",
+      cacheStatus: ["REPORTED_ZERO", "REPORTED_POSITIVE", "NOT_REPORTED", "INCONSISTENT"].includes(provenance.cacheStatus) ? provenance.cacheStatus : "NOT_REPORTED",
+      ...(provenance.providerUsageShape === "gemini_metadata" ? {
+        providerUsageShape: "gemini_metadata",
+        fieldSources: Object.fromEntries([...nativeFields, "toolUsePromptTokens"].map(key => [key,
+          ["PROVIDER_REPORTED", "NOT_REPORTED", "INVALID", "DERIVED"].includes(provenance.fieldSources?.[key]) ? provenance.fieldSources[key] : "NOT_REPORTED"])),
+        providerComponents: { toolUsePromptTokens: safeCount(provenance.providerComponents?.toolUsePromptTokens) },
+        accountingStatus: ["RECONCILED", "UNRECONCILED", "INCONSISTENT", "UNKNOWN"].includes(provenance.accountingStatus) ? provenance.accountingStatus : "UNKNOWN",
+        derived: { cacheMissTokens: safeCount(provenance.derived?.cacheMissTokens) },
+        inconsistentFields: Array.isArray(provenance.inconsistentFields) ? provenance.inconsistentFields.filter(key => [...nativeFields, "toolUsePromptTokens"].includes(key)) : []
+      } : {})
+    }
+  };
+}
+
 function projectDurableTrace(value) {
   if (!value || typeof value !== "object" || Array.isArray(value)) return null;
   const projected = {
@@ -105,16 +129,7 @@ function createUsageAnalytics({ fs, dataDir, analyticsFile, retention, createPro
         generationStatus: ["COMPLETE", "TRUNCATED", "FILTERED", "REFUSED", "TOOL_CALLS", "CANCELLED", "ERROR", "PARTIAL", "UNKNOWN"].includes(metadata?.generationStatus) ? metadata.generationStatus : null,
         providerFinish: ["STOP", "LENGTH", "FILTERED", "TOOL_CALLS", "REFUSAL", "CANCELLED", "ERROR", "UNKNOWN"].includes(metadata?.providerFinish) ? metadata.providerFinish : null,
         providerAttemptCount: Number.isSafeInteger(metadata?.providerAttemptCount) && metadata.providerAttemptCount >= 0 ? metadata.providerAttemptCount : null,
-        providerUsage: metadata?.providerUsage ? {
-          native: Object.fromEntries(["inputTokens", "outputTokens", "cachedInputTokens", "cacheMissTokens", "reasoningTokens", "totalTokens"].map(key => [key,
-            Number.isSafeInteger(metadata.providerUsage.native?.[key]) && metadata.providerUsage.native[key] >= 0 ? metadata.providerUsage.native[key] : null])),
-          estimated: Object.fromEntries(["inputTokens", "outputTokens"].map(key => [key,
-            Number.isSafeInteger(metadata.providerUsage.estimated?.[key]) && metadata.providerUsage.estimated[key] >= 0 ? metadata.providerUsage.estimated[key] : null])),
-          provenance: {
-            status: ["REPORTED", "PARTIAL", "NOT_REPORTED", "UNKNOWN", "INCONSISTENT"].includes(metadata.providerUsage.provenance?.status) ? metadata.providerUsage.provenance.status : "UNKNOWN",
-            cacheStatus: ["REPORTED_ZERO", "REPORTED_POSITIVE", "NOT_REPORTED", "INCONSISTENT"].includes(metadata.providerUsage.provenance?.cacheStatus) ? metadata.providerUsage.provenance.cacheStatus : "NOT_REPORTED"
-          }
-        } : null,
+        providerUsage: projectProviderUsage(metadata?.providerUsage),
         model: metadata?.model || "unknown",
         character: metadata?.character || null,
         characterId: Number.isFinite(Number(metadata?.characterId)) ? Number(metadata.characterId) : null,
@@ -696,4 +711,4 @@ function createUsageAnalytics({ fs, dataDir, analyticsFile, retention, createPro
   return UsageAnalytics;
 }
 
-module.exports = { createUsageAnalytics, projectDurableTrace, buildDurableComparisonKey };
+module.exports = { createUsageAnalytics, projectDurableTrace, buildDurableComparisonKey, projectProviderUsage };

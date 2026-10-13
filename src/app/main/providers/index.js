@@ -57,6 +57,65 @@ function nativeUsage(promptTokens, completionTokens) {
   return Object.keys(usage).length ? usage : void 0;
 }
 
+const GEMINI_USAGE_FIELDS = [
+  ["promptTokenCount", "prompt_tokens"],
+  ["candidatesTokenCount", "completion_tokens"],
+  ["totalTokenCount", "total_tokens"],
+  ["cachedContentTokenCount", null],
+  ["thoughtsTokenCount", null],
+  ["toolUsePromptTokenCount", null]
+];
+const GEMINI_USAGE_FIELD_NAMES = new Set(GEMINI_USAGE_FIELDS.map(([field]) => field));
+
+function projectGeminiUsage(metadata) {
+  if (!metadata || typeof metadata !== "object" || Array.isArray(metadata)) return void 0;
+  const usage = {};
+  const safeMetadata = {};
+  const invalidFields = [];
+  for (const [field, legacyField] of GEMINI_USAGE_FIELDS) {
+    if (!Object.prototype.hasOwnProperty.call(metadata, field)) continue;
+    const value = metadata[field];
+    if (value == null) continue;
+    if (!Number.isSafeInteger(value) || value < 0) {
+      invalidFields.push(field);
+      continue;
+    }
+    safeMetadata[field] = value;
+    if (legacyField) usage[legacyField] = value;
+  }
+  if (Object.keys(safeMetadata).length) usage.usageMetadata = safeMetadata;
+  if (invalidFields.length) usage.usageMetadataInvalidFields = invalidFields;
+  return Object.keys(usage).length ? usage : void 0;
+}
+
+function mergeGeminiUsage(previous, next) {
+  if (!next || typeof next !== "object") return previous;
+  const metadata = { ...(previous?.usageMetadata || {}) };
+  const invalidFields = new Set(Array.isArray(previous?.usageMetadataInvalidFields)
+    ? previous.usageMetadataInvalidFields.filter(field => GEMINI_USAGE_FIELD_NAMES.has(field))
+    : []);
+  const nextMetadata = next.usageMetadata && typeof next.usageMetadata === "object" ? next.usageMetadata : {};
+  for (const [field] of GEMINI_USAGE_FIELDS) {
+    if (!Object.prototype.hasOwnProperty.call(nextMetadata, field)) continue;
+    metadata[field] = nextMetadata[field];
+    invalidFields.delete(field);
+  }
+  if (Array.isArray(next.usageMetadataInvalidFields)) {
+    for (const field of next.usageMetadataInvalidFields) {
+      if (!GEMINI_USAGE_FIELD_NAMES.has(field)) continue;
+      delete metadata[field];
+      invalidFields.add(field);
+    }
+  }
+  const usage = projectGeminiUsage(metadata) || {};
+  if (invalidFields.size) {
+    usage.usageMetadataInvalidFields = GEMINI_USAGE_FIELDS
+      .map(([field]) => field)
+      .filter(field => invalidFields.has(field));
+  }
+  return Object.keys(usage).length ? usage : void 0;
+}
+
 class BaseProvider {
   constructor() {
     this.requiresBaseUrl = false;
@@ -1952,7 +2011,10 @@ class GeminiProvider extends BaseProvider {
     const recordChunk = (chunk) => {
       if (!firstChunkId && chunk.id) firstChunkId = chunk.id;
       if (chunk.finish_reason !== null && chunk.finish_reason !== void 0) finalFinishReason = chunk.finish_reason;
-      if (chunk.usage !== void 0) finalUsage = chunk.usage;
+      if (chunk.usage !== void 0) {
+        finalUsage = mergeGeminiUsage(finalUsage, chunk.usage);
+        chunk = { ...chunk, usage: finalUsage };
+      }
       if (chunk.delta?.content) accumulatedContent += chunk.delta.content;
       return chunk;
     };
@@ -2035,11 +2097,7 @@ class GeminiProvider extends BaseProvider {
       "SAFETY": "content_filter",
       "RECITATION": "content_filter"
     };
-    const usage = response.usageMetadata ? {
-      prompt_tokens: response.usageMetadata.promptTokenCount,
-      completion_tokens: response.usageMetadata.candidatesTokenCount,
-      total_tokens: response.usageMetadata.totalTokenCount
-    } : void 0;
+    const usage = projectGeminiUsage(response.usageMetadata);
     return {
       id: response.responseId || void 0,
       content: content || null,
@@ -2052,11 +2110,7 @@ class GeminiProvider extends BaseProvider {
    */
   parseGeminiStreamChunk(chunk) {
     const candidate = chunk.candidates?.[0];
-    const usage = chunk.usageMetadata ? {
-      prompt_tokens: chunk.usageMetadata.promptTokenCount,
-      completion_tokens: chunk.usageMetadata.candidatesTokenCount,
-      total_tokens: chunk.usageMetadata.totalTokenCount
-    } : void 0;
+    const usage = projectGeminiUsage(chunk.usageMetadata);
     if (!candidate) {
       return {
         id: chunk.responseId,
