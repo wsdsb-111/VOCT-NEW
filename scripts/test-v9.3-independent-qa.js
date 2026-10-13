@@ -678,7 +678,7 @@ async function testOptionalUsageFieldsAcrossSevenAdapters() {
           const records = [];
           const tracked = await trackCandidateAdapter({ provider, config, request, usageRecords: records });
           const usage = records[0]?.usage;
-          const reportedCacheHit = openAiAdapters.has(type);
+          const reportedCacheHit = openAiAdapters.has(type) || type === "gemini";
           failIfDifferent(`${type}_${missingMode}_adapter_response_content`, "Synthetic optional usage response.", tracked.tracked?.content);
           failIfDifferent(`${type}_${missingMode}_adapter_native_input`, 75, usage?.native?.inputTokens);
           failIfDifferent(`${type}_${missingMode}_adapter_native_output`, 127, usage?.native?.outputTokens);

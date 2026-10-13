@@ -8,6 +8,6 @@
 
 基线[Release Regression #118](https://github.com/wsdsb-111/VOCT-NEW/actions/runs/38350638449)已通过GitHub公开API核验：head_sha完全等于本轮基线，completed/success，更新时间2026-10-13T05:24:40Z。它只证明旧V9.3提交；V9.3.1最终SHA CI另列待验收，用户自行推送，不自动上传。
 
-新增Gemini、Action和独立QA测试先在基线执行RED，合成数据不联网。Gemini15组中11 RED／4 PASS，Action最终36个RED断言，独立QA9组中8 RED／1 PASS；新增3个发布组，507 test文件／435 release组／71历史组。原始日志保留在 `.build/v931-gemini-RED.log`、`.build/v931-action-RED.log`、`.build/v931-independent-RED.log`；初始Action24个RED另存 `.build/v931-action-initial-RED.log`，不以改写RED掩盖失败。
+新增Gemini、Action和独立QA测试先在基线执行RED，合成数据不联网。Gemini15组中11 RED／4 PASS，Action最终36个RED断言，独立QA9组中8 RED／1 PASS；新增3个发布组，507 test文件／435 release组／71历史组。原始日志保留在 `.build/v931-gemini-RED.log`、`.build/v931-action-RED.log`、`.build/v931-independent-RED.log`。初轮Action24个RED只有会话观察；并行复制时取到已完善的36条日志，因此initial文件也是最终36条的副本，不能作为独立24条快照，不重建或覆盖历史。
 
 本地基线、CI及Golden哈希见[匿名基线证据](v931-baseline-evidence.json)。CK3、Soak和Gemini真实端点均未在本轮验证，修复候选不得自动称FULL_FREEZE。

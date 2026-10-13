@@ -9,8 +9,8 @@ const { execFileSync } = require("node:child_process");
 const root = path.resolve(__dirname, "..");
 const expectedBaseline = "6e232091edb109ccc1e34d26c4b9a120b8a199ba";
 const args = process.argv.slice(2);
-if (args.some(arg => !["--capture-red", "--capture-green"].includes(arg)) || args.length > 1) {
-  throw new Error("Usage: node scripts/test-v9.3.1-independent-qa.js [--capture-red|--capture-green]");
+if (args.some(arg => !["--capture-red", "--capture-green", "--capture-partial-tail-red", "--capture-normalizer-boundary-red", "--capture-partial-total-red", "--capture-action-dto-red"].includes(arg)) || args.length > 1) {
+  throw new Error("Usage: node scripts/test-v9.3.1-independent-qa.js [--capture-red|--capture-green|--capture-partial-tail-red|--capture-normalizer-boundary-red|--capture-partial-total-red|--capture-action-dto-red]");
 }
 
 const head = execFileSync("git", ["rev-parse", "HEAD"], { cwd: root, encoding: "utf8" }).trim();
@@ -51,7 +51,7 @@ require.cache[versionPath] = { exports: {
 
 const { GeminiProvider } = require("../src/app/main/providers");
 const { LLMManager, TokenCounter } = require("../src/app/main/provider-service");
-const { normalizeUsage } = require("../src/app/main/providers/usage-normalization");
+const { normalizeUsage, normalizeProviderUsage } = require("../src/app/main/providers/usage-normalization");
 const { validateGenerationOutcome } = require("../src/app/main/providers/generation-outcome");
 const { createRequestControl } = require("../src/app/main/providers/provider-cancellation");
 const { createUsageAnalytics } = require("../src/app/main/analytics/usage-analytics");
@@ -59,6 +59,8 @@ const { createProviderDiagnostics } = require("../src/app/main/analytics/provide
 const usageRetention = require("../src/app/main/usage-analytics-retention");
 const { createActionEffectWriter } = require("../src/app/main/actions/action-effect-writer");
 const { createActionEngine } = require("../src/app/main/actions/action-engine");
+const { createActionDiagnostic } = require("../src/app/main/actions/types");
+const { verifyActionConfirmation, settleActionResult } = require("../src/app/main/actions/action-confirmation");
 
 function expect(condition, name) {
   if (!condition) throw new Error(`assertion_failed:${name}`);
@@ -347,10 +349,11 @@ async function testGeminiMulticomponentCanonicalAndWriters() {
   expectEqual(usage?.native?.cachedInputTokens, 40, "gemini_cached_native");
   expectEqual(usage?.native?.totalTokens, 150, "gemini_total_native");
   expect(usage?.provenance?.status !== "INCONSISTENT", "gemini_multicomponent_total_not_pairwise_inconsistent");
-  expectEqual(usage?.visible_completion_tokens, 20, "gemini_visible_output_is_candidates");
   expectEqual(sourceOf(usage, "reasoningTokens"), "PROVIDER_REPORTED", "gemini_reasoning_source");
   expectEqual(sourceOf(usage, "cachedInputTokens"), "PROVIDER_REPORTED", "gemini_cache_source");
+  expectEqual(accountingStatus(usage), "RECONCILED", "gemini_known_official_components_reconcile");
   const persisted = readCanonicalFromAnalytics(output);
+  expectEqual(last(output.analyticsEntries)?.visibleCompletionTokens, 20, "analytics_visible_output_is_candidates");
   expectEqual(persisted?.native?.reasoningTokens, 30, "analytics_writer_persists_thoughts");
   expectEqual(persisted?.native?.cachedInputTokens, 40, "analytics_writer_persists_cache");
   expectEqual(sourceOf(persisted, "reasoningTokens"), "PROVIDER_REPORTED", "analytics_writer_persists_field_source");
@@ -375,15 +378,18 @@ async function testGeminiInvalidStringIsClassifiedWithoutPersistence() {
   expectEqual(sourceOf(usage, "reasoningTokens"), "PROVIDER_REPORTED", "gemini_explicit_zero_source");
   expectEqual(usage?.native?.cachedInputTokens, null, "gemini_bad_cache_not_zero");
   expectEqual(sourceOf(usage, "cachedInputTokens"), "INVALID", "gemini_bad_cache_invalid_source");
+  expectEqual(usage?.provenance?.status, "INCONSISTENT", "gemini_bad_cache_marks_usage_inconsistent");
+  expect(usage?.provenance?.inconsistentFields?.includes("cachedInputTokens"), "gemini_bad_cache_field_flagged");
   expectEqual(toolUseTokens(usage), 7, "gemini_tool_component_retained");
   expectEqual(toolUseSource(usage), "PROVIDER_REPORTED", "gemini_tool_component_source");
-  expectOneOf(accountingStatus(usage), ["PARTIAL", "UNRECONCILED"], "gemini_tool_component_accounting_unreconciled");
+  expectEqual(accountingStatus(usage), "RECONCILED", "gemini_tool_component_not_added_to_official_total");
   const persistedText = [
     JSON.stringify(output.tracked),
     fs.readFileSync(output.harness.analyticsFile, "utf8"),
     fs.readFileSync(output.harness.diagnosticsFile, "utf8")
   ].join("\n");
   expect(!persistedText.includes(secretMarker), "gemini_malicious_string_not_returned_or_persisted");
+  expect(!persistedText.includes("synthetic-fixture-key"), "gemini_fixture_api_key_not_returned_or_persisted");
   assertLoggedOnce(output, "gemini_invalid_component");
 }
 
@@ -401,7 +407,29 @@ async function testGeminiMissingNullUndefinedAndNoInference() {
     expectEqual(usage?.native?.cachedInputTokens, cached, `${name}_cache_value`);
     expectEqual(sourceOf(usage, "reasoningTokens"), reasoning === 0 ? "PROVIDER_REPORTED" : "NOT_REPORTED", `${name}_reasoning_source`);
     expectEqual(sourceOf(usage, "cachedInputTokens"), cached === 0 ? "PROVIDER_REPORTED" : "NOT_REPORTED", `${name}_cache_source`);
+    expectEqual(usage?.provenance?.cacheStatus, cached === 0 ? "REPORTED_ZERO" : "NOT_REPORTED", `${name}_cache_status`);
     assertLoggedOnce(output, name);
+  }
+
+  const scalarFields = [
+    { field: "promptTokenCount", native: "inputTokens", other: { candidatesTokenCount: 5, totalTokenCount: 5 }, zero: 0 },
+    { field: "candidatesTokenCount", native: "outputTokens", other: { promptTokenCount: 10, totalTokenCount: 10 }, zero: 0 },
+    { field: "totalTokenCount", native: "totalTokens", other: { promptTokenCount: 0, candidatesTokenCount: 0 }, zero: 0 }
+  ];
+  for (const { field, native, other, zero } of scalarFields) {
+    for (const [state, value] of [["zero", zero], ["null", null], ["undefined", void 0], ["absent", void 0]]) {
+      const usageMetadata = { ...other };
+      if (state === "absent") delete usageMetadata[field];
+      else usageMetadata[field] = value;
+      const name = `gemini-${native}-${state}`;
+      const output = await runNonStream(name, usageMetadata);
+      const usage = output.typed;
+      const expected = state === "zero" ? 0 : null;
+      const expectedSource = state === "zero" ? "PROVIDER_REPORTED" : "NOT_REPORTED";
+      expectEqual(usage?.native?.[native], expected, `${name}_value`);
+      expectEqual(sourceOf(usage, native), expectedSource, `${name}_source`);
+      assertLoggedOnce(output, name);
+    }
   }
 
   const noBreakdown = await runNonStream("gemini-unreported-components", {
@@ -414,9 +442,46 @@ async function testGeminiMissingNullUndefinedAndNoInference() {
   expectEqual(sourceOf(usage, "reasoningTokens"), "NOT_REPORTED", "gemini_unreported_reasoning_source");
   expectEqual(toolUseTokens(usage), null, "gemini_total_difference_not_tool_component");
   expectEqual(toolUseSource(usage), "NOT_REPORTED", "gemini_unreported_tool_source");
-  expectOneOf(accountingStatus(usage), ["PARTIAL", "UNRECONCILED"], "gemini_unreported_components_accounting_incomplete");
+  expectEqual(accountingStatus(usage), "UNRECONCILED", "gemini_unreported_components_accounting_incomplete");
   expectEqual(usage?.native?.totalTokens, 170, "gemini_unreconciled_total_preserved");
+  expectEqual(usage?.provenance?.status, "PARTIAL", "gemini_unreported_breakdown_global_partial");
   expect(usage?.provenance?.status !== "INCONSISTENT", "gemini_unreported_breakdown_not_guessed_as_inconsistent");
+
+  const toolComponent = await runNonStream("gemini-tool-component-accounting", {
+    promptTokenCount: 100,
+    candidatesTokenCount: 20,
+    thoughtsTokenCount: 30,
+    toolUsePromptTokenCount: 7,
+    totalTokenCount: 150
+  });
+  expectEqual(accountingStatus(toolComponent.typed), "RECONCILED", "gemini_tool_component_not_added_to_official_total");
+  expectEqual(toolComponent.typed?.provenance?.status, "PARTIAL", "gemini_tool_component_global_partial");
+  expectEqual(toolUseTokens(toolComponent.typed), 7, "gemini_tool_component_not_dropped");
+  assertLoggedOnce(toolComponent, "gemini_tool_component_accounting");
+
+  const toolUnreconciled = await runNonStream("gemini-tool-total-unreconciled", {
+    promptTokenCount: 100,
+    candidatesTokenCount: 20,
+    thoughtsTokenCount: 30,
+    toolUsePromptTokenCount: 7,
+    totalTokenCount: 170
+  });
+  expectEqual(accountingStatus(toolUnreconciled.typed), "UNRECONCILED", "gemini_tool_does_not_explain_total_difference");
+  expectEqual(toolUnreconciled.typed?.native?.totalTokens, 170, "gemini_tool_total_difference_preserves_native_total");
+  expectEqual(toolUnreconciled.typed?.native?.reasoningTokens, 30, "gemini_tool_total_difference_preserves_native_thoughts");
+  expectEqual(toolUseTokens(toolUnreconciled.typed), 7, "gemini_tool_unreconciled_component_preserved");
+  assertLoggedOnce(toolUnreconciled, "gemini_tool_total_unreconciled");
+
+  const impossibleTotal = await runNonStream("gemini-impossible-total", {
+    promptTokenCount: 100,
+    candidatesTokenCount: 20,
+    thoughtsTokenCount: 30,
+    totalTokenCount: 50
+  });
+  expectEqual(impossibleTotal.typed?.native?.totalTokens, 50, "gemini_impossible_provider_total_preserved");
+  expectEqual(impossibleTotal.typed?.provenance?.status, "INCONSISTENT", "gemini_total_below_known_components_inconsistent");
+  expectEqual(accountingStatus(impossibleTotal.typed), "INCONSISTENT", "gemini_impossible_total_accounting_inconsistent");
+  expect(impossibleTotal.typed?.provenance?.inconsistentFields?.includes("totalTokens"), "gemini_impossible_total_field_flagged");
 }
 
 async function testGeminiUsageOnlyTailDeduplicatesAndPersistsOnce() {
@@ -432,6 +497,40 @@ async function testGeminiUsageOnlyTailDeduplicatesAndPersistsOnce() {
   expectEqual(output.typed?.native?.totalTokens, 60, "gemini_duplicate_tail_not_summed");
   expectEqual(output.chunks.filter(chunk => chunk?.usage).length, 2, "gemini_each_usage_only_frame_observable");
   assertLoggedOnce(output, "gemini_stop_usage_tail");
+}
+
+async function testGeminiPostStopPartialAndEmptyUsageTailsRetainPriorFields() {
+  const output = await runStream("gemini-stop-partial-empty-tails", [
+    {
+      responseId: "synthetic-partial-empty-tail",
+      candidates: [{ content: { parts: [{ text: "Synthetic complete response." }] }, finishReason: "STOP" }],
+      usageMetadata: { promptTokenCount: 100, candidatesTokenCount: 20, totalTokenCount: 150 }
+    },
+    {
+      responseId: "synthetic-partial-empty-tail",
+      usageMetadata: { thoughtsTokenCount: 30, cachedContentTokenCount: 40, toolUsePromptTokenCount: 7 }
+    },
+    { responseId: "synthetic-partial-empty-tail", usageMetadata: {} }
+  ]);
+  const usage = output.typed;
+  expectEqual(output.final?.votc_result?.status, "COMPLETE", "gemini_partial_empty_tail_preserves_stop");
+  expectEqual(usage?.native?.inputTokens, 100, "gemini_partial_empty_tail_preserves_prompt");
+  expectEqual(usage?.native?.outputTokens, 20, "gemini_partial_empty_tail_preserves_candidates");
+  expectEqual(usage?.native?.totalTokens, 150, "gemini_partial_empty_tail_preserves_total");
+  expectEqual(usage?.native?.reasoningTokens, 30, "gemini_partial_empty_tail_adds_thoughts");
+  expectEqual(usage?.native?.cachedInputTokens, 40, "gemini_partial_empty_tail_adds_cache");
+  expectEqual(toolUseTokens(usage), 7, "gemini_partial_empty_tail_adds_tool_component");
+  expectEqual(sourceOf(usage, "inputTokens"), "PROVIDER_REPORTED", "gemini_partial_empty_tail_prompt_source");
+  expectEqual(sourceOf(usage, "outputTokens"), "PROVIDER_REPORTED", "gemini_partial_empty_tail_candidates_source");
+  expectEqual(sourceOf(usage, "totalTokens"), "PROVIDER_REPORTED", "gemini_partial_empty_tail_total_source");
+  expectEqual(sourceOf(usage, "reasoningTokens"), "PROVIDER_REPORTED", "gemini_partial_empty_tail_thoughts_source");
+  expectEqual(sourceOf(usage, "cachedInputTokens"), "PROVIDER_REPORTED", "gemini_partial_empty_tail_cache_source");
+  expectEqual(toolUseSource(usage), "PROVIDER_REPORTED", "gemini_partial_empty_tail_tool_source");
+  expectEqual(output.chunks.filter(chunk => chunk?.usage).length, 2, "gemini_partial_empty_tail_usage_frames_observed");
+  expectEqual(last(output.analyticsEntries)?.providerUsage?.native?.inputTokens, 100, "gemini_partial_empty_tail_writer_keeps_prompt");
+  expectEqual(last(output.analyticsEntries)?.providerUsage?.native?.reasoningTokens, 30, "gemini_partial_empty_tail_writer_keeps_thoughts");
+  expectEqual(last(output.analyticsEntries)?.providerUsage?.native?.cachedInputTokens, 40, "gemini_partial_empty_tail_writer_keeps_cache");
+  assertLoggedOnce(output, "gemini_stop_partial_empty_tails");
 }
 
 async function testGeminiUsageOnlyBeforeFinishAndConflictingFinish() {
@@ -488,13 +587,105 @@ async function testOtherSixProviderTotalsRemainStrict() {
   }
 }
 
-function makeActionHarness(writeBehavior) {
+async function testNormalizerInvalidMarkerOutranksLegacyAliases() {
+  const usage = normalizeUsage({
+    usageMetadata: { candidatesTokenCount: 2, totalTokenCount: 200 },
+    prompt_tokens: 99,
+    usageMetadataInvalidFields: ["promptTokenCount"]
+  }, { providerType: "gemini" });
+  expectEqual(usage?.native?.inputTokens, null, "normalizer_invalid_marker_blocks_legacy_input");
+  expectEqual(sourceOf(usage, "inputTokens"), "INVALID", "normalizer_invalid_marker_source_wins");
+  expect(usage?.provenance?.inconsistentFields?.includes("inputTokens"), "normalizer_invalid_marker_field_flagged");
+}
+
+async function testExplicitNonGeminiProviderKeepsStrictTotals() {
+  for (const providerType of ["openai-compatible", "deepseek"]) {
+    const usage = normalizeUsage({
+      usageMetadata: {
+        promptTokenCount: 100,
+        candidatesTokenCount: 20,
+        thoughtsTokenCount: 30,
+        totalTokenCount: 150
+      }
+    }, { providerType });
+    expectEqual(usage?.provenance?.status, "INCONSISTENT", `${providerType}_usage_metadata_does_not_relax_total_gate`);
+    expect(usage?.provenance?.inconsistentFields?.includes("totalTokens"), `${providerType}_bad_total_remains_flagged`);
+  }
+}
+
+async function testExplicitProviderTypeWinsUsageShape() {
+  for (const providerType of ["openai-compatible", "deepseek"]) {
+    const usage = normalizeUsage({
+      usageMetadata: { promptTokenCount: 10, candidatesTokenCount: 5, totalTokenCount: 99 }
+    }, { providerType });
+    expectEqual(usage?.provenance?.providerUsageShape, providerType === "deepseek" ? "deepseek" : "openai_compatible", `${providerType}_explicit_provider_shape_wins`);
+  }
+}
+
+async function testGeminiCandidatesAlwaysDriveVisibleCompletion() {
+  const usage = normalizeProviderUsage({
+    usageMetadata: {
+      promptTokenCount: 100,
+      candidatesTokenCount: 20,
+      thoughtsTokenCount: 30,
+      totalTokenCount: 150
+    },
+    visible_completion_tokens: 5
+  });
+  expectEqual(usage?.completion_tokens, 20, "gemini_candidates_remain_legacy_completion");
+  expectEqual(usage?.visible_completion_tokens, 20, "gemini_candidates_override_noncanonical_visible_value");
+}
+
+async function testGeminiPartialTotalBelowKnownInputIsInconsistent() {
+  const usage = normalizeUsage({ usageMetadata: { promptTokenCount: 100, totalTokenCount: 50 } }, { providerType: "gemini" });
+  expectEqual(usage?.provenance?.status, "INCONSISTENT", "gemini_partial_total_below_input_inconsistent");
+  expectEqual(accountingStatus(usage), "INCONSISTENT", "gemini_partial_total_below_input_accounting_inconsistent");
+  expect(usage?.provenance?.inconsistentFields?.includes("totalTokens"), "gemini_partial_total_below_input_flagged");
+  expectEqual(usage?.native?.inputTokens, 100, "gemini_partial_total_input_preserved");
+  expectEqual(usage?.native?.outputTokens, null, "gemini_partial_total_missing_output_stays_null");
+  expectEqual(usage?.native?.reasoningTokens, null, "gemini_partial_total_missing_thoughts_stay_null");
+}
+
+async function testGeminiPartialTotalBelowKnownCandidatesIsInconsistent() {
+  const usage = normalizeUsage({ usageMetadata: { candidatesTokenCount: 20, totalTokenCount: 10 } }, { providerType: "gemini" });
+  expectEqual(usage?.provenance?.status, "INCONSISTENT", "gemini_partial_total_below_candidates_inconsistent");
+  expectEqual(accountingStatus(usage), "INCONSISTENT", "gemini_partial_total_below_candidates_accounting_inconsistent");
+  expect(usage?.provenance?.inconsistentFields?.includes("totalTokens"), "gemini_partial_total_below_candidates_flagged");
+  expectEqual(usage?.native?.inputTokens, null, "gemini_partial_total_missing_input_stays_null");
+  expectEqual(usage?.native?.outputTokens, 20, "gemini_partial_total_candidates_preserved");
+  expectEqual(usage?.native?.reasoningTokens, null, "gemini_partial_total_missing_thoughts_stay_null");
+}
+
+async function testGeminiPartialTotalBelowKnownThoughtsIsInconsistent() {
+  const usage = normalizeUsage({ usageMetadata: { thoughtsTokenCount: 30, totalTokenCount: 20 } }, { providerType: "gemini" });
+  expectEqual(usage?.provenance?.status, "INCONSISTENT", "gemini_partial_total_below_thoughts_inconsistent");
+  expectEqual(accountingStatus(usage), "INCONSISTENT", "gemini_partial_total_below_thoughts_accounting_inconsistent");
+  expect(usage?.provenance?.inconsistentFields?.includes("totalTokens"), "gemini_partial_total_below_thoughts_flagged");
+  expectEqual(usage?.native?.inputTokens, null, "gemini_partial_thoughts_missing_input_stays_null");
+  expectEqual(usage?.native?.outputTokens, null, "gemini_partial_thoughts_missing_candidates_stay_null");
+  expectEqual(usage?.native?.reasoningTokens, 30, "gemini_partial_thoughts_preserved");
+}
+
+async function testGeminiPartialTotalAboveKnownInputRemainsUnreconciled() {
+  const usage = normalizeUsage({ usageMetadata: { promptTokenCount: 100, totalTokenCount: 150 } }, { providerType: "gemini" });
+  expectEqual(usage?.provenance?.status, "PARTIAL", "gemini_partial_valid_total_global_partial");
+  expectEqual(accountingStatus(usage), "UNKNOWN", "gemini_partial_valid_total_accounting_unknown");
+  expectEqual(usage?.native?.inputTokens, 100, "gemini_partial_valid_total_input_preserved");
+  expectEqual(usage?.native?.outputTokens, null, "gemini_partial_valid_total_does_not_infer_candidates");
+  expectEqual(usage?.native?.reasoningTokens, null, "gemini_partial_valid_total_does_not_infer_thoughts");
+  expectEqual(usage?.native?.totalTokens, 150, "gemini_partial_valid_total_preserved");
+  expectEqual(usage?.provenance?.inconsistentFields?.length, 0, "gemini_partial_valid_total_not_inconsistent");
+}
+
+function makeActionHarness(writeBehavior, { throwAfterAcceptedEffect = false } = {}) {
   let writeAttempts = 0;
+  let carrierMayHaveBeenTouched = false;
   const runFileManager = {
     releaseStalledActionForNewAction() {},
     getQueueHealth() { return { queueBlocked: false }; },
     write() {
       writeAttempts++;
+      carrierMayHaveBeenTouched = true;
       return writeBehavior(writeAttempts);
     }
   };
@@ -502,6 +693,7 @@ function makeActionHarness(writeBehavior) {
   const ActionSandbox = {
     async executeAction(_filePath, context) {
       await context.runGameEffect("synthetic_action_effect");
+      if (throwAfterAcceptedEffect) throw new Error("synthetic_post_accept_sandbox_failure");
       return { message: "Synthetic action submitted." };
     }
   };
@@ -527,18 +719,20 @@ function makeActionHarness(writeBehavior) {
     conv,
     npc: { id: 101, shortName: "Synthetic NPC" },
     invocation: { actionId: "syntheticAction", args: {} },
-    get writeAttempts() { return writeAttempts; }
+    get writeAttempts() { return writeAttempts; },
+    get carrierMayHaveBeenTouched() { return carrierMayHaveBeenTouched; }
   };
 }
 
-async function runAction(writeBehavior) {
-  const harness = makeActionHarness(writeBehavior);
+async function runAction(writeBehavior, options) {
+  const harness = makeActionHarness(writeBehavior, options);
   const result = await harness.Engine.runInvocation(harness.conv, harness.npc, harness.invocation);
   return { ...harness, result };
 }
 
 async function testActionFailureAndPartialUnknownAreNotAcceptedOrReplayed() {
   const partial = await runAction(() => { throw new Error("synthetic_partial_carrier_write_failure"); });
+  expectEqual(partial.carrierMayHaveBeenTouched, true, "action_failure_may_have_touched_carrier");
   expectEqual(partial.writeAttempts, 1, "action_partial_unknown_writer_not_replayed");
   expectEqual(partial.result?.success, false, "action_partial_unknown_success_false");
   expectEqual(partial.result?.lifecycle?.dispatched, false, "action_partial_unknown_not_projected_as_accepted");
@@ -549,6 +743,7 @@ async function testActionFailureAndPartialUnknownAreNotAcceptedOrReplayed() {
   expectEqual(partial.result?.diagnostic?.commandId, null, "action_partial_no_fabricated_command_id");
   expectEqual(partial.result?.diagnostic?.dispatchStatus, "FAILED", "action_partial_failed_compat_status");
   expectEqual(partial.result?.diagnostic?.confirmationStatus, "NOT_CONFIRMED", "action_partial_no_ack");
+  expectEqual(partial.result?.confirmation, undefined, "action_partial_unknown_has_no_confirmation_descriptor");
 
   const failedEnvelope = await runAction(() => ({ status: "FAILED" }));
   expectEqual(failedEnvelope.writeAttempts, 1, "action_failed_envelope_not_replayed");
@@ -557,6 +752,33 @@ async function testActionFailureAndPartialUnknownAreNotAcceptedOrReplayed() {
   expectEqual(failedEnvelope.result?.diagnostic?.dispatchAttempted, true, "action_failed_envelope_attempted");
   expectEqual(failedEnvelope.result?.diagnostic?.dispatchAccepted, false, "action_failed_envelope_not_accepted_diagnostic");
   expectEqual(failedEnvelope.result?.diagnostic?.commandId, null, "action_failed_envelope_no_command_id");
+  expectEqual(failedEnvelope.result?.confirmation, undefined, "action_failed_envelope_has_no_confirmation_descriptor");
+
+  const acceptedThenSandboxFailed = await runAction(
+    attempt => ({ commandId: `synthetic-command-${attempt}`, status: "awaiting_ack" }),
+    { throwAfterAcceptedEffect: true }
+  );
+  const acceptedResult = acceptedThenSandboxFailed.result;
+  expectEqual(acceptedThenSandboxFailed.writeAttempts, 1, "action_post_accept_sandbox_failure_not_replayed");
+  expectEqual(acceptedResult?.success, false, "action_post_accept_sandbox_failure_not_success");
+  expectEqual(acceptedResult?.diagnostic?.dispatchAccepted, true, "action_post_accept_failure_keeps_accepted_diagnostic");
+  expectEqual(acceptedResult?.diagnostic?.commandId, "synthetic-command-1", "action_post_accept_failure_keeps_command_id");
+  expectEqual(acceptedResult?.confirmation?.type, "STATE_UNVERIFIABLE", "action_post_accept_failure_keeps_confirmation_entry");
+  expectEqual(acceptedResult?.confirmation?.dispatch?.commandId, "synthetic-command-1", "action_confirmation_entry_retains_dispatch");
+  expectEqual(acceptedResult?.confirmation?.requireCommandReadback, false, "action_unverifiable_confirmation_does_not_claim_effect_readback");
+  const ackVerification = verifyActionConfirmation({
+    confirmation: acceptedResult.confirmation,
+    gameData: acceptedThenSandboxFailed.conv.gameData,
+    gameDataRevision: acceptedThenSandboxFailed.conv.gameDataRevision,
+    commandReadback: { acknowledged: true, commandId: "synthetic-command-1" }
+  });
+  expectEqual(ackVerification.status, "UNCONFIRMED", "action_ack_without_effect_readback_remains_unconfirmed");
+  expectEqual(ackVerification.confirmedStateChange, null, "action_ack_does_not_fabricate_confirmed_state_change");
+  const settledAfterAck = settleActionResult(acceptedResult, { ...ackVerification, commandStatus: "acknowledged" });
+  expectEqual(settledAfterAck?.success, false, "action_ack_unconfirmed_settlement_success_false");
+  expectEqual(settledAfterAck?.lifecycle?.confirmed, false, "action_ack_unconfirmed_settlement_not_confirmed");
+  expectEqual(settledAfterAck?.diagnostic?.dispatchAttempted, true, "action_postaccept_settlement_keeps_attempted");
+  expectEqual(settledAfterAck?.diagnostic?.dispatchAccepted, true, "action_postaccept_settlement_keeps_accepted");
 }
 
 async function testAcceptedCommandWaitsForCk3Confirmation() {
@@ -572,20 +794,84 @@ async function testAcceptedCommandWaitsForCk3Confirmation() {
     expectEqual(result?.diagnostic?.commandId, `synthetic-command-1`, `action_${status}_real_command_id_retained`);
     expectEqual(result?.diagnostic?.confirmationStatus, "PENDING_CONFIRMATION", `action_${status}_still_waiting_for_ck3`);
     expectEqual(result?.confirmation?.type === "ACK_CONFIRMED", false, `action_${status}_no_fake_ck3_ack`);
+    const verification = verifyActionConfirmation({
+      confirmation: result.confirmation,
+      commandReadback: {
+        acknowledged: true,
+        commandId: result.confirmation?.dispatch?.commandId,
+        sourceRuntimeId: 101,
+        targetRuntimeId: null
+      }
+    });
+    expectEqual(verification.status, "ACKNOWLEDGED", `action_${status}_ack_not_confirmed_state`);
+    const settled = settleActionResult(result, { ...verification, commandStatus: "acknowledged" });
+    expectEqual(settled?.success, false, `action_${status}_ack_not_effect_confirmation`);
+    expectEqual(settled?.diagnostic?.dispatchAttempted, true, `action_${status}_settlement_keeps_attempted`);
+    expectEqual(settled?.diagnostic?.dispatchAccepted, true, `action_${status}_settlement_keeps_accepted`);
   }
+}
+
+async function testActionDiagnosticOptionalBooleansPreserveLegacyShape() {
+  const legacy = createActionDiagnostic({ actionId: "syntheticLegacyAction" });
+  expectEqual(Object.hasOwn(legacy, "dispatchAttempted"), false, "action_legacy_diagnostic_shape_omits_attempted");
+  expectEqual(Object.hasOwn(legacy, "dispatchAccepted"), false, "action_legacy_diagnostic_shape_omits_accepted");
+
+  const invalidBooleans = createActionDiagnostic({
+    actionId: "syntheticInvalidDiagnostic",
+    dispatchAttempted: "true",
+    dispatchAccepted: 1
+  });
+  expect(!invalidBooleans.dispatchAttempted, "action_nonboolean_attempted_not_truthy");
+  expect(!invalidBooleans.dispatchAccepted, "action_nonboolean_accepted_not_truthy");
+
+  const explicitFalse = createActionDiagnostic({
+    actionId: "syntheticFalseDiagnostic",
+    dispatchAttempted: false,
+    dispatchAccepted: false
+  });
+  expectEqual(explicitFalse.dispatchAttempted, false, "action_explicit_false_attempted_preserved");
+  expectEqual(explicitFalse.dispatchAccepted, false, "action_explicit_false_accepted_preserved");
 }
 
 async function run() {
   const baselineState = head === expectedBaseline ? "BASELINE" : "HEAD_ADVANCED";
-  await scenario("Gemini multicomponent native usage reaches analytics and diagnostic writers", testGeminiMulticomponentCanonicalAndWriters);
-  await scenario("Gemini invalid string is classified and absent from returned or persisted output", testGeminiInvalidStringIsClassifiedWithoutPersistence);
-  await scenario("Gemini zero, null, undefined, absent and unreported components stay distinct", testGeminiMissingNullUndefinedAndNoInference);
-  await scenario("Gemini usage-only tails deduplicate and persist one usage record", testGeminiUsageOnlyTailDeduplicatesAndPersistsOnce);
-  await scenario("Gemini usage-only ordering and conflicting finishes preserve fail-closed status", testGeminiUsageOnlyBeforeFinishAndConflictingFinish);
-  await scenario("Gemini EOF and Abort preserve observed partial usage without COMPLETE", testGeminiEofAndAbortRetainPartialUsageWithoutComplete);
-  await scenario("six non-Gemini providers retain strict total consistency checks", testOtherSixProviderTotalsRemainStrict);
-  await scenario("Action writer failures and partial unknown delivery do not become accepted or replay", testActionFailureAndPartialUnknownAreNotAcceptedOrReplayed);
-  await scenario("accepted Action commands remain unconfirmed until CK3 readback", testAcceptedCommandWaitsForCk3Confirmation);
+  if (args.includes("--capture-action-dto-red")) {
+    await scenario("accepted Action settlement retains dispatch facts", testAcceptedCommandWaitsForCk3Confirmation);
+    await scenario("postaccept StateUnverifiable settlement retains dispatch facts", testActionFailureAndPartialUnknownAreNotAcceptedOrReplayed);
+    await scenario("Action diagnostic optional booleans preserve legacy shape", testActionDiagnosticOptionalBooleansPreserveLegacyShape);
+  } else if (args.includes("--capture-normalizer-boundary-red")) {
+    await scenario("Normalizer invalid markers outrank conflicting legacy aliases", testNormalizerInvalidMarkerOutranksLegacyAliases);
+    await scenario("Explicit non-Gemini providers keep strict total consistency", testExplicitNonGeminiProviderKeepsStrictTotals);
+    await scenario("Explicit provider type controls usage shape", testExplicitProviderTypeWinsUsageShape);
+    await scenario("Gemini candidates remain the visible completion count", testGeminiCandidatesAlwaysDriveVisibleCompletion);
+  } else if (args.includes("--capture-partial-total-red")) {
+    await scenario("Gemini partial total below known input is inconsistent", testGeminiPartialTotalBelowKnownInputIsInconsistent);
+    await scenario("Gemini partial total below known candidates is inconsistent", testGeminiPartialTotalBelowKnownCandidatesIsInconsistent);
+    await scenario("Gemini partial total below known thoughts is inconsistent", testGeminiPartialTotalBelowKnownThoughtsIsInconsistent);
+    await scenario("Gemini partial total above known input stays partial without inference", testGeminiPartialTotalAboveKnownInputRemainsUnreconciled);
+  } else if (args.includes("--capture-partial-tail-red")) {
+    await scenario("Gemini STOP plus partial and empty usage-only tails retain earlier fields", testGeminiPostStopPartialAndEmptyUsageTailsRetainPriorFields);
+  } else {
+    await scenario("Gemini multicomponent native usage reaches analytics and diagnostic writers", testGeminiMulticomponentCanonicalAndWriters);
+    await scenario("Gemini invalid string is classified and absent from returned or persisted output", testGeminiInvalidStringIsClassifiedWithoutPersistence);
+    await scenario("Gemini zero, null, undefined, absent and unreported components stay distinct", testGeminiMissingNullUndefinedAndNoInference);
+    await scenario("Gemini usage-only tails deduplicate and persist one usage record", testGeminiUsageOnlyTailDeduplicatesAndPersistsOnce);
+    await scenario("Gemini STOP plus partial and empty usage-only tails retain earlier fields", testGeminiPostStopPartialAndEmptyUsageTailsRetainPriorFields);
+    await scenario("Gemini usage-only ordering and conflicting finishes preserve fail-closed status", testGeminiUsageOnlyBeforeFinishAndConflictingFinish);
+    await scenario("Gemini EOF and Abort preserve observed partial usage without COMPLETE", testGeminiEofAndAbortRetainPartialUsageWithoutComplete);
+    await scenario("six non-Gemini providers retain strict total consistency checks", testOtherSixProviderTotalsRemainStrict);
+    await scenario("Normalizer invalid markers outrank conflicting legacy aliases", testNormalizerInvalidMarkerOutranksLegacyAliases);
+    await scenario("Explicit non-Gemini providers keep strict total consistency", testExplicitNonGeminiProviderKeepsStrictTotals);
+    await scenario("Explicit provider type controls usage shape", testExplicitProviderTypeWinsUsageShape);
+    await scenario("Gemini candidates remain the visible completion count", testGeminiCandidatesAlwaysDriveVisibleCompletion);
+    await scenario("Gemini partial total below known input is inconsistent", testGeminiPartialTotalBelowKnownInputIsInconsistent);
+    await scenario("Gemini partial total below known candidates is inconsistent", testGeminiPartialTotalBelowKnownCandidatesIsInconsistent);
+    await scenario("Gemini partial total below known thoughts is inconsistent", testGeminiPartialTotalBelowKnownThoughtsIsInconsistent);
+    await scenario("Gemini partial total above known input stays partial without inference", testGeminiPartialTotalAboveKnownInputRemainsUnreconciled);
+    await scenario("Action writer failures and partial unknown delivery do not become accepted or replay", testActionFailureAndPartialUnknownAreNotAcceptedOrReplayed);
+    await scenario("accepted Action commands remain unconfirmed until CK3 readback", testAcceptedCommandWaitsForCk3Confirmation);
+    await scenario("Action diagnostic optional booleans preserve legacy shape", testActionDiagnosticOptionalBooleansPreserveLegacyShape);
+  }
 
   const report = [
     `V9.3.1 independent QA ${baselineState}`,
@@ -595,9 +881,18 @@ async function run() {
     `SUMMARY ${failures.length ? `${failures.length} RED` : "GREEN"}`
   ].join("\n") + "\n";
   process.stdout.write(report);
-  const evidence = args.includes("--capture-red") ? "RED" : args.includes("--capture-green") ? "GREEN" : null;
+  const evidence = args.includes("--capture-normalizer-boundary-red") ? "normalizer-boundary-RED"
+    : args.includes("--capture-action-dto-red") ? "action-dto-RED"
+      : args.includes("--capture-partial-total-red") ? "partial-total-RED"
+      : args.includes("--capture-partial-tail-red") ? "partial-tail-RED"
+      : args.includes("--capture-red") ? "RED" : args.includes("--capture-green") ? "GREEN" : null;
   if (evidence) {
-    const evidencePath = path.join(root, ".build", `v931-independent-${evidence}.log`);
+    const evidenceFile = evidence === "action-dto-RED" ? "v931-action-dto-RED.log"
+      : evidence === "partial-total-RED" ? "v931-partial-total-RED.log"
+      : evidence === "partial-tail-RED" ? "v931-partial-tail-RED.log"
+      : evidence === "normalizer-boundary-RED" ? "v931-normalizer-boundary-RED.log"
+        : `v931-independent-${evidence}.log`;
+    const evidencePath = path.join(root, ".build", evidenceFile);
     fs.mkdirSync(path.dirname(evidencePath), { recursive: true });
     fs.writeFileSync(evidencePath, report, "utf8");
     process.stdout.write(`EVIDENCE ${path.relative(root, evidencePath)}\n`);
@@ -611,9 +906,14 @@ async function run() {
 run().catch(error => {
   const report = `V9.3.1 independent QA HARNESS_FAILURE\nHEAD ${head}\n${safeError(error)}\n`;
   process.stderr.write(report);
-  if (args.includes("--capture-red")) {
+  if (args.includes("--capture-red") || args.includes("--capture-partial-tail-red") || args.includes("--capture-normalizer-boundary-red") || args.includes("--capture-partial-total-red") || args.includes("--capture-action-dto-red")) {
+    const evidenceFile = args.includes("--capture-action-dto-red") ? "v931-action-dto-RED.log"
+      : args.includes("--capture-partial-total-red") ? "v931-partial-total-RED.log"
+      : args.includes("--capture-normalizer-boundary-red") ? "v931-normalizer-boundary-RED.log"
+      : args.includes("--capture-partial-tail-red") ? "v931-partial-tail-RED.log" : "v931-independent-RED.log";
+    const evidencePath = path.join(root, ".build", evidenceFile);
     fs.mkdirSync(path.join(root, ".build"), { recursive: true });
-    fs.writeFileSync(path.join(root, ".build", "v931-independent-RED.log"), report, "utf8");
+    fs.writeFileSync(evidencePath, report, "utf8");
   }
   process.exitCode = 1;
 }).finally(() => {

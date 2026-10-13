@@ -10,6 +10,8 @@ V9.2.1 缓存专项安全／诊断候选（2026-10-12）：[验证](docs/current
 
 ## 主要功能
 
+V9.3.1修复候选：[实施](docs/current/v9/V9_3_1_IMPLEMENTATION_REPORT.md)、[验证](docs/current/v9/V9_3_1_VERIFICATION_REPORT.md)、[台账](docs/current/v9/V9_3_1_P_ISSUE_LEDGER.md)。修复Gemini原生缓存／思考用量丢失、total及可见输出口径和部分流尾帧覆盖；Action区分写入尝试与信封接受，失败保留待回执证据，不重放未知效果。本轮全部离线，正式版本仍9.2.0/V9.2，GLM缓存继续HOLD→V9.4。
+
 V9.3 Provider Platform候选：[实施](docs/current/v9/V9_3_IMPLEMENTATION_REPORT.md)、[验证](docs/current/v9/V9_3_VERIFICATION_REPORT.md)、[支持／问题台账](docs/current/v9/V9_3_P_ISSUE_LEDGER.md)。统一七服务商能力／严格完成／原生与估算用量、取消及有界重试；正常出站保持，未知或部分Action不执行。正式App/UI暂保持9.2.0/V9.2；本轮实机和最终SHA CI分别签署。
 
 V9.2.3候选（2026-10-13）：[实施](docs/current/v9/V9_2_3_IMPLEMENTATION_REPORT.md)、[验证](docs/current/v9/V9_2_3_VERIFICATION_REPORT.md)。Year/Life自动模型生成已退役；保留Durable、Detail/Legacy及合法旧档查看和手改。以下旧年度压缩／重建记录为历史合同，不能据此重新启用生成。GLM旧新出站一致，原生长上下文另有取证，实机问题仍HOLD；正式App/UI保持9.2.0/V9.2，未签完整冻结。

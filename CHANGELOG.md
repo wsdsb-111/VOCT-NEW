@@ -2,6 +2,8 @@
 
 这里是版本变更的单一入口。详细设计和测试证据保留在链接目标中，本文件只维护版本顺序、用户可见摘要和文档索引。
 
+V9.3.1修复候选：[实施](docs/current/v9/V9_3_1_IMPLEMENTATION_REPORT.md)、[验证](docs/current/v9/V9_3_1_VERIFICATION_REPORT.md)。Gemini原生缓存／思考及总量正确保留，候选输出不重复扣思考，部分流尾帧不丢已知用量；Action失败不误标已接受，并保留真实命令的待回执入口。无新API调用，正式App/UI仍9.2.0/V9.2，CI／CK3／Soak单独验收。
+
 V9.3 Provider Platform候选：[实施](docs/current/v9/V9_3_IMPLEMENTATION_REPORT.md)、[验证](docs/current/v9/V9_3_VERIFICATION_REPORT.md)、[支持／问题台账](docs/current/v9/V9_3_P_ISSUE_LEDGER.md)。统一七服务商能力／严格完成／原生与估算用量、取消及有界重试；正常出站保持，未知或部分Action不执行。正式App/UI暂保持9.2.0/V9.2；本轮实机和最终SHA CI分别签署。
 
 V9.2.3 候选（2026-10-13，GLM收益HOLD）：[实施](docs/current/v9/V9_2_3_IMPLEMENTATION_REPORT.md)、[验证](docs/current/v9/V9_2_3_VERIFICATION_REPORT.md)、[台账](docs/current/v9/V9_2_3_P_ISSUE_LEDGER.md)。退役Year/Life自动模型生成，保留Durable、Detail/Legacy与合法旧档，按来源证据处理派生失败恢复，信件接受明确退役状态。GLM三版本出站一致，原生长上下文独立取证；正式App/UI保持9.2.0/V9.2，人工Gate未齐不签冻结。

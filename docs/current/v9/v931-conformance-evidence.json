@@ -1,0 +1,216 @@
+{
+  "schemaVersion": 1,
+  "candidateStatus": "CANDIDATE",
+  "baseline": "6e232091edb109ccc1e34d26c4b9a120b8a199ba",
+  "commits": {
+    "C0": "8219da22dbfe57a3940a0beeec372302d73cb39e",
+    "C1": "7e5b053edde8f5bc94ed6e24354c472081ba59fa",
+    "C2": "c4a36ff60f098e650b1f9ed174695296f8ae597c",
+    "C1Supplement": "097cf9d0793291c207bdccdbf10b410492675ea3",
+    "C2Supplement": "cef7ea74250dce6780e01964151727e58f5adf0c"
+  },
+  "runtimeInputDigest": "69e4a579ca28cace8d467601fc3ad36873ff28f808824576bdb4eb6bac034565",
+  "mappedFiles": 293,
+  "dependencyLock": {
+    "files": 5981,
+    "packages": 264,
+    "changed": false
+  },
+  "normalWire": {
+    "scenes": 39,
+    "goldenSHA256": "5553f48da7f5747420ecffe16b4e12429e63cd4b167429090167f3324b384ff3",
+    "requestDrift": 0
+  },
+  "sourceHashes": [
+    {
+      "path": "src/app/main/providers/index.js",
+      "sha256": "b4297b186d251ec6565459b9cbb20a964b034cc25d13136ab91e6743da527095"
+    },
+    {
+      "path": "src/app/main/providers/usage-normalization.js",
+      "sha256": "4ac652aa15e8793c0f74e14ae3a8968662d2cab7de88418f797049837b77e3f2"
+    },
+    {
+      "path": "src/app/main/analytics/usage-analytics.js",
+      "sha256": "8db09866c529797b38f9b156d106699191a2c55b89d616624a1b0755ca0e255e"
+    },
+    {
+      "path": "src/app/main/analytics/provider-diagnostics.js",
+      "sha256": "0e7bd3541f55e42df475cac962ae45623e9152b2efe96adbdab4e5d75fd94dab"
+    },
+    {
+      "path": "src/app/main/actions/action-engine.js",
+      "sha256": "6858fbdeb25e268b04a1f0210c1c87da083bc701d08c2b56034b3ac0f6ad3488"
+    },
+    {
+      "path": "src/app/main/actions/types.js",
+      "sha256": "bf1529251dc276de0dc50cf75d1e9c42d81201e64accbff920018ea2e3e5a977"
+    }
+  ],
+  "testHashes": [
+    {
+      "path": "scripts/test-v9.3.1-gemini-usage.js",
+      "sha256": "2b2be7b71a7e92182a4dc996359b74eba1ab417ba0d2b8168736d68e79966313"
+    },
+    {
+      "path": "scripts/test-v9.3.1-action-dispatch-diagnostics.js",
+      "sha256": "9d7426ccdb880e65100c09ab80b4b230db1a0e728f623cd4a8c5cfc76fd2bfdb"
+    },
+    {
+      "path": "scripts/test-v9.3.1-independent-qa.js",
+      "sha256": "53673aeb0a096f1ac60a0c9b7f4719c92f64c3a4d70bfc9af5f2698775b67469"
+    },
+    {
+      "path": "scripts/test-v9.3-independent-qa.js",
+      "sha256": "812e161a1fcef74c72431ebd9e721344177f25691b883ba4bebe7a0e4146e482"
+    },
+    {
+      "path": "scripts/test-v7.7-provider-service.js",
+      "sha256": "ccf933a87e0236a3afda5afa6cf5f390db7d898dfef7f5c4a348c6dc3643c128"
+    }
+  ],
+  "redEvidence": [
+    {
+      "path": ".build/v931-gemini-RED.log",
+      "sha256": "bd5c224fe852870b4d7923648dfaa8d0b79baed0a109bf4d98b173794cb15fa7"
+    },
+    {
+      "path": ".build/v931-action-RED.log",
+      "sha256": "668553a344152410228e94763b1b60bf5ccc282365511dae76da1ded6fde376c"
+    },
+    {
+      "path": ".build/v931-independent-RED.log",
+      "sha256": "03f0b676fb37ad786b18b13e773675b110bc47ae00675cd9b95eef7037b06e42"
+    },
+    {
+      "path": ".build/v931-gemini-partial-tail-RED.log",
+      "sha256": "3feaf5688288f2b6d9762172919de1557eb2164b1116ab451b55c9d1b6bf943f"
+    },
+    {
+      "path": ".build/v931-partial-tail-RED.log",
+      "sha256": "f2dbf84cfead98d08afcb6b6d211e648e97208641a6d752bfb18d82e441805eb"
+    },
+    {
+      "path": ".build/v931-postaccept-RED.log",
+      "sha256": "e9997bf4f951d0233be96eb52d34c734232783a23a884439ac2647a7e02840a6"
+    },
+    {
+      "path": ".build/v931-normalizer-public-RED.log",
+      "sha256": "271d6411c38935eff82de00b2ddf6c3be55dc8c01bf183b1a50496dd7399c52b"
+    },
+    {
+      "path": ".build/v931-normalizer-boundary-RED.log",
+      "sha256": "7e109eb2088d55f2a231557eb055847c8f66be9072eacdc94a5561903166b737"
+    },
+    {
+      "path": ".build/v931-gemini-partial-total-RED.log",
+      "sha256": "6452667a755abe1a13958f571d52cbf8bccd1b647d35e8ffd37b7fc32266e466"
+    },
+    {
+      "path": ".build/v931-partial-total-RED.log",
+      "sha256": "9a54f9814130acafb61f32d3b4a2f915c0b1fde258c762f0be7b547885607efb"
+    },
+    {
+      "path": ".build/v931-action-settlement-RED.log",
+      "sha256": "b8208b47d11c7a37befa498a2a453c5b24288df1cc7368a2256ae79c04757ed3"
+    },
+    {
+      "path": ".build/v931-action-dto-RED.log",
+      "sha256": "a2c44f3e8a54060abb24689624379ab50cf461587358c6d41f325308684080cc"
+    }
+  ],
+  "baselineRed": {
+    "gemini": {
+      "cases": 15,
+      "red": 11,
+      "pass": 4
+    },
+    "action": {
+      "redAssertions": 36
+    },
+    "independent": {
+      "cases": 9,
+      "red": 8,
+      "pass": 1
+    }
+  },
+  "candidateOffline": {
+    "gemini": {
+      "cases": 20,
+      "pass": 20
+    },
+    "action": "PASS",
+    "independent": {
+      "cases": 19,
+      "pass": 19,
+      "evidenceSHA256": "891b89595cdf5cb78bc915f50d0bf87a94b64e21240745020d752acbb064371d"
+    },
+    "previousPlatformIndependent": {
+      "cases": 18,
+      "pass": 18
+    }
+  },
+  "release": {
+    "state": "RUNNING",
+    "groups": 435,
+    "classifiedFiles": 507,
+    "archivedChecks": 71,
+    "initialAttempt": {
+      "state": "FAILED_OLD_EXPECTATION",
+      "group": "v7.7-provider-service",
+      "logSHA256": "ed3cccb6ab3bf4d2a93f07cc8b63f62a098cc8d2369b096fcdbc59a1144628c4"
+    },
+    "previousPassedInput": {
+      "groups": 435,
+      "inputDigest": "c6fd2d1ee686ceb8b65ffc88a673c9f5983b72875289d5900dc45b8741601750",
+      "logSHA256": "ef54beb32273ef4f2a715889718b66a825858be0b1656bd21137deb7a07f40c0"
+    }
+  },
+  "packagedSmoke": {
+    "state": "PASS",
+    "profiles": 2,
+    "geminiSyntheticSendsPerProfile": 2,
+    "usageWritesPerProfile": 2,
+    "diagnosticWritesPerProfile": 2,
+    "actionFailureWritesPerProfile": 1,
+    "realProviderCalls": 0,
+    "diagnostics": "white_list_only",
+    "app": "9.2.0",
+    "coreUI": "V9.2",
+    "mod": "2.0.5",
+    "logSHA256": "8f0174ef1529b83ff128600d87ff938b80085113fc051b56c4c3e8739e5d90ef",
+    "actionDiagnosticFlagsPreserved": true
+  },
+  "newPaidGenerationCalls": 0,
+  "realCK3Effects": 0,
+  "finalShaCI": "NOT_VERIFIED",
+  "ck3": "NOT_VERIFIED",
+  "soak": "NOT_VERIFIED",
+  "geminiNativeEndpoint": "NOT_VERIFIED",
+  "glmCache": "P1_HOLD_V9_4",
+  "geminiAccounting": {
+    "documentedSum": "prompt + thoughts + candidates",
+    "cachedIsInputReuse": true,
+    "toolUseAddedToTotal": false,
+    "billingOutputTokens": "UNKNOWN",
+    "confirmedInvoice": "UNKNOWN"
+  },
+  "notes": [
+    "Offline mocks do not prove endpoint support.",
+    "DISPATCH_FAILED remains an invocation failure; accepted pending-command evidence is independently retained.",
+    "An ACK for STATE_UNVERIFIABLE remains UNCONFIRMED.",
+    "No retired Year/Life generation path was restored.",
+    "Only an existing Gemini-zero mock expectation was updated; no frozen wire golden was rewritten."
+  ],
+  "businessSafetyFixtures": [
+    "scripts/test-v9.2.3-derived-retirement.js",
+    "scripts/test-v9.2.3-derived-recovery.js",
+    "scripts/test-v9.2.2-presend-forget.js",
+    "scripts/test-v8.15-durable-forget.js",
+    "scripts/test-v8.8.3-action-gold-confirmation.js",
+    "scripts/test-v7.10-official-action-system.js",
+    "scripts/test-v7.10-rc6-rev3-run-command-recovery.js",
+    "scripts/test-v8.14.2-letter-memory-finalization.js"
+  ],
+  "newRealProviderGenerationCalls": 0
+}

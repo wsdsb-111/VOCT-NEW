@@ -17,3 +17,7 @@
 | V93-GATE-01 | 待本轮人工／最终CI | 新CK3、Soak、最终提交SHA CI分别签署，静态／模拟不替代实机；用户前次选择自行推送，未自动推送。 |
 
 代码与专项通过范围见[实施报告](V9_3_IMPLEMENTATION_REPORT.md)，最终计数和真实API结果见[验证报告](V9_3_VERIFICATION_REPORT.md)。
+
+## V9.3.1 后续修复补记
+
+上表保留V9.3当时范围与证据。其V93-P2-01已在V9.3.1候选定向修复：Action失败记录不再推断已接受，新增attempted／accepted，并保留已有命令的待回执入口，ACK仍不等于效果确认。同轮修复Gemini原生缓存／思考及total多组成分统计、部分usage-only覆盖问题。新候选结果和未完成Gate见[V9.3.1验证](V9_3_1_VERIFICATION_REPORT.md)与[新台账](V9_3_1_P_ISSUE_LEDGER.md)；GLM HOLD、旧SHA CI及原生证据不改写。
