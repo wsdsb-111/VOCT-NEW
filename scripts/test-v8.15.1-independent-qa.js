@@ -180,7 +180,7 @@ async function testMemory4LifecycleRecovery() {
     return filter(snapshot, ...args);
   };
   const first = await engine.finalizeConversation({ ...prepared,
-    requestDurable: async () => JSON.stringify({ status: "NO_DURABLE_CONTENT", entries: [] }) });
+    requestDurable: async () => ({ content: JSON.stringify({ status: "NO_DURABLE_CONTENT", entries: [] }), finish_reason: "stop" }) });
   assert.equal(failOnce, false);
   assert(first.durable.owners.some(owner => owner.ownerId === 2 && owner.status === "EXTRACTION_FAILED"),
     "transient snapshot failure remains visible in finalization results: " + JSON.stringify(first));
@@ -192,7 +192,7 @@ async function testMemory4LifecycleRecovery() {
     summaryFoldersDir: fixture.summariesDir, trace: { record() {} } });
   const recovered = await restarted.recoverPendingFinalizations({ activeCampaignToken: campaignToken,
     isMemory4RecoveryCurrent: () => true,
-    requestDurable: async () => JSON.stringify({ status: "NO_DURABLE_CONTENT", entries: [] }) });
+    requestDurable: async () => ({ content: JSON.stringify({ status: "NO_DURABLE_CONTENT", entries: [] }), finish_reason: "stop" }) });
   assert(recovered.some(owner => owner.status === "NO_DURABLE_CONTENT" || owner.success === true),
     "the restarted Narrative plus Memory4 recovery path must consume the pending handoff: " + JSON.stringify(recovered));
   assert.equal(restarted.listRecoverySnapshots().length, 0, "Narrative recovery clears after the Owner handoff completes");

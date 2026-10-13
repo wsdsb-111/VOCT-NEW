@@ -57,12 +57,12 @@ async function finalize(id, durable) {
     [1, "我向赵太初承诺把玉印妥善存入内库。"],
     [4, "我听见了这项关于玉印的约定。"]
   ]), async prompt => {
-    if (!durable) return JSON.stringify({ status: "NO_DURABLE_CONTENT", entries: [] });
+    if (!durable) return { content: JSON.stringify({ status: "NO_DURABLE_CONTENT", entries: [] }), finish_reason: "stop" };
     const input = JSON.parse(prompt[1].content);
     const fragment = input.fragments[0];
-    return JSON.stringify({ status: "STORE", entries: [{ memoryType: "DURABLE_KNOWLEDGE",
+    return { content: JSON.stringify({ status: "STORE", entries: [{ memoryType: "DURABLE_KNOWLEDGE",
       text: "双方约定将玉印保存在内库。", fragmentIds: [fragment.fragmentId], entityIds: [],
-      participantIds: fragment.presentIds, topics: ["玉印"], eventTime: { status: "unknown", precision: "unknown" } }] });
+      participantIds: fragment.presentIds, topics: ["玉印"], eventTime: { status: "unknown", precision: "unknown" } }] }), finish_reason: "stop" };
   }, { isNarrativeCommitted: true });
 }
 
@@ -87,7 +87,7 @@ function createLifecycleHarness() {
           return memoryEngine.memory4.finalizeCommitted(context(this.id, this.gameData.date || this.gameData.normalizedDate || "1038.4.28", [
             [1, "我向赵太初承诺把玉印妥善存入内库。"],
             [4, "我听见了这项关于玉印的约定。"]
-          ]), async () => JSON.stringify({ status: "NO_DURABLE_CONTENT", entries: [] }), { isNarrativeCommitted: true });
+          ]), async () => ({ content: JSON.stringify({ status: "NO_DURABLE_CONTENT", entries: [] }), finish_reason: "stop" }), { isNarrativeCommitted: true });
         }
         return { success: true };
       };
@@ -202,7 +202,7 @@ async function main() {
     const futureEvidence = await memoryEngine.memory4.finalizeCommitted(context("future-evidence-after-loaded-save", "1039.4.28", [
       [1, "我向赵太初承诺把玉印妥善存入内库。"],
       [4, "我听见了这项关于玉印的约定。"]
-    ]), async () => JSON.stringify({ status: "NO_DURABLE_CONTENT", entries: [] }), { isNarrativeCommitted: true });
+    ]), async () => ({ content: JSON.stringify({ status: "NO_DURABLE_CONTENT", entries: [] }), finish_reason: "stop" }), { isNarrativeCommitted: true });
     assert.equal(futureEvidence.status, "COMPLETE");
     const endedArchive = await SummariesManager.getMemory4OwnerData({ ownerId: 4,
       expectedCampaignToken: campaignToken, expectedContextId: liveConversation.id });

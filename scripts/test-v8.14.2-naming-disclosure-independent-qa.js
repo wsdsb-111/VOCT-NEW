@@ -162,17 +162,17 @@ async function fixture({ date = "1044.11.8", playerAge = 23, playerTitle = "明�
         const payload = JSON.parse(prompt[1].content);
         sample.durablePayloads.push(payload);
         if (!sample.durableText || Number(payload.ownerId) !== sample.scope.ownerId) {
-          return JSON.stringify({ status: "NO_DURABLE_CONTENT", entries: [] });
+          return { content: JSON.stringify({ status: "NO_DURABLE_CONTENT", entries: [] }), finish_reason: "stop" };
         }
         const fragment = payload.fragments.find(item => item.text.includes("赵太初")) || payload.fragments[0];
         assert(fragment, "the real durable prompt must contain a source fragment");
-        return JSON.stringify({ status: "STORE", entries: [{ memoryType: "MAJOR_EXPERIENCE",
+        return { content: JSON.stringify({ status: "STORE", entries: [{ memoryType: "MAJOR_EXPERIENCE",
           text: sample.durableText, fragmentIds: [fragment.fragmentId],
           entityIds: [...new Set([Number(fragment.speakerId), ...(fragment.entityIds || [])])],
           participantIds: fragment.participantIds || [], topics: ["相识"],
-          eventTime: { status: "unknown", precision: "unknown" } }] });
+          eventTime: { status: "unknown", precision: "unknown" } }] }), finish_reason: "stop" };
       }
-      return JSON.stringify({ status: "NO_DURABLE_CONTENT", entries: [] });
+      return { content: JSON.stringify({ status: "NO_DURABLE_CONTENT", entries: [] }), finish_reason: "stop" };
     }
   };
   sample.worldline = { isSubjectivePromptIntegrationEnabled: () => false,

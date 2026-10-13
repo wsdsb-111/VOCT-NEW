@@ -542,7 +542,11 @@ async function providerStreamCancellationAndErrorsStayBusinessVisibleButTraceSaf
   const failedStream = await manager.trackUsage((async function* () {
     throw new Error(privateProviderError);
   })(), metadata, failedSpan);
-  await assert.rejects(failedStream[Symbol.asyncIterator]().next(), new RegExp(privateProviderError));
+  await assert.rejects(failedStream[Symbol.asyncIterator]().next(), error => {
+    assert.equal(error.providerError.category, "UNKNOWN");
+    assert.equal(error.message.includes(privateProviderError), false);
+    return true;
+  });
 
   const report = trace.exportReport();
   const endings = report.events.filter((event) => event.step === "provider.streamEnd");

@@ -1,9 +1,60 @@
 "use strict";
 const OpenAI = require("openai");
 const { VOTC_CORE_VERSION, VOTC_APP_VERSION } = require("../version");
+const { retryOperation } = require("./provider-retry-policy");
+const { SOURCE_GUARD_CODE, toProviderError, safeProviderConsole } = require("./provider-errors");
+const { assertActive, awaitWithSignal } = require("./provider-cancellation");
+const { validateGenerationOutcome } = require("./generation-outcome");
+const console = safeProviderConsole;
 
-function isOpenRouterErrorResponse(e) {
-  return typeof e === "object" && e !== null && "error" in e && typeof e.error === "object" && typeof e.error.message === "string" && typeof e.error.code === "number";
+function isRetryableProviderStatus(error) {
+  const status = Number(error?.status);
+  return status === 429 || [502, 503, 504].includes(status);
+}
+
+function isRequestControlStop(error, requestControl) {
+  return error?.message === SOURCE_GUARD_CODE || requestControl?.signal?.aborted === true || error?.name === "AbortError" || error?.name === "TimeoutError";
+}
+
+function requestControlWithSignal(requestControl, request) {
+  const signal = requestControl?.signal || request?.signal;
+  if (!signal || requestControl?.signal === signal) return requestControl;
+  return { ...(requestControl || {}), signal };
+}
+
+function checkRequestControl(requestControl) {
+  assertActive(requestControl?.signal);
+  requestControl?.check?.();
+  assertActive(requestControl?.signal);
+}
+
+function isStrictlyComplete(response, provider) {
+  const outcome = validateGenerationOutcome(response, { providerType: provider });
+  return outcome.status === "COMPLETE" && outcome.complete === true;
+}
+
+function testConnectionFailure(error, provider, model, requestControl) {
+  if (isRequestControlStop(error, requestControl)) throw error;
+  const providerError = safeError(error, provider, model);
+  safeProviderConsole.error(providerError);
+  return { success: false, error: providerError.message };
+}
+
+function safeError(error, provider, model, responseStarted = false) {
+  return toProviderError(error, {
+    provider,
+    model,
+    responseStarted,
+    attemptCount: Number.isSafeInteger(error?.votcAttemptCount) ? error.votcAttemptCount : 1
+  });
+}
+
+function nativeUsage(promptTokens, completionTokens) {
+  const usage = {};
+  if (Number.isFinite(promptTokens)) usage.prompt_tokens = promptTokens;
+  if (Number.isFinite(completionTokens)) usage.completion_tokens = completionTokens;
+  if (Number.isFinite(promptTokens) && Number.isFinite(completionTokens)) usage.total_tokens = promptTokens + completionTokens;
+  return Object.keys(usage).length ? usage : void 0;
 }
 
 class BaseProvider {
@@ -30,29 +81,30 @@ class BaseProvider {
    * @param config - Provider configuration
    * @returns Connection test result
    */
-  async testConnection(config) {
+  async testConnection(config, requestControl = null) {
     try {
+      checkRequestControl(requestControl);
       this.validateConfig(config);
       const testMessages = [{
         role: "user",
         content: "Hi."
       }];
-      await this.chatCompletion({
+      const response = await this.chatCompletion({
         model: config.defaultModel,
         messages: testMessages,
         max_tokens: 10,
         stream: false
-      }, config);
+      }, config, requestControl);
+      checkRequestControl(requestControl);
+      if (!isStrictlyComplete(response, this.providerId)) {
+        return { success: false, error: "Provider returned an incomplete test response." };
+      }
       return {
         success: true,
         message: `Successfully connected to ${this.name}`
       };
     } catch (error) {
-      console.error(`[${this.providerId}] Connection test failed:`, error);
-      return {
-        success: false,
-        error: error.message || `Failed to connect to ${this.name}`
-      };
+      return testConnectionFailure(error, this.providerId, config?.defaultModel, requestControl);
     }
   }
   /**
@@ -60,12 +112,14 @@ class BaseProvider {
    * @param config - Provider configuration
    * @returns Array of available models
    */
-  async listModels(config) {
+  async listModels(config, requestControl = null) {
     try {
       this.validateConfig(config);
+      checkRequestControl(requestControl);
       console.warn(`[${this.providerId}] Model listing not implemented for ${this.name}`);
       return [];
     } catch (error) {
+      if (isRequestControlStop(error, requestControl)) throw error;
       console.error(`[${this.providerId}] Error listing models:`, error);
       throw error;
     }
@@ -74,7 +128,8 @@ class BaseProvider {
    * Helper method to create consistent error messages
    */
   createErrorMessage(operation, error) {
-    return `[${this.providerId}] ${operation} failed: ${error.message || "Unknown error"}`;
+    const providerError = safeError(error, this.providerId, void 0);
+    return `[${this.providerId}] ${operation} failed: ${providerError.code || "provider_unknown"}`;
   }
   /**
    * Helper method to validate messages format
@@ -104,31 +159,20 @@ class BaseProvider {
   /**
    * Retry an async operation with exponential backoff
    * @param operation The async operation to retry
-   * @param maxRetries Maximum number of retry attempts (default: 3)
+   * @param maxRetries Retained for existing call sites; the adapter policy caps requests at two total attempts
    * @param initialDelay Initial delay in milliseconds (default: 1000)
-   * @param shouldRetry Function to determine if error is retryable (default: always retry)
+   * @param shouldRetry Function to determine if a classified HTTP status may be retried
    * @returns Promise resolving to operation result
    */
-  async retryWithBackoff(operation, maxRetries = 3, initialDelay = 1e3, shouldRetry = () => true) {
-    let delay = initialDelay;
-    let lastError;
-    for (let attempt = 0; attempt <= maxRetries; attempt++) {
-      try {
-        return await operation();
-      } catch (error) {
-        lastError = error;
-        const retryable = shouldRetry(error);
-        error.votcAttemptCount = attempt + 1;
-        error.votcRetryable = retryable;
-        if (attempt === maxRetries || !retryable) {
-          throw error;
-        }
-        console.log(`[${this.providerId}] Retry attempt ${attempt + 1}/${maxRetries + 1} after ${delay}ms delay`);
-        await new Promise((resolve) => setTimeout(resolve, delay));
-        delay *= 2;
-      }
-    }
-    throw lastError;
+  async retryWithBackoff(operation, _maxRetries = 1, initialDelay = 1e3, shouldRetry = isRetryableProviderStatus, requestControl = null) {
+    return retryOperation(operation, {
+      signal: requestControl?.signal,
+      deadline: requestControl?.deadline,
+      maxAttempts: requestControl?.maxAttempts ?? 2,
+      initialDelay,
+      shouldRetry,
+      check: requestControl?.check
+    });
   }
 }
 const isOpenRouterFreeModel = (modelData) => {
@@ -146,30 +190,31 @@ class OpenRouterProvider extends BaseProvider {
    * @returns true if the error is retryable
    */
   shouldRetryOpenRouter(error) {
-    if (error instanceof OpenAI.APIError) {
-      const status = error.status;
-      return status === 429 || status >= 500 && status < 600;
-    }
-    return error.code === "ECONNRESET" || error.code === "ETIMEDOUT" || error.code === "ENOTFOUND";
+    return isRetryableProviderStatus(error);
   }
-  async listModels(config) {
+  async listModels(config, requestControl = null) {
     try {
-      const response = await fetch("https://openrouter.ai/api/v1/models", {
-        method: "GET",
-        headers: {
-          "Authorization": `Bearer ${this.getAPIKey(config)}`,
-          "Content-Type": "application/json"
-        }
-      });
+      const response = await this.retryWithBackoff(() => {
+        requestControl?.beforeSend?.();
+        return fetch("https://openrouter.ai/api/v1/models", {
+          ...requestControl?.signal ? { signal: requestControl.signal } : {},
+          method: "GET",
+          headers: {
+            "Authorization": `Bearer ${this.getAPIKey(config)}`,
+            "Content-Type": "application/json"
+          }
+        });
+      }, 1, 1e3, isRetryableProviderStatus, requestControl);
+      checkRequestControl(requestControl);
       if (!response.ok) {
-        const errorBody = await response.text();
-        console.error(`OpenRouter API error (${response.status}): ${errorBody}`);
-        throw new Error(`Failed to fetch models from OpenRouter: ${response.statusText}`);
+        const error = new Error("provider_http_error");
+        error.status = response.status;
+        error.headers = response.headers;
+        throw error;
       }
       const { data } = await response.json();
       if (!Array.isArray(data)) {
-        console.error("Unexpected response format from OpenRouter /models endpoint:", data);
-        throw new Error("Unexpected response format from OpenRouter /models endpoint.");
+        throw Object.assign(new Error("provider_invalid_response"), { code: "provider_invalid_response" });
       }
       return data.map((modelData) => ({
         id: modelData.id,
@@ -179,13 +224,15 @@ class OpenRouterProvider extends BaseProvider {
         // Add other properties as needed, e.g., pricing details
       }));
     } catch (error) {
-      console.error("Error fetching OpenRouter models:", error);
-      throw error;
+      const providerError = safeError(error, "openrouter", "models");
+      console.error(providerError);
+      throw providerError;
     }
   }
   chatCompletion(request, config, requestControl = null) {
+    requestControl = requestControlWithSignal(requestControl, request);
     const openAIClient = new OpenAI({
-      ...requestControl ? { maxRetries: 0 } : {},
+      maxRetries: 0,
       apiKey: this.getAPIKey(config),
       baseURL: "https://openrouter.ai/api/v1",
       defaultHeaders: {
@@ -209,7 +256,7 @@ class OpenRouterProvider extends BaseProvider {
       }
     };
     if (requestParams.stream) {
-      return this._streamChatCompletion(requestParams, openAIClient, request.signal);
+      return this._streamChatCompletion(requestParams, openAIClient, requestControl?.signal || request.signal, requestControl);
     } else {
       return this._nonStreamChatCompletion(requestParams, openAIClient, requestControl);
     }
@@ -223,7 +270,8 @@ class OpenRouterProvider extends BaseProvider {
         },
         3,
         1e3,
-        this.shouldRetryOpenRouter.bind(this)
+        this.shouldRetryOpenRouter.bind(this),
+        requestControl
       );
       const choice = data.choices?.[0];
       if (!choice) {
@@ -247,28 +295,23 @@ class OpenRouterProvider extends BaseProvider {
         } : void 0
       };
     } catch (error) {
-      if (requestControl && (error.message === "memory4_request_source_changed_before_send" || requestControl.signal?.aborted)) throw error;
-      if (error instanceof OpenAI.APIError) {
-        console.error(
-          `[OpenRouterProvider] API error for model ${request.model}:`,
-          error.status,
-          error.name,
-          error.message,
-          error.metadata?.raw
-        );
-        throw new Error(`OpenRouter API error via SDK: ${error.status} ${error.name} - ${error.message}`);
-      }
-      console.error(`[OpenRouterProvider] Unexpected error for model ${request.model}:`, error);
-      throw new Error(`Unexpected OpenRouter SDK error: ${error.message || error}`);
+      const providerError = safeError(error, "openrouter", request.model);
+      safeProviderConsole.error(providerError);
+      throw providerError;
     }
   }
-  async *_streamChatCompletion(request, openAIClient, signal) {
+  async *_streamChatCompletion(request, openAIClient, signal, requestControl = null) {
+    let responseStarted = false;
     try {
       const stream = await this.retryWithBackoff(
-        () => openAIClient.chat.completions.create(request),
+        () => {
+          requestControl?.beforeSend?.();
+          return openAIClient.chat.completions.create(request, signal ? { signal } : void 0);
+        },
         7,
         1e3,
-        this.shouldRetryOpenRouter.bind(this)
+        this.shouldRetryOpenRouter.bind(this),
+        requestControl
       );
       const contentParts = [];
       const toolCallsMap = {};
@@ -276,16 +319,12 @@ class OpenRouterProvider extends BaseProvider {
       let finalFinishReason = null;
       let firstChunkId = "";
       for await (const chunk of stream) {
+        responseStarted = true;
         const choice = chunk.choices[0];
         if (choice?.finish_reason === "error") {
           const choiceWithError = choice;
           if (choiceWithError.error) {
-            const error = choiceWithError.error;
-            console.error(
-              `OpenRouter Mid-Stream Error: ${error?.code || "Unknown"} - ${error?.message || "Unknown error"}`
-            );
-            const errorDetails = typeof error === "object" ? JSON.stringify(error, null, 2) : String(error);
-            throw new Error(`OpenRouter Mid-Stream Error: ${errorDetails}`);
+            throw Object.assign(new Error("provider_invalid_response"), { code: "provider_invalid_response" });
           } else {
             throw new Error(
               `OpenRouter Mid-Stream Error: Stream terminated with error status but no error details provided`
@@ -296,7 +335,10 @@ class OpenRouterProvider extends BaseProvider {
           firstChunkId = chunk.id;
         }
         if (!choice) {
-          if (chunk.usage) finalUsage = chunk.usage;
+          if (chunk.usage) {
+            finalUsage = chunk.usage;
+            yield { id: chunk.id, usage: chunk.usage, finish_reason: null };
+          }
           continue;
         }
         const delta = choice.delta;
@@ -311,11 +353,12 @@ class OpenRouterProvider extends BaseProvider {
             // Some providers emit hidden reasoning before the visible answer.
             // Forward only a presence marker; the reasoning text is never
             // shown in the UI or retained in the conversation history.
-            reasoning: delta.reasoning_content || delta.reasoning || void 0,
+            reasoning: delta.reasoning_content || delta.reasoning ? true : void 0,
             role: delta.role,
             tool_calls: delta.tool_calls
           } : void 0,
-          finish_reason
+          finish_reason,
+          ...chunk.usage ? { usage: chunk.usage } : {}
         };
         yield streamChunk;
         if (delta?.content) {
@@ -323,14 +366,15 @@ class OpenRouterProvider extends BaseProvider {
         }
         if (delta?.tool_calls) {
           for (const tc of delta.tool_calls) {
-            const key = `${tc.index}_${tc.id}`;
+            const key = Number.isInteger(tc.index) ? String(tc.index) : `unindexed-${Object.keys(toolCallsMap).length}`;
             if (!toolCallsMap[key]) {
               toolCallsMap[key] = {
-                id: tc.id,
+                id: tc.id || void 0,
                 type: "function",
                 function: { name: "", arguments: "" }
               };
             }
+            if (tc.id) toolCallsMap[key].id = tc.id;
             if (tc.function?.name) {
               toolCallsMap[key].function.name = tc.function.name;
             }
@@ -352,26 +396,14 @@ class OpenRouterProvider extends BaseProvider {
         usage: finalUsage
       };
     } catch (error) {
-      if (signal?.aborted) {
-        console.info(`[OpenRouterProvider] OpenAI SDK stream cancelled for model ${request.model}:`, error);
-        throw new Error(`AbortError: Message cancelled`);
-      }
-      console.error(`[OpenRouterProvider] OpenAI SDK stream error for model ${request.model}:`, error);
-      if (isOpenRouterErrorResponse(error)) {
-        const openRouterError = error.error;
-        const metadataStr = openRouterError.metadata ? `
-Metadata: ${JSON.stringify(openRouterError.metadata, null, 2)}` : "";
-        console.error(`OpenRouter API stream error via SDK: ${openRouterError.code} - ${openRouterError.message} ${metadataStr}`);
-        throw new Error(`OpenRouter API stream error via SDK: ${openRouterError.code} - ${openRouterError.message} ${metadataStr}`);
-      }
-      if (error instanceof OpenAI.APIError) {
-        throw new Error(`OpenRouter API stream error via SDK: ${error.status} ${error.name} - ${error.message}`);
-      }
-      throw new Error(`OpenRouter API stream error via SDK: ${error.message || "Unknown error"}`);
+      const providerError = safeError(error, "openrouter", request.model, responseStarted);
+      safeProviderConsole.error(providerError);
+      throw providerError;
     }
   }
-  async testConnection(config) {
+  async testConnection(config, requestControl = null) {
     try {
+      checkRequestControl(requestControl);
       const testRequest = {
         model: config.defaultModel || "openrouter/auto",
         // Use a known cheap/fast model or user's default
@@ -379,14 +411,14 @@ Metadata: ${JSON.stringify(openRouterError.metadata, null, 2)}` : "";
         max_tokens: 1,
         stream: false
       };
-      const response = await this.chatCompletion(testRequest, config);
-      if (response && (response.content || response.id)) {
+      const response = await this.chatCompletion(testRequest, config, requestControl);
+      checkRequestControl(requestControl);
+      if (isStrictlyComplete(response, "openrouter")) {
         return { success: true, message: `Successfully connected to OpenRouter. Received response ID: ${response.id}` };
       }
       return { success: false, error: "Test connection to OpenRouter failed to get a valid response." };
-    } catch (e) {
-      console.error("OpenRouter testConnection error:", e);
-      return { success: false, error: e.message || "Unknown error during OpenRouter test connection." };
+    } catch (error) {
+      return testConnectionFailure(error, "openrouter", config?.defaultModel, requestControl);
     }
   }
 }
@@ -402,13 +434,9 @@ class OpenAICompatibleProvider extends BaseProvider {
    * @returns true if the error is retryable
    */
   shouldRetry(error) {
-    if (error instanceof OpenAI.APIError) {
-      const status = error.status;
-      return status === 429 || status >= 500 && status < 600;
-    }
-    return error.code === "ECONNRESET" || error.code === "ETIMEDOUT" || error.code === "ENOTFOUND";
+    return isRetryableProviderStatus(error);
   }
-  async listModels(config) {
+  async listModels(config, requestControl = null) {
     const headers = {
       "Content-Type": "application/json",
       "X-Title": `Voices of the Court V${VOTC_CORE_VERSION}`,
@@ -424,30 +452,44 @@ class OpenAICompatibleProvider extends BaseProvider {
         maxRetries: 0
       });
       const response = await this.retryWithBackoff(
-        () => openAIClient.models.list(),
+        () => {
+          requestControl?.beforeSend?.();
+          return openAIClient.models.list(requestControl?.signal ? { signal: requestControl.signal } : void 0);
+        },
         3,
         1e3,
-        this.shouldRetry.bind(this)
+        this.shouldRetry.bind(this),
+        requestControl
       );
+      checkRequestControl(requestControl);
       return response.data.map((modelData) => ({
         id: modelData.id,
         name: modelData.id
       }));
     } catch (error) {
-      console.warn("OpenAICompatibleProvider: Failed to fetch models using OpenAI library, falling back to fetch:", error);
+      if (isRequestControlStop(error, requestControl)) throw error;
+      safeProviderConsole.warn(error);
       try {
-        const response = await fetch(`${this.getBaseUrl(config)}/models`, {
-          method: "GET",
-          headers
-        });
+        const response = await this.retryWithBackoff(() => {
+          requestControl?.beforeSend?.();
+          return fetch(`${this.getBaseUrl(config)}/models`, {
+            ...requestControl?.signal ? { signal: requestControl.signal } : {},
+            method: "GET",
+            headers
+          });
+        }, 1, 1e3, this.shouldRetry.bind(this), requestControl);
+        checkRequestControl(requestControl);
         if (!response.ok) {
-          const errorBody = await response.text();
-          console.warn(`OpenAICompatibleProvider: Failed to fetch models from ${this.getBaseUrl(config)} (${response.status}): ${errorBody}`);
+          const responseError = new Error("provider_http_error");
+          responseError.status = response.status;
+          responseError.headers = response.headers;
+          safeProviderConsole.warn(safeError(responseError, "openai-compatible", "models"));
           return [];
         }
         const { data } = await response.json();
         if (!Array.isArray(data)) {
-          console.warn("OpenAICompatibleProvider: Unexpected response format from /models endpoint:", data);
+          const responseError = Object.assign(new Error("provider_invalid_response"), { code: "provider_invalid_response" });
+          safeProviderConsole.warn(safeError(responseError, "openai-compatible", "models"));
           return [];
         }
         return data.map((modelData) => ({
@@ -455,7 +497,8 @@ class OpenAICompatibleProvider extends BaseProvider {
           name: modelData.id
         }));
       } catch (fallbackError) {
-        console.warn("OpenAICompatibleProvider: Error fetching models with fallback:", fallbackError);
+        if (isRequestControlStop(fallbackError, requestControl)) throw fallbackError;
+        safeProviderConsole.warn(safeError(fallbackError, "openai-compatible", "models"));
         return [];
       }
     }
@@ -475,6 +518,7 @@ class OpenAICompatibleProvider extends BaseProvider {
     };
   }
   chatCompletion(request, config, requestControl = null) {
+    requestControl = requestControlWithSignal(requestControl, request);
     const headers = {
       "Content-Type": "application/json",
       "X-Title": `Voices of the Court V${VOTC_CORE_VERSION}`,
@@ -490,7 +534,7 @@ class OpenAICompatibleProvider extends BaseProvider {
     });
     const requestParams = this.buildDiagnosticRequest(request, config);
     if (requestParams.stream) {
-      return this._streamChatCompletion(requestParams, openAIClient, request.signal);
+      return this._streamChatCompletion(requestParams, openAIClient, requestControl?.signal || request.signal, requestControl);
     } else {
       return this._nonStreamChatCompletion(requestParams, openAIClient, requestControl);
     }
@@ -504,7 +548,8 @@ class OpenAICompatibleProvider extends BaseProvider {
         },
         3,
         1e3,
-        this.shouldRetry.bind(this)
+        this.shouldRetry.bind(this),
+        requestControl
       );
       const choice = data.choices?.[0];
       if (!choice) {
@@ -528,27 +573,23 @@ class OpenAICompatibleProvider extends BaseProvider {
         } : void 0
       };
     } catch (error) {
-      if (requestControl && (error.message === "memory4_request_source_changed_before_send" || requestControl.signal?.aborted)) throw error;
-      if (error instanceof OpenAI.APIError) {
-        console.error(
-          `[OpenAICompatibleProvider] API error for model ${request.model}:`,
-          error.status,
-          error.name,
-          error.message
-        );
-        throw new Error(`OpenAI-Compatible API error via SDK: ${error.status} ${error.name} - ${error.message}`);
-      }
-      console.error(`[OpenAICompatibleProvider] Unexpected error for model ${request.model}:`, error);
-      throw new Error(`Unexpected OpenAI-Compatible SDK error: ${error.message || error}`);
+      const providerError = safeError(error, "openai-compatible", request.model);
+      safeProviderConsole.error(providerError);
+      throw providerError;
     }
   }
-  async *_streamChatCompletion(request, openAIClient, signal) {
+  async *_streamChatCompletion(request, openAIClient, signal, requestControl = null) {
+    let responseStarted = false;
     try {
       const stream = await this.retryWithBackoff(
-        () => openAIClient.chat.completions.create(request, signal ? { signal } : void 0),
+        () => {
+          requestControl?.beforeSend?.();
+          return openAIClient.chat.completions.create(request, signal ? { signal } : void 0);
+        },
         7,
         1e3,
-        this.shouldRetry.bind(this)
+        this.shouldRetry.bind(this),
+        requestControl
       );
       const contentParts = [];
       const toolCallsMap = {};
@@ -556,12 +597,16 @@ class OpenAICompatibleProvider extends BaseProvider {
       let finalFinishReason = null;
       let firstChunkId = "";
       for await (const chunk of stream) {
+        responseStarted = true;
         const choice = chunk.choices[0];
         if (!firstChunkId && chunk.id) {
           firstChunkId = chunk.id;
         }
         if (!choice) {
-          if (chunk.usage) finalUsage = chunk.usage;
+          if (chunk.usage) {
+            finalUsage = chunk.usage;
+            yield { id: chunk.id, usage: chunk.usage, finish_reason: null };
+          }
           continue;
         }
         const delta = choice.delta;
@@ -573,11 +618,12 @@ class OpenAICompatibleProvider extends BaseProvider {
           id: chunk.id,
           delta: delta ? {
             content: delta.content || void 0,
-            reasoning: delta.reasoning_content || delta.reasoning || void 0,
+            reasoning: delta.reasoning_content || delta.reasoning ? true : void 0,
             role: delta.role,
             tool_calls: delta.tool_calls
           } : void 0,
-          finish_reason
+          finish_reason,
+          ...chunk.usage ? { usage: chunk.usage } : {}
         };
         yield streamChunk;
         if (delta?.content) {
@@ -585,14 +631,15 @@ class OpenAICompatibleProvider extends BaseProvider {
         }
         if (delta?.tool_calls) {
           for (const tc of delta.tool_calls) {
-            const key = `${tc.index}_${tc.id}`;
+            const key = Number.isInteger(tc.index) ? String(tc.index) : `unindexed-${Object.keys(toolCallsMap).length}`;
             if (!toolCallsMap[key]) {
               toolCallsMap[key] = {
-                id: tc.id,
+                id: tc.id || void 0,
                 type: "function",
                 function: { name: "", arguments: "" }
               };
             }
+            if (tc.id) toolCallsMap[key].id = tc.id;
             if (tc.function?.name) {
               toolCallsMap[key].function.name = tc.function.name;
             }
@@ -614,33 +661,28 @@ class OpenAICompatibleProvider extends BaseProvider {
         usage: finalUsage
       };
     } catch (error) {
-      if (signal?.aborted) {
-        console.info(`[OpenAICompatibleProvider] OpenAI SDK stream cancelled for model ${request.model}:`, error);
-        throw new Error(`AbortError: Message cancelled`);
-      }
-      console.error(`[OpenAICompatibleProvider] OpenAI SDK stream error for model ${request.model}:`, error);
-      if (error instanceof OpenAI.APIError) {
-        throw new Error(`OpenAI-Compatible API stream error via SDK: ${error.status} ${error.name} - ${error.message}`);
-      }
-      throw new Error(`OpenAI-Compatible API stream error via SDK: ${error.message || "Unknown error"}`);
+      const providerError = safeError(error, "openai-compatible", request.model, responseStarted);
+      safeProviderConsole.error(providerError);
+      throw providerError;
     }
   }
-  async testConnection(config) {
+  async testConnection(config, requestControl = null) {
     try {
+      checkRequestControl(requestControl);
       const testRequest = {
         model: config.defaultModel || "gpt-3.5-turbo",
         messages: [{ role: "user", content: "Test" }],
         max_tokens: 1,
         stream: false
       };
-      const response = await this.chatCompletion(testRequest, config);
-      if (response && (response.content || response.id)) {
+      const response = await this.chatCompletion(testRequest, config, requestControl);
+      checkRequestControl(requestControl);
+      if (isStrictlyComplete(response, "openai-compatible")) {
         return { success: true, message: `Successfully connected to OpenAI-Compatible API. Received response ID: ${response.id}` };
       }
       return { success: false, error: "Test connection to OpenAI-Compatible API failed to get a valid response." };
-    } catch (e) {
-      console.error("OpenAI-Compatible testConnection error:", e);
-      return { success: false, error: e.message || "Unknown error during OpenAI-Compatible test connection." };
+    } catch (error) {
+      return testConnectionFailure(error, "openai-compatible", config?.defaultModel, requestControl);
     }
   }
 }
@@ -715,53 +757,70 @@ class ZhipuProvider extends OpenAICompatibleProvider {
     return this.buildRequestParams(request, config);
   }
   chatCompletion(request, config, requestControl = null) {
+    requestControl = requestControlWithSignal(requestControl, request);
     const requestParams = this.buildRequestParams(request, config);
     const openAIClient = this.createOpenAIClient(config);
-    return requestParams.stream ? this._streamZhipuChatCompletion(requestParams, openAIClient, request.signal) : this._nonStreamZhipuChatCompletion(requestParams, openAIClient, requestControl);
+    return requestParams.stream ? this._streamZhipuChatCompletion(requestParams, openAIClient, requestControl?.signal || request.signal, requestControl) : this._nonStreamZhipuChatCompletion(requestParams, openAIClient, requestControl);
   }
   async _nonStreamZhipuChatCompletion(request, openAIClient, requestControl = null) {
     const response = await super._nonStreamChatCompletion(request, openAIClient, requestControl);
     const normalizedUsage = this.normalizeUsage(response.usage);
     return { ...response, usage: normalizedUsage, usage_debug: this.buildUsageDebug(response.usage, normalizedUsage) };
   }
-  async *_streamZhipuChatCompletion(request, openAIClient, signal) {
-    const iterator = super._streamChatCompletion(request, openAIClient, signal)[Symbol.asyncIterator]();
-    while (true) {
+  async *_streamZhipuChatCompletion(request, openAIClient, signal, requestControl = null) {
+    const iterator = super._streamChatCompletion(request, openAIClient, signal, requestControl)[Symbol.asyncIterator]();
+    try {
+      while (true) {
       const step = await iterator.next();
       if (step.done) {
         const normalizedUsage = this.normalizeUsage(step.value?.usage);
         return { ...step.value, usage: normalizedUsage, usage_debug: this.buildUsageDebug(step.value?.usage, normalizedUsage) };
       }
-      yield step.value;
+      if (step.value?.usage !== void 0) {
+        const normalizedUsage = this.normalizeUsage(step.value.usage);
+        yield { ...step.value, usage: normalizedUsage, usage_debug: this.buildUsageDebug(step.value.usage, normalizedUsage) };
+      } else {
+        yield step.value;
+      }
+      }
+    } finally {
+      try { await awaitWithSignal(iterator.return?.(), signal); } catch {}
     }
   }
-  async listModels(config) {
+  async listModels(config, requestControl = null) {
     try {
-      const response = await this.createOpenAIClient(config).models.list();
+      const response = await this.retryWithBackoff(() => {
+        requestControl?.beforeSend?.();
+        return this.createOpenAIClient(config).models.list(requestControl?.signal ? { signal: requestControl.signal } : void 0);
+      }, 1, 1e3, this.shouldRetry.bind(this), requestControl);
+      checkRequestControl(requestControl);
       const models = Array.isArray(response?.data) ? response.data.map((model) => ({ id: model.id, name: model.id })) : [];
       return models.length > 0 ? models : [{ id: "glm-5.3-flash", name: "GLM-5.3-Flash" }];
     } catch (error) {
-      console.warn("ZhipuProvider: Failed to fetch models; using the GLM-5.3-Flash fallback.", error.message || error);
+      if (isRequestControlStop(error, requestControl)) throw error;
+      safeProviderConsole.warn(safeError(error, "zhipu", "models"));
       return [{ id: "glm-5.3-flash", name: "GLM-5.3-Flash" }];
     }
   }
-  async testConnection(config) {
+  async testConnection(config, requestControl = null) {
     try {
+      checkRequestControl(requestControl);
       const response = await this.chatCompletion({
         model: config.defaultModel || "glm-5.3-flash",
         messages: [{ role: "user", content: "Reply with exactly: OK" }],
         max_tokens: 128,
         stream: false
-      }, config);
-      return response && (response.content != null || response.id) ? { success: true, message: `Successfully connected to 智谱 GLM. Received response ID: ${response.id}` } : { success: false, error: "Test connection to 智谱 GLM failed to get a valid response." };
+      }, config, requestControl);
+      checkRequestControl(requestControl);
+      return isStrictlyComplete(response, "zhipu") ? { success: true, message: `Successfully connected to 智谱 GLM. Received response ID: ${response.id}` } : { success: false, error: "Test connection to 智谱 GLM returned an incomplete response." };
     } catch (error) {
-      console.error("ZhipuProvider testConnection error:", error);
-      return { success: false, error: error.message || "Unknown error during 智谱 GLM test connection." };
+      return testConnectionFailure(error, "zhipu", config?.defaultModel, requestControl);
     }
   }
 }
-class OllamaProvider {
+class OllamaProvider extends BaseProvider {
   constructor() {
+    super();
     this.providerId = "ollama";
     this.name = "Ollama";
   }
@@ -771,25 +830,28 @@ class OllamaProvider {
     }
     return config;
   }
-  async listModels(config) {
+  async listModels(config, requestControl = null) {
     const providerConfig = this.getConfig(config);
     const endpoint = `${providerConfig.baseUrl.replace(/\/$/, "")}/api/tags`;
     try {
-      const response = await fetch(endpoint, {
-        method: "GET",
-        headers: {
-          "Content-Type": "application/json"
-        }
-      });
+      const response = await this.retryWithBackoff(() => {
+        requestControl?.beforeSend?.();
+        return fetch(endpoint, {
+          ...requestControl?.signal ? { signal: requestControl.signal } : {},
+          method: "GET",
+          headers: { "Content-Type": "application/json" }
+        });
+      }, 1, 1e3, isRetryableProviderStatus, requestControl);
+      checkRequestControl(requestControl);
       if (!response.ok) {
-        const errorBody = await response.text();
-        console.error(`Ollama API error (${response.status}) listing models: ${errorBody}`);
-        throw new Error(`Failed to fetch models from Ollama: ${response.statusText}`);
+        const error = new Error("provider_http_error");
+        error.status = response.status;
+        error.headers = response.headers;
+        throw error;
       }
       const data = await response.json();
       if (!data.models || !Array.isArray(data.models)) {
-        console.error("Unexpected response format from Ollama /api/tags endpoint:", data);
-        throw new Error("Unexpected response format from Ollama /api/tags endpoint.");
+        throw Object.assign(new Error("provider_invalid_response"), { code: "provider_invalid_response" });
       }
       return data.models.map((modelData) => ({
         id: modelData.name,
@@ -801,12 +863,14 @@ class OllamaProvider {
         // contextLength: modelData.details?.parameter_size ? parseInt(modelData.details.parameter_size) : undefined, // Example, might not be correct
       }));
     } catch (error) {
-      console.error("Error fetching Ollama models:", error);
-      throw error;
+      const providerError = safeError(error, "ollama", "models");
+      safeProviderConsole.error(providerError);
+      throw providerError;
     }
   }
   // Implementation
   chatCompletion(request, config, requestControl = null) {
+    requestControl = requestControlWithSignal(requestControl, request);
     const providerConfig = this.getConfig(config);
     const endpoint = `${providerConfig.baseUrl.replace(/\/$/, "")}/api/chat`;
     const ollamaMessages = request.messages.map((msg) => ({
@@ -840,119 +904,161 @@ class OllamaProvider {
       }
     }
     if (request.stream) {
-      return this._streamChatCompletion(request, endpoint, body);
+      return this._streamChatCompletion(request, endpoint, body, requestControl);
     } else {
       return this._nonStreamChatCompletion(request, endpoint, body, requestControl);
     }
   }
   async _nonStreamChatCompletion(request, endpoint, body, requestControl = null) {
-    requestControl?.beforeSend?.();
-    const response = await fetch(endpoint, {
-      ...requestControl?.signal ? { signal: requestControl.signal } : {},
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ ...body, stream: false })
-      // Ensure stream is false
-    });
-    if (!response.ok) {
-      const errorBody = await response.text();
-      console.error(`Ollama API error (${response.status}) for model ${request.model}: ${errorBody}`);
-      throw new Error(`Ollama API error: ${response.status} ${response.statusText} - ${errorBody}`);
-    }
-    const data = await response.json();
-    if (!data.message || typeof data.message.content !== "string") {
-      throw new Error("Invalid response from Ollama: No message content found.");
-    }
-    return {
-      id: data.created_at,
-      // Ollama doesn't have a specific response ID like OpenAI, use created_at or generate one
-      content: data.message.content,
-      // tool_calls: undefined, // Ollama native API doesn't support OpenAI-style tool calls directly
-      finish_reason: data.done ? data.done_reason || "stop" : null,
-      // done_reason might exist
-      usage: {
-        // Ollama provides token counts in the response
-        prompt_tokens: data.prompt_eval_count,
-        completion_tokens: data.eval_count,
-        total_tokens: (data.prompt_eval_count || 0) + (data.eval_count || 0)
+    try {
+      const response = await this.retryWithBackoff(async () => {
+        requestControl?.beforeSend?.();
+        const result = await fetch(endpoint, {
+          ...requestControl?.signal ? { signal: requestControl.signal } : {},
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ ...body, stream: false })
+          // Ensure stream is false
+        });
+        if (!result.ok) {
+          const error = new Error("provider_http_error");
+          error.status = result.status;
+          error.headers = result.headers;
+          throw error;
+        }
+        return result;
+      }, 1, 1e3, isRetryableProviderStatus, requestControl);
+      const data = await response.json();
+      if (!data.message || typeof data.message.content !== "string") {
+        throw Object.assign(new Error("provider_invalid_response"), { code: "provider_invalid_response" });
       }
-    };
+      return {
+        id: data.created_at,
+        // Ollama doesn't have a specific response ID like OpenAI, use created_at or generate one
+        content: data.message.content,
+        // tool_calls: undefined, // Ollama native API doesn't support OpenAI-style tool calls directly
+        finish_reason: data.done ? data.done_reason || "stop" : null,
+        // done_reason might exist
+        usage: nativeUsage(data.prompt_eval_count, data.eval_count)
+      };
+    } catch (error) {
+      const providerError = safeError(error, "ollama", request.model);
+      safeProviderConsole.error(providerError);
+      throw providerError;
+    }
   }
-  async *_streamChatCompletion(request, endpoint, body) {
-    const response = await fetch(endpoint, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ ...body, stream: true })
-    });
-    if (!response.ok || !response.body) {
-      const errorBody = await response.text();
-      console.error(`Ollama API stream error (${response.status}) for model ${request.model}: ${errorBody}`);
-      throw new Error(`Ollama API stream error: ${response.status} ${response.statusText} - ${errorBody}`);
+  async *_streamChatCompletion(request, endpoint, body, requestControl = null) {
+    const signal = requestControl?.signal || request.signal;
+    let response;
+    try {
+      response = await this.retryWithBackoff(async () => {
+        requestControl?.beforeSend?.();
+        const result = await fetch(endpoint, {
+          ...signal ? { signal } : {},
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ ...body, stream: true })
+        });
+        if (!result.ok || !result.body) {
+          const error = new Error(result.body ? "provider_http_error" : "provider_invalid_response");
+          error.status = result.status;
+          error.headers = result.headers;
+          if (!result.body) error.code = "provider_invalid_response";
+          throw error;
+        }
+        return result;
+      }, 1, 1e3, isRetryableProviderStatus, requestControl);
+    } catch (error) {
+      const providerError = safeError(error, "ollama", request.model);
+      safeProviderConsole.error(providerError);
+      throw providerError;
     }
     const reader = response.body.getReader();
     const decoder = new TextDecoder();
     let buffer = "";
-    let aggregatedResponse = {
+    const aggregatedResponse = {
       id: "",
-      // Will be set from first chunk or generated
       content: "",
-      // tool_calls: [], // Ollama native API doesn't support OpenAI-style tool calls directly
-      finish_reason: null,
-      usage: { prompt_tokens: 0, completion_tokens: 0, total_tokens: 0 }
+      finish_reason: void 0,
+      usage: void 0
     };
     let firstChunk = true;
+    let terminalFrameSeen = false;
+    let readerCompleted = false;
+    const parseLine = (line) => {
+      if (!line.trim()) return null;
+      let chunkData;
+      try {
+        chunkData = JSON.parse(line);
+      } catch {
+        throw Object.assign(new Error("provider_invalid_response"), { code: "provider_invalid_response" });
+      }
+      if (!chunkData || typeof chunkData !== "object" || Array.isArray(chunkData)) {
+        throw Object.assign(new Error("provider_invalid_response"), { code: "provider_invalid_response" });
+      }
+      if (firstChunk) {
+        aggregatedResponse.id = chunkData.created_at || Date.now().toString();
+        firstChunk = false;
+      }
+      const usage = nativeUsage(chunkData.prompt_eval_count, chunkData.eval_count);
+      const streamChunk = {
+        delta: chunkData.message?.content ? { content: chunkData.message.content } : void 0,
+        finish_reason: chunkData.done ? chunkData.done_reason || "stop" : null,
+        ...usage ? { usage } : {}
+      };
+      if (chunkData.message?.content) aggregatedResponse.content += chunkData.message.content;
+      if (usage !== void 0) aggregatedResponse.usage = usage;
+      if (chunkData.done) {
+        terminalFrameSeen = true;
+        aggregatedResponse.finish_reason = chunkData.done_reason || "stop";
+      }
+      return streamChunk;
+    };
     try {
       while (true) {
         const { done, value } = await reader.read();
-        if (done) break;
+        if (done) {
+          readerCompleted = true;
+          buffer += decoder.decode();
+          if (buffer.length > 0) {
+            const streamChunk = parseLine(buffer.replace(/\r$/, ""));
+            buffer = "";
+            if (streamChunk) yield streamChunk;
+            if (terminalFrameSeen) return aggregatedResponse;
+          }
+          break;
+        }
         buffer += decoder.decode(value, { stream: true });
         let eolIndex;
         while ((eolIndex = buffer.indexOf("\n")) >= 0) {
-          const line = buffer.substring(0, eolIndex).trim();
+          const line = buffer.substring(0, eolIndex).replace(/\r$/, "");
           buffer = buffer.substring(eolIndex + 1);
-          if (line) {
-            try {
-              const chunkData = JSON.parse(line);
-              if (firstChunk) {
-                aggregatedResponse.id = chunkData.created_at || Date.now().toString();
-                firstChunk = false;
-              }
-              const streamChunk = {
-                delta: chunkData.message?.content ? { content: chunkData.message.content } : void 0,
-                finish_reason: chunkData.done ? chunkData.done_reason || "stop" : null
-              };
-              yield streamChunk;
-              if (chunkData.message?.content) {
-                aggregatedResponse.content = (aggregatedResponse.content || "") + chunkData.message.content;
-              }
-              if (chunkData.done) {
-                aggregatedResponse.finish_reason = chunkData.done_reason || "stop";
-                aggregatedResponse.usage = {
-                  prompt_tokens: chunkData.prompt_eval_count,
-                  completion_tokens: chunkData.eval_count,
-                  total_tokens: (chunkData.prompt_eval_count || 0) + (chunkData.eval_count || 0)
-                };
-                return aggregatedResponse;
-              }
-            } catch (e) {
-              console.error("Error parsing Ollama stream chunk:", e, "Raw line:", line);
-            }
-          }
+          const streamChunk = parseLine(line);
+          if (streamChunk) yield streamChunk;
+          if (terminalFrameSeen) return aggregatedResponse;
         }
       }
+    } catch (error) {
+      const providerError = safeError(error, "ollama", request.model, true);
+      safeProviderConsole.error(providerError);
+      throw providerError;
     } finally {
+      if (!readerCompleted) {
+        try { await reader.cancel(); } catch {}
+      }
       reader.releaseLock();
     }
     return aggregatedResponse;
   }
-  async testConnection(config) {
+  async testConnection(config, requestControl = null) {
     const providerConfig = this.getConfig(config);
     try {
-      await this.listModels(providerConfig);
-      return { success: true, message: `Successfully connected to Ollama at ${providerConfig.baseUrl}.` };
-    } catch (e) {
-      console.error(`Ollama testConnection error for ${providerConfig.baseUrl}:`, e);
-      return { success: false, error: e.message || `Unknown error during Ollama test connection to ${providerConfig.baseUrl}.` };
+      checkRequestControl(requestControl);
+      await this.listModels(providerConfig, requestControl);
+      checkRequestControl(requestControl);
+      return { success: true, message: "Ollama model directory is reachable; generation was not tested." };
+    } catch (error) {
+      return testConnectionFailure(error, "ollama", config?.defaultModel, requestControl);
     }
   }
 }
@@ -977,7 +1083,8 @@ class Player2Provider extends BaseProvider {
   /**
    * Override listModels to return empty array since Player2 doesn't support model listing
    */
-  async listModels() {
+  async listModels(_config, requestControl = null) {
+    checkRequestControl(requestControl);
     return [];
   }
   /**
@@ -986,15 +1093,12 @@ class Player2Provider extends BaseProvider {
    * @returns true if the error is retryable
    */
   shouldRetryPlayer2(error) {
-    if (error instanceof OpenAI.APIError) {
-      const status = error.status;
-      return status === 429 || status >= 500 && status < 600;
-    }
-    return error.code === "ECONNRESET" || error.code === "ETIMEDOUT" || error.code === "ENOTFOUND";
+    return isRetryableProviderStatus(error);
   }
   chatCompletion(request, _config, requestControl = null) {
+    requestControl = requestControlWithSignal(requestControl, request);
     const openAIClient = new OpenAI({
-      ...requestControl ? { maxRetries: 0 } : {},
+      maxRetries: 0,
       apiKey: "sk-dummy-key",
       baseURL: this.player2BaseUrl,
       defaultHeaders: {
@@ -1013,7 +1117,7 @@ class Player2Provider extends BaseProvider {
       ...request.response_format ? { response_format: request.response_format } : {}
     };
     if (requestParams.stream) {
-      return this._streamChatCompletion(requestParams, openAIClient, request.signal);
+      return this._streamChatCompletion(requestParams, openAIClient, requestControl?.signal || request.signal, requestControl);
     } else {
       return this._nonStreamChatCompletion(requestParams, openAIClient, requestControl);
     }
@@ -1027,7 +1131,8 @@ class Player2Provider extends BaseProvider {
         },
         3,
         1e3,
-        this.shouldRetryPlayer2.bind(this)
+        this.shouldRetryPlayer2.bind(this),
+        requestControl
       );
       const choice = data.choices?.[0];
       if (!choice) {
@@ -1047,27 +1152,23 @@ class Player2Provider extends BaseProvider {
         } : void 0
       };
     } catch (error) {
-      if (requestControl && (error.message === "memory4_request_source_changed_before_send" || requestControl.signal?.aborted)) throw error;
-      if (error instanceof OpenAI.APIError) {
-        console.error(
-          `[Player2Provider] API error for model ${request.model}:`,
-          error.status,
-          error.name,
-          error.message
-        );
-        throw new Error(`Player2 API error via SDK: ${error.status} ${error.name} - ${error.message}`);
-      }
-      console.error(`[Player2Provider] Unexpected error for model ${request.model}:`, error);
-      throw new Error(`Unexpected Player2 SDK error: ${error.message || error}`);
+      const providerError = safeError(error, "player2", request.model);
+      safeProviderConsole.error(providerError);
+      throw providerError;
     }
   }
-  async *_streamChatCompletion(request, openAIClient, signal) {
+  async *_streamChatCompletion(request, openAIClient, signal, requestControl = null) {
+    let responseStarted = false;
     try {
       const stream = await this.retryWithBackoff(
-        () => openAIClient.chat.completions.create(request, signal ? { signal } : void 0),
+        () => {
+          requestControl?.beforeSend?.();
+          return openAIClient.chat.completions.create(request, signal ? { signal } : void 0);
+        },
         7,
         1e3,
-        this.shouldRetryPlayer2.bind(this)
+        this.shouldRetryPlayer2.bind(this),
+        requestControl
       );
       const contentParts = [];
       const toolCallsMap = {};
@@ -1075,16 +1176,12 @@ class Player2Provider extends BaseProvider {
       let finalFinishReason = null;
       let firstChunkId = "";
       for await (const chunk of stream) {
+        responseStarted = true;
         const choice = chunk.choices[0];
         if (choice?.finish_reason === "error") {
           const choiceWithError = choice;
           if (choiceWithError.error) {
-            const error = choiceWithError.error;
-            console.error(
-              `Player2 Mid-Stream Error: ${error?.code || "Unknown"} - ${error?.message || "Unknown error"}`
-            );
-            const errorDetails = typeof error === "object" ? JSON.stringify(error, null, 2) : String(error);
-            throw new Error(`Player2 Mid-Stream Error: ${errorDetails}`);
+            throw Object.assign(new Error("provider_invalid_response"), { code: "provider_invalid_response" });
           } else {
             throw new Error(
               `Player2 Mid-Stream Error: Stream terminated with error status but no error details provided`
@@ -1095,7 +1192,10 @@ class Player2Provider extends BaseProvider {
           firstChunkId = chunk.id;
         }
         if (!choice) {
-          if (chunk.usage) finalUsage = chunk.usage;
+          if (chunk.usage) {
+            finalUsage = chunk.usage;
+            yield { id: chunk.id, usage: chunk.usage, finish_reason: null };
+          }
           continue;
         }
         const delta = choice.delta;
@@ -1107,11 +1207,12 @@ class Player2Provider extends BaseProvider {
           id: chunk.id,
           delta: delta ? {
             content: delta.content || void 0,
-            reasoning: delta.reasoning_content || delta.reasoning || void 0,
+            reasoning: delta.reasoning_content || delta.reasoning ? true : void 0,
             role: delta.role,
             tool_calls: delta.tool_calls
           } : void 0,
-          finish_reason
+          finish_reason,
+          ...chunk.usage ? { usage: chunk.usage } : {}
         };
         yield streamChunk;
         if (delta?.content) {
@@ -1119,14 +1220,15 @@ class Player2Provider extends BaseProvider {
         }
         if (delta?.tool_calls) {
           for (const tc of delta.tool_calls) {
-            const key = `${tc.index}_${tc.id}`;
+            const key = Number.isInteger(tc.index) ? String(tc.index) : `unindexed-${Object.keys(toolCallsMap).length}`;
             if (!toolCallsMap[key]) {
               toolCallsMap[key] = {
-                id: tc.id,
+                id: tc.id || void 0,
                 type: "function",
                 function: { name: "", arguments: "" }
               };
             }
+            if (tc.id) toolCallsMap[key].id = tc.id;
             if (tc.function?.name) {
               toolCallsMap[key].function.name = tc.function.name;
             }
@@ -1148,19 +1250,14 @@ class Player2Provider extends BaseProvider {
         usage: finalUsage
       };
     } catch (error) {
-      if (signal?.aborted) {
-        console.info(`[Player2Provider] OpenAI SDK stream cancelled for model ${request.model}:`, error);
-        throw new Error(`AbortError: Message cancelled`);
-      }
-      console.error(`[Player2Provider] OpenAI SDK stream error for model ${request.model}:`, error);
-      if (error instanceof OpenAI.APIError) {
-        throw new Error(`Player2 API stream error via SDK: ${error.status} ${error.name} - ${error.message}`);
-      }
-      throw new Error(`Player2 API stream error via SDK: ${error.message || "Unknown error"}`);
+      const providerError = safeError(error, "player2", request.model, responseStarted);
+      safeProviderConsole.error(providerError);
+      throw providerError;
     }
   }
-  async testConnection() {
+  async testConnection(config, requestControl = null) {
     try {
+      checkRequestControl(requestControl);
       const testRequest = {
         model: "gpt-oss-120b",
         // Use a known cheap/fast model or user's default
@@ -1168,42 +1265,47 @@ class Player2Provider extends BaseProvider {
         max_tokens: 1,
         stream: false
       };
-      const response = await this.chatCompletion(testRequest);
-      if (response && (response.content || response.id)) {
+      const response = await this.chatCompletion(testRequest, config, requestControl);
+      checkRequestControl(requestControl);
+      if (isStrictlyComplete(response, "player2")) {
         return { success: true, message: `Successfully connected to Player2. Received response ID: ${response.id}` };
       }
       return { success: false, error: "Test connection to Player2 failed to get a valid response." };
-    } catch (e) {
-      console.error("Player2 testConnection error:", e);
-      return { success: false, error: e.message || "Unknown error during Player2 test connection." };
+    } catch (error) {
+      return testConnectionFailure(error, "player2", "gpt-oss-120b", requestControl);
     }
   }
-  async checkHealth() {
+  async checkHealth(requestControl = null) {
     try {
+      checkRequestControl(requestControl);
       const baseHeaders = {
         Accept: "application/json",
         "player2-game-key": this.player2GameKey
       };
+      requestControl?.beforeSend?.();
       const response = await fetch(this.player2HealthUrl, {
+        ...requestControl?.signal ? { signal: requestControl.signal } : {},
         method: "GET",
         headers: baseHeaders
       });
+      checkRequestControl(requestControl);
       return await this.handleHealthErrorResponse(response);
     } catch (error) {
-      console.error("[Player2Provider] Health check error:", error);
-      return { success: false, error: error.message || "Unable to reach Player2 health endpoint." };
+      if (isRequestControlStop(error, requestControl)) throw error;
+      const providerError = safeError(error, "player2", "health");
+      console.error(providerError);
+      return { success: false, error: providerError.message };
     }
   }
   async handleHealthErrorResponse(response) {
     if (response.status === 200) {
-      return { success: true };
+      return { success: true, message: "Player2 health endpoint is reachable; generation was not tested." };
     }
     if (response.status === 401) {
       return { success: false, code: 401, error: "Authentication required in Player2 App." };
     }
     if (response.status === 402) {
-      const data = await response.json().catch(() => ({}));
-      return { success: false, code: 402, error: data.message || "Insufficient credits." };
+      return { success: false, code: 402, error: "Insufficient credits." };
     }
     if (response.status === 429) {
       return { success: false, code: 429, error: "Too many requests. Please try again." };
@@ -1218,8 +1320,7 @@ class Player2Provider extends BaseProvider {
         error: "Health endpoint not found. Check Player2 app version or base URL."
       };
     }
-    const fallback = await response.text().catch(() => "Unknown error");
-    return { success: false, code: response.status, error: fallback || "Unknown error." };
+    return { success: false, code: response.status, error: "Player2 health check failed." };
   }
 }
 class DeepseekProvider extends BaseProvider {
@@ -1233,11 +1334,7 @@ class DeepseekProvider extends BaseProvider {
    * Determine if an error should trigger a retry
    */
   shouldRetry(error) {
-    if (error instanceof OpenAI.APIError) {
-      const status = error.status;
-      return status === 429 || status >= 500 && status < 600;
-    }
-    return error.code === "ECONNRESET" || error.code === "ETIMEDOUT" || error.code === "ENOTFOUND";
+    return isRetryableProviderStatus(error);
   }
   /**
    * Get the base URL for Deepseek API
@@ -1245,7 +1342,8 @@ class DeepseekProvider extends BaseProvider {
   getDeepseekBaseUrl(config) {
     return config.baseUrl || this.DEFAULT_BASE_URL;
   }
-  async listModels(_) {
+  async listModels(_, requestControl = null) {
+    checkRequestControl(requestControl);
     return [
       { id: "deepseek-v4-flash", name: "DeepSeek V4 Flash" },
       { id: "deepseek-v4-pro", name: "DeepSeek V4 Pro" },
@@ -1269,6 +1367,7 @@ class DeepseekProvider extends BaseProvider {
     };
   }
   chatCompletion(request, config, requestControl = null) {
+    requestControl = requestControlWithSignal(requestControl, request);
     const baseUrl = this.getDeepseekBaseUrl(config);
     const openAIClient = new OpenAI({
       apiKey: this.getAPIKey(config),
@@ -1277,7 +1376,7 @@ class DeepseekProvider extends BaseProvider {
     });
     const requestParams = this.buildDiagnosticRequest(request, config);
     if (requestParams.stream) {
-      return this._streamChatCompletion(requestParams, openAIClient, request.signal);
+      return this._streamChatCompletion(requestParams, openAIClient, requestControl?.signal || request.signal, requestControl);
     } else {
       return this._nonStreamChatCompletion(requestParams, openAIClient, requestControl);
     }
@@ -1421,7 +1520,8 @@ IMPORTANT: Your response must be ONLY valid JSON. No prose, no code fences, no e
         },
         3,
         1e3,
-        this.shouldRetry.bind(this)
+        this.shouldRetry.bind(this),
+        requestControl
       );
       const choice = data.choices?.[0];
       if (!choice) {
@@ -1441,45 +1541,23 @@ IMPORTANT: Your response must be ONLY valid JSON. No prose, no code fences, no e
         } : void 0
       };
     } catch (error) {
-      if (requestControl && (error.message === "memory4_request_source_changed_before_send" || requestControl.signal?.aborted)) throw error;
-      if (error instanceof OpenAI.APIError) {
-        console.error(
-          `[DeepseekProvider] API error for model ${request.model}:`,
-          error.status,
-          error.name,
-          error.message
-        );
-        const providerError = new Error(`Deepseek API error: ${error.status ?? "n/a"} ${error.name || "APIError"} - ${error.message}`);
-        providerError.name = error.name || "APIError";
-        providerError.provider = "deepseek";
-        providerError.model = request.model;
-        providerError.status = error.status ?? null;
-        providerError.code = error.code ?? null;
-        providerError.causeCode = error.cause?.code ?? null;
-        providerError.attemptCount = error.votcAttemptCount || 1;
-        providerError.retryable = error.votcRetryable === true;
-        throw providerError;
-      }
-      console.error(`[DeepseekProvider] Unexpected error for model ${request.model}:`, error);
-      const providerError = new Error(`Unexpected Deepseek API error: ${error.message || error}`);
-      providerError.name = error?.name || "Error";
-      providerError.provider = "deepseek";
-      providerError.model = request.model;
-      providerError.status = error?.status ?? null;
-      providerError.code = error?.code ?? null;
-      providerError.causeCode = error?.cause?.code ?? null;
-      providerError.attemptCount = error?.votcAttemptCount || 1;
-      providerError.retryable = error?.votcRetryable === true;
+      const providerError = safeError(error, "deepseek", request.model);
+      safeProviderConsole.error(providerError);
       throw providerError;
     }
   }
-  async *_streamChatCompletion(request, openAIClient, signal) {
+  async *_streamChatCompletion(request, openAIClient, signal, requestControl = null) {
+    let responseStarted = false;
     try {
       const stream = await this.retryWithBackoff(
-        () => openAIClient.chat.completions.create(request, signal ? { signal } : void 0),
+        () => {
+          requestControl?.beforeSend?.();
+          return openAIClient.chat.completions.create(request, signal ? { signal } : void 0);
+        },
         7,
         1e3,
-        this.shouldRetry.bind(this)
+        this.shouldRetry.bind(this),
+        requestControl
       );
       const contentParts = [];
       const toolCallsMap = {};
@@ -1487,12 +1565,16 @@ IMPORTANT: Your response must be ONLY valid JSON. No prose, no code fences, no e
       let finalFinishReason = null;
       let firstChunkId = "";
       for await (const chunk of stream) {
+        responseStarted = true;
         const choice = chunk.choices[0];
         if (!firstChunkId && chunk.id) {
           firstChunkId = chunk.id;
         }
         if (!choice) {
-          if (chunk.usage) finalUsage = chunk.usage;
+          if (chunk.usage) {
+            finalUsage = chunk.usage;
+            yield { id: chunk.id, usage: chunk.usage, finish_reason: null };
+          }
           continue;
         }
         const delta = choice.delta;
@@ -1504,11 +1586,12 @@ IMPORTANT: Your response must be ONLY valid JSON. No prose, no code fences, no e
           id: chunk.id,
           delta: delta ? {
             content: delta.content || void 0,
-            reasoning: delta.reasoning_content || delta.reasoning || void 0,
+            reasoning: delta.reasoning_content || delta.reasoning ? true : void 0,
             role: delta.role,
             tool_calls: delta.tool_calls
           } : void 0,
-          finish_reason
+          finish_reason,
+          ...chunk.usage ? { usage: chunk.usage } : {}
         };
         yield streamChunk;
         if (delta?.content) {
@@ -1516,14 +1599,15 @@ IMPORTANT: Your response must be ONLY valid JSON. No prose, no code fences, no e
         }
         if (delta?.tool_calls) {
           for (const tc of delta.tool_calls) {
-            const key = `${tc.index}_${tc.id}`;
+            const key = Number.isInteger(tc.index) ? String(tc.index) : `unindexed-${Object.keys(toolCallsMap).length}`;
             if (!toolCallsMap[key]) {
               toolCallsMap[key] = {
-                id: tc.id,
+                id: tc.id || void 0,
                 type: "function",
                 function: { name: "", arguments: "" }
               };
             }
+            if (tc.id) toolCallsMap[key].id = tc.id;
             if (tc.function?.name) {
               toolCallsMap[key].function.name = tc.function.name;
             }
@@ -1545,39 +1629,28 @@ IMPORTANT: Your response must be ONLY valid JSON. No prose, no code fences, no e
         usage: finalUsage
       };
     } catch (error) {
-      if (signal?.aborted) {
-        console.info(`[DeepseekProvider] Stream cancelled for model ${request.model}:`, error);
-        throw new Error(`AbortError: Message cancelled`);
-      }
-      console.error(`[DeepseekProvider] Stream error for model ${request.model}:`, error);
-      const providerError = new Error(error instanceof OpenAI.APIError ? `Deepseek API stream error: ${error.status ?? "n/a"} ${error.name || "APIError"} - ${error.message}` : `Deepseek API stream error: ${error.message || "Unknown error"}`);
-      providerError.name = error?.name || "Error";
-      providerError.provider = "deepseek";
-      providerError.model = request.model;
-      providerError.status = error?.status ?? null;
-      providerError.code = error?.code ?? null;
-      providerError.causeCode = error?.cause?.code ?? null;
-      providerError.attemptCount = error?.votcAttemptCount || 1;
-      providerError.retryable = error?.votcRetryable === true;
+      const providerError = safeError(error, "deepseek", request.model, responseStarted);
+      safeProviderConsole.error(providerError);
       throw providerError;
     }
   }
-  async testConnection(config) {
+  async testConnection(config, requestControl = null) {
     try {
+      checkRequestControl(requestControl);
       const testRequest = {
         model: config.defaultModel || "deepseek-v4-flash",
         messages: [{ role: "user", content: "Test" }],
         max_tokens: 1,
         stream: false
       };
-      const response = await this.chatCompletion(testRequest, config);
-      if (response && (response.content || response.id)) {
+      const response = await this.chatCompletion(testRequest, config, requestControl);
+      checkRequestControl(requestControl);
+      if (isStrictlyComplete(response, "deepseek")) {
         return { success: true, message: `Successfully connected to Deepseek. Received response ID: ${response.id}` };
       }
       return { success: false, error: "Test connection to Deepseek failed to get a valid response." };
-    } catch (e) {
-      console.error("Deepseek testConnection error:", e);
-      return { success: false, error: e.message || "Unknown error during Deepseek test connection." };
+    } catch (error) {
+      return testConnectionFailure(error, "deepseek", config?.defaultModel, requestControl);
     }
   }
 }
@@ -1592,11 +1665,7 @@ class GeminiProvider extends BaseProvider {
    * Determine if an error should trigger a retry
    */
   shouldRetry(error) {
-    if (error.status) {
-      const status = error.status;
-      return status === 429 || status >= 500 && status < 600;
-    }
-    return error.code === "ECONNRESET" || error.code === "ETIMEDOUT" || error.code === "ENOTFOUND";
+    return isRetryableProviderStatus(error);
   }
   /**
    * Get the base URL for Gemini API
@@ -1722,23 +1791,30 @@ class GeminiProvider extends BaseProvider {
     }
     return body;
   }
-  async listModels(config) {
+  async listModels(config, requestControl = null) {
     const baseUrl = this.getGeminiBaseUrl(config);
     const apiKey = this.getAPIKey(config);
     try {
-      const response = await fetch(`${baseUrl}/models?key=${apiKey}`, {
-        method: "GET",
-        headers: {
-          "Content-Type": "application/json"
-        }
-      });
+      const response = await this.retryWithBackoff(() => {
+        requestControl?.beforeSend?.();
+        return fetch(`${baseUrl}/models?key=${apiKey}`, {
+          ...requestControl?.signal ? { signal: requestControl.signal } : {},
+          method: "GET",
+          headers: { "Content-Type": "application/json" }
+        });
+      }, 1, 1e3, isRetryableProviderStatus, requestControl);
+      checkRequestControl(requestControl);
       if (!response.ok) {
-        console.warn(`GeminiProvider: Failed to fetch models (${response.status})`);
+        const error = new Error("provider_http_error");
+        error.status = response.status;
+        error.headers = response.headers;
+        safeProviderConsole.warn(safeError(error, "gemini", "models"));
         return this.getDefaultModels();
       }
       const data = await response.json();
       if (!data.models || !Array.isArray(data.models)) {
-        console.warn("GeminiProvider: Unexpected response format from /models endpoint");
+        const error = Object.assign(new Error("provider_invalid_response"), { code: "provider_invalid_response" });
+        safeProviderConsole.warn(safeError(error, "gemini", "models"));
         return this.getDefaultModels();
       }
       return data.models.filter(
@@ -1749,7 +1825,8 @@ class GeminiProvider extends BaseProvider {
         contextLength: model.inputTokenLimit
       }));
     } catch (error) {
-      console.warn("GeminiProvider: Error fetching models:", error);
+      if (isRequestControlStop(error, requestControl)) throw error;
+      safeProviderConsole.warn(safeError(error, "gemini", "models"));
       return this.getDefaultModels();
     }
   }
@@ -1765,11 +1842,12 @@ class GeminiProvider extends BaseProvider {
     ];
   }
   chatCompletion(request, config, requestControl = null) {
+    requestControl = requestControlWithSignal(requestControl, request);
     const baseUrl = this.getGeminiBaseUrl(config);
     const apiKey = this.getAPIKey(config);
     const modelName = request.model.startsWith("models/") ? request.model : `models/${request.model}`;
     if (request.stream) {
-      return this._streamChatCompletion(baseUrl, apiKey, modelName, request);
+      return this._streamChatCompletion(baseUrl, apiKey, modelName, request, requestControl);
     } else {
       return this._nonStreamChatCompletion(baseUrl, apiKey, modelName, request, requestControl);
     }
@@ -1789,61 +1867,63 @@ class GeminiProvider extends BaseProvider {
             body: JSON.stringify(body)
           });
           if (!res.ok) {
-            const errorBody = await res.text();
-            const error = new Error(`Gemini API error: ${res.status} - ${errorBody}`);
+            const error = new Error("provider_http_error");
             error.status = res.status;
+            error.headers = res.headers;
             throw error;
           }
           return res.json();
         },
         3,
         1e3,
-        this.shouldRetry.bind(this)
+        this.shouldRetry.bind(this),
+        requestControl
       );
       return this.parseGeminiResponse(response);
     } catch (error) {
-      if (requestControl && (error.message === "memory4_request_source_changed_before_send" || requestControl.signal?.aborted)) throw error;
-      console.error(`[GeminiProvider] API error for model ${request.model}:`, error);
-      throw new Error(`Gemini API error: ${error.message || error}`);
+      const providerError = safeError(error, "gemini", request.model);
+      safeProviderConsole.error(providerError);
+      throw providerError;
     }
   }
-  async *_streamChatCompletion(baseUrl, apiKey, modelName, request) {
+  async *_streamChatCompletion(baseUrl, apiKey, modelName, request, requestControl = null) {
     const body = this.buildRequestBody(request);
     const url = `${baseUrl}/${modelName}:streamGenerateContent?alt=sse&key=${apiKey}`;
     let response;
     try {
       response = await this.retryWithBackoff(
         async () => {
+          requestControl?.beforeSend?.();
           const res = await fetch(url, {
+            ...(requestControl?.signal || request.signal) ? { signal: requestControl?.signal || request.signal } : {},
             method: "POST",
             headers: {
               "Content-Type": "application/json"
             },
-            body: JSON.stringify(body),
-            signal: request.signal
+            body: JSON.stringify(body)
           });
           if (!res.ok) {
-            const errorBody = await res.text();
-            const error = new Error(`Gemini API error: ${res.status} - ${errorBody}`);
+            const error = new Error("provider_http_error");
             error.status = res.status;
+            error.headers = res.headers;
             throw error;
           }
+          if (!res.body) throw Object.assign(new Error("provider_invalid_response"), { code: "provider_invalid_response" });
           return res;
         },
         3,
         1e3,
-        this.shouldRetry.bind(this)
+        this.shouldRetry.bind(this),
+        requestControl
       );
     } catch (error) {
-      if (request.signal?.aborted) {
-        throw new Error("AbortError: Message cancelled");
-      }
-      console.error(`[GeminiProvider] Stream error for model ${request.model}:`, error);
-      throw new Error(`Gemini API stream error: ${error.message || error}`);
+      const providerError = safeError(error, "gemini", request.model);
+      safeProviderConsole.error(providerError);
+      throw providerError;
     }
     const reader = response.body?.getReader();
     if (!reader) {
-      throw new Error("Gemini API: No response body");
+      throw safeError(Object.assign(new Error("provider_invalid_response"), { code: "provider_invalid_response" }), "gemini", request.model);
     }
     const decoder = new TextDecoder();
     let buffer = "";
@@ -1851,46 +1931,82 @@ class GeminiProvider extends BaseProvider {
     let firstChunkId = "";
     let finalFinishReason = null;
     let finalUsage = void 0;
+    let readerCompleted = false;
+    const eventData = [];
+    const parseEvent = () => {
+      if (!eventData.length) return null;
+      const data = eventData.join("\n");
+      eventData.length = 0;
+      if (data.trim() === "[DONE]") return null;
+      let parsed;
+      try {
+        parsed = JSON.parse(data);
+      } catch {
+        throw Object.assign(new Error("provider_invalid_response"), { code: "provider_invalid_response" });
+      }
+      if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
+        throw Object.assign(new Error("provider_invalid_response"), { code: "provider_invalid_response" });
+      }
+      return this.parseGeminiStreamChunk(parsed);
+    };
+    const recordChunk = (chunk) => {
+      if (!firstChunkId && chunk.id) firstChunkId = chunk.id;
+      if (chunk.finish_reason !== null && chunk.finish_reason !== void 0) finalFinishReason = chunk.finish_reason;
+      if (chunk.usage !== void 0) finalUsage = chunk.usage;
+      if (chunk.delta?.content) accumulatedContent += chunk.delta.content;
+      return chunk;
+    };
+    const processLine = (rawLine) => {
+      const line = rawLine.replace(/\r$/, "");
+      if (!line) return parseEvent();
+      if (line.startsWith(":")) return null;
+      const colon = line.indexOf(":");
+      const field = colon < 0 ? line : line.slice(0, colon);
+      if (field !== "data") {
+        if (["event", "id", "retry"].includes(field)) return null;
+        throw Object.assign(new Error("provider_invalid_response"), { code: "provider_invalid_response" });
+      }
+      const value = colon < 0 ? "" : line.slice(colon + 1);
+      eventData.push(value.startsWith(" ") ? value.slice(1) : value);
+      return null;
+    };
     try {
       while (true) {
         const { done, value } = await reader.read();
-        if (done) break;
+        if (done) {
+          readerCompleted = true;
+          buffer += decoder.decode();
+          if (buffer.length > 0) {
+            const chunk = processLine(buffer);
+            buffer = "";
+            if (chunk) yield recordChunk(chunk);
+          }
+          const chunk = parseEvent();
+          if (chunk) yield recordChunk(chunk);
+          break;
+        }
         buffer += decoder.decode(value, { stream: true });
         const lines = buffer.split("\n");
         buffer = lines.pop() || "";
         for (const line of lines) {
-          if (line.startsWith("data: ")) {
-            const data = line.slice(6).trim();
-            if (data === "[DONE]") continue;
-            try {
-              const parsed = JSON.parse(data);
-              const chunk = this.parseGeminiStreamChunk(parsed);
-              if (!firstChunkId && chunk.id) {
-                firstChunkId = chunk.id;
-              }
-              if (chunk.finish_reason) {
-                finalFinishReason = chunk.finish_reason;
-              }
-              if (chunk.usage) {
-                finalUsage = chunk.usage;
-              }
-              if (chunk.delta?.content) {
-                accumulatedContent += chunk.delta.content;
-              }
-              yield chunk;
-            } catch (parseError) {
-              console.warn("[GeminiProvider] Failed to parse SSE data:", data);
-            }
-          }
+          const chunk = processLine(line);
+          if (chunk) yield recordChunk(chunk);
         }
       }
       return {
         id: firstChunkId,
         content: accumulatedContent,
-        finish_reason: finalFinishReason || "stop",
+        finish_reason: finalFinishReason,
         usage: finalUsage
       };
+    } catch (error) {
+      const providerError = safeError(error, "gemini", request.model, true);
+      safeProviderConsole.error(providerError);
+      throw providerError;
     } finally {
+      if (!readerCompleted) {
+        try { await reader.cancel(); } catch {}
+      }
       reader.releaseLock();
     }
   }
@@ -1917,8 +2033,7 @@ class GeminiProvider extends BaseProvider {
       "STOP": "stop",
       "MAX_TOKENS": "length",
       "SAFETY": "content_filter",
-      "RECITATION": "content_filter",
-      "OTHER": "stop"
+      "RECITATION": "content_filter"
     };
     const usage = response.usageMetadata ? {
       prompt_tokens: response.usageMetadata.promptTokenCount,
@@ -1928,7 +2043,7 @@ class GeminiProvider extends BaseProvider {
     return {
       id: response.responseId || void 0,
       content: content || null,
-      finish_reason: candidate.finishReason ? finishReasonMap[candidate.finishReason] || "stop" : "stop",
+      finish_reason: candidate.finishReason ? finishReasonMap[candidate.finishReason] || candidate.finishReason : null,
       usage
     };
   }
@@ -1962,8 +2077,7 @@ class GeminiProvider extends BaseProvider {
       "STOP": "stop",
       "MAX_TOKENS": "length",
       "SAFETY": "content_filter",
-      "RECITATION": "content_filter",
-      "OTHER": "stop"
+      "RECITATION": "content_filter"
     };
     return {
       id: chunk.responseId,
@@ -1971,26 +2085,27 @@ class GeminiProvider extends BaseProvider {
         content: content || void 0,
         role: "assistant"
       },
-      finish_reason: candidate.finishReason ? finishReasonMap[candidate.finishReason] || null : null,
+      finish_reason: candidate.finishReason ? finishReasonMap[candidate.finishReason] || candidate.finishReason : null,
       usage
     };
   }
-  async testConnection(config) {
+  async testConnection(config, requestControl = null) {
     try {
+      checkRequestControl(requestControl);
       const testRequest = {
         model: config.defaultModel || "gemini-2.5-flash",
         messages: [{ role: "user", content: "Hi" }],
         max_tokens: 5,
         stream: false
       };
-      const response = await this.chatCompletion(testRequest, config);
-      if (response && (response.content !== null || response.id)) {
-        return { success: true, message: `Successfully connected to Gemini. Response: ${response.content?.substring(0, 50) || "(empty)"}` };
+      const response = await this.chatCompletion(testRequest, config, requestControl);
+      checkRequestControl(requestControl);
+      if (isStrictlyComplete(response, "gemini")) {
+        return { success: true, message: `Successfully connected to Gemini. Received response ID: ${response.id}` };
       }
-      return { success: false, error: "Test connection to Gemini failed to get a valid response." };
-    } catch (e) {
-      console.error("Gemini testConnection error:", e);
-      return { success: false, error: e.message || "Unknown error during Gemini test connection." };
+      return { success: false, error: "Test connection to Gemini returned an incomplete response." };
+    } catch (error) {
+      return testConnectionFailure(error, "gemini", config?.defaultModel, requestControl);
     }
   }
 }

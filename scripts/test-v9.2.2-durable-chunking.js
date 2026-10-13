@@ -351,7 +351,9 @@ async function assertAdapterRetryGuard(label, invoke) {
   const transport = async (...args) => {
     transportCalls++;
     transportArgs.push(args);
-    if (transportCalls === 1) throw Object.assign(new Error("mock connection reset"), { code: "ECONNRESET" });
+    if (transportCalls === 1) throw Object.assign(new Error("mock HTTP 503"), {
+      status: 503, headers: { "retry-after": "0" }
+    });
     assert.fail(`${label} must run the authorization guard before retry transport`);
   };
   const requestControl = { signal: controller.signal, beforeSend() {
@@ -384,8 +386,8 @@ async function testOpenRouterAndPlayer2ConditionalSdkSettingsAndPayloads() {
     const ordinaryResponse = await provider.chatCompletion(request, config);
 
     assert.equal(ordinaryResponse.content, "{}");
-    assert.equal(Object.prototype.hasOwnProperty.call(openAIClientOptions[0], "maxRetries"), false,
-      `${label} ordinary chat must keep the prior SDK retry default`);
+    assert.equal(openAIClientOptions[0].maxRetries, 0,
+      `${label} ordinary chat must disable hidden SDK retries`);
     assert.deepEqual(ordinaryRequests[0].providerRequest, expectedPayload,
       `${label} ordinary chat request JSON must retain its established shape`);
     assert.equal(ordinaryRequests[0].requestOptions, undefined);
@@ -401,14 +403,14 @@ async function testOpenRouterAndPlayer2ConditionalSdkSettingsAndPayloads() {
     openAITransport = async (providerRequest, requestOptions) => {
       durableTransportCalls++;
       durableRequests.push({ providerRequest, requestOptions });
-      throw Object.assign(new Error("mock connection reset"), { code: "ECONNRESET" });
+      throw Object.assign(new Error("mock HTTP 503"), { status: 503, headers: { "retry-after": "0" } });
     };
     const controller = new AbortController();
     await assert.rejects(provider.chatCompletion(request, config, { signal: controller.signal, beforeSend() {
       beforeSendChecks++;
       if (beforeSendChecks === 2) throw sourceChanged;
     } }), error => error === sourceChanged,
-    `${label} must stop at the pre-transport guard after a retryable network failure`);
+    `${label} must stop at the pre-transport guard after an explicitly retryable HTTP 503`);
     assert.equal(beforeSendChecks, 2);
     assert.equal(durableTransportCalls, 1);
     assert.deepEqual(durableRequests[0].providerRequest, expectedPayload);

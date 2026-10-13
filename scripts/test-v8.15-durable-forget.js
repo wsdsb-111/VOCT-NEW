@@ -196,7 +196,7 @@ async function run() {
     let durablePrompt = "";
     const recovered = await restarted.recoverPending(async (prompt) => {
       durablePrompt = JSON.stringify(prompt);
-      return JSON.stringify({ status: "STORE", entries: [pending.candidateA, pending.candidateC] });
+      return { content: JSON.stringify({ status: "STORE", entries: [pending.candidateA, pending.candidateC] }), finish_reason: "stop" };
     }, { activeCampaignToken: campaignToken, isNarrativeCommitted: () => true });
     assert.equal(recovered.length, 1);
     assert.equal(recovered[0].status, "STORE", JSON.stringify(recovered[0]));
@@ -315,12 +315,12 @@ async function run() {
 
     const unknown = context("finalization-unknown-source");
     const retryCoordinator = createCoordinator("unknown-source");
-    const failed = await retryCoordinator.finishOwner(unknown.snapshot, async () => JSON.stringify({ status: "STORE", entries: [
+    const failed = await retryCoordinator.finishOwner(unknown.snapshot, async () => ({ content: JSON.stringify({ status: "STORE", entries: [
       { ...unknown.candidateC, fragmentIds: [...unknown.candidateC.fragmentIds, "unrecognized-source"] }
-    ] }));
+    ] }), finish_reason: "stop" }));
     assert.equal(failed.status, "EXTRACTION_FAILED");
     assert.equal(failed.error, "memory4_response_source_mismatch");
-    const retried = await retryCoordinator.recoverPending(async () => JSON.stringify({ status: "STORE", entries: [unknown.candidateC] }),
+    const retried = await retryCoordinator.recoverPending(async () => ({ content: JSON.stringify({ status: "STORE", entries: [unknown.candidateC] }), finish_reason: "stop" }),
       { activeCampaignToken: campaignToken, isNarrativeCommitted: () => true });
     assert.equal(retried[0].status, "STORE");
     assert.deepEqual(retryCoordinator.store.query({ campaignToken, ownerId }).map(entry => entry.text), ["remembered fact C"]);

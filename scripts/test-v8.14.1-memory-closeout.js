@@ -116,9 +116,9 @@ async function main() {
         const body = JSON.parse(prompt[1].content);
         assert(body.activeCommitments.some(entry => entry.entryId === saved.entryId && entry.expectedRevision === 1));
         const fragment = body.fragments.find(item => item.text === quote);
-        return JSON.stringify({ status: extras.entries?.length ? "STORE" : "NO_DURABLE_CONTENT", entries: extras.entries || [],
+        return { content: JSON.stringify({ status: extras.entries?.length ? "STORE" : "NO_DURABLE_CONTENT", entries: extras.entries || [],
           commitmentTransitions: [{ entryId: saved.entryId, expectedRevision: 1, status, fragmentIds: [fragment.fragmentId],
-            commitmentQuote: "归还玉印", evidenceQuote: quote, ...extras.transition }] });
+            commitmentQuote: "归还玉印", evidenceQuote: quote, ...extras.transition } ] }), finish_reason: "stop" };
       });
     };
     await checkAsync("a shared object cannot bind fulfillment to a different promised action", async () => {
@@ -191,7 +191,7 @@ async function main() {
       }
       const f = fixture("silence"), saved = newPromise(f, "silence");
       const snapshot = f.coordinator.buildOwnerSnapshot(context(f, "silence-later", [[1, "又过了许多年。"], [2, "今日天气很好。"]], { date: "1220.1.1" }), 2);
-      await f.coordinator.finishOwner(snapshot, async () => JSON.stringify({ status: "NO_DURABLE_CONTENT", entries: [] }));
+      await f.coordinator.finishOwner(snapshot, async () => ({ content: JSON.stringify({ status: "NO_DURABLE_CONTENT", entries: [] }), finish_reason: "stop" }));
       assert.equal(f.coordinator.store.readEntry(f.scope, saved.entryId).state.status, "active");
       const packet = f.planner.plan({ ...f.scope, currentGameDate: "1220.1.1", query: "还有哪些未完成的承诺？", entityIds: [1], querySpeakerId: 1,
         memoryEngineRemainingBudget: 1200, providerRemainingSafeBudget: 1200, legacyMemories: [] });
@@ -213,10 +213,10 @@ async function main() {
       const snapshot = f.coordinator.buildOwnerSnapshot(context(f, "superseded-end", [[1, quote], [2, "我记住了新约。"]], { date: "1181.1.1" }), 2);
       const result = await f.coordinator.finishOwner(snapshot, async prompt => {
         const fragment = JSON.parse(prompt[1].content).fragments.find(item => item.text === quote);
-        return JSON.stringify({ status: "STORE", entries: [{ memoryType: "COMMITMENT", text: replacementText, fragmentIds: [fragment.fragmentId],
+        return { content: JSON.stringify({ status: "STORE", entries: [{ memoryType: "COMMITMENT", text: replacementText, fragmentIds: [fragment.fragmentId],
           entityIds: [1], participantIds: [1, 2], topics: ["promise"] }], commitmentTransitions: [{ entryId: saved.entryId,
           expectedRevision: 1, status: "superseded", commitmentQuote: "归还玉印", evidenceQuote: quote,
-          fragmentIds: [fragment.fragmentId], replacementEntryIndex: 0 }] });
+          fragmentIds: [fragment.fragmentId], replacementEntryIndex: 0 }] }), finish_reason: "stop" };
       });
       assert.equal(result.commitmentTransitionCount, 1);
       const old = f.coordinator.store.readEntry(f.scope, saved.entryId), replacement = f.coordinator.store.readEntry(f.scope, result.entryIds[0]);
@@ -237,8 +237,8 @@ async function main() {
       const snapshot = f.coordinator.buildOwnerSnapshot(context(f, "wrong-promisor-end", [[2, quote]], { date: "1181.1.1" }), 2);
       const result = await f.coordinator.finishOwner(snapshot, async prompt => {
         const fragment = JSON.parse(prompt[1].content).fragments.find(item => item.text === quote);
-        return JSON.stringify({ status: "NO_DURABLE_CONTENT", entries: [], commitmentTransitions: [{ entryId: saved.entryId,
-          expectedRevision: 1, status: "fulfilled", commitmentQuote: "归还玉印", evidenceQuote: quote, fragmentIds: [fragment.fragmentId] }] });
+        return { content: JSON.stringify({ status: "NO_DURABLE_CONTENT", entries: [], commitmentTransitions: [{ entryId: saved.entryId,
+          expectedRevision: 1, status: "fulfilled", commitmentQuote: "归还玉印", evidenceQuote: quote, fragmentIds: [fragment.fragmentId] }] }), finish_reason: "stop" };
       });
       assert.equal(result.status, "EXTRACTION_FAILED");
       assert.equal(f.coordinator.store.readEntry(f.scope, saved.entryId).state.status, "active");

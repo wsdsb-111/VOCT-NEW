@@ -49,7 +49,7 @@ async function testRollingCheckpointDurability() {
         batches.push({ ids: batch.map((entry) => entry.id), previous });
         return batch;
       },
-      requestSummary: async () => ({ content: updatedSummary })
+      requestSummary: async () => ({ content: updatedSummary, finish_reason: "stop" })
     });
     assert.strictEqual(result.committed, true);
   }
@@ -221,7 +221,7 @@ async function testFinalizationRecoveryAndStructuredExtraction() {
         return { content: JSON.stringify({
           summarySegments: parsed.summarySegments.map((segment) => ({ ...segment, messageIds: segment.messageIds.filter((id) => ids.has(id)) })).filter((segment) => segment.messageIds.length),
           memories: parsed.memories.filter((memory) => memory.messageIds.every((id) => ids.has(id)))
-        }) };
+        }), finish_reason: "stop" };
       },
       buildPrompt: (chunk) => chunk.messages
     });
@@ -240,7 +240,7 @@ async function testFinalizationRecoveryAndStructuredExtraction() {
       conversationId: "conversation-immediate-retry",
       requestSummary: async () => {
         attempts++;
-        return attempts === 1 ? { content: "" } : { content: payload };
+        return attempts === 1 ? { content: "" } : { content: payload, finish_reason: "stop" };
       },
       buildPrompt: () => []
     });

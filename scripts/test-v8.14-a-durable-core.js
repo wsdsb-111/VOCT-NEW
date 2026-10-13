@@ -298,7 +298,7 @@ try {
       else if (++ownerTwoRequests === 1) throw new Error("temporary_provider_failure");
       const fragmentId = JSON.parse(prompt[1].content).fragments[0].fragmentId;
       return { content: JSON.stringify({ status: "STORE", entries: [{ memoryType: "LONG_TERM_GOAL", text: "提出议和意向。", fragmentIds: [fragmentId],
-        participantIds: [], entityIds: [], topics: ["议和"], eventTime: { status: "unknown" } }] }) };
+        participantIds: [], entityIds: [], topics: ["议和"], eventTime: { status: "unknown" } }] }), finish_reason: "stop" };
     };
     const first = await engine.finalizeConversation({ ...c, requestSummary: () => narrativeRequests++, requestDurable });
     assert.equal(first.success, true);

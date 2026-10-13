@@ -100,7 +100,7 @@ async function run() {
       sourceRole: "user", targetAge: 23 }).disclosures, 23), undefined,
     "a first-person claim cannot be rebound to a same-age named third party");
 
-    const requestDurable = async () => JSON.stringify({ status: "NO_DURABLE_CONTENT", entries: [] });
+    const requestDurable = async () => ({ content: JSON.stringify({ status: "NO_DURABLE_CONTENT", entries: [] }), finish_reason: "stop" });
     const npcQuestionContext = context({ conversationId: "npc-age-question", finalizationId: "npc-age-question-finalization",
       excludedSummaryOwnerIds: [2] });
     const npcResult = await coordinator.finalizeCommitted(npcQuestionContext, requestDurable, { isNarrativeCommitted: true });

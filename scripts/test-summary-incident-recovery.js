@@ -44,14 +44,14 @@ async function main() {
     const boundaryContext = { ...context, preferChunkedSummary: true, participantPresence: [{ characterId: 1, joinedAtMessageId: 0, leftAtMessageId: null }, { characterId: 2, joinedAtMessageId: 2, leftAtMessageId: 8 }] };
     boundaryContext.requestSummary = async messages => {
       assert.ok(![2, 8].some(boundary => messages[0].id < boundary && messages.at(-1).id >= boundary), "input chunks themselves cannot cross presence boundaries");
-      return { content: JSON.stringify({ summarySegments: [{ content: "边界内的完整叙事", participants: [1], messageIds: messages.map(m => m.id) }], memories: [] }) };
+      return { content: JSON.stringify({ summarySegments: [{ content: "边界内的完整叙事", participants: [1], messageIds: messages.map(m => m.id) }], memories: [] }), finish_reason: "stop" };
     };
     const boundaryOutput = await engine.requestFinalSummary(boundaryContext);
     assert.equal(engine.evaluateFinalSummaryQuality(boundaryContext, engine.extractor.parseOutput(boundaryOutput, boundaryContext)).success, true);
     const markerContext = { ...boundaryContext, participantPresence: [{ characterId: 1, joinedAtMessageId: 0, leftAtMessageId: null }, { characterId: 2, joinedAtMessageId: 4, leftAtMessageId: 5 }], messages: context.messages.map(message => message.id === 4 ? { ...message, role: "system", kind: "presence_join", content: "【甲入内】" } : message) };
     markerContext.requestSummary = async messages => {
       assert.ok(!messages.every(message => message.kind === "presence_join"), "system-only boundary events must not provoke invented dialogue");
-      return { content: JSON.stringify({ summarySegments: [{ content: "边界内叙事", participants: [1], messageIds: messages.map(m => m.id) }], memories: [] }) };
+      return { content: JSON.stringify({ summarySegments: [{ content: "边界内叙事", participants: [1], messageIds: messages.map(m => m.id) }], memories: [] }), finish_reason: "stop" };
     };
     const markerOutput = await engine.requestFinalSummary(markerContext);
     assert.ok(engine.extractor.parseOutput(markerOutput, markerContext).summarySegments.some(segment => segment.content === "【甲入内】"));

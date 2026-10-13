@@ -55,7 +55,7 @@ Conversation.configure({
   llmManager: {
     sendSummaryRequest: async () => {
       summaryRequestCount += 1;
-      return { content: "{}" };
+      return { content: "{}", finish_reason: "stop" };
     }
   },
   TokenCounter: {
@@ -400,7 +400,7 @@ function makeConversation() {
           messageIds: [0, 1, 2],
           speakerIds: [1, 2, 3]
         }]
-      }) }),
+      }), finish_reason: "stop" }),
       persistCharacterFolders: async (_finalSummary, context) => {
         assert.strictEqual(context.directedSummaries.size, 6, "三人一轮对话必须产生六份有向摘要投影");
         for (const [pairKey, projection] of context.directedSummaries) {

@@ -43,7 +43,7 @@ const requests = [];
 const provider = {
   async chatCompletion(request, config) {
     requests.push({ request, config });
-    return { content: config === actionConfig ? '{"actions":[]}' : "ok", usage: { prompt_tokens: 1, completion_tokens: 1, total_tokens: 2 } };
+    return { finish_reason: "stop", content: config.instanceId === actionConfig.instanceId ? '{"actions":[]}' : "ok", usage: { prompt_tokens: 1, completion_tokens: 1, total_tokens: 2 } };
   }
 };
 const manager = new LLMManager({
@@ -66,15 +66,18 @@ const manager = new LLMManager({
   await manager.sendSummaryRequest([{ role: "user", content: "summary" }]);
 
   const [chatRequest, actionRequest, summaryRequest] = requests;
-  assert.strictEqual(chatRequest.config, chatConfig);
+  assert.deepStrictEqual(chatRequest.config, chatConfig);
+  assert.notStrictEqual(chatRequest.config, chatConfig, "request uses a pinned configuration copy");
   assert.deepStrictEqual({ temperature: chatRequest.request.temperature, max_tokens: chatRequest.request.max_tokens }, chatConfig.defaultParameters, "Chat Provider defaults must remain independent");
-  assert.strictEqual(actionRequest.config, actionConfig);
+  assert.deepStrictEqual(actionRequest.config, actionConfig);
+  assert.notStrictEqual(actionRequest.config, actionConfig, "request uses a pinned configuration copy");
   assert.strictEqual(actionRequest.request.temperature, 0.1);
   assert.strictEqual(actionRequest.request.max_tokens, 512);
   assert.strictEqual(actionConfig.useMinimizedActionsSchema, false);
   assert.strictEqual(actionConfig.actionSchemaDeliveryMode, "optimized_local_validation");
   assert.strictEqual(actionConfig.deepseekActionStablePrefixOptimization, false);
-  assert.strictEqual(summaryRequest.config, summaryConfig);
+  assert.deepStrictEqual(summaryRequest.config, summaryConfig);
+  assert.notStrictEqual(summaryRequest.config, summaryConfig, "request uses a pinned configuration copy");
   assert.strictEqual(summaryRequest.request.temperature, summaryConfig.defaultParameters.temperature, "Summary Provider defaults must remain independent");
 
   assert(mainSource.includes('defaultModel: "deepseek-v4-flash"'));

@@ -130,9 +130,7 @@ function createSummariesManager({ fs, path, summariesDir, memoryEngine, memorySy
         const configuredLimit = Number(getSummaryOutputLimit());
         const maxTokens = Number.isInteger(configuredLimit) && configuredLimit >= 256 && configuredLimit <= 16384 ? configuredLimit : 4096;
         const generated = await requestSummary(prompt, { attempt: 1, maxTokens, requestType: "summary_rewrite" });
-        const outcome = typeof generated === "string"
-          ? { content: generated, complete: true, truncated: false }
-          : validateGenerationOutcome(generated);
+        const outcome = validateGenerationOutcome(generated);
         if (outcome.truncated) return { success: false, error: "summary_regeneration_output_truncated" };
         if (!outcome.complete) return { success: false, error: "summary_regeneration_output_incomplete" };
         const regeneratedContent = String(outcome.content || "").trim().replace(/^```(?:text|markdown)?\s*/i, "").replace(/\s*```$/, "").trim();

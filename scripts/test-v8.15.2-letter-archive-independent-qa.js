@@ -127,7 +127,7 @@ function createFixture({ failFirstSummary = false, letterManagerFactory = create
         shouldFailSummary = false;
         throw new Error("fixture_summary_failure");
       }
-      return { content: SUMMARY_TEXT };
+      return { content: SUMMARY_TEXT, finish_reason: "stop" };
     },
     requestDurable: async (messages, options) => {
       durableOwners.push(options.ownerId);
@@ -142,7 +142,7 @@ function createFixture({ failFirstSummary = false, letterManagerFactory = create
         participantIds: [],
         topics: ["玉印", "信件"],
         eventTime: { from: fragment.eventDate, to: fragment.eventDate, precision: "day", status: "reported" }
-      }] }) };
+      }] }), finish_reason: "stop" };
     },
     persistSummary: async (summary, context) => GameData.saveRecoveredSummary(summary, context),
     getSummarySettings: () => settingsRepository.getSummaryPromptSettings(),
@@ -154,7 +154,7 @@ function createFixture({ failFirstSummary = false, letterManagerFactory = create
   const managerDependencies = {
     settingsRepository, fs, path, TailFile: class {}, readline: {}, parseLog,
     letterPromptBuilder: { buildMessages: () => [{ role: "user", content: "offline letter fixture" }] },
-    llmManager: { sendChatRequest: async () => ({ content: REPLY_TEXT }) },
+    llmManager: { sendChatRequest: async () => ({ content: REPLY_TEXT, finish_reason: "stop" }) },
     PromptBuilder: {}, TokenCounter: { estimateMessageTokens: message => message.content.length },
     memoryEngine, dataDir, letterEffectTransport, runFileManager, autoStartLogTailing: false,
     letterPayloadRetryDelays: [], setIntervalFn: inertInterval, clearIntervalFn() {},

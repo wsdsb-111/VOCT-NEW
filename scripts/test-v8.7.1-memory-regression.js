@@ -26,7 +26,7 @@ const { evidenceMemory } = require("./v8.6.2-test-fixtures");
 
     const manager = new RollingSummaryManager({ trace: new MemoryTrace({ logger: { log() {} } }) });
     const state = manager.createState();
-    const checkpoint = await manager.checkpoint({ state, history: [{ id: 0, role: "user", name: "玩家", content: "约定" }, { id: 1, role: "assistant", name: "韩世忠", content: "记得" }], tokensToSummarize: 2, estimateMessageTokens: () => 1, buildPrompt: (batch) => batch, requestSummary: async () => ({ content: "双方确认赴约。" }) });
+    const checkpoint = await manager.checkpoint({ state, history: [{ id: 0, role: "user", name: "玩家", content: "约定" }, { id: 1, role: "assistant", name: "韩世忠", content: "记得" }], tokensToSummarize: 2, estimateMessageTokens: () => 1, buildPrompt: (batch) => batch, requestSummary: async () => ({ content: "双方确认赴约。", finish_reason: "stop" }) });
     assert.equal(checkpoint.committed, true);
     assert.equal(state.currentSummary, "双方确认赴约。");
 

@@ -2242,6 +2242,7 @@ class Conversation {
       if (finalInstruction) safePrompt.push({ ...finalInstruction });
       console.log(`[TOKEN_COUNT] Character leaving summary for ${character.fullName}: ${this.estimateTokenCount(safePrompt)}`);
       const result = await llmManager.sendSummaryRequest(safePrompt, void 0, { requestType: "character_leaving_summary" });
+      if (!validateGenerationOutcome(result).complete) return null;
       const summary = result && typeof result === "object" && typeof result.content === "string" ? result.content.trim() : "";
       if (!summary) {
         console.error("Invalid response format for character leaving summary");

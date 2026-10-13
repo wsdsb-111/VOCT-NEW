@@ -118,11 +118,11 @@ async function run() {
         const context = { campaignToken: `commit-${count}`, conversationId: `commit-${count}`,
           finalizationVisibilityV1: true, participants, messages,
           participantPresence: participants.map((person) => ({ characterId: person.id, joinedAtMessageId: 1, leftAtMessageId: null })),
-          buildPrompt: () => [], requestSummary: async () => { summaryRequests++; return { content: output }; },
+          buildPrompt: () => [], requestSummary: async () => { summaryRequests++; return { content: output, finish_reason: "stop" }; },
           requestDurable: async (prompt, options) => {
             if (count === 2 && options.ownerId === 2) assert.equal(JSON.stringify(prompt).includes("背叛"), false);
             if (count === 3 && options.ownerId === 3) assert.equal(JSON.stringify(prompt).includes("秘密"), false);
-            return { content: '{"status":"NO_DURABLE_CONTENT","entries":[]}' };
+            return { content: '{"status":"NO_DURABLE_CONTENT","entries":[]}', finish_reason: "stop" };
           },
           persistCharacterFolders: async () => ({ success: true }) };
         const result = await engine.finalizeConversation(context);

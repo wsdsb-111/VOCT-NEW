@@ -750,6 +750,30 @@
       "target": "out/main/providers/index.js"
     },
     {
+      "source": "main/providers/provider-cancellation.js",
+      "target": "out/main/providers/provider-cancellation.js"
+    },
+    {
+      "source": "main/providers/provider-capabilities.js",
+      "target": "out/main/providers/provider-capabilities.js"
+    },
+    {
+      "source": "main/providers/provider-errors.js",
+      "target": "out/main/providers/provider-errors.js"
+    },
+    {
+      "source": "main/providers/provider-platform.js",
+      "target": "out/main/providers/provider-platform.js"
+    },
+    {
+      "source": "main/providers/provider-result.js",
+      "target": "out/main/providers/provider-result.js"
+    },
+    {
+      "source": "main/providers/provider-retry-policy.js",
+      "target": "out/main/providers/provider-retry-policy.js"
+    },
+    {
       "source": "main/providers/request-budget.js",
       "target": "out/main/providers/request-budget.js"
     },

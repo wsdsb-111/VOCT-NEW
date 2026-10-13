@@ -27,7 +27,10 @@ const providerOutput = JSON.stringify({ summarySegments: [{ content: "玩家答�
   const failed = await engine.finalizeConversation({
     ...context,
     buildPrompt: () => [],
-    requestSummary: async () => ({ content: providerCalls++ === 0 ? providerOutput : "" }),
+    requestSummary: async () => {
+      if (providerCalls++ === 0) return { content: providerOutput, finish_reason: "stop" };
+      return { content: "" };
+    },
     persistCharacterFolders: async () => { throw new Error("summary_folder_disk_offline"); }
   });
   assert.strictEqual(failed.success, false);

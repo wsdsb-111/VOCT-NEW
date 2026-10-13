@@ -177,7 +177,8 @@ async function run() {
     const noDurableContext = finalizationContext({ token: "v8.15.1-no-durable", conversationId: "no-durable-conversation",
       finalizationId: "no-durable-finalization" });
     const noDurable = await coordinator.finalizeCommitted(noDurableContext,
-      async () => JSON.stringify({ status: "NO_DURABLE_CONTENT", entries: [] }), { isNarrativeCommitted: true });
+      async () => ({ content: JSON.stringify({ status: "NO_DURABLE_CONTENT", entries: [] }), finish_reason: "stop" }),
+      { isNarrativeCommitted: true });
     assert.equal(noDurable.status, "COMPLETE");
     assert.equal(noDurable.owners.find(owner => owner.ownerId === 2)?.status, "NO_DURABLE_CONTENT");
     assert.equal(fact(coordinator.getCurrentDisclosures({ campaignToken: noDurableContext.campaignToken, ownerId: 2 }, 1,

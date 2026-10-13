@@ -181,7 +181,7 @@ async function assertCoverageFailureRecoversWithRegeneration() {
     memories: [memory]
   });
   try {
-    const failed = await engine.finalizeConversation({ ...context, requestSummary: async () => ({ content: incomplete }) });
+    const failed = await engine.finalizeConversation({ ...context, requestSummary: async () => ({ content: incomplete, finish_reason: "stop" }) });
     assert.strictEqual(failed.success, false);
     assert(String(failed.error?.message).startsWith("projection_narrative_coverage_missing:"));
     assert.strictEqual(folderWrites, 0, "coverage failure must happen before character-folder persistence");
@@ -200,7 +200,7 @@ async function assertCoverageFailureRecoversWithRegeneration() {
     let regenerationCalls = 0;
     const recovered = await engine.recoverFailedFinalization(snapshotPath, {
       buildPrompt: () => [],
-      requestSummary: async () => { regenerationCalls++; return { content: corrected }; },
+      requestSummary: async () => { regenerationCalls++; return { content: corrected, finish_reason: "stop" }; },
       persistCharacterFolders: context.persistCharacterFolders
     });
     assert.strictEqual(recovered.success, true);

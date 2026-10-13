@@ -116,13 +116,13 @@ const service = new LLMManager({
   assert.strictEqual(calls.length, 5);
   const [chatCall, actionCall, summaryCall, fallbackSummaryCall, recoverySummaryCall] = calls;
 
-  assert.strictEqual(chatCall.config, chatConfig, "chat must use the active conversation provider");
+  assert.deepStrictEqual(chatCall.config, chatConfig, "chat must use the active conversation provider");
   assert.strictEqual(chatCall.request.model, "chat-model");
   assert.strictEqual(chatCall.request.stream, true);
   assert.deepStrictEqual(chatCall.request.thinking, { type: "enabled" });
   assert.strictEqual(chatCall.request.max_tokens, 4096);
 
-  assert.strictEqual(actionCall.config, actionConfig, "actions must use the selected action provider");
+  assert.deepStrictEqual(actionCall.config, actionConfig, "actions must use the selected action provider");
   assert.strictEqual(actionCall.request.model, "action-model");
   assert.strictEqual(actionCall.request.stream, false);
   assert.strictEqual(actionCall.request.thinking, undefined, "action routing must not impose provider-specific thinking parameters");
@@ -130,7 +130,7 @@ const service = new LLMManager({
   assert.strictEqual(actionCall.request.max_tokens, 999);
   assert.strictEqual(actionCall.request.response_format.type, "json_schema");
 
-  assert.strictEqual(summaryCall.config, summaryConfig, "summaries must use the selected summary provider");
+  assert.deepStrictEqual(summaryCall.config, summaryConfig, "summaries must use the selected summary provider");
   assert.strictEqual(summaryCall.request.model, "summary-model");
   assert.strictEqual(summaryCall.request.stream, false);
   assert.deepStrictEqual(summaryCall.request.thinking, { type: "disabled" }, "DeepSeek final summaries must disable thinking to protect structured output");

@@ -105,7 +105,7 @@ async function fixture({ roster = [1, 2], date = "1164.5.20", mainTemplate = nul
       if (options.requestType === "memory4_durable") {
         const input = JSON.parse(prompt[1].content);
         sample.durableInputs.push(input);
-        if (sample.durableResponse) return JSON.stringify(sample.durableResponse(input));
+        if (sample.durableResponse) return { content: JSON.stringify(sample.durableResponse(input)), finish_reason: "stop" };
         const unique = new Map();
         for (const fragment of input.fragments) {
           if (!unique.has(fragment.text) || fragment.fragmentId.startsWith("segment_")) unique.set(fragment.text, fragment);
@@ -116,7 +116,7 @@ async function fixture({ roster = [1, 2], date = "1164.5.20", mainTemplate = nul
             fragmentIds: [fragment.fragmentId], entityIds: fragment.entityIds, topics: ["往事"],
             eventTime: time ? { from: time.fromGameDate, to: time.toGameDate, precision: time.precision, status: "reported" } : { status: "unknown" } };
         });
-        return JSON.stringify({ status: entries.length ? "STORE" : "NO_DURABLE_CONTENT", entries });
+        return { content: JSON.stringify({ status: entries.length ? "STORE" : "NO_DURABLE_CONTENT", entries }), finish_reason: "stop" };
       }
       const text = prompt.find(message => message.content.startsWith("Full conversation:"))?.content || "";
       const segments = [];
@@ -429,18 +429,18 @@ async function main() {
         const fragment = input.fragments.find(item => item.text === content);
         assert(fragment, "Coordinator must supply the exact source fragment");
         const source = snapshot.fragments.find(item => item.fragmentId === fragment.fragmentId);
-        if (!transition) return JSON.stringify({ status: "STORE", entries: [{ ...sourceEntry(source, "COMMITMENT"),
-          fragmentIds: [fragment.fragmentId], entityIds: source.entityIds, participantIds: [1, 2], topics: ["约定"] }], commitmentTransitions: [] });
+        if (!transition) return { content: JSON.stringify({ status: "STORE", entries: [{ ...sourceEntry(source, "COMMITMENT"),
+          fragmentIds: [fragment.fragmentId], entityIds: source.entityIds, participantIds: [1, 2], topics: ["约定"] }], commitmentTransitions: [] }), finish_reason: "stop" };
         const targetId = transition.entryId || originalId;
         const target = input.activeCommitments.find(item => item.entryId === targetId);
         assert(target, "Coordinator must offer the current active commitment");
         const entries = replacementText ? [{ ...sourceEntry(source, "COMMITMENT"), text: replacementText,
           fragmentIds: [fragment.fragmentId], entityIds: source.entityIds, participantIds: [1, 2], topics: ["约定"] }] : [];
-        return JSON.stringify({ status: entries.length ? "STORE" : "NO_DURABLE_CONTENT", entries,
+        return { content: JSON.stringify({ status: entries.length ? "STORE" : "NO_DURABLE_CONTENT", entries,
           commitmentTransitions: [{ entryId: targetId, expectedRevision: target.expectedRevision,
             fragmentIds: [fragment.fragmentId], status: transition.status,
             commitmentQuote: transition.binding, evidenceQuote: content,
-            ...(replacementText ? { replacementEntryIndex: 0 } : {}) }] });
+            ...(replacementText ? { replacementEntryIndex: 0 } : {}) }] }), finish_reason: "stop" };
       });
       return { snapshot, result };
     };

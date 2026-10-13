@@ -249,16 +249,20 @@ function testEmptyEntryAndTransitionBudgetsStayHardLimits() {
   const validEntry = candidate(fragment);
   const validTransition = { entryId: "existing-commitment", expectedRevision: 1, status: "fulfilled",
     fragmentIds: [fragment.fragmentId], commitmentQuote: "归还玉印", evidenceQuote: "我已经归还玉印，履行了承诺。" };
+  const noContentPayload = { status: "NO_DURABLE_CONTENT", entries: [] };
 
-  assert.throws(() => coordinator.parseResult(JSON.stringify({ status: "STORE", entries: [validEntry] }),
+  assert.throws(() => coordinator.parseResult(JSON.stringify(noContentPayload), [fragment], snapshot),
+    error => error.message === "memory4_generation_incomplete", "bare JSON strings lack terminal completion evidence");
+  assert.throws(() => coordinator.parseResult({ content: JSON.stringify(noContentPayload) }, [fragment], snapshot),
+    error => error.message === "memory4_generation_incomplete", "missing finish reason remains incomplete");
+
+  assert.throws(() => coordinator.parseResult(completeResult([validEntry]),
     [fragment], snapshot, 0, 1), error => error.message === "memory4_response_invalid_shape",
   "zero entry budget must reject an entry before candidate validation");
-  assert.throws(() => coordinator.parseResult(JSON.stringify({ status: "NO_DURABLE_CONTENT", entries: [],
-    commitmentTransitions: [validTransition] }), [fragment], snapshot, 0, 0),
+  assert.throws(() => coordinator.parseResult(completeResult([], [validTransition]), [fragment], snapshot, 0, 0),
   error => error.message === "memory4_response_invalid_transitions",
   "zero transition budget must reject a transition even when entry budget is zero");
-  const transitionsOnly = coordinator.parseResult(JSON.stringify({ status: "NO_DURABLE_CONTENT", entries: [],
-    commitmentTransitions: [validTransition] }), [fragment], snapshot, 0, 1);
+  const transitionsOnly = coordinator.parseResult(completeResult([], [validTransition]), [fragment], snapshot, 0, 1);
   assert.equal(transitionsOnly.status, "NO_DURABLE_CONTENT");
   assert.deepEqual(transitionsOnly.entries, []);
   assert.deepEqual(transitionsOnly.commitmentTransitions, [validTransition]);
@@ -270,7 +274,7 @@ function testUnknownEntityFilteringRemainsCountOnly() {
   const snapshot = makeSnapshot({ label: "unknown-entity-filter", fragments: [fragment] });
   const valid = candidate(fragment, "authorized fact");
   const unknown = candidate(fragment, "unverified third-party fact", [999]);
-  const parsed = coordinator.parseResult(JSON.stringify({ status: "STORE", entries: [unknown, valid] }),
+  const parsed = coordinator.parseResult(completeResult([unknown, valid]),
     [fragment], snapshot, 8, 8);
 
   assert.equal(parsed.status, "STORE");

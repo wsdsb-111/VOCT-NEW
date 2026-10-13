@@ -575,10 +575,10 @@ async function main() {
     sample.base.writeJson(path.join(directory, "index.json"), index);
     sample.base.writeJson(path.join(directory, "metadata.json"), { ...metadata, indexHash: hash(index) });
     sample.coordinator.configureDerived({ isCampaignCurrent: () => false });
-    const result = await sample.coordinator.finishOwner(source.snapshot, async () => JSON.stringify({ status: "STORE", entries: [{
+    const result = await sample.coordinator.finishOwner(source.snapshot, async () => ({ content: JSON.stringify({ status: "STORE", entries: [{
       memoryType: "MAJOR_EXPERIENCE", text: source.snapshot.fragments[0].text, fragmentIds: [source.snapshot.fragments[0].fragmentId],
       entityIds: [99], eventTime: { from: "1164.1.1", to: "1164.12.31", precision: "year", status: "reported" }
-    }] }));
+    }] }), finish_reason: "stop" }));
     assert.equal(result.status, "STORE");
     assert.equal(result.derivedGenerationStatus, "SKIPPED_DERIVED_POLICY");
     assert.equal(result.derived.status, "SKIPPED_DERIVED_POLICY");
@@ -636,9 +636,9 @@ async function main() {
       const fragments = JSON.parse(prompt[1].content).fragments;
       offered.push(fragments.map(fragment => fragment.text));
       const target = fragments.find(fragment => fragment.text === facts[2].content);
-      return JSON.stringify({ status: target ? "STORE" : "NO_DURABLE_CONTENT", entries: target ? [{ memoryType: "MAJOR_EXPERIENCE",
+      return { content: JSON.stringify({ status: target ? "STORE" : "NO_DURABLE_CONTENT", entries: target ? [{ memoryType: "MAJOR_EXPERIENCE",
         text: target.text, fragmentIds: [target.fragmentId], entityIds: [99],
-        eventTime: { from: "1164.1.1", to: "1164.12.31", precision: "year", status: "reported" } }] : [] });
+        eventTime: { from: "1164.1.1", to: "1164.12.31", precision: "year", status: "reported" } }] : [] }), finish_reason: "stop" };
     } });
     const converted = await sample.coordinator.recompressLegacy(sample.scope, { memoryId: parent.memoryId, expectedSourceHash: legacySourceHash(parent) });
     assert.equal(converted.status, "COMPLETE", converted.reason);
@@ -666,9 +666,9 @@ async function main() {
       provenance: { campaignToken: sample.scope.campaignToken, folderOwnerId: 2, extractionMode: "user_edited_summary" } });
     sample.coordinator.configureDerived({ isCampaignCurrent: () => true, requestExtraction: async prompt => {
       const fragment = JSON.parse(prompt[1].content).fragments[0];
-      return JSON.stringify({ status: "STORE", entries: [{ memoryType: "MAJOR_EXPERIENCE", text: fragment.text,
+      return { content: JSON.stringify({ status: "STORE", entries: [{ memoryType: "MAJOR_EXPERIENCE", text: fragment.text,
         fragmentIds: [fragment.fragmentId], entityIds: [99],
-        eventTime: { from: "1164.1.1", to: "1164.12.31", precision: "year", status: "reported" } }] });
+        eventTime: { from: "1164.1.1", to: "1164.12.31", precision: "year", status: "reported" } }] }), finish_reason: "stop" };
     } });
     const result = await sample.coordinator.recompressLegacy(sample.scope, { memoryId: source.memoryId });
     assert.equal(result.status, "COMPLETE", result.reason);
@@ -691,9 +691,9 @@ async function main() {
     sample.coordinator.configureDerived({ isCampaignCurrent: () => true, requestExtraction: async prompt => {
       const input = JSON.parse(prompt[1].content), fragment = input.fragments[0];
       assert.equal(input.conversationDate, "1170.1.1");
-      return JSON.stringify({ status: "STORE", entries: [{ memoryType: "MAJOR_EXPERIENCE", text: fragment.text,
+      return { content: JSON.stringify({ status: "STORE", entries: [{ memoryType: "MAJOR_EXPERIENCE", text: fragment.text,
         fragmentIds: [fragment.fragmentId], entityIds: [99],
-        eventTime: { from: "1160.1.1", to: "1160.12.31", precision: "year", status: "reported" } }] });
+        eventTime: { from: "1160.1.1", to: "1160.12.31", precision: "year", status: "reported" } }] }), finish_reason: "stop" };
     } });
     const result = await sample.coordinator.recompressLegacy(sample.scope, { memoryId: source.memoryId });
     assert.equal(result.status, "COMPLETE", result.reason);
@@ -713,9 +713,9 @@ async function main() {
     const original = fs.readFileSync(sourceFile);
     sample.coordinator.configureDerived({ isCampaignCurrent: () => true, requestExtraction: async prompt => {
       const fragment = JSON.parse(prompt[1].content).fragments[0];
-      return JSON.stringify({ status: "STORE", entries: [{ memoryType: "MAJOR_EXPERIENCE", text: fragment.text,
+      return { content: JSON.stringify({ status: "STORE", entries: [{ memoryType: "MAJOR_EXPERIENCE", text: fragment.text,
         fragmentIds: [fragment.fragmentId], entityIds: [99],
-        eventTime: { from: "1165.1.1", to: "1165.12.31", precision: "year", status: "reported" } }] });
+        eventTime: { from: "1165.1.1", to: "1165.12.31", precision: "year", status: "reported" } }] }), finish_reason: "stop" };
     } });
     const result = await sample.coordinator.recompressLegacy(sample.scope, { memoryId: source.memoryId });
     assert.equal(result.status, "EXTRACTION_FAILED");
@@ -736,8 +736,8 @@ async function main() {
     sample.coordinator.configureDerived({ isCampaignCurrent: () => true, requestExtraction: async prompt => {
       const fragment = JSON.parse(prompt[1].content).fragments[0];
       entered(); await paused;
-      return JSON.stringify({ status: "STORE", entries: [{ memoryType: "MAJOR_EXPERIENCE", text: fragment.text,
-        fragmentIds: [fragment.fragmentId], entityIds: [99] }] });
+      return { content: JSON.stringify({ status: "STORE", entries: [{ memoryType: "MAJOR_EXPERIENCE", text: fragment.text,
+        fragmentIds: [fragment.fragmentId], entityIds: [99] }] }), finish_reason: "stop" };
     } });
     const running = sample.coordinator.recompressLegacy(sample.scope, { memoryId: source.memoryId });
     await ready;

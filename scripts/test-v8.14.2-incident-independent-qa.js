@@ -61,7 +61,7 @@ function response(entries = [], extra = {}) {
 }
 
 function asGeneration(value) {
-  return { content: JSON.stringify(value), complete: true, truncated: false };
+  return { content: JSON.stringify(value), finish_reason: "stop", complete: true, truncated: false };
 }
 
 function promptPayload(prompt) {

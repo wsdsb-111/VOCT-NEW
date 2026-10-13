@@ -39,7 +39,7 @@ Conversation.configure({
     async sendSummaryRequest(prompt) {
       capturedPrompt = prompt;
       if (summaryFailure) throw new Error("summary unavailable");
-      return { content: summaryText };
+      return { content: summaryText, finish_reason: "stop" };
     }
   },
   TokenCounter: { calculateTotalTokens: () => 1, estimateMessageTokens: () => 1 },

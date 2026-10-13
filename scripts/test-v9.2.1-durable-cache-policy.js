@@ -14,6 +14,7 @@ const fragment = { fragmentId: "source-1", text: "甲告知乙明年会继续研
 const snapshot = { ownerId: 2, campaignToken: "policy-campaign", date: "1164.1.1", completeness: "complete",
   counterpartIds: [1], fragments: [fragment], activeCommitments: [], entityNameEvidence: [], relationshipEvidence: [] };
 const hash = text => crypto.createHash("sha256").update(text).digest("hex");
+const completeResult = payload => ({ content: JSON.stringify(payload), finish_reason: "stop" });
 const PromptBuilder = createPromptBuilder({ TemplateEngine: class {}, PromptScriptLoader: class {},
   TokenCounter: { estimateMessageTokens: message => message.content.length }, createPromptFingerprint: hash });
 const first = coordinator.buildPrompt(snapshot, [fragment], 8, 8);
@@ -42,12 +43,14 @@ assert.deepEqual(JSON.parse(empty[1].content).fragments, []);
 assert.deepEqual(JSON.parse(empty[1].content).limits, { maxEntries: 0, maxCommitmentTransitions: 1 }, "D-05 zero entry allowance stays zero");
 const entry = { memoryType: "LONG_TERM_GOAL", text: fragment.text, fragmentIds: [fragment.fragmentId], entityIds: [1],
   participantIds: [1, 2], topics: [], eventTime: { status: "unknown" } };
-assert.throws(() => coordinator.parseResult(JSON.stringify({ status: "STORE", entries: [entry] }), [fragment], snapshot, 0, 1), /invalid_shape/, "D-06 local entry limit remains authoritative");
-assert.throws(() => coordinator.parseResult(JSON.stringify({ status: "NO_DURABLE_CONTENT", entries: [], commitmentTransitions: [{}] }), [fragment], snapshot, 0, 0), /invalid_transitions/);
-const unknown = coordinator.parseResult(JSON.stringify({ status: "STORE", entries: [{ ...entry, entityIds: [999] }] }), [fragment], snapshot);
+assert.throws(() => coordinator.parseResult(completeResult({ status: "STORE", entries: [entry] }), [fragment], snapshot, 0, 1), /invalid_shape/, "D-06 local entry limit remains authoritative");
+assert.throws(() => coordinator.parseResult(completeResult({ status: "NO_DURABLE_CONTENT", entries: [], commitmentTransitions: [{}] }), [fragment], snapshot, 0, 0), /invalid_transitions/);
+const unknown = coordinator.parseResult(completeResult({ status: "STORE", entries: [{ ...entry, entityIds: [999] }] }), [fragment], snapshot);
 assert.equal(unknown.entries.length, 0, "D-07 unknown entity remains rejected");
 assert.equal(unknown.rejectedUnknownEntityCount, 1);
-assert.throws(() => coordinator.parseResult("not json", [fragment], snapshot), /invalid_json/, "D-10 malformed result stays a failure");
+assert.throws(() => coordinator.parseResult({ content: "not json", finish_reason: "stop" }, [fragment], snapshot), /invalid_json/, "D-10 malformed result stays a failure");
+assert.throws(() => coordinator.parseResult("not json", [fragment], snapshot), /generation_incomplete/, "bare strings do not carry terminal evidence");
+assert.throws(() => coordinator.parseResult({ content: JSON.stringify({ status: "NO_DURABLE_CONTENT", entries: [] }) }, [fragment], snapshot), /generation_incomplete/, "missing finish reason is incomplete");
 assert.throws(() => coordinator.parseResult({ content: "{}", finish_reason: "length" }, [fragment], snapshot), /generation_incomplete/);
 
 const baselinePolicy = fs.readFileSync(path.join(__dirname, "fixtures/v9.2-durable-policy.txt"), "utf8");

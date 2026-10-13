@@ -215,15 +215,15 @@ async function run() {
       f.coordinator.baseStore.loadFolderSummariesForCharacter = () => [parent];
       f.coordinator.configureDerived({ requestExtraction: async prompt => {
         const fragment = JSON.parse(prompt[1].content).fragments[0];
-        return JSON.stringify({ status: "STORE", entries: [{ memoryType: "MAJOR_EXPERIENCE", text: fragment.text,
-          fragmentIds: [fragment.fragmentId], entityIds: [998], participantIds: [], topics: [], eventTime: { status: "unknown" } }] });
+        return { content: JSON.stringify({ status: "STORE", entries: [{ memoryType: "MAJOR_EXPERIENCE", text: fragment.text,
+          fragmentIds: [fragment.fragmentId], entityIds: [998], participantIds: [], topics: [], eventTime: { status: "unknown" } }] }), finish_reason: "stop" };
       } });
       const result = await f.coordinator.recompressLegacy(scope, { memoryId: parent.memoryId });
       assert.equal(result.status, "EXTRACTION_FAILED");
       assert.equal(result.reason, "memory4_response_no_valid_entries");
       assert.equal(f.coordinator.store.query(scope).length, 0);
       assert.equal(f.trace.list().find(entry => entry.stage === "memory4_candidate_rejected").memory4RejectedUnknownEntityCount, 1);
-      f.coordinator.configureDerived({ requestExtraction: async () => JSON.stringify({ status: "NO_DURABLE_CONTENT", entries: [] }) });
+      f.coordinator.configureDerived({ requestExtraction: async () => ({ content: JSON.stringify({ status: "NO_DURABLE_CONTENT", entries: [] }), finish_reason: "stop" }) });
       const empty = await f.coordinator.recompressLegacy(scope, { memoryId: parent.memoryId });
       assert.equal(empty.status, "RETAINED_LEGACY");
       assert.equal(empty.reason, "NO_DURABLE_CONTENT");

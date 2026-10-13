@@ -142,7 +142,7 @@ function buildContext(conversationId, participants, messageCount) {
     const compressed = JSON.stringify({ summarySegments: [{ content: "双方确认安排。", participants: [1, 2], messageIds: [1, 2] }], memories: [] });
     const output = await restarted.requestFinalSummary({ ...transient, requestSummary: async () => {
       if (++attempts === 1) throw new Error("temporary network failure");
-      return { content: compressed };
+      return { content: compressed, finish_reason: "stop" };
     } });
     assert.strictEqual(attempts, 2);
     assert.strictEqual(output, compressed, "a transient failure must return the retried model output");
@@ -175,7 +175,7 @@ function buildContext(conversationId, participants, messageCount) {
     await entered;
     assert.strictEqual(maxCancellationConcurrency, 2, "manual recovery processes a bounded pair concurrently");
     cancelledEngine.clearAllLongTermMemory();
-    pendingResponses.forEach(release => release({ content: compressed }));
+    pendingResponses.forEach(release => release({ content: compressed, finish_reason: "stop" }));
     const cancelledResults = await recovery;
     assert.strictEqual(cancelledResults.length, 2);
     assert(cancelledResults.every(result => result.cancelled), "clearing memory cancels every in-flight recovery");

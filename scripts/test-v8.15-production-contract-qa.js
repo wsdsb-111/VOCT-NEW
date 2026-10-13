@@ -407,12 +407,12 @@ async function testManagerDeletionAndLateRecovery() {
   let extractionInput = "";
   const recovered = await restarted.memory4.recoverPending(async prompt => {
     extractionInput = prompt[1].content;
-    return JSON.stringify({ status: "STORE", entries: [
+    return { content: JSON.stringify({ status: "STORE", entries: [
       { memoryType: "DURABLE_KNOWLEDGE", text: "A must not return", fragmentIds: ["fragment-A"],
         participantIds: [2, 1], entityIds: [1], topics: ["A"], eventTime: { status: "unknown" } },
       { memoryType: "DURABLE_KNOWLEDGE", text: "RECOVERED_C_CANONICAL_SENTINEL about 赵光义", fragmentIds: ["fragment-C"],
         participantIds: [2, 3], entityIds: [3], topics: ["C"], eventTime: { status: "unknown" } }
-    ] });
+    ] }), finish_reason: "stop" };
   }, { activeCampaignToken: campaignToken, isNarrativeCommitted: () => true });
   assert.equal(recovered.length, 1);
   assert.equal(recovered[0].status, "STORE", JSON.stringify(recovered[0]));
@@ -441,12 +441,12 @@ async function testUnknownSourceResponseRejected() {
   const engine = new MemoryEngine({ baseDir: path.join(directory, "memory"), summaryFoldersDir: summariesDir,
     trace: { record() {} } });
   const snapshot = makePendingSnapshot();
-  const response = JSON.stringify({ status: "STORE", entries: [
+  const response = { content: JSON.stringify({ status: "STORE", entries: [
     { memoryType: "DURABLE_KNOWLEDGE", text: "VALID_C_BUT_BATCH_MUST_FAIL_CLOSED", fragmentIds: ["fragment-C"],
       participantIds: [2, 3], entityIds: [3], topics: ["C"], eventTime: { status: "unknown" } },
     { memoryType: "DURABLE_KNOWLEDGE", text: "UNKNOWN_FRAGMENT_MUST_NOT_COMMIT", fragmentIds: ["not-in-snapshot"],
       participantIds: [2, 3], entityIds: [3], topics: ["unknown"], eventTime: { status: "unknown" } }
-  ] });
+  ] }), finish_reason: "stop" };
   const result = await engine.memory4.finishOwner(snapshot, async () => response, null, () => true);
   assert.equal(result.status, "EXTRACTION_FAILED");
   assert.equal(result.error, "memory4_response_source_mismatch");

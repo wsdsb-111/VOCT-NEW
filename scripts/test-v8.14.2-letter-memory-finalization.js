@@ -84,12 +84,12 @@ function createHarness() {
     }
     const next = provider.summaryResults.shift();
     if (next instanceof Error) throw next;
-    return next || { content: "双方通过信件确认玉印已留存于内库。" };
+    return next || { content: "双方通过信件确认玉印已留存于内库。", finish_reason: "stop" };
   };
   const requestDurable = async (prompt, options) => {
     provider.durableRequests = (provider.durableRequests || 0) + 1;
     provider.durableOwners = [...(provider.durableOwners || []), options.ownerId];
-    return { content: JSON.stringify({ status: "NO_DURABLE_CONTENT", entries: [] }) };
+    return { content: JSON.stringify({ status: "NO_DURABLE_CONTENT", entries: [] }), finish_reason: "stop" };
   };
   const persistSummary = async (summary, summaryContext) => {
     provider.projections.push({ summary, context: structuredClone(summaryContext) });
@@ -307,7 +307,7 @@ async function testRealMemory4CoordinatorAcceptsLetterSnapshots() {
     getHistoricalReferenceByYear: () => null });
   const durableOwners = [];
   const service = new LetterMemoryFinalization({ memoryEngine,
-    requestSummary: async () => ({ content: "双方互通信件，确认玉印留存于内库。" }),
+    requestSummary: async () => ({ content: "双方互通信件，确认玉印留存于内库。", finish_reason: "stop" }),
     persistSummary: async (summary, summaryContext) => GameData.saveRecoveredSummary(summary, summaryContext),
     isCampaignCurrent: token => token === campaignToken,
     requestDurable: async (prompt, options) => {
@@ -318,7 +318,7 @@ async function testRealMemory4CoordinatorAcceptsLetterSnapshots() {
         memoryType: "DURABLE_KNOWLEDGE", text: "往来信件确认玉印留存于内库。",
         fragmentIds: [fragment.fragmentId], entityIds: fragment.entityIds, participantIds: [], topics: ["玉印"],
         eventTime: { status: "unknown", precision: "unknown" }
-      }] }) };
+      }] }), finish_reason: "stop" };
     }
   });
   try {

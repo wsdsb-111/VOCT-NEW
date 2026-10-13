@@ -6,6 +6,7 @@ const { execFileSync } = require("node:child_process");
 const fs = require("node:fs");
 const Module = require("node:module");
 const path = require("node:path");
+const { validateGenerationOutcome } = require("../resources/app/out/main/providers/generation-outcome");
 
 const root = path.resolve(__dirname, "..");
 const snapshotRoot = path.join(root, ".build", "v923-glm-native-usage-baselines");
@@ -200,9 +201,21 @@ async function checkCommit(commit, mockSdk) {
   assert(capture.bodyJson, `${commit.id}:real_adapter_called_sdk_create`);
   assert.strictEqual(capture.body.stream_options.include_usage, true, `${commit.id}:usage_tail_requested_on_stream`);
   assert.strictEqual(capture.body.max_tokens, 128, `${commit.id}:stream_wire_max_tokens`);
-  assert.strictEqual(result.chunks.length, 1, `${commit.id}:usage_only_tail_is_not_emitted_as_a_content_chunk`);
-  assert.strictEqual(result.chunks[0].delta.content, "Synthetic reply.", `${commit.id}:content_chunk_survives`);
+  const contentChunks = result.chunks.filter(chunk => chunk.delta?.content);
+  const usageOnlyChunks = result.chunks.filter(chunk => !chunk.delta?.content && chunk.usage !== void 0);
+  assert.strictEqual(contentChunks.length, 1, `${commit.id}:single_content_chunk_survives`);
+  assert.strictEqual(result.chunks.length, commit.id === "candidate-src" ? 2 : 1, `${commit.id}:legacy_or_candidate_stream_event_count`);
+  assert.strictEqual(usageOnlyChunks.length, commit.id === "candidate-src" ? 1 : 0, `${commit.id}:usage_only_is_an_independent_candidate_event`);
+  assert.strictEqual(contentChunks[0].delta.content, "Synthetic reply.", `${commit.id}:content_chunk_survives`);
+  assert.strictEqual(contentChunks[0].finish_reason, null, `${commit.id}:legacy_stream_keeps_missing_terminal_fixture`);
   assert.strictEqual(result.final.content, "Synthetic reply.", `${commit.id}:stream_final_content`);
+  assert.strictEqual(result.final.finish_reason, null, `${commit.id}:stream_final_keeps_missing_terminal_fixture`);
+  if (commit.id === "candidate-src") {
+    assert.strictEqual(validateGenerationOutcome(result.final, { providerType: "zhipu" }).status, "UNKNOWN",
+      `${commit.id}:missing_finish_remains_strictly_unknown`);
+    assert.strictEqual(usageOnlyChunks[0].finish_reason, null, `${commit.id}:usage_only_is_not_terminal`);
+    assert.strictEqual(usageOnlyChunks[0].usage.prompt_tokens, 100, `${commit.id}:usage_only_contains_native_usage`);
+  }
   assert(result.final.usage, `${commit.id}:usage_only_tail_survives_stream_adapter`);
   assert.strictEqual(result.final.usage.prompt_cache_hit_tokens, 0, `${commit.id}:tail_zero_cache_hit`);
   assert.strictEqual(result.final.usage.prompt_cache_miss_tokens, 100, `${commit.id}:tail_cache_miss`);
@@ -235,9 +248,17 @@ async function main() {
     const results = [];
     for (const target of targets) results.push({ target, result: await checkCommit(target, mockSdk) });
     const referenceBytes = Buffer.from(JSON.stringify(results[0].result), "utf8");
-    for (const { target, result } of results.slice(1)) {
-      const candidateBytes = Buffer.from(JSON.stringify(result), "utf8");
-      assert(referenceBytes.equals(candidateBytes), `v9.2.1_and_${target.id}_native_usage_fixtures_must_match_byte_for_byte`);
+    const legacyBytes = Buffer.from(JSON.stringify(results[1].result), "utf8");
+    assert(referenceBytes.equals(legacyBytes), "v9.2.1_and_v9.2.2_native_usage_fixtures_must_remain_byte_for_byte_frozen");
+    const canonical = result => ({
+      zero: result.zero,
+      unknown: result.unknown,
+      emptyUnknown: result.emptyUnknown,
+      streamTail: { bodyJson: result.streamTail.bodyJson, final: result.streamTail.final }
+    });
+    for (const { target, result } of results.slice(2)) {
+      assert.deepEqual(canonical(result), canonical(results[0].result), `${target.id}:canonical_native_usage_has_no_synthetic_counts`);
+      assert.strictEqual(JSON.parse(result.streamTail.clientJson).maxRetries, 0, `${target.id}:sdk_hidden_retries_disabled`);
     }
     const digest = sha256(referenceBytes);
     originalLog(`V9.2.3 GLM native usage PASS: runtimeTargets=${results.length}, targets=v9.2.1/v9.2.2/candidate-src, fixturesPerTarget=4, streamTail=retained, reportedZero=0, missingCache=UNKNOWN, reasoning=normalized, resultSHA256=${digest}, sdk=mock, network=0`);

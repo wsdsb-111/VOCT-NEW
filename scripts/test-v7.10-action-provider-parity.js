@@ -24,7 +24,7 @@ let capturedRequest = null;
 const provider = {
   async chatCompletion(request) {
     capturedRequest = request;
-    return { content: '{"actions":[]}', usage: { prompt_tokens: 1, completion_tokens: 1, total_tokens: 2 } };
+    return { finish_reason: "stop", content: '{"actions":[]}', usage: { prompt_tokens: 1, completion_tokens: 1, total_tokens: 2 } };
   }
 };
 const manager = new LLMManager({
@@ -50,7 +50,8 @@ const manager = new LLMManager({
   assert.strictEqual(capturedRequest.model, config.defaultModel);
   assert.strictEqual(capturedRequest.messages, messages);
   assert.strictEqual(capturedRequest.stream, false);
-  assert.strictEqual(capturedRequest.signal, controller.signal);
+  assert.notStrictEqual(capturedRequest.signal, controller.signal, "platform owns a linked cancellation signal");
+  assert.strictEqual(capturedRequest.signal.aborted, false);
   for (const [key, value] of Object.entries(defaultParameters)) assert.strictEqual(capturedRequest[key], value, `${key} must preserve the selected provider default`);
   assert.strictEqual(capturedRequest.thinking, undefined, "LLMManager must not impose provider-specific thinking parameters");
   assert.deepStrictEqual(capturedRequest.response_format, {

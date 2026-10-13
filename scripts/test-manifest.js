@@ -81,6 +81,11 @@ const archivedChecks = [
 ];
 
 const releaseChecks = [
+  { group: "v9.3-adapter-conformance", script: "test-v9.3-adapter-conformance.js" },
+  { group: "v9.3-independent-qa", script: "test-v9.3-independent-qa.js" },
+  { group: "v9.3-cancellation-retry", script: "test-v9.3-cancellation-retry.js" },
+  { group: "v9.3-result-usage", script: "test-v9.3-result-usage.js" },
+  { group: "v9.3-provider-capabilities", script: "test-v9.3-provider-capabilities.js" },
   { group: "v9.2.3-derived-retirement", script: "test-v9.2.3-derived-retirement.js" },
   { group: "v9.2.3-derived-recovery", script: "test-v9.2.3-derived-recovery.js" },
   { group: "v9.2.3-glm-outbound-equivalence", script: "test-v9.2.3-glm-outbound-equivalence.js" },

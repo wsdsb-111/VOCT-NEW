@@ -575,14 +575,14 @@ async function main() {
     assert.equal(disclosedBeforeRetry[0].status, "AUTO_DISCLOSED");
 
     sample.failDurable = false;
-    const recovered = await sample.engine.memory4.recoverPending(async () => JSON.stringify({ status: "NO_DURABLE_CONTENT", entries: [] }), {
+    const recovered = await sample.engine.memory4.recoverPending(async () => ({ content: JSON.stringify({ status: "NO_DURABLE_CONTENT", entries: [] }), finish_reason: "stop" }), {
       activeCampaignToken: sample.scope.campaignToken, isNarrativeCommitted: () => true
     });
     assert(recovered.length > 0 && recovered.every(item => ["NO_DURABLE_CONTENT", "NOT_PRESENT"].includes(item.status)),
       "recovery commits each pending owner without adding durable entries");
     assert(disclosureRecords(sample, 2, 1).some(item => item.status === "AUTO_DISCLOSED"));
     assert.deepEqual(disclosureRecords(sample, 2, 1), disclosedBeforeRetry, "recovery must not duplicate disclosure evidence or bump its revision");
-    assert.deepEqual(await sample.engine.memory4.recoverPending(async () => JSON.stringify({ status: "NO_DURABLE_CONTENT", entries: [] }), {
+    assert.deepEqual(await sample.engine.memory4.recoverPending(async () => ({ content: JSON.stringify({ status: "NO_DURABLE_CONTENT", entries: [] }), finish_reason: "stop" }), {
       activeCampaignToken: sample.scope.campaignToken, isNarrativeCommitted: () => true
     }), [], "a completed recovery cannot duplicate the source");
   });

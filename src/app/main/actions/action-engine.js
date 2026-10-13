@@ -1,4 +1,5 @@
 "use strict";
+const { validateGenerationOutcome } = require("../providers/generation-outcome");
 
 const { CriticalActionRecallObserver: DefaultCriticalActionRecallObserver } = require("./critical-action-recall-diagnostics");
 const { ACTION_LIFECYCLE_STATUSES, createActionLifecycle, createActionDiagnostic } = require("./types");
@@ -101,8 +102,12 @@ function createActionEngine({ actionRegistry, settingsRepository, usageAnalytics
         const output = await llmManager.sendActionsRequest(messages, "votc_actions", jsonSchema, signal);
         if (signal?.aborted) return { autoApproved: [], needsApproval: [] };
         const result = await output;
+        const outcome = validateGenerationOutcome(result, { providerType: actionsConfig?.providerType });
+        if (!outcome.complete) {
+          recordDiagnostics("incomplete_response");
+          return { autoApproved: [], needsApproval: [] };
+        }
         const content = result && typeof result === "object" ? result.content : null;
-        console.log("[DEBUG] ActionEngine: Received LLM response", content);
         if (!content || typeof content !== "string" || signal?.aborted) {
           recordDiagnostics("empty_response");
           return { autoApproved: [], needsApproval: [] };

@@ -88,7 +88,7 @@ async function main() {
       f.coordinator.configureDerived({ isCampaignCurrent: () => false,
         requestCompression: async () => { compressionCalls++; throw new Error("retired_derived_provider_must_not_run"); } });
       const data = f.snapshot("1158年迁居邢州。");
-      const result = await f.coordinator.finishOwner(data.source, async () => JSON.stringify({ status: "STORE", entries: [data.entry] }));
+      const result = await f.coordinator.finishOwner(data.source, async () => ({ content: JSON.stringify({ status: "STORE", entries: [data.entry] }), finish_reason: "stop" }));
       assert.equal(result.status, "STORE");
       assert.equal(result.durableStatus, "STORE");
       assert.equal(result.derivedGenerationStatus, "SKIPPED_DERIVED_POLICY");
@@ -288,8 +288,8 @@ async function main() {
       let sourceBatches = [];
       f.coordinator.configureDerived({ isCampaignCurrent: () => true, requestExtraction: async prompt => {
         const fragments = JSON.parse(prompt[1].content).fragments; sourceBatches.push(fragments.length);
-        return JSON.stringify({ status: "STORE", entries: [{ memoryType: "COMMITMENT", text: fragments[0].text,
-          fragmentIds: [fragments[0].fragmentId], entityIds: [1], topics: [] }] });
+        return { content: JSON.stringify({ status: "STORE", entries: [{ memoryType: "COMMITMENT", text: fragments[0].text,
+          fragmentIds: [fragments[0].fragmentId], entityIds: [1], topics: [] }] }), finish_reason: "stop" };
       } });
       const first = await f.coordinator.recompressLegacy(f.scope, { memoryId: parent.memoryId, expectedSourceHash: legacySourceHash(parent) });
       const second = await f.coordinator.recompressLegacy(f.scope, { memoryId: parent.memoryId, expectedSourceHash: legacySourceHash(parent) });
@@ -323,9 +323,9 @@ async function main() {
       f.coordinator.configureDerived({ isCampaignCurrent: () => true, requestExtraction: async prompt => {
         const fragments = JSON.parse(prompt[1].content).fragments;
         assert.equal(fragments.find(fragment => fragment.text.startsWith("去年")).sourceAsOf, "1164.1.1");
-        return JSON.stringify({ status: "STORE", entries: fragments.map(fragment => ({ memoryType: "MAJOR_EXPERIENCE", text: fragment.text,
+        return { content: JSON.stringify({ status: "STORE", entries: fragments.map(fragment => ({ memoryType: "MAJOR_EXPERIENCE", text: fragment.text,
           fragmentIds: [fragment.fragmentId], entityIds: [1], eventTime: { from: fragment.text.startsWith("1164") ? "1164.1.1" : "1163.1.1",
-            to: fragment.text.startsWith("1164") ? "1164.12.31" : "1163.12.31", precision: "year", status: "reported" } })) });
+            to: fragment.text.startsWith("1164") ? "1164.12.31" : "1163.12.31", precision: "year", status: "reported" } })) }), finish_reason: "stop" };
       } });
       const result = await f.coordinator.recompressLegacy(f.scope, { memoryId: parent.memoryId });
       assert.equal(result.status, "COMPLETE", result.reason);
@@ -348,8 +348,8 @@ async function main() {
       unsupported.base.loadFolderSummariesForCharacter = () => [source];
       unsupported.coordinator.configureDerived({ requestExtraction: async prompt => {
         const fragment = JSON.parse(prompt[1].content).fragments[0];
-        return JSON.stringify({ status: "STORE", entries: [{ memoryType: "MAJOR_EXPERIENCE", text: fragment.text,
-          fragmentIds: [fragment.fragmentId], eventTime: { from: "1164.1.1", to: "1164.12.31", precision: "year", status: "reported" } }] });
+        return { content: JSON.stringify({ status: "STORE", entries: [{ memoryType: "MAJOR_EXPERIENCE", text: fragment.text,
+          fragmentIds: [fragment.fragmentId], eventTime: { from: "1164.1.1", to: "1164.12.31", precision: "year", status: "reported" } }] }), finish_reason: "stop" };
       } });
       assert.equal((await unsupported.coordinator.recompressLegacy(unsupported.scope, { memoryId: source.memoryId })).reason, "memory4_unsupported_event_date");
     });

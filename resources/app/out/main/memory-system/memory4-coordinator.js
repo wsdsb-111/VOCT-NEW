@@ -948,8 +948,7 @@ class Memory4Coordinator {
 
   parseResult(response, allowedFragments, snapshot = null, maxEntries = MAX_DURABLE_ENTRIES_PER_OWNER,
     maxTransitions = MAX_DURABLE_ENTRIES_PER_OWNER, forgottenFragmentIds = []) {
-    const outcome = typeof response === "string" ? { content: response, complete: true, truncated: false }
-      : validateGenerationOutcome(response);
+    const outcome = validateGenerationOutcome(response);
     if (outcome.truncated || !outcome.complete) throw new Error("memory4_generation_incomplete");
     const content = String(outcome.content || "").trim().replace(/^```(?:json)?\s*/i, "").replace(/\s*```$/i, "");
     let parsed;

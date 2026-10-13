@@ -131,7 +131,8 @@ nonStreamProvider.createOpenAIClient = () => ({
     }
     chunks.push(step.value);
   }
-  assert.strictEqual(chunks[0].delta.reasoning, "hidden", "reasoning remains a stream-only field");
+  assert.strictEqual(chunks[0].delta.reasoning, true, "reasoning emits only a presence marker");
+  assert.strictEqual(JSON.stringify(chunks).includes("hidden"), false, "hidden reasoning text never escapes the adapter");
   assert.strictEqual(streamResponse.content, "visible");
   assert.strictEqual(streamResponse.usage.prompt_cache_hit_tokens, 75, "usage-only tail chunks must be normalized");
   assert.strictEqual(streamResponse.usage.visible_completion_tokens, 10);

@@ -37,7 +37,7 @@ const safeOutput = context => JSON.stringify({ summarySegments: context.messages
       let calls = 0;
       const output = { summarySegments: [segment(context.messages.map(m => m.id))],
         memories: [{ content: "无效候选没有 source", participants: [1, 2], visibility: "public", messageIds: [1] }] };
-      const result = await engine.finalizeConversation({ ...context, requestSummary: async () => { calls++; return { content: calls === 1 ? JSON.stringify(output) : safeOutput(context) }; },
+      const result = await engine.finalizeConversation({ ...context, requestSummary: async () => { calls++; return { content: calls === 1 ? JSON.stringify(output) : safeOutput(context), finish_reason: "stop" }; },
         requestDurable: async () => ({ content: "malformed durable" }) });
       assert.equal(result.success, true, result.error?.message);
       assert.equal(calls, 1, "source-bounded visibility repair must not force a second model request");
@@ -77,7 +77,7 @@ const safeOutput = context => JSON.stringify({ summarySegments: context.messages
         { ...segment([4], "NPC1告诉NPC3锦囊秘令藏在北门。"), participants: [1, 3], speakerIds: [1] },
         { content: "NPC2返回。", participants: [1, 2, 3], visibility: "participants", source: "game_fact", messageIds: [5], speakerIds: [] },
         { ...segment([6], "NPC2回来后继续商议。"), participants: [1, 2, 3], speakerIds: [2] }
-      ], memories: [] }) }) });
+      ], memories: [] }), finish_reason: "stop" }) });
     assert.equal(gap.success, true, gap.error?.message);
     assert(!gap.directedSummaries.get("2->1").content.includes("锦囊秘令"), "return cannot reveal the absence gap");
     assert(gap.directedSummaries.get("3->1").content.includes("锦囊秘令"), "present observer retains the event");
@@ -91,7 +91,7 @@ const safeOutput = context => JSON.stringify({ summarySegments: context.messages
       { ...segment([1], "NPC1提出次日在城门交换玄鹤铜牌。"), participants: [1], speakerIds: [1] },
       { ...segment([2], "我答应明日在城门交换玄鹤铜牌。"), participants: [2], speakerIds: [2] }
     ], memories: [] });
-    const options = { requestSummary: async () => { recoveryCalls++; return { content: recoveryOutput }; }, buildPrompt: () => [], persistCharacterFolders: async () => ({ success: true }) };
+    const options = { requestSummary: async () => { recoveryCalls++; return { content: recoveryOutput, finish_reason: "stop" }; }, buildPrompt: () => [], persistCharacterFolders: async () => ({ success: true }) };
     const result = await engine.recoverFailedFinalization(file, options);
     assert.equal(result.success, true, result.error?.message);
     assert.equal(recoveryCalls, 1, "failed raw extraction must be regenerated through the summary model");

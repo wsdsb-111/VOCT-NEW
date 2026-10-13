@@ -102,6 +102,19 @@ function createUsageAnalytics({ fs, dataDir, analyticsFile, retention, createPro
         mode: metadata?.mode || null,
         origin: metadata?.origin || null,
         providerType: metadata?.providerType || "unknown",
+        generationStatus: ["COMPLETE", "TRUNCATED", "FILTERED", "REFUSED", "TOOL_CALLS", "CANCELLED", "ERROR", "PARTIAL", "UNKNOWN"].includes(metadata?.generationStatus) ? metadata.generationStatus : null,
+        providerFinish: ["STOP", "LENGTH", "FILTERED", "TOOL_CALLS", "REFUSAL", "CANCELLED", "ERROR", "UNKNOWN"].includes(metadata?.providerFinish) ? metadata.providerFinish : null,
+        providerAttemptCount: Number.isSafeInteger(metadata?.providerAttemptCount) && metadata.providerAttemptCount >= 0 ? metadata.providerAttemptCount : null,
+        providerUsage: metadata?.providerUsage ? {
+          native: Object.fromEntries(["inputTokens", "outputTokens", "cachedInputTokens", "cacheMissTokens", "reasoningTokens", "totalTokens"].map(key => [key,
+            Number.isSafeInteger(metadata.providerUsage.native?.[key]) && metadata.providerUsage.native[key] >= 0 ? metadata.providerUsage.native[key] : null])),
+          estimated: Object.fromEntries(["inputTokens", "outputTokens"].map(key => [key,
+            Number.isSafeInteger(metadata.providerUsage.estimated?.[key]) && metadata.providerUsage.estimated[key] >= 0 ? metadata.providerUsage.estimated[key] : null])),
+          provenance: {
+            status: ["REPORTED", "PARTIAL", "NOT_REPORTED", "UNKNOWN", "INCONSISTENT"].includes(metadata.providerUsage.provenance?.status) ? metadata.providerUsage.provenance.status : "UNKNOWN",
+            cacheStatus: ["REPORTED_ZERO", "REPORTED_POSITIVE", "NOT_REPORTED", "INCONSISTENT"].includes(metadata.providerUsage.provenance?.cacheStatus) ? metadata.providerUsage.provenance.cacheStatus : "NOT_REPORTED"
+          }
+        } : null,
         model: metadata?.model || "unknown",
         character: metadata?.character || null,
         characterId: Number.isFinite(Number(metadata?.characterId)) ? Number(metadata.characterId) : null,

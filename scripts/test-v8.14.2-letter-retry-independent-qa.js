@@ -92,9 +92,9 @@ function createFixture({ failFirstSummary = false, captureFailure = false } = {}
           summaryStarted.resolve();
           return summaryGate.promise;
         }
-        return { content: "双方确认玉印已留在内库。" };
+        return { content: "双方确认玉印已留在内库。", finish_reason: "stop" };
       },
-      requestDurable: async () => ({ content: JSON.stringify({ status: "NO_DURABLE_CONTENT", entries: [] }) }),
+      requestDurable: async () => ({ content: JSON.stringify({ status: "NO_DURABLE_CONTENT", entries: [] }), finish_reason: "stop" }),
       persistSummary: async (summary, context) => {
         assert.equal(context.campaignToken, campaignToken);
         assert.equal(context.date, "1038.4.4");
@@ -332,7 +332,7 @@ async function testRealMemory4AndRecoveredSummaryPipeline() {
         const fragment = payload.fragments.find(row => row.eventDate === "1038.4.1") || payload.fragments[0];
         assert(fragment, "actual Memory4 prompt contains a verified letter fragment");
         durableRequests.push({ ownerId: payload.ownerId, fragment });
-        return JSON.stringify({ status: "STORE", entries: letterStoreEntries(fragment) });
+        return { content: JSON.stringify({ status: "STORE", entries: letterStoreEntries(fragment) }), finish_reason: "stop" };
       }
     });
     return new LetterMemoryFinalization({
@@ -352,7 +352,7 @@ async function testRealMemory4AndRecoveredSummaryPipeline() {
           failedDurableCalls++;
           throw new Error("fixture_letter_durable_provider_failure");
         }
-        return JSON.stringify({ status: "STORE", entries: letterStoreEntries(fragment) });
+        return { content: JSON.stringify({ status: "STORE", entries: letterStoreEntries(fragment) }), finish_reason: "stop" };
       },
       persistSummary: (content, summaryContext) => GameData.saveRecoveredSummary(content, summaryContext),
       getSummarySettings: () => ({ letterSummaryPrompt: "只概括信件中明确记载的内容。" }),
@@ -537,9 +537,9 @@ function memory4RewriteResponse(prompt, contentOverride = null) {
   const fragment = payload.fragments[0];
   assert(fragment, "summary rebuild extraction receives the current legacy source fragment");
   const content = contentOverride || fragment.text;
-  return JSON.stringify({ status: "STORE", entries: [{ memoryType: "DURABLE_KNOWLEDGE", text: content,
+  return { content: JSON.stringify({ status: "STORE", entries: [{ memoryType: "DURABLE_KNOWLEDGE", text: content,
     fragmentIds: [fragment.fragmentId], entityIds: fragment.allowedEntityIds, participantIds: [], topics: ["粮食"],
-    eventTime: { from: "1164.1.1", to: "1164.12.31", precision: "year", status: "reported" } }] });
+    eventTime: { from: "1164.1.1", to: "1164.12.31", precision: "year", status: "reported" } }] }), finish_reason: "stop" };
 }
 
 async function testRealRegenerationRebuildAndStaleCampaignGuard() {
