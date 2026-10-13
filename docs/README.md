@@ -4,6 +4,8 @@
 
 ## 推荐阅读顺序
 
+V9.3 Provider Platform候选：[方案](current/v9/V9_3_IMPLEMENTATION_SPEC.md)、[基线](current/v9/V9_3_BASELINE.md)、[Provider审计](current/v9/V9_3_PROVIDER_AUDIT.md)、[支持矩阵](current/v9/V9_3_PROVIDER_MATRIX.md)、[实施](current/v9/V9_3_IMPLEMENTATION_REPORT.md)、[验证](current/v9/V9_3_VERIFICATION_REPORT.md)、[台账](current/v9/V9_3_P_ISSUE_LEDGER.md)、[V9.4移交](current/v9/V9_3_HANDOFF_TO_V9_4.md)、[40核心场景](current/v9/v93-conformance-evidence.json)。七Adapter离线合同统一；原生与Mock、UNKNOWN与零、正式版本与人工Gate分别保留。
+
 V9.2.3退役与GLM诊断候选：[方案](current/v9/V9_2_3_IMPLEMENTATION_SPEC.md)、[基线](current/v9/V9_2_3_BASELINE.md)、[实施](current/v9/V9_2_3_IMPLEMENTATION_REPORT.md)、[验证](current/v9/V9_2_3_VERIFICATION_REPORT.md)、[台账](current/v9/V9_2_3_P_ISSUE_LEDGER.md)、[移交](current/v9/V9_2_3_HANDOFF_TO_V9_3.md)。Year/Life自动模型生成退役，Detail/Legacy与合法历史档保留；GLM应用出站未证明回归，收益HOLD，正式版本与人工Gate分开。
 
 2026-10-12 GLM 实机缓存审计：[分析报告](current/v9/V9_2_2_GLM_CACHE_INCIDENT_20261012.md)、[脱敏证据](current/v9/glm-cache-20261012-evidence.json)。本轮八次 chat 原生加权命中 33.42%，五次零；相同稳定前缀与参数仍有零值，未证实应用侧缺陷。Durable 与 Runtime 按要求保持不变，供应商缓存驻留／路由原因待取证。

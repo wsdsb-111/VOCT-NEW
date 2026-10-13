@@ -1,0 +1,632 @@
+{
+  "schemaVersion": 1,
+  "planHash": "f7674628fea18e12c866fcdfe4648cf4169a92bf63a239f3a8d47463789e40b4",
+  "run": {
+    "startedAt": "2026-10-13T04:40:14.854Z",
+    "finishedAt": "2026-10-13T04:40:25.931Z",
+    "runnerExitCode": 0
+  },
+  "budget": {
+    "maxUSD": 1,
+    "reservedUSD": 0.06228994,
+    "costUpperBoundUSD": 0.00130368,
+    "confirmedProviderChargeUSD": null
+  },
+  "priceChecks": [
+    {
+      "providerType": "deepseek",
+      "model": "deepseek-v4-flash",
+      "status": "FIXED_PLAN_RATE_USED",
+      "rates": {
+        "currency": "USD",
+        "unit": "per million tokens",
+        "inputCacheHitPeak": 0.006,
+        "inputCacheMissPeak": 0.3,
+        "outputPeak": 1.2,
+        "budgetInput": 0.3,
+        "budgetOutput": 1.2
+      },
+      "source": [
+        "https://api-docs.deepseek.com/quick_start/pricing/ — legacy model alias is billed at DeepSeek-V4.1-Flash Flash rates"
+      ]
+    },
+    {
+      "providerType": "openrouter",
+      "model": "z-ai/glm-5.3-flash",
+      "status": "LIVE_CATALOG_PASSED_PLAN_BOUNDS",
+      "rates": {
+        "currency": "USD",
+        "unit": "per million tokens",
+        "inputMaxAcrossPublishedRoutes": 0.225,
+        "outputMaxAcrossPublishedRoutes": 1.6,
+        "cacheReadMaxAcrossPublishedRoutes": 0.099,
+        "budgetInput": 0.225,
+        "budgetOutput": 1.6
+      },
+      "source": [
+        "https://openrouter.ai/api/v1/models/z-ai/glm-5.3-flash/endpoints — current published route catalog; maxima aggregated across 32 priced routes"
+      ]
+    }
+  ],
+  "nativeResult": {
+    "attempts": 9,
+    "settledUsage": 8,
+    "notVerified": 1,
+    "providerResults": [
+      {
+        "providerType": "deepseek",
+        "model": "deepseek-v4-flash",
+        "attempts": 8,
+        "settledUsage": 8,
+        "usageUnknown": 0,
+        "byCase": {
+          "chat_nonstream": {
+            "plannedAttemptsMax": 2,
+            "attempts": 2,
+            "settledUsage": 2,
+            "notVerified": 0
+          },
+          "chat_stream": {
+            "plannedAttemptsMax": 2,
+            "attempts": 2,
+            "settledUsage": 2,
+            "notVerified": 0
+          },
+          "action": {
+            "plannedAttemptsMax": 2,
+            "attempts": 2,
+            "settledUsage": 2,
+            "notVerified": 0
+          },
+          "durable": {
+            "plannedAttemptsMax": 2,
+            "attempts": 2,
+            "settledUsage": 2,
+            "notVerified": 0
+          }
+        },
+        "nativeTokenTotals": {
+          "inputTokens": 896,
+          "outputTokens": 679,
+          "cachedInputTokens": 0,
+          "cacheMissTokens": 896,
+          "totalTokens": 1575,
+          "reasoningTokensReportedSum": 286,
+          "attemptsWithReportedReasoning": 2,
+          "attemptsWithMissingReasoning": 6
+        }
+      },
+      {
+        "providerType": "openrouter",
+        "model": "z-ai/glm-5.3-flash",
+        "attempts": 1,
+        "settledUsage": 0,
+        "usageUnknown": 1,
+        "byCase": {
+          "chat_nonstream": {
+            "plannedAttemptsMax": 2,
+            "attempts": 1,
+            "settledUsage": 0,
+            "notVerified": 1
+          },
+          "chat_stream": {
+            "plannedAttemptsMax": 2,
+            "attempts": 0,
+            "settledUsage": 0,
+            "notVerified": 0
+          },
+          "action": {
+            "plannedAttemptsMax": 2,
+            "attempts": 0,
+            "settledUsage": 0,
+            "notVerified": 0
+          },
+          "durable": {
+            "plannedAttemptsMax": 2,
+            "attempts": 0,
+            "settledUsage": 0,
+            "notVerified": 0
+          }
+        },
+        "nativeTokenTotals": {
+          "inputTokens": 75,
+          "outputTokens": 127,
+          "cachedInputTokens": 0,
+          "cacheMissTokens": null,
+          "totalTokens": 202,
+          "reasoningTokensReportedSum": 79,
+          "attemptsWithReportedReasoning": 1,
+          "attemptsWithMissingReasoning": 0
+        }
+      }
+    ]
+  },
+  "attempts": [
+    {
+      "sequence": 1,
+      "providerType": "deepseek",
+      "model": "deepseek-v4-flash",
+      "case": "chat_nonstream",
+      "attemptOrdinal": 1,
+      "state": "SETTLED_USAGE",
+      "status": "COMPLETE",
+      "finish": "STOP",
+      "outcome": "NATIVE_USAGE_VERIFIED",
+      "inputUpperBoundBytes": 1481,
+      "tokens": {
+        "native": {
+          "inputTokens": 94,
+          "outputTokens": 176,
+          "cachedInputTokens": 0,
+          "cacheMissTokens": 94,
+          "reasoningTokens": null,
+          "totalTokens": 270
+        },
+        "estimated": {
+          "inputTokens": 74,
+          "outputTokens": 19,
+          "method": "local_estimator"
+        }
+      },
+      "usageProvenance": {
+        "status": "PARTIAL",
+        "cacheStatus": "REPORTED_ZERO",
+        "fieldSources": {
+          "inputTokens": "PROVIDER_REPORTED",
+          "outputTokens": "PROVIDER_REPORTED",
+          "cachedInputTokens": "PROVIDER_REPORTED",
+          "cacheMissTokens": "PROVIDER_REPORTED",
+          "reasoningTokens": "NOT_REPORTED",
+          "totalTokens": "PROVIDER_REPORTED"
+        },
+        "inconsistentFields": []
+      },
+      "reasoning": {
+        "present": false,
+        "tokenCount": null,
+        "source": "missing"
+      },
+      "reservedUSD": 0.0067584,
+      "costUpperBoundUSD": 0.0002394,
+      "errorCategory": null
+    },
+    {
+      "sequence": 2,
+      "providerType": "deepseek",
+      "model": "deepseek-v4-flash",
+      "case": "chat_nonstream",
+      "attemptOrdinal": 2,
+      "state": "SETTLED_USAGE",
+      "status": "COMPLETE",
+      "finish": "STOP",
+      "outcome": "NATIVE_USAGE_VERIFIED",
+      "inputUpperBoundBytes": 1481,
+      "tokens": {
+        "native": {
+          "inputTokens": 94,
+          "outputTokens": 135,
+          "cachedInputTokens": 0,
+          "cacheMissTokens": 94,
+          "reasoningTokens": null,
+          "totalTokens": 229
+        },
+        "estimated": {
+          "inputTokens": 74,
+          "outputTokens": 19,
+          "method": "local_estimator"
+        }
+      },
+      "usageProvenance": {
+        "status": "PARTIAL",
+        "cacheStatus": "REPORTED_ZERO",
+        "fieldSources": {
+          "inputTokens": "PROVIDER_REPORTED",
+          "outputTokens": "PROVIDER_REPORTED",
+          "cachedInputTokens": "PROVIDER_REPORTED",
+          "cacheMissTokens": "PROVIDER_REPORTED",
+          "reasoningTokens": "NOT_REPORTED",
+          "totalTokens": "PROVIDER_REPORTED"
+        },
+        "inconsistentFields": []
+      },
+      "reasoning": {
+        "present": false,
+        "tokenCount": null,
+        "source": "missing"
+      },
+      "reservedUSD": 0.0067584,
+      "costUpperBoundUSD": 0.0001902,
+      "errorCategory": null
+    },
+    {
+      "sequence": 3,
+      "providerType": "deepseek",
+      "model": "deepseek-v4-flash",
+      "case": "chat_stream",
+      "attemptOrdinal": 1,
+      "state": "SETTLED_USAGE",
+      "status": "COMPLETE",
+      "finish": "STOP",
+      "outcome": "NATIVE_USAGE_VERIFIED",
+      "inputUpperBoundBytes": 1517,
+      "tokens": {
+        "native": {
+          "inputTokens": 92,
+          "outputTokens": 196,
+          "cachedInputTokens": 0,
+          "cacheMissTokens": 92,
+          "reasoningTokens": 181,
+          "totalTokens": 288
+        },
+        "estimated": {
+          "inputTokens": 73,
+          "outputTokens": 19,
+          "method": "local_estimator"
+        }
+      },
+      "usageProvenance": {
+        "status": "REPORTED",
+        "cacheStatus": "REPORTED_ZERO",
+        "fieldSources": {
+          "inputTokens": "PROVIDER_REPORTED",
+          "outputTokens": "PROVIDER_REPORTED",
+          "cachedInputTokens": "PROVIDER_REPORTED",
+          "cacheMissTokens": "PROVIDER_REPORTED",
+          "reasoningTokens": "PROVIDER_REPORTED",
+          "totalTokens": "PROVIDER_REPORTED"
+        },
+        "inconsistentFields": []
+      },
+      "reasoning": {
+        "present": true,
+        "tokenCount": 181,
+        "source": "usage"
+      },
+      "reservedUSD": 0.0067584,
+      "costUpperBoundUSD": 0.0002628,
+      "errorCategory": null
+    },
+    {
+      "sequence": 4,
+      "providerType": "deepseek",
+      "model": "deepseek-v4-flash",
+      "case": "chat_stream",
+      "attemptOrdinal": 2,
+      "state": "SETTLED_USAGE",
+      "status": "COMPLETE",
+      "finish": "STOP",
+      "outcome": "NATIVE_USAGE_VERIFIED",
+      "inputUpperBoundBytes": 1517,
+      "tokens": {
+        "native": {
+          "inputTokens": 92,
+          "outputTokens": 120,
+          "cachedInputTokens": 0,
+          "cacheMissTokens": 92,
+          "reasoningTokens": 105,
+          "totalTokens": 212
+        },
+        "estimated": {
+          "inputTokens": 73,
+          "outputTokens": 19,
+          "method": "local_estimator"
+        }
+      },
+      "usageProvenance": {
+        "status": "REPORTED",
+        "cacheStatus": "REPORTED_ZERO",
+        "fieldSources": {
+          "inputTokens": "PROVIDER_REPORTED",
+          "outputTokens": "PROVIDER_REPORTED",
+          "cachedInputTokens": "PROVIDER_REPORTED",
+          "cacheMissTokens": "PROVIDER_REPORTED",
+          "reasoningTokens": "PROVIDER_REPORTED",
+          "totalTokens": "PROVIDER_REPORTED"
+        },
+        "inconsistentFields": []
+      },
+      "reasoning": {
+        "present": true,
+        "tokenCount": 105,
+        "source": "usage"
+      },
+      "reservedUSD": 0.0067584,
+      "costUpperBoundUSD": 0.0001716,
+      "errorCategory": null
+    },
+    {
+      "sequence": 5,
+      "providerType": "deepseek",
+      "model": "deepseek-v4-flash",
+      "case": "action",
+      "attemptOrdinal": 1,
+      "state": "SETTLED_USAGE",
+      "status": "COMPLETE",
+      "finish": "STOP",
+      "outcome": "NATIVE_USAGE_VERIFIED",
+      "inputUpperBoundBytes": 1682,
+      "tokens": {
+        "native": {
+          "inputTokens": 125,
+          "outputTokens": 5,
+          "cachedInputTokens": 0,
+          "cacheMissTokens": 125,
+          "reasoningTokens": null,
+          "totalTokens": 130
+        },
+        "estimated": {
+          "inputTokens": 111,
+          "outputTokens": 5,
+          "method": "local_estimator"
+        }
+      },
+      "usageProvenance": {
+        "status": "PARTIAL",
+        "cacheStatus": "REPORTED_ZERO",
+        "fieldSources": {
+          "inputTokens": "PROVIDER_REPORTED",
+          "outputTokens": "PROVIDER_REPORTED",
+          "cachedInputTokens": "PROVIDER_REPORTED",
+          "cacheMissTokens": "PROVIDER_REPORTED",
+          "reasoningTokens": "NOT_REPORTED",
+          "totalTokens": "PROVIDER_REPORTED"
+        },
+        "inconsistentFields": []
+      },
+      "reasoning": {
+        "present": false,
+        "tokenCount": null,
+        "source": "missing"
+      },
+      "reservedUSD": 0.0067584,
+      "costUpperBoundUSD": 0.0000435,
+      "errorCategory": null
+    },
+    {
+      "sequence": 6,
+      "providerType": "deepseek",
+      "model": "deepseek-v4-flash",
+      "case": "action",
+      "attemptOrdinal": 2,
+      "state": "SETTLED_USAGE",
+      "status": "COMPLETE",
+      "finish": "STOP",
+      "outcome": "NATIVE_USAGE_VERIFIED",
+      "inputUpperBoundBytes": 1682,
+      "tokens": {
+        "native": {
+          "inputTokens": 125,
+          "outputTokens": 5,
+          "cachedInputTokens": 0,
+          "cacheMissTokens": 125,
+          "reasoningTokens": null,
+          "totalTokens": 130
+        },
+        "estimated": {
+          "inputTokens": 111,
+          "outputTokens": 5,
+          "method": "local_estimator"
+        }
+      },
+      "usageProvenance": {
+        "status": "PARTIAL",
+        "cacheStatus": "REPORTED_ZERO",
+        "fieldSources": {
+          "inputTokens": "PROVIDER_REPORTED",
+          "outputTokens": "PROVIDER_REPORTED",
+          "cachedInputTokens": "PROVIDER_REPORTED",
+          "cacheMissTokens": "PROVIDER_REPORTED",
+          "reasoningTokens": "NOT_REPORTED",
+          "totalTokens": "PROVIDER_REPORTED"
+        },
+        "inconsistentFields": []
+      },
+      "reasoning": {
+        "present": false,
+        "tokenCount": null,
+        "source": "missing"
+      },
+      "reservedUSD": 0.0067584,
+      "costUpperBoundUSD": 0.0000435,
+      "errorCategory": null
+    },
+    {
+      "sequence": 7,
+      "providerType": "deepseek",
+      "model": "deepseek-v4-flash",
+      "case": "durable",
+      "attemptOrdinal": 1,
+      "state": "SETTLED_USAGE",
+      "status": "COMPLETE",
+      "finish": "STOP",
+      "outcome": "NATIVE_USAGE_VERIFIED",
+      "inputUpperBoundBytes": 1701,
+      "tokens": {
+        "native": {
+          "inputTokens": 137,
+          "outputTokens": 21,
+          "cachedInputTokens": 0,
+          "cacheMissTokens": 137,
+          "reasoningTokens": null,
+          "totalTokens": 158
+        },
+        "estimated": {
+          "inputTokens": 117,
+          "outputTokens": 18,
+          "method": "local_estimator"
+        }
+      },
+      "usageProvenance": {
+        "status": "PARTIAL",
+        "cacheStatus": "REPORTED_ZERO",
+        "fieldSources": {
+          "inputTokens": "PROVIDER_REPORTED",
+          "outputTokens": "PROVIDER_REPORTED",
+          "cachedInputTokens": "PROVIDER_REPORTED",
+          "cacheMissTokens": "PROVIDER_REPORTED",
+          "reasoningTokens": "NOT_REPORTED",
+          "totalTokens": "PROVIDER_REPORTED"
+        },
+        "inconsistentFields": []
+      },
+      "reasoning": {
+        "present": false,
+        "tokenCount": null,
+        "source": "missing"
+      },
+      "reservedUSD": 0.0067584,
+      "costUpperBoundUSD": 0.0000663,
+      "errorCategory": null
+    },
+    {
+      "sequence": 8,
+      "providerType": "deepseek",
+      "model": "deepseek-v4-flash",
+      "case": "durable",
+      "attemptOrdinal": 2,
+      "state": "SETTLED_USAGE",
+      "status": "COMPLETE",
+      "finish": "STOP",
+      "outcome": "NATIVE_USAGE_VERIFIED",
+      "inputUpperBoundBytes": 1701,
+      "tokens": {
+        "native": {
+          "inputTokens": 137,
+          "outputTokens": 21,
+          "cachedInputTokens": 0,
+          "cacheMissTokens": 137,
+          "reasoningTokens": null,
+          "totalTokens": 158
+        },
+        "estimated": {
+          "inputTokens": 117,
+          "outputTokens": 18,
+          "method": "local_estimator"
+        }
+      },
+      "usageProvenance": {
+        "status": "PARTIAL",
+        "cacheStatus": "REPORTED_ZERO",
+        "fieldSources": {
+          "inputTokens": "PROVIDER_REPORTED",
+          "outputTokens": "PROVIDER_REPORTED",
+          "cachedInputTokens": "PROVIDER_REPORTED",
+          "cacheMissTokens": "PROVIDER_REPORTED",
+          "reasoningTokens": "NOT_REPORTED",
+          "totalTokens": "PROVIDER_REPORTED"
+        },
+        "inconsistentFields": []
+      },
+      "reasoning": {
+        "present": false,
+        "tokenCount": null,
+        "source": "missing"
+      },
+      "reservedUSD": 0.0067584,
+      "costUpperBoundUSD": 0.0000663,
+      "errorCategory": null
+    },
+    {
+      "sequence": 9,
+      "providerType": "openrouter",
+      "model": "z-ai/glm-5.3-flash",
+      "case": "chat_nonstream",
+      "attemptOrdinal": 1,
+      "state": "USAGE_UNKNOWN",
+      "status": "COMPLETE",
+      "finish": "STOP",
+      "outcome": "NOT_VERIFIED",
+      "inputUpperBoundBytes": 1464,
+      "tokens": {
+        "native": {
+          "inputTokens": 75,
+          "outputTokens": 127,
+          "cachedInputTokens": 0,
+          "cacheMissTokens": null,
+          "reasoningTokens": 79,
+          "totalTokens": 202
+        },
+        "estimated": {
+          "inputTokens": 74,
+          "outputTokens": 52,
+          "method": "local_estimator"
+        }
+      },
+      "usageProvenance": {
+        "status": "INCONSISTENT",
+        "cacheStatus": "REPORTED_ZERO",
+        "fieldSources": {
+          "inputTokens": "PROVIDER_REPORTED",
+          "outputTokens": "PROVIDER_REPORTED",
+          "cachedInputTokens": "PROVIDER_REPORTED",
+          "cacheMissTokens": "DERIVED",
+          "reasoningTokens": "PROVIDER_REPORTED",
+          "totalTokens": "PROVIDER_REPORTED"
+        },
+        "inconsistentFields": [
+          "cacheMissTokens"
+        ]
+      },
+      "reasoning": {
+        "present": true,
+        "tokenCount": 79,
+        "source": "usage"
+      },
+      "reservedUSD": 0.00822273,
+      "costUpperBoundUSD": 0.00022008,
+      "errorCategory": null
+    }
+  ],
+  "plannedNotAttempted": [
+    {
+      "providerType": "openrouter",
+      "model": "z-ai/glm-5.3-flash",
+      "case": "chat_nonstream",
+      "attemptOrdinal": 2
+    },
+    {
+      "providerType": "openrouter",
+      "model": "z-ai/glm-5.3-flash",
+      "case": "chat_stream",
+      "attemptOrdinal": 1
+    },
+    {
+      "providerType": "openrouter",
+      "model": "z-ai/glm-5.3-flash",
+      "case": "chat_stream",
+      "attemptOrdinal": 2
+    },
+    {
+      "providerType": "openrouter",
+      "model": "z-ai/glm-5.3-flash",
+      "case": "action",
+      "attemptOrdinal": 1
+    },
+    {
+      "providerType": "openrouter",
+      "model": "z-ai/glm-5.3-flash",
+      "case": "action",
+      "attemptOrdinal": 2
+    },
+    {
+      "providerType": "openrouter",
+      "model": "z-ai/glm-5.3-flash",
+      "case": "durable",
+      "attemptOrdinal": 1
+    },
+    {
+      "providerType": "openrouter",
+      "model": "z-ai/glm-5.3-flash",
+      "case": "durable",
+      "attemptOrdinal": 2
+    }
+  ],
+  "notVerified": [
+    "OpenRouter chat_nonstream attempt 1 returned COMPLETE/STOP but usage normalization was INCONSISTENT for cacheMissTokens; runner retained the reservation and stopped that provider.",
+    "The seven remaining planned OpenRouter attempts were not sent after the usage inconsistency; they remain unverified.",
+    "DeepSeek reasoning usage was absent on six of eight attempts; no reasoning-token value is inferred for those attempts.",
+    "Provider billing receipts were not inspected; costUpperBoundUSD is a plan-rate upper bound from reported native input/output tokens, not a confirmed charge.",
+    "Action and Durable cases were synthetic schema/route probes only; no CK3 effect or durable memory write was requested or verified."
+  ],
+  "blockedProviders": []
+}

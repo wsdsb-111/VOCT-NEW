@@ -1,0 +1,573 @@
+{
+  "schemaVersion": 1,
+  "offlineReplayOnly": true,
+  "noProviderCalls": true,
+  "noCredentialReads": true,
+  "nativeDataUnchangedFromPriorReplay": true,
+  "originalEvidence": {
+    "ledgerPath": ".build/v93-native-ledger.json",
+    "ledgerSHA256": "2a67f5074f5f03e4d1b845e407d2e5818b1330e993586d8e80f7397f6dc71eee",
+    "summaryPath": ".build/v93-native-summary.json",
+    "summarySHA256": "820d7c72d25f62acda12e946e5984124f3598545e322bdf120e42b109293288c",
+    "planHash": "f7674628fea18e12c866fcdfe4648cf4169a92bf63a239f3a8d47463789e40b4",
+    "attempts": 9,
+    "reservedUSD": 0.06228994,
+    "costUpperBoundUSD": 0.00130368,
+    "costUpperBoundIncludesOpenRouterAttempt9": true,
+    "confirmedProviderChargeUSD": null
+  },
+  "canonicalSource": {
+    "path": "src/app/main/providers/usage-normalization.js",
+    "sha256": "cf546ed5e653e00c859e800ecbd5b599c4a4db354d44251c6bbdfda2399caa43"
+  },
+  "normalizationRuleConfirmed": "Only NOT_REPORTED cache-miss fields are derived; invalid numeric/negative cache-miss fields remain INVALID and are not derived.",
+  "replayMethod": "Reconstructed each usage object from the original ledger numeric projection only; no response body or provider transport was loaded.",
+  "attempts": [
+    {
+      "sequence": 1,
+      "providerType": "deepseek",
+      "model": "deepseek-v4-flash",
+      "case": "chat_nonstream",
+      "attemptOrdinal": 1,
+      "originalLedgerState": "SETTLED_USAGE",
+      "originalFinish": "STOP",
+      "originalUsageProvenanceStatus": "PARTIAL",
+      "originalNativeProjection": {
+        "inputTokens": 94,
+        "outputTokens": 176,
+        "cachedInputTokens": 0,
+        "cacheMissTokens": 94,
+        "reasoningTokens": null,
+        "totalTokens": 270
+      },
+      "reconstructedCacheMissInput": "PROVIDER_REPORTED",
+      "replayedCanonicalUsage": {
+        "native": {
+          "inputTokens": 94,
+          "outputTokens": 176,
+          "cachedInputTokens": 0,
+          "cacheMissTokens": 94,
+          "reasoningTokens": null,
+          "totalTokens": 270
+        },
+        "provenance": {
+          "status": "PARTIAL",
+          "providerUsageShape": "deepseek",
+          "cacheStatus": "REPORTED_ZERO",
+          "fieldSources": {
+            "inputTokens": "PROVIDER_REPORTED",
+            "outputTokens": "PROVIDER_REPORTED",
+            "cachedInputTokens": "PROVIDER_REPORTED",
+            "cacheMissTokens": "PROVIDER_REPORTED",
+            "reasoningTokens": "NOT_REPORTED",
+            "totalTokens": "PROVIDER_REPORTED"
+          },
+          "derived": {
+            "cacheMissTokens": null
+          },
+          "inconsistentFields": []
+        }
+      },
+      "numericUsageGate": "PASS",
+      "overallAttemptRetest": "NOT_PERFORMED_OFFLINE_REPLAY_ONLY",
+      "estimatedUsageCarriedForward": {
+        "inputTokens": 74,
+        "outputTokens": 19,
+        "method": "local_estimator"
+      },
+      "reservedUSD": 0.0067584,
+      "costUpperBoundUSD": 0.0002394
+    },
+    {
+      "sequence": 2,
+      "providerType": "deepseek",
+      "model": "deepseek-v4-flash",
+      "case": "chat_nonstream",
+      "attemptOrdinal": 2,
+      "originalLedgerState": "SETTLED_USAGE",
+      "originalFinish": "STOP",
+      "originalUsageProvenanceStatus": "PARTIAL",
+      "originalNativeProjection": {
+        "inputTokens": 94,
+        "outputTokens": 135,
+        "cachedInputTokens": 0,
+        "cacheMissTokens": 94,
+        "reasoningTokens": null,
+        "totalTokens": 229
+      },
+      "reconstructedCacheMissInput": "PROVIDER_REPORTED",
+      "replayedCanonicalUsage": {
+        "native": {
+          "inputTokens": 94,
+          "outputTokens": 135,
+          "cachedInputTokens": 0,
+          "cacheMissTokens": 94,
+          "reasoningTokens": null,
+          "totalTokens": 229
+        },
+        "provenance": {
+          "status": "PARTIAL",
+          "providerUsageShape": "deepseek",
+          "cacheStatus": "REPORTED_ZERO",
+          "fieldSources": {
+            "inputTokens": "PROVIDER_REPORTED",
+            "outputTokens": "PROVIDER_REPORTED",
+            "cachedInputTokens": "PROVIDER_REPORTED",
+            "cacheMissTokens": "PROVIDER_REPORTED",
+            "reasoningTokens": "NOT_REPORTED",
+            "totalTokens": "PROVIDER_REPORTED"
+          },
+          "derived": {
+            "cacheMissTokens": null
+          },
+          "inconsistentFields": []
+        }
+      },
+      "numericUsageGate": "PASS",
+      "overallAttemptRetest": "NOT_PERFORMED_OFFLINE_REPLAY_ONLY",
+      "estimatedUsageCarriedForward": {
+        "inputTokens": 74,
+        "outputTokens": 19,
+        "method": "local_estimator"
+      },
+      "reservedUSD": 0.0067584,
+      "costUpperBoundUSD": 0.0001902
+    },
+    {
+      "sequence": 3,
+      "providerType": "deepseek",
+      "model": "deepseek-v4-flash",
+      "case": "chat_stream",
+      "attemptOrdinal": 1,
+      "originalLedgerState": "SETTLED_USAGE",
+      "originalFinish": "STOP",
+      "originalUsageProvenanceStatus": "REPORTED",
+      "originalNativeProjection": {
+        "inputTokens": 92,
+        "outputTokens": 196,
+        "cachedInputTokens": 0,
+        "cacheMissTokens": 92,
+        "reasoningTokens": 181,
+        "totalTokens": 288
+      },
+      "reconstructedCacheMissInput": "PROVIDER_REPORTED",
+      "replayedCanonicalUsage": {
+        "native": {
+          "inputTokens": 92,
+          "outputTokens": 196,
+          "cachedInputTokens": 0,
+          "cacheMissTokens": 92,
+          "reasoningTokens": 181,
+          "totalTokens": 288
+        },
+        "provenance": {
+          "status": "REPORTED",
+          "providerUsageShape": "deepseek",
+          "cacheStatus": "REPORTED_ZERO",
+          "fieldSources": {
+            "inputTokens": "PROVIDER_REPORTED",
+            "outputTokens": "PROVIDER_REPORTED",
+            "cachedInputTokens": "PROVIDER_REPORTED",
+            "cacheMissTokens": "PROVIDER_REPORTED",
+            "reasoningTokens": "PROVIDER_REPORTED",
+            "totalTokens": "PROVIDER_REPORTED"
+          },
+          "derived": {
+            "cacheMissTokens": null
+          },
+          "inconsistentFields": []
+        }
+      },
+      "numericUsageGate": "PASS",
+      "overallAttemptRetest": "NOT_PERFORMED_OFFLINE_REPLAY_ONLY",
+      "estimatedUsageCarriedForward": {
+        "inputTokens": 73,
+        "outputTokens": 19,
+        "method": "local_estimator"
+      },
+      "reservedUSD": 0.0067584,
+      "costUpperBoundUSD": 0.0002628
+    },
+    {
+      "sequence": 4,
+      "providerType": "deepseek",
+      "model": "deepseek-v4-flash",
+      "case": "chat_stream",
+      "attemptOrdinal": 2,
+      "originalLedgerState": "SETTLED_USAGE",
+      "originalFinish": "STOP",
+      "originalUsageProvenanceStatus": "REPORTED",
+      "originalNativeProjection": {
+        "inputTokens": 92,
+        "outputTokens": 120,
+        "cachedInputTokens": 0,
+        "cacheMissTokens": 92,
+        "reasoningTokens": 105,
+        "totalTokens": 212
+      },
+      "reconstructedCacheMissInput": "PROVIDER_REPORTED",
+      "replayedCanonicalUsage": {
+        "native": {
+          "inputTokens": 92,
+          "outputTokens": 120,
+          "cachedInputTokens": 0,
+          "cacheMissTokens": 92,
+          "reasoningTokens": 105,
+          "totalTokens": 212
+        },
+        "provenance": {
+          "status": "REPORTED",
+          "providerUsageShape": "deepseek",
+          "cacheStatus": "REPORTED_ZERO",
+          "fieldSources": {
+            "inputTokens": "PROVIDER_REPORTED",
+            "outputTokens": "PROVIDER_REPORTED",
+            "cachedInputTokens": "PROVIDER_REPORTED",
+            "cacheMissTokens": "PROVIDER_REPORTED",
+            "reasoningTokens": "PROVIDER_REPORTED",
+            "totalTokens": "PROVIDER_REPORTED"
+          },
+          "derived": {
+            "cacheMissTokens": null
+          },
+          "inconsistentFields": []
+        }
+      },
+      "numericUsageGate": "PASS",
+      "overallAttemptRetest": "NOT_PERFORMED_OFFLINE_REPLAY_ONLY",
+      "estimatedUsageCarriedForward": {
+        "inputTokens": 73,
+        "outputTokens": 19,
+        "method": "local_estimator"
+      },
+      "reservedUSD": 0.0067584,
+      "costUpperBoundUSD": 0.0001716
+    },
+    {
+      "sequence": 5,
+      "providerType": "deepseek",
+      "model": "deepseek-v4-flash",
+      "case": "action",
+      "attemptOrdinal": 1,
+      "originalLedgerState": "SETTLED_USAGE",
+      "originalFinish": "STOP",
+      "originalUsageProvenanceStatus": "PARTIAL",
+      "originalNativeProjection": {
+        "inputTokens": 125,
+        "outputTokens": 5,
+        "cachedInputTokens": 0,
+        "cacheMissTokens": 125,
+        "reasoningTokens": null,
+        "totalTokens": 130
+      },
+      "reconstructedCacheMissInput": "PROVIDER_REPORTED",
+      "replayedCanonicalUsage": {
+        "native": {
+          "inputTokens": 125,
+          "outputTokens": 5,
+          "cachedInputTokens": 0,
+          "cacheMissTokens": 125,
+          "reasoningTokens": null,
+          "totalTokens": 130
+        },
+        "provenance": {
+          "status": "PARTIAL",
+          "providerUsageShape": "deepseek",
+          "cacheStatus": "REPORTED_ZERO",
+          "fieldSources": {
+            "inputTokens": "PROVIDER_REPORTED",
+            "outputTokens": "PROVIDER_REPORTED",
+            "cachedInputTokens": "PROVIDER_REPORTED",
+            "cacheMissTokens": "PROVIDER_REPORTED",
+            "reasoningTokens": "NOT_REPORTED",
+            "totalTokens": "PROVIDER_REPORTED"
+          },
+          "derived": {
+            "cacheMissTokens": null
+          },
+          "inconsistentFields": []
+        }
+      },
+      "numericUsageGate": "PASS",
+      "overallAttemptRetest": "NOT_PERFORMED_OFFLINE_REPLAY_ONLY",
+      "estimatedUsageCarriedForward": {
+        "inputTokens": 111,
+        "outputTokens": 5,
+        "method": "local_estimator"
+      },
+      "reservedUSD": 0.0067584,
+      "costUpperBoundUSD": 0.0000435
+    },
+    {
+      "sequence": 6,
+      "providerType": "deepseek",
+      "model": "deepseek-v4-flash",
+      "case": "action",
+      "attemptOrdinal": 2,
+      "originalLedgerState": "SETTLED_USAGE",
+      "originalFinish": "STOP",
+      "originalUsageProvenanceStatus": "PARTIAL",
+      "originalNativeProjection": {
+        "inputTokens": 125,
+        "outputTokens": 5,
+        "cachedInputTokens": 0,
+        "cacheMissTokens": 125,
+        "reasoningTokens": null,
+        "totalTokens": 130
+      },
+      "reconstructedCacheMissInput": "PROVIDER_REPORTED",
+      "replayedCanonicalUsage": {
+        "native": {
+          "inputTokens": 125,
+          "outputTokens": 5,
+          "cachedInputTokens": 0,
+          "cacheMissTokens": 125,
+          "reasoningTokens": null,
+          "totalTokens": 130
+        },
+        "provenance": {
+          "status": "PARTIAL",
+          "providerUsageShape": "deepseek",
+          "cacheStatus": "REPORTED_ZERO",
+          "fieldSources": {
+            "inputTokens": "PROVIDER_REPORTED",
+            "outputTokens": "PROVIDER_REPORTED",
+            "cachedInputTokens": "PROVIDER_REPORTED",
+            "cacheMissTokens": "PROVIDER_REPORTED",
+            "reasoningTokens": "NOT_REPORTED",
+            "totalTokens": "PROVIDER_REPORTED"
+          },
+          "derived": {
+            "cacheMissTokens": null
+          },
+          "inconsistentFields": []
+        }
+      },
+      "numericUsageGate": "PASS",
+      "overallAttemptRetest": "NOT_PERFORMED_OFFLINE_REPLAY_ONLY",
+      "estimatedUsageCarriedForward": {
+        "inputTokens": 111,
+        "outputTokens": 5,
+        "method": "local_estimator"
+      },
+      "reservedUSD": 0.0067584,
+      "costUpperBoundUSD": 0.0000435
+    },
+    {
+      "sequence": 7,
+      "providerType": "deepseek",
+      "model": "deepseek-v4-flash",
+      "case": "durable",
+      "attemptOrdinal": 1,
+      "originalLedgerState": "SETTLED_USAGE",
+      "originalFinish": "STOP",
+      "originalUsageProvenanceStatus": "PARTIAL",
+      "originalNativeProjection": {
+        "inputTokens": 137,
+        "outputTokens": 21,
+        "cachedInputTokens": 0,
+        "cacheMissTokens": 137,
+        "reasoningTokens": null,
+        "totalTokens": 158
+      },
+      "reconstructedCacheMissInput": "PROVIDER_REPORTED",
+      "replayedCanonicalUsage": {
+        "native": {
+          "inputTokens": 137,
+          "outputTokens": 21,
+          "cachedInputTokens": 0,
+          "cacheMissTokens": 137,
+          "reasoningTokens": null,
+          "totalTokens": 158
+        },
+        "provenance": {
+          "status": "PARTIAL",
+          "providerUsageShape": "deepseek",
+          "cacheStatus": "REPORTED_ZERO",
+          "fieldSources": {
+            "inputTokens": "PROVIDER_REPORTED",
+            "outputTokens": "PROVIDER_REPORTED",
+            "cachedInputTokens": "PROVIDER_REPORTED",
+            "cacheMissTokens": "PROVIDER_REPORTED",
+            "reasoningTokens": "NOT_REPORTED",
+            "totalTokens": "PROVIDER_REPORTED"
+          },
+          "derived": {
+            "cacheMissTokens": null
+          },
+          "inconsistentFields": []
+        }
+      },
+      "numericUsageGate": "PASS",
+      "overallAttemptRetest": "NOT_PERFORMED_OFFLINE_REPLAY_ONLY",
+      "estimatedUsageCarriedForward": {
+        "inputTokens": 117,
+        "outputTokens": 18,
+        "method": "local_estimator"
+      },
+      "reservedUSD": 0.0067584,
+      "costUpperBoundUSD": 0.0000663
+    },
+    {
+      "sequence": 8,
+      "providerType": "deepseek",
+      "model": "deepseek-v4-flash",
+      "case": "durable",
+      "attemptOrdinal": 2,
+      "originalLedgerState": "SETTLED_USAGE",
+      "originalFinish": "STOP",
+      "originalUsageProvenanceStatus": "PARTIAL",
+      "originalNativeProjection": {
+        "inputTokens": 137,
+        "outputTokens": 21,
+        "cachedInputTokens": 0,
+        "cacheMissTokens": 137,
+        "reasoningTokens": null,
+        "totalTokens": 158
+      },
+      "reconstructedCacheMissInput": "PROVIDER_REPORTED",
+      "replayedCanonicalUsage": {
+        "native": {
+          "inputTokens": 137,
+          "outputTokens": 21,
+          "cachedInputTokens": 0,
+          "cacheMissTokens": 137,
+          "reasoningTokens": null,
+          "totalTokens": 158
+        },
+        "provenance": {
+          "status": "PARTIAL",
+          "providerUsageShape": "deepseek",
+          "cacheStatus": "REPORTED_ZERO",
+          "fieldSources": {
+            "inputTokens": "PROVIDER_REPORTED",
+            "outputTokens": "PROVIDER_REPORTED",
+            "cachedInputTokens": "PROVIDER_REPORTED",
+            "cacheMissTokens": "PROVIDER_REPORTED",
+            "reasoningTokens": "NOT_REPORTED",
+            "totalTokens": "PROVIDER_REPORTED"
+          },
+          "derived": {
+            "cacheMissTokens": null
+          },
+          "inconsistentFields": []
+        }
+      },
+      "numericUsageGate": "PASS",
+      "overallAttemptRetest": "NOT_PERFORMED_OFFLINE_REPLAY_ONLY",
+      "estimatedUsageCarriedForward": {
+        "inputTokens": 117,
+        "outputTokens": 18,
+        "method": "local_estimator"
+      },
+      "reservedUSD": 0.0067584,
+      "costUpperBoundUSD": 0.0000663
+    },
+    {
+      "sequence": 9,
+      "providerType": "openrouter",
+      "model": "z-ai/glm-5.3-flash",
+      "case": "chat_nonstream",
+      "attemptOrdinal": 1,
+      "originalLedgerState": "USAGE_UNKNOWN",
+      "originalFinish": "STOP",
+      "originalUsageProvenanceStatus": "INCONSISTENT",
+      "originalNativeProjection": {
+        "inputTokens": 75,
+        "outputTokens": 127,
+        "cachedInputTokens": 0,
+        "cacheMissTokens": null,
+        "reasoningTokens": 79,
+        "totalTokens": 202
+      },
+      "reconstructedCacheMissInput": "OWN_UNDEFINED",
+      "replayedCanonicalUsage": {
+        "native": {
+          "inputTokens": 75,
+          "outputTokens": 127,
+          "cachedInputTokens": 0,
+          "cacheMissTokens": null,
+          "reasoningTokens": 79,
+          "totalTokens": 202
+        },
+        "provenance": {
+          "status": "PARTIAL",
+          "providerUsageShape": "openai_compatible",
+          "cacheStatus": "REPORTED_ZERO",
+          "fieldSources": {
+            "inputTokens": "PROVIDER_REPORTED",
+            "outputTokens": "PROVIDER_REPORTED",
+            "cachedInputTokens": "PROVIDER_REPORTED",
+            "cacheMissTokens": "DERIVED",
+            "reasoningTokens": "PROVIDER_REPORTED",
+            "totalTokens": "PROVIDER_REPORTED"
+          },
+          "derived": {
+            "cacheMissTokens": 75
+          },
+          "inconsistentFields": []
+        }
+      },
+      "numericUsageGate": "PASS",
+      "overallAttemptRetest": "NOT_PERFORMED_OFFLINE_REPLAY_ONLY",
+      "estimatedUsageCarriedForward": {
+        "inputTokens": 74,
+        "outputTokens": 52,
+        "method": "local_estimator"
+      },
+      "reservedUSD": 0.00822273,
+      "costUpperBoundUSD": 0.00022008
+    }
+  ],
+  "plannedNotAttempted": [
+    {
+      "providerType": "openrouter",
+      "model": "z-ai/glm-5.3-flash",
+      "case": "chat_nonstream",
+      "attemptOrdinal": 2
+    },
+    {
+      "providerType": "openrouter",
+      "model": "z-ai/glm-5.3-flash",
+      "case": "chat_stream",
+      "attemptOrdinal": 1
+    },
+    {
+      "providerType": "openrouter",
+      "model": "z-ai/glm-5.3-flash",
+      "case": "chat_stream",
+      "attemptOrdinal": 2
+    },
+    {
+      "providerType": "openrouter",
+      "model": "z-ai/glm-5.3-flash",
+      "case": "action",
+      "attemptOrdinal": 1
+    },
+    {
+      "providerType": "openrouter",
+      "model": "z-ai/glm-5.3-flash",
+      "case": "action",
+      "attemptOrdinal": 2
+    },
+    {
+      "providerType": "openrouter",
+      "model": "z-ai/glm-5.3-flash",
+      "case": "durable",
+      "attemptOrdinal": 1
+    },
+    {
+      "providerType": "openrouter",
+      "model": "z-ai/glm-5.3-flash",
+      "case": "durable",
+      "attemptOrdinal": 2
+    }
+  ],
+  "notVerified": [
+    "This offline numeric replay does not retroactively change the immutable original OpenRouter attempt state USAGE_UNKNOWN or verify the discarded response payload.",
+    "All seven remaining planned OpenRouter attempts were never sent and remain NOT_VERIFIED.",
+    "No invoice or provider-side billing receipt was inspected; the original $0.00130368 costUpperBoundUSD is not a confirmed bill, and $0.06228994 reservedUSD remains unchanged.",
+    "DeepSeek reasoning usage remains absent on six attempts; the replay does not infer those token counts.",
+    "Action and Durable remain synthetic route-conformance probes only, with no CK3 effect or durable memory write."
+  ]
+}

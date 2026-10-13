@@ -1,0 +1,463 @@
+{
+  "kind": "candidate_conformance_coverage",
+  "baseline": "e1c3c37c89d8001f995593bc1c287a9c0d63a31f",
+  "normalWireGoldenScenes": 39,
+  "independentCandidate": {
+    "pass": 18,
+    "red": 0,
+    "skip": 0
+  },
+  "independentFrozenBaseline": {
+    "red": 23,
+    "pass": 4
+  },
+  "mockOnlyProviders": [
+    "player2",
+    "ollama",
+    "gemini"
+  ],
+  "notes": [
+    "Offline PASS maps specific fixtures, not live endpoint/model support.",
+    "T17 preserves normal native-schema request serialization; mock success cannot prove full provider schema enforcement.",
+    "Ollama native structured format is not added; Gemini schema remains the existing subset."
+  ],
+  "coreScenarios": [
+    {
+      "id": "T01",
+      "scenario": "无模型/配置缺失",
+      "expected": "不发网，明确错误",
+      "fixtures": [
+        "scripts/test-v9.3-cancellation-retry.js"
+      ],
+      "offline": "PASS",
+      "native": "NOT_A_NATIVE_SUPPORT_CLAIM"
+    },
+    {
+      "id": "T02",
+      "scenario": "Capabilities cache miss/hit",
+      "expected": "来源可追溯，参数不串实例",
+      "fixtures": [
+        "scripts/test-v9.3-provider-capabilities.js",
+        "scripts/test-v9.3-independent-qa.js"
+      ],
+      "offline": "PASS",
+      "native": "NOT_A_NATIVE_SUPPORT_CLAIM"
+    },
+    {
+      "id": "T03",
+      "scenario": "更换模型、端点或路由",
+      "expected": "重新解析能力，不沿用旧判断",
+      "fixtures": [
+        "scripts/test-v9.3-provider-capabilities.js",
+        "scripts/test-v9.3-independent-qa.js"
+      ],
+      "offline": "PASS",
+      "native": "NOT_A_NATIVE_SUPPORT_CLAIM"
+    },
+    {
+      "id": "T04",
+      "scenario": "非流式 stop",
+      "expected": "Normalized COMPLETE，内容/usage 匹配",
+      "fixtures": [
+        "scripts/test-v9.3-result-usage.js",
+        "scripts/test-v9.3-adapter-conformance.js"
+      ],
+      "offline": "PASS",
+      "native": "NOT_A_NATIVE_SUPPORT_CLAIM"
+    },
+    {
+      "id": "T05",
+      "scenario": "流式 token delta",
+      "expected": "顺序稳定，最终内容等价",
+      "fixtures": [
+        "scripts/test-v9.3-adapter-conformance.js"
+      ],
+      "offline": "PASS",
+      "native": "NOT_A_NATIVE_SUPPORT_CLAIM"
+    },
+    {
+      "id": "T06",
+      "scenario": "流式 usage-only 最后包",
+      "expected": "只记一次 Usage；允许 no-choice",
+      "fixtures": [
+        "scripts/test-v9.3-adapter-conformance.js",
+        "scripts/test-v9.3-independent-qa.js"
+      ],
+      "offline": "PASS",
+      "native": "NOT_A_NATIVE_SUPPORT_CLAIM"
+    },
+    {
+      "id": "T07",
+      "scenario": "`max_tokens` 截断",
+      "expected": "标 TRUNCATED，不当完整 JSON",
+      "fixtures": [
+        "scripts/test-v9.3-result-usage.js",
+        "scripts/test-v9.3-independent-qa.js"
+      ],
+      "offline": "PASS",
+      "native": "NOT_A_NATIVE_SUPPORT_CLAIM"
+    },
+    {
+      "id": "T08",
+      "scenario": "只收到部分内容后断链",
+      "expected": "PARTIAL/UNKNOWN，禁止“成功”",
+      "fixtures": [
+        "scripts/test-v9.3-adapter-conformance.js",
+        "scripts/test-v9.3-independent-qa.js"
+      ],
+      "offline": "PASS",
+      "native": "NOT_A_NATIVE_SUPPORT_CLAIM"
+    },
+    {
+      "id": "T09",
+      "scenario": "供应商拒绝与 content filter",
+      "expected": "Typed refusal/filter，不接受 Action",
+      "fixtures": [
+        "scripts/test-v9.3-result-usage.js"
+      ],
+      "offline": "PASS",
+      "native": "NOT_A_NATIVE_SUPPORT_CLAIM"
+    },
+    {
+      "id": "T10",
+      "scenario": "未知 finish reason",
+      "expected": "UNKNOWN，严格业务不放行",
+      "fixtures": [
+        "scripts/test-v9.3-result-usage.js",
+        "scripts/test-v9.3-independent-qa.js"
+      ],
+      "offline": "PASS",
+      "native": "NOT_A_NATIVE_SUPPORT_CLAIM"
+    },
+    {
+      "id": "T11",
+      "scenario": "空 usage",
+      "expected": "UNKNOWN，而不是官方 0",
+      "fixtures": [
+        "scripts/test-v9.3-result-usage.js"
+      ],
+      "offline": "PASS",
+      "native": "NOT_A_NATIVE_SUPPORT_CLAIM"
+    },
+    {
+      "id": "T12",
+      "scenario": "明确 cached_tokens=0",
+      "expected": "`REPORTED_ZERO`，而非 UNKNOWN",
+      "fixtures": [
+        "scripts/test-v9.3-result-usage.js",
+        "scripts/test-v9.2.3-glm-native-usage.js"
+      ],
+      "offline": "PASS",
+      "native": "NOT_A_NATIVE_SUPPORT_CLAIM"
+    },
+    {
+      "id": "T13",
+      "scenario": "cached_tokens>0",
+      "expected": "原生值精确保留",
+      "fixtures": [
+        "scripts/test-v9.3-result-usage.js",
+        "scripts/test-v8.9.1-cache-usage.js"
+      ],
+      "offline": "PASS",
+      "native": "NOT_A_NATIVE_SUPPORT_CLAIM"
+    },
+    {
+      "id": "T14",
+      "scenario": "reasoning 仅 presence",
+      "expected": "不泄露 reasoning 原文",
+      "fixtures": [
+        "scripts/test-v9.3-adapter-conformance.js",
+        "scripts/test-v8.8.5-zhipu-provider.js"
+      ],
+      "offline": "PASS",
+      "native": "NOT_A_NATIVE_SUPPORT_CLAIM"
+    },
+    {
+      "id": "T15",
+      "scenario": "reasoning_token 仅部分提供",
+      "expected": "缺失保持 null",
+      "fixtures": [
+        "scripts/test-v9.3-result-usage.js",
+        "scripts/test-v9.3-independent-qa.js"
+      ],
+      "offline": "PASS",
+      "native": "NOT_A_NATIVE_SUPPORT_CLAIM"
+    },
+    {
+      "id": "T16",
+      "scenario": "tool call 多 chunk 拼接",
+      "expected": "index/id/arguments 正确，重复不双计",
+      "fixtures": [
+        "scripts/test-v9.3-adapter-conformance.js"
+      ],
+      "offline": "PASS",
+      "native": "NOT_A_NATIVE_SUPPORT_CLAIM"
+    },
+    {
+      "id": "T17",
+      "scenario": "native schema 支持",
+      "expected": "真实验证和本地校验通过",
+      "fixtures": [
+        "scripts/test-v9.3-provider-capabilities.js",
+        "scripts/test-v9.3-adapter-conformance.js"
+      ],
+      "offline": "PASS",
+      "native": "FULL_NATIVE_SCHEMA_NOT_VERIFIED"
+    },
+    {
+      "id": "T18",
+      "scenario": "JSON object 兼容模式",
+      "expected": "Schema 仍在本地拒绝非法字段",
+      "fixtures": [
+        "scripts/test-v7.10-action-provider-parity.js",
+        "scripts/test-v9.3-independent-qa.js"
+      ],
+      "offline": "PASS",
+      "native": "NOT_A_NATIVE_SUPPORT_CLAIM"
+    },
+    {
+      "id": "T19",
+      "scenario": "明确 unsupported feature",
+      "expected": "发送前 Typed Unsupported",
+      "fixtures": [
+        "scripts/test-v9.3-provider-capabilities.js",
+        "scripts/test-v9.3-cancellation-retry.js"
+      ],
+      "offline": "PASS",
+      "native": "NOT_A_NATIVE_SUPPORT_CLAIM"
+    },
+    {
+      "id": "T20",
+      "scenario": "未经验证 feature",
+      "expected": "显示 UNKNOWN，不谎称支持",
+      "fixtures": [
+        "scripts/test-v9.3-provider-capabilities.js",
+        "scripts/test-v9.3-independent-qa.js"
+      ],
+      "offline": "PASS",
+      "native": "NOT_A_NATIVE_SUPPORT_CLAIM"
+    },
+    {
+      "id": "T21",
+      "scenario": "capabilities 查询中 Abort",
+      "expected": "不发业务请求",
+      "fixtures": [
+        "scripts/test-v9.3-independent-qa.js"
+      ],
+      "offline": "PASS",
+      "native": "NOT_A_NATIVE_SUPPORT_CLAIM"
+    },
+    {
+      "id": "T22",
+      "scenario": "429 Retry-After / Abort",
+      "expected": "不再尝试下一次",
+      "fixtures": [
+        "scripts/test-v9.3-cancellation-retry.js",
+        "scripts/test-v9.3-independent-qa.js"
+      ],
+      "offline": "PASS",
+      "native": "NOT_A_NATIVE_SUPPORT_CLAIM"
+    },
+    {
+      "id": "T23",
+      "scenario": "502/503/504 请求前故障",
+      "expected": "按明确策略有限重试",
+      "fixtures": [
+        "scripts/test-v9.3-adapter-conformance.js",
+        "scripts/test-v9.3-cancellation-retry.js"
+      ],
+      "offline": "PASS",
+      "native": "NOT_A_NATIVE_SUPPORT_CLAIM"
+    },
+    {
+      "id": "T24",
+      "scenario": "传输可能送达但超时",
+      "expected": "送达状态 UNKNOWN，不重放效果",
+      "fixtures": [
+        "scripts/test-v9.3-cancellation-retry.js",
+        "scripts/test-v9.3-independent-qa.js"
+      ],
+      "offline": "PASS",
+      "native": "NOT_A_NATIVE_SUPPORT_CLAIM"
+    },
+    {
+      "id": "T25",
+      "scenario": "首个输出 chunk 后中断",
+      "expected": "不透明重试/不拼接第二轮",
+      "fixtures": [
+        "scripts/test-v9.3-adapter-conformance.js",
+        "scripts/test-v9.3-independent-qa.js"
+      ],
+      "offline": "PASS",
+      "native": "NOT_A_NATIVE_SUPPORT_CLAIM"
+    },
+    {
+      "id": "T26",
+      "scenario": "SDK 默认隐藏重试",
+      "expected": "明确禁用或计数，避免成本不透明",
+      "fixtures": [
+        "scripts/test-v9.3-adapter-conformance.js",
+        "scripts/test-v9.3-independent-qa.js"
+      ],
+      "offline": "PASS",
+      "native": "NOT_A_NATIVE_SUPPORT_CLAIM"
+    },
+    {
+      "id": "T27",
+      "scenario": "用户取消普通 Chat",
+      "expected": "正确终态和 Reader 关闭",
+      "fixtures": [
+        "scripts/test-v9.3-independent-qa.js"
+      ],
+      "offline": "PASS",
+      "native": "NOT_A_NATIVE_SUPPORT_CLAIM"
+    },
+    {
+      "id": "T28",
+      "scenario": "Durable SourceRevision 在 capabilities 中途变化",
+      "expected": "发送前拒绝旧证据",
+      "fixtures": [
+        "scripts/test-v9.2.2-presend-forget.js",
+        "scripts/test-v9.3-independent-qa.js"
+      ],
+      "offline": "PASS",
+      "native": "NOT_A_NATIVE_SUPPORT_CLAIM"
+    },
+    {
+      "id": "T29",
+      "scenario": "Durable SourceRevision 在 backoff 中变化",
+      "expected": "下一次 Attempt 拒绝旧证据",
+      "fixtures": [
+        "scripts/test-v9.2.2-durable-chunking.js"
+      ],
+      "offline": "PASS",
+      "native": "NOT_A_NATIVE_SUPPORT_CLAIM"
+    },
+    {
+      "id": "T30",
+      "scenario": "Forget 与返回结果竞态",
+      "expected": "不提交已忘内容",
+      "fixtures": [
+        "scripts/test-v9.2.1-cache-invariants.js",
+        "scripts/test-v9.2.2-presend-forget.js"
+      ],
+      "offline": "PASS",
+      "native": "NOT_A_NATIVE_SUPPORT_CLAIM"
+    },
+    {
+      "id": "T31",
+      "scenario": "Action 部分 JSON + HTTP 200",
+      "expected": "不执行 CK3 Effect",
+      "fixtures": [
+        "scripts/test-v9.3-independent-qa.js"
+      ],
+      "offline": "PASS",
+      "native": "NOT_A_NATIVE_SUPPORT_CLAIM"
+    },
+    {
+      "id": "T32",
+      "scenario": "Letter 失败/未知 ACK",
+      "expected": "不重复投递或归档",
+      "fixtures": [
+        "scripts/test-v8.15.2-letter-archive-independent-qa.js",
+        "scripts/test-v8.14.2-letter-retry-independent-qa.js"
+      ],
+      "offline": "PASS",
+      "native": "NOT_A_NATIVE_SUPPORT_CLAIM"
+    },
+    {
+      "id": "T33",
+      "scenario": "估算 vs 原生总数不一致",
+      "expected": "provenance 标识明确，账单不虚报",
+      "fixtures": [
+        "scripts/test-v9.3-result-usage.js",
+        "scripts/test-v9.3-independent-qa.js"
+      ],
+      "offline": "PASS",
+      "native": "NOT_A_NATIVE_SUPPORT_CLAIM"
+    },
+    {
+      "id": "T34",
+      "scenario": "缓存 hit 大于 input / 非数值",
+      "expected": "INCONSISTENT/UNKNOWN，不掩盖异常",
+      "fixtures": [
+        "scripts/test-v9.3-result-usage.js"
+      ],
+      "offline": "PASS",
+      "native": "NOT_A_NATIVE_SUPPORT_CLAIM"
+    },
+    {
+      "id": "T35",
+      "scenario": "Diagnostics on/off",
+      "expected": "关闭不改变 HTTP body，开启不泄露文本",
+      "fixtures": [
+        "scripts/test-v9.3-adapter-conformance.js",
+        "scripts/test-v9.0-independent-qa.js"
+      ],
+      "offline": "PASS",
+      "native": "NOT_A_NATIVE_SUPPORT_CLAIM"
+    },
+    {
+      "id": "T36",
+      "scenario": "Provider Instance 切换",
+      "expected": "路由/密钥/能力不串用",
+      "fixtures": [
+        "scripts/test-v9.3-provider-capabilities.js",
+        "scripts/test-v9.3-independent-qa.js"
+      ],
+      "offline": "PASS",
+      "native": "NOT_A_NATIVE_SUPPORT_CLAIM"
+    },
+    {
+      "id": "T37",
+      "scenario": "Provider Snapshot 固定后用户改模型",
+      "expected": "明确错误或保留快照，不暗中切换",
+      "fixtures": [
+        "scripts/test-v9.3-independent-qa.js",
+        "scripts/test-v9.2.2-presend-forget.js"
+      ],
+      "offline": "PASS",
+      "native": "NOT_A_NATIVE_SUPPORT_CLAIM"
+    },
+    {
+      "id": "T38",
+      "scenario": "模型名下线 / listModels 失败",
+      "expected": "不假定已支持，合理退化",
+      "fixtures": [
+        "scripts/test-v9.3-provider-capabilities.js",
+        "scripts/test-v9.3-adapter-conformance.js"
+      ],
+      "offline": "PASS",
+      "native": "NOT_A_NATIVE_SUPPORT_CLAIM"
+    },
+    {
+      "id": "T39",
+      "scenario": "旧 Year/Life UI 直接调用",
+      "expected": "返回 SKIPPED，Provider Request=0",
+      "fixtures": [
+        "scripts/test-v9.2.3-derived-retirement.js",
+        "scripts/test-v9.2.3-derived-recovery.js"
+      ],
+      "offline": "PASS",
+      "native": "NOT_A_NATIVE_SUPPORT_CLAIM"
+    },
+    {
+      "id": "T40",
+      "scenario": "Legacy 手工旧档与跨年代召回",
+      "expected": "仍按旧权限与来源结果",
+      "fixtures": [
+        "scripts/test-v8.14.1-memory4-archival-readonly.js",
+        "scripts/test-v8.14-de-independent-qa.js"
+      ],
+      "offline": "PASS",
+      "native": "NOT_A_NATIVE_SUPPORT_CLAIM"
+    }
+  ],
+  "runtimeInputDigest": "60ecceb1d406a83ba67ea7a23a67bfb1c8d682a3f9c889f2555dd35f70322d31",
+  "codeCommit": "218fd1a91227ae33a31ce8a085cda8ce8e044dae",
+  "optionalUsageFix": {
+    "rawNumericProjectionReplayPass": 9,
+    "newProviderCalls": 0,
+    "sourceSHA256": "cf546ed5e653e00c859e800ecbd5b599c4a4db354d44251c6bbdfda2399caa43"
+  }
+}

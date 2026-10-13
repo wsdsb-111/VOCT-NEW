@@ -4,11 +4,13 @@ Voices of the Court 是一个面向《Crusader Kings III》（CK3）的沉浸式
 
 本仓库保存 VOTC 的可编辑 JavaScript 源、可重复生成的运行资源、既有 Windows 壳与锁定依赖，适合运行、开发与回归验证。
 
-当前主线 **V9.2 应用边界与 JSON 仓储**（2026-10-11）：[施工与验证](docs/current/v9/V9_2_VERIFICATION_REPORT.md)、[七域端口](docs/current/v9/V9_2_SERVICE_PORTS.md)、[数据权威与恢复](docs/current/v9/V9_2_JSON_AUTHORITY_AND_RECOVERY.md)。符合[旧总路线](docs/current/v9/V9_ROADMAP.md) §7.3，委托既有服务和 Store；Provider／Context／Renderer／Bridge 的后续重构仍按阶段进行。V9.1 f9c088f 和 V9.2 6026713 的远端 CI 已成功，用户功能确认保留；新候选的 CI 按最终 SHA 独立核验。
+正式基线 **V9.2 应用边界与 JSON 仓储**（2026-10-11）：[施工与验证](docs/current/v9/V9_2_VERIFICATION_REPORT.md)、[七域端口](docs/current/v9/V9_2_SERVICE_PORTS.md)、[数据权威与恢复](docs/current/v9/V9_2_JSON_AUTHORITY_AND_RECOVERY.md)。符合[旧总路线](docs/current/v9/V9_ROADMAP.md) §7.3，委托既有服务和 Store；本轮经用户明确要求实施V9.3 Provider候选，Context／Renderer／Bridge仍留后续阶段。V9.1 f9c088f 和 V9.2 6026713 的远端 CI 已成功，用户功能确认保留；新候选的 CI 按最终 SHA 独立核验。
 
-V9.2.1 缓存专项安全／诊断候选（2026-10-12）：[验证](docs/current/v9/V9_2_1_VERIFICATION_REPORT.md)、[问题台账](docs/current/v9/V9_2_1_P_ISSUE_LEDGER.md)。Durable 固定规则与动态额度分离，修复 Forget 在截断重试中重发已忘片段；补充真实 v813 出站与原生用量审计。GLM 96 次合成 A/B 没有命中率增益，DeepSeek baseline 质量门禁停止，效果 **HOLD**。按施工规格暂不冻结或升级发布版本，App/UI 保持 9.2.0/V9.2；V9.3 不自动开工。
+V9.2.1 缓存专项安全／诊断候选（2026-10-12）：[验证](docs/current/v9/V9_2_1_VERIFICATION_REPORT.md)、[问题台账](docs/current/v9/V9_2_1_P_ISSUE_LEDGER.md)。Durable 固定规则与动态额度分离，修复 Forget 在截断重试中重发已忘片段；补充真实 v813 出站与原生用量审计。GLM 96 次合成 A/B 没有命中率增益，DeepSeek baseline 质量门禁停止，效果 **HOLD**。当时未自动进入V9.3；本轮按用户新指示独立施工，App/UI仍保持9.2.0/V9.2。
 
 ## 主要功能
+
+V9.3 Provider Platform候选：[实施](docs/current/v9/V9_3_IMPLEMENTATION_REPORT.md)、[验证](docs/current/v9/V9_3_VERIFICATION_REPORT.md)、[支持／问题台账](docs/current/v9/V9_3_P_ISSUE_LEDGER.md)。统一七服务商能力／严格完成／原生与估算用量、取消及有界重试；正常出站保持，未知或部分Action不执行。正式App/UI暂保持9.2.0/V9.2；本轮实机和最终SHA CI分别签署。
 
 V9.2.3候选（2026-10-13）：[实施](docs/current/v9/V9_2_3_IMPLEMENTATION_REPORT.md)、[验证](docs/current/v9/V9_2_3_VERIFICATION_REPORT.md)。Year/Life自动模型生成已退役；保留Durable、Detail/Legacy及合法旧档查看和手改。以下旧年度压缩／重建记录为历史合同，不能据此重新启用生成。GLM旧新出站一致，原生长上下文另有取证，实机问题仍HOLD；正式App/UI保持9.2.0/V9.2，未签完整冻结。
 

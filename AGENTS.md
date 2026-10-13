@@ -17,6 +17,8 @@ V9.2.1 缓存专项目前为安全／诊断候选，证据见 docs/current/v9/V9
 
 ## 当前稳定合同
 
+- V9.3 Provider Platform候选见 docs/current/v9/V9_3_VERIFICATION_REPORT.md。Chat/Action/Summary统一Facade；能力UNKNOWN保留证据，明确UNSUPPORTED发送前阻止；只有STOP/COMPLETE进入严格业务。SDK隐式重试为0，显式生成最多2次且未知送达/部分流不透明重发；每次真实transport前复核Forget/来源及同步预算。原生用量与估算分开，缺失字段不可当0，非法字段不可被DERIVED掩盖。七Adapter正常wire、GLM v813、DeepSeek优化、Version与原持久化writer保持；当前仅候选，不宣称Full Freeze。
+
 - V9.2.3 候选固定退役 Memory4 Year/Life 自动模型生成及后台重建；历史合法视图可查看和手改，Detail/Legacy、Durable、Commitment、Forget与来源校验保持。跳过必须显示 `SKIPPED_DERIVED_POLICY`，不能冒充已生成。旧 Recovery 只有真实提交证据闭合才可清除；坏记录、未知状态与其他 Campaign保留。候选仍按 docs/current/v9/V9_2_3_VERIFICATION_REPORT.md 分别签署自动化、原生Provider、CI和人工Gate，正式App/UI暂保持9.2.0/V9.2。
 
 - V8.8.4 动作区分 QUEUED、ACKNOWLEDGED 与 CONFIRMED。NPC 列表不含玩家，玩家绑定 root；金币/好感度以同命令 BEGIN—ACK 的真实前后状态确认。游戏侧同命令去重和旧会话零写入隔离不可移除；其他动作只有 ACK 时不宣称效果成功。
