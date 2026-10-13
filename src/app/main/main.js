@@ -29,7 +29,7 @@ const { createStartupPerformanceTrace } = require("./runtime/startup-performance
 
 const performanceTrace = createStartupPerformanceTrace();
 const { DurableRequestTrace } = require("./analytics/durable-request-trace");
-const durableRequestTrace = new DurableRequestTrace({ enabled: performanceTrace.enabled === true });
+const durableRequestTrace = new DurableRequestTrace({ enabled: true });
 const appLaunchSpan = performanceTrace.startSpan("app.launch", { attribution: "MAIN" });
 
 function traceMainOperation(step, operation, attribution = "MAIN") {

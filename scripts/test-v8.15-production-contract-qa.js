@@ -442,16 +442,20 @@ async function testUnknownSourceResponseRejected() {
     trace: { record() {} } });
   const snapshot = makePendingSnapshot();
   const response = { content: JSON.stringify({ status: "STORE", entries: [
-    { memoryType: "DURABLE_KNOWLEDGE", text: "VALID_C_BUT_BATCH_MUST_FAIL_CLOSED", fragmentIds: ["fragment-C"],
+    { memoryType: "DURABLE_KNOWLEDGE", text: "VALID_C_WITH_VERIFIED_SOURCE", fragmentIds: ["fragment-C"],
       participantIds: [2, 3], entityIds: [3], topics: ["C"], eventTime: { status: "unknown" } },
     { memoryType: "DURABLE_KNOWLEDGE", text: "UNKNOWN_FRAGMENT_MUST_NOT_COMMIT", fragmentIds: ["not-in-snapshot"],
       participantIds: [2, 3], entityIds: [3], topics: ["unknown"], eventTime: { status: "unknown" } }
   ] }), finish_reason: "stop" };
-  const result = await engine.memory4.finishOwner(snapshot, async () => response, null, () => true);
-  assert.equal(result.status, "EXTRACTION_FAILED");
-  assert.equal(result.error, "memory4_response_source_mismatch");
-  assert.deepEqual(engine.memory4.store.query({ campaignToken, ownerId: 2 }), [],
-    "a response containing any unknown fragment reference must not partially commit its otherwise-valid entries");
+  assert.throws(() => engine.memory4.parseResult(response, snapshot.fragments, snapshot),
+    error => error.message === "memory4_response_source_mismatch", "strict source validation remains unchanged");
+  let calls = 0;
+  const result = await engine.memory4.finishOwner(snapshot, async () => { calls++; return response; }, null, () => true);
+  assert.equal(result.status, "STORE");
+  assert.equal(calls, 2, "a rejected candidate receives only one bounded repair");
+  assert.equal(result.rejectedCandidateCount, 1);
+  assert.deepEqual(engine.memory4.store.query({ campaignToken, ownerId: 2 }).map(entry => entry.text),
+    ["VALID_C_WITH_VERIFIED_SOURCE"], "only individually verified candidates may commit; unknown sources remain rejected");
 }
 
 async function testSharedSourceProjectionAndReadDtos() {
@@ -555,7 +559,7 @@ async function main() {
     [testOrphanForgetReachesProvider, "orphan audit/forget -> restart -> Memory4 packet, temporalExtraText and Provider messages stay clear"],
     [testSharedSourceProjectionAndReadDtos, "shared A/C source -> delete A -> owner/detail/year DTOs and readSources -> restart keeps C only"],
     [testManagerDeletionAndLateRecovery, "SummariesManager deletion -> restart -> late A+C recovery, C-only durable/provider recall"],
-    [testUnknownSourceResponseRejected, "durable finalization rejects a mixed valid/unknown-fragment provider response without partial commit"]
+    [testUnknownSourceResponseRejected, "durable finalization isolates unknown-fragment candidates and commits only verified facts"]
   ];
   const failures = [];
   try {

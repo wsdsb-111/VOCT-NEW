@@ -56,5 +56,8 @@ assert.throws(() => coordinator.parseResult({ content: "{}", finish_reason: "len
 const baselinePolicy = fs.readFileSync(path.join(__dirname, "fixtures/v9.2-durable-policy.txt"), "utf8");
 const oldLimits = "Return no more than 8 entries and 8 commitment transitions for this owner in this request.";
 const newLimits = "Follow the dynamic request limits: return no more than limits.maxEntries entries and limits.maxCommitmentTransitions commitment transitions for this owner in this request.";
-assert.equal(first[0].content, baselinePolicy.replace(oldLimits, newLimits), "D-11 every other policy clause is retained verbatim");
-console.log("V9.2.1 Durable policy: PASS (fixed prefix, dynamic scopes/limits, deterministic bytes, unchanged validation and clauses)");
+assert(baselinePolicy.includes(oldLimits), "D-11 historical V9.2 policy evidence stays intact");
+const currentPolicy = JSON.parse(fs.readFileSync(path.join(__dirname, "fixtures/v932-durable-policy.json"), "utf8")).policy;
+assert.equal(first[0].content, currentPolicy, "D-11 V9.3.2 compact evidence/schema policy is explicitly versioned");
+assert(first[0].content.includes(newLimits), "D-11 changing limits remain outside the policy prefix");
+console.log("Durable policy: PASS (V9.3.2 versioned prefix, dynamic scopes/limits, deterministic bytes, strict validation)");

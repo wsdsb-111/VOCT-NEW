@@ -139,7 +139,7 @@ function makePipeline(coordinator, respond, { reportUsage = true, transportRepea
   return { requestDurable, sent, calls, trace, get beforeSendChecks() { return beforeSendChecks; } };
 }
 
-async function test129FragmentsRemain128Plus1() {
+async function test129FragmentsRespectCountAndInputBudget() {
   const { coordinator, store } = makeFixture("outer-128-plus-1");
   const fragments = Array.from({ length: 129 }, (_, index) => makeFragment(`outer-${index + 1}`,
     `ORDINARY_SOURCE_${index + 1}`, index + 1));
@@ -148,25 +148,20 @@ async function test129FragmentsRemain128Plus1() {
   const result = await coordinator.finishOwner(snapshot, pipeline.requestDurable, null, () => true, { origin: "finalization" });
 
   assert.equal(result.status, "NO_DURABLE_CONTENT");
-  assert.equal(pipeline.sent.length, 2);
-  assert.deepEqual(pipeline.sent.map(row => row.payload.fragments.length), [128, 1]);
-  assert.deepEqual(pipeline.sent.map(row => row.payload.limits), [
-    { maxEntries: 8, maxCommitmentTransitions: 8 },
-    { maxEntries: 8, maxCommitmentTransitions: 8 }
-  ], "each ordinary outer chunk retains both independent owner quotas");
-  assert.deepEqual(pipeline.sent.map(row => [row.payload.fragments[0].fragmentId,
-    row.payload.fragments.at(-1).fragmentId]), [["outer-1", "outer-128"], ["outer-129", "outer-129"]]);
+  assert(pipeline.sent.length >= 2);
+  assert(pipeline.sent.every(row => row.payload.fragments.length <= 128));
+  assert(pipeline.sent.every(row => row.payload.limits.maxEntries === 8 && row.payload.limits.maxCommitmentTransitions === 0),
+    "empty active commitments must not reserve nonexistent transition work");
   assert.equal(pipeline.calls.every(call => call.options.maxTokens === 4096), true,
     "the established Durable output ceiling remains 4096 for every chunk");
   const attempts = pipeline.trace.exportReport().attempts;
-  assert.equal(attempts.length, 2);
-  assert.deepEqual(attempts.map(row => [row.chunkIndex, row.chunkTotal, row.chunkPath, row.fragmentCount]), [
-    [0, 2, [0], 128], [1, 2, [1], 1]
-  ]);
-  assert.deepEqual(attempts.map(row => row.sourceDigest), [
-    pipeline.trace.hashValue("source_digest", JSON.stringify([snapshot.sourceRevision, fragments.slice(0, 128)])),
-    pipeline.trace.hashValue("source_digest", JSON.stringify([snapshot.sourceRevision, fragments.slice(128)]))
-  ], "source digests must distinguish the two exact chunk source sets without exporting source text");
+  assert.equal(attempts.length, pipeline.sent.length);
+  assert.deepEqual(attempts.map(row => [row.chunkIndex, row.chunkTotal, row.chunkPath, row.fragmentCount]),
+    pipeline.sent.map((row, index) => [index, pipeline.sent.length, [index], row.payload.fragments.length]));
+  assert.deepEqual(attempts.map(row => row.sourceDigest), pipeline.sent.map(row =>
+    pipeline.trace.hashValue("source_digest", JSON.stringify([snapshot.sourceRevision,
+      row.payload.fragments.map(fragment => fragments.find(source => source.fragmentId === fragment.fragmentId))]))),
+  "source digests must distinguish exact chunk source sets without exporting source text");
   assert.equal(JSON.stringify(pipeline.trace.exportReport()).includes("ORDINARY_SOURCE_"), false,
     "the durable attempt report must not serialize source text");
   assert.equal(attempts.every(row => row.providerSendStartedAt && row.inputReported && row.inputTokens > 0), true);
@@ -572,11 +567,14 @@ async function testEightTransitionQuotaAcrossOuterChunks() {
   assert.equal(result.status, "NO_DURABLE_CONTENT", `transition-only results keep their existing result status (${result.error || "no error detail"})`);
   assert.equal(result.entryIds.length, 0);
   assert.equal(result.commitmentTransitionCount, 8);
-  assert.equal(pipeline.sent.length, 2);
-  assert.deepEqual(pipeline.sent.map(row => row.payload.limits), [
-    { maxEntries: 8, maxCommitmentTransitions: 8 },
-    { maxEntries: 8, maxCommitmentTransitions: 1 }
-  ], "the transition hard limit is cumulative across outer chunks and stays independent of entry quota");
+  assert(pipeline.sent.length > 1);
+  let remainingTransitions = 8;
+  for (const row of pipeline.sent) {
+    assert.deepEqual(row.payload.limits, { maxEntries: 8, maxCommitmentTransitions: remainingTransitions },
+      "the transition hard limit is cumulative across budgeted chunks and independent of entry quota");
+    remainingTransitions -= row.payload.fragments.filter(fragment => evidence.some(source => source.text === fragment.text)).length;
+  }
+  assert.equal(remainingTransitions, 0);
   assert.equal(pipeline.sent.reduce((sum, row) => sum + row.payload.fragments.length, 0), 129);
   const currentFragments = new Set(pipeline.sent.flatMap(row => row.payload.fragments.map(fragment => fragment.fragmentId)));
   assert.deepEqual([...currentFragments].sort(), fragments.map(fragment => fragment.fragmentId).sort());
@@ -600,6 +598,9 @@ async function testReplacementIndexSurvivesBinaryAndOuterOffsets() {
   const fragments = [...ordinary, leftTail, replacementEvidence];
   const snapshot = makeSnapshot("replacement-offsets-current", fragments,
     { campaignToken: "replacement-campaign", finalizationId: "current-replacement-run" });
+  // Isolate replacement remapping from the independently tested input partition policy.
+  coordinator.chunkFragments = () => [ordinary, [leftTail, replacementEvidence]];
+  coordinator.estimateDurableInput = () => 1000;
   const pipeline = makePipeline(coordinator, async ({ payload }) => {
     const ids = payload.fragments.map(fragment => fragment.fragmentId);
     if (ids.length === 128) {
@@ -637,7 +638,7 @@ async function testReplacementIndexSurvivesBinaryAndOuterOffsets() {
 
 async function run() {
   try {
-    await test129FragmentsRemain128Plus1();
+    await test129FragmentsRespectCountAndInputBudget();
     await testBinaryTreeCountsParentAndLeafCostsAndKeepsAllSources();
     await testSingleFragmentTruncationFailsWithoutRecursiveRetry();
     await testMissingNativeUsageStaysUnknown();

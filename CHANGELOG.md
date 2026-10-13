@@ -1,5 +1,7 @@
 # VOTC 版本变更入口
 
+V9.3.2（2026-10-13）：修复 Durable 无效生成、输入膨胀及重复恢复；修正取消/多 Effect 派发证据，Core/UI/App 同步为9.3.2。详见[实施](docs/current/v9/V9_3_2_IMPLEMENTATION_REPORT.md)和[验证](docs/current/v9/V9_3_2_VERIFICATION_REPORT.md)。
+
 这里是版本变更的单一入口。详细设计和测试证据保留在链接目标中，本文件只维护版本顺序、用户可见摘要和文档索引。
 
 V9.3.1修复候选：[实施](docs/current/v9/V9_3_1_IMPLEMENTATION_REPORT.md)、[验证](docs/current/v9/V9_3_1_VERIFICATION_REPORT.md)。Gemini原生缓存／思考及总量正确保留，候选输出不重复扣思考，部分流尾帧不丢已知用量；Action失败不误标已接受，并保留真实命令的待回执入口。无新API调用，正式App/UI仍9.2.0/V9.2，CI／CK3／Soak单独验收。

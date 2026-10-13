@@ -321,7 +321,7 @@ async function run() {
     assert.equal(failed.status, "EXTRACTION_FAILED");
     assert.equal(failed.error, "memory4_response_source_mismatch");
     const retried = await retryCoordinator.recoverPending(async () => ({ content: JSON.stringify({ status: "STORE", entries: [unknown.candidateC] }), finish_reason: "stop" }),
-      { activeCampaignToken: campaignToken, isNarrativeCommitted: () => true });
+      { manual: true, activeCampaignToken: campaignToken, isNarrativeCommitted: () => true });
     assert.equal(retried[0].status, "STORE");
     assert.deepEqual(retryCoordinator.store.query({ campaignToken, ownerId }).map(entry => entry.text), ["remembered fact C"]);
 

@@ -110,10 +110,10 @@ async function fixture({ roster = [1, 2], date = "1164.5.20", mainTemplate = nul
         for (const fragment of input.fragments) {
           if (!unique.has(fragment.text) || fragment.fragmentId.startsWith("segment_")) unique.set(fragment.text, fragment);
         }
-        const entries = [...unique.values()].slice(0, 8).map(fragment => {
+        const entries = [...unique.values()].slice(0, input.limits.maxEntries).map(fragment => {
           const time = extractTemporalAnchors(fragment.text, { anchorGameDate: input.conversationDate, messageId: 0 })[0];
           return { memoryType: fragment.text.includes("承诺") ? "COMMITMENT" : "MAJOR_EXPERIENCE", text: fragment.text,
-            fragmentIds: [fragment.fragmentId], entityIds: fragment.entityIds, topics: ["往事"],
+            fragmentIds: [fragment.fragmentId], entityIds: fragment.allowedEntityIds, topics: ["往事"],
             eventTime: time ? { from: time.fromGameDate, to: time.toGameDate, precision: time.precision, status: "reported" } : { status: "unknown" } };
         });
         return { content: JSON.stringify({ status: entries.length ? "STORE" : "NO_DURABLE_CONTENT", entries }), finish_reason: "stop" };
@@ -478,7 +478,9 @@ async function main() {
     const newPromise = "我对玩家说：我承诺把玉印封入国库，也承诺把玉印归还给玩家。";
     const rejectedReplacement = await finishSnapshot("binding-unmarked-replacement", "1165.1.3", newPromise,
       { status: "superseded", binding: "把玉印封入国库" }, "我承诺把玉印归还给玩家");
-    assert.equal(rejectedReplacement.result.status, "EXTRACTION_FAILED");
+    assert.equal(rejectedReplacement.result.status, "STORE", "the valid new promise remains separate from the rejected supersession");
+    assert.equal(rejectedReplacement.result.rejectedCandidateCount, 1);
+    assert.equal(rejectedReplacement.result.commitmentTransitionCount, 0);
     assert.equal(readStatus(originalId), "active", "a different predicate does not replace the old promise without explicit supersession");
 
     const explicitReplacement = "我对玩家说：我现将‘把玉印封入国库’的旧约改为‘我承诺把玉印归还给玩家’。";

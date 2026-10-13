@@ -48,7 +48,8 @@ function validateEntry(candidate, snapshot) {
   const entityIds = ids(candidate.entityIds);
   if ((candidate.entityIds || []).length !== entityIds.length || entityIds.some(id => !availableEntities.includes(id))) throw new Error("memory4_unknown_entity");
   const participantIds = ids(candidate.participantIds);
-  if (participantIds.some(id => !fragments.some(fragment => fragment.presentIds.includes(id)))) throw new Error("memory4_invalid_participant");
+  if ((candidate.participantIds || []).length !== participantIds.length
+    || participantIds.some(id => !fragments.some(fragment => fragment.presentIds.includes(id)))) throw new Error("memory4_invalid_participant");
   const requested = candidate.eventTime || {};
   const status = requested.status || "unknown";
   const precision = requested.precision || "unknown";

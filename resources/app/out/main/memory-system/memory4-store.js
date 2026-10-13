@@ -756,7 +756,11 @@ class Memory4Store {
     const now = new Date().toISOString();
     const record = { status: result.status, entryIds: entries.map(entry => entry.entryId), sourceRevision: snapshot.sourceRevision, committedAt: now,
       completeness: snapshot.completeness, visibilityEvidence: snapshot.visibilityEvidence || null,
-      evaluatedFragmentCount: snapshot.fragments.length, legacyRetained: snapshot.legacyRetained === true,
+      evaluatedFragmentCount: result.evaluatedFragmentCount ?? snapshot.fragments.length, legacyRetained: snapshot.legacyRetained === true,
+      ...(result.extractionPolicyVersion ? { extractionPolicyVersion: result.extractionPolicyVersion,
+        rejectedCandidateCount: result.rejectedCandidateCount || 0,
+        localMetadataCorrectionCount: result.localMetadataCorrectionCount || 0,
+        extractionCoverage: result.evaluatedFragmentCount < snapshot.fragments.length ? "CAPPED" : "FULL" } : {}),
       changedEntryIds: changes.map(entry => entry.entryId), commitmentTransitionCount: changes.length, noDetailIsNotUnknown: true };
     this.store.withSummaryMutation(null, () => {
       for (const entry of [...entries, ...changes]) {
@@ -1493,4 +1497,4 @@ class Memory4Store {
   }
 }
 
-module.exports = { Memory4Store, INDEX_KEYS };
+module.exports = { Memory4Store, INDEX_KEYS, commitmentCore };

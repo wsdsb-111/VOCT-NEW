@@ -79,7 +79,7 @@ function createPromptBuilder({
         } else if (requestType === "memory4_durable" && message.role === "system"
           && content.startsWith("VOTC Memory Engine 4.0 Durable extraction.")
           && content.includes("Follow the dynamic request limits:")) {
-          label = "Stable Memory4 Durable Policy v9.2.1";
+          label = content.includes("Contract v9.3.2.") ? "Stable Memory4 Durable Policy v9.3.2" : "Stable Memory4 Durable Policy v9.2.1";
           type = "summary_stable";
         } else if (content.startsWith("Stable rolling-summary instructions:")) {
           label = "Stable Rolling Summary Instructions";

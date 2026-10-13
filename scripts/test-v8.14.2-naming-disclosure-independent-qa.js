@@ -168,7 +168,7 @@ async function fixture({ date = "1044.11.8", playerAge = 23, playerTitle = "明�
         assert(fragment, "the real durable prompt must contain a source fragment");
         return { content: JSON.stringify({ status: "STORE", entries: [{ memoryType: "MAJOR_EXPERIENCE",
           text: sample.durableText, fragmentIds: [fragment.fragmentId],
-          entityIds: [...new Set([Number(fragment.speakerId), ...(fragment.entityIds || [])])],
+          entityIds: fragment.allowedEntityIds,
           participantIds: fragment.participantIds || [], topics: ["相识"],
           eventTime: { status: "unknown", precision: "unknown" } }] }), finish_reason: "stop" };
       }
@@ -230,6 +230,10 @@ function ownerPrompt(sample, ownerId = 2) {
   return [...sample.prompts].reverse().find(item => item.ownerId === ownerId) || null;
 }
 
+function fragmentNames(payload, fragment) {
+  return fragment.nameRefs.map(index => payload.entityNames[index]);
+}
+
 function profileFacts(sample, ownerId = 2, targetId = 1, gameData = sample.conversation.gameData) {
   return sample.engine.memory4.getKnownEntityProfile({ campaignToken: sample.scope.campaignToken, ownerId }, targetId,
     { gameData }).disclosedFacts;
@@ -268,8 +272,8 @@ async function main() {
     const prompt = ownerPrompt(positive);
     assert(prompt, "the NPC Owner must receive a real durable prompt");
     const namedFragments = prompt.payload.fragments.filter(fragment => fragment.text.includes("张道正"));
-    assert(namedFragments.some(fragment => fragment.entityNames.some(row => row.entityId === 3 && row.name === "张道正")));
-    assert(prompt.system.includes("Owner means the memory holder"));
+    assert(namedFragments.some(fragment => fragmentNames(prompt.payload, fragment).some(row => row.entityId === 3 && row.name === "张道正")));
+    assert(prompt.system.includes("Owner is the memory holder"));
     assert(prompt.system.includes("never a master or 主人"));
     assert.equal(result.durable?.status, "COMPLETE");
     assert.equal(result.durable?.owners?.find(owner => owner.ownerId === 2)?.status, "STORE");
@@ -295,7 +299,7 @@ async function main() {
     await finalize(sample);
     const prompt = ownerPrompt(sample);
     assert(prompt);
-    const rows = prompt.payload.fragments.flatMap(fragment => fragment.entityNames);
+    const rows = prompt.payload.fragments.flatMap(fragment => fragmentNames(prompt.payload, fragment));
     assert(rows.some(row => row.entityId === 2 && row.name === "张道素"));
     assert(!rows.some(row => row.name === "主人"));
     assert(!rows.some(row => row.entityId === 1), "same-scene player identity alone does not expose a backend name");
@@ -349,7 +353,7 @@ async function main() {
     const snapshot = sample.snapshots.get(2);
     assert(snapshot.entityNameEvidence.some(row => row.entityId === 3 && row.name === "张道正"
       && row.evidence.some(item => item.source === "SOURCE_EXPLICIT_NAME")));
-    assert(ownerPrompt(sample).payload.fragments.some(fragment => fragment.entityNames.some(row => row.entityId === 3
+    assert(ownerPrompt(sample).payload.fragments.some(fragment => fragmentNames(ownerPrompt(sample).payload, fragment).some(row => row.entityId === 3
       && row.name === "张道正")));
   });
 
@@ -359,7 +363,7 @@ async function main() {
     await finalize(sample);
     const snapshot = sample.snapshots.get(2);
     assert(!snapshot.entityNameEvidence.some(row => row.entityId === 3));
-    assert(!ownerPrompt(sample).payload.fragments.some(fragment => fragment.entityNames.some(row => row.entityId === 3)));
+    assert(!ownerPrompt(sample).payload.fragments.some(fragment => fragmentNames(ownerPrompt(sample).payload, fragment).some(row => row.entityId === 3)));
     assert(!snapshot.relationshipEvidence.some(row => row.entityId === 3),
       "a generic role phrase does not add an otherwise unmentioned entity to the source");
   });
@@ -370,7 +374,7 @@ async function main() {
     await finalize(sample);
     const snapshot = sample.snapshots.get(2);
     assert(!snapshot.entityNameEvidence.some(row => [3, 4].includes(row.entityId)));
-    assert(!ownerPrompt(sample).payload.fragments.some(fragment => fragment.entityNames.some(row => [3, 4].includes(row.entityId))));
+    assert(!ownerPrompt(sample).payload.fragments.some(fragment => fragmentNames(ownerPrompt(sample).payload, fragment).some(row => [3, 4].includes(row.entityId))));
   });
 
   await check("conversation presence without source disclosure or direct relationship does not reveal the player's backstage name", async () => {
@@ -379,7 +383,7 @@ async function main() {
     await finalize(sample);
     const snapshot = sample.snapshots.get(2);
     assert(!snapshot.entityNameEvidence.some(row => row.entityId === 1 && row.name === "赵太初"));
-    assert(!ownerPrompt(sample).payload.fragments.some(fragment => fragment.entityNames.some(row => row.entityId === 1)));
+    assert(!ownerPrompt(sample).payload.fragments.some(fragment => fragmentNames(ownerPrompt(sample).payload, fragment).some(row => row.entityId === 1)));
   });
 
   await check("a private self-thought does not enter another Owner's names, AGE, or Profile", async () => {
@@ -405,8 +409,8 @@ async function main() {
     assert(authorSnapshot.fragments.some(fragment => fragment.text.includes("旁白：师父张道正")
       && fragment.visibilityEvidence === "legacy_author_perspective"
       && !fragment.entityIds.includes(3)), "the author may retain the unmarked narration only as self-only Legacy");
-    assert(!authorPrompt.payload.fragments.some(fragment => fragment.entityIds.includes(3)
-      || fragment.allowedEntityIds.includes(3) || fragment.entityNames.some(row => row.entityId === 3)),
+    assert(!authorPrompt.payload.fragments.some(fragment => fragment.allowedEntityIds.includes(3)
+      || fragmentNames(authorPrompt.payload, fragment).some(row => row.entityId === 3)),
     "unmarked assistant narration cannot authorize a third-party entity binding");
     const otherOwnerSnapshot = sample.snapshots.get(1);
     assert(otherOwnerSnapshot);

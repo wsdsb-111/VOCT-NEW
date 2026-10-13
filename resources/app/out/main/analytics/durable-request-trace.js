@@ -25,6 +25,15 @@ const REPORTED_FIELDS = ["inputReported", "hitReported", "missReported", "output
 const SAFE_ERROR_CODES = new Set(["memory4_generation_incomplete", "memory4_generation_changed", "memory4_provider_unavailable",
   "memory4_response_no_valid_entries", "memory4_response_invalid_json", "memory4_response_invalid_shape",
   "memory4_response_invalid_transitions", "memory4_response_source_mismatch", "memory4_request_source_changed_before_send",
+  "memory4_invalid_entry", "memory4_scope_mismatch", "memory4_unknown_entity", "memory4_invalid_participant",
+  "memory4_invalid_event_status", "memory4_invalid_event_date", "memory4_invalid_event_range",
+  "memory4_unknown_time_has_date", "memory4_future_fact", "memory4_unverified_observation",
+  "memory4_unsupported_event_date", "memory4_invalid_precision", "memory4_checkpoint_corrupt",
+  "memory4_fragment_input_too_large", "memory4_generation_budget_exhausted", "memory4_commitment_replacement_invalid",
+  "memory4_commitment_transitions_invalid", "memory4_commitment_target_stale", "memory4_commitment_target_source_invalid",
+  "memory4_commitment_date_invalid", "memory4_commitment_evidence_invalid", "memory4_commitment_binding_invalid",
+  "memory4_commitment_evidence_uncertain", "memory4_commitment_fulfillment_unproven",
+  "memory4_commitment_cancellation_unproven", "memory4_commitment_replacement_unproven", "memory4_commitment_conditions_unproven",
   "provider_budget_blocked", "provider_cancelled", "provider_timeout", "provider_error"]);
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const HASH_PATTERN = /^[0-9a-f]{64}$/i;

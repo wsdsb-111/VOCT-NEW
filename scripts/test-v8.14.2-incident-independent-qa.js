@@ -82,8 +82,10 @@ async function main() {
       const payload = promptPayload(env.coordinator.buildPrompt(snapshot, snapshot.fragments));
       assert.deepEqual(payload.fragments[0].allowedEntityIds, [1, 2, 99]);
       assert.deepEqual(payload.fragments[0].participantIds, [1, 2, 3]);
-      assert.deepEqual(payload.fragments[0].presentIds, [1, 2, 3], "the original presence evidence remains available");
-      assert.deepEqual(payload.fragments[0].entityIds, [99], "the original cited-entity evidence remains available");
+      assert.deepEqual(snapshot.fragments[0].presentIds, [1, 2, 3], "the original presence evidence remains local and unchanged");
+      assert.deepEqual(snapshot.fragments[0].entityIds, [99], "the original cited-entity evidence remains local and unchanged");
+      assert.equal(payload.fragments[0].presentIds, undefined, "wire presence uses participantIds without duplicating local proof");
+      assert.equal(payload.fragments[0].entityIds, undefined, "wire identity allowance uses allowedEntityIds without duplicating local proof");
       const legacyFragment = { fragmentId: "legacy-minimal", text: "旧版最小证据。", speakerId: 1, sourceType: "spoken",
         entityIds: [], presentIds: [1, 2, 3] };
       const legacyPrompt = promptPayload(env.coordinator.buildPrompt({ ownerId: 2, campaignToken: "legacy-minimal",

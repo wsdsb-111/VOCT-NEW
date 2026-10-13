@@ -6,7 +6,7 @@ These rules apply to files in scripts/.
 
 - Use Node's built-in assert and deterministic fixtures. Do not depend on a CK3 installation path, live Provider/API, current date, %APPDATA% contents, real save, log, summary or secret.
 - scripts/test-manifest.js is the single inventory for direct and nested checks. Every test-*.js file must be classified there as a release check or historical archive; update the manifest when adding a test.
-- Current assertions use project/core V9.2/9.2 and App 9.2.0; Workshop 2.0.5, Memory 4.0/protocol 3.0/storage 2.5 remain. Build, deploy and verify parity before release checks. V9.2 fixtures cover candidate scope/Forget, journal crashes, anonymous audit and maintenance deployment recovery.
+- Current assertions use project/core V9.3.2/9.3.2 and App 9.3.2; Workshop 2.0.5, Memory 4.0/protocol 3.0/storage 2.5 remain. Build, deploy and verify parity before release checks. V9.2 fixtures cover candidate scope/Forget, journal crashes, anonymous audit and maintenance deployment recovery.
 - The current production Action baseline is Official VOTC 2.0.3. The old self-developed Action Engine/AE/Action Mode tests remain historical unless the manifest explicitly marks a compatibility check; do not add new production behavior to an obsolete suite merely because its filename is old.
 - Put V8.8.4/V8.8.5 incident, queue-vs-ACK timing, argument ambiguity, provisional feedback, missing age, extended kinship, Current Truth, Memory and UI contract cases in the narrowest matching focused script. Cover game-side deduplication and NPC indices excluding the player. Theme changes belong with test-v8.8-ui-style-backgrounds.js; update its assertions when the CSS/background/label contract changes.
 

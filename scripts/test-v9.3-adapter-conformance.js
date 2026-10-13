@@ -10,7 +10,7 @@ const root = path.resolve(__dirname, "..");
 const baseline = JSON.parse(fs.readFileSync(path.join(__dirname, "fixtures/v93-provider-golden-baseline.json"), "utf8"));
 const providerIndexPath = path.join(root, "src/app/main/providers/index.js");
 const versionExports = {
-  VOTC_CORE_VERSION: "9.2",
+  VOTC_CORE_VERSION: "9.3.2",
   VOTC_APP_VERSION: require(path.join(root, "package.json")).version,
   MEMORY_ENGINE_VERSION: "3.0",
   ACTION_SYSTEM_VERSION: "official-votc-2.0.3",
@@ -219,12 +219,57 @@ function scenarioProjection(capture) {
   };
 }
 
+function expectedVersionHeaderUpdate(captures) {
+  const counts = { "user-agent": 0, "x-title": 0 };
+  const updated = captures.map(capture => ({
+    ...capture,
+    requests: capture.requests.map(request => {
+      const headers = { ...request.headers };
+      if (headers["user-agent"] === "VOTC/9.2.0") {
+        headers["user-agent"] = "VOTC/9.3.2";
+        counts["user-agent"]++;
+      }
+      if (headers["x-title"] === "Voices of the Court V9.2") {
+        headers["x-title"] = "Voices of the Court V9.3.2";
+        counts["x-title"]++;
+      }
+      return { ...request, headers };
+    })
+  }));
+  assert.equal(counts["user-agent"], 12, "only the 12 VOTC User-Agent values in the old baseline receive the App version update");
+  assert.equal(counts["x-title"], 12, "only the 12 VOTC X-Title values in the old baseline receive the core version update");
+  return updated;
+}
+
+function assertCurrentVersionHeaders(captures) {
+  let userAgentCount = 0;
+  let titleCount = 0;
+  for (const capture of captures) {
+    for (const request of capture.requests) {
+      const userAgent = request.headers["user-agent"];
+      const title = request.headers["x-title"];
+      if (userAgent?.startsWith("VOTC/")) {
+        assert.equal(userAgent, "VOTC/9.3.2", `${capture.id}_VOTC_user_agent_version`);
+        userAgentCount++;
+      }
+      if (title?.startsWith("Voices of the Court V")) {
+        assert.equal(title, "Voices of the Court V9.3.2", `${capture.id}_VOTC_x_title_version`);
+        titleCount++;
+      }
+    }
+  }
+  assert.equal(userAgentCount, 12, "all 12 VOTC User-Agent headers must carry App 9.3.2");
+  assert.equal(titleCount, 12, "all 12 VOTC X-Title headers must carry core V9.3.2");
+}
+
 async function testFrozenWireGolden() {
   assert.equal(SCENARIOS.length, 39);
   assert.equal(baseline.baseline.gitSha, "e1c3c37c89d8001f995593bc1c287a9c0d63a31f");
   assert.equal(baseline.baseline.openaiSdkVersion, "4.104.0");
   const current = captureAll();
-  assert.deepStrictEqual(current.captures.map(scenarioProjection), baseline.captures.map(scenarioProjection), "provider wire request drifted from frozen baseline");
+  assertCurrentVersionHeaders(current.captures);
+  const expectedCaptures = expectedVersionHeaderUpdate(baseline.captures);
+  assert.deepStrictEqual(current.captures.map(scenarioProjection), expectedCaptures.map(scenarioProjection), "provider wire changed beyond the explicit V9.3.2 version headers");
   for (const capture of current.captures.filter(item => item.control === "durable-before-send")) {
     assert.equal(capture.beforeSendGuardCalls, capture.attemptCount, `${capture.id}_before_send_count`);
   }

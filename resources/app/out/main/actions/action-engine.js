@@ -201,6 +201,13 @@ function createActionEngine({ actionRegistry, settingsRepository, usageAnalytics
       let dispatchAttempted = false;
       let dispatchAccepted = false;
       let lastAcceptedDispatch = null;
+      const getAcceptedDispatchEvidence = () => dispatchRecords
+        .filter((dispatch) => typeof dispatch.commandId === "string" && ["queued", "awaiting_ack"].includes(dispatch.status))
+        .map(({ commandId, status, writeAttempts, writtenAt, lastWrittenAt, queuedAt }) => ({ commandId, status, writeAttempts, writtenAt, lastWrittenAt, queuedAt }));
+      const withMultipleDispatchEvidence = (confirmation) => {
+        const dispatches = getAcceptedDispatchEvidence();
+        return dispatches.length > 1 ? { ...confirmation, dispatches } : confirmation;
+      };
       const selectedArgs = invocation.args ?? {};
       const requestedArgs = invocation.requestedArgs ?? extractRequestedActionArgs(invocation.actionId, conv.getHistory?.() || conv.messages || []);
       const argumentDrift = detectActionArgumentDrift(requestedArgs, selectedArgs);
@@ -245,13 +252,13 @@ function createActionEngine({ actionRegistry, settingsRepository, usageAnalytics
         const expectedStateChange = (result && typeof result === "object" ? result.expectedStateChange ?? null : null)
           || (invocation.actionId === "changeOpinionOf" && dispatched ? { type: "OPINION_CHANGE", sourceRuntimeId: npc.id, targetRuntimeId: targetId, amount: Math.max(-10, Math.min(10, Math.floor(Number(executionArgs.value)))) } : null);
         const validationFailed = !dispatched && result && typeof result === "object" && result.sentiment === "negative";
-        const confirmation = !options?.dryRun && dispatched ? captureActionConfirmation({
+        const confirmation = !options?.dryRun && dispatched ? withMultipleDispatchEvidence(captureActionConfirmation({
           actionId: invocation.actionId,
           expectedStateChange,
           gameData: conv.gameData,
           gameDataRevision: conv.gameDataRevision ?? conv.gameData?.revision ?? conv.gameData?.gameDataRevision ?? null,
           dispatch: lastAcceptedDispatch
-        }) || { type: expectedStateChange ? "STATE_UNVERIFIABLE" : "RUN_ACK", dispatch: lastAcceptedDispatch, sourceRuntimeId: dispatchSourceId, targetRuntimeId: targetId, requireCommandReadback: lastAcceptedDispatch?.hasCommandEnvelope === true } : null;
+        }) || { type: expectedStateChange ? "STATE_UNVERIFIABLE" : "RUN_ACK", dispatch: lastAcceptedDispatch, sourceRuntimeId: dispatchSourceId, targetRuntimeId: targetId, requireCommandReadback: lastAcceptedDispatch?.hasCommandEnvelope === true }) : null;
         const requiresConfirmation = confirmation !== null;
         if (requiresConfirmation && !feedback) feedback = { message: String(userLang).startsWith("zh") ? "已提交动作请求，等待游戏回执" : "Action requested; awaiting game acknowledgement", sentiment: "neutral" };
         const lifecycle = createActionLifecycle({
@@ -277,6 +284,7 @@ function createActionEngine({ actionRegistry, settingsRepository, usageAnalytics
           commandId: confirmation?.dispatch?.commandId || null,
           commandStatus: confirmation?.dispatch?.status || null,
           dispatchEvidence: confirmation?.dispatch || dispatchEvidence,
+          ...(getAcceptedDispatchEvidence().length > 1 ? { dispatches: getAcceptedDispatchEvidence() } : {}),
           argumentDrift
         });
         diagnostic.dispatchAttempted = dispatchAttempted;
@@ -291,10 +299,10 @@ function createActionEngine({ actionRegistry, settingsRepository, usageAnalytics
           success: false,
           error: error instanceof Error ? error.message : String(error),
           lifecycle: createActionLifecycle({ selected: true, validated: true, dispatched: physicallyDispatched, confirmed: false, status: dispatchAttempted ? ACTION_LIFECYCLE_STATUSES.DISPATCH_FAILED : ACTION_LIFECYCLE_STATUSES.VALIDATION_FAILED }),
-          ...(lastAcceptedDispatch ? { confirmation: {
+          ...(lastAcceptedDispatch ? { confirmation: withMultipleDispatchEvidence({
             type: "STATE_UNVERIFIABLE", dispatch: lastAcceptedDispatch,
             sourceRuntimeId: dispatchSourceId, targetRuntimeId: targetId, requireCommandReadback: false
-          } } : {}),
+          }) } : {}),
           diagnostic: Object.assign(createActionDiagnostic({
             actionId: invocation.actionId,
             sourceRuntimeId: dispatchSourceId,
@@ -309,6 +317,7 @@ function createActionEngine({ actionRegistry, settingsRepository, usageAnalytics
             commandId: lastAcceptedDispatch?.commandId || null,
             commandStatus: lastAcceptedDispatch?.status || null,
             dispatchEvidence,
+            ...(getAcceptedDispatchEvidence().length > 1 ? { dispatches: getAcceptedDispatchEvidence() } : {}),
             argumentDrift
           }), { dispatchAttempted, dispatchAccepted })
         };

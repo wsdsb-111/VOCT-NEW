@@ -4,9 +4,11 @@ Voices of the Court 是一个面向《Crusader Kings III》（CK3）的沉浸式
 
 本仓库保存 VOTC 的可编辑 JavaScript 源、可重复生成的运行资源、既有 Windows 壳与锁定依赖，适合运行、开发与回归验证。
 
-正式基线 **V9.2 应用边界与 JSON 仓储**（2026-10-11）：[施工与验证](docs/current/v9/V9_2_VERIFICATION_REPORT.md)、[七域端口](docs/current/v9/V9_2_SERVICE_PORTS.md)、[数据权威与恢复](docs/current/v9/V9_2_JSON_AUTHORITY_AND_RECOVERY.md)。符合[旧总路线](docs/current/v9/V9_ROADMAP.md) §7.3，委托既有服务和 Store；本轮经用户明确要求实施V9.3 Provider候选，Context／Renderer／Bridge仍留后续阶段。V9.1 f9c088f 和 V9.2 6026713 的远端 CI 已成功，用户功能确认保留；新候选的 CI 按最终 SHA 独立核验。
+此前正式基线 **V9.2 应用边界与 JSON 仓储**（2026-10-11）：[施工与验证](docs/current/v9/V9_2_VERIFICATION_REPORT.md)、[七域端口](docs/current/v9/V9_2_SERVICE_PORTS.md)、[数据权威与恢复](docs/current/v9/V9_2_JSON_AUTHORITY_AND_RECOVERY.md)。符合[旧总路线](docs/current/v9/V9_ROADMAP.md) §7.3，委托既有服务和 Store；后续按用户明确要求实施 V9.3 Provider 与 V9.3.2 修复，Context／Renderer／Bridge 仍留后续阶段。V9.1 f9c088f 和 V9.2 6026713 的远端 CI 已成功，用户功能确认保留；新版本 CI 按最终 SHA 独立核验。
 
 V9.2.1 缓存专项安全／诊断候选（2026-10-12）：[验证](docs/current/v9/V9_2_1_VERIFICATION_REPORT.md)、[问题台账](docs/current/v9/V9_2_1_P_ISSUE_LEDGER.md)。Durable 固定规则与动态额度分离，修复 Forget 在截断重试中重发已忘片段；补充真实 v813 出站与原生用量审计。GLM 96 次合成 A/B 没有命中率增益，DeepSeek baseline 质量门禁停止，效果 **HOLD**。当时未自动进入V9.3；本轮按用户新指示独立施工，App/UI仍保持9.2.0/V9.2。
+
+V9.3.2 Durable／Action 修复（2026-10-13–14）：[实施](docs/current/v9/V9_3_2_IMPLEMENTATION_REPORT.md)、[验证](docs/current/v9/V9_3_2_VERIFICATION_REPORT.md)。修复耐久记忆输出合同、重复证据、分块及恢复进度，保留严格来源和知情范围；Core/UI/App 为 9.3.2。438 组门禁、独立 QA 和隔离打包冒烟通过；138 份历史恢复目标入库证明通过，保存 1,093 条 Durable，恢复队列清空。原生费用保护上界 USD 0.660913；新 CK3、Soak 与远端 CI 分别待验收。
 
 ## 主要功能
 
@@ -16,7 +18,7 @@ V9.3 Provider Platform候选：[实施](docs/current/v9/V9_3_IMPLEMENTATION_REPO
 
 V9.2.3候选（2026-10-13）：[实施](docs/current/v9/V9_2_3_IMPLEMENTATION_REPORT.md)、[验证](docs/current/v9/V9_2_3_VERIFICATION_REPORT.md)。Year/Life自动模型生成已退役；保留Durable、Detail/Legacy及合法旧档查看和手改。以下旧年度压缩／重建记录为历史合同，不能据此重新启用生成。GLM旧新出站一致，原生长上下文另有取证，实机问题仍HOLD；正式App/UI保持9.2.0/V9.2，未签完整冻结。
 
-当前版本：项目 **V9.2**，Electron App 包 **9.2.0**，VOTC Workshop Mod **2.0.5**，人物记忆 **Memory Engine 4.0**。前端显示 `V9.2 · Mod v2.0.5`，悬停可见 App 包版本；记忆协议 3.0、摘要 2.5 保持兼容。独立 Three-Mod 工程仍为 1.0.6；VOTC.exe 的旧壳属性版本未改写。以下历史报告保留当时版本和验收快照。
+当前版本：项目 **V9.3.2**，Electron App 包 **9.3.2**，VOTC Workshop Mod **2.0.5**，人物记忆 **Memory Engine 4.0**。前端显示 `V9.3.2 · Mod v2.0.5`，悬停可见 App 包版本；记忆协议 3.0、摘要 2.5 保持兼容。独立 Three-Mod 工程仍为 1.0.6；VOTC.exe 的旧壳属性版本未改写。以下历史报告保留当时版本和验收快照。
 
 可选兼容工程已完成本地迁移：[CK3-Three-Mod-Compatibility](https://github.com/wsdsb-111/CK3-Three-Mod-Compatibility)，工作目录 `C:/Users/97330/Documents/Codex/CK3-Three-Mod-Compatibility`。官职／称谓规则不属于 VOTC 运行必需依赖，历史[1.0.6 报告](docs/v8.15.2-celestial-same-tier-office-report.md)保留；当前安装 Mod 不卸载。独立CI与CK3验收待执行。
 
@@ -309,12 +311,12 @@ V7.7 在 V7.6 健康化基础上分阶段拆分主进程：第一阶段将六种
 node scripts\test-release.js
 ```
 
-清单覆盖全部 `test-*.js`；当前 487 个分类文件、418 个发布组、68 个历史归档，结果见[V9.2 验证](docs/current/v9/V9_2_VERIFICATION_REPORT.md)。既有 Action、Letter、Memory、Worldline、关系、日期和缓存门禁继续执行；历史归档检查不计入发布组。
+清单覆盖全部 `test-*.js`；当前 510 个分类文件、438 个发布组、71 个历史归档，结果见[V9.3.2 验证](docs/current/v9/V9_3_2_VERIFICATION_REPORT.md)。既有 Action、Letter、Memory、Worldline、关系、日期和缓存门禁继续执行；历史归档检查不计入发布组。
 
 ## 版本信息
 
-- 项目／前端版本：V9.2；底部显示 `V9.2 · Mod v2.0.5`，App 包版本为 9.2.0
-- 当前开发基线：V9.2 Application Boundary & JSON Repository，继承 V8.15.2 行为与既有用户验收；V9.1 已上传 SHA 的 CI 成功，V9.2 CI、真实 CK3／Provider／性能复测分别记录。
+- 项目／前端版本：V9.3.2；底部显示 `V9.3.2 · Mod v2.0.5`，App 包版本为 9.3.2
+- 当前开发基线：V9.3.2 Durable／Action 修复，继承 V9.3 Provider Facade、V9.2 应用边界与既有用户验收；本轮原生 Provider、CK3、Soak 与最终 SHA 的 CI 分别记录。
 - 本机 CK3 模组 descriptor：Voices of the Court 2.0，version 2.0.5，Workshop 3346777360（Mod 名称保留以兼容依赖）；必需 Date Runner 补丁按[外部运行依赖](docs/EXTERNAL_RUNTIME_DEPENDENCIES.md)核对，不单凭版本号判定
 - 本机模组 descriptor 支持版本：CK3 1.20.*（元数据声明，不替代实机兼容性 Gate）
 - UI 主题：宫廷编年史风格（深红、暗金、羊皮纸文本层级）

@@ -5,7 +5,7 @@ const path = require("path");
 const { assertScope, hash, ids, strings, legacySourceHash, directCounterpartIds, validateEntry } = require("./memory4-contract");
 const { projectVisibleTranscript } = require("./memory4-visibility");
 const { getFactCandidates, disclosureFactId, scanVisibleDisclosures, scanLetterDisclosures } = require("./memory4-disclosure");
-const { Memory4Store } = require("./memory4-store");
+const { Memory4Store, commitmentCore } = require("./memory4-store");
 const { ScopedJsonRepository } = require("./scoped-json-repository");
 const { projectionLineageFromSummary, createProjectionLineage } = require("./memory4-forget");
 const { Memory4ProfileService } = require("./memory4-profile");
@@ -16,10 +16,25 @@ const { validateGenerationOutcome } = require("../providers/generation-outcome")
 const { validateSourceItem, presentIds, sourceParagraphSegments } = require("./finalization-visibility");
 const { MentionTracker } = require("./mention-tracker");
 const { normalizeGameDate } = require("../worldline/character-temporal-facts");
+const { estimateTokens } = require("../token-estimator");
 
 const MAX_FRAGMENTS_PER_REQUEST = 128;
 const MAX_DURABLE_ENTRIES_PER_OWNER = 8;
 const DURABLE_MAX_OUTPUT_TOKENS = 4096;
+const DURABLE_INPUT_TOKEN_BUDGET = 8192;
+const DURABLE_REPAIR_RESERVE = 1024;
+const DURABLE_SINGLE_FRAGMENT_BUDGET = 16384;
+const DURABLE_POLICY_VERSION = "9.3.2";
+const DURABLE_REPAIRABLE_ERRORS = new Set(["memory4_response_invalid_json", "memory4_response_invalid_shape",
+  "memory4_response_invalid_transitions", "memory4_response_source_mismatch", "memory4_invalid_entry",
+  "memory4_scope_mismatch", "memory4_unknown_entity", "memory4_invalid_participant", "memory4_invalid_event_status",
+  "memory4_invalid_event_date", "memory4_invalid_event_range", "memory4_unknown_time_has_date",
+  "memory4_future_fact", "memory4_unverified_observation", "memory4_unsupported_event_date",
+  "memory4_invalid_precision", "memory4_commitment_replacement_invalid", "memory4_commitment_transitions_invalid",
+  "memory4_commitment_target_stale", "memory4_commitment_target_source_invalid", "memory4_commitment_date_invalid",
+  "memory4_commitment_evidence_invalid", "memory4_commitment_binding_invalid", "memory4_commitment_evidence_uncertain",
+  "memory4_commitment_fulfillment_unproven", "memory4_commitment_cancellation_unproven", "memory4_commitment_replacement_unproven",
+  "memory4_commitment_conditions_unproven"]);
 
 function disclosureCharacterRows(value) {
   const rows = value instanceof Map ? [...value.values()] : Array.isArray(value) ? value
@@ -245,14 +260,6 @@ class Memory4Coordinator {
       legacyArchiveScope: allowPersistedArchive === true };
     const recoveryFile = this.recoveryPath(snapshot);
     const priorRecovery = this.readRecovery(recoveryFile);
-    const clearAttemptRecovery = () => {
-      if (!fs.existsSync(recoveryFile)) return;
-      try {
-        const recovery = this.readRecovery(recoveryFile);
-        if (!recovery || hash(recovery.snapshot) !== hash(snapshot)) return;
-        this.baseStore.removeSummaryMutationFile(recoveryFile);
-      } catch { /* Preserve recovery whose contents cannot be verified. */ }
-    };
     const prior = this.store.loadIndex(scope).finalizations[hash(snapshot.finalizationId)];
     if (prior) {
       const committedProof = this.inspectCommittedSnapshot(snapshot);
@@ -273,54 +280,30 @@ class Memory4Coordinator {
     }
     this.lazyInFlight.add(key);
     const controller = new AbortController();
-    let durableTrace = null;
     try {
       if (!current()) return { status: "CANCELLED", sourceMemoryId: memoryId, entryIds: [], retained: true };
-      this.saveRecovery(snapshot, { status: "PENDING", retryCount: priorRecovery?.retryCount || 0, lastError: null });
       providerSnapshot ||= this.derived.options.getProviderSnapshot ? await this.derived.options.getProviderSnapshot() : null;
       snapshot.summaryProviderSnapshot = providerSnapshot;
-      this.saveRecovery(snapshot, { status: "PENDING", retryCount: priorRecovery?.retryCount || 0, lastError: null });
-      if (!current()) return { status: this.isLegacyRecompressionSnapshotCurrent(snapshot) ? "CANCELLED" : "STALE",
-        sourceMemoryId: memoryId, entryIds: [], retained: true };
-      const traceRun = this.beginDurableTraceRun(snapshot, { origin: "legacy_recompression", operation: "legacy_recompression" });
-      durableTrace = this.beginDurableTraceAttempt(traceRun, { ownerId: scope.ownerId, campaignToken: scope.campaignToken,
-        finalizationId: snapshot.finalizationId, chunkIndex: 0, chunkTotal: 1, chunkPath: [0], fragmentCount: fragments.length,
-        origin: "legacy_recompression", operation: "legacy_recompression",
-        sourceDigest: this.durableTraceHash("source_digest", [snapshot.sourceRevision, fragments]) });
-      const response = await this.derived.options.requestExtraction(this.buildPrompt(snapshot, fragments), {
-        signal: controller.signal, maxTokens: DURABLE_MAX_OUTPUT_TOKENS, providerSnapshot, requestType: "memory4_durable", durableTrace,
-        beforeSendGuard: this.makeDurableSendGuard(snapshot, fragments, current) });
-      if (!current()) {
-        return { status: this.isLegacyRecompressionSnapshotCurrent(snapshot) ? "CANCELLED" : "STALE",
-          sourceMemoryId: memoryId, entryIds: [], retained: true };
+      const result = await this.finishOwner(snapshot, (messages, options) => this.derived.options.requestExtraction(messages,
+        { ...options, signal: controller.signal, requestType: "memory4_durable" }), priorRecovery, current,
+        { origin: "legacy_recompression", operation: "legacy_recompression" });
+      if (!this.isLegacyRecompressionSnapshotCurrent(snapshot)) {
+        return { status: "STALE", sourceMemoryId: memoryId, entryIds: [], retained: true };
       }
-      const result = this.parseResult(response, fragments, snapshot);
-      this.recordDurableTrace(durableTrace, { status: "PARSED_OK", parseStatus: "PARSED_OK", complete: true, truncated: false });
-      if (result.rejectedUnknownEntityCount) this.trace?.record("memory4_candidate_rejected", {
-        ownerId: scope.ownerId, count: result.rejectedUnknownEntityCount, reason: "unknown_entity"
-      });
-      if (!result.entries.length && !result.commitmentTransitions.length && result.rejectedUnknownEntityCount > 0) {
-        throw new Error("memory4_response_no_valid_entries");
+      if (!["STORE", "NO_DURABLE_CONTENT"].includes(result.durableStatus)) {
+        return { ...result, sourceMemoryId: memoryId, entryIds: [], retained: true, reason: result.error || result.reason };
       }
-      if (!result.entries.length && !rebuildDerived) {
-        clearAttemptRecovery();
-        return { status: "RETAINED_LEGACY", sourceMemoryId: memoryId, entryIds: [], retained: true, reason: "NO_DURABLE_CONTENT" };
-      }
-      const committed = this.store.commitOwner(snapshot, result);
-      this.recordDurableTrace(durableTrace, { status: "COMMITTED" });
-      const derived = await rebuildDerivedViews({ finalizationId: snapshot.finalizationId, sourceRevision: snapshot.sourceRevision });
-      this.clearVerifiedRecovery(snapshot, recoveryFile);
-      const status = result.status === "NO_DURABLE_CONTENT" ? "NO_DURABLE_CONTENT" : "COMPLETE";
-      this.trace?.record("memory4_legacy_recompression", { ownerId: scope.ownerId, status, count: committed.entryIds.length });
-      return { status, durableStatus: committed.status, derivedGenerationStatus: derived?.status || "SKIPPED_DERIVED_POLICY",
-        ...(rebuildDerived ? { canonical: { status, entryIds: [...committed.entryIds] } } : {}), derived,
-        ...(fs.existsSync(recoveryFile) ? { recoveryPath: recoveryFile } : {}),
-        sourceMemoryId: memoryId, entryIds: [...committed.entryIds], retained: true };
+      const derived = rebuildDerived
+        ? await rebuildDerivedViews({ finalizationId: snapshot.finalizationId, sourceRevision: snapshot.sourceRevision }) : result.derived;
+      const status = result.durableStatus === "NO_DURABLE_CONTENT" ? "NO_DURABLE_CONTENT" : "COMPLETE";
+      this.trace?.record("memory4_legacy_recompression", { ownerId: scope.ownerId, status, count: result.entryIds.length });
+      return { status: result.entryIds.length || rebuildDerived ? status : "RETAINED_LEGACY",
+        durableStatus: result.durableStatus, derivedGenerationStatus: derived?.status || "SKIPPED_DERIVED_POLICY",
+        ...(rebuildDerived ? { canonical: { status, entryIds: [...result.entryIds] } } : {}), derived,
+        ...(fs.existsSync(recoveryFile) ? { recoveryPath: recoveryFile } : {}), sourceMemoryId: memoryId,
+        entryIds: [...result.entryIds], retained: true, ...(!result.entryIds.length ? { reason: "NO_DURABLE_CONTENT" } : {}) };
     } catch (error) {
-      this.recordDurableTrace(durableTrace, durableTraceFailure(error, durableTrace));
       this.trace?.record("memory4_legacy_recompression", { ownerId: scope.ownerId, status: "EXTRACTION_FAILED", errorCode: error.message });
-      if (this.isLegacyRecompressionSnapshotCurrent(snapshot) && current()) this.saveRecovery(snapshot, { status: "EXTRACTION_FAILED", retryCount: Number(this.readRecovery(recoveryFile)?.retryCount || 0) + 1,
-        lastError: String(error?.message || error) });
       return { status: "EXTRACTION_FAILED", sourceMemoryId: memoryId, entryIds: [], retained: true, reason: error.message };
     } finally { this.lazyInFlight.delete(key); }
   }
@@ -682,8 +665,13 @@ class Memory4Coordinator {
     if (!metadata || metadata.knownEvidenceRevisions?.[hash([snapshot.conversationId, snapshot.ownerId])] !== snapshot.sourceRevision) {
       return unverified("SOURCE_REVISION_EVIDENCE_MISSING");
     }
+    const evaluatedAll = Array.isArray(snapshot.fragments) && record.evaluatedFragmentCount === snapshot.fragments.length;
+    const validCappedEvaluation = Array.isArray(snapshot.fragments) && record.extractionPolicyVersion === DURABLE_POLICY_VERSION
+      && record.extractionCoverage === "CAPPED" && Number.isSafeInteger(record.evaluatedFragmentCount)
+      && record.evaluatedFragmentCount > 0 && record.evaluatedFragmentCount < snapshot.fragments.length
+      && Array.isArray(record.entryIds) && record.entryIds.length === MAX_DURABLE_ENTRIES_PER_OWNER;
     if (!Array.isArray(snapshot.fragments) || !["STORE", "NO_DURABLE_CONTENT", "NOT_PRESENT"].includes(record.status)
-      || record.evaluatedFragmentCount !== snapshot.fragments.length || record.completeness !== snapshot.completeness
+      || !evaluatedAll && !validCappedEvaluation || record.completeness !== snapshot.completeness
       || record.legacyRetained !== (snapshot.legacyRetained === true) || record.noDetailIsNotUnknown !== true
       || hash(record.visibilityEvidence ?? null) !== hash(snapshot.visibilityEvidence ?? null)
       || typeof record.committedAt !== "string" || !Number.isFinite(Date.parse(record.committedAt))) {
@@ -920,40 +908,211 @@ class Memory4Coordinator {
       Number(right.entityIds?.some(id => priority.has(id))) - Number(left.entityIds?.some(id => priority.has(id))));
   }
 
+  relevantCommitments(entries, fragments) {
+    // A valid transition must quote the complete concrete binding in its source.
+    return (entries || []).filter(entry => {
+      const core = commitmentCore(entry.text);
+      return core && fragments.some(fragment => fragment.text.includes(core));
+    });
+  }
+
+  estimateDurableInput(messages) {
+    // Reserve the shared Summary anchor and the measured estimate/native gap.
+    return Math.ceil(estimateTokens(JSON.stringify(messages)) * 1.5) + 256;
+  }
+
+  chunkFragments(snapshot, fragments) {
+    const chunks = [];
+    let chunk = [];
+    for (const fragment of fragments) {
+      const next = [...chunk, fragment];
+      if (next.length > MAX_FRAGMENTS_PER_REQUEST
+        || this.estimateDurableInput(this.buildPrompt(snapshot, next)) > DURABLE_INPUT_TOKEN_BUDGET - DURABLE_REPAIR_RESERVE) {
+        if (chunk.length) chunks.push(chunk);
+        chunk = [fragment];
+        if (this.estimateDurableInput(this.buildPrompt(snapshot, chunk)) > DURABLE_SINGLE_FRAGMENT_BUDGET) {
+          throw new Error("memory4_fragment_input_too_large");
+        }
+      } else chunk = next;
+    }
+    if (chunk.length) chunks.push(chunk);
+    return chunks;
+  }
+
+  checkpointScope(snapshot) {
+    return hash([snapshot.campaignToken, snapshot.ownerId, snapshot.conversationId, snapshot.finalizationId,
+      snapshot.date, snapshot.sourceKind, snapshot.letterId]);
+  }
+
+  checkpointFragment(snapshot, fragment) {
+    return hash([fragment, (snapshot.entityNameEvidence || []).filter(row => row.fragmentId === fragment.fragmentId),
+      (snapshot.relationshipEvidence || []).filter(row => row.fragmentId === fragment.fragmentId)]);
+  }
+
+  durableFailureSource(snapshot) {
+    try {
+      const current = this.store.filterForgottenSnapshot(snapshot).snapshot;
+      return hash([current.sourceRevision, current.fragments, current.projectionLineages,
+        this.relevantCommitments(this.store.activeCommitments(current), current.fragments)]);
+    } catch { return null; }
+  }
+
+  pruneDurableResult(result, availableIds) {
+    const positions = new Map();
+    const entries = result.entries.filter((entry, index) => {
+      if (!entry.fragmentIds.every(id => availableIds.has(id))) return false;
+      positions.set(index, positions.size);
+      return true;
+    });
+    const commitmentTransitions = (result.commitmentTransitions || []).filter(transition =>
+      transition.fragmentIds.every(id => availableIds.has(id))
+      && (transition.status !== "superseded" || positions.has(transition.replacementEntryIndex)))
+      .map(transition => ({ ...transition, ...(transition.status === "superseded"
+        ? { replacementEntryIndex: positions.get(transition.replacementEntryIndex) } : {}) }));
+    return { ...result, entries, commitmentTransitions, status: entries.length ? "STORE" : "NO_DURABLE_CONTENT" };
+  }
+
+  mergeDurableResults(first, second, snapshot) {
+    const entries = [...first.entries];
+    const keys = new Map(entries.map((entry, index) => [validateEntry(entry, snapshot).entryId, index]));
+    const positions = new Map();
+    for (const [index, entry] of second.entries.entries()) {
+      const key = validateEntry(entry, snapshot).entryId;
+      if (!keys.has(key)) { keys.set(key, entries.length); entries.push(entry); }
+      positions.set(index, keys.get(key));
+    }
+    const commitmentTransitions = [...(first.commitmentTransitions || [])];
+    for (const transition of second.commitmentTransitions || []) {
+      const mapped = { ...transition, ...(transition.status === "superseded"
+        ? { replacementEntryIndex: positions.get(transition.replacementEntryIndex) } : {}) };
+      if (!commitmentTransitions.some(prior => hash(prior) === hash(mapped))) commitmentTransitions.push(mapped);
+    }
+    return { status: entries.length ? "STORE" : "NO_DURABLE_CONTENT", entries, commitmentTransitions,
+      rejectedUnknownEntityCount: (first.rejectedUnknownEntityCount || 0) + (second.rejectedUnknownEntityCount || 0),
+      localMetadataCorrectionCount: (first.localMetadataCorrectionCount || 0) + (second.localMetadataCorrectionCount || 0),
+      rejectedCodes: [...(first.rejectedCodes || []), ...(second.rejectedCodes || [])] };
+  }
+
+  restoreDurableCheckpoint(snapshot, prior) {
+    const scopeHash = this.checkpointScope(snapshot);
+    const sourceContext = { sourceRevision: snapshot.sourceRevision, completeness: snapshot.completeness,
+      activeCommitmentsHash: hash(snapshot.activeCommitments),
+      lineages: (snapshot.projectionLineages || []).map(row => ({ id: row.projectionId, digest: hash(row) })),
+      sources: snapshot.fragments.map(fragment => ({ id: fragment.fragmentId, digest: this.checkpointFragment(snapshot, fragment) })) };
+    const fresh = () => ({ version: 1, policyVersion: DURABLE_POLICY_VERSION, scopeHash,
+      sourceContext, contextHash: hash([scopeHash, sourceContext]), chunks: [] });
+    const checkpoint = prior?.extractionCheckpoint;
+    if (!checkpoint) return fresh();
+    if (checkpoint.version !== 1 || checkpoint.policyVersion !== DURABLE_POLICY_VERSION || checkpoint.scopeHash !== scopeHash
+      || !Array.isArray(checkpoint.chunks) || !Array.isArray(checkpoint.sourceContext?.sources)
+      || !Array.isArray(checkpoint.sourceContext?.lineages)
+      || checkpoint.contextHash !== hash([scopeHash, checkpoint.sourceContext])) {
+      throw new Error("memory4_checkpoint_corrupt");
+    }
+    for (const saved of checkpoint.chunks) {
+      if (!Array.isArray(saved.sources) || !saved.result || saved.digest !== hash([scopeHash, saved.sources, saved.result])) {
+        throw new Error("memory4_checkpoint_corrupt");
+      }
+    }
+    if (checkpoint.contextHash !== hash([scopeHash, sourceContext])) {
+      const old = checkpoint.sourceContext;
+      const currentSources = new Map(sourceContext.sources.map(row => [row.id, row.digest]));
+      const oldSources = new Map(old.sources.map(row => [row.id, row.digest]));
+      const oldLineages = new Map(old.lineages.map(row => [row.id, row.digest]));
+      const knownForgotten = new Set(strings(prior?.forgottenFragmentIds));
+      const forgottenLineages = new Set(this.store.listForgottenProjections(snapshot).map(row => row.projectionId));
+      const removedSources = old.sources.filter(row => !currentSources.has(row.id));
+      const currentLineages = new Set(sourceContext.lineages.map(row => row.id));
+      const removedLineages = old.lineages.filter(row => !currentLineages.has(row.id));
+      const provenForget = (removedSources.length > 0 || removedLineages.length > 0)
+        && old.activeCommitmentsHash === sourceContext.activeCommitmentsHash
+        && sourceContext.sources.every(row => oldSources.get(row.id) === row.digest)
+        && removedSources.every(row => knownForgotten.has(row.id))
+        && sourceContext.lineages.every(row => oldLineages.get(row.id) === row.digest)
+        && removedLineages.every(row => forgottenLineages.has(row.id));
+      if (!provenForget) return fresh();
+    }
+    const current = new Map(snapshot.fragments.map(fragment => [fragment.fragmentId, fragment]));
+    const chunks = [];
+    for (const saved of checkpoint.chunks) {
+      if (!Array.isArray(saved.sources) || !saved.result || saved.digest !== hash([scopeHash, saved.sources, saved.result])) {
+        throw new Error("memory4_checkpoint_corrupt");
+      }
+      // A model saw the whole leaf: any removed or changed source invalidates that leaf.
+      if (saved.sources.some(source => !current.has(source.id)
+        || source.digest !== this.checkpointFragment(snapshot, current.get(source.id)))) continue;
+      const available = new Set(saved.sources.filter(source => current.has(source.id)).map(source => source.id));
+      const result = this.pruneDurableResult(saved.result, available);
+      const verified = this.parseResult({ content: JSON.stringify(result), finish_reason: "stop" },
+        [...available].map(id => current.get(id)), snapshot);
+      if (verified.rejectedUnknownEntityCount) throw new Error("memory4_checkpoint_corrupt");
+      const sources = saved.sources.filter(source => available.has(source.id));
+      const record = { sources, result: { ...result, entries: verified.entries, commitmentTransitions: verified.commitmentTransitions } };
+      record.digest = hash([scopeHash, record.sources, record.result]);
+      chunks.push(record);
+    }
+    return { ...fresh(), chunks };
+  }
+
   buildPrompt(snapshot, fragments, remainingEntrySlots = MAX_DURABLE_ENTRIES_PER_OWNER, remainingTransitionSlots = MAX_DURABLE_ENTRIES_PER_OWNER) {
-    const ordered = this.orderFragments(snapshot, fragments);
-    const prompt = [
-      { role: "system", content: `VOTC Memory Engine 4.0 Durable extraction. Return JSON only: {\"status\":\"STORE|NO_DURABLE_CONTENT\",\"entries\":[{\"memoryType\":\"RELATIONSHIP_CHANGE|COMMITMENT|DURABLE_KNOWLEDGE|MAJOR_EXPERIENCE|LONG_TERM_GOAL|EMOTIONAL_ANCHOR\",\"text\":\"...\",\"fragmentIds\":[\"...\"],\"entityIds\":[],\"participantIds\":[],\"topics\":[],\"eventTime\":{\"from\":null,\"to\":null,\"precision\":\"unknown\",\"status\":\"unknown\"}}],\"commitmentTransitions\":[{\"entryId\":\"...\",\"expectedRevision\":1,\"status\":\"fulfilled|cancelled|superseded\",\"fragmentIds\":[\"...\"],\"commitmentQuote\":\"...\",\"evidenceQuote\":\"...\",\"replacementEntryIndex\":null}]}. Only durable facts; ordinary conversation may have zero entries. Use only supplied fragments and their exact IDs. For entityIds, each fragment's allowedEntityIds is the complete numeric allowlist; copy only those IDs. The Owner ID may be used when listed in allowedEntityIds for a fact about the Owner as its own subject or as the listener; include it only when relevant. participantIds are presence evidence only and never authorize entityIds. Do not infer or invent entity IDs. Do not infer who heard other parts of an old message. Self-only legacy text is the author's statement, not proof of other people's private thoughts or CK3 facts. A reported event stays reported. Relative dates in Legacy fragments use their sourceAsOf, never the current runtime date or a different projection date. Uncertain event dates remain unknown. Do not change Campaign or Owner. Never claim an entry without a supporting fragment. Follow the dynamic request limits: return no more than limits.maxEntries entries and limits.maxCommitmentTransitions commitment transitions for this owner in this request. A transition must copy an activeCommitment entryId and expectedRevision, cite a complete verbatim evidenceQuote from a verified source fragment, and bind it by an exact, concrete commitmentQuote appearing in both the original commitment and the evidence. The binding must identify exactly one supplied active commitment; generic words are invalid. Only explicit fulfilled/cancelled/replacement statements qualify. Questions, future plans, hypothetical, negation, hearsay, ambiguous references and years of silence never change status. Fulfillment needs explicit completion of every original condition; cancellation/replacement must explicitly cover the original agreement including all its conditions. For superseded, replacementEntryIndex must point to a new COMMITMENT in this response, whose text is copied verbatim from the same replacement evidence. Use NO_DURABLE_CONTENT with entries:[] when only transitions are needed. No transition is CK3 effect confirmation.` },
-      { role: "user", content: JSON.stringify({ ownerId: snapshot.ownerId, campaignToken: snapshot.campaignToken,
-        conversationDate: snapshot.date, completeness: snapshot.completeness,
-        activeCommitments: (snapshot.activeCommitments || []).map(entry => ({ entryId: entry.entryId,
+    const entityNames = [], relationships = [];
+    const nameKeys = new Map(), relationshipKeys = new Map();
+    const reference = (rows, keys, row) => {
+      const key = JSON.stringify(row);
+      if (!keys.has(key)) { keys.set(key, rows.length); rows.push(row); }
+      return keys.get(key);
+    };
+    const projected = this.orderFragments(snapshot, fragments).map((fragment, position) => {
+      const allowedEntityIds = ids([...(fragment.knownBy?.includes(snapshot.ownerId) ? [snapshot.ownerId] : []),
+        fragment.speakerId, ...fragment.entityIds]);
+      const nameRefs = (snapshot.entityNameEvidence || []).filter(row => row.fragmentId === fragment.fragmentId
+        && allowedEntityIds.includes(row.entityId) && (row.ownerId == null || row.ownerId === snapshot.ownerId)
+        && (row.campaignToken == null || row.campaignToken === snapshot.campaignToken))
+        .map(row => reference(entityNames, nameKeys, { entityId: row.entityId, name: row.name }));
+      const relationshipRefs = (snapshot.relationshipEvidence || []).filter(row => row.fragmentId === fragment.fragmentId
+        && row.ownerId === snapshot.ownerId && row.campaignToken === snapshot.campaignToken
+        && row.knownToOwner === true && allowedEntityIds.includes(row.entityId))
+        .map(row => reference(relationships, relationshipKeys, { entityId: row.entityId, types: row.types, asOf: row.asOf }));
+      const eventDate = normalizeGameDate(fragment.eventDate)?.canonical;
+      const acquiredDate = normalizeGameDate(fragment.acquiredDate)?.canonical;
+      return { fragmentId: fragment.fragmentId, fragmentRef: `f${position}`, text: fragment.text, speakerId: fragment.speakerId,
+        sourceType: fragment.sourceType, allowedEntityIds, participantIds: ids(fragment.presentIds), nameRefs, relationshipRefs,
+        ...(fragment.legacyMemoryId ? { sourceAsOf: fragment.legacyAnchorGameDate } : {}),
+        ...(eventDate ? { eventDate } : {}), ...(acquiredDate ? { acquiredDate } : {}) };
+    });
+    return [
+      { role: "system", content: `VOTC Memory Engine 4.0 Durable extraction. Contract v9.3.2.
+Return JSON only: {"status":"STORE"|"NO_DURABLE_CONTENT","entries":[],"commitmentTransitions":[]}.
+Each entry: {"memoryType":"DURABLE_KNOWLEDGE","text":"evidence-backed third-person archival prose","fragmentIds":["copy exact supplied ID"],"entityIds":[],"participantIds":[],"topics":[],"eventTime":{"from":null,"to":null,"precision":"unknown","status":"unknown"}}. entityIds and participantIds contain JSON integers, never strings, names, table indices or quoted numbers. Copy actual IDs from the cited fragments only; use [] if uncertain.
+memoryType must be RELATIONSHIP_CHANGE, COMMITMENT, DURABLE_KNOWLEDGE, MAJOR_EXPERIENCE, LONG_TERM_GOAL or EMOTIONAL_ANCHOR. Only significant lasting information qualifies; do not save routine chatter. Preserve important names, conditions and quantities without inventing facts. Owner is the memory holder (记忆持有人), never a master or 主人.
+eventTime.status must be observed, reported, planned or unknown. eventTime.precision must be day, month, year, range or unknown. Uncertain dates require from:null, to:null, precision:"unknown"; status describes the evidence, not whether the date is known. Dated events need both dates in the supplied evidence; never invent or translate a relative date using another fragment's date. sourceAsOf anchors Legacy statements. When sourceType is spoken, reported or rumor, use reported for accounts, planned for future intentions, or unknown; observed is forbidden even if a speaker says they saw it or the dialogue happened now. observed is allowed only when EVERY cited fragment has sourceType witnessed or game_fact. Future completed facts are prohibited; a future plan stays planned. Use status:"unknown" only when the event status is uncertain; that status never permits dates.
+Every entry must cite at least one exact supplied fragmentId or its short fragmentRef, such as "f0", in fragmentIds. Prefer fragmentRef to avoid copying long IDs; the application resolves it to that request's original source. Never construct IDs or borrow references from another request. entityIds may only contain the union of allowedEntityIds from those cited fragments. participantIds are presence evidence only and never authorize entityIds. Owner ID may be used when listed in allowedEntityIds for a fact about the Owner as its own subject or as the listener; include it only when relevant. Empty entityIds is valid when no identity can be supported. Do not include everyone present or names found only in other fragments. Do not change Campaign or Owner. Source visibility and knownBy are granted locally, never by your output.
+entityNames and relationships are deduplicated tables. Each fragment's nameRefs and relationshipRefs authorize only those table rows for that fragment. Names and roles never authorize an entity ID. Use only names authorized by the cited fragment; an absent name remains unknown. Preserve exact quotations for commitments. Relationships are scoped CK3 readback at asOf, not proof of a historical change, private knowledge or a confirmed game effect. Ambiguous identities stay ambiguous.
+Follow the dynamic request limits: return no more than limits.maxEntries entries and limits.maxCommitmentTransitions commitment transitions for this owner in this request. STORE requires nonempty entries; NO_DURABLE_CONTENT requires entries:[]. Zero allowance means return no entries. A repair request supplies safe validation codes, not new evidence: correct only against the supplied fragments. Do not repeat alreadyAccepted facts.
+Each transition: {"entryId":"copy activeCommitment ID","expectedRevision":1,"status":"fulfilled"|"cancelled"|"superseded","fragmentIds":["exact ID"],"evidenceQuote":"complete verbatim source quote","commitmentQuote":"exact concrete quote shared with the original commitment","replacementEntryIndex":0}. replacementEntryIndex is required only for superseded and must point to a new COMMITMENT whose text is copied verbatim from the replacement evidence. The binding must identify exactly one supplied active commitment and cover every original condition. Questions, future plans, hypotheticals, negations, hearsay, generic phrases, ambiguous references and years of silence never change status. No transition confirms a CK3 effect.` },
+      { role: "user", content: JSON.stringify({ contractVersion: "9.3.2", ownerId: snapshot.ownerId,
+        campaignToken: snapshot.campaignToken, conversationDate: snapshot.date, completeness: snapshot.completeness,
+        entityNames, relationships, fragments: projected,
+        activeCommitments: this.relevantCommitments(snapshot.activeCommitments, fragments).map(entry => ({ entryId: entry.entryId,
           expectedRevision: entry.revision, text: entry.text })),
-        fragments: ordered.map(fragment => {
-          const eventDate = normalizeGameDate(fragment.eventDate)?.canonical || null;
-          const acquiredDate = normalizeGameDate(fragment.acquiredDate)?.canonical || null;
-          return { fragmentId: fragment.fragmentId, text: fragment.text,
-          visibilityEvidence: fragment.visibilityEvidence, speakerId: fragment.speakerId, sourceType: fragment.sourceType,
-          entityIds: fragment.entityIds, presentIds: fragment.presentIds,
-          entityNames: (snapshot.entityNameEvidence || []).filter(row => row.fragmentId === fragment.fragmentId),
-          relationships: (snapshot.relationshipEvidence || []).filter(row => row.fragmentId === fragment.fragmentId),
-          allowedEntityIds: ids([...(fragment.knownBy?.includes(snapshot.ownerId) ? [snapshot.ownerId] : []),
-            fragment.speakerId, ...fragment.entityIds]), participantIds: ids(fragment.presentIds),
-          ...(fragment.legacyMemoryId ? { sourceAsOf: fragment.legacyAnchorGameDate } : {}),
-          ...(eventDate ? { eventDate } : {}), ...(acquiredDate ? { acquiredDate } : {}) };
-        }), limits: { maxEntries: remainingEntrySlots, maxCommitmentTransitions: remainingTransitionSlots } }) }
+        limits: { maxEntries: remainingEntrySlots, maxCommitmentTransitions: remainingTransitionSlots } }) }
     ];
-    prompt[0].content += " Owner means the memory holder (记忆持有人), never a master or 主人. Write archival prose in third person, identifying people by the evidence-backed names in the cited fragment's entityNames instead of bare 主人, 玩家, 师父 or 天师. A role may supplement an authorized name (师父 + 姓名) only when the source or scoped relationships proves that role. entityNames supplies only names this Owner can know from that fragment; absent names remain unknown and must not be obtained from a different Owner, unseen paragraph or backend profile. Preserve verbatim quotations required for commitments. relationships is the existing CK3 relationship readback scoped to this Owner and source date: use it to distinguish known people, not to manufacture an event, historical relationship change, current effect confirmation or a third person's private knowledge. Ambiguous roles and pronouns must remain ambiguous; do not guess an entity. Cite the original supporting fragments when their named entities were lost in a paraphrased summary.";
-    return prompt;
   }
 
   parseResult(response, allowedFragments, snapshot = null, maxEntries = MAX_DURABLE_ENTRIES_PER_OWNER,
-    maxTransitions = MAX_DURABLE_ENTRIES_PER_OWNER, forgottenFragmentIds = []) {
+    maxTransitions = MAX_DURABLE_ENTRIES_PER_OWNER, forgottenFragmentIds = [], { collectRejections = false, fragmentRefs = null } = {}) {
     const outcome = validateGenerationOutcome(response);
     if (outcome.truncated || !outcome.complete) throw new Error("memory4_generation_incomplete");
     const content = String(outcome.content || "").trim().replace(/^```(?:json)?\s*/i, "").replace(/\s*```$/i, "");
     let parsed;
     try { parsed = JSON.parse(content); }
     catch { throw new Error("memory4_response_invalid_json"); }
+    if (fragmentRefs) {
+      const resolveRefs = candidate => candidate && typeof candidate === "object" && Array.isArray(candidate.fragmentIds)
+        ? { ...candidate, fragmentIds: candidate.fragmentIds.map(id => fragmentRefs.get(id) || id) } : candidate;
+      if (Array.isArray(parsed?.entries)) parsed.entries = parsed.entries.map(resolveRefs);
+      if (Array.isArray(parsed?.commitmentTransitions)) parsed.commitmentTransitions = parsed.commitmentTransitions.map(resolveRefs);
+    }
     const entryLimit = Math.max(0, Number.isInteger(maxEntries) ? maxEntries : MAX_DURABLE_ENTRIES_PER_OWNER);
     if (!parsed || !["STORE", "NO_DURABLE_CONTENT"].includes(parsed.status) || !Array.isArray(parsed.entries)
       || parsed.entries.length > entryLimit || (parsed.status === "STORE") !== (parsed.entries.length > 0)) throw new Error("memory4_response_invalid_shape");
@@ -967,28 +1126,63 @@ class Memory4Coordinator {
           || !allowed.has(id) && !forgotten.has(id))) throw new Error("memory4_response_source_mismatch");
       return !candidate.fragmentIds.some(id => forgotten.has(id));
     };
-    parsed.entries = parsed.entries.filter(validateLateSources);
     const entries = [];
     const entryPositions = new Map();
     let rejectedUnknownEntityCount = 0;
-    for (const [position, candidate] of parsed.entries.entries()) {
+    let localMetadataCorrectionCount = 0;
+    const rejectedCodes = [];
+    for (let [position, candidate] of parsed.entries.entries()) {
       try {
+        if (!validateLateSources(candidate)) continue;
+        let metadataCorrected = false;
+        if (collectRejections && snapshot && candidate?.eventTime && typeof candidate.eventTime === "object") {
+          const cited = strings(candidate.fragmentIds).map(id => snapshot.fragments.find(fragment => fragment.fragmentId === id));
+          if (cited.length && cited.every(fragment => fragment?.knownBy.includes(snapshot.ownerId))) {
+            const eventTime = { ...candidate.eventTime };
+            if (eventTime.status === "observed" && !cited.every(fragment => ["witnessed", "game_fact"].includes(fragment.sourceType))) {
+              eventTime.status = "reported";
+              metadataCorrected = true;
+            }
+            if (eventTime.from == null && eventTime.to == null && ["day", "month", "year", "range"].includes(eventTime.precision)) {
+              eventTime.precision = "unknown";
+              metadataCorrected = true;
+            }
+            if (metadataCorrected) candidate = { ...candidate, eventTime };
+          }
+        }
         if (snapshot) validateEntry(candidate, snapshot);
+        if (metadataCorrected) localMetadataCorrectionCount++;
         entryPositions.set(position, entries.length); entries.push(candidate);
       } catch (error) {
-        if (error.message !== "memory4_unknown_entity") throw error;
-        rejectedUnknownEntityCount++;
+        if (error.message === "memory4_unknown_entity") rejectedUnknownEntityCount++;
+        else if (!collectRejections || !DURABLE_REPAIRABLE_ERRORS.has(error.message)) throw error;
+        rejectedCodes.push(error.message);
       }
     }
-    const retainedTransitions = transitions.filter(validateLateSources);
-    for (const transition of retainedTransitions) {
-      if (transition.status === "superseded") {
-        if (!entryPositions.has(transition.replacementEntryIndex)) throw new Error("memory4_commitment_replacement_invalid");
-        transition.replacementEntryIndex = entryPositions.get(transition.replacementEntryIndex);
+    const retainedTransitions = [];
+    for (const transition of transitions) {
+      try {
+        if (!validateLateSources(transition)) continue;
+        const retained = { ...transition };
+        if (retained.status === "superseded") {
+          if (!entryPositions.has(retained.replacementEntryIndex)) throw new Error("memory4_commitment_replacement_invalid");
+          retained.replacementEntryIndex = entryPositions.get(retained.replacementEntryIndex);
+        }
+        if (collectRejections && snapshot) {
+          const index = this.store.loadIndex(snapshot);
+          const metadata = this.store.read(path.join(this.store.directory(snapshot), "metadata.json"), null);
+          this.store.commitmentChanges(snapshot, [...retainedTransitions, retained],
+            entries.map(entry => validateEntry(entry, snapshot)), index, metadata);
+        }
+        retainedTransitions.push(retained);
+      } catch (error) {
+        if (!collectRejections || !DURABLE_REPAIRABLE_ERRORS.has(error.message)) throw error;
+        rejectedCodes.push(error.message);
       }
     }
     return { ...parsed, status: entries.length ? "STORE" : "NO_DURABLE_CONTENT", entries,
-      commitmentTransitions: retainedTransitions, rejectedUnknownEntityCount };
+      commitmentTransitions: retainedTransitions, rejectedUnknownEntityCount,
+      ...(collectRejections ? { rejectedCodes, localMetadataCorrectionCount } : {}) };
   }
 
   makeDurableSendGuard(snapshot, chunk, isCurrent = () => true) {
@@ -1005,6 +1199,7 @@ class Memory4Coordinator {
       } catch { throw new Error("memory4_request_source_changed_before_send"); }
       if (!isCurrent() || sourceIdentity(latest) !== expectedIdentity || hash(chunk) !== expectedChunk
         || !recovery || sourceIdentity(recovery.snapshot) !== expectedIdentity
+        || hash(this.relevantCommitments(this.store.activeCommitments(latest), latest.fragments)) !== hash(snapshot.activeCommitments)
         || snapshot.legacyRecompression === true && !this.isLegacyRecompressionSnapshotCurrent(snapshot)) {
         throw new Error("memory4_request_source_changed_before_send");
       }
@@ -1020,6 +1215,7 @@ class Memory4Coordinator {
     const parsedAttempts = [];
     const forgottenFragmentIds = new Set(strings(prior?.forgottenFragmentIds));
     let forgetFilterPassed = false;
+    let extractionCheckpoint = null;
     try {
       const hadFragments = Array.isArray(snapshot.fragments) && snapshot.fragments.length > 0;
       let sourceFilteredByForget = false;
@@ -1054,8 +1250,11 @@ class Memory4Coordinator {
         return { ownerId: snapshot.ownerId, status: "RECOVERY_UNVERIFIED", reason: committedProof.reason || "DERIVED_RECOVERY_COMMIT_UNVERIFIED",
           recoveryPath: file };
       }
-      snapshot.activeCommitments ||= this.store.activeCommitments(snapshot);
-      this.saveRecovery(snapshot, { forgottenFragmentIds: [...forgottenFragmentIds], status: "PENDING", retryCount: prior?.retryCount || 0, lastError: null });
+      snapshot.activeCommitments = this.relevantCommitments(this.store.activeCommitments(snapshot), snapshot.fragments);
+      extractionCheckpoint = this.restoreDurableCheckpoint(snapshot, { ...prior, forgottenFragmentIds: [...forgottenFragmentIds] });
+      const saveProgress = () => this.saveRecovery(snapshot, { forgottenFragmentIds: [...forgottenFragmentIds],
+        status: "PENDING", retryCount: prior?.retryCount || 0, lastError: null, extractionCheckpoint });
+      saveProgress();
       if (!snapshot.skipKnownEvidence) this.store.recordKnownEvidence(snapshot);
       this.recordDisclosures(snapshot);
       if (handoffOnly) return { ownerId: snapshot.ownerId, status: "RECOVERY_PENDING", recoveryPath: file };
@@ -1068,6 +1267,29 @@ class Memory4Coordinator {
         const commitmentTransitions = [];
         let rejectedUnknownEntityCount = 0;
         const orderedFragments = this.orderFragments(snapshot, snapshot.fragments);
+        const processed = new Set();
+        const restoreProgress = () => {
+          extractionCheckpoint = this.restoreDurableCheckpoint(snapshot, { extractionCheckpoint, forgottenFragmentIds: [...forgottenFragmentIds] });
+          let accumulated = { entries: [], commitmentTransitions: [], rejectedUnknownEntityCount: 0, rejectedCodes: [] };
+          processed.clear();
+          for (const saved of extractionCheckpoint.chunks) {
+            accumulated = this.mergeDurableResults(accumulated, saved.result, snapshot);
+            for (const source of saved.sources) processed.add(source.id);
+          }
+          entries.splice(0, entries.length, ...accumulated.entries);
+          commitmentTransitions.splice(0, commitmentTransitions.length, ...accumulated.commitmentTransitions);
+          rejectedUnknownEntityCount = accumulated.rejectedUnknownEntityCount;
+        };
+        restoreProgress();
+        const remember = (chunk, parsed) => {
+          const record = { sources: chunk.map(fragment => ({ id: fragment.fragmentId,
+            digest: this.checkpointFragment(snapshot, fragment) })), result: parsed };
+          record.digest = hash([extractionCheckpoint.scopeHash, record.sources, record.result]);
+          extractionCheckpoint.chunks.push(record);
+          restoreProgress();
+          saveProgress();
+        };
+        let generationCount = 0;
         const extractChunk = async (chunk, remainingEntrySlots, remainingTransitionSlots, lineage, refreshCount = 0) => {
           if (!isCurrent()) throw new Error("memory4_generation_changed");
           const beforeRequest = this.store.filterForgottenSnapshot(snapshot);
@@ -1075,86 +1297,145 @@ class Memory4Coordinator {
             (beforeRequest.removedFragmentIds || []).forEach(id => forgottenFragmentIds.add(id));
             snapshot = beforeRequest.snapshot;
             sourceFilteredByForget = true;
+            restoreProgress();
           }
-          chunk = chunk.filter(fragment => snapshot.fragments.some(current => current.fragmentId === fragment.fragmentId));
-          if (!chunk.length) return { entries: [], commitmentTransitions: [], rejectedUnknownEntityCount: 0 };
+          chunk = chunk.filter(fragment => !processed.has(fragment.fragmentId)
+            && snapshot.fragments.some(current => current.fragmentId === fragment.fragmentId));
+          if (!chunk.length || remainingEntrySlots === 0 && remainingTransitionSlots === 0) return;
+          saveProgress();
           const durableTrace = this.beginDurableTraceAttempt(traceRun, { ownerId: snapshot.ownerId, campaignToken: snapshot.campaignToken,
             finalizationId: snapshot.finalizationId, chunkIndex: lineage.chunkIndex, chunkTotal: lineage.chunkTotal,
             chunkPath: lineage.chunkPath, fragmentCount: chunk.length, origin, operation,
             sourceDigest: this.durableTraceHash("source_digest", [snapshot.sourceRevision, chunk]) }, { parentAttemptId: lineage.parentAttemptId,
             retryDepth: lineage.retryDepth, retryReason: lineage.retryReason });
-          try {
-            const response = await requestDurable(this.buildPrompt(snapshot, chunk, remainingEntrySlots, remainingTransitionSlots), { ownerId: snapshot.ownerId,
-              campaignToken: snapshot.campaignToken, maxTokens: DURABLE_MAX_OUTPUT_TOKENS, providerSnapshot: snapshot.summaryProviderSnapshot,
-              durableTrace, beforeSendGuard: this.makeDurableSendGuard(snapshot, chunk, isCurrent) });
+          const send = async (messages, attempt) => {
+            if (++generationCount > 32) throw new Error("memory4_generation_budget_exhausted");
+            const inputBudget = chunk.length === 1 ? DURABLE_SINGLE_FRAGMENT_BUDGET : DURABLE_INPUT_TOKEN_BUDGET;
+            if (this.estimateDurableInput(messages) > inputBudget) throw new Error("memory4_fragment_input_too_large");
+            const response = await requestDurable(messages, { ownerId: snapshot.ownerId, campaignToken: snapshot.campaignToken,
+              maxTokens: DURABLE_MAX_OUTPUT_TOKENS, providerSnapshot: snapshot.summaryProviderSnapshot,
+              durableTrace: attempt, beforeSendGuard: this.makeDurableSendGuard(snapshot, chunk, isCurrent) });
             if (!isCurrent()) throw new Error("memory4_generation_changed");
             const latest = this.store.filterForgottenSnapshot(snapshot);
             if (latest.forgottenProjectionIds.length || latest.removedFragmentCount) {
               (latest.removedFragmentIds || []).forEach(id => forgottenFragmentIds.add(id));
               snapshot = latest.snapshot;
               sourceFilteredByForget = true;
+              restoreProgress();
+              if (chunk.some(fragment => (latest.removedFragmentIds || []).includes(fragment.fragmentId))) {
+                throw new Error("memory4_response_source_forgotten");
+              }
             }
             const allowedChunk = chunk.filter(fragment => snapshot.fragments.some(current => current.fragmentId === fragment.fragmentId));
-            const parsed = this.parseResult(response, allowedChunk, snapshot, remainingEntrySlots, remainingTransitionSlots,
-              [...forgottenFragmentIds]);
-            this.recordDurableTrace(durableTrace, { status: "PARSED_OK", parseStatus: "PARSED_OK", complete: true, truncated: false });
-            if (durableTrace) parsedAttempts.push(durableTrace);
-            return parsed;
+            const sentPayload = JSON.parse(messages[1].content);
+            const sentLimits = sentPayload.limits;
+            const fragmentRefs = new Map(sentPayload.fragments.map(fragment => [fragment.fragmentRef, fragment.fragmentId]));
+            return this.parseResult(response, allowedChunk, snapshot, sentLimits.maxEntries, sentLimits.maxCommitmentTransitions,
+              [...forgottenFragmentIds], { collectRejections: true, fragmentRefs });
+          };
+          try {
+            let parsed;
+            try { parsed = await send(this.buildPrompt(snapshot, chunk, remainingEntrySlots, remainingTransitionSlots), durableTrace); }
+            catch (error) {
+              if (!DURABLE_REPAIRABLE_ERRORS.has(error.message)) throw error;
+              parsed = { entries: [], commitmentTransitions: [], rejectedCodes: [error.message], rejectedUnknownEntityCount: 0 };
+            }
+            const initialAccepted = parsed.entries.length > 0 || parsed.commitmentTransitions.length > 0 || parsed.rejectedCodes.length === 0;
+            const initialRejected = parsed.rejectedCodes.length > 0;
+            if (parsed.rejectedCodes.length) {
+              this.recordDurableTrace(durableTrace, { status: "REJECTED", parseStatus: "SOURCE_REJECTED", errorCode: parsed.rejectedCodes[0] });
+              if (parsed.rejectedUnknownEntityCount) this.trace?.record("memory4_candidate_rejected", {
+                ownerId: snapshot.ownerId, count: parsed.rejectedUnknownEntityCount, reason: "unknown_entity" });
+              const repairTrace = this.beginDurableTraceAttempt(traceRun, { ownerId: snapshot.ownerId, campaignToken: snapshot.campaignToken,
+                finalizationId: snapshot.finalizationId, chunkIndex: lineage.chunkIndex, chunkTotal: lineage.chunkTotal,
+                chunkPath: lineage.chunkPath, fragmentCount: chunk.length, origin, operation,
+                sourceDigest: this.durableTraceHash("source_digest", [snapshot.sourceRevision, chunk]) },
+                { parentAttemptId: durableTrace?.durableAttemptId, retryDepth: lineage.retryDepth + 1, retryReason: "other" });
+              const messages = this.buildPrompt(snapshot, chunk, remainingEntrySlots - parsed.entries.length,
+                remainingTransitionSlots - parsed.commitmentTransitions.length);
+              const payload = JSON.parse(messages[1].content);
+              payload.repair = { validationCodes: [...new Set(parsed.rejectedCodes)],
+                alreadyAccepted: parsed.entries.map(entry => ({ memoryType: entry.memoryType, fragmentIds: entry.fragmentIds })) };
+              if (parsed.rejectedCodes.includes("memory4_unknown_entity")) {
+                payload.repair.entityIdHint = "For each entry independently, copy JSON integer IDs only from allowedEntityIds of its cited fragments. Do not copy names, table indices, quoted numbers or IDs from other fragments. If uncertain return entityIds:[]; that is valid.";
+              }
+              if (parsed.rejectedCodes.includes("memory4_unverified_observation")) {
+                payload.repair.observationHint = "A spoken account cannot be observed, including first-person statements. Use reported for such accounts, planned for intentions, or unknown. Keep uncertain dates null.";
+              }
+              if (parsed.rejectedCodes.some(code => ["memory4_unsupported_event_date", "memory4_unknown_time_has_date", "memory4_future_fact"].includes(code))) {
+                payload.repair.eventTimeHint = "conversationDate and acquiredDate are not event-date evidence. Do not date an event from another fragment or infer dates from relative wording. Unless the cited source supports the exact event dates, use from:null, to:null, precision:unknown; keep reported/planned/unknown according to that source. Never change the text or turn a future intention into an observed/completed fact.";
+              }
+              messages[1].content = JSON.stringify(payload);
+              try {
+                const repaired = await send(messages, repairTrace);
+                const initial = parsed;
+                parsed = this.mergeDurableResults(initial, repaired, snapshot);
+                const repairAccepted = repaired.entries.length > 0 || repaired.commitmentTransitions.length > 0;
+                // An empty repair cannot prove that rejected facts contained no durable content.
+                parsed.rejectedCodes = repairAccepted ? repaired.rejectedCodes
+                  : [...initial.rejectedCodes, ...repaired.rejectedCodes];
+                parsed.rejectedUnknownEntityCount = repaired.rejectedUnknownEntityCount
+                  + (repairAccepted ? 0 : initial.rejectedUnknownEntityCount);
+                this.recordDurableTrace(repairTrace, { status: repairAccepted ? "PARSED_OK" : "REJECTED",
+                  parseStatus: repairAccepted ? "PARSED_OK" : "SOURCE_REJECTED", errorCode: repaired.rejectedCodes[0] });
+                if (repairTrace && repairAccepted) parsedAttempts.push(repairTrace);
+              } catch (error) {
+                this.recordDurableTrace(repairTrace, durableTraceFailure(error, repairTrace));
+                if (!DURABLE_REPAIRABLE_ERRORS.has(error.message) && error.message !== "memory4_fragment_input_too_large") throw error;
+                if (!parsed.entries.length && !parsed.commitmentTransitions.length) throw error;
+              }
+            }
+            if (!parsed.entries.length && !parsed.commitmentTransitions.length && parsed.rejectedCodes.length) {
+              throw new Error(parsed.rejectedCodes[0] === "memory4_unknown_entity"
+                ? "memory4_response_no_valid_entries" : parsed.rejectedCodes[0]);
+            }
+            if (!initialRejected) this.recordDurableTrace(durableTrace, { status: "PARSED_OK", parseStatus: "PARSED_OK", complete: true, truncated: false });
+            if (durableTrace && initialAccepted) parsedAttempts.push(durableTrace);
+            const available = new Set(snapshot.fragments.map(fragment => fragment.fragmentId));
+            parsed = this.pruneDurableResult(parsed, available);
+            remember(chunk.filter(fragment => available.has(fragment.fragmentId)), parsed);
           } catch (error) {
             this.recordDurableTrace(durableTrace, durableTraceFailure(error, durableTrace));
             if (!isCurrent()) throw new Error("memory4_generation_changed");
-            if (error.message === "memory4_request_source_changed_before_send" && refreshCount < 1) {
-              let refreshed;
-              try { refreshed = this.store.filterForgottenSnapshot(snapshot); }
-              catch { throw error; }
-              if (!refreshed.removedFragmentCount && !refreshed.forgottenProjectionIds.length) throw error;
+            if (["memory4_request_source_changed_before_send", "memory4_response_source_forgotten"].includes(error.message)
+              && refreshCount < 1) {
+              const refreshed = this.store.filterForgottenSnapshot(snapshot);
+              if (!refreshed.removedFragmentCount && !refreshed.forgottenProjectionIds.length
+                && error.message !== "memory4_response_source_forgotten") throw error;
               (refreshed.removedFragmentIds || []).forEach(id => forgottenFragmentIds.add(id));
               snapshot = refreshed.snapshot;
               sourceFilteredByForget = true;
-              return extractChunk(chunk, remainingEntrySlots, remainingTransitionSlots, { ...lineage,
-                parentAttemptId: durableTrace?.durableAttemptId || lineage.parentAttemptId,
-                retryDepth: lineage.retryDepth + 1, retryReason: "source_changed_before_send" }, refreshCount + 1);
+              restoreProgress();
+              return extractChunk(chunk, MAX_DURABLE_ENTRIES_PER_OWNER - entries.length,
+                snapshot.activeCommitments.length ? MAX_DURABLE_ENTRIES_PER_OWNER - commitmentTransitions.length : 0,
+                { ...lineage, parentAttemptId: durableTrace?.durableAttemptId || lineage.parentAttemptId,
+                  retryDepth: lineage.retryDepth + 1, retryReason: "source_changed_before_send" }, refreshCount + 1);
             }
-            if (error.message !== "memory4_generation_incomplete") throw error;
-            if (chunk.length > 1) {
-              const midpoint = Math.ceil(chunk.length / 2);
-              const parentAttemptId = typeof durableTrace?.durableAttemptId === "string"
-                ? durableTrace.durableAttemptId : lineage.parentAttemptId;
-              const retryDepth = Number.isSafeInteger(durableTrace?.retryDepth) ? durableTrace.retryDepth + 1 : lineage.retryDepth + 1;
-              const retry = (branch) => ({ ...lineage, chunkPath: [...lineage.chunkPath, branch], parentAttemptId,
-                retryDepth, retryReason: "output_truncated" });
-              const first = await extractChunk(chunk.slice(0, midpoint), remainingEntrySlots, remainingTransitionSlots, retry(0));
-              const second = await extractChunk(chunk.slice(midpoint), remainingEntrySlots - first.entries.length,
-                remainingTransitionSlots - first.commitmentTransitions.length, retry(1));
-              return { entries: [...first.entries, ...second.entries],
-                commitmentTransitions: [...first.commitmentTransitions, ...second.commitmentTransitions.map(transition => ({ ...transition,
-                  ...(transition.status === "superseded" ? { replacementEntryIndex: transition.replacementEntryIndex + first.entries.length } : {}) }))],
-                rejectedUnknownEntityCount: first.rejectedUnknownEntityCount + second.rejectedUnknownEntityCount };
-            }
-            throw error;
+            if (error.message !== "memory4_generation_incomplete" || chunk.length <= 1) throw error;
+            const midpoint = Math.ceil(chunk.length / 2);
+            const retry = branch => ({ ...lineage, chunkPath: [...lineage.chunkPath, branch],
+              parentAttemptId: durableTrace?.durableAttemptId || lineage.parentAttemptId,
+              retryDepth: lineage.retryDepth + 1, retryReason: "output_truncated" });
+            await extractChunk(chunk.slice(0, midpoint), remainingEntrySlots, remainingTransitionSlots, retry(0));
+            await extractChunk(chunk.slice(midpoint), MAX_DURABLE_ENTRIES_PER_OWNER - entries.length,
+              snapshot.activeCommitments.length ? MAX_DURABLE_ENTRIES_PER_OWNER - commitmentTransitions.length : 0, retry(1));
           }
         };
-        const chunkTotal = Math.ceil(orderedFragments.length / MAX_FRAGMENTS_PER_REQUEST);
-        for (let offset = 0, chunkIndex = 0; offset < orderedFragments.length; offset += MAX_FRAGMENTS_PER_REQUEST, chunkIndex++) {
-          const chunk = orderedFragments.slice(offset, offset + MAX_FRAGMENTS_PER_REQUEST);
-          const parsed = await extractChunk(chunk, MAX_DURABLE_ENTRIES_PER_OWNER - entries.length,
-            MAX_DURABLE_ENTRIES_PER_OWNER - commitmentTransitions.length, { chunkIndex, chunkTotal, chunkPath: [chunkIndex],
-              parentAttemptId: null, retryDepth: 0, retryReason: "other" });
-          commitmentTransitions.push(...parsed.commitmentTransitions.map(transition => ({ ...transition,
-            ...(transition.status === "superseded" ? { replacementEntryIndex: transition.replacementEntryIndex + entries.length } : {}) })));
-          entries.push(...parsed.entries);
-          rejectedUnknownEntityCount += parsed.rejectedUnknownEntityCount;
-          this.saveRecovery(snapshot, { forgottenFragmentIds: [...forgottenFragmentIds], status: "PENDING",
-            retryCount: prior?.retryCount || 0, lastError: null, completedFragmentCount: offset + chunk.length });
-          if (entries.length >= MAX_DURABLE_ENTRIES_PER_OWNER && commitmentTransitions.length >= MAX_DURABLE_ENTRIES_PER_OWNER) break;
+        const chunks = this.chunkFragments(snapshot, orderedFragments.filter(fragment => !processed.has(fragment.fragmentId)));
+        for (const [chunkIndex, chunk] of chunks.entries()) {
+          await extractChunk(chunk, MAX_DURABLE_ENTRIES_PER_OWNER - entries.length,
+            snapshot.activeCommitments.length ? MAX_DURABLE_ENTRIES_PER_OWNER - commitmentTransitions.length : 0,
+            { chunkIndex, chunkTotal: chunks.length, chunkPath: [chunkIndex], parentAttemptId: null, retryDepth: 0, retryReason: "other" });
+          if (entries.length >= MAX_DURABLE_ENTRIES_PER_OWNER
+            && (!snapshot.activeCommitments.length || commitmentTransitions.length >= MAX_DURABLE_ENTRIES_PER_OWNER)) break;
         }
         if (rejectedUnknownEntityCount) this.trace?.record("memory4_candidate_rejected", {
           ownerId: snapshot.ownerId, count: rejectedUnknownEntityCount, reason: "unknown_entity"
         });
-        if (!entries.length && !commitmentTransitions.length && rejectedUnknownEntityCount > 0) {
-          throw new Error("memory4_response_no_valid_entries");
-        }
-        result = { status: entries.length ? "STORE" : "NO_DURABLE_CONTENT", entries, commitmentTransitions };
+        result = { status: entries.length ? "STORE" : "NO_DURABLE_CONTENT", entries, commitmentTransitions,
+          evaluatedFragmentCount: processed.size, extractionPolicyVersion: DURABLE_POLICY_VERSION,
+          localMetadataCorrectionCount: extractionCheckpoint.chunks.reduce((count, saved) => count + (saved.result.localMetadataCorrectionCount || 0), 0),
+          rejectedCandidateCount: extractionCheckpoint.chunks.reduce((count, saved) => count + (saved.result.rejectedCodes?.length || 0), 0) };
       }
       if (!isCurrent()) throw new Error("memory4_generation_changed");
       const latest = this.store.filterForgottenSnapshot(snapshot);
@@ -1166,11 +1447,7 @@ class Memory4Coordinator {
           if (fs.existsSync(file)) this.baseStore.removeSummaryMutationFile(file);
           return { ownerId: snapshot.ownerId, status: "FORGOTTEN", forgottenProjectionIds: latest.forgottenProjectionIds };
         }
-        const allowedFragments = new Set(snapshot.fragments.map(fragment => fragment.fragmentId));
-        result.entries = result.entries.filter(entry => entry.fragmentIds.every(id => allowedFragments.has(id)));
-        result.commitmentTransitions = (result.commitmentTransitions || []).filter(transition =>
-          transition.fragmentIds.every(id => allowedFragments.has(id)));
-        result.status = result.entries.length ? "STORE" : "NO_DURABLE_CONTENT";
+        result = this.pruneDurableResult(result, new Set(snapshot.fragments.map(fragment => fragment.fragmentId)));
       }
       if (sourceFilteredByForget && snapshot.fragments.length === 0) {
         if (fs.existsSync(file)) this.baseStore.removeSummaryMutationFile(file);
@@ -1191,8 +1468,9 @@ class Memory4Coordinator {
       if (!isCurrent()) return { ownerId: snapshot.ownerId, status: "CANCELLED",
         ...(fs.existsSync(file) ? { recoveryPath: file } : {}) };
       const retryCount = Number(prior?.retryCount || 0) + 1;
-      if (forgetFilterPassed && error.message !== "memory4_request_source_changed_before_send") this.saveRecovery(snapshot, { forgottenFragmentIds: [...forgottenFragmentIds], status: "EXTRACTION_FAILED",
-        retryCount, lastError: String(error?.message || error) });
+      if (forgetFilterPassed && !["memory4_request_source_changed_before_send", "memory4_checkpoint_corrupt"].includes(error.message)) this.saveRecovery(snapshot, { forgottenFragmentIds: [...forgottenFragmentIds], status: "EXTRACTION_FAILED",
+        retryCount, lastError: String(error?.message || error), ...(extractionCheckpoint ? { extractionCheckpoint } : {}),
+        failurePolicyVersion: DURABLE_POLICY_VERSION, failureSourceHash: this.durableFailureSource(snapshot) });
       this.trace?.record("memory4_durable", { finalizationId: snapshot.finalizationId, ownerId: snapshot.ownerId,
         status: "EXTRACTION_FAILED", errorCode: String(error?.message || error) });
       return { ownerId: snapshot.ownerId, status: "EXTRACTION_FAILED", retryCount, error: String(error?.message || error),
@@ -1314,6 +1592,14 @@ class Memory4Coordinator {
             continue;
           }
           if (!isNarrativeCommitted(snapshot) && !legacyRecompression) { results[index] = { status: "WAITING_NARRATIVE", ownerId: snapshot.ownerId }; continue; }
+          if (!manual && record.failurePolicyVersion === DURABLE_POLICY_VERSION
+            && (!record.failureSourceHash || record.failureSourceHash === this.durableFailureSource(snapshot))
+            && (DURABLE_REPAIRABLE_ERRORS.has(record.lastError)
+              || ["memory4_response_no_valid_entries", "memory4_checkpoint_corrupt", "memory4_fragment_input_too_large",
+                "memory4_generation_budget_exhausted"].includes(record.lastError))) {
+            results[index] = { status: "FAILED_MANUAL", ownerId: snapshot.ownerId, reason: record.lastError };
+            continue;
+          }
           if (!manual && Number(record.retryCount || 0) >= 3) { results[index] = { status: "FAILED_MANUAL", ownerId: snapshot.ownerId }; continue; }
           const recoveryIsCurrent = () => isCurrent() && (!legacyRecompression || this.isLegacyRecompressionSnapshotCurrent(snapshot));
           const traceRun = this.beginDurableTraceRun(snapshot, { origin: "recovery",

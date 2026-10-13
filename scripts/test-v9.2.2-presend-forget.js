@@ -140,7 +140,7 @@ async function testForgetDuringCapabilityLookupDoesNotReachProvider() {
   const refreshed = fixture.coordinator.store.filterForgottenSnapshot(fixture.snapshot).snapshot;
   refreshed.activeCommitments = fixture.coordinator.store.activeCommitments(refreshed);
   const refreshedChunk = refreshed.fragments;
-  const expectedPrompt = fixture.coordinator.buildPrompt(refreshed, refreshedChunk, 8, 8);
+  const expectedPrompt = fixture.coordinator.buildPrompt(refreshed, refreshedChunk, 8, 0);
   assert.deepEqual(transports[0].messages, PromptBuilder.prepareSummaryMessages(expectedPrompt),
     "the transport must receive the rebuilt B-only prompt, not stale messages with edited metadata");
   assert.equal(JSON.stringify(originalPrompts[0]).includes(fixture.fragmentA.text), true,
@@ -192,7 +192,7 @@ async function testUnchangedRequestPreservesExactMessages() {
   assert.equal(result.status, "NO_DURABLE_CONTENT");
   assert.equal(transports.length, 1);
   const expected = PromptBuilder.prepareSummaryMessages(fixture.coordinator.buildPrompt(
-    fixture.snapshot, fixture.snapshot.fragments, 8, 8));
+    fixture.snapshot, fixture.snapshot.fragments, 8, 0));
   assert.deepEqual(transports[0].messages, expected,
     "authorization checks must not alter prompt bytes for a source set that did not change");
   const digest = messages => crypto.createHash("sha256").update(JSON.stringify(messages)).digest("hex");

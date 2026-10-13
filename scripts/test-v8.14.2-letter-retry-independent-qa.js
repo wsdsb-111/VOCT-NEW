@@ -319,7 +319,16 @@ async function testRealMemory4AndRecoveredSummaryPipeline() {
   const durableRequests = [];
   let narrativeRequests = 0;
   let derivedCompressionCalls = 0;
-  const makeEngine = () => new MemoryEngine({ baseDir, summaryFoldersDir: summariesDir, trace: { record() {} } });
+  const makeEngine = () => {
+    const engine = new MemoryEngine({ baseDir, summaryFoldersDir: summariesDir, trace: { record() {} } });
+    const buildPrompt = engine.memory4.buildPrompt.bind(engine.memory4);
+    engine.memory4.buildPrompt = (snapshot, fragments, ...limits) => {
+      assert(fragments.every(fragment => fragment.visibilityEvidence === "validated_letter"
+        && fragment.sourceTextVerified === true), "full local proof remains validated before compact wire projection");
+      return buildPrompt(snapshot, fragments, ...limits);
+    };
+    return engine;
+  };
   const makeService = (memoryEngine, shouldFail, failDurableCalls = 0) => {
     let failedDurableCalls = 0;
     const GameData = createGameData({ fs, path, memorySystem, memoryEngine, summariesDir, getHistoricalReferenceByYear: () => null });
@@ -490,7 +499,7 @@ async function testRealMemory4AndRecoveredSummaryPipeline() {
     assert.deepEqual([...new Set(durableRequests.map(row => row.ownerId))].sort(), [1, 2]);
     assert.equal(durableRequests.filter(row => row.ownerId === 1).length, 2, "only the failed owner is extracted again");
     assert.equal(durableRequests.filter(row => row.ownerId === 2).length, 1, "completed owner extraction is not replayed");
-    assert(durableRequests.every(row => row.fragment.visibilityEvidence === "validated_letter"
+    assert(durableRequests.every(row => row.fragment.sourceType === "spoken"
       && JSON.stringify(row.fragment.allowedEntityIds.slice().sort()) === JSON.stringify([1, 2])
       && row.fragment.participantIds.length === 0),
     "the real coordinator exposes only validated evidence and does not invent CK3 presence from a letter");

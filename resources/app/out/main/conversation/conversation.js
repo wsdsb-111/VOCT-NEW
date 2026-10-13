@@ -1680,12 +1680,28 @@ class Conversation {
   async waitForActionConfirmation(result, { timeoutMs = 12e3, pollMs = 500 } = {}) {
     if (!result?.confirmation) return result;
     let observedWriteAt = null;
+    let observedDispatch = result.lifecycle?.dispatched === true;
+    const dispatches = Array.isArray(result.confirmation.dispatches) && result.confirmation.dispatches.length > 0
+      ? result.confirmation.dispatches
+      : [result.confirmation.dispatch].filter(Boolean);
+    const hasPhysicalDispatchEvidence = () => {
+      if (observedDispatch) return true;
+      observedDispatch = dispatches.some((dispatch) => {
+        const command = this.getRunCommand(dispatch.commandId);
+        if (!command) return true; // A missing command record cannot prove a zero-write cancellation.
+        return command.status === "acknowledged" || runFileManager.hasWriteHistory(command);
+      });
+      return observedDispatch;
+    };
     while (true) {
       // Queue TTL belongs to RunFileManager; ACK time starts only after a write.
       runFileManager.expireQueuedActions?.();
       const command = this.getRunCommand(result.confirmation.dispatch?.commandId);
-      if (!command) return settleActionResult(result, { status: "UNCONFIRMED", stateAfter: null });
+      if (!command) return settleActionResult(result, { status: "UNCONFIRMED", stateAfter: null, dispatched: hasPhysicalDispatchEvidence() });
       if (command?.status === "acknowledged") {
+        if (dispatches.length > 1) {
+          return settleActionResult(result, { status: "UNCONFIRMED", stateAfter: null, revisionAfter: this.gameDataRevision, confirmedStateChange: null, commandStatus: command.status, dispatched: true });
+        }
         try {
           const commandReadback = result.confirmation.requireCommandReadback
             ? await readActionCommandReadback(settingsRepository.getCK3DebugLogPath(), command.commandId) : null;
@@ -1702,22 +1718,24 @@ class Conversation {
               catch (error) { console.warn("[ActionConfirmation] post-verification balance refresh failed:", error.message); }
             }
             runFileManager.recordActionVerification?.(command.commandId, verification);
-            return settleActionResult(result, { ...verification, commandStatus: command.status });
+            return settleActionResult(result, { ...verification, commandStatus: command.status, dispatched: true });
           }
         } catch (error) {
           console.warn("[ActionConfirmation] runtime refresh failed:", error);
         }
       } else if (command && ["failed", "cancelled", "expired", "quarantined"].includes(command.status)) {
-        return settleActionResult(result, { status: command.status === "expired" && !runFileManager.hasWriteHistory(command) ? "QUEUE_EXPIRED" : "UNCONFIRMED", stateAfter: null, revisionAfter: this.gameDataRevision, confirmedStateChange: null, commandStatus: command.status });
+        const dispatched = hasPhysicalDispatchEvidence();
+        return settleActionResult(result, { status: command.status === "expired" && !dispatched ? "QUEUE_EXPIRED" : "UNCONFIRMED", stateAfter: null, revisionAfter: this.gameDataRevision, confirmedStateChange: null, commandStatus: command.status, dispatched });
       }
       if (runFileManager.hasWriteHistory(command)) {
+        observedDispatch = true;
         observedWriteAt ??= Date.now();
         const writtenAt = command.lastWrittenAt ?? command.writtenAt ?? observedWriteAt;
         if (Date.now() - writtenAt >= timeoutMs) break;
       }
       await new Promise((resolve) => setTimeout(resolve, pollMs));
     }
-    return settleActionResult(result, { status: "TIMEOUT", stateAfter: null, revisionAfter: this.gameDataRevision, confirmedStateChange: null });
+    return settleActionResult(result, { status: "TIMEOUT", stateAfter: null, revisionAfter: this.gameDataRevision, confirmedStateChange: null, dispatched: hasPhysicalDispatchEvidence() });
   }
   replaceActionFeedback(associatedMessageId, provisional, settled) {
     const commandId = provisional?.diagnostic?.commandId || null;

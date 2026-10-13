@@ -185,15 +185,19 @@ async function testForgetOfNextOuterChunkIsFilteredBeforeRequest() {
     const { payload } = promptUser(prompt);
     prompts.push({ prompt, payload });
     if (prompts.length === 1) {
-      assert.equal(payload.fragments.length, 128, "the fixture must put the forgotten source in the next outer chunk");
+      assert(payload.fragments.length > 0 && payload.fragments.length <= 128,
+        "the first request must respect both the token budget and fragment cap");
+      assert.equal(payload.fragments.some(fragment => fragment.fragmentId === forgottenFragment.fragmentId), false,
+        "the fixture must put the forgotten source after the first budgeted chunk");
       forgetResult = coordinator.forgetSummaryProjection(projection.summary, { ownerId: 2, counterpartId: 3 });
     }
     return completeResult();
   });
 
   assert.equal(forgetResult?.status, "FORGOTTEN", "the fixture must persist a real Memory4 Forget tombstone");
-  assert.equal(prompts.length, 1, "a later outer chunk must be intersected with the latest filtered snapshot before Provider work");
-  assert.deepEqual(prompts[0].payload.fragments.map(fragment => fragment.fragmentId), retainedFragments.map(fragment => fragment.fragmentId));
+  assert.deepEqual(prompts.flatMap(request => request.payload.fragments.map(fragment => fragment.fragmentId)),
+    retainedFragments.map(fragment => fragment.fragmentId),
+    "later budgeted chunks must retain every authorized fragment exactly once");
   assert.equal(JSON.stringify(prompts).includes(forgottenFragment.text), false,
     "the not-yet-requested forgotten source must never reach a later chunk request");
   assert.equal(result.status, "NO_DURABLE_CONTENT");
@@ -282,7 +286,7 @@ function testUnknownEntityFilteringRemainsCountOnly() {
   assert.equal(parsed.rejectedUnknownEntityCount, 1, "rejections stay count-only and do not alter valid candidate semantics");
 }
 
-async function testOrdinary129FragmentsKeep128Plus1OuterBatches() {
+async function testOrdinary129FragmentsRespectTokenAndFragmentBudgets() {
   const { coordinator } = createCoordinator("ordinary-outer-batches");
   const fragments = Array.from({ length: 129 }, (_, index) => makeFragment({
     fragmentId: `ordinary-batch-${index + 1}`,
@@ -293,15 +297,19 @@ async function testOrdinary129FragmentsKeep128Plus1OuterBatches() {
   const requests = [];
   const result = await coordinator.finishOwner(snapshot, async (prompt, options) => {
     const { payload } = promptUser(prompt);
-    requests.push({ fragmentCount: payload.fragments.length, maxTokens: options.maxTokens, limits: payload.limits });
+    requests.push({ fragmentIds: payload.fragments.map(fragment => fragment.fragmentId), maxTokens: options.maxTokens,
+      limits: payload.limits, inputBudget: coordinator.estimateDurableInput(prompt) });
     return completeResult();
   });
 
   assert.equal(result.status, "NO_DURABLE_CONTENT");
-  assert.deepEqual(requests, [
-    { fragmentCount: 128, maxTokens: 4096, limits: { maxEntries: 8, maxCommitmentTransitions: 8 } },
-    { fragmentCount: 1, maxTokens: 4096, limits: { maxEntries: 8, maxCommitmentTransitions: 8 } }
-  ], "ordinary outer chunk boundaries and independent request budgets remain unchanged");
+  assert(requests.length > 1);
+  assert.deepEqual(requests.flatMap(request => request.fragmentIds), fragments.map(fragment => fragment.fragmentId));
+  for (const request of requests) {
+    assert(request.fragmentIds.length <= 128 && request.inputBudget <= 8192);
+    assert.equal(request.maxTokens, 4096);
+    assert.deepEqual(request.limits, { maxEntries: 8, maxCommitmentTransitions: 0 });
+  }
 }
 
 function conversationContext(label, texts, date) {
@@ -412,8 +420,8 @@ async function run() {
     console.log("PASS zero budgets remain hard parse limits");
     testUnknownEntityFilteringRemainsCountOnly();
     console.log("PASS unknown entity filtering remains count-only for rejected candidates");
-    await testOrdinary129FragmentsKeep128Plus1OuterBatches();
-    console.log("PASS ordinary 129 fragments keep the 128+1 outer request boundary");
+    await testOrdinary129FragmentsRespectTokenAndFragmentBudgets();
+    console.log("PASS ordinary 129 fragments obey token and fragment budgets without losing evidence");
     await testCommitmentOnlyBinaryRetryConsumesOnlyTransitionBudget();
     console.log("PASS transition-only binary retry preserves evidence and consumes transition budget");
     await testPromptScopesPersistOnlyWithinTheirOwnerCampaign();

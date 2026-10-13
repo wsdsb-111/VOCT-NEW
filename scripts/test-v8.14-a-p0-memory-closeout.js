@@ -168,7 +168,8 @@ async function run() {
       });
       assert.equal(result.status, "STORE");
       assert.equal(result.entryIds.length, 2);
-      assert.equal(calls, 3, "one incomplete batch should be retried as two smaller evidence batches");
+      assert.equal(calls, 5, "one incomplete batch splits into two children, each with one bounded invalid-candidate repair");
+      assert.equal(result.rejectedCandidateCount, 2, "unrepaired unsupported entities remain visible in the commit diagnostics");
       assert.equal(fs.readdirSync(coordinator.recoveryDir).length, 0, "successful partial extraction must clear its recovery record");
     });
     await check("Durable batches allow 128 fragments with a fixed 4096-token output ceiling", async () => {
@@ -186,11 +187,13 @@ async function run() {
       const snapshot = coordinator.buildOwnerSnapshot(context, 1);
       const requests = [];
       const result = await coordinator.finishOwner(snapshot, async (prompt, options) => {
-        requests.push({ fragmentCount: JSON.parse(prompt[1].content).fragments.length, maxTokens: options.maxTokens });
+        requests.push({ fragmentIds: JSON.parse(prompt[1].content).fragments.map(fragment => fragment.fragmentId),
+          inputTokens: coordinator.estimateDurableInput(prompt), maxTokens: options.maxTokens });
         return { content: JSON.stringify({ status: "NO_DURABLE_CONTENT", entries: [] }), finish_reason: "stop" };
       });
       assert.equal(result.status, "NO_DURABLE_CONTENT");
-      assert.deepEqual(requests, [{ fragmentCount: 128, maxTokens: 4096 }, { fragmentCount: 1, maxTokens: 4096 }]);
+      assert.deepEqual(requests.flatMap(request => request.fragmentIds), snapshot.fragments.map(fragment => fragment.fragmentId));
+      assert(requests.every(request => request.fragmentIds.length <= 128 && request.inputTokens <= 8192 && request.maxTokens === 4096));
     });
     console.log(`V8.14-A P0 memory closeout: ${passed} PASS`);
   } finally { fs.rmSync(root, { recursive: true, force: true }); }

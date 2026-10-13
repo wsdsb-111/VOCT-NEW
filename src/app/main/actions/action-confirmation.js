@@ -141,7 +141,11 @@ function verifyActionConfirmation({ confirmation, gameData, gameDataRevision, co
 function settleActionResult(result, verification) {
   const status = verification.status;
   const confirmed = status === ACTION_LIFECYCLE_STATUSES.CONFIRMED;
-  const dispatched = status !== "QUEUE_BLOCKED" && status !== "QUEUE_EXPIRED";
+  const dispatched = typeof verification.dispatched === "boolean"
+    ? verification.dispatched
+    : typeof result.lifecycle?.dispatched === "boolean"
+      ? result.lifecycle.dispatched
+      : status !== "QUEUE_BLOCKED" && status !== "QUEUE_EXPIRED";
   const lifecycle = createActionLifecycle({ selected: true, validated: true, dispatched, confirmed, status });
   const diagnostic = createActionDiagnostic({
     ...(result.diagnostic || {}),

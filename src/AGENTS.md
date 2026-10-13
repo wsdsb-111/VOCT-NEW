@@ -1,4 +1,4 @@
-# V9.2 Source Guidelines
+# V9.3.2 Source Guidelines
 
 `src/app/` is the editable runtime source. `scripts/build-runtime.js` maps Main, Preload and Renderer to `resources/app/out` and default assets/package metadata to `resources/app`. Edit source first; generated resources are kept for direct VOTC.exe use and existing contract tests, then verified against the build.
 

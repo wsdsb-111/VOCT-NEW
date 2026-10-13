@@ -1,6 +1,10 @@
 # 对话摘要与人物记忆：Memory Engine 4.0（3.0 协议、2.5 存储兼容）
 
-当前项目 V9.2、App 9.2.0、Workshop 2.0.5、Memory Engine 4.0。ScopedJsonRepository 委托既有 Memory4Store；候选与授权正文分离，保留所有索引轴、范围日期、当前 Forget 与来源校验。协议 3.0、存储 2.5／schema 2、目录、召回顺序和缓存合同兼容。详见[V9.2 数据权威](current/v9/V9_2_JSON_AUTHORITY_AND_RECOVERY.md)；下方历史验收快照保留。
+当前项目 V9.3.2、App 9.3.2、Workshop 2.0.5、Memory Engine 4.0。ScopedJsonRepository 委托既有 Memory4Store；候选与授权正文分离，保留所有索引轴、范围日期、当前 Forget 与来源校验。协议 3.0、存储 2.5／schema 2、目录、召回顺序和 Summary anchor 兼容。详见[V9.2 数据权威](current/v9/V9_2_JSON_AUTHORITY_AND_RECOVERY.md)；下方历史验收快照保留。
+
+## V9.3.2 Durable 抽取与恢复（2026-10-13）
+
+[实施](current/v9/V9_3_2_IMPLEMENTATION_REPORT.md)与[验证](current/v9/V9_3_2_VERIFICATION_REPORT.md)：固定 Policy v9.3.2 明确严格输出合同，Owner 授权的人名/关系目录去重，活动承诺只提供来源中可核验的相关项。普通请求按输入预算与 128 片段上限分块；原文不截断。坏候选隔离并允许一次有限修正，成功分块通过现有 Recovery writer 保存 checkpoint，恢复前重新验证来源、Forget、手改及 scope；同版本同来源的确定性失败不自动反复付费。Provider STOP 与 canonical Durable commit 分开记录。中途入场的双人投影、人物认知及 Year/Life 退役保持，不放宽知情范围。
 
 ## V9.2 改名目录合并（2026-10-11）
 

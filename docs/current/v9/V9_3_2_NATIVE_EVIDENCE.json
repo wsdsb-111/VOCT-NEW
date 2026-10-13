@@ -1,0 +1,97 @@
+{
+  "version": "9.3.2",
+  "generatedAt": "2026-10-13T18:03:19.951Z",
+  "runtimePayloadSha256": "e7cd7a230a9a7971492ce7724f6e7b99e35114654298e8185991993f4262330a",
+  "baselineBackupVerifiedFiles": 1986,
+  "authorizationUSD": 1,
+  "pendingRecoverySeparatelyAuthorized": 2,
+  "budget": {
+    "transports": 380,
+    "effectiveMaxTransports": 512,
+    "spentBoundUSD": 0.6609126,
+    "inFlight": 0,
+    "priceSource": "https://api-docs.deepseek.com/quick_start/pricing/"
+  },
+  "synthetic": {
+    "requests": 3,
+    "nativeUsageSettled": 3,
+    "unknownUsage": 0,
+    "inputTokens": 323,
+    "cacheHitTokens": 0,
+    "cacheMissTokens": 323,
+    "outputTokens": 337,
+    "chargeUpperBoundUSD": 0.0005013,
+    "cacheHitRatePercent": 0
+  },
+  "allRepair": {
+    "requests": 377,
+    "nativeUsageSettled": 377,
+    "unknownUsage": 0,
+    "inputTokens": 1883447,
+    "cacheHitTokens": 942464,
+    "cacheMissTokens": 940983,
+    "outputTokens": 310383,
+    "chargeUpperBoundUSD": 0.66041089,
+    "cacheHitRatePercent": 50.0393
+  },
+  "latestReviewed": {
+    "before": {
+      "inputTokens": 213879,
+      "cacheHitTokens": 2944,
+      "outputTokens": 5735,
+      "durableEntries": 0
+    },
+    "after": {
+      "requests": 28,
+      "nativeUsageSettled": 28,
+      "unknownUsage": 0,
+      "inputTokens": 149720,
+      "cacheHitTokens": 76672,
+      "cacheMissTokens": 73048,
+      "outputTokens": 26202,
+      "chargeUpperBoundUSD": 0.05381694,
+      "cacheHitRatePercent": 51.2103
+    },
+    "proofs": {
+      "targetOwners": 4,
+      "committed": 4,
+      "uncommitted": 0,
+      "unverified": 0,
+      "recoveryRemaining": 0,
+      "durableEntries": 32,
+      "store": 4,
+      "noDurableContent": 0,
+      "notPresent": 0,
+      "capped": 4,
+      "fullCoverage": 0,
+      "localMetadataCorrections": 0,
+      "rejectedCandidates": 9
+    }
+  },
+  "originalRecovery": {
+    "targetOwners": 138,
+    "committed": 138,
+    "uncommitted": 0,
+    "unverified": 0,
+    "recoveryRemaining": 0,
+    "durableEntries": 1093,
+    "store": 138,
+    "noDurableContent": 0,
+    "notPresent": 0,
+    "capped": 130,
+    "fullCoverage": 8,
+    "localMetadataCorrections": 173,
+    "rejectedCandidates": 108
+  },
+  "ledgerSha256": "08a1ae9bd42f1a0b4f2498f13f284c624c92f6dbfe3d9a76ec1dfbf6a55a8d0d",
+  "usageAnalytics": {
+    "unchangedActionAndLetterState": true,
+    "originalAnalyticsRowsPreserved": true,
+    "maintenanceUsageRows": 377,
+    "duplicateEvents": 0,
+    "inputTokens": 1883447,
+    "cacheHitTokens": 942464,
+    "cacheMissTokens": 940983,
+    "outputTokens": 310383
+  }
+}

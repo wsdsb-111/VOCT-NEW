@@ -32,7 +32,7 @@ function createActionLifecycle({ selected = false, validated = false, dispatched
   };
 }
 
-function createActionDiagnostic({ actionId, type = actionId, sourceRuntimeId = null, targetRuntimeId = null, args = {}, stateBefore = null, stateAfter = null, revisionBefore = null, revisionAfter = null, dispatchStatus = "NOT_DISPATCHED", confirmationStatus = "NOT_STARTED", expectedStateChange = null, requestedArgs = null, requestedByUser = requestedArgs?.amount ?? null, selectedArgs = args, effectiveArgs = args, confirmedStateChange = null, commandId = null, commandStatus = null, dispatchEvidence = null, argumentDrift = null, dispatchAttempted, dispatchAccepted } = {}) {
+function createActionDiagnostic({ actionId, type = actionId, sourceRuntimeId = null, targetRuntimeId = null, args = {}, stateBefore = null, stateAfter = null, revisionBefore = null, revisionAfter = null, dispatchStatus = "NOT_DISPATCHED", confirmationStatus = "NOT_STARTED", expectedStateChange = null, requestedArgs = null, requestedByUser = requestedArgs?.amount ?? null, selectedArgs = args, effectiveArgs = args, confirmedStateChange = null, commandId = null, commandStatus = null, dispatchEvidence = null, dispatches = null, argumentDrift = null, dispatchAttempted, dispatchAccepted } = {}) {
   return {
     actionId: actionId ?? null,
     type: type ?? null,
@@ -55,6 +55,7 @@ function createActionDiagnostic({ actionId, type = actionId, sourceRuntimeId = n
     commandStatus,
     dispatchEvidence,
     argumentDrift,
+    ...(Array.isArray(dispatches) && dispatches.length > 1 ? { dispatches: dispatches.map((dispatch) => ({ ...dispatch })) } : {}),
     ...(typeof dispatchAttempted === "boolean" ? { dispatchAttempted } : {}),
     ...(typeof dispatchAccepted === "boolean" ? { dispatchAccepted } : {})
   };
