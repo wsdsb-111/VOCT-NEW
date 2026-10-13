@@ -1,0 +1,1325 @@
+{
+  "schemaVersion": 1,
+  "captureKind": "offline synthetic HTTP capture",
+  "baseline": {
+    "gitSha": "e1c3c37c89d8001f995593bc1c287a9c0d63a31f",
+    "coreVersion": "9.2",
+    "appVersion": "9.2.0",
+    "openaiSdkVersion": "4.104.0"
+  },
+  "privacy": {
+    "messages": "synthetic only",
+    "credentials": "omitted or redacted",
+    "urls": "origin and pathname only; all query strings removed"
+  },
+  "captures": [
+    {
+      "id": "player2.chat.stream.multi-system-history",
+      "providerType": "player2",
+      "route": "CHAT",
+      "stream": true,
+      "messageVariant": "multi-system-history",
+      "control": "none",
+      "actionSchemaDeliveryMode": "official_full_injected",
+      "clientRetryPolicy": {
+        "transport": "openai@4.104.0",
+        "sdkMaxRetries": 2,
+        "outerMaxRetries": 7
+      },
+      "attemptCount": 1,
+      "bytesSent": 605,
+      "beforeSendGuardCalls": 0,
+      "terminalState": "CAPTURED_WITH_SYNTHETIC_RESPONSE",
+      "usageStatus": "SYNTHETIC_RESPONSE_USAGE_PRESENT",
+      "requests": [
+        {
+          "method": "POST",
+          "url": "http://127.0.0.1:4315/v1/chat/completions",
+          "headers": {
+            "accept": "application/json",
+            "authorization": "[REDACTED]",
+            "content-type": "application/json",
+            "player2-game-key": "[REDACTED]",
+            "user-agent": "OpenAI/JS 4.104.0"
+          },
+          "body": "{\n  \"model\": \"fixture-model\",\n  \"messages\": [\n    {\n      \"role\": \"system\",\n      \"content\": \"[synthetic fixture] stable system block\"\n    },\n    {\n      \"role\": \"system\",\n      \"content\": \"[synthetic fixture] second system block\"\n    },\n    {\n      \"role\": \"user\",\n      \"content\": \"[synthetic fixture] earlier user turn\"\n    },\n    {\n      \"role\": \"assistant\",\n      \"content\": \"[synthetic fixture] earlier assistant turn\"\n    },\n    {\n      \"role\": \"user\",\n      \"content\": \"[synthetic fixture] current user turn\"\n    }\n  ],\n  \"stream\": true,\n  \"temperature\": 0.6,\n  \"max_tokens\": 256,\n  \"top_p\": 0.9\n}",
+          "bodyBytes": 605,
+          "bodySha256": "811d501a0bd062b6fa3965182f3944a0edcd4ad1c8c33ccc5e692029ffc6b4cc"
+        }
+      ]
+    },
+    {
+      "id": "player2.chat.no-stream.single-turn",
+      "providerType": "player2",
+      "route": "CHAT",
+      "stream": false,
+      "messageVariant": "single-turn",
+      "control": "none",
+      "actionSchemaDeliveryMode": "official_full_injected",
+      "clientRetryPolicy": {
+        "transport": "openai@4.104.0",
+        "sdkMaxRetries": 2,
+        "outerMaxRetries": 3
+      },
+      "attemptCount": 1,
+      "bytesSent": 309,
+      "beforeSendGuardCalls": 0,
+      "terminalState": "CAPTURED_WITH_SYNTHETIC_RESPONSE",
+      "usageStatus": "SYNTHETIC_RESPONSE_USAGE_PRESENT",
+      "requests": [
+        {
+          "method": "POST",
+          "url": "http://127.0.0.1:4315/v1/chat/completions",
+          "headers": {
+            "accept": "application/json",
+            "authorization": "[REDACTED]",
+            "content-type": "application/json",
+            "player2-game-key": "[REDACTED]",
+            "user-agent": "OpenAI/JS 4.104.0"
+          },
+          "body": "{\n  \"model\": \"fixture-model\",\n  \"messages\": [\n    {\n      \"role\": \"system\",\n      \"content\": \"[synthetic fixture] system block\"\n    },\n    {\n      \"role\": \"user\",\n      \"content\": \"[synthetic fixture] current user turn\"\n    }\n  ],\n  \"stream\": false,\n  \"temperature\": 0.6,\n  \"max_tokens\": 256,\n  \"top_p\": 0.9\n}",
+          "bodyBytes": 309,
+          "bodySha256": "941c3be33b7ff33839c966dbd80d48330b8b27f0c7cbb2cc82dc9b52cbee6818"
+        }
+      ]
+    },
+    {
+      "id": "player2.action.schema.multi-system-history",
+      "providerType": "player2",
+      "route": "ACTION",
+      "stream": false,
+      "messageVariant": "multi-system-history",
+      "control": "none",
+      "actionSchemaDeliveryMode": "official_full_injected",
+      "clientRetryPolicy": {
+        "transport": "openai@4.104.0",
+        "sdkMaxRetries": 2,
+        "outerMaxRetries": 3
+      },
+      "attemptCount": 1,
+      "bytesSent": 1385,
+      "beforeSendGuardCalls": 0,
+      "terminalState": "CAPTURED_WITH_SYNTHETIC_RESPONSE",
+      "usageStatus": "SYNTHETIC_RESPONSE_USAGE_PRESENT",
+      "requests": [
+        {
+          "method": "POST",
+          "url": "http://127.0.0.1:4315/v1/chat/completions",
+          "headers": {
+            "accept": "application/json",
+            "authorization": "[REDACTED]",
+            "content-type": "application/json",
+            "player2-game-key": "[REDACTED]",
+            "user-agent": "OpenAI/JS 4.104.0"
+          },
+          "body": "{\n  \"model\": \"fixture-model\",\n  \"messages\": [\n    {\n      \"role\": \"system\",\n      \"content\": \"[synthetic fixture] stable system block\"\n    },\n    {\n      \"role\": \"system\",\n      \"content\": \"[synthetic fixture] second system block\"\n    },\n    {\n      \"role\": \"user\",\n      \"content\": \"[synthetic fixture] earlier user turn\"\n    },\n    {\n      \"role\": \"assistant\",\n      \"content\": \"[synthetic fixture] earlier assistant turn\"\n    },\n    {\n      \"role\": \"user\",\n      \"content\": \"[synthetic fixture] current user turn\"\n    }\n  ],\n  \"stream\": false,\n  \"temperature\": 0.6,\n  \"max_tokens\": 1024,\n  \"top_p\": 0.9,\n  \"response_format\": {\n    \"type\": \"json_schema\",\n    \"json_schema\": {\n      \"name\": \"votc_actions\",\n      \"schema\": {\n        \"type\": \"object\",\n        \"properties\": {\n          \"actions\": {\n            \"type\": \"array\",\n            \"items\": {\n              \"type\": \"object\",\n              \"properties\": {\n                \"actionId\": {\n                  \"type\": \"string\",\n                  \"enum\": [\n                    \"fixture_noop\"\n                  ]\n                },\n                \"characterId\": {\n                  \"type\": \"string\"\n                }\n              },\n              \"required\": [\n                \"actionId\"\n              ]\n            }\n          }\n        },\n        \"required\": [\n          \"actions\"\n        ]\n      },\n      \"strict\": true\n    }\n  }\n}",
+          "bodyBytes": 1385,
+          "bodySha256": "ab1c563d488bc1d238e70c4e331868fb35c255842d53ed98d123a909a3dc6646"
+        }
+      ]
+    },
+    {
+      "id": "player2.summary.json-object.multi-system-history",
+      "providerType": "player2",
+      "route": "SUMMARY",
+      "stream": false,
+      "messageVariant": "multi-system-history",
+      "control": "none",
+      "actionSchemaDeliveryMode": "official_full_injected",
+      "clientRetryPolicy": {
+        "transport": "openai@4.104.0",
+        "sdkMaxRetries": 2,
+        "outerMaxRetries": 3
+      },
+      "attemptCount": 1,
+      "bytesSent": 661,
+      "beforeSendGuardCalls": 0,
+      "terminalState": "CAPTURED_WITH_SYNTHETIC_RESPONSE",
+      "usageStatus": "SYNTHETIC_RESPONSE_USAGE_PRESENT",
+      "requests": [
+        {
+          "method": "POST",
+          "url": "http://127.0.0.1:4315/v1/chat/completions",
+          "headers": {
+            "accept": "application/json",
+            "authorization": "[REDACTED]",
+            "content-type": "application/json",
+            "player2-game-key": "[REDACTED]",
+            "user-agent": "OpenAI/JS 4.104.0"
+          },
+          "body": "{\n  \"model\": \"fixture-model\",\n  \"messages\": [\n    {\n      \"role\": \"system\",\n      \"content\": \"[synthetic fixture] stable system block\"\n    },\n    {\n      \"role\": \"system\",\n      \"content\": \"[synthetic fixture] second system block\"\n    },\n    {\n      \"role\": \"user\",\n      \"content\": \"[synthetic fixture] earlier user turn\"\n    },\n    {\n      \"role\": \"assistant\",\n      \"content\": \"[synthetic fixture] earlier assistant turn\"\n    },\n    {\n      \"role\": \"user\",\n      \"content\": \"[synthetic fixture] current user turn\"\n    }\n  ],\n  \"stream\": false,\n  \"temperature\": 0.6,\n  \"max_tokens\": 1024,\n  \"top_p\": 0.9,\n  \"response_format\": {\n    \"type\": \"json_object\"\n  }\n}",
+          "bodyBytes": 661,
+          "bodySha256": "fe0e30c5b71bbd83b028e331cc294ceb5e74aa23ecf8c306b440574ece304990"
+        }
+      ]
+    },
+    {
+      "id": "player2.summary-durable.before-send-guard",
+      "providerType": "player2",
+      "route": "SUMMARY_DURABLE",
+      "stream": false,
+      "messageVariant": "multi-system-history",
+      "control": "durable-before-send",
+      "actionSchemaDeliveryMode": "official_full_injected",
+      "clientRetryPolicy": {
+        "transport": "openai@4.104.0",
+        "sdkMaxRetries": 0,
+        "outerMaxRetries": 3
+      },
+      "attemptCount": 1,
+      "bytesSent": 661,
+      "beforeSendGuardCalls": 1,
+      "terminalState": "CAPTURED_WITH_SYNTHETIC_RESPONSE",
+      "usageStatus": "SYNTHETIC_RESPONSE_USAGE_PRESENT",
+      "requests": [
+        {
+          "method": "POST",
+          "url": "http://127.0.0.1:4315/v1/chat/completions",
+          "headers": {
+            "accept": "application/json",
+            "authorization": "[REDACTED]",
+            "content-type": "application/json",
+            "player2-game-key": "[REDACTED]",
+            "user-agent": "OpenAI/JS 4.104.0"
+          },
+          "body": "{\n  \"model\": \"fixture-model\",\n  \"messages\": [\n    {\n      \"role\": \"system\",\n      \"content\": \"[synthetic fixture] stable system block\"\n    },\n    {\n      \"role\": \"system\",\n      \"content\": \"[synthetic fixture] second system block\"\n    },\n    {\n      \"role\": \"user\",\n      \"content\": \"[synthetic fixture] earlier user turn\"\n    },\n    {\n      \"role\": \"assistant\",\n      \"content\": \"[synthetic fixture] earlier assistant turn\"\n    },\n    {\n      \"role\": \"user\",\n      \"content\": \"[synthetic fixture] current user turn\"\n    }\n  ],\n  \"stream\": false,\n  \"temperature\": 0.6,\n  \"max_tokens\": 1024,\n  \"top_p\": 0.9,\n  \"response_format\": {\n    \"type\": \"json_object\"\n  }\n}",
+          "bodyBytes": 661,
+          "bodySha256": "fe0e30c5b71bbd83b028e331cc294ceb5e74aa23ecf8c306b440574ece304990"
+        }
+      ]
+    },
+    {
+      "id": "openrouter.chat.stream.multi-system-history",
+      "providerType": "openrouter",
+      "route": "CHAT",
+      "stream": true,
+      "messageVariant": "multi-system-history",
+      "control": "none",
+      "actionSchemaDeliveryMode": "official_full_injected",
+      "clientRetryPolicy": {
+        "transport": "openai@4.104.0",
+        "sdkMaxRetries": 2,
+        "outerMaxRetries": 7
+      },
+      "attemptCount": 1,
+      "bytesSent": 647,
+      "beforeSendGuardCalls": 0,
+      "terminalState": "CAPTURED_WITH_SYNTHETIC_RESPONSE",
+      "usageStatus": "SYNTHETIC_RESPONSE_USAGE_PRESENT",
+      "requests": [
+        {
+          "method": "POST",
+          "url": "https://openrouter.ai/api/v1/chat/completions",
+          "headers": {
+            "accept": "application/json",
+            "authorization": "[REDACTED]",
+            "content-type": "application/json",
+            "http-referer": "https://github.com/Voices-of-the-Court/VOTC",
+            "user-agent": "OpenAI/JS 4.104.0",
+            "x-title": "Voices of the Court V9.2"
+          },
+          "body": "{\n  \"model\": \"fixture-model\",\n  \"messages\": [\n    {\n      \"role\": \"system\",\n      \"content\": \"[synthetic fixture] stable system block\"\n    },\n    {\n      \"role\": \"system\",\n      \"content\": \"[synthetic fixture] second system block\"\n    },\n    {\n      \"role\": \"user\",\n      \"content\": \"[synthetic fixture] earlier user turn\"\n    },\n    {\n      \"role\": \"assistant\",\n      \"content\": \"[synthetic fixture] earlier assistant turn\"\n    },\n    {\n      \"role\": \"user\",\n      \"content\": \"[synthetic fixture] current user turn\"\n    }\n  ],\n  \"stream\": true,\n  \"temperature\": 0.6,\n  \"max_tokens\": 256,\n  \"top_p\": 0.9,\n  \"reasoning\": {\n    \"exclude\": true\n  }\n}",
+          "bodyBytes": 647,
+          "bodySha256": "c8da77cd0c8b88c07971d357038fa846c57292db53ae582551612d17e4fdfc60"
+        }
+      ]
+    },
+    {
+      "id": "openrouter.chat.no-stream.single-turn",
+      "providerType": "openrouter",
+      "route": "CHAT",
+      "stream": false,
+      "messageVariant": "single-turn",
+      "control": "none",
+      "actionSchemaDeliveryMode": "official_full_injected",
+      "clientRetryPolicy": {
+        "transport": "openai@4.104.0",
+        "sdkMaxRetries": 2,
+        "outerMaxRetries": 3
+      },
+      "attemptCount": 1,
+      "bytesSent": 351,
+      "beforeSendGuardCalls": 0,
+      "terminalState": "CAPTURED_WITH_SYNTHETIC_RESPONSE",
+      "usageStatus": "SYNTHETIC_RESPONSE_USAGE_PRESENT",
+      "requests": [
+        {
+          "method": "POST",
+          "url": "https://openrouter.ai/api/v1/chat/completions",
+          "headers": {
+            "accept": "application/json",
+            "authorization": "[REDACTED]",
+            "content-type": "application/json",
+            "http-referer": "https://github.com/Voices-of-the-Court/VOTC",
+            "user-agent": "OpenAI/JS 4.104.0",
+            "x-title": "Voices of the Court V9.2"
+          },
+          "body": "{\n  \"model\": \"fixture-model\",\n  \"messages\": [\n    {\n      \"role\": \"system\",\n      \"content\": \"[synthetic fixture] system block\"\n    },\n    {\n      \"role\": \"user\",\n      \"content\": \"[synthetic fixture] current user turn\"\n    }\n  ],\n  \"stream\": false,\n  \"temperature\": 0.6,\n  \"max_tokens\": 256,\n  \"top_p\": 0.9,\n  \"reasoning\": {\n    \"exclude\": true\n  }\n}",
+          "bodyBytes": 351,
+          "bodySha256": "c6ab37ffb74c00ea7ceb75034de4cfcb3010ca9c4a9b1c29169373eae40aca09"
+        }
+      ]
+    },
+    {
+      "id": "openrouter.action.schema.multi-system-history",
+      "providerType": "openrouter",
+      "route": "ACTION",
+      "stream": false,
+      "messageVariant": "multi-system-history",
+      "control": "none",
+      "actionSchemaDeliveryMode": "official_full_injected",
+      "clientRetryPolicy": {
+        "transport": "openai@4.104.0",
+        "sdkMaxRetries": 2,
+        "outerMaxRetries": 3
+      },
+      "attemptCount": 1,
+      "bytesSent": 1427,
+      "beforeSendGuardCalls": 0,
+      "terminalState": "CAPTURED_WITH_SYNTHETIC_RESPONSE",
+      "usageStatus": "SYNTHETIC_RESPONSE_USAGE_PRESENT",
+      "requests": [
+        {
+          "method": "POST",
+          "url": "https://openrouter.ai/api/v1/chat/completions",
+          "headers": {
+            "accept": "application/json",
+            "authorization": "[REDACTED]",
+            "content-type": "application/json",
+            "http-referer": "https://github.com/Voices-of-the-Court/VOTC",
+            "user-agent": "OpenAI/JS 4.104.0",
+            "x-title": "Voices of the Court V9.2"
+          },
+          "body": "{\n  \"model\": \"fixture-model\",\n  \"messages\": [\n    {\n      \"role\": \"system\",\n      \"content\": \"[synthetic fixture] stable system block\"\n    },\n    {\n      \"role\": \"system\",\n      \"content\": \"[synthetic fixture] second system block\"\n    },\n    {\n      \"role\": \"user\",\n      \"content\": \"[synthetic fixture] earlier user turn\"\n    },\n    {\n      \"role\": \"assistant\",\n      \"content\": \"[synthetic fixture] earlier assistant turn\"\n    },\n    {\n      \"role\": \"user\",\n      \"content\": \"[synthetic fixture] current user turn\"\n    }\n  ],\n  \"stream\": false,\n  \"temperature\": 0.6,\n  \"max_tokens\": 1024,\n  \"top_p\": 0.9,\n  \"response_format\": {\n    \"type\": \"json_schema\",\n    \"json_schema\": {\n      \"name\": \"votc_actions\",\n      \"schema\": {\n        \"type\": \"object\",\n        \"properties\": {\n          \"actions\": {\n            \"type\": \"array\",\n            \"items\": {\n              \"type\": \"object\",\n              \"properties\": {\n                \"actionId\": {\n                  \"type\": \"string\",\n                  \"enum\": [\n                    \"fixture_noop\"\n                  ]\n                },\n                \"characterId\": {\n                  \"type\": \"string\"\n                }\n              },\n              \"required\": [\n                \"actionId\"\n              ]\n            }\n          }\n        },\n        \"required\": [\n          \"actions\"\n        ]\n      },\n      \"strict\": true\n    }\n  },\n  \"reasoning\": {\n    \"exclude\": true\n  }\n}",
+          "bodyBytes": 1427,
+          "bodySha256": "3504d8e340792037c6d0199f702c23585d473157320ac627912d04b547ef7481"
+        }
+      ]
+    },
+    {
+      "id": "openrouter.summary.json-object.multi-system-history",
+      "providerType": "openrouter",
+      "route": "SUMMARY",
+      "stream": false,
+      "messageVariant": "multi-system-history",
+      "control": "none",
+      "actionSchemaDeliveryMode": "official_full_injected",
+      "clientRetryPolicy": {
+        "transport": "openai@4.104.0",
+        "sdkMaxRetries": 2,
+        "outerMaxRetries": 3
+      },
+      "attemptCount": 1,
+      "bytesSent": 703,
+      "beforeSendGuardCalls": 0,
+      "terminalState": "CAPTURED_WITH_SYNTHETIC_RESPONSE",
+      "usageStatus": "SYNTHETIC_RESPONSE_USAGE_PRESENT",
+      "requests": [
+        {
+          "method": "POST",
+          "url": "https://openrouter.ai/api/v1/chat/completions",
+          "headers": {
+            "accept": "application/json",
+            "authorization": "[REDACTED]",
+            "content-type": "application/json",
+            "http-referer": "https://github.com/Voices-of-the-Court/VOTC",
+            "user-agent": "OpenAI/JS 4.104.0",
+            "x-title": "Voices of the Court V9.2"
+          },
+          "body": "{\n  \"model\": \"fixture-model\",\n  \"messages\": [\n    {\n      \"role\": \"system\",\n      \"content\": \"[synthetic fixture] stable system block\"\n    },\n    {\n      \"role\": \"system\",\n      \"content\": \"[synthetic fixture] second system block\"\n    },\n    {\n      \"role\": \"user\",\n      \"content\": \"[synthetic fixture] earlier user turn\"\n    },\n    {\n      \"role\": \"assistant\",\n      \"content\": \"[synthetic fixture] earlier assistant turn\"\n    },\n    {\n      \"role\": \"user\",\n      \"content\": \"[synthetic fixture] current user turn\"\n    }\n  ],\n  \"stream\": false,\n  \"temperature\": 0.6,\n  \"max_tokens\": 1024,\n  \"top_p\": 0.9,\n  \"response_format\": {\n    \"type\": \"json_object\"\n  },\n  \"reasoning\": {\n    \"exclude\": true\n  }\n}",
+          "bodyBytes": 703,
+          "bodySha256": "66c7be1c25b3dafc629ab003864b3529f6889ad1bf6f7170c5ce8e5142435c22"
+        }
+      ]
+    },
+    {
+      "id": "openrouter.summary-durable.before-send-guard",
+      "providerType": "openrouter",
+      "route": "SUMMARY_DURABLE",
+      "stream": false,
+      "messageVariant": "multi-system-history",
+      "control": "durable-before-send",
+      "actionSchemaDeliveryMode": "official_full_injected",
+      "clientRetryPolicy": {
+        "transport": "openai@4.104.0",
+        "sdkMaxRetries": 0,
+        "outerMaxRetries": 3
+      },
+      "attemptCount": 1,
+      "bytesSent": 703,
+      "beforeSendGuardCalls": 1,
+      "terminalState": "CAPTURED_WITH_SYNTHETIC_RESPONSE",
+      "usageStatus": "SYNTHETIC_RESPONSE_USAGE_PRESENT",
+      "requests": [
+        {
+          "method": "POST",
+          "url": "https://openrouter.ai/api/v1/chat/completions",
+          "headers": {
+            "accept": "application/json",
+            "authorization": "[REDACTED]",
+            "content-type": "application/json",
+            "http-referer": "https://github.com/Voices-of-the-Court/VOTC",
+            "user-agent": "OpenAI/JS 4.104.0",
+            "x-title": "Voices of the Court V9.2"
+          },
+          "body": "{\n  \"model\": \"fixture-model\",\n  \"messages\": [\n    {\n      \"role\": \"system\",\n      \"content\": \"[synthetic fixture] stable system block\"\n    },\n    {\n      \"role\": \"system\",\n      \"content\": \"[synthetic fixture] second system block\"\n    },\n    {\n      \"role\": \"user\",\n      \"content\": \"[synthetic fixture] earlier user turn\"\n    },\n    {\n      \"role\": \"assistant\",\n      \"content\": \"[synthetic fixture] earlier assistant turn\"\n    },\n    {\n      \"role\": \"user\",\n      \"content\": \"[synthetic fixture] current user turn\"\n    }\n  ],\n  \"stream\": false,\n  \"temperature\": 0.6,\n  \"max_tokens\": 1024,\n  \"top_p\": 0.9,\n  \"response_format\": {\n    \"type\": \"json_object\"\n  },\n  \"reasoning\": {\n    \"exclude\": true\n  }\n}",
+          "bodyBytes": 703,
+          "bodySha256": "66c7be1c25b3dafc629ab003864b3529f6889ad1bf6f7170c5ce8e5142435c22"
+        }
+      ]
+    },
+    {
+      "id": "openai-compatible.chat.stream.multi-system-history",
+      "providerType": "openai-compatible",
+      "route": "CHAT",
+      "stream": true,
+      "messageVariant": "multi-system-history",
+      "control": "none",
+      "actionSchemaDeliveryMode": "official_full_injected",
+      "clientRetryPolicy": {
+        "transport": "openai@4.104.0",
+        "sdkMaxRetries": 0,
+        "outerMaxRetries": 7
+      },
+      "attemptCount": 1,
+      "bytesSent": 658,
+      "beforeSendGuardCalls": 0,
+      "terminalState": "CAPTURED_WITH_SYNTHETIC_RESPONSE",
+      "usageStatus": "SYNTHETIC_RESPONSE_USAGE_PRESENT",
+      "requests": [
+        {
+          "method": "POST",
+          "url": "https://compatible.fixture.invalid/v1/chat/completions",
+          "headers": {
+            "accept": "application/json",
+            "authorization": "[REDACTED]",
+            "content-type": "application/json",
+            "user-agent": "VOTC/9.2.0",
+            "x-title": "Voices of the Court V9.2"
+          },
+          "body": "{\n  \"model\": \"fixture-model\",\n  \"messages\": [\n    {\n      \"role\": \"system\",\n      \"content\": \"[synthetic fixture] stable system block\"\n    },\n    {\n      \"role\": \"system\",\n      \"content\": \"[synthetic fixture] second system block\"\n    },\n    {\n      \"role\": \"user\",\n      \"content\": \"[synthetic fixture] earlier user turn\"\n    },\n    {\n      \"role\": \"assistant\",\n      \"content\": \"[synthetic fixture] earlier assistant turn\"\n    },\n    {\n      \"role\": \"user\",\n      \"content\": \"[synthetic fixture] current user turn\"\n    }\n  ],\n  \"stream\": true,\n  \"temperature\": 0.6,\n  \"max_tokens\": 256,\n  \"top_p\": 0.9,\n  \"stream_options\": {\n    \"include_usage\": true\n  }\n}",
+          "bodyBytes": 658,
+          "bodySha256": "ba67312c90d699fb2930a16ee80946b67497133f0c4beadcbec8afd698f0067e"
+        }
+      ]
+    },
+    {
+      "id": "openai-compatible.chat.no-stream.single-turn",
+      "providerType": "openai-compatible",
+      "route": "CHAT",
+      "stream": false,
+      "messageVariant": "single-turn",
+      "control": "none",
+      "actionSchemaDeliveryMode": "official_full_injected",
+      "clientRetryPolicy": {
+        "transport": "openai@4.104.0",
+        "sdkMaxRetries": 0,
+        "outerMaxRetries": 3
+      },
+      "attemptCount": 1,
+      "bytesSent": 309,
+      "beforeSendGuardCalls": 0,
+      "terminalState": "CAPTURED_WITH_SYNTHETIC_RESPONSE",
+      "usageStatus": "SYNTHETIC_RESPONSE_USAGE_PRESENT",
+      "requests": [
+        {
+          "method": "POST",
+          "url": "https://compatible.fixture.invalid/v1/chat/completions",
+          "headers": {
+            "accept": "application/json",
+            "authorization": "[REDACTED]",
+            "content-type": "application/json",
+            "user-agent": "VOTC/9.2.0",
+            "x-title": "Voices of the Court V9.2"
+          },
+          "body": "{\n  \"model\": \"fixture-model\",\n  \"messages\": [\n    {\n      \"role\": \"system\",\n      \"content\": \"[synthetic fixture] system block\"\n    },\n    {\n      \"role\": \"user\",\n      \"content\": \"[synthetic fixture] current user turn\"\n    }\n  ],\n  \"stream\": false,\n  \"temperature\": 0.6,\n  \"max_tokens\": 256,\n  \"top_p\": 0.9\n}",
+          "bodyBytes": 309,
+          "bodySha256": "941c3be33b7ff33839c966dbd80d48330b8b27f0c7cbb2cc82dc9b52cbee6818"
+        }
+      ]
+    },
+    {
+      "id": "openai-compatible.action.schema.multi-system-history",
+      "providerType": "openai-compatible",
+      "route": "ACTION",
+      "stream": false,
+      "messageVariant": "multi-system-history",
+      "control": "none",
+      "actionSchemaDeliveryMode": "official_full_injected",
+      "clientRetryPolicy": {
+        "transport": "openai@4.104.0",
+        "sdkMaxRetries": 0,
+        "outerMaxRetries": 3
+      },
+      "attemptCount": 1,
+      "bytesSent": 1385,
+      "beforeSendGuardCalls": 0,
+      "terminalState": "CAPTURED_WITH_SYNTHETIC_RESPONSE",
+      "usageStatus": "SYNTHETIC_RESPONSE_USAGE_PRESENT",
+      "requests": [
+        {
+          "method": "POST",
+          "url": "https://compatible.fixture.invalid/v1/chat/completions",
+          "headers": {
+            "accept": "application/json",
+            "authorization": "[REDACTED]",
+            "content-type": "application/json",
+            "user-agent": "VOTC/9.2.0",
+            "x-title": "Voices of the Court V9.2"
+          },
+          "body": "{\n  \"model\": \"fixture-model\",\n  \"messages\": [\n    {\n      \"role\": \"system\",\n      \"content\": \"[synthetic fixture] stable system block\"\n    },\n    {\n      \"role\": \"system\",\n      \"content\": \"[synthetic fixture] second system block\"\n    },\n    {\n      \"role\": \"user\",\n      \"content\": \"[synthetic fixture] earlier user turn\"\n    },\n    {\n      \"role\": \"assistant\",\n      \"content\": \"[synthetic fixture] earlier assistant turn\"\n    },\n    {\n      \"role\": \"user\",\n      \"content\": \"[synthetic fixture] current user turn\"\n    }\n  ],\n  \"stream\": false,\n  \"temperature\": 0.6,\n  \"max_tokens\": 1024,\n  \"top_p\": 0.9,\n  \"response_format\": {\n    \"type\": \"json_schema\",\n    \"json_schema\": {\n      \"name\": \"votc_actions\",\n      \"schema\": {\n        \"type\": \"object\",\n        \"properties\": {\n          \"actions\": {\n            \"type\": \"array\",\n            \"items\": {\n              \"type\": \"object\",\n              \"properties\": {\n                \"actionId\": {\n                  \"type\": \"string\",\n                  \"enum\": [\n                    \"fixture_noop\"\n                  ]\n                },\n                \"characterId\": {\n                  \"type\": \"string\"\n                }\n              },\n              \"required\": [\n                \"actionId\"\n              ]\n            }\n          }\n        },\n        \"required\": [\n          \"actions\"\n        ]\n      },\n      \"strict\": true\n    }\n  }\n}",
+          "bodyBytes": 1385,
+          "bodySha256": "ab1c563d488bc1d238e70c4e331868fb35c255842d53ed98d123a909a3dc6646"
+        }
+      ]
+    },
+    {
+      "id": "openai-compatible.summary.json-object.multi-system-history",
+      "providerType": "openai-compatible",
+      "route": "SUMMARY",
+      "stream": false,
+      "messageVariant": "multi-system-history",
+      "control": "none",
+      "actionSchemaDeliveryMode": "official_full_injected",
+      "clientRetryPolicy": {
+        "transport": "openai@4.104.0",
+        "sdkMaxRetries": 0,
+        "outerMaxRetries": 3
+      },
+      "attemptCount": 1,
+      "bytesSent": 661,
+      "beforeSendGuardCalls": 0,
+      "terminalState": "CAPTURED_WITH_SYNTHETIC_RESPONSE",
+      "usageStatus": "SYNTHETIC_RESPONSE_USAGE_PRESENT",
+      "requests": [
+        {
+          "method": "POST",
+          "url": "https://compatible.fixture.invalid/v1/chat/completions",
+          "headers": {
+            "accept": "application/json",
+            "authorization": "[REDACTED]",
+            "content-type": "application/json",
+            "user-agent": "VOTC/9.2.0",
+            "x-title": "Voices of the Court V9.2"
+          },
+          "body": "{\n  \"model\": \"fixture-model\",\n  \"messages\": [\n    {\n      \"role\": \"system\",\n      \"content\": \"[synthetic fixture] stable system block\"\n    },\n    {\n      \"role\": \"system\",\n      \"content\": \"[synthetic fixture] second system block\"\n    },\n    {\n      \"role\": \"user\",\n      \"content\": \"[synthetic fixture] earlier user turn\"\n    },\n    {\n      \"role\": \"assistant\",\n      \"content\": \"[synthetic fixture] earlier assistant turn\"\n    },\n    {\n      \"role\": \"user\",\n      \"content\": \"[synthetic fixture] current user turn\"\n    }\n  ],\n  \"stream\": false,\n  \"temperature\": 0.6,\n  \"max_tokens\": 1024,\n  \"top_p\": 0.9,\n  \"response_format\": {\n    \"type\": \"json_object\"\n  }\n}",
+          "bodyBytes": 661,
+          "bodySha256": "fe0e30c5b71bbd83b028e331cc294ceb5e74aa23ecf8c306b440574ece304990"
+        }
+      ]
+    },
+    {
+      "id": "openai-compatible.summary-durable.before-send-guard",
+      "providerType": "openai-compatible",
+      "route": "SUMMARY_DURABLE",
+      "stream": false,
+      "messageVariant": "multi-system-history",
+      "control": "durable-before-send",
+      "actionSchemaDeliveryMode": "official_full_injected",
+      "clientRetryPolicy": {
+        "transport": "openai@4.104.0",
+        "sdkMaxRetries": 0,
+        "outerMaxRetries": 3
+      },
+      "attemptCount": 1,
+      "bytesSent": 661,
+      "beforeSendGuardCalls": 1,
+      "terminalState": "CAPTURED_WITH_SYNTHETIC_RESPONSE",
+      "usageStatus": "SYNTHETIC_RESPONSE_USAGE_PRESENT",
+      "requests": [
+        {
+          "method": "POST",
+          "url": "https://compatible.fixture.invalid/v1/chat/completions",
+          "headers": {
+            "accept": "application/json",
+            "authorization": "[REDACTED]",
+            "content-type": "application/json",
+            "user-agent": "VOTC/9.2.0",
+            "x-title": "Voices of the Court V9.2"
+          },
+          "body": "{\n  \"model\": \"fixture-model\",\n  \"messages\": [\n    {\n      \"role\": \"system\",\n      \"content\": \"[synthetic fixture] stable system block\"\n    },\n    {\n      \"role\": \"system\",\n      \"content\": \"[synthetic fixture] second system block\"\n    },\n    {\n      \"role\": \"user\",\n      \"content\": \"[synthetic fixture] earlier user turn\"\n    },\n    {\n      \"role\": \"assistant\",\n      \"content\": \"[synthetic fixture] earlier assistant turn\"\n    },\n    {\n      \"role\": \"user\",\n      \"content\": \"[synthetic fixture] current user turn\"\n    }\n  ],\n  \"stream\": false,\n  \"temperature\": 0.6,\n  \"max_tokens\": 1024,\n  \"top_p\": 0.9,\n  \"response_format\": {\n    \"type\": \"json_object\"\n  }\n}",
+          "bodyBytes": 661,
+          "bodySha256": "fe0e30c5b71bbd83b028e331cc294ceb5e74aa23ecf8c306b440574ece304990"
+        }
+      ]
+    },
+    {
+      "id": "ollama.chat.stream.multi-system-history",
+      "providerType": "ollama",
+      "route": "CHAT",
+      "stream": true,
+      "messageVariant": "multi-system-history",
+      "control": "none",
+      "actionSchemaDeliveryMode": "official_full_injected",
+      "clientRetryPolicy": {
+        "transport": "fetch",
+        "sdkMaxRetries": null
+      },
+      "attemptCount": 1,
+      "bytesSent": 460,
+      "beforeSendGuardCalls": 0,
+      "terminalState": "CAPTURED_WITH_SYNTHETIC_RESPONSE",
+      "usageStatus": "SYNTHETIC_RESPONSE_USAGE_PRESENT",
+      "requests": [
+        {
+          "method": "POST",
+          "url": "https://ollama.fixture.invalid/api/chat",
+          "headers": {
+            "content-type": "application/json"
+          },
+          "body": "{\"model\":\"fixture-model\",\"messages\":[{\"role\":\"system\",\"content\":\"[synthetic fixture] stable system block\"},{\"role\":\"system\",\"content\":\"[synthetic fixture] second system block\"},{\"role\":\"user\",\"content\":\"[synthetic fixture] earlier user turn\"},{\"role\":\"assistant\",\"content\":\"[synthetic fixture] earlier assistant turn\"},{\"role\":\"user\",\"content\":\"[synthetic fixture] current user turn\"}],\"stream\":true,\"options\":{\"temperature\":0.6,\"num_predict\":256,\"top_p\":0.9}}",
+          "bodyBytes": 460,
+          "bodySha256": "c4b18c769066a56a04a34b57f0d509504db203d7cca8e70fc13e887e20180593"
+        }
+      ]
+    },
+    {
+      "id": "ollama.chat.no-stream.single-turn",
+      "providerType": "ollama",
+      "route": "CHAT",
+      "stream": false,
+      "messageVariant": "single-turn",
+      "control": "none",
+      "actionSchemaDeliveryMode": "official_full_injected",
+      "clientRetryPolicy": {
+        "transport": "fetch",
+        "sdkMaxRetries": null
+      },
+      "attemptCount": 1,
+      "bytesSent": 242,
+      "beforeSendGuardCalls": 0,
+      "terminalState": "CAPTURED_WITH_SYNTHETIC_RESPONSE",
+      "usageStatus": "SYNTHETIC_RESPONSE_USAGE_PRESENT",
+      "requests": [
+        {
+          "method": "POST",
+          "url": "https://ollama.fixture.invalid/api/chat",
+          "headers": {
+            "content-type": "application/json"
+          },
+          "body": "{\"model\":\"fixture-model\",\"messages\":[{\"role\":\"system\",\"content\":\"[synthetic fixture] system block\"},{\"role\":\"user\",\"content\":\"[synthetic fixture] current user turn\"}],\"stream\":false,\"options\":{\"temperature\":0.6,\"num_predict\":256,\"top_p\":0.9}}",
+          "bodyBytes": 242,
+          "bodySha256": "be98e1e64cd15c2d30c0d2b3b4cb07a013ef9f0c58aecb5da5438d4b0a535d81"
+        }
+      ]
+    },
+    {
+      "id": "ollama.action.schema.multi-system-history",
+      "providerType": "ollama",
+      "route": "ACTION",
+      "stream": false,
+      "messageVariant": "multi-system-history",
+      "control": "none",
+      "actionSchemaDeliveryMode": "official_full_injected",
+      "clientRetryPolicy": {
+        "transport": "fetch",
+        "sdkMaxRetries": null
+      },
+      "attemptCount": 1,
+      "bytesSent": 462,
+      "beforeSendGuardCalls": 0,
+      "terminalState": "CAPTURED_WITH_SYNTHETIC_RESPONSE",
+      "usageStatus": "SYNTHETIC_RESPONSE_USAGE_PRESENT",
+      "requests": [
+        {
+          "method": "POST",
+          "url": "https://ollama.fixture.invalid/api/chat",
+          "headers": {
+            "content-type": "application/json"
+          },
+          "body": "{\"model\":\"fixture-model\",\"messages\":[{\"role\":\"system\",\"content\":\"[synthetic fixture] stable system block\"},{\"role\":\"system\",\"content\":\"[synthetic fixture] second system block\"},{\"role\":\"user\",\"content\":\"[synthetic fixture] earlier user turn\"},{\"role\":\"assistant\",\"content\":\"[synthetic fixture] earlier assistant turn\"},{\"role\":\"user\",\"content\":\"[synthetic fixture] current user turn\"}],\"stream\":false,\"options\":{\"temperature\":0.6,\"num_predict\":1024,\"top_p\":0.9}}",
+          "bodyBytes": 462,
+          "bodySha256": "e08de7d684c192755980d8c7d3899036b6bcb91f384d3a2badbe632bcbba26db"
+        }
+      ]
+    },
+    {
+      "id": "ollama.summary.json-object.multi-system-history",
+      "providerType": "ollama",
+      "route": "SUMMARY",
+      "stream": false,
+      "messageVariant": "multi-system-history",
+      "control": "none",
+      "actionSchemaDeliveryMode": "official_full_injected",
+      "clientRetryPolicy": {
+        "transport": "fetch",
+        "sdkMaxRetries": null
+      },
+      "attemptCount": 1,
+      "bytesSent": 462,
+      "beforeSendGuardCalls": 0,
+      "terminalState": "CAPTURED_WITH_SYNTHETIC_RESPONSE",
+      "usageStatus": "SYNTHETIC_RESPONSE_USAGE_PRESENT",
+      "requests": [
+        {
+          "method": "POST",
+          "url": "https://ollama.fixture.invalid/api/chat",
+          "headers": {
+            "content-type": "application/json"
+          },
+          "body": "{\"model\":\"fixture-model\",\"messages\":[{\"role\":\"system\",\"content\":\"[synthetic fixture] stable system block\"},{\"role\":\"system\",\"content\":\"[synthetic fixture] second system block\"},{\"role\":\"user\",\"content\":\"[synthetic fixture] earlier user turn\"},{\"role\":\"assistant\",\"content\":\"[synthetic fixture] earlier assistant turn\"},{\"role\":\"user\",\"content\":\"[synthetic fixture] current user turn\"}],\"stream\":false,\"options\":{\"temperature\":0.6,\"num_predict\":1024,\"top_p\":0.9}}",
+          "bodyBytes": 462,
+          "bodySha256": "e08de7d684c192755980d8c7d3899036b6bcb91f384d3a2badbe632bcbba26db"
+        }
+      ]
+    },
+    {
+      "id": "ollama.summary-durable.before-send-guard",
+      "providerType": "ollama",
+      "route": "SUMMARY_DURABLE",
+      "stream": false,
+      "messageVariant": "multi-system-history",
+      "control": "durable-before-send",
+      "actionSchemaDeliveryMode": "official_full_injected",
+      "clientRetryPolicy": {
+        "transport": "fetch",
+        "sdkMaxRetries": null
+      },
+      "attemptCount": 1,
+      "bytesSent": 462,
+      "beforeSendGuardCalls": 1,
+      "terminalState": "CAPTURED_WITH_SYNTHETIC_RESPONSE",
+      "usageStatus": "SYNTHETIC_RESPONSE_USAGE_PRESENT",
+      "requests": [
+        {
+          "method": "POST",
+          "url": "https://ollama.fixture.invalid/api/chat",
+          "headers": {
+            "content-type": "application/json"
+          },
+          "body": "{\"model\":\"fixture-model\",\"messages\":[{\"role\":\"system\",\"content\":\"[synthetic fixture] stable system block\"},{\"role\":\"system\",\"content\":\"[synthetic fixture] second system block\"},{\"role\":\"user\",\"content\":\"[synthetic fixture] earlier user turn\"},{\"role\":\"assistant\",\"content\":\"[synthetic fixture] earlier assistant turn\"},{\"role\":\"user\",\"content\":\"[synthetic fixture] current user turn\"}],\"stream\":false,\"options\":{\"temperature\":0.6,\"num_predict\":1024,\"top_p\":0.9}}",
+          "bodyBytes": 462,
+          "bodySha256": "e08de7d684c192755980d8c7d3899036b6bcb91f384d3a2badbe632bcbba26db"
+        }
+      ]
+    },
+    {
+      "id": "deepseek.chat.stream.multi-system-history",
+      "providerType": "deepseek",
+      "route": "CHAT",
+      "stream": true,
+      "messageVariant": "multi-system-history",
+      "control": "none",
+      "actionSchemaDeliveryMode": "optimized_local_validation",
+      "clientRetryPolicy": {
+        "transport": "openai@4.104.0",
+        "sdkMaxRetries": 0,
+        "outerMaxRetries": 7
+      },
+      "attemptCount": 1,
+      "bytesSent": 702,
+      "beforeSendGuardCalls": 0,
+      "terminalState": "CAPTURED_WITH_SYNTHETIC_RESPONSE",
+      "usageStatus": "SYNTHETIC_RESPONSE_USAGE_PRESENT",
+      "requests": [
+        {
+          "method": "POST",
+          "url": "https://api.deepseek.com/chat/completions",
+          "headers": {
+            "accept": "application/json",
+            "authorization": "[REDACTED]",
+            "content-type": "application/json",
+            "user-agent": "OpenAI/JS 4.104.0"
+          },
+          "body": "{\n  \"model\": \"fixture-model\",\n  \"messages\": [\n    {\n      \"role\": \"system\",\n      \"content\": \"[synthetic fixture] stable system block\"\n    },\n    {\n      \"role\": \"system\",\n      \"content\": \"[synthetic fixture] second system block\"\n    },\n    {\n      \"role\": \"user\",\n      \"content\": \"[synthetic fixture] earlier user turn\"\n    },\n    {\n      \"role\": \"assistant\",\n      \"content\": \"[synthetic fixture] earlier assistant turn\"\n    },\n    {\n      \"role\": \"user\",\n      \"content\": \"[synthetic fixture] current user turn\"\n    }\n  ],\n  \"stream\": true,\n  \"temperature\": 0.6,\n  \"max_tokens\": 4096,\n  \"top_p\": 0.9,\n  \"thinking\": {\n    \"type\": \"enabled\"\n  },\n  \"stream_options\": {\n    \"include_usage\": true\n  }\n}",
+          "bodyBytes": 702,
+          "bodySha256": "620ad3beff2c0985332f8b9af1bf10fa634185d6adcf5185e90659725b5f6a40"
+        }
+      ]
+    },
+    {
+      "id": "deepseek.chat.no-stream.single-turn",
+      "providerType": "deepseek",
+      "route": "CHAT",
+      "stream": false,
+      "messageVariant": "single-turn",
+      "control": "none",
+      "actionSchemaDeliveryMode": "optimized_local_validation",
+      "clientRetryPolicy": {
+        "transport": "openai@4.104.0",
+        "sdkMaxRetries": 0,
+        "outerMaxRetries": 3
+      },
+      "attemptCount": 1,
+      "bytesSent": 353,
+      "beforeSendGuardCalls": 0,
+      "terminalState": "CAPTURED_WITH_SYNTHETIC_RESPONSE",
+      "usageStatus": "SYNTHETIC_RESPONSE_USAGE_PRESENT",
+      "requests": [
+        {
+          "method": "POST",
+          "url": "https://api.deepseek.com/chat/completions",
+          "headers": {
+            "accept": "application/json",
+            "authorization": "[REDACTED]",
+            "content-type": "application/json",
+            "user-agent": "OpenAI/JS 4.104.0"
+          },
+          "body": "{\n  \"model\": \"fixture-model\",\n  \"messages\": [\n    {\n      \"role\": \"system\",\n      \"content\": \"[synthetic fixture] system block\"\n    },\n    {\n      \"role\": \"user\",\n      \"content\": \"[synthetic fixture] current user turn\"\n    }\n  ],\n  \"stream\": false,\n  \"temperature\": 0.6,\n  \"max_tokens\": 4096,\n  \"top_p\": 0.9,\n  \"thinking\": {\n    \"type\": \"enabled\"\n  }\n}",
+          "bodyBytes": 353,
+          "bodySha256": "abcdb6591dc8430965cce7e12b476603b5cff4c1881217aead98bc15121a1c64"
+        }
+      ]
+    },
+    {
+      "id": "deepseek.action.schema.multi-system-history",
+      "providerType": "deepseek",
+      "route": "ACTION",
+      "stream": false,
+      "messageVariant": "multi-system-history",
+      "control": "none",
+      "actionSchemaDeliveryMode": "optimized_local_validation",
+      "clientRetryPolicy": {
+        "transport": "openai@4.104.0",
+        "sdkMaxRetries": 0,
+        "outerMaxRetries": 3
+      },
+      "attemptCount": 1,
+      "bytesSent": 705,
+      "beforeSendGuardCalls": 0,
+      "terminalState": "CAPTURED_WITH_SYNTHETIC_RESPONSE",
+      "usageStatus": "SYNTHETIC_RESPONSE_USAGE_PRESENT",
+      "requests": [
+        {
+          "method": "POST",
+          "url": "https://api.deepseek.com/chat/completions",
+          "headers": {
+            "accept": "application/json",
+            "authorization": "[REDACTED]",
+            "content-type": "application/json",
+            "user-agent": "OpenAI/JS 4.104.0"
+          },
+          "body": "{\n  \"model\": \"fixture-model\",\n  \"messages\": [\n    {\n      \"role\": \"system\",\n      \"content\": \"[synthetic fixture] stable system block\"\n    },\n    {\n      \"role\": \"system\",\n      \"content\": \"[synthetic fixture] second system block\"\n    },\n    {\n      \"role\": \"user\",\n      \"content\": \"[synthetic fixture] earlier user turn\"\n    },\n    {\n      \"role\": \"assistant\",\n      \"content\": \"[synthetic fixture] earlier assistant turn\"\n    },\n    {\n      \"role\": \"user\",\n      \"content\": \"[synthetic fixture] current user turn\"\n    }\n  ],\n  \"stream\": false,\n  \"temperature\": 0.6,\n  \"max_tokens\": 1024,\n  \"top_p\": 0.9,\n  \"thinking\": {\n    \"type\": \"disabled\"\n  },\n  \"response_format\": {\n    \"type\": \"json_object\"\n  }\n}",
+          "bodyBytes": 705,
+          "bodySha256": "0b19427313083b943de3721136b12be34332c242624f60ab8ec4b1c292622f5d"
+        }
+      ]
+    },
+    {
+      "id": "deepseek.summary.json-object.multi-system-history",
+      "providerType": "deepseek",
+      "route": "SUMMARY",
+      "stream": false,
+      "messageVariant": "multi-system-history",
+      "control": "none",
+      "actionSchemaDeliveryMode": "optimized_local_validation",
+      "clientRetryPolicy": {
+        "transport": "openai@4.104.0",
+        "sdkMaxRetries": 0,
+        "outerMaxRetries": 3
+      },
+      "attemptCount": 1,
+      "bytesSent": 705,
+      "beforeSendGuardCalls": 0,
+      "terminalState": "CAPTURED_WITH_SYNTHETIC_RESPONSE",
+      "usageStatus": "SYNTHETIC_RESPONSE_USAGE_PRESENT",
+      "requests": [
+        {
+          "method": "POST",
+          "url": "https://api.deepseek.com/chat/completions",
+          "headers": {
+            "accept": "application/json",
+            "authorization": "[REDACTED]",
+            "content-type": "application/json",
+            "user-agent": "OpenAI/JS 4.104.0"
+          },
+          "body": "{\n  \"model\": \"fixture-model\",\n  \"messages\": [\n    {\n      \"role\": \"system\",\n      \"content\": \"[synthetic fixture] stable system block\"\n    },\n    {\n      \"role\": \"system\",\n      \"content\": \"[synthetic fixture] second system block\"\n    },\n    {\n      \"role\": \"user\",\n      \"content\": \"[synthetic fixture] earlier user turn\"\n    },\n    {\n      \"role\": \"assistant\",\n      \"content\": \"[synthetic fixture] earlier assistant turn\"\n    },\n    {\n      \"role\": \"user\",\n      \"content\": \"[synthetic fixture] current user turn\"\n    }\n  ],\n  \"stream\": false,\n  \"temperature\": 0.6,\n  \"max_tokens\": 1024,\n  \"top_p\": 0.9,\n  \"thinking\": {\n    \"type\": \"disabled\"\n  },\n  \"response_format\": {\n    \"type\": \"json_object\"\n  }\n}",
+          "bodyBytes": 705,
+          "bodySha256": "0b19427313083b943de3721136b12be34332c242624f60ab8ec4b1c292622f5d"
+        }
+      ]
+    },
+    {
+      "id": "deepseek.summary-durable.before-send-guard",
+      "providerType": "deepseek",
+      "route": "SUMMARY_DURABLE",
+      "stream": false,
+      "messageVariant": "multi-system-history",
+      "control": "durable-before-send",
+      "actionSchemaDeliveryMode": "optimized_local_validation",
+      "clientRetryPolicy": {
+        "transport": "openai@4.104.0",
+        "sdkMaxRetries": 0,
+        "outerMaxRetries": 3
+      },
+      "attemptCount": 1,
+      "bytesSent": 705,
+      "beforeSendGuardCalls": 1,
+      "terminalState": "CAPTURED_WITH_SYNTHETIC_RESPONSE",
+      "usageStatus": "SYNTHETIC_RESPONSE_USAGE_PRESENT",
+      "requests": [
+        {
+          "method": "POST",
+          "url": "https://api.deepseek.com/chat/completions",
+          "headers": {
+            "accept": "application/json",
+            "authorization": "[REDACTED]",
+            "content-type": "application/json",
+            "user-agent": "OpenAI/JS 4.104.0"
+          },
+          "body": "{\n  \"model\": \"fixture-model\",\n  \"messages\": [\n    {\n      \"role\": \"system\",\n      \"content\": \"[synthetic fixture] stable system block\"\n    },\n    {\n      \"role\": \"system\",\n      \"content\": \"[synthetic fixture] second system block\"\n    },\n    {\n      \"role\": \"user\",\n      \"content\": \"[synthetic fixture] earlier user turn\"\n    },\n    {\n      \"role\": \"assistant\",\n      \"content\": \"[synthetic fixture] earlier assistant turn\"\n    },\n    {\n      \"role\": \"user\",\n      \"content\": \"[synthetic fixture] current user turn\"\n    }\n  ],\n  \"stream\": false,\n  \"temperature\": 0.6,\n  \"max_tokens\": 1024,\n  \"top_p\": 0.9,\n  \"thinking\": {\n    \"type\": \"disabled\"\n  },\n  \"response_format\": {\n    \"type\": \"json_object\"\n  }\n}",
+          "bodyBytes": 705,
+          "bodySha256": "0b19427313083b943de3721136b12be34332c242624f60ab8ec4b1c292622f5d"
+        }
+      ]
+    },
+    {
+      "id": "gemini.chat.stream.multi-system-history",
+      "providerType": "gemini",
+      "route": "CHAT",
+      "stream": true,
+      "messageVariant": "multi-system-history",
+      "control": "none",
+      "actionSchemaDeliveryMode": "official_full_injected",
+      "clientRetryPolicy": {
+        "transport": "fetch",
+        "sdkMaxRetries": null
+      },
+      "attemptCount": 1,
+      "bytesSent": 469,
+      "beforeSendGuardCalls": 0,
+      "terminalState": "CAPTURED_WITH_SYNTHETIC_RESPONSE",
+      "usageStatus": "SYNTHETIC_RESPONSE_USAGE_PRESENT",
+      "requests": [
+        {
+          "method": "POST",
+          "url": "https://generativelanguage.googleapis.com/v1beta/models/fixture-model:streamGenerateContent",
+          "headers": {
+            "content-type": "application/json"
+          },
+          "body": "{\"contents\":[{\"role\":\"user\",\"parts\":[{\"text\":\"[synthetic fixture] earlier user turn\"}]},{\"role\":\"model\",\"parts\":[{\"text\":\"[synthetic fixture] earlier assistant turn\"}]},{\"role\":\"user\",\"parts\":[{\"text\":\"[synthetic fixture] current user turn\"}]}],\"generationConfig\":{\"temperature\":0.6,\"maxOutputTokens\":256,\"topP\":0.9},\"systemInstruction\":{\"role\":\"user\",\"parts\":[{\"text\":\"[synthetic fixture] stable system block\"},{\"text\":\"\\n\\n[synthetic fixture] second system block\"}]}}",
+          "bodyBytes": 469,
+          "bodySha256": "00f257c43df79d3e74069e5095aebdf5bef8eb9859380fd58b2ea74d37b0145c"
+        }
+      ]
+    },
+    {
+      "id": "gemini.chat.no-stream.single-turn",
+      "providerType": "gemini",
+      "route": "CHAT",
+      "stream": false,
+      "messageVariant": "single-turn",
+      "control": "none",
+      "actionSchemaDeliveryMode": "official_full_injected",
+      "clientRetryPolicy": {
+        "transport": "fetch",
+        "sdkMaxRetries": null
+      },
+      "attemptCount": 1,
+      "bytesSent": 251,
+      "beforeSendGuardCalls": 0,
+      "terminalState": "CAPTURED_WITH_SYNTHETIC_RESPONSE",
+      "usageStatus": "SYNTHETIC_RESPONSE_USAGE_PRESENT",
+      "requests": [
+        {
+          "method": "POST",
+          "url": "https://generativelanguage.googleapis.com/v1beta/models/fixture-model:generateContent",
+          "headers": {
+            "content-type": "application/json"
+          },
+          "body": "{\"contents\":[{\"role\":\"user\",\"parts\":[{\"text\":\"[synthetic fixture] current user turn\"}]}],\"generationConfig\":{\"temperature\":0.6,\"maxOutputTokens\":256,\"topP\":0.9},\"systemInstruction\":{\"role\":\"user\",\"parts\":[{\"text\":\"[synthetic fixture] system block\"}]}}",
+          "bodyBytes": 251,
+          "bodySha256": "15eeafda78ea5cf7b2cf8d5b580ab79a689b2b5c3cab9cc3f5311bcc5d2995fc"
+        }
+      ]
+    },
+    {
+      "id": "gemini.action.schema.multi-system-history",
+      "providerType": "gemini",
+      "route": "ACTION",
+      "stream": false,
+      "messageVariant": "multi-system-history",
+      "control": "none",
+      "actionSchemaDeliveryMode": "official_full_injected",
+      "clientRetryPolicy": {
+        "transport": "fetch",
+        "sdkMaxRetries": null
+      },
+      "attemptCount": 1,
+      "bytesSent": 762,
+      "beforeSendGuardCalls": 0,
+      "terminalState": "CAPTURED_WITH_SYNTHETIC_RESPONSE",
+      "usageStatus": "SYNTHETIC_RESPONSE_USAGE_PRESENT",
+      "requests": [
+        {
+          "method": "POST",
+          "url": "https://generativelanguage.googleapis.com/v1beta/models/fixture-model:generateContent",
+          "headers": {
+            "content-type": "application/json"
+          },
+          "body": "{\"contents\":[{\"role\":\"user\",\"parts\":[{\"text\":\"[synthetic fixture] earlier user turn\"}]},{\"role\":\"model\",\"parts\":[{\"text\":\"[synthetic fixture] earlier assistant turn\"}]},{\"role\":\"user\",\"parts\":[{\"text\":\"[synthetic fixture] current user turn\"}]}],\"generationConfig\":{\"temperature\":0.6,\"maxOutputTokens\":1024,\"topP\":0.9,\"responseMimeType\":\"application/json\",\"responseJsonSchema\":{\"type\":\"object\",\"properties\":{\"actions\":{\"type\":\"array\",\"items\":{\"type\":\"object\",\"properties\":{\"actionId\":{\"type\":\"string\",\"enum\":[\"fixture_noop\"]},\"characterId\":{\"type\":\"string\"}},\"required\":[\"actionId\"]}}},\"required\":[\"actions\"]}},\"systemInstruction\":{\"role\":\"user\",\"parts\":[{\"text\":\"[synthetic fixture] stable system block\"},{\"text\":\"\\n\\n[synthetic fixture] second system block\"}]}}",
+          "bodyBytes": 762,
+          "bodySha256": "258fcacd0b16fbe13b0a0e5d12daa65d9631a397c7f9b19ac43b77af2b61121b"
+        }
+      ]
+    },
+    {
+      "id": "gemini.summary.json-object.multi-system-history",
+      "providerType": "gemini",
+      "route": "SUMMARY",
+      "stream": false,
+      "messageVariant": "multi-system-history",
+      "control": "none",
+      "actionSchemaDeliveryMode": "official_full_injected",
+      "clientRetryPolicy": {
+        "transport": "fetch",
+        "sdkMaxRetries": null
+      },
+      "attemptCount": 1,
+      "bytesSent": 508,
+      "beforeSendGuardCalls": 0,
+      "terminalState": "CAPTURED_WITH_SYNTHETIC_RESPONSE",
+      "usageStatus": "SYNTHETIC_RESPONSE_USAGE_PRESENT",
+      "requests": [
+        {
+          "method": "POST",
+          "url": "https://generativelanguage.googleapis.com/v1beta/models/fixture-model:generateContent",
+          "headers": {
+            "content-type": "application/json"
+          },
+          "body": "{\"contents\":[{\"role\":\"user\",\"parts\":[{\"text\":\"[synthetic fixture] earlier user turn\"}]},{\"role\":\"model\",\"parts\":[{\"text\":\"[synthetic fixture] earlier assistant turn\"}]},{\"role\":\"user\",\"parts\":[{\"text\":\"[synthetic fixture] current user turn\"}]}],\"generationConfig\":{\"temperature\":0.6,\"maxOutputTokens\":1024,\"topP\":0.9,\"responseMimeType\":\"application/json\"},\"systemInstruction\":{\"role\":\"user\",\"parts\":[{\"text\":\"[synthetic fixture] stable system block\"},{\"text\":\"\\n\\n[synthetic fixture] second system block\"}]}}",
+          "bodyBytes": 508,
+          "bodySha256": "1f2a45061d77b2308a45a36277b7bff3005bca60537f5d5db61211f92a16a467"
+        }
+      ]
+    },
+    {
+      "id": "gemini.summary-durable.before-send-guard",
+      "providerType": "gemini",
+      "route": "SUMMARY_DURABLE",
+      "stream": false,
+      "messageVariant": "multi-system-history",
+      "control": "durable-before-send",
+      "actionSchemaDeliveryMode": "official_full_injected",
+      "clientRetryPolicy": {
+        "transport": "fetch",
+        "sdkMaxRetries": null
+      },
+      "attemptCount": 1,
+      "bytesSent": 508,
+      "beforeSendGuardCalls": 1,
+      "terminalState": "CAPTURED_WITH_SYNTHETIC_RESPONSE",
+      "usageStatus": "SYNTHETIC_RESPONSE_USAGE_PRESENT",
+      "requests": [
+        {
+          "method": "POST",
+          "url": "https://generativelanguage.googleapis.com/v1beta/models/fixture-model:generateContent",
+          "headers": {
+            "content-type": "application/json"
+          },
+          "body": "{\"contents\":[{\"role\":\"user\",\"parts\":[{\"text\":\"[synthetic fixture] earlier user turn\"}]},{\"role\":\"model\",\"parts\":[{\"text\":\"[synthetic fixture] earlier assistant turn\"}]},{\"role\":\"user\",\"parts\":[{\"text\":\"[synthetic fixture] current user turn\"}]}],\"generationConfig\":{\"temperature\":0.6,\"maxOutputTokens\":1024,\"topP\":0.9,\"responseMimeType\":\"application/json\"},\"systemInstruction\":{\"role\":\"user\",\"parts\":[{\"text\":\"[synthetic fixture] stable system block\"},{\"text\":\"\\n\\n[synthetic fixture] second system block\"}]}}",
+          "bodyBytes": 508,
+          "bodySha256": "1f2a45061d77b2308a45a36277b7bff3005bca60537f5d5db61211f92a16a467"
+        }
+      ]
+    },
+    {
+      "id": "zhipu.chat.stream.multi-system-history",
+      "providerType": "zhipu",
+      "route": "CHAT",
+      "stream": true,
+      "messageVariant": "multi-system-history",
+      "control": "none",
+      "actionSchemaDeliveryMode": "official_full_injected",
+      "clientRetryPolicy": {
+        "transport": "openai@4.104.0",
+        "sdkMaxRetries": 0,
+        "outerMaxRetries": 7
+      },
+      "attemptCount": 1,
+      "bytesSent": 758,
+      "beforeSendGuardCalls": 0,
+      "terminalState": "CAPTURED_WITH_SYNTHETIC_RESPONSE",
+      "usageStatus": "SYNTHETIC_RESPONSE_USAGE_PRESENT",
+      "requests": [
+        {
+          "method": "POST",
+          "url": "https://open.bigmodel.cn/api/paas/v4/chat/completions",
+          "headers": {
+            "accept": "application/json",
+            "authorization": "[REDACTED]",
+            "content-type": "application/json",
+            "user-agent": "VOTC/9.2.0"
+          },
+          "body": "{\n  \"model\": \"fixture-model\",\n  \"messages\": [\n    {\n      \"role\": \"system\",\n      \"content\": \"[synthetic fixture] stable system block\"\n    },\n    {\n      \"role\": \"system\",\n      \"content\": \"[synthetic fixture] second system block\"\n    },\n    {\n      \"role\": \"user\",\n      \"content\": \"[synthetic fixture] earlier user turn\"\n    },\n    {\n      \"role\": \"assistant\",\n      \"content\": \"[synthetic fixture] earlier assistant turn\"\n    },\n    {\n      \"role\": \"user\",\n      \"content\": \"[synthetic fixture] current user turn\"\n    }\n  ],\n  \"stream\": true,\n  \"temperature\": 0.6,\n  \"max_tokens\": 256,\n  \"top_p\": 0.9,\n  \"reasoning_effort\": \"low\",\n  \"thinking\": {\n    \"type\": \"enabled\",\n    \"clear_thinking\": true\n  },\n  \"stream_options\": {\n    \"include_usage\": true\n  }\n}",
+          "bodyBytes": 758,
+          "bodySha256": "efcdb622e443c2421c9cdd366c34e882bcced646df4cb00e97ac3ce3af173ab3"
+        }
+      ]
+    },
+    {
+      "id": "zhipu.chat.no-stream.single-turn",
+      "providerType": "zhipu",
+      "route": "CHAT",
+      "stream": false,
+      "messageVariant": "single-turn",
+      "control": "none",
+      "actionSchemaDeliveryMode": "official_full_injected",
+      "clientRetryPolicy": {
+        "transport": "openai@4.104.0",
+        "sdkMaxRetries": 0,
+        "outerMaxRetries": 3
+      },
+      "attemptCount": 1,
+      "bytesSent": 409,
+      "beforeSendGuardCalls": 0,
+      "terminalState": "CAPTURED_WITH_SYNTHETIC_RESPONSE",
+      "usageStatus": "SYNTHETIC_RESPONSE_USAGE_PRESENT",
+      "requests": [
+        {
+          "method": "POST",
+          "url": "https://open.bigmodel.cn/api/paas/v4/chat/completions",
+          "headers": {
+            "accept": "application/json",
+            "authorization": "[REDACTED]",
+            "content-type": "application/json",
+            "user-agent": "VOTC/9.2.0"
+          },
+          "body": "{\n  \"model\": \"fixture-model\",\n  \"messages\": [\n    {\n      \"role\": \"system\",\n      \"content\": \"[synthetic fixture] system block\"\n    },\n    {\n      \"role\": \"user\",\n      \"content\": \"[synthetic fixture] current user turn\"\n    }\n  ],\n  \"stream\": false,\n  \"temperature\": 0.6,\n  \"max_tokens\": 256,\n  \"top_p\": 0.9,\n  \"reasoning_effort\": \"low\",\n  \"thinking\": {\n    \"type\": \"enabled\",\n    \"clear_thinking\": true\n  }\n}",
+          "bodyBytes": 409,
+          "bodySha256": "68e0b7f03ae36c7e66caa69adfce5d69d8036cfba45c2ba659a8f06c4390e7d7"
+        }
+      ]
+    },
+    {
+      "id": "zhipu.action.schema.multi-system-history",
+      "providerType": "zhipu",
+      "route": "ACTION",
+      "stream": false,
+      "messageVariant": "multi-system-history",
+      "control": "none",
+      "actionSchemaDeliveryMode": "official_full_injected",
+      "clientRetryPolicy": {
+        "transport": "openai@4.104.0",
+        "sdkMaxRetries": 0,
+        "outerMaxRetries": 3
+      },
+      "attemptCount": 1,
+      "bytesSent": 1485,
+      "beforeSendGuardCalls": 0,
+      "terminalState": "CAPTURED_WITH_SYNTHETIC_RESPONSE",
+      "usageStatus": "SYNTHETIC_RESPONSE_USAGE_PRESENT",
+      "requests": [
+        {
+          "method": "POST",
+          "url": "https://open.bigmodel.cn/api/paas/v4/chat/completions",
+          "headers": {
+            "accept": "application/json",
+            "authorization": "[REDACTED]",
+            "content-type": "application/json",
+            "user-agent": "VOTC/9.2.0"
+          },
+          "body": "{\n  \"model\": \"fixture-model\",\n  \"messages\": [\n    {\n      \"role\": \"system\",\n      \"content\": \"[synthetic fixture] stable system block\"\n    },\n    {\n      \"role\": \"system\",\n      \"content\": \"[synthetic fixture] second system block\"\n    },\n    {\n      \"role\": \"user\",\n      \"content\": \"[synthetic fixture] earlier user turn\"\n    },\n    {\n      \"role\": \"assistant\",\n      \"content\": \"[synthetic fixture] earlier assistant turn\"\n    },\n    {\n      \"role\": \"user\",\n      \"content\": \"[synthetic fixture] current user turn\"\n    }\n  ],\n  \"stream\": false,\n  \"temperature\": 0.6,\n  \"max_tokens\": 1024,\n  \"top_p\": 0.9,\n  \"reasoning_effort\": \"low\",\n  \"thinking\": {\n    \"type\": \"enabled\",\n    \"clear_thinking\": true\n  },\n  \"response_format\": {\n    \"type\": \"json_schema\",\n    \"json_schema\": {\n      \"name\": \"votc_actions\",\n      \"schema\": {\n        \"type\": \"object\",\n        \"properties\": {\n          \"actions\": {\n            \"type\": \"array\",\n            \"items\": {\n              \"type\": \"object\",\n              \"properties\": {\n                \"actionId\": {\n                  \"type\": \"string\",\n                  \"enum\": [\n                    \"fixture_noop\"\n                  ]\n                },\n                \"characterId\": {\n                  \"type\": \"string\"\n                }\n              },\n              \"required\": [\n                \"actionId\"\n              ]\n            }\n          }\n        },\n        \"required\": [\n          \"actions\"\n        ]\n      },\n      \"strict\": true\n    }\n  }\n}",
+          "bodyBytes": 1485,
+          "bodySha256": "1b17a43998be3ab2b6b7c2d1194d81218674eed3ea1cff6f9909e013673eba34"
+        }
+      ]
+    },
+    {
+      "id": "zhipu.summary.json-object.multi-system-history",
+      "providerType": "zhipu",
+      "route": "SUMMARY",
+      "stream": false,
+      "messageVariant": "multi-system-history",
+      "control": "none",
+      "actionSchemaDeliveryMode": "official_full_injected",
+      "clientRetryPolicy": {
+        "transport": "openai@4.104.0",
+        "sdkMaxRetries": 0,
+        "outerMaxRetries": 3
+      },
+      "attemptCount": 1,
+      "bytesSent": 761,
+      "beforeSendGuardCalls": 0,
+      "terminalState": "CAPTURED_WITH_SYNTHETIC_RESPONSE",
+      "usageStatus": "SYNTHETIC_RESPONSE_USAGE_PRESENT",
+      "requests": [
+        {
+          "method": "POST",
+          "url": "https://open.bigmodel.cn/api/paas/v4/chat/completions",
+          "headers": {
+            "accept": "application/json",
+            "authorization": "[REDACTED]",
+            "content-type": "application/json",
+            "user-agent": "VOTC/9.2.0"
+          },
+          "body": "{\n  \"model\": \"fixture-model\",\n  \"messages\": [\n    {\n      \"role\": \"system\",\n      \"content\": \"[synthetic fixture] stable system block\"\n    },\n    {\n      \"role\": \"system\",\n      \"content\": \"[synthetic fixture] second system block\"\n    },\n    {\n      \"role\": \"user\",\n      \"content\": \"[synthetic fixture] earlier user turn\"\n    },\n    {\n      \"role\": \"assistant\",\n      \"content\": \"[synthetic fixture] earlier assistant turn\"\n    },\n    {\n      \"role\": \"user\",\n      \"content\": \"[synthetic fixture] current user turn\"\n    }\n  ],\n  \"stream\": false,\n  \"temperature\": 0.6,\n  \"max_tokens\": 1024,\n  \"top_p\": 0.9,\n  \"reasoning_effort\": \"low\",\n  \"thinking\": {\n    \"type\": \"enabled\",\n    \"clear_thinking\": true\n  },\n  \"response_format\": {\n    \"type\": \"json_object\"\n  }\n}",
+          "bodyBytes": 761,
+          "bodySha256": "ed33c171c1c6925da234f93916745331cfd257c1b652cb5ece2cb18fbf5b440c"
+        }
+      ]
+    },
+    {
+      "id": "zhipu.summary-durable.before-send-guard",
+      "providerType": "zhipu",
+      "route": "SUMMARY_DURABLE",
+      "stream": false,
+      "messageVariant": "multi-system-history",
+      "control": "durable-before-send",
+      "actionSchemaDeliveryMode": "official_full_injected",
+      "clientRetryPolicy": {
+        "transport": "openai@4.104.0",
+        "sdkMaxRetries": 0,
+        "outerMaxRetries": 3
+      },
+      "attemptCount": 1,
+      "bytesSent": 761,
+      "beforeSendGuardCalls": 1,
+      "terminalState": "CAPTURED_WITH_SYNTHETIC_RESPONSE",
+      "usageStatus": "SYNTHETIC_RESPONSE_USAGE_PRESENT",
+      "requests": [
+        {
+          "method": "POST",
+          "url": "https://open.bigmodel.cn/api/paas/v4/chat/completions",
+          "headers": {
+            "accept": "application/json",
+            "authorization": "[REDACTED]",
+            "content-type": "application/json",
+            "user-agent": "VOTC/9.2.0"
+          },
+          "body": "{\n  \"model\": \"fixture-model\",\n  \"messages\": [\n    {\n      \"role\": \"system\",\n      \"content\": \"[synthetic fixture] stable system block\"\n    },\n    {\n      \"role\": \"system\",\n      \"content\": \"[synthetic fixture] second system block\"\n    },\n    {\n      \"role\": \"user\",\n      \"content\": \"[synthetic fixture] earlier user turn\"\n    },\n    {\n      \"role\": \"assistant\",\n      \"content\": \"[synthetic fixture] earlier assistant turn\"\n    },\n    {\n      \"role\": \"user\",\n      \"content\": \"[synthetic fixture] current user turn\"\n    }\n  ],\n  \"stream\": false,\n  \"temperature\": 0.6,\n  \"max_tokens\": 1024,\n  \"top_p\": 0.9,\n  \"reasoning_effort\": \"low\",\n  \"thinking\": {\n    \"type\": \"enabled\",\n    \"clear_thinking\": true\n  },\n  \"response_format\": {\n    \"type\": \"json_object\"\n  }\n}",
+          "bodyBytes": 761,
+          "bodySha256": "ed33c171c1c6925da234f93916745331cfd257c1b652cb5ece2cb18fbf5b440c"
+        }
+      ]
+    },
+    {
+      "id": "openai-compatible.action.schema.optimized-local-validation",
+      "providerType": "openai-compatible",
+      "route": "ACTION",
+      "stream": false,
+      "messageVariant": "multi-system-history",
+      "control": "none",
+      "actionSchemaDeliveryMode": "optimized_local_validation",
+      "clientRetryPolicy": {
+        "transport": "openai@4.104.0",
+        "sdkMaxRetries": 0,
+        "outerMaxRetries": 3
+      },
+      "attemptCount": 1,
+      "bytesSent": 661,
+      "beforeSendGuardCalls": 0,
+      "terminalState": "CAPTURED_WITH_SYNTHETIC_RESPONSE",
+      "usageStatus": "SYNTHETIC_RESPONSE_USAGE_PRESENT",
+      "requests": [
+        {
+          "method": "POST",
+          "url": "https://compatible.fixture.invalid/v1/chat/completions",
+          "headers": {
+            "accept": "application/json",
+            "authorization": "[REDACTED]",
+            "content-type": "application/json",
+            "user-agent": "VOTC/9.2.0",
+            "x-title": "Voices of the Court V9.2"
+          },
+          "body": "{\n  \"model\": \"fixture-model\",\n  \"messages\": [\n    {\n      \"role\": \"system\",\n      \"content\": \"[synthetic fixture] stable system block\"\n    },\n    {\n      \"role\": \"system\",\n      \"content\": \"[synthetic fixture] second system block\"\n    },\n    {\n      \"role\": \"user\",\n      \"content\": \"[synthetic fixture] earlier user turn\"\n    },\n    {\n      \"role\": \"assistant\",\n      \"content\": \"[synthetic fixture] earlier assistant turn\"\n    },\n    {\n      \"role\": \"user\",\n      \"content\": \"[synthetic fixture] current user turn\"\n    }\n  ],\n  \"stream\": false,\n  \"temperature\": 0.6,\n  \"max_tokens\": 1024,\n  \"top_p\": 0.9,\n  \"response_format\": {\n    \"type\": \"json_object\"\n  }\n}",
+          "bodyBytes": 661,
+          "bodySha256": "fe0e30c5b71bbd83b028e331cc294ceb5e74aa23ecf8c306b440574ece304990"
+        }
+      ]
+    },
+    {
+      "id": "openai-compatible.action.schema.official-full-injected",
+      "providerType": "openai-compatible",
+      "route": "ACTION",
+      "stream": false,
+      "messageVariant": "multi-system-history",
+      "control": "none",
+      "actionSchemaDeliveryMode": "official_full_injected",
+      "clientRetryPolicy": {
+        "transport": "openai@4.104.0",
+        "sdkMaxRetries": 0,
+        "outerMaxRetries": 3
+      },
+      "attemptCount": 1,
+      "bytesSent": 1385,
+      "beforeSendGuardCalls": 0,
+      "terminalState": "CAPTURED_WITH_SYNTHETIC_RESPONSE",
+      "usageStatus": "SYNTHETIC_RESPONSE_USAGE_PRESENT",
+      "requests": [
+        {
+          "method": "POST",
+          "url": "https://compatible.fixture.invalid/v1/chat/completions",
+          "headers": {
+            "accept": "application/json",
+            "authorization": "[REDACTED]",
+            "content-type": "application/json",
+            "user-agent": "VOTC/9.2.0",
+            "x-title": "Voices of the Court V9.2"
+          },
+          "body": "{\n  \"model\": \"fixture-model\",\n  \"messages\": [\n    {\n      \"role\": \"system\",\n      \"content\": \"[synthetic fixture] stable system block\"\n    },\n    {\n      \"role\": \"system\",\n      \"content\": \"[synthetic fixture] second system block\"\n    },\n    {\n      \"role\": \"user\",\n      \"content\": \"[synthetic fixture] earlier user turn\"\n    },\n    {\n      \"role\": \"assistant\",\n      \"content\": \"[synthetic fixture] earlier assistant turn\"\n    },\n    {\n      \"role\": \"user\",\n      \"content\": \"[synthetic fixture] current user turn\"\n    }\n  ],\n  \"stream\": false,\n  \"temperature\": 0.6,\n  \"max_tokens\": 1024,\n  \"top_p\": 0.9,\n  \"response_format\": {\n    \"type\": \"json_schema\",\n    \"json_schema\": {\n      \"name\": \"votc_actions\",\n      \"schema\": {\n        \"type\": \"object\",\n        \"properties\": {\n          \"actions\": {\n            \"type\": \"array\",\n            \"items\": {\n              \"type\": \"object\",\n              \"properties\": {\n                \"actionId\": {\n                  \"type\": \"string\",\n                  \"enum\": [\n                    \"fixture_noop\"\n                  ]\n                },\n                \"characterId\": {\n                  \"type\": \"string\"\n                }\n              },\n              \"required\": [\n                \"actionId\"\n              ]\n            }\n          }\n        },\n        \"required\": [\n          \"actions\"\n        ]\n      },\n      \"strict\": true\n    }\n  }\n}",
+          "bodyBytes": 1385,
+          "bodySha256": "ab1c563d488bc1d238e70c4e331868fb35c255842d53ed98d123a909a3dc6646"
+        }
+      ]
+    },
+    {
+      "id": "deepseek.action.schema.optimized-local-validation",
+      "providerType": "deepseek",
+      "route": "ACTION",
+      "stream": false,
+      "messageVariant": "multi-system-history",
+      "control": "none",
+      "actionSchemaDeliveryMode": "optimized_local_validation",
+      "clientRetryPolicy": {
+        "transport": "openai@4.104.0",
+        "sdkMaxRetries": 0,
+        "outerMaxRetries": 3
+      },
+      "attemptCount": 1,
+      "bytesSent": 705,
+      "beforeSendGuardCalls": 0,
+      "terminalState": "CAPTURED_WITH_SYNTHETIC_RESPONSE",
+      "usageStatus": "SYNTHETIC_RESPONSE_USAGE_PRESENT",
+      "requests": [
+        {
+          "method": "POST",
+          "url": "https://api.deepseek.com/chat/completions",
+          "headers": {
+            "accept": "application/json",
+            "authorization": "[REDACTED]",
+            "content-type": "application/json",
+            "user-agent": "OpenAI/JS 4.104.0"
+          },
+          "body": "{\n  \"model\": \"fixture-model\",\n  \"messages\": [\n    {\n      \"role\": \"system\",\n      \"content\": \"[synthetic fixture] stable system block\"\n    },\n    {\n      \"role\": \"system\",\n      \"content\": \"[synthetic fixture] second system block\"\n    },\n    {\n      \"role\": \"user\",\n      \"content\": \"[synthetic fixture] earlier user turn\"\n    },\n    {\n      \"role\": \"assistant\",\n      \"content\": \"[synthetic fixture] earlier assistant turn\"\n    },\n    {\n      \"role\": \"user\",\n      \"content\": \"[synthetic fixture] current user turn\"\n    }\n  ],\n  \"stream\": false,\n  \"temperature\": 0.6,\n  \"max_tokens\": 1024,\n  \"top_p\": 0.9,\n  \"thinking\": {\n    \"type\": \"disabled\"\n  },\n  \"response_format\": {\n    \"type\": \"json_object\"\n  }\n}",
+          "bodyBytes": 705,
+          "bodySha256": "0b19427313083b943de3721136b12be34332c242624f60ab8ec4b1c292622f5d"
+        }
+      ]
+    },
+    {
+      "id": "deepseek.action.schema.official-full-injected",
+      "providerType": "deepseek",
+      "route": "ACTION",
+      "stream": false,
+      "messageVariant": "multi-system-history",
+      "control": "none",
+      "actionSchemaDeliveryMode": "official_full_injected",
+      "clientRetryPolicy": {
+        "transport": "openai@4.104.0",
+        "sdkMaxRetries": 0,
+        "outerMaxRetries": 3
+      },
+      "attemptCount": 1,
+      "bytesSent": 1007,
+      "beforeSendGuardCalls": 0,
+      "terminalState": "CAPTURED_WITH_SYNTHETIC_RESPONSE",
+      "usageStatus": "SYNTHETIC_RESPONSE_USAGE_PRESENT",
+      "requests": [
+        {
+          "method": "POST",
+          "url": "https://api.deepseek.com/chat/completions",
+          "headers": {
+            "accept": "application/json",
+            "authorization": "[REDACTED]",
+            "content-type": "application/json",
+            "user-agent": "OpenAI/JS 4.104.0"
+          },
+          "body": "{\n  \"model\": \"fixture-model\",\n  \"messages\": [\n    {\n      \"role\": \"system\",\n      \"content\": \"[synthetic fixture] stable system block\"\n    },\n    {\n      \"role\": \"system\",\n      \"content\": \"[synthetic fixture] second system block\\n\\nYou MUST respond with valid JSON matching this schema:\\nSchema name: votc_actions\\n- actions: array of objects (required)\\n  - actionId: enum{fixture_noop} (required)\\n  - characterId: string (optional)\\n\\nIMPORTANT: Your response must be ONLY valid JSON. No prose, no code fences, no explanations.\"\n    },\n    {\n      \"role\": \"user\",\n      \"content\": \"[synthetic fixture] earlier user turn\"\n    },\n    {\n      \"role\": \"assistant\",\n      \"content\": \"[synthetic fixture] earlier assistant turn\"\n    },\n    {\n      \"role\": \"user\",\n      \"content\": \"[synthetic fixture] current user turn\"\n    }\n  ],\n  \"stream\": false,\n  \"temperature\": 0.6,\n  \"max_tokens\": 1024,\n  \"top_p\": 0.9,\n  \"thinking\": {\n    \"type\": \"disabled\"\n  },\n  \"response_format\": {\n    \"type\": \"json_object\"\n  }\n}",
+          "bodyBytes": 1007,
+          "bodySha256": "56e2bd1af7d46b9d639b8f57736f51c21fe90a9ebadb7425745f81e4385ec0a1"
+        }
+      ]
+    }
+  ]
+}
