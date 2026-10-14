@@ -10,11 +10,13 @@
 | 本机 | Windows 11 家庭版中文版 10.0.26200 / build 26200；Git 2.56.0.windows.2 |
 | 日常 Node | v24.13.0（局部事件/冒烟编排） |
 | 工作流复现 Node | 官方 v22.23.3 win-x64，下载执行前以官方 SHASUMS256 校验 |
-| 原 CI | windows-2025-vs2026 / image 20260925.250.1，Node 22.23.3 |
+| 原 CI | Windows Server 2025 Datacenter 10.0.26100；windows-2025-vs2026 / image 20260925.250.1，Node 22.23.3，Git 2.55.0.windows.5 |
 | 原远端结果 | [run 38503719487](https://github.com/wsdsb-111/VOCT-NEW/actions/runs/38503719487)，[job 115656292796](https://github.com/wsdsb-111/VOCT-NEW/actions/runs/38503719487/job/115656292796)：部署 FAIL，release 未运行 |
 | 本轮新远端结果 | 未推送，未产生新 SHA 的 Actions success；保留用户手动推送安排 |
 
 本机 Windows 全新检出验证与 GitHub 托管 Windows runner 是不同证据。下述通过不能替代最终新 main SHA 的远端 success。
+
+修复代码与首版交付报告已保存为 main 本地提交 `d062151238a66c7d1f9539f799e46aa8699c27ae`；后续文档提交只补充原 CI 环境取证，不改变验证过的 runtime payload。远端须按用户实际推送的最终 main SHA 核验。
 
 ## 四项先红后绿
 

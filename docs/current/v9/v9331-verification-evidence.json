@@ -13,7 +13,9 @@
     "image": "windows-2025-vs2026",
     "imageVersion": "20260925.250.1",
     "status": "FAIL_DEPLOY",
-    "error": "build_deploy_initial_target_unknown:out/main/chunks/icon-BljXrxwL.ico"
+    "error": "build_deploy_initial_target_unknown:out/main/chunks/icon-BljXrxwL.ico",
+    "operatingSystem": "Windows Server 2025 Datacenter 10.0.26100",
+    "git": "2.55.0.windows.5"
   },
   "newRemoteCI": {
     "status": "PENDING_USER_PUSH",
@@ -274,5 +276,6 @@
     "yearLifeApply": false,
     "ck3RealValidation": false,
     "soak": false
-  }
+  },
+  "codeCommitSHA": "d062151238a66c7d1f9539f799e46aa8699c27ae"
 }
