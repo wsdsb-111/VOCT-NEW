@@ -41,6 +41,7 @@ export function Memory4Manager({ react: R, ownerId, refreshKey, searchActive = f
   const [openEntryId, setOpenEntryId] = R.useState(null);
   const [expandedCoverageId, setExpandedCoverageId] = R.useState(null);
   const [coveragePages, setCoveragePages] = R.useState({});
+  const [activeCoverageOffsets, setActiveCoverageOffsets] = R.useState({});
   const [coverageLoading, setCoverageLoading] = R.useState(false);
   const [coverageEntry, setCoverageEntry] = R.useState(null);
   const [editor, setEditor] = R.useState(null);
@@ -48,10 +49,19 @@ export function Memory4Manager({ react: R, ownerId, refreshKey, searchActive = f
   const requestSequence = R.useRef(0);
   const contextEpoch = R.useRef(0);
   const tabSelection = R.useRef(0);
+  const coverageRequest = R.useRef(0);
   const expectedScope = data?.ownerId === ownerId ? { expectedCampaignToken: data.campaignToken, expectedContextId: data.contextId } : {};
   const scope = { ownerId, ...expectedScope };
   const load = async (options = {}) => {
     const sequence = ++requestSequence.current;
+    coverageRequest.current++;
+    setCoveragePages({});
+    setActiveCoverageOffsets({});
+    setExpandedCoverageId(null);
+    setCoverageEntry(null);
+    setEntries({});
+    setOpenEntryId(null);
+    setSources(null);
     setLoading(true);
     setCoverageLoading(false);
     setError("");
@@ -67,6 +77,7 @@ export function Memory4Manager({ react: R, ownerId, refreshKey, searchActive = f
       setOpenEntryId(null);
       setExpandedCoverageId(null);
       setCoveragePages({});
+      setActiveCoverageOffsets({});
       setCoverageEntry(null);
     } catch (cause) {
       if (sequence === requestSequence.current) { setData(null); setError(errorText(cause?.message)); }
@@ -79,9 +90,9 @@ export function Memory4Manager({ react: R, ownerId, refreshKey, searchActive = f
     setData(null); setEditor(null); setSources(null); setEntries({}); setOpenEntryId(null); setExpandedCoverageId(null);
     setCoveragePages({}); setCoverageEntry(null); setBusy(false); setMessage(""); setEntityId(null);
     load({ entityId: null });
-    return () => { requestSequence.current++; contextEpoch.current++; };
+    return () => { requestSequence.current++; contextEpoch.current++; coverageRequest.current++; };
   }, [ownerId, refreshKey]);
-  R.useEffect(() => { if (searchActive) { tabSelection.current++; setCoverageLoading(false); setTab("legacy"); } }, [searchActive]);
+  R.useEffect(() => { if (searchActive) { tabSelection.current++; coverageRequest.current++; setCoverageLoading(false); setTab("legacy"); } }, [searchActive]);
   R.useEffect(() => api.onConversationUpdate?.(async () => {
     const epoch = contextEpoch.current;
     let result;
@@ -94,8 +105,9 @@ export function Memory4Manager({ react: R, ownerId, refreshKey, searchActive = f
     if (!result?.success || contextChanged) {
       requestSequence.current++;
       contextEpoch.current++;
+      coverageRequest.current++;
       setData(null); setEditor(null); setSources(null); setEntries({}); setOpenEntryId(null); setExpandedCoverageId(null);
-      setCoveragePages({}); setCoverageEntry(null); setBusy(false); setLoading(false); setCoverageLoading(false); setMessage("");
+      setCoveragePages({}); setActiveCoverageOffsets({}); setCoverageEntry(null); setBusy(false); setLoading(false); setCoverageLoading(false); setMessage("");
       setError(errorText(result?.error || "memory4_campaign_changed"));
     }
   }), [ownerId, data?.campaignToken, data?.contextId, data?.readOnlyArchive, data?.readOnlyReason]);
@@ -148,59 +160,81 @@ export function Memory4Manager({ react: R, ownerId, refreshKey, searchActive = f
     button("上一页", () => load({ [option]: Math.max(0, section.offset - 40), entityId }), { disabled: busy || loading || !section.offset }),
     h("span", null, `${section.offset + 1} - ${Math.min(section.total, section.offset + 40)} / ${section.total}`),
     button("下一页", () => load({ [option]: section.offset + 40, entityId }), { disabled: busy || loading || section.offset + 40 >= section.total }));
-  const loadCoverage = async (summary, offset = 0) => {
-    if (expandedCoverageId === summary.summaryId && offset === 0) { setExpandedCoverageId(null); return; }
+  const loadCoverage = async (summary, offset = 0, toggle = false) => {
+    const token = ++coverageRequest.current;
+    if (toggle && expandedCoverageId === summary.summaryId) {
+      setExpandedCoverageId(null); setCoverageLoading(false); return;
+    }
     if (!summary.summaryId) { setError("此旧摘要没有可验证的来源标识。"); return; }
     setExpandedCoverageId(summary.summaryId);
+    setActiveCoverageOffsets(previous => ({ ...previous, [summary.summaryId]: offset }));
     const cached = coveragePages[summary.summaryId]?.[offset];
-    if (cached) return;
     const epoch = contextEpoch.current;
     const sequence = requestSequence.current;
+    const selection = tabSelection.current;
+    const isCurrent = () => epoch === contextEpoch.current && sequence === requestSequence.current
+      && selection === tabSelection.current && token === coverageRequest.current;
     setCoverageLoading(true);
     setError("");
     try {
       const result = await api.getMemory4Coverage({ ...scope, finalizationId: summary.finalizationId,
-        legacyMemoryId: summary.summaryId, offset, limit: 40,
+        legacyMemoryId: summary.summaryId, offset, limit: cached ? 1 : 40,
         expectedIndexRevision: data.coverageSummary.indexRevision, expectedSummaryHash: summary.summaryHash });
-      if (epoch !== contextEpoch.current || sequence !== requestSequence.current) return;
+      if (!isCurrent()) return;
       if (!result?.success) throw new Error(result?.error);
       if (result.status === "STALE") {
         setCoveragePages({});
+        setActiveCoverageOffsets({});
+        setMessage("来源版本已变化，旧详情已撤回。");
         setError(errorText("memory4_coverage_stale"));
         await load({ entityId, legacyOffset: data.coverageSummary.offset });
         return;
       }
-      setCoveragePages(previous => ({ ...previous, [summary.summaryId]: { ...(previous[summary.summaryId] || {}), [offset]: result } }));
+      const page = cached && cached.indexRevision === result.indexRevision && cached.summaryHash === result.summaryHash ? cached : result;
+      if (cached && page !== cached) { await load({ entityId }); return; }
+      setCoveragePages(previous => ({ ...previous, [summary.summaryId]: { ...(previous[summary.summaryId] || {}), [offset]: page } }));
     } catch (cause) {
-      if (epoch === contextEpoch.current && sequence === requestSequence.current) setError(errorText(cause?.message));
+      if (isCurrent()) {
+        if (cached) setCoveragePages(previous => {
+          const pages = { ...previous[summary.summaryId] };
+          delete pages[offset];
+          return { ...previous, [summary.summaryId]: pages };
+        });
+        setError(errorText(cause?.message));
+      }
     } finally {
-      if (epoch === contextEpoch.current) setCoverageLoading(false);
+      if (isCurrent()) setCoverageLoading(false);
     }
   };
   const showCoverageEntry = async (entryRef, page) => {
     const epoch = contextEpoch.current;
     const sequence = requestSequence.current;
     const selection = tabSelection.current;
+    const token = ++coverageRequest.current;
+    const isCurrent = () => epoch === contextEpoch.current && sequence === requestSequence.current
+      && selection === tabSelection.current && token === coverageRequest.current;
     setCoverageLoading(true);
     setError("");
     try {
       const result = await api.getMemory4Entry({ ...scope, entryId: entryRef.entryId,
         expectedIndexRevision: page.indexRevision, expectedEntryRevision: entryRef.revision, expectedBodyHash: entryRef.bodyHash });
-      if (epoch !== contextEpoch.current || sequence !== requestSequence.current || selection !== tabSelection.current) return;
+      if (!isCurrent()) return;
       if (!result?.success) throw new Error(result?.error);
       if (result.status === "STALE") {
         setCoverageEntry(null);
+        setMessage("来源版本已变化，旧详情已撤回。");
         setError(errorText("memory4_coverage_stale"));
         await load({ entityId, legacyOffset: data.coverageSummary.offset });
         return;
       }
       setCoverageEntry(result.entry);
+      setCoverageLoading(false);
       tabSelection.current++;
       setTab("detail");
     } catch (cause) {
-      if (epoch === contextEpoch.current && sequence === requestSequence.current && selection === tabSelection.current) setError(errorText(cause?.message));
+      if (isCurrent()) setError(errorText(cause?.message));
     } finally {
-      if (epoch === contextEpoch.current && sequence === requestSequence.current && selection === tabSelection.current) setCoverageLoading(false);
+      if (isCurrent()) setCoverageLoading(false);
     }
   };
   const durable = data?.coverageSummary?.latest?.durable;
@@ -256,13 +290,13 @@ export function Memory4Manager({ react: R, ownerId, refreshKey, searchActive = f
       h("p", { className: "memory4-meta" }, "只显示当前人物与战役中可验证的来源关系。来源关联不代表两份文字语义等价；未评估不代表内容丢失。"),
       data.coverageSummary.summaries.length ? data.coverageSummary.summaries.map(summary => {
         const stats = summary.legacy;
-        const page = coveragePages[summary.summaryId]?.[0];
+        const page = coverageLoading ? null : coveragePages[summary.summaryId]?.[activeCoverageOffsets[summary.summaryId] ?? 0];
         return h("article", { className: "memory4-coverage-summary", key: summary.summaryId || summary.finalizationId || "unverified" },
           h("div", { className: "memory4-coverage-summary-heading" },
             h("strong", null, summary.summaryId || "来源标识未知的旧摘要"),
             h("span", null, `重要事项：${stats.importantItemCount == null ? "未知" : stats.importantItemCount}`)),
           h("p", null, `来源可证实关联：${stats.importantItemCount == null ? `${stats.provenSourceLinkedCount} 条（分母未知）` : `${stats.provenSourceLinkedCount} / ${stats.importantItemCount}`}；同场相关 ${stats.sourceRelatedOnlyCount}；仅 Legacy 保留 ${stats.legacyOnlyCount}；映射未知 ${stats.unverifiedCount}；已撤销 ${stats.forgottenCount + stats.revokedCount}。`),
-          button(expandedCoverageId === summary.summaryId ? "收起来源覆盖详情" : "展开来源覆盖详情", () => loadCoverage(summary),
+          button(expandedCoverageId === summary.summaryId ? "收起来源覆盖详情" : "展开来源覆盖详情", () => loadCoverage(summary, activeCoverageOffsets[summary.summaryId] ?? 0, true),
             { disabled: coverageLoading || !summary.summaryId }),
           expandedCoverageId === summary.summaryId && h("div", { className: "memory4-coverage-page" },
             coverageLoading && h("p", { className: "memory4-meta", role: "status" }, "正在验证来源…"),
@@ -333,7 +367,7 @@ export function Memory4Manager({ react: R, ownerId, refreshKey, searchActive = f
               h("span", { className: "memory4-meta" }, `来源：CK3 · 读取日期：${currentAge.currentAgeReadDate}`)),
             ages.length ? ages.map(fact => disclosureFactRow(profile, fact))
               : h("p", { className: "memory4-empty" }, "暂无已披露年龄。"))),
-        button("查看相关记忆", () => { tabSelection.current++; setCoverageLoading(false); setEntityId(profile.entityId); setTab("detail"); load({ entityId: profile.entityId }); }));
+        button("查看相关记忆", () => { tabSelection.current++; coverageRequest.current++; setCoverageLoading(false); setEntityId(profile.entityId); setTab("detail"); load({ entityId: profile.entityId }); }));
     }) : h("p", { className: "memory4-empty" }, "暂无可确认的人物认知记录。"), pages(data.known, "knownOffset"));
   else if (tab === "official") content = h(R.Fragment, null,
     h("p", { className: "memory4-meta" }, "来源：CK3 · 只读"),
@@ -394,7 +428,7 @@ export function Memory4Manager({ react: R, ownerId, refreshKey, searchActive = f
   return h("div", { className: `memory4-manager${data ? "" : " memory4-context-unavailable"}` },
     h("div", { className: "memory4-heading" }, h("strong", null, "人物记忆"), button("\u21bb", () => load({ entityId, refreshCurrentFacts: true }), { title: "刷新人物记忆", "aria-label": "刷新人物记忆" })),
     h("nav", { className: "memory4-tabs", role: "tablist", "aria-label": "人物记忆" }, TABS.map(([key, label]) => h("button", {
-      key, type: "button", role: "tab", "aria-selected": tab === key, onClick: () => { tabSelection.current++; setCoverageLoading(false); setTab(key); }, className: tab === key ? "active" : ""
+      key, type: "button", role: "tab", "aria-selected": tab === key, onClick: () => { tabSelection.current++; coverageRequest.current++; setCoverageLoading(false); setTab(key); }, className: tab === key ? "active" : ""
     }, label))),
     data?.readOnlyArchive && h("div", { className: "memory4-conflict memory4-archive-notice", role: "status" },
       data.readOnlyReason === "conversation_ended"

@@ -2,7 +2,7 @@
 
 ## 项目定位与结构
 
-本仓库是面向 Crusader Kings III 的 Windows 打包版 VOTC Electron 应用。当前主线 V9.3.3／App 9.3.3，按旧总路线实施 Application Boundary & JSON Repository；V9.1 f9c088f 的远端 CI 和用户功能确认已补记，证据见 docs/current/v9/V9_2_VERIFICATION_REPORT.md。既有用户验收保留；新 CK3、Provider、性能、CI 与 Soak 结果独立记录，不能宣称 Full Freeze。
+本仓库是面向 Crusader Kings III 的 Windows 打包版 VOTC Electron 应用。当前主线 V9.3.3.1／App 9.3.3.1，按旧总路线实施 Application Boundary & JSON Repository；V9.1 f9c088f 的远端 CI 和用户功能确认已补记，证据见 docs/current/v9/V9_2_VERIFICATION_REPORT.md。既有用户验收保留；新 CK3、Provider、性能、CI 与 Soak 结果独立记录，不能宣称 Full Freeze。
 
 V9.2.1 缓存专项目前为安全／诊断候选，证据见 docs/current/v9/V9_2_1_VERIFICATION_REPORT.md。Durable 固定 Policy 与 User 动态 limits 分离；每次请求前复核 Forget，二分及后续 chunk 不重发已忘源。GLM 保持 v813，原生收益 HOLD；按施工规格 Gate 暂不升级正式版本或自动进入 V9.3。V9.2 6026713 的远端 CI 已核验 Success，新候选仍需最终 SHA 独立核验。
 
@@ -13,7 +13,7 @@ V9.2.1 缓存专项目前为安全／诊断候选，证据见 docs/current/v9/V9
 - resources/app/default_userdata/ 保存默认 Prompt、本地化和标准 Action；它不是用户运行时数据目录。
 - scripts/ 保存迁移工具、专项回归和发布门禁；scripts/test-manifest.js 是测试清单的唯一编排入口。
 - docs/README.md 是文档入口，docs/V8阶段开发记录.md 是 V8 连续实施记录，docs/README_摘要系统.md 是摘要/Memory 合同；根目录 CHANGELOG.md 只维护版本索引和用户可见摘要。
-- VOTC.exe 是复用打包壳，Windows 文件属性版本未重写。项目／核心 V9.3.3／9.3.3，App 包 9.3.3，前端 `V9.3.3 · Mod v2.0.5`；Workshop 2.0.5、Memory 4.0／协议 3.0／存储 2.5／Official Action 2.0.3、Three-Mod 1.0.6 保留。
+- VOTC.exe 是复用打包壳，Windows 文件属性版本未重写。项目／核心 V9.3.3.1／9.3.3.1，App 包 9.3.3.1，前端 `V9.3.3.1 · Mod v2.0.5`；Workshop 2.0.5、Memory 4.0／协议 3.0／存储 2.5／Official Action 2.0.3、Three-Mod 1.0.6 保留。
 
 ## 当前稳定合同
 

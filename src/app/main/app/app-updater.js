@@ -13,6 +13,7 @@ function createAppUpdater({ electronUpdater, log, settingsRepository, electron, 
     constructor() {
       this.mainWindow = null;
       this.updateAvailable = false;
+      if (!VOTC_FORK_IDENTITY.autoUpdateEnabled) return;
       electronUpdater.autoUpdater.logger = log;
       electronUpdater.autoUpdater.autoDownload = false;
       electronUpdater.autoUpdater.autoInstallOnAppQuit = false;

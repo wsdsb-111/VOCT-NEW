@@ -122,7 +122,8 @@ const sharedEntry = { entryId: sharedEntryId, ownerId: scope.ownerId, campaignTo
   text: "Private shared-source body.", evidence: { knownBy: [scope.ownerId] },
   source: { finalizationId, conversationId, messageIds: [9], segmentIds: ["legacy-shared-segment"], projectionLineages: [sharedLineage], legacyRefs: [] } };
 const sharedOptions = { scope, index: sharedIndex, metadata: sharedMetadata, legacyMemories: [sharedSummary],
-  getLegacyFacts: () => [sharedFact], store: { ...store, readEntry: () => sharedEntry }, baseStore };
+  getLegacyFacts: () => [sharedFact], store: { ...store, readEntry: () => sharedEntry },
+  baseStore: { getMemory: id => id === sharedFact.memoryId ? sharedFact : baseStore.getMemory(id) } };
 const sharedPage = getCoveragePage({ ...sharedOptions, finalizationId, legacyMemoryId: sharedSummary.memoryId });
 assert.equal(sharedPage.items[0].relation, "SHARED_FRAGMENT_SOURCE");
 assert.equal(sharedPage.items[0].semanticEquivalence, "NOT_ASSERTED", "shared source does not assert semantic equivalence");
@@ -179,8 +180,8 @@ assert.deepEqual(nodes(defaultTree, node => node.type === "button" && node.props
   ["人物认知", "官方追忆", "详细长期记忆", "Legacy 对话摘要"]);
 assert(!rendererSource.includes("updateYear") && !rendererSource.includes("updateLife")
   && !rendererSource.includes("cancelDerived"), "Renderer does not expose retired operations");
-assert(rendererSource.includes("selection !== tabSelection.current")
-  && rendererSource.includes("tabSelection.current++; setCoverageLoading(false); setEntityId(profile.entityId); setTab(\"detail\")"),
+assert(rendererSource.includes("selection === tabSelection.current && token === coverageRequest.current")
+  && rendererSource.includes("tabSelection.current++; coverageRequest.current++; setCoverageLoading(false); setEntityId(profile.entityId); setTab(\"detail\")"),
   "stale coverage entry responses cannot override explicit navigation to another pane");
 
 const uiData = { ownerId: scope.ownerId, campaignToken: scope.campaignToken, contextId: "ctx", readOnlyArchive: false,

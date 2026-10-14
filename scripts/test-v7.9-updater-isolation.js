@@ -40,4 +40,17 @@ assert.strictEqual(updater.checkForUpdates(), null);
 assert.strictEqual(providerChecks, 0, "disabled fork updater must not contact any release provider");
 assert(updater.getChangelogUrl("7.9").includes("wsdsb-111/VOCT-NEW"));
 
+const { AppUpdater: NativeAppUpdater } = require(path.join(root, "resources/app/node_modules/electron-updater/out/AppUpdater"));
+assert.throws(() => new NativeAppUpdater(null, { version: "9.3.3.1" }),
+  error => error.code === "ERR_UPDATER_INVALID_VERSION", "the vendored updater rejects the required four-part version");
+let updaterInitializations = 0;
+const lazyUpdater = Object.defineProperty({}, "autoUpdater", { get() {
+  updaterInitializations++;
+  return new NativeAppUpdater(null, { version: "9.3.3.1" });
+} });
+const DisabledUpdater = createAppUpdater({ electronUpdater: lazyUpdater, log: { info() {} } });
+const disabled = new DisabledUpdater();
+assert.equal(disabled.checkForUpdates(), null);
+assert.equal(updaterInitializations, 0, "a disabled updater must not initialize the semver-only SDK during startup");
+
 console.log("VOTC v7.9 updater isolation: PASS (fork target, cache, changelog and startup guard)");

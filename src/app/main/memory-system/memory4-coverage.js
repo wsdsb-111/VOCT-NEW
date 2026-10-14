@@ -17,6 +17,14 @@ function perspectiveIds(memory) {
   return strings(memory?.perspectiveMemoryIds || memory?.provenance?.perspectiveMemoryIds);
 }
 
+function legacySourceScope(memory) {
+  const provenance = memory?.provenance || {};
+  if (memory?.conversationId && provenance.conversationId && memory.conversationId !== provenance.conversationId
+    || memory?.finalizationId && provenance.finalizationId && memory.finalizationId !== provenance.finalizationId) return null;
+  return { conversationId: memory?.conversationId || provenance.conversationId,
+    finalizationId: finalizationIdOf(memory) };
+}
+
 function legacySourceIdentity(memory) {
   const provenance = memory?.provenance || {};
   return {
@@ -38,7 +46,10 @@ function verifiedLegacyLineages(scope, legacyMemories, store, getLegacyFacts) {
     const declaredIds = perspectiveIds(memory);
     const facts = declaredIds.length && declaredIds.length <= MAX_COVERAGE_FACTS && typeof getLegacyFacts === "function"
       ? getLegacyFacts(scope, memory).filter(fact => declaredIds.includes(String(fact?.memoryId))) : [];
-    const finalizationId = finalizationIdOf(memory);
+    const { finalizationId, conversationId } = legacySourceScope(memory) || {};
+    if (!finalizationId || !conversationId) continue;
+    const byFact = new Map();
+    result.set(memory.memoryId, byFact);
     const stored = memory.provenance?.projectionLineages;
     let candidates = Array.isArray(stored) ? stored : [];
     if (!candidates.length) {
@@ -50,30 +61,40 @@ function verifiedLegacyLineages(scope, legacyMemories, store, getLegacyFacts) {
       let lineage;
       try {
         if (candidate?.campaignToken !== scope.campaignToken || Number(candidate?.ownerId) !== scope.ownerId) continue;
-        if (!finalizationId || candidate.finalizationId !== finalizationId) continue;
+        if (candidate.finalizationId !== finalizationId || candidate.conversationId !== conversationId) continue;
         lineage = createProjectionLineage(candidate);
       } catch { /* Invalid or cross-scope lineage cannot establish a source link. */ }
       if (!lineage || !lineage.legacyMemoryIds.some(id => relatedIds.has(id))) continue;
-      const factBacked = facts.some(fact => {
-        if (!lineage.legacyMemoryIds.includes(String(fact.memoryId))) return false;
-        const identity = legacySourceIdentity(fact);
-        return identity.messageIds.some(id => lineage.sourceMessageIds?.includes(id))
-          || identity.segmentIds.some(id => lineage.sourceSegmentIds?.includes(id));
-      });
-      if (!factBacked) continue;
       if (store.isProjectionLineageForgotten(scope, lineage)) continue;
-      result.set(lineage.projectionId, lineage);
+      for (const fact of facts) {
+        if (!authorizedLegacy(fact, scope) || !lineage.legacyMemoryIds.includes(String(fact.memoryId))) continue;
+        const identity = legacySourceIdentity(fact);
+        if (!identity.messageIds.some(id => lineage.sourceMessageIds?.includes(id))
+          && !identity.segmentIds.some(id => lineage.sourceSegmentIds?.includes(id))) continue;
+        if (!byFact.has(fact.memoryId)) byFact.set(fact.memoryId, []);
+        byFact.get(fact.memoryId).push(lineage);
+      }
     }
   }
-  return [...result.values()];
+  return result;
 }
 
-function sourceIntersects(legacy, entry, verifiedLineages) {
+function sourceIntersects(scope, row, entry, verifiedLineages) {
+  const legacy = row.fact;
   const source = entry?.source || {};
+  const identityScope = legacySourceScope(row._legacy);
+  const conversationId = identityScope?.conversationId;
+  if (!conversationId || !row.finalizationId || identityScope.finalizationId !== row.finalizationId || source.conversationId !== conversationId
+    || source.finalizationId !== row.finalizationId) return false;
+  const factScope = legacySourceScope(legacy);
+  if (!factScope || factScope.conversationId && factScope.conversationId !== conversationId
+    || factScope.finalizationId && factScope.finalizationId !== row.finalizationId) return false;
   const identity = legacySourceIdentity(legacy);
   const messageIds = new Set(source.messageIds || []);
   const segmentIds = new Set([...(source.segmentIds || []), ...(source.fragmentIds || [])].map(String));
-  return verifiedLineages.some(lineage => {
+  return (verifiedLineages.get(row.summaryId)?.get(legacy.memoryId) || []).some(lineage => {
+    if (lineage.campaignToken !== scope.campaignToken || lineage.ownerId !== scope.ownerId
+      || lineage.conversationId !== conversationId || lineage.finalizationId !== row.finalizationId) return false;
     const lineageMessages = new Set(lineage.sourceMessageIds || []);
     const lineageSegments = new Set((lineage.sourceSegmentIds || []).map(String));
     return identity.messageIds.some(id => messageIds.has(id) && lineageMessages.has(id))
@@ -216,7 +237,10 @@ function classifyRows({ scope, rows, index, metadata, store, baseStore, verified
     finalizationSnapshot({ scope, finalizationId, index, metadata, store, baseStore, cache });
   }
   return rows.map(row => {
-    if (!row.fact || !row.factHash || row.finalizationId && !cache.get(row.finalizationId)?.sourceRevisionCurrent) {
+    const currentFact = row.fact && baseStore.getMemory(row.fact.memoryId);
+    if (!row.fact || !row.factHash || !authorizedLegacy(row.fact, scope) || !authorizedLegacy(currentFact, scope)
+      || legacySourceHash(currentFact) !== row.factHash
+      || row.finalizationId && !cache.get(row.finalizationId)?.sourceRevisionCurrent) {
       return { ...row, relation: "UNVERIFIED", durableEntryIds: [], completeMigrationProof: false };
     }
     const entryState = cache.get(row.finalizationId)?.entryState || { entries: [], invalid: 0, forgotten: 0, revoked: 0 };
@@ -227,7 +251,7 @@ function classifyRows({ scope, rows, index, metadata, store, baseStore, verified
       durableEntryIds: exact.map(item => item.entryId),
       completeMigrationProof: exact.some(item => (item.entry.source?.legacyRefs || []).some(ref =>
         ref.memoryId === row.fact.memoryId && ref.sourceHash === row.factHash && ref.complete === true)) };
-    const shared = entries.filter(item => sourceIntersects(row.fact, item.entry, verifiedLineages));
+    const shared = entries.filter(item => sourceIntersects(scope, row, item.entry, verifiedLineages));
     if (shared.length) return { ...row, relation: "SHARED_FRAGMENT_SOURCE",
       durableEntryIds: shared.map(item => item.entryId), completeMigrationProof: false };
     if (entries.length) return { ...row, relation: "RELATED_FINALIZATION_ONLY", durableEntryIds: [], completeMigrationProof: false };

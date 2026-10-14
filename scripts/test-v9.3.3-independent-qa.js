@@ -45,16 +45,6 @@ function fixture(label) {
   const summaryFoldersDir = path.join(directory, "summaries");
   for (const ownerId of [1, 2, 3, 9]) fs.mkdirSync(path.join(summaryFoldersDir, `${ownerId}_fixture`), { recursive: true });
   const baseStore = new MemoryStore({ baseDir: path.join(directory, "memory"), summaryFoldersDir });
-  // Windows may reject rename-over-existing for the journal itself; journal semantics have
-  // dedicated tests, while these fixtures exercise Memory4 proof and scope contracts.
-  const writeJson = baseStore.writeJson.bind(baseStore);
-  baseStore.writeJson = (filePath, value) => {
-    if (path.resolve(filePath) === path.resolve(baseStore.summaryMutationPath)) {
-      fs.writeFileSync(filePath, JSON.stringify(value, null, 2), "utf8");
-      return;
-    }
-    return writeJson(filePath, value);
-  };
   const coordinator = new Memory4Coordinator(baseStore);
   return { directory, summaryFoldersDir, baseStore, coordinator };
 }
@@ -65,6 +55,53 @@ function candidate(source, text) {
     entityIds: [COUNTERPART_ID], participantIds: [OWNER_ID, COUNTERPART_ID], topics: [],
     eventTime: observedDate ? { from: observedDate, to: observedDate, precision: "day", status: "observed" }
       : { from: null, to: null, precision: "unknown", status: "reported" } };
+}
+
+function coverageProvenanceFixture(label) {
+  const { coordinator, baseStore } = fixture(label);
+  const scope = { campaignToken: `campaign-${label}`, ownerId: OWNER_ID };
+  const factsBySummary = new Map();
+
+  function addLegacy({ label: itemLabel, conversationId, finalizationId, messageId, segmentId,
+    includeLineage = true, lineageOwnerId = OWNER_ID, lineageCampaignToken = scope.campaignToken }) {
+    const fact = baseStore.saveMemory({ memoryId: `legacy-fact-${itemLabel}`, type: "folder_summary",
+      subtype: "conversation_summary", content: `Legacy fact ${itemLabel}`, eventDate: "1181.1.1",
+      participants: [OWNER_ID, COUNTERPART_ID], subjects: [OWNER_ID], knownBy: [OWNER_ID],
+      visibility: "known_group", source: "imported", tags: [],
+      provenance: { campaignToken: scope.campaignToken, campaignBinding: { status: "bound" },
+        folderOwnerId: OWNER_ID, counterpartId: COUNTERPART_ID, counterpartIds: [COUNTERPART_ID],
+        sourceMessageIds: [messageId], sourceSegmentIds: [segmentId] } });
+    const lineage = includeLineage ? createProjectionLineage({ campaignToken: lineageCampaignToken,
+      ownerId: lineageOwnerId, conversationId, finalizationId, counterpartId: COUNTERPART_ID,
+      legacyMemoryIds: [fact.memoryId], sourceMessageIds: [messageId], sourceSegmentIds: [segmentId] }) : null;
+    const summary = { memoryId: `legacy-summary-${itemLabel}`, content: `Legacy summary ${itemLabel}`,
+      finalizationId, conversationId, knownBy: [OWNER_ID], perspectiveMemoryIds: [fact.memoryId],
+      provenance: { campaignToken: scope.campaignToken, folderOwnerId: OWNER_ID, counterpartId: COUNTERPART_ID,
+        counterpartIds: [COUNTERPART_ID], conversationId, finalizationId, perspectiveMemoryIds: [fact.memoryId],
+        projectionLineages: lineage ? [lineage] : [] } };
+    factsBySummary.set(summary.memoryId, [fact]);
+    return { fact, lineage, summary };
+  }
+
+  function commitSource({ label: itemLabel, conversationId, finalizationId, messageId, segmentId,
+    projectionLineages = [] }) {
+    const source = fragment(segmentId, `Durable source ${itemLabel}`, { messageId, sourceMessageIds: [messageId] });
+    const current = { ...snapshot(itemLabel, [source], { campaignToken: scope.campaignToken, finalizationId }),
+      conversationId, projectionLineages };
+    const committed = coordinator.store.commitOwner(current, { status: "STORE", entries: [candidate(source, source.text)] });
+    assert.equal(committed.entryIds.length, 1, `fixture ${itemLabel} must commit one Durable entry`);
+    return committed.entryIds[0];
+  }
+
+  function args(legacyMemories, overrides = {}) {
+    const index = coordinator.store.loadIndex(scope);
+    const metadata = coordinator.store.read(path.join(coordinator.store.directory(scope), "metadata.json"), null);
+    return { scope, index, metadata, legacyMemories,
+      getLegacyFacts: (_scope, memory) => factsBySummary.get(memory.memoryId) || [],
+      store: coordinator.store, baseStore, legacyRevision: 1, forgetGeneration: 0, ...overrides };
+  }
+
+  return { scope, coordinator, baseStore, addLegacy, commitSource, args };
 }
 
 function resigned(proof, changes) {
@@ -239,7 +276,7 @@ async function testCoveragePageRejectsWrongScopeStaleBodiesAndForget() {
   const finalizationId = "coverage-security-finalization";
   const conversationId = "coverage-security-conversation";
   const sourceText = "旧摘要来源事实：边境议和正式完成。";
-  const fact = baseStore.saveMemory({ memoryId: "legacy-coverage-fact", type: "folder_summary", subtype: "conversation_summary",
+  let fact = baseStore.saveMemory({ memoryId: "legacy-coverage-fact", type: "folder_summary", subtype: "conversation_summary",
     content: sourceText, eventDate: "1181.1.1", participants: [OWNER_ID, COUNTERPART_ID], subjects: [OWNER_ID],
     knownBy: [OWNER_ID], visibility: "known_group", source: "imported", tags: ["议和"],
     provenance: { campaignToken: scope.campaignToken, campaignBinding: { status: "bound" }, folderOwnerId: OWNER_ID,
@@ -270,6 +307,21 @@ async function testCoveragePageRejectsWrongScopeStaleBodiesAndForget() {
   assert.equal(page.items[0].completeMigrationProof, true);
   assert.equal(JSON.stringify(page).includes(sourceText), false, "coverage DTO cannot contain source or summary body text");
   assert.equal(JSON.stringify(page).includes(legacy.content), false);
+
+  const originalFact = fact;
+  fact = baseStore.saveMemory({ ...fact, content: "手动编辑后的 Legacy 事实。" });
+  const editedLegacy = getCoveragePage({ ...args, index: coordinator.store.loadIndex(scope) });
+  assert.equal(editedLegacy.items[0]?.relation, "UNVERIFIED",
+    "a Legacy fact hash edit invalidates the Durable exact-source proof");
+  assert.deepEqual(editedLegacy.items[0]?.durableEntryIds || [], []);
+  fact = baseStore.saveMemory(originalFact);
+
+  const revisionKey = hash([conversationId, OWNER_ID]);
+  const staleSourceRevision = getCoveragePage({ ...args, metadata: { ...metadata,
+    knownEvidenceRevisions: { ...metadata.knownEvidenceRevisions, [revisionKey]: "f".repeat(64) } } });
+  assert.equal(staleSourceRevision.items[0]?.relation, "UNVERIFIED",
+    "a stale source revision cannot retain a Legacy-to-Durable source link");
+  assert.deepEqual(staleSourceRevision.items[0]?.durableEntryIds || [], []);
 
   const unrelatedFact = baseStore.saveMemory({ memoryId: "legacy-coverage-unrelated-fact", type: "folder_summary",
     subtype: "conversation_summary", content: "不同 Legacy 事实来源。", eventDate: "1181.1.1",
@@ -320,6 +372,125 @@ async function testCoveragePageRejectsWrongScopeStaleBodiesAndForget() {
   assert.equal(forgotten.status, "OK");
   assert.notEqual(forgotten.items[0]?.relation, "LEGACY_SOURCE_EXACT", "current Forget tombstone must sever the Durable link");
   assert.deepEqual(forgotten.items[0]?.durableEntryIds || [], []);
+}
+
+async function testCoverageSharedSourceRejectsConversationIdCollisions() {
+  const h = coverageProvenanceFixture("coverage-conversation-collision");
+  const finalizationId = "conversation-collision-finalization";
+  const messageId = 7;
+  const segmentId = "segment-reused-between-conversations";
+  const legacy = h.addLegacy({ label: "conversation-collision", conversationId: "legacy-conversation",
+    finalizationId, messageId, segmentId });
+  h.commitSource({ label: "conversation-collision", conversationId: "durable-conversation",
+    finalizationId, messageId, segmentId });
+
+  const page = getCoveragePage({ ...h.args([legacy.summary]), finalizationId });
+  assert.equal(page.status, "OK");
+  assert.equal(page.items[0]?.relation, "RELATED_FINALIZATION_ONLY",
+    "same Owner/Campaign/finalization and reused message/segment IDs cannot bridge conversations");
+  assert.deepEqual(page.items[0]?.durableEntryIds, []);
+}
+
+async function testCoverageSharedSourceRejectsConflictingSummaryProvenance() {
+  for (const [label, conflict] of [
+    ["conversation", { provenance: { conversationId: "conflicting-conversation" } }],
+    ["finalization", { provenance: { finalizationId: "conflicting-finalization" } }]
+  ]) {
+    const h = coverageProvenanceFixture(`coverage-summary-provenance-${label}`);
+    const conversationId = `trusted-conversation-${label}`;
+    const finalizationId = `trusted-finalization-${label}`;
+    const messageId = 23;
+    const segmentId = `segment-summary-provenance-${label}`;
+    const legacy = h.addLegacy({ label, conversationId, finalizationId, messageId, segmentId });
+    h.commitSource({ label, conversationId, finalizationId, messageId, segmentId });
+    const summary = { ...legacy.summary, provenance: { ...legacy.summary.provenance, ...conflict.provenance } };
+
+    const page = getCoveragePage({ ...h.args([summary]), finalizationId });
+    assert.equal(page.items[0]?.relation, "RELATED_FINALIZATION_ONLY",
+      `top-level and provenance ${label} identities must agree before shared-source association`);
+    assert.deepEqual(page.items[0]?.durableEntryIds, []);
+  }
+}
+
+async function testCoverageSharedSourceRejectsConflictingFactProvenance() {
+  for (const [label, identity] of [
+    ["conversation", { topLevel: "conversationId", provenance: "conversationId" }],
+    ["finalization", { topLevel: "finalizationId", provenance: "finalizationId" }]
+  ]) {
+    const h = coverageProvenanceFixture(`coverage-fact-provenance-${label}`);
+    const conversationId = `trusted-conversation-${label}`;
+    const finalizationId = `trusted-finalization-${label}`;
+    const messageId = 29;
+    const segmentId = `segment-fact-provenance-${label}`;
+    const legacy = h.addLegacy({ label, conversationId, finalizationId, messageId, segmentId });
+    h.commitSource({ label, conversationId, finalizationId, messageId, segmentId });
+    const conflictingFact = { ...legacy.fact, [identity.topLevel]: identity.topLevel === "conversationId"
+      ? conversationId : finalizationId,
+    provenance: { ...legacy.fact.provenance, [identity.provenance]: `conflicting-${label}` } };
+
+    const page = getCoveragePage({ ...h.args([legacy.summary], {
+      getLegacyFacts: () => [conflictingFact]
+    }), finalizationId });
+    assert.equal(page.items[0]?.relation, "RELATED_FINALIZATION_ONLY",
+      `fact top-level and provenance ${label} identities must agree before shared-source association`);
+    assert.deepEqual(page.items[0]?.durableEntryIds, []);
+  }
+}
+
+async function testCoverageSharedSourceCannotBorrowAnotherSummaryLineage() {
+  const h = coverageProvenanceFixture("coverage-page-lineage-collision");
+  const messageId = 7;
+  const segmentId = "segment-reused-between-finalizations";
+  const target = h.addLegacy({ label: "page-target", conversationId: "target-conversation",
+    finalizationId: "target-finalization", messageId, segmentId, includeLineage: false });
+  const other = h.addLegacy({ label: "page-other", conversationId: "other-conversation",
+    finalizationId: "other-finalization", messageId, segmentId });
+  h.commitSource({ label: "page-target", conversationId: "target-conversation",
+    finalizationId: "target-finalization", messageId, segmentId });
+  h.commitSource({ label: "page-other", conversationId: "other-conversation",
+    finalizationId: "other-finalization", messageId, segmentId });
+
+  const summary = buildCoverageSummary({ ...h.args([target.summary, other.summary]) });
+  const targetRow = summary.summaries.find(row => row.summaryId === target.summary.memoryId);
+  const otherRow = summary.summaries.find(row => row.summaryId === other.summary.memoryId);
+  assert.equal(targetRow?.legacy.provenSourceLinkedCount, 0,
+    "a different summary's verified lineage cannot authenticate this summary's reused IDs");
+  assert.equal(targetRow?.legacy.sourceRelatedOnlyCount, 1);
+  assert.equal(otherRow?.legacy.provenSourceLinkedCount, 1,
+    "the summary that owns the valid lineage remains source-linked");
+}
+
+async function testCoverageSharedSourceRetainsScopeAndForgetBoundaries() {
+  const h = coverageProvenanceFixture("coverage-shared-scope-forget");
+  const finalizationId = "shared-scope-finalization";
+  const conversationId = "shared-scope-conversation";
+  const messageId = 19;
+  const segmentId = "segment-shared-scope";
+  const valid = h.addLegacy({ label: "shared-valid", conversationId, finalizationId, messageId, segmentId });
+  h.commitSource({ label: "shared-valid", conversationId, finalizationId, messageId, segmentId,
+    projectionLineages: [valid.lineage] });
+
+  const validPage = getCoveragePage({ ...h.args([valid.summary]), finalizationId });
+  assert.equal(validPage.items[0]?.relation, "SHARED_FRAGMENT_SOURCE",
+    "a same-scope, same-conversation, same-finalization lineage still links by shared source IDs");
+  assert.equal(validPage.items[0]?.durableEntryIds.length, 1);
+
+  for (const [label, lineageOverrides] of [
+    ["wrong-owner", { lineageOwnerId: OWNER_ID + 1 }],
+    ["wrong-campaign", { lineageCampaignToken: "foreign-campaign" }]
+  ]) {
+    const forged = h.addLegacy({ label, conversationId, finalizationId, messageId, segmentId, ...lineageOverrides });
+    const page = getCoveragePage({ ...h.args([forged.summary]), finalizationId });
+    assert.equal(page.items[0]?.relation, "RELATED_FINALIZATION_ONLY",
+      `${label} lineage cannot prove a shared source within the current scope`);
+    assert.deepEqual(page.items[0]?.durableEntryIds, []);
+  }
+
+  h.coordinator.store.persistForgottenProjection(h.scope, valid.lineage);
+  const forgotten = getCoveragePage({ ...h.args([valid.summary]), finalizationId, forgetGeneration: 1 });
+  assert.equal(forgotten.items[0]?.relation, "FORGOTTEN",
+    "a current Forget tombstone severs a previously valid shared-source link");
+  assert.deepEqual(forgotten.items[0]?.durableEntryIds, []);
 }
 
 async function testRetirementMigrationFailsClosedAndCanRollback() {
@@ -494,6 +665,11 @@ const tests = [
   ["legacy CAPPED proof remains valid without fabricated V9.3.3 counts", testLegacyCappedCommitRemainsProvenButNewCoverageIsUnknown],
   ["YEAR/LIFE intents use Detail while old derived refs fail closed", testYearLifeIntentUsesCurrentDetailsAndRejectsOldRefs],
   ["coverage page rejects wrong scope, stale bodies, and Forget", testCoveragePageRejectsWrongScopeStaleBodiesAndForget],
+  ["shared-source links reject repeated IDs across conversations", testCoverageSharedSourceRejectsConversationIdCollisions],
+  ["shared-source links reject conflicting summary provenance", testCoverageSharedSourceRejectsConflictingSummaryProvenance],
+  ["shared-source links reject conflicting fact provenance", testCoverageSharedSourceRejectsConflictingFactProvenance],
+  ["same-page rows cannot borrow another Legacy summary lineage", testCoverageSharedSourceCannotBorrowAnotherSummaryLineage],
+  ["shared-source links retain positive, scope, and Forget checks", testCoverageSharedSourceRetainsScopeAndForgetBoundaries],
   ["retirement migration fails closed and supports rollback", testRetirementMigrationFailsClosedAndCanRollback]
 ];
 

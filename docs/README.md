@@ -4,6 +4,8 @@
 
 ## 推荐阅读顺序
 
+V9.3.3.1 回归修复：[规格](current/v9/V9_3_3_1_FIX_SPEC.md)、[实施](current/v9/V9_3_3_1_FIX_REPORT.md)、[验证](current/v9/V9_3_3_1_VERIFICATION_REPORT.md)、[改动清单](current/v9/V9_3_3_1_CHANGED_FILES.md)。Windows 二进制首次部署、Coverage 同源身份、明细分页和详情 Loading；本轮零付费与零历史清理，最终 SHA 远端 CI 待用户手动推送。
+
 V9.3.3 来源规划、来源关联与 Year/Life 物理退役：[规格](current/v9/V9_3_3_IMPLEMENTATION_SPEC.md)、[实施](current/v9/V9_3_3_IMPLEMENTATION_REPORT.md)、[验证](current/v9/V9_3_3_VERIFICATION_REPORT.md)。源码、部署、实际数据清理、原生 Provider 和人工 Gate 分别签署；旧记录缺的覆盖统计保持未知。
 
 V9.3.2 Durable／Action 修复：[实施](current/v9/V9_3_2_IMPLEMENTATION_REPORT.md)、[验证](current/v9/V9_3_2_VERIFICATION_REPORT.md)。按用户要求同步 Core/UI/App 为 9.3.2；完整发布门禁与原生失败记录修复单列核验。
@@ -24,7 +26,7 @@ V9.2.1 缓存专项候选：[施工规格](current/v9/V9_2_1_IMPLEMENTATION_SPEC
 
 当前主线 V9.2：[施工原文](current/v9/V9_2_IMPLEMENTATION_SPEC.md)、[实施／验证](current/v9/V9_2_VERIFICATION_REPORT.md)、[七域端口](current/v9/V9_2_SERVICE_PORTS.md)、[JSON 权威与恢复](current/v9/V9_2_JSON_AUTHORITY_AND_RECOVERY.md)、[问题台账](current/v9/V9_2_P_ISSUE_LEDGER.md)、[V9.3 移交](current/v9/V9_2_HANDOFF_TO_V9_3.md)。按[旧总路线](current/v9/V9_ROADMAP.md) §7.3 分期；[V9.1 构建说明](current/v9/V9_1_SOURCE_BUILD.md)和旧实施报告保留历史证据。
 
-当前版本合同见[V9.2 验证](current/v9/V9_2_VERIFICATION_REPORT.md)：项目 V9.2／App 9.2.0／Workshop 2.0.5／Memory Engine 4.0；协议 3.0、存储 2.5、Official Action 2.0.3 和 Three-Mod 1.0.6 保留。
+当前版本合同见[V9.3.3.1 验证](current/v9/V9_3_3_1_VERIFICATION_REPORT.md)：项目 V9.3.3.1／App 9.3.3.1／Workshop 2.0.5／Memory Engine 4.0；协议 3.0、存储 2.5、Official Action 2.0.3 和 Three-Mod 1.0.6 保留。
 
 V9工程合同：[永久行为](current/v9/V9_BASELINE_BEHAVIOR_CONTRACTS.md)、[架构边界](current/v9/V9_ARCHITECTURE_BOUNDARY.md)、[数据责任](current/v9/V9_DATA_OWNERSHIP_LEDGER.md)、[退役台账](current/v9/V9_DECOMMISSION_LEDGER.md)、[性能调查](current/v9/V9_STARTUP_PERFORMANCE_INVESTIGATION.md)、[独立兼容迁移](current/v9/V9_COMPATIBILITY_MOD_SEPARATION.md)。
 

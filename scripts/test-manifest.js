@@ -84,6 +84,8 @@ const archivedChecks = [
 ];
 
 const releaseChecks = [
+  { group: "v9.3.3.1-binary-checkout", script: "test-v9.3.3.1-binary-checkout.js" },
+  { group: "v9.3.3.1-coverage-interactions", script: "test-v9.3.3.1-coverage-interactions.js" },
   { group: "v9.3.3-evidence-planner", script: "test-v9.3.3-evidence-planner.js" },
   { group: "v9.3.3-source-validity", script: "test-v9.3.3-source-validity.js" },
   { group: "v9.3.3-coverage-ui", script: "test-v9.3.3-memory4-coverage-ui.js" },

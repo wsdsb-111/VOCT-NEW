@@ -1,0 +1,278 @@
+{
+  "baselineSHA": "fc4f1c60a13b06d7daddac697e484db335f26647",
+  "version": "9.3.3.1",
+  "localWindows": "Windows 11 Home Chinese 10.0.26200",
+  "git": "2.56.0.windows.2",
+  "node": {
+    "local": "24.13.0",
+    "workflowReproduction": "22.23.3"
+  },
+  "previousRemoteCI": {
+    "runId": 38503719487,
+    "jobId": 115656292796,
+    "image": "windows-2025-vs2026",
+    "imageVersion": "20260925.250.1",
+    "status": "FAIL_DEPLOY",
+    "error": "build_deploy_initial_target_unknown:out/main/chunks/icon-BljXrxwL.ico"
+  },
+  "newRemoteCI": {
+    "status": "PENDING_USER_PUSH",
+    "pushPerformed": false
+  },
+  "baselineBinary": {
+    "source": "src/app/main/chunks/icon-BljXrxwL.ico",
+    "map": {
+      "source": "main/chunks/icon-BljXrxwL.ico",
+      "target": "out/main/chunks/icon-BljXrxwL.ico"
+    },
+    "blob": {
+      "bytes": 46292,
+      "sha256": "19f891af71bc453177e972009db60d56549c45fecd4e9aefebf59cb756455ea8"
+    },
+    "installed": {
+      "bytes": 46292,
+      "sha256": "19f891af71bc453177e972009db60d56549c45fecd4e9aefebf59cb756455ea8"
+    },
+    "filteredCheckout": {
+      "bytes": 46445,
+      "sha256": "cbaf45ac3d45379427fe51f5f488708e6638773538128262a65e178183aa1d86"
+    },
+    "input": {
+      "bytes": 46292,
+      "sha256": "19f891af71bc453177e972009db60d56549c45fecd4e9aefebf59cb756455ea8"
+    },
+    "firstDiff": {
+      "blobInput": -1,
+      "checkoutInput": 45
+    },
+    "lfWithoutCR": 153
+  },
+  "binaryInventory": [
+    {
+      "source": "main/chunks/icon-BljXrxwL.ico",
+      "target": "out/main/chunks/icon-BljXrxwL.ico",
+      "bytes": 46292,
+      "blobBytes": 46292,
+      "blobMatchesInput": true,
+      "sourceSHA": "19f891af71bc453177e972009db60d56549c45fecd4e9aefebf59cb756455ea8"
+    },
+    {
+      "source": "renderer/assets/Alert-FVm_0HKZ.png",
+      "target": "out/renderer/assets/Alert-FVm_0HKZ.png",
+      "bytes": 15000,
+      "blobBytes": 15000,
+      "blobMatchesInput": true,
+      "sourceSHA": "66ef497f744f8a7aadf58351f476b878a5104ff5eeda2f59249539ddda1c4f83"
+    },
+    {
+      "source": "renderer/assets/background_area_light-Bpu6TAku.png",
+      "target": "out/renderer/assets/background_area_light-Bpu6TAku.png",
+      "bytes": 33262,
+      "blobBytes": 33262,
+      "blobMatchesInput": true,
+      "sourceSHA": "6556859b73a9b35831a2f11113dc4a7ee71f52b3b8bed3b11f0bb9aed88ba708"
+    },
+    {
+      "source": "renderer/assets/background-ink-v1.png",
+      "target": "out/renderer/assets/background-ink-v1.png",
+      "bytes": 2546278,
+      "blobBytes": 2546278,
+      "blobMatchesInput": true,
+      "sourceSHA": "d0d0bb973d0ed4be082053c197058478df9d1cb80a99030b348fa1b50c03b90c"
+    },
+    {
+      "source": "renderer/assets/background-knight-v1.png",
+      "target": "out/renderer/assets/background-knight-v1.png",
+      "bytes": 2819312,
+      "blobBytes": 2819312,
+      "blobMatchesInput": true,
+      "sourceSHA": "aff375345fe850fe1483c2d72861f4a26d791c7e7ef4b6f172fc8804c8578a72"
+    },
+    {
+      "source": "renderer/assets/background-parchment-v1.png",
+      "target": "out/renderer/assets/background-parchment-v1.png",
+      "bytes": 2458490,
+      "blobBytes": 2458490,
+      "blobMatchesInput": true,
+      "sourceSHA": "40fdf7a4dafa84942de4d9b4d4b64907b565100e03e222b6969f05f4ce1a6139"
+    },
+    {
+      "source": "renderer/assets/button-BbNez-YQ.png",
+      "target": "out/renderer/assets/button-BbNez-YQ.png",
+      "bytes": 7566,
+      "blobBytes": 7566,
+      "blobMatchesInput": true,
+      "sourceSHA": "8a4db9a3c9e6777a2926f07474690d20b8c1963df83b933721aaa74c5d3cd498"
+    },
+    {
+      "source": "renderer/assets/cursor-DOS5RQ7t.png",
+      "target": "out/renderer/assets/cursor-DOS5RQ7t.png",
+      "bytes": 5494,
+      "blobBytes": 5494,
+      "blobMatchesInput": true,
+      "sourceSHA": "05fe0161090d5c79ba1dcdf0fb0a3fc0f8ca438f342a3d1c634c29f767aa7ec9"
+    },
+    {
+      "source": "renderer/assets/GitanLatin-Regular-C_7d6E69.otf",
+      "target": "out/renderer/assets/GitanLatin-Regular-C_7d6E69.otf",
+      "bytes": 202856,
+      "blobBytes": 202856,
+      "blobMatchesInput": true,
+      "sourceSHA": "1d15e752eb1548fb90925aef1e3a0294470d6c52e8fb362a3ac81b1d6d625f27"
+    },
+    {
+      "source": "renderer/assets/theme-ink-v1.png",
+      "target": "out/renderer/assets/theme-ink-v1.png",
+      "bytes": 2022245,
+      "blobBytes": 2022245,
+      "blobMatchesInput": true,
+      "sourceSHA": "16cc1549cbb365f0d74c9067e447a2455444db698a6ecd1e3671f825d178f8d3"
+    },
+    {
+      "source": "renderer/assets/theme-knight-v1.png",
+      "target": "out/renderer/assets/theme-knight-v1.png",
+      "bytes": 2114074,
+      "blobBytes": 2114074,
+      "blobMatchesInput": true,
+      "sourceSHA": "270f34047b201e7c19956794d1daaf0a7d8b50797b1b1efd646f14f3d825419e"
+    },
+    {
+      "source": "renderer/assets/theme-parchment-v1.png",
+      "target": "out/renderer/assets/theme-parchment-v1.png",
+      "bytes": 1376239,
+      "blobBytes": 1376239,
+      "blobMatchesInput": true,
+      "sourceSHA": "5466e255c91eebe882f02d31b6d926c2802b63f86d0e1bd0158f43f8cd64c5bb"
+    },
+    {
+      "source": "renderer/assets/tooltip2-RduFwM5h.png",
+      "target": "out/renderer/assets/tooltip2-RduFwM5h.png",
+      "bytes": 4279,
+      "blobBytes": 4279,
+      "blobMatchesInput": true,
+      "sourceSHA": "9fa1c1be9ee5eef036ae2914e869ef57ae1c820a4495b973d7caa0268e7f65d8"
+    }
+  ],
+  "cleanWindows": {
+    "node": "v22.23.3",
+    "snapshotSHA": "941e863afffdda15c3e410b4a879d7f6dbe15c8d",
+    "initialBuildExists": false,
+    "steps": [
+      {
+        "script": "scripts/runtime-dependencies.js",
+        "status": 0,
+        "summary": [
+          "Runtime dependency verification: PASS (5981 files, 264 packages)"
+        ]
+      },
+      {
+        "script": "scripts/build-runtime.js",
+        "status": 0,
+        "summary": [
+          "VOTC source build: PASS (296 files, App 9.3.3.1, 0a45f1a6263b0df143b9fe60b4f266259123c2618b112a05d6c41f72ffce8ddb)"
+        ]
+      },
+      {
+        "script": "scripts/verify-runtime-build.js",
+        "status": 0,
+        "summary": [
+          "VOTC build verification: PASS (296 source/artifact hashes)"
+        ]
+      },
+      {
+        "script": "scripts/deploy-runtime-build.js",
+        "status": 0,
+        "summary": []
+      },
+      {
+        "script": "scripts/verify-runtime-build.js --deployed",
+        "status": 0,
+        "summary": [
+          "VOTC build verification: PASS (296 source/artifact hashes, deployed parity)"
+        ]
+      },
+      {
+        "script": "scripts/test-release.js",
+        "status": 0,
+        "summary": [
+          "VOTC Release Regression: PASS (443 groups)"
+        ]
+      }
+    ],
+    "asset": {
+      "blob": {
+        "bytes": 46292,
+        "sha256": "19f891af71bc453177e972009db60d56549c45fecd4e9aefebf59cb756455ea8"
+      },
+      "checkout": {
+        "bytes": 46292,
+        "sha256": "19f891af71bc453177e972009db60d56549c45fecd4e9aefebf59cb756455ea8"
+      },
+      "staging": {
+        "bytes": 46292,
+        "sha256": "19f891af71bc453177e972009db60d56549c45fecd4e9aefebf59cb756455ea8"
+      }
+    },
+    "payloadSha256": "0a45f1a6263b0df143b9fe60b4f266259123c2618b112a05d6c41f72ffce8ddb",
+    "managedFiles": 296,
+    "rootPayloadMatches": true,
+    "deployedIcon": {
+      "bytes": 46292,
+      "sha256": "19f891af71bc453177e972009db60d56549c45fecd4e9aefebf59cb756455ea8"
+    },
+    "lfsFilesVerified": 68,
+    "coreAutocrlf": true
+  },
+  "release": {
+    "root": {
+      "status": "PASS",
+      "groups": 443
+    },
+    "clean": {
+      "status": "PASS",
+      "groups": 443
+    },
+    "classifiedTestFiles": 517,
+    "archived": 73
+  },
+  "independentQA": {
+    "groups": 12,
+    "pass": 12,
+    "fail": 0,
+    "nativeWriter": true
+  },
+  "coverageEvents": {
+    "groups": 20,
+    "pass": 20,
+    "fail": 0
+  },
+  "packagedElectron": {
+    "profiles": 2,
+    "moduleParity": 16,
+    "themes": [
+      "parchment",
+      "knight",
+      "ink"
+    ],
+    "detailTotal": 1000,
+    "detailPage": 40,
+    "coverageTotal": 95,
+    "coveragePages": [
+      40,
+      40,
+      15
+    ],
+    "detailLoadingReleased": true,
+    "failedCacheWithdrawn": true,
+    "staleWithdrawn": true,
+    "networkBlocked": true
+  },
+  "boundaries": {
+    "paidCalls": 0,
+    "paidCostUSD": 0,
+    "userDataMigration": false,
+    "yearLifeApply": false,
+    "ck3RealValidation": false,
+    "soak": false
+  }
+}
