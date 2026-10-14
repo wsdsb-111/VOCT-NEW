@@ -310,10 +310,9 @@ async function testUnsplitExplicitOverviewReachesProvider() {
   assert.deepEqual(baselinePacket.diagnostics.explicitTargetEntityIds, [3]);
   assert(baselinePacket.diagnostics.mentionedOutOfSceneIds.includes(4));
   assert.equal(baselinePacket.query.granularity, "LIFE");
-  assert(["year", "life"].includes(baselinePacket.overview?.sourceRef.kind),
-    "a real non-target Derived overview must occupy the slot before Legacy is added");
-  assert.deepEqual(baselinePacket.overview.sourceRef.sourceEntryIds, committed.entryIds);
-  assert.equal(baselinePacket.overview.explicitTargetEntityIds?.includes(3) || false, false);
+  assert(!baselinePacket.items.some(item=>["year","life"].includes(item.sourceRef?.kind)));
+  assert(baselinePacket.details.some(item=>committed.entryIds.includes(item.memory.memoryId)));
+
 
   const content = "【张道素能够知道并记住的本场经过】\n赵光义在北境守门，留下 UNSPLIT_C_TARGET_SENTINEL。其后还有连续叙事，无法可靠拆分。";
   const row = summaryRow({ subjectIds: [3], content });
@@ -520,13 +519,9 @@ async function testSharedSourceProjectionAndReadDtos() {
   assert.equal(detailSources.sources.entries.length, 1);
   assert.equal(detailSources.sources.entries[0].sourceValid, true);
   assert.deepEqual(detailSources.sources.entries[0].source.projectionLineages.map(lineage => lineage.counterpartId), [3]);
-  const year = ownerDto.derived.years.find(view => view.items.some(item => item.sourceEntryIds.includes(entryId)));
-  assert(year, "the derived year DTO must still point to the surviving canonical source");
-  const yearSources = await manager.getMemory4Sources({ ownerId: 2, expectedCampaignToken: campaignToken,
-    kind: "year", eventYear: year.eventYear });
-  assert.equal(yearSources.sources.entries.length, 1);
-  assert.equal(yearSources.sources.entries[0].sourceValid, true);
-  assert.deepEqual(yearSources.sources.entries[0].source.projectionLineages.map(lineage => lineage.counterpartId), [3]);
+  assert.equal(ownerDto.derived, undefined);
+  await assert.rejects(manager.getMemory4Sources({ownerId:2,expectedCampaignToken:campaignToken,kind:"year",eventYear:1164}), /memory4_derived_operation_retired/);
+
 
   const restartedEngine = new MemoryEngine({ baseDir: path.join(directory, "memory"), summaryFoldersDir: summariesDir,
     trace: { record() {} } });
@@ -541,13 +536,8 @@ async function testSharedSourceProjectionAndReadDtos() {
   assert.equal(restartedDetail.sources.entries[0].sourceValid, true);
   assert.deepEqual(restartedDetail.sources.entries[0].source.projectionLineages.map(lineage => lineage.counterpartId), [3]);
   const restartedYearDto = await restartedManager.getMemory4OwnerData({ ownerId: 2, expectedCampaignToken: campaignToken });
-  const restartedYear = restartedYearDto.derived.years.find(view => view.items.some(item => item.sourceEntryIds.includes(entryId)));
-  assert(restartedYear && restartedYear.dirty, "revision change must leave derived content visible but mark it stale after restart");
-  const restartedYearSources = await restartedManager.getMemory4Sources({ ownerId: 2, expectedCampaignToken: campaignToken,
-    kind: "year", eventYear: year.eventYear });
-  assert.equal(restartedYearSources.sources.entries.length, 1);
-  assert.equal(restartedYearSources.sources.entries[0].sourceValid, true);
-  assert.deepEqual(restartedYearSources.sources.entries[0].source.projectionLineages.map(lineage => lineage.counterpartId), [3]);
+  assert.equal(restartedYearDto.derived,undefined);
+  await assert.rejects(restartedManager.getMemory4Sources({ownerId:2,expectedCampaignToken:campaignToken,kind:"year",eventYear:1164}), /memory4_derived_operation_retired/);
 }
 
 async function main() {
@@ -555,9 +545,9 @@ async function main() {
     [testPromptRoutingAndScope, "PromptBuilder: explicit C history across duo/trio/four-person presence, absent D, generic negative, identity and scope gates"],
     [testPartialAndOversizedLegacyReachProvider, "Conversation -> PromptBuilder: partial legacy retention and query-focused middle excerpt"],
     [testExplicitLegacyFinalSelectionReachesProvider, "Conversation -> final selection -> temporalExtraText -> PromptBuilder: explicit C Legacy survives two unrelated Canonical details"],
-    [testUnsplitExplicitOverviewReachesProvider, "Conversation -> real Derived -> unsplit explicit Legacy overview -> final Provider messages, including oversize excerpt"],
+    [testUnsplitExplicitOverviewReachesProvider, "Conversation -> retired views ignored -> unsplit explicit Legacy overview -> final Provider messages, including oversize excerpt"],
     [testOrphanForgetReachesProvider, "orphan audit/forget -> restart -> Memory4 packet, temporalExtraText and Provider messages stay clear"],
-    [testSharedSourceProjectionAndReadDtos, "shared A/C source -> delete A -> owner/detail/year DTOs and readSources -> restart keeps C only"],
+    [testSharedSourceProjectionAndReadDtos, "shared A/C source -> delete A -> canonical DTOs and retired-source rejection -> restart keeps C only"],
     [testManagerDeletionAndLateRecovery, "SummariesManager deletion -> restart -> late A+C recovery, C-only durable/provider recall"],
     [testUnknownSourceResponseRejected, "durable finalization isolates unknown-fragment candidates and commits only verified facts"]
   ];

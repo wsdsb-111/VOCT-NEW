@@ -24,7 +24,6 @@ const { hash } = fromApp("main", "memory-system", "memory4-contract");
 const { normalizeGameDate } = fromApp("main", "worldline", "character-temporal-facts");
 
 const root = fs.mkdtempSync(path.join(os.tmpdir(), "votc-v923-derived-recovery-"));
-const estimateTokens = text => Math.ceil(String(text).length / 2);
 let checks = 0, failures = 0, sequence = 0;
 
 async function check(name, run) {
@@ -43,25 +42,13 @@ function fixture(name = "fixture") {
   const summaryFoldersDir = path.join(directory, "summaries");
   for (const id of [1, 2, 3]) fs.mkdirSync(path.join(summaryFoldersDir, `${id}_fixture`), { recursive: true });
   const base = new MemoryStore({ baseDir: path.join(directory, "memory"), summaryFoldersDir });
-  const derivedCalls = [];
   const durableCalls = [];
-  const coordinator = makeCoordinator(base, derivedCalls);
-  return { base, coordinator, directory, summaryFoldersDir, derivedCalls, durableCalls };
-}
-
-function makeCoordinator(base, derivedCalls) {
-  const coordinator = new Memory4Coordinator(base);
-  coordinator.configureDerived({ isCampaignCurrent: () => true, estimateTokens,
-    requestCompression: async (_prompt, options) => {
-      derivedCalls.push(options.requestType || "UNKNOWN");
-      throw new Error("qa_derived_llm_sentinel");
-    } });
-  return coordinator;
+  return { base, coordinator: new Memory4Coordinator(base), directory, summaryFoldersDir, durableCalls };
 }
 
 function restart(sample) {
   sample.base = new MemoryStore({ baseDir: path.join(sample.directory, "memory"), summaryFoldersDir: sample.summaryFoldersDir });
-  sample.coordinator = makeCoordinator(sample.base, sample.derivedCalls);
+  sample.coordinator = new Memory4Coordinator(sample.base);
   return sample.coordinator;
 }
 
@@ -126,11 +113,6 @@ function addLegacyFixture(sample, { ownerId = 2, counterpartId = 1, campaignToke
   return { memory, source, scope: { campaignToken, ownerId } };
 }
 
-async function flushImmediateQueue() {
-  await new Promise(resolve => setImmediate(resolve));
-  await new Promise(resolve => setImmediate(resolve));
-}
-
 async function main() {
   await check("DER-03: a committed DERIVED_REBUILD_FAILED record survives five recoveries without Durable or Derived replay", async () => {
     const sample = fixture("committed-derived-failure");
@@ -153,14 +135,13 @@ async function main() {
     assert.equal(afterIndex.finalizations[hash(detail.snapshot.finalizationId)].sourceRevision, beforeRecord.sourceRevision);
     assert.equal(afterIndex.entries[detail.entryId].bodyHash, beforeEntryHash, "recovery must not rewrite committed Detail");
     assert.deepEqual(sample.durableCalls, [], "committed recovery must not call the Durable extractor");
-    assert.deepEqual(sample.derivedCalls, [], "five recovery passes must not regenerate Year/Life");
-    assert.equal(outcomes[0]?.status, "SKIPPED_DERIVED_POLICY");
+    assert.equal(outcomes[0]?.status, "COMPLETE", "a proven historical derived-only recovery closes without regeneration");
     assert.equal(outcomes[0]?.durableStatus, "STORE");
     assert.equal(outcomes.length <= 1, true, "a retired derived-only Recovery is closed after its first verified pass");
     assert.equal(fs.existsSync(recoveryFile), false, "verified derived-only recovery should be safely retired");
   });
 
-  await check("DER-04: uncommitted PENDING remains a real Durable recovery and commits without Derived calls", async () => {
+  await check("DER-04: uncommitted PENDING remains a real Durable recovery", async () => {
     const sample = fixture("pending-durable");
     const context = contextFor({ campaignToken: "v923-pending-campaign", conversationId: "v923-pending", text: "尚未提交的合成耐久事实。" });
     const snapshot = sample.coordinator.buildOwnerSnapshot(context, 2);
@@ -176,65 +157,59 @@ async function main() {
     assert.equal(committed.status, "STORE");
     assert.equal(committed.entryIds.length, 1);
     assert.equal(results[0].status, "STORE");
-    assert.equal(results[0].derivedGenerationStatus, "SKIPPED_DERIVED_POLICY");
-    assert.deepEqual(sample.derivedCalls, []);
+    assert.equal(results[0].durableStatus, "STORE");
     assert.equal(fs.existsSync(recoveryFile), false);
   });
 
-  await check("DER-05: converted and unconverted Legacy paths preserve conversion while suppressing only post-conversion Derived", async () => {
+  await check("DER-05: Legacy conversion retries do not duplicate committed Durable entries", async () => {
     const convertedSample = fixture("legacy-converted");
     const convertedLegacy = addLegacyFixture(convertedSample, { text: "已转换的合成 Legacy 来源。".repeat(300) });
     let extractionCalls = 0;
-    convertedSample.coordinator.configureDerived({ requestExtraction: async prompt => {
+    convertedSample.coordinator.configureExtraction({ requestExtraction: async prompt => {
       extractionCalls++;
       return durableResponse(prompt);
     } });
     const initial = await convertedSample.coordinator.recompressLegacy(convertedLegacy.scope, {
-      memoryId: convertedLegacy.memory.memoryId, expectedSourceHash: null, rebuildDerived: false });
-    await flushImmediateQueue();
+      memoryId: convertedLegacy.memory.memoryId, expectedSourceHash: null });
     assert.equal(initial.status, "COMPLETE");
     const before = convertedSample.coordinator.store.loadIndex(convertedLegacy.scope);
     assert(Object.values(before.entries).some(row => row.legacyMemoryIds?.includes(convertedLegacy.source.memoryId)
       || row.legacyRefs?.some(ref => ref.memoryId === convertedLegacy.source.memoryId)));
     const retry = await convertedSample.coordinator.recompressLegacy(convertedLegacy.scope, {
-      memoryId: convertedLegacy.memory.memoryId, expectedSourceHash: null, rebuildDerived: true });
+      memoryId: convertedLegacy.memory.memoryId, expectedSourceHash: null });
     const after = convertedSample.coordinator.store.loadIndex(convertedLegacy.scope);
     assert.equal(retry.status, "ALREADY_CONVERTED");
-    assert.equal(retry.derived?.status, "SKIPPED_DERIVED_POLICY");
     assert.equal(extractionCalls, 1, "converted Legacy must not be re-extracted");
     assert.deepEqual(after.entries, before.entries, "converted Durable bodies and index rows stay unchanged");
-    assert.deepEqual(convertedSample.derivedCalls, []);
 
     const unconvertedSample = fixture("legacy-unconverted");
     const unconvertedLegacy = addLegacyFixture(unconvertedSample, { campaignToken: "v923-unconverted-campaign",
       text: "尚未转换的合成 Legacy 来源。".repeat(300) });
     let unconvertedExtractions = 0;
-    unconvertedSample.coordinator.configureDerived({ requestExtraction: async prompt => {
+    unconvertedSample.coordinator.configureExtraction({ requestExtraction: async prompt => {
       unconvertedExtractions++;
       return durableResponse(prompt);
     } });
     const converted = await unconvertedSample.coordinator.recompressLegacy(unconvertedLegacy.scope, {
-      memoryId: unconvertedLegacy.memory.memoryId, rebuildDerived: true });
+      memoryId: unconvertedLegacy.memory.memoryId });
     const index = unconvertedSample.coordinator.store.loadIndex(unconvertedLegacy.scope);
     assert.equal(unconvertedExtractions, 1, "unconverted Legacy still performs its necessary Durable conversion");
-    assert.equal(converted.derived?.status, "SKIPPED_DERIVED_POLICY");
+    assert.equal(converted.durableStatus, "STORE");
     assert(Object.values(index.entries).some(row => row.legacyRefs?.some(ref => ref.memoryId === unconvertedLegacy.source.memoryId)));
-    assert.deepEqual(unconvertedSample.derivedCalls, []);
 
     const failedSample = fixture("legacy-conversion-failed");
     const failedLegacy = addLegacyFixture(failedSample, { campaignToken: "v923-failed-conversion-campaign" });
     const originalSummary = fs.readFileSync(path.join(failedSample.summaryFoldersDir, "2_fixture", "与人物1的对话.json"));
-    failedSample.coordinator.configureDerived({ requestExtraction: async () => {
+    failedSample.coordinator.configureExtraction({ requestExtraction: async () => {
       failedSample.durableCalls.push("memory4_durable");
       throw new Error("qa_durable_conversion_sentinel");
     } });
     const failedConversion = await failedSample.coordinator.recompressLegacy(failedLegacy.scope, {
-      memoryId: failedLegacy.memory.memoryId, rebuildDerived: true });
+      memoryId: failedLegacy.memory.memoryId });
     assert.equal(failedConversion.status, "EXTRACTION_FAILED");
     assert.equal(failedConversion.retained, true, "failed Durable conversion must keep Legacy available");
     assert.equal(Object.keys(failedSample.coordinator.store.loadIndex(failedLegacy.scope).entries).length, 0);
     assert.deepEqual(fs.readFileSync(path.join(failedSample.summaryFoldersDir, "2_fixture", "与人物1的对话.json")), originalSummary);
-    assert.deepEqual(failedSample.derivedCalls, []);
   });
 
   await check("DER-12: a different Campaign recovery remains byte-identical and never crosses scope", async () => {
@@ -251,7 +226,6 @@ async function main() {
     assert.equal(results[0].status, "CAMPAIGN_MISMATCH");
     assert.deepEqual(fs.readFileSync(file), original);
     assert.deepEqual(sample.durableCalls, []);
-    assert.deepEqual(sample.derivedCalls, []);
 
     const archive = fixture("no-active-campaign");
     const archivedContext = contextFor({ campaignToken: "archived-v923-campaign", conversationId: "archived-v923-recovery" });
@@ -265,7 +239,6 @@ async function main() {
     assert.equal(noCampaign[0].status, "CAMPAIGN_MISMATCH");
     assert.deepEqual(fs.readFileSync(archivedFile), archivedBytes, "read-only/no-campaign recovery remains byte-identical");
     assert.deepEqual(archive.durableCalls, []);
-    assert.deepEqual(archive.derivedCalls, []);
   });
 
   await check("DER-13: malformed Recovery JSON is reported without changing or deleting its bytes", async () => {
@@ -284,7 +257,6 @@ async function main() {
     assert.deepEqual(fs.readFileSync(file), original);
     assert.equal(sample.coordinator.getRecoveryStatus("v923-bad-json-campaign").invalid, 1);
     assert.deepEqual(sample.durableCalls, []);
-    assert.deepEqual(sample.derivedCalls, []);
   });
 
   await check("DER-13: a schema-valid old Recovery with missing status stays UNKNOWN and byte-identical", async () => {
@@ -306,7 +278,6 @@ async function main() {
     assert.equal(results[0].reason, "RECOVERY_STATUS_UNKNOWN");
     assert.deepEqual(fs.readFileSync(file), original);
     assert.deepEqual(sample.durableCalls, []);
-    assert.deepEqual(sample.derivedCalls, []);
   });
 
   await check("DER-08/13: a forgotten PENDING source is rejected before Durable send and its Recovery is safely closed", async () => {
@@ -326,7 +297,6 @@ async function main() {
     assert.deepEqual(sample.durableCalls, []);
     assert.equal(Object.keys(sample.coordinator.store.loadIndex({ campaignToken: snapshot.campaignToken, ownerId: snapshot.ownerId }).entries).length, 0);
     assert.equal(fs.existsSync(file), false);
-    assert.deepEqual(sample.derivedCalls, []);
   });
 
   await check("DER-03/08: a committed source-revision mismatch fails closed without extraction or index changes", async () => {
@@ -347,13 +317,12 @@ async function main() {
     assert.equal(sample.coordinator.store.loadIndex(detail.scope).revision, beforeRevision);
     assert.deepEqual(Object.keys(sample.coordinator.store.loadIndex(detail.scope).entries), beforeEntryIds);
     assert.deepEqual(sample.durableCalls, []);
-    assert.deepEqual(sample.derivedCalls, []);
     assert.equal(fs.existsSync(file), true, "unproven source state must not be silently discarded");
   });
 }
 
 main().then(() => {
-  console.log(`V9.2.3 derived recovery QA: ${checks} PASS, ${failures} FAIL`);
+  console.log(`V9.2.3 recovery compatibility QA: ${checks} PASS, ${failures} FAIL`);
   if (failures) process.exitCode = 1;
 }).catch(error => { console.error(error.stack || error.message); process.exitCode = 1; })
   .finally(() => {

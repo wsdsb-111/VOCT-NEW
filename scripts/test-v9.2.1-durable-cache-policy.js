@@ -8,6 +8,7 @@ const { Memory4Coordinator } = require("../src/app/main/memory-system/memory4-co
 const { createPromptBuilder } = require("../src/app/main/prompts/prompt-builder");
 
 const coordinator = Object.create(Memory4Coordinator.prototype);
+coordinator.sourcePositions = new WeakMap();
 const fragment = { fragmentId: "source-1", text: "甲告知乙明年会继续研究历法。", speakerId: 1,
   entityIds: [1], presentIds: [1, 2], knownBy: [1, 2], sourceType: "spoken", visibility: "participants",
   visibilityEvidence: "application_fragment", sourceTextVerified: true, sourceMessageIds: [1] };
@@ -57,7 +58,7 @@ const baselinePolicy = fs.readFileSync(path.join(__dirname, "fixtures/v9.2-durab
 const oldLimits = "Return no more than 8 entries and 8 commitment transitions for this owner in this request.";
 const newLimits = "Follow the dynamic request limits: return no more than limits.maxEntries entries and limits.maxCommitmentTransitions commitment transitions for this owner in this request.";
 assert(baselinePolicy.includes(oldLimits), "D-11 historical V9.2 policy evidence stays intact");
-const currentPolicy = JSON.parse(fs.readFileSync(path.join(__dirname, "fixtures/v932-durable-policy.json"), "utf8")).policy;
-assert.equal(first[0].content, currentPolicy, "D-11 V9.3.2 compact evidence/schema policy is explicitly versioned");
+const currentPolicy = JSON.parse(fs.readFileSync(path.join(__dirname, "fixtures/v933-durable-policy.json"), "utf8")).policy;
+assert.equal(first[0].content, currentPolicy, "D-11 V9.3.3 compact evidence/schema policy is explicitly versioned");
 assert(first[0].content.includes(newLimits), "D-11 changing limits remain outside the policy prefix");
-console.log("Durable policy: PASS (V9.3.2 versioned prefix, dynamic scopes/limits, deterministic bytes, strict validation)");
+console.log("Durable policy: PASS (V9.3.3 versioned prefix, dynamic scopes/limits, deterministic bytes, strict validation)");

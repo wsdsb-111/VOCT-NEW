@@ -22,8 +22,16 @@ function fixture(label, fragments) {
   const folders = path.join(directory, "summaries");
   for (const owner of [1, 2, 3]) fs.mkdirSync(path.join(folders, `${owner}_fixture`), { recursive: true });
   const base = new MemoryStore({ baseDir: path.join(directory, "memory"), summaryFoldersDir: folders });
+  // Keep this regression suite focused on Durable; journal replacement has dedicated tests.
+  const writeJson = base.writeJson.bind(base);
+  base.writeJson = (filePath, value) => {
+    if (path.resolve(filePath) === path.resolve(base.summaryMutationPath)) {
+      fs.writeFileSync(filePath, JSON.stringify(value, null, 2), "utf8");
+      return;
+    }
+    return writeJson(filePath, value);
+  };
   const coordinator = new Memory4Coordinator(base);
-  coordinator.derived.schedule = async () => ({ status: "SKIPPED_DERIVED_POLICY" });
   const snapshot = { campaignToken: `campaign-${label}`, ownerId: 2, conversationId: `conversation-${label}`,
     finalizationId: `final-${label}`, episodeId: null, date: "1181.1.1", sourceRevision: hash(fragments),
     presentMessageCount: fragments.length, completeness: "complete", counterpartIds: [1], summaryIds: [],
@@ -38,7 +46,7 @@ check("prompt enumerates temporal status and distinguishes audience from authori
   const prompt = coordinator.buildPrompt(snapshot, snapshot.fragments);
   for (const word of ["observed", "reported", "planned", "unknown"]) assert(prompt[0].content.includes(word));
   assert(prompt[0].content.includes("participantIds are presence evidence only and never authorize entityIds"));
-  assert(prompt[0].content.includes("v9.3.2"));
+  assert(prompt[0].content.includes("v9.3.3"));
 });
 
 check("wire DTO removes repeated local proof metadata without authorizing unseen names", () => {
@@ -121,7 +129,6 @@ check("large source is split by input budget and recovery does not resend accept
   assert.equal(first.status, "EXTRACTION_FAILED");
   assert(firstSent.length >= 2);
   const recovered = new Memory4Coordinator(base);
-  recovered.derived.schedule = async () => ({ status: "SKIPPED_DERIVED_POLICY" });
   const resumedSent = [];
   const prior = recovered.readRecovery(recovered.recoveryPath(snapshot));
   const final = await recovered.finishOwner(prior.snapshot, async (messages, metadata) => {

@@ -156,6 +156,7 @@ electron.contextBridge.exposeInMainWorld("conversationAPI", {
   getMemoryOverview: () => electron.ipcRenderer.invoke("conversation:getMemoryOverview"),
   getSummariesDashboardData: (options = {}) => electron.ipcRenderer.invoke("conversation:getSummariesDashboardData", options),
   getMemory4OwnerData: (request) => electron.ipcRenderer.invoke("memory4:getOwnerData", request),
+  getMemory4Coverage: (request) => electron.ipcRenderer.invoke("memory4:getCoverage", request),
   getMemory4Entry: (request) => electron.ipcRenderer.invoke("memory4:getEntry", request),
   getMemory4Sources: (request) => electron.ipcRenderer.invoke("memory4:getSources", request),
   mutateMemory4: (request) => electron.ipcRenderer.invoke("memory4:mutate", request),

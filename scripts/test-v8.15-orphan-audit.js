@@ -103,7 +103,7 @@ async function run() {
     assert.equal(restarted.memory4.store.query(scope).length, 0);
     assert.equal(restarted.memory4.store.getDisclosedFacts(scope, 9).length, 0);
     assert.equal(fs.readdirSync(restarted.memory4.recoveryDir).filter(name => name.endsWith(".json")).length, 0);
-    assert.equal(JSON.stringify(restarted.memory4.derived.list(scope)).includes("ORPHAN_orphan_SENTINEL"), false);
+    assert.equal(Object.hasOwn(restarted.memory4, "derived"), false);
     assert.equal(new Memory4OrphanAudit(restarted).audit(scope).items[0].status, "FORGOTTEN");
     console.log("PASS orphan audit is read-only; explicit forget survives restart across all durable layers");
 

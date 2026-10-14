@@ -332,21 +332,24 @@ async function run() {
     const derivedEntries = derivedCoordinator.store.query(derivedScope);
     const derivedA = derivedEntries.find(entry => entry.text === "remembered fact A");
     const derivedC = derivedEntries.find(entry => entry.text === "remembered fact C");
-    derivedCoordinator.baseStore.writeJson(derivedCoordinator.derived.file(derivedScope, "year", 1164), {
+    derivedCoordinator.baseStore.writeJson(path.join(derivedCoordinator.store.directory(derivedScope), "years", "1164.json"), {
       memory4SchemaVersion: 1, campaignToken, ownerId, revision: 1, eventYear: 1164, sourceRevisionSet: [], sourceHash: "stale",
       items: [{ segmentId: "year-a", sourceEntryIds: [derivedA.entryId], text: "FORGOTTEN_WRONG_FACT" },
         { segmentId: "year-c", sourceEntryIds: [derivedC.entryId], text: "retained year fact" }]
     });
-    derivedCoordinator.baseStore.writeJson(derivedCoordinator.derived.file(derivedScope, "life"), {
+    derivedCoordinator.baseStore.writeJson(path.join(derivedCoordinator.store.directory(derivedScope), "life.json"), {
       memory4SchemaVersion: 1, campaignToken, ownerId, revision: 1, sourceRevisionSet: [], sourceHash: "stale",
       segments: [{ segmentId: "life-a", sourceEntryIds: [derivedA.entryId], text: "FORGOTTEN_WRONG_FACT" },
         { segmentId: "life-c", sourceEntryIds: [derivedC.entryId], text: "retained life fact" }]
     });
     derivedCoordinator.forgetSummaryProjection(derived.summaryA, { ownerId, counterpartId: 1 });
-    const derivedDto = JSON.stringify(createCoordinator("derived").derived.list(derivedScope));
+    const restartedAfterRetirement = createCoordinator("derived");
+    assert.equal(Object.hasOwn(restartedAfterRetirement, "derived"), false);
+    const derivedDto = JSON.stringify(restartedAfterRetirement.store.query(derivedScope));
     assert.equal(derivedDto.includes("FORGOTTEN_WRONG_FACT"), false);
-    assert.equal(derivedDto.includes("retained year fact"), true);
-    assert.equal(derivedDto.includes("retained life fact"), true);
+    assert.equal(derivedDto.includes("retained year fact"), false);
+    assert.equal(derivedDto.includes("retained life fact"), false);
+    assert(derivedDto.includes("remembered fact C"));
     console.log("PASS pending recovery forget survives restart without reviving A");
     console.log("PASS deleting B-A leaves same-finalization B-C canonical projection intact");
     console.log("PASS shared source retains B-C lineage and factual presence after deleting B-A");
@@ -355,7 +358,7 @@ async function run() {
     console.log("PASS old disclosure mapping handles message ID 0 and fails closed when unmapped");
     console.log("PASS old pair disclosure is not revoked by same-finalization B-C message");
     console.log("PASS historical letter canonical is removed by exact summary source ID");
-    console.log("PASS persisted derived year/life text is scrubbed while unrelated items remain");
+    console.log("PASS retired year/life files cannot enter canonical recall; unrelated Detail remains");
   } finally {
     fs.rmSync(root, { recursive: true, force: true });
   }

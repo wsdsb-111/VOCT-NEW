@@ -19,7 +19,7 @@ async function uiRace(rejectOld = false) {
   let reads = 0, revision = 1;
   const catalogue = () => ({ success: true, ownerId: 2, campaignToken: "fixture", contextId: "fixture-context",
     indexRevision: revision, readOnlyArchive: false, known: { items: [], total: 0 }, official: [],
-    legacy: { total: 0, counts: {}, items: [] }, derived: { years: [], life: null }, generation: {},
+    legacy: { total: 0, counts: {}, items: [] }, generation: {},
     detail: { total: 1, items: [{ entryId: "fixture-entry", memoryType: "DURABLE_KNOWLEDGE", revision }] } });
   const api = { getMemory4OwnerData: async () => catalogue(), getMemory4Entry: async () => {
     reads++;

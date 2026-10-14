@@ -4,6 +4,8 @@
 
 ## 推荐阅读顺序
 
+V9.3.3 来源规划、来源关联与 Year/Life 物理退役：[规格](current/v9/V9_3_3_IMPLEMENTATION_SPEC.md)、[实施](current/v9/V9_3_3_IMPLEMENTATION_REPORT.md)、[验证](current/v9/V9_3_3_VERIFICATION_REPORT.md)。源码、部署、实际数据清理、原生 Provider 和人工 Gate 分别签署；旧记录缺的覆盖统计保持未知。
+
 V9.3.2 Durable／Action 修复：[实施](current/v9/V9_3_2_IMPLEMENTATION_REPORT.md)、[验证](current/v9/V9_3_2_VERIFICATION_REPORT.md)。按用户要求同步 Core/UI/App 为 9.3.2；完整发布门禁与原生失败记录修复单列核验。
 
 V9.3.1 实机后审查：[2026-10-13 只读审查报告](current/v9/V9_3_1_RUNTIME_REVIEW_20261013.md)。区分双人摘要投影、人物认知、Action ACK/确认与 Durable 校验失败；包含匿名 Token 汇总和改进优先级，尚未实施修复。

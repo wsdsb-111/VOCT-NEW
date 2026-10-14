@@ -1,7 +1,10 @@
-const TABS = [["known", "人物认知"], ["official", "官方追忆"], ["life", "人生记忆"], ["year", "年度记忆"], ["detail", "详细长期记忆"], ["legacy", "Legacy 对话摘要"]];
+const TABS = [["known", "人物认知"], ["official", "官方追忆"], ["detail", "详细长期记忆"], ["legacy", "Legacy 对话摘要"]];
 const TYPES = { RELATIONSHIP_CHANGE: "关系变化", COMMITMENT: "承诺", DURABLE_KNOWLEDGE: "长期事实", MAJOR_EXPERIENCE: "重要经历", LONG_TERM_GOAL: "长期目标", EMOTIONAL_ANCHOR: "重要情感" };
 const LEVELS = { DIRECT_INTERACTION: "直接交谈", DIRECT_OBSERVATION: "见过", SHARED_SCENE: "见过", MENTION_ONLY: "听说过", DIRECT_RELATIONSHIP: "关系证据", UNKNOWN: "未知（证据不足）" };
 const RELATIONS = { friend: "朋友", best_friend: "至交", rival: "仇敌", nemesis: "死敌", lover: "情人", soulmate: "灵魂伴侣", spouse: "配偶" };
+const COVERAGE_RELATIONS = { LEGACY_SOURCE_EXACT: "Legacy 来源已精确核对", SHARED_FRAGMENT_SOURCE: "共享来源有证据，事实未逐条核验",
+  RELATED_FINALIZATION_ONLY: "同场相关，来源未逐条核验", LEGACY_ONLY: "仅 Legacy 保留", UNVERIFIED: "来源映射未验证",
+  DURABLE_ONLY: "仅 Durable 保留", FORGOTTEN: "关联已撤销（Forget）", REVOKED: "关联条目已删除" };
 const ERRORS = {
   legacy_binding_conversation_not_active: "尚未加载游戏对话。",
   legacy_binding_game_data_unavailable: "当前游戏数据尚不可用。",
@@ -14,12 +17,11 @@ const ERRORS = {
   memory4_campaign_changed: "战役已切换，请刷新后重试。",
   legacy_binding_conversation_changed: "游戏对话已切换，请刷新后重试。",
   memory4_revision_conflict: "记忆已发生变化，未覆盖内容。请刷新后重试。",
-  memory4_derived_revision_conflict: "来源或版本已变化，未覆盖内容。请刷新后重试。",
   memory4_disclosure_revision_conflict: "人物认知已发生变化，未覆盖标记。请刷新后重试。",
   memory4_owner_folder_not_unique: "此人物的摘要目录存在缺失或冲突。",
   memory4_compression_quality_failed: "模型压缩未通过预算、条件或日期校验，原始记忆已保留。可重新生成。",
-  memory4_life_year_missing: "仍有年份尚未生成年度记忆，请先重新生成年度与人生记忆。",
-  memory4_derived_llm_retired: "年度与人生记忆的模型生成已退役；历史结果和原始长期记忆保留。",
+  memory4_coverage_stale: "来源覆盖已变化，正在重新读取。",
+  memory4_entry_expectation_invalid: "长期记忆版本已变化，请刷新后重试。",
   memory4_unavailable: "人物记忆暂不可用。"
 };
 const errorText = value => ERRORS[value] || (/revision|stale|source_changed/.test(String(value)) ? "来源或版本已变化，未覆盖内容。请刷新后重试。" : `操作未完成：${String(value || "未知错误").slice(0, 180)}`);
@@ -37,16 +39,21 @@ export function Memory4Manager({ react: R, ownerId, refreshKey, searchActive = f
   const [entityId, setEntityId] = R.useState(null);
   const [entries, setEntries] = R.useState({});
   const [openEntryId, setOpenEntryId] = R.useState(null);
+  const [expandedCoverageId, setExpandedCoverageId] = R.useState(null);
+  const [coveragePages, setCoveragePages] = R.useState({});
+  const [coverageLoading, setCoverageLoading] = R.useState(false);
+  const [coverageEntry, setCoverageEntry] = R.useState(null);
   const [editor, setEditor] = R.useState(null);
   const [sources, setSources] = R.useState(null);
   const requestSequence = R.useRef(0);
   const contextEpoch = R.useRef(0);
+  const tabSelection = R.useRef(0);
   const expectedScope = data?.ownerId === ownerId ? { expectedCampaignToken: data.campaignToken, expectedContextId: data.contextId } : {};
   const scope = { ownerId, ...expectedScope };
-  const derivedGenerationRetired = data?.derived?.generationPolicy === "RETIRED";
   const load = async (options = {}) => {
     const sequence = ++requestSequence.current;
     setLoading(true);
+    setCoverageLoading(false);
     setError("");
     try {
       const result = await api.getMemory4OwnerData({ ownerId, entityId, ...expectedScope, ...options });
@@ -58,6 +65,9 @@ export function Memory4Manager({ react: R, ownerId, refreshKey, searchActive = f
       setData(result);
       setEntries({});
       setOpenEntryId(null);
+      setExpandedCoverageId(null);
+      setCoveragePages({});
+      setCoverageEntry(null);
     } catch (cause) {
       if (sequence === requestSequence.current) { setData(null); setError(errorText(cause?.message)); }
     } finally {
@@ -66,11 +76,12 @@ export function Memory4Manager({ react: R, ownerId, refreshKey, searchActive = f
   };
   R.useEffect(() => {
     contextEpoch.current++;
-    setData(null); setEditor(null); setSources(null); setEntries({}); setOpenEntryId(null); setBusy(false); setMessage(""); setEntityId(null);
+    setData(null); setEditor(null); setSources(null); setEntries({}); setOpenEntryId(null); setExpandedCoverageId(null);
+    setCoveragePages({}); setCoverageEntry(null); setBusy(false); setMessage(""); setEntityId(null);
     load({ entityId: null });
     return () => { requestSequence.current++; contextEpoch.current++; };
   }, [ownerId, refreshKey]);
-  R.useEffect(() => { if (searchActive) setTab("legacy"); }, [searchActive]);
+  R.useEffect(() => { if (searchActive) { tabSelection.current++; setCoverageLoading(false); setTab("legacy"); } }, [searchActive]);
   R.useEffect(() => api.onConversationUpdate?.(async () => {
     const epoch = contextEpoch.current;
     let result;
@@ -83,7 +94,8 @@ export function Memory4Manager({ react: R, ownerId, refreshKey, searchActive = f
     if (!result?.success || contextChanged) {
       requestSequence.current++;
       contextEpoch.current++;
-      setData(null); setEditor(null); setSources(null); setEntries({}); setOpenEntryId(null); setBusy(false); setLoading(false); setMessage("");
+      setData(null); setEditor(null); setSources(null); setEntries({}); setOpenEntryId(null); setExpandedCoverageId(null);
+      setCoveragePages({}); setCoverageEntry(null); setBusy(false); setLoading(false); setCoverageLoading(false); setMessage("");
       setError(errorText(result?.error || "memory4_campaign_changed"));
     }
   }), [ownerId, data?.campaignToken, data?.contextId, data?.readOnlyArchive, data?.readOnlyReason]);
@@ -110,13 +122,9 @@ export function Memory4Manager({ react: R, ownerId, refreshKey, searchActive = f
   const mutate = async (payload, closeEditor = false) => {
     if (!data || data.readOnlyArchive) { setError(errorText(data ? "memory4_archive_read_only" : "memory4_unavailable")); return; }
     const epoch = contextEpoch.current;
-    const isCancel = payload.operation === "cancelDerived";
-    if (!isCancel) setBusy(true);
+    setBusy(true);
     setError("");
     setMessage("");
-    const refreshTimer = payload.operation === "rebuild" ? setTimeout(() => {
-      if (epoch === contextEpoch.current) load({ entityId });
-    }, 150) : null;
     try {
       const result = await api.mutateMemory4({ ...scope, ...payload });
       if (epoch !== contextEpoch.current) return;
@@ -124,45 +132,92 @@ export function Memory4Manager({ react: R, ownerId, refreshKey, searchActive = f
       const status = result.result?.status;
       if (["FAILED", "EXTRACTION_FAILED", "STALE"].includes(status)) throw new Error(result.result.reason || status);
       setMessage(["setManualDisclosure", "deleteDisclosure"].includes(payload.operation) ? "人物认知标记已更新。"
-        : status === "SKIPPED_DERIVED_POLICY" ? errorText("memory4_derived_llm_retired")
-        : payload.operation === "rebuild" && result.result?.reason === "NO_ELIGIBLE_SOURCES" ? "没有可归档的来源：需要可确认的事件日期或获知日期。原始长期记忆已保留。"
-        : payload.operation === "cancelDerived" ? "已请求停止派生记忆任务。" : payload.operation === "keepManual" ? "已保留手工文本；底层记忆变化仍待处理。"
         : status === "IN_PROGRESS" ? "已有重压缩任务正在进行。" : status === "ALREADY_CONVERTED" ? "可核验内容已转为长期记忆，原摘要继续保留。"
           : status === "RETAINED_LEGACY" ? result.result.reason === "NO_DURABLE_CONTENT" ? "未提取出可确认的长期记忆，原摘要继续保留。" : "来源证据不足，原摘要继续保留。"
-          : status === "CANCELLED" ? "任务已停止。" : status === "MANUAL_OVERRIDE" ? "手工版本已保留，自动生成未覆盖。"
             : payload.operation === "deleteDetail" ? "已删除长期记忆。" : "记忆已更新。" );
       if (closeEditor) setEditor(null);
       await load({ entityId });
     } catch (cause) {
-      clearTimeout(refreshTimer);
       if (epoch === contextEpoch.current) {
-        if (payload.operation === "rebuild") await load({ entityId });
-        if (epoch === contextEpoch.current) setError(errorText(cause?.message));
+        setError(errorText(cause?.message));
       }
     }
-    finally { clearTimeout(refreshTimer); if (!isCancel && epoch === contextEpoch.current) setBusy(false); }
-  };
-  const regenerate = (kind, view, extra = {}) => {
-    if (!data || data.readOnlyArchive) { setError(errorText(data ? "memory4_archive_read_only" : "memory4_unavailable")); return; }
-    if (derivedGenerationRetired) { setMessage(errorText("memory4_derived_llm_retired")); return; }
-    const manual = kind === "year" ? view.generationMode === "manual_override" || view.manual?.mode === "manual_override"
-      : extra.segmentId ? view.segments?.find(segment => segment.segmentId === extra.segmentId)?.manual?.mode === "manual_override" : view.manual?.mode === "manual_override";
-    if (!window.confirm(manual ? "重新生成将覆盖这个阶段的手工版本，并使用当前摘要模型。继续？" : "将使用当前摘要模型从有效来源生成记忆，可能产生 API 费用。继续？")) return;
-    mutate({ operation: "rebuild", kind, expectedRevision: view.revision || 0, overwriteManual: !!manual, ...extra });
-  };
-  const conflict = (kind, view, extra = {}) => {
-    const manual = kind === "year" ? view.generationMode === "manual_override" || view.manual?.mode === "manual_override"
-      : view.segments?.find(segment => segment.segmentId === extra.segmentId)?.manual?.mode === "manual_override" || view.manual?.mode === "manual_override";
-    if (!view.dirty) return null;
-    return h("div", { className: "memory4-conflict", role: "status" }, h("strong", null, "底层记忆已变化"),
-      button("查看来源变化", () => showSources({ kind, ...extra })),
-      manual && writeButton("保留手工版本", () => mutate({ operation: "keepManual", kind, expectedRevision: view.revision, ...extra })),
-      writeButton(manual ? "重新生成并覆盖" : "从来源重新生成", () => regenerate(kind, view, extra), { disabled: derivedGenerationRetired }));
+    finally { if (epoch === contextEpoch.current) setBusy(false); }
   };
   const pages = (section, option) => section?.total > 40 && h("div", { className: "memory4-pager" },
     button("上一页", () => load({ [option]: Math.max(0, section.offset - 40), entityId }), { disabled: busy || loading || !section.offset }),
     h("span", null, `${section.offset + 1} - ${Math.min(section.total, section.offset + 40)} / ${section.total}`),
     button("下一页", () => load({ [option]: section.offset + 40, entityId }), { disabled: busy || loading || section.offset + 40 >= section.total }));
+  const loadCoverage = async (summary, offset = 0) => {
+    if (expandedCoverageId === summary.summaryId && offset === 0) { setExpandedCoverageId(null); return; }
+    if (!summary.summaryId) { setError("此旧摘要没有可验证的来源标识。"); return; }
+    setExpandedCoverageId(summary.summaryId);
+    const cached = coveragePages[summary.summaryId]?.[offset];
+    if (cached) return;
+    const epoch = contextEpoch.current;
+    const sequence = requestSequence.current;
+    setCoverageLoading(true);
+    setError("");
+    try {
+      const result = await api.getMemory4Coverage({ ...scope, finalizationId: summary.finalizationId,
+        legacyMemoryId: summary.summaryId, offset, limit: 40,
+        expectedIndexRevision: data.coverageSummary.indexRevision, expectedSummaryHash: summary.summaryHash });
+      if (epoch !== contextEpoch.current || sequence !== requestSequence.current) return;
+      if (!result?.success) throw new Error(result?.error);
+      if (result.status === "STALE") {
+        setCoveragePages({});
+        setError(errorText("memory4_coverage_stale"));
+        await load({ entityId, legacyOffset: data.coverageSummary.offset });
+        return;
+      }
+      setCoveragePages(previous => ({ ...previous, [summary.summaryId]: { ...(previous[summary.summaryId] || {}), [offset]: result } }));
+    } catch (cause) {
+      if (epoch === contextEpoch.current && sequence === requestSequence.current) setError(errorText(cause?.message));
+    } finally {
+      if (epoch === contextEpoch.current) setCoverageLoading(false);
+    }
+  };
+  const showCoverageEntry = async (entryRef, page) => {
+    const epoch = contextEpoch.current;
+    const sequence = requestSequence.current;
+    const selection = tabSelection.current;
+    setCoverageLoading(true);
+    setError("");
+    try {
+      const result = await api.getMemory4Entry({ ...scope, entryId: entryRef.entryId,
+        expectedIndexRevision: page.indexRevision, expectedEntryRevision: entryRef.revision, expectedBodyHash: entryRef.bodyHash });
+      if (epoch !== contextEpoch.current || sequence !== requestSequence.current || selection !== tabSelection.current) return;
+      if (!result?.success) throw new Error(result?.error);
+      if (result.status === "STALE") {
+        setCoverageEntry(null);
+        setError(errorText("memory4_coverage_stale"));
+        await load({ entityId, legacyOffset: data.coverageSummary.offset });
+        return;
+      }
+      setCoverageEntry(result.entry);
+      tabSelection.current++;
+      setTab("detail");
+    } catch (cause) {
+      if (epoch === contextEpoch.current && sequence === requestSequence.current && selection === tabSelection.current) setError(errorText(cause?.message));
+    } finally {
+      if (epoch === contextEpoch.current && sequence === requestSequence.current && selection === tabSelection.current) setCoverageLoading(false);
+    }
+  };
+  const durable = data?.coverageSummary?.latest?.durable;
+  const durableOnly = data?.coverageSummary?.latest?.durableOnly;
+  const recovery = data?.coverageSummary?.recovery || {};
+  const durableStatusText = !durable ? "没有可验证的 Durable 提交记录。"
+    : durable.commitState === "UNVERIFIED" || durable.coverageState === "UNVERIFIED_LEGACY" ? "旧记录没有足够的来源证明，无法计算覆盖情况。"
+      : durable.commitState === "NOT_PRESENT" ? "本次没有可处理的对话来源，未进行 Durable 提取。"
+      : durable.coverageState === "FULL_MODEL_EVALUATED" ? `全部计划来源已通过模型评估；当前有效保存 ${durable.committed ?? "未知"} 条。`
+        : durable.coverageState === "CAPPED" ? `8 条配额已满；仍有 ${durable.sourceCounts?.unmodeled ?? "未知"} 个来源片段未经过模型评估，对话与 Legacy 保留。`
+          : durable.coverageState === "NO_DURABLE_CONTENT_VERIFIED" ? durable.sourceCounts?.authorized === 0
+            ? "没有已授权来源片段可供模型评估；Legacy 对话摘要仍保留。"
+            : "本次模型评估后没有符合存储条件的长期事项。"
+            : durable.coverageState === "LOCAL_FILTERED" ? `部分来源由本地规则排除；模型评估 ${durable.sourceCounts?.modelEvaluated ?? "未知"} 个来源。`
+              : durable.coverageState === "PARTIAL_SOURCE" ? `部分来源经过模型评估；尚有 ${durable.sourceCounts?.unmodeled ?? "未知"} 个来源未完整评估。`
+                : durable.coverageState === "FAILED" ? "Durable 提取失败，恢复记录已保留；Legacy 对话摘要仍可查看。"
+                : "Durable 覆盖状态未知。";
   const disclosureKnown = fact => !!fact.currentDirectObservation || !!fact.effectiveKnown && fact.status !== "MANUAL_HIDDEN";
   const disclosureFactRef = fact => ({ factType: fact.factType, factKey: fact.factKey, value: fact.value });
   const disclosureAction = (profile, fact) => {
@@ -197,13 +252,51 @@ export function Memory4Manager({ react: R, ownerId, refreshKey, searchActive = f
   const editButton = (payload, text, title) => writeButton("编辑", () => setEditor({ ...payload, text, title }));
   let content;
   if (tab === "legacy") content = h(R.Fragment, null,
-    data && h("details", { className: "memory4-coverage" }, h("summary", null, "Legacy 来源与覆盖"),
-      h("p", null, `旧摘要：${data.legacy.total}；可重压缩：${data.legacy.counts.eligible || 0}；部分覆盖：${data.legacy.counts.partial || 0}；保留原文：${data.legacy.counts.retained || 0}。`),
-      data.legacy.items.map(item => h("div", { className: "memory4-legacy-row", key: item.memoryId },
+    data && h("section", { className: "memory4-coverage" }, h("h5", null, "Legacy 来源关联"),
+      h("p", { className: "memory4-meta" }, "只显示当前人物与战役中可验证的来源关系。来源关联不代表两份文字语义等价；未评估不代表内容丢失。"),
+      data.coverageSummary.summaries.length ? data.coverageSummary.summaries.map(summary => {
+        const stats = summary.legacy;
+        const page = coveragePages[summary.summaryId]?.[0];
+        return h("article", { className: "memory4-coverage-summary", key: summary.summaryId || summary.finalizationId || "unverified" },
+          h("div", { className: "memory4-coverage-summary-heading" },
+            h("strong", null, summary.summaryId || "来源标识未知的旧摘要"),
+            h("span", null, `重要事项：${stats.importantItemCount == null ? "未知" : stats.importantItemCount}`)),
+          h("p", null, `来源可证实关联：${stats.importantItemCount == null ? `${stats.provenSourceLinkedCount} 条（分母未知）` : `${stats.provenSourceLinkedCount} / ${stats.importantItemCount}`}；同场相关 ${stats.sourceRelatedOnlyCount}；仅 Legacy 保留 ${stats.legacyOnlyCount}；映射未知 ${stats.unverifiedCount}；已撤销 ${stats.forgottenCount + stats.revokedCount}。`),
+          button(expandedCoverageId === summary.summaryId ? "收起来源覆盖详情" : "展开来源覆盖详情", () => loadCoverage(summary),
+            { disabled: coverageLoading || !summary.summaryId }),
+          expandedCoverageId === summary.summaryId && h("div", { className: "memory4-coverage-page" },
+            coverageLoading && h("p", { className: "memory4-meta", role: "status" }, "正在验证来源…"),
+            page?.durableOnly && h("div", { className: "memory4-durable-only" },
+              h("span", null, page.durableOnly.count == null ? "仅 Durable 保留数量未知（部分 Legacy 来源无法验证）。"
+                : `仅 Durable 保留：${page.durableOnly.count} 条；没有可读 Legacy 事项与之对应。`),
+              (page.durableOnly.entries || []).map(entryRef => button("查看 Durable", () => showCoverageEntry(entryRef, page),
+                { key: `durable-only-${entryRef.entryId}`, disabled: coverageLoading }))),
+            page?.items.map((item, index) => h("div", { className: "memory4-coverage-row", key: item.legacyMemoryId || `${summary.summaryId}-${index}` },
+              h("span", null, item.legacyMemoryId || "旧记录来源未知"),
+              h("span", null, COVERAGE_RELATIONS[item.relation] || "来源映射未知"),
+              item.completeMigrationProof && h("span", { className: "memory4-meta" }, "完整迁移证明"),
+              (item.durableEntries || []).map(entryRef => button("查看 Durable", () => showCoverageEntry(entryRef, page),
+                { key: entryRef.entryId, disabled: coverageLoading })))),
+            page && page.total > 40 && h("div", { className: "memory4-pager" },
+              button("上一页", () => loadCoverage(summary, Math.max(0, page.offset - 40)), { disabled: coverageLoading || !page.offset }),
+              h("span", null, `${page.offset + 1} - ${Math.min(page.total, page.offset + 40)} / ${page.total}`),
+              button("下一页", () => loadCoverage(summary, page.offset + 40), { disabled: coverageLoading || page.offset + 40 >= page.total })),
+            page && !page.items.length && h("p", { className: "memory4-empty" }, "没有可显示的来源关联。")));
+      }) : h("p", { className: "memory4-empty" }, data.coverageSummary.legacy.importantItemCount == null
+        ? "旧摘要没有可验证的重要事项标识，来源关联数量未知。" : "当前页没有可验证的 Legacy 来源关联。"),
+      data.coverageSummary.total > 40 && h("div", { className: "memory4-pager" },
+        button("上一页旧摘要", () => load({ legacyOffset: Math.max(0, data.coverageSummary.offset - 40), entityId }),
+          { disabled: loading || data.coverageSummary.offset === 0 }),
+        h("span", null, `${data.coverageSummary.offset + 1} - ${Math.min(data.coverageSummary.total, data.coverageSummary.offset + 40)} / ${data.coverageSummary.total}`),
+        button("下一页旧摘要", () => load({ legacyOffset: data.coverageSummary.offset + 40, entityId }),
+          { disabled: loading || data.coverageSummary.offset + 40 >= data.coverageSummary.total }))),
+    data && h("details", { className: "memory4-coverage memory4-recompression-coverage" }, h("summary", null, "旧摘要重压缩状态"),
+      h("p", null, `旧摘要：${data.legacy.total}；可重压缩：${data.legacy.counts.eligible ?? "未知"}；部分覆盖：${data.legacy.counts.partial ?? "未知"}；保留原文：${data.legacy.counts.retained ?? "未知"}。`),
+      data.legacy.recompressionCoverage.items.map(item => h("div", { className: "memory4-legacy-row", key: item.memoryId },
         h("code", null, item.memoryId), h("span", null, item.partial ? "部分覆盖，剩余事实保留" : item.eligible ? "来源可核验" : "来源证据不足，保留原文"),
         writeButton("重压缩为长期记忆", () => {
           if (window.confirm("将使用当前摘要模型重压缩这篇旧摘要中可核验的内容，可能产生 API 费用。原摘要继续保留。继续？")) mutate({ operation: "recompressLegacy", memoryId: item.memoryId, expectedSourceHash: item.sourceHash });
-        }, { disabled: busy || loading || !item.eligible })))), legacyContent);
+        }, { disabled: busy || loading || !item.eligible }))), pages(data.legacy.recompressionCoverage, "legacyOffset")), legacyContent);
   else if (!data) content = h("p", { className: "memory4-empty" }, loading ? "读取人物记忆中…" : "人物记忆尚不可用。");
   else if (tab === "known") content = h(R.Fragment, null,
     data.known.items.length ? data.known.items.map(profile => {
@@ -240,40 +333,32 @@ export function Memory4Manager({ react: R, ownerId, refreshKey, searchActive = f
               h("span", { className: "memory4-meta" }, `来源：CK3 · 读取日期：${currentAge.currentAgeReadDate}`)),
             ages.length ? ages.map(fact => disclosureFactRow(profile, fact))
               : h("p", { className: "memory4-empty" }, "暂无已披露年龄。"))),
-        button("查看相关记忆", () => { setEntityId(profile.entityId); setTab("detail"); load({ entityId: profile.entityId }); }));
+        button("查看相关记忆", () => { tabSelection.current++; setCoverageLoading(false); setEntityId(profile.entityId); setTab("detail"); load({ entityId: profile.entityId }); }));
     }) : h("p", { className: "memory4-empty" }, "暂无可确认的人物认知记录。"), pages(data.known, "knownOffset"));
   else if (tab === "official") content = h(R.Fragment, null,
     h("p", { className: "memory4-meta" }, "来源：CK3 · 只读"),
     data.official.length ? data.official.map((record, index) => h("section", { className: "memory4-official", key: index },
       h("small", null, `采集日期：${record.captureGameDate || "未知"}`), h("p", { className: "memory4-text" }, record.content))) : h("p", { className: "memory4-empty" }, "当前战役尚未导出此人物的官方追忆。"));
-  else if (tab === "year") content = h(R.Fragment, null,
-    h("p", { className: "memory4-empty" }, "事件日期明确时按发生年份归档；事件日期未知时按获知年份归档，并保留未知标注。"),
-    derivedGenerationRetired && h("p", { className: "memory4-meta", role: "status" }, errorText("memory4_derived_llm_retired")),
-    !data.derived.years.length && h("p", { className: "memory4-empty" }, derivedGenerationRetired ? "暂无历史年度结果；跨年代事实仍可从详细长期记忆与 Legacy 召回。" : data.detail.total ? "暂无年度记忆，可从有效长期记忆来源生成。" : "暂无可用于生成年度记忆的详细长期记忆来源。"),
-    writeButton("从长期记忆生成年度与人生记忆", () => regenerate("all", { revision: data.derived.derivedRevision || 0 }), { disabled: derivedGenerationRetired || !data.detail.total }),
-    data.derived.years.map(year => h("details", { className: "memory4-derived", key: year.eventYear },
-      h("summary", null, `${year.eventYear} 年`, year.dirty && h("span", { className: "memory4-status" }, "底层记忆已变化"),
-        year.generationMode === "manual_override" && h("span", { className: "memory4-status" }, "手工版本")),
-      conflict("year", year, { eventYear: year.eventYear }),
-      h("div", { className: "memory4-actions" }, button("查看来源", () => showSources({ kind: "year", eventYear: year.eventYear })),
-        writeButton("从 Detail 重新生成", () => regenerate("year", year, { eventYear: year.eventYear }), { disabled: derivedGenerationRetired || !data.detail.total })),
-      year.items.map(item => h("section", { className: "memory4-derived-item", key: item.itemId }, h("p", { className: "memory4-text" }, item.text),
-        editButton({ operation: "updateYear", eventYear: year.eventYear, itemId: item.itemId, expectedRevision: year.revision }, item.text, `${year.eventYear} 年`))))));
-  else if (tab === "life") {
-    const life = data.derived.life;
-    content = h(R.Fragment, null,
-      derivedGenerationRetired && h("p", { className: "memory4-meta", role: "status" }, errorText("memory4_derived_llm_retired")),
-      writeButton("从年度记忆生成人生记忆", () => regenerate("life", life || { revision: 0 }), { disabled: derivedGenerationRetired || !data.derived.years.length }),
-      life?.segments?.length ? life.segments.map(segment => h("details", { className: "memory4-derived", key: segment.segmentId },
-        h("summary", null, `${segment.period.fromYear} - ${segment.period.toYear}`, life.dirty && h("span", { className: "memory4-status" }, "底层记忆已变化"),
-          segment.manual?.mode === "manual_override" && h("span", { className: "memory4-status" }, "手工版本")),
-        conflict("life", life, { segmentId: segment.segmentId }), h("p", { className: "memory4-text" }, segment.text),
-        h("div", { className: "memory4-actions" }, editButton({ operation: "updateLife", segmentId: segment.segmentId, expectedRevision: life.revision }, segment.text, `${segment.period.fromYear} - ${segment.period.toYear}`),
-          button("查看来源", () => showSources({ kind: "life", segmentId: segment.segmentId })), writeButton("重新生成当前阶段", () => regenerate("life", life, { segmentId: segment.segmentId }),
-            { disabled: derivedGenerationRetired || !data.derived.years.length }))))
-        : h("p", { className: "memory4-empty" }, derivedGenerationRetired ? "暂无历史人生结果；原始长期记忆与承诺状态保留。" : data.derived.years.length ? "暂无人生记忆。" : "暂无人生记忆；当前没有可用的年度记忆来源。"));
-  } else if (tab === "detail") content = h(R.Fragment, null,
+  else if (tab === "detail") content = h(R.Fragment, null,
+    h("section", { className: "memory4-durable-status", "aria-label": "Durable 状态" },
+      h("strong", null, "Durable 状态"), h("p", null, durableStatusText),
+      durable && durable.sourceCounts && durable.sourceCountPrecision !== "UNKNOWN" && h("p", { className: "memory4-meta" },
+        `来源：${durable.sourceCounts.authorized ?? "未知"} 个授权片段；${durable.sourceCounts.modelEvaluated ?? "未知"} 个经过模型评估；${durable.sourceCounts.unmodeled ?? "未知"} 个未评估。`),
+      durableOnly && h("p", { className: "memory4-meta" }, durableOnly.count == null
+        ? "仅 Durable 保留数量未知（部分 Legacy 来源无法验证）。" : `仅 Durable 保留：${durableOnly.count} 条。`),
+      recovery.pending > 0 && h("p", { className: "memory4-meta", role: "status" },
+        `Durable 尚未全部成功写入：本人物有 ${recovery.pending} 个恢复任务待处理，其中 ${recovery.manual || 0} 个需要人工处理${recovery.balanceBlocked ? `，${recovery.balanceBlocked} 个因余额不足暂缓` : ""}。`),
+      durable?.retractedCount > 0 && h("p", { className: "memory4-meta" }, `已匿名排除 ${durable.retractedCount} 个 Forget 或删除的条目。`)),
     entityId && h("div", { className: "memory4-actions" }, h("span", null, "仅显示相关人物记忆"), button("显示全部", () => { setEntityId(null); load({ entityId: null }); })),
+    coverageEntry && h("article", { className: "memory4-detail memory4-coverage-entry" },
+      h("strong", null, "来自 Legacy 来源覆盖的 Durable"), h("p", { className: "memory4-text" }, coverageEntry.text),
+      h("p", { className: "memory4-meta" }, `交谈日期：${coverageEntry.conversationDate || "未知"} · 获知日期：${coverageEntry.acquiredDate || "未知"}`),
+      h("div", { className: "memory4-actions" }, editButton({ operation: "updateDetail", entryId: coverageEntry.entryId,
+        expectedRevision: coverageEntry.revision }, coverageEntry.text, "详细长期记忆"),
+      button("查看来源", () => showSources({ kind: "detail", entryId: coverageEntry.entryId })),
+      writeButton("删除", () => {
+        if (window.confirm("删除这条长期记忆？")) mutate({ operation: "deleteDetail", entryId: coverageEntry.entryId, expectedRevision: coverageEntry.revision });
+      }, { className: "danger-button" }))),
     data.detail.items.length ? data.detail.items.map(row => {
       const entry = entries[row.entryId];
       return h("details", { className: "memory4-detail", key: row.entryId, open: openEntryId === row.entryId },
@@ -285,9 +370,15 @@ export function Memory4Manager({ react: R, ownerId, refreshKey, searchActive = f
           const epoch = contextEpoch.current;
           const sequence = requestSequence.current;
           try {
-            const result = await api.getMemory4Entry({ ...scope, entryId: row.entryId });
+            const result = await api.getMemory4Entry({ ...scope, entryId: row.entryId,
+              expectedIndexRevision: data.indexRevision, expectedEntryRevision: row.revision, expectedBodyHash: row.bodyHash });
             if (epoch !== contextEpoch.current || sequence !== requestSequence.current) return;
             if (!result?.success) throw new Error(result?.error);
+            if (result.status === "STALE") {
+              setError(errorText("memory4_coverage_stale"));
+              await load({ entityId });
+              return;
+            }
             setEntries(previous => ({ ...previous, [row.entryId]: result.entry }));
           } catch (cause) { if (epoch === contextEpoch.current && sequence === requestSequence.current) setError(errorText(cause?.message)); }
         } }, `${TYPES[row.memoryType] || "长期记忆"} · ${eventDate(row.eventTime)}`),
@@ -295,7 +386,7 @@ export function Memory4Manager({ react: R, ownerId, refreshKey, searchActive = f
           h("p", { className: "memory4-meta" }, `交谈日期：${entry.conversationDate || "未知"} · 获知日期：${entry.acquiredDate || "未知"}`),
           h("div", { className: "memory4-actions" }, editButton({ operation: "updateDetail", entryId: entry.entryId, expectedRevision: entry.revision }, entry.text, "详细长期记忆"),
             button("查看来源", () => showSources({ kind: "detail", entryId: entry.entryId })), writeButton("删除", () => {
-              if (window.confirm("删除这条长期记忆？相关年度与人生记忆会重新核对来源。")) mutate({ operation: "deleteDetail", entryId: entry.entryId, expectedRevision: entry.revision });
+              if (window.confirm("删除这条长期记忆？")) mutate({ operation: "deleteDetail", entryId: entry.entryId, expectedRevision: entry.revision });
             }, { className: "danger-button" }))) : h("p", null, "读取正文中…"));
     }) : h("p", { className: "memory4-empty" }, data.generation.lastStatus === "NO_DURABLE_CONTENT"
       ? `最近一次归档未提取出可确认的长期事实；Legacy 对话摘要仍保留（${data.generation.noDurableContentCount} 次无长期事实结果）。`
@@ -303,7 +394,7 @@ export function Memory4Manager({ react: R, ownerId, refreshKey, searchActive = f
   return h("div", { className: `memory4-manager${data ? "" : " memory4-context-unavailable"}` },
     h("div", { className: "memory4-heading" }, h("strong", null, "人物记忆"), button("\u21bb", () => load({ entityId, refreshCurrentFacts: true }), { title: "刷新人物记忆", "aria-label": "刷新人物记忆" })),
     h("nav", { className: "memory4-tabs", role: "tablist", "aria-label": "人物记忆" }, TABS.map(([key, label]) => h("button", {
-      key, type: "button", role: "tab", "aria-selected": tab === key, onClick: () => setTab(key), className: tab === key ? "active" : ""
+      key, type: "button", role: "tab", "aria-selected": tab === key, onClick: () => { tabSelection.current++; setCoverageLoading(false); setTab(key); }, className: tab === key ? "active" : ""
     }, label))),
     data?.readOnlyArchive && h("div", { className: "memory4-conflict memory4-archive-notice", role: "status" },
       data.readOnlyReason === "conversation_ended"
@@ -311,9 +402,7 @@ export function Memory4Manager({ react: R, ownerId, refreshKey, searchActive = f
         : `此为已加载战役中该人物的已保存归档${data.archiveAsOfDate ? `（截至 ${data.archiveAsOfDate}）` : ""}，仅供查阅；当前人物关系和状态未重新回读。`),
     error && h("p", { className: "memory4-error", role: "alert" }, error), message && h("p", { role: "status" }, message),
     (busy || loading) && h("p", { role: "status" }, busy ? "处理中…" : "读取中…"),
-    !derivedGenerationRetired && data?.derived.jobs?.some(job => ["QUEUED", "RUNNING", "FAILED", "REQUEUED"].includes(job.status)) && h("p", { className: "memory4-meta", role: "status" },
-      data.derived.jobs.some(job => job.status === "FAILED") ? `派生记忆生成失败${data.derived.jobs.find(job => job.status === "FAILED").eventYear ? `（${data.derived.jobs.find(job => job.status === "FAILED").eventYear} 年）` : ""}，可重新生成。` : data.derived.jobs.some(job => job.status === "RUNNING") ? "派生记忆正在生成，完成后刷新。" : "派生记忆已排队，等待生成。",
-      data.derived.jobs.some(job => ["RUNNING", "QUEUED", "REQUEUED"].includes(job.status)) && writeButton("停止任务", () => mutate({ operation: "cancelDerived" }), { title: "停止当前人物的派生记忆任务" })),
+    coverageLoading && h("p", { className: "memory4-meta", role: "status" }, "正在读取并验证来源覆盖…"),
     h("div", { className: "memory4-panel", role: "tabpanel" }, content),
     editor && h("div", { className: "modal-overlay" }, h("form", { className: "modal-content memory4-modal", onSubmit: event => { event.preventDefault(); mutate(editor, true); } },
       h("div", { className: "modal-header" }, h("h4", null, `编辑${editor.title}`), button("\u00d7", () => setEditor(null), { title: "关闭编辑", "aria-label": "关闭编辑" })),

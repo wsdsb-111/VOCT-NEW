@@ -10,7 +10,7 @@
 
 ## 编写规则
 
-- 当前版本写法统一为项目 V9.3.2、App 包 9.3.2、VOTC Workshop Mod 2.0.5、Memory Engine 4.0；底层协议 3.0、摘要存储 2.5、Official Action 2.0.3 和独立 Three-Mod 1.0.6 分别保留。历史报告、原始设计与冻结证据保留当时版本，最新变更以 current/v9/V9_3_2_VERIFICATION_REPORT.md 为准。
+- 当前版本写法统一为项目 V9.3.3、App 包 9.3.3、VOTC Workshop Mod 2.0.5、Memory Engine 4.0；底层协议 3.0、摘要存储 2.5、Official Action 2.0.3 和独立 Three-Mod 1.0.6 分别保留。历史报告、原始设计与冻结证据保留当时版本，最新变更以 current/v9/V9_3_3_VERIFICATION_REPORT.md 为准。
 
 - 只记录仓库中实际存在、已经实现或明确标注为限制的内容；区分“代码/自动化通过”和“真实 CK3、Provider、Electron、远端 CI 或 Soak 已验收”。
 - 新文档沿用仓库已有的版本、阶段、主题和 implementation-report/review 命名风格；不要为了统一而重命名历史中文文件或另造根目录版本散文档。

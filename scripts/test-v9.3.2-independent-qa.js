@@ -48,8 +48,16 @@ function makeFixture(label) {
   const summaryFoldersDir = path.join(directory, "summaries");
   for (const ownerId of [1, 2, 3, 9]) fs.mkdirSync(path.join(summaryFoldersDir, `${ownerId}_fixture`), { recursive: true });
   const baseStore = new MemoryStore({ baseDir: path.join(directory, "memory"), summaryFoldersDir });
+  // Keep this suite focused on Durable; journal replacement has dedicated tests.
+  const writeJson = baseStore.writeJson.bind(baseStore);
+  baseStore.writeJson = (filePath, value) => {
+    if (path.resolve(filePath) === path.resolve(baseStore.summaryMutationPath)) {
+      fs.writeFileSync(filePath, JSON.stringify(value, null, 2), "utf8");
+      return;
+    }
+    return writeJson(filePath, value);
+  };
   const coordinator = new Memory4Coordinator(baseStore);
-  coordinator.derived.schedule = async () => ({ status: "COMPLETE" });
   return { coordinator, baseStore };
 }
 
@@ -776,10 +784,15 @@ async function testCommittedSnapshotRecoveryDoesNotRequestAgain() {
   const { coordinator } = makeFixture("committed-recovery");
   const fragment = makeFragment("committed-fragment", "COMMITTED_SOURCE");
   const snapshot = makeSnapshot("committed-recovery", [fragment]);
-  coordinator.derived.schedule = async () => ({ status: "FAILED", reason: "injected derived failure" });
+  const clearRecovery = coordinator.clearVerifiedRecovery.bind(coordinator);
+  coordinator.clearVerifiedRecovery = () => false;
   const initial = makeRequest(() => completed([candidate(fragment, "COMMITTED_FACT")]));
   const result = await coordinator.finishOwner(snapshot, initial.request);
   assert.equal(result.status, "STORE");
+  assert.equal(result.recoveryStatus, "RECOVERY_UNVERIFIED");
+  assert(result.recoveryPath, "a failed canonical cleanup must keep its recovery receipt");
+  assert.equal(coordinator.inspectCommittedSnapshot(snapshot).state, "COMMITTED",
+    "the committed receipt remains verifiable while recovery cleanup is unavailable");
   assert.equal(initial.calls.length, 1);
 
   let recoveryRequests = 0;
@@ -789,7 +802,15 @@ async function testCommittedSnapshotRecoveryDoesNotRequestAgain() {
   }, { activeCampaignToken: snapshot.campaignToken, isNarrativeCommitted: () => true });
   assert.equal(recoveryRequests, 0, "recovery must use the verified commit and avoid a duplicate provider extraction");
   assert.equal(recovered.length, 1);
+  assert.equal(recovered[0].status, "RECOVERY_UNVERIFIED", "failed cleanup must preserve the recovery receipt");
   assert.equal(query(coordinator, snapshot).filter(entry => entry.text === "COMMITTED_FACT").length, 1);
+  coordinator.clearVerifiedRecovery = clearRecovery;
+  const closed = await coordinator.recoverPending(async () => {
+    recoveryRequests++;
+    return completed();
+  }, { activeCampaignToken: snapshot.campaignToken, isNarrativeCommitted: () => true });
+  assert.equal(closed[0].status, "COMPLETE");
+  assert.equal(recoveryRequests, 0);
 }
 
 async function testCappedCommitProofAndForgedCoverageFailClosed() {
@@ -815,7 +836,7 @@ async function testCappedCommitProofAndForgedCoverageFailClosed() {
   const record = originalIndex.finalizations[recordKey];
   assert.equal(record.status, "STORE");
   assert.equal(record.extractionCoverage, "CAPPED");
-  assert.equal(record.extractionPolicyVersion, "9.3.2");
+  assert.equal(record.extractionPolicyVersion, "9.3.3");
   assert.equal(record.entryIds.length, 8);
   assert(Number.isSafeInteger(record.evaluatedFragmentCount) && record.evaluatedFragmentCount > 0
     && record.evaluatedFragmentCount < fragments.length);
@@ -829,7 +850,8 @@ async function testCappedCommitProofAndForgedCoverageFailClosed() {
     baseStore.writeJson(metadataPath, { ...originalMetadata, indexHash: hash(forgedIndex) });
     const proof = coordinator.inspectCommittedSnapshot(snapshot);
     assert.equal(proof.state, "UNVERIFIED");
-    assert.equal(proof.reason, "DURABLE_COMMIT_RECORD_INVALID");
+    assert(["DURABLE_COMMIT_RECORD_INVALID", "DURABLE_COVERAGE_PROOF_INVALID"].includes(proof.reason),
+      `forged record must fail closed, got ${proof.reason}`);
   };
   try {
     persistForgedRecord({ ...record, entryIds: record.entryIds.slice(0, 7) });
@@ -850,7 +872,7 @@ async function testLegacySourceEditDuringAsyncExtractionReturnsStale() {
   let signalEntered, releaseResponse;
   const entered = new Promise(resolve => { signalEntered = resolve; });
   const responsePaused = new Promise(resolve => { releaseResponse = resolve; });
-  coordinator.configureDerived({ isCampaignCurrent: () => true, requestExtraction: async prompt => {
+  coordinator.configureExtraction({ isCampaignCurrent: () => true, requestExtraction: async prompt => {
     const fragment = JSON.parse(prompt[1].content).fragments[0];
     signalEntered();
     await responsePaused;

@@ -50,12 +50,7 @@ function fixture(label, { annotated = false, sourceText = spokenText, segmentTex
   const trace = new MemoryTrace({ logger: null });
   const coordinator = new Memory4Coordinator(store, { trace });
   const scheduled = [];
-  const schedule = coordinator.derived.schedule.bind(coordinator.derived);
-  coordinator.derived.schedule = async (scope, options) => {
-    const result = await schedule(scope, options);
-    scheduled.push({ scope, options, result });
-    return result;
-  };
+  assert.equal(coordinator.derived, undefined);
   const message = { id: 1, role: "assistant", speakerCharacterId: 1, content: sourceText,
     ...(annotated ? { memory4Fragments: [{ start: 0, end: sourceText.length, visibility: "participants",
       sourceType: "spoken", recipientIds: [2, 3], entityIds: [] }] } : {}) };
@@ -130,12 +125,8 @@ async function run() {
       assert.equal(result.entryIds.length, 1);
       assert.equal(shared.coordinator.store.query(ownerTwo).length, 1);
       assert.equal(shared.coordinator.store.query(ownerThree).length, 0);
-      assert.equal(shared.scheduled.length, 1);
-      assert.equal(result.derivedGenerationStatus, "SKIPPED_DERIVED_POLICY");
-      assert.equal(result.derived.status, "SKIPPED_DERIVED_POLICY");
-      assert.equal(result.derived.generated, false);
-      assert.equal(result.derived.providerRequests, 0);
-      assert.equal(shared.coordinator.derived.list(ownerTwo).generationPolicy, "RETIRED");
+      assert.equal(shared.scheduled.length, 0);
+      assert.equal(shared.coordinator.derived, undefined);
       assert.equal(promptFragment.allowedEntityIds.includes(2), true);
     });
     await checkAsync("all unknown third-party IDs remain rejected and keep a retryable recovery snapshot", async () => {
@@ -213,7 +204,7 @@ async function run() {
         content: `【乙能够知道并记住的本场内容】\n- ${sourceFact.content}`,
         provenance: { campaignToken: scope.campaignToken, folderOwnerId: 2, perspectiveMemoryIds: [sourceFact.memoryId] } };
       f.coordinator.baseStore.loadFolderSummariesForCharacter = () => [parent];
-      f.coordinator.configureDerived({ requestExtraction: async prompt => {
+      f.coordinator.configureExtraction({ requestExtraction: async prompt => {
         const fragment = JSON.parse(prompt[1].content).fragments[0];
         return { content: JSON.stringify({ status: "STORE", entries: [{ memoryType: "MAJOR_EXPERIENCE", text: fragment.text,
           fragmentIds: [fragment.fragmentId], entityIds: [998], participantIds: [], topics: [], eventTime: { status: "unknown" } }] }), finish_reason: "stop" };
@@ -223,9 +214,9 @@ async function run() {
       assert.equal(result.reason, "memory4_response_no_valid_entries");
       assert.equal(f.coordinator.store.query(scope).length, 0);
       assert.equal(f.trace.list().find(entry => entry.stage === "memory4_candidate_rejected").memory4RejectedUnknownEntityCount, 1);
-      f.coordinator.configureDerived({ requestExtraction: async () => ({ content: JSON.stringify({ status: "NO_DURABLE_CONTENT", entries: [] }), finish_reason: "stop" }) });
+      f.coordinator.configureExtraction({ requestExtraction: async () => ({ content: JSON.stringify({ status: "NO_DURABLE_CONTENT", entries: [] }), finish_reason: "stop" }) });
       const empty = await f.coordinator.recompressLegacy(scope, { memoryId: parent.memoryId });
-      assert.equal(empty.status, "RETAINED_LEGACY");
+      assert.equal(empty.status, "NO_DURABLE_CONTENT");
       assert.equal(empty.reason, "NO_DURABLE_CONTENT");
       assert.equal(f.coordinator.store.query(scope).length, 0);
     });
@@ -235,11 +226,8 @@ async function run() {
       const result = await f.coordinator.finishOwner(snapshot, requestFor([], "NO_DURABLE_CONTENT"));
       assert.equal(result.status, "NO_DURABLE_CONTENT");
       assert.equal(result.entryIds.length, 0);
-      assert.equal(result.derivedGenerationStatus, "SKIPPED_DERIVED_POLICY");
-      assert.equal(result.derived.generated, false);
-      assert.equal(result.derived.providerRequests, 0);
       assert.equal(f.coordinator.getRecoveryStatus(snapshot.campaignToken).pending, 0);
-      assert.equal(f.scheduled.length, 1);
+      assert.equal(f.scheduled.length, 0);
     });
     assert.deepEqual(failures, [], failures.join("\n"));
     console.log(`V8.14.2 Durable generation incident: ${assertions} checks passed`);

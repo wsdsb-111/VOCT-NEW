@@ -7,5 +7,8 @@ VOTC.exe filter=lfs diff=lfs merge=lfs -text
 resources/app/default_userdata/actions/standard/z_leavesConversation.js -whitespace
 # V9.1 source inputs preserve the frozen runtime and Prompt bytes on every checkout.
 src/app/** -text whitespace=cr-at-eol
+# Generated Windows runtime keeps CRLF outside whitespace diagnostics.
+resources/app/out/** text eol=crlf whitespace=cr-at-eol
 # The supplied implementation specification is preserved verbatim, including line-end spaces.
 docs/current/v9/V9_2_IMPLEMENTATION_SPEC.md whitespace=-blank-at-eol
+docs/current/v9/V9_3_3_IMPLEMENTATION_SPEC.md whitespace=-blank-at-eol

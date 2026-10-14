@@ -14,10 +14,7 @@ const MAX_LETTER_LENGTH = 65536;
 const COMPLETED_OWNER_STATUSES = new Set(["STORE", "NO_DURABLE_CONTENT", "NOT_PRESENT", "FORGOTTEN"]);
 
 function ownerComplete(owner) {
-  if (!COMPLETED_OWNER_STATUSES.has(owner.status)) return false;
-  return owner.status !== "STORE" || !owner.entryIds?.length || owner.derivedStatus === "COMPLETE"
-    || owner.derivedStatus === "SKIPPED_DERIVED_POLICY"
-      && owner.derivedGenerated === false && owner.derivedProviderRequests === 0;
+  return COMPLETED_OWNER_STATUSES.has(owner.status);
 }
 
 function freezeDeep(value) {
@@ -166,7 +163,7 @@ class LetterMemoryFinalization {
       attemptCount: 0, retryCount: 0, lastErrorCode: null,
       narrative: { status: "PENDING", summaryStatus: "PENDING", summary: null,
         projectionStatus: "PENDING", legacyStatus: "PENDING", markerStatus: "PENDING", memoryId: null },
-      owners: Object.fromEntries(participants.map(ownerId => [String(ownerId), { ownerId, status: "PENDING", derivedStatus: "PENDING" }])),
+      owners: Object.fromEntries(participants.map(ownerId => [String(ownerId), { ownerId, status: "PENDING" }])),
       createdAt: new Date().toISOString(), updatedAt: new Date().toISOString()
     };
     this.writeJob(job);
@@ -392,36 +389,6 @@ class LetterMemoryFinalization {
     } catch { return null; }
   }
 
-  async rebuildDerived(snapshot, providerSnapshot) {
-    const derived = this.memoryEngine.memory4?.derived;
-    if (typeof derived?.rebuild !== "function") return { status: "FAILED", reason: "LETTER_MEMORY_DERIVED_UNAVAILABLE" };
-    const scope = { campaignToken: snapshot.campaignToken, ownerId: snapshot.ownerId };
-    const request = { kind: "all", providerSnapshot, committedFinalization: true,
-      finalizationProof: { finalizationId: snapshot.finalizationId, sourceRevision: snapshot.sourceRevision } };
-    let outcome;
-    try { outcome = await derived.rebuild(snapshot, request); }
-    catch { return { status: "FAILED", reason: "LETTER_MEMORY_DERIVED_FAILED" }; }
-    const key = hash([scope.campaignToken, scope.ownerId]);
-    if (outcome?.status === "QUEUED") {
-      for (let attempt = 0; attempt < 600; attempt++) {
-        await new Promise(resolve => setTimeout(resolve, 50));
-        const job = derived.jobs?.get(key);
-        if (["FAILED", "CANCELLED", "REQUEUED", "MANUAL_OVERRIDE"].includes(job?.status)) {
-          return { status: job.status, reason: job.reason || null };
-        }
-        if (job?.status === "COMPLETE" && !derived.active?.has(key)) {
-          try { if (derived.list(scope)?.dirty !== true) return { status: "COMPLETE" }; }
-          catch { return { status: "FAILED", reason: "LETTER_MEMORY_DERIVED_FAILED" }; }
-        }
-      }
-      return { status: "RUNNING", reason: "LETTER_MEMORY_DERIVED_STILL_RUNNING" };
-    }
-    if (outcome?.status !== "COMPLETE") return outcome || { status: "FAILED", reason: "LETTER_MEMORY_DERIVED_FAILED" };
-    try { return derived.list(scope)?.dirty === true
-      ? { status: "STALE", reason: "LETTER_MEMORY_DERIVED_STALE" } : outcome; }
-    catch { return { status: "FAILED", reason: "LETTER_MEMORY_DERIVED_FAILED" }; }
-  }
-
   isCurrent(job) {
     try { return typeof this.isCampaignCurrent !== "function" || this.isCampaignCurrent(job.context.campaignToken) === true; }
     catch { return false; }
@@ -476,7 +443,6 @@ class LetterMemoryFinalization {
             owner.status = result.status;
             owner.completedAt = new Date().toISOString();
             owner.entryIds = Array.isArray(result.entryIds) ? result.entryIds : [];
-            owner.derivedStatus = owner.status === "STORE" && owner.entryIds.length ? "PENDING" : "NOT_REQUIRED";
             this.writeJob(job);
           } else if (result?.status === "CANCELLED" && !this.isCurrent(job)) {
             return { ...this.result(job), status: "CAMPAIGN_CHANGED" };
@@ -487,27 +453,6 @@ class LetterMemoryFinalization {
             this.writeJob(job);
             continue;
           }
-        }
-        if (owner.status === "STORE" && owner.entryIds?.length && !ownerComplete(owner)) {
-          let derivedResult = { status: "FAILED" };
-          try { derivedResult = await this.rebuildDerived(snapshot, providerSnapshot); } catch { /* retry only the derived archive */ }
-          if (derivedResult?.status === "COMPLETE"
-            || derivedResult?.status === "SKIPPED_DERIVED_POLICY"
-              && derivedResult.generated === false && derivedResult.providerRequests === 0) {
-            owner.derivedStatus = derivedResult.status;
-            if (derivedResult.status === "SKIPPED_DERIVED_POLICY") {
-              owner.derivedGenerated = false;
-              owner.derivedProviderRequests = 0;
-            }
-            owner.derivedCompletedAt = new Date().toISOString();
-            owner.derivedErrorCode = null;
-          } else {
-            owner.derivedStatus = "FAILED";
-            owner.derivedErrorCode = derivedResult?.reason === "LETTER_MEMORY_DERIVED_STILL_RUNNING"
-              ? "LETTER_MEMORY_DERIVED_STILL_RUNNING" : "LETTER_MEMORY_DERIVED_FAILED";
-            job.lastErrorCode = owner.derivedErrorCode;
-          }
-          this.writeJob(job);
         }
       }
     } catch (error) {
@@ -528,7 +473,7 @@ class LetterMemoryFinalization {
   result(job) {
     return { jobId: job.jobId, campaignToken: job.context.campaignToken, status: this.status(job),
       narrativeStatus: job.narrative.status, ownerStatuses: Object.values(job.owners).map(owner => ({
-        ownerId: owner.ownerId, status: owner.status, derivedStatus: owner.derivedStatus || null })),
+        ownerId: owner.ownerId, status: owner.status })),
       retryCount: job.retryCount, errorCode: job.lastErrorCode || null };
   }
 

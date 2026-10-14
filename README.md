@@ -12,17 +12,19 @@ V9.3.2 Durable／Action 修复（2026-10-13–14）：[实施](docs/current/v9/V
 
 ## 主要功能
 
+V9.3.3 候选（2026-10-14）：[施工规格](docs/current/v9/V9_3_3_IMPLEMENTATION_SPEC.md)、[实施](docs/current/v9/V9_3_3_IMPLEMENTATION_REPORT.md)、[验证](docs/current/v9/V9_3_3_VERIFICATION_REPORT.md)。重要来源按全文与时间区间优先规划；Legacy–Durable 展示只读来源关联，保留 8 条上限和严格权限。Year/Life 从生产服务、UI 与召回退役，某年/生平问句仍检索 Detail/Legacy；历史派生文件须经具体范围确认后事务清理。当前源码版本 9.3.3，部署与各项实机 Gate 以本轮报告为准。
+
 V9.3.1修复候选：[实施](docs/current/v9/V9_3_1_IMPLEMENTATION_REPORT.md)、[验证](docs/current/v9/V9_3_1_VERIFICATION_REPORT.md)、[台账](docs/current/v9/V9_3_1_P_ISSUE_LEDGER.md)。修复Gemini原生缓存／思考用量丢失、total及可见输出口径和部分流尾帧覆盖；Action区分写入尝试与信封接受，失败保留待回执证据，不重放未知效果。本轮全部离线，正式版本仍9.2.0/V9.2，GLM缓存继续HOLD→V9.4。
 
 V9.3 Provider Platform候选：[实施](docs/current/v9/V9_3_IMPLEMENTATION_REPORT.md)、[验证](docs/current/v9/V9_3_VERIFICATION_REPORT.md)、[支持／问题台账](docs/current/v9/V9_3_P_ISSUE_LEDGER.md)。统一七服务商能力／严格完成／原生与估算用量、取消及有界重试；正常出站保持，未知或部分Action不执行。正式App/UI暂保持9.2.0/V9.2；本轮实机和最终SHA CI分别签署。
 
 V9.2.3候选（2026-10-13）：[实施](docs/current/v9/V9_2_3_IMPLEMENTATION_REPORT.md)、[验证](docs/current/v9/V9_2_3_VERIFICATION_REPORT.md)。Year/Life自动模型生成已退役；保留Durable、Detail/Legacy及合法旧档查看和手改。以下旧年度压缩／重建记录为历史合同，不能据此重新启用生成。GLM旧新出站一致，原生长上下文另有取证，实机问题仍HOLD；正式App/UI保持9.2.0/V9.2，未签完整冻结。
 
-当前版本：项目 **V9.3.2**，Electron App 包 **9.3.2**，VOTC Workshop Mod **2.0.5**，人物记忆 **Memory Engine 4.0**。前端显示 `V9.3.2 · Mod v2.0.5`，悬停可见 App 包版本；记忆协议 3.0、摘要 2.5 保持兼容。独立 Three-Mod 工程仍为 1.0.6；VOTC.exe 的旧壳属性版本未改写。以下历史报告保留当时版本和验收快照。
+当前版本：项目 **V9.3.3**，Electron App 包 **9.3.3**，VOTC Workshop Mod **2.0.5**，人物记忆 **Memory Engine 4.0**。前端显示 `V9.3.3 · Mod v2.0.5`，悬停可见 App 包版本；记忆协议 3.0、摘要 2.5 保持兼容。独立 Three-Mod 工程仍为 1.0.6；VOTC.exe 的旧壳属性版本未改写。以下历史报告保留当时版本和验收快照。
 
 可选兼容工程已完成本地迁移：[CK3-Three-Mod-Compatibility](https://github.com/wsdsb-111/CK3-Three-Mod-Compatibility)，工作目录 `C:/Users/97330/Documents/Codex/CK3-Three-Mod-Compatibility`。官职／称谓规则不属于 VOTC 运行必需依赖，历史[1.0.6 报告](docs/v8.15.2-celestial-same-tier-office-report.md)保留；当前安装 Mod 不卸载。独立CI与CK3验收待执行。
 
-人物改名后，摘要列表与对话读写会自动按 ID 合并旧目录，按日期排列摘要并保留长期、年度和人生记忆。合并前保留原字节备份；不同 ID／Campaign、手动修改与遗忘状态保持隔离，冲突时保留原数据并阻止覆盖。详见[摘要合同](docs/README_摘要系统.md)。
+人物改名后，摘要列表与对话读写会自动按 ID 合并旧目录，按日期排列摘要并保留 Detail/Legacy、手动修改与遗忘状态。发现未清理的旧派生视图时阻止合并，须先完成明确确认的迁移；不同 ID／Campaign 保持隔离，冲突时保留原数据并阻止覆盖。详见[摘要合同](docs/README_摘要系统.md)。
 
 V8.15.2 运行与流官兼容修复（2026-10-10）：[空闲控制台报错](docs/v8.15.2-idle-run-carrier-report.md)、[信件消费缺口](docs/v8.15.2-outbound-bridge-followup-report.md)、[Three-Mod 官职交接](docs/v8.15.2-celestial-office-compatibility-report.md)。正式后台消费不再依赖对话窗口；兼容层限制跨官区归位并处理旧低级流官头衔，世袭保留。本轮实机验证与此前用户验收分开记录，需重启 App／CK3。
 
@@ -311,12 +313,12 @@ V7.7 在 V7.6 健康化基础上分阶段拆分主进程：第一阶段将六种
 node scripts\test-release.js
 ```
 
-清单覆盖全部 `test-*.js`；当前 510 个分类文件、438 个发布组、71 个历史归档，结果见[V9.3.2 验证](docs/current/v9/V9_3_2_VERIFICATION_REPORT.md)。既有 Action、Letter、Memory、Worldline、关系、日期和缓存门禁继续执行；历史归档检查不计入发布组。
+清单覆盖全部 `test-*.js`；本轮分类数量与发布结果见[V9.3.3 验证](docs/current/v9/V9_3_3_VERIFICATION_REPORT.md)，数量以 `scripts/test-manifest.js` 实际输出为准。既有 Action、Letter、Memory、Worldline、关系、日期和缓存门禁继续执行；历史归档检查不计入发布组。
 
 ## 版本信息
 
-- 项目／前端版本：V9.3.2；底部显示 `V9.3.2 · Mod v2.0.5`，App 包版本为 9.3.2
-- 当前开发基线：V9.3.2 Durable／Action 修复，继承 V9.3 Provider Facade、V9.2 应用边界与既有用户验收；本轮原生 Provider、CK3、Soak 与最终 SHA 的 CI 分别记录。
+- 项目／前端版本：V9.3.3；底部显示 `V9.3.3 · Mod v2.0.5`，App 包版本为 9.3.3
+- 当前开发基线：V9.3.3 Durable 来源规划、只读来源关联及 Year/Life 生产退役，继承 V9.3 Provider Facade；历史数据清理须显式确认，CK3、Soak 与最终 SHA CI 独立验收。
 - 本机 CK3 模组 descriptor：Voices of the Court 2.0，version 2.0.5，Workshop 3346777360（Mod 名称保留以兼容依赖）；必需 Date Runner 补丁按[外部运行依赖](docs/EXTERNAL_RUNTIME_DEPENDENCIES.md)核对，不单凭版本号判定
 - 本机模组 descriptor 支持版本：CK3 1.20.*（元数据声明，不替代实机兼容性 Gate）
 - UI 主题：宫廷编年史风格（深红、暗金、羊皮纸文本层级）

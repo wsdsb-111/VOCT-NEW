@@ -594,8 +594,8 @@
       "target": "out/main/memory-system/memory4-coordinator.js"
     },
     {
-      "source": "main/memory-system/memory4-derived.js",
-      "target": "out/main/memory-system/memory4-derived.js"
+      "source": "main/memory-system/memory4-coverage.js",
+      "target": "out/main/memory-system/memory4-coverage.js"
     },
     {
       "source": "main/memory-system/memory4-disclosure.js",
@@ -604,6 +604,10 @@
     {
       "source": "main/memory-system/memory4-entity-context.js",
       "target": "out/main/memory-system/memory4-entity-context.js"
+    },
+    {
+      "source": "main/memory-system/memory4-evidence-planner.js",
+      "target": "out/main/memory-system/memory4-evidence-planner.js"
     },
     {
       "source": "main/memory-system/memory4-forget.js",
@@ -628,6 +632,14 @@
     {
       "source": "main/memory-system/memory4-relationship-readback.js",
       "target": "out/main/memory-system/memory4-relationship-readback.js"
+    },
+    {
+      "source": "main/memory-system/memory4-retirement-migration.js",
+      "target": "out/main/memory-system/memory4-retirement-migration.js"
+    },
+    {
+      "source": "main/memory-system/memory4-source-validity.js",
+      "target": "out/main/memory-system/memory4-source-validity.js"
     },
     {
       "source": "main/memory-system/memory4-store.js",

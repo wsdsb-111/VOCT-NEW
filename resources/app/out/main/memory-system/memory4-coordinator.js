@@ -10,13 +10,14 @@ const { ScopedJsonRepository } = require("./scoped-json-repository");
 const { projectionLineageFromSummary, createProjectionLineage } = require("./memory4-forget");
 const { Memory4ProfileService } = require("./memory4-profile");
 const { Memory4RelationshipReadback } = require("./memory4-relationship-readback");
-const { Memory4DerivedService } = require("./memory4-derived");
+const { memory4SourceValid } = require("./memory4-source-validity");
 const { buildMemory4EntityContext } = require("./memory4-entity-context");
 const { validateGenerationOutcome } = require("../providers/generation-outcome");
 const { validateSourceItem, presentIds, sourceParagraphSegments } = require("./finalization-visibility");
 const { MentionTracker } = require("./mention-tracker");
 const { normalizeGameDate } = require("../worldline/character-temporal-facts");
 const { estimateTokens } = require("../token-estimator");
+const { planEvidence, PLANNER_VERSION, coverageProof, validCoverageProof } = require("./memory4-evidence-planner");
 
 const MAX_FRAGMENTS_PER_REQUEST = 128;
 const MAX_DURABLE_ENTRIES_PER_OWNER = 8;
@@ -24,7 +25,7 @@ const DURABLE_MAX_OUTPUT_TOKENS = 4096;
 const DURABLE_INPUT_TOKEN_BUDGET = 8192;
 const DURABLE_REPAIR_RESERVE = 1024;
 const DURABLE_SINGLE_FRAGMENT_BUDGET = 16384;
-const DURABLE_POLICY_VERSION = "9.3.2";
+const DURABLE_POLICY_VERSION = "9.3.3";
 const DURABLE_REPAIRABLE_ERRORS = new Set(["memory4_response_invalid_json", "memory4_response_invalid_shape",
   "memory4_response_invalid_transitions", "memory4_response_source_mismatch", "memory4_invalid_entry",
   "memory4_scope_mismatch", "memory4_unknown_entity", "memory4_invalid_participant", "memory4_invalid_event_status",
@@ -95,12 +96,16 @@ class Memory4Coordinator {
     this.durableRequestTrace = null;
     this.recoveryDir = store.paths.memory4Recovery;
     this.inFlight = new Set();
-    this.derived = new Memory4DerivedService(this);
-    this.store.derived = this.derived;
+    this.extractionOptions = {};
     this.lazyInFlight = new Set();
+    this.sourcePositions = new WeakMap();
   }
 
-  configureDerived(options = {}) { this.derived.configure(options); }
+  configureExtraction(options = {}) { this.extractionOptions = { ...this.extractionOptions, ...options }; }
+
+  sourceValid(scope, row, index, metadata) {
+    return memory4SourceValid({ store: this.store, baseStore: this.baseStore, scope, row, index, metadata });
+  }
 
   beginDurableTraceRun(snapshot, options) {
     try { return this.durableRequestTrace?.beginRun(snapshot, options) || null; }
@@ -179,13 +184,11 @@ class Memory4Coordinator {
   }
 
   async recompressLegacy(scope, { memoryId, expectedSourceHash = null, providerSnapshot = null,
-    isCurrent = () => true, allowPersistedArchive = false, rebuildDerived = false } = {}) {
+    isCurrent = () => true, allowPersistedArchive = false } = {}) {
     assertScope(scope);
     scope = { campaignToken: scope.campaignToken, ownerId: scope.ownerId };
     if (allowPersistedArchive) this.store.assertPersistedScope(scope);
     const key = hash([scope, memoryId]);
-    const rebuildDerivedViews = proof => this.derived.rebuild(scope, { kind: "all", providerSnapshot, committedFinalization: true,
-      finalizationProof: proof }).catch(error => ({ status: "FAILED", kind: "all", reason: String(error?.message || error) }));
     if (this.lazyInFlight.has(key)) return { status: "IN_PROGRESS", sourceMemoryId: memoryId, entryIds: [], retained: true };
     const source = this.legacySource(scope, memoryId);
     const sourceFacts = this.legacyFacts(scope, source);
@@ -193,7 +196,7 @@ class Memory4Coordinator {
     if (!source || expectedSourceHash && legacySourceHash(source) !== expectedSourceHash) return { status: "STALE", sourceMemoryId: memoryId, entryIds: [], retained: true };
     if (!facts.length) return { status: "RETAINED_LEGACY", sourceMemoryId: memoryId, entryIds: [], retained: true, reason: "UNPROVEN_FRAGMENT_BOUNDARY" };
     const sourceHash = legacySourceHash(source), sourceProofs = sourceFacts.map(memory => [memory.memoryId, legacySourceHash(memory)]);
-    const current = () => (allowPersistedArchive || !this.derived.options.isCampaignCurrent || this.derived.options.isCampaignCurrent(scope.campaignToken))
+    const current = () => (allowPersistedArchive || !this.extractionOptions.isCampaignCurrent || this.extractionOptions.isCampaignCurrent(scope.campaignToken))
       && isCurrent() && legacySourceHash(this.legacySource(scope, memoryId) || {}) === sourceHash
       && sourceProofs.every(([id, proof]) => {
         const memory = this.baseStore.getMemory(id);
@@ -208,47 +211,21 @@ class Memory4Coordinator {
     const index = this.store.loadIndex(scope);
     const metadata = this.store.read(path.join(this.store.directory(scope), "metadata.json"), null);
     const covered = new Set();
-    const coveredRows = [];
     for (const [entryId, row] of Object.entries(index.entries)) {
       const record = index.finalizations[hash(row.finalizationId)];
       if (row.deleted || record?.status !== "STORE" || !record.entryIds?.includes(entryId)) continue;
       try {
         const entry = this.store.readEntry(scope, entryId, index);
-        if (!this.derived.sourceValid(scope, row, index, metadata) || entry.source.finalizationId !== row.finalizationId) continue;
+        if (!this.sourceValid(scope, row, index, metadata) || entry.source.finalizationId !== row.finalizationId) continue;
         const validRefs = (row.legacyRefs || []).filter(ref => facts.some(fact =>
           fact.memoryId === ref.memoryId && legacySourceHash(fact) === ref.sourceHash));
         if (validRefs.length) {
           validRefs.forEach(ref => covered.add(ref.memoryId));
-          coveredRows.push({ entryId, row, record });
         }
       } catch { /* Invalid or forgotten legacy coverage stays eligible for normal Durable recovery. */ }
     }
     facts = facts.filter(fact => !covered.has(fact.memoryId)).slice(0, MAX_DURABLE_ENTRIES_PER_OWNER);
     if (!facts.length) {
-      if (rebuildDerived) {
-        const coveredProof = coveredRows.sort((left, right) => String(left.row.finalizationId).localeCompare(String(right.row.finalizationId)))[0];
-        const record = coveredProof?.record;
-        if (sourceFacts.some(fact => !covered.has(fact.memoryId))) return { status: "RECOVERY_UNVERIFIED",
-          reason: "LEGACY_DURABLE_COVERAGE_INCOMPLETE", sourceMemoryId: memoryId, entryIds: [], retained: true };
-        if (coveredProof && record?.sourceRevision) {
-          if (!current()) return { status: "CANCELLED", sourceMemoryId: memoryId, entryIds: [], retained: true };
-          const snapshot = { ...scope, conversationId: `legacy_${hash([memoryId, scope, sourceProofs])}`,
-            finalizationId: coveredProof.row.finalizationId, sourceRevision: record.sourceRevision,
-            episodeId: null, date: source.eventDate || null, totalDays: source.totalDays ?? null,
-            fragments: legacyFragments(sourceFacts), presentMessageCount: 0, completeness: "partial", counterpartIds: [], summaryIds: [memoryId],
-            legacyRetained: true, skipKnownEvidence: true, legacyRecompression: true, legacySourceMemoryId: memoryId,
-            legacySourceProof: sourceHash, legacySourceFactProofs: sourceProofs, legacyArchiveScope: allowPersistedArchive === true,
-            summaryProviderSnapshot: providerSnapshot };
-          const recoveryFile = this.recoveryPath(snapshot);
-          const derived = await rebuildDerivedViews({ finalizationId: coveredProof.row.finalizationId, sourceRevision: record.sourceRevision });
-          this.clearVerifiedRecovery(snapshot, recoveryFile);
-          return { status: "ALREADY_CONVERTED", canonical: { status: "ALREADY_CONVERTED", entryIds: [] },
-            durableStatus: record.status, derivedGenerationStatus: derived?.status || "SKIPPED_DERIVED_POLICY", derived,
-            ...(fs.existsSync(recoveryFile) ? { recoveryPath: recoveryFile } : {}), sourceMemoryId: memoryId, entryIds: [], retained: true };
-        }
-        return { status: "RECOVERY_UNVERIFIED", reason: "LEGACY_DURABLE_COVERAGE_UNVERIFIED",
-          sourceMemoryId: memoryId, entryIds: [], retained: true };
-      }
       return { status: "ALREADY_CONVERTED", sourceMemoryId: memoryId, entryIds: [], retained: true };
     }
     const proofs = facts.map(memory => [memory.memoryId, legacySourceHash(memory)]);
@@ -266,14 +243,15 @@ class Memory4Coordinator {
       if (committedProof.state !== "COMMITTED") return { status: "RECOVERY_UNVERIFIED", reason: committedProof.reason || "LEGACY_COMMIT_UNVERIFIED",
         ...(fs.existsSync(recoveryFile) ? { recoveryPath: recoveryFile } : {}), sourceMemoryId: memoryId, entryIds: [], retained: true };
       if (!current()) return { status: "CANCELLED", sourceMemoryId: memoryId, entryIds: [], retained: true };
-      const derived = await rebuildDerivedViews({ finalizationId: snapshot.finalizationId, sourceRevision: snapshot.sourceRevision });
-      this.clearVerifiedRecovery(snapshot, recoveryFile);
+      const recovery = this.finishCanonicalRecovery(snapshot, recoveryFile);
+      if (recovery.status !== "COMPLETE") return { status: recovery.status, ...recovery,
+        durableStatus: committedProof.record.status, sourceMemoryId: memoryId, entryIds: [], retained: true };
       return { status: "ALREADY_CONVERTED", canonical: { status: "ALREADY_CONVERTED", entryIds: [...prior.entryIds] },
-        durableStatus: committedProof.record.status, derivedGenerationStatus: derived?.status || "SKIPPED_DERIVED_POLICY", derived,
+        durableStatus: committedProof.record.status,
         ...(fs.existsSync(recoveryFile) ? { recoveryPath: recoveryFile } : {}),
         sourceMemoryId: memoryId, entryIds: [...prior.entryIds], retained: true };
     }
-    if (typeof this.derived.options.requestExtraction !== "function") {
+    if (typeof this.extractionOptions.requestExtraction !== "function") {
       this.saveRecovery(snapshot, { status: "EXTRACTION_FAILED", retryCount: Number(priorRecovery?.retryCount || 0) + 1,
         lastError: "memory4_provider_unavailable" });
       return { status: "EXTRACTION_FAILED", sourceMemoryId: memoryId, entryIds: [], retained: true, reason: "memory4_provider_unavailable" };
@@ -282,24 +260,22 @@ class Memory4Coordinator {
     const controller = new AbortController();
     try {
       if (!current()) return { status: "CANCELLED", sourceMemoryId: memoryId, entryIds: [], retained: true };
-      providerSnapshot ||= this.derived.options.getProviderSnapshot ? await this.derived.options.getProviderSnapshot() : null;
+      providerSnapshot ||= this.extractionOptions.getProviderSnapshot ? await this.extractionOptions.getProviderSnapshot() : null;
       snapshot.summaryProviderSnapshot = providerSnapshot;
-      const result = await this.finishOwner(snapshot, (messages, options) => this.derived.options.requestExtraction(messages,
+      const result = await this.finishOwner(snapshot, (messages, options) => this.extractionOptions.requestExtraction(messages,
         { ...options, signal: controller.signal, requestType: "memory4_durable" }), priorRecovery, current,
         { origin: "legacy_recompression", operation: "legacy_recompression" });
       if (!this.isLegacyRecompressionSnapshotCurrent(snapshot)) {
         return { status: "STALE", sourceMemoryId: memoryId, entryIds: [], retained: true };
       }
-      if (!["STORE", "NO_DURABLE_CONTENT"].includes(result.durableStatus)) {
-        return { ...result, sourceMemoryId: memoryId, entryIds: [], retained: true, reason: result.error || result.reason };
+      if (!["STORE", "NO_DURABLE_CONTENT"].includes(result.durableStatus) || result.recoveryStatus !== "COMPLETE") {
+        return { ...result, status: result.recoveryStatus === "RECOVERY_UNVERIFIED" ? "RECOVERY_UNVERIFIED" : result.status,
+          sourceMemoryId: memoryId, entryIds: [], retained: true, reason: result.error || result.reason };
       }
-      const derived = rebuildDerived
-        ? await rebuildDerivedViews({ finalizationId: snapshot.finalizationId, sourceRevision: snapshot.sourceRevision }) : result.derived;
       const status = result.durableStatus === "NO_DURABLE_CONTENT" ? "NO_DURABLE_CONTENT" : "COMPLETE";
       this.trace?.record("memory4_legacy_recompression", { ownerId: scope.ownerId, status, count: result.entryIds.length });
-      return { status: result.entryIds.length || rebuildDerived ? status : "RETAINED_LEGACY",
-        durableStatus: result.durableStatus, derivedGenerationStatus: derived?.status || "SKIPPED_DERIVED_POLICY",
-        ...(rebuildDerived ? { canonical: { status, entryIds: [...result.entryIds] } } : {}), derived,
+      return { status,
+        durableStatus: result.durableStatus,
         ...(fs.existsSync(recoveryFile) ? { recoveryPath: recoveryFile } : {}), sourceMemoryId: memoryId,
         entryIds: [...result.entryIds], retained: true, ...(!result.entryIds.length ? { reason: "NO_DURABLE_CONTENT" } : {}) };
     } catch (error) {
@@ -600,8 +576,7 @@ class Memory4Coordinator {
       index: this.store.loadIndex(scope, { forgottenProjections }),
       metadata: this.store.read(path.join(directory, "metadata.json"), null) || {},
       known: this.store.read(path.join(directory, "known-entities.json"), null) || { ...scope, entities: {} },
-      snapshots: new Map(), rawYears: new Map() };
-    context.derived = this.derived.list(scope, { readContext: context });
+      snapshots: new Map() };
     return context;
   }
 
@@ -666,7 +641,10 @@ class Memory4Coordinator {
       return unverified("SOURCE_REVISION_EVIDENCE_MISSING");
     }
     const evaluatedAll = Array.isArray(snapshot.fragments) && record.evaluatedFragmentCount === snapshot.fragments.length;
-    const validCappedEvaluation = Array.isArray(snapshot.fragments) && record.extractionPolicyVersion === DURABLE_POLICY_VERSION
+    if (record.extractionPolicyVersion === DURABLE_POLICY_VERSION && !validCoverageProof(record.coverageProof, record, snapshot)) {
+      return unverified("DURABLE_COVERAGE_PROOF_INVALID");
+    }
+    const validCappedEvaluation = Array.isArray(snapshot.fragments) && ["9.3.2", DURABLE_POLICY_VERSION].includes(record.extractionPolicyVersion)
       && record.extractionCoverage === "CAPPED" && Number.isSafeInteger(record.evaluatedFragmentCount)
       && record.evaluatedFragmentCount > 0 && record.evaluatedFragmentCount < snapshot.fragments.length
       && Array.isArray(record.entryIds) && record.entryIds.length === MAX_DURABLE_ENTRIES_PER_OWNER;
@@ -706,7 +684,7 @@ class Memory4Coordinator {
           || entry.source?.finalizationId !== row.finalizationId || entry.source?.conversationId !== row.conversationId
           || entryKind === "changed" && (entry.state?.source?.finalizationId !== snapshot.finalizationId
             || entry.state?.source?.conversationId !== snapshot.conversationId || entry.state?.source?.sourceRevision !== snapshot.sourceRevision)
-          || !this.derived.sourceValid(scope, row, index, metadata)) return false;
+          || !this.sourceValid(scope, row, index, metadata)) return false;
         const sourceRecord = index.finalizations[hash(entry.source.finalizationId)];
         const sourceRevision = metadata.knownEvidenceRevisions?.[hash([entry.source.conversationId, scope.ownerId])];
         return !!sourceRecord?.sourceRevision && sourceRevision === sourceRecord.sourceRevision
@@ -732,14 +710,14 @@ class Memory4Coordinator {
     } catch { return false; }
   }
 
-  getRecoveryStatus(activeCampaignToken) {
+  getRecoveryStatus(activeCampaignToken, ownerId = null) {
     if (!activeCampaignToken || !fs.existsSync(this.recoveryDir)) return { pending: 0, manual: 0, balanceBlocked: 0 };
     let pending = 0, manual = 0, balanceBlocked = 0, invalid = 0;
     for (const name of fs.readdirSync(this.recoveryDir).filter(name => /^[a-f0-9]{64}\.json$/.test(name))) {
       let record;
       try { record = this.readRecovery(path.join(this.recoveryDir, name)); }
       catch { invalid++; continue; }
-      if (record?.snapshot?.campaignToken !== activeCampaignToken) continue;
+      if (record?.snapshot?.campaignToken !== activeCampaignToken || ownerId != null && record.snapshot.ownerId !== ownerId) continue;
       pending++;
       if (Number(record.retryCount || 0) >= 3) manual++;
       if (/402|insufficient balance/i.test(record.lastError || "")) balanceBlocked++;
@@ -903,9 +881,9 @@ class Memory4Coordinator {
   }
 
   orderFragments(snapshot, fragments) {
-    const priority = new Set(ids(snapshot.relationshipChangeEntityIds));
-    return [...fragments].sort((left, right) =>
-      Number(right.entityIds?.some(id => priority.has(id))) - Number(left.entityIds?.some(id => priority.has(id))));
+    const plan = planEvidence(snapshot, snapshot.fragments || fragments);
+    const ranks = new Map(plan.orderedFragmentIds.map((id, position) => [id, position]));
+    return [...fragments].sort((left, right) => ranks.get(left.fragmentId) - ranks.get(right.fragmentId));
   }
 
   relevantCommitments(entries, fragments) {
@@ -995,15 +973,18 @@ class Memory4Coordinator {
 
   restoreDurableCheckpoint(snapshot, prior) {
     const scopeHash = this.checkpointScope(snapshot);
+    const plan = planEvidence(snapshot);
     const sourceContext = { sourceRevision: snapshot.sourceRevision, completeness: snapshot.completeness,
       activeCommitmentsHash: hash(snapshot.activeCommitments),
       lineages: (snapshot.projectionLineages || []).map(row => ({ id: row.projectionId, digest: hash(row) })),
       sources: snapshot.fragments.map(fragment => ({ id: fragment.fragmentId, digest: this.checkpointFragment(snapshot, fragment) })) };
     const fresh = () => ({ version: 1, policyVersion: DURABLE_POLICY_VERSION, scopeHash,
+      plannerVersion: PLANNER_VERSION, sourceDigest: plan.sourceDigest, planChecksum: plan.checksum,
+      originalOrder: plan.originalOrder, orderedFragmentIds: plan.orderedFragmentIds,
       sourceContext, contextHash: hash([scopeHash, sourceContext]), chunks: [] });
     const checkpoint = prior?.extractionCheckpoint;
     if (!checkpoint) return fresh();
-    if (checkpoint.version !== 1 || checkpoint.policyVersion !== DURABLE_POLICY_VERSION || checkpoint.scopeHash !== scopeHash
+    if (checkpoint.version !== 1 || !["9.3.2", DURABLE_POLICY_VERSION].includes(checkpoint.policyVersion) || checkpoint.scopeHash !== scopeHash
       || !Array.isArray(checkpoint.chunks) || !Array.isArray(checkpoint.sourceContext?.sources)
       || !Array.isArray(checkpoint.sourceContext?.lineages)
       || checkpoint.contextHash !== hash([scopeHash, checkpoint.sourceContext])) {
@@ -1014,6 +995,15 @@ class Memory4Coordinator {
         throw new Error("memory4_checkpoint_corrupt");
       }
     }
+    // Old leaves are readable but cannot certify completion under a different source plan.
+    if (checkpoint.policyVersion !== DURABLE_POLICY_VERSION || checkpoint.plannerVersion !== PLANNER_VERSION) return fresh();
+    const oldPlan = { sourceDigest: checkpoint.sourceDigest, planChecksum: checkpoint.planChecksum,
+      originalOrder: checkpoint.originalOrder, orderedFragmentIds: checkpoint.orderedFragmentIds };
+    if (!/^[a-f0-9]{64}$/.test(oldPlan.sourceDigest || "") || !/^[a-f0-9]{64}$/.test(oldPlan.planChecksum || "")
+      || !Array.isArray(oldPlan.originalOrder) || !Array.isArray(oldPlan.orderedFragmentIds)) throw new Error("memory4_checkpoint_corrupt");
+    if (checkpoint.contextHash === hash([scopeHash, sourceContext]) && (oldPlan.sourceDigest !== plan.sourceDigest
+      || oldPlan.planChecksum !== plan.checksum || hash(oldPlan.originalOrder) !== hash(plan.originalOrder)
+      || hash(oldPlan.orderedFragmentIds) !== hash(plan.orderedFragmentIds))) return fresh();
     if (checkpoint.contextHash !== hash([scopeHash, sourceContext])) {
       const old = checkpoint.sourceContext;
       const currentSources = new Map(sourceContext.sources.map(row => [row.id, row.digest]));
@@ -1055,6 +1045,10 @@ class Memory4Coordinator {
   }
 
   buildPrompt(snapshot, fragments, remainingEntrySlots = MAX_DURABLE_ENTRIES_PER_OWNER, remainingTransitionSlots = MAX_DURABLE_ENTRIES_PER_OWNER) {
+    const sourceFragments = snapshot.fragments || fragments;
+    if (!this.sourcePositions.has(sourceFragments)) this.sourcePositions.set(sourceFragments,
+      new Map(sourceFragments.map((fragment, position) => [fragment.fragmentId, position])));
+    const originalPositions = this.sourcePositions.get(sourceFragments);
     const entityNames = [], relationships = [];
     const nameKeys = new Map(), relationshipKeys = new Map();
     const reference = (rows, keys, row) => {
@@ -1062,7 +1056,7 @@ class Memory4Coordinator {
       if (!keys.has(key)) { keys.set(key, rows.length); rows.push(row); }
       return keys.get(key);
     };
-    const projected = this.orderFragments(snapshot, fragments).map((fragment, position) => {
+    const projected = fragments.map((fragment, position) => {
       const allowedEntityIds = ids([...(fragment.knownBy?.includes(snapshot.ownerId) ? [snapshot.ownerId] : []),
         fragment.speakerId, ...fragment.entityIds]);
       const nameRefs = (snapshot.entityNameEvidence || []).filter(row => row.fragmentId === fragment.fragmentId
@@ -1075,22 +1069,23 @@ class Memory4Coordinator {
         .map(row => reference(relationships, relationshipKeys, { entityId: row.entityId, types: row.types, asOf: row.asOf }));
       const eventDate = normalizeGameDate(fragment.eventDate)?.canonical;
       const acquiredDate = normalizeGameDate(fragment.acquiredDate)?.canonical;
-      return { fragmentId: fragment.fragmentId, fragmentRef: `f${position}`, text: fragment.text, speakerId: fragment.speakerId,
+      return { fragmentId: fragment.fragmentId, fragmentRef: `f${position}`, sourceOrdinal: originalPositions.get(fragment.fragmentId), text: fragment.text, speakerId: fragment.speakerId,
         sourceType: fragment.sourceType, allowedEntityIds, participantIds: ids(fragment.presentIds), nameRefs, relationshipRefs,
         ...(fragment.legacyMemoryId ? { sourceAsOf: fragment.legacyAnchorGameDate } : {}),
         ...(eventDate ? { eventDate } : {}), ...(acquiredDate ? { acquiredDate } : {}) };
     });
     return [
-      { role: "system", content: `VOTC Memory Engine 4.0 Durable extraction. Contract v9.3.2.
+      { role: "system", content: `VOTC Memory Engine 4.0 Durable extraction. Contract v9.3.3.
 Return JSON only: {"status":"STORE"|"NO_DURABLE_CONTENT","entries":[],"commitmentTransitions":[]}.
 Each entry: {"memoryType":"DURABLE_KNOWLEDGE","text":"evidence-backed third-person archival prose","fragmentIds":["copy exact supplied ID"],"entityIds":[],"participantIds":[],"topics":[],"eventTime":{"from":null,"to":null,"precision":"unknown","status":"unknown"}}. entityIds and participantIds contain JSON integers, never strings, names, table indices or quoted numbers. Copy actual IDs from the cited fragments only; use [] if uncertain.
 memoryType must be RELATIONSHIP_CHANGE, COMMITMENT, DURABLE_KNOWLEDGE, MAJOR_EXPERIENCE, LONG_TERM_GOAL or EMOTIONAL_ANCHOR. Only significant lasting information qualifies; do not save routine chatter. Preserve important names, conditions and quantities without inventing facts. Owner is the memory holder (记忆持有人), never a master or 主人.
+Prioritize lasting consequences, major events, experiences, historical recollections, reported news, relationships, conditional promises, goals and secrets. Plain greetings, empty gestures and repetitive scene decoration normally create no memory. "你好" or "我挠挠头，端起茶杯" alone normally yields no entry; "摸刀柄，昨晚看见刺客" contains an account; "拔刀刺伤使臣，当场被捕" contains a consequential event. Preserve negation and conditions such as "若北伐成功才恢复兵权". "听闻城池失守，尚未证实" stays reported or rumor; "十年前逃离汴京，日期未知" keeps unknown dates. Never fill a quota: fewer than eight entries is valid. Merge paraphrases with all supported source IDs. Input priority is not truth; sourceOrdinal preserves the original chronology, including cancellations after earlier promises.
 eventTime.status must be observed, reported, planned or unknown. eventTime.precision must be day, month, year, range or unknown. Uncertain dates require from:null, to:null, precision:"unknown"; status describes the evidence, not whether the date is known. Dated events need both dates in the supplied evidence; never invent or translate a relative date using another fragment's date. sourceAsOf anchors Legacy statements. When sourceType is spoken, reported or rumor, use reported for accounts, planned for future intentions, or unknown; observed is forbidden even if a speaker says they saw it or the dialogue happened now. observed is allowed only when EVERY cited fragment has sourceType witnessed or game_fact. Future completed facts are prohibited; a future plan stays planned. Use status:"unknown" only when the event status is uncertain; that status never permits dates.
 Every entry must cite at least one exact supplied fragmentId or its short fragmentRef, such as "f0", in fragmentIds. Prefer fragmentRef to avoid copying long IDs; the application resolves it to that request's original source. Never construct IDs or borrow references from another request. entityIds may only contain the union of allowedEntityIds from those cited fragments. participantIds are presence evidence only and never authorize entityIds. Owner ID may be used when listed in allowedEntityIds for a fact about the Owner as its own subject or as the listener; include it only when relevant. Empty entityIds is valid when no identity can be supported. Do not include everyone present or names found only in other fragments. Do not change Campaign or Owner. Source visibility and knownBy are granted locally, never by your output.
 entityNames and relationships are deduplicated tables. Each fragment's nameRefs and relationshipRefs authorize only those table rows for that fragment. Names and roles never authorize an entity ID. Use only names authorized by the cited fragment; an absent name remains unknown. Preserve exact quotations for commitments. Relationships are scoped CK3 readback at asOf, not proof of a historical change, private knowledge or a confirmed game effect. Ambiguous identities stay ambiguous.
 Follow the dynamic request limits: return no more than limits.maxEntries entries and limits.maxCommitmentTransitions commitment transitions for this owner in this request. STORE requires nonempty entries; NO_DURABLE_CONTENT requires entries:[]. Zero allowance means return no entries. A repair request supplies safe validation codes, not new evidence: correct only against the supplied fragments. Do not repeat alreadyAccepted facts.
 Each transition: {"entryId":"copy activeCommitment ID","expectedRevision":1,"status":"fulfilled"|"cancelled"|"superseded","fragmentIds":["exact ID"],"evidenceQuote":"complete verbatim source quote","commitmentQuote":"exact concrete quote shared with the original commitment","replacementEntryIndex":0}. replacementEntryIndex is required only for superseded and must point to a new COMMITMENT whose text is copied verbatim from the replacement evidence. The binding must identify exactly one supplied active commitment and cover every original condition. Questions, future plans, hypotheticals, negations, hearsay, generic phrases, ambiguous references and years of silence never change status. No transition confirms a CK3 effect.` },
-      { role: "user", content: JSON.stringify({ contractVersion: "9.3.2", ownerId: snapshot.ownerId,
+      { role: "user", content: JSON.stringify({ contractVersion: "9.3.3", ownerId: snapshot.ownerId,
         campaignToken: snapshot.campaignToken, conversationDate: snapshot.date, completeness: snapshot.completeness,
         entityNames, relationships, fragments: projected,
         activeCommitments: this.relevantCommitments(snapshot.activeCommitments, fragments).map(entry => ({ entryId: entry.entryId,
@@ -1241,9 +1236,9 @@ Each transition: {"entryId":"copy activeCommitment ID","expectedRevision":1,"sta
       if (committedProof.state === "COMMITTED") {
         this.recordDisclosures(snapshot, { campaignToken: snapshot.campaignToken, date: snapshot.date,
           characters: new Map((snapshot.disclosureCharacters || []).map(character => [character.id, character])) });
-        const derived = await this.finishCommittedDerived(snapshot, prior, file, { sourceFilteredByForget });
+        const recovery = this.finishCanonicalRecovery(snapshot, file, { sourceFilteredByForget });
         return { ownerId: snapshot.ownerId, ...committedProof.record, alreadyCommitted: true,
-          durableStatus: committedProof.record.status, derivedGenerationStatus: derived.status, derived,
+          durableStatus: committedProof.record.status, recoveryStatus: recovery.status,
           ...(fs.existsSync(file) ? { recoveryPath: file } : {}) };
       }
       if (committedProof.state === "UNVERIFIED" || prior?.status === "DERIVED_REBUILD_FAILED") {
@@ -1448,21 +1443,32 @@ Each transition: {"entryId":"copy activeCommitment ID","expectedRevision":1,"sta
           return { ownerId: snapshot.ownerId, status: "FORGOTTEN", forgottenProjectionIds: latest.forgottenProjectionIds };
         }
         result = this.pruneDurableResult(result, new Set(snapshot.fragments.map(fragment => fragment.fragmentId)));
+        extractionCheckpoint = this.restoreDurableCheckpoint(snapshot, { extractionCheckpoint,
+          forgottenFragmentIds: [...forgottenFragmentIds] });
+        result = extractionCheckpoint.chunks.reduce((accumulated, saved) => this.mergeDurableResults(accumulated, saved.result, snapshot),
+          { entries: [], commitmentTransitions: [], rejectedUnknownEntityCount: 0, rejectedCodes: [] });
       }
       if (sourceFilteredByForget && snapshot.fragments.length === 0) {
         if (fs.existsSync(file)) this.baseStore.removeSummaryMutationFile(file);
         return { ownerId: snapshot.ownerId, status: "FORGOTTEN" };
       }
+      const evaluatedSourceIds = [...new Set(extractionCheckpoint?.chunks.flatMap(saved => saved.sources.map(source => source.id)) || [])];
+      result.evaluatedFragmentCount = evaluatedSourceIds.length;
+      if (evaluatedSourceIds.length < snapshot.fragments.length && result.entries.length < MAX_DURABLE_ENTRIES_PER_OWNER) {
+        throw new Error("memory4_response_source_forgotten");
+      }
+      result.extractionPolicyVersion = DURABLE_POLICY_VERSION;
+      result.coverageProof = coverageProof(snapshot, evaluatedSourceIds, result.entries.length);
       const persisted = this.repository.commitOwner(snapshot, result);
       parsedAttempts.forEach(attempt => this.recordDurableTrace(attempt, { status: "COMMITTED" }));
       this.recordDisclosures(snapshot, { campaignToken: snapshot.campaignToken, date: snapshot.date,
         characters: new Map((snapshot.disclosureCharacters || []).map(character => [character.id, character])) });
-      const derived = await this.finishCommittedDerived(snapshot, prior, file);
+      const recovery = this.finishCanonicalRecovery(snapshot, file);
       this.trace?.record("memory4_durable", { finalizationId: snapshot.finalizationId, ownerId: snapshot.ownerId,
         status: persisted.status, entryCount: persisted.entryIds.length, completeness: persisted.completeness,
-        ...(derived ? { derivedStatus: derived.status } : {}) });
+        recoveryStatus: recovery.status });
       return { ownerId: snapshot.ownerId, ...persisted, durableStatus: persisted.status,
-        ...(derived ? { derivedGenerationStatus: derived.status, derived } : {}),
+        recoveryStatus: recovery.status,
         ...(fs.existsSync(file) ? { recoveryPath: file } : {}) };
     } catch (error) {
       if (!isCurrent()) return { ownerId: snapshot.ownerId, status: "CANCELLED",
@@ -1478,19 +1484,10 @@ Each transition: {"entryId":"copy activeCommitment ID","expectedRevision":1,"sta
     } finally { this.inFlight.delete(file); }
   }
 
-  async finishCommittedDerived(snapshot, prior, file, { sourceFilteredByForget = false } = {}) {
-    const derived = await this.derived.schedule(snapshot, { providerSnapshot: snapshot.summaryProviderSnapshot, committedFinalization: true });
-    if (derived?.status === "SKIPPED_DERIVED_POLICY") {
-      const cleared = this.clearVerifiedRecovery(snapshot, file, { sourceFilteredByForget });
-      return { ...derived, ...(cleared ? {} : { recoveryRetained: true, recoveryPath: file }) };
-    }
-    if (!derived?.status || ["COMPLETE", "MANUAL_OVERRIDE"].includes(derived.status)) {
-      this.clearVerifiedRecovery(snapshot, file, { sourceFilteredByForget });
-      return derived || null;
-    }
-    this.saveRecovery(snapshot, { status: "DERIVED_REBUILD_FAILED", retryCount: Number(prior?.retryCount || 0),
-      lastError: String(derived.reason || derived.status || "memory4_derived_failed") });
-    return derived;
+  finishCanonicalRecovery(snapshot, file, options = {}) {
+    const cleared = this.clearVerifiedRecovery(snapshot, file, options);
+    return { status: cleared ? "COMPLETE" : "RECOVERY_UNVERIFIED", providerRequests: 0,
+      ...(cleared ? {} : { recoveryRetained: true, recoveryPath: file }) };
   }
 
   async finalizeCommitted(context, requestDurable, { isNarrativeCommitted, isCurrent = () => true, handoffOnly = false } = {}) {
@@ -1570,8 +1567,8 @@ Each transition: {"entryId":"copy activeCommitment ID","expectedRevision":1,"sta
             }
             const cleared = this.clearVerifiedRecovery(snapshot, file);
             results[index] = cleared
-              ? { ownerId: snapshot.ownerId, status: "SKIPPED_DERIVED_POLICY", durableStatus: committedProof.record.status,
-                derivedGenerationStatus: "SKIPPED_DERIVED_POLICY", generated: false, providerRequests: 0 }
+              ? { ownerId: snapshot.ownerId, status: "COMPLETE", durableStatus: committedProof.record.status,
+                generated: false, providerRequests: 0 }
               : { ownerId: snapshot.ownerId, status: "RECOVERY_UNVERIFIED", recoveryPath: file,
                 reason: "DURABLE_RECOVERY_CLEANUP_UNVERIFIED" };
             continue;

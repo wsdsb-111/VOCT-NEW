@@ -146,10 +146,6 @@ async function main() {
       const originalFinalizationKey = hash(saved.snapshot.finalizationId);
       const result = await transition(f, saved, "fulfilled-end", "我已经归还玉印，履行了归还玉印的承诺。", "fulfilled");
       assert.equal(result.commitmentTransitionCount, 1);
-      assert.equal(result.derivedGenerationStatus, "SKIPPED_DERIVED_POLICY");
-      assert.equal(result.derived.status, "SKIPPED_DERIVED_POLICY");
-      assert.equal(result.derived.generated, false);
-      assert.equal(result.derived.providerRequests, 0);
       const entry = f.coordinator.store.readEntry(f.scope, saved.entryId);
       assert.equal(entry.state.status, "fulfilled"); assert.equal(entry.revision, 2); assert.equal(entry.state.revision, 2);
       assert.equal(entry.state.changedGameDate, "1181.1.1"); assert(entry.state.changedAt);
@@ -169,10 +165,8 @@ async function main() {
       const metadata = f.coordinator.store.read(path.join(f.coordinator.store.directory(f.scope), "metadata.json"));
       assert.equal(metadata.knownEvidenceRevisions[hash([saved.snapshot.conversationId, f.scope.ownerId])], originalSourceRevision,
         "derived retirement must not clear the original source revision proof");
-      assert.equal(metadata.derivedDirty, true, "retirement preserves the source invalidation marker instead of pretending views were reconciled");
-      const derived = f.coordinator.derived.list(f.scope);
-      assert.equal(derived.generationPolicy, "RETIRED");
-      assert.equal(derived.dirty, true);
+      assert.equal(metadata.derivedDirty, undefined);
+      assert.equal(f.coordinator.derived, undefined);
     });
     await checkAsync("explicit cancellation closes only the original active promise", async () => {
       const f = fixture("cancelled"), saved = newPromise(f, "cancelled");
@@ -256,7 +250,7 @@ async function main() {
       assert.equal(f.planner.plan(options).items.length, 0);
       const index = f.coordinator.store.loadIndex(f.scope);
       const metadata = f.coordinator.store.read(path.join(f.coordinator.store.directory(f.scope), "metadata.json"));
-      assert.equal(f.coordinator.derived.sourceValid(f.scope, index.entries[saved.entryId], index, metadata), false);
+      assert.equal(f.coordinator.sourceValid(f.scope, index.entries[saved.entryId], index, metadata), false);
     });
     await checkAsync("a failed transition transaction rolls back the canonical status and body", async () => {
       const f = fixture("transition-rollback"), saved = newPromise(f, "transition-rollback");

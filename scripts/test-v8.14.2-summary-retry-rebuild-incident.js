@@ -121,7 +121,7 @@ async function retryDetachedMemory4AndLetters(root) {
     persistCharacterFolders: async () => ({ success: true }),
     requestSummary: async () => ({ content: validSummary({ ...context, messages: context.messages }), finish_reason: "stop" })
   };
-  engine.memory4.configureDerived({
+  engine.memory4.configureExtraction({
     isCampaignCurrent: token => token === "detached-campaign",
     requestExtraction: async () => { throw new Error("fixture_initial_extraction_failure"); }
   });
@@ -151,7 +151,7 @@ async function retryDetachedMemory4AndLetters(root) {
       return [{ letterId: "failed-letter", status: "EXTRACTION_FAILED", error: "fixture_letter_failure" }];
     }
   };
-  engine.memory4.configureDerived({
+  engine.memory4.configureExtraction({
     isCampaignCurrent: token => token === "detached-campaign",
     requestExtraction: async prompt => ({ content: durableOutput(prompt), finish_reason: "stop" })
   });
@@ -197,7 +197,7 @@ async function retryPersistedLegacyExtractionWithRetiredDerived(root) {
     campaignToken, date: "1165.1.1", characters: new Map([[2, { id: 2, shortName: "乙" }], [3, { id: 3, shortName: "丙" }]])
   }, memoryState: engine.createConversationState("legacy-recovery-conversation"), dynamicRecallHistory: new Map() };
   let requestExtractionCalls = 0, durableRetryCalls = 0, compressionCalls = 0;
-  engine.memory4.configureDerived({
+  engine.memory4.configureExtraction({
     isCampaignCurrent: token => token === campaignToken,
     estimateTokens: text => Math.ceil(text.length / 2),
     requestExtraction: async () => { requestExtractionCalls++; throw new Error("fixture_extraction_failure"); },
@@ -242,13 +242,11 @@ async function retryPersistedLegacyExtractionWithRetiredDerived(root) {
   const canonicalEntries = engine.memory4.store.query(scope);
   const index = engine.memory4.store.loadIndex(scope);
   const metadata = engine.store.readJson(path.join(engine.memory4.store.directory(scope), "metadata.json"), null);
-  engine.memory4.derived.markDirty(scope, { index, metadata, entryIds: canonicalEntries.map(entry => entry.entryId) });
+  assert.equal(engine.memory4.derived, undefined);
   const coveredRebuild = await engine.memory4.recompressLegacy(scope, {
     memoryId: sourceMemory.memoryId, expectedSourceHash: coverage.sourceHash, rebuildDerived: true
   });
   assert.equal(coveredRebuild.status, "ALREADY_CONVERTED");
-  assert.equal(coveredRebuild.derived.status, "SKIPPED_DERIVED_POLICY");
-  assert.equal(coveredRebuild.derived.providerRequests, 0);
   assert.equal(engine.memory4.getRecoveryStatus(campaignToken).pending, 0,
     "a verified covered Durable source must not create a Derived-only recovery loop");
   const coveredRetry = await manager.retryFailedSummaries();
@@ -276,7 +274,7 @@ async function regenerateRewritesLegacySourceWithoutDerivedGeneration(root) {
     campaignToken, date: "1165.1.1", characters: new Map([[2, { id: 2, shortName: "乙", fullName: "乙" }], [3, { id: 3, shortName: "丙", fullName: "丙" }]])
   }, memoryState: engine.createConversationState("regenerate-active"), dynamicRecallHistory: new Map() };
   const extractionContents = [];
-  engine.memory4.configureDerived({
+  engine.memory4.configureExtraction({
     isCampaignCurrent: token => token === campaignToken,
     estimateTokens: text => Math.ceil(text.length / 2),
     requestExtraction: async prompt => {
@@ -299,12 +297,12 @@ async function regenerateRewritesLegacySourceWithoutDerivedGeneration(root) {
     getCurrentConversation: () => conversation,
     getMemory4ReadConversation: () => conversation,
     requestSummary: async () => ({ content: outputs.shift(), finish_reason: "stop" }),
+    requestDurable: (prompt, options) => engine.memory4.extractionOptions.requestExtraction(prompt, options),
     getSummaryOutputLimit: () => 4096
   });
   const first = await manager.regenerateSummary(2, 3, 0, initialContent);
   assert.equal(first.success, true, JSON.stringify(first));
   assert.equal(first.memoryRebuild.canonical.status, "COMPLETE");
-  assert.equal(first.memoryRebuild.derived.status, "SKIPPED_DERIVED_POLICY");
   const scope = { campaignToken, ownerId: 2 };
   const firstEntry = engine.memory4.store.query(scope)[0];
   assert(firstEntry.text.includes("改为承诺"));
@@ -317,29 +315,37 @@ async function regenerateRewritesLegacySourceWithoutDerivedGeneration(root) {
   const second = await manager.regenerateSummary(2, 3, 0, current);
   assert.equal(second.success, true);
   assert.equal(second.memoryRebuild.canonical.status, "COMPLETE");
-  assert.equal(second.memoryRebuild.derived.status, "SKIPPED_DERIVED_POLICY");
   const currentEntries = engine.memory4.store.query(scope);
   assert(currentEntries.some(entry => entry.text.includes("确认秋收后")));
   assert(!currentEntries.some(entry => entry.text.includes("改为承诺")), "old canonicals bound to the replaced Legacy source must become ineligible");
   const preservedManual = engine.memory4.store.readEntry(scope, firstEntry.entryId);
   assert.equal(preservedManual.text, "手工保留的旧来源长期记忆。");
   assert.equal(preservedManual.edit.mode, "manual_override");
-  const rebuilt = engine.memory4.derived.list(scope);
-  assert(rebuilt.years.some(view => view.eventYear === 1164 && view.dirty));
-  assert(rebuilt.life?.dirty, "source replacement leaves persisted historical views stale instead of rebuilding them");
-  assert.deepEqual(engine.memory4.derived.getPointers(scope, 3, { currentGameDate: "1165.1.1" }).yearKeys, []);
-  assert.deepEqual(engine.memory4.derived.getPointers(scope, 3, { currentGameDate: "1165.1.1" }).lifeItemIds, []);
+  assert.equal(engine.memory4.derived, undefined);
 
   const third = await manager.regenerateSummary(2, 3, 0, expectedOutputs[1]);
-  assert.equal(third.success, true);
+  assert.equal(third.success, true, JSON.stringify(third));
   assert.equal(third.memoryRebuild.canonical.status, "NO_DURABLE_CONTENT");
-  assert.equal(third.memoryRebuild.derived.status, "SKIPPED_DERIVED_POLICY");
   assert(!engine.memory4.store.query(scope).some(entry => entry.text.includes("无可确认")), "NO_DURABLE_CONTENT must not fabricate a Detail entry");
-  assert(engine.memory4.derived.list(scope).years.every(view => view.dirty), "old Year files stay stale after a rewrite with no Durable replacement");
-  assert.deepEqual(engine.memory4.derived.getPointers(scope, 3, { currentGameDate: "1165.1.1" }).yearKeys, []);
+  assert.equal(engine.memory4.derived, undefined);
   assert(Object.values(engine.memory4.store.loadIndex(scope).finalizations).some(record => record.status === "NO_DURABLE_CONTENT"),
     "the empty extraction outcome must remain explicit and source-bound");
   assert.deepEqual(extractionContents, expectedOutputs, "each successful rewrite must extract exactly its new source body");
+  outputs.push("1164年乙无可确认的长期内容，证据已重核。");
+  const clearRecovery = engine.memory4.clearVerifiedRecovery.bind(engine.memory4);
+  engine.memory4.clearVerifiedRecovery = () => false;
+  let unverified;
+  try { unverified = await manager.regenerateSummary(2, 3, 0, expectedOutputs[2]); }
+  finally { engine.memory4.clearVerifiedRecovery = clearRecovery; }
+  assert.equal(unverified.success, false, JSON.stringify(unverified));
+  assert.equal(unverified.memoryRebuild.canonical.status, "RECOVERY_UNVERIFIED");
+  assert.equal(engine.memory4.getRecoveryStatus(campaignToken).pending, 1);
+  const requestCount = extractionContents.length;
+  const restored = await manager.retryFailedSummaries();
+  assert.equal(restored.failed, 0, JSON.stringify(restored));
+  assert.equal(engine.memory4.getRecoveryStatus(campaignToken).pending, 0);
+  assert.equal(extractionContents.length, requestCount, "verified empty commit cleanup never replays model extraction");
+
 }
 
 async function main() {

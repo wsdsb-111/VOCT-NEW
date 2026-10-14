@@ -1,0 +1,149 @@
+{
+  "version": "9.3.3",
+  "runtimePayloadSha256": "e77469edf4053b65018c3ef5ec0cb8854f35aa5d1a044f293a0bbac56aa5f4de",
+  "candidateBuild": true,
+  "priceVerified": "2026-10-14",
+  "maxUSD": 1,
+  "spentBoundUSD": 0.00737012,
+  "transports": 7,
+  "ledgerAllSettledUsage": true,
+  "syntheticOnly": true,
+  "totals": {
+    "inputTokens": 27540,
+    "cacheHitTokens": 6144,
+    "cacheMissTokens": 21396,
+    "outputTokens": 762
+  },
+  "inputEstimates": [
+    {
+      "caseName": "greetings",
+      "generation": 1,
+      "estimate": 4473,
+      "nativeInput": 2866,
+      "wireBytes": 11884
+    },
+    {
+      "caseName": "late-event",
+      "generation": 1,
+      "estimate": 7093,
+      "nativeInput": 4816,
+      "wireBytes": 18887
+    },
+    {
+      "caseName": "late-event",
+      "generation": 2,
+      "estimate": 7140,
+      "nativeInput": 4848,
+      "wireBytes": 19013
+    },
+    {
+      "caseName": "late-event",
+      "generation": 3,
+      "estimate": 7138,
+      "nativeInput": 4844,
+      "wireBytes": 19003
+    },
+    {
+      "caseName": "late-event",
+      "generation": 4,
+      "estimate": 4048,
+      "nativeInput": 2535,
+      "wireBytes": 10747
+    },
+    {
+      "caseName": "consequential-gesture",
+      "generation": 1,
+      "estimate": 5575,
+      "nativeInput": 3688,
+      "wireBytes": 14836
+    },
+    {
+      "caseName": "conditional-promise",
+      "generation": 1,
+      "estimate": 5919,
+      "nativeInput": 3943,
+      "wireBytes": 15747
+    }
+  ],
+  "cases": [
+    {
+      "caseName": "greetings",
+      "status": "NO_DURABLE_CONTENT",
+      "commitProof": "COMMITTED",
+      "requests": 1,
+      "committed": 0,
+      "prioritySourceLinked": [],
+      "conservativeTime": true,
+      "coverageState": "NO_DURABLE_CONTENT_VERIFIED",
+      "authorizedSourceCount": 24,
+      "modelEvaluatedSourceCount": 24
+    },
+    {
+      "caseName": "late-event",
+      "status": "STORE",
+      "commitProof": "COMMITTED",
+      "requests": 4,
+      "committed": 3,
+      "prioritySourceLinked": [
+        {
+          "sourceOrdinal": 3,
+          "linked": true
+        },
+        {
+          "sourceOrdinal": 90,
+          "linked": true
+        },
+        {
+          "sourceOrdinal": 179,
+          "linked": true
+        }
+      ],
+      "conservativeTime": true,
+      "coverageState": "FULL_MODEL_EVALUATED",
+      "authorizedSourceCount": 180,
+      "modelEvaluatedSourceCount": 180
+    },
+    {
+      "caseName": "consequential-gesture",
+      "status": "STORE",
+      "commitProof": "COMMITTED",
+      "requests": 1,
+      "committed": 2,
+      "prioritySourceLinked": [
+        {
+          "sourceOrdinal": 33,
+          "linked": true
+        },
+        {
+          "sourceOrdinal": 35,
+          "linked": true
+        }
+      ],
+      "conservativeTime": true,
+      "coverageState": "FULL_MODEL_EVALUATED",
+      "authorizedSourceCount": 36,
+      "modelEvaluatedSourceCount": 36
+    },
+    {
+      "caseName": "conditional-promise",
+      "status": "STORE",
+      "commitProof": "COMMITTED",
+      "requests": 1,
+      "committed": 2,
+      "prioritySourceLinked": [
+        {
+          "sourceOrdinal": 30,
+          "linked": true
+        },
+        {
+          "sourceOrdinal": 39,
+          "linked": true
+        }
+      ],
+      "conservativeTime": true,
+      "coverageState": "FULL_MODEL_EVALUATED",
+      "authorizedSourceCount": 40,
+      "modelEvaluatedSourceCount": 40
+    }
+  ]
+}

@@ -192,7 +192,7 @@ async function run() {
         return { content: JSON.stringify({ status: "NO_DURABLE_CONTENT", entries: [] }), finish_reason: "stop" };
       });
       assert.equal(result.status, "NO_DURABLE_CONTENT");
-      assert.deepEqual(requests.flatMap(request => request.fragmentIds), snapshot.fragments.map(fragment => fragment.fragmentId));
+      assert.deepEqual(requests.flatMap(request => request.fragmentIds).sort(), snapshot.fragments.map(fragment => fragment.fragmentId).sort());
       assert(requests.every(request => request.fragmentIds.length <= 128 && request.inputTokens <= 8192 && request.maxTokens === 4096));
     });
     console.log(`V8.14-A P0 memory closeout: ${passed} PASS`);

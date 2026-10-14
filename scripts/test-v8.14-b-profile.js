@@ -138,8 +138,11 @@ check("missing or neutral CK3 relation never invents a transition", () => {
 check("confirmed transition prioritizes only existing visible Durable fragments", () => {
   const fragments = [{ fragmentId: "other", entityIds: [3], text: "谈天气。" },
     { fragmentId: "related", entityIds: [2], text: "与乙交谈。" }];
-  const prompt = Memory4Coordinator.prototype.buildPrompt({ ownerId: 1, campaignToken: "campaign-A", date: "1164.1.1",
-    completeness: "complete", relationshipChangeEntityIds: [2] }, fragments);
+  const coordinator = Object.create(Memory4Coordinator.prototype);
+  coordinator.sourcePositions = new WeakMap();
+  const snapshot = { ownerId: 1, campaignToken: "campaign-A", date: "1164.1.1",
+    completeness: "complete", relationshipChangeEntityIds: [2], fragments };
+  const prompt = coordinator.buildPrompt(snapshot, coordinator.orderFragments(snapshot, fragments));
   const payload = JSON.parse(prompt[1].content);
   assert.deepEqual(payload.fragments.map(item => item.fragmentId), ["related", "other"]);
   assert.equal(prompt[1].content.includes("rival"), false);

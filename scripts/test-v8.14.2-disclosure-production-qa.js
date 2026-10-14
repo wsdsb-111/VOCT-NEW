@@ -163,7 +163,7 @@ async function fixture({ date = "1164.5.20", campaignToken = "votc-v8142-qa-camp
     getSettings: () => ({ v812MemoryEngine3Enabled: true, v812TemporalSummaryRecallEnabled: true }),
     getPromptContext: async () => null
   };
-  engine.memory4.configureDerived({ isCampaignCurrent: () => true, getProviderSnapshot: async () => null });
+  engine.memory4.configureExtraction({ isCampaignCurrent: () => true, getProviderSnapshot: async () => null });
   sample.open = async (currentDate = date, nextResponderId = responderId) => {
     const gameData = sample.createGameData(currentDate, nextResponderId);
     fs.writeFileSync(sample.settings.getCK3DebugLogPath(), "deterministic fixture only", "utf8");

@@ -516,50 +516,6 @@ function mergeKnown(left, right, ownerId, campaignToken) {
   return merged;
 }
 
-function validateDerivedView(view, kind, year, ownerId, campaignToken) {
-  const listKey = kind === "year" ? "items" : "segments", idKey = kind === "year" ? "itemId" : "segmentId";
-  if (!view || typeof view !== "object" || Array.isArray(view) || view.memory4SchemaVersion !== 1
-    || view.ownerId !== ownerId || view.campaignToken !== campaignToken || !Number.isSafeInteger(view.revision) || view.revision < 0
-    || !Array.isArray(view.sourceRevisionSet) || view.sourceRevisionSet.some(item => typeof item !== "string")
-    || !Array.isArray(view[listKey]) || kind === "year" && view.eventYear !== year) throw new Error("memory4_derived_invalid");
-  const ids = new Set();
-  for (const item of view[listKey]) {
-    const id = item?.[idKey];
-    if (!item || typeof item !== "object" || Array.isArray(item) || typeof id !== "string" || !id || ids.has(id)) {
-      throw new Error("memory4_derived_invalid");
-    }
-    ids.add(id);
-  }
-  return view;
-}
-
-function mergeView(left, right, kind, year, index) {
-  const listKey = kind === "year" ? "items" : "segments", idKey = kind === "year" ? "itemId" : "segmentId";
-  for (const view of [left, right]) validateDerivedView(view, kind, year, left.ownerId, left.campaignToken);
-  const ignored = new Set([listKey, "sourceRevisionSet", "sourceHash", "dirty", "revision", "tokens", "updatedAt"]);
-  for (const key of new Set([...Object.keys(left), ...Object.keys(right)])) {
-    if (!ignored.has(key) && Object.hasOwn(left, key) && Object.hasOwn(right, key) && !isDeepStrictEqual(left[key], right[key])) {
-      throw new Error("memory4_derived_conflict");
-    }
-  }
-  const rows = new Map(left[listKey].map(item => [item[idKey], item]));
-  for (const item of right[listKey]) {
-    if (!item?.[idKey] || rows.has(item[idKey]) && !isDeepStrictEqual(rows.get(item[idKey]), item)) throw new Error("memory4_derived_conflict");
-    rows.set(item[idKey], item);
-  }
-  const items = [...rows.values()];
-  const sourceDate = item => (item.sourceEntryIds || []).map(id => {
-    const row = index.entries[id], date = normalizeGameDate(row?.eventTime?.from || row?.acquiredDate);
-    return date?.serial;
-  }).filter(Number.isFinite).sort((a, b) => a - b)[0] || Infinity;
-  if (kind === "year") items.sort((a, b) => sourceDate(a) - sourceDate(b) || String(a.itemId).localeCompare(String(b.itemId)));
-  else items.sort((a, b) => (Number(a.period?.fromYear) || Infinity) - (Number(b.period?.fromYear) || Infinity)
-    || String(a.segmentId).localeCompare(String(b.segmentId)));
-  return { ...left, ...right, [listKey]: items, sourceRevisionSet: [...new Set([...left.sourceRevisionSet, ...right.sourceRevisionSet])].sort(),
-    sourceHash: null, dirty: true, revision: Math.max(left.revision, right.revision) + 1,
-    ...(kind === "year" ? { tokens: (Number(left.tokens) || 0) + (Number(right.tokens) || 0) } : {}) };
-}
-
 function mergeSidecars(store, groups, ownerId, canonicalRoot) {
   const memory4 = new Memory4Store(store), writes = [];
   for (const [campaignHash, locations] of groups) {
@@ -574,7 +530,7 @@ function mergeSidecars(store, groups, ownerId, canonicalRoot) {
       let index = JSON.parse(JSON.stringify(sidecars[0].index));
       let known = sidecars[0].known || null;
       let forgotten = { ...(sidecars[0].forgotten?.projections || {}) };
-      const views = new Map(), entries = new Map(), extras = new Map();
+      const entries = new Map(), extras = new Map();
       for (const sidecar of sidecars) {
         if (sidecar.index.ownerId !== ownerId || sidecar.index.campaignToken !== campaignToken) throw new Error("memory4_scope_mismatch");
         for (const [id, row] of Object.entries(sidecar.index.entries)) {
@@ -597,17 +553,6 @@ function mergeSidecars(store, groups, ownerId, canonicalRoot) {
             entries.set(key, bytes);
             continue;
           }
-          if (/^years\/[1-9]\d{0,3}\.json$/.test(key) || key === "life.json") {
-            const prior = views.get(key), yearMatch = key.match(/^years\/([1-9]\d{0,3})\.json$/);
-            let view;
-            try { view = JSON.parse(bytes.toString("utf8").replace(/^\uFEFF/, "")); }
-            catch { throw new Error("memory4_derived_invalid"); }
-            const kind = yearMatch ? "year" : "life", year = yearMatch ? Number(yearMatch[1]) : null;
-            validateDerivedView(view, kind, year, ownerId, campaignToken);
-            if (!prior) views.set(key, view);
-            else views.set(key, mergeView(prior, view, kind, year, index));
-            continue;
-          }
           if (extras.has(key) && !extras.get(key).equals(bytes)) throw new Error("memory4_sidecar_file_conflict");
           extras.set(key, bytes);
         }
@@ -620,7 +565,7 @@ function mergeSidecars(store, groups, ownerId, canonicalRoot) {
         knownRevisions[key] = revision;
       }
       const metadata = { ...sidecars[0].metadata };
-      const metadataIgnored = new Set(["revision", "indexHash", "knownEvidenceRevisions", "derivedRevision", "derivedDirty", "updatedAt", "lastFinalizationId"]);
+      const metadataIgnored = new Set(["revision", "indexHash", "knownEvidenceRevisions", "updatedAt", "lastFinalizationId"]);
       const metadataKeys = new Set(sidecars.flatMap(item => Object.keys(item.metadata)));
       for (const key of metadataKeys) {
         if (metadataIgnored.has(key)) continue;
@@ -634,34 +579,13 @@ function mergeSidecars(store, groups, ownerId, canonicalRoot) {
           if (!record) throw new Error("memory4_metadata_index_mismatch");
           return { id, time: Date.parse(record.committedAt || "") || 0 };
         }).sort((a, b) => b.time - a.time || a.id.localeCompare(b.id))[0];
-      const changedViews = views.size > 0;
-      for (const [key, view] of views) {
-        const yearMatch = key.match(/^years\/([1-9]\d{0,3})\.json$/);
-        const kind = yearMatch ? "year" : "life";
-        const listKey = kind === "year" ? "items" : "segments";
-        const idKey = kind === "year" ? "itemId" : "segmentId";
-        const rows = view[listKey].slice();
-        if (kind === "year") {
-          const sourceDate = item => (item.sourceEntryIds || []).map(id => {
-            const row = index.entries[id], date = normalizeGameDate(row?.eventTime?.from || row?.acquiredDate);
-            return date?.serial;
-          }).filter(Number.isFinite).sort((a, b) => a - b)[0] || Infinity;
-          rows.sort((left, right) => sourceDate(left) - sourceDate(right) || String(left[idKey]).localeCompare(String(right[idKey])));
-        } else {
-          rows.sort((left, right) => (Number(left.period?.fromYear) || Infinity) - (Number(right.period?.fromYear) || Infinity)
-            || String(left[idKey]).localeCompare(String(right[idKey])));
-        }
-        views.set(key, { ...view, [listKey]: rows, sourceHash: null, dirty: true,
-          revision: view.dirty === true || view.sourceHash === null ? view.revision : view.revision + 1 });
-      }
+      delete metadata.derivedRevision;
+      delete metadata.derivedDirty;
       const mergedMetadata = { ...metadata, memory4SchemaVersion: 1, campaignToken, ownerId,
         revision: index.revision, indexHash: hash(index), knownEvidenceRevisions: knownRevisions,
-        derivedRevision: Math.max(...sidecars.map(item => Number(item.metadata.derivedRevision) || 0)) + (changedViews ? 1 : 0),
-        derivedDirty: changedViews || sidecars.some(item => item.metadata.derivedDirty === true),
         ...(latest ? { lastFinalizationId: latest.id } : {}),
         updatedAt: sidecars.map(item => item.metadata.updatedAt).filter(value => typeof value === "string").sort().at(-1) || null };
       files = new Map([...entries, ...extras]);
-      for (const [key, view] of views) files.set(key, Buffer.from(JSON.stringify(view, null, 2), "utf8"));
       if (known) files.set("known-entities.json", Buffer.from(JSON.stringify(known, null, 2), "utf8"));
       if (sidecars.some(item => item.forgotten)) files.set("forgotten-projections.json", Buffer.from(JSON.stringify({
         schemaVersion: 1, campaignToken, ownerId, projections: forgotten

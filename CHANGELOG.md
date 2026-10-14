@@ -1,5 +1,7 @@
 # VOTC 版本变更入口
 
+V9.3.3 候选（2026-10-14）：重要来源按时间区间优先送审，增加 Legacy–Durable 只读来源关联；Year/Life 服务、UI 和磁盘派生召回退役，保留 Detail/Legacy 跨年代检索。历史文件清理需单独确认具体范围。详见[实施](docs/current/v9/V9_3_3_IMPLEMENTATION_REPORT.md)和[验证](docs/current/v9/V9_3_3_VERIFICATION_REPORT.md)。
+
 V9.3.2（2026-10-13）：修复 Durable 无效生成、输入膨胀及重复恢复；修正取消/多 Effect 派发证据，Core/UI/App 同步为9.3.2。详见[实施](docs/current/v9/V9_3_2_IMPLEMENTATION_REPORT.md)和[验证](docs/current/v9/V9_3_2_VERIFICATION_REPORT.md)。
 
 这里是版本变更的单一入口。详细设计和测试证据保留在链接目标中，本文件只维护版本顺序、用户可见摘要和文档索引。

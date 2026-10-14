@@ -4,7 +4,6 @@ const assert = require("node:assert/strict");
 const fs = require("node:fs");
 const path = require("node:path");
 const { createFixture, pendingLetter, makeReceiptLine, waitFor } = require("./test-v8.15.2-letter-archive-independent-qa");
-const { Memory4DerivedService } = require("../resources/app/out/main/memory-system/memory4-derived");
 
 const LOAD_LINE = "VOTC:LOAD_SESSION/;/fix5-independent-load";
 
@@ -403,70 +402,6 @@ async function acceptedProofResumesAfterCrashBeforeFinalization() {
   }
 }
 
-function makeDerivedFixture(responseText) {
-  const calls = [];
-  const service = new Memory4DerivedService({ store: {}, baseStore: {} });
-  service.configure({
-    estimateTokens: text => String(text).length,
-    requestCompression: async (messages, options) => {
-      calls.push({ messages, options });
-      const request = JSON.parse(messages[1].content);
-      const sourceEntryIds = request.items.flatMap(item => item.sourceEntryIds);
-      return JSON.stringify({ items: [{ text: responseText, sourceEntryIds }] });
-    }
-  });
-  return { service, calls };
-}
-
-function derivedEntry(entryId, text) {
-  return {
-    entryId, text, importance: 1, entityIds: [], topics: [],
-    evidence: { sourceType: "fact", epistemicStatus: "reported" },
-    state: { status: "active" },
-    eventTime: { from: "1164.1.1", to: "1164.12.31", precision: "year", status: "reported" },
-    acquiredDate: "1164.1.1"
-  };
-}
-
-function derivedItem(entry) {
-  return { itemId: `item_${entry.entryId}`, text: entry.text, sourceEntryIds: [entry.entryId],
-    entityIds: [], topics: [], importance: 1 };
-}
-
-async function lifeBudgetRetainsSourcesBetweenYearAndLifeLimits() {
-  const first = derivedEntry("life_source_1", "a".repeat(700));
-  const second = derivedEntry("life_source_2", "b".repeat(700));
-  const { service, calls } = makeDerivedFixture("c".repeat(900));
-  const result = await service.compress({ campaignToken: "qa-campaign", ownerId: 2 }, "life",
-    [derivedItem(first), derivedItem(second)], [first, second],
-    { cancelled: false, controller: { signal: null } }, null);
-
-  assert.equal(calls.length, 1, "1401 LIFE input tokens must compress even though they fit the YEAR cap");
-  assert.match(calls[0].messages[0].content, /fit 700 tokens and never exceed 1000/i);
-  assert.deepEqual(result[0].sourceEntryIds, [first.entryId, second.entryId], "compressed LIFE output retains each source exactly once");
-  assert.equal(result[0].timeAxis, "event");
-}
-
-async function lifeHardLimitRejectsOverageAndYearAcceptsItsOwnRange() {
-  const entry = derivedEntry("budget_boundary_source", "s".repeat(1800));
-  const items = [derivedItem(entry)];
-  const lifeOver = makeDerivedFixture("l".repeat(1001));
-  await assert.rejects(lifeOver.service.compress({ campaignToken: "qa-campaign", ownerId: 2 }, "life", items, [entry],
-    { cancelled: false, controller: { signal: null } }, null), error => error.message === "memory4_compression_quality_failed");
-
-  const yearAllowed = makeDerivedFixture("y".repeat(1450));
-  const yearResult = await yearAllowed.service.compress({ campaignToken: "qa-campaign", ownerId: 2 }, "year", items, [entry],
-    { cancelled: false, controller: { signal: null } }, null);
-  assert.equal(yearAllowed.calls.length, 1);
-  assert.equal(yearResult[0].text.length, 1450);
-  assert.deepEqual(yearResult[0].sourceEntryIds, [entry.entryId]);
-
-  const lostSource = makeDerivedFixture("z".repeat(900));
-  lostSource.service.options.requestCompression = async () => JSON.stringify({ items: [{ text: "compressed", sourceEntryIds: ["wrong_source"] }] });
-  await assert.rejects(lostSource.service.compress({ campaignToken: "qa-campaign", ownerId: 2 }, "year", items, [entry],
-    { cancelled: false, controller: { signal: null } }, null), error => error.message === "memory4_compression_source_mismatch");
-}
-
 async function dateScannerCountsUtf8BytesAcrossChunks() {
   const fixture = createFixture();
   try {
@@ -658,30 +593,16 @@ async function run() {
     ["missing session proof", missingSessionProofFailsClosed],
     ["recovery scan budget", recoveryScanBudgetFailsClosed],
     ["persisted acceptance crash recovery", acceptedProofResumesAfterCrashBeforeFinalization],
-    ["LIFE cap and source retention", lifeBudgetRetainsSourcesBetweenYearAndLifeLimits],
-    ["independent YEAR and LIFE limits", lifeHardLimitRejectsOverageAndYearAcceptsItsOwnRange],
     ["UTF-8 chunked DATE offsets", dateScannerCountsUtf8BytesAcrossChunks],
     ["partial LOAD cannot advance old DATE", partialNewLoadCannotAdvanceDateFromOldSession],
     ["completed partial LOAD recovers new date", completedPartialLoadRecoversNewSessionDate],
     ["rotated scanner blocks first Effect", rotatedScannerCannotWriteFirstLetterEffect],
     ["rotated old-reader DATE callback", oldReaderDateCallbackCannotPublishAfterRotation]
   ];
-  const archivedNames = new Set([
-    "LIFE cap and source retention",
-    "independent YEAR and LIFE limits"
-  ]);
-  for (const name of archivedNames) {
-    assert(cases.some(([caseName]) => caseName === name), `archived case remains classified: ${name}`);
-  }
+  // The two retired compression cases are preserved in the separately classified history script.
   const failures = [];
   let passed = 0;
-  let skippedArchive = 0;
   for (const [name, test] of cases) {
-    if (archivedNames.has(name)) {
-      skippedArchive++;
-      console.log(`ARCHIVED ${name}: automatic Year/Life compression is retired`);
-      continue;
-    }
     try {
       await test();
       passed++;
@@ -692,7 +613,7 @@ async function run() {
     }
   }
   if (failures.length) process.exitCode = 1;
-  else console.log(`V8.15.2 fix5 independent adversarial QA: ${passed} PASS, ${failures.length} FAIL, ${skippedArchive} ARCHIVED`);
+  else console.log(`V8.15.2 fix5 independent adversarial QA: ${passed} PASS, ${failures.length} FAIL; 2 retired cases preserved in history`);
 }
 
 if (require.main === module) run().catch(error => { console.error(error); process.exitCode = 1; });

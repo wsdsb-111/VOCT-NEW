@@ -89,7 +89,7 @@ async function main() {
       const legacyFragment = { fragmentId: "legacy-minimal", text: "旧版最小证据。", speakerId: 1, sourceType: "spoken",
         entityIds: [], presentIds: [1, 2, 3] };
       const legacyPrompt = promptPayload(env.coordinator.buildPrompt({ ownerId: 2, campaignToken: "legacy-minimal",
-        date: "1164.2.1", completeness: "partial" }, [legacyFragment]));
+        date: "1164.2.1", completeness: "partial", fragments: [legacyFragment] }, [legacyFragment]));
       assert.deepEqual(legacyPrompt.fragments[0].allowedEntityIds, [1], "absent knownBy must neither crash prompt construction nor grant Owner 2");
       assert.match(env.coordinator.buildPrompt(snapshot, snapshot.fragments)[0].content, /allowedEntityIds/);
       assert.match(env.coordinator.buildPrompt(snapshot, snapshot.fragments)[0].content, /never authorize entityIds/);
@@ -142,7 +142,6 @@ async function main() {
 
     {
       const env = createEnvironment(profile, "mixed-entry");
-      env.coordinator.derived.schedule = () => {};
       const context = createContext("mixed-entry");
       const snapshot = env.coordinator.buildOwnerSnapshot(context, 2);
       const result = await env.coordinator.finishOwner(snapshot, async () => asGeneration(response([
@@ -158,7 +157,6 @@ async function main() {
 
     {
       const env = createEnvironment(profile, "mixed-transition");
-      env.coordinator.derived.schedule = () => {};
       const firstContext = createContext("commitment-source", { content: "甲承诺向乙运粮。", date: "1164.1.2" });
       const firstSnapshot = env.coordinator.buildOwnerSnapshot(firstContext, 2);
       const original = candidate(firstSnapshot, { memoryType: "COMMITMENT", text: "甲承诺向乙运粮。", entityIds: [2] });
@@ -192,7 +190,7 @@ async function main() {
         content: "甲曾告知乙，谷物抵达仓库。", knownBy: [2], subjects: [1],
         provenance: { campaignToken: scope.campaignToken, folderOwnerId: 2, extractionMode: "user_edited_summary" } });
       env.store.saveMemory(original);
-      env.coordinator.configureDerived({ isCampaignCurrent: () => true,
+      env.coordinator.configureExtraction({ isCampaignCurrent: () => true,
         requestExtraction: async prompt => asGeneration(response([{
           memoryType: "DURABLE_KNOWLEDGE", text: "丙曾与乙议定此事。", fragmentIds: promptPayload(prompt).fragments.map(fragment => fragment.fragmentId),
           participantIds: [], entityIds: [3], topics: [], eventTime: { status: "unknown" }
@@ -215,9 +213,9 @@ async function main() {
         content: "甲曾告知乙，谷物抵达仓库。", knownBy: [2], subjects: [1],
         provenance: { campaignToken: scope.campaignToken, folderOwnerId: 2, extractionMode: "user_edited_summary" } });
       env.store.saveMemory(original);
-      env.coordinator.configureDerived({ isCampaignCurrent: () => true, requestExtraction: async () => asGeneration(response()) });
+      env.coordinator.configureExtraction({ isCampaignCurrent: () => true, requestExtraction: async () => asGeneration(response()) });
       const empty = await env.coordinator.recompressLegacy(scope, { memoryId: original.memoryId });
-      assert.equal(empty.status, "RETAINED_LEGACY");
+      assert.equal(empty.status, "NO_DURABLE_CONTENT");
       assert.equal(empty.reason, "NO_DURABLE_CONTENT");
       assert.equal(empty.retained, true);
       assert.equal(env.coordinator.store.query(scope).length, 0);
@@ -233,21 +231,16 @@ async function main() {
       const snapshot = env.coordinator.buildOwnerSnapshot(context, 2);
       const detail = candidate(snapshot, { text: "甲向乙交付了谷物。", entityIds: [2],
         eventTime: { from: "1164.1.1", to: "1164.1.1", precision: "day", status: "reported" } });
-      env.coordinator.configureDerived({ isCampaignCurrent: () => true, estimateTokens: text => Math.ceil(text.length / 4) });
+      env.coordinator.configureExtraction({ isCampaignCurrent: () => true, estimateTokens: text => Math.ceil(text.length / 4) });
       const result = await env.coordinator.finishOwner(snapshot, async () => asGeneration(response([detail])));
       assert.equal(result.status, "STORE");
       const scope = { campaignToken: context.campaignToken, ownerId: 2 };
       const canonical = env.coordinator.store.query(scope);
       assert.equal(canonical.length, 1, "finishOwner must persist canonical Detail");
       assert.deepEqual(canonical[0].eventTime, { from: "1164.1.1", to: "1164.1.1", precision: "day", status: "reported" });
-      assert.equal(result.derivedGenerationStatus, "SKIPPED_DERIVED_POLICY");
-      assert.equal(result.derived.status, "SKIPPED_DERIVED_POLICY");
-      assert.equal(result.derived.generated, false);
-      assert.equal(result.derived.providerRequests, 0);
-      const views = env.coordinator.derived.list(scope);
-      assert.equal(views.generationPolicy, "RETIRED");
-      assert.deepEqual(views.years, []);
-      assert.equal(views.life, null);
+      assert.equal(result.derived, undefined);
+      assert.equal(env.coordinator.derived, undefined);
+      assert.equal(env.coordinator.inspectCommittedSnapshot(snapshot).state, "COMMITTED");
       check("finishOwner stores canonical Detail while keeping derived generation retired");
     }
 

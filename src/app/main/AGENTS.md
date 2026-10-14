@@ -2,7 +2,7 @@
 
 These rules apply to editable src/app/main/ and its generated resources/app/out/main/ output, especially main.js, services, providers and IPC. Edit source and rebuild; do not edit generated output alone.
 
-Current project/core version is V9.3.2/9.3.2, Electron App package version is 9.3.2 and VOTC Workshop Mod is 2.0.5. Provider User-Agent reads the App version from package.json via version.js. Memory Engine display 4.0, protocol 3.0, summary storage 2.5 and Official Action 2.0.3 retain their existing contracts.
+Current project/core version is V9.3.3/9.3.3, Electron App package version is 9.3.3 and VOTC Workshop Mod is 2.0.5. Provider User-Agent reads the App version from package.json via version.js. Memory Engine display 4.0, protocol 3.0, summary storage 2.5 and Official Action 2.0.3 retain their existing contracts.
 
 Renamed summary folders consolidate only by numeric Owner ID, with counterpart files resolved by numeric ID. Summary listing and GameData paths delegate to MemoryStore; raw verified backups stay outside recall under baseDir/renamed-summary-folders. Preserve Campaign scopes, Legacy binding IDs, manual edits, Forget and tombstones. Conflicting sidecars block consolidation. Directory creation/removal is recorded in the existing version 1 summary mutation journal for rollback.
 

@@ -165,7 +165,7 @@ function createFixture({ campaignToken = "votc-v921-glm-campaign-A", date = "116
     summaryFoldersDir: summariesDir,
     trace: { record() {} }
   });
-  sample.engine.memory4.configureDerived({ isCampaignCurrent: () => true, getProviderSnapshot: async () => null });
+  sample.engine.memory4.configureExtraction({ isCampaignCurrent: () => true, getProviderSnapshot: async () => null });
   sample.worldline = {
     isSubjectivePromptIntegrationEnabled: () => false,
     isPromptIntegrationEnabled: () => false,

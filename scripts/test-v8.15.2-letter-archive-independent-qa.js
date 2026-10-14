@@ -85,8 +85,7 @@ function createFixture({ failFirstSummary = false, letterManagerFactory = create
 
   const memoryEngine = new MemoryEngine({ baseDir: memoryDir, summaryFoldersDir: summariesDir,
     trace: { record() {} } });
-  memoryEngine.memory4.configureDerived({ isCampaignCurrent: token => token === CAMPAIGN });
-  memoryEngine.memory4.derived.schedule = () => {};
+  memoryEngine.memory4.configureExtraction({ isCampaignCurrent: token => token === CAMPAIGN });
 
   const GameData = createGameData({ fs, path, memorySystem, memoryEngine, summariesDir,
     getHistoricalReferenceByYear: () => null });
@@ -375,14 +374,10 @@ async function testReceiptArchiveRetryAndIsolation() {
       assert.deepEqual(entry.evidence.visibilityEvidence, ["validated_letter"]);
       assert.deepEqual(entry.evidence.knownBy, [1, 2]);
       assert.equal(ownerStatuses.get(ownerId).status, "STORE");
-      assert.equal(ownerStatuses.get(ownerId).derivedStatus, "SKIPPED_DERIVED_POLICY");
-      assert.equal(job.owners[String(ownerId)].derivedGenerated, false);
-      assert.equal(job.owners[String(ownerId)].derivedProviderRequests, 0);
-      const year = fixture.memoryEngine.memory4.derived.read(scope, "year", 1038);
-      const life = fixture.memoryEngine.memory4.derived.read(scope, "life");
-      assert.equal(year, null, "letter Durable memories stay stored without generated Year views");
-      assert.equal(life, null, "letter Durable memories stay stored without a generated Life view");
-      assert.equal(fixture.memoryEngine.memory4.derived.list(scope).generationPolicy, "RETIRED");
+      assert.equal(Object.hasOwn(fixture.memoryEngine.memory4, "derived"), false);
+      const directory = fixture.memoryEngine.memory4.store.directory(scope);
+      assert.equal(fs.existsSync(path.join(directory, "years")), false);
+      assert.equal(fs.existsSync(path.join(directory, "life.json")), false);
     }
   } finally {
     await fixture.close();

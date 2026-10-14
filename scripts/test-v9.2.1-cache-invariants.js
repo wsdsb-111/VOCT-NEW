@@ -25,7 +25,6 @@ function createCoordinator(label) {
   for (const person of participants) fs.mkdirSync(path.join(summaryFoldersDir, `${person.id}_fixture`), { recursive: true });
   const store = new MemoryStore({ baseDir: path.join(directory, "memory"), summaryFoldersDir });
   const coordinator = new Memory4Coordinator(store);
-  coordinator.derived.schedule = async () => ({ status: "COMPLETE" });
   return { coordinator, store: coordinator.store };
 }
 
@@ -195,8 +194,8 @@ async function testForgetOfNextOuterChunkIsFilteredBeforeRequest() {
   });
 
   assert.equal(forgetResult?.status, "FORGOTTEN", "the fixture must persist a real Memory4 Forget tombstone");
-  assert.deepEqual(prompts.flatMap(request => request.payload.fragments.map(fragment => fragment.fragmentId)),
-    retainedFragments.map(fragment => fragment.fragmentId),
+  assert.deepEqual(prompts.flatMap(request => request.payload.fragments.map(fragment => fragment.fragmentId)).sort(),
+    retainedFragments.map(fragment => fragment.fragmentId).sort(),
     "later budgeted chunks must retain every authorized fragment exactly once");
   assert.equal(JSON.stringify(prompts).includes(forgottenFragment.text), false,
     "the not-yet-requested forgotten source must never reach a later chunk request");
@@ -304,7 +303,7 @@ async function testOrdinary129FragmentsRespectTokenAndFragmentBudgets() {
 
   assert.equal(result.status, "NO_DURABLE_CONTENT");
   assert(requests.length > 1);
-  assert.deepEqual(requests.flatMap(request => request.fragmentIds), fragments.map(fragment => fragment.fragmentId));
+  assert.deepEqual(requests.flatMap(request => request.fragmentIds).sort(), fragments.map(fragment => fragment.fragmentId).sort());
   for (const request of requests) {
     assert(request.fragmentIds.length <= 128 && request.inputBudget <= 8192);
     assert.equal(request.maxTokens, 4096);

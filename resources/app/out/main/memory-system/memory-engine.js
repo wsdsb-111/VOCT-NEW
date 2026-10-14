@@ -428,7 +428,6 @@ class MemoryEngine {
       projectionId: durable.projectionId || null,
       baseMemoryDeleted: deletedMemoryCount,
       memory4EntriesForgotten: durable.canonicalEntriesForgotten || 0,
-      derivedInvalidated: durable.derivedInvalidated || 0,
       disclosureEvidenceRevoked: durable.disclosureEvidenceRevoked || 0,
       recoveryDeleted: durable.recoveryDeleted || 0,
       revokedMemoryCount,
@@ -473,7 +472,6 @@ class MemoryEngine {
       projections: results.map(result => result.projectionId).filter(Boolean),
       baseMemoryDeleted: results.reduce((total, result) => total + result.baseMemoryDeleted, 0),
       memory4EntriesForgotten: results.reduce((total, result) => total + result.memory4EntriesForgotten, 0),
-      derivedInvalidated: results.reduce((total, result) => total + (result.derivedInvalidated || 0), 0),
       disclosureEvidenceRevoked: results.reduce((total, result) => total + (result.disclosureEvidenceRevoked || 0), 0),
       recoveryDeleted: results.reduce((total, result) => total + (result.recoveryDeleted || 0), 0)
     };
@@ -1588,7 +1586,9 @@ class MemoryEngine {
         isNarrativeCommitted: snapshot => this.isMemory4NarrativeCommitted(snapshot)
       });
       return [...narrative, ...durable.filter(row => !["WAITING_NARRATIVE", "CAMPAIGN_MISMATCH"].includes(row.status))
-        .map(row => ({ ...row, success: ["STORE", "NO_DURABLE_CONTENT", "NOT_PRESENT"].includes(row.status) }))];
+        .map(row => ({ ...row, success: row.recoveryStatus !== "RECOVERY_UNVERIFIED"
+          && (["STORE", "NO_DURABLE_CONTENT", "NOT_PRESENT"].includes(row.status)
+            || row.status === "COMPLETE" && ["STORE", "NO_DURABLE_CONTENT", "NOT_PRESENT"].includes(row.durableStatus)) }))];
     })();
     try { return await this.pendingRecovery; }
     finally { this.pendingRecovery = null; }

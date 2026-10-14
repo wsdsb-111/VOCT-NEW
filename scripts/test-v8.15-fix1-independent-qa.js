@@ -193,7 +193,7 @@ function createPlannerSelectionHarness(directory) {
   const baseStore = { summaryFoldersDir: summariesDir, index: { memories: {} }, getMemory: () => null,
     loadFolderSummariesForCharacter: () => [] };
   const store = { loadIndex: () => index, directory: () => path.join(directory, "memory4"), read: (_file, fallback = null) => fallback,
-    readEntry: (_scope, id) => entries.get(id), isProjectionLineageForgotten: () => false };
+    readEntry: (_scope, id) => entries.get(id), isEntryForgotten: () => false, isProjectionLineageForgotten: () => false };
   const targetProfile = { id: 3, firstName: names.get(3), shortName: names.get(3), fullName: names.get(3) };
   const coordinator = { baseStore, store, derived: { selectSlice: () => null },
     getKnownEntityProfile: () => ({ recognition: { level: "KNOWN" }, relationship: { status: "UNKNOWN", types: [] } }) };
@@ -367,10 +367,10 @@ async function run() {
       const derivedPacket = selection.plan({ query, rows: [{ entryId: "explicit-derived-source", entityIds: [3], topics: ["北境"],
         text: "赵光义在北境守门约定中的经历。" }], legacyMemories: [selection.makeLegacy("competing-explicit-legacy",
         "赵光义在北境守门约定中交出玉印；COMPETING_EXPLICIT_LEGACY_SENTINEL")], overview: derived });
-      assert.equal(derivedPacket.overview?.memory.memoryId, derivedId,
-        "an Explicit Target Derived overview must not be replaced by Explicit Target Legacy");
+      assert.equal(derivedPacket.overview?.memory.memoryId, "competing-explicit-legacy",
+        "the authorized Legacy overview replaces the retired disk source");
       assert.equal(derivedPacket.overview.routeKind, "entity_target");
-      assert.equal(derivedPacket.items.some(item => item.memory.memoryId === "competing-explicit-legacy"), false);
+      assert(derivedPacket.items.every(item => !["year", "life"].includes(item.sourceRef.kind)));
 
       const high = selection.makeLegacy("ranked-explicit-legacy-high",
         "赵光义在北境守门约定中交出玉印，守将依约开启城门。HIGH_EXPLICIT_OVERVIEW_SENTINEL");
@@ -389,9 +389,9 @@ async function run() {
       const packet = selection.plan({ query: "你还记得北境旧事吗？", explicitTargetEntityIds: [],
         rows: [{ entryId: "generic-derived-source", entityIds: [4], topics: ["北境"], text: "北境旧事中的行程记录。" }],
         legacyMemories: [selection.makeLegacy("generic-legacy", "北境旧事另有一段旧叙事。", [45])], overview: derived });
-      assert.equal(packet.overview?.memory.memoryId, derived.memory.memoryId);
-      assert.equal(packet.items.some(item => item.memory.memoryId === "generic-legacy"), false,
-        "ordinary Legacy must not force its way into the overview without an Explicit Target");
+      assert.equal(packet.overview?.memory.memoryId, "generic-legacy");
+      assert(packet.items.every(item => !["year", "life"].includes(item.sourceRef.kind)),
+        "an empty Explicit Target set still cannot restore a retired disk view");
     });
 
     await check("oversize explicit Legacy target is re-excerpted after dropping competing items", () => {

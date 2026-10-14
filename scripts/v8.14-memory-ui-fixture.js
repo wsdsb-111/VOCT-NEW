@@ -4,7 +4,6 @@ const fs = require("fs");
 const path = require("path");
 const { MemoryEngine } = require("../resources/app/out/main/memory-system/memory-engine");
 const { projectVisibleTranscript } = require("../resources/app/out/main/memory-system/memory4-visibility");
-const { seedDerivedHistory } = require("./fixtures/v923-derived-history");
 
 async function createMemoryUiFixture(profile) {
   const summariesDir = path.join(profile, "votc_data", "conversation_summaries");
@@ -39,13 +38,6 @@ async function createMemoryUiFixture(profile) {
     participantIds: [1, archiveOwnerId], topics: ["粮食"], eventTime: { status: "reported", precision: "day", from: "1160.6.1", to: "1160.6.1" }
   })) });
   let requests = 0;
-  engine.memory4.configureDerived({ isCampaignCurrent: token => token === scope.campaignToken,
-    requestCompression: async () => { requests++; throw new Error("fixture_must_not_call_provider"); }, estimateTokens: text => Math.ceil(text.length / 2) });
-  seedDerivedHistory(engine, scope);
-  const views = engine.memory4.derived.list(scope);
-  const year = views.years[0];
-  engine.memory4.derived.updateYear(scope, { eventYear: year.eventYear, itemId: year.items[0].itemId,
-    text: "乙记得甲承诺分两次送粮，河水退后再送第二批。", expectedRevision: year.revision });
   const entries = engine.memory4.store.query(scope);
   engine.memory4.store.updateEntry(scope, entries[0].entryId, `${entries[0].text}乙保留这项约定。`, { expectedRevision: entries[0].revision });
   const official = { playerId: 2, playerName: "乙", characterId: 2, characterName: "官方追忆摘要", sourceType: "CK3_OFFICIAL_RECOLLECTION",
@@ -60,6 +52,7 @@ async function createMemoryUiFixture(profile) {
     perspectiveMemoryIds: [], perspectiveSummarySegmentIds: archiveProjection.fragments.map(fragment => fragment.fragmentId),
     sourceSegmentIds: archiveProjection.fragments.map(fragment => fragment.fragmentId), sourceMessageIds: [1] }]), "utf8");
   const characters = [[1, "甲"], [2, "乙"], [3, "丙"]].map(([id, shortName]) => ({ id, shortName, fullName: shortName,
+    ...(id === 1 ? { titleRankConcept: "county" } : {}),
     relationsToCharacters: id === 2 ? [{ id: 1, relations: ["friend"] }] : [], relationsToPlayer: [] }));
   const conversation = { id: "isolated-ui-conversation", isActive: true, gameData: { campaignToken: scope.campaignToken, date: "1164.1.1", playerID: 1,
     characters: new Map(characters.map(character => [character.id, character])) }, memoryState: engine.createConversationState("isolated-ui-conversation"), dynamicRecallHistory: new Map() };

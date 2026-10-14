@@ -48,6 +48,9 @@ function mergeCharacterProfiles(...groups) {
 class MemoryStore {
   constructor({ baseDir, summaryFoldersDir = null, recoveryDir = null } = {}) {
     if (!baseDir) throw new Error("memory_store_base_dir_required");
+    const retirementLock = path.join(baseDir, "memory4-retirement-v933.lock");
+    assertNoLinks(retirementLock);
+    if (fs.existsSync(retirementLock)) throw new Error("memory4_retirement_recovery_required");
     this.baseDir = baseDir;
     this.summaryFoldersDir = summaryFoldersDir;
     this.paths = {

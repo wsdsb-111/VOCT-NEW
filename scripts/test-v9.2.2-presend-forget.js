@@ -49,7 +49,6 @@ function makeFixture(label) {
   for (const ownerId of [1, 2, 3]) fs.mkdirSync(path.join(summaryFoldersDir, `${ownerId}_fixture`), { recursive: true });
   const baseStore = new MemoryStore({ baseDir: path.join(directory, "memory"), summaryFoldersDir });
   const coordinator = new Memory4Coordinator(baseStore);
-  coordinator.derived.schedule = async () => ({ status: "COMPLETE" });
   const campaignToken = `campaign-${label}`;
   const conversationId = `conversation-${label}`;
   const finalizationId = `finalization-${label}`;

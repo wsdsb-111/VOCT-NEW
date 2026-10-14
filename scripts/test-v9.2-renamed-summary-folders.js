@@ -293,6 +293,17 @@ function testDisjointSameCampaignUnion() {
     writeJson(path.join(left.sidecarPath, "life.json"), leftLife);
     copySidecar(left.sidecarPath, target.oldFolder, CAMPAIGN);
     copySidecar(right.sidecarPath, target.currentFolder, CAMPAIGN);
+    const beforeRetiredConflict = readTree(target.summaryRoot);
+    assert.throws(() => target.store.mergeRenamedSummaryFolders(OWNER_ID, "新名"), /memory4_sidecar_file_conflict/,
+      "retired views with different bodies must block union without rewriting them");
+    assertSameTree(readTree(target.summaryRoot), beforeRetiredConflict, "retired-view rejection preserves every source byte");
+    for (const folder of [target.oldFolder, target.currentFolder]) {
+      const sidecar = path.join(folder, "memory4", hash(CAMPAIGN));
+      fs.unlinkSync(path.join(sidecar, "years", "1164.json"));
+      assert.deepEqual(fs.readdirSync(path.join(sidecar, "years")), [], "fixture retirement must identify all year files");
+      fs.rmdirSync(path.join(sidecar, "years"));
+      fs.unlinkSync(path.join(sidecar, "life.json"));
+    }
     const result = target.store.mergeRenamedSummaryFolders(OWNER_ID, "新名");
     assert.strictEqual(result.folderPath, target.currentFolder);
     const memory4 = new Memory4Store(target.store);
@@ -307,12 +318,8 @@ function testDisjointSameCampaignUnion() {
     assert.strictEqual(fs.readdirSync(path.join(target.summaryRoot, ".memory4", String(OWNER_ID))).length, 1,
       "the disjoint union has one canonical campaign sidecar");
     const canonical = memory4.directory(left.scope);
-    const year = JSON.parse(fs.readFileSync(path.join(canonical, "years", "1164.json"), "utf8"));
-    const life = JSON.parse(fs.readFileSync(path.join(canonical, "life.json"), "utf8"));
-    assert.strictEqual(year.items.length, 2, "annual memories retain both independent sources");
-    assert.deepStrictEqual(life.segments.map(segment => segment.period.fromYear), [1150, 1164],
-      "life memories retain both segments in chronological order");
-    assert(year.dirty && life.dirty, "merged derived views require source revalidation before recall");
+    assert(!fs.existsSync(path.join(canonical, "years")) && !fs.existsSync(path.join(canonical, "life.json")),
+      "canonical union after explicit fixture retirement never recreates removed views");
   } finally {
     for (const item of [left, right]) fs.rmSync(item.fixture.root, { recursive: true, force: true });
     fs.rmSync(target.root, { recursive: true, force: true });

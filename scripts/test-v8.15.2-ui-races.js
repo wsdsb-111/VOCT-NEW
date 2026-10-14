@@ -74,8 +74,8 @@ function ownerData() {
         currentKnownAge: 14, currentAgeReadDate: "1165.3.12", revision: 1 }
     ] }], offset: 0, total: 1 },
     official: [], legacy: { total: 0, counts: {}, items: [] },
-    derived: { years: [{ eventYear: 1164, revision: 1, items: [] }], life: null, derivedRevision: 1 },
-    generation: {}, detail: { offset: 0, total: 0, items: [] } };
+    generation: {}, detail: { offset: 0, total: 1, items: [{ entryId: "current-detail", revision: 1,
+      bodyHash: "a".repeat(64), eventTime: {}, memoryType: "DURABLE_KNOWLEDGE" }] } };
 }
 
 async function createLoadedRenderer(api) {
@@ -89,14 +89,19 @@ async function testSourcesRace(rejectOld = false) {
   const old = deferred();
   const diagnostics = [];
   const api = { getMemory4OwnerData: async () => ownerData(), getMemory4Sources: () => old.promise,
+    getMemory4Entry: async () => ({ success: true, entry: { entryId: "current-detail", text: "CURRENT_BODY", revision: 1 } }),
     onConversationUpdate: () => () => {} };
   const renderer = createRenderer(api, 1, diagnostics);
   renderer.render();
   await renderer.flush();
   let tree = renderer.tree;
-  const yearTab = nodes(tree, node => node.type === "button" && node.props.role === "tab"
-    && text(node) === "年度记忆")[0];
-  yearTab.props.onClick();
+  const detailTab = nodes(tree, node => node.type === "button" && node.props.role === "tab"
+    && text(node) === "详细长期记忆")[0];
+  detailTab.props.onClick();
+  tree = renderer.render();
+  const detailSummary = nodes(tree, node => node.type === "details" && node.props.className === "memory4-detail")[0]
+    .children.find(node => node?.type === "summary");
+  await detailSummary.props.onClick({ preventDefault() {} });
   tree = renderer.render();
   const sourceButton = nodes(tree, node => node.type === "button" && text(node) === "查看来源")[0];
   const sourceRequest = sourceButton.props.onClick();

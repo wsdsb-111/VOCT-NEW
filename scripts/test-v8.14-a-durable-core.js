@@ -254,7 +254,7 @@ try {
     assert.deepEqual(memory4.query(snapshot), []);
     memory4.commitOwner(snapshot, { status: "STORE", entries: [candidate] });
     assert.deepEqual(memory4.query(snapshot), []);
-    assert.equal(memory4.read(path.join(memory4.directory(snapshot), "metadata.json"), null).derivedDirty, true);
+    assert.equal(Object.hasOwn(memory4.read(path.join(memory4.directory(snapshot), "metadata.json"), null), "derivedDirty"), false);
   });
   check("indexed candidate query does not read 1000 detail bodies", () => {
     const scope = { campaignToken: "large", ownerId: 3 };

@@ -178,7 +178,7 @@ async function fixture({ date = "1044.11.8", playerAge = 23, playerTitle = "æ˜Žç
   sample.worldline = { isSubjectivePromptIntegrationEnabled: () => false,
     isPromptIntegrationEnabled: () => false, getSettings: () => ({ v812MemoryEngine3Enabled: true,
       v812TemporalSummaryRecallEnabled: true }), getPromptContext: async () => null };
-  engine.memory4.configureDerived({ isCampaignCurrent: () => true, getProviderSnapshot: async () => null });
+  engine.memory4.configureExtraction({ isCampaignCurrent: () => true, getProviderSnapshot: async () => null });
   const gameData = sample.createGameData(date);
   fs.writeFileSync(sample.settings.getCK3DebugLogPath(), "deterministic fixture only", "utf8");
   Conversation.configure({ memoryEngine: engine, settingsRepository: sample.settings, parseLog: async () => gameData,

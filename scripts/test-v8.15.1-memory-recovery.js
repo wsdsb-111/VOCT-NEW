@@ -4,7 +4,6 @@ const assert = require("node:assert/strict");
 const fs = require("node:fs");
 const path = require("node:path");
 const { MemoryEngine } = require("../resources/app/out/main/memory-system/memory-engine");
-const { seedDerivedHistory } = require("./fixtures/v923-derived-history");
 
 const root = fs.mkdtempSync(path.join(__dirname, ".v8.15.1-memory-recovery-"));
 let checks = 0;
@@ -70,7 +69,7 @@ function makeEngine(dir) {
   const summariesDir = path.join(dir, "summaries");
   ensureSummaryFolders(summariesDir);
   const engine = new MemoryEngine({ baseDir: path.join(dir, "memory"), summaryFoldersDir: summariesDir, trace: { record() {} } });
-  engine.memory4.configureDerived({ isCampaignCurrent: () => true });
+  engine.memory4.configureExtraction({ isCampaignCurrent: () => true });
   return engine;
 }
 
@@ -144,23 +143,17 @@ async function committedRecoveryRetiresDerivedWork(rootDir) {
   coordinator.store.commitOwner(snapshot, { status: "STORE", entries: [candidateFor(snapshot)] });
 
   const restarted = new MemoryEngine({ store: engine.store, trace: { record() {} } }).memory4;
-  let scheduleCalls = 0, compressionCalls = 0;
-  restarted.configureDerived({ isCampaignCurrent: () => true,
-    requestCompression: async () => { compressionCalls++; throw new Error("retired_derived_provider_must_not_run"); } });
-  restarted.derived.schedule = async () => { scheduleCalls++; return { status: "UNEXPECTED_SCHEDULE" }; };
   let extractionCalls = 0;
   const recoveryPromise = restarted.recoverPending(async () => { extractionCalls++; throw new Error("committed owner must not be extracted twice"); }, {
     activeCampaignToken: context.campaignToken,
     isNarrativeCommitted: () => true
   });
   const results = await recoveryPromise;
-  const derived = restarted.derived.list(snapshot);
   check("verified Durable recovery retires Derived work and clears only its committed recovery record",
     restarted.inspectCommittedSnapshot(snapshot).state === "COMMITTED" && !fs.existsSync(recoveryFile)
-      && results.length === 1 && results[0].status === "SKIPPED_DERIVED_POLICY"
-      && results[0].durableStatus === "STORE" && results[0].derivedGenerationStatus === "SKIPPED_DERIVED_POLICY");
-  check("recovery does not schedule Year/Life work or call its Provider", scheduleCalls === 0 && compressionCalls === 0
-    && derived.generationPolicy === "RETIRED" && derived.years.length === 0 && derived.life === null);
+      && results.length === 1 && results[0].status === "COMPLETE"
+      && results[0].durableStatus === "STORE");
+  check("recovery has no Year/Life service or Provider side job", !Object.hasOwn(restarted, "derived"));
   check("already-committed canonical owner does not repeat provider extraction", extractionCalls === 0);
 }
 
@@ -169,12 +162,9 @@ async function preserveManualOverrideAndForget(rootDir) {
   const firstContext = fixtureContext("v8151-manual", "manual-first");
   const first = committedSnapshot(engine, firstContext);
   const coordinator = engine.memory4;
-  coordinator.store.commitOwner(first, { status: "STORE", entries: [candidateFor(first)] });
-  seedDerivedHistory(engine, { campaignToken: first.campaignToken, ownerId: first.ownerId });
-  let year = coordinator.derived.list(first).years.find(view => view.eventYear === 1164);
-  assert(year?.items.length);
-  coordinator.derived.updateYear(first, { eventYear: 1164, itemId: year.items[0].itemId,
-    expectedRevision: year.revision, text: "手工保留的年度记忆。" });
+  const original = coordinator.store.commitOwner(first, { status: "STORE", entries: [candidateFor(first)] });
+  const manualId = original.entryIds[0];
+  coordinator.store.updateEntry(first, manualId, "手工保留的长期记忆。", { expectedRevision: 1 });
 
   const secondContext = fixtureContext("v8151-manual", "manual-second");
   secondContext.conversationId = "manual-second-conversation";
@@ -191,12 +181,11 @@ async function preserveManualOverrideAndForget(rootDir) {
     activeCampaignToken: second.campaignToken,
     isNarrativeCommitted: () => true
   });
-  year = restarted.derived.read(second, "year", 1164);
-  check("manual historical Year text survives as dirty data after verified Durable recovery",
-    year.items[0].text === "手工保留的年度记忆。" && restarted.derived.list(second).years[0].dirty);
+  const manual = restarted.store.readEntry(first, manualId);
+  check("manual Detail text survives verified Durable recovery", manual.text === "手工保留的长期记忆。" && manual.edit.mode === "manual_override");
   check("retired Derived work does not pin or mislabel a verified recovery record",
-    !fs.existsSync(recoveryFile) && recovered[0].status === "SKIPPED_DERIVED_POLICY"
-      && recovered[0].durableStatus === "STORE" && recovered[0].derivedGenerationStatus === "SKIPPED_DERIVED_POLICY");
+    !fs.existsSync(recoveryFile) && recovered[0].status === "COMPLETE"
+      && recovered[0].durableStatus === "STORE");
 
   const forgetContext = fixtureContext("v8151-forgotten", "forgotten");
   const forgottenSnapshot = committedSnapshot(engine, forgetContext);

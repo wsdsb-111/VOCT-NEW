@@ -218,19 +218,16 @@ async function testCommittedDetailRecovery() {
 
   const restarted = new MemoryEngine({ baseDir: path.join(fixture.directory, "memory"),
     summaryFoldersDir: fixture.summariesDir, trace: { record() {} } });
-  restarted.memory4.configureDerived({ isCampaignCurrent: token => token === campaignToken,
+  restarted.memory4.configureExtraction({ isCampaignCurrent: token => token === campaignToken,
     estimateTokens: text => Math.ceil(String(text || "").length / 2) });
   const recovered = await restarted.memory4.recoverPending(null,
     { activeCampaignToken: campaignToken, isNarrativeCommitted: () => true });
-  assert.deepEqual(recovered, [{ ownerId: 2, status: "SKIPPED_DERIVED_POLICY", durableStatus: "STORE",
-    derivedGenerationStatus: "SKIPPED_DERIVED_POLICY", generated: false, providerRequests: 0 }],
+  assert.deepEqual(recovered, [{ ownerId: 2, status: "COMPLETE", durableStatus: "STORE",
+    generated: false, providerRequests: 0 }],
   "recovery accepts only the verified Durable commit and typed derived retirement: " + JSON.stringify(recovered));
   assert.deepEqual(restarted.memory4.store.query(scope).map(entry => entry.entryId), committed.entryIds,
     "verified retirement preserves the original committed Detail");
-  const derived = restarted.memory4.derived.list(scope);
-  assert.equal(derived.generationPolicy, "RETIRED");
-  assert.deepEqual(derived.years, []);
-  assert.equal(derived.life, null);
+  assert.equal(Object.hasOwn(restarted.memory4, "derived"), false);
   assert.equal(fs.readdirSync(restarted.memory4.recoveryDir).filter(name => name.endsWith(".json")).length, 0);
 }
 
@@ -492,7 +489,7 @@ async function testRendererDelayedBodyResponse() {
   let ownerCalls = 0;
   const data = revision => ({ success: true, ownerId: 2, campaignToken, contextId: "ui-context",
     readOnlyArchive: false, readOnlyReason: null, known: { items: [], offset: 0, total: 0 },
-    official: [], derived: { years: [], life: null }, legacy: { total: 0, items: [], counts: {} },
+    official: [], legacy: { total: 0, items: [], counts: {} },
     generation: { lastStatus: null, noDurableContentCount: 0 },
     detail: { offset: 0, total: 1, items: [{ entryId: "entry-race", memoryType: "DURABLE_KNOWLEDGE",
       eventTime: { status: "unknown" }, revision }] } });

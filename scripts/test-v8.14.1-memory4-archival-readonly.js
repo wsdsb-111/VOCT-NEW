@@ -24,7 +24,7 @@ fs.mkdirSync(path.join(summariesDir, "1_Player"), { recursive: true });
 fs.mkdirSync(path.join(summariesDir, "4_赵太初"), { recursive: true });
 
 const memoryEngine = new MemoryEngine({ baseDir: path.join(root, "memory"), summaryFoldersDir: summariesDir, trace: { record() {} } });
-memoryEngine.memory4.configureDerived({ isCampaignCurrent: token => token === campaignToken, estimateTokens: text => Math.ceil(text.length / 2) });
+memoryEngine.memory4.configureExtraction({ isCampaignCurrent: token => token === campaignToken, estimateTokens: text => Math.ceil(text.length / 2) });
 
 let currentConversation = null;
 let lifecycleManager = null;
@@ -166,7 +166,7 @@ async function main() {
       operation: "updateDetail", entryId: data.detail.items[0].entryId, text: "当前 roster 外不得编辑。",
       expectedRevision: data.detail.items[0].revision }), "legacy_summary_binding_owner_not_in_current_campaign");
     await rejectsWith(SummariesManager.mutateMemory4({ ownerId: 4, expectedCampaignToken: campaignToken,
-      operation: "rebuild", kind: "all", overwriteManual: false, expectedRevision: data.derived.derivedRevision || 0 }),
+      operation: "rebuild", kind: "all", overwriteManual: false, expectedRevision: 0 }),
     "legacy_summary_binding_owner_not_in_current_campaign");
     assert.equal(treeHash(root), beforeRosterDeniedWrites, "an active but off-roster archive must remain read-only");
     checks++;
@@ -305,7 +305,7 @@ async function main() {
     await rejectsWith(SummariesManager.mutateMemory4({ ownerId: 4, expectedCampaignToken: campaignToken,
       operation: "updateDetail", entryId, text: "不得在归档上下文修改。", expectedRevision: endedEntry.entry.revision }), "legacy_binding_conversation_not_active");
     await rejectsWith(SummariesManager.mutateMemory4({ ownerId: 4, expectedCampaignToken: campaignToken,
-      operation: "rebuild", kind: "all", overwriteManual: false, expectedRevision: ended.derived.derivedRevision || 0 }), "legacy_binding_conversation_not_active");
+      operation: "rebuild", kind: "all", overwriteManual: false, expectedRevision: 0 }), "legacy_binding_conversation_not_active");
     assert.equal(treeHash(root), beforeDeniedWrites);
     checks++;
     console.log("PASS ended-context archive remains readable while update and rebuild stay server-blocked");

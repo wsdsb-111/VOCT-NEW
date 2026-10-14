@@ -289,20 +289,8 @@ async function testRealMemory4CoordinatorAcceptsLetterSnapshots() {
   const summariesDir = path.join(root, "summaries");
   const memoryEngine = new MemoryEngine({ baseDir: path.join(root, "memory"), summaryFoldersDir: summariesDir,
     trace: { record() {} } });
-  memoryEngine.memory4.configureDerived({ isCampaignCurrent: token => token === campaignToken });
-  const derived = memoryEngine.memory4.derived;
-  const rebuild = derived.rebuild.bind(derived);
-  let failFirstDerivedBuild = true;
-  let derivedCalls = 0;
-  derived.schedule = () => {};
-  derived.rebuild = async (snapshot, request) => {
-    derivedCalls++;
-    if (snapshot.ownerId === 1 && failFirstDerivedBuild) {
-      failFirstDerivedBuild = false;
-      return { status: "FAILED", reason: "fixture_derived_failure" };
-    }
-    return rebuild(snapshot, request);
-  };
+  memoryEngine.memory4.configureExtraction({ isCampaignCurrent: token => token === campaignToken });
+  assert.equal(memoryEngine.memory4.derived, undefined);
   const GameData = createGameData({ fs, path, memorySystem, memoryEngine, summariesDir,
     getHistoricalReferenceByYear: () => null });
   const durableOwners = [];
@@ -326,12 +314,10 @@ async function testRealMemory4CoordinatorAcceptsLetterSnapshots() {
       participantProfiles: context().participantProfiles.map(person => ({ ...person, age: person.id === 1 ? 30 : 20 })) };
     const job = service.captureAccepted(accepted);
     const first = await service.finalize(job);
-    assert.equal(first.status, "PARTIAL_FAILURE", JSON.stringify(first));
-    assert.equal(first.ownerStatuses.find(owner => owner.ownerId === 1).derivedStatus, "FAILED", JSON.stringify(first));
+    assert.equal(first.status, "COMPLETE", JSON.stringify(first));
     assert.deepEqual(durableOwners.sort(), [1, 2]);
     const retried = await service.retryPending({ activeCampaignToken: campaignToken, manual: true });
-    assert(retried.some(row => row.status === "COMPLETE"));
-    assert.equal(derivedCalls, 3, "derived rebuild retries without re-running durable extraction");
+    assert.equal(retried.length, 0, "completed canonical letter work is not replayed");
     assert.deepEqual(durableOwners.sort(), [1, 2], "a committed Canonical owner is not extracted again when derived generation is retired");
     const [sender, recipient] = accepted.participantProfiles;
     const projectedFiles = new Map();
@@ -366,15 +352,10 @@ async function testRealMemory4CoordinatorAcceptsLetterSnapshots() {
       assert.equal(known?.sharedSceneCount || 0, 0);
 
       const completedOwner = service.readJob(job.jobId).owners[String(ownerId)];
-      assert.equal(completedOwner.derivedStatus, "SKIPPED_DERIVED_POLICY");
-      assert.equal(completedOwner.derivedGenerated, false);
-      assert.equal(completedOwner.derivedProviderRequests, 0);
-      const views = derived.list(scope);
-      assert.equal(views.generationPolicy, "RETIRED");
-      assert.deepEqual(views.years, [], "letter Durable memories remain stored without generated Year views");
-      assert.equal(views.life, null, "letter Durable memories remain stored without a generated Life view");
-      assert.equal(derived.read(scope, "year", 1038), null);
-      assert.equal(derived.read(scope, "life"), null);
+      assert.equal(completedOwner.derivedStatus, undefined);
+      assert.equal(memoryEngine.memory4.derived, undefined);
+      assert(!fs.existsSync(path.join(memoryEngine.memory4.store.directory(scope), "years")));
+      assert(!fs.existsSync(path.join(memoryEngine.memory4.store.directory(scope), "life.json")));
       assert.equal(entry.eventTime.from, null);
       assert.equal(entry.eventTime.to, null);
     }

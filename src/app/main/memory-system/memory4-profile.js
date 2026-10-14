@@ -100,7 +100,7 @@ class Memory4ProfileService {
       disclosedFacts: this.store.getCurrentDisclosures(scope, entityId,
         validLiveScope(scope, snapshot, gameData) ? gameData : null,
         { readContext, currentGameDate: currentGameDate || gameData?.date || snapshot?.gameDate }),
-      memoryPointers: { detailIds: [...pointers.detailIds], ...(this.store.derived?.getPointers(scope, entityId, { currentGameDate: currentGameDate || gameData?.date || snapshot?.gameDate, readContext }) || { yearKeys: [], lifeItemIds: [] }),
+      memoryPointers: { detailIds: [...pointers.detailIds],
         legacyCoverageRefs: bridge.memories.filter(memory => ids([
           ...(memory.subjects || []), ...(memory.provenance?.counterpartIds || []), memory.provenance?.counterpartId
         ]).includes(entityId)).map(memory => memory.memoryId) } };

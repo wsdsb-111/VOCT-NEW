@@ -27,7 +27,7 @@ try {
     loadFolderSummariesForCharacter: () => [] };
   const coordinator = { baseStore: base, store: { loadIndex: () => activeIndex,
     directory: () => root, read: (_file, fallback = null) => fallback,
-    readEntry: (_scope, id) => entryRecords.get(id),
+    readEntry: (_scope, id) => entryRecords.get(id), isEntryForgotten: () => false,
     isProjectionLineageForgotten: (_scope, lineage) => lineage.legacyMemoryIds.some(id => forgottenLegacyIds.has(id)) },
     derived: { selectSlice: () => null }, getKnownEntityProfile: () => ({ recognition: { level: "KNOWN" },
       relationship: { status: "UNKNOWN", types: [] } }) };
@@ -248,8 +248,9 @@ try {
       reason: { axis: "event", from: "1190.1.1", to: "1190.1.1", precision: "day" }, annotation: "derived fixture",
       sourceRef: { kind: "year", id: "selection-target-derived", sourceEntryIds: ["selection-target-C1"] } });
     const derivedPacket = plan(targetCanonical, [44]);
-    assert.equal(derivedPacket.overview.routeKind, "entity_target",
-      "a Derived overview backed by an Explicit Target Canonical source keeps target priority metadata");
+    assert(derivedPacket.details.some(item => item.sourceRef.id === "selection-target-C1" && item.routeKind === "entity_target"),
+      "Explicit Target Canonical details retain priority without retired overviews");
+    assert(derivedPacket.items.every(item => !["year", "life"].includes(item.sourceRef.kind)));
 
     const budgetedPacket = fitRecallPacket({ query: { granularity: "PERIOD", text: query },
       overview: { memory: { memoryId: "unrelated-derived", content: "北境旧闻无关材料。".repeat(300), tags: ["北境"] },
@@ -338,13 +339,12 @@ try {
     assert.equal(packet.overview.routeKind, "entity_target");
     assert.equal(packet.details.some(item => item.sourceRef.kind === "legacy"), false);
     assert(packet.tokens <= 1200);
-    assert.equal(plan(44, [44]).overview.memory.memoryId, "unsplit-derived-overview",
-      "an explicit Derived overview must not be replaced by an explicit Legacy candidate");
-    assert.equal(plan(45, []).overview.memory.memoryId, "unsplit-derived-overview",
-      "without explicit targets, the existing Derived overview must remain");
+    assert.equal(plan(44, [44]).overview.memory.memoryId, target.memoryId,
+      "the valid Legacy overview remains available after derived retirement");
+    assert(plan(45, []).items.every(item => !["year", "life"].includes(item.sourceRef.kind)));
     const ordinary = legacy("unsplit-non-target", "北境旧事属于另一个人物。", { subjects: [45], topics: ["北境"] });
-    assert.equal(plan(45, [44], [ordinary]).overview.memory.memoryId, "unsplit-derived-overview",
-      "a non-target Legacy cannot force an overview replacement");
+    assert(plan(45, [44], [ordinary]).items.every(item => !["year", "life"].includes(item.sourceRef.kind)),
+      "non-target Legacy never revives the old disk overview");
     const filler = "宫廷礼节和宴席席次记录。".repeat(700);
     const oversized = { ...target, content: `${filler}\n李道远在北境守门，留下 UNSPLIT_C_TARGET_SENTINEL。\n${filler}` };
     const budgeted = plan(45, [44], [oversized]);

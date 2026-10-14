@@ -332,7 +332,7 @@ async function testRealMemory4AndRecoveredSummaryPipeline() {
   const makeService = (memoryEngine, shouldFail, failDurableCalls = 0) => {
     let failedDurableCalls = 0;
     const GameData = createGameData({ fs, path, memorySystem, memoryEngine, summariesDir, getHistoricalReferenceByYear: () => null });
-    memoryEngine.memory4.configureDerived({
+    memoryEngine.memory4.configureExtraction({
       isCampaignCurrent: token => token === campaignToken,
       estimateTokens: text => Math.ceil(text.length / 4),
       requestCompression: async () => { derivedCompressionCalls++; throw new Error("retired_derived_provider_must_not_run"); },
@@ -395,52 +395,14 @@ async function testRealMemory4AndRecoveredSummaryPipeline() {
     const completed = recovered.find(row => row.status === "COMPLETE");
     assert(completed,
       `a fresh MemoryEngine process recovers the persisted letter job: ${JSON.stringify({ recovered, durableFailures })}`);
-    assert(completed.ownerStatuses.every(owner => owner.status === "STORE" && owner.derivedStatus === "SKIPPED_DERIVED_POLICY"),
-      "verified Durable commits complete with the typed retirement result, without claiming a generated view");
+    assert(completed.ownerStatuses.every(owner => owner.status === "STORE"), "canonical commits complete without a derived task");
     const letterJobPath = service.recoveryPath(job.jobId);
-    let persistedJob = JSON.parse(fs.readFileSync(letterJobPath, "utf8"));
-    for (const owner of Object.values(persistedJob.owners)) {
-      assert.equal(owner.derivedStatus, "SKIPPED_DERIVED_POLICY");
-      assert.equal(owner.derivedGenerated, false);
-      assert.equal(owner.derivedProviderRequests, 0);
-    }
-    persistedJob.owners["1"].derivedProviderRequests = 1;
-    fs.writeFileSync(letterJobPath, JSON.stringify(persistedJob), "utf8");
-    const realDerivedRebuild = engine.memory4.derived.rebuild.bind(engine.memory4.derived);
-    let controlledRevalidations = 0;
-    engine.memory4.derived.rebuild = async (...args) => {
-      controlledRevalidations++;
-      return realDerivedRebuild(...args);
-    };
-    try {
-      const revalidated = await service.retryPending({ activeCampaignToken: campaignToken, manual: true });
-      assert.equal(revalidated[0]?.status, "COMPLETE", "a persisted skip without a complete typed proof is revalidated");
-      assert.equal(controlledRevalidations, 1, "only the owner with invalid retirement proof is revalidated");
-    } finally { engine.memory4.derived.rebuild = realDerivedRebuild; }
-    persistedJob = JSON.parse(fs.readFileSync(letterJobPath, "utf8"));
-    assert.equal(persistedJob.owners["1"].derivedGenerated, false);
-    assert.equal(persistedJob.owners["1"].derivedProviderRequests, 0);
-
-    persistedJob.owners["1"].derivedProviderRequests = 1;
-    fs.writeFileSync(letterJobPath, JSON.stringify(persistedJob), "utf8");
-    const durableCallsBeforeMalformedSkip = durableRequests.length;
-    let malformedSkipCalls = 0;
-    engine.memory4.derived.rebuild = async () => {
-      malformedSkipCalls++;
-      return { status: "SKIPPED_DERIVED_POLICY", generated: true, providerRequests: 0 };
-    };
-    let malformedSkip;
-    try { malformedSkip = await service.retryPending({ activeCampaignToken: campaignToken, manual: true }); }
-    finally { engine.memory4.derived.rebuild = realDerivedRebuild; }
-    assert.equal(malformedSkipCalls, 1);
-    assert.equal(malformedSkip[0]?.status, "PARTIAL_FAILURE", "a malformed retirement result cannot complete a Durable owner");
-    assert.equal(malformedSkip[0].ownerStatuses.find(owner => owner.ownerId === 1).derivedStatus, "FAILED");
-    assert.equal(durableRequests.length, durableCallsBeforeMalformedSkip, "derived revalidation must not replay completed Durable extraction");
-    assert.equal(engine.memory4.store.query({ campaignToken, ownerId: 1 }).length, 2,
-      "rejecting a malformed derived skip preserves the already committed Durable facts");
-
-    const restored = await service.retryPending({ activeCampaignToken: campaignToken, manual: true });
-    assert.equal(restored[0]?.status, "COMPLETE", "a subsequent verified retirement result completes the preserved Durable job");
+    const persistedJob = JSON.parse(fs.readFileSync(letterJobPath, "utf8"));
+    assert(Object.values(persistedJob.owners).every(owner => owner.derivedStatus === undefined));
+    const beforeCalls = durableRequests.length;
+    assert.equal((await service.retryPending({activeCampaignToken:campaignToken,manual:true})).length, 0);
+    assert.equal(durableRequests.length, beforeCalls, "completed Durable extraction is not replayed");
+    assert.equal(engine.memory4.derived, undefined);
     assert.equal(narrativeRequests, 2, "retry resumes durable extraction without re-requesting an already saved letter summary");
     assert.equal(engine.store.listAllEpisodes().length, 1, "real MemoryStore commits one letter episode marker");
     const memories = engine.store.listAllMemories().filter(row => row.provenance?.conversationId === context.letterId);
@@ -486,13 +448,7 @@ async function testRealMemory4AndRecoveredSummaryPipeline() {
       assert.deepEqual(relativeRef.segmentIds, relativeDate.source.segmentIds);
       const finalization = Object.values(index.finalizations).find(row => row.status === "STORE");
       assert(finalization, "real Memory4 index records the owner-specific canonical commit");
-      const derivedResult = await engine.memory4.derived.rebuild(scope, { kind: "all" });
-      assert.equal(derivedResult.status, "SKIPPED_DERIVED_POLICY", JSON.stringify(derivedResult));
-      assert.equal(derivedResult.providerRequests, 0);
-      const views = engine.memory4.derived.list(scope);
-      assert.equal(views.generationPolicy, "RETIRED");
-      assert.deepEqual(views.years, [], "letter Durable facts remain stored without generating a Year file");
-      assert.equal(views.life, null, "letter Durable facts remain stored without generating a Life file");
+      assert.equal(engine.memory4.derived, undefined);
     }
     assert.throws(() => engine.memory4.store.query({ campaignToken, ownerId: 3 }), /memory4_owner_folder_not_unique/,
       "an unrelated third party has no owner folder from which to query private letter Detail");
@@ -531,7 +487,7 @@ function createRealRegenerationFixture({ requestSummary, requestExtraction, camp
   gameData.characters.set(1, { id: 1, name: "丙", shortName: "丙", fullName: "丙" });
   const conversation = { id: "summary-rebuild-active", isActive: true, gameData,
     memoryState: engine.createConversationState("summary-rebuild-active"), dynamicRecallHistory: new Map() };
-  engine.memory4.configureDerived({ isCampaignCurrent: token => token === campaign, requestExtraction });
+  engine.memory4.configureExtraction({ isCampaignCurrent: token => token === campaign, requestExtraction });
   const manager = createSummariesManager({ fs, path, summariesDir, memoryEngine: engine, memorySystem,
     getCurrentConversation: () => conversation, getMemory4ReadConversation: () => conversation,
     requestSummary, getSummaryOutputLimit: () => 2048 });

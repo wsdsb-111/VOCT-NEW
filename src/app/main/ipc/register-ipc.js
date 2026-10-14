@@ -915,7 +915,7 @@ function registerIpcHandlers(runtime) {
       return { success: false, error: "摘要重试失败，恢复记录已保留，请检查摘要模型配置及日志。" };
     }
   });
-  for (const [channel, method] of [["memory4:getOwnerData", "getMemory4OwnerData"], ["memory4:getEntry", "getMemory4Entry"],
+  for (const [channel, method] of [["memory4:getOwnerData", "getMemory4OwnerData"], ["memory4:getCoverage", "getMemory4Coverage"], ["memory4:getEntry", "getMemory4Entry"],
     ["memory4:getSources", "getMemory4Sources"], ["memory4:mutate", "mutateMemory4"],
     ["memory4:auditOrphans", "auditMemory4Orphans"], ["memory4:forgetOrphan", "forgetMemory4Orphan"],
     ["memory4:integrityAudit", "auditMemory4Integrity"]]) {
@@ -925,6 +925,24 @@ function registerIpcHandlers(runtime) {
         const ownerId = requireInteger(request.ownerId, "owner_id", { min: 1, max: 2147483647 });
         if (request.expectedCampaignToken != null && (typeof request.expectedCampaignToken !== "string" || request.expectedCampaignToken.length > 256)) throw new Error("memory4_campaign_invalid");
         if (request.entityId != null) requireInteger(request.entityId, "entity_id", { min: 1, max: 2147483647 });
+        if (channel === "memory4:getCoverage") {
+          if (request.finalizationId != null && (typeof request.finalizationId !== "string" || request.finalizationId.length > 512)
+            || request.legacyMemoryId != null && (typeof request.legacyMemoryId !== "string" || request.legacyMemoryId.length > 256)
+            || request.offset != null && (!Number.isSafeInteger(request.offset) || request.offset < 0 || request.offset > 1000000)
+            || request.limit != null && (!Number.isSafeInteger(request.limit) || request.limit < 1 || request.limit > 40)
+            || request.expectedIndexRevision != null && (!Number.isSafeInteger(request.expectedIndexRevision) || request.expectedIndexRevision < 0)
+            || request.expectedSummaryHash != null && (typeof request.expectedSummaryHash !== "string" || !/^[a-f0-9]{64}$/.test(request.expectedSummaryHash))) {
+            throw new Error("memory4_coverage_request_invalid");
+          }
+        }
+        if (channel === "memory4:getEntry") {
+          if (typeof request.entryId !== "string" || !/^m4_[a-f0-9]{64}$/.test(request.entryId)
+            || request.expectedIndexRevision != null && (!Number.isSafeInteger(request.expectedIndexRevision) || request.expectedIndexRevision < 0)
+            || request.expectedEntryRevision != null && (!Number.isSafeInteger(request.expectedEntryRevision) || request.expectedEntryRevision < 0)
+            || request.expectedBodyHash != null && (typeof request.expectedBodyHash !== "string" || !/^[a-f0-9]{64}$/.test(request.expectedBodyHash))) {
+            throw new Error("memory4_entry_request_invalid");
+          }
+        }
         return await SummariesManager[method]({ ...request, ownerId }, services?.persistence);
       } catch (error) {
         return { success: false, error: error.message || "memory4_request_failed" };

@@ -6,9 +6,12 @@ const actionChecks = [];
 const followupChecks = [];
 
 const archivedChecks = [
+  // V9.3.3 removes Year/Life view/generation lifecycle; canonical safety stays in source-validity, recall and independent QA.
+  "test-v8.14-d-derived-lifecycle.js",
   // V9.2.3 retires paid Year/Life generation; readonly/source safety remains in release fixtures.
   "test-v8.15.2-derived-budget-split.js",
   "test-v8.15.2-derived-compression-independent-qa.js",
+  "test-v8.15.2-fix5-derived-budget-history.js",
   "test-v8.15.2-derived-acquisition-independent-qa.js",
   "test-action-participant-binding.js",
   "test-action-participants.js",
@@ -81,6 +84,10 @@ const archivedChecks = [
 ];
 
 const releaseChecks = [
+  { group: "v9.3.3-evidence-planner", script: "test-v9.3.3-evidence-planner.js" },
+  { group: "v9.3.3-source-validity", script: "test-v9.3.3-source-validity.js" },
+  { group: "v9.3.3-coverage-ui", script: "test-v9.3.3-memory4-coverage-ui.js" },
+  { group: "v9.3.3-independent-qa", script: "test-v9.3.3-independent-qa.js" },
   { group: "v9.3-adapter-conformance", script: "test-v9.3-adapter-conformance.js" },
   { group: "v9.3-independent-qa", script: "test-v9.3-independent-qa.js" },
   { group: "v9.3-cancellation-retry", script: "test-v9.3-cancellation-retry.js" },
@@ -236,7 +243,6 @@ const releaseChecks = [
   { group: "v8.14-c-recall-planner", script: "test-v8.14-c-recall-planner.js" },
   { group: "v8.14-player-identity-knowledge", script: "test-v8.14-player-identity-knowledge.js" },
   { group: "v8.14-de-independent-qa", script: "test-v8.14-de-independent-qa.js" },
-  { group: "v8.14-d-derived-lifecycle", script: "test-v8.14-d-derived-lifecycle.js" },
   { group: "v8.14.1-production-pipeline-qa", script: "test-v8.14.1-production-pipeline-qa.js" },
   { group: "v8.14.1-memory4-archival-readonly", script: "test-v8.14.1-memory4-archival-readonly.js" },
   { group: "v8.14.1-frontend-content", script: "test-v8.14.1-frontend-content.js" },

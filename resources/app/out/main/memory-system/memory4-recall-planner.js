@@ -6,6 +6,7 @@ const { resolveTemporalFocus, detectTemporalAxisIntent } = require("./fuzzy-temp
 const { gameDateFromSerial, hasFirstMeetingCue } = require("./temporal-anchor-extractor");
 const { normalizeGameDate } = require("../worldline/character-temporal-facts");
 const { buildLegacyBridge } = require("./memory4-legacy-bridge");
+const { memory4SourceValid } = require("./memory4-source-validity");
 const { projectionLineageFromSummary } = require("./memory4-forget");
 const { MemoryRanker } = require("./memory-ranker");
 const { normalizePerspectiveTemporalRefs, isFirstMeetingSummary } = require("./summary-date-index");
@@ -228,11 +229,46 @@ class Memory4RecallPlanner {
   }
 
   currentSource(scope, entry, index, metadata) {
+    const row = index.entries[entry.entryId];
+    if (!memory4SourceValid({ store: this.store, baseStore: this.baseStore, scope, row, index, metadata })) return false;
     if (!sourceRevisionCurrent(entry.source, scope, index, metadata)
       || entry.state.source && !sourceRevisionCurrent(entry.state.source, scope, index, metadata)) return false;
     const refs = entry.source.legacyRefs || [];
     if (entry.source.legacyMemoryIds?.length && refs.length !== entry.source.legacyMemoryIds.length) return false;
     return refs.every(ref => this.validLegacyRef(scope, ref));
+  }
+
+  reselectFocus(scope, focus, index, metadata, options) {
+    const currentDate = serial(options.currentGameDate);
+    if (!Number.isFinite(currentDate) || !Array.isArray(focus.sourceRefs)) return null;
+    const sourceIds = new Set(), legacyRefs = [];
+    for (const ref of focus.sourceRefs) {
+      if (ref?.kind === "legacy") {
+        if (this.validateHistory(scope, [ref], options)) legacyRefs.push(ref);
+        continue;
+      }
+      if (ref?.kind === "detail" && this.validateHistory(scope, [ref], options)) sourceIds.add(ref.id);
+      else if (["year", "life", "conversation_year"].includes(ref?.kind)
+        && Array.isArray(ref.sourceEntryIds) && ref.sourceEntryIds.length <= 32) {
+        for (const id of ref.sourceEntryIds) if (typeof id === "string") sourceIds.add(id);
+      }
+    }
+    const detailRefs = [], chainIds = new Set(), topics = new Set();
+    for (const id of sourceIds) {
+      const row = index.entries[id];
+      if (!row || !memory4SourceValid({ store: this.store, baseStore: this.baseStore, scope, row, index, metadata })
+        || [row.conversationDate, row.acquiredDate, row.stateChangedGameDate].some(date => date && serial(date) > currentDate)) continue;
+      try {
+        const entry = this.store.readEntry(scope, id, index);
+        if (!this.currentSource(scope, entry, index, metadata) || !ids(entry.evidence?.knownBy).includes(scope.ownerId)) continue;
+        detailRefs.push({ kind: "detail", id, bodyHash: row.bodyHash });
+        chainIds.add(entry.source.finalizationId);
+        for (const topic of entry.topics || []) if (typeof topic === "string") topics.add(topic);
+      } catch { /* An invalid or forgotten source is excluded from the refreshed focus. */ }
+    }
+    if (!detailRefs.length && !legacyRefs.length) return null;
+    return { ...focus, entryIds: detailRefs.map(ref => ref.id), chainIds: [...chainIds],
+      topics: [...topics], sourceRefs: [...detailRefs, ...legacyRefs] };
   }
 
   // Only a provably complete, independent legacy fact can be suppressed. An
@@ -272,13 +308,32 @@ class Memory4RecallPlanner {
     const legacy = this.baseStore.loadFolderSummariesForCharacter(scope.ownerId);
     const availableLegacy = this.legacyCandidates(buildLegacyBridge(legacy, scope).memories, scope, index);
     return (refs || []).every(ref => {
-      if (["year", "life", "conversation_year"].includes(ref.kind)) return this.coordinator.derived?.validateRef(scope, ref, { currentGameDate }) === true;
+      if (!ref || typeof ref !== "object") return false;
+      if (ref.kind === "year" || ref.kind === "life") return false;
+      if (ref.kind === "conversation_year") {
+        const sourceIds = ref.sourceEntryIds;
+        return !!currentGameDate && Array.isArray(sourceIds) && sourceIds.length > 0 && sourceIds.length <= 32
+          && new Set(sourceIds).size === sourceIds.length
+          && ref.id === `memory4:${scope.campaignToken}:${scope.ownerId}:conversation_year:${hash([sourceIds, ref.window])}`
+          && hash(sourceIds.map(id => index.entries[id])) === ref.sourceRowsHash
+          && sourceIds.every(id => {
+            const row = index.entries[id];
+            if (!row || !memory4SourceValid({ store: this.store, baseStore: this.baseStore, scope, row, index, metadata })
+              || [row.conversationDate, row.acquiredDate, row.stateChangedGameDate].some(date => date && serial(date) > serial(currentGameDate))) return false;
+            try {
+              const entry = this.store.readEntry(scope, id, index);
+              return !!entry && this.currentSource(scope, entry, index, metadata);
+            } catch { return false; }
+          });
+      }
       if (ref.kind === "detail") {
         const row = index.entries[ref.id];
         if (!row || row.deleted || row.bodyHash !== ref.bodyHash) return false;
-        const entry = this.store.readEntry(scope, ref.id, index);
-        if (currentGameDate && [entry.conversationDate, entry.acquiredDate, entry.state.changedGameDate].some(date => serial(date) > serial(currentGameDate))) return false;
-        return this.currentSource(scope, entry, index, metadata) && ids(entry.evidence.knownBy).includes(scope.ownerId);
+        try {
+          const entry = this.store.readEntry(scope, ref.id, index);
+          if (currentGameDate && [entry.conversationDate, entry.acquiredDate, entry.state.changedGameDate].some(date => serial(date) > serial(currentGameDate))) return false;
+          return this.currentSource(scope, entry, index, metadata) && ids(entry.evidence.knownBy).includes(scope.ownerId);
+        } catch { return false; }
       }
       return availableLegacy.some(memory => (memory.provenance?.legacyParentId || memory.memoryId) === ref.parentId
         && (!ref.id || memory.memoryId === ref.id) && (memory.provenance?.legacyParentHash || projectionHash(memory)) === ref.bodyHash
@@ -309,7 +364,7 @@ class Memory4RecallPlanner {
     const query = { ...parsed, entityIds: ids([...(parsed.entityIds || []), ...explicitTargetEntityIds, ...mentionedOutOfSceneIds]),
       topics: [...(parsed.topics || [])] };
     if (!AXES.has(query.axis) || !GRANULARITIES.has(query.granularity) || ids(query.entityIds).length !== query.entityIds.length) throw new Error("memory4_recall_query_invalid");
-    const focus = options.focus;
+    let focus = options.focus;
     const seen = new Set(options.excludedKeys || []);
     const diagnostics = { ownerId: scope.ownerId, indexRevision: index.revision, axis: query.axis, granularity: query.granularity,
       queryHash: hash(options.query || ""), candidateCount: 0, bodyReads: 0, rejected: {}, elapsedMs: 0,
@@ -317,11 +372,18 @@ class Memory4RecallPlanner {
       entityTargetSelectedIds: [], legacyCandidateCount: 0,
       legacyRejected: { identity: 0, lexical: 0, topic: 0, budget: 0, stale: 0, forgotten: 0 }, memory4SelectedIds: [] };
     const reject = name => { diagnostics.rejected[name] = (diagnostics.rejected[name] || 0) + 1; };
-    const focusValid = query.granularity === "FOLLOW_UP" && focus && focus.campaignToken === scope.campaignToken && focus.ownerId === scope.ownerId
+    const focusContextValid = query.granularity === "FOLLOW_UP" && focus && focus.campaignToken === scope.campaignToken && focus.ownerId === scope.ownerId
       && focus.conversationId === options.conversationId && focus.sceneRevision === options.sceneRevision
       && options.turnEpoch >= focus.turnEpoch && options.turnEpoch - focus.turnEpoch <= 3
-      && (!query.entityIds.length || query.entityIds.every(id => focus.entityIds.includes(id)))
-      && this.validateHistory(scope, focus.sourceRefs, options);
+      && Array.isArray(focus.entityIds) && (!query.entityIds.length || query.entityIds.every(id => focus.entityIds.includes(id)));
+    let focusValid = !!focusContextValid && this.validateHistory(scope, focus.sourceRefs, options);
+    if (focusContextValid && !focusValid) {
+      const refreshed = this.reselectFocus(scope, focus, index, metadata, options);
+      if (refreshed) {
+        focus = refreshed;
+        focusValid = this.validateHistory(scope, focus.sourceRefs, options);
+      }
+    }
     if (query.granularity === "FOLLOW_UP" && focusValid) {
       query.entityIds = [...focus.entityIds]; query.topics = [...focus.topics]; query.axis = focus.axis;
     }
@@ -415,6 +477,7 @@ class Memory4RecallPlanner {
     };
     let firstMeetingDate = Infinity;
     for (const candidate of rows.slice(0, 32)) {
+      if (this.store.isEntryForgotten(scope, candidate.row)) { reject("forgotten"); continue; }
       const entry = readCandidate(candidate.id);
       if (!ids(entry.evidence?.knownBy).includes(scope.ownerId) || !["private", "participants", "known_group"].includes(entry.evidence?.visibility)) { reject("visibility"); continue; }
       if (!this.currentSource(scope, entry, index, metadata)) { reject("revision"); continue; }
@@ -456,27 +519,11 @@ class Memory4RecallPlanner {
       .map(candidate => ({ ...candidate, score: candidate.score + (explicitTargetEntityIds.some(id => entitySet(candidate.memory).includes(id)
         || containsEntityAlias(candidate.memory.content, new Set([id]), aliasIndex, aliasTracker)) ? 1 : 0) }))
       .sort((left, right) => right.score - left.score);
-    let overview = blocked ? null : this.coordinator.derived?.selectSlice(scope, { query, index,
-      eligibleEntryIds: rows.slice(0, Math.max(0, 32 - diagnostics.bodyReads)).map(candidate => candidate.id), currentGameDate: options.currentGameDate,
-      maxTokens: Math.min(400, options.memoryEngineRemainingBudget || 0), estimateTokens: options.estimateTokens, excludedKeys: [...seen],
-      verifiedEntries, maxBodyReads: 32 - diagnostics.bodyReads, onReadEntry: () => diagnostics.bodyReads++ }) || null;
-    if (overview) {
-      for (const id of overview.sourceRef.sourceEntryIds) {
-        const entry = readCandidate(id);
-        if (!this.currentSource(scope, entry, index, metadata) || !ids(entry.evidence.knownBy).includes(scope.ownerId)) {
-          reject("revision"); overview = null; break;
-        }
-        const row = index.entries[id];
-        const targetHit = relevantEntities.some(entity => row.entityIds.includes(entity));
-        const topicHit = matchesTopic(row);
-        const lexicalHit = !!searchText && hasLexicalOverlap(searchText, `${entry.text} ${(entry.topics || []).join(" ")}`);
-        if (!genericCommitmentQuery && !query.firstMeeting && query.granularity !== "FOLLOW_UP"
-          && !targetHit && !topicHit && !lexicalHit) { reject("lexical"); overview = null; break; }
-      }
-    }
+    let overview = null;
     if (!overview && !blocked && query.axis === "CONVERSATION" && query.granularity === "YEAR" && rows.length > 2) {
       const items = [], texts = [];
       for (const candidate of rows.slice(0, Math.max(0, 32 - diagnostics.bodyReads))) {
+        if (this.store.isEntryForgotten(scope, candidate.row)) { reject("forgotten"); continue; }
         const entry = readCandidate(candidate.id);
         if (!this.currentSource(scope, entry, index, metadata) || !ids(entry.evidence.knownBy).includes(scope.ownerId)) continue;
         const targetHit = relevantEntities.some(entity => candidate.row.entityIds.includes(entity));
@@ -491,7 +538,7 @@ class Memory4RecallPlanner {
       const key = `memory4:${scope.campaignToken}:${scope.ownerId}:conversation_year:${hash([items, query.window])}`;
       if (items.length && !seen.has(key)) overview = { memory: { memoryId: key, memory4Key: key, content: texts.join("\n"), type: "memory4_conversation_year", tags: queryTopics },
         reason: { axis: "conversation", ...query.window, precision: "year" }, annotation: "交谈年份即时概览；不属于磁盘事件年度记忆。",
-        sourceRef: { kind: "conversation_year", id: key, sourceEntryIds: items, sourceRowsHash: hash(items.map(id => index.entries[id])) } };
+        sourceRef: { kind: "conversation_year", id: key, sourceEntryIds: items, sourceRowsHash: hash(items.map(id => index.entries[id])), window: query.window } };
     }
     const explicitTargetIdsForItem = item => {
       if (!item || !explicitTargetEntityIds.length) return [];
@@ -502,7 +549,7 @@ class Memory4RecallPlanner {
         return explicitTargetEntityIds.filter(id => entitySet(item.memory).includes(id)
           || containsEntityAlias(item.memory.content, new Set([id]), aliasIndex, aliasTracker));
       }
-      if (["year", "life", "conversation_year"].includes(item.sourceRef?.kind)) {
+      if (item.sourceRef?.kind === "conversation_year") {
         return explicitTargetEntityIds.filter(id => item.sourceRef.sourceEntryIds?.some(sourceId => index.entries[sourceId]?.entityIds?.includes(id)));
       }
       return [];
@@ -521,7 +568,8 @@ class Memory4RecallPlanner {
         if (matched) break;
       }
       if (!matched && (query.axis !== "EVENT" || !query.window && !query.firstMeeting)) matched = temporalMatch(pseudo, query, options);
-      if (!matched || query.granularity === "FOLLOW_UP") continue;
+      if (!matched || query.granularity === "FOLLOW_UP" && !focusLegacyIds.has(memory.memoryId)
+        && !focusLegacyIds.has(memory.provenance?.legacyParentId)) continue;
       const targetHit = relevantEntities.some(entity => entitySet(memory).includes(entity))
         || legacyEntityIds.size > 0 && containsEntityAlias(memory.content, legacyEntityIds, aliasIndex, aliasTracker);
       const topicHit = queryTopics.some(topic => memory.content.includes(topic) || (memory.tags || []).includes(topic));
@@ -585,6 +633,8 @@ class Memory4RecallPlanner {
         : query.window && !details.length && !overview ? "本轮没有可新增的目标时段证据；此前已注入的匹配历史仍可用，不代表当时没有发生。" : null;
     const selectedLegacyBeforeFit = new Set([overview, ...details].filter(item => item?.sourceRef?.kind === "legacy")
       .map(item => item.memory.memoryId));
+    const focusLegacyIds = new Set((focus?.sourceRefs || []).filter(ref => ref?.kind === "legacy")
+      .flatMap(ref => [ref.id, ref.parentId]).filter(Boolean));
     const packet = fitRecallPacket({ query, overview, details, profileText, notice, diagnostics,
       focus: { ...scope, conversationId: options.conversationId, sceneRevision: options.sceneRevision,
         turnEpoch: options.turnEpoch, axis: query.axis, entityIds: [...relevantEntities] } },

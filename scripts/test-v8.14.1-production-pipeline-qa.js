@@ -139,7 +139,7 @@ async function fixture({ roster = [1, 2], date = "1164.5.20", mainTemplate = nul
     getSettings: () => ({ v812MemoryEngine3Enabled: true, v812TemporalSummaryRecallEnabled: true }),
     getPromptContext: async request => { sample.worldlineRequests.push(request); return null; }
   };
-  engine.memory4.configureDerived({ isCampaignCurrent: () => true, getProviderSnapshot: async () => null });
+  engine.memory4.configureExtraction({ isCampaignCurrent: () => true, getProviderSnapshot: async () => null });
   sample.open = async (currentDate = date, currentRoster = roster) => {
     const gameData = sample.createGameData(currentDate, currentRoster);
     fs.writeFileSync(sample.settings.getCK3DebugLogPath(), "deterministic fixture only", "utf8");
@@ -318,7 +318,7 @@ async function main() {
     await send(dated, "我对甲说：1142年6月3日我在渡口交给你地图，这是往事，不是1170年刚刚发生的事。" );
     await finalize(dated);
     seedDerivedHistory(dated.engine, dated.scope);
-    const years = dated.engine.memory4.derived.list(dated.scope).years.map(view => view.eventYear);
+    const years = Object.keys(dated.engine.memory4.store.loadIndex(dated.scope).byEventYear || {}).map(Number);
     assert(years.includes(1142) && years.includes(1143));
     assert(!years.includes(1170), "the extraction may not relabel the event as the conversation year");
     await dated.open("1170.1.2");
@@ -336,15 +336,14 @@ async function main() {
     assert.equal(packet(dated).items.length, 0, "an old event cannot grant knowledge acquired in a future conversation");
     assert.equal(dated.conversation.dynamicRecallHistory?.get(2)?.size || 0, 0);
   });
-  await check("edit/delete: real canonical revisions dirty Year/Life and discard stale Prompt history and Seen", async () => {
+  await check("edit/delete: real canonical revisions discard stale Prompt history and Seen without retired view writes", async () => {
     await dated.open("1170.1.2");
     await send(dated, "1142年6月3日发生了什么？" );
     const selected = packet(dated).details[0].memory.memoryId;
     const old = dated.engine.memory4.store.readEntry(dated.scope, selected);
     assert(dated.conversation.dynamicRecallHistory.get(2).size);
     dated.engine.memory4.store.updateEntry(dated.scope, selected, old.text + " MANUAL_EDIT_SENTINEL", { expectedRevision: old.revision });
-    const views = dated.engine.memory4.derived.list(dated.scope);
-    assert(views.years.find(view => view.eventYear === 1142).dirty && views.life.dirty);
+    assert.equal(dated.engine.memory4.derived, undefined);
     dated.conversation.getPromptHistoryForCharacter(2);
     assert.equal(dated.conversation.dynamicRecallHistory.get(2).size, 0);
     assert.equal(dated.conversation.memoryState.responderRecallCache.get(2).seenDynamicSummaries.size, 0);
@@ -358,7 +357,7 @@ async function main() {
     assert(!packet(dated).items.some(item => item.memory.memoryId === selected));
     assert(dated.engine.memory4.store.readEntry(dated.scope, selected).deleted);
   });
-  await check("commitment: Conversation fulfillment closes only an exact sourced active promise and dirties derived views", async () => {
+  await check("commitment: Conversation fulfillment closes only an exact sourced active promise without derived tasks", async () => {
     const sample = await fixture();
     const promise = "我对玩家说：1164年5月20日我承诺归还玉印。";
     sample.reply = () => promise;
@@ -369,16 +368,7 @@ async function main() {
     const original = entries(sample).find(entry => entry.memoryType === "COMMITMENT");
     assert(original && original.state.status === "active");
     seedDerivedHistory(sample.engine, sample.scope);
-    const beforeViews = sample.engine.memory4.derived.list(sample.scope);
-    assert(beforeViews.years.length && beforeViews.life.segments.length);
-    const dirtyPublications = [];
-    const markDirty = sample.engine.memory4.derived.markDirty.bind(sample.engine.memory4.derived);
-    sample.engine.memory4.derived.markDirty = (scope, options) => {
-      const result = markDirty(scope, options);
-      if (scope.ownerId === 2 && options.entryIds.includes(original.entryId)) dirtyPublications.push({ result,
-        year: sample.engine.memory4.derived.read(scope, "year", 1164), life: sample.engine.memory4.derived.read(scope, "life") });
-      return result;
-    };
+    assert.equal(sample.engine.memory4.derived, undefined);
     await sample.open("1165.1.1");
     const completed = "我对玩家说：我已经归还玉印，履行了归还玉印的承诺。";
     sample.reply = () => completed;
@@ -398,9 +388,7 @@ async function main() {
     assert.equal(fulfilled.state.changedGameDate, "1165.1.1");
     assert.equal(fulfilled.state.source.sourceType, "reported");
     assert(fulfilled.state.sourceMessageIds.length && fulfilled.state.source.finalizationId);
-    assert(dirtyPublications.some(publication => publication.result.derivedDirty && publication.year.dirty && publication.life.dirty),
-      "the canonical state transition must publish dirty for retained historical views");
-    assert.equal(sample.engine.memory4.derived.list(sample.scope).generationPolicy, "RETIRED");
+    assert.equal(sample.engine.memory4.derived, undefined);
     await sample.open("1166.1.1");
     await send(sample, "还有哪些未完成的承诺？" );
     assert(!packet(sample).items.some(item => item.memory.memoryId === original.entryId));

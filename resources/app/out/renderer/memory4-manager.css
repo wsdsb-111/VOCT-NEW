@@ -29,7 +29,7 @@
 .memory4-tabs button[aria-selected="true"] { outline: 2px solid var(--memory4-text); outline-offset: 1px; }
 .memory4-panel { padding-top: 12px; min-height: 80px; }
 .memory4-manager h5 { color: var(--memory4-text); margin: 0 0 10px; font-size: 15px; }
-.memory4-entity, .memory4-derived, .memory4-detail, .memory4-source, .memory4-legacy-row { padding: 12px 0; border-bottom: 1px solid var(--memory4-line); }
+.memory4-entity, .memory4-detail, .memory4-source, .memory4-legacy-row, .memory4-coverage-summary { padding: 12px 0; border-bottom: 1px solid var(--memory4-line); }
 .memory4-entity dl { display: grid; grid-template-columns: 90px minmax(0, 1fr) 90px minmax(0, 1fr); gap: 7px 12px; margin: 0 0 12px; font-size: 13px; }
 .memory4-entity dt { color: var(--memory4-muted); }
 .memory4-entity dd { margin: 0; overflow-wrap: anywhere; }
@@ -46,9 +46,17 @@
 .memory4-meta, .memory4-empty { color: var(--memory4-muted); font-size: 13px; line-height: 1.6; }
 .memory4-conflict { border-left: 3px solid var(--memory4-alert); padding: 10px; margin: 10px 0; color: var(--memory4-alert); }
 .memory4-error { color: var(--memory4-alert); overflow-wrap: anywhere; }
-.memory4-derived-item { padding: 8px 0; }
 .memory4-actions { margin: 10px 0; }
 .memory4-legacy-row { display: grid; gap: 8px; }
+.memory4-durable-status { border: 1px solid var(--memory4-line); border-left: 3px solid var(--memory4-alert); padding: 10px 12px; margin: 0 0 14px; min-width: 0; }
+.memory4-durable-status p { margin: 6px 0 0; overflow-wrap: anywhere; }
+.memory4-coverage-summary { min-width: 0; }
+.memory4-coverage-summary-heading { display: flex; justify-content: space-between; align-items: baseline; flex-wrap: wrap; gap: 6px 12px; overflow-wrap: anywhere; }
+.memory4-coverage-summary p { line-height: 1.6; overflow-wrap: anywhere; }
+.memory4-coverage-page { min-width: 0; padding: 4px 0 8px; }
+.memory4-durable-only { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; padding: 8px 0; color: var(--memory4-muted); }
+.memory4-coverage-row { display: grid; grid-template-columns: minmax(110px, 1fr) minmax(160px, 2fr) auto auto; align-items: center; gap: 8px; padding: 8px 0; border-bottom: 1px solid var(--memory4-line); overflow-wrap: anywhere; }
+.memory4-coverage-entry { margin-bottom: 14px; }
 .memory4-manager code, .memory4-manager pre { overflow-wrap: anywhere; white-space: pre-wrap; }
 .memory4-pager { justify-content: center; padding: 12px 0; }
 .memory4-modal { width: min(760px, 92vw); max-width: 92vw; min-width: 0; max-height: 88vh; border-radius: 8px; color: var(--memory4-text); background: var(--votc-surface-raised, #1f1f24); display: flex; flex-direction: column; }
@@ -73,4 +81,5 @@
   .memory4-disclosure-row button { grid-column: 1; grid-row: auto; justify-self: start; }
   .memory4-tabs button { flex: 1 1 130px; }
   .memory4-status { display: block; margin-left: 0; }
+  .memory4-coverage-row { grid-template-columns: minmax(0, 1fr); align-items: start; }
 }

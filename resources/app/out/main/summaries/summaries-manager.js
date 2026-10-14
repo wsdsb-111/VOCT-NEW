@@ -3,6 +3,8 @@
 const { validateGenerationOutcome } = require("../providers/generation-outcome");
 const { Memory4OrphanAudit } = require("../memory-system/memory4-orphan-audit");
 const { getCharacterPersonalName } = require("../memory-system/character-identity");
+const { buildCoverageSummary, getCoveragePage } = require("../memory-system/memory4-coverage");
+const { memory4SourceValid } = require("../memory-system/memory4-source-validity");
 
 function createSummariesManager({ fs, path, summariesDir, memoryEngine, memorySystem, getCurrentConversation = () => null,
   getMemory4ReadConversation = null, requestSummary, requestDurable, getSummaryCapabilities, getSummaryOutputLimit = () => 4096, buildSummaryPrompt, persistRecoveredSummary }) {
@@ -77,7 +79,7 @@ function createSummariesManager({ fs, path, summariesDir, memoryEngine, memorySy
         const letterFailed = letterResults.filter(result => !succeeded(result)).length;
         return {
           success: results.every(result => result.success) && letterFailed === 0,
-          recovered: results.filter(result => result.success && (!result.alreadyCommitted || result.derivedRecovered)).length + letterRecovered,
+          recovered: results.filter(result => result.success && !result.alreadyCommitted).length + letterRecovered,
           failed: results.filter(result => !result.success).length + letterFailed,
           letterResults,
           recoveryStatus: this.getRecoveryStatus()
@@ -153,11 +155,8 @@ function createSummariesManager({ fs, path, summariesDir, memoryEngine, memorySy
         const updatedRows = JSON.parse(fs$1.readFileSync(filePath, "utf8"));
         const memoryRebuild = await this.rebuildRegeneratedSummaryMemory(playerId, updatedRows[summaryIndex]);
         const canonicalStatus = memoryRebuild.canonical.status;
-        const derivedStatus = memoryRebuild.derived.status;
         const canonicalComplete = ["COMPLETE", "ALREADY_CONVERTED", "NO_DURABLE_CONTENT"].includes(canonicalStatus);
-        const derivedComplete = ["COMPLETE", "MANUAL_OVERRIDE", "SKIPPED_DERIVED_POLICY"].includes(derivedStatus);
-        const success = canonicalComplete && derivedComplete;
-        return { success, partial: !success, summaryUpdated: true, content: regeneratedContent, memoryRebuild };
+        return { success: canonicalComplete, partial: !canonicalComplete, summaryUpdated: true, content: regeneratedContent, memoryRebuild };
       } catch (error) {
         console.error(`Failed to regenerate summary for character ${characterId} from owner ${playerId}:`, error);
         return { success: false, error: error instanceof Error ? error.message : "summary_regeneration_failed" };
@@ -167,11 +166,11 @@ function createSummariesManager({ fs, path, summariesDir, memoryEngine, memorySy
     }
 
     static async rebuildRegeneratedSummaryMemory(ownerId, summaryRecord) {
-      const skipped = (reason, status = "SKIPPED") => ({ canonical: { status, reason }, derived: { status: "SKIPPED", reason } });
       const coordinator = memoryEngine.memory4;
       const campaignToken = typeof summaryRecord?.campaignToken === "string" ? summaryRecord.campaignToken.trim() : "";
       const memoryId = summaryRecord?.perspectiveMemoryIds?.[0];
-      if (!coordinator?.derived || !campaignToken || typeof memoryId !== "string") return skipped("SCOPED_SOURCE_UNAVAILABLE");
+      const skipped = (reason, status = "SKIPPED") => ({ canonical: { status, reason } });
+      if (!coordinator || !campaignToken || typeof memoryId !== "string") return skipped("SCOPED_SOURCE_UNAVAILABLE");
 
       let context;
       try {
@@ -193,26 +192,21 @@ function createSummariesManager({ fs, path, summariesDir, memoryEngine, memorySy
       const source = memoryEngine.store.getMemory(memoryId);
       if (!source || source.content !== summaryRecord.content || source.provenance?.campaignToken !== campaignToken
         || Number(source.provenance?.folderOwnerId) !== context.ownerId) {
-        return { canonical: { status: "SOURCE_INVALID" }, derived: { status: "SKIPPED", reason: "SOURCE_INVALID" } };
+        return { canonical: { status: "SOURCE_INVALID" } };
       }
       const sourceProof = coordinator.getLegacyCoverage({ campaignToken, ownerId: context.ownerId }, [source]).items[0];
       if (!sourceProof?.eligible || !/^[a-f0-9]{64}$/.test(sourceProof.sourceHash || "")) {
-        return { canonical: { status: "SOURCE_INVALID" }, derived: { status: "SKIPPED", reason: "SOURCE_INVALID" } };
+        return { canonical: { status: "SOURCE_INVALID" } };
       }
       try {
         const result = await coordinator.recompressLegacy({ campaignToken, ownerId: context.ownerId }, {
           memoryId, expectedSourceHash: sourceProof.sourceHash, isCurrent,
-          allowPersistedArchive: context.readOnlyArchive, rebuildDerived: true
+          allowPersistedArchive: context.readOnlyArchive
         });
         const canonicalStatus = result.canonical?.status || result.status;
-        return {
-          canonical: { status: canonicalStatus, entryIds: result.entryIds || result.canonical?.entryIds || [], reason: result.reason || null },
-          derived: result.derived || { status: ["COMPLETE", "ALREADY_CONVERTED", "NO_DURABLE_CONTENT"].includes(canonicalStatus) ? "PENDING" : "SKIPPED",
-            kind: "all", reason: result.reason || "CANONICAL_NOT_COMMITTED" }
-        };
+        return { canonical: { status: canonicalStatus, entryIds: result.entryIds || result.canonical?.entryIds || [], reason: result.reason || null } };
       } catch (error) {
-        return { canonical: { status: "EXTRACTION_FAILED", reason: String(error?.message || error) },
-          derived: { status: "SKIPPED", reason: "CANONICAL_NOT_COMMITTED" } };
+        return { canonical: { status: "EXTRACTION_FAILED", reason: String(error?.message || error) } };
       }
     }
 
@@ -263,7 +257,7 @@ function createSummariesManager({ fs, path, summariesDir, memoryEngine, memorySy
       if (request.expectedContextId != null && request.expectedContextId !== context.conversation.id) throw new Error("legacy_binding_conversation_changed");
       if (requireCampaign && request.expectedCampaignToken !== context.campaignToken
         || request.expectedCampaignToken != null && request.expectedCampaignToken !== context.campaignToken) throw new Error("memory4_campaign_changed");
-      if (!memoryEngine.memory4?.derived) throw new Error("memory4_unavailable");
+      if (!memoryEngine.memory4) throw new Error("memory4_unavailable");
       return context;
     }
 
@@ -301,7 +295,7 @@ function createSummariesManager({ fs, path, summariesDir, memoryEngine, memorySy
           throw error;
         }
       }
-      if (!memoryEngine.memory4?.derived) throw new Error("memory4_unavailable");
+      if (!memoryEngine.memory4) throw new Error("memory4_unavailable");
       return context;
     }
 
@@ -361,7 +355,8 @@ function createSummariesManager({ fs, path, summariesDir, memoryEngine, memorySy
         .map(Number).filter(id => Number.isSafeInteger(id) && id > 0 && id !== context.ownerId));
       const offset = request.detailOffset || 0;
       const knownOffset = request.knownOffset || 0;
-      if (![offset, knownOffset].every(value => Number.isSafeInteger(value) && value >= 0)) throw new Error("memory4_page_invalid");
+      const legacyOffset = request.legacyOffset || 0;
+      if (![offset, knownOffset, legacyOffset].every(value => Number.isSafeInteger(value) && value >= 0 && value <= 1000000)) throw new Error("memory4_page_invalid");
       const name = id => context.gameData.characters.get(id)?.shortName || context.gameData.characters.get(id)?.fullName || `#${id}`;
       const orderedEntities = [...entityIds].sort((left, right) => name(left).localeCompare(name(right), "zh-CN"));
       const details = Object.entries(index.entries).filter(([, row]) => !row.deleted && row.knownBy?.includes(context.ownerId)
@@ -380,11 +375,21 @@ function createSummariesManager({ fs, path, summariesDir, memoryEngine, memorySy
           if (!captures.has(key)) { captures.set(key, content); official.push(record); }
         }
       }
-      const coverage = coordinator.getLegacyCoverage(scope, legacy.filter(memory => memory.provenance?.campaignToken === scope.campaignToken
-        && memory.provenance?.folderOwnerId === scope.ownerId));
+      const scopedLegacy = legacy.filter(memory => memory.provenance?.campaignToken === scope.campaignToken
+        && memory.provenance?.folderOwnerId === scope.ownerId && memory.knownBy?.includes(scope.ownerId));
+      const coverage = coordinator.getLegacyCoverage(scope, scopedLegacy);
+      const legacyRevision = memoryEngine.store.getFolderSummaryRevision(context.ownerId);
+      const coverageSummary = buildCoverageSummary({ scope, index, metadata: readContext.metadata, legacyMemories: scopedLegacy,
+        getLegacyFacts: (coverageScope, memory) => coordinator.legacyFacts(coverageScope, memory),
+        store: coordinator.store, baseStore: memoryEngine.store, legacyRevision,
+        forgetGeneration: readContext.projectionForgetGeneration, latestFinalizationId: readContext.metadata.lastFinalizationId,
+        offset: legacyOffset, limit: 40 });
       const finalizations = Object.values(index.finalizations || {}).filter(record => ["STORE", "NO_DURABLE_CONTENT", "NOT_PRESENT"].includes(record?.status));
       const latestFinalization = finalizations.sort((left, right) => String(right.committedAt || "").localeCompare(String(left.committedAt || "")))[0] || null;
       this.assertCurrentMemory4ReadContext(context);
+      if (coordinator.store.loadIndex(scope).revision !== index.revision
+        || coordinator.store.projectionForgetGeneration(scope) !== readContext.projectionForgetGeneration
+        || memoryEngine.store.getFolderSummaryRevision(context.ownerId) !== legacyRevision) throw new Error("memory4_coverage_stale");
       return { success: true, ownerId: context.ownerId, campaignToken: context.campaignToken, indexRevision: index.revision,
         contextId: context.contextId, readOnlyArchive: context.readOnlyArchive, readOnlyReason: context.readOnlyReason, archiveAsOfDate: context.archiveAsOfDate,
         generation: { finalizationCount: finalizations.length,
@@ -395,17 +400,72 @@ function createSummariesManager({ fs, path, summariesDir, memoryEngine, memorySy
             currentGameDate: context.readOnlyArchive ? context.archiveAsOfDate : undefined, legacyMemories: legacy, readContext }), displayName: name(entityId)
         })) },
         detail: { total: details.length, offset, entityId: request.entityId || null, items: details.slice(offset, offset + 40).map(([entryId, row]) => ({ entryId, ...row })) },
-        derived: readContext.derived, official,
-        legacy: { counts: coverage.counts, items: coverage.items.slice(0, 40), total: coverage.items.length } };
+        coverageSummary: { ...coverageSummary,
+          recovery: (() => {
+            const status = coordinator.getRecoveryStatus(context.campaignToken, context.ownerId);
+            return { pending: status.pending || 0, manual: status.manual || 0, balanceBlocked: status.balanceBlocked || 0 };
+          })() }, official,
+        legacy: { counts: coverage.counts, items: coverage.items.slice(legacyOffset, legacyOffset + 40), total: coverage.items.length,
+          offset: legacyOffset, recompressionCoverage: { counts: coverage.counts, items: coverage.items.slice(legacyOffset, legacyOffset + 40),
+            total: coverage.items.length, offset: legacyOffset } } };
+    }
+
+    static async getMemory4Coverage(request = {}) {
+      const context = await this.getMemory4ReadContext(request);
+      const coordinator = memoryEngine.memory4;
+      const scope = { campaignToken: context.campaignToken, ownerId: context.ownerId };
+      const readContext = coordinator.createProfileReadContext(scope);
+      const legacy = memoryEngine.store.loadFolderSummariesForCharacter(context.ownerId);
+      const scopedLegacy = legacy.filter(memory => memory.provenance?.campaignToken === scope.campaignToken
+        && memory.provenance?.folderOwnerId === scope.ownerId && memory.knownBy?.includes(scope.ownerId));
+      const legacyRevision = memoryEngine.store.getFolderSummaryRevision(context.ownerId);
+      const result = getCoveragePage({ scope, index: readContext.index, metadata: readContext.metadata,
+        legacyMemories: scopedLegacy, getLegacyFacts: (coverageScope, memory) => coordinator.legacyFacts(coverageScope, memory),
+        store: coordinator.store, baseStore: memoryEngine.store,
+        finalizationId: request.finalizationId ?? null, legacyMemoryId: request.legacyMemoryId ?? null,
+        offset: request.offset ?? 0, limit: request.limit ?? 40,
+        expectedIndexRevision: request.expectedIndexRevision ?? null, expectedSummaryHash: request.expectedSummaryHash ?? null,
+        legacyRevision, forgetGeneration: readContext.projectionForgetGeneration });
+      this.assertCurrentMemory4ReadContext(context);
+      if (coordinator.store.loadIndex(scope).revision !== readContext.index.revision
+        || coordinator.store.projectionForgetGeneration(scope) !== readContext.projectionForgetGeneration
+        || memoryEngine.store.getFolderSummaryRevision(context.ownerId) !== legacyRevision) {
+        return { success: true, status: "STALE", indexRevision: coordinator.store.loadIndex(scope).revision,
+          items: [], offset: result.offset, limit: result.limit, total: result.total,
+          contextId: context.contextId, campaignToken: context.campaignToken };
+      }
+      return { success: true, ...result, contextId: context.contextId, campaignToken: context.campaignToken,
+        readOnlyArchive: context.readOnlyArchive, readOnlyReason: context.readOnlyReason };
     }
 
     static async getMemory4Entry(request = {}) {
       const context = await this.getMemory4ReadContext(request);
-      const entry = memoryEngine.memory4.repository.readEntry({ campaignToken: context.campaignToken, ownerId: context.ownerId }, request.entryId);
-      if (entry.deleted || !entry.evidence?.knownBy?.includes(context.ownerId)) throw new Error("memory4_entry_unavailable");
+      if (typeof request.entryId !== "string" || !/^m4_[a-f0-9]{64}$/.test(request.entryId)) throw new Error("memory4_invalid_entry_id");
+      if (request.expectedIndexRevision != null && (!Number.isSafeInteger(request.expectedIndexRevision) || request.expectedIndexRevision < 0)
+        || request.expectedEntryRevision != null && (!Number.isSafeInteger(request.expectedEntryRevision) || request.expectedEntryRevision < 0)
+        || request.expectedBodyHash != null && !/^[a-f0-9]{64}$/.test(request.expectedBodyHash)) throw new Error("memory4_entry_expectation_invalid");
+      const coordinator = memoryEngine.memory4;
+      const scope = { campaignToken: context.campaignToken, ownerId: context.ownerId };
+      const readContext = coordinator.createProfileReadContext(scope);
+      const index = readContext.index;
+      const row = index.entries?.[request.entryId];
+      const stale = () => ({ success: true, status: "STALE", contextId: context.contextId,
+        campaignToken: context.campaignToken, indexRevision: coordinator.store.loadIndex(scope).revision });
+      if (!row || request.expectedIndexRevision != null && request.expectedIndexRevision !== index.revision
+        || request.expectedEntryRevision != null && request.expectedEntryRevision !== row.revision
+        || request.expectedBodyHash != null && request.expectedBodyHash !== row.bodyHash
+        || !memory4SourceValid({ store: coordinator.store, baseStore: memoryEngine.store, scope, row, index, metadata: readContext.metadata })) return stale();
+      const forgetGeneration = readContext.projectionForgetGeneration;
+      let entry;
+      try { entry = coordinator.store.readEntry(scope, request.entryId, index); }
+      catch { return stale(); }
+      if (entry.deleted || entry.ownerId !== context.ownerId || entry.campaignToken !== context.campaignToken
+        || !Array.isArray(entry.evidence?.knownBy) || !entry.evidence.knownBy.includes(context.ownerId)) return stale();
       this.assertCurrentMemory4ReadContext(context);
+      if (coordinator.store.loadIndex(scope).revision !== index.revision
+        || coordinator.store.projectionForgetGeneration(scope) !== forgetGeneration) return stale();
       return { success: true, entry, contextId: context.contextId, campaignToken: context.campaignToken,
-        readOnlyArchive: context.readOnlyArchive, readOnlyReason: context.readOnlyReason };
+        indexRevision: index.revision, readOnlyArchive: context.readOnlyArchive, readOnlyReason: context.readOnlyReason };
     }
 
     static async auditMemory4Integrity(request = {}, persistence = memoryEngine.memory4.repository) {
@@ -445,20 +505,19 @@ function createSummariesManager({ fs, path, summariesDir, memoryEngine, memorySy
         return { success: true, sources: { kind: "detail", changed: !valid, entries: [{ ...entry, sourceValid: valid }], missingEntryIds: [] },
           contextId: context.contextId, campaignToken: context.campaignToken, readOnlyArchive: context.readOnlyArchive, readOnlyReason: context.readOnlyReason };
       }
-      if (!["year", "life"].includes(request.kind)) throw new Error("memory4_source_kind_invalid");
-      const sources = memoryEngine.memory4.derived.getSources(scope, request);
-      this.assertCurrentMemory4ReadContext(context);
-      return { success: true, sources, contextId: context.contextId, campaignToken: context.campaignToken,
-        readOnlyArchive: context.readOnlyArchive, readOnlyReason: context.readOnlyReason };
+      if (["year", "life"].includes(request.kind)) throw new Error("memory4_derived_operation_retired");
+      throw new Error("memory4_source_kind_invalid");
     }
 
     static async mutateMemory4(request = {}) {
       const context = await this.getMemory4Context(request);
       const scope = { campaignToken: context.campaignToken, ownerId: context.ownerId };
       const coordinator = memoryEngine.memory4;
-      const operations = ["updateDetail", "deleteDetail", "updateYear", "updateLife", "keepManual", "rebuild", "recompressLegacy", "cancelDerived", "setManualDisclosure", "deleteDisclosure"];
+      const retiredOperations = ["updateYear", "updateLife", "keepManual", "rebuild", "cancelDerived"];
+      if (retiredOperations.includes(request.operation)) throw new Error("memory4_derived_operation_retired");
+      const operations = ["updateDetail", "deleteDetail", "recompressLegacy", "setManualDisclosure", "deleteDisclosure"];
       if (!operations.includes(request.operation)) throw new Error("memory4_operation_invalid");
-      if (!["recompressLegacy", "cancelDerived"].includes(request.operation) && (!Number.isSafeInteger(request.expectedRevision) || request.expectedRevision < 0)) throw new Error("memory4_expected_revision_required");
+      if (request.operation !== "recompressLegacy" && (!Number.isSafeInteger(request.expectedRevision) || request.expectedRevision < 0)) throw new Error("memory4_expected_revision_required");
       if (request.operation.startsWith("update") && (typeof request.text !== "string" || !request.text.trim() || request.text.length > 16384)) throw new Error("memory4_text_required");
       let result;
       if (["setManualDisclosure", "deleteDisclosure"].includes(request.operation)) {
@@ -476,21 +535,13 @@ function createSummariesManager({ fs, path, summariesDir, memoryEngine, memorySy
           { expectedRevision: request.expectedRevision });
       } else if (request.operation === "updateDetail") result = coordinator.store.updateEntry(scope, request.entryId, request.text, { expectedRevision: request.expectedRevision });
       else if (request.operation === "deleteDetail") result = coordinator.store.deleteEntry(scope, request.entryId, { expectedRevision: request.expectedRevision });
-      else if (request.operation === "updateYear") result = coordinator.derived.updateYear(scope, request);
-      else if (request.operation === "updateLife") result = coordinator.derived.updateLife(scope, request);
-      else if (request.operation === "keepManual") result = coordinator.derived.keepManual(scope, request);
-      else if (request.operation === "cancelDerived") result = coordinator.derived.cancel(scope);
-      else if (request.operation === "rebuild") {
-        if (!["year", "life", "all"].includes(request.kind) || typeof request.overwriteManual !== "boolean") throw new Error("memory4_rebuild_request_invalid");
-        result = await coordinator.derived.rebuild(scope, { kind: request.kind, eventYear: request.eventYear, segmentId: request.segmentId,
-          overwriteManual: request.overwriteManual, expectedRevision: request.expectedRevision });
-      } else {
+      else {
         if (typeof request.memoryId !== "string" || !/^[a-f0-9]{64}$/.test(request.expectedSourceHash || "")) throw new Error("memory4_legacy_source_invalid");
         result = await coordinator.recompressLegacy(scope, { memoryId: request.memoryId, expectedSourceHash: request.expectedSourceHash, manual: true });
       }
       this.assertCurrentLegacyBindingContext(context);
       if (context.gameData.campaignToken !== context.campaignToken) throw new Error("memory4_campaign_changed");
-      if (result !== false && request.operation !== "cancelDerived") this.invalidateMemory4Dynamic(context);
+      if (result !== false) this.invalidateMemory4Dynamic(context);
       return { success: result !== false, result };
     }
 

@@ -75,7 +75,6 @@ function makeFixture(label) {
   for (const ownerId of [1, 2, 3]) fs.mkdirSync(path.join(summaryFoldersDir, `${ownerId}_fixture`), { recursive: true });
   const baseStore = new MemoryStore({ baseDir: path.join(directory, "memory"), summaryFoldersDir });
   const coordinator = new Memory4Coordinator(baseStore);
-  coordinator.derived.schedule = async () => ({ status: "COMPLETE" });
   return { coordinator, store: coordinator.store };
 }
 
@@ -171,7 +170,7 @@ async function test129FragmentsRespectCountAndInputBudget() {
   assert.equal(attempts.every(row => row.requestedOutputTokens === 4096 && row.effectiveOutputTokens === 2048
     && row.tokenEstimate > 0), true, "request budget and input estimate fields must be present on each actual attempt");
   const submittedIds = pipeline.sent.flatMap(row => row.payload.fragments.map(fragment => fragment.fragmentId));
-  assert.deepEqual(submittedIds, fragments.map(fragment => fragment.fragmentId), "no ordinary source fragment may be dropped or repeated");
+  assert.deepEqual([...submittedIds].sort(), fragments.map(fragment => fragment.fragmentId).sort(), "ranking may reorder sources, but none may be dropped or repeated");
   assert.equal(pipeline.sent.reduce((sum, row) => sum + row.payload.fragments.length, 0), 129);
   assert.equal(pipeline.sent.reduce((sum, row) => sum + row.inputTokens, 0),
     attempts.reduce((sum, row) => sum + row.inputTokens, 0), "all actually sent input usage, including every outer chunk, must reconcile");

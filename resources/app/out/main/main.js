@@ -667,13 +667,11 @@ const SummariesManager = createSummariesManager({
     beforeSendGuard: options.beforeSendGuard, durableTrace: options.durableTrace }),
   persistRecoveredSummary: (summary, context) => GameData.saveRecoveredSummary(summary, context)
 });
-memoryEngine.memory4?.configureDerived({
+memoryEngine.memory4?.configureExtraction({
   getProviderSnapshot: () => llmManager.getProviderCapabilities("SUMMARY"),
-  requestCompression: () => { throw new Error("memory4_derived_llm_retired"); },
   requestExtraction: (prompt, options) => llmManager.sendSummaryRequest(prompt, options.signal, { requestType: "memory4_durable",
     maxTokens: options.maxTokens, providerSnapshot: options.providerSnapshot, beforeSendGuard: options.beforeSendGuard, durableTrace: options.durableTrace }),
-  isCampaignCurrent: token => conversationManager.getCurrentConversation()?.gameData?.campaignToken === token,
-  estimateTokens: text => TokenCounter.estimateTokens(text)
+  isCampaignCurrent: token => conversationManager.getCurrentConversation()?.gameData?.campaignToken === token
 });
 const updaterTranslations = {
   en: {

@@ -16,7 +16,6 @@ const { buildSummaryCatalogEntry } = require("../resources/app/out/main/memory-s
 const { MemoryEngine } = require("../resources/app/out/main/memory-system/memory-engine");
 const { Conversation } = require("../resources/app/out/main/conversation/conversation");
 const { createMemoryRecord } = require("../resources/app/out/main/memory-system/memory-types");
-const { seedDerivedHistory } = require("./fixtures/v923-derived-history");
 
 const PromptBuilder = createPromptBuilder({ TemplateEngine: class {}, PromptScriptLoader: class {} });
 const root = fs.mkdtempSync(path.join(os.tmpdir(), "votc-memory4-de-independent-"));
@@ -24,21 +23,8 @@ let checks = 0;
 let failures = 0;
 let fixtures = 0;
 let sources = 0;
-let skippedArchive = 0;
-const archivedGenerationChecks = new Set([
-  "derived: Year uses event year or explicitly labeled acquisition year and excludes plans",
-  "derived: async compression cannot publish after the canonical source changes",
-  "derived: async compression cannot overwrite a concurrent manual edit",
-  "derived: cancellation stays isolated from another owner's completed job",
-  "derived: compressor receives canonical rumor status even without uncertainty words in the body"
-]);
 
 async function check(name, run) {
-  if (archivedGenerationChecks.has(name)) {
-    skippedArchive++;
-    console.log(`ARCHIVED ${name}: automatic Year/Life generation is retired`);
-    return;
-  }
   try {
     await run();
     checks++;
@@ -111,32 +97,18 @@ function rewriteEntry(sample, entryId, change) {
   sample.base.writeJson(path.join(directory, "metadata.json"), { ...metadata, revision: index.revision, indexHash: hash(index) });
 }
 
-function compressionPause() {
-  let entered, release;
-  const ready = new Promise(resolve => { entered = resolve; });
-  const paused = new Promise(resolve => { release = resolve; });
-  let calls = 0;
-  return { ready, release,
-    requestCompression: async prompt => {
-      const items = JSON.parse(prompt[1].content).items;
-      if (++calls === 1) { entered(); await paused; }
-      return JSON.stringify({ items: [{ text: "STALE_BUILD 压缩前版本。", sourceEntryIds: items.flatMap(item => item.sourceEntryIds) }] });
-    } };
-}
-
-async function waitForCompression(paused, running) {
-  await Promise.race([paused.ready, running.then(result => { throw new Error(`compression never started: ${result.status}`); })]);
-}
-
-function select(sample, entryIds, query = {}) {
-  return sample.coordinator.derived.selectSlice(sample.scope, { index: sample.coordinator.store.loadIndex(sample.scope),
-    eligibleEntryIds: entryIds, currentGameDate: sample.options.currentGameDate, estimateTokens: sample.options.estimateTokens,
-    query: { axis: "EVENT", granularity: "YEAR", entityIds: [99], window: { from: "1164.1.1", to: "1164.12.31" }, ...query } });
+function detailRef(sample, entryId) {
+  const index = sample.coordinator.store.loadIndex(sample.scope);
+  return { kind: "detail", id: entryId, bodyHash: index.entries[entryId]?.bodyHash };
 }
 
 async function drainJobs() {
   await new Promise(resolve => setImmediate(resolve));
   await new Promise(resolve => setImmediate(resolve));
+}
+
+function configureExtraction(sample, requestExtraction, isCampaignCurrent = () => true) {
+  sample.coordinator.configureExtraction({ getProviderSnapshot: async () => null, requestExtraction, isCampaignCurrent });
 }
 
 function management(sample) {
@@ -191,7 +163,7 @@ function populateLargeOwner(sample) {
   sample.coordinator.store.reindex(index);
   sample.base.writeJson(path.join(directory, "index.json"), index);
   sample.base.writeJson(path.join(directory, "metadata.json"), { memory4SchemaVersion: 1, ...sample.scope,
-    revision: index.revision, indexHash: hash(index), knownEvidenceRevisions, derivedDirty: true });
+    revision: index.revision, indexHash: hash(index), knownEvidenceRevisions });
   sample.base.writeJson(path.join(directory, "known-entities.json"), known);
 }
 
@@ -273,234 +245,106 @@ async function main() {
     const profile = sample.coordinator.getKnownEntityProfile(sample.scope, 99, { currentGameDate: sample.options.currentGameDate });
     assert.equal(profile.recognition.level, "MENTION_ONLY");
     assert.equal(profile.recognition.mentionCount, 1);
-    assert.deepEqual(profile.memoryPointers.detailIds, []);
-    assert.deepEqual(profile.memoryPointers.yearKeys, []);
-    assert.deepEqual(profile.memoryPointers.lifeItemIds, []);
+    assert.deepEqual(profile.memoryPointers, { detailIds: [], legacyCoverageRefs: [] });
   });
-  await check("derived: Year uses event year or explicitly labeled acquisition year and excludes plans", async () => {
+  await check("recall: YEAR and LIFE questions use only canonical Detail or Legacy refs", () => {
     const sample = fixture();
-    addEvent(sample, { year: 1154, date: "1164.1.1", text: "1154年九十九号人物曾迁居。" });
-    addSource(sample, { date: "1164.1.1", text: "当时商谈了另一件事，但发生年份未知。", durable: true });
-    addSource(sample, { date: "1191.1.1", text: "1190年出发 PLANNED_TIME。", durable: true,
-      eventTime: { from: "1190.1.1", to: "1190.12.31", precision: "year", status: "planned" } });
-    assert.equal((await sample.coordinator.derived.rebuild(sample.scope)).status, "COMPLETE");
-    const views = sample.coordinator.derived.list(sample.scope);
-    assert.deepEqual(views.years.map(view => view.eventYear), [1154, 1164]);
-    assert(views.years[0].items[0].text.includes("1154年"));
-    assert.equal(JSON.stringify(views).includes("PLANNED_TIME"), false);
-    assert(views.years[1].items[0].text.includes("本年获知，事件日期未知"));
-    assert(views.years[1].items[0].text.includes("发生年份未知"));
-    assert.equal(views.years[1].items[0].timeAxis, "acquired");
+    const event = addEvent(sample, { text: "1164年九十九号人物迁居 YEAR_DETAIL。" });
+    addEvent(sample, { year: 1150, text: "1150年九十九号人物受封 LIFE_DETAIL。" });
+    for (const query of ["1164年发生了什么？", "此人一生有哪些重要经历？"]) {
+      const packet = sample.planner.plan({ ...sample.options, query });
+      assert(packet.items.length > 0, query);
+      assert(packet.items.every(item => ["detail", "legacy"].includes(item.sourceRef.kind)));
+    }
+    assert(sample.planner.validateHistory(sample.scope, [detailRef(sample, event.entryId)], sample.options));
+    for (const kind of ["year", "life"]) {
+      assert.equal(sample.planner.validateHistory(sample.scope, [{ kind, id: "retired-ref", sourceEntryIds: [event.entryId] }], sample.options), false);
+    }
   });
-  await check("derived: related slice withholds other entities and future-acquired facts", async () => {
+  await check("recall: related Detail withholds other entities and future-acquired facts", () => {
     const sample = fixture();
     const target = addEvent(sample, { text: "1164年九十九号人物迁居 TARGET_ONLY。" });
     addEvent(sample, { entityIds: [100], text: "1164年一百号人物隐居 OTHER_ENTITY_SECRET。" });
     addEvent(sample, { date: "1190.1.1", text: "1164年旧事到1190年才获知 FUTURE_KNOWLEDGE。" });
-    seedDerivedHistory(sample.coordinator, sample.scope);
-    const slice = select(sample, [target.entryId]);
-    assert(slice.memory.content.includes("TARGET_ONLY"));
-    assert.equal(slice.memory.content.includes("OTHER_ENTITY_SECRET"), false);
-    assert.equal(slice.memory.content.includes("FUTURE_KNOWLEDGE"), false);
-    assert.equal(sample.coordinator.derived.validateRef(sample.scope, slice.sourceRef, { currentGameDate: "1160.1.1" }), false);
+    const packet = sample.planner.plan({ ...sample.options, query: "1164年九十九号人物迁居" });
+    assert(packet.items.some(item => item.sourceRef.kind === "detail" && item.sourceRef.id === target.entryId));
+    assert.equal(JSON.stringify(packet.items).includes("OTHER_ENTITY_SECRET"), false);
+    assert.equal(JSON.stringify(packet.items).includes("FUTURE_KNOWLEDGE"), false);
   });
-  await check("derived: canonical edit invalidates views, profile pointers and retained history", async () => {
+  await check("recall: canonical edit invalidates retained Detail history and keeps revision checks", () => {
     const sample = fixture();
     const { entryId } = addEvent(sample, { text: "1164年迁居 EDITED_AWAY。" });
-    seedDerivedHistory(sample.coordinator, sample.scope);
-    const slice = select(sample, [entryId]);
-    assert(sample.coordinator.derived.validateRef(sample.scope, slice.sourceRef, { currentGameDate: sample.options.currentGameDate }));
-    assert.deepEqual(sample.coordinator.derived.getPointers(sample.scope, 99, { currentGameDate: sample.options.currentGameDate }).yearKeys, [1164]);
+    const ref = detailRef(sample, entryId);
+    assert(sample.planner.validateHistory(sample.scope, [ref], sample.options));
     sample.coordinator.store.updateEntry(sample.scope, entryId, "1164年迁居后经用户修订 NEW_DETAIL。", { expectedRevision: 1 });
-    const views = sample.coordinator.derived.list(sample.scope);
-    assert(views.years[0].dirty && views.life.dirty);
-    assert.equal(select(sample, [entryId]), null);
-    assert.deepEqual(sample.coordinator.derived.getPointers(sample.scope, 99, { currentGameDate: sample.options.currentGameDate }).yearKeys, []);
-    assert.deepEqual(sample.coordinator.derived.getPointers(sample.scope, 99, { currentGameDate: sample.options.currentGameDate }).lifeItemIds, []);
-    assert.equal(sample.coordinator.derived.validateRef(sample.scope, slice.sourceRef, { currentGameDate: sample.options.currentGameDate }), false);
+    assert.equal(sample.planner.validateHistory(sample.scope, [ref], sample.options), false);
     assert.throws(() => sample.coordinator.store.updateEntry(sample.scope, entryId, "stale edit", { expectedRevision: 1 }), /edit_stale/);
   });
-  await check("derived: keepManual retains edited text and dirty status after source mutation", async () => {
-    const sample = fixture();
-    const { entryId } = addEvent(sample);
-    seedDerivedHistory(sample.coordinator, sample.scope);
-    const view = sample.coordinator.derived.list(sample.scope).years[0];
-    sample.coordinator.derived.updateYear(sample.scope, { eventYear: 1164, itemId: view.items[0].itemId,
-      text: "手工保留 MANUAL_TEXT。", expectedRevision: view.revision });
-    sample.coordinator.store.updateEntry(sample.scope, entryId, "1164年新的来源内容。", { expectedRevision: 1 });
-    const dirty = sample.coordinator.derived.list(sample.scope).years[0];
-    sample.coordinator.derived.keepManual(sample.scope, { kind: "year", eventYear: 1164, expectedRevision: dirty.revision });
-    const kept = sample.coordinator.derived.list(sample.scope).years[0];
-    assert(kept.dirty);
-    assert.equal(kept.manual.mode, "manual_override");
-    assert(kept.items[0].text.includes("MANUAL_TEXT"));
-    assert.equal(select(sample, [entryId]), null);
-    assert.equal((await sample.coordinator.derived.rebuild(sample.scope, { kind: "year", eventYear: 1164 })).status, "SKIPPED_DERIVED_POLICY");
-    assert.equal(sample.coordinator.derived.list(sample.scope).years[0].items[0].text, kept.items[0].text);
-  });
-  await check("derived: async compression cannot publish after the canonical source changes", async () => {
-    const sample = fixture();
-    const paused = compressionPause();
-    sample.coordinator.configureDerived({ requestCompression: paused.requestCompression, estimateTokens: sample.options.estimateTokens });
-    const { entryId } = addEvent(sample, { text: `1164年旧来源 ${"长篇经历".repeat(1200)}` });
-    const running = sample.coordinator.derived.rebuild(sample.scope, { kind: "year", eventYear: 1164 });
-    await waitForCompression(paused, running);
-    sample.coordinator.store.updateEntry(sample.scope, entryId, "1164年修订后的短来源 NEW_SOURCE。", { expectedRevision: 1 });
-    paused.release();
-    assert.equal((await running).status, "REQUEUED");
-    await drainJobs();
-    const view = sample.coordinator.derived.list(sample.scope).years[0];
-    assert(view.items[0].text.includes("NEW_SOURCE"));
-    assert.equal(JSON.stringify(view).includes("STALE_BUILD"), false);
-  });
-  await check("derived: async compression cannot overwrite a concurrent manual edit", async () => {
-    const sample = fixture();
-    const { entryId } = addEvent(sample);
-    await sample.coordinator.derived.rebuild(sample.scope, { kind: "year", eventYear: 1164 });
-    sample.coordinator.store.updateEntry(sample.scope, entryId, `1164年长来源 ${"长篇经历".repeat(1200)}`, { expectedRevision: 1 });
-    const paused = compressionPause();
-    sample.coordinator.configureDerived({ requestCompression: paused.requestCompression, estimateTokens: sample.options.estimateTokens });
-    const running = sample.coordinator.derived.rebuild(sample.scope, { kind: "year", eventYear: 1164 });
-    await waitForCompression(paused, running);
-    const view = sample.coordinator.derived.list(sample.scope).years[0];
-    sample.coordinator.derived.updateYear(sample.scope, { eventYear: 1164, itemId: view.items[0].itemId,
-      text: "并发手工编辑 MANUAL_WINS。", expectedRevision: view.revision });
-    paused.release();
-    assert.equal((await running).status, "REQUEUED");
-    await drainJobs();
-    const kept = sample.coordinator.derived.list(sample.scope).years[0];
-    assert(kept.dirty && kept.manual.mode === "manual_override");
-    assert(kept.items[0].text.includes("MANUAL_WINS"));
-    assert.equal(JSON.stringify(kept).includes("STALE_BUILD"), false);
-  });
-  await check("derived: cancellation stays isolated from another owner's completed job", async () => {
-    const sample = fixture();
-    const paused = compressionPause();
-    sample.coordinator.configureDerived({ requestCompression: paused.requestCompression, estimateTokens: sample.options.estimateTokens });
-    addEvent(sample, { text: `1164年长来源 ${"长篇经历".repeat(1200)}` });
-    addEvent(sample, { ownerId: 3, text: "1164年三号人物的独立来源。" });
-    const running = sample.coordinator.derived.rebuild(sample.scope, { kind: "year", eventYear: 1164 });
-    await waitForCompression(paused, running);
-    const otherScope = { ...sample.scope, ownerId: 3 };
-    assert.equal((await sample.coordinator.derived.rebuild(otherScope, { kind: "year", eventYear: 1164 })).status, "COMPLETE");
-    assert.equal(sample.coordinator.derived.cancel(sample.scope).cancelled, true);
-    paused.release();
-    assert.equal((await running).status, "CANCELLED");
-    assert.deepEqual(sample.coordinator.derived.list(sample.scope).years, []);
-    assert.equal(sample.coordinator.derived.list(otherScope).years.length, 1);
-  });
-  await check("derived: rebuilding one Life period cannot revive stale text in another period", async () => {
-    const sample = fixture();
-    const old = addEvent(sample, { year: 1140, text: "1140年旧迁居 STALE_OTHER_PERIOD。" });
-    addEvent(sample, { year: 1150, text: "1150年另一段经历 TARGET_PERIOD。" });
-    seedDerivedHistory(sample.coordinator, sample.scope);
-    sample.coordinator.store.updateEntry(sample.scope, old.entryId, "1140年修订迁居 CURRENT_OTHER_PERIOD。", { expectedRevision: 1 });
-    const retired = await sample.coordinator.derived.rebuild(sample.scope, { kind: "life", segmentId: "life_1150s" });
-    assert.equal(retired.status, "SKIPPED_DERIVED_POLICY");
-    const slice = select(sample, [old.entryId], { granularity: "LIFE", window: { from: "1140.1.1", to: "1149.12.31" } });
-    assert.equal(slice?.memory.content.includes("STALE_OTHER_PERIOD") || false, false);
-    if (slice) assert(slice.memory.content.includes("CURRENT_OTHER_PERIOD"));
-  });
-  await check("derived: tombstones cannot return through Year, Life or a new background rebuild", async () => {
+  await check("recall: tombstones cannot return through Detail history or recall", () => {
     const sample = fixture();
     const { entryId } = addEvent(sample, { text: "1164年应被删除 DELETED_FACT。" });
-    seedDerivedHistory(sample.coordinator, sample.scope);
-    const slice = select(sample, [entryId]);
+    const ref = detailRef(sample, entryId);
     sample.coordinator.store.deleteEntry(sample.scope, entryId, { expectedRevision: 1 });
-    assert.equal(sample.coordinator.derived.validateRef(sample.scope, slice.sourceRef, { currentGameDate: sample.options.currentGameDate }), false);
-    assert.equal((await sample.coordinator.derived.rebuild(sample.scope)).status, "SKIPPED_DERIVED_POLICY");
-    assert.equal(select(sample, [entryId]), null);
-    const views = sample.coordinator.derived.list(sample.scope);
-    assert(views.years.every(view => view.dirty), "a tombstone must invalidate and retain old Year files for safe history");
-    assert.equal(views.life?.dirty, true, "a tombstone must invalidate and retain the old Life file");
-    assert.equal(sample.coordinator.derived.getPointers(sample.scope, 99, { currentGameDate: sample.options.currentGameDate }).yearKeys.length, 0);
-    assert.equal(JSON.stringify(views).includes("DELETED_FACT"), true, "soft deletion retains its dirty history; explicit Forget performs scrubbing");
+    assert.equal(sample.planner.validateHistory(sample.scope, [ref], sample.options), false);
+    const packet = sample.planner.plan({ ...sample.options, query: "1164年九十九号人物被删除的事情" });
+    assert.equal(JSON.stringify(packet.items).includes("DELETED_FACT"), false);
     assert.equal(sample.coordinator.store.readEntry(sample.scope, entryId).deleted, true);
   });
-  await check("derived: source visibility revision changes invalidate overview even when body is unchanged", async () => {
+  await check("recall: Forget invalidates prior Detail history before output", () => {
+    const sample = fixture();
+    const source = addEvent(sample, { text: "1164年被遗忘的事实 FORGOTTEN_FACT。" });
+    const ref = detailRef(sample, source.entryId);
+    assert(sample.planner.validateHistory(sample.scope, [ref], sample.options));
+    sample.coordinator.store.persistForgottenProjection(sample.scope, { campaignToken: sample.scope.campaignToken,
+      ownerId: sample.scope.ownerId, finalizationId: source.snapshot.finalizationId, counterpartId: 1,
+      segmentIds: [source.snapshot.fragments[0].fragmentId] });
+    assert.equal(sample.planner.validateHistory(sample.scope, [ref], sample.options), false);
+    const packet = sample.planner.plan({ ...sample.options, query: "1164年九十九号人物迁居" });
+    assert.equal(JSON.stringify(packet.items).includes("FORGOTTEN_FACT"), false);
+  });
+  await check("recall: source visibility revision changes invalidate history even when body is unchanged", () => {
     const sample = fixture();
     const source = addEvent(sample);
-    seedDerivedHistory(sample.coordinator, sample.scope);
-    const slice = select(sample, [source.entryId]);
+    const ref = detailRef(sample, source.entryId);
     sample.coordinator.store.recordKnownEvidence({ ...source.snapshot, sourceRevision: "new-visible-source-revision", fragments: [], interactionEvidence: [] });
-    assert.equal(select(sample, [source.entryId]), null);
-    assert.equal(sample.coordinator.derived.validateRef(sample.scope, slice.sourceRef, { currentGameDate: sample.options.currentGameDate }), false);
-    assert.deepEqual(sample.coordinator.derived.getPointers(sample.scope, 99, { currentGameDate: sample.options.currentGameDate }).yearKeys, []);
+    assert.equal(sample.planner.validateHistory(sample.scope, [ref], sample.options), false);
+    const packet = sample.planner.plan({ ...sample.options, query: "1164年九十九号人物经历" });
+    assert.equal(JSON.stringify(packet.items).includes(source.snapshot.fragments[0].text), false);
   });
-  await check("derived: old Legacy conversions without source hashes never become authoritative views", async () => {
+  await check("recall: Legacy conversions without source hashes fail closed", () => {
     const sample = fixture();
     const { entryId } = addEvent(sample, { text: "1164年旧格式转换 UNPROVEN_LEGACY_COPY。" });
     rewriteEntry(sample, entryId, entry => { entry.source.legacyMemoryIds = ["legacy-without-proof"]; entry.source.legacyRefs = []; });
-    assert.equal((await sample.coordinator.derived.rebuild(sample.scope)).status, "SKIPPED_DERIVED_POLICY");
-    assert.equal(select(sample, [entryId]), null);
-    assert.equal(JSON.stringify(sample.coordinator.derived.list(sample.scope)).includes("UNPROVEN_LEGACY_COPY"), false);
+    assert.equal(sample.planner.validateHistory(sample.scope, [detailRef(sample, entryId)], sample.options), false);
+    const packet = sample.planner.plan({ ...sample.options, query: "1164年九十九号人物旧格式转换" });
+    assert.equal(JSON.stringify(packet.items).includes("UNPROVEN_LEGACY_COPY"), false);
   });
-  await check("derived: source body mismatch fails closed before history or overview reuse", async () => {
+  await check("recall: body mismatch fails closed before retained Detail reuse", () => {
     const sample = fixture();
     const { entryId } = addEvent(sample);
-    seedDerivedHistory(sample.coordinator, sample.scope);
-    const slice = select(sample, [entryId]);
+    const ref = detailRef(sample, entryId);
     const entry = sample.coordinator.store.readEntry(sample.scope, entryId);
     sample.base.writeJson(sample.coordinator.store.entryPath(sample.coordinator.store.directory(sample.scope), entryId), { ...entry, text: "unindexed source corruption" });
-    let historyValid = false, selected = null;
-    try { historyValid = sample.coordinator.derived.validateRef(sample.scope, slice.sourceRef, { currentGameDate: sample.options.currentGameDate }); } catch {}
-    try { selected = select(sample, [entryId]); } catch {}
-    assert.equal(historyValid, false);
-    assert.equal(selected, null);
+    assert.equal(sample.planner.validateHistory(sample.scope, [ref], sample.options), false);
+    let packet = null;
+    try { packet = sample.planner.plan({ ...sample.options, query: "1164年九十九号人物经历" }); } catch {}
+    assert.equal(packet?.items.some(item => item.sourceRef.kind === "detail" && item.sourceRef.id === entryId) || false, false);
   });
-  await check("derived: scope DTO never persists or returns UI context, game data or messages", async () => {
-    const sample = fixture();
-    addEvent(sample);
-    seedDerivedHistory(sample.coordinator, sample.scope);
-    const oversizedScope = { ...sample.scope, conversation: { messages: [{ content: "PRIVATE_CONVERSATION_SENTINEL" }] },
-      gameData: { playerName: "PRIVATE_GAME_DATA_SENTINEL", provider: { apiKey: "FIXTURE_SECRET_SENTINEL" } },
-      sourcePrompt: "PRIVATE_SOURCE_PROMPT_SENTINEL" };
-    const listed = sample.coordinator.derived.list(oversizedScope);
-    const diskYear = sample.coordinator.derived.read(sample.scope, "year", 1164);
-    const diskLife = sample.coordinator.derived.read(sample.scope, "life");
-    for (const record of [listed, diskYear, diskLife]) {
-      assert.equal(Object.hasOwn(record, "conversation"), false);
-      assert.equal(Object.hasOwn(record, "gameData"), false);
-      assert.equal(Object.hasOwn(record, "sourcePrompt"), false);
-      assert.equal(JSON.stringify(record).includes("PRIVATE_"), false);
-      assert.equal(JSON.stringify(record).includes("FIXTURE_SECRET_SENTINEL"), false);
-    }
-  });
-  await check("derived: Year and Life preserve rumor knowledge labels around plain source assertions", async () => {
+  await check("recall: Detail keeps reported rumor labels and never promotes them to CK3 truth", () => {
     const sample = fixture();
     const { entryId } = addEvent(sample, { text: "1164年九十九号人物已死。" });
     rewriteEntry(sample, entryId, entry => { entry.evidence.sourceType = "rumor"; });
-    seedDerivedHistory(sample.coordinator, sample.scope);
-    const year = select(sample, [entryId]);
-    const life = select(sample, [entryId], { granularity: "LIFE", window: null });
-    for (const slice of [year, life]) {
-      assert(slice);
-      assert(/rumor|传闻/i.test(`${slice.annotation}\n${slice.memory.content}`), "a derived slice must retain rumor epistemic status");
-      assert.equal(slice.memory.content.includes("CK3已确认"), false);
-    }
+    const packet = sample.planner.plan({ ...sample.options, query: "1164年九十九号人物死亡" });
+    const item = packet.items.find(candidate => candidate.sourceRef.kind === "detail" && candidate.sourceRef.id === entryId);
+    assert(item);
+    assert(/rumor|传闻/i.test(item.annotation));
+    assert.equal(item.memory.content.includes("CK3已确认"), false);
   });
-  await check("derived: compressor receives canonical rumor status even without uncertainty words in the body", async () => {
-    const sample = fixture();
-    const { entryId } = addEvent(sample, { text: `1164年九十九号人物已死。${"旧事细节。".repeat(600)}` });
-    rewriteEntry(sample, entryId, entry => { entry.evidence.sourceType = "rumor"; });
-    const inputEvidence = [];
-    sample.coordinator.configureDerived({ estimateTokens: sample.options.estimateTokens, requestCompression: async prompt => {
-      const items = JSON.parse(prompt[1].content).items;
-      inputEvidence.push(...items.flatMap(item => item.evidence || []));
-      return JSON.stringify({ items: [{ text: "1164年九十九号人物已死。", sourceEntryIds: [entryId] }] });
-    } });
-    assert.equal((await sample.coordinator.derived.rebuild(sample.scope)).status, "COMPLETE");
-    assert(inputEvidence.some(evidence => evidence.sourceEntryId === entryId
-      && evidence.sourceType === "rumor" && evidence.epistemicStatus === "reported"));
-    assert(/rumor|传闻/i.test(select(sample, [entryId]).memory.content));
-  });
-  await check("diagnostics: source bodies, prompts and query text never enter D/E recall traces", async () => {
+  await check("diagnostics: source bodies and query text never enter recall traces", () => {
     const sample = fixture();
     const events = [];
     sample.coordinator.trace = { record: (stage, details) => events.push({ stage, details }) };
     addEvent(sample, { text: "1164年九十九号人物经历 SOURCE_BODY_PRIVATE_SENTINEL。" });
-    const retired = await sample.coordinator.derived.rebuild(sample.scope);
-    assert.equal(retired.status, "SKIPPED_DERIVED_POLICY");
     sample.planner.plan({ ...sample.options, query: "1164年发生了什么？QUERY_PRIVATE_SENTINEL" });
     assert(events.some(event => event.stage === "memory4_recall"));
     const serialized = JSON.stringify(events);
@@ -515,7 +359,9 @@ async function main() {
     const request = { ownerId: 2, expectedCampaignToken: sample.scope.campaignToken, entryId };
     assert.equal((await manager.getMemory4Entry(request)).entry.entryId, entryId);
     await assert.rejects(manager.getMemory4Entry({ ...request, expectedCampaignToken: "other-campaign" }), /campaign_changed/);
-    await assert.rejects(manager.getMemory4Entry({ ...request, ownerId: 3 }), /index_body_mismatch/);
+    const foreignOwner = await manager.getMemory4Entry({ ...request, ownerId: 3 });
+    assert.equal(foreignOwner.status, "STALE");
+    assert.equal(foreignOwner.entry, undefined);
     conversation.isActive = false;
     const archivedEntry = await manager.getMemory4Entry(request);
     assert.equal(archivedEntry.readOnlyArchive, true);
@@ -561,11 +407,10 @@ async function main() {
       }
     }
   });
-  await check("derived: detached finalization commits Durable without reading the active campaign", async () => {
+  await check("finalization: detached Durable commit has no Year/Life side job or response DTO", async () => {
     const sample = fixture();
     const source = addEvent(sample, { text: "1164年旧战役来源 DETACHED_FINALIZATION。" });
-    let compressionCalls = 0;
-    sample.coordinator.configureDerived({ requestCompression: async () => { compressionCalls++; throw new Error("retired_derived_provider_must_not_run"); } });
+    let extractionCalls = 0;
     const index = sample.coordinator.store.loadIndex(sample.scope);
     delete index.finalizations[hash(source.snapshot.finalizationId)];
     index.entries = {};
@@ -574,20 +419,15 @@ async function main() {
     const metadata = sample.coordinator.store.read(path.join(directory, "metadata.json"));
     sample.base.writeJson(path.join(directory, "index.json"), index);
     sample.base.writeJson(path.join(directory, "metadata.json"), { ...metadata, indexHash: hash(index) });
-    sample.coordinator.configureDerived({ isCampaignCurrent: () => false });
+    configureExtraction(sample, async () => { extractionCalls++; throw new Error("no detached background extraction expected"); }, () => false);
     const result = await sample.coordinator.finishOwner(source.snapshot, async () => ({ content: JSON.stringify({ status: "STORE", entries: [{
       memoryType: "MAJOR_EXPERIENCE", text: source.snapshot.fragments[0].text, fragmentIds: [source.snapshot.fragments[0].fragmentId],
       entityIds: [99], eventTime: { from: "1164.1.1", to: "1164.12.31", precision: "year", status: "reported" }
     }] }), finish_reason: "stop" }));
     assert.equal(result.status, "STORE");
-    assert.equal(result.derivedGenerationStatus, "SKIPPED_DERIVED_POLICY");
-    assert.equal(result.derived.status, "SKIPPED_DERIVED_POLICY");
-    const views = sample.coordinator.derived.list(sample.scope);
-    assert.equal(views.generationPolicy, "RETIRED");
-    assert.deepEqual(views.years, []);
-    assert.equal(views.life, null);
-    assert.equal(compressionCalls, 0);
-    assert.deepEqual(sample.coordinator.derived.list({ ...sample.scope, campaignToken: "other-campaign" }).years, []);
+    assert.equal(extractionCalls, 0);
+    assert.equal(Object.hasOwn(result, "derived"), false);
+    assert.equal(Object.hasOwn(result, "derivedGenerationStatus"), false);
   });
   await check("lazy: only successfully injected Legacy evidence queues recompression", () => {
     const sample = fixture();
@@ -632,14 +472,14 @@ async function main() {
     const before = JSON.stringify(parent);
     sample.base.loadFolderSummariesForCharacter = () => [parent];
     const offered = [];
-    sample.coordinator.configureDerived({ isCampaignCurrent: () => true, requestExtraction: async prompt => {
+    configureExtraction(sample, async prompt => {
       const fragments = JSON.parse(prompt[1].content).fragments;
       offered.push(fragments.map(fragment => fragment.text));
       const target = fragments.find(fragment => fragment.text === facts[2].content);
       return { content: JSON.stringify({ status: target ? "STORE" : "NO_DURABLE_CONTENT", entries: target ? [{ memoryType: "MAJOR_EXPERIENCE",
         text: target.text, fragmentIds: [target.fragmentId], entityIds: [99],
         eventTime: { from: "1164.1.1", to: "1164.12.31", precision: "year", status: "reported" } }] : [] }), finish_reason: "stop" };
-    } });
+    });
     const converted = await sample.coordinator.recompressLegacy(sample.scope, { memoryId: parent.memoryId, expectedSourceHash: legacySourceHash(parent) });
     assert.equal(converted.status, "COMPLETE", converted.reason);
     await drainJobs();
@@ -659,42 +499,39 @@ async function main() {
     assert.equal(sample.coordinator.getLegacyCoverage(sample.scope, [parent]).items[0].retainedFacts, 4);
     assert.equal(JSON.stringify(parent), before);
   });
-  await check("lazy: Legacy source edit withdraws derived overview, coverage and retained history", async () => {
+  await check("lazy: Legacy source edit withdraws Durable history proof and coverage", async () => {
     const sample = fixture();
     const source = sample.base.saveMemory({ memoryId: "legacy-edited-source", type: "information", content: "1164年九十九号人物迁居。",
       eventDate: "1170.1.1", knownBy: [2], subjects: [99], updatedBy: "user",
       provenance: { campaignToken: sample.scope.campaignToken, folderOwnerId: 2, extractionMode: "user_edited_summary" } });
-    sample.coordinator.configureDerived({ isCampaignCurrent: () => true, requestExtraction: async prompt => {
+    configureExtraction(sample, async prompt => {
       const fragment = JSON.parse(prompt[1].content).fragments[0];
       return { content: JSON.stringify({ status: "STORE", entries: [{ memoryType: "MAJOR_EXPERIENCE", text: fragment.text,
         fragmentIds: [fragment.fragmentId], entityIds: [99],
         eventTime: { from: "1164.1.1", to: "1164.12.31", precision: "year", status: "reported" } }] }), finish_reason: "stop" };
-    } });
+    });
     const result = await sample.coordinator.recompressLegacy(sample.scope, { memoryId: source.memoryId });
     assert.equal(result.status, "COMPLETE", result.reason);
-    const historical = seedDerivedHistory(sample.coordinator, sample.scope);
-    assert(historical.years.length);
-    const slice = select(sample, result.entryIds);
-    assert(slice);
+    const ref = detailRef(sample, result.entryIds[0]);
+    assert(sample.planner.validateHistory(sample.scope, [ref], sample.options));
     sample.base.updateMemory(source.memoryId, { content: "1164年用户已修订另一件事。" });
-    assert.equal(select(sample, result.entryIds), null);
-    assert.equal(sample.coordinator.derived.validateRef(sample.scope, slice.sourceRef, { currentGameDate: sample.options.currentGameDate }), false);
+    assert.equal(sample.planner.validateHistory(sample.scope, [ref], sample.options), false);
     assert.equal(sample.coordinator.getLegacyCoverage(sample.scope, [sample.base.getMemory(source.memoryId)]).items[0].suppressedFacts, 0);
     sample.base.deleteMemory(source.memoryId);
-    assert.equal(select(sample, result.entryIds), null);
+    assert.equal(sample.planner.validateHistory(sample.scope, [ref], sample.options), false);
   });
   await check("lazy: relative event time uses original source acquisition date, not the current runtime", async () => {
     const sample = fixture();
     const source = sample.base.saveMemory({ memoryId: "legacy-relative-source", content: "十年前九十九号人物迁居。",
       eventDate: "1170.1.1", knownBy: [2], subjects: [99], updatedBy: "user",
       provenance: { campaignToken: sample.scope.campaignToken, folderOwnerId: 2, extractionMode: "user_edited_summary" } });
-    sample.coordinator.configureDerived({ isCampaignCurrent: () => true, requestExtraction: async prompt => {
+    configureExtraction(sample, async prompt => {
       const input = JSON.parse(prompt[1].content), fragment = input.fragments[0];
       assert.equal(input.conversationDate, "1170.1.1");
       return { content: JSON.stringify({ status: "STORE", entries: [{ memoryType: "MAJOR_EXPERIENCE", text: fragment.text,
         fragmentIds: [fragment.fragmentId], entityIds: [99],
         eventTime: { from: "1160.1.1", to: "1160.12.31", precision: "year", status: "reported" } }] }), finish_reason: "stop" };
-    } });
+    });
     const result = await sample.coordinator.recompressLegacy(sample.scope, { memoryId: source.memoryId });
     assert.equal(result.status, "COMPLETE", result.reason);
     const entry = sample.coordinator.store.readEntry(sample.scope, result.entryIds[0]);
@@ -704,24 +541,23 @@ async function main() {
     assert(entry.temporalRefs.some(ref => ref.fromGameDate === "1160.1.1"));
     await drainJobs();
   });
-  await check("lazy: unsupported guessed event years remain Legacy without a derived view", async () => {
+  await check("lazy: unsupported guessed event years remain Legacy without Durable suppression", async () => {
     const sample = fixture();
     const source = sample.base.saveMemory({ memoryId: "legacy-guessed-date", content: "1164年九十九号人物迁居。",
       eventDate: "1170.1.1", knownBy: [2], subjects: [99], updatedBy: "user",
       provenance: { campaignToken: sample.scope.campaignToken, folderOwnerId: 2, extractionMode: "user_edited_summary" } });
     const sourceFile = sample.base.memoryPath(source.memoryId);
     const original = fs.readFileSync(sourceFile);
-    sample.coordinator.configureDerived({ isCampaignCurrent: () => true, requestExtraction: async prompt => {
+    configureExtraction(sample, async prompt => {
       const fragment = JSON.parse(prompt[1].content).fragments[0];
       return { content: JSON.stringify({ status: "STORE", entries: [{ memoryType: "MAJOR_EXPERIENCE", text: fragment.text,
         fragmentIds: [fragment.fragmentId], entityIds: [99],
         eventTime: { from: "1165.1.1", to: "1165.12.31", precision: "year", status: "reported" } }] }), finish_reason: "stop" };
-    } });
+    });
     const result = await sample.coordinator.recompressLegacy(sample.scope, { memoryId: source.memoryId });
     assert.equal(result.status, "EXTRACTION_FAILED");
     assert.equal(result.reason, "memory4_unsupported_event_date");
     assert.deepEqual(result.entryIds, []);
-    assert.deepEqual(sample.coordinator.derived.list(sample.scope).years, []);
     assert.equal(sample.coordinator.getLegacyCoverage(sample.scope, [source]).items[0].suppressedFacts, 0);
     assert.deepEqual(fs.readFileSync(sourceFile), original);
   });
@@ -733,12 +569,12 @@ async function main() {
     let entered, release;
     const ready = new Promise(resolve => { entered = resolve; });
     const paused = new Promise(resolve => { release = resolve; });
-    sample.coordinator.configureDerived({ isCampaignCurrent: () => true, requestExtraction: async prompt => {
+    configureExtraction(sample, async prompt => {
       const fragment = JSON.parse(prompt[1].content).fragments[0];
       entered(); await paused;
       return { content: JSON.stringify({ status: "STORE", entries: [{ memoryType: "MAJOR_EXPERIENCE", text: fragment.text,
         fragmentIds: [fragment.fragmentId], entityIds: [99] }] }), finish_reason: "stop" };
-    } });
+    });
     const running = sample.coordinator.recompressLegacy(sample.scope, { memoryId: source.memoryId });
     await ready;
     sample.base.updateMemory(source.memoryId, { content: "1164年来源已经手工修订。" });
@@ -748,24 +584,16 @@ async function main() {
     assert.equal((await sample.coordinator.recompressLegacy(sample.scope, { memoryId: source.memoryId,
       expectedSourceHash: legacySourceHash(source) })).status, "STALE");
   });
-  await check("management: renderer cannot forge detached-finalization permission for a changing campaign", async () => {
+  await check("management: renderer cannot invoke retired Year/Life operations", async () => {
     const sample = fixture();
-    const { manager, conversation } = management(sample);
-    conversation.gameData.campaignToken = "new-campaign";
-    let compressionCalls = 0;
-    sample.coordinator.configureDerived({ requestCompression: async () => { compressionCalls++; throw new Error("retired_derived_provider_must_not_run"); },
-      isCampaignCurrent: token => conversation.gameData.campaignToken === token });
+    const { manager } = management(sample);
     addEvent(sample, { text: "1164年旧战役来源。" });
     await assert.rejects(manager.mutateMemory4({ ownerId: 2, expectedCampaignToken: sample.scope.campaignToken, operation: "rebuild",
-      kind: "year", eventYear: 1164, overwriteManual: false, expectedRevision: 0, committedFinalization: true }), /campaign_changed/);
-    assert.equal(compressionCalls, 0);
-    assert.deepEqual(sample.coordinator.derived.list(sample.scope).years, []);
+      kind: "year", eventYear: 1164, overwriteManual: false, expectedRevision: 0, committedFinalization: true }), /memory4_derived_operation_retired/);
   });
-  await check("performance: 1000 canonical bodies plus real Year/Life keep recall reads bounded", async () => {
+  await check("performance: 1000 canonical bodies keep YEAR recall reads bounded", async () => {
     const sample = fixture();
     populateLargeOwner(sample);
-    seedDerivedHistory(sample.coordinator, sample.scope, { yearTextFor: (entry) => `1164年人物${entry.entityIds[0]}有重要经历。` });
-    assert(sample.coordinator.derived.list(sample.scope).life.segments.length);
     const originalRead = fs.readFileSync;
     const entriesDirectory = path.join(sample.coordinator.store.directory(sample.scope), "entries") + path.sep;
     let bodyReads = 0;
@@ -777,7 +605,8 @@ async function main() {
     const started = process.hrtime.bigint();
     try { packet = sample.planner.plan({ ...sample.options, query: "1164年发生了什么？" }); }
     finally { fs.readFileSync = originalRead; }
-    assert(packet.overview && ["year", "life"].includes(packet.overview.sourceRef.kind));
+    assert(packet.items.length > 0);
+    assert(packet.items.every(item => ["detail", "legacy", "conversation_year"].includes(item.sourceRef.kind)));
     assert(packet.details.length <= 2 && packet.tokens <= 1200);
     assert(bodyReads <= 32, `all selected canonical reads count: ${bodyReads}`);
     const recallMs = Number(process.hrtime.bigint() - started) / 1e6;
@@ -796,7 +625,7 @@ async function main() {
 }
 
 main().then(() => {
-  console.log(`V8.14 D/E independent QA: ${checks} PASS, ${failures} FAIL, ${skippedArchive} ARCHIVED (deterministic fixtures only)`);
+  console.log(`V8.14 D/E independent QA: ${checks} PASS, ${failures} FAIL (deterministic fixtures only)`);
   if (failures) process.exitCode = 1;
 }).catch(error => {
   console.error(error.stack || error.message);

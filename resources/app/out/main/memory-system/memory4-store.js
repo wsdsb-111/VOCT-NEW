@@ -6,6 +6,7 @@ const { assertScope, hash, ids, strings, gameDate, sourceRevisionCurrent, valida
 const { updateKnownEntities, evidenceCompleteness } = require("./memory4-visibility");
 const { getFactCandidates, disclosureFactId } = require("./memory4-disclosure");
 const { createProjectionLineage, projectionLineageFromSummary, matchesProjectionLineage, disclosureProofForgetMatch, entryForgotten, snapshotForgottenFragments, segmentAliases } = require("./memory4-forget");
+const { validCoverageProof } = require("./memory4-evidence-planner");
 const { normalizeGameDate } = require("../worldline/character-temporal-facts");
 const { resolveTraitVisibility } = require("../prompts/trait-visibility-policy");
 const { assertNoLinks } = require("./scoped-path");
@@ -16,6 +17,13 @@ const projectionForgetGenerations = new Map();
 const UNCERTAIN_COMMITMENT = /[?？]|如果|假如|要是|倘若|是否|能否|会不会|听说|据说|传闻|声称|心想|心里|内心|打算|计划|希望|准备|明天|明日|明年|今后|以后|将来|届时|将要|将会|即将|尚未|还未|还没|没有|并未|未能|没能|不能|无法|从未|不曾|并非|不属实|不是真的|请|命令|要求|(?:不|未|没)(?:曾|是|能|会|再|愿|代表|意味着|完成|履行|兑现|归还|交还|交付|取消|撤销|释放|替代|取代)|(?:将|会).{0,16}(?:完成|履行|兑现|归还|交还|交付|取消|撤销|废止|作废|替代|取代)|\b(?:if|suppose|hypothetical|will|would|might|may|plan|intend|hope|tomorrow|rumor|rumour|heard|not|never|please)\b|n['’]t/i;
 const COMMITMENT_CUE = /承诺|答应|许诺|保证|约定|\b(?:promise(?:s|d)?|pledge(?:s|d)?|agree(?:s|d)?|undertake|undertakes|undertook|undertaken|vow(?:s|ed)?)\b/gi;
 const COMMITMENT_CONDITION = /(?:但(?:是)?(?:须|必须|需)?|须|必须|前提(?:是)?|条件(?:是)?|只有|只要|倘若|若|如果|\bunless\b|\bprovided\b|\bon condition\b|\bonly if\b|\bif\b)\s*([^。.!！?？;；]+)/gi;
+
+function withoutRetiredDerivedMetadata(metadata) {
+  const retained = { ...(metadata || {}) };
+  delete retained.derivedDirty;
+  delete retained.derivedRevision;
+  return retained;
+}
 
 function commitmentBinding(value) {
   return typeof value === "string" && value.trim().length >= 2 && value.trim().length <= 256
@@ -328,10 +336,9 @@ class Memory4Store {
     const index = this.loadIndex(scope);
     const directory = this.directory(scope);
     const metadata = this.read(path.join(directory, "metadata.json"), null);
-    if (!metadata) return { canonicalEntriesForgotten: 0, derivedInvalidated: 0 };
+    if (!metadata) return { canonicalEntriesForgotten: 0 };
     const forgotten = this.listForgottenProjections(scope);
     const changedIds = [];
-    const deletedIds = [];
     let canonicalEntriesForgotten = 0;
     for (const [id, row] of Object.entries(index.entries)) {
       if (row.deleted) continue;
@@ -365,21 +372,18 @@ class Memory4Store {
       entry.revision++;
       entry.updatedAt = new Date().toISOString();
       changedIds.push(id);
-      deletedIds.push(id);
       canonicalEntriesForgotten++;
       this.store.writeJson(file, entry);
       index.entries[id] = this.indexRow(entry);
     }
-    if (!changedIds.length) return { canonicalEntriesForgotten, derivedInvalidated: 0 };
+    if (!changedIds.length) return { canonicalEntriesForgotten };
     index.revision++;
     this.reindex(index);
-    this.derived?.forgetEntries(scope, { forgottenEntryIds: deletedIds });
-    const derived = this.derived?.markDirty(scope, { index, metadata, entryIds: changedIds }) || {};
-    this.store.writeJson(path.join(directory, "metadata.json"), { ...metadata, revision: index.revision,
-      indexHash: hash(index), derivedDirty: true, ...derived, updatedAt: new Date().toISOString() });
+    this.store.writeJson(path.join(directory, "metadata.json"), { ...withoutRetiredDerivedMetadata(metadata), revision: index.revision,
+      indexHash: hash(index), updatedAt: new Date().toISOString() });
     this.store.writeJson(path.join(directory, "index.json"), index);
     this.store.invalidateFolderSummaryCache([scope.ownerId]);
-    return { canonicalEntriesForgotten, derivedInvalidated: changedIds.length };
+    return { canonicalEntriesForgotten };
   }
 
   revokeProjectionDisclosures(scope, target) {
@@ -567,7 +571,7 @@ class Memory4Store {
 
   assertPersistedScope(scope) {
     const directory = this.directory(scope);
-    const names = ["index.json", "metadata.json", "known-entities.json", "entries", "years", "life.json"];
+    const names = ["index.json", "metadata.json", "known-entities.json", "entries"];
     const existing = names.map(name => path.join(directory, name)).filter(file => fs.existsSync(file));
     if (!existing.length) throw new Error("memory4_scope_not_persisted");
     for (const file of existing) if (fs.lstatSync(file).isSymbolicLink()) throw new Error("memory4_symlink_path");
@@ -628,12 +632,10 @@ class Memory4Store {
     const now = new Date().toISOString();
     this.store.withSummaryMutation(null, () => {
       this.store.writeJson(path.join(directory, "known-entities.json"), known);
-      const affected = Object.keys(index.entries).filter(id => index.entries[id].conversationId === snapshot.conversationId);
-      const derived = this.derived?.markDirty(snapshot, { index, metadata, entryIds: affected }) || {};
-      this.store.writeJson(path.join(directory, "metadata.json"), { ...metadata, memory4SchemaVersion: 1,
+      this.store.writeJson(path.join(directory, "metadata.json"), { ...withoutRetiredDerivedMetadata(metadata), memory4SchemaVersion: 1,
         campaignToken: snapshot.campaignToken, ownerId: snapshot.ownerId, revision: index.revision, indexHash: hash(index),
         knownEvidenceRevisions: { ...metadata?.knownEvidenceRevisions, [evidenceKey]: snapshot.sourceRevision },
-        ...derived, updatedAt: now });
+        updatedAt: now });
       this.store.writeJson(path.join(directory, "index.json"), index);
     });
     return { alreadyRecorded: false, entityCount: Object.keys(known.entities).length };
@@ -757,11 +759,15 @@ class Memory4Store {
     const record = { status: result.status, entryIds: entries.map(entry => entry.entryId), sourceRevision: snapshot.sourceRevision, committedAt: now,
       completeness: snapshot.completeness, visibilityEvidence: snapshot.visibilityEvidence || null,
       evaluatedFragmentCount: result.evaluatedFragmentCount ?? snapshot.fragments.length, legacyRetained: snapshot.legacyRetained === true,
+      ...(result.coverageProof ? { coverageProof: result.coverageProof } : {}),
       ...(result.extractionPolicyVersion ? { extractionPolicyVersion: result.extractionPolicyVersion,
         rejectedCandidateCount: result.rejectedCandidateCount || 0,
         localMetadataCorrectionCount: result.localMetadataCorrectionCount || 0,
         extractionCoverage: result.evaluatedFragmentCount < snapshot.fragments.length ? "CAPPED" : "FULL" } : {}),
       changedEntryIds: changes.map(entry => entry.entryId), commitmentTransitionCount: changes.length, noDetailIsNotUnknown: true };
+    if (result.extractionPolicyVersion === "9.3.3" && !validCoverageProof(result.coverageProof, record, snapshot)) {
+      throw new Error("memory4_coverage_proof_invalid");
+    }
     this.store.withSummaryMutation(null, () => {
       for (const entry of [...entries, ...changes]) {
         // Tombstones survive re-extraction; a stale job cannot resurrect a fact.
@@ -776,11 +782,10 @@ class Memory4Store {
       const known = snapshot.skipKnownEvidence ? priorKnown || { campaignToken: snapshot.campaignToken, ownerId: snapshot.ownerId, revision: 0, entities: {} }
         : updateKnownEntities(priorKnown, snapshot);
       this.store.writeJson(path.join(directory, "known-entities.json"), known);
-      const derived = this.derived?.markDirty(snapshot, { index, metadata, entryIds: [...entries, ...changes].map(entry => entry.entryId) }) || {};
-      this.store.writeJson(path.join(directory, "metadata.json"), { ...metadata, memory4SchemaVersion: 1, campaignToken: snapshot.campaignToken,
+      this.store.writeJson(path.join(directory, "metadata.json"), { ...withoutRetiredDerivedMetadata(metadata), memory4SchemaVersion: 1, campaignToken: snapshot.campaignToken,
         ownerId: snapshot.ownerId, revision: index.revision, indexHash: hash(index), lastFinalizationId: snapshot.finalizationId,
         knownEvidenceRevisions: { ...metadata?.knownEvidenceRevisions, [hash([snapshot.conversationId, snapshot.ownerId])]: snapshot.sourceRevision },
-        derivedDirty: entries.length > 0 || changes.length > 0 || metadata?.derivedDirty === true, ...derived, updatedAt: now });
+        updatedAt: now });
       this.store.writeJson(path.join(directory, "index.json"), index);
     });
     this.store.invalidateFolderSummaryCache([snapshot.ownerId]);
@@ -1199,7 +1204,7 @@ class Memory4Store {
     const directory = this.directory(scope);
     const persist = () => {
       this.store.writeJson(path.join(directory, "known-entities.json"), known);
-      this.store.writeJson(path.join(directory, "metadata.json"), { ...metadata, memory4SchemaVersion: 1,
+      this.store.writeJson(path.join(directory, "metadata.json"), { ...withoutRetiredDerivedMetadata(metadata), memory4SchemaVersion: 1,
         campaignToken: scope.campaignToken, ownerId: scope.ownerId, revision: index.revision, indexHash: hash(index),
         disclosureRevision: (Number(metadata.disclosureRevision) || 0) + 1, updatedAt: now });
       this.store.writeJson(path.join(directory, "index.json"), index);
@@ -1463,8 +1468,7 @@ class Memory4Store {
     index.entries[entryId] = this.indexRow(entry); index.revision++; this.reindex(index);
     this.store.withSummaryMutation(null, () => {
       this.store.writeJson(this.entryPath(directory, entryId), entry);
-      const derived = this.derived?.markDirty(scope, { index, metadata, entryIds: [entryId] }) || {};
-      this.store.writeJson(path.join(directory, "metadata.json"), { ...metadata, revision: index.revision, indexHash: hash(index), derivedDirty: true, ...derived });
+      this.store.writeJson(path.join(directory, "metadata.json"), { ...withoutRetiredDerivedMetadata(metadata), revision: index.revision, indexHash: hash(index) });
       this.store.writeJson(path.join(directory, "index.json"), index);
     });
     this.store.invalidateFolderSummaryCache([scope.ownerId]);
@@ -1488,8 +1492,7 @@ class Memory4Store {
     if (!metadata) throw new Error("memory4_metadata_missing");
     this.store.withSummaryMutation(null, () => {
       this.store.writeJson(file, entry);
-      const derived = this.derived?.markDirty(scope, { index, metadata, entryIds: [entryId] }) || {};
-      this.store.writeJson(path.join(directory, "metadata.json"), { ...metadata, revision: index.revision, indexHash: hash(index), derivedDirty: true, ...derived });
+      this.store.writeJson(path.join(directory, "metadata.json"), { ...withoutRetiredDerivedMetadata(metadata), revision: index.revision, indexHash: hash(index) });
       this.store.writeJson(path.join(directory, "index.json"), index);
     });
     this.store.invalidateFolderSummaryCache([scope.ownerId]);
