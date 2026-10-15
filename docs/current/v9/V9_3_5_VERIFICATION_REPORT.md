@@ -14,6 +14,8 @@
 
 真实隔离 VOTC.exe 离线窗口通过 UI→Preload→IPC→索引文件验收，没有注入或模拟 GameData。单 Pair 确认成功落盘；Owner 预览含 2 个关系，取消后索引和源文件均无写入，再预览确认显示 2／2 成功，重复确认无重复事项且索引哈希保持不变，两份 Legacy 文件哈希始终不变。Provider／network 调用均为 0，没有真实用户资料或 CK3 调用。证据目录 `.build/v935-offline-backfill-smoke-jHg4yH/offline-native`；`offline-owner-confirm-enabled.png` 和 `offline-owner-write-success.png` 已逐图阅查，分别显示确认启用和 2／2 成功。单 Pair 以真实索引 JSON 和文件断言证明，不把未对准的单 Pair 截图当视觉证据。测试结束无 VOTC 进程残留。
 
+离线确认修复实施提交为 `278ad1d7e0dcfff9911bec92d7c32c54dc27ee8c`；后续仅文档回执补充此 SHA，不改变已测试代码、部署资源或测试脚本。未推送远端。
+
 下方为初版已完成的验收快照（初版 payload `cc70be7d30fc6821c5a5112179da5008c36257d98705ea73d9d923f7add2aa8a`）；其中离线只读断言由本次用户确认的离线索引回填合同替代，不代表当前行为。真实 CK3／Soak／最终提交远端 CI 仍独立待验，不自动 push。
 
 ## 初版验收回执
