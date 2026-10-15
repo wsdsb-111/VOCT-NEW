@@ -1,6 +1,22 @@
 # V9.3.5 验证报告
 
-日期：2026-10-15。基线 SHA `941104063581f37de799065216ed422779460b8e`。Core／App／UI 9.3.5；Runtime 285 映射，最终 payload SHA-256 `cc70be7d30fc6821c5a5112179da5008c36257d98705ea73d9d923f7add2aa8a`。实施与数据合同见[实施报告](V9_3_5_IMPLEMENTATION_REPORT.md)、[来源合同](V9_3_5_INDEX_AND_SOURCE_CONTRACT.md)。
+日期：2026-10-15。初版基线 SHA `941104063581f37de799065216ed422779460b8e`。Core／App／UI 9.3.5；Runtime 285 映射。离线确认修复后的 payload SHA-256 为 `1b6dbb788902788f20da02401a88c585fa1d33f9f3b1a58fd626b13a26a6596b`。实施与数据合同见[实施报告](V9_3_5_IMPLEMENTATION_REPORT.md)、[来源合同](V9_3_5_INDEX_AND_SOURCE_CONTRACT.md)。
+
+## 离线确认写入修复
+
+用户实测“提取成功但确认按钮禁用”，并确认仅打开历史摘要、未连接游戏。原 service 仅在活动 GameData 包含 Owner 时授予写入，ledger 又禁止历史预览 apply；因此提取本身成功，确认链却无法执行。不是点击样式问题，不能只移除 disabled。
+
+现允许在所选范围具有唯一可信 Campaign 绑定时离线确认生成本地派生索引；单 Pair 按该 Pair 判定，Owner 批量按整个 Owner 判定。get／preview／apply 同一权限计算，apply 重验来源和预览 revision；未绑定、多战役歧义、来源变化、客户端注入 Campaign／path／离线权限字段仍拒绝。不修改原 Legacy，不补当前游戏日期，不增加模型请求，Durable 与旧 Sidecar 仍退役。
+
+反例先在原代码复现 writable=false；修复后实际 IPC＋Store 回归及独立合成验证通过：离线确认原子写盘、原摘要逐字节不变、重复回填不重复、只预览／取消无写、未绑定及同 Pair 多 Campaign 拒绝、同 Owner 不同 Pair 可各自明确绑定、Owner 跨 Campaign 批量拒绝、来源或 Campaign 变更使旧确认失效。该修复增加已有测试组内的断言，manifest 仍为 407 发布组／127 历史项／535 文件。
+
+本轮在干净 Windows 检出快照 `c430111e7595ad7fd7c9e815d2dd51a27cdede1a`（本地隔离验证提交，基于 `11f431c`）从无 `.build` 开始，Node22.23.3／core.autocrlf=true，按相同 CI 六步执行，全部 exit 0，407／407 发布组通过。68 份 LFS 对象、5981 个锁定依赖文件／264 包通过校验，285 source／artifact／deployed 映射与根工作区 payload 一致；日志为 `.build/v935-offline-candidate-*.log`。
+
+真实隔离 VOTC.exe 离线窗口通过 UI→Preload→IPC→索引文件验收，没有注入或模拟 GameData。单 Pair 确认成功落盘；Owner 预览含 2 个关系，取消后索引和源文件均无写入，再预览确认显示 2／2 成功，重复确认无重复事项且索引哈希保持不变，两份 Legacy 文件哈希始终不变。Provider／network 调用均为 0，没有真实用户资料或 CK3 调用。证据目录 `.build/v935-offline-backfill-smoke-jHg4yH/offline-native`；`offline-owner-confirm-enabled.png` 和 `offline-owner-write-success.png` 已逐图阅查，分别显示确认启用和 2／2 成功。单 Pair 以真实索引 JSON 和文件断言证明，不把未对准的单 Pair 截图当视觉证据。测试结束无 VOTC 进程残留。
+
+下方为初版已完成的验收快照（初版 payload `cc70be7d30fc6821c5a5112179da5008c36257d98705ea73d9d923f7add2aa8a`）；其中离线只读断言由本次用户确认的离线索引回填合同替代，不代表当前行为。真实 CK3／Soak／最终提交远端 CI 仍独立待验，不自动 push。
+
+## 初版验收回执
 
 ## Gate 状态
 

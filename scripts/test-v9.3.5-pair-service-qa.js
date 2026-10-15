@@ -179,14 +179,13 @@ async function main() {
     const unconnectedService = createPairMemoryService({ store, getCurrentConversation: () => null });
     const unconnectedPreview = unconnectedService.preview({ ownerId, counterpartId });
     assert.equal(unconnectedPreview.success, true);
-    assert.equal(unconnectedPreview.writable, false);
+    assert.equal(unconnectedPreview.writable, true, "a uniquely bound offline archive can be explicitly confirmed");
+    assert.equal(unconnectedPreview.offlineBackfill, true);
     const pairScope = { campaignToken, ownerId, counterpartId };
     const indexPath = store.pairLedger.indexPath(pairScope);
     assert.equal(fs.existsSync(indexPath), false, "read-only preview does not persist an index");
-    assert.throws(() => unconnectedService.apply({ ownerId, counterpartId,
-      previewRevision: unconnectedPreview.pairs[0].previewRevision }),
-    error => error.message === "PAIR_INDEX_READ_ONLY");
-    assert.equal(fs.existsSync(indexPath), false, "a disconnected session cannot write the index");
+    assert.equal(fs.existsSync(indexPath), false, "offline preview alone must not write the index");
+    const offlineHandlers = createIpcHandlers(unconnectedService, () => null);
 
     const sourceItem = getResponse.items[0];
     const openResponse = await ipc("openPairMemorySource")(null, {
@@ -223,7 +222,7 @@ async function main() {
     assert.deepEqual(rejectedOpen, { success: false, error: "PAIR_INDEX_REQUEST_INVALID" });
 
     const sourceBytesBeforePreview = fs.readFileSync(sourceFile);
-    const stalePreview = await ipc("previewPairMemoryBackfill")(null, { ownerId, counterpartId });
+    const stalePreview = await offlineHandlers.get("conversation:previewPairMemoryBackfill")(null, { ownerId, counterpartId });
     assert.equal(stalePreview.success, true);
     assert.deepEqual(fs.readFileSync(sourceFile), sourceBytesBeforePreview, "preview never edits the Legacy source");
     const changedRows = rows.map((row, index) => index === 0
@@ -231,7 +230,7 @@ async function main() {
       : row);
     store.writeJson(sourceFile, changedRows);
     store.invalidateFolderSummaryCache([ownerId]);
-    const staleApply = await ipc("applyPairMemoryBackfill")(null, {
+    const staleApply = await offlineHandlers.get("conversation:applyPairMemoryBackfill")(null, {
       ownerId, counterpartId, previewRevision: stalePreview.pairs[0].previewRevision
     });
     assert.deepEqual(staleApply, { success: false, error: "PAIR_INDEX_PREVIEW_STALE" },
@@ -243,12 +242,14 @@ async function main() {
     error => error.message === "SOURCE_UNAVAILABLE_OR_STALE",
     "an old SourceKey + expected revision cannot open changed source bytes");
 
-    const currentPreview = await ipc("previewPairMemoryBackfill")(null, { ownerId, counterpartId });
+    const currentPreview = await offlineHandlers.get("conversation:previewPairMemoryBackfill")(null, { ownerId, counterpartId });
     assert.equal(currentPreview.success, true);
-    const applyResponse = await ipc("applyPairMemoryBackfill")(null, {
+    const beforeOfflineApply = fs.readFileSync(sourceFile);
+    const applyResponse = await offlineHandlers.get("conversation:applyPairMemoryBackfill")(null, {
       ownerId, counterpartId, previewRevision: currentPreview.pairs[0].previewRevision
     });
     assert.equal(applyResponse.success, true, JSON.stringify(applyResponse));
+    assert.deepEqual(fs.readFileSync(sourceFile), beforeOfflineApply, "offline confirmation writes only the derived index");
     assert.equal(applyResponse.ownerId, ownerId);
     assert.equal(applyResponse.counterpartId, counterpartId);
     assert.equal(applyResponse.pairs[0].itemCount, 1);
@@ -260,6 +261,43 @@ async function main() {
     assert.equal(persistedIndex.items[0].text, "双方改约将金印保存在宫库。");
     assert.deepEqual(fs.readFileSync(sourceFile), Buffer.from(JSON.stringify(changedRows, null, 2)),
       "apply changes only the new index, never the source summary");
+
+    const repeatedPreview = unconnectedService.preview({ ownerId, counterpartId });
+    assert.equal(unconnectedService.apply({ ownerId, counterpartId,
+      previewRevision: repeatedPreview.pairs[0].previewRevision }).pairs[0].itemCount, 1,
+    "repeating an offline backfill does not duplicate items");
+    const confirmedBytes = fs.readFileSync(indexPath);
+    assert.throws(() => store.pairLedger.apply(pairScope, { readOnly: true, allowHistoricalBackfill: true,
+      previewRevision: repeatedPreview.pairs[0].previewRevision }), /PAIR_INDEX_READ_ONLY/);
+    assert.deepEqual(await offlineHandlers.get("conversation:applyPairMemoryBackfill")(null, {
+      ownerId, counterpartId, previewRevision: repeatedPreview.pairs[0].previewRevision, allowHistoricalBackfill: true
+    }), { success: false, error: "PAIR_INDEX_REQUEST_INVALID" }, "the Renderer cannot grant itself offline authority");
+
+    const replaceSources = values => { store.writeJson(sourceFile, values); store.invalidateFolderSummaryCache([ownerId]); };
+    replaceSources(changedRows.map(row => row.characterId === sameNameCounterpartId
+      ? { ...row, campaignToken: otherCampaignToken } : row));
+    assert.equal(unconnectedService.preview({ ownerId }).writable, false, "multi-Campaign Owner batch is ambiguous");
+    assert.equal(unconnectedService.preview({ ownerId, counterpartId }).writable, true,
+      "another Pair's Campaign does not block this uniquely bound Pair");
+    const boundPreview = unconnectedService.preview({ ownerId, counterpartId });
+    replaceSources([...changedRows, summary({ otherId: counterpartId, finalizationId: "conflicting-campaign",
+      token: otherCampaignToken, content: "摘要\n【需要长期记住的事项】\n- 另一战役的事项。" })]);
+    assert.equal(unconnectedService.preview({ ownerId, counterpartId }).writable, false, "same-Pair Campaign conflict blocks confirmation");
+    assert.throws(() => unconnectedService.apply({ ownerId, counterpartId,
+      previewRevision: boundPreview.pairs[0].previewRevision }), /PAIR_INDEX_READ_ONLY/);
+    assert.deepEqual(fs.readFileSync(indexPath), confirmedBytes, "ambiguous confirmation cannot replace an existing index");
+
+    replaceSources([rows[1]]);
+    assert.equal(unconnectedService.preview({ ownerId, counterpartId }).writable, false, "unbound history remains read-only");
+    assert.throws(() => unconnectedService.apply({ ownerId, counterpartId,
+      previewRevision: boundPreview.pairs[0].previewRevision }), /PAIR_INDEX_READ_ONLY/);
+    replaceSources(changedRows.filter(row => row.characterId === counterpartId && row.campaignToken)
+      .map(row => ({ ...row, campaignToken: otherCampaignToken })));
+    assert.throws(() => unconnectedService.apply({ ownerId, counterpartId,
+      previewRevision: boundPreview.pairs[0].previewRevision }), /PAIR_INDEX_PREVIEW_STALE/,
+    "switching the unique Campaign invalidates the old confirmation");
+    assert.deepEqual(fs.readFileSync(indexPath), confirmedBytes);
+    assert.equal(fs.existsSync(store.pairLedger.indexPath({ ...pairScope, campaignToken: otherCampaignToken })), false);
 
     assertStaticIpcContract();
     console.log("V9.3.5 Pair Memory Service IPC QA: PASS");

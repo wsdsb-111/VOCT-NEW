@@ -18,10 +18,13 @@ function createPairMemoryService({ store, getCurrentConversation }) {
     const memories = store.loadFolderSummariesForCharacter(ownerId);
     const trusted = memories.filter(memory => memory.provenance?.folderOwnerId === ownerId
       && memory.knownBy.includes(ownerId) && memory.provenance?.campaignBinding?.status !== "unresolved");
-    const sourceCampaigns = [...new Set(trusted.map(memory => memory.provenance?.campaignToken).filter(value => typeof value === "string" && value.trim()))];
+    const scopedSources = counterpartId ? trusted.filter(memory =>
+      [memory.provenance.counterpartId, ...(memory.provenance.counterpartIds || [])].includes(counterpartId)) : trusted;
+    const sourceCampaigns = [...new Set(scopedSources.map(memory => memory.provenance?.campaignToken).filter(value => typeof value === "string" && value.trim()))];
     const campaignToken = typeof gameData?.campaignToken === "string" && gameData.campaignToken.trim()
       || (sourceCampaigns.length === 1 ? sourceCampaigns[0] : null);
-    const writable = !!(campaignToken && gameData?.campaignToken === campaignToken
+    const offlineBackfill = !gameData && sourceCampaigns.length === 1;
+    const writable = offlineBackfill || !!(campaignToken && gameData?.campaignToken === campaignToken
       && gameData?.characters instanceof Map && gameData.characters.has(ownerId));
     const authorized = trusted.filter(memory => memory.provenance.campaignToken === campaignToken);
     const counterpartIds = [...new Set(authorized.flatMap(memory => memory.provenance.counterpartIds || [memory.provenance.counterpartId]))]
@@ -33,7 +36,8 @@ function createPairMemoryService({ store, getCurrentConversation }) {
         || (characterId !== ownerId ? cleanName(trusted.find(memory => memory.provenance.counterpartId === characterId)?.provenance.counterpartName) : null)
         || "姓名未载入";
     };
-    return { ownerId, counterpartId, counterpartIds, campaignToken, writable, conversation, memories,
+    return { ownerId, counterpartId, counterpartIds, campaignToken, writable, offlineBackfill, conversation, memories,
+      scopeIssue: sourceCampaigns.length > 1 ? "CAMPAIGN_BINDING_AMBIGUOUS" : "CAMPAIGN_BINDING_REQUIRED",
       ownerName: name(ownerId), counterpartName: counterpartId ? name(counterpartId) : null, name,
       options: { memories, currentGameDate: gameData?.date, currentTotalDays: gameData?.totalDays, readOnly: true, allowHistoricalPreview: !gameData?.date } };
   }
@@ -41,12 +45,12 @@ function createPairMemoryService({ store, getCurrentConversation }) {
     return { campaignToken: ctx.campaignToken, ownerId: ctx.ownerId, counterpartId };
   }
   function metadata(ctx) {
-    return { ownerName: ctx.ownerName, counterpartName: ctx.counterpartName, writable: ctx.writable };
+    return { ownerName: ctx.ownerName, counterpartName: ctx.counterpartName, writable: ctx.writable, offlineBackfill: ctx.offlineBackfill };
   }
   function get(request) {
     const ctx = context(request);
     if (!ctx.counterpartId) throw new Error("PAIR_INDEX_SCOPE_INVALID");
-    if (!ctx.campaignToken) return { success: true, ...metadata(ctx), writable: false, items: [], totalCount: 0, page: 0, pageSize: 20, diagnostics: { reason: "CAMPAIGN_BINDING_REQUIRED" } };
+    if (!ctx.campaignToken) return { success: true, ...metadata(ctx), writable: false, items: [], totalCount: 0, page: 0, pageSize: 20, diagnostics: { reason: ctx.scopeIssue } };
     const result = store.pairLedger.get(pair(ctx, ctx.counterpartId), { ...ctx.options,
       page: request.page, pageSize: request.pageSize, sort: request.sort, search: request.search,
       fromDate: request.fromDate, toDate: request.toDate });
@@ -54,7 +58,7 @@ function createPairMemoryService({ store, getCurrentConversation }) {
   }
   function preview(request) {
     const ctx = context(request);
-    if (!ctx.campaignToken) return { success: true, ...metadata(ctx), writable: false, pairs: [], counts: {}, previewRevision: digest([ctx.ownerId, null]), diagnostics: { reason: "CAMPAIGN_BINDING_REQUIRED" } };
+    if (!ctx.campaignToken) return { success: true, ...metadata(ctx), writable: false, pairs: [], counts: {}, previewRevision: digest([ctx.ownerId, null]), diagnostics: { reason: ctx.scopeIssue } };
     const ids = ctx.counterpartId ? [ctx.counterpartId] : ctx.counterpartIds;
     const pairs = ids.map(counterpartId => {
       const result = store.pairLedger.preview(pair(ctx, counterpartId), ctx.options);
@@ -69,7 +73,8 @@ function createPairMemoryService({ store, getCurrentConversation }) {
     const ctx = context(request);
     if (!ctx.writable || !ctx.counterpartId) throw new Error("PAIR_INDEX_READ_ONLY");
     if (getCurrentConversation() !== ctx.conversation) throw new Error("PAIR_INDEX_PREVIEW_STALE");
-    const result = store.pairLedger.apply(pair(ctx, ctx.counterpartId), { ...ctx.options, readOnly: false, previewRevision: request.previewRevision });
+    const result = store.pairLedger.apply(pair(ctx, ctx.counterpartId), { ...ctx.options, readOnly: false,
+      allowHistoricalBackfill: ctx.offlineBackfill, previewRevision: request.previewRevision });
     return { success: true, ...result, ...metadata(ctx), ownerId: ctx.ownerId, counterpartId: ctx.counterpartId };
   }
   function open(request) {

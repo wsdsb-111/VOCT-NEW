@@ -4,7 +4,7 @@
 
 Legacy 原摘要是唯一权威文本。索引仅保存事项原文、日期、路由证据、搜索词与来源指针，不保存整篇摘要副本，不改写事实或叠加 Durable 状态。
 
-主键为 `(campaignToken, ownerId, counterpartId)`，A→B 和 B→A 完全独立。Campaign 来自后端当前 GameData／现有合法绑定，IPC 不接受客户端指定 Campaign 或磁盘路径。Owner 写入需为当前角色；离线唯一绑定可只读浏览。时间未知时不注入 Pair 事项；未来摘要、无授权／歧义来源、Forget、跨战役内容不得进入当前 Prompt。
+主键为 `(campaignToken, ownerId, counterpartId)`，A→B 和 B→A 完全独立。Campaign 来自后端当前 GameData／现有合法绑定，IPC 不接受客户端指定 Campaign 或磁盘路径。有 GameData 时保留当前战役／Owner 写入门禁；无游戏连接时，所选范围具有唯一可信的历史 Campaign 绑定，允许预览后明确确认生成本地派生索引。单 Pair 按该 Pair 来源判定，Owner 批量按整个 Owner 判定，未绑定或多战役歧义保持只读。离线不补造当前游戏日期，也不授予当前事实；时间未知时不注入 Pair 事项，未来摘要、无授权／歧义来源、Forget、跨战役内容不得进入当前 Prompt。
 
 文件位置为 `MemoryStore.baseDir/pair-important-index/v1/<campaign SHA-256>/<owner>/<counterpart>.json`，不是 archiveSidecar。索引可删除后从合法 Legacy 重建，原子替换只影响该 Pair。旧 Sidecar 不扫描、不读写。
 
@@ -41,7 +41,7 @@ Temporal 与 Mentioned／Entity 各最多 3 篇，去重后合计最多 6；源�
 
 Preload 使用相应 camelCase 方法。数字 ID 范围沿现有 IPC 合同，字符串限长、未知字段拒绝。列表搜索要求所有词项命中；数字和英文使用独立词项边界，不能因全文子串把 41 匹配为 141。无词项的单汉字可作原文子串搜索。分页、排序和搜索不能让权限扩展；ID、来源键和内部路径不能成为玩家主标签。
 
-批量由前端逐 Pair 执行预览结果中的独立 revision；每完成一 Pair 才增加真实进度，取消在 Pair 之间停止。已完成部分保留，失败部分可重新预览并续做，不伪装整批事务。确认取消不写入；只读浏览不能 apply。
+批量由前端逐 Pair 执行预览结果中的独立 revision；每完成一 Pair 才增加真实进度，取消在 Pair 之间停止。已完成部分保留，失败部分可重新预览并续做，不伪装整批事务。取消确认不写入。离线回填的权限由后端在 get／preview／apply 一致计算；apply 重新验证源修订，内部 `allowHistoricalBackfill` 不属于 IPC 允许字段，客户端不能自行授权。写入仅限 Pair 索引，原 Legacy、Forget 及旧 Sidecar 不受修改。
 
 来源 modal 必须先成功 open 验源，再显示原文；过期时提示刷新而不展示旧缓存正文。定位还需核对真实摘要行与返回的内容／日期。UI 首要人物标识只用真实姓名，未知显示“姓名未载入”，同名 ID 仅折叠诊断。
 

@@ -26,7 +26,7 @@
     pair_index_preview_stale: "预览期间摘要发生变化，旧方案已作废。已重新扫描，请检查新预览后再次确认。",
     pair_ledger_preview_stale: "预览期间摘要发生变化，旧方案已作废。已重新扫描，请检查新预览后再次确认。",
     source_unavailable_or_stale: "来源已变化或当前不可访问。事项簿已刷新，请重新打开来源。",
-    pair_memory_campaign_not_loaded: "当前没有可验证的游戏战役；可以查看只读归档，不能写入事项簿。",
+    pair_memory_campaign_not_loaded: "历史摘要的所属战役尚未绑定或存在歧义；可以查看，暂不能写入事项簿。",
     pair_memory_owner_not_in_current_campaign: "当前战役无法验证此 Owner，未写入事项簿。",
     pair_memory_game_data_unavailable: "当前游戏数据尚未准备好；只读内容仍可查看，请稍后重试。",
     pair_memory_read_only: "当前档案为只读状态，可以查看事项，不能写入。",
@@ -603,6 +603,7 @@
         return;
       }
       if (state.ledger?.writable === false) section.append(makeElement("p", "pair-ledger-readonly", "只读归档：可以查看事项和来源，不能回填。"));
+      if (state.ledger?.offlineBackfill === true) section.append(makeElement("p", "pair-ledger-offline", "离线整理：已验证历史摘要的唯一战役绑定，可预览后确认生成事项簿。只更新本地索引，不修改原摘要。"));
       if (state.ledger) {
         const top = makeElement("div", "pair-ledger-controls");
         const count = Number(state.ledger.totalCount || 0);
@@ -697,7 +698,8 @@
       const preview = state.preview;
       const previewCard = makeElement("div", "pair-ledger-preview");
       previewCard.append(makeElement("h6", "", "回填预览（尚未写入）"));
-      if (preview.writable === false) previewCard.append(makeElement("p", "pair-ledger-readonly", "当前来源可只读预览；没有可验证的活动 Campaign，不能确认写入。"));
+      if (preview.writable === false) previewCard.append(makeElement("p", "pair-ledger-readonly", "当前来源仅可查看：所属战役未绑定、存在歧义或当前角色无法验证，不能确认写入。"));
+      if (preview.offlineBackfill === true) previewCard.append(makeElement("p", "pair-ledger-offline", "已验证历史摘要的唯一战役绑定，无需连接游戏；确认后只生成本地事项簿。"));
       appendCounts(previewCard, preview);
       const reasons = toReasonRows(preview);
       if (!reasons.length && Number(preview.skippedCount ?? preview.counts?.skippedCount) > 0) {

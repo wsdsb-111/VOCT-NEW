@@ -25,7 +25,7 @@
 
 - 页面人物主标签必须使用摘要、IPC 或当前人物资料中的真实姓名；姓名不可知时显示“姓名未载入”等提示。ID 只用于内部关联或折叠诊断，不显示成主标签，不用数字 fallback；同名不同 ID 仍保持身份隔离。
 - Pair 回填必须先生成预览，再由用户明确确认；取消确认不写入。Owner 批量操作只覆盖当前 Owner，逐 Pair 应用并显示进度与部分结果。来源查看通过后端以 source key 和期望 revision 复验后返回当前原文；过期来源须提示刷新。
-- 安全只读归档可在无游戏连接时查看，但不得回填；旧 `archiveSidecar` 仍逐字节保留，运行时不扫描、读取或写入。
+- 无游戏连接时，历史 Legacy 来源在所选范围内有唯一可信 Campaign 绑定，可预览后明确确认回填本地 Pair 派生索引；单 Pair 按该 Pair 判定，Owner 批量按整个 Owner 判定。未绑定／多战役歧义保持只读，不改原摘要；旧 `archiveSidecar` 仍逐字节保留，运行时不扫描、读取或写入。
 - 历史 V9.2.3 候选曾退役 Year/Life 自动模型生成及后台重建；其 Durable、Detail 与 Recovery 约束不覆盖 V9.3.5 候选。旧 Recovery 和其他 Campaign 的历史数据仍不得因文档更新而删除。
 
 - V8.8.4 动作区分 QUEUED、ACKNOWLEDGED 与 CONFIRMED。NPC 列表不含玩家，玩家绑定 root；金币/好感度以同命令 BEGIN—ACK 的真实前后状态确认。游戏侧同命令去重和旧会话零写入隔离不可移除；其他动作只有 ACK 时不宣称效果成功。

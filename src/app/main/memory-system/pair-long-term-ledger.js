@@ -606,7 +606,7 @@ class PairLongTermLedger {
   }
 
   apply(scopeInput, { previewRevision, ...options } = {}) {
-    if (options.readOnly === true || options.allowHistoricalPreview === true) throw makeError("PAIR_INDEX_READ_ONLY");
+    if (options.readOnly === true || options.allowHistoricalPreview === true && options.allowHistoricalBackfill !== true) throw makeError("PAIR_INDEX_READ_ONLY");
     if (typeof previewRevision !== "string" || !/^[a-f0-9]{64}$/u.test(previewRevision)) throw makeError("PAIR_INDEX_PREVIEW_REQUIRED");
     const preview = this.preview(scopeInput, options);
     if (preview.previewRevision !== previewRevision) throw makeError("PAIR_INDEX_PREVIEW_STALE");
