@@ -1,6 +1,6 @@
 # V9.3.4 验证报告
 
-日期：2026-10-15。实施提交 SHA 待最终本地提交记录；runtime payload SHA-256 `5823950499a768f97c0cf2dd483c0559e68e6b00cfe3a73cc9c5a5d81b7a2aad`，278 个 source／artifact／deployed 映射一致。App 9.3.4。
+日期：2026-10-15。本地实施提交 SHA `69ef4b272cb87238bbc1a45fe9d49c0846084c3e`；runtime payload SHA-256 `5823950499a768f97c0cf2dd483c0559e68e6b00cfe3a73cc9c5a5d81b7a2aad`，278 个 source／artifact／deployed 映射一致。App 9.3.4。
 
 ## 门禁状态
 
@@ -64,3 +64,7 @@ node scripts/test-release.js
 真实 VOTC.exe 使用两个独立合成 profile（performance off／on），设置 APPDATA、LOCALAPPDATA 与 user-data-dir 到仓内隔离目录，并阻断网络；没有打开真实用户资料。每个 profile 含 95 篇合成 Legacy 和 1 篇合成官方追忆，实际 UI → Preload → IPC → 文件 writer 编辑／删除、日期筛选（10 条）、正文展开、重要事项、分页（每页10条）、搜索通过；官方项无可写控件且主进程拒绝写入。版本 title／footer／tooltip 均9.3.4，旧 Memory4 页面／Bridge／IPC 不存在。性能诊断开关与导出隐私负例通过，模块哈希匹配部署源。两个 profile Provider、外网和 CK3 调用均0。
 
 合计6张游牧／骑士／水墨截图保存在 `.build/v934-packaged-smoke-8ZCIh0`，三主题正文与控件已人工阅图；详尽匿名模块／截图哈希见审计 JSON。测试程序退出后不保留运行中的 VOTC 进程。原生 Electron 成功不等于 CK3 实机或长期 Soak 成功。
+
+## 本地提交与待发布边界
+
+实施提交 `69ef4b272cb87238bbc1a45fe9d49c0846084c3e` 位于本地 main。其后的文档回执仅补充本 SHA 与证据，不改变已测试的 Runtime；相对清洁验证快照，测试脚本另只移除一行末尾空白。主仓库最终文档提交 SHA 可由 `git rev-parse HEAD` 查询。未执行 push，GitHub CI 必须在用户推送后按最终 main SHA 重新核验，不能使用隔离快照或旧 SHA 代替。

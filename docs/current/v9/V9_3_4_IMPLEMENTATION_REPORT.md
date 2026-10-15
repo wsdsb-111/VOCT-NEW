@@ -46,3 +46,5 @@ Core、App、UI 为 **9.3.4**，可见记忆标签为 **Legacy Summary**。协�
 ## 验证范围
 
 详见 [验证报告](V9_3_4_VERIFICATION_REPORT.md)、[变更清单](V9_3_4_CHANGED_FILES.md)、[脱敏审计](V9_3_4_RETIREMENT_AUDIT.json)。本轮全部离线；没有付费 API 支出，没有真实 CK3／Soak 验收，也不推送远端。
+
+本地实施提交：`69ef4b272cb87238bbc1a45fe9d49c0846084c3e`。后续文档回执仅记录验证与 SHA；未推送。

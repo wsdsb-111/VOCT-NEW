@@ -1,6 +1,6 @@
 {
   "runtimeVersion": "9.3.4",
-  "headSHA": "PENDING_LOCAL_IMPLEMENTATION_COMMIT",
+  "headSHA": "69ef4b272cb87238bbc1a45fe9d49c0846084c3e",
   "baselineSHA": "3c1c2162e63f587bf920c8670bc88f9c263ac0f1",
   "payloadSha256": "5823950499a768f97c0cf2dd483c0559e68e6b00cfe3a73cc9c5a5d81b7a2aad",
   "managedRuntimeFiles": 278,
@@ -407,5 +407,6 @@
     }
   },
   "releaseGroupTotal": 402,
-  "gateEvidenceScope": "offline synthetic fixtures and isolated Windows/Electron only; no real userdata or paid APIs"
+  "gateEvidenceScope": "offline synthetic fixtures and isolated Windows/Electron only; no real userdata or paid APIs",
+  "headSHAScope": "local implementation main commit; following documentation-only receipt does not change runtime; remote CI must match final pushed main"
 }
