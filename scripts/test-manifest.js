@@ -180,6 +180,7 @@ const releaseChecks = [
   { group: "v9.3.5-pair-ui", script: "test-v9.3.5-pair-ui.js" },
   { group: "v9.3.5-letter-summary", script: "test-v9.3.5-letter-summary.js" },
   { group: "v9.3.5-independent-qa", script: "test-v9.3.5-independent-qa.js" },
+  { group: "v9.3.6-pair-memory-routing", script: "test-v9.3.6-pair-memory-routing.js" },
   { group: "v9.3.5-pair-service-qa", script: "test-v9.3.5-pair-service-qa.js" },
   { group: "v9.3.4-legacy-crud-qa", script: "test-v9.3.4-legacy-crud-qa.js" },
   { group: "v9.3.4-deployment-recovery-qa", script: "test-v9.3.4-deployment-recovery-qa.js" },

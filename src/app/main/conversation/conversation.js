@@ -689,7 +689,12 @@ class Conversation {
     const mentionableProfiles = memoryState.mentionProfileCache.profiles;
     const currentUserIndex = history.findLastIndex((entry) => entry.role === "user");
     const pairRoute = require("../memory-system/pair-memory-routing").resolveActiveMemoryPairs({
-      ownerId: npc.id, history, activeParticipantIds, playerId: this.gameData.playerID
+      ownerId: npc.id, history, activeParticipantIds, playerId: this.gameData.playerID,
+      campaignToken: this.gameData.campaignToken,
+      currentPlayerMessageId: this.getTurnManager().currentTurn?.playerMessageId,
+      turnEpoch: this.turnEpoch,
+      conversationId: this.id,
+      sceneRevision: JSON.stringify([this.gameData.scene || null, this.gameData.location || null, this.gameData.locationController || null])
     });
     const query = pairRoute.query || (currentUserIndex >= 0 ? history[currentUserIndex].content || "" : "");
     const assistContext = (currentUserIndex > 0 ? history.slice(Math.max(0, currentUserIndex - 2), currentUserIndex) : []).map((entry) => entry.content || "").filter(Boolean).join("\n");
@@ -725,6 +730,8 @@ class Conversation {
       sessionRecallCache: memoryState.responderRecallCache,
       directCounterpartIds: pairRoute.counterpartIds,
       querySpeakerId: pairRoute.querySpeakerId,
+      trustedPlayerAnchorId: pairRoute.playerAnchorId,
+      trustedPlayerTurn: pairRoute.trustedPlayerTurn,
       ownerFolderMemories: memoryState.mentionProfileCache.ownerFolderMemoriesRawById?.get(Number(npc.id))
         || memoryEngine.loadOwnerFolderMemories(npc.id),
       currentGameDate: this.gameData.date,

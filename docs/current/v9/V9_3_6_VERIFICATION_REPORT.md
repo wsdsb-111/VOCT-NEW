@@ -23,3 +23,7 @@
 ## 待验收
 
 Gate 1–5 待阶段代码与行为证据；真实 CK3／Provider 账单／80–100 轮 Soak 为 NOT_RUN；远端 CI 为 PENDING_USER_PUSH，不推送。
+
+## Gate 1：路由与保存回归
+
+`test-v9.3.6-pair-memory-routing.js` 14 项行为断言通过，覆盖参与者重排、NPC 最近发言、可信当前玩家轮次、L0／L1／L2、引用、否定、同名歧义及有限追问。`test-v9.3.5-independent-qa.js` 原有 8 项均通过，包括迟到／耳语／混合可见性／缺席、NPC 双向定向保存、同日来源／Forget／同 stat 等长改写、150 摘要／750 事项 Golden Set 和共享预算。旧测试仅将与新合同冲突的“最近 NPC 改固定关系”改为玩家锚点断言，未归档安全用例。Gate 1 已完成；尚未据此宣称冻结事项、统一门禁或预算阶段完成。

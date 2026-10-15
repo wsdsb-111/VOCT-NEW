@@ -436,22 +436,34 @@ async function testPairIndexMissKeepsLegacyFallbackAndRejectsStaleCache() {
 
 function testActivePairDirectionRouting() {
   const aSpeaksToB = resolveActiveMemoryPairs({ ownerId: 2, activeParticipantIds: [1, 2, 3], playerId: 1,
-    history: [{ role: "user", speakerCharacterId: 1, addresseeId: 2, content: "QA_A_TO_B: 你记得长命锁吗？" }] });
-  assert.deepEqual(aSpeaksToB.counterpartIds, [1], "A speaking to B activates only A→B for owner B");
+    currentPlayerMessageId: "player-turn-1", turnEpoch: 1,
+    history: [{ id: "player-turn-1", role: "user", speakerCharacterId: 1, addresseeId: 2, content: "QA_A_TO_B: 你记得长命锁吗？" }] });
+  assert.deepEqual(aSpeaksToB.counterpartIds, [1], "the fixed counterpart is the trusted player anchor");
   assert.equal(aSpeaksToB.querySpeakerId, 1);
-  const bRepliesToA = resolveActiveMemoryPairs({ ownerId: 1, activeParticipantIds: [1, 2, 3], playerId: 1,
-    history: [{ role: "assistant", speakerCharacterId: 2, targetCharacterId: 1, content: "QA_B_TO_A: 我记得那场宴会。" }] });
-  assert.deepEqual(bRepliesToA.counterpartIds, [2], "B replying to A activates only B→A for owner A");
-  assert.equal(bRepliesToA.querySpeakerId, 2);
-  const afterPairSwitch = resolveActiveMemoryPairs({ ownerId: 2, activeParticipantIds: [1, 2, 3], playerId: 1,
+  assert.equal(aSpeaksToB.trustedPlayerTurn.messageId, "player-turn-1");
+  const afterNpcReply = resolveActiveMemoryPairs({ ownerId: 2, activeParticipantIds: [1, 2, 3], playerId: 1,
+    currentPlayerMessageId: "player-turn-2", turnEpoch: 2,
     history: [
-      { role: "user", speakerCharacterId: 1, addresseeId: 2, content: "旧轮：玩家向乙发言。" },
-      { role: "assistant", speakerCharacterId: 3, content: "新轮：丙回应，没有向玩家发言。" }
+      { id: "player-turn-2", role: "user", speakerCharacterId: 1, addresseeId: 2, content: "QA_PLAYER_QUERY: 你还记得丙吗？" },
+      { id: "npc-b-reply", role: "assistant", speakerCharacterId: 2, content: "QA_B_REPLY: 我记得。" },
+      { id: "npc-c-reply", role: "assistant", speakerCharacterId: 3, content: "QA_C_REPLY: 我也在这里。" }
     ] });
-  assert.deepEqual(afterPairSwitch.counterpartIds, [3], "the recent valid speaker replaces an old player target after a pair switch");
-  assert.equal(afterPairSwitch.querySpeakerId, 3);
+  assert.deepEqual(afterNpcReply.counterpartIds, [1], "later NPC replies in the same player turn do not move the fixed anchor");
+  assert.equal(afterNpcReply.querySpeakerId, 3, "query speaker remains the latest real speaker");
+  assert.equal(afterNpcReply.query, "QA_C_REPLY: 我也在这里。");
+  assert.equal(afterNpcReply.trustedPlayerTurn.content, "QA_PLAYER_QUERY: 你还记得丙吗？",
+    "NPC text does not replace or upgrade the trusted player request");
+  const stalePlayerTurn = resolveActiveMemoryPairs({ ownerId: 2, activeParticipantIds: [1, 2, 3], playerId: 1,
+    currentPlayerMessageId: "old-player-turn", turnEpoch: 3,
+    history: [
+      { id: "old-player-turn", role: "user", speakerCharacterId: 1, content: "旧轮玩家消息。" },
+      { id: "new-player-turn", role: "user", speakerCharacterId: 1, content: "当前玩家消息。" },
+      { id: "npc-c-reply", role: "assistant", speakerCharacterId: 3, content: "NPC 最近发言。" }
+    ] });
+  assert.deepEqual(stalePlayerTurn.counterpartIds, [1], "the trusted player remains the fixed anchor");
+  assert.equal(stalePlayerTurn.querySpeakerId, 3);
+  assert.equal(stalePlayerTurn.trustedPlayerTurn, null, "a stale message ID cannot continue prior player authorization");
 }
-
 async function testRecentOnePairSwitchStablePrefixAndVisibleBudget() {
   const engine = makeFixture("pair-recent-one");
   const aRows = [
@@ -556,7 +568,7 @@ async function main() {
   await check("Pair Index → exact Legacy Source Recall and 150-summary/750-item Chinese n-gram golden set", testPairIndexTwoLevelRecallAndScale);
   await check("same-day source identity, owner direction, revision, Forget, and stale fail-closed", testPairSourceIdentityScopeAndStaleFailClosed);
   await check("index miss retains Legacy narrative fallback and stale index text is rejected", testPairIndexMissKeepsLegacyFallbackAndRejectsStaleCache);
-  await check("NPC A→B/B→A route follows only the latest authorized counterpart", testActivePairDirectionRouting);
+  await check("fixed player anchor is independent of the latest authorized speaker", testActivePairDirectionRouting);
   await check("Recent1, stable prefix, active-pair switch, and visible token budget", testRecentOnePairSwitchStablePrefixAndVisibleBudget);
   await check("temporal and entity channels each select three within shared visible budget", testTemporalEntityIndependentCapsAndSharedVisibleBudget);
   console.log(`V9.3.5 independent QA: ${passed} PASS, ${failed} FAIL`);
