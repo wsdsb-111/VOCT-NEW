@@ -614,6 +614,18 @@
       "target": "out/main/memory-system/pair-memory-source-retrieval.js"
     },
     {
+      "source": "main/memory-system/player-centered-memory.js",
+      "target": "out/main/memory-system/player-centered-memory.js"
+    },
+    {
+      "source": "main/memory-system/memory-budget-policy.js",
+      "target": "out/main/memory-system/memory-budget-policy.js"
+    },
+    {
+      "source": "main/memory-system/player-memory-diagnostics.js",
+      "target": "out/main/memory-system/player-memory-diagnostics.js"
+    },
+    {
       "source": "main/memory-system/perspective-projector.js",
       "target": "out/main/memory-system/perspective-projector.js"
     },

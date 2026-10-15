@@ -1,14 +1,14 @@
 # 对话摘要与人物记忆：Legacy Summary（3.0 协议、2.5 存储兼容）
 
-当前记录 V9.3.5 Pair Memory Index 候选，施工与验收仍在进行；正式 Core／App／UI 版本号以包元数据和最终报告为准。Workshop 2.0.5、Official Action 2.0.3、`Legacy Summary`、协议 3.0、摘要存储 2.5／schema 2 与既有目录格式保持。Durable、Year/Life 的生成、恢复、模型提取和后台重建不恢复。
+当前记录 Core／App／UI V9.3.6 发布候选。Workshop 2.0.5、Official Action 2.0.3、`Legacy Summary`、协议 3.0、摘要存储 2.5／schema 2 与既有目录格式保持。Durable、Year/Life 的生成、恢复、模型提取和后台重建不恢复。
 
-候选召回分两层：每名直接 Counterpart 先取最近 1 篇 Legacy 摘要，再通过本地 Owner→Counterpart Pair 事项索引检索相关事项，并按已验证的来源键和修订号读取 1–2 篇确切 Legacy 来源摘要。Temporal 与 Mentioned 各自最多选 3 项，所有召回共同受首次生成时冻结的总预算约束：2／3／4+ 人分别为上下文 10%／12.5%／15%，上限 3600／4500／5400 Token，取较小值并为 Provider 保留安全余量。本地确定性解析/索引不增加模型提取请求。
+每位回应 NPC 的固定历史只锚定当前玩家：最近 1 篇 Legacy、合法官方追忆、预算内尽量完整的玩家关系事项簿。固定文本首次构造后冻结；第三人仅提名为 L0，不读取其历史索引或原文；明确历史关系询问为 L1，每目标至多 16 条事项、零原文；具体历史经过为 L2，共享预算内至多 2 篇经来源键和修订号复验的摘要。2／3／4+ 人采用 16%／18%／20% 与 4800／5600／6400 Token 上限，并取无记忆 Prompt、输出预留及 Provider 安全余量允许的较小值。 NPC→NPC 的合法定向摘要与索引继续写入，但不因其他 NPC 发言自动进入固定基线。动态历史不回灌为下一轮对话正文，必须逐轮通过玩家意图门禁。Source／Forget／Campaign 失效同步撤销 Engine 快照与 Prompt 前缀，并在实际发送与重试前复核。
 
 无游戏连接时，历史摘要在所选范围内具有唯一可信 Campaign 绑定，可预览后明确确认回填本地 Pair 索引；未绑定或多战役歧义保持只读。此操作不修改原摘要。事项表单按全量数据过滤 `search`、`fromDate`、`toDate`，再分页并按日期排序。回填必须先预览再明确确认，取消确认阶段不写入；Owner 批量执行逐 Pair 处理，显示进度与部分成功／失败，批次取消后保留尚未执行的 Pair。来源查看必须调用后端按 `sourceSummaryKey` 和期望修订号复验后返回当前原文及精确事项指针，在模态框中展示全文并定位经复验的事项；不得根据缓存行、日期、行号或客户端路径跳转，来源已变更时提示刷新。页面人物主标签只用真实姓名；姓名未知显示“姓名未载入”，ID 只用于内部或折叠诊断，来源键等技术字段不作为主标签。
 
-旧 `archiveSidecar` 是惰性归档，运行时不得扫描、读取或写入，原始字节保持不变。Legacy Forget ledger 存放于现有 index，并与摘要 mutation 一起事务提交或回滚。目录改名合并若会包含 Sidecar，则跳过该次合并；纯 Legacy 摘要目录仍可正常读写。Year/Life 历史迁移脚本只可通过 `scripts/archive/v933-year-life` 的显式维护导入使用，不进入 Runtime，V9.3.5 候选不执行该迁移。
+旧 `archiveSidecar` 是惰性归档，运行时不得扫描、读取或写入，原始字节保持不变。Legacy Forget ledger 存放于现有 index，并与摘要 mutation 一起事务提交或回滚。目录改名合并若会包含 Sidecar，则跳过该次合并；纯 Legacy 摘要目录仍可正常读写。Year/Life 历史迁移脚本只可通过 `scripts/archive/v933-year-life` 的显式维护导入使用，不进入 Runtime，V9.3.6 不执行该迁移。
 
-V9.3.5 候选状态见[实施报告](current/v9/V9_3_5_IMPLEMENTATION_REPORT.md)、[验证报告](current/v9/V9_3_5_VERIFICATION_REPORT.md)与[索引和来源合同](current/v9/V9_3_5_INDEX_AND_SOURCE_CONTRACT.md)。最终映射、构建、部署和测试证据以报告为准；真实 CK3、Soak 与远端 CI 待验收，不宣称 Full Freeze，不在报告外预填数量。V9.3.4 的[实施报告](current/v9/V9_3_4_IMPLEMENTATION_REPORT.md)与[验证报告](current/v9/V9_3_4_VERIFICATION_REPORT.md)保留为上一阶段快照。
+V9.3.6 候选状态见[实施报告](current/v9/V9_3_6_IMPLEMENTATION_REPORT.md)、[验证报告](current/v9/V9_3_6_VERIFICATION_REPORT.md)、[Token 与缓存对比](current/v9/V9_3_6_TOKEN_AND_CACHE_COMPARISON.md)、[兼容与退役审计](current/v9/V9_3_6_COMPATIBILITY_AND_RETIREMENT_AUDIT.md)；真实 CK3、Provider、Soak 与远端 CI 单列验收。
 
 ## 历史版本合同与验收快照（以下内容不覆盖 V9.3.5 候选合同）
 

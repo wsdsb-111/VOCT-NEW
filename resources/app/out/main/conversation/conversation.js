@@ -13,6 +13,8 @@ const { verifyActionConfirmation, settleActionResult } = require("../actions/act
 const { readActionCommandReadback } = require("../actions/action-command-readback");
 const { validateGenerationOutcome } = require("../providers/generation-outcome");
 const { planRequestBudget } = require("../providers/request-budget");
+const { PLAYER_CENTERED_RECALL_ENABLED, DEFAULT_MEMORY_BUDGET_POLICY_REVISION,
+  resolveMemoryBudget } = require("../memory-system/memory-budget-policy");
 
 let ActionEngine = null;
 let settingsRepository = null;
@@ -388,7 +390,8 @@ class Conversation {
       : { contextWindow: await llmManager.getCurrentContextLength() || 1e4, maxOutputTokens: 256 };
     const contextLimit = capabilities.contextWindow;
     const memoryRecallStartedAt = Date.now();
-    let memoryContext = await traceOperation(performanceTrace, "memory.recall", { attribution: "MAIN", context: diagnosticsContext }, () => this.getMemoryContextFor(npc, contextLimit));
+    let memoryContext = await traceOperation(performanceTrace, "memory.recall", { attribution: "MAIN", context: diagnosticsContext }, () => this.getMemoryContextFor(npc, contextLimit,
+      { deferPlayerMemory: PLAYER_CENTERED_RECALL_ENABLED }));
     const memoryRecallMs = Date.now() - memoryRecallStartedAt;
     const promptHistory = this.getPromptHistoryForCharacter(npc.id);
     const promptSummary = this.getPromptSummaryForCharacter(npc.id);
@@ -583,9 +586,43 @@ class Conversation {
     for (let attempt = 0; attempt < 8; attempt++) {
       const history = this.getPromptHistoryForCharacter(npc.id);
       const summary = this.getPromptSummaryForCharacter(npc.id);
-      const messages = typeof PromptBuilder.buildMessagesWithTokenCount === "function"
-        ? PromptBuilder.buildMessagesWithTokenCount(history, npc, this.gameData, summary, memoryContext).messages
-        : PromptBuilder.buildMessages(history, npc, this.gameData, summary, memoryContext);
+      const pendingRecall = this.pendingPlayerRecallRequests?.get(Number(npc.id));
+      if (PLAYER_CENTERED_RECALL_ENABLED && pendingRecall) {
+        if (pendingRecall.turnEpoch !== this.turnEpoch || pendingRecall.conversationId !== this.id) throw new Error("memory_player_turn_superseded");
+        const excluded = PromptBuilder.buildMessagesWithTokenCount(history, npc, this.gameData, summary, memoryContext,
+          activeProvider, { memoryMode: "exclude" });
+        const nonMemoryBudget = planRequestBudget({ messages: excluded.messages, capabilities, requestedOutputTokens,
+          countTokens: items => this.estimateTokenCount(items) });
+        const providerHeadroomTokens = Math.max(0, Math.floor((nonMemoryBudget.effectiveInputBudget - nonMemoryBudget.estimatedInputTokens) / 1.1));
+        const memoryBudgetTokens = this.getMemoryTokenBudget(contextLimit, pendingRecall.activeParticipantIds, providerHeadroomTokens);
+        const memoryBudgetPlan = { policyRevision: DEFAULT_MEMORY_BUDGET_POLICY_REVISION,
+          participantCount: this.frozenMemoryBudget.participantCount, contextWindow: contextLimit,
+          nonMemoryInputTokens: nonMemoryBudget.estimatedInputTokens, providerHeadroomTokens, memoryBudgetTokens,
+          reservedOutputTokens: nonMemoryBudget.reservedOutputTokens, safetyMarginTokens: nonMemoryBudget.safetyMarginTokens,
+          protocolOverheadTokens: nonMemoryBudget.protocolOverheadTokens };
+        const retrieved = (applicationServices?.memory || memoryEngine).retrieveForResponder({ ...pendingRecall,
+          tokenBudget: memoryBudgetTokens, memoryBudgetPlan, configurationRevision: capabilities.capabilityRevision || JSON.stringify([
+            capabilities.providerId, capabilities.modelId, capabilities.contextWindow, capabilities.maxOutputTokens]),
+          budgetPolicyRevision: DEFAULT_MEMORY_BUDGET_POLICY_REVISION });
+        if (memoryContext.sourceFolderRevision !== retrieved.sourceFolderRevision) {
+          this.cacheV2FrozenSnapshots?.prefixByResponder?.clear();
+          this.dynamicRecallHistory?.clear();
+          this.memoryState.mentionProfileCache = null;
+        }
+        this.memoryState.sourceFolderRevisions?.set(npc.id, retrieved.sourceFolderRevision);
+        memoryContext = { ...memoryContext, ...retrieved, freezePromptPrefix: this.isV813PrefixEnabled?.() === true,
+          memoryBudgetPlan };
+        usageAnalytics?.record({ requestType: "memory_recall", characterId: npc.id,
+          pairMemoryMetrics: retrieved.pairMemoryMetrics, memoryBudgetPlan: memoryContext.memoryBudgetPlan,
+          turnEpoch: this.turnEpoch }, null);
+      }
+      const built = typeof PromptBuilder.buildMessagesWithTokenCount === "function"
+        ? PromptBuilder.buildMessagesWithTokenCount(history, npc, this.gameData, summary, memoryContext, activeProvider)
+        : { messages: PromptBuilder.buildMessages(history, npc, this.gameData, summary, memoryContext) };
+      const messages = built.messages;
+      if (memoryContext?.playerCenteredRecallEnabled && PromptBuilder.getMemoryBlockTokenCount(built) > memoryContext.tokenBudget) {
+        throw new Error("chat_memory_budget_exceeded");
+      }
       budget = planRequestBudget({ messages, capabilities, requestedOutputTokens, countTokens: (items) => this.estimateTokenCount(items) });
       const rollingState = this.memoryState?.rollingState;
       this.contextBudgetDiagnostics = {
@@ -637,7 +674,19 @@ class Conversation {
     }
     return result;
   }
-  getMemoryTokenBudget(contextLimit, participantIds) {
+  getMemoryTokenBudget(contextLimit, participantIds, providerHeadroomTokens = contextLimit) {
+    if (PLAYER_CENTERED_RECALL_ENABLED) {
+      if (!this.frozenMemoryBudget) {
+        const participantCount = new Set(participantIds.map(Number).filter(id => Number.isSafeInteger(id) && id > 0)).size;
+        const plan = resolveMemoryBudget({ participantCount, contextWindowTokens: contextLimit,
+          providerHeadroomTokens: contextLimit });
+        this.frozenMemoryBudget = { participantCount, ratio: plan.ratio,
+          policyRevision: plan.policyRevision, tokens: plan.policyBudgetTokens };
+      }
+      const plan = resolveMemoryBudget({ participantCount: this.frozenMemoryBudget.participantCount,
+        contextWindowTokens: contextLimit, providerHeadroomTokens });
+      return Math.min(this.frozenMemoryBudget.tokens, plan.memoryBudgetTokens);
+    }
     if (!this.frozenMemoryBudget) {
       const participantCount = new Set(participantIds.map(Number)).size;
       const tier = Math.min(2, Math.max(0, participantCount - 2));
@@ -647,7 +696,7 @@ class Conversation {
     }
     return this.frozenMemoryBudget.tokens;
   }
-  async getMemoryContextFor(npc, contextLimit = null) {
+  async getMemoryContextFor(npc, contextLimit = null, options = {}) {
     if (!memoryEngine || !npc || !this.gameData) return null;
     if (Number(npc.id) === Number(this.gameData.playerID)) return null;
     if (this.isV813PrefixEnabled?.()) await this.worldlinePrefetchPromise;
@@ -689,7 +738,12 @@ class Conversation {
     const mentionableProfiles = memoryState.mentionProfileCache.profiles;
     const currentUserIndex = history.findLastIndex((entry) => entry.role === "user");
     const pairRoute = require("../memory-system/pair-memory-routing").resolveActiveMemoryPairs({
-      ownerId: npc.id, history, activeParticipantIds, playerId: this.gameData.playerID
+      ownerId: npc.id, history, activeParticipantIds, playerId: this.gameData.playerID,
+      campaignToken: this.gameData.campaignToken,
+      currentPlayerMessageId: (this.runtime?.turnManager || this.turnManager)?.currentTurn?.playerMessageId,
+      turnEpoch: this.turnEpoch,
+      conversationId: this.id,
+      sceneRevision: JSON.stringify([this.gameData.scene || null, this.gameData.location || null, this.gameData.locationController || null])
     });
     const query = pairRoute.query || (currentUserIndex >= 0 ? history[currentUserIndex].content || "" : "");
     const assistContext = (currentUserIndex > 0 ? history.slice(Math.max(0, currentUserIndex - 2), currentUserIndex) : []).map((entry) => entry.content || "").filter(Boolean).join("\n");
@@ -715,7 +769,7 @@ class Conversation {
       recentCharacterId: memoryState.mentionState.recentThirdPersonCharacterId
     });
     const queryIdentityUnresolved = memoryEngine.mentionTracker.lastScanUnresolved === true;
-    const retrieved = (applicationServices?.memory || memoryEngine).retrieveForResponder({
+    const retrievalInput = {
       characterId: npc.id,
       query,
       mentionedEntityIds: memory3Settings.v812MemoryEngine3Enabled !== false ? currentTurnMentionedCharacterIds : mentionedCharacterIds,
@@ -725,6 +779,10 @@ class Conversation {
       sessionRecallCache: memoryState.responderRecallCache,
       directCounterpartIds: pairRoute.counterpartIds,
       querySpeakerId: pairRoute.querySpeakerId,
+      trustedPlayerAnchorId: pairRoute.playerAnchorId,
+      trustedPlayerTurn: pairRoute.trustedPlayerTurn,
+      playerCenteredRecallEnabled: PLAYER_CENTERED_RECALL_ENABLED,
+      budgetPolicyRevision: DEFAULT_MEMORY_BUDGET_POLICY_REVISION,
       ownerFolderMemories: memoryState.mentionProfileCache.ownerFolderMemoriesRawById?.get(Number(npc.id))
         || memoryEngine.loadOwnerFolderMemories(npc.id),
       currentGameDate: this.gameData.date,
@@ -740,13 +798,21 @@ class Conversation {
       temporalSummaryRecallEnabled: memory3Settings.v812TemporalSummaryRecallEnabled !== false,
       officialSummary: this.gameData.getOfficialRecollectionSummary?.(npc.id, this.id) || null,
       turnEpoch: this.turnEpoch,
-      tokenBudget: memory3Settings.v812MemoryEngine3Enabled !== false
+      tokenBudget: PLAYER_CENTERED_RECALL_ENABLED || memory3Settings.v812MemoryEngine3Enabled !== false
         ? this.getMemoryTokenBudget(limit, activeParticipantIds)
         : Math.min(2400, Math.max(800, Math.floor(limit * 0.08))),
-      estimateTokens: (text) => TokenCounter.estimateTokens(text)
-    });
+      estimateTokens: (text) => TokenCounter.estimateTokens(text),
+      estimateMessageTokens: (message) => this.estimateMessageTokens(message)
+    };
+    if (!(this.pendingPlayerRecallRequests instanceof Map)) this.pendingPlayerRecallRequests = new Map();
+    if (PLAYER_CENTERED_RECALL_ENABLED) this.pendingPlayerRecallRequests.set(Number(npc.id), retrievalInput);
+    const retrieved = options.deferPlayerMemory && PLAYER_CENTERED_RECALL_ENABLED
+      ? { playerCenteredRecallEnabled: true, sourceFolderRevision, sourceCampaignToken: this.gameData.campaignToken,
+        playerAnchorId: pairRoute.playerAnchorId, conversationId: this.id, routing: {} }
+      : (applicationServices?.memory || memoryEngine).retrieveForResponder(retrievalInput);
     if (retrieved.sourceFolderRevision !== sourceFolderRevision) {
       this.cacheV2FrozenSnapshots?.prefixByResponder?.clear();
+      this.dynamicRecallHistory?.clear();
       memoryState.mentionProfileCache = null;
       memoryState.sourceFolderRevisions.set(npc.id, retrieved.sourceFolderRevision);
     }
@@ -755,7 +821,7 @@ class Conversation {
       const profile = mentionableProfiles.get(characterId) || this.gameData.characters.get(characterId);
       return profile ? memoryEngine.getCharacterMentionAliases(profile) : [];
     });
-    const turnRecall = memory3Settings.v812MemoryEngine3Enabled !== false ? { selected: [], text: null, tokens: 0, reason: "UNIFIED_EXTRA3", triggered: false } : memoryEngine.retrieveTurnRecall({
+    const turnRecall = PLAYER_CENTERED_RECALL_ENABLED || memory3Settings.v812MemoryEngine3Enabled !== false ? { selected: [], text: null, tokens: 0, reason: "UNIFIED_EXTRA3", triggered: false } : memoryEngine.retrieveTurnRecall({
       characterId: npc.id,
       query,
       assistContext,
@@ -770,7 +836,7 @@ class Conversation {
       cache: memoryState.turnRecallCache,
       turnEpoch: this.turnEpoch
     });
-    const thirdPartyEvidence = memory3Settings.v812MemoryEngine3Enabled === false && typeof memoryEngine.retrieveThirdPartyEvidence === "function" ? memoryEngine.retrieveThirdPartyEvidence({
+    const thirdPartyEvidence = !PLAYER_CENTERED_RECALL_ENABLED && memory3Settings.v812MemoryEngine3Enabled === false && typeof memoryEngine.retrieveThirdPartyEvidence === "function" ? memoryEngine.retrieveThirdPartyEvidence({
       characterId: npc.id,
       query,
       mentionedEntityIds: currentTurnMentionedCharacterIds,
@@ -949,6 +1015,7 @@ class Conversation {
       const messageId = Number(message.id);
       return Number(window.joinedAtMessageId ?? 0) <= messageId && (window.leftAtMessageId == null || messageId < Number(window.leftAtMessageId));
     }));
+    if (PLAYER_CENTERED_RECALL_ENABLED) return history;
     const recalls = this.dynamicRecallHistory?.get(Number(characterId));
     if (!recalls) return history;
     const retainedIds = new Set(history.map(message => message.id));
@@ -974,6 +1041,7 @@ class Conversation {
       injectedTokens: Number(block.tokens) || TokenCounter?.estimateTokens?.(text) || Math.ceil(text.length / 2)
     });
     if (!committed.committedCount) return;
+    if (PLAYER_CENTERED_RECALL_ENABLED) return;
     if (!this.dynamicRecallHistory) this.dynamicRecallHistory = new Map();
     if (!this.dynamicRecallHistory.has(Number(characterId))) this.dynamicRecallHistory.set(Number(characterId), new Map());
     this.dynamicRecallHistory.get(Number(characterId)).set(messageId, { text,
@@ -1249,18 +1317,37 @@ class Conversation {
       const thirdPartyEvidenceTokens = promptBlockTokens("third-party-evidence-patch");
       const turnRecallTokens = promptBlockTokens("memory-turn-recall");
       const worldlineTokens = promptBlockTokens("worldline-stable") + promptBlockTokens("worldline-turn-recall");
-      const totalMemoryTokens = promptBlockTokens("memory-stable") + promptBlockTokens("memory-direct-frozen") + mentionedSnapshotTokens + promptBlockTokens("memory-temporal-extra") + promptBlockTokens("memory-session-topic-anchor") + turnRecallTokens + thirdPartyEvidenceTokens;
+      const totalMemoryTokens = promptBlockTokens("memory-stable") + promptBlockTokens("memory-direct-frozen")
+        + promptBlockTokens("memory-official-recollection") + promptBlockTokens("memory-player-ledger-frozen")
+        + mentionedSnapshotTokens + promptBlockTokens("memory-temporal-extra") + promptBlockTokens("memory-session-topic-anchor") + turnRecallTokens + thirdPartyEvidenceTokens;
+      const renderedMemoryTokens = typeof PromptBuilder.getMemoryBlockTokenCount === "function"
+        ? PromptBuilder.getMemoryBlockTokenCount(promptBuild) : totalMemoryTokens;
+      if (memoryContext?.playerCenteredRecallEnabled && renderedMemoryTokens > memoryContext.tokenBudget) throw new Error("chat_memory_budget_exceeded");
       logVerboseLLM(`[Conversation][verbose] Prompt for ${npc.fullName}:`, llmMessages);
       const estimatedTokenCount = traceOperation(performanceTrace, "tokenEstimate", { attribution: "MAIN", context: diagnosticsContext, count: llmMessages.length }, () => this.estimateTokenCount(llmMessages));
       console.log(`[TOKEN_COUNT] Message from ${npc.fullName}:`, estimatedTokenCount);
       const isOpenRouter = activeConfig?.providerType === "openrouter";
-      const result = await llmManager.sendChatRequest(
-        llmMessages,
-        isOpenRouter ? void 0 : controller.signal,
-        void 0,
-        {
+      const chatRequestMetadata = {
           requestType: "chat",
           beforeSendGuard: () => {
+            if (memoryContext?.playerCenteredRecallEnabled) {
+              if (!this.isResponseCurrent(responseState, npc)
+                || memoryContext.sourceSceneRevision != null && memoryContext.sourceSceneRevision !== JSON.stringify([
+                  this.gameData.scene || null, this.gameData.location || null, this.gameData.locationController || null])) {
+                const error = new Error("Memory responder or turn changed before send");
+                error.name = "AbortError";
+                throw error;
+              }
+              const validation = memoryEngine.validatePlayerMemoryContext(memoryContext, this.gameData, this.id);
+              if (!validation.valid) {
+                this.cacheV2FrozenSnapshots?.prefixByResponder?.clear();
+                this.dynamicRecallHistory?.clear();
+                const error = new Error(`Memory source changed before send: ${validation.reason}`);
+                error.name = "AbortError";
+                throw error;
+              }
+              return;
+            }
             if (memoryContext?.sourceFolderRevision != null && (
               memoryEngine.store.getFolderSummaryRevision(npc.id) !== memoryContext.sourceFolderRevision
               || this.gameData.campaignToken !== memoryContext.sourceCampaignToken
@@ -1301,6 +1388,11 @@ class Conversation {
           turnRecallTokens,
           thirdPartyEvidenceTokens,
           totalMemoryTokens,
+          ...(memoryContext?.playerCenteredRecallEnabled ? { renderedMemoryTokens,
+            pairMemoryMetrics: memoryContext.pairMemoryMetrics,
+            memoryBudgetTokens: memoryContext.tokenBudget, memoryBudgetPlan: memoryContext.memoryBudgetPlan,
+            memoryPlayerLedgerTokens: promptBlockTokens("memory-player-ledger-frozen"),
+            memoryOfficialTokens: promptBlockTokens("memory-official-recollection") } : {}),
           worldStableTokens: promptBlockTokens("worldline-stable"),
           worldTurnRecallTokens: promptBlockTokens("worldline-turn-recall"),
           worldlineTokens,
@@ -1315,7 +1407,12 @@ class Conversation {
           activeRawMessageCount: this.getPromptHistoryForCharacter(npc.id).length,
           rollingSegmentCount: this.memoryState?.rollingState?.segments?.length || 0,
           cacheEpoch: this.memoryState?.rollingState?.cacheEpoch || 0
-        }
+      };
+      const result = await llmManager.sendChatRequest(
+        llmMessages,
+        isOpenRouter ? void 0 : controller.signal,
+        void 0,
+        chatRequestMetadata
       );
       let chatCachedTokens = null;
       if (settingsRepository.getGlobalStreamSetting() && typeof result === "object" && typeof result[Symbol.asyncIterator] === "function") {
@@ -1382,7 +1479,7 @@ class Conversation {
           const outcome = validateGenerationOutcome(finalResponse);
           chatCachedTokens = outcome.cachedTokens;
           if (outcome.truncated) {
-            placeholder.content = await this.completeTruncatedResponse(llmMessages, placeholder.content, responseState, npc, diagnosticsContext);
+            placeholder.content = await this.completeTruncatedResponse(llmMessages, placeholder.content, responseState, npc, diagnosticsContext, chatRequestMetadata);
             this.emitUpdate();
           } else if (!outcome.complete) {
             throw new Error(`chat_generation_incomplete:${outcome.finishReason || "unknown"}`);
@@ -1407,7 +1504,7 @@ class Conversation {
         chatCachedTokens = outcome.cachedTokens;
         if (!outcome.complete && !outcome.truncated) throw new Error(`chat_generation_incomplete:${outcome.finishReason || "unknown"}`);
         placeholder.content = outcome.truncated
-          ? await this.completeTruncatedResponse(llmMessages, result.content, responseState, npc, diagnosticsContext)
+          ? await this.completeTruncatedResponse(llmMessages, result.content, responseState, npc, diagnosticsContext, chatRequestMetadata)
           : result.content;
         placeholder.streamStatus = "generating";
         this.emitUpdate();
@@ -1461,7 +1558,7 @@ class Conversation {
     }
     await this.handleActionResults(npcMessageId, npc, actionResults);
   }
-  async completeTruncatedResponse(originalMessages, partialContent, responseState, npc, diagnosticsContext = null) {
+  async completeTruncatedResponse(originalMessages, partialContent, responseState, npc, diagnosticsContext = null, initialRequestMetadata = {}) {
     if (!partialContent?.trim()) throw new Error("chat_generation_truncated_without_content");
     const continuationMessages = [
       ...originalMessages,
@@ -1469,6 +1566,7 @@ class Conversation {
       { role: "user", content: "请从刚才截断的位置继续完成上一条回复，不要重复已写内容。" }
     ];
     const response = await llmManager.sendChatRequest(continuationMessages, responseState.controller.signal, true, {
+      ...initialRequestMetadata,
       requestType: "chat_continuation",
       conversationId: this.id,
       responderId: npc.id,
@@ -2051,6 +2149,9 @@ class Conversation {
   end() {
     this.isActive = false;
     this.clearHistory();
+    this.pendingPlayerRecallRequests?.clear();
+    this.frozenMemoryBudget = null;
+    if (PLAYER_CENTERED_RECALL_ENABLED) memoryEngine?.invalidateConversationRecallState(this);
   }
   // Emit conversation update event
   emitUpdate() {

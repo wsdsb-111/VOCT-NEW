@@ -1,6 +1,9 @@
 # VOTC 版本变更入口
 
-V9.3.5 Pair Memory Index 候选（施工与验收中）：[实施报告](docs/current/v9/V9_3_5_IMPLEMENTATION_REPORT.md)、[验证报告](docs/current/v9/V9_3_5_VERIFICATION_REPORT.md)、[索引与来源合同](docs/current/v9/V9_3_5_INDEX_AND_SOURCE_CONTRACT.md)。合同为 Recent1 + 本地 Owner→Counterpart Pair 事项索引，并按已验证来源定位 1–2 篇确切 Legacy 摘要；Temporal 与 Mentioned 各自最多 3 项，共享 10%／12.5%／15% 与 3600／4500／5400 Token 总预算。不新增模型提取请求；Durable、Year/Life 生成和后台重建继续退役。映射、构建及验收状态以报告为准；CK3、Soak 与远端 CI 尚未签署，不宣称 Full Freeze。
+V9.3.6 玩家中心记忆发布候选：[实施报告](docs/current/v9/V9_3_6_IMPLEMENTATION_REPORT.md)、[验证报告](docs/current/v9/V9_3_6_VERIFICATION_REPORT.md)、[Token 与缓存对比](docs/current/v9/V9_3_6_TOKEN_AND_CACHE_COMPARISON.md)、[兼容与退役审计](docs/current/v9/V9_3_6_COMPATIBILITY_AND_RETIREMENT_AUDIT.md)。每位回应 NPC 的固定历史只锚定当前玩家：最近 1 篇 Legacy、合法官方追忆、预算内尽量完整的玩家关系事项簿。固定文本首次构造后冻结；第三人仅提名为 L0，不读取其历史索引或原文；明确历史关系询问为 L1，每目标至多 16 条事项、零原文；具体历史经过为 L2，共享预算内至多 2 篇经来源键和修订号复验的摘要。2／3／4+ 人采用 16%／18%／20% 与 4800／5600／6400 Token 上限，并取无记忆 Prompt、输出预留及 Provider 安全余量允许的较小值。保持 NPC→NPC 定向摘要写入、Legacy、Forget、信件、官方行动及世界线合同。实机、真实 Provider、Soak、远端 CI 单列待验收。
+
+
+历史 V9.3.5 Pair Memory Index 候选：[实施报告](docs/current/v9/V9_3_5_IMPLEMENTATION_REPORT.md)、[验证报告](docs/current/v9/V9_3_5_VERIFICATION_REPORT.md)、[索引与来源合同](docs/current/v9/V9_3_5_INDEX_AND_SOURCE_CONTRACT.md)。合同为 Recent1 + 本地 Owner→Counterpart Pair 事项索引，并按已验证来源定位 1–2 篇确切 Legacy 摘要；Temporal 与 Mentioned 各自最多 3 项，共享 10%／12.5%／15% 与 3600／4500／5400 Token 总预算。不新增模型提取请求；Durable、Year/Life 生成和后台重建继续退役。映射、构建及验收状态以报告为准；CK3、Soak 与远端 CI 尚未签署，不宣称 Full Freeze。
 
 历史 V9.3.4 Durable 完全退役与 Legacy Summary：[实施报告](docs/current/v9/V9_3_4_IMPLEMENTATION_REPORT.md)、[验证报告](docs/current/v9/V9_3_4_VERIFICATION_REPORT.md)。当时 Recent2、官方追忆候选及 Extra 的配额仅保留为该版本验收快照，不代表 V9.3.5 候选合同。Workshop 2.0.5、Official Action 2.0.3、协议 3.0 与存储 2.5 保持；Durable 生产读写及 Year/Life 生成已退役。
 
@@ -10,7 +13,7 @@ V9.3.5 Pair Memory Index 候选（施工与验收中）：[实施报告](docs/cu
 
 历史 V9.3.2（2026-10-13）：修复 Durable 无效生成、输入膨胀及重复恢复；修正取消/多 Effect 派发证据，Core/UI/App 同步为 9.3.2。详见[实施](docs/current/v9/V9_3_2_IMPLEMENTATION_REPORT.md)和[验证](docs/current/v9/V9_3_2_VERIFICATION_REPORT.md)。
 
-这里是版本变更的单一入口。除最上方 V9.3.5 候选条目外，以下内容均按当时版本保留为历史快照。详细设计和测试证据保留在链接目标中，本文件只维护版本顺序、用户可见摘要和文档索引。
+这里是版本变更的单一入口。除最上方 V9.3.6 候选条目外，以下内容均按当时版本保留为历史快照。详细设计和测试证据保留在链接目标中，本文件只维护版本顺序、用户可见摘要和文档索引。
 
 历史 V9.3.1修复候选：[实施](docs/current/v9/V9_3_1_IMPLEMENTATION_REPORT.md)、[验证](docs/current/v9/V9_3_1_VERIFICATION_REPORT.md)、[台账](docs/current/v9/V9_3_1_P_ISSUE_LEDGER.md)。Gemini原生缓存／思考及总量正确保留，候选输出不重复扣思考，部分流尾帧不丢已知用量；Action失败不误标已接受，并保留真实命令的待回执入口。无新API调用，正式App/UI仍9.2.0/V9.2，CI／CK3／Soak单独验收。
 

@@ -2,7 +2,7 @@
 
 ## 项目定位与结构
 
-本仓库是面向 Crusader Kings III 的 Windows 打包版 VOTC Electron 应用。当前文档入口跟踪 V9.3.5 Pair Memory Index 候选；实施、验证及索引与来源合同见 [实施报告](docs/current/v9/V9_3_5_IMPLEMENTATION_REPORT.md)、[验证报告](docs/current/v9/V9_3_5_VERIFICATION_REPORT.md)和[合同文档](docs/current/v9/V9_3_5_INDEX_AND_SOURCE_CONTRACT.md)。候选仍在施工与验收阶段，映射、构建、部署和门禁证据按报告更新；真实 CK3、Soak 和远端 CI 尚待验收，不能宣称 Full Freeze。V9.3.4 报告保留为历史证据。
+本仓库是面向 Crusader Kings III 的 Windows 打包版 VOTC Electron 应用。当前文档入口跟踪 V9.3.6 玩家中心记忆 候选；实施、验证及索引与来源合同见 [实施报告](docs/current/v9/V9_3_6_IMPLEMENTATION_REPORT.md)、[验证报告](docs/current/v9/V9_3_6_VERIFICATION_REPORT.md)和[合同文档](docs/current/v9/V9_3_5_INDEX_AND_SOURCE_CONTRACT.md)。候选仍在施工与验收阶段，映射、构建、部署和门禁证据按报告更新；真实 CK3、Soak 和远端 CI 尚待验收，不能宣称 Full Freeze。V9.3.4 报告保留为历史证据。
 
 历史 V9.2.1 缓存专项曾作为安全／诊断候选，证据见 docs/current/v9/V9_2_1_VERIFICATION_REPORT.md。其 Durable Policy、Forget 和 GLM v813 结论仅代表当时状态；Durable 已由 V9.3.4 彻底退役。V9.2 6026713 的远端 CI 成功记录继续保留为历史证据。
 
@@ -13,20 +13,20 @@
 - resources/app/default_userdata/ 保存默认 Prompt、本地化和标准 Action；它不是用户运行时数据目录。
 - scripts/ 保存迁移工具、专项回归和发布门禁；scripts/test-manifest.js 是测试清单的唯一编排入口。
 - docs/README.md 是文档入口，docs/V8阶段开发记录.md 是 V8 连续实施记录，docs/README_摘要系统.md 是摘要/Memory 合同；根目录 CHANGELOG.md 只维护版本索引和用户可见摘要。
-- VOTC.exe 是复用打包壳，Windows 文件属性版本未重写。V9.3.5 是候选而非验收完成声明；正式项目／核心、App 包与 UI 版本号以包元数据和最终报告为准。前端记忆入口显示 `Legacy Summary`；Workshop 2.0.5、协议 3.0、摘要存储 2.5 与 Official Action 2.0.3 保持。Memory Engine 4.0 不再是在线功能标签。
+- VOTC.exe 是复用打包壳，Windows 文件属性版本未重写。V9.3.6 是候选而非验收完成声明；正式项目／核心、App 包与 UI 版本号以包元数据和最终报告为准。前端记忆入口显示 `Legacy Summary`；Workshop 2.0.5、协议 3.0、摘要存储 2.5 与 Official Action 2.0.3 保持。Memory Engine 4.0 不再是在线功能标签。
 
-## 当前生产基线与 V9.3.5 候选合同
+## 当前生产基线与 V9.3.6 候选合同
 
 - V9.3 Provider Platform 候选合同见 docs/current/v9/V9_3_VERIFICATION_REPORT.md。Chat/Action/Summary 统一 Facade；能力 UNKNOWN 保留证据，明确 UNSUPPORTED 发送前阻止；只有 STOP/COMPLETE 进入严格业务。SDK 隐式重试为 0，显式生成最多 2 次且未知送达／部分流不透明重发；每次真实 transport 前复核 Forget/来源及同步预算。原生用量与估算分开，缺失字段不可当 0，非法字段不可被 DERIVED 掩盖。此 Provider 记录不恢复已退役的 Durable 写入。
 
-- V9.3.5 候选 Legacy Summary 合同：直接关系使用 Recent1 与本地 Owner→Counterpart Pair 事项索引；索引命中后按后端复验的来源键和修订号召回 1–2 篇确切 Legacy 来源摘要，不按缓存行、日期或客户端路径盲跳。Temporal 与 Mentioned 各自最多 3 项；所有召回共享会话首次生成时冻结的总输入预算：2／3／4+ 人分别为上下文 10%／12.5%／15%，上限 3600／4500／5400 Token，取较小值并预留 Provider 安全余量。本地确定性索引不增加模型提取请求；Durable、Year/Life 生成与后台重建继续退役。
+- V9.3.6 Legacy Summary 合同：每位回应 NPC 的固定历史只锚定当前玩家：最近 1 篇 Legacy、合法官方追忆、预算内尽量完整的玩家关系事项簿。固定文本首次构造后冻结；第三人仅提名为 L0，不读取其历史索引或原文；明确历史关系询问为 L1，每目标至多 16 条事项、零原文；具体历史经过为 L2，共享预算内至多 2 篇经来源键和修订号复验的摘要。2／3／4+ 人采用 16%／18%／20% 与 4800／5600／6400 Token 上限，并取无记忆 Prompt、输出预留及 Provider 安全余量允许的较小值。保持 NPC→NPC 合法定向写入；Legacy 是叙事来源，事项为本地派生索引。不新增模型提取或检索请求；Durable／Year／Life 继续退役。
 - 旧 `archiveSidecar` 是惰性归档：生产运行时不得扫描、读取或写入，原始字节保留。Legacy Forget ledger 只写入现有 index，并随现有摘要事务提交或回滚。若改名目录合并会包含旧 Sidecar，则跳过合并；不影响纯 Legacy 摘要的正常读写。
-- Year/Life 历史迁移工具只可通过 `scripts/archive/v933-year-life` 下的显式维护导入使用，不属于 Runtime；V9.3.5 候选不执行该迁移。
+- Year/Life 历史迁移工具只可通过 `scripts/archive/v933-year-life` 下的显式维护导入使用，不属于 Runtime；V9.3.6 候选不执行该迁移。
 
 - 页面人物主标签必须使用摘要、IPC 或当前人物资料中的真实姓名；姓名不可知时显示“姓名未载入”等提示。ID 只用于内部关联或折叠诊断，不显示成主标签，不用数字 fallback；同名不同 ID 仍保持身份隔离。
 - Pair 回填必须先生成预览，再由用户明确确认；取消确认不写入。Owner 批量操作只覆盖当前 Owner，逐 Pair 应用并显示进度与部分结果。来源查看通过后端以 source key 和期望 revision 复验后返回当前原文；过期来源须提示刷新。
 - 无游戏连接时，历史 Legacy 来源在所选范围内有唯一可信 Campaign 绑定，可预览后明确确认回填本地 Pair 派生索引；单 Pair 按该 Pair 判定，Owner 批量按整个 Owner 判定。未绑定／多战役歧义保持只读，不改原摘要；旧 `archiveSidecar` 仍逐字节保留，运行时不扫描、读取或写入。
-- 历史 V9.2.3 候选曾退役 Year/Life 自动模型生成及后台重建；其 Durable、Detail 与 Recovery 约束不覆盖 V9.3.5 候选。旧 Recovery 和其他 Campaign 的历史数据仍不得因文档更新而删除。
+- 历史 V9.2.3 候选曾退役 Year/Life 自动模型生成及后台重建；其 Durable、Detail 与 Recovery 约束不覆盖 V9.3.6 候选。旧 Recovery 和其他 Campaign 的历史数据仍不得因文档更新而删除。
 
 - V8.8.4 动作区分 QUEUED、ACKNOWLEDGED 与 CONFIRMED。NPC 列表不含玩家，玩家绑定 root；金币/好感度以同命令 BEGIN—ACK 的真实前后状态确认。游戏侧同命令去重和旧会话零写入隔离不可移除；其他动作只有 ACK 时不宣称效果成功。
 - V8.8.5 排队 TTL 归 RunFileManager，ACK 计时从实际写入开始；`votc.txt` 必须以 UTF-8 BOM 临时文件原子替换。新动作可在载体已安全清空后隔离旧 STALLED 动作，但绝不重放未知效果。多个金额不做确定性覆盖，好感度确认前不能使用成功文案。DeepSeek 两项 Action 优化默认开启且可关闭；OpenAI-compatible 提供 Action Schema 标准/兼容传输模式。独立 `zhipu` Provider 的 GLM 推理强度和 `clear_thinking` 不得与 DeepSeek 专属配置交叉；缓存/推理 Token 必须先归一化。流式 Provider 必须保留 usage-only 尾块，Gemini `usageMetadata` 统一记账；端点不返回 usage 时只能记录明确标记的估算 Token。空年龄保持未知；扩展亲属依赖实际家谱，伯叔与父亲比较长幼，堂表亲与主体比较长幼，旧英文模板只做动态事实接入、不扩充动作参与者。
@@ -100,7 +100,7 @@ test-release.js 通过 test-manifest.js 汇总直接和嵌套检查；新增 tes
 - Spawn subagents only when the work is genuinely parallelizable or delegation materially improves speed or context management.
 - Keep delegated tasks narrow and concrete; have child agents return concise evidence, paths, symbols, and conclusions.
 
-## V9.2 历史施工约束（仅记录当时版本，不覆盖 V9.3.5 候选合同）
+## V9.2 历史施工约束（仅记录当时版本，不覆盖 V9.3.6 候选合同）
 
 用户授权的改名目录合并只按数字 Owner ID 归并、按 counterpart ID 定位对话文件；保持不同 Campaign、Legacy binding ID、手改和 Forget。先逐字节备份至 MemoryStore baseDir/renamed-summary-folders（不参与召回），共享 sidecar 冲突时保留原目录并阻止合并。目录创建/移除继续使用 version 1 summary mutation journal 恢复。不得用名字合并不同 ID。
 

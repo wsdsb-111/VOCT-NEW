@@ -1,5 +1,7 @@
 "use strict";
 
+const { projectPlayerMemoryDiagnostics } = require("./player-memory-diagnostics");
+
 class MemoryTrace {
   constructor({ logger = console, maxEntries = 500 } = {}) {
     this.logger = logger;
@@ -8,6 +10,17 @@ class MemoryTrace {
   }
 
   record(stage, details = {}) {
+    if (stage === "player_memory_retrieval") {
+      const safe = {
+        timestamp: new Date().toISOString(),
+        stage,
+        playerMemory: projectPlayerMemoryDiagnostics(details)
+      };
+      this.entries.push(safe);
+      if (this.entries.length > this.maxEntries) this.entries.shift();
+      this.logger?.log?.(`[MemoryTrace] ${stage}`, safe);
+      return safe;
+    }
     const derivedStage = ["memory4_derived", "memory4_legacy_recompression"].includes(stage);
     if (derivedStage) details = Object.fromEntries(["ownerId", "status", "kind", "count", "indexRevision", "derivedRevision", "sourceHash", "durationMs", "errorCode", "eventYear", "quality"]
       .map(key => [key, details[key]]));

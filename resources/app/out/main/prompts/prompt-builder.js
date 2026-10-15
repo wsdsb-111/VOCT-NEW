@@ -5,6 +5,7 @@ const { resolveProviderPromptProfile, resolvePromptLayoutId } = require("./provi
 const { createStableProfile, createLiveProfile, buildStableKinship, formatStableProfile, formatStableKinship, formatLiveProfile } = require("./character-profile-v2");
 const { buildHistoricalReferenceReplacement } = require("../worldline/subjective-prompt-context");
 const { currentRelationship } = require("../memory-system/entity-context");
+const { isMemoryBudgetBlock } = require("../memory-system/memory-budget-policy");
 const { parseRelationIntent } = require("../worldline/relation-intent-parser");
 const { createTraitProfileView } = require("./trait-profile-selector");
 
@@ -16,6 +17,8 @@ const PROMPT_LIFECYCLE = Object.freeze({
   RESPONDER_FROZEN: "RESPONDER_FROZEN",
   DYNAMIC: "DYNAMIC"
 });
+// Match the marginal per-message protocol overhead used by planRequestBudget.
+const PROMPT_MESSAGE_OVERHEAD_TOKENS = 8;
 
 function createPromptBuilder({
   TemplateEngine,
@@ -57,6 +60,68 @@ function createPromptBuilder({
       const key = String(character.id);
       if (!cache.has(key)) cache.set(key, JSON.parse(this.stableStringify(character)));
       return cache.get(key);
+    }
+    static createMemoryExcludedContext(memoryContext) {
+      if (!memoryContext || typeof memoryContext !== "object") return memoryContext;
+      const worldlineKeys = [
+        "historicalReferenceInfo", "historicalWorldText", "coveragePatchText", "recentWorldText",
+        "worldStableText", "worldTopicText", "worldSupplementalText", "worldCurrentText", "worldTurnRecallText"
+      ];
+      const excluded = {
+        activeParticipantIds: memoryContext.activeParticipantIds,
+        subjectiveWorldPolicyActive: memoryContext.subjectiveWorldPolicyActive,
+        campaignToken: memoryContext.campaignToken,
+        disclosureProfiles: memoryContext.disclosureProfiles instanceof Map ? new Map(memoryContext.disclosureProfiles) : memoryContext.disclosureProfiles,
+        presenceText: memoryContext.presenceText,
+        confirmedActionText: memoryContext.confirmedActionText,
+        cacheV2FrozenSnapshots: null
+      };
+      for (const key of worldlineKeys) {
+        if (memoryContext[key] !== undefined) excluded[key] = memoryContext[key];
+      }
+      const cache = memoryContext.cacheV2FrozenSnapshots;
+      if (cache && typeof cache === "object") {
+        excluded.cacheV2FrozenSnapshots = {
+          ...cache,
+          conversation: cache.conversation ? { ...cache.conversation } : null,
+          responders: cache.responders instanceof Map ? new Map(cache.responders) : cache.responders,
+          prefixByResponder: null
+        };
+      }
+      for (const key of ["stableProfileCache", "stableDescriptionCache"]) {
+        if (memoryContext[key] instanceof Map) excluded[key] = new Map(memoryContext[key]);
+      }
+      return excluded;
+    }
+    static getFrozenPrefixScopeSignature(char, memoryContext) {
+      const pairIds = memoryContext?.sourcePairIds;
+      const responderId = char?.id;
+      const playerAnchorId = memoryContext?.playerAnchorId;
+      const requiredStrings = [
+        memoryContext?.baselineSnapshotId,
+        memoryContext?.sourceCampaignToken,
+        memoryContext?.budgetPolicyRevision,
+        memoryContext?.conversationId
+      ];
+      const sourceFolderRevision = memoryContext?.sourceFolderRevision;
+      if (!["string", "number"].includes(typeof responderId) || typeof responderId === "number" && !Number.isFinite(responderId)
+        || !["string", "number"].includes(typeof playerAnchorId) || typeof playerAnchorId === "number" && !Number.isFinite(playerAnchorId)
+        || !Array.isArray(pairIds)
+        || pairIds.some((id) => id == null || !["string", "number"].includes(typeof id) || typeof id === "number" && !Number.isFinite(id))
+        || requiredStrings.some((value) => typeof value !== "string" || !value.trim())
+        || !(typeof sourceFolderRevision === "string" && sourceFolderRevision.trim()
+          || typeof sourceFolderRevision === "number" && Number.isSafeInteger(sourceFolderRevision) && sourceFolderRevision >= 0)) return null;
+      const scope = {
+        responderId: String(responderId),
+        playerAnchorId: String(playerAnchorId),
+        baselineSnapshotId: memoryContext.baselineSnapshotId,
+        sourceFolderRevision,
+        sourceCampaignToken: memoryContext.sourceCampaignToken,
+        sourcePairIds: pairIds.map(String).sort(),
+        budgetPolicyRevision: memoryContext.budgetPolicyRevision,
+        conversationId: memoryContext.conversationId
+      };
+      return createPromptFingerprint(this.stableStringify(scope));
     }
     static buildSummaryCacheAnchor() {
       return `VOTC_SUMMARY_CACHE_ANCHOR_v1
@@ -472,6 +537,7 @@ function createPromptBuilder({
           break;
         }
         case "memories": {
+          if (baseContext.memoryContext?.playerCenteredRecallEnabled === true) break;
           if (baseContext.memoryContext?.engineVersion?.startsWith("3.") && baseContext.memoryContext.memoryEngine3Enabled !== false) break;
           const memoriesBlock = this.buildMemoriesBlock(gameData, character, block.limit ?? 5, block.template, baseContext);
           if (memoriesBlock) {
@@ -480,6 +546,7 @@ function createPromptBuilder({
           break;
         }
         case "past_summaries": {
+          if (baseContext.memoryContext?.playerCenteredRecallEnabled === true) break;
           if (["2.", "3."].some((prefix) => baseContext.memoryContext?.engineVersion?.startsWith(prefix))) break;
           const pastSummaries = this.buildPastSummariesContext(character, gameData);
           if (pastSummaries) {
@@ -525,7 +592,9 @@ function createPromptBuilder({
     /**
      * Build messages with token counting for preview
      */
-    static buildMessagesWithTokenCount(history, char, gameData, currentSessionSummary, memoryContext = null, providerConfig = null) {
+    static buildMessagesWithTokenCount(history, char, gameData, currentSessionSummary, memoryContext = null, providerConfig = null, options = {}) {
+      const memoryMode = options?.memoryMode;
+      if (memoryMode === "exclude") memoryContext = this.createMemoryExcludedContext(memoryContext);
       const profileView = createTraitProfileView(gameData, char, memoryContext);
       gameData = profileView.gameData;
       char = profileView.character;
@@ -641,7 +710,16 @@ function createPromptBuilder({
       const directMemoryBlock = {
         id: "memory-direct-frozen",
         type: "memory_direct_frozen",
-        label: "Frozen Direct Relationship Memory",
+        label: "Recent1 Direct Relationship Memory",
+        enabled: true,
+        role: "system",
+        stable: !glmCacheV2,
+        lifecycle: glmCacheV2 ? PROMPT_LIFECYCLE.DYNAMIC : null
+      };
+      const playerLedgerFrozenBlock = {
+        id: "memory-player-ledger-frozen",
+        type: "memory_player_ledger_frozen",
+        label: "Frozen Player Ledger",
         enabled: true,
         role: "system",
         stable: !glmCacheV2,
@@ -698,9 +776,11 @@ function createPromptBuilder({
         cacheV2FrozenInserted = true;
         const prefixCache = v813Layout ? memoryContext?.cacheV2FrozenSnapshots?.prefixByResponder : null;
         const responderKey = String(char?.id ?? "");
+        const scopeSignature = this.getFrozenPrefixScopeSignature(char, memoryContext);
         let frozenText = {
           officialRecollection: memoryContext?.officialRecollectionText,
           directMemory: memoryContext?.directStableText,
+          playerLedger: memoryContext?.playerLedgerFrozenText,
           stableMemory: memoryContext?.stableText,
           mentionedSnapshot: memoryContext?.mentionedSnapshotText,
           worldStable: memoryContext?.worldStableText,
@@ -710,8 +790,15 @@ function createPromptBuilder({
           worldRecall: memoryContext?.worldTurnRecallText
         };
         if (prefixCache instanceof Map && responderKey) {
-          if (!prefixCache.has(responderKey) && memoryContext?.freezePromptPrefix !== false) prefixCache.set(responderKey, { ...frozenText });
-          frozenText = prefixCache.get(responderKey) || frozenText;
+          if (!scopeSignature || memoryContext?.freezePromptPrefix === false) {
+            prefixCache.delete(responderKey);
+          } else {
+            const cachedPrefix = prefixCache.get(responderKey);
+            if (!cachedPrefix || cachedPrefix.scopeSignature !== scopeSignature) {
+              prefixCache.set(responderKey, { ...frozenText, scopeSignature });
+            }
+            frozenText = prefixCache.get(responderKey) || frozenText;
+          }
         }
         const frozenBlocks = [
           {
@@ -734,6 +821,10 @@ function createPromptBuilder({
           {
             block: { ...directMemoryBlock, stable: true, lifecycle: PROMPT_LIFECYCLE.RESPONDER_FROZEN },
             content: frozenText.directMemory
+          },
+          {
+            block: { ...playerLedgerFrozenBlock, stable: true, lifecycle: PROMPT_LIFECYCLE.RESPONDER_FROZEN },
+            content: frozenText.playerLedger
           },
           {
             block: { ...stableMemoryBlock, stable: true, lifecycle: PROMPT_LIFECYCLE.RESPONDER_FROZEN },
@@ -774,20 +865,28 @@ function createPromptBuilder({
             tokens: TokenCounter.estimateTokens(memoryContext.officialRecollectionText)
           });
         }
-        if (memoryContext?.stableText) {
-          llmMessages.push({ role: "system", content: memoryContext.stableText });
-          blocksWithTokens.push({
-            block: stableMemoryBlock,
-            content: memoryContext.stableText,
-            tokens: TokenCounter.estimateTokens(memoryContext.stableText)
-          });
-        }
         if (memoryContext?.directStableText) {
           llmMessages.push({ role: "system", content: memoryContext.directStableText });
           blocksWithTokens.push({
             block: directMemoryBlock,
             content: memoryContext.directStableText,
             tokens: TokenCounter.estimateTokens(memoryContext.directStableText)
+          });
+        }
+        if (memoryContext?.playerLedgerFrozenText) {
+          llmMessages.push({ role: "system", content: memoryContext.playerLedgerFrozenText });
+          blocksWithTokens.push({
+            block: playerLedgerFrozenBlock,
+            content: memoryContext.playerLedgerFrozenText,
+            tokens: TokenCounter.estimateTokens(memoryContext.playerLedgerFrozenText)
+          });
+        }
+        if (memoryContext?.stableText) {
+          llmMessages.push({ role: "system", content: memoryContext.stableText });
+          blocksWithTokens.push({
+            block: stableMemoryBlock,
+            content: memoryContext.stableText,
+            tokens: TokenCounter.estimateTokens(memoryContext.stableText)
           });
         }
         if (memoryContext?.mentionedSnapshotText) {
@@ -852,6 +951,9 @@ function createPromptBuilder({
       const v813FrozenBlockCount = v813Layout ? blocksWithTokens.length : 0;
       for (const block of blocks) {
         if (!block.enabled) continue;
+        if (memoryMode === "exclude" && (String(block.id || "").startsWith("memory-")
+          || String(block.type || "").startsWith("memory_")
+          || ["memories", "past_summaries"].includes(block.type))) continue;
         if (["past_summaries", "memories", "rolling_summary"].includes(block.type)) {
           deferredContextBlocks.push(block);
           continue;
@@ -895,7 +997,8 @@ function createPromptBuilder({
           responderGameFacts,
           responderGameFactsBlock,
           responderFamilyFacts,
-          responderFamilyFactsBlock
+          responderFamilyFactsBlock,
+          memoryMode
         });
         if (Array.isArray(result)) {
           blocksWithTokens.push(...result);
@@ -970,6 +1073,15 @@ function createPromptBuilder({
         declaredStaticTokens,
         dynamicTailTokens: blocksWithTokens.slice(firstDynamicBlock < 0 ? blocksWithTokens.length : firstDynamicBlock).reduce((total, tokenBlock) => total + (Number(tokenBlock.tokens) || 0), 0)
       };
+    }
+    static getMemoryBlockTokenCount(promptBuild) {
+      return (Array.isArray(promptBuild?.blocks) ? promptBuild.blocks : []).reduce((total, entry) => {
+        if (!isMemoryBudgetBlock(entry?.block)) return total;
+        const message = { role: "system", content: String(entry?.content || "") };
+        const estimatedTokens = typeof TokenCounter.estimateMessageTokens === "function"
+          ? TokenCounter.estimateMessageTokens(message) : TokenCounter.estimateTokens(message.content);
+        return total + Math.max(Number(entry?.tokens) || 0, Number(estimatedTokens) || 0) + PROMPT_MESSAGE_OVERHEAD_TOKENS;
+      }, 0);
     }
     /**
      * Apply a single block with token counting.
@@ -1119,6 +1231,8 @@ function createPromptBuilder({
           break;
         }
         case "memories": {
+          if (options.memoryMode === "exclude") break;
+          if (baseContext.memoryContext?.playerCenteredRecallEnabled === true) break;
           if (baseContext.memoryContext?.engineVersion?.startsWith("3.") && baseContext.memoryContext.memoryEngine3Enabled !== false) break;
           try {
             const memoriesBlock = this.buildMemoriesBlock(gameData, character, block.limit ?? 5, block.template, baseContext);
@@ -1133,6 +1247,8 @@ function createPromptBuilder({
           break;
         }
         case "past_summaries": {
+          if (options.memoryMode === "exclude") break;
+          if (baseContext.memoryContext?.playerCenteredRecallEnabled === true) break;
           if (["2.", "3."].some((prefix) => baseContext.memoryContext?.engineVersion?.startsWith(prefix))) break;
           const pastSummaries = this.buildPastSummariesContext(character, gameData);
           if (pastSummaries) {
@@ -1192,7 +1308,7 @@ function createPromptBuilder({
           };
           const appendConfiguredContext = (configuredBlocks = []) => {
             for (const configuredBlock of configuredBlocks) {
-              const result = this.applyBlockWithTokenCount(configuredBlock, messages, history, baseContext, promptSettings);
+              const result = this.applyBlockWithTokenCount(configuredBlock, messages, history, baseContext, promptSettings, { memoryMode: options.memoryMode });
               for (const entry of Array.isArray(result) ? result : result ? [result] : []) {
                 tokenBlocks.push({ ...entry, block: { ...entry.block, stable: false, lifecycle: PROMPT_LIFECYCLE.DYNAMIC } });
               }

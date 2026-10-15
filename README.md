@@ -4,7 +4,7 @@ Voices of the Court 是一个面向《Crusader Kings III》（CK3）的沉浸式
 
 本仓库保存 VOTC 的可编辑 JavaScript 源、可重复生成的运行资源、既有 Windows 壳与锁定依赖，适合运行、开发与回归验证。
 
-当前文档入口为 **V9.3.5 Pair Memory Index 候选（施工与验收中）**：[实施报告](docs/current/v9/V9_3_5_IMPLEMENTATION_REPORT.md)、[验证报告](docs/current/v9/V9_3_5_VERIFICATION_REPORT.md)、[索引与来源合同](docs/current/v9/V9_3_5_INDEX_AND_SOURCE_CONTRACT.md)。候选在 Legacy `Recent1` 之外使用 Owner→Counterpart 本地 Pair 事项索引，并按已验证的来源键和修订号读取 1–2 篇确切 Legacy 来源摘要；Temporal 与 Mentioned 各自最多选 3 项，所有输入共同受 2／3／4+ 人对应 10%／12.5%／15% 上限及 3600／4500／5400 Token 总预算约束，并保留 Provider 安全余量。不新增模型提取请求；Durable、Year/Life 生成与后台重建继续退役。V9.3.5 尚未完成发布验收；真实 CK3、Soak、远端 CI 和最终构建证据以报告为准，不据此宣称 Full Freeze。V9.3.4 保留为历史基线。
+当前为 **Core／App／UI V9.3.6 发布候选**：[实施报告](docs/current/v9/V9_3_6_IMPLEMENTATION_REPORT.md)、[验证报告](docs/current/v9/V9_3_6_VERIFICATION_REPORT.md)、[Token 与缓存对比](docs/current/v9/V9_3_6_TOKEN_AND_CACHE_COMPARISON.md)、[兼容与退役审计](docs/current/v9/V9_3_6_COMPATIBILITY_AND_RETIREMENT_AUDIT.md)。每位回应 NPC 的固定历史只锚定当前玩家：最近 1 篇 Legacy、合法官方追忆、预算内尽量完整的玩家关系事项簿。固定文本首次构造后冻结；第三人仅提名为 L0，不读取其历史索引或原文；明确历史关系询问为 L1，每目标至多 16 条事项、零原文；具体历史经过为 L2，共享预算内至多 2 篇经来源键和修订号复验的摘要。2／3／4+ 人采用 16%／18%／20% 与 4800／5600／6400 Token 上限，并取无记忆 Prompt、输出预留及 Provider 安全余量允许的较小值。不新增模型检索或提取请求；Durable、Year/Life 与旧 Sidecar 保持退役边界。真实 CK3、Provider、Soak 与最终 SHA 远端 CI 尚待验收，不宣称 Full Freeze。V9.3.5 及更早报告保留为历史证据。
 
 历史基线 **V9.2 应用边界与 JSON 仓储**（2026-10-11）：[施工与验证](docs/current/v9/V9_2_VERIFICATION_REPORT.md)、[七域端口](docs/current/v9/V9_2_SERVICE_PORTS.md)、[数据权威与恢复](docs/current/v9/V9_2_JSON_AUTHORITY_AND_RECOVERY.md)。符合[当时总路线](docs/current/v9/V9_ROADMAP.md) §7.3；V9.1 f9c088f 和 V9.2 6026713 的远端 CI 与用户功能确认作为历史证据保留。
 
@@ -14,9 +14,9 @@ Voices of the Court 是一个面向《Crusader Kings III》（CK3）的沉浸式
 
 ## 主要功能
 
-当前记忆入口为 `Legacy Summary`。每名直接对话对象使用最近 1 篇摘要，并从本地 Pair 事项索引中检索相关事项，再按准确来源定位 1–2 篇 Legacy 摘要；来源修订失效时刷新索引，不打开缓存旧行。Temporal 与 Mentioned 各自最多选 3 项，所有内容共同受按在场人数冻结的 10%／12.5%／15% 上限及 3600／4500／5400 Token 总预算约束。索引由既有摘要确定性本地生成，不新增模型提取请求。Legacy 页面提供事项搜索、日期筛选、分页、预览确认回填和已验证来源全文查看；人物主标签只用真实姓名，未知时显示“姓名未载入”，ID 仅用于内部或折叠诊断。
+当前记忆入口为 `Legacy Summary`。每位回应 NPC 的固定历史只锚定当前玩家：最近 1 篇 Legacy、合法官方追忆、预算内尽量完整的玩家关系事项簿。固定文本首次构造后冻结；第三人仅提名为 L0，不读取其历史索引或原文；明确历史关系询问为 L1，每目标至多 16 条事项、零原文；具体历史经过为 L2，共享预算内至多 2 篇经来源键和修订号复验的摘要。2／3／4+ 人采用 16%／18%／20% 与 4800／5600／6400 Token 上限，并取无记忆 Prompt、输出预留及 Provider 安全余量允许的较小值。Legacy 页面保留事项搜索、日期筛选、分页、预览确认回填与已验证来源全文；人物主标签只显示真实姓名，未知时显示“姓名未载入”。
 
-### 历史版本记录（以下保留当时实现与验收快照，不代表 V9.3.5 候选合同）
+### 历史版本记录（以下保留当时实现与验收快照，不代表 V9.3.6 当前合同）
 
 历史 V9.3.4 Durable 退役与 Legacy Summary：[实施](docs/current/v9/V9_3_4_IMPLEMENTATION_REPORT.md)、[验证](docs/current/v9/V9_3_4_VERIFICATION_REPORT.md)。当时直接关系默认取最近两篇摘要，搭配合法官方追忆和动态 Extra；其映射、构建、部署及验收结论只作为该阶段证据。V9.3.5 候选改用 Recent1 与 Pair 事项索引/精确来源召回，不能把旧配额视为当前候选合同。
 
@@ -30,7 +30,7 @@ V9.3.3.1 修复（2026-10-14）：[规格](docs/current/v9/V9_3_3_1_FIX_SPEC.md)
 
 历史 V9.2.3候选（2026-10-13）：[实施](docs/current/v9/V9_2_3_IMPLEMENTATION_REPORT.md)、[验证](docs/current/v9/V9_2_3_VERIFICATION_REPORT.md)。Year/Life自动模型生成已退役；保留Durable、Detail/Legacy及合法旧档查看和手改。以下旧年度压缩／重建记录为历史合同，不能据此重新启用生成。GLM旧新出站一致，原生长上下文另有取证，实机问题仍HOLD；正式App/UI保持9.2.0/V9.2，未签完整冻结。Durable 已由 V9.3.4 退役。
 
-当前候选目标为 V9.3.5，仍处施工与验收阶段，不能据此推定正式项目／Core／UI 或 Electron App 版本已变更；正式版本号以包元数据和最终报告为准。VOTC Workshop Mod 2.0.5、`Legacy Summary`、协议 3.0、摘要存储 2.5 与 Official Action 2.0.3 保持。VOTC.exe 的旧壳属性版本未改写。Durable 不再在线，Year/Life 不生成。
+Core／App／UI 为 9.3.6。VOTC Workshop Mod 2.0.5、`Legacy Summary`、协议 3.0、摘要存储 2.5 与 Official Action 2.0.3 保持。VOTC.exe 的旧壳属性版本未改写。Durable 不再在线，Year/Life 不生成。
 
 可选兼容工程已完成本地迁移：[CK3-Three-Mod-Compatibility](https://github.com/wsdsb-111/CK3-Three-Mod-Compatibility)，工作目录 `C:/Users/97330/Documents/Codex/CK3-Three-Mod-Compatibility`。官职／称谓规则不属于 VOTC 运行必需依赖，历史[1.0.6 报告](docs/v8.15.2-celestial-same-tier-office-report.md)保留；当前安装 Mod 不卸载。独立CI与CK3验收待执行。
 

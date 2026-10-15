@@ -60,6 +60,9 @@ for (const provider of providers) {
   const snapshots = { conversation: null, responders: new Map(), prefixByResponder: new Map() };
   const context = {
     cacheV2FrozenSnapshots: snapshots, activeParticipantIds: [1, 2],
+    playerAnchorId: 0, baselineSnapshotId: "v813-prefix-fixture-baseline", sourceFolderRevision: 1,
+    sourceCampaignToken: "v813-prefix-fixture-campaign", sourcePairIds: [0, 2],
+    budgetPolicyRevision: "v9.3.5", conversationId: "v813-prefix-fixture-conversation",
     stableText: "旧摘要", directStableText: "直接记忆", officialRecollectionText: "官方追忆",
     worldStableText: "甲的世界线基线", worldTurnRecallText: "甲知道的历史",
     worldCurrentText: "本轮世界状态", presenceText: "甲在场", temporalExtraText: "首轮召回",

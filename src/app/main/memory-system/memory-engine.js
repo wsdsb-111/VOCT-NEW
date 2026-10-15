@@ -1632,7 +1632,18 @@ class MemoryEngine {
     return selected;
   }
 
-  retrieveForResponder({ characterId, query = "", directCounterpartIds = [], activeParticipantIds = [], querySpeakerId = null, mentionedEntityIds = [], mentionedEntityNames = {}, entityProfiles = null, mentionedRecallCache = null, sessionRecallCache = null, ownerFolderMemories = null, officialSummary = null, turnEpoch = 0, currentGameDate = null, currentTotalDays = null, campaignToken = null, conversationId = null, sceneRevision = null, memoryEngine3Enabled = true, gameData = null, identityUnresolved = false, explicitTargetEntityIds = null, queryEntityIds = null, temporalSummaryRecallEnabled = true, tokenBudget = 800, estimateTokens } = {}) {
+  retrieveForResponder(options = {}) {
+    if (options.playerCenteredRecallEnabled === true) {
+      return require("./player-centered-memory").retrievePlayerCenteredMemory(this, options);
+    }
+    return this.retrieveLegacyForResponder(options);
+  }
+
+  validatePlayerMemoryContext(context, gameData, conversationId) {
+    return require("./player-centered-memory").validatePlayerMemorySources(this, context, gameData, conversationId);
+  }
+
+  retrieveLegacyForResponder({ characterId, query = "", directCounterpartIds = [], activeParticipantIds = [], querySpeakerId = null, mentionedEntityIds = [], mentionedEntityNames = {}, entityProfiles = null, mentionedRecallCache = null, sessionRecallCache = null, ownerFolderMemories = null, officialSummary = null, turnEpoch = 0, currentGameDate = null, currentTotalDays = null, campaignToken = null, conversationId = null, sceneRevision = null, memoryEngine3Enabled = true, gameData = null, identityUnresolved = false, explicitTargetEntityIds = null, queryEntityIds = null, temporalSummaryRecallEnabled = true, tokenBudget = 800, estimateTokens } = {}) {
     const startedAt = Date.now();
     const ownerId = Number(characterId);
     const ownerValid = isValidCharacterId(ownerId);

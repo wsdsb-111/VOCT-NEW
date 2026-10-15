@@ -269,6 +269,7 @@ function resolveActiveMemoryPairs({ ownerId, history = [], activeParticipantIds 
 
 module.exports = {
   classifyThirdPersonHistoryRequest,
+  removeQuotedText,
   resolveActiveMemoryPairs,
   resolveCurrentQueryContext,
   resolveFrozenPlayerAnchor,

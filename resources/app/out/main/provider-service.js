@@ -3,6 +3,7 @@
 const crypto = require("crypto");
 const { estimateTokens } = require("./token-estimator");
 const { resolveProviderCapabilities, planRequestBudget } = require("./providers/request-budget");
+const { isMemoryBudgetBlock } = require("./memory-system/memory-budget-policy");
 const { OVERLAY_BLOCK_ID, OVERLAY_VERSION, prepareActionMessages } = require("./actions/action-prompt-compatibility-overlay");
 const { buildProviderCapabilities, capabilityCacheKey } = require("./providers/provider-capabilities");
 const { createRequestControl, awaitWithSignal, assertActive, managedIterator } = require("./providers/provider-cancellation");
@@ -13,6 +14,82 @@ const console = safeProviderConsole;
 
 function rejectRetiredDurableOutbound(requestType) {
   if (requestType === "memory4_durable") throw new Error("memory4_durable_retired");
+}
+
+function memoryBudgetMetadataSnapshot(messages, metadata) {
+  try {
+    const blocks = metadata.blocks.map((block) => ({
+      id: block.id,
+      type: block.type,
+      messageStartPosition: block.messageStartPosition,
+      messageCount: block.messageCount,
+      tokens: block.tokens,
+      fingerprint: block.fingerprint
+    }));
+    return crypto.createHash("sha256").update(JSON.stringify({
+      messages,
+      memoryBudgetTokens: metadata.memoryBudgetTokens,
+      renderedMemoryTokens: metadata.renderedMemoryTokens,
+      blocks
+    })).digest("hex");
+  } catch (_error) {
+    throw new Error("chat_memory_budget_metadata_invalid");
+  }
+}
+
+function validateMemoryBudgetMessages(messages, metadata, TokenCounter) {
+  const budget = metadata.memoryBudgetTokens;
+  const rendered = metadata.renderedMemoryTokens;
+  if (!Number.isSafeInteger(budget) || budget < 0
+    || !Number.isSafeInteger(rendered) || rendered < 0
+    || !Array.isArray(messages) || !Array.isArray(metadata.blocks)) {
+    throw new Error("chat_memory_budget_metadata_invalid");
+  }
+  if (rendered > budget) throw new Error("chat_memory_budget_exceeded");
+
+  const spans = [];
+  let actualMemoryTokens = 0;
+  for (const block of metadata.blocks) {
+    if (!block || typeof block !== "object") throw new Error("chat_memory_budget_metadata_invalid");
+    const isMemory = isMemoryBudgetBlock(block);
+    const start = block.messageStartPosition;
+    const count = block.messageCount;
+    if (start == null) {
+      if (count !== 0 || isMemory) throw new Error("chat_memory_budget_block_unmapped");
+      continue;
+    }
+    if (!Number.isSafeInteger(start) || start < 0 || !Number.isSafeInteger(count) || count < 1
+      || start + count > messages.length) {
+      throw new Error("chat_memory_budget_block_mapping_invalid");
+    }
+    const end = start + count;
+    spans.push({ start, end });
+    if (!isMemory) continue;
+
+    const blockMessages = messages.slice(start, end);
+    if (blockMessages.some((message) => !message || typeof message.role !== "string" || typeof message.content !== "string")) {
+      throw new Error("chat_memory_budget_block_mapping_invalid");
+    }
+    const directText = blockMessages.length === 1 ? blockMessages[0].content : null;
+    const roleText = blockMessages.map((message) => `${message.role}: ${message.content}`).join("\n\n");
+    const fingerprint = value => crypto.createHash("sha256").update(String(value), "utf8").digest("hex").slice(0, 16);
+    if (typeof block.fingerprint !== "string" || !/^[a-f0-9]{16}$/.test(block.fingerprint)
+      || block.fingerprint !== fingerprint(roleText) && (directText === null || block.fingerprint !== fingerprint(directText))) {
+      throw new Error("chat_memory_budget_block_fingerprint_mismatch");
+    }
+    for (const message of blockMessages) {
+      const messageTokens = typeof TokenCounter.estimateMessageTokens === "function"
+        ? TokenCounter.estimateMessageTokens(message) : TokenCounter.estimateTokens(message.content);
+      if (!Number.isFinite(messageTokens) || messageTokens < 0) throw new Error("chat_memory_budget_metadata_invalid");
+      actualMemoryTokens += Math.ceil(messageTokens) + 8;
+    }
+  }
+  spans.sort((left, right) => left.start - right.start || left.end - right.end);
+  for (let index = 1; index < spans.length; index += 1) {
+    if (spans[index].start < spans[index - 1].end) throw new Error("chat_memory_budget_blocks_overlap");
+  }
+  if (actualMemoryTokens > budget) throw new Error("chat_memory_budget_exceeded");
+  return actualMemoryTokens;
 }
 
 class ProviderRegistry {
@@ -256,7 +333,42 @@ class LLMManager {
       signal
       // ...params,
     };
-    const control = this.createControl(activeConfig, "CHAT", signal, metadata);
+    const memoryBudgetGuardEnabled = Object.prototype.hasOwnProperty.call(metadata, "memoryBudgetTokens");
+    const memoryGuardState = { snapshot: null, capabilities: null, reservedOutputTokens: null };
+    let controlMetadata = metadata;
+    if (memoryBudgetGuardEnabled) {
+      validateMemoryBudgetMessages(request.messages, metadata, this.TokenCounter);
+      memoryGuardState.snapshot = memoryBudgetMetadataSnapshot(request.messages, metadata);
+      const verifyMemoryAndRequestBudget = () => {
+        if (memoryBudgetMetadataSnapshot(request.messages, metadata) !== memoryGuardState.snapshot) {
+          throw new Error("chat_memory_budget_request_changed_before_send");
+        }
+        validateMemoryBudgetMessages(request.messages, metadata, this.TokenCounter);
+        if (!memoryGuardState.capabilities || !Number.isSafeInteger(memoryGuardState.reservedOutputTokens)
+          || request.max_tokens !== memoryGuardState.reservedOutputTokens) {
+          throw new Error("chat_request_budget_changed_before_send");
+        }
+        const finalBudget = planRequestBudget({
+          messages: request.messages,
+          capabilities: memoryGuardState.capabilities,
+          requestedOutputTokens: memoryGuardState.reservedOutputTokens,
+          countTokens: items => this.TokenCounter.calculateTotalTokens(items)
+        });
+        if (!finalBudget.safe || finalBudget.reservedOutputTokens !== memoryGuardState.reservedOutputTokens) {
+          throw new Error("chat_request_budget_exceeded_before_send");
+        }
+      };
+      controlMetadata = {
+        ...metadata,
+        beforeSendGuard: () => {
+          verifyMemoryAndRequestBudget();
+          const guardResult = metadata.beforeSendGuard?.();
+          if (guardResult && typeof guardResult.then === "function") throw new Error("provider_async_guard_unsupported");
+          verifyMemoryAndRequestBudget();
+        }
+      };
+    }
+    const control = this.createControl(activeConfig, "CHAT", signal, controlMetadata);
     let capabilities;
     try { capabilities = await this.getProviderCapabilities("CHAT", null, control, activeConfig); }
     catch (error) { control.dispose(); throw toProviderError(error); }
@@ -269,6 +381,13 @@ class LLMManager {
       throw error;
     }
     request.max_tokens = budget.reservedOutputTokens;
+    if (memoryBudgetGuardEnabled) {
+      memoryGuardState.capabilities = Object.freeze({
+        contextWindow: capabilities.contextWindow,
+        maxOutputTokens: capabilities.maxOutputTokens
+      });
+      memoryGuardState.reservedOutputTokens = budget.reservedOutputTokens;
+    }
     const estimatedPromptTokens = this.TokenCounter.calculateTotalTokens(messages);
     console.log(`[LLMManager] Chat request: provider=${activeConfig.providerType}, model=${activeConfig.defaultModel}, messages=${messages.length}, estimatedPromptTokens=${estimatedPromptTokens}${isDeepseekChat ? `, maxTokens=${request.max_tokens}, thinking=enabled` : ""}`);
     const requestType = metadata.requestType || "chat";

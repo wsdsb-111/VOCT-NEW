@@ -4,7 +4,7 @@
 
 ## 推荐阅读顺序
 
-**当前候选 V9.3.5：Pair Memory Index 与来源召回（施工、验证中）。** 参阅[实施报告](current/v9/V9_3_5_IMPLEMENTATION_REPORT.md)、[验证报告](current/v9/V9_3_5_VERIFICATION_REPORT.md)和[索引与来源合同](current/v9/V9_3_5_INDEX_AND_SOURCE_CONTRACT.md)。合同采用 Recent1 + 本地 Owner→Counterpart Pair 事项索引及 1–2 篇经来源键／修订号复验的 Legacy 摘要；Temporal 与 Mentioned 各自最多 3 项，共享原有 10%／12.5%／15% 和 3600／4500／5400 Token 总预算。不新增模型提取请求；Durable、Year/Life 生成及后台重建继续退役。映射、构建和测试状态以本轮报告为准；真实 CK3、Soak 与远端 CI 尚待验收，不宣称 Full Freeze。V9.3.4 报告仍保留为上一阶段历史证据。
+**当前候选 V9.3.6：玩家固定关系记忆与第三人分级检索。** [实施报告](current/v9/V9_3_6_IMPLEMENTATION_REPORT.md)、[验证报告](current/v9/V9_3_6_VERIFICATION_REPORT.md)、[Token 与缓存对比](current/v9/V9_3_6_TOKEN_AND_CACHE_COMPARISON.md)、[兼容与退役审计](current/v9/V9_3_6_COMPATIBILITY_AND_RETIREMENT_AUDIT.md)。每位回应 NPC 的固定历史只锚定当前玩家：最近 1 篇 Legacy、合法官方追忆、预算内尽量完整的玩家关系事项簿。固定文本首次构造后冻结；第三人仅提名为 L0，不读取其历史索引或原文；明确历史关系询问为 L1，每目标至多 16 条事项、零原文；具体历史经过为 L2，共享预算内至多 2 篇经来源键和修订号复验的摘要。2／3／4+ 人采用 16%／18%／20% 与 4800／5600／6400 Token 上限，并取无记忆 Prompt、输出预留及 Provider 安全余量允许的较小值。不新增 LLM 检索；真实 CK3、Provider、Soak 与远端 CI 待验收。V9.3.5 报告保留历史，索引存储和来源合同继续兼容。
 
 **历史版本 V9.3.3.1 回归修复：**[规格](current/v9/V9_3_3_1_FIX_SPEC.md)、[实施](current/v9/V9_3_3_1_FIX_REPORT.md)、[验证](current/v9/V9_3_3_1_VERIFICATION_REPORT.md)、[改动清单](current/v9/V9_3_3_1_CHANGED_FILES.md)。Windows 二进制首次部署、Coverage 同源身份、明细分页和详情 Loading；该轮 Gate 与 CI 状态保留为当时记录。
 
@@ -28,7 +28,7 @@
 
 历史 V9.2：[施工原文](current/v9/V9_2_IMPLEMENTATION_SPEC.md)、[实施／验证](current/v9/V9_2_VERIFICATION_REPORT.md)、[七域端口](current/v9/V9_2_SERVICE_PORTS.md)、[JSON 权威与恢复](current/v9/V9_2_JSON_AUTHORITY_AND_RECOVERY.md)、[问题台账](current/v9/V9_2_P_ISSUE_LEDGER.md)、[V9.3 移交](current/v9/V9_2_HANDOFF_TO_V9_3.md)。按当时[旧总路线](current/v9/V9_ROADMAP.md) §7.3 分期；[V9.1 构建说明](current/v9/V9_1_SOURCE_BUILD.md)和旧实施报告保留历史证据。
 
-当前候选合同见[V9.3.5 索引与来源合同](current/v9/V9_3_5_INDEX_AND_SOURCE_CONTRACT.md)；候选仍在施工与验收阶段，正式版本号以包元数据和最终报告为准。Workshop 2.0.5、`Legacy Summary`、协议 3.0、存储 2.5、Official Action 2.0.3 和 Three-Mod 1.0.6 保持。
+当前候选合同见[实施报告](current/v9/V9_3_6_IMPLEMENTATION_REPORT.md)、[验证报告](current/v9/V9_3_6_VERIFICATION_REPORT.md)、[Token 与缓存对比](current/v9/V9_3_6_TOKEN_AND_CACHE_COMPARISON.md)、[兼容与退役审计](current/v9/V9_3_6_COMPATIBILITY_AND_RETIREMENT_AUDIT.md)；Workshop 2.0.5、`Legacy Summary`、协议 3.0、存储 2.5、Official Action 2.0.3 和 Three-Mod 1.0.6 保持。
 
 V9工程合同：[永久行为](current/v9/V9_BASELINE_BEHAVIOR_CONTRACTS.md)、[架构边界](current/v9/V9_ARCHITECTURE_BOUNDARY.md)、[数据责任](current/v9/V9_DATA_OWNERSHIP_LEDGER.md)、[退役台账](current/v9/V9_DECOMMISSION_LEDGER.md)、[性能调查](current/v9/V9_STARTUP_PERFORMANCE_INVESTIGATION.md)、[独立兼容迁移](current/v9/V9_COMPATIBILITY_MOD_SEPARATION.md)。
 

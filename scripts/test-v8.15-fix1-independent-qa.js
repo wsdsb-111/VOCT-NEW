@@ -140,9 +140,12 @@ function createPromptHarness(directory, { activeIds = [1, 2] } = {}) {
     usageAnalytics: { record() {} }, createPromptFingerprint: fingerprint, path, worldlineService });
   const createConversation = query => {
     const conversation = Object.create(Conversation.prototype);
-    conversation.id = `qa-conversation-${++conversationSequence}`;
+    const turnId = ++conversationSequence;
+    const playerMessageId = `qa-player-message-${turnId}`;
+    conversation.id = `qa-conversation-${turnId}`;
     conversation.gameData = gameData;
-    conversation.messages = [{ id: 1, role: "user", content: query }];
+    conversation.messages = [{ id: playerMessageId, role: "user", speakerCharacterId: Number(gameData.playerID), content: query }];
+    conversation.turnManager = { currentTurn: { playerMessageId } };
     conversation.memoryState = engine.createConversationState(conversation.id);
     conversation.memoryState.participantPresence = activeIds.map(characterId => ({ characterId,
       joinedAtMessageId: 0, leftAtMessageId: null }));
@@ -221,10 +224,13 @@ async function run() {
         subjectIds: [3], content: parentText, perspectiveMemoryIds: [targetSource.memoryId],
         conversationId: "legacy-parent-conversation", finalizationId: "legacy-parent-finalization",
         segmentId: "legacy-parent-segment" })]);
-      const result = await providerInput(harness, "赵光义北境那件事后来怎么样？");
-      assert.deepEqual(result.memoryContext.entityTargetRecall.explicitTargetEntityIds, [3]);
-      assert(result.memoryContext.entityTargetText.includes("EXPLICIT_C_LEGACY_SENTINEL"),
-        "the responder memory context must include the authorized Legacy projection");
+      const result = await providerInput(harness, "赵光义以前在北境旧事中具体说过什么？");
+      assert.equal(result.memoryContext.thirdPersonDecision.level, "L2",
+        "an exact Legacy source request must be an explicit L2 detail query");
+      assert.deepEqual(result.memoryContext.thirdPersonDecision.targetCharacterIds, [3]);
+      assert([...result.memoryContext.extra, ...(result.memoryContext.pairMemorySources || [])]
+        .some(entry => entry.memory.content.includes("EXPLICIT_C_LEGACY_SENTINEL")),
+      "the responder memory context must include the authorized Legacy projection");
       assert(result.text.includes("EXPLICIT_C_LEGACY_SENTINEL"), "the complete Provider messages must contain Legacy evidence");
     });
 

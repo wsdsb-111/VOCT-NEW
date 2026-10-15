@@ -215,14 +215,14 @@ async function testNativeSummaryLifecycle() {
     assert.equal(later.directStableText, first.directStableText);
     const { Conversation } = require(path.join(root, "resources/app/out/main/conversation/conversation"));
     Conversation.configure({ memoryEngine: engine });
-    for (const [count, ratio, ceiling] of [[2, 0.10, 3600], [3, 0.125, 4500], [4, 0.15, 5400], [8, 0.15, 5400]]) {
+    for (const [count, ratio, ceiling] of [[2, 0.16, 4800], [3, 0.18, 5600], [4, 0.20, 6400], [8, 0.20, 6400]]) {
       const chat = Object.create(Conversation.prototype);
       const ids = Array.from({ length: count }, (_, i) => i + 1);
       assert.equal(chat.getMemoryTokenBudget(16000, ids), Math.floor(16000 * ratio));
       assert.equal(chat.getMemoryTokenBudget(16000, [1, 2, 3, 4, 5]), Math.floor(16000 * ratio), "mid-session presence must not change the frozen budget");
       assert.equal(Conversation.prototype.getMemoryTokenBudget.call({}, 200000, ids), ceiling);
     }
-    assert.equal(Conversation.prototype.getMemoryTokenBudget.call({}, 4096, [1, 2]), 409, "small contexts must respect the percentage ceiling");
+    assert.equal(Conversation.prototype.getMemoryTokenBudget.call({}, 4096, [1, 2]), 655, "small contexts must respect the percentage ceiling");
     const chat = Object.create(Conversation.prototype);
     chat.id = "recall-history";
     chat.memoryState = engine.createConversationState(chat.id);
@@ -232,15 +232,15 @@ async function testNativeSummaryLifecycle() {
     const recallInput = { ...input, sessionRecallCache: chat.memoryState.responderRecallCache };
     const retained = engine.retrieveForResponder({ ...recallInput, query: "五年前" });
     chat.retainDynamicSummaryRecall(2, 1, { blocks: [{ block: { id: "memory-temporal-extra" }, content: retained.temporalExtraText }] }, 1);
-    assert.equal(chat.getPromptHistoryForCharacter(2)[1].content, retained.temporalExtraText, "successful recall survives in the responder's prompt history");
+    assert.deepEqual(chat.getPromptHistoryForCharacter(2), chat.messages, "historical recall must pass the current player intent gate again instead of surviving in dialogue history");
     assert.equal(chat.getPromptHistoryForCharacter(3).length, 2, "other NPCs must not see the private recall annotation");
     assert.equal(chat.getHistory().length, 2, "recall annotations must not become actual dialogue or finalization evidence");
     chat.memoryState.rollingState.committedThroughHistoryIndex = 2;
     assert.equal(chat.getPromptHistoryForCharacter(2).length, 0);
     const recalledAgain = engine.retrieveForResponder({ ...recallInput, query: "五年前", turnEpoch: 2 });
-    assert(recalledAgain.extra.some(e => retained.extra.some(old => old.memory.memoryId === e.memory.memoryId)), "after compression removes the annotation, explicit recall is eligible again");
+    assert(recalledAgain.extra.every(e => !retained.extra.some(old => old.memory.memoryId === e.memory.memoryId)), "the legacy adapter keeps its committed seen state; the player-centered path independently authorizes each new recall");
     engine.invalidateConversationRecallState(chat);
-    assert.equal(chat.dynamicRecallHistory.size, 0, "editing/deleting summaries clears historical recall copies");
+    assert.equal(chat.dynamicRecallHistory?.size || 0, 0, "editing/deleting summaries leaves no historical recall copies");
     const otherOwner = engine.retrieveForResponder({ ...input, characterId: 3, sessionRecallCache: new Map() });
     assert(!otherOwner.direct.some(e => e.memory.subtype === "official_recollection"));
     const thirdPersonMemory = record("third-person", today - 8, "韩世忠亲口告诉我的往事");

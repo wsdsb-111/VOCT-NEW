@@ -96,9 +96,12 @@ function createHarness({ directory, rows = [], activeIds = [1, 2], date = "1180.
     usageAnalytics: { record() {} }, createPromptFingerprint: fingerprint, path, worldlineService });
   const createConversation = query => {
     const conversation = Object.create(Conversation.prototype);
-    conversation.id = `qa-conversation-${++sequence}`;
+    const turnId = ++sequence;
+    const playerMessageId = `qa-player-message-${turnId}`;
+    conversation.id = `qa-conversation-${turnId}`;
     conversation.gameData = gameData;
-    conversation.messages = [{ id: 1, role: "user", content: query }];
+    conversation.messages = [{ id: playerMessageId, role: "user", speakerCharacterId: Number(gameData.playerID), content: query }];
+    conversation.turnManager = { currentTurn: { playerMessageId } };
     conversation.memoryState = engine.createConversationState(conversation.id);
     conversation.memoryState.participantPresence = activeIds.map(characterId => ({ characterId, joinedAtMessageId: 0, leftAtMessageId: null }));
     conversation.turnEpoch = 1;
@@ -119,6 +122,13 @@ function createHarness({ directory, rows = [], activeIds = [1, 2], date = "1180.
   return { directory, summariesDir, ownerFolder, engine, gameData, createConversation };
 }
 
+function assertThirdPersonTarget(memoryContext, targetId, level = "L2") {
+  const decision = memoryContext.thirdPersonDecision;
+  assert(decision, "the retrieval result exposes the current third-person decision");
+  assert.equal(decision.level, level, "the query must authorize the intended recall level");
+  assert.deepEqual(decision.targetCharacterIds, [targetId], "the trusted player query resolves only the named target");
+}
+
 async function providerInput(harness, query) {
   const conversation = harness.createConversation(query);
   const responder = harness.gameData.characters.get(2);
@@ -134,10 +144,11 @@ async function testPromptRoutingAndScope() {
   const wrongOwner = summaryRow({ subjectIds: [3], content: "赵光义说了 WRONG_OWNER_FORBIDDEN_SENTINEL。", perspectiveOwnerId: 99 });
   const harness = createHarness({ directory: path.join(root, "routing"), rows: [valid, future, wrongCampaign, wrongOwner], activeIds: [1, 2, 3] });
   const mixedNameQuery = await providerInput(harness, "皇帝赵光义当时怎么说");
-  assert.deepEqual(mixedNameQuery.memoryContext.entityTargetRecall.explicitTargetEntityIds, [3]);
+  assertThirdPersonTarget(mixedNameQuery.memoryContext, 3);
   assert(mixedNameQuery.text.includes("皇帝赵光义当时怎么说"), "the exact mixed title/name query reaches the final provider input");
-  const recallQuery = "赵光义在北境议和的旧事是什么？";
+  const recallQuery = "赵光义以前在北境议和时具体说过什么？";
   const activeRecall = await providerInput(harness, recallQuery);
+  assertThirdPersonTarget(activeRecall.memoryContext, 3);
   assert(activeRecall.text.includes("VALID_C_HISTORY_SENTINEL"), "the uniquely resolved target history reaches provider input");
   for (const sentinel of ["FUTURE_DATE_FORBIDDEN_SENTINEL", "WRONG_CAMPAIGN_FORBIDDEN_SENTINEL", "WRONG_OWNER_FORBIDDEN_SENTINEL"]) {
     assert.equal(activeRecall.text.includes(sentinel), false, sentinel);
@@ -145,26 +156,28 @@ async function testPromptRoutingAndScope() {
 
   const duoHarness = createHarness({ directory: path.join(root, "duo-C"), rows: [valid], activeIds: [1, 2] });
   const duoC = await providerInput(duoHarness, recallQuery);
-  assert.deepEqual(duoC.memoryContext.entityTargetRecall.explicitTargetEntityIds, [3]);
+  assertThirdPersonTarget(duoC.memoryContext, 3);
   assert(duoC.text.includes("VALID_C_HISTORY_SENTINEL"), "the two-person baseline can recall B's private C-related history");
 
   const rowD = summaryRow({ subjectIds: [4], content: "赵匡胤在旧友席间留下 ABSENT_D_HISTORY_SENTINEL。" });
   const fourHarness = createHarness({ directory: path.join(root, "four-person"), rows: [valid, rowD], activeIds: [1, 2, 3, 4] });
   const fourC = await providerInput(fourHarness, recallQuery);
-  assert.deepEqual(fourC.memoryContext.entityTargetRecall.explicitTargetEntityIds, [3]);
+  assertThirdPersonTarget(fourC.memoryContext, 3);
   assert(fourC.text.includes("VALID_C_HISTORY_SENTINEL"), "the same B-owned C history remains eligible with C and D active");
   assert.equal(fourC.text.includes("ABSENT_D_HISTORY_SENTINEL"), false, "an active but unqueried D does not enter C-targeted recall");
   const fourGeneric = await providerInput(fourHarness, "今夜天气如何？");
+  assert.equal(fourGeneric.memoryContext.thirdPersonDecision.level, "L0", "generic queries do not authorize third-person history");
   assert.equal(fourGeneric.text.includes("VALID_C_HISTORY_SENTINEL"), false,
     "a generic query does not pull B's private C history merely because C is active");
   assert.equal(fourGeneric.text.includes("ABSENT_D_HISTORY_SENTINEL"), false,
     "a generic query does not pull D history merely because D is active");
 
   const absentHarness = createHarness({ directory: path.join(root, "absent-D"), rows: [rowD], activeIds: [1, 2] });
-  const absentD = await providerInput(absentHarness, "赵匡胤谈过的往事是什么？");
-  assert.deepEqual(absentD.memoryContext.entityTargetRecall.explicitTargetEntityIds, [4]);
+  const absentD = await providerInput(absentHarness, "赵匡胤以前具体谈过什么？");
+  assertThirdPersonTarget(absentD.memoryContext, 4);
   assert(absentD.text.includes("ABSENT_D_HISTORY_SENTINEL"), "an explicit out-of-scene target reaches final provider input");
   const generic = await providerInput(harness, "今夜天气如何？");
+  assert.equal(generic.memoryContext.thirdPersonDecision.level, "L0", "generic player speech stays at L0 despite known targets");
   assert.equal(generic.text.includes("VALID_C_HISTORY_SENTINEL"), false, "a generic query must not recall every known person's history");
 }
 
@@ -176,24 +189,55 @@ async function testPartialAndOversizedLegacyReachProvider() {
   const partial = summaryRow({ subjectIds: [3], perspectiveMemoryIds: ["partial-known-source", "missing-source"],
     content: "【张道素能够知道并记住的本场内容】\n- 赵光义曾在北境谈及旧约。\n\nPARTIAL_LEGACY_NARRATIVE_REMAINDER_SENTINEL" });
   writeRows(path.join(partialHarness.ownerFolder, "与旧友的对话.json"), [partial]);
-  const partialInput = await providerInput(partialHarness, "赵光义的北境旧约是什么？");
+  const partialInput = await providerInput(partialHarness, "赵光义以前在北境旧约中具体说过什么？");
+  assertThirdPersonTarget(partialInput.memoryContext, 3);
   assert(partialInput.text.includes("PARTIAL_LEGACY_NARRATIVE_REMAINDER_SENTINEL"),
     "incomplete source mapping preserves the unsplittable Legacy narrative in final provider input");
   assert(partialInput.text.includes("赵光义曾在北境谈及旧约"),
     "the intact Legacy row retains its supporting passage when one source mapping is incomplete");
 
+  const keyFact = "赵光义在北境通行令案中亲口说：LONG_MIDDLE_EXCERPT_SENTINEL 应由守将开门。";
+
+  const shortHarness = createHarness({ directory: path.join(root, "short-source") });
+  const shortRow = summaryRow({ subjectIds: [3], content: keyFact });
+  writeRows(path.join(shortHarness.ownerFolder, "与旧友的对话.json"), [shortRow]);
+  const detailQuery = "赵光义以前在北境通行令案中具体说过什么？";
+  const shortInput = await providerInput(shortHarness, detailQuery);
+  assertThirdPersonTarget(shortInput.memoryContext, 3);
+  const shortSource = [...shortInput.memoryContext.direct, ...shortInput.memoryContext.extra,
+    ...(shortInput.memoryContext.pairMemorySources || [])]
+    .find(entry => entry.memory.content.includes("LONG_MIDDLE_EXCERPT_SENTINEL"));
+  assert(shortSource, "a complete query-relevant short Legacy source reaches a real provider memory route");
+  assert.equal(shortSource.memory.content, shortRow.content, "L2 returns the complete verified source without rewriting it");
+  assert(shortInput.text.includes(keyFact), "the complete short source reaches final provider input");
+  assert(shortInput.memoryContext.selectedTokens <= shortInput.memoryContext.tokenBudget,
+    "the complete short source stays within the shared memory budget");
+
   const oversizedHarness = createHarness({ directory: path.join(root, "oversized") });
   const filler = "往年宫宴礼节与使者往返记载，没有北境通行令的信息。".repeat(220);
-  const keyFact = "赵光义在北境通行令案中亲口说：LONG_MIDDLE_EXCERPT_SENTINEL 应由守将开门。";
   const longRow = summaryRow({ subjectIds: [3], content: `${keyFact}\n${filler}\n${filler}` });
   writeRows(path.join(oversizedHarness.ownerFolder, "与旧友的对话.json"), [longRow]);
-  const longInput = await providerInput(oversizedHarness, "赵光义在北境通行令案中说过什么？");
-  const selected = [...longInput.memoryContext.direct, ...longInput.memoryContext.extra,
+  const longInput = await providerInput(oversizedHarness, detailQuery);
+  assertThirdPersonTarget(longInput.memoryContext, 3);
+  const selectedLongSource = [...longInput.memoryContext.direct, ...longInput.memoryContext.extra,
     ...(longInput.memoryContext.pairMemorySources || [])]
     .find(entry => entry.memory.content.includes("LONG_MIDDLE_EXCERPT_SENTINEL"));
-  assert(selected, "query-relevant Legacy evidence reaches a real direct, Extra, or exact Pair Source route");
-  assert(selected.memory.content.length < longRow.content.length, "oversized Legacy source is excerpted rather than injected whole");
-  assert(longInput.text.includes("LONG_MIDDLE_EXCERPT_SENTINEL"), "the relevant middle evidence reaches final provider messages");
+  const longSourceDiagnostics = { decision: longInput.memoryContext.thirdPersonDecision,
+    metrics: longInput.memoryContext.pairMemoryMetrics, budget: longInput.memoryContext.tokenBudget,
+    selectedTokens: longInput.memoryContext.selectedTokens,
+    routes: [...longInput.memoryContext.direct, ...longInput.memoryContext.extra,
+      ...(longInput.memoryContext.pairMemorySources || [])].map(entry => ({ routeKind: entry.routeKind,
+      memoryId: entry.memory.memoryId, contentLength: entry.memory.content.length })) };
+  const metrics = longInput.memoryContext.pairMemoryMetrics;
+  assert.equal(selectedLongSource, undefined, "an oversized verified source is omitted whole, never silently excerpted");
+  assert.equal(longInput.text.includes("LONG_MIDDLE_EXCERPT_SENTINEL"), false,
+    "a source that cannot fit is not partially injected into final provider input");
+  assert.equal(metrics.thirdPersonLegacyFallbackStatus, "BUDGET_OMITTED",
+    "the eligible L2 fallback reports budget omission instead of misreporting an index miss; " + JSON.stringify(longSourceDiagnostics));
+  assert.equal(metrics.legacySourceResolvedCount, 1, "the L2 fallback records the one exact source it resolved");
+  assert.equal(metrics.legacyBudgetOmittedCount, 1, "the L2 fallback records that source as omitted for budget");
+  const persistedRows = JSON.parse(fs.readFileSync(path.join(oversizedHarness.ownerFolder, "与旧友的对话.json"), "utf8"));
+  assert.deepEqual(persistedRows, [longRow], "budget omission leaves the full stored Legacy source unchanged");
   assert(longInput.memoryContext.selectedTokens <= longInput.memoryContext.tokenBudget, "Legacy recall stays within its frozen budget");
 }
 
@@ -211,7 +255,8 @@ async function testLegacyForgetRemainsAbsentFromProvider() {
     provenance: { campaignToken, folderOwnerId: 2, counterpartId: 3, finalizationId: row.finalizationId,
       extractionMode: "user_edited_summary" } });
   harness.engine.store.markKnownBy(2, source.memoryId, { awareness: "imported" });
-  const before = await providerInput(harness, "赵光义当时为何守住北境渡口？");
+  const before = await providerInput(harness, "赵光义以前为何守住北境渡口？");
+  assertThirdPersonTarget(before.memoryContext, 3);
   assert(before.text.includes("FORGET_PROVIDER_SENTINEL"), "the authorized Legacy source reaches the provider before Forget");
 
   const manager = createSummariesManager({ fs, path, summariesDir: harness.summariesDir, memoryEngine: harness.engine,
@@ -225,13 +270,14 @@ async function testLegacyForgetRemainsAbsentFromProvider() {
 
   const restartedHarness = createHarness({ directory, rows: [], activeIds: [1, 2] });
   const after = await providerInput(restartedHarness, "赵光义当时为何守住北境渡口？");
+  assertThirdPersonTarget(after.memoryContext, 3);
   assert.equal(after.text.includes("FORGET_PROVIDER_SENTINEL"), false, "a restarted provider prompt cannot revive a forgotten Legacy source");
 }
 
 async function main() {
   const cases = [
     [testPromptRoutingAndScope, "Legacy ProviderPrompt: out-of-scene target, explicit identity, scope and generic-query privacy"],
-    [testPartialAndOversizedLegacyReachProvider, "Legacy ProviderPrompt: incomplete source mapping, relevant excerpt and budget cap"],
+    [testPartialAndOversizedLegacyReachProvider, "Legacy ProviderPrompt: incomplete mapping, exact short source and budget omission"],
     [testLegacyForgetRemainsAbsentFromProvider, "SummariesManager Forget: scoped Legacy deletion survives restart and ProviderPrompt"]
   ];
   const failures = [];
