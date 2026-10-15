@@ -25,22 +25,6 @@ function createLetterPromptBuilder({ TemplateEngine, PromptScriptLoader, setting
 
     buildMessages(gameData, letter) {
       const disclosureProfiles = new Map();
-      const ownerId = Number(gameData.getAi()?.id);
-      const { asOfDate } = letterKnowledgeDate(gameData, letter);
-      if (asOfDate && gameData.campaignToken && memoryEngine?.memory4?.getCurrentDisclosures) {
-        try {
-          const scope = { campaignToken: gameData.campaignToken, ownerId };
-          const readContext = memoryEngine.memory4.createProfileReadContext(scope);
-          for (const entityId of gameData.characters.keys()) {
-            if (Number(entityId) === ownerId) continue;
-            disclosureProfiles.set(Number(entityId), memoryEngine.memory4.getCurrentDisclosures(scope, Number(entityId),
-              { campaignToken: gameData.campaignToken, date: asOfDate.canonical, characters: gameData.characters }, { readContext }));
-          }
-        } catch (error) {
-          disclosureProfiles.clear();
-          if (error.message !== "memory4_owner_folder_not_unique") console.warn("[Memory4] Letter knowledge unavailable:", error.message);
-        }
-      }
       gameData = createTraitProfileView(gameData, gameData.getAi(), { disclosureProfiles }).gameData;
       // A remote recipient cannot observe the sender's current scene.
       gameData.location = "";
@@ -173,7 +157,7 @@ Reply as {{character.fullName}}.`;
         directCounterpartIds: [Number(player.id)], querySpeakerId: Number(player.id), mentionedEntityIds,
         mentionedEntityNames: Object.fromEntries(mentionedEntityIds.map(id => [id, memoryEngine.getCharacterMentionAliases(profiles.get(id))])),
         ownerFolderMemories: folders, currentGameDate: asOfDate?.canonical || null, currentTotalDays: asOfDay, campaignToken,
-        conversationId: letter.letterId || letter.id || null, memory4RecallEnabled: false,
+        conversationId: letter.letterId || letter.id || null,
         sessionRecallCache: new Map(), mentionedRecallCache: new Map(), estimateTokens: TokenCounter?.estimateTokens
       });
       result.summaries = [...(recalled.direct || []), ...(recalled.mentioned || []), ...(recalled.extra || []), ...(recalled.topicPatch || [])]

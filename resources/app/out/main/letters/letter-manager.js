@@ -875,8 +875,6 @@ function createLetterManager({ settingsRepository, fs, path, TailFile, readline,
         const samePayload = pendingLetter && pendingLetter.letter.totalDays === letter.totalDays && pendingLetter.letter.delay === letter.delay && pendingLetter.letter.content === letter.content;
         console.warn(`LetterManager: Ignored ${samePayload ? "duplicate" : "conflicting"} payload for pending ${letter.letterId}`);
         if (samePayload) {
-          const disclosureBinding = this.buildLetterDisclosureBinding(gameData, letter);
-          if (disclosureBinding) await this.recordLetterDisclosure(gameData, letter, gameData.playerID, gameData.aiID, letter.content);
           this.attachPipelineToLetter(letter.letterId);
           this.latestPipelineStatus.state = this.getLetterStatus(letter.letterId)?.pipelineState || LetterPipelineState.PENDING_DELIVERY;
         }
@@ -884,7 +882,6 @@ function createLetterManager({ settingsRepository, fs, path, TailFile, readline,
       }
       if (this.getLetterStatus(letter.letterId)?.responseStatus === LetterResponseStatus.GENERATING && this.failedLetterContexts.has(letter.letterId)) return null;
       const disclosureBinding = this.buildLetterDisclosureBinding(gameData, letter);
-      if (disclosureBinding) await this.recordLetterDisclosure(gameData, letter, gameData.playerID, gameData.aiID, letter.content);
       const deliveryTiming = await this.resolveDeliveryTiming(letter);
       const characterName = gameData.getAi()?.fullName || "Unknown";
       this.createLetterStatus(letter, characterName, deliveryTiming);
@@ -970,7 +967,7 @@ function createLetterManager({ settingsRepository, fs, path, TailFile, readline,
         console.log(`Letter ${letter.letterId} is ready for immediate delivery`);
         await this.checkAndDeliverLetters();
       }
-      if (!memoryEngine?.letterMemoryFinalization) await this.generateSummary(gameData, letter, reply);
+      if (!memoryEngine?.letterSummaryFinalization) await this.generateSummary(gameData, letter, reply);
       return reply;
     }
     buildLetterDisclosureBinding(gameData, letter) {
@@ -987,7 +984,7 @@ function createLetterManager({ settingsRepository, fs, path, TailFile, readline,
     }
     buildLetterSourceMemoryContext(gameData, binding) {
       if (!binding) return null;
-      const { buildCurrentMemory4RelationshipEvidence } = require("../memory-system/memory4-entity-context");
+      const { buildCurrentRelationshipEvidence } = require("../memory-system/entity-context");
       const pair = [binding.playerId, binding.aiId];
       return {
         participantProfiles: pair.map(id => {
@@ -995,7 +992,7 @@ function createLetterManager({ settingsRepository, fs, path, TailFile, readline,
           return { id, name: character?.name, shortName: character?.shortName,
             firstName: character?.firstName, fullName: character?.fullName };
         }),
-        relationshipEvidence: buildCurrentMemory4RelationshipEvidence({ gameData, ownerIds: pair, entityIds: pair })
+        relationshipEvidence: buildCurrentRelationshipEvidence({ gameData, ownerIds: pair, entityIds: pair })
       };
     }
     validateLetterReceipt(storedLetter, receipt) {
@@ -1008,36 +1005,11 @@ function createLetterManager({ settingsRepository, fs, path, TailFile, readline,
         && receipt.aiId === binding.aiId && Number.isSafeInteger(receipt.totalDays)
         && receipt.totalDays >= storedLetter.expectedDeliveryDay && receipt.totalDays >= binding.sourceTotalDays);
     }
-    async recordLetterDisclosure(gameData, letter, senderId, recipientId, text) {
-      const coordinator = memoryEngine?.memory4;
-      if (typeof coordinator?.recordLetterDisclosures !== "function") return null;
-      const binding = this.buildLetterDisclosureBinding(gameData, letter);
-      const sender = Number(senderId);
-      const recipient = Number(recipientId);
-      const isPlayerNpcExchange = sender === binding?.playerId && recipient === binding?.aiId
-        || sender === binding?.aiId && recipient === binding?.playerId;
-      if (!binding || !isPlayerNpcExchange) return null;
-      try {
-        return await coordinator.recordLetterDisclosures({
-          campaignToken: binding.campaignToken,
-          date: gameData.date,
-          ownerId: recipient,
-          senderId: sender,
-          recipientId: recipient,
-          letterId: letter.letterId,
-          text,
-          characters: gameData.characters
-        });
-      } catch (error) {
-        console.warn(`LetterManager: Memory4 letter disclosure skipped (${error instanceof Error ? error.message : "unknown_error"})`);
-        return null;
-      }
-    }
     async recordAcceptedLetterDisclosure(storedLetter) {
       const binding = storedLetter?.disclosureBinding;
       const receipt = storedLetter?.acceptedReceipt;
       if (this.validateLetterReceipt(storedLetter, receipt) && storedLetter.sourceMemoryContext
-        && memoryEngine?.letterMemoryFinalization) {
+        && memoryEngine?.letterSummaryFinalization) {
         storedLetter.acceptedMemoryContext = { ...storedLetter.sourceMemoryContext,
           campaignToken: binding.campaignToken, letterId: storedLetter.letter.letterId,
           senderId: binding.playerId, recipientId: binding.aiId, sourceDate: binding.sourceDate,
@@ -1045,13 +1017,6 @@ function createLetterManager({ settingsRepository, fs, path, TailFile, readline,
           acceptedTotalDays: receipt.totalDays, text: storedLetter.letter.content, reply: storedLetter.reply };
         this.savePendingLetters();
         this.finalizeAcceptedLetterMemory(storedLetter, storedLetter.acceptedMemoryContext);
-        try {
-          const current = await parseLog(settingsRepository.getCK3DebugLogPath());
-          if (current?.campaignToken === binding.campaignToken && current.playerID === binding.playerId
-            && current.aiID === binding.aiId && current.totalDays === receipt.totalDays) {
-            await this.recordLetterDisclosure(current, storedLetter.letter, binding.aiId, binding.playerId, storedLetter.reply);
-          }
-        } catch { /* The durable archive uses the validated source snapshot, not a later dialogue. */ }
         return { archiveCaptured: true };
       }
       const debugLogPath = settingsRepository.getCK3DebugLogPath();
@@ -1070,9 +1035,9 @@ function createLetterManager({ settingsRepository, fs, path, TailFile, readline,
           || validation.letter.totalDays !== storedLetter.letter.totalDays || validation.letter.delay !== storedLetter.letter.delay
           || currentBinding.sourceTotalDays < Number(storedLetter.expectedDeliveryDay)
           || currentBinding.sourceTotalDays < binding.sourceTotalDays) return null;
-        const archive = memoryEngine?.letterMemoryFinalization;
+        const archive = memoryEngine?.letterSummaryFinalization;
         if (archive) {
-          const { buildCurrentMemory4RelationshipEvidence } = require("../memory-system/memory4-entity-context");
+          const { buildCurrentRelationshipEvidence } = require("../memory-system/entity-context");
           const participantProfiles = [binding.playerId, binding.aiId].map(id => {
             const character = gameData.characters.get(id);
             return { id, name: character?.name, shortName: character?.shortName, firstName: character?.firstName, fullName: character?.fullName };
@@ -1081,15 +1046,14 @@ function createLetterManager({ settingsRepository, fs, path, TailFile, readline,
             senderId: binding.playerId, recipientId: binding.aiId, sourceDate: binding.sourceDate, acceptedDate: acceptedDate.canonical,
             sourceTotalDays: binding.sourceTotalDays, acceptedTotalDays: currentBinding.sourceTotalDays,
             text: storedLetter.letter.content, reply: storedLetter.reply, participantProfiles,
-            relationshipEvidence: buildCurrentMemory4RelationshipEvidence({ gameData, ownerIds: [binding.playerId, binding.aiId],
+            relationshipEvidence: buildCurrentRelationshipEvidence({ gameData, ownerIds: [binding.playerId, binding.aiId],
               entityIds: [binding.playerId, binding.aiId] }) };
           this.savePendingLetters();
           this.finalizeAcceptedLetterMemory(storedLetter, storedLetter.acceptedMemoryContext);
         }
-        const disclosure = await this.recordLetterDisclosure(gameData, validation.letter, currentBinding.aiId, currentBinding.playerId, storedLetter.reply);
-        return archive ? { disclosure, archiveCaptured: true } : disclosure;
+        return archive ? { archiveCaptured: true } : null;
       } catch (error) {
-        console.warn(`LetterManager: Accepted letter disclosure skipped (${error instanceof Error ? error.message : "unknown_error"})`);
+        console.warn(`LetterManager: Accepted letter summary capture failed (${error instanceof Error ? error.message : "unknown_error"})`);
         if (storedLetter.acceptedMemoryContext) {
           this.updateLetterStatus(storedLetter.letter.letterId, { summaryStatus: LetterSummaryStatus.SAVE_FAILED,
             summaryError: error instanceof Error ? error.message : "letter_memory_capture_failed" });
@@ -1100,7 +1064,7 @@ function createLetterManager({ settingsRepository, fs, path, TailFile, readline,
       }
     }
     finalizeAcceptedLetterMemory(storedLetter, context) {
-      const archive = memoryEngine?.letterMemoryFinalization;
+      const archive = memoryEngine?.letterSummaryFinalization;
       const job = archive.captureAccepted(context);
       const letterId = storedLetter.letter.letterId;
       this.updateLetterStatus(letterId, { summaryStatus: LetterSummaryStatus.GENERATING, summaryError: null });
@@ -1234,7 +1198,7 @@ function createLetterManager({ settingsRepository, fs, path, TailFile, readline,
         this.transitionLetter(normalizedLetterId, LetterPipelineState.PENDING_DELIVERY, { expectedDeliveryDay, retryAttemptCount, ...deliveryTiming });
         this.savePendingLetters();
         if (effectiveCurrentDay >= expectedDeliveryDay) await this.checkAndDeliverLetters();
-        if (!memoryEngine?.letterMemoryFinalization) {
+        if (!memoryEngine?.letterSummaryFinalization) {
           const latestContext = await this.loadLatestGameDataWithLetter();
           if (latestContext?.letter?.letterId === normalizedLetterId) await this.generateSummary(latestContext.gameData, context.letter, reply);
           else this.updateLetterStatus(normalizedLetterId, { summaryStatus: LetterSummaryStatus.GENERATION_FAILED, summaryError: "Retry succeeded, but matching letter context was unavailable for summary." });
@@ -1483,7 +1447,7 @@ function createLetterManager({ settingsRepository, fs, path, TailFile, readline,
         return false;
       }
       const storedLetter = this.storedLetters.get(letter.letterId);
-      if (memoryEngine?.letterMemoryFinalization && storedLetter?.sourceMemoryContext && storedLetter.disclosureBinding) {
+      if (memoryEngine?.letterSummaryFinalization && storedLetter?.sourceMemoryContext && storedLetter.disclosureBinding) {
         storedLetter.receiptToken ||= randomBytes(16).toString("hex");
         if (!storedLetter.receiptSessionProof) {
           try {
@@ -1768,7 +1732,7 @@ ${"  \t"}modifier = artifact_monthly_minor_prestige_1_modifier
         acceptedLetter.acceptedMemoryAwaitingProof = true;
         if (!this.savePendingLetters()) throw new Error("letter_acceptance_persist_failed");
         const memoryAccepted = acceptedEffectWritten && acceptedLetter ? await this.recordAcceptedLetterDisclosure(acceptedLetter) : null;
-        if (memoryEngine?.letterMemoryFinalization && !memoryAccepted?.archiveCaptured) {
+        if (memoryEngine?.letterSummaryFinalization && !memoryAccepted?.archiveCaptured) {
           acceptedLetter.acceptedMemoryAwaitingProof = true;
           this.updateLetterStatus(acceptedLetterId, { summaryStatus: LetterSummaryStatus.SAVE_FAILED, summaryError: "letter_memory_acceptance_proof_unavailable" });
         } else this.storedLetters.delete(acceptedLetterId);

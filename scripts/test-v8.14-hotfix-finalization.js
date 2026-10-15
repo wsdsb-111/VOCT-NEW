@@ -35,13 +35,15 @@ const safeOutput = context => JSON.stringify({ summarySegments: context.messages
         participantPresence: participants.slice(0, count).map(p => ({ characterId: p.id, joinedAtMessageId: p.id === 3 ? 3 : 1, leftAtMessageId: null })),
         finalizationVisibilityV1: true, buildPrompt: () => [], persistCharacterFolders: async () => ({ success: true }) };
       let calls = 0;
+      let durableCalls = 0;
       const output = { summarySegments: [segment(context.messages.map(m => m.id))],
         memories: [{ content: "无效候选没有 source", participants: [1, 2], visibility: "public", messageIds: [1] }] };
       const result = await engine.finalizeConversation({ ...context, requestSummary: async () => { calls++; return { content: calls === 1 ? JSON.stringify(output) : safeOutput(context), finish_reason: "stop" }; },
-        requestDurable: async () => ({ content: "malformed durable" }) });
+        requestDurable: async () => { durableCalls++; return { content: "malformed durable" }; } });
       assert.equal(result.success, true, result.error?.message);
       assert.equal(calls, 1, "source-bounded visibility repair must not force a second model request");
-      assert.equal(result.durable.status, "PARTIAL_FAILURE", "malformed durable cannot cancel committed Narrative");
+      assert.equal(durableCalls, 0, "retired Durable finalization callback must never run");
+      assert.equal(Object.hasOwn(result, "durable"), false, "finalization result must not expose a Durable outcome");
       assert(result.directedSummaries.get("1->2"));
       assert(!result.directedSummaries.get("1->2").content.includes("心里"));
       if (count === 3) assert(!result.directedSummaries.get("3->1").content.includes("铜牌"), "late arrival cannot read prior negotiation");
@@ -122,7 +124,11 @@ const safeOutput = context => JSON.stringify({ summarySegments: context.messages
     assert.equal(snapshot.lastOutputFingerprint.length, 64);
     assert.equal((await engine.recoverFailedFinalization(blockedFile, { ...options, automatic: true })).reason, "recovery_repeated_failure_requires_review");
     assert.equal(recoveryCalls, 2);
-    const diagnostics = buildIncidentDiagnostics({ memoryEngine: engine, conversation: null, providerDiagnostics: { getRecent: () => [{
+    const noMemory4Reads = new Proxy(engine, { get(target, property, receiver) {
+      if (property === "memory4") throw new Error("incident_diagnostics_must_not_scan_memory4_recovery");
+      return Reflect.get(target, property, receiver);
+    } });
+    const diagnostics = buildIncidentDiagnostics({ memoryEngine: noMemory4Reads, conversation: null, providerDiagnostics: { getRecent: () => [{
       requestType: "chat", provider: "zhipu", rawUsage: { prompt_tokens: 12000, prompt_tokens_details: { cached_tokens: 0 } },
       normalizedUsage: { prompt_cache_hit_tokens: 0 }, secret: "never expose", messages: [{ content: "private raw transcript" }]
     }] } });
@@ -142,6 +148,6 @@ const safeOutput = context => JSON.stringify({ summarySegments: context.messages
       throw new Error("402 insufficient balance");
     } }), error => error.message.includes("402") && error.providerOutput === null,
     "transport failure cannot inherit the previous attempt's output fingerprint");
-    console.log("V8.14 Hotfix Finalization: PASS (2P/3P, single-call source repair, private/presence boundaries, Narrative/Durable independence, saved-output recovery, manual retry)");
+    console.log("V8.14 Hotfix Finalization: PASS (2P/3P, single-call source repair, private/presence boundaries, Legacy-only diagnostics, saved-output recovery, manual retry)");
   } finally { fs.rmSync(root, { recursive: true, force: true }); }
 })().catch(error => { console.error(error); process.exitCode = 1; });

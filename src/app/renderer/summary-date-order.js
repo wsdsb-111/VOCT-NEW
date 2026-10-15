@@ -11,6 +11,10 @@ function dateOrder(value) {
   return year * 10000 + month * 100 + day;
 }
 
+export function getSummaryDateOrder(value) {
+  return dateOrder(value);
+}
+
 export function getSummaryDisplayEntries(summaries, sortByDate = true) {
   // Keep file indices intact for edit, delete and regenerate IPC calls.
   const entries = summaries.map((summary, index) => ({ summary, index }));
@@ -23,4 +27,38 @@ export function getSummaryDisplayEntries(summaries, sortByDate = true) {
     if (rightDate === null) return -1;
     return rightDate - leftDate;
   });
+}
+
+export function getLegacySummaryPage(summaries, {
+  sortByDate = true,
+  fromDate = "",
+  toDate = "",
+  page = 0,
+  pageSize = 10
+} = {}) {
+  const fromOrder = fromDate ? dateOrder(fromDate) : null;
+  const toOrder = toDate ? dateOrder(toDate) : null;
+  const hasRange = !!fromDate || !!toDate;
+  const matchingEntries = getSummaryDisplayEntries(summaries, sortByDate).filter(({ summary }) => {
+    if (!hasRange) return true;
+    const order = dateOrder(summary.date);
+    if (order === null || fromOrder === null && fromDate || toOrder === null && toDate) return false;
+    return (fromOrder === null || order >= fromOrder) && (toOrder === null || order <= toOrder);
+  });
+  const safePageSize = Number.isSafeInteger(pageSize) && pageSize > 0 ? pageSize : 10;
+  const pageCount = Math.ceil(matchingEntries.length / safePageSize);
+  const currentPage = pageCount ? Math.min(Math.max(Number.isSafeInteger(page) ? page : 0, 0), pageCount - 1) : 0;
+  return {
+    entries: matchingEntries.slice(currentPage * safePageSize, (currentPage + 1) * safePageSize),
+    totalCount: matchingEntries.length,
+    page: currentPage,
+    pageCount,
+    pageSize: safePageSize
+  };
+}
+
+export function getSummaryImportantMatters(content) {
+  if (typeof content !== "string") return "";
+  const match = content.match(/【需要长期记住的事项】([\s\S]*?)(?=\n\s*【[^】]+】|$)/);
+  return match?.[1]?.trim() || "";
 }

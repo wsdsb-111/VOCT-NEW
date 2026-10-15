@@ -12,10 +12,10 @@ const { Character } = require("../resources/app/out/main/game-data/character");
 const { createGameData } = require("../resources/app/out/main/game-data/game-data");
 const { createLetterEffectTransport } = require("../resources/app/out/main/letters/letter-effect-transport");
 const { createLetterManager } = require("../resources/app/out/main/letters/letter-manager");
-const { LetterMemoryFinalization } = require("../resources/app/out/main/memory-system/letter-memory-finalization");
+const { LetterSummaryFinalization } = require("../resources/app/out/main/memory-system/letter-summary-finalization");
 const { MemoryEngine } = require("../resources/app/out/main/memory-system/memory-engine");
 const memorySystem = require("../resources/app/out/main/memory-system");
-const { hash } = require("../resources/app/out/main/memory-system/memory4-contract");
+const { hash } = require("../resources/app/out/main/memory-system/legacy-source-lineage");
 
 const CAMPAIGN = "votc8c-202610080001";
 const OTHER_CAMPAIGN = "votc8c-202610080002";
@@ -85,7 +85,6 @@ function createFixture({ failFirstSummary = false, letterManagerFactory = create
 
   const memoryEngine = new MemoryEngine({ baseDir: memoryDir, summaryFoldersDir: summariesDir,
     trace: { record() {} } });
-  memoryEngine.memory4.configureExtraction({ isCampaignCurrent: token => token === CAMPAIGN });
 
   const GameData = createGameData({ fs, path, memorySystem, memoryEngine, summariesDir,
     getHistoricalReferenceByYear: () => null });
@@ -115,12 +114,10 @@ function createFixture({ failFirstSummary = false, letterManagerFactory = create
   };
 
   const summaryCalls = [];
-  const durableOwners = [];
-  const durableSnapshots = [];
   let shouldFailSummary = failFirstSummary;
-  const archive = new LetterMemoryFinalization({
+  const archive = new LetterSummaryFinalization({
     memoryEngine,
-    requestSummary: async messages => {
+    requestSummary: async (messages, options) => {
       summaryCalls.push(structuredClone(messages));
       if (shouldFailSummary) {
         shouldFailSummary = false;
@@ -128,26 +125,11 @@ function createFixture({ failFirstSummary = false, letterManagerFactory = create
       }
       return { content: SUMMARY_TEXT, finish_reason: "stop" };
     },
-    requestDurable: async (messages, options) => {
-      durableOwners.push(options.ownerId);
-      const request = JSON.parse(messages[1].content);
-      const fragment = request.fragments[0];
-      durableSnapshots.push({ ownerId: options.ownerId, fragment });
-      return { content: JSON.stringify({ status: "STORE", entries: [{
-        memoryType: "DURABLE_KNOWLEDGE",
-        text: "信件确认玉印已妥善保管。",
-        fragmentIds: [fragment.fragmentId],
-        entityIds: fragment.allowedEntityIds,
-        participantIds: [],
-        topics: ["玉印", "信件"],
-        eventTime: { from: fragment.eventDate, to: fragment.eventDate, precision: "day", status: "reported" }
-      }] }), finish_reason: "stop" };
-    },
     persistSummary: async (summary, context) => GameData.saveRecoveredSummary(summary, context),
     getSummarySettings: () => settingsRepository.getSummaryPromptSettings(),
     isCampaignCurrent: token => token === CAMPAIGN
   });
-  memoryEngine.letterMemoryFinalization = archive;
+  memoryEngine.letterSummaryFinalization = archive;
 
   const inertInterval = () => ({ unref() {} });
   const managerDependencies = {
@@ -175,7 +157,7 @@ function createFixture({ failFirstSummary = false, letterManagerFactory = create
     manager, managers, createManager, managerDependencies, sourceGameData, originalLetter,
     makeGameData, setParsedGameData(value) { parsedGameData = value; },
     get parseCalls() { return parseCalls; }, get effectWrites() { return effectWrites; },
-    summaryCalls, durableOwners, durableSnapshots, archive, memoryEngine, runFileManager,
+    summaryCalls, archive, memoryEngine, runFileManager,
     async close() {
       for (const item of managers) await item.stopLogTailing();
       fs.rmSync(root, { recursive: true, force: true });
@@ -315,28 +297,27 @@ async function testReceiptArchiveRetryAndIsolation() {
       "summary failure does not undo game receipt");
     const retry = await fixture.archive.retryPending({ activeCampaignToken: CAMPAIGN, manual: true });
     safeAssert(retry.some(row => row.status === "COMPLETE"),
-      `accepted memory finalization recovers from its durable job: ${JSON.stringify(retry.map(row => ({
-        status: row.status, errorCode: row.errorCode, ownerStatuses: row.ownerStatuses
+      `accepted Legacy summary finalization recovers from its recovery job: ${JSON.stringify(retry.map(row => ({
+        status: row.status, errorCode: row.errorCode
       })))}`);
     assert.equal(fixture.effectWrites, 2, "retrying the accepted archive does not write another Effect");
     assert.equal(fixture.summaryCalls.length, 2, "only the failed summary request is retried");
-    assert.deepEqual(fixture.durableOwners.slice().sort((a, b) => a - b), [1, 2],
-      "both letter owners receive durable Memory4 extraction");
 
-    const recoveryFiles = fs.readdirSync(fixture.memoryEngine.store.paths.memory4Recovery)
+    const recoveryDir = path.join(fixture.memoryEngine.store.paths.recovery, "letter-summary");
+    const recoveryFiles = fs.readdirSync(recoveryDir)
       .filter(name => /^letter_[a-f0-9]{64}\.json$/.test(name));
-    assert.equal(recoveryFiles.length, 1, "one accepted letter creates one durable archive job");
+    assert.equal(recoveryFiles.length, 1, "one accepted letter creates one Legacy summary recovery job");
     const jobId = recoveryFiles[0].slice("letter_".length, -".json".length);
     const job = fixture.archive.readJob(jobId);
-    assert.equal(hash(job.context.text), hash(originalLetter.content), "the archive uses the original letter text");
-    assert.equal(hash(job.context.reply), hash(REPLY_TEXT), "the archive uses the generated reply");
+    assert.equal(hash(job.context.text), hash(originalLetter.content), "the Legacy summary uses the original letter text");
+    assert.equal(hash(job.context.reply), hash(REPLY_TEXT), "the Legacy summary uses the generated reply");
     assert.equal(job.context.acceptedDate, "1038.4.4");
     assert.equal(job.context.acceptedTotalDays, 103);
     assert.equal(job.context.participantProfiles.find(row => row.id === 2).shortName, "李师师",
       "current-log character changes do not replace source participant profiles");
     assert(job.context.relationshipEvidence.some(row => row.ownerId === 1 && row.entityId === 2
       && row.types.includes("spouse") && row.asOf === "1038.4.1"),
-    "the archived relationship evidence keeps its source date and owner scope");
+    "the accepted Legacy context keeps relationship evidence scoped to the source date and owner");
     assert.equal(fixture.summaryCalls.length, 2);
     safeAssert(JSON.stringify(fixture.summaryCalls[1]).includes(originalLetter.content)
       && JSON.stringify(fixture.summaryCalls[1]).includes(REPLY_TEXT),
@@ -364,21 +345,14 @@ async function testReceiptArchiveRetryAndIsolation() {
       assert.equal(rows[0].playerId, index === 0 ? 1 : 2, "each summary file preserves its owner perspective");
     }
 
-    const ownerStatuses = new Map(fixture.archive.result(job).ownerStatuses.map(row => [row.ownerId, row]));
-    for (const ownerId of [1, 2]) {
-      const scope = { campaignToken: CAMPAIGN, ownerId };
-      const index = fixture.memoryEngine.memory4.store.loadIndex(scope);
-      const committed = index.finalizations[hash(job.finalizationId)];
-      safeAssert(!!committed && committed.entryIds.length === 1, "each owner has one committed canonical letter memory");
-      const entry = fixture.memoryEngine.memory4.store.readEntry(scope, committed.entryIds[0], index);
-      assert.deepEqual(entry.evidence.visibilityEvidence, ["validated_letter"]);
-      assert.deepEqual(entry.evidence.knownBy, [1, 2]);
-      assert.equal(ownerStatuses.get(ownerId).status, "STORE");
-      assert.equal(Object.hasOwn(fixture.memoryEngine.memory4, "derived"), false);
-      const directory = fixture.memoryEngine.memory4.store.directory(scope);
-      assert.equal(fs.existsSync(path.join(directory, "years")), false);
-      assert.equal(fs.existsSync(path.join(directory, "life.json")), false);
-    }
+    const [letterMemory] = fixture.memoryEngine.store.listAllMemories();
+    assert.equal(letterMemory.type, "letter");
+    assert.equal(letterMemory.content, SUMMARY_TEXT, "the accepted narrative is stored through the Legacy MemoryStore");
+    assert.deepEqual(letterMemory.knownBy, [1, 2], "both correspondents retain their own Legacy knowledge");
+    const [episode] = fixture.memoryEngine.store.listAllEpisodes();
+    assert.equal(episode.commitMarker, job.commitMarker, "the accepted Legacy episode marker is committed");
+    assert.equal(episode.letterId, LETTER_ID);
+    assert.equal(Object.hasOwn(fixture.memoryEngine, "memory4"), false, "the production letter fixture has no Memory4 coordinator");
   } finally {
     await fixture.close();
   }
@@ -399,7 +373,7 @@ async function testLegacyClipboardAcceptanceRemainsSupported() {
       letter: legacyLetter, reply: "旧版回信。", expectedDeliveryDay: 103, disclosureBinding: binding
     });
     manager.awaitingAcceptanceLetterId = legacyLetter.letterId;
-    fixture.memoryEngine.letterMemoryFinalization = null;
+    fixture.memoryEngine.letterSummaryFinalization = null;
 
     const result = await manager.clearLettersFile();
     assert.deepEqual(result, { success: true, letterId: legacyLetter.letterId }, "legacy acceptance remains handled by the prior callback contract");
@@ -454,7 +428,7 @@ async function main() {
   await testReceiptArchiveRetryAndIsolation();
   await testHeadBaselineDoesNotAcceptNewReceiptProtocol();
   await testLegacyClipboardAcceptanceRemainsSupported();
-  console.log("V8.15.2 letter archive independent QA: PASS (receipt binding, in-memory HEAD baseline, restart, stale/duplicate isolation, real directed summaries, both Memory4 owners with retired derived generation, retry without redelivery, legacy callback)");
+  console.log("V8.15.2 Legacy letter archive independent QA: PASS (receipt binding, restart, stale/duplicate isolation, directed summaries, no-redelivery retry, Legacy callback)");
 }
 
 module.exports = { createFixture, pendingLetter, makeReceiptLine, waitFor };

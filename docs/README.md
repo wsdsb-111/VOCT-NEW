@@ -4,29 +4,31 @@
 
 ## 推荐阅读顺序
 
-V9.3.3.1 回归修复：[规格](current/v9/V9_3_3_1_FIX_SPEC.md)、[实施](current/v9/V9_3_3_1_FIX_REPORT.md)、[验证](current/v9/V9_3_3_1_VERIFICATION_REPORT.md)、[改动清单](current/v9/V9_3_3_1_CHANGED_FILES.md)。Windows 二进制首次部署、Coverage 同源身份、明细分页和详情 Loading；本轮零付费与零历史清理，最终 SHA 远端 CI 待用户手动推送。
+**当前主线 V9.3.4：Durable 完全退役与 Legacy Summary。** 参阅[实施报告](current/v9/V9_3_4_IMPLEMENTATION_REPORT.md)和[验证报告](current/v9/V9_3_4_VERIFICATION_REPORT.md)。Core／App／UI 为 9.3.4；Workshop 2.0.5、Official Action 2.0.3、协议 3.0 与摘要存储 2.5 保持。源码映射 278 项，构建和部署验证已通过；真实 CK3、Soak 与远端 CI 待验收。最终 PASS 数量以正式报告为准。
 
-V9.3.3 来源规划、来源关联与 Year/Life 物理退役：[规格](current/v9/V9_3_3_IMPLEMENTATION_SPEC.md)、[实施](current/v9/V9_3_3_IMPLEMENTATION_REPORT.md)、[验证](current/v9/V9_3_3_VERIFICATION_REPORT.md)。源码、部署、实际数据清理、原生 Provider 和人工 Gate 分别签署；旧记录缺的覆盖统计保持未知。
+**历史版本 V9.3.3.1 回归修复：**[规格](current/v9/V9_3_3_1_FIX_SPEC.md)、[实施](current/v9/V9_3_3_1_FIX_REPORT.md)、[验证](current/v9/V9_3_3_1_VERIFICATION_REPORT.md)、[改动清单](current/v9/V9_3_3_1_CHANGED_FILES.md)。Windows 二进制首次部署、Coverage 同源身份、明细分页和详情 Loading；该轮 Gate 与 CI 状态保留为当时记录。
 
-V9.3.2 Durable／Action 修复：[实施](current/v9/V9_3_2_IMPLEMENTATION_REPORT.md)、[验证](current/v9/V9_3_2_VERIFICATION_REPORT.md)。按用户要求同步 Core/UI/App 为 9.3.2；完整发布门禁与原生失败记录修复单列核验。
+历史 V9.3.3 来源规划、来源关联与 Year/Life 物理退役：[规格](current/v9/V9_3_3_IMPLEMENTATION_SPEC.md)、[实施](current/v9/V9_3_3_IMPLEMENTATION_REPORT.md)、[验证](current/v9/V9_3_3_VERIFICATION_REPORT.md)。重要来源按全文与时间区间优先规划；Legacy–Durable 展示只读来源关联，保留 8 条上限和严格权限。Year/Life 从生产服务、UI 与召回退役，某年/生平问句仍检索 Detail/Legacy；历史派生文件须经具体范围确认后事务清理。V9.3.3 当时源码、部署、实际数据清理、原生 Provider 和人工 Gate 分别签署；旧记录缺的覆盖统计保持未知。V9.3.4 已进一步退役 Durable。
 
-V9.3.1 实机后审查：[2026-10-13 只读审查报告](current/v9/V9_3_1_RUNTIME_REVIEW_20261013.md)。区分双人摘要投影、人物认知、Action ACK/确认与 Durable 校验失败；包含匿名 Token 汇总和改进优先级，尚未实施修复。
+历史 V9.3.2 Durable／Action 修复：[实施](current/v9/V9_3_2_IMPLEMENTATION_REPORT.md)、[验证](current/v9/V9_3_2_VERIFICATION_REPORT.md)。按用户要求同步 Core/UI/App 为 9.3.2；完整发布门禁与原生失败记录修复单列核验。Durable 已在 V9.3.4 退役。
 
-V9.3.1 Provider Usage／Action诊断修复候选：[方案](current/v9/V9_3_1_IMPLEMENTATION_SPEC.md)、[基线](current/v9/V9_3_1_BASELINE.md)、[实施](current/v9/V9_3_1_IMPLEMENTATION_REPORT.md)、[验证](current/v9/V9_3_1_VERIFICATION_REPORT.md)、[台账](current/v9/V9_3_1_P_ISSUE_LEDGER.md)、[移交](current/v9/V9_3_1_HANDOFF_TO_V9_4.md)、[匿名证据](current/v9/v931-conformance-evidence.json)。Gemini模拟全链用量和Action失败证据收口，正式版本及真实端点／CK3／最终CI分别记录。
+历史 V9.3.1 实机后审查：[2026-10-13 只读审查报告](current/v9/V9_3_1_RUNTIME_REVIEW_20261013.md)。区分双人摘要投影、人物认知、Action ACK/确认与 Durable 校验失败；包含匿名 Token 汇总和改进优先级，尚未实施修复。
 
-V9.3 Provider Platform候选：[方案](current/v9/V9_3_IMPLEMENTATION_SPEC.md)、[基线](current/v9/V9_3_BASELINE.md)、[Provider审计](current/v9/V9_3_PROVIDER_AUDIT.md)、[支持矩阵](current/v9/V9_3_PROVIDER_MATRIX.md)、[实施](current/v9/V9_3_IMPLEMENTATION_REPORT.md)、[验证](current/v9/V9_3_VERIFICATION_REPORT.md)、[台账](current/v9/V9_3_P_ISSUE_LEDGER.md)、[V9.4移交](current/v9/V9_3_HANDOFF_TO_V9_4.md)、[40核心场景](current/v9/v93-conformance-evidence.json)。七Adapter离线合同统一；原生与Mock、UNKNOWN与零、正式版本与人工Gate分别保留。
+历史 V9.3.1 Provider Usage／Action 诊断修复候选：[方案](current/v9/V9_3_1_IMPLEMENTATION_SPEC.md)、[基线](current/v9/V9_3_1_BASELINE.md)、[实施](current/v9/V9_3_1_IMPLEMENTATION_REPORT.md)、[验证](current/v9/V9_3_1_VERIFICATION_REPORT.md)、[台账](current/v9/V9_3_1_P_ISSUE_LEDGER.md)、[移交](current/v9/V9_3_1_HANDOFF_TO_V9_4.md)、[匿名证据](current/v9/v931-conformance-evidence.json)。Gemini 模拟全链用量和 Action 失败证据收口，正式版本及真实端点／CK3／最终 CI 分别记录。
 
-V9.2.3退役与GLM诊断候选：[方案](current/v9/V9_2_3_IMPLEMENTATION_SPEC.md)、[基线](current/v9/V9_2_3_BASELINE.md)、[实施](current/v9/V9_2_3_IMPLEMENTATION_REPORT.md)、[验证](current/v9/V9_2_3_VERIFICATION_REPORT.md)、[台账](current/v9/V9_2_3_P_ISSUE_LEDGER.md)、[移交](current/v9/V9_2_3_HANDOFF_TO_V9_3.md)。Year/Life自动模型生成退役，Detail/Legacy与合法历史档保留；GLM应用出站未证明回归，收益HOLD，正式版本与人工Gate分开。
+历史 V9.3 Provider Platform 候选：[方案](current/v9/V9_3_IMPLEMENTATION_SPEC.md)、[基线](current/v9/V9_3_BASELINE.md)、[Provider审计](current/v9/V9_3_PROVIDER_AUDIT.md)、[支持矩阵](current/v9/V9_3_PROVIDER_MATRIX.md)、[实施](current/v9/V9_3_IMPLEMENTATION_REPORT.md)、[验证](current/v9/V9_3_VERIFICATION_REPORT.md)、[台账](current/v9/V9_3_P_ISSUE_LEDGER.md)、[V9.4移交](current/v9/V9_3_HANDOFF_TO_V9_4.md)、[40核心场景](current/v9/v93-conformance-evidence.json)。七 Adapter 离线合同统一；原生与 Mock、UNKNOWN 与零、正式版本与人工 Gate 分别保留。
 
-2026-10-12 GLM 实机缓存审计：[分析报告](current/v9/V9_2_2_GLM_CACHE_INCIDENT_20261012.md)、[脱敏证据](current/v9/glm-cache-20261012-evidence.json)。本轮八次 chat 原生加权命中 33.42%，五次零；相同稳定前缀与参数仍有零值，未证实应用侧缺陷。Durable 与 Runtime 按要求保持不变，供应商缓存驻留／路由原因待取证。
+历史 V9.2.3 退役与 GLM 诊断候选：[方案](current/v9/V9_2_3_IMPLEMENTATION_SPEC.md)、[基线](current/v9/V9_2_3_BASELINE.md)、[实施](current/v9/V9_2_3_IMPLEMENTATION_REPORT.md)、[验证](current/v9/V9_2_3_VERIFICATION_REPORT.md)、[台账](current/v9/V9_2_3_P_ISSUE_LEDGER.md)、[移交](current/v9/V9_2_3_HANDOFF_TO_V9_3.md)。Year/Life 自动模型生成退役，Detail/Legacy 与合法历史档保留；GLM 应用出站未证明回归，收益 HOLD，正式版本与人工 Gate 分开。Durable 已由 V9.3.4 进一步退役。
 
-V9.2.2 Durable 事故候选：[施工方案](current/v9/V9_2_2_DURABLE_INCIDENT_PLAN.md)、[事故基线](current/v9/V9_2_2_BASELINE.md)、[实施](current/v9/V9_2_2_IMPLEMENTATION_REPORT.md)、[验证](current/v9/V9_2_2_VERIFICATION_REPORT.md)、[问题台账](current/v9/V9_2_2_P_ISSUE_LEDGER.md)、[移交](current/v9/V9_2_2_HANDOFF_TO_V9_3.md)。已修复发送前 Forget 竞争与跨范围归因；原生合成暖缓存正常，真实长冷输入／恢复成本继续取证，收益 HOLD，正式版本不升级。
+历史 2026-10-12 GLM 实机缓存审计：[分析报告](current/v9/V9_2_2_GLM_CACHE_INCIDENT_20261012.md)、[脱敏证据](current/v9/glm-cache-20261012-evidence.json)。本轮八次 chat 原生加权命中 33.42%，五次零；相同稳定前缀与参数仍有零值，未证实应用侧缺陷。当时 Durable 与 Runtime 按要求保持不变；供应商缓存驻留／路由结论按原报告保留。
 
-V9.2.1 缓存专项候选：[施工规格](current/v9/V9_2_1_IMPLEMENTATION_SPEC.md)、[基线](current/v9/V9_2_1_BASELINE.md)、[验证](current/v9/V9_2_1_VERIFICATION_REPORT.md)、[问题台账](current/v9/V9_2_1_P_ISSUE_LEDGER.md)、[移交](current/v9/V9_2_1_HANDOFF_TO_V9_3.md)。安全/诊断修复与原生收益分开；效果 HOLD，App/UI 暂保留 9.2.0/V9.2。
+历史 V9.2.2 Durable 事故候选：[施工方案](current/v9/V9_2_2_DURABLE_INCIDENT_PLAN.md)、[事故基线](current/v9/V9_2_2_BASELINE.md)、[实施](current/v9/V9_2_2_IMPLEMENTATION_REPORT.md)、[验证](current/v9/V9_2_2_VERIFICATION_REPORT.md)、[问题台账](current/v9/V9_2_2_P_ISSUE_LEDGER.md)、[移交](current/v9/V9_2_2_HANDOFF_TO_V9_3.md)。已修复发送前 Forget 竞争与跨范围归因；原生合成暖缓存正常，真实长冷输入／恢复成本继续取证，收益 HOLD，正式版本不升级。Durable 已由 V9.3.4 退役。
 
-当前主线 V9.2：[施工原文](current/v9/V9_2_IMPLEMENTATION_SPEC.md)、[实施／验证](current/v9/V9_2_VERIFICATION_REPORT.md)、[七域端口](current/v9/V9_2_SERVICE_PORTS.md)、[JSON 权威与恢复](current/v9/V9_2_JSON_AUTHORITY_AND_RECOVERY.md)、[问题台账](current/v9/V9_2_P_ISSUE_LEDGER.md)、[V9.3 移交](current/v9/V9_2_HANDOFF_TO_V9_3.md)。按[旧总路线](current/v9/V9_ROADMAP.md) §7.3 分期；[V9.1 构建说明](current/v9/V9_1_SOURCE_BUILD.md)和旧实施报告保留历史证据。
+历史 V9.2.1 缓存专项候选：[施工规格](current/v9/V9_2_1_IMPLEMENTATION_SPEC.md)、[基线](current/v9/V9_2_1_BASELINE.md)、[验证](current/v9/V9_2_1_VERIFICATION_REPORT.md)、[问题台账](current/v9/V9_2_1_P_ISSUE_LEDGER.md)、[移交](current/v9/V9_2_1_HANDOFF_TO_V9_3.md)。安全/诊断修复与原生收益分开；效果 HOLD，App/UI 暂保留 9.2.0/V9.2。版本和 Gate 状态保留为历史快照。
 
-当前版本合同见[V9.3.3.1 验证](current/v9/V9_3_3_1_VERIFICATION_REPORT.md)：项目 V9.3.3.1／App 9.3.3.1／Workshop 2.0.5／Memory Engine 4.0；协议 3.0、存储 2.5、Official Action 2.0.3 和 Three-Mod 1.0.6 保留。
+历史 V9.2：[施工原文](current/v9/V9_2_IMPLEMENTATION_SPEC.md)、[实施／验证](current/v9/V9_2_VERIFICATION_REPORT.md)、[七域端口](current/v9/V9_2_SERVICE_PORTS.md)、[JSON 权威与恢复](current/v9/V9_2_JSON_AUTHORITY_AND_RECOVERY.md)、[问题台账](current/v9/V9_2_P_ISSUE_LEDGER.md)、[V9.3 移交](current/v9/V9_2_HANDOFF_TO_V9_3.md)。按当时[旧总路线](current/v9/V9_ROADMAP.md) §7.3 分期；[V9.1 构建说明](current/v9/V9_1_SOURCE_BUILD.md)和旧实施报告保留历史证据。
+
+当前版本合同见[V9.3.4 验证报告](current/v9/V9_3_4_VERIFICATION_REPORT.md)：Core／App／UI V9.3.4，Workshop 2.0.5，`Legacy Summary`，协议 3.0、存储 2.5、Official Action 2.0.3 和 Three-Mod 1.0.6 保持。
 
 V9工程合同：[永久行为](current/v9/V9_BASELINE_BEHAVIOR_CONTRACTS.md)、[架构边界](current/v9/V9_ARCHITECTURE_BOUNDARY.md)、[数据责任](current/v9/V9_DATA_OWNERSHIP_LEDGER.md)、[退役台账](current/v9/V9_DECOMMISSION_LEDGER.md)、[性能调查](current/v9/V9_STARTUP_PERFORMANCE_INVESTIGATION.md)、[独立兼容迁移](current/v9/V9_COMPATIBILITY_MOD_SEPARATION.md)。
 

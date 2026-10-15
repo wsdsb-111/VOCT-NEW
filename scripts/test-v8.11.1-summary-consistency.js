@@ -5,26 +5,12 @@ const fs = require("fs");
 const os = require("os");
 const path = require("path");
 const { MemoryEngine } = require("../resources/app/out/main/memory-system");
-const { createProjectionLineage } = require("../resources/app/out/main/memory-system/memory4-forget");
-const { hash } = require("../resources/app/out/main/memory-system/memory4-contract");
+const { createProjectionLineage } = require("../resources/app/out/main/memory-system/legacy-source-lineage");
 const { createSummariesManager } = require("../resources/app/out/main/summaries/summaries-manager");
 
-function seedMemory4Projection(engine, { campaignToken, conversationId, finalizationId, ownerId, counterpartId, segmentId, text }) {
-  const fragmentId = `${segmentId}-source`;
-  const messageId = 1;
-  const lineage = createProjectionLineage({ campaignToken, ownerId, counterpartId, conversationId, finalizationId,
-    segmentIds: [segmentId], sourceSegmentIds: [fragmentId], sourceMessageIds: [messageId] });
-  const snapshot = { campaignToken, ownerId, conversationId, finalizationId, episodeId: `${finalizationId}-episode`,
-    date: "1164.1.1", totalDays: 425000, sourceRevision: hash([campaignToken, finalizationId, "source"]),
-    presentMessageCount: 1, completeness: "complete", summaryIds: [], counterpartIds: [counterpartId],
-    fragments: [{ fragmentId, messageId, sourceMessageIds: [messageId], text, speakerId: ownerId, speakerIds: [ownerId],
-      sourceTextVerified: true, sourceRole: "assistant", presentIds: [ownerId, counterpartId], knownBy: [ownerId, counterpartId],
-      visibility: "participants", sourceType: "spoken", recipientIds: [counterpartId], entityIds: [counterpartId],
-      visibilityEvidence: "application_fragment" }], projectionLineages: [lineage] };
-  engine.memory4.store.commitOwner(snapshot, { status: "STORE", entries: [{ memoryType: "DURABLE_KNOWLEDGE", text,
-    fragmentIds: [fragmentId], participantIds: [ownerId, counterpartId], entityIds: [counterpartId], topics: ["fixture"],
-    eventTime: { status: "unknown" } }] });
-  return lineage;
+function createLegacyProjectionLineage({ campaignToken, conversationId, finalizationId, ownerId, counterpartId, segmentId }) {
+  return createProjectionLineage({ campaignToken, ownerId, counterpartId, conversationId, finalizationId,
+    segmentIds: [segmentId], sourceSegmentIds: [`${segmentId}-source`], sourceMessageIds: [1] });
 }
 
 (async () => {
@@ -42,8 +28,8 @@ function seedMemory4Projection(engine, { campaignToken, conversationId, finaliza
     const memory = store.saveMemory({ memoryId: "original", content: "赵构答应给黄金", participants: [1, 2], subjects: [2], knownBy: [1, 2], visibility: "known_group", provenance: { finalizationId: "final", campaignToken, folderOwnerId: 1, counterpartId: 2, conversationId } });
     for (const id of [1, 2]) store.markKnownBy(id, memory.memoryId);
     store.saveEpisode({ episodeId: "episode", conversationId, finalizationId: "final", campaignToken, memoryIds: [memory.memoryId], summarySegments: [{ segmentId: "segment", content: memory.content, knownBy: [1, 2] }] });
-    const lineage = seedMemory4Projection(engine, { campaignToken, conversationId, finalizationId: "final", ownerId: 1,
-      counterpartId: 2, segmentId: "segment", text: "赵构答应给黄金" });
+    const lineage = createLegacyProjectionLineage({ campaignToken, conversationId, finalizationId: "final", ownerId: 1,
+      counterpartId: 2, segmentId: "segment" });
     const file = path.join(folder, "与乙的对话.json");
     const record = { playerId: 1, characterId: 2, playerName: "甲", characterName: "乙", campaignToken, conversationId,
       finalizationId: "final", perspectiveOwnerId: 1, perspectiveSummarySegmentIds: ["segment"],
@@ -64,7 +50,7 @@ function seedMemory4Projection(engine, { campaignToken, conversationId, finaliza
     assert.throws(() => engine.updateSummaryProjection(edited, "busy", { ownerId: 1, counterpartId: 2 }), /SUMMARY_FINALIZATION_IN_PROGRESS/);
     engine.activeFinalizationIds.delete("final");
     const recoveryFile = path.join(store.paths.recovery, "pending.json");
-    store.writeJson(recoveryFile, { finalizationId: "final", conversationId: "unfinished" });
+    store.writeJson(recoveryFile, { finalizationId: "final", conversationId: "unfinished", campaignToken });
     assert.throws(() => engine.updateSummaryProjection(edited, "pending", { ownerId: 1, counterpartId: 2 }), /SUMMARY_FINALIZATION_RECOVERY_PENDING/);
     fs.unlinkSync(recoveryFile);
     const restarted = new MemoryEngine(options);
@@ -86,13 +72,24 @@ function seedMemory4Projection(engine, { campaignToken, conversationId, finaliza
 
     // Legacy summary has a finalization ID, but no perspective memory IDs.
     store.markKnownBy(1, "original");
-    store.updateMemory("original", { knownBy: [1, 2], provenance: {} });
-    assert.equal(engine.forgetSummaryProjection(record).revokedMemoryCount, 1);
+    store.updateMemory("original", { knownBy: [1, 2], provenance: { campaignToken, finalizationId: "final", folderOwnerId: 1, counterpartId: 2 } });
+    const legacyRecord = { ...record };
+    delete legacyRecord.perspectiveMemoryIds;
+    delete legacyRecord.perspectiveSummarySegmentIds;
+    delete legacyRecord.projectionId;
+    assert.equal(engine.forgetSummaryProjection(legacyRecord).revokedMemoryCount, 1);
     assert.equal(store.queryMemories({ characterId: 1 }).length, 0);
     assert.equal(store.queryMemories({ characterId: 2 }).length, 1);
-    assert.throws(() => engine.forgetSummaryProjection({ playerId: 2, content: "unmapped legacy" }), /LEGACY_SUMMARY_MEMORY_MAPPING_INCOMPLETE/);
+    const beforeUnrelatedForget = store.getMemory("original");
+    assert.equal(engine.forgetSummaryProjection({ playerId: 1, characterId: 2, campaignToken,
+      finalizationId: "unrelated-finalization", content: "other legacy" }).revokedMemoryCount, 0);
+    assert.deepEqual(store.getMemory("original"), beforeUnrelatedForget, "an explicitly different source finalization is untouched");
+    store.updateMemory("original", { provenance: { campaignToken, folderOwnerId: 1, counterpartId: 2 } });
+    assert.throws(() => engine.forgetSummaryProjection({ playerId: 1, characterId: 2, campaignToken,
+      finalizationId: "unmapped-finalization", content: "unmapped legacy" }), /LEGACY_SUMMARY_MEMORY_MAPPING_INCOMPLETE/);
     assert(traces.some(item => item.type === "LEGACY_SUMMARY_MEMORY_MAPPING_INCOMPLETE"));
     assert.equal(store.queryMemories({ characterId: 2 }).length, 1, "unmapped deletion cannot wipe unrelated owner memory");
+    store.updateMemory("original", { provenance: beforeUnrelatedForget.provenance });
 
     // Simulate a process death after a journaled write, before commit.
     store.summaryMutation = { version: 1, files: {} };

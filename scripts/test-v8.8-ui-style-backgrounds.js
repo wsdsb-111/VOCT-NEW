@@ -102,7 +102,6 @@ assert.match(renderer, /title: "游牧风格"/);
 assert.match(renderer, /children: "世界书"/);
 assert.ok(!renderer.includes('children: "世界线"'), "配置导航不能继续显示旧称世界线");
 
-assert.ok(rendererHtml.indexOf('./ui-comfort.css') > rendererHtml.indexOf('./memory4-manager.css'), "Reading layer must follow existing theme and Memory CSS");
 assert.ok(preview.includes('href="resources/app/out/renderer/ui-comfort.css"'), "Preview must load the delivered reading layer");
 assert.match(comfort, /--ui-font: "Microsoft YaHei", "PingFang SC", "Noto Sans CJK SC", sans-serif/);
 assert.match(comfort, /body \* \{ letter-spacing: 0 !important; \}/);
@@ -110,7 +109,6 @@ assert.match(comfort, /font-size: var\(--message-font-size, 17px\)/, "User messa
 assert.match(comfort, /container-type: inline-size/);
 assert.match(comfort, /@container \(max-width: 520px\)/, "Narrow panel layout must not depend only on window width");
 assert.match(comfort, /:focus-visible/);
-assert.match(comfort, /\.memory4-tabs button:focus-visible/, "Selected Memory tabs must retain keyboard focus");
 assert.match(comfort, /\.worldline-tabs \{\s*flex-wrap: wrap/, "Worldbook tabs must wrap rather than hide offscreen");
 assert.match(comfort, /\.config-header \{\s*z-index: 11;\s*pointer-events: none;/, "Header controls must sit above the drag overlay without blocking blank drag space");
 assert.match(comfort, /\.config-header > \* \{ pointer-events: auto; \}/, "Header controls must remain clickable");

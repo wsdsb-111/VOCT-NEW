@@ -6,6 +6,98 @@ const actionChecks = [];
 const followupChecks = [];
 
 const archivedChecks = [
+  // Historical Memory4 contracts; active Legacy and deployment replacements are registered below.
+  "test-v8.15.1-retired-memory4-independent-qa.js",
+  // Historical Memory4 contracts; active Legacy and deployment replacements are registered below.
+  "test-v8.15-retired-durable-entity-recall.js",
+  // Historical Memory4 contracts; active Legacy and deployment replacements are registered below.
+  "test-v8.15-retired-durable-production-contracts.js",
+  // Historical Memory4 contracts; active Legacy and deployment replacements are registered below.
+  "test-v8.14.2-retired-memory4-ui-edit.js",
+  // Historical Memory4 contracts; active Legacy and deployment replacements are registered below.
+  "test-v9.2-independent-qa.js",
+  // V9.3.4 keeps P0 visibility and Narrative recovery active; old Durable parallelism/chunking is historical.
+  "test-v8.14-a-p0-retired-durable.js",
+  "test-v8.15-fix1-retired-durable-audit.js",
+  // V9.3.4: retired Memory4 disclosure/observation epochs.
+  "test-v8.14.2-closeout-independent-qa.js",
+  // V9.3.4: retired Memory4 disclosure epochs.
+  "test-v8.14.2-disclosure-fact-epoch.js",
+  // V9.3.4: retired Memory4 naming disclosure aliases; active MentionTracker tests retain target resolution.
+  "test-v8.14.2-nickname-target-alias.js",
+  // V9.3.4: retired Memory4 third-party disclosure.
+  "test-v8.14.2-third-party-disclosure.js",
+  // V9.3.4: retired Memory4 naming/profile/AGE claims.
+  "test-v8.14.2-naming-disclosure-independent-qa.js",
+  // V9.3.4: retired Memory4 AGE claims.
+  "test-v8.14.2-age-disclosure.js",
+  // V9.3.4: retired Memory4 disclosure source proofs.
+  "test-v8.14.2-disclosure-source-incident.js",
+  // V9.3.4: retired Memory4 entity snapshots.
+  "test-v8.14.2-memory-entity-naming.js",
+  // V9.3.4: retired Durable malformed-candidate/derived incidents.
+  "test-v8.14.2-incident-independent-qa.js",
+  // V9.3.4: retired sidecar letter disclosure; active Letter suites retain ACK/privacy/recovery.
+  "test-v8.14.2-letter-disclosure.js",
+  // V9.3.4: retired sidecar disclosure generation/read/write.
+  "test-v8.14.2-disclosure-production-qa.js",
+  // V9.3.4: retired sidecar management UI.
+  "test-v8.14.2-disclosure-ui.js",
+  // V9.3.4: retired sidecar disclosure state.
+  "test-v8.14.2-disclosure-core.js",
+  // V9.3.4: retired Memory4 profile/packet/detail management contracts.
+  "test-v8.14-de-independent-qa.js",
+  // V9.3.4: retired Memory4 packet planner.
+  "test-v8.14-c-recall-planner.js",
+  // V9.3.4: retired Memory4 recognition/profile state.
+  "test-v8.14-b-profile.js",
+  // V9.3.4: retired canonical Detail/Commitment/derived lifecycle.
+  "test-v8.14.1-memory-closeout.js",
+  // V9.3.4: retired Memory4 management UI.
+  "test-v8.14-e-memory-ui.js",
+  // V9.3.4: retired Memory4 orphan maintenance and source scanning.
+  "test-v8.15-orphan-audit.js",
+  // V9.3.4: retired sidecar AGE claim ledger.
+  "test-v8.15.2-age-claims-independent-qa.js",
+  // V9.3.4: retired sidecar AGE claim ledger.
+  "test-v8.15.2-age-disclosure.js",
+  // V9.3.4: retired Memory4 source/detail UI races.
+  "test-v8.15.2-ui-races.js",
+  // V9.3.4: retired sidecar observation-to-Provider authorization; CK3/Self traits retained in active trait routing tests.
+  "test-v8.15.2-provider-visible-traits.js",
+  // V9.3.4: retired sidecar disclosure grammar.
+  "test-v8.15.2-disclosure-grammar.js",
+  // V9.3.4: retired sidecar direct-observation ledger.
+  "test-v8.15.2-direct-observation.js",
+  // V9.3.4: retired Memory4 UI and Detail recall.
+  "test-v8.15.1-recall-ui.js",
+  // V9.3.4: retired sidecar disclosure/profile mutation.
+  "test-v8.15.1-disclosure.js",
+  // V9.3.4: Durable handoff and recovery only; Narrative replacement in V9.3.4 independent QA.
+  "test-v8.15.1-memory-recovery.js",
+  // Historical Durable/Year-Life extraction only; retirement is covered by V9.3.4 negative gates.
+  "test-v9.2.1-cache-invariants.js",
+  // Historical Durable/Year-Life extraction only; retirement is covered by V9.3.4 negative gates.
+  "test-v9.2.3-derived-recovery.js",
+  // Historical Durable/Year-Life extraction only; retirement is covered by V9.3.4 negative gates.
+  "test-v9.2.3-derived-retirement.js",
+  // V9.3.4 retires Durable-only production contracts; Legacy and Provider mixed suites remain active.
+  "test-v9.3.2-durable-pipeline.js",
+  "test-v9.3.2-independent-qa.js",
+  "test-v9.2.1-durable-cache-policy.js",
+  "test-v9.2.2-durable-lineage.js",
+  "test-v9.2.2-durable-attribution.js",
+  "test-v9.2.2-durable-chunking.js",
+  "test-v9.2.2-presend-forget.js",
+  "test-v8.14-a-durable-core.js",
+  "test-v8.14.2-durable-generation-incident.js",
+  "test-v8.14.1-memory4-archival-readonly.js",
+  "test-v9.3.3-evidence-planner.js",
+  "test-v9.3.3-source-validity.js",
+  "test-v9.3.3-independent-qa.js",
+  "test-v9.3.3-memory4-coverage-ui.js",
+  "test-v9.3.3.1-coverage-interactions.js",
+  "test-v9.2-scoped-json.js",
   // V9.3.3 removes Year/Life view/generation lifecycle; canonical safety stays in source-validity, recall and independent QA.
   "test-v8.14-d-derived-lifecycle.js",
   // V9.2.3 retires paid Year/Life generation; readonly/source safety remains in release fixtures.
@@ -84,12 +176,14 @@ const archivedChecks = [
 ];
 
 const releaseChecks = [
+  { group: "v9.3.4-legacy-crud-qa", script: "test-v9.3.4-legacy-crud-qa.js" },
+  { group: "v9.3.4-deployment-recovery-qa", script: "test-v9.3.4-deployment-recovery-qa.js" },
+  {group:"v9.3.4-legacy-forget",script:"test-v9.3.4-legacy-forget.js"},
+  { group: "v9.3.4-legacy-retirement", script: "test-v9.3.4-legacy-retirement.js" },
+  { group: "v9.3.4-legacy-recall", script: "test-v9.3.4-legacy-recall.js" },
+  { group: "v9.3.4-no-durable-outbound", script: "test-v9.3.4-no-durable-outbound.js" },
+  { group: "v9.3.4-independent-qa", script: "test-v9.3.4-independent-qa.js" },
   { group: "v9.3.3.1-binary-checkout", script: "test-v9.3.3.1-binary-checkout.js" },
-  { group: "v9.3.3.1-coverage-interactions", script: "test-v9.3.3.1-coverage-interactions.js" },
-  { group: "v9.3.3-evidence-planner", script: "test-v9.3.3-evidence-planner.js" },
-  { group: "v9.3.3-source-validity", script: "test-v9.3.3-source-validity.js" },
-  { group: "v9.3.3-coverage-ui", script: "test-v9.3.3-memory4-coverage-ui.js" },
-  { group: "v9.3.3-independent-qa", script: "test-v9.3.3-independent-qa.js" },
   { group: "v9.3-adapter-conformance", script: "test-v9.3-adapter-conformance.js" },
   { group: "v9.3-independent-qa", script: "test-v9.3-independent-qa.js" },
   { group: "v9.3-cancellation-retry", script: "test-v9.3-cancellation-retry.js" },
@@ -98,25 +192,13 @@ const releaseChecks = [
   { group: "v9.3.1-gemini-usage", script: "test-v9.3.1-gemini-usage.js" },
   { group: "v9.3.1-action-dispatch-diagnostics", script: "test-v9.3.1-action-dispatch-diagnostics.js" },
   { group: "v9.3.1-independent-qa", script: "test-v9.3.1-independent-qa.js" },
-  { group: "v9.3.2-durable-pipeline", script: "test-v9.3.2-durable-pipeline.js" },
-  { group: "v9.3.2-independent-qa", script: "test-v9.3.2-independent-qa.js" },
   { group: "v9.3.2-action-lifecycle", script: "test-v9.3.2-action-lifecycle.js" },
-  { group: "v9.2.3-derived-retirement", script: "test-v9.2.3-derived-retirement.js" },
-  { group: "v9.2.3-derived-recovery", script: "test-v9.2.3-derived-recovery.js" },
   { group: "v9.2.3-glm-outbound-equivalence", script: "test-v9.2.3-glm-outbound-equivalence.js" },
   { group: "v9.2.3-glm-native-usage", script: "test-v9.2.3-glm-native-usage.js" },
-  { group: "v9.2.1-durable-cache-policy", script: "test-v9.2.1-durable-cache-policy.js" },
   { group: "v9.2.1-glm-v813-prefix", script: "test-v9.2.1-glm-v813-prefix.js" },
   { group: "v9.2.1-cache-native-usage", script: "test-v9.2.1-cache-native-usage.js" },
-  { group: "v9.2.1-cache-invariants", script: "test-v9.2.1-cache-invariants.js" },
-  { group: "v9.2.2-durable-lineage", script: "test-v9.2.2-durable-lineage.js" },
-  { group: "v9.2.2-durable-attribution", script: "test-v9.2.2-durable-attribution.js" },
-  { group: "v9.2.2-presend-forget", script: "test-v9.2.2-presend-forget.js" },
-  { group: "v9.2.2-durable-chunking", script: "test-v9.2.2-durable-chunking.js" },
   { group: "v9.2-build-guard", script: "test-v9.2-build-guard.js" },
   { group: "v9.2-service-ports", script: "test-v9.2-service-ports.js" },
-  { group: "v9.2-scoped-json", script: "test-v9.2-scoped-json.js" },
-  { group: "v9.2-independent-qa", script: "test-v9.2-independent-qa.js" },
   { group: "v9.2-renamed-summary-folders", script: "test-v9.2-renamed-summary-folders.js" },
   { group: "v9.1-source-build", script: "test-v9.1-source-build.js" },
   { group: "v9.1-runtime-dependencies", script: "test-v9.1-runtime-dependencies.js" },
@@ -136,17 +218,8 @@ const releaseChecks = [
   { group: "v9.0-ci-history", script: "test-v9.0-ci-history.js" },
   { group: "v8.15.2-confirmed-letter-memory-repair", script: "test-v8.15.2-confirmed-letter-memory-repair.js" },
   { group: "v8.15.1-worldline-adapter", script: "test-v8.15.1-worldline-adapter.js" },
-  { group: "v8.15.1-memory-recovery", script: "test-v8.15.1-memory-recovery.js" },
-  { group: "v8.15.1-disclosure", script: "test-v8.15.1-disclosure.js" },
-  { group: "v8.15.1-recall-ui", script: "test-v8.15.1-recall-ui.js" },
   { group: "v8.15.1-independent-qa", script: "test-v8.15.1-independent-qa.js" },
   { group: "v8.15.2-visible-traits", script: "test-v8.15.2-visible-traits.js" },
-  { group: "v8.15.2-direct-observation", script: "test-v8.15.2-direct-observation.js" },
-  { group: "v8.15.2-disclosure-grammar", script: "test-v8.15.2-disclosure-grammar.js" },
-  { group: "v8.15.2-provider-visible-traits", script: "test-v8.15.2-provider-visible-traits.js" },
-  { group: "v8.15.2-ui-races", script: "test-v8.15.2-ui-races.js" },
-  { group: "v8.15.2-age-disclosure", script: "test-v8.15.2-age-disclosure.js" },
-  { group: "v8.15.2-age-claims-independent-qa", script: "test-v8.15.2-age-claims-independent-qa.js" },
   { group: "v8.15.2-world-memory-scope-audit", script: "test-v8.15.2-world-memory-scope-audit.js" },
   { group: "v8.15.2-world-summary-date-qa", script: "test-v8.15.2-world-summary-date-qa.js" },
   { group: "v8.15.2-memory-canonical-acl", script: "test-v8.15.2-memory-canonical-acl.js" },
@@ -160,9 +233,7 @@ const releaseChecks = [
   { group: "v8.15-legacy-recall", script: "test-v8.15-legacy-recall.js" },
   { group: "v8.15-memory-prefix-invalidation", script: "test-v8.15-memory-prefix-invalidation.js" },
   { group: "v8.15-production-contract-qa", script: "test-v8.15-production-contract-qa.js" },
-  { group: "v8.15-orphan-audit", script: "test-v8.15-orphan-audit.js" },
   { group: "v8.15-fix1-independent-qa", script: "test-v8.15-fix1-independent-qa.js" },
-  { group: "v8.14-e-memory-ui", script: "test-v8.14-e-memory-ui.js" },
   { group: "v8.8.4-incident-regression", script: "test-v8.8.4-incident-regression.js" },
   { group: "v8.8.5-review-kinship", script: "test-v8.8.5-review-kinship.js" },
   { group: "v8.8.5-zhipu-provider", script: "test-v8.8.5-zhipu-provider.js" },
@@ -234,35 +305,15 @@ const releaseChecks = [
   { group: "v8.13.2-worldline-closure", script: "test-v8.13.2-worldline-closure.js" },
   { group: "v8.13.2.1-acceptance-hotfix", script: "test-v8.13.2.1-acceptance-hotfix.js" },
   { group: "v8.13.2.2-legacy-bulk-binding", script: "test-v8.13.2.2-legacy-bulk-binding.js" },
-  { group: "v8.14-a-durable-core", script: "test-v8.14-a-durable-core.js" },
-  { group: "v8.14.2-durable-generation-incident", script: "test-v8.14.2-durable-generation-incident.js" },
-  { group: "v8.14.1-memory-closeout", script: "test-v8.14.1-memory-closeout.js" },
   { group: "v8.14-a-sol-review", script: "test-v8.14-a-sol-review.js" },
   { group: "v8.14-a-finalization-visibility", script: "test-v8.14-a-finalization-visibility.js" },
   { group: "v8.14-a-p0-memory-closeout", script: "test-v8.14-a-p0-memory-closeout.js" },
-  { group: "v8.14-b-profile", script: "test-v8.14-b-profile.js" },
   { group: "v8.14.1-trait-profile-routing", script: "test-v8.14.1-trait-profile-routing.js" },
-  { group: "v8.14-c-recall-planner", script: "test-v8.14-c-recall-planner.js" },
   { group: "v8.14-player-identity-knowledge", script: "test-v8.14-player-identity-knowledge.js" },
-  { group: "v8.14-de-independent-qa", script: "test-v8.14-de-independent-qa.js" },
   { group: "v8.14.1-production-pipeline-qa", script: "test-v8.14.1-production-pipeline-qa.js" },
-  { group: "v8.14.1-memory4-archival-readonly", script: "test-v8.14.1-memory4-archival-readonly.js" },
   { group: "v8.14.1-frontend-content", script: "test-v8.14.1-frontend-content.js" },
-  { group: "v8.14.2-disclosure-core", script: "test-v8.14.2-disclosure-core.js" },
   { group: "v8.14.2-disclosure-profile", script: "test-v8.14.2-disclosure-profile.js" },
-  { group: "v8.14.2-disclosure-ui", script: "test-v8.14.2-disclosure-ui.js" },
-  { group: "v8.14.2-disclosure-production-qa", script: "test-v8.14.2-disclosure-production-qa.js" },
-  { group: "v8.14.2-letter-disclosure", script: "test-v8.14.2-letter-disclosure.js" },
   { group: "v8.14.2-summary-edit-incident", script: "test-v8.14.2-summary-edit-incident.js" },
-  { group: "v8.14.2-incident-independent-qa", script: "test-v8.14.2-incident-independent-qa.js" },
-  { group: "v8.14.2-memory-entity-naming", script: "test-v8.14.2-memory-entity-naming.js" },
-  { group: "v8.14.2-disclosure-source-incident", script: "test-v8.14.2-disclosure-source-incident.js" },
-  { group: "v8.14.2-age-disclosure", script: "test-v8.14.2-age-disclosure.js" },
-  { group: "v8.14.2-naming-disclosure-independent-qa", script: "test-v8.14.2-naming-disclosure-independent-qa.js" },
-  { group: "v8.14.2-third-party-disclosure", script: "test-v8.14.2-third-party-disclosure.js" },
-  { group: "v8.14.2-nickname-target-alias", script: "test-v8.14.2-nickname-target-alias.js" },
-  { group: "v8.14.2-disclosure-fact-epoch", script: "test-v8.14.2-disclosure-fact-epoch.js" },
-  { group: "v8.14.2-closeout-independent-qa", script: "test-v8.14.2-closeout-independent-qa.js" },
   { group: "v8.14-hotfix-finalization", script: "test-v8.14-hotfix-finalization.js" },
   { group: "v8.14-summary-manual-regeneration", script: "test-v8.14-summary-manual-regeneration.js" },
   { group: "v8.14-hotfix-name-authority", script: "test-v8.14-hotfix-name-authority.js" },

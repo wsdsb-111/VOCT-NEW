@@ -4,32 +4,25 @@ const assert = require("node:assert/strict");
 const fs = require("node:fs");
 const os = require("node:os");
 const path = require("node:path");
-const { MemoryStore } = require("../resources/app/out/main/memory-system/memory-store");
 const { MemoryEngine } = require("../resources/app/out/main/memory-system/memory-engine");
-const { Memory4Store } = require("../resources/app/out/main/memory-system/memory4-store");
-const { Memory4Coordinator } = require("../resources/app/out/main/memory-system/memory4-coordinator");
-const { projectVisibleTranscript } = require("../resources/app/out/main/memory-system/memory4-visibility");
-const { validateEntry } = require("../resources/app/out/main/memory-system/memory4-contract");
-const { buildLegacyBridge } = require("../resources/app/out/main/memory-system/memory4-legacy-bridge");
-const { createMemoryRecord } = require("../resources/app/out/main/memory-system/memory-types");
+const { validateSourceItem } = require("../resources/app/out/main/memory-system/finalization-visibility");
+const { KnowledgeService } = require("../resources/app/out/main/memory-system/knowledge-service");
 
 const root = fs.mkdtempSync(path.join(os.tmpdir(), "votc-v814-sol-review-"));
 const folders = path.join(root, "summaries");
-fs.mkdirSync(path.join(folders, "1_A"), { recursive: true });
-fs.mkdirSync(path.join(folders, "2_B"), { recursive: true });
-const store = new MemoryStore({ baseDir: path.join(root, "memory"), summaryFoldersDir: folders });
-const memory4 = new Memory4Store(store);
-const coordinator = new Memory4Coordinator(store);
+for (const id of [1, 2]) fs.mkdirSync(path.join(folders, `${id}_NPC`), { recursive: true });
+const engine = new MemoryEngine({ baseDir: path.join(root, "memory"), summaryFoldersDir: folders, trace: { record() {} } });
+const store = engine.store;
+const knowledge = new KnowledgeService({ store });
 const spoken = "我愿意议和。";
 const hidden = "我其实准备背叛。";
+const people = [{ id: 1, name: "A" }, { id: 2, name: "B" }];
+const presence = people.map(person => ({ characterId: person.id, joinedAtMessageId: 1, leftAtMessageId: null }));
 const context = { campaignToken: "campaign-sol", conversationId: "conversation-sol", finalizationId: "finalization-sol",
-  episodeId: "episode-sol", date: "1164.1.1", totalDays: 424000, participants: [{ id: 1 }, { id: 2 }],
-  participantPresence: [{ characterId: 1, joinedAtMessageId: 0, leftAtMessageId: null },
-    { characterId: 2, joinedAtMessageId: 0, leftAtMessageId: null }],
-  messages: [{ id: 1, role: "assistant", speakerCharacterId: 1, content: spoken + hidden,
-    memory4Fragments: [{ start: 0, end: spoken.length, visibility: "participants", sourceType: "spoken", recipientIds: [2], entityIds: [] },
-      { start: spoken.length, end: spoken.length + hidden.length, visibility: "private", sourceType: "spoken", entityIds: [] }] }] };
-
+  episodeId: "episode-sol", date: "1164.1.1", totalDays: 424000, participants: people, participantPresence: presence,
+  finalizationVisibilityV1: true, buildPrompt: () => [], messages: [{ id: 1, role: "assistant", speakerCharacterId: 1, content: `${spoken}\n${hidden}` }] };
+const segment = (content, visibility, participants) => ({ content, visibility, participants, source: "spoken",
+  provenance: { messageIds: [1], speakerIds: [1] } });
 let passed = 0, failed = 0;
 async function check(name, test) {
   try { await test(); passed++; console.log(`PASS ${name}`); }
@@ -38,99 +31,90 @@ async function check(name, test) {
 
 async function run() {
   try {
-    await check("visible projector never sends adjacent private prose to observer", () => {
-      const observer = coordinator.buildOwnerSnapshot(context, 2);
-      const prompt = coordinator.buildPrompt(observer, observer.fragments);
-      assert.equal(observer.fragments.length, 1);
-      assert.equal(prompt[1].content.includes(hidden), false);
-      assert.equal(projectVisibleTranscript(context, 1).fragments.length, 2);
+    await check("Narrative source boundaries keep adjacent private prose out of the observer view", () => {
+      const publicPart = segment(spoken, "public", [1, 2]);
+      const privatePart = segment(hidden, "private", [1]);
+      assert.deepEqual(validateSourceItem(publicPart, context).audience, [1, 2]);
+      assert.deepEqual(validateSourceItem(privatePart, context).audience, [1]);
+      assert.deepEqual(knowledge.resolveKnownBy(publicPart, { finalizationVisibilityV1: true, sourceContext: context }), [1, 2]);
+      assert.deepEqual(knowledge.resolveKnownBy(privatePart, { finalizationVisibilityV1: true, sourceContext: context }), [1]);
     });
-    await check("spoken report cannot be promoted to observed CK3 fact", () => {
-      const snapshot = coordinator.buildOwnerSnapshot(context, 2);
-      const candidate = { memoryType: "COMMITMENT", text: "一号答应议和。", fragmentIds: [snapshot.fragments[0].fragmentId],
-        participantIds: [1, 2], entityIds: [], eventTime: { status: "observed" } };
-      assert.throws(() => validateEntry(candidate, snapshot), /unverified_observation/);
-      assert.equal(validateEntry({ ...candidate, eventTime: { status: "reported" } }, snapshot).evidence.epistemicStatus, "reported");
+    await check("reported speech cannot be promoted to a witnessed CK3 fact", () => {
+      const rumorContext = { ...context, messages: [{ ...context.messages[0], content: "A听说D已经死了。" }] };
+      const reported = segment("A听说D已经死了。", "public", [1, 2]);
+      assert.equal(validateSourceItem({ ...reported, source: "witnessed" }, rumorContext).reason, "visibility_reported_source_mismatch");
+      assert.deepEqual(validateSourceItem({ ...reported, source: "rumor" }, rumorContext).audience, [1, 2]);
     });
-    await check("partial old speech keeps Legacy but denies new observer detail", () => {
-      const old = { ...context, messages: [{ ...context.messages[0], memory4Fragments: undefined }] };
-      const observer = projectVisibleTranscript(old, 2);
-      assert.equal(observer.completeness, "partial");
-      assert.equal(observer.fragments.length, 0);
-      const legacy = createMemoryRecord({ memoryId: "legacy-sol", type: "folder_summary", content: "旧摘要仍可召回。", knownBy: [2],
-        provenance: { campaignToken: context.campaignToken, folderOwnerId: 2 } });
-      assert.equal(buildLegacyBridge([legacy], { campaignToken: context.campaignToken, ownerId: 2 }).memories.length, 1);
+    await check("Legacy owner summary remains recallable without sidecar evidence", () => {
+      const file = path.join(folders, "2_NPC", "与1的对话.json");
+      store.writeJson(file, [{ playerId: 2, playerName: "B", characterId: 1, characterName: "A", perspectiveOwnerId: 2,
+        knownBy: [2], date: "1160.1.1", totalDays: 420000, content: "旧摘要仍可读取。", campaignToken: context.campaignToken,
+        campaignBinding: { status: "bound", source: "fixture" } }]);
+      const recalled = engine.retrieveForResponder({ characterId: 2, query: "上次谈了什么？", querySpeakerId: 1,
+        directCounterpartIds: [1], activeParticipantIds: [1, 2], ownerFolderMemories: engine.loadOwnerFolderMemories(2),
+        currentGameDate: "1164.1.1", currentTotalDays: 424000, campaignToken: context.campaignToken,
+        memoryEngine3Enabled: true, tokenBudget: 1000, estimateTokens: () => 10, sessionRecallCache: new Map() });
+      assert(recalled.direct.some(entry => entry.memory.content === "旧摘要仍可读取。"));
     });
-    await check("zero Durable preserves Narrative bytes and co-presence evidence", () => {
-      const c = { ...context, campaignToken: "zero-campaign", conversationId: "zero-c", finalizationId: "zero-f",
-        messages: [{ ...context.messages[0], memory4Fragments: undefined }] };
-      const snapshot = coordinator.buildOwnerSnapshot(c, 2);
-      const narrative = path.join(folders, "2_B", "narrative-sol.json");
-      fs.writeFileSync(narrative, "Narrative stays intact");
-      memory4.recordKnownEvidence(snapshot);
-      memory4.commitOwner(snapshot, { status: "NO_DURABLE_CONTENT", entries: [] });
-      assert.equal(fs.readFileSync(narrative, "utf8"), "Narrative stays intact");
-      assert.equal(memory4.getKnownEntityEvidence(snapshot, 1).status, "SHARED_SCENE");
-      assert.equal(memory4.query(snapshot).length, 0);
+    await check("Narrative finalization commits with zero Durable calls", async () => {
+      const messages = [
+        { id: 1, role: "assistant", speakerCharacterId: 1, content: spoken },
+        { id: 2, role: "assistant", speakerCharacterId: 1, content: hidden }
+      ];
+      const output = JSON.stringify({ summarySegments: [
+        { content: spoken, participants: [1, 2], visibility: "public", source: "spoken", messageIds: [1], speakerIds: [1] },
+        { content: hidden, participants: [1], visibility: "private", source: "spoken", messageIds: [2], speakerIds: [1] }
+      ], memories: [] });
+      const marker = path.join(root, "summaries", "narrative-marker.txt");
+      fs.writeFileSync(marker, "Narrative stays intact", "utf8");
+      let durableCalls = 0;
+      const result = await engine.finalizeConversation({ ...context, conversationId: "zero-durable", finalizationId: "zero-durable-final",
+        messages, requestSummary: async () => ({ content: output, finish_reason: "stop" }),
+        requestDurable: async () => { durableCalls++; throw new Error("retired_durable_callback_must_not_run"); },
+        persistCharacterFolders: async () => ({ success: true }) });
+      assert.equal(result.success, true, result.error?.message);
+      assert.equal(durableCalls, 0);
+      assert.equal(Object.hasOwn(result, "durable"), false);
+      assert.equal(fs.readFileSync(marker, "utf8"), "Narrative stays intact");
+      assert.deepEqual(result.extraction.summarySegments.map(item => item.knownBy), [[1, 2], [1]]);
     });
-    await check("per-owner retry is idempotent after successful commit", () => {
-      const snapshot = coordinator.buildOwnerSnapshot({ ...context, campaignToken: "idempotent-campaign",
-        conversationId: "idempotent-c", finalizationId: "idempotent-f" }, 2);
-      const candidate = { memoryType: "COMMITMENT", text: "一号提出议和。", fragmentIds: [snapshot.fragments[0].fragmentId],
-        participantIds: [1, 2], entityIds: [], eventTime: { status: "reported" } };
-      const first = memory4.commitOwner(snapshot, { status: "STORE", entries: [candidate] });
-      const again = memory4.commitOwner(snapshot, { status: "STORE", entries: [candidate] });
+    await check("repeated finalization reuses committed Narrative without a second summary request", async () => {
+      const messages = [{ id: 1, role: "assistant", speakerCharacterId: 1, content: spoken }];
+      const output = JSON.stringify({ summarySegments: [{ content: spoken, participants: [1, 2], visibility: "public",
+        source: "spoken", messageIds: [1], speakerIds: [1] }], memories: [] });
+      let summaryCalls = 0, durableCalls = 0;
+      const repeatContext = { ...context, conversationId: "idempotent-narrative", finalizationId: "idempotent-narrative-final", messages,
+        requestSummary: async () => { summaryCalls++; return { content: output, finish_reason: "stop" }; },
+        requestDurable: async () => { durableCalls++; throw new Error("retired_durable_callback_must_not_run"); },
+        persistCharacterFolders: async () => ({ success: true }) };
+      const first = await engine.finalizeConversation(repeatContext);
+      const again = await engine.finalizeConversation(repeatContext);
+      assert.equal(first.success, true);
+      assert.equal(again.success, true);
       assert.equal(again.alreadyCommitted, true);
-      assert.deepEqual(again.entryIds, first.entryIds);
-      assert.equal(memory4.query(snapshot).length, 1);
+      assert.equal(summaryCalls, 1);
+      assert.equal(durableCalls, 0);
     });
     await check("Narrative commit must not cross Campaign even when IDs collide", () => {
       store.saveEpisode({ episodeId: "prior-episode", conversationId: "same-conversation", finalizationId: "same-finalization",
-        campaignToken: "old-campaign", participants: [{ id: 1 }, { id: 2 }], commitMarker: "committed" });
-      const engine = new MemoryEngine({ store, trace: { record() {} } });
+        campaignToken: "old-campaign", participants: people, commitMarker: "committed" });
       assert.equal(engine.isCommitted({ conversationId: "same-conversation", finalizationId: "same-finalization", campaignToken: "new-campaign" }), null);
       store.saveEpisode({ episodeId: "current-episode", conversationId: "same-conversation", finalizationId: "same-finalization",
-        campaignToken: "new-campaign", participants: [{ id: 1 }, { id: 2 }], commitMarker: "committed" });
+        campaignToken: "new-campaign", participants: people, commitMarker: "committed" });
       assert.equal(engine.isCommitted({ conversationId: "same-conversation", finalizationId: "same-finalization", campaignToken: "new-campaign" })?.episodeId, "current-episode");
     });
-    await check("Known direct interaction must retract when revised source loses speech evidence", () => {
-      const first = coordinator.buildOwnerSnapshot({ ...context, conversationId: "known-revision" }, 2);
-      memory4.recordKnownEvidence(first);
-      assert.equal(memory4.getKnownEntityEvidence(first, 1).status, "DIRECT_INTERACTION");
-      const revised = coordinator.buildOwnerSnapshot({ ...context, conversationId: "known-revision",
-        messages: [{ ...context.messages[0], memory4Fragments: undefined }] }, 2);
-      memory4.recordKnownEvidence(revised);
-      assert.equal(memory4.getKnownEntityEvidence(revised, 1).status, "SHARED_SCENE");
-      assert.equal(memory4.getKnownEntityEvidence(revised, 1).directConversationCount, 0);
-    });
-    await check("Known revision preserves independent conversation evidence", () => {
-      const first = coordinator.buildOwnerSnapshot({ ...context, conversationId: "known-one" }, 2);
-      const other = coordinator.buildOwnerSnapshot({ ...context, conversationId: "known-two" }, 2);
-      memory4.recordKnownEvidence(first);
-      memory4.recordKnownEvidence(other);
-      assert.equal(memory4.getKnownEntityEvidence(other, 1).directConversationCount, 2);
-      const revised = coordinator.buildOwnerSnapshot({ ...context, conversationId: "known-one",
-        messages: [{ ...context.messages[0], memory4Fragments: undefined }] }, 2);
-      memory4.recordKnownEvidence(revised);
-      assert.equal(memory4.getKnownEntityEvidence(other, 1).directConversationCount, 1);
-      assert.equal(memory4.getKnownEntityEvidence(other, 1).sourceConversationIds.includes("known-two"), true);
-    });
-    await check("Known revision removes unsupported entity row without claiming never met", () => {
-      const first = coordinator.buildOwnerSnapshot({ ...context, conversationId: "known-removed" }, 1);
-      memory4.recordKnownEvidence(first);
-      assert.equal(memory4.getKnownEntityEvidence(first, 2).status, "DIRECT_INTERACTION");
-      const revised = coordinator.buildOwnerSnapshot({ ...context, conversationId: "known-removed", participantPresence: [],
-        messages: [{ ...context.messages[0], memory4Fragments: undefined }] }, 1);
-      memory4.recordKnownEvidence(revised);
-      assert.equal(memory4.getKnownEntityEvidence(revised, 2).status, "UNKNOWN");
-    });
-    await check("cancelled owner extraction cannot be reported as COMPLETE", async () => {
-      let current = true;
-      const result = await coordinator.finalizeCommitted({ ...context, conversationId: "cancel-c", finalizationId: "cancel-f" },
-        async () => { current = false; return { content: '{"status":"NO_DURABLE_CONTENT","entries":[]}' }; },
-        { isNarrativeCommitted: true, isCurrent: () => current });
-      assert.notEqual(result.status, "COMPLETE");
-      assert.equal(result.owners[0].status, "CANCELLED");
+    await check("canceled Narrative finalization never commits or invokes Durable", async () => {
+      let durableCalls = 0;
+      const cancelled = new MemoryEngine({ baseDir: path.join(root, "cancelled-memory"), summaryFoldersDir: folders, trace: { record() {} } });
+      const result = await cancelled.finalizeConversation({ ...context, conversationId: "cancelled", finalizationId: "cancelled-final",
+        requestSummary: async () => {
+          cancelled.memoryGeneration++;
+          return { content: "not used", finish_reason: "stop" };
+        },
+        requestDurable: async () => { durableCalls++; throw new Error("retired_durable_callback_must_not_run"); } });
+      assert.equal(result.cancelled, true);
+      assert.equal(durableCalls, 0);
+      assert.equal(cancelled.isCommitted({ ...context, conversationId: "cancelled", finalizationId: "cancelled-final" }), null);
     });
     console.log(`V8.14-A Sol review: ${passed} PASS, ${failed} FAIL`);
     if (failed) process.exitCode = 1;

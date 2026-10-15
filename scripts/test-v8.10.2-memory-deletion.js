@@ -7,8 +7,7 @@ const path = require("path");
 
 const root = path.resolve(__dirname, "..");
 const { MemoryEngine } = require(path.join(root, "resources", "app", "out", "main", "memory-system"));
-const { createProjectionLineage } = require(path.join(root, "resources", "app", "out", "main", "memory-system", "memory4-forget"));
-const { hash } = require(path.join(root, "resources", "app", "out", "main", "memory-system", "memory4-contract"));
+const { createProjectionLineage } = require(path.join(root, "resources", "app", "out", "main", "memory-system", "legacy-source-lineage"));
 const { Character } = require(path.join(root, "resources", "app", "out", "main", "game-data", "character"));
 const { createSummariesManager } = require(path.join(root, "resources", "app", "out", "main", "summaries", "summaries-manager"));
 
@@ -16,21 +15,9 @@ function filesIn(directory) {
   return fs.existsSync(directory) ? fs.readdirSync(directory) : [];
 }
 
-function seedMemory4Projection(engine, { ownerId, counterpartId, campaignToken, conversationId, finalizationId, segmentId, messageId, text }) {
-  const fragmentId = `${segmentId}-source`;
-  const lineage = createProjectionLineage({ campaignToken, ownerId, counterpartId, conversationId, finalizationId,
-    segmentIds: [segmentId], sourceSegmentIds: [fragmentId], sourceMessageIds: [messageId] });
-  const snapshot = { campaignToken, ownerId, conversationId, finalizationId, episodeId: `${finalizationId}-episode`,
-    date: "1164.1.1", totalDays: 425000, sourceRevision: hash([campaignToken, finalizationId, "source"]),
-    presentMessageCount: 1, completeness: "complete", summaryIds: [], counterpartIds: [counterpartId],
-    fragments: [{ fragmentId, messageId, sourceMessageIds: [messageId], text, speakerId: ownerId, speakerIds: [ownerId],
-      sourceTextVerified: true, sourceRole: "assistant", presentIds: [ownerId, counterpartId], knownBy: [ownerId, counterpartId],
-      visibility: "participants", sourceType: "spoken", recipientIds: [counterpartId], entityIds: [counterpartId],
-      visibilityEvidence: "application_fragment" }], projectionLineages: [lineage] };
-  engine.memory4.store.commitOwner(snapshot, { status: "STORE", entries: [{ memoryType: "DURABLE_KNOWLEDGE", text,
-    fragmentIds: [fragmentId], participantIds: [ownerId, counterpartId], entityIds: [counterpartId], topics: ["fixture"],
-    eventTime: { status: "unknown" } }] });
-  return lineage;
+function createLegacyProjectionLineage({ ownerId, counterpartId, campaignToken, conversationId, finalizationId, segmentId, messageId }) {
+  return createProjectionLineage({ campaignToken, ownerId, counterpartId, conversationId, finalizationId,
+    segmentIds: [segmentId], sourceSegmentIds: [`${segmentId}-source`], sourceMessageIds: [messageId] });
 }
 
 function createConversation() {
@@ -78,7 +65,8 @@ function createConversation() {
       participants: [1, 2],
       subjects: [1, 2],
       visibility: "known_group",
-      knownBy: [1, 2]
+      knownBy: [1, 2],
+      provenance: { campaignToken: "campaign-v8102-shared", finalizationId: "fin-shared", folderOwnerId: 1, counterpartId: 2 }
     });
     engine.store.markKnownBy(1, memory.memoryId);
     engine.store.markKnownBy(2, memory.memoryId);
@@ -86,12 +74,12 @@ function createConversation() {
       episodeId: "episode-shared",
       conversationId: "old-conversation",
       finalizationId: "fin-shared",
+      campaignToken: "campaign-v8102-shared",
       memoryIds: [memory.memoryId],
       summarySegments: [{ segmentId: "segment-shared", content: "旧日密谈。", knownBy: [1, 2] }]
     });
-    const sharedLineage = seedMemory4Projection(engine, { ownerId: 1, counterpartId: 2, campaignToken: "campaign-v8102-shared",
-      conversationId: "old-conversation", finalizationId: "fin-shared", segmentId: "segment-shared", messageId: 1,
-      text: "Memory4 fixture for the shared projection." });
+    const sharedLineage = createLegacyProjectionLineage({ ownerId: 1, counterpartId: 2, campaignToken: "campaign-v8102-shared",
+      conversationId: "old-conversation", finalizationId: "fin-shared", segmentId: "segment-shared", messageId: 1 });
     engine.store.saveCharacterConsolidation(1, { derivedFrom: [memory.memoryId] });
     fs.writeFileSync(path.join(ownerFolder, "与乙的对话.json"), JSON.stringify([{
       playerId: 1,
@@ -142,7 +130,8 @@ function createConversation() {
     assert.strictEqual(filesIn(engine.store.paths.characters).length, 0, "clear all must remove consolidations");
     assert.strictEqual(filesIn(engine.store.paths.pairs).length, 0, "clear all must remove pair indexes");
     assert.strictEqual(filesIn(engine.store.paths.recovery).length, 0, "clear all must remove recovery snapshots");
-    assert.strictEqual(filesIn(summaryRoot).length, 0, "clear all must remove visible summary folders");
+    assert.strictEqual(filesIn(ownerFolder).filter(name => name.endsWith(".json") && name !== "life.json").length, 0,
+      "clear all must remove visible summary records");
     assert.deepStrictEqual(engine.store.index.memories, {});
     assert.deepStrictEqual(engine.store.index.episodes, {});
     assert.strictEqual(engine.store.getFolderSummaryCacheMetrics().entries, 0, "clear all must invalidate folder cache");
@@ -190,16 +179,16 @@ function createConversation() {
       participants: [1, 2],
       subjects: [1, 2],
       visibility: "known_group",
-      knownBy: [1, 2]
+      knownBy: [1, 2],
+      provenance: { campaignToken: "campaign-v8102-ui", finalizationId: "fin-ui", folderOwnerId: 1, counterpartId: 2 }
     });
     engine.store.markKnownBy(1, uiMemory.memoryId);
     engine.store.markKnownBy(2, uiMemory.memoryId);
     const uiFolder = path.join(summaryRoot, "1_甲");
     const uiFile = path.join(uiFolder, "与乙的对话.json");
     fs.mkdirSync(uiFolder, { recursive: true });
-    const uiLineage = seedMemory4Projection(engine, { ownerId: 1, counterpartId: 2, campaignToken: "campaign-v8102-ui",
-      conversationId: "ui-conversation", finalizationId: "fin-ui", segmentId: "segment-ui", messageId: 2,
-      text: "Memory4 fixture for the UI projection." });
+    const uiLineage = createLegacyProjectionLineage({ ownerId: 1, counterpartId: 2, campaignToken: "campaign-v8102-ui",
+      conversationId: "ui-conversation", finalizationId: "fin-ui", segmentId: "segment-ui", messageId: 2 });
     fs.writeFileSync(uiFile, JSON.stringify([{
       playerId: 1,
       playerName: "甲",

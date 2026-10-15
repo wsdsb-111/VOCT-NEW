@@ -4,8 +4,9 @@ const fs = require("node:fs");
 const path = require("node:path");
 const { randomUUID } = require("node:crypto");
 const { spawnSync } = require("node:child_process");
-const { LetterMemoryFinalization } = require("../resources/app/out/main/memory-system/letter-memory-finalization");
-const { hash } = require("../resources/app/out/main/memory-system/memory4-contract");
+const { LetterSummaryFinalization } = require("../resources/app/out/main/memory-system/letter-summary-finalization");
+const { MemoryEngine } = require("../resources/app/out/main/memory-system/memory-engine");
+const { hash } = require("../resources/app/out/main/memory-system/legacy-source-lineage");
 
 function requireStoppedApp() {
   const result = spawnSync("powershell.exe", ["-NoProfile", "-NonInteractive", "-Command",
@@ -35,15 +36,17 @@ function captureConfirmedLetter({ dataDir, letterId, context, confirmedReceived 
   if (row.sourceMemoryContext && hash(row.sourceMemoryContext) !== hash({
     participantProfiles: context.participantProfiles, relationshipEvidence: context.relationshipEvidence
   })) throw new Error("confirmed_letter_source_snapshot_mismatch");
-  const recoveryDir = path.join(path.resolve(dataDir), "memory", "memory4-recovery");
-  const store = { paths: { memory4Recovery: recoveryDir },
-    writeJson(target, value) {
-      fs.mkdirSync(path.dirname(target), { recursive: true });
-      const temporary = `${target}.${randomUUID()}.tmp`;
-      fs.writeFileSync(temporary, JSON.stringify(value, null, 2), { encoding: "utf8", flag: "wx" });
-      fs.renameSync(temporary, target);
-    } };
-  const archive = new LetterMemoryFinalization({ memoryEngine: { store } });
+  const dataRoot = path.resolve(dataDir);
+  const memoryEngine = new MemoryEngine({
+    baseDir: path.join(dataRoot, "memory"),
+    summaryFoldersDir: path.join(dataRoot, "conversation_summaries"),
+    recoveryDir: path.join(dataRoot, "memory_recovery")
+  });
+  const archive = new LetterSummaryFinalization({ memoryEngine,
+    requestSummary: async () => { throw new Error("repair_must_not_call_provider"); },
+    persistSummary: async () => { throw new Error("repair_must_not_finalize_summary"); },
+    isCampaignCurrent: () => true
+  });
   const jobId = archive.jobId(context);
   if (fs.readFileSync(file, "utf8") !== original) throw new Error("pending_letters_changed_during_repair");
   const backup = `${file}.confirmed-memory-${Date.now()}.bak`;

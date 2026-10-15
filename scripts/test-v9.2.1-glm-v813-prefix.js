@@ -20,8 +20,8 @@ const { TokenCounter } = require("../resources/app/out/main/provider-service");
 const { ZhipuProvider } = require("../resources/app/out/main/providers");
 const { createProviderDiagnostics } = require("../resources/app/out/main/analytics/provider-diagnostics");
 const { normalizeGameDate } = require("../resources/app/out/main/worldline/character-temporal-facts");
-const { hash } = require("../resources/app/out/main/memory-system/memory4-contract");
-const { createProjectionLineage } = require("../resources/app/out/main/memory-system/memory4-forget");
+const { hash } = require("../resources/app/out/main/memory-system/legacy-source-lineage");
+const { createProjectionLineage } = require("../resources/app/out/main/memory-system/legacy-source-lineage");
 
 const MODEL = "glm-5.3-flash";
 const names = new Map([[1, "玩家"], [2, "甲"], [3, "乙"], [4, "丙"], [99, "九十九郎"]]);
@@ -165,7 +165,7 @@ function createFixture({ campaignToken = "votc-v921-glm-campaign-A", date = "116
     summaryFoldersDir: summariesDir,
     trace: { record() {} }
   });
-  sample.engine.memory4.configureExtraction({ isCampaignCurrent: () => true, getProviderSnapshot: async () => null });
+
   sample.worldline = {
     isSubjectivePromptIntegrationEnabled: () => false,
     isPromptIntegrationEnabled: () => false,
@@ -352,54 +352,18 @@ function createFixture({ campaignToken = "votc-v921-glm-campaign-A", date = "116
       sourceSegmentIds: [fragmentId],
       sourceMessageIds: [10]
     });
-    const visibleIds = [...new Set([1, 2, Number(counterpartId)])];
-    const snapshot = {
-      campaignToken: campaign,
-      ownerId: 2,
-      conversationId,
-      finalizationId,
-      episodeId: finalizationId + "-episode",
-      date,
-      totalDays: normalizeGameDate(date)?.serial ?? null,
-      sourceRevision: hash([finalizationId, "fixture-source"]),
-      presentMessageCount: 1,
-      completeness: "complete",
-      summaryIds: [],
-      counterpartIds: visibleIds.filter(id => id !== 2),
-      projectionLineages: [lineage],
-      fragments: [{
-        fragmentId,
-        messageId: 10,
-        sourceMessageIds: [10],
-        text,
-        speakerId: 2,
-        speakerIds: [2],
-        sourceTextVerified: true,
-        sourceRole: "assistant",
-        presentIds: visibleIds,
-        knownBy: visibleIds,
-        visibility: "participants",
-        sourceType: "spoken",
-        recipientIds: visibleIds,
-        entityIds: [Number(counterpartId)],
-        visibilityEvidence: "application_fragment"
-      }]
-    };
-    const committed = sample.engine.memory4.store.commitOwner(snapshot, {
-      status: "STORE",
-      entries: [{
-        memoryType: "DURABLE_KNOWLEDGE",
-        text,
-        fragmentIds: [fragmentId],
-        participantIds: visibleIds,
-        entityIds: [Number(counterpartId)],
-        topics: ["北境守门之约"],
-        eventTime: { status: "unknown" }
-      }]
+    const committed = sample.engine.store.saveMemory({
+      type: "information", content: text, canonicalText: text, importance: 0.95,
+      participants: [2, Number(counterpartId)], subjects: [Number(counterpartId)], knownBy: [2], visibility: "known_group",
+      eventDate: date, totalDays: normalizeGameDate(date)?.serial,
+      provenance: { campaignToken: campaign, finalizationId, conversationId, folderOwnerId: 2, counterpartId,
+        projectionId: lineage.projectionId, segmentIds: [segmentId] }
     });
+    sample.engine.store.markKnownBy(2, committed.memoryId, { awareness: "direct" });
     return {
       lineage,
       summaryRecord: {
+        playerId: 2,
         campaignToken: campaign,
         perspectiveOwnerId: 2,
         characterId: Number(counterpartId),
@@ -408,7 +372,7 @@ function createFixture({ campaignToken = "votc-v921-glm-campaign-A", date = "116
         perspectiveSummarySegmentIds: [segmentId],
         sourceSegmentIds: [fragmentId],
         sourceMessageIds: [10],
-        perspectiveMemoryIds: [],
+        perspectiveMemoryIds: [committed.memoryId],
         projectionId: lineage.projectionId,
         date,
         content: text
@@ -533,13 +497,13 @@ async function main() {
       const history = [{ role: "user", content: "关于北境守门之约，我从前听过什么？" }];
       const campaignA = await sample.buildActualSample({ history, responderId: 2 });
       assert(campaignA.actualRequest.messages.some(message => String(message.content || "").includes("CAMPAIGN_A_PRIVATE_SENTINEL")),
-        "the seeded private fact must first traverse the actual Memory4-to-Conversation-to-Provider path");
+        "the seeded private fact must first traverse the actual Legacy-to-Conversation-to-Provider path");
       const campaignB = await sample.buildActualSample({ history, responderId: 2, campaign: "glm-v813-campaign-B" });
       assert.equal(campaignB.actualRequest.messages.some(message => String(message.content || "").includes("CAMPAIGN_A_PRIVATE_SENTINEL")), false,
         "the same owner and responder in another Campaign must not receive Campaign A memory");
     });
 
-    await check("G-05 real Memory4 Forget tombstone clears the next actual outgoing Prompt", async () => {
+    await check("G-05 real Legacy Forget ledger clears the next actual outgoing Prompt", async () => {
       const sample = createFixture();
       await sample.open();
       const source = sample.commitMemoryFact({
@@ -557,7 +521,7 @@ async function main() {
         invalidateConversations: [sample.conversation]
       });
       assert.equal(forgotten.status, "FORGOTTEN");
-      assert.equal(sample.engine.memory4.store.isProjectionLineageForgotten(sample.scope, source.lineage), true);
+      assert.equal(sample.engine.store.isSummaryProjectionForgotten(source.summaryRecord, { ownerId: 2, counterpartId: 1 }), true);
       const after = await sample.buildActualSample({ history, responderId: 2 });
       assert.equal(after.actualRequest.messages.some(message => String(message.content || "").includes("FORGET_V813_SENTINEL")), false,
         "a tombstoned fact and its frozen recall prefix must not return on the next request");

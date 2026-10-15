@@ -73,9 +73,13 @@ try {
       ]).join("|");
     }
   }
+  const noMemory4Reads = new Proxy(engine, { get(target, property, receiver) {
+    if (property === "memory4") throw new Error("letter_prompt_must_not_read_memory4");
+    return Reflect.get(target, property, receiver);
+  } });
   const dependencies = { TemplateEngine: class { renderTemplateString(template, context) { return Handlebars.compile(template)(context); } },
     PromptScriptLoader: ScriptLoader, settingsRepository: { getLetterPromptSettings: () => settings },
-    promptConfigManager: { resolvePath: value => value }, memoryEngine: engine };
+    promptConfigManager: { resolvePath: value => value }, memoryEngine: noMemory4Reads };
   dependencies.PromptBuilder = createPromptBuilder(dependencies);
   const Builder = createLetterPromptBuilder(dependencies);
   const letter = { letterId: "letter-fixture", content: "Do you remember our conversation?", totalDays: 100 };
@@ -88,8 +92,8 @@ try {
     folderDiagnostics: [...engine.store.folderSummaryLoadDiagnostics], folderRevisions: [...engine.store.folderSummaryRevisions],
     ranker: engine.ranker, traceEntries });
   const stateBefore = readState();
-  for (const method of ["writeJson", "saveMemory", "updateMemory", "markKnownBy"]) engine.store[method] = () => { throw new Error("letter_prompt_must_not_write_memory"); };
-  engine.markRoutedRecallSeen = () => { throw new Error("letter_prompt_must_not_commit_seen"); };
+  assert.equal(engine.memory4, undefined, "the Legacy letter memory fixture has no Memory4 coordinator");
+  const diskBefore = snapshotTree(tempRoot);
   const text = new Builder().buildMessages(gameData, letter).map(message => message.content).join("\n");
   assert(!text.includes("PLAYER_DIRECTORY_RAW_SUMMARY"), "past_summaries cannot use GameData's sender-directory mirror");
   assert(!text.includes("PLAYER_PRIVATE"), "recipient's prompt cannot read the sender's private raw or folder memory");
@@ -106,6 +110,7 @@ try {
   assert.equal(engine.store.summaryDateIndexCache.size, dateIndexBefore, "letter date indexes remain request-local");
   assert.equal(JSON.stringify(engine.store.getCharacterKnowledge(2)), knowledgeBefore, "prompt assembly does not commit knowledge or seen");
   assert.equal(readState(), stateBefore, "letter reads never change scene indexes, loader diagnostics, ranker state or trace");
+  assert.deepEqual(snapshotTree(tempRoot), diskBefore, "prompt assembly leaves the actual Legacy files byte-for-byte unchanged");
 
   const thirdParty = new Builder().buildMessages(gameData, { ...letter, content: "What did ThirdParty promise?" }).map(message => message.content).join("\n");
   assert(thirdParty.includes("THIRD_PARTY_LEGAL_PAIR"), "an actual third-party mention routes only the recipient's own history");
@@ -139,7 +144,26 @@ try {
   recipient.relationsToPlayer = ["friend"];
   assert(identityGuard(new Builder().buildMessages(gameData, letter)).includes("身份识别关系证据：friend"));
   assert.equal(readState(), stateBefore, "all repeated previews remain read-only");
+  assert.deepEqual(snapshotTree(tempRoot), diskBefore, "repeated previews do not write Legacy data");
   console.log("V8.14.1 Letter Knowledge: PASS (recipient route, Campaign, as-of, acquired-at, knownBy, templates/scripts, native self, read-only, identity guard input contract)");
 } finally {
   fs.rmSync(tempRoot, { recursive: true, force: true });
+}
+
+function snapshotTree(directory) {
+  if (!fs.existsSync(directory)) return null;
+  const rows = [];
+  const visit = (current, relative = "") => {
+    for (const entry of fs.readdirSync(current, { withFileTypes: true })) {
+      const child = path.join(current, entry.name);
+      const childRelative = path.join(relative, entry.name);
+      if (entry.isSymbolicLink()) rows.push([childRelative, `symlink:${fs.readlinkSync(child)}`]);
+      else if (entry.isDirectory()) {
+        rows.push([childRelative, "directory"]);
+        visit(child, childRelative);
+      } else rows.push([childRelative, `file:${fs.readFileSync(child).toString("base64")}`]);
+    }
+  };
+  visit(directory);
+  return rows.sort(([left], [right]) => left.localeCompare(right));
 }

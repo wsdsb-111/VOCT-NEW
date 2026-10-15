@@ -20,3 +20,5 @@ resources/app/out/**/*.svg text eol=crlf
 docs/current/v9/V9_2_IMPLEMENTATION_SPEC.md whitespace=-blank-at-eol
 docs/current/v9/V9_3_3_IMPLEMENTATION_SPEC.md whitespace=-blank-at-eol
 docs/current/v9/V9_3_3_1_FIX_SPEC.md whitespace=-blank-at-eol
+
+/docs/current/v9/V9_3_4_DURABLE_RETIREMENT_IMPLEMENTATION_SPEC.md whitespace=-blank-at-eol

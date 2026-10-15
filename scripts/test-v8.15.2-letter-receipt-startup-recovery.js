@@ -28,7 +28,11 @@ async function offlineReceipt({ restartReader = false } = {}) {
     assert.equal(recovering.awaitingAcceptanceLetterId, null, "verified offline receipt must release the original acceptance lock");
     await waitFor(() => fixture.summaryCalls.length === 1, "offline receipt archives once");
     assert.equal(fixture.effectWrites, 1, "recovery must never rewrite Effect");
-    assert.equal(fixture.durableOwners.length, 2);
+    await waitFor(() => fixture.memoryEngine.store.listAllMemories().length === 1, "the accepted Legacy letter summary commits once");
+    const [legacyLetter] = fixture.memoryEngine.store.listAllMemories();
+    assert.equal(legacyLetter.type, "letter");
+    assert.deepEqual(legacyLetter.knownBy, [1, 2], "both correspondents retain the Legacy letter memory");
+    assert.equal(Object.hasOwn(fixture.memoryEngine, "memory4"), false);
     await recovering.restartLogTailing();
     await recovering.processLogLine(receipt);
     assert.equal(fixture.summaryCalls.length, 1);

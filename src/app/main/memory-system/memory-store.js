@@ -7,10 +7,10 @@ const { createMemoryRecord, uniqueIds } = require("./memory-types");
 const { CURRENT_MEMORY_SCHEMA_VERSION } = require("./memory-schema");
 const { MEMORY_ENGINE_VERSION } = require("../version");
 const { buildSummaryDateIndex, buildDualTemporalIndex, normalizePerspectiveTemporalRefs } = require("./summary-date-index");
-const { Memory4Store } = require("./memory4-store");
-const { projectionLineageFromSummary, matchesProjectionLineage } = require("./memory4-forget");
+const { createProjectionLineage, projectionLineageFromSummary, matchesProjectionLineage } = require("./legacy-source-lineage");
 const { assertNoLinks } = require("./scoped-path");
 const { mergeRenamedSummaryFolders, getSummaryConversationFile } = require("./summary-folder-merge");
+const { MentionTracker } = require("./mention-tracker");
 
 function removeDirectoryTree(directory) {
   for (const entry of fs.readdirSync(directory, { withFileTypes: true })) {
@@ -60,7 +60,6 @@ class MemoryStore {
       knowledge: path.join(baseDir, "knowledge"),
       ownerStatus: path.join(baseDir, "owner-status"),
       recovery: recoveryDir || path.join(baseDir, "recovery"),
-      memory4Recovery: path.join(baseDir, "memory4-recovery"),
       index: path.join(baseDir, "index.json")
     };
     this.ensureDirectories();
@@ -81,7 +80,7 @@ class MemoryStore {
   }
 
   ensureDirectories() {
-    for (const directory of [this.baseDir, this.paths.episodes, this.paths.characters, this.paths.pairs, this.paths.knowledge, this.paths.ownerStatus, this.paths.recovery, this.paths.memory4Recovery]) {
+    for (const directory of [this.baseDir, this.paths.episodes, this.paths.characters, this.paths.pairs, this.paths.knowledge, this.paths.ownerStatus, this.paths.recovery]) {
       assertNoLinks(directory);
       fs.mkdirSync(directory, { recursive: true });
     }
@@ -729,10 +728,14 @@ class MemoryStore {
   }
 
   clearLongTermMemoryStorage() {
-    if (this.summaryFoldersDir) clearDirectory(this.summaryFoldersDir);
-    const memory4Recovery = path.resolve(this.paths.memory4Recovery);
-    if (path.dirname(memory4Recovery) !== path.resolve(this.baseDir)) throw new Error("memory4_recovery_path_invalid");
-    for (const directory of [this.paths.episodes, this.paths.characters, this.paths.pairs, this.paths.knowledge, this.paths.recovery, memory4Recovery]) {
+    if (this.summaryFoldersDir && fs.existsSync(this.summaryFoldersDir)) {
+      for (const entry of fs.readdirSync(this.summaryFoldersDir, { withFileTypes: true })) {
+        if (!entry.isDirectory() || entry.isSymbolicLink() || !/^\d+_/.test(entry.name)) continue;
+        const folder = path.join(this.summaryFoldersDir, entry.name);
+        for (const file of fs.readdirSync(folder).filter(name => name.endsWith(".json") && name !== "life.json")) this.removeSummaryMutationFile(path.join(folder, file));
+      }
+    }
+    for (const directory of [this.paths.episodes, this.paths.characters, this.paths.pairs, this.paths.knowledge, this.paths.recovery]) {
       clearDirectory(directory);
     }
     this.index = { schemaVersion: CURRENT_MEMORY_SCHEMA_VERSION, memories: {}, episodes: {} };
@@ -757,18 +760,17 @@ class MemoryStore {
     const prefix = `${numericId}_`;
     const folders = fs.readdirSync(root, { withFileTypes: true })
       .filter((entry) => entry.isDirectory() && entry.name.startsWith(prefix));
+    let removedFolderCount = 0;
     for (const folder of folders) {
       const target = path.resolve(root, folder.name);
       if (path.dirname(target) !== root) throw new Error("unsafe_summary_folder_target");
-      removeDirectoryTree(target);
+      assertNoLinks(target);
+      for (const file of fs.readdirSync(target).filter(name => name.endsWith(".json") && name !== "life.json")) {
+        this.removeSummaryMutationFile(path.join(target, file));
+      }
+      if (fs.readdirSync(target).length === 0) { fs.rmdirSync(target); removedFolderCount++; }
     }
-    const sidecar = path.resolve(root, ".memory4", String(numericId));
-    if (path.dirname(sidecar) !== path.join(root, ".memory4")) throw new Error("unsafe_summary_folder_target");
-    if (fs.existsSync(sidecar)) {
-      if (fs.lstatSync(path.join(root, ".memory4")).isSymbolicLink() || fs.lstatSync(sidecar).isSymbolicLink()) throw new Error("unsafe_summary_folder_target");
-      removeDirectoryTree(sidecar);
-    }
-    return { removedFolderCount: folders.length };
+    return { removedFolderCount };
   }
 
   summaryOwnerStatusPath(characterId) {
@@ -876,6 +878,31 @@ class MemoryStore {
     return { ...this.folderSummaryCacheMetrics, entries: this.folderSummaryCache.size };
   }
 
+  listForgottenSummaryProjections() {
+    const ledger = this.index.forgottenSummaryProjections;
+    if (ledger == null) return [];
+    if (typeof ledger !== "object" || Array.isArray(ledger)) throw new Error("legacy_forget_ledger_invalid");
+    return Object.entries(ledger).map(([key, record]) => {
+      const lineage = createProjectionLineage(record);
+      if (key !== lineage.projectionId) throw new Error("legacy_forget_ledger_invalid");
+      return lineage;
+    });
+  }
+
+  isSummaryProjectionForgotten(summary, options = {}) {
+    const lineage = projectionLineageFromSummary(summary, options);
+    return !!lineage && this.listForgottenSummaryProjections().some(target => matchesProjectionLineage(target, lineage));
+  }
+
+  recordForgottenSummaryProjection(summary, options = {}) {
+    const lineage = projectionLineageFromSummary(summary, options);
+    if (!lineage) return null;
+    this.listForgottenSummaryProjections();
+    this.index.forgottenSummaryProjections = { ...this.index.forgottenSummaryProjections, [lineage.projectionId]: lineage };
+    this.saveIndex();
+    return lineage;
+  }
+
   loadFolderSummariesForCharacter(characterId) {
     const ownerId = Number(characterId);
     if (!Number.isSafeInteger(ownerId) || ownerId <= 0) return [];
@@ -905,8 +932,7 @@ class MemoryStore {
     const folders = fs.readdirSync(this.summaryFoldersDir, { withFileTypes: true })
       .filter((entry) => entry.isDirectory() && entry.name.startsWith(prefix));
     const sessions = new Map();
-    const forgetStore = new Memory4Store({ summaryFoldersDir: this.summaryFoldersDir });
-    const forgottenByCampaign = new Map();
+    const forgottenProjections = this.listForgottenSummaryProjections();
     for (const folder of folders) {
       const folderPath = path.join(this.summaryFoldersDir, folder.name);
       const files = fs.readdirSync(folderPath).filter((name) => name.endsWith(".json"));
@@ -946,11 +972,8 @@ class MemoryStore {
           let projectionLineage = null;
           if (counterpartId && summary.campaignToken) {
             try {
-              const lineageKey = `${ownerId}|${summary.campaignToken}`;
-              if (!forgottenByCampaign.has(lineageKey)) forgottenByCampaign.set(lineageKey,
-                forgetStore.listForgottenProjections({ campaignToken: summary.campaignToken, ownerId }));
               projectionLineage = projectionLineageFromSummary(summary, { ownerId, counterpartId });
-              if (projectionLineage && forgottenByCampaign.get(lineageKey).some(target => matchesProjectionLineage(target, projectionLineage))) continue;
+              if (projectionLineage && forgottenProjections.some(target => matchesProjectionLineage(target, projectionLineage))) continue;
             } catch {
               loadDiagnostics.ownerRejectedCount++;
               continue;
@@ -1080,9 +1103,13 @@ class MemoryStore {
     });
   }
 
-  searchOwnerFolderForEntity(ownerId, entityId, entityNames = [], ownerMemories = null) {
+  searchOwnerFolderForEntity(ownerId, entityId, entityNames = [], ownerMemories = null, entityProfiles = []) {
     const numericEntityId = Number(entityId);
     const names = [...new Set((entityNames || []).map((name) => String(name || "").trim()).filter(Boolean))];
+    const tracker = new MentionTracker();
+    const profiles = entityProfiles.length ? entityProfiles : [{ id: numericEntityId, mentionAliases: names }];
+    const aliases = entityProfiles.length ? tracker.buildAliases(profiles).filter(alias => alias.id !== numericEntityId || names.includes(alias.name))
+      : names.map(name => ({ id: numericEntityId, name }));
     const memories = Array.isArray(ownerMemories) ? ownerMemories : this.loadFolderSummariesForCharacter(ownerId);
     return memories.filter((memory) => {
       const counterpartIds = uniqueIds([memory.provenance?.counterpartId, ...(memory.provenance?.counterpartIds || [])]);
@@ -1096,7 +1123,7 @@ class MemoryStore {
         ...(memory.provenance?.counterpartNames || []),
         ...(memory.provenance?.conversationFiles || [])
       ].filter(Boolean).join("\n");
-      return names.some((name) => searchable.includes(name));
+      return tracker.findMentionedCharacterIds([{ content: searchable }], { aliasIndex: aliases, resolveCoreference: false }).includes(numericEntityId);
     });
   }
 

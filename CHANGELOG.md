@@ -1,18 +1,20 @@
 # VOTC 版本变更入口
 
-V9.3.3.1 修复（2026-10-14）：修复 Windows 检出图标损坏、Coverage 跨会话来源误关联、明细翻页和 Durable 跳转 Loading。四段 App 版本启动兼容；保留 8 条上限，不付费或清理历史。详见[实施](docs/current/v9/V9_3_3_1_FIX_REPORT.md)和[验证](docs/current/v9/V9_3_3_1_VERIFICATION_REPORT.md)，远端 CI 等待手动推送。
+V9.3.4 Durable 完全退役与 Legacy Summary（当前）：[实施报告](docs/current/v9/V9_3_4_IMPLEMENTATION_REPORT.md)、[验证报告](docs/current/v9/V9_3_4_VERIFICATION_REPORT.md)。Core／App／UI 9.3.4；Workshop 2.0.5、Official Action 2.0.3、协议 3.0 与存储 2.5 保持。Durable 不再生产读写或请求；Legacy 摘要继续支持历史记忆、编辑与 Forget，Year/Life 不恢复生成。源码映射 278 项，构建及部署验证已通过；本轮真实 CK3、Soak 与远端 CI 待验收，最终门禁数量由正式报告记录。
 
-V9.3.3 候选（2026-10-14）：重要来源按时间区间优先送审，增加 Legacy–Durable 只读来源关联；Year/Life 服务、UI 和磁盘派生召回退役，保留 Detail/Legacy 跨年代检索。历史文件清理需单独确认具体范围。详见[实施](docs/current/v9/V9_3_3_IMPLEMENTATION_REPORT.md)和[验证](docs/current/v9/V9_3_3_VERIFICATION_REPORT.md)。
+历史 V9.3.3.1 修复（2026-10-14）：修复 Windows 检出图标损坏、Coverage 跨会话来源误关联、明细翻页和 Durable 跳转 Loading。四段 App 版本启动兼容；当时不付费或清理历史。详见[实施](docs/current/v9/V9_3_3_1_FIX_REPORT.md)和[验证](docs/current/v9/V9_3_3_1_VERIFICATION_REPORT.md)。
 
-V9.3.2（2026-10-13）：修复 Durable 无效生成、输入膨胀及重复恢复；修正取消/多 Effect 派发证据，Core/UI/App 同步为9.3.2。详见[实施](docs/current/v9/V9_3_2_IMPLEMENTATION_REPORT.md)和[验证](docs/current/v9/V9_3_2_VERIFICATION_REPORT.md)。
+历史 V9.3.3 候选（2026-10-14）：重要来源按时间区间优先送审，曾增加 Legacy–Durable 只读来源关联；Year/Life 服务、UI 和磁盘派生召回退役。V9.3.4 已进一步退役 Durable 生产链。详见[实施](docs/current/v9/V9_3_3_IMPLEMENTATION_REPORT.md)和[验证](docs/current/v9/V9_3_3_VERIFICATION_REPORT.md)。
 
-这里是版本变更的单一入口。详细设计和测试证据保留在链接目标中，本文件只维护版本顺序、用户可见摘要和文档索引。
+历史 V9.3.2（2026-10-13）：修复 Durable 无效生成、输入膨胀及重复恢复；修正取消/多 Effect 派发证据，Core/UI/App 同步为 9.3.2。详见[实施](docs/current/v9/V9_3_2_IMPLEMENTATION_REPORT.md)和[验证](docs/current/v9/V9_3_2_VERIFICATION_REPORT.md)。
 
-V9.3.1修复候选：[实施](docs/current/v9/V9_3_1_IMPLEMENTATION_REPORT.md)、[验证](docs/current/v9/V9_3_1_VERIFICATION_REPORT.md)。Gemini原生缓存／思考及总量正确保留，候选输出不重复扣思考，部分流尾帧不丢已知用量；Action失败不误标已接受，并保留真实命令的待回执入口。无新API调用，正式App/UI仍9.2.0/V9.2，CI／CK3／Soak单独验收。
+这里是版本变更的单一入口。除最上方 V9.3.4 当前条目外，以下内容均按当时版本保留为历史快照。详细设计和测试证据保留在链接目标中，本文件只维护版本顺序、用户可见摘要和文档索引。
 
-V9.3 Provider Platform候选：[实施](docs/current/v9/V9_3_IMPLEMENTATION_REPORT.md)、[验证](docs/current/v9/V9_3_VERIFICATION_REPORT.md)、[支持／问题台账](docs/current/v9/V9_3_P_ISSUE_LEDGER.md)。统一七服务商能力／严格完成／原生与估算用量、取消及有界重试；正常出站保持，未知或部分Action不执行。正式App/UI暂保持9.2.0/V9.2；本轮实机和最终SHA CI分别签署。
+历史 V9.3.1修复候选：[实施](docs/current/v9/V9_3_1_IMPLEMENTATION_REPORT.md)、[验证](docs/current/v9/V9_3_1_VERIFICATION_REPORT.md)、[台账](docs/current/v9/V9_3_1_P_ISSUE_LEDGER.md)。Gemini原生缓存／思考及总量正确保留，候选输出不重复扣思考，部分流尾帧不丢已知用量；Action失败不误标已接受，并保留真实命令的待回执入口。无新API调用，正式App/UI仍9.2.0/V9.2，CI／CK3／Soak单独验收。
 
-V9.2.3 候选（2026-10-13，GLM收益HOLD）：[实施](docs/current/v9/V9_2_3_IMPLEMENTATION_REPORT.md)、[验证](docs/current/v9/V9_2_3_VERIFICATION_REPORT.md)、[台账](docs/current/v9/V9_2_3_P_ISSUE_LEDGER.md)。退役Year/Life自动模型生成，保留Durable、Detail/Legacy与合法旧档，按来源证据处理派生失败恢复，信件接受明确退役状态。GLM三版本出站一致，原生长上下文独立取证；正式App/UI保持9.2.0/V9.2，人工Gate未齐不签冻结。
+历史 V9.3 Provider Platform候选：[实施](docs/current/v9/V9_3_IMPLEMENTATION_REPORT.md)、[验证](docs/current/v9/V9_3_VERIFICATION_REPORT.md)、[支持／问题台账](docs/current/v9/V9_3_P_ISSUE_LEDGER.md)。统一七服务商能力／严格完成／原生与估算用量、取消及有界重试；正常出站保持，未知或部分Action不执行。正式App/UI暂保持9.2.0/V9.2；本轮实机和最终SHA CI分别签署。
+
+历史 V9.2.3 候选（2026-10-13，GLM收益HOLD）：[实施](docs/current/v9/V9_2_3_IMPLEMENTATION_REPORT.md)、[验证](docs/current/v9/V9_2_3_VERIFICATION_REPORT.md)、[台账](docs/current/v9/V9_2_3_P_ISSUE_LEDGER.md)。退役Year/Life自动模型生成，保留Durable、Detail/Legacy与合法旧档，按来源证据处理派生失败恢复，信件接受明确退役状态。GLM三版本出站一致，原生长上下文独立取证；正式App/UI保持9.2.0/V9.2，人工Gate未齐不签冻结。V9.3.4 后续退役了 Durable。
 
 V9.2.2 候选（2026-10-12，缓存收益 HOLD）：[事故与实施](docs/current/v9/V9_2_2_IMPLEMENTATION_REPORT.md)、[验证](docs/current/v9/V9_2_2_VERIFICATION_REPORT.md)、[台账](docs/current/v9/V9_2_2_P_ISSUE_LEDGER.md)。核对 14 次 Durable 低命中事故，修复异步等待后及内部重试前的 Forget 来源竞争和跨 Owner 归因；增加默认关闭、内存有上限的匿名请求树诊断。合成重复来源暖缓存正常，长冷证据／恢复成本仍需实机追踪；正式 App/UI 保持 9.2.0/V9.2。
 

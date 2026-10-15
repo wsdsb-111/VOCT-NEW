@@ -1,16 +1,24 @@
-# 对话摘要与人物记忆：Memory Engine 4.0（3.0 协议、2.5 存储兼容）
+# 对话摘要与人物记忆：Legacy Summary（3.0 协议、2.5 存储兼容）
 
-当前项目 V9.3.3、App 9.3.3、Workshop 2.0.5、Memory Engine 4.0。ScopedJsonRepository 委托既有 Memory4Store；候选与授权正文分离，保留所有索引轴、范围日期、当前 Forget 与来源校验。协议 3.0、存储 2.5／schema 2、目录、召回顺序和 Summary anchor 兼容。详见[V9.2 数据权威](current/v9/V9_2_JSON_AUTHORITY_AND_RECOVERY.md)；下方历史验收快照保留。
+当前 Core／App／UI 为 V9.3.4，Workshop 2.0.5，Official Action 2.0.3。人物历史交谈记忆由 `Legacy Summary` 提供；不再在线运行 Memory4/Durable 提取、恢复、召回或写入。Year/Life 自动生成和后台重建继续退役，合法的 Legacy 日期检索保留。协议 3.0、摘要存储 2.5／schema 2 与既有目录格式保持兼容。
 
-## V9.3.3 来源规划与派生退役（2026-10-14）
+当前召回预算：每个直接 Counterpart 默认取最近两篇摘要；合法的 CK3 Official Summary 使用独立的一篇槽位。每名回应 NPC 每轮可取 0–3 篇动态 Extra。摘要总输入预算在会话首次生成时按参与人数冻结：2 人为上下文 10%／上限 3600 Token，3 人为 12.5%／上限 4500，4 人及以上为 15%／上限 5400；使用比例与上限的较小值，并为完整 Provider 请求保留安全余量。
+
+旧 `archiveSidecar` 是惰性归档，运行时不得扫描、读取或写入，原始字节保持不变。Legacy Forget ledger 存放于现有 index，并与摘要 mutation 一起事务提交或回滚。目录改名合并若会包含 Sidecar，则跳过该次合并；纯 Legacy 摘要目录仍可正常读写。Year/Life 历史迁移脚本只可通过 `scripts/archive/v933-year-life` 的显式维护导入使用，不进入 Runtime，V9.3.4 不执行该迁移。
+
+V9.3.4 当前实施和验证状态见[实施报告](current/v9/V9_3_4_IMPLEMENTATION_REPORT.md)与[验证报告](current/v9/V9_3_4_VERIFICATION_REPORT.md)。源码映射 278 项，构建与部署验证已通过；真实 CK3、Soak 与远端 CI 待验收，最终发布组数量以正式报告为准。
+
+## 历史版本合同与验收快照（以下内容不覆盖 V9.3.4 当前合同）
+
+### 历史 V9.3.3 来源规划与派生退役（2026-10-14）
 
 [实施](current/v9/V9_3_3_IMPLEMENTATION_REPORT.md)与[验证](current/v9/V9_3_3_VERIFICATION_REPORT.md)：全部 Owner 授权片段保留，优先评估各时间区间的重要来源，寒暄仅降序；本地浏览不计作模型理解，8 条配额仍针对整场 Owner。新 Coverage proof 区分实际评估与未评估，历史缺项保持未知；Legacy 来源对应不代表语义等价，也不自动回填正文。Year/Life 的服务、展示、编辑和磁盘召回退役；LIFE/YEAR 问句及 Detail 年份索引继续有效。旧派生文件仅按明确确认的清单事务删除，提交后销毁临时副本，玩家外部备份不动。
 
-## V9.3.2 Durable 抽取与恢复（2026-10-13，历史基线）
+### 历史 V9.3.2 Durable 抽取与恢复（2026-10-13）
 
 [实施](current/v9/V9_3_2_IMPLEMENTATION_REPORT.md)与[验证](current/v9/V9_3_2_VERIFICATION_REPORT.md)：固定 Policy v9.3.2 明确严格输出合同，Owner 授权的人名/关系目录去重，活动承诺只提供来源中可核验的相关项。普通请求按输入预算与 128 片段上限分块；原文不截断。坏候选隔离并允许一次有限修正，成功分块通过现有 Recovery writer 保存 checkpoint，恢复前重新验证来源、Forget、手改及 scope；同版本同来源的确定性失败不自动反复付费。Provider STOP 与 canonical Durable commit 分开记录。中途入场的双人投影、人物认知及 Year/Life 退役保持，不放宽知情范围。
 
-## V9.2 改名目录合并（2026-10-11）
+### 历史 V9.2 改名目录合并（2026-10-11；已由 V9.3.4 当前合同取代）
 
 V9.2.3候选补充：[实施](current/v9/V9_2_3_IMPLEMENTATION_REPORT.md)、[验证](current/v9/V9_2_3_VERIFICATION_REPORT.md)。Year/Life自动生成、后台重建与模型压缩已退役；合法旧档可查看和手改，dirty、Forget与来源校验保留，不会自动清成“已生成”。Durable、Detail/Legacy、Commitment与协议3.0/存储2.5保持。下列年度压缩／重建过程是历史记录，候选中不再执行；宏观生平概览损失按方案接受，跨年代原始事实召回仍需实机验收。
 
@@ -365,24 +373,20 @@ V8.6.2 状态面板标记 Memory Engine 2.6；人物目录、缓存、来源消�
 - 死亡发生在当前会话中时，终局摘要仍会写入生者拥有的方向，但跳过死者作为目录拥有者的方向；恢复快照保存这一排除集合，重启恢复也不会重新创建死者目录。
 - 读档或复活流程可以解除墓碑，恢复该角色作为目录所有者的后续记忆生命周期。
 
-## 验证
+## V9.3.4 验证入口
 
-从程序目录运行：
+从程序目录按顺序构建、部署并运行当前回归：
 
 ```powershell
-node scripts\test-v7.1-memory-engine.js
-node scripts\test-v7.2-memory-routing.js
-node scripts\test-v7.2-sequential-finalization.js
-node scripts\test-v7.2.1-stability.js
-node scripts\test-v7.3-identity-lifecycle.js
-node scripts\test-v7.5-memory-action-retirement.js
-node scripts\test-v7.6-architecture-security.js
-node scripts\test-v7.6-semantic-golden-set.js
-node scripts\test-v7.6.1-directed-summary-persistence.js
-node scripts\test-v7.6.1-recovery-race.js
-node scripts\test-memory-ui.js
+node scripts\runtime-dependencies.js
+node scripts\build-runtime.js
+node scripts\verify-runtime-build.js
+node scripts\deploy-runtime-build.js
+node scripts\verify-runtime-build.js --deployed
+node scripts\test-v9.3.4-legacy-retirement.js
 node scripts\test-release.js
 node --check resources\app\out\main\main.js
+node --check resources\app\out\main\ipc\register-ipc.js
 ```
 
-自动回归不连接真实 CK3 或摘要 Provider。连续会话、多人长期游玩、Provider 挂起后重启恢复和动作实际写入 CK3 仍需实机验收；代码级 source/target 锁定、死亡目录清理和错误目标拒绝已纳入 V7.3 门禁。
+自动回归不连接真实 CK3 或摘要 Provider。V9.3.4 的实现及当前验证范围见[实施报告](current/v9/V9_3_4_IMPLEMENTATION_REPORT.md)和[验证报告](current/v9/V9_3_4_VERIFICATION_REPORT.md)；真实 CK3、Soak 与远端 CI 仍待验收。报告未确认前，不在此预填最终发布组数量。

@@ -394,7 +394,7 @@ async function savedLetterWaitsTwoMonthsAndDispatchesOnceWithoutAcceptance() {
     clearOutboundEffect: mode => ({ success: true, mode, effectFilePath: path.join(tempRoot, "run", "votc.txt") }),
   };
   const memoryEngine = {
-    letterMemoryFinalization: {
+    letterSummaryFinalization: {
       captureAccepted() { acceptedMemoryCaptures++; return { jobId: "synthetic-accepted-job" }; },
       finalize: async () => ({ status: "COMPLETE" })
     }

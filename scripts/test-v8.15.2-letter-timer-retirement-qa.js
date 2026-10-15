@@ -188,7 +188,7 @@ function createFixture(managerFactory = createLetterManager) {
   const letterEffectTransport = createFakeTransport(runFileManager, votcPath);
   const archiveCaptures = [];
   const memoryEngine = {
-    letterMemoryFinalization: {
+    letterSummaryFinalization: {
       captureAccepted(context) {
         archiveCaptures.push(structuredClone(context));
         return { jobId: "job-" + archiveCaptures.length };

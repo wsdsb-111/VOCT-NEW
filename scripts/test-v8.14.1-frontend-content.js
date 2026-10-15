@@ -22,20 +22,20 @@ const check = (condition, message) => {
   if (!condition) failures.push(message);
 };
 
-const featureVersionDeclaration = /\bconst\s+VOTC_FEATURE_VERSION\s*=\s*["']V9\.3\.3\.1["']/.test(renderer);
-check(featureVersionDeclaration, "Renderer must define VOTC_FEATURE_VERSION = \"V9.3.3.1\"");
+const featureVersionDeclaration = /\bconst\s+VOTC_FEATURE_VERSION\s*=\s*["']V9\.3\.4["']/.test(renderer);
+check(featureVersionDeclaration, "Renderer must define VOTC_FEATURE_VERSION = \"V9.3.4\"");
 check((renderer.match(/\bVOTC_FEATURE_VERSION\b/g) || []).length >= 2, "Renderer must display the feature version constant");
 check(renderer.includes("window.electronAPI.getAppVersion()"), "footer must continue reading the package version through getAppVersion()");
 const footerStart = renderer.indexOf('className: "app-version"');
 check(footerStart >= 0 && /appVersion/.test(renderer.slice(footerStart, footerStart + 180)), "footer must retain the getAppVersion() result as package metadata");
-check(appPackage.version === "9.3.3.1", "the Electron package version must match V9.3.3.1 using the specified four-part patch label");
+check(appPackage.version === "9.3.4", "the Electron package version must match V9.3.4 using the current SemVer label");
 check(renderer.includes('const VOTC_WORKSHOP_MOD_VERSION = "2.0.5";'), "Renderer must identify Workshop Mod 2.0.5");
 check(renderer.slice(footerStart, footerStart + 300).includes("VOTC_WORKSHOP_MOD_VERSION"), "footer must show the Workshop Mod version");
-check(fs.readFileSync(path.join(root, "resources/app/out/renderer/index.html"), "utf8").includes("<title>VOTC V9.3.3.1</title>"), "window title must identify V9.3.3.1");
+check(fs.readFileSync(path.join(root, "resources/app/out/renderer/index.html"), "utf8").includes("<title>VOTC V9.3.4</title>"), "window title must identify V9.3.4");
 const themePreview = fs.readFileSync(path.join(root, "ui-theme-preview.html"), "utf8");
-check(themePreview.includes("VOTC V9.3.3.1 · 三主题预览") && themePreview.includes("V9.3.3.1 · Mod v2.0.5") && themePreview.includes('title="VOTC App 9.3.3.1"'), "theme preview must match the shipped version labels");
+check(themePreview.includes("VOTC V9.3.4 · 三主题预览") && themePreview.includes("V9.3.4 · Mod v2.0.5") && themePreview.includes('title="VOTC App 9.3.4"'), "theme preview must match the shipped version labels");
 
-check(renderer.includes("Memory Engine 4.0"), "the current memory overview must identify Memory Engine 4.0");
+check(renderer.includes("Legacy Summary"), "the current memory overview must identify Legacy Summary");
 const footerRule = rendererCss.match(/\.config-panel-container \.app-version\s*\{([^}]*)\}/)?.[1] || "";
 check(/position:\s*static\s*;/.test(footerRule) && /align-self:\s*flex-end\s*;/.test(footerRule) && /flex-shrink:\s*0\s*;/.test(footerRule), "footer must reserve flex layout space instead of overlaying page content");
 check(/margin-top:\s*6px\s*;/.test(footerRule) && /max-width:\s*100%\s*;/.test(footerRule) && /white-space:\s*nowrap\s*;/.test(footerRule), "footer must remain bounded and legible in narrow windows");
@@ -104,11 +104,10 @@ assert.deepStrictEqual(overview.characters, [], "overview must not add a duplica
 
 const overviewCopy = [...overview.boundaries, ...Object.values(overview.routingPolicy)].join("\n");
 check(/Recent\s*2|最近\s*2|最近两篇/i.test(overviewCopy), "memory overview must describe the Recent2 lane");
-check(/Memory\s*4(?:\.0)?|Memory4/i.test(overviewCopy), "memory overview must describe the current Memory4 route");
-check(/(?:概览|overview)[^。\n]{0,80}1/i.test(overviewCopy), "memory overview must state the one-item overview allowance");
-check(/(?:细节|详情|detail)[^。\n]{0,80}2/i.test(overviewCopy), "memory overview must state the two-item detail allowance");
-check(/(?:LIFE|人生)[^。\n]{0,80}1/i.test(overviewCopy), "memory overview must state the one-item life allowance");
-check(/(?:<=|≤|最多|不超过)\s*1,?200|\b1200\b/i.test(overviewCopy), "memory overview must state the 1200-token hard ceiling");
+check(/Legacy/i.test(overviewCopy), "memory overview must describe Legacy recall");
+check(/最多[额外]*三篇/i.test(overviewCopy), "memory overview must state the three-summary dynamic allowance");
+check(/共享记忆 Token 预算/.test(overviewCopy), "memory overview must state the shared memory budget");
+check(/不读 Year\/Life/.test(overviewCopy), "date recall must keep Year/Life retired");
 check(/Owner/i.test(overviewCopy) && /Campaign|战役/i.test(overviewCopy) && /knownBy|知情名单/i.test(overviewCopy), "memory overview must explain Owner, Campaign, and knownBy scope");
 check(/(?:归档|archive)[^。\n]{0,60}(?:只读|read.only)|(?:只读|read.only)[^。\n]{0,60}(?:归档|archive)/i.test(overviewCopy), "memory overview must identify archives as read-only");
 

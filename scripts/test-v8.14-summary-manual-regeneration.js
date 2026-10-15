@@ -47,11 +47,10 @@ const { MemoryEngine } = require("../resources/app/out/main/memory-system");
     assert.strictEqual(lastPrompt, undefined, "stale UI content must not trigger a paid request");
 
     const regenerated = await manager.regenerateSummary(2, 3, 0, raw);
-    assert.strictEqual(regenerated.success, false, "without a trusted Campaign context, the rewrite must not claim linked memory rebuilt");
+    assert.strictEqual(regenerated.success, true, "Legacy rewrite succeeds without any retired Durable rebuild");
     assert.strictEqual(regenerated.summaryUpdated, true);
-    assert.strictEqual(regenerated.partial, true);
-    assert.strictEqual(regenerated.memoryRebuild.canonical.status, "SKIPPED");
-    assert.strictEqual(regenerated.memoryRebuild.derived, undefined);
+    assert.strictEqual(regenerated.partial, undefined);
+    assert.strictEqual(regenerated.memoryRebuild, undefined);
     assert.strictEqual(lastOptions.maxTokens, 8192, "manual regeneration must use the configured summary output budget");
     assert.strictEqual(lastOptions.requestType, "summary_rewrite", "manual rewriting must use a plain-text request type, not structured JSON extraction");
     assert(lastPrompt[1].content.includes(raw), "the selected saved summary is the only regeneration source");

@@ -5,21 +5,15 @@ const fs = require("node:fs");
 const os = require("node:os");
 const path = require("node:path");
 const { MemoryStore } = require("../resources/app/out/main/memory-system/memory-store");
-const { Memory4Coordinator } = require("../resources/app/out/main/memory-system/memory4-coordinator");
-const { Memory4Store } = require("../resources/app/out/main/memory-system/memory4-store");
 const { MemoryEngine } = require("../resources/app/out/main/memory-system/memory-engine");
-const { validateEntry } = require("../resources/app/out/main/memory-system/memory4-contract");
 const { validateSourceItem, validateVisibilityBoundaries, repairVisibilityBoundaries } = require("../resources/app/out/main/memory-system/finalization-visibility");
 const { KnowledgeService } = require("../resources/app/out/main/memory-system/knowledge-service");
 const { MemoryExtractor } = require("../resources/app/out/main/memory-system/memory-extractor");
-const { buildLegacyBridge } = require("../resources/app/out/main/memory-system/memory4-legacy-bridge");
 
 const root = fs.mkdtempSync(path.join(os.tmpdir(), "votc-v814-finalization-"));
 const folders = path.join(root, "summaries");
 for (const id of [1, 2, 3]) fs.mkdirSync(path.join(folders, `${id}_NPC`), { recursive: true });
 const store = new MemoryStore({ baseDir: path.join(root, "memory"), summaryFoldersDir: folders });
-const coordinator = new Memory4Coordinator(store);
-const memory4 = new Memory4Store(store);
 const people = [{ id: 1, name: "A" }, { id: 2, name: "B" }, { id: 3, name: "C" }];
 const presence = people.map((person) => ({ characterId: person.id, joinedAtMessageId: 1, leftAtMessageId: null }));
 const base = { campaignToken: "finalization-test", conversationId: "conversation-test", finalizationId: "finalization-test",
@@ -114,21 +108,18 @@ async function run() {
           participants: participants.map((person) => person.id), visibility: "public", source: "spoken",
           messageIds: [message.id], speakerIds: [message.speakerCharacterId]
         })), memories: [] });
-        let summaryRequests = 0;
+        let summaryRequests = 0, durableCalls = 0;
         const context = { campaignToken: `commit-${count}`, conversationId: `commit-${count}`,
           finalizationVisibilityV1: true, participants, messages,
           participantPresence: participants.map((person) => ({ characterId: person.id, joinedAtMessageId: 1, leftAtMessageId: null })),
           buildPrompt: () => [], requestSummary: async () => { summaryRequests++; return { content: output, finish_reason: "stop" }; },
-          requestDurable: async (prompt, options) => {
-            if (count === 2 && options.ownerId === 2) assert.equal(JSON.stringify(prompt).includes("背叛"), false);
-            if (count === 3 && options.ownerId === 3) assert.equal(JSON.stringify(prompt).includes("秘密"), false);
-            return { content: '{"status":"NO_DURABLE_CONTENT","entries":[]}', finish_reason: "stop" };
-          },
+          requestDurable: async () => { durableCalls++; throw new Error("retired_durable_callback_must_not_run"); },
           persistCharacterFolders: async () => ({ success: true }) };
         const result = await engine.finalizeConversation(context);
         assert.equal(result.success, true, result.error?.message);
         assert.equal(summaryRequests, 1, "deterministic source repair must satisfy visibility validation without a redundant model retry");
-        assert.equal(result.durable.status, "COMPLETE");
+        assert.equal(durableCalls, 0, "finalization must not invoke the retired Durable callback");
+        assert.equal(Object.hasOwn(result, "durable"), false, "finalization result must not expose Durable state");
         const episode = engine.isCommitted({ ...context, finalizationId: engine.getFinalizationId(context) });
         assert.equal(episode.visibilityValidationVersion, 1);
         const restricted = episode.summarySegments.find((segment) => segment.visibility === (count === 2 ? "private" : "known_group"));
@@ -211,73 +202,39 @@ async function run() {
       const episode = engine.persistExtraction(scene, extraction).episode;
       assert.equal(episode.visibilityValidationVersion, 1);
       assert.deepEqual(episode.summarySegments.map((segment) => segment.knownBy), [[1, 2, 3], [1]]);
-      assert.deepEqual(coordinator.buildOwnerSnapshot({ ...scene, verifiedSummarySegments: episode.summarySegments }, 2)
-        .fragments.map((fragment) => fragment.text), ["A笑着说：“当然可以。”"]);
+      assert.deepEqual(episode.summarySegments.filter(segment => segment.knownBy.includes(2)).map(segment => segment.content),
+        ["A笑着说：“当然可以。”"]);
     });
-    await check("Memory4 uses verified segment but not private material for observer", () => {
-      const publicPart = { ...item("A笑着说：“当然可以。”", "participants", [1, 2, 3]), segmentId: "public-1", knownBy: [1, 2, 3] };
-      const privatePart = { ...item("A心里决定明天背叛C。", "private", [1]), segmentId: "private-1", knownBy: [1] };
-      const scene = { ...base, verifiedSummarySegments: [publicPart, privatePart] };
-      const observer = coordinator.buildOwnerSnapshot(scene, 2);
-      const author = coordinator.buildOwnerSnapshot(scene, 1);
-      assert.equal(observer.fragments.length, 1);
-      assert.equal(author.fragments.length, 3);
-      assert.equal(JSON.stringify(coordinator.buildPrompt(observer, observer.fragments)).includes("背叛"), false);
-      assert.throws(() => coordinator.buildOwnerSnapshot({ ...scene, verifiedSummarySegments: [{ ...privatePart, knownBy: [1, 2] }] }, 2), /known_by_mismatch/);
+    await check("Legacy summaries remain recallable through the native route", () => {
+      const engine = new MemoryEngine({ store, trace: { record() {} } });
+      store.writeJson(path.join(folders, "2_NPC", "与1的对话.json"), [{ playerId: 2, playerName: "B", characterId: 1,
+        characterName: "A", perspectiveOwnerId: 2, knownBy: [2], date: "1160.1.1", totalDays: 420000,
+        content: "旧摘要仍可读取。", campaignToken: base.campaignToken, campaignBinding: { status: "bound", source: "fixture" } }]);
+      const ownerMemories = engine.loadOwnerFolderMemories(2);
+      const recalled = engine.retrieveForResponder({ characterId: 2, query: "上次谈了什么？", querySpeakerId: 1,
+        directCounterpartIds: [1], activeParticipantIds: [1, 2], ownerFolderMemories: ownerMemories,
+        currentGameDate: "1164.1.1", currentTotalDays: 424000, campaignToken: base.campaignToken,
+        memoryEngine3Enabled: true, tokenBudget: 1000, estimateTokens: () => 10, sessionRecallCache: new Map() });
+      assert(recalled.direct.some(entry => entry.memory.content === "旧摘要仍可读取。"));
     });
-    await check("Known Entity receives co-presence but no private mention", () => {
-      const privatePart = { ...item("A心里决定明天背叛C。", "private", [1]), segmentId: "private-2", knownBy: [1] };
-      const observer = coordinator.buildOwnerSnapshot({ ...base, verifiedSummarySegments: [privatePart] }, 2);
-      memory4.recordKnownEvidence(observer);
-      assert.equal(memory4.getKnownEntityEvidence(observer, 3).mentionCount, 0);
-      assert.equal(memory4.getKnownEntityEvidence(observer, 1).sharedSceneCount, 1);
-      assert.equal(memory4.getKnownEntityEvidence(observer, 1).directConversationCount, 0);
-    });
-    await check("public speech alone does not imply direct conversation", () => {
-      const publicPart = { ...item("A笑着说：“当然可以。”", "participants", [1, 2, 3]),
-        segmentId: "public-evidence", knownBy: [1, 2, 3] };
-      const observer = coordinator.buildOwnerSnapshot({ ...base, conversationId: "public-evidence",
-        verifiedSummarySegments: [publicPart] }, 3);
-      memory4.recordKnownEvidence(observer);
-      assert.equal(memory4.getKnownEntityEvidence(observer, 1).directConversationCount, 0);
-      assert.equal(memory4.getKnownEntityEvidence(observer, 1).sharedSceneCount, 1);
-    });
-    await check("Legacy remains readable without inferred observer Detail", () => {
-      const observer = coordinator.buildOwnerSnapshot(base, 2);
-      assert.equal(observer.fragments.length, 0);
-      assert.equal(observer.completeness, "partial");
-      assert.equal(buildLegacyBridge([{ memoryId: "legacy-one", type: "folder_summary", content: "旧摘要", knownBy: [2],
-        provenance: { campaignToken: base.campaignToken, folderOwnerId: 2 } }], { campaignToken: base.campaignToken, ownerId: 2 }).memories.length, 1);
-    });
-    await check("invalid extraction does not become NO_DURABLE_CONTENT", async () => {
-      const publicPart = { ...item("A笑着说：“当然可以。”", "participants", [1, 2]), segmentId: "public-3", knownBy: [1, 2] };
-      const scene = { ...base, conversationId: "failed-extraction", finalizationId: "failed-extraction",
-        verifiedSummarySegments: [publicPart] };
-      const result = await coordinator.finalizeCommitted(scene, null, { isNarrativeCommitted: true });
-      assert.equal(result.status, "PARTIAL_FAILURE");
-      assert.equal(result.owners[1].status, "EXTRACTION_FAILED");
-    });
-    await check("source IDs and epistemic status survive Durable gate", () => {
-      const segment = { ...item("A笑着说：“当然可以。”", "participants", [1, 2]), segmentId: "public-4", knownBy: [1, 2] };
-      const snapshot = coordinator.buildOwnerSnapshot({ ...base, verifiedSummarySegments: [segment] }, 2);
-      const candidate = { memoryType: "COMMITMENT", text: "A答应。", fragmentIds: [snapshot.fragments[0].fragmentId],
-        entityIds: [], participantIds: [1, 2], eventTime: { status: "reported" } };
-      const entry = validateEntry(candidate, snapshot);
-      assert.deepEqual(entry.source.messageIds, [1]);
-      assert.equal(entry.evidence.epistemicStatus, "reported");
-      assert.equal(entry.evidence.sourceType, "spoken");
-      assert.throws(() => validateEntry({ ...candidate, eventTime: { status: "observed" } }, snapshot), /unverified_observation/);
-    });
-    await check("rumor source remains rumor in Canonical evidence", () => {
-      const scene = { ...base, messages: [{ ...base.messages[0], content: "A听说D已经死了。" }] };
-      const segment = { ...item("A听说D已经死了。", "participants", [1, 2]), source: "rumor",
-        segmentId: "rumor-1", knownBy: [1, 2] };
-      const snapshot = coordinator.buildOwnerSnapshot({ ...scene, verifiedSummarySegments: [segment] }, 2);
-      const entry = validateEntry({ memoryType: "DURABLE_KNOWLEDGE", text: "A听说D已死。",
-        fragmentIds: [snapshot.fragments[0].fragmentId], entityIds: [], participantIds: [1, 2],
-        eventTime: { status: "reported" } }, snapshot);
-      assert.equal(entry.evidence.sourceType, "rumor");
-      assert.equal(entry.evidence.epistemicStatus, "reported");
+    await check("invalid narrative remains recoverable and never calls Durable", async () => {
+      const engine = new MemoryEngine({ store, trace: { record() {} } });
+      const messages = [
+        { id: 1, role: "user", speakerCharacterId: 2, content: "B提出守城。" },
+        { id: 2, role: "assistant", speakerCharacterId: 1, content: "A答应守城。" }
+      ];
+      let summaryCalls = 0, durableCalls = 0;
+      const context = { campaignToken: base.campaignToken, conversationId: "invalid-narrative", finalizationId: "invalid-narrative",
+        participants: people.slice(0, 2), participantPresence: presence.slice(0, 2), messages, finalizationVisibilityV1: true,
+        buildPrompt: () => [],
+        requestSummary: async () => { summaryCalls++; return { content: '{"summarySegments":[],"memories":[]}', finish_reason: "stop" }; },
+        requestDurable: async () => { durableCalls++; throw new Error("retired_durable_callback_must_not_run"); },
+        persistCharacterFolders: async () => ({ saved: true }) };
+      const result = await engine.finalizeConversation(context);
+      assert.equal(result.success, false);
+      assert(summaryCalls > 0);
+      assert.equal(durableCalls, 0);
+      assert.equal(engine.isCommitted(context), null);
     });
     await check("rumor remains told in Narrative perspectives", () => {
       const engine = new MemoryEngine({ store, trace: { record() {} } });

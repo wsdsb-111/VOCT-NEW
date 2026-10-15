@@ -7,7 +7,6 @@ const path = require("node:path");
 const { MemoryStore } = require("../resources/app/out/main/memory-system/memory-store");
 const { MemoryEngine } = require("../resources/app/out/main/memory-system/memory-engine");
 const { KnowledgeService } = require("../resources/app/out/main/memory-system/knowledge-service");
-const { Memory4Coordinator } = require("../resources/app/out/main/memory-system/memory4-coordinator");
 const { repairVisibilityBoundaries, validateVisibilityBoundaries } = require("../resources/app/out/main/memory-system/finalization-visibility");
 const { validateSummarySegmentPresenceBoundaries } = require("../resources/app/out/main/memory-system/perspective-projector");
 
@@ -88,7 +87,7 @@ async function run() {
         persistCharacterFolders: async () => ({ success: true }) });
       assert.equal(results.filter(result => result.success).length, 2);
       assert.equal(requests, 2);
-      assert.equal(engine.listRecoverySnapshots().length, 2, "committed narratives retain their handoff until the durable provider is available");
+      assert.equal(engine.listRecoverySnapshots().length, 0, "committed Legacy narratives close recovery without Durable handoff");
       let durableRequests = 0;
       await engine.recoverPendingFinalizations({ manual: true, activeCampaignToken: "p0",
         requestSummary: async () => { requests++; throw new Error("committed narrative must not be requested again"); },
@@ -97,103 +96,8 @@ async function run() {
           return { content: JSON.stringify({ status: "NO_DURABLE_CONTENT", entries: [] }), finish_reason: "stop" };
         } });
       assert.equal(requests, 2);
-      assert.equal(durableRequests, 4, "each conversation hands off exactly two owners without regenerating its narrative");
+      assert.equal(durableRequests, 0, "Legacy recovery never invokes Durable");
       assert.equal(engine.listRecoverySnapshots().length, 0);
-      assert.equal(engine.memory4.getRecoveryStatus("p0").pending, 0);
-    });
-    await check("multi-owner Durable extraction runs with bounded parallelism", async () => {
-      const coordinator = new Memory4Coordinator(store);
-      const participants = [1, 2, 3, 4, 5].map(id => ({ id, name: `P${id}` }));
-      const context = { campaignToken: "durable-p0", conversationId: "durable-p0", finalizationId: "durable-p0",
-        participants, date: "1164.1.1", messages: [{ id: 1, role: "user", speakerCharacterId: 1, content: "P1公开宣布守城。" }],
-        participantPresence: participants.map(person => ({ characterId: person.id, joinedAtMessageId: 0, leftAtMessageId: null })),
-        verifiedSummarySegments: [{ ...segment("P1公开宣布守城。", [1], [1], [1]), segmentId: "shared-p0",
-          knownBy: participants.map(person => person.id) }] };
-      let active = 0, peak = 0, calls = 0;
-      const result = await coordinator.finalizeCommitted(context, async () => {
-        calls++; peak = Math.max(peak, ++active);
-        await new Promise(resolve => setTimeout(resolve, 5));
-        active--;
-        return { content: JSON.stringify({ status: "NO_DURABLE_CONTENT", entries: [] }), finish_reason: "stop" };
-      }, { isNarrativeCommitted: true });
-      assert.equal(result.status, "COMPLETE", JSON.stringify(result.owners));
-      assert.equal(calls, 5);
-      assert.equal(peak, 2);
-    });
-    await check("one manual Durable retry processes every pending owner", async () => {
-      const coordinator = new Memory4Coordinator(store);
-      const participants = people;
-      const context = { campaignToken: "durable-retry-p0", conversationId: "durable-retry-p0", finalizationId: "durable-retry-p0",
-        participants, date: "1164.1.1", messages: [{ id: 1, role: "user", speakerCharacterId: 1, content: "A公开宣布守城。" }],
-        participantPresence: participants.map(person => ({ characterId: person.id, joinedAtMessageId: 0, leftAtMessageId: null })),
-        verifiedSummarySegments: [{ ...segment("A公开宣布守城。", [1], [1], [1]), segmentId: "shared-retry-p0",
-          knownBy: participants.map(person => person.id) }] };
-      for (const person of participants) coordinator.saveRecovery(coordinator.buildOwnerSnapshot(context, person.id), {
-        status: "EXTRACTION_FAILED", retryCount: 3, lastError: "fixture_transient" });
-      let calls = 0, active = 0, peak = 0;
-      const results = await coordinator.recoverPending(async () => {
-        calls++; peak = Math.max(peak, ++active);
-        await new Promise(resolve => setTimeout(resolve, 5));
-        active--;
-        return { content: JSON.stringify({ status: "NO_DURABLE_CONTENT", entries: [] }), finish_reason: "stop" };
-      }, { manual: true, activeCampaignToken: context.campaignToken, isNarrativeCommitted: () => true });
-      assert.equal(results.filter(result => result.status === "NO_DURABLE_CONTENT").length, 3);
-      assert.equal(calls, 3);
-      assert.equal(peak, 2);
-    });
-    await check("truncated Durable batches split and reject only unsupported entity links", async () => {
-      const coordinator = new Memory4Coordinator(store);
-      const participants = people.slice(0, 2);
-      const messages = Array.from({ length: 4 }, (_, index) => {
-        const content = `A公开陈述第${index + 1}项安排。`;
-        return { id: index + 1, role: "user", speakerCharacterId: 1, content,
-          memory4Fragments: [{ start: 0, end: content.length, visibility: "participants", sourceType: "spoken",
-            recipientIds: [2], entityIds: [1] }] };
-      });
-      const context = { campaignToken: "durable-retry-split-p0", conversationId: "durable-retry-split-p0",
-        finalizationId: "durable-retry-split-p0", participants, date: "1164.1.1", messages,
-        participantPresence: participants.map(person => ({ characterId: person.id, joinedAtMessageId: 0, leftAtMessageId: null })) };
-      const snapshot = coordinator.buildOwnerSnapshot(context, 1);
-      let calls = 0;
-      const result = await coordinator.finishOwner(snapshot, async (prompt) => {
-        calls++;
-        const payload = JSON.parse(prompt[1].content);
-        if (payload.fragments.length > 2) return { content: "{}", finish_reason: "length" };
-        const fragment = payload.fragments[0];
-        const entry = { memoryType: "DURABLE_KNOWLEDGE", text: `安排 ${fragment.fragmentId}`,
-          fragmentIds: [fragment.fragmentId], entityIds: [fragment.speakerId], participantIds: [fragment.speakerId],
-          topics: [], eventTime: { from: null, to: null, precision: "unknown", status: "unknown" } };
-        const unsupportedEntityEntry = { ...entry, text: `未验证实体 ${fragment.fragmentId}`, entityIds: [999] };
-        return { content: JSON.stringify({ status: "STORE", entries: [entry, unsupportedEntityEntry] }), finish_reason: "stop" };
-      });
-      assert.equal(result.status, "STORE");
-      assert.equal(result.entryIds.length, 2);
-      assert.equal(calls, 5, "one incomplete batch splits into two children, each with one bounded invalid-candidate repair");
-      assert.equal(result.rejectedCandidateCount, 2, "unrepaired unsupported entities remain visible in the commit diagnostics");
-      assert.equal(fs.readdirSync(coordinator.recoveryDir).length, 0, "successful partial extraction must clear its recovery record");
-    });
-    await check("Durable batches allow 128 fragments with a fixed 4096-token output ceiling", async () => {
-      const coordinator = new Memory4Coordinator(store);
-      const participants = people.slice(0, 2);
-      const messages = Array.from({ length: 129 }, (_, index) => {
-        const content = `公开安排${index + 1}。`;
-        return { id: index + 1, role: "user", speakerCharacterId: 1, content,
-          memory4Fragments: [{ start: 0, end: content.length, visibility: "participants", sourceType: "spoken",
-            recipientIds: [2], entityIds: [1] }] };
-      });
-      const context = { campaignToken: "durable-cap-p0", conversationId: "durable-cap-p0", finalizationId: "durable-cap-p0",
-        participants, date: "1164.1.1", messages,
-        participantPresence: participants.map(person => ({ characterId: person.id, joinedAtMessageId: 0, leftAtMessageId: null })) };
-      const snapshot = coordinator.buildOwnerSnapshot(context, 1);
-      const requests = [];
-      const result = await coordinator.finishOwner(snapshot, async (prompt, options) => {
-        requests.push({ fragmentIds: JSON.parse(prompt[1].content).fragments.map(fragment => fragment.fragmentId),
-          inputTokens: coordinator.estimateDurableInput(prompt), maxTokens: options.maxTokens });
-        return { content: JSON.stringify({ status: "NO_DURABLE_CONTENT", entries: [] }), finish_reason: "stop" };
-      });
-      assert.equal(result.status, "NO_DURABLE_CONTENT");
-      assert.deepEqual(requests.flatMap(request => request.fragmentIds).sort(), snapshot.fragments.map(fragment => fragment.fragmentId).sort());
-      assert(requests.every(request => request.fragmentIds.length <= 128 && request.inputTokens <= 8192 && request.maxTokens === 4096));
     });
     console.log(`V8.14-A P0 memory closeout: ${passed} PASS`);
   } finally { fs.rmSync(root, { recursive: true, force: true }); }

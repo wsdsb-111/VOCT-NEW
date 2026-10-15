@@ -4,29 +4,35 @@ Voices of the Court 是一个面向《Crusader Kings III》（CK3）的沉浸式
 
 本仓库保存 VOTC 的可编辑 JavaScript 源、可重复生成的运行资源、既有 Windows 壳与锁定依赖，适合运行、开发与回归验证。
 
-此前正式基线 **V9.2 应用边界与 JSON 仓储**（2026-10-11）：[施工与验证](docs/current/v9/V9_2_VERIFICATION_REPORT.md)、[七域端口](docs/current/v9/V9_2_SERVICE_PORTS.md)、[数据权威与恢复](docs/current/v9/V9_2_JSON_AUTHORITY_AND_RECOVERY.md)。符合[旧总路线](docs/current/v9/V9_ROADMAP.md) §7.3，委托既有服务和 Store；后续按用户明确要求实施 V9.3 Provider 与 V9.3.2 修复，Context／Renderer／Bridge 仍留后续阶段。V9.1 f9c088f 和 V9.2 6026713 的远端 CI 已成功，用户功能确认保留；新版本 CI 按最终 SHA 独立核验。
+当前基线 **V9.3.4 Durable 退役与 Legacy Summary**：[实施报告](docs/current/v9/V9_3_4_IMPLEMENTATION_REPORT.md)、[验证报告](docs/current/v9/V9_3_4_VERIFICATION_REPORT.md)。Core／App／UI 为 9.3.4；Workshop 2.0.5、Official Action 2.0.3、协议 3.0 与摘要存储 2.5 保持。Durable 生产生成、恢复、召回与写入已退役；Year/Life 继续不生成。源码映射 278 项，构建与部署验证通过；本轮真实 CK3、Soak 与远端 CI 待验收，最终发布组数量以正式报告为准。
 
-V9.2.1 缓存专项安全／诊断候选（2026-10-12）：[验证](docs/current/v9/V9_2_1_VERIFICATION_REPORT.md)、[问题台账](docs/current/v9/V9_2_1_P_ISSUE_LEDGER.md)。Durable 固定规则与动态额度分离，修复 Forget 在截断重试中重发已忘片段；补充真实 v813 出站与原生用量审计。GLM 96 次合成 A/B 没有命中率增益，DeepSeek baseline 质量门禁停止，效果 **HOLD**。当时未自动进入V9.3；本轮按用户新指示独立施工，App/UI仍保持9.2.0/V9.2。
+历史基线 **V9.2 应用边界与 JSON 仓储**（2026-10-11）：[施工与验证](docs/current/v9/V9_2_VERIFICATION_REPORT.md)、[七域端口](docs/current/v9/V9_2_SERVICE_PORTS.md)、[数据权威与恢复](docs/current/v9/V9_2_JSON_AUTHORITY_AND_RECOVERY.md)。符合[当时总路线](docs/current/v9/V9_ROADMAP.md) §7.3；V9.1 f9c088f 和 V9.2 6026713 的远端 CI 与用户功能确认作为历史证据保留。
 
-V9.3.2 Durable／Action 修复（2026-10-13–14）：[实施](docs/current/v9/V9_3_2_IMPLEMENTATION_REPORT.md)、[验证](docs/current/v9/V9_3_2_VERIFICATION_REPORT.md)。修复耐久记忆输出合同、重复证据、分块及恢复进度，保留严格来源和知情范围；Core/UI/App 为 9.3.2。438 组门禁、独立 QA 和隔离打包冒烟通过；138 份历史恢复目标入库证明通过，保存 1,093 条 Durable，恢复队列清空。原生费用保护上界 USD 0.660913；新 CK3、Soak 与远端 CI 分别待验收。
+历史 V9.2.1 缓存专项安全／诊断候选（2026-10-12）：[验证](docs/current/v9/V9_2_1_VERIFICATION_REPORT.md)、[问题台账](docs/current/v9/V9_2_1_P_ISSUE_LEDGER.md)。Durable 固定规则与动态额度分离，修复 Forget 在截断重试中重发已忘片段；补充真实 v813 出站与原生用量审计。GLM 96 次合成 A/B 没有命中率增益，DeepSeek baseline 质量门禁停止，效果 **HOLD**。当时未自动进入V9.3；本轮按用户新指示独立施工，App/UI仍保持9.2.0/V9.2。
+
+历史 V9.3.2 Durable／Action 修复（2026-10-13–14）：[实施](docs/current/v9/V9_3_2_IMPLEMENTATION_REPORT.md)、[验证](docs/current/v9/V9_3_2_VERIFICATION_REPORT.md)。修复耐久记忆输出合同、重复证据、分块及恢复进度，保留严格来源和知情范围；Core/UI/App 为 9.3.2。438 组门禁、独立 QA 和隔离打包冒烟通过；138 份历史恢复目标入库证明通过，保存 1,093 条 Durable，恢复队列清空。原生费用保护上界 USD 0.660913；新 CK3、Soak 与远端 CI 分别待验收。Durable 已在 V9.3.4 从生产链退役。
 
 ## 主要功能
 
+当前记忆入口为 `Legacy Summary`。NPC 每名直接对话对象默认读取最近两篇摘要，合法 CK3 官方追忆摘要占独立槽位；每名回应 NPC 每轮动态 Extra 为 0–3 篇。会话首次生成时冻结摘要总预算：2 人为上下文 10%／上限 3600 Token，3 人为 12.5%／上限 4500，4 人及以上为 15%／上限 5400，取较小值并为 Provider 保留安全余量。摘要全文、重要事项、编辑／删除、日期筛选与分页由 Legacy 摘要界面提供。
+
+### 历史版本记录（以下保留当时实现与验收快照，不代表 V9.3.4 当前功能）
+
 V9.3.3.1 修复（2026-10-14）：[规格](docs/current/v9/V9_3_3_1_FIX_SPEC.md)、[实施](docs/current/v9/V9_3_3_1_FIX_REPORT.md)、[验证](docs/current/v9/V9_3_3_1_VERIFICATION_REPORT.md)。修复 Windows 二进制检出、同源 Coverage 判定、明细分页和 Durable 跳转 Loading；版本同步 9.3.3.1，零付费和零历史清理。远端 CI 等待用户手动推送后核验。
 
-V9.3.3 候选（2026-10-14）：[施工规格](docs/current/v9/V9_3_3_IMPLEMENTATION_SPEC.md)、[实施](docs/current/v9/V9_3_3_IMPLEMENTATION_REPORT.md)、[验证](docs/current/v9/V9_3_3_VERIFICATION_REPORT.md)。重要来源按全文与时间区间优先规划；Legacy–Durable 展示只读来源关联，保留 8 条上限和严格权限。Year/Life 从生产服务、UI 与召回退役，某年/生平问句仍检索 Detail/Legacy；历史派生文件须经具体范围确认后事务清理。当前源码版本 9.3.3，部署与各项实机 Gate 以本轮报告为准。
+历史 V9.3.3 候选（2026-10-14）：[施工规格](docs/current/v9/V9_3_3_IMPLEMENTATION_SPEC.md)、[实施](docs/current/v9/V9_3_3_IMPLEMENTATION_REPORT.md)、[验证](docs/current/v9/V9_3_3_VERIFICATION_REPORT.md)。重要来源按全文与时间区间优先规划；Legacy–Durable 展示只读来源关联，保留 8 条上限和严格权限。Year/Life 从生产服务、UI 与召回退役，某年/生平问句仍检索 Detail/Legacy；历史派生文件须经具体范围确认后事务清理。该轮源码版本 9.3.3，部署与各项实机 Gate 以当时报告为准；V9.3.4 已进一步退役 Durable。
 
-V9.3.1修复候选：[实施](docs/current/v9/V9_3_1_IMPLEMENTATION_REPORT.md)、[验证](docs/current/v9/V9_3_1_VERIFICATION_REPORT.md)、[台账](docs/current/v9/V9_3_1_P_ISSUE_LEDGER.md)。修复Gemini原生缓存／思考用量丢失、total及可见输出口径和部分流尾帧覆盖；Action区分写入尝试与信封接受，失败保留待回执证据，不重放未知效果。本轮全部离线，正式版本仍9.2.0/V9.2，GLM缓存继续HOLD→V9.4。
+历史 V9.3.1 修复候选：[实施](docs/current/v9/V9_3_1_IMPLEMENTATION_REPORT.md)、[验证](docs/current/v9/V9_3_1_VERIFICATION_REPORT.md)、[台账](docs/current/v9/V9_3_1_P_ISSUE_LEDGER.md)。修复Gemini原生缓存／思考用量丢失、total及可见输出口径和部分流尾帧覆盖；Action区分写入尝试与信封接受，失败保留待回执证据，不重放未知效果。本轮全部离线，正式版本仍9.2.0/V9.2，GLM缓存继续HOLD→V9.4。
 
-V9.3 Provider Platform候选：[实施](docs/current/v9/V9_3_IMPLEMENTATION_REPORT.md)、[验证](docs/current/v9/V9_3_VERIFICATION_REPORT.md)、[支持／问题台账](docs/current/v9/V9_3_P_ISSUE_LEDGER.md)。统一七服务商能力／严格完成／原生与估算用量、取消及有界重试；正常出站保持，未知或部分Action不执行。正式App/UI暂保持9.2.0/V9.2；本轮实机和最终SHA CI分别签署。
+历史 V9.3 Provider Platform候选：[实施](docs/current/v9/V9_3_IMPLEMENTATION_REPORT.md)、[验证](docs/current/v9/V9_3_VERIFICATION_REPORT.md)、[支持／问题台账](docs/current/v9/V9_3_P_ISSUE_LEDGER.md)。统一七服务商能力／严格完成／原生与估算用量、取消及有界重试；正常出站保持，未知或部分Action不执行。正式App/UI暂保持9.2.0/V9.2；本轮实机和最终SHA CI分别签署。
 
-V9.2.3候选（2026-10-13）：[实施](docs/current/v9/V9_2_3_IMPLEMENTATION_REPORT.md)、[验证](docs/current/v9/V9_2_3_VERIFICATION_REPORT.md)。Year/Life自动模型生成已退役；保留Durable、Detail/Legacy及合法旧档查看和手改。以下旧年度压缩／重建记录为历史合同，不能据此重新启用生成。GLM旧新出站一致，原生长上下文另有取证，实机问题仍HOLD；正式App/UI保持9.2.0/V9.2，未签完整冻结。
+历史 V9.2.3候选（2026-10-13）：[实施](docs/current/v9/V9_2_3_IMPLEMENTATION_REPORT.md)、[验证](docs/current/v9/V9_2_3_VERIFICATION_REPORT.md)。Year/Life自动模型生成已退役；保留Durable、Detail/Legacy及合法旧档查看和手改。以下旧年度压缩／重建记录为历史合同，不能据此重新启用生成。GLM旧新出站一致，原生长上下文另有取证，实机问题仍HOLD；正式App/UI保持9.2.0/V9.2，未签完整冻结。Durable 已由 V9.3.4 退役。
 
-当前版本：项目 **V9.3.3.1**，Electron App 包 **9.3.3.1**，VOTC Workshop Mod **2.0.5**，人物记忆 **Memory Engine 4.0**。前端显示 `V9.3.3.1 · Mod v2.0.5`，悬停可见 App 包版本；记忆协议 3.0、摘要 2.5 保持兼容。独立 Three-Mod 工程仍为 1.0.6；VOTC.exe 的旧壳属性版本未改写。以下历史报告保留当时版本和验收快照。
+当前版本：项目／Core／UI **V9.3.4**，Electron App 包 **9.3.4**，VOTC Workshop Mod **2.0.5**。记忆入口显示 `Legacy Summary`；协议 3.0、摘要存储 2.5 与 Official Action 2.0.3 保持。VOTC.exe 的旧壳属性版本未改写。Durable 不再在线，Year/Life 不生成。
 
 可选兼容工程已完成本地迁移：[CK3-Three-Mod-Compatibility](https://github.com/wsdsb-111/CK3-Three-Mod-Compatibility)，工作目录 `C:/Users/97330/Documents/Codex/CK3-Three-Mod-Compatibility`。官职／称谓规则不属于 VOTC 运行必需依赖，历史[1.0.6 报告](docs/v8.15.2-celestial-same-tier-office-report.md)保留；当前安装 Mod 不卸载。独立CI与CK3验收待执行。
 
-人物改名后，摘要列表与对话读写会自动按 ID 合并旧目录，按日期排列摘要并保留 Detail/Legacy、手动修改与遗忘状态。发现未清理的旧派生视图时阻止合并，须先完成明确确认的迁移；不同 ID／Campaign 保持隔离，冲突时保留原数据并阻止覆盖。详见[摘要合同](docs/README_摘要系统.md)。
+人物改名后的目录合并只处理 Legacy 摘要；若合并会包含旧 archive Sidecar，则跳过合并，不读取或改写 Sidecar，保留原始字节。不同 ID／Campaign 继续隔离，纯 Legacy 数据仍可正常读写。详见[摘要合同](docs/README_摘要系统.md)。
 
 V8.15.2 运行与流官兼容修复（2026-10-10）：[空闲控制台报错](docs/v8.15.2-idle-run-carrier-report.md)、[信件消费缺口](docs/v8.15.2-outbound-bridge-followup-report.md)、[Three-Mod 官职交接](docs/v8.15.2-celestial-office-compatibility-report.md)。正式后台消费不再依赖对话窗口；兼容层限制跨官区归位并处理旧低级流官头衔，世袭保留。本轮实机验证与此前用户验收分开记录，需重启 App／CK3。
 
@@ -205,7 +211,13 @@ V7.6 默认模板明确区分长期稳定记忆、当前话题记忆与本轮事
 
 ## 对话摘要与记忆
 
-V7.9.1 继续使用 Memory Engine 2.5，本次未修改摘要存储、动态召回选择或人物目录格式。旧摘要导入、跨周目摘要提示和旧格式运行路径已退休；人物目录仍是唯一摘要正文来源，2.3/2.4 视角摘要继续兼容读取。主要规则是：
+当前人物历史记忆由 `Legacy Summary` 驱动，直接关系默认召回两篇摘要；合法 CK3 官方追忆可作为独立一篇。每名回应 NPC 每轮动态 Extra 为 0–3 篇。摘要总输入预算在会话首次生成时冻结：参与人数为 2／3／4+ 时分别使用上下文 10%／12.5%／15%，且上限为 3600／4500／5400 Token，取较小值并保留 Provider 安全余量。Legacy 页面可展开全文和重要事项，并支持编辑、删除、日期筛选与分页。
+
+旧 archive Sidecar 保留原始字节且运行时不扫描、不读、不写。Legacy Forget ledger 位于现有摘要 index，并随摘要 mutation 事务提交或回滚。改名目录合并若会包含 Sidecar 则跳过；纯 Legacy 摘要仍可正常读写。协议 3.0、存储 2.5、Campaign／Owner 与知情边界保持；Year/Life 自动生成及后台重建不恢复。
+
+### 历史摘要设计快照（V7.9.1 时点）
+
+V7.9.1 继续使用 Memory Engine 2.5，本次未修改摘要存储、动态召回选择或人物目录格式。旧摘要导入、跨周目摘要提示和旧格式运行路径已退休；人物目录仍是唯一摘要正文来源，2.3/2.4 视角摘要继续兼容读取。以下条目保留该阶段记录，不作为 V9.3.4 当前实现合同：
 
 - 摘要 Provider 请求异常时不推进 rolling checkpoint；终局最多两次整场模型请求，失败保留 recovery snapshot，不将原文写成人物摘要。摘要页“重试失败摘要”按当前模型配置补生成，可重试已达自动上限的记录；截断、来源 ID 和投影质量门禁不放宽；
 - 结构化区分事实、信念、计划、传闻、秘密、承诺和关系变化；
@@ -315,18 +327,18 @@ V7.7 在 V7.6 健康化基础上分阶段拆分主进程：第一阶段将六种
 node scripts\test-release.js
 ```
 
-清单覆盖全部 `test-*.js`；本轮分类数量与发布结果见[V9.3.3.1 验证](docs/current/v9/V9_3_3_1_VERIFICATION_REPORT.md)，数量以 `scripts/test-manifest.js` 实际输出为准。既有 Action、Letter、Memory、Worldline、关系、日期和缓存门禁继续执行；历史归档检查不计入发布组。
+清单覆盖全部 `test-*.js`；当前 V9.3.4 的验证结果见[验证报告](docs/current/v9/V9_3_4_VERIFICATION_REPORT.md)，数量以 `scripts/test-manifest.js` 实际输出和正式报告为准。自动化与构建证据不替代真实 CK3、Soak 或远端 CI 验收。
 
 ## 版本信息
 
-- 项目／前端版本：V9.3.3.1；底部显示 `V9.3.3.1 · Mod v2.0.5`，App 包版本为 9.3.3.1
-- 当前开发基线：V9.3.3.1 修复 Windows 部署、Coverage 同源判定与分页/Loading；保留 V9.3.3 Durable Planner 和 Year/Life 生产退役，CK3、Soak 与最终 SHA CI 独立验收。
+- 项目／前端版本：V9.3.4；App 包版本为 9.3.4；记忆入口显示 `Legacy Summary`
+- 当前开发基线：Durable 生产链已退役，摘要驱动的历史记忆、Legacy UI 与原协议/存储兼容。源码映射 278 项，构建和部署已通过；真实 CK3、Soak 与远端 CI 待验收，最终组数不在报告外预填。
 - 本机 CK3 模组 descriptor：Voices of the Court 2.0，version 2.0.5，Workshop 3346777360（Mod 名称保留以兼容依赖）；必需 Date Runner 补丁按[外部运行依赖](docs/EXTERNAL_RUNTIME_DEPENDENCIES.md)核对，不单凭版本号判定
 - 本机模组 descriptor 支持版本：CK3 1.20.*（元数据声明，不替代实机兼容性 Gate）
 - UI 主题：宫廷编年史风格（深红、暗金、羊皮纸文本层级）
 - UI 主题切换：游牧、骑士纹章、水墨画卷三套完整历史风格；分别使用 `image/草原游牧.png`、`image/中世纪骑士.png`、`image/中国古典.png` 作为整块界面背景，并保留各自的边框结构、按钮造型、消息卡片、输入框、字体和滚动条，主题选择可自动保存
 - UI 素材生成提示词：参见 [docs/UI_ASSET_PROMPTS_2.0.3.md](docs/UI_ASSET_PROMPTS_2.0.3.md)
-- 当前重点：七域语义端口、同一 Memory4 权威仓储、索引候选与惰性授权正文、既有 journal 崩溃恢复和只读匿名审计；V9.3 再处理 Provider 能力层。既有 Provider、缓存和长时间运行用户验收保留。
+- 当前摘要预算：直接关系两篇摘要，另有合法官方摘要独立槽位；动态 Extra 每 NPC 每轮 0–3 篇。总预算按人数冻结为 10%/3600、12.5%/4500、15%/5400 Token，并保留 Provider 安全余量。
 
 ## 已知限制
 
@@ -336,8 +348,8 @@ node scripts\test-release.js
 - Workshop 2.0.5 的存档 token 跨重启与不同新存档隔离仍需真实 CK3 保存/读档 Gate；旧模组不会持久化世界线，但现有对话仍可运行。
 - CK3 日志格式、角色头衔语言和本地化文本变化时，可能影响年份或皇帝识别。
 - DeepSeek 等服务商的上下文缓存由服务端管理，命中率会受到请求前缀、模型、账号隔离和缓存生命周期影响。
-- 人物摘要目录是 Memory Engine 4.0 可见界面所展示的长期记忆数据，底层继续兼容 `engineVersion: 3.0` 与摘要 2.5 数据合同；清理或迁移前请先备份 `%APPDATA%/VOTC/votc_data/conversation_summaries`。
-- 结构化记忆质量仍受摘要 Provider 的 JSON 遵循能力影响；新终局请求解析失败时会自动重试，连续失败则保留 recovery snapshot，旧恢复快照仍兼容自然语言回退。
+- 人物摘要目录由 Legacy Summary 界面管理，兼容既有协议 3.0 与摘要 2.5；清理或迁移前请先备份 `%APPDATA%/VOTC/votc_data/conversation_summaries`。旧 archive Sidecar 不参与当前读取或写入，原始字节保留。
+- 摘要质量仍受所选 Summary Provider 与历史数据完整性影响；自动化回归不等同于新 CK3/Provider/Soak 验收。
 
 ## 文档入口
 

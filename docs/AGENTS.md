@@ -4,18 +4,18 @@
 
 - docs/README.md 是分类、推荐阅读顺序和当前版本入口的唯一索引。
 - 根目录 README.md 负责项目简介、安装运行和当前基线；根目录 CHANGELOG.md 只维护版本顺序、用户可见摘要和详细文档链接，不复制完整实现记录。
-- docs/V8阶段开发记录.md 是 V8.0 起的连续阶段记录；docs/README_摘要系统.md 维护当前 Memory Engine 4.0 可见标签、既有 3.0 协议与 2.5 存储合同、召回和生命周期边界。
-- 当前入口为 docs/current/v9/ 的 V9.2 源码构建、架构移交与验证；V9.0 及更早报告保留历史证据。按旧总路线分期，不把重新审查方案中的六项业务重构写成本版完成。既有用户验收不降级，新V9的CI／打包／CK3／Provider／性能结果单独记录，不得将 ACK 或静态通过写成效果验收通过。
+- docs/V8阶段开发记录.md 是 V8.0 起的连续阶段记录；docs/README_摘要系统.md 维护当前 `Legacy Summary` 标签、兼容的 3.0 协议与 2.5 存储合同及摘要召回边界。
+- 当前入口为 docs/current/v9/ 的 V9.3.4 Durable 退役实施与验证报告；V9.3.3 及更早报告保留历史证据。既有用户验收不降级；新版本的 CI／打包／CK3／Provider／性能结果单独记录，不得将 ACK 或静态通过写成效果验收通过。当前源码映射、构建和部署证据可引用；本轮真实 CK3、Soak 与远端 CI 尚待验收。
 - V6/V7 阶段文档和 V8.3 历史文档仍是历史证据。若功能已退役，应在当前入口标注历史/废止，不因整理而删除文件或破坏旧链接。
 
 ## 编写规则
 
-- 当前版本写法统一为项目 V9.3.3.1、App 包 9.3.3.1、VOTC Workshop Mod 2.0.5、Memory Engine 4.0；底层协议 3.0、摘要存储 2.5、Official Action 2.0.3 和独立 Three-Mod 1.0.6 分别保留。历史报告、原始设计与冻结证据保留当时版本，最新变更以 current/v9/V9_3_3_1_VERIFICATION_REPORT.md 为准。
+- 当前版本写法统一为 Core/App/UI V9.3.4、VOTC Workshop Mod 2.0.5、人物历史记忆 UI `Legacy Summary`；协议 3.0、摘要存储 2.5、Official Action 2.0.3 和独立 Three-Mod 1.0.6 保持。不要再宣传 Memory Engine 4.0 在线功能。历史报告、原始设计与冻结证据保留当时版本，当前变更分别以 [V9.3.4 实施报告](current/v9/V9_3_4_IMPLEMENTATION_REPORT.md)和[验证报告](current/v9/V9_3_4_VERIFICATION_REPORT.md)为准；不要预写尚未确定的最终 PASS 数量。
 
 - 只记录仓库中实际存在、已经实现或明确标注为限制的内容；区分“代码/自动化通过”和“真实 CK3、Provider、Electron、远端 CI 或 Soak 已验收”。
 - 新文档沿用仓库已有的版本、阶段、主题和 implementation-report/review 命名风格；不要为了统一而重命名历史中文文件或另造根目录版本散文档。
 - 变更记录应写明受影响路径、数据/IPC/Prompt 合同、验证命令、证据范围和剩余人工 Gate。不要把截图、日志、存档或 API 凭据复制进仓库。
-- 摘要文档必须同时说明可见版本标签和底层兼容合同：当前人物记忆显示为 Memory Engine 4.0，但既有协议 `engineVersion: 3.0`、2.5 存储格式、字段和迁移边界保持兼容，除非另有迁移方案。显示标签更新不升级持久化协议。
+- 摘要文档必须同时说明当前可见标签 `Legacy Summary` 和底层兼容合同：既有协议 3.0、2.5 存储格式、字段与迁移边界保持兼容。旧 archive Sidecar 惰性保留且运行时不读写；Legacy Forget ledger 使用原 index 及现有事务。改名合并若包含 Sidecar 则跳过，但纯 Legacy 摘要读写继续。
 - 世界线/关系文档必须保持 CK3 当前事实只读、Current Runtime Truth 优先、Definition↔Runtime 一对一绑定、冲突 fail-closed 和来源完整性边界；不要把历史人物资料写成当前游戏事实。
 - UI 文档要注明三主题内部键 parchment/knight/ink 与玩家名称“游牧”/“骑士”/“水墨”的映射，并记录可读性、背景覆盖层和视觉验证范围。
 - 设计文档、实施报告和审查报告不可互相冒充：方案是预期合同，实施报告是代码结果，审查报告还要标出未完成的人工 Gate。

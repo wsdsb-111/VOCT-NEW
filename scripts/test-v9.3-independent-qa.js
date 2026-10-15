@@ -833,7 +833,7 @@ async function testCapabilityCancellationAndEndpointCacheIsolation() {
   const manager = makeManager({ config, provider });
   const controller = new AbortController();
   const request = manager.sendSummaryRequest([{ role: "user", content: "synthetic" }], controller.signal, {
-    requestType: "memory4_durable",
+    requestType: "memory_recovery",
     beforeSendGuard() {}
   });
   await lookupStarted.promise;
@@ -942,7 +942,7 @@ async function testForgetGuardStillRunsAfterCapabilityWait() {
   };
   const manager = makeManager({ config, provider });
   const request = manager.sendSummaryRequest([{ role: "user", content: "synthetic forgotten source" }], undefined, {
-    requestType: "memory4_durable",
+    requestType: "memory_recovery",
     beforeSendGuard() { guardCalls++; if (forgotten) throw new Error("memory4_request_source_changed_before_send"); }
   });
   await lookupStarted.promise;
@@ -1347,7 +1347,7 @@ async function run() {
       await scenario("conflicting finish and duplicate usage tails remain UNKNOWN and account once", testConflictingFinishAndDuplicateUsageTailAccounting);
     }
     await scenario("capability cancellation settles promptly and endpoint changes invalidate cache", testCapabilityCancellationAndEndpointCacheIsolation);
-    await scenario("Memory4 pre-send Forget guard still runs after capability lookup", testForgetGuardStillRunsAfterCapabilityWait);
+    await scenario("Generic pre-send source guard still runs after capability lookup", testForgetGuardStillRunsAfterCapabilityWait);
     await scenario("unterminated streams are not complete across seven mocked adapters", testUnterminatedStreamRejectedAcrossSevenAdapters);
     await scenario("partial stream disconnect never replays across seven mocked adapters", testPartialStreamsNeverReplayAcrossSevenAdapters);
     await scenario("SDK retries are explicit and abort during backoff starts no new request", testAbortDuringBackoffAndSdkRetryOwnership);

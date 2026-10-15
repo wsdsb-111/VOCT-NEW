@@ -6,7 +6,7 @@ const { spawnSync } = require("child_process");
 const sourceVersionPath = require.resolve("../src/app/main/version");
 require.cache[sourceVersionPath] = { exports: require("../resources/app/out/main/version") };
 const { MemoryStore } = require("../src/app/main/memory-system/memory-store");
-const { planYearLifeRetirement, executeYearLifeRetirement, recoverYearLifeRetirement } = require("../src/app/main/memory-system/memory4-retirement-migration");
+const { planYearLifeRetirement, executeYearLifeRetirement, recoverYearLifeRetirement } = require("./archive/v933-year-life/memory4-retirement-migration");
 const { assertNoLinks } = require("../src/app/main/memory-system/scoped-path");
 
 function usage() {

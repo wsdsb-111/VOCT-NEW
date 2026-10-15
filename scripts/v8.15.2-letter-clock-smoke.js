@@ -307,10 +307,11 @@ async function run() {
       ipc.removeHandler('letters:getStatuses');
       ipc.handle('letters:getStatuses',()=>recovering.getAllLetterStatuses());
       await recovering.startLogTailing();
-      await helpers.waitFor(()=>fixture.summaryCalls.length===1&&fixture.durableOwners.length===2,'packaged receipt archive');
+      await helpers.waitFor(()=>fixture.summaryCalls.length===1&&fixture.memoryEngine.store.listAllMemories().length===1,'packaged Legacy receipt archive');
       await recovering.restartLogTailing();
+      const [legacyLetter]=fixture.memoryEngine.store.listAllMemories();
       return {effectWrites:fixture.effectWrites,summaryCalls:fixture.summaryCalls.length,
-        owners:fixture.durableOwners.length,lock:recovering.awaitingAcceptanceLetterId};
+        owners:legacyLetter.knownBy.length,lock:recovering.awaitingAcceptanceLetterId};
     })()`);
     assert.deepEqual(receiptFixture, { effectWrites: 1, summaryCalls: 1, owners: 2, lock: null });
     const receiptStatus = await readStatuses();

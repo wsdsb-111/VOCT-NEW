@@ -13,10 +13,6 @@ const { PromptScriptSandbox } = require("../resources/app/out/main/prompts/promp
 const { createGameData } = require("../resources/app/out/main/game-data/game-data");
 const { Character } = require("../resources/app/out/main/game-data/character");
 const { TokenCounter } = require("../resources/app/out/main/provider-service");
-const { MemoryStore } = require("../resources/app/out/main/memory-system/memory-store");
-const { Memory4Coordinator } = require("../resources/app/out/main/memory-system/memory4-coordinator");
-const { Memory4RecallPlanner } = require("../resources/app/out/main/memory-system/memory4-recall-planner");
-const { projectVisibleTranscript } = require("../resources/app/out/main/memory-system/memory4-visibility");
 
 const promptsDir = path.resolve(__dirname, "../resources/app/default_userdata/prompts");
 const TemplateEngine = createTemplateEngine({ Handlebars, fs, path, defaultPromptsDir: promptsDir,
@@ -139,26 +135,14 @@ for (const value of ["v5", "v6", "v7", "glm_cache_v2", "v813"]) {
   });
 }
 layout = "v813";
-function evidence(text = "Target is a Bastard.") {
-  return { campaignToken: "trait-campaign", ownerId: 2, entityIds: [1], acquiredDate: "1163.1.1",
-    conversationDate: "1163.1.1", text, evidence: { knownBy: [2], visibility: "private", sourceType: "witnessed", epistemicStatus: "observed" },
-    source: { conversationId: "trait-source", finalizationId: "trait-final", messageIds: [4] } };
-}
-const knownContext = value => ({ ...memoryContext(), memory4Packet: { details: [{ traitKnowledgeEvidence: value }] } });
-check("Known Profile requires one concrete trait claim rather than recognition or relationships", () => {
+check("retired Memory4 Packet evidence is never read or used to restore traits", () => {
   const sample = fixture();
+  const memory4Packet = { get details() { throw new Error("retired Memory4 Packet must not be read"); } };
+  const view = selector.createTraitProfileView(sample.data, sample.responder, { ...memoryContext(), memory4Packet });
+  assert.deepEqual(view.gameData.getPlayer().traits, []);
   sample.responder.relationsToPlayer = ["friend"];
-  const known = selector.createTraitProfileView(sample.data, sample.responder, knownContext(evidence()));
-  assert.deepEqual(known.gameData.getPlayer().traits.map(value => value.name), ["Bastard"]);
-  const recognition = selector.createTraitProfileView(sample.data, sample.responder, { knownEntities: [{ entityId: 1, recognition: "DIRECT_RELATIONSHIP" }] });
-  assert.deepEqual(recognition.gameData.getPlayer().traits, []);
-});
-check("specific proof can restore an unknown Mod trait without declaring it observable", () => {
-  const sample = fixture();
-  sample.player.traits.push(trait("Mod Lineage"));
-  const view = selector.createTraitProfileView(sample.data, sample.responder, knownContext(evidence("Target has Mod Lineage.")));
-  assert.deepEqual(view.gameData.getPlayer().traits.map(value => value.name), ["Mod Lineage"]);
-  assert(!selector.getTraitsForObservedProfile(sample.player).some(value => value.name === "Mod Lineage"));
+  const relationshipOnly = selector.createTraitProfileView(sample.data, sample.responder, { ...memoryContext(), memory4Packet });
+  assert.deepEqual(relationshipOnly.gameData.getPlayer().traits, [], "relationship recognition alone does not disclose hidden traits");
 });
 check("only responder-owned current CK3 known secrets restore their exact trait", () => {
   const sample = fixture();
@@ -170,50 +154,4 @@ check("only responder-owned current CK3 known secrets restore their exact trait"
   sample.data.date = "invalid";
   assert.deepEqual(selector.createTraitProfileView(sample.data, sample.responder).gameData.getPlayer().traits, []);
 });
-check("wrong Owner/Campaign/date/visibility, negation, hypotheses and hearsay cannot promote raw traits", () => {
-  const sample = fixture();
-  const cases = [
-    { ...evidence(), ownerId: 3 }, { ...evidence(), campaignToken: "other" }, { ...evidence(), acquiredDate: "1165.1.1" },
-    { ...evidence(), acquiredDate: null }, { ...evidence(), source: {} },
-    { ...evidence(), evidence: { ...evidence().evidence, knownBy: [3] } },
-    { ...evidence(), evidence: { ...evidence().evidence, visibility: "unknown" } },
-    evidence("Target is not a Bastard."), evidence("Target might be a Bastard."), evidence("据说 Target 是 Bastard。"),
-    evidence("Target is a Bastard someday."), evidence("Target is a Bastard?"), evidence("Target 是 Bastard，将来才会确定。"),
-    evidence("Target 是 Bastard，并不属实。"), evidence("Target 是 Bastard。这是谣言。"), evidence("Target is a Bastard. That is false."),
-    evidence('我听某人说 "Target 是 Bastard"。'), evidence('有人声称："Target 是 Bastard"。'), evidence('Target 自称是 Bastard。'),
-    evidence("Target 是 Bastard，这只是玩笑。"), evidence("Target 是 Bastard，这只是虚构。"), evidence("Target 是 Bastard，这只是误传。"),
-    { ...evidence(), evidence: { ...evidence().evidence, sourceType: "reported", epistemicStatus: "reported" } }
-  ];
-  for (const source of cases) assert.deepEqual(selector.createTraitProfileView(sample.data, sample.responder,
-    knownContext(source)).gameData.getPlayer().traits, []);
-});
-check("production Memory4 detail verifies scope, then only its witnessed trait enters the prompt view", () => {
-  const temporary = fs.mkdtempSync(path.join(os.tmpdir(), "votc-trait-routing-"));
-  try {
-    const folders = path.join(temporary, "summaries");
-    fs.mkdirSync(path.join(folders, "2_Responder"), { recursive: true });
-    const store = new MemoryStore({ baseDir: path.join(temporary, "memory"), summaryFoldersDir: folders });
-    const coordinator = new Memory4Coordinator(store);
-    const sample = fixture();
-    const text = "Target is a Bastard.";
-    const context = { campaignToken: sample.data.campaignToken, conversationId: "trait-history", finalizationId: "trait-final",
-      date: "1163.1.1", totalDays: 424635, participants: [{ id: 1 }, { id: 2 }],
-      participantPresence: [{ characterId: 1, joinedAtMessageId: 0 }, { characterId: 2, joinedAtMessageId: 0 }],
-      messages: [{ id: 1, role: "assistant", speakerCharacterId: 2, content: text,
-        memory4Fragments: [{ start: 0, end: text.length, visibility: "participants", sourceType: "game_fact", entityIds: [1], recipientIds: [1] }] }] };
-    const projection = projectVisibleTranscript(context, 2);
-    const snapshot = { ...context, ...projection, ownerId: 2, counterpartIds: [1] };
-    coordinator.store.commitOwner(snapshot, { status: "STORE", entries: [{ memoryType: "DURABLE_KNOWLEDGE", text,
-      fragmentIds: [projection.fragments[0].fragmentId], entityIds: [1], participantIds: [1, 2], topics: ["Bastard"], eventTime: { status: "unknown" } }] });
-    const packet = new Memory4RecallPlanner(coordinator).plan({ campaignToken: sample.data.campaignToken, ownerId: 2,
-      query: "1163年我们聊过什么？", querySpeakerId: 1, entityIds: [1], gameData: sample.data, currentGameDate: sample.data.date,
-      currentTotalDays: sample.data.totalDays, memoryEngineRemainingBudget: 1200 });
-    assert.equal(packet.details.length, 1);
-    assert.equal(packet.details[0].traitKnowledgeEvidence.ownerId, 2);
-    const result = build(sample, { ...directObservationContext(sample), memory4Packet: packet, temporalExtraText: packet.text });
-    assert(result.blocks.find(item => item.content.startsWith("SELF=")).content.includes("OTHER=Target:Beautiful,Bastard,One-eyed,||"));
-  } finally {
-    fs.rmSync(temporary, { recursive: true, force: true });
-  }
-});
-console.log(`V8.14.1 Trait Profile Routing: ${checks} PASS (offline production prompts and verified Memory4 details)`);
+console.log(`V8.14.1 Trait Profile Routing: ${checks} PASS (offline prompts, CK3 observation, and retired Packet boundary)`);

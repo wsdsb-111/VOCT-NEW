@@ -3,22 +3,23 @@
 const assert = require("node:assert/strict");
 const childProcess = require("node:child_process");
 const fs = require("node:fs");
+const Module = require("node:module");
 const os = require("node:os");
 const path = require("node:path");
-const { MemoryStore } = require("../resources/app/out/main/memory-system/memory-store");
-const { Memory4Coordinator } = require("../resources/app/out/main/memory-system/memory4-coordinator");
-const { Memory4Store } = require("../resources/app/out/main/memory-system/memory4-store");
-const { hash } = require("../resources/app/out/main/memory-system/memory4-contract");
-const { createProjectionLineage } = require("../resources/app/out/main/memory-system/memory4-forget");
-const { projectVisibleTranscript } = require("../resources/app/out/main/memory-system/memory4-visibility");
-const memorySystem = require("../resources/app/out/main/memory-system");
-const { createGameData } = require("../resources/app/out/main/game-data/game-data");
-const { createSummariesManager } = require("../resources/app/out/main/summaries/summaries-manager");
+const sourceVersionPath = require.resolve("../src/app/main/version.js");
+const originalModuleLoad = Module._load;
+Module._load = function (request, parent, isMain) {
+  if (request === "../../package.json" && parent?.filename === sourceVersionPath) return require("../package.json");
+  return originalModuleLoad.call(this, request, parent, isMain);
+};
+const { MemoryStore } = require("../src/app/main/memory-system/memory-store");
+const memorySystem = require("../src/app/main/memory-system");
+const { createGameData } = require("../src/app/main/game-data/game-data");
+const { createSummariesManager } = require("../src/app/main/summaries/summaries-manager");
 
 const OWNER_ID = 42;
 const COUNTERPART_ID = 77;
 const CAMPAIGN = "summary-folder-rename-campaign";
-const FACT = { factType: "TITLE", factKey: "title_duchy_of_canis", value: "Duchy of Canis" };
 const temporaryRoots = [];
 
 function makeFixture(label) {
@@ -93,79 +94,43 @@ function writeConversation(folder, fileName, summaries) {
   return filePath;
 }
 
-function projectedEntry({ ownerId = OWNER_ID, counterpartId = COUNTERPART_ID, campaignToken = CAMPAIGN,
-  finalizationId, conversationId = `conversation-${finalizationId}`, text = `记忆 ${finalizationId}`, topics = ["court"],
-  candidateText = text } = {}) {
-  const context = {
-    campaignToken,
-    conversationId,
-    finalizationId,
-    date: "1164.1.1",
-    totalDays: 425000,
-    participants: [
-      { id: ownerId, firstName: `Owner ${ownerId}`, shortName: `Owner ${ownerId}`, fullName: `Owner ${ownerId}` },
-      { id: counterpartId, firstName: `Person ${counterpartId}`, shortName: `Person ${counterpartId}`, fullName: `Person ${counterpartId}` }
-    ],
-    participantPresence: [ownerId, counterpartId].map(characterId => ({ characterId, joinedAtMessageId: 1, leftAtMessageId: null })),
-    messages: [{ id: 1, role: "user", speakerCharacterId: ownerId, content: text, memory4Fragments: [{
-      start: 0, end: text.length, visibility: "participants", sourceType: "spoken",
-      recipientIds: [counterpartId], entityIds: [counterpartId]
-    }] }]
+function writeOpaqueSidecar(directory) {
+  const opaqueBytes = Buffer.from([0x00, 0xff, 0x4d, 0x34, 0x00, 0x7b, 0x80]);
+  for (const relative of ["index.json", "metadata.json", "known-entities.json", "forgotten-projections.json",
+    "entries/opaque.bin", "years/1164.json", "life.json"]) {
+    const filePath = path.join(directory, ...relative.split("/"));
+    fs.mkdirSync(path.dirname(filePath), { recursive: true });
+    fs.writeFileSync(filePath, opaqueBytes);
+  }
+  return opaqueBytes;
+}
+
+function withoutSidecarReads(sidecarPaths, action) {
+  const sidecarRoots = sidecarPaths.map(item => path.resolve(item).toLowerCase());
+  const withinSidecar = candidate => {
+    const resolved = path.resolve(String(candidate)).toLowerCase();
+    return sidecarRoots.some(root => resolved === root || resolved.startsWith(root + path.sep.toLowerCase()));
   };
-  const projected = projectVisibleTranscript(context, ownerId);
-  assert.strictEqual(projected.fragments.length, 1, "fixture transcript must project one visible fragment");
-  const projectionLineage = createProjectionLineage({ campaignToken, ownerId, conversationId, finalizationId,
-    counterpartId, segmentIds: [projected.fragments[0].fragmentId], sourceMessageIds: [1] });
-  const snapshot = { ...context, ownerId, episodeId: `episode-${finalizationId}`, presentMessageCount: projected.presentMessageCount,
-    completeness: projected.completeness, legacyRetained: projected.legacyRetained,
-    visibilityEvidence: projected.visibilityEvidence, sourceRevision: projected.sourceRevision,
-    summaryIds: [], counterpartIds: [counterpartId], fragments: projected.fragments, projectionLineages: [projectionLineage] };
-  const candidate = { memoryType: "DURABLE_KNOWLEDGE", text: candidateText,
-    fragmentIds: [projected.fragments[0].fragmentId], participantIds: [ownerId, counterpartId], entityIds: [counterpartId],
-    topics, eventTime: { status: "unknown" } };
-  return { snapshot, candidate, projectionLineage };
-}
-
-function commitEntry(coordinator, args) {
-  const { snapshot, candidate } = projectedEntry(args);
-  const result = coordinator.store.commitOwner(snapshot, { status: "STORE", entries: [candidate] });
-  const entryId = result.entryIds[0];
-  return { snapshot, entryId, entry: coordinator.store.readEntry(snapshot, entryId) };
-}
-
-function createSidecar(label, { ownerId = OWNER_ID, campaignToken = CAMPAIGN, entries = null,
-  manualStatus = null, manualCounterpartId = COUNTERPART_ID } = {}) {
-  const fixture = makeFixture(label);
-  const sourceFolder = path.join(fixture.summaryRoot, `${ownerId}_source`);
-  fs.mkdirSync(sourceFolder, { recursive: true });
-  const store = new MemoryStore({ baseDir: fixture.baseDir, summaryFoldersDir: fixture.summaryRoot });
-  const coordinator = new Memory4Coordinator(store);
-  const scope = { campaignToken, ownerId };
-  coordinator.store.ensureDisclosureScope(scope);
-  const committed = (entries || [{ finalizationId: `${label}-entry`, counterpartId: manualCounterpartId, text: `${label} memory` }])
-    .map(spec => commitEntry(coordinator, { ...spec, ownerId, campaignToken }));
-  if (manualStatus) {
-    const gameData = { campaignToken, date: "1164.1.1", characters: new Map([
-      { id: ownerId, shortName: `Owner ${ownerId}` },
-      { id: manualCounterpartId, shortName: `Person ${manualCounterpartId}`, primaryTitle: FACT.value }
-    ].map(character => [character.id, character])) };
-    coordinator.updateManualDisclosure(scope, manualCounterpartId, FACT, manualStatus, gameData, { expectedRevision: 0 });
+  const originalReadFileSync = fs.readFileSync, originalReaddirSync = fs.readdirSync;
+  let attempted = null, actionError = null;
+  try {
+    fs.readFileSync = (file, ...args) => {
+      if (withinSidecar(file)) { attempted = `read:${file}`; throw new Error("test_retired_sidecar_read"); }
+      return originalReadFileSync(file, ...args);
+    };
+    fs.readdirSync = (directory, ...args) => {
+      if (withinSidecar(directory)) { attempted = `list:${directory}`; throw new Error("test_retired_sidecar_list"); }
+      return originalReaddirSync(directory, ...args);
+    };
+    action();
+  } catch (error) {
+    actionError = error;
+  } finally {
+    fs.readFileSync = originalReadFileSync;
+    fs.readdirSync = originalReaddirSync;
   }
-  const sidecarPath = path.join(fixture.summaryRoot, ".memory4", String(ownerId), hash(campaignToken));
-  assert(fs.existsSync(path.join(sidecarPath, "index.json")), "fixture sidecar is committed through Memory4Coordinator");
-  return { fixture, folder: sourceFolder, store, coordinator, scope, sidecarPath, committed };
-}
-
-function copySidecar(sourceSidecar, ownerFolder, campaignToken) {
-  const destination = path.join(ownerFolder, "memory4", hash(campaignToken));
-  fs.mkdirSync(path.dirname(destination), { recursive: true });
-  for (const [relative, bytes] of readTree(sourceSidecar)) {
-    const file = path.join(destination, relative);
-    fs.mkdirSync(path.dirname(file), { recursive: true });
-    fs.writeFileSync(file, bytes, { flag: "wx" });
-  }
-  assertSameTree(readTree(destination), readTree(sourceSidecar), "fixture sidecar copy is complete");
-  return destination;
+  assert.strictEqual(attempted, null, "retired sidecar contents are never opened or listed");
+  if (actionError) throw actionError;
 }
 
 function createLegacyAliasFixture(label, { ownerId = OWNER_ID, oldName = "旧名", newName = "新名" } = {}) {
@@ -177,27 +142,8 @@ function createLegacyAliasFixture(label, { ownerId = OWNER_ID, oldName = "旧名
   return { ...fixture, oldFolder, currentFolder, ownerId };
 }
 
-function writeDerivedViews(store, scope, directory, entry) {
-  const stamp = `${entry.entryId}@${entry.revision}`;
-  store.writeJson(path.join(directory, "years", "1164.json"), {
-    memory4SchemaVersion: 1, campaignToken: scope.campaignToken, ownerId: scope.ownerId, revision: 4,
-    eventYear: 1164, sourceHash: hash([entry.entryId, entry.revision]), sourceRevisionSet: [stamp], dirty: false,
-    items: [{ itemId: `year_item_${entry.entryId}`, text: entry.text, sourceEntryIds: [entry.entryId] }], tokens: 3
-  });
-  store.writeJson(path.join(directory, "life.json"), {
-    memory4SchemaVersion: 1, campaignToken: scope.campaignToken, ownerId: scope.ownerId, revision: 2,
-    sourceHash: hash([entry.entryId, entry.revision, "life"]), sourceRevisionSet: [stamp], dirty: false,
-    segments: [{ segmentId: `life_${entry.entryId}`, period: { fromYear: 1164, toYear: 1164 }, text: entry.text, sourceEntryIds: [entry.entryId] }]
-  });
-}
-
-function testMergeRowsAndRealSidecar() {
+function testMergeLegacyRows() {
   const target = createLegacyAliasFixture("rows");
-  const sidecarSeed = createSidecar("rows-memory", { entries: [
-    { finalizationId: "forgotten-entry", counterpartId: COUNTERPART_ID, text: "source to forget" },
-    { finalizationId: "deleted-entry", counterpartId: COUNTERPART_ID, text: "source to delete" },
-    { finalizationId: "surviving-entry", counterpartId: COUNTERPART_ID, text: "surviving memory" }
-  ], manualStatus: "MANUAL_HIDDEN" });
   try {
     const mirrorOld = summary("共同经历", "1100.1.1", { campaignToken: "campaign-alpha", playerName: "旧名", characterName: "旧对手名" });
     const mirrorRenamed = summary("共同经历", "1100.1.1", { campaignToken: "campaign-alpha", playerName: "新名", characterName: "新对手名" });
@@ -211,21 +157,6 @@ function testMergeRowsAndRealSidecar() {
     const currentFile = writeConversation(target.currentFolder, "与新对手名的对话.json", [mirrorRenamed, divergentNew, otherCampaign, unknownNew]);
     const oldBindingId = target.store.getLegacySummaryBindingId(oldFile, 2, unknownOld);
     const newBindingId = target.store.getLegacySummaryBindingId(currentFile, 3, unknownNew);
-    const sidecarBytes = readTree(sidecarSeed.sidecarPath);
-    const entryIds = sidecarSeed.committed.map(row => row.entryId);
-    const memory4 = new Memory4Store(sidecarSeed.store);
-    const memory4Directory = memory4.directory(sidecarSeed.scope);
-    const forgottenLineage = sidecarSeed.committed[0].snapshot.projectionLineages[0];
-    memory4.persistForgottenProjection(sidecarSeed.scope, forgottenLineage);
-    assert.deepStrictEqual(memory4.query(sidecarSeed.scope).map(row => row.entryId), entryIds.slice(1),
-      "a persisted forgotten projection hides its exact source before relocation");
-    assert.strictEqual(memory4.deleteEntry(sidecarSeed.scope, entryIds[1], { expectedRevision: 1 }), true,
-      "Memory4Store creates a real tombstone through its supported mutation");
-    const survivor = memory4.readEntry(sidecarSeed.scope, entryIds[2]);
-    writeDerivedViews(sidecarSeed.store, sidecarSeed.scope, memory4Directory, survivor);
-    copySidecar(sidecarSeed.sidecarPath, target.oldFolder, sidecarSeed.scope.campaignToken);
-    const legacySidecar = path.join(target.oldFolder, "memory4", hash(sidecarSeed.scope.campaignToken));
-    const beforeSidecar = readTree(legacySidecar);
 
     const result = target.store.mergeRenamedSummaryFolders(OWNER_ID, "新名");
     assert.strictEqual(result.folderPath, target.currentFolder);
@@ -252,164 +183,72 @@ function testMergeRowsAndRealSidecar() {
     }
     const dates = mergedRows.map(row => row.date);
     assert.deepStrictEqual(dates, [...dates].sort((left, right) => right.localeCompare(left)), "summaries are newest first");
-
-    const canonical = path.join(target.summaryRoot, ".memory4", String(OWNER_ID), hash(sidecarSeed.scope.campaignToken));
-    assert(fs.existsSync(canonical), "the sidecar is relocated under the canonical owner and campaign path");
-    assert(!fs.existsSync(legacySidecar), "the legacy sidecar path is removed after relocation");
-    assertSameTree(readTree(canonical), beforeSidecar, "all sidecar files retain their original bytes");
-    const relocated = new Memory4Store(target.store);
-    assert.strictEqual(relocated.directory(sidecarSeed.scope), canonical, "fresh Memory4Store instances resolve the canonical path");
-    const index = relocated.loadIndex(sidecarSeed.scope);
-    assert.strictEqual(hash(relocated.readEntry(sidecarSeed.scope, entryIds[2])), index.entries[entryIds[2]].bodyHash,
-      "relocation preserves the committed body and index hash");
-    assert.strictEqual(relocated.readEntry(sidecarSeed.scope, entryIds[1]).deleted, true, "the deleted entry remains a valid tombstone");
-    assert(!relocated.query(sidecarSeed.scope).some(row => row.entryId === entryIds[1]), "the tombstoned entry stays out of recall");
-    assert(!relocated.query(sidecarSeed.scope).some(row => row.entryId === entryIds[0]), "the forgotten projection stays out of recall");
-    assert.deepStrictEqual(relocated.query(sidecarSeed.scope).map(row => row.entryId), [entryIds[2]], "only the surviving entry is recalled");
-    assert(fs.existsSync(path.join(canonical, "life.json")) && fs.existsSync(path.join(canonical, "years", "1164.json"))
-      && fs.existsSync(path.join(canonical, "forgotten-projections.json")) && fs.existsSync(path.join(canonical, "known-entities.json"))
-      && fs.existsSync(path.join(canonical, "index.json")) && fs.existsSync(path.join(canonical, "metadata.json")),
-    "derived, tombstone, forgotten, known, index, and metadata records all survive relocation");
-    const known = relocated.read(path.join(canonical, "known-entities.json"), null);
-    assert(Object.values(known.entities[String(COUNTERPART_ID)].disclosedFacts).some(row => row.status === "MANUAL_HIDDEN"),
-      "the manual disclosure state remains present after relocation");
-  } finally {
-    fs.rmSync(sidecarSeed.fixture.root, { recursive: true, force: true });
-    fs.rmSync(target.root, { recursive: true, force: true });
-  }
-}
-
-function testDisjointSameCampaignUnion() {
-  const target = createLegacyAliasFixture("union");
-  const left = createSidecar("union-left", { entries: [{ finalizationId: "union-left-fin", counterpartId: 77, text: "left fact" }],
-    manualStatus: "MANUAL_KNOWN", manualCounterpartId: 77 });
-  const right = createSidecar("union-right", { entries: [{ finalizationId: "union-right-fin", counterpartId: 78, text: "right fact" }],
-    manualStatus: "MANUAL_KNOWN", manualCounterpartId: 78 });
-  try {
-    writeDerivedViews(left.store, left.scope, left.sidecarPath, left.committed[0].entry);
-    writeDerivedViews(right.store, right.scope, right.sidecarPath, right.committed[0].entry);
-    const leftLife = JSON.parse(fs.readFileSync(path.join(left.sidecarPath, "life.json"), "utf8"));
-    leftLife.segments[0].period = { fromYear: 1150, toYear: 1159 };
-    writeJson(path.join(left.sidecarPath, "life.json"), leftLife);
-    copySidecar(left.sidecarPath, target.oldFolder, CAMPAIGN);
-    copySidecar(right.sidecarPath, target.currentFolder, CAMPAIGN);
-    const beforeRetiredConflict = readTree(target.summaryRoot);
-    assert.throws(() => target.store.mergeRenamedSummaryFolders(OWNER_ID, "新名"), /memory4_sidecar_file_conflict/,
-      "retired views with different bodies must block union without rewriting them");
-    assertSameTree(readTree(target.summaryRoot), beforeRetiredConflict, "retired-view rejection preserves every source byte");
-    for (const folder of [target.oldFolder, target.currentFolder]) {
-      const sidecar = path.join(folder, "memory4", hash(CAMPAIGN));
-      fs.unlinkSync(path.join(sidecar, "years", "1164.json"));
-      assert.deepEqual(fs.readdirSync(path.join(sidecar, "years")), [], "fixture retirement must identify all year files");
-      fs.rmdirSync(path.join(sidecar, "years"));
-      fs.unlinkSync(path.join(sidecar, "life.json"));
-    }
-    const result = target.store.mergeRenamedSummaryFolders(OWNER_ID, "新名");
-    assert.strictEqual(result.folderPath, target.currentFolder);
-    const memory4 = new Memory4Store(target.store);
-    const rows = memory4.query({ ownerId: OWNER_ID, campaignToken: CAMPAIGN });
-    assert.deepStrictEqual(new Set(rows.map(row => row.text)), new Set(["left fact", "right fact"]),
-      "disjoint valid sidecars in the same owner-campaign scope are unioned");
-    const known = memory4.readKnownEntities({ ownerId: OWNER_ID, campaignToken: CAMPAIGN });
-    assert.deepStrictEqual(Object.keys(known.currentFactState).sort(), ["77", "78"],
-      "union preserves current fact epochs for disjoint counterpart IDs");
-    assert.deepStrictEqual(Object.keys(known.currentFactObservedDates).sort(), ["77", "78"],
-      "union preserves current fact observation high-water dates for disjoint counterpart IDs");
-    assert.strictEqual(fs.readdirSync(path.join(target.summaryRoot, ".memory4", String(OWNER_ID))).length, 1,
-      "the disjoint union has one canonical campaign sidecar");
-    const canonical = memory4.directory(left.scope);
-    assert(!fs.existsSync(path.join(canonical, "years")) && !fs.existsSync(path.join(canonical, "life.json")),
-      "canonical union after explicit fixture retirement never recreates removed views");
-  } finally {
-    for (const item of [left, right]) fs.rmSync(item.fixture.root, { recursive: true, force: true });
-    fs.rmSync(target.root, { recursive: true, force: true });
-  }
-}
-
-function assertMergeRejectsWithoutMutation(label, left, right, expectedError) {
-  const target = createLegacyAliasFixture(label);
-  try {
-    copySidecar(left.sidecarPath, target.oldFolder, left.scope.campaignToken);
-    copySidecar(right.sidecarPath, target.currentFolder, right.scope.campaignToken);
-    const beforeSummaries = readTree(target.summaryRoot);
-    const beforeMemory = readTree(target.baseDir);
-    assert.throws(() => target.store.mergeRenamedSummaryFolders(OWNER_ID, "新名"), expectedError,
-      "conflicting valid disclosures or bodies must fail closed");
-    assertSameTree(readTree(target.summaryRoot), beforeSummaries, "rejected merge leaves source summary folders byte-for-byte intact");
-    assertSameTree(readTree(target.baseDir), beforeMemory, "rejected merge leaves journal and repository state unchanged");
   } finally {
     fs.rmSync(target.root, { recursive: true, force: true });
   }
 }
 
-function testConflictingManualDisclosureFailsClosed() {
-  const hidden = createSidecar("manual-hidden", { manualStatus: "MANUAL_HIDDEN" });
-  const known = createSidecar("manual-known", { manualStatus: "MANUAL_KNOWN" });
-  try {
-    const hiddenFact = Object.values(hidden.coordinator.store.readKnownEntities(hidden.scope).entities[String(COUNTERPART_ID)].disclosedFacts)[0];
-    const knownFact = Object.values(known.coordinator.store.readKnownEntities(known.scope).entities[String(COUNTERPART_ID)].disclosedFacts)[0];
-    assert.strictEqual(hiddenFact.factId, knownFact.factId, "the sidecars describe the same manual disclosure identity");
-    assert.strictEqual(hiddenFact.status, "MANUAL_HIDDEN");
-    assert.strictEqual(knownFact.status, "MANUAL_KNOWN");
-    assertMergeRejectsWithoutMutation("manual-conflict", hidden, known, /conflict|disclosure|known|index/i);
-  } finally {
-    for (const item of [hidden, known]) fs.rmSync(item.fixture.root, { recursive: true, force: true });
-  }
-}
-
-function testSameEntryDifferentValidBodyFailsClosed() {
-  const shared = { finalizationId: "same-entry-finalization", conversationId: "same-entry-conversation", counterpartId: 77,
-    text: "same projected transcript", candidateText: "same body", topics: ["topic-left"] };
-  const left = createSidecar("entry-body-left", { entries: [shared] });
-  const right = createSidecar("entry-body-right", { entries: [{ ...shared, topics: ["topic-right"] }] });
-  try {
-    const leftEntry = left.committed[0].entry;
-    const rightEntry = right.committed[0].entry;
-    assert.strictEqual(leftEntry.entryId, rightEntry.entryId, "both valid entries collide on the stable entry identity");
-    assert.notStrictEqual(hash(leftEntry), hash(rightEntry), "their valid JSON bodies differ outside the entry ID inputs");
-    assertMergeRejectsWithoutMutation("entry-body-conflict", left, right, /conflict|entry|body|index/i);
-  } finally {
-    for (const item of [left, right]) fs.rmSync(item.fixture.root, { recursive: true, force: true });
-  }
-}
-
-function testCorruptBodyAndRevisionMismatchFailClosed() {
-  for (const mode of ["body", "revision"]) {
-    const target = createLegacyAliasFixture(`corrupt-${mode}`);
-    const source = createSidecar(`corrupt-${mode}-source`);
+function testOpaqueRetiredSidecarsBlockWithoutAccess() {
+  for (const location of ["renamed-folder", "canonical-owner"]) {
+    const target = createLegacyAliasFixture(`opaque-${location}`);
     try {
-      copySidecar(source.sidecarPath, target.oldFolder, CAMPAIGN);
-      const sidecarPath = path.join(target.oldFolder, "memory4", hash(CAMPAIGN));
-      const entryId = source.committed[0].entryId;
-      const bodyPath = path.join(sidecarPath, "entries", `${entryId}.json`);
-      const body = JSON.parse(fs.readFileSync(bodyPath, "utf8"));
-      if (mode === "body") {
-        body.text = "tampered body without matching bodyHash";
-        writeJson(bodyPath, body);
-      } else {
-        body.revision++;
-        writeJson(bodyPath, body);
-        const indexPath = path.join(sidecarPath, "index.json");
-        const index = JSON.parse(fs.readFileSync(indexPath, "utf8"));
-        index.entries[entryId].bodyHash = hash(body);
-        writeJson(indexPath, index);
-        const metadataPath = path.join(sidecarPath, "metadata.json");
-        const metadata = JSON.parse(fs.readFileSync(metadataPath, "utf8"));
-        metadata.indexHash = hash(index);
-        writeJson(metadataPath, metadata);
-      }
+      const oldFile = writeConversation(target.oldFolder, "与旧乙的对话.json", [summary("legacy old", "1100.1.1", { characterId: 77 })]);
+      const currentFile = writeConversation(target.currentFolder, "与新乙的对话.json", [summary("legacy current", "1101.1.1", { characterId: 78 })]);
+      const sidecarPath = location === "renamed-folder"
+        ? path.join(target.oldFolder, "memory4")
+        : path.join(target.summaryRoot, ".memory4", String(OWNER_ID));
+      const opaqueBytes = writeOpaqueSidecar(sidecarPath);
       const before = readTree(target.summaryRoot);
-      assert.throws(() => target.store.mergeRenamedSummaryFolders(OWNER_ID, "新名"), /body|revision|index|mismatch|invalid/i,
-        `${mode} corruption must fail closed`);
-      assertSameTree(readTree(target.summaryRoot), before, `${mode} corruption does not mutate any summary data`);
-      assert.strictEqual(readTree(target.baseDir).size, 0, `${mode} corruption does not leave a mutation journal`);
+      let mergeResult, gameData, owner, counterpart77;
+      withoutSidecarReads([sidecarPath], () => {
+        mergeResult = target.store.mergeRenamedSummaryFolders(OWNER_ID, "新名");
+        assert.strictEqual(mergeResult.blocked, "RETIRED_SIDECAR_PRESENT",
+          "a retired sidecar skips the rename merge without opening or parsing its contents");
+        assert.strictEqual(target.store.getSummaryConversationFile(OWNER_ID, 77, "旧乙"), oldFile,
+          "Legacy lookup still resolves the unique counterpart file in a preserved owner alias");
+        assert.strictEqual(target.store.getSummaryConversationFile(OWNER_ID, 78, "新乙"), currentFile,
+          "Legacy lookup still resolves counterpart files from every preserved owner alias");
+        const GameData = createGameData({ fs, path, memorySystem,
+          memoryEngine: { store: target.store, invalidateSummaryFolderCache: ids => target.store.invalidateFolderSummaryCache(ids) },
+          summariesDir: target.summaryRoot,
+          getHistoricalReferenceByYear: () => ({ period: "fixture", context: "", notableEvents: [], notableFigures: [] }) });
+        gameData = Object.create(GameData.prototype);
+        owner = { id: OWNER_ID, firstName: "新名", shortName: "新名", fullName: "新名" };
+        counterpart77 = { id: 77, firstName: "旧乙", shortName: "旧乙", fullName: "旧乙" };
+        const counterpart78 = { id: 78, firstName: "新乙", shortName: "新乙", fullName: "新乙" };
+        gameData.characters = new Map([[OWNER_ID, owner], [77, counterpart77], [78, counterpart78]]);
+        gameData.date = "1112.1.1";
+        gameData.totalDays = 1200;
+        gameData.loadAllConversationsForCharacter(owner);
+        assert.deepStrictEqual(new Set(owner.allConversationSummaries.map(item => item.content)), new Set(["legacy old", "legacy current"]),
+          "Legacy character loading reads every legal numeric-owner folder when maintenance is blocked");
+        const newCounterpartPath = gameData.getConversationFilePath(OWNER_ID, "新名", 99, "新乙");
+        assert(path.basename(newCounterpartPath).includes("_99"), "a new counterpart uses an ID-qualified file when the canonical name collides");
+      });
+      assertSameTree(readTree(target.summaryRoot), before, "a blocked merge preserves all legacy and opaque sidecar bytes");
+      assert(fs.existsSync(target.oldFolder) && fs.existsSync(target.currentFolder), "both owner aliases remain after the safe block");
+      assert.strictEqual(fs.existsSync(path.join(target.baseDir, "summary-mutation.json")), false, "a blocked merge starts no transaction journal");
+      assert(opaqueBytes.length > 0, "the opaque sidecar fixture contains bytes");
+      const beforeSidecar = readTree(sidecarPath);
+      withoutSidecarReads([sidecarPath], () => {
+        gameData.saveSummaryForDirectedPair(owner, counterpart77, "Legacy write remains available", [owner, counterpart77], {
+          date: gameData.date, totalDays: gameData.totalDays, finalizationId: "blocked-merge-write", campaignToken: CAMPAIGN
+        });
+      });
+      assert(fs.existsSync(target.oldFolder), "the source Legacy owner directory remains present after a directed write");
+      assertSameTree(readTree(sidecarPath), beforeSidecar, "Legacy CRUD leaves retired sidecar bytes untouched");
+      assert(JSON.parse(fs.readFileSync(oldFile, "utf8")).some(row => row.content === "Legacy write remains available"),
+        "a unique Legacy counterpart file remains writable while maintenance is blocked");
+      writeConversation(target.currentFolder, "与另一个乙的对话.json", [summary("conflicting legacy", "1102.1.1", { characterId: 77 })]);
+      withoutSidecarReads([sidecarPath], () => {
+        assert.throws(() => target.store.getSummaryConversationFile(OWNER_ID, 77, "旧乙"), /summary_merge_counterpart_file_conflict/,
+          "only conflicting counterpart-to-file mappings fail closed");
+      });
     } finally {
-      fs.rmSync(source.fixture.root, { recursive: true, force: true });
       fs.rmSync(target.root, { recursive: true, force: true });
     }
   }
 }
-
 function testCorruptSummaryJsonIsFailClosed() {
   const target = createLegacyAliasFixture("corrupt-summary-json");
   try {
@@ -591,27 +430,33 @@ function testSourceChangedAfterPlanning() {
   }
 }
 
-function testCrashRecoveryDuringSidecarRelocation() {
+function testCrashRecoveryDuringLegacyMerge() {
   const target = createLegacyAliasFixture("crash");
-  const source = createSidecar("crash-source");
   try {
     writeConversation(target.oldFolder, "与旧乙的对话.json", [summary("old summary", "1100.1.1", { campaignToken: CAMPAIGN })]);
-    copySidecar(source.sidecarPath, target.oldFolder, CAMPAIGN);
-    const oldSidecar = path.join(target.oldFolder, "memory4", hash(CAMPAIGN));
-    const sourceBytes = readTree(oldSidecar);
+    writeConversation(target.currentFolder, "与现乙的对话.json", [summary("current summary", "1101.1.1", { campaignToken: CAMPAIGN })]);
     const originalSummaries = readTree(target.summaryRoot);
-    const memoryStorePath = require.resolve("../resources/app/out/main/memory-system/memory-store");
+    const memoryStorePath = require.resolve("../src/app/main/memory-system/memory-store");
     const childScript = String.raw`
       const fs = require("node:fs");
       const path = require("node:path");
-      const [summaryRoot, baseDir, memoryStorePath, ownerFolder, canonicalPath] = process.argv.slice(1);
+      const [summaryRoot, baseDir, memoryStorePath, packageJsonPath, targetFolder] = process.argv.slice(1);
+      const Module = require("node:module");
+      const originalLoad = Module._load;
+      const versionPath = path.resolve(path.dirname(memoryStorePath), "../version.js");
+      Module._load = function (request, parent, isMain) {
+        if (request === "../../package.json" && parent && path.resolve(parent.filename) === versionPath) {
+          return originalLoad.call(this, packageJsonPath, parent, isMain);
+        }
+        return originalLoad.call(this, request, parent, isMain);
+      };
       const originalRename = fs.renameSync.bind(fs);
       let interrupted = false;
       fs.renameSync = (from, to, ...rest) => {
         const result = originalRename(from, to, ...rest);
         const target = path.resolve(String(to));
-        if (!interrupted && target.startsWith(path.resolve(canonicalPath) + path.sep)
-          && /\.json$/i.test(target)) {
+        if (!interrupted && target.startsWith(path.resolve(targetFolder) + path.sep)
+          && /^与.+的对话\.json$/.test(path.basename(target))) {
           interrupted = true;
           process.exit(86);
         }
@@ -621,42 +466,33 @@ function testCrashRecoveryDuringSidecarRelocation() {
       new MemoryStore({ baseDir, summaryFoldersDir: summaryRoot }).mergeRenamedSummaryFolders(42, "全新名");
       process.exit(0);
     `;
-    const canonicalPath = path.join(target.summaryRoot, ".memory4", String(OWNER_ID), hash(CAMPAIGN));
+    const targetFolder = path.join(target.summaryRoot, `${OWNER_ID}_全新名`);
+    const packageJsonPath = require.resolve("../package.json");
     const child = childProcess.spawnSync(process.execPath,
-      ["-e", childScript, target.summaryRoot, target.baseDir, memoryStorePath, target.oldFolder, canonicalPath],
+      ["-e", childScript, target.summaryRoot, target.baseDir, memoryStorePath, packageJsonPath, targetFolder],
       { encoding: "utf8", timeout: 15000, windowsHide: true });
-    assert.strictEqual(child.status, 86, `child exits after a real canonical sidecar file write: ${child.stderr || child.stdout}`);
+    assert.strictEqual(child.status, 86, `child exits after a real Legacy summary write: ${child.stderr || child.stdout}`);
     new MemoryStore({ baseDir: target.baseDir, summaryFoldersDir: target.summaryRoot });
     assertSameTree(readTree(target.summaryRoot), originalSummaries, "restart restores every original summary file and path");
-    assert.strictEqual(fs.existsSync(canonicalPath), false, "rollback removes the created empty canonical sidecar");
-    assert.strictEqual(fs.existsSync(path.join(target.summaryRoot, `${OWNER_ID}_全新名`)), false,
-      "rollback removes the newly created summary folder");
-    assertSameTree(readTree(oldSidecar), sourceBytes, "restart restores the legacy sidecar after interrupted relocation");
-    const recovered = new Memory4Store(new MemoryStore({ baseDir: target.baseDir, summaryFoldersDir: target.summaryRoot }));
-    assert.strictEqual(recovered.readEntry({ ownerId: OWNER_ID, campaignToken: CAMPAIGN }, source.committed[0].entryId).text,
-      source.committed[0].entry.text, "recovery leaves the original sidecar available for recall");
+    assert.strictEqual(fs.existsSync(targetFolder), false, "rollback removes the newly created summary folder");
     assert.strictEqual(fs.existsSync(path.join(target.baseDir, "summary-mutation.json")), false,
       "startup recovery clears the completed summary mutation journal");
   } finally {
-    fs.rmSync(source.fixture.root, { recursive: true, force: true });
     fs.rmSync(target.root, { recursive: true, force: true });
   }
 }
 
 async function run() {
   try {
-    testMergeRowsAndRealSidecar();
-    testDisjointSameCampaignUnion();
-    testConflictingManualDisclosureFailsClosed();
-    testSameEntryDifferentValidBodyFailsClosed();
-    testCorruptBodyAndRevisionMismatchFailClosed();
+    testMergeLegacyRows();
+    testOpaqueRetiredSidecarsBlockWithoutAccess();
     testCorruptSummaryJsonIsFailClosed();
     await testGameDataAndSummaryManagerIntegration();
     testSameNameCounterpartIdsStaySeparate();
     testNamesakeOwnerIsolation();
     testNativeJunctionSafety();
     testSourceChangedAfterPlanning();
-    testCrashRecoveryDuringSidecarRelocation();
+    testCrashRecoveryDuringLegacyMerge();
     console.log("V9.2 renamed summary folders: PASS");
   } finally {
     for (const root of temporaryRoots) fs.rmSync(root, { recursive: true, force: true });

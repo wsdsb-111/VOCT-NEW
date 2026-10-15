@@ -1,11 +1,6 @@
 "use strict";
 
-const fs = require("fs");
-
 const { getCharacterPersonalName } = require("../memory-system/character-identity");
-const { getFactCandidates } = require("../memory-system/memory4-disclosure");
-const { resolveTraitVisibility } = require("../prompts/trait-visibility-policy");
-const { buildCurrentMemory4RelationshipEvidence } = require("../memory-system/memory4-entity-context");
 const { memoryMatchesCampaign } = require("../memory-system/memory-types");
 const { MentionTracker } = require("../memory-system/mention-tracker");
 const { createConversationRuntime } = require("./conversation-runtime");
@@ -183,7 +178,6 @@ class Conversation {
     this.summaryParticipantProfiles = /* @__PURE__ */ new Map();
     this.stableProfileCache = /* @__PURE__ */ new Map();
     this.stableDescriptionCache = /* @__PURE__ */ new Map();
-    this.disclosureProfilesByResponder = /* @__PURE__ */ new Map();
     this.cacheV2FrozenSnapshots = { conversation: null, responders: /* @__PURE__ */ new Map() };
     this.cacheV2FrozenSnapshots.prefixByResponder = /* @__PURE__ */ new Map();
     this.frozenWorldlineByResponder = /* @__PURE__ */ new Map();
@@ -199,7 +193,6 @@ class Conversation {
     this.presenceInitialized = false;
     this.pendingActionApprovals = /* @__PURE__ */ new Map();
     this.gameDataRevision = 0;
-    this.memory4RelationshipChanges = [];
     this.eventEmitter = new events.EventEmitter();
     this.runtime = createConversationRuntime(this, {
       recordSkipped: (responseState, reason) => this.recordGenerationSkippedAnalytics(responseState, reason)
@@ -220,24 +213,8 @@ class Conversation {
     if (!manager) throw new Error("conversation_generation_manager_not_initialized");
     return manager;
   }
-  async parseCK3GameData(ck3DebugPath, { captureForConversation = false } = {}) {
-    let before = null;
-    try { before = fs.statSync(ck3DebugPath); } catch {}
-    const gameData = await parseLog(ck3DebugPath);
-    try {
-      const after = fs.statSync(ck3DebugPath);
-      if (before && before.size === after.size && before.mtimeMs === after.mtimeMs
-        && gameData?.ck3RelationshipReadbackComplete !== false) {
-        const changes = memoryEngine?.memory4?.observeCK3Readback(gameData, { sourceId: ck3DebugPath, size: after.size,
-          mtimeMs: after.mtimeMs, complete: true });
-        if (captureForConversation && changes?.length) {
-          this.memory4RelationshipChanges = [...(this.memory4RelationshipChanges || []), ...changes];
-        }
-      }
-    } catch (error) {
-      console.warn("[Memory4] CK3 relationship readback skipped:", error.message);
-    }
-    return gameData;
+  async parseCK3GameData(ck3DebugPath) {
+    return parseLog(ck3DebugPath);
   }
   async initializeGameData() {
     const conversationOpenSpan = startTraceSpan(performanceTrace, "conversation.open", { attribution: "MAIN" });
@@ -267,8 +244,6 @@ class Conversation {
       this.captureSummaryParticipantProfiles(this.gameData.characters.values());
       this.initializePresence();
       traceOperation(performanceTrace, "summary.load", { attribution: "MAIN", count: this.gameData.characters.size }, () => this.gameData.loadCharactersSummaries());
-      traceOperation(performanceTrace, "knowledge.disclosureSnapshot", { attribution: "MAIN", count: (this.selectedCharacterIds?.size || 0) + 1 }, () => this.captureDisclosureProfiles());
-      traceOperation(performanceTrace, "knowledge.directObservation", { attribution: "MAIN", count: this.presentCharacterIds?.size || 0 }, () => this.observeVisibleTraits());
       traceOperation(performanceTrace, "officialRecollection.sync", { attribution: "MAIN" }, () => this.gameData.syncOfficialRecollectionSummaries?.(this.id));
       this.worldlinePrefetchPromise = traceOperation(performanceTrace, "worldline.frozenPrefetch", { attribution: "MAIN" }, () => this.prefetchFrozenWorldline()).catch((error) => {
         console.warn("[Worldline] Conversation-opening recall failed:", error.message);
@@ -294,72 +269,6 @@ class Conversation {
   }
   isV813PrefixEnabled() {
     return settingsRepository?.getChatPromptV813Layout?.() === true;
-  }
-  captureDisclosureProfiles() {
-    const campaignToken = this.gameData?.campaignToken;
-    if (!campaignToken || !memoryEngine?.memory4?.getCurrentDisclosures) return;
-    const ownerIds = new Set([Number(this.gameData.playerID), ...this.selectedCharacterIds].filter(Number.isSafeInteger));
-    for (const ownerId of ownerIds) {
-      if (!this.gameData.characters.has(ownerId)) continue;
-      const key = `${campaignToken}:${ownerId}`;
-      if (this.disclosureProfilesByResponder.has(key)) continue;
-      const scope = { campaignToken, ownerId: Number(ownerId) };
-      const profiles = new Map();
-      try {
-        memoryEngine.memory4.refreshCurrentFactState?.(scope, this.gameData);
-        const readContext = memoryEngine.memory4.createProfileReadContext(scope);
-        for (const entityId of this.gameData.characters.keys()) {
-          if (Number(entityId) === Number(ownerId)) continue;
-          profiles.set(Number(entityId), memoryEngine.memory4.getCurrentDisclosures(scope, Number(entityId), this.gameData, { readContext }));
-        }
-      } catch (error) {
-        profiles.clear();
-        if (error.message !== "memory4_owner_folder_not_unique") console.warn("[Memory4] Opening knowledge unavailable:", error.message);
-      }
-      this.disclosureProfilesByResponder.set(key, profiles);
-    }
-  }
-  observeVisibleTraits() {
-    if (!this.presenceInitialized || !this.gameData?.campaignToken || !memoryEngine?.memory4?.observeVisibleTraits) return;
-    const participantPresence = memoryEngine.ensureConversationState(this).participantPresence;
-    const messageBoundary = this.nextId;
-    this.gameData.directObservationContext = { conversationId: this.id, campaignToken: this.gameData.campaignToken,
-      gameDate: this.gameData.date, messageBoundary, participantPresence: participantPresence.map(window => ({ ...window })) };
-    const activeIds = [...new Set(participantPresence.filter(window => Number(window.joinedAtMessageId) <= messageBoundary
-      && (window.leftAtMessageId == null || messageBoundary < Number(window.leftAtMessageId)))
-      .map(window => Number(window.characterId)))].filter(id => this.gameData.characters.has(id)
-        && this.isCharacterAvailableForConversation(this.gameData.characters.get(id)));
-    let changed = false;
-    for (const observerId of activeIds) for (const targetId of activeIds) {
-      if (observerId === targetId) continue;
-      const result = memoryEngine.memory4.observeVisibleTraits({ ...this.gameData.directObservationContext,
-        observerId, targetId, gameData: this.gameData });
-      changed ||= result.changed;
-    }
-    this.captureDisclosureProfiles();
-    for (const [key, profiles] of this.disclosureProfilesByResponder) {
-      if (!key.startsWith(`${this.gameData.campaignToken}:`)) continue;
-      const scope = { campaignToken: this.gameData.campaignToken, ownerId: Number(key.slice(this.gameData.campaignToken.length + 1)) };
-      const readContext = memoryEngine.memory4.createProfileReadContext(scope);
-      for (const entityId of this.gameData.characters.keys()) {
-        if (Number(entityId) === scope.ownerId) continue;
-        const current = memoryEngine.memory4.getCurrentDisclosures(scope, Number(entityId), this.gameData, { readContext });
-        const visible = fact => fact.factType === "TRAIT" && resolveTraitVisibility({ traitId: fact.canonicalKey,
-          name: fact.value, category: fact.category }).status === "OBSERVABLE";
-        // Only current observation may extend the opening knowledge snapshot.
-        const next = [...(profiles.get(Number(entityId)) || []).filter(fact => !visible(fact)
-          && current.some(row => row.factId === fact.factId && row.factEpoch === fact.factEpoch
-            && (!fact.effectiveKnown || row.effectiveKnown))), ...current.filter(visible)];
-        if (JSON.stringify(next) !== JSON.stringify(profiles.get(Number(entityId)) || [])) changed = true;
-        profiles.set(Number(entityId), next);
-      }
-    }
-    if (changed) {
-      this.stableProfileCache.clear();
-      this.stableDescriptionCache.clear();
-      this.cacheV2FrozenSnapshots.responders.clear();
-      this.cacheV2FrozenSnapshots.prefixByResponder.clear();
-    }
   }
   async prefetchFrozenWorldline() {
     if (!this.isV813PrefixEnabled?.() || !worldlineService) return;
@@ -674,16 +583,6 @@ class Conversation {
     for (let attempt = 0; attempt < 8; attempt++) {
       const history = this.getPromptHistoryForCharacter(npc.id);
       const summary = this.getPromptSummaryForCharacter(npc.id);
-      if (memoryContext.memory4Packet) {
-        const baseContext = { ...memoryContext, temporalExtraText: null };
-        const baseMessages = typeof PromptBuilder.buildMessagesWithTokenCount === "function"
-          ? PromptBuilder.buildMessagesWithTokenCount(history, npc, this.gameData, summary, baseContext).messages
-          : PromptBuilder.buildMessages(history, npc, this.gameData, summary, baseContext);
-        const baseBudget = planRequestBudget({ messages: baseMessages, capabilities, requestedOutputTokens, countTokens: items => this.estimateTokenCount(items) });
-        const safeRemaining = Math.max(0, Math.floor((baseBudget.effectiveInputBudget - baseBudget.estimatedInputTokens - 16) / 1.1));
-        memoryContext = memoryEngine.fitMemory4Context(memoryContext, npc.id, this.memoryState.responderRecallCache,
-          safeRemaining, text => TokenCounter.estimateTokens(text));
-      }
       const messages = typeof PromptBuilder.buildMessagesWithTokenCount === "function"
         ? PromptBuilder.buildMessagesWithTokenCount(history, npc, this.gameData, summary, memoryContext).messages
         : PromptBuilder.buildMessages(history, npc, this.gameData, summary, memoryContext);
@@ -750,7 +649,6 @@ class Conversation {
   }
   async getMemoryContextFor(npc, contextLimit = null) {
     if (!memoryEngine || !npc || !this.gameData) return null;
-    this.observeVisibleTraits();
     if (Number(npc.id) === Number(this.gameData.playerID)) return null;
     if (this.isV813PrefixEnabled?.()) await this.worldlinePrefetchPromise;
     if (memoryEngine.isSummaryOwnerDeceased(npc.id)) memoryEngine.reviveSummaryOwner(npc.id);
@@ -826,7 +724,6 @@ class Conversation {
       conversationId: this.id,
       sceneRevision: JSON.stringify([this.gameData.scene || null, this.gameData.location || null, this.gameData.locationController || null]),
       memoryEngine3Enabled: memory3Settings.v812MemoryEngine3Enabled !== false,
-      memory4RecallEnabled: true,
       gameData: this.gameData,
       entityProfiles: [...mentionableProfiles.values()],
       explicitTargetEntityIds,
@@ -914,7 +811,6 @@ class Conversation {
       activeParticipantIds,
       stableProfileCache: this.stableProfileCache,
       stableDescriptionCache: this.stableDescriptionCache,
-      disclosureProfiles: this.disclosureProfilesByResponder?.get(`${this.gameData.campaignToken}:${npc.id}`) || new Map(),
       cacheV2FrozenSnapshots: this.cacheV2FrozenSnapshots,
       freezePromptPrefix: false,
       presenceText: this.buildPresenceContext(),
@@ -1043,10 +939,7 @@ class Conversation {
     const retainedIds = new Set(history.map(message => message.id));
     const cache = this.memoryState?.responderRecallCache?.get(Number(characterId));
     for (const [messageId, recall] of recalls) {
-      const sourceValid = !recall.memory4Scope || recall.memory4Scope.campaignToken === this.gameData.campaignToken
-        && recall.memory4Scope.ownerId === Number(characterId)
-        && memoryEngine.memory4Recall.validateHistory(recall.memory4Scope, recall.sourceRefs, { currentGameDate: this.gameData.date });
-      if (retainedIds.has(messageId) && sourceValid) continue;
+      if (retainedIds.has(messageId)) continue;
       for (const key of recall.keys) cache?.seenDynamicSummaries?.delete(key);
       if (cache) delete cache.dynamicTurn;
       recalls.delete(messageId);
@@ -1059,7 +952,7 @@ class Conversation {
     const text = block?.content;
     const cache = this.memoryState?.responderRecallCache?.get(Number(characterId));
     if (!text || cache?.dynamicTurn !== turnEpoch) return;
-    const injectedEntries = (cache.dynamicExtra || []).filter(entry => !cache.memory4Packet || text.includes(entry.memory.memoryId));
+    const injectedEntries = cache.dynamicExtra || [];
     const committed = memoryEngine.commitDynamicSummaryRecall(characterId, this.memoryState.responderRecallCache, turnEpoch, {
       providerSucceeded: true, injectedBlockIds: ["memory-temporal-extra"],
       injectedMemoryIds: injectedEntries.map(entry => entry.memory.memoryId),
@@ -1069,13 +962,7 @@ class Conversation {
     if (!this.dynamicRecallHistory) this.dynamicRecallHistory = new Map();
     if (!this.dynamicRecallHistory.has(Number(characterId))) this.dynamicRecallHistory.set(Number(characterId), new Map());
     this.dynamicRecallHistory.get(Number(characterId)).set(messageId, { text,
-      keys: injectedEntries.map(entry => memoryEngine.getRouteMemoryKey(entry.memory)),
-      memory4Scope: cache.memory4Packet ? { campaignToken: this.gameData.campaignToken, ownerId: Number(characterId) } : null,
-      sourceRefs: cache.memory4Packet?.sourceRefs || [] });
-    const legacySources = (cache.memory4Packet?.sourceRefs || []).filter(ref => ref.kind === "legacy"
-      && injectedEntries.some(entry => entry.memory.memoryId === ref.id));
-    if (legacySources.length) memoryEngine.memory4?.queueLegacyRecompression({ campaignToken: this.gameData.campaignToken,
-      ownerId: Number(characterId) }, { sourceRefs: legacySources });
+      keys: injectedEntries.map(entry => memoryEngine.getRouteMemoryKey(entry.memory)) });
   }
   getPromptSummaryForCharacter(characterId) {
     const state = memoryEngine?.ensureConversationState(this).rollingState;
@@ -1118,7 +1005,6 @@ class Conversation {
     const message = createMessage({ id: this.nextId++, role: "system", kind: "presence_join", characterId: numericId, content: `【${character.shortName || character.fullName}入内】` });
     this.messages.push(message);
     memoryEngine?.observeParticipants(this, [numericId], message.id);
-    this.observeVisibleTraits();
     this.joinEvents.push({ characterId: numericId, atMessageId: message.id, atHistoryIndex: this.getHistory().length - 1 });
     this.emitUpdate();
     return { success: true, status: "present", messageId: message.id };
@@ -1136,7 +1022,6 @@ class Conversation {
       memoryEngine?.markParticipantLeft(this, numericId, this.nextId);
       this.presentCharacterIds.delete(numericId);
       this.waitingCharacterIds.add(numericId);
-      this.observeVisibleTraits();
       this.emitUpdate();
       return { success: true, status: "waiting", summaryGenerated: false };
     }
@@ -1145,7 +1030,6 @@ class Conversation {
     memoryEngine?.markParticipantLeft(this, numericId, message.id);
     this.presentCharacterIds.delete(numericId);
     this.departedCharacterIds.add(numericId);
-    this.observeVisibleTraits();
     this.npcQueue = this.npcQueue.filter((candidate) => Number(candidate?.id) !== numericId);
     if (this.customQueue) this.customQueue = this.customQueue.filter((candidate) => Number(candidate?.id) !== numericId);
     this.invalidateApprovalsForCharacter(numericId, "left");
@@ -1176,7 +1060,6 @@ class Conversation {
     memoryEngine?.markParticipantLeft(this, numericId, message.id);
     this.presentCharacterIds.delete(numericId);
     this.temporarilyAbsentCharacterIds.set(numericId, { mode, leftAtMessageId: message.id });
-    this.observeVisibleTraits();
     this.npcQueue = this.npcQueue.filter((candidate) => Number(candidate?.id) !== numericId);
     if (this.customQueue) this.customQueue = this.customQueue.filter((candidate) => Number(candidate?.id) !== numericId);
     this.invalidateApprovalsForCharacter(numericId, "temporarily_absent");
@@ -1207,7 +1090,6 @@ class Conversation {
     });
     this.messages.push(message);
     memoryEngine?.observeParticipants(this, [numericId], message.id);
-    this.observeVisibleTraits();
     this.joinEvents.push({ characterId: numericId, atMessageId: message.id, atHistoryIndex: this.getHistory().length - 1, temporaryReturn: true, mode: temporaryAbsence.mode });
     this.emitUpdate();
     return { success: true, status: "present", mode: temporaryAbsence.mode, messageId: message.id };
@@ -1249,7 +1131,6 @@ class Conversation {
     this.temporarilyAbsentCharacterIds?.delete(Number(characterId));
     this.departedCharacterIds?.add(Number(characterId));
     const deactivated = participantLifecycle.deactivate(this, characterId, reason);
-    this.observeVisibleTraits();
     if (reason === "dead" && Number(characterId) !== Number(this.gameData?.playerID)) {
       try {
         memoryEngine?.markSummaryOwnerDeceased(characterId, { reason });
@@ -1668,13 +1549,16 @@ class Conversation {
   async refreshGameDataForActionConfirmation() {
     const ck3DebugPath = settingsRepository.getCK3DebugLogPath();
     if (!ck3DebugPath) throw new Error("ck3_debug_log_path_not_configured");
-    const gameData = await this.parseCK3GameData(ck3DebugPath, { captureForConversation: true });
+    const gameData = await this.parseCK3GameData(ck3DebugPath);
     gameData.loadCharactersSummaries();
     gameData.syncOfficialRecollectionSummaries?.(this.id);
     this.gameData = gameData;
     this.gameDataRevision += 1;
     this.gameData.gameDataRevision = this.gameDataRevision;
-    this.observeVisibleTraits();
+    this.stableProfileCache.clear();
+    this.stableDescriptionCache.clear();
+    this.cacheV2FrozenSnapshots.responders.clear();
+    this.cacheV2FrozenSnapshots.prefixByResponder.clear();
     return this.gameData;
   }
   async waitForActionConfirmation(result, { timeoutMs = 12e3, pollMs = 500 } = {}) {
@@ -1987,33 +1871,15 @@ class Conversation {
     const mentionedIds = new MentionTracker().findMentionedCharacterIds(messages, { candidates: mentionableProfiles,
       excludedIds: participantIds, resolveCoreference: false });
     const mentionedEntities = mentionableProfiles.filter(character => mentionedIds.includes(character.id));
-    const memory4RelationshipEvidence = buildCurrentMemory4RelationshipEvidence({ gameData: this.gameData,
-      ownerIds: participantIds, entityIds: [...participantIds, ...mentionedIds] });
-    const disclosureFactEpochsByOwner = {};
-    for (const ownerId of participantIds) {
-      try {
-        disclosureFactEpochsByOwner[ownerId] = memoryEngine.memory4?.captureDisclosureFactEpochs?.(
-          { campaignToken: this.gameData.campaignToken, ownerId }, this.gameData) || {};
-      } catch (error) {
-        console.warn("[Memory4] Fact epoch capture unavailable:", error.message);
-        disclosureFactEpochsByOwner[ownerId] = {};
-      }
-    }
     return {
       conversationId: this.id,
       date: this.gameData.date,
       campaignToken: this.gameData.campaignToken || null,
       totalDays: this.gameData.totalDays,
-      relationshipChanges: this.memory4RelationshipChanges || [],
       finalizationVisibilityV1: true,
       messages,
       participants,
       mentionedEntities,
-      memory4RelationshipEvidence,
-      disclosureFactEpochsByOwner,
-      disclosureCharacters: [...this.gameData.characters.values()].map(character => ({ id: Number(character.id),
-        names: [...new Set([character.firstName, character.shortName, character.fullName, character.name].filter(Boolean))],
-        nickname: character.nickname || null, facts: getFactCandidates(character) })),
       excludedSummaryOwnerIds,
       participantPresence: state.participantPresence,
       joinEvents: this.joinEvents,
@@ -2117,10 +1983,6 @@ class Conversation {
           summaryBudget: requestOptions.summaryBudget
         });
       },
-      requestDurable: (prompt, options = {}) => llmManager.sendSummaryRequest(prompt, void 0, {
-        requestType: "memory4_durable", maxTokens: options.maxTokens, providerSnapshot: options.providerSnapshot,
-        durableTrace: options.durableTrace, beforeSendGuard: options.beforeSendGuard
-      })
     });
   }
   async recoverPendingMemories() {
@@ -2130,10 +1992,6 @@ class Conversation {
       buildPrompt: (context) => memoryEngine.buildFinalizationPrompt({ ...context, finalInstructions: context.finalInstructions || PromptBuilder.getFinalSummaryInstructions() }),
       getSummaryCapabilities: (snapshot) => llmManager.getProviderCapabilities("SUMMARY", snapshot),
       requestSummary: (summaryPrompt, options = {}) => llmManager.sendSummaryRequest(summaryPrompt, void 0, { requestType: "memory_recovery", maxTokens: options.maxTokens, providerSnapshot: options.providerSnapshot, summaryBudget: options.summaryBudget }),
-      requestDurable: (prompt, options = {}) => llmManager.sendSummaryRequest(prompt, void 0, {
-        requestType: "memory4_durable", maxTokens: options.maxTokens, providerSnapshot: options.providerSnapshot,
-        durableTrace: options.durableTrace, beforeSendGuard: options.beforeSendGuard
-      }),
       activeCampaignToken: this.gameData.campaignToken || null,
       resolveParticipantProfiles: (snapshot) => memoryEngine.resolveRecoveryParticipantProfiles(snapshot, [...this.summaryParticipantProfiles.values()]),
       persistCharacterFolders: async (finalSummary, context) => {
@@ -2166,7 +2024,6 @@ class Conversation {
   }
   end() {
     this.isActive = false;
-    if (this.gameData) delete this.gameData.directObservationContext;
     this.clearHistory();
   }
   // Emit conversation update event
@@ -2300,7 +2157,6 @@ class Conversation {
     this.temporarilyAbsentCharacterIds?.delete(numericId);
     this.invalidateApprovalsForCharacter(numericId, "removed");
     this.gameData.characters.delete(numericId);
-    this.observeVisibleTraits();
     if (closedPresence) this.checkpointFinalization("action_participant_left");
     const initialQueueLength = this.npcQueue.length;
     this.npcQueue = this.npcQueue.filter((char) => Number(char.id) !== numericId);

@@ -1,0 +1,411 @@
+{
+  "runtimeVersion": "9.3.4",
+  "headSHA": "PENDING_LOCAL_IMPLEMENTATION_COMMIT",
+  "baselineSHA": "3c1c2162e63f587bf920c8670bc88f9c263ac0f1",
+  "payloadSha256": "5823950499a768f97c0cf2dd483c0559e68e6b00cfe3a73cc9c5a5d81b7a2aad",
+  "managedRuntimeFiles": 278,
+  "releaseGroupsPassed": 402,
+  "remoteCI": "PENDING_USER_PUSH",
+  "durableOutboundCount": 0,
+  "durableRecoveryTriggeredCount": 0,
+  "legacySummaryCommittedCount": 2,
+  "legacySummaryCommittedCountScope": "representative accepted-letter fixture: two Owner projections; not production totals",
+  "legacyRecallInjectedIds": [
+    {
+      "scenario": "ordinary",
+      "ids": [
+        "folder_779cd3e4d41634cd",
+        "folder_714a031c0a81ffbf",
+        "folder_a6b75df21cb610a0",
+        "folder_30a29610a2d8af17",
+        "folder_cbd843f2e369200e"
+      ],
+      "direct": 2,
+      "extra": 3,
+      "selectedChars": [
+        52,
+        59,
+        67,
+        72,
+        75
+      ],
+      "selectedBodyEstimatedTokens": 164,
+      "injectedBlockHash": "d8e0c3247b16c3bb355ada8821b3f995a2ee3d7cadba78b0b5bed7bef692af86",
+      "injectedBlockChars": 501
+    },
+    {
+      "scenario": "obsolete-flag",
+      "ids": [
+        "folder_779cd3e4d41634cd",
+        "folder_714a031c0a81ffbf",
+        "folder_30a29610a2d8af17",
+        "folder_a6b75df21cb610a0",
+        "folder_cbd843f2e369200e"
+      ],
+      "direct": 2,
+      "extra": 3,
+      "selectedChars": [
+        52,
+        59,
+        72,
+        67,
+        75
+      ],
+      "selectedBodyEstimatedTokens": 164,
+      "injectedBlockHash": "ea7bcc2d6a57a8814112229577b4665b416fd7a5a1b8b96d996f6249a8da4a7a",
+      "injectedBlockChars": 501
+    },
+    {
+      "scenario": "direct-recollection",
+      "ids": [
+        "folder_779cd3e4d41634cd",
+        "folder_714a031c0a81ffbf",
+        "folder_a6b75df21cb610a0",
+        "folder_30a29610a2d8af17",
+        "folder_cbd843f2e369200e"
+      ],
+      "direct": 2,
+      "extra": 3,
+      "selectedChars": [
+        52,
+        59,
+        67,
+        72,
+        75
+      ],
+      "selectedBodyEstimatedTokens": 164,
+      "injectedBlockHash": "d8e0c3247b16c3bb355ada8821b3f995a2ee3d7cadba78b0b5bed7bef692af86",
+      "injectedBlockChars": 501
+    },
+    {
+      "scenario": "year-1170",
+      "ids": [
+        "folder_779cd3e4d41634cd",
+        "folder_714a031c0a81ffbf",
+        "folder_cbd843f2e369200e"
+      ],
+      "direct": 2,
+      "extra": 1,
+      "selectedChars": [
+        52,
+        59,
+        75
+      ],
+      "selectedBodyEstimatedTokens": 94,
+      "injectedBlockHash": "675e967f7186bef25b74a50c1ea3004e77be8a9c3c10d3d7db6f34c36694e349",
+      "injectedBlockChars": 502
+    },
+    {
+      "scenario": "out-of-scene-chen",
+      "ids": [
+        "folder_779cd3e4d41634cd",
+        "folder_714a031c0a81ffbf",
+        "folder_cf588949c2ee1215",
+        "folder_df2a1b9959b4ea92"
+      ],
+      "direct": 2,
+      "extra": 2,
+      "selectedChars": [
+        52,
+        59,
+        65,
+        56
+      ],
+      "selectedBodyEstimatedTokens": 117,
+      "injectedBlockHash": "cba544c2ab103102c6a0d55742316396b8a7159f86528a547a7481122a320361",
+      "injectedBlockChars": 441
+    },
+    {
+      "scenario": "foreign-campaign",
+      "ids": [],
+      "direct": 0,
+      "extra": 0,
+      "selectedChars": [],
+      "selectedBodyEstimatedTokens": 0,
+      "injectedBlockHash": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "injectedBlockChars": 0
+    },
+    {
+      "scenario": "next-turn",
+      "ids": [
+        "folder_779cd3e4d41634cd",
+        "folder_714a031c0a81ffbf"
+      ],
+      "direct": 2,
+      "extra": 0,
+      "selectedChars": [
+        52,
+        59
+      ],
+      "selectedBodyEstimatedTokens": 56,
+      "injectedBlockHash": "2404ddabf6cdab94761af05ac3df63b57bcce47ec015eb1f0c3924331fc9de46",
+      "injectedBlockChars": 185
+    }
+  ],
+  "forgetRegressionPassed": true,
+  "sidecarWriteCount": 0,
+  "oldSidecarIgnored": true,
+  "oldSidecarPolicy": "RETIRED_INERT; real userdata not accessed; only explicit multi-folder maintenance path existence/no-links checks protect archive bytes",
+  "ck3ManualGate": "NOT_RUN",
+  "soakGate": "NOT_RUN",
+  "paidProviderCalls": 0,
+  "costUsd": 0,
+  "removedRuntimePaths": [
+    "main/memory-system/memory4-contract.js",
+    "main/memory-system/memory4-coordinator.js",
+    "main/memory-system/memory4-coverage.js",
+    "main/memory-system/memory4-disclosure.js",
+    "main/memory-system/memory4-evidence-planner.js",
+    "main/memory-system/memory4-forget.js",
+    "main/memory-system/memory4-legacy-bridge.js",
+    "main/memory-system/memory4-orphan-audit.js",
+    "main/memory-system/memory4-profile.js",
+    "main/memory-system/memory4-recall-planner.js",
+    "main/memory-system/memory4-relationship-readback.js",
+    "main/memory-system/memory4-retirement-migration.js",
+    "main/memory-system/memory4-source-validity.js",
+    "main/memory-system/memory4-store.js",
+    "main/memory-system/memory4-visibility.js",
+    "main/memory-system/scoped-json-repository.js",
+    "main/analytics/durable-request-trace.js",
+    "main/memory-system/letter-memory-finalization.js",
+    "main/memory-system/memory4-entity-context.js",
+    "renderer/memory4-manager.js",
+    "renderer/memory4-manager.css"
+  ],
+  "manualMaintenanceOnlyPaths": [
+    "scripts/archive/v933-year-life/memory4-retirement-migration.js",
+    "scripts/archive/v933-year-life/memory4-contract.js",
+    "scripts/archive/v933-year-life/memory4-store.js",
+    "scripts/archive/v933-year-life/memory4-visibility.js",
+    "scripts/archive/v933-year-life/memory4-disclosure.js",
+    "scripts/archive/v933-year-life/memory4-forget.js",
+    "scripts/archive/v933-year-life/memory4-evidence-planner.js"
+  ],
+  "testInventory": {
+    "baseline": {
+      "release": 443,
+      "archive": 73
+    },
+    "current": {
+      "release": 402,
+      "archive": 127
+    },
+    "retiredReleaseScripts": [
+      "test-v9.2-independent-qa.js",
+      "test-v8.14.2-closeout-independent-qa.js",
+      "test-v8.14.2-disclosure-fact-epoch.js",
+      "test-v8.14.2-nickname-target-alias.js",
+      "test-v8.14.2-third-party-disclosure.js",
+      "test-v8.14.2-naming-disclosure-independent-qa.js",
+      "test-v8.14.2-age-disclosure.js",
+      "test-v8.14.2-disclosure-source-incident.js",
+      "test-v8.14.2-memory-entity-naming.js",
+      "test-v8.14.2-incident-independent-qa.js",
+      "test-v8.14.2-letter-disclosure.js",
+      "test-v8.14.2-disclosure-production-qa.js",
+      "test-v8.14.2-disclosure-ui.js",
+      "test-v8.14.2-disclosure-core.js",
+      "test-v8.14-de-independent-qa.js",
+      "test-v8.14-c-recall-planner.js",
+      "test-v8.14-b-profile.js",
+      "test-v8.14.1-memory-closeout.js",
+      "test-v8.14-e-memory-ui.js",
+      "test-v8.15-orphan-audit.js",
+      "test-v8.15.2-age-claims-independent-qa.js",
+      "test-v8.15.2-age-disclosure.js",
+      "test-v8.15.2-ui-races.js",
+      "test-v8.15.2-provider-visible-traits.js",
+      "test-v8.15.2-disclosure-grammar.js",
+      "test-v8.15.2-direct-observation.js",
+      "test-v8.15.1-recall-ui.js",
+      "test-v8.15.1-disclosure.js",
+      "test-v8.15.1-memory-recovery.js",
+      "test-v9.2.1-cache-invariants.js",
+      "test-v9.2.3-derived-recovery.js",
+      "test-v9.2.3-derived-retirement.js",
+      "test-v9.3.2-durable-pipeline.js",
+      "test-v9.3.2-independent-qa.js",
+      "test-v9.2.1-durable-cache-policy.js",
+      "test-v9.2.2-durable-lineage.js",
+      "test-v9.2.2-durable-attribution.js",
+      "test-v9.2.2-durable-chunking.js",
+      "test-v9.2.2-presend-forget.js",
+      "test-v8.14-a-durable-core.js",
+      "test-v8.14.2-durable-generation-incident.js",
+      "test-v8.14.1-memory4-archival-readonly.js",
+      "test-v9.3.3-evidence-planner.js",
+      "test-v9.3.3-source-validity.js",
+      "test-v9.3.3-independent-qa.js",
+      "test-v9.3.3-memory4-coverage-ui.js",
+      "test-v9.3.3.1-coverage-interactions.js",
+      "test-v9.2-scoped-json.js"
+    ],
+    "newArchiveScripts": [
+      "test-v8.15.1-retired-memory4-independent-qa.js",
+      "test-v8.15-retired-durable-entity-recall.js",
+      "test-v8.15-retired-durable-production-contracts.js",
+      "test-v8.14.2-retired-memory4-ui-edit.js",
+      "test-v8.14-a-p0-retired-durable.js",
+      "test-v8.15-fix1-retired-durable-audit.js"
+    ],
+    "newReleaseScripts": [
+      "test-v9.3.4-legacy-crud-qa.js",
+      "test-v9.3.4-deployment-recovery-qa.js",
+      "test-v9.3.4-legacy-forget.js",
+      "test-v9.3.4-legacy-retirement.js",
+      "test-v9.3.4-legacy-recall.js",
+      "test-v9.3.4-no-durable-outbound.js",
+      "test-v9.3.4-independent-qa.js"
+    ]
+  },
+  "independentQa": {
+    "retirement": 5,
+    "legacyRecall": 10,
+    "legacyForget": 7,
+    "legacyCrud": 2
+  },
+  "packagedElectron": {
+    "status": "PASS",
+    "profileCount": 2,
+    "screenshotCount": 6,
+    "profiles": [
+      {
+        "profile": "performance-off",
+        "appVersion": "9.3.4",
+        "syntheticLegacyCount": 95,
+        "syntheticOfficialCount": 1,
+        "pageSize": 10,
+        "dateRangeMatches": 10,
+        "legacyEdit": true,
+        "legacyDelete": true,
+        "officialReadOnly": true,
+        "providerCalls": 0,
+        "networkAttempts": 0,
+        "memory4IpcHandlers": 0,
+        "moduleSha256": {
+          "main": "6f9ec9d7f2eb9429d128ebf92461fcf959ae9e10d83fb093e910c83f0861e2eb",
+          "providerService": "f95344a6777f6b0ccd6ec17105b54b775ee17091119a2c09cc372a3f21d8287a",
+          "conversation": "1fe3d3942398e826e321a6f37afe5c5d7d3cfcc5e8865ac5263e2f9e92f28c1c",
+          "conversationManager": "1e4e6d424b368aea3a6fc62ef2a5c111b5d37394777465d44bd0efe644b3c5d6",
+          "promptBuilder": "a8185dd2f0e42f9d0c3e337d7165be4739a4baad6511093a2c17a2be4e1b16e6",
+          "letterPromptBuilder": "d683cdf82030e08f888130cff1557e10b438cbed1a978751dd92b6acfcdf9b27",
+          "traitProfileSelector": "a2d00f91a82f10509f98709534fff013aa89c87c3f9fbae9167279ae8c50253d",
+          "entityContext": "c6f788ec24ffa137e0d51300f756a00e6fbe9ecf2cf8dc95b0fd57138226fe0a",
+          "incidentDiagnostics": "8d85c2502bb10065dfe2b95a21c7d1bfeebf90e0d054cc181d83653bde25ee89",
+          "memoryEngine": "610952b6ba39c9be84ed0b0720e3a2a03ebdd8e477babf81ff4a8b09902efabc",
+          "summariesManager": "25e82f498abb41548bc2c4788fd422bd1bfd38ad8748c852553d37fa5fa6f40a"
+        },
+        "screenshots": [
+          {
+            "path": ".build/v934-packaged-smoke-8ZCIh0/performance-off/legacy-summaries-parchment.png",
+            "sha256": "3732786ea345826bcbc6e6160c4672a1baa797cfafdc83c2da4c3af30faffcd6"
+          },
+          {
+            "path": ".build/v934-packaged-smoke-8ZCIh0/performance-off/legacy-summaries-knight.png",
+            "sha256": "bcff29171f158ce7edd47e7000afe37c2e8e0ed31c2ae76e59401b0c12963fc6"
+          },
+          {
+            "path": ".build/v934-packaged-smoke-8ZCIh0/performance-off/legacy-summaries-ink.png",
+            "sha256": "07f472bd381a6c503b077a401d3709a7f2c3bf74890b2eccb0f21966a14983a8"
+          }
+        ]
+      },
+      {
+        "profile": "performance-on",
+        "appVersion": "9.3.4",
+        "syntheticLegacyCount": 95,
+        "syntheticOfficialCount": 1,
+        "pageSize": 10,
+        "dateRangeMatches": 10,
+        "legacyEdit": true,
+        "legacyDelete": true,
+        "officialReadOnly": true,
+        "providerCalls": 0,
+        "networkAttempts": 0,
+        "memory4IpcHandlers": 0,
+        "moduleSha256": {
+          "main": "6f9ec9d7f2eb9429d128ebf92461fcf959ae9e10d83fb093e910c83f0861e2eb",
+          "providerService": "f95344a6777f6b0ccd6ec17105b54b775ee17091119a2c09cc372a3f21d8287a",
+          "conversation": "1fe3d3942398e826e321a6f37afe5c5d7d3cfcc5e8865ac5263e2f9e92f28c1c",
+          "conversationManager": "1e4e6d424b368aea3a6fc62ef2a5c111b5d37394777465d44bd0efe644b3c5d6",
+          "promptBuilder": "a8185dd2f0e42f9d0c3e337d7165be4739a4baad6511093a2c17a2be4e1b16e6",
+          "letterPromptBuilder": "d683cdf82030e08f888130cff1557e10b438cbed1a978751dd92b6acfcdf9b27",
+          "traitProfileSelector": "a2d00f91a82f10509f98709534fff013aa89c87c3f9fbae9167279ae8c50253d",
+          "entityContext": "c6f788ec24ffa137e0d51300f756a00e6fbe9ecf2cf8dc95b0fd57138226fe0a",
+          "incidentDiagnostics": "8d85c2502bb10065dfe2b95a21c7d1bfeebf90e0d054cc181d83653bde25ee89",
+          "memoryEngine": "610952b6ba39c9be84ed0b0720e3a2a03ebdd8e477babf81ff4a8b09902efabc",
+          "summariesManager": "25e82f498abb41548bc2c4788fd422bd1bfd38ad8748c852553d37fa5fa6f40a"
+        },
+        "screenshots": [
+          {
+            "path": ".build/v934-packaged-smoke-8ZCIh0/performance-on/legacy-summaries-parchment.png",
+            "sha256": "3732786ea345826bcbc6e6160c4672a1baa797cfafdc83c2da4c3af30faffcd6"
+          },
+          {
+            "path": ".build/v934-packaged-smoke-8ZCIh0/performance-on/legacy-summaries-knight.png",
+            "sha256": "bcff29171f158ce7edd47e7000afe37c2e8e0ed31c2ae76e59401b0c12963fc6"
+          },
+          {
+            "path": ".build/v934-packaged-smoke-8ZCIh0/performance-on/legacy-summaries-ink.png",
+            "sha256": "625a31621ae88664ec55ca1d9455b284b62bcca81d103cf91a8c9bdea12f3591"
+          }
+        ]
+      }
+    ]
+  },
+  "cleanWindows": {
+    "node": "v22.23.3",
+    "snapshotSHA": "73da1495ead80c9c025098e08ec5336f019c687d",
+    "initialBuildExists": false,
+    "steps": [
+      {
+        "script": "scripts/runtime-dependencies.js",
+        "status": 0
+      },
+      {
+        "script": "scripts/build-runtime.js",
+        "status": 0
+      },
+      {
+        "script": "scripts/verify-runtime-build.js",
+        "status": 0
+      },
+      {
+        "script": "scripts/deploy-runtime-build.js",
+        "status": 0
+      },
+      {
+        "script": "scripts/verify-runtime-build.js --deployed",
+        "status": 0
+      },
+      {
+        "script": "scripts/test-release.js",
+        "status": 0
+      }
+    ],
+    "asset": {
+      "blob": {
+        "bytes": 46292,
+        "sha256": "19f891af71bc453177e972009db60d56549c45fecd4e9aefebf59cb756455ea8"
+      },
+      "checkout": {
+        "bytes": 46292,
+        "sha256": "19f891af71bc453177e972009db60d56549c45fecd4e9aefebf59cb756455ea8"
+      },
+      "staging": {
+        "bytes": 46292,
+        "sha256": "19f891af71bc453177e972009db60d56549c45fecd4e9aefebf59cb756455ea8"
+      }
+    },
+    "payloadSha256": "5823950499a768f97c0cf2dd483c0559e68e6b00cfe3a73cc9c5a5d81b7a2aad",
+    "managedFiles": 278,
+    "rootPayloadMatches": true,
+    "deployedIcon": {
+      "bytes": 46292,
+      "sha256": "19f891af71bc453177e972009db60d56549c45fecd4e9aefebf59cb756455ea8"
+    }
+  },
+  "releaseGroupTotal": 402,
+  "gateEvidenceScope": "offline synthetic fixtures and isolated Windows/Electron only; no real userdata or paid APIs"
+}

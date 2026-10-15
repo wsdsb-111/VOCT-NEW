@@ -1,7 +1,6 @@
 import { WorldMemoryEditor } from "../world-memory-editor.js";
-import { Memory4Manager } from "../memory4-manager.js";
-import { getSummaryDisplayEntries } from "../summary-date-order.js";
-const VOTC_FEATURE_VERSION = "V9.3.3.1";
+import { getLegacySummaryPage, getSummaryImportantMatters } from "../summary-date-order.js";
+const VOTC_FEATURE_VERSION = "V9.3.4";
 const VOTC_WORKSHOP_MOD_VERSION = "2.0.5";
 function getDefaultExportFromCjs(x) {
   return x && x.__esModule && Object.prototype.hasOwnProperty.call(x, "default") ? x["default"] : x;
@@ -18142,44 +18141,12 @@ const useConfigStore = create()(
           return [];
         }
       },
-      getMemoryOverview: async () => {
-        try {
-          return await window.conversationAPI.getMemoryOverview();
-        } catch (error) {
-          console.error("Failed to get Memory Engine overview:", error);
-          return { engineVersion: "3.0", totals: {}, boundaries: [], routingPolicy: {}, characters: [] };
-        }
-      },
       getSummariesDashboardData: async (options = {}) => {
         try {
           return await window.conversationAPI.getSummariesDashboardData(options);
         } catch (error) {
           console.error("Failed to get summaries dashboard data:", error);
-          return { summaries: [], memoryOverview: { engineVersion: "3.0", totals: {}, boundaries: [], routingPolicy: {}, characters: [] } };
-        }
-      },
-      updateStructuredMemory: async (memoryId, content) => {
-        try {
-          return await window.conversationAPI.updateStructuredMemory(memoryId, content);
-        } catch (error) {
-          console.error("Failed to update structured memory:", error);
-          return { success: false, error: error instanceof Error ? error.message : "Unknown error" };
-        }
-      },
-      updateMemoryRecord: async (memoryId, updates, advanced = false) => {
-        try {
-          return await window.conversationAPI.updateMemoryRecord(memoryId, updates, advanced);
-        } catch (error) {
-          console.error("Failed to update memory record:", error);
-          return { success: false, error: error instanceof Error ? error.message : "Unknown error" };
-        }
-      },
-      getSummariesForCharacter: async (playerId, characterId) => {
-        try {
-          return await window.conversationAPI.getSummariesForCharacter(playerId, characterId);
-        } catch (error) {
-          console.error(`Failed to get summaries for character ${characterId}:`, error);
-          return [];
+          return { summaries: [] };
         }
       },
       updateSummary: async (playerId, characterId, summaryIndex, newContent) => {
@@ -21124,7 +21091,6 @@ const SummariesManager = () => {
   const openSummariesFolder = useConfigStore((state) => state.openSummariesFolder);
   const clearSummaries = useConfigStore((state) => state.clearSummaries);
   const [summaries2, setSummaries] = reactExports.useState([]);
-  const [memoryOverview, setMemoryOverview] = reactExports.useState({ engineVersion: "3.0", totals: {}, boundaries: [], routingPolicy: {}, characters: [] });
   const [recoveryStatus, setRecoveryStatus] = reactExports.useState({ pending: 0, running: false });
   const [incidentDiagnostics, setIncidentDiagnostics] = reactExports.useState({ recall: [], recovery: [], providerCache: [] });
   const [isRetryingSummaries, setIsRetryingSummaries] = reactExports.useState(false);
@@ -21138,6 +21104,9 @@ const SummariesManager = () => {
   const [searchQuery, setSearchQuery] = reactExports.useState("");
   const [isClearing, setIsClearing] = reactExports.useState(false);
   const [sortByDate, setSortByDate] = reactExports.useState(true);
+  const [summaryDateFrom, setSummaryDateFrom] = reactExports.useState("");
+  const [summaryDateTo, setSummaryDateTo] = reactExports.useState("");
+  const [summaryPages, setSummaryPages] = reactExports.useState({});
   const [clearResult, setClearResult] = reactExports.useState(null);
   reactExports.useEffect(() => {
     loadSummaries();
@@ -21147,7 +21116,6 @@ const SummariesManager = () => {
     try {
       const dashboardData = await getSummariesDashboardData({ refresh });
       setSummaries(dashboardData.summaries || []);
-      setMemoryOverview(dashboardData.memoryOverview || { engineVersion: "3.0", totals: {}, boundaries: [], routingPolicy: {}, characters: [] });
       setRecoveryStatus(dashboardData.recoveryStatus || { pending: 0, running: false });
       setIncidentDiagnostics(dashboardData.incidentDiagnostics || { recall: [], recovery: [], providerCache: [] });
     } catch (error) {
@@ -21157,7 +21125,7 @@ const SummariesManager = () => {
     }
   };
   const handleRetrySummaries = async () => {
-    if (!window.confirm("将使用当前摘要模型重试失败的对话、信件归档或长期记忆提取，可能产生 API 费用。不会重新发送信件。请先确认模型配置和余额可用。继续？")) return;
+    if (!window.confirm("将使用当前摘要模型重试失败的对话摘要或信件归档，可能产生 API 费用。不会重新发送信件。请先确认模型配置和余额可用。继续？")) return;
     setIsRetryingSummaries(true);
     setRetryResult(null);
     try {
@@ -21165,7 +21133,7 @@ const SummariesManager = () => {
       setRetryResult(result.error || `本次恢复 ${result.recovered || 0} 项；失败 ${result.failed || 0} 项。${result.recoveryStatus?.balanceBlocked ? "服务商余额不足，请充值或更换摘要模型后重试。" : "失败记录保留恢复快照；已提交的 Narrative 不会重生成。"}`);
       await loadSummaries(true);
     } catch (error) {
-      setRetryResult("记忆任务重试失败，请检查摘要模型配置及日志；恢复记录不会删除。");
+      setRetryResult("摘要或信件归档重试失败，请检查摘要模型配置及日志；恢复记录不会删除。");
     } finally {
       setIsRetryingSummaries(false);
     }
@@ -21238,20 +21206,11 @@ const SummariesManager = () => {
     const ownerId = Number(metadata.ownerId ?? metadata.playerId);
     const counterpartId = Number(metadata.counterpartId ?? metadata.characterId);
     const key = `${ownerId}:${counterpartId}:${index}`;
-    if (!window.confirm(`将把“${metadata.ownerName || metadata.playerName} ↔ ${metadata.counterpartName || metadata.characterName}”的 ${summary.date || "无日期"} 摘要正文发送给当前摘要模型整理，并重建此人物对应的长期记忆，可能产生 API 费用。手工版本保留，其他人物摘要不变。正文生成失败时保留原文；Durable 未成功时保留恢复记录。继续？`)) return;
+    if (!window.confirm(`将把“${metadata.ownerName || metadata.playerName} ↔ ${metadata.counterpartName || metadata.characterName}”的 ${summary.date || "无日期"} 摘要正文发送给当前摘要模型整理，可能产生 API 费用。手工版本保留，其他人物摘要不变；正文生成失败时保留原文。继续？`)) return;
     setRegeneratingSummaryKey(key);
     setRetryResult(null);
     try {
       const result = await window.conversationAPI.regenerateSummary(ownerId, counterpartId, index, summary.content);
-      if (result?.summaryUpdated) {
-        const memoryStatuses = { COMPLETE: "已完成", ALREADY_CONVERTED: "已同步", NO_DURABLE_CONTENT: "未提取出长期事实",
-          PENDING: "等待处理", SKIPPED: "尚未重建", EXTRACTION_FAILED: "提取失败",
-          SOURCE_INVALID: "来源失效", STALE: "来源已变化", CANCELLED: "已取消", FAILED: "重建失败", REQUEUED: "等待重试",
-          BLOCKED_CONTEXT: "缺少可信战役上下文", BLOCKED_ARCHIVE_PROOF: "归档来源无法确认" };
-        const canonical = memoryStatuses[result.memoryRebuild?.canonical?.status] || "尚未完成";        setRetryResult(`摘要正文已更新；Durable：${canonical}。${result.success ? "Legacy 摘要保留。" : "Durable 尚未成功写入；Legacy 摘要保留，请检查恢复任务与摘要模型配置。"}`);
-        await loadSummaries(true);
-        return;
-      }
       if (!result?.success) {
         const messages = {
           summary_regeneration_in_progress: "已有一篇摘要正在整理，请完成后再试。",
@@ -21262,15 +21221,12 @@ const SummariesManager = () => {
           summary_regeneration_output_invalid: "模型没有返回可用正文，原摘要未更改。",
           summary_model_unavailable: "摘要模型不可用，请先检查摘要模型配置。",
           summary_request_budget_exceeded: "这篇摘要过长，超过当前模型上下文预算；原摘要未更改。",
-          SUMMARY_FINALIZATION_IN_PROGRESS: "该摘要正在终局写入，稍后再整理。",
-          SUMMARY_FINALIZATION_RECOVERY_PENDING: "该摘要仍有待恢复任务，完成恢复后再整理。",
-          LEGACY_SUMMARY_MEMORY_MAPPING_INCOMPLETE: "无法安全对应这篇旧摘要的记忆投影，原文未更改。",
           official_recollection_is_not_regenerable: "官方追忆由 CK3 管理，不能从此处重新生成。"
         };
         setRetryResult(`摘要整理失败：${messages[result?.error] || result?.error || "未知错误"}`);
         return;
       }
-      setRetryResult("摘要已由模型重新整理，并同步更新了当前人物的记忆投影。");
+      setRetryResult("摘要已由模型重新整理并保存。");
       await loadSummaries(true);
     } catch (error) {
       setRetryResult(`摘要整理失败，原文未更改：${error instanceof Error ? error.message : "请检查摘要模型配置及日志。"}`);
@@ -21418,7 +21374,8 @@ const SummariesManager = () => {
     setSearchQuery("");
     setExpandedCharacters(/* @__PURE__ */ new Set());
   };
-  const totals = memoryOverview.totals || {};
+  const legacySummaryFolderCount = new Set(summaries2.map(metadata => String(metadata.ownerId ?? metadata.playerId))).size;
+  const legacySummaryRecordCount = summaries2.reduce((total, metadata) => total + (metadata.summaries?.length || 0), 0);
   return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "form-group summaries-manager", children: [
     /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "header-row", children: [
       /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
@@ -21427,7 +21384,7 @@ const SummariesManager = () => {
       ] }),
       /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "header-actions", children: [
         /* @__PURE__ */ jsxRuntimeExports.jsx("button", { onClick: () => loadSummaries(true), disabled: isLoadingSummaries, children: isLoadingSummaries ? t("summaries.loadingSummaries") : t("summariesManager.refresh") }),
-        /* @__PURE__ */ jsxRuntimeExports.jsx("button", { type: "button", onClick: handleRetrySummaries, disabled: isRetryingSummaries || isClearing || recoveryStatus.running || !recoveryStatus.pending, children: isRetryingSummaries ? "正在调用模型补生成…" : "重试失败记忆任务" }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx("button", { type: "button", onClick: handleRetrySummaries, disabled: isRetryingSummaries || isClearing || recoveryStatus.running || !recoveryStatus.pending, children: isRetryingSummaries ? "正在重试摘要…" : "重试失败摘要/信件归档" }),
         /* @__PURE__ */ jsxRuntimeExports.jsxs("button", { type: "button", className: sortByDate ? "primary-button" : "", "aria-pressed": sortByDate, title: sortByDate ? "最近日期在上；点击切换为原文件顺序" : "点击按日期排序，最近日期在上", onClick: () => setSortByDate(value => !value), disabled: isLoadingSummaries || isClearing, children: [/* @__PURE__ */ jsxRuntimeExports.jsx("span", { "aria-hidden": true, children: "↓ " }), "按日期排序"] }),
         /* @__PURE__ */ jsxRuntimeExports.jsx("button", { type: "button", onClick: handleOpenSummariesFolder, children: t("summaries.openSummariesFolder") }),
         /* @__PURE__ */ jsxRuntimeExports.jsx("button", { type: "button", onClick: handleClearSummaries, disabled: isLoadingSummaries || isClearing || summaryGroups.length === 0, className: "danger-button", children: isClearing ? t("summaries.clearing") : t("summaries.clearAllSummaries") })
@@ -21435,37 +21392,25 @@ const SummariesManager = () => {
     ] }),
     clearResult && /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: `clear-result ${clearResult.success ? "success" : "error"}`, children: clearResult.message }),
     retryResult && /* @__PURE__ */ jsxRuntimeExports.jsx("p", { role: "status", className: "help-text", children: retryResult }),
-    (recoveryStatus.pending > 0 || recoveryStatus.running) && /* @__PURE__ */ jsxRuntimeExports.jsx("p", { role: "status", className: "help-text", children: `待恢复：对话摘要 ${recoveryStatus.narrativePending || 0} 场，长期记忆 ${recoveryStatus.durablePending || 0} 位角色，信件归档 ${recoveryStatus.letterPending || 0} 封。${recoveryStatus.running ? "后台正在生成，完成后请刷新。" : recoveryStatus.balanceBlocked ? "服务商报告余额不足；充值或更换摘要模型后重试。" : "可点击“重试失败记忆任务”；已提交结果不重生成，已接受信件不重发。"}` }),
-    recoveryStatus.durableInvalid > 0 && /* @__PURE__ */ jsxRuntimeExports.jsx("p", { role: "alert", className: "help-text", children: `另有 ${recoveryStatus.durableInvalid} 个 Durable 恢复快照无法读取，已隔离；请保留文件并检查诊断日志。` }),
+    (recoveryStatus.pending > 0 || recoveryStatus.running) && /* @__PURE__ */ jsxRuntimeExports.jsx("p", { role: "status", className: "help-text", children: `待恢复：对话摘要 ${recoveryStatus.narrativePending || 0} 场，信件归档 ${recoveryStatus.letterPending || 0} 封。${recoveryStatus.running ? "后台正在生成，完成后请刷新。" : recoveryStatus.balanceBlocked ? "服务商报告余额不足；充值或更换摘要模型后重试。" : "可点击“重试失败摘要/信件归档”；已提交结果不重生成，已接受信件不重发。"}` }),
     ...[["记忆召回诊断（最近实际请求）", "recall"], ["摘要恢复诊断", "recovery"], ["Provider 缓存诊断", "providerCache"]].map(([label, key]) =>
       /* @__PURE__ */ jsxRuntimeExports.jsxs("details", { className: "worldline-advanced-details", children: [
         /* @__PURE__ */ jsxRuntimeExports.jsx("summary", { children: label }),
         /* @__PURE__ */ jsxRuntimeExports.jsx("pre", { style: { whiteSpace: "pre-wrap", overflowWrap: "anywhere", maxHeight: "400px", overflow: "auto" },
           children: incidentDiagnostics[key]?.length ? JSON.stringify(incidentDiagnostics[key], null, 2) : "暂无记录；完成一次对话请求后刷新。" })
       ] }, key)),
-    /* @__PURE__ */ jsxRuntimeExports.jsxs("section", { className: "memory-engine-overview", children: [
+    /* @__PURE__ */ jsxRuntimeExports.jsxs("section", { className: "legacy-summary-overview", children: [
       /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "memory-engine-title", children: [
         /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
-          /* @__PURE__ */ jsxRuntimeExports.jsx("h5", { children: `Memory Engine 4.0 · ${VOTC_FEATURE_VERSION}` }),
-          /* @__PURE__ */ jsxRuntimeExports.jsx("p", { children: "人物认知 · 官方追忆 · 详细长期记忆 · Legacy 来源关联与摘要；2.5 存储兼容" })
+          /* @__PURE__ */ jsxRuntimeExports.jsx("h5", { children: `Legacy Summary · ${VOTC_FEATURE_VERSION}` }),
+          /* @__PURE__ */ jsxRuntimeExports.jsx("p", { children: "查看、筛选、编辑和删除本地人物摘要；CK3 官方追忆保持只读同步。" })
         ] }),
-        /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: `memory-engine-status ${memoryOverview.error ? "is-error" : ""}`, children: memoryOverview.error ? "读取异常" : "本地档案" })
+        /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "memory-engine-status", children: "本地摘要" })
       ] }),
       /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "memory-health-grid", children: [
-        /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "memory-health-card", children: [/* @__PURE__ */ jsxRuntimeExports.jsx("strong", { children: totals.summaryFolders || 0 }), /* @__PURE__ */ jsxRuntimeExports.jsx("span", { children: "人物摘要目录" })] }),
-        /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "memory-health-card", children: [/* @__PURE__ */ jsxRuntimeExports.jsx("strong", { children: totals.summaryFiles || 0 }), /* @__PURE__ */ jsxRuntimeExports.jsx("span", { children: "人物对话文件" })] }),
-        /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "memory-health-card", children: [/* @__PURE__ */ jsxRuntimeExports.jsx("strong", { children: totals.summaryRecords || 0 }), /* @__PURE__ */ jsxRuntimeExports.jsx("span", { children: "摘要记录（不含长期条目）" })] })
-      ] }),
-      /* @__PURE__ */ jsxRuntimeExports.jsxs("details", { className: "memory-routing-details", children: [
-        /* @__PURE__ */ jsxRuntimeExports.jsx("summary", { children: "查看当前记忆策略" }),
-        /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "memory-routing-grid", children: Object.entries(memoryOverview.routingPolicy || {}).map(([key, label]) => /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "memory-routing-card", children: [
-          /* @__PURE__ */ jsxRuntimeExports.jsx("strong", { children: key === "stablePrefix" ? "稳定前缀" : key === "directPair" ? "直接关系" : key === "group" ? "多人对话" : key === "mentioned" ? "场外人物" : key === "sessionTopicAnchor" ? "旧路由话题锚点" : key === "turnRecall" ? "动态召回" : "Token 边界" }),
-          /* @__PURE__ */ jsxRuntimeExports.jsx("span", { children: label })
-        ] }, key)) })
-      ] }),
-      /* @__PURE__ */ jsxRuntimeExports.jsxs("details", { className: "memory-boundary-details", children: [
-        /* @__PURE__ */ jsxRuntimeExports.jsx("summary", { children: "查看当前记忆边界" }),
-        /* @__PURE__ */ jsxRuntimeExports.jsx("ul", { children: (memoryOverview.boundaries || []).map((boundary, index) => /* @__PURE__ */ jsxRuntimeExports.jsx("li", { children: boundary }, index)) })
+        /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "memory-health-card", children: [/* @__PURE__ */ jsxRuntimeExports.jsx("strong", { children: legacySummaryFolderCount }), /* @__PURE__ */ jsxRuntimeExports.jsx("span", { children: "人物摘要目录" })] }),
+        /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "memory-health-card", children: [/* @__PURE__ */ jsxRuntimeExports.jsx("strong", { children: summaries2.length }), /* @__PURE__ */ jsxRuntimeExports.jsx("span", { children: "对话摘要文件" })] }),
+        /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "memory-health-card", children: [/* @__PURE__ */ jsxRuntimeExports.jsx("strong", { children: legacySummaryRecordCount }), /* @__PURE__ */ jsxRuntimeExports.jsx("span", { children: "摘要记录" })] })
       ] })
     ] }),
     /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "search-box summary-search-shell", children: [
@@ -21492,6 +21437,11 @@ const SummariesManager = () => {
     normalizedSearchQuery && /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "search-result-stats", children: [
       /* @__PURE__ */ jsxRuntimeExports.jsxs("strong", { children: ["“", deferredSearchQuery.trim(), "”"] }),
       "：本人目录 ", searchCounts.owner, " 个文件；他人直接对话 ", searchCounts.counterpart, " 个；其他相关摘要 ", searchCounts.related, " 个。目录已定位，仅首条正文自动展开。"
+    ] }),
+    /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "summary-date-filter", role: "group", "aria-label": "摘要日期筛选", style: { display: "flex", alignItems: "center", gap: "12px", flexWrap: "wrap", margin: "12px 0" }, children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsxs("label", { style: { display: "flex", alignItems: "center", gap: "6px" }, children: ["开始日期", /* @__PURE__ */ jsxRuntimeExports.jsx("input", { type: "date", value: summaryDateFrom, onChange: (event) => { setSummaryDateFrom(event.target.value); setSummaryPages({}); } })] }),
+      /* @__PURE__ */ jsxRuntimeExports.jsxs("label", { style: { display: "flex", alignItems: "center", gap: "6px" }, children: ["结束日期", /* @__PURE__ */ jsxRuntimeExports.jsx("input", { type: "date", value: summaryDateTo, onChange: (event) => { setSummaryDateTo(event.target.value); setSummaryPages({}); } })] }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx("button", { type: "button", disabled: !summaryDateFrom && !summaryDateTo, onClick: () => { setSummaryDateFrom(""); setSummaryDateTo(""); setSummaryPages({}); }, children: "清除日期筛选" })
     ] }),
     summaryGroups.length === 0 ? /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "empty-state", children: searchQuery ? t("summariesManager.noSearchResults") : t("summariesManager.noSummariesFound") }) : /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "summaries-list", children: summaryGroups.map(({ playerId, playerSummaries }) => {
       const playerKey = `player-${playerId}`;
@@ -21531,8 +21481,7 @@ const SummariesManager = () => {
             ]
           }
         ),
-        isPlayerExpanded && /* @__PURE__ */ jsxRuntimeExports.jsx(Memory4Manager, { react: reactExports, ownerId: Number(playerId), refreshKey: summaries2, searchActive: !!normalizedSearchQuery,
-          legacyContent: /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "player-characters", children: playerSummaries.filter(metadata => !metadata.memory4Only).map((metadata) => {
+        isPlayerExpanded && /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "player-characters", children: playerSummaries.map((metadata) => {
           const characterKey = `${metadata.playerId}-${metadata.characterId}`;
           const isExpanded = expandedCharacters.has(characterKey);
           const conversationLabel = metadata.conversationFile?.replace(/\.json$/i, "") || `与${metadata.characterName}的对话`;
@@ -21588,7 +21537,13 @@ const SummariesManager = () => {
                 ]
               }
             ),
-            isExpanded && /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "summaries-container", children: getSummaryDisplayEntries(metadata.summaries, sortByDate).map(({ summary, index }) => /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "summary-item", children: [
+            isExpanded && (() => {
+              const summaryPageKey = `${Number(metadata.ownerId ?? metadata.playerId)}:${Number(metadata.counterpartId ?? metadata.characterId)}`;
+              const summaryPage = getLegacySummaryPage(metadata.summaries, {
+                sortByDate, fromDate: summaryDateFrom, toDate: summaryDateTo,
+                page: summaryPages[summaryPageKey] || 0, pageSize: 10
+              });
+              return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "summaries-container", children: [summaryPage.entries.map(({ summary, index }) => /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "summary-item", children: [
               /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "summary-header", children: [
                 /* @__PURE__ */ jsxRuntimeExports.jsxs("span", { className: "summary-date", children: [
                   summary.sourceType === "CK3_OFFICIAL_RECOLLECTION" ? "官方追忆摘要（随新对话更新）" : "📅 ",
@@ -21603,16 +21558,19 @@ const SummariesManager = () => {
                       children: bindingLegacySummaryId === summary.legacyBindingId ? "绑定中…" : "绑定当前战役"
                     }
                   ),
-                  summary.sourceType !== "CK3_OFFICIAL_RECOLLECTION" && summary.type !== "official_recollection" && summary.subtype !== "official_recollection" && /* @__PURE__ */ jsxRuntimeExports.jsx("button", {
-                    type: "button",
-                    title: "通过当前摘要模型重新整理本篇摘要",
-                    disabled: !!regeneratingSummaryKey || isClearing,
-                    onClick: (e) => {
-                      e.stopPropagation();
-                      handleRegenerateSummary(metadata, index, summary);
-                    },
-                    children: regeneratingSummaryKey === `${Number(metadata.ownerId ?? metadata.playerId)}:${Number(metadata.counterpartId ?? metadata.characterId)}:${index}` ? "模型整理中…" : "模型整理"
-                  }),
+                  summary.sourceType !== "CK3_OFFICIAL_RECOLLECTION" && summary.type !== "official_recollection" && summary.subtype !== "official_recollection" && /* @__PURE__ */ jsxRuntimeExports.jsx(
+                    "button",
+                    {
+                      type: "button",
+                      title: "通过当前摘要模型重新整理本篇摘要",
+                      disabled: !!regeneratingSummaryKey || isClearing,
+                      onClick: (e) => {
+                        e.stopPropagation();
+                        handleRegenerateSummary(metadata, index, summary);
+                      },
+                      children: regeneratingSummaryKey === `${Number(metadata.ownerId ?? metadata.playerId)}:${Number(metadata.counterpartId ?? metadata.characterId)}:${index}` ? "模型整理中…" : "模型整理"
+                    }
+                  ),
                   summary.sourceType !== "CK3_OFFICIAL_RECOLLECTION" && summary.type !== "official_recollection" && summary.subtype !== "official_recollection" && /* @__PURE__ */ jsxRuntimeExports.jsx(
                     "button",
                     {
@@ -21637,10 +21595,25 @@ const SummariesManager = () => {
               /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "summary-content", children: [
                 summary.content.substring(0, 150),
                 summary.content.length > 150 ? "..." : ""
+              ] }),
+              summary.content.length > 150 && /* @__PURE__ */ jsxRuntimeExports.jsxs("details", { className: "summary-full-content", children: [
+                /* @__PURE__ */ jsxRuntimeExports.jsx("summary", { children: "查看全文" }),
+                /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "summary-content", style: { whiteSpace: "pre-wrap" }, children: summary.content })
+              ] }),
+              getSummaryImportantMatters(summary.content) && /* @__PURE__ */ jsxRuntimeExports.jsxs("details", { className: "summary-important-matters", children: [
+                /* @__PURE__ */ jsxRuntimeExports.jsx("summary", { children: "重要事项" }),
+                /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "summary-content", style: { whiteSpace: "pre-wrap" }, children: getSummaryImportantMatters(summary.content) })
               ] })
-            ] }, index)) })
+            ] }, index)),
+            summaryPage.pageCount > 1 && /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "summary-pagination", role: "navigation", "aria-label": "摘要分页", style: { display: "flex", alignItems: "center", justifyContent: "center", gap: "8px", margin: "12px 0" }, children: [
+              /* @__PURE__ */ jsxRuntimeExports.jsx("button", { type: "button", disabled: summaryPage.page === 0, onClick: () => setSummaryPages(previous => ({ ...previous, [summaryPageKey]: summaryPage.page - 1 })), children: "上一页" }),
+              /* @__PURE__ */ jsxRuntimeExports.jsxs("span", { children: ["第 ", summaryPage.page + 1, " / ", summaryPage.pageCount, " 页 · ", summaryPage.totalCount, " 篇"] }),
+              /* @__PURE__ */ jsxRuntimeExports.jsx("button", { type: "button", disabled: summaryPage.page + 1 >= summaryPage.pageCount, onClick: () => setSummaryPages(previous => ({ ...previous, [summaryPageKey]: summaryPage.page + 1 })), children: "下一页" })
+            ] })
+          ] });
+            })()
           ] }, characterKey);
-        }) }) })
+        }) })
       ] }, playerKey);
     }) }),
     editingEntry && /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "modal-overlay", children: /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "modal-content summary-edit-modal", children: [
@@ -22029,8 +22002,8 @@ const OptimizationView = () => {
     [text("关系上下文", "Relationship context"), text("第三方角色按亲属和年龄解析，不加入发言队列。", "Mentioned third parties are resolved from kinship and age data without joining the speaker queue.")],
     [text("稳定记忆前缀", "Stable memory prefix"), text("同一场对话每轮保持一致；对话结束后的新摘要在下一场读取。", "It stays unchanged throughout one conversation; new final summaries are loaded in the next conversation.")],
     [text("人物认知与公开标记", "Character knowledge and disclosure"), text("称号默认可见；精确头衔与隐藏特质按每名合法听众逐项保存。公开标记在下一场生效，手动设知与撤销不改变 CK3 事实。", "Nicknames are visible by default; exact titles and hidden traits are recorded per authorized listener. Disclosure applies in the next conversation; manual knowledge does not change CK3 facts.")],
-    [text("Memory4 动态召回", "Memory4 dynamic recall"), text("最近两篇摘要与官方追忆保持冻结；动态尾部按时间、人物和来源检索，最多一份概览、两条细节，人生召回最多一条代表细节。继续兼容 2.5 数据合同。", "Two recent summaries and official recollections stay frozen; the dynamic tail retrieves by time, entity, and source, with at most one overview and two details, or one representative detail for life recall. The 2.5 storage contract remains compatible.")],
-    [text("长期记忆与归档", "Durable memories and archives"), text("Detail 与 Legacy 提供有来源依据的长期记忆；同战役已保存归档可只读查看，无长期内容或官方导出时保持为空。", "Detail and Legacy provide source-supported durable memories. Persisted same-campaign archives are read-only; absent durable content or official exports stay empty.")],
+    [text("Legacy 摘要查看", "Legacy summary browsing"), text("摘要正文可展开全文，并支持按日期筛选、分页和手动编辑。", "Legacy summaries support full-text viewing, date filtering, pagination, and manual editing.")],
+    [text("CK3 官方追忆", "CK3 official recollections"), text("官方追忆由 CK3 提供，并显示在人物摘要列表中。", "Official recollections come from CK3 and appear in the character summary list.")],
     [text("摘要读取与可信度", "Summary cache and trust"), text("人物目录按需缓存，写入后精确失效；所有摘要来源 messageId 必须存在于真实对话。", "Character folders are cached on demand and invalidated after writes; every cited messageId must exist in the source conversation.")],
     [text("在场窗口", "Presence windows"), text("候场、入内和永久离场保持原语义；昏迷、睡着或暂时离开会关闭当前窗口，返回后开启新窗口，缺席期间不回应、不召回也不生成该人物的摘要内容。", "Waiting, joining, and permanent departure keep their original semantics. Unconsciousness, sleep, or temporary absence closes the current window and returning opens a new one; absent content is excluded from that character's replies, recall, and summary.")],
     [text("安全配置", "Secure configuration"), text("Provider API Key 使用 Electron safeStorage 加密落盘；明文旧配置在可用时自动迁移。", "Provider API keys are encrypted at rest with Electron safeStorage; plaintext settings migrate when encryption is available.")],
@@ -22043,7 +22016,7 @@ const OptimizationView = () => {
     /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "optimization-header", children: [
       /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
         /* @__PURE__ */ jsxRuntimeExports.jsx("h3", { children: text("系统优化与用量", "System Optimization & Usage") }),
-        /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "muted-text", children: text(`${VOTC_FEATURE_VERSION} · Memory Engine 4.0；2.5 存储兼容。Owner 知识会话开始冻结；GLM 前缀布局保留，缓存与长时间运行仍待实机验证。`, `${VOTC_FEATURE_VERSION} · Memory Engine 4.0; 2.5 storage remains compatible. Owner knowledge freezes at conversation opening; GLM prefix layout is preserved, while cache telemetry and long-running behavior still require in-game validation.`) })
+        /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "muted-text", children: text(`${VOTC_FEATURE_VERSION} · Legacy Summary。Owner 知识会话开始冻结；GLM 前缀布局保留，缓存与长时间运行仍待实机验证。`, `${VOTC_FEATURE_VERSION} · Legacy Summary. Owner knowledge freezes at conversation opening; GLM prefix layout is preserved, while cache telemetry and long-running behavior still require in-game validation.`) })
       ] }),
       /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "optimization-header-actions", children: [
         /* @__PURE__ */ jsxRuntimeExports.jsx("button", { type: "button", onClick: loadReport, disabled: isLoading, children: isLoading ? text("读取中…", "Loading…") : text("刷新", "Refresh") }),
@@ -24175,8 +24148,8 @@ const modals$8 = { "areYouSureDeletePreset": "Are you sure you want to delete th
 const promptPreview$8 = { "character": "Character", "loadingPreview": "Loading preview...", "noActiveConversation": "No active conversation. Start a conversation to preview prompts.", "noModelSelected": "No model selected", "none": "None", "promptBlocks": "Prompt Blocks", "promptPreview": "Prompt Preview", "totalTokens": "Total Tokens" };
 const prompts$8 = { "addCustomBlock": "Add custom block", "conversation": "Conversation", "customTextBlock": "Custom Text Block", "delete": "Delete", "deleteBlock": "Delete block", "deletePreset": "Delete this preset?", "edit": "Edit", "enabled": "Enabled", "exportedTo": "Exported to {{path}}", "exportZip": "Export ZIP", "failedToExport": "Failed to export prompts.", "hide": "Hide", "label": "Label", "leaveEmptyDefault": "Leave empty to use default text", "letters": "Letters", "loadingPromptConfig": "Loading prompt configuration...", "mainInstruction": "Main instruction (Handlebars)", "mainPrompt": "Main prompt (Handlebars)", "memoriesPretext": "Memories pretext (Handlebars)", "memoriesToInclude": "Memories to include", "openPromptsFolder": "Open prompts folder", "pastSummariesPretext": "Past summaries pretext (Handlebars)", "pinned": "pinned", "presets": "Presets", "promptBuilder": "Prompt Builder", "promptBuilderHelp": "Reorder, toggle, and edit blocks that compose the prompt.", "promptSet": "Prompt set", "refreshFiles": "Refresh files", "resetMainPrompt": "Reset main prompt to default template? This will replace current text.", "resetToDefault": "Reset to default", "role": "Role", "rollingSummaryPretext": "Rolling summary pretext (Handlebars)", "saveAsNew": "Save as new", "savePreset": "Save preset", "selectPreset": "Select preset...", "suffix": "Suffix", "template": "Template (Handlebars)", "updatePreset": "Update preset" };
 const settings$8 = { "actionApprovalHelp": "Configure when actions require user approval before execution. Destructive actions (like killing characters) always require approval regardless of these settings.", "actionApprovalSettings": "Action Approval Settings", "approvalMode": "Approval Mode", "approvalModeAll": "Auto-accept All (No actions require approval)", "approvalModeNonDestructive": "Auto-accept Non-destructive (Only destructive actions require approval)", "approvalModeNone": "No Auto-accept (All actions require approval)", "ck3UserFolder": "CK3 User Folder", "currentPath": "Current Path", "enableStreamingGlobally": "Enable Streaming Globally", "generateFollowingMessages": "Generate Following Messages", "globalApplicationSettings": "Global Application Settings", "letterStatusHelp": "View the status of all letters in the generation and delivery pipeline.", "letterStatusManagement": "Letter Status Management", "loadingSettings": "Loading settings...", "messageFontSize": "Message Font Size", "pauseOnApproval": "Pause Conversation When Approval Needed", "pauseOnApprovalHelp": "When enabled, the conversation will pause when actions need approval, allowing you to review them before continuing.", "pauseOnRegeneration": "Pause on Regeneration", "selectFolder": "Select Folder", "showSettingsOnStartup": "Show Settings on Startup", "viewLettersStatus": "View Letters Status", "votcModLocation": "VOTC Mod Location", "ck3UserFolderHelp": 'Click on field below to select/change path to CK3 folder. Usually it is in "Documents" folder. OneDrive location is likely to fail!', "ck3UserFolderExample": "YOUR_USERNAME", "selectedCK3FolderTitle": "Selected CK3 Documents Path", "selectCK3UserFolderTitle": "Select CK3 Documents Folder", "allowPrerelease": "Receive Pre-release Updates", "allowPrereleaseHelp": "When enabled, you will receive beta and pre-release versions. These may be less stable but include the latest features.", "egline": "e.g.", "ck3UserFolderClickToSelect": "click to select" };
-const summaries$8 = {"aboutSummaryGeneration": "About Summary Generation", "aboutSummaryGenerationHelp": "Summaries are automatically generated in two scenarios:", "clearAllSummaries": "Clear All Summaries", "clearFailed": "Clear failed: {{error}}", "clearing": "Clearing...", "clearSuccess": "All summaries cleared successfully.", "configureSummaries": "Configure how conversation summaries are generated.", "confirmClearSummaries": "Are you sure you want to clear all conversation summaries? This action cannot be undone.", "conversationSummaryManagement": "Conversation Summary Management", "conversationSummaryManagementHelp": "Manage conversation summaries stored for your characters.", "errors": "Errors", "filesCopied": "Copied {{count}} files.", "finalSummaries": "Final Perspective Summaries", "finalSummariesHelp": "Saved at conversation end within each owner's actual knowledge. Durable facts are extracted after the narrative commits; no verified durable content means no detail entries.", "finalSummaryPrompt": "Final Summary Prompt", "finalSummaryPromptHelp": "Used for the final perspective narrative; durable facts are extracted separately with source and knowledge validation.", "importFailed": "Import failed: {{error}}", "importing": "Importing...", "importLegacySummaries": "Import Legacy Summaries", "importSuccess": "Import successful!", "legacyDataImport": "Legacy Data Import", "legacyDataImportHelp": "Import conversation summaries from legacy VOTC installation. Existing summaries will be backed up.", "letterSummaryPrompt": "Letter Summary Prompt", "letterSummaryPromptHelp": "Used for correspondence summaries; memory storage and game delivery status remain separate. V8.14.1 letters passed player testing; new recipient-scoped disclosure still requires in-game retesting.", "loadingSummaries": "Loading summaries...", "noSummaries": "No summaries available", "openSummariesFolder": "Open Summaries Folder", "promptsActiveInfo": "The prompts below show the current active prompts. Changes are automatically saved after you stop typing.", "providerOverride": "Provider Override", "providerOverrideHelp": "Choose a specific provider for generating conversation summaries. Leave as \"Use Active Provider\" to use your currently selected provider.", "resetAllDefaults": "Reset all to defaults", "resetAllPrompts": "Reset all summary prompts to defaults? This will replace all current text.", "resetFinalPrompt": "Reset final summary prompt to default? This will replace current text.", "resetLetterSummaryPrompt": "Reset letter summary prompt to default? This will replace current text.", "resetRollingPrompt": "Reset rolling summary prompt to default? This will replace current text.", "rollingSummaries": "Rolling Summaries", "rollingSummariesHelp": "Created during long conversations when the context limit is approaching. These help compress older messages while preserving important information.", "rollingSummaryPrompt": "Rolling Summary Prompt", "rollingSummaryPromptHelp": "This prompt is used when the conversation gets too long and needs to be compressed. It creates incremental summaries during the conversation.", "summariesView": "Summaries", "summaryGenerationSettings": "Summary Generation Settings", "summaryProvider": "Summary Provider", "useActiveProvider": "Use Active Provider"};
-const summariesManager$8 = {"characterId": "Character ID", "characters": "characters", "confirmDeleteCharacterSummaries": "Are you sure you want to delete all summaries for this character? This action cannot be undone.", "confirmDeleteSummary": "Are you sure you want to delete this summary?", "deleteAll": "Delete All", "editSummary": "Edit Summary", "failedDeleteCharacterSummaries": "Failed to delete character summaries: {{error}}", "failedDeleteSummary": "Failed to delete summary: {{error}}", "failedUpdateSummary": "Failed to update summary: {{error}}", "noSearchResults": "No summaries found matching your search.", "noSummariesFound": "No character archives yet. Completed valid conversations save perspective summaries; durable details require verified facts, and official recollections require CK3 exports.", "playerId": "Player ID", "refresh": "Refresh", "searchPlaceholder": "Search by character name, player ID, or summary content...", "summariesCount": "summaries", "summariesManager": "Summaries & Character Memories", "summariesManagerHelp": "Character knowledge, official recollections, durable details, and Legacy summaries; archived views are read-only.", "summaryIndex": "Summary Index"};
+const summaries$8 = {"aboutSummaryGeneration": "About Summary Generation", "aboutSummaryGenerationHelp": "Summaries are automatically generated in two scenarios:", "clearAllSummaries": "Clear All Summaries", "clearFailed": "Clear failed: {{error}}", "clearing": "Clearing...", "clearSuccess": "All summaries cleared successfully.", "configureSummaries": "Configure how conversation summaries are generated.", "confirmClearSummaries": "Are you sure you want to clear all conversation summaries? This action cannot be undone.", "conversationSummaryManagement": "Conversation Summary Management", "conversationSummaryManagementHelp": "Manage conversation summaries stored for your characters.", "errors": "Errors", "filesCopied": "Copied {{count}} files.", "finalSummaries": "Final Perspective Summaries", "finalSummariesHelp": "Saved at conversation end within each owner's actual knowledge. The completed owner narrative is saved as a Legacy summary.", "finalSummaryPrompt": "Final Summary Prompt", "finalSummaryPromptHelp": "Used for the final perspective narrative; the final perspective narrative saved to the Legacy summary.", "importFailed": "Import failed: {{error}}", "importing": "Importing...", "importLegacySummaries": "Import Legacy Summaries", "importSuccess": "Import successful!", "legacyDataImport": "Legacy Data Import", "legacyDataImportHelp": "Import conversation summaries from legacy VOTC installation. Existing summaries will be backed up.", "letterSummaryPrompt": "Letter Summary Prompt", "letterSummaryPromptHelp": "Used for correspondence summaries; memory storage and game delivery status remain separate. V8.14.1 letters passed player testing; new recipient-scoped disclosure still requires in-game retesting.", "loadingSummaries": "Loading summaries...", "noSummaries": "No summaries available", "openSummariesFolder": "Open Summaries Folder", "promptsActiveInfo": "The prompts below show the current active prompts. Changes are automatically saved after you stop typing.", "providerOverride": "Provider Override", "providerOverrideHelp": "Choose a specific provider for generating conversation summaries. Leave as \"Use Active Provider\" to use your currently selected provider.", "resetAllDefaults": "Reset all to defaults", "resetAllPrompts": "Reset all summary prompts to defaults? This will replace all current text.", "resetFinalPrompt": "Reset final summary prompt to default? This will replace current text.", "resetLetterSummaryPrompt": "Reset letter summary prompt to default? This will replace current text.", "resetRollingPrompt": "Reset rolling summary prompt to default? This will replace current text.", "rollingSummaries": "Rolling Summaries", "rollingSummariesHelp": "Created during long conversations when the context limit is approaching. These help compress older messages while preserving important information.", "rollingSummaryPrompt": "Rolling Summary Prompt", "rollingSummaryPromptHelp": "This prompt is used when the conversation gets too long and needs to be compressed. It creates incremental summaries during the conversation.", "summariesView": "Summaries", "summaryGenerationSettings": "Summary Generation Settings", "summaryProvider": "Summary Provider", "useActiveProvider": "Use Active Provider"};
+const summariesManager$8 = {"characterId": "Character ID", "characters": "characters", "confirmDeleteCharacterSummaries": "Are you sure you want to delete all summaries for this character? This action cannot be undone.", "confirmDeleteSummary": "Are you sure you want to delete this summary?", "deleteAll": "Delete All", "editSummary": "Edit Summary", "failedDeleteCharacterSummaries": "Failed to delete character summaries: {{error}}", "failedDeleteSummary": "Failed to delete summary: {{error}}", "failedUpdateSummary": "Failed to update summary: {{error}}", "noSearchResults": "No summaries found matching your search.", "noSummariesFound": "No character archives yet. Completed valid conversations save perspective summaries; official recollections require CK3 exports.", "playerId": "Player ID", "refresh": "Refresh", "searchPlaceholder": "Search by character name, player ID, or summary content...", "summariesCount": "summaries", "summariesManager": "Legacy Summary Manager", "summariesManagerHelp": "Browse, read, edit, and delete Legacy summaries and CK3 official recollections.", "summaryIndex": "Summary Index"};
 const en = {
   actions: actions$8,
   chat: chat$8,
@@ -24343,8 +24316,8 @@ const modals$2 = { "areYouSureDeletePreset": "您确定要删除预设 {{name}} 
 const promptPreview$2 = { "character": "角色", "loadingPreview": "加载预览中...", "noActiveConversation": "没有进行中的对话。开始对话以预览提示词。", "noModelSelected": "未选择模型", "none": "无", "promptBlocks": "提示词块", "promptPreview": "提示词预览", "totalTokens": "总 Token 数" };
 const prompts$2 = { "addCustomBlock": "添加自定义块", "conversation": "对话", "customTextBlock": "自定义文本块", "delete": "删除", "deleteBlock": "删除块", "deletePreset": "删除此预设？", "edit": "编辑", "enabled": "已启用", "exportedTo": "已导出到 {{path}}", "exportZip": "导出 ZIP", "failedToExport": "导出提示词失败。", "hide": "隐藏", "label": "标签", "leaveEmptyDefault": "留空则使用默认文本", "letters": "信件", "loadingPromptConfig": "加载提示词配置中...", "mainInstruction": "主要指令（Handlebars）", "mainPrompt": "主提示词（Handlebars）", "memoriesPretext": "记忆前文（Handlebars）", "memoriesToInclude": "要包含的记忆", "openPromptsFolder": "打开提示词文件夹", "pastSummariesPretext": "历史摘要前文（Handlebars）", "pinned": "已固定", "presets": "预设", "promptBuilder": "提示词构建器", "promptBuilderHelp": "拖拽排序、启用/禁用和编辑提示词块。", "promptSet": "提示词集", "refreshFiles": "刷新文件", "resetMainPrompt": "将主提示词重置为默认模板？当前内容将被替换。", "resetToDefault": "重置为默认", "role": "角色", "rollingSummaryPretext": "滚动摘要前文（Handlebars）", "saveAsNew": "另存为新预设", "savePreset": "保存预设", "selectPreset": "选择预设...", "suffix": "后缀", "template": "模板（Handlebars）", "updatePreset": "更新预设" };
 const settings$2 = { "actionApprovalHelp": "配置哪些操作在执行前需要用户批准。危险操作（如杀死角色）无论如何都始终需要批准。", "actionApprovalSettings": "操作批准设置", "approvalMode": "批准模式", "approvalModeAll": "自动执行全部动作", "approvalModeNonDestructive": "仅危险动作需要确认", "approvalModeNone": "全部动作手动确认", "ck3UserFolder": "CK3 用户文件夹", "currentPath": "当前路径", "enableStreamingGlobally": "全局启用流式输出", "generateFollowingMessages": "生成后续消息", "globalApplicationSettings": "全局应用设置", "letterStatusHelp": "查看生成和送达流程中所有信件的状态。", "letterStatusManagement": "信件状态管理", "loadingSettings": "加载设置中...", "messageFontSize": "消息字体大小", "pauseOnApproval": "需要批准时暂停对话", "pauseOnApprovalHelp": "启用后，当操作需要批准时对话将暂停，允许您在继续之前审核。", "pauseOnRegeneration": "重新生成时暂停", "selectFolder": "选择文件夹", "showSettingsOnStartup": "启动时显示设置", "viewLettersStatus": "查看信件状态", "votcModLocation": "VOTC 模组位置", "ck3UserFolderHelp": '点击下方字段以选择/更改 CK3 文件夹路径。\n通常位于"文档"文件夹中。\nOneDrive 定位可能会失败！', "ck3UserFolderExample": "用户名", "selectedCK3FolderTitle": "已选择的 CK3 文档路径", "selectCK3UserFolderTitle": "选择 CK3 文档文件夹", "allowPrerelease": "接收测试版更新", "allowPrereleaseHelp": "启用后，您将收到测试版和预发布版本。这些版本可能不太稳定，但包含最新功能。", "egline": "如：", "ck3UserFolderClickToSelect": "点击以选择" };
-const summaries$2 = {"aboutSummaryGeneration": "关于摘要生成", "aboutSummaryGenerationHelp": "摘要在两种情况下自动生成：", "clearAllSummaries": "清除所有摘要", "clearFailed": "清除失败：{{error}}", "clearing": "清除中...", "clearSuccess": "所有摘要已清除。", "configureSummaries": "配置对话摘要的生成方式。", "confirmClearSummaries": "您确定要清除所有对话摘要吗？此操作无法撤消。", "conversationSummaryManagement": "对话摘要管理", "conversationSummaryManagementHelp": "管理角色的对话摘要。", "errors": "错误", "filesCopied": "已复制 {{count}} 个文件。", "finalSummaries": "终局视角摘要", "finalSummariesHelp": "对话结束后按每名人物的实际知情范围保存；正文提交成功后再提取长期事实，无可确认内容时不生成详细条目。", "finalSummaryPrompt": "最终摘要提示词", "finalSummaryPromptHelp": "用于终局视角摘要正文；长期事实另行按来源与知情边界提取。", "importFailed": "导入失败：{{error}}", "importing": "导入中...", "importLegacySummaries": "导入旧版摘要", "importSuccess": "导入成功！", "legacyDataImport": "旧版数据导入", "legacyDataImportHelp": "从旧版 VOTC 导入对话摘要。现有摘要将被备份。", "letterSummaryPrompt": "信件摘要提示词", "letterSummaryPromptHelp": "用于信件正文摘要；记忆保存与游戏送达状态分开。V8.14.1 信件已通过玩家实测，新收信人公开标记仍待实机复测。", "loadingSummaries": "加载摘要中...", "noSummaries": "没有可用的摘要", "openSummariesFolder": "打开摘要文件夹", "promptsActiveInfo": "下方显示当前使用中的提示词。更改会在停止输入后自动保存。", "providerOverride": "指定服务商", "providerOverrideHelp": "选择用于生成对话摘要的特定服务商。默认使用当前服务商。", "resetAllDefaults": "全部重置为默认", "resetAllPrompts": "将所有摘要提示词重置为默认？当前内容将被替换。", "resetFinalPrompt": "将最终摘要提示词重置为默认？当前内容将被替换。", "resetLetterSummaryPrompt": "将信件摘要提示词重置为默认？当前内容将被替换。", "resetRollingPrompt": "将滚动摘要提示词重置为默认？当前内容将被替换。", "rollingSummaries": "滚动摘要", "rollingSummariesHelp": "当长对话接近上下文限制时自动创建，用于压缩旧消息并保留重要信息。", "rollingSummaryPrompt": "滚动摘要提示词", "rollingSummaryPromptHelp": "当对话过长需要压缩时使用此提示词，在对话过程中创建增量摘要。", "summariesView": "摘要", "summaryGenerationSettings": "摘要生成设置", "summaryProvider": "摘要服务商", "useActiveProvider": "使用当前服务商"};
-const summariesManager$2 = {"characterId": "对话人物 ID", "characters": "对话文件", "confirmDeleteCharacterSummaries": "您确定要删除此角色的所有摘要吗？此操作无法撤消。", "confirmDeleteSummary": "您确定要删除此摘要吗？", "deleteAll": "全部删除", "editSummary": "编辑摘要", "failedDeleteCharacterSummaries": "删除角色摘要失败：{{error}}", "failedDeleteSummary": "删除摘要失败：{{error}}", "failedUpdateSummary": "更新摘要失败：{{error}}", "noSearchResults": "未找到匹配的摘要。", "noSummariesFound": "暂无人物档案。有效对话结束后保存视角摘要；仅有可核验长期事实时才生成详细记忆，官方追忆需要 CK3 导出。", "playerId": "目录人物 ID", "refresh": "刷新", "searchPlaceholder": "输入人物姓名或 ID，定位本人目录及相关摘要...", "summariesCount": "摘要", "summariesManager": "摘要与记忆管理器", "summariesManagerHelp": "人物认知、官方追忆、详细长期记忆与 Legacy 摘要；归档仅供只读查阅。", "summaryIndex": "摘要索引"};
+const summaries$2 = {"aboutSummaryGeneration": "关于摘要生成", "aboutSummaryGenerationHelp": "摘要在两种情况下自动生成：", "clearAllSummaries": "清除所有摘要", "clearFailed": "清除失败：{{error}}", "clearing": "清除中...", "clearSuccess": "所有摘要已清除。", "configureSummaries": "配置对话摘要的生成方式。", "confirmClearSummaries": "您确定要清除所有对话摘要吗？此操作无法撤消。", "conversationSummaryManagement": "对话摘要管理", "conversationSummaryManagementHelp": "管理角色的对话摘要。", "errors": "错误", "filesCopied": "已复制 {{count}} 个文件。", "finalSummaries": "终局视角摘要", "finalSummariesHelp": "对话结束后按每名人物的实际知情范围保存；正文提交成功后保存为 Legacy 摘要。", "finalSummaryPrompt": "最终摘要提示词", "finalSummaryPromptHelp": "用于终局视角摘要正文；生成的正文将保存为 Legacy 摘要。", "importFailed": "导入失败：{{error}}", "importing": "导入中...", "importLegacySummaries": "导入旧版摘要", "importSuccess": "导入成功！", "legacyDataImport": "旧版数据导入", "legacyDataImportHelp": "从旧版 VOTC 导入对话摘要。现有摘要将被备份。", "letterSummaryPrompt": "信件摘要提示词", "letterSummaryPromptHelp": "用于信件正文摘要；记忆保存与游戏送达状态分开。V8.14.1 信件已通过玩家实测，新收信人公开标记仍待实机复测。", "loadingSummaries": "加载摘要中...", "noSummaries": "没有可用的摘要", "openSummariesFolder": "打开摘要文件夹", "promptsActiveInfo": "下方显示当前使用中的提示词。更改会在停止输入后自动保存。", "providerOverride": "指定服务商", "providerOverrideHelp": "选择用于生成对话摘要的特定服务商。默认使用当前服务商。", "resetAllDefaults": "全部重置为默认", "resetAllPrompts": "将所有摘要提示词重置为默认？当前内容将被替换。", "resetFinalPrompt": "将最终摘要提示词重置为默认？当前内容将被替换。", "resetLetterSummaryPrompt": "将信件摘要提示词重置为默认？当前内容将被替换。", "resetRollingPrompt": "将滚动摘要提示词重置为默认？当前内容将被替换。", "rollingSummaries": "滚动摘要", "rollingSummaryPrompt": "滚动摘要提示词", "rollingSummaryPromptHelp": "当对话过长需要压缩时使用此提示词，在对话过程中创建增量摘要。", "summariesView": "摘要", "summaryGenerationSettings": "摘要生成设置", "summaryProvider": "摘要服务商", "useActiveProvider": "使用当前服务商"};
+const summariesManager$2 = {"characterId": "对话人物 ID", "characters": "对话文件", "confirmDeleteCharacterSummaries": "您确定要删除此角色的所有摘要吗？此操作无法撤消。", "confirmDeleteSummary": "您确定要删除此摘要吗？", "deleteAll": "全部删除", "editSummary": "编辑摘要", "failedDeleteCharacterSummaries": "删除角色摘要失败：{{error}}", "failedDeleteSummary": "删除摘要失败：{{error}}", "failedUpdateSummary": "更新摘要失败：{{error}}", "noSearchResults": "未找到匹配的摘要。", "noSummariesFound": "暂无人物档案。有效对话结束后保存视角摘要；官方追忆需要 CK3 导出。", "playerId": "目录人物 ID", "refresh": "刷新", "searchPlaceholder": "输入人物姓名或 ID，定位本人目录及相关摘要...", "summariesCount": "摘要", "summariesManager": "Legacy 摘要管理器", "summariesManagerHelp": "浏览、展开阅读、编辑和删除 Legacy 摘要，并查看 CK3 官方追忆。", "summaryIndex": "摘要索引"};
 const zh = {
   actions: actions$2,
   chat: chat$2,

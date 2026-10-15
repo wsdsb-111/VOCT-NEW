@@ -4,7 +4,7 @@ const { buildFamilyFactBlock } = require("../worldline/character-family-facts");
 const { resolveProviderPromptProfile, resolvePromptLayoutId } = require("./provider-prompt-adapter");
 const { createStableProfile, createLiveProfile, buildStableKinship, formatStableProfile, formatStableKinship, formatLiveProfile } = require("./character-profile-v2");
 const { buildHistoricalReferenceReplacement } = require("../worldline/subjective-prompt-context");
-const { currentRelationship } = require("../memory-system/memory4-profile");
+const { currentRelationship } = require("../memory-system/entity-context");
 const { parseRelationIntent } = require("../worldline/relation-intent-parser");
 const { createTraitProfileView } = require("./trait-profile-selector");
 
@@ -76,11 +76,6 @@ function createPromptBuilder({
         if (content.startsWith("VOTC_SUMMARY_CACHE_ANCHOR_")) {
           label = "Stable Summary Cache Anchor";
           type = "summary_cache_anchor";
-        } else if (requestType === "memory4_durable" && message.role === "system"
-          && content.startsWith("VOTC Memory Engine 4.0 Durable extraction.")
-          && content.includes("Follow the dynamic request limits:")) {
-          label = content.includes("Contract v9.3.2.") ? "Stable Memory4 Durable Policy v9.3.2" : "Stable Memory4 Durable Policy v9.2.1";
-          type = "summary_stable";
         } else if (content.startsWith("Stable rolling-summary instructions:")) {
           label = "Stable Rolling Summary Instructions";
           type = "summary_stable";

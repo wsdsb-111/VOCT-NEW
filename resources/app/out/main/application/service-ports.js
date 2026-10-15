@@ -17,8 +17,7 @@ const APPLICATION_SERVICE_METHODS = Object.freeze({
     "getPromptContext", "getSubjectivePromptContextAsync", "getCheckpointStatus"
   ]),
   action: Object.freeze(["evaluateForCharacter", "runInvocation"]),
-  letter: Object.freeze(["processLatestLetter", "clearLettersFile", "getAllLetterStatuses"]),
-  persistence: Object.freeze(["queryCandidates", "readEntry", "audit"])
+  letter: Object.freeze(["processLatestLetter", "clearLettersFile", "getAllLetterStatuses"])
 });
 
 function bindRequiredMethods(serviceName, owner, methodNames) {
@@ -36,8 +35,8 @@ function bindRequiredMethods(serviceName, owner, methodNames) {
   return Object.freeze(port);
 }
 
-function createApplicationServices({ conversation, presence, memory, worldline, action, letter, persistence } = {}) {
-  const owners = { conversation, presence, memory, worldline, action, letter, persistence };
+function createApplicationServices({ conversation, presence, memory, worldline, action, letter } = {}) {
+  const owners = { conversation, presence, memory, worldline, action, letter };
   const services = {};
   for (const [serviceName, methodNames] of Object.entries(APPLICATION_SERVICE_METHODS)) {
     services[serviceName] = bindRequiredMethods(serviceName, owners[serviceName], methodNames);

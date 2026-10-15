@@ -15,36 +15,7 @@ function observable(trait) {
 function getTraitsForObservedProfile(character) {
   return getTraitsForSelfProfile(character).filter(observable);
 }
-const escapePattern = value => String(value).replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-function explicitTraitClaim(entry, target, trait, gameData) {
-  const names = [...new Set([target.shortName, target.fullName, target.firstName, target.name].filter(Boolean))]
-    .filter(name => !(gameData?.characters instanceof Map) || [...gameData.characters.values()].filter(person =>
-      [person.shortName, person.fullName, person.firstName, person.name].includes(name)).every(person => Number(person.id) === Number(target.id)));
-  const labels = [...new Set([typeof trait === "string" ? trait : trait.name, ...getTraitAliases(trait)].filter(Boolean))];
-  const text = String(entry.text || "");
-  if (/[?？]|并非|不是|并不|不属实|不真实|未证实|未经证实|虚假|谣言|传言|听[^。！？.!?\n]*说|声称|自称|引用|未必|玩笑|虚构|误传|不曾|未曾|否认|怀疑|可能|也许|或许|据说|传闻|如果|假如|是否|未来|将来|将成为|将是|日后|终将|迟早|尚未|not\b|never\b|false\b|untrue\b|unconfirmed\b|den(?:y|ied)|might\b|may\b|rumou?r|heard\b|claims?\b|said\b|quotes?\b|alleged\b|jok(?:e|ing)\b|fiction\b|if\b|whether\b|will\b|would\b|going to|future\b|someday\b/i.test(text)) return false;
-  const clauses = text.split(/[。！？.!?\n;；]/);
-  return clauses.some(clause => {
-    return names.some(name => labels.some(label => new RegExp(`(?:^|[\\s,，:："'（(])${escapePattern(name)}(?:\\s*(?:是|为|具有|拥有|具备)\\s*|\\s+(?:is|has|possesses)\\s+)(?:(?:a|an|the)\\s+|一[位个名]\\s*)?${escapePattern(label)}(?:$|[\\s,，:：)）"'\\]]|的)`, "i").test(clause)));
-  });
-}
-function authorizedEntry(entry, observer, target, context) {
-  const current = normalizeGameDate(context?.currentGameDate);
-  const acquired = normalizeGameDate(entry?.acquiredDate);
-  const conversation = normalizeGameDate(entry?.conversationDate);
-  const sourceProof = entry?.source?.messageIds?.some(id => Number.isSafeInteger(id) && id >= 0)
-    || entry?.source?.legacyRefs?.some(ref => ref.memoryId && ref.eventKey && /^[a-f0-9]{64}$/.test(ref.sourceHash || ""));
-  return current && acquired && conversation && acquired.serial <= current.serial && conversation.serial <= current.serial
-    && typeof context.campaignToken === "string" && !!context.campaignToken
-    && entry.campaignToken === context.campaignToken && Number(entry.ownerId) === Number(observer?.id)
-    && (entry.entityIds || []).includes(Number(target?.id)) && entry.deleted !== true
-    && (entry.evidence?.knownBy || []).includes(Number(observer?.id))
-    && ["private", "participants", "known_group"].includes(entry.evidence?.visibility)
-    && ["witnessed", "game_fact"].includes(entry.evidence?.sourceType) && entry.evidence?.epistemicStatus === "observed"
-    && !!entry.source?.conversationId && !!entry.source?.finalizationId && sourceProof;
-}
 function getTraitsForKnownProfile(observer, target, knowledgeContext = {}) {
-  const entries = (knowledgeContext.memory4Packet?.details || []).map(item => item.traitKnowledgeEvidence).filter(Boolean);
   const secrets = normalizeGameDate(knowledgeContext.currentGameDate) && typeof knowledgeContext.campaignToken === "string"
     && knowledgeContext.campaignToken.trim() ? observer?.knownSecrets || [] : [];
   const secretTraits = { secret_bastard: "bastard", secret_disputed_heritage: "disputed_heritage", secret_witch: "witch",
@@ -55,7 +26,6 @@ function getTraitsForKnownProfile(observer, target, knowledgeContext = {}) {
     if (facts.some(fact => fact.currentDirectObservation === true && fact.effectiveKnown === true)) return true;
     if (facts.some(fact => fact.status === "MANUAL_HIDDEN")) return false;
     return facts.some(fact => fact.effectiveKnown === true)
-      || entries.some(entry => authorizedEntry(entry, observer, target, knowledgeContext) && explicitTraitClaim(entry, target, trait, knowledgeContext.gameData))
       || secrets.some(secret => Number(secret.ownerId) === Number(target?.id) && secretTraits[secret.type] === normalizeTraitKey(trait));
   });
 }
@@ -77,9 +47,7 @@ function knownTitle(observer, target, value, context) {
       || /^concept_/.test(value) && fact.aliases?.includes(normalize(value).toLowerCase())));
   if (facts.some(fact => fact.status === "MANUAL_HIDDEN")) return "";
   if (facts.some(fact => fact.effectiveKnown === true)) return value;
-  const entries = (context.memory4Packet?.details || []).map(item => item.traitKnowledgeEvidence).filter(Boolean);
-  return entries.some(entry => authorizedEntry(entry, observer, target, context)
-    && explicitTraitClaim(entry, target, { name: value }, context.gameData)) ? value : "";
+  return "";
 }
 
 // A per-request presentation copy protects custom templates and scripts as well as bundled ones.

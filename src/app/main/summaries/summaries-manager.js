@@ -1,25 +1,21 @@
 "use strict";
 
 const { validateGenerationOutcome } = require("../providers/generation-outcome");
-const { Memory4OrphanAudit } = require("../memory-system/memory4-orphan-audit");
 const { getCharacterPersonalName } = require("../memory-system/character-identity");
-const { buildCoverageSummary, getCoveragePage } = require("../memory-system/memory4-coverage");
-const { memory4SourceValid } = require("../memory-system/memory4-source-validity");
 
 function createSummariesManager({ fs, path, summariesDir, memoryEngine, memorySystem, getCurrentConversation = () => null,
-  getMemory4ReadConversation = null, requestSummary, requestDurable, getSummaryCapabilities, getSummaryOutputLimit = () => 4096, buildSummaryPrompt, persistRecoveredSummary }) {
+  requestSummary, getSummaryCapabilities, getSummaryOutputLimit = () => 4096, buildSummaryPrompt, persistRecoveredSummary }) {
   const fs$1 = fs;
   const VOTC_SUMMARIES_DIR = summariesDir;
-  const getCurrentMemory4ReadConversation = typeof getMemory4ReadConversation === "function" ? getMemory4ReadConversation : getCurrentConversation;
   let summaryRegenerationInFlight = false;
   let summaryRetryInFlight = null;
   class SummariesManager {
     static getRecoveryStatus() {
       const conversation = getCurrentConversation();
       const currentId = conversation?.id;
-      const memory4ReadConversation = getCurrentMemory4ReadConversation();
-      const activeCampaignToken = typeof memory4ReadConversation?.gameData?.campaignToken === "string"
-        ? memory4ReadConversation.gameData.campaignToken.trim() || null : null;
+      const readConversation = getCurrentConversation();
+      const activeCampaignToken = typeof readConversation?.gameData?.campaignToken === "string"
+        ? readConversation.gameData.campaignToken.trim() || null : null;
       let pending = 0, manual = 0, balanceBlocked = 0;
       for (const file of memoryEngine.listRecoverySnapshots()) {
         const snapshot = memoryEngine.store.readJson(file, null);
@@ -29,41 +25,36 @@ function createSummariesManager({ fs, path, summariesDir, memoryEngine, memorySy
         if (snapshot.finalizationStatus === "failed_manual") manual++;
         if (/402|insufficient balance/i.test(snapshot.lastError || "")) balanceBlocked++;
       }
-      const durable = memoryEngine.memory4?.getRecoveryStatus(activeCampaignToken) || { pending: 0, manual: 0, balanceBlocked: 0 };
       let letters = { pending: 0, manual: 0, balanceBlocked: 0 };
       try {
-        letters = memoryEngine.letterMemoryFinalization?.getRecoveryStatus(activeCampaignToken) || letters;
+        letters = memoryEngine.letterSummaryFinalization?.getRecoveryStatus(activeCampaignToken) || letters;
       } catch (error) {
         letters = { ...letters, invalid: 1, error: String(error?.message || error) };
       }
-      return { pending: pending + durable.pending + Number(letters.pending || 0), manual: manual + durable.manual + Number(letters.manual || 0),
-        balanceBlocked: balanceBlocked + durable.balanceBlocked + Number(letters.balanceBlocked || 0), narrativePending: pending, durablePending: durable.pending,
-        letterPending: Number(letters.pending || 0), letterManual: Number(letters.manual || 0),
-        durableInvalid: durable.invalid || 0, letterInvalid: Number(letters.invalid || 0),
-        running: !!memoryEngine.pendingRecovery || memoryEngine.activeFinalizationIds.size > 0 || (memoryEngine.memory4?.inFlight.size || 0) > 0 };
+      return { pending: pending + Number(letters.pending || 0), manual: manual + Number(letters.manual || 0),
+        balanceBlocked: balanceBlocked + Number(letters.balanceBlocked || 0), narrativePending: pending,
+        letterPending: Number(letters.pending || 0), letterManual: Number(letters.manual || 0), letterInvalid: Number(letters.invalid || 0),
+        running: !!memoryEngine.pendingRecovery || memoryEngine.activeFinalizationIds.size > 0 };
     }
 
     static async retryFailedSummaries() {
       if (summaryRetryInFlight) return summaryRetryInFlight;
-      const readConversation = getCurrentMemory4ReadConversation();
+      const readConversation = getCurrentConversation();
       const activeCampaignToken = typeof readConversation?.gameData?.campaignToken === "string"
         ? readConversation.gameData.campaignToken.trim() || null : null;
       summaryRetryInFlight = (async () => {
         const results = await memoryEngine.recoverPendingFinalizations({
           manual: true,
           activeCampaignToken,
-          isMemory4RecoveryCurrent: () => getCurrentMemory4ReadConversation() === readConversation
-            && (readConversation?.gameData?.campaignToken?.trim?.() || null) === activeCampaignToken,
           isConversationActive: id => getCurrentConversation()?.id === id,
           buildPrompt: buildSummaryPrompt,
           requestSummary,
-          requestDurable,
           getSummaryCapabilities,
           resolveParticipantProfiles: snapshot => memoryEngine.resolveRecoveryParticipantProfiles(snapshot),
           persistCharacterFolders: persistRecoveredSummary
         });
         let letterResults = [];
-        const letterFinalization = memoryEngine.letterMemoryFinalization;
+        const letterFinalization = memoryEngine.letterSummaryFinalization;
         if (typeof letterFinalization?.retryPending === "function") {
           try {
             const retried = await letterFinalization.retryPending({ activeCampaignToken, manual: true });
@@ -74,7 +65,7 @@ function createSummariesManager({ fs, path, summariesDir, memoryEngine, memorySy
         }
         this.refreshCurrentConversation();
         const succeeded = result => result?.success === true
-          || ["COMPLETE", "STORE", "NO_DURABLE_CONTENT", "NOT_PRESENT", "ALREADY_COMMITTED"].includes(result?.status);
+          || ["COMPLETE", "ALREADY_COMMITTED"].includes(result?.status);
         const letterRecovered = letterResults.filter(result => succeeded(result) && !result.alreadyCommitted).length;
         const letterFailed = letterResults.filter(result => !succeeded(result)).length;
         return {
@@ -152,61 +143,12 @@ function createSummariesManager({ fs, path, summariesDir, memoryEngine, memorySy
         }
         const result = await this.updateSummary(playerId, characterId, summaryIndex, regeneratedContent);
         if (!result.success) return result;
-        const updatedRows = JSON.parse(fs$1.readFileSync(filePath, "utf8"));
-        const memoryRebuild = await this.rebuildRegeneratedSummaryMemory(playerId, updatedRows[summaryIndex]);
-        const canonicalStatus = memoryRebuild.canonical.status;
-        const canonicalComplete = ["COMPLETE", "ALREADY_CONVERTED", "NO_DURABLE_CONTENT"].includes(canonicalStatus);
-        return { success: canonicalComplete, partial: !canonicalComplete, summaryUpdated: true, content: regeneratedContent, memoryRebuild };
+        return { success: true, summaryUpdated: true, content: regeneratedContent };
       } catch (error) {
         console.error(`Failed to regenerate summary for character ${characterId} from owner ${playerId}:`, error);
         return { success: false, error: error instanceof Error ? error.message : "summary_regeneration_failed" };
       } finally {
         summaryRegenerationInFlight = false;
-      }
-    }
-
-    static async rebuildRegeneratedSummaryMemory(ownerId, summaryRecord) {
-      const coordinator = memoryEngine.memory4;
-      const campaignToken = typeof summaryRecord?.campaignToken === "string" ? summaryRecord.campaignToken.trim() : "";
-      const memoryId = summaryRecord?.perspectiveMemoryIds?.[0];
-      const skipped = (reason, status = "SKIPPED") => ({ canonical: { status, reason } });
-      if (!coordinator || !campaignToken || typeof memoryId !== "string") return skipped("SCOPED_SOURCE_UNAVAILABLE");
-
-      let context;
-      try {
-        context = await this.getMemory4ReadContext({ ownerId, expectedCampaignToken: campaignToken }, true);
-        this.assertCurrentMemory4ReadContext(context);
-      } catch (error) {
-        if (error.message === "memory4_archive_scope_not_persisted" || error.message === "memory4_archive_proof_unavailable") {
-          return skipped(error.message, "BLOCKED_ARCHIVE_PROOF");
-        }
-        if (error.message === "legacy_binding_conversation_not_active" || error.message === "legacy_binding_game_data_unavailable") {
-          return skipped("TRUSTED_READ_CONTEXT_UNAVAILABLE");
-        }
-        return skipped(error.message || "TRUSTED_READ_CONTEXT_INVALID", "BLOCKED_CONTEXT");
-      }
-      const isCurrent = () => {
-        try { this.assertCurrentMemory4ReadContext(context); return true; }
-        catch { return false; }
-      };
-      const source = memoryEngine.store.getMemory(memoryId);
-      if (!source || source.content !== summaryRecord.content || source.provenance?.campaignToken !== campaignToken
-        || Number(source.provenance?.folderOwnerId) !== context.ownerId) {
-        return { canonical: { status: "SOURCE_INVALID" } };
-      }
-      const sourceProof = coordinator.getLegacyCoverage({ campaignToken, ownerId: context.ownerId }, [source]).items[0];
-      if (!sourceProof?.eligible || !/^[a-f0-9]{64}$/.test(sourceProof.sourceHash || "")) {
-        return { canonical: { status: "SOURCE_INVALID" } };
-      }
-      try {
-        const result = await coordinator.recompressLegacy({ campaignToken, ownerId: context.ownerId }, {
-          memoryId, expectedSourceHash: sourceProof.sourceHash, isCurrent,
-          allowPersistedArchive: context.readOnlyArchive
-        });
-        const canonicalStatus = result.canonical?.status || result.status;
-        return { canonical: { status: canonicalStatus, entryIds: result.entryIds || result.canonical?.entryIds || [], reason: result.reason || null } };
-      } catch (error) {
-        return { canonical: { status: "EXTRACTION_FAILED", reason: String(error?.message || error) } };
       }
     }
 
@@ -248,301 +190,6 @@ function createSummariesManager({ fs, path, summariesDir, memoryEngine, memorySy
 
     static assertCurrentLegacyBindingContext(context) {
       if (getCurrentConversation() !== context.conversation) throw new Error("legacy_binding_conversation_changed");
-    }
-
-    static async getMemory4Context(request = {}, requireCampaign = true) {
-      const context = await this.getLegacyBulkBindingContext(request.ownerId);
-      this.assertCurrentLegacyBindingContext(context);
-      if (context.conversation.isActive === false) throw new Error("legacy_binding_conversation_not_active");
-      if (request.expectedContextId != null && request.expectedContextId !== context.conversation.id) throw new Error("legacy_binding_conversation_changed");
-      if (requireCampaign && request.expectedCampaignToken !== context.campaignToken
-        || request.expectedCampaignToken != null && request.expectedCampaignToken !== context.campaignToken) throw new Error("memory4_campaign_changed");
-      if (!memoryEngine.memory4) throw new Error("memory4_unavailable");
-      return context;
-    }
-
-    static async getMemory4ReadContext(request = {}, requirePersistedArchive = true) {
-      const conversation = getCurrentMemory4ReadConversation();
-      if (!conversation) throw new Error("legacy_binding_conversation_not_active");
-      if (!conversation.gameData && conversation.gameDataReady && typeof conversation.gameDataReady.then === "function") {
-        await conversation.gameDataReady;
-      }
-      if (getCurrentMemory4ReadConversation() !== conversation) throw new Error("legacy_binding_conversation_changed");
-      const gameData = conversation.gameData;
-      const ownerId = Number(request.ownerId);
-      if (!gameData || !(gameData.characters instanceof Map)) throw new Error("legacy_binding_game_data_unavailable");
-      if (typeof gameData.campaignToken !== "string" || !gameData.campaignToken.trim()) throw new Error("legacy_binding_campaign_not_loaded");
-      if (!Number.isSafeInteger(ownerId) || ownerId <= 0) throw new Error("legacy_summary_binding_owner_invalid");
-      const campaignToken = gameData.campaignToken.trim();
-      if (request.expectedCampaignToken != null && request.expectedCampaignToken !== campaignToken) throw new Error("memory4_campaign_changed");
-      if (request.expectedContextId != null && request.expectedContextId !== conversation.id) throw new Error("legacy_binding_conversation_changed");
-      const matches = [...gameData.characters.values()].filter(character => Number(character?.id) === ownerId);
-      if (matches.length > 1) throw new Error("legacy_summary_binding_owner_not_unique_in_current_campaign");
-      const ownerInRoster = matches.length === 1;
-      const readOnlyArchive = conversation.isActive === false || !ownerInRoster;
-      const context = { conversation, gameData, ownerId, campaignToken, ownerInRoster, readOnlyArchive,
-        readOnlyReason: conversation.isActive === false ? "conversation_ended" : !ownerInRoster ? "owner_not_in_current_roster" : null,
-        contextId: conversation.id, archiveAsOfDate: readOnlyArchive ? gameData.date || null : null };
-      if (readOnlyArchive && requirePersistedArchive) {
-        if (typeof memoryEngine.memory4?.store?.assertPersistedScope !== "function") throw new Error("memory4_archive_proof_unavailable");
-        try {
-          memoryEngine.memory4.store.assertPersistedScope({ ownerId, campaignToken });
-        } catch (error) {
-          if (error.message === "memory4_owner_folder_not_unique" || error.message === "memory4_scope_not_persisted") {
-            if (conversation.isActive !== false && !ownerInRoster) throw new Error("legacy_summary_binding_owner_not_in_current_campaign");
-            throw new Error("memory4_archive_scope_not_persisted");
-          }
-          throw error;
-        }
-      }
-      if (!memoryEngine.memory4) throw new Error("memory4_unavailable");
-      return context;
-    }
-
-    static assertCurrentMemory4ReadContext(context) {
-      if (getCurrentMemory4ReadConversation() !== context.conversation) throw new Error("legacy_binding_conversation_changed");
-      if (context.conversation.gameData?.campaignToken?.trim?.() !== context.campaignToken) throw new Error("memory4_campaign_changed");
-      const characters = context.conversation.gameData?.characters;
-      if (!(characters instanceof Map)) throw new Error("legacy_binding_game_data_unavailable");
-      const matches = [...characters.values()].filter(character => Number(character?.id) === context.ownerId);
-      if (matches.length > 1) throw new Error("legacy_summary_binding_owner_not_unique_in_current_campaign");
-      const ownerInRoster = matches.length === 1;
-      const readOnlyArchive = context.conversation.isActive === false || !ownerInRoster;
-      const readOnlyReason = context.conversation.isActive === false ? "conversation_ended" : !ownerInRoster ? "owner_not_in_current_roster" : null;
-      if (ownerInRoster !== context.ownerInRoster || readOnlyArchive !== context.readOnlyArchive || readOnlyReason !== context.readOnlyReason) {
-        throw new Error("legacy_binding_conversation_changed");
-      }
-    }
-
-    static invalidateMemory4Dynamic(context) {
-      this.assertCurrentLegacyBindingContext(context);
-      const conversation = context.conversation;
-      const state = memoryEngine.ensureConversationState(conversation);
-      state.responderRecallCache.delete(context.ownerId);
-      state.mentionedRecallCache.delete(context.ownerId);
-      state.turnRecallCache.clear();
-      conversation.dynamicRecallHistory?.delete(context.ownerId);
-      conversation.cacheV2FrozenSnapshots?.prefixByResponder?.delete(String(context.ownerId));
-      memoryEngine.pruneConversationDisclosures(conversation, context.ownerId);
-      const character = context.gameData.characters.get(context.ownerId);
-      if (character) {
-        character.conversationSummaries = [];
-        character.conversationCache = new Map();
-        character.dynamicMemoryCache = null;
-      }
-    }
-
-    static async getMemory4OwnerData(request = {}) {
-      const context = await this.getMemory4ReadContext(request, request.contextOnly !== true);
-      const scope = { campaignToken: context.campaignToken, ownerId: context.ownerId };
-      if (request.contextOnly === true) return { success: true, ...scope, contextId: context.contextId,
-        readOnlyArchive: context.readOnlyArchive, readOnlyReason: context.readOnlyReason, archiveAsOfDate: context.archiveAsOfDate };
-      const coordinator = memoryEngine.memory4;
-      if (request.refreshCurrentFacts === true && !context.readOnlyArchive) {
-        this.assertCurrentMemory4ReadContext(context);
-        coordinator.refreshCurrentFactState(scope, context.gameData, { historical: true });
-      }
-      const readContext = coordinator.createProfileReadContext(scope);
-      const index = readContext.index;
-      const known = readContext.known;
-      if (known && (known.ownerId !== context.ownerId || known.campaignToken !== context.campaignToken || !known.entities)) throw new Error("memory4_known_index_invalid");
-      const legacy = memoryEngine.store.loadFolderSummariesForCharacter(context.ownerId);
-      const owner = context.readOnlyArchive ? null : context.gameData.characters.get(context.ownerId);
-      const entityIds = new Set([...Object.keys(known?.entities || {}), ...Object.keys(index.byEntity || {}),
-        ...(owner?.relationsToCharacters || []).map(item => item.id),
-        ...(owner?.relationsToPlayer?.length ? [context.gameData.playerID] : []),
-        ...legacy.filter(memory => memory.provenance?.campaignToken === context.campaignToken).flatMap(memory => memory.subjects || [])]
-        .map(Number).filter(id => Number.isSafeInteger(id) && id > 0 && id !== context.ownerId));
-      const offset = request.detailOffset || 0;
-      const knownOffset = request.knownOffset || 0;
-      const legacyOffset = request.legacyOffset || 0;
-      if (![offset, knownOffset, legacyOffset].every(value => Number.isSafeInteger(value) && value >= 0 && value <= 1000000)) throw new Error("memory4_page_invalid");
-      const name = id => context.gameData.characters.get(id)?.shortName || context.gameData.characters.get(id)?.fullName || `#${id}`;
-      const orderedEntities = [...entityIds].sort((left, right) => name(left).localeCompare(name(right), "zh-CN"));
-      const details = Object.entries(index.entries).filter(([, row]) => !row.deleted && row.knownBy?.includes(context.ownerId)
-        && (!request.entityId || row.entityIds?.includes(request.entityId))).sort((left, right) => String(right[1].eventTime?.from || right[1].conversationDate || "").localeCompare(String(left[1].eventTime?.from || left[1].conversationDate || ""), undefined, { numeric: true }));
-      const official = [];
-      const captures = new Map();
-      for (const folder of fs$1.readdirSync(VOTC_SUMMARIES_DIR, { withFileTypes: true }).filter(entry => entry.isDirectory()
-        && !entry.isSymbolicLink() && entry.name.startsWith(`${context.ownerId}_`))) {
-        const officialFile = path.join(VOTC_SUMMARIES_DIR, folder.name, "官方追忆摘要.json");
-        if (fs$1.existsSync(officialFile) && fs$1.lstatSync(officialFile).isSymbolicLink()) throw new Error("memory4_symlink_path");
-        for (const record of coordinator.store.read(officialFile, []).filter(record => record?.sourceType === "CK3_OFFICIAL_RECOLLECTION"
-          && Number(record.playerId) === context.ownerId && record.campaignToken === context.campaignToken)) {
-          const key = JSON.stringify([record.memoryId || record.captureId || record.finalizationId || null, record.date || null, record.totalDays ?? null]);
-          const content = JSON.stringify(record);
-          if (captures.has(key) && captures.get(key) !== content) throw new Error("memory4_official_capture_conflict");
-          if (!captures.has(key)) { captures.set(key, content); official.push(record); }
-        }
-      }
-      const scopedLegacy = legacy.filter(memory => memory.provenance?.campaignToken === scope.campaignToken
-        && memory.provenance?.folderOwnerId === scope.ownerId && memory.knownBy?.includes(scope.ownerId));
-      const coverage = coordinator.getLegacyCoverage(scope, scopedLegacy);
-      const legacyRevision = memoryEngine.store.getFolderSummaryRevision(context.ownerId);
-      const coverageSummary = buildCoverageSummary({ scope, index, metadata: readContext.metadata, legacyMemories: scopedLegacy,
-        getLegacyFacts: (coverageScope, memory) => coordinator.legacyFacts(coverageScope, memory),
-        store: coordinator.store, baseStore: memoryEngine.store, legacyRevision,
-        forgetGeneration: readContext.projectionForgetGeneration, latestFinalizationId: readContext.metadata.lastFinalizationId,
-        offset: legacyOffset, limit: 40 });
-      const finalizations = Object.values(index.finalizations || {}).filter(record => ["STORE", "NO_DURABLE_CONTENT", "NOT_PRESENT"].includes(record?.status));
-      const latestFinalization = finalizations.sort((left, right) => String(right.committedAt || "").localeCompare(String(left.committedAt || "")))[0] || null;
-      this.assertCurrentMemory4ReadContext(context);
-      if (coordinator.store.loadIndex(scope).revision !== index.revision
-        || coordinator.store.projectionForgetGeneration(scope) !== readContext.projectionForgetGeneration
-        || memoryEngine.store.getFolderSummaryRevision(context.ownerId) !== legacyRevision) throw new Error("memory4_coverage_stale");
-      return { success: true, ownerId: context.ownerId, campaignToken: context.campaignToken, indexRevision: index.revision,
-        contextId: context.contextId, readOnlyArchive: context.readOnlyArchive, readOnlyReason: context.readOnlyReason, archiveAsOfDate: context.archiveAsOfDate,
-        generation: { finalizationCount: finalizations.length,
-          noDurableContentCount: finalizations.filter(record => record.status === "NO_DURABLE_CONTENT").length,
-          lastStatus: latestFinalization?.status || null },
-        known: { total: orderedEntities.length, offset: knownOffset, items: orderedEntities.slice(knownOffset, knownOffset + 40).map(entityId => ({
-          ...coordinator.getKnownEntityProfile(scope, entityId, { gameData: context.readOnlyArchive ? null : context.gameData,
-            currentGameDate: context.readOnlyArchive ? context.archiveAsOfDate : undefined, legacyMemories: legacy, readContext }), displayName: name(entityId)
-        })) },
-        detail: { total: details.length, offset, entityId: request.entityId || null, items: details.slice(offset, offset + 40).map(([entryId, row]) => ({ entryId, ...row })) },
-        coverageSummary: { ...coverageSummary,
-          recovery: (() => {
-            const status = coordinator.getRecoveryStatus(context.campaignToken, context.ownerId);
-            return { pending: status.pending || 0, manual: status.manual || 0, balanceBlocked: status.balanceBlocked || 0 };
-          })() }, official,
-        legacy: { counts: coverage.counts, items: coverage.items.slice(legacyOffset, legacyOffset + 40), total: coverage.items.length,
-          offset: legacyOffset, recompressionCoverage: { counts: coverage.counts, items: coverage.items.slice(legacyOffset, legacyOffset + 40),
-            total: coverage.items.length, offset: legacyOffset } } };
-    }
-
-    static async getMemory4Coverage(request = {}) {
-      const context = await this.getMemory4ReadContext(request);
-      const coordinator = memoryEngine.memory4;
-      const scope = { campaignToken: context.campaignToken, ownerId: context.ownerId };
-      const readContext = coordinator.createProfileReadContext(scope);
-      const legacy = memoryEngine.store.loadFolderSummariesForCharacter(context.ownerId);
-      const scopedLegacy = legacy.filter(memory => memory.provenance?.campaignToken === scope.campaignToken
-        && memory.provenance?.folderOwnerId === scope.ownerId && memory.knownBy?.includes(scope.ownerId));
-      const legacyRevision = memoryEngine.store.getFolderSummaryRevision(context.ownerId);
-      const result = getCoveragePage({ scope, index: readContext.index, metadata: readContext.metadata,
-        legacyMemories: scopedLegacy, getLegacyFacts: (coverageScope, memory) => coordinator.legacyFacts(coverageScope, memory),
-        store: coordinator.store, baseStore: memoryEngine.store,
-        finalizationId: request.finalizationId ?? null, legacyMemoryId: request.legacyMemoryId ?? null,
-        offset: request.offset ?? 0, limit: request.limit ?? 40,
-        expectedIndexRevision: request.expectedIndexRevision ?? null, expectedSummaryHash: request.expectedSummaryHash ?? null,
-        legacyRevision, forgetGeneration: readContext.projectionForgetGeneration });
-      this.assertCurrentMemory4ReadContext(context);
-      if (coordinator.store.loadIndex(scope).revision !== readContext.index.revision
-        || coordinator.store.projectionForgetGeneration(scope) !== readContext.projectionForgetGeneration
-        || memoryEngine.store.getFolderSummaryRevision(context.ownerId) !== legacyRevision) {
-        return { success: true, status: "STALE", indexRevision: coordinator.store.loadIndex(scope).revision,
-          items: [], offset: result.offset, limit: result.limit, total: result.total,
-          contextId: context.contextId, campaignToken: context.campaignToken };
-      }
-      return { success: true, ...result, contextId: context.contextId, campaignToken: context.campaignToken,
-        readOnlyArchive: context.readOnlyArchive, readOnlyReason: context.readOnlyReason };
-    }
-
-    static async getMemory4Entry(request = {}) {
-      const context = await this.getMemory4ReadContext(request);
-      if (typeof request.entryId !== "string" || !/^m4_[a-f0-9]{64}$/.test(request.entryId)) throw new Error("memory4_invalid_entry_id");
-      if (request.expectedIndexRevision != null && (!Number.isSafeInteger(request.expectedIndexRevision) || request.expectedIndexRevision < 0)
-        || request.expectedEntryRevision != null && (!Number.isSafeInteger(request.expectedEntryRevision) || request.expectedEntryRevision < 0)
-        || request.expectedBodyHash != null && !/^[a-f0-9]{64}$/.test(request.expectedBodyHash)) throw new Error("memory4_entry_expectation_invalid");
-      const coordinator = memoryEngine.memory4;
-      const scope = { campaignToken: context.campaignToken, ownerId: context.ownerId };
-      const readContext = coordinator.createProfileReadContext(scope);
-      const index = readContext.index;
-      const row = index.entries?.[request.entryId];
-      const stale = () => ({ success: true, status: "STALE", contextId: context.contextId,
-        campaignToken: context.campaignToken, indexRevision: coordinator.store.loadIndex(scope).revision });
-      if (!row || request.expectedIndexRevision != null && request.expectedIndexRevision !== index.revision
-        || request.expectedEntryRevision != null && request.expectedEntryRevision !== row.revision
-        || request.expectedBodyHash != null && request.expectedBodyHash !== row.bodyHash
-        || !memory4SourceValid({ store: coordinator.store, baseStore: memoryEngine.store, scope, row, index, metadata: readContext.metadata })) return stale();
-      const forgetGeneration = readContext.projectionForgetGeneration;
-      let entry;
-      try { entry = coordinator.store.readEntry(scope, request.entryId, index); }
-      catch { return stale(); }
-      if (entry.deleted || entry.ownerId !== context.ownerId || entry.campaignToken !== context.campaignToken
-        || !Array.isArray(entry.evidence?.knownBy) || !entry.evidence.knownBy.includes(context.ownerId)) return stale();
-      this.assertCurrentMemory4ReadContext(context);
-      if (coordinator.store.loadIndex(scope).revision !== index.revision
-        || coordinator.store.projectionForgetGeneration(scope) !== forgetGeneration) return stale();
-      return { success: true, entry, contextId: context.contextId, campaignToken: context.campaignToken,
-        indexRevision: index.revision, readOnlyArchive: context.readOnlyArchive, readOnlyReason: context.readOnlyReason };
-    }
-
-    static async auditMemory4Integrity(request = {}, persistence = memoryEngine.memory4.repository) {
-      const context = await this.getMemory4ReadContext(request);
-      const result = persistence.audit({ campaignToken: context.campaignToken, ownerId: context.ownerId });
-      this.assertCurrentMemory4ReadContext(context);
-      return result;
-    }
-
-    static async auditMemory4Orphans(request = {}) {
-      const context = await this.getMemory4ReadContext(request);
-      const result = new Memory4OrphanAudit(memoryEngine).audit({ campaignToken: context.campaignToken, ownerId: context.ownerId });
-      this.assertCurrentMemory4ReadContext(context);
-      memoryEngine.trace.record("memory4_orphan_audit", { ownerId: context.ownerId,
-        candidateCount: result.items.filter(item => item.status === "ORPHANED_PRE_V815_PROJECTION").length,
-        unknownCount: result.items.filter(item => item.status === "UNKNOWN").length });
-      return { success: true, ...result, contextId: context.contextId, readOnlyArchive: context.readOnlyArchive };
-    }
-
-    static async forgetMemory4Orphan(request = {}) {
-      const context = await this.getMemory4Context(request);
-      const result = new Memory4OrphanAudit(memoryEngine).forget({ campaignToken: context.campaignToken, ownerId: context.ownerId }, request);
-      this.invalidateMemory4Dynamic(context);
-      memoryEngine.trace.record("memory4_orphan_forget", { ownerId: context.ownerId, projectionId: request.projectionId,
-        canonicalEntriesForgotten: result.canonicalEntriesForgotten || 0 });
-      return { success: true, result };
-    }
-
-    static async getMemory4Sources(request = {}) {
-      const context = await this.getMemory4ReadContext(request);
-      const scope = { campaignToken: context.campaignToken, ownerId: context.ownerId };
-      if (request.kind === "detail") {
-        const { entry } = await this.getMemory4Entry(request);
-        const valid = memoryEngine.memory4Recall.validateHistory(scope, [{ kind: "detail", id: entry.entryId,
-          bodyHash: memoryEngine.memory4.store.loadIndex(scope).entries[entry.entryId].bodyHash }], { currentGameDate: context.readOnlyArchive ? null : context.gameData.date });
-        this.assertCurrentMemory4ReadContext(context);
-        return { success: true, sources: { kind: "detail", changed: !valid, entries: [{ ...entry, sourceValid: valid }], missingEntryIds: [] },
-          contextId: context.contextId, campaignToken: context.campaignToken, readOnlyArchive: context.readOnlyArchive, readOnlyReason: context.readOnlyReason };
-      }
-      if (["year", "life"].includes(request.kind)) throw new Error("memory4_derived_operation_retired");
-      throw new Error("memory4_source_kind_invalid");
-    }
-
-    static async mutateMemory4(request = {}) {
-      const context = await this.getMemory4Context(request);
-      const scope = { campaignToken: context.campaignToken, ownerId: context.ownerId };
-      const coordinator = memoryEngine.memory4;
-      const retiredOperations = ["updateYear", "updateLife", "keepManual", "rebuild", "cancelDerived"];
-      if (retiredOperations.includes(request.operation)) throw new Error("memory4_derived_operation_retired");
-      const operations = ["updateDetail", "deleteDetail", "recompressLegacy", "setManualDisclosure", "deleteDisclosure"];
-      if (!operations.includes(request.operation)) throw new Error("memory4_operation_invalid");
-      if (request.operation !== "recompressLegacy" && (!Number.isSafeInteger(request.expectedRevision) || request.expectedRevision < 0)) throw new Error("memory4_expected_revision_required");
-      if (request.operation.startsWith("update") && (typeof request.text !== "string" || !request.text.trim() || request.text.length > 16384)) throw new Error("memory4_text_required");
-      let result;
-      if (["setManualDisclosure", "deleteDisclosure"].includes(request.operation)) {
-        const entityId = Number(request.entityId);
-        const factRef = request.factRef;
-        if (!Number.isSafeInteger(entityId) || entityId <= 0 || entityId === context.ownerId) throw new Error("memory4_disclosure_entity_invalid");
-        if (!factRef || typeof factRef !== "object" || !["TITLE", "TRAIT"].includes(factRef.factType)
-          || typeof factRef.factKey !== "string" || !factRef.factKey.trim() || factRef.factKey.length > 256
-          || typeof factRef.value !== "string" || !factRef.value.trim() || factRef.value.length > 256) throw new Error("memory4_disclosure_fact_invalid");
-        if (request.operation === "setManualDisclosure") {
-          if (!["MANUAL_KNOWN", "MANUAL_HIDDEN"].includes(request.status)) throw new Error("memory4_disclosure_status_invalid");
-          result = coordinator.updateManualDisclosure(scope, entityId, factRef, request.status, context.gameData,
-            { expectedRevision: request.expectedRevision });
-        } else result = coordinator.deleteDisclosure(scope, entityId, factRef, context.gameData,
-          { expectedRevision: request.expectedRevision });
-      } else if (request.operation === "updateDetail") result = coordinator.store.updateEntry(scope, request.entryId, request.text, { expectedRevision: request.expectedRevision });
-      else if (request.operation === "deleteDetail") result = coordinator.store.deleteEntry(scope, request.entryId, { expectedRevision: request.expectedRevision });
-      else {
-        if (typeof request.memoryId !== "string" || !/^[a-f0-9]{64}$/.test(request.expectedSourceHash || "")) throw new Error("memory4_legacy_source_invalid");
-        result = await coordinator.recompressLegacy(scope, { memoryId: request.memoryId, expectedSourceHash: request.expectedSourceHash, manual: true });
-      }
-      this.assertCurrentLegacyBindingContext(context);
-      if (context.gameData.campaignToken !== context.campaignToken) throw new Error("memory4_campaign_changed");
-      if (result !== false) this.invalidateMemory4Dynamic(context);
-      return { success: result !== false, result };
     }
 
     static async previewLegacyConversationBinding({ ownerId, counterpartId, folderName, conversationFile } = {}) {
@@ -593,7 +240,7 @@ function createSummariesManager({ fs, path, summariesDir, memoryEngine, memorySy
       const owners = ownerIds || [...new Set(fs$1.readdirSync(VOTC_SUMMARIES_DIR, { withFileTypes: true })
         .filter(entry => entry.isDirectory() && !entry.isSymbolicLink() && /^\d+_/.test(entry.name))
         .map(entry => Number(entry.name.split("_")[0])))];
-      const gameData = getCurrentMemory4ReadConversation()?.gameData;
+      const gameData = getCurrentConversation()?.gameData;
       for (const ownerId of owners) {
         if (!Number.isSafeInteger(Number(ownerId)) || Number(ownerId) <= 0) continue;
         const character = gameData?.characters?.get(Number(ownerId));
@@ -657,13 +304,6 @@ function createSummariesManager({ fs, path, summariesDir, memoryEngine, memorySy
                 console.error(`Failed to read summaries from ${filePath}:`, error);
               }
             }
-            if (!results.some(metadata => metadata.folderName === characterFolderName)
-              && (fs$1.existsSync(path.join(characterFolderPath, "memory4"))
-                || fs$1.existsSync(path.join(VOTC_SUMMARIES_DIR, ".memory4", characterFolderName.split("_")[0])))) {
-              const match = characterFolderName.match(/^(\d+)_(.+)$/);
-              if (match) results.push({ ownerId: Number(match[1]), playerId: Number(match[1]), ownerName: match[2], playerName: match[2],
-                folderName: characterFolderName, conversationFile: null, summaries: [], memory4Only: true });
-            }
           } catch (error) {
             console.error(`Failed to process character folder ${characterFolderName}:`, error);
           }
@@ -672,8 +312,7 @@ function createSummariesManager({ fs, path, summariesDir, memoryEngine, memorySy
       } catch (error) {
         console.error("Failed to list summaries:", error);
       }
-      return results.filter((metadata, index) => !metadata.memory4Only || !results.some(other => !other.memory4Only && other.ownerId === metadata.ownerId)
-        && results.findIndex(other => other.memory4Only && other.ownerId === metadata.ownerId) === index);
+      return results;
     }
     /**
      * Helper method to find summary file paths in character folder structure

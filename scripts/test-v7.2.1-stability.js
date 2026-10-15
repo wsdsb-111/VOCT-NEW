@@ -110,7 +110,7 @@ function writePair(folderRoot, owner, counterpart, summaries) {
     const gameDataSource = fs.readFileSync(path.join(root, "resources", "app", "out", "main", "game-data", "game-data.js"), "utf8");
     const letterBlock = fs.readFileSync(path.join(root, "resources", "app", "out", "main", "prompts", "letter-prompt-builder.js"), "utf8");
     assert(gameDataSource.includes("memoryEngine.findMentionedCharactersInHistory"), "GameData and Conversation mention detection must share one matcher");
-    assert(letterBlock.includes("memory4RecallEnabled: false"), "recipient-scoped letter knowledge must preserve the existing route without adding Memory4 Letter integration");
+    assert(!letterBlock.includes("memory4RecallEnabled"), "recipient-scoped letter knowledge must preserve the existing route without adding Memory4 Letter integration");
     assert(letterBlock.includes("buildPastSummariesContext"), "official letter prompts must preserve the upstream past-summaries block");
     assert(letterBlock.includes("buildAllMemoriesBlock"), "official letter prompts must preserve the upstream character-memories block");
     assert(gameDataSource.includes('error: "insufficient_summary_participants"'), "insufficient participant persistence must return an explicit failure");

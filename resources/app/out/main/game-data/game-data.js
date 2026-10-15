@@ -5,7 +5,7 @@ const { createRelationshipResolver } = require("./relationship-resolver");
 const { resolveRelationshipCurrentTruth } = require("../worldline/relationship-current-truth");
 const { MEMORY_ENGINE_VERSION } = require("../version");
 const { buildOfficialRecollectionSummary } = require("../memory-system/official-recollection-provider");
-const { createProjectionLineage } = require("../memory-system/memory4-forget");
+const { createProjectionLineage } = require("../memory-system/legacy-source-lineage");
 
 function createGameData({ fs, path, memorySystem, memoryEngine, summariesDir, getHistoricalReferenceByYear }) {
   const fs$1 = fs;
@@ -165,8 +165,14 @@ function createGameData({ fs, path, memorySystem, memoryEngine, summariesDir, ge
       const toName = this.sanitizeFileName(this.getCharacterPersonalName(toCharId, toCharName));
       const fileName = `与${toName}的对话.json`;
       if (typeof memoryEngine?.store?.getSummaryConversationFile === "function") {
-        return memoryEngine.store.getSummaryConversationFile(Number(fromCharId), Number(toCharId), toName)
-          || path.join(fromFolder, fileName);
+        const existingFile = memoryEngine.store.getSummaryConversationFile(Number(fromCharId), Number(toCharId), toName);
+        if (existingFile) return existingFile;
+        const filePath = path.join(fromFolder, fileName);
+        if (!fs$1.existsSync(filePath)) return filePath;
+        let candidate = path.join(fromFolder, `与${toName}_${Number(toCharId)}的对话.json`);
+        let suffix = 2;
+        while (fs$1.existsSync(candidate)) candidate = path.join(fromFolder, `与${toName}_${Number(toCharId)}_${suffix++}的对话.json`);
+        return candidate;
       }
       return path.join(fromFolder, fileName);
     }
@@ -177,6 +183,13 @@ function createGameData({ fs, path, memorySystem, memoryEngine, summariesDir, ge
      */
     loadAllConversationsForCharacter(character) {
       const characterFolder = this.getCharacterFolderPath(character.id, character.shortName);
+      const ownerPrefix = `${Number(character.id)}_`;
+      const characterFolders = fs$1.existsSync(VOTC_SUMMARIES_DIR)
+        ? fs$1.readdirSync(VOTC_SUMMARIES_DIR, { withFileTypes: true })
+          .filter(entry => entry.isDirectory() && !entry.isSymbolicLink() && entry.name.startsWith(ownerPrefix))
+          .map(entry => path.join(VOTC_SUMMARIES_DIR, entry.name))
+        : [];
+      if (!characterFolders.length && fs$1.existsSync(characterFolder)) characterFolders.push(characterFolder);
       
       // Initialize array to store all summaries from different conversations
       if (!character.allConversationSummaries) {
@@ -184,35 +197,35 @@ function createGameData({ fs, path, memorySystem, memoryEngine, summariesDir, ge
       }
       
       try {
-        if (!fs$1.existsSync(characterFolder)) {
+        if (!characterFolders.length) {
           return;
         }
-        
-        // Read all conversation files in the character's folder
-        const files = fs$1.readdirSync(characterFolder).filter(f => f.endsWith('.json'));
-        
-        for (const file of files) {
-          const filePath = path.join(characterFolder, file);
-          try {
-            const fileContent = fs$1.readFileSync(filePath, 'utf8');
-            const summaries = JSON.parse(fileContent);
-            
-            if (Array.isArray(summaries) && summaries.length > 0) {
-              // Extract the other character's name from filename: "与XXX的对话.json"
-              const match = file.match(/^与(.+)的对话\.json$/);
-              const otherCharacterName = match ? match[1] : '未知角色';
-              
-              // Add recent summaries (last 5 from each conversation).
-              const recentSummaries = summaries.slice(0, 5).map(s => ({
-                ...s,
-                conversationWith: otherCharacterName,
-                sourceFile: file
-              }));
-              
-              character.allConversationSummaries.push(...recentSummaries);
+
+        for (const folder of characterFolders) {
+          const files = fs$1.readdirSync(folder).filter(f => f.endsWith('.json'));
+          for (const file of files) {
+            const filePath = path.join(folder, file);
+            try {
+              const fileContent = fs$1.readFileSync(filePath, 'utf8');
+              const summaries = JSON.parse(fileContent);
+
+              if (Array.isArray(summaries) && summaries.length > 0) {
+                // Extract the other character's name from filename: "与XXX的对话.json"
+                const match = file.match(/^与(.+)的对话\.json$/);
+                const otherCharacterName = match ? match[1] : '未知角色';
+
+                // Add recent summaries (last 5 from each conversation).
+                const recentSummaries = summaries.slice(0, 5).map(s => ({
+                  ...s,
+                  conversationWith: otherCharacterName,
+                  sourceFile: file
+                }));
+
+                character.allConversationSummaries.push(...recentSummaries);
+              }
+            } catch (error) {
+              console.error(`Failed to load summaries from ${filePath}:`, error);
             }
-          } catch (error) {
-            console.error(`Failed to load summaries from ${filePath}:`, error);
           }
         }
         

@@ -57,8 +57,7 @@ function registerIpcHandlers(runtime) {
         filters: [{ name: "JSON", extensions: ["json"] }]
       });
       if (selection.canceled || !selection.filePath) return { exported: false, reason: "CANCELLED" };
-      await fs.promises.writeFile(selection.filePath, JSON.stringify({ ...performanceTrace.exportReport(),
-        durableTrace: llmManager?.durableRequestTrace?.exportReport() || { version: 1, enabled: false, attempts: [] } }, null, 2), "utf8");
+      await fs.promises.writeFile(selection.filePath, JSON.stringify(performanceTrace.exportReport(), null, 2), "utf8");
       return { exported: true };
     } catch (_error) {
       return { exported: false, reason: "PERFORMANCE_EXPORT_FAILED" };
@@ -885,15 +884,6 @@ function registerIpcHandlers(runtime) {
       return [];
     }
   });
-  electron.ipcMain.handle("conversation:getMemoryOverview", async () => {
-    try {
-      const summaryCatalog = await SummariesManager.listAllSummaries();
-      return memoryEngine.getUiOverview({ summaryCatalog });
-    } catch (error) {
-      console.error("Failed to get Memory Engine overview:", error);
-      return { engineVersion: "2.2", totals: {}, boundaries: [], routingPolicy: {}, characters: [], error: error.message || "Unknown error" };
-    }
-  });
   electron.ipcMain.handle("conversation:getSummariesDashboardData", async (_, options = {}) => {
     try {
       if (options?.refresh === true) memoryEngine.invalidateSummaryFolderCache();
@@ -901,10 +891,10 @@ function registerIpcHandlers(runtime) {
       const incidentDiagnostics = require("../memory-system/incident-diagnostics").buildIncidentDiagnostics({
         memoryEngine, conversation: conversationManager.getCurrentConversation(), providerDiagnostics
       });
-      return { summaries, memoryOverview: memoryEngine.getUiOverview({ summaryCatalog: summaries }), recoveryStatus: SummariesManager.getRecoveryStatus(), incidentDiagnostics };
+      return { summaries, recoveryStatus: SummariesManager.getRecoveryStatus(), incidentDiagnostics };
     } catch (error) {
       console.error("Failed to get summaries dashboard data:", error);
-      return { summaries: [], memoryOverview: { engineVersion: "2.2", totals: {}, boundaries: [], routingPolicy: {}, characters: [], error: error.message || "Unknown error" } };
+      return { summaries: [] };
     }
   });
   electron.ipcMain.handle("conversation:retryFailedSummaries", async () => {
@@ -915,48 +905,6 @@ function registerIpcHandlers(runtime) {
       return { success: false, error: "摘要重试失败，恢复记录已保留，请检查摘要模型配置及日志。" };
     }
   });
-  for (const [channel, method] of [["memory4:getOwnerData", "getMemory4OwnerData"], ["memory4:getCoverage", "getMemory4Coverage"], ["memory4:getEntry", "getMemory4Entry"],
-    ["memory4:getSources", "getMemory4Sources"], ["memory4:mutate", "mutateMemory4"],
-    ["memory4:auditOrphans", "auditMemory4Orphans"], ["memory4:forgetOrphan", "forgetMemory4Orphan"],
-    ["memory4:integrityAudit", "auditMemory4Integrity"]]) {
-    electron.ipcMain.handle(channel, async (_, request = {}) => {
-      try {
-        if (!request || typeof request !== "object" || Array.isArray(request)) throw new Error("memory4_request_required");
-        const ownerId = requireInteger(request.ownerId, "owner_id", { min: 1, max: 2147483647 });
-        if (request.expectedCampaignToken != null && (typeof request.expectedCampaignToken !== "string" || request.expectedCampaignToken.length > 256)) throw new Error("memory4_campaign_invalid");
-        if (request.entityId != null) requireInteger(request.entityId, "entity_id", { min: 1, max: 2147483647 });
-        if (channel === "memory4:getCoverage") {
-          if (request.finalizationId != null && (typeof request.finalizationId !== "string" || request.finalizationId.length > 512)
-            || request.legacyMemoryId != null && (typeof request.legacyMemoryId !== "string" || request.legacyMemoryId.length > 256)
-            || request.offset != null && (!Number.isSafeInteger(request.offset) || request.offset < 0 || request.offset > 1000000)
-            || request.limit != null && (!Number.isSafeInteger(request.limit) || request.limit < 1 || request.limit > 40)
-            || request.expectedIndexRevision != null && (!Number.isSafeInteger(request.expectedIndexRevision) || request.expectedIndexRevision < 0)
-            || request.expectedSummaryHash != null && (typeof request.expectedSummaryHash !== "string" || !/^[a-f0-9]{64}$/.test(request.expectedSummaryHash))) {
-            throw new Error("memory4_coverage_request_invalid");
-          }
-        }
-        if (channel === "memory4:getEntry") {
-          if (typeof request.entryId !== "string" || !/^m4_[a-f0-9]{64}$/.test(request.entryId)
-            || request.expectedIndexRevision != null && (!Number.isSafeInteger(request.expectedIndexRevision) || request.expectedIndexRevision < 0)
-            || request.expectedEntryRevision != null && (!Number.isSafeInteger(request.expectedEntryRevision) || request.expectedEntryRevision < 0)
-            || request.expectedBodyHash != null && (typeof request.expectedBodyHash !== "string" || !/^[a-f0-9]{64}$/.test(request.expectedBodyHash))) {
-            throw new Error("memory4_entry_request_invalid");
-          }
-        }
-        return await SummariesManager[method]({ ...request, ownerId }, services?.persistence);
-      } catch (error) {
-        return { success: false, error: error.message || "memory4_request_failed" };
-      }
-    });
-  }
-  electron.ipcMain.handle("conversation:updateStructuredMemory", async (_, { memoryId, content }) => {
-    try {
-      return memoryEngine.updateMemoryContent(memoryId, content);
-    } catch (error) {
-      console.error("Failed to update structured memory:", error);
-      return { success: false, error: error.message || "Unknown error" };
-    }
-  });
   electron.ipcMain.handle("shell:openPlayer2", async () => {
     try {
       await electron.shell.openExternal("player2://");
@@ -964,30 +912,6 @@ function registerIpcHandlers(runtime) {
     } catch (error) {
       console.error("Failed to open Player2 app:", error);
       return { success: false, error: error.message || "Unknown error" };
-    }
-  });
-  electron.ipcMain.handle("memory:updateRecord", async (_, { memoryId, updates, advanced = false }) => {
-    try {
-      return memoryEngine.updateMemory(memoryId, updates, { advanced });
-    } catch (error) {
-      console.error("Failed to update memory record:", error);
-      return { success: false, error: error.message || "Unknown error" };
-    }
-  });
-  electron.ipcMain.handle("memory:deleteRecord", async (_, { memoryId }) => {
-    try {
-      return memoryEngine.deleteMemory(memoryId);
-    } catch (error) {
-      console.error("Failed to delete memory record:", error);
-      return { success: false, error: error.message || "Unknown error" };
-    }
-  });
-  electron.ipcMain.handle("conversation:getSummariesForCharacter", async (_, request = {}) => {
-    try {
-      return await SummariesManager.getSummariesForCharacter(requireInteger(request.playerId, "player_id", { max: 2147483647 }), requireInteger(request.characterId, "character_id", { max: 2147483647 }));
-    } catch (error) {
-      console.error("Failed to get summaries for character:", error);
-      return [];
     }
   });
   electron.ipcMain.handle("conversation:bindLegacySummaryCampaign", async (_, request = {}) => {

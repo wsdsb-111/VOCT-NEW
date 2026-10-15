@@ -12,7 +12,7 @@ const { buildDualTemporalIndex, selectDualTemporalExtras } = require("../resourc
 const { resolveTemporalFocus } = require("../resources/app/out/main/memory-system/fuzzy-temporal-resolver");
 const { buildPerspectiveSummaryMap, validatePerspectiveSummaryMap } = require("../resources/app/out/main/memory-system/perspective-projector");
 const { createGameData } = require("../resources/app/out/main/game-data/game-data");
-const { createProjectionLineage } = require("../resources/app/out/main/memory-system/memory4-forget");
+const { createProjectionLineage } = require("../resources/app/out/main/memory-system/legacy-source-lineage");
 
 function withFreshProjectionLineage(record) {
   const provenance = record.provenance || {};

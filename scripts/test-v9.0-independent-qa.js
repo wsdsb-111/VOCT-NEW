@@ -200,10 +200,7 @@ async function diagnosticsDisabledPreservesConversationRecoveryFixture() {
   });
   const conversation = Object.create(Conversation.prototype);
   Object.assign(conversation, {
-    captureSummaryParticipantProfiles() {},
     initializePresence() {},
-    captureDisclosureProfiles() { calls.push("disclosure"); },
-    observeVisibleTraits() { calls.push("observation"); },
     prefetchFrozenWorldline: async () => {},
     recoverPendingMemories: async () => {},
     emitUpdate() { calls.push("ready"); },
@@ -213,7 +210,7 @@ async function diagnosticsDisabledPreservesConversationRecoveryFixture() {
   await conversation.initializeGameData();
   await Promise.all([conversation.worldlinePrefetchPromise, conversation.memoryRecoveryPromise]);
   assert.equal(conversation.isActive, true, "diagnostics must not add required participant-set state to legacy recovery fixtures");
-  assert.deepEqual(calls, ["summary", "disclosure", "observation", "ready"]);
+  assert.deepEqual(calls, ["summary", "ready"]);
 
   calls.length = 0;
   let spanAttempts = 0;
@@ -225,10 +222,7 @@ async function diagnosticsDisabledPreservesConversationRecoveryFixture() {
   });
   const traceFailureConversation = Object.create(Conversation.prototype);
   Object.assign(traceFailureConversation, {
-    captureSummaryParticipantProfiles() {},
     initializePresence() {},
-    captureDisclosureProfiles() { calls.push("disclosure"); },
-    observeVisibleTraits() { calls.push("observation"); },
     prefetchFrozenWorldline: async () => {},
     recoverPendingMemories: async () => {},
     emitUpdate() { calls.push("ready"); },
@@ -238,7 +232,7 @@ async function diagnosticsDisabledPreservesConversationRecoveryFixture() {
   await Promise.all([traceFailureConversation.worldlinePrefetchPromise, traceFailureConversation.memoryRecoveryPromise]);
   assert.ok(spanAttempts > 0, "the fixture must exercise failures from enabled trace instrumentation");
   assert.equal(traceFailureConversation.isActive, true, "trace exceptions must not prevent successful conversation initialization");
-  assert.deepEqual(calls, ["summary", "disclosure", "observation", "ready"]);
+  assert.deepEqual(calls, ["summary", "ready"]);
 }
 
 async function rendererObserverUsesBoundedWhitelistedBatchesAndCleansUp() {

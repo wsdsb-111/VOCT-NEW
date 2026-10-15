@@ -1,8 +1,6 @@
 "use strict";
 
 const assert = require("node:assert/strict");
-const fs = require("node:fs");
-const path = require("node:path");
 const { createCanonFixture } = require("./v8.7.1-canon-test-fixture");
 const { normalizeCanonPayload } = require("../resources/app/out/main/worldline/canon-contract");
 
@@ -237,28 +235,6 @@ async function testSummaryDisplayOrderingAndSourceIndices() {
   assert(entries.every(entry => entry.summary === source[entry.index]), "each display entry retains its original summary and file index");
   assert.deepEqual(getSummaryDisplayEntries(source, false).map(entry => entry.index), [0, 1, 2, 3, 4, 5, 6],
     "the unsorted mode returns original file order");
-
-  const rendererRoot = path.join(__dirname, "../resources/app/out/renderer");
-  const rendererHtml = fs.readFileSync(path.join(rendererRoot, "index.html"), "utf8");
-  const bundlePath = rendererHtml.match(/src=["']\.\/assets\/(index-[^"']+\.js)["']/)?.[1];
-  assert(bundlePath, "the shipped renderer bundle is referenced by index.html");
-  const renderer = fs.readFileSync(path.join(rendererRoot, "assets", bundlePath), "utf8");
-  assert.ok(/getSummaryDisplayEntries/.test(renderer));
-  assert.ok(/const \[sortByDate,\s*setSortByDate\] = reactExports\.useState\(true\)/.test(renderer),
-    "date sorting is enabled by default so retry reloads still show newest first");
-  assert.ok(/"aria-pressed": sortByDate/.test(renderer));
-  assert.ok(/onClick: \(\) => setSortByDate\(value => !value\)/.test(renderer),
-    "the date button toggles back to original file order");
-  assert.ok(/getSummaryDisplayEntries\(metadata\.summaries, sortByDate\)/.test(renderer),
-    "the summary list uses a display projection rather than sorting the source records in place");
-  assert.ok(/retryFailedSummaries\(\);[\s\S]{0,300}await loadSummaries\(true\);/.test(renderer),
-    "retry reloads the source array and the default date projection remains active");
-  assert.ok(/handleEditSummary\(metadata, index, summary\.content\)/.test(renderer),
-    "edit receives the helper's original file index");
-  assert.ok(/handleDeleteSummary\(\s*metadata\.playerId,\s*metadata\.characterId,\s*index\s*\)/.test(renderer),
-    "delete receives the helper's original file index");
-  assert.ok(/handleRegenerateSummary\(metadata, index, summary\)/.test(renderer),
-    "regenerate receives the helper's original file index");
 }
 
 async function main() {
