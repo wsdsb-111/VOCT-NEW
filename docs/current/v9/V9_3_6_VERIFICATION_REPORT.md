@@ -1,6 +1,6 @@
 # V9.3.6 验证报告
 
-状态：来源修订竞争最终补验中，2026-10-16。前轮完整 417 组通过；下面最后一节说明补验范围。基线 `03dfc4efe2791b31f28f4a4d521d41a10b59f6b9`。不得将本文件的自动化记录解释成 Full Freeze。
+状态：V9.3.6 本地发布候选验收通过，2026-10-16。基线 `03dfc4efe2791b31f28f4a4d521d41a10b59f6b9`。自动化通过不代表 Full Freeze。
 
 ## Gate 0
 
@@ -30,7 +30,7 @@
 
 ## Gate 2／3：固定前缀、检索与隔离
 
-独立 QA 在真实 MemoryEngine／MemoryStore／PairLedger／PromptBuilder 上执行，FR01–18、TP01–26、MP01–08 共 52 条目录用例覆盖；额外包含精确去重、合并多人投影及预算边界反例。默认脚本目前执行 68 个行为检查，不将仅列出的 TK 夹具冒充通过。独立 QA 自己的 TK01–08 目录仍为 NOT_RUN；下节由专门预算／集成测试提供交叉证据。
+独立 QA 在真实 MemoryEngine／MemoryStore／PairLedger／PromptBuilder 上执行，FR01–18、TP01–26、MP01–08 共 52 条目录用例覆盖；额外包含精确去重、合并多人投影及预算边界反例。默认脚本目前执行 69 个行为检查，不将仅列出的 TK 夹具冒充通过。独立 QA 自己的 TK01–08 目录仍为 NOT_RUN；下节由专门预算／集成测试提供交叉证据。
 
 通过范围包括 30／100 条全量、500 条整条确定性裁剪及磁盘保留、15 轮字节稳定、Owner／Campaign／玩家隔离、Forget 撤回 Engine 与 prefix、同 stat 等长改写、来源删除、Official 与 Recent 不重复、多人视角和 NPC→NPC 保存。L0 额外 C 索引／原文读取为零；L1 每目标 ≤16 且零原文；L2 总来源 ≤2，包含双时间轴、损坏索引、来源过期和有界合法回退。
 
@@ -54,29 +54,29 @@
 
 真实 `VOTC.exe`，独立空白 profile，清除凭据环境并阻止外网与 Provider。App／窗口标题／页脚为 9.3.6；实际 Main 加载模块与源／部署 SHA 一致，Legacy dashboard IPC 正常，Memory4 globals／IPC 均为空。打包 Engine 的 L0/L1/L2 来源数为 0／0／2，固定字节不变，1410／4800 估算 Token。退出后窗口进程关闭。此为合成打包验证，非 CK3／API／Soak。
 
-## 修订竞争修复前的候选验收
+## 最终来源修订竞争回归
 
-最终源码、构建与部署为 288 映射；候选 payload `aac8a3d73179cea343423abeb0fd954bbf6314f7c394fc5784c5118f2650bcb2`。清单为 417 发布组／127 历史项／545 测试文件。无推送，无用户数据修改或真实 Provider 费用。
+收口独立探针复现：L2 前两次来源读取成功后发生 scope revision 变化，旧分支丢失累计次数，fallback 又读取两次，合计 4 次／3 个唯一来源。修复使成功、失败、严重冲突及最终修订失效返回均保留 sourceResolveAttemptCount；Engine 按已用次数扣减同轮两次来源总额度，fallback 不重新获得额度，匿名诊断保留累计计数。
 
-最终代码及测试候选为 `20184fdd26e1a3f04b1753885dfd54314336e66a`。从该 SHA 新建 Windows 检出（core.autocrlf=true、无初始 .build），逐字节校验并物化 68 个 LFS 文件。Node 22.23.3 执行：
+修复后实际探针及正式 QA 回归均为 2 次调用／2 个唯一来源、SOURCE_STALE、fallback 0。红证据来自修复前独立探针（.build/v936-scope-race-red-evidence.json），正式回归是在修复后加入，未冒充该正式用例先红后绿。默认独立套件为 69 checks PASS；TK09／10 仍为 NOT_RUN。
+
+## 最终本地候选
+
+代码与测试候选为 `5681d10aa5d9ff1e5d9665c722afc98fe7451f06`；从该 SHA 创建全新 Windows 检出（core.autocrlf=true、无初始 .build），校验并物化 68 个 LFS 文件。Node 22.23.3 执行完整六步：
 
 | 六步 | 结果 |
 |---|---|
 | runtime-dependencies | PASS：5981 文件／264 包 |
-| build-runtime | PASS：288 文件、App 9.3.6、上述 payload |
+| build-runtime | PASS：288 文件、App 9.3.6 |
 | verify-runtime-build | PASS：288 source／artifact hashes |
 | deploy-runtime-build | PASS：隔离候选部署 |
 | verify-runtime-build --deployed | PASS：源／产物／部署一致 |
 | test-release | PASS：417／417 组、exit 0 |
 
-证据：`.build/v936-clean-candidate-report.json`、`.build/v936-candidate-test-release.log`。独立 QA 默认行为套件在该完整门禁中为 68 checks PASS（FR／TP／MP 52 条目录覆盖＋额外边界）；不把 TK09／10 未测项改成 PASS。负面夹具会输出预期的拒绝／失败日志，最终以断言、exit 0 和 aggregate PASS 判定，不隐藏这些输出。
+最终 payload 为 `293e3ba59be67dddd58c6d3bebfafd47c288fa04ae4892b1961e85b5676fa917`，与本机部署完全一致。清单为 545 个测试文件、417 发布组和 127 历史项。证据为 .build/v936-clean-candidate-report.json、.build/v936-candidate-test-release.log；独立套件在完整门禁中为 69 checks PASS（52 条 FR／TP／MP 目录覆盖＋额外来源／预算边界）。负面夹具会输出预期拒绝／失败日志，最终以断言、exit 0 和 aggregate PASS 判定，不隐藏这些输出。
 
-合成备份／回滚演练在同一隔离候选进行：288 项运行资源逐项 SHA256 备份验证；关闭单一读取配置后构建／部署旧读政策，8K／2人额度确认为 819；随后恢复新配置并重建／部署，payload 精确恢复上述哈希。合成 Legacy、Forget index、惰性 Sidecar 的内容哈希全程一致，并从合成备份恢复再验证。证据 `.build/v936-rollback-rehearsal.json`，全部 8 次构建／部署／校验步骤 exit 0；没有操作真实 APPDATA、秘密数据或存档。
+修复后的隔离 Electron 再次通过，L0／L1／L2 来源数仍为 0／0／2，App／窗口标题／页脚为 9.3.6，网络／Provider 调用为 0。
 
-后续收口提交仅更新报告和开发说明，不改变上述受测源码、测试清单或 payload。远端 CI 必须待用户手动推送后绑定实际最终 SHA 另行核验；不引用旧 run 代替。
+最终同一候选的合成备份／回滚演练也重新完成：288 项运行资源逐项 SHA256 备份验证；关闭单一读取配置后构建／部署旧读政策，8K／2人额度为 819；恢复新配置并重建／部署后 payload 精确恢复上述哈希。合成 Legacy、Forget index、惰性 Sidecar 的内容哈希全程一致，并从合成备份恢复再验证。证据 .build/v936-rollback-rehearsal.json，全部 8 次构建／部署／校验步骤 exit 0。没有操作真实 APPDATA、秘密数据或存档。
 
-## 最终来源修订竞争补验
-
-收口独立探针复现：L2 前两次来源读取成功后发生 scope revision 变化，旧分支丢失累计次数，fallback 又读取两次，合计 4 次／3 个唯一来源。修复使成功、失败、严重冲突及最终修订失效返回均保留 `sourceResolveAttemptCount`；Engine 按已用次数扣减同轮两次来源总额度，fallback 不重新获得额度，匿名诊断记录累计计数。
-
-修复后实际探针及正式 QA 回归均为 2 次调用／2 个唯一来源、`SOURCE_STALE`、fallback 0；默认独立套件为 69 checks PASS。红证据来自修复前独立探针（`.build/v936-scope-race-red-evidence.json`），正式回归是在修复后加入，未冒充该正式用例先红后绿。新 payload 为 `293e3ba59be67dddd58c6d3bebfafd47c288fa04ae4892b1961e85b5676fa917`，288 项部署一致；隔离 Electron 已复验通过。该修订后的全新 Windows 六步和回滚演练正在重新执行，完成后以下结果更新为最终凭据。
+后续收口提交仅更新报告和开发说明，不改变上述受测源码、测试清单或 payload。真实 CK3、Provider 账单、20–30／80–100 轮 Soak 为 NOT_RUN；远端 CI 为 PENDING_USER_PUSH，必须绑定用户手动推送后的最终 SHA 另行核验，不引用旧 run。无推送、无真实用户数据修改、无付费 API 调用。
