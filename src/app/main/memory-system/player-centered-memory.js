@@ -254,7 +254,9 @@ function retrieveDynamicMemory(engine, options, state, baseline, memories, rawMe
     && decision.level === "L0" && !decision.denialDetected
     && (turnRecall.detectIntent(query).triggered || temporal.requested);
   const fallbackEligible = pair.legacyFallbackEligible === true && decision.level === "L2";
-  const sourceAttempts = (pair.verifiedCandidatePointers?.length || 0) + (pair.metrics.sourceKeyValidationFailedCount || 0);
+  const sourceAttempts = Number.isSafeInteger(pair.metrics.sourceResolveAttemptCount)
+    ? pair.metrics.sourceResolveAttemptCount
+    : (pair.verifiedCandidatePointers?.length || 0) + (pair.metrics.sourceKeyValidationFailedCount || 0);
   const fallback = fallbackEligible || playerHistoryRequested
     ? retrieveLegacyDetails(engine, { ...options, rawOwnerSnapshot: rawMemories, directPairOnly: playerHistoryRequested }, memories,
       fallbackEligible ? decision.targetCharacterIds : [Number(options.trustedPlayerAnchorId)], profiles, temporal,
@@ -269,6 +271,7 @@ function retrieveDynamicMemory(engine, options, state, baseline, memories, rawMe
         : fallback.omittedByBudget ? "BUDGET_OMITTED" : pair.fallbackStatus,
       legacyFallbackUsed: fallback.sources.length > 0 && fallbackEligible,
       legacySourceResolvedCount: fallback.opened, legacyBudgetOmittedCount: fallback.omittedByBudget,
+      totalSourceResolveAttemptCount: sourceAttempts + fallback.opened,
       sourceKeyValidationFailedCount: (pair.metrics.sourceKeyValidationFailedCount || 0) + fallback.rejected,
       finalInjectedTokens: countMemoryBlocks([text], countTokens) } };
   state.dynamicKey = dynamicKey; state.dynamicResult = result;
@@ -349,6 +352,8 @@ function retrievePlayerCenteredMemory(engine, options) {
     dynamicCacheHit: dynamic.cacheHit === true, legacyFallbackUsed: dynamic.metrics.legacyFallbackUsed === true };
   metrics.legacySourceResolvedCount = dynamic.metrics.legacySourceResolvedCount;
   metrics.legacyBudgetOmittedCount = dynamic.metrics.legacyBudgetOmittedCount;
+  metrics.sourceResolveAttemptCount = dynamic.metrics.sourceResolveAttemptCount || 0;
+  metrics.totalSourceResolveAttemptCount = dynamic.metrics.totalSourceResolveAttemptCount;
   if (metrics.finalInjectedTokens > budget) throw new Error("player_memory_formatted_budget_exceeded");
   engine.trace.record("player_memory_retrieval", { responderId: ownerId, playerAnchorId: playerId,
     conversationIdHash: digest(conversationId), campaignHash: digest(campaignToken),

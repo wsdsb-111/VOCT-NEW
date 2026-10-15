@@ -28,7 +28,8 @@ const COUNT_FIELDS = Object.freeze([
   "playerLedgerAvailableCount", "playerLedgerInjectedCount", "playerLedgerOmittedCount",
   "recentLegacyCount", "thirdPersonTargetCount", "thirdPersonIndexHitCount", "thirdPersonInjectedItems",
   "thirdPersonSourceOpenedCount", "legacySourceResolvedCount", "legacyBudgetOmittedCount",
-  "sourceKeyValidationFailedCount", "openedSummaryCount", "recentSummaryReferencedItems"
+  "sourceKeyValidationFailedCount", "openedSummaryCount", "recentSummaryReferencedItems",
+  "sourceResolveAttemptCount", "totalSourceResolveAttemptCount"
 ]);
 const TOKEN_FIELDS = Object.freeze([
   "memoryBudget", "baselineBudgetUsed", "dynamicBudgetUsed", "finalInjectedTokens",

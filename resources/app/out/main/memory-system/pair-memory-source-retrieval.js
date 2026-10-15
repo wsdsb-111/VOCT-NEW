@@ -504,14 +504,14 @@ function retrieveThirdPersonHistory({ mode = "THIRD_PERSON_LEDGER", store, owner
   const staleSourceKeys = new Set();
   let fatalSourceStatus = null;
   let sourceResolveMs = 0;
+  let sourceResolveAttemptCount = 0;
   if (level === "L2") {
     const resolveStart = performance.now();
-    let attempts = 0;
     for (const row of candidateMap.values()) {
-      if (attempts >= 2 || resolvedSources.length >= 2) break;
+      if (sourceResolveAttemptCount >= 2 || resolvedSources.length >= 2) break;
       const { candidate, pointer } = row;
       if (excluded.has(String(pointer.sourceMemoryId))) continue;
-      attempts++;
+      sourceResolveAttemptCount++;
       try {
         const resolved = store.pairLedger.resolveSource(candidate.scope, {
           sourceSummaryKey: pointer.sourceSummaryKey,
@@ -538,7 +538,7 @@ function retrieveThirdPersonHistory({ mode = "THIRD_PERSON_LEDGER", store, owner
   if (fatalSourceStatus) {
     return formatThirdPersonEmpty(fatalSourceStatus, { level, legacyFallbackEligible: false,
       candidateSourcePointers,
-      metrics: { indexLookupMs, sourceResolveMs, candidateSummaryCount,
+      metrics: { indexLookupMs, sourceResolveMs, sourceResolveAttemptCount, candidateSummaryCount,
         totalVisibleItems: totalRelevantItems, scopeRevisions } });
   }
 
@@ -635,7 +635,7 @@ function retrieveThirdPersonHistory({ mode = "THIRD_PERSON_LEDGER", store, owner
     const fallbackAllowed = revisionFallbackAllowed && level === "L2"
       && ["SOURCE_STALE", "INDEX_UNAVAILABLE"].includes(status);
     return formatThirdPersonEmpty(status, { level, legacyFallbackEligible: fallbackAllowed,
-      metrics: { indexLookupMs, sourceResolveMs, totalVisibleItems: totalRelevantItems,
+      metrics: { indexLookupMs, sourceResolveMs, sourceResolveAttemptCount, totalVisibleItems: totalRelevantItems,
         omittedItems: totalRelevantItems, omittedByTargetLimit, candidateSummaryCount, scopeRevisions } });
   }
 
@@ -650,6 +650,7 @@ function retrieveThirdPersonHistory({ mode = "THIRD_PERSON_LEDGER", store, owner
   const metrics = {
     indexLookupMs,
     sourceResolveMs,
+    sourceResolveAttemptCount,
     candidateSummaryCount,
     openedSummaryCount: resolvedSources.length,
     indexHitCount: totalRelevantItems,

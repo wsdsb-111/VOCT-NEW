@@ -1,6 +1,6 @@
 # V9.3.6 兼容与退役审计
 
-状态：本地候选审计；真实 CK3、Provider、Soak、最终 SHA 远端 CI 分别验收，不宣称 Full Freeze。
+状态：本地候选审计通过，417 组回归及合成备份／回滚演练通过；真实 CK3、Provider、Soak、最终 SHA 远端 CI 分别验收，不宣称 Full Freeze。
 
 ## 数据与读取合同
 
@@ -26,3 +26,5 @@ Source Key／Revision、当前日期、Campaign、玩家和 Owner、会话、真
 ## 回滚
 
 `memory-budget-policy.js` 的单一 `PLAYER_CENTERED_RECALL_ENABLED` 配置选择读取与预算政策。关闭后使用旧适配读路径与旧预算表，不能恢复 Durable；已有合法 Legacy 和 Pair 索引不会撤销。回滚需要正常构建、应用退出、部署及一致性校验，不能只手改 out 文件。发布备份／回滚合成演练和最终结果记录于[验证报告](V9_3_6_VERIFICATION_REPORT.md)。本轮不导出或改写真实 APPDATA、摘要、凭据、存档或日志。
+
+演练已完成：隔离候选 288 项代码备份逐项验证，旧读配置构建部署后确认 8K／2人旧额度 819，恢复新配置后的 payload 与最终候选完全相同；合成 Legacy、Forget 与 Sidecar 哈希不变。Legacy／Pair UI、离线确认、来源打开、信件、Official Action、世界线和退役保护均包含在最终 417 组完整回归中；真实 CK3 投递与效果仍不以模拟通过代替。

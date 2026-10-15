@@ -1823,6 +1823,67 @@ async function runSourceReviewBehaviorChecks() {
   }
 }
 
+async function runScopeRevisionRaceBehaviorCheck() {
+  const fixture = createAdversarialFixtureData();
+  const matter = "乙与玛蒂尔达因边境税收发生争执，双方核对账册后再议。";
+  const makeRaceSummary = (id, date, extra = "") => makeLegacySummary(2, 3, id, date, [matter + extra]);
+  const baseline = makeLegacySummary(2, 1, "race-player-baseline", "1199.1.1", []);
+  fixture.pairSummaries = [
+    { ownerId: 2, counterpartId: 1, summaries: [baseline] },
+    { ownerId: 2, counterpartId: 3, summaries: [
+      makeRaceSummary("race-source-1", "1090.1.1", " RACE_SOURCE_1"),
+      makeRaceSummary("race-source-2", "1090.1.1", " RACE_SOURCE_2"),
+      makeRaceSummary("race-source-3", "1090.1.1", " RACE_SOURCE_3"),
+      makeRaceSummary("race-source-4", "1090.1.1", " RACE_SOURCE_4")
+    ] }
+  ];
+  const test = createFixtureEngine("l2-scope-revision-race");
+  try {
+    seedAdversarialFixture(test.engine, fixture);
+    const sourceFile = pairSummaryPath(test.engine, 2, 3);
+    const originalResolve = test.engine.store.pairLedger.resolveSource.bind(test.engine.store.pairLedger);
+    const resolved = [];
+    let mutationApplied = false;
+    test.engine.store.pairLedger.resolveSource = (scope, pointer, options) => {
+      const value = originalResolve(scope, pointer, options);
+      resolved.push({ key: pointer.sourceSummaryKey, success: value?.success === true });
+      if (!mutationApplied && resolved.filter(entry => entry.success).length === 2) {
+        const rows = test.engine.store.readJson(sourceFile, []);
+        rows.push(makeRaceSummary("race-source-added-after-two-resolves", "1090.1.1", " RACE_LATE_SOURCE"));
+        test.engine.store.writeJson(sourceFile, rows);
+        test.engine.store.invalidateFolderSummaryCache([2]);
+        mutationApplied = true;
+      }
+      return value;
+    };
+
+    const request = makeCandidateRequest(fixture, "detail", {
+      conversationId: "qa-l2-scope-revision-race",
+      sceneRevision: "scope-race-scene-1",
+      tokenBudget: 100000
+    });
+    const result = test.engine.retrieveForResponder(request);
+    const metrics = result.pairMemoryMetrics;
+    const uniqueKeys = new Set(resolved.map(entry => entry.key));
+    assert.equal(mutationApplied, true, "fixture must change the real Legacy source set after two successful resolves");
+    assert.equal(result.thirdPersonDecision.level, "L2", "fixture must exercise authorized source-detail retrieval");
+    assert.equal(resolved.filter(entry => entry.success).length, 2, "both initial source resolves must succeed before the race");
+    assert(resolved.length <= 2, "Pair retrieval plus fallback must remain within two total source resolves");
+    assert(uniqueKeys.size <= 2, "Pair retrieval plus fallback must not open a third unique Legacy source");
+    assert.equal(metrics.sourceResolveAttemptCount, resolved.length, "diagnostics must expose Pair source attempts");
+    assert.equal(metrics.totalSourceResolveAttemptCount, resolved.length, "diagnostics must expose cumulative Pair plus fallback attempts");
+    assert.equal(metrics.thirdPersonLegacyFallbackStatus, "SOURCE_STALE", "a scope revision race must remain visibly stale");
+    assert.equal(metrics.legacyFallbackUsed, false, "a stale scope must not be reported as a successful Legacy fallback");
+    assert.equal(metrics.legacySourceResolvedCount, 0, "the stale scope must not resolve fallback Legacy sources");
+    assert.equal(result.temporalExtraText, null, "the stale scope must not inject discarded source text");
+    return [{ id: "QA-L2-SCOPE-REVISION-SOURCE-CAP", status: "PASS",
+      resolveSourceCalls: resolved.length, uniqueSourceKeys: uniqueKeys.size,
+      fallbackStatus: metrics.thirdPersonLegacyFallbackStatus }];
+  } finally {
+    test.cleanup();
+  }
+}
+
 function assertFixtureScaffold() {
   assert.equal(caseDescriptions.length, 62, "FR/TP/MP/TK catalogue should mirror all 62 spec rows");
   assert.equal(new Set(caseDescriptions.map(item => item.id)).size, caseDescriptions.length);
@@ -1876,7 +1937,12 @@ if (require.main === module) {
   } else if (process.argv.includes("--run-tp-mp")) {
     runAndPrint("TP/MP", runThirdPersonAndMultiPartyBehaviorChecks);
   } else if (process.argv.includes("--run-source-review")) {
-    runAndPrint("source review", runSourceReviewBehaviorChecks);
+    runAndPrint("source review", async () => [
+      ...await runSourceReviewBehaviorChecks(),
+      ...await runScopeRevisionRaceBehaviorCheck()
+    ]);
+  } else if (process.argv.includes("--run-scope-race")) {
+    runAndPrint("scope revision race", runScopeRevisionRaceBehaviorCheck);
   } else if (process.argv.includes("--run-budget-edge")) {
     runAndPrint("budget edge", runBudgetBoundaryBehaviorChecks);
   } else {
@@ -1884,6 +1950,7 @@ if (require.main === module) {
       ...await runFrBaselineBehaviorChecks(),
       ...await runThirdPersonAndMultiPartyBehaviorChecks(),
       ...await runSourceReviewBehaviorChecks(),
+      ...await runScopeRevisionRaceBehaviorCheck(),
       ...await runBudgetBoundaryBehaviorChecks()
     ];
     runAndPrint("behavior suite", runAll);

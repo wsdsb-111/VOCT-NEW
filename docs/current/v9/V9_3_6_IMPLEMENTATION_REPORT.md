@@ -1,6 +1,6 @@
 # V9.3.6 实施报告
 
-状态：V9.3.6 本地候选施工与验收。规格为 [详细施工合同](V9_3_6_DETAILED_IMPLEMENTATION_SPEC.md)，基线 `03dfc4efe2791b31f28f4a4d521d41a10b59f6b9`。真实 CK3、Provider、Soak 和远端 CI 单列，不能视为已验收。
+状态：V9.3.6 本地发布候选已实现并部署，完整 417 组回归通过。规格为 [详细施工合同](V9_3_6_DETAILED_IMPLEMENTATION_SPEC.md)，基线 `03dfc4efe2791b31f28f4a4d521d41a10b59f6b9`。真实 CK3、Provider、Soak 和远端 CI 单列，不能视为已验收。
 
 ## Phase 0：基线
 
@@ -37,3 +37,7 @@ Provider 根据实际消息跨度和指纹复算记忆成本；每次真实传�
 ## 兼容与交付
 
 Legacy、Pair Index、Forget、NPC→NPC 保存、信件、Official Action 和 Worldline 写入合同不改；不做真实数据迁移、付费调用或远端推送。Core／App／UI 统一 9.3.6，窗口和预览标签同步；Workshop、协议、存储和动作版本保持。[验证报告](V9_3_6_VERIFICATION_REPORT.md)记录最终门禁与 payload；[Token 对比](V9_3_6_TOKEN_AND_CACHE_COMPARISON.md)区分估算与实际用量；[兼容审计](V9_3_6_COMPATIBILITY_AND_RETIREMENT_AUDIT.md)说明回滚和保留边界。
+
+最终 288 source／artifact／deployed 映射一致；全新 Windows 检出的六步全部通过，417／417 组、独立 QA 68 行为检查、隔离 Electron 窗口、合成完整备份／旧读政策回滚／新政策恢复均通过。代码及测试候选 `20184fd`，payload `aac8a3d73179cea343423abeb0fd954bbf6314f7c394fc5784c5118f2650bcb2`。本地阶段提交包含基线、可信路由、读取／预算实现及流式续写反例；最终报告提交不改变 payload。现为 release candidate，真实环境和最终 push SHA 的 CI 未签署。
+
+最终补验：独立探针另发现修订竞争时首次检索与 fallback 的读取次数未累计。已修复并通过正式回归，累计最多两次来源读取，69 项独立检查通过，修订 payload `293e3ba59be67dddd58c6d3bebfafd47c288fa04ae4892b1961e85b5676fa917`；全新 Windows 完整门禁与回滚演练将按该修订重新签署，以验证报告最后一节为准。
