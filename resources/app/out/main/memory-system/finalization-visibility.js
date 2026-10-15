@@ -101,6 +101,9 @@ function validateSourceItem(item, context, { segment = false } = {}) {
     audience = audience === null ? allowed : audience.filter((id) => allowed.includes(id));
   }
   if (!audience?.length) return { success: false, reason: "visibility_audience_unverified" };
+  if (!segment && !validateSummarySegmentPresenceBoundaries(context, { summarySegments: [item] }).success) {
+    return { success: false, reason: "memory_crosses_presence_boundary" };
+  }
   return { success: true, audience, speakers, messageIds, visibility, source: item.source || "spoken" };
 }
 
@@ -179,10 +182,22 @@ function repairVisibilityBoundaries(context, extraction) {
   });
   extraction.summarySegments.sort((left, right) =>
     Math.min(...(left.provenance?.messageIds || [])) - Math.min(...(right.provenance?.messageIds || [])));
-  extraction.memories = (extraction.memories || []).filter((memory) =>
-    !uniqueIds(memory.provenance?.messageIds).some((id) => repairs.has(id)) && validateSourceItem(memory, context).success);
+  extraction.memories = (extraction.memories || []).filter((memory) => memoryFitsRepairedSources(memory, context, repairs));
   extraction.sessionSummary = extraction.summarySegments.map((segment) => segment.content).join("\n\n");
   return { repairedMessageIds };
+}
+
+function memoryFitsRepairedSources(memory, context, repairs) {
+  const validation = validateSourceItem(memory, context);
+  if (!validation.success) return false;
+  return validation.messageIds.every(id => {
+    if (!repairs.has(id)) return true;
+    const audience = new Set(repairs.get(id).flatMap(segment => {
+      const source = validateSourceItem(segment, context);
+      return source.success ? source.audience : [];
+    }));
+    return validation.audience.every(ownerId => audience.has(ownerId));
+  });
 }
 
 function rebuildSourceNarrative(context, extraction = null) {
@@ -196,7 +211,10 @@ function rebuildSourceNarrative(context, extraction = null) {
     if (!segments || segments.some((segment) => !validateSourceItem(segment, context).success)) return null;
     summarySegments.push(...segments);
   }
-  return summarySegments.length ? { structured: true, summarySegments, memories: [],
+  const repairs = new Map((context.messages || []).map(message => [Number(message.id),
+    summarySegments.filter(segment => segment.provenance.messageIds.includes(Number(message.id)))]));
+  const memories = (extraction?.memories || []).filter(memory => memoryFitsRepairedSources(memory, context, repairs));
+  return summarySegments.length ? { structured: true, summarySegments, memories,
     sessionSummary: summarySegments.map((segment) => segment.content).join("\n\n") } : null;
 }
 

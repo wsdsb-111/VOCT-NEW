@@ -153,6 +153,10 @@ electron.contextBridge.exposeInMainWorld("conversationAPI", {
   declineActions: (approvalEntryId) => electron.ipcRenderer.invoke("conversation:declineActions", { approvalEntryId }),
   // Summaries manager methods
   listAllSummaries: () => electron.ipcRenderer.invoke("conversation:listAllSummaries"),
+    getPairMemoryIndex: (request) => electron.ipcRenderer.invoke("conversation:getPairMemoryIndex", request),
+    previewPairMemoryBackfill: (request) => electron.ipcRenderer.invoke("conversation:previewPairMemoryBackfill", request),
+    applyPairMemoryBackfill: (request) => electron.ipcRenderer.invoke("conversation:applyPairMemoryBackfill", request),
+    openPairMemorySource: (request) => electron.ipcRenderer.invoke("conversation:openPairMemorySource", request),
   getSummariesDashboardData: (options = {}) => electron.ipcRenderer.invoke("conversation:getSummariesDashboardData", options),
   retryFailedSummaries: () => electron.ipcRenderer.invoke("conversation:retryFailedSummaries"),
   bindLegacySummaryCampaign: (ownerId, counterpartId, summaryIds) => electron.ipcRenderer.invoke("conversation:bindLegacySummaryCampaign", { ownerId, counterpartId, summaryIds }),

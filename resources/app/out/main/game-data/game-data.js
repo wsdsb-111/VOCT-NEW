@@ -897,6 +897,7 @@ function createGameData({ fs, path, memorySystem, memoryEngine, summariesDir, ge
           finalizationId: options.finalizationId || null,
           conversationId: options.conversationId || null,
           projectionId: lineage?.projectionId || null,
+          ...(options.sourceRevision ? { sourceRevision: options.sourceRevision } : {}),
           ...(options.sourceLetterId ? { sourceLetterId: options.sourceLetterId } : {}),
           engineVersion: projection ? MEMORY_ENGINE_VERSION : "2.2",
           perspectiveOwnerId: projection?.ownerId ?? owner.id,
@@ -911,6 +912,14 @@ function createGameData({ fs, path, memorySystem, memoryEngine, summariesDir, ge
           open: projection?.open === true
         });
         this.writeConversationSummariesFile(filePath, summaries);
+        memoryEngine?.store?.invalidateFolderSummaryCache([Number(owner.id)]);
+        try {
+          if (options.campaignToken && !memoryEngine?.store?.summaryMutation) memoryEngine.store.pairLedger?.read({
+            campaignToken: options.campaignToken, ownerId: Number(owner.id), counterpartId: Number(other.id)
+          }, { currentGameDate: options.date ?? this.date, currentTotalDays: options.totalDays ?? this.totalDays });
+        } catch (error) {
+          memoryEngine?.trace?.record("PAIR_LEDGER_REBUILD_PENDING", { ownerId: Number(owner.id), counterpartId: Number(other.id), code: error.message });
+        }
       }
       return summaries;
     }

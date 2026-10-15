@@ -62,21 +62,27 @@ function testOfficialEvents() {
 
 function testEditorReadOnlyBoundary() {
   const renderer = fs.readFileSync(path.join(__dirname, "../resources/app/out/renderer/assets/index-Dn3qWlAB.js"), "utf8");
+  const nameHelperStart = renderer.indexOf("const summaryPersonName = (value) => {");
+  const nameHelperEnd = renderer.indexOf("\nconst PairLongTermUiMount", nameHelperStart);
+  assert(nameHelperStart >= 0 && nameHelperEnd > nameHelperStart, "the real summary person-name helper must be extractable");
+  const summaryPersonNameHelper = renderer.slice(nameHelperStart, nameHelperEnd);
   const handlerStart = renderer.indexOf("  const handleEditSummary =");
   assert(handlerStart >= 0, "the summary edit handler must exist");
   const handler = renderer.slice(handlerStart, renderer.indexOf("  const handleSaveEdit =", handlerStart));
   for (const marker of [{ sourceType: "CK3_OFFICIAL_RECOLLECTION" }, { type: "official_recollection" }, { subtype: "official_recollection" }, {}]) {
     let editingEntry;
-    const metadata = { playerId: 2, characterId: 2, ownerName: "角色二", summaries: [{ content: "原文", ...marker }] };
+    const metadata = { playerId: 2, characterId: 2, ownerName: "角色二", counterpartName: "ID:2", summaries: [{ content: "原文", ...marker }] };
     const original = JSON.stringify(metadata);
     const context = { metadata,
       setEditingEntry: value => { editingEntry = value; } };
-    vm.runInNewContext(`${handler}\nhandleEditSummary(metadata, 0, "原文");`, context);
+    vm.runInNewContext(`${summaryPersonNameHelper}\n${handler}\nhandleEditSummary(metadata, 0, "原文");`, context);
     if (Object.keys(marker).length) assert.equal(editingEntry, undefined, "Official recollections must never open the editable summary modal");
     else {
       assert.equal(editingEntry.content, "原文", "ordinary summaries remain editable");
       assert.equal(editingEntry.playerId, 2);
       assert.equal(editingEntry.characterId, 2);
+      assert.equal(editingEntry.ownerName, "角色二", "summary editor uses the actual owner name");
+      assert.equal(editingEntry.counterpartName, "姓名未载入", "summary editor never uses a numeric ID as the person label");
       assert.equal(editingEntry.sourceType, undefined);
     }
     assert.equal(JSON.stringify(metadata), original, "opening or refusing the editor never mutates source summaries");

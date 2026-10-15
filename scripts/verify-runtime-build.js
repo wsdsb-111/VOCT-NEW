@@ -31,7 +31,7 @@ function validateDeploymentReceipt(rootDir, { allowIncompleteDeployment = false 
     if (typeof value !== "string" || !value || /[\\:\x00-\x1f]/.test(value)
       || value.split("/").some(part => !part || part === "." || part === ".." || /[. ]$/.test(part)
         || /^(?:con|prn|aux|nul|com[1-9]|lpt[1-9])(?:\.|$)/i.test(part))
-      || !(value === "package.json" || /^(out\/(main|preload|renderer)|default_userdata)\//.test(value))
+      || !(value === "package.json" || /^(out\/(main|preload|renderer|shared)|default_userdata)\//.test(value))
       || !/^[a-f0-9]{64}$/.test(item.sha256 || "") || names.has(value)) {
       throw new Error("build_deploy_receipt_invalid");
     }

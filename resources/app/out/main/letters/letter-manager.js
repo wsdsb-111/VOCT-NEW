@@ -100,6 +100,7 @@ function createLetterManager({ settingsRepository, fs, path, TailFile, readline,
       this.payloadRetryInProgress = /* @__PURE__ */ new Set();
       this.replyRetryInProgress = /* @__PURE__ */ new Set();
       this.letterStatuses = /* @__PURE__ */ new Map();
+      this.letterArchiveStatuses = /* @__PURE__ */ new Map();
       this.deliveryInProgress = /* @__PURE__ */ new Set();
       this.awaitingAcceptanceLetterId = null;
       this.tailFile = null;
@@ -793,7 +794,7 @@ function createLetterManager({ settingsRepository, fs, path, TailFile, readline,
             }
           } else if (storedLetter.acceptedMemoryAwaitingProof) {
             const result = await this.recordAcceptedLetterDisclosure(storedLetter);
-            if (result?.archiveCaptured) {
+            if (result?.archiveJobAccepted === true || result?.archiveCaptured === true) {
               this.storedLetters.delete(letterId);
               this.savePendingLetters();
             }
@@ -1017,7 +1018,7 @@ function createLetterManager({ settingsRepository, fs, path, TailFile, readline,
           acceptedTotalDays: receipt.totalDays, text: storedLetter.letter.content, reply: storedLetter.reply };
         this.savePendingLetters();
         this.finalizeAcceptedLetterMemory(storedLetter, storedLetter.acceptedMemoryContext);
-        return { archiveCaptured: true };
+        return { archiveJobAccepted: true, archiveCaptured: true };
       }
       const debugLogPath = settingsRepository.getCK3DebugLogPath();
       if (!binding || !debugLogPath) return null;
@@ -1051,7 +1052,7 @@ function createLetterManager({ settingsRepository, fs, path, TailFile, readline,
           this.savePendingLetters();
           this.finalizeAcceptedLetterMemory(storedLetter, storedLetter.acceptedMemoryContext);
         }
-        return archive ? { archiveCaptured: true } : null;
+        return archive ? { archiveJobAccepted: true, archiveCaptured: true } : null;
       } catch (error) {
         console.warn(`LetterManager: Accepted letter summary capture failed (${error instanceof Error ? error.message : "unknown_error"})`);
         if (storedLetter.acceptedMemoryContext) {
@@ -1063,18 +1064,67 @@ function createLetterManager({ settingsRepository, fs, path, TailFile, readline,
         return null;
       }
     }
+    updateLetterArchiveStatus(letterId, updates, persist = true) {
+      const previous = this.letterArchiveStatuses.get(letterId) || { letterId };
+      const next = { ...previous, ...updates, letterId, updatedAt: Date.now() };
+      this.letterArchiveStatuses.set(letterId, next);
+      const currentStatus = this.letterStatuses.get(letterId) || {
+        letterId, responseStatus: LetterResponseStatus.SENT, summaryStatus: LetterSummaryStatus.NOT_STARTED,
+        summaryContent: null, summaryError: null, createdAt: Date.now(), characterName: "Unknown"
+      };
+      this.letterStatuses.set(letterId, { ...currentStatus, ...next,
+        responseStatus: LetterResponseStatus.SENT, deliveryStatus: "DELIVERED" });
+      if (persist) this.savePendingLetters();
+      return next;
+    }
+    applyLetterArchiveResult(letterId, result, persist = true) {
+      const status = result?.status;
+      const complete = status === "COMPLETE" && result.archiveStatus === "SUMMARY_COMPLETE";
+      const manualBlocked = status === "MANUAL_BLOCKED" || status === "INVALID";
+      const summaryStatus = complete ? LetterSummaryStatus.SAVED
+        : result?.summaryStatus === "COMPLETE" ? LetterSummaryStatus.SAVE_FAILED : LetterSummaryStatus.GENERATION_FAILED;
+      const archiveStatus = complete ? "SUMMARY_COMPLETE"
+        : manualBlocked || status === "FAILED_MANUAL" ? "SUMMARY_MANUAL_BLOCKED" : "SUMMARY_RETRYABLE_FAILED";
+      return this.updateLetterArchiveStatus(letterId, {
+        deliveryStatus: "DELIVERED", archiveJobId: result?.jobId || this.letterArchiveStatuses.get(letterId)?.archiveJobId || null,
+        archiveStatus, archiveRetryAllowed: !complete && !manualBlocked && status !== "CAMPAIGN_CHANGED",
+        archiveRetryMode: manualBlocked ? "BLOCKED" : status === "FAILED_MANUAL" ? "MANUAL"
+          : status === "CAMPAIGN_CHANGED" ? "CAMPAIGN" : "AUTOMATIC",
+        summaryStatus, summaryError: complete ? null : result?.errorCode || "letter_summary_finalization_pending",
+        summaryStage: result?.summaryStatus || null, projectionStage: result?.projectionStatus || null,
+        senderLegacyArchive: result?.senderProjection || this.letterArchiveStatuses.get(letterId)?.senderLegacyArchive || null,
+        recipientLegacyArchive: result?.recipientProjection || this.letterArchiveStatuses.get(letterId)?.recipientLegacyArchive || null
+      }, persist);
+    }
     finalizeAcceptedLetterMemory(storedLetter, context) {
       const archive = memoryEngine?.letterSummaryFinalization;
-      const job = archive.captureAccepted(context);
       const letterId = storedLetter.letter.letterId;
+      let job;
+      try { job = archive.captureAccepted(context); }
+      catch (error) {
+        const errorCode = error instanceof Error ? error.message.split(":", 1)[0] : "letter_memory_capture_failed";
+        this.updateLetterArchiveStatus(letterId, {
+          deliveryStatus: "DELIVERED", archiveStatus: "SUMMARY_RETRYABLE_FAILED", archiveRetryAllowed: true,
+          archiveRetryMode: "CAPTURE", summaryStatus: LetterSummaryStatus.SAVE_FAILED,
+          summaryError: /^[A-Za-z0-9_-]{1,128}$/.test(errorCode) ? errorCode : "letter_memory_capture_failed"
+        });
+        throw error;
+      }
+      this.updateLetterArchiveStatus(letterId, {
+        deliveryStatus: "DELIVERED", archiveJobId: job.jobId, archiveStatus: "SUMMARY_PENDING",
+        archiveRetryAllowed: false, archiveRetryMode: "AUTOMATIC", summaryStatus: LetterSummaryStatus.GENERATING,
+        summaryError: null, summaryStage: "PENDING", projectionStage: "PENDING",
+        senderLegacyArchive: { ownerId: context.senderId, counterpartId: context.recipientId, status: "PENDING", errorCode: null },
+        recipientLegacyArchive: { ownerId: context.recipientId, counterpartId: context.senderId, status: "PENDING", errorCode: null }
+      });
       this.updateLetterStatus(letterId, { summaryStatus: LetterSummaryStatus.GENERATING, summaryError: null });
       void archive.finalize(job).then(result => {
-        this.updateLetterStatus(letterId, { summaryStatus: result.status === "COMPLETE" ? LetterSummaryStatus.SAVED : LetterSummaryStatus.GENERATION_FAILED,
-          summaryError: result.status === "COMPLETE" ? null : result.errorCode || "letter_memory_finalization_pending" });
+        this.applyLetterArchiveResult(letterId, result);
       }).catch(error => {
-        this.updateLetterStatus(letterId, { summaryStatus: LetterSummaryStatus.GENERATION_FAILED,
-          summaryError: error instanceof Error ? error.message : "letter_memory_finalization_failed" });
+        this.applyLetterArchiveResult(letterId, { status: "FAILED_NARRATIVE", summaryStatus: "PENDING",
+          errorCode: error instanceof Error ? error.message.split(":", 1)[0] : "letter_memory_finalization_failed" });
       });
+      return { archiveJobAccepted: true, archiveCaptured: true, jobId: job.jobId };
     }
     validateLetterPayload(letter) {
       const rawTotalDays = letter?.totalDays;
@@ -1579,6 +1629,40 @@ ${"  \t"}modifier = artifact_monthly_minor_prestige_1_modifier
             this.updateLetterStatus(letterId, { responseStatus: LetterResponseStatus.GENERATION_FAILED, responseError: "Previous reply generation failed.", retryAttemptCount: 0 });
           }
         }
+        for (const archiveStatus of Array.isArray(state?.letterArchiveStatuses) ? state.letterArchiveStatuses : []) {
+          const letterId = archiveStatus?.letterId;
+          if (typeof letterId !== "string" || !letterId.trim() || typeof archiveStatus.archiveJobId !== "string"
+            || !/^[a-f0-9]{64}$/.test(archiveStatus.archiveJobId)) continue;
+          const projection = value => value && typeof value === "object" ? {
+            ownerId: Number.isSafeInteger(value.ownerId) ? value.ownerId : null,
+            counterpartId: Number.isSafeInteger(value.counterpartId) ? value.counterpartId : null,
+            targetFileId: typeof value.targetFileId === "string" && /^legacy_[a-f0-9]{24}$/.test(value.targetFileId) ? value.targetFileId : null,
+            projectionId: typeof value.projectionId === "string" && /^m4p_[a-f0-9]{64}$/.test(value.projectionId) ? value.projectionId : null,
+            status: ["PENDING", "COMPLETE", "MISSING", "FORGOTTEN", "CONFLICT", "ERROR"].includes(value.status) ? value.status : "ERROR",
+            errorCode: typeof value.errorCode === "string" && /^[A-Za-z0-9_-]{1,96}$/.test(value.errorCode) ? value.errorCode : null
+          } : null;
+          const restored = {
+            letterId, deliveryStatus: "DELIVERED", archiveJobId: archiveStatus.archiveJobId,
+            archiveStatus: ["SUMMARY_PENDING", "SUMMARY_COMPLETE", "SUMMARY_RETRYABLE_FAILED", "SUMMARY_MANUAL_BLOCKED"].includes(archiveStatus.archiveStatus)
+              ? archiveStatus.archiveStatus : "SUMMARY_RETRYABLE_FAILED",
+            archiveRetryAllowed: archiveStatus.archiveRetryAllowed === true,
+            archiveRetryMode: typeof archiveStatus.archiveRetryMode === "string" ? archiveStatus.archiveRetryMode : "AUTOMATIC",
+            summaryStatus: Object.values(LetterSummaryStatus).includes(archiveStatus.summaryStatus)
+              ? archiveStatus.summaryStatus : LetterSummaryStatus.SAVE_FAILED,
+            summaryError: typeof archiveStatus.summaryError === "string" && /^[A-Za-z0-9_-]{1,128}$/.test(archiveStatus.summaryError)
+              ? archiveStatus.summaryError : null,
+            summaryStage: typeof archiveStatus.summaryStage === "string" ? archiveStatus.summaryStage : null,
+            projectionStage: typeof archiveStatus.projectionStage === "string" ? archiveStatus.projectionStage : null,
+            senderLegacyArchive: projection(archiveStatus.senderLegacyArchive),
+            recipientLegacyArchive: projection(archiveStatus.recipientLegacyArchive),
+            updatedAt: Number.isSafeInteger(archiveStatus.updatedAt) ? archiveStatus.updatedAt : Date.now()
+          };
+          this.letterArchiveStatuses.set(letterId, restored);
+          const prior = this.letterStatuses.get(letterId) || {
+            letterId, responseStatus: LetterResponseStatus.SENT, createdAt: restored.updatedAt, characterName: "Unknown"
+          };
+          this.letterStatuses.set(letterId, { ...prior, ...restored, responseStatus: LetterResponseStatus.SENT });
+        }
         if (this.awaitingAcceptanceLetterId && !this.storedLetters.has(this.awaitingAcceptanceLetterId)) this.awaitingAcceptanceLetterId = null;
         if (quarantined.length > 0) {
           this.writeInvalidPendingQuarantine(quarantined);
@@ -1604,9 +1688,18 @@ ${"  \t"}modifier = artifact_monthly_minor_prestige_1_modifier
           ...failedContext,
           status: this.letterStatuses.get(letterId) || null
         }));
+        const letterArchiveStatuses = Array.from(this.letterArchiveStatuses.values()).map(status => ({
+          letterId: status.letterId, deliveryStatus: status.deliveryStatus, archiveJobId: status.archiveJobId,
+          archiveStatus: status.archiveStatus, archiveRetryAllowed: status.archiveRetryAllowed,
+          archiveRetryMode: status.archiveRetryMode, summaryStatus: status.summaryStatus, summaryError: status.summaryError,
+          summaryStage: status.summaryStage, projectionStage: status.projectionStage,
+          senderLegacyArchive: status.senderLegacyArchive, recipientLegacyArchive: status.recipientLegacyArchive,
+          updatedAt: status.updatedAt
+        }));
         const temporaryPath = `${this.pendingLettersFile}.${process.pid}.${randomBytes(6).toString("hex")}.tmp`;
         try {
-          fs$1.writeFileSync(temporaryPath, JSON.stringify({ version: 4, awaitingAcceptanceLetterId: this.awaitingAcceptanceLetterId, letters, failedLetters }, null, 2), "utf8");
+          fs$1.writeFileSync(temporaryPath, JSON.stringify({ version: 4, awaitingAcceptanceLetterId: this.awaitingAcceptanceLetterId,
+            letters, failedLetters, letterArchiveStatuses }, null, 2), "utf8");
           const fd = fs$1.openSync(temporaryPath, "r+");
           try { fs$1.fsyncSync(fd); } finally { fs$1.closeSync(fd); }
           fs$1.renameSync(temporaryPath, this.pendingLettersFile);
@@ -1629,7 +1722,7 @@ ${"  \t"}modifier = artifact_monthly_minor_prestige_1_modifier
           if (this.getLetterStatus(id)?.responseStatus !== LetterResponseStatus.SENT || !pending.acceptedReceiptRecorded
             || !this.validateLetterReceipt(pending, pending.acceptedReceipt)) continue;
           const captured = await this.recordAcceptedLetterDisclosure(pending);
-          if (captured?.archiveCaptured) {
+          if (captured?.archiveJobAccepted === true || captured?.archiveCaptured === true) {
             this.storedLetters.delete(id);
             if (!this.savePendingLetters()) this.storedLetters.set(id, pending);
           }
@@ -1732,7 +1825,7 @@ ${"  \t"}modifier = artifact_monthly_minor_prestige_1_modifier
         acceptedLetter.acceptedMemoryAwaitingProof = true;
         if (!this.savePendingLetters()) throw new Error("letter_acceptance_persist_failed");
         const memoryAccepted = acceptedEffectWritten && acceptedLetter ? await this.recordAcceptedLetterDisclosure(acceptedLetter) : null;
-        if (memoryEngine?.letterSummaryFinalization && !memoryAccepted?.archiveCaptured) {
+        if (memoryEngine?.letterSummaryFinalization && memoryAccepted?.archiveJobAccepted !== true && memoryAccepted?.archiveCaptured !== true) {
           acceptedLetter.acceptedMemoryAwaitingProof = true;
           this.updateLetterStatus(acceptedLetterId, { summaryStatus: LetterSummaryStatus.SAVE_FAILED, summaryError: "letter_memory_acceptance_proof_unavailable" });
         } else this.storedLetters.delete(acceptedLetterId);
@@ -2148,6 +2241,13 @@ set_global_variable = {
      */
     getAllLetterStatuses() {
       this.refreshEffectDiagnosticTimeout();
+      const archive = memoryEngine?.letterSummaryFinalization;
+      if (typeof archive?.getJobStatus === "function") {
+        for (const [letterId, archiveStatus] of this.letterArchiveStatuses) {
+          if (!archiveStatus.archiveJobId) continue;
+          this.applyLetterArchiveResult(letterId, archive.getJobStatus(archiveStatus.archiveJobId), false);
+        }
+      }
       for (const status of this.letterStatuses.values()) {
         const effectiveCurrentDay = this.getEffectiveDeliveryCurrentDay(status);
         status.currentDay = effectiveCurrentDay;
@@ -2238,6 +2338,7 @@ set_global_variable = {
       }
       for (const letterId of statusesToRemove) {
         this.letterStatuses.delete(letterId);
+        this.letterArchiveStatuses.delete(letterId);
         console.log(`Cleared old letter status: ${letterId}`);
       }
       if (statusesToRemove.length > 0) {

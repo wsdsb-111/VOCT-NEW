@@ -107,8 +107,8 @@ function readInputs(rootDir) {
   const files = config.files.map(item => {
     const source = safeRelative(item.source);
     const target = safeRelative(item.target);
-    const expected = /^(main|preload|renderer)\//.test(source) ? "out/" + source : source;
-    if (!(source === "package.json" || /^(main|preload|renderer|default_userdata)\//.test(source))
+    const expected = /^(main|preload|renderer|shared)\//.test(source) ? "out/" + source : source;
+    if (!(source === "package.json" || /^(main|preload|renderer|shared|default_userdata)\//.test(source))
       || target !== expected || sourceNames.has(source) || targetNames.has(target)) throw new Error("build_invalid_mapping");
     sourceNames.add(source);
     targetNames.add(target);
@@ -141,7 +141,7 @@ function verifyArtifacts(outputDir, expectedFiles = null) {
   const names = new Set();
   for (const item of manifest.files) {
     const target = safeRelative(item.path);
-    if (!(target === "package.json" || /^(out\/(main|preload|renderer)|default_userdata)\//.test(target))
+    if (!(target === "package.json" || /^(out\/(main|preload|renderer|shared)|default_userdata)\//.test(target))
       || names.has(target)) throw new Error("build_invalid_manifest_path");
     names.add(target);
     const file = path.join(outputDir, "app", target);
@@ -172,7 +172,7 @@ function buildRuntime({ rootDir = root, outputDir = path.join(rootDir, ".build/r
   if (appPackage.main !== "out/main/main.js") throw new Error("build_invalid_main");
   for (const item of payload) {
     // Default userdata includes editor TypeScript declarations with .js names; preserve these opaque assets.
-    if (/^(main|preload|renderer)\//.test(item.source) && item.source.endsWith(".js")) {
+    if (/^(main|preload|renderer|shared)\//.test(item.source) && item.source.endsWith(".js")) {
       const inputType = item.source.startsWith("renderer/") ? "module" : "commonjs";
       const result = spawnSync(process.execPath, ["--check", "--input-type=" + inputType], { input: item.bytes, encoding: "utf8", windowsHide: true });
       if (result.status !== 0) throw new Error(`build_syntax_failed:${item.source}\n${result.stderr || result.error || ""}`);

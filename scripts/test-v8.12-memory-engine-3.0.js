@@ -28,6 +28,8 @@ const record = (id, days, content = `摘要${id}`) => ({
 });
 const markFixtureSnapshot = (engine, ownerId, memories) => {
   engine.store.folderSummarySnapshotRevisions.set(memories, engine.store.getFolderSummaryRevision(ownerId));
+  engine.store.folderSummarySnapshotSources.set(memories, { ownerId, folderNames: [], files: [],
+    directories: engine.store.getFolderSummarySourceDirectories(ownerId, []) });
   return memories;
 };
 
@@ -71,7 +73,7 @@ try {
   const input = { characterId: 2, directCounterpartIds: [1], ownerFolderMemories: markFixtureSnapshot(engine, 2, memories),
     currentGameDate, currentTotalDays: today, campaignToken: fixtureCampaignToken, tokenBudget: 800, estimateTokens: (value) => String(value).length, sessionRecallCache: session };
   const first = engine.retrieveForResponder({ ...input, query: "五年前" });
-  assert.deepEqual(first.direct.map((entry) => entry.memory.memoryId), ["r1", "r2"]);
+  assert.deepEqual(first.direct.map((entry) => entry.memory.memoryId), ["r1"], "only the newest direct Legacy summary is frozen as Recent1");
   assert.deepEqual(first.extra.map((entry) => entry.memory.memoryId), ["t1", "t3", "t2"]);
   assert.match(first.temporalExtraText, /当前1152年1月1日；五年前对应1147年/);
   const dateStamped = [
@@ -112,8 +114,11 @@ try {
     "an exact-time question about a mentioned out-of-scene person must keep that person's owner-scoped summaries eligible");
   const second = engine.retrieveForResponder({ ...input, query: "最近怎样" });
   assert.deepEqual(second.direct, first.direct);
-  assert(second.extra.length <= 3);
-  assert.equal(second.extra.some((entry) => ["r1", "r2"].includes(entry.memory.memoryId)), false);
+  assert(second.extra.length <= 6);
+  assert(second.extra.filter(entry => entry.reason?.source === "temporal").length <= 3);
+  assert(second.extra.filter(entry => entry.routeKind === "entity_target").length <= 3);
+  assert.equal(second.extra.some((entry) => entry.memory.memoryId === "r1"), false,
+    "the frozen Recent1 summary is not injected a second time through dynamic Extra");
   const rollback = engine.retrieveForResponder({ ...input, memoryEngine3Enabled: false, sessionRecallCache: new Map(), query: "五年前" });
   assert.equal(rollback.direct.length, 3);
   assert.equal(rollback.extra.length, 0);
@@ -148,7 +153,7 @@ assert.equal(sampled.entries.length, MAX_RANGE_NODES);
 assert.equal(sampled.entries[0].gameDate, "1.1.1");
 assert.equal(sampled.entries.at(-1).gameDate, "400.1.1");
 assert(sampled.entries.some((node) => node.gameDate === "251.1.1"));
-console.log("V8.12 Memory Engine 3.0: PASS (Recent2, Extra3, temporal, owner-scoped official recollection)");
+console.log("V8.12 Memory Engine 3.0: PASS (Recent1, Temporal/Entity Extra limits, temporal, owner-scoped official recollection)");
 
 async function testNativeSummaryLifecycle() {
   const sandbox = fs.mkdtempSync(path.join(os.tmpdir(), "votc-native-summary-"));
@@ -194,7 +199,8 @@ async function testNativeSummaryLifecycle() {
       campaignToken: data.campaignToken,
       currentGameDate, currentTotalDays: today, campaignToken: data.campaignToken, tokenBudget: 3600, estimateTokens, sessionRecallCache: session, turnEpoch: 1 };
     const first = engine.retrieveForResponder({ ...input, query: "五年前" });
-    assert.equal(first.direct.length, 3);
+    assert.equal(first.direct.length, 2, "Recent1 plus the independently authorized official summary form the direct block");
+    assert.equal(first.direct.filter(entry => entry.routeKind !== "official").length, 1);
     assert.equal(first.direct.filter(e => e.memory.subtype === "official_recollection").length, 1);
     assert(first.selectedTokens <= first.tokenBudget);
     assert.equal(first.mentionedSnapshotText, null);

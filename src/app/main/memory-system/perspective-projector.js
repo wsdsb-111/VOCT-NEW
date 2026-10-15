@@ -159,12 +159,12 @@ function renderPerspectiveContent(owner, memories, summarySegments = []) {
   const narrative = summarySegments.map((segment) => String(segment.content || "").trim()).filter(Boolean);
   const lines = memories.map((memory) => `- ${memory.content}`).filter((line) => line.length > 2);
   if (narrative.length > 0) {
-    const durable = lines.length > 0 ? `\n\n【需要长期记住的事项】\n${lines.join("\n")}` : "";
-    return `【${ownerName}能够知道并记住的本场经过】\n${narrative.join("\n\n")}${durable}`;
+    const importantMatters = `\n\n【需要长期记住的事项】\n${lines.length ? lines.join("\n") : "无"}`;
+    return `【${ownerName}能够知道并记住的本场经过】\n${narrative.join("\n\n")}${importantMatters}`;
   }
   return lines.length > 0
-    ? `【${ownerName}能够知道并记住的本场内容】\n${lines.join("\n")}`
-    : `【${ownerName}的本场记忆】\n- 本场对话没有形成该人物能够确认并长期保存的明确事件。`;
+    ? `【${ownerName}能够知道并记住的本场内容】\n${lines.join("\n")}\n\n【需要长期记住的事项】\n${lines.join("\n")}`
+    : `【${ownerName}的本场记忆】\n- 本场对话没有形成该人物能够确认并长期保存的明确事件。\n\n【需要长期记住的事项】\n无`;
 }
 
 function buildPerspectiveSummaryMap(context = {}, extraction = {}) {

@@ -80,7 +80,9 @@ try {
   assert.strictEqual(overview.totals.summaryFolders, 3, "overview must count canonical character folders");
   assert.strictEqual(overview.totals.summaryFiles, 3, "overview must count visible conversation files");
   assert.strictEqual(overview.totals.summaryRecords, 3, "overview must count player-editable summaries");
-  assert.strictEqual(overview.routingPolicy.stablePrefix, "最近两篇直接关系摘要与官方追忆本场冻结；动态召回不改冻结前缀", "overview must expose the current Recent2 stable-memory boundary");
+  assert.strictEqual(overview.routingPolicy.stablePrefix, "最近一篇直接关系摘要与官方追忆本场冻结；动态召回不改冻结前缀", "overview must expose the current Recent1 stable-memory boundary");
+  assert(overview.boundaries.some((boundary) => boundary.includes("本地事项索引可定位一至两篇历史原摘要") && boundary.includes("时间与场外人物通道各最多三篇")),
+    "overview must describe the two-level source recall and independent Temporal/Mentioned caps");
   assert(overview.boundaries.some((boundary) => boundary.includes("本场冻结") && boundary.includes("最多三篇")), "overview must explain when stable memory changes");
   assert.deepStrictEqual(overview.characters, [], "the UI overview must not duplicate the folder tree with a structured-memory tree");
   const updated = engine.updateMemoryContent("memory_known", "乙亲历了丙的再次到访。");

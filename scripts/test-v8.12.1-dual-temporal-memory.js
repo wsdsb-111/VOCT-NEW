@@ -151,8 +151,8 @@ async function main() {
     };
     const noReminder = restarted.retrieveForResponder({ ...timeInput, sessionRecallCache: new Map(),
       query: "20年前第一次见到你", turnEpoch: 1 });
-    assert.deepEqual(noReminder.direct.map(entry => entry.memory.provenance.finalizationId), ["recent-1199", "recent-1198"],
-      "a time query without explicit recall intent keeps the query-independent Recent2 block");
+    assert.deepEqual(noReminder.direct.map(entry => entry.memory.provenance.finalizationId), ["recent-1199"],
+      "a time query keeps the query-independent single Recent1 block");
     assert(noReminder.extra.some(entry => entry.memory.content.includes(meetingContent)),
       "20 years ago retrieves the dated matching conversation summary into dynamic Extra");
     const firstMeetingTemporal = resolveTemporalFocus("第一次见到你", null, timeInput);
@@ -190,13 +190,13 @@ async function main() {
     const timeSession = new Map();
     const primed = restarted.retrieveForResponder({ ...timeInput, sessionRecallCache: timeSession,
       query: "今夜安好", turnEpoch: 1 });
-    assert.deepEqual(primed.direct.map(entry => entry.memory.provenance.finalizationId), ["recent-1199", "recent-1198"]);
+    assert.deepEqual(primed.direct.map(entry => entry.memory.provenance.finalizationId), ["recent-1199"]);
     const withReminder = restarted.retrieveForResponder({ ...timeInput, sessionRecallCache: timeSession,
       query: "你还记得20年前第一次见到你吗？", turnEpoch: 2 });
-    assert.deepEqual(withReminder.direct.map(entry => entry.memory.provenance.finalizationId), ["recent-1199", "recent-1198"],
-      "an explicit recall cue must not replace frozen Recent2 with a query-ranked old summary");
+    assert.deepEqual(withReminder.direct.map(entry => entry.memory.provenance.finalizationId), ["recent-1199"],
+      "an explicit recall cue must not replace frozen Recent1 with a query-ranked old summary");
     assert(withReminder.extra.some(entry => entry.memory.content.includes(meetingContent)),
-      "the old summary remains available as temporal Extra after Recent2 is frozen");
+      "the old summary remains available as query-focused temporal Extra after Recent1 is frozen");
     assert.equal(withReminder.temporalDiagnostics.selectedCount, 1,
       "temporal diagnostics count the summary actually selected for injection");
     const selectedMeeting = withReminder.extra.find(entry => entry.memory.content.includes(meetingContent));

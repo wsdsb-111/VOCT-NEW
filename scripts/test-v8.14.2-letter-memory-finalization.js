@@ -166,12 +166,17 @@ async function testAcceptedLetterPersistsBothLegacyOwners() {
     pending.narrative.markerStatus = "PENDING";
     harness.service.writeJob(pending);
     const retried = await harness.service.finalize(job, { manual: true });
-    assert.equal(retried.status, "COMPLETE", JSON.stringify(retried));
+    assert.equal(retried.status, "MANUAL_BLOCKED", JSON.stringify(retried));
+    assert.equal(retried.archiveStatus, "SUMMARY_MANUAL_BLOCKED");
+    assert.equal(retried.deliveryStatus, "DELIVERED", "a Legacy Forget block does not change the completed game delivery receipt");
+    assert.equal(retried.senderProjection.status, "COMPLETE", "the sender's valid projection remains proven");
+    assert.equal(retried.recipientProjection.status, "FORGOTTEN", "the recipient's Forget tombstone blocks recovery");
     assert.equal(fs.existsSync(ownerFiles.get(2).file), false, "a pending retry cannot recreate the forgotten recipient projection");
     assert.equal(JSON.parse(fs.readFileSync(ownerFiles.get(1).file, "utf8")).length, 1,
       "the retained sender summary is neither removed nor duplicated");
-    assert.deepEqual(await harness.service.retryPending({ activeCampaignToken: campaignToken, manual: true }), [],
-      "completed Legacy letter finalization is not replayed");
+    const blockedRetry = await harness.service.retryPending({ activeCampaignToken: campaignToken, manual: true });
+    assert(blockedRetry.some(row => row.status === "MANUAL_BLOCKED"),
+      "retry reports the terminal Forget block without replaying Legacy finalization");
     assert.equal(harness.provider.summaries, 1);
   } finally {
     fs.rmSync(harness.root, { recursive: true, force: true });

@@ -36,16 +36,22 @@ const args = { characterId: 2, directCounterpartIds: [1], activeParticipantIds: 
   currentTotalDays: normalizeGameDate("1200.1.1").serial, ownerFolderMemories: snapshots, tokenBudget: 1200,
   memoryEngine3Enabled: true, estimateTokens: text => Math.ceil(String(text).length / 2) };
 function observe(name, context) {
-  const selected = [...context.direct, ...context.stable, ...context.extra];
+  const selected = [...context.direct, ...context.stable, ...context.extra, ...(context.pairMemorySources || [])];
   const injectedText = [context.directStableText, context.stableText, context.temporalExtraText].filter(Boolean).join("\n\n");
   assert(selected.every(row => injectedText.includes(row.memory.content)), "each counted source must appear in its final recall block");
   observations.push({ name, directSummaries: context.direct.filter(row => row.routeKind !== "official").length,
     official: context.direct.filter(row => row.routeKind === "official").length, stable: context.stable.length,
-    dynamicExtra: context.extra.length, selectedTokens: context.selectedTokens,
+    dynamicExtra: context.extra.length, pairSources: (context.pairMemorySources || []).length,
+    temporalExtra: context.extra.filter(row => row.reason?.source === "temporal").length,
+    entityExtra: context.extra.filter(row => row.routeKind === "entity_target").length, selectedTokens: context.selectedTokens,
+    extraIds: context.extra.map(row => row.memory.memoryId),
+    pairSourceIds: (context.pairMemorySources || []).map(row => row.memory.memoryId),
     ids: selected.map(row => row.memory.memoryId), contentHashes: selected.map(row => crypto.createHash("sha256").update(row.memory.content).digest("hex")),
     selectedChars: selected.map(row => row.memory.content.length), budgets: context.routing.budgets,
     injectedBlockHash: crypto.createHash("sha256").update(injectedText).digest("hex"), injectedBlockChars: injectedText.length });
-  assert(context.extra.length <= 3);
+  assert(context.extra.length <= 6);
+  assert(context.extra.filter(row => row.reason?.source === "temporal").length <= 3);
+  assert(context.extra.filter(row => row.routeKind === "entity_target").length <= 3);
   assert(context.selectedTokens <= context.tokenBudget);
   assert(selected.every(row => row.memory.type === "folder_summary" || row.routeKind === "stable_memory"));
   return context;
@@ -57,7 +63,7 @@ try {
   check("retired modules never initialize", () => assert.equal(!!engine.memory4, false));
   check("direct pair narrative and additional recall", () => {
     const context = observe("ordinary", engine.retrieveForResponder({ ...args, query: "谈谈村民与护卫安排。", sessionRecallCache: cache, turnEpoch: 1 }));
-    assert.equal(context.direct.length, 2);
+    assert.equal(context.direct.length, 1);
     assert(context.directStableText.includes("护卫安排"));
     assert(context.extra.length > 0);
     engine.commitDynamicSummaryRecall(2, cache, 1, { providerSucceeded: true, injectedBlockIds: ["memory-temporal-extra"],
@@ -65,17 +71,20 @@ try {
   });
   check("retired flag cannot replace Legacy Extra", () => {
     const context = observe("obsolete-flag", engine.retrieveForResponder({ ...args, query: "当初你为什么答应帮我支援粮草？", memory4RecallEnabled: true, sessionRecallCache: new Map(), turnEpoch: 1 }));
-    assert(context.directStableText.includes("保护村民") || context.temporalExtraText?.includes("保护村民"));
-    assert(context.extra.length > 0, "the historical Memory4 flag cannot suppress narrative recall");
+    assert(context.temporalExtraText.includes("保护村民"),
+      "the historical promise tail must be injected through dynamic recall, not substituted into frozen Recent1");
+    assert(context.extra.length > 0 || context.pairMemorySources.length > 0,
+      "the historical Memory4 flag cannot suppress narrative recall from Legacy Extra or an exact Pair Source");
   });
   check("query-prioritized original narrative", () => {
     const context = observe("direct-recollection", engine.retrieveForResponder({ ...args, query: "你还记得我们上次为什么会吵架吗？", sessionRecallCache: new Map(), turnEpoch: 1 }));
-    assert([context.directStableText, context.temporalExtraText].join(" ").includes("担心乡民安全"));
+    assert(context.temporalExtraText.includes("担心乡民安全"),
+      "the argument's query-relevant tail must remain in the dynamic recall block");
   });
   check("time recall keeps hearsay and dates", () => {
     const context = observe("year-1170", engine.retrieveForResponder({ ...args, query: "1170年我们谈过的北境战争结果是什么？", sessionRecallCache: new Map(), turnEpoch: 1 }));
     assert(context.temporal.triggered);
-    assert(context.extra.some(row => row.memory.eventDate === "1170.1.1"));
+    assert([...context.extra, ...context.pairMemorySources].some(row => row.memory.eventDate === "1170.1.1"));
     assert(context.temporalExtraText.includes("传闻"));
     assert(!context.temporalExtraText.includes("【年度记忆】"));
   });
@@ -87,9 +96,9 @@ try {
   });
   check("foreign Campaign and Owner cannot recall", () => {
     const context = observe("foreign-campaign", engine.retrieveForResponder({ ...args, campaignToken: "another-campaign", query: "战争与村民", sessionRecallCache: new Map(), turnEpoch: 1 }));
-    assert.equal(context.direct.length + context.extra.length, 0);
+    assert.equal(context.direct.length + context.extra.length + context.pairMemorySources.length, 0);
     const foreign = engine.retrieveForResponder({ ...args, characterId: 4, query: "村民与陈将军", sessionRecallCache: new Map(), turnEpoch: 1 });
-    assert.equal(foreign.direct.length + foreign.extra.length, 0);
+    assert.equal(foreign.direct.length + foreign.extra.length + foreign.pairMemorySources.length, 0);
   });
   check("participant admission refreshes the direct snapshot", () => {
     const admissionCache = new Map();
@@ -97,18 +106,19 @@ try {
       query: "尚未开始交谈", sessionRecallCache: admissionCache, turnEpoch: 1 });
     assert.equal(empty.direct.length, 0);
     const joined = engine.retrieveForResponder({ ...args, query: "谈谈护卫", sessionRecallCache: admissionCache, turnEpoch: 2 });
-    assert.equal(joined.direct.length, 2);
+    assert.equal(joined.direct.length, 1);
   });
   check("unresolved identity cannot borrow a target or dynamic narrative", () => {
     const blocked = engine.retrieveForResponder({ ...args, query: "阿布鲁当时为何渡河？", identityUnresolved: true,
       mentionedEntityIds: [3], explicitTargetEntityIds: [3], sessionRecallCache: new Map(), turnEpoch: 1 });
     assert.equal(blocked.extra.length, 0);
+    assert.equal(blocked.pairMemorySources.length, 0);
     assert.equal(blocked.entityTargetRecall.selectedIds.length, 0);
     assert(blocked.temporalExtraText.includes("未能唯一识别"));
   });
   check("success-only Extra commit and multi-turn dedupe", () => {
     const context = observe("next-turn", engine.retrieveForResponder({ ...args, query: "那后来护卫安排怎样了？", sessionRecallCache: cache, turnEpoch: 2 }));
-    const previous = new Set(observations[0].ids.slice(2));
+    const previous = new Set([...observations[0].extraIds, ...observations[0].pairSourceIds]);
     assert(context.extra.every(row => !previous.has(row.memory.memoryId)));
     for (let turnEpoch = 3; turnEpoch <= 10; turnEpoch++) engine.retrieveForResponder({ ...args, query: "继续谈谈村民", sessionRecallCache: cache, turnEpoch });
   });

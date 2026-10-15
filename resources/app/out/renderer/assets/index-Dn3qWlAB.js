@@ -1,6 +1,6 @@
 import { WorldMemoryEditor } from "../world-memory-editor.js";
-import { getLegacySummaryPage, getSummaryImportantMatters } from "../summary-date-order.js";
-const VOTC_FEATURE_VERSION = "V9.3.4";
+import { getLegacySummaryPage, getSummaryDisplayEntries, getSummaryImportantMatters } from "../summary-date-order.js";
+const VOTC_FEATURE_VERSION = "V9.3.5";
 const VOTC_WORKSHOP_MOD_VERSION = "2.0.5";
 function getDefaultExportFromCjs(x) {
   return x && x.__esModule && Object.prototype.hasOwnProperty.call(x, "default") ? x["default"] : x;
@@ -21082,6 +21082,24 @@ const PromptsView = () => {
     )
   ] });
 };
+const summaryPersonName = (value) => {
+  const name = String(value ?? "").trim();
+  return name && !/^(?:id\s*[:：]?\s*)?\d+$/i.test(name) ? name : "姓名未载入";
+};
+const PairLongTermUiMount = (props) => {
+  const hostRef = reactExports.useRef(null);
+  const latestProps = reactExports.useRef(props);
+  latestProps.current = props;
+  reactExports.useEffect(() => {
+    const mount = window.VOTCPairLongTermUi?.mount;
+    if (!hostRef.current || typeof mount !== "function") return void 0;
+    return mount(hostRef.current, {
+      ...latestProps.current,
+      onLocateSource: (response, item) => latestProps.current.onLocateSource?.(response, item)
+    });
+  }, [props.mode, props.ownerId, props.counterpartId, props.refreshToken]);
+  return /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "pair-long-term-ui-host", ref: hostRef });
+};
 const SummariesManager = () => {
   const { t } = useTranslation();
   const getSummariesDashboardData = useConfigStore((state) => state.getSummariesDashboardData);
@@ -21107,6 +21125,7 @@ const SummariesManager = () => {
   const [summaryDateFrom, setSummaryDateFrom] = reactExports.useState("");
   const [summaryDateTo, setSummaryDateTo] = reactExports.useState("");
   const [summaryPages, setSummaryPages] = reactExports.useState({});
+  const [ledgerRefreshRevision, setLedgerRefreshRevision] = reactExports.useState(0);
   const [clearResult, setClearResult] = reactExports.useState(null);
   reactExports.useEffect(() => {
     loadSummaries();
@@ -21116,12 +21135,75 @@ const SummariesManager = () => {
     try {
       const dashboardData = await getSummariesDashboardData({ refresh });
       setSummaries(dashboardData.summaries || []);
+      setLedgerRefreshRevision((revision) => revision + 1);
       setRecoveryStatus(dashboardData.recoveryStatus || { pending: 0, running: false });
       setIncidentDiagnostics(dashboardData.incidentDiagnostics || { recall: [], recovery: [], providerCache: [] });
     } catch (error) {
       console.error("Failed to load summaries:", error);
     } finally {
       setIsLoadingSummaries(false);
+    }
+  };
+  const handleLocateResolvedSource = async (resolvedSource, matchedItem) => {
+    const ownerId = Number(resolvedSource?.ownerId ?? resolvedSource?.scope?.ownerId);
+    const counterpartId = Number(resolvedSource?.counterpartId ?? resolvedSource?.scope?.counterpartId);
+    const index = Number(resolvedSource?.summaryIndex ?? resolvedSource?.locator?.summaryIndex ?? resolvedSource?.summary?.summaryIndex);
+    const verifiedContent = typeof resolvedSource?.content === "string" ? resolvedSource.content : resolvedSource?.summary?.content;
+    if (!Number.isSafeInteger(ownerId) || ownerId <= 0 || !Number.isSafeInteger(counterpartId) || counterpartId <= 0 || !Number.isSafeInteger(index) || index < 0 || typeof verifiedContent !== "string") {
+      return { success: false, error: "source_locator_incomplete", message: "已验证来源未提供可定位的当前摘要记录。" };
+    }
+    try {
+      const dashboardData = await getSummariesDashboardData({ refresh: true });
+      const refreshed = dashboardData.summaries || [];
+      setSummaries(refreshed);
+      setLedgerRefreshRevision((revision) => revision + 1);
+      const metadata = refreshed.find((entry) => Number(entry.ownerId ?? entry.playerId) === ownerId && Number(entry.counterpartId ?? entry.characterId) === counterpartId);
+      const current = metadata?.summaries?.[index];
+      const resolvedDate = resolvedSource?.summary?.date;
+      if (!metadata || !current || current.content !== verifiedContent || resolvedDate && current.date !== resolvedDate) {
+        return { success: false, error: "source_unavailable_or_stale", message: "源摘要在定位前已变化；已刷新摘要列表，请重新打开事项来源。" };
+      }
+      const ordered = getSummaryDisplayEntries(metadata.summaries, sortByDate);
+      const position = ordered.findIndex((entry) => entry.index === index);
+      if (position < 0) return { success: false, error: "source_unavailable_or_stale", message: "已刷新列表中找不到该来源摘要。" };
+      const ownerKey = `player-${Number(metadata.playerId ?? ownerId)}`;
+      const pairKey = `${Number(metadata.playerId ?? ownerId)}-${Number(metadata.characterId ?? counterpartId)}`;
+      setSearchQuery("");
+      setSummaryDateFrom("");
+      setSummaryDateTo("");
+      setSummaryPages((previous) => ({ ...previous, [`${ownerId}:${counterpartId}`]: Math.floor(position / 10) }));
+      setExpandedCharacters((previous) => new Set([...previous, ownerKey, pairKey]));
+      await new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+      const target = document.querySelector(`[data-pair-source-id="${ownerId}:${counterpartId}:${index}"]`);
+      if (!target) return { success: false, error: "source_row_not_rendered", message: "源摘要已验证，但当前页面未能展开对应记录；请刷新列表后重试。" };
+      const importantMatters = target.querySelector(".summary-important-matters");
+      const fullSummary = target.querySelector(".summary-full-content");
+      const itemText = String(matchedItem?.text || "").trim();
+      let itemMismatch = false;
+      if (importantMatters && itemText) {
+        const displayedItems = importantMatters.querySelector(".summary-content");
+        if (!displayedItems?.textContent.includes(itemText)) {
+          if (fullSummary) fullSummary.open = true;
+          itemMismatch = true;
+        } else {
+          importantMatters.open = true;
+          importantMatters.dataset.pairSourceItem = itemText;
+          importantMatters.classList.add("pair-source-item-highlight");
+          window.setTimeout(() => {
+            importantMatters.classList.remove("pair-source-item-highlight");
+            delete importantMatters.dataset.pairSourceItem;
+          }, 5000);
+        }
+      } else if (fullSummary) {
+        fullSummary.open = true;
+      }
+      (importantMatters && !itemMismatch ? importantMatters : fullSummary || target).scrollIntoView({ behavior: "smooth", block: "center" });
+      target.classList.add("pair-source-highlight");
+      window.setTimeout(() => target.classList.remove("pair-source-highlight"), 3000);
+      if (itemMismatch) return { success: false, error: "source_item_not_rendered", message: "已验证并定位到原摘要，但当前事项显示与索引内容不完全一致；已展开全文，请核对原文后再编辑。" };
+      return { success: true };
+    } catch (error) {
+      return { success: false, error: "source_navigation_failed", message: `定位源摘要失败：${error instanceof Error ? error.message : "请刷新摘要列表后重试。"}` };
     }
   };
   const handleRetrySummaries = async () => {
@@ -21173,8 +21255,8 @@ const SummariesManager = () => {
     setEditingEntry({
       playerId: metadata.playerId,
       characterId: metadata.characterId,
-      ownerName: metadata.ownerName || metadata.playerName,
-      counterpartName: metadata.counterpartName || metadata.characterName,
+      ownerName: summaryPersonName(metadata.ownerName || metadata.playerName),
+      counterpartName: summaryPersonName(metadata.counterpartName || metadata.characterName),
       conversationFile: metadata.conversationFile,
       sourceType: metadata.summaries[index]?.sourceType,
       index,
@@ -21206,7 +21288,7 @@ const SummariesManager = () => {
     const ownerId = Number(metadata.ownerId ?? metadata.playerId);
     const counterpartId = Number(metadata.counterpartId ?? metadata.characterId);
     const key = `${ownerId}:${counterpartId}:${index}`;
-    if (!window.confirm(`将把“${metadata.ownerName || metadata.playerName} ↔ ${metadata.counterpartName || metadata.characterName}”的 ${summary.date || "无日期"} 摘要正文发送给当前摘要模型整理，可能产生 API 费用。手工版本保留，其他人物摘要不变；正文生成失败时保留原文。继续？`)) return;
+    if (!window.confirm(`将把“${summaryPersonName(metadata.ownerName || metadata.playerName)} ↔ ${summaryPersonName(metadata.counterpartName || metadata.characterName)}”的 ${summary.date || "无日期"} 摘要正文发送给当前摘要模型整理，可能产生 API 费用。手工版本保留，其他人物摘要不变；正文生成失败时保留原文。继续？`)) return;
     setRegeneratingSummaryKey(key);
     setRetryResult(null);
     try {
@@ -21254,7 +21336,7 @@ const SummariesManager = () => {
     const ownerId = Number(metadata.ownerId ?? metadata.playerId);
     const counterpartId = Number(metadata.counterpartId);
     const bindingId = summary.legacyBindingId;
-    if (!bindingId || !window.confirm(`确认将“${metadata.ownerName || metadata.playerName} ↔ ${metadata.counterpartName || metadata.characterName}”的 ${summary.date || "无日期"} 这篇旧摘要绑定到当前加载的战役？只修改此摘要；已有绑定和同文件其他摘要不受影响。`)) return;
+    if (!bindingId || !window.confirm(`确认将“${summaryPersonName(metadata.ownerName || metadata.playerName)} ↔ ${summaryPersonName(metadata.counterpartName || metadata.characterName)}”的 ${summary.date || "无日期"} 这篇旧摘要绑定到当前加载的战役？只修改此摘要；已有绑定和同文件其他摘要不受影响。`)) return;
     setBindingLegacySummaryId(bindingId);
     try {
       const result = await window.conversationAPI.bindLegacySummaryCampaign(ownerId, counterpartId, [bindingId]);
@@ -21282,8 +21364,8 @@ const SummariesManager = () => {
         return;
       }
       const scopeLabel = scope === "owner"
-        ? `“${metadata.ownerName || metadata.playerName}”的全部旧摘要`
-        : `“${metadata.ownerName || metadata.playerName} ↔ ${metadata.counterpartName || metadata.characterName}”的全部旧摘要`;
+        ? `“${summaryPersonName(metadata.ownerName || metadata.playerName)}”的全部旧摘要`
+        : `“${summaryPersonName(metadata.ownerName || metadata.playerName)} ↔ ${summaryPersonName(metadata.counterpartName || metadata.characterName)}”的全部旧摘要`;
       const previewText = scope === "owner"
         ? `扫描对话文件：${preview.scannedFiles}\n扫描摘要：${preview.scannedSummaries}`
         : `扫描摘要：${preview.scannedSummaries}`;
@@ -21293,7 +21375,7 @@ const SummariesManager = () => {
         ? await window.conversationAPI.bindLegacyOwnerCampaign(ownerId, preview.campaignToken, preview.previewRevision)
         : await window.conversationAPI.bindLegacyConversationCampaign(ownerId, counterpartId, metadata.folderName, metadata.conversationFile, preview.campaignToken, preview.previewRevision);
       if (!result?.success) throw new Error(result?.error || "legacy_summary_bulk_binding_failed");
-      alert(`已完成旧摘要迁移${scope === "owner" ? `：${metadata.ownerName || metadata.playerName}` : ""}\n扫描对话文件：${result.scannedFiles}\n扫描摘要：${result.scannedSummaries}\n成功绑定：${result.boundCount}\n已属于当前战役：${result.alreadyCurrentCount}\n其他战役跳过：${result.otherCampaignCount}\n官方追忆跳过：${result.officialCount}\n身份待核实：${result.unresolvedCounterpartCount}\n无效摘要/文件：${result.invalidSummaryCount + result.invalidFileCount}`);
+      alert(`已完成旧摘要迁移${scope === "owner" ? `：${summaryPersonName(metadata.ownerName || metadata.playerName)}` : ""}\n扫描对话文件：${result.scannedFiles}\n扫描摘要：${result.scannedSummaries}\n成功绑定：${result.boundCount}\n已属于当前战役：${result.alreadyCurrentCount}\n其他战役跳过：${result.otherCampaignCount}\n官方追忆跳过：${result.officialCount}\n身份待核实：${result.unresolvedCounterpartCount}\n无效摘要/文件：${result.invalidSummaryCount + result.invalidFileCount}`);
       await loadSummaries(true);
     } catch (error) {
       const message = error?.message === "legacy_binding_preview_stale"
@@ -21419,7 +21501,7 @@ const SummariesManager = () => {
         "input",
         {
           type: "search",
-          placeholder: "输入人物姓名或 ID：定位本人目录，并列出其他人涉及此人的摘要",
+          placeholder: "输入人物姓名：定位本人目录，并列出其他人涉及此人的摘要",
           value: searchQuery,
           onChange: (e) => {
             setSearchQuery(e.target.value);
@@ -21456,10 +21538,13 @@ const SummariesManager = () => {
           "div",
           {
             className: "player-header",
-            onClick: () => toggleCharacterExpanded(playerKey),
+            onClick: (e) => {
+              if (e.target.closest(".summary-person-diagnostics")) return;
+              toggleCharacterExpanded(playerKey);
+            },
             children: [
               /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "expand-icon", children: isPlayerExpanded ? "▼" : "▶" }),
-              /* @__PURE__ */ jsxRuntimeExports.jsxs("span", { className: "player-name", children: [playerSummaries[0]?.ownerName || playerSummaries[0]?.playerName || `Player ID: ${playerId}`, /* @__PURE__ */ jsxRuntimeExports.jsxs("small", { children: ["摘要目录 · ", playerSummaries[0]?.folderName || playerId, " | 对话文件：", ownerSummaries.length, " | 摘要总数：", ownerTotalSummaries, " | 未绑定旧摘要：", ownerUnboundCount] })] }),
+              /* @__PURE__ */ jsxRuntimeExports.jsxs("span", { className: "player-name", children: [summaryPersonName(playerSummaries[0]?.ownerName || playerSummaries[0]?.playerName), /* @__PURE__ */ jsxRuntimeExports.jsxs("small", { children: ["对话文件：", ownerSummaries.length, " | 摘要总数：", ownerTotalSummaries, " | 未绑定旧摘要：", ownerUnboundCount] }), /* @__PURE__ */ jsxRuntimeExports.jsxs("details", { className: "summary-person-diagnostics", children: [/* @__PURE__ */ jsxRuntimeExports.jsx("summary", { children: "诊断详情" }), /* @__PURE__ */ jsxRuntimeExports.jsxs("span", { children: ["Owner ID：", playerId, " · 目录：", playerSummaries[0]?.folderName || "未载入"] })] })] }),
               /* @__PURE__ */ jsxRuntimeExports.jsxs("span", { className: "summary-count", children: [
                 playerSummaries.length,
                 " ",
@@ -21481,10 +21566,14 @@ const SummariesManager = () => {
             ]
           }
         ),
-        isPlayerExpanded && /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "player-characters", children: playerSummaries.map((metadata) => {
+        isPlayerExpanded && /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "player-characters", children: [
+          /* @__PURE__ */ jsxRuntimeExports.jsx(PairLongTermUiMount, { key: `owner-ledger-${playerId}`, mode: "owner", ownerId: Number(playerId), ownerName: summaryPersonName(playerSummaries[0]?.ownerName || playerSummaries[0]?.playerName), refreshToken: ledgerRefreshRevision }),
+          playerSummaries.map((metadata) => {
           const characterKey = `${metadata.playerId}-${metadata.characterId}`;
           const isExpanded = expandedCharacters.has(characterKey);
-          const conversationLabel = metadata.conversationFile?.replace(/\.json$/i, "") || `与${metadata.characterName}的对话`;
+          const counterpartName = summaryPersonName(metadata.counterpartName || metadata.characterName);
+          const ownerName = summaryPersonName(metadata.ownerName || metadata.playerName);
+          const conversationLabel = `与${counterpartName}的对话`;
           return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "character-summary-group", children: [
             /* @__PURE__ */ jsxRuntimeExports.jsxs(
               "div",
@@ -21492,16 +21581,14 @@ const SummariesManager = () => {
                 className: "character-header",
                 onClick: (e) => {
                   e.stopPropagation();
+                  if (e.target.closest(".summary-person-diagnostics")) return;
                   toggleCharacterExpanded(characterKey);
                 },
                 children: [
                   /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "expand-icon", children: isExpanded ? "▼" : "▶" }),
-                  /* @__PURE__ */ jsxRuntimeExports.jsxs("span", { className: "character-name", children: [conversationLabel, /* @__PURE__ */ jsxRuntimeExports.jsxs("small", { className: "summary-route-label", children: [metadata.ownerName || metadata.playerName, " → ", metadata.counterpartName || metadata.characterName] })] }),
+                  /* @__PURE__ */ jsxRuntimeExports.jsxs("span", { className: "character-name", children: [conversationLabel, /* @__PURE__ */ jsxRuntimeExports.jsxs("small", { className: "summary-route-label", children: [ownerName, " → ", counterpartName] })] }),
                   normalizedSearchQuery && metadata.searchMatch.kind !== "all" && /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: `summary-match-badge is-${metadata.searchMatch.kind}`, children: metadata.searchMatch.label }),
-                  /* @__PURE__ */ jsxRuntimeExports.jsxs("span", { className: "character-id", children: [
-                    "ID: ",
-                    metadata.characterId
-                  ] }),
+                  /* @__PURE__ */ jsxRuntimeExports.jsxs("details", { className: "summary-person-diagnostics", children: [/* @__PURE__ */ jsxRuntimeExports.jsx("summary", { children: "诊断详情" }), /* @__PURE__ */ jsxRuntimeExports.jsxs("span", { children: ["Owner ID：", metadata.ownerId ?? metadata.playerId, " · Counterpart ID：", metadata.counterpartId ?? metadata.characterId, " · 来源文件：", metadata.conversationFile || "未载入"] })] }),
                   /* @__PURE__ */ jsxRuntimeExports.jsxs("span", { className: "summary-count", children: [
                     metadata.summaries.length,
                     " ",
@@ -21543,7 +21630,22 @@ const SummariesManager = () => {
                 sortByDate, fromDate: summaryDateFrom, toDate: summaryDateTo,
                 page: summaryPages[summaryPageKey] || 0, pageSize: 10
               });
-              return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "summaries-container", children: [summaryPage.entries.map(({ summary, index }) => /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "summary-item", children: [
+              return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "summaries-container", children: [
+              /* @__PURE__ */ jsxRuntimeExports.jsx(PairLongTermUiMount, {
+                key: `pair-ledger-${summaryPageKey}`,
+                mode: "pair",
+                ownerId: Number(metadata.ownerId ?? metadata.playerId),
+                counterpartId: Number(metadata.counterpartId ?? metadata.characterId),
+                ownerName,
+                counterpartName,
+                refreshToken: ledgerRefreshRevision,
+                onLocateSource: (resolvedSource, item) => handleLocateResolvedSource({
+                  ...resolvedSource,
+                  ownerId: Number(metadata.ownerId ?? metadata.playerId),
+                  counterpartId: Number(metadata.counterpartId ?? metadata.characterId)
+                }, item)
+              }),
+              summaryPage.entries.map(({ summary, index }) => /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "summary-item", "data-pair-source-id": `${Number(metadata.ownerId ?? metadata.playerId)}:${Number(metadata.counterpartId ?? metadata.characterId)}:${index}`, children: [
               /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "summary-header", children: [
                 /* @__PURE__ */ jsxRuntimeExports.jsxs("span", { className: "summary-date", children: [
                   summary.sourceType === "CK3_OFFICIAL_RECOLLECTION" ? "官方追忆摘要（随新对话更新）" : "📅 ",
@@ -21604,7 +21706,7 @@ const SummariesManager = () => {
                 /* @__PURE__ */ jsxRuntimeExports.jsx("summary", { children: "重要事项" }),
                 /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "summary-content", style: { whiteSpace: "pre-wrap" }, children: getSummaryImportantMatters(summary.content) })
               ] })
-            ] }, index)),
+              ] }, index)),
             summaryPage.pageCount > 1 && /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "summary-pagination", role: "navigation", "aria-label": "摘要分页", style: { display: "flex", alignItems: "center", justifyContent: "center", gap: "8px", margin: "12px 0" }, children: [
               /* @__PURE__ */ jsxRuntimeExports.jsx("button", { type: "button", disabled: summaryPage.page === 0, onClick: () => setSummaryPages(previous => ({ ...previous, [summaryPageKey]: summaryPage.page - 1 })), children: "上一页" }),
               /* @__PURE__ */ jsxRuntimeExports.jsxs("span", { children: ["第 ", summaryPage.page + 1, " / ", summaryPage.pageCount, " 页 · ", summaryPage.totalCount, " 篇"] }),
@@ -21613,7 +21715,8 @@ const SummariesManager = () => {
           ] });
             })()
           ] }, characterKey);
-        }) })
+        })]
+        })
       ] }, playerKey);
     }) }),
     editingEntry && /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "modal-overlay", children: /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "modal-content summary-edit-modal", children: [
@@ -21635,20 +21738,14 @@ const SummariesManager = () => {
               "目录人物："
             ] }),
             " ",
-            editingEntry.ownerName || "未知角色",
-            "（ID: ",
-            editingEntry.playerId,
-            "）"
+            summaryPersonName(editingEntry.ownerName),
           ] }),
           /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { children: [
             /* @__PURE__ */ jsxRuntimeExports.jsxs("strong", { children: [
               "对话对象："
             ] }),
             " ",
-            editingEntry.counterpartName || "未知角色",
-            "（ID: ",
-            editingEntry.characterId,
-            "）"
+            summaryPersonName(editingEntry.counterpartName),
           ] }),
           /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { children: [
             /* @__PURE__ */ jsxRuntimeExports.jsxs("strong", { children: [
@@ -21659,6 +21756,7 @@ const SummariesManager = () => {
             editingEntry.index + 1
           ] })
         ] }),
+        /* @__PURE__ */ jsxRuntimeExports.jsxs("details", { className: "summary-person-diagnostics", children: [/* @__PURE__ */ jsxRuntimeExports.jsx("summary", { children: "诊断详情" }), /* @__PURE__ */ jsxRuntimeExports.jsxs("span", { children: ["Owner ID：", editingEntry.playerId, " · Counterpart ID：", editingEntry.characterId] })] }),
         editingEntry.sourceType === "CK3_OFFICIAL_RECOLLECTION" && /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "help-text", children: "官方追忆来自 CK3。本页修改作用于当前同步副本；开始新对话后，系统可能根据最新 CK3 日志重新覆盖。" }),
         /* @__PURE__ */ jsxRuntimeExports.jsx(
           "textarea",

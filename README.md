@@ -4,7 +4,7 @@ Voices of the Court 是一个面向《Crusader Kings III》（CK3）的沉浸式
 
 本仓库保存 VOTC 的可编辑 JavaScript 源、可重复生成的运行资源、既有 Windows 壳与锁定依赖，适合运行、开发与回归验证。
 
-当前基线 **V9.3.4 Durable 退役与 Legacy Summary**：[实施报告](docs/current/v9/V9_3_4_IMPLEMENTATION_REPORT.md)、[验证报告](docs/current/v9/V9_3_4_VERIFICATION_REPORT.md)。Core／App／UI 为 9.3.4；Workshop 2.0.5、Official Action 2.0.3、协议 3.0 与摘要存储 2.5 保持。Durable 生产生成、恢复、召回与写入已退役；Year/Life 继续不生成。源码映射 278 项，构建与部署验证通过；本轮真实 CK3、Soak 与远端 CI 待验收，最终发布组数量以正式报告为准。
+当前文档入口为 **V9.3.5 Pair Memory Index 候选（施工与验收中）**：[实施报告](docs/current/v9/V9_3_5_IMPLEMENTATION_REPORT.md)、[验证报告](docs/current/v9/V9_3_5_VERIFICATION_REPORT.md)、[索引与来源合同](docs/current/v9/V9_3_5_INDEX_AND_SOURCE_CONTRACT.md)。候选在 Legacy `Recent1` 之外使用 Owner→Counterpart 本地 Pair 事项索引，并按已验证的来源键和修订号读取 1–2 篇确切 Legacy 来源摘要；Temporal 与 Mentioned 各自最多选 3 项，所有输入共同受 2／3／4+ 人对应 10%／12.5%／15% 上限及 3600／4500／5400 Token 总预算约束，并保留 Provider 安全余量。不新增模型提取请求；Durable、Year/Life 生成与后台重建继续退役。V9.3.5 尚未完成发布验收；真实 CK3、Soak、远端 CI 和最终构建证据以报告为准，不据此宣称 Full Freeze。V9.3.4 保留为历史基线。
 
 历史基线 **V9.2 应用边界与 JSON 仓储**（2026-10-11）：[施工与验证](docs/current/v9/V9_2_VERIFICATION_REPORT.md)、[七域端口](docs/current/v9/V9_2_SERVICE_PORTS.md)、[数据权威与恢复](docs/current/v9/V9_2_JSON_AUTHORITY_AND_RECOVERY.md)。符合[当时总路线](docs/current/v9/V9_ROADMAP.md) §7.3；V9.1 f9c088f 和 V9.2 6026713 的远端 CI 与用户功能确认作为历史证据保留。
 
@@ -14,9 +14,11 @@ Voices of the Court 是一个面向《Crusader Kings III》（CK3）的沉浸式
 
 ## 主要功能
 
-当前记忆入口为 `Legacy Summary`。NPC 每名直接对话对象默认读取最近两篇摘要，合法 CK3 官方追忆摘要占独立槽位；每名回应 NPC 每轮动态 Extra 为 0–3 篇。会话首次生成时冻结摘要总预算：2 人为上下文 10%／上限 3600 Token，3 人为 12.5%／上限 4500，4 人及以上为 15%／上限 5400，取较小值并为 Provider 保留安全余量。摘要全文、重要事项、编辑／删除、日期筛选与分页由 Legacy 摘要界面提供。
+当前记忆入口为 `Legacy Summary`。每名直接对话对象使用最近 1 篇摘要，并从本地 Pair 事项索引中检索相关事项，再按准确来源定位 1–2 篇 Legacy 摘要；来源修订失效时刷新索引，不打开缓存旧行。Temporal 与 Mentioned 各自最多选 3 项，所有内容共同受按在场人数冻结的 10%／12.5%／15% 上限及 3600／4500／5400 Token 总预算约束。索引由既有摘要确定性本地生成，不新增模型提取请求。Legacy 页面提供事项搜索、日期筛选、分页、预览确认回填和已验证来源全文查看；人物主标签只用真实姓名，未知时显示“姓名未载入”，ID 仅用于内部或折叠诊断。
 
-### 历史版本记录（以下保留当时实现与验收快照，不代表 V9.3.4 当前功能）
+### 历史版本记录（以下保留当时实现与验收快照，不代表 V9.3.5 候选合同）
+
+历史 V9.3.4 Durable 退役与 Legacy Summary：[实施](docs/current/v9/V9_3_4_IMPLEMENTATION_REPORT.md)、[验证](docs/current/v9/V9_3_4_VERIFICATION_REPORT.md)。当时直接关系默认取最近两篇摘要，搭配合法官方追忆和动态 Extra；其映射、构建、部署及验收结论只作为该阶段证据。V9.3.5 候选改用 Recent1 与 Pair 事项索引/精确来源召回，不能把旧配额视为当前候选合同。
 
 V9.3.3.1 修复（2026-10-14）：[规格](docs/current/v9/V9_3_3_1_FIX_SPEC.md)、[实施](docs/current/v9/V9_3_3_1_FIX_REPORT.md)、[验证](docs/current/v9/V9_3_3_1_VERIFICATION_REPORT.md)。修复 Windows 二进制检出、同源 Coverage 判定、明细分页和 Durable 跳转 Loading；版本同步 9.3.3.1，零付费和零历史清理。远端 CI 等待用户手动推送后核验。
 
@@ -28,7 +30,7 @@ V9.3.3.1 修复（2026-10-14）：[规格](docs/current/v9/V9_3_3_1_FIX_SPEC.md)
 
 历史 V9.2.3候选（2026-10-13）：[实施](docs/current/v9/V9_2_3_IMPLEMENTATION_REPORT.md)、[验证](docs/current/v9/V9_2_3_VERIFICATION_REPORT.md)。Year/Life自动模型生成已退役；保留Durable、Detail/Legacy及合法旧档查看和手改。以下旧年度压缩／重建记录为历史合同，不能据此重新启用生成。GLM旧新出站一致，原生长上下文另有取证，实机问题仍HOLD；正式App/UI保持9.2.0/V9.2，未签完整冻结。Durable 已由 V9.3.4 退役。
 
-当前版本：项目／Core／UI **V9.3.4**，Electron App 包 **9.3.4**，VOTC Workshop Mod **2.0.5**。记忆入口显示 `Legacy Summary`；协议 3.0、摘要存储 2.5 与 Official Action 2.0.3 保持。VOTC.exe 的旧壳属性版本未改写。Durable 不再在线，Year/Life 不生成。
+当前候选目标为 V9.3.5，仍处施工与验收阶段，不能据此推定正式项目／Core／UI 或 Electron App 版本已变更；正式版本号以包元数据和最终报告为准。VOTC Workshop Mod 2.0.5、`Legacy Summary`、协议 3.0、摘要存储 2.5 与 Official Action 2.0.3 保持。VOTC.exe 的旧壳属性版本未改写。Durable 不再在线，Year/Life 不生成。
 
 可选兼容工程已完成本地迁移：[CK3-Three-Mod-Compatibility](https://github.com/wsdsb-111/CK3-Three-Mod-Compatibility)，工作目录 `C:/Users/97330/Documents/Codex/CK3-Three-Mod-Compatibility`。官职／称谓规则不属于 VOTC 运行必需依赖，历史[1.0.6 报告](docs/v8.15.2-celestial-same-tier-office-report.md)保留；当前安装 Mod 不卸载。独立CI与CK3验收待执行。
 
@@ -211,13 +213,13 @@ V7.6 默认模板明确区分长期稳定记忆、当前话题记忆与本轮事
 
 ## 对话摘要与记忆
 
-当前人物历史记忆由 `Legacy Summary` 驱动，直接关系默认召回两篇摘要；合法 CK3 官方追忆可作为独立一篇。每名回应 NPC 每轮动态 Extra 为 0–3 篇。摘要总输入预算在会话首次生成时冻结：参与人数为 2／3／4+ 时分别使用上下文 10%／12.5%／15%，且上限为 3600／4500／5400 Token，取较小值并保留 Provider 安全余量。Legacy 页面可展开全文和重要事项，并支持编辑、删除、日期筛选与分页。
+当前人物历史记忆由 `Legacy Summary` 驱动：每名直接对话对象取最近 1 篇摘要，并通过本地 Owner→Counterpart Pair 事项索引选择 1–2 篇精确来源摘要。索引事项仅由既有摘要确定性生成，不增加模型提取请求；来源必须经键和修订号复验后才能查看，过期项提示刷新。Temporal 与 Mentioned 各自最多 3 项，并与其他记忆内容共同受会话首次生成时冻结的总预算约束：2／3／4+ 人分别为上下文 10%／12.5%／15%，上限 3600／4500／5400 Token，取较小值并保留 Provider 安全余量。Legacy 页面提供搜索、日期过滤、分页、预览确认回填及已验证来源查看；主标签使用真实姓名，姓名未知显示“姓名未载入”，ID 只放内部或折叠诊断。
 
-旧 archive Sidecar 保留原始字节且运行时不扫描、不读、不写。Legacy Forget ledger 位于现有摘要 index，并随摘要 mutation 事务提交或回滚。改名目录合并若会包含 Sidecar 则跳过；纯 Legacy 摘要仍可正常读写。协议 3.0、存储 2.5、Campaign／Owner 与知情边界保持；Year/Life 自动生成及后台重建不恢复。
+旧归档内容只允许安全只读查看；无游戏连接时仍可只读浏览，但不能回填。旧 `archiveSidecar` 保留原始字节且运行时不扫描、不读、不写。Legacy Forget ledger 位于现有摘要 index，并随摘要 mutation 事务提交或回滚。改名目录合并若会包含 Sidecar 则跳过；纯 Legacy 摘要仍可正常读写。协议 3.0、存储 2.5、Campaign／Owner 与知情边界保持；Year/Life 自动生成及后台重建不恢复。
 
 ### 历史摘要设计快照（V7.9.1 时点）
 
-V7.9.1 继续使用 Memory Engine 2.5，本次未修改摘要存储、动态召回选择或人物目录格式。旧摘要导入、跨周目摘要提示和旧格式运行路径已退休；人物目录仍是唯一摘要正文来源，2.3/2.4 视角摘要继续兼容读取。以下条目保留该阶段记录，不作为 V9.3.4 当前实现合同：
+V7.9.1 继续使用 Memory Engine 2.5，本次未修改摘要存储、动态召回选择或人物目录格式。旧摘要导入、跨周目摘要提示和旧格式运行路径已退休；人物目录仍是唯一摘要正文来源，2.3/2.4 视角摘要继续兼容读取。以下条目保留该阶段记录，不作为 V9.3.5 候选实现合同：
 
 - 摘要 Provider 请求异常时不推进 rolling checkpoint；终局最多两次整场模型请求，失败保留 recovery snapshot，不将原文写成人物摘要。摘要页“重试失败摘要”按当前模型配置补生成，可重试已达自动上限的记录；截断、来源 ID 和投影质量门禁不放宽；
 - 结构化区分事实、信念、计划、传闻、秘密、承诺和关系变化；
@@ -327,18 +329,18 @@ V7.7 在 V7.6 健康化基础上分阶段拆分主进程：第一阶段将六种
 node scripts\test-release.js
 ```
 
-清单覆盖全部 `test-*.js`；当前 V9.3.4 的验证结果见[验证报告](docs/current/v9/V9_3_4_VERIFICATION_REPORT.md)，数量以 `scripts/test-manifest.js` 实际输出和正式报告为准。自动化与构建证据不替代真实 CK3、Soak 或远端 CI 验收。
+清单覆盖全部 `test-*.js`；V9.3.5 候选的验证入口见[验证报告](docs/current/v9/V9_3_5_VERIFICATION_REPORT.md)，测试数量以清单和最终报告为准。自动化与构建证据不替代真实 CK3、Soak 或远端 CI 验收。
 
 ## 版本信息
 
-- 项目／前端版本：V9.3.4；App 包版本为 9.3.4；记忆入口显示 `Legacy Summary`
-- 当前开发基线：Durable 生产链已退役，摘要驱动的历史记忆、Legacy UI 与原协议/存储兼容。源码映射 278 项，构建和部署已通过；真实 CK3、Soak 与远端 CI 待验收，最终组数不在报告外预填。
+- 项目／前端／App 正式版本号以包元数据和最终报告为准；V9.3.5 是仍在施工与验收中的候选，记忆入口显示 `Legacy Summary`
+- 当前候选合同：Recent1 + 本地 Pair 事项索引及 1–2 篇经复验的来源摘要；Temporal、Mentioned 各自最多 3 项，共享既有输入预算；Durable 与 Year/Life 生成退役。源码映射、构建、部署、CK3、Soak 和远端 CI 状态均以本轮正式报告为准，不在报告外预填数量或验收结论。
 - 本机 CK3 模组 descriptor：Voices of the Court 2.0，version 2.0.5，Workshop 3346777360（Mod 名称保留以兼容依赖）；必需 Date Runner 补丁按[外部运行依赖](docs/EXTERNAL_RUNTIME_DEPENDENCIES.md)核对，不单凭版本号判定
 - 本机模组 descriptor 支持版本：CK3 1.20.*（元数据声明，不替代实机兼容性 Gate）
 - UI 主题：宫廷编年史风格（深红、暗金、羊皮纸文本层级）
 - UI 主题切换：游牧、骑士纹章、水墨画卷三套完整历史风格；分别使用 `image/草原游牧.png`、`image/中世纪骑士.png`、`image/中国古典.png` 作为整块界面背景，并保留各自的边框结构、按钮造型、消息卡片、输入框、字体和滚动条，主题选择可自动保存
 - UI 素材生成提示词：参见 [docs/UI_ASSET_PROMPTS_2.0.3.md](docs/UI_ASSET_PROMPTS_2.0.3.md)
-- 当前摘要预算：直接关系两篇摘要，另有合法官方摘要独立槽位；动态 Extra 每 NPC 每轮 0–3 篇。总预算按人数冻结为 10%/3600、12.5%/4500、15%/5400 Token，并保留 Provider 安全余量。
+- 当前候选摘要预算：Recent1、Pair 来源摘要、Temporal 与 Mentioned 等输入共享按 2／3／4+ 人冻结的 10%/3600、12.5%/4500、15%/5400 Token 总限，并保留 Provider 安全余量；Temporal 与 Mentioned 各自最多 3 项。
 
 ## 已知限制
 

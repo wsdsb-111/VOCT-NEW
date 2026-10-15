@@ -246,20 +246,19 @@ async function testAcceptedLetterCrashForgetRecovery() {
       "a restarted service still validates the pending job before recovery");
 
     const automatic = await restartedService.retryPending({ activeCampaignToken: letterCampaign });
-    assert(automatic.some(row => row.status === "FAILED_MANUAL"),
-      "uncommitted Legacy memory/episode stays behind the bounded retry cap");
+    assert(automatic.some(row => row.status === "MANUAL_BLOCKED"),
+      "a forgotten owner blocks recovery even after the bounded retry cap");
     assert.equal(provider.requestTypes.length, 1, "a capped automatic retry does not regenerate the completed summary");
     const recovered = await restartedService.retryPending({ activeCampaignToken: letterCampaign, manual: true });
-    assert(recovered.some(row => row.status === "COMPLETE"), JSON.stringify(recovered));
-    assert.equal(provider.requestTypes.length, 1, "a completed summary is reused; recovery makes no second model request");
+    assert(recovered.some(row => row.status === "MANUAL_BLOCKED"), JSON.stringify(recovered));
+    assert.equal(provider.requestTypes.length, 1, "a completed summary is reused; Forget recovery makes no second model request");
     assert.deepEqual(provider.requestTypes, ["letter_summary"], "recovery performs no Durable/provider outbound");
     const finalizationSource = fs.readFileSync(require.resolve("../src/app/main/memory-system/letter-summary-finalization"), "utf8");
     assert.doesNotMatch(finalizationSource, /letter-effect-transport|letter_effect/,
       "the recovery service has no game Effect transport dependency");
-    assert.equal(restartedEngine.store.listAllEpisodes().length, 1);
-    const [letterMemory] = restartedEngine.store.listAllMemories();
-    assert(letterMemory, "recovery stores the Legacy letter memory");
-    assert.deepEqual(letterMemory.knownBy, [1], "recovery does not restore the forgotten recipient's knowledge");
+    assert.equal(restartedEngine.store.listAllEpisodes().length, 0, "a forgotten recipient prevents letter marker recovery");
+    assert.equal(restartedEngine.store.listAllMemories().length, 0, "a forgotten recipient prevents recreating letter memory");
+    assert.equal(restartedService.getJobStatus(jobRef.jobId).archiveStatus, "SUMMARY_MANUAL_BLOCKED");
     assert.equal(fs.existsSync(recipientFile), false, "recovery cannot recreate the forgotten owner's Legacy row");
     assert.equal(JSON.parse(fs.readFileSync(senderFile, "utf8")).length, 1,
       "the retained sender row remains singular after recovery");

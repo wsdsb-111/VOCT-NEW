@@ -1,0 +1,229 @@
+.pair-long-term-ui-host {
+  margin: 12px 0;
+}
+
+.pair-ledger-panel {
+  display: grid;
+  gap: 10px;
+  padding: 14px;
+  border: 1px solid var(--border-color, rgba(127, 127, 127, .35));
+  border-radius: 10px;
+  background: var(--surface-color, rgba(127, 127, 127, .06));
+}
+
+.pair-ledger-header h5,
+.pair-ledger-preview h6 {
+  margin: 0;
+}
+
+.pair-ledger-header p,
+.pair-ledger-notice,
+.pair-ledger-status,
+.pair-ledger-error,
+.pair-ledger-readonly,
+.pair-ledger-empty,
+.pair-ledger-item-text,
+.pair-source-modal-route,
+.pair-source-matched-item {
+  margin: 0;
+}
+
+.pair-ledger-notice,
+.pair-ledger-status,
+.pair-ledger-readonly,
+.pair-ledger-empty {
+  font-size: .92em;
+  opacity: .86;
+}
+
+.pair-ledger-error {
+  color: var(--danger-color, #a33);
+}
+
+.pair-ledger-controls,
+.pair-ledger-item-header,
+.pair-ledger-item-actions,
+.pair-ledger-pagination,
+.pair-ledger-preview-actions,
+.pair-source-modal-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.pair-ledger-controls,
+.pair-ledger-item-header,
+.pair-source-modal-header {
+  justify-content: space-between;
+}
+
+.pair-ledger-filters {
+  display: grid;
+  grid-template-columns: minmax(180px, 2fr) repeat(2, minmax(130px, 1fr)) auto;
+  gap: 8px;
+}
+
+.pair-ledger-filters input,
+.pair-ledger-sort {
+  min-width: 0;
+  padding: 7px 9px;
+}
+
+.pair-ledger-items,
+.pair-ledger-preview-items,
+.pair-ledger-preview-pairs,
+.pair-ledger-apply-results {
+  display: grid;
+  gap: 8px;
+  margin: 0;
+  padding-left: 22px;
+}
+
+.pair-ledger-item,
+.pair-ledger-preview,
+.pair-ledger-batch-progress {
+  display: grid;
+  gap: 8px;
+  padding: 10px;
+  border: 1px solid var(--border-color, rgba(127, 127, 127, .25));
+  border-radius: 8px;
+  background: var(--panel-color, rgba(255, 255, 255, .12));
+}
+
+.pair-ledger-item-header time {
+  font-weight: 600;
+}
+
+.pair-ledger-evidence {
+  font-size: .88em;
+  opacity: .76;
+}
+
+.pair-ledger-counts {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 14px;
+  margin: 0;
+}
+
+.pair-ledger-counts dt,
+.pair-ledger-counts dd {
+  display: inline;
+  margin: 0;
+}
+
+.pair-ledger-counts dd {
+  font-weight: 700;
+}
+
+.pair-ledger-skip-reasons,
+.pair-ledger-preview-items p {
+  margin: 4px 0 0;
+}
+
+.pair-ledger-pagination {
+  justify-content: center;
+}
+
+.pair-ledger-diagnostics pre {
+  max-height: 240px;
+  overflow: auto;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  font-size: .82em;
+}
+
+.pair-ledger-apply-results .is-success {
+  color: var(--success-color, #276749);
+}
+
+.pair-ledger-apply-results .is-error {
+  color: var(--danger-color, #a33);
+}
+
+.pair-source-modal-backdrop {
+  position: fixed;
+  z-index: 10000;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  padding: 20px;
+  background: rgba(0, 0, 0, .62);
+}
+
+.pair-source-modal {
+  width: min(900px, 96vw);
+  max-height: 90vh;
+  overflow: auto;
+  display: grid;
+  gap: 12px;
+  padding: 18px;
+  border: 1px solid var(--border-color, rgba(127, 127, 127, .4));
+  border-radius: 12px;
+  background: var(--background-color, #f5f1e8);
+  color: var(--text-color, #242424);
+}
+
+.pair-source-content {
+  max-height: 58vh;
+  overflow: auto;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  margin: 0;
+  padding: 12px;
+  border-radius: 8px;
+  background: rgba(127, 127, 127, .1);
+}
+
+.pair-source-matched-item mark {
+  white-space: pre-wrap;
+}
+
+.summary-person-diagnostics {
+  margin-left: 8px;
+  font-size: .82em;
+  opacity: .76;
+}
+
+.summary-person-diagnostics summary {
+  cursor: pointer;
+}
+
+.summary-person-diagnostics span {
+  display: block;
+  overflow-wrap: anywhere;
+}
+
+.pair-source-highlight {
+  outline: 2px solid var(--accent-color, #bd8c42);
+  outline-offset: 3px;
+  transition: outline-color .2s ease;
+}
+
+.summary-important-matters.pair-source-item-highlight {
+  padding: 8px;
+  border-radius: 6px;
+  background: rgba(189, 140, 66, .16);
+  box-shadow: 0 0 0 2px var(--accent-color, #bd8c42);
+}
+
+.summary-important-matters.pair-source-item-highlight::before {
+  display: block;
+  margin-bottom: 6px;
+  color: var(--accent-color, #bd8c42);
+  content: "对应事项： " attr(data-pair-source-item);
+  font-weight: 700;
+  white-space: pre-wrap;
+}
+
+.pair-source-modal-header {
+  font-size: 1.1em;
+  font-weight: 700;
+}
+
+@media (max-width: 700px) {
+  .pair-ledger-filters {
+    grid-template-columns: 1fr;
+  }
+}

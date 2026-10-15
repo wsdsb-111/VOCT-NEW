@@ -23,6 +23,8 @@ try {
   const legacy = folder("legacy-summary", null);
   const markFixtureSnapshot = memories => {
     engine.store.folderSummarySnapshotRevisions.set(memories, engine.store.getFolderSummaryRevision(2));
+    engine.store.folderSummarySnapshotSources.set(memories, { ownerId: 2, folderNames: [], files: [],
+      directories: engine.store.getFolderSummarySourceDirectories(2, []) });
     return memories;
   };
   engine.store.saveMemory(createMemoryRecord({ memoryId: "campaign-b-internal", type: "event", content: "other campaign",

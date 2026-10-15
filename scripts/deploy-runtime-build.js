@@ -49,7 +49,7 @@ function safeManagedPath(value) {
       || /^(?:con|prn|aux|nul|com[1-9]|lpt[1-9])(?:\.|$)/i.test(part))) {
     throw new Error("build_deploy_invalid_path");
   }
-  if (!(value === "package.json" || /^(out\/(main|preload|renderer)|default_userdata)\//.test(value))) {
+  if (!(value === "package.json" || /^(out\/(main|preload|renderer|shared)|default_userdata)\//.test(value))) {
     throw new Error("build_deploy_invalid_path");
   }
   return value;
@@ -494,7 +494,7 @@ function safeSourcePath(value) {
       || /^(?:con|prn|aux|nul|com[1-9]|lpt[1-9])(?:\.|$)/i.test(part))) {
     throw new Error("build_deploy_invalid_mapping");
   }
-  if (!(value === "package.json" || /^(main|preload|renderer|default_userdata)\//.test(value))) {
+  if (!(value === "package.json" || /^(main|preload|renderer|shared|default_userdata)\//.test(value))) {
     throw new Error("build_deploy_invalid_mapping");
   }
   return value;
@@ -517,7 +517,7 @@ function readBootstrapMappings(rootDir, manifest) {
   const mappings = config.files.map(item => {
     const source = safeSourcePath(item?.source);
     const target = safeManagedPath(item?.target);
-    const expectedTarget = /^(main|preload|renderer)\//.test(source) ? `out/${source}` : source;
+    const expectedTarget = /^(main|preload|renderer|shared)\//.test(source) ? `out/${source}` : source;
     if (target !== expectedTarget || sources.has(source) || targets.has(target)) {
       throw new Error("build_deploy_bootstrap_inputs_invalid");
     }

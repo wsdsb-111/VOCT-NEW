@@ -166,7 +166,7 @@ assert(extractionPrompt.includes("There is no fixed character or word count"), "
 assert(extractionPrompt.includes("attribute every action, statement, belief and emotion to the correct named character"), "摘要必须逐人归属言行、观点和情绪");
 assert(extractionPrompt.includes("Never replace concrete details with generic phrases"), "摘要不得用泛化措辞替代具体对话事实");
 assert(extractionPrompt.includes("exact numbers, dates, locations, titles, objects and quoted terms"), "摘要必须保留可核验的数字、日期、地点、头衔、物件和关键措辞");
-assert(extractionPrompt.includes("at most 10 high-value durable memories"), "结构化记忆条目必须限制为最多 10 条以保护 4096 Token JSON");
+assert(extractionPrompt.includes("from every substantive presence period"), "同一次摘要应覆盖每个在场窗口的重要事项；输出受既有 Provider Token 预算约束");
 assert(extractionPrompt.includes("as concise as possible without losing substantive content"), "终局摘要必须要求精简表达但不得丢失实质内容");
 assert(extractionPrompt.includes("knowledge audience materially changes"), "终局摘要必须在知情范围变化时拆分叙事片段");
 assert(extractionPrompt.includes("asleep, unconscious, absent or has left"), "睡着、昏迷、不在场或离场人物不得获得无法感知的内容");

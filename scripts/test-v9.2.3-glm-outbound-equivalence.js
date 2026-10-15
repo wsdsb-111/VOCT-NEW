@@ -280,8 +280,8 @@ function assertPair(reference, result, label) {
   assert.strictEqual(reference.bodySha256, result.bodySha256, `${label}:SDK_create_wire_SHA256`);
   const expectedClient = JSON.parse(reference.clientJson);
   if (expectedClient.defaultHeaders["User-Agent"] === "VOTC/9.2.0"
-    && result.client.defaultHeaders["User-Agent"] === "VOTC/9.3.4") {
-    expectedClient.defaultHeaders["User-Agent"] = "VOTC/9.3.4";
+    && result.client.defaultHeaders["User-Agent"] === "VOTC/9.3.5") {
+    expectedClient.defaultHeaders["User-Agent"] = "VOTC/9.3.5";
   }
   const expectedClientJson = JSON.stringify(expectedClient);
   assert.strictEqual(expectedClientJson, result.clientJson, `${label}:SDK_endpoint_client_config_bytes_except_explicit_version`);
@@ -289,7 +289,7 @@ function assertPair(reference, result, label) {
 }
 
 function assertExpectedClient(result, label) {
-  if (label.includes("candidate")) assert.strictEqual(result.client.defaultHeaders["User-Agent"], "VOTC/9.3.4", `${label}:app_version_header`);
+  if (label.includes("candidate")) assert.strictEqual(result.client.defaultHeaders["User-Agent"], "VOTC/9.3.5", `${label}:app_version_header`);
   assert.strictEqual(result.client.apiKey, "synthetic-fixture-key", `${label}:synthetic_only_sdk_key`);
   assert.strictEqual(result.client.baseURL, "https://example.invalid/api/paas/v4", `${label}:configured_endpoint`);
   assert.strictEqual(result.client.maxRetries, 0, `${label}:sdk_retries_disabled_for_fixture`);

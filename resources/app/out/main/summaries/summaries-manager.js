@@ -9,7 +9,12 @@ function createSummariesManager({ fs, path, summariesDir, memoryEngine, memorySy
   const VOTC_SUMMARIES_DIR = summariesDir;
   let summaryRegenerationInFlight = false;
   let summaryRetryInFlight = null;
+  const pairMemory = require("../memory-system/pair-memory-service").createPairMemoryService({ store: memoryEngine.store, getCurrentConversation });
   class SummariesManager {
+    static getPairMemoryIndex(request) { return pairMemory.get(request); }
+    static previewPairMemoryBackfill(request) { return pairMemory.preview(request); }
+    static applyPairMemoryBackfill(request) { return pairMemory.apply(request); }
+    static openPairMemorySource(request) { return pairMemory.open(request); }
     static getRecoveryStatus() {
       const conversation = getCurrentConversation();
       const currentId = conversation?.id;

@@ -22,18 +22,18 @@ const check = (condition, message) => {
   if (!condition) failures.push(message);
 };
 
-const featureVersionDeclaration = /\bconst\s+VOTC_FEATURE_VERSION\s*=\s*["']V9\.3\.4["']/.test(renderer);
-check(featureVersionDeclaration, "Renderer must define VOTC_FEATURE_VERSION = \"V9.3.4\"");
+const featureVersionDeclaration = /\bconst\s+VOTC_FEATURE_VERSION\s*=\s*["']V9\.3\.5["']/.test(renderer);
+check(featureVersionDeclaration, "Renderer must define VOTC_FEATURE_VERSION = \"V9.3.5\"");
 check((renderer.match(/\bVOTC_FEATURE_VERSION\b/g) || []).length >= 2, "Renderer must display the feature version constant");
 check(renderer.includes("window.electronAPI.getAppVersion()"), "footer must continue reading the package version through getAppVersion()");
 const footerStart = renderer.indexOf('className: "app-version"');
 check(footerStart >= 0 && /appVersion/.test(renderer.slice(footerStart, footerStart + 180)), "footer must retain the getAppVersion() result as package metadata");
-check(appPackage.version === "9.3.4", "the Electron package version must match V9.3.4 using the current SemVer label");
+check(appPackage.version === "9.3.5", "the Electron package version must match V9.3.5 using the current SemVer label");
 check(renderer.includes('const VOTC_WORKSHOP_MOD_VERSION = "2.0.5";'), "Renderer must identify Workshop Mod 2.0.5");
 check(renderer.slice(footerStart, footerStart + 300).includes("VOTC_WORKSHOP_MOD_VERSION"), "footer must show the Workshop Mod version");
-check(fs.readFileSync(path.join(root, "resources/app/out/renderer/index.html"), "utf8").includes("<title>VOTC V9.3.4</title>"), "window title must identify V9.3.4");
+check(fs.readFileSync(path.join(root, "resources/app/out/renderer/index.html"), "utf8").includes("<title>VOTC V9.3.5</title>"), "window title must identify V9.3.5");
 const themePreview = fs.readFileSync(path.join(root, "ui-theme-preview.html"), "utf8");
-check(themePreview.includes("VOTC V9.3.4 · 三主题预览") && themePreview.includes("V9.3.4 · Mod v2.0.5") && themePreview.includes('title="VOTC App 9.3.4"'), "theme preview must match the shipped version labels");
+check(themePreview.includes("VOTC V9.3.5 · 三主题预览") && themePreview.includes("V9.3.5 · Mod v2.0.5") && themePreview.includes('title="VOTC App 9.3.5"'), "theme preview must match the shipped version labels");
 
 check(renderer.includes("Legacy Summary"), "the current memory overview must identify Legacy Summary");
 const footerRule = rendererCss.match(/\.config-panel-container \.app-version\s*\{([^}]*)\}/)?.[1] || "";
@@ -103,10 +103,11 @@ assert.deepStrictEqual(overview.totals, {
 assert.deepStrictEqual(overview.characters, [], "overview must not add a duplicate structured-memory tree");
 
 const overviewCopy = [...overview.boundaries, ...Object.values(overview.routingPolicy)].join("\n");
-check(/Recent\s*2|最近\s*2|最近两篇/i.test(overviewCopy), "memory overview must describe the Recent2 lane");
+check(/最近一篇直接关系摘要/.test(overviewCopy), "memory overview must describe the Recent1 direct-summary lane");
+check(/本地事项索引可定位一至两篇历史原摘要/.test(overviewCopy), "memory overview must describe two-level retrieval through exact Legacy source summaries");
 check(/Legacy/i.test(overviewCopy), "memory overview must describe Legacy recall");
-check(/最多[额外]*三篇/i.test(overviewCopy), "memory overview must state the three-summary dynamic allowance");
-check(/共享记忆 Token 预算/.test(overviewCopy), "memory overview must state the shared memory budget");
+check(/时间与场外人物通道各最多三篇/.test(overviewCopy), "memory overview must state independent Temporal and Mentioned limits");
+check(/所有通道共享原 Token 上限/.test(overviewCopy), "memory overview must state the shared memory token ceiling");
 check(/不读 Year\/Life/.test(overviewCopy), "date recall must keep Year/Life retired");
 check(/Owner/i.test(overviewCopy) && /Campaign|战役/i.test(overviewCopy) && /knownBy|知情名单/i.test(overviewCopy), "memory overview must explain Owner, Campaign, and knownBy scope");
 check(/(?:归档|archive)[^。\n]{0,60}(?:只读|read.only)|(?:只读|read.only)[^。\n]{0,60}(?:归档|archive)/i.test(overviewCopy), "memory overview must identify archives as read-only");

@@ -97,6 +97,7 @@ async function testLegacyLetterFinalization() {
 
 async function main() {
   await testLegacyLetterFinalization();
+  globalThis.VOTCPairImportantMatters = require("../src/app/shared/pair-important-matters");
   const { getLegacySummaryPage, getSummaryImportantMatters } = await import(pathToFileURL(
     path.join(root, "src/app/renderer/summary-date-order.js")
   ).href);
@@ -129,7 +130,7 @@ async function main() {
     "date boundaries include summaries on the boundary");
 
   const content = "谈判最终达成。\n【需要长期记住的事项】\n- 约定秋收后再会。\n【其他记录】\n不属于重要事项。";
-  assert.equal(getSummaryImportantMatters(content), "- 约定秋收后再会。");
+  assert.equal(getSummaryImportantMatters(content), "约定秋收后再会。");
   assert.equal(getSummaryImportantMatters("没有重要事项标记"), "");
 
   const renderer = read("src/app/renderer/assets/index-Dn3qWlAB.js");
@@ -160,7 +161,7 @@ async function main() {
   assert.doesNotMatch(preload, /conversation:getMemoryOverview|conversation:updateStructuredMemory|memory:updateRecord|memory:deleteRecord/);
   assert.doesNotMatch(ipc, /conversation:getMemoryOverview|conversation:updateStructuredMemory|memory:updateRecord|memory:deleteRecord/);
 
-  console.log("V9.3.4 Legacy Retirement: PASS (synthetic letter finalization and date/pagination helpers; static UI/IPC contracts; no Memory4 bridge)");
+  console.log("V9.3.5 Legacy Retirement: PASS (synthetic letter finalization and date/pagination helpers; static UI/IPC contracts; no Memory4 bridge)");
 }
 
 main().catch(error => {

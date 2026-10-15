@@ -884,6 +884,23 @@ function registerIpcHandlers(runtime) {
       return [];
     }
   });
+  for (const method of ["getPairMemoryIndex", "previewPairMemoryBackfill", "applyPairMemoryBackfill", "openPairMemorySource"]) {
+    electron.ipcMain.handle(`conversation:${method}`, async (_event, request = {}) => {
+      try {
+        const allowed = new Set(["ownerId", "counterpartId", "page", "pageSize", "sort", "search", "fromDate", "toDate", "previewRevision", "sourceSummaryKey", "expectedSourceRevision"]);
+        if (!request || typeof request !== "object" || Array.isArray(request) || Object.keys(request).some(key => !allowed.has(key))) throw new Error("PAIR_INDEX_REQUEST_INVALID");
+        requireInteger(request.ownerId, "owner_id", { max: 2147483647 });
+        if (request.counterpartId != null) requireInteger(request.counterpartId, "counterpart_id", { max: 2147483647 });
+        if (request.page != null) requireInteger(request.page, "page", { min: 0, max: 1000000 });
+        if (request.pageSize != null) requireInteger(request.pageSize, "page_size", { max: 50 });
+        if (request.sort != null && !["newest", "oldest"].includes(request.sort)) throw new Error("PAIR_INDEX_REQUEST_INVALID");
+        for (const key of ["search", "fromDate", "toDate", "previewRevision", "sourceSummaryKey", "expectedSourceRevision"]) {
+          if (request[key] != null && (typeof request[key] !== "string" || request[key].length > 512)) throw new Error("PAIR_INDEX_REQUEST_INVALID");
+        }
+        return await SummariesManager[method](request);
+      } catch (error) { return { success: false, error: error.message || "PAIR_INDEX_FAILED" }; }
+    });
+  }
   electron.ipcMain.handle("conversation:getSummariesDashboardData", async (_, options = {}) => {
     try {
       if (options?.refresh === true) memoryEngine.invalidateSummaryFolderCache();

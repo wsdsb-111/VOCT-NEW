@@ -81,10 +81,6 @@ function normalizeContext(input) {
     relationshipEvidence: relationshipRows(input.relationshipEvidence) });
 }
 
-function successfulPersistence(result) {
-  return result === true || result?.success === true;
-}
-
 function responseContent(response) {
   const outcome = validateGenerationOutcome(typeof response === "string" ? { content: response } : response);
   return outcome.complete && !outcome.truncated ? outcome.content.trim() : "";
@@ -127,6 +123,13 @@ class LetterSummaryFinalization {
       throw new Error("letter_memory_job_corrupt");
     }
     job.context = context;
+    const sourceRevision = this.sourceRevision(context, job.payloadHash);
+    if (job.sourceRevision == null) {
+      job.sourceRevision = sourceRevision;
+      job.legacySourceRevision = true;
+    } else if (job.sourceRevision !== sourceRevision) {
+      throw new Error("letter_memory_job_corrupt");
+    }
     return job;
   }
 
@@ -137,6 +140,11 @@ class LetterSummaryFinalization {
 
   jobId(context) {
     return hash([context.campaignToken, context.letterId, hash([context.text, context.reply])]);
+  }
+
+  sourceRevision(context, payloadHash = hash([context.text, context.reply])) {
+    return hash([context.campaignToken, context.letterId, context.senderId, context.recipientId,
+      context.sourceDate, context.acceptedDate, context.sourceTotalDays, context.acceptedTotalDays, payloadHash]);
   }
 
   captureAccepted(input) {
@@ -151,6 +159,7 @@ class LetterSummaryFinalization {
     const job = {
       schemaVersion: SCHEMA_VERSION, kind: "LETTER_SUMMARY_FINALIZATION", jobId,
       payloadHash: hash([context.text, context.reply]), context,
+      sourceRevision: this.sourceRevision(context, hash([context.text, context.reply])),
       conversationId: `letter_${jobId}`, finalizationId: `letter_${jobId}`,
       episodeId: `letter_episode_${jobId}`, commitMarker: `commit_letter_${jobId}`,
       attemptCount: 0, retryCount: 0, lastErrorCode: null,
@@ -226,7 +235,7 @@ class LetterSummaryFinalization {
     return {
       conversationId: job.conversationId, finalizationId: job.finalizationId, episodeId: job.episodeId,
       commitMarker: job.commitMarker, campaignToken: job.context.campaignToken,
-      sourceLetterId: job.context.letterId,
+      sourceLetterId: job.context.letterId, sourceRevision: job.sourceRevision,
       currentCampaignNative: true, date: job.context.acceptedDate, totalDays: job.context.acceptedTotalDays,
       participants: job.context.participantProfiles, participantIds: [job.context.senderId, job.context.recipientId],
       participantProfiles: job.context.participantProfiles, excludedSummaryOwnerIds: this.getForgottenOwnerIds(job),
@@ -253,6 +262,167 @@ class LetterSummaryFinalization {
       memoryIds: memories.filter(memory => memory.knownBy.includes(ownerId)).map(memory => memory.memoryId) };
   }
 
+  projectionTargetFileId(ownerId, counterpartId) {
+    return `legacy_${hash(["letter_summary_target", ownerId, counterpartId]).slice(0, 24)}`;
+  }
+
+  hasVerifiedLegacyMarker(job) {
+    if (job.narrative.markerStatus !== "COMPLETE") return false;
+    const store = this.memoryEngine.store;
+    const marker = store.findEpisodeByFinalization?.(job.conversationId, job.finalizationId, job.context.campaignToken)
+      || store.listAllEpisodes?.().find(item => item.conversationId === job.conversationId
+        && item.finalizationId === job.finalizationId && item.campaignToken === job.context.campaignToken) || null;
+    const participantIds = (Array.isArray(marker?.participants) ? marker.participants : [])
+      .map(profile => Number(profile?.id ?? profile?.characterId)).filter(Number.isSafeInteger);
+    return marker?.commitMarker === job.commitMarker
+      && marker.letterId === job.context.letterId
+      && marker.letterPayloadHash === job.payloadHash
+      && marker.sessionSummary === job.narrative.summary
+      && gameDate(marker.date) === job.context.acceptedDate
+      && Number(marker.totalDays) === job.context.acceptedTotalDays
+      && participantIds.includes(job.context.senderId) && participantIds.includes(job.context.recipientId);
+  }
+
+  verifyLegacyProjection(job, ownerId, counterpartId, forgottenOwners) {
+    const expectedLineage = createProjectionLineage({ campaignToken: job.context.campaignToken,
+      ownerId, counterpartId, sourceLetterId: job.context.letterId,
+      conversationId: job.conversationId, finalizationId: job.finalizationId });
+    const proof = { ownerId, counterpartId, targetFileId: this.projectionTargetFileId(ownerId, counterpartId),
+      projectionId: expectedLineage.projectionId, sourceRevision: job.sourceRevision, status: "MISSING", errorCode: null };
+    if (forgottenOwners.includes(ownerId)) {
+      proof.status = "FORGOTTEN";
+      proof.errorCode = "LETTER_SUMMARY_OWNER_FORGOTTEN";
+      return proof;
+    }
+    try {
+      const store = this.memoryEngine.store;
+      if (typeof store.getSummaryConversationFile !== "function" || !store.summaryFoldersDir) {
+        throw new Error("LETTER_SUMMARY_PROJECTION_STORE_UNAVAILABLE");
+      }
+      const counterpartProfile = job.context.participantProfiles.find(profile => profile.id === counterpartId);
+      const fallbackName = counterpartProfile?.shortName || counterpartProfile?.firstName
+        || counterpartProfile?.name || counterpartProfile?.fullName || `角色 ${counterpartId}`;
+      const filePath = store.getSummaryConversationFile(ownerId, counterpartId, fallbackName);
+      if (!filePath) return proof;
+      const root = path.resolve(store.summaryFoldersDir);
+      const resolvedPath = path.resolve(filePath);
+      const relativePath = path.relative(root, resolvedPath);
+      if (!relativePath || relativePath === ".." || relativePath.startsWith(`..${path.sep}`) || path.isAbsolute(relativePath)) {
+        throw new Error("LETTER_SUMMARY_PROJECTION_PATH_INVALID");
+      }
+      assertNoLinks(root);
+      assertNoLinks(resolvedPath);
+      if (!fs.existsSync(resolvedPath)) return proof;
+      const stat = fs.lstatSync(resolvedPath);
+      if (!stat.isFile() || stat.isSymbolicLink()) throw new Error("LETTER_SUMMARY_PROJECTION_FILE_INVALID");
+      let rows;
+      try { rows = JSON.parse(fs.readFileSync(resolvedPath, "utf8").replace(/^\uFEFF/, "")); }
+      catch { throw new Error("LETTER_SUMMARY_PROJECTION_JSON_INVALID"); }
+      if (!Array.isArray(rows)) throw new Error("LETTER_SUMMARY_PROJECTION_JSON_INVALID");
+      const matchingRows = rows.filter(row => row?.finalizationId === job.finalizationId);
+      if (!matchingRows.length) return proof;
+      if (matchingRows.length !== 1) throw new Error("LETTER_SUMMARY_PROJECTION_DUPLICATE");
+      const row = matchingRows[0];
+      const participantIds = (Array.isArray(row.participants) ? row.participants : [])
+        .map(profile => Number(profile?.id ?? profile?.characterId)).filter(Number.isSafeInteger);
+      if (row.campaignToken !== job.context.campaignToken
+        || row.conversationId !== job.conversationId
+        || row.finalizationId !== job.finalizationId
+        || Number(row.playerId) !== ownerId || Number(row.characterId) !== counterpartId
+        || Number(row.perspectiveOwnerId) !== ownerId
+        || row.sourceLetterId !== job.context.letterId
+        || row.projectionId !== expectedLineage.projectionId
+        || row.content !== job.narrative.summary
+        || gameDate(row.date) !== job.context.acceptedDate
+        || Number(row.totalDays) !== job.context.acceptedTotalDays
+        || row.campaignBinding?.status !== "bound"
+        || !participantIds.includes(ownerId) || !participantIds.includes(counterpartId)) {
+        throw new Error("LETTER_SUMMARY_PROJECTION_IDENTITY_MISMATCH");
+      }
+      if (row.sourceRevision === job.sourceRevision) {
+        proof.sourceRevisionStatus = "VERIFIED";
+      } else if (row.sourceRevision == null && job.legacySourceRevision === true) {
+        // Accept V9.3.4 rows only when their exact source-bound finalization marker survives.
+        if (!this.hasVerifiedLegacyMarker(job)) throw new Error("LETTER_SUMMARY_LEGACY_MARKER_UNVERIFIED");
+        proof.sourceRevisionStatus = "LEGACY_FINALIZATION_BOUND";
+      } else {
+        throw new Error(row.sourceRevision == null
+          ? "LETTER_SUMMARY_SOURCE_REVISION_MISSING" : "LETTER_SUMMARY_SOURCE_REVISION_MISMATCH");
+      }
+      proof.status = "COMPLETE";
+      return proof;
+    } catch (error) {
+      const rawCode = error instanceof Error ? error.message.split(":", 1)[0] : "";
+      proof.status = rawCode === "LETTER_SUMMARY_PROJECTION_IDENTITY_MISMATCH"
+        || rawCode === "LETTER_SUMMARY_PROJECTION_DUPLICATE"
+        || rawCode === "LETTER_SUMMARY_LEGACY_MARKER_UNVERIFIED"
+        || rawCode === "LETTER_SUMMARY_SOURCE_REVISION_MISMATCH"
+        || rawCode === "LETTER_SUMMARY_PROJECTION_PATH_INVALID"
+        ? "CONFLICT" : "ERROR";
+      proof.errorCode = /^[A-Za-z0-9_-]{1,96}$/.test(rawCode)
+        ? rawCode : "LETTER_SUMMARY_PROJECTION_VERIFY_FAILED";
+      return proof;
+    }
+  }
+
+  refreshProjectionProofs(job) {
+    const forgottenOwners = this.getForgottenOwnerIds(job);
+    const senderId = job.context.senderId, recipientId = job.context.recipientId;
+    const sender = this.verifyLegacyProjection(job, senderId, recipientId, forgottenOwners);
+    const recipient = this.verifyLegacyProjection(job, recipientId, senderId, forgottenOwners);
+    job.narrative.projections = { sender, recipient };
+    return job.narrative.projections;
+  }
+
+  hasCompleteProjectionProofs(job) {
+    return job.narrative.projections?.sender?.status === "COMPLETE"
+      && job.narrative.projections?.recipient?.status === "COMPLETE";
+  }
+
+  async ensureProjections(job) {
+    this.assertNoLegacyIdentityConflict(job);
+    let projections = this.refreshProjectionProofs(job);
+    if (this.hasCompleteProjectionProofs(job)) {
+      job.narrative.projectionStatus = "COMPLETE";
+      this.writeJob(job);
+      return;
+    }
+
+    const hasUnsafeProof = [projections.sender, projections.recipient].some(proof =>
+      proof.status === "ERROR" || proof.status === "CONFLICT");
+    const hasMissingAllowedProjection = [projections.sender, projections.recipient]
+      .some(proof => proof.status === "MISSING");
+    if (!hasUnsafeProof && hasMissingAllowedProjection) {
+      if (typeof this.persistSummary !== "function") throw new Error("LETTER_SUMMARY_PERSIST_UNAVAILABLE");
+      let persistError = null;
+      try { await this.persistSummary(job.narrative.summary, this.summaryContext(job)); }
+      catch (error) { persistError = error; }
+      // The writer result (including success:true) is acceptance only. Re-read each owner file.
+      projections = this.refreshProjectionProofs(job);
+      if (this.hasCompleteProjectionProofs(job)) {
+        job.narrative.projectionStatus = "COMPLETE";
+        this.writeJob(job);
+        return;
+      }
+      if (persistError && projections.sender.status === "ERROR" && projections.recipient.status === "ERROR") {
+        const code = persistError instanceof Error ? persistError.message.split(":", 1)[0] : "";
+        if (/^[A-Za-z0-9_-]{1,96}$/.test(code)) throw new Error(code);
+      }
+    }
+
+    const senderError = projections.sender.errorCode, recipientError = projections.recipient.errorCode;
+    if ([projections.sender, projections.recipient].some(proof => proof.status === "FORGOTTEN" || proof.status === "CONFLICT")) {
+      job.narrative.projectionStatus = "MANUAL_BLOCKED";
+      const errorCode = senderError || recipientError || "LETTER_SUMMARY_PROJECTION_MANUAL_BLOCKED";
+      this.writeJob(job);
+      throw new Error(errorCode);
+    }
+    job.narrative.projectionStatus = "FAILED";
+    const errorCode = senderError || recipientError || "LETTER_SUMMARY_PROJECTION_MISSING";
+    this.writeJob(job);
+    throw new Error(errorCode);
+  }
+
   async ensureNarrative(job, providerSnapshot) {
     const narrative = job.narrative;
     if (narrative.summaryStatus !== "COMPLETE") {
@@ -271,16 +441,9 @@ class LetterSummaryFinalization {
       this.writeJob(job);
     }
 
-    if (narrative.projectionStatus !== "COMPLETE") {
-      this.assertNoLegacyIdentityConflict(job);
-      if (typeof this.persistSummary !== "function") throw new Error("LETTER_SUMMARY_PERSIST_UNAVAILABLE");
-      let persisted;
-      try { persisted = await this.persistSummary(narrative.summary, this.summaryContext(job)); }
-      catch { throw new Error("LETTER_SUMMARY_PERSIST_FAILED"); }
-      if (!successfulPersistence(persisted)) throw new Error("LETTER_SUMMARY_PERSIST_FAILED");
-      narrative.projectionStatus = "COMPLETE";
-      this.writeJob(job);
-    }
+    // Re-check both owner files even when the job previously completed. A Forget
+    // tombstone can invalidate one direction while a later marker still needs writing.
+    await this.ensureProjections(job);
 
     if (narrative.legacyStatus !== "COMPLETE") {
       const campaignBinding = { status: "bound", source: `accepted_letter:${job.payloadHash}`, version: 1 };
@@ -340,9 +503,17 @@ class LetterSummaryFinalization {
         try { store.saveEpisode(episode); } catch { throw new Error("LETTER_MEMORY_MARKER_SAVE_FAILED"); }
       }
       narrative.markerStatus = "COMPLETE";
-      narrative.status = "COMPLETE";
+      narrative.status = this.canComplete(job) ? "COMPLETE" : "PENDING";
       this.writeJob(job);
     }
+  }
+
+  canComplete(job) {
+    return job.narrative.summaryStatus === "COMPLETE"
+      && job.narrative.projectionStatus === "COMPLETE"
+      && this.hasCompleteProjectionProofs(job)
+      && job.narrative.legacyStatus === "COMPLETE"
+      && job.narrative.markerStatus === "COMPLETE";
   }
 
   letterMemories(job) {
@@ -383,7 +554,8 @@ class LetterSummaryFinalization {
 
   async finalizeOnce(reference, { manual = false } = {}) {
     const job = this.readJob(typeof reference === "string" ? reference : reference?.jobId);
-    if (job.narrative.status === "COMPLETE") return this.result(job);
+    const currentStatus = this.status(job);
+    if (currentStatus === "COMPLETE" || currentStatus === "MANUAL_BLOCKED") return this.result(job);
     if (!this.isCurrent(job)) return { ...this.result(job), status: "CAMPAIGN_CHANGED" };
     if (!manual && job.retryCount >= MAX_AUTOMATIC_FAILURES) return { ...this.result(job), status: "FAILED_MANUAL" };
     job.attemptCount++;
@@ -397,22 +569,65 @@ class LetterSummaryFinalization {
       if (!this.isCurrent(job)) return { ...this.result(job), status: "CAMPAIGN_CHANGED" };
     } catch (error) {
       job.lastErrorCode = error instanceof Error ? error.message : "LETTER_SUMMARY_FINALIZATION_FAILED";
+      if (job.narrative.projectionStatus === "MANUAL_BLOCKED") job.narrative.status = "MANUAL_BLOCKED";
     }
     const status = this.status(job);
-    if (status !== "COMPLETE") job.retryCount++;
-    else job.retryCount = 0;
+    if (status === "COMPLETE") job.retryCount = 0;
+    else if (status !== "MANUAL_BLOCKED") job.retryCount++;
     this.writeJob(job);
     return this.result(job);
   }
 
   status(job) {
-    return job.narrative.status === "COMPLETE" ? "COMPLETE" : "FAILED_NARRATIVE";
+    if (job.narrative.summaryStatus === "COMPLETE"
+      && (job.narrative.status === "COMPLETE" || job.narrative.projectionStatus === "COMPLETE")) {
+      try {
+        const projections = this.refreshProjectionProofs(job);
+        if (this.hasCompleteProjectionProofs(job)) {
+          job.narrative.projectionStatus = "COMPLETE";
+        } else if ([projections.sender, projections.recipient].some(proof =>
+          proof.status === "FORGOTTEN" || proof.status === "ERROR" || proof.status === "CONFLICT")) {
+          job.narrative.projectionStatus = "MANUAL_BLOCKED";
+          job.narrative.status = "MANUAL_BLOCKED";
+          job.lastErrorCode = projections.sender.errorCode || projections.recipient.errorCode
+            || "LETTER_SUMMARY_PROJECTION_MANUAL_BLOCKED";
+        } else {
+          job.narrative.projectionStatus = "PENDING";
+          job.narrative.status = "PENDING";
+        }
+      } catch {
+        job.narrative.projections = { sender: { status: "ERROR", errorCode: "LETTER_SUMMARY_PROJECTION_VERIFY_FAILED" },
+          recipient: { status: "ERROR", errorCode: "LETTER_SUMMARY_PROJECTION_VERIFY_FAILED" } };
+        job.narrative.projectionStatus = "MANUAL_BLOCKED";
+        job.narrative.status = "MANUAL_BLOCKED";
+        job.lastErrorCode = "LETTER_SUMMARY_PROJECTION_VERIFY_FAILED";
+      }
+    }
+    if (job.narrative.status === "COMPLETE" && !this.canComplete(job)) job.narrative.status = "PENDING";
+    if (job.narrative.status === "COMPLETE") return "COMPLETE";
+    return job.narrative.status === "MANUAL_BLOCKED" ? "MANUAL_BLOCKED" : "FAILED_NARRATIVE";
   }
 
   result(job) {
     return { jobId: job.jobId, campaignToken: job.context.campaignToken, status: this.status(job),
       narrativeStatus: job.narrative.status,
+      archiveStatus: this.status(job) === "COMPLETE" ? "SUMMARY_COMPLETE"
+        : this.status(job) === "MANUAL_BLOCKED" ? "SUMMARY_MANUAL_BLOCKED" : "SUMMARY_RETRYABLE_FAILED",
+      deliveryStatus: "DELIVERED", sourceLetterId: job.context.letterId,
+      sourceRevision: job.sourceRevision,
+      summaryStatus: job.narrative.summaryStatus, projectionStatus: job.narrative.projectionStatus,
+      senderProjection: job.narrative.projections?.sender || null,
+      recipientProjection: job.narrative.projections?.recipient || null,
+      legacyStatus: job.narrative.legacyStatus, markerStatus: job.narrative.markerStatus,
       retryCount: job.retryCount, errorCode: job.lastErrorCode || null };
+  }
+
+  getJobStatus(jobId) {
+    try { return this.result(this.readJob(jobId)); }
+    catch (error) {
+      return { jobId, status: "INVALID", archiveStatus: "SUMMARY_MANUAL_BLOCKED",
+        errorCode: error instanceof Error ? error.message : "LETTER_SUMMARY_JOB_INVALID" };
+    }
   }
 
   async retryPending({ activeCampaignToken, manual = false } = {}) {
@@ -425,6 +640,7 @@ class LetterSummaryFinalization {
       try { job = this.readJob(jobId); } catch { results.push({ jobId, status: "INVALID" }); continue; }
       if (job.context.campaignToken !== activeCampaignToken) continue;
       if (this.status(job) === "COMPLETE") continue;
+      if (this.status(job) === "MANUAL_BLOCKED") { results.push(this.result(job)); continue; }
       if (!manual && job.retryCount >= MAX_AUTOMATIC_FAILURES) {
         results.push({ ...this.result(job), status: "FAILED_MANUAL" });
         continue;
@@ -443,7 +659,7 @@ class LetterSummaryFinalization {
       try { job = this.readJob(jobId); } catch { result.invalid++; continue; }
       if (job.context.campaignToken !== campaignToken || this.status(job) === "COMPLETE") continue;
       result.pending++;
-      if (job.retryCount >= MAX_AUTOMATIC_FAILURES) result.manual++;
+      if (job.narrative.status === "MANUAL_BLOCKED" || job.retryCount >= MAX_AUTOMATIC_FAILURES) result.manual++;
     }
     return result;
   }

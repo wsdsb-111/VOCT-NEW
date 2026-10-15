@@ -598,6 +598,22 @@
       "target": "out/main/memory-system/official-recollection-provider.js"
     },
     {
+      "source": "main/memory-system/pair-long-term-ledger.js",
+      "target": "out/main/memory-system/pair-long-term-ledger.js"
+    },
+    {
+      "source": "main/memory-system/pair-memory-routing.js",
+      "target": "out/main/memory-system/pair-memory-routing.js"
+    },
+    {
+      "source": "main/memory-system/pair-memory-service.js",
+      "target": "out/main/memory-system/pair-memory-service.js"
+    },
+    {
+      "source": "main/memory-system/pair-memory-source-retrieval.js",
+      "target": "out/main/memory-system/pair-memory-source-retrieval.js"
+    },
+    {
       "source": "main/memory-system/perspective-projector.js",
       "target": "out/main/memory-system/perspective-projector.js"
     },
@@ -1094,6 +1110,14 @@
       "target": "out/renderer/index.html"
     },
     {
+      "source": "renderer/pair-long-term-ui.css",
+      "target": "out/renderer/pair-long-term-ui.css"
+    },
+    {
+      "source": "renderer/pair-long-term-ui.js",
+      "target": "out/renderer/pair-long-term-ui.js"
+    },
+    {
       "source": "renderer/startup-performance-observer.js",
       "target": "out/renderer/startup-performance-observer.js"
     },
@@ -1112,6 +1136,10 @@
     {
       "source": "renderer/worldline-player-presentation.js",
       "target": "out/renderer/worldline-player-presentation.js"
+    },
+    {
+      "source": "shared/pair-important-matters.js",
+      "target": "out/shared/pair-important-matters.js"
     }
   ]
 }

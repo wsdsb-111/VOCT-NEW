@@ -1604,7 +1604,7 @@ class MemoryEngine {
     const recentByRoute = new Map(groups.map(([routeId, entries]) => [routeId, [...entries].sort((left, right) => queryPrioritized
       ? right.score - left.score || this.getMemoryRecency(right.memory) - this.getMemoryRecency(left.memory)
       : this.getMemoryRecency(right.memory) - this.getMemoryRecency(left.memory))]));
-    const baselineRounds = mode === "direct_legacy" ? 3 : mode === "direct" ? 2 : 1;
+    const baselineRounds = mode === "direct_legacy" ? 3 : 1;
     const recentKeys = new Set([...recentByRoute.values()].flatMap(entries => entries.slice(0, baselineRounds).map(entry => this.getRouteMemoryKey(entry.memory))));
     const pinnedPool = mode === "direct_legacy" ? groups.flatMap(([routeId, entries]) => entries.map(entry => ({ routeId, entry })))
       .filter(({ entry }) => !recentKeys.has(this.getRouteMemoryKey(entry.memory)) && (entry.memory.importance >= 0.9 || entry.memory.status === "open" || entry.memory.unresolved))
@@ -1637,6 +1637,12 @@ class MemoryEngine {
     const ownerId = Number(characterId);
     const ownerValid = isValidCharacterId(ownerId);
     const temporalScope = JSON.stringify([campaignToken, conversationId, sceneRevision]);
+    const sourcePairIds = uniqueIds([...directCounterpartIds, ...mentionedEntityIds, ...(explicitTargetEntityIds || queryEntityIds || []),
+      ...(sessionRecallCache?.get(ownerId)?.frozenPairIds || [])]);
+    const cachedSources = this.store.folderSummaryCache?.get(ownerId);
+    if (cachedSources && sourcePairIds.some(id => this.store.hasPairLedgerSourceContentChanges(cachedSources, id))) {
+      this.store.invalidateFolderSummaryCache([ownerId]);
+    }
     const currentFolderRevision = ownerValid ? this.store.getFolderSummaryRevision(ownerId) : null;
     const cachedResponderState = sessionRecallCache?.get(ownerId);
     const previousScope = sessionRecallCache?.get(ownerId)?.temporalScope;
@@ -1688,7 +1694,7 @@ class MemoryEngine {
     const directGroups = new Map();
     for (const counterpartId of directIds) {
       const memories = this.store.loadDirectPairSummaries(ownerId, counterpartId, folderMemories);
-      directGroups.set(counterpartId, this.ranker.rank(memories, { query: "", participantIds: [counterpartId], currentTotalDays }));
+      directGroups.set(counterpartId, memories.map(memory => ({ memory, score: 0, reason: { source: "recent_pair" } })));
     }
     const recallIntent = turnRecall.detectIntent(query);
     const requestedSpeakerId = Number(querySpeakerId);
@@ -1778,7 +1784,7 @@ class MemoryEngine {
     // responder; 3.0 out-of-scene recall belongs to the dynamic Extra pool.
     const stableRanked = this.ranker.rank(internalMemories, { query: "", entityIds: [], participantIds: [], currentTotalDays })
       .filter((entry) => entry.memory.importance >= 0.9 || entry.memory.status === "open" || entry.memory.unresolved);
-    const frozenBudget = memoryEngine3Enabled ? Math.floor(budget * 0.65) : budget;
+    const frozenBudget = memoryEngine3Enabled ? Math.floor(budget * 0.45) : budget;
     const hasEntityTargetCandidates = [...entityTargetGroups.values()].some((entries) => entries.length > 0);
     const laneWeights = {
       direct: officialMemory || [...directGroups.values()].some((entries) => entries.length > 0) ? 55 : 0,
@@ -1804,14 +1810,17 @@ class MemoryEngine {
     const official = !Array.isArray(responderCache.direct) && officialMemory
       ? this.ranker.selectWithinBudget([{ memory: officialMemory, score: 1 }], { tokenBudget: officialAllowance, estimateTokens, allowTruncate: true })
         .map(entry => ({ ...entry, routeKind: "official", routeCharacterIds: [ownerId] })) : [];
-    let direct = directRecallId != null ? [
+    let direct = !memoryEngine3Enabled && directRecallId != null ? [
       ...this.selectRoutedMemories(directRecallGroups, { tokenBudget: directBudget - official.reduce((n, e) => n + e.tokens, 0), estimateTokens, mode: "direct", queryPrioritized: true }),
       ...official
     ] : Array.isArray(responderCache.direct) ? responderCache.direct : [
       ...this.selectRoutedMemories(directGroups, { tokenBudget: directBudget - official.reduce((n, e) => n + e.tokens, 0), estimateTokens, mode: memoryEngine3Enabled ? "direct" : "direct_legacy" }),
       ...official
     ];
-    if (directRecallId == null && !Array.isArray(responderCache.direct) && directIds.length > 0) responderCache.direct = direct;
+    if ((memoryEngine3Enabled || directRecallId == null) && !Array.isArray(responderCache.direct) && directIds.length > 0) {
+      responderCache.direct = direct;
+      responderCache.frozenPairIds = [...directIds];
+    }
     direct = direct.map((entry) => ({ ...entry }));
     const mentioned = [];
     for (const entityId of memoryEngine3Enabled ? [] : mentionedIds) {
@@ -1861,7 +1870,23 @@ class MemoryEngine {
     if (!Array.isArray(responderCache.stable)) responderCache.stable = stable;
     const frozenSelectedTokens = [...direct, ...deduplicatedMentioned, ...deduplicatedEntityTargetSnapshot, ...stable]
       .reduce((total, entry) => total + Number(entry.tokens || 0), 0);
-    const extraBudget = Math.max(0, budget - frozenSelectedTokens);
+    const pairChanged = memoryEngine3Enabled && Array.isArray(responderCache.frozenPairIds)
+      && JSON.stringify(responderCache.frozenPairIds) !== JSON.stringify(directIds);
+    const activePairRecent = pairChanged ? this.selectRoutedMemories(directGroups, {
+      tokenBudget: Math.max(0, Math.floor((budget - frozenSelectedTokens) * 0.45)), estimateTokens, mode: "direct"
+    }).filter(entry => !selectedFolderKeys.has(this.getRouteMemoryKey(entry.memory))) : [];
+    let activePairRecentText = this.formatMemoryBlock("本轮实际交谈对象的最近一篇摘要（不表示私下交谈）", activePairRecent) || "";
+    const countPairTokens = estimateTokens || (text => Math.ceil(String(text).length / 2));
+    const activePairRecentTokens = activePairRecentText ? countPairTokens(activePairRecentText) : 0;
+    const pairScopeIds = [...new Set([...directIds, ...explicitTargetIds.filter(id => !activeIds.includes(id)), ...mentionedIds])];
+    const pairMemory = memoryEngine3Enabled && !identityUnresolved ? require("./pair-memory-source-retrieval").retrievePairMemorySources({
+      store: this.store, ownerId, counterpartIds: pairScopeIds, query, campaignToken, currentGameDate, currentTotalDays,
+      memories: folderSnapshot, excludedMemoryIds: [...direct, ...stable, ...activePairRecent].map(entry => entry.memory.memoryId),
+      tokenBudget: Math.max(0, Math.floor((budget - frozenSelectedTokens - activePairRecentTokens) * 0.65)), estimateTokens
+    }) : { text: "", items: [], sources: [], metrics: { finalInjectedTokens: 0, fallbackReason: "IDENTITY_UNRESOLVED" } };
+    let pairContextTokens = activePairRecentTokens + pairMemory.metrics.finalInjectedTokens;
+    for (const entry of [...activePairRecent, ...pairMemory.sources]) selectedFolderKeys.add(this.getRouteMemoryKey(entry.memory));
+    const extraBudget = Math.max(0, budget - frozenSelectedTokens - pairContextTokens);
     const temporal = memoryEngine3Enabled && temporalSummaryRecallEnabled
       ? resolveTemporalFocus(query, responderCache.temporalFocus, { currentGameDate, currentTotalDays, turnEpoch, conversationId, sceneRevision })
       : { triggered: false, reason: "DISABLED", nextFocus: null };
@@ -1887,7 +1912,10 @@ class MemoryEngine {
     });
     const temporalCandidates = temporalSelections.map(entry => entry.memory);
     const temporalReasons = new Map(temporalSelections.map(entry => [entry.memory.memoryId, entry.reason]));
-    const rankedExtras = this.ranker.rank(folderMemories, { query, entityIds: mentionedIds, participantIds: temporalDirectIds, currentTotalDays });
+    const needsLegacyFallback = pairMemory.metrics.legacyFallbackUsed !== false || temporal.triggered
+      || mentionedIds.length > 0 || explicitTargetIds.some(id => !directIds.includes(id));
+    const rankedExtras = needsLegacyFallback
+      ? this.ranker.rank(folderMemories, { query, entityIds: mentionedIds, participantIds: temporalDirectIds, currentTotalDays }) : [];
     const directRecallKeys = new Set([...directRecallGroups.values()].flat().map(entry => this.getRouteMemoryKey(entry.memory)));
     const topicCandidates = query.trim() ? rankedExtras.filter((entry) => Number(entry.reason?.query) >= 0.28
       && (directRecallId == null || directRecallKeys.has(this.getRouteMemoryKey(entry.memory)))).map((entry) => entry.memory) : [];
@@ -1897,11 +1925,13 @@ class MemoryEngine {
       && (directRecallId == null || directRecallKeys.has(this.getRouteMemoryKey(entry.memory)))
       && (entry.memory.importance >= 0.9 || entry.memory.status === "open" || entry.memory.unresolved || entry.memory.content?.includes("【需要长期记住的事项】"))).map((entry) => entry.memory);
     if (!(responderCache.seenDynamicSummaries instanceof Set)) responderCache.seenDynamicSummaries = new Set();
-    const sameTurn = responderCache.dynamicTurn === turnEpoch;
+    const dynamicQueryKey = JSON.stringify([query, directIds, explicitTargetIds, mentionedIds]);
+    const sameTurn = responderCache.dynamicTurn === turnEpoch && responderCache.dynamicQueryKey === dynamicQueryKey;
     let extra = memoryEngine3Enabled && sameTurn && !identityUnresolved ? responderCache.dynamicExtra || [] : [];
     let extraTokens = 0;
     const extraSources = identityUnresolved ? [] : unresolvedEntityTime ? [["entity_target", entityTargetCandidates]]
-      : restrictedTemporalQuery || blockedTimeQuery ? [["temporal", temporalCandidates]]
+      : blockedTimeQuery ? [["temporal", temporalCandidates]]
+      : restrictedTemporalQuery ? [["temporal", temporalCandidates], ["entity_target", entityTargetCandidates], ["mentioned", mentionedCandidates]]
       : [["temporal", temporalCandidates], ["entity_target", entityTargetCandidates], ["mentioned", mentionedCandidates], ["topic", topicCandidates], ["important", importantCandidates]];
     const dynamicRouteByKey = new Map([...frozenRouteByKey.values(), ...deduplicatedEntityTargetSnapshot]
       .map((entry) => [this.getRouteMemoryKey(entry.memory), entry]));
@@ -1910,9 +1940,11 @@ class MemoryEngine {
       entry.routeKinds = [...new Set([...(entry.routeKinds || (entry.routeKind ? [entry.routeKind] : [])), "entity_target"])];
       entry.routeCharacterIds = [...new Set([...(entry.routeCharacterIds || []), ...targetIds.map(Number)])];
     };
+    const channelCounts = { temporal: 0, entity: 0, fallback: 0 };
     for (const [source, candidates] of memoryEngine3Enabled && !sameTurn ? extraSources : []) {
       for (const candidate of candidates) {
-        if (extra.length >= 3 || extraTokens >= extraBudget) break;
+        const channel = source === "temporal" ? "temporal" : ["entity_target", "mentioned"].includes(source) ? "entity" : "fallback";
+        if (channelCounts[channel] >= 3 || extra.length >= 6 || extraTokens >= extraBudget) break;
         const memory = source === "entity_target" ? candidate.memory : candidate;
         const key = this.getRouteMemoryKey(memory);
         if (source === "entity_target" && selectedFolderKeys.has(key)) {
@@ -1939,6 +1971,7 @@ class MemoryEngine {
           entityTargetSelectedIds.add(memory.memoryId);
         }
         extra.push(routed);
+        channelCounts[channel]++;
         extraTokens += fitted.tokens;
         selectedFolderKeys.add(key);
         dynamicRouteByKey.set(key, routed);
@@ -1946,8 +1979,11 @@ class MemoryEngine {
     }
     if (memoryEngine3Enabled) {
       responderCache.dynamicTurn = turnEpoch;
+      responderCache.dynamicQueryKey = dynamicQueryKey;
       responderCache.dynamicExtra = extra;
     }
+    const renderLegacyExtra = () => {
+    const timeEntries = extra.filter(entry => entry.reason?.source === "temporal");
     const temporalDescription = extra.map(entry => entry.reason?.source === "temporal"
       ? `命中依据：${entry.reason.axis === "event" ? "原始对话中的事件时间引用" : "对话发生日期"} ${entry.reason.fromGameDate || ""}～${entry.reason.toGameDate || ""}（${{ year: "年", month: "月", day: "日" }[entry.reason.precision] || "未知"}精度，不推断更精确日期）。摘要自身的对话日期仍为${entry.memory.eventDate || "未知"}。` : "").filter(Boolean).join("\n");
     const temporalAxisLabel = temporal.axisIntent === "EVENT" ? "事件发生时间"
@@ -1958,19 +1994,59 @@ class MemoryEngine {
     const standardExtraText = entityTargetExtra.length
       ? [this.formatMemoryBlock("明确询问人物的历史摘要", entityTargetExtra),
         this.formatMemoryBlock("其他本轮召回摘要", otherExtra)].filter(Boolean).join("\n\n")
-      : this.formatMemoryBlock("本轮召回摘要（仅本轮注入，最多三篇）", extra);
-    const temporalExtraText = identityUnresolved
+      : this.formatMemoryBlock("本轮召回摘要（时间与人物通道各最多三篇，共享预算）", extra);
+    return identityUnresolved
       ? "【人物核对】未能唯一识别所问人物；不得把其他人物的摘要当作该人的经历。"
       : unresolvedEntityTime
       ? `【本轮时间核对】“当时”的时间范围尚未确定。以下仅为该人物有授权的历史摘要，须按各自日期引用，不得推断它们就是所问时段。\n${standardExtraText || "本轮无可新增的相关摘要。"}`
       : blockedTimeQuery ? "【本轮时间核对】缺少可确认的游戏日期或时间范围，无法安全检索；不得用其他年份的记忆代答。"
       : firstMeetingQuery
-        ? `【本轮首次相识线索核对】${extra.length
-          ? `以下是档案中正文明确提及初次相识的最早可用对话摘要；只能称为最早可用记录，不得据此断言双方人生中首次相识。\n${this.formatMemoryBlock("最早可用的相识摘要", extra)}`
+        ? `【本轮首次相识线索核对】${timeEntries.length
+          ? `以下是档案中正文明确提及初次相识的最早可用对话摘要；只能称为最早可用记录，不得据此断言双方人生中首次相识。\n${this.formatMemoryBlock("最早可用的相识摘要", timeEntries)}`
           : "本轮未新增正文明确提及初次相识的摘要；若此前已注入对应证据，仍可沿用历史原文；若无，不得用更早但无关的摘要代替。"}`
       : targetDateQuery
-      ? `【本轮时间核对：游戏当前${normalizeGameDate(currentGameDate)?.display}；${temporal.expression}${temporal.targetGameYear ? `对应${temporal.targetGameYear}年` : ""}】时间含义：${temporalAxisLabel}。${extra.length ? `${temporalDescription}\n时间引用证明当时谈及该时段，不单独证明事件属实；只引用正文实际保留的证据。\n${this.formatMemoryBlock("本轮时间匹配摘要", extra)}` : "本轮未检索到可新增的该时段对话摘要；此前已注入的对应证据仍可使用，不等于当时没有发生事件。"}冻结的最近两篇对话和官方追忆可能含其他日期，不能把其他年份的事当成该时段的事。`
+      ? `【本轮时间核对：游戏当前${normalizeGameDate(currentGameDate)?.display}；${temporal.expression}${temporal.targetGameYear ? `对应${temporal.targetGameYear}年` : ""}】时间含义：${temporalAxisLabel}。${timeEntries.length ? `${temporalDescription}\n时间引用证明当时谈及该时段，不单独证明事件属实；只引用正文实际保留的证据。\n${this.formatMemoryBlock("本轮时间匹配摘要", timeEntries)}` : "本轮未检索到可新增的该时段对话摘要；此前已注入的对应证据仍可使用，不等于当时没有发生事件。"}冻结的最近一篇对话和官方追忆可能含其他日期，不能把其他年份的事当成该时段的事。`
       : standardExtraText;
+    };
+    const renderDynamic = () => [activePairRecentText, pairMemory.text, renderLegacyExtra(),
+      restrictedTemporalQuery ? this.formatMemoryBlock("本轮场外人物补充（按各自日期引用）", extra.filter(entry => entry.reason?.source !== "temporal")) : null
+    ].filter(Boolean).join("\n\n") || null;
+    const renderFixed = () => [this.formatMemoryBlock("长期稳定记忆", stable),
+      this.formatMemoryBlock(officialMemory ? "本场冻结：最近一篇对话与官方追忆摘要" : "冻结的直接关系最近一篇摘要", direct)
+    ].filter(Boolean);
+    let temporalExtraText = renderDynamic();
+    const renderedTokens = () => {
+      const blocks = [...renderFixed(), temporalExtraText].filter(Boolean);
+      return Math.max(blocks.reduce((sum, text) => sum + countPairTokens(text), 0),
+        blocks.length ? countPairTokens(blocks.join("\n\n")) : 0);
+    };
+    if (memoryEngine3Enabled) {
+      while (extra.length && renderedTokens() > budget) {
+        const index = extra.length - 1;
+        const entry = extra[index];
+        const remaining = Number(entry.tokens) - (renderedTokens() - budget) - 4;
+        const [fitted] = remaining >= 24 ? this.ranker.selectWithinBudget([entry], {
+          tokenBudget: remaining, estimateTokens, allowTruncate: true
+        }) : [];
+        if (fitted && fitted.tokens < entry.tokens) extra[index] = fitted;
+        else extra.pop();
+        temporalExtraText = renderDynamic();
+      }
+      if (renderedTokens() > budget && pairMemory.text) {
+        pairMemory.text = ""; pairMemory.items = []; pairMemory.sources = [];
+        pairMemory.metrics.fallbackReason = "MEMORY_FORMAT_BUDGET";
+        pairMemory.metrics.pairLedgerTokens = 0; pairMemory.metrics.sourceRecallTokens = 0;
+        pairMemory.metrics.openedSummaryCount = 0; pairMemory.metrics.finalInjectedTokens = 0;
+        temporalExtraText = renderDynamic();
+      }
+      if (renderedTokens() > budget) { activePairRecent.splice(0); activePairRecentText = ""; temporalExtraText = renderDynamic(); }
+      if (renderedTokens() > budget) temporalExtraText = null;
+      while (stable.length && renderedTokens() > budget) stable.pop();
+      while (direct.length && renderedTokens() > budget) direct.pop();
+      if (Array.isArray(responderCache.direct)) responderCache.direct = direct;
+      pairContextTokens = (activePairRecentText ? countPairTokens(activePairRecentText) : 0) + pairMemory.metrics.finalInjectedTokens;
+    }
+    const entityTargetExtra = extra.filter(entry => entry.routeKind === "entity_target");
     let topicPatch = memoryEngine3Enabled ? [] : Array.isArray(responderCache.topicPatch) ? responderCache.topicPatch : [];
     if (!identityUnresolved && !memoryEngine3Enabled && !responderCache.topicPatchLocked && query.trim()) {
       const rankedPatch = this.ranker.rank(folderMemories, { query, entityIds: mentionedIds, participantIds: directIds, currentTotalDays })
@@ -1990,7 +2066,8 @@ class MemoryEngine {
       this.trace.record("retrieve", { memoryId: entry.memory.memoryId, type: entry.memory.type, score: entry.score, characterId: ownerId, reason, ...routeMetadata });
       this.trace.record("selected", { memoryId: entry.memory.memoryId, type: entry.memory.type, score: entry.score, characterId: ownerId, reason, ...routeMetadata });
     }
-    const selectedTokens = [...stable, ...relevant].reduce((total, entry) => total + Number(entry.tokens || 0), 0);
+    const selectedTokens = memoryEngine3Enabled ? renderedTokens()
+      : [...stable, ...relevant].reduce((total, entry) => total + Number(entry.tokens || 0), 0) + pairContextTokens;
     const folderCandidateCount = new Set([...directGroups.values(), ...mentionedGroups.values(), ...entityTargetGroups.values()]
       .flat().map((entry) => this.getRouteMemoryKey(entry.memory))).size;
     const temporalRanges = [temporal.primaryWindow, ...(temporal.mode === "TARGET_DATE" ? [] : [temporal.expansionWindow])].filter(Boolean);
@@ -2121,6 +2198,8 @@ class MemoryEngine {
     };
     Object.assign(recallDiagnostics, entityRecallDiagnostics);
     recallDiagnostics.entityRecallDiagnostics = entityRecallDiagnostics;
+    recallDiagnostics.pairMemoryMetrics = { ...pairMemory.metrics, activePairIds: directIds, finalInjectedTokens: selectedTokens };
+    this.trace.record("pair_memory_retrieval", { characterId: ownerId, ...recallDiagnostics.pairMemoryMetrics });
     const recallDiagnosticsMap = sessionRecallCache instanceof Map && sessionRecallCache.recallDiagnostics instanceof Map
       ? sessionRecallCache.recallDiagnostics : null;
     if (recallDiagnosticsMap && ownerValid) recallDiagnosticsMap.set(ownerId, recallDiagnostics);
@@ -2176,18 +2255,28 @@ class MemoryEngine {
       folderSummaryCache: this.store.getFolderSummaryCacheMetrics(),
       memoryEngine3Enabled,
       respondingCharacterId: ownerId,
+      sourceFolderRevision: currentFolderRevision,
+      sourceCampaignToken: campaignToken,
+      sourcePairIds,
       stable,
-      relevant,
+      relevant: [...relevant, ...activePairRecent, ...pairMemory.sources],
       direct,
       mentioned: deduplicatedMentioned,
       topicPatch,
       extra,
+      pairMemoryItems: pairMemory.items,
+      pairMemorySources: pairMemory.sources,
+      pairMemoryMetrics: { ...pairMemory.metrics, recentTokens: direct.reduce((sum, entry) => sum + entry.tokens, 0) + activePairRecentTokens,
+        recentSummaryTruncated: [...direct, ...activePairRecent].some(entry => entry.memory.content.endsWith("…")),
+        temporalTokens: extra.filter(entry => entry.reason?.source === "temporal").reduce((sum, entry) => sum + entry.tokens, 0),
+        mentionedTokens: extra.filter(entry => entry.routeKind === "entity_target").reduce((sum, entry) => sum + entry.tokens, 0),
+        activePairIds: directIds, finalInjectedTokens: selectedTokens },
       temporal,
       temporalDiagnostics,
       temporalExtraText,
       stableText: this.formatMemoryBlock("长期稳定记忆", stable),
       directText: this.formatMemoryBlock("与当前在场人物的直接记忆", direct),
-      directStableText: this.formatMemoryBlock(officialMemory ? "本场冻结：最近两篇对话与官方追忆摘要" : "冻结的直接关系最近两篇摘要", direct),
+      directStableText: this.formatMemoryBlock(officialMemory ? "本场冻结：最近一篇对话与官方追忆摘要" : "冻结的直接关系最近一篇摘要", direct),
       mentionedText: this.formatMemoryBlock("与被提及场外人物有关的记忆", deduplicatedMentioned),
       mentionedSnapshotText,
       entityTargetText: this.formatMemoryBlock("明确询问人物的历史记忆", [...deduplicatedEntityTargetSnapshot, ...entityTargetExtra]),
@@ -2476,20 +2565,20 @@ class MemoryEngine {
       },
       boundaries: [
         "人物记忆按 Owner、Campaign、游戏日期、获得日期、knownBy 与来源版本隔离；玩家保存记忆，但不执行 NPC 提示词召回。",
-        "最近两篇直接关系摘要与合法官方追忆在本场冻结；动态 Legacy 摘要按人物、主题与时间检索，最多三篇。",
+        "最近一篇直接关系摘要与合法官方追忆在本场冻结；本地事项索引可定位一至两篇历史原摘要；时间与场外人物通道各最多三篇，共享总预算。",
         "Legacy 动态召回保留摘要叙述与重要事项；年份/往事检索只使用合法摘要日期索引，不读 Year/Life。",
         "第三人记忆只读取当前回应者自己的知情空间；候场、缺席和未收到的耳语不构成直接交谈或见证。",
-        "年度与人生记忆是 Detail 的派生视图，来源版本失效或视图变脏时不用于有效召回；无长期内容不强制生成。",
+        "Durable、Detail、Year/Life 已退役，旧归档不读写；长期事项仅由合法 Legacy 原文确定性派生，不新增模型抽取。",
         "Legacy 摘要继续保留，只有可核验的当前战役来源可进入新召回；CK3 官方追忆保持只读，不由模型补造。",
         "结束对话或 Owner 不在窄角色表时，仅以已加载战役与既有侧车证明开放归档只读查看；归档不代表当前 CK3 关系或状态。"
       ],
       routingPolicy: {
-        stablePrefix: "最近两篇直接关系摘要与官方追忆本场冻结；动态召回不改冻结前缀",
+        stablePrefix: "最近一篇直接关系摘要与官方追忆本场冻结；动态召回不改冻结前缀",
         directPair: "按当前回应者的直接交谈证据和 Owner 知情边界读取",
         group: "多人分别按在场窗口、耳语对象与每名 Owner 的知情视角保存和召回",
         mentioned: "只从当前回应者可知的来源读取第三人，不读取被提及者的私人目录",
         sessionTopicAnchor: "仅关闭人物记忆召回、回退旧路由时使用原话题锚点",
-        turnRecall: "Legacy 按时间、人物与主题检索摘要，每个响应轮最多额外三篇",
+        turnRecall: "Legacy 两级来源回查与全文兜底；时间和场外人物各最多三篇，所有通道共享原 Token 上限",
         tokenBudget: "Legacy 固定与动态摘要共享记忆 Token 预算，并受 Provider 安全余量限制"
       },
       characters: []

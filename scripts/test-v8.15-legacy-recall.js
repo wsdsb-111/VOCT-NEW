@@ -228,13 +228,14 @@ try {
     const result = fixture.recall({ query: "你还记得完全陌生的阿布鲁吗？", identityUnresolved: true,
       explicitTargetEntityIds: [], memoryEngine3Enabled: true });
     assert.deepEqual(result.direct.map(entry => entry.memory.provenance.finalizationId),
-      [recentDirect.finalizationId, queryMatchingOlderDirect.finalizationId],
-    "unresolved identity preserves the ordinary recent direct order rather than query-ranking older history");
+      [recentDirect.finalizationId],
+    "unresolved identity preserves the single frozen Recent1 rather than query-ranking older history");
     assert(result.direct.every(entry => entry.routeKind === "direct"
       && !(entry.routeKinds || []).includes("entity_target")
       && !(entry.explicitTargetEntityIds || []).length),
     "ordinary frozen direct context may remain, but cannot be attributed to the unresolved name");
     assert.equal(result.extra.length, 0, "an unresolved name cannot select dynamic Extra history");
+    assert.equal(result.pairMemorySources.length, 0, "an unresolved name cannot open an exact Pair Source");
     assert.equal(result.topicPatch.length, 0, "an unresolved name cannot add a topic patch from unrelated history");
     assert.equal(result.entityTargetRecall.selectedIds.length, 0);
     assert.match(result.temporalExtraText, /未能唯一识别所问人物/);

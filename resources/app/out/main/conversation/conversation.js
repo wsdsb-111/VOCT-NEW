@@ -657,6 +657,12 @@ class Conversation {
     const activeParticipantIds = this.getActiveConversationCharacters().map((character) => character.id);
     const mentionExcludedIds = this.gameData.getMentionExclusionIds(activeParticipantIds);
     const memoryState = memoryEngine.ensureConversationState(this);
+    const sourceFolderRevision = memoryEngine.store.getFolderSummaryRevision(npc.id);
+    if (!(memoryState.sourceFolderRevisions instanceof Map)) memoryState.sourceFolderRevisions = new Map();
+    if (memoryState.sourceFolderRevisions.has(npc.id) && memoryState.sourceFolderRevisions.get(npc.id) !== sourceFolderRevision) {
+      memoryEngine.invalidateConversationRecallState(this);
+    }
+    memoryState.sourceFolderRevisions.set(npc.id, sourceFolderRevision);
     this.getPromptHistoryForCharacter(npc.id);
     const participantKey = [...new Set(activeParticipantIds.map(Number))].sort((left, right) => left - right).join(",");
     const campaignKey = this.gameData.campaignToken ?? null;
@@ -682,7 +688,10 @@ class Conversation {
     }
     const mentionableProfiles = memoryState.mentionProfileCache.profiles;
     const currentUserIndex = history.findLastIndex((entry) => entry.role === "user");
-    const query = currentUserIndex >= 0 ? history[currentUserIndex].content || "" : "";
+    const pairRoute = require("../memory-system/pair-memory-routing").resolveActiveMemoryPairs({
+      ownerId: npc.id, history, activeParticipantIds, playerId: this.gameData.playerID
+    });
+    const query = pairRoute.query || (currentUserIndex >= 0 ? history[currentUserIndex].content || "" : "");
     const assistContext = (currentUserIndex > 0 ? history.slice(Math.max(0, currentUserIndex - 2), currentUserIndex) : []).map((entry) => entry.content || "").filter(Boolean).join("\n");
     const mentionedCharacterIds = memoryEngine.findMentionedOutOfSceneCharacters({
       conversation: this,
@@ -714,8 +723,8 @@ class Conversation {
       mentionedEntityNames,
       mentionedRecallCache: memoryState.mentionedRecallCache,
       sessionRecallCache: memoryState.responderRecallCache,
-      directCounterpartIds: activeParticipantIds.filter((characterId) => characterId !== npc.id),
-      querySpeakerId: this.gameData.playerID,
+      directCounterpartIds: pairRoute.counterpartIds,
+      querySpeakerId: pairRoute.querySpeakerId,
       ownerFolderMemories: memoryState.mentionProfileCache.ownerFolderMemoriesRawById?.get(Number(npc.id))
         || memoryEngine.loadOwnerFolderMemories(npc.id),
       currentGameDate: this.gameData.date,
@@ -736,6 +745,11 @@ class Conversation {
         : Math.min(2400, Math.max(800, Math.floor(limit * 0.08))),
       estimateTokens: (text) => TokenCounter.estimateTokens(text)
     });
+    if (retrieved.sourceFolderRevision !== sourceFolderRevision) {
+      this.cacheV2FrozenSnapshots?.prefixByResponder?.clear();
+      memoryState.mentionProfileCache = null;
+      memoryState.sourceFolderRevisions.set(npc.id, retrieved.sourceFolderRevision);
+    }
     const turnEntityIds = [...new Set([...activeParticipantIds, ...currentTurnMentionedCharacterIds].map(Number))].filter((characterId) => characterId !== Number(npc.id));
     const turnEntityNames = turnEntityIds.flatMap((characterId) => {
       const profile = mentionableProfiles.get(characterId) || this.gameData.characters.get(characterId);
@@ -783,6 +797,7 @@ class Conversation {
       candidateCount: turnRecall.candidateCount,
       temporalDiagnostics: retrieved.temporalDiagnostics || null,
       entityRecallDiagnostics: retrieved.entityRecallDiagnostics || null,
+      pairMemoryMetrics: retrieved.pairMemoryMetrics || null,
       turnEpoch: this.turnEpoch
     }, null);
     let worldContext = null;
@@ -1245,6 +1260,17 @@ class Conversation {
         void 0,
         {
           requestType: "chat",
+          beforeSendGuard: () => {
+            if (memoryContext?.sourceFolderRevision != null && (
+              memoryEngine.store.getFolderSummaryRevision(npc.id) !== memoryContext.sourceFolderRevision
+              || this.gameData.campaignToken !== memoryContext.sourceCampaignToken
+              || (memoryContext.sourcePairIds || []).some(id => memoryEngine.store.hasPairLedgerSourceContentChanges(
+                memoryEngine.store.folderSummaryCache.get(Number(npc.id)) || [], id)))) {
+              const error = new Error("Legacy memory source changed before send");
+              error.name = "AbortError";
+              throw error;
+            }
+          },
           conversationId: this.id,
           responderId: npc.id,
           ...(diagnosticsContext ? { performanceTraceContext: diagnosticsContext } : {}),

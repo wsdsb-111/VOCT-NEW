@@ -431,6 +431,7 @@ const fs = require("fs");
 const { createLogParser } = require("./game-data/log-parser");
 const parseLog = createLogParser({ GameData, Character, onGameDataParsed: (gameData) => {
   runtimeNameSource = {
+    campaignToken: gameData.campaignToken || null,
     gameDate: gameData.date,
     playerId: gameData.playerID,
     characters: [...gameData.characters.values()].map(character => ({ id: character.id, firstName: character.firstName, fullName: character.fullName }))
@@ -931,6 +932,7 @@ const letterEffectTransport = new LetterEffectTransport();
 const { LetterSummaryFinalization } = require("./memory-system/letter-summary-finalization");
 memoryEngine.letterSummaryFinalization = new LetterSummaryFinalization({
   memoryEngine,
+  isCampaignCurrent: token => !!token && runtimeNameSource?.campaignToken === token,
   getSummarySettings: () => settingsRepository.getSummaryPromptSettings(),
   getProviderSnapshot: () => llmManager.getProviderCapabilities("SUMMARY"),
   requestSummary: (prompt, options = {}) => llmManager.sendSummaryRequest(prompt, void 0, {

@@ -2,6 +2,7 @@
 
 const { createTraitProfileView } = require("./trait-profile-selector");
 const { memoryMatchesCampaign } = require("../memory-system/memory-types");
+const PairLongTermLedger = require("../memory-system/pair-long-term-ledger");
 const { normalizeGameDate } = require("../worldline/character-temporal-facts");
 const { gameDateFromSerial } = require("../memory-system/temporal-anchor-extractor");
 
@@ -125,9 +126,14 @@ Reply as {{character.fullName}}.`;
       const scopedStore = Object.create(store);
       scopedStore.folderSummaryCache = new Map(store.folderSummaryCache);
       scopedStore.folderSummaryCacheMetrics = { ...store.folderSummaryCacheMetrics };
+      scopedStore.folderSummaryRevisions = new Map(store.folderSummaryRevisions);
       scopedStore.folderSummaryLoadDiagnostics = new Map(store.folderSummaryLoadDiagnostics);
+      scopedStore.folderSummaryCacheSources = new Map(store.folderSummaryCacheSources);
+      scopedStore.summaryConversationFileCache = new Map(store.summaryConversationFileCache);
       scopedStore.folderSummarySnapshotRevisions = new WeakMap();
+      scopedStore.folderSummarySnapshotSources = new WeakMap();
       scopedStore.summaryDateIndexCache = new Map();
+      scopedStore.pairLedger = new PairLongTermLedger({ store: scopedStore });
       const knowledge = store.getCharacterKnowledge(ownerId).filter(record => day(record.acquiredAt) != null
         && asOfDay != null && day(record.acquiredAt) <= asOfDay);
       const knownIds = new Set(knowledge.map(record => record.memoryId));

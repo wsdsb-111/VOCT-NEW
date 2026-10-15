@@ -76,8 +76,8 @@ function retrieve(engine, state, options) {
     const snapshot = store.loadFolderSummariesForCharacter(20);
     const state = engine.createConversationState("targeted-recall");
     const selected = retrieve(engine, state, { characterId: 20, query: "你还记得玄鹤铜牌吗", ownerFolderMemories: snapshot, campaignToken, turnEpoch: 1 });
-    assert(selected.direct.some(entry => entry.memory.content.includes("玄鹤铜牌")), "explicit direct-pair recall keeps the matching tail fact");
-    assert(selected.direct.some(entry => entry.memory.content.length < oldTailFact.length), "query-focused excerpt reaches token fitting before truncation");
+    assert(selected.extra.some(entry => entry.memory.content.includes("玄鹤铜牌")), "explicit recall keeps the matching historical tail fact in dynamic Legacy fallback while Recent1 stays frozen");
+    assert(selected.extra.some(entry => entry.memory.content.includes("玄鹤铜牌") && entry.memory.content.length < oldTailFact.length), "query-focused excerpt reaches token fitting before truncation");
     assert(!JSON.stringify([...selected.direct, ...selected.extra].map(entry => entry.memory.content)).includes("异世活动标记"));
     assert(!JSON.stringify([...selected.direct, ...selected.extra].map(entry => entry.memory.content)).includes("未绑定活动标记"));
 

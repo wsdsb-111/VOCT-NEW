@@ -188,8 +188,10 @@ async function testPartialAndOversizedLegacyReachProvider() {
   const longRow = summaryRow({ subjectIds: [3], content: `${keyFact}\n${filler}\n${filler}` });
   writeRows(path.join(oversizedHarness.ownerFolder, "与旧友的对话.json"), [longRow]);
   const longInput = await providerInput(oversizedHarness, "赵光义在北境通行令案中说过什么？");
-  const selected = longInput.memoryContext.extra.find(entry => entry.memory.content.includes("LONG_MIDDLE_EXCERPT_SENTINEL"));
-  assert(selected, "query-relevant Legacy evidence reaches the ProviderPrompt route");
+  const selected = [...longInput.memoryContext.direct, ...longInput.memoryContext.extra,
+    ...(longInput.memoryContext.pairMemorySources || [])]
+    .find(entry => entry.memory.content.includes("LONG_MIDDLE_EXCERPT_SENTINEL"));
+  assert(selected, "query-relevant Legacy evidence reaches a real direct, Extra, or exact Pair Source route");
   assert(selected.memory.content.length < longRow.content.length, "oversized Legacy source is excerpted rather than injected whole");
   assert(longInput.text.includes("LONG_MIDDLE_EXCERPT_SENTINEL"), "the relevant middle evidence reaches final provider messages");
   assert(longInput.memoryContext.selectedTokens <= longInput.memoryContext.tokenBudget, "Legacy recall stays within its frozen budget");

@@ -73,6 +73,7 @@ function createMemoryRecord(input = {}) {
       finalizationId: provenance.finalizationId || null,
       projectionId: provenance.projectionId || null,
       projectionLineages: Array.isArray(provenance.projectionLineages) ? JSON.parse(JSON.stringify(provenance.projectionLineages)) : [],
+      pairLedgerSources: Array.isArray(provenance.pairLedgerSources) ? JSON.parse(JSON.stringify(provenance.pairLedgerSources)) : [],
       sourceSegmentIds: Array.isArray(provenance.sourceSegmentIds) ? [...new Set(provenance.sourceSegmentIds.map(String).filter(Boolean))] : [],
       sourceMessageIds: Array.isArray(provenance.sourceMessageIds)
         ? [...new Set(provenance.sourceMessageIds.filter(id => Number.isSafeInteger(id) && id >= 0))].sort((a, b) => a - b) : [],

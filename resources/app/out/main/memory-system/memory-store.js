@@ -11,6 +11,7 @@ const { createProjectionLineage, projectionLineageFromSummary, matchesProjection
 const { assertNoLinks } = require("./scoped-path");
 const { mergeRenamedSummaryFolders, getSummaryConversationFile } = require("./summary-folder-merge");
 const { MentionTracker } = require("./mention-tracker");
+const PairLongTermLedger = require("./pair-long-term-ledger");
 
 function removeDirectoryTree(directory) {
   for (const entry of fs.readdirSync(directory, { withFileTypes: true })) {
@@ -45,6 +46,50 @@ function mergeCharacterProfiles(...groups) {
   return [...profiles.values()];
 }
 
+function statSignature(filePath) {
+  if (!filePath) return null;
+  try {
+    const stat = fs.lstatSync(filePath);
+    return {
+      isDirectory: stat.isDirectory(),
+      isFile: stat.isFile(),
+      isSymbolicLink: stat.isSymbolicLink(),
+      size: stat.size,
+      mtimeMs: stat.mtimeMs,
+      ctimeMs: stat.ctimeMs
+    };
+  } catch (error) {
+    if (error.code === "ENOENT") return null;
+    throw error;
+  }
+}
+
+function clonePairLedgerSources(sources) {
+  return JSON.parse(JSON.stringify(Array.isArray(sources) ? sources : []));
+}
+
+function cloneFolderSummary(memory) {
+  const result = createMemoryRecord(memory);
+  result.provenance.pairLedgerSources = clonePairLedgerSources(memory?.provenance?.pairLedgerSources);
+  return result;
+}
+
+function pairLedgerSourceIdentity({ summary, ownerId, counterpartId, campaignToken }) {
+  const projectionId = typeof summary.projectionId === "string" ? summary.projectionId.trim() : "";
+  const finalizationId = typeof summary.finalizationId === "string" ? summary.finalizationId.trim() : "";
+  const conversationId = typeof summary.conversationId === "string" ? summary.conversationId.trim() : "";
+  const identity = projectionId
+    ? ["projection", projectionId]
+    : finalizationId || conversationId
+      ? ["session", finalizationId, conversationId]
+      : null;
+  if (!identity) return { sourceSummaryKey: null, projectionId: null, finalizationId: null, conversationId: null };
+  const key = JSON.stringify([1, campaignToken, ownerId, counterpartId, ...identity]);
+  const sourceSummaryKey = `pair-summary:${crypto.createHash("sha256").update(key).digest("hex")}`;
+  return { sourceSummaryKey, projectionId: projectionId || null, finalizationId: finalizationId || null,
+    conversationId: conversationId || null };
+}
+
 class MemoryStore {
   constructor({ baseDir, summaryFoldersDir = null, recoveryDir = null } = {}) {
     if (!baseDir) throw new Error("memory_store_base_dir_required");
@@ -76,7 +121,10 @@ class MemoryStore {
     this.folderSummaryRevisions = new Map();
     this.folderSummaryLoadDiagnostics = new Map();
     this.folderSummarySnapshotRevisions = new WeakMap();
+    this.folderSummarySnapshotSources = new WeakMap();
+    this.folderSummaryCacheSources = new Map();
     this.summaryConversationFileCache = new Map();
+    this.pairLedger = new PairLongTermLedger({ store: this });
   }
 
   ensureDirectories() {
@@ -834,6 +882,8 @@ class MemoryStore {
       this.summaryDateIndexCache.clear();
       this.folderSummaryLoadDiagnostics.clear();
       this.summaryConversationFileCache.clear();
+      this.folderSummaryCacheSources.clear();
+      this.pairLedger?.invalidate();
       for (const characterId of owners) {
         this.folderSummaryRevisions.set(characterId, (this.folderSummaryRevisions.get(characterId) || 0) + 1);
       }
@@ -842,6 +892,8 @@ class MemoryStore {
     for (const characterId of uniqueIds(characterIds)) {
       this.summaryConversationFileCache.delete(characterId);
       if (this.folderSummaryCache.delete(characterId)) this.folderSummaryCacheMetrics.invalidations++;
+      this.folderSummaryCacheSources.delete(characterId);
+      this.pairLedger?.invalidate([characterId]);
       this.folderSummaryRevisions.set(characterId, (this.folderSummaryRevisions.get(characterId) || 0) + 1);
       this.folderSummaryLoadDiagnostics.delete(characterId);
       for (const key of this.summaryDateIndexCache.keys()) if (key.startsWith(String(characterId) + "|")) this.summaryDateIndexCache.delete(key);
@@ -849,11 +901,109 @@ class MemoryStore {
   }
 
   getFolderSummaryRevision(characterId) {
-    return this.folderSummaryRevisions.get(Number(characterId)) || 0;
+    const ownerId = Number(characterId);
+    this.refreshFolderSummaryCacheIfStale(ownerId);
+    return this.folderSummaryRevisions.get(ownerId) || 0;
   }
 
   getFolderSummarySnapshotRevision(memories) {
     return Array.isArray(memories) ? this.folderSummarySnapshotRevisions.get(memories) ?? null : null;
+  }
+
+  getFolderSummarySnapshotSources(memories) {
+    const sources = Array.isArray(memories) ? this.folderSummarySnapshotSources.get(memories) : null;
+    return sources ? JSON.parse(JSON.stringify(sources)) : null;
+  }
+
+  hasPairLedgerSourceChanges(memories, pairSources = []) {
+    const snapshot = Array.isArray(memories) ? this.folderSummarySnapshotSources.get(memories) : null;
+    if (!snapshot) return true;
+    try {
+      if (this.folderSummarySourceStateChanged(snapshot)) return true;
+      const checked = new Set();
+      for (const source of pairSources) {
+        const relative = source?.relativeSummaryPath;
+        if (typeof relative !== "string" || !relative || checked.has(relative)) continue;
+        checked.add(relative);
+        if (JSON.stringify(source.fileSignature) !== JSON.stringify(this.getSummarySourceFileSignature(relative))) return true;
+      }
+      return false;
+    } catch {
+      return true;
+    }
+  }
+
+  hasPairLedgerSourceContentChanges(memories, counterpartId) {
+    const files = new Map();
+    for (const memory of memories || []) for (const source of memory.provenance?.pairLedgerSources || []) {
+      if (Number(source.counterpartId) === Number(counterpartId)) files.set(source.relativeSummaryPath, source.fileDigest);
+    }
+    for (const [relative, expected] of files) {
+      try {
+        if (!expected || !this.getSummarySourceFileSignature(relative)) return true;
+        const file = path.resolve(this.summaryFoldersDir, ...relative.split("/"));
+        assertNoLinks(file);
+        const rows = JSON.parse(fs.readFileSync(file, "utf8").replace(/^\uFEFF/, ""));
+        if (crypto.createHash("sha256").update(JSON.stringify(rows)).digest("hex") !== expected) return true;
+      } catch { return true; }
+    }
+    return false;
+  }
+
+  folderSummarySourceStateChanged(sourceState) {
+    if (JSON.stringify(sourceState.directories) !== JSON.stringify(this.getFolderSummarySourceDirectories(sourceState.ownerId, sourceState.folderNames))) return true;
+    for (const sourceFile of sourceState.files || []) {
+      if (JSON.stringify(sourceFile.fileSignature) !== JSON.stringify(this.getSummarySourceFileSignature(sourceFile.relativeSummaryPath))) return true;
+    }
+    return false;
+  }
+
+  refreshFolderSummaryCacheIfStale(characterId) {
+    const ownerId = Number(characterId);
+    const sourceState = this.folderSummaryCacheSources.get(ownerId);
+    if (!sourceState) return false;
+    let stale = false;
+    try {
+      stale = this.folderSummarySourceStateChanged(sourceState);
+    } catch {
+      stale = true;
+    }
+    if (stale) this.invalidateFolderSummaryCache([ownerId]);
+    return stale;
+  }
+
+  getFolderSummarySourceDirectories(ownerId, folderNames = []) {
+    const root = this.summaryFoldersDir ? path.resolve(this.summaryFoldersDir) : null;
+    const rootSignature = root ? statSignature(root) : null;
+    if (rootSignature && (rootSignature.isSymbolicLink || !rootSignature.isDirectory)) throw new Error("pair_index_source_root_invalid");
+    const directories = { root: rootSignature, folders: [] };
+    for (const name of [...new Set(folderNames)].sort()) {
+      if (typeof name !== "string" || path.basename(name) !== name || !name.startsWith(`${Number(ownerId)}_`)) {
+        throw new Error("pair_index_source_folder_invalid");
+      }
+      const folderPath = path.resolve(root || "", name);
+      if (!root || path.dirname(folderPath) !== root) throw new Error("pair_index_source_folder_invalid");
+      const signature = statSignature(folderPath);
+      if (signature && (signature.isSymbolicLink || !signature.isDirectory)) throw new Error("pair_index_source_folder_invalid");
+      directories.folders.push({ name, signature });
+    }
+    return directories;
+  }
+
+  getSummarySourceFileSignature(relativeSummaryPath) {
+    if (!this.summaryFoldersDir || typeof relativeSummaryPath !== "string") return null;
+    const parts = relativeSummaryPath.split(/[\\/]/);
+    if (parts.length !== 2 || parts.some(part => !part || part === "." || part === "..")) throw new Error("pair_index_source_path_invalid");
+    const [folderName, fileName] = parts;
+    if (path.basename(folderName) !== folderName || !/^\d+_.+$/u.test(folderName)
+      || path.basename(fileName) !== fileName || !/^与.+的对话\.json$/u.test(fileName)) throw new Error("pair_index_source_path_invalid");
+    const root = path.resolve(this.summaryFoldersDir);
+    const folderPath = path.resolve(root, folderName);
+    const filePath = path.resolve(folderPath, fileName);
+    if (path.dirname(folderPath) !== root || path.dirname(filePath) !== folderPath) throw new Error("pair_index_source_path_invalid");
+    const signature = statSignature(filePath);
+    if (signature?.isSymbolicLink || signature && !signature.isFile) throw new Error("pair_index_source_file_invalid");
+    return signature;
   }
 
   getFolderSummaryLoadDiagnostics(characterId) {
@@ -900,16 +1050,20 @@ class MemoryStore {
     this.listForgottenSummaryProjections();
     this.index.forgottenSummaryProjections = { ...this.index.forgottenSummaryProjections, [lineage.projectionId]: lineage };
     this.saveIndex();
+    const ownerId = Number(options.ownerId);
+    if (Number.isSafeInteger(ownerId) && ownerId > 0) this.invalidateFolderSummaryCache([ownerId]);
     return lineage;
   }
 
   loadFolderSummariesForCharacter(characterId) {
     const ownerId = Number(characterId);
     if (!Number.isSafeInteger(ownerId) || ownerId <= 0) return [];
+    this.refreshFolderSummaryCacheIfStale(ownerId);
     if (this.folderSummaryCache.has(ownerId)) {
       this.folderSummaryCacheMetrics.hits++;
-      const memories = this.folderSummaryCache.get(ownerId).map((memory) => createMemoryRecord(memory));
+      const memories = this.folderSummaryCache.get(ownerId).map(cloneFolderSummary);
       this.folderSummarySnapshotRevisions.set(memories, this.getFolderSummaryRevision(ownerId));
+      this.folderSummarySnapshotSources.set(memories, this.folderSummaryCacheSources.get(ownerId) || null);
       this.folderSummaryLoadDiagnostics.set(ownerId, {
         status: "CACHE_HIT", cacheHit: true, filesFound: null, filesParsed: null, recordsParsed: null,
         ownerAcceptedCount: null, ownerRejectedCount: null, malformedFileCount: null, cachedSummaryCount: memories.length
@@ -925,6 +1079,9 @@ class MemoryStore {
       this.folderSummaryCache.set(ownerId, []);
       const memories = [];
       this.folderSummarySnapshotRevisions.set(memories, this.getFolderSummaryRevision(ownerId));
+      const sourceState = { ownerId, folderNames: [], directories: this.getFolderSummarySourceDirectories(ownerId, []) };
+      this.folderSummaryCacheSources.set(ownerId, sourceState);
+      this.folderSummarySnapshotSources.set(memories, sourceState);
       this.folderSummaryLoadDiagnostics.set(ownerId, loadDiagnostics);
       return memories;
     }
@@ -932,6 +1089,7 @@ class MemoryStore {
     const folders = fs.readdirSync(this.summaryFoldersDir, { withFileTypes: true })
       .filter((entry) => entry.isDirectory() && entry.name.startsWith(prefix));
     const sessions = new Map();
+    const sourceFiles = [];
     const forgottenProjections = this.listForgottenSummaryProjections();
     for (const folder of folders) {
       const folderPath = path.join(this.summaryFoldersDir, folder.name);
@@ -939,7 +1097,15 @@ class MemoryStore {
       loadDiagnostics.filesFound += files.length;
       for (const file of files) {
         const invalidFile = Symbol("invalid_summary_file");
-        const summaries = this.readJson(path.join(folderPath, file), invalidFile);
+        const sourceFilePath = path.join(folderPath, file);
+        const beforeSignature = statSignature(sourceFilePath);
+        const summaries = this.readJson(sourceFilePath, invalidFile);
+        const fileDigest = Array.isArray(summaries) ? crypto.createHash("sha256").update(JSON.stringify(summaries)).digest("hex") : null;
+        const afterSignature = statSignature(sourceFilePath);
+        const fileSignature = beforeSignature && afterSignature && beforeSignature.isFile && !beforeSignature.isSymbolicLink
+          && JSON.stringify(beforeSignature) === JSON.stringify(afterSignature) ? afterSignature : null;
+        const pairLedgerFileValid = /^与.+的对话\.json$/u.test(file);
+        if (pairLedgerFileValid) sourceFiles.push({ relativeSummaryPath: `${folder.name}/${file}`, fileSignature });
         if (!Array.isArray(summaries)) {
           loadDiagnostics.malformedFileCount++;
           continue;
@@ -1002,6 +1168,31 @@ class MemoryStore {
           const temporalSignature = temporalRefs.length ? `|${JSON.stringify(temporalRefs)}` : "";
           const sessionKey = (summary.campaignToken ? `${summary.campaignToken}|` : "") + (finalizationId ? `${ownerId}|${finalizationId}|${summary.content}${temporalSignature}` : `${ownerId}|${summary.date || ""}|${summary.totalDays ?? ""}|${summary.content}${temporalSignature}`);
           const digest = crypto.createHash("sha1").update(sessionKey).digest("hex").slice(0, 16);
+          const relativeSummaryPath = `${folder.name}/${file}`;
+          const sourceRevision = crypto.createHash("sha256").update(JSON.stringify(summary)).digest("hex");
+          const sourceIdentity = counterpartId ? pairLedgerSourceIdentity({ summary, ownerId, counterpartId,
+            campaignToken: String(summary.campaignToken || "").trim() || null }) : null;
+          const pairLedgerSource = counterpartId && pairLedgerFileValid ? {
+            ownerAuthorized: true,
+            forgetChecked: true,
+            ownerId,
+            counterpartId,
+            campaignToken: String(summary.campaignToken || "").trim() || null,
+            campaignBinding: summary.campaignBinding || null,
+            sourceSummaryKey: sourceIdentity.sourceSummaryKey,
+            sourceRevision,
+            sourceMemoryId: `folder_${digest}`,
+            relativeSummaryPath,
+            folderName: folder.name,
+            conversationFile: file,
+            summaryIndex: index,
+            fileSignature,
+            fileDigest,
+            projectionId: sourceIdentity.projectionId,
+            finalizationId: sourceIdentity.finalizationId,
+            conversationId: sourceIdentity.conversationId,
+            rawSummary: JSON.parse(JSON.stringify(summary))
+          } : null;
           const existing = sessions.get(sessionKey);
           if (existing) {
             existing.importance = Math.max(existing.importance, summary.pinned === true ? 0.95 : 0.65);
@@ -1028,9 +1219,10 @@ class MemoryStore {
             existing.provenance.perspectiveSummarySegmentIds = [...new Set([...existing.provenance.perspectiveSummarySegmentIds,
               ...(summary.perspectiveSummarySegmentIds || [])].map(String).filter(Boolean))];
             existing.provenance.temporalRefs = normalizePerspectiveTemporalRefs([...existing.provenance.temporalRefs, ...temporalRefs], existing.provenance.perspectiveMemoryIds);
+            if (pairLedgerSource) existing.provenance.pairLedgerSources.push(pairLedgerSource);
             continue;
           }
-          sessions.set(sessionKey, createMemoryRecord({
+          const memory = createMemoryRecord({
             schemaVersion: CURRENT_MEMORY_SCHEMA_VERSION,
             memoryId: `folder_${digest}`,
             type: "folder_summary",
@@ -1077,16 +1269,22 @@ class MemoryStore {
               speakerIds: []
             },
             status: summary.open === true ? "open" : null
-          }));
+          });
+          memory.provenance.pairLedgerSources = pairLedgerSource ? [pairLedgerSource] : [];
+          sessions.set(sessionKey, memory);
         }
       }
     }
     const memories = [...sessions.values()];
     this.folderSummaryCache.set(ownerId, memories);
+    const sourceState = { ownerId, folderNames: folders.map(folder => folder.name), files: sourceFiles,
+      directories: this.getFolderSummarySourceDirectories(ownerId, folders.map(folder => folder.name)) };
+    this.folderSummaryCacheSources.set(ownerId, sourceState);
     loadDiagnostics.cachedSummaryCount = memories.length;
     this.folderSummaryLoadDiagnostics.set(ownerId, loadDiagnostics);
-    const snapshot = memories.map((memory) => createMemoryRecord(memory));
+    const snapshot = memories.map(cloneFolderSummary);
     this.folderSummarySnapshotRevisions.set(snapshot, this.getFolderSummaryRevision(ownerId));
+    this.folderSummarySnapshotSources.set(snapshot, sourceState);
     return snapshot;
   }
 

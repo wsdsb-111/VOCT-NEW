@@ -59,6 +59,6 @@ export function getLegacySummaryPage(summaries, {
 
 export function getSummaryImportantMatters(content) {
   if (typeof content !== "string") return "";
-  const match = content.match(/【需要长期记住的事项】([\s\S]*?)(?=\n\s*【[^】]+】|$)/);
-  return match?.[1]?.trim() || "";
+  const parsed = globalThis.VOTCPairImportantMatters?.parseImportantMatters?.(content);
+  return Array.isArray(parsed?.items) ? parsed.items.map((item) => item.text).filter(Boolean).join("\n") : "";
 }
