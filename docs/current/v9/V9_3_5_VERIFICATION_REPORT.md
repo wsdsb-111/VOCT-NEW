@@ -1,8 +1,22 @@
 # V9.3.5 验证报告
 
-日期：2026-10-15。初版基线 SHA `941104063581f37de799065216ed422779460b8e`。Core／App／UI 9.3.5；Runtime 285 映射。离线确认修复后的 payload SHA-256 为 `1b6dbb788902788f20da02401a88c585fa1d33f9f3b1a58fd626b13a26a6596b`。实施与数据合同见[实施报告](V9_3_5_IMPLEMENTATION_REPORT.md)、[来源合同](V9_3_5_INDEX_AND_SOURCE_CONTRACT.md)。
+日期：2026-10-15。初版基线 SHA `941104063581f37de799065216ed422779460b8e`。Core／App／UI 9.3.5；Runtime 285 映射。当前事项簿文件夹 UI 的 payload SHA-256 为 `41acdd5896978b94a6d198fec45ef0052fd05eabfcbe34cd38f309ccd9d2a9a4`。实施与数据合同见[实施报告](V9_3_5_IMPLEMENTATION_REPORT.md)、[来源合同](V9_3_5_INDEX_AND_SOURCE_CONTRACT.md)。
+
+## 长期事项簿文件夹 UI
+
+按用户草图改为默认折叠的“长期事项簿”文件夹；展开后按真实姓名 Owner→Counterpart 列出关系，每组首次展开时懒加载既有 Pair 索引，事项正文在左、日期在右。生成／更新工具收在独立折叠区，成功后收回文件夹，详细执行统计和来源诊断默认收起；失败保留可发现提示，不自动伪装完成。搜索、日期过滤、分页、后端验源与来源定位保持。
+
+目录从完整 Owner 的现有摘要 metadata 构建，不依赖本轮生成结果或 Legacy 搜索筛选后的短列表；重新挂载仍可浏览已有关系。目录 DOM 不因生成状态重绘而重建，关闭／重开同一组不重复注册监听；销毁时清理子挂载。仅改 Renderer 与对应测试，不移动摘要或索引文件，不改 IPC、离线权限、召回、Prompt 或持久格式。
+
+独立 DOM 反例及既有 Pair UI 回归通过，覆盖默认折叠、真实姓名两关系隔离、首次展开懒加载、分页、Source Key／Revision 校验、重开不重复加载、重新挂载、监听释放、成功折叠和失败状态。CSS 两列／右对齐合同断言通过；原生窗口发现旧 `--votc-panel/text` 深色变量与游牧／水墨主题暗文字覆盖冲突；改用当前成对的 `--votc-surface`／`--votc-text-body`，并加入防退化断言。最终游牧（parchment）／骑士（knight）／水墨（ink）三主题目录截图均已逐图阅查，事项簿区域姓名与底色清晰。manifest 仍为 407 发布组／127 历史项／535 文件。
+
+本轮干净 Windows 检出快照 `f544bf7491ea3ed0dc16fd472134eba952ab75f0`（基于 `b4a868f`）从无 `.build` 开始，Node22.23.3／core.autocrlf=true，依赖校验、构建、构建验证、部署、部署验证和完整发布六步均 exit 0，407／407 发布组通过。68 份 LFS 对象、5981 个锁定依赖文件／264 包通过校验，285 source／artifact／deployed 映射与根工作区 payload 一致；日志 `.build/v935-folder-candidate-*.log`，汇总 `.build/v935-folder-clean-candidate-report.json`。
+
+本轮最终部署的真实隔离 VOTC.exe 原生验收通过：默认文件夹收起，两个真实姓名关系首次展开才读取；25 条事项每页 20 条，第二页为 5 条，日期 bbox 验证位于正文右侧；来源全文经过实际 IPC 验真后打开。Owner 预览／确认生成后文件夹和成功统计自动收起，重新展开可浏览。退出后使用同一 userData、无重新播种，再打开仍读到 25／2 条事项；两份原 Legacy 文件哈希始终一致。证据为 `.build/v935-pair-folder-visual-smoke-rGPKVf/offline-native/smoke-evidence.json` 和同目录三张 `pair-folder-<theme>.png`。Provider 调用与外部 network attempts 均为空，未调用真实 CK3；测试进程已关闭。该原生验收使用合成资料，不替代真实 CK3／Soak／远端 CI。
 
 ## 离线确认写入修复
+
+以下为上一轮离线确认修复的验收快照，payload 为 `1b6dbb788902788f20da02401a88c585fa1d33f9f3b1a58fd626b13a26a6596b`。
 
 用户实测“提取成功但确认按钮禁用”，并确认仅打开历史摘要、未连接游戏。原 service 仅在活动 GameData 包含 Owner 时授予写入，ledger 又禁止历史预览 apply；因此提取本身成功，确认链却无法执行。不是点击样式问题，不能只移除 disabled。
 

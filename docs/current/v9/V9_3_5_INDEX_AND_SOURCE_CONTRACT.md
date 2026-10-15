@@ -32,6 +32,8 @@ Temporal 与 Mentioned／Entity 各最多 3 篇，去重后合计最多 6；源�
 
 ## IPC 与回填
 
+玩家页面以默认折叠的“长期事项簿”文件夹浏览，内部按真实 Owner→Counterpart 姓名分组，事项正文与右侧日期并列。组首次展开才调用既有 Pair 列表接口，继续使用全库筛选与后端分页。生成／更新及处理统计另行收起；UI 文件夹不代表磁盘迁移，也不改变索引作用域、源权限或来源验真。
+
 | IPC | 允许输入 | 关键约束 |
 |---|---|---|
 | `conversation:getPairMemoryIndex` | ownerId、counterpartId、page、pageSize、search、fromDate、toDate、sort | page 从 0 开始；pageSize 上限 50；全索引筛选后分页 |

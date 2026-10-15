@@ -551,23 +551,71 @@
   function mount(host, options) {
     let disposed = false;
     let controller;
+    let completedResult = null;
+    const childDisposers = [];
     const names = {
       ownerName: displayPersonName(options.ownerName),
       counterpartName: displayPersonName(options.counterpartName)
     };
+    const modalHost = makeElement("div", "pair-ledger-modal-host");
+    const contentHost = makeElement("div", "pair-ledger-folder-content");
+    const folder = options.inline ? null : makeElement("details", "pair-ledger-folder");
+    const folderLabel = makeElement("span", "pair-ledger-folder-label", options.mode === "owner"
+      ? "长期事项簿" : `${names.ownerName} → ${names.counterpartName} · 长期事项`);
+    const folderStatus = makeElement("span", "pair-ledger-folder-status");
+    if (folder) {
+      const summary = makeElement("summary", "pair-ledger-folder-summary");
+      summary.append(makeElement("span", "pair-ledger-folder-icon", "📁"), folderLabel, folderStatus);
+      folder.append(summary, contentHost);
+    }
+    const operationHost = makeElement("div", "pair-ledger-operation-host");
+    const maintenance = options.mode === "owner" ? makeElement("details", "pair-ledger-maintenance") : null;
+    if (maintenance) {
+      const catalog = makeElement("div", "pair-ledger-catalog");
+      const seen = new Set();
+      for (const relation of options.counterparts || []) {
+        const counterpartId = Number(relation.counterpartId);
+        if (!Number.isSafeInteger(counterpartId) || counterpartId <= 0 || counterpartId === Number(options.ownerId) || seen.has(counterpartId)) continue;
+        seen.add(counterpartId);
+        const group = makeElement("details", "pair-ledger-group");
+        const summary = makeElement("summary", "pair-ledger-group-summary");
+        const hint = makeElement("span", "pair-ledger-group-hint", "查看事项");
+        summary.append(makeElement("span", "pair-ledger-route", `${names.ownerName} → ${displayPersonName(relation.counterpartName)}`), hint);
+        const childHost = makeElement("div", "pair-ledger-group-content");
+        let mounted = false;
+        group.addEventListener("toggle", () => {
+          if (disposed || !group.open || mounted) return;
+          mounted = true;
+          childDisposers.push(mount(childHost, { ...options, mode: "pair", inline: true, counterpartId,
+            counterpartName: relation.counterpartName, onStatus: status => {
+              hint.textContent = status.error ? "读取失败 · 请展开查看" : status.busy ? "读取中…"
+                : status.ledger ? `${status.ledger.totalCount || 0} 条事项` : "查看事项";
+              hint.className = status.error ? "pair-ledger-group-hint is-error" : "pair-ledger-group-hint";
+            } }));
+        });
+        group.append(summary, childHost);
+        catalog.append(group);
+      }
+      folderStatus.textContent = `${seen.size} 个关系`;
+      if (!seen.size) catalog.append(makeElement("p", "pair-ledger-empty", "暂无可浏览的人物关系。"));
+      maintenance.append(makeElement("summary", "", "生成与更新"), operationHost);
+      contentHost.append(catalog, maintenance);
+    } else contentHost.append(operationHost);
+    host.replaceChildren(folder || contentHost, modalHost);
 
     function render(state) {
       if (disposed) return;
-      host.replaceChildren();
+      if (typeof options.onStatus === "function") options.onStatus(state);
+      folderStatus.className = state.error || state.result?.success === false
+        ? "pair-ledger-folder-status is-error" : "pair-ledger-folder-status";
+      operationHost.replaceChildren();
+      modalHost.replaceChildren();
       const section = makeElement("section", `pair-ledger-panel is-${state.mode}`);
       const header = makeElement("div", "pair-ledger-header");
-      const title = state.mode === "owner" ? "批量生成长期事项簿" : "长期重要事项簿（Owner 视角）";
-      header.append(makeElement("h5", "", state.mode === "owner" ? `为 ${names.ownerName} 批量生成长期事项簿` : title));
-      if (state.mode === "pair") header.append(makeElement("p", "pair-ledger-route", `${names.ownerName} → ${names.counterpartName}`));
-      section.append(header);
-
-      const notice = makeElement("p", "pair-ledger-notice", "本功能只从 Legacy 摘要本地提取，不调用 AI，也不修改原始摘要。事项会随源摘要编辑、删除和 Forget 同步。派生事项不可单独编辑。查看原摘要时会由主进程重新验证来源身份和版本。");
-      section.append(notice);
+      if (state.mode === "owner") {
+        header.append(makeElement("h5", "", `更新 ${names.ownerName} 的长期事项簿`));
+        section.append(header);
+      }
 
       if (state.mode === "pair") renderPairLedger(section, state, controller, names);
       if (state.busy && state.operation === "batch") {
@@ -586,15 +634,41 @@
         progress.append(cancel);
         section.append(progress);
       }
-      renderBackfill(section, state, controller);
+      if (state.mode === "owner") renderBackfill(section, state, controller);
+      else {
+        const tools = makeElement("details", "pair-ledger-maintenance");
+        tools.open = !!state.preview || state.busy && state.operation !== "load" || !!state.error;
+        tools.append(makeElement("summary", "", "生成与更新"));
+        renderBackfill(tools, state, controller);
+        section.append(tools);
+      }
       if (state.message) section.append(makeElement("p", "pair-ledger-status", state.message));
       if (state.error) {
+        folderStatus.textContent = "需要处理 · 请展开查看";
+        folderStatus.className = "pair-ledger-folder-status is-error";
+        if (maintenance) maintenance.open = true;
         section.append(makeElement("p", "pair-ledger-error", state.error));
         if (state.errorCode) renderDiagnostics(section, { error: state.errorCode }, "诊断详情");
       }
-      if (state.result) renderApplyResult(section, state.result, state.progress, state.mode);
-      host.append(section);
-      if (state.sourceModal) renderSourceModal(host, state, controller, names, options);
+      if (state.result) {
+        if (state.result.success === false) {
+          folderStatus.textContent = "未完成 · 请展开查看";
+          if (maintenance) maintenance.open = true;
+        }
+        const details = makeElement("details", "pair-ledger-result-details");
+        details.open = state.result.success === false;
+        details.append(makeElement("summary", "", "本次处理详情"));
+        renderApplyResult(details, state.result, state.progress, state.mode);
+        section.append(details);
+        if (!state.busy && state.result.success === true && completedResult !== state.result) {
+          completedResult = state.result;
+          if (folder) folder.open = false;
+          if (maintenance) maintenance.open = false;
+          folderStatus.textContent = state.mode === "owner" ? "已更新" : `共 ${state.ledger?.totalCount || 0} 条`;
+        }
+      }
+      operationHost.append(section);
+      if (state.sourceModal) renderSourceModal(modalHost, state, controller, names, options);
     }
 
     function renderPairLedger(section, state, controls) {
@@ -603,8 +677,8 @@
         return;
       }
       if (state.ledger?.writable === false) section.append(makeElement("p", "pair-ledger-readonly", "只读归档：可以查看事项和来源，不能回填。"));
-      if (state.ledger?.offlineBackfill === true) section.append(makeElement("p", "pair-ledger-offline", "离线整理：已验证历史摘要的唯一战役绑定，可预览后确认生成事项簿。只更新本地索引，不修改原摘要。"));
       if (state.ledger) {
+        if (folder && !state.result) folderStatus.textContent = `共 ${state.ledger.totalCount || 0} 条`;
         const top = makeElement("div", "pair-ledger-controls");
         const count = Number(state.ledger.totalCount || 0);
         top.append(makeElement("span", "pair-ledger-total", `共 ${count} 条`));
@@ -650,10 +724,8 @@
         const list = makeElement("ol", "pair-ledger-items");
         for (const item of items) {
           const row = makeElement("li", "pair-ledger-item");
-          const header = makeElement("div", "pair-ledger-item-header");
-          header.append(makeElement("time", "", item.conversationDate || "日期未记录"));
-          header.append(makeElement("span", "pair-ledger-evidence", formatInteractionEvidence(item.interactionEvidence)));
-          row.append(header, makeElement("p", "pair-ledger-item-text", item.text || ""));
+          row.append(makeElement("p", "pair-ledger-item-text", item.text || ""),
+            makeElement("time", "pair-ledger-item-date", item.conversationDate || "日期未记录"));
           const actions = makeElement("div", "pair-ledger-item-actions");
           actions.append(makeButton("查看原摘要", () => controls.openSource(item), ""));
           const sourceDetails = makeElement("details", "pair-ledger-source-details");
@@ -661,7 +733,9 @@
           sourceDetails.append(makeElement("p", "", `来源日期：${item.conversationDate || "未记录"} · ${formatInteractionEvidence(item.interactionEvidence)}`));
           renderDiagnostics(sourceDetails, item.source || {}, "来源诊断详情");
           actions.append(sourceDetails);
-          row.append(actions);
+          const sourceActions = makeElement("details", "pair-ledger-item-source");
+          sourceActions.append(makeElement("summary", "", "来源"), actions);
+          row.append(sourceActions);
           list.append(row);
         }
         section.append(list);
@@ -786,6 +860,7 @@
       disposed = true;
       root.removeEventListener("votc:pair-memory-index-updated", progressEvent);
       controller.dispose();
+      for (const dispose of childDisposers) dispose();
       host.replaceChildren();
     };
   }

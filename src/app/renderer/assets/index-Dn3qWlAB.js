@@ -21567,7 +21567,14 @@ const SummariesManager = () => {
           }
         ),
         isPlayerExpanded && /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "player-characters", children: [
-          /* @__PURE__ */ jsxRuntimeExports.jsx(PairLongTermUiMount, { key: `owner-ledger-${playerId}`, mode: "owner", ownerId: Number(playerId), ownerName: summaryPersonName(playerSummaries[0]?.ownerName || playerSummaries[0]?.playerName), refreshToken: ledgerRefreshRevision }),
+          /* @__PURE__ */ jsxRuntimeExports.jsx(PairLongTermUiMount, {
+            key: `owner-ledger-${playerId}`, mode: "owner", ownerId: Number(playerId),
+            ownerName: summaryPersonName(playerSummaries[0]?.ownerName || playerSummaries[0]?.playerName),
+            counterparts: ownerSummaries.map(metadata => ({ counterpartId: Number(metadata.counterpartId ?? metadata.characterId),
+              counterpartName: summaryPersonName(metadata.counterpartName || metadata.characterName) })),
+            refreshToken: ledgerRefreshRevision,
+            onLocateSource: (resolvedSource, item) => handleLocateResolvedSource(resolvedSource, item)
+          }),
           playerSummaries.map((metadata) => {
           const characterKey = `${metadata.playerId}-${metadata.characterId}`;
           const isExpanded = expandedCharacters.has(characterKey);
