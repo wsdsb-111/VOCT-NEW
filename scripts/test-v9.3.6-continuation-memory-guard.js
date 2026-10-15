@@ -39,7 +39,8 @@ function makePromptBuilder() {
   };
 }
 
-function createRun({ sourceChangesAfterInitial = false, partialContent = "V936_PARTIAL_REPLY", contextWindow = 2048 } = {}) {
+function createRun({ sourceChangesAfterInitial = false, partialContent = "V936_PARTIAL_REPLY", contextWindow = 2048,
+  streamInitial = false } = {}) {
   const providerConfig = {
     providerType: "v936-continuation-memory-fixture",
     customName: "V936 Continuation Fixture",
@@ -59,6 +60,10 @@ function createRun({ sourceChangesAfterInitial = false, partialContent = "V936_P
       stats.requests.push(request);
       if (stats.transports === 1) {
         if (sourceChangesAfterInitial) state.sourceValid = false;
+        if (request.stream) return (async function* streamLengthResponse() {
+          yield { delta: { content: partialContent } };
+          return { content: partialContent, finish_reason: "length" };
+        })();
         return { content: partialContent, finish_reason: "length" };
       }
       return { content: "V936_COMPLETION_SUFFIX", finish_reason: "stop" };
@@ -68,7 +73,7 @@ function createRun({ sourceChangesAfterInitial = false, partialContent = "V936_P
   providerRegistry.register(providerConfig.providerType, FixtureProvider);
   const settingsRepository = {
     getActiveProviderConfig: () => providerConfig,
-    getGlobalStreamSetting: () => false,
+    getGlobalStreamSetting: () => streamInitial,
     getChatPromptV813Layout: () => false,
     getChatPromptV89Settings: () => ({ chatPromptV89OutboundDiagnostics: false })
   };
@@ -206,6 +211,38 @@ async function testValidContinuationKeepsBudgetAndChecksEveryTransport() {
   assert.equal(run.stats.requests[1].max_tokens, 128);
 }
 
+async function testStreamLengthContinuesWithMemoryGuard() {
+  const run = createRun({ streamInitial: true });
+  await run.chat.respondAs(run.npc);
+  assert.equal(run.stats.transports, 2, "a streamed LENGTH response must continue through one additional transport");
+  assert.equal(run.stats.requests[0].stream, true, "the initial request must use the real streaming path");
+  assert.equal(run.stats.requests[1].stream, false, "continuation remains a non-streaming request");
+  assert.equal(run.sentMetadata.length, 2);
+  const [initial, continuation] = run.sentMetadata;
+  assert.equal(continuation.requestType, "chat_continuation");
+  assert.equal(continuation.memoryBudgetTokens, initial.memoryBudgetTokens);
+  assert.equal(continuation.renderedMemoryTokens, initial.renderedMemoryTokens);
+  assert.deepEqual(continuation.blocks, initial.blocks,
+    "stream continuation must retain the original memory spans and fingerprints");
+  assert.equal(continuation.beforeSendGuard, initial.beforeSendGuard,
+    "stream continuation must retain the exact per-turn memory guard closure");
+  assert.equal(run.state.validationCalls, 2, "source validation must run before each streamed/continuation transport");
+}
+
+async function testStreamLengthForgetStopsContinuationTransport() {
+  const run = createRun({ streamInitial: true, sourceChangesAfterInitial: true });
+  await run.chat.respondAs(run.npc);
+  assert.equal(run.stats.requests[0].stream, true, "the initial request must use the real streaming path");
+  assert.equal(run.stats.transports, 1, "Forget after streamed LENGTH must block the continuation transport");
+  assert.equal(run.stats.providerEntries, 2,
+    "the rejected continuation may enter the wrapper but must fail before provider transport");
+  assert.equal(run.sentMetadata.length, 2);
+  assert.equal(run.sentMetadata[1].requestType, "chat_continuation");
+  assert.equal(run.sentMetadata[1].beforeSendGuard, run.sentMetadata[0].beforeSendGuard);
+  assert.deepEqual(run.sentMetadata[1].blocks, run.sentMetadata[0].blocks);
+  assert.equal(run.state.validationCalls, 2, "Forget must be revalidated before the continuation send");
+}
+
 async function testContinuationPartialCannotOverflowContext() {
   const run = createRun({ partialContent: `V936_PARTIAL_${"x".repeat(12000)}` });
   await run.chat.respondAs(run.npc);
@@ -224,6 +261,8 @@ async function main() {
   await withBlockedNetwork(async () => {
     await testForgetStopsContinuationBeforeSecondTransport();
     await testValidContinuationKeepsBudgetAndChecksEveryTransport();
+    await testStreamLengthContinuesWithMemoryGuard();
+    await testStreamLengthForgetStopsContinuationTransport();
     await testContinuationPartialCannotOverflowContext();
   });
   console.log("V9.3.6 continuation memory guard: PASS (Forget, valid resend guard, full-request budget)");

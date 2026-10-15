@@ -48,7 +48,7 @@
 | TK07 | 标题、日期、证据、角色消息开销纳入；三布局实际 block span／fingerprint 经 LLMManager 守卫各合法发送一次 |
 | TK08 | 16 条事项＋两篇完整来源共享一个预算；整篇过大来源明确省略，不部分注入 |
 
-新增真实续写链反例：初始截断后 Forget 阻止第二次实际传输；合法续写重跑同一来源 guard，partial 增大导致超窗也在发送前拒绝。诊断实际落盘再回读，计数／枚举／哈希保留，正文／路径／凭据哨兵不落盘，未知缓存不补零。旧生产 QA 仅升级可信轮次、L2 目标与完整原文预算合同，Scope／Future／Campaign／Forget／回滚断言保持。
+新增真实续写链反例：初始截断后 Forget 阻止第二次实际传输；合法续写重跑同一来源 guard，partial 增大导致超窗也在发送前拒绝。初始非流式与 async-iterator 流式 LENGTH 均有实际 Conversation→Facade 用例，续写使用非流式并保留原 spans／guard。诊断实际落盘再回读，计数／枚举／哈希保留，正文／路径／凭据哨兵不落盘，未知缓存不补零。旧生产 QA 仅升级可信轮次、L2 目标与完整原文预算合同，Scope／Future／Campaign／Forget／回滚断言保持；旧 Review Closure 的 TokenCounter 夹具补齐实际消息估算接口。
 
 ## 隔离打包窗口
 

@@ -25,7 +25,8 @@ async function main() {
       profileMemory("legacy", null, 777, "旧角色")];
     engine.loadOwnerFolderMemories = ownerId => Number(ownerId) === 2 ? memories : [];
     Conversation.configure({ memoryEngine: engine, llmManager: { getCurrentContextLength: async () => 8000 },
-      TokenCounter: { estimateTokens: text => String(text || "").length }, usageAnalytics: { record() {} },
+      TokenCounter: { estimateTokens: text => String(text || "").length,
+        estimateMessageTokens: message => String(message?.content || "").length }, usageAnalytics: { record() {} },
       worldlineService: { getSettings: () => ({ v812MemoryEngine3Enabled: true }), isSubjectivePromptIntegrationEnabled: () => true } });
     const chat = Object.create(Conversation.prototype);
     const player = { id: 1, shortName: "玩家" }, npc = { id: 2, shortName: "NPC" };
