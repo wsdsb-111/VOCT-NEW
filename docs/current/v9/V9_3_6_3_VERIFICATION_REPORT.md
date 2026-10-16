@@ -92,7 +92,7 @@ C01–C18与EXTRA、PERMISSIONS、C19–C21共23/23通过。表中范围是各�
 
 ## 最终构建与交付
 
-运行代码SHA：CODE_SHA_PENDING。Node v22.23.3；Windows版本及正式测量源码哈希见[环境证据](v9363-performance-source-evidence.json)。CK3安装exe的FileVersion/ProductVersion为空，未启动读取运行时版本（NOT_RUN）。全新Windows快照 2c1180718c17922eb3b13cf2a3613edf4269ff03、初始无.build、68项LFS逐个验证。
+运行代码SHA：`6e06672d5bfd065f70ff9a0d68ace6efaf4f74be`。Node v22.23.3；Windows版本及正式测量源码哈希见[环境证据](v9363-performance-source-evidence.json)。CK3安装exe的FileVersion/ProductVersion为空，未启动读取运行时版本（NOT_RUN）。全新Windows快照 2c1180718c17922eb3b13cf2a3613edf4269ff03、初始无.build、68项LFS逐个验证。
 
 | 标准步骤 | 退出码 | 结果 |
 |---|---:|---|
@@ -112,3 +112,7 @@ C01–C18与EXTRA、PERMISSIONS、C19–C21共23/23通过。表中范围是各�
 实际VOTC.exe同一隔离profile两次启动，无重复种入。Main加载所有改动模块的部署SHA并与源一致；GLM设置/IPC和实际历史记忆注入、新“登基之后/政变之后”L1/L2通过。旧摘要事项簿折叠、按真实姓名分组、25/2条、分页、三主题、来源弹窗后端复验、预览确认回填、源文件逐字节不变及重启保留均通过。界面与原始证据在.build，仓库仅保存[匿名计数与哈希](v9363-native-evidence.json)。没有开启CK3/Provider。
 
 L0/L1/L2原文读取数0/0/2、固定文本稳定、1410 Tokens在4800内；退休Memory4/Durable的Renderer表面及IPC仍为空。新GLMCustom90000、已有Auto8192保留、1M Custom、不合法小数不保存、256零输入警告与拒绝发送不回归。零Provider调用、零网络尝试。
+
+最终文档复核：7个交付模块语法通过，821个当前文档本地链接通过，git diff --check通过；本地289项部署哈希再次核验。运行代码SHA见上文，后续报告提交不更改运行payload。
+
+原始性能JSON另以core.autocrlf=true执行checkout-index到全新.build目录，字节SHA与报告一致；精确路径-text规则已实际复验，不影响Runtime映射。

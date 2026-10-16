@@ -30,7 +30,7 @@ C20用真实Engine确认：较新的非标准JSON成为玩家Recent1后，若文
 
 ## 最终本地结果
 
-运行代码SHA：CODE_SHA_PENDING。Core/App/UI为9.3.6.3，Workshop2.0.5、Official Action2.0.3、协议3.0、存储2.5保持。Node v22.23.3；全新Windows验证快照 2c1180718c17922eb3b13cf2a3613edf4269ff03，初始无.build，68项LFS资产逐个校验；标准六步全部退出0。实际289映射、payload 4a5a54504815a3482450d5e6d53c269c988759fe06619a8dc38bafbccea91673，source/artifact/deployed一致。唯一清单558个测试文件、430发布组、127历史项；430/430组通过。
+运行代码SHA：`6e06672d5bfd065f70ff9a0d68ace6efaf4f74be`。Core/App/UI为9.3.6.3，Workshop2.0.5、Official Action2.0.3、协议3.0、存储2.5保持。Node v22.23.3；全新Windows验证快照 2c1180718c17922eb3b13cf2a3613edf4269ff03，初始无.build，68项LFS资产逐个校验；标准六步全部退出0。实际289映射、payload 4a5a54504815a3482450d5e6d53c269c988759fe06619a8dc38bafbccea91673，source/artifact/deployed一致。唯一清单558个测试文件、430发布组、127历史项；430/430组通过。
 
 S01–S20及未来依赖补充S21共21/21；旧档C01–C18及5项补充共23/23；同版本正式294格性能（8820个B样本）+unknown诊断，9116次调用。300 Pair常规warm P50 605.3–656.1ms、P95 633.5–691.5ms；1/5/10个旧Pair边界warm P95 497.5–597.5ms，建议门槛通过。全体不确定/allmention耗时另列，没有缩小合法候选。
 
