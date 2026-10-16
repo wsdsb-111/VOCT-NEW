@@ -1,0 +1,827 @@
+{
+  "schemaVersion": 1,
+  "task": "V9.3.6.1 FIX03 synthetic Pair retrieval baseline",
+  "status": "COMPLETE",
+  "createdAt": "2026-10-16T04:11:12.047Z",
+  "environment": {
+    "node": "v24.13.0",
+    "platform": "win32",
+    "arch": "x64",
+    "syntheticEngineStorePairLedger": true,
+    "realAppDataOrSaveOrNetwork": false,
+    "diskReads": true,
+    "coldDefinition": "PairLedger in-memory scope cache cleared before each measured lookup; temporary synthetic JSON summaries remain on disk.",
+    "warmDefinition": "Same engine, snapshot and PairLedger scope cache reused after one priming lookup.",
+    "timingScope": "Retrieval call only; fixture creation, file seeding and snapshot loading are excluded."
+  },
+  "correctnessChecks": {
+    "passed": 7,
+    "forgotten": true,
+    "campaignIsolation": true,
+    "sourceRevisionEdit": true,
+    "delete": true,
+    "l0Reads": 0,
+    "l1SourceResolveAttempts": 0,
+    "l2MaximumTotalSourceAttempts": 2,
+    "crossPairHearsayRetained": true,
+    "reverseOwnerPrivateViewExcluded": true,
+    "readMetricsVerified": true
+  },
+  "interpretation": {
+    "candidateFilterChanged": false,
+    "topNTruncationAdded": false,
+    "optimizationImplemented": false,
+    "decision": "Measurement only. Per-scope PairLedger reads perform source and Forget revalidation; a separate Owner-scope cache was deferred because it cannot safely bypass those checks and its benefit was not isolated by this baseline."
+  },
+  "scales": [
+    {
+      "pairCount": 5,
+      "syntheticSummaryCount": 5,
+      "cold": {
+        "sampleCount": 4,
+        "percentiles": {
+          "wallMs": {
+            "p50": 61.6499,
+            "p95": 70.46190000000001
+          },
+          "cpuMs": {
+            "p50": 62,
+            "p95": 63
+          },
+          "indexLookupMs": {
+            "p50": 36.97829999999999,
+            "p95": 43.11260000000004
+          },
+          "logicalIndexReads": {
+            "p50": 10,
+            "p95": 10
+          },
+          "indexCacheHits": {
+            "p50": 5,
+            "p95": 5
+          },
+          "indexCacheMisses": {
+            "p50": 5,
+            "p95": 5
+          },
+          "resolveAttempts": {
+            "p50": 0,
+            "p95": 0
+          },
+          "candidatePairScopes": {
+            "p50": 5,
+            "p95": 5
+          },
+          "candidateSummaryCount": {
+            "p50": 5,
+            "p95": 5
+          }
+        },
+        "samples": [
+          {
+            "wallMs": 70.46190000000001,
+            "cpuMs": 47,
+            "indexLookupMs": 43.11260000000004,
+            "logicalIndexReads": 10,
+            "indexCacheHits": 5,
+            "indexCacheMisses": 5,
+            "resolveAttempts": 0,
+            "candidatePairScopes": 5,
+            "candidateSummaryCount": 5,
+            "fallbackStatus": "INDEX_HIT_ITEMS",
+            "selectedItemCount": 5
+          },
+          {
+            "wallMs": 61.6499,
+            "cpuMs": 63,
+            "indexLookupMs": 36.97829999999999,
+            "logicalIndexReads": 10,
+            "indexCacheHits": 5,
+            "indexCacheMisses": 5,
+            "resolveAttempts": 0,
+            "candidatePairScopes": 5,
+            "candidateSummaryCount": 5,
+            "fallbackStatus": "INDEX_HIT_ITEMS",
+            "selectedItemCount": 5
+          },
+          {
+            "wallMs": 64.01160000000004,
+            "cpuMs": 62,
+            "indexLookupMs": 39.33100000000002,
+            "logicalIndexReads": 10,
+            "indexCacheHits": 5,
+            "indexCacheMisses": 5,
+            "resolveAttempts": 0,
+            "candidatePairScopes": 5,
+            "candidateSummaryCount": 5,
+            "fallbackStatus": "INDEX_HIT_ITEMS",
+            "selectedItemCount": 5
+          },
+          {
+            "wallMs": 58.836700000000064,
+            "cpuMs": 62,
+            "indexLookupMs": 36.25170000000003,
+            "logicalIndexReads": 10,
+            "indexCacheHits": 5,
+            "indexCacheMisses": 5,
+            "resolveAttempts": 0,
+            "candidatePairScopes": 5,
+            "candidateSummaryCount": 5,
+            "fallbackStatus": "INDEX_HIT_ITEMS",
+            "selectedItemCount": 5
+          }
+        ]
+      },
+      "warm": {
+        "sampleCount": 8,
+        "percentiles": {
+          "wallMs": {
+            "p50": 45.4692,
+            "p95": 58.50610000000006
+          },
+          "cpuMs": {
+            "p50": 47,
+            "p95": 62
+          },
+          "indexLookupMs": {
+            "p50": 23.018899999999803,
+            "p95": 30.76850000000013
+          },
+          "logicalIndexReads": {
+            "p50": 10,
+            "p95": 10
+          },
+          "indexCacheHits": {
+            "p50": 10,
+            "p95": 10
+          },
+          "indexCacheMisses": {
+            "p50": 0,
+            "p95": 0
+          },
+          "resolveAttempts": {
+            "p50": 0,
+            "p95": 0
+          },
+          "candidatePairScopes": {
+            "p50": 5,
+            "p95": 5
+          },
+          "candidateSummaryCount": {
+            "p50": 5,
+            "p95": 5
+          }
+        },
+        "samples": [
+          {
+            "wallMs": 58.50610000000006,
+            "cpuMs": 47,
+            "indexLookupMs": 30.76850000000013,
+            "logicalIndexReads": 10,
+            "indexCacheHits": 10,
+            "indexCacheMisses": 0,
+            "resolveAttempts": 0,
+            "candidatePairScopes": 5,
+            "candidateSummaryCount": 5,
+            "fallbackStatus": "INDEX_HIT_ITEMS",
+            "selectedItemCount": 5
+          },
+          {
+            "wallMs": 42.298699999999826,
+            "cpuMs": 47,
+            "indexLookupMs": 22.376600000000053,
+            "logicalIndexReads": 10,
+            "indexCacheHits": 10,
+            "indexCacheMisses": 0,
+            "resolveAttempts": 0,
+            "candidatePairScopes": 5,
+            "candidateSummaryCount": 5,
+            "fallbackStatus": "INDEX_HIT_ITEMS",
+            "selectedItemCount": 5
+          },
+          {
+            "wallMs": 42.27449999999999,
+            "cpuMs": 47,
+            "indexLookupMs": 21.39110000000005,
+            "logicalIndexReads": 10,
+            "indexCacheHits": 10,
+            "indexCacheMisses": 0,
+            "resolveAttempts": 0,
+            "candidatePairScopes": 5,
+            "candidateSummaryCount": 5,
+            "fallbackStatus": "INDEX_HIT_ITEMS",
+            "selectedItemCount": 5
+          },
+          {
+            "wallMs": 45.4692,
+            "cpuMs": 47,
+            "indexLookupMs": 23.018899999999803,
+            "logicalIndexReads": 10,
+            "indexCacheHits": 10,
+            "indexCacheMisses": 0,
+            "resolveAttempts": 0,
+            "candidatePairScopes": 5,
+            "candidateSummaryCount": 5,
+            "fallbackStatus": "INDEX_HIT_ITEMS",
+            "selectedItemCount": 5
+          },
+          {
+            "wallMs": 45.63609999999994,
+            "cpuMs": 47,
+            "indexLookupMs": 23.68380000000002,
+            "logicalIndexReads": 10,
+            "indexCacheHits": 10,
+            "indexCacheMisses": 0,
+            "resolveAttempts": 0,
+            "candidatePairScopes": 5,
+            "candidateSummaryCount": 5,
+            "fallbackStatus": "INDEX_HIT_ITEMS",
+            "selectedItemCount": 5
+          },
+          {
+            "wallMs": 44.10360000000014,
+            "cpuMs": 31,
+            "indexLookupMs": 22.169399999999996,
+            "logicalIndexReads": 10,
+            "indexCacheHits": 10,
+            "indexCacheMisses": 0,
+            "resolveAttempts": 0,
+            "candidatePairScopes": 5,
+            "candidateSummaryCount": 5,
+            "fallbackStatus": "INDEX_HIT_ITEMS",
+            "selectedItemCount": 5
+          },
+          {
+            "wallMs": 46.01580000000013,
+            "cpuMs": 47,
+            "indexLookupMs": 23.64930000000004,
+            "logicalIndexReads": 10,
+            "indexCacheHits": 10,
+            "indexCacheMisses": 0,
+            "resolveAttempts": 0,
+            "candidatePairScopes": 5,
+            "candidateSummaryCount": 5,
+            "fallbackStatus": "INDEX_HIT_ITEMS",
+            "selectedItemCount": 5
+          },
+          {
+            "wallMs": 48.57400000000007,
+            "cpuMs": 62,
+            "indexLookupMs": 24.415599999999813,
+            "logicalIndexReads": 10,
+            "indexCacheHits": 10,
+            "indexCacheMisses": 0,
+            "resolveAttempts": 0,
+            "candidatePairScopes": 5,
+            "candidateSummaryCount": 5,
+            "fallbackStatus": "INDEX_HIT_ITEMS",
+            "selectedItemCount": 5
+          }
+        ]
+      }
+    },
+    {
+      "pairCount": 30,
+      "syntheticSummaryCount": 30,
+      "cold": {
+        "sampleCount": 4,
+        "percentiles": {
+          "wallMs": {
+            "p50": 698.8549999999998,
+            "p95": 869.0596
+          },
+          "cpuMs": {
+            "p50": 703,
+            "p95": 875
+          },
+          "indexLookupMs": {
+            "p50": 377.69259999999986,
+            "p95": 454.2438000000002
+          },
+          "logicalIndexReads": {
+            "p50": 60,
+            "p95": 60
+          },
+          "indexCacheHits": {
+            "p50": 30,
+            "p95": 30
+          },
+          "indexCacheMisses": {
+            "p50": 30,
+            "p95": 30
+          },
+          "resolveAttempts": {
+            "p50": 0,
+            "p95": 0
+          },
+          "candidatePairScopes": {
+            "p50": 30,
+            "p95": 30
+          },
+          "candidateSummaryCount": {
+            "p50": 30,
+            "p95": 30
+          }
+        },
+        "samples": [
+          {
+            "wallMs": 698.8549999999998,
+            "cpuMs": 703,
+            "indexLookupMs": 377.69259999999986,
+            "logicalIndexReads": 60,
+            "indexCacheHits": 30,
+            "indexCacheMisses": 30,
+            "resolveAttempts": 0,
+            "candidatePairScopes": 30,
+            "candidateSummaryCount": 30,
+            "fallbackStatus": "INDEX_HIT_ITEMS",
+            "selectedItemCount": 16
+          },
+          {
+            "wallMs": 659.5657000000001,
+            "cpuMs": 640,
+            "indexLookupMs": 376.39300000000003,
+            "logicalIndexReads": 60,
+            "indexCacheHits": 30,
+            "indexCacheMisses": 30,
+            "resolveAttempts": 0,
+            "candidatePairScopes": 30,
+            "candidateSummaryCount": 30,
+            "fallbackStatus": "INDEX_HIT_ITEMS",
+            "selectedItemCount": 16
+          },
+          {
+            "wallMs": 869.0596,
+            "cpuMs": 875,
+            "indexLookupMs": 438.18100000000004,
+            "logicalIndexReads": 60,
+            "indexCacheHits": 30,
+            "indexCacheMisses": 30,
+            "resolveAttempts": 0,
+            "candidatePairScopes": 30,
+            "candidateSummaryCount": 30,
+            "fallbackStatus": "INDEX_HIT_ITEMS",
+            "selectedItemCount": 16
+          },
+          {
+            "wallMs": 797.8670000000002,
+            "cpuMs": 782,
+            "indexLookupMs": 454.2438000000002,
+            "logicalIndexReads": 60,
+            "indexCacheHits": 30,
+            "indexCacheMisses": 30,
+            "resolveAttempts": 0,
+            "candidatePairScopes": 30,
+            "candidateSummaryCount": 30,
+            "fallbackStatus": "INDEX_HIT_ITEMS",
+            "selectedItemCount": 16
+          }
+        ]
+      },
+      "warm": {
+        "sampleCount": 8,
+        "percentiles": {
+          "wallMs": {
+            "p50": 743.8980999999994,
+            "p95": 873.1921000000002
+          },
+          "cpuMs": {
+            "p50": 735,
+            "p95": 844
+          },
+          "indexLookupMs": {
+            "p50": 375.77920000000086,
+            "p95": 439.21779999999944
+          },
+          "logicalIndexReads": {
+            "p50": 60,
+            "p95": 60
+          },
+          "indexCacheHits": {
+            "p50": 60,
+            "p95": 60
+          },
+          "indexCacheMisses": {
+            "p50": 0,
+            "p95": 0
+          },
+          "resolveAttempts": {
+            "p50": 0,
+            "p95": 0
+          },
+          "candidatePairScopes": {
+            "p50": 30,
+            "p95": 30
+          },
+          "candidateSummaryCount": {
+            "p50": 30,
+            "p95": 30
+          }
+        },
+        "samples": [
+          {
+            "wallMs": 743.8980999999994,
+            "cpuMs": 734,
+            "indexLookupMs": 346.33400000000074,
+            "logicalIndexReads": 60,
+            "indexCacheHits": 60,
+            "indexCacheMisses": 0,
+            "resolveAttempts": 0,
+            "candidatePairScopes": 30,
+            "candidateSummaryCount": 30,
+            "fallbackStatus": "INDEX_HIT_ITEMS",
+            "selectedItemCount": 16
+          },
+          {
+            "wallMs": 867.7155999999995,
+            "cpuMs": 844,
+            "indexLookupMs": 439.21779999999944,
+            "logicalIndexReads": 60,
+            "indexCacheHits": 60,
+            "indexCacheMisses": 0,
+            "resolveAttempts": 0,
+            "candidatePairScopes": 30,
+            "candidateSummaryCount": 30,
+            "fallbackStatus": "INDEX_HIT_ITEMS",
+            "selectedItemCount": 16
+          },
+          {
+            "wallMs": 873.1921000000002,
+            "cpuMs": 844,
+            "indexLookupMs": 371.03279999999995,
+            "logicalIndexReads": 60,
+            "indexCacheHits": 60,
+            "indexCacheMisses": 0,
+            "resolveAttempts": 0,
+            "candidatePairScopes": 30,
+            "candidateSummaryCount": 30,
+            "fallbackStatus": "INDEX_HIT_ITEMS",
+            "selectedItemCount": 16
+          },
+          {
+            "wallMs": 743.8498000000009,
+            "cpuMs": 735,
+            "indexLookupMs": 394.3852999999999,
+            "logicalIndexReads": 60,
+            "indexCacheHits": 60,
+            "indexCacheMisses": 0,
+            "resolveAttempts": 0,
+            "candidatePairScopes": 30,
+            "candidateSummaryCount": 30,
+            "fallbackStatus": "INDEX_HIT_ITEMS",
+            "selectedItemCount": 16
+          },
+          {
+            "wallMs": 756.6990999999998,
+            "cpuMs": 749,
+            "indexLookupMs": 378.9542999999994,
+            "logicalIndexReads": 60,
+            "indexCacheHits": 60,
+            "indexCacheMisses": 0,
+            "resolveAttempts": 0,
+            "candidatePairScopes": 30,
+            "candidateSummaryCount": 30,
+            "fallbackStatus": "INDEX_HIT_ITEMS",
+            "selectedItemCount": 16
+          },
+          {
+            "wallMs": 722.9735999999994,
+            "cpuMs": 688,
+            "indexLookupMs": 375.77920000000086,
+            "logicalIndexReads": 60,
+            "indexCacheHits": 60,
+            "indexCacheMisses": 0,
+            "resolveAttempts": 0,
+            "candidatePairScopes": 30,
+            "candidateSummaryCount": 30,
+            "fallbackStatus": "INDEX_HIT_ITEMS",
+            "selectedItemCount": 16
+          },
+          {
+            "wallMs": 759.4106000000011,
+            "cpuMs": 765,
+            "indexLookupMs": 403.2515000000003,
+            "logicalIndexReads": 60,
+            "indexCacheHits": 60,
+            "indexCacheMisses": 0,
+            "resolveAttempts": 0,
+            "candidatePairScopes": 30,
+            "candidateSummaryCount": 30,
+            "fallbackStatus": "INDEX_HIT_ITEMS",
+            "selectedItemCount": 16
+          },
+          {
+            "wallMs": 734.4151000000002,
+            "cpuMs": 720,
+            "indexLookupMs": 348.59389999999985,
+            "logicalIndexReads": 60,
+            "indexCacheHits": 60,
+            "indexCacheMisses": 0,
+            "resolveAttempts": 0,
+            "candidatePairScopes": 30,
+            "candidateSummaryCount": 30,
+            "fallbackStatus": "INDEX_HIT_ITEMS",
+            "selectedItemCount": 16
+          }
+        ]
+      }
+    },
+    {
+      "pairCount": 100,
+      "syntheticSummaryCount": 100,
+      "cold": {
+        "sampleCount": 2,
+        "percentiles": {
+          "wallMs": {
+            "p50": 6936.475699999999,
+            "p95": 7229.7281
+          },
+          "cpuMs": {
+            "p50": 6844,
+            "p95": 7125
+          },
+          "indexLookupMs": {
+            "p50": 3410.8050000000003,
+            "p95": 3998.3769999999986
+          },
+          "logicalIndexReads": {
+            "p50": 200,
+            "p95": 200
+          },
+          "indexCacheHits": {
+            "p50": 100,
+            "p95": 100
+          },
+          "indexCacheMisses": {
+            "p50": 100,
+            "p95": 100
+          },
+          "resolveAttempts": {
+            "p50": 0,
+            "p95": 0
+          },
+          "candidatePairScopes": {
+            "p50": 100,
+            "p95": 100
+          },
+          "candidateSummaryCount": {
+            "p50": 100,
+            "p95": 100
+          }
+        },
+        "samples": [
+          {
+            "wallMs": 7229.7281,
+            "cpuMs": 7125,
+            "indexLookupMs": 3998.3769999999986,
+            "logicalIndexReads": 200,
+            "indexCacheHits": 100,
+            "indexCacheMisses": 100,
+            "resolveAttempts": 0,
+            "candidatePairScopes": 100,
+            "candidateSummaryCount": 100,
+            "fallbackStatus": "INDEX_HIT_ITEMS",
+            "selectedItemCount": 16
+          },
+          {
+            "wallMs": 6936.475699999999,
+            "cpuMs": 6844,
+            "indexLookupMs": 3410.8050000000003,
+            "logicalIndexReads": 200,
+            "indexCacheHits": 100,
+            "indexCacheMisses": 100,
+            "resolveAttempts": 0,
+            "candidatePairScopes": 100,
+            "candidateSummaryCount": 100,
+            "fallbackStatus": "INDEX_HIT_ITEMS",
+            "selectedItemCount": 16
+          }
+        ]
+      },
+      "warm": {
+        "sampleCount": 3,
+        "percentiles": {
+          "wallMs": {
+            "p50": 6739.8169999999955,
+            "p95": 6795.0057000000015
+          },
+          "cpuMs": {
+            "p50": 6657,
+            "p95": 6765
+          },
+          "indexLookupMs": {
+            "p50": 3538.477500000001,
+            "p95": 3584.296599999994
+          },
+          "logicalIndexReads": {
+            "p50": 200,
+            "p95": 200
+          },
+          "indexCacheHits": {
+            "p50": 200,
+            "p95": 200
+          },
+          "indexCacheMisses": {
+            "p50": 0,
+            "p95": 0
+          },
+          "resolveAttempts": {
+            "p50": 0,
+            "p95": 0
+          },
+          "candidatePairScopes": {
+            "p50": 100,
+            "p95": 100
+          },
+          "candidateSummaryCount": {
+            "p50": 100,
+            "p95": 100
+          }
+        },
+        "samples": [
+          {
+            "wallMs": 6739.8169999999955,
+            "cpuMs": 6594,
+            "indexLookupMs": 3493.3578999999954,
+            "logicalIndexReads": 200,
+            "indexCacheHits": 200,
+            "indexCacheMisses": 0,
+            "resolveAttempts": 0,
+            "candidatePairScopes": 100,
+            "candidateSummaryCount": 100,
+            "fallbackStatus": "INDEX_HIT_ITEMS",
+            "selectedItemCount": 16
+          },
+          {
+            "wallMs": 6795.0057000000015,
+            "cpuMs": 6765,
+            "indexLookupMs": 3538.477500000001,
+            "logicalIndexReads": 200,
+            "indexCacheHits": 200,
+            "indexCacheMisses": 0,
+            "resolveAttempts": 0,
+            "candidatePairScopes": 100,
+            "candidateSummaryCount": 100,
+            "fallbackStatus": "INDEX_HIT_ITEMS",
+            "selectedItemCount": 16
+          },
+          {
+            "wallMs": 6733.5086999999985,
+            "cpuMs": 6657,
+            "indexLookupMs": 3584.296599999994,
+            "logicalIndexReads": 200,
+            "indexCacheHits": 200,
+            "indexCacheMisses": 0,
+            "resolveAttempts": 0,
+            "candidatePairScopes": 100,
+            "candidateSummaryCount": 100,
+            "fallbackStatus": "INDEX_HIT_ITEMS",
+            "selectedItemCount": 16
+          }
+        ]
+      }
+    },
+    {
+      "pairCount": 300,
+      "syntheticSummaryCount": 300,
+      "cold": {
+        "sampleCount": 1,
+        "percentiles": {
+          "wallMs": {
+            "p50": 53957.484599999996,
+            "p95": 53957.484599999996
+          },
+          "cpuMs": {
+            "p50": 53328,
+            "p95": 53328
+          },
+          "indexLookupMs": {
+            "p50": 29240.7149,
+            "p95": 29240.7149
+          },
+          "logicalIndexReads": {
+            "p50": 600,
+            "p95": 600
+          },
+          "indexCacheHits": {
+            "p50": 300,
+            "p95": 300
+          },
+          "indexCacheMisses": {
+            "p50": 300,
+            "p95": 300
+          },
+          "resolveAttempts": {
+            "p50": 0,
+            "p95": 0
+          },
+          "candidatePairScopes": {
+            "p50": 300,
+            "p95": 300
+          },
+          "candidateSummaryCount": {
+            "p50": 300,
+            "p95": 300
+          }
+        },
+        "samples": [
+          {
+            "wallMs": 53957.484599999996,
+            "cpuMs": 53328,
+            "indexLookupMs": 29240.7149,
+            "logicalIndexReads": 600,
+            "indexCacheHits": 300,
+            "indexCacheMisses": 300,
+            "resolveAttempts": 0,
+            "candidatePairScopes": 300,
+            "candidateSummaryCount": 300,
+            "fallbackStatus": "INDEX_HIT_ITEMS",
+            "selectedItemCount": 16
+          }
+        ]
+      },
+      "warm": {
+        "sampleCount": 3,
+        "percentiles": {
+          "wallMs": {
+            "p50": 41658.52900000001,
+            "p95": 42389.365100000025
+          },
+          "cpuMs": {
+            "p50": 40672,
+            "p95": 41891
+          },
+          "indexLookupMs": {
+            "p50": 19991.9761,
+            "p95": 22011.348399999988
+          },
+          "logicalIndexReads": {
+            "p50": 600,
+            "p95": 600
+          },
+          "indexCacheHits": {
+            "p50": 600,
+            "p95": 600
+          },
+          "indexCacheMisses": {
+            "p50": 0,
+            "p95": 0
+          },
+          "resolveAttempts": {
+            "p50": 0,
+            "p95": 0
+          },
+          "candidatePairScopes": {
+            "p50": 300,
+            "p95": 300
+          },
+          "candidateSummaryCount": {
+            "p50": 300,
+            "p95": 300
+          }
+        },
+        "samples": [
+          {
+            "wallMs": 39584.307899999985,
+            "cpuMs": 39094,
+            "indexLookupMs": 19991.9761,
+            "logicalIndexReads": 600,
+            "indexCacheHits": 600,
+            "indexCacheMisses": 0,
+            "resolveAttempts": 0,
+            "candidatePairScopes": 300,
+            "candidateSummaryCount": 300,
+            "fallbackStatus": "INDEX_HIT_ITEMS",
+            "selectedItemCount": 16
+          },
+          {
+            "wallMs": 41658.52900000001,
+            "cpuMs": 40672,
+            "indexLookupMs": 19097.20079999999,
+            "logicalIndexReads": 600,
+            "indexCacheHits": 600,
+            "indexCacheMisses": 0,
+            "resolveAttempts": 0,
+            "candidatePairScopes": 300,
+            "candidateSummaryCount": 300,
+            "fallbackStatus": "INDEX_HIT_ITEMS",
+            "selectedItemCount": 16
+          },
+          {
+            "wallMs": 42389.365100000025,
+            "cpuMs": 41891,
+            "indexLookupMs": 22011.348399999988,
+            "logicalIndexReads": 600,
+            "indexCacheHits": 600,
+            "indexCacheMisses": 0,
+            "resolveAttempts": 0,
+            "candidatePairScopes": 300,
+            "candidateSummaryCount": 300,
+            "fallbackStatus": "INDEX_HIT_ITEMS",
+            "selectedItemCount": 16
+          }
+        ]
+      }
+    }
+  ]
+}

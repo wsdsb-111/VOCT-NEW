@@ -61,6 +61,11 @@ function testTraceProjection() {
     thirdPersonInjectedItems: 1,
     thirdPersonSourceOpenedCount: 1,
     thirdPersonFallbackStatus: "INDEX_HIT_SOURCE",
+    candidatePairCount: 8,
+    actualIndexReadCount: 16,
+    indexCacheHits: 8,
+    indexCacheMisses: 8,
+    indexCacheHit: false,
     legacySourceResolvedCount: 1,
     legacyBudgetOmittedCount: 0,
     dynamicCacheHit: true,
@@ -74,6 +79,11 @@ function testTraceProjection() {
   assert.equal(recorded.playerMemory.providerHeadroomTokens, 7100);
   assert.equal(recorded.playerMemory.maxOutputTokens, 4096);
   assert.equal(recorded.playerMemory.legacySourceResolvedCount, 1);
+  assert.equal(recorded.playerMemory.candidatePairCount, 8);
+  assert.equal(recorded.playerMemory.actualIndexReadCount, 16);
+  assert.equal(recorded.playerMemory.indexCacheHits, 8);
+  assert.equal(recorded.playerMemory.indexCacheMisses, 8);
+  assert.equal(recorded.playerMemory.indexCacheHit, false, "a mixed cold/warm scope lookup is not an all-cache-hit retrieval");
   assert.equal(recorded.playerMemory.dynamicCacheHit, true);
   assert.equal(recorded.playerMemory.playerLedgerCacheHit, null, "unknown ledger cache status must remain null");
   assert.equal(recorded.playerMemory.conversationIdHash, null, "raw conversation identity must not be projected");
@@ -131,6 +141,11 @@ function testAnalyticsPersistence() {
         thirdPersonTargetCount: 1,
         thirdPersonSourceOpenedCount: 1,
         thirdPersonFallbackStatus: "INDEX_HIT_SOURCE",
+        candidatePairCount: 8,
+        actualIndexReadCount: 16,
+        indexCacheHits: 8,
+        indexCacheMisses: 8,
+        indexCacheHit: false,
         legacySourceResolvedCount: 1,
         legacyBudgetOmittedCount: 0,
         dynamicCacheHit: true,
@@ -171,6 +186,11 @@ function testAnalyticsPersistence() {
     assert.equal(entry.pairMemoryMetrics.frozenSnapshotIdHash, "b".repeat(64));
     assert.equal(entry.pairMemoryMetrics.playerLedgerCacheHit, null, "unknown ledger cache status must remain null");
     assert.equal(entry.pairMemoryMetrics.dynamicCacheHit, true);
+    assert.equal(entry.pairMemoryMetrics.candidatePairCount, 8);
+    assert.equal(entry.pairMemoryMetrics.actualIndexReadCount, 16);
+    assert.equal(entry.pairMemoryMetrics.indexCacheHits, 8);
+    assert.equal(entry.pairMemoryMetrics.indexCacheMisses, 8);
+    assert.equal(entry.pairMemoryMetrics.indexCacheHit, false);
     assert.equal(entry.memoryBudgetPlan.providerHeadroomTokens, 2500);
     assert.equal(entry.memoryBudgetPlan.reservedOutputTokens, 2048);
     assert.equal(entry.renderedMemoryTokens, 390);

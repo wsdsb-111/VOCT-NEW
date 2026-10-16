@@ -2,7 +2,7 @@
 
 const crypto = require("crypto");
 const { estimateTokens } = require("./token-estimator");
-const { resolveProviderCapabilities, planRequestBudget } = require("./providers/request-budget");
+const { resolveContextMode, resolveProviderCapabilities, planRequestBudget, validateContextConfiguration } = require("./providers/request-budget");
 const { isMemoryBudgetBlock } = require("./memory-system/memory-budget-policy");
 const { OVERLAY_BLOCK_ID, OVERLAY_VERSION, prepareActionMessages } = require("./actions/action-prompt-compatibility-overlay");
 const { buildProviderCapabilities, capabilityCacheKey } = require("./providers/provider-capabilities");
@@ -231,7 +231,10 @@ class LLMManager {
     let cached = this.capabilityCache.get(key);
     if (!cached || cached.expiresAt < Date.now()) {
       let model = null;
-      if (!config.customContextLength || !config.customMaxOutputTokens) {
+      const contextMode = resolveContextMode(config);
+      const needsNativeContextLookup = contextMode === "auto"
+        || contextMode === "custom" && ["openrouter", "gemini"].includes(config.providerType);
+      if (needsNativeContextLookup || !config.customMaxOutputTokens) {
         try {
           const lookupControl = control ? { signal: control.signal, deadline: control.deadline, maxAttempts: 1, check: control.check } : null;
           const models = await awaitWithSignal(this.getProviderInstance(config).listModels?.(config, lookupControl), control?.signal);
@@ -801,15 +804,14 @@ class LLMManager {
   }
   // Set custom context length for the active provider
   setCustomContextLength(contextLength) {
-    if (!Number.isInteger(contextLength) || contextLength < 256 || contextLength > 2e6) {
-      throw new Error("custom_context_length_must_be_an_integer_between_256_and_2000000");
-    }
+    validateContextConfiguration({ contextMode: "custom", customContextLength: contextLength });
     const activeConfig = this.settingsRepository.getActiveProviderConfig();
     if (!activeConfig) {
       throw new Error("No active and enabled LLM provider configured.");
     }
     const updatedConfig = {
       ...activeConfig,
+      contextMode: "custom",
       customContextLength: contextLength
     };
     this.settingsRepository.saveProviderConfig(updatedConfig);
@@ -821,6 +823,7 @@ class LLMManager {
       throw new Error("No active and enabled LLM provider configured.");
     }
     const { customContextLength, ...configWithoutCustomContext } = activeConfig;
+    configWithoutCustomContext.contextMode = "auto";
     this.settingsRepository.saveProviderConfig(configWithoutCustomContext);
   }
 }

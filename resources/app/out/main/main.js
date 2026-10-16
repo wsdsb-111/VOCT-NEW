@@ -110,7 +110,7 @@ const DEFAULT_PROVIDER_CONFIGS = {
     apiKey: "",
     baseUrl: "https://open.bigmodel.cn/api/paas/v4",
     defaultModel: "glm-5.3-flash",
-    customContextLength: 9e4,
+    contextMode: "auto",
     defaultParameters: { temperature: 0.7, max_tokens: 4096 },
     glmReasoningEffort: "low",
     glmClearThinking: true
@@ -191,6 +191,7 @@ const baseProviderConfigSchema = {
     defaultModel: { type: "string" },
     defaultParameters: { type: "object" },
     customContextLength: { type: "number" },
+    contextMode: { type: "string", enum: ["auto", "custom"] },
     useMinimizedActionsSchema: { type: "boolean" },
     actionSchemaDeliveryMode: { type: "string", enum: ["official_full_injected", "optimized_local_validation"] },
     deepseekActionStateTransitionRecallOverlay: { type: "boolean" },

@@ -2,6 +2,7 @@
 
 const path = require("path");
 const fs = require("fs");
+const { DEFAULT_CONTEXT_WINDOW, validateContextConfiguration } = require("../providers/request-budget");
 
 function requireInteger(value, label, { min = 0, max = Number.MAX_SAFE_INTEGER } = {}) {
   if (!Number.isInteger(value) || value < min || value > max) throw new Error(`${label}_must_be_an_integer_between_${min}_and_${max}`);
@@ -318,6 +319,7 @@ function registerIpcHandlers(runtime) {
     }
   });
   electron.ipcMain.handle("llm:saveProviderConfig", (_, config) => {
+    validateContextConfiguration(config);
     return settingsRepository.saveProviderConfig(config);
   });
   electron.ipcMain.handle("llm:deletePreset", (_, instanceId) => {
@@ -430,7 +432,7 @@ function registerIpcHandlers(runtime) {
       return await llmManager.getCurrentContextLength();
     } catch (error) {
       console.error("IPC llm:getCurrentContextLength error:", error);
-      return 9e4;
+      return DEFAULT_CONTEXT_WINDOW;
     }
   });
   electron.ipcMain.handle("llm:getMaxContextLength", async () => {
@@ -438,11 +440,12 @@ function registerIpcHandlers(runtime) {
       return await llmManager.getMaxContextLength();
     } catch (error) {
       console.error("IPC llm:getMaxContextLength error:", error);
-      return 9e4;
+      return DEFAULT_CONTEXT_WINDOW;
     }
   });
   electron.ipcMain.handle("llm:setCustomContextLength", (_, contextLength) => {
     try {
+      validateContextConfiguration({ contextMode: "custom", customContextLength: contextLength });
       llmManager.setCustomContextLength(contextLength);
     } catch (error) {
       console.error("IPC llm:setCustomContextLength error:", error);

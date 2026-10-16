@@ -3,7 +3,9 @@
 const crypto = require("crypto");
 
 const TARGET_EVIDENCE = new Set(["EXPLICIT_ID", "UNIQUE_ALIAS"]);
-const HISTORICAL_PATTERN = /以前|曾经|过去|往事|历史|当年|当时|那年|此前|之前|后来|之后|接下来|回忆|记得|\d{3,6}\s*年/u;
+const HISTORICAL_PATTERN = /以前|曾经|过去|往事|历史|当年|当时|那年|此前|之前|回忆|回想|旧事|\d{3,6}\s*年/u;
+const CURRENT_FUTURE_PATTERN = /现在|今天|当下|眼下|当前|明天|后天|下次|将来|未来|准备|打算|接下来|之后|稍后/u;
+const REMINDER_PATTERN = /记得\s*(?:把|将|要|去|给|向|通知|提醒|安排|交|带|告诉|转告|送)/u;
 const DETAIL_PATTERN = /具体|究竟|到底|原话|为何|为什么|原因|过程|经过|详细|怎么说|说了什么|如何说|发生了什么|发生过什么|什么争执|哪些争执|哪一年|何时|什么时候|\d{3,6}\s*年/u;
 const TIME_PATTERN = /哪一年|何时|什么时候|\d{3,6}\s*年|当年|那年/u;
 const RELATIONSHIP_PATTERN = /记得|认识|关系|相处|交情|如何|怎么样|什么样/u;
@@ -137,6 +139,22 @@ function removeQuotedText(text) {
   return text.replace(/[“「『][\s\S]*?[”」』]|‘[\s\S]*?’|"[\s\S]*?"|'[^']*'/gu, " ").trim();
 }
 
+function classifyTemporalIntent(unquotedText) {
+  const text = String(unquotedText || "").trim();
+  if (ELLIPTICAL_FOLLOWUP_PATTERN.test(text)) return { kind: "FOLLOWUP", historicalText: "" };
+  // A separate historical question may follow a present/future instruction. Within
+  // an ambiguous mixed clause, current/future wording cannot grant history access.
+  const historicalClauses = text.split(/[，,。；;！？!?\n]/u).filter(clause => {
+    if (CURRENT_FUTURE_PATTERN.test(clause) || REMINDER_PATTERN.test(clause)) return false;
+    return HISTORICAL_PATTERN.test(clause)
+      || /(?:你|您)(?:还|是否|可否|可)?记得/u.test(clause)
+      || /记得.+(?:吗|么)$/u.test(clause);
+  });
+  if (historicalClauses.length) return { kind: "PAST_HISTORY", historicalText: historicalClauses.join("，") };
+  return { kind: CURRENT_FUTURE_PATTERN.test(text) || REMINDER_PATTERN.test(text)
+    ? "CURRENT_FUTURE" : "NONE", historicalText: "" };
+}
+
 function isValidBinding(binding, { ownerId, playerAnchorId, trustedPlayerTurn }) {
   if (!binding || typeof binding !== "object") return false;
   const targetIds = normalizeTargets(binding.targetCharacterIds);
@@ -203,26 +221,27 @@ function classifyThirdPersonHistoryRequest({ trustedPlayerTurn = null, ownerId, 
     return decision;
   }
 
-  const quotedOnlyHistory = HISTORICAL_PATTERN.test(query) && !HISTORICAL_PATTERN.test(unquotedQuery);
-  if (quotedOnlyHistory) {
+  const temporalIntent = classifyTemporalIntent(unquotedQuery);
+  const quotedOnlyHistory = /记得/u.test(query) || HISTORICAL_PATTERN.test(query);
+  if (quotedOnlyHistory && !/记得/u.test(unquotedQuery) && !HISTORICAL_PATTERN.test(unquotedQuery)) {
     decision.reasonCode = "QUOTED_HISTORY_ONLY";
     return decision;
   }
 
   let targetResolution = normalizeTargets(resolvedTargets);
   let targetEvidence = targetResolution.evidence;
-  if (!targetResolution.ids.length && !targetResolution.ambiguous
-    && ELLIPTICAL_FOLLOWUP_PATTERN.test(unquotedQuery)
-    && isValidBinding(conversationBinding, { ownerId: owner, playerAnchorId: player, trustedPlayerTurn: turn })) {
+  const validFollowup = temporalIntent.kind === "FOLLOWUP"
+    && isValidBinding(conversationBinding, { ownerId: owner, playerAnchorId: player, trustedPlayerTurn: turn });
+  if (validFollowup && !targetResolution.ambiguous) {
     targetResolution = normalizeTargets(conversationBinding.targetCharacterIds);
     targetEvidence = "BOUND_FOLLOWUP";
   }
-  const hasHistoricalIntent = HISTORICAL_PATTERN.test(unquotedQuery);
-  const detailRequested = hasHistoricalIntent && DETAIL_PATTERN.test(unquotedQuery);
-  const timeFocused = detailRequested && TIME_PATTERN.test(unquotedQuery);
-  const relationshipIntent = RELATIONSHIP_PATTERN.test(unquotedQuery);
+  const hasHistoricalIntent = temporalIntent.kind === "PAST_HISTORY" || validFollowup;
+  const detailRequested = temporalIntent.kind === "PAST_HISTORY" && DETAIL_PATTERN.test(temporalIntent.historicalText);
+  const timeFocused = detailRequested && TIME_PATTERN.test(temporalIntent.historicalText);
+  const relationshipIntent = RELATIONSHIP_PATTERN.test(temporalIntent.historicalText);
   if (!hasHistoricalIntent) {
-    decision.reasonCode = "NO_HISTORICAL_INTENT";
+    decision.reasonCode = temporalIntent.kind === "FOLLOWUP" ? "FOLLOWUP_BINDING_EXPIRED" : "NO_HISTORICAL_INTENT";
     decision.targetEvidence = targetEvidence;
     return decision;
   }
@@ -268,6 +287,7 @@ function resolveActiveMemoryPairs({ ownerId, history = [], activeParticipantIds 
 }
 
 module.exports = {
+  classifyTemporalIntent,
   classifyThirdPersonHistoryRequest,
   removeQuotedText,
   resolveActiveMemoryPairs,

@@ -1,8 +1,10 @@
+> V9.3.6.1 修复候选沿用下列 V9.3.6 玩家中心记忆合同。最新实施、验证与上下文兼容说明见 docs/current/v9/V9_3_6_1_IMPLEMENTATION_REPORT.md、V9_3_6_1_VERIFICATION_REPORT.md 和 V9_3_6_1_CONTEXT_COMPATIBILITY.md；实机／Provider／Soak／远端CI分开签署。
+
 # Repository Guidelines
 
 ## 项目定位与结构
 
-本仓库是面向 Crusader Kings III 的 Windows 打包版 VOTC Electron 应用。当前文档入口跟踪 V9.3.6 玩家中心记忆 候选；实施、验证及索引与来源合同见 [实施报告](docs/current/v9/V9_3_6_IMPLEMENTATION_REPORT.md)、[验证报告](docs/current/v9/V9_3_6_VERIFICATION_REPORT.md)和[合同文档](docs/current/v9/V9_3_5_INDEX_AND_SOURCE_CONTRACT.md)。候选仍在施工与验收阶段，映射、构建、部署和门禁证据按报告更新；真实 CK3、Soak 和远端 CI 尚待验收，不能宣称 Full Freeze。V9.3.4 报告保留为历史证据。
+本仓库是面向 Crusader Kings III 的 Windows 打包版 VOTC Electron 应用。当前文档入口跟踪 V9.3.6.1 修复 候选；实施、验证及索引与来源合同见 [实施报告](docs/current/v9/V9_3_6_1_IMPLEMENTATION_REPORT.md)、[验证报告](docs/current/v9/V9_3_6_1_VERIFICATION_REPORT.md)和[合同文档](docs/current/v9/V9_3_5_INDEX_AND_SOURCE_CONTRACT.md)。候选仍在施工与验收阶段，映射、构建、部署和门禁证据按报告更新；真实 CK3、Soak 和远端 CI 尚待验收，不能宣称 Full Freeze。V9.3.4 报告保留为历史证据。
 
 历史 V9.2.1 缓存专项曾作为安全／诊断候选，证据见 docs/current/v9/V9_2_1_VERIFICATION_REPORT.md。其 Durable Policy、Forget 和 GLM v813 结论仅代表当时状态；Durable 已由 V9.3.4 彻底退役。V9.2 6026713 的远端 CI 成功记录继续保留为历史证据。
 

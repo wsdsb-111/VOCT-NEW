@@ -279,7 +279,8 @@ class OpenRouterProvider extends BaseProvider {
         id: modelData.id,
         name: modelData.name || modelData.id,
         isFree: isOpenRouterFreeModel(modelData),
-        contextLength: modelData.context_length
+        contextLength: modelData.context_length,
+        contextLengthSource: Number.isSafeInteger(modelData.context_length) ? "provider_native" : "unverified"
         // Add other properties as needed, e.g., pricing details
       }));
     } catch (error) {
@@ -1881,7 +1882,8 @@ class GeminiProvider extends BaseProvider {
       ).map((model) => ({
         id: model.name.replace("models/", ""),
         name: model.displayName || model.name.replace("models/", ""),
-        contextLength: model.inputTokenLimit
+        contextLength: model.inputTokenLimit,
+        contextLengthSource: Number.isSafeInteger(model.inputTokenLimit) ? "provider_native" : "unverified"
       }));
     } catch (error) {
       if (isRequestControlStop(error, requestControl)) throw error;
@@ -1894,10 +1896,10 @@ class GeminiProvider extends BaseProvider {
    */
   getDefaultModels() {
     return [
-      { id: "gemini-2.5-pro", name: "Gemini 2.5 Pro", contextLength: 2e6 },
-      { id: "gemini-2.5-flash", name: "Gemini 2.5 Flash", contextLength: 1e6 },
-      { id: "gemini-2.5-flash-lite", name: "Gemini 2.5 Flash-Lite", contextLength: 1e6 },
-      { id: "gemini-2.0-flash", name: "Gemini 2.0 Flash", contextLength: 1e6 }
+      { id: "gemini-2.5-pro", name: "Gemini 2.5 Pro", contextLength: 2e6, contextLengthSource: "bundled_unverified" },
+      { id: "gemini-2.5-flash", name: "Gemini 2.5 Flash", contextLength: 1e6, contextLengthSource: "bundled_unverified" },
+      { id: "gemini-2.5-flash-lite", name: "Gemini 2.5 Flash-Lite", contextLength: 1e6, contextLengthSource: "bundled_unverified" },
+      { id: "gemini-2.0-flash", name: "Gemini 2.0 Flash", contextLength: 1e6, contextLengthSource: "bundled_unverified" }
     ];
   }
   chatCompletion(request, config, requestControl = null) {

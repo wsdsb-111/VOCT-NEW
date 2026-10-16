@@ -176,6 +176,11 @@ const archivedChecks = [
 ];
 
 const releaseChecks = [
+  { group: "v9.3.6.1-intent-boundary", script: "test-v9.3.6.1-intent-boundary.js" },
+  { group: "v9.3.6.1-context-limit", script: "test-v9.3.6.1-context-limit.js" },
+  { group: "v9.3.6.1-pair-retrieval-scale", script: "test-v9.3.6.1-pair-retrieval-scale.js" },
+  { group: "v9.3.6.1-recent-dedup", script: "test-v9.3.6.1-recent-dedup.js" },
+  { group: "v9.3.6.1-responder-budget", script: "test-v9.3.6.1-responder-budget.js" },
   { group: "v9.3.5-pair-ledger", script: "test-v9.3.5-pair-ledger.js" },
   { group: "v9.3.5-pair-ui", script: "test-v9.3.5-pair-ui.js" },
   { group: "v9.3.5-letter-summary", script: "test-v9.3.5-letter-summary.js" },

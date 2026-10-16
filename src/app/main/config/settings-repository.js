@@ -1,5 +1,7 @@
 "use strict";
 
+const { validateContextConfiguration } = require("../providers/request-budget");
+
 function createSettingsRepository({ Store, schema, SecureProviderSecrets, electron, providerTypes, defaultProviderConfigs, defaultActiveProvider, promptConfigManager, logVerboseLLM, hashPromptAsset, path, fs, promptsDir, defaultPromptsDir, defaultMainTemplatePath, legacyBundledPromptHashes }) {
   const PROVIDER_TYPES = providerTypes;
   const DEFAULT_PROVIDER_CONFIGS = defaultProviderConfigs;
@@ -396,6 +398,11 @@ function createSettingsRepository({ Store, schema, SecureProviderSecrets, electr
     // --- Provider Configuration and Preset Management ---
     // This method now handles saving both base provider configs and presets
     saveProviderConfig(configToSave) {
+      validateContextConfiguration(configToSave);
+      if (configToSave.customContextLength === null) {
+        configToSave = { ...configToSave };
+        delete configToSave.customContextLength;
+      }
       const settings = this.getLLMSettings();
       if (PROVIDER_TYPES.includes(configToSave.instanceId)) {
         const index = settings.providers.findIndex((p) => p.instanceId === configToSave.instanceId);
@@ -429,6 +436,7 @@ function createSettingsRepository({ Store, schema, SecureProviderSecrets, electr
           customName: "V8.9 · GLM53F-Low",
           baseUrl: zhipu.baseUrl || "https://open.bigmodel.cn/api/paas/v4",
           defaultModel: "glm-5.3-flash",
+          contextMode: "custom",
           customContextLength: 9e4,
           defaultParameters: { ...(zhipu.defaultParameters || {}), temperature: 0.7 },
           glmReasoningEffort: "low",
@@ -440,6 +448,7 @@ function createSettingsRepository({ Store, schema, SecureProviderSecrets, electr
           providerType: "openai-compatible",
           customName: "V8.9 · DSV4F-0731",
           defaultModel: "deepseek-v4-flash-0731",
+          contextMode: "custom",
           customContextLength: 9e4,
           defaultParameters: { ...(compatible.defaultParameters || {}), temperature: 0.7 }
         }

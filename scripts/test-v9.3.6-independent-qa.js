@@ -1,11 +1,11 @@
 "use strict";
 
 // Independent fixture scaffold for the V9.3.6 FR/TP/MP/TK contracts.
-// Intentionally not in test-manifest.js until the implementation is ready for execution.
 const assert = require("node:assert/strict");
 const crypto = require("node:crypto");
 const fs = require("node:fs");
 const path = require("node:path");
+const { parseImportantMatters } = require("../src/app/shared/pair-important-matters");
 const versionPath = require.resolve("../src/app/main/version");
 require.cache[versionPath] = {
   id: versionPath,
@@ -333,15 +333,18 @@ function assertBaselineSlots(result, { expectedRecent, expectedOfficial, expecte
 function assertLedgerItemRendering(result) {
   const slots = baselineSlots(result);
   const recentText = String(result?.directStableText || "");
+  const renderedRecentItems = parseImportantMatters(recentText).items;
   const recentSources = (result?.direct || []).flatMap(entry => entry.memory?.provenance?.pairLedgerSources || []);
   const items = result?.pairMemoryItems || [];
   let referencedCount = 0;
   for (const item of items) {
     const exactSource = recentSources.some(source => source.sourceSummaryKey === item.source?.sourceSummaryKey
       && source.sourceRevision === item.source?.sourceRevision);
-    const shouldReference = exactSource && recentText.includes(item.text);
+    const completeRenderedMatter = renderedRecentItems.some(row => !row.ambiguous
+      && row.ordinal === Number(item.source?.sourceItemOrdinal) && row.text === item.text);
+    const shouldReference = exactSource && completeRenderedMatter;
     assert.equal(item.recentSummaryReference === true, shouldReference,
-      "Recent dedupe must require exact source key, revision, and complete text containment for " + item.itemId);
+      "Recent dedupe must require exact source key, revision, ordinal, and complete rendered matter for " + item.itemId);
     if (shouldReference) {
       referencedCount++;
       assert(slots.ledger.includes("详见近期摘要"), "an exact duplicate matter should retain a dated/evidence ledger reference");
@@ -359,7 +362,8 @@ function makePromptRuntime() {
   const state = { v813: false };
   const characters = new Map([
     [1, { id: 1, shortName: "甲", fullName: "甲", age: 40, traits: [], parents: [], children: [] }],
-    [2, { id: 2, shortName: "乙", fullName: "乙", age: 35, traits: [], parents: [], children: [] }]
+    [2, { id: 2, shortName: "乙", fullName: "乙", age: 35, traits: [], parents: [], children: [] }],
+    [3, { id: 3, shortName: "玛蒂尔达", fullName: "玛蒂尔达", age: 35, traits: [], parents: [], children: [] }]
   ]);
   const gameData = {
     date: currentGameDate,
@@ -396,14 +400,14 @@ function makePromptRuntime() {
     defaultChatInstruction: "FR_QA_INSTRUCTION"
   });
   const history = [{ role: "user", content: "甲询问当前宫廷安排。" }];
-  const build = (layout, memoryContext) => {
+  const build = (layout, memoryContext, characterId = 2) => {
     state.v813 = layout === "v813";
     const provider = layout === "glm"
       ? { providerType: "zhipu", defaultModel: "glm-5.3-flash" }
       : { providerType: "openai-compatible", defaultModel: "qa-model" };
-    return builder.buildMessagesWithTokenCount(history, characters.get(2), gameData, "", {
+    return builder.buildMessagesWithTokenCount(history, characters.get(characterId), gameData, "", {
       ...memoryContext,
-      activeParticipantIds: [1, 2],
+      activeParticipantIds: [1, characterId],
       cacheV2FrozenSnapshots: memoryContext.cacheV2FrozenSnapshots || {
         conversation: null, responders: new Map(), prefixByResponder: new Map()
       },
@@ -1963,6 +1967,7 @@ module.exports = {
   seedAdversarialFixture,
   createFixtureEngine,
   makeCandidateRequest,
+  makePromptRuntime,
   assertFixtureScaffold,
   createFrBaselineFixtureData,
   baselineSlots,

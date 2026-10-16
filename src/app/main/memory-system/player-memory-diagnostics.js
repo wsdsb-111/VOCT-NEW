@@ -29,7 +29,8 @@ const COUNT_FIELDS = Object.freeze([
   "recentLegacyCount", "thirdPersonTargetCount", "thirdPersonIndexHitCount", "thirdPersonInjectedItems",
   "thirdPersonSourceOpenedCount", "legacySourceResolvedCount", "legacyBudgetOmittedCount",
   "sourceKeyValidationFailedCount", "openedSummaryCount", "recentSummaryReferencedItems",
-  "sourceResolveAttemptCount", "totalSourceResolveAttemptCount"
+  "sourceResolveAttemptCount", "totalSourceResolveAttemptCount", "candidatePairCount", "actualIndexReadCount",
+  "indexCacheHits", "indexCacheMisses"
 ]);
 const TOKEN_FIELDS = Object.freeze([
   "memoryBudget", "baselineBudgetUsed", "dynamicBudgetUsed", "finalInjectedTokens",
@@ -78,6 +79,7 @@ function projectPairMemoryMetrics(value) {
   projected.thirdPersonLegacyFallbackStatus = safeEnum(value.thirdPersonLegacyFallbackStatus ?? value.thirdPersonFallbackStatus, FALLBACK_STATUSES);
   projected.fallbackStatus = safeEnum(value.fallbackStatus, FALLBACK_STATUSES);
   projected.playerLedgerCacheHit = safeBoolean(value.playerLedgerCacheHit ?? value.ledgerCacheHit);
+  projected.indexCacheHit = safeBoolean(value.indexCacheHit);
   projected.dynamicCacheHit = safeBoolean(value.dynamicCacheHit);
   projected.legacyFallbackUsed = safeBoolean(value.legacyFallbackUsed);
   projected.budgetPolicyRevision = safeEnum(value.budgetPolicyRevision, POLICY_REVISIONS);

@@ -129,10 +129,15 @@ function retrievePlayerBaselineLedger({ store, ownerId, counterpartIds = [], cam
 
   const visibleItems = read.items.filter(item => isRetrievablePairLedgerItem(item)
     && typeof item.itemId === "string" && typeof item.text === "string" && item.text.trim());
+  // Parse the actual rendered (possibly truncated) Recent copy with the same
+  // boundaries as the index. A substring is not proof of a complete matter.
+  const renderedRecentItems = parseImportantMatters(recentSummary?.text).items;
   const orderedItems = visibleItems.map(item => {
     const verifiedRecent = recentSummary?.sources?.some(source =>
       source.sourceSummaryKey === item.source?.sourceSummaryKey && source.sourceRevision === item.source?.sourceRevision);
-    return verifiedRecent && String(recentSummary.text || "").includes(item.text)
+    const completeItem = renderedRecentItems.some(row => !row.ambiguous
+      && row.ordinal === item.source?.sourceItemOrdinal && row.text === item.text);
+    return verifiedRecent && completeItem
       ? { ...item, recentSummaryReference: true } : item;
   }).sort(compareLedgerItems);
   const budget = Math.max(0, Number(tokenBudget) || 0);
@@ -377,6 +382,11 @@ function formatThirdPersonEmpty(status, { level = "L0", metrics = {}, candidateS
     metrics: {
       indexLookupMs: 0,
       sourceResolveMs: 0,
+      candidatePairCount: 0,
+      actualIndexReadCount: 0,
+      indexCacheHits: 0,
+      indexCacheMisses: 0,
+      indexCacheHit: false,
       candidateSummaryCount: 0,
       openedSummaryCount: 0,
       totalVisibleItems: 0,
@@ -421,16 +431,36 @@ function retrieveThirdPersonHistory({ mode = "THIRD_PERSON_LEDGER", store, owner
   const otherIds = collectOwnerCounterpartIds(memories, ownerId, campaignToken, route.targetIds);
   const scopes = [...route.targetIds.map(counterpartId => ({ counterpartId, scopeKind: "DIRECT_PAIR" })),
     ...otherIds.map(counterpartId => ({ counterpartId, scopeKind: "CROSS_PAIR" }))];
+  const candidatePairCount = scopes.length;
   const candidatesByTarget = new Map(route.targetIds.map(id => [id, new Map()]));
   const scopeRevisions = [];
   let indexLookupMs = 0;
   let candidateSummaryCount = 0;
+  let actualIndexReadCount = 0;
+  let indexCacheHits = 0;
+  let indexCacheMisses = 0;
+  let indexCacheOutcomeUnknown = false;
+  const readIndex = (scope, options) => {
+    actualIndexReadCount++;
+    try {
+      const result = store.pairLedger.read(scope, options);
+      if (result?.cacheHit === true) indexCacheHits++;
+      else indexCacheMisses++;
+      return result;
+    } catch (error) {
+      indexCacheOutcomeUnknown = true;
+      throw error;
+    }
+  };
+  const indexReadMetrics = () => ({ candidatePairCount, actualIndexReadCount, indexCacheHits, indexCacheMisses,
+    // True only when every explicit PairLedger.read call in this retrieval hit its scope cache.
+    indexCacheHit: actualIndexReadCount > 0 && !indexCacheOutcomeUnknown && indexCacheMisses === 0 });
   const lookupStart = performance.now();
   for (const { counterpartId, scopeKind } of scopes) {
     const scope = { campaignToken, ownerId, counterpartId };
     let read;
     try {
-      read = store.pairLedger.read(scope, { currentGameDate, currentTotalDays, memories, readOnly: true });
+      read = readIndex(scope, { currentGameDate, currentTotalDays, memories, readOnly: true });
     } catch (error) {
       const code = String(error?.code || error?.message || "");
       const identityConflict = /IDENTITY/u.test(code);
@@ -440,11 +470,11 @@ function retrieveThirdPersonHistory({ mode = "THIRD_PERSON_LEDGER", store, owner
           : /SOURCE_STALE|SOURCE_UNSTABLE|SOURCE_UNAVAILABLE|FORGET/u.test(code) ? "SOURCE_STALE" : "INDEX_UNAVAILABLE";
       return formatThirdPersonEmpty(status, { level, legacyFallbackEligible: !identityConflict && !forgetConflict
         && level === "L2" && ["SOURCE_STALE", "INDEX_UNAVAILABLE"].includes(status),
-        metrics: { indexLookupMs: performance.now() - lookupStart } });
+        metrics: { ...indexReadMetrics(), indexLookupMs: performance.now() - lookupStart } });
     }
     if (!Array.isArray(read?.items) || typeof read.sourceRevision !== "string" || !read.sourceRevision) {
       return formatThirdPersonEmpty(read?.diagnostics?.currentDateRequired ? "CURRENT_DATE_REQUIRED" : "INDEX_UNAVAILABLE",
-        { level, metrics: { indexLookupMs: performance.now() - lookupStart } });
+        { level, metrics: { ...indexReadMetrics(), indexLookupMs: performance.now() - lookupStart } });
     }
     scopeRevisions.push({ ownerId, counterpartId, revision: read.sourceRevision });
     candidateSummaryCount += read.sourceSummaries?.length || 0;
@@ -495,7 +525,7 @@ function retrieveThirdPersonHistory({ mode = "THIRD_PERSON_LEDGER", store, owner
   const candidateSourcePointers = [...candidateMap.values()].map(row => row.pointer);
   if (!totalRelevantItems) {
     return formatThirdPersonEmpty("INDEX_MISS", { level, candidateSourcePointers,
-      metrics: { indexLookupMs, candidateSummaryCount, totalVisibleItems: 0, scopeRevisions } });
+      metrics: { ...indexReadMetrics(), indexLookupMs, candidateSummaryCount, totalVisibleItems: 0, scopeRevisions } });
   }
 
   const excluded = new Set(excludedMemoryIds.map(String));
@@ -538,7 +568,7 @@ function retrieveThirdPersonHistory({ mode = "THIRD_PERSON_LEDGER", store, owner
   if (fatalSourceStatus) {
     return formatThirdPersonEmpty(fatalSourceStatus, { level, legacyFallbackEligible: false,
       candidateSourcePointers,
-      metrics: { indexLookupMs, sourceResolveMs, sourceResolveAttemptCount, candidateSummaryCount,
+      metrics: { ...indexReadMetrics(), indexLookupMs, sourceResolveMs, sourceResolveAttemptCount, candidateSummaryCount,
         totalVisibleItems: totalRelevantItems, scopeRevisions } });
   }
 
@@ -617,7 +647,7 @@ function retrieveThirdPersonHistory({ mode = "THIRD_PERSON_LEDGER", store, owner
   let revisionFallbackAllowed = true;
   for (const entry of scopeRevisions) {
     try {
-      const verified = store.pairLedger.read({ campaignToken, ownerId: entry.ownerId, counterpartId: entry.counterpartId },
+      const verified = readIndex({ campaignToken, ownerId: entry.ownerId, counterpartId: entry.counterpartId },
         { currentGameDate, currentTotalDays, readOnly: true });
       if (verified.sourceRevision !== entry.revision) revisionChanged = true;
     } catch (error) {
@@ -635,7 +665,7 @@ function retrieveThirdPersonHistory({ mode = "THIRD_PERSON_LEDGER", store, owner
     const fallbackAllowed = revisionFallbackAllowed && level === "L2"
       && ["SOURCE_STALE", "INDEX_UNAVAILABLE"].includes(status);
     return formatThirdPersonEmpty(status, { level, legacyFallbackEligible: fallbackAllowed,
-      metrics: { indexLookupMs, sourceResolveMs, sourceResolveAttemptCount, totalVisibleItems: totalRelevantItems,
+      metrics: { ...indexReadMetrics(), indexLookupMs, sourceResolveMs, sourceResolveAttemptCount, totalVisibleItems: totalRelevantItems,
         omittedItems: totalRelevantItems, omittedByTargetLimit, candidateSummaryCount, scopeRevisions } });
   }
 
@@ -650,6 +680,7 @@ function retrieveThirdPersonHistory({ mode = "THIRD_PERSON_LEDGER", store, owner
   const metrics = {
     indexLookupMs,
     sourceResolveMs,
+    ...indexReadMetrics(),
     sourceResolveAttemptCount,
     candidateSummaryCount,
     openedSummaryCount: resolvedSources.length,

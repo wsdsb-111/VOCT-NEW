@@ -1,10 +1,12 @@
 # VOTC 文档索引
 
+V9.3.6.1 修复候选正在施工：[实施报告](current/v9/V9_3_6_1_IMPLEMENTATION_REPORT.md)、[验证报告](current/v9/V9_3_6_1_VERIFICATION_REPORT.md)、[上下文兼容说明](current/v9/V9_3_6_1_CONTEXT_COMPATIBILITY.md)。修复当前／未来语句的历史误授权和 Recent1 条目去重，扩展 Auto／Custom Context 设置；沿用 V9.3.6 的记忆硬上限与会话冻结，规模检索按测量证据处理。真实 CK3、Provider、Soak 和远端 CI 单列，旧报告作为历史证据保留。
+
 本目录集中保存 VOTC 的架构说明、版本设计、实施报告和阶段记录。根目录的 [README.md](../README.md) 只负责项目简介、安装运行和当前基线；根目录的 [CHANGELOG.md](../CHANGELOG.md) 负责版本顺序，详细内容按下面的分类维护。
 
 ## 推荐阅读顺序
 
-**当前候选 V9.3.6：玩家固定关系记忆与第三人分级检索。** [实施报告](current/v9/V9_3_6_IMPLEMENTATION_REPORT.md)、[验证报告](current/v9/V9_3_6_VERIFICATION_REPORT.md)、[Token 与缓存对比](current/v9/V9_3_6_TOKEN_AND_CACHE_COMPARISON.md)、[兼容与退役审计](current/v9/V9_3_6_COMPATIBILITY_AND_RETIREMENT_AUDIT.md)。每位回应 NPC 的固定历史只锚定当前玩家：最近 1 篇 Legacy、合法官方追忆、预算内尽量完整的玩家关系事项簿。固定文本首次构造后冻结；第三人仅提名为 L0，不读取其历史索引或原文；明确历史关系询问为 L1，每目标至多 16 条事项、零原文；具体历史经过为 L2，共享预算内至多 2 篇经来源键和修订号复验的摘要。2／3／4+ 人采用 16%／18%／20% 与 4800／5600／6400 Token 上限，并取无记忆 Prompt、输出预留及 Provider 安全余量允许的较小值。不新增 LLM 检索；真实 CK3、Provider、Soak 与远端 CI 待验收。V9.3.5 报告保留历史，索引存储和来源合同继续兼容。
+**历史基线 V9.3.6：玩家固定关系记忆与第三人分级检索。** [实施报告](current/v9/V9_3_6_IMPLEMENTATION_REPORT.md)、[验证报告](current/v9/V9_3_6_VERIFICATION_REPORT.md)、[Token 与缓存对比](current/v9/V9_3_6_TOKEN_AND_CACHE_COMPARISON.md)、[兼容与退役审计](current/v9/V9_3_6_COMPATIBILITY_AND_RETIREMENT_AUDIT.md)。每位回应 NPC 的固定历史只锚定当前玩家：最近 1 篇 Legacy、合法官方追忆、预算内尽量完整的玩家关系事项簿。固定文本首次构造后冻结；第三人仅提名为 L0，不读取其历史索引或原文；明确历史关系询问为 L1，每目标至多 16 条事项、零原文；具体历史经过为 L2，共享预算内至多 2 篇经来源键和修订号复验的摘要。2／3／4+ 人采用 16%／18%／20% 与 4800／5600／6400 Token 上限，并取无记忆 Prompt、输出预留及 Provider 安全余量允许的较小值。不新增 LLM 检索；真实 CK3、Provider、Soak 与远端 CI 待验收。V9.3.5 报告保留历史，索引存储和来源合同继续兼容。
 
 **历史版本 V9.3.3.1 回归修复：**[规格](current/v9/V9_3_3_1_FIX_SPEC.md)、[实施](current/v9/V9_3_3_1_FIX_REPORT.md)、[验证](current/v9/V9_3_3_1_VERIFICATION_REPORT.md)、[改动清单](current/v9/V9_3_3_1_CHANGED_FILES.md)。Windows 二进制首次部署、Coverage 同源身份、明细分页和详情 Loading；该轮 Gate 与 CI 状态保留为当时记录。
 

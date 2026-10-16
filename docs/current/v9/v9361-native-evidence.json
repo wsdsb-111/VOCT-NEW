@@ -1,0 +1,48 @@
+{
+  "schemaVersion": 1,
+  "scope": "isolated Electron with synthetic profile and all external transport blocked",
+  "version": {
+    "app": "9.3.6.1",
+    "title": "VOTC V9.3.6.1",
+    "footer": "V9.3.6.1 · Mod v2.0.5",
+    "tooltip": "VOTC App 9.3.6.1"
+  },
+  "context": {
+    "mode": "custom",
+    "customContextLength": 1048576,
+    "inputMax": "2000000",
+    "unverified": true
+  },
+  "assertions": {
+    "autoUnknownFallbackDisplayed": true,
+    "customOneMillionSavedViaIpc": true,
+    "invalidCustomRetainedWithWarning": true,
+    "invalidCustomNotPersisted": true,
+    "invalidIpcRejected": true,
+    "autoRestoredAfterInvalid": true
+  },
+  "memory": {
+    "deployedEngine": true,
+    "levels": [
+      "L0",
+      "L1",
+      "L2"
+    ],
+    "sourceCounts": [
+      0,
+      0,
+      2
+    ],
+    "frozenBytesStable": true,
+    "renderedMemoryTokens": 1410,
+    "budget": 4800,
+    "providerCalls": 0
+  },
+  "payloadSha256": "6edf7432fdd2780be3418242f0bf218665ad5cd77a726220bbb76eef0bc4bbe9",
+  "sourceDeployedParity": true,
+  "providerCalls": 0,
+  "externalNetworkAttempts": 0,
+  "appProcessClosed": true,
+  "realCk3": "NOT_RUN",
+  "realProvider": "NOT_RUN"
+}

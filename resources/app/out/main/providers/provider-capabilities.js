@@ -136,6 +136,7 @@ function capabilityCacheKey(config = {}, route = "CHAT") {
     modelId: config.defaultModel || null,
     route: normalizeRoute(route || config.route),
     limits: {
+      contextMode: config.contextMode || null,
       customContextLength: config.customContextLength ?? null,
       customMaxOutputTokens: config.customMaxOutputTokens ?? null,
       maxOutputTokens: config.maxOutputTokens ?? null,

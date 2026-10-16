@@ -3,7 +3,7 @@
 const crypto = require("crypto");
 const { normalizeGameDate } = require("../worldline/character-temporal-facts");
 const { retrievePairMemorySources } = require("./pair-memory-source-retrieval");
-const { classifyThirdPersonHistoryRequest, removeQuotedText } = require("./pair-memory-routing");
+const { classifyThirdPersonHistoryRequest, classifyTemporalIntent, removeQuotedText } = require("./pair-memory-routing");
 const { resolveTemporalFocus } = require("./fuzzy-temporal-resolver");
 const { buildDualTemporalIndex, selectDualTemporalExtras } = require("./summary-date-index");
 const turnRecall = require("./turn-recall");
@@ -132,14 +132,16 @@ function resolveHistoryDecision(engine, options, state, memories) {
   const query = currentPlayerTurn?.trusted === true && currentPlayerTurn?.isCurrent === true
     && currentPlayerTurn?.role === "user" && Number(currentPlayerTurn?.speakerCharacterId) === playerId
     ? removeQuotedText(currentPlayerTurn.content) : "";
+  const temporalIntent = classifyTemporalIntent(query);
+  const targetQuery = temporalIntent.kind === "PAST_HISTORY" ? temporalIntent.historicalText : query;
   const focus = state.namedTargetFocus;
   const focusValid = focus && focus.turnEpoch + 1 === options.turnEpoch && focus.sceneRevision === options.sceneRevision;
-  const explicitIds = engine.mentionTracker.findMentionedCharacterIds([{ role: "user", content: query }], {
+  const explicitIds = engine.mentionTracker.findMentionedCharacterIds([{ role: "user", content: targetQuery }], {
     candidates: profiles, excludedIds: [ownerId, playerId], resolveCoreference: false
   });
   const explicitAmbiguous = engine.mentionTracker.lastScanUnresolved === true;
   const targetIds = explicitIds.length || explicitAmbiguous ? explicitIds
-    : engine.mentionTracker.findMentionedCharacterIds([{ role: "user", content: query }], {
+    : engine.mentionTracker.findMentionedCharacterIds([{ role: "user", content: targetQuery }], {
       candidates: profiles, excludedIds: [ownerId, playerId],
       recentCharacterId: focusValid ? focus.characterId : null
     });
@@ -159,10 +161,11 @@ function resolveHistoryDecision(engine, options, state, memories) {
     conversationId: options.conversationId, sceneRevision: options.sceneRevision
   };
   else if (decision.level === "L0" && decision.reasonCode !== "NO_TRUSTED_PLAYER_TURN") state.historyBinding = null;
-  return { decision, query, profiles, mentionedTargetIds: targetIds, ambiguous };
+  return { decision, query: temporalIntent.kind === "PAST_HISTORY" ? temporalIntent.historicalText : query,
+    profiles, mentionedTargetIds: targetIds, ambiguous };
 }
 
-function retrieveLegacyDetails(engine, options, memories, targets, profiles, temporal, excludedIds, tokenBudget, countTokens, limit) {
+function retrieveLegacyDetails(engine, options, query, memories, targets, profiles, temporal, excludedIds, tokenBudget, countTokens, limit) {
   const ownerId = Number(options.characterId);
   const uniqueAliases = engine.mentionTracker.buildAliases(profiles);
   let candidates = memories.filter(memory => memory.subtype !== "official_recollection"
@@ -176,13 +179,13 @@ function retrieveLegacyDetails(engine, options, memories, targets, profiles, tem
   if (temporal.triggered) {
     const dateIndex = buildDualTemporalIndex(candidates, { ownerId, currentGameDate: options.currentGameDate,
       currentTotalDays: options.currentTotalDays, campaignToken: options.campaignToken });
-    temporalEntries = selectDualTemporalExtras(dateIndex, candidates, temporal, { query: options.trustedPlayerTurn?.content || "",
+    temporalEntries = selectDualTemporalExtras(dateIndex, candidates, temporal, { query,
       entityIds: targets, directCounterpartIds: targets, excludedKeys: [...excludedIds],
       getKey: memory => String(memory.memoryId), limit });
     const allowed = new Set(temporalEntries.map(entry => entry.memory.memoryId));
     candidates = candidates.filter(memory => allowed.has(memory.memoryId));
   } else if (temporal.requested) candidates = [];
-  const ranked = engine.ranker.rank(candidates, { query: options.trustedPlayerTurn?.content || "",
+  const ranked = engine.ranker.rank(candidates, { query,
     entityIds: targets, participantIds: targets, currentTotalDays: options.currentTotalDays });
   const sources = [], texts = [], sourcePairs = new Set();
   const verifiedScopes = new Map();
@@ -258,7 +261,7 @@ function retrieveDynamicMemory(engine, options, state, baseline, memories, rawMe
     ? pair.metrics.sourceResolveAttemptCount
     : (pair.verifiedCandidatePointers?.length || 0) + (pair.metrics.sourceKeyValidationFailedCount || 0);
   const fallback = fallbackEligible || playerHistoryRequested
-    ? retrieveLegacyDetails(engine, { ...options, rawOwnerSnapshot: rawMemories, directPairOnly: playerHistoryRequested }, memories,
+    ? retrieveLegacyDetails(engine, { ...options, rawOwnerSnapshot: rawMemories, directPairOnly: playerHistoryRequested }, query, memories,
       fallbackEligible ? decision.targetCharacterIds : [Number(options.trustedPlayerAnchorId)], profiles, temporal,
       new Set([...excludedIds, ...pair.sources.map(entry => String(entry.memory.memoryId))]),
       Math.max(0, budget - countTokens(pair.text) - (pair.text ? 2 : 0)), countTokens, fallbackEligible ? Math.max(0, 2 - sourceAttempts) : 3)
@@ -349,6 +352,11 @@ function retrievePlayerCenteredMemory(engine, options) {
     thirdPersonIndexHitCount: dynamic.metrics.indexHitCount || 0, thirdPersonInjectedItems: dynamic.items.length,
     thirdPersonSourceOpenedCount: dynamic.sources.filter(entry => entry.routeKind === "third_person_source").length,
     thirdPersonLegacyFallbackStatus: dynamic.metrics.thirdPersonFallbackStatus,
+    candidatePairCount: dynamic.metrics.candidatePairCount || 0,
+    actualIndexReadCount: dynamic.metrics.actualIndexReadCount || 0,
+    indexCacheHits: dynamic.metrics.indexCacheHits || 0,
+    indexCacheMisses: dynamic.metrics.indexCacheMisses || 0,
+    indexCacheHit: dynamic.metrics.indexCacheHit === true,
     dynamicCacheHit: dynamic.cacheHit === true, legacyFallbackUsed: dynamic.metrics.legacyFallbackUsed === true };
   metrics.legacySourceResolvedCount = dynamic.metrics.legacySourceResolvedCount;
   metrics.legacyBudgetOmittedCount = dynamic.metrics.legacyBudgetOmittedCount;

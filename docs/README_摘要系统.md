@@ -1,6 +1,6 @@
 # 对话摘要与人物记忆：Legacy Summary（3.0 协议、2.5 存储兼容）
 
-当前记录 Core／App／UI V9.3.6 发布候选。Workshop 2.0.5、Official Action 2.0.3、`Legacy Summary`、协议 3.0、摘要存储 2.5／schema 2 与既有目录格式保持。Durable、Year/Life 的生成、恢复、模型提取和后台重建不恢复。
+当前记录 Core／App／UI V9.3.6.1 发布候选。Workshop 2.0.5、Official Action 2.0.3、`Legacy Summary`、协议 3.0、摘要存储 2.5／schema 2 与既有目录格式保持。Durable、Year/Life 的生成、恢复、模型提取和后台重建不恢复。
 
 每位回应 NPC 的固定历史只锚定当前玩家：最近 1 篇 Legacy、合法官方追忆、预算内尽量完整的玩家关系事项簿。固定文本首次构造后冻结；第三人仅提名为 L0，不读取其历史索引或原文；明确历史关系询问为 L1，每目标至多 16 条事项、零原文；具体历史经过为 L2，共享预算内至多 2 篇经来源键和修订号复验的摘要。2／3／4+ 人采用 16%／18%／20% 与 4800／5600／6400 Token 上限，并取无记忆 Prompt、输出预留及 Provider 安全余量允许的较小值。 NPC→NPC 的合法定向摘要与索引继续写入，但不因其他 NPC 发言自动进入固定基线。动态历史不回灌为下一轮对话正文，必须逐轮通过玩家意图门禁。Source／Forget／Campaign 失效同步撤销 Engine 快照与 Prompt 前缀，并在实际发送与重试前复核。
 
@@ -8,7 +8,9 @@
 
 旧 `archiveSidecar` 是惰性归档，运行时不得扫描、读取或写入，原始字节保持不变。Legacy Forget ledger 存放于现有 index，并与摘要 mutation 一起事务提交或回滚。目录改名合并若会包含 Sidecar，则跳过该次合并；纯 Legacy 摘要目录仍可正常读写。Year/Life 历史迁移脚本只可通过 `scripts/archive/v933-year-life` 的显式维护导入使用，不进入 Runtime，V9.3.6 不执行该迁移。
 
-V9.3.6 候选状态见[实施报告](current/v9/V9_3_6_IMPLEMENTATION_REPORT.md)、[验证报告](current/v9/V9_3_6_VERIFICATION_REPORT.md)、[Token 与缓存对比](current/v9/V9_3_6_TOKEN_AND_CACHE_COMPARISON.md)、[兼容与退役审计](current/v9/V9_3_6_COMPATIBILITY_AND_RETIREMENT_AUDIT.md)；真实 CK3、Provider、Soak 与远端 CI 单列验收。
+修复前 V9.3.6 基线状态见[实施报告](current/v9/V9_3_6_IMPLEMENTATION_REPORT.md)、[验证报告](current/v9/V9_3_6_VERIFICATION_REPORT.md)、[Token 与缓存对比](current/v9/V9_3_6_TOKEN_AND_CACHE_COMPARISON.md)、[兼容与退役审计](current/v9/V9_3_6_COMPATIBILITY_AND_RETIREMENT_AUDIT.md)；真实 CK3、Provider、Soak 与远端 CI 单列验收。
+
+V9.3.6.1 修复见[实施报告](current/v9/V9_3_6_1_IMPLEMENTATION_REPORT.md)、[验证报告](current/v9/V9_3_6_1_VERIFICATION_REPORT.md)与[Context兼容](current/v9/V9_3_6_1_CONTEXT_COMPATIBILITY.md)。当前／未来提醒不授予第三人历史权限；混合句只从明确历史分句解析人物、时间与相关性。Recent 去重要求同来源键、修订、事项序号和实际渲染的完整条目；截断／子串／其他序号保留正文。下述玩家锚点、人数冻结与记忆硬上限继续沿用。
 
 ## 历史版本合同与验收快照（以下内容不覆盖 V9.3.5 候选合同）
 
