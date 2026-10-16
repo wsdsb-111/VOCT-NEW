@@ -1,6 +1,6 @@
 # V9.3.6.1 实施报告
 
-状态：代码与专项已完成，完整候选验收进行中；基线代码 5681d10，报告收口 6c056c0。需求见[施工规格](V9_3_6_1_FIX_SPEC.md)。本地修复不重写真实用户数据，不调用付费 Provider，不推送远端。
+状态：本地发布候选已完成并部署，422／422发布组、独立QA和隔离窗口验证通过；基线代码 5681d10，报告收口 6c056c0。需求见[施工规格](V9_3_6_1_FIX_SPEC.md)。本地修复不重写真实用户数据，不调用付费 Provider，不推送远端。
 
 ## FIX-01 历史意图
 
@@ -29,3 +29,9 @@ request-budget.js、Provider capability cache、Main schema、SettingsRepository
 ## 兼容边界
 
 保留 Legacy Summary、协议 3.0、摘要存储 2.5、NPC→NPC 定向保存、Forget、Official Action、Worldline 和信件。Durable／Year／Life 不恢复，旧 Sidecar 保持惰性归档。记忆块 ID 不改；2／3／4+ 人 4800／5600／6400 上限及首次会话人数冻结不扩张。
+
+## 最终交付
+
+实现提交 3e4118169e2b3a49ae2ea3139f77e0bfbc2d129d；全新Windows验证快照 f3dccc2a066decb965c0a847b753774e9c03b29e（与实现提交运行payload一致，后续收口仅更新报告）。最终 288 项source／artifact／deployed映射，payload 6edf7432fdd2780be3418242f0bf218665ad5cd77a726220bbb76eef0bc4bbe9。Node v22.23.3 的标准六步及422组发布门禁通过；非法Custom→Auto的真实IPC保存、1M自定义、L0／L1／L2来源0／0／2和零外部调用的隔离Electron验证通过。详见[最终验证](V9_3_6_1_VERIFICATION_REPORT.md)。
+
+FIX-01／02／04／05／06完成。FIX-03按规格允许的测量＋诊断降级路径交付，逆索引／候选缩减／性能提速未完成，不宣称该优化通过；300 Pair仍存在明显延迟。真实CK3、付费Provider、24轮联调、100轮Soak及远端CI均NOT_RUN；本轮费用0，未推送，未改真实用户数据。

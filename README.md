@@ -1,6 +1,6 @@
 # Voices of the Court（VOTC）
 
-V9.3.6.1 修复候选正在施工：[实施报告](docs/current/v9/V9_3_6_1_IMPLEMENTATION_REPORT.md)、[验证报告](docs/current/v9/V9_3_6_1_VERIFICATION_REPORT.md)、[上下文兼容说明](docs/current/v9/V9_3_6_1_CONTEXT_COMPATIBILITY.md)。修复当前／未来语句的历史误授权和 Recent1 条目去重，扩展 Auto／Custom Context 设置；沿用 V9.3.6 的记忆硬上限与会话冻结，规模检索按测量证据处理。真实 CK3、Provider、Soak 和远端 CI 单列，旧报告作为历史证据保留。
+V9.3.6.1 修复候选已完成本地部署（422组发布回归与隔离Electron通过）：[实施报告](docs/current/v9/V9_3_6_1_IMPLEMENTATION_REPORT.md)、[验证报告](docs/current/v9/V9_3_6_1_VERIFICATION_REPORT.md)、[上下文兼容说明](docs/current/v9/V9_3_6_1_CONTEXT_COMPATIBILITY.md)。修复当前／未来语句的历史误授权和 Recent1 条目去重，扩展 Auto／Custom Context 设置；沿用 V9.3.6 的记忆硬上限与会话冻结，规模检索按测量证据处理。真实 CK3、Provider、Soak 和远端 CI 单列，旧报告作为历史证据保留。
 
 Voices of the Court 是一个面向《Crusader Kings III》（CK3）的沉浸式 AI 宫廷对话工具。它读取 CK3 的游戏日志和角色数据，将当前日期、朝代、角色关系、场景、记忆与历史背景整理为提示词，再通过兼容 OpenAI Chat Completions 格式的 API 生成角色扮演回复。
 

@@ -1,6 +1,6 @@
 # VOTC 文档索引
 
-V9.3.6.1 修复候选正在施工：[实施报告](current/v9/V9_3_6_1_IMPLEMENTATION_REPORT.md)、[验证报告](current/v9/V9_3_6_1_VERIFICATION_REPORT.md)、[上下文兼容说明](current/v9/V9_3_6_1_CONTEXT_COMPATIBILITY.md)。修复当前／未来语句的历史误授权和 Recent1 条目去重，扩展 Auto／Custom Context 设置；沿用 V9.3.6 的记忆硬上限与会话冻结，规模检索按测量证据处理。真实 CK3、Provider、Soak 和远端 CI 单列，旧报告作为历史证据保留。
+V9.3.6.1 修复候选已完成本地部署（422组发布回归与隔离Electron通过）：[实施报告](current/v9/V9_3_6_1_IMPLEMENTATION_REPORT.md)、[验证报告](current/v9/V9_3_6_1_VERIFICATION_REPORT.md)、[上下文兼容说明](current/v9/V9_3_6_1_CONTEXT_COMPATIBILITY.md)。修复当前／未来语句的历史误授权和 Recent1 条目去重，扩展 Auto／Custom Context 设置；沿用 V9.3.6 的记忆硬上限与会话冻结，规模检索按测量证据处理。真实 CK3、Provider、Soak 和远端 CI 单列，旧报告作为历史证据保留。
 
 本目录集中保存 VOTC 的架构说明、版本设计、实施报告和阶段记录。根目录的 [README.md](../README.md) 只负责项目简介、安装运行和当前基线；根目录的 [CHANGELOG.md](../CHANGELOG.md) 负责版本顺序，详细内容按下面的分类维护。
 
