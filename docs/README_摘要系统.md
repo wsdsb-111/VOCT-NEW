@@ -1,6 +1,6 @@
 # 对话摘要与人物记忆：Legacy Summary（3.0 协议、2.5 存储兼容）
 
-当前记录 Core／App／UI V9.3.6.2 发布候选。Workshop 2.0.5、Official Action 2.0.3、`Legacy Summary`、协议 3.0、摘要存储 2.5／schema 2 与既有目录格式保持。Durable、Year/Life 的生成、恢复、模型提取和后台重建不恢复。
+当前记录 Core／App／UI V9.3.6.3 发布候选。Workshop 2.0.5、Official Action 2.0.3、`Legacy Summary`、协议 3.0、摘要存储 2.5／schema 2 与既有目录格式保持。Durable、Year/Life 的生成、恢复、模型提取和后台重建不恢复。
 
 每位回应 NPC 的固定历史只锚定当前玩家：最近 1 篇 Legacy、合法官方追忆、预算内尽量完整的玩家关系事项簿。固定文本首次构造后冻结；第三人仅提名为 L0，不读取其历史索引或原文；明确历史关系询问为 L1，每目标至多 16 条事项、零原文；具体历史经过为 L2，共享预算内至多 2 篇经来源键和修订号复验的摘要。2／3／4+ 人采用 16%／18%／20% 与 4800／5600／6400 Token 上限，并取无记忆 Prompt、输出预留及 Provider 安全余量允许的较小值。 NPC→NPC 的合法定向摘要与索引继续写入，但不因其他 NPC 发言自动进入固定基线。动态历史不回灌为下一轮对话正文，必须逐轮通过玩家意图门禁。Source／Forget／Campaign 失效同步撤销 Engine 快照与 Prompt 前缀，并在实际发送与重试前复核。
 
@@ -400,3 +400,5 @@ node --check resources\app\out\main\ipc\register-ipc.js
 自动回归不连接真实 CK3 或摘要 Provider。以上命令和[V9.3.4 实施报告](current/v9/V9_3_4_IMPLEMENTATION_REPORT.md)、[验证报告](current/v9/V9_3_4_VERIFICATION_REPORT.md)仅保留为上一阶段历史证据；其结果不代表 V9.3.5 候选验证状态。
 
 V9.3.6.2见[实施报告](current/v9/V9_3_6_2_IMPLEMENTATION_REPORT.md)、[验证报告](current/v9/V9_3_6_2_VERIFICATION_REPORT.md)、[性能A/B](current/v9/V9_3_6_2_PAIR_PERFORMANCE_AB.md)和[Context说明](current/v9/V9_3_6_2_CONTEXT_COMPATIBILITY.md)。Owner可信摘要派生的进程内候选目录只做保守预筛，不替代PairLedger／Source／Forget；目录不完整显式走原全量路径，快路径保留每候选实际读和末尾复验，以及全Owner进入／退出核对。同版本支持safe／exhaustive回滚，L0不访问第三人目录。历史目标、时间和相关性统一取授权分句；局部否定不遮蔽其他明确历史目标。新GLM实例Custom90000为未经原生验证的兼容值，旧Auto不静默迁移；扩窗不改变记忆硬上限。
+
+V9.3.6.3按可信Pair局部纳入旧摘要不确定来源，只有全域未知时完整回退；Owner进入和退出校验覆盖已读取的非标准旧JSON。同stat内容改动、Forget、身份与日期竞争仍整轮失效。事件之后的回顾由时间结构与谓词共同识别，未来、提醒、否定与引述保持L0。详见[实施报告](current/v9/V9_3_6_3_IMPLEMENTATION_REPORT.md)与[旧档兼容](current/v9/V9_3_6_3_LEGACY_COMPATIBILITY.md)。

@@ -29,8 +29,8 @@ class OwnerTargetCandidateDirectory {
   getCandidateScopes({ ownerId, campaignToken, ownerSnapshot, snapshotRevision, profiles,
     targetCharacterIds, counterpartIds, sceneRevision = null, currentGameDate, currentTotalDays, epoch } = {}) {
     const started = performance.now();
-    const fail = (status, reason) => ({ status, reason, coverage: "INCOMPLETE",
-      candidateCounterpartIds: [], constructionMs: performance.now() - started, cacheHit: false });
+    const fail = (status, reason, metrics = {}) => ({ status, reason, coverage: "INCOMPLETE",
+      candidateCounterpartIds: [], constructionMs: performance.now() - started, cacheHit: false, ...metrics });
     if (!Array.isArray(ownerSnapshot) || !Number.isSafeInteger(snapshotRevision)
       || this.store.getFolderSummarySnapshotRevision(ownerSnapshot) !== snapshotRevision
       || this.store.getFolderSummarySnapshotSources(ownerSnapshot)?.ownerId !== ownerId) {
@@ -41,21 +41,48 @@ class OwnerTargetCandidateDirectory {
     const profileFingerprint = digest([...profiles.byId].map(([id, profile]) => [id, [...profile.aliases].sort(), profile.uniqueAliases]));
     const universe = new Set(counterpartIds);
     const covered = new Set();
+    const uncertain = new Set();
+    let uncertainSourceCount = 0;
+    let unscopedUnknownCount = 0;
     const sources = [];
+    const coverageRecords = [];
+    const scopeIds = values => [...new Set(values.map(Number).filter(id => Number.isSafeInteger(id)
+      && id > 0 && id !== ownerId && universe.has(id)))];
+    const markUncertain = ids => {
+      if (!ids.length) { unscopedUnknownCount++; return; }
+      uncertainSourceCount++;
+      for (const id of ids) uncertain.add(id);
+    };
     for (const memory of ownerSnapshot) {
       const provenance = memory?.provenance;
-      if (Number(provenance?.folderOwnerId) !== ownerId || !memory.knownBy?.map(Number).includes(ownerId)
+      if (Number(provenance?.folderOwnerId) !== ownerId || !Array.isArray(memory.knownBy)
+        || !memory.knownBy.map(Number).includes(ownerId)
         || String(provenance.campaignToken || "").trim() !== campaignToken) continue;
-      if (!Array.isArray(provenance.pairLedgerSources) || !provenance.pairLedgerSources.length) {
-        return fail("UNAVAILABLE", "SOURCE_COVERAGE_INCOMPLETE");
+      const pairSources = Array.isArray(provenance.pairLedgerSources) ? provenance.pairLedgerSources : [];
+      const provenanceIds = scopeIds([provenance.counterpartId,
+        ...(Array.isArray(provenance.counterpartIds) ? provenance.counterpartIds : [])]);
+      const recordIds = scopeIds([...provenanceIds, ...pairSources.map(source => source?.counterpartId)]);
+      coverageRecords.push([memory.memoryId, provenanceIds, provenance.pairLedgerSources ?? null]);
+      if (!pairSources.length) {
+        markUncertain(recordIds);
+        continue;
       }
-      for (const source of provenance.pairLedgerSources) {
-        const counterpartId = Number(source.counterpartId);
-        if (Number(source.ownerId) !== ownerId || !universe.has(counterpartId)) continue;
-        const raw = source.rawSummary;
-        if (source.ownerAuthorized !== true || !raw || typeof raw.content !== "string"
-          || !source.fileSignature || !source.fileDigest || !source.relativeSummaryPath
-          || source.sourceMemoryId !== memory.memoryId) return fail("UNAVAILABLE", "SOURCE_COVERAGE_INCOMPLETE");
+      const represented = new Set();
+      for (const source of pairSources) {
+        const counterpartId = Number(source?.counterpartId);
+        const sourceIds = scopeIds([counterpartId]);
+        for (const id of sourceIds) represented.add(id);
+        if (!sourceIds.length) { markUncertain(recordIds); continue; }
+        const raw = source?.rawSummary;
+        if (source?.ownerAuthorized !== true || !raw || typeof raw.content !== "string"
+          || !source.fileSignature || !/^[a-f0-9]{64}$/u.test(source.fileDigest || "")
+          || typeof source.relativeSummaryPath !== "string" || !source.relativeSummaryPath
+          || Number(source.ownerId) !== ownerId || typeof source.sourceSummaryKey !== "string" || !source.sourceSummaryKey.trim()
+          || !/^[a-f0-9]{64}$/u.test(source.sourceRevision || "")
+          || source.sourceMemoryId !== memory.memoryId) {
+          markUncertain(sourceIds);
+          continue;
+        }
         covered.add(counterpartId);
         const ids = [Number(raw.playerId), Number(raw.characterId)];
         if (!ids.includes(ownerId) || !ids.includes(counterpartId)
@@ -68,31 +95,37 @@ class OwnerTargetCandidateDirectory {
         // matter is represented, including confirmed ambiguous and Legacy items.
         const parsed = parseImportantMatters(raw.content);
         const texts = [normalizeAlias(raw.content), ...parsed.items.map(item => normalizeAlias(item.text))];
-        sources.push({ counterpartId, texts, identity: [source.sourceSummaryKey, source.sourceRevision,
-          source.relativeSummaryPath, source.summaryIndex, source.fileDigest, raw.content] });
+        sources.push({ counterpartId, texts });
       }
+      const missingIds = provenanceIds.filter(id => !represented.has(id));
+      if (missingIds.length) markUncertain(missingIds);
     }
-    if (counterpartIds.some(id => !covered.has(id) && !targetCharacterIds.includes(id))) {
-      return fail("UNAVAILABLE", "SOURCE_COVERAGE_INCOMPLETE");
-    }
-    const sourceIdentityFingerprint = digest(sources.map(source => source.identity));
-    const key = digest([ownerId, campaignToken, snapshotRevision, profileFingerprint, sourceIdentityFingerprint,
+    for (const id of counterpartIds) if (!covered.has(id)) uncertain.add(id);
+    const coverageMetrics = { trustedCoveredScopeCount: counterpartIds.filter(id => covered.has(id) && !uncertain.has(id)).length,
+      uncertainScopedScopeCount: uncertain.size, uncertainSourceCount, unscopedUnknownCount };
+    if (unscopedUnknownCount) return fail("UNAVAILABLE", "UNSCOPED_LEGACY_SOURCE", coverageMetrics);
+    const sourceIdentityFingerprint = digest(coverageRecords);
+    const key = digest(["v9363-scoped-coverage-1", ownerId, campaignToken, snapshotRevision, profileFingerprint, sourceIdentityFingerprint,
       targetCharacterIds, counterpartIds, sceneRevision, currentGameDate, currentTotalDays, epoch]);
     const cached = this.cache.get(key);
     if (cached && cached.checksum === digest(cached.result) && cached.ownerId === ownerId) {
       this.cache.delete(key);
       this.cache.set(key, cached);
       return { ...cached.result, candidateCounterpartIds: [...cached.result.candidateCounterpartIds],
+        uncertainCounterpartIds: [...cached.result.uncertainCounterpartIds],
         constructionMs: 0, cacheHit: true };
     }
-    const candidates = new Set(targetCharacterIds);
+    const candidates = new Set([...targetCharacterIds, ...uncertain]);
     for (const source of sources) if (targets.some(profile => profile.uniqueAliases.some(alias =>
       source.texts.some(text => text.includes(alias))))) candidates.add(source.counterpartId);
-    const result = { status: "COMPLETE", reason: "NONE", coverage: "CONSERVATIVE_SUPERSET",
+    const result = { status: uncertain.size ? "SCOPED_DEGRADED" : "COMPLETE",
+      reason: uncertain.size ? "SCOPED_LEGACY_SOURCE" : "NONE", coverage: "CONSERVATIVE_SUPERSET",
       ownerId, campaignToken, snapshotRevision, profileFingerprint, sourceIdentityFingerprint,
-      candidateCounterpartIds: counterpartIds.filter(id => candidates.has(id)), ownerPairCount: counterpartIds.length };
+      candidateCounterpartIds: counterpartIds.filter(id => candidates.has(id)), ownerPairCount: counterpartIds.length,
+      uncertainCounterpartIds: counterpartIds.filter(id => uncertain.has(id)), ...coverageMetrics };
     this.cache.set(key, { ownerId, result: Object.freeze({ ...result,
-      candidateCounterpartIds: Object.freeze([...result.candidateCounterpartIds]) }), checksum: digest(result) });
+      candidateCounterpartIds: Object.freeze([...result.candidateCounterpartIds]),
+      uncertainCounterpartIds: Object.freeze([...result.uncertainCounterpartIds]) }), checksum: digest(result) });
     while (this.cache.size > 64) this.cache.delete(this.cache.keys().next().value);
     return { ...result, constructionMs: performance.now() - started, cacheHit: false };
   }

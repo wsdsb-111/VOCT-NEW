@@ -23,3 +23,5 @@ docs/current/v9/V9_3_3_1_FIX_SPEC.md whitespace=-blank-at-eol
 
 /docs/current/v9/V9_3_4_DURABLE_RETIREMENT_IMPLEMENTATION_SPEC.md whitespace=-blank-at-eol
 /docs/current/v9/V9_3_5_PAIR_MEMORY_INDEX_REVISED_IMPLEMENTATION_SPEC.md whitespace=-blank-at-eol
+# Keep the published V9.3.6.3 raw evidence SHA stable on Windows clones.
+/docs/current/v9/v9363-pair-ab-evidence.json -text

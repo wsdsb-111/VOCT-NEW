@@ -171,12 +171,34 @@ function verifyUsageAnalyticsWhitelist() {
       }
     }, {});
 
+    analytics.record({
+      requestType: "chat", proposalId: "scoped-legacy-coverage", providerType: "zhipu", model: "fixture-model",
+      pairMemoryMetrics: { candidateDirectoryStatus: "SCOPED_DEGRADED", legacyScanFallbackReason: "SCOPED_LEGACY_SOURCE",
+        legacyScanFallbackCount: 0, trustedCoveredScopeCount: 295, uncertainScopedScopeCount: 5,
+        uncertainSourceCount: 6, unscopedUnknownCount: 0, ownerValidationMs: 3.25, sourceResolveMs: 1.5,
+        uncertainCounterpartIds: [bodySentinel], rawSummary: bodySentinel }
+    }, {});
+    analytics.record({
+      requestType: "chat", proposalId: "invalid-legacy-coverage", providerType: "zhipu", model: "fixture-model",
+      pairMemoryMetrics: { trustedCoveredScopeCount: -1, uncertainScopedScopeCount: 1.5,
+        uncertainSourceCount: "1", unscopedUnknownCount: Infinity, ownerValidationMs: -1 }
+    }, {});
     const persistedText = fs.readFileSync(analyticsFile, "utf8");
     const entries = JSON.parse(persistedText).entries;
     const entry = entries.find(candidate => candidate.proposalId === "valid-context-and-candidate-fields");
     const invalidEntry = entries.find(candidate => candidate.proposalId === "invalid-candidate-fields");
     assert(entry, "the valid UsageAnalytics fixture is persisted");
     assert(invalidEntry, "the invalid UsageAnalytics fixture is persisted for fail-closed projection checks");
+    const scoped = entries.find(row => row.proposalId === "scoped-legacy-coverage").pairMemoryMetrics;
+    for (const [field, value] of Object.entries({ candidateDirectoryStatus: "SCOPED_DEGRADED",
+      legacyScanFallbackReason: "SCOPED_LEGACY_SOURCE", legacyScanFallbackCount: 0,
+      trustedCoveredScopeCount: 295, uncertainScopedScopeCount: 5, uncertainSourceCount: 6,
+      unscopedUnknownCount: 0, ownerValidationMs: 3.25, sourceResolveMs: 1.5 })) assert.equal(scoped[field], value);
+    assert.equal(Object.hasOwn(scoped, "uncertainCounterpartIds"), false);
+    assert.equal(Object.hasOwn(scoped, "rawSummary"), false);
+    const invalidCoverage = entries.find(row => row.proposalId === "invalid-legacy-coverage").pairMemoryMetrics;
+    for (const field of ["trustedCoveredScopeCount", "uncertainScopedScopeCount", "uncertainSourceCount",
+      "unscopedUnknownCount", "ownerValidationMs"]) assert.equal(invalidCoverage[field], null);
     assert.equal(entry.contextMode, "custom");
     assert.equal(entry.contextWindowSource, "user_provided_unverified");
     assert.equal(entry.effectiveContextWindow, 90000);

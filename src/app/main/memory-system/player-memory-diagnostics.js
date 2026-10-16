@@ -7,9 +7,9 @@ const FALLBACK_STATUSES = new Set([
   "LEGACY_SOURCE_FALLBACK", "NOT_REQUESTED", "SOURCE_STALE"
 ]);
 const INTENT_LEVELS = new Set(["L0", "L1", "L2"]);
-const DIRECTORY_STATUSES = new Set(["COMPLETE", "STALE", "UNAVAILABLE", "AMBIGUOUS"]);
+const DIRECTORY_STATUSES = new Set(["COMPLETE", "SCOPED_DEGRADED", "STALE", "UNAVAILABLE", "AMBIGUOUS"]);
 const DIRECTORY_REASONS = new Set(["NONE", "REFERENCE_MODE", "OWNER_SNAPSHOT_UNAVAILABLE", "OWNER_SNAPSHOT_STALE",
-  "SOURCE_COVERAGE_INCOMPLETE", "ALIAS_PROFILE_AMBIGUOUS", "DIRECTORY_BUILD_FAILED", "DIRECTORY_INVALID"]);
+  "SOURCE_COVERAGE_INCOMPLETE", "SCOPED_LEGACY_SOURCE", "UNSCOPED_LEGACY_SOURCE", "ALIAS_PROFILE_AMBIGUOUS", "DIRECTORY_BUILD_FAILED", "DIRECTORY_INVALID"]);
 const POLICY_REVISIONS = new Set(["v9.3.5", "v9.3.6", "v936-player-centered-1"]);
 const INVALIDATION_REASONS = new Set([
   "CONTEXT_HEADROOM", "FIRST_PROMPT", "PLAYER_OR_CAMPAIGN_CHANGED", "SOURCE_OR_SCOPE_CHANGED",
@@ -33,7 +33,8 @@ const COUNT_FIELDS = Object.freeze([
   "thirdPersonSourceOpenedCount", "legacySourceResolvedCount", "legacyBudgetOmittedCount",
   "sourceKeyValidationFailedCount", "openedSummaryCount", "recentSummaryReferencedItems",
   "sourceResolveAttemptCount", "totalSourceResolveAttemptCount", "candidatePairCount", "actualIndexReadCount",
-  "indexCacheHits", "indexCacheMisses", "ownerPairCount", "scopeRevisionChecks", "legacyScanFallbackCount"
+  "indexCacheHits", "indexCacheMisses", "ownerPairCount", "scopeRevisionChecks", "legacyScanFallbackCount",
+  "trustedCoveredScopeCount", "uncertainScopedScopeCount", "uncertainSourceCount", "unscopedUnknownCount"
 ]);
 const TOKEN_FIELDS = Object.freeze([
   "memoryBudget", "baselineBudgetUsed", "dynamicBudgetUsed", "finalInjectedTokens",
@@ -70,7 +71,7 @@ function projectPairMemoryMetrics(value) {
   const projected = {};
   for (const field of COUNT_FIELDS) projected[field] = safeCount(value[field]);
   for (const field of TOKEN_FIELDS) projected[field] = safeCount(value[field]);
-  for (const field of ["indexLookupMs", "sourceResolveMs", "candidateDirectoryBuildMs"]) projected[field] = safeFinite(value[field]);
+  for (const field of ["indexLookupMs", "sourceResolveMs", "candidateDirectoryBuildMs", "ownerValidationMs"]) projected[field] = safeFinite(value[field]);
   projected.candidateDirectoryStatus = safeEnum(value.candidateDirectoryStatus, DIRECTORY_STATUSES);
   projected.candidateDirectoryCacheHit = safeBoolean(value.candidateDirectoryCacheHit);
   projected.legacyScanFallbackReason = safeEnum(value.legacyScanFallbackReason, DIRECTORY_REASONS);

@@ -3,7 +3,7 @@
 const crypto = require("crypto");
 const { normalizeGameDate } = require("../worldline/character-temporal-facts");
 const { retrievePairMemorySources } = require("./pair-memory-source-retrieval");
-const { classifyThirdPersonHistoryRequest, classifyTemporalIntent, removeQuotedText } = require("./pair-memory-routing");
+const { ROUTE_SCHEMA_VERSION, classifyThirdPersonHistoryRequest, classifyTemporalIntent, removeQuotedText } = require("./pair-memory-routing");
 const { resolveTemporalFocus } = require("./fuzzy-temporal-resolver");
 const { buildDualTemporalIndex, selectDualTemporalExtras } = require("./summary-date-index");
 const turnRecall = require("./turn-recall");
@@ -121,6 +121,15 @@ function buildBaseline(engine, options, memories, revision, identity, countToken
 }
 
 function resolveHistoryDecision(engine, options, state, memories) {
+  if (state.routeSchemaVersion !== ROUTE_SCHEMA_VERSION) {
+    state.historyBinding = null;
+    state.namedTargetFocus = null;
+    state.dynamicKey = null;
+    state.dynamicResult = null;
+    state.temporalFocus = null;
+    state.pendingTemporalFocus = null;
+    state.routeSchemaVersion = ROUTE_SCHEMA_VERSION;
+  }
   const ownerId = Number(options.characterId), playerId = Number(options.trustedPlayerAnchorId);
   const sourceProfiles = options.entityProfiles || options.gameData?.getMentionableCharacterProfiles?.()
     || engine.getMentionableProfilesFromFolderMemories(memories);
@@ -164,9 +173,10 @@ function resolveHistoryDecision(engine, options, state, memories) {
   });
   const explicitAmbiguous = engine.mentionTracker.lastScanUnresolved === true;
   const explicitTargetIds = explicitIds.filter(id => !deniedTargetIds.has(id));
+  const reciprocalTargetReference = /(?:你们|你俩|两人|彼此|双方)/u.test(targetQuery);
   const targetIds = explicitIds.length || explicitAmbiguous || temporalIntent.denialScopes.length || hasTargetScopedDenial ? explicitTargetIds
     : temporalIntent.kind === "PAST_HISTORY" && focusValid
-      ? engine.mentionTracker.findMentionedCharacterIds([{ role: "user", content: targetQuery }], {
+      ? reciprocalTargetReference ? [Number(focus.characterId)] : engine.mentionTracker.findMentionedCharacterIds([{ role: "user", content: targetQuery }], {
         candidates: profiles, excludedIds: [ownerId, playerId], recentCharacterId: focus.characterId
       })
       : [];
@@ -180,11 +190,13 @@ function resolveHistoryDecision(engine, options, state, memories) {
   if (currentPlayerTurn?.trusted === true && query && state.namedTargetFocus?.turnEpoch !== options.turnEpoch) {
     state.namedTargetFocus = explicitTargetIds.length === 1 && !ambiguous
       ? { characterId: explicitTargetIds[0], turnEpoch: options.turnEpoch, sceneRevision: options.sceneRevision } : null;
+    if (state.namedTargetFocus) state.namedTargetFocus.routeSchemaVersion = ROUTE_SCHEMA_VERSION;
   }
   if (decision.level !== "L0" && decision.targetEvidence !== "BOUND_FOLLOWUP") state.historyBinding = {
     responderId: ownerId, playerAnchorId: playerId, targetCharacterIds: decision.targetCharacterIds,
     authorizedTurnEpoch: options.turnEpoch, expiresAfterTurnEpoch: options.turnEpoch + 1,
-    conversationId: options.conversationId, sceneRevision: options.sceneRevision
+    conversationId: options.conversationId, sceneRevision: options.sceneRevision,
+    routeSchemaVersion: ROUTE_SCHEMA_VERSION
   };
   else if (decision.level === "L0" && decision.reasonCode !== "NO_TRUSTED_PLAYER_TURN") state.historyBinding = null;
   return { decision, query: temporalIntent.kind === "PAST_HISTORY" ? temporalIntent.historicalText : query,
@@ -263,7 +275,7 @@ function retrieveDynamicMemory(engine, options, state, baseline, memories, rawMe
   const messageOverhead = countMemoryBlocks([" "], countTokens) - countTokens(" ") + 1;
   const budget = Math.max(0, options.tokenBudget - baseline.formattedTokens - messageOverhead);
   const dynamicKey = digest([baseline.snapshotId, options.turnEpoch, options.sceneRevision,
-    decision.queryFingerprint, decision.level, decision.targetCharacterIds, decision.reasonCode, budget]);
+    ROUTE_SCHEMA_VERSION, decision.queryFingerprint, decision.level, decision.targetCharacterIds, decision.reasonCode, budget]);
   if (state.dynamicKey === dynamicKey && state.dynamicResult) return { ...state.dynamicResult, cacheHit: true };
   const excludedIds = new Set([...baseline.direct, ...baseline.official, ...baseline.stable].map(entry => String(entry.memory.memoryId)));
   const temporal = resolveTemporalFocus(query, state.temporalFocus || null, { currentGameDate: options.currentGameDate,
@@ -383,6 +395,13 @@ function retrievePlayerCenteredMemory(engine, options) {
     candidateDirectoryStatus: dynamic.metrics.candidateDirectoryStatus || "UNAVAILABLE",
     candidateDirectoryCacheHit: dynamic.metrics.candidateDirectoryCacheHit === true,
     candidateDirectoryBuildMs: dynamic.metrics.candidateDirectoryBuildMs || 0,
+    trustedCoveredScopeCount: dynamic.metrics.trustedCoveredScopeCount || 0,
+    uncertainScopedScopeCount: dynamic.metrics.uncertainScopedScopeCount || 0,
+    uncertainSourceCount: dynamic.metrics.uncertainSourceCount || 0,
+    unscopedUnknownCount: dynamic.metrics.unscopedUnknownCount || 0,
+    ownerValidationMs: dynamic.metrics.ownerValidationMs || 0,
+    indexLookupMs: (baseline.ledgerMetrics.indexLookupMs || 0) + (dynamic.metrics.indexLookupMs || 0),
+    sourceResolveMs: dynamic.metrics.sourceResolveMs || 0,
     ownerPairCount: dynamic.metrics.ownerPairCount || 0,
     candidateReductionRatio: dynamic.metrics.candidateReductionRatio ?? null,
     scopeRevisionChecks: dynamic.metrics.scopeRevisionChecks || 0,
@@ -449,8 +468,18 @@ function validatePlayerMemorySources(engine, context, gameData, conversationId) 
     context.playerLedgerFrozenText, context.stableText, context.temporalExtraText].some(Boolean)) return { valid: true, reason: "NO_AUTHORIZED_MEMORY" };
   if (forgetFingerprint(engine, ownerId) !== context.sourceForgetFingerprint) return reject("FORGET_CHANGED");
   if (engine.store.getFolderSummaryRevision(ownerId) !== context.sourceFolderRevision) return reject("SOURCE_REVISION_CHANGED");
-  const snapshot = engine.store.folderSummaryCache?.get(ownerId) || [];
-  if ((context.sourcePairIds || []).some(id => engine.store.hasPairLedgerSourceContentChanges(snapshot, id))) {
+  try {
+    const snapshot = engine.store.loadFolderSummariesForCharacter(ownerId);
+    if (engine.store.getFolderSummarySnapshotRevision(snapshot) !== context.sourceFolderRevision) {
+      engine.store.invalidateFolderSummaryCache([ownerId]);
+      return reject("SOURCE_REVISION_CHANGED");
+    }
+    if ((context.sourcePairIds || []).some(id => engine.store.hasPairLedgerSourceContentChanges(snapshot, id))
+      || engine.store.hasOwnerSummaryContentChanges(snapshot)) {
+      engine.store.invalidateFolderSummaryCache([ownerId]);
+      return reject("SOURCE_CONTENT_CHANGED");
+    }
+  } catch {
     engine.store.invalidateFolderSummaryCache([ownerId]);
     return reject("SOURCE_CONTENT_CHANGED");
   }

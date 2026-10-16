@@ -427,13 +427,15 @@ function runAmbiguousAndIncompleteChecks() {
     () => retrieve(fixture, { retrievalMode: "safe-candidate-directory" }));
   legacySource.rawSummary = priorRawSummary;
   assert.deepEqual(incompleteSafe.value.items.map(itemFingerprint), reference.items.map(itemFingerprint),
-    "an incomplete source directory must preserve the full-scan result");
-  assert.equal(incompleteSafe.value.metrics.candidateDirectoryStatus, "UNAVAILABLE",
-    "a missing raw Summary body must mark candidate coverage incomplete");
-  assert.equal(incompleteSafe.value.metrics.legacyScanFallbackCount, 1,
-    "incomplete metadata must use the full owner scan instead of treating it as an empty candidate set");
-  assert.equal(incompleteSafe.value.metrics.candidatePairCount, reference.metrics.candidatePairCount,
-    "the fallback must scan every old reference scope");
+    "a missing raw Summary body on a known Pair must preserve the exhaustive result");
+  assert.equal(incompleteSafe.value.metrics.candidateDirectoryStatus, "SCOPED_DEGRADED",
+    "a missing raw Summary body with a trusted counterpart ID must degrade only that Pair");
+  assert.equal(incompleteSafe.value.metrics.legacyScanFallbackCount, 0,
+    "a known uncertain Pair must not trigger the full Owner scan");
+  assert(incompleteSafe.counts.readScopes.some(row => row.counterpartId === 8000),
+    "the uncertain source's known Pair must be revalidated by the authoritative PairLedger");
+  assert(incompleteSafe.value.metrics.candidatePairCount < reference.metrics.candidatePairCount,
+    "a scoped legacy source must leave unrelated Pair scopes unread");
 }
 
 function runOwnerReadRaceChecks() {

@@ -945,14 +945,14 @@ class MemoryStore {
     const snapshot = this.folderSummarySnapshotSources.get(memories);
     if (!snapshot) return true;
     return this.hasSummarySourceContentChanges(new Map((snapshot.files || [])
-      .map(source => [source.relativeSummaryPath, source.fileDigest])));
+      .map(source => [source.relativeSummaryPath, source.fileDigest])), true);
   }
 
-  hasSummarySourceContentChanges(files) {
+  hasSummarySourceContentChanges(files, allowLegacyFileNames = false) {
     const checkedFolders = new Set();
     for (const [relative, expected] of files) {
       try {
-        const before = this.getSummarySourceFileSignature(relative);
+        const before = this.getSummarySourceFileSignature(relative, allowLegacyFileNames);
         if (!expected || !before) return true;
         const file = path.resolve(this.summaryFoldersDir, ...relative.split("/"));
         const folder = path.dirname(file);
@@ -962,7 +962,7 @@ class MemoryStore {
         }
         const rows = JSON.parse(fs.readFileSync(file, "utf8").replace(/^\uFEFF/, ""));
         if (crypto.createHash("sha256").update(JSON.stringify(rows)).digest("hex") !== expected
-          || JSON.stringify(before) !== JSON.stringify(this.getSummarySourceFileSignature(relative))) return true;
+          || JSON.stringify(before) !== JSON.stringify(this.getSummarySourceFileSignature(relative, allowLegacyFileNames))) return true;
       } catch { return true; }
     }
     // Files are lstat'ed before and after each read. Shared ancestors need only
@@ -974,7 +974,7 @@ class MemoryStore {
   folderSummarySourceStateChanged(sourceState) {
     if (JSON.stringify(sourceState.directories) !== JSON.stringify(this.getFolderSummarySourceDirectories(sourceState.ownerId, sourceState.folderNames))) return true;
     for (const sourceFile of sourceState.files || []) {
-      if (JSON.stringify(sourceFile.fileSignature) !== JSON.stringify(this.getSummarySourceFileSignature(sourceFile.relativeSummaryPath))) return true;
+      if (JSON.stringify(sourceFile.fileSignature) !== JSON.stringify(this.getSummarySourceFileSignature(sourceFile.relativeSummaryPath, true))) return true;
     }
     return false;
   }
@@ -1011,13 +1011,14 @@ class MemoryStore {
     return directories;
   }
 
-  getSummarySourceFileSignature(relativeSummaryPath) {
+  getSummarySourceFileSignature(relativeSummaryPath, allowLegacyFileNames = false) {
     if (!this.summaryFoldersDir || typeof relativeSummaryPath !== "string") return null;
     const parts = relativeSummaryPath.split(/[\\/]/);
     if (parts.length !== 2 || parts.some(part => !part || part === "." || part === "..")) throw new Error("pair_index_source_path_invalid");
     const [folderName, fileName] = parts;
     if (path.basename(folderName) !== folderName || !/^\d+_.+$/u.test(folderName)
-      || path.basename(fileName) !== fileName || !/^与.+的对话\.json$/u.test(fileName)) throw new Error("pair_index_source_path_invalid");
+      || path.basename(fileName) !== fileName
+      || !(allowLegacyFileNames ? /^.+\.json$/u : /^与.+的对话\.json$/u).test(fileName)) throw new Error("pair_index_source_path_invalid");
     const root = path.resolve(this.summaryFoldersDir);
     const folderPath = path.resolve(root, folderName);
     const filePath = path.resolve(folderPath, fileName);
@@ -1121,12 +1122,12 @@ class MemoryStore {
         const sourceFilePath = path.join(folderPath, file);
         const beforeSignature = statSignature(sourceFilePath);
         const summaries = this.readJson(sourceFilePath, invalidFile);
-        const fileDigest = Array.isArray(summaries) ? crypto.createHash("sha256").update(JSON.stringify(summaries)).digest("hex") : null;
+        const fileDigest = summaries !== invalidFile ? crypto.createHash("sha256").update(JSON.stringify(summaries)).digest("hex") : null;
         const afterSignature = statSignature(sourceFilePath);
         const fileSignature = beforeSignature && afterSignature && beforeSignature.isFile && !beforeSignature.isSymbolicLink
           && JSON.stringify(beforeSignature) === JSON.stringify(afterSignature) ? afterSignature : null;
         const pairLedgerFileValid = /^与.+的对话\.json$/u.test(file);
-        if (pairLedgerFileValid) sourceFiles.push({ relativeSummaryPath: `${folder.name}/${file}`, fileSignature, fileDigest });
+        sourceFiles.push({ relativeSummaryPath: `${folder.name}/${file}`, fileSignature, fileDigest });
         if (!Array.isArray(summaries)) {
           loadDiagnostics.malformedFileCount++;
           continue;

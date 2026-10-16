@@ -1,0 +1,2315 @@
+{
+  "schemaVersion": 1,
+  "runtime": "v22.23.3",
+  "summary": {
+    "passed": 23,
+    "failed": 0,
+    "total": 23
+  },
+  "checks": [
+    {
+      "id": "C01",
+      "label": "300 complete Pair scopes remain sparse",
+      "status": "PASS",
+      "retrievals": [
+        {
+          "mode": "exhaustive-reference",
+          "fallbackStatus": "INDEX_HIT_ITEMS",
+          "fallbackReason": "REFERENCE_MODE",
+          "candidateDirectoryStatus": "UNAVAILABLE",
+          "candidatePairCount": 300,
+          "ownerPairCount": 300,
+          "trustedCoveredScopeCount": 0,
+          "uncertainScopedScopeCount": 0,
+          "uncertainSourceCount": 0,
+          "unscopedUnknownCount": 0,
+          "legacyScanFallbackCount": 0,
+          "actualIndexReadCount": 600,
+          "sourceResolveAttemptCount": 0,
+          "itemCount": 2,
+          "itemIdentityOrderHash": "8c287b3cbbfb6aa1f7598c6f6709a6616ef56812edb6282260d163ae4e1a3d6b",
+          "resolvedSourceOrderHash": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+          "scopeRevisionHash": "9368ddeec8aa2c67146ea8a44b4d5b417aab02a1e7e438d903594c32715333fc",
+          "textHash": "b7660cacc50413ae2db61601323b2ac296d7e235be9b8ab314c391946b7aebbc"
+        },
+        {
+          "mode": "safe-candidate-directory",
+          "fallbackStatus": "INDEX_HIT_ITEMS",
+          "fallbackReason": "NONE",
+          "candidateDirectoryStatus": "COMPLETE",
+          "candidatePairCount": 2,
+          "ownerPairCount": 300,
+          "trustedCoveredScopeCount": 300,
+          "uncertainScopedScopeCount": 0,
+          "uncertainSourceCount": 0,
+          "unscopedUnknownCount": 0,
+          "legacyScanFallbackCount": 0,
+          "actualIndexReadCount": 4,
+          "sourceResolveAttemptCount": 0,
+          "itemCount": 2,
+          "itemIdentityOrderHash": "8c287b3cbbfb6aa1f7598c6f6709a6616ef56812edb6282260d163ae4e1a3d6b",
+          "resolvedSourceOrderHash": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+          "scopeRevisionHash": "7b968a7601f824e62514c8f165bc5dbca2facd3b57070eb43b94bcb4ce519fb9",
+          "textHash": "b7660cacc50413ae2db61601323b2ac296d7e235be9b8ab314c391946b7aebbc",
+          "directory": {
+            "status": "COMPLETE",
+            "reason": "NONE",
+            "coverage": "CONSERVATIVE_SUPERSET",
+            "candidateCounterpartIds": [
+              300,
+              9000
+            ],
+            "uncertainCounterpartIds": [],
+            "trustedCoveredScopeCount": 300,
+            "uncertainScopedScopeCount": 0,
+            "uncertainSourceCount": 0,
+            "unscopedUnknownCount": 0
+          }
+        }
+      ],
+      "abComparisons": [
+        {
+          "label": "safe-vs-exhaustive",
+          "itemsAndOrderEqual": true,
+          "sourceKeyRevisionOrderEqual": true,
+          "formattedTextEqual": true,
+          "safeItemIdentityOrderHash": "8c287b3cbbfb6aa1f7598c6f6709a6616ef56812edb6282260d163ae4e1a3d6b",
+          "referenceItemIdentityOrderHash": "8c287b3cbbfb6aa1f7598c6f6709a6616ef56812edb6282260d163ae4e1a3d6b",
+          "safeResolvedSourceOrderHash": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+          "referenceResolvedSourceOrderHash": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+          "safeFallbackStatus": "INDEX_HIT_ITEMS",
+          "referenceFallbackStatus": "INDEX_HIT_ITEMS",
+          "safeCandidatePairCount": 2,
+          "referenceCandidatePairCount": 300,
+          "safeLegacyFallbackCount": 0,
+          "referenceReason": "REFERENCE_MODE"
+        }
+      ],
+      "notes": []
+    },
+    {
+      "id": "C02",
+      "label": "one real unindexed legacy source degrades locally",
+      "status": "PASS",
+      "retrievals": [
+        {
+          "mode": "exhaustive-reference",
+          "fallbackStatus": "INDEX_HIT_ITEMS",
+          "fallbackReason": "REFERENCE_MODE",
+          "candidateDirectoryStatus": "UNAVAILABLE",
+          "candidatePairCount": 301,
+          "ownerPairCount": 301,
+          "trustedCoveredScopeCount": 0,
+          "uncertainScopedScopeCount": 0,
+          "uncertainSourceCount": 0,
+          "unscopedUnknownCount": 0,
+          "legacyScanFallbackCount": 0,
+          "actualIndexReadCount": 602,
+          "sourceResolveAttemptCount": 0,
+          "itemCount": 2,
+          "itemIdentityOrderHash": "45a55040cbbd10a64ad0ae60cdaed8f33b5234afad65f253b8b7ca470349bbb4",
+          "resolvedSourceOrderHash": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+          "scopeRevisionHash": "f0f9bba10ff32ef37549eac9e585c2a10425ced2fe73d3f18bbaf1d46577e81f",
+          "textHash": "ffaf6fbbdba1fe43aa9adc64c43295f5548f7c050060d8d82d56b4bfd2c4ab88"
+        },
+        {
+          "mode": "safe-candidate-directory",
+          "fallbackStatus": "INDEX_HIT_ITEMS",
+          "fallbackReason": "SCOPED_LEGACY_SOURCE",
+          "candidateDirectoryStatus": "SCOPED_DEGRADED",
+          "candidatePairCount": 3,
+          "ownerPairCount": 301,
+          "trustedCoveredScopeCount": 300,
+          "uncertainScopedScopeCount": 1,
+          "uncertainSourceCount": 1,
+          "unscopedUnknownCount": 0,
+          "legacyScanFallbackCount": 0,
+          "actualIndexReadCount": 6,
+          "sourceResolveAttemptCount": 0,
+          "itemCount": 2,
+          "itemIdentityOrderHash": "45a55040cbbd10a64ad0ae60cdaed8f33b5234afad65f253b8b7ca470349bbb4",
+          "resolvedSourceOrderHash": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+          "scopeRevisionHash": "9f9c2a889bf0bf1e5d5d635db83f98db2c2ffc7bc1ea7ea530f1bd8256b9e858",
+          "textHash": "ffaf6fbbdba1fe43aa9adc64c43295f5548f7c050060d8d82d56b4bfd2c4ab88",
+          "directory": {
+            "status": "SCOPED_DEGRADED",
+            "reason": "SCOPED_LEGACY_SOURCE",
+            "coverage": "CONSERVATIVE_SUPERSET",
+            "candidateCounterpartIds": [
+              300,
+              9000,
+              9101
+            ],
+            "uncertainCounterpartIds": [
+              9101
+            ],
+            "trustedCoveredScopeCount": 300,
+            "uncertainScopedScopeCount": 1,
+            "uncertainSourceCount": 1,
+            "unscopedUnknownCount": 0
+          }
+        }
+      ],
+      "abComparisons": [
+        {
+          "label": "safe-vs-exhaustive",
+          "itemsAndOrderEqual": true,
+          "sourceKeyRevisionOrderEqual": true,
+          "formattedTextEqual": true,
+          "safeItemIdentityOrderHash": "45a55040cbbd10a64ad0ae60cdaed8f33b5234afad65f253b8b7ca470349bbb4",
+          "referenceItemIdentityOrderHash": "45a55040cbbd10a64ad0ae60cdaed8f33b5234afad65f253b8b7ca470349bbb4",
+          "safeResolvedSourceOrderHash": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+          "referenceResolvedSourceOrderHash": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+          "safeFallbackStatus": "INDEX_HIT_ITEMS",
+          "referenceFallbackStatus": "INDEX_HIT_ITEMS",
+          "safeCandidatePairCount": 3,
+          "referenceCandidatePairCount": 301,
+          "safeLegacyFallbackCount": 0,
+          "referenceReason": "REFERENCE_MODE"
+        }
+      ],
+      "notes": []
+    },
+    {
+      "id": "C03",
+      "label": "five locatable legacy sources expand only their Pair scopes",
+      "status": "PASS",
+      "retrievals": [
+        {
+          "mode": "exhaustive-reference",
+          "fallbackStatus": "INDEX_HIT_ITEMS",
+          "fallbackReason": "REFERENCE_MODE",
+          "candidateDirectoryStatus": "UNAVAILABLE",
+          "candidatePairCount": 305,
+          "ownerPairCount": 305,
+          "trustedCoveredScopeCount": 0,
+          "uncertainScopedScopeCount": 0,
+          "uncertainSourceCount": 0,
+          "unscopedUnknownCount": 0,
+          "legacyScanFallbackCount": 0,
+          "actualIndexReadCount": 610,
+          "sourceResolveAttemptCount": 0,
+          "itemCount": 2,
+          "itemIdentityOrderHash": "6435ed86e32edf08e2983bd7eec64f54f95dfe8dfce61bdaf7fa1e849d09a440",
+          "resolvedSourceOrderHash": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+          "scopeRevisionHash": "819d79d656104805d6bb38b5fe3eadaec0bd7720ba356cfe71d0f9c10afe20d0",
+          "textHash": "251b34b407f1815a3aee5f489bb98cd5aa24cfc1db490a73b64724f3912c8658"
+        },
+        {
+          "mode": "safe-candidate-directory",
+          "fallbackStatus": "INDEX_HIT_ITEMS",
+          "fallbackReason": "SCOPED_LEGACY_SOURCE",
+          "candidateDirectoryStatus": "SCOPED_DEGRADED",
+          "candidatePairCount": 7,
+          "ownerPairCount": 305,
+          "trustedCoveredScopeCount": 300,
+          "uncertainScopedScopeCount": 5,
+          "uncertainSourceCount": 5,
+          "unscopedUnknownCount": 0,
+          "legacyScanFallbackCount": 0,
+          "actualIndexReadCount": 14,
+          "sourceResolveAttemptCount": 0,
+          "itemCount": 2,
+          "itemIdentityOrderHash": "6435ed86e32edf08e2983bd7eec64f54f95dfe8dfce61bdaf7fa1e849d09a440",
+          "resolvedSourceOrderHash": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+          "scopeRevisionHash": "1dbeb4df59ef15f5cbf5b48fdc2fd8d85ddb097a22ac4948e6776830243a04c6",
+          "textHash": "251b34b407f1815a3aee5f489bb98cd5aa24cfc1db490a73b64724f3912c8658",
+          "directory": {
+            "status": "SCOPED_DEGRADED",
+            "reason": "SCOPED_LEGACY_SOURCE",
+            "coverage": "CONSERVATIVE_SUPERSET",
+            "candidateCounterpartIds": [
+              300,
+              9000,
+              9201,
+              9202,
+              9203,
+              9204,
+              9205
+            ],
+            "uncertainCounterpartIds": [
+              9201,
+              9202,
+              9203,
+              9204,
+              9205
+            ],
+            "trustedCoveredScopeCount": 300,
+            "uncertainScopedScopeCount": 5,
+            "uncertainSourceCount": 5,
+            "unscopedUnknownCount": 0
+          }
+        }
+      ],
+      "abComparisons": [
+        {
+          "label": "safe-vs-exhaustive",
+          "itemsAndOrderEqual": true,
+          "sourceKeyRevisionOrderEqual": true,
+          "formattedTextEqual": true,
+          "safeItemIdentityOrderHash": "6435ed86e32edf08e2983bd7eec64f54f95dfe8dfce61bdaf7fa1e849d09a440",
+          "referenceItemIdentityOrderHash": "6435ed86e32edf08e2983bd7eec64f54f95dfe8dfce61bdaf7fa1e849d09a440",
+          "safeResolvedSourceOrderHash": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+          "referenceResolvedSourceOrderHash": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+          "safeFallbackStatus": "INDEX_HIT_ITEMS",
+          "referenceFallbackStatus": "INDEX_HIT_ITEMS",
+          "safeCandidatePairCount": 7,
+          "referenceCandidatePairCount": 305,
+          "safeLegacyFallbackCount": 0,
+          "referenceReason": "REFERENCE_MODE"
+        }
+      ],
+      "notes": []
+    },
+    {
+      "id": "C04",
+      "label": "rawSummary null with a known Pair is locally revalidated",
+      "status": "PASS",
+      "retrievals": [
+        {
+          "mode": "exhaustive-reference",
+          "fallbackStatus": "INDEX_HIT_ITEMS",
+          "fallbackReason": "REFERENCE_MODE",
+          "candidateDirectoryStatus": "UNAVAILABLE",
+          "candidatePairCount": 25,
+          "ownerPairCount": 25,
+          "trustedCoveredScopeCount": 0,
+          "uncertainScopedScopeCount": 0,
+          "uncertainSourceCount": 0,
+          "unscopedUnknownCount": 0,
+          "legacyScanFallbackCount": 0,
+          "actualIndexReadCount": 50,
+          "sourceResolveAttemptCount": 0,
+          "itemCount": 2,
+          "itemIdentityOrderHash": "73fc2c1473810e84f70f6cd92b36075f81f51b91ed1c588f7846a747d1f05dbf",
+          "resolvedSourceOrderHash": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+          "scopeRevisionHash": "ec13dca9ce8360e4626735d32ad091c2e957ff6bed042e6c80193ad9de07cd88",
+          "textHash": "a9aa03970c18577f7537596468e1cb275c129779e2c591d4d42867febf113856"
+        },
+        {
+          "mode": "safe-candidate-directory",
+          "fallbackStatus": "INDEX_HIT_ITEMS",
+          "fallbackReason": "SCOPED_LEGACY_SOURCE",
+          "candidateDirectoryStatus": "SCOPED_DEGRADED",
+          "candidatePairCount": 3,
+          "ownerPairCount": 25,
+          "trustedCoveredScopeCount": 24,
+          "uncertainScopedScopeCount": 1,
+          "uncertainSourceCount": 1,
+          "unscopedUnknownCount": 0,
+          "legacyScanFallbackCount": 0,
+          "actualIndexReadCount": 6,
+          "sourceResolveAttemptCount": 0,
+          "itemCount": 2,
+          "itemIdentityOrderHash": "73fc2c1473810e84f70f6cd92b36075f81f51b91ed1c588f7846a747d1f05dbf",
+          "resolvedSourceOrderHash": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+          "scopeRevisionHash": "34f80875dae6befd996e53ed3f065078c9a218092f2ab7fe14ca72d00a313356",
+          "textHash": "a9aa03970c18577f7537596468e1cb275c129779e2c591d4d42867febf113856",
+          "directory": {
+            "status": "SCOPED_DEGRADED",
+            "reason": "SCOPED_LEGACY_SOURCE",
+            "coverage": "CONSERVATIVE_SUPERSET",
+            "candidateCounterpartIds": [
+              300,
+              9000,
+              9301
+            ],
+            "uncertainCounterpartIds": [
+              9301
+            ],
+            "trustedCoveredScopeCount": 24,
+            "uncertainScopedScopeCount": 1,
+            "uncertainSourceCount": 1,
+            "unscopedUnknownCount": 0
+          }
+        }
+      ],
+      "abComparisons": [
+        {
+          "label": "safe-vs-exhaustive",
+          "itemsAndOrderEqual": true,
+          "sourceKeyRevisionOrderEqual": true,
+          "formattedTextEqual": true,
+          "safeItemIdentityOrderHash": "73fc2c1473810e84f70f6cd92b36075f81f51b91ed1c588f7846a747d1f05dbf",
+          "referenceItemIdentityOrderHash": "73fc2c1473810e84f70f6cd92b36075f81f51b91ed1c588f7846a747d1f05dbf",
+          "safeResolvedSourceOrderHash": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+          "referenceResolvedSourceOrderHash": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+          "safeFallbackStatus": "INDEX_HIT_ITEMS",
+          "referenceFallbackStatus": "INDEX_HIT_ITEMS",
+          "safeCandidatePairCount": 3,
+          "referenceCandidatePairCount": 25,
+          "safeLegacyFallbackCount": 0,
+          "referenceReason": "REFERENCE_MODE"
+        }
+      ],
+      "notes": []
+    },
+    {
+      "id": "C05",
+      "label": "missing source digest/signature refreshes safely within scope",
+      "status": "PASS",
+      "retrievals": [
+        {
+          "mode": "exhaustive-reference",
+          "fallbackStatus": "SOURCE_STALE",
+          "fallbackReason": "REFERENCE_MODE",
+          "candidateDirectoryStatus": "UNAVAILABLE",
+          "candidatePairCount": 25,
+          "ownerPairCount": 25,
+          "trustedCoveredScopeCount": 0,
+          "uncertainScopedScopeCount": 0,
+          "uncertainSourceCount": 0,
+          "unscopedUnknownCount": 0,
+          "legacyScanFallbackCount": 0,
+          "actualIndexReadCount": 3,
+          "sourceResolveAttemptCount": 0,
+          "itemCount": 0,
+          "itemIdentityOrderHash": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+          "resolvedSourceOrderHash": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+          "scopeRevisionHash": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+          "textHash": "12ae32cb1ec02d01eda3581b127c1fee3b0dc53572ed6baf239721a03d82e126"
+        },
+        {
+          "mode": "safe-candidate-directory",
+          "fallbackStatus": "SOURCE_STALE",
+          "fallbackReason": "SCOPED_LEGACY_SOURCE",
+          "candidateDirectoryStatus": "SCOPED_DEGRADED",
+          "candidatePairCount": 3,
+          "ownerPairCount": 25,
+          "trustedCoveredScopeCount": 24,
+          "uncertainScopedScopeCount": 1,
+          "uncertainSourceCount": 1,
+          "unscopedUnknownCount": 0,
+          "legacyScanFallbackCount": 0,
+          "actualIndexReadCount": 3,
+          "sourceResolveAttemptCount": 0,
+          "itemCount": 0,
+          "itemIdentityOrderHash": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+          "resolvedSourceOrderHash": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+          "scopeRevisionHash": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+          "textHash": "12ae32cb1ec02d01eda3581b127c1fee3b0dc53572ed6baf239721a03d82e126",
+          "directory": {
+            "status": "SCOPED_DEGRADED",
+            "reason": "SCOPED_LEGACY_SOURCE",
+            "coverage": "CONSERVATIVE_SUPERSET",
+            "candidateCounterpartIds": [
+              300,
+              9000,
+              9401
+            ],
+            "uncertainCounterpartIds": [
+              9401
+            ],
+            "trustedCoveredScopeCount": 24,
+            "uncertainScopedScopeCount": 1,
+            "uncertainSourceCount": 1,
+            "unscopedUnknownCount": 0
+          }
+        }
+      ],
+      "abComparisons": [
+        {
+          "label": "safe-vs-exhaustive",
+          "itemsAndOrderEqual": true,
+          "sourceKeyRevisionOrderEqual": true,
+          "formattedTextEqual": true,
+          "safeItemIdentityOrderHash": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+          "referenceItemIdentityOrderHash": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+          "safeResolvedSourceOrderHash": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+          "referenceResolvedSourceOrderHash": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+          "safeFallbackStatus": "SOURCE_STALE",
+          "referenceFallbackStatus": "SOURCE_STALE",
+          "safeCandidatePairCount": 3,
+          "referenceCandidatePairCount": 25,
+          "safeLegacyFallbackCount": 0,
+          "referenceReason": "REFERENCE_MODE"
+        }
+      ],
+      "notes": []
+    },
+    {
+      "id": "C06",
+      "label": "missing coverage in a multi-Pair projection stays scoped",
+      "status": "PASS",
+      "retrievals": [
+        {
+          "mode": "exhaustive-reference",
+          "fallbackStatus": "INDEX_HIT_ITEMS",
+          "fallbackReason": "REFERENCE_MODE",
+          "candidateDirectoryStatus": "UNAVAILABLE",
+          "candidatePairCount": 26,
+          "ownerPairCount": 26,
+          "trustedCoveredScopeCount": 0,
+          "uncertainScopedScopeCount": 0,
+          "uncertainSourceCount": 0,
+          "unscopedUnknownCount": 0,
+          "legacyScanFallbackCount": 0,
+          "actualIndexReadCount": 52,
+          "sourceResolveAttemptCount": 0,
+          "itemCount": 3,
+          "itemIdentityOrderHash": "114611d924cb0341ea7aa4287bed66820a93dd3538700aa936b4f26c16f2a2cb",
+          "resolvedSourceOrderHash": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+          "scopeRevisionHash": "2a92e233f7b8492b2b53a4373e522e3e5dc989f46174b5dd66a0ab731a772a43",
+          "textHash": "175f7017f56eebd4ea9b9df1f9e07e5ca0c14d2a45dd8b204c4f088c500e2103"
+        },
+        {
+          "mode": "safe-candidate-directory",
+          "fallbackStatus": "INDEX_HIT_ITEMS",
+          "fallbackReason": "SCOPED_LEGACY_SOURCE",
+          "candidateDirectoryStatus": "SCOPED_DEGRADED",
+          "candidatePairCount": 4,
+          "ownerPairCount": 26,
+          "trustedCoveredScopeCount": 25,
+          "uncertainScopedScopeCount": 1,
+          "uncertainSourceCount": 1,
+          "unscopedUnknownCount": 0,
+          "legacyScanFallbackCount": 0,
+          "actualIndexReadCount": 8,
+          "sourceResolveAttemptCount": 0,
+          "itemCount": 3,
+          "itemIdentityOrderHash": "114611d924cb0341ea7aa4287bed66820a93dd3538700aa936b4f26c16f2a2cb",
+          "resolvedSourceOrderHash": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+          "scopeRevisionHash": "cae09c58aaffcc4630fb1df7164d98161128413aa6bda7fa5b4f4128d3e84b7d",
+          "textHash": "175f7017f56eebd4ea9b9df1f9e07e5ca0c14d2a45dd8b204c4f088c500e2103",
+          "directory": {
+            "status": "SCOPED_DEGRADED",
+            "reason": "SCOPED_LEGACY_SOURCE",
+            "coverage": "CONSERVATIVE_SUPERSET",
+            "candidateCounterpartIds": [
+              300,
+              9000,
+              9501,
+              9502
+            ],
+            "uncertainCounterpartIds": [
+              9502
+            ],
+            "trustedCoveredScopeCount": 25,
+            "uncertainScopedScopeCount": 1,
+            "uncertainSourceCount": 1,
+            "unscopedUnknownCount": 0
+          }
+        }
+      ],
+      "abComparisons": [
+        {
+          "label": "safe-vs-exhaustive",
+          "itemsAndOrderEqual": true,
+          "sourceKeyRevisionOrderEqual": true,
+          "formattedTextEqual": true,
+          "safeItemIdentityOrderHash": "114611d924cb0341ea7aa4287bed66820a93dd3538700aa936b4f26c16f2a2cb",
+          "referenceItemIdentityOrderHash": "114611d924cb0341ea7aa4287bed66820a93dd3538700aa936b4f26c16f2a2cb",
+          "safeResolvedSourceOrderHash": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+          "referenceResolvedSourceOrderHash": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+          "safeFallbackStatus": "INDEX_HIT_ITEMS",
+          "referenceFallbackStatus": "INDEX_HIT_ITEMS",
+          "safeCandidatePairCount": 4,
+          "referenceCandidatePairCount": 26,
+          "safeLegacyFallbackCount": 0,
+          "referenceReason": "REFERENCE_MODE"
+        }
+      ],
+      "notes": []
+    },
+    {
+      "id": "C07",
+      "label": "genuinely unscoped unknown uses exhaustive reference",
+      "status": "PASS",
+      "retrievals": [
+        {
+          "mode": "safe-candidate-directory",
+          "fallbackStatus": "INDEX_HIT_ITEMS",
+          "fallbackReason": "UNSCOPED_LEGACY_SOURCE",
+          "candidateDirectoryStatus": "UNAVAILABLE",
+          "candidatePairCount": 18,
+          "ownerPairCount": 18,
+          "trustedCoveredScopeCount": 18,
+          "uncertainScopedScopeCount": 0,
+          "uncertainSourceCount": 0,
+          "unscopedUnknownCount": 1,
+          "legacyScanFallbackCount": 1,
+          "actualIndexReadCount": 36,
+          "sourceResolveAttemptCount": 0,
+          "itemCount": 2,
+          "itemIdentityOrderHash": "ea17e3d6f8d8e2c9bd79b48a24b4140f02c12b4e7723e431e570b3885a720733",
+          "resolvedSourceOrderHash": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+          "scopeRevisionHash": "e3a74ad7b674b060cd664cbc819a631b9fba694e794ce21b1410611e87fa9fa3",
+          "textHash": "ef501d34ffcbccbda3454bf9e91d666a0ac71adca421723c5c695c86177f3bb6",
+          "directory": {
+            "status": "UNAVAILABLE",
+            "reason": "UNSCOPED_LEGACY_SOURCE",
+            "coverage": "INCOMPLETE",
+            "candidateCounterpartIds": [],
+            "uncertainCounterpartIds": [],
+            "trustedCoveredScopeCount": 18,
+            "uncertainScopedScopeCount": 0,
+            "uncertainSourceCount": 0,
+            "unscopedUnknownCount": 1
+          }
+        },
+        {
+          "mode": "exhaustive-reference",
+          "fallbackStatus": "INDEX_HIT_ITEMS",
+          "fallbackReason": "REFERENCE_MODE",
+          "candidateDirectoryStatus": "UNAVAILABLE",
+          "candidatePairCount": 18,
+          "ownerPairCount": 18,
+          "trustedCoveredScopeCount": 0,
+          "uncertainScopedScopeCount": 0,
+          "uncertainSourceCount": 0,
+          "unscopedUnknownCount": 0,
+          "legacyScanFallbackCount": 0,
+          "actualIndexReadCount": 36,
+          "sourceResolveAttemptCount": 0,
+          "itemCount": 2,
+          "itemIdentityOrderHash": "ea17e3d6f8d8e2c9bd79b48a24b4140f02c12b4e7723e431e570b3885a720733",
+          "resolvedSourceOrderHash": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+          "scopeRevisionHash": "e3a74ad7b674b060cd664cbc819a631b9fba694e794ce21b1410611e87fa9fa3",
+          "textHash": "ef501d34ffcbccbda3454bf9e91d666a0ac71adca421723c5c695c86177f3bb6"
+        }
+      ],
+      "abComparisons": [
+        {
+          "label": "unscoped-safe-vs-exhaustive",
+          "itemsAndOrderEqual": true,
+          "sourceKeyRevisionOrderEqual": true,
+          "formattedTextEqual": true,
+          "safeItemIdentityOrderHash": "ea17e3d6f8d8e2c9bd79b48a24b4140f02c12b4e7723e431e570b3885a720733",
+          "referenceItemIdentityOrderHash": "ea17e3d6f8d8e2c9bd79b48a24b4140f02c12b4e7723e431e570b3885a720733",
+          "safeResolvedSourceOrderHash": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+          "referenceResolvedSourceOrderHash": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+          "safeFallbackStatus": "INDEX_HIT_ITEMS",
+          "referenceFallbackStatus": "INDEX_HIT_ITEMS",
+          "safeCandidatePairCount": 18,
+          "referenceCandidatePairCount": 18,
+          "safeLegacyFallbackCount": 1,
+          "referenceReason": "REFERENCE_MODE"
+        }
+      ],
+      "notes": []
+    },
+    {
+      "id": "C08",
+      "label": "damaged Owner source snapshot fails closed",
+      "status": "PASS",
+      "retrievals": [
+        {
+          "mode": "safe-candidate-directory",
+          "fallbackStatus": "SOURCE_STALE",
+          "fallbackReason": "OWNER_SNAPSHOT_STALE",
+          "candidateDirectoryStatus": "STALE",
+          "candidatePairCount": 0,
+          "ownerPairCount": 0,
+          "trustedCoveredScopeCount": 0,
+          "uncertainScopedScopeCount": 0,
+          "uncertainSourceCount": 0,
+          "unscopedUnknownCount": 0,
+          "legacyScanFallbackCount": 0,
+          "actualIndexReadCount": 0,
+          "sourceResolveAttemptCount": 0,
+          "itemCount": 0,
+          "itemIdentityOrderHash": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+          "resolvedSourceOrderHash": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+          "scopeRevisionHash": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+          "textHash": "12ae32cb1ec02d01eda3581b127c1fee3b0dc53572ed6baf239721a03d82e126"
+        },
+        {
+          "mode": "exhaustive-reference",
+          "fallbackStatus": "SOURCE_STALE",
+          "fallbackReason": "OWNER_SNAPSHOT_STALE",
+          "candidateDirectoryStatus": "STALE",
+          "candidatePairCount": 0,
+          "ownerPairCount": 0,
+          "trustedCoveredScopeCount": 0,
+          "uncertainScopedScopeCount": 0,
+          "uncertainSourceCount": 0,
+          "unscopedUnknownCount": 0,
+          "legacyScanFallbackCount": 0,
+          "actualIndexReadCount": 0,
+          "sourceResolveAttemptCount": 0,
+          "itemCount": 0,
+          "itemIdentityOrderHash": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+          "resolvedSourceOrderHash": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+          "scopeRevisionHash": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+          "textHash": "12ae32cb1ec02d01eda3581b127c1fee3b0dc53572ed6baf239721a03d82e126"
+        }
+      ],
+      "abComparisons": [
+        {
+          "label": "malformed-owner-safe-vs-exhaustive",
+          "itemsAndOrderEqual": true,
+          "sourceKeyRevisionOrderEqual": true,
+          "formattedTextEqual": true,
+          "safeItemIdentityOrderHash": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+          "referenceItemIdentityOrderHash": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+          "safeResolvedSourceOrderHash": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+          "referenceResolvedSourceOrderHash": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+          "safeFallbackStatus": "SOURCE_STALE",
+          "referenceFallbackStatus": "SOURCE_STALE",
+          "safeCandidatePairCount": 0,
+          "referenceCandidatePairCount": 0,
+          "safeLegacyFallbackCount": 0,
+          "referenceReason": "OWNER_SNAPSHOT_STALE"
+        }
+      ],
+      "notes": []
+    },
+    {
+      "id": "C19",
+      "label": "valid non-array Owner JSON is hash-guarded but never recalled",
+      "status": "PASS",
+      "retrievals": [
+        {
+          "mode": "exhaustive-reference",
+          "fallbackStatus": "INDEX_HIT_ITEMS",
+          "fallbackReason": "REFERENCE_MODE",
+          "candidateDirectoryStatus": "UNAVAILABLE",
+          "candidatePairCount": 18,
+          "ownerPairCount": 18,
+          "trustedCoveredScopeCount": 0,
+          "uncertainScopedScopeCount": 0,
+          "uncertainSourceCount": 0,
+          "unscopedUnknownCount": 0,
+          "legacyScanFallbackCount": 0,
+          "actualIndexReadCount": 36,
+          "sourceResolveAttemptCount": 0,
+          "itemCount": 2,
+          "itemIdentityOrderHash": "c9e44f8d2f10ab6eaee37c1b09f6c080481dbdda0121c9273dd1c487bc444206",
+          "resolvedSourceOrderHash": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+          "scopeRevisionHash": "cc1e532b1d175acf97b48d7044b3fc2524c4de10c7f3125c6a21849fe0b9abbf",
+          "textHash": "853cabfa12a9623e7961e48a502b362e13b9d2eee4811a3cf7ad8f136834de6a"
+        },
+        {
+          "mode": "safe-candidate-directory",
+          "fallbackStatus": "INDEX_HIT_ITEMS",
+          "fallbackReason": "NONE",
+          "candidateDirectoryStatus": "COMPLETE",
+          "candidatePairCount": 2,
+          "ownerPairCount": 18,
+          "trustedCoveredScopeCount": 18,
+          "uncertainScopedScopeCount": 0,
+          "uncertainSourceCount": 0,
+          "unscopedUnknownCount": 0,
+          "legacyScanFallbackCount": 0,
+          "actualIndexReadCount": 4,
+          "sourceResolveAttemptCount": 0,
+          "itemCount": 2,
+          "itemIdentityOrderHash": "c9e44f8d2f10ab6eaee37c1b09f6c080481dbdda0121c9273dd1c487bc444206",
+          "resolvedSourceOrderHash": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+          "scopeRevisionHash": "b61a262a8d2e1c375303e8ba9f68b8745af59105d08a17371956e1d1be344955",
+          "textHash": "853cabfa12a9623e7961e48a502b362e13b9d2eee4811a3cf7ad8f136834de6a",
+          "directory": {
+            "status": "COMPLETE",
+            "reason": "NONE",
+            "coverage": "CONSERVATIVE_SUPERSET",
+            "candidateCounterpartIds": [
+              300,
+              9000
+            ],
+            "uncertainCounterpartIds": [],
+            "trustedCoveredScopeCount": 18,
+            "uncertainScopedScopeCount": 0,
+            "uncertainSourceCount": 0,
+            "unscopedUnknownCount": 0
+          }
+        },
+        {
+          "mode": "safe-candidate-directory",
+          "fallbackStatus": "SOURCE_STALE",
+          "fallbackReason": "DIRECTORY_BUILD_FAILED",
+          "candidateDirectoryStatus": "STALE",
+          "candidatePairCount": 18,
+          "ownerPairCount": 18,
+          "trustedCoveredScopeCount": 0,
+          "uncertainScopedScopeCount": 0,
+          "uncertainSourceCount": 0,
+          "unscopedUnknownCount": 0,
+          "legacyScanFallbackCount": 1,
+          "actualIndexReadCount": 36,
+          "sourceResolveAttemptCount": 0,
+          "itemCount": 0,
+          "itemIdentityOrderHash": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+          "resolvedSourceOrderHash": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+          "scopeRevisionHash": "cc1e532b1d175acf97b48d7044b3fc2524c4de10c7f3125c6a21849fe0b9abbf",
+          "textHash": "12ae32cb1ec02d01eda3581b127c1fee3b0dc53572ed6baf239721a03d82e126",
+          "directory": {
+            "status": "COMPLETE",
+            "reason": "NONE",
+            "coverage": "CONSERVATIVE_SUPERSET",
+            "candidateCounterpartIds": [
+              300,
+              9000
+            ],
+            "uncertainCounterpartIds": [],
+            "trustedCoveredScopeCount": 18,
+            "uncertainScopedScopeCount": 0,
+            "uncertainSourceCount": 0,
+            "unscopedUnknownCount": 0
+          }
+        }
+      ],
+      "abComparisons": [
+        {
+          "label": "safe-vs-exhaustive",
+          "itemsAndOrderEqual": true,
+          "sourceKeyRevisionOrderEqual": true,
+          "formattedTextEqual": true,
+          "safeItemIdentityOrderHash": "c9e44f8d2f10ab6eaee37c1b09f6c080481dbdda0121c9273dd1c487bc444206",
+          "referenceItemIdentityOrderHash": "c9e44f8d2f10ab6eaee37c1b09f6c080481dbdda0121c9273dd1c487bc444206",
+          "safeResolvedSourceOrderHash": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+          "referenceResolvedSourceOrderHash": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+          "safeFallbackStatus": "INDEX_HIT_ITEMS",
+          "referenceFallbackStatus": "INDEX_HIT_ITEMS",
+          "safeCandidatePairCount": 2,
+          "referenceCandidatePairCount": 18,
+          "safeLegacyFallbackCount": 0,
+          "referenceReason": "REFERENCE_MODE"
+        }
+      ],
+      "notes": [
+        {
+          "event": "valid-nonarray-json-coexists-with-pair-summary",
+          "parsedType": "object",
+          "canonicalDigestTracked": true,
+          "emittedAsMemory": false
+        },
+        {
+          "event": "same-stat-valid-json-object-owner-race",
+          "result": "SOURCE_STALE",
+          "returnedText": false
+        }
+      ]
+    },
+    {
+      "id": "C20",
+      "label": "same-stat nonstandard Player Recent1 edits invalidate the frozen Engine context",
+      "status": "PASS",
+      "retrievals": [],
+      "abComparisons": [],
+      "notes": [
+        {
+          "event": "actual-engine-before-send-nonstandard-player-source-guard",
+          "baselineIncludedInDirectStableText": true,
+          "filenameClass": "nonstandard-json",
+          "sourcePairIdsIncludePlayer": true,
+          "initialValidation": {
+            "valid": true,
+            "reason": null
+          },
+          "sameStatTrials": [
+            {
+              "mutation": "same-stat-content",
+              "valid": false,
+              "reason": "SOURCE_CONTENT_CHANGED",
+              "sameSyntheticSizeAndMtime": true,
+              "actualCtimeChanged": true,
+              "ownerDigestWouldDetect": true,
+              "initialContextValid": true
+            },
+            {
+              "mutation": "same-stat-identity",
+              "valid": false,
+              "reason": "SOURCE_CONTENT_CHANGED",
+              "sameSyntheticSizeAndMtime": true,
+              "actualCtimeChanged": true,
+              "ownerDigestWouldDetect": true,
+              "initialContextValid": true
+            },
+            {
+              "mutation": "same-stat-campaign",
+              "valid": false,
+              "reason": "SOURCE_CONTENT_CHANGED",
+              "sameSyntheticSizeAndMtime": true,
+              "actualCtimeChanged": true,
+              "ownerDigestWouldDetect": true,
+              "initialContextValid": true
+            }
+          ],
+          "physicalFilesystemMutation": {
+            "byteLengthPreserved": true,
+            "mtimePreserved": true,
+            "ctimeChanged": true
+          },
+          "beforeSendPairLedgerCalls": [
+            {
+              "phase": "initial",
+              "readCount": 0,
+              "resolveCount": 0
+            },
+            {
+              "phase": "same-stat-content-initial",
+              "readCount": 0,
+              "resolveCount": 0
+            },
+            {
+              "phase": "same-stat-content",
+              "readCount": 0,
+              "resolveCount": 0
+            },
+            {
+              "phase": "same-stat-identity-initial",
+              "readCount": 0,
+              "resolveCount": 0
+            },
+            {
+              "phase": "same-stat-identity",
+              "readCount": 0,
+              "resolveCount": 0
+            },
+            {
+              "phase": "same-stat-campaign-initial",
+              "readCount": 0,
+              "resolveCount": 0
+            },
+            {
+              "phase": "same-stat-campaign",
+              "readCount": 0,
+              "resolveCount": 0
+            },
+            {
+              "phase": "physical-ctime-change",
+              "readCount": 0,
+              "resolveCount": 0
+            },
+            {
+              "phase": "restored-context",
+              "readCount": 0,
+              "resolveCount": 0
+            },
+            {
+              "phase": "post-revision-race-initial",
+              "readCount": 0,
+              "resolveCount": 0
+            },
+            {
+              "phase": "post-revision-race",
+              "readCount": 0,
+              "resolveCount": 0
+            },
+            {
+              "phase": "post-revision-race-recovered",
+              "readCount": 0,
+              "resolveCount": 0
+            }
+          ],
+          "actualFilesystemValidation": {
+            "valid": false,
+            "reason": "SOURCE_REVISION_CHANGED"
+          },
+          "refreshedSnapshotValidation": {
+            "valid": true,
+            "reason": null
+          },
+          "postRevisionSameStatRace": {
+            "mutationApplied": true,
+            "byteLengthPreserved": true,
+            "mtimePreserved": true,
+            "ctimeChanged": true,
+            "valid": false,
+            "reason": "SOURCE_REVISION_CHANGED",
+            "recoveredSnapshotValid": true,
+            "recoveredReason": null
+          }
+        }
+      ]
+    },
+    {
+      "id": "C21",
+      "label": "same-stat standard Player Pair sources remain before-send guarded",
+      "status": "PASS",
+      "retrievals": [],
+      "abComparisons": [],
+      "notes": [
+        {
+          "event": "standard-player-pair-source-before-send-race",
+          "sourcePairIdsIncludePlayer": true,
+          "pairLedgerSourcePresent": true,
+          "mutationApplied": true,
+          "byteLengthPreserved": true,
+          "mtimePreserved": true,
+          "ctimeChanged": true,
+          "initialValidation": {
+            "valid": true,
+            "reason": null
+          },
+          "raceValidation": {
+            "valid": false,
+            "reason": "SOURCE_REVISION_CHANGED"
+          },
+          "refreshedValidation": {
+            "valid": true,
+            "reason": null
+          },
+          "beforeSendPairLedgerCalls": [
+            {
+              "phase": "initial",
+              "readCount": 0,
+              "resolveCount": 0
+            },
+            {
+              "phase": "post-revision-race",
+              "readCount": 0,
+              "resolveCount": 0
+            },
+            {
+              "phase": "refreshed",
+              "readCount": 0,
+              "resolveCount": 0
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "C09",
+      "label": "merged projections preserve Pair-specific source identities",
+      "status": "PASS",
+      "retrievals": [
+        {
+          "mode": "exhaustive-reference",
+          "fallbackStatus": "INDEX_HIT_ITEMS",
+          "fallbackReason": "REFERENCE_MODE",
+          "candidateDirectoryStatus": "UNAVAILABLE",
+          "candidatePairCount": 26,
+          "ownerPairCount": 26,
+          "trustedCoveredScopeCount": 0,
+          "uncertainScopedScopeCount": 0,
+          "uncertainSourceCount": 0,
+          "unscopedUnknownCount": 0,
+          "legacyScanFallbackCount": 0,
+          "actualIndexReadCount": 52,
+          "sourceResolveAttemptCount": 0,
+          "itemCount": 4,
+          "itemIdentityOrderHash": "29c1379d339a6cefc032c3672372242ada67b2a947e5d22a177b3257c8c92ddc",
+          "resolvedSourceOrderHash": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+          "scopeRevisionHash": "9961de779d8b30e6e1874b59654c12561869ea33bb1d8a8e77afa3c9e7ef0a02",
+          "textHash": "c21fa6ce067f8bad0b4157d0cd7a8fe525e5dfb5d3f7f0ec21d6827c7f8915cf"
+        },
+        {
+          "mode": "safe-candidate-directory",
+          "fallbackStatus": "INDEX_HIT_ITEMS",
+          "fallbackReason": "NONE",
+          "candidateDirectoryStatus": "COMPLETE",
+          "candidatePairCount": 4,
+          "ownerPairCount": 26,
+          "trustedCoveredScopeCount": 26,
+          "uncertainScopedScopeCount": 0,
+          "uncertainSourceCount": 0,
+          "unscopedUnknownCount": 0,
+          "legacyScanFallbackCount": 0,
+          "actualIndexReadCount": 8,
+          "sourceResolveAttemptCount": 0,
+          "itemCount": 4,
+          "itemIdentityOrderHash": "29c1379d339a6cefc032c3672372242ada67b2a947e5d22a177b3257c8c92ddc",
+          "resolvedSourceOrderHash": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+          "scopeRevisionHash": "605f0410b6b08eb8a4ba2ae9279e4c794ae05d76fc0664780552b37000ac1ac1",
+          "textHash": "c21fa6ce067f8bad0b4157d0cd7a8fe525e5dfb5d3f7f0ec21d6827c7f8915cf",
+          "directory": {
+            "status": "COMPLETE",
+            "reason": "NONE",
+            "coverage": "CONSERVATIVE_SUPERSET",
+            "candidateCounterpartIds": [
+              300,
+              9000,
+              9601,
+              9602
+            ],
+            "uncertainCounterpartIds": [],
+            "trustedCoveredScopeCount": 26,
+            "uncertainScopedScopeCount": 0,
+            "uncertainSourceCount": 0,
+            "unscopedUnknownCount": 0
+          }
+        }
+      ],
+      "abComparisons": [
+        {
+          "label": "safe-vs-exhaustive",
+          "itemsAndOrderEqual": true,
+          "sourceKeyRevisionOrderEqual": true,
+          "formattedTextEqual": true,
+          "safeItemIdentityOrderHash": "29c1379d339a6cefc032c3672372242ada67b2a947e5d22a177b3257c8c92ddc",
+          "referenceItemIdentityOrderHash": "29c1379d339a6cefc032c3672372242ada67b2a947e5d22a177b3257c8c92ddc",
+          "safeResolvedSourceOrderHash": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+          "referenceResolvedSourceOrderHash": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+          "safeFallbackStatus": "INDEX_HIT_ITEMS",
+          "referenceFallbackStatus": "INDEX_HIT_ITEMS",
+          "safeCandidatePairCount": 4,
+          "referenceCandidatePairCount": 26,
+          "safeLegacyFallbackCount": 0,
+          "referenceReason": "REFERENCE_MODE"
+        }
+      ],
+      "notes": []
+    },
+    {
+      "id": "C10",
+      "label": "confirmed ambiguous Legacy matter matches exhaustive retrieval",
+      "status": "PASS",
+      "retrievals": [
+        {
+          "mode": "exhaustive-reference",
+          "fallbackStatus": "INDEX_HIT_ITEMS",
+          "fallbackReason": "REFERENCE_MODE",
+          "candidateDirectoryStatus": "UNAVAILABLE",
+          "candidatePairCount": 19,
+          "ownerPairCount": 19,
+          "trustedCoveredScopeCount": 0,
+          "uncertainScopedScopeCount": 0,
+          "uncertainSourceCount": 0,
+          "unscopedUnknownCount": 0,
+          "legacyScanFallbackCount": 0,
+          "actualIndexReadCount": 38,
+          "sourceResolveAttemptCount": 0,
+          "itemCount": 3,
+          "itemIdentityOrderHash": "95944deed2f61b29e38506283fe2f3c6e97e927614f5dcc1a7937554438e5100",
+          "resolvedSourceOrderHash": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+          "scopeRevisionHash": "e229d6895a121a1fe569b09d4d559201e2499ecc97a5a492949cb90ad960c8f5",
+          "textHash": "e7f37c63f12c3668119743e4f08bbb24e09d8e6a39d80d3ffe12bf6ab5d61964"
+        },
+        {
+          "mode": "safe-candidate-directory",
+          "fallbackStatus": "INDEX_HIT_ITEMS",
+          "fallbackReason": "SCOPED_LEGACY_SOURCE",
+          "candidateDirectoryStatus": "SCOPED_DEGRADED",
+          "candidatePairCount": 3,
+          "ownerPairCount": 19,
+          "trustedCoveredScopeCount": 18,
+          "uncertainScopedScopeCount": 1,
+          "uncertainSourceCount": 1,
+          "unscopedUnknownCount": 0,
+          "legacyScanFallbackCount": 0,
+          "actualIndexReadCount": 6,
+          "sourceResolveAttemptCount": 0,
+          "itemCount": 3,
+          "itemIdentityOrderHash": "95944deed2f61b29e38506283fe2f3c6e97e927614f5dcc1a7937554438e5100",
+          "resolvedSourceOrderHash": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+          "scopeRevisionHash": "067b15308d5406c3899791100dde995a9b3730741c502f02e8a24ec50f34ce9a",
+          "textHash": "e7f37c63f12c3668119743e4f08bbb24e09d8e6a39d80d3ffe12bf6ab5d61964",
+          "directory": {
+            "status": "SCOPED_DEGRADED",
+            "reason": "SCOPED_LEGACY_SOURCE",
+            "coverage": "CONSERVATIVE_SUPERSET",
+            "candidateCounterpartIds": [
+              300,
+              9000,
+              9701
+            ],
+            "uncertainCounterpartIds": [
+              9701
+            ],
+            "trustedCoveredScopeCount": 18,
+            "uncertainScopedScopeCount": 1,
+            "uncertainSourceCount": 1,
+            "unscopedUnknownCount": 0
+          }
+        }
+      ],
+      "abComparisons": [
+        {
+          "label": "safe-vs-exhaustive",
+          "itemsAndOrderEqual": true,
+          "sourceKeyRevisionOrderEqual": true,
+          "formattedTextEqual": true,
+          "safeItemIdentityOrderHash": "95944deed2f61b29e38506283fe2f3c6e97e927614f5dcc1a7937554438e5100",
+          "referenceItemIdentityOrderHash": "95944deed2f61b29e38506283fe2f3c6e97e927614f5dcc1a7937554438e5100",
+          "safeResolvedSourceOrderHash": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+          "referenceResolvedSourceOrderHash": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+          "safeFallbackStatus": "INDEX_HIT_ITEMS",
+          "referenceFallbackStatus": "INDEX_HIT_ITEMS",
+          "safeCandidatePairCount": 3,
+          "referenceCandidatePairCount": 19,
+          "safeLegacyFallbackCount": 0,
+          "referenceReason": "REFERENCE_MODE"
+        }
+      ],
+      "notes": []
+    },
+    {
+      "id": "C11",
+      "label": "fullwidth unique aliases remain covered",
+      "status": "PASS",
+      "retrievals": [
+        {
+          "mode": "exhaustive-reference",
+          "fallbackStatus": "INDEX_HIT_ITEMS",
+          "fallbackReason": "REFERENCE_MODE",
+          "candidateDirectoryStatus": "UNAVAILABLE",
+          "candidatePairCount": 23,
+          "ownerPairCount": 23,
+          "trustedCoveredScopeCount": 0,
+          "uncertainScopedScopeCount": 0,
+          "uncertainSourceCount": 0,
+          "unscopedUnknownCount": 0,
+          "legacyScanFallbackCount": 0,
+          "actualIndexReadCount": 46,
+          "sourceResolveAttemptCount": 0,
+          "itemCount": 3,
+          "itemIdentityOrderHash": "04c7b74e22b88880b85d417b74d618f9d8973b28b947fbeab1c6ee6186b84a36",
+          "resolvedSourceOrderHash": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+          "scopeRevisionHash": "da7e7267f225313437a532f9afa4955d1bdb465d64939758c80b11538665d9a4",
+          "textHash": "2d69109923b080880dc3c8d1b6f4198248fd9dafcffd5410f78a727b119a11aa"
+        },
+        {
+          "mode": "safe-candidate-directory",
+          "fallbackStatus": "INDEX_HIT_ITEMS",
+          "fallbackReason": "NONE",
+          "candidateDirectoryStatus": "COMPLETE",
+          "candidatePairCount": 3,
+          "ownerPairCount": 23,
+          "trustedCoveredScopeCount": 23,
+          "uncertainScopedScopeCount": 0,
+          "uncertainSourceCount": 0,
+          "unscopedUnknownCount": 0,
+          "legacyScanFallbackCount": 0,
+          "actualIndexReadCount": 6,
+          "sourceResolveAttemptCount": 0,
+          "itemCount": 3,
+          "itemIdentityOrderHash": "04c7b74e22b88880b85d417b74d618f9d8973b28b947fbeab1c6ee6186b84a36",
+          "resolvedSourceOrderHash": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+          "scopeRevisionHash": "7c0f680ed7c41aa93ee537634fd75b4db51405beb25602240579ceb40e26413d",
+          "textHash": "2d69109923b080880dc3c8d1b6f4198248fd9dafcffd5410f78a727b119a11aa",
+          "directory": {
+            "status": "COMPLETE",
+            "reason": "NONE",
+            "coverage": "CONSERVATIVE_SUPERSET",
+            "candidateCounterpartIds": [
+              300,
+              9000,
+              9801
+            ],
+            "uncertainCounterpartIds": [],
+            "trustedCoveredScopeCount": 23,
+            "uncertainScopedScopeCount": 0,
+            "uncertainSourceCount": 0,
+            "unscopedUnknownCount": 0
+          }
+        }
+      ],
+      "abComparisons": [
+        {
+          "label": "safe-vs-exhaustive",
+          "itemsAndOrderEqual": true,
+          "sourceKeyRevisionOrderEqual": true,
+          "formattedTextEqual": true,
+          "safeItemIdentityOrderHash": "04c7b74e22b88880b85d417b74d618f9d8973b28b947fbeab1c6ee6186b84a36",
+          "referenceItemIdentityOrderHash": "04c7b74e22b88880b85d417b74d618f9d8973b28b947fbeab1c6ee6186b84a36",
+          "safeResolvedSourceOrderHash": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+          "referenceResolvedSourceOrderHash": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+          "safeFallbackStatus": "INDEX_HIT_ITEMS",
+          "referenceFallbackStatus": "INDEX_HIT_ITEMS",
+          "safeCandidatePairCount": 3,
+          "referenceCandidatePairCount": 23,
+          "safeLegacyFallbackCount": 0,
+          "referenceReason": "REFERENCE_MODE"
+        }
+      ],
+      "notes": []
+    },
+    {
+      "id": "C12",
+      "label": "identity, aliases, scene date, campaign and Owner stay isolated",
+      "status": "PASS",
+      "retrievals": [
+        {
+          "mode": "safe-candidate-directory",
+          "fallbackStatus": "IDENTITY_AMBIGUOUS",
+          "fallbackReason": "IDENTITY_AMBIGUOUS",
+          "candidateDirectoryStatus": null,
+          "candidatePairCount": 0,
+          "ownerPairCount": 0,
+          "trustedCoveredScopeCount": 0,
+          "uncertainScopedScopeCount": 0,
+          "uncertainSourceCount": 0,
+          "unscopedUnknownCount": 0,
+          "legacyScanFallbackCount": 0,
+          "actualIndexReadCount": 0,
+          "sourceResolveAttemptCount": 0,
+          "itemCount": 0,
+          "itemIdentityOrderHash": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+          "resolvedSourceOrderHash": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+          "scopeRevisionHash": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+          "textHash": "12ae32cb1ec02d01eda3581b127c1fee3b0dc53572ed6baf239721a03d82e126"
+        },
+        {
+          "mode": "exhaustive-reference",
+          "fallbackStatus": "INDEX_HIT_ITEMS",
+          "fallbackReason": "REFERENCE_MODE",
+          "candidateDirectoryStatus": "UNAVAILABLE",
+          "candidatePairCount": 25,
+          "ownerPairCount": 25,
+          "trustedCoveredScopeCount": 0,
+          "uncertainScopedScopeCount": 0,
+          "uncertainSourceCount": 0,
+          "unscopedUnknownCount": 0,
+          "legacyScanFallbackCount": 0,
+          "actualIndexReadCount": 50,
+          "sourceResolveAttemptCount": 0,
+          "itemCount": 3,
+          "itemIdentityOrderHash": "15d9baaab96815c52c6e54b1715e0d6168696b02e7fe7c4d9c2669f30f27dcf3",
+          "resolvedSourceOrderHash": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+          "scopeRevisionHash": "5182e598d8d761c5e8447a154629d381c5737c89933f66ca7c39ad8fa214897b",
+          "textHash": "9f389120b18dc4d0e63f00e68d1284761aea289cd776429116c3a26e85982644"
+        },
+        {
+          "mode": "safe-candidate-directory",
+          "fallbackStatus": "INDEX_HIT_ITEMS",
+          "fallbackReason": "NONE",
+          "candidateDirectoryStatus": "COMPLETE",
+          "candidatePairCount": 4,
+          "ownerPairCount": 25,
+          "trustedCoveredScopeCount": 25,
+          "uncertainScopedScopeCount": 0,
+          "uncertainSourceCount": 0,
+          "unscopedUnknownCount": 0,
+          "legacyScanFallbackCount": 0,
+          "actualIndexReadCount": 8,
+          "sourceResolveAttemptCount": 0,
+          "itemCount": 3,
+          "itemIdentityOrderHash": "15d9baaab96815c52c6e54b1715e0d6168696b02e7fe7c4d9c2669f30f27dcf3",
+          "resolvedSourceOrderHash": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+          "scopeRevisionHash": "ac8d32a037d5535a2b26d8b699da70bc76143b04807b8c9925bb8e94f809581a",
+          "textHash": "9f389120b18dc4d0e63f00e68d1284761aea289cd776429116c3a26e85982644",
+          "directory": {
+            "status": "COMPLETE",
+            "reason": "NONE",
+            "coverage": "CONSERVATIVE_SUPERSET",
+            "candidateCounterpartIds": [
+              300,
+              9000,
+              9901,
+              9904
+            ],
+            "uncertainCounterpartIds": [],
+            "trustedCoveredScopeCount": 25,
+            "uncertainScopedScopeCount": 0,
+            "uncertainSourceCount": 0,
+            "unscopedUnknownCount": 0
+          }
+        },
+        {
+          "mode": "exhaustive-reference",
+          "fallbackStatus": "INDEX_HIT_ITEMS",
+          "fallbackReason": "REFERENCE_MODE",
+          "candidateDirectoryStatus": "UNAVAILABLE",
+          "candidatePairCount": 25,
+          "ownerPairCount": 25,
+          "trustedCoveredScopeCount": 0,
+          "uncertainScopedScopeCount": 0,
+          "uncertainSourceCount": 0,
+          "unscopedUnknownCount": 0,
+          "legacyScanFallbackCount": 0,
+          "actualIndexReadCount": 50,
+          "sourceResolveAttemptCount": 0,
+          "itemCount": 4,
+          "itemIdentityOrderHash": "9b1691cdab868edd61960b33bb63beed1da62feaf5644b019f8bbf30d1c3504d",
+          "resolvedSourceOrderHash": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+          "scopeRevisionHash": "5182e598d8d761c5e8447a154629d381c5737c89933f66ca7c39ad8fa214897b",
+          "textHash": "7302db7af755027d747a391e26ff42bb9754cb680ee4abe8aa9445857a7b5912"
+        },
+        {
+          "mode": "safe-candidate-directory",
+          "fallbackStatus": "INDEX_HIT_ITEMS",
+          "fallbackReason": "NONE",
+          "candidateDirectoryStatus": "COMPLETE",
+          "candidatePairCount": 5,
+          "ownerPairCount": 25,
+          "trustedCoveredScopeCount": 25,
+          "uncertainScopedScopeCount": 0,
+          "uncertainSourceCount": 0,
+          "unscopedUnknownCount": 0,
+          "legacyScanFallbackCount": 0,
+          "actualIndexReadCount": 10,
+          "sourceResolveAttemptCount": 0,
+          "itemCount": 4,
+          "itemIdentityOrderHash": "9b1691cdab868edd61960b33bb63beed1da62feaf5644b019f8bbf30d1c3504d",
+          "resolvedSourceOrderHash": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+          "scopeRevisionHash": "ddec222b1aa44f3697f890ec7d1fced267edd65a2d55f528acf531c480e5065f",
+          "textHash": "7302db7af755027d747a391e26ff42bb9754cb680ee4abe8aa9445857a7b5912",
+          "directory": {
+            "status": "COMPLETE",
+            "reason": "NONE",
+            "coverage": "CONSERVATIVE_SUPERSET",
+            "candidateCounterpartIds": [
+              300,
+              9000,
+              9901,
+              9902,
+              9904
+            ],
+            "uncertainCounterpartIds": [],
+            "trustedCoveredScopeCount": 25,
+            "uncertainScopedScopeCount": 0,
+            "uncertainSourceCount": 0,
+            "unscopedUnknownCount": 0
+          }
+        },
+        {
+          "mode": "safe-candidate-directory",
+          "fallbackStatus": "INDEX_HIT_ITEMS",
+          "fallbackReason": "NONE",
+          "candidateDirectoryStatus": "COMPLETE",
+          "candidatePairCount": 5,
+          "ownerPairCount": 25,
+          "trustedCoveredScopeCount": 25,
+          "uncertainScopedScopeCount": 0,
+          "uncertainSourceCount": 0,
+          "unscopedUnknownCount": 0,
+          "legacyScanFallbackCount": 0,
+          "actualIndexReadCount": 10,
+          "sourceResolveAttemptCount": 0,
+          "itemCount": 4,
+          "itemIdentityOrderHash": "9b1691cdab868edd61960b33bb63beed1da62feaf5644b019f8bbf30d1c3504d",
+          "resolvedSourceOrderHash": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+          "scopeRevisionHash": "ddec222b1aa44f3697f890ec7d1fced267edd65a2d55f528acf531c480e5065f",
+          "textHash": "7302db7af755027d747a391e26ff42bb9754cb680ee4abe8aa9445857a7b5912"
+        },
+        {
+          "mode": "safe-candidate-directory",
+          "fallbackStatus": "INDEX_HIT_ITEMS",
+          "fallbackReason": "NONE",
+          "candidateDirectoryStatus": "COMPLETE",
+          "candidatePairCount": 5,
+          "ownerPairCount": 25,
+          "trustedCoveredScopeCount": 25,
+          "uncertainScopedScopeCount": 0,
+          "uncertainSourceCount": 0,
+          "unscopedUnknownCount": 0,
+          "legacyScanFallbackCount": 0,
+          "actualIndexReadCount": 10,
+          "sourceResolveAttemptCount": 0,
+          "itemCount": 4,
+          "itemIdentityOrderHash": "9b1691cdab868edd61960b33bb63beed1da62feaf5644b019f8bbf30d1c3504d",
+          "resolvedSourceOrderHash": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+          "scopeRevisionHash": "ddec222b1aa44f3697f890ec7d1fced267edd65a2d55f528acf531c480e5065f",
+          "textHash": "7302db7af755027d747a391e26ff42bb9754cb680ee4abe8aa9445857a7b5912"
+        },
+        {
+          "mode": "exhaustive-reference",
+          "fallbackStatus": "INDEX_HIT_ITEMS",
+          "fallbackReason": "REFERENCE_MODE",
+          "candidateDirectoryStatus": "UNAVAILABLE",
+          "candidatePairCount": 25,
+          "ownerPairCount": 25,
+          "trustedCoveredScopeCount": 0,
+          "uncertainScopedScopeCount": 0,
+          "uncertainSourceCount": 0,
+          "unscopedUnknownCount": 0,
+          "legacyScanFallbackCount": 0,
+          "actualIndexReadCount": 50,
+          "sourceResolveAttemptCount": 0,
+          "itemCount": 5,
+          "itemIdentityOrderHash": "98ead1d7e4c67aa6dab5e818e74414df2e6c98dfed05ccc87d4c28ea6492bc14",
+          "resolvedSourceOrderHash": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+          "scopeRevisionHash": "5182e598d8d761c5e8447a154629d381c5737c89933f66ca7c39ad8fa214897b",
+          "textHash": "9bdb7beff7e018179b0c0f8fb49ffeb25bb2fba23bbc98c6b97455df4fa9a0ed"
+        },
+        {
+          "mode": "safe-candidate-directory",
+          "fallbackStatus": "INDEX_HIT_ITEMS",
+          "fallbackReason": "NONE",
+          "candidateDirectoryStatus": "COMPLETE",
+          "candidatePairCount": 5,
+          "ownerPairCount": 25,
+          "trustedCoveredScopeCount": 25,
+          "uncertainScopedScopeCount": 0,
+          "uncertainSourceCount": 0,
+          "unscopedUnknownCount": 0,
+          "legacyScanFallbackCount": 0,
+          "actualIndexReadCount": 10,
+          "sourceResolveAttemptCount": 0,
+          "itemCount": 5,
+          "itemIdentityOrderHash": "98ead1d7e4c67aa6dab5e818e74414df2e6c98dfed05ccc87d4c28ea6492bc14",
+          "resolvedSourceOrderHash": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+          "scopeRevisionHash": "ddec222b1aa44f3697f890ec7d1fced267edd65a2d55f528acf531c480e5065f",
+          "textHash": "9bdb7beff7e018179b0c0f8fb49ffeb25bb2fba23bbc98c6b97455df4fa9a0ed",
+          "directory": {
+            "status": "COMPLETE",
+            "reason": "NONE",
+            "coverage": "CONSERVATIVE_SUPERSET",
+            "candidateCounterpartIds": [
+              300,
+              9000,
+              9901,
+              9902,
+              9904
+            ],
+            "uncertainCounterpartIds": [],
+            "trustedCoveredScopeCount": 25,
+            "uncertainScopedScopeCount": 0,
+            "uncertainSourceCount": 0,
+            "unscopedUnknownCount": 0
+          }
+        }
+      ],
+      "abComparisons": [
+        {
+          "label": "safe-vs-exhaustive",
+          "itemsAndOrderEqual": true,
+          "sourceKeyRevisionOrderEqual": true,
+          "formattedTextEqual": true,
+          "safeItemIdentityOrderHash": "15d9baaab96815c52c6e54b1715e0d6168696b02e7fe7c4d9c2669f30f27dcf3",
+          "referenceItemIdentityOrderHash": "15d9baaab96815c52c6e54b1715e0d6168696b02e7fe7c4d9c2669f30f27dcf3",
+          "safeResolvedSourceOrderHash": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+          "referenceResolvedSourceOrderHash": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+          "safeFallbackStatus": "INDEX_HIT_ITEMS",
+          "referenceFallbackStatus": "INDEX_HIT_ITEMS",
+          "safeCandidatePairCount": 4,
+          "referenceCandidatePairCount": 25,
+          "safeLegacyFallbackCount": 0,
+          "referenceReason": "REFERENCE_MODE"
+        },
+        {
+          "label": "safe-vs-exhaustive",
+          "itemsAndOrderEqual": true,
+          "sourceKeyRevisionOrderEqual": true,
+          "formattedTextEqual": true,
+          "safeItemIdentityOrderHash": "9b1691cdab868edd61960b33bb63beed1da62feaf5644b019f8bbf30d1c3504d",
+          "referenceItemIdentityOrderHash": "9b1691cdab868edd61960b33bb63beed1da62feaf5644b019f8bbf30d1c3504d",
+          "safeResolvedSourceOrderHash": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+          "referenceResolvedSourceOrderHash": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+          "safeFallbackStatus": "INDEX_HIT_ITEMS",
+          "referenceFallbackStatus": "INDEX_HIT_ITEMS",
+          "safeCandidatePairCount": 5,
+          "referenceCandidatePairCount": 25,
+          "safeLegacyFallbackCount": 0,
+          "referenceReason": "REFERENCE_MODE"
+        },
+        {
+          "label": "safe-vs-exhaustive",
+          "itemsAndOrderEqual": true,
+          "sourceKeyRevisionOrderEqual": true,
+          "formattedTextEqual": true,
+          "safeItemIdentityOrderHash": "98ead1d7e4c67aa6dab5e818e74414df2e6c98dfed05ccc87d4c28ea6492bc14",
+          "referenceItemIdentityOrderHash": "98ead1d7e4c67aa6dab5e818e74414df2e6c98dfed05ccc87d4c28ea6492bc14",
+          "safeResolvedSourceOrderHash": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+          "referenceResolvedSourceOrderHash": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+          "safeFallbackStatus": "INDEX_HIT_ITEMS",
+          "referenceFallbackStatus": "INDEX_HIT_ITEMS",
+          "safeCandidatePairCount": 5,
+          "referenceCandidatePairCount": 25,
+          "safeLegacyFallbackCount": 0,
+          "referenceReason": "REFERENCE_MODE"
+        }
+      ],
+      "notes": []
+    },
+    {
+      "id": "C13",
+      "label": "same-stat source races, including nonstandard legacy JSON, reject the round",
+      "status": "PASS",
+      "retrievals": [
+        {
+          "mode": "safe-candidate-directory",
+          "fallbackStatus": "SOURCE_STALE",
+          "fallbackReason": "DIRECTORY_BUILD_FAILED",
+          "candidateDirectoryStatus": "STALE",
+          "candidatePairCount": 21,
+          "ownerPairCount": 21,
+          "trustedCoveredScopeCount": 0,
+          "uncertainScopedScopeCount": 0,
+          "uncertainSourceCount": 0,
+          "unscopedUnknownCount": 0,
+          "legacyScanFallbackCount": 1,
+          "actualIndexReadCount": 2,
+          "sourceResolveAttemptCount": 0,
+          "itemCount": 0,
+          "itemIdentityOrderHash": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+          "resolvedSourceOrderHash": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+          "scopeRevisionHash": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+          "textHash": "12ae32cb1ec02d01eda3581b127c1fee3b0dc53572ed6baf239721a03d82e126",
+          "directory": {
+            "status": "SCOPED_DEGRADED",
+            "reason": "SCOPED_LEGACY_SOURCE",
+            "coverage": "CONSERVATIVE_SUPERSET",
+            "candidateCounterpartIds": [
+              300,
+              9000,
+              9911
+            ],
+            "uncertainCounterpartIds": [
+              9911
+            ],
+            "trustedCoveredScopeCount": 20,
+            "uncertainScopedScopeCount": 1,
+            "uncertainSourceCount": 1,
+            "unscopedUnknownCount": 0
+          }
+        },
+        {
+          "mode": "safe-candidate-directory",
+          "fallbackStatus": "SOURCE_STALE",
+          "fallbackReason": "SCOPED_LEGACY_SOURCE",
+          "candidateDirectoryStatus": "STALE",
+          "candidatePairCount": 3,
+          "ownerPairCount": 21,
+          "trustedCoveredScopeCount": 20,
+          "uncertainScopedScopeCount": 1,
+          "uncertainSourceCount": 1,
+          "unscopedUnknownCount": 0,
+          "legacyScanFallbackCount": 0,
+          "actualIndexReadCount": 6,
+          "sourceResolveAttemptCount": 0,
+          "itemCount": 0,
+          "itemIdentityOrderHash": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+          "resolvedSourceOrderHash": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+          "scopeRevisionHash": "839ceeb02b137c70da764dc40f8861d1d45fb9c7096ad44076905f5126b9c0eb",
+          "textHash": "12ae32cb1ec02d01eda3581b127c1fee3b0dc53572ed6baf239721a03d82e126"
+        },
+        {
+          "mode": "exhaustive-reference",
+          "fallbackStatus": "INDEX_HIT_ITEMS",
+          "fallbackReason": "REFERENCE_MODE",
+          "candidateDirectoryStatus": "UNAVAILABLE",
+          "candidatePairCount": 21,
+          "ownerPairCount": 21,
+          "trustedCoveredScopeCount": 0,
+          "uncertainScopedScopeCount": 0,
+          "uncertainSourceCount": 0,
+          "unscopedUnknownCount": 0,
+          "legacyScanFallbackCount": 0,
+          "actualIndexReadCount": 42,
+          "sourceResolveAttemptCount": 0,
+          "itemCount": 2,
+          "itemIdentityOrderHash": "1b8eeadbc0579d3733e49307db90860f2a623502f03180caf894bb91cd164cec",
+          "resolvedSourceOrderHash": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+          "scopeRevisionHash": "db08a3fc266ac4837d281f2ff56556e1d87745b933d7a8b345513010269f08d5",
+          "textHash": "6d30ec219815bc0f91859f5ad8bde98ecf1f66ac9d3ef9da5562d85772f1c1f4"
+        },
+        {
+          "mode": "safe-candidate-directory",
+          "fallbackStatus": "INDEX_HIT_ITEMS",
+          "fallbackReason": "SCOPED_LEGACY_SOURCE",
+          "candidateDirectoryStatus": "SCOPED_DEGRADED",
+          "candidatePairCount": 3,
+          "ownerPairCount": 21,
+          "trustedCoveredScopeCount": 20,
+          "uncertainScopedScopeCount": 1,
+          "uncertainSourceCount": 1,
+          "unscopedUnknownCount": 0,
+          "legacyScanFallbackCount": 0,
+          "actualIndexReadCount": 6,
+          "sourceResolveAttemptCount": 0,
+          "itemCount": 2,
+          "itemIdentityOrderHash": "1b8eeadbc0579d3733e49307db90860f2a623502f03180caf894bb91cd164cec",
+          "resolvedSourceOrderHash": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+          "scopeRevisionHash": "839ceeb02b137c70da764dc40f8861d1d45fb9c7096ad44076905f5126b9c0eb",
+          "textHash": "6d30ec219815bc0f91859f5ad8bde98ecf1f66ac9d3ef9da5562d85772f1c1f4",
+          "directory": {
+            "status": "SCOPED_DEGRADED",
+            "reason": "SCOPED_LEGACY_SOURCE",
+            "coverage": "CONSERVATIVE_SUPERSET",
+            "candidateCounterpartIds": [
+              300,
+              9000,
+              9911
+            ],
+            "uncertainCounterpartIds": [
+              9911
+            ],
+            "trustedCoveredScopeCount": 20,
+            "uncertainScopedScopeCount": 1,
+            "uncertainSourceCount": 1,
+            "unscopedUnknownCount": 0
+          }
+        }
+      ],
+      "abComparisons": [
+        {
+          "label": "safe-vs-exhaustive",
+          "itemsAndOrderEqual": true,
+          "sourceKeyRevisionOrderEqual": true,
+          "formattedTextEqual": true,
+          "safeItemIdentityOrderHash": "1b8eeadbc0579d3733e49307db90860f2a623502f03180caf894bb91cd164cec",
+          "referenceItemIdentityOrderHash": "1b8eeadbc0579d3733e49307db90860f2a623502f03180caf894bb91cd164cec",
+          "safeResolvedSourceOrderHash": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+          "referenceResolvedSourceOrderHash": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+          "safeFallbackStatus": "INDEX_HIT_ITEMS",
+          "referenceFallbackStatus": "INDEX_HIT_ITEMS",
+          "safeCandidatePairCount": 3,
+          "referenceCandidatePairCount": 21,
+          "safeLegacyFallbackCount": 0,
+          "referenceReason": "REFERENCE_MODE"
+        }
+      ],
+      "notes": [
+        {
+          "event": "same-stat-standard-and-legacy-source-race",
+          "result": "SOURCE_STALE",
+          "returnedText": false
+        },
+        {
+          "event": "same-stat-nonstandard-owner-source-race",
+          "result": "SOURCE_STALE",
+          "returnedText": false
+        }
+      ]
+    },
+    {
+      "id": "C14",
+      "label": "safe/exhaustive/safe rollback preserves items, revisions and access",
+      "status": "PASS",
+      "retrievals": [
+        {
+          "mode": "safe-candidate-directory",
+          "fallbackStatus": "INDEX_HIT_SOURCE",
+          "fallbackReason": "NONE",
+          "candidateDirectoryStatus": "COMPLETE",
+          "candidatePairCount": 2,
+          "ownerPairCount": 32,
+          "trustedCoveredScopeCount": 32,
+          "uncertainScopedScopeCount": 0,
+          "uncertainSourceCount": 0,
+          "unscopedUnknownCount": 0,
+          "legacyScanFallbackCount": 0,
+          "actualIndexReadCount": 4,
+          "sourceResolveAttemptCount": 2,
+          "itemCount": 0,
+          "itemIdentityOrderHash": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+          "resolvedSourceOrderHash": "93349a179deff1687c6bb03b9eb73b50d5cb2a38c7d36e388edeed1c9c940e73",
+          "scopeRevisionHash": "b1e5c32cd9def7448020f9153584ebe9ef63b9956f687eafe3157e211b1f7e1b",
+          "textHash": "49657437db947cd61f562319f68c37ff3394dfd818d47670c0b55de337585f9e",
+          "directory": {
+            "status": "COMPLETE",
+            "reason": "NONE",
+            "coverage": "CONSERVATIVE_SUPERSET",
+            "candidateCounterpartIds": [
+              300,
+              9000
+            ],
+            "uncertainCounterpartIds": [],
+            "trustedCoveredScopeCount": 32,
+            "uncertainScopedScopeCount": 0,
+            "uncertainSourceCount": 0,
+            "unscopedUnknownCount": 0
+          }
+        },
+        {
+          "mode": "exhaustive-reference",
+          "fallbackStatus": "INDEX_HIT_SOURCE",
+          "fallbackReason": "REFERENCE_MODE",
+          "candidateDirectoryStatus": "UNAVAILABLE",
+          "candidatePairCount": 32,
+          "ownerPairCount": 32,
+          "trustedCoveredScopeCount": 0,
+          "uncertainScopedScopeCount": 0,
+          "uncertainSourceCount": 0,
+          "unscopedUnknownCount": 0,
+          "legacyScanFallbackCount": 0,
+          "actualIndexReadCount": 64,
+          "sourceResolveAttemptCount": 2,
+          "itemCount": 0,
+          "itemIdentityOrderHash": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+          "resolvedSourceOrderHash": "93349a179deff1687c6bb03b9eb73b50d5cb2a38c7d36e388edeed1c9c940e73",
+          "scopeRevisionHash": "519518782e07d303f8544878e3d8ad649661afc097364a317e6157da4b375db3",
+          "textHash": "49657437db947cd61f562319f68c37ff3394dfd818d47670c0b55de337585f9e"
+        },
+        {
+          "mode": "safe-candidate-directory",
+          "fallbackStatus": "INDEX_HIT_SOURCE",
+          "fallbackReason": "NONE",
+          "candidateDirectoryStatus": "COMPLETE",
+          "candidatePairCount": 2,
+          "ownerPairCount": 32,
+          "trustedCoveredScopeCount": 32,
+          "uncertainScopedScopeCount": 0,
+          "uncertainSourceCount": 0,
+          "unscopedUnknownCount": 0,
+          "legacyScanFallbackCount": 0,
+          "actualIndexReadCount": 4,
+          "sourceResolveAttemptCount": 2,
+          "itemCount": 0,
+          "itemIdentityOrderHash": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+          "resolvedSourceOrderHash": "93349a179deff1687c6bb03b9eb73b50d5cb2a38c7d36e388edeed1c9c940e73",
+          "scopeRevisionHash": "b1e5c32cd9def7448020f9153584ebe9ef63b9956f687eafe3157e211b1f7e1b",
+          "textHash": "49657437db947cd61f562319f68c37ff3394dfd818d47670c0b55de337585f9e",
+          "directory": {
+            "status": "COMPLETE",
+            "reason": "NONE",
+            "coverage": "CONSERVATIVE_SUPERSET",
+            "candidateCounterpartIds": [
+              300,
+              9000
+            ],
+            "uncertainCounterpartIds": [],
+            "trustedCoveredScopeCount": 32,
+            "uncertainScopedScopeCount": 0,
+            "uncertainSourceCount": 0,
+            "unscopedUnknownCount": 0
+          }
+        }
+      ],
+      "abComparisons": [
+        {
+          "label": "safe-before-vs-exhaustive",
+          "itemsAndOrderEqual": true,
+          "sourceKeyRevisionOrderEqual": true,
+          "formattedTextEqual": true,
+          "safeItemIdentityOrderHash": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+          "referenceItemIdentityOrderHash": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+          "safeResolvedSourceOrderHash": "93349a179deff1687c6bb03b9eb73b50d5cb2a38c7d36e388edeed1c9c940e73",
+          "referenceResolvedSourceOrderHash": "93349a179deff1687c6bb03b9eb73b50d5cb2a38c7d36e388edeed1c9c940e73",
+          "safeFallbackStatus": "INDEX_HIT_SOURCE",
+          "referenceFallbackStatus": "INDEX_HIT_SOURCE",
+          "safeCandidatePairCount": 2,
+          "referenceCandidatePairCount": 32,
+          "safeLegacyFallbackCount": 0,
+          "referenceReason": "REFERENCE_MODE"
+        },
+        {
+          "label": "safe-after-vs-exhaustive",
+          "itemsAndOrderEqual": true,
+          "sourceKeyRevisionOrderEqual": true,
+          "formattedTextEqual": true,
+          "safeItemIdentityOrderHash": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+          "referenceItemIdentityOrderHash": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+          "safeResolvedSourceOrderHash": "93349a179deff1687c6bb03b9eb73b50d5cb2a38c7d36e388edeed1c9c940e73",
+          "referenceResolvedSourceOrderHash": "93349a179deff1687c6bb03b9eb73b50d5cb2a38c7d36e388edeed1c9c940e73",
+          "safeFallbackStatus": "INDEX_HIT_SOURCE",
+          "referenceFallbackStatus": "INDEX_HIT_SOURCE",
+          "safeCandidatePairCount": 2,
+          "referenceCandidatePairCount": 32,
+          "safeLegacyFallbackCount": 0,
+          "referenceReason": "REFERENCE_MODE"
+        }
+      ],
+      "notes": []
+    },
+    {
+      "id": "C15",
+      "label": "non-target old coverage gaps do not force 300 Pair reads",
+      "status": "PASS",
+      "retrievals": [
+        {
+          "mode": "exhaustive-reference",
+          "fallbackStatus": "INDEX_HIT_ITEMS",
+          "fallbackReason": "REFERENCE_MODE",
+          "candidateDirectoryStatus": "UNAVAILABLE",
+          "candidatePairCount": 301,
+          "ownerPairCount": 301,
+          "trustedCoveredScopeCount": 0,
+          "uncertainScopedScopeCount": 0,
+          "uncertainSourceCount": 0,
+          "unscopedUnknownCount": 0,
+          "legacyScanFallbackCount": 0,
+          "actualIndexReadCount": 602,
+          "sourceResolveAttemptCount": 0,
+          "itemCount": 2,
+          "itemIdentityOrderHash": "faab2d001cef02c18546d01703375e9777171c7af0bc55a563a5ad0b668ed971",
+          "resolvedSourceOrderHash": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+          "scopeRevisionHash": "380a2d1e5dbedd0aa9c0d0b521713ebc9619ed34d6002cfbff085ea3c91cf693",
+          "textHash": "04aa3642c4e60a1417ea3e0486d71841e0e3065c13b314e3d2f73850d733926c"
+        },
+        {
+          "mode": "safe-candidate-directory",
+          "fallbackStatus": "INDEX_HIT_ITEMS",
+          "fallbackReason": "SCOPED_LEGACY_SOURCE",
+          "candidateDirectoryStatus": "SCOPED_DEGRADED",
+          "candidatePairCount": 3,
+          "ownerPairCount": 301,
+          "trustedCoveredScopeCount": 300,
+          "uncertainScopedScopeCount": 1,
+          "uncertainSourceCount": 1,
+          "unscopedUnknownCount": 0,
+          "legacyScanFallbackCount": 0,
+          "actualIndexReadCount": 6,
+          "sourceResolveAttemptCount": 0,
+          "itemCount": 2,
+          "itemIdentityOrderHash": "faab2d001cef02c18546d01703375e9777171c7af0bc55a563a5ad0b668ed971",
+          "resolvedSourceOrderHash": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+          "scopeRevisionHash": "737210213847633b9aec8f8a187363e97c81dbf89449c7d6977287e996cccdd5",
+          "textHash": "04aa3642c4e60a1417ea3e0486d71841e0e3065c13b314e3d2f73850d733926c",
+          "directory": {
+            "status": "SCOPED_DEGRADED",
+            "reason": "SCOPED_LEGACY_SOURCE",
+            "coverage": "CONSERVATIVE_SUPERSET",
+            "candidateCounterpartIds": [
+              300,
+              9000,
+              9921
+            ],
+            "uncertainCounterpartIds": [
+              9921
+            ],
+            "trustedCoveredScopeCount": 300,
+            "uncertainScopedScopeCount": 1,
+            "uncertainSourceCount": 1,
+            "unscopedUnknownCount": 0
+          }
+        }
+      ],
+      "abComparisons": [
+        {
+          "label": "safe-vs-exhaustive",
+          "itemsAndOrderEqual": true,
+          "sourceKeyRevisionOrderEqual": true,
+          "formattedTextEqual": true,
+          "safeItemIdentityOrderHash": "faab2d001cef02c18546d01703375e9777171c7af0bc55a563a5ad0b668ed971",
+          "referenceItemIdentityOrderHash": "faab2d001cef02c18546d01703375e9777171c7af0bc55a563a5ad0b668ed971",
+          "safeResolvedSourceOrderHash": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+          "referenceResolvedSourceOrderHash": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+          "safeFallbackStatus": "INDEX_HIT_ITEMS",
+          "referenceFallbackStatus": "INDEX_HIT_ITEMS",
+          "safeCandidatePairCount": 3,
+          "referenceCandidatePairCount": 301,
+          "safeLegacyFallbackCount": 0,
+          "referenceReason": "REFERENCE_MODE"
+        }
+      ],
+      "notes": []
+    },
+    {
+      "id": "C16",
+      "label": "all uncertain Pair scopes remain a complete uncapped superset",
+      "status": "PASS",
+      "retrievals": [
+        {
+          "mode": "exhaustive-reference",
+          "fallbackStatus": "INDEX_HIT_ITEMS",
+          "fallbackReason": "REFERENCE_MODE",
+          "candidateDirectoryStatus": "UNAVAILABLE",
+          "candidatePairCount": 24,
+          "ownerPairCount": 24,
+          "trustedCoveredScopeCount": 0,
+          "uncertainScopedScopeCount": 0,
+          "uncertainSourceCount": 0,
+          "unscopedUnknownCount": 0,
+          "legacyScanFallbackCount": 0,
+          "actualIndexReadCount": 48,
+          "sourceResolveAttemptCount": 0,
+          "itemCount": 2,
+          "itemIdentityOrderHash": "7421400d6cdeba29202ce7c7a21cb65001d67194c2e5ab5e3e1c77609b308d70",
+          "resolvedSourceOrderHash": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+          "scopeRevisionHash": "379d8dca3d7be64cca498adafa4004bc7df9f7e1549cae50e417d26dddfcb487",
+          "textHash": "36c415d3008b6bc47e6a3c2e2e05b6c96afa984ad0d9f5a1865a451211d70657"
+        },
+        {
+          "mode": "safe-candidate-directory",
+          "fallbackStatus": "INDEX_HIT_ITEMS",
+          "fallbackReason": "SCOPED_LEGACY_SOURCE",
+          "candidateDirectoryStatus": "SCOPED_DEGRADED",
+          "candidatePairCount": 24,
+          "ownerPairCount": 24,
+          "trustedCoveredScopeCount": 2,
+          "uncertainScopedScopeCount": 22,
+          "uncertainSourceCount": 22,
+          "unscopedUnknownCount": 0,
+          "legacyScanFallbackCount": 0,
+          "actualIndexReadCount": 48,
+          "sourceResolveAttemptCount": 0,
+          "itemCount": 2,
+          "itemIdentityOrderHash": "7421400d6cdeba29202ce7c7a21cb65001d67194c2e5ab5e3e1c77609b308d70",
+          "resolvedSourceOrderHash": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+          "scopeRevisionHash": "379d8dca3d7be64cca498adafa4004bc7df9f7e1549cae50e417d26dddfcb487",
+          "textHash": "36c415d3008b6bc47e6a3c2e2e05b6c96afa984ad0d9f5a1865a451211d70657",
+          "directory": {
+            "status": "SCOPED_DEGRADED",
+            "reason": "SCOPED_LEGACY_SOURCE",
+            "coverage": "CONSERVATIVE_SUPERSET",
+            "candidateCounterpartIds": [
+              300,
+              9000,
+              11000,
+              11001,
+              11002,
+              11003,
+              11004,
+              11005,
+              11006,
+              11007,
+              11008,
+              11009,
+              11010,
+              11011,
+              11012,
+              11013,
+              11014,
+              11015,
+              11016,
+              11017,
+              11018,
+              11019,
+              11020,
+              11021
+            ],
+            "uncertainCounterpartIds": [
+              11000,
+              11001,
+              11002,
+              11003,
+              11004,
+              11005,
+              11006,
+              11007,
+              11008,
+              11009,
+              11010,
+              11011,
+              11012,
+              11013,
+              11014,
+              11015,
+              11016,
+              11017,
+              11018,
+              11019,
+              11020,
+              11021
+            ],
+            "trustedCoveredScopeCount": 2,
+            "uncertainScopedScopeCount": 22,
+            "uncertainSourceCount": 22,
+            "unscopedUnknownCount": 0
+          }
+        }
+      ],
+      "abComparisons": [
+        {
+          "label": "safe-vs-exhaustive",
+          "itemsAndOrderEqual": true,
+          "sourceKeyRevisionOrderEqual": true,
+          "formattedTextEqual": true,
+          "safeItemIdentityOrderHash": "7421400d6cdeba29202ce7c7a21cb65001d67194c2e5ab5e3e1c77609b308d70",
+          "referenceItemIdentityOrderHash": "7421400d6cdeba29202ce7c7a21cb65001d67194c2e5ab5e3e1c77609b308d70",
+          "safeResolvedSourceOrderHash": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+          "referenceResolvedSourceOrderHash": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+          "safeFallbackStatus": "INDEX_HIT_ITEMS",
+          "referenceFallbackStatus": "INDEX_HIT_ITEMS",
+          "safeCandidatePairCount": 24,
+          "referenceCandidatePairCount": 24,
+          "safeLegacyFallbackCount": 0,
+          "referenceReason": "REFERENCE_MODE"
+        }
+      ],
+      "notes": []
+    },
+    {
+      "id": "C17",
+      "label": "source symlinks fail closed or static guards are verified",
+      "status": "PASS",
+      "retrievals": [
+        {
+          "mode": "exhaustive-reference",
+          "fallbackStatus": "INDEX_HIT_ITEMS",
+          "fallbackReason": "REFERENCE_MODE",
+          "candidateDirectoryStatus": "UNAVAILABLE",
+          "candidatePairCount": 12,
+          "ownerPairCount": 12,
+          "trustedCoveredScopeCount": 0,
+          "uncertainScopedScopeCount": 0,
+          "uncertainSourceCount": 0,
+          "unscopedUnknownCount": 0,
+          "legacyScanFallbackCount": 0,
+          "actualIndexReadCount": 24,
+          "sourceResolveAttemptCount": 0,
+          "itemCount": 2,
+          "itemIdentityOrderHash": "bd50815e6201878218c9f202680558461f030f70047f08477560acd3f3b44de4",
+          "resolvedSourceOrderHash": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+          "scopeRevisionHash": "62a3a186447b58a5b407be78ba9c72e864445aee2e708e3966cd517bf01bcfb5",
+          "textHash": "364641fbea9e423f6dbcde2107d4c7da9902f188c8ddefcd2efc7de65ca2fb64"
+        },
+        {
+          "mode": "safe-candidate-directory",
+          "fallbackStatus": "INDEX_HIT_ITEMS",
+          "fallbackReason": "NONE",
+          "candidateDirectoryStatus": "COMPLETE",
+          "candidatePairCount": 2,
+          "ownerPairCount": 12,
+          "trustedCoveredScopeCount": 12,
+          "uncertainScopedScopeCount": 0,
+          "uncertainSourceCount": 0,
+          "unscopedUnknownCount": 0,
+          "legacyScanFallbackCount": 0,
+          "actualIndexReadCount": 4,
+          "sourceResolveAttemptCount": 0,
+          "itemCount": 2,
+          "itemIdentityOrderHash": "bd50815e6201878218c9f202680558461f030f70047f08477560acd3f3b44de4",
+          "resolvedSourceOrderHash": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+          "scopeRevisionHash": "17056f3eb739786686b50462eb66a1d6d91c8a8c974dc894f70ffeebdb2e3be7",
+          "textHash": "364641fbea9e423f6dbcde2107d4c7da9902f188c8ddefcd2efc7de65ca2fb64",
+          "directory": {
+            "status": "COMPLETE",
+            "reason": "NONE",
+            "coverage": "CONSERVATIVE_SUPERSET",
+            "candidateCounterpartIds": [
+              300,
+              9000
+            ],
+            "uncertainCounterpartIds": [],
+            "trustedCoveredScopeCount": 12,
+            "uncertainScopedScopeCount": 0,
+            "uncertainSourceCount": 0,
+            "unscopedUnknownCount": 0
+          }
+        }
+      ],
+      "abComparisons": [
+        {
+          "label": "safe-vs-exhaustive",
+          "itemsAndOrderEqual": true,
+          "sourceKeyRevisionOrderEqual": true,
+          "formattedTextEqual": true,
+          "safeItemIdentityOrderHash": "bd50815e6201878218c9f202680558461f030f70047f08477560acd3f3b44de4",
+          "referenceItemIdentityOrderHash": "bd50815e6201878218c9f202680558461f030f70047f08477560acd3f3b44de4",
+          "safeResolvedSourceOrderHash": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+          "referenceResolvedSourceOrderHash": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+          "safeFallbackStatus": "INDEX_HIT_ITEMS",
+          "referenceFallbackStatus": "INDEX_HIT_ITEMS",
+          "safeCandidatePairCount": 2,
+          "referenceCandidatePairCount": 12,
+          "safeLegacyFallbackCount": 0,
+          "referenceReason": "REFERENCE_MODE"
+        }
+      ],
+      "notes": [
+        {
+          "event": "file-link-creation-unavailable",
+          "code": "EPERM",
+          "verification": "static-lstat-guards-plus-normal-snapshot-ab"
+        }
+      ]
+    },
+    {
+      "id": "C18",
+      "label": "a target source in a secondary counterpart Pair is retained",
+      "status": "PASS",
+      "retrievals": [
+        {
+          "mode": "exhaustive-reference",
+          "fallbackStatus": "INDEX_HIT_ITEMS",
+          "fallbackReason": "REFERENCE_MODE",
+          "candidateDirectoryStatus": "UNAVAILABLE",
+          "candidatePairCount": 28,
+          "ownerPairCount": 28,
+          "trustedCoveredScopeCount": 0,
+          "uncertainScopedScopeCount": 0,
+          "uncertainSourceCount": 0,
+          "unscopedUnknownCount": 0,
+          "legacyScanFallbackCount": 0,
+          "actualIndexReadCount": 56,
+          "sourceResolveAttemptCount": 0,
+          "itemCount": 4,
+          "itemIdentityOrderHash": "84f305e754f55f17f195e47c86aa9732b066713108afe504ec6e39caf1debe5f",
+          "resolvedSourceOrderHash": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+          "scopeRevisionHash": "7dd7fba53845b22f3084300958a99eae2b4f0d910cad263e09d1c1dd0ba3e312",
+          "textHash": "e4c9efcebef99af99d3de1b1eacbaf667af7008996c3ab2b10f16f371d7622e7"
+        },
+        {
+          "mode": "safe-candidate-directory",
+          "fallbackStatus": "INDEX_HIT_ITEMS",
+          "fallbackReason": "NONE",
+          "candidateDirectoryStatus": "COMPLETE",
+          "candidatePairCount": 4,
+          "ownerPairCount": 28,
+          "trustedCoveredScopeCount": 28,
+          "uncertainScopedScopeCount": 0,
+          "uncertainSourceCount": 0,
+          "unscopedUnknownCount": 0,
+          "legacyScanFallbackCount": 0,
+          "actualIndexReadCount": 8,
+          "sourceResolveAttemptCount": 0,
+          "itemCount": 4,
+          "itemIdentityOrderHash": "84f305e754f55f17f195e47c86aa9732b066713108afe504ec6e39caf1debe5f",
+          "resolvedSourceOrderHash": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+          "scopeRevisionHash": "48e7f310ffbf8d3b0815890c4e3cb9f3b9211f637588c0ca77999ae9d60f7eab",
+          "textHash": "e4c9efcebef99af99d3de1b1eacbaf667af7008996c3ab2b10f16f371d7622e7",
+          "directory": {
+            "status": "COMPLETE",
+            "reason": "NONE",
+            "coverage": "CONSERVATIVE_SUPERSET",
+            "candidateCounterpartIds": [
+              300,
+              9000,
+              9931,
+              9932
+            ],
+            "uncertainCounterpartIds": [],
+            "trustedCoveredScopeCount": 28,
+            "uncertainScopedScopeCount": 0,
+            "uncertainSourceCount": 0,
+            "unscopedUnknownCount": 0
+          }
+        }
+      ],
+      "abComparisons": [
+        {
+          "label": "safe-vs-exhaustive",
+          "itemsAndOrderEqual": true,
+          "sourceKeyRevisionOrderEqual": true,
+          "formattedTextEqual": true,
+          "safeItemIdentityOrderHash": "84f305e754f55f17f195e47c86aa9732b066713108afe504ec6e39caf1debe5f",
+          "referenceItemIdentityOrderHash": "84f305e754f55f17f195e47c86aa9732b066713108afe504ec6e39caf1debe5f",
+          "safeResolvedSourceOrderHash": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+          "referenceResolvedSourceOrderHash": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+          "safeFallbackStatus": "INDEX_HIT_ITEMS",
+          "referenceFallbackStatus": "INDEX_HIT_ITEMS",
+          "safeCandidatePairCount": 4,
+          "referenceCandidatePairCount": 28,
+          "safeLegacyFallbackCount": 0,
+          "referenceReason": "REFERENCE_MODE"
+        }
+      ],
+      "notes": []
+    },
+    {
+      "id": "EXTRA",
+      "label": "Forget and failed L2 resolution share existing safety limits",
+      "status": "PASS",
+      "retrievals": [
+        {
+          "mode": "exhaustive-reference",
+          "fallbackStatus": "INDEX_HIT_ITEMS",
+          "fallbackReason": "REFERENCE_MODE",
+          "candidateDirectoryStatus": "UNAVAILABLE",
+          "candidatePairCount": 15,
+          "ownerPairCount": 15,
+          "trustedCoveredScopeCount": 0,
+          "uncertainScopedScopeCount": 0,
+          "uncertainSourceCount": 0,
+          "unscopedUnknownCount": 0,
+          "legacyScanFallbackCount": 0,
+          "actualIndexReadCount": 30,
+          "sourceResolveAttemptCount": 0,
+          "itemCount": 3,
+          "itemIdentityOrderHash": "4b5f7ed89a4af3fa6a8603fc23b5b3ad4631389b5125b9922ca78c65f9e6b73e",
+          "resolvedSourceOrderHash": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+          "scopeRevisionHash": "28a6723e45f0733712187eb490392d5216ed7cce1fa9d8b627b3e660dc1f9e20",
+          "textHash": "921c7a991b17fc3f2dd844ae293e8819d47a1c21def15849ccbb1c16c1d13947"
+        },
+        {
+          "mode": "safe-candidate-directory",
+          "fallbackStatus": "INDEX_HIT_ITEMS",
+          "fallbackReason": "NONE",
+          "candidateDirectoryStatus": "COMPLETE",
+          "candidatePairCount": 3,
+          "ownerPairCount": 15,
+          "trustedCoveredScopeCount": 15,
+          "uncertainScopedScopeCount": 0,
+          "uncertainSourceCount": 0,
+          "unscopedUnknownCount": 0,
+          "legacyScanFallbackCount": 0,
+          "actualIndexReadCount": 6,
+          "sourceResolveAttemptCount": 0,
+          "itemCount": 3,
+          "itemIdentityOrderHash": "4b5f7ed89a4af3fa6a8603fc23b5b3ad4631389b5125b9922ca78c65f9e6b73e",
+          "resolvedSourceOrderHash": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+          "scopeRevisionHash": "f08dd8c840160c5502c930972ac48825cb669b31241ae2721cd95b3ea6991ea2",
+          "textHash": "921c7a991b17fc3f2dd844ae293e8819d47a1c21def15849ccbb1c16c1d13947",
+          "directory": {
+            "status": "COMPLETE",
+            "reason": "NONE",
+            "coverage": "CONSERVATIVE_SUPERSET",
+            "candidateCounterpartIds": [
+              300,
+              9000,
+              9941
+            ],
+            "uncertainCounterpartIds": [],
+            "trustedCoveredScopeCount": 15,
+            "uncertainScopedScopeCount": 0,
+            "uncertainSourceCount": 0,
+            "unscopedUnknownCount": 0
+          }
+        },
+        {
+          "mode": "exhaustive-reference",
+          "fallbackStatus": "INDEX_HIT_ITEMS",
+          "fallbackReason": "REFERENCE_MODE",
+          "candidateDirectoryStatus": "UNAVAILABLE",
+          "candidatePairCount": 14,
+          "ownerPairCount": 14,
+          "trustedCoveredScopeCount": 0,
+          "uncertainScopedScopeCount": 0,
+          "uncertainSourceCount": 0,
+          "unscopedUnknownCount": 0,
+          "legacyScanFallbackCount": 0,
+          "actualIndexReadCount": 28,
+          "sourceResolveAttemptCount": 0,
+          "itemCount": 2,
+          "itemIdentityOrderHash": "ceb665564ae3c7a38ef4ca5cab5d1a2a83f8b0107c754344143f4125b52a05f9",
+          "resolvedSourceOrderHash": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+          "scopeRevisionHash": "a860b52729573cba1a0d214d9106daf509b3b2d864e007eb3812599e85116d43",
+          "textHash": "3e663be73cc45efdc1065ee0cb84bdc501e952d2c472f066923a458adbb6803d"
+        },
+        {
+          "mode": "safe-candidate-directory",
+          "fallbackStatus": "INDEX_HIT_ITEMS",
+          "fallbackReason": "NONE",
+          "candidateDirectoryStatus": "COMPLETE",
+          "candidatePairCount": 2,
+          "ownerPairCount": 14,
+          "trustedCoveredScopeCount": 14,
+          "uncertainScopedScopeCount": 0,
+          "uncertainSourceCount": 0,
+          "unscopedUnknownCount": 0,
+          "legacyScanFallbackCount": 0,
+          "actualIndexReadCount": 4,
+          "sourceResolveAttemptCount": 0,
+          "itemCount": 2,
+          "itemIdentityOrderHash": "ceb665564ae3c7a38ef4ca5cab5d1a2a83f8b0107c754344143f4125b52a05f9",
+          "resolvedSourceOrderHash": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+          "scopeRevisionHash": "2743abb76685fa7726dec1bcd40671da6737e770b7aaec8a2bc2ff7df93ace8f",
+          "textHash": "3e663be73cc45efdc1065ee0cb84bdc501e952d2c472f066923a458adbb6803d",
+          "directory": {
+            "status": "COMPLETE",
+            "reason": "NONE",
+            "coverage": "CONSERVATIVE_SUPERSET",
+            "candidateCounterpartIds": [
+              300,
+              9000
+            ],
+            "uncertainCounterpartIds": [],
+            "trustedCoveredScopeCount": 14,
+            "uncertainScopedScopeCount": 0,
+            "uncertainSourceCount": 0,
+            "unscopedUnknownCount": 0
+          }
+        }
+      ],
+      "abComparisons": [
+        {
+          "label": "safe-vs-exhaustive",
+          "itemsAndOrderEqual": true,
+          "sourceKeyRevisionOrderEqual": true,
+          "formattedTextEqual": true,
+          "safeItemIdentityOrderHash": "4b5f7ed89a4af3fa6a8603fc23b5b3ad4631389b5125b9922ca78c65f9e6b73e",
+          "referenceItemIdentityOrderHash": "4b5f7ed89a4af3fa6a8603fc23b5b3ad4631389b5125b9922ca78c65f9e6b73e",
+          "safeResolvedSourceOrderHash": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+          "referenceResolvedSourceOrderHash": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+          "safeFallbackStatus": "INDEX_HIT_ITEMS",
+          "referenceFallbackStatus": "INDEX_HIT_ITEMS",
+          "safeCandidatePairCount": 3,
+          "referenceCandidatePairCount": 15,
+          "safeLegacyFallbackCount": 0,
+          "referenceReason": "REFERENCE_MODE"
+        },
+        {
+          "label": "safe-vs-exhaustive",
+          "itemsAndOrderEqual": true,
+          "sourceKeyRevisionOrderEqual": true,
+          "formattedTextEqual": true,
+          "safeItemIdentityOrderHash": "ceb665564ae3c7a38ef4ca5cab5d1a2a83f8b0107c754344143f4125b52a05f9",
+          "referenceItemIdentityOrderHash": "ceb665564ae3c7a38ef4ca5cab5d1a2a83f8b0107c754344143f4125b52a05f9",
+          "safeResolvedSourceOrderHash": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+          "referenceResolvedSourceOrderHash": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+          "safeFallbackStatus": "INDEX_HIT_ITEMS",
+          "referenceFallbackStatus": "INDEX_HIT_ITEMS",
+          "safeCandidatePairCount": 2,
+          "referenceCandidatePairCount": 14,
+          "safeLegacyFallbackCount": 0,
+          "referenceReason": "REFERENCE_MODE"
+        }
+      ],
+      "notes": []
+    },
+    {
+      "id": "PERMISSIONS",
+      "label": "L0 never reads third-person Pair scopes and L1 never resolves source text",
+      "status": "PASS",
+      "retrievals": [],
+      "abComparisons": [],
+      "notes": []
+    }
+  ],
+  "failedCheckIds": []
+}

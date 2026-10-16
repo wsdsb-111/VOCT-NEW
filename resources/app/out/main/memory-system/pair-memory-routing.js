@@ -4,20 +4,22 @@ const crypto = require("crypto");
 
 const TARGET_EVIDENCE = new Set(["EXPLICIT_ID", "UNIQUE_ALIAS"]);
 const HISTORICAL_PATTERN = /以前|曾经|过去|往事|历史|当年|当时|那年|此前|之前|后来|回忆|回想|旧事|\d{3,6}\s*年/u;
-const HISTORICAL_AFTER_PATTERN = /(?:战争|战事|围城|离开宫廷|离开|回到|出征|交战|会面|结盟|订约|婚礼|加冕)(?:以后|之后)/u;
 const CURRENT_FUTURE_PATTERN = /现在|今天|当下|眼下|当前|明天|后天|下次|将来|未来|接下来|稍后/u;
 const FUTURE_PLAN_PATTERN = /(?:之后|以后)(?:还要|要不要|计划|会不会)|(?:还要|要不要|计划|会不会).{0,8}(?:之后|以后)|(?:只|仅)(?:谈|说|讨论|看).{0,6}(?:今天|现在|当下|眼下|当前)/u;
+const FUTURE_DEPENDENCY_PATTERN = /(?:等|待|如果|假如|若).{0,20}(?:以后|之后|过后)|(?:以后|之后|过后).{0,10}(?:还要|要不要|计划|会不会|准备|打算|将|要)|(?:记得|提醒|记住).{0,24}(?:以后|之后|过后).{0,10}(?:把|将|要|交|给|通知|安排|送|带|告诉)/u;
 const PLAN_ACTION_PATTERN = /(?:准备|打算)(?:去|要|安排|如何|怎么|做|处理|见|接见)/u;
 const NEGATION_PATTERN = /别|不要|不必|不用|无需|不想|暂时不/u;
 const DENIAL_ACTION_PATTERN = /回忆|回想|提起|谈|讲|说|查|翻|问|了解/u;
 const DENIAL_HISTORY_PATTERN = /以前|过去|往事|历史|当年|旧事|从前|经历|关系|记忆/u;
 const DIRECT_RECALL_ACTION_PATTERN = /回忆|回想|查|翻/u;
 const REMINDER_PATTERN = /记得\s*(?:把|将|要|去|给|向|通知|提醒|安排|交|带|告诉|转告|送)/u;
-const DETAIL_PATTERN = /具体|究竟|到底|原话|为何|为什么|原因|过程|经过|详细|怎么说|说了什么|如何说|发生了什么|发生过什么|什么争执|哪些争执|哪一年|何时|什么时候|\d{3,6}\s*年/u;
+const DETAIL_PATTERN = /具体|究竟|到底|原话|为何|为什么|原因|过程|经过|详细|怎么说|说了什么|如何说|怎么处理|如何处理|发生了什么|发生过什么|什么争执|哪些争执|哪一年|何时|什么时候|\d{3,6}\s*年/u;
+const EVENT_AFTER_RECALL_PATTERN = /(?:发生了?什么|发生过什么|怎么样了|关系(?:如何|怎么样|怎么变化)|(?:关系.{0,4})?发生过变化|(?:关系.{0,4})?有过变化|结果如何|有何影响|有什么影响|有没有.{0,8}过|是否.{0,8}过|如何相处|怎么相处|经历过什么|当时如何)/u;
+const COMPLETED_ASPECT_PATTERN = /(?:发生|见|遇到|经历|改变|变化|处理|相处)(?:了|过)|(?:已经|曾经).{0,8}(?:发生|见|经历|改变|变化|处理|相处)/u;
 const TIME_PATTERN = /哪一年|何时|什么时候|\d{3,6}\s*年|当年|那年/u;
 const RELATIONSHIP_PATTERN = /记得|认识|关系|相处|交情|如何|怎么样|什么样/u;
 const ELLIPTICAL_FOLLOWUP_PATTERN = /^(?:(?:那|那么)?(?:(?:他|她|他们|她们|它|这件事|那件事|这个约定)?(?:后来|之后|接下来))|(?:他|她|他们|她们|它)?(?:后来|之后|然后)|这件事|那件事|这个约定)(?:呢|如何|怎么样|怎么了|发生了什么)?[？?。！!…]*$/u;
-const ROUTE_SCHEMA_VERSION = "v936-third-person-route-1";
+const ROUTE_SCHEMA_VERSION = "v9363-third-person-route-2";
 
 function validId(value) {
   const id = Number(value);
@@ -159,8 +161,20 @@ function removeQuotedText(text) {
 }
 
 function splitIntentClauses(text) {
-  return String(text || "").split(/[，,。；;！？!?\n]+|(?<!不)(?=(?:不过|但是|但|可是|然而))/u)
+  const normalized = String(text || "").replace(/((?:以后|之后|过后))[，,]\s*/gu, "$1 ");
+  return normalized.split(/[，,。；;！？!?\n]+|(?<!不)(?=(?:不过|但是|但|可是|然而))/u)
     .map(clause => clause.trim()).filter(Boolean);
+}
+
+function hasEventAfterRecall(text) {
+  const connectors = /(?:以后|之后|过后)/gu;
+  for (const match of text.matchAll(connectors)) {
+    const event = text.slice(Math.max(0, match.index - 24), match.index);
+    const after = text.slice(match.index + match[0].length, match.index + match[0].length + 40);
+    if ([...event.matchAll(/\p{Script=Han}/gu)].length < 2) continue;
+    if (EVENT_AFTER_RECALL_PATTERN.test(after)) return { matched: true, completed: COMPLETED_ASPECT_PATTERN.test(after) };
+  }
+  return { matched: false, completed: false };
 }
 
 function isHistoricalDenialClause(text) {
@@ -179,17 +193,21 @@ function classifyIntentClause(text) {
     || /记得.+(?:吗|么)$/u.test(text);
   const historicalEvidence = [];
   if (HISTORICAL_PATTERN.test(text)) historicalEvidence.push("PAST_ANCHOR");
-  if (HISTORICAL_AFTER_PATTERN.test(text)) historicalEvidence.push("COMPLETED_EVENT_AFTER");
+  const eventAfterRecall = hasEventAfterRecall(text);
+  if (eventAfterRecall.matched) historicalEvidence.push("EVENT_AFTER_RECALL");
+  if (eventAfterRecall.completed) historicalEvidence.push("COMPLETED_ASPECT");
   if (explicitHistoryQuestion) historicalEvidence.push("HISTORY_QUESTION");
   const futureEvidence = [];
+  if (FUTURE_DEPENDENCY_PATTERN.test(text)) futureEvidence.push("FUTURE_DEPENDENCY");
   if (CURRENT_FUTURE_PATTERN.test(text) || FUTURE_PLAN_PATTERN.test(text) || REMINDER_PATTERN.test(text)
     || (!historicalEvidence.length && PLAN_ACTION_PATTERN.test(text))) {
-    futureEvidence.push("CURRENT_OR_PLAN_ANCHOR");
+    if (!futureEvidence.includes("FUTURE_DEPENDENCY")) futureEvidence.push("CURRENT_OR_PLAN_ANCHOR");
   }
+  const mayRequestSourceDetail = historicalEvidence.length > 0 && !futureEvidence.length && DETAIL_PATTERN.test(text);
   if (denialScope) return { text, kind: "DENIAL", historicalEvidence, futureEvidence, denialScope, explicitHistoryQuestion, mayRequestSourceDetail: false };
   if (historicalEvidence.length && !futureEvidence.length) {
     return { text, kind: "PAST_HISTORY", historicalEvidence, futureEvidence, denialScope, explicitHistoryQuestion,
-      mayRequestSourceDetail: true };
+      mayRequestSourceDetail };
   }
   if (historicalEvidence.length && futureEvidence.length) {
     return { text, kind: "AMBIGUOUS", historicalEvidence, futureEvidence, denialScope, explicitHistoryQuestion,
@@ -221,6 +239,7 @@ function classifyTemporalIntent(unquotedText) {
 
 function isValidBinding(binding, { ownerId, playerAnchorId, trustedPlayerTurn }) {
   if (!binding || typeof binding !== "object") return false;
+  if (binding.routeSchemaVersion != null && binding.routeSchemaVersion !== ROUTE_SCHEMA_VERSION) return false;
   const targetIds = normalizeTargets(binding.targetCharacterIds);
   const owner = validId(binding.responderId ?? binding.ownerId);
   const player = validId(binding.playerAnchorId);
@@ -305,7 +324,8 @@ function classifyThirdPersonHistoryRequest({ trustedPlayerTurn = null, ownerId, 
     targetEvidence = "BOUND_FOLLOWUP";
   }
   const hasHistoricalIntent = temporalIntent.kind === "PAST_HISTORY" || validFollowup;
-  const detailRequested = temporalIntent.kind === "PAST_HISTORY" && DETAIL_PATTERN.test(temporalIntent.historicalText);
+  const detailRequested = temporalIntent.kind === "PAST_HISTORY"
+    && temporalIntent.clauses.some(clause => clause.kind === "PAST_HISTORY" && clause.mayRequestSourceDetail);
   const timeFocused = detailRequested && TIME_PATTERN.test(temporalIntent.historicalText);
   const relationshipIntent = RELATIONSHIP_PATTERN.test(temporalIntent.historicalText);
   if (!hasHistoricalIntent) {
@@ -357,6 +377,7 @@ function resolveActiveMemoryPairs({ ownerId, history = [], activeParticipantIds 
 }
 
 module.exports = {
+  ROUTE_SCHEMA_VERSION,
   classifyTemporalIntent,
   classifyThirdPersonHistoryRequest,
   removeQuotedText,

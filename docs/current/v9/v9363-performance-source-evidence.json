@@ -1,0 +1,23 @@
+{
+  "createdAt": "2026-10-16T11:55:13.806Z",
+  "sourceHead": "440251b5c4b0c710b67bff9ca93c277470c28cd9",
+  "payloadSha256": "4a5a54504815a3482450d5e6d53c269c988759fe06619a8dc38bafbccea91673",
+  "sourceHashes": {
+    "src/app/main/memory-system/memory-store.js": "7d76f6e144315b35508c03445cc5dfdce56d880fe94ddea4374e65b7cf5ce9d7",
+    "src/app/main/memory-system/pair-long-term-ledger.js": "c4133543f61de78de1d083387cfc091333884914a51f0b586ada7af1ff8bd9a6",
+    "src/app/main/memory-system/memory-engine.js": "ab24e45a0ccb05b06ecb85bfe93ab8f3ad1620aed2e9d6e9f1e8d0b071d3962f",
+    "src/app/main/memory-system/pair-memory-source-retrieval.js": "39578b9a39995bd2f320bc414c2084767d43f26e9881b9ec488b919d7f68bdaf",
+    "src/app/main/memory-system/owner-target-candidate-directory.js": "964af134e69e1c5244138190978cd50cc3098e097889c5387493182864d73256",
+    "src/app/main/memory-system/pair-memory-routing.js": "8aa11dfb28b1dce7cb295d34ec8ae875df8d776cc2982f136f3d6802beb429af",
+    "src/app/main/memory-system/player-centered-memory.js": "33737807873f3508ba6569fcf2bab107cb5bc95d39193cee6c1b4624356bbd0c",
+    "src/app/main/memory-system/player-memory-diagnostics.js": "418681e8d5512a0f7776ff8ef7d82b0974e30a41d619e7850c65fdb0bacfc7f0",
+    "src/app/shared/pair-important-matters.js": "14c67e60cb5d2290b321b09b4a977ce26a62c5464d6ba97697505fb411cad6db",
+    "scripts/test-v9.3.6.3-mixed-archive-ab.js": "84dc7b7ba0522c10197460b7eed6b348ac8be8047b61af0480cbf9348f7c6435"
+  },
+  "osRelease": "10.0.26200",
+  "osVersion": "Windows 11 Home China",
+  "node": "v22.23.3",
+  "finishedAt": "2026-10-16T13:05:08.614Z",
+  "exitCode": 0,
+  "sourceUnchanged": true
+}
