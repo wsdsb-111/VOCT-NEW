@@ -30,6 +30,11 @@ function buildFamilyEntityFactBundle({ graph = null, responderId = null, relatio
     lifeStatus: life.status,
     age: age.age,
     ageLabel: age.label,
+    ageSource: age.ageSource,
+    ageConflict: age.conflict,
+    rawAge: age.rawAge,
+    calculatedCalendarAge: age.calculatedCalendarAge,
+    ageAsOfGameDate: age.asOfGameDate,
     death: death?.fact || null,
     sourceTier: "GAME_TRUTH",
     sourceComplete: graph.scopeTruncated !== true && character.partial !== true && !relationResult.diagnostic

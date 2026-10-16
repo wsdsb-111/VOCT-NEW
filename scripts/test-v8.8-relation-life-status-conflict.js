@@ -17,11 +17,30 @@ const profiles = createRelationshipResolver({ onDiagnostic: () => false }).build
 const son = profiles.get(2);
 assert.equal(son.alive, null);
 assert.equal(son.evidence.conflicts.lifeStatus, true);
-assert.deepEqual(resolveCharacterAge(son, { currentGameDate: "1175.2.1", currentTotalDays: 430000 }), { age: null, label: "age", source: "LIFE_STATUS_CONFLICT", conflict: true });
+assert.deepEqual(resolveCharacterAge(son, { currentGameDate: "1175.2.1", currentTotalDays: 430000 }), {
+  age: null,
+  label: "age",
+  source: "LIFE_STATUS_CONFLICT",
+  ageSource: "LIFE_STATUS_CONFLICT",
+  conflict: true,
+  rawAge: null,
+  calculatedCalendarAge: null,
+  asOfGameDate: "1175.2.1"
+});
 const family = buildFamilyFactBlock(profiles.get(1), { date: "1175.2.1", totalDays: 430000, getMentionableCharacterProfiles: () => profiles }, { query: "你儿子怎么样了" });
 assert(family.includes("生死状态存在冲突"));
 assert(!family.includes("1175年1月1日去世"));
-assert.deepEqual(resolveCharacterAge({ alive: false, age: 80 }, { currentGameDate: "1200.1.1" }), { age: null, label: "ageAtDeath", source: "AGE_AT_DEATH_UNAVAILABLE", conflict: false });
+assert.deepEqual(resolveCharacterAge({ alive: false, age: 80 }, { currentGameDate: "1200.1.1" }), {
+  age: null,
+  label: "ageAtDeath",
+  source: "AGE_AT_DEATH_UNAVAILABLE",
+  ageSource: "AGE_AT_DEATH_UNAVAILABLE",
+  conflict: false,
+  rawAge: null,
+  calculatedCalendarAge: null,
+  asOfGameDate: null,
+  reason: "DATE_EVIDENCE_UNAVAILABLE"
+});
 const directProfiles = createRelationshipResolver({ onDiagnostic: () => false }).buildCanonicalProfiles(new Map([[3, { id: 3, fullName: "矛盾人物", alive: true, deathDate: "1175年1月1日" }]]), 430000, () => "unknown");
 assert.equal(directProfiles.get(3).evidence.conflicts.lifeStatus, true);
 const currentTruth = getCurrentTruth({ gameDate: "1175.2.1", characters: { 3: { id: 3, alive: true, deathDate: "1175.1.1" } } }, 3, "alive");

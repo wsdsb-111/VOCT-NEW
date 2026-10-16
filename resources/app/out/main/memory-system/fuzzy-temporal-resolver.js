@@ -122,7 +122,7 @@ function resolveTemporalWindow(query, { currentGameDate, currentTotalDays, earli
 }
 
 // Pure proposal only: the caller owns per-responder storage and successful-reply commit.
-function resolveTemporalFocus(query, previousFocus, { currentGameDate, currentTotalDays, turnEpoch, conversationId, sceneRevision } = {}) {
+function resolveTemporalFocus(query, previousFocus, { currentGameDate, currentTotalDays, turnEpoch, logicalTurnEpoch, conversationId, sceneRevision } = {}) {
   const text = typeof query === "string" ? query : "";
   const axisIntent = detectTemporalAxisIntent(query);
   const temporal = resolveTemporalWindow(query, { currentGameDate, currentTotalDays });
@@ -144,7 +144,8 @@ function resolveTemporalFocus(query, previousFocus, { currentGameDate, currentTo
     result.nextFocus = {
       targetGameYear: from.year, fromGameDate: from.canonical, toGameDate: to.canonical,
       axisIntent, axis: axisIntent.toLowerCase(), establishedTurn: turnEpoch, lastUsedTurn: turnEpoch,
-      conversationId, sceneRevision, currentGameDate: current.canonical
+      conversationId, sceneRevision, currentGameDate: current.canonical,
+      lastUsedLogicalTurn: Number.isSafeInteger(logicalTurnEpoch) && logicalTurnEpoch >= 0 ? logicalTurnEpoch : null
     };
     return result;
   }
@@ -152,8 +153,11 @@ function resolveTemporalFocus(query, previousFocus, { currentGameDate, currentTo
       /最近|近日|近来|现在|今天|明天|明年|未来|换个话题|说点别的|不说这个/.test(text) ||
       /\d+\s*(?:年|月)|[零〇一二两三四五六七八九十百\d]+\s*(?:年|个月|月|天|日)\s*[前后]|今年|本月/.test(text) ||
       !/那一年|那年|当年|那时|当时|后来|之后|随后/.test(text)) return result;
-  const gap = turnEpoch - previousFocus.lastUsedTurn;
-  if (!Number.isSafeInteger(previousFocus.lastUsedTurn) || gap < 0 || gap > 3 ||
+  const usesLogicalTurn = Number.isSafeInteger(previousFocus.lastUsedLogicalTurn);
+  const currentTurn = usesLogicalTurn ? logicalTurnEpoch : turnEpoch;
+  const previousTurn = usesLogicalTurn ? previousFocus.lastUsedLogicalTurn : previousFocus.lastUsedTurn;
+  const gap = currentTurn - previousTurn;
+  if (!Number.isSafeInteger(currentTurn) || !Number.isSafeInteger(previousTurn) || gap < 0 || gap > 3 ||
       previousFocus.conversationId !== conversationId || previousFocus.sceneRevision !== sceneRevision ||
       !["EVENT", "CONVERSATION", "MIXED", "MEMORY_RECALL"].includes(previousFocus.axisIntent)) return result;
   const from = normalizeGameDate(previousFocus.fromGameDate), to = normalizeGameDate(previousFocus.toGameDate);
@@ -165,7 +169,8 @@ function resolveTemporalFocus(query, previousFocus, { currentGameDate, currentTo
     triggered: true, requested: true, expression: text, normalizedConcept: "TEMPORAL_FOCUS", mode: "TARGET_DATE",
     primaryWindow, expansionWindow: { ...primaryWindow }, targetTotalDays: (primaryWindow.fromTotalDays + primaryWindow.toTotalDays) / 2,
     targetGameYear: from.year, maxResults: 3, order: "TARGET_DISTANCE", axisIntent: inheritedAxis, focusReused: true,
-    nextFocus: { ...previousFocus, axisIntent: inheritedAxis, axis: inheritedAxis.toLowerCase(), lastUsedTurn: turnEpoch }
+    nextFocus: { ...previousFocus, axisIntent: inheritedAxis, axis: inheritedAxis.toLowerCase(), lastUsedTurn: turnEpoch,
+      lastUsedLogicalTurn: Number.isSafeInteger(logicalTurnEpoch) && logicalTurnEpoch >= 0 ? logicalTurnEpoch : null }
   };
 }
 

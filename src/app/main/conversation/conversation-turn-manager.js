@@ -4,6 +4,7 @@ class ConversationTurnManager {
   constructor(conversation) {
     this.conversation = conversation;
     this.epoch = Number(conversation.turnEpoch) || 0;
+    this.logicalEpoch = Number(conversation.logicalTurnEpoch) || 0;
     this.queue = Array.isArray(conversation.npcQueue) ? conversation.npcQueue : [];
     this.currentTurn = null;
     Object.defineProperty(conversation, "turnEpoch", {
@@ -11,6 +12,12 @@ class ConversationTurnManager {
       enumerable: true,
       get: () => this.epoch,
       set: (value) => { this.epoch = Number(value) || 0; }
+    });
+    Object.defineProperty(conversation, "logicalTurnEpoch", {
+      configurable: true,
+      enumerable: true,
+      get: () => this.logicalEpoch,
+      set: (value) => { this.logicalEpoch = Number(value) || 0; }
     });
     Object.defineProperty(conversation, "npcQueue", {
       configurable: true,
@@ -20,17 +27,50 @@ class ConversationTurnManager {
     });
   }
 
-  startUserTurn({ playerMessageId, activeParticipantIds = [] }) {
+  startUserTurn({ playerMessageId, activeParticipantIds = [], playerCharacterId = null,
+    conversationId = this.conversation.id || null, sceneRevision = null, campaignToken = null }) {
     this.epoch += 1;
+    this.logicalEpoch += 1;
     this.conversation.cancelActiveResponse?.("superseded_by_new_user_turn");
     this.queue = [];
     this.currentTurn = Object.freeze({
       turnId: `${this.conversation.id || "conversation"}:${this.epoch}`,
+      originalTurnIdentity: `${conversationId || "conversation"}:${playerMessageId}`,
       epoch: this.epoch,
+      logicalTurnEpoch: this.logicalEpoch,
       playerMessageId,
+      playerCharacterId: Number(playerCharacterId) || null,
+      conversationId,
+      sceneRevision,
+      campaignToken,
       startedAt: Date.now(),
       activeParticipantIds: Object.freeze([...activeParticipantIds]),
+      regenerateOfByResponder: Object.freeze({}),
       queueState: "cleared"
+    });
+    return this.currentTurn;
+  }
+
+  startRegenerationTurn({ playerMessageId, playerCharacterId, conversationId = this.conversation.id || null,
+    sceneRevision = null, campaignToken = null, regenerateOfByResponder = {} } = {}) {
+    const previousTurn = this.currentTurn;
+    if (!previousTurn || previousTurn.playerMessageId !== playerMessageId
+      || previousTurn.logicalTurnEpoch !== this.logicalEpoch
+      || previousTurn.playerCharacterId !== Number(playerCharacterId)
+      || previousTurn.conversationId !== conversationId
+      || previousTurn.sceneRevision !== sceneRevision
+      || previousTurn.campaignToken !== campaignToken) return null;
+
+    this.epoch += 1;
+    this.conversation.cancelActiveResponse?.("superseded_by_regeneration");
+    this.queue = [];
+    this.currentTurn = Object.freeze({
+      ...previousTurn,
+      turnId: `${this.conversation.id || "conversation"}:${this.epoch}`,
+      epoch: this.epoch,
+      startedAt: Date.now(),
+      regenerateOfByResponder: Object.freeze({ ...regenerateOfByResponder }),
+      queueState: "regenerating"
     });
     return this.currentTurn;
   }

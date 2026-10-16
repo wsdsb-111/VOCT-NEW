@@ -1,5 +1,8 @@
 # V9.3.6.3 实施报告
 
+> 本文件保留此前 TwoP1 阶段的历史证据；2026-10-17 综合修复追加 AGE / RECALL / REGEN / OBS，当前结果见[综合实施报告](V9_3_6_3_INTEGRATED_IMPLEMENTATION_REPORT.md)和[综合验证报告](V9_3_6_3_INTEGRATED_VERIFICATION_REPORT.md)。下文数量与哈希仅属于原批次。
+
+
 状态：本地候选施工、构建与验证完成，已部署；不代表Full Freeze。冻结基线代码 abb5f9ce086a1da850b4aba78a7e429ac0cf27ae、报告提交440251b5c4b0c710b67bff9ca93c277470c28cd9；基线payload0445d6388410f7519f4083c2bcdd8bed43dad3b4a24d1d4336f9823fab15b5e6。需求见[施工方案](V9_3_6_3_TWO_P1_FIX_PLAN.md)。
 
 ## INT-03：不依赖事件名称的历史回顾

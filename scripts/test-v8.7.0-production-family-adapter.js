@@ -7,6 +7,8 @@ const path = require("path");
 const { Character, inferGenderFromPronoun } = require("../resources/app/out/main/game-data/character");
 const { createLogParser } = require("../resources/app/out/main/game-data/log-parser");
 const { createRelationshipResolver } = require("../resources/app/out/main/game-data/relationship-resolver");
+const { resolveCharacterAge } = require("../resources/app/out/main/worldline/character-age-service");
+const { computeAgeAtDate } = require("../resources/app/out/main/worldline/character-temporal-facts");
 const { CK3LogProductionFixture, productionFamilyLogLines } = require("./v8.7-production-fixtures");
 
 (async () => {
@@ -24,7 +26,10 @@ const { CK3LogProductionFixture, productionFamilyLogLines } = require("./v8.7-pr
       assert.equal(profile.deathDateTotalDays, 428000);
       assert.equal(profile.deathDate, "1171年9月2日");
       assert.equal(profile.deathReason, reason);
-      assert.equal(profile.age, Math.floor((428000 - profile.birthDateTotalDays) / 365.2425));
+      assert.equal(profile.age, null, "deceased profile must not store a derived current age");
+      const ageAtDeath = resolveCharacterAge(profile, { currentGameDate: gameData.date, currentTotalDays: gameData.totalDays });
+      assert.equal(ageAtDeath.age, computeAgeAtDate(profile.birthDate, profile.deathDate));
+      assert.equal(ageAtDeath.ageSource, "BIRTH_DEATH_CALENDAR");
     }
     console.log("V8.7.0 Production Family Adapter: PASS (parser-shaped parent/child/sibling death passthrough)");
   } finally {

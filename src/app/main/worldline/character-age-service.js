@@ -8,26 +8,78 @@ function nonnegativeNumber(value) {
   return Number.isFinite(number) && number >= 0 ? number : null;
 }
 
+function ageResult({ age = null, label = "age", source = "UNKNOWN", conflict = false, rawAge = null, calculatedCalendarAge = null, asOfGameDate = null, reason = null } = {}) {
+  return {
+    age,
+    label,
+    source,
+    ageSource: source,
+    conflict,
+    rawAge,
+    calculatedCalendarAge,
+    asOfGameDate,
+    ...(reason ? { reason } : {})
+  };
+}
+
+function trustedCurrentAge(character = {}) {
+  const source = character.ageSource;
+  if (source !== "CK3_CURRENT_AGE" && source !== "CK3_LIVE_RELATIVE_AGE") return null;
+  const value = nonnegativeNumber(character.age);
+  if (value === null || !Number.isInteger(value)) return null;
+  if (source === "CK3_LIVE_RELATIVE_AGE") {
+    const bound = (character.evidence?.age || []).some(evidence => evidence.ageSource === source
+      && nonnegativeNumber(evidence.value) === value
+      && Number.isFinite(Number(evidence.sourceOwnerId)) && Number(evidence.sourceOwnerId) > 0
+      && ["parent", "child", "sibling", "spouse"].includes(evidence.relationType)
+      && typeof evidence.source === "string" && evidence.source.length > 0);
+    if (!bound) return null;
+  }
+  return { value, source };
+}
+
 function resolveCharacterAge(character = {}, current = null) {
   const options = current && typeof current === "object" ? current : { currentGameDate: current };
   const lifeStatus = resolveLifeStatus(character);
-  if (lifeStatus.conflict) return { age: null, label: "age", source: "LIFE_STATUS_CONFLICT", conflict: true };
+  const asOfGameDate = normalizeGameDate(options.currentGameDate)?.canonical || null;
+  if (lifeStatus.conflict) return ageResult({ source: "LIFE_STATUS_CONFLICT", conflict: true, asOfGameDate });
   const dead = lifeStatus.alive === false;
-  const birthDays = nonnegativeNumber(character.birthDateTotalDays);
-  const currentDays = nonnegativeNumber(options.currentTotalDays);
-  const raw = nonnegativeNumber(character.age);
-  let derived = dead ? computeAgeAtDeath(character) : null;
-  let source = dead && derived !== null && birthDays !== null && nonnegativeNumber(character.deathDateTotalDays) !== null ? "BIRTH_DEATH_TOTAL_DAYS" : "BIRTH_DEATH_DATES";
-  if (!dead && birthDays !== null && currentDays !== null && currentDays >= birthDays) {
-    derived = Math.floor((currentDays - birthDays) / 365.2425);
-    source = "BIRTH_CURRENT_TOTAL_DAYS";
-  } else if (!dead) {
-    derived = computeAgeAtDate(character.birth || character.birthDate, options.currentGameDate);
-    source = "BIRTH_CURRENT_DATE";
+  if (dead) {
+    const calculatedCalendarAge = computeAgeAtDate(character.birth || character.birthDate, character.deathDate);
+    if (character.ageAtDeathSource === "CK3_AGE_AT_DEATH") {
+      const explicitAge = nonnegativeNumber(character.ageAtDeath);
+      if (explicitAge !== null && Number.isInteger(explicitAge)) {
+        return ageResult({ age: explicitAge, label: "ageAtDeath", source: "CK3_AGE_AT_DEATH", rawAge: explicitAge, calculatedCalendarAge, conflict: character.ageEvidenceConflict === true || calculatedCalendarAge !== null && calculatedCalendarAge !== explicitAge, asOfGameDate: normalizeGameDate(character.deathDate)?.canonical || null });
+      }
+    }
+    if (calculatedCalendarAge !== null) return ageResult({ age: calculatedCalendarAge, label: "ageAtDeath", source: "BIRTH_DEATH_CALENDAR", calculatedCalendarAge, asOfGameDate: normalizeGameDate(character.deathDate)?.canonical || null });
+    const hasOrdinalDates = nonnegativeNumber(character.birthDateTotalDays ?? character.birthTotalDays) !== null
+      || nonnegativeNumber(character.deathDateTotalDays ?? character.deathTotalDays) !== null;
+    return ageResult({ label: "ageAtDeath", source: "AGE_AT_DEATH_UNAVAILABLE", asOfGameDate: normalizeGameDate(character.deathDate)?.canonical || null, reason: hasOrdinalDates ? "CALENDAR_DAY_MAPPING_UNVERIFIED" : "DATE_EVIDENCE_UNAVAILABLE" });
   }
-  if (derived !== null) return { age: derived, label: dead ? "ageAtDeath" : "age", source, conflict: raw !== null && raw !== derived };
-  if (dead) return { age: null, label: "ageAtDeath", source: "AGE_AT_DEATH_UNAVAILABLE", conflict: false };
-  return raw !== null ? { age: Math.floor(raw), label: "age", source: "RAW_AGE_FALLBACK", conflict: false } : { age: null, label: "age", source: "UNKNOWN", conflict: false };
+  const currentAge = trustedCurrentAge(character);
+  const calculatedCalendarAge = computeAgeAtDate(character.birth || character.birthDate, options.currentGameDate);
+  if (currentAge) {
+    return ageResult({
+      age: currentAge.value,
+      source: currentAge.source,
+      rawAge: currentAge.value,
+      calculatedCalendarAge,
+      conflict: character.ageEvidenceConflict === true || calculatedCalendarAge !== null && calculatedCalendarAge !== currentAge.value,
+      asOfGameDate
+    });
+  }
+  if (character.ageSource === "AGE_SOURCE_CONFLICT" || character.ageEvidenceConflict === true && character.ageSource !== "CK3_CURRENT_AGE" && character.ageSource !== "CK3_LIVE_RELATIVE_AGE") {
+    return ageResult({ source: "AGE_SOURCE_CONFLICT", conflict: true, calculatedCalendarAge, asOfGameDate, reason: "AGE_EVIDENCE_CONFLICT" });
+  }
+  if (calculatedCalendarAge !== null) return ageResult({ age: calculatedCalendarAge, source: "BIRTH_CURRENT_CALENDAR", calculatedCalendarAge, asOfGameDate });
+  const hasBirthOrdinal = nonnegativeNumber(character.birthDateTotalDays ?? character.birthTotalDays) !== null;
+  return ageResult({
+    source: "UNKNOWN",
+    calculatedCalendarAge: null,
+    asOfGameDate,
+    reason: hasBirthOrdinal ? "CALENDAR_DAY_MAPPING_UNVERIFIED" : "DATE_EVIDENCE_UNAVAILABLE"
+  });
 }
 
 // Positive means subject is older. Age-at-death must never establish seniority.

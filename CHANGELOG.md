@@ -1,6 +1,8 @@
 # VOTC 版本变更入口
 
-V9.3.6.3 修复候选已部署：历史事件之后漏召回及旧摘要整轮降级已修正，来源/Forget/预算合同保持；430/430发布组、9116次合成A/B与隔离双启动通过，289项部署哈希一致。真实CK3/Provider/Soak/远端CI待验收。详见[实施报告](docs/current/v9/V9_3_6_3_IMPLEMENTATION_REPORT.md)、[验证报告](docs/current/v9/V9_3_6_3_VERIFICATION_REPORT.md)、[旧档兼容](docs/current/v9/V9_3_6_3_LEGACY_COMPATIBILITY.md)、[性能A/B](docs/current/v9/V9_3_6_3_PAIR_PERFORMANCE_AB.md)。
+V9.3.6.3 综合修复候选：本轮补充 CK3 权威年龄、场外亲属/年份召回、重新生成授权和实际 Prompt 匿名对照；436组发布回归、22格484次同源合成A/B和隔离Electron双启动通过，289项部署一致。先前 TwoP1 数据保留为历史批次。当前施工与验收状态见[综合实施报告](docs/current/v9/V9_3_6_3_INTEGRATED_IMPLEMENTATION_REPORT.md)、[综合验证报告](docs/current/v9/V9_3_6_3_INTEGRATED_VERIFICATION_REPORT.md)和[实机清单](docs/current/v9/V9_3_6_3_REAL_GAME_CHECKLIST.md)。
+
+此前 V9.3.6.3 TwoP1 历史批次已部署：历史事件之后漏召回及旧摘要整轮降级已修正，来源/Forget/预算合同保持；430/430发布组、9116次合成A/B与隔离双启动通过，289项部署哈希一致。真实CK3/Provider/Soak/远端CI待验收。详见[实施报告](docs/current/v9/V9_3_6_3_IMPLEMENTATION_REPORT.md)、[验证报告](docs/current/v9/V9_3_6_3_VERIFICATION_REPORT.md)、[旧档兼容](docs/current/v9/V9_3_6_3_LEGACY_COMPATIBILITY.md)、[性能A/B](docs/current/v9/V9_3_6_3_PAIR_PERFORMANCE_AB.md)。
 
 V9.3.6.2 优化候选已本地部署：保守候选目录缩减跨 Pair 读取，常规5／30／100／300关系性能门槛及来源安全专项通过；修复历史分句和局部否定，新GLM默认显式、未验证90K兼容Custom，已有Auto由用户选择。427／427发布组及隔离窗口通过，289项部署哈希一致；真实CK3／Provider／Soak／远端CI分开验收。[实施报告](docs/current/v9/V9_3_6_2_IMPLEMENTATION_REPORT.md)、[验证报告](docs/current/v9/V9_3_6_2_VERIFICATION_REPORT.md)、[性能A/B](docs/current/v9/V9_3_6_2_PAIR_PERFORMANCE_AB.md)、[Context说明](docs/current/v9/V9_3_6_2_CONTEXT_COMPATIBILITY.md)。
 

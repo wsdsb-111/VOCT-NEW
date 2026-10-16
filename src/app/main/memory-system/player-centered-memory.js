@@ -5,6 +5,9 @@ const { normalizeGameDate } = require("../worldline/character-temporal-facts");
 const { retrievePairMemorySources } = require("./pair-memory-source-retrieval");
 const { ROUTE_SCHEMA_VERSION, classifyThirdPersonHistoryRequest, classifyTemporalIntent, removeQuotedText } = require("./pair-memory-routing");
 const { resolveTemporalFocus } = require("./fuzzy-temporal-resolver");
+const { hasTemporalAxisCue } = require("./temporal-anchor-extractor");
+const { getCachedKinshipGraph } = require("../worldline/kinship-graph-cache");
+const { resolveAnchoredRelationMention } = require("../worldline/anchored-relation-resolver");
 const { buildDualTemporalIndex, selectDualTemporalExtras } = require("./summary-date-index");
 const turnRecall = require("./turn-recall");
 const FROZEN_ALLOCATION = Object.freeze({ ledgerMinimumShare: 0.3, officialMinimumShare: 0.2,
@@ -145,7 +148,9 @@ function resolveHistoryDecision(engine, options, state, memories) {
   const targetQuery = temporalIntent.kind === "PAST_HISTORY" ? temporalIntent.historicalText
     : temporalIntent.kind === "FOLLOWUP" ? query : "";
   const focus = state.namedTargetFocus;
-  const focusValid = focus && focus.turnEpoch + 1 === options.turnEpoch && focus.sceneRevision === options.sceneRevision;
+  const focusValid = focus && (focus.logicalTurnEpoch != null
+    ? focus.logicalTurnEpoch + 1 === currentPlayerTurn?.logicalTurnEpoch : focus.turnEpoch + 1 === options.turnEpoch)
+    && focus.sceneRevision === options.sceneRevision;
   const deniedTargetIds = new Set();
   let denialScopeAmbiguous = false;
   let hasTargetScopedDenial = false;
@@ -173,34 +178,50 @@ function resolveHistoryDecision(engine, options, state, memories) {
   });
   const explicitAmbiguous = engine.mentionTracker.lastScanUnresolved === true;
   const explicitTargetIds = explicitIds.filter(id => !deniedTargetIds.has(id));
+  const relation = temporalIntent.kind === "PAST_HISTORY" && !explicitIds.length && !explicitAmbiguous && options.gameData
+    ? resolveAnchoredRelationMention({ query: targetQuery, responderId: ownerId,
+      graph: getCachedKinshipGraph(options.gameData), recentTargetId: null }) : null;
+  const relationRequested = relation && relation.status !== "NO_RELATION_INTENT";
+  const kinshipId = relation?.status === "RELATION_RESOLVED" ? Number(relation.targetRuntimeId) : null;
+  const kinshipResolved = Number.isSafeInteger(kinshipId) && kinshipId > 0 && ![ownerId, playerId].includes(kinshipId);
   const reciprocalTargetReference = /(?:你们|你俩|两人|彼此|双方)/u.test(targetQuery);
-  const targetIds = explicitIds.length || explicitAmbiguous || temporalIntent.denialScopes.length || hasTargetScopedDenial ? explicitTargetIds
+  const targetIds = relationRequested ? kinshipResolved ? [kinshipId] : []
+    : explicitIds.length || explicitAmbiguous || temporalIntent.denialScopes.length || hasTargetScopedDenial ? explicitTargetIds
     : temporalIntent.kind === "PAST_HISTORY" && focusValid
       ? reciprocalTargetReference ? [Number(focus.characterId)] : engine.mentionTracker.findMentionedCharacterIds([{ role: "user", content: targetQuery }], {
         candidates: profiles, excludedIds: [ownerId, playerId], recentCharacterId: focus.characterId
       })
       : [];
-  const ambiguous = explicitAmbiguous || engine.mentionTracker.lastScanUnresolved === true;
+  const ambiguous = explicitAmbiguous || engine.mentionTracker.lastScanUnresolved === true
+    || relationRequested && !kinshipResolved && /AMBIGUOUS|CONFLICT|INCOMPLETE/u.test(relation.status);
   const decision = classifyThirdPersonHistoryRequest({ ownerId, playerAnchorId: playerId,
     trustedPlayerTurn: currentPlayerTurn,
     deniedTargetCharacterIds: [...deniedTargetIds], denialScopeAmbiguous, targetScopedDenial: hasTargetScopedDenial,
-    resolvedTargets: ambiguous ? [{ ambiguous: true }] : targetIds.map(characterId => ({ characterId, evidence: "UNIQUE_ALIAS" })),
+    resolvedTargets: ambiguous ? [{ ambiguous: true }] : targetIds.map(characterId => ({ characterId,
+      evidence: kinshipResolved ? "KINSHIP_UNIQUE" : "UNIQUE_ALIAS" })),
     conversationBinding: state.historyBinding || null });
-  if (decision.level !== "L0" && !explicitIds.length && targetIds.length && focusValid) decision.targetEvidence = "BOUND_FOLLOWUP";
+  if (decision.level !== "L0" && !kinshipResolved && !explicitIds.length && targetIds.length && focusValid) decision.targetEvidence = "BOUND_FOLLOWUP";
   if (currentPlayerTurn?.trusted === true && query && state.namedTargetFocus?.turnEpoch !== options.turnEpoch) {
     state.namedTargetFocus = explicitTargetIds.length === 1 && !ambiguous
-      ? { characterId: explicitTargetIds[0], turnEpoch: options.turnEpoch, sceneRevision: options.sceneRevision } : null;
+      ? { characterId: explicitTargetIds[0], turnEpoch: options.turnEpoch,
+        logicalTurnEpoch: currentPlayerTurn?.logicalTurnEpoch ?? null, sceneRevision: options.sceneRevision }
+      : decision.level !== "L0" && focusValid ? focus : null;
     if (state.namedTargetFocus) state.namedTargetFocus.routeSchemaVersion = ROUTE_SCHEMA_VERSION;
   }
   if (decision.level !== "L0" && decision.targetEvidence !== "BOUND_FOLLOWUP") state.historyBinding = {
     responderId: ownerId, playerAnchorId: playerId, targetCharacterIds: decision.targetCharacterIds,
     authorizedTurnEpoch: options.turnEpoch, expiresAfterTurnEpoch: options.turnEpoch + 1,
+    authorizedLogicalTurnEpoch: currentPlayerTurn?.logicalTurnEpoch ?? null,
     conversationId: options.conversationId, sceneRevision: options.sceneRevision,
     routeSchemaVersion: ROUTE_SCHEMA_VERSION
   };
   else if (decision.level === "L0" && decision.reasonCode !== "NO_TRUSTED_PLAYER_TURN") state.historyBinding = null;
   return { decision, query: temporalIntent.kind === "PAST_HISTORY" ? temporalIntent.historicalText : query,
-    profiles, mentionedTargetIds: targetIds, ambiguous };
+    profiles, mentionedTargetIds: targetIds, ambiguous, temporalIntentKind: temporalIntent.kind,
+    targetResolution: ambiguous ? "TARGET_AMBIGUOUS" : kinshipResolved ? "KINSHIP_UNIQUE"
+      : decision.targetCharacterIds.length ? decision.targetEvidence === "BOUND_FOLLOWUP" ? "BOUND_FOLLOWUP" : "EXPLICIT_ALIAS"
+        : relationRequested ? "TARGET_UNRESOLVED" : "NO_HISTORY_TARGET",
+    relationRequested };
 }
 
 function retrieveLegacyDetails(engine, options, query, memories, targets, profiles, temporal, excludedIds, tokenBudget, countTokens, limit) {
@@ -215,8 +236,11 @@ function retrieveLegacyDetails(engine, options, query, memories, targets, profil
     }));
   let temporalEntries = [];
   if (temporal.triggered) {
-    const dateIndex = buildDualTemporalIndex(candidates, { ownerId, currentGameDate: options.currentGameDate,
+    let dateIndex = buildDualTemporalIndex(candidates, { ownerId, currentGameDate: options.currentGameDate,
       currentTotalDays: options.currentTotalDays, campaignToken: options.campaignToken });
+    if (options.strictTemporalAxis && hasTemporalAxisCue(query) && ["EVENT", "CONVERSATION"].includes(temporal.axisIntent)) {
+      dateIndex = dateIndex.filter(entry => entry.axis === temporal.axisIntent.toLowerCase());
+    }
     temporalEntries = selectDualTemporalExtras(dateIndex, candidates, temporal, { query,
       entityIds: targets, directCounterpartIds: targets, excludedKeys: [...excludedIds],
       getKey: memory => String(memory.memoryId), limit });
@@ -253,7 +277,7 @@ function retrieveLegacyDetails(engine, options, query, memories, targets, profil
           currentTotalDays: options.currentTotalDays, memories: options.rawOwnerSnapshot, readOnly: true });
         if (!resolved?.success || typeof resolved.summary?.content !== "string") { rejected++; continue; }
         const entry = { memory: { ...memory, content: resolved.summary.content }, routeKind: "dynamic_extra",
-          routeCharacterIds: targets, sourceSummaryKey: pointer.sourceSummaryKey,
+          routeCharacterIds: targets, sourceSummaryKey: pointer.sourceSummaryKey, sourceRevision: pointer.sourceRevision,
           reason: temporalEntries.find(row => row.memory.memoryId === memory.memoryId)?.reason || { source: "legacy_detail" } };
         const text = engine.formatMemoryBlock(temporal.triggered ? "本轮历史时间核对：按谈话／事件双时间轴引用" : "本轮经来源复验的历史经过", [entry]);
         if (countTokens(joinBlocks([...texts, text])) > tokenBudget) { omittedByBudget++; continue; }
@@ -271,18 +295,23 @@ function retrieveLegacyDetails(engine, options, query, memories, targets, profil
 }
 
 function retrieveDynamicMemory(engine, options, state, baseline, memories, rawMemories, countTokens) {
-  const { decision, query, profiles, mentionedTargetIds, ambiguous } = resolveHistoryDecision(engine, options, state, memories);
+  const { decision, query, profiles, mentionedTargetIds, ambiguous, temporalIntentKind, targetResolution, relationRequested } = resolveHistoryDecision(engine, options, state, memories);
   const messageOverhead = countMemoryBlocks([" "], countTokens) - countTokens(" ") + 1;
   const budget = Math.max(0, options.tokenBudget - baseline.formattedTokens - messageOverhead);
-  const dynamicKey = digest([baseline.snapshotId, options.turnEpoch, options.sceneRevision,
-    ROUTE_SCHEMA_VERSION, decision.queryFingerprint, decision.level, decision.targetCharacterIds, decision.reasonCode, budget]);
-  if (state.dynamicKey === dynamicKey && state.dynamicResult) return { ...state.dynamicResult, cacheHit: true };
-  const excludedIds = new Set([...baseline.direct, ...baseline.official, ...baseline.stable].map(entry => String(entry.memory.memoryId)));
   const temporal = resolveTemporalFocus(query, state.temporalFocus || null, { currentGameDate: options.currentGameDate,
     currentTotalDays: options.currentTotalDays, turnEpoch: options.turnEpoch,
+    logicalTurnEpoch: decision.authorizationMessageId != null ? options.trustedPlayerTurn?.logicalTurnEpoch : null,
     conversationId: options.conversationId, sceneRevision: options.sceneRevision });
+  const dynamicKey = digest([baseline.snapshotId, options.turnEpoch, options.sceneRevision,
+    options.trustedPlayerTurn?.messageId, options.currentGameDate, options.currentTotalDays,
+    ROUTE_SCHEMA_VERSION, decision.queryFingerprint, decision.level, decision.targetCharacterIds, decision.reasonCode,
+    temporal.requested, temporal.mode, temporal.primaryWindow, temporal.expansionWindow, budget,
+    options.memoryBudgetPlan?.providerHeadroomTokens]);
+  if (state.dynamicKey === dynamicKey && state.dynamicResult) return { ...state.dynamicResult, cacheHit: true };
+  const excludedIds = new Set([...baseline.direct, ...baseline.official, ...baseline.stable].map(entry => String(entry.memory.memoryId)));
   const entitiesProfile = profiles.map(profile => ({ characterId: Number(profile.id),
-    name: engine.getCharacterMentionAliases(profile)[0], aliases: engine.getCharacterMentionAliases(profile) }));
+    name: profile.fullName || profile.shortName || profile.name || engine.getCharacterMentionAliases(profile)[0],
+    aliases: engine.getCharacterMentionAliases(profile) }));
   let pair = { text: "", items: [], sources: [], fallbackStatus: ambiguous ? "IDENTITY_AMBIGUOUS" : "NOT_REQUESTED",
     legacyFallbackEligible: false, metrics: { finalInjectedTokens: 0, scopeRevisions: [] } };
   if (decision.level !== "L0") pair = retrievePairMemorySources({
@@ -290,17 +319,19 @@ function retrieveDynamicMemory(engine, options, state, baseline, memories, rawMe
     store: engine.store, ownerId: Number(options.characterId), decision, entitiesProfile,
     sceneRevision: options.sceneRevision,
     campaignToken: options.campaignToken, currentGameDate: options.currentGameDate, currentTotalDays: options.currentTotalDays,
-    memories: rawMemories, query, excludedMemoryIds: [...excludedIds], tokenBudget: budget, estimateTokens: countTokens
+    memories: rawMemories, query, temporal, excludedMemoryIds: [...excludedIds], tokenBudget: budget, estimateTokens: countTokens
   });
   const playerHistoryRequested = options.trustedPlayerTurn?.trusted === true && !ambiguous && !mentionedTargetIds.length
-    && decision.level === "L0" && !decision.denialDetected
+    && decision.level === "L0" && !decision.denialDetected && !relationRequested
+    && ["PAST_HISTORY", "FOLLOWUP"].includes(temporalIntentKind)
     && (turnRecall.detectIntent(query).triggered || temporal.requested);
   const fallbackEligible = pair.legacyFallbackEligible === true && decision.level === "L2";
   const sourceAttempts = Number.isSafeInteger(pair.metrics.sourceResolveAttemptCount)
     ? pair.metrics.sourceResolveAttemptCount
     : (pair.verifiedCandidatePointers?.length || 0) + (pair.metrics.sourceKeyValidationFailedCount || 0);
   const fallback = fallbackEligible || playerHistoryRequested
-    ? retrieveLegacyDetails(engine, { ...options, rawOwnerSnapshot: rawMemories, directPairOnly: playerHistoryRequested }, query, memories,
+    ? retrieveLegacyDetails(engine, { ...options, rawOwnerSnapshot: rawMemories, directPairOnly: playerHistoryRequested,
+      strictTemporalAxis: fallbackEligible }, query, memories,
       fallbackEligible ? decision.targetCharacterIds : [Number(options.trustedPlayerAnchorId)], profiles, temporal,
       new Set([...excludedIds, ...pair.sources.map(entry => String(entry.memory.memoryId))]),
       Math.max(0, budget - countTokens(pair.text) - (pair.text ? 2 : 0)), countTokens, fallbackEligible ? Math.max(0, 2 - sourceAttempts) : 3)
@@ -308,7 +339,8 @@ function retrieveDynamicMemory(engine, options, state, baseline, memories, rawMe
   const text = joinBlocks([pair.text, fallback.text]);
   const result = { text, decision, temporal, items: pair.items, sources: [...pair.sources, ...fallback.sources],
     sourcePairIds: [...new Set([...(pair.metrics.scopeRevisions || []).map(entry => entry.counterpartId), ...fallback.sourcePairIds])],
-    metrics: { ...pair.metrics, thirdPersonIntentLevel: decision.level, thirdPersonTargetCount: decision.targetCharacterIds.length,
+    metrics: { ...pair.metrics, targetResolution, trustedPlayerTurnResolved: decision.authorizationMessageId != null,
+      intentReasonCode: decision.reasonCode, thirdPersonIntentLevel: decision.level, thirdPersonTargetCount: decision.targetCharacterIds.length,
       thirdPersonFallbackStatus: fallback.sources.length && fallbackEligible ? "LEGACY_SOURCE_FALLBACK"
         : fallback.omittedByBudget ? "BUDGET_OMITTED" : pair.fallbackStatus,
       legacyFallbackUsed: fallback.sources.length > 0 && fallbackEligible,
@@ -359,7 +391,8 @@ function retrievePlayerCenteredMemory(engine, options) {
     && (!normalizeGameDate(memory.eventDate) || normalizeGameDate(memory.eventDate).serial <= today));
   const sourceForgetFingerprint = forgetFingerprint(engine, ownerId);
   const identity = digest([campaignToken, conversationId, ownerId, playerId, revision, today, sourceForgetFingerprint,
-    officialFingerprint(officialSummary), budgetPolicyRevision, options.configurationRevision || null, engine.memoryGeneration]);
+    officialFingerprint(officialSummary), budgetPolicyRevision, options.configurationRevision || null, engine.memoryGeneration,
+    engine.store.pairLedger?.retrievalEpoch]);
   const prior = state.frozenPlayerBaseline;
   const reuse = prior?.identity === identity && prior.formattedTokens <= budget && (prior.budgetTokens > 0 || budget === 0);
   if (!reuse) {
@@ -416,6 +449,11 @@ function retrievePlayerCenteredMemory(engine, options) {
   metrics.legacyBudgetOmittedCount = dynamic.metrics.legacyBudgetOmittedCount;
   metrics.sourceResolveAttemptCount = dynamic.metrics.sourceResolveAttemptCount || 0;
   metrics.totalSourceResolveAttemptCount = dynamic.metrics.totalSourceResolveAttemptCount;
+  for (const field of ["targetResolution", "trustedPlayerTurnResolved", "intentReasonCode", "temporalMode", "timeAnchorStatus",
+    "timeWindowStart", "timeWindowEnd", "timeFallbackReason", "candidateVisibleCount", "matchedWindowCount", "temporalExpansionUsed"]) {
+    metrics[field] = dynamic.metrics[field] ?? null;
+  }
+  metrics.budgetOmittedCount = (dynamic.metrics.budgetOmittedCount || 0) + (dynamic.metrics.legacyBudgetOmittedCount || 0);
   if (metrics.finalInjectedTokens > budget) throw new Error("player_memory_formatted_budget_exceeded");
   engine.trace.record("player_memory_retrieval", { responderId: ownerId, playerAnchorId: playerId,
     conversationIdHash: digest(conversationId), campaignHash: digest(campaignToken),

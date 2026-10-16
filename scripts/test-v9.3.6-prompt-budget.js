@@ -268,7 +268,7 @@ function assertDryRunPreservesLiveMentionCurrentTruth() {
   currentGameData.characters = new Map([
     [1, { id: 1, name: "玩家-A", shortName: "玩家-A", fullName: "玩家-A", gender: "female", age: 40, parents: [], children: [], siblings: [], traits: [] }],
     [2, { id: 2, name: "NPC-B", shortName: "NPC-B", fullName: "NPC-B", gender: "male", age: 35, parents: [], children: [], siblings: [], traits: [] }],
-    [3, { id: 3, name: "NPC-C", shortName: "NPC-C", fullName: "NPC-C", gender: "male", age: 29, primaryTitle: "伯爵", parents: [], children: [], siblings: [], traits: [] }]
+    [3, { id: 3, name: "NPC-C", shortName: "NPC-C", fullName: "NPC-C", gender: "male", age: 29, ageSource: "CK3_CURRENT_AGE", primaryTitle: "伯爵", parents: [], children: [], siblings: [], traits: [] }]
   ]);
   currentGameData.mentionedCharactersInContext = new Set();
   currentGameData.findMentionedCharacterIdsInHistory = () => new Set([3]);

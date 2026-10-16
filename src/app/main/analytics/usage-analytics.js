@@ -1,7 +1,7 @@
 "use strict";
 
 const { normalizeProviderUsage } = require("../providers/usage-normalization");
-const { projectPairMemoryMetrics, projectMemoryBudgetPlan, projectMemoryTokenMetrics, projectContextDiagnostics } = require("../memory-system/player-memory-diagnostics");
+const { projectPairMemoryMetrics, projectMemoryBudgetPlan, projectMemoryTokenMetrics, projectContextDiagnostics, projectMemoryAttemptDiagnostics } = require("../memory-system/player-memory-diagnostics");
 
 const DURABLE_ORIGINS = new Set(["finalization", "recovery", "legacy_recompression", "letter_finalization", "other"]);
 const DURABLE_SCOPE_HASH_FIELDS = ["ownerScopeHash", "campaignScopeHash", "endpointHash", "effectiveParameterHash", "policyHash"];
@@ -323,6 +323,7 @@ function createUsageAnalytics({ fs, dataDir, analyticsFile, retention, createPro
           lifecycle: block.lifecycle || null
         })) : [],
         pairMemoryMetrics: projectPairMemoryMetrics(metadata?.pairMemoryMetrics),
+        memoryAttemptDiagnostics: projectMemoryAttemptDiagnostics(metadata?.memoryAttemptDiagnostics),
         ...projectContextDiagnostics(metadata),
         memoryBudgetPlan: projectMemoryBudgetPlan(metadata?.memoryBudgetPlan),
         ...projectMemoryTokenMetrics(metadata)

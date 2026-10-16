@@ -10,6 +10,7 @@ const { planSummaryRequest } = require("../resources/app/out/main/memory-system/
 const { MemoryEngine } = require("../resources/app/out/main/memory-system");
 const { Conversation } = require("../resources/app/out/main/conversation/conversation");
 const { GenerationManager } = require("../resources/app/out/main/conversation/generation-manager");
+const { ConversationTurnManager } = require("../resources/app/out/main/conversation/conversation-turn-manager");
 const { LLMManager } = require("../resources/app/out/main/provider-service");
 
 async function main() {
@@ -297,6 +298,9 @@ async function main() {
         emitUpdate() {}, checkAndSummarizeIfNeeded: async () => ({}), getPromptHistoryForCharacter: () => [], getPromptSummaryForCharacter: () => "",
         estimateTokenCount: () => 1, actionEvaluations: [], evaluateCompletedActions: async function (_npc, _id, message) { this.actionEvaluations.push(message.content); } });
       chat.generationManager = new GenerationManager(chat, { recordSkipped() {} });
+      chat.turnManager = new ConversationTurnManager(chat);
+      chat.generationAttemptsByMessageId = new Map();
+      chat.memoryAttemptDiagnosticsByOwner = new Map();
       return chat;
     };
     const completeChat = createChat();

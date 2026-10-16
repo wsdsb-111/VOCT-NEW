@@ -22,6 +22,7 @@ function createRelationshipResolver({ onDiagnostic = null } = {}) {
     canonicalCharacter: null,
     names: [],
     gender: [],
+    age: [],
     birthDate: [],
     birthDateText: [],
     alive: [],
@@ -69,6 +70,20 @@ function createRelationshipResolver({ onDiagnostic = null } = {}) {
     const sourceItem = record.birthDate.find((item) => item.value === value);
     return { value, source: sourceItem?.source || "unknown", conflict: false };
   };
+  const resolveTieredAge = (record) => {
+    const canonicalValues = new Set(record.age.filter((item) => item.priority === 1).map((item) => item.value));
+    const edgeValues = new Set(record.age.filter((item) => item.priority > 1).map((item) => item.value));
+    if (canonicalValues.size > 1) return { value: null, source: "AGE_SOURCE_CONFLICT", conflict: true };
+    if (canonicalValues.size === 1) {
+      const value = [...canonicalValues][0];
+      const sourceItem = record.age.find((item) => item.priority === 1 && item.value === value);
+      return { value, source: sourceItem?.ageSource || "CK3_CURRENT_AGE", conflict: [...edgeValues].some((item) => item !== value) };
+    }
+    if (edgeValues.size > 1) return { value: null, source: "AGE_SOURCE_CONFLICT", conflict: true };
+    const value = [...edgeValues][0] ?? null;
+    const sourceItem = record.age.find((item) => item.value === value);
+    return { value, source: sourceItem?.ageSource || "UNKNOWN", conflict: false };
+  };
   const resolveTieredValue = (record, field, diagnosticCode) => {
     const items = record[field].filter((item) => item.value !== null && item.value !== void 0 && item.value !== "");
     const canonicalValues = new Set(items.filter((item) => item.priority === 1).map((item) => item.value));
@@ -100,6 +115,10 @@ function createRelationshipResolver({ onDiagnostic = null } = {}) {
   };
   const collectTemporalEvidence = (record, value, priority, sourceOwnerId, relationType, source) => {
     const common = { priority, sourceOwnerId, relationType, source };
+    const age = nonnegativeNumber(value?.age);
+    if (age !== null && Number.isInteger(age) && (priority === 1 && value?.ageSource === "CK3_CURRENT_AGE" || priority > 1 && value?.ageSource === "CK3_LIVE_RELATIVE_AGE")) {
+      record.age.push({ value: age, ageSource: value.ageSource, ...common });
+    }
     const birthDate = finiteDay(value?.birthDateTotalDays);
     if (birthDate !== null) record.birthDate.push({ value: birthDate, ...common });
     if (value?.birthDate) record.birthDateText.push({ value: value.birthDate, ...common });
@@ -154,16 +173,13 @@ function createRelationshipResolver({ onDiagnostic = null } = {}) {
       const name = canonical?.fullName || canonical?.shortName || [...new Set(record.names)].sort((left, right) => left.localeCompare(right))[0];
       if (!name) continue;
       const gender = resolveTieredGender(record);
+      const age = resolveTieredAge(record);
       const birthDate = resolveTieredBirthDate(record);
       const birthDateText = resolveTieredValue(record, "birthDateText", "RELATION_CONFLICT_BIRTHDATE_TEXT");
       const alive = resolveLifeStatus(record);
       const deathDate = resolveTieredValue(record, "deathDate", "RELATION_CONFLICT_DEATHDATE");
       const deathDateText = resolveTieredValue(record, "deathDateText", "RELATION_CONFLICT_DEATHDATE_TEXT");
       const deathReason = resolveTieredValue(record, "deathReason", "RELATION_CONFLICT_DEATH_REASON");
-      const ageAtDay = alive.value === false ? deathDate.value : nonnegativeNumber(totalDays);
-      const age = birthDate.value !== null && ageAtDay !== null && ageAtDay >= birthDate.value
-        ? Math.max(0, Math.floor((ageAtDay - birthDate.value) / 365.2425))
-        : alive.value === false ? null : nonnegativeNumber(canonical?.age);
       const profile = canonical ? { ...canonical } : {
         id: record.id,
         shortName: name,
@@ -191,10 +207,13 @@ function createRelationshipResolver({ onDiagnostic = null } = {}) {
       profile.deathDateTotalDays = alive.conflict ? null : deathDate.value;
       profile.deathDate = alive.conflict ? null : deathDateText.value || profile.deathDate || null;
       profile.deathReason = alive.conflict ? null : deathReason.value || profile.deathReason || null;
-      profile.age = alive.conflict ? null : age;
+      profile.age = alive.conflict || alive.value === false ? null : age.value;
+      profile.ageSource = alive.conflict ? "LIFE_STATUS_CONFLICT" : alive.value === false ? null : age.source;
+      profile.ageEvidenceConflict = age.conflict;
       profile.evidence = {
         canonicalCharacter: canonical || null,
         gender: record.gender.map((item) => ({ ...item })),
+        age: record.age.map((item) => ({ ...item })),
         birthDate: record.birthDate.map((item) => ({ ...item })),
         birthDateText: record.birthDateText.map((item) => ({ ...item })),
         alive: record.alive.map((item) => ({ ...item })),
@@ -207,6 +226,7 @@ function createRelationshipResolver({ onDiagnostic = null } = {}) {
         conflicts: {
           gender: gender.conflict,
           genderDisagreement: gender.disagreement === true,
+          age: age.conflict,
           birthDate: birthDate.conflict,
           alive: alive.conflict,
           lifeStatus: alive.conflict,

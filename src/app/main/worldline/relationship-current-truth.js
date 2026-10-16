@@ -74,7 +74,11 @@ function resolveRelationshipCurrentTruth({ gameData, subjectRuntimeId, anchorRun
     currentState: {
       sex,
       alive: life.alive,
-      age: age.age
+      age: age.age,
+      ageSource: age.ageSource,
+      ageConflict: age.conflict,
+      rawAge: age.rawAge,
+      calculatedCalendarAge: age.calculatedCalendarAge
     },
     relations: {},
     evidence: {
@@ -83,6 +87,10 @@ function resolveRelationshipCurrentTruth({ gameData, subjectRuntimeId, anchorRun
       sourceComplete: graph.scopeTruncated !== true && profile.partial !== true,
       conflicts,
       memoryUsedForCurrentSex: false,
+      ageSource: age.ageSource,
+      ageConflict: age.conflict,
+      rawAge: age.rawAge,
+      calculatedCalendarAge: age.calculatedCalendarAge,
       canonicalSex,
       relationSideSex: sideEvidence.sex,
       relationSideSexes: sideEvidence.values,

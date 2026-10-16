@@ -1,5 +1,8 @@
 # V9.3.6.3 验证报告
 
+> 本文件保留此前 TwoP1 阶段的历史证据；2026-10-17 综合修复追加 AGE / RECALL / REGEN / OBS，当前结果见[综合实施报告](V9_3_6_3_INTEGRATED_IMPLEMENTATION_REPORT.md)和[综合验证报告](V9_3_6_3_INTEGRATED_VERIFICATION_REPORT.md)。下文数量与哈希仅属于原批次。
+
+
 状态：本地候选验证完成并部署，2026-10-16；不代表Full Freeze。
 
 基线440251b5c4b0c710b67bff9ca93c277470c28cd9在全新Windows共享克隆内完成标准六步，Node22.23.3；68个LFS资产逐项校验，427组发布门禁退出0，289项payload与原部署一致。原资源和部署回执另保存在.build/v9363-preserved-v9362-runtime。

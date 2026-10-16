@@ -4,6 +4,7 @@ const assert = require("node:assert/strict");
 const crypto = require("node:crypto");
 
 const { Conversation } = require("../src/app/main/conversation/conversation");
+const { ConversationTurnManager } = require("../src/app/main/conversation/conversation-turn-manager");
 const { LLMManager, ProviderRegistry, TokenCounter } = require("../src/app/main/provider-service");
 
 function fingerprint(value) {
@@ -125,6 +126,8 @@ function createRun({ sourceChangesAfterInitial = false, partialContent = "V936_P
     nextId: 1,
     turnEpoch: 1,
     messages: [],
+    generationAttemptsByMessageId: new Map(),
+    memoryAttemptDiagnosticsByOwner: new Map(),
     generationManager,
     gameData: {
       scene: "V936_SCENE",
@@ -148,6 +151,7 @@ function createRun({ sourceChangesAfterInitial = false, partialContent = "V936_P
     pauseConversation() {}
   });
 
+  chat.turnManager = new ConversationTurnManager(chat);
   Conversation.configure({
     settingsRepository,
     llmManager,

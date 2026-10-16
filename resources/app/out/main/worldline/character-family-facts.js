@@ -1,5 +1,6 @@
 "use strict";
 
+const crypto = require("crypto");
 const { resolveCharacterAge } = require("./character-age-service");
 const { normalizeSpouseRecords } = require("./canonical-spouse-record");
 const { getCachedKinshipGraph } = require("./kinship-graph-cache");
@@ -14,6 +15,72 @@ const DISPLAY_TYPES = new Set(["PARENT_OF", "CHILD_OF", "SIBLING_OF", "GRANDPARE
 
 function characterName(character, id) {
   return character?.fullName || character?.shortName || character?.firstName || character?.name || `#${id}`;
+}
+
+function isExplicitCurrentAgeQuestion(query) {
+  const text = String(query || "").normalize("NFKC").trim();
+  if (!text || /(?:去年|前年|前些年|过去|以前|曾经|当年|那年|那时|当时|明年|后年|未来|将来|几年后|[零〇一二两三四五六七八九十百千]+年后|\d{3,6}\s*年|生前|去世时|去世时候|死亡时|死亡时候|死时|死的时候|终年|临终|historical|last year|years? ago|at (?:death|the time))/iu.test(text)) return false;
+  return /(?:多大(?:了)?|几岁(?:了)?|多少岁|年龄|年纪|how old|what age|current age)/iu.test(text);
+}
+
+function sourceBoundSpouseProfile(anchorCharacter, targetRuntimeId, relationAnchorRuntimeId, relationTypes) {
+  if (!anchorCharacter) return null;
+  const record = normalizeSpouseRecords(anchorCharacter).find(item => String(item.runtimeId) === String(targetRuntimeId)
+    && (relationTypes.includes("SPOUSE_OF") && item.relationType === "CURRENT_SPOUSE"
+      || relationTypes.includes("FORMER_SPOUSE_OF") && item.relationType === "FORMER_SPOUSE"
+      || relationTypes.includes("DECEASED_SPOUSE_OF") && item.relationType === "DECEASED_SPOUSE"));
+  if (!record || !record.raw || typeof record.raw !== "object") return null;
+  const raw = record.raw;
+  const age = raw.age === null || raw.age === undefined || raw.age === "" ? NaN : Number(raw.age);
+  const hasRelativeAge = Number.isInteger(age) && age >= 0
+    && ["CK3_CURRENT_AGE", "CK3_LIVE_RELATIVE_AGE"].includes(raw.ageSource);
+  const source = `spouse.${record.source}`;
+  const sourceOwnerId = Number(relationAnchorRuntimeId);
+  const ageSource = hasRelativeAge ? "CK3_LIVE_RELATIVE_AGE" : raw.ageSource;
+  const ageEvidence = [...(raw.evidence?.age || [])];
+  if (hasRelativeAge && !ageEvidence.some(item => item.ageSource === "CK3_LIVE_RELATIVE_AGE" && Number(item.value) === age)) {
+    ageEvidence.push({ value: age, ageSource, sourceOwnerId, relationType: "spouse", source });
+  }
+  return {
+    ...raw,
+    ageSource,
+    evidence: {
+      ...raw.evidence,
+      age: ageEvidence,
+      relations: [...(raw.evidence?.relations || []), { ownerId: sourceOwnerId, relationType: "spouse", source }]
+    }
+  };
+}
+
+function sourceBoundFamilyProfile(gameData, targetRuntimeId, relationResolution) {
+  if (!gameData || targetRuntimeId === null || targetRuntimeId === undefined) return null;
+  const targetId = Number(targetRuntimeId);
+  const anchorId = Number(relationResolution?.relationAnchorRuntimeId);
+  const characters = gameData.characters;
+  const canonical = characters instanceof Map ? characters.get(targetId) || characters.get(String(targetId)) : characters?.[targetId];
+  const anchorCharacter = characters instanceof Map ? characters.get(anchorId) || characters.get(String(anchorId)) : characters?.[anchorId];
+  const profiles = typeof gameData.getMentionableCharacterProfiles === "function"
+    ? gameData.getMentionableCharacterProfiles()
+    : characters;
+  const profile = profiles instanceof Map ? profiles.get(targetId) || profiles.get(String(targetId)) : profiles?.[targetId];
+  if (canonical) return profile;
+  if (profile) {
+    const pathIds = new Set((relationResolution?.relation?.relationPath || [targetId, anchorId]).map(String));
+    pathIds.add(String(anchorId));
+    const validTypes = new Set(["parent", "child", "sibling", "spouse"]);
+    const relationBound = (profile.evidence?.relations || []).some(evidence => pathIds.has(String(evidence.ownerId))
+      && validTypes.has(evidence.relationType) && typeof evidence.source === "string" && evidence.source.length > 0);
+    const sourceBound = [
+      ...(profile.evidence?.age || []),
+      ...(profile.evidence?.birthDate || []),
+      ...(profile.evidence?.birthDateText || [])
+    ].some(evidence => pathIds.has(String(evidence.sourceOwnerId))
+      && validTypes.has(evidence.relationType) && typeof evidence.source === "string" && evidence.source.length > 0);
+    if (relationBound && sourceBound) return profile;
+  }
+  const relationTypes = relationResolution?.intent?.relationTypes || [];
+  const spouseType = relationTypes.some(type => ["SPOUSE_OF", "FORMER_SPOUSE_OF", "DECEASED_SPOUSE_OF"].includes(type));
+  return spouseType ? sourceBoundSpouseProfile(anchorCharacter, targetId, anchorId, relationTypes) : null;
 }
 
 function formatStructuredCharacter(character = {}, current = null, characters = null) {
@@ -31,7 +98,7 @@ function formatStructuredCharacter(character = {}, current = null, characters = 
   else if (death) parts.push(death.text);
   else if (lifeStatus.alive === true) parts.push("在世");
   if (character.location) parts.push(`当前位置：${character.location}`);
-  return { text: parts.join("；"), diagnostics: { sexSource: sex.source, ageSource: age.source, ageConflict: age.conflict, lifeStatusConflict, death: death?.fact || null } };
+  return { text: parts.join("；"), diagnostics: { sexSource: sex.source, ageSource: age.ageSource, ageConflict: age.conflict, rawAge: age.rawAge, calculatedCalendarAge: age.calculatedCalendarAge, asOfGameDate: age.asOfGameDate, lifeStatusConflict, death: death?.fact || null } };
 }
 
 function buildUnresolvedRelationConstraint(result) {
@@ -60,7 +127,7 @@ function buildGenderConflictConstraint(result) {
 - 不得从 Memory 或模型猜测具体人物；需要更多当前游戏数据后才能确定。`;
 }
 
-function buildFamilyFactBlock(character, gameData, { query = "", recentTargetId = null, currentFactRegistry = null } = {}) {
+function buildFamilyFactBlock(character, gameData, { query = "", recentTargetId = null, currentFactRegistry = null, ageAuthorityGameData = null, ageDiagnostics = null } = {}) {
   if (!character?.id || !gameData) return null;
   const graph = getCachedKinshipGraph(gameData);
   const temporal = { currentGameDate: gameData.date, currentTotalDays: gameData.totalDays };
@@ -69,6 +136,26 @@ function buildFamilyFactBlock(character, gameData, { query = "", recentTargetId 
   if (relationResolution?.status === "NO_RELATION_INTENT") relationResolution = null;
   if (relationResolution?.intent?.sourcePhrase) {
     console.log(`[VOTC Relation] query=${String(query).replace(/\s+/g, " ").trim()} intent=${relationResolution.intent.relationTypes.join(",") || "NONE"} sex=${relationResolution.intent.sexConstraint || "unknown"} anchorMention=${relationResolution.anchor.mention || "-"} anchorRuntimeId=${relationResolution.relationAnchorRuntimeId || "-"} targetRuntimeId=${relationResolution.targetRuntimeId || "-"} targetName=${relationResolution.target?.name || "-"} resolution=${relationResolution.status}`);
+  }
+  const canUseSourceAge = isExplicitCurrentAgeQuestion(query) && relationResolution?.status === "RELATION_RESOLVED";
+  const selectedTargetId = canUseSourceAge ? String(relationResolution.targetRuntimeId) : null;
+  let selectedAge = null;
+  if (canUseSourceAge) {
+    const sourceCharacter = sourceBoundFamilyProfile(ageAuthorityGameData, selectedTargetId, relationResolution);
+    selectedAge = resolveCharacterAge(sourceCharacter || {}, {
+      currentGameDate: ageAuthorityGameData?.date ?? gameData.date,
+      currentTotalDays: ageAuthorityGameData?.totalDays ?? gameData.totalDays
+    });
+    if (Array.isArray(ageDiagnostics)) {
+      ageDiagnostics.push({
+        characterIdHash: crypto.createHash("sha256").update(selectedTargetId).digest("hex"),
+        ageSource: selectedAge.ageSource,
+        rawAge: selectedAge.rawAge,
+        calculatedCalendarAge: selectedAge.calculatedCalendarAge,
+        ageConflict: selectedAge.conflict,
+        asOfGameDate: selectedAge.asOfGameDate
+      });
+    }
   }
   if (relationResolution?.status === "RELATION_GENDER_CONFLICT") return buildGenderConflictConstraint(relationResolution);
   if (relationResolution?.status === "RELATION_AMBIGUOUS") {
@@ -104,13 +191,21 @@ function buildFamilyFactBlock(character, gameData, { query = "", recentTargetId 
     const label = currentFact?.relations[String(relationAnchorId)]?.label || resolveKinshipLabel({ type: edge.type, sex: "unknown", branch: edge.branch });
     const death = bundle.death ? { fact: bundle.death, text: formatDeathFact(relative, { ...temporal, characters: graph.nodes })?.text || "已故" } : null;
     const lifeStatus = resolveLifeStatus(relative);
-    const age = { age: bundle.age, label: bundle.ageLabel };
+    const age = selectedTargetId === String(edge.from) && selectedAge ? selectedAge : { age: bundle.age, label: bundle.ageLabel };
     const details = [];
     if (!bundle.sourceComplete) details.push("来源范围不完整");
     if (sex.conflict && sex.sex === "unknown") details.push("性别数据存在冲突，未输出性别结论");
     if (lifeStatus.conflict) details.push("生死状态存在冲突，未输出结论");
-    else if (death) details.push(death.text);
+    else if (death) {
+      details.push(death.text);
+      if (age.label === "ageAtDeath" && age.age !== null && !/终年\s*\d+\s*岁/u.test(death.text)) details.push(`终年${age.age}岁`);
+    }
     else if (lifeStatus.alive === true) details.push("在世");
+    if (selectedTargetId === String(edge.from) && age.age === null) {
+      details.push(age.label === "ageAtDeath" ? "去世年龄未知"
+        : age.ageSource === "AGE_SOURCE_CONFLICT" ? "年龄来源冲突，当前年龄未知"
+          : age.ageSource === "LIFE_STATUS_CONFLICT" ? "生死状态冲突，年龄未知" : "当前年龄未知（缺少可信年龄来源）");
+    }
     if (!death && age.age !== null) details.push(`${age.age}岁`);
     if (relationResolution?.status === "RELATION_RESOLVED") {
       const anchor = graph.nodes.get(String(relationAnchorId)) || {};
@@ -126,4 +221,4 @@ function buildFamilyFactBlock(character, gameData, { query = "", recentTargetId 
   return `=== 当前结构化家庭事实（本轮 CK3 数据） ===\n${lines.join("\n")}\n权威规则：亲属身份、性别、是否已故、死亡日期和年龄以本块结构化结果为准；相对时间只能使用系统给出的结果。若本块明确给出致死者，则以本块为准；若本块未给出致死者，可使用后续获准的 Current Game Truth / Worldline Game Truth。不得从 Memory 或模型推测致死者。Memory 只可补充过去经历与主观感受，不得覆盖这些事实。`;
 }
 
-module.exports = { buildFamilyFactBlock, formatStructuredCharacter, buildUnresolvedRelationConstraint };
+module.exports = { buildFamilyFactBlock, formatStructuredCharacter, buildUnresolvedRelationConstraint, isExplicitCurrentAgeQuestion };

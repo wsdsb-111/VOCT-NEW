@@ -87,10 +87,9 @@ function computeAgeAtDate(birthDate, atDate) {
 }
 
 function computeAgeAtDeath(character = {}) {
-  const birthTotalDays = totalDay(character.birthDateTotalDays ?? character.birthTotalDays);
-  const deathTotalDays = totalDay(character.deathDateTotalDays ?? character.deathTotalDays);
-  if (birthTotalDays !== null && deathTotalDays !== null && deathTotalDays >= birthTotalDays) {
-    return Math.floor((deathTotalDays - birthTotalDays) / 365.2425);
+  if (character.ageAtDeathSource === "CK3_AGE_AT_DEATH") {
+    const explicitAge = Number(character.ageAtDeath);
+    if (Number.isInteger(explicitAge) && explicitAge >= 0) return explicitAge;
   }
   return computeAgeAtDate(character.birth || character.birthDate, character.deathDate);
 }
@@ -123,6 +122,11 @@ function buildDeathFact(character = {}, { currentGameDate = null, currentTotalDa
   const totalDaysTemporal = relativeTimeFromTotalDays(deathDateTotalDays, currentTotalDays);
   const dateTemporal = normalizedDeathDate ? { ...relativeTimeLabel(normalizedDeathDate.canonical, currentGameDate), source: "DATE" } : { daysSinceEvent: null, relativeLabel: null, status: "DATE_UNAVAILABLE", source: "DATE" };
   const temporal = totalDaysTemporal.status !== "TOTAL_DAYS_UNAVAILABLE" ? totalDaysTemporal : dateTemporal;
+  const ageAtDeath = computeAgeAtDeath(character);
+  const explicitAgeAtDeath = Number(character.ageAtDeath);
+  const ageAtDeathSource = character.ageAtDeathSource === "CK3_AGE_AT_DEATH" && Number.isInteger(explicitAgeAtDeath) && explicitAgeAtDeath >= 0
+    ? "CK3_AGE_AT_DEATH"
+    : ageAtDeath === null ? "AGE_AT_DEATH_UNAVAILABLE" : "BIRTH_DEATH_CALENDAR";
   return {
     deceasedId,
     deathDate,
@@ -130,7 +134,8 @@ function buildDeathFact(character = {}, { currentGameDate = null, currentTotalDa
     killerId,
     killerName,
     cause,
-    ageAtDeath: computeAgeAtDeath(character),
+    ageAtDeath,
+    ageAtDeathSource,
     sourceTier: "GAME_TRUTH",
     sourceComplete: deathDate !== null || deathDateTotalDays !== null,
     derivedTemporalPresentation: { currentGameDate: normalizeGameDate(currentGameDate)?.canonical || null, eventDate: deathDate, ...temporal }

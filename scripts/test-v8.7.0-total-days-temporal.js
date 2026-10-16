@@ -17,8 +17,10 @@ const fact = buildDeathFact(character, { currentTotalDays: 428018, currentGameDa
 assert.equal(fact.derivedTemporalPresentation.daysSinceEvent, 18);
 assert.equal(fact.derivedTemporalPresentation.relativeLabel, "18天前");
 assert.equal(fact.derivedTemporalPresentation.source, "TOTAL_DAYS");
-assert.equal(fact.ageAtDeath, Math.floor((428000 - 409000) / 365.2425));
-assert.equal(resolveCharacterAge(character, { currentTotalDays: 500000, currentGameDate: "1300.1.1" }).age, fact.ageAtDeath);
+assert.equal(fact.ageAtDeath, null, "ordinal dates do not establish calendar age when birth date cannot be parsed");
+const ageAtDeath = resolveCharacterAge(character, { currentTotalDays: 500000, currentGameDate: "1300.1.1" });
+assert.equal(ageAtDeath.age, null);
+assert.equal(ageAtDeath.reason, "CALENDAR_DAY_MAPPING_UNVERIFIED");
 
 const yesterday = buildDeathFact({ ...character, deathDateTotalDays: 428017 }, { currentTotalDays: 428018 });
 assert.equal(yesterday.derivedTemporalPresentation.relativeLabel, "昨日");

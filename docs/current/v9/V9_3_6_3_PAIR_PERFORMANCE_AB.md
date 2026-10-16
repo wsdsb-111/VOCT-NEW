@@ -1,5 +1,8 @@
 # V9.3.6.3 混合旧摘要性能A/B
 
+> 本文件保留此前 TwoP1 阶段的历史证据；2026-10-17 综合修复追加 AGE / RECALL / REGEN / OBS，当前结果见[综合实施报告](V9_3_6_3_INTEGRATED_IMPLEMENTATION_REPORT.md)和[综合验证报告](V9_3_6_3_INTEGRATED_VERIFICATION_REPORT.md)。下文数量与哈希仅属于原批次。
+
+
 状态：本轮正式独占采样完成，正确性与建议性能门槛通过；最坏场景单列，不代表真实CK3验收。
 
 A为同版本exhaustive-reference（每格1次cold参考，无可信P95）；B为同版本safe-candidate-directory（每格10cold+20warm）。Cold指独立MemoryEngine下的PairLedger/目录空缓存，fixture与MemoryStore初次加载在计时区间外，不宣称磁盘首次加载。Warm紧接第10次cold，复用同一上下文，无额外预热。

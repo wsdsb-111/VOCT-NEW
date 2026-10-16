@@ -4,6 +4,7 @@ const { performance } = require("perf_hooks");
 const crypto = require("crypto");
 const { parseImportantMatters, searchTerms } = require("../../shared/pair-important-matters");
 const { normalizeGameDate } = require("../worldline/character-temporal-facts");
+const { gameDateFromSerial, hasTemporalAxisCue, extractTemporalAnchors } = require("./temporal-anchor-extractor");
 
 const PLAYER_LEDGER_HEADER = "【与玩家的长期事项】以下日期是谈话记录日期；事项为当时记录，承诺或打算不表示已履行。";
 
@@ -238,8 +239,12 @@ function collectOwnerCounterpartIds(memories, ownerId, campaignToken, excludedId
   return [...ids].sort((left, right) => left - right);
 }
 
-function thirdPersonQueryTerms(query, targetProfiles) {
+function thirdPersonQueryTerms(query, targetProfiles, temporal) {
   let lexical = String(query || "").normalize("NFKC").toLocaleLowerCase();
+  if (temporal?.requested) {
+    if (temporal.expression) lexical = lexical.split(temporal.expression).join(" ");
+    lexical = lexical.replace(/去年|前年|前些年|[零〇一二两三四五六七八九十百\d]+年前|\d+年(?:\d+月(?:\d+[日号])?)?|儿子|女儿|孩子|父亲|母亲|兄弟|姐妹|配偶|丈夫|妻子|谈过|聊过|讨论过|争论过|谈的/gu, " ");
+  }
   for (const profile of targetProfiles) {
     for (const alias of profile.aliases) lexical = lexical.split(alias).join(" ");
   }
@@ -323,7 +328,7 @@ function decisionForThirdPersonRetrieval(decision, ownerId, mode) {
     && id !== ownerId && id !== Number(decision.playerAnchorId)) && new Set(targetIds).size === targetIds.length;
   const validLevel = decision.level === "L1" || decision.level === "L2";
   const validIntent = typeof decision.historyIntent === "string" && decision.historyIntent !== "NONE";
-  const validEvidence = ["EXPLICIT_ID", "UNIQUE_ALIAS", "BOUND_FOLLOWUP"].includes(decision.targetEvidence);
+  const validEvidence = ["EXPLICIT_ID", "UNIQUE_ALIAS", "KINSHIP_UNIQUE", "BOUND_FOLLOWUP"].includes(decision.targetEvidence);
   const detailConsistent = decision.level === "L2" ? decision.explicitSourceDetailRequested === true
     : decision.explicitSourceDetailRequested !== true;
   if (!validTargets || !validLevel || !validIntent || !validEvidence || decision.denialDetected === true
@@ -412,7 +417,7 @@ function formatThirdPersonEmpty(status, { level = "L0", metrics = {}, candidateS
 
 function retrieveThirdPersonHistory({ mode = "THIRD_PERSON_LEDGER", store, ownerId, decision, entitiesProfile = [],
   campaignToken, currentGameDate, currentTotalDays, memories = [], query = "", excludedMemoryIds = [], tokenBudget = 0,
-  retrievalMode = store?.pairLedger?.retrievalMode || "safe-candidate-directory", sceneRevision = null,
+  retrievalMode = store?.pairLedger?.retrievalMode || "safe-candidate-directory", sceneRevision = null, temporal = null,
   estimateTokens = text => Math.ceil(String(text).length / 2) } = {}) {
   const route = decisionForThirdPersonRetrieval(decision, ownerId, mode);
   if (!route.ok) return formatThirdPersonEmpty(route.status);
@@ -420,6 +425,10 @@ function retrieveThirdPersonHistory({ mode = "THIRD_PERSON_LEDGER", store, owner
   if (!store?.pairLedger) return formatThirdPersonEmpty("INDEX_UNAVAILABLE", { level });
   if (typeof campaignToken !== "string" || !campaignToken.trim()) return formatThirdPersonEmpty("CAMPAIGN_UNBOUND", { level });
   if (!normalizeGameDate(currentGameDate)) return formatThirdPersonEmpty("CURRENT_DATE_REQUIRED", { level });
+  // A broad recollection such as "当年政变" does not assert a particular calendar window.
+  // An unresolved explicit year/date, or "那一年", still fails closed below.
+  if (temporal?.requested && !temporal.triggered && temporal.reason === "NO_TIME_EXPRESSION"
+    && /当年|当时|那时/u.test(query) && !/那一年|哪一年|何时|什么时候/u.test(query)) temporal = null;
 
   const profiles = buildEntityProfileIndex(entitiesProfile);
   const targetProfiles = route.targetIds.map(id => profiles.byId.get(id));
@@ -428,7 +437,37 @@ function retrieveThirdPersonHistory({ mode = "THIRD_PERSON_LEDGER", store, owner
     return formatThirdPersonEmpty("IDENTITY_AMBIGUOUS", { level });
   }
 
-  const terms = thirdPersonQueryTerms(query, targetProfiles);
+  const currentDate = normalizeGameDate(currentGameDate);
+  const today = Number(currentTotalDays) > 0 ? Number(currentTotalDays) : currentDate.serial;
+  const windowValid = range => range && Number.isFinite(range.fromTotalDays) && Number.isFinite(range.toTotalDays)
+    && range.fromTotalDays <= range.toTotalDays && range.toTotalDays <= today;
+  if (temporal?.requested && (!temporal.triggered || !windowValid(temporal.primaryWindow))) {
+    return formatThirdPersonEmpty("TEMPORAL_WINDOW_MISMATCH", { level, legacyFallbackEligible: false,
+      metrics: { timeAnchorStatus: "UNAVAILABLE", timeFallbackReason: "TEMPORAL_WINDOW_MISMATCH" } });
+  }
+  const eventAxis = temporal?.axisIntent === "EVENT" && hasTemporalAxisCue(query);
+  const itemEventWindows = new Map();
+  const inWindow = (item, range) => {
+    const date = normalizeGameDate(item.conversationDate);
+    const day = date ? today + date.serial - currentDate.serial
+      : Number(currentTotalDays) > 0 && Number(item.conversationTotalDays) > 0 ? Number(item.conversationTotalDays) : null;
+    const conversationMatches = day !== null && day >= range.fromTotalDays && day <= range.toTotalDays;
+    if (conversationMatches && !eventAxis) return true;
+    if (!["EVENT", "MIXED"].includes(temporal?.axisIntent)) return false;
+    if (!itemEventWindows.has(item.itemId)) {
+      const refs = extractTemporalAnchors(item.text, { anchorGameDate: item.conversationDate,
+        legacySource: { memoryId: item.source?.sourceMemoryId, sourceHash: item.source?.sourceRevision, fragmentId: item.itemId } });
+      itemEventWindows.set(item.itemId, refs.filter(ref => ref.timeRole === "event").map(ref => ({
+        fromTotalDays: today + normalizeGameDate(ref.fromGameDate).serial - currentDate.serial,
+        toTotalDays: today + normalizeGameDate(ref.toGameDate).serial - currentDate.serial })));
+    }
+    return itemEventWindows.get(item.itemId).some(entry =>
+      entry.fromTotalDays <= range.toTotalDays && entry.toTotalDays >= range.fromTotalDays);
+  };
+  const windowDate = day => gameDateFromSerial(currentDate.serial + day - today)?.canonical || null;
+  let candidateVisibleCount = 0, matchedWindowCount = 0, temporalExpansionUsed = false;
+  let timeFallbackReason = "NONE";
+  const terms = thirdPersonQueryTerms(query, targetProfiles, temporal);
   let ownerReadSession = null;
   let ownerValidationMs = 0;
   const validateOwnerRead = () => {
@@ -480,6 +519,11 @@ function retrieveThirdPersonHistory({ mode = "THIRD_PERSON_LEDGER", store, owner
   if (!safeDirectory && ["COMPLETE", "SCOPED_DEGRADED"].includes(directory.status)) directory = { status: "UNAVAILABLE", reason: "DIRECTORY_INVALID" };
   const scopes = safeDirectory ? allScopes.filter(scope => candidateIds.has(scope.counterpartId)) : allScopes;
   const directoryMetrics = () => ({ candidateDirectoryStatus: directory.status,
+    candidateVisibleCount, matchedWindowCount, temporalExpansionUsed, timeFallbackReason,
+    temporalMode: !temporal?.requested ? "NO_TIME" : temporal.normalizedConcept === "EXPLICIT_YEAR" ? "EXPLICIT_YEAR" : temporal.mode,
+    timeAnchorStatus: temporal?.requested ? "TRUSTED_PLAYER_QUERY" : "NO_TIME",
+    timeWindowStart: temporal?.triggered ? windowDate(temporal.primaryWindow.fromTotalDays) : null,
+    timeWindowEnd: temporal?.triggered ? windowDate(temporal.primaryWindow.toTotalDays) : null,
     candidateDirectoryCacheHit: directory.cacheHit === true, candidateDirectoryBuildMs: directory.constructionMs || 0,
     trustedCoveredScopeCount: directory.trustedCoveredScopeCount || 0,
     uncertainScopedScopeCount: directory.uncertainScopedScopeCount || 0,
@@ -565,7 +609,16 @@ function retrieveThirdPersonHistory({ mode = "THIRD_PERSON_LEDGER", store, owner
   let totalRelevantItems = 0;
   let omittedByTargetLimit = 0;
   for (const targetId of route.targetIds) {
-    const rows = [...candidatesByTarget.get(targetId).values()];
+    let rows = [...candidatesByTarget.get(targetId).values()];
+    candidateVisibleCount += rows.length;
+    if (temporal?.requested) {
+      const primary = rows.filter(row => inWindow(row.item, temporal.primaryWindow));
+      if (!primary.length && temporal.mode === "FUZZY_RECENCY" && windowValid(temporal.expansionWindow)) {
+        rows = rows.filter(row => inWindow(row.item, temporal.expansionWindow));
+        if (rows.length) { temporalExpansionUsed = true; timeFallbackReason = "TEMPORAL_EXPANSION_USED"; }
+      } else rows = primary;
+    }
+    matchedWindowCount += rows.length;
     totalRelevantItems += rows.length;
     const direct = rows.filter(row => row.scopeKind === "DIRECT_PAIR");
     const cross = rows.filter(row => row.scopeKind === "CROSS_PAIR");
@@ -590,7 +643,9 @@ function retrieveThirdPersonHistory({ mode = "THIRD_PERSON_LEDGER", store, owner
       return formatThirdPersonEmpty("SOURCE_STALE", { level, legacyFallbackEligible: false,
         metrics: { ...indexReadMetrics(), candidateDirectoryStatus: "STALE", indexLookupMs } });
     }
-    return formatThirdPersonEmpty("INDEX_MISS", { level, candidateSourcePointers,
+    if (temporal?.requested) timeFallbackReason = "TIME_WINDOW_NO_MATCH";
+    return formatThirdPersonEmpty(temporal?.requested ? "TIME_WINDOW_NO_MATCH" : "INDEX_MISS", { level, candidateSourcePointers,
+      legacyFallbackEligible: temporal?.requested ? level === "L2" && candidateVisibleCount === 0 : null,
       metrics: { ...indexReadMetrics(), indexLookupMs, candidateSummaryCount, totalVisibleItems: 0, scopeRevisions } });
   }
 
@@ -763,6 +818,7 @@ function retrieveThirdPersonHistory({ mode = "THIRD_PERSON_LEDGER", store, owner
     injectedItems: items.length,
     omittedItems,
     omittedByBudget,
+    budgetOmittedCount: omittedByBudget + sourceBudgetOmittedCount,
     sourceBudgetOmittedCount,
     omittedByTargetLimit,
     duplicateIncludedCount,

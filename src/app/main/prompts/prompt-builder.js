@@ -595,6 +595,7 @@ function createPromptBuilder({
     static buildMessagesWithTokenCount(history, char, gameData, currentSessionSummary, memoryContext = null, providerConfig = null, options = {}) {
       const memoryMode = options?.memoryMode;
       if (memoryMode === "exclude") memoryContext = this.createMemoryExcludedContext(memoryContext);
+      const ageAuthorityGameData = gameData;
       const profileView = createTraitProfileView(gameData, char, memoryContext);
       gameData = profileView.gameData;
       char = profileView.character;
@@ -663,7 +664,13 @@ function createPromptBuilder({
       };
       const responderGameFacts = this.buildResponderGameFacts(char, gameData);
       const latestUserQuery = [...workingHistory].reverse().find((message) => message.role === "user")?.content || "";
-      const responderFamilyFacts = buildFamilyFactBlock(char, gameData, { query: latestUserQuery, currentFactRegistry });
+      const ageDiagnostics = [];
+      const responderFamilyFacts = buildFamilyFactBlock(char, gameData, {
+        query: latestUserQuery,
+        currentFactRegistry,
+        ageAuthorityGameData,
+        ageDiagnostics
+      });
       const mentionedCharactersContext = memoryContext?.subjectiveWorldPolicyActive ? null : this.buildMentionedCharactersContext(char, gameData, workingHistory, currentFactRegistry);
       const responderGameFactsBlock = {
         id: "responder-game-facts",
@@ -1063,6 +1070,7 @@ function createPromptBuilder({
           layoutId
         },
         omittedHistoryTokens: TokenCounter.calculateTotalTokens(omittedHistory),
+        ageDiagnostics,
         staticTokens,
         dynamicTokens: blocksWithTokens.slice(firstDynamicBlock < 0 ? blocksWithTokens.length : firstDynamicBlock).reduce((total, tokenBlock) => total + (Number(tokenBlock.tokens) || 0), 0),
         globalStaticTokens: lifecycleTokens[PROMPT_LIFECYCLE.GLOBAL_STATIC],

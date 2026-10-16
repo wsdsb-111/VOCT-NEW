@@ -2,8 +2,10 @@
 
 const crypto = require("crypto");
 
-const TARGET_EVIDENCE = new Set(["EXPLICIT_ID", "UNIQUE_ALIAS"]);
+const TARGET_EVIDENCE = new Set(["EXPLICIT_ID", "UNIQUE_ALIAS", "KINSHIP_UNIQUE"]);
 const HISTORICAL_PATTERN = /以前|曾经|过去|往事|历史|当年|当时|那年|此前|之前|后来|回忆|回想|旧事|\d{3,6}\s*年/u;
+const PAST_TIME_PATTERN = /去年|前年|[零〇一二两三四五六七八九十百\d]+\s*(?:年|个月|月|天|日)前|前些年|前些日子|往年|早年|从前|很久以前|早先|当初/u;
+const PAST_QUERY_PATTERN = /谈|说|争论|见|关系|相处|记得|经历|发生|约定|往来|如何|什么|怎样/u;
 const CURRENT_FUTURE_PATTERN = /现在|今天|当下|眼下|当前|明天|后天|下次|将来|未来|接下来|稍后/u;
 const FUTURE_PLAN_PATTERN = /(?:之后|以后)(?:还要|要不要|计划|会不会)|(?:还要|要不要|计划|会不会).{0,8}(?:之后|以后)|(?:只|仅)(?:谈|说|讨论|看).{0,6}(?:今天|现在|当下|眼下|当前)/u;
 const FUTURE_DEPENDENCY_PATTERN = /(?:等|待|如果|假如|若).{0,20}(?:以后|之后|过后)|(?:以后|之后|过后).{0,10}(?:还要|要不要|计划|会不会|准备|打算|将|要)|(?:记得|提醒|记住).{0,24}(?:以后|之后|过后).{0,10}(?:把|将|要|交|给|通知|安排|送|带|告诉)/u;
@@ -14,12 +16,12 @@ const DENIAL_HISTORY_PATTERN = /以前|过去|往事|历史|当年|旧事|从前
 const DIRECT_RECALL_ACTION_PATTERN = /回忆|回想|查|翻/u;
 const REMINDER_PATTERN = /记得\s*(?:把|将|要|去|给|向|通知|提醒|安排|交|带|告诉|转告|送)/u;
 const DETAIL_PATTERN = /具体|究竟|到底|原话|为何|为什么|原因|过程|经过|详细|怎么说|说了什么|如何说|怎么处理|如何处理|发生了什么|发生过什么|什么争执|哪些争执|哪一年|何时|什么时候|\d{3,6}\s*年/u;
-const EVENT_AFTER_RECALL_PATTERN = /(?:发生了?什么|发生过什么|怎么样了|关系(?:如何|怎么样|怎么变化)|(?:关系.{0,4})?发生过变化|(?:关系.{0,4})?有过变化|结果如何|有何影响|有什么影响|有没有.{0,8}过|是否.{0,8}过|如何相处|怎么相处|经历过什么|当时如何)/u;
+const EVENT_AFTER_RECALL_PATTERN = /(?:发生了?什么|发生过什么|怎么样了|关系(?:如何|怎么样|怎么变化)|关系.{0,4}(?:有什么|有何)变化|(?:关系.{0,4})?发生过变化|(?:关系.{0,4})?有过变化|结果如何|有何影响|有什么影响|有没有.{0,8}过|有没有再(?:见面|会面|往来)|是否.{0,8}过|如何相处|怎么相处|经历过什么|当时如何)/u;
 const COMPLETED_ASPECT_PATTERN = /(?:发生|见|遇到|经历|改变|变化|处理|相处)(?:了|过)|(?:已经|曾经).{0,8}(?:发生|见|经历|改变|变化|处理|相处)/u;
 const TIME_PATTERN = /哪一年|何时|什么时候|\d{3,6}\s*年|当年|那年/u;
 const RELATIONSHIP_PATTERN = /记得|认识|关系|相处|交情|如何|怎么样|什么样/u;
 const ELLIPTICAL_FOLLOWUP_PATTERN = /^(?:(?:那|那么)?(?:(?:他|她|他们|她们|它|这件事|那件事|这个约定)?(?:后来|之后|接下来))|(?:他|她|他们|她们|它)?(?:后来|之后|然后)|这件事|那件事|这个约定)(?:呢|如何|怎么样|怎么了|发生了什么)?[？?。！!…]*$/u;
-const ROUTE_SCHEMA_VERSION = "v9363-third-person-route-2";
+const ROUTE_SCHEMA_VERSION = "v9363-third-person-route-3";
 
 function validId(value) {
   const id = Number(value);
@@ -72,7 +74,8 @@ function normalizeTargets(resolvedTargets = []) {
   if ([...aliasIds.values()].some(aliasCharacters => aliasCharacters.size > 1)) ambiguous = true;
   return {
     ids: ambiguous ? [] : [...ids],
-    evidence: ambiguous || !ids.size ? "UNRESOLVED" : evidence.has("UNIQUE_ALIAS") ? "UNIQUE_ALIAS" : "EXPLICIT_ID",
+    evidence: ambiguous || !ids.size ? "UNRESOLVED" : evidence.has("UNIQUE_ALIAS") ? "UNIQUE_ALIAS"
+      : evidence.has("KINSHIP_UNIQUE") ? "KINSHIP_UNIQUE" : "EXPLICIT_ID",
     ambiguous
   };
 }
@@ -107,7 +110,7 @@ function resolveCurrentQueryContext({ history = [], ownerId, trustedPlayerId, ac
   return { querySpeakerId: null, query: "", addressedIds: [], directnessEvidence: "UNDETERMINED" };
 }
 
-function resolveTrustedPlayerTurn({ history = [], playerAnchorId, currentPlayerMessageId, turnEpoch,
+function resolveTrustedPlayerTurn({ history = [], playerAnchorId, currentPlayerMessageId, turnEpoch, logicalTurnEpoch = null,
   conversationId = null, sceneRevision = null } = {}) {
   const player = validId(playerAnchorId);
   if (!player || currentPlayerMessageId == null || !Number.isSafeInteger(turnEpoch) || turnEpoch < 0
@@ -123,7 +126,7 @@ function resolveTrustedPlayerTurn({ history = [], playerAnchorId, currentPlayerM
   const turnIndex = matchingIndices[0];
   const message = history[turnIndex];
   if (message?.role !== "user" || message.isStreaming === true || typeof message.content !== "string" || !message.content.trim()) return null;
-  const speakerId = validId(message.speakerCharacterId ?? player);
+  const speakerId = validId(message.speakerCharacterId);
   if (speakerId !== player) return null;
   return {
     trusted: true,
@@ -133,6 +136,7 @@ function resolveTrustedPlayerTurn({ history = [], playerAnchorId, currentPlayerM
     speakerCharacterId: speakerId,
     turnIndex,
     turnEpoch,
+    logicalTurnEpoch: Number.isSafeInteger(logicalTurnEpoch) && logicalTurnEpoch >= 0 ? logicalTurnEpoch : null,
     conversationId: conversationId ?? null,
     sceneRevision: sceneRevision ?? null,
     content: message.content
@@ -193,6 +197,7 @@ function classifyIntentClause(text) {
     || /记得.+(?:吗|么)$/u.test(text);
   const historicalEvidence = [];
   if (HISTORICAL_PATTERN.test(text)) historicalEvidence.push("PAST_ANCHOR");
+  if (PAST_TIME_PATTERN.test(text) && PAST_QUERY_PATTERN.test(text)) historicalEvidence.push("PAST_TIME_QUERY");
   const eventAfterRecall = hasEventAfterRecall(text);
   if (eventAfterRecall.matched) historicalEvidence.push("EVENT_AFTER_RECALL");
   if (eventAfterRecall.completed) historicalEvidence.push("COMPLETED_ASPECT");
@@ -200,7 +205,7 @@ function classifyIntentClause(text) {
   const futureEvidence = [];
   if (FUTURE_DEPENDENCY_PATTERN.test(text)) futureEvidence.push("FUTURE_DEPENDENCY");
   if (CURRENT_FUTURE_PATTERN.test(text) || FUTURE_PLAN_PATTERN.test(text) || REMINDER_PATTERN.test(text)
-    || (!historicalEvidence.length && PLAN_ACTION_PATTERN.test(text))) {
+    || !historicalEvidence.length && PLAN_ACTION_PATTERN.test(text)) {
     if (!futureEvidence.includes("FUTURE_DEPENDENCY")) futureEvidence.push("CURRENT_OR_PLAN_ANCHOR");
   }
   const mayRequestSourceDetail = historicalEvidence.length > 0 && !futureEvidence.length && DETAIL_PATTERN.test(text);
@@ -243,9 +248,10 @@ function isValidBinding(binding, { ownerId, playerAnchorId, trustedPlayerTurn })
   const targetIds = normalizeTargets(binding.targetCharacterIds);
   const owner = validId(binding.responderId ?? binding.ownerId);
   const player = validId(binding.playerAnchorId);
-  const authorizedEpoch = Number(binding.authorizedTurnEpoch ?? binding.turnEpoch);
-  const expiresAfterTurnEpoch = Number(binding.expiresAfterTurnEpoch ?? authorizedEpoch + 1);
-  const currentEpoch = trustedPlayerTurn.turnEpoch;
+  const logical = binding.authorizedLogicalTurnEpoch != null;
+  const authorizedEpoch = Number(logical ? binding.authorizedLogicalTurnEpoch : binding.authorizedTurnEpoch ?? binding.turnEpoch);
+  const expiresAfterTurnEpoch = logical ? authorizedEpoch + 1 : Number(binding.expiresAfterTurnEpoch ?? authorizedEpoch + 1);
+  const currentEpoch = logical ? trustedPlayerTurn.logicalTurnEpoch : trustedPlayerTurn.turnEpoch;
   if (targetIds.ambiguous || !targetIds.ids.length || owner !== ownerId || player !== playerAnchorId
     || !Number.isSafeInteger(authorizedEpoch) || currentEpoch !== authorizedEpoch + 1
     || currentEpoch > expiresAfterTurnEpoch) return false;
@@ -280,6 +286,8 @@ function classifyThirdPersonHistoryRequest({ trustedPlayerTurn = null, ownerId, 
     denialDetected: false,
     reasonCode: "NO_HISTORICAL_INTENT",
     queryFingerprint,
+    logicalQueryFingerprint: validTurn ? crypto.createHash("sha256")
+      .update(JSON.stringify([ROUTE_SCHEMA_VERSION, owner, player, turn.messageId, normalizedQuery])).digest("hex") : "",
     authorizationTurnIndex: validTurn ? turn.turnIndex : null,
     authorizationTurnEpoch: validTurn ? turn.turnEpoch : null,
     authorizationMessageId: validTurn ? turn.messageId : null
@@ -356,11 +364,11 @@ function classifyThirdPersonHistoryRequest({ trustedPlayerTurn = null, ownerId, 
 
 function resolveActiveMemoryPairs({ ownerId, history = [], activeParticipantIds = [], playerId = null,
   trustedPlayerId = playerId, currentPlayerMessageId = null, turnEpoch = null,
-  conversationId = null, sceneRevision = null } = {}) {
+  conversationId = null, sceneRevision = null, logicalTurnEpoch = null } = {}) {
   const anchor = resolveFrozenPlayerAnchor({ ownerId, trustedPlayerId });
   const queryContext = resolveCurrentQueryContext({ history, ownerId, trustedPlayerId, activeParticipantIds });
   const trustedPlayerTurn = anchor.ok ? resolveTrustedPlayerTurn({ history, playerAnchorId: anchor.playerAnchorId,
-    currentPlayerMessageId, turnEpoch, conversationId, sceneRevision }) : null;
+    currentPlayerMessageId, turnEpoch, logicalTurnEpoch, conversationId, sceneRevision }) : null;
   return {
     counterpartIds: anchor.ok ? [anchor.playerAnchorId] : [],
     playerAnchorId: anchor.playerAnchorId,

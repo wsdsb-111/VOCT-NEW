@@ -26,7 +26,7 @@ const LEVELS = ["L0", "L1", "L2"];
 const modeFlags = process.argv.slice(2).filter(arg => ["--estimate", "--benchmark"].includes(arg));
 const unknownFlags = process.argv.slice(2).filter(arg => !["--estimate", "--benchmark"].includes(arg));
 
-if (unknownFlags.length || modeFlags.length > 1) {
+if (require.main === module && (unknownFlags.length || modeFlags.length > 1)) {
   console.error("Usage: node scripts/test-v9.3.6.3-mixed-archive-ab.js [--estimate|--benchmark]");
   process.exit(2);
 }
@@ -34,7 +34,7 @@ if (unknownFlags.length || modeFlags.length > 1) {
 const runMode = modeFlags[0] === "--benchmark" ? "benchmark"
   : modeFlags[0] === "--estimate" ? "estimate" : "correctness";
 const nodeMajor = Number(process.versions.node.split(".")[0]);
-if (nodeMajor !== 22) {
+if (require.main === module && nodeMajor !== 22) {
   console.error("NODE_22_REQUIRED: run with .build/v9331-node22/node.exe");
   process.exit(2);
 }
@@ -97,8 +97,18 @@ fs.mkdirSync(buildRoot, { recursive: true });
 const tempRoot = fs.mkdtempSync(path.join(buildRoot, "v9363-mixed-archive-"));
 const resolvedBuildRoot = path.resolve(buildRoot);
 const resolvedTempRoot = path.resolve(tempRoot);
-if (!resolvedTempRoot.toLowerCase().startsWith((resolvedBuildRoot + path.sep).toLowerCase())) {
+if (path.dirname(resolvedTempRoot).toLowerCase() !== resolvedBuildRoot.toLowerCase()
+    || !path.basename(resolvedTempRoot).startsWith("v9363-mixed-archive-")) {
   throw new Error("FIXTURE_ROOT_OUTSIDE_BUILD");
+}
+
+function cleanupFixtureRoot() {
+  const candidate = path.resolve(tempRoot);
+  if (path.dirname(candidate).toLowerCase() !== resolvedBuildRoot.toLowerCase()
+      || !path.basename(candidate).startsWith("v9363-mixed-archive-")) {
+    throw new Error("FIXTURE_CLEANUP_ROOT_OUTSIDE_BUILD");
+  }
+  if (fs.existsSync(candidate)) fs.rmSync(candidate, { recursive: true, force: true });
 }
 
 function machineInfo() {
@@ -139,13 +149,16 @@ function summaryContent(marker, matter) {
   return `${marker}：合成叙事。\n\n【需要长期记住的事项】\n- ${matter}\n【其他事项】\n合成来源。`;
 }
 
-function makeSummary({ counterpartId, counterpartName, finalizationId, content, unscoped = false }) {
+function makeSummary({ counterpartId, counterpartName, finalizationId, content, unscoped = false,
+  date = "1190.1.1" }) {
+  const normalizedDate = normalizeGameDate(date);
+  if (!normalizedDate) throw new Error("FIXTURE_SUMMARY_DATE_INVALID");
   const participants = unscoped
     ? [{ id: OWNER_ID, name: OWNER_NAME }]
     : [{ id: OWNER_ID, name: OWNER_NAME }, { id: counterpartId, name: counterpartName }];
   return {
-    date: "1190.1.1",
-    totalDays: normalizeGameDate("1190.1.1").serial,
+    date: normalizedDate.canonical,
+    totalDays: normalizedDate.serial,
     content,
     playerId: OWNER_ID,
     playerName: OWNER_NAME,
@@ -161,9 +174,9 @@ function makeSummary({ counterpartId, counterpartName, finalizationId, content, 
   };
 }
 
-function writeSummary(filePath, summary) {
+function writeSummary(filePath, summaries) {
   fs.mkdirSync(path.dirname(filePath), { recursive: true });
-  fs.writeFileSync(filePath, JSON.stringify([summary], null, 2), "utf8");
+  fs.writeFileSync(filePath, JSON.stringify(Array.isArray(summaries) ? summaries : [summaries], null, 2), "utf8");
 }
 
 function matterFor(queryCase, pairIndex) {
@@ -180,7 +193,8 @@ function uncertainPairIndexes(pairCount, uncertainCount) {
   return Array.from({ length: uncertainCount }, (_, index) => index + 1);
 }
 
-function makeFixture(label, pairCount, uncertainCount, queryCase, { unscopedUnknown = false } = {}) {
+function makeFixture(label, pairCount, uncertainCount, queryCase,
+  { unscopedUnknown = false, summaryDatesByPair = null, queryText = null } = {}) {
   const root = path.join(tempRoot, label);
   const summaryFoldersDir = path.join(root, "summaries");
   const ownerFolder = path.join(summaryFoldersDir, `${OWNER_ID}_${OWNER_NAME}`);
@@ -193,12 +207,18 @@ function makeFixture(label, pairCount, uncertainCount, queryCase, { unscopedUnkn
   for (let index = 0; index < pairCount; index++) {
     const counterpartId = ids[index];
     const counterpartName = pairNameAt(index);
-    const finalizationId = `v9363-${label}-pair-${index}`;
-    const marker = `SYNTHETIC_${label}_${index}`;
-    const summary = makeSummary({ counterpartId, counterpartName, finalizationId,
-      content: summaryContent(marker, matterFor(queryCase, index)) });
+    const dates = Array.isArray(summaryDatesByPair?.[index]) && summaryDatesByPair[index].length
+      ? summaryDatesByPair[index] : ["1190.1.1"];
+    const summaries = dates.map((date, dateIndex) => {
+      const finalizationId = `v9363-${label}-pair-${index}${dateIndex ? `-d${dateIndex}` : ""}`;
+      const marker = `SYNTHETIC_${label}_${index}${dates.length > 1 ? `-d${dateIndex}` : ""}`;
+      const dateMarker = ["甲", "乙", "丙"][dateIndex] || String(dateIndex + 1);
+      const matter = matterFor(queryCase, index) + (dates.length > 1 ? `（合成事项${dateMarker}）` : "");
+      return makeSummary({ counterpartId, counterpartName, finalizationId, date,
+        content: summaryContent(marker, matter) });
+    });
     const pairPath = path.join(ownerFolder, `与${counterpartName}的对话.json`);
-    writeSummary(pairPath, summary);
+    writeSummary(pairPath, summaries);
     sourceFiles.push(pairPath);
   }
 
@@ -242,6 +262,8 @@ function makeFixture(label, pairCount, uncertainCount, queryCase, { unscopedUnkn
     uncertainCount,
     uncertainFinalizationIds,
     queryCase,
+    queryText,
+    summaryDatesByPair,
     unscopedUnknown,
     unscopedFinalizationId,
     summaryFoldersDir
@@ -352,9 +374,9 @@ function pairProfile() {
   return [{ characterId: TARGET_ID, name: TARGET_ALIAS, aliases: [TARGET_ALIAS, "target-alpha"] }];
 }
 
-function makeRetrievalArgs(context, retrievalMode, level) {
+function makeRetrievalArgs(context, retrievalMode, level, temporal = null) {
   const queryCase = context.fixture.queryCase;
-  return {
+  const args = {
     mode: level === "L2" ? "THIRD_PERSON_SOURCE_DETAIL" : "THIRD_PERSON_LEDGER",
     retrievalMode,
     store: context.store,
@@ -365,10 +387,12 @@ function makeRetrievalArgs(context, retrievalMode, level) {
     currentGameDate: CURRENT_DATE,
     currentTotalDays: normalizedCurrentDate.serial ?? CURRENT_TOTAL_DAYS,
     memories: context.memories,
-    query: queryFor(queryCase),
+    query: context.fixture.queryText || queryFor(queryCase),
     tokenBudget: TOKEN_BUDGET,
     estimateTokens: value => Math.ceil(String(value || "").length / 2)
   };
+  if (temporal) args.temporal = temporal;
+  return args;
 }
 
 function installLedgerCounters(context, counts) {
@@ -438,7 +462,7 @@ function blankCounters() {
     ownerReadValidationMs: 0 };
 }
 
-function runRetrieval(context, level, { timingRole }) {
+function runRetrieval(context, level, { timingRole, temporal = null }) {
   const counts = blankCounters();
   const ledger = context.store.pairLedger;
   const store = context.store;
@@ -448,12 +472,13 @@ function runRetrieval(context, level, { timingRole }) {
   const before = process.memoryUsage();
   const cpuBefore = process.cpuUsage();
   const restoreCounters = installLedgerCounters(context, counts);
+  const args = makeRetrievalArgs(context, context.retrievalMode, level, temporal);
   const start = performance.now();
   let result;
   let snapshotAudit = { calls: 0, uncertainRows: 0, exactStoreWeakMapSnapshot: true, sourceBytesStable: true };
   try {
     const audited = withTrustedSnapshotAudit(context, () => ({
-      result: retrievePairMemorySources(makeRetrievalArgs(context, context.retrievalMode, level))
+      result: retrievePairMemorySources(args)
     }));
     result = audited.result;
     if (audited.trustedSnapshotAudit) snapshotAudit = audited.trustedSnapshotAudit;
@@ -462,7 +487,7 @@ function runRetrieval(context, level, { timingRole }) {
   const cpuDelta = process.cpuUsage(cpuBefore);
   const after = process.memoryUsage();
   const metrics = result?.metrics || {};
-  const semantic = semanticEvidence(result, level, counts);
+  const semantic = semanticEvidence(result, level, counts, args.decision.targetCharacterIds, temporal);
   const sample = {
     level,
     timingRole,
@@ -531,12 +556,13 @@ function runRetrieval(context, level, { timingRole }) {
       sourceResolveAttemptCount: metrics.sourceResolveAttemptCount ?? null
     },
     trustedSnapshotAudit: snapshotAudit,
+    requestedTemporal: temporal,
     semantic
   };
   return { result, counts, sample };
 }
 
-function semanticEvidence(result, level, counts) {
+function semanticEvidence(result, level, counts, targetCharacterIds = [], temporal = null) {
   const items = Array.isArray(result?.items) ? result.items : [];
   const itemRows = items.map(item => {
     const source = item.source || {};
@@ -550,10 +576,20 @@ function semanticEvidence(result, level, counts) {
     const memory = source.memory || {};
     return [source.sourceSummaryKey ?? null, source.sourceRevision ?? null,
       memory.memoryId ?? null, sha256(memory.content || ""), source.routeKind ?? null,
-      Array.isArray(source.routeCharacterIds) ? source.routeCharacterIds.map(Number) : []];
+      Array.isArray(source.routeCharacterIds) ? source.routeCharacterIds.map(Number) : [],
+      source.sourceItemOrdinal ?? null];
   });
   const metrics = result?.metrics || {};
-  const targetIds = [TARGET_ID];
+  const reportedWindow = metrics.temporalWindow || metrics.retrievalWindow || result?.temporalWindow || {
+    mode: metrics.temporalMode ?? null,
+    anchorStatus: metrics.timeAnchorStatus ?? null,
+    start: metrics.timeWindowStart ?? null,
+    end: metrics.timeWindowEnd ?? null,
+    visibleItemCount: metrics.candidateVisibleCount ?? null,
+    matchedItemCount: metrics.matchedWindowCount ?? null,
+    expansionUsed: metrics.temporalExpansionUsed === true,
+    fallbackReason: metrics.timeFallbackReason ?? null
+  };
   return {
     status: result?.status ?? null,
     textSha256: sha256(result?.text || ""),
@@ -561,7 +597,7 @@ function semanticEvidence(result, level, counts) {
     itemIdentityAndOrderSha256: sha256(stableJson(itemRows)),
     sourceOutputCount: resolvedSources.length,
     sourceOutputSha256: sha256(stableJson(resolvedSources)),
-    targetIdsSha256: sha256(stableJson(targetIds)),
+    targetIdsSha256: sha256(stableJson(targetCharacterIds.map(Number))),
     itemTargetIdsSha256: sha256(stableJson(items.map(item => Number(item.targetCharacterId)).sort((a, b) => a - b))),
     sourceResolveAttempts: counts.resolveSourceCalls,
     reportedSourceResolveAttempts: metrics.sourceResolveAttemptCount ?? 0,
@@ -570,6 +606,8 @@ function semanticEvidence(result, level, counts) {
     legacyFallbackUsed: metrics.legacyFallbackUsed === true,
     legacyFallbackEligible: result?.legacyFallbackEligible === true,
     fallbackStatus: result?.fallbackStatus ?? null,
+    requestedTemporalSha256: temporal ? sha256(stableJson(temporal)) : null,
+    reportedWindowSha256: reportedWindow ? sha256(stableJson(reportedWindow)) : null,
     level
   };
 }
@@ -585,6 +623,8 @@ function comparableSemantic(sample) {
     sourceOutputSha256: semantic.sourceOutputSha256,
     targetIdsSha256: semantic.targetIdsSha256,
     itemTargetIdsSha256: semantic.itemTargetIdsSha256,
+    requestedTemporalSha256: semantic.requestedTemporalSha256,
+    reportedWindowSha256: semantic.reportedWindowSha256,
     sourceResolveAttempts: semantic.sourceResolveAttempts,
     requestedTokenBudget: semantic.requestedTokenBudget,
     finalInjectedTokens: semantic.finalInjectedTokens,
@@ -669,6 +709,7 @@ function cellKey({ pairCount, oldPercent = null, uncertainCount = null, queryCas
 }
 
 function sampleRow(run, arm) {
+  const metrics = run.result?.metrics || {};
   return {
     arm,
     wallMs: run.sample.wallMs,
@@ -689,7 +730,19 @@ function sampleRow(run, arm) {
     fallback: run.sample.fallback,
     trustedSnapshotAudit: run.sample.trustedSnapshotAudit,
     semantic: run.sample.semantic,
+    temporalWindow: {
+      mode: metrics.temporalMode ?? null,
+      anchorStatus: metrics.timeAnchorStatus ?? null,
+      start: metrics.timeWindowStart ?? null,
+      end: metrics.timeWindowEnd ?? null,
+      visibleItemCount: metrics.candidateVisibleCount ?? null,
+      matchedItemCount: metrics.matchedWindowCount ?? null,
+      expansionUsed: metrics.temporalExpansionUsed === true,
+      fallbackReason: metrics.timeFallbackReason ?? null
+    },
     readScopeCount: run.sample.readScopeCount,
+    readScopeCounterpartIds: [...new Set(run.counts.readScopes.map(scope => Number(scope.counterpartId))
+      .filter(id => Number.isSafeInteger(id) && id > 0))].sort((a, b) => a - b),
     allReadScopesBelongToOwner: run.sample.allReadScopesBelongToOwner
   };
 }
@@ -918,29 +971,38 @@ function printSafeFailureStack(error) {
   else console.error("HARNESS_STACK no approved fixture/runtime source locations");
 }
 
-try {
-  if (runMode === "correctness") runCorrectnessMatrix();
-  else if (runMode === "estimate") runEstimate();
-  else runBenchmark();
-  if (runMode === "benchmark" && runState.gateFailures.length) {
-    runState.failures.push({ name: "PerformanceGateError", code: "V9363_PERFORMANCE_GATE_FAILED",
-      failureCount: runState.gateFailures.length });
+function runCli() {
+  try {
+    if (runMode === "correctness") runCorrectnessMatrix();
+    else if (runMode === "estimate") runEstimate();
+    else runBenchmark();
+    if (runMode === "benchmark" && runState.gateFailures.length) {
+      runState.failures.push({ name: "PerformanceGateError", code: "V9363_PERFORMANCE_GATE_FAILED",
+        failureCount: runState.gateFailures.length });
+    }
+    runState.completed = runState.failures.length === 0;
+  } catch (error) {
+    printSafeFailureStack(error);
+    runState.failures.push({ name: error?.name || "Error", code: error?.code || "HARNESS_ASSERTION_FAILED",
+      message: String(error?.code || error?.name || "HARNESS_ASSERTION_FAILED").slice(0, 120) });
+  } finally {
+    try { flushRaw(); }
+    finally { cleanupFixtureRoot(); }
   }
-  runState.completed = runState.failures.length === 0;
-} catch (error) {
-  printSafeFailureStack(error);
-  runState.failures.push({ name: error?.name || "Error", code: error?.code || "HARNESS_ASSERTION_FAILED",
-    message: String(error?.code || error?.name || "HARNESS_ASSERTION_FAILED").slice(0, 120) });
-} finally {
-  try { flushRaw(); }
-  finally {
-    if (fs.existsSync(tempRoot)) fs.rmSync(tempRoot, { recursive: true, force: true });
-  }
+
+  const completedCount = runMode === "correctness" ? runState.correctnessCells.length
+    : runMode === "benchmark" ? runState.benchmarkCells.length : runState.estimateSamples.length;
+  console.log(`${runState.completed ? "PASS" : "FAIL"} V9.3.6.3 mixed archive ${runMode}: ${completedCount} records, `
+    + `${runState.totalRetrievalCalls || 0} retrieval calls, raw=${path.relative(repoRoot, outputPath)}`);
+  if (runState.gateFailures.length) console.error(`PERFORMANCE GATES FAILED: ${runState.gateFailures.length}`);
+  if (!runState.completed) process.exitCode = 1;
 }
 
-const completedCount = runMode === "correctness" ? runState.correctnessCells.length
-  : runMode === "benchmark" ? runState.benchmarkCells.length : runState.estimateSamples.length;
-console.log(`${runState.completed ? "PASS" : "FAIL"} V9.3.6.3 mixed archive ${runMode}: ${completedCount} records, `
-  + `${runState.totalRetrievalCalls || 0} retrieval calls, raw=${path.relative(repoRoot, outputPath)}`);
-if (runState.gateFailures.length) console.error(`PERFORMANCE GATES FAILED: ${runState.gateFailures.length}`);
-if (!runState.completed) process.exitCode = 1;
+module.exports = {
+  OWNER_ID, PLAYER_ID, TARGET_ID, TARGET_ALIAS, OWNER_NAME, CAMPAIGN, CURRENT_DATE, CURRENT_TOTAL_DAYS, TOKEN_BUDGET,
+  makeFixture, createContext, runRetrieval, sampleRow, assertEquivalent, assertScopedCandidate,
+  comparableSemantic, expectedAliasPairs, pairIdAt, uncertainPairIndexes, ratioUncertainCount, summarizeWall, median, percentile,
+  cleanupFixtureRoot
+};
+
+if (require.main === module) runCli();

@@ -1078,7 +1078,10 @@ class WorldlineService {
         genderStatus: sex?.status || "UNKNOWN",
         age: familyBundle?.age ?? age?.age ?? null,
         ageLabel: familyBundle?.ageLabel || age?.label || "age",
-        ageSource: age?.source || null,
+        ageSource: familyBundle?.ageSource || age?.ageSource || null,
+        ageConflict: familyBundle?.ageConflict ?? age?.conflict ?? false,
+        rawAge: familyBundle?.rawAge ?? age?.rawAge ?? null,
+        calculatedCalendarAge: familyBundle?.calculatedCalendarAge ?? age?.calculatedCalendarAge ?? null,
         location: reference(target.locationName || target.location || target.currentLocation),
         liege: relatedReference(target.liege || target.liegeId || target.directLiege),
         court: reference(target.courtEmployer || target.court || target.courtName),
@@ -1090,7 +1093,7 @@ class WorldlineService {
         items: differences,
         bindings: bindingRows
       },
-      familyFact: familyBundle ? { relation: familyBundle.relation, relationLabel: familyBundle.relationLabel, relationshipKind: familyBundle.relationshipKind, lifeStatus: familyBundle.lifeStatus, age: familyBundle.age, ageLabel: familyBundle.ageLabel, death: familyBundle.death, sourceTier: familyBundle.sourceTier, sourceComplete: familyBundle.sourceComplete } : null,
+      familyFact: familyBundle ? { relation: familyBundle.relation, relationLabel: familyBundle.relationLabel, relationshipKind: familyBundle.relationshipKind, lifeStatus: familyBundle.lifeStatus, age: familyBundle.age, ageLabel: familyBundle.ageLabel, ageSource: familyBundle.ageSource, ageConflict: familyBundle.ageConflict, rawAge: familyBundle.rawAge, calculatedCalendarAge: familyBundle.calculatedCalendarAge, ageAsOfGameDate: familyBundle.ageAsOfGameDate, death: familyBundle.death, sourceTier: familyBundle.sourceTier, sourceComplete: familyBundle.sourceComplete } : null,
       integrity,
       profiling: {
         entityLatencyMs,

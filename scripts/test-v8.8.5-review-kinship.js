@@ -28,7 +28,7 @@ async function check(name, fn) {
 }
 
 function familyFixture() {
-  const person = (id, gender, age, extra = {}) => ({ id, shortName: "person" + id, fullName: "person" + id, gender, age, alive: true, ...extra });
+  const person = (id, gender, age, extra = {}) => ({ id, shortName: "person" + id, fullName: "person" + id, gender, age, ageSource: "CK3_CURRENT_AGE", alive: true, ...extra });
   return { date: "1186.6.1", characters: new Map([
     [1, person(1, "male", 30, { parents: [{ id: 2 }, { id: 3 }] })],
     [2, person(2, "male", 60, { parents: [{ id: 4 }, { id: 5 }], siblings: [{ id: 6 }, { id: 7 }, { id: 8 }] })],
@@ -84,8 +84,8 @@ async function run() {
   });
   await check("missing age and day fields are not zero; real newborn is zero", () => {
     for (const age of [null, undefined, "", "  ", false, -1, "invalid"]) assert.strictEqual(resolveCharacterAge({ age }).age, null, String(age));
-    assert.strictEqual(resolveCharacterAge({ age: 0 }).age, 0);
-    assert.strictEqual(resolveCharacterAge({ age: 35, birthDateTotalDays: null }, { currentTotalDays: 400000 }).age, 35);
+    assert.strictEqual(resolveCharacterAge({ age: 0, ageSource: "CK3_CURRENT_AGE" }).age, 0);
+    assert.strictEqual(resolveCharacterAge({ age: 35, ageSource: "CK3_CURRENT_AGE", birthDateTotalDays: null }, { currentTotalDays: 400000 }).age, 35);
     assert.strictEqual(resolveCharacterAge({ birthDate: "1156.6.2", birthDateTotalDays: null }, { currentGameDate: "1186.6.1", currentTotalDays: null }).age, 29);
     assert.strictEqual(resolveCharacterAge({ age: 60, alive: false }).age, null);
     const raw = Array(27).fill("");

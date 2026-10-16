@@ -194,6 +194,8 @@ class Conversation {
     this.leaveEvents = [];
     this.presenceInitialized = false;
     this.pendingActionApprovals = /* @__PURE__ */ new Map();
+    this.generationAttemptsByMessageId = /* @__PURE__ */ new Map();
+    this.memoryAttemptDiagnosticsByOwner = /* @__PURE__ */ new Map();
     this.gameDataRevision = 0;
     this.eventEmitter = new events.EventEmitter();
     this.runtime = createConversationRuntime(this, {
@@ -737,11 +739,13 @@ class Conversation {
     }
     const mentionableProfiles = memoryState.mentionProfileCache.profiles;
     const currentUserIndex = history.findLastIndex((entry) => entry.role === "user");
+    const currentTurn = (this.runtime?.turnManager || this.turnManager)?.currentTurn;
     const pairRoute = require("../memory-system/pair-memory-routing").resolveActiveMemoryPairs({
       ownerId: npc.id, history, activeParticipantIds, playerId: this.gameData.playerID,
       campaignToken: this.gameData.campaignToken,
-      currentPlayerMessageId: (this.runtime?.turnManager || this.turnManager)?.currentTurn?.playerMessageId,
+      currentPlayerMessageId: currentTurn?.playerMessageId,
       turnEpoch: this.turnEpoch,
+      logicalTurnEpoch: currentTurn?.logicalTurnEpoch ?? null,
       conversationId: this.id,
       sceneRevision: JSON.stringify([this.gameData.scene || null, this.gameData.location || null, this.gameData.locationController || null])
     });
@@ -790,6 +794,7 @@ class Conversation {
       campaignToken: this.gameData.campaignToken || null,
       conversationId: this.id,
       sceneRevision: JSON.stringify([this.gameData.scene || null, this.gameData.location || null, this.gameData.locationController || null]),
+      logicalTurnEpoch: currentTurn?.logicalTurnEpoch ?? null,
       memoryEngine3Enabled: memory3Settings.v812MemoryEngine3Enabled !== false,
       gameData: this.gameData,
       entityProfiles: [...mentionableProfiles.values()],
@@ -1291,6 +1296,13 @@ class Conversation {
       streamStatus: "thinking"
     });
     const responseState = this.getGenerationManager().start({ turnEpoch, messageId: msgId, npcId: npc.id });
+    const currentTurn = this.getTurnManager().currentTurn;
+    this.generationAttemptsByMessageId.set(msgId, {
+      logicalPlayerMessageId: currentTurn?.playerMessageId ?? null,
+      turnEpoch,
+      responderId: Number(npc.id),
+      hasActionOutcome: false
+    });
     const controller = responseState.controller;
     this.messages.push(placeholder);
     this.emitUpdate();
@@ -1323,6 +1335,8 @@ class Conversation {
       const renderedMemoryTokens = typeof PromptBuilder.getMemoryBlockTokenCount === "function"
         ? PromptBuilder.getMemoryBlockTokenCount(promptBuild) : totalMemoryTokens;
       if (memoryContext?.playerCenteredRecallEnabled && renderedMemoryTokens > memoryContext.tokenBudget) throw new Error("chat_memory_budget_exceeded");
+      const memoryAttemptDiagnostics = {};
+      let memoryAttemptDiagnosticsCaptured = false;
       logVerboseLLM(`[Conversation][verbose] Prompt for ${npc.fullName}:`, llmMessages);
       const estimatedTokenCount = traceOperation(performanceTrace, "tokenEstimate", { attribution: "MAIN", context: diagnosticsContext, count: llmMessages.length }, () => this.estimateTokenCount(llmMessages));
       console.log(`[TOKEN_COUNT] Message from ${npc.fullName}:`, estimatedTokenCount);
@@ -1330,9 +1344,13 @@ class Conversation {
       const chatRequestMetadata = {
           requestType: "chat",
           beforeSendGuard: () => {
+            if (!this.isResponseCurrent(responseState, npc)) {
+              const error = new Error("Responder or turn changed before send");
+              error.name = "AbortError";
+              throw error;
+            }
             if (memoryContext?.playerCenteredRecallEnabled) {
-              if (!this.isResponseCurrent(responseState, npc)
-                || memoryContext.sourceSceneRevision != null && memoryContext.sourceSceneRevision !== JSON.stringify([
+              if (memoryContext.sourceSceneRevision != null && memoryContext.sourceSceneRevision !== JSON.stringify([
                   this.gameData.scene || null, this.gameData.location || null, this.gameData.locationController || null])) {
                 const error = new Error("Memory responder or turn changed before send");
                 error.name = "AbortError";
@@ -1346,9 +1364,7 @@ class Conversation {
                 error.name = "AbortError";
                 throw error;
               }
-              return;
-            }
-            if (memoryContext?.sourceFolderRevision != null && (
+            } else if (memoryContext?.sourceFolderRevision != null && (
               memoryEngine.store.getFolderSummaryRevision(npc.id) !== memoryContext.sourceFolderRevision
               || this.gameData.campaignToken !== memoryContext.sourceCampaignToken
               || (memoryContext.sourcePairIds || []).some(id => memoryEngine.store.hasPairLedgerSourceContentChanges(
@@ -1357,7 +1373,40 @@ class Conversation {
               error.name = "AbortError";
               throw error;
             }
+            if (!this.isResponseCurrent(responseState, npc)) {
+              const error = new Error("Responder or turn changed before send");
+              error.name = "AbortError";
+              throw error;
+            }
+            if (!memoryAttemptDiagnosticsCaptured) {
+              memoryAttemptDiagnosticsCaptured = true;
+              try {
+                const { buildMemoryAttemptDiagnostics } = require("../memory-system/player-memory-diagnostics");
+                if (typeof buildMemoryAttemptDiagnostics === "function") {
+                  const attemptTurn = this.getTurnManager().currentTurn;
+                  const logicalPlayerMessageId = attemptTurn?.playerMessageId ?? null;
+                  const diagnostics = buildMemoryAttemptDiagnostics({
+                    memoryContext,
+                    promptBuild,
+                    logicalPlayerMessageId,
+                    attemptEpoch: responseState.turnEpoch,
+                    regenerateOf: attemptTurn?.regenerateOfByResponder?.[Number(npc.id)] ?? null,
+                    previous: logicalPlayerMessageId == null
+                      ? null : this.memoryAttemptDiagnosticsByOwner.get(Number(npc.id)) || null
+                  });
+                  if (diagnostics && typeof diagnostics === "object") {
+                    Object.assign(memoryAttemptDiagnostics, diagnostics);
+                    if (logicalPlayerMessageId != null) {
+                      this.memoryAttemptDiagnosticsByOwner.set(Number(npc.id), diagnostics);
+                    }
+                  }
+                }
+              } catch (_error) {
+                console.warn("[MemoryDiagnostics] Memory attempt diagnostics unavailable");
+              }
+            }
           },
+          memoryAttemptDiagnostics,
           conversationId: this.id,
           responderId: npc.id,
           ...(diagnosticsContext ? { performanceTraceContext: diagnosticsContext } : {}),
@@ -1516,13 +1565,14 @@ class Conversation {
       } else {
         throw new Error("Bad LLM response format");
       }
-      this.retainDynamicSummaryRecall(npc.id, msgId, promptBuild, turnEpoch);
+      if (this.isResponseCurrent(responseState, npc)) this.retainDynamicSummaryRecall(npc.id, msgId, promptBuild, turnEpoch);
       if (chatCachedTokens != null) memoryEngine.trace.record("provider_cache_usage", { characterId: npc.id, conversationId: this.id, cachedTokens: chatCachedTokens });
     } catch (error) {
       const staleResponse = responseState.stale || controller.signal.aborted || !this.isResponseCurrent(responseState, npc) || error instanceof Error && error.message === "AbortError: Message cancelled";
       if (staleResponse) {
         conversationTurnResult = "CANCELLED";
         wasCancelled = true;
+        this.generationAttemptsByMessageId.delete(msgId);
         this.messages = this.messages.filter((msg) => msg.id !== msgId || !msg.isStreaming);
         this.recordGenerationSkipped(responseState, responseState.staleReason || (this.isCharacterAvailableForConversation(npc) ? "stale_generation" : "inactive_participant_generation"));
       } else {
@@ -1533,8 +1583,12 @@ class Conversation {
         const err = createError({
           id: this.nextId++,
           content: `Failed to get response from ${npc.shortName}`,
-          details: error instanceof Error ? error.message : String(error)
+          details: error instanceof Error ? error.message : String(error),
+          responderCharacterId: Number(npc.id)
         });
+        const failedAttempt = this.generationAttemptsByMessageId.get(msgId);
+        if (failedAttempt) this.generationAttemptsByMessageId.set(err.id, { ...failedAttempt });
+        this.generationAttemptsByMessageId.delete(msgId);
         this.messages.push(err);
         if (this.npcQueue.length > 0) this.pauseConversation();
       }
@@ -1551,10 +1605,17 @@ class Conversation {
       this.recordGenerationSkipped(responseState, responseState?.staleReason || "stale_action_evaluation");
       return;
     }
+    const generationAttempt = this.generationAttemptsByMessageId.get(npcMessageId);
+    if (generationAttempt) generationAttempt.actionEvaluationPending = true;
     const actionResults = await ActionEngine.evaluateForCharacter(this, npc, responseState.controller.signal);
     if (!this.isResponseCurrent(responseState, npc)) {
       this.recordGenerationSkipped(responseState, responseState?.staleReason || "stale_action_evaluation");
       return;
+    }
+    if (generationAttempt) {
+      generationAttempt.actionEvaluationPending = false;
+      generationAttempt.hasActionOutcome = (actionResults?.autoApproved?.length || 0) > 0
+        || (actionResults?.needsApproval?.length || 0) > 0;
     }
     await this.handleActionResults(npcMessageId, npc, actionResults);
   }
@@ -1811,6 +1872,36 @@ class Conversation {
   async processQueue(turnEpoch = this.turnEpoch) {
     return this.getTurnManager().processQueue(turnEpoch);
   }
+  getValidatedRegenerationContext(targetIndex, targetMessage, responderId) {
+    const currentTurn = this.getTurnManager().currentTurn;
+    const playerId = Number(this.gameData?.playerID);
+    const sceneRevision = JSON.stringify([this.gameData?.scene || null, this.gameData?.location || null,
+      this.gameData?.locationController || null]);
+    const campaignToken = this.gameData?.campaignToken || null;
+    if (!currentTurn || !Number.isSafeInteger(playerId) || playerId <= 0
+      || currentTurn.playerMessageId == null || currentTurn.playerCharacterId !== playerId
+      || currentTurn.conversationId !== this.id || currentTurn.sceneRevision !== sceneRevision
+      || currentTurn.campaignToken !== campaignToken
+      || !currentTurn.activeParticipantIds?.some(id => Number(id) === Number(responderId))) return null;
+
+    const playerMessageIndex = this.messages.findIndex(message => message?.role === "user"
+      && message.id === currentTurn.playerMessageId);
+    let latestUserIndex = -1;
+    for (let index = 0; index < this.messages.length; index += 1) {
+      if (this.messages[index]?.role === "user") latestUserIndex = index;
+    }
+    const playerMessage = this.messages[playerMessageIndex];
+    if (playerMessageIndex < 0 || latestUserIndex !== playerMessageIndex || playerMessageIndex >= targetIndex
+      || playerMessage.speakerCharacterId !== playerId || typeof playerMessage.content !== "string"
+      || !playerMessage.content.trim() || playerMessage.isStreaming === true || playerMessage.incomplete === true) return null;
+
+    const attempt = this.generationAttemptsByMessageId?.get(targetMessage.id);
+    if (!attempt || attempt.logicalPlayerMessageId !== playerMessage.id
+      || attempt.responderId !== Number(responderId) || !Number.isSafeInteger(attempt.turnEpoch)
+      || attempt.turnEpoch < 0 || attempt.turnEpoch > currentTurn.epoch
+      || attempt.actionEvaluationPending === true || attempt.hasActionOutcome === true) return null;
+    return { currentTurn, playerMessage, playerMessageIndex, sceneRevision, campaignToken, playerId };
+  }
   // Send a user message and trigger responses from all NPCs
   async sendMessage(userMessage) {
     console.log(`Conversation.sendMessage called (characters=${typeof userMessage === "string" ? userMessage.length : 0})`);
@@ -1834,9 +1925,15 @@ class Conversation {
       speakerCharacterId: Number(this.gameData.playerID),
       content: userMessage
     });
+    this.generationAttemptsByMessageId.clear();
+    this.memoryAttemptDiagnosticsByOwner.clear();
     const turnState = this.getTurnManager().startUserTurn({
       playerMessageId: userMsg.id,
-      activeParticipantIds: this.getActiveConversationCharacters().map((character) => character.id)
+      activeParticipantIds: this.getActiveConversationCharacters().map((character) => character.id),
+      playerCharacterId: Number(this.gameData.playerID),
+      conversationId: this.id,
+      sceneRevision: JSON.stringify([this.gameData.scene || null, this.gameData.location || null, this.gameData.locationController || null]),
+      campaignToken: this.gameData.campaignToken || null
     });
     this.messages.push(userMsg);
     memoryEngine?.observeParticipants(this, turnState.activeParticipantIds, userMsg.id);
@@ -1858,43 +1955,68 @@ class Conversation {
       console.error("Can only regenerate assistant messages:", targetMessage.role);
       return;
     }
-    this.getTurnManager().supersede("superseded_by_regeneration");
-    for (let i = this.messages.length - 1; i >= targetIndex; i--) {
-      this.messages.splice(i, 1);
-    }
-    const targetCharacter = this.getNpcList().find((c) => c.fullName === targetMessage.name);
-    if (!targetCharacter) {
-      console.error("Could not find character for message:", targetMessage.name);
-      this.emitUpdate();
+    const responderId = Number(targetMessage.speakerCharacterId);
+    if (!Number.isSafeInteger(responderId) || responderId <= 0 || responderId === Number(this.gameData?.playerID)) {
+      console.error("Cannot regenerate assistant without a valid responder ID");
       return;
     }
+    const regenerationContext = this.getValidatedRegenerationContext(targetIndex, targetMessage, responderId);
+    const targetCharacter = regenerationContext && this.getNpcList().find((character) => Number(character.id) === responderId);
+    if (!targetCharacter) {
+      console.error("Cannot safely regenerate a stale turn or unavailable responder");
+      return;
+    }
+    const tailMessages = this.messages.slice(targetIndex);
+    const tailHasUnsafeOutcome = tailMessages.some(message => {
+      const attempt = this.generationAttemptsByMessageId.get(message.id);
+      return attempt?.hasActionOutcome === true || attempt?.actionEvaluationPending === true
+        || (message.type === "action-approval" || message.type === "action-feedback")
+        || (message.role !== "assistant" && message.type !== "error");
+    });
+    if (tailHasUnsafeOutcome) {
+      console.error("Cannot regenerate a turn with action outcomes or non-generation events");
+      return;
+    }
+
+    const regenerateOfByResponder = {};
+    for (const message of tailMessages) {
+      if (message.role !== "assistant") continue;
+      const attempt = this.generationAttemptsByMessageId.get(message.id);
+      const messageResponderId = Number(message.speakerCharacterId);
+      if (attempt?.logicalPlayerMessageId === regenerationContext.playerMessage.id
+        && Number.isSafeInteger(messageResponderId) && messageResponderId > 0
+        && attempt.responderId === messageResponderId) {
+        regenerateOfByResponder[messageResponderId] = message.id;
+      }
+    }
+    regenerateOfByResponder[responderId] = targetMessage.id;
+    const turnState = this.getTurnManager().startRegenerationTurn({
+      playerMessageId: regenerationContext.playerMessage.id,
+      playerCharacterId: regenerationContext.playerId,
+      conversationId: this.id,
+      sceneRevision: regenerationContext.sceneRevision,
+      campaignToken: regenerationContext.campaignToken,
+      regenerateOfByResponder
+    });
+    if (!turnState) {
+      console.error("Cannot safely create a regeneration attempt for this turn");
+      return;
+    }
+    const prefixMessages = new Set(this.messages.slice(0, targetIndex));
+    for (const message of tailMessages) this.generationAttemptsByMessageId.delete(message.id);
+    this.messages = this.messages.filter(message => prefixMessages.has(message));
+
     const generateFollowing = settingsRepository.getGenerateFollowingMessagesSetting();
     if (generateFollowing) {
-      let latestUserIndex = -1;
-      for (let i = targetIndex - 1; i >= 0; i--) {
-        const msg = this.messages[i];
-        if ("role" in msg && msg.role === "user") {
-          latestUserIndex = i;
-          break;
-        }
-      }
-      if (latestUserIndex >= 0) {
-        const respondedCharacters = /* @__PURE__ */ new Set();
-        for (let i = latestUserIndex + 1; i < targetIndex; i++) {
-          const msg = this.messages[i];
-          if (msg.role === "assistant" && msg.name) {
-            respondedCharacters.add(msg.name);
-          }
-        }
-        const allNpcs = this.getNpcList();
-        const remainingCharacters = allNpcs.filter(
-          (c) => !respondedCharacters.has(c.fullName) && c.fullName !== targetCharacter.fullName
-        );
-        this.npcQueue = [targetCharacter, ...remainingCharacters];
-        console.log("Refilled queue for regeneration:", this.npcQueue.map((c) => c.shortName));
-      } else {
-        this.npcQueue = [targetCharacter];
-      }
+      const respondedCharacterIds = new Set(this.messages.slice(regenerationContext.playerMessageIndex + 1)
+        .filter(message => message.role === "assistant"
+          && this.generationAttemptsByMessageId.get(message.id)?.logicalPlayerMessageId === regenerationContext.playerMessage.id)
+        .map(message => Number(message.speakerCharacterId)).filter(Number.isSafeInteger));
+      const activeParticipantIds = new Set(turnState.activeParticipantIds.map(Number));
+      const remainingCharacters = this.getNpcList().filter(character => activeParticipantIds.has(Number(character.id))
+        && !respondedCharacterIds.has(Number(character.id)) && Number(character.id) !== responderId);
+      this.npcQueue = [targetCharacter, ...remainingCharacters];
+      console.log("Refilled queue for regeneration:", this.npcQueue.map((character) => character.shortName));
     } else {
       this.npcQueue = [targetCharacter];
     }
@@ -1918,28 +2040,39 @@ class Conversation {
       console.error("Can only regenerate error entries:", targetError.type);
       return;
     }
-    this.messages.splice(targetIndex, 1);
     if (targetError.content === "Failed to initialize conversation") {
+      this.messages.splice(targetIndex, 1);
       await this.initializeGameData();
     } else {
-      const userMessages = this.messages.filter((msg) => "role" in msg && msg.role === "user");
-      if (userMessages.length > 0) {
-        const latestUserMessage = userMessages[userMessages.length - 1];
-        for (let i = this.messages.length - 1; i >= 0; i--) {
-          const msg = this.messages[i];
-          if ("role" in msg && msg.role === "user" && msg.id === latestUserMessage.id || msg.type === "action-feedback" && msg.associatedMessageId === latestUserMessage.id) {
-            break;
-          }
-          if ("role" in msg && msg.role === "assistant" || msg.type === "error") {
-            this.messages.splice(i, 1);
-          }
-        }
-        if (this.npcQueue.length === 0) {
-          this.fillNpcQueue();
-        }
-        this.emitUpdate();
-        this.resumeConversation();
+      const attempt = this.generationAttemptsByMessageId.get(targetError.id);
+      const responderId = Number(targetError.responderCharacterId ?? attempt?.responderId);
+      const regenerationContext = Number.isSafeInteger(responderId) && responderId > 0
+        ? this.getValidatedRegenerationContext(targetIndex, targetError, responderId) : null;
+      const targetCharacter = regenerationContext && this.getNpcList().find(character => Number(character.id) === responderId);
+      if (!targetCharacter) {
+        console.error("Cannot safely retry a stale turn or unavailable responder error");
+        return;
       }
+      const currentTurn = regenerationContext.currentTurn;
+      const remainingQueue = this.npcQueue.filter(character => Number(character.id) !== responderId
+        && currentTurn.activeParticipantIds.some(id => Number(id) === Number(character.id)));
+      const turnState = this.getTurnManager().startRegenerationTurn({
+        playerMessageId: regenerationContext.playerMessage.id,
+        playerCharacterId: regenerationContext.playerId,
+        conversationId: this.id,
+        sceneRevision: regenerationContext.sceneRevision,
+        campaignToken: regenerationContext.campaignToken,
+        regenerateOfByResponder: { [responderId]: targetError.id }
+      });
+      if (!turnState) {
+        console.error("Cannot safely create a retry attempt for this error");
+        return;
+      }
+      this.generationAttemptsByMessageId.delete(targetError.id);
+      this.messages = this.messages.filter(message => message !== targetError);
+      this.npcQueue = [targetCharacter, ...remainingQueue];
+      this.emitUpdate();
+      this.resumeConversation();
     }
     this.emitUpdate();
   }
@@ -2149,6 +2282,8 @@ class Conversation {
   end() {
     this.isActive = false;
     this.clearHistory();
+    this.generationAttemptsByMessageId?.clear();
+    this.memoryAttemptDiagnosticsByOwner?.clear();
     this.pendingPlayerRecallRequests?.clear();
     this.frozenMemoryBudget = null;
     if (PLAYER_CENTERED_RECALL_ENABLED) memoryEngine?.invalidateConversationRecallState(this);

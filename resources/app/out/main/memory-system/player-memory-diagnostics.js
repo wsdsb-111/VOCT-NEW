@@ -1,10 +1,11 @@
 "use strict";
 
+const crypto = require("crypto");
 const HASH_PATTERN = /^[a-f0-9]{64}$/i;
 const FALLBACK_STATUSES = new Set([
   "BUDGET_OMITTED", "CAMPAIGN_UNBOUND", "CURRENT_DATE_REQUIRED", "IDENTITY_AMBIGUOUS",
   "IDENTITY_UNRESOLVED", "INDEX_HIT_ITEMS", "INDEX_HIT_SOURCE", "INDEX_MISS", "INDEX_UNAVAILABLE",
-  "LEGACY_SOURCE_FALLBACK", "NOT_REQUESTED", "SOURCE_STALE"
+  "LEGACY_SOURCE_FALLBACK", "NOT_REQUESTED", "SOURCE_STALE", "TIME_WINDOW_NO_MATCH", "TEMPORAL_WINDOW_MISMATCH"
 ]);
 const INTENT_LEVELS = new Set(["L0", "L1", "L2"]);
 const DIRECTORY_STATUSES = new Set(["COMPLETE", "SCOPED_DEGRADED", "STALE", "UNAVAILABLE", "AMBIGUOUS"]);
@@ -34,7 +35,8 @@ const COUNT_FIELDS = Object.freeze([
   "sourceKeyValidationFailedCount", "openedSummaryCount", "recentSummaryReferencedItems",
   "sourceResolveAttemptCount", "totalSourceResolveAttemptCount", "candidatePairCount", "actualIndexReadCount",
   "indexCacheHits", "indexCacheMisses", "ownerPairCount", "scopeRevisionChecks", "legacyScanFallbackCount",
-  "trustedCoveredScopeCount", "uncertainScopedScopeCount", "uncertainSourceCount", "unscopedUnknownCount"
+  "trustedCoveredScopeCount", "uncertainScopedScopeCount", "uncertainSourceCount", "unscopedUnknownCount",
+  "candidateVisibleCount", "matchedWindowCount", "budgetOmittedCount"
 ]);
 const TOKEN_FIELDS = Object.freeze([
   "memoryBudget", "baselineBudgetUsed", "dynamicBudgetUsed", "finalInjectedTokens",
@@ -93,7 +95,86 @@ function projectPairMemoryMetrics(value) {
   projected.dynamicCacheHit = safeBoolean(value.dynamicCacheHit);
   projected.legacyFallbackUsed = safeBoolean(value.legacyFallbackUsed);
   projected.budgetPolicyRevision = safeEnum(value.budgetPolicyRevision, POLICY_REVISIONS);
+  projected.targetResolution = safeEnum(value.targetResolution, new Set(["EXPLICIT_ALIAS", "KINSHIP_UNIQUE", "BOUND_FOLLOWUP", "TARGET_AMBIGUOUS", "TARGET_UNRESOLVED", "NO_HISTORY_TARGET"]));
+  projected.trustedPlayerTurnResolved = safeBoolean(value.trustedPlayerTurnResolved);
+  projected.temporalMode = safeEnum(value.temporalMode, new Set(["NO_TIME", "EXPLICIT_YEAR", "TARGET_DATE", "FUZZY_RECENCY", "EARLIEST_AVAILABLE"]));
+  projected.timeAnchorStatus = safeEnum(value.timeAnchorStatus, new Set(["NO_TIME", "TRUSTED_PLAYER_QUERY", "UNAVAILABLE"]));
+  for (const field of ["timeWindowStart", "timeWindowEnd"]) projected[field] = typeof value[field] === "string" && /^\d{1,6}\.\d{1,2}\.\d{1,2}$/u.test(value[field]) ? value[field] : null;
+  projected.timeFallbackReason = safeEnum(value.timeFallbackReason, new Set(["NONE", "TIME_WINDOW_NO_MATCH", "TEMPORAL_WINDOW_MISMATCH", "TEMPORAL_EXPANSION_USED"]));
+  projected.temporalExpansionUsed = safeBoolean(value.temporalExpansionUsed);
+  projected.intentReasonCode = safeEnum(value.intentReasonCode, new Set(["EXPLICIT_HISTORY_REQUEST", "EXPLICIT_HISTORY_DETAIL",
+    "NO_TRUSTED_PLAYER_TURN", "PLAYER_TURN_INVALID", "NO_HISTORICAL_INTENT", "AMBIGUOUS_TEMPORAL_CLAUSE",
+    "DENIAL_OR_CURRENT_ONLY", "IDENTITY_AMBIGUOUS", "HISTORY_TARGET_UNRESOLVED", "FOLLOWUP_BINDING_EXPIRED",
+    "RESPONDER_ID_INVALID", "PLAYER_ANCHOR_UNAVAILABLE", "BOUND_HISTORY_FOLLOWUP"]));
   return projected;
+}
+
+function buildMemoryAttemptDiagnostics({ memoryContext = {}, promptBuild = {}, logicalPlayerMessageId, attemptEpoch, regenerateOf, previous } = {}) {
+  const hash = value => crypto.createHash("sha256").update(JSON.stringify(value ?? null)).digest("hex");
+  const contentHash = value => crypto.createHash("sha256").update(String(value || "")).digest("hex");
+  const decision = memoryContext.thirdPersonDecision || {};
+  const temporal = memoryContext.temporal || {};
+  const blocks = (promptBuild.blocks || []).filter(({ block }) => Object.hasOwn(TOKEN_BLOCK_FIELDS, block?.id));
+  const narrative = ["direct", "official", "stable", "pairMemorySources"].flatMap(kind =>
+    (memoryContext[kind] || []).map(entry => [kind, entry.memory?.memoryId, entry.sourceSummaryKey,
+      entry.sourceRevision ?? entry.memory?.sourceRevision, entry.targetCharacterId]));
+  const selected = [...narrative, ...(memoryContext.pairMemoryItems || []).map(item => [item.itemId, item.source?.sourceSummaryKey,
+    item.source?.sourceRevision, item.targetCharacterId]), ...(memoryContext.pairMemorySources || []).map(source =>
+    [source.sourceSummaryKey, source.sourceRevision, source.targetCharacterId])];
+  const logicalPlayerMessageIdHash = logicalPlayerMessageId == null ? null : hash(logicalPlayerMessageId);
+  const scopeDigest = hash([memoryContext.conversationId, memoryContext.respondingCharacterId, memoryContext.playerAnchorId,
+    memoryContext.sourceCampaignToken, memoryContext.sourceSceneRevision, memoryContext.sourceGameDate,
+    memoryContext.tokenBudget, temporal.mode, temporal.primaryWindow, temporal.expansionWindow]);
+  const row = {
+    logicalPlayerMessageIdHash, attemptEpoch: safeCount(attemptEpoch), regenerateOfHash: regenerateOf == null ? null : hash(regenerateOf),
+    responderIdHash: hash(memoryContext.respondingCharacterId), conversationIdHash: hash(memoryContext.conversationId),
+    campaignTokenHash: hash(memoryContext.sourceCampaignToken),
+    trustedPlayerTurnResolved: memoryContext.pairMemoryMetrics?.trustedPlayerTurnResolved === true,
+    memoryQueryFingerprint: safeHash(decision.logicalQueryFingerprint || decision.queryFingerprint),
+    authorizationDigest: hash([decision.level, decision.targetCharacterIds, decision.targetEvidence, decision.historyIntent]),
+    sourceRevisionDigest: hash([memoryContext.sourceFolderRevision, memoryContext.sourceForgetFingerprint,
+      memoryContext.sourceOfficialFingerprint, narrative,
+      (memoryContext.pairMemoryItems || []).map(item => [item.source?.sourceSummaryKey, item.source?.sourceRevision])]),
+    memorySelectionDigest: hash(selected), scopeDigest,
+    memoryInjectionDigest: hash(blocks.map(({ block, content, tokens }) => [block.id, contentHash(content), safeCount(tokens)])),
+    renderedMemoryTokens: blocks.reduce((total, block) => total + (safeCount(block.tokens) || 0), 0),
+    selectedMemoryTokens: safeCount(memoryContext.selectedTokens),
+    comparisonStatus: "FIRST_ATTEMPT"
+  };
+  row.ageDiagnostics = projectAgeDiagnostics(promptBuild.ageDiagnostics);
+  row.ageSourceConflictCount = row.ageDiagnostics.filter(age => age.ageConflict === true).length;
+  if (previous && logicalPlayerMessageIdHash && previous.logicalPlayerMessageIdHash === logicalPlayerMessageIdHash) {
+    row.comparisonStatus = previous.scopeDigest !== row.scopeDigest ? "SNAPSHOT_CHANGED"
+      : previous.authorizationDigest !== row.authorizationDigest || previous.memoryQueryFingerprint !== row.memoryQueryFingerprint ? "AUTHORIZATION_CHANGED"
+        : previous.sourceRevisionDigest !== row.sourceRevisionDigest ? "SOURCE_CHANGED"
+          : previous.memorySelectionDigest !== row.memorySelectionDigest ? "SELECTION_CHANGED"
+            : previous.memoryInjectionDigest !== row.memoryInjectionDigest ? "PROMPT_INJECTION_CHANGED" : "MATCH";
+  }
+  return row;
+}
+
+function projectMemoryAttemptDiagnostics(value) {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return null;
+  const row = {};
+  for (const field of ["logicalPlayerMessageIdHash", "regenerateOfHash", "responderIdHash", "conversationIdHash", "campaignTokenHash", "memoryQueryFingerprint", "authorizationDigest", "sourceRevisionDigest", "memorySelectionDigest", "memoryInjectionDigest", "scopeDigest"]) row[field] = safeHash(value[field]);
+  for (const field of ["attemptEpoch", "renderedMemoryTokens", "selectedMemoryTokens"]) row[field] = safeCount(value[field]);
+  row.trustedPlayerTurnResolved = safeBoolean(value.trustedPlayerTurnResolved);
+  row.comparisonStatus = safeEnum(value.comparisonStatus, new Set(["FIRST_ATTEMPT", "MATCH", "SNAPSHOT_CHANGED", "AUTHORIZATION_CHANGED", "SOURCE_CHANGED", "SELECTION_CHANGED", "PROMPT_INJECTION_CHANGED"]));
+  row.ageDiagnostics = projectAgeDiagnostics(value.ageDiagnostics);
+  row.ageSourceConflictCount = row.ageDiagnostics.filter(age => age.ageConflict === true).length;
+  return row;
+}
+
+function projectAgeDiagnostics(value) {
+  if (!Array.isArray(value)) return [];
+  return value.slice(0, 1).map(age => ({
+    characterIdHash: safeHash(age?.characterIdHash),
+    ageSource: safeEnum(age?.ageSource, new Set(["CK3_CURRENT_AGE", "CK3_LIVE_RELATIVE_AGE", "CK3_AGE_AT_DEATH",
+      "BIRTH_CURRENT_CALENDAR", "BIRTH_DEATH_CALENDAR", "UNKNOWN", "LIFE_STATUS_CONFLICT", "AGE_SOURCE_CONFLICT", "AGE_AT_DEATH_UNAVAILABLE"])),
+    rawAge: safeCount(age?.rawAge), calculatedCalendarAge: safeCount(age?.calculatedCalendarAge),
+    ageConflict: safeBoolean(age?.ageConflict),
+    asOfGameDate: typeof age?.asOfGameDate === "string" && /^\d{1,6}\.\d{1,2}\.\d{1,2}$/u.test(age.asOfGameDate) ? age.asOfGameDate : null
+  }));
 }
 
 function projectMemoryBudgetPlan(value) {
@@ -161,6 +242,8 @@ function projectPlayerMemoryDiagnostics(value) {
 }
 
 module.exports = {
+  buildMemoryAttemptDiagnostics,
+  projectMemoryAttemptDiagnostics,
   projectContextDiagnostics,
   projectPlayerMemoryDiagnostics,
   projectPairMemoryMetrics,

@@ -3,6 +3,7 @@
 const { resolveProviderPromptProfile, resolvePromptLayoutId } = require("../prompts/provider-prompt-adapter");
 const { normalizeProviderUsage, normalizeUsage } = require("../providers/usage-normalization");
 const { projectProviderUsage } = require("./usage-analytics");
+const { projectMemoryAttemptDiagnostics, projectPairMemoryMetrics } = require("../memory-system/player-memory-diagnostics");
 const {
   buildRealRequestSnapshot,
   buildRealRequestDiff,
@@ -239,7 +240,9 @@ function createProviderDiagnostics({ fs, path, dataDir, settingsRepository, prov
 
     recordResponse({ provider, model, requestType, response, usage, metadata = {}, startedAt, completedAt, firstReasoningAt, firstVisibleContentAt }) {
       const hasRealDiff = metadata.realRequestDiff && metadata.realRequestDiff.version === "real_request_diff_v1";
-      if (!hasRealDiff && provider !== "zhipu" && !["summary", "final_summary", "memory_recovery", "rolling_summary"].includes(requestType)) return null;
+      const memoryAttemptDiagnostics = projectMemoryAttemptDiagnostics(metadata.memoryAttemptDiagnostics);
+      if (!hasRealDiff && !memoryAttemptDiagnostics?.memoryInjectionDigest && provider !== "zhipu"
+        && !["summary", "final_summary", "memory_recovery", "rolling_summary"].includes(requestType)) return null;
       const usageDebug = response?.usage_debug;
       const normalizedUsage = sanitizeUsage(normalizeProviderUsage(usageDebug?.normalized_usage || usage), true);
       const rawUsage = sanitizeUsage(usageDebug?.raw_usage || response?.usage, false);
@@ -274,6 +277,8 @@ function createProviderDiagnostics({ fs, path, dataDir, settingsRepository, prov
         actionDeferred: requestType === "chat" && ["length", "max_tokens", "max_output_tokens"].includes(response?.finish_reason ?? response?.finishReason),
         alignmentStatus: realRequestDiff?.alignmentStatus || null,
         realRequestDiff,
+        memoryAttemptDiagnostics,
+        pairMemoryMetrics: projectPairMemoryMetrics(metadata.pairMemoryMetrics),
         localPrefixDiagnostics: buildLocalPrefixDiagnostics({ normalizedUsage, blocks, TokenCounter, messages }),
         requestStartedAt: startedAt || null,
         firstReasoningAt: firstReasoningAt || null,
@@ -310,8 +315,19 @@ function createProviderDiagnostics({ fs, path, dataDir, settingsRepository, prov
         captureEnabled: this.getStatus().captureEnabled,
         retainedEntries: entries.length,
         summary: summarizeRealRequestEntries(entries),
-        entries
+        entries,
+        memoryAttemptComparisons: this.getMemoryAttemptComparisons(limit)
       };
+    }
+
+    getMemoryAttemptComparisons(limit = 300) {
+      const count = Math.min(300, Math.max(1, Math.floor(Number(limit) || 300)));
+      return this.readEntries().filter(entry => entry.requestType === "chat" && entry.memoryAttemptDiagnostics?.memoryInjectionDigest)
+        .slice(-count).map(entry => ({ timestamp: entry.timestamp, provider: entry.provider, model: entry.model,
+          ...projectMemoryAttemptDiagnostics(entry.memoryAttemptDiagnostics),
+          pairMemoryMetrics: projectPairMemoryMetrics(entry.pairMemoryMetrics),
+          effectiveRequestFingerprint: /^[a-f0-9]{64}$/iu.test(entry.effectiveRequestFingerprint || "") ? entry.effectiveRequestFingerprint : null,
+          sendGuardStatus: "PASSED", groundingStatus: "NOT_EVALUATED" }));
     }
 
     exportRealRequestDiff(limit = 300) {
@@ -319,7 +335,8 @@ function createProviderDiagnostics({ fs, path, dataDir, settingsRepository, prov
       const exportPath = path.join(dataDir, `voct-real-request-diff-${date}.json`);
       const entries = this.getRecentRealRequestDiff(limit);
       fs.mkdirSync(dataDir, { recursive: true });
-      fs.writeFileSync(exportPath, JSON.stringify({ version: "real_request_diff_v1", generatedAt: new Date().toISOString(), summary: summarizeRealRequestEntries(entries), entries }, null, 2), "utf8");
+      const memoryAttemptComparisons = this.getMemoryAttemptComparisons(limit);
+      fs.writeFileSync(exportPath, JSON.stringify({ version: "real_request_diff_v1", generatedAt: new Date().toISOString(), summary: summarizeRealRequestEntries(entries), entries, memoryAttemptComparisons }, null, 2), "utf8");
       return { success: true, path: exportPath, count: entries.length };
     }
 
