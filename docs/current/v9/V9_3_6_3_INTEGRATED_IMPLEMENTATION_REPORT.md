@@ -1,6 +1,6 @@
 # V9.3.6.3 综合实施报告
 
-状态：AGE-01、RECALL-01、REGEN-01 与 OBS-01 的本轮补充施工记录。本地候选实现、构建、部署、完整回归及隔离窗口已通过；新建Windows候选复验待收口，不代表Full Freeze。
+状态：AGE-01、RECALL-01、REGEN-01 与 OBS-01 的本轮补充施工记录。本地候选实现、构建、部署、完整回归及隔离窗口已通过；新建Windows候选六步和完整436组复验亦通过，不代表Full Freeze。
 
 ## 范围与历史关系
 
@@ -64,3 +64,5 @@ Legacy Summary 可见标签、协议 3.0、存储 2.5、Official Action 2.0.3、
 App/Core/UI保持9.3.6.3；独立Three-Mod、Workshop、协议与存储版本保持。冻结的旧候选为 `5c6af27e4f502b8c2a6dfb93dc8a03dd989d5092`，payload `4a5a54504815a3482450d5e6d53c269c988759fe06619a8dc38bafbccea91673`。本轮预修复基线有310次合成采样；当前性能结论只取本轮候选同源A/B，不把旧批次9116次计入本轮。
 
 隔离打包窗口两次启动、实际部署模块九组集成QA、重新生成记忆块比对、Legacy文件夹与姓名/日期/来源展示通过；实际网络和付费模型调用为0。完整命令、计数、源码哈希和后续干净Windows候选结果见[综合验证](V9_3_6_3_INTEGRATED_VERIFICATION_REPORT.md)。
+
+代码提交：`b4a9e805231fffea82b4c8d6f09d56a1d7610a08`。干净Windows候选使用该提交、68项LFS校验和空.build目录完成六步；完整436组通过，289项payload与主部署一致。最终报告收口仅含文档，不改变测试代码。

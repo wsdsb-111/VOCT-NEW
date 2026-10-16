@@ -1,0 +1,53 @@
+{
+  "node": "v22.23.3",
+  "snapshotSHA": "b4a9e805231fffea82b4c8d6f09d56a1d7610a08",
+  "initialBuildExists": false,
+  "lfsFilesVerified": 68,
+  "steps": [
+    {
+      "script": "scripts/runtime-dependencies.js",
+      "status": 0,
+      "summary": [
+        "Runtime dependency verification: PASS (5981 files, 264 packages)"
+      ]
+    },
+    {
+      "script": "scripts/build-runtime.js",
+      "status": 0,
+      "summary": [
+        "VOTC source build: PASS (289 files, App 9.3.6.3, 8a706fd7ab2cfb507c0f8ae52c437758c3fb42c98d950febcf56862b57e82a10)"
+      ]
+    },
+    {
+      "script": "scripts/verify-runtime-build.js",
+      "status": 0,
+      "summary": [
+        "VOTC build verification: PASS (289 source/artifact hashes)"
+      ]
+    },
+    {
+      "script": "scripts/deploy-runtime-build.js",
+      "status": 0,
+      "summary": []
+    },
+    {
+      "script": "scripts/verify-runtime-build.js --deployed",
+      "status": 0,
+      "summary": [
+        "VOTC build verification: PASS (289 source/artifact hashes, deployed parity)"
+      ]
+    },
+    {
+      "script": "scripts/test-release.js",
+      "status": 0,
+      "summary": [
+        "VOTC Release Regression: PASS (436 groups)"
+      ],
+      "expectedNegativeFixtureDiagnostics": true
+    }
+  ],
+  "payloadSha256": "8a706fd7ab2cfb507c0f8ae52c437758c3fb42c98d950febcf56862b57e82a10",
+  "managedFiles": 289,
+  "rootPayloadMatches": true,
+  "releaseGroups": 436
+}

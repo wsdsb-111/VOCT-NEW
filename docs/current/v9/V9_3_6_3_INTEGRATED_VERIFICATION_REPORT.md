@@ -1,6 +1,6 @@
 # V9.3.6.3 综合验证报告
 
-状态：2026-10-17本地候选完整回归、构建部署、隔离窗口与性能A/B通过；不代表Full Freeze。干净Windows候选复验和最终代码提交标识将在本报告追加。
+状态：2026-10-17本地候选完整回归、构建部署、隔离窗口与性能A/B通过；不代表Full Freeze。干净Windows候选六步复验已通过；测试代码提交 `b4a9e805231fffea82b4c8d6f09d56a1d7610a08`，此后的收口只更新文档。
 
 ## 环境与冻结
 
@@ -35,3 +35,9 @@ Windows 10.0.26200，构建/发布测试Node22.23.3；实际VOTC壳为Electron35
 ## 外部验收边界
 
 真实CK3存档/日历与生日、真实Provider与模型grounding、20–30轮联调、80–100轮Soak、远端CI均为NOT_RUN。合成请求、静态通过或Prompt注入一致不等于模型回答已验证。付费调用0、成本0；不推送远端、不改变真实摘要/凭据/存档。操作项见[实机清单](V9_3_6_3_REAL_GAME_CHECKLIST.md)。
+
+## 干净Windows候选与最终交付
+
+从本地提交 `b4a9e805231fffea82b4c8d6f09d56a1d7610a08` 创建无.build目录的新克隆；68项LFS原始资产逐项SHA-256校验。Node22.23.3顺序执行 runtime-dependencies、build-runtime、verify-runtime-build、deploy-runtime-build、verify-runtime-build --deployed、test-release，六步全部退出0，完整436组再次通过。289项映射及payload与主目录一致：`8a706fd7ab2cfb507c0f8ae52c437758c3fb42c98d950febcf56862b57e82a10`。匿名[候选证据](v9363i-clean-candidate-evidence.json)保留实际命令与结果。
+
+运行代码已本地提交，报告收口不改变源码/运行资源；没有推送远端。真实CK3、Provider、联调、Soak与CI仍为NOT_RUN。
