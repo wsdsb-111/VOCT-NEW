@@ -32,6 +32,6 @@ Main 和 Renderer 的新 GLM 实例默认显式 Custom 90000，并清楚标为�
 
 ## 最终本地结果
 
-运行代码提交：CODE_SHA_PENDING。全新Windows验证快照 `bbbace1b0f88ce3e67cf8fc87f6c55cb323f08d5`（初始无.build，68个LFS资产逐个校验），Node v22.23.3 标准六步全部退出0。最终289映射，payload `0445d6388410f7519f4083c2bcdd8bed43dad3b4a24d1d4336f9823fab15b5e6`，source／artifact／deployed一致。清单555个test文件、427发布组、127历史项；五个新专项均登记，16／16历史矩阵、10组独立QA和32格实际构建次数审计通过。
+运行代码提交：`abb5f9ce086a1da850b4aba78a7e429ac0cf27ae`。全新Windows验证快照 `bbbace1b0f88ce3e67cf8fc87f6c55cb323f08d5`（初始无.build，68个LFS资产逐个校验），Node v22.23.3 标准六步全部退出0。最终289映射，payload `0445d6388410f7519f4083c2bcdd8bed43dad3b4a24d1d4336f9823fab15b5e6`，source／artifact／deployed一致。清单555个test文件、427发布组、127历史项；五个新专项均登记，16／16历史矩阵、10组独立QA和32格实际构建次数审计通过。
 
 正式候选1080个样本、24个常规性能格全部达标；300关系常规warm P50为359–506ms，P95为408–556ms，cold P95为517–582ms。所有关系提及目标时保留全300候选，最坏耗时单列，未以Top-N丢事项。GLM真实IPC、Auto重启保留与0／0／2来源限制均通过隔离窗口；本轮模型／外网调用0。真实CK3／Provider／Soak／远端CI仍NOT_RUN；未推送、未改真实用户数据。

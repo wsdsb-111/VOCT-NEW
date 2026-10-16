@@ -18,7 +18,7 @@
 
 ## 最终构建与发布门禁
 
-运行代码终点 SHA：CODE_SHA_PENDING。全新Windows验证快照 `bbbace1b0f88ce3e67cf8fc87f6c55cb323f08d5`，初始无.build，core.autocrlf=true，68个LFS资产逐个核验。最终运行payload `0445d6388410f7519f4083c2bcdd8bed43dad3b4a24d1d4336f9823fab15b5e6`；289项映射在根部署和全新候选完全一致。后续文档收口不改payload。
+运行代码终点 SHA：`abb5f9ce086a1da850b4aba78a7e429ac0cf27ae`。全新Windows验证快照 `bbbace1b0f88ce3e67cf8fc87f6c55cb323f08d5`，初始无.build，core.autocrlf=true，68个LFS资产逐个核验。最终运行payload `0445d6388410f7519f4083c2bcdd8bed43dad3b4a24d1d4336f9823fab15b5e6`；289项映射在根部署和全新候选完全一致。后续文档收口不改payload。
 
 | 标准步骤 | 退出码 | 结果 |
 |---|---:|---|
@@ -44,3 +44,5 @@ PASS：实际 VOTC.exe 的一次性 APPDATA／LOCALAPPDATA／USERPROFILE 窗口�
 冒烟脚本初轮的服务商名称定位、懒加载校验时机、Auto清理无效Custom值的假设、重启重复seed导致来源身份歧义均已纠正；这些是隔离脚本问题，未改生产代码来迁就断言。最终双启动退出码0，使用同一运行payload。
 
 真实 Provider、CK3、20–30 轮联调、80–100 轮 Soak 和远端 CI：**NOT_RUN**。本轮付费调用 0，未推送，不以合成 fixture 或一次隔离窗口代替以上验收，不宣称 Full Freeze。
+
+最终文档收口复核：7个交付模块语法通过，804个当前文档本地链接通过，git diff --check通过；本地部署289项哈希再次核验通过。运行代码SHA见上文，后续报告提交不更改运行payload。
