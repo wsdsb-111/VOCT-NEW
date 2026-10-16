@@ -938,15 +938,36 @@ class MemoryStore {
     for (const memory of memories || []) for (const source of memory.provenance?.pairLedgerSources || []) {
       if (Number(source.counterpartId) === Number(counterpartId)) files.set(source.relativeSummaryPath, source.fileDigest);
     }
+    return this.hasSummarySourceContentChanges(files);
+  }
+
+  hasOwnerSummaryContentChanges(memories) {
+    const snapshot = this.folderSummarySnapshotSources.get(memories);
+    if (!snapshot) return true;
+    return this.hasSummarySourceContentChanges(new Map((snapshot.files || [])
+      .map(source => [source.relativeSummaryPath, source.fileDigest])));
+  }
+
+  hasSummarySourceContentChanges(files) {
+    const checkedFolders = new Set();
     for (const [relative, expected] of files) {
       try {
-        if (!expected || !this.getSummarySourceFileSignature(relative)) return true;
+        const before = this.getSummarySourceFileSignature(relative);
+        if (!expected || !before) return true;
         const file = path.resolve(this.summaryFoldersDir, ...relative.split("/"));
-        assertNoLinks(file);
+        const folder = path.dirname(file);
+        if (!checkedFolders.has(folder)) {
+          assertNoLinks(folder);
+          checkedFolders.add(folder);
+        }
         const rows = JSON.parse(fs.readFileSync(file, "utf8").replace(/^\uFEFF/, ""));
-        if (crypto.createHash("sha256").update(JSON.stringify(rows)).digest("hex") !== expected) return true;
+        if (crypto.createHash("sha256").update(JSON.stringify(rows)).digest("hex") !== expected
+          || JSON.stringify(before) !== JSON.stringify(this.getSummarySourceFileSignature(relative))) return true;
       } catch { return true; }
     }
+    // Files are lstat'ed before and after each read. Shared ancestors need only
+    // one check on each side of the batch, rather than once per source file.
+    try { for (const folder of checkedFolders) assertNoLinks(folder); } catch { return true; }
     return false;
   }
 
@@ -1105,7 +1126,7 @@ class MemoryStore {
         const fileSignature = beforeSignature && afterSignature && beforeSignature.isFile && !beforeSignature.isSymbolicLink
           && JSON.stringify(beforeSignature) === JSON.stringify(afterSignature) ? afterSignature : null;
         const pairLedgerFileValid = /^与.+的对话\.json$/u.test(file);
-        if (pairLedgerFileValid) sourceFiles.push({ relativeSummaryPath: `${folder.name}/${file}`, fileSignature });
+        if (pairLedgerFileValid) sourceFiles.push({ relativeSummaryPath: `${folder.name}/${file}`, fileSignature, fileDigest });
         if (!Array.isArray(summaries)) {
           loadDiagnostics.malformedFileCount++;
           continue;

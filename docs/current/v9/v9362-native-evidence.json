@@ -1,0 +1,382 @@
+{
+  "initial": {
+    "version": {
+      "app": "9.3.6.2",
+      "title": "VOTC V9.3.6.2",
+      "footer": "V9.3.6.2 · Mod v2.0.5",
+      "tooltip": "VOTC App 9.3.6.2"
+    },
+    "contextEvidence": {
+      "initial": {
+        "contextMode": "custom",
+        "contextWindowSource": "user_provided_unverified",
+        "effectiveContextWindow": 90000,
+        "configuredContextLength": 90000,
+        "modelNativeContext": null,
+        "outputReserveTokens": 4096,
+        "usableInputBudget": 75072,
+        "budgetStatus": "INPUT_AVAILABLE"
+      },
+      "auto": {
+        "contextMode": "auto",
+        "contextWindowSource": "safe_fallback",
+        "effectiveContextWindow": 8192,
+        "configuredContextLength": null,
+        "modelNativeContext": null,
+        "outputReserveTokens": 4096,
+        "usableInputBudget": 3080,
+        "budgetStatus": "INPUT_AVAILABLE"
+      },
+      "oneMillion": {
+        "contextMode": "custom",
+        "contextWindowSource": "user_provided_unverified",
+        "effectiveContextWindow": 1048576,
+        "configuredContextLength": 1048576,
+        "modelNativeContext": null,
+        "outputReserveTokens": 4096,
+        "usableInputBudget": 918618,
+        "budgetStatus": "INPUT_AVAILABLE"
+      },
+      "tiny": {
+        "contextMode": "custom",
+        "contextWindowSource": "user_provided_unverified",
+        "effectiveContextWindow": 256,
+        "configuredContextLength": 256,
+        "modelNativeContext": null,
+        "outputReserveTokens": 256,
+        "usableInputBudget": 0,
+        "budgetStatus": "NO_USABLE_INPUT"
+      },
+      "invalidRejected": true,
+      "explicitCompatButton": true,
+      "keepAutoButton": true,
+      "existingAutoRetained": false
+    },
+    "profile": {
+      "deployedEngine": true,
+      "levels": [
+        "L0",
+        "L1",
+        "L2"
+      ],
+      "sourceCounts": [
+        0,
+        0,
+        2
+      ],
+      "frozenBytesStable": true,
+      "renderedMemoryTokens": 1410,
+      "budget": 4800,
+      "providerCalls": 0
+    },
+    "loadedModules": {
+      "main": {
+        "path": "resources/app/out/main/main.js",
+        "sha256": "e135d204898adaa3c591bc1d3b93c45e751a6b690bb7219b53a45ae0a18d19af"
+      },
+      "providerService": {
+        "path": "resources/app/out/main/provider-service.js",
+        "sha256": "73740f5f408b395c39b5aacaf7e4ad4846ee1a8e3ce86d311b3cd17d588ffa93"
+      },
+      "conversation": {
+        "path": "resources/app/out/main/conversation/conversation.js",
+        "sha256": "31803d8d2dd136e6d5036ddc38e03c699d21642c645e86b3f948e6cc10f22d03"
+      },
+      "conversationManager": {
+        "path": "resources/app/out/main/conversation/conversation-manager.js",
+        "sha256": "1e4e6d424b368aea3a6fc62ef2a5c111b5d37394777465d44bd0efe644b3c5d6"
+      },
+      "promptBuilder": {
+        "path": "resources/app/out/main/prompts/prompt-builder.js",
+        "sha256": "8a38e2966e445f5323a34045d38a7a2c7bd0f49feb5fb46c5b5d1c34c498ae9b"
+      },
+      "letterPromptBuilder": {
+        "path": "resources/app/out/main/prompts/letter-prompt-builder.js",
+        "sha256": "fc0f16178f2f20a81e431622cd26673ae651edbaa0105bad821e395dbdf0369f"
+      },
+      "traitProfileSelector": {
+        "path": "resources/app/out/main/prompts/trait-profile-selector.js",
+        "sha256": "a2d00f91a82f10509f98709534fff013aa89c87c3f9fbae9167279ae8c50253d"
+      },
+      "entityContext": {
+        "path": "resources/app/out/main/memory-system/entity-context.js",
+        "sha256": "c6f788ec24ffa137e0d51300f756a00e6fbe9ecf2cf8dc95b0fd57138226fe0a"
+      },
+      "incidentDiagnostics": {
+        "path": "resources/app/out/main/memory-system/incident-diagnostics.js",
+        "sha256": "8d85c2502bb10065dfe2b95a21c7d1bfeebf90e0d054cc181d83653bde25ee89"
+      },
+      "memoryEngine": {
+        "path": "resources/app/out/main/memory-system/memory-engine.js",
+        "sha256": "ab24e45a0ccb05b06ecb85bfe93ab8f3ad1620aed2e9d6e9f1e8d0b071d3962f"
+      },
+      "summariesManager": {
+        "path": "resources/app/out/main/summaries/summaries-manager.js",
+        "sha256": "8d635a73d552c94c1519e6f9e9b5586222beef8172cfb6fe1084d265eccb7210"
+      },
+      "memory-store": {
+        "path": "resources/app/out/main/memory-system/memory-store.js",
+        "sha256": "42a7620f9ecdab4625ecdee9ba935a851c061a996119b5a8b1df8dd52740d58b"
+      },
+      "pair-long-term-ledger": {
+        "path": "resources/app/out/main/memory-system/pair-long-term-ledger.js",
+        "sha256": "c4133543f61de78de1d083387cfc091333884914a51f0b586ada7af1ff8bd9a6"
+      },
+      "pair-memory-source-retrieval": {
+        "path": "resources/app/out/main/memory-system/pair-memory-source-retrieval.js",
+        "sha256": "5025068b1e7486a3201c0bbab135f7d0e0776b34093327bdd80feaa60257b969"
+      },
+      "owner-target-candidate-directory": {
+        "path": "resources/app/out/main/memory-system/owner-target-candidate-directory.js",
+        "sha256": "84884d8048c63bc16f6f228fd720c0644938456aa0bbcfdb8839f9b7293840e7"
+      },
+      "pair-memory-routing": {
+        "path": "resources/app/out/main/memory-system/pair-memory-routing.js",
+        "sha256": "57ee1d27a04737afd43b089b587ebbd75c26073b82df6938edae765f3a9385a3"
+      },
+      "player-centered-memory": {
+        "path": "resources/app/out/main/memory-system/player-centered-memory.js",
+        "sha256": "a14f46b889eb6356f23177c68e120424932b57969363e00ff976b7aacdb84860"
+      },
+      "player-memory-diagnostics": {
+        "path": "resources/app/out/main/memory-system/player-memory-diagnostics.js",
+        "sha256": "676d93783aa02e0a2158d8732d70c9a12754278159b8bc39c12403b6f8fa0ab7"
+      }
+    },
+    "rendererFiles": {
+      "rendererHtml": {
+        "sourceHash": "8ab5c6af3d6ffd814fb18160d2cdb58ab4686df29abb433cc25aab0fef4f67cc",
+        "deployedHash": "8ab5c6af3d6ffd814fb18160d2cdb58ab4686df29abb433cc25aab0fef4f67cc"
+      },
+      "rendererBundle": {
+        "sourceHash": "b9b5b12a5e2d8a775e4e89c6b951c294a1ea564fe85662cea82ef48c353777a0",
+        "deployedHash": "b9b5b12a5e2d8a775e4e89c6b951c294a1ea564fe85662cea82ef48c353777a0"
+      },
+      "summaryDateOrder": {
+        "sourceHash": "3db63dfca1c9d63b70de3b8a5684be870788782fb473e18b6321d46ef3d092a5",
+        "deployedHash": "3db63dfca1c9d63b70de3b8a5684be870788782fb473e18b6321d46ef3d092a5"
+      },
+      "pairLongTermUi": {
+        "sourceHash": "00dd7191d056d34b3a3adf0be224a2eef11b78a0e3106e070c7c1b8ed086af5c",
+        "deployedHash": "00dd7191d056d34b3a3adf0be224a2eef11b78a0e3106e070c7c1b8ed086af5c"
+      },
+      "pairLongTermCss": {
+        "sourceHash": "d78877be15de20a6feadb972b593502c12da9d09166cfd30cc6ea6c8da555cbe",
+        "deployedHash": "d78877be15de20a6feadb972b593502c12da9d09166cfd30cc6ea6c8da555cbe"
+      },
+      "pairImportantMatters": {
+        "sourceHash": "14c67e60cb5d2290b321b09b4a977ce26a62c5464d6ba97697505fb411cad6db",
+        "deployedHash": "14c67e60cb5d2290b321b09b4a977ce26a62c5464d6ba97697505fb411cad6db"
+      }
+    },
+    "preloadSourceParity": "verified and absent Memory4/Durable surface verified in real Renderer",
+    "m4IpcHandlers": [],
+    "providerCalls": [],
+    "networkAttempts": [],
+    "ck3": "not invoked"
+  },
+  "reopened": {
+    "version": {
+      "app": "9.3.6.2",
+      "title": "VOTC V9.3.6.2",
+      "footer": "V9.3.6.2 · Mod v2.0.5",
+      "tooltip": "VOTC App 9.3.6.2"
+    },
+    "contextEvidence": {
+      "initial": {
+        "contextMode": "auto",
+        "contextWindowSource": "safe_fallback",
+        "effectiveContextWindow": 8192,
+        "configuredContextLength": null,
+        "modelNativeContext": null,
+        "outputReserveTokens": 4096,
+        "usableInputBudget": 3080,
+        "budgetStatus": "INPUT_AVAILABLE"
+      },
+      "auto": {
+        "contextMode": "auto",
+        "contextWindowSource": "safe_fallback",
+        "effectiveContextWindow": 8192,
+        "configuredContextLength": null,
+        "modelNativeContext": null,
+        "outputReserveTokens": 4096,
+        "usableInputBudget": 3080,
+        "budgetStatus": "INPUT_AVAILABLE"
+      },
+      "oneMillion": {
+        "contextMode": "custom",
+        "contextWindowSource": "user_provided_unverified",
+        "effectiveContextWindow": 1048576,
+        "configuredContextLength": 1048576,
+        "modelNativeContext": null,
+        "outputReserveTokens": 4096,
+        "usableInputBudget": 918618,
+        "budgetStatus": "INPUT_AVAILABLE"
+      },
+      "tiny": {
+        "contextMode": "custom",
+        "contextWindowSource": "user_provided_unverified",
+        "effectiveContextWindow": 256,
+        "configuredContextLength": 256,
+        "modelNativeContext": null,
+        "outputReserveTokens": 256,
+        "usableInputBudget": 0,
+        "budgetStatus": "NO_USABLE_INPUT"
+      },
+      "invalidRejected": true,
+      "explicitCompatButton": true,
+      "keepAutoButton": true,
+      "existingAutoRetained": true
+    },
+    "profile": {
+      "deployedEngine": true,
+      "levels": [
+        "L0",
+        "L1",
+        "L2"
+      ],
+      "sourceCounts": [
+        0,
+        0,
+        2
+      ],
+      "frozenBytesStable": true,
+      "renderedMemoryTokens": 1410,
+      "budget": 4800,
+      "providerCalls": 0
+    },
+    "loadedModules": {
+      "main": {
+        "path": "resources/app/out/main/main.js",
+        "sha256": "e135d204898adaa3c591bc1d3b93c45e751a6b690bb7219b53a45ae0a18d19af"
+      },
+      "providerService": {
+        "path": "resources/app/out/main/provider-service.js",
+        "sha256": "73740f5f408b395c39b5aacaf7e4ad4846ee1a8e3ce86d311b3cd17d588ffa93"
+      },
+      "conversation": {
+        "path": "resources/app/out/main/conversation/conversation.js",
+        "sha256": "31803d8d2dd136e6d5036ddc38e03c699d21642c645e86b3f948e6cc10f22d03"
+      },
+      "conversationManager": {
+        "path": "resources/app/out/main/conversation/conversation-manager.js",
+        "sha256": "1e4e6d424b368aea3a6fc62ef2a5c111b5d37394777465d44bd0efe644b3c5d6"
+      },
+      "promptBuilder": {
+        "path": "resources/app/out/main/prompts/prompt-builder.js",
+        "sha256": "8a38e2966e445f5323a34045d38a7a2c7bd0f49feb5fb46c5b5d1c34c498ae9b"
+      },
+      "letterPromptBuilder": {
+        "path": "resources/app/out/main/prompts/letter-prompt-builder.js",
+        "sha256": "fc0f16178f2f20a81e431622cd26673ae651edbaa0105bad821e395dbdf0369f"
+      },
+      "traitProfileSelector": {
+        "path": "resources/app/out/main/prompts/trait-profile-selector.js",
+        "sha256": "a2d00f91a82f10509f98709534fff013aa89c87c3f9fbae9167279ae8c50253d"
+      },
+      "entityContext": {
+        "path": "resources/app/out/main/memory-system/entity-context.js",
+        "sha256": "c6f788ec24ffa137e0d51300f756a00e6fbe9ecf2cf8dc95b0fd57138226fe0a"
+      },
+      "incidentDiagnostics": {
+        "path": "resources/app/out/main/memory-system/incident-diagnostics.js",
+        "sha256": "8d85c2502bb10065dfe2b95a21c7d1bfeebf90e0d054cc181d83653bde25ee89"
+      },
+      "memoryEngine": {
+        "path": "resources/app/out/main/memory-system/memory-engine.js",
+        "sha256": "ab24e45a0ccb05b06ecb85bfe93ab8f3ad1620aed2e9d6e9f1e8d0b071d3962f"
+      },
+      "summariesManager": {
+        "path": "resources/app/out/main/summaries/summaries-manager.js",
+        "sha256": "8d635a73d552c94c1519e6f9e9b5586222beef8172cfb6fe1084d265eccb7210"
+      },
+      "memory-store": {
+        "path": "resources/app/out/main/memory-system/memory-store.js",
+        "sha256": "42a7620f9ecdab4625ecdee9ba935a851c061a996119b5a8b1df8dd52740d58b"
+      },
+      "pair-long-term-ledger": {
+        "path": "resources/app/out/main/memory-system/pair-long-term-ledger.js",
+        "sha256": "c4133543f61de78de1d083387cfc091333884914a51f0b586ada7af1ff8bd9a6"
+      },
+      "pair-memory-source-retrieval": {
+        "path": "resources/app/out/main/memory-system/pair-memory-source-retrieval.js",
+        "sha256": "5025068b1e7486a3201c0bbab135f7d0e0776b34093327bdd80feaa60257b969"
+      },
+      "owner-target-candidate-directory": {
+        "path": "resources/app/out/main/memory-system/owner-target-candidate-directory.js",
+        "sha256": "84884d8048c63bc16f6f228fd720c0644938456aa0bbcfdb8839f9b7293840e7"
+      },
+      "pair-memory-routing": {
+        "path": "resources/app/out/main/memory-system/pair-memory-routing.js",
+        "sha256": "57ee1d27a04737afd43b089b587ebbd75c26073b82df6938edae765f3a9385a3"
+      },
+      "player-centered-memory": {
+        "path": "resources/app/out/main/memory-system/player-centered-memory.js",
+        "sha256": "a14f46b889eb6356f23177c68e120424932b57969363e00ff976b7aacdb84860"
+      },
+      "player-memory-diagnostics": {
+        "path": "resources/app/out/main/memory-system/player-memory-diagnostics.js",
+        "sha256": "676d93783aa02e0a2158d8732d70c9a12754278159b8bc39c12403b6f8fa0ab7"
+      }
+    },
+    "rendererFiles": {
+      "rendererHtml": {
+        "sourceHash": "8ab5c6af3d6ffd814fb18160d2cdb58ab4686df29abb433cc25aab0fef4f67cc",
+        "deployedHash": "8ab5c6af3d6ffd814fb18160d2cdb58ab4686df29abb433cc25aab0fef4f67cc"
+      },
+      "rendererBundle": {
+        "sourceHash": "b9b5b12a5e2d8a775e4e89c6b951c294a1ea564fe85662cea82ef48c353777a0",
+        "deployedHash": "b9b5b12a5e2d8a775e4e89c6b951c294a1ea564fe85662cea82ef48c353777a0"
+      },
+      "summaryDateOrder": {
+        "sourceHash": "3db63dfca1c9d63b70de3b8a5684be870788782fb473e18b6321d46ef3d092a5",
+        "deployedHash": "3db63dfca1c9d63b70de3b8a5684be870788782fb473e18b6321d46ef3d092a5"
+      },
+      "pairLongTermUi": {
+        "sourceHash": "00dd7191d056d34b3a3adf0be224a2eef11b78a0e3106e070c7c1b8ed086af5c",
+        "deployedHash": "00dd7191d056d34b3a3adf0be224a2eef11b78a0e3106e070c7c1b8ed086af5c"
+      },
+      "pairLongTermCss": {
+        "sourceHash": "d78877be15de20a6feadb972b593502c12da9d09166cfd30cc6ea6c8da555cbe",
+        "deployedHash": "d78877be15de20a6feadb972b593502c12da9d09166cfd30cc6ea6c8da555cbe"
+      },
+      "pairImportantMatters": {
+        "sourceHash": "14c67e60cb5d2290b321b09b4a977ce26a62c5464d6ba97697505fb411cad6db",
+        "deployedHash": "14c67e60cb5d2290b321b09b4a977ce26a62c5464d6ba97697505fb411cad6db"
+      }
+    },
+    "preloadSourceParity": "verified and absent Memory4/Durable surface verified in real Renderer",
+    "m4IpcHandlers": [],
+    "providerCalls": [],
+    "networkAttempts": [],
+    "ck3": "not invoked"
+  },
+  "appProcessClosed": true,
+  "screenshots": [
+    {
+      "file": "v9362-glm-new-default.png",
+      "sha256": "f7e0852eb72efa7f7a668a0c502f483cd39d77895fe772916b47157edf6fa705"
+    },
+    {
+      "file": "v9362-glm-existing-auto.png",
+      "sha256": "3f907ee749b32cc020953e54f085cdfd62d8c3eef819b73b8aad863c75a2c8a7"
+    },
+    {
+      "file": "v9362-glm-auto-choices.png",
+      "sha256": "669a970dbf68341c7795f8d98d77f8219cef19a46c051d5a1f78814e4c348cbe"
+    },
+    {
+      "file": "v9362-glm-tiny-budget.png",
+      "sha256": "f54341392c4df05bdb3850c0fd04e03d95003f502c77ed0d501916ff91b54747"
+    },
+    {
+      "file": "v9362-native-window.png",
+      "sha256": "4023f360dfffb2bdfeba6fa74774b376a586ab2f9df18e7f67063c72a79d6c16"
+    }
+  ],
+  "visualReview": "PASS_90K_AUTO_CHOICES_TINY_BUDGET_SCREENSHOTS_REVIEWED",
+  "status": "PASS_ISOLATED_NATIVE_AUTOMATION",
+  "realProvider": "NOT_RUN",
+  "realCK3": "NOT_RUN",
+  "soak": "NOT_RUN"
+}

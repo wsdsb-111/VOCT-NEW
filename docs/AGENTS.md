@@ -1,4 +1,4 @@
-> V9.3.6.1 修复候选沿用下列 V9.3.6 玩家中心记忆合同。最新实施、验证与上下文兼容说明见 current/v9/V9_3_6_1_IMPLEMENTATION_REPORT.md、V9_3_6_1_VERIFICATION_REPORT.md 和 V9_3_6_1_CONTEXT_COMPATIBILITY.md；实机／Provider／Soak／远端CI分开签署。
+> V9.3.6.2 修复候选沿用下列 V9.3.6 玩家中心记忆合同。最新实施、验证与上下文兼容说明见 current/v9/V9_3_6_2_IMPLEMENTATION_REPORT.md、V9_3_6_2_VERIFICATION_REPORT.md 和 V9_3_6_2_CONTEXT_COMPATIBILITY.md；实机／Provider／Soak／远端CI分开签署。
 
 # 文档目录维护规则
 
@@ -7,12 +7,12 @@
 - docs/README.md 是分类、推荐阅读顺序和当前版本入口的唯一索引。
 - 根目录 README.md 负责项目简介、安装运行和当前基线；根目录 CHANGELOG.md 只维护版本顺序、用户可见摘要和详细文档链接，不复制完整实现记录。
 - docs/V8阶段开发记录.md 是 V8.0 起的连续阶段记录；docs/README_摘要系统.md 维护当前 `Legacy Summary` 标签、兼容的 3.0 协议与 2.5 存储合同及摘要召回边界。
-- 当前文档入口跟踪 V9.3.6.1 修复 候选，链接到 `V9_3_6_1_IMPLEMENTATION_REPORT.md`、`V9_3_6_1_VERIFICATION_REPORT.md` 和 `V9_3_5_INDEX_AND_SOURCE_CONTRACT.md`；V9.3.4 及更早报告保留历史证据。候选仍在施工与验收阶段，最终映射、构建、部署和测试状态以本轮报告为准，不得预填数量。真实 CK3、Soak 与远端 CI 尚待验收，不能宣称 Full Freeze；不得将 ACK 或静态通过写成效果验收通过。
+- 当前文档入口跟踪 V9.3.6.2 修复 候选，链接到 `V9_3_6_2_IMPLEMENTATION_REPORT.md`、`V9_3_6_2_VERIFICATION_REPORT.md` 和 `V9_3_5_INDEX_AND_SOURCE_CONTRACT.md`；V9.3.4 及更早报告保留历史证据。候选仍在施工与验收阶段，最终映射、构建、部署和测试状态以本轮报告为准，不得预填数量。真实 CK3、Soak 与远端 CI 尚待验收，不能宣称 Full Freeze；不得将 ACK 或静态通过写成效果验收通过。
 - V6/V7 阶段文档和 V8.3 历史文档仍是历史证据。若功能已退役，应在当前入口标注历史/废止，不因整理而删除文件或破坏旧链接。
 
 ## 编写规则
 
-- 当前候选合同写作统一为 V9.3.6 玩家中心记忆、人物历史记忆 UI `Legacy Summary`；正式 Core/App/UI 版本号以包元数据和最终报告为准。Workshop 2.0.5、协议 3.0、摘要存储 2.5、Official Action 2.0.3 和独立 Three-Mod 1.0.6 保持。不要宣传 Memory Engine 4.0 在线功能。V9.3.4 报告保留为历史快照；候选实现、验证和来源合同分别链接 [实施报告](current/v9/V9_3_6_1_IMPLEMENTATION_REPORT.md)、[验证报告](current/v9/V9_3_6_1_VERIFICATION_REPORT.md)和[索引与来源合同](current/v9/V9_3_5_INDEX_AND_SOURCE_CONTRACT.md)。不要预写尚未确定的最终 PASS 数量或映射数量。
+- 当前候选合同写作统一为 V9.3.6 玩家中心记忆、人物历史记忆 UI `Legacy Summary`；正式 Core/App/UI 版本号以包元数据和最终报告为准。Workshop 2.0.5、协议 3.0、摘要存储 2.5、Official Action 2.0.3 和独立 Three-Mod 1.0.6 保持。不要宣传 Memory Engine 4.0 在线功能。V9.3.4 报告保留为历史快照；候选实现、验证和来源合同分别链接 [实施报告](current/v9/V9_3_6_2_IMPLEMENTATION_REPORT.md)、[验证报告](current/v9/V9_3_6_2_VERIFICATION_REPORT.md)和[索引与来源合同](current/v9/V9_3_5_INDEX_AND_SOURCE_CONTRACT.md)。不要预写尚未确定的最终 PASS 数量或映射数量。
 
 - 只记录仓库中实际存在、已经实现或明确标注为限制的内容；区分“代码/自动化通过”和“真实 CK3、Provider、Electron、远端 CI 或 Soak 已验收”。
 - 新文档沿用仓库已有的版本、阶段、主题和 implementation-report/review 命名风格；不要为了统一而重命名历史中文文件或另造根目录版本散文档。

@@ -614,6 +614,10 @@
       "target": "out/main/memory-system/pair-memory-source-retrieval.js"
     },
     {
+      "source": "main/memory-system/owner-target-candidate-directory.js",
+      "target": "out/main/memory-system/owner-target-candidate-directory.js"
+    },
+    {
       "source": "main/memory-system/player-centered-memory.js",
       "target": "out/main/memory-system/player-centered-memory.js"
     },

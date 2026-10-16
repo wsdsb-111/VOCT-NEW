@@ -433,6 +433,9 @@ class LLMManager {
     try {
       return await this.trackUsage(this.generate(provider, request, activeConfig, capabilities, control, estimatedPromptTokens), {
       ...usageMetadata,
+      contextMode: capabilities.contextMode,
+      contextWindowSource: capabilities.contextWindowSource,
+      effectiveContextWindow: capabilities.contextWindow,
       requestBudget: budget,
       requestType,
       providerType: activeConfig.providerType,
@@ -522,6 +525,9 @@ class LLMManager {
       ...metadata,
       requestControl: control,
       requestBudget: budget,
+      contextMode: capabilities.contextMode,
+      contextWindowSource: capabilities.contextWindowSource,
+      effectiveContextWindow: capabilities.contextWindow,
       requestType: "action",
       providerType: config.providerType,
       model: config.defaultModel,
@@ -682,6 +688,7 @@ class LLMManager {
     console.log(`[LLMManager] Summary request: provider=${config.providerType}, model=${config.defaultModel}, messages=${preparedMessages.length}, estimatedPromptTokens=${estimatedPromptTokens}${deepseekMode}`);
     try {
       return await this.trackUsage(this.generate(provider, request, config, capabilities, control, estimatedPromptTokens), { ...metadata,
+        contextMode: capabilities.contextMode, contextWindowSource: capabilities.contextWindowSource, effectiveContextWindow: capabilities.contextWindow,
         requestControl: control,
         requestBudget: budget, blocks: summaryBlocks, requestType: metadata.requestType || "summary",
         providerType: config.providerType, model: config.defaultModel, estimatedPromptTokens });
@@ -797,6 +804,14 @@ class LLMManager {
   // Get current context length for the active provider
   async getCurrentContextLength() {
     return (await this.getProviderCapabilities("CHAT")).contextWindow;
+  }
+  async getContextDiagnostics() {
+    const capabilities = await this.getProviderCapabilities("CHAT");
+    const budget = planRequestBudget({ messages: [], capabilities, countTokens: () => 0 });
+    return { contextMode: capabilities.contextMode, contextWindowSource: capabilities.contextWindowSource,
+      effectiveContextWindow: capabilities.contextWindow, configuredContextLength: capabilities.configuredContextLength,
+      modelNativeContext: capabilities.modelNativeContext, outputReserveTokens: budget.reservedOutputTokens,
+      usableInputBudget: budget.effectiveInputBudget, budgetStatus: budget.budgetStatus };
   }
   // Get the maximum context length for the current model
   async getMaxContextLength() {

@@ -22,18 +22,18 @@ const check = (condition, message) => {
   if (!condition) failures.push(message);
 };
 
-const featureVersionDeclaration = /\bconst\s+VOTC_FEATURE_VERSION\s*=\s*["']V9\.3\.6\.1["']/.test(renderer);
-check(featureVersionDeclaration, "Renderer must define VOTC_FEATURE_VERSION = \"V9.3.6.1\"");
+const featureVersionDeclaration = /\bconst\s+VOTC_FEATURE_VERSION\s*=\s*["']V9\.3\.6\.2["']/.test(renderer);
+check(featureVersionDeclaration, "Renderer must define VOTC_FEATURE_VERSION = \"V9.3.6.2\"");
 check((renderer.match(/\bVOTC_FEATURE_VERSION\b/g) || []).length >= 2, "Renderer must display the feature version constant");
 check(renderer.includes("window.electronAPI.getAppVersion()"), "footer must continue reading the package version through getAppVersion()");
 const footerStart = renderer.indexOf('className: "app-version"');
 check(footerStart >= 0 && /appVersion/.test(renderer.slice(footerStart, footerStart + 180)), "footer must retain the getAppVersion() result as package metadata");
-check(appPackage.version === "9.3.6.1", "the Electron package version must match V9.3.6.1 using the current SemVer label");
+check(appPackage.version === "9.3.6.2", "the Electron package version must match V9.3.6.2 using the current SemVer label");
 check(renderer.includes('const VOTC_WORKSHOP_MOD_VERSION = "2.0.5";'), "Renderer must identify Workshop Mod 2.0.5");
 check(renderer.slice(footerStart, footerStart + 300).includes("VOTC_WORKSHOP_MOD_VERSION"), "footer must show the Workshop Mod version");
-check(fs.readFileSync(path.join(root, "resources/app/out/renderer/index.html"), "utf8").includes("<title>VOTC V9.3.6.1</title>"), "window title must identify V9.3.6.1");
+check(fs.readFileSync(path.join(root, "resources/app/out/renderer/index.html"), "utf8").includes("<title>VOTC V9.3.6.2</title>"), "window title must identify V9.3.6.2");
 const themePreview = fs.readFileSync(path.join(root, "ui-theme-preview.html"), "utf8");
-check(themePreview.includes("VOTC V9.3.6.1 · 三主题预览") && themePreview.includes("V9.3.6.1 · Mod v2.0.5") && themePreview.includes('title="VOTC App 9.3.6.1"'), "theme preview must match the shipped version labels");
+check(themePreview.includes("VOTC V9.3.6.2 · 三主题预览") && themePreview.includes("V9.3.6.2 · Mod v2.0.5") && themePreview.includes('title="VOTC App 9.3.6.2"'), "theme preview must match the shipped version labels");
 
 check(renderer.includes("Legacy Summary"), "the current memory overview must identify Legacy Summary");
 const footerRule = rendererCss.match(/\.config-panel-container \.app-version\s*\{([^}]*)\}/)?.[1] || "";

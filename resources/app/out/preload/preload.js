@@ -58,6 +58,7 @@ electron.contextBridge.exposeInMainWorld("llmConfigAPI", {
   getAllowPrerelease: () => electron.ipcRenderer.invoke("llm:getAllowPrerelease"),
   saveAllowPrerelease: (allow) => electron.ipcRenderer.invoke("llm:saveAllowPrerelease", allow),
   getCurrentContextLength: () => electron.ipcRenderer.invoke("llm:getCurrentContextLength"),
+  getContextDiagnostics: () => electron.ipcRenderer.invoke("llm:getContextDiagnostics"),
   getMaxContextLength: () => electron.ipcRenderer.invoke("llm:getMaxContextLength"),
   setCustomContextLength: (contextLength) => electron.ipcRenderer.invoke("llm:setCustomContextLength", contextLength),
   clearCustomContextLength: () => electron.ipcRenderer.invoke("llm:clearCustomContextLength"),

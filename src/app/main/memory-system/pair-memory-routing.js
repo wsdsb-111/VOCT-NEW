@@ -3,8 +3,15 @@
 const crypto = require("crypto");
 
 const TARGET_EVIDENCE = new Set(["EXPLICIT_ID", "UNIQUE_ALIAS"]);
-const HISTORICAL_PATTERN = /以前|曾经|过去|往事|历史|当年|当时|那年|此前|之前|回忆|回想|旧事|\d{3,6}\s*年/u;
-const CURRENT_FUTURE_PATTERN = /现在|今天|当下|眼下|当前|明天|后天|下次|将来|未来|准备|打算|接下来|之后|稍后/u;
+const HISTORICAL_PATTERN = /以前|曾经|过去|往事|历史|当年|当时|那年|此前|之前|后来|回忆|回想|旧事|\d{3,6}\s*年/u;
+const HISTORICAL_AFTER_PATTERN = /(?:战争|战事|围城|离开宫廷|离开|回到|出征|交战|会面|结盟|订约|婚礼|加冕)(?:以后|之后)/u;
+const CURRENT_FUTURE_PATTERN = /现在|今天|当下|眼下|当前|明天|后天|下次|将来|未来|接下来|稍后/u;
+const FUTURE_PLAN_PATTERN = /(?:之后|以后)(?:还要|要不要|计划|会不会)|(?:还要|要不要|计划|会不会).{0,8}(?:之后|以后)|(?:只|仅)(?:谈|说|讨论|看).{0,6}(?:今天|现在|当下|眼下|当前)/u;
+const PLAN_ACTION_PATTERN = /(?:准备|打算)(?:去|要|安排|如何|怎么|做|处理|见|接见)/u;
+const NEGATION_PATTERN = /别|不要|不必|不用|无需|不想|暂时不/u;
+const DENIAL_ACTION_PATTERN = /回忆|回想|提起|谈|讲|说|查|翻|问|了解/u;
+const DENIAL_HISTORY_PATTERN = /以前|过去|往事|历史|当年|旧事|从前|经历|关系|记忆/u;
+const DIRECT_RECALL_ACTION_PATTERN = /回忆|回想|查|翻/u;
 const REMINDER_PATTERN = /记得\s*(?:把|将|要|去|给|向|通知|提醒|安排|交|带|告诉|转告|送)/u;
 const DETAIL_PATTERN = /具体|究竟|到底|原话|为何|为什么|原因|过程|经过|详细|怎么说|说了什么|如何说|发生了什么|发生过什么|什么争执|哪些争执|哪一年|何时|什么时候|\d{3,6}\s*年/u;
 const TIME_PATTERN = /哪一年|何时|什么时候|\d{3,6}\s*年|当年|那年/u;
@@ -130,29 +137,86 @@ function resolveTrustedPlayerTurn({ history = [], playerAnchorId, currentPlayerM
   };
 }
 
-function isDenialOrCurrentOnly(text) {
-  return /(?:别|不要|不必|不用|无需|不想|暂时不).{0,12}(?:回忆|回想|提起|谈|讲|说|查|翻|问|了解).{0,14}(?:以前|过去|往事|历史|当年|旧事)?/u.test(text)
-    || /(?:只|仅)(?:谈|说|讨论|看).{0,6}(?:今天|现在|当下|眼下|当前)/u.test(text);
+function removeQuotedText(text) {
+  const endings = new Map([["“", "”"], ["「", "」"], ["『", "』"], ["‘", "’"], ["\"", "\""], ["'", "'"]]);
+  const stack = [];
+  const visible = [];
+  for (const character of String(text || "")) {
+    if (stack.length) {
+      if (character === stack[stack.length - 1]) {
+        stack.pop();
+      }
+      else if (endings.has(character)) stack.push(endings.get(character));
+      continue;
+    }
+    if (endings.has(character)) {
+      stack.push(endings.get(character));
+      visible.push(" ");
+    }
+    else visible.push(character);
+  }
+  return visible.join("").trim();
 }
 
-function removeQuotedText(text) {
-  return text.replace(/[“「『][\s\S]*?[”」』]|‘[\s\S]*?’|"[\s\S]*?"|'[^']*'/gu, " ").trim();
+function splitIntentClauses(text) {
+  return String(text || "").split(/[，,。；;！？!?\n]+|(?<!不)(?=(?:不过|但是|但|可是|然而))/u)
+    .map(clause => clause.trim()).filter(Boolean);
+}
+
+function isHistoricalDenialClause(text) {
+  const negation = NEGATION_PATTERN.exec(text);
+  if (!negation) return false;
+  const remainder = text.slice(negation.index + negation[0].length);
+  const action = DENIAL_ACTION_PATTERN.exec(remainder);
+  if (!action || action.index > 12) return false;
+  const deniedTopic = remainder.slice(action.index + action[0].length);
+  return DIRECT_RECALL_ACTION_PATTERN.test(action[0]) || DENIAL_HISTORY_PATTERN.test(deniedTopic);
+}
+
+function classifyIntentClause(text) {
+  const denialScope = isHistoricalDenialClause(text);
+  const explicitHistoryQuestion = /(?:你|您)(?:还|是否|可否|可)?记得/u.test(text)
+    || /记得.+(?:吗|么)$/u.test(text);
+  const historicalEvidence = [];
+  if (HISTORICAL_PATTERN.test(text)) historicalEvidence.push("PAST_ANCHOR");
+  if (HISTORICAL_AFTER_PATTERN.test(text)) historicalEvidence.push("COMPLETED_EVENT_AFTER");
+  if (explicitHistoryQuestion) historicalEvidence.push("HISTORY_QUESTION");
+  const futureEvidence = [];
+  if (CURRENT_FUTURE_PATTERN.test(text) || FUTURE_PLAN_PATTERN.test(text) || REMINDER_PATTERN.test(text)
+    || (!historicalEvidence.length && PLAN_ACTION_PATTERN.test(text))) {
+    futureEvidence.push("CURRENT_OR_PLAN_ANCHOR");
+  }
+  if (denialScope) return { text, kind: "DENIAL", historicalEvidence, futureEvidence, denialScope, explicitHistoryQuestion, mayRequestSourceDetail: false };
+  if (historicalEvidence.length && !futureEvidence.length) {
+    return { text, kind: "PAST_HISTORY", historicalEvidence, futureEvidence, denialScope, explicitHistoryQuestion,
+      mayRequestSourceDetail: true };
+  }
+  if (historicalEvidence.length && futureEvidence.length) {
+    return { text, kind: "AMBIGUOUS", historicalEvidence, futureEvidence, denialScope, explicitHistoryQuestion,
+      mayRequestSourceDetail: false };
+  }
+  if (futureEvidence.length || CURRENT_FUTURE_PATTERN.test(text) || REMINDER_PATTERN.test(text)) {
+    return { text, kind: "CURRENT_FUTURE", historicalEvidence, futureEvidence, denialScope, explicitHistoryQuestion,
+      mayRequestSourceDetail: false };
+  }
+  return { text, kind: "NEUTRAL", historicalEvidence, futureEvidence, denialScope, explicitHistoryQuestion,
+    mayRequestSourceDetail: false };
 }
 
 function classifyTemporalIntent(unquotedText) {
   const text = String(unquotedText || "").trim();
-  if (ELLIPTICAL_FOLLOWUP_PATTERN.test(text)) return { kind: "FOLLOWUP", historicalText: "" };
-  // A separate historical question may follow a present/future instruction. Within
-  // an ambiguous mixed clause, current/future wording cannot grant history access.
-  const historicalClauses = text.split(/[，,。；;！？!?\n]/u).filter(clause => {
-    if (CURRENT_FUTURE_PATTERN.test(clause) || REMINDER_PATTERN.test(clause)) return false;
-    return HISTORICAL_PATTERN.test(clause)
-      || /(?:你|您)(?:还|是否|可否|可)?记得/u.test(clause)
-      || /记得.+(?:吗|么)$/u.test(clause);
-  });
-  if (historicalClauses.length) return { kind: "PAST_HISTORY", historicalText: historicalClauses.join("，") };
-  return { kind: CURRENT_FUTURE_PATTERN.test(text) || REMINDER_PATTERN.test(text)
-    ? "CURRENT_FUTURE" : "NONE", historicalText: "" };
+  if (ELLIPTICAL_FOLLOWUP_PATTERN.test(text)) return { kind: "FOLLOWUP", historicalText: "", clauses: [], denialScopes: [], ambiguous: false };
+  const clauses = splitIntentClauses(text).map(classifyIntentClause);
+  const historicalClauses = clauses.filter(clause => clause.kind === "PAST_HISTORY");
+  const denialScopes = clauses.filter(clause => clause.denialScope);
+  if (historicalClauses.length) return { kind: "PAST_HISTORY", historicalText: historicalClauses.map(clause => clause.text).join("，"),
+    clauses, denialScopes, ambiguous: clauses.some(clause => clause.kind === "AMBIGUOUS") };
+  if (denialScopes.length) return { kind: "DENIAL", historicalText: "", clauses, denialScopes, ambiguous: false };
+  if (clauses.some(clause => clause.kind === "AMBIGUOUS")) {
+    return { kind: "AMBIGUOUS", historicalText: "", clauses, denialScopes, ambiguous: true };
+  }
+  return { kind: clauses.some(clause => clause.kind === "CURRENT_FUTURE") ? "CURRENT_FUTURE" : "NONE",
+    historicalText: "", clauses, denialScopes, ambiguous: false };
 }
 
 function isValidBinding(binding, { ownerId, playerAnchorId, trustedPlayerTurn }) {
@@ -172,7 +236,8 @@ function isValidBinding(binding, { ownerId, playerAnchorId, trustedPlayerTurn })
 }
 
 function classifyThirdPersonHistoryRequest({ trustedPlayerTurn = null, ownerId, playerAnchorId,
-  resolvedTargets = [], conversationBinding = null } = {}) {
+  resolvedTargets = [], deniedTargetCharacterIds = [], denialScopeAmbiguous = false,
+  targetScopedDenial = false, conversationBinding = null } = {}) {
   const owner = validId(ownerId);
   const player = validId(playerAnchorId);
   const turn = trustedPlayerTurn;
@@ -214,14 +279,8 @@ function classifyThirdPersonHistoryRequest({ trustedPlayerTurn = null, ownerId, 
   }
 
   const unquotedQuery = removeQuotedText(query);
-  const denialDetected = isDenialOrCurrentOnly(unquotedQuery);
-  decision.denialDetected = denialDetected;
-  if (denialDetected) {
-    decision.reasonCode = "DENIAL_OR_CURRENT_ONLY";
-    return decision;
-  }
-
   const temporalIntent = classifyTemporalIntent(unquotedQuery);
+  const hasDenialScope = temporalIntent.denialScopes.length > 0 || targetScopedDenial === true;
   const quotedOnlyHistory = /记得/u.test(query) || HISTORICAL_PATTERN.test(query);
   if (quotedOnlyHistory && !/记得/u.test(unquotedQuery) && !HISTORICAL_PATTERN.test(unquotedQuery)) {
     decision.reasonCode = "QUOTED_HISTORY_ONLY";
@@ -229,6 +288,15 @@ function classifyThirdPersonHistoryRequest({ trustedPlayerTurn = null, ownerId, 
   }
 
   let targetResolution = normalizeTargets(resolvedTargets);
+  const deniedIds = new Set((Array.isArray(deniedTargetCharacterIds) ? deniedTargetCharacterIds : [])
+    .map(validId).filter(Boolean));
+  if (targetResolution.ids.length && deniedIds.size) {
+    const ids = targetResolution.ids.filter(id => !deniedIds.has(id));
+    targetResolution = { ...targetResolution, ids,
+      evidence: ids.length ? targetResolution.evidence : "UNRESOLVED" };
+  }
+  const denialDetected = hasDenialScope && (denialScopeAmbiguous || deniedIds.size === 0 || !targetResolution.ids.length);
+  decision.denialDetected = denialDetected;
   let targetEvidence = targetResolution.evidence;
   const validFollowup = temporalIntent.kind === "FOLLOWUP"
     && isValidBinding(conversationBinding, { ownerId: owner, playerAnchorId: player, trustedPlayerTurn: turn });
@@ -241,7 +309,9 @@ function classifyThirdPersonHistoryRequest({ trustedPlayerTurn = null, ownerId, 
   const timeFocused = detailRequested && TIME_PATTERN.test(temporalIntent.historicalText);
   const relationshipIntent = RELATIONSHIP_PATTERN.test(temporalIntent.historicalText);
   if (!hasHistoricalIntent) {
-    decision.reasonCode = temporalIntent.kind === "FOLLOWUP" ? "FOLLOWUP_BINDING_EXPIRED" : "NO_HISTORICAL_INTENT";
+    decision.reasonCode = temporalIntent.kind === "FOLLOWUP" ? "FOLLOWUP_BINDING_EXPIRED"
+      : denialDetected ? "DENIAL_OR_CURRENT_ONLY"
+        : temporalIntent.kind === "AMBIGUOUS" ? "AMBIGUOUS_TEMPORAL_CLAUSE" : "NO_HISTORICAL_INTENT";
     decision.targetEvidence = targetEvidence;
     return decision;
   }

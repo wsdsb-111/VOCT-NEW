@@ -1,6 +1,6 @@
 import { WorldMemoryEditor } from "../world-memory-editor.js";
 import { getLegacySummaryPage, getSummaryDisplayEntries, getSummaryImportantMatters } from "../summary-date-order.js";
-const VOTC_FEATURE_VERSION = "V9.3.6.1";
+const VOTC_FEATURE_VERSION = "V9.3.6.2";
 const VOTC_WORKSHOP_MOD_VERSION = "2.0.5";
 function getDefaultExportFromCjs(x) {
   return x && x.__esModule && Object.prototype.hasOwnProperty.call(x, "default") ? x["default"] : x;
@@ -17626,7 +17626,8 @@ const DEFAULT_PROVIDER_CONFIGS = {
     apiKey: "",
     baseUrl: "https://open.bigmodel.cn/api/paas/v4",
     defaultModel: "glm-5.3-flash",
-    contextMode: "auto",
+    contextMode: "custom",
+    customContextLength: 90000,
     defaultParameters: { temperature: 0.7, max_tokens: 4096 },
     glmReasoningEffort: "low",
     glmClearThinking: true
@@ -18436,19 +18437,55 @@ const ContextLengthField = ({
   const [contextLength, setContextLength] = reactExports.useState("");
   const cacheKey = getCacheKey(config2);
   const availableModels = getCachedModels(cacheKey);
-  const currentModel = availableModels.find((model) => model.id === config2.defaultModel);
+  const currentModel = availableModels.find((model) => String(model.id) === String(config2.defaultModel));
+  const contextModeInvalid = config2.contextMode !== void 0 && !["auto", "custom"].includes(config2.contextMode);
   const contextMode = ["auto", "custom"].includes(config2.contextMode)
     ? config2.contextMode : config2.customContextLength !== void 0 && config2.customContextLength !== null ? "custom" : "auto";
-  const modelNativeContext = currentModel?.contextLengthSource === "provider_native"
-    && Number.isSafeInteger(currentModel.contextLength) && currentModel.contextLength >= 256 && currentModel.contextLength <= 2e6
-    ? currentModel.contextLength : null;
+  const metadataModelId = currentModel?.modelId ?? currentModel?.id;
+  const modelMatchesConfig = !metadataModelId || !config2.defaultModel || String(metadataModelId) === String(config2.defaultModel);
+  const metadataContext = modelMatchesConfig ? currentModel?.contextLength ?? currentModel?.context_window : null;
+  const modelContext = Number.isSafeInteger(metadataContext) && metadataContext >= 256 && metadataContext <= 2e6
+    && (currentModel?.contextLengthSource === void 0 || currentModel.contextLengthSource === "provider_native")
+    ? metadataContext : null;
+  const modelContextSource = modelContext === null ? null : currentModel?.contextLengthSource === "provider_native" ? "provider_native" : "provider_metadata";
+  const verifiedNativeContext = modelContextSource === "provider_native" ? modelContext : null;
+  const numValue = contextLength.trim() === "" ? NaN : Number(contextLength);
+  const validCustom = Number.isSafeInteger(numValue) && numValue >= 256 && numValue <= 2e6;
+  const storedCustomIsPresent = config2.customContextLength !== void 0 && config2.customContextLength !== null;
+  const storedCustomIsValid = !storedCustomIsPresent || Number.isSafeInteger(config2.customContextLength)
+    && config2.customContextLength >= 256 && config2.customContextLength <= 2e6;
+  const invalidConfiguration = contextModeInvalid || !storedCustomIsValid || contextMode === "custom" && !storedCustomIsPresent;
+  const configuredContext = !invalidConfiguration && contextMode === "custom" && storedCustomIsValid
+    ? config2.customContextLength : null;
+  const effectiveContext = invalidConfiguration
+    ? Math.min(modelContext || 8192, 8192)
+    : configuredContext ? modelContext ? Math.min(configuredContext, modelContext) : configuredContext : modelContext || 8192;
+  const contextWindowSource = invalidConfiguration
+    ? "invalid_configuration_fallback"
+    : configuredContext
+      ? modelContext && modelContext < configuredContext ? "provider_native_cap" : modelContext ? "user_provided" : "user_provided_unverified"
+      : modelContext ? modelContextSource : "safe_fallback";
+  const configuredContextDisplay = invalidConfiguration
+    ? "invalid configuration"
+    : configuredContext === null ? "Auto (no active Custom value)" : `${configuredContext.toLocaleString()} tokens`;
+  const positiveInteger = (value) => {
+    const number = Number(value);
+    return Number.isFinite(number) && number > 0 ? Math.floor(number) : null;
+  };
+  const configuredOutput = positiveInteger(config2.customMaxOutputTokens ?? config2.maxOutputTokens ?? config2.defaultParameters?.max_tokens);
+  const modelOutput = modelMatchesConfig ? positiveInteger(currentModel?.maxOutputTokens ?? currentModel?.maxCompletionTokens ?? currentModel?.outputTokenLimit) : null;
+  const inferredOutput = configuredContext || modelContext ? Math.min(8192, Math.max(2048, Math.floor(effectiveContext / 4))) : 2048;
+  const maxOutputTokens = Math.min(positiveInteger(config2.customMaxOutputTokens ?? config2.maxOutputTokens) || modelOutput || configuredOutput || inferredOutput, effectiveContext);
+  const safetyMarginTokens = Math.max(256, Math.ceil(effectiveContext * 0.12));
+  const outputReserveTokens = maxOutputTokens;
+  const effectiveInputBudget = Math.max(0, effectiveContext - outputReserveTokens - 32 - safetyMarginTokens);
   reactExports.useEffect(() => {
     if (config2.customContextLength !== void 0 && config2.customContextLength !== null) {
       setContextLength(config2.customContextLength.toString());
     } else if (contextMode !== "custom") {
       setContextLength("");
     }
-  }, [config2.defaultModel, config2.customContextLength, config2.contextMode, contextMode, modelNativeContext]);
+  }, [config2.defaultModel, config2.customContextLength, config2.contextMode, contextMode, modelContext]);
   const handleContextLengthChange = (e) => {
     const value = e.target.value;
     setContextLength(value);
@@ -18464,16 +18501,27 @@ const ContextLengthField = ({
     if (nextMode === "custom") {
       const current = Number(contextLength);
       const initialCustom = Number.isSafeInteger(current) && current >= 256 && current <= 2e6
-        ? current : modelNativeContext || 8192;
+        ? current : modelContext || 8192;
       setContextLength(String(initialCustom));
       onContextModeChange(nextMode, initialCustom);
       return;
     }
     onContextModeChange("auto");
   };
-  const numValue = contextLength.trim() === "" ? NaN : Number(contextLength);
-  const validCustom = Number.isSafeInteger(numValue) && numValue >= 256 && numValue <= 2e6;
-  const exceedsMax = contextMode === "custom" && validCustom && modelNativeContext !== null && numValue > modelNativeContext;
+  const chooseContextMode = (nextMode, value = null) => {
+    if (nextMode === "custom") {
+      const current = Number(contextLength);
+      const customValue = Number.isSafeInteger(value) && value >= 256 && value <= 2e6
+        ? value : Number.isSafeInteger(current) && current >= 256 && current <= 2e6 ? current : modelContext || 8192;
+      setContextLength(String(customValue));
+      onContextModeChange("custom", customValue);
+      return;
+    }
+    onContextModeChange("auto");
+  };
+  const exceedsMax = contextMode === "custom" && validCustom && modelContext !== null && numValue > modelContext;
+  const unavailableInput = effectiveInputBudget <= 0;
+  const glmAutoUnknown = config2.providerType === "zhipu" && contextMode === "auto" && modelContext === null;
   return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "form-group", children: [
     /* @__PURE__ */ jsxRuntimeExports.jsx("label", { htmlFor: "contextMode", children: "Context Window Mode:" }),
     /* @__PURE__ */ jsxRuntimeExports.jsxs("select", { id: "contextMode", name: "contextMode", value: contextMode, onChange: handleContextModeChange, children: [
@@ -18481,9 +18529,9 @@ const ContextLengthField = ({
       /* @__PURE__ */ jsxRuntimeExports.jsx("option", { value: "custom", children: "Custom" })
     ] }),
     contextMode === "auto"
-      ? modelNativeContext !== null
-        ? /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "context-length-status", children: ["Auto uses the provider-reported context window: ", modelNativeContext.toLocaleString(), " tokens."] })
-        : /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "context-length-warning", children: "Provider context is unknown. Auto uses a conservative 8,192-token fallback." })
+      ? modelContext !== null
+        ? /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "context-length-status", children: ["Auto uses the provider-reported context window: ", modelContext.toLocaleString(), " tokens."] })
+        : /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "context-length-warning", children: "Provider context is unverified. Auto uses a conservative 8,192-token fallback; this is not the model's native limit." })
       : /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "context-length-input-container", children: [
         /* @__PURE__ */ jsxRuntimeExports.jsx("input", {
           type: "number",
@@ -18496,14 +18544,36 @@ const ContextLengthField = ({
           step: "1",
           required: true
         }),
-        /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "context-length-status", children: modelNativeContext !== null
-          ? `User-provided limit; verified provider maximum: ${modelNativeContext.toLocaleString()} tokens.`
+        /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "context-length-status", children: modelContext !== null
+          ? `User-provided limit; provider-reported context: ${modelContext.toLocaleString()} tokens.`
           : "User-provided limit; provider context is unverified." })
       ] }),
+    glmAutoUnknown && /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "context-length-warning", children: [
+      "当前 GLM 未提供经验证的上下文窗口。Auto 按 8,192 Token 保守回退；此前兼容设置为 90,000 Token，未经原生验证。",
+      /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "context-length-input-container", children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsx("button", { type: "button", onClick: () => chooseContextMode("custom", 90000), children: "使用 90K 兼容设置" }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx("button", { type: "button", onClick: () => chooseContextMode("auto"), children: "保持 Auto" }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx("button", { type: "button", onClick: () => chooseContextMode("custom"), children: "自定义" })
+      ] })
+    ] }),
+    contextModeInvalid && /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "context-length-warning", children: "Saved context mode is invalid; the request budget safely falls back to 8,192 tokens until corrected." }),
+    configuredContext === 90000 && contextWindowSource === "user_provided_unverified" && config2.providerType === "zhipu"
+      && /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "context-length-status", children: "90K compatibility setting; the provider's native context window has not been verified." }),
+    /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "context-length-status", children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsx("div", { children: ["Mode: ", contextModeInvalid ? "invalid" : contextMode] }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx("div", { children: ["Source: ", contextWindowSource] }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx("div", { children: ["Configured: ", configuredContextDisplay] }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx("div", { children: ["Verified Native: ", verifiedNativeContext === null ? "Unknown / Unverified" : `${verifiedNativeContext.toLocaleString()} tokens`] }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx("div", { children: ["Effective: ", effectiveContext.toLocaleString(), " tokens"] }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx("div", { children: ["可用输入（空消息预算估算）: ", effectiveInputBudget.toLocaleString(), " tokens"] }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx("div", { children: ["输出预留: ", outputReserveTokens.toLocaleString(), " tokens"] }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx("div", { children: "实际消息仍会由完整请求预算守卫复核。" })
+    ] }),
     contextMode === "custom" && !validCustom && /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "context-length-warning", children: "Enter a whole number from 256 to 2,000,000." }),
+    unavailableInput && /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "context-length-warning", children: "此设置无法为当前输出预留、安全余量和协议开销留下可用输入；请提高 Custom 值或降低输出上限。发送时仍会由预算守卫阻止不合适的请求。" }),
     exceedsMax && /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "context-length-warning", children: [
-      "⚠️ Requested context exceeds the verified model maximum (",
-      modelNativeContext.toLocaleString(),
+      "⚠️ Requested context exceeds the provider-reported model context (",
+      modelContext.toLocaleString(),
       "); the effective limit will be capped."
     ] })
   ] });

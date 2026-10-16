@@ -110,7 +110,8 @@ const DEFAULT_PROVIDER_CONFIGS = {
     apiKey: "",
     baseUrl: "https://open.bigmodel.cn/api/paas/v4",
     defaultModel: "glm-5.3-flash",
-    contextMode: "auto",
+    contextMode: "custom",
+    customContextLength: 90000,
     defaultParameters: { temperature: 0.7, max_tokens: 4096 },
     glmReasoningEffort: "low",
     glmClearThinking: true

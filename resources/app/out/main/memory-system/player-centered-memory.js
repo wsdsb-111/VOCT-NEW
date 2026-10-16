@@ -133,27 +133,53 @@ function resolveHistoryDecision(engine, options, state, memories) {
     && currentPlayerTurn?.role === "user" && Number(currentPlayerTurn?.speakerCharacterId) === playerId
     ? removeQuotedText(currentPlayerTurn.content) : "";
   const temporalIntent = classifyTemporalIntent(query);
-  const targetQuery = temporalIntent.kind === "PAST_HISTORY" ? temporalIntent.historicalText : query;
+  const targetQuery = temporalIntent.kind === "PAST_HISTORY" ? temporalIntent.historicalText
+    : temporalIntent.kind === "FOLLOWUP" ? query : "";
   const focus = state.namedTargetFocus;
   const focusValid = focus && focus.turnEpoch + 1 === options.turnEpoch && focus.sceneRevision === options.sceneRevision;
+  const deniedTargetIds = new Set();
+  let denialScopeAmbiguous = false;
+  let hasTargetScopedDenial = false;
+  for (const clause of temporalIntent.clauses) {
+    const negation = /别|不要|不必|不用|无需|不想|暂时不/u.exec(clause.text);
+    const remainder = negation ? clause.text.slice(negation.index + negation[0].length) : "";
+    const talkAction = /谈|说|讲|提起/u.exec(remainder);
+    const targetScopedTalkDenial = !clause.denialScope && !!talkAction && talkAction.index <= 12;
+    if (!clause.denialScope && !targetScopedTalkDenial) continue;
+    const ids = engine.mentionTracker.findMentionedCharacterIds([{ role: "user", content: clause.text }], {
+      candidates: profiles, excludedIds: [ownerId, playerId], resolveCoreference: false
+    });
+    const ambiguousAliases = (engine.mentionTracker.lastAmbiguousAliases || [])
+      .filter(alias => clause.text.includes(alias.name));
+    if (targetScopedTalkDenial && !ids.length && !ambiguousAliases.length) continue;
+    if (targetScopedTalkDenial) hasTargetScopedDenial = true;
+    for (const id of ids) deniedTargetIds.add(id);
+    if (engine.mentionTracker.lastScanUnresolved === true) {
+      denialScopeAmbiguous = true;
+      for (const alias of ambiguousAliases) for (const id of alias.characterIds) deniedTargetIds.add(id);
+    }
+  }
   const explicitIds = engine.mentionTracker.findMentionedCharacterIds([{ role: "user", content: targetQuery }], {
     candidates: profiles, excludedIds: [ownerId, playerId], resolveCoreference: false
   });
   const explicitAmbiguous = engine.mentionTracker.lastScanUnresolved === true;
-  const targetIds = explicitIds.length || explicitAmbiguous ? explicitIds
-    : engine.mentionTracker.findMentionedCharacterIds([{ role: "user", content: targetQuery }], {
-      candidates: profiles, excludedIds: [ownerId, playerId],
-      recentCharacterId: focusValid ? focus.characterId : null
-    });
+  const explicitTargetIds = explicitIds.filter(id => !deniedTargetIds.has(id));
+  const targetIds = explicitIds.length || explicitAmbiguous || temporalIntent.denialScopes.length || hasTargetScopedDenial ? explicitTargetIds
+    : temporalIntent.kind === "PAST_HISTORY" && focusValid
+      ? engine.mentionTracker.findMentionedCharacterIds([{ role: "user", content: targetQuery }], {
+        candidates: profiles, excludedIds: [ownerId, playerId], recentCharacterId: focus.characterId
+      })
+      : [];
   const ambiguous = explicitAmbiguous || engine.mentionTracker.lastScanUnresolved === true;
   const decision = classifyThirdPersonHistoryRequest({ ownerId, playerAnchorId: playerId,
     trustedPlayerTurn: currentPlayerTurn,
+    deniedTargetCharacterIds: [...deniedTargetIds], denialScopeAmbiguous, targetScopedDenial: hasTargetScopedDenial,
     resolvedTargets: ambiguous ? [{ ambiguous: true }] : targetIds.map(characterId => ({ characterId, evidence: "UNIQUE_ALIAS" })),
     conversationBinding: state.historyBinding || null });
   if (decision.level !== "L0" && !explicitIds.length && targetIds.length && focusValid) decision.targetEvidence = "BOUND_FOLLOWUP";
   if (currentPlayerTurn?.trusted === true && query && state.namedTargetFocus?.turnEpoch !== options.turnEpoch) {
-    state.namedTargetFocus = explicitIds.length === 1 && !ambiguous
-      ? { characterId: explicitIds[0], turnEpoch: options.turnEpoch, sceneRevision: options.sceneRevision } : null;
+    state.namedTargetFocus = explicitTargetIds.length === 1 && !ambiguous
+      ? { characterId: explicitTargetIds[0], turnEpoch: options.turnEpoch, sceneRevision: options.sceneRevision } : null;
   }
   if (decision.level !== "L0" && decision.targetEvidence !== "BOUND_FOLLOWUP") state.historyBinding = {
     responderId: ownerId, playerAnchorId: playerId, targetCharacterIds: decision.targetCharacterIds,
@@ -250,6 +276,7 @@ function retrieveDynamicMemory(engine, options, state, baseline, memories, rawMe
   if (decision.level !== "L0") pair = retrievePairMemorySources({
     mode: decision.level === "L2" ? "THIRD_PERSON_SOURCE_DETAIL" : "THIRD_PERSON_LEDGER",
     store: engine.store, ownerId: Number(options.characterId), decision, entitiesProfile,
+    sceneRevision: options.sceneRevision,
     campaignToken: options.campaignToken, currentGameDate: options.currentGameDate, currentTotalDays: options.currentTotalDays,
     memories: rawMemories, query, excludedMemoryIds: [...excludedIds], tokenBudget: budget, estimateTokens: countTokens
   });
@@ -353,6 +380,14 @@ function retrievePlayerCenteredMemory(engine, options) {
     thirdPersonSourceOpenedCount: dynamic.sources.filter(entry => entry.routeKind === "third_person_source").length,
     thirdPersonLegacyFallbackStatus: dynamic.metrics.thirdPersonFallbackStatus,
     candidatePairCount: dynamic.metrics.candidatePairCount || 0,
+    candidateDirectoryStatus: dynamic.metrics.candidateDirectoryStatus || "UNAVAILABLE",
+    candidateDirectoryCacheHit: dynamic.metrics.candidateDirectoryCacheHit === true,
+    candidateDirectoryBuildMs: dynamic.metrics.candidateDirectoryBuildMs || 0,
+    ownerPairCount: dynamic.metrics.ownerPairCount || 0,
+    candidateReductionRatio: dynamic.metrics.candidateReductionRatio ?? null,
+    scopeRevisionChecks: dynamic.metrics.scopeRevisionChecks || 0,
+    legacyScanFallbackCount: dynamic.metrics.legacyScanFallbackCount || 0,
+    legacyScanFallbackReason: dynamic.metrics.legacyScanFallbackReason || "NONE",
     actualIndexReadCount: dynamic.metrics.actualIndexReadCount || 0,
     indexCacheHits: dynamic.metrics.indexCacheHits || 0,
     indexCacheMisses: dynamic.metrics.indexCacheMisses || 0,

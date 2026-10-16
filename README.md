@@ -1,6 +1,8 @@
 # Voices of the Court（VOTC）
 
-V9.3.6.1 修复候选已完成本地部署（422组发布回归与隔离Electron通过）：[实施报告](docs/current/v9/V9_3_6_1_IMPLEMENTATION_REPORT.md)、[验证报告](docs/current/v9/V9_3_6_1_VERIFICATION_REPORT.md)、[上下文兼容说明](docs/current/v9/V9_3_6_1_CONTEXT_COMPATIBILITY.md)。修复当前／未来语句的历史误授权和 Recent1 条目去重，扩展 Auto／Custom Context 设置；沿用 V9.3.6 的记忆硬上限与会话冻结，规模检索按测量证据处理。真实 CK3、Provider、Soak 和远端 CI 单列，旧报告作为历史证据保留。
+V9.3.6.2 优化候选已本地部署：保守候选目录缩减跨 Pair 读取，常规5／30／100／300关系性能门槛及来源安全专项通过；修复历史分句和局部否定，新GLM默认显式、未验证90K兼容Custom，已有Auto由用户选择。427／427发布组及隔离窗口通过，289项部署哈希一致；真实CK3／Provider／Soak／远端CI分开验收。[实施报告](docs/current/v9/V9_3_6_2_IMPLEMENTATION_REPORT.md)、[验证报告](docs/current/v9/V9_3_6_2_VERIFICATION_REPORT.md)、[性能A/B](docs/current/v9/V9_3_6_2_PAIR_PERFORMANCE_AB.md)、[Context说明](docs/current/v9/V9_3_6_2_CONTEXT_COMPATIBILITY.md)。
+
+历史 V9.3.6.1 修复候选已完成本地部署（422组发布回归与隔离Electron通过）：[实施报告](docs/current/v9/V9_3_6_1_IMPLEMENTATION_REPORT.md)、[验证报告](docs/current/v9/V9_3_6_1_VERIFICATION_REPORT.md)、[上下文兼容说明](docs/current/v9/V9_3_6_1_CONTEXT_COMPATIBILITY.md)。修复当前／未来语句的历史误授权和 Recent1 条目去重，扩展 Auto／Custom Context 设置；沿用 V9.3.6 的记忆硬上限与会话冻结，规模检索按测量证据处理。真实 CK3、Provider、Soak 和远端 CI 单列，旧报告作为历史证据保留。
 
 Voices of the Court 是一个面向《Crusader Kings III》（CK3）的沉浸式 AI 宫廷对话工具。它读取 CK3 的游戏日志和角色数据，将当前日期、朝代、角色关系、场景、记忆与历史背景整理为提示词，再通过兼容 OpenAI Chat Completions 格式的 API 生成角色扮演回复。
 
@@ -18,7 +20,7 @@ Voices of the Court 是一个面向《Crusader Kings III》（CK3）的沉浸式
 
 当前记忆入口为 `Legacy Summary`。每位回应 NPC 的固定历史只锚定当前玩家：最近 1 篇 Legacy、合法官方追忆、预算内尽量完整的玩家关系事项簿。固定文本首次构造后冻结；第三人仅提名为 L0，不读取其历史索引或原文；明确历史关系询问为 L1，每目标至多 16 条事项、零原文；具体历史经过为 L2，共享预算内至多 2 篇经来源键和修订号复验的摘要。2／3／4+ 人采用 16%／18%／20% 与 4800／5600／6400 Token 上限，并取无记忆 Prompt、输出预留及 Provider 安全余量允许的较小值。Legacy 页面保留事项搜索、日期筛选、分页、预览确认回填与已验证来源全文；人物主标签只显示真实姓名，未知时显示“姓名未载入”。
 
-### 历史版本记录（以下保留当时实现与验收快照，不代表 V9.3.6.1 当前合同）
+### 历史版本记录（以下保留当时实现与验收快照，不代表 V9.3.6.2 当前合同）
 
 历史 V9.3.4 Durable 退役与 Legacy Summary：[实施](docs/current/v9/V9_3_4_IMPLEMENTATION_REPORT.md)、[验证](docs/current/v9/V9_3_4_VERIFICATION_REPORT.md)。当时直接关系默认取最近两篇摘要，搭配合法官方追忆和动态 Extra；其映射、构建、部署及验收结论只作为该阶段证据。V9.3.5 候选改用 Recent1 与 Pair 事项索引/精确来源召回，不能把旧配额视为当前候选合同。
 
@@ -32,7 +34,7 @@ V9.3.3.1 修复（2026-10-14）：[规格](docs/current/v9/V9_3_3_1_FIX_SPEC.md)
 
 历史 V9.2.3候选（2026-10-13）：[实施](docs/current/v9/V9_2_3_IMPLEMENTATION_REPORT.md)、[验证](docs/current/v9/V9_2_3_VERIFICATION_REPORT.md)。Year/Life自动模型生成已退役；保留Durable、Detail/Legacy及合法旧档查看和手改。以下旧年度压缩／重建记录为历史合同，不能据此重新启用生成。GLM旧新出站一致，原生长上下文另有取证，实机问题仍HOLD；正式App/UI保持9.2.0/V9.2，未签完整冻结。Durable 已由 V9.3.4 退役。
 
-Core／App／UI 为 9.3.6.1。VOTC Workshop Mod 2.0.5、`Legacy Summary`、协议 3.0、摘要存储 2.5 与 Official Action 2.0.3 保持。VOTC.exe 的旧壳属性版本未改写。Durable 不再在线，Year/Life 不生成。
+Core／App／UI 为 9.3.6.2。VOTC Workshop Mod 2.0.5、`Legacy Summary`、协议 3.0、摘要存储 2.5 与 Official Action 2.0.3 保持。VOTC.exe 的旧壳属性版本未改写。Durable 不再在线，Year/Life 不生成。
 
 可选兼容工程已完成本地迁移：[CK3-Three-Mod-Compatibility](https://github.com/wsdsb-111/CK3-Three-Mod-Compatibility)，工作目录 `C:/Users/97330/Documents/Codex/CK3-Three-Mod-Compatibility`。官职／称谓规则不属于 VOTC 运行必需依赖，历史[1.0.6 报告](docs/v8.15.2-celestial-same-tier-office-report.md)保留；当前安装 Mod 不卸载。独立CI与CK3验收待执行。
 

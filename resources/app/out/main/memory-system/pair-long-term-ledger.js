@@ -6,6 +6,7 @@ const path = require("path");
 const { normalizeGameDate } = require("../worldline/character-temporal-facts");
 const { assertNoLinks } = require("./scoped-path");
 const pairMatters = require("../../shared/pair-important-matters");
+const { OwnerTargetCandidateDirectory } = require("./owner-target-candidate-directory");
 
 const INDEX_SCHEMA_VERSION = 1;
 const INDEX_ALGORITHM_VERSION = 1;
@@ -82,6 +83,17 @@ class PairLongTermLedger {
     this.store = store;
     this.cache = new Map();
     this.ownerSnapshots = new Map();
+    this.candidateDirectory = new OwnerTargetCandidateDirectory({ store });
+    this.ownerReadSessions = new WeakSet();
+    this.retrievalEpoch = 0;
+    this.retrievalMode = "safe-candidate-directory";
+  }
+
+  setRetrievalMode(mode) {
+    if (!["safe-candidate-directory", "exhaustive-reference"].includes(mode)) throw makeError("PAIR_RETRIEVAL_MODE_INVALID");
+    if (mode === this.retrievalMode) return;
+    this.retrievalMode = mode;
+    this.store.invalidateFolderSummaryCache();
   }
 
   scopeKey(scope) {
@@ -94,6 +106,8 @@ class PairLongTermLedger {
   }
 
   invalidate(ownerIds = null) {
+    this.retrievalEpoch++;
+    this.candidateDirectory.invalidate(ownerIds);
     if (ownerIds == null) {
       this.cache.clear();
       this.ownerSnapshots.clear();
@@ -156,7 +170,49 @@ class PairLongTermLedger {
     }
   }
 
-  loadSnapshot(scope, suppliedMemories = null) {
+  beginOwnerRead({ ownerId, campaignToken, counterpartId, memories }) {
+    const scope = normalizeScope({ ownerId, campaignToken, counterpartId });
+    const expectedRevision = this.store.getFolderSummarySnapshotRevision(memories);
+    const snapshot = this.loadSnapshot(scope, memories);
+    const revision = this.store.getFolderSummarySnapshotRevision(snapshot);
+    if (expectedRevision !== revision || this.store.hasOwnerSummaryContentChanges(snapshot)) {
+      this.store.invalidateFolderSummaryCache([ownerId]);
+      throw makeError("PAIR_INDEX_SOURCE_UNSTABLE");
+    }
+    const pairMemories = new Map();
+    for (const memory of snapshot) for (const source of memory.provenance?.pairLedgerSources || []) {
+      const id = Number(source.counterpartId);
+      if (!pairMemories.has(id)) pairMemories.set(id, new Set());
+      pairMemories.get(id).add(memory);
+    }
+    const session = Object.freeze({ ownerId, campaignToken, memories: snapshot, snapshotRevision: revision,
+      epoch: this.retrievalEpoch, pairMemories });
+    this.ownerReadSessions.add(session);
+    return session;
+  }
+
+  validateOwnerRead(session) {
+    if (!this.ownerReadSessions.has(session) || session.epoch !== this.retrievalEpoch
+      || this.store.getFolderSummarySnapshotRevision(session.memories) !== session.snapshotRevision) return false;
+    if (this.store.hasPairLedgerSourceChanges(session.memories) || this.store.hasOwnerSummaryContentChanges(session.memories)) {
+      this.store.invalidateFolderSummaryCache([session.ownerId]);
+      return false;
+    }
+    return session.epoch === this.retrievalEpoch;
+  }
+
+  loadSnapshot(scope, suppliedMemories = null, ownerReadSession = null) {
+    if (ownerReadSession) {
+      const session = ownerReadSession;
+      if (!this.ownerReadSessions.has(session) || session.ownerId !== scope.ownerId
+        || session.campaignToken !== scope.campaignToken || session.epoch !== this.retrievalEpoch
+        || this.store.hasPairLedgerSourceContentChanges([...(session.pairMemories.get(scope.counterpartId) || [])], scope.counterpartId)) {
+        throw makeError("PAIR_INDEX_SOURCE_UNSTABLE");
+      }
+      // The round validates the whole Owner on entry and exit. Each read still
+      // checks its real source bytes; this avoids N copies of the Owner file scan.
+      return session.memories;
+    }
     const cachedSnapshot = this.ownerSnapshots.get(scope.ownerId);
     let memories = Array.isArray(suppliedMemories) ? suppliedMemories : cachedSnapshot?.memories;
     if (Array.isArray(suppliedMemories) && cachedSnapshot
@@ -489,7 +545,7 @@ class PairLongTermLedger {
 
   read(scopeInput, options = {}) {
     const scope = normalizeScope(scopeInput);
-    const memories = this.loadSnapshot(scope, options.memories);
+    const memories = this.loadSnapshot(scope, options.memories, options.ownerReadSession);
     const diagnostics = { scope: { ownerId: scope.ownerId, counterpartId: scope.counterpartId }, scannedSummaryCount: 0, skipReasons: {} };
     const snapshotRevision = this.store.getFolderSummarySnapshotRevision(memories);
     const key = this.scopeKey(scope);
@@ -620,6 +676,8 @@ class PairLongTermLedger {
     this.writeIndex(scope, confirmedIndex);
     const cacheEntry = this.cache.get(cacheKey);
     this.cache.set(cacheKey, { ...cacheEntry, index: confirmedIndex });
+    this.retrievalEpoch++;
+    this.candidateDirectory.invalidate([scope.ownerId]);
     return { success: true, counts: preview.counts, sourceRevision: read.sourceRevision,
       previewRevision, pairs: [{ scope, itemCount: index.items.length }], diagnostics: read.diagnostics };
   }
@@ -628,14 +686,14 @@ class PairLongTermLedger {
     const scope = normalizeScope(scopeInput);
     if (typeof sourceSummaryKey !== "string" || !sourceSummaryKey || typeof sourceRevision !== "string"
       || !/^[a-f0-9]{64}$/u.test(sourceRevision)) throw makeError("PAIR_INDEX_SOURCE_POINTER_INVALID");
-    const memories = this.loadSnapshot(scope, options.memories);
+    const memories = this.loadSnapshot(scope, options.memories, options.ownerReadSession);
     const diagnostics = { scope: { ownerId: scope.ownerId, counterpartId: scope.counterpartId }, scannedSummaryCount: 0, skipReasons: {} };
     const currentIndex = this.read(scope, { ...options, memories, readOnly: true });
     const source = currentIndex.sourceSummaries.filter(item => item.sourceSummaryKey === sourceSummaryKey
       && item.sourceRevision === sourceRevision);
     if (source.length !== 1) throw makeError(source.length ? "SOURCE_IDENTITY_AMBIGUOUS" : "SOURCE_UNAVAILABLE_OR_STALE");
     const locator = source[0];
-    const currentMemories = this.loadSnapshot(scope);
+    const currentMemories = this.loadSnapshot(scope, null, options.ownerReadSession);
     const rawSources = this.collectSources(scope, currentMemories, diagnostics);
     const boundSources = this.bindLegacySourceKeys(scope, rawSources, currentIndex.sourceSummaries, diagnostics);
     const exact = boundSources.filter(item => item.sourceSummaryKey === sourceSummaryKey

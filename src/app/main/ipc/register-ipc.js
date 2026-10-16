@@ -435,6 +435,7 @@ function registerIpcHandlers(runtime) {
       return DEFAULT_CONTEXT_WINDOW;
     }
   });
+  electron.ipcMain.handle("llm:getContextDiagnostics", () => llmManager.getContextDiagnostics());
   electron.ipcMain.handle("llm:getMaxContextLength", async () => {
     try {
       return await llmManager.getMaxContextLength();

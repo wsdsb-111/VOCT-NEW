@@ -31,7 +31,6 @@ function createSettingsRepository({ Store, schema, SecureProviderSecrets, electr
             providerType: type,
             // customName: type.charAt(0).toUpperCase() + type.slice(1), // No customName for base configs
             ...DEFAULT_PROVIDER_CONFIGS[type]
-            // customContextLength is intentionally omitted to use default
           });
           settingsChanged = true;
         }
@@ -43,7 +42,6 @@ function createSettingsRepository({ Store, schema, SecureProviderSecrets, electr
           instanceId: type,
           providerType: type,
           ...DEFAULT_PROVIDER_CONFIGS[type]
-          // customContextLength is intentionally omitted to use default
         };
       }).filter((p) => PROVIDER_TYPES.includes(p.instanceId));
       if (settingsChanged) {

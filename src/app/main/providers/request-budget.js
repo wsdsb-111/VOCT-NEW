@@ -100,11 +100,14 @@ function planRequestBudget({ messages = [], capabilities, requestedOutputTokens,
   return {
     estimatedInputTokens,
     reservedOutputTokens,
+    outputReserveTokens: reservedOutputTokens,
     protocolOverheadTokens,
     safetyMarginTokens,
     effectiveInputBudget,
+    usableInputBudget: effectiveInputBudget,
+    budgetStatus: effectiveInputBudget > 0 ? "INPUT_AVAILABLE" : "NO_USABLE_INPUT",
     pressureRatio: effectiveInputBudget ? estimatedInputTokens / effectiveInputBudget : Infinity,
-    safe: estimatedInputTokens <= effectiveInputBudget
+    safe: effectiveInputBudget > 0 && estimatedInputTokens <= effectiveInputBudget
   };
 }
 

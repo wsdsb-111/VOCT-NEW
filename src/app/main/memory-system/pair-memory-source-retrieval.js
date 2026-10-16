@@ -412,6 +412,7 @@ function formatThirdPersonEmpty(status, { level = "L0", metrics = {}, candidateS
 
 function retrieveThirdPersonHistory({ mode = "THIRD_PERSON_LEDGER", store, ownerId, decision, entitiesProfile = [],
   campaignToken, currentGameDate, currentTotalDays, memories = [], query = "", excludedMemoryIds = [], tokenBudget = 0,
+  retrievalMode = store?.pairLedger?.retrievalMode || "safe-candidate-directory", sceneRevision = null,
   estimateTokens = text => Math.ceil(String(text).length / 2) } = {}) {
   const route = decisionForThirdPersonRetrieval(decision, ownerId, mode);
   if (!route.ok) return formatThirdPersonEmpty(route.status);
@@ -428,9 +429,47 @@ function retrieveThirdPersonHistory({ mode = "THIRD_PERSON_LEDGER", store, owner
   }
 
   const terms = thirdPersonQueryTerms(query, targetProfiles);
+  let ownerReadSession = null;
+  let directory = { status: "UNAVAILABLE", reason: "OWNER_SNAPSHOT_UNAVAILABLE", cacheHit: false, constructionMs: 0 };
+  if (retrievalMode !== "exhaustive-reference" && store.pairLedger.beginOwnerRead) {
+    try {
+      ownerReadSession = store.pairLedger.beginOwnerRead({ ownerId, campaignToken,
+        counterpartId: route.targetIds[0], memories });
+      memories = ownerReadSession.memories;
+    } catch (error) {
+      if (/SOURCE_UNSTABLE|SOURCE_STALE|FORGET/u.test(String(error?.code || error?.message || ""))) {
+        return formatThirdPersonEmpty("SOURCE_STALE", { level, legacyFallbackEligible: false,
+          metrics: { candidateDirectoryStatus: "STALE", legacyScanFallbackReason: "OWNER_SNAPSHOT_STALE" } });
+      }
+    }
+  }
   const otherIds = collectOwnerCounterpartIds(memories, ownerId, campaignToken, route.targetIds);
-  const scopes = [...route.targetIds.map(counterpartId => ({ counterpartId, scopeKind: "DIRECT_PAIR" })),
+  const allScopes = [...route.targetIds.map(counterpartId => ({ counterpartId, scopeKind: "DIRECT_PAIR" })),
     ...otherIds.map(counterpartId => ({ counterpartId, scopeKind: "CROSS_PAIR" }))];
+  if (ownerReadSession) {
+    try {
+      directory = store.pairLedger.candidateDirectory.getCandidateScopes({ ownerId, campaignToken,
+        ownerSnapshot: memories, snapshotRevision: ownerReadSession.snapshotRevision, profiles,
+        targetCharacterIds: route.targetIds, counterpartIds: allScopes.map(scope => scope.counterpartId),
+        sceneRevision, currentGameDate, currentTotalDays, epoch: ownerReadSession.epoch });
+    } catch {
+      directory = { status: "UNAVAILABLE", reason: "DIRECTORY_BUILD_FAILED", cacheHit: false, constructionMs: 0 };
+    }
+  }
+  if (!directory || typeof directory !== "object") directory = { status: "UNAVAILABLE", reason: "DIRECTORY_INVALID" };
+  const safeDirectory = directory.status === "COMPLETE" && directory.coverage === "CONSERVATIVE_SUPERSET"
+    && directory.ownerId === ownerId && directory.campaignToken === campaignToken
+    && directory.snapshotRevision === ownerReadSession?.snapshotRevision
+    && Array.isArray(directory.candidateCounterpartIds)
+    && route.targetIds.every(id => directory.candidateCounterpartIds.includes(id));
+  const candidateIds = new Set(safeDirectory ? directory.candidateCounterpartIds : []);
+  if (!safeDirectory && directory.status === "COMPLETE") directory = { status: "UNAVAILABLE", reason: "DIRECTORY_INVALID" };
+  const scopes = safeDirectory ? allScopes.filter(scope => candidateIds.has(scope.counterpartId)) : allScopes;
+  const directoryMetrics = () => ({ candidateDirectoryStatus: directory.status,
+    candidateDirectoryCacheHit: directory.cacheHit === true, candidateDirectoryBuildMs: directory.constructionMs || 0,
+    ownerPairCount: allScopes.length, candidateReductionRatio: allScopes.length ? 1 - scopes.length / allScopes.length : 0,
+    legacyScanFallbackCount: !safeDirectory && retrievalMode !== "exhaustive-reference" ? 1 : 0,
+    legacyScanFallbackReason: safeDirectory ? "NONE" : retrievalMode === "exhaustive-reference" ? "REFERENCE_MODE" : directory.reason });
   const candidatePairCount = scopes.length;
   const candidatesByTarget = new Map(route.targetIds.map(id => [id, new Map()]));
   const scopeRevisions = [];
@@ -443,7 +482,7 @@ function retrieveThirdPersonHistory({ mode = "THIRD_PERSON_LEDGER", store, owner
   const readIndex = (scope, options) => {
     actualIndexReadCount++;
     try {
-      const result = store.pairLedger.read(scope, options);
+      const result = store.pairLedger.read(scope, safeDirectory ? { ...options, ownerReadSession } : options);
       if (result?.cacheHit === true) indexCacheHits++;
       else indexCacheMisses++;
       return result;
@@ -452,7 +491,8 @@ function retrieveThirdPersonHistory({ mode = "THIRD_PERSON_LEDGER", store, owner
       throw error;
     }
   };
-  const indexReadMetrics = () => ({ candidatePairCount, actualIndexReadCount, indexCacheHits, indexCacheMisses,
+  let scopeRevisionChecks = 0;
+  const indexReadMetrics = () => ({ ...directoryMetrics(), candidatePairCount, actualIndexReadCount, scopeRevisionChecks, indexCacheHits, indexCacheMisses,
     // True only when every explicit PairLedger.read call in this retrieval hit its scope cache.
     indexCacheHit: actualIndexReadCount > 0 && !indexCacheOutcomeUnknown && indexCacheMisses === 0 });
   const lookupStart = performance.now();
@@ -462,6 +502,10 @@ function retrieveThirdPersonHistory({ mode = "THIRD_PERSON_LEDGER", store, owner
     try {
       read = readIndex(scope, { currentGameDate, currentTotalDays, memories, readOnly: true });
     } catch (error) {
+      if (ownerReadSession && !store.pairLedger.validateOwnerRead(ownerReadSession)) {
+        return formatThirdPersonEmpty("SOURCE_STALE", { level, legacyFallbackEligible: false,
+          metrics: { ...indexReadMetrics(), candidateDirectoryStatus: "STALE", indexLookupMs: performance.now() - lookupStart } });
+      }
       const code = String(error?.code || error?.message || "");
       const identityConflict = /IDENTITY/u.test(code);
       const forgetConflict = /FORGET/u.test(code);
@@ -524,6 +568,10 @@ function retrieveThirdPersonHistory({ mode = "THIRD_PERSON_LEDGER", store, owner
   }
   const candidateSourcePointers = [...candidateMap.values()].map(row => row.pointer);
   if (!totalRelevantItems) {
+    if (ownerReadSession && !store.pairLedger.validateOwnerRead(ownerReadSession)) {
+      return formatThirdPersonEmpty("SOURCE_STALE", { level, legacyFallbackEligible: false,
+        metrics: { ...indexReadMetrics(), candidateDirectoryStatus: "STALE", indexLookupMs } });
+    }
     return formatThirdPersonEmpty("INDEX_MISS", { level, candidateSourcePointers,
       metrics: { ...indexReadMetrics(), indexLookupMs, candidateSummaryCount, totalVisibleItems: 0, scopeRevisions } });
   }
@@ -546,7 +594,8 @@ function retrieveThirdPersonHistory({ mode = "THIRD_PERSON_LEDGER", store, owner
         const resolved = store.pairLedger.resolveSource(candidate.scope, {
           sourceSummaryKey: pointer.sourceSummaryKey,
           sourceRevision: pointer.sourceRevision
-        }, { currentGameDate, currentTotalDays, memories, readOnly: true });
+        }, { currentGameDate, currentTotalDays, memories, readOnly: true,
+          ...(safeDirectory ? { ownerReadSession } : {}) });
         const base = memories.find(memory => sourceMemoryMatchesPointer(memory, pointer, campaignToken));
         if (resolved.success !== true || typeof resolved.summary?.content !== "string" || !base) {
           throw new Error("SOURCE_UNAVAILABLE_OR_STALE");
@@ -647,6 +696,7 @@ function retrieveThirdPersonHistory({ mode = "THIRD_PERSON_LEDGER", store, owner
   let revisionFallbackAllowed = true;
   for (const entry of scopeRevisions) {
     try {
+      scopeRevisionChecks++;
       const verified = readIndex({ campaignToken, ownerId: entry.ownerId, counterpartId: entry.counterpartId },
         { currentGameDate, currentTotalDays, readOnly: true });
       if (verified.sourceRevision !== entry.revision) revisionChanged = true;
@@ -659,6 +709,11 @@ function retrieveThirdPersonHistory({ mode = "THIRD_PERSON_LEDGER", store, owner
             : /SOURCE_STALE|SOURCE_UNSTABLE|SOURCE_UNAVAILABLE/u.test(code) ? "SOURCE_STALE" : "INDEX_UNAVAILABLE";
       if (/FORGET|IDENTITY|CAMPAIGN/u.test(code)) revisionFallbackAllowed = false;
     }
+  }
+  if (ownerReadSession && !store.pairLedger.validateOwnerRead(ownerReadSession)) {
+    return formatThirdPersonEmpty("SOURCE_STALE", { level, legacyFallbackEligible: false,
+      metrics: { ...indexReadMetrics(), candidateDirectoryStatus: "STALE", indexLookupMs, sourceResolveMs,
+        sourceResolveAttemptCount, scopeRevisions } });
   }
   if (revisionChanged) {
     const status = revisionFailureStatus || "SOURCE_STALE";
