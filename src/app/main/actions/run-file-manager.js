@@ -10,6 +10,19 @@ const TERMINAL_COMMAND_STATUSES = ["failed", "acknowledged", "cancelled", "expir
 
 function createRunFileManager({ settingsRepository, path, fs, dataDir = null, now = () => Date.now(), random = () => Math.random() }) {
   const fs$1 = fs;
+  const renameAtomically = (source, target) => {
+    for (let attempt = 0; ; attempt += 1) {
+      try {
+        fs$1.renameSync(source, target);
+        return;
+      } catch (error) {
+        if (attempt >= 4 || !["EPERM", "EACCES", "EBUSY"].includes(error.code)) throw error;
+        // Retry the same prepared bytes, never the command/effect lifecycle.
+        // A permanent failure still leaves dispatch blocked or stalled.
+        Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 20 * (attempt + 1));
+      }
+    }
+  };
   class RunFileManager {
     constructor() {
       this.ck3UserPath = settingsRepository.getCK3UserFolderPath() || null;
@@ -204,7 +217,7 @@ function createRunFileManager({ settingsRepository, path, fs, dataDir = null, no
         fs$1.mkdirSync(path.dirname(this.stateFile), { recursive: true });
         tempPath = `${this.stateFile}.${process.pid}.${now()}.tmp`;
         fs$1.writeFileSync(tempPath, JSON.stringify({ version: RUN_COMMAND_QUEUE_VERSION, pendingCommands: this.pendingCommands, recentCommands: this.recentCommands.slice(-50) }, null, 2), "utf8");
-        fs$1.renameSync(tempPath, this.stateFile);
+        renameAtomically(tempPath, this.stateFile);
         this.stateNeedsMigration = false;
         return true;
       } catch (error) {
@@ -260,7 +273,7 @@ ${payload}
       const temporaryPath = `${this.path}.${process.pid}.${this.carrierWriteSequence}.tmp`;
       try {
         fs$1.writeFileSync(temporaryPath, content, "utf8");
-        fs$1.renameSync(temporaryPath, this.path);
+        renameAtomically(temporaryPath, this.path);
       } finally {
         if (typeof fs$1.existsSync === "function" && fs$1.existsSync(temporaryPath) && typeof fs$1.unlinkSync === "function") fs$1.unlinkSync(temporaryPath);
       }

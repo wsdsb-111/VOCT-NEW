@@ -1,5 +1,8 @@
 # V9.3.7 CK3 实机验收清单
 
+> 2026-10-17 后续状态：下文保留原 058 候选的本地验证批次。之后已提交 9caffe6，其远端发布回归 FAILED；本轮源码／文档修复及重新验证见[后续收口报告](V9_3_7_FOLLOWUP_REPORT.md)。旧的“未提交”“停止测试”描述不限制当前用户授权的复验，旧 PASS 不代表本轮或远端 PASS。
+
+
 状态：最终源码已冻结；build/deploy/parity 290 mappings、正式性能对照、Pair benchmark、11 组隔离 Electron smoke 和完整 release regression 通过。Release 为 442/442 groups，manifest 为 442 release groups／127 archived entries。用户要求停止后续测试；最终 wrapper 的额外 deployed-parity 阶段未重跑，构建报告已有 deployed parity PASS。合成生产 Prompt Provider 复核为 PARTIAL。真实 CK3、游戏内 Provider、Soak 与远端 CI 尚未执行。
 
 ## 当前本地证据
@@ -10,7 +13,7 @@
 - Pair benchmark：22 cells／484 calls、0 gate failures、`completed=true`；使用历史命名的当前源码 harness，5 个核心检索文件 hash 与 retained baseline 一致。`.build/v937-pair-benchmark-raw.json`、`.build/v937-pair-benchmark.log`。
 - 最终候选双启动 Electron smoke：11 groups，版本 9.3.7，网络／Provider calls 为 0，进程已关闭。`.build/v937-full-ui-visual-smoke-LdVnLy/offline-native/smoke-evidence.json`、`integrated-qa.json`。
 - 合成 DeepSeek 生产 Prompt 共 26 次，本轮复核已结束。最终 parity 为 18 个 Prompt hash 相同、8 个旧阶段 superseded。最终未知 3 例中 2 例明确不知道但补入无来源背景，1 例回避回答且未编造身份或否定关系（人工标记 `ABSTAINED_WITHOUT_IDENTITY`）；literal FAIL 与两例旧模型错答保留，整体 PARTIAL。具体结果和预算口径见[实施报告](V9_3_7_IMPLEMENTATION_REPORT.md)。
-- 历史红测与失败记录不删除：`.build/v937-red-age-baseline.log`、`.build/v937-red-parent-baseline.log`、`.build/v937-perf-expanded-first-failure.json`。完整 release 曾发现旧 `v8.12-temporal-archive` 年龄断言过时；修正测试期望后年龄专项通过，当前最终 release 仍运行中。
+- 历史红测与失败记录不删除：`.build/v937-red-age-baseline.log`、`.build/v937-red-parent-baseline.log`、`.build/v937-perf-expanded-first-failure.json`。完整 release 曾发现旧 `v8.12-temporal-archive` 年龄断言过时；修正测试期望后年龄专项通过，原批次最终 release 已 442/442 PASS；本轮复验另记。
 
 ## 准备与日志导出
 

@@ -1,6 +1,7 @@
 "use strict";
 
 const { getCachedKinshipGraph } = require("../worldline/kinship-graph-cache");
+const { resolveCharacterAge } = require("../worldline/character-age-service");
 
 const BLOOD_KINSHIP_TYPES = new Set([
   "PARENT_OF",
@@ -91,11 +92,13 @@ function buildStableKinship(character, gameData) {
 
 function createStableProfile(character = {}, gameData = null) {
   const classified = classifyTraits(character.traits);
+  const age = resolveCharacterAge(character, { currentGameDate: gameData?.date,
+    currentTotalDays: gameData?.totalDays, currentCampaignToken: gameData?.campaignToken });
   return {
     id: numericOrNull(character.id) ?? textOrNull(character.id),
     name: textOrNull(character.shortName || character.firstName),
     sex: normalizeSex(character),
-    age: numericOrNull(character.age),
+    age: age.sourceConflict ? null : age.age,
     house: textOrNull(character.house),
     origin: character.house ? null : "lowborn",
     culture: textOrNull(character.culture),

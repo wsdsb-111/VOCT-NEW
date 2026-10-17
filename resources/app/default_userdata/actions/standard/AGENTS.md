@@ -1,6 +1,6 @@
 # Standard Action Script Guidelines
 
-These rules apply to shipped scripts in this directory.
+These rules apply to editable standard scripts in src/app/default_userdata/actions/standard/ and their generated resources/app/default_userdata/actions/standard/ output. Edit source first, then build/deploy/verify; do not edit only the generated copy.
 
 ## Action contract
 
@@ -12,7 +12,7 @@ check() must return deterministic availability and valid target IDs. run() must 
 
 - Encode only the effect the action claims to perform. Do not infer injury, death, consent, pregnancy, relationship or other state changes as scene side effects.
 - Treat CK3 native conditions and post-effect readback as authoritative. Do not optimistically mutate local current state; for gold and other confirmed effects, update the visible result only after the existing ACK/readback contract succeeds.
-- Preserve participant/target binding, self-target and invalid-target guards. Keep adult checks on intimate or romance-related behavior.
+- Preserve participant/target binding, self-target and invalid-target guards. Keep adult checks on intimate or romance-related behavior. Under V9.3.7, unverified calendar arithmetic is not an authoritative age; unknown or conflicting age must not satisfy an adult gate.
 - Keep action candidates constrained and deterministic before the model request; structured output and local validation remain required even when a provider supplies an action proposal.
 - Never expose API keys, complete prompts/messages or private runtime data in action logs, diagnostics or test output.
 

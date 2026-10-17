@@ -1,5 +1,7 @@
 # VOTC 版本变更入口
 
+V9.3.7 后续收口（2026-10-17）：同步 README／各层 AGENTS，修复稳定资料／自定义模板的亲属来源过滤、稳定年龄及 Windows 队列原子替换短暂占用。本地发布回归 444/444 PASS、290 项构建部署一致、隔离窗口及限定性能复验通过；远端 CI 按用户要求暂缓。当前证据和限制见[后续报告](docs/current/v9/V9_3_7_FOLLOWUP_REPORT.md)，以下保留原候选批次记录。
+
 V9.3.7 修复候选（基线 V9.3.6.3）新增同父异母、同母异父、当前继父母／继兄弟姐妹及有来源的历史继亲 Legacy 事实；不新增 Memory 读取，不由前配偶推导继亲。最终源码已冻结，build/deploy 290 项映射（payload `05871d99e3b52e1442b322129ab17ccc2ea367ec259409b122f7d0f2929709da`）、性能对照、Pair benchmark 与 11 组 Electron smoke 通过；完整 release regression 442/442 PASS（442 release groups、127 archived entries）。合成 Prompt Provider 复核为 PARTIAL；CK3／游戏内 Provider／Soak／远端 CI 尚待验收，不宣称 Full Freeze。详见[施工方案](docs/current/v9/V9_3_7_IMPLEMENTATION_PLAN.md)、[实施报告](docs/current/v9/V9_3_7_IMPLEMENTATION_REPORT.md)、[验证报告](docs/current/v9/V9_3_7_VERIFICATION_REPORT.md)和[实机清单](docs/current/v9/V9_3_7_REAL_GAME_CHECKLIST.md)。
 
 V9.3.6.3 综合修复候选：本轮补充 CK3 权威年龄、场外亲属/年份召回、重新生成授权和实际 Prompt 匿名对照；436组发布回归、22格484次同源合成A/B和隔离Electron双启动通过，289项部署一致。先前 TwoP1 数据保留为历史批次。当前施工与验收状态见[综合实施报告](docs/current/v9/V9_3_6_3_INTEGRATED_IMPLEMENTATION_REPORT.md)、[综合验证报告](docs/current/v9/V9_3_6_3_INTEGRATED_VERIFICATION_REPORT.md)和[实机清单](docs/current/v9/V9_3_6_3_REAL_GAME_CHECKLIST.md)。
@@ -23,7 +25,7 @@ V9.3.6.2 优化候选已本地部署：保守候选目录缩减跨 Pair 读取�
 
 历史 V9.3.2（2026-10-13）：修复 Durable 无效生成、输入膨胀及重复恢复；修正取消/多 Effect 派发证据，Core/UI/App 同步为 9.3.2。详见[实施](docs/current/v9/V9_3_2_IMPLEMENTATION_REPORT.md)和[验证](docs/current/v9/V9_3_2_VERIFICATION_REPORT.md)。
 
-这里是版本变更的单一入口。除最上方 V9.3.6.3 候选条目外，以下内容均按当时版本保留为历史快照。详细设计和测试证据保留在链接目标中，本文件只维护版本顺序、用户可见摘要和文档索引。
+这里是版本变更的单一入口。除顶部当前候选及其后续收口条目外，以下内容均按当时版本保留为历史快照。详细设计和测试证据保留在链接目标中，本文件只维护版本顺序、用户可见摘要和文档索引。
 
 历史 V9.3.1修复候选：[实施](docs/current/v9/V9_3_1_IMPLEMENTATION_REPORT.md)、[验证](docs/current/v9/V9_3_1_VERIFICATION_REPORT.md)、[台账](docs/current/v9/V9_3_1_P_ISSUE_LEDGER.md)。Gemini原生缓存／思考及总量正确保留，候选输出不重复扣思考，部分流尾帧不丢已知用量；Action失败不误标已接受，并保留真实命令的待回执入口。无新API调用，正式App/UI仍9.2.0/V9.2，CI／CK3／Soak单独验收。
 

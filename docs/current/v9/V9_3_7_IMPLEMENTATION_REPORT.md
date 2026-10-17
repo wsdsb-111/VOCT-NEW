@@ -1,6 +1,9 @@
 # V9.3.7 实施报告
 
-> 当前记录最终冻结源码候选的实施和阶段验证。完整发布门禁仍在运行；因此本报告不签署 Full Freeze。
+> 2026-10-17 后续状态：下文保留原 058 候选的本地验证批次。之后已提交 9caffe6，其远端发布回归 FAILED；本轮源码／文档修复及重新验证见[后续收口报告](V9_3_7_FOLLOWUP_REPORT.md)。旧的“未提交”“停止测试”描述不限制当前用户授权的复验，旧 PASS 不代表本轮或远端 PASS。
+
+
+> 当前记录最终冻结源码候选的实施和阶段验证。原批次完整发布门禁已通过；真实 CK3、游戏内 Provider 和 Soak 未验收，本报告不签署 Full Freeze。
 
 状态：最终源码冻结。build/deploy 与 parity 通过，290 项映射，payload SHA `05871d99e3b52e1442b322129ab17ccc2ea367ec259409b122f7d0f2929709da`；Node 22 正式性能对照、Pair benchmark 和最终候选 Electron 双启动 smoke 11 组通过。完整 release regression **442/442 PASS**，清单为 442 release groups／127 archived entries。按用户要求停止后续测试；最终 wrapper 的额外 deployed-parity 阶段没有重跑，构建报告已有 deployed parity PASS。本轮代码未提交、未推送，本地工作区和已部署 058 候选保留。合成生产 Prompt 的 Provider 复核为 **PARTIAL**；真实 CK3、游戏内 Provider、Soak 和远端 CI 尚未验收，不签署 Full Freeze。需求见[施工方案](V9_3_7_IMPLEMENTATION_PLAN.md)，核验边界见[验证报告](V9_3_7_VERIFICATION_REPORT.md)，CK3 步骤见[实机清单](V9_3_7_REAL_GAME_CHECKLIST.md)。
 

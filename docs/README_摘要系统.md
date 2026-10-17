@@ -1,6 +1,6 @@
 # 对话摘要与人物记忆：Legacy Summary（3.0 协议、2.5 存储兼容）
 
-当前记录 Core／App／UI V9.3.6.3 基线与 V9.3.7 修复候选状态。Workshop 2.0.5、Official Action 2.0.3、`Legacy Summary`、协议 3.0、摘要存储 2.5／schema 2 与既有目录格式保持。最终源码已冻结；build/deploy 290 项映射（payload `05871d99e3b52e1442b322129ab17ccc2ea367ec259409b122f7d0f2929709da`）、正式性能对照、Pair benchmark 与 11 组 native smoke 已通过，完整 release regression 442/442 PASS（442 release groups、127 archived entries）。合成 Prompt Provider 复核为 PARTIAL，CK3／游戏内 Provider／Soak／远端 CI 尚待验收。详细状态见当前版本报告。Durable、Year/Life 的生成、恢复、模型提取和后台重建不恢复。
+当前 Core／App／UI 为 V9.3.7 候选，基线 V9.3.6.3。Workshop 2.0.5、Official Action 2.0.3、`Legacy Summary`、协议 3.0、摘要存储 2.5／schema 2 与既有目录格式保持。原报告的 290 项映射、442/442 发布组、正式性能、Pair benchmark 与 11 组 native smoke 是旧批次证据；本轮源码、构建和验证结果以[后续收口报告](current/v9/V9_3_7_FOLLOWUP_REPORT.md)为准。合成 Prompt Provider 复核仍为 PARTIAL，真实 CK3／游戏内 Provider／Soak 未验收；提交 9caffe6 的远端发布回归已失败，远端修复按用户要求暂缓。Durable、Year/Life 的生成、恢复、模型提取和后台重建不恢复。
 
 V9.3.7 修复候选扩展到同父异母、同母异父、当前继父母／继兄弟姐妹及有来源的历史继亲事实；不改变 Legacy Summary 既有授权与 Forget 合同，不新增 Memory 读取。明确死亡或生命状态冲突时拒绝当前继亲事实；生命状态缺失时要求新鲜、来源绑定的 `CURRENT_MARRIAGE`。未知不等于不存在：不能据未知回答“没有”，也不得补造父母生死、婚史或人物不知情原因。当前 GameData 无确认时只说明“当前游戏资料未确认”，不否定有来源的过去关系，也不凭前配偶推断继亲。严格 typed STEP 仅作既有格式读取兼容，不自动重建历史。CK3 新行须重新导出，旧日志及未知／秘密关系保持未知。详见[施工方案](current/v9/V9_3_7_IMPLEMENTATION_PLAN.md)、[实施报告](current/v9/V9_3_7_IMPLEMENTATION_REPORT.md)、[验证报告](current/v9/V9_3_7_VERIFICATION_REPORT.md)和[实机清单](current/v9/V9_3_7_REAL_GAME_CHECKLIST.md)。
 
@@ -14,7 +14,7 @@ V9.3.7 修复候选扩展到同父异母、同母异父、当前继父母／继�
 
 V9.3.6.1 修复见[实施报告](current/v9/V9_3_6_1_IMPLEMENTATION_REPORT.md)、[验证报告](current/v9/V9_3_6_1_VERIFICATION_REPORT.md)与[Context兼容](current/v9/V9_3_6_1_CONTEXT_COMPATIBILITY.md)。当前／未来提醒不授予第三人历史权限；混合句只从明确历史分句解析人物、时间与相关性。Recent 去重要求同来源键、修订、事项序号和实际渲染的完整条目；截断／子串／其他序号保留正文。下述玩家锚点、人数冻结与记忆硬上限继续沿用。
 
-## 历史版本合同与验收快照（以下内容不覆盖 V9.3.6.1 候选合同）
+## 历史版本合同与验收快照（以下内容不覆盖 V9.3.7 当前合同）
 
 ### 历史 V9.3.3 来源规划与派生退役（2026-10-14）
 

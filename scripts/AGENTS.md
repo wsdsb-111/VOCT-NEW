@@ -1,4 +1,4 @@
-> V9.3.6.3 修复候选沿用下列 V9.3.6 玩家中心记忆合同。最新实施、验证与旧档兼容说明见 ../docs/current/v9/V9_3_6_3_IMPLEMENTATION_REPORT.md、V9_3_6_3_VERIFICATION_REPORT.md 和 V9_3_6_3_LEGACY_COMPATIBILITY.md；实机／Provider／Soak／远端CI分开签署。
+> 当前候选为 V9.3.7，沿用 V9.3.6 玩家中心记忆合同。当前版本及后续收口报告由根 README.md 和 docs/README.md 索引；V9.3.6.3 旧档兼容合同继续有效。otherParent 不扩大 Memory 权限，未验证的日历年龄仅作诊断。CK3／Provider／Soak／远端 CI 分开签署，远端失败不得写成未执行或 PASS。
 
 # Script and Test Guidelines
 
@@ -8,7 +8,7 @@ These rules apply to files in scripts/.
 
 - Use Node's built-in assert and deterministic fixtures. Do not depend on a CK3 installation path, live Provider/API, current date, %APPDATA% contents, real save, log, summary or secret.
 - scripts/test-manifest.js is the single inventory for direct and nested checks. Every test-*.js file must be classified there as a release check or historical archive; update the manifest when adding a test.
-- The current candidate is V9.3.6.3 Player-centered Recall with the `Legacy Summary` label; formal package versions remain governed by package metadata and final reports. Workshop 2.0.5, protocol 3.0 and summary storage 2.5 remain. Memory4/Durable and Year/Life generation/rebuild are retired from production. Focused checks should cover the player-anchored Recent1/Official/Pair baseline, L0/L1/L2 permissions, formatted memory and full-request budgets, source invalidation, search/date filtering, preview/confirm/cancel, per-Pair batch progress/partial outcomes, read-only archives, and actual-name-only person labels. Build, deploy and verify parity before release checks. Do not hardcode an unsettled source mapping or final release-group count; use the V9.3.6 reports for current evidence and retain V9.3.5 and earlier results as history.
+- The current candidate is V9.3.7 age/kinship with V9.3.6 Player-centered Recall with the `Legacy Summary` label; formal package versions remain governed by package metadata and final reports. Workshop 2.0.5, protocol 3.0 and summary storage 2.5 remain. Memory4/Durable and Year/Life generation/rebuild are retired from production. Focused checks should cover the player-anchored Recent1/Official/Pair baseline, L0/L1/L2 permissions, formatted memory and full-request budgets, source invalidation, search/date filtering, preview/confirm/cancel, per-Pair batch progress/partial outcomes, read-only archives, and actual-name-only person labels. Build, deploy and verify parity before release checks. Do not hardcode an unsettled source mapping or final release-group count; use the V9.3.7 follow-up report for the current run and keep earlier batch evidence separate and retain V9.3.5 and earlier results as history.
 - The current production Action baseline is Official VOTC 2.0.3. The old self-developed Action Engine/AE/Action Mode tests remain historical unless the manifest explicitly marks a compatibility check; do not add new production behavior to an obsolete suite merely because its filename is old.
 - Put V8.8.4/V8.8.5 incident, queue-vs-ACK timing, argument ambiguity, provisional feedback, missing age, extended kinship, Current Truth, Memory and UI contract cases in the narrowest matching focused script. Cover game-side deduplication and NPC indices excluding the player. Theme changes belong with test-v8.8-ui-style-backgrounds.js; update its assertions when the CSS/background/label contract changes.
 
@@ -43,3 +43,5 @@ git diff --check
 ~~~
 
 The release suite is the authoritative aggregate gate; the current inventory is reported by scripts/test-manifest.js and changes as V9 checks and independent-project extraction evolve. Static/script checks do not prove real CK3, Provider, packaged Electron, remote CI or long-running behavior, so reports must state those boundaries separately.
+
+V9.3.7 checks cover authoritative age, public parent source binding, half/step siblings, UNKNOWN versus absence, death/life conflicts, Campaign/snapshot mismatch, and unchanged Memory permissions. Keep failures visible; do not loosen thresholds, skip historical counterexamples or label an unrun paid Provider/CK3/Soak gate PASS. Record a failed remote CI as FAILED for that SHA until a new exact-SHA run passes.

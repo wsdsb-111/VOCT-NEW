@@ -95,7 +95,7 @@ function createCharacterMap(source) {
   return new Map(Object.entries(characters || {}).map(([key, value]) => [String(key), value]));
 }
 
-function buildKinshipGraph(source = {}, { includeOtherParents = true } = {}) {
+function buildKinshipGraph(source = {}, { includeOtherParents = true, otherParentEvidenceFilter = null, directParentEvidenceFilter = null } = {}) {
   const characters = createCharacterMap(source);
   const nodes = new Map(characters);
   const edges = [];
@@ -146,7 +146,7 @@ function buildKinshipGraph(source = {}, { includeOtherParents = true } = {}) {
   };
   const addOtherParent = (value, defaults = {}) => {
     const evidence = createOtherParentEvidence(value, defaults);
-    if (!evidence) return;
+    if (!evidence || otherParentEvidenceFilter && !otherParentEvidenceFilter(evidence, value)) return;
     const parentId = ensureNode({ id: evidence.parentId, name: evidence.parentName, gender: evidence.parentGender });
     const childId = ensureNode(evidence.childId);
     if (!parentId || !childId) return;
@@ -160,6 +160,7 @@ function buildKinshipGraph(source = {}, { includeOtherParents = true } = {}) {
       ? character.parents.map((parent) => ({ parent, branch: null }))
       : [{ parent: character?.parents?.father ?? character?.father, branch: "PATERNAL" }, { parent: character?.parents?.mother ?? character?.mother, branch: "MATERNAL" }];
     for (const { parent, branch } of parentEntries.filter((entry) => entry.parent)) {
+      if (directParentEvidenceFilter && !directParentEvidenceFilter(parent, characterId)) continue;
       const parentId = ensureNode(parent);
       if (!parentId) continue;
       const details = relationshipDetails(parent, { branch });
@@ -228,6 +229,7 @@ function buildKinshipGraph(source = {}, { includeOtherParents = true } = {}) {
       const ownerId = ensureNode(evidence.ownerId);
       if (!ownerId) continue;
       if (evidence.relationType === "parent") {
+        if (directParentEvidenceFilter && !directParentEvidenceFilter(evidence.directParentEvidence || evidence, ownerId)) continue;
         const details = relationshipDetails(evidence, { source: evidence.source || "SNAPSHOT_DIRECT" });
         add(characterId, ownerId, "PARENT_OF", [characterId, ownerId], 1, details);
         add(ownerId, characterId, "CHILD_OF", [ownerId, characterId], 1, details);

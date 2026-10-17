@@ -180,7 +180,8 @@ function createRelationshipResolver({ onDiagnostic = null } = {}) {
       if (parent.sourceOwnerId !== undefined && evidenceOwnerId !== sourceOwnerId) return;
       if (parent.childId !== undefined && positiveRuntimeId(parent.childId) !== childId) return;
       if (parent.relationType && parent.relationType !== "parent") return;
-      if (parent.source && parent.source !== "CK3_OTHER_PARENT") return;
+      if (parent.source !== "CK3_OTHER_PARENT") return;
+      if (parent.knowledgeStatus !== undefined && parent.knowledgeStatus !== "UNKNOWN") return;
       if (parent.sourceRelation && parent.sourceRelation !== sourceRelation) return;
       const campaignFields = ["campaignId", "campaignToken", "sourceSnapshotId", "checkpointId"];
       const evidence = {
@@ -214,7 +215,13 @@ function createRelationshipResolver({ onDiagnostic = null } = {}) {
           const gender = normalizeGender(entry.gender, entry.sheHe, inferGenderFromPronoun);
           record.gender.push({ value: gender, priority: 2, sourceOwnerId: ownerId, relationType, source });
           collectTemporalEvidence(record, entry, 2, ownerId, relationType, source, relativeAgeContext);
-          pushUnique(record.relations, { ownerId, relationType, source }, (item) => `${item.ownerId}:${item.relationType}`);
+          const directParentEvidence = field === "parents" && (entry.source === "CK3_DIRECT_PARENT" || Object.hasOwn(entry, "publicStatus"))
+            ? { source: entry.source, sourceOwnerId: entry.sourceOwnerId, childId: entry.childId,
+              relationType: entry.relationType, sourceRelation: entry.sourceRelation, publicStatus: entry.publicStatus,
+              knowledgeStatus: entry.knowledgeStatus, campaignToken: entry.campaignToken,
+              sourceSnapshotId: entry.sourceSnapshotId, evidenceConflict: entry.evidenceConflict } : null;
+          pushUnique(record.relations, { ownerId, relationType, source,
+            ...(directParentEvidence ? { directParentEvidence } : {}) }, (item) => `${item.ownerId}:${item.relationType}`);
           if (field === "children") addOtherParentRelation(record, owner, entry, "kids.otherParent");
           else if (field === "siblings") addOtherParentRelation(record, owner, entry, "siblings.otherParent");
         }

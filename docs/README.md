@@ -1,6 +1,19 @@
 # VOTC 文档索引
 
-V9.3.7 修复候选（基线 V9.3.6.3）扩展到同父异母、同母异父、当前继父母／继兄弟姐妹及有来源的历史继亲 Legacy 记录；不新增 Memory 读取，也不从前配偶推断继亲。最终源码已冻结，build/deploy 290 项映射（payload `05871d99e3b52e1442b322129ab17ccc2ea367ec259409b122f7d0f2929709da`）、正式性能对照、Pair benchmark 与 11 组原生 smoke 通过；完整 release regression 442/442 PASS（442 release groups、127 archived entries）。合成 Prompt Provider 为 PARTIAL，CK3、游戏内 Provider、Soak 与远端 CI 尚待验收；不宣称 Full Freeze。入口：[施工方案](current/v9/V9_3_7_IMPLEMENTATION_PLAN.md)、[实施报告](current/v9/V9_3_7_IMPLEMENTATION_REPORT.md)、[验证报告](current/v9/V9_3_7_VERIFICATION_REPORT.md)、[实机清单](current/v9/V9_3_7_REAL_GAME_CHECKLIST.md)。
+V9.3.7 修复候选（基线 V9.3.6.3）扩展到同父异母、同母异父、当前继父母／继兄弟姐妹及有来源的历史继亲 Legacy 记录；不新增 Memory 读取，也不从前配偶推断继亲。原报告记录 290 项映射、442/442 发布组、正式性能、Pair benchmark 与 11 组原生 smoke 通过，属于原候选批次；本轮状态见下方后续收口报告。合成 Prompt Provider 为 PARTIAL，真实 CK3、游戏内 Provider 与 Soak 未验收，不宣称 Full Freeze。原候选入口：[施工方案](current/v9/V9_3_7_IMPLEMENTATION_PLAN.md)、[实施报告](current/v9/V9_3_7_IMPLEMENTATION_REPORT.md)、[验证报告](current/v9/V9_3_7_VERIFICATION_REPORT.md)、[实机清单](current/v9/V9_3_7_REAL_GAME_CHECKLIST.md)。
+
+## 推荐阅读顺序
+
+当前入口：[V9.3.7 后续收口报告](current/v9/V9_3_7_FOLLOWUP_REPORT.md)：本轮本地发布回归 444/444 PASS、290 项构建部署一致、隔离 Electron 6 组及限定性能复验通过。`9caffe6` 的 [CI run 39004062734](https://github.com/wsdsb-111/VOCT-NEW/actions/runs/39004062734) 已在发布回归失败；本地 PASS 不代表该远端 run 通过；远端 CI 已按用户要求暂缓处理。
+
+1. 当前实施、验证与实机清单：见上方 V9.3.7 链接及后续收口报告。
+2. [源码与构建](current/v9/V9_1_SOURCE_BUILD.md)：先编辑 src/app，再构建、部署和校验。
+3. [Legacy Summary](README_摘要系统.md)：当前 Recent1／L0–L2、来源、Forget 和索引合同。
+4. [索引与来源合同](current/v9/V9_3_5_INDEX_AND_SOURCE_CONTRACT.md)：存储／IPC 合同继续兼容，召回配额以上述当前合同为准。
+
+## 历史版本与阶段快照
+
+以下保留各版本当时的实现和验收快照；旧段落中的“当前”“下一步”、Memory4 和配额只指该阶段，不覆盖顶部 V9.3.7 合同。
 
 V9.3.6.3 综合修复候选：本轮补充 CK3 权威年龄、场外亲属/年份召回、重新生成授权和实际 Prompt 匿名对照；436组发布回归、22格484次同源合成A/B和隔离Electron双启动通过，289项部署一致。先前 TwoP1 数据保留为历史批次。当前施工与验收状态见[综合实施报告](current/v9/V9_3_6_3_INTEGRATED_IMPLEMENTATION_REPORT.md)、[综合验证报告](current/v9/V9_3_6_3_INTEGRATED_VERIFICATION_REPORT.md)和[实机清单](current/v9/V9_3_6_3_REAL_GAME_CHECKLIST.md)。
 
@@ -12,7 +25,7 @@ V9.3.6.2 优化候选已本地部署：保守候选目录缩减跨 Pair 读取�
 
 本目录集中保存 VOTC 的架构说明、版本设计、实施报告和阶段记录。根目录的 [README.md](../README.md) 只负责项目简介、安装运行和当前基线；根目录的 [CHANGELOG.md](../CHANGELOG.md) 负责版本顺序，详细内容按下面的分类维护。
 
-## 推荐阅读顺序
+## 历史阶段入口
 
 **历史基线 V9.3.6：玩家固定关系记忆与第三人分级检索。** [实施报告](current/v9/V9_3_6_IMPLEMENTATION_REPORT.md)、[验证报告](current/v9/V9_3_6_VERIFICATION_REPORT.md)、[Token 与缓存对比](current/v9/V9_3_6_TOKEN_AND_CACHE_COMPARISON.md)、[兼容与退役审计](current/v9/V9_3_6_COMPATIBILITY_AND_RETIREMENT_AUDIT.md)。每位回应 NPC 的固定历史只锚定当前玩家：最近 1 篇 Legacy、合法官方追忆、预算内尽量完整的玩家关系事项簿。固定文本首次构造后冻结；第三人仅提名为 L0，不读取其历史索引或原文；明确历史关系询问为 L1，每目标至多 16 条事项、零原文；具体历史经过为 L2，共享预算内至多 2 篇经来源键和修订号复验的摘要。2／3／4+ 人采用 16%／18%／20% 与 4800／5600／6400 Token 上限，并取无记忆 Prompt、输出预留及 Provider 安全余量允许的较小值。不新增 LLM 检索；真实 CK3、Provider、Soak 与远端 CI 待验收。V9.3.5 报告保留历史，索引存储和来源合同继续兼容。
 
@@ -38,7 +51,7 @@ V9.3.6.2 优化候选已本地部署：保守候选目录缩减跨 Pair 读取�
 
 历史 V9.2：[施工原文](current/v9/V9_2_IMPLEMENTATION_SPEC.md)、[实施／验证](current/v9/V9_2_VERIFICATION_REPORT.md)、[七域端口](current/v9/V9_2_SERVICE_PORTS.md)、[JSON 权威与恢复](current/v9/V9_2_JSON_AUTHORITY_AND_RECOVERY.md)、[问题台账](current/v9/V9_2_P_ISSUE_LEDGER.md)、[V9.3 移交](current/v9/V9_2_HANDOFF_TO_V9_3.md)。按当时[旧总路线](current/v9/V9_ROADMAP.md) §7.3 分期；[V9.1 构建说明](current/v9/V9_1_SOURCE_BUILD.md)和旧实施报告保留历史证据。
 
-当前候选合同见[实施报告](current/v9/V9_3_6_IMPLEMENTATION_REPORT.md)、[验证报告](current/v9/V9_3_6_VERIFICATION_REPORT.md)、[Token 与缓存对比](current/v9/V9_3_6_TOKEN_AND_CACHE_COMPARISON.md)、[兼容与退役审计](current/v9/V9_3_6_COMPATIBILITY_AND_RETIREMENT_AUDIT.md)；Workshop 2.0.5、`Legacy Summary`、协议 3.0、存储 2.5、Official Action 2.0.3 和 Three-Mod 1.0.6 保持。
+V9.3.6 历史合同见[实施报告](current/v9/V9_3_6_IMPLEMENTATION_REPORT.md)、[验证报告](current/v9/V9_3_6_VERIFICATION_REPORT.md)、[Token 与缓存对比](current/v9/V9_3_6_TOKEN_AND_CACHE_COMPARISON.md)、[兼容与退役审计](current/v9/V9_3_6_COMPATIBILITY_AND_RETIREMENT_AUDIT.md)；玩家中心记忆的权限与兼容边界继续沿用，当前 V9.3.7 验证以本页顶部入口为准。
 
 V9工程合同：[永久行为](current/v9/V9_BASELINE_BEHAVIOR_CONTRACTS.md)、[架构边界](current/v9/V9_ARCHITECTURE_BOUNDARY.md)、[数据责任](current/v9/V9_DATA_OWNERSHIP_LEDGER.md)、[退役台账](current/v9/V9_DECOMMISSION_LEDGER.md)、[性能调查](current/v9/V9_STARTUP_PERFORMANCE_INVESTIGATION.md)、[独立兼容迁移](current/v9/V9_COMPATIBILITY_MOD_SEPARATION.md)。
 
@@ -216,7 +229,7 @@ V8.5.1 历史基线：[Sol 最终审查与修复](v8.5.1-sol-final-review.md)，
 
 ## 文档分类
 
-最新阶段：[V8.12.1 双时间记忆实施记录](v8.12.1-dual-temporal-memory-implementation-report.md)（自动 Gate 通过，实机待验收）。[V8.12 Part 3 NPC Memory 存储结构前置分析](v8.12-part3-npc-memory-storage-analysis.md) 保留为历史分析；Part 3 的实施与 2026-09-24 用户报告验收见 [Part 3 施工记录](v8.12-part3-memory-engine-3.0-implementation-report.md)，不将前置分析改写为实现或验收证据。
+历史阶段：[V8.12.1 双时间记忆实施记录](v8.12.1-dual-temporal-memory-implementation-report.md)（自动 Gate 通过，实机待验收）。[V8.12 Part 3 NPC Memory 存储结构前置分析](v8.12-part3-npc-memory-storage-analysis.md) 保留为历史分析；Part 3 的实施与 2026-09-24 用户报告验收见 [Part 3 施工记录](v8.12-part3-memory-engine-3.0-implementation-report.md)，不将前置分析改写为实现或验收证据。
 
 ### 架构与运行规则
 
@@ -292,7 +305,7 @@ V8.5.1 历史基线：[Sol 最终审查与修复](v8.5.1-sol-final-review.md)，
 - [v8.0-historical-baseline-2.0-implementation-report.md](v8.0-historical-baseline-2.0-implementation-report.md)：V8.0 结构化历史基线、兼容适配、shadow Temporal Gate、Prompt/cache 等价和发布验证边界。
 - [VOTC_v7.8_main.js第一轮模块化拆分实施记录.md](VOTC_v7.8_main.js第一轮模块化拆分实施记录.md)：Pre-V8 组合根、游戏数据、Prompt、摘要、信件和运行服务拆分边界及验证结果。
 - [VOTC_v7.7_main.js架构拆分与迁移清单.md](VOTC_v7.7_main.js架构拆分与迁移清单.md)：V7.7 Provider Service、Provider 与 IPC 分阶段拆分范围、依赖边界和验证清单。
-- [README_摘要系统.md](README_摘要系统.md)：Memory Engine 4.0 可见标签、3.0 协议、2.5 数据合同和人物目录视角摘要系统。
+- [README_摘要系统.md](README_摘要系统.md)：当前 Legacy Summary、玩家中心 Recent1/L0–L2、3.0 协议、2.5 存储和历史记忆合同。
 - [V7阶段优化记录.md](V7阶段优化记录.md)：V7.0 至当前 V7.x 的功能、修复和验收边界。
 - [V6阶段优化记录.md](V6阶段优化记录.md)：V6.2 至 V6.9.1 的动作系统、缓存和架构记录。
 

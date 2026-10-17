@@ -178,6 +178,8 @@ const archivedChecks = [
 const releaseChecks = [
   { group: "v9.3.7-age-calibration", script: "test-v9.3.7-age-calibration.js" },
   { group: "v9.3.7-other-parent-graph", script: "test-v9.3.7-other-parent-graph.js" },
+  { group: "v9.3.7-public-kinship-cache", script: "test-v9.3.7-public-kinship-cache.js" },
+  { group: "v9.3.7-runfile-atomic-retry", script: "test-v9.3.7-runfile-atomic-retry.js" },
   { group: "v9.3.7-independent-qa", script: "test-v9.3.7-independent-qa.js" },
   { group: "v9.3.7-family-performance", script: "test-v9.3.7-family-performance.js" },
   { group: "v9.3.7-step-family", script: "test-v9.3.7-step-family.js" },

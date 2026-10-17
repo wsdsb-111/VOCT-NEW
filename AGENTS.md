@@ -1,23 +1,23 @@
-> V9.3.7 候选沿用下列 V9.3.6 玩家中心记忆合同。年龄来源校准与公开双亲证据见 docs/current/v9/V9_3_7_IMPLEMENTATION_REPORT.md 和 V9_3_7_VERIFICATION_REPORT.md；旧档兼容仍见 V9_3_6_3_LEGACY_COMPATIBILITY.md。新增 otherParent 事实不得扩大 Memory 权限；未验证的日历年龄只作诊断。实机／Provider／Soak／远端 CI 分开签署。
+> 当前候选为 V9.3.7，沿用 V9.3.6 玩家中心记忆合同。当前版本及后续收口报告由根 README.md 和 docs/README.md 索引；V9.3.6.3 旧档兼容合同继续有效。otherParent 不扩大 Memory 权限，未验证的日历年龄仅作诊断。CK3／Provider／Soak／远端 CI 分开签署，远端失败不得写成未执行或 PASS。
 
 # Repository Guidelines
 
 ## 项目定位与结构
 
-本仓库是面向 Crusader Kings III 的 Windows 打包版 VOTC Electron 应用。当前文档入口跟踪 V9.3.6.3 修复 候选；实施、验证及索引与来源合同见 [实施报告](docs/current/v9/V9_3_6_3_IMPLEMENTATION_REPORT.md)、[验证报告](docs/current/v9/V9_3_6_3_VERIFICATION_REPORT.md)和[合同文档](docs/current/v9/V9_3_5_INDEX_AND_SOURCE_CONTRACT.md)。候选已完成本地施工与验证，仍待实机与外部验收，映射、构建、部署和门禁证据按报告更新；真实 CK3、Soak 和远端 CI 尚待验收，不能宣称 Full Freeze。V9.3.4 报告保留为历史证据。
+本仓库是面向 Crusader Kings III 的 Windows 打包版 VOTC Electron 应用。当前文档入口跟踪 V9.3.7 修复候选；实施、验证及索引与来源合同见 [实施报告](docs/current/v9/V9_3_7_IMPLEMENTATION_REPORT.md)、[验证报告](docs/current/v9/V9_3_7_VERIFICATION_REPORT.md)和[合同文档](docs/current/v9/V9_3_5_INDEX_AND_SOURCE_CONTRACT.md)。原候选本地验证与当前提交复验分开；GitHub 9caffe6 发布回归已失败，本轮状态见 docs/current/v9/V9_3_7_FOLLOWUP_REPORT.md，实机与外部验收单列，映射、构建、部署和门禁证据按报告更新；真实 CK3、游戏内 Provider、Soak 尚待验收；远端 CI 按具体 SHA 和 run 记录，不能宣称 Full Freeze。V9.3.4 报告保留为历史证据。
 
 历史 V9.2.1 缓存专项曾作为安全／诊断候选，证据见 docs/current/v9/V9_2_1_VERIFICATION_REPORT.md。其 Durable Policy、Forget 和 GLM v813 结论仅代表当时状态；Durable 已由 V9.3.4 彻底退役。V9.2 6026713 的远端 CI 成功记录继续保留为历史证据。
 
-- resources/app/out/main/main.js 是 Electron 主进程组合根；主进程实现已按职责拆分到 actions/、conversation/、memory-system/、summaries/、worldline/、game-data/、historical-system/、letters/、providers/、ipc/、analytics/、runtime/、config/ 等目录，action-system/ 保留为历史目录结构。
+- resources/app/out/main/main.js 是 Electron 主进程组合根；主进程实现已按职责拆分到 actions/、conversation/、memory-system/、summaries/、worldline/、game-data/、historical-system/、letters/、providers/、ipc/、analytics/、runtime/、config/ 等目录，旧自研 action-system 仅属历史设计，不得恢复生产行为。
 - src/app/ 是可编辑 Runtime 源；build/runtime-inputs.json 显式映射 Main/Preload/Renderer 与默认数据。先编辑源、构建并部署，再核验 resources/app 生成资源；不要单独编辑 out/。源码和构建边界遵循 src/AGENTS.md，详情见 docs/current/v9/V9_1_SOURCE_BUILD.md。
 - resources/app/out/renderer/ 是随应用交付的 Renderer 资源。world-memory-editor.js 负责世界记忆编辑器，worldline-player-presentation.js 负责世界线玩家展示；assets/ 内包含三套主题背景和打包 CSS/JS。
 - ui-theme-preview.html 是本地三主题视觉预览页，主题内部键为 parchment、knight、ink，玩家可见名称为“游牧”“骑士”“水墨”。
 - resources/app/default_userdata/ 保存默认 Prompt、本地化和标准 Action；它不是用户运行时数据目录。
 - scripts/ 保存迁移工具、专项回归和发布门禁；scripts/test-manifest.js 是测试清单的唯一编排入口。
 - docs/README.md 是文档入口，docs/V8阶段开发记录.md 是 V8 连续实施记录，docs/README_摘要系统.md 是摘要/Memory 合同；根目录 CHANGELOG.md 只维护版本索引和用户可见摘要。
-- VOTC.exe 是复用打包壳，Windows 文件属性版本未重写。V9.3.6 是候选而非验收完成声明；正式项目／核心、App 包与 UI 版本号以包元数据和最终报告为准。前端记忆入口显示 `Legacy Summary`；Workshop 2.0.5、协议 3.0、摘要存储 2.5 与 Official Action 2.0.3 保持。Memory Engine 4.0 不再是在线功能标签。
+- VOTC.exe 是复用打包壳，Windows 文件属性版本未重写。V9.3.7 是候选而非验收完成声明；正式项目／核心、App 包与 UI 版本号以包元数据和最终报告为准。前端记忆入口显示 `Legacy Summary`；Workshop 2.0.5、协议 3.0、摘要存储 2.5 与 Official Action 2.0.3 保持。Memory Engine 4.0 不再是在线功能标签。
 
-## 当前生产基线与 V9.3.6 候选合同
+## 当前 V9.3.7 候选与沿用的记忆合同
 
 - V9.3 Provider Platform 候选合同见 docs/current/v9/V9_3_VERIFICATION_REPORT.md。Chat/Action/Summary 统一 Facade；能力 UNKNOWN 保留证据，明确 UNSUPPORTED 发送前阻止；只有 STOP/COMPLETE 进入严格业务。SDK 隐式重试为 0，显式生成最多 2 次且未知送达／部分流不透明重发；每次真实 transport 前复核 Forget/来源及同步预算。原生用量与估算分开，缺失字段不可当 0，非法字段不可被 DERIVED 掩盖。此 Provider 记录不恢复已退役的 Durable 写入。
 
@@ -70,7 +70,7 @@ test-release.js 通过 test-manifest.js 汇总直接和嵌套检查；新增 tes
 
 使用 JavaScript 两空格缩进、分号和 camelCase，保持现有打包文件风格。优先改动最小的现有文件，不重排或重新生成无关的 bundled 资源；保持 IPC 名称、持久化设置键、Action signature、分析字段、Prompt block ID 和主题内部键稳定。
 
-新增或修改标准 Action 时遵循 resources/app/default_userdata/actions/standard/AGENTS.md；新增或修改测试时遵循 scripts/AGENTS.md；修改文档时遵循 docs/AGENTS.md。不要为了清理而删除历史版本文档或用户数据。
+新增或修改标准 Action 时先遵循 src/app/default_userdata/actions/standard/AGENTS.md，再构建部署对应资源；新增或修改测试时遵循 scripts/AGENTS.md；修改文档时遵循 docs/AGENTS.md。不要为了清理而删除历史版本文档或用户数据。
 
 ## 提交与安全
 

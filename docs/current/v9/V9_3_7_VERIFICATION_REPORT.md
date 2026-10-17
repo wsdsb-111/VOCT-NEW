@@ -1,5 +1,8 @@
 # V9.3.7 验证报告
 
+> 2026-10-17 后续状态：下文保留原 058 候选的本地验证批次。之后已提交 9caffe6，其远端发布回归 FAILED；本轮源码／文档修复及重新验证见[后续收口报告](V9_3_7_FOLLOWUP_REPORT.md)。旧的“未提交”“停止测试”描述不限制当前用户授权的复验，旧 PASS 不代表本轮或远端 PASS。
+
+
 > 最终源码候选的 build/deploy、专项验证、Pair benchmark、性能对照、隔离 Electron smoke 与完整 release regression 已有结果。本报告不签署 Full Freeze。
 
 状态：build/deploy/parity **PASS**（290 mappings，payload `05871d99e3b52e1442b322129ab17ccc2ea367ec259409b122f7d0f2929709da`）；Node 22 正式性能、22-cell Pair benchmark、11-group Electron smoke 与完整 release regression **PASS**（442/442，442 release groups／127 archived entries）。用户要求停止后续测试；最终 wrapper 的额外 deployed-parity 阶段未重跑，构建报告已有 deployed parity PASS。合成生产 Prompt Provider 复核为 **PARTIAL**；真实 CK3／游戏内 Provider、Soak、远端 CI 尚未执行。详见[实施报告](V9_3_7_IMPLEMENTATION_REPORT.md)与[实机清单](V9_3_7_REAL_GAME_CHECKLIST.md)。
