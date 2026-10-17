@@ -9,7 +9,7 @@ const { TemporalArchiveStore } = require("../resources/app/out/main/worldline/te
 const { HistoricalCheckpointIndex, boundedRead } = require("../resources/app/out/main/worldline/historical-checkpoint-index");
 const { inspectTemporalArchive } = require("../resources/app/out/main/worldline/temporal-archive-diagnostics");
 const { parseGameState } = require("../resources/app/out/main/worldline/game-state-adapter");
-const { digest } = require("../resources/app/out/main/worldline/historical-query-projection");
+const { digest, createHistoricalQueryProjection } = require("../resources/app/out/main/worldline/historical-query-projection");
 const { normalizeGameDate } = require("../resources/app/out/main/worldline/character-temporal-facts");
 const { WorldlineService, normalizeSettings } = require("../resources/app/out/main/worldline/worldline-service");
 
@@ -56,7 +56,22 @@ function fixture(date = "1145.1.1", campaign = "fixture", revision = "") {
     assert.throws(() => store.commit(fixture("1145.1.1", "fixture", "revision")), /HISTORY_SAME_DATE_REVISION_CONFLICT/);
     const restarted = new TemporalArchiveStore({ root: store.root });
     const projection = restarted.read(first.scope, first.checkpoint.id);
-    assert.equal(projection.characters[1].ageAtCheckpoint, 45);
+    // Projection schema stores only the selected age scalar; birth-only calendar arithmetic is not a factual checkpoint age.
+    assert.equal(projection.characters[1].ageAtCheckpoint, null);
+    assert.equal(Object.hasOwn(projection.characters[1], "ageSource"), false, "age provenance is not a field in the historical projection schema");
+    assert.equal(Object.hasOwn(projection.characters[1], "calculatedCalendarAge"), false, "diagnostic estimates are not projected as historical facts");
+    const explicitAgeSnapshot = {
+      ...first.checkpoint,
+      snapshot: {
+        ...first.checkpoint.snapshot,
+        characters: {
+          ...first.checkpoint.snapshot.characters,
+          1: { ...first.checkpoint.snapshot.characters[1], age: 44, ageSource: "CK3_CURRENT_AGE" }
+        }
+      }
+    };
+    const explicitAgeProjection = createHistoricalQueryProjection(explicitAgeSnapshot, first.scope);
+    assert.equal(explicitAgeProjection.characters[1].ageAtCheckpoint, 44, "an explicit trusted CK3 age remains available in the projection");
     assert.deepEqual(projection.characters[2].siblingIds, ["3"]);
     assert.equal(projection.characters[1].location, "123");
     assert.equal(projection.titles[11].localizedName, "宋");

@@ -1,5 +1,7 @@
 # VOTC 版本变更入口
 
+V9.3.7 修复候选（基线 V9.3.6.3）新增同父异母、同母异父、当前继父母／继兄弟姐妹及有来源的历史继亲 Legacy 事实；不新增 Memory 读取，不由前配偶推导继亲。最终源码已冻结，build/deploy 290 项映射（payload `05871d99e3b52e1442b322129ab17ccc2ea367ec259409b122f7d0f2929709da`）、性能对照、Pair benchmark 与 11 组 Electron smoke 通过；完整 release regression 442/442 PASS（442 release groups、127 archived entries）。合成 Prompt Provider 复核为 PARTIAL；CK3／游戏内 Provider／Soak／远端 CI 尚待验收，不宣称 Full Freeze。详见[施工方案](docs/current/v9/V9_3_7_IMPLEMENTATION_PLAN.md)、[实施报告](docs/current/v9/V9_3_7_IMPLEMENTATION_REPORT.md)、[验证报告](docs/current/v9/V9_3_7_VERIFICATION_REPORT.md)和[实机清单](docs/current/v9/V9_3_7_REAL_GAME_CHECKLIST.md)。
+
 V9.3.6.3 综合修复候选：本轮补充 CK3 权威年龄、场外亲属/年份召回、重新生成授权和实际 Prompt 匿名对照；436组发布回归、22格484次同源合成A/B和隔离Electron双启动通过，289项部署一致。先前 TwoP1 数据保留为历史批次。当前施工与验收状态见[综合实施报告](docs/current/v9/V9_3_6_3_INTEGRATED_IMPLEMENTATION_REPORT.md)、[综合验证报告](docs/current/v9/V9_3_6_3_INTEGRATED_VERIFICATION_REPORT.md)和[实机清单](docs/current/v9/V9_3_6_3_REAL_GAME_CHECKLIST.md)。
 
 此前 V9.3.6.3 TwoP1 历史批次已部署：历史事件之后漏召回及旧摘要整轮降级已修正，来源/Forget/预算合同保持；430/430发布组、9116次合成A/B与隔离双启动通过，289项部署哈希一致。真实CK3/Provider/Soak/远端CI待验收。详见[实施报告](docs/current/v9/V9_3_6_3_IMPLEMENTATION_REPORT.md)、[验证报告](docs/current/v9/V9_3_6_3_VERIFICATION_REPORT.md)、[旧档兼容](docs/current/v9/V9_3_6_3_LEGACY_COMPATIBILITY.md)、[性能A/B](docs/current/v9/V9_3_6_3_PAIR_PERFORMANCE_AB.md)。

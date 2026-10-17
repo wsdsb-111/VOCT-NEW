@@ -142,6 +142,7 @@ function buildMemoryAttemptDiagnostics({ memoryContext = {}, promptBuild = {}, l
     comparisonStatus: "FIRST_ATTEMPT"
   };
   row.ageDiagnostics = projectAgeDiagnostics(promptBuild.ageDiagnostics);
+  row.familyDiagnostics = projectFamilyDiagnostics(promptBuild.familyDiagnostics);
   row.ageSourceConflictCount = row.ageDiagnostics.filter(age => age.ageConflict === true).length;
   if (previous && logicalPlayerMessageIdHash && previous.logicalPlayerMessageIdHash === logicalPlayerMessageIdHash) {
     row.comparisonStatus = previous.scopeDigest !== row.scopeDigest ? "SNAPSHOT_CHANGED"
@@ -161,6 +162,7 @@ function projectMemoryAttemptDiagnostics(value) {
   row.trustedPlayerTurnResolved = safeBoolean(value.trustedPlayerTurnResolved);
   row.comparisonStatus = safeEnum(value.comparisonStatus, new Set(["FIRST_ATTEMPT", "MATCH", "SNAPSHOT_CHANGED", "AUTHORIZATION_CHANGED", "SOURCE_CHANGED", "SELECTION_CHANGED", "PROMPT_INJECTION_CHANGED"]));
   row.ageDiagnostics = projectAgeDiagnostics(value.ageDiagnostics);
+  row.familyDiagnostics = projectFamilyDiagnostics(value.familyDiagnostics);
   row.ageSourceConflictCount = row.ageDiagnostics.filter(age => age.ageConflict === true).length;
   return row;
 }
@@ -173,8 +175,22 @@ function projectAgeDiagnostics(value) {
       "BIRTH_CURRENT_CALENDAR", "BIRTH_DEATH_CALENDAR", "UNKNOWN", "LIFE_STATUS_CONFLICT", "AGE_SOURCE_CONFLICT", "AGE_AT_DEATH_UNAVAILABLE"])),
     rawAge: safeCount(age?.rawAge), calculatedCalendarAge: safeCount(age?.calculatedCalendarAge),
     ageConflict: safeBoolean(age?.ageConflict),
+    selectedAge: safeCount(age?.selectedAge), promptAge: safeCount(age?.promptAge),
+    currentAgeSourceOwnerIdHash: safeHash(age?.currentAgeSourceOwnerIdHash),
+    currentAgeRelationType: safeEnum(age?.currentAgeRelationType, new Set(["parent", "child", "sibling", "spouse"])),
+    currentAgeEvidenceSourceType: safeEnum(age?.currentAgeEvidenceSourceType, new Set(["parents", "children", "siblings", "spouses", "spouse", "other"])),
+    sourceConflict: safeBoolean(age?.sourceConflict),
+    profileSelectionPath: safeEnum(age?.profileSelectionPath, new Set(["CURRENT_CANONICAL", "BOUND_RELATIVE_OR_UNKNOWN"])),
+    diagnosticCode: safeEnum(age?.diagnosticCode, new Set(["RAW_CK3_AGE_MISMATCH", "RELATIVE_AGE_MISSING", "AGE_SOURCE_SELECTION_MISMATCH", "CALENDAR_AGE_MISMATCH", "PROFILE_AGE_STALE", "PROMPT_AGE_MISMATCH", "MODEL_ANSWER_MISMATCH", "AGE_SOURCE_MATCH", "AGE_SOURCE_CONFLICT", "AGE_EVIDENCE_CONFLICT", "CALENDAR_AGE_UNVERIFIED", "LIFE_STATUS_CONFLICT", "CK3_AGE_AT_DEATH_SELECTED", "CURRENT_AGE_SELECTED", "RELATIVE_AGE_UNBOUND", "CURRENT_AGE_INVALID", "CURRENT_AGE_SOURCE_UNAVAILABLE", "CALENDAR_DAY_MAPPING_UNVERIFIED", "DATE_EVIDENCE_UNAVAILABLE"])),
     asOfGameDate: typeof age?.asOfGameDate === "string" && /^\d{1,6}\.\d{1,2}\.\d{1,2}$/u.test(age.asOfGameDate) ? age.asOfGameDate : null
   }));
+}
+
+function projectFamilyDiagnostics(value) {
+  return Array.isArray(value) ? value.slice(0, 1).map(item => ({
+    nodeVisits: safeCount(item?.nodeVisits), edgeVisits: safeCount(item?.edgeVisits),
+    targetedParentQuery: safeBoolean(item?.targetedParentQuery), buildMs: safeFinite(item?.buildMs), tokenCount: safeCount(item?.tokenCount)
+  })) : [];
 }
 
 function projectMemoryBudgetPlan(value) {

@@ -1,6 +1,6 @@
 "use strict";
 
-const { normalizeGameDate } = require("../worldline/character-temporal-facts");
+const { normalizeGameDate, resolveLifeStatus } = require("../worldline/character-temporal-facts");
 const { getCharacterPersonalName } = require("../memory-system/character-identity");
 const PRIVATE_FIELDS = ["personality", "sexuality", "boldness", "compassion", "energy", "greed", "honor", "rationality", "sociability", "vengefulness", "zeal", "capitalLocation"];
 
@@ -51,11 +51,45 @@ function knownTitle(observer, target, value, context) {
 }
 
 // A per-request presentation copy protects custom templates and scripts as well as bundled ones.
-function createTraitProfileView(gameData, character, memoryContext = null) {
+function createTraitProfileView(gameData, character, memoryContext = null, { includeStepFamily = false } = {}) {
   const observer = gameData?.characters?.get(Number(character?.id)) || character;
   const knowledge = { ...memoryContext, campaignToken: gameData?.campaignToken, currentGameDate: gameData?.date, gameData };
   const copies = new Map();
   const relativeFields = new Set(["parents", "children", "siblings", "spouses", "concubines", "otherParent", "concubineOf", "betrothed"]);
+  const currentParentBindings = new Set();
+  for (const owner of gameData?.characters?.values?.() || []) {
+    for (const [field, sourceRelation] of [["children", "kids.otherParent"], ["siblings", "siblings.otherParent"]]) {
+      for (const child of owner[field] || []) {
+        const record = child?.otherParent;
+        if (!record || record.sourceOwnerId !== Number(owner.id) || record.sourceRelation !== sourceRelation) continue;
+        currentParentBindings.add(`${owner.id}:${child.id}:${record.otherParentId ?? record.id}:${sourceRelation}`);
+      }
+    }
+  }
+  const currentPublicParent = (record, childId = record?.childId) => record?.publicStatus === "PUBLIC_LEGAL_PARENT"
+    && record.source === "CK3_OTHER_PARENT" && Number.isSafeInteger(record.sourceOwnerId) && record.sourceOwnerId > 0
+    && record.relationType === "parent" && ["kids.otherParent", "siblings.otherParent"].includes(record.sourceRelation)
+    && typeof gameData?.campaignToken === "string" && gameData.campaignToken.length > 0
+    && record.campaignToken === gameData.campaignToken
+    && record.sourceSnapshotId === `${gameData.date}/${gameData.totalDays}`
+    && currentParentBindings.has(`${record.sourceOwnerId}:${childId}:${record.otherParentId ?? record.parentId ?? record.id}:${record.sourceRelation}`);
+  const currentFamilySource = record => typeof gameData?.campaignToken === "string" && gameData.campaignToken.length > 0
+    && record.campaignToken === gameData.campaignToken && record.sourceSnapshotId === `${gameData.date}/${gameData.totalDays}`;
+  const currentMarriageLifeConsistent = (parent, spouse) => [parent, spouse,
+    gameData?.characters?.get(Number(parent.id)), gameData?.characters?.get(Number(spouse.id))]
+    .filter(Boolean).every(record => {
+      const status = resolveLifeStatus(record);
+      return !status.conflict && status.alive !== false;
+    });
+  const currentTypedStep = (record, childId) => typeof record.source === "string" && record.source.trim().length > 0
+    && record.source !== "CK3_DIRECT_PARENT" && record.sourceOwnerId === Number(childId) && record.childId === Number(childId)
+    && record.relationType === "parent" && record.sourceRelation === "parents" && !record.relationshipKindConflict
+    && record.publicStatus === "PUBLIC_LEGAL_PARENT" && record.knowledgeStatus === "UNKNOWN" && currentFamilySource(record);
+  const currentStepChild = (record, spouse) => includeStepFamily && record?.sourceOwnerId === Number(observer?.id)
+    && record.sourceParentId === Number(spouse.parentId) && record.sourceSpouseId === Number(spouse.id)
+    && record.relationType === "child" && record.sourceRelation === "parents.spouses.children"
+    && record.publicStatus === "PUBLIC_LEGAL_PARENT" && record.knowledgeStatus === "UNKNOWN"
+    && !record.evidenceConflict && currentFamilySource(record);
   const copy = (value, relative = false) => {
     if (!value || typeof value !== "object") return value;
     if (copies.has(value)) return copies.get(value);
@@ -66,7 +100,39 @@ function createTraitProfileView(gameData, character, memoryContext = null) {
     if (value instanceof Map) for (const [key, item] of value) result.set(key, copy(item));
     else if (value instanceof Set) for (const item of value) result.add(copy(item));
     else {
-      for (const key of Object.keys(value)) result[key] = copy(value[key], relativeFields.has(key) || relative && Array.isArray(value));
+      for (const key of Object.keys(value)) {
+        if (key === "parents" && Array.isArray(value[key])) {
+          result[key] = value[key].filter(item => (item?.source !== "CK3_PARENT_SPOUSE_CHILD"
+            || includeStepFamily && item.sourceOwnerId === Number(observer?.id) && item.childId === Number(value.id)
+              && item.relationType === "parent" && ["parents.spouses.children.spouseParent", "parents.spouses.children.otherParent"].includes(item.sourceRelation)
+              && item.publicStatus === "PUBLIC_LEGAL_PARENT" && item.knowledgeStatus === "UNKNOWN" && !item.evidenceConflict && currentFamilySource(item))
+            && (item?.relationshipKind !== "STEP" || includeStepFamily && currentTypedStep(item, value.id)) && (item?.source !== "CK3_DIRECT_PARENT"
+            || item.publicStatus === "PUBLIC_LEGAL_PARENT" && item.sourceOwnerId === Number(value.id)
+              && item.childId === Number(value.id) && item.relationType === "parent" && item.sourceRelation === "parents"
+              && item.knowledgeStatus === "UNKNOWN" && !item.evidenceConflict && currentFamilySource(item))).map(item => copy(item, true));
+          continue;
+        }
+        if (key === "spouses" && Array.isArray(value[key])) {
+          result[key] = value[key].filter(item => item?.source !== "CK3_PARENT_SPOUSE"
+            || includeStepFamily && item.publicStatus === "PUBLIC_LEGAL_MARRIAGE" && item.parentId === Number(value.id)
+              && item.relationType === "CURRENT_SPOUSE" && item.sourceRelation === "parents.spouses"
+              && item.sourceOwnerId === Number(observer?.id) && item.knowledgeStatus === "UNKNOWN"
+              && !item.evidenceConflict && currentFamilySource(item) && currentMarriageLifeConsistent(value, item)).map(item => copy(item, true));
+          continue;
+        }
+        if (key === "children" && Array.isArray(value[key])) {
+          result[key] = value[key].filter(item => item?.source !== "CK3_PARENT_SPOUSE_CHILD"
+            || currentStepChild(item, value)).map(item => copy(item, true));
+          continue;
+        }
+        // A raw parentage record is not evidence that an NPC may learn its identity.
+        if (key === "otherParent" && !currentPublicParent(value[key], value.id)) continue;
+        if (key === "otherParentRelations" && Array.isArray(value[key])) {
+          result[key] = value[key].filter(item => currentPublicParent(item)).map(item => copy(item));
+          continue;
+        }
+        result[key] = copy(value[key], relativeFields.has(key) || relative && Array.isArray(value));
+      }
       if (relative && Number(value.id) > 0 || Array.isArray(value.traits) || Object.hasOwn(value, "personality") || Array.isArray(value.secrets) || Object.hasOwn(value, "primaryTitle")) {
         const isSelf = Number(value.id) > 0 && Number(value.id) === Number(observer?.id);
         if (Array.isArray(value.traits)) result.traits = (isSelf ? getTraitsForSelfProfile(value) : getTraitsForKnownProfile(observer, value, knowledge)).map(trait => copy(trait));

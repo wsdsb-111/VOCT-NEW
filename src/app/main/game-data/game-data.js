@@ -580,7 +580,10 @@ function createGameData({ fs, path, memorySystem, memoryEngine, summariesDir, ge
      */
     getMentionableCharacterProfiles() {
       const resolver = this.relationshipResolver || createRelationshipResolver();
-      const profiles = resolver.buildCanonicalProfiles(this.characters, this.totalDays, inferGenderFromPronoun);
+      const profiles = resolver.buildCanonicalProfiles(this.characters, this.totalDays, inferGenderFromPronoun, {
+        campaignToken: this.campaignToken,
+        sourceSnapshotId: `${this.date}/${this.totalDays}`
+      });
       const addRelationAliases = (characterId, aliases) => {
         const profile = profiles.get(Number(characterId));
         if (!profile) return;

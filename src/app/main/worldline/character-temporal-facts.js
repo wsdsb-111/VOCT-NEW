@@ -88,10 +88,11 @@ function computeAgeAtDate(birthDate, atDate) {
 
 function computeAgeAtDeath(character = {}) {
   if (character.ageAtDeathSource === "CK3_AGE_AT_DEATH") {
-    const explicitAge = Number(character.ageAtDeath);
+    const explicitAge = character.ageAtDeath === null || character.ageAtDeath === undefined || character.ageAtDeath === "" ? NaN : Number(character.ageAtDeath);
     if (Number.isInteger(explicitAge) && explicitAge >= 0) return explicitAge;
   }
-  return computeAgeAtDate(character.birth || character.birthDate, character.deathDate);
+  // The CK3 calendar mapping has not been verified against a live save.
+  return null;
 }
 
 function resolveLifeStatus(character = {}) {
@@ -123,10 +124,7 @@ function buildDeathFact(character = {}, { currentGameDate = null, currentTotalDa
   const dateTemporal = normalizedDeathDate ? { ...relativeTimeLabel(normalizedDeathDate.canonical, currentGameDate), source: "DATE" } : { daysSinceEvent: null, relativeLabel: null, status: "DATE_UNAVAILABLE", source: "DATE" };
   const temporal = totalDaysTemporal.status !== "TOTAL_DAYS_UNAVAILABLE" ? totalDaysTemporal : dateTemporal;
   const ageAtDeath = computeAgeAtDeath(character);
-  const explicitAgeAtDeath = Number(character.ageAtDeath);
-  const ageAtDeathSource = character.ageAtDeathSource === "CK3_AGE_AT_DEATH" && Number.isInteger(explicitAgeAtDeath) && explicitAgeAtDeath >= 0
-    ? "CK3_AGE_AT_DEATH"
-    : ageAtDeath === null ? "AGE_AT_DEATH_UNAVAILABLE" : "BIRTH_DEATH_CALENDAR";
+  const ageAtDeathSource = ageAtDeath === null ? "AGE_AT_DEATH_UNAVAILABLE" : "CK3_AGE_AT_DEATH";
   return {
     deceasedId,
     deathDate,

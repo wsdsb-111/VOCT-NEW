@@ -180,7 +180,7 @@ function resolveHistoryDecision(engine, options, state, memories) {
   const explicitTargetIds = explicitIds.filter(id => !deniedTargetIds.has(id));
   const relation = temporalIntent.kind === "PAST_HISTORY" && !explicitIds.length && !explicitAmbiguous && options.gameData
     ? resolveAnchoredRelationMention({ query: targetQuery, responderId: ownerId,
-      graph: getCachedKinshipGraph(options.gameData), recentTargetId: null }) : null;
+      graph: getCachedKinshipGraph(options.gameData, { includeOtherParents: false }), recentTargetId: null }) : null;
   const relationRequested = relation && relation.status !== "NO_RELATION_INTENT";
   const kinshipId = relation?.status === "RELATION_RESOLVED" ? Number(relation.targetRuntimeId) : null;
   const kinshipResolved = Number.isSafeInteger(kinshipId) && kinshipId > 0 && ![ownerId, playerId].includes(kinshipId);

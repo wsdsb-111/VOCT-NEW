@@ -36,11 +36,11 @@ function relationSideSex(profile, gameData, subjectRuntimeId) {
   return { sex: values.size === 1 ? [...values][0] : "unknown", values: [...values], conflict: values.size > 1, verifiedSex: verifiedValues.size === 1 && values.size === 1 ? [...verifiedValues][0] : "unknown" };
 }
 
-function resolveRelationshipCurrentTruth({ gameData, subjectRuntimeId, anchorRuntimeId, registry = null } = {}) {
+function resolveRelationshipCurrentTruth({ gameData, subjectRuntimeId, anchorRuntimeId, registry = null, kinshipGraph = null } = {}) {
   const subjectId = Number(subjectRuntimeId);
   const anchorId = anchorRuntimeId == null ? null : Number(anchorRuntimeId);
   if (!gameData || !Number.isFinite(subjectId)) return null;
-  const graph = getCachedKinshipGraph(gameData);
+  const graph = kinshipGraph || getCachedKinshipGraph(gameData);
   const hasRuntimeStore = gameData.characters instanceof Map || gameData.characters && typeof gameData.characters === "object";
   const canonical = gameData.characters instanceof Map
     ? gameData.characters.get(subjectId) || null
@@ -64,7 +64,7 @@ function resolveRelationshipCurrentTruth({ gameData, subjectRuntimeId, anchorRun
   const relation = relationResult.diagnostic ? null : relationResult.relation || (legacyType ? { type: legacyType, source: "CURRENT_RUNTIME_RELATION", branch: null } : null);
   const relationLabel = relation ? (sex === "unknown" ? neutralLabel(relation.type, resolveKinshipLabel({ ...relation, sex })) : legacyType === relation.type ? legacyResolution.label : resolveKinshipLabel({ ...relation, sex })) : null;
   const life = resolveLifeStatus(canonical || profile);
-  const age = resolveCharacterAge(canonical || profile, { currentGameDate: gameData.date, currentTotalDays: gameData.totalDays });
+  const age = resolveCharacterAge(canonical || profile, { currentGameDate: gameData.date, currentTotalDays: gameData.totalDays, currentCampaignToken: gameData.campaignToken });
   const fact = registry?.get(String(subjectId)) || {
     runtimeId: subjectId,
     identity: {

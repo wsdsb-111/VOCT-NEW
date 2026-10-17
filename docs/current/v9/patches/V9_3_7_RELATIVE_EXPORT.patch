@@ -1,0 +1,86 @@
+index c730520..965a677 100644
+--- a/common/scripted_effects/log_character_v2_effect.txt
++++ b/common/scripted_effects/log_character_v2_effect.txt
+@@ -415,7 +415,31 @@ log_relatives = {
+ 	save_scope_as = votc_mcc_tmp_var
+ 	every_parent = {
+ 		even_if_dead = yes
+-		debug_log = "VOTC:IN/;/parents/;/[PREV.Char.GetID]/;/[THIS.Char.GetID]/;/[THIS.Char.GetTitledFirstNameNicknamedNoTooltipRegnal]/;/[THIS.Char.GetBirthDate.GetDateAsTotalDays]/;/[THIS.Char.GetBirthDate.GetString]/;/"
++		if = {
++			limit = { OR = { this = scope:votc_mcc_tmp_var.mother this = scope:votc_mcc_tmp_var.father } }
++			debug_log = "VOTC:IN/;/parents/;/[PREV.Char.GetID]/;/[THIS.Char.GetID]/;/[THIS.Char.GetTitledFirstNameNicknamedNoTooltipRegnal]/;/[THIS.Char.GetBirthDate.GetDateAsTotalDays]/;/[THIS.Char.GetBirthDate.GetString]/;/[THIS.Char.GetAge]/;/[THIS.Char.GetSheHe]/;/PUBLIC_LEGAL_PARENT/;/"
++		}
++		else = {
++			debug_log = "VOTC:IN/;/parents/;/[PREV.Char.GetID]/;/[THIS.Char.GetID]/;/[THIS.Char.GetTitledFirstNameNicknamedNoTooltipRegnal]/;/[THIS.Char.GetBirthDate.GetDateAsTotalDays]/;/[THIS.Char.GetBirthDate.GetString]/;/[THIS.Char.GetAge]/;/[THIS.Char.GetSheHe]/;/UNKNOWN/;/"
++		}
++		save_scope_as = votc_v937_relative_parent
++		if = {
++			limit = { is_alive = yes OR = { this = scope:votc_mcc_tmp_var.mother this = scope:votc_mcc_tmp_var.father } }
++			every_spouse = {
++				limit = { is_alive = yes }
++				save_scope_as = votc_v937_step_parent
++				debug_log = "VOTC:IN/;/parent_spouse/;/[GetGlobalVariable('votc_mcc_tmp_var').GetCharacter.GetID]/;/[scope:votc_v937_relative_parent.Char.GetID]/;/[THIS.Char.GetID]/;/[THIS.Char.GetTitledFirstNameNicknamedNoTooltipRegnal]/;/[THIS.Char.GetSheHe]/;/PUBLIC_LEGAL_MARRIAGE/;/"
++				every_child = {
++					limit = { is_alive = yes }
++					save_scope_as = votc_v937_step_child
++					every_parent = {
++						even_if_dead = yes
++						limit = { AND = { NOT = { this = scope:votc_v937_step_parent } OR = { this = scope:votc_v937_step_child.mother this = scope:votc_v937_step_child.father } } }
++						debug_log = "VOTC:IN/;/parent_spouse_child/;/[GetGlobalVariable('votc_mcc_tmp_var').GetCharacter.GetID]/;/[scope:votc_v937_relative_parent.Char.GetID]/;/[scope:votc_v937_step_parent.Char.GetID]/;/[scope:votc_v937_step_child.Char.GetID]/;/[scope:votc_v937_step_child.Char.GetTitledFirstNameNicknamedNoTooltipRegnal]/;/[scope:votc_v937_step_child.Char.GetSheHe]/;/[THIS.Char.GetID]/;/[THIS.Char.GetTitledFirstNameNicknamedNoTooltipRegnal]/;/[THIS.Char.GetSheHe]/;/PUBLIC_LEGAL_PARENT/;/"
++					}
++				}
++			}
++		}
+ 		if = {
+ 			limit = { is_alive = no }
+ 			debug_log = "VOTC:IN/;/parent_death/;/[PREV.Char.GetID]/;/[THIS.Char.GetID]/;/[THIS.Char.GetDeathDate.GetDateAsTotalDays]/;/[THIS.Char.GetDeathDate.GetStringShort]/;/[THIS.Char.GetDeathReason]/;/"
+@@ -423,7 +447,8 @@ log_relatives = {
+ 	}
+ 	every_child = {
+ 		even_if_dead = yes
+-		debug_log = "VOTC:IN/;/kids/;/[PREV.Char.GetID]/;/[THIS.Char.GetID]/;/[THIS.Char.GetTitledFirstNameNicknamedNoTooltipRegnal]/;/[THIS.Char.GetSheHe]/;/[THIS.Char.GetBirthDate.GetDateAsTotalDays]/;/[THIS.Char.GetBirthDate.GetString]/;/"
++		save_scope_as = votc_v937_relative_subject
++		debug_log = "VOTC:IN/;/kids/;/[PREV.Char.GetID]/;/[THIS.Char.GetID]/;/[THIS.Char.GetTitledFirstNameNicknamedNoTooltipRegnal]/;/[THIS.Char.GetSheHe]/;/[THIS.Char.GetBirthDate.GetDateAsTotalDays]/;/[THIS.Char.GetBirthDate.GetString]/;/[THIS.Char.GetAge]/;/"
+ 		# kid other parent
+ 		if = {
+ 			limit = {
+@@ -437,7 +462,13 @@ log_relatives = {
+ 				limit = {
+ 					NOT = { this = scope:votc_mcc_tmp_var }
+ 				}
+-				debug_log = "VOTC:IN/;/kid_other_parent/;/[GetGlobalVariable('votc_mcc_tmp_var').GetCharacter.GetID]/;/[PREV.Char.GetID]/;/[THIS.Char.GetID]/;/[THIS.Char.GetTitledFirstNameNicknamedNoTooltipRegnal]"
++				if = {
++					limit = { OR = { this = scope:votc_v937_relative_subject.mother this = scope:votc_v937_relative_subject.father } }
++					debug_log = "VOTC:IN/;/kid_other_parent/;/[GetGlobalVariable('votc_mcc_tmp_var').GetCharacter.GetID]/;/[PREV.Char.GetID]/;/[THIS.Char.GetID]/;/[THIS.Char.GetTitledFirstNameNicknamedNoTooltipRegnal]/;/PUBLIC_LEGAL_PARENT/;/[THIS.Char.GetSheHe]/;/"
++				}
++				else = {
++					debug_log = "VOTC:IN/;/kid_other_parent/;/[GetGlobalVariable('votc_mcc_tmp_var').GetCharacter.GetID]/;/[PREV.Char.GetID]/;/[THIS.Char.GetID]/;/[THIS.Char.GetTitledFirstNameNicknamedNoTooltipRegnal]/;/UNKNOWN/;/[THIS.Char.GetSheHe]/;/"
++				}
+ 			}
+ 		}
+ 
+@@ -487,7 +518,8 @@ log_relatives = {
+ 
+ 	every_sibling = {
+ 		even_if_dead = yes
+-		debug_log = "VOTC:IN/;/siblings/;/[PREV.Char.GetID]/;/[THIS.Char.GetID]/;/[THIS.Char.GetTitledFirstNameNicknamedNoTooltipRegnal]/;/[THIS.Char.GetSheHe]/;/[THIS.Char.GetBirthDate.GetDateAsTotalDays]/;/[THIS.Char.GetBirthDate.GetString]/;/"
++		save_scope_as = votc_v937_relative_subject
++		debug_log = "VOTC:IN/;/siblings/;/[PREV.Char.GetID]/;/[THIS.Char.GetID]/;/[THIS.Char.GetTitledFirstNameNicknamedNoTooltipRegnal]/;/[THIS.Char.GetSheHe]/;/[THIS.Char.GetBirthDate.GetDateAsTotalDays]/;/[THIS.Char.GetBirthDate.GetString]/;/[THIS.Char.GetAge]/;/"
+ 		# sibling other parent
+ 		if = {
+ 			limit = {
+@@ -503,7 +535,13 @@ log_relatives = {
+ 						is_parent_of = scope:votc_mcc_tmp_var 
+ 					}
+ 				}
+-				debug_log = "VOTC:IN/;/sibling_other_parent/;/[GetGlobalVariable('votc_mcc_tmp_var').GetCharacter.GetID]/;/[PREV.Char.GetID]/;/[THIS.Char.GetID]/;/[THIS.Char.GetTitledFirstNameNicknamedNoTooltipRegnal]"
++				if = {
++					limit = { OR = { this = scope:votc_v937_relative_subject.mother this = scope:votc_v937_relative_subject.father } }
++					debug_log = "VOTC:IN/;/sibling_other_parent/;/[GetGlobalVariable('votc_mcc_tmp_var').GetCharacter.GetID]/;/[PREV.Char.GetID]/;/[THIS.Char.GetID]/;/[THIS.Char.GetTitledFirstNameNicknamedNoTooltipRegnal]/;/PUBLIC_LEGAL_PARENT/;/[THIS.Char.GetSheHe]/;/"
++				}
++				else = {
++					debug_log = "VOTC:IN/;/sibling_other_parent/;/[GetGlobalVariable('votc_mcc_tmp_var').GetCharacter.GetID]/;/[PREV.Char.GetID]/;/[THIS.Char.GetID]/;/[THIS.Char.GetTitledFirstNameNicknamedNoTooltipRegnal]/;/UNKNOWN/;/[THIS.Char.GetSheHe]/;/"
++				}
+ 			}
+ 		}
+ 

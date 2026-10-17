@@ -1,6 +1,8 @@
 # 对话摘要与人物记忆：Legacy Summary（3.0 协议、2.5 存储兼容）
 
-当前记录 Core／App／UI V9.3.6.3 发布候选。Workshop 2.0.5、Official Action 2.0.3、`Legacy Summary`、协议 3.0、摘要存储 2.5／schema 2 与既有目录格式保持。Durable、Year/Life 的生成、恢复、模型提取和后台重建不恢复。
+当前记录 Core／App／UI V9.3.6.3 基线与 V9.3.7 修复候选状态。Workshop 2.0.5、Official Action 2.0.3、`Legacy Summary`、协议 3.0、摘要存储 2.5／schema 2 与既有目录格式保持。最终源码已冻结；build/deploy 290 项映射（payload `05871d99e3b52e1442b322129ab17ccc2ea367ec259409b122f7d0f2929709da`）、正式性能对照、Pair benchmark 与 11 组 native smoke 已通过，完整 release regression 442/442 PASS（442 release groups、127 archived entries）。合成 Prompt Provider 复核为 PARTIAL，CK3／游戏内 Provider／Soak／远端 CI 尚待验收。详细状态见当前版本报告。Durable、Year/Life 的生成、恢复、模型提取和后台重建不恢复。
+
+V9.3.7 修复候选扩展到同父异母、同母异父、当前继父母／继兄弟姐妹及有来源的历史继亲事实；不改变 Legacy Summary 既有授权与 Forget 合同，不新增 Memory 读取。明确死亡或生命状态冲突时拒绝当前继亲事实；生命状态缺失时要求新鲜、来源绑定的 `CURRENT_MARRIAGE`。未知不等于不存在：不能据未知回答“没有”，也不得补造父母生死、婚史或人物不知情原因。当前 GameData 无确认时只说明“当前游戏资料未确认”，不否定有来源的过去关系，也不凭前配偶推断继亲。严格 typed STEP 仅作既有格式读取兼容，不自动重建历史。CK3 新行须重新导出，旧日志及未知／秘密关系保持未知。详见[施工方案](current/v9/V9_3_7_IMPLEMENTATION_PLAN.md)、[实施报告](current/v9/V9_3_7_IMPLEMENTATION_REPORT.md)、[验证报告](current/v9/V9_3_7_VERIFICATION_REPORT.md)和[实机清单](current/v9/V9_3_7_REAL_GAME_CHECKLIST.md)。
 
 每位回应 NPC 的固定历史只锚定当前玩家：最近 1 篇 Legacy、合法官方追忆、预算内尽量完整的玩家关系事项簿。固定文本首次构造后冻结；第三人仅提名为 L0，不读取其历史索引或原文；明确历史关系询问为 L1，每目标至多 16 条事项、零原文；具体历史经过为 L2，共享预算内至多 2 篇经来源键和修订号复验的摘要。2／3／4+ 人采用 16%／18%／20% 与 4800／5600／6400 Token 上限，并取无记忆 Prompt、输出预留及 Provider 安全余量允许的较小值。 NPC→NPC 的合法定向摘要与索引继续写入，但不因其他 NPC 发言自动进入固定基线。动态历史不回灌为下一轮对话正文，必须逐轮通过玩家意图门禁。Source／Forget／Campaign 失效同步撤销 Engine 快照与 Prompt 前缀，并在实际发送与重试前复核。
 

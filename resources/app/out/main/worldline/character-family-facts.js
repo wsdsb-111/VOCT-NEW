@@ -10,6 +10,7 @@ const { resolveCharacterSexConsensus } = require("./character-demographic-normal
 const { resolveAnchoredRelationMention } = require("./anchored-relation-resolver");
 const { buildFamilyEntityFactBundle } = require("./family-entity-fact-bundle");
 const { resolveRelationshipCurrentTruth } = require("./relationship-current-truth");
+const { buildStepFamilyFactBlock, isStepFamilyQuery } = require("./step-family-facts");
 
 const DISPLAY_TYPES = new Set(["PARENT_OF", "CHILD_OF", "SIBLING_OF", "GRANDPARENT_OF", "AUNT_UNCLE_OF", "NIECE_NEPHEW_OF", "COUSIN_OF", "SPOUSE_OF", "FORMER_SPOUSE_OF", "DECEASED_SPOUSE_OF"]);
 
@@ -63,7 +64,10 @@ function sourceBoundFamilyProfile(gameData, targetRuntimeId, relationResolution)
     ? gameData.getMentionableCharacterProfiles()
     : characters;
   const profile = profiles instanceof Map ? profiles.get(targetId) || profiles.get(String(targetId)) : profiles?.[targetId];
-  if (canonical) return profile;
+  if (canonical && canonical.ageSource === "CK3_CURRENT_AGE" && Number.isInteger(canonical.age) && canonical.age >= 0) {
+    return { ...canonical, ageEvidenceConflict: profile?.ageEvidenceConflict === true || canonical.ageEvidenceConflict === true,
+      evidence: profile?.evidence || canonical.evidence };
+  }
   if (profile) {
     const pathIds = new Set((relationResolution?.relation?.relationPath || [targetId, anchorId]).map(String));
     pathIds.add(String(anchorId));
@@ -127,10 +131,79 @@ function buildGenderConflictConstraint(result) {
 - 不得从 Memory 或模型猜测具体人物；需要更多当前游戏数据后才能确定。`;
 }
 
-function buildFamilyFactBlock(character, gameData, { query = "", recentTargetId = null, currentFactRegistry = null, ageAuthorityGameData = null, ageDiagnostics = null } = {}) {
+function buildParentQuery(character, graph, query, metrics, gameData) {
+  const chained = String(query).match(/你(?:的)?(兄弟|姐妹|兄长|哥哥|弟弟|姐姐|妹妹)(?:的)?(母亲|父亲)/u);
+  const comparison = /同父异母|同母异父/u.test(query);
+  if (!chained && !comparison) return null;
+  const siblingQuery = chained ? `你${chained[1]}是谁` : query;
+  let sibling = resolveAnchoredRelationMention({ query: siblingQuery, responderId: character.id, graph });
+  if (comparison && sibling.status === "NO_RELATION_INTENT") {
+    const ids = [...new Set(graph.relationsTo(character.id).filter(edge => edge.type === "SIBLING_OF").map(edge => String(edge.from)))];
+    metrics.edgeVisits += ids.length;
+    const named = String(query).match(/(?:你和|你与)([^，,。？！?]{1,30}?)(?:是|算|属于|为)/u)?.[1]?.trim();
+    const matching = named ? ids.filter(id => {
+      const candidate = graph.nodes.get(id);
+      return [candidate?.fullName, candidate?.shortName, candidate?.firstName, candidate?.name].some(name => name === named);
+    }) : ids;
+    sibling = { ...sibling, status: matching.length === 1 ? "RELATION_RESOLVED" : matching.length > 1 ? "RELATION_AMBIGUOUS" : "RELATION_UNKNOWN",
+      targetRuntimeId: matching.length === 1 ? matching[0] : null, intent: { relationTypes: ["SIBLING_OF"], sourcePhrase: named || "你们" } };
+  }
+  if (sibling.status !== "RELATION_RESOLVED" || !sibling.intent.relationTypes.includes("SIBLING_OF")) {
+    return buildUnresolvedRelationConstraint(sibling);
+  }
+  const parents = id => {
+    const edges = graph.relationsTo(id).filter(edge => edge.type === "PARENT_OF");
+    metrics.edgeVisits += edges.length;
+    return edges.filter(edge => !edge.parentEvidenceConflict && (!edge.parentEvidence?.length || edge.parentEvidence.some(item => item.publicStatus === "PUBLIC_LEGAL_PARENT"
+      && item.campaignToken === gameData.campaignToken && item.sourceSnapshotId === `${gameData.date}/${gameData.totalDays}`)))
+      .map(edge => { metrics.nodeVisits++; return graph.nodes.get(String(edge.from)); }).filter(Boolean);
+  };
+  const targetParents = parents(sibling.targetRuntimeId);
+  const parent = (records, sex) => {
+    const matches = records.filter(item => resolveCharacterSexConsensus({ snapshot: item }).sex === sex);
+    return matches.length === 1 ? matches[0] : null;
+  };
+  const targetName = characterName(graph.nodes.get(String(sibling.targetRuntimeId)), sibling.targetRuntimeId);
+  let line;
+  if (chained) {
+    const selected = parent(targetParents, chained[2] === "母亲" ? "female" : "male");
+    line = selected ? `${targetName}的${chained[2]}：${characterName(selected, selected.id)}` : `${targetName}的${chained[2]}：未知（缺少唯一可信公开来源）`;
+  } else {
+    const ownParents = parents(character.id);
+    const father = parent(ownParents, "male"), mother = parent(ownParents, "female");
+    const otherFather = parent(targetParents, "male"), otherMother = parent(targetParents, "female");
+    const complete = father && mother && otherFather && otherMother;
+    const sameFather = complete && String(father.id) === String(otherFather.id);
+    const sameMother = complete && String(mother.id) === String(otherMother.id);
+    line = !complete ? "双亲关系未知（缺少完整可信公开来源），不得猜测同父异母或同母异父。"
+      : `${characterName(character, character.id)}与${targetName}：${sameFather && !sameMother ? "同父异母" : !sameFather && sameMother ? "同母异父" : sameFather && sameMother ? "同父同母" : "双亲均不同"}；${sameMother && !sameFather
+        ? `共同母亲为${characterName(mother, mother.id)}；双方父亲分别为${characterName(father, father.id)}、${characterName(otherFather, otherFather.id)}`
+        : `双方母亲分别为${characterName(mother, mother.id)}、${characterName(otherMother, otherMother.id)}`}。`;
+  }
+  return `=== 当前结构化家庭事实（本轮 CK3 数据） ===\n- ${line}\n权威规则：本块只提供有公开来源的定向双亲事实，不代表角色知道其他私人经历或秘密；不得补造未知父母，不得由共同子女推断父母彼此为配偶。`;
+}
+
+function buildFamilyFactBlock(character, gameData, { query = "", recentTargetId = null, currentFactRegistry = null, ageAuthorityGameData = null, ageDiagnostics = null, familyDiagnostics = null } = {}) {
   if (!character?.id || !gameData) return null;
-  const graph = getCachedKinshipGraph(gameData);
-  const temporal = { currentGameDate: gameData.date, currentTotalDays: gameData.totalDays };
+  const started = performance.now();
+  if (isStepFamilyQuery(query)) {
+    const step = buildStepFamilyFactBlock(character, gameData, { query });
+    if (step.handled) {
+      if (Array.isArray(familyDiagnostics)) familyDiagnostics.push({ nodeVisits: step.metrics.nodeVisits,
+        edgeVisits: step.metrics.edgeVisits, targetedParentQuery: true, buildMs: performance.now() - started });
+      return step.text;
+    }
+  }
+  const graph = getCachedKinshipGraph(gameData, { includeOtherParents: /母亲|父亲|父母|母后|母妃|父王|父皇|同父|同母/u.test(query) });
+  const metrics = { nodeVisits: 0, edgeVisits: 0, targetedParentQuery: false };
+  const parentQuery = buildParentQuery(character, graph, query, metrics, gameData);
+  if (parentQuery) {
+    metrics.targetedParentQuery = true;
+    metrics.buildMs = performance.now() - started;
+    if (Array.isArray(familyDiagnostics)) familyDiagnostics.push(metrics);
+    return parentQuery;
+  }
+  const temporal = { currentGameDate: gameData.date, currentTotalDays: gameData.totalDays, currentCampaignToken: gameData.campaignToken };
   let relationResolution = query ? resolveAnchoredRelationMention({ query, responderId: character.id, graph, recentTargetId }) : null;
   // A family inventory is not a request to select one ambiguous person.
   if (relationResolution?.status === "NO_RELATION_INTENT") relationResolution = null;
@@ -144,7 +217,8 @@ function buildFamilyFactBlock(character, gameData, { query = "", recentTargetId 
     const sourceCharacter = sourceBoundFamilyProfile(ageAuthorityGameData, selectedTargetId, relationResolution);
     selectedAge = resolveCharacterAge(sourceCharacter || {}, {
       currentGameDate: ageAuthorityGameData?.date ?? gameData.date,
-      currentTotalDays: ageAuthorityGameData?.totalDays ?? gameData.totalDays
+      currentTotalDays: ageAuthorityGameData?.totalDays ?? gameData.totalDays,
+      currentCampaignToken: ageAuthorityGameData?.campaignToken ?? gameData.campaignToken
     });
     if (Array.isArray(ageDiagnostics)) {
       ageDiagnostics.push({
@@ -153,7 +227,15 @@ function buildFamilyFactBlock(character, gameData, { query = "", recentTargetId 
         rawAge: selectedAge.rawAge,
         calculatedCalendarAge: selectedAge.calculatedCalendarAge,
         ageConflict: selectedAge.conflict,
-        asOfGameDate: selectedAge.asOfGameDate
+        asOfGameDate: selectedAge.asOfGameDate,
+        selectedAge: selectedAge.age,
+        promptAge: selectedAge.age,
+        sourceConflict: selectedAge.sourceConflict,
+        currentAgeSourceOwnerIdHash: selectedAge.sourceOwnerId == null ? null : crypto.createHash("sha256").update(String(selectedAge.sourceOwnerId)).digest("hex"),
+        currentAgeRelationType: selectedAge.currentAgeRelationType,
+        currentAgeEvidenceSourceType: selectedAge.currentAgeEvidenceSourceType,
+        profileSelectionPath: sourceCharacter?.ageSource === "CK3_CURRENT_AGE" ? "CURRENT_CANONICAL" : "BOUND_RELATIVE_OR_UNKNOWN",
+        diagnosticCode: selectedAge.diagnosticCode || (selectedAge.age === null ? "RELATIVE_AGE_MISSING" : selectedAge.conflict ? "CALENDAR_AGE_MISMATCH" : "AGE_SOURCE_MATCH")
       });
     }
   }
@@ -186,7 +268,7 @@ function buildFamilyFactBlock(character, gameData, { query = "", recentTargetId 
     if (!resolution.relation) continue;
     const bundle = buildFamilyEntityFactBundle({ graph, responderId: character.id, relationAnchorId, targetRuntimeId: edge.from, relationTypes: relationResolution?.intent?.relationTypes || null, temporal });
     if (!bundle) continue;
-    const currentFact = resolveRelationshipCurrentTruth({ gameData, subjectRuntimeId: edge.from, anchorRuntimeId: relationAnchorId, registry: currentFactRegistry });
+    const currentFact = resolveRelationshipCurrentTruth({ gameData, subjectRuntimeId: edge.from, anchorRuntimeId: relationAnchorId, registry: currentFactRegistry, kinshipGraph: graph });
     const sex = { sex: currentFact?.currentState?.sex || "unknown", conflict: currentFact?.evidence?.conflicts?.length > 0 };
     const label = currentFact?.relations[String(relationAnchorId)]?.label || resolveKinshipLabel({ type: edge.type, sex: "unknown", branch: edge.branch });
     const death = bundle.death ? { fact: bundle.death, text: formatDeathFact(relative, { ...temporal, characters: graph.nodes })?.text || "已故" } : null;
@@ -218,6 +300,10 @@ function buildFamilyFactBlock(character, gameData, { query = "", recentTargetId 
     lines.push(`- 配偶/伴侣（未绑定角色）：${spouse.name}`);
   }
   if (!lines.length) return null;
+  metrics.nodeVisits = seen.size;
+  metrics.edgeVisits = relations.length;
+  metrics.buildMs = performance.now() - started;
+  if (Array.isArray(familyDiagnostics)) familyDiagnostics.push(metrics);
   return `=== 当前结构化家庭事实（本轮 CK3 数据） ===\n${lines.join("\n")}\n权威规则：亲属身份、性别、是否已故、死亡日期和年龄以本块结构化结果为准；相对时间只能使用系统给出的结果。若本块明确给出致死者，则以本块为准；若本块未给出致死者，可使用后续获准的 Current Game Truth / Worldline Game Truth。不得从 Memory 或模型推测致死者。Memory 只可补充过去经历与主观感受，不得覆盖这些事实。`;
 }
 

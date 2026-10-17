@@ -1,4 +1,4 @@
-> V9.3.6.3 修复候选沿用下列 V9.3.6 玩家中心记忆合同。最新实施、验证与旧档兼容说明见 docs/current/v9/V9_3_6_3_IMPLEMENTATION_REPORT.md、V9_3_6_3_VERIFICATION_REPORT.md 和 V9_3_6_3_LEGACY_COMPATIBILITY.md；实机／Provider／Soak／远端CI分开签署。
+> V9.3.7 候选沿用下列 V9.3.6 玩家中心记忆合同。年龄来源校准与公开双亲证据见 docs/current/v9/V9_3_7_IMPLEMENTATION_REPORT.md 和 V9_3_7_VERIFICATION_REPORT.md；旧档兼容仍见 V9_3_6_3_LEGACY_COMPATIBILITY.md。新增 otherParent 事实不得扩大 Memory 权限；未验证的日历年龄只作诊断。实机／Provider／Soak／远端 CI 分开签署。
 
 # Repository Guidelines
 

@@ -86,7 +86,11 @@ async function run() {
     for (const age of [null, undefined, "", "  ", false, -1, "invalid"]) assert.strictEqual(resolveCharacterAge({ age }).age, null, String(age));
     assert.strictEqual(resolveCharacterAge({ age: 0, ageSource: "CK3_CURRENT_AGE" }).age, 0);
     assert.strictEqual(resolveCharacterAge({ age: 35, ageSource: "CK3_CURRENT_AGE", birthDateTotalDays: null }, { currentTotalDays: 400000 }).age, 35);
-    assert.strictEqual(resolveCharacterAge({ birthDate: "1156.6.2", birthDateTotalDays: null }, { currentGameDate: "1186.6.1", currentTotalDays: null }).age, 29);
+    const birthdayOnlyAge = resolveCharacterAge({ birthDate: "1156.6.2", birthDateTotalDays: null }, { currentGameDate: "1186.6.1", currentTotalDays: null });
+    assert.strictEqual(birthdayOnlyAge.age, null, "unverified CK3 calendar arithmetic is not a factual age");
+    assert.strictEqual(birthdayOnlyAge.ageSource, "UNKNOWN");
+    assert.strictEqual(birthdayOnlyAge.calculatedCalendarAge, 29);
+    assert.strictEqual(birthdayOnlyAge.diagnosticCode, "CALENDAR_AGE_UNVERIFIED");
     assert.strictEqual(resolveCharacterAge({ age: 60, alive: false }).age, null);
     const raw = Array(27).fill("");
     raw[0] = 1;

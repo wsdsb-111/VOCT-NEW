@@ -8,7 +8,7 @@ const { Character, inferGenderFromPronoun } = require("../resources/app/out/main
 const { createLogParser } = require("../resources/app/out/main/game-data/log-parser");
 const { createRelationshipResolver } = require("../resources/app/out/main/game-data/relationship-resolver");
 const { resolveCharacterAge } = require("../resources/app/out/main/worldline/character-age-service");
-const { computeAgeAtDate } = require("../resources/app/out/main/worldline/character-temporal-facts");
+const { computeAgeAtDate, formatDeathFact } = require("../resources/app/out/main/worldline/character-temporal-facts");
 const { CK3LogProductionFixture, productionFamilyLogLines } = require("./v8.7-production-fixtures");
 
 (async () => {
@@ -28,9 +28,25 @@ const { CK3LogProductionFixture, productionFamilyLogLines } = require("./v8.7-pr
       assert.equal(profile.deathReason, reason);
       assert.equal(profile.age, null, "deceased profile must not store a derived current age");
       const ageAtDeath = resolveCharacterAge(profile, { currentGameDate: gameData.date, currentTotalDays: gameData.totalDays });
-      assert.equal(ageAtDeath.age, computeAgeAtDate(profile.birthDate, profile.deathDate));
-      assert.equal(ageAtDeath.ageSource, "BIRTH_DEATH_CALENDAR");
+      assert.equal(ageAtDeath.age, null, "unverified CK3 calendar arithmetic is diagnostic, not a factual age at death");
+      assert.equal(ageAtDeath.calculatedCalendarAge, computeAgeAtDate(profile.birthDate, profile.deathDate));
+      assert.equal(ageAtDeath.ageSource, "AGE_AT_DEATH_UNAVAILABLE");
+      assert.equal(ageAtDeath.diagnosticCode, "CALENDAR_AGE_UNVERIFIED");
     }
+    const explicitDeath = {
+      id: 13,
+      fullName: "明确年龄的亡者",
+      alive: false,
+      birthDate: "1100.1.1",
+      deathDate: "1150.1.1",
+      ageAtDeath: 49,
+      ageAtDeathSource: "CK3_AGE_AT_DEATH"
+    };
+    const explicitAgeAtDeath = resolveCharacterAge(explicitDeath, { currentGameDate: gameData.date, currentTotalDays: gameData.totalDays });
+    assert.equal(explicitAgeAtDeath.age, 49, "explicit CK3 age at death remains factual even when the unverified calendar estimate differs");
+    assert.equal(explicitAgeAtDeath.ageSource, "CK3_AGE_AT_DEATH");
+    const explicitDeathPresentation = formatDeathFact(explicitDeath, { currentGameDate: gameData.date, currentTotalDays: gameData.totalDays });
+    assert.match(explicitDeathPresentation.text, /终年49岁/);
     console.log("V8.7.0 Production Family Adapter: PASS (parser-shaped parent/child/sibling death passthrough)");
   } finally {
     fs.rmSync(tempDir, { recursive: true, force: true });

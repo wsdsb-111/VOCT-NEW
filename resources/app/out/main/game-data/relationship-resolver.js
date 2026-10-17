@@ -29,7 +29,8 @@ function createRelationshipResolver({ onDiagnostic = null } = {}) {
     deathDate: [],
     deathDateText: [],
     deathReason: [],
-    relations: []
+    relations: [],
+    otherParentRelations: []
   });
   const pushUnique = (items, value, key) => {
     if (!items.some((item) => key(item) === key(value))) items.push(value);
@@ -113,11 +114,26 @@ function createRelationshipResolver({ onDiagnostic = null } = {}) {
     if (hasAlive) return { value: true, source: aliveItems[0].source || "unknown", conflict: false };
     return { value: null, source: "unknown", conflict: false };
   };
-  const collectTemporalEvidence = (record, value, priority, sourceOwnerId, relationType, source) => {
+  const collectTemporalEvidence = (record, value, priority, sourceOwnerId, relationType, source, relativeAgeContext = {}) => {
     const common = { priority, sourceOwnerId, relationType, source };
     const age = nonnegativeNumber(value?.age);
-    if (age !== null && Number.isInteger(age) && (priority === 1 && value?.ageSource === "CK3_CURRENT_AGE" || priority > 1 && value?.ageSource === "CK3_LIVE_RELATIVE_AGE")) {
+    if (age !== null && Number.isInteger(age) && priority === 1 && value?.ageSource === "CK3_CURRENT_AGE") {
       record.age.push({ value: age, ageSource: value.ageSource, ...common });
+    } else if (age !== null && Number.isInteger(age) && priority > 1 && value?.ageSource === "CK3_LIVE_RELATIVE_AGE") {
+      const expectedOwnerId = Number(sourceOwnerId);
+      const relativeAgeEvidence = Array.isArray(value?.evidence?.age) ? value.evidence.age : [];
+      for (const evidence of relativeAgeEvidence) {
+        const evidenceOwnerId = Number(evidence?.sourceOwnerId);
+        const evidenceAge = nonnegativeNumber(evidence?.value);
+        if (!Number.isSafeInteger(evidenceOwnerId) || evidenceOwnerId <= 0 || evidenceOwnerId !== expectedOwnerId) continue;
+        if (evidence?.relationType !== relationType || evidence?.source !== source) continue;
+        if (typeof relativeAgeContext?.campaignToken !== "string" || !relativeAgeContext.campaignToken
+          || evidence.campaignToken !== relativeAgeContext.campaignToken) continue;
+        if (typeof relativeAgeContext?.sourceSnapshotId !== "string" || !relativeAgeContext.sourceSnapshotId
+          || evidence.sourceSnapshotId !== relativeAgeContext.sourceSnapshotId) continue;
+        if (evidence?.ageSource !== "CK3_LIVE_RELATIVE_AGE" || evidenceAge === null || !Number.isInteger(evidenceAge) || evidenceAge !== age) continue;
+        record.age.push({ ...evidence, value: evidenceAge, priority });
+      }
     }
     const birthDate = finiteDay(value?.birthDateTotalDays);
     if (birthDate !== null) record.birthDate.push({ value: birthDate, ...common });
@@ -129,7 +145,7 @@ function createRelationshipResolver({ onDiagnostic = null } = {}) {
     if (value?.alive === true) record.alive.push({ value: true, ...common });
     if (value?.alive === false || deathDate !== null || value?.deathDate) record.alive.push({ value: false, ...common });
   };
-  const buildCanonicalProfiles = (characters, totalDays, inferGenderFromPronoun) => {
+  const buildCanonicalProfiles = (characters, totalDays, inferGenderFromPronoun, relativeAgeContext = {}) => {
     const records = new Map();
     const getRecord = (id) => {
       if (!records.has(id)) records.set(id, createEvidenceRecord(id));
@@ -143,13 +159,48 @@ function createRelationshipResolver({ onDiagnostic = null } = {}) {
       if (character.fullName || character.shortName) record.names.push(character.fullName || character.shortName);
       const gender = normalizeGender(character.gender, character.sheHe, inferGenderFromPronoun);
       record.gender.push({ value: gender, priority: 1, sourceOwnerId: id, relationType: "canonical", source: "characters" });
-      collectTemporalEvidence(record, character, 1, id, "canonical", "characters");
+      collectTemporalEvidence(record, character, 1, id, "canonical", "characters", relativeAgeContext);
     }
     const relationLists = [
       { field: "parents", relationType: "parent" },
       { field: "children", relationType: "child" },
       { field: "siblings", relationType: "sibling" }
     ];
+    const positiveRuntimeId = (value) => {
+      const numeric = Number(value);
+      return Number.isSafeInteger(numeric) && numeric > 0 ? numeric : null;
+    };
+    const addOtherParentRelation = (childRecord, owner, entry, sourceRelation) => {
+      const parent = entry?.otherParent;
+      const childId = positiveRuntimeId(childRecord?.id);
+      const parentId = positiveRuntimeId(parent?.id ?? parent?.otherParentId);
+      const sourceOwnerId = positiveRuntimeId(owner?.id);
+      if (!childId || !parentId || !sourceOwnerId || childId === parentId) return;
+      const evidenceOwnerId = positiveRuntimeId(parent?.sourceOwnerId);
+      if (parent.sourceOwnerId !== undefined && evidenceOwnerId !== sourceOwnerId) return;
+      if (parent.childId !== undefined && positiveRuntimeId(parent.childId) !== childId) return;
+      if (parent.relationType && parent.relationType !== "parent") return;
+      if (parent.source && parent.source !== "CK3_OTHER_PARENT") return;
+      if (parent.sourceRelation && parent.sourceRelation !== sourceRelation) return;
+      const campaignFields = ["campaignId", "campaignToken", "sourceSnapshotId", "checkpointId"];
+      const evidence = {
+        childId,
+        parentId,
+        otherParentId: parentId,
+        parentName: typeof parent.name === "string" && parent.name.trim() ? parent.name : null,
+        parentGender: parent.parentGender === "male" || parent.parentGender === "female" ? parent.parentGender : "unknown",
+        sourceOwnerId,
+        relationType: "parent",
+        source: "CK3_OTHER_PARENT",
+        sourceRelation,
+        publicStatus: parent.publicStatus === "PUBLIC_LEGAL_PARENT" ? "PUBLIC_LEGAL_PARENT" : "UNKNOWN",
+        knowledgeStatus: "UNKNOWN"
+      };
+      for (const field of campaignFields) {
+        evidence[field] = parent[field] ?? entry?.[field] ?? owner?.[field] ?? null;
+      }
+      pushUnique(childRecord.otherParentRelations, evidence, (item) => JSON.stringify(item));
+    };
     for (const owner of characters.values()) {
       const ownerId = Number(owner?.id);
       if (!Number.isFinite(ownerId)) continue;
@@ -162,8 +213,10 @@ function createRelationshipResolver({ onDiagnostic = null } = {}) {
           const source = `${ownerId}.${field}`;
           const gender = normalizeGender(entry.gender, entry.sheHe, inferGenderFromPronoun);
           record.gender.push({ value: gender, priority: 2, sourceOwnerId: ownerId, relationType, source });
-          collectTemporalEvidence(record, entry, 2, ownerId, relationType, source);
+          collectTemporalEvidence(record, entry, 2, ownerId, relationType, source, relativeAgeContext);
           pushUnique(record.relations, { ownerId, relationType, source }, (item) => `${item.ownerId}:${item.relationType}`);
+          if (field === "children") addOtherParentRelation(record, owner, entry, "kids.otherParent");
+          else if (field === "siblings") addOtherParentRelation(record, owner, entry, "siblings.otherParent");
         }
       }
     }
@@ -221,6 +274,7 @@ function createRelationshipResolver({ onDiagnostic = null } = {}) {
         deathDateText: record.deathDateText.map((item) => ({ ...item })),
         deathReason: record.deathReason.map((item) => ({ ...item })),
         relations: record.relations.map((item) => ({ ...item })),
+        otherParentRelations: record.otherParentRelations.map((item) => ({ ...item })),
         resolvedGenderSource: gender.source,
         resolvedBirthSource: birthDate.source,
         conflicts: {

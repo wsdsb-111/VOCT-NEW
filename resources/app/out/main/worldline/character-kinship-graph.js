@@ -11,6 +11,63 @@ function id(value) {
   return raw === null || raw === undefined || raw === "" ? null : String(raw);
 }
 
+function positiveRuntimeId(value) {
+  const raw = value && typeof value === "object" ? value.id ?? value.characterId : value;
+  const numeric = Number(raw);
+  return Number.isSafeInteger(numeric) && numeric > 0 ? String(numeric) : null;
+}
+
+function createOtherParentEvidence(value, defaults = {}) {
+  const expectedChildId = positiveRuntimeId(defaults.childId);
+  const suppliedChildId = value?.childId === null || value?.childId === undefined ? null : positiveRuntimeId(value.childId);
+  const childId = suppliedChildId || expectedChildId;
+  const parentId = positiveRuntimeId(value?.parentId ?? value?.otherParentId ?? value?.otherParent ?? value?.id ?? defaults.parentId);
+  const expectedOwnerId = positiveRuntimeId(defaults.sourceOwnerId);
+  const suppliedOwnerId = value?.sourceOwnerId === null || value?.sourceOwnerId === undefined ? null : positiveRuntimeId(value.sourceOwnerId);
+  const sourceOwnerId = suppliedOwnerId || expectedOwnerId;
+  const sourceRelation = value?.sourceRelation ?? defaults.sourceRelation;
+  const allowedSourceRelations = new Set(["kids.otherParent", "siblings.otherParent"]);
+  if ((expectedChildId && childId !== expectedChildId) || (expectedOwnerId && sourceOwnerId !== expectedOwnerId)) return null;
+  if (value?.childId !== null && value?.childId !== undefined && !suppliedChildId
+    || value?.sourceOwnerId !== null && value?.sourceOwnerId !== undefined && !suppliedOwnerId) return null;
+  if (value?.relationType && value.relationType !== "parent") return null;
+  if (value?.source && value.source !== "CK3_OTHER_PARENT") return null;
+  if (!allowedSourceRelations.has(sourceRelation)
+    || defaults.sourceRelation && sourceRelation !== defaults.sourceRelation) return null;
+  if (!childId || !parentId || !sourceOwnerId || childId === parentId) return null;
+  const pick = (field) => value?.[field] ?? defaults[field] ?? null;
+  const parentName = value?.parentName ?? value?.name ?? defaults.parentName ?? null;
+  const parentGender = value?.parentGender ?? defaults.parentGender;
+  return {
+    childId,
+    parentId,
+    otherParentId: parentId,
+    parentName: typeof parentName === "string" && parentName.trim() ? parentName : null,
+    parentGender: parentGender === "male" || parentGender === "female" ? parentGender : "unknown",
+    sourceOwnerId,
+    relationType: "parent",
+    source: "CK3_OTHER_PARENT",
+    sourceRelation,
+    publicStatus: pick("publicStatus") === "PUBLIC_LEGAL_PARENT" ? "PUBLIC_LEGAL_PARENT" : "UNKNOWN",
+    knowledgeStatus: "UNKNOWN",
+    campaignId: pick("campaignId"),
+    campaignToken: pick("campaignToken"),
+    sourceSnapshotId: pick("sourceSnapshotId"),
+    checkpointId: pick("checkpointId")
+  };
+}
+
+function mergeParentEvidence(edge, incoming) {
+  if (!Array.isArray(incoming) || incoming.length === 0) return;
+  if (!Array.isArray(edge.parentEvidence)) edge.parentEvidence = [];
+  for (const evidence of incoming) {
+    const key = JSON.stringify(evidence);
+    if (!edge.parentEvidence.some((item) => JSON.stringify(item) === key)) edge.parentEvidence.push(evidence);
+  }
+  const publicStatuses = new Set(edge.parentEvidence.map((item) => item.publicStatus).filter((status) => status !== "UNKNOWN"));
+  if (publicStatuses.size > 1) edge.parentEvidenceConflict = true;
+}
+
 function values(value) {
   if (Array.isArray(value)) return value;
   return value === null || value === undefined || value === "" ? [] : [value];
@@ -38,7 +95,7 @@ function createCharacterMap(source) {
   return new Map(Object.entries(characters || {}).map(([key, value]) => [String(key), value]));
 }
 
-function buildKinshipGraph(source = {}) {
+function buildKinshipGraph(source = {}, { includeOtherParents = true } = {}) {
   const characters = createCharacterMap(source);
   const nodes = new Map(characters);
   const edges = [];
@@ -62,6 +119,7 @@ function buildKinshipGraph(source = {}) {
     const key = `${fromId}:${toId}:${type}`;
     if (edgeKeys.has(key)) {
       const existing = edgeByKey.get(key);
+      mergeParentEvidence(existing, details.parentEvidence);
       if (existing && details.branch && existing.branch && existing.branch !== details.branch) existing.branchConflict = true;
       if (existing && details.branch && !existing.branch) existing.branch = details.branch;
       const incomingKind = details.relationshipKind || null;
@@ -86,7 +144,18 @@ function buildKinshipGraph(source = {}) {
     outgoingEdges.get(fromId).push(edge);
     incomingEdges.get(toId).push(edge);
   };
+  const addOtherParent = (value, defaults = {}) => {
+    const evidence = createOtherParentEvidence(value, defaults);
+    if (!evidence) return;
+    const parentId = ensureNode({ id: evidence.parentId, name: evidence.parentName, gender: evidence.parentGender });
+    const childId = ensureNode(evidence.childId);
+    if (!parentId || !childId) return;
+    const details = { source: evidence.source, parentEvidence: [evidence] };
+    add(parentId, childId, "PARENT_OF", [parentId, childId], 1, details);
+    add(childId, parentId, "CHILD_OF", [childId, parentId], 1, details);
+  };
   for (const [characterId, character] of characters) {
+    const sourceOwnerId = positiveRuntimeId(character?.id ?? characterId);
     const parentEntries = Array.isArray(character?.parents)
       ? character.parents.map((parent) => ({ parent, branch: null }))
       : [{ parent: character?.parents?.father ?? character?.father, branch: "PATERNAL" }, { parent: character?.parents?.mother ?? character?.mother, branch: "MATERNAL" }];
@@ -103,12 +172,40 @@ function buildKinshipGraph(source = {}) {
       const details = relationshipDetails(child);
       add(characterId, childId, "PARENT_OF", [characterId, childId], 1, details);
       add(childId, characterId, "CHILD_OF", [childId, characterId], 1, details);
+      if (includeOtherParents) {
+        addOtherParent(child?.otherParent, {
+          childId,
+          sourceOwnerId,
+          sourceRelation: "kids.otherParent",
+          parentName: child?.otherParent?.name,
+          campaignId: child?.otherParent?.campaignId ?? character?.campaignId,
+          campaignToken: child?.otherParent?.campaignToken ?? character?.campaignToken,
+          sourceSnapshotId: child?.otherParent?.sourceSnapshotId ?? character?.sourceSnapshotId,
+          checkpointId: child?.otherParent?.checkpointId ?? character?.checkpointId,
+          publicStatus: child?.otherParent?.publicStatus,
+          parentGender: child?.otherParent?.parentGender
+        });
+      }
     }
     for (const sibling of values(character?.siblings)) {
       const siblingId = ensureNode(sibling);
       if (!siblingId) continue;
       add(characterId, siblingId, "SIBLING_OF", [characterId, siblingId], 1, { source: "LOG_DIRECT" });
       add(siblingId, characterId, "SIBLING_OF", [siblingId, characterId], 1, { source: "LOG_DIRECT" });
+      if (includeOtherParents) {
+        addOtherParent(sibling?.otherParent, {
+          childId: siblingId,
+          sourceOwnerId,
+          sourceRelation: "siblings.otherParent",
+          parentName: sibling?.otherParent?.name,
+          campaignId: sibling?.otherParent?.campaignId ?? character?.campaignId,
+          campaignToken: sibling?.otherParent?.campaignToken ?? character?.campaignToken,
+          sourceSnapshotId: sibling?.otherParent?.sourceSnapshotId ?? character?.sourceSnapshotId,
+          checkpointId: sibling?.otherParent?.checkpointId ?? character?.checkpointId,
+          publicStatus: sibling?.otherParent?.publicStatus,
+          parentGender: sibling?.otherParent?.parentGender
+        });
+      }
     }
     for (const spouse of normalizeSpouseRecords(character)) {
       if (spouse.runtimeId === null) continue;
@@ -141,6 +238,23 @@ function buildKinshipGraph(source = {}) {
       } else if (evidence.relationType === "sibling") {
         add(characterId, ownerId, "SIBLING_OF", [characterId, ownerId], evidence.confidence ?? 1, { source: "LOG_DIRECT", evidenceSource: evidence.source || null });
         add(ownerId, characterId, "SIBLING_OF", [ownerId, characterId], evidence.confidence ?? 1, { source: "LOG_DIRECT", evidenceSource: evidence.source || null });
+      }
+    }
+    if (includeOtherParents) {
+      const relationSources = {
+        "kids.otherParent": { relationType: "child", field: "children" },
+        "siblings.otherParent": { relationType: "sibling", field: "siblings" }
+      };
+      for (const evidence of character?.evidence?.otherParentRelations || []) {
+        const binding = relationSources[evidence?.sourceRelation];
+        const evidenceOwnerId = positiveRuntimeId(evidence?.sourceOwnerId);
+        const evidenceChildId = positiveRuntimeId(evidence?.childId);
+        if (!binding || evidenceChildId !== sourceOwnerId || !evidenceOwnerId) continue;
+        const expectedSource = `${evidenceOwnerId}.${binding.field}`;
+        const relationBound = (character?.evidence?.relations || []).some((item) => Number(item?.ownerId) === Number(evidenceOwnerId)
+          && item?.relationType === binding.relationType && item?.source === expectedSource);
+        if (!relationBound) continue;
+        addOtherParent(evidence, { childId: evidenceChildId, sourceOwnerId: evidenceOwnerId, sourceRelation: evidence.sourceRelation });
       }
     }
   }

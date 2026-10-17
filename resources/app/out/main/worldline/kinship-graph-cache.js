@@ -9,13 +9,21 @@ function relationFingerprint(gameData) {
   const characters = gameData?.characters instanceof Map ? [...gameData.characters.values()] : Object.values(gameData?.characters || {});
   return characters.map((character) => [
     character?.id,
-    ...["parents", "children", "siblings", "spouse", "spouses", "formerSpouses", "deceasedSpouses"].map((field) => JSON.stringify(character?.[field] ?? null)),
+    ...["parents", "children", "siblings", "spouse", "spouses", "formerSpouses", "deceasedSpouses"].map((field) => {
+      const value = character?.[field] ?? null;
+      // Step-family evidence is queried directly; its subtree is not a birth-graph input.
+      return JSON.stringify(field === "parents" && Array.isArray(value)
+        ? value.map(parent => parent?.source === "CK3_DIRECT_PARENT" ? { ...parent, spouses: undefined } : parent)
+        : value);
+    }),
     character?.consort && typeof character.consort === "object" ? character.consort.id ?? character.consort.name : character?.consort || "",
     character?.gender ?? character?.sex ?? character?.female ?? "",
     character?.evidence?.conflicts?.gender === true,
     character?.birthDateTotalDays ?? character?.birthTotalDays ?? "",
     character?.birthDate ?? character?.birth ?? "",
     character?.age ?? "",
+    character?.ageSource ?? "",
+    JSON.stringify(character?.evidence?.age ?? null),
     character?.alive,
     character?.evidence?.conflicts?.alive === true,
     character?.deathDateTotalDays ?? character?.deathDate ?? ""
@@ -87,14 +95,16 @@ function getTargetedKinshipGraph(gameData, seedIds = [], { maxDepth = 3, maxNode
   return graph;
 }
 
-function getCachedKinshipGraph(gameData) {
+function getCachedKinshipGraph(gameData, { includeOtherParents = true } = {}) {
   if (!gameData || typeof gameData !== "object") return buildKinshipGraph({});
-  const key = revisionKey(gameData);
-  const cached = graphCache.get(gameData);
+  const key = `${revisionKey(gameData)}:${includeOtherParents}`;
+  let variants = graphCache.get(gameData);
+  if (!variants) { variants = new Map(); graphCache.set(gameData, variants); }
+  const cached = variants.get(includeOtherParents);
   if (cached?.key === key) return cached.graph;
   const profiles = typeof gameData.getMentionableCharacterProfiles === "function" ? gameData.getMentionableCharacterProfiles() : gameData.characters;
-  const graph = buildKinshipGraph(profiles);
-  graphCache.set(gameData, { key, graph });
+  const graph = buildKinshipGraph(profiles, { includeOtherParents });
+  variants.set(includeOtherParents, { key, graph });
   return graph;
 }
 

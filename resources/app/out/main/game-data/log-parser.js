@@ -6,6 +6,32 @@ const fs = require("fs");
 const readline = require("readline");
 const { inferGenderFromPronoun } = require("./character");
 
+function parseRelativeAge(data, index, gameData, sourceOwnerId, relationType, field) {
+  const value = nonnegativeNumber(data[index]);
+  const age = value !== null && Number.isInteger(value) ? value : null;
+  const ageSource = age === null ? null : "CK3_LIVE_RELATIVE_AGE";
+  if (age === null) return { age, ageSource };
+  const totalDays = nonnegativeNumber(gameData?.totalDays);
+  const date = String(gameData?.date || "").trim();
+  const sourceSnapshotId = date && totalDays !== null ? `${date}/${totalDays}` : null;
+  const source = `${sourceOwnerId}.${field}`;
+  return {
+    age,
+    ageSource,
+    evidence: {
+      age: [{
+        value: age,
+        ageSource,
+        sourceOwnerId,
+        relationType,
+        source,
+        campaignToken: typeof gameData?.campaignToken === "string" && gameData.campaignToken ? gameData.campaignToken : null,
+        sourceSnapshotId
+      }]
+    }
+  };
+}
+
 function createLogParser({ GameData, Character, onGameDataParsed = null }) {
   async function parseLog(debugLogPath) {
     console.log(`parseLog: Processing debug log at path: ${debugLogPath}`);
@@ -19,9 +45,14 @@ function createLogParser({ GameData, Character, onGameDataParsed = null }) {
     let currentKnownSecret = null;
     let currentTroops = null;
     let currentChild = null;
+    let currentChildOwnerId = null;
     let currentSibling = null;
+    let currentSiblingOwnerId = null;
     let pendingMemoryLine = null;
     let pendingLetterLine = null;
+    const getSourceSnapshotId = () => gameData?.date && Number.isFinite(Number(gameData.totalDays))
+      ? `${gameData.date}/${Number(gameData.totalDays)}`
+      : null;
     const fileStream = fs.createReadStream(debugLogPath);
     const rl = readline.createInterface({
       input: fileStream,
@@ -473,15 +504,158 @@ function createLogParser({ GameData, Character, onGameDataParsed = null }) {
               multiLineType = "opinionBreakdown";
             }
             break;
-          case "parents":
+          case "parents": {
+            const parentId = Number(data[1]);
+            const gender = inferGenderFromPronoun(data[6]);
             const parent = {
-              id: Number(data[1]),
+              id: parentId,
               name: data[2],
               birthDateTotalDays: nonnegativeNumber(data[3]),
-              birthDate: data[4]
+              birthDate: data[4],
+              gender,
+              ...(gender !== "unknown" ? { genderSource: "CK3_LIVE_RELATIVE" } : {}),
+              sheHe: data[6] || "",
+              ...(data[7] === "PUBLIC_LEGAL_PARENT" || data[7] === "UNKNOWN" ? {
+                source: "CK3_DIRECT_PARENT",
+                sourceOwnerId: rootID,
+                childId: rootID,
+                relationType: "parent",
+                sourceRelation: "parents",
+                publicStatus: data[7] === "PUBLIC_LEGAL_PARENT" ? "PUBLIC_LEGAL_PARENT" : "UNKNOWN",
+                knowledgeStatus: "UNKNOWN",
+                campaignToken: gameData.campaignToken || null,
+                sourceSnapshotId: getSourceSnapshotId()
+              } : { publicStatus: "UNKNOWN" }),
+              spouses: [],
+              ...parseRelativeAge(data, 5, gameData, rootID, "parent", "parents")
             };
-            gameData.characters.get(rootID).parents.push(parent);
+            gameData.characters.get(rootID)?.parents.push(parent);
             break;
+          }
+          case "parent_spouse": {
+            const parentId = Number(data[1]);
+            const spouseId = Number(data[2]);
+            const character = gameData.characters.get(rootID);
+            const parent = character?.parents?.find((item) => Number(item.id) === parentId
+              && item.publicStatus === "PUBLIC_LEGAL_PARENT"
+              && item.source === "CK3_DIRECT_PARENT"
+              && Number(item.sourceOwnerId) === rootID
+              && Number(item.childId) === rootID
+              && item.relationType === "parent"
+              && item.sourceRelation === "parents"
+              && item.campaignToken === gameData.campaignToken
+              && item.sourceSnapshotId === getSourceSnapshotId());
+            const spouseGender = inferGenderFromPronoun(data[4]);
+            if (!parent || !gameData.campaignToken || !getSourceSnapshotId()
+              || !Number.isSafeInteger(spouseId) || spouseId <= 0 || spouseId === rootID || spouseId === parentId
+              || !String(data[3] || "").trim() || data[5] !== "PUBLIC_LEGAL_MARRIAGE") break;
+            const spouse = {
+              id: spouseId,
+              name: data[3],
+              sheHe: data[4] || "",
+              gender: spouseGender,
+              ...(spouseGender !== "unknown" ? { genderSource: "CK3_LIVE_RELATIVE" } : {}),
+              relationType: "CURRENT_SPOUSE",
+              parentId,
+              sourceOwnerId: rootID,
+              source: "CK3_PARENT_SPOUSE",
+              sourceRelation: "parents.spouses",
+              publicStatus: "PUBLIC_LEGAL_MARRIAGE",
+              knowledgeStatus: "UNKNOWN",
+              campaignToken: gameData.campaignToken || null,
+              sourceSnapshotId: getSourceSnapshotId(),
+              children: []
+            };
+            const existing = parent.spouses.find((item) => Number(item.id) === spouseId);
+            if (!existing) parent.spouses.push(spouse);
+            else if (existing.name !== spouse.name || existing.gender !== spouse.gender
+              || existing.source !== spouse.source || existing.publicStatus !== spouse.publicStatus) existing.evidenceConflict = true;
+            break;
+          }
+          case "parent_spouse_child": {
+            const parentId = Number(data[1]);
+            const spouseId = Number(data[2]);
+            const childId = Number(data[3]);
+            const otherParentId = Number(data[6]);
+            const character = gameData.characters.get(rootID);
+            const parent = character?.parents?.find((item) => Number(item.id) === parentId
+              && item.publicStatus === "PUBLIC_LEGAL_PARENT"
+              && item.source === "CK3_DIRECT_PARENT"
+              && Number(item.sourceOwnerId) === rootID
+              && Number(item.childId) === rootID
+              && item.relationType === "parent"
+              && item.sourceRelation === "parents"
+              && item.campaignToken === gameData.campaignToken
+              && item.sourceSnapshotId === getSourceSnapshotId());
+            const spouse = parent?.spouses?.find((item) => Number(item.id) === spouseId
+              && item.relationType === "CURRENT_SPOUSE"
+              && item.source === "CK3_PARENT_SPOUSE"
+              && Number(item.sourceOwnerId) === rootID
+              && Number(item.parentId) === parentId
+              && item.sourceRelation === "parents.spouses"
+              && item.publicStatus === "PUBLIC_LEGAL_MARRIAGE"
+              && item.campaignToken === gameData.campaignToken
+              && item.sourceSnapshotId === getSourceSnapshotId());
+            const childGender = inferGenderFromPronoun(data[5]);
+            const otherParentGender = inferGenderFromPronoun(data[8]);
+            if (!spouse || !gameData.campaignToken || !getSourceSnapshotId()
+              || !Number.isSafeInteger(childId) || childId <= 0 || childId === rootID || childId === spouseId
+              || !Number.isSafeInteger(otherParentId) || otherParentId <= 0 || otherParentId === childId || otherParentId === spouseId
+              || !String(data[4] || "").trim() || !String(data[7] || "").trim() || data[9] !== "PUBLIC_LEGAL_PARENT") break;
+            const child = {
+              id: childId,
+              name: data[4],
+              sheHe: data[5] || "",
+              gender: childGender,
+              ...(childGender !== "unknown" ? { genderSource: "CK3_LIVE_RELATIVE" } : {}),
+              sourceOwnerId: rootID,
+              sourceParentId: parentId,
+              sourceSpouseId: spouseId,
+              relationType: "child",
+              source: "CK3_PARENT_SPOUSE_CHILD",
+              sourceRelation: "parents.spouses.children",
+              publicStatus: "PUBLIC_LEGAL_PARENT",
+              knowledgeStatus: "UNKNOWN",
+              campaignToken: gameData.campaignToken || null,
+              sourceSnapshotId: getSourceSnapshotId(),
+              parents: [
+                {
+                  id: spouseId,
+                  name: spouse.name,
+                  gender: spouse.gender,
+                  sourceOwnerId: rootID,
+                  childId,
+                  relationType: "parent",
+                  source: "CK3_PARENT_SPOUSE_CHILD",
+                  sourceRelation: "parents.spouses.children.spouseParent",
+                  publicStatus: "PUBLIC_LEGAL_PARENT",
+                  knowledgeStatus: "UNKNOWN",
+                  campaignToken: gameData.campaignToken || null,
+                  sourceSnapshotId: getSourceSnapshotId()
+                },
+                {
+                  id: otherParentId,
+                  name: data[7],
+                  gender: otherParentGender,
+                  ...(otherParentGender !== "unknown" ? { genderSource: "CK3_LIVE_RELATIVE" } : {}),
+                  sourceOwnerId: rootID,
+                  childId,
+                  relationType: "parent",
+                  source: "CK3_PARENT_SPOUSE_CHILD",
+                  sourceRelation: "parents.spouses.children.otherParent",
+                  publicStatus: "PUBLIC_LEGAL_PARENT",
+                  knowledgeStatus: "UNKNOWN",
+                  campaignToken: gameData.campaignToken || null,
+                  sourceSnapshotId: getSourceSnapshotId()
+                }
+              ]
+            };
+            const existing = spouse.children.find((item) => Number(item.id) === childId);
+            if (!existing) spouse.children.push(child);
+            else if (JSON.stringify(existing.parents) !== JSON.stringify(child.parents)
+              || existing.name !== child.name || existing.gender !== child.gender) existing.evidenceConflict = true;
+            break;
+          }
           case "parent_death":
             const parentId = Number(data[1]);
             const parentToUpdate = gameData.characters.get(rootID).parents.find((p) => p.id === parentId);
@@ -500,18 +674,30 @@ function createLogParser({ GameData, Character, onGameDataParsed = null }) {
               genderSource: "CK3_LIVE_RELATIVE",
               birthDateTotalDays: nonnegativeNumber(data[4]),
               birthDate: data[5],
+              ...parseRelativeAge(data, 6, gameData, rootID, "child", "children"),
               traits: [],
               maritalStatus: "unmarried",
               concubines: [],
               spouses: []
             };
+            currentChildOwnerId = rootID;
             gameData.characters.get(rootID).children.push(currentChild);
             break;
           case "kid_other_parent":
-            if (currentChild) {
+            if (currentChild && currentChildOwnerId === rootID && Number(data[1]) === Number(currentChild.id)) {
               currentChild.otherParent = {
                 id: Number(data[2]),
-                name: data[3]
+                otherParentId: Number(data[2]),
+                name: data[3],
+                parentGender: inferGenderFromPronoun(data[5]),
+                sourceOwnerId: rootID,
+                relationType: "parent",
+                source: "CK3_OTHER_PARENT",
+                sourceRelation: "kids.otherParent",
+                publicStatus: data[4] === "PUBLIC_LEGAL_PARENT" ? "PUBLIC_LEGAL_PARENT" : "UNKNOWN",
+                knowledgeStatus: "UNKNOWN",
+                campaignToken: gameData.campaignToken || null,
+                sourceSnapshotId: getSourceSnapshotId()
               };
             }
             break;
@@ -572,6 +758,7 @@ function createLogParser({ GameData, Character, onGameDataParsed = null }) {
             break;
           case "kid_eob":
             currentChild = null;
+            currentChildOwnerId = null;
             break;
           case "siblings":
             currentSibling = {
@@ -582,18 +769,30 @@ function createLogParser({ GameData, Character, onGameDataParsed = null }) {
               genderSource: "CK3_LIVE_RELATIVE",
               birthDateTotalDays: nonnegativeNumber(data[4]),
               birthDate: data[5],
+              ...parseRelativeAge(data, 6, gameData, rootID, "sibling", "siblings"),
               traits: [],
               maritalStatus: "unmarried",
               concubines: [],
               spouses: []
             };
+            currentSiblingOwnerId = rootID;
             gameData.characters.get(rootID).siblings.push(currentSibling);
             break;
           case "sibling_other_parent":
-            if (currentSibling) {
+            if (currentSibling && currentSiblingOwnerId === rootID && Number(data[1]) === Number(currentSibling.id)) {
               currentSibling.otherParent = {
                 id: Number(data[2]),
-                name: data[3]
+                otherParentId: Number(data[2]),
+                name: data[3],
+                parentGender: inferGenderFromPronoun(data[5]),
+                sourceOwnerId: rootID,
+                relationType: "parent",
+                source: "CK3_OTHER_PARENT",
+                sourceRelation: "siblings.otherParent",
+                publicStatus: data[4] === "PUBLIC_LEGAL_PARENT" ? "PUBLIC_LEGAL_PARENT" : "UNKNOWN",
+                knowledgeStatus: "UNKNOWN",
+                campaignToken: gameData.campaignToken || null,
+                sourceSnapshotId: getSourceSnapshotId()
               };
             }
             break;
@@ -654,6 +853,7 @@ function createLogParser({ GameData, Character, onGameDataParsed = null }) {
             break;
           case "sibling_eob":
             currentSibling = null;
+            currentSiblingOwnerId = null;
             break;
           case "persona_numbers":
             const character = gameData.characters.get(rootID);

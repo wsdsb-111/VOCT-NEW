@@ -176,6 +176,12 @@ const archivedChecks = [
 ];
 
 const releaseChecks = [
+  { group: "v9.3.7-age-calibration", script: "test-v9.3.7-age-calibration.js" },
+  { group: "v9.3.7-other-parent-graph", script: "test-v9.3.7-other-parent-graph.js" },
+  { group: "v9.3.7-independent-qa", script: "test-v9.3.7-independent-qa.js" },
+  { group: "v9.3.7-family-performance", script: "test-v9.3.7-family-performance.js" },
+  { group: "v9.3.7-step-family", script: "test-v9.3.7-step-family.js" },
+  { group: "v9.3.7-step-family-independent-qa", script: "test-v9.3.7-step-family-independent-qa.js" },
   { group: "v9.3.6.2-context-compatibility", script: "test-v9.3.6.2-context-compatibility.js" },
   { group: "v9.3.6.2-intent-scopes", script: "test-v9.3.6.2-intent-scopes.js" },
   { group: "v9.3.6.2-candidate-directory-qa", script: "test-v9.3.6.2-candidate-directory-qa.js" },

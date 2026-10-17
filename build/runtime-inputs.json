@@ -990,6 +990,10 @@
       "target": "out/main/worldline/shared-query-analyzer.js"
     },
     {
+      "source": "main/worldline/step-family-facts.js",
+      "target": "out/main/worldline/step-family-facts.js"
+    },
+    {
       "source": "main/worldline/subjective-prompt-context.js",
       "target": "out/main/worldline/subjective-prompt-context.js"
     },

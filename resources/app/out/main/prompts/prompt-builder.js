@@ -8,6 +8,8 @@ const { currentRelationship } = require("../memory-system/entity-context");
 const { isMemoryBudgetBlock } = require("../memory-system/memory-budget-policy");
 const { parseRelationIntent } = require("../worldline/relation-intent-parser");
 const { createTraitProfileView } = require("./trait-profile-selector");
+const { resolveCharacterAge } = require("../worldline/character-age-service");
+const { isStepFamilyQuery } = require("../worldline/step-family-facts");
 
 const traitProfileContexts = new WeakSet();
 
@@ -262,7 +264,7 @@ function createPromptBuilder({
     }
     static buildResponderGameFacts(char, gameData = null) {
       if (!char) return null;
-      const age = Number(char.age);
+      const age = resolveCharacterAge(char, { currentGameDate: gameData?.date, currentTotalDays: gameData?.totalDays, currentCampaignToken: gameData?.campaignToken }).age;
       const primaryTitle = typeof char.primaryTitle === "string" ? char.primaryTitle.trim() : "";
       const title = primaryTitle && !["None", "None of", "None von", "None de"].includes(primaryTitle) ? primaryTitle : "无主要头衔";
       const courtPosition = typeof char.heldCourtAndCouncilPositions === "string" && char.heldCourtAndCouncilPositions.trim() ? char.heldCourtAndCouncilPositions.trim() : "无";
@@ -271,7 +273,7 @@ function createPromptBuilder({
       return `=== 当前回应角色的权威游戏资料（本轮 CK3 数据） ===
   - 游戏姓名／称号：${char.fullName || char.shortName || "未知"}
   - 姓名：${char.shortName || char.firstName || "未知"}
-  - 年龄：${Number.isFinite(age) ? `${Math.floor(age)}岁` : "游戏未提供"}
+  - 年龄：${age !== null ? `${age}岁` : "游戏未提供"}
   - 主要头衔：${title}
   - 宫廷／议会职位：${courtPosition}
   - 头衔等级：${titleRank}
@@ -596,7 +598,8 @@ function createPromptBuilder({
       const memoryMode = options?.memoryMode;
       if (memoryMode === "exclude") memoryContext = this.createMemoryExcludedContext(memoryContext);
       const ageAuthorityGameData = gameData;
-      const profileView = createTraitProfileView(gameData, char, memoryContext);
+      const stepFamilyRequested = isStepFamilyQuery([...(history || [])].reverse().find(message => message.role === "user")?.content || "");
+      const profileView = createTraitProfileView(gameData, char, memoryContext, { includeStepFamily: stepFamilyRequested });
       gameData = profileView.gameData;
       char = profileView.character;
       const promptSettings = settingsRepository.getPromptSettings();
@@ -665,11 +668,13 @@ function createPromptBuilder({
       const responderGameFacts = this.buildResponderGameFacts(char, gameData);
       const latestUserQuery = [...workingHistory].reverse().find((message) => message.role === "user")?.content || "";
       const ageDiagnostics = [];
+      const familyDiagnostics = [];
       const responderFamilyFacts = buildFamilyFactBlock(char, gameData, {
         query: latestUserQuery,
         currentFactRegistry,
         ageAuthorityGameData,
-        ageDiagnostics
+        ageDiagnostics,
+        familyDiagnostics
       });
       const mentionedCharactersContext = memoryContext?.subjectiveWorldPolicyActive ? null : this.buildMentionedCharactersContext(char, gameData, workingHistory, currentFactRegistry);
       const responderGameFactsBlock = {
@@ -1071,6 +1076,7 @@ function createPromptBuilder({
         },
         omittedHistoryTokens: TokenCounter.calculateTotalTokens(omittedHistory),
         ageDiagnostics,
+        familyDiagnostics: familyDiagnostics.map(item => ({ ...item, tokenCount: TokenCounter.estimateTokens(responderFamilyFacts || "") })),
         staticTokens,
         dynamicTokens: blocksWithTokens.slice(firstDynamicBlock < 0 ? blocksWithTokens.length : firstDynamicBlock).reduce((total, tokenBlock) => total + (Number(tokenBlock.tokens) || 0), 0),
         globalStaticTokens: lifecycleTokens[PROMPT_LIFECYCLE.GLOBAL_STATIC],
