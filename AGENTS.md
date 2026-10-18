@@ -1,12 +1,14 @@
-V9.3.9 补充合同：2／3 人时间摘要 5 篇、4+ 人 3 篇，第三人始终全场共享 3 篇；完整动态摘要成功注入并完成请求后按回应者冻结到稳定前缀，跨场不继承、不扩大来源权限。Character Knowledge 独立于退役 Memory4，按 Campaign／Owner／Target／fact／来源修订隔离并在发送前复核。用户本轮只交付代码、自动化验证和 GitHub 上传，不执行真实 CK3／付费 Provider／Soak 或 GitHub Release。
+V9.3.9.1 当前修复补充（优先于下方 V9.3.9 历史状态）：只管理当前对话的定向人物披露；姓名、头衔、称号等仅按当前对话的合法披露记录，公开发言逐一记录给实际在场听众，私语仅指定人物，候场／缺席不追溯获知。外貌／身体沿用现有白名单，称号公开；当前可靠公开父母子女及亲兄弟姐妹（含公开半亲）可免披露互知特质，继亲及未暴露私生亲属关系不授权。撤下 Worldline 认知服务生产接线，不扫描全体人物；保留原生定向 knownSecrets、手动状态与发送前复核，不恢复 Memory4。V9.3.9 摘要召回／冻结／预算及关系来源合同保持。年龄仅移除稳定资料中过期年龄，真实“年龄 +1”仍 NOT_CONFIRMED。详见 docs/current/v9/V9_3_9_1_IMPLEMENTATION_REPORT.md 与 docs/current/v9/V9_3_9_1_HANDOFF.md。原停止时不连接 GitHub／远端 CI 的要求保留为历史记录；用户本轮已额外授权拉取 GitHub 并修复分支失败 CI，此为授权状态，不代表修复或 CI 已完成。真实 CK3、付费 Provider、Soak 与 GitHub Release 仍未执行。
 
-> 当前候选为 V9.3.9，沿用 V9.3.7 年龄／亲属事实与 V9.3.6.3 旧档兼容合同。玩家固定历史为完整 Recent2、合法官方追忆和完整合法玩家关系事项簿；明确玩家历史分句可并用双人／三人最多 5 篇、4+ 人最多 3 篇时间摘要和跨目标共享最多 3 篇第三人历史。2／3／4+ 人预算为 65%／70%／75% 和 80,000／84,000／96,000 Token 上限，实际取 Provider 当前余量允许值。来源无法完整容纳时先压缩较旧对话，仍超限则 transport 前暂停并展示所需、可用及分项预算，不得静默裁剪／遗漏。上下文提示按当前配置窗口动态显示逐对话、逐回应者及逐轮剩余量，估算与最近请求实际用量分开标注。当前版本及收口报告由根 README.md 和 docs/README.md 索引。otherParent 不扩大 Memory 权限，未验证的日历年龄仅作诊断。CK3／Provider／Soak／远端 CI 分开签署；V9.3.7 `9caffe6` 的远端失败保留为该 SHA 历史证据，不能写成 V9.3.9 的未执行或 PASS。
+V9.3.9 摘要补充合同：2／3 人时间摘要上限 5 篇、4+ 人 3 篇，第三人摘要全场共享最多 3 篇；完整动态摘要成功注入并完成请求后按回应者冻结到稳定前缀，跨场不继承且不扩大来源权限。Character Knowledge 独立于已退役 Memory4，按 Campaign／Owner／Target／fact／来源修订隔离并在发送前复核。
+
+> V9.3.9 摘要与兼容合同（V9.3.9.1 沿用），依据 V9.3.7 年龄／亲属事实与 V9.3.6.3 旧档兼容合同。玩家固定历史为完整 Recent2、合法官方追忆和完整合法玩家关系事项簿；明确玩家历史分句可并用双人／三人最多 5 篇、4+ 人最多 3 篇时间摘要和跨目标共享最多 3 篇第三人历史。2／3／4+ 人预算为 65%／70%／75% 和 80,000／84,000／96,000 Token 上限，实际取 Provider 当前余量允许值。来源无法完整容纳时先压缩较旧对话，仍超限则 transport 前暂停并展示所需、可用及分项预算，不得静默裁剪／遗漏。上下文提示按当前配置窗口动态显示逐对话、逐回应者及逐轮剩余量，估算与最近请求实际用量分开标注。当前版本及收口报告由根 README.md 和 docs/README.md 索引。otherParent 不扩大 Memory 权限，未验证的日历年龄仅作诊断。CK3／Provider／Soak／远端 CI 分开签署；V9.3.7 `9caffe6` 的远端失败保留为该 SHA 历史证据，不能写成 V9.3.9 的未执行或 PASS。
 
 # Repository Guidelines
 
 ## 项目定位与结构
 
-本仓库是面向 Crusader Kings III 的 Windows 打包版 VOTC Electron 应用。当前文档入口跟踪 V9.3.9 玩家记忆与上下文预算候选；实施结果以 [V9.3.9 实施报告](docs/current/v9/V9_3_9_IMPLEMENTATION_REPORT.md)为准，兼容与来源合同见 [索引与来源合同](docs/current/v9/V9_3_5_INDEX_AND_SOURCE_CONTRACT.md)。V9.3.7 年龄／亲属报告及后续收口继续作为历史证据；GitHub `9caffe6` 发布回归已失败，仍归属于该 SHA。实机与外部验收单列，映射、构建、部署和门禁证据按 V9.3.9 实际结果更新；真实 CK3、游戏内 Provider、Soak 尚待独立验收；远端 CI 按具体 SHA 和 run 记录，不能宣称 Full Freeze。V9.3.4 报告保留为历史证据。
+本仓库是面向 Crusader Kings III 的 Windows 打包版 VOTC Electron 应用。当前文档入口跟踪 V9.3.9.1 定向披露修复候选；最新实施与验证状态以 [V9.3.9.1 实施报告](docs/current/v9/V9_3_9_1_IMPLEMENTATION_REPORT.md)为准，V9.3.9 摘要合同及兼容与来源合同见 [V9.3.9 实施报告](docs/current/v9/V9_3_9_IMPLEMENTATION_REPORT.md)和[索引与来源合同](docs/current/v9/V9_3_5_INDEX_AND_SOURCE_CONTRACT.md)。V9.3.7 年龄／亲属报告及后续收口继续作为历史证据；GitHub `9caffe6` 发布回归已失败，仍归属于该 SHA。实机与外部验收单列，映射、构建、部署和门禁证据按 V9.3.9.1 实际结果更新；真实 CK3、游戏内 Provider、Soak 尚待独立验收；远端 CI 按具体 SHA 和 run 记录，不能宣称 Full Freeze。V9.3.4 报告保留为历史证据。
 
 历史 V9.2.1 缓存专项曾作为安全／诊断候选，证据见 docs/current/v9/V9_2_1_VERIFICATION_REPORT.md。其 Durable Policy、Forget 和 GLM v813 结论仅代表当时状态；Durable 已由 V9.3.4 彻底退役。V9.2 6026713 的远端 CI 成功记录继续保留为历史证据。
 
@@ -17,9 +19,9 @@ V9.3.9 补充合同：2／3 人时间摘要 5 篇、4+ 人 3 篇，第三人始�
 - resources/app/default_userdata/ 保存默认 Prompt、本地化和标准 Action；它不是用户运行时数据目录。
 - scripts/ 保存迁移工具、专项回归和发布门禁；scripts/test-manifest.js 是测试清单的唯一编排入口。
 - docs/README.md 是文档入口，docs/V8阶段开发记录.md 是 V8 连续实施记录，docs/README_摘要系统.md 是摘要/Memory 合同；根目录 CHANGELOG.md 只维护版本索引和用户可见摘要。
-- VOTC.exe 是复用打包壳，Windows 文件属性版本未重写。V9.3.9 是候选而非验收完成声明；正式项目／核心、App 包与 UI 版本号以包元数据和最终报告为准。前端记忆入口显示 `Legacy Summary`；Workshop 2.0.5、协议 3.0、摘要存储 2.5 与 Official Action 2.0.3 保持。Memory Engine 4.0 不再是在线功能标签。
+- VOTC.exe 是复用打包壳，Windows 文件属性版本未重写。V9.3.9.1 是候选而非验收完成声明；正式项目／核心、App 包与 UI 版本号以包元数据和最终报告为准。前端记忆入口显示 `Legacy Summary`；Workshop 2.0.5、协议 3.0、摘要存储 2.5 与 Official Action 2.0.3 保持。Memory Engine 4.0 不再是在线功能标签。
 
-## 当前 V9.3.9 候选与沿用的记忆合同
+## V9.3.9.1 沿用的记忆合同
 
 - V9.3 Provider Platform 候选合同见 docs/current/v9/V9_3_VERIFICATION_REPORT.md。Chat/Action/Summary 统一 Facade；能力 UNKNOWN 保留证据，明确 UNSUPPORTED 发送前阻止；只有 STOP/COMPLETE 进入严格业务。SDK 隐式重试为 0，显式生成最多 2 次且未知送达／部分流不透明重发；每次真实 transport 前复核 Forget/来源及同步预算。原生用量与估算分开，缺失字段不可当 0，非法字段不可被 DERIVED 掩盖。此 Provider 记录不恢复已退役的 Durable 写入。
 

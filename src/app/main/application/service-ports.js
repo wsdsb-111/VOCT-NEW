@@ -16,7 +16,7 @@ const APPLICATION_SERVICE_METHODS = Object.freeze({
   worldline: Object.freeze([
     "getPromptContext", "getSubjectivePromptContextAsync", "getCheckpointStatus"
   ]),
-  characterKnowledge: Object.freeze(["getDisclosureProfile", "getOwnerView", "getTargetView", "setManualStatus"]),
+  characterKnowledge: Object.freeze(["getDisclosureProfile", "getConversationView", "getOwnerView", "getTargetView", "setManualStatus", "recordConversation"]),
   action: Object.freeze(["evaluateForCharacter", "runInvocation"]),
   letter: Object.freeze(["processLatestLetter", "clearLettersFile", "getAllLetterStatuses"])
 });

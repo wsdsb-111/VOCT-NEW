@@ -1,5 +1,7 @@
 # VOTC 版本变更入口
 
+V9.3.9.1 本地修复候选：只恢复当前对话人物的定向披露与手动特质认知；公开披露逐一记录给实际在场听众，私语仅指定对象，候场／缺席不追溯获知。姓名、头衔和称号按合法当前对话披露记录，称号公开；沿用外貌／身体白名单，只有当前可靠公开父母子女及亲兄弟姐妹（含公开半亲）可免披露互知特质，继亲和未暴露私生亲属关系不授权。撤下 Worldline 认知生产接线；V9.3.9 摘要召回、冻结、预算及来源合同保持。稳定资料旧年龄已移除，真实“年龄 +1”仍 NOT_CONFIRMED。原停止时“不连接 GitHub／远端 CI”保留为历史；用户本轮已额外授权拉取 GitHub 并修复分支失败 CI，完成状态以实际结果记录。真实 CK3、付费 Provider、Soak、GitHub Release 未执行。详见[修复报告](docs/current/v9/V9_3_9_1_IMPLEMENTATION_REPORT.md)和[交接记录](docs/current/v9/V9_3_9_1_HANDOFF.md)。
+
 V9.3.8.1 开发方案（已并入 V9.3.9）：拟将双人／三人时间摘要上限提升至 5，第三人摘要维持 3；4 人及以上维持 3+3，人数硬上限调整为 80,000／84,000／96,000 Token。成功动态召回将按回应者冻结全文并放入稳定 Prompt 前缀，供本场后续轮次复用。此条目保留原设计合同，实施结果由 V9.3.9 报告承接；详见 [开发方案](docs/current/v9/V9_3_8_1_DEVELOPMENT_SPEC.md)。
 
 V9.3.8 本地候选收口：玩家记忆与上下文合同、单行 UI、290 项 build/stage/deploy/deployed verify、独立 VM QA 和 6 张原生窗口截图通过；完整 release regression session 8943 exit 0，446 release groups PASS。此前 68 组 service-port 接线、102 组旧 8K 省略断言、181 组过期 V9.3.7 前端版本正则失败及修正见实施报告；181 组时应用／renderer 版本已正确。Provider 原生 usage 未实测；真实 CK3、游戏内 Provider 与 Soak 待验收。清单库存 574 tests、446 release groups、127 historical entries。远端 CI 按用户要求暂缓（NOT_RUN）；本地门禁 PASS 不代表 Full Freeze。

@@ -82,7 +82,7 @@ check("production custom template includes only scoped direct observations for o
   assert(text.includes("OTHER=Target:Beautiful,One-eyed,||"), text);
   assert.equal(JSON.stringify([...sample.data.characters]), before, "prompt routing must not alter runtime character data");
 });
-check("raw observable traits remain absent without current direct-observation disclosure", () => {
+check("raw observable traits remain absent without actual presence or disclosure", () => {
   const sample = fixture();
   const view = selector.createTraitProfileView(sample.data, sample.responder);
   assert.deepEqual(view.gameData.getPlayer().traits, []);
@@ -102,7 +102,7 @@ check("nested family and custom script receive the same scoped profile", () => {
       campaignToken: sample.data.campaignToken, sourceSnapshotId: `${sample.data.date}/${sample.data.totalDays}` } }];
   const view = selector.createTraitProfileView(sample.data, sample.responder);
   assert.equal(Object.getPrototypeOf(view.gameData), GameData.prototype);
-  assert.deepEqual(view.character.children[0].traits, [], "off-scene relatives do not inherit the responder's observations");
+  assert.deepEqual(view.character.children[0].traits, [], "a relative absent from current character bindings does not inherit observations");
   assert.equal(view.character.children[0].personality, undefined);
   assert.deepEqual(view.character.children[0].secrets, []);
   assert.equal(view.character.personality, sample.responder.personality);
@@ -142,17 +142,19 @@ check("retired Memory4 Packet evidence is never read or used to restore traits",
   const sample = fixture();
   const memory4Packet = { get details() { throw new Error("retired Memory4 Packet must not be read"); } };
   const view = selector.createTraitProfileView(sample.data, sample.responder, { ...memoryContext(), memory4Packet });
-  assert.deepEqual(view.gameData.getPlayer().traits, []);
+  assert.deepEqual(view.gameData.getPlayer().traits.map(value => value.name), ["Beautiful", "One-eyed"],
+    "the existing in-person whitelist is independent of the unread retired Packet");
   sample.responder.relationsToPlayer = ["friend"];
   const relationshipOnly = selector.createTraitProfileView(sample.data, sample.responder, { ...memoryContext(), memory4Packet });
-  assert.deepEqual(relationshipOnly.gameData.getPlayer().traits, [], "relationship recognition alone does not disclose hidden traits");
+  assert.deepEqual(relationshipOnly.gameData.getPlayer().traits.map(value => value.name), ["Beautiful", "One-eyed"],
+    "friendship adds no hidden traits beyond the actual-presence whitelist");
 });
-check("raw known secrets require a verified responder disclosure before restoring their exact trait", () => {
+check("current-log known secrets retain exact responder-target proof independently of Worldline", () => {
   const sample = fixture();
   sample.responder.knownSecrets = [{ type: "secret_bastard", ownerId: 1 }];
   sample.player.knownSecrets = [{ type: "secret_witch", ownerId: 2 }];
-  assert.deepEqual(selector.createTraitProfileView(sample.data, sample.responder).gameData.getPlayer().traits, [],
-    "raw knownSecrets cannot bypass the current knowledge service");
+  assert.deepEqual(selector.createTraitProfileView(sample.data, sample.responder).gameData.getPlayer().traits.map(value => value.name), ["Bastard"],
+    "the restored pre-V9.3.9 native proof grants only its exact trait to this owner");
   const verifiedKnowledge = { disclosureProfiles: new Map([[1, [{ campaignToken: sample.data.campaignToken,
     ownerId: 2, entityId: 1, factType: "TRAIT", factKey: "trait_bastard", status: "AUTO_DISCLOSED",
     current: true, effectiveKnown: true, firstAcquiredDate: sample.data.date }]]]) };

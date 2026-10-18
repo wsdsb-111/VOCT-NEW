@@ -1166,6 +1166,14 @@
       "target": "out/main/conversation/character-disclosure-context.js"
     },
     {
+      "source": "main/conversation/character-disclosure-store.js",
+      "target": "out/main/conversation/character-disclosure-store.js"
+    },
+    {
+      "source": "main/conversation/character-disclosure-extraction.js",
+      "target": "out/main/conversation/character-disclosure-extraction.js"
+    },
+    {
       "source": "main/memory-system/dynamic-summary-freeze.js",
       "target": "out/main/memory-system/dynamic-summary-freeze.js"
     },

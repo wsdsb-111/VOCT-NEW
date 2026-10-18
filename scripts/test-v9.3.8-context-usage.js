@@ -180,7 +180,7 @@ function testRendererAndBridgeExposeInlineContextAndOverflow() {
   const renderer = fs.readFileSync(path.join(__dirname, "../src/app/renderer/assets/index-Dn3qWlAB.js"), "utf8");
   const css = fs.readFileSync(path.join(__dirname, "../src/app/renderer/ui-comfort.css"), "utf8");
   const preload = fs.readFileSync(path.join(__dirname, "../src/app/preload/preload.js"), "utf8");
-  assert(renderer.includes('const VOTC_FEATURE_VERSION = "V9.3.9"'));
+  assert(renderer.includes(`const VOTC_FEATURE_VERSION = "V${require("../package.json").version}"`));
   assert(renderer.includes("ContextUsageIndicator"));
   assert(renderer.includes("inputHeadroomBeforeSendTokens"));
   assert(renderer.includes("memory-budget-overflow-grid"));

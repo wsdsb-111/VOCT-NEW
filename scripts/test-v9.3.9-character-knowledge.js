@@ -193,16 +193,22 @@ try {
   assert.equal(service.getDisclosureProfile(reaffirmed.scope).status, "BLOCKED");
 
   const servicePorts = require("../src/app/main/application/service-ports");
+  // V9.3.9.1 leaves the checkpoint implementation above as historical proof;
+  // production ports now bind the conversation-scoped disclosure adapter.
+  const { ConversationDisclosureStore } = require("../src/app/main/conversation/character-disclosure-store");
+  const disclosureStore = new ConversationDisclosureStore({ dataDir: tempDir, getCurrentConversation: () => null });
   const ports = servicePorts.createApplicationServices({
     conversation: { createConversation() {}, getCurrentConversation() {}, sendMessage() {}, endCurrentConversation() {}, flushFinalizations() {}, hasPendingFinalizations() {}, getContextUsageSnapshot() {}, onContextUsageUpdate() {} },
     presence: { getConversationState() {}, joinWaitingCharacter() {}, leavePresentCharacter() {}, temporarilyLeaveCharacter() {}, returnTemporaryCharacter() {} },
     memory: { retrieveForResponder() {}, finalizeConversation() {}, forgetSummaryProjection() {}, recoverPendingFinalizations() {} },
     worldline: { getPromptContext() {}, getSubjectivePromptContextAsync() {}, getCheckpointStatus() {} },
-    characterKnowledge: service,
+    characterKnowledge: disclosureStore,
     action: { evaluateForCharacter() {}, runInvocation() {} },
     letter: { processLatestLetter() {}, clearLettersFile() {}, getAllLetterStatuses() {} }
   });
   assert.equal(typeof ports.characterKnowledge.getDisclosureProfile, "function");
+  assert.equal(ports.characterKnowledge.getConversationView().available, false, "the production adapter requires an active conversation");
+  assert.equal(ports.characterKnowledge.getDisclosureProfile({ ownerRuntimeId: "1", targetRuntimeId: "2" }).status, "BLOCKED");
 
   const source = fs.readFileSync(path.join(__dirname, "../src/app/main/worldline/character-knowledge-service.js"), "utf8");
   assert.doesNotMatch(source, /archiveSidecar|Memory4|Durable Planner|memory4-manager/i);

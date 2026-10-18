@@ -51,6 +51,17 @@
   min-width: min(320px, 100%);
 }
 
+.character-knowledge-picker {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  margin: 12px 18px 4px 0;
+}
+
+.character-knowledge-picker select {
+  min-width: min(280px, 100%);
+}
+
 .character-knowledge-facts {
   display: grid;
   gap: 8px;
@@ -127,7 +138,8 @@
     justify-self: start;
   }
 
-  .character-knowledge-target-picker {
+  .character-knowledge-target-picker,
+  .character-knowledge-picker {
     align-items: flex-start;
     flex-direction: column;
   }

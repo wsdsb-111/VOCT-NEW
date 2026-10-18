@@ -1,6 +1,6 @@
 import { WorldMemoryEditor } from "../world-memory-editor.js";
 import { getLegacySummaryPage, getSummaryDisplayEntries, getSummaryImportantMatters } from "../summary-date-order.js";
-const VOTC_FEATURE_VERSION = "V9.3.9";
+const VOTC_FEATURE_VERSION = "V9.3.9.1";
 const VOTC_WORKSHOP_MOD_VERSION = "2.0.5";
 function getDefaultExportFromCjs(x) {
   return x && x.__esModule && Object.prototype.hasOwnProperty.call(x, "default") ? x["default"] : x;
@@ -21269,15 +21269,13 @@ const PairLongTermUiMount = (props) => {
   }, [props.mode, props.ownerId, props.counterpartId, props.refreshToken]);
   return /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "pair-long-term-ui-host", ref: hostRef });
 };
-const CharacterKnowledgeUiMount = (props) => {
+const CharacterKnowledgeUiMount = () => {
   const hostRef = reactExports.useRef(null);
-  const latestProps = reactExports.useRef(props);
-  latestProps.current = props;
   reactExports.useEffect(() => {
     const mount = window.VOTCCharacterKnowledgeUi?.mount;
     if (!hostRef.current || typeof mount !== "function") return void 0;
-    return mount(hostRef.current, latestProps.current);
-  }, [props.ownerRuntimeId, props.refreshToken]);
+    return mount(hostRef.current);
+  }, []);
   return /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "character-knowledge-ui-host", ref: hostRef });
 };
 const SummariesManager = () => {
@@ -21652,6 +21650,7 @@ const SummariesManager = () => {
         /* @__PURE__ */ jsxRuntimeExports.jsx("button", { type: "button", onClick: handleClearSummaries, disabled: isLoadingSummaries || isClearing || summaryGroups.length === 0, className: "danger-button", children: isClearing ? t("summaries.clearing") : t("summaries.clearAllSummaries") })
       ] })
     ] }),
+    /* @__PURE__ */ jsxRuntimeExports.jsx(CharacterKnowledgeUiMount, {}),
     clearResult && /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: `clear-result ${clearResult.success ? "success" : "error"}`, children: clearResult.message }),
     retryResult && /* @__PURE__ */ jsxRuntimeExports.jsx("p", { role: "status", className: "help-text", children: retryResult }),
     (recoveryStatus.pending > 0 || recoveryStatus.running) && /* @__PURE__ */ jsxRuntimeExports.jsx("p", { role: "status", className: "help-text", children: `待恢复：对话摘要 ${recoveryStatus.narrativePending || 0} 场，信件归档 ${recoveryStatus.letterPending || 0} 封。${recoveryStatus.running ? "后台正在生成，完成后请刷新。" : recoveryStatus.balanceBlocked ? "服务商报告余额不足；充值或更换摘要模型后重试。" : "可点击“重试失败摘要/信件归档”；已提交结果不重生成，已接受信件不重发。"}` }),
@@ -21754,11 +21753,6 @@ const SummariesManager = () => {
               counterpartName: summaryPersonName(metadata.counterpartName || metadata.characterName) })),
             refreshToken: ledgerRefreshRevision,
             onLocateSource: (resolvedSource, item) => handleLocateResolvedSource(resolvedSource, item)
-          }),
-          /* @__PURE__ */ jsxRuntimeExports.jsx(CharacterKnowledgeUiMount, {
-            key: `character-knowledge-${playerId}`,
-            ownerRuntimeId: Number(playerId),
-            refreshToken: ledgerRefreshRevision
           }),
           playerSummaries.map((metadata) => {
           const characterKey = `${metadata.playerId}-${metadata.characterId}`;

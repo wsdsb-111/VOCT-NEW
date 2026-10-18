@@ -26,8 +26,8 @@ function buildCharacterDisclosureContext({ service, gameData, responderId, targe
       continue;
     }
     const evidencePrefix = gameData.campaignToken + "|" + currentDate + "/" + gameData.totalDays + "|";
-    const facts = (profile.facts || []).filter(fact => ["TRAIT", "TITLE"].includes(fact.factType)
-      && ["KNOWN", "MANUAL_KNOWN", "MANUAL_HIDDEN"].includes(fact.status)
+    const facts = (profile.facts || []).filter(fact => ["NAME", "NICKNAME", "TRAIT", "TITLE"].includes(fact.factType)
+      && ["KNOWN", "AUTO_DISCLOSED", "MANUAL_KNOWN", "MANUAL_HIDDEN"].includes(fact.status)
       && (fact.evidenceSourceSnapshotId
         ? fact.evidenceSourceSnapshotId.startsWith(evidencePrefix)
           && /^[a-f0-9]{16}$/.test(fact.evidenceSourceSnapshotId.slice(evidencePrefix.length))

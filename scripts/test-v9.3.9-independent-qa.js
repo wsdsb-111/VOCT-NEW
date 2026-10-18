@@ -213,20 +213,23 @@ function testCharacterKnowledgePromptBoundary() {
     const futureGameData = { ...currentGameData, date: "1200.1.2", totalDays: currentGameData.totalDays + 1 };
     const futureOwnerContext = buildCharacterDisclosureContext({ service, gameData: futureGameData, responderId: 2, targetIds: [3] });
     const futureOwner = createTraitProfileView(futureGameData, futureGameData.characters.get(2), futureOwnerContext).gameData.characters.get(3);
-    assert.deepEqual(futureOwner.traits, [], "checkpoint-date mismatch blocks a current-secret disclosure");
+    assert.equal(futureOwnerContext.disclosureProfiles.size, 0, "checkpoint-date mismatch still blocks checkpoint-derived facts");
+    assert.deepEqual(futureOwner.traits, ["witch"], "V9.3.9.1 restores the pre-V9.3.9 current-log Owner -> Target proof independently of Worldline");
 
     worldlineService.freshnessStatus = "STALE";
     const staleCheckpointContext = buildCharacterDisclosureContext({ service, gameData: currentGameData, responderId: 2, targetIds: [3] });
     const staleCheckpoint = createTraitProfileView(currentGameData, currentGameData.characters.get(2), staleCheckpointContext)
       .gameData.characters.get(3);
-    assert.deepEqual(staleCheckpoint.traits, [], "a stale checkpoint blocks raw knownSecrets from bypassing the disclosure service");
+    assert.equal(staleCheckpointContext.disclosureProfiles.size, 0, "a stale checkpoint supplies no disclosure facts");
+    assert.deepEqual(staleCheckpoint.traits, ["witch"], "a stale Worldline checkpoint does not revoke an independent current-log known-secret proof");
     worldlineService.freshnessStatus = "FRESH";
 
     fs.writeFileSync(autosavePath, "v939-autosave-file-changed");
     const staleAutosaveContext = buildCharacterDisclosureContext({ service, gameData: currentGameData, responderId: 2, targetIds: [3] });
     const staleAutosave = createTraitProfileView(currentGameData, currentGameData.characters.get(2), staleAutosaveContext)
       .gameData.characters.get(3);
-    assert.deepEqual(staleAutosave.traits, [], "a changed autosave blocks raw knownSecrets from bypassing the disclosure service");
+    assert.equal(staleAutosaveContext.disclosureProfiles.size, 0, "a changed autosave supplies no checkpoint-derived facts");
+    assert.deepEqual(staleAutosave.traits, ["witch"], "a changed Worldline autosave does not revoke an independent current-log known-secret proof");
   } finally {
     fs.rmSync(dataDir, { recursive: true, force: true });
   }

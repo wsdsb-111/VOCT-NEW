@@ -176,6 +176,13 @@ const archivedChecks = [
 ];
 
 const releaseChecks = [
+  { group: "v9.3.9.1-disclosure-extraction", script: "test-v9.3.9.1-disclosure-extraction.js" },
+  { group: "v9.3.9.1-disclosure-store", script: "test-v9.3.9.1-disclosure-store.js" },
+  { group: "v9.3.9.1-knowledge-ui", script: "test-v9.3.9.1-knowledge-ui.js" },
+  { group: "v9.3.9.1-age-prompt", script: "test-v9.3.9.1-age-prompt.js" },
+  { group: "v9.3.9.1-mother-knowledge", script: "test-v9.3.9.1-mother-knowledge.js" },
+  { group: "v9.3.9.1-trait-access", script: "test-v9.3.9.1-trait-access.js" },
+  { group: "v9.3.9.1-independent-qa", script: "test-v9.3.9.1-independent-qa.js" },
   { group: "v9.3.9-dynamic-freeze", script: "test-v9.3.9-dynamic-freeze.js" },
   { group: "v9.3.9-disclosure-prompt", script: "test-v9.3.9-disclosure-prompt.js" },
   { group: "v9.3.9-kinship", script: "test-v9.3.9-kinship.js" },

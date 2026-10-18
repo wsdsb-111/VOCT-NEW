@@ -129,18 +129,23 @@ function registerIpcHandlers(runtime) {
   }
   const characterKnowledge = services?.characterKnowledge || characterKnowledgeService;
   if (characterKnowledge) {
+    electron.ipcMain.handle("characterKnowledge:getConversationView", () => characterKnowledge?.getConversationView?.()
+      || { available: false, participants: [], reason: "character_knowledge_conversation_unavailable" });
     electron.ipcMain.handle("characterKnowledge:getOwnerView", (_event, payload) => characterKnowledge.getOwnerView({
+      conversationId: payload?.conversationId ?? null,
       ownerRuntimeId: payload?.ownerRuntimeId,
       campaignToken: payload?.campaignToken,
       sourceSnapshotId: payload?.sourceSnapshotId
     }));
     electron.ipcMain.handle("characterKnowledge:getTargetView", (_event, payload) => characterKnowledge.getTargetView({
+      conversationId: payload?.conversationId ?? null,
       campaignToken: payload?.campaignToken,
       ownerRuntimeId: payload?.ownerRuntimeId,
       targetRuntimeId: payload?.targetRuntimeId,
       sourceSnapshotId: payload?.sourceSnapshotId
     }));
     electron.ipcMain.handle("characterKnowledge:setManualStatus", (_event, payload) => characterKnowledge.setManualStatus({
+      conversationId: payload?.conversationId ?? null,
       campaignToken: payload?.campaignToken,
       ownerRuntimeId: payload?.ownerRuntimeId,
       targetRuntimeId: payload?.targetRuntimeId,

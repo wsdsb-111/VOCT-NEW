@@ -1022,8 +1022,22 @@ class Conversation {
   getCharacterDisclosureContext(npc, additionalTargets = []) {
     return buildCharacterDisclosureContext({
       service: applicationServices?.characterKnowledge, gameData: this.gameData, responderId: npc.id,
-      targetIds: [...this.gameData.characters.keys(), ...additionalTargets]
+      targetIds: [this.gameData.playerID, ...(this.selectedCharacterIds || []), ...additionalTargets]
     });
+  }
+  recordCharacterDisclosures() {
+    const service = applicationServices?.characterKnowledge;
+    if (typeof service?.recordConversation !== "function") return;
+    const participants = [this.gameData.playerID, ...(this.selectedCharacterIds || [])].map(id => this.gameData.characters.get(Number(id)))
+      .filter(Boolean).map(person => ({ id: Number(person.id), name: person.shortName || person.fullName || person.name }));
+    try {
+      service.recordConversation({ conversation: this, context: {
+        conversationId: this.id, campaignToken: this.gameData.campaignToken, date: this.gameData.date,
+        messages: this.getHistory(), participants, participantPresence: this.memoryState?.participantPresence || []
+      } });
+    } catch (error) {
+      console.error("[CharacterDisclosure] Recording failed", /^character_knowledge_[a-z_]+$/.test(error.message) ? error.message : "persistence_failed");
+    }
   }
   estimateTokenCount(messages) {
     return TokenCounter.calculateTotalTokens(messages);
@@ -1796,6 +1810,7 @@ class Conversation {
         throw new Error("Bad LLM response format");
       }
       if (this.isResponseCurrent(responseState, npc)) this.retainDynamicSummaryRecall(npc.id, msgId, promptBuild, turnEpoch);
+      if (streamCompleted && !wasCancelled && this.isResponseCurrent(responseState, npc)) this.recordCharacterDisclosures();
       if (chatCachedTokens != null) memoryEngine.trace.record("provider_cache_usage", { characterId: npc.id, conversationId: this.id, cachedTokens: chatCachedTokens });
     } catch (error) {
       require("../memory-system/dynamic-summary-freeze").discardPendingSources(this.memoryState?.responderRecallCache, npc.id, turnEpoch);
@@ -2176,6 +2191,7 @@ class Conversation {
     });
     this.messages.push(userMsg);
     memoryEngine?.observeParticipants(this, turnState.activeParticipantIds, userMsg.id);
+    this.recordCharacterDisclosures();
     if (this.memoryState?.turnRecallCache instanceof Map) this.memoryState.turnRecallCache.clear();
     this.emitUpdate();
     this.fillNpcQueue();
@@ -2244,6 +2260,7 @@ class Conversation {
     const prefixMessages = new Set(this.messages.slice(0, targetIndex));
     for (const message of tailMessages) this.generationAttemptsByMessageId.delete(message.id);
     this.messages = this.messages.filter(message => prefixMessages.has(message));
+    this.recordCharacterDisclosures();
 
     const generateFollowing = settingsRepository.getGenerateFollowingMessagesSetting();
     if (generateFollowing) {
@@ -2332,10 +2349,12 @@ class Conversation {
       for (let i = this.messages.length - 1; i >= targetIndex; i--) {
         this.messages.splice(i, 1);
       }
+      this.recordCharacterDisclosures();
       this.emitUpdate();
       await this.sendMessage(newContent);
     } else {
       targetMessage.content = newContent;
+      this.recordCharacterDisclosures();
       this.emitUpdate();
     }
   }

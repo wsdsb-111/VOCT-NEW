@@ -1,10 +1,12 @@
 # VOTC 文档索引
 
-V9.3.9 为当前代码候选，合并 V9.3.8.1 的动态摘要冻结、5+3 额度和 80,000／84,000／96,000 Token 合同，以及导入的 V9.3.7.1 亲属、年龄诊断、人物认知和 CI 修复。当前实施证据见 [V9.3.9 实施报告](current/v9/V9_3_9_IMPLEMENTATION_REPORT.md)，任务映射见 [合并计划](current/v9/V9_3_9_IMPLEMENTATION_PLAN.md)。本轮按用户要求只完成代码／自动验证与 GitHub 上传，真实 CK3／Provider／Soak／正式 Release 分开交接。
+V9.3.9.1 为当前本地修复候选，范围仅限当前对话的定向人物披露与特质认知：公开披露逐一记录给实际在场听众，私语仅指定人物，候场／缺席不追溯获知；外貌／身体沿用白名单，称号公开；只有当前可靠公开父母子女与亲兄弟姐妹（含公开半亲）可免披露互知特质，继亲和未暴露私生亲属关系不授权。撤下 Worldline 认知服务生产接线，不扫描全体人物；V9.3.9 摘要配额、预算、召回、冻结和来源合同保持。稳定资料旧年龄已移除，真实“年龄 +1”仍因缺实机分层证据而 NOT_CONFIRMED。原停止时不连接 GitHub／远端 CI 的要求保留为历史；用户本轮已额外授权拉取 GitHub 并修复分支失败 CI，授权不代表工作已完成。真实 CK3、付费 Provider、Soak、GitHub Release 未执行。当前证据见 [V9.3.9.1 修复实施与验证报告](current/v9/V9_3_9_1_IMPLEMENTATION_REPORT.md)；V9.3.9 基线见 [实施报告](current/v9/V9_3_9_IMPLEMENTATION_REPORT.md)。
 
 ## 推荐阅读顺序
 
-1. [V9.3.9 合并计划](current/v9/V9_3_9_IMPLEMENTATION_PLAN.md)与[实施报告](current/v9/V9_3_9_IMPLEMENTATION_REPORT.md)：代码范围、实际验证和外部交接。
+继续未完成的 V9.3.9.1 工作时，先读 [交接记录](current/v9/V9_3_9_1_HANDOFF.md)：它保留原停止时工作区、构建与验证状态；本轮新增的 GitHub／失败 CI 授权及实际结果另行记录。
+
+1. [V9.3.9.1 修复报告](current/v9/V9_3_9_1_IMPLEMENTATION_REPORT.md)：P0 定向披露、P1 年龄边界、P2 母亲身份证据及验证结果；[V9.3.9 报告](current/v9/V9_3_9_IMPLEMENTATION_REPORT.md)为历史基线。
 2. [源码与构建](current/v9/V9_1_SOURCE_BUILD.md)：先编辑 src/app，再构建和验证生成资源。
 3. [Legacy Summary](README_摘要系统.md)：Recent2、全场动态配额、来源复验与冻结复用。
 4. [索引与来源合同](current/v9/V9_3_5_INDEX_AND_SOURCE_CONTRACT.md)：既有存储／IPC 兼容边界。
@@ -12,7 +14,7 @@ V9.3.9 为当前代码候选，合并 V9.3.8.1 的动态摘要冻结、5+3 额�
 
 ## 历史版本与阶段快照
 
-以下保留各版本当时的实现和验收快照；旧段落中的“当前”“下一步”、Memory4 和配额只指该阶段，不覆盖顶部 V9.3.9 合同。
+以下保留各版本当时的实现和验收快照；旧段落中的“当前”“下一步”、Memory4 和配额只指该阶段，不覆盖顶部 V9.3.9.1 当前范围及沿用的 V9.3.9 合同。
 
 V9.3.6.3 综合修复候选：本轮补充 CK3 权威年龄、场外亲属/年份召回、重新生成授权和实际 Prompt 匿名对照；436组发布回归、22格484次同源合成A/B和隔离Electron双启动通过，289项部署一致。先前 TwoP1 数据保留为历史批次。当前施工与验收状态见[综合实施报告](current/v9/V9_3_6_3_INTEGRATED_IMPLEMENTATION_REPORT.md)、[综合验证报告](current/v9/V9_3_6_3_INTEGRATED_VERIFICATION_REPORT.md)和[实机清单](current/v9/V9_3_6_3_REAL_GAME_CHECKLIST.md)。
 

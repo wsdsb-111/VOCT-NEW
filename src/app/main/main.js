@@ -19,7 +19,7 @@ const { MEMORY_ENGINE_VERSION } = require("./version");
 const { registerIpcHandlers } = require("./ipc/register-ipc");
 const { createApplicationServices } = require("./application/service-ports");
 const { WorldlineService } = require("./worldline/worldline-service");
-const { CharacterKnowledgeService } = require("./worldline/character-knowledge-service");
+const { ConversationDisclosureStore } = require("./conversation/character-disclosure-store");
 const { createPaths } = require("./config/paths");
 const { getHistoricalReferenceByYear } = require("./game-data/legacy-historical-reference");
 const { CampaignIdentityResolver } = require("./historical-system/campaign-identity");
@@ -385,14 +385,14 @@ const SettingsRepository = createSettingsRepository({
   legacyBundledPromptHashes: LEGACY_BUNDLED_PROMPT_HASHES
 });
 const settingsRepository = traceMainOperation("settings.load", () => new SettingsRepository());
-let currentGameData = null;
 const worldlineService = new WorldlineService({
   settingsRepository,
   dataDir: VOTC_DATA_DIR,
   dialog: electron.dialog,
   memoryEngine
 });
-const characterKnowledgeService = new CharacterKnowledgeService({ dataDir: VOTC_DATA_DIR, worldlineService, getCurrentGameData: () => currentGameData });
+const characterKnowledgeService = new ConversationDisclosureStore({ dataDir: VOTC_DATA_DIR,
+  getCurrentConversation: () => conversationManager.getCurrentConversation() });
 const providerRegistry = ProviderRegistry.getInstance();
 function createPromptFingerprint(value) {
   if (value === null || value === void 0) return null;
@@ -435,7 +435,6 @@ worldlineService.setRuntimeNameSource(() => runtimeNameSource);
 const fs = require("fs");
 const { createLogParser } = require("./game-data/log-parser");
 const parseLog = createLogParser({ GameData, Character, onGameDataParsed: (gameData) => {
-  currentGameData = gameData;
   runtimeNameSource = {
     campaignToken: gameData.campaignToken || null,
     gameDate: gameData.date,

@@ -16,13 +16,187 @@ function observable(trait) {
 function getTraitsForObservedProfile(character) {
   return getTraitsForSelfProfile(character).filter(observable);
 }
+
+function runtimeCharacterId(value) {
+  const raw = value && typeof value === "object" ? value.id ?? value.runtimeId ?? value.characterId : value;
+  const id = Number(raw);
+  return Number.isSafeInteger(id) && id > 0 ? id : null;
+}
+
+function characterAt(gameData, characterId) {
+  if (!characterId) return null;
+  const characters = gameData?.characters;
+  return characters instanceof Map
+    ? characters.get(characterId) ?? characters.get(String(characterId)) ?? null
+    : characters?.[characterId] ?? characters?.[String(characterId)] ?? null;
+}
+
+function parentReferences(character) {
+  if (Array.isArray(character?.parents)) return character.parents;
+  const parents = character?.parents && typeof character.parents === "object" ? Object.values(character.parents) : [];
+  return [...parents, character?.father, character?.mother].filter(value => value !== null && value !== undefined);
+}
+
+function evidenceRows(character) {
+  return Array.isArray(character?.evidence?.relations) ? character.evidence.relations : [];
+}
+
+function explicitStepRelationship(record) {
+  return ["relationshipKind", "parentage", "parentType", "kinshipType", "kind"]
+    .some(key => typeof record?.[key] === "string" && /STEP|继亲|繼親/iu.test(record[key]));
+}
+
+function directParentCandidates(child, parent, childId, parentId) {
+  const candidates = [];
+  const add = value => {
+    if (!value || typeof value !== "object") return;
+    let proof = value.directParentEvidence || value.parentEvidence || value;
+    if (!proof || typeof proof !== "object") return;
+    // A typed step-parent must not become a direct relative through an otherwise
+    // valid nested parent source; keep the conflict in the complete candidate set.
+    if (explicitStepRelationship(value) || explicitStepRelationship(proof)) proof = { ...proof, evidenceConflict: true };
+    const key = JSON.stringify(proof);
+    if (!candidates.some(item => JSON.stringify(item) === key)) candidates.push(proof);
+  };
+  for (const reference of parentReferences(child)) {
+    if (runtimeCharacterId(reference) === parentId && typeof reference === "object") add(reference);
+  }
+  for (const evidence of evidenceRows(child)) {
+    if (runtimeCharacterId(evidence?.ownerId) === parentId && evidence?.directParentEvidence) add(evidence);
+  }
+  for (const evidence of evidenceRows(parent)) {
+    if (runtimeCharacterId(evidence?.ownerId) === childId && evidence?.relationType === "parent") add(evidence);
+  }
+  for (const entry of Array.isArray(parent?.children) ? parent.children : []) {
+    if (runtimeCharacterId(entry) === childId && (entry.directParentEvidence || entry.parentEvidence)) add(entry);
+  }
+  return candidates;
+}
+
+function hasCurrentPublicParent(gameData, childId, parentId) {
+  const child = characterAt(gameData, childId);
+  const parent = characterAt(gameData, parentId);
+  if (!child || !parent) return false;
+  const candidates = directParentCandidates(child, parent, childId, parentId);
+  if (!candidates.length) return false;
+  const accepts = currentDirectParentFilter(gameData);
+  // A valid duplicate must not upgrade a conflicting or stale record for the same pair.
+  return candidates.every(proof => accepts(proof, { childId, parentId }));
+}
+
+function currentPublicOtherParent(gameData, sourceParentId, childId) {
+  const sourceParent = characterAt(gameData, sourceParentId);
+  if (!sourceParent) return [];
+  const accepts = currentPublicParentFilter(gameData);
+  const candidates = [];
+  for (const entry of Array.isArray(sourceParent.children) ? sourceParent.children : []) {
+    if (runtimeCharacterId(entry) !== childId) continue;
+    const evidence = entry.otherParent;
+    if (evidence === null || evidence === undefined) continue;
+    const parentId = runtimeCharacterId(evidence?.parentId ?? evidence?.otherParentId ?? evidence?.id);
+    const identityFields = [evidence.id, evidence.parentId, evidence.otherParentId].filter(value => value !== null && value !== undefined);
+    if (!parentId || explicitStepRelationship(entry) || explicitStepRelationship(evidence) || evidence.sourceRelation !== "kids.otherParent"
+      || identityFields.some(value => runtimeCharacterId(value) !== parentId)
+      || runtimeCharacterId(evidence.sourceOwnerId) !== sourceParentId
+      || !accepts(evidence, evidence, { childId, sourceOwnerId: sourceParentId })) return [];
+    candidates.push(evidence);
+  }
+  if (!candidates.length) return [];
+  const signatures = new Set(candidates.map(evidence => JSON.stringify([
+    runtimeCharacterId(evidence.id ?? evidence.parentId ?? evidence.otherParentId),
+    runtimeCharacterId(evidence.sourceOwnerId),
+    runtimeCharacterId(evidence.childId),
+    evidence.source,
+    evidence.sourceRelation,
+    evidence.relationType,
+    evidence.publicStatus,
+    evidence.knowledgeStatus,
+    evidence.campaignToken,
+    evidence.sourceSnapshotId,
+    evidence.evidenceConflict === true
+  ])));
+  // Repeated source rows must agree as a whole; a current row cannot mask a bad duplicate.
+  return signatures.size === 1 ? [runtimeCharacterId(candidates[0].parentId ?? candidates[0].otherParentId ?? candidates[0].id)] : [];
+}
+
+function publicParentsOf(gameData, character) {
+  const childId = runtimeCharacterId(character);
+  if (!childId || !characterAt(gameData, childId)) return new Set();
+  const candidateIds = new Set(parentReferences(character).map(runtimeCharacterId).filter(Boolean));
+  for (const evidence of evidenceRows(character)) {
+    const proof = evidence?.directParentEvidence;
+    if (proof && runtimeCharacterId(evidence?.ownerId ?? proof.parentId)) candidateIds.add(runtimeCharacterId(evidence.ownerId ?? proof.parentId));
+  }
+  // CK3_OTHER_PARENT facts are bound to the current legal parent that emitted the kids.otherParent row.
+  const otherParentRows = Array.isArray(character?.evidence?.otherParentRelations) ? character.evidence.otherParentRelations : [];
+  for (const evidence of otherParentRows) {
+    const ownerId = runtimeCharacterId(evidence?.sourceOwnerId);
+    const accepts = currentPublicParentFilter(gameData);
+    if (ownerId && evidence?.sourceRelation === "kids.otherParent"
+      && accepts(evidence, evidence, { childId, sourceOwnerId: ownerId })) candidateIds.add(ownerId);
+  }
+
+  const parentIds = new Set();
+  for (const parentId of candidateIds) {
+    if (hasCurrentPublicParent(gameData, childId, parentId)) parentIds.add(parentId);
+  }
+  for (const parentId of [...parentIds]) {
+    for (const otherParentId of currentPublicOtherParent(gameData, parentId, childId)) parentIds.add(otherParentId);
+  }
+  return parentIds;
+}
+
+function isPublicCloseFamily(observerId, targetId, gameData) {
+  if (hasCurrentPublicParent(gameData, observerId, targetId)
+    || hasCurrentPublicParent(gameData, targetId, observerId)) return true;
+  const observer = characterAt(gameData, observerId);
+  const target = characterAt(gameData, targetId);
+  if (!observer || !target) return false;
+  const observerParents = publicParentsOf(gameData, observer);
+  const targetParents = publicParentsOf(gameData, target);
+  if (observerParents.has(targetId) || targetParents.has(observerId)) return true;
+  for (const parentId of observerParents) if (targetParents.has(parentId)) return true;
+  return false;
+}
+
+function traitFactKeys(character, observableOnly = false) {
+  const traits = observableOnly ? getTraitsForObservedProfile(character) : getTraitsForSelfProfile(character);
+  return [...new Set(traits.map(normalizeTraitKey).filter(Boolean).map(key => `trait_${key}`))];
+}
+
+function getAutomaticTraitAccess(observer, target, gameData, options = {}) {
+  const observerId = runtimeCharacterId(observer);
+  const targetId = runtimeCharacterId(target);
+  if (!observerId || !targetId || observerId === targetId) return { source: null, traitKeys: [] };
+  const traitKeys = traitFactKeys(target);
+  if (!traitKeys.length) return { source: null, traitKeys: [] };
+  if (isPublicCloseFamily(observerId, targetId, gameData)) return { source: "PUBLIC_CLOSE_FAMILY", traitKeys };
+  const activeParticipantIds = Array.isArray(options?.activeParticipantIds) ? options.activeParticipantIds : [];
+  const present = new Set(activeParticipantIds.map(runtimeCharacterId).filter(Boolean));
+  if (present.has(observerId) && present.has(targetId)) {
+    const observableKeys = traitFactKeys(target, true);
+    if (observableKeys.length) return { source: "OBSERVABLE", traitKeys: observableKeys };
+  }
+  return { source: null, traitKeys: [] };
+}
+
 function getTraitsForKnownProfile(observer, target, knowledgeContext = {}) {
+  // Preserve the pre-V9.3.9 Owner -> Target proof from the current game log.
+  const secrets = normalizeGameDate(knowledgeContext.currentGameDate) && typeof knowledgeContext.campaignToken === "string"
+    && knowledgeContext.campaignToken.trim() ? observer?.knownSecrets || [] : [];
+  const secretTraits = { secret_bastard: "bastard", secret_disputed_heritage: "disputed_heritage", secret_witch: "witch",
+    secret_cannibal: "cannibal", secret_deviant: "deviant", secret_incest: "incestuous", secret_adulterer: "adulterer" };
+  const automatic = getAutomaticTraitAccess(observer, target, knowledgeContext.gameData,
+    { activeParticipantIds: knowledgeContext.activeParticipantIds });
+  const automaticTraitKeys = new Set(automatic.traitKeys);
   return getTraitsForSelfProfile(target).filter(trait => {
-    const facts = scopedDisclosureFacts(observer, target, knowledgeContext).filter(fact => fact.factType === "TRAIT"
-      && fact.factKey === `trait_${normalizeTraitKey(trait)}`);
+    const factKey = `trait_${normalizeTraitKey(trait)}`;
+    if (automaticTraitKeys.has(factKey)) return true;
+    const facts = scopedDisclosureFacts(observer, target, knowledgeContext).filter(fact => fact.factType === "TRAIT" && fact.factKey === factKey);
     if (facts.some(fact => fact.currentDirectObservation === true && fact.effectiveKnown === true)) return true;
     if (facts.some(fact => fact.status === "MANUAL_HIDDEN")) return false;
-    return facts.some(fact => fact.effectiveKnown === true);
+    return facts.some(fact => fact.effectiveKnown === true)
+      || secrets.some(secret => Number(secret.ownerId) === Number(target?.id) && secretTraits[secret.type] === normalizeTraitKey(trait));
   });
 }
 
@@ -199,4 +373,4 @@ function createTraitProfileView(gameData, character, memoryContext = null, { inc
 }
 
 module.exports = { NON_OBSERVABLE_TO_OTHERS, OBSERVABLE_TO_OTHERS, normalizeTraitKey, getTraitAliases, resolveTraitVisibility,
-  getTraitsForSelfProfile, getTraitsForObservedProfile, getTraitsForKnownProfile, createTraitProfileView };
+  getTraitsForSelfProfile, getTraitsForObservedProfile, getAutomaticTraitAccess, getTraitsForKnownProfile, createTraitProfileView };

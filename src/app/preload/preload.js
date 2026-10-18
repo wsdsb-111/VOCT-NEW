@@ -250,6 +250,7 @@ electron.contextBridge.exposeInMainWorld("worldlineAPI", {
   }
 });
 electron.contextBridge.exposeInMainWorld("characterKnowledgeAPI", {
+  getConversationView: () => electron.ipcRenderer.invoke("characterKnowledge:getConversationView"),
   getOwnerView: (payload) => electron.ipcRenderer.invoke("characterKnowledge:getOwnerView", payload),
   getTargetView: (payload) => electron.ipcRenderer.invoke("characterKnowledge:getTargetView", payload),
   setManualStatus: (payload) => electron.ipcRenderer.invoke("characterKnowledge:setManualStatus", payload)

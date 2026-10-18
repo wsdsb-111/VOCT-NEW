@@ -336,8 +336,8 @@ async function main() {
     const data = sample.conversation.gameData;
     await send(sample, "请只依眼前所见，不读取旁人的隐秘性格。" );
     const chat = sample.requests.at(-1).messages.map(message => message.content).join("\n");
-    assert(chat.includes("SELF=天才,") && chat.includes("PLAYER=|"), JSON.stringify(chat.match(/SELF=[^\n]*|PLAYER=[^\n]*/g)));
-    for (const secret of ["PLAYER=天才", "MOD_UNKNOWN_CHARACTER_TRAIT", "PLAYER_PRIVATE_PERSONALITY_SENTINEL"]) assert(!chat.includes(secret));
+    assert(chat.includes("SELF=天才,") && chat.includes("PLAYER=眉清目秀,|"), JSON.stringify(chat.match(/SELF=[^\n]*|PLAYER=[^\n]*/g)));
+    for (const secret of ["PLAYER=天才", "PLAYER=聪慧", "PLAYER=欺诈", "PLAYER=私生子", "MOD_UNKNOWN_CHARACTER_TRAIT", "PLAYER_PRIVATE_PERSONALITY_SENTINEL"]) assert(!chat.includes(secret));
     sample.settings.getLetterPromptSettings = () => ({ mainTemplate: "SELF={{#each ai.traits}}{{name}},{{/each}}|PLAYER={{#each player.traits}}{{name}},{{/each}}|{{player.personality}}",
       blocks: [{ type: "main", enabled: true }, { type: "custom", enabled: true, template: "{{#each gameData.characters}}{{#each this.traits}}{{name}},{{/each}}|{{this.personality}}{{/each}}" }] });
     const letter = letterBuilder(sample).buildMessages(data, { content: "请回信。" }).map(message => message.content).join("\n");
@@ -357,17 +357,30 @@ async function main() {
     }
     data.getAi().knownSecrets = [{ ownerId: 1, type: "secret_bastard" }];
     const rawKnownSecrets = traitSelector.createTraitProfileView(data, data.getAi(), {});
-    assert.deepEqual(rawKnownSecrets.gameData.getPlayer().traits, [],
-      "raw knownSecrets do not authorize disclosing another character's secret trait");
+    assert.deepEqual(rawKnownSecrets.gameData.getPlayer().traits.map(trait => trait.name), ["私生子"],
+      "the responder's current log preserves exact Owner-to-Target secret knowledge");
+    data.getAi().knownSecrets = [{ ownerId: 3, type: "secret_bastard" }];
+    const wrongTarget = traitSelector.createTraitProfileView(data, data.getAi(), {});
+    assert.deepEqual(wrongTarget.gameData.getPlayer().traits, [], "a known secret for another target cannot reveal the player's trait");
+    data.getAi().knownSecrets = [];
+    data.getPlayer().knownSecrets = [{ ownerId: 1, type: "secret_bastard" }];
+    const wrongOwner = traitSelector.createTraitProfileView(data, data.getAi(), {});
+    assert.deepEqual(wrongOwner.gameData.getPlayer().traits, [], "the target's own knowledge log cannot be transferred to the responder");
+    data.getAi().knownSecrets = [{ ownerId: 1, type: "secret_bastard" }];
     const evidenceSourceSnapshotId = `${data.campaignToken}|${data.date}/${data.totalDays}|${"a".repeat(16)}`;
     const scopedDisclosureFacts = new Map([[1, [{ campaignToken: data.campaignToken, ownerId: 2, entityId: 1,
       current: true, status: "AUTO_DISCLOSED", effectiveKnown: true, factType: "TRAIT", factKey: "trait_bastard",
       source: "GAME_DATA_KNOWN_SECRET", sourceSnapshotId: `checkpoint-a|${evidenceSourceSnapshotId}`,
       evidenceSourceSnapshotId,
       firstAcquiredDate: data.date }]]]);
+    data.getAi().knownSecrets = [];
     const permitted = traitSelector.createTraitProfileView(data, data.getAi(), { disclosureProfiles: scopedDisclosureFacts });
     assert.deepEqual(permitted.gameData.getPlayer().traits.map(trait => trait.name), ["私生子"],
-      "only a current responder-scoped disclosure fact may reveal the matching secret trait");
+      "a current responder-scoped disclosure fact also preserves the matching trait");
+    const manualHiddenFacts = new Map([[1, [{ ...scopedDisclosureFacts.get(1)[0], status: "MANUAL_HIDDEN", effectiveKnown: false }]]]);
+    data.getAi().knownSecrets = [{ ownerId: 1, type: "secret_bastard" }];
+    const manuallyHidden = traitSelector.createTraitProfileView(data, data.getAi(), { disclosureProfiles: manualHiddenFacts });
+    assert.deepEqual(manuallyHidden.gameData.getPlayer().traits, [], "manual hidden state overrides the raw current-log secret");
   });
 }
 

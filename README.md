@@ -6,13 +6,20 @@ VOTC 是面向《Crusader Kings III》（CK3）的 Windows Electron 宫廷对话
 
 ## 当前版本与进度
 
-Core／App／UI 为 V9.3.9 代码候选，合并 V9.3.8.1 记忆方案与遗漏的 V9.3.7.1 修复任务。交付范围为代码、自动化回归与 GitHub 上传；真实 CK3、游戏内 Provider、Soak 和正式 Release 由用户后续验收。
+Core／App／UI 当前为 V9.3.9.1 本地修复候选。只恢复当前对话人物的定向认知显示与手动特质披露，重点覆盖姓名、头衔和称号；不扫描全体人物，已撤下 V9.3.9 的 Worldline 认知服务生产接线。原停止时不连接 GitHub／远端 CI 的要求保留为历史记录；用户本轮已额外授权拉取 GitHub 并修复分支失败 CI，授权不表示修复或 CI 已完成。真实 CK3、付费 Provider、Soak 与 GitHub Release 未执行。
 
 双人／三人的全场动态摘要额度为时间 5 + 第三人 3，记忆硬上限分别为 80,000／84,000 Token；4 人以上保持 3+3，上限为 96,000 Token。成功注入并完成请求后按回应者冻结原文，放在可变对话前复用；失败候选不冻结，来源变化逐项复验。比例仍为 65%／70%／75%，窗口容量由当前配置读取；用户将自行设置 192,000，不硬编码。
 
-本版统一亲子来源门禁与继亲标签，恢复独立人物认知 UI／服务并接入 Prompt 权限复核，提供生产 Parser 新旧日志回归和年龄分层诊断 CLI，修复 C17 测试作用域错误。Workshop Mod 2.0.5、Official Action 2.0.3、协议 3.0、存储 2.5／schema 2 保持；新 kids 公开证据字段作为独立补丁交付，不宣称已被当前游戏加载。
+V9.3.9.1 的定向认知只作用于当前对话：公开披露逐一记录给实际在场听众，私语只给指定对象，候场／缺席者不追溯获知。自动可见沿用外貌／身体白名单；称号公开。只有当前可靠公开父母子女及亲兄弟姐妹（含公开半亲）可免披露互知特质，继亲和未暴露私生亲属关系不授权。手动特质状态持久化，并参与对应 NPC 的 Prompt 过滤。
 
-- [V9.3.9 合并计划](docs/current/v9/V9_3_9_IMPLEMENTATION_PLAN.md)
+年龄修复仅移除稳定资料中的旧年龄行，当前年龄仍由动态游戏事实提供，不统一减一；缺少同日期实机原始数据，真实“年龄 +1”根因仍 NOT_CONFIRMED。Workshop Mod 2.0.5、Official Action 2.0.3、协议 3.0、存储 2.5／schema 2 保持。摘要配额、召回、冻结及关系来源合同沿用 V9.3.9。
+
+V9.3.9 的亲子来源门禁、继亲标签、Parser 新旧日志回归、年龄分层诊断与 C17 作用域修复保留为历史基线；该版人物认知 UI／服务中的 Worldline 生产接线已由 V9.3.9.1 撤下。独立 `kids` 公开证据字段仍不宣称已被当前游戏加载。详见 [V9.3.9 合并计划](docs/current/v9/V9_3_9_IMPLEMENTATION_PLAN.md) 与 [V9.3.9 实施报告](docs/current/v9/V9_3_9_IMPLEMENTATION_REPORT.md)。
+
+- [V9.3.9.1 修复实施与验证报告](docs/current/v9/V9_3_9_1_IMPLEMENTATION_REPORT.md)
+- [V9.3.9.1 跨电脑交接与剩余任务](docs/current/v9/V9_3_9_1_HANDOFF.md)：保留原停止时的进度与失败记录；本轮恢复授权及后续状态分别记录。
+- [V9.3.9 合并计划](docs/current/v9/V9_3_9_IMPLEMENTATION_PLAN.md)（历史基线）
+- [V9.3.9 实施与交付报告](docs/current/v9/V9_3_9_IMPLEMENTATION_REPORT.md)（摘要合同基线）
 - [V9.3.9 实施与交付报告](docs/current/v9/V9_3_9_IMPLEMENTATION_REPORT.md)
 - [V9.3.8 历史实施报告](docs/current/v9/V9_3_8_IMPLEMENTATION_REPORT.md)
 - [文档索引](docs/README.md)、[版本记录](CHANGELOG.md)、[Legacy Summary 合同](docs/README_摘要系统.md)

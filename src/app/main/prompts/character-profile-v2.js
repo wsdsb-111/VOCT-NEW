@@ -157,7 +157,6 @@ function formatStableProfile(profile) {
 - Runtime ID：${profile.id ?? "未知"}
 - 姓名：${profile.name || "未知"}
 - 性别：${profile.sex === "male" ? "男性" : profile.sex === "female" ? "女性" : "未知"}
-- 年龄：${profile.age ?? "未知"}
 - 家族／出身：${profile.house || profile.origin || "未知"}
 - 文化：${profile.culture || "未知"}
 - 信仰：${profile.faith || "未知"}
