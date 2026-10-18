@@ -1,7 +1,11 @@
 {
   "name": "votc-build-workspace",
   "private": true,
+<<<<<<< Updated upstream
   "version": "9.3.7",
+=======
+  "version": "9.3.9.1",
+>>>>>>> Stashed changes
   "engines": { "node": ">=22" },
   "scripts": {
     "build": "node scripts/build-runtime.js",

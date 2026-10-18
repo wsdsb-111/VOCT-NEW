@@ -243,3 +243,12 @@ electron.contextBridge.exposeInMainWorld("worldlineAPI", {
     return () => electron.ipcRenderer.removeListener("worldline:updated", handler);
   }
 });
+<<<<<<< Updated upstream
+=======
+electron.contextBridge.exposeInMainWorld("characterKnowledgeAPI", {
+  getConversationView: () => electron.ipcRenderer.invoke("characterKnowledge:getConversationView"),
+  getOwnerView: (payload) => electron.ipcRenderer.invoke("characterKnowledge:getOwnerView", payload),
+  getTargetView: (payload) => electron.ipcRenderer.invoke("characterKnowledge:getTargetView", payload),
+  setManualStatus: (payload) => electron.ipcRenderer.invoke("characterKnowledge:setManualStatus", payload)
+});
+>>>>>>> Stashed changes

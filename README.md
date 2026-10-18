@@ -6,10 +6,15 @@ VOTC 是面向《Crusader Kings III》（CK3）的 Windows Electron 宫廷对话
 
 ## 当前版本与进度
 
+<<<<<<< Updated upstream
 Core／App／UI 当前均为 **V9.3.7 候选**，基线为 V9.3.6.3。Workshop Mod 2.0.5、Official Action 2.0.3、记忆协议 3.0、摘要存储 2.5／schema 2 保持兼容。`VOTC.exe` 复用既有壳，其 Windows 文件属性版本不能代表当前应用资源版本。
+=======
+Core／App／UI 当前为 V9.3.9.1 本地修复候选。恢复当前对话人物之间的定向认知显示与手动特质披露，重点修复姓名、头衔、称号漏记；撤下 V9.3.9 非预期的 Worldline 认知服务接线，不为每轮构建全体人物认知。交付范围为代码、自动化及隔离窗口验证；按用户要求不连接 GitHub、不处理远端 CI，不执行真实 CK3、付费 Provider、Soak 或正式 Release。
+>>>>>>> Stashed changes
 
 V9.3.7 校准 CK3 权威年龄来源，支持有来源绑定的公开双亲、同父异母／同母异父、当前继父母及继兄弟姐妹；保留已授权且有明确来源的历史继亲 Legacy 记录。未验证的日历推算仅作诊断，未知不等于“没有”。新增 `otherParent` 事实不扩大 Memory 权限，不从前配偶推断历史继亲。
 
+<<<<<<< Updated upstream
 2026-10-17 本轮已同步文档，修复稳定资料／自定义模板的亲属来源过滤、稳定年龄与 Windows 队列原子替换短暂占用；**本地完整发布回归 444/444 PASS**，290 项构建部署一致，隔离 Electron 6 组检查和限定范围的性能复验通过。证据与失败批次保留在[后续收口报告](docs/current/v9/V9_3_7_FOLLOWUP_REPORT.md)。
 
 原候选报告记录了 290 项映射、442/442 发布组、Pair benchmark 和 11 组隔离 Electron smoke 通过；这些是对应批次的本地证据。当前提交 `9caffe6` 的 [GitHub CI](https://github.com/wsdsb-111/VOCT-NEW/actions/runs/39004062734) 在发布回归步骤失败，不能将旧本地 PASS 当作远端通过。合成 Prompt Provider 复核为 **PARTIAL**；真实 CK3、游戏内 Provider 与 Soak 仍待独立验收，当前不宣称 Full Freeze。远端 CI 已按用户要求暂缓处理。本轮文档与遗留测试收口证据统一记录在[后续收口报告](docs/current/v9/V9_3_7_FOLLOWUP_REPORT.md)。
@@ -17,6 +22,18 @@ V9.3.7 校准 CK3 权威年龄来源，支持有来源绑定的公开双亲、�
 - [实施报告](docs/current/v9/V9_3_7_IMPLEMENTATION_REPORT.md)、[验证报告](docs/current/v9/V9_3_7_VERIFICATION_REPORT.md)、[实机清单](docs/current/v9/V9_3_7_REAL_GAME_CHECKLIST.md)
 - [文档索引](docs/README.md)、[版本变更及历史阶段](CHANGELOG.md)
 - [源码与构建合同](docs/current/v9/V9_1_SOURCE_BUILD.md)、[Legacy Summary 合同](docs/README_摘要系统.md)
+=======
+人物认知按 Campaign／听众／目标／事实与来源修订分别记录。公开发言让实际在场听众各自获知，私语只给指定对象，候场／缺席者不继承。见面自动获知只沿用外貌／身体白名单；当前公开可靠的父母子女及亲兄弟姐妹关系允许互知特质，未暴露的真实私生亲属关系不适用。称号保持公开可见。手动特质状态持久化并真实参与对应 NPC 的 Prompt 过滤。
+
+年龄修复移除稳定资料中的旧年龄行，当前年龄由动态游戏事实提供，不统一减一；由于缺少同日期实机原始数据，昨晚 NPC 回答“年龄 +1”的根因仍未证实，不能宣称 P1 完整验收。Workshop Mod 2.0.5、Official Action 2.0.3、协议 3.0、存储 2.5／schema 2 保持。摘要配额、召回、冻结及关系来源实现沿用 V9.3.9。
+
+- [V9.3.9.1 修复实施与验证报告](docs/current/v9/V9_3_9_1_IMPLEMENTATION_REPORT.md)
+- [V9.3.9.1 跨电脑交接与剩余任务](docs/current/v9/V9_3_9_1_HANDOFF.md)：本轮因额度停止；最后源码尚未部署，全量回归未完成通过。
+- [V9.3.9 合并计划](docs/current/v9/V9_3_9_IMPLEMENTATION_PLAN.md)（历史基线）
+- [V9.3.9 实施与交付报告](docs/current/v9/V9_3_9_IMPLEMENTATION_REPORT.md)
+- [V9.3.8 历史实施报告](docs/current/v9/V9_3_8_IMPLEMENTATION_REPORT.md)
+- [文档索引](docs/README.md)、[版本记录](CHANGELOG.md)、[Legacy Summary 合同](docs/README_摘要系统.md)
+>>>>>>> Stashed changes
 
 ## 主要功能与边界
 

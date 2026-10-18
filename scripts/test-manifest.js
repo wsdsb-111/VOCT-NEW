@@ -176,6 +176,21 @@ const archivedChecks = [
 ];
 
 const releaseChecks = [
+<<<<<<< Updated upstream
+=======
+  { group: "v9.3.9.1-disclosure-extraction", script: "test-v9.3.9.1-disclosure-extraction.js" },
+  { group: "v9.3.9.1-disclosure-store", script: "test-v9.3.9.1-disclosure-store.js" },
+  { group: "v9.3.9.1-knowledge-ui", script: "test-v9.3.9.1-knowledge-ui.js" },
+  { group: "v9.3.9.1-age-prompt", script: "test-v9.3.9.1-age-prompt.js" },
+  { group: "v9.3.9.1-mother-knowledge", script: "test-v9.3.9.1-mother-knowledge.js" },
+  { group: "v9.3.9.1-trait-access", script: "test-v9.3.9.1-trait-access.js" },
+  { group: "v9.3.9-dynamic-freeze", script: "test-v9.3.9-dynamic-freeze.js" },
+  { group: "v9.3.9-disclosure-prompt", script: "test-v9.3.9-disclosure-prompt.js" },
+  { group: "v9.3.9-kinship", script: "test-v9.3.9-kinship.js" },
+  { group: "v9.3.9-age-parser", script: "test-v9.3.9-age-parser.js" },
+  { group: "v9.3.9-character-knowledge", script: "test-v9.3.9-character-knowledge.js" },
+  { group: "v9.3.9-independent-qa", script: "test-v9.3.9-independent-qa.js" },
+>>>>>>> Stashed changes
   { group: "v9.3.7-age-calibration", script: "test-v9.3.7-age-calibration.js" },
   { group: "v9.3.7-other-parent-graph", script: "test-v9.3.7-other-parent-graph.js" },
   { group: "v9.3.7-public-kinship-cache", script: "test-v9.3.7-public-kinship-cache.js" },

@@ -1,3 +1,10 @@
+<<<<<<< Updated upstream
+=======
+V9.3.9.1 当前修复补充（优先于下方 V9.3.9 历史状态）：只管理当前对话的定向人物披露；公开发言逐一记录给实际在场听众，私语仅指定人物，候场／缺席不继承。外貌身体沿现有白名单，称号公开；当前可靠公开父母子女及亲兄弟姐妹（含公开半亲）可免披露互知特质，未暴露私生亲属关系不适用。撤下 Worldline 认知服务生产接线，不扫描全体人物；保留原生定向 knownSecrets、手动状态与发送前复核，不恢复 Memory4。V9.3.9 摘要召回／冻结／预算及关系来源实现保持。年龄只移除稳定资料中过期年龄，原实机 +1 缺证据仍 NOT_CONFIRMED。当前报告为 docs/current/v9/V9_3_9_1_IMPLEMENTATION_REPORT.md。本轮按用户要求不连接 GitHub／远端 CI，不执行真实 CK3／付费 Provider／Soak／Release；下方 GitHub 上传说明只属于历史批次。
+
+V9.3.9 补充合同：2／3 人时间摘要 5 篇、4+ 人 3 篇，第三人始终全场共享 3 篇；完整动态摘要成功注入并完成请求后按回应者冻结到稳定前缀，跨场不继承、不扩大来源权限。Character Knowledge 独立于退役 Memory4，按 Campaign／Owner／Target／fact／来源修订隔离并在发送前复核。用户本轮只交付代码、自动化验证和 GitHub 上传，不执行真实 CK3／付费 Provider／Soak 或 GitHub Release。
+
+>>>>>>> Stashed changes
 # Main Process Guidelines
 
 These rules apply to editable src/app/main/ and its generated resources/app/out/main/ output, especially main.js, services, providers and IPC. Edit source and rebuild; do not edit generated output alone.

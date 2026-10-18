@@ -1160,6 +1160,41 @@
     {
       "source": "shared/pair-important-matters.js",
       "target": "out/shared/pair-important-matters.js"
+<<<<<<< Updated upstream
+=======
+    },
+    {
+      "source": "main/conversation/character-disclosure-context.js",
+      "target": "out/main/conversation/character-disclosure-context.js"
+    },
+    {
+      "source": "main/conversation/character-disclosure-store.js",
+      "target": "out/main/conversation/character-disclosure-store.js"
+    },
+    {
+      "source": "main/conversation/character-disclosure-extraction.js",
+      "target": "out/main/conversation/character-disclosure-extraction.js"
+    },
+    {
+      "source": "main/memory-system/dynamic-summary-freeze.js",
+      "target": "out/main/memory-system/dynamic-summary-freeze.js"
+    },
+    {
+      "source": "main/worldline/age-diagnostics.js",
+      "target": "out/main/worldline/age-diagnostics.js"
+    },
+    {
+      "source": "main/worldline/character-knowledge-service.js",
+      "target": "out/main/worldline/character-knowledge-service.js"
+    },
+    {
+      "source": "renderer/character-knowledge-ui.css",
+      "target": "out/renderer/character-knowledge-ui.css"
+    },
+    {
+      "source": "renderer/character-knowledge-ui.js",
+      "target": "out/renderer/character-knowledge-ui.js"
+>>>>>>> Stashed changes
     }
   ]
 }

@@ -7,10 +7,15 @@ const path = require("node:path");
 const { captureAll, SCENARIOS } = require("./fixtures/v93-provider-golden");
 
 const root = path.resolve(__dirname, "..");
+const candidateVersion = require(path.join(root, "package.json")).version;
 const baseline = JSON.parse(fs.readFileSync(path.join(__dirname, "fixtures/v93-provider-golden-baseline.json"), "utf8"));
 const providerIndexPath = path.join(root, "src/app/main/providers/index.js");
 const versionExports = {
+<<<<<<< Updated upstream
   VOTC_CORE_VERSION: "9.3.7",
+=======
+  VOTC_CORE_VERSION: candidateVersion,
+>>>>>>> Stashed changes
   VOTC_APP_VERSION: require(path.join(root, "package.json")).version,
   MEMORY_ENGINE_VERSION: "3.0",
   ACTION_SYSTEM_VERSION: "official-votc-2.0.3",
@@ -226,11 +231,19 @@ function expectedVersionHeaderUpdate(captures) {
     requests: capture.requests.map(request => {
       const headers = { ...request.headers };
       if (headers["user-agent"] === "VOTC/9.2.0") {
+<<<<<<< Updated upstream
         headers["user-agent"] = "VOTC/9.3.7";
         counts["user-agent"]++;
       }
       if (headers["x-title"] === "Voices of the Court V9.2") {
         headers["x-title"] = "Voices of the Court V9.3.7";
+=======
+        headers["user-agent"] = `VOTC/${candidateVersion}`;
+        counts["user-agent"]++;
+      }
+      if (headers["x-title"] === "Voices of the Court V9.2") {
+        headers["x-title"] = `Voices of the Court V${candidateVersion}`;
+>>>>>>> Stashed changes
         counts["x-title"]++;
       }
       return { ...request, headers };
@@ -249,17 +262,30 @@ function assertCurrentVersionHeaders(captures) {
       const userAgent = request.headers["user-agent"];
       const title = request.headers["x-title"];
       if (userAgent?.startsWith("VOTC/")) {
+<<<<<<< Updated upstream
         assert.equal(userAgent, "VOTC/9.3.7", `${capture.id}_VOTC_user_agent_version`);
         userAgentCount++;
       }
       if (title?.startsWith("Voices of the Court V")) {
         assert.equal(title, "Voices of the Court V9.3.7", `${capture.id}_VOTC_x_title_version`);
+=======
+        assert.equal(userAgent, `VOTC/${candidateVersion}`, `${capture.id}_VOTC_user_agent_version`);
+        userAgentCount++;
+      }
+      if (title?.startsWith("Voices of the Court V")) {
+        assert.equal(title, `Voices of the Court V${candidateVersion}`, `${capture.id}_VOTC_x_title_version`);
+>>>>>>> Stashed changes
         titleCount++;
       }
     }
   }
+<<<<<<< Updated upstream
   assert.equal(userAgentCount, 12, "all 12 VOTC User-Agent headers must carry App 9.3.7");
   assert.equal(titleCount, 12, "all 12 VOTC X-Title headers must carry core V9.3.7");
+=======
+  assert.equal(userAgentCount, 12, "all 12 VOTC User-Agent headers must carry the candidate App version");
+  assert.equal(titleCount, 12, "all 12 VOTC X-Title headers must carry the candidate core version");
+>>>>>>> Stashed changes
 }
 
 async function testFrozenWireGolden() {
@@ -269,7 +295,11 @@ async function testFrozenWireGolden() {
   const current = captureAll();
   assertCurrentVersionHeaders(current.captures);
   const expectedCaptures = expectedVersionHeaderUpdate(baseline.captures);
+<<<<<<< Updated upstream
   assert.deepStrictEqual(current.captures.map(scenarioProjection), expectedCaptures.map(scenarioProjection), "provider wire changed beyond the explicit V9.3.7 version headers");
+=======
+  assert.deepStrictEqual(current.captures.map(scenarioProjection), expectedCaptures.map(scenarioProjection), "provider wire changed beyond the explicit candidate version headers");
+>>>>>>> Stashed changes
   for (const capture of current.captures.filter(item => item.control === "durable-before-send")) {
     assert.equal(capture.beforeSendGuardCalls, capture.attemptCount, `${capture.id}_before_send_count`);
   }

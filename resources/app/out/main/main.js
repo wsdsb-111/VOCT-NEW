@@ -19,6 +19,10 @@ const { MEMORY_ENGINE_VERSION } = require("./version");
 const { registerIpcHandlers } = require("./ipc/register-ipc");
 const { createApplicationServices } = require("./application/service-ports");
 const { WorldlineService } = require("./worldline/worldline-service");
+<<<<<<< Updated upstream
+=======
+const { ConversationDisclosureStore } = require("./conversation/character-disclosure-store");
+>>>>>>> Stashed changes
 const { createPaths } = require("./config/paths");
 const { getHistoricalReferenceByYear } = require("./game-data/legacy-historical-reference");
 const { CampaignIdentityResolver } = require("./historical-system/campaign-identity");
@@ -390,6 +394,11 @@ const worldlineService = new WorldlineService({
   dialog: electron.dialog,
   memoryEngine
 });
+<<<<<<< Updated upstream
+=======
+const characterKnowledgeService = new ConversationDisclosureStore({ dataDir: VOTC_DATA_DIR,
+  getCurrentConversation: () => conversationManager.getCurrentConversation() });
+>>>>>>> Stashed changes
 const providerRegistry = ProviderRegistry.getInstance();
 function createPromptFingerprint(value) {
   if (value === null || value === void 0) return null;

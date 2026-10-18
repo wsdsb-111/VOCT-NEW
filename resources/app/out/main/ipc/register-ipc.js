@@ -126,6 +126,39 @@ function registerIpcHandlers(runtime) {
     electron.ipcMain.handle("worldline:updateSupplemental", () => { throw new Error("legacy_supplemental_read_only"); });
     electron.ipcMain.handle("worldline:deleteSupplemental", () => { throw new Error("legacy_supplemental_read_only"); });
   }
+<<<<<<< Updated upstream
+=======
+  const characterKnowledge = services?.characterKnowledge || characterKnowledgeService;
+  if (characterKnowledge) {
+    electron.ipcMain.handle("characterKnowledge:getConversationView", () => characterKnowledge?.getConversationView?.()
+      || { available: false, participants: [], reason: "character_knowledge_conversation_unavailable" });
+    electron.ipcMain.handle("characterKnowledge:getOwnerView", (_event, payload) => characterKnowledge.getOwnerView({
+      conversationId: payload?.conversationId ?? null,
+      ownerRuntimeId: payload?.ownerRuntimeId,
+      campaignToken: payload?.campaignToken,
+      sourceSnapshotId: payload?.sourceSnapshotId
+    }));
+    electron.ipcMain.handle("characterKnowledge:getTargetView", (_event, payload) => characterKnowledge.getTargetView({
+      conversationId: payload?.conversationId ?? null,
+      campaignToken: payload?.campaignToken,
+      ownerRuntimeId: payload?.ownerRuntimeId,
+      targetRuntimeId: payload?.targetRuntimeId,
+      sourceSnapshotId: payload?.sourceSnapshotId
+    }));
+    electron.ipcMain.handle("characterKnowledge:setManualStatus", (_event, payload) => characterKnowledge.setManualStatus({
+      conversationId: payload?.conversationId ?? null,
+      campaignToken: payload?.campaignToken,
+      ownerRuntimeId: payload?.ownerRuntimeId,
+      targetRuntimeId: payload?.targetRuntimeId,
+      sourceSnapshotId: payload?.sourceSnapshotId,
+      factSourceSnapshotId: payload?.factSourceSnapshotId,
+      factType: payload?.factType,
+      factKey: payload?.factKey,
+      status: payload?.status,
+      expectedRevision: payload?.expectedRevision
+    }));
+  }
+>>>>>>> Stashed changes
   electron.ipcMain.handle("prompts:getSettings", () => {
     return settingsRepository.getPromptSettings();
   });

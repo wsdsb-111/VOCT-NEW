@@ -1,6 +1,10 @@
 "use strict";
 
+<<<<<<< Updated upstream
 const VOTC_CORE_VERSION = "9.3.7";
+=======
+const VOTC_CORE_VERSION = "9.3.9.1";
+>>>>>>> Stashed changes
 const VOTC_APP_VERSION = require("../../package.json").version;
 const MEMORY_ENGINE_VERSION = "3.0";
 const ACTION_SYSTEM_VERSION = "official-votc-2.0.3";

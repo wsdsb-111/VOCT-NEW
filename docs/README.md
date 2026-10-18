@@ -1,5 +1,6 @@
 # VOTC 文档索引
 
+<<<<<<< Updated upstream
 V9.3.7 修复候选（基线 V9.3.6.3）扩展到同父异母、同母异父、当前继父母／继兄弟姐妹及有来源的历史继亲 Legacy 记录；不新增 Memory 读取，也不从前配偶推断继亲。原报告记录 290 项映射、442/442 发布组、正式性能、Pair benchmark 与 11 组原生 smoke 通过，属于原候选批次；本轮状态见下方后续收口报告。合成 Prompt Provider 为 PARTIAL，真实 CK3、游戏内 Provider 与 Soak 未验收，不宣称 Full Freeze。原候选入口：[施工方案](current/v9/V9_3_7_IMPLEMENTATION_PLAN.md)、[实施报告](current/v9/V9_3_7_IMPLEMENTATION_REPORT.md)、[验证报告](current/v9/V9_3_7_VERIFICATION_REPORT.md)、[实机清单](current/v9/V9_3_7_REAL_GAME_CHECKLIST.md)。
 
 ## 推荐阅读顺序
@@ -10,6 +11,19 @@ V9.3.7 修复候选（基线 V9.3.6.3）扩展到同父异母、同母异父、�
 2. [源码与构建](current/v9/V9_1_SOURCE_BUILD.md)：先编辑 src/app，再构建、部署和校验。
 3. [Legacy Summary](README_摘要系统.md)：当前 Recent1／L0–L2、来源、Forget 和索引合同。
 4. [索引与来源合同](current/v9/V9_3_5_INDEX_AND_SOURCE_CONTRACT.md)：存储／IPC 合同继续兼容，召回配额以上述当前合同为准。
+=======
+当前为 V9.3.9.1 本地修复候选，证据见 [修复实施与验证报告](current/v9/V9_3_9_1_IMPLEMENTATION_REPORT.md)。恢复当前对话的一对一认知 UI／手动特质披露，修复姓名、头衔、称号提取，按实际在场听众记录公开披露；保留外貌身体白名单、称号公开可见与公开可靠直系亲属特质互知。撤下 V9.3.9 的 Worldline 认知服务接线，摘要配额／预算／召回／冻结及关系来源实现不变。稳定资料旧年龄已移除，但真实“年龄 +1”缺实机分层证据，尚未完整验收。本轮不连接 GitHub／远端 CI，不执行真实 CK3／付费 Provider／Soak／正式 Release。V9.3.9 及此前报告保留历史证据。
+
+## 推荐阅读顺序
+
+迁机继续本轮任务时，先读 [V9.3.9.1 交接记录](current/v9/V9_3_9_1_HANDOFF.md)：工作区未提交、最后源码未部署、完整门禁未通过；包含最近失败及下一步命令。
+
+1. [V9.3.9.1 修复报告](current/v9/V9_3_9_1_IMPLEMENTATION_REPORT.md)：P0 定向披露、P1 年龄边界、P2 母亲身份证据及验证结果；[V9.3.9 报告](current/v9/V9_3_9_IMPLEMENTATION_REPORT.md)为历史基线。
+2. [源码与构建](current/v9/V9_1_SOURCE_BUILD.md)：先编辑 src/app，再构建和验证生成资源。
+3. [Legacy Summary](README_摘要系统.md)：Recent2、全场动态配额、来源复验与冻结复用。
+4. [索引与来源合同](current/v9/V9_3_5_INDEX_AND_SOURCE_CONTRACT.md)：既有存储／IPC 兼容边界。
+5. 方案来源：[V9.3.8.1](current/v9/V9_3_8_1_DEVELOPMENT_SPEC.md)、[V9.3.7.1 导入原案](current/v9/V9_3_7_1_FIX_SPEC_IMPORTED.md)。
+>>>>>>> Stashed changes
 
 ## 历史版本与阶段快照
 
