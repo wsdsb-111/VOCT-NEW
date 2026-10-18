@@ -2329,6 +2329,8 @@ class MemoryEngine {
       return { committedCount: 0, reason: "injection_evidence_incomplete" };
     }
     const injectedEntries = (state.dynamicExtra || []).filter(entry => injectedMemoryIds.has(String(entry.memory.memoryId)));
+    const frozenCommit = state.frozenDynamicPolicy
+      ? require("./dynamic-summary-freeze").commitFrozenSources(sessionRecallCache, ownerId, turnEpoch, injectedMemoryIds) : null;
     if (injectedEntries.length) this.commitTemporalFocus(ownerId, sessionRecallCache, turnEpoch);
     for (const entry of injectedEntries) state.seenDynamicSummaries.add(this.getRouteMemoryKey(entry.memory));
     const diagnostics = sessionRecallCache.recallDiagnostics?.get(ownerId);
@@ -2340,7 +2342,7 @@ class MemoryEngine {
       diagnostics.stages.injection = { status: "PROVIDER_SUCCESS", injectedBlockIds, injectedTokens };
       diagnostics.stages.seen = { status: diagnostics.seenCommitStatus, committedIds: injectedEntries.map(entry => entry.memory.memoryId) };
     }
-    return { committedCount: injectedEntries.length, reason: injectedEntries.length ? "provider_success" : "no_injected_dynamic_summary" };
+    return frozenCommit || { committedCount: injectedEntries.length, reason: injectedEntries.length ? "provider_success" : "no_injected_dynamic_summary" };
   }
 
   commitTemporalFocus(characterId, sessionRecallCache, turnEpoch) {

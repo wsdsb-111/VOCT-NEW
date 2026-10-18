@@ -121,7 +121,9 @@ function createPromptBuilder({
         sourceCampaignToken: memoryContext.sourceCampaignToken,
         sourcePairIds: pairIds.map(String).sort(),
         budgetPolicyRevision: memoryContext.budgetPolicyRevision,
-        conversationId: memoryContext.conversationId
+        conversationId: memoryContext.conversationId,
+        characterKnowledgeRevision: memoryContext.characterKnowledgeRevision || null,
+        frozenDynamicFingerprint: memoryContext.frozenDynamicText ? createPromptFingerprint(memoryContext.frozenDynamicText) : null
       };
       return createPromptFingerprint(this.stableStringify(scope));
     }
@@ -722,7 +724,7 @@ function createPromptBuilder({
       const directMemoryBlock = {
         id: "memory-direct-frozen",
         type: "memory_direct_frozen",
-        label: "Recent1 Direct Relationship Memory",
+        label: "Recent2 Direct Relationship Memory",
         enabled: true,
         role: "system",
         stable: !glmCacheV2,
@@ -794,6 +796,7 @@ function createPromptBuilder({
           directMemory: memoryContext?.directStableText,
           playerLedger: memoryContext?.playerLedgerFrozenText,
           stableMemory: memoryContext?.stableText,
+          dynamicSummaries: memoryContext?.frozenDynamicText,
           mentionedSnapshot: memoryContext?.mentionedSnapshotText,
           worldStable: memoryContext?.worldStableText,
           worldTopic: memoryContext?.worldTopicText,
@@ -841,6 +844,10 @@ function createPromptBuilder({
           {
             block: { ...stableMemoryBlock, stable: true, lifecycle: PROMPT_LIFECYCLE.RESPONDER_FROZEN },
             content: frozenText.stableMemory
+          },
+          {
+            block: { id: "memory-dynamic-frozen", type: "memory_dynamic_frozen", label: "Frozen Dynamic Summaries", stable: true, lifecycle: PROMPT_LIFECYCLE.RESPONDER_FROZEN },
+            content: frozenText.dynamicSummaries
           },
           ...(!v813Layout ? [{
             block: { ...mentionedSnapshotBlock, stable: true, lifecycle: PROMPT_LIFECYCLE.RESPONDER_FROZEN },
@@ -899,6 +906,14 @@ function createPromptBuilder({
             block: stableMemoryBlock,
             content: memoryContext.stableText,
             tokens: TokenCounter.estimateTokens(memoryContext.stableText)
+          });
+        }
+        if (memoryContext?.frozenDynamicText) {
+          llmMessages.push({ role: "system", content: memoryContext.frozenDynamicText });
+          blocksWithTokens.push({
+            block: { id: "memory-dynamic-frozen", type: "memory_dynamic_frozen", label: "Frozen Dynamic Summaries", stable: true, lifecycle: PROMPT_LIFECYCLE.RESPONDER_FROZEN },
+            content: memoryContext.frozenDynamicText,
+            tokens: TokenCounter.estimateTokens(memoryContext.frozenDynamicText)
           });
         }
         if (memoryContext?.mentionedSnapshotText) {

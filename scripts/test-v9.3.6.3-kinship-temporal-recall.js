@@ -8,8 +8,22 @@ const { normalizeGameDate } = require("../src/app/main/worldline/character-tempo
 const { classifyTemporalIntent } = require("../src/app/main/memory-system/pair-memory-routing");
 const { extractTemporalAnchors } = require("../src/app/main/memory-system/temporal-anchor-extractor");
 
-const profiles = [{ id: 1, name: "甲", gender: "male" }, { id: 2, name: "乙", gender: "male", children: [{ id: 3, name: "玛蒂尔达", gender: "male" }] },
-  { id: 3, name: "玛蒂尔达", gender: "male", parents: [{ id: 2, name: "乙", gender: "male" }] }, { id: 4, name: "丁大人", gender: "male" }];
+const CAMPAIGN = "v9363-kinship-temporal-fixture";
+const GAME_DATE = "1200.1.1";
+const GAME_DAYS = normalizeGameDate(GAME_DATE).serial;
+function directParentEvidence(childId, parentId) {
+  return {
+    source: "CK3_DIRECT_PARENT", sourceOwnerId: childId, childId, parentId,
+    relationType: "parent", sourceRelation: "parents", publicStatus: "PUBLIC_LEGAL_PARENT",
+    knowledgeStatus: "UNKNOWN", campaignToken: CAMPAIGN, sourceSnapshotId: `${GAME_DATE}/${GAME_DAYS}`
+  };
+}
+const sonEvidence = directParentEvidence(3, 2);
+const secondSonEvidence = directParentEvidence(4, 2);
+const profiles = [{ id: 1, name: "甲", gender: "male" },
+  { id: 2, name: "乙", gender: "male", children: [{ id: 3, name: "玛蒂尔达", gender: "male", directParentEvidence: sonEvidence }] },
+  { id: 3, name: "玛蒂尔达", gender: "male", parents: [{ id: 2, name: "乙", gender: "male", ...sonEvidence }] },
+  { id: 4, name: "丁大人", gender: "male" }];
 function makeFixture() {
   const fixture = createAdversarialFixtureData();
   const template = fixture.pairSummaries.find(pair => pair.ownerId === 2 && pair.counterpartId === 3).summaries[0];
@@ -59,9 +73,21 @@ function run() {
     runCase("T04", () => { const r = retrieve("1192年你和玛蒂尔达谈过盐税吗？"); assert.equal(items(r).length, 0); assert.equal(r.pairMemoryMetrics.thirdPersonLegacyFallbackStatus, "TIME_WINDOW_NO_MATCH"); assert(!String(r.temporalExtraText).includes("TIME_1199")); });
     runCase("T05", () => { const r = retrieve("前些年你与玛蒂尔达的关系如何？", { currentGameDate: "1207.1.1", currentTotalDays: normalizeGameDate("1207.1.1").serial }); assert.equal(r.thirdPersonDecision.level, "L1"); assert.deepEqual(years(r).sort(), ["1199", "1201"]); assert.equal(r.pairMemoryMetrics.temporalExpansionUsed, true); });
     runCase("T06", () => { const r = retrieve("去年你和玛蒂尔达谈过什么？"); assert(!String(r.temporalExtraText).includes("CB_PRIVATE_SENTINEL")); assert.deepEqual(r.thirdPersonDecision.targetCharacterIds, [3]); });
-    const gameData = { characters: new Map(profiles.map(profile => [profile.id, profile])), getMentionableCharacterProfiles: () => new Map(profiles.map(profile => [profile.id, profile])) };
+    const gameData = { characters: new Map(profiles.map(profile => [profile.id, profile])), campaignToken: CAMPAIGN,
+      date: GAME_DATE, totalDays: GAME_DAYS,
+      getMentionableCharacterProfiles: () => new Map(profiles.map(profile => [profile.id, profile])) };
     runCase("T07", () => { const r = retrieve("你儿子去年说过什么？", { gameData }); assert.equal(r.thirdPersonDecision.level, "L1"); assert.deepEqual(r.thirdPersonDecision.targetCharacterIds, [3]); assert.deepEqual(years(r), ["1199"]); });
-    runCase("T08", () => { const duplicate = { ...gameData, characters: new Map(gameData.characters) }; duplicate.characters.set(2, { ...profiles[1], children: [profiles[2], profiles[3]] }); duplicate.getMentionableCharacterProfiles = () => duplicate.characters; const r = retrieve("你儿子去年说过什么？", { gameData: duplicate }); assert.equal(r.thirdPersonDecision.level, "L0"); assert.equal(r.pairMemoryMetrics.targetResolution, "TARGET_AMBIGUOUS"); });
+    runCase("T08", () => {
+      const duplicate = { ...gameData, characters: new Map(gameData.characters) };
+      const secondSon = { ...profiles[3], parents: [{ id: 2, name: "乙", gender: "male", ...secondSonEvidence }] };
+      const secondSonLink = { ...secondSon, directParentEvidence: secondSonEvidence };
+      duplicate.characters.set(2, { ...profiles[1], children: [profiles[2], secondSonLink] });
+      duplicate.characters.set(4, secondSon);
+      duplicate.getMentionableCharacterProfiles = () => duplicate.characters;
+      const r = retrieve("你儿子去年说过什么？", { gameData: duplicate });
+      assert.equal(r.thirdPersonDecision.level, "L0");
+      assert.equal(r.pairMemoryMetrics.targetResolution, "TARGET_AMBIGUOUS");
+    });
     runCase("T09", () => assert.equal(retrieve("你儿子现在几岁？", { gameData }).thirdPersonDecision.level, "L0"));
     runCase("T10", () => assert.equal(retrieve("去年之后你准备怎么安排玛蒂尔达？").thirdPersonDecision.level, "L0"));
     runCase("T11", () => assert.equal(retrieve("去年玛蒂尔达说了什么？", { trustedPlayerTurn: null }).thirdPersonDecision.level, "L0"));

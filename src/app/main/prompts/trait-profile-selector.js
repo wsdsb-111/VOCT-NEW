@@ -17,17 +17,12 @@ function getTraitsForObservedProfile(character) {
   return getTraitsForSelfProfile(character).filter(observable);
 }
 function getTraitsForKnownProfile(observer, target, knowledgeContext = {}) {
-  const secrets = normalizeGameDate(knowledgeContext.currentGameDate) && typeof knowledgeContext.campaignToken === "string"
-    && knowledgeContext.campaignToken.trim() ? observer?.knownSecrets || [] : [];
-  const secretTraits = { secret_bastard: "bastard", secret_disputed_heritage: "disputed_heritage", secret_witch: "witch",
-    secret_cannibal: "cannibal", secret_deviant: "deviant", secret_incest: "incestuous", secret_adulterer: "adulterer" };
   return getTraitsForSelfProfile(target).filter(trait => {
     const facts = scopedDisclosureFacts(observer, target, knowledgeContext).filter(fact => fact.factType === "TRAIT"
       && fact.factKey === `trait_${normalizeTraitKey(trait)}`);
     if (facts.some(fact => fact.currentDirectObservation === true && fact.effectiveKnown === true)) return true;
     if (facts.some(fact => fact.status === "MANUAL_HIDDEN")) return false;
-    return facts.some(fact => fact.effectiveKnown === true)
-      || secrets.some(secret => Number(secret.ownerId) === Number(target?.id) && secretTraits[secret.type] === normalizeTraitKey(trait));
+    return facts.some(fact => fact.effectiveKnown === true);
   });
 }
 
@@ -68,7 +63,7 @@ function createTraitProfileView(gameData, character, memoryContext = null, { inc
     }
   }
   const publicParentSource = currentPublicParentFilter(gameData);
-  const currentPublicParent = (record, childId = record?.childId) => publicParentSource(record, record)
+  const currentPublicParent = (record, childId = record?.childId) => publicParentSource(record, record, { childId })
     && (record.childId === null || record.childId === undefined || Number(record.childId) === Number(childId))
     && record.source === "CK3_OTHER_PARENT" && Number.isSafeInteger(record.sourceOwnerId) && record.sourceOwnerId > 0
     && record.relationType === "parent" && ["kids.otherParent", "siblings.otherParent"].includes(record.sourceRelation)
@@ -81,16 +76,19 @@ function createTraitProfileView(gameData, character, memoryContext = null, { inc
   const isStepSourceRecord = (record, source, prefix) => record?.source === source
     || typeof record?.sourceRelation === "string" && record.sourceRelation.startsWith(prefix);
   const currentDirectParent = currentDirectParentFilter(gameData);
+  const currentHistoricalStep = (record, childId) => includeStepFamily
+    && record?.relationshipKind === "STEP" && !record.relationshipKindConflict && !record.evidenceConflict
+    && record.source === "LEGACY_TYPED_STEP_RELATION" && record.sourceRelation === "parents"
+    && record.relationType === "parent" && record.sourceOwnerId === Number(childId)
+    && record.childId === Number(childId) && Number.isSafeInteger(Number(record.id)) && Number(record.id) > 0
+    && record.publicStatus === "PUBLIC_LEGAL_PARENT" && record.knowledgeStatus === "UNKNOWN"
+    && currentFamilySource(record);
   const currentMarriageLifeConsistent = (parent, spouse) => [parent, spouse,
     gameData?.characters?.get(Number(parent.id)), gameData?.characters?.get(Number(spouse.id))]
     .filter(Boolean).every(record => {
       const status = resolveLifeStatus(record);
       return !status.conflict && status.alive !== false;
     });
-  const currentTypedStep = (record, childId) => typeof record.source === "string" && record.source.trim().length > 0
-    && record.source !== "CK3_DIRECT_PARENT" && record.sourceOwnerId === Number(childId) && record.childId === Number(childId)
-    && record.relationType === "parent" && record.sourceRelation === "parents" && !record.relationshipKindConflict
-    && record.publicStatus === "PUBLIC_LEGAL_PARENT" && record.knowledgeStatus === "UNKNOWN" && currentFamilySource(record);
   const currentStepChild = (record, spouse) => includeStepFamily && record?.source === "CK3_PARENT_SPOUSE_CHILD"
     && record.sourceOwnerId === Number(observer?.id)
     && record.sourceParentId === Number(spouse.parentId) && record.sourceSpouseId === Number(spouse.id)
@@ -109,18 +107,25 @@ function createTraitProfileView(gameData, character, memoryContext = null, { inc
     else {
       for (const key of Object.keys(value)) {
         if (key === "parents" && Array.isArray(value[key])) {
+          const historicalSteps = value[key].filter(item => currentHistoricalStep(item, value.id));
+          if (historicalSteps.length) result.historicalStepRelations = historicalSteps.map(item => ({
+            ...copy(item, true), relationType: "STEP_PARENT", temporalStatus: "HISTORICAL"
+          }));
           result[key] = value[key].filter(item => (!isStepSourceRecord(item, "CK3_PARENT_SPOUSE_CHILD", "parents.spouses.children.")
             || includeStepFamily && item.source === "CK3_PARENT_SPOUSE_CHILD" && item.sourceOwnerId === Number(observer?.id) && item.childId === Number(value.id)
               && item.relationType === "parent" && ["parents.spouses.children.spouseParent", "parents.spouses.children.otherParent"].includes(item.sourceRelation)
               && item.publicStatus === "PUBLIC_LEGAL_PARENT" && item.knowledgeStatus === "UNKNOWN" && !item.evidenceConflict && currentFamilySource(item))
-            && (item?.relationshipKind !== "STEP" || includeStepFamily && currentTypedStep(item, value.id))
-            && (item?.source === "CK3_PARENT_SPOUSE_CHILD" || item?.relationshipKind === "STEP"
+            && item?.relationshipKind !== "STEP"
+            && (item?.source === "CK3_PARENT_SPOUSE_CHILD"
               || currentDirectParent(item, value.id))).map(item => copy(item, true));
           continue;
         }
         if (key === "relations" && Array.isArray(value[key])) {
-          result[key] = value[key].filter(item => !item?.directParentEvidence
-            || currentDirectParent(item.directParentEvidence, item.ownerId)).map(item => copy(item));
+          result[key] = value[key].filter(item => !["parent", "child"].includes(item?.relationType)
+            || currentDirectParent(item.directParentEvidence, {
+              childId: item.relationType === "child" ? value.id : item.ownerId,
+              parentId: item.relationType === "child" ? item.ownerId : value.id
+            })).map(item => copy(item));
           continue;
         }
         if (key === "spouses" && Array.isArray(value[key])) {
@@ -132,8 +137,10 @@ function createTraitProfileView(gameData, character, memoryContext = null, { inc
           continue;
         }
         if (key === "children" && Array.isArray(value[key])) {
-          result[key] = value[key].filter(item => !isStepSourceRecord(item, "CK3_PARENT_SPOUSE_CHILD", "parents.spouses.children")
-            || currentStepChild(item, value)).map(item => copy(item, true));
+          result[key] = value[key].filter(item => isStepSourceRecord(item, "CK3_PARENT_SPOUSE_CHILD", "parents.spouses.children")
+            ? currentStepChild(item, value)
+            : currentDirectParent(item?.directParentEvidence || item?.parentEvidence, { childId: item?.id, parentId: value.id }))
+            .map(item => copy(item, true));
           continue;
         }
         // A raw parentage record is not evidence that an NPC may learn its identity.

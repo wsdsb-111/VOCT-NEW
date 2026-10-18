@@ -40,6 +40,10 @@ function makeStepFamilyLines({
   addSecret = false
 } = {}) {
   const lines = makeFamilyFixtureLines({ siblingCount });
+  for (let index = 0; index < siblingCount; index += 1) {
+    const siblingId = index === 0 ? 20 : 100 + index;
+    lines.push(line("parents", siblingId, [PLAYER_ID, "宋氏父", 0, "1142年5月2日", 48, "he", "PUBLIC_LEGAL_PARENT"]));
+  }
   const extraCharacters = [
     { id: STEP_FATHER_ID, name: "沈承安", gender: "male", age: 42 },
     { id: STEP_MOTHER_ID, name: "崔兰", gender: "female", age: 39 },
@@ -586,8 +590,13 @@ async function main() {
   const validTypedStepData = await parseFixture(runtime, makeStepFamilyLines());
   addTypedHistoricalStep(validTypedStepData, { name: "V937_VALID_TYPED_STEP" });
   const validTypedProjection = projectTraitProfile(validTypedStepData, true);
+  assert.ok(validTypedProjection.responder.historicalStepRelations?.some(record =>
+    record.name === "V937_VALID_TYPED_STEP" && record.relationType === "STEP_PARENT" && record.temporalStatus === "HISTORICAL"),
+  "a source-bound legacy STEP record is available only in the explicit historical relation projection");
+  assert.ok(!validTypedProjection.responder.parents.some(parent => Number(parent.id) === 82),
+    "a historical typed STEP relation cannot masquerade as a biological parent");
   assert.ok(validTypedProjection.serialized.includes("V937_VALID_TYPED_STEP"),
-    "a source-bound current-snapshot legacy STEP record remains available in the custom-template view");
+    "the explicit custom-template historical relation view retains the verified label");
   const typedStepProjectionCases = [
     ["snapshot", record => { record.sourceSnapshotId = "stale-typed-step"; }],
     ["campaign", record => { record.campaignToken = OTHER_CAMPAIGN; }],
@@ -604,6 +613,8 @@ async function main() {
     invalidate(record);
     const projection = projectTraitProfile(data, true);
     assert.ok(!projection.serialized.includes(sentinel), `invalid typed STEP ${label} sentinel must not serialize`);
+    assert.ok(!projection.responder.historicalStepRelations?.some(item => item.name === sentinel),
+      `invalid typed STEP ${label} must not appear in historicalStepRelations`);
   }
 
   const cacheData = await parseFixture(runtime, makeStepFamilyLines());
@@ -613,23 +624,38 @@ async function main() {
   const parsedStepTreeData = await parseFixture(runtime, makeProjectionFixtureLines());
   const parsedStepTree = getProjectionFixtureEvidence(parsedStepTreeData).spouse;
   cacheMother.spouses.push(parsedStepTree);
-  assert.strictEqual(getCachedBirthGraphQuietly(cacheData), cachedBirthGraph,
-    "adding a parser-produced spouse/children subtree must reuse the cached birth graph");
+  let currentBirthGraph = getCachedBirthGraphQuietly(cacheData);
+  assert.notStrictEqual(currentBirthGraph, cachedBirthGraph,
+    "adding a parser-produced spouse/children subtree invalidates the birth graph cache");
+  assert.equal(currentBirthGraph.relationBetween(1, RESPONDER_ID).relation?.type, "PARENT_OF",
+    "spouse-source invalidation preserves the responder's verified biological parent edge");
+  assert.equal(currentBirthGraph.relationBetween(STEP_FATHER_ID, STEP_BROTHER_ID).relation?.type || null, null,
+    "a parent-spouse child remains a step relation and never enters the biological graph");
   const freshStepQuery = render(runtime, cacheData, "你继兄弟是谁？", memoryContext);
   assert.match(freshStepQuery.familyText, /沈子明/u,
     "the direct step-family query must read newly attached source evidence despite birth-graph cache reuse");
 
   const cachedStepChild = cacheMother.spouses[0].children[0];
   cachedStepChild.publicStatus = "UNKNOWN";
-  assert.strictEqual(getCachedBirthGraphQuietly(cacheData), cachedBirthGraph,
-    "changing only spouse-child evidence status must not rebuild the birth graph");
+  const afterUnknownChild = getCachedBirthGraphQuietly(cacheData);
+  assert.notStrictEqual(afterUnknownChild, currentBirthGraph,
+    "changing spouse-child evidence status invalidates the birth graph cache");
+  assert.equal(afterUnknownChild.relationBetween(1, RESPONDER_ID).relation?.type, "PARENT_OF",
+    "invalidating a step-child proof leaves the responder's biological parent edge intact");
+  assert.equal(afterUnknownChild.relationBetween(STEP_FATHER_ID, STEP_BROTHER_ID).relation?.type || null, null,
+    "an UNKNOWN step-child proof does not create a biological parent edge");
   const unknownChildQuery = render(runtime, cacheData, "你继兄弟是谁？", memoryContext);
   assert.ok(!unknownChildQuery.familyText.includes("沈子明"),
     "the direct step-family query must immediately hide child evidence changed to UNKNOWN");
 
   cacheMother.spouses[0].publicStatus = "UNKNOWN";
-  assert.strictEqual(getCachedBirthGraphQuietly(cacheData), cachedBirthGraph,
-    "changing only parent-spouse evidence status must not rebuild the birth graph");
+  const afterUnknownSpouse = getCachedBirthGraphQuietly(cacheData);
+  assert.notStrictEqual(afterUnknownSpouse, afterUnknownChild,
+    "changing parent-spouse evidence status invalidates the birth graph cache");
+  assert.equal(afterUnknownSpouse.relationBetween(1, RESPONDER_ID).relation?.type, "PARENT_OF",
+    "invalidating spouse evidence leaves the responder's biological parent edge intact");
+  assert.equal(afterUnknownSpouse.relationBetween(STEP_FATHER_ID, STEP_BROTHER_ID).relation?.type || null, null,
+    "an UNKNOWN spouse proof does not create a biological parent edge");
   const unknownSpouseQuery = render(runtime, cacheData, "你继父是谁？", memoryContext);
   assert.ok(!unknownSpouseQuery.familyText.includes("沈承安"),
     "the direct step-family query must immediately hide spouse evidence changed to UNKNOWN");
@@ -747,7 +773,7 @@ async function main() {
   const typedHistory = addTypedHistoricalStep(typedHistoryData);
   const typedHistoryPrompt = render(runtime, typedHistoryData, "你以前的继母是谁？", makeMemoryContext());
   assert.match(typedHistoryPrompt.familyText, /历史来源记载曾有王氏旧继母为继亲；当前关系未确认/u,
-    "a strictly source-bound legacy typed STEP record must be preserved as history without claiming the current relationship");
+    "a strictly source-bound legacy typed STEP record is narrated as history without claiming a current relationship");
   assert.ok(!typedHistoryPrompt.familyText.includes("继母：王氏旧继母"),
     "historical typed STEP evidence must never be presented as a current step-parent");
   assert.equal(typedHistory.source, "LEGACY_TYPED_STEP_RELATION",
@@ -810,7 +836,7 @@ async function main() {
       "authorized time-bounded Legacy memory remains in the final Prompt without memory authorization expansion",
       "unrelated Prompt text and token count are unchanged",
       "custom-template projection retains only fresh, bound, public step-family evidence and filters invalid sentinels",
-      "new spouse evidence reuses the birth graph cache while direct step-family queries observe updated status"
+      "spouse evidence mutations invalidate the birth graph cache while step relations stay outside biological edges"
     ]
   }, null, 2) + "\n");
 }

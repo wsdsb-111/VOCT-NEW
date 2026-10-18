@@ -176,9 +176,17 @@ const archivedChecks = [
 ];
 
 const releaseChecks = [
+  { group: "v9.3.9-dynamic-freeze", script: "test-v9.3.9-dynamic-freeze.js" },
+  { group: "v9.3.9-disclosure-prompt", script: "test-v9.3.9-disclosure-prompt.js" },
+  { group: "v9.3.9-kinship", script: "test-v9.3.9-kinship.js" },
+  { group: "v9.3.9-age-parser", script: "test-v9.3.9-age-parser.js" },
+  { group: "v9.3.9-character-knowledge", script: "test-v9.3.9-character-knowledge.js" },
+  { group: "v9.3.9-independent-qa", script: "test-v9.3.9-independent-qa.js" },
   { group: "v9.3.7-age-calibration", script: "test-v9.3.7-age-calibration.js" },
   { group: "v9.3.7-other-parent-graph", script: "test-v9.3.7-other-parent-graph.js" },
   { group: "v9.3.7-public-kinship-cache", script: "test-v9.3.7-public-kinship-cache.js" },
+  { group: "v9.3.8-full-memory", script: "test-v9.3.8-full-memory.js" },
+  { group: "v9.3.8-context-usage", script: "test-v9.3.8-context-usage.js" },
   { group: "v9.3.7-runfile-atomic-retry", script: "test-v9.3.7-runfile-atomic-retry.js" },
   { group: "v9.3.7-independent-qa", script: "test-v9.3.7-independent-qa.js" },
   { group: "v9.3.7-family-performance", script: "test-v9.3.7-family-performance.js" },

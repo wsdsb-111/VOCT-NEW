@@ -101,7 +101,7 @@ function emptyPlayerLedger(fallbackStatus, extraMetrics = {}) {
 }
 
 function retrievePlayerBaselineLedger({ store, ownerId, counterpartIds = [], campaignToken, currentGameDate,
-  currentTotalDays, memories = [], tokenBudget = 0, recentSummary = null,
+  currentTotalDays, memories = [], tokenBudget = 0, recentSummary = null, recentSummaries = null,
   estimateTokens = text => Math.ceil(String(text).length / 2) } = {}) {
   if (!store?.pairLedger) return emptyPlayerLedger("INDEX_UNAVAILABLE");
   if (typeof campaignToken !== "string" || !campaignToken.trim()) return emptyPlayerLedger("CAMPAIGN_UNBOUND");
@@ -132,13 +132,13 @@ function retrievePlayerBaselineLedger({ store, ownerId, counterpartIds = [], cam
     && typeof item.itemId === "string" && typeof item.text === "string" && item.text.trim());
   // Parse the actual rendered (possibly truncated) Recent copy with the same
   // boundaries as the index. A substring is not proof of a complete matter.
-  const renderedRecentItems = parseImportantMatters(recentSummary?.text).items;
+  const renderedRecents = (Array.isArray(recentSummaries) ? recentSummaries : [recentSummary])
+    .filter(Boolean).map(summary => ({ ...summary, items: parseImportantMatters(summary.text).items }));
   const orderedItems = visibleItems.map(item => {
-    const verifiedRecent = recentSummary?.sources?.some(source =>
-      source.sourceSummaryKey === item.source?.sourceSummaryKey && source.sourceRevision === item.source?.sourceRevision);
-    const completeItem = renderedRecentItems.some(row => !row.ambiguous
-      && row.ordinal === item.source?.sourceItemOrdinal && row.text === item.text);
-    return verifiedRecent && completeItem
+    const represented = renderedRecents.some(summary => summary.sources?.some(source =>
+      source.sourceSummaryKey === item.source?.sourceSummaryKey && source.sourceRevision === item.source?.sourceRevision)
+      && summary.items.some(row => !row.ambiguous && row.ordinal === item.source?.sourceItemOrdinal && row.text === item.text));
+    return represented
       ? { ...item, recentSummaryReference: true } : item;
   }).sort(compareLedgerItems);
   const budget = Math.max(0, Number(tokenBudget) || 0);
@@ -417,9 +417,10 @@ function formatThirdPersonEmpty(status, { level = "L0", metrics = {}, candidateS
 
 function retrieveThirdPersonHistory({ mode = "THIRD_PERSON_LEDGER", store, ownerId, decision, entitiesProfile = [],
   campaignToken, currentGameDate, currentTotalDays, memories = [], query = "", excludedMemoryIds = [], tokenBudget = 0,
-  retrievalMode = store?.pairLedger?.retrievalMode || "safe-candidate-directory", sceneRevision = null, temporal = null,
+  retrievalMode = store?.pairLedger?.retrievalMode || "safe-candidate-directory", sceneRevision = null, temporal = null, sourceLimit = 2,
   estimateTokens = text => Math.ceil(String(text).length / 2) } = {}) {
   const route = decisionForThirdPersonRetrieval(decision, ownerId, mode);
+  const maxSources = Math.min(3, Number.isSafeInteger(sourceLimit) && sourceLimit > 0 ? sourceLimit : 2);
   if (!route.ok) return formatThirdPersonEmpty(route.status);
   const level = route.level;
   if (!store?.pairLedger) return formatThirdPersonEmpty("INDEX_UNAVAILABLE", { level });
@@ -659,7 +660,7 @@ function retrieveThirdPersonHistory({ mode = "THIRD_PERSON_LEDGER", store, owner
   if (level === "L2") {
     const resolveStart = performance.now();
     for (const row of candidateMap.values()) {
-      if (sourceResolveAttemptCount >= 2 || resolvedSources.length >= 2) break;
+      if (sourceResolveAttemptCount >= maxSources || resolvedSources.length >= maxSources) break;
       const { candidate, pointer } = row;
       if (excluded.has(String(pointer.sourceMemoryId))) continue;
       sourceResolveAttemptCount++;

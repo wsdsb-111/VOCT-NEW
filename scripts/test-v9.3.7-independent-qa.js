@@ -26,6 +26,15 @@ const RELATED_QUERY = "你兄弟的母亲是谁？";
 const COMPARISON_QUERY = "你们是否同父异母？";
 const AGE_QUERY = "你兄弟赵子明现在几岁？";
 
+function addPublicKidsMarkers(lines) {
+  return lines.map(value => {
+    const fields = value.split("/;/");
+    if (fields[1] !== "kids" || fields[2] !== String(PLAYER_ID)) return value;
+    if (fields.at(-1) === "PUBLIC_LEGAL_PARENT") return value;
+    return `${value}/;/PUBLIC_LEGAL_PARENT`;
+  });
+}
+
 function sha256(value) {
   return crypto.createHash("sha256").update(String(value)).digest("hex");
 }
@@ -64,13 +73,13 @@ function addConflictingMother(lines, status = "PUBLIC_LEGAL_PARENT") {
 }
 
 function graphFor(gameData) {
-  const { buildKinshipGraph } = require(path.join(ROOT, "src/app/main/worldline/character-kinship-graph.js"));
+  const { getCachedKinshipGraph } = require(path.join(ROOT, "src/app/main/worldline/kinship-graph-cache.js"));
   const originalLog = console.log;
   const originalWarn = console.warn;
   console.log = () => {};
   console.warn = () => {};
   try {
-    return buildKinshipGraph(gameData.getMentionableCharacterProfiles());
+    return getCachedKinshipGraph(gameData);
   } finally {
     console.log = originalLog;
     console.warn = originalWarn;
@@ -79,7 +88,7 @@ function graphFor(gameData) {
 
 async function main() {
   const runtime = loadRuntime(ROOT);
-  const baseLines = makeFamilyFixtureLines({ siblingCount: 1, siblingCharacterAge: null, siblingRelativeAge: 17 });
+  const baseLines = addPublicKidsMarkers(makeFamilyFixtureLines({ siblingCount: 1, siblingCharacterAge: null, siblingRelativeAge: 17 }));
   const lines = addAdversarialRows(baseLines);
   const gameData = await parseFixture(runtime, lines);
   const graph = graphFor(gameData);

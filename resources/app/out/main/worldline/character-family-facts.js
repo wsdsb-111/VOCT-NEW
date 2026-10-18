@@ -12,7 +12,7 @@ const { buildFamilyEntityFactBundle } = require("./family-entity-fact-bundle");
 const { resolveRelationshipCurrentTruth } = require("./relationship-current-truth");
 const { buildStepFamilyFactBlock, isStepFamilyQuery } = require("./step-family-facts");
 
-const DISPLAY_TYPES = new Set(["PARENT_OF", "CHILD_OF", "SIBLING_OF", "GRANDPARENT_OF", "AUNT_UNCLE_OF", "NIECE_NEPHEW_OF", "COUSIN_OF", "SPOUSE_OF", "FORMER_SPOUSE_OF", "DECEASED_SPOUSE_OF"]);
+const DISPLAY_TYPES = new Set(["PARENT_OF", "CHILD_OF", "STEP_PARENT_OF", "STEP_CHILD_OF", "STEP_SIBLING_OF", "SIBLING_OF", "GRANDPARENT_OF", "AUNT_UNCLE_OF", "NIECE_NEPHEW_OF", "COUSIN_OF", "SPOUSE_OF", "FORMER_SPOUSE_OF", "DECEASED_SPOUSE_OF"]);
 
 function characterName(character, id) {
   return character?.fullName || character?.shortName || character?.firstName || character?.name || `#${id}`;
@@ -270,7 +270,9 @@ function buildFamilyFactBlock(character, gameData, { query = "", recentTargetId 
     if (!bundle) continue;
     const currentFact = resolveRelationshipCurrentTruth({ gameData, subjectRuntimeId: edge.from, anchorRuntimeId: relationAnchorId, registry: currentFactRegistry, kinshipGraph: graph });
     const sex = { sex: currentFact?.currentState?.sex || "unknown", conflict: currentFact?.evidence?.conflicts?.length > 0 };
-    const label = currentFact?.relations[String(relationAnchorId)]?.label || resolveKinshipLabel({ type: edge.type, sex: "unknown", branch: edge.branch });
+    const label = edge.relationshipKind === "STEP" || edge.type.startsWith("STEP_")
+      ? resolveKinshipLabel({ type: edge.type, sex: "unknown", branch: edge.branch, relationshipKind: "STEP" })
+      : currentFact?.relations[String(relationAnchorId)]?.label || resolveKinshipLabel({ type: edge.type, sex: "unknown", branch: edge.branch, relationshipKind: edge.relationshipKind });
     const death = bundle.death ? { fact: bundle.death, text: formatDeathFact(relative, { ...temporal, characters: graph.nodes })?.text || "已故" } : null;
     const lifeStatus = resolveLifeStatus(relative);
     const age = selectedTargetId === String(edge.from) && selectedAge ? selectedAge : { age: bundle.age, label: bundle.ageLabel };

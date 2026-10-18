@@ -226,8 +226,8 @@ function assertPolicyMatrix() {
     }
   }
   for (const participants of [4, 6]) {
-    const current32k = resolveMemoryBudget({ participantCount: participants, contextWindowTokens: 32768, providerHeadroomTokens: 32768 });
-    const current128k = resolveMemoryBudget({ participantCount: participants, contextWindowTokens: 131072, providerHeadroomTokens: 131072 });
+    const current32k = resolveMemoryBudget({ participantCount: participants, contextWindowTokens: 32768, providerHeadroomTokens: 32768, policyRevision: "v9.3.6" });
+    const current128k = resolveMemoryBudget({ participantCount: participants, contextWindowTokens: 131072, providerHeadroomTokens: 131072, policyRevision: "v9.3.6" });
     assert.equal(current32k.memoryBudgetTokens, 6400, "32K/4+ must stop at the new tier hard cap");
     assert.equal(current128k.memoryBudgetTokens, 6400, "128K/4+ must retain the hard cap");
   }

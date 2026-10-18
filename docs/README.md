@@ -1,19 +1,18 @@
 # VOTC 文档索引
 
-V9.3.7 修复候选（基线 V9.3.6.3）扩展到同父异母、同母异父、当前继父母／继兄弟姐妹及有来源的历史继亲 Legacy 记录；不新增 Memory 读取，也不从前配偶推断继亲。原报告记录 290 项映射、442/442 发布组、正式性能、Pair benchmark 与 11 组原生 smoke 通过，属于原候选批次；本轮状态见下方后续收口报告。合成 Prompt Provider 为 PARTIAL，真实 CK3、游戏内 Provider 与 Soak 未验收，不宣称 Full Freeze。原候选入口：[施工方案](current/v9/V9_3_7_IMPLEMENTATION_PLAN.md)、[实施报告](current/v9/V9_3_7_IMPLEMENTATION_REPORT.md)、[验证报告](current/v9/V9_3_7_VERIFICATION_REPORT.md)、[实机清单](current/v9/V9_3_7_REAL_GAME_CHECKLIST.md)。
+V9.3.9 为当前代码候选，合并 V9.3.8.1 的动态摘要冻结、5+3 额度和 80,000／84,000／96,000 Token 合同，以及导入的 V9.3.7.1 亲属、年龄诊断、人物认知和 CI 修复。当前实施证据见 [V9.3.9 实施报告](current/v9/V9_3_9_IMPLEMENTATION_REPORT.md)，任务映射见 [合并计划](current/v9/V9_3_9_IMPLEMENTATION_PLAN.md)。本轮按用户要求只完成代码／自动验证与 GitHub 上传，真实 CK3／Provider／Soak／正式 Release 分开交接。
 
 ## 推荐阅读顺序
 
-当前入口：[V9.3.7 后续收口报告](current/v9/V9_3_7_FOLLOWUP_REPORT.md)：本轮本地发布回归 444/444 PASS、290 项构建部署一致、隔离 Electron 6 组及限定性能复验通过。`9caffe6` 的 [CI run 39004062734](https://github.com/wsdsb-111/VOCT-NEW/actions/runs/39004062734) 已在发布回归失败；本地 PASS 不代表该远端 run 通过；远端 CI 已按用户要求暂缓处理。
-
-1. 当前实施、验证与实机清单：见上方 V9.3.7 链接及后续收口报告。
-2. [源码与构建](current/v9/V9_1_SOURCE_BUILD.md)：先编辑 src/app，再构建、部署和校验。
-3. [Legacy Summary](README_摘要系统.md)：当前 Recent1／L0–L2、来源、Forget 和索引合同。
-4. [索引与来源合同](current/v9/V9_3_5_INDEX_AND_SOURCE_CONTRACT.md)：存储／IPC 合同继续兼容，召回配额以上述当前合同为准。
+1. [V9.3.9 合并计划](current/v9/V9_3_9_IMPLEMENTATION_PLAN.md)与[实施报告](current/v9/V9_3_9_IMPLEMENTATION_REPORT.md)：代码范围、实际验证和外部交接。
+2. [源码与构建](current/v9/V9_1_SOURCE_BUILD.md)：先编辑 src/app，再构建和验证生成资源。
+3. [Legacy Summary](README_摘要系统.md)：Recent2、全场动态配额、来源复验与冻结复用。
+4. [索引与来源合同](current/v9/V9_3_5_INDEX_AND_SOURCE_CONTRACT.md)：既有存储／IPC 兼容边界。
+5. 方案来源：[V9.3.8.1](current/v9/V9_3_8_1_DEVELOPMENT_SPEC.md)、[V9.3.7.1 导入原案](current/v9/V9_3_7_1_FIX_SPEC_IMPORTED.md)。
 
 ## 历史版本与阶段快照
 
-以下保留各版本当时的实现和验收快照；旧段落中的“当前”“下一步”、Memory4 和配额只指该阶段，不覆盖顶部 V9.3.7 合同。
+以下保留各版本当时的实现和验收快照；旧段落中的“当前”“下一步”、Memory4 和配额只指该阶段，不覆盖顶部 V9.3.9 合同。
 
 V9.3.6.3 综合修复候选：本轮补充 CK3 权威年龄、场外亲属/年份召回、重新生成授权和实际 Prompt 匿名对照；436组发布回归、22格484次同源合成A/B和隔离Electron双启动通过，289项部署一致。先前 TwoP1 数据保留为历史批次。当前施工与验收状态见[综合实施报告](current/v9/V9_3_6_3_INTEGRATED_IMPLEMENTATION_REPORT.md)、[综合验证报告](current/v9/V9_3_6_3_INTEGRATED_VERIFICATION_REPORT.md)和[实机清单](current/v9/V9_3_6_3_REAL_GAME_CHECKLIST.md)。
 
@@ -51,7 +50,7 @@ V9.3.6.2 优化候选已本地部署：保守候选目录缩减跨 Pair 读取�
 
 历史 V9.2：[施工原文](current/v9/V9_2_IMPLEMENTATION_SPEC.md)、[实施／验证](current/v9/V9_2_VERIFICATION_REPORT.md)、[七域端口](current/v9/V9_2_SERVICE_PORTS.md)、[JSON 权威与恢复](current/v9/V9_2_JSON_AUTHORITY_AND_RECOVERY.md)、[问题台账](current/v9/V9_2_P_ISSUE_LEDGER.md)、[V9.3 移交](current/v9/V9_2_HANDOFF_TO_V9_3.md)。按当时[旧总路线](current/v9/V9_ROADMAP.md) §7.3 分期；[V9.1 构建说明](current/v9/V9_1_SOURCE_BUILD.md)和旧实施报告保留历史证据。
 
-V9.3.6 历史合同见[实施报告](current/v9/V9_3_6_IMPLEMENTATION_REPORT.md)、[验证报告](current/v9/V9_3_6_VERIFICATION_REPORT.md)、[Token 与缓存对比](current/v9/V9_3_6_TOKEN_AND_CACHE_COMPARISON.md)、[兼容与退役审计](current/v9/V9_3_6_COMPATIBILITY_AND_RETIREMENT_AUDIT.md)；玩家中心记忆的权限与兼容边界继续沿用，当前 V9.3.7 验证以本页顶部入口为准。
+V9.3.6 历史合同见[实施报告](current/v9/V9_3_6_IMPLEMENTATION_REPORT.md)、[验证报告](current/v9/V9_3_6_VERIFICATION_REPORT.md)、[Token 与缓存对比](current/v9/V9_3_6_TOKEN_AND_CACHE_COMPARISON.md)、[兼容与退役审计](current/v9/V9_3_6_COMPATIBILITY_AND_RETIREMENT_AUDIT.md)；玩家中心记忆的权限与兼容边界继续沿用，当前 V9.3.9 合同以本页顶部入口为准。
 
 V9工程合同：[永久行为](current/v9/V9_BASELINE_BEHAVIOR_CONTRACTS.md)、[架构边界](current/v9/V9_ARCHITECTURE_BOUNDARY.md)、[数据责任](current/v9/V9_DATA_OWNERSHIP_LEDGER.md)、[退役台账](current/v9/V9_DECOMMISSION_LEDGER.md)、[性能调查](current/v9/V9_STARTUP_PERFORMANCE_INVESTIGATION.md)、[独立兼容迁移](current/v9/V9_COMPATIBILITY_MOD_SEPARATION.md)。
 

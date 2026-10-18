@@ -1,6 +1,6 @@
 "use strict";
 const assert = require("assert");
-const { buildKinshipGraph } = require("../resources/app/out/main/worldline/character-kinship-graph");
+const { buildLegacyStructuralKinshipGraph: buildKinshipGraph } = require("../resources/app/out/main/worldline/character-kinship-graph");
 const { familyCharacters } = require("./v8.6.2-test-fixtures");
 const graph = buildKinshipGraph(familyCharacters());
 const husband = graph.relationBetween("1", "13").relation;

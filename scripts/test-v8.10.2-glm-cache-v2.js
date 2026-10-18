@@ -105,7 +105,22 @@ const responder = {
   relationsToPlayer: ["朋友"],
   relationsToCharacters: []
 };
-const child = { id: 2, shortName: "赵乙", firstName: "乙", fullName: "赵乙", gender: "female", sheHe: "她", parents: [{ id: 1, name: "赵甲" }] };
+const kinshipCampaignToken = "v810-fixture-campaign";
+const kinshipSnapshotId = "1175.1.1/1";
+const currentParentEvidence = {
+  source: "CK3_DIRECT_PARENT",
+  sourceOwnerId: 2,
+  childId: 2,
+  parentId: 1,
+  relationType: "parent",
+  sourceRelation: "parents",
+  publicStatus: "PUBLIC_LEGAL_PARENT",
+  knowledgeStatus: "UNKNOWN",
+  campaignToken: kinshipCampaignToken,
+  sourceSnapshotId: kinshipSnapshotId
+};
+responder.children[0].directParentEvidence = currentParentEvidence;
+const child = { id: 2, shortName: "赵乙", firstName: "乙", fullName: "赵乙", gender: "female", sheHe: "她", parents: [{ id: 1, name: "赵甲", ...currentParentEvidence }] };
 const characters = new Map([[1, responder], [2, child]]);
 const gameData = {
   date: "1175.1.1",
@@ -113,6 +128,7 @@ const gameData = {
   dynasty: "宋",
   currentEraName: "淳熙",
   totalDays: 1,
+  campaignToken: kinshipCampaignToken,
   scene: "throne_room",
   location: "临安",
   characters,

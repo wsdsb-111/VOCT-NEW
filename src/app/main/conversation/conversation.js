@@ -1,6 +1,7 @@
 "use strict";
 
 const { getCharacterPersonalName } = require("../memory-system/character-identity");
+const { buildCharacterDisclosureContext } = require("./character-disclosure-context");
 const { memoryMatchesCampaign } = require("../memory-system/memory-types");
 const { MentionTracker } = require("../memory-system/mention-tracker");
 const { createConversationRuntime } = require("./conversation-runtime");
@@ -73,6 +74,21 @@ function traceOperation(trace, step, fields, operation) {
   }
   finishTraceSpan(finish, { result: "OK" });
   return result;
+}
+
+function tokenCountOrNull(value) {
+  return typeof value === "number" && Number.isSafeInteger(value) && value >= 0 ? value : null;
+}
+
+function formatMemoryContextOverflow(details = {}) {
+  details = details && typeof details === "object" ? details : {};
+  const count = value => tokenCountOrNull(value)?.toLocaleString("zh-CN") || "未知";
+  const breakdown = details.breakdown && typeof details.breakdown === "object" ? details.breakdown : {};
+  const labels = [
+    ["最近记忆", "recent"], ["官方追忆", "official"], ["玩家关系事项簿", "ledger"],
+    ["稳定记忆", "stable"], ["时间记忆", "temporal"], ["第三人记忆", "thirdPerson"]
+  ];
+  return `当前上下文预算无法容纳所选记忆，本次回复未发送给服务商。需要 ${count(details.requiredTokens)} Token，可用 ${count(details.availableTokens)} Token。分项：${labels.map(([label, key]) => `${label} ${count(breakdown[key])}`).join("、")} Token。`;
 }
 
 const TEMPORARY_ABSENCE_MODES = Object.freeze({
@@ -196,6 +212,10 @@ class Conversation {
     this.pendingActionApprovals = /* @__PURE__ */ new Map();
     this.generationAttemptsByMessageId = /* @__PURE__ */ new Map();
     this.memoryAttemptDiagnosticsByOwner = /* @__PURE__ */ new Map();
+    this.contextUsageByResponder = /* @__PURE__ */ new Map();
+    this.contextUsageRevision = 0;
+    this.contextUsageSceneRevision = null;
+    this.contextCompactionTurnKey = null;
     this.gameDataRevision = 0;
     this.eventEmitter = new events.EventEmitter();
     this.runtime = createConversationRuntime(this, {
@@ -206,6 +226,58 @@ class Conversation {
     this.generationManager = this.runtime.generationManager;
     this.referenceContext = this.runtime.referenceContext;
     this.gameDataReady = this.initializeGameData();
+  }
+  getContextUsageSnapshot(phase = "snapshot") {
+    return {
+      conversationId: this.id,
+      conversationEpoch: this.conversationEpoch,
+      turnEpoch: this.turnEpoch || 0,
+      sceneRevision: this.contextUsageSceneRevision,
+      revision: this.contextUsageRevision || 0,
+      phase,
+      responders: [...(this.contextUsageByResponder?.values?.() || [])]
+    };
+  }
+  resetContextUsageScene(turnEpoch = this.turnEpoch || 0) {
+    const sceneRevision = JSON.stringify([this.gameData?.scene || null, this.gameData?.location || null,
+      this.gameData?.locationController || null]);
+    if (this.contextUsageSceneRevision === sceneRevision) return false;
+    this.contextUsageSceneRevision = sceneRevision;
+    this.contextUsageByResponder?.clear?.();
+    this.contextUsageRevision = (this.contextUsageRevision || 0) + 1;
+    this.eventEmitter?.emit?.("context-usage-updated", {
+      ...this.getContextUsageSnapshot("reset"), turnEpoch
+    });
+    return true;
+  }
+  resetContextUsageTurn() {
+    this.contextUsageByResponder?.clear?.();
+    this.contextUsageRevision = (this.contextUsageRevision || 0) + 1;
+    this.eventEmitter?.emit?.("context-usage-updated", this.getContextUsageSnapshot("reset"));
+    return true;
+  }
+  publishContextUsage(row, responseState = null) {
+    if (!row || !this.eventEmitter || !this.contextUsageByResponder) return false;
+    const responderId = Number(row.responderId);
+    if (!Number.isSafeInteger(responderId) || responderId <= 0
+      || row.conversationId !== this.id
+      || Number(row.conversationEpoch) !== Number(this.conversationEpoch)
+      || Number(row.turnEpoch) !== Number(this.turnEpoch)
+      || row.sceneRevision !== this.contextUsageSceneRevision) return false;
+    const previous = this.contextUsageByResponder.get(responderId);
+    const terminalForLatestRequest = (row.phase === "cancelled" || row.phase === "failed")
+      && previous?.requestId === row.requestId;
+    if (responseState && !this.isResponseCurrent(responseState) && !terminalForLatestRequest) return false;
+    this.contextUsageRevision = (this.contextUsageRevision || 0) + 1;
+    this.contextUsageByResponder.set(responderId, { ...row, responderId, usageRevision: this.contextUsageRevision });
+    this.eventEmitter.emit("context-usage-updated", this.getContextUsageSnapshot("update"));
+    return true;
+  }
+  onContextUsageUpdate(callback) {
+    this.eventEmitter?.on?.("context-usage-updated", callback);
+  }
+  offContextUsageUpdate(callback) {
+    this.eventEmitter?.off?.("context-usage-updated", callback);
   }
   getTurnManager() {
     const manager = this.runtime?.turnManager || this.turnManager;
@@ -385,6 +457,10 @@ class Conversation {
     return patch?.patchText || null;
   }
   async checkAndSummarizeIfNeeded(npc, diagnosticsContext = null) {
+    const currentTurn = this.runtime?.turnManager?.currentTurn || this.turnManager?.currentTurn;
+    const compactionTurnKey = currentTurn?.logicalTurnEpoch != null ? `logical:${currentTurn.logicalTurnEpoch}`
+      : currentTurn?.playerMessageId != null ? `player:${currentTurn.playerMessageId}`
+        : `epoch:${Number.isSafeInteger(Number(this.turnEpoch)) ? Number(this.turnEpoch) : 0}`;
     memoryEngine?.syncRollingStateFromConversationFields(this);
     memoryEngine?.syncConversationRollingFields(this);
     const capabilities = typeof llmManager.getProviderCapabilities === "function"
@@ -583,7 +659,8 @@ class Conversation {
     }
     if (this.isV813PrefixEnabled?.()) memoryContext.freezePromptPrefix = true;
     const activeProvider = settingsRepository?.getActiveProviderConfig?.();
-    const requestedOutputTokens = activeProvider?.providerType === "deepseek" ? 4096 : Number(activeProvider?.defaultParameters?.max_tokens) || 4096;
+    const requestedOutputTokens = activeProvider?.providerType === "deepseek" ? 4096
+      : Number(activeProvider?.defaultParameters?.max_tokens) || capabilities.maxOutputTokens;
     let budget;
     for (let attempt = 0; attempt < 8; attempt++) {
       const history = this.getPromptHistoryForCharacter(npc.id);
@@ -602,10 +679,20 @@ class Conversation {
           nonMemoryInputTokens: nonMemoryBudget.estimatedInputTokens, providerHeadroomTokens, memoryBudgetTokens,
           reservedOutputTokens: nonMemoryBudget.reservedOutputTokens, safetyMarginTokens: nonMemoryBudget.safetyMarginTokens,
           protocolOverheadTokens: nonMemoryBudget.protocolOverheadTokens };
-        const retrieved = (applicationServices?.memory || memoryEngine).retrieveForResponder({ ...pendingRecall,
-          tokenBudget: memoryBudgetTokens, memoryBudgetPlan, configurationRevision: capabilities.capabilityRevision || JSON.stringify([
-            capabilities.providerId, capabilities.modelId, capabilities.contextWindow, capabilities.maxOutputTokens]),
-          budgetPolicyRevision: DEFAULT_MEMORY_BUDGET_POLICY_REVISION });
+        let retrieved;
+        try {
+          retrieved = (applicationServices?.memory || memoryEngine).retrieveForResponder({ ...pendingRecall,
+            tokenBudget: memoryBudgetTokens, memoryBudgetPlan, configurationRevision: capabilities.capabilityRevision || JSON.stringify([
+              capabilities.providerId, capabilities.modelId, capabilities.contextWindow, capabilities.maxOutputTokens]),
+            budgetPolicyRevision: DEFAULT_MEMORY_BUDGET_POLICY_REVISION });
+        } catch (error) {
+          if (error?.code !== "MEMORY_CONTEXT_OVERFLOW") throw error;
+          if (this.contextCompactionTurnKey === compactionTurnKey) throw error;
+          this.contextCompactionTurnKey = compactionTurnKey;
+          const compacted = await this.createRollingSummary(nonMemoryBudget.effectiveInputBudget);
+          if (!compacted?.committed || !compacted.selection?.batch?.length) throw error;
+          continue;
+        }
         if (memoryContext.sourceFolderRevision !== retrieved.sourceFolderRevision) {
           this.cacheV2FrozenSnapshots?.prefixByResponder?.clear();
           this.dynamicRecallHistory?.clear();
@@ -618,6 +705,8 @@ class Conversation {
           pairMemoryMetrics: retrieved.pairMemoryMetrics, memoryBudgetPlan: memoryContext.memoryBudgetPlan,
           turnEpoch: this.turnEpoch }, null);
       }
+      memoryContext = { ...memoryContext, ...this.getCharacterDisclosureContext(npc,
+        [...(memoryContext.disclosureTargetIds || []), ...(memoryContext.thirdPersonDecision?.targetCharacterIds || [])]) };
       const built = typeof PromptBuilder.buildMessagesWithTokenCount === "function"
         ? PromptBuilder.buildMessagesWithTokenCount(history, npc, this.gameData, summary, memoryContext, activeProvider)
         : { messages: PromptBuilder.buildMessages(history, npc, this.gameData, summary, memoryContext) };
@@ -630,8 +719,12 @@ class Conversation {
       this.contextBudgetDiagnostics = {
         ...budget,
         provider: capabilities.providerType,
+        providerId: capabilities.providerId,
         model: capabilities.modelId,
         contextWindow: capabilities.contextWindow,
+        contextWindowSource: capabilities.contextWindowSource,
+        configuredContextLength: capabilities.configuredContextLength,
+        modelNativeContext: capabilities.modelNativeContext,
         providerMaxOutputTokens: capabilities.maxOutputTokens,
         softThresholdReached: budget.pressureRatio >= 0.65,
         historyMode: rollingState?.cacheEpoch > 0 ? "COMPACTED" : "APPEND_ONLY",
@@ -640,6 +733,8 @@ class Conversation {
         cacheEpoch: rollingState?.cacheEpoch || 0
       };
       if (budget.pressureRatio < (this.CONTEXT_LIMIT_PERCENTAGE ?? 0.75)) break;
+      if (this.contextCompactionTurnKey === compactionTurnKey) break;
+      this.contextCompactionTurnKey = compactionTurnKey;
       const result = await this.createRollingSummary(budget.effectiveInputBudget);
       if (!result?.committed) break;
     }
@@ -679,7 +774,9 @@ class Conversation {
   getMemoryTokenBudget(contextLimit, participantIds, providerHeadroomTokens = contextLimit) {
     if (PLAYER_CENTERED_RECALL_ENABLED) {
       if (!this.frozenMemoryBudget) {
-        const participantCount = new Set(participantIds.map(Number).filter(id => Number.isSafeInteger(id) && id > 0)).size;
+        const conversationIds = this.selectedCharacterIds instanceof Set
+          ? [this.gameData?.playerID, ...this.selectedCharacterIds] : participantIds;
+        const participantCount = new Set(conversationIds.map(Number).filter(id => Number.isSafeInteger(id) && id > 0)).size;
         const plan = resolveMemoryBudget({ participantCount, contextWindowTokens: contextLimit,
           providerHeadroomTokens: contextLimit });
         this.frozenMemoryBudget = { participantCount, ratio: plan.ratio,
@@ -711,7 +808,10 @@ class Conversation {
     const sourceFolderRevision = memoryEngine.store.getFolderSummaryRevision(npc.id);
     if (!(memoryState.sourceFolderRevisions instanceof Map)) memoryState.sourceFolderRevisions = new Map();
     if (memoryState.sourceFolderRevisions.has(npc.id) && memoryState.sourceFolderRevisions.get(npc.id) !== sourceFolderRevision) {
-      memoryEngine.invalidateConversationRecallState(this);
+      if (PLAYER_CENTERED_RECALL_ENABLED) {
+        memoryState.mentionProfileCache = null;
+        this.cacheV2FrozenSnapshots?.prefixByResponder?.clear();
+      } else memoryEngine.invalidateConversationRecallState(this);
     }
     memoryState.sourceFolderRevisions.set(npc.id, sourceFolderRevision);
     this.getPromptHistoryForCharacter(npc.id);
@@ -806,6 +906,7 @@ class Conversation {
       tokenBudget: PLAYER_CENTERED_RECALL_ENABLED || memory3Settings.v812MemoryEngine3Enabled !== false
         ? this.getMemoryTokenBudget(limit, activeParticipantIds)
         : Math.min(2400, Math.max(800, Math.floor(limit * 0.08))),
+      participantCount: this.frozenMemoryBudget?.participantCount,
       estimateTokens: (text) => TokenCounter.estimateTokens(text),
       estimateMessageTokens: (message) => this.estimateMessageTokens(message)
     };
@@ -883,6 +984,7 @@ class Conversation {
     }
     return {
       ...retrieved,
+      ...this.getCharacterDisclosureContext(npc, currentTurnMentionedCharacterIds),
       turnRecall: turnRecall.selected,
       turnRecallText: turnRecall.text,
       turnRecallTokens: turnRecall.tokens,
@@ -917,6 +1019,12 @@ class Conversation {
   /**
    * Estimate token count (simple approximation)
    */
+  getCharacterDisclosureContext(npc, additionalTargets = []) {
+    return buildCharacterDisclosureContext({
+      service: applicationServices?.characterKnowledge, gameData: this.gameData, responderId: npc.id,
+      targetIds: [...this.gameData.characters.keys(), ...additionalTargets]
+    });
+  }
   estimateTokenCount(messages) {
     return TokenCounter.calculateTotalTokens(messages);
   }
@@ -1035,13 +1143,14 @@ class Conversation {
       ? [{ role: "system", content: recalls.get(message.id).text }, message] : [message]);
   }
   retainDynamicSummaryRecall(characterId, messageId, promptBuild, turnEpoch) {
-    const block = promptBuild.blocks?.find(entry => entry.block?.id === "memory-temporal-extra");
+    const block = promptBuild.blocks?.find(entry => entry.block?.id === "memory-dynamic-frozen")
+      || promptBuild.blocks?.find(entry => entry.block?.id === "memory-temporal-extra");
     const text = block?.content;
     const cache = this.memoryState?.responderRecallCache?.get(Number(characterId));
     if (!text || cache?.dynamicTurn !== turnEpoch) return;
     const injectedEntries = cache.dynamicExtra || [];
     const committed = memoryEngine.commitDynamicSummaryRecall(characterId, this.memoryState.responderRecallCache, turnEpoch, {
-      providerSucceeded: true, injectedBlockIds: ["memory-temporal-extra"],
+      providerSucceeded: true, injectedBlockIds: [block.block.id],
       injectedMemoryIds: injectedEntries.map(entry => entry.memory.memoryId),
       injectedTokens: Number(block.tokens) || TokenCounter?.estimateTokens?.(text) || Math.ceil(text.length / 2)
     });
@@ -1272,6 +1381,7 @@ class Conversation {
       console.log(`[Conversation] Skipping unavailable NPC response: ${npc?.shortName || npc?.id || "unknown"}`);
       return;
     }
+    this.resetContextUsageScene(turnEpoch);
     let diagnosticsContext = null;
     try { diagnosticsContext = this.performanceTraceContext?.nextTurn?.() || null; } catch (_error) {}
     const conversationTurnSpan = startTraceSpan(performanceTrace, "conversation.turn", { attribution: "MAIN", context: diagnosticsContext });
@@ -1308,6 +1418,7 @@ class Conversation {
     this.emitUpdate();
     let wasCancelled = false;
     let streamCompleted = false;
+    let settleContextUsageAfterFailure = null;
     try {
       const memoryContext = await this.checkAndSummarizeIfNeeded(npc, diagnosticsContext);
       if (!this.isResponseCurrent(responseState, npc)) throw new Error("AbortError: Message cancelled");
@@ -1331,7 +1442,7 @@ class Conversation {
       const worldlineTokens = promptBlockTokens("worldline-stable") + promptBlockTokens("worldline-turn-recall");
       const totalMemoryTokens = promptBlockTokens("memory-stable") + promptBlockTokens("memory-direct-frozen")
         + promptBlockTokens("memory-official-recollection") + promptBlockTokens("memory-player-ledger-frozen")
-        + mentionedSnapshotTokens + promptBlockTokens("memory-temporal-extra") + promptBlockTokens("memory-session-topic-anchor") + turnRecallTokens + thirdPartyEvidenceTokens;
+        + mentionedSnapshotTokens + promptBlockTokens("memory-dynamic-frozen") + promptBlockTokens("memory-temporal-extra") + promptBlockTokens("memory-session-topic-anchor") + turnRecallTokens + thirdPartyEvidenceTokens;
       const renderedMemoryTokens = typeof PromptBuilder.getMemoryBlockTokenCount === "function"
         ? PromptBuilder.getMemoryBlockTokenCount(promptBuild) : totalMemoryTokens;
       if (memoryContext?.playerCenteredRecallEnabled && renderedMemoryTokens > memoryContext.tokenBudget) throw new Error("chat_memory_budget_exceeded");
@@ -1341,11 +1452,113 @@ class Conversation {
       const estimatedTokenCount = traceOperation(performanceTrace, "tokenEstimate", { attribution: "MAIN", context: diagnosticsContext, count: llmMessages.length }, () => this.estimateTokenCount(llmMessages));
       console.log(`[TOKEN_COUNT] Message from ${npc.fullName}:`, estimatedTokenCount);
       const isOpenRouter = activeConfig?.providerType === "openrouter";
+      const contextDiagnostics = this.contextBudgetDiagnostics || {};
+      const contextWindowTokens = tokenCountOrNull(contextDiagnostics.contextWindow);
+      const providerMaxOutputTokens = tokenCountOrNull(contextDiagnostics.providerMaxOutputTokens);
+      let requestBudget = contextWindowTokens != null && providerMaxOutputTokens != null
+        ? planRequestBudget({ messages: llmMessages,
+          capabilities: { contextWindow: contextWindowTokens, maxOutputTokens: providerMaxOutputTokens },
+          requestedOutputTokens: activeConfig?.providerType === "deepseek" ? 4096
+            : Number(activeConfig?.defaultParameters?.max_tokens) || providerMaxOutputTokens,
+          countTokens: items => this.estimateTokenCount(items) }) : null;
+      let providerUsage = null;
+      let requestPhase = "request_snapshot";
+      let lastContextUsageUpdateAt = 0;
+      let lastContextUsageContentLength = 0;
+      const contextSceneRevision = JSON.stringify([this.gameData?.scene || null, this.gameData?.location || null,
+        this.gameData?.locationController || null]);
+      const publishContextUsage = (phase, force = false) => {
+        const terminalForLatestRequest = (phase === "cancelled" || phase === "failed")
+          && this.contextUsageByResponder?.get?.(Number(npc.id))?.requestId === msgId;
+        if (!requestBudget || contextSceneRevision !== this.contextUsageSceneRevision
+          || !this.isResponseCurrent(responseState, npc) && !terminalForLatestRequest) return;
+        const now = Date.now();
+        if (phase === "streaming" && !force && now - lastContextUsageUpdateAt < 500
+          && placeholder.content.length - lastContextUsageContentLength < 256) return;
+        const nativeUsage = providerUsage?.native || {};
+        const actualInputTokens = tokenCountOrNull(nativeUsage.inputTokens);
+        const actualOutputTokens = tokenCountOrNull(nativeUsage.outputTokens);
+        const estimatedOutputTokens = tokenCountOrNull(providerUsage?.estimated?.outputTokens)
+          ?? tokenCountOrNull(TokenCounter.estimateTokens(placeholder.content));
+        const inputTokens = actualInputTokens ?? tokenCountOrNull(requestBudget.estimatedInputTokens);
+        const outputTokens = actualOutputTokens ?? estimatedOutputTokens;
+        const usedTokens = inputTokens != null && outputTokens != null ? inputTokens + outputTokens : null;
+        const source = actualInputTokens != null && actualOutputTokens != null ? "provider_usage"
+          : actualInputTokens != null || actualOutputTokens != null ? "provider_usage_partial_estimate" : "estimated";
+        lastContextUsageUpdateAt = now;
+        lastContextUsageContentLength = placeholder.content.length;
+        this.publishContextUsage({
+          conversationId: this.id,
+          conversationEpoch: this.conversationEpoch,
+          turnEpoch,
+          sceneRevision: contextSceneRevision,
+          requestId: msgId,
+          responderId: Number(npc.id),
+          responderName: npc.fullName || npc.shortName || "姓名未载入",
+          provider: contextDiagnostics.provider || activeConfig?.providerType || null,
+          model: contextDiagnostics.model || activeConfig?.defaultModel || null,
+          contextWindowTokens,
+          contextWindowSource: contextDiagnostics.contextWindowSource || null,
+          phase,
+          estimatedInputTokens: requestBudget.estimatedInputTokens,
+          inputTokens,
+          inputTokensSource: actualInputTokens != null ? "provider_usage" : "estimated",
+          outputTokens,
+          outputTokensSource: actualOutputTokens != null ? "provider_usage"
+            : ["streaming", "failed", "cancelled"].includes(phase) ? "provisional_estimate" : "estimated",
+          usedTokens,
+          remainingContextTokens: usedTokens == null ? null : contextWindowTokens - usedTokens,
+          effectiveInputBudget: requestBudget.effectiveInputBudget,
+          inputHeadroomBeforeSendTokens: Math.max(0, Math.floor((requestBudget.effectiveInputBudget - requestBudget.estimatedInputTokens) / 1.1)),
+          reservedOutputTokens: requestBudget.reservedOutputTokens,
+          protocolOverheadTokens: requestBudget.protocolOverheadTokens,
+          safetyMarginTokens: requestBudget.safetyMarginTokens,
+          usageStatus: providerUsage?.provenance?.status || "NOT_REPORTED",
+          updatedAt: new Date(now).toISOString(),
+          usageSource: source
+        }, responseState);
+      };
+      settleContextUsageAfterFailure = phase => {
+        requestPhase = phase;
+        publishContextUsage(phase, true);
+      };
+      publishContextUsage("request_snapshot", true);
+      const onContinuationRequest = (messages) => {
+        if (!contextWindowTokens || !providerMaxOutputTokens) return;
+        requestBudget = planRequestBudget({ messages,
+          capabilities: { contextWindow: contextWindowTokens, maxOutputTokens: providerMaxOutputTokens },
+          requestedOutputTokens: activeConfig?.providerType === "deepseek" ? 4096
+            : Number(activeConfig?.defaultParameters?.max_tokens) || providerMaxOutputTokens,
+          countTokens: items => this.estimateTokenCount(items) });
+        providerUsage = null;
+        requestPhase = "request_snapshot";
+        lastContextUsageUpdateAt = 0;
+        lastContextUsageContentLength = 0;
+        publishContextUsage("request_snapshot", true);
+      };
+      const onContinuationOutcome = (outcome, content) => {
+        placeholder.content = content;
+        providerUsage = outcome.usage;
+        requestPhase = "completed";
+        publishContextUsage("completed", true);
+      };
       const chatRequestMetadata = {
           requestType: "chat",
+          onProviderEvent: (event) => {
+            if (event?.type !== "USAGE_UPDATE" || !this.isResponseCurrent(responseState, npc)) return;
+            if (event.usage?.native) providerUsage = event.usage;
+            if (requestPhase === "streaming" && event.usage?.native) publishContextUsage("streaming");
+          },
           beforeSendGuard: () => {
             if (!this.isResponseCurrent(responseState, npc)) {
               const error = new Error("Responder or turn changed before send");
+              error.name = "AbortError";
+              throw error;
+            }
+            if (memoryContext?.characterKnowledgeRevision
+              && this.getCharacterDisclosureContext(npc, memoryContext.disclosureTargetIds).characterKnowledgeRevision !== memoryContext.characterKnowledgeRevision) {
+              this.cacheV2FrozenSnapshots?.prefixByResponder?.clear();
+              const error = new Error("Character knowledge source changed before send");
               error.name = "AbortError";
               throw error;
             }
@@ -1487,6 +1700,9 @@ class Conversation {
                   placeholder.streamStatus = "generating";
                   placeholder.content += chunk.delta.content;
                   this.emitUpdate();
+                  const enteringStream = requestPhase !== "streaming";
+                  requestPhase = "streaming";
+                  publishContextUsage("streaming", enteringStream);
                 }
               }
             })();
@@ -1521,6 +1737,9 @@ class Conversation {
                 placeholder.streamStatus = "generating";
                 placeholder.content += chunk.delta.content;
                 this.emitUpdate();
+                const enteringStream = requestPhase !== "streaming";
+                requestPhase = "streaming";
+                publishContextUsage("streaming", enteringStream);
               }
             }
             streamCompleted = true;
@@ -1528,10 +1747,15 @@ class Conversation {
           const outcome = validateGenerationOutcome(finalResponse);
           chatCachedTokens = outcome.cachedTokens;
           if (outcome.truncated) {
-            placeholder.content = await this.completeTruncatedResponse(llmMessages, placeholder.content, responseState, npc, diagnosticsContext, chatRequestMetadata);
+            placeholder.content = await this.completeTruncatedResponse(llmMessages, placeholder.content, responseState, npc,
+              diagnosticsContext, chatRequestMetadata, onContinuationRequest, onContinuationOutcome);
             this.emitUpdate();
           } else if (!outcome.complete) {
             throw new Error(`chat_generation_incomplete:${outcome.finishReason || "unknown"}`);
+          } else {
+            providerUsage = outcome.usage;
+            requestPhase = "completed";
+            publishContextUsage("completed", true);
           }
         } catch (streamError) {
           if (streamError instanceof Error && streamError.message === "AbortError: Message cancelled") {
@@ -1553,8 +1777,14 @@ class Conversation {
         chatCachedTokens = outcome.cachedTokens;
         if (!outcome.complete && !outcome.truncated) throw new Error(`chat_generation_incomplete:${outcome.finishReason || "unknown"}`);
         placeholder.content = outcome.truncated
-          ? await this.completeTruncatedResponse(llmMessages, result.content, responseState, npc, diagnosticsContext, chatRequestMetadata)
+          ? await this.completeTruncatedResponse(llmMessages, result.content, responseState, npc,
+            diagnosticsContext, chatRequestMetadata, onContinuationRequest, onContinuationOutcome)
           : result.content;
+        if (!outcome.truncated) {
+          providerUsage = outcome.usage;
+          requestPhase = "completed";
+          publishContextUsage("completed", true);
+        }
         placeholder.streamStatus = "generating";
         this.emitUpdate();
         placeholder.isStreaming = false;
@@ -1568,7 +1798,9 @@ class Conversation {
       if (this.isResponseCurrent(responseState, npc)) this.retainDynamicSummaryRecall(npc.id, msgId, promptBuild, turnEpoch);
       if (chatCachedTokens != null) memoryEngine.trace.record("provider_cache_usage", { characterId: npc.id, conversationId: this.id, cachedTokens: chatCachedTokens });
     } catch (error) {
+      require("../memory-system/dynamic-summary-freeze").discardPendingSources(this.memoryState?.responderRecallCache, npc.id, turnEpoch);
       const staleResponse = responseState.stale || controller.signal.aborted || !this.isResponseCurrent(responseState, npc) || error instanceof Error && error.message === "AbortError: Message cancelled";
+      settleContextUsageAfterFailure?.(staleResponse ? "cancelled" : "failed");
       if (staleResponse) {
         conversationTurnResult = "CANCELLED";
         wasCancelled = true;
@@ -1580,10 +1812,13 @@ class Conversation {
         this.getGenerationManager().fail(responseState);
         console.error("Failed to get response for", npc.shortName, ":", error);
         this.messages = this.messages.filter((msg) => msg.id !== msgId);
+        const memoryContextOverflow = error?.code === "MEMORY_CONTEXT_OVERFLOW";
         const err = createError({
           id: this.nextId++,
-          content: `Failed to get response from ${npc.shortName}`,
-          details: error instanceof Error ? error.message : String(error),
+          content: memoryContextOverflow ? formatMemoryContextOverflow(error.memoryBudgetDetails)
+            : `Failed to get response from ${npc.shortName}`,
+          details: memoryContextOverflow ? null : error instanceof Error ? error.message : String(error),
+          memoryBudgetDetails: memoryContextOverflow ? error.memoryBudgetDetails : null,
           responderCharacterId: Number(npc.id)
         });
         const failedAttempt = this.generationAttemptsByMessageId.get(msgId);
@@ -1619,13 +1854,15 @@ class Conversation {
     }
     await this.handleActionResults(npcMessageId, npc, actionResults);
   }
-  async completeTruncatedResponse(originalMessages, partialContent, responseState, npc, diagnosticsContext = null, initialRequestMetadata = {}) {
+  async completeTruncatedResponse(originalMessages, partialContent, responseState, npc, diagnosticsContext = null,
+    initialRequestMetadata = {}, onContinuationRequest = null, onContinuationOutcome = null) {
     if (!partialContent?.trim()) throw new Error("chat_generation_truncated_without_content");
     const continuationMessages = [
       ...originalMessages,
       { role: "assistant", content: partialContent },
       { role: "user", content: "请从刚才截断的位置继续完成上一条回复，不要重复已写内容。" }
     ];
+    onContinuationRequest?.(continuationMessages);
     const response = await llmManager.sendChatRequest(continuationMessages, responseState.controller.signal, true, {
       ...initialRequestMetadata,
       requestType: "chat_continuation",
@@ -1642,7 +1879,9 @@ class Conversation {
     for (let size = maxOverlap; size > 0; size--) {
       if (partialContent.endsWith(outcome.content.slice(0, size))) { overlap = size; break; }
     }
-    return partialContent + outcome.content.slice(overlap);
+    const content = partialContent + outcome.content.slice(overlap);
+    onContinuationOutcome?.(outcome, content);
+    return content;
   }
   /**
    * Handle action results using the official VOTC 2.0.3 approval flow.
@@ -2437,4 +2676,4 @@ class Conversation {
   }
 }
 
-module.exports = { Conversation };
+module.exports = { Conversation, tokenCountOrNull, formatMemoryContextOverflow };

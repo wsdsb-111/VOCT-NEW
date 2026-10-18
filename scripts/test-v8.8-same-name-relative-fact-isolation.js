@@ -1,7 +1,7 @@
 "use strict";
 
 const assert = require("assert");
-const { buildKinshipGraph } = require("../resources/app/out/main/worldline/character-kinship-graph");
+const { buildLegacyStructuralKinshipGraph: buildKinshipGraph } = require("../resources/app/out/main/worldline/character-kinship-graph");
 const { buildFamilyEntityFactBundle } = require("../resources/app/out/main/worldline/family-entity-fact-bundle");
 
 const graph = buildKinshipGraph({

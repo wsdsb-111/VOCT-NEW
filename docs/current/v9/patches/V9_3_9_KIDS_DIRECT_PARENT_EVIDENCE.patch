@@ -1,0 +1,28 @@
+diff --git a/common/scripted_effects/log_character_v2_effect.txt b/common/scripted_effects/log_character_v2_effect.txt
+--- a/common/scripted_effects/log_character_v2_effect.txt
++++ b/common/scripted_effects/log_character_v2_effect.txt
+@@ -448,8 +448,23 @@ log_relatives = {
+ 	every_child = {
+ 		even_if_dead = yes
+ 		save_scope_as = votc_v937_relative_subject
+-		debug_log = "VOTC:IN/;/kids/;/[PREV.Char.GetID]/;/[THIS.Char.GetID]/;/[THIS.Char.GetTitledFirstNameNicknamedNoTooltipRegnal]/;/[THIS.Char.GetSheHe]/;/[THIS.Char.GetBirthDate.GetDateAsTotalDays]/;/[THIS.Char.GetBirthDate.GetString]/;/[THIS.Char.GetAge]/;/"
++		if = {
++			limit = {
++				any_parent = {
++					even_if_dead = yes
++					this = scope:votc_mcc_tmp_var
++					OR = {
++						this = scope:votc_v937_relative_subject.mother
++						this = scope:votc_v937_relative_subject.father
++					}
++				}
++			}
++			debug_log = "VOTC:IN/;/kids/;/[PREV.Char.GetID]/;/[THIS.Char.GetID]/;/[THIS.Char.GetTitledFirstNameNicknamedNoTooltipRegnal]/;/[THIS.Char.GetSheHe]/;/[THIS.Char.GetBirthDate.GetDateAsTotalDays]/;/[THIS.Char.GetBirthDate.GetString]/;/[THIS.Char.GetAge]/;/PUBLIC_LEGAL_PARENT/;/"
++		}
++		else = {
++			debug_log = "VOTC:IN/;/kids/;/[PREV.Char.GetID]/;/[THIS.Char.GetID]/;/[THIS.Char.GetTitledFirstNameNicknamedNoTooltipRegnal]/;/[THIS.Char.GetSheHe]/;/[THIS.Char.GetBirthDate.GetDateAsTotalDays]/;/[THIS.Char.GetBirthDate.GetString]/;/[THIS.Char.GetAge]/;/UNKNOWN/;/"
++		}
+ 		# kid other parent
+ 		if = {
+ 			limit = {
+ 				any_parent = {

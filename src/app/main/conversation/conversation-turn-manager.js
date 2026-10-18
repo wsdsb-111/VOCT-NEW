@@ -31,6 +31,7 @@ class ConversationTurnManager {
     conversationId = this.conversation.id || null, sceneRevision = null, campaignToken = null }) {
     this.epoch += 1;
     this.logicalEpoch += 1;
+    this.conversation.resetContextUsageTurn?.();
     this.conversation.cancelActiveResponse?.("superseded_by_new_user_turn");
     this.queue = [];
     this.currentTurn = Object.freeze({
@@ -62,6 +63,7 @@ class ConversationTurnManager {
       || previousTurn.campaignToken !== campaignToken) return null;
 
     this.epoch += 1;
+    this.conversation.resetContextUsageTurn?.();
     this.conversation.cancelActiveResponse?.("superseded_by_regeneration");
     this.queue = [];
     this.currentTurn = Object.freeze({

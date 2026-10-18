@@ -70,20 +70,20 @@ function retrieve(engine, fixture, responderId, conversationId, sessionRecallCac
 function checkFrozenBudgetPolicy() {
   const conversation = Object.create(Conversation.prototype);
   conversation.frozenMemoryBudget = null;
-  assert.equal(conversation.getMemoryTokenBudget(262144, [1, 2], 50000), 4800,
-    "two-person memory budget freezes at its 4800-token cap");
-  assert.equal(conversation.getMemoryTokenBudget(1048576, [1, 2, 3, 4], 50000), 4800,
+  assert.equal(conversation.getMemoryTokenBudget(262144, [1, 2], 100000), 80000,
+    "two-person memory budget freezes at its 80000-token cap");
+  assert.equal(conversation.getMemoryTokenBudget(1048576, [1, 2, 3, 4], 100000), 80000,
     "later participants cannot silently raise the first frozen tier");
   assert.equal(conversation.frozenMemoryBudget.participantCount, 2);
   assert.equal(conversation.getMemoryTokenBudget(1048576, [1, 2, 3, 4], 1200), 1200,
     "reduced Provider headroom still tightens a frozen allocation");
-  assert.equal(conversation.getMemoryTokenBudget(1048576, [1, 2, 3, 4], 50000), 4800,
+  assert.equal(conversation.getMemoryTokenBudget(1048576, [1, 2, 3, 4], 100000), 80000,
     "restored headroom cannot expand beyond the frozen tier");
 
   const fourPersonConversation = Object.create(Conversation.prototype);
   fourPersonConversation.frozenMemoryBudget = null;
-  assert.equal(fourPersonConversation.getMemoryTokenBudget(1048576, [1, 2, 3, 4], 50000), 6400,
-    "a separate conversation that starts with four participants may use the 6400-token cap");
+  assert.equal(fourPersonConversation.getMemoryTokenBudget(1048576, [1, 2, 3, 4], 100000), 96000,
+    "a separate conversation that starts with four participants may use the 96000-token cap");
 }
 
 function checkResponderIsolationAndPromptBudget() {
@@ -247,7 +247,7 @@ async function run() {
   const isolation = checkResponderIsolationAndPromptBudget();
   const streaming = await checkStreamingContinuationGuard();
   console.log("V9.3.6.1 responder budget: PASS (frozen tiers, isolated Prompt snapshots, continuation guard)");
-  console.log(JSON.stringify({ frozenTwoPersonTokens: 4800, laterFourPersonTokens: 4800,
+  console.log(JSON.stringify({ frozenTwoPersonTokens: 80000, laterFourPersonTokens: 80000,
     reducedHeadroomTokens: 1200, isolation, streaming }));
 }
 

@@ -1,10 +1,12 @@
-> 当前候选为 V9.3.7，沿用 V9.3.6 玩家中心记忆合同。当前版本及后续收口报告由根 README.md 和 docs/README.md 索引；V9.3.6.3 旧档兼容合同继续有效。otherParent 不扩大 Memory 权限，未验证的日历年龄仅作诊断。CK3／Provider／Soak／远端 CI 分开签署，远端失败不得写成未执行或 PASS。
+V9.3.9 补充合同：2／3 人时间摘要 5 篇、4+ 人 3 篇，第三人始终全场共享 3 篇；完整动态摘要成功注入并完成请求后按回应者冻结到稳定前缀，跨场不继承、不扩大来源权限。Character Knowledge 独立于退役 Memory4，按 Campaign／Owner／Target／fact／来源修订隔离并在发送前复核。用户本轮只交付代码、自动化验证和 GitHub 上传，不执行真实 CK3／付费 Provider／Soak 或 GitHub Release。
+
+> 当前候选为 V9.3.9，沿用 V9.3.7 年龄／亲属事实与 V9.3.6.3 旧档兼容合同。玩家固定历史为完整 Recent2、合法官方追忆和完整合法玩家关系事项簿；明确玩家历史分句可并用双人／三人最多 5 篇、4+ 人最多 3 篇时间摘要和跨目标共享最多 3 篇第三人历史。2／3／4+ 人预算为 65%／70%／75% 和 80,000／84,000／96,000 Token 上限，实际取 Provider 当前余量允许值。来源无法完整容纳时先压缩较旧对话，仍超限则 transport 前暂停并展示所需、可用及分项预算，不得静默裁剪／遗漏。上下文提示按当前配置窗口动态显示逐对话、逐回应者及逐轮剩余量，估算与最近请求实际用量分开标注。当前版本及收口报告由根 README.md 和 docs/README.md 索引。otherParent 不扩大 Memory 权限，未验证的日历年龄仅作诊断。CK3／Provider／Soak／远端 CI 分开签署；V9.3.7 `9caffe6` 的远端失败保留为该 SHA 历史证据，不能写成 V9.3.9 的未执行或 PASS。
 
 # Repository Guidelines
 
 ## 项目定位与结构
 
-本仓库是面向 Crusader Kings III 的 Windows 打包版 VOTC Electron 应用。当前文档入口跟踪 V9.3.7 修复候选；实施、验证及索引与来源合同见 [实施报告](docs/current/v9/V9_3_7_IMPLEMENTATION_REPORT.md)、[验证报告](docs/current/v9/V9_3_7_VERIFICATION_REPORT.md)和[合同文档](docs/current/v9/V9_3_5_INDEX_AND_SOURCE_CONTRACT.md)。原候选本地验证与当前提交复验分开；GitHub 9caffe6 发布回归已失败，本轮状态见 docs/current/v9/V9_3_7_FOLLOWUP_REPORT.md，实机与外部验收单列，映射、构建、部署和门禁证据按报告更新；真实 CK3、游戏内 Provider、Soak 尚待验收；远端 CI 按具体 SHA 和 run 记录，不能宣称 Full Freeze。V9.3.4 报告保留为历史证据。
+本仓库是面向 Crusader Kings III 的 Windows 打包版 VOTC Electron 应用。当前文档入口跟踪 V9.3.9 玩家记忆与上下文预算候选；实施结果以 [V9.3.9 实施报告](docs/current/v9/V9_3_9_IMPLEMENTATION_REPORT.md)为准，兼容与来源合同见 [索引与来源合同](docs/current/v9/V9_3_5_INDEX_AND_SOURCE_CONTRACT.md)。V9.3.7 年龄／亲属报告及后续收口继续作为历史证据；GitHub `9caffe6` 发布回归已失败，仍归属于该 SHA。实机与外部验收单列，映射、构建、部署和门禁证据按 V9.3.9 实际结果更新；真实 CK3、游戏内 Provider、Soak 尚待独立验收；远端 CI 按具体 SHA 和 run 记录，不能宣称 Full Freeze。V9.3.4 报告保留为历史证据。
 
 历史 V9.2.1 缓存专项曾作为安全／诊断候选，证据见 docs/current/v9/V9_2_1_VERIFICATION_REPORT.md。其 Durable Policy、Forget 和 GLM v813 结论仅代表当时状态；Durable 已由 V9.3.4 彻底退役。V9.2 6026713 的远端 CI 成功记录继续保留为历史证据。
 
@@ -15,15 +17,15 @@
 - resources/app/default_userdata/ 保存默认 Prompt、本地化和标准 Action；它不是用户运行时数据目录。
 - scripts/ 保存迁移工具、专项回归和发布门禁；scripts/test-manifest.js 是测试清单的唯一编排入口。
 - docs/README.md 是文档入口，docs/V8阶段开发记录.md 是 V8 连续实施记录，docs/README_摘要系统.md 是摘要/Memory 合同；根目录 CHANGELOG.md 只维护版本索引和用户可见摘要。
-- VOTC.exe 是复用打包壳，Windows 文件属性版本未重写。V9.3.7 是候选而非验收完成声明；正式项目／核心、App 包与 UI 版本号以包元数据和最终报告为准。前端记忆入口显示 `Legacy Summary`；Workshop 2.0.5、协议 3.0、摘要存储 2.5 与 Official Action 2.0.3 保持。Memory Engine 4.0 不再是在线功能标签。
+- VOTC.exe 是复用打包壳，Windows 文件属性版本未重写。V9.3.9 是候选而非验收完成声明；正式项目／核心、App 包与 UI 版本号以包元数据和最终报告为准。前端记忆入口显示 `Legacy Summary`；Workshop 2.0.5、协议 3.0、摘要存储 2.5 与 Official Action 2.0.3 保持。Memory Engine 4.0 不再是在线功能标签。
 
-## 当前 V9.3.7 候选与沿用的记忆合同
+## 当前 V9.3.9 候选与沿用的记忆合同
 
 - V9.3 Provider Platform 候选合同见 docs/current/v9/V9_3_VERIFICATION_REPORT.md。Chat/Action/Summary 统一 Facade；能力 UNKNOWN 保留证据，明确 UNSUPPORTED 发送前阻止；只有 STOP/COMPLETE 进入严格业务。SDK 隐式重试为 0，显式生成最多 2 次且未知送达／部分流不透明重发；每次真实 transport 前复核 Forget/来源及同步预算。原生用量与估算分开，缺失字段不可当 0，非法字段不可被 DERIVED 掩盖。此 Provider 记录不恢复已退役的 Durable 写入。
 
-- V9.3.6 Legacy Summary 合同：每位回应 NPC 的固定历史只锚定当前玩家：最近 1 篇 Legacy、合法官方追忆、预算内尽量完整的玩家关系事项簿。固定文本首次构造后冻结；第三人仅提名为 L0，不读取其历史索引或原文；明确历史关系询问为 L1，每目标至多 16 条事项、零原文；具体历史经过为 L2，共享预算内至多 2 篇经来源键和修订号复验的摘要。2／3／4+ 人采用 16%／18%／20% 与 4800／5600／6400 Token 上限，并取无记忆 Prompt、输出预留及 Provider 安全余量允许的较小值。保持 NPC→NPC 合法定向写入；Legacy 是叙事来源，事项为本地派生索引。不新增模型提取或检索请求；Durable／Year／Life 继续退役。
+- V9.3.9 Legacy Summary 合同：每位回应 NPC 的固定历史只锚定当前玩家，完整包含最近 2 篇 Legacy、合法官方追忆及完整合法玩家关系事项簿；首次构造后冻结。L0 仅提名，不读取第三人历史索引或原文；明确历史关系询问的 L1 每目标至多 16 条事项、零原文；明确玩家历史分句下，双人／三人最多 5 篇、4+ 人最多 3 篇时间摘要与最多 3 篇第三人历史摘要可并用，第三人上限跨目标共享，来源均按 source key／revision 复验。2／3／4+ 人采用当前配置上下文窗口的 65%／70%／75% 与 80,000／84,000／96,000 Token 上限，并取非记忆 Prompt、输出预留和 Provider 实际余量允许的较小值。完整来源拥挤时先压缩较旧对话；若仍超限，在 transport 前暂停并显示所需、可用与组件预算，不得静默裁剪或漏掉事项。上下文用量提示按配置窗口动态计算、逐对话和逐回应者隔离，每轮更新当前剩余量；临时估算与最近请求实际用量明确区分。保持 NPC→NPC 合法定向写入；Legacy 是叙事来源，事项为本地派生索引。不新增模型提取或检索请求；Durable／Year／Life 继续退役。
 - 旧 `archiveSidecar` 是惰性归档：生产运行时不得扫描、读取或写入，原始字节保留。Legacy Forget ledger 只写入现有 index，并随现有摘要事务提交或回滚。若改名目录合并会包含旧 Sidecar，则跳过合并；不影响纯 Legacy 摘要的正常读写。
-- Year/Life 历史迁移工具只可通过 `scripts/archive/v933-year-life` 下的显式维护导入使用，不属于 Runtime；V9.3.6 候选不执行该迁移。
+- Year/Life 历史迁移工具只可通过 `scripts/archive/v933-year-life` 下的显式维护导入使用，不属于 Runtime；V9.3.9 候选不执行该迁移。
 
 - 页面人物主标签必须使用摘要、IPC 或当前人物资料中的真实姓名；姓名不可知时显示“姓名未载入”等提示。ID 只用于内部关联或折叠诊断，不显示成主标签，不用数字 fallback；同名不同 ID 仍保持身份隔离。
 - Pair 回填必须先生成预览，再由用户明确确认；取消确认不写入。Owner 批量操作只覆盖当前 Owner，逐 Pair 应用并显示进度与部分结果。来源查看通过后端以 source key 和期望 revision 复验后返回当前原文；过期来源须提示刷新。
@@ -62,7 +64,7 @@ node --check resources\app\out\renderer\worldline-player-presentation.js
 git diff --check
 ~~~
 
-test-release.js 通过 test-manifest.js 汇总直接和嵌套检查；新增 test-*.js 必须登记到清单并明确是发布组还是历史归档。清单数量以 scripts/test-manifest.js 的实际输出为准；完整门禁结果以当前实施报告为准。测试数量变化时更新相关文档，不要把旧数量硬编码为源码合同。
+test-release.js 通过 test-manifest.js 汇总直接和嵌套检查；新增 test-*.js 必须登记到清单并明确是发布组还是历史归档。清单数量以 scripts/test-manifest.js 的实际输出为准；完整门禁结果以 V9.3.9 实施报告和实际候选证据为准。测试数量变化时更新相关文档，不要把旧数量硬编码为源码合同。
 
 修改 IPC、设置、Prompt、流式输出、动作回读、世界线或主题 UI 后，仍需启动 VOTC.exe 做对应人工冒烟。静态回归不能替代真实 CK3 存档、Provider、debug.log ACK、打包窗口和 Soak 验收。
 

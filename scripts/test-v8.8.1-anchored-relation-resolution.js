@@ -1,11 +1,20 @@
 "use strict";
 
 const assert = require("assert");
-const { buildKinshipGraph } = require("../resources/app/out/main/worldline/character-kinship-graph");
+const { buildLegacyStructuralKinshipGraph: buildKinshipGraph } = require("../resources/app/out/main/worldline/character-kinship-graph");
 const { resolveAnchoredRelationMention } = require("../resources/app/out/main/worldline/anchored-relation-resolver");
 const { buildFamilyFactBlock } = require("../resources/app/out/main/worldline/character-family-facts");
 const { createGameData } = require("../resources/app/out/main/game-data/game-data");
 const { inferGenderFromPronoun } = require("../resources/app/out/main/game-data/character");
+
+const CAMPAIGN = "votc8c-202610180004";
+const GAME_DATE = "1175.2.1";
+const TOTAL_DAYS = 430100;
+function currentParentProof(childId, parentId) {
+  return { source: "CK3_DIRECT_PARENT", sourceOwnerId: childId, childId, parentId,
+    relationType: "parent", sourceRelation: "parents", publicStatus: "PUBLIC_LEGAL_PARENT",
+    knowledgeStatus: "UNKNOWN", campaignToken: CAMPAIGN, sourceSnapshotId: `${GAME_DATE}/${TOTAL_DAYS}` };
+}
 
 const characters = new Map([
   [1, { id: 1, fullName: "岳月娥", gender: "female" }],
@@ -35,14 +44,21 @@ const direct = resolveAnchoredRelationMention({ query: "你儿子近日如何？
 assert.equal(direct.status, "RELATION_AMBIGUOUS");
 assert.equal(direct.relationAnchorRuntimeId, "10");
 
-const familyBlock = buildFamilyFactBlock(characters.get(1), { date: "1175.2.1", getMentionableCharacterProfiles: () => characters }, { query: goldenQuery });
+const currentCharacters = new Map(characters);
+currentCharacters.set(10, { ...characters.get(10), children: [11, 12, 13].map(id => ({
+  ...characters.get(id), directParentEvidence: currentParentProof(id, 10)
+})) });
+currentCharacters.set(12, { ...characters.get(12), parents: [{ id: 10, ...currentParentProof(12, 10) }] });
+const currentGameData = { date: GAME_DATE, totalDays: TOTAL_DAYS, campaignToken: CAMPAIGN,
+  characters: currentCharacters, getMentionableCharacterProfiles: () => currentCharacters };
+const familyBlock = buildFamilyFactBlock(currentCharacters.get(1), currentGameData, { query: goldenQuery });
 assert.match(familyBlock, /查询关系主体：赵德昭/);
 assert.match(familyBlock, /目标人物：赵允韬/);
 assert.match(familyBlock, /性别：男性/);
 assert.doesNotMatch(familyBlock, /女儿|她|女子/);
-assert.equal(buildFamilyFactBlock(characters.get(1), { date: "1175.2.1", getMentionableCharacterProfiles: () => characters }, { query: "今夜月色甚好。" }), null);
+assert.equal(buildFamilyFactBlock(currentCharacters.get(1), currentGameData, { query: "今夜月色甚好。" }), null);
 
-const failClosed = buildFamilyFactBlock(characters.get(1), { date: "1175.2.1", getMentionableCharacterProfiles: () => characters }, { query: "听闻某府新得一子。" });
+const failClosed = buildFamilyFactBlock(currentCharacters.get(1), currentGameData, { query: "听闻某府新得一子。" });
 assert.match(failClosed, /男性亲属/);
 assert.match(failClosed, /不得将该目标改写为女性/);
 
@@ -66,9 +82,13 @@ assert.equal(missingBirth.status, "RELATION_AMBIGUOUS");
 assert.equal(missingBirth.reason, "BIRTH_ORDER_UNAVAILABLE");
 
 const GameData = createGameData({ fs: {}, path: {}, memorySystem: {}, memoryEngine: { findMentionedCharactersInHistory: () => [] }, summariesDir: "", getHistoricalReferenceByYear: () => ({}) });
-const aliasGame = new GameData([1, "父亲", 2, "回应者", "1175年2月1日", "talk_scene_court", "京师", "父亲", 430100]);
+const aliasGame = new GameData([1, "父亲", 2, "回应者", "1175年2月1日", "talk_scene_court", "京师", "父亲", TOTAL_DAYS]);
+aliasGame.campaignToken = CAMPAIGN;
 aliasGame.characters = new Map([
-  [1, { id: 1, fullName: "父亲", shortName: "父亲", firstName: "父亲", gender: "male", parents: [], children: [{ id: 2, name: "长子", gender: "male", birthDateTotalDays: 430000 }, { id: 3, name: "次女", gender: "female", birthDateTotalDays: 430050 }], siblings: [], traits: [], relationsToPlayer: [], relationsToCharacters: [], consort: "" }]
+  [1, { id: 1, fullName: "父亲", shortName: "父亲", firstName: "父亲", gender: "male", parents: [], children: [
+    { id: 2, name: "长子", gender: "male", birthDateTotalDays: 430000, directParentEvidence: currentParentProof(2, 1) },
+    { id: 3, name: "次女", gender: "female", birthDateTotalDays: 430050, directParentEvidence: currentParentProof(3, 1) }
+  ], siblings: [], traits: [], relationsToPlayer: [], relationsToCharacters: [], consort: "" }]
 ]);
 const aliases = aliasGame.getMentionableCharacterProfiles();
 assert(aliases.get(2).mentionAliases.includes("儿子") && aliases.get(2).mentionAliases.includes("长子"));

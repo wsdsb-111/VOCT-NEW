@@ -30,10 +30,11 @@ function validateActionFilePath(filePath, actionsRoot) {
 }
 
 function registerIpcHandlers(runtime) {
-  const { electron, settingsRepository, promptConfigManager, uuid, VOTC_PROMPTS_DIR, TemplateEngine, exportPromptsZip, letterManager, runFileManager, llmManager, providerRegistry, usageAnalytics, providerDiagnostics, actionRegistry, VOTC_ACTIONS_DIR, resolveI18nString, conversationManager, ActionEngine, VOTC_SUMMARIES_DIR, SummariesManager, memoryEngine, worldlineService } = runtime;
+  const { electron, settingsRepository, promptConfigManager, uuid, VOTC_PROMPTS_DIR, TemplateEngine, exportPromptsZip, letterManager, runFileManager, llmManager, providerRegistry, usageAnalytics, providerDiagnostics, actionRegistry, VOTC_ACTIONS_DIR, resolveI18nString, conversationManager, ActionEngine, VOTC_SUMMARIES_DIR, SummariesManager, memoryEngine, worldlineService, characterKnowledgeService } = runtime;
 
   const performanceTrace = runtime.performanceTrace;
   const services = runtime.applicationServices;
+  const conversationService = services?.conversation || conversationManager;
   const emptyPerformanceReport = () => ({ traceVersion: 1, enabled: false, sampledWindow: true, events: [], statistics: [] });
   electron.ipcMain.handle("performance:get-state", () => ({ traceVersion: 1, enabled: performanceTrace?.enabled === true }));
   electron.ipcMain.handle("performance:snapshot", () => performanceTrace?.snapshot() || emptyPerformanceReport());
@@ -125,6 +126,31 @@ function registerIpcHandlers(runtime) {
     electron.ipcMain.handle("worldline:createSupplemental", () => { throw new Error("legacy_supplemental_read_only"); });
     electron.ipcMain.handle("worldline:updateSupplemental", () => { throw new Error("legacy_supplemental_read_only"); });
     electron.ipcMain.handle("worldline:deleteSupplemental", () => { throw new Error("legacy_supplemental_read_only"); });
+  }
+  const characterKnowledge = services?.characterKnowledge || characterKnowledgeService;
+  if (characterKnowledge) {
+    electron.ipcMain.handle("characterKnowledge:getOwnerView", (_event, payload) => characterKnowledge.getOwnerView({
+      ownerRuntimeId: payload?.ownerRuntimeId,
+      campaignToken: payload?.campaignToken,
+      sourceSnapshotId: payload?.sourceSnapshotId
+    }));
+    electron.ipcMain.handle("characterKnowledge:getTargetView", (_event, payload) => characterKnowledge.getTargetView({
+      campaignToken: payload?.campaignToken,
+      ownerRuntimeId: payload?.ownerRuntimeId,
+      targetRuntimeId: payload?.targetRuntimeId,
+      sourceSnapshotId: payload?.sourceSnapshotId
+    }));
+    electron.ipcMain.handle("characterKnowledge:setManualStatus", (_event, payload) => characterKnowledge.setManualStatus({
+      campaignToken: payload?.campaignToken,
+      ownerRuntimeId: payload?.ownerRuntimeId,
+      targetRuntimeId: payload?.targetRuntimeId,
+      sourceSnapshotId: payload?.sourceSnapshotId,
+      factSourceSnapshotId: payload?.factSourceSnapshotId,
+      factType: payload?.factType,
+      factKey: payload?.factKey,
+      status: payload?.status,
+      expectedRevision: payload?.expectedRevision
+    }));
   }
   electron.ipcMain.handle("prompts:getSettings", () => {
     return settingsRepository.getPromptSettings();
@@ -780,6 +806,10 @@ function registerIpcHandlers(runtime) {
   electron.ipcMain.handle("conversation:getEntries", () => {
     return conversationManager.getConversationEntries();
   });
+  electron.ipcMain.handle("conversation:getContextUsage", () => conversationService.getContextUsageSnapshot?.() || {
+    conversationId: null, conversationEpoch: conversationManager.conversationEpoch || 0,
+    turnEpoch: 0, sceneRevision: null, revision: 0, phase: "reset", responders: []
+  });
   electron.ipcMain.handle("conversation:cancelStream", () => {
     conversationManager.cancelCurrentStream();
   });
@@ -1067,6 +1097,12 @@ function registerIpcHandlers(runtime) {
     }
   };
   conversationManager.onConversationUpdate(conversationUpdateCallback);
+  const contextUsageUpdateCallback = (snapshot) => {
+    if (runtime.chatWindow && !runtime.chatWindow.isDestroyed()) {
+      runtime.chatWindow.webContents.send("conversation:contextUsageUpdated", snapshot);
+    }
+  };
+  conversationService.onContextUsageUpdate?.(contextUsageUpdateCallback);
   console.log("Conversation IPC handlers registered successfully");
 }
 

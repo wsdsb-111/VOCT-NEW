@@ -7,6 +7,7 @@ const path = require("node:path");
 const { createLogParser } = require("../src/app/main/game-data/log-parser");
 const { createRelationshipResolver } = require("../src/app/main/game-data/relationship-resolver");
 const { buildKinshipGraph } = require("../src/app/main/worldline/character-kinship-graph");
+const { currentPublicParentFilter, currentDirectParentFilter } = require("../src/app/main/worldline/kinship-graph-cache");
 const { createTraitProfileView } = require("../src/app/main/prompts/trait-profile-selector");
 
 class FixtureGameData {
@@ -54,11 +55,11 @@ async function main() {
     "VOTC:IN/;/init/;/1/;/玩家/;/2/;/NPC/;/1080年1月1日/;/Scene: testing/;/长安/;/长安/;/10000",
     "VOTC:CAMPAIGN/votc8c-202610170001",
     "VOTC:IN/;/character/;/1/;/共同父亲",
-    "VOTC:IN/;/kids/;/1/;/101/;/妻生子/;/他/;/12000/;/1047年1月1日/;/",
+    "VOTC:IN/;/kids/;/1/;/101/;/妻生子/;/他/;/12000/;/1047年1月1日/;//;/PUBLIC_LEGAL_PARENT",
     "VOTC:IN/;/kid_other_parent/;/1/;/999/;/9/;/错误挂接/;/PUBLIC_LEGAL_PARENT/;/她",
     "VOTC:IN/;/kid_other_parent/;/1/;/101/;/2/;/妻子/;/PUBLIC_LEGAL_PARENT/;/她",
     "VOTC:IN/;/kid_eob/;/1/;/101/;/",
-    "VOTC:IN/;/kids/;/1/;/102/;/妾生子/;/他/;/13000/;/1050年1月1日/;/",
+    "VOTC:IN/;/kids/;/1/;/102/;/妾生子/;/他/;/13000/;/1050年1月1日/;//;/PUBLIC_LEGAL_PARENT",
     "VOTC:IN/;/kid_other_parent/;/1/;/102/;/3/;/妾室",
     "VOTC:IN/;/kid_eob/;/1/;/102/;/",
     "VOTC:IN/;/siblings/;/1/;/103/;/同父异母兄弟/;/他/;/14000/;/1055年1月1日/;/",
@@ -126,20 +127,22 @@ async function main() {
     assert.deepEqual(badProfiles.get(101).evidence.otherParentRelations, [], "normalization must not launder invalid parent bindings");
   }
 
-  const graph = buildKinshipGraph(profiles);
-  const rawGraph = buildKinshipGraph(gameData.characters);
+  const currentEvidenceFilters = { otherParentEvidenceFilter: currentPublicParentFilter(gameData),
+    directParentEvidenceFilter: currentDirectParentFilter(gameData) };
+  const graph = buildKinshipGraph(profiles, currentEvidenceFilters);
+  const rawGraph = buildKinshipGraph(gameData.characters, currentEvidenceFilters);
   assertParentEdge(graph, 1, 101);
   assertParentEdge(graph, 1, 102);
   assertParentEdge(graph, 2, 101);
-  assertParentEdge(graph, 3, 102);
-  assertParentEdge(graph, 4, 103);
+  assert.equal(graph.relationBetween(3, 102).relation, null, "an unmarked other parent stays unknown");
+  assert.equal(graph.relationBetween(4, 103).relation, null, "an UNKNOWN sibling other parent cannot enter the current graph");
   assertParentEdge(rawGraph, 2, 101);
-  assertParentEdge(rawGraph, 4, 103);
+  assert.equal(rawGraph.relationBetween(4, 103).relation, null, "raw profiles use the same public/source filter");
   assert.equal(graph.relationBetween(101, 102).relation?.type, "SIBLING_OF", "the shared father still derives the sibling edge");
   assert.equal(graph.relationBetween(2, 3).relation, null, "different mothers do not acquire a spouse or kinship edge");
   assert.equal(graph.relationBetween(4, 1).relation, null, "sibling_other_parent must never attach the other parent to the root");
 
-  for (const [parentId, childId, sourceRelation] of [[2, 101, "kids.otherParent"], [4, 103, "siblings.otherParent"]]) {
+  for (const [parentId, childId, sourceRelation] of [[2, 101, "kids.otherParent"]]) {
     const relation = assertParentEdge(graph, parentId, childId);
     assert.ok(relation.parentEvidence?.some((evidence) => evidence.childId === String(childId)
       && evidence.parentId === String(parentId)
@@ -147,13 +150,13 @@ async function main() {
       && evidence.source === "CK3_OTHER_PARENT"
       && evidence.sourceRelation === sourceRelation
       && evidence.otherParentId === String(parentId)
-      && evidence.publicStatus === (parentId === 2 ? "PUBLIC_LEGAL_PARENT" : "UNKNOWN")
+      && evidence.publicStatus === "PUBLIC_LEGAL_PARENT"
       && evidence.sourceSnapshotId === "1080年1月1日/10000"
       && evidence.campaignToken === "votc8c-202610170001"
       && evidence.knowledgeStatus === "UNKNOWN"), "edge should expose bounded source and unknown visibility/knowledge evidence");
   }
 
-  const memorySafeGraph = buildKinshipGraph(profiles, { includeOtherParents: false });
+  const memorySafeGraph = buildKinshipGraph(profiles, { ...currentEvidenceFilters, includeOtherParents: false });
   assert.equal(memorySafeGraph.relationBetween(2, 101).relation, null, "callers can exclude other-parent edges from memory authorization");
   assert.equal(memorySafeGraph.relationBetween(1, 101).relation?.type, "PARENT_OF", "excluding extra edges preserves the existing graph");
 
@@ -164,18 +167,20 @@ async function main() {
   const memoryGraphWithoutOtherParents = buildKinshipGraph(isolatedOtherParentRecords, { includeOtherParents: false });
   assert.equal(memoryGraphWithoutOtherParents.relationBetween(90, 21).relation, null, "memory graph excludes other-parent edges");
   assert.equal(memoryGraphWithoutOtherParents.relationBetween(21, 22).relation, null, "excluded other parents cannot derive a new sibling authorization edge");
-  assert.equal(buildKinshipGraph(isolatedOtherParentRecords).relationBetween(21, 22).relation?.source, "DERIVED_SHARED_PARENT", "the presentation graph may derive a sibling from the extra parent edge");
+  assert.equal(buildKinshipGraph(isolatedOtherParentRecords).relationBetween(21, 22).relation, null,
+    "other-parent evidence without current campaign/snapshot context cannot derive sibling authorization");
 
   const stalePublicParent = { ...root.children[0].otherParent, campaignToken: "old-campaign", sourceSnapshotId: "old-date/1" };
   const promptCharacter = {
     id: 1,
     name: "共同父亲",
-    children: [{ id: 101, name: "妻生子", otherParent: stalePublicParent }],
+    children: [{ id: 101, name: "妻生子", directParentEvidence: root.children[0].directParentEvidence, otherParent: stalePublicParent }],
     evidence: {
-      canonicalCharacter: { id: 1, name: "共同父亲", children: [{ id: 101, name: "妻生子", otherParent: stalePublicParent }] },
+      canonicalCharacter: { id: 1, name: "共同父亲", children: [{ id: 101, name: "妻生子",
+        directParentEvidence: root.children[0].directParentEvidence, otherParent: stalePublicParent }] },
       otherParentRelations: [{ childId: 101, parentId: 2, otherParentId: 2, parentName: "旧战役配偶", sourceOwnerId: 1,
         relationType: "parent", source: "CK3_OTHER_PARENT", sourceRelation: "kids.otherParent", publicStatus: "PUBLIC_LEGAL_PARENT",
-        campaignToken: "old-campaign", sourceSnapshotId: "old-date/1" }]
+        knowledgeStatus: "UNKNOWN", campaignToken: "old-campaign", sourceSnapshotId: "old-date/1" }]
     }
   };
   const promptView = createTraitProfileView({ ...gameData, characters: new Map([[1, root]]), campaignToken: gameData.campaignToken }, promptCharacter).character;
@@ -187,7 +192,7 @@ async function main() {
     sourceSnapshotId: `${gameData.date}/${gameData.totalDays}` };
   const currentPromptView = createTraitProfileView({ ...gameData, characters: new Map([[1, root]]) }, {
     ...promptCharacter,
-    children: [{ id: 101, name: "妻生子", otherParent: currentPublicParent }],
+    children: [{ id: 101, name: "妻生子", directParentEvidence: root.children[0].directParentEvidence, otherParent: currentPublicParent }],
     evidence: { ...promptCharacter.evidence, otherParentRelations: [{ ...promptCharacter.evidence.otherParentRelations[0],
       sourceOwnerId: 1, campaignToken: gameData.campaignToken, sourceSnapshotId: `${gameData.date}/${gameData.totalDays}` }] }
   }).character;
@@ -195,7 +200,8 @@ async function main() {
   assert.equal(currentPromptView.evidence.otherParentRelations[0]?.parentName, "旧战役配偶", "current public normalized evidence remains available");
   const unknownPromptView = createTraitProfileView({ ...gameData, characters: new Map([[1, root]]) }, {
     ...promptCharacter,
-    children: [{ id: 101, name: "妻生子", otherParent: { ...currentPublicParent, name: "秘密母亲", publicStatus: "UNKNOWN" } }],
+    children: [{ id: 101, name: "妻生子", directParentEvidence: root.children[0].directParentEvidence,
+      otherParent: { ...currentPublicParent, name: "秘密母亲", publicStatus: "UNKNOWN" } }],
     evidence: { ...promptCharacter.evidence, otherParentRelations: [{ ...promptCharacter.evidence.otherParentRelations[0],
       parentName: "秘密母亲", sourceOwnerId: 1, publicStatus: "UNKNOWN", campaignToken: gameData.campaignToken,
       sourceSnapshotId: `${gameData.date}/${gameData.totalDays}` }] }
@@ -212,11 +218,11 @@ async function main() {
       otherParentRelations: profiles.get(101).evidence.otherParentRelations.map((item) => ({ ...item, publicStatus: "PUBLIC_LEGAL_PARENT" }))
     }
   });
-  const publicRelation = assertParentEdge(buildKinshipGraph(explicitPublic), 2, 101);
+  const publicRelation = assertParentEdge(buildKinshipGraph(explicitPublic, currentEvidenceFilters), 2, 101);
   assert.equal(publicRelation.parentEvidence[0].publicStatus, "PUBLIC_LEGAL_PARENT", "explicit public legal-parent evidence is preserved");
   assert.equal(publicRelation.parentEvidence[0].knowledgeStatus, "UNKNOWN", "public parentage does not claim NPC knowledge");
   assert.equal(graph.nodes.get("2").gender, "female", "a restricted parent node only receives gender supported by the CK3 export");
-  assert.equal(graph.nodes.get("4").gender, "male", "sibling parent gender also comes from its own CK3 export");
+  assert.equal(graph.nodes.has("4"), false, "UNKNOWN sibling parent evidence cannot create a parent node");
   assert.equal(graph.nodes.get("2").partial, true, "an unprofiled parent stays a restricted node");
   assert.equal(graph.nodes.get("2").age, undefined, "restricted parent nodes gain no age");
   assert.equal(graph.nodes.get("2").traits, undefined, "restricted parent nodes gain no traits");
@@ -224,7 +230,7 @@ async function main() {
   assert.equal(assertParentEdge(graph, 2, 101).parentEvidence.length, 1, "raw and normalized duplicate evidence deduplicates exactly");
 
   const evidenceOnlyProfiles = new Map([...profiles].map(([id, profile]) => [id, { ...profile, children: [], siblings: [] }]));
-  assertParentEdge(buildKinshipGraph(evidenceOnlyProfiles), 2, 101);
+  assertParentEdge(buildKinshipGraph(evidenceOnlyProfiles, currentEvidenceFilters), 2, 101);
   const mismatchedEvidenceProfiles = new Map(evidenceOnlyProfiles);
   const child101Profile = mismatchedEvidenceProfiles.get(101);
   mismatchedEvidenceProfiles.set(101, {
@@ -234,7 +240,7 @@ async function main() {
       otherParentRelations: child101Profile.evidence.otherParentRelations.map((item) => ({ ...item, sourceOwnerId: 999 }))
     }
   });
-  assert.equal(buildKinshipGraph(mismatchedEvidenceProfiles).relationBetween(2, 101).relation, null,
+  assert.equal(buildKinshipGraph(mismatchedEvidenceProfiles, currentEvidenceFilters).relationBetween(2, 101).relation, null,
     "normalized other-parent evidence must bind to the child profile's source owner relation");
   const wrongRelationEvidenceProfiles = new Map(evidenceOnlyProfiles);
   wrongRelationEvidenceProfiles.set(101, {
@@ -244,7 +250,7 @@ async function main() {
       otherParentRelations: child101Profile.evidence.otherParentRelations.map((item) => ({ ...item, sourceRelation: "siblings.otherParent" }))
     }
   });
-  assert.equal(buildKinshipGraph(wrongRelationEvidenceProfiles).relationBetween(2, 101).relation, null,
+  assert.equal(buildKinshipGraph(wrongRelationEvidenceProfiles, currentEvidenceFilters).relationBetween(2, 101).relation, null,
     "normalized other-parent evidence must match its child/sibling relation source");
 
   const invalidReferencesGraph = buildKinshipGraph({ 20: {

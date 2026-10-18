@@ -386,7 +386,7 @@ assertFrozenPrefixScopeInvalidation();
 
 function assertMemoryBudgetPolicy() {
   assert.equal(PLAYER_CENTERED_RECALL_ENABLED, true, "the single player-centered recall switch defaults on");
-  assert.equal(DEFAULT_MEMORY_BUDGET_POLICY_REVISION, "v9.3.6");
+  assert.equal(DEFAULT_MEMORY_BUDGET_POLICY_REVISION, "v9.3.9");
   assert.deepEqual(Object.values(MEMORY_BUDGET_POLICIES["v9.3.5"].tiers).map(({ ratio, capTokens }) => [ratio, capTokens]), [
     [0.10, 3600], [0.125, 4500], [0.15, 5400]
   ]);
@@ -394,14 +394,14 @@ function assertMemoryBudgetPolicy() {
     [0.16, 4800], [0.18, 5600], [0.20, 6400]
   ]);
   for (const entry of [
-    { participants: 2, window: 50000, ratio: 0.16, cap: 4800 },
-    { participants: 3, window: 50000, ratio: 0.18, cap: 5600 },
-    { participants: 5, window: 50000, ratio: 0.20, cap: 6400 }
+    { participants: 2, window: 128000, ratio: 0.65, cap: 80000 },
+    { participants: 3, window: 128000, ratio: 0.70, cap: 84000 },
+    { participants: 5, window: 128000, ratio: 0.75, cap: 96000 }
   ]) {
     const result = resolveMemoryBudget({ participantCount: entry.participants, contextWindowTokens: entry.window, providerHeadroomTokens: 10000 });
     assert.equal(result.ratio, entry.ratio);
     assert.equal(result.policyCapTokens, entry.cap);
-    assert.equal(result.memoryBudgetTokens, entry.cap);
+    assert.equal(result.memoryBudgetTokens, 10000, "provider headroom still bounds the expanded policy");
     assert.equal(result.providerHeadroomTokens, 10000);
     const proportional = resolveMemoryBudget({
       participantCount: entry.participants, contextWindowTokens: 10000, providerHeadroomTokens: 10000

@@ -11,6 +11,22 @@ const MEMORY_BUDGET_POLICIES = Object.freeze({
       4: Object.freeze({ ratio: 0.15, capTokens: 5400 })
     })
   }),
+  "v9.3.9": Object.freeze({
+    revision: "v9.3.9",
+    tiers: Object.freeze({
+      2: Object.freeze({ ratio: 0.65, capTokens: 80000 }),
+      3: Object.freeze({ ratio: 0.70, capTokens: 84000 }),
+      4: Object.freeze({ ratio: 0.75, capTokens: 96000 })
+    })
+  }),
+  "v9.3.8": Object.freeze({
+    revision: "v9.3.8",
+    tiers: Object.freeze({
+      2: Object.freeze({ ratio: 0.65, capTokens: 80000 }),
+      3: Object.freeze({ ratio: 0.70, capTokens: 84000 }),
+      4: Object.freeze({ ratio: 0.75, capTokens: 88000 })
+    })
+  }),
   "v9.3.6": Object.freeze({
     revision: "v9.3.6",
     tiers: Object.freeze({
@@ -21,7 +37,7 @@ const MEMORY_BUDGET_POLICIES = Object.freeze({
   })
 });
 
-const DEFAULT_MEMORY_BUDGET_POLICY_REVISION = PLAYER_CENTERED_RECALL_ENABLED ? "v9.3.6" : "v9.3.5";
+const DEFAULT_MEMORY_BUDGET_POLICY_REVISION = PLAYER_CENTERED_RECALL_ENABLED ? "v9.3.9" : "v9.3.5";
 
 function resolveMemoryBudget({ participantCount, contextWindowTokens, providerHeadroomTokens, policyRevision = DEFAULT_MEMORY_BUDGET_POLICY_REVISION } = {}) {
   const policy = MEMORY_BUDGET_POLICIES[policyRevision];

@@ -356,8 +356,18 @@ async function main() {
       assert.equal(view.gameData.getPlayer().traits.length, 0, text);
     }
     data.getAi().knownSecrets = [{ ownerId: 1, type: "secret_bastard" }];
-    const permitted = traitSelector.createTraitProfileView(data, data.getAi(), {});
-    assert.deepEqual(permitted.gameData.getPlayer().traits.map(trait => trait.name), ["私生子"], "only a matching CK3 secret readback may reveal the secret trait");
+    const rawKnownSecrets = traitSelector.createTraitProfileView(data, data.getAi(), {});
+    assert.deepEqual(rawKnownSecrets.gameData.getPlayer().traits, [],
+      "raw knownSecrets do not authorize disclosing another character's secret trait");
+    const evidenceSourceSnapshotId = `${data.campaignToken}|${data.date}/${data.totalDays}|${"a".repeat(16)}`;
+    const scopedDisclosureFacts = new Map([[1, [{ campaignToken: data.campaignToken, ownerId: 2, entityId: 1,
+      current: true, status: "AUTO_DISCLOSED", effectiveKnown: true, factType: "TRAIT", factKey: "trait_bastard",
+      source: "GAME_DATA_KNOWN_SECRET", sourceSnapshotId: `checkpoint-a|${evidenceSourceSnapshotId}`,
+      evidenceSourceSnapshotId,
+      firstAcquiredDate: data.date }]]]);
+    const permitted = traitSelector.createTraitProfileView(data, data.getAi(), { disclosureProfiles: scopedDisclosureFacts });
+    assert.deepEqual(permitted.gameData.getPlayer().traits.map(trait => trait.name), ["私生子"],
+      "only a current responder-scoped disclosure fact may reveal the matching secret trait");
   });
 }
 

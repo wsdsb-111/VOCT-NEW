@@ -161,7 +161,7 @@ function selectDualTemporalExtras(index, memories, temporal, { query = "", entit
     selected.push({ memory, score: entry.score, reason: { source: "temporal", axis: entry.axis, precision: entry.precision,
       targetGameYear: temporal.targetGameYear || null, matchedExpression: entry.ref?.expression || temporal.expression,
       fromGameDate: entry.ref?.fromGameDate || entry.gameDate, toGameDate: entry.ref?.toGameDate || entry.gameDate } });
-    if (selected.length >= Math.min(3, limit)) break;
+    if (selected.length >= Math.min(5, limit)) break;
   }
   return selected;
 }

@@ -116,10 +116,16 @@ electron.contextBridge.exposeInMainWorld("conversationAPI", {
   getConversationEntries: () => {
     return electron.ipcRenderer.invoke("conversation:getEntries");
   },
+  getContextUsage: () => electron.ipcRenderer.invoke("conversation:getContextUsage"),
   onConversationUpdate: (callback) => {
     const handler = (_event, entries) => callback(entries);
     electron.ipcRenderer.on("conversation:updated", handler);
     return () => electron.ipcRenderer.removeListener("conversation:updated", handler);
+  },
+  onContextUsageUpdate: (callback) => {
+    const handler = (_event, snapshot) => callback(snapshot);
+    electron.ipcRenderer.on("conversation:contextUsageUpdated", handler);
+    return () => electron.ipcRenderer.removeListener("conversation:contextUsageUpdated", handler);
   },
   cancelStream: () => {
     return electron.ipcRenderer.invoke("conversation:cancelStream");
@@ -242,4 +248,9 @@ electron.contextBridge.exposeInMainWorld("worldlineAPI", {
     electron.ipcRenderer.on("worldline:updated", handler);
     return () => electron.ipcRenderer.removeListener("worldline:updated", handler);
   }
+});
+electron.contextBridge.exposeInMainWorld("characterKnowledgeAPI", {
+  getOwnerView: (payload) => electron.ipcRenderer.invoke("characterKnowledge:getOwnerView", payload),
+  getTargetView: (payload) => electron.ipcRenderer.invoke("characterKnowledge:getTargetView", payload),
+  setManualStatus: (payload) => electron.ipcRenderer.invoke("characterKnowledge:setManualStatus", payload)
 });

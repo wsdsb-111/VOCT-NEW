@@ -1,6 +1,7 @@
 "use strict";
 
 const { buildKinshipGraph } = require("./character-kinship-graph");
+const { normalizeGameDate } = require("./character-temporal-facts");
 
 const graphCache = new WeakMap();
 const targetedGraphCache = new WeakMap();
@@ -11,10 +12,7 @@ function relationFingerprint(gameData) {
     character?.id,
     ...["parents", "children", "siblings", "spouse", "spouses", "formerSpouses", "deceasedSpouses"].map((field) => {
       const value = character?.[field] ?? null;
-      // Step-family evidence is queried directly; its subtree is not a birth-graph input.
-      return field === "parents" && Array.isArray(value)
-        ? value.map(parent => parent?.source === "CK3_DIRECT_PARENT" ? { ...parent, spouses: undefined } : parent)
-        : value;
+      return value;
     }),
     character?.consort && typeof character.consort === "object" ? character.consort.id ?? character.consort.name : character?.consort || "",
     character?.gender ?? character?.sex ?? character?.female ?? "",
@@ -40,7 +38,8 @@ function revisionKey(gameData) {
   // The fallback already serializes the exact parent source metadata. Reuse
   // that proof instead of walking the same character collection a second time.
   const liveScope = explicitRevision === null || explicitRevision === undefined
-    ? /"source":"CK3_(?:DIRECT|OTHER)_PARENT"/.test(fingerprint) ? `${gameData?.date ?? ""}/${gameData?.totalDays ?? ""}` : ""
+    ? /"source":"CK3_(?:DIRECT|OTHER)_PARENT"/.test(fingerprint) ? `${gameData?.date ?? ""}/${gameData?.totalDays ?? ""}`
+      : /"source":"CK3_SAVE_LEGAL_PARENT"/.test(fingerprint) ? `${gameData?.playthroughId ?? ""}/${gameData?.gameDate ?? ""}/${gameData?.contentFingerprint ?? ""}` : ""
     : liveParentScope(gameData);
   return [
     gameData?.campaignToken ?? gameData?.campaignId ?? "",
@@ -57,10 +56,14 @@ function liveParentScope(gameData) {
   const characters = gameData?.characters instanceof Map ? gameData.characters.values() : Object.values(gameData?.characters || {});
   for (const character of characters) {
     if ((character?.parents || []).some?.(parent => parent?.source === "CK3_DIRECT_PARENT")
+      || character?.children?.some?.(entry => entry?.directParentEvidence?.source === "CK3_DIRECT_PARENT")
       || ["children", "siblings"].some(field => character?.[field]?.some?.(entry => entry?.otherParent))
       || character?.evidence?.otherParentRelations?.length
       || character?.evidence?.relations?.some(item => item?.directParentEvidence?.source === "CK3_DIRECT_PARENT")) {
       return `${gameData?.date ?? ""}/${gameData?.totalDays ?? ""}`;
+    }
+    if (character?.evidence?.relations?.some(item => item?.directParentEvidence?.source === "CK3_SAVE_LEGAL_PARENT")) {
+      return `${gameData?.playthroughId ?? ""}/${gameData?.gameDate ?? ""}/${gameData?.contentFingerprint ?? ""}`;
     }
   }
   // Legacy structural graphs have no live parent source to expire. Preserve
@@ -88,39 +91,103 @@ function relatedIds(character = {}) {
   return [...new Set(values)];
 }
 
-function currentPublicParentFilter(gameData) {
-  const campaignToken = gameData?.campaignToken;
+function positiveRuntimeId(value) {
+  const raw = value && typeof value === "object" ? value.id ?? value.runtimeId ?? value.characterId : value;
+  const numeric = Number(raw);
+  return Number.isSafeInteger(numeric) && numeric > 0 ? numeric : null;
+}
+
+function currentParentSnapshotId(gameData) {
   const date = typeof gameData?.date === "string" ? gameData.date.trim() : "";
   const rawDays = gameData?.totalDays;
   const days = typeof rawDays === "number" || typeof rawDays === "string" && rawDays.trim()
     ? Number(rawDays) : NaN;
-  const snapshotId = date && Number.isFinite(days) && days >= 0 ? `${date}/${days}` : null;
-  // Raw/diagnostic graphs retain evidence. Shared presentation graphs must
-  // reject it before deriving siblings/grandparents or freezing Prompt text.
-  return (evidence, record) => typeof campaignToken === "string" && campaignToken.length > 0 && snapshotId !== null
-    && record?.source === "CK3_OTHER_PARENT" && record.publicStatus === "PUBLIC_LEGAL_PARENT"
-    && (record.knowledgeStatus === undefined || record.knowledgeStatus === "UNKNOWN")
-    && record.campaignToken === campaignToken && record.sourceSnapshotId === snapshotId
-    && evidence.campaignToken === campaignToken && evidence.sourceSnapshotId === snapshotId;
+  return date && Number.isFinite(days) && days >= 0 ? `${date}/${days}` : null;
+}
+
+function isCurrentDirectParentEvidence(record, context = {}, gameData = {}) {
+  if (!record || typeof record !== "object") return false;
+  const childId = positiveRuntimeId(context.childId ?? context.sourceOwnerId ?? record.childId);
+  const parentId = positiveRuntimeId(context.parentId ?? record.parentId ?? record.id);
+  const recordId = positiveRuntimeId(record.id ?? record.parentId ?? record.parentRuntimeId);
+  if (record.source === "CK3_SAVE_LEGAL_PARENT") {
+    const playthroughId = gameData?.playthroughId;
+    const gameDate = gameData?.gameDate;
+    const contentFingerprint = gameData?.contentFingerprint;
+    const parentField = record.sourceRelation === "family_data.father" ? "father"
+      : record.sourceRelation === "family_data.mother" ? "mother" : null;
+    const characters = gameData?.characters;
+    const child = characters instanceof Map
+      ? characters.get(childId) ?? characters.get(String(childId))
+      : characters?.[childId] ?? characters?.[String(childId)];
+    const parent = characters instanceof Map
+      ? characters.get(parentId) ?? characters.get(String(parentId))
+      : characters?.[parentId] ?? characters?.[String(parentId)];
+    const rawLegalParentId = parentField ? positiveRuntimeId(child?.parents?.[parentField]) : null;
+    return gameData?.schemaVersion === 1
+      && typeof playthroughId === "string" && playthroughId.length > 0
+      && typeof gameDate === "string" && normalizeGameDate(gameDate) !== null
+      && typeof contentFingerprint === "string" && /^[a-f0-9]{64}$/iu.test(contentFingerprint)
+      && childId !== null && parentId !== null && (recordId === null || recordId === parentId)
+      && record.sourceSchemaVersion === 1
+      && record.sourceOwnerId === String(childId) && record.childId === String(childId)
+      && record.parentId === String(parentId)
+      && record.relationType === "parent"
+      && parentField !== null && rawLegalParentId === parentId && !!parent
+      && record.publicStatus === "PUBLIC_LEGAL_PARENT" && record.knowledgeStatus === "UNKNOWN"
+      && record.evidenceConflict !== true
+      && record.playthroughId === playthroughId && record.gameDate === gameDate
+      && record.contentFingerprint === contentFingerprint
+      && record.sourceSnapshotId === `${playthroughId}/${gameDate}/${contentFingerprint}`;
+  }
+  const campaignToken = gameData?.campaignToken;
+  const snapshotId = currentParentSnapshotId(gameData);
+  return childId !== null && parentId !== null
+    && (recordId === null || recordId === parentId)
+    && record.source === "CK3_DIRECT_PARENT"
+    && record.publicStatus === "PUBLIC_LEGAL_PARENT"
+    && record.knowledgeStatus === "UNKNOWN"
+    && record.evidenceConflict !== true
+    && record.relationType === "parent"
+    && record.sourceRelation === "parents"
+    && positiveRuntimeId(record.sourceOwnerId) === childId
+    && positiveRuntimeId(record.childId) === childId
+    && typeof campaignToken === "string" && campaignToken.length > 0
+    && record.campaignToken === campaignToken
+    && snapshotId !== null && record.sourceSnapshotId === snapshotId;
+}
+
+function currentPublicParentFilter(gameData) {
+  const campaignToken = gameData?.campaignToken;
+  const snapshotId = currentParentSnapshotId(gameData);
+  return (evidence, record, context = {}) => {
+    const parentId = positiveRuntimeId(evidence?.parentId ?? evidence?.otherParentId ?? evidence?.id);
+    const childId = positiveRuntimeId(context.childId ?? evidence?.childId ?? record?.childId);
+    const sourceOwnerId = positiveRuntimeId(evidence?.sourceOwnerId);
+    const expectedOwnerId = positiveRuntimeId(context.sourceOwnerId ?? record?.sourceOwnerId);
+    return typeof campaignToken === "string" && campaignToken.length > 0 && snapshotId !== null
+      && parentId !== null && childId !== null && sourceOwnerId !== null
+      && (expectedOwnerId === null || sourceOwnerId === expectedOwnerId)
+      && sourceOwnerId === positiveRuntimeId(record?.sourceOwnerId)
+      && (record?.childId === null || record?.childId === undefined || positiveRuntimeId(record.childId) === childId)
+      && record?.source === "CK3_OTHER_PARENT" && evidence?.source === "CK3_OTHER_PARENT"
+      && record?.publicStatus === "PUBLIC_LEGAL_PARENT" && evidence?.publicStatus === "PUBLIC_LEGAL_PARENT"
+      && record?.knowledgeStatus === "UNKNOWN" && evidence?.knowledgeStatus === "UNKNOWN"
+      && record?.evidenceConflict !== true && evidence?.evidenceConflict !== true
+      && record?.relationType === "parent" && evidence?.relationType === "parent"
+      && record?.sourceRelation === evidence?.sourceRelation
+      && ["kids.otherParent", "siblings.otherParent"].includes(record?.sourceRelation)
+      && sourceOwnerId === positiveRuntimeId(record?.sourceOwnerId)
+      && record?.campaignToken === campaignToken && evidence?.campaignToken === campaignToken
+      && record?.sourceSnapshotId === snapshotId && evidence?.sourceSnapshotId === snapshotId;
+  };
 }
 
 function currentDirectParentFilter(gameData) {
-  const campaignToken = gameData?.campaignToken;
-  const date = typeof gameData?.date === "string" ? gameData.date.trim() : "";
-  const rawDays = gameData?.totalDays;
-  const days = typeof rawDays === "number" || typeof rawDays === "string" && rawDays.trim()
-    ? Number(rawDays) : NaN;
-  const snapshotId = date && Number.isFinite(days) && days >= 0 ? `${date}/${days}` : null;
-  return (record, childId) => {
-    if (!record || typeof record !== "object") return true;
-    if (Object.hasOwn(record, "publicStatus")
-      && (record.publicStatus !== "PUBLIC_LEGAL_PARENT" || record.source !== "CK3_DIRECT_PARENT")) return false;
-    if (record.source !== "CK3_DIRECT_PARENT") return true;
-    return record.publicStatus === "PUBLIC_LEGAL_PARENT" && record.knowledgeStatus === "UNKNOWN" && !record.evidenceConflict
-      && record.relationType === "parent" && record.sourceRelation === "parents"
-      && Number(record.sourceOwnerId) === Number(childId) && Number(record.childId) === Number(childId)
-      && typeof campaignToken === "string" && campaignToken.length > 0 && snapshotId !== null
-      && record.campaignToken === campaignToken && record.sourceSnapshotId === snapshotId;
+  return (record, contextOrChildId = {}) => {
+    const context = contextOrChildId && typeof contextOrChildId === "object"
+      ? contextOrChildId : { childId: contextOrChildId };
+    return isCurrentDirectParentEvidence(record, context, gameData);
   };
 }
 
@@ -170,4 +237,4 @@ function getCachedKinshipGraph(gameData, { includeOtherParents = true } = {}) {
   return graph;
 }
 
-module.exports = { getCachedKinshipGraph, getTargetedKinshipGraph, revisionKey, currentDirectParentFilter, currentPublicParentFilter };
+module.exports = { getCachedKinshipGraph, getTargetedKinshipGraph, revisionKey, currentDirectParentFilter, currentPublicParentFilter, isCurrentDirectParentEvidence };

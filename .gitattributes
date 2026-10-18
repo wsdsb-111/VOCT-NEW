@@ -29,3 +29,6 @@ docs/current/v9/V9_3_3_1_FIX_SPEC.md whitespace=-blank-at-eol
 /docs/current/v9/v9363i-source-evidence.json -text
 /scripts/test-v9.3.6.3-mixed-archive-ab.js -text
 /scripts/test-v9.3.6.3-integrated-ab.js -text
+# Preserve the supplied historical specification and unified patch context bytes.
+/docs/current/v9/V9_3_7_1_FIX_SPEC_IMPORTED.md whitespace=-blank-at-eol
+/docs/current/v9/patches/V9_3_9_KIDS_DIRECT_PARENT_EVIDENCE.patch -text whitespace=-space-before-tab

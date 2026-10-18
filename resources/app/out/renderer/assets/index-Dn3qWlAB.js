@@ -1,6 +1,6 @@
 import { WorldMemoryEditor } from "../world-memory-editor.js";
 import { getLegacySummaryPage, getSummaryDisplayEntries, getSummaryImportantMatters } from "../summary-date-order.js";
-const VOTC_FEATURE_VERSION = "V9.3.7";
+const VOTC_FEATURE_VERSION = "V9.3.9";
 const VOTC_WORKSHOP_MOD_VERSION = "2.0.5";
 function getDefaultExportFromCjs(x) {
   return x && x.__esModule && Object.prototype.hasOwnProperty.call(x, "default") ? x["default"] : x;
@@ -15927,6 +15927,10 @@ const MessageItem = ({ entry }) => {
       ] }),
       /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "error-content", children: [
         /* @__PURE__ */ jsxRuntimeExports.jsx("p", { children: entry.content }),
+        entry.memoryBudgetDetails && /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "memory-budget-overflow-details", children: [
+          /* @__PURE__ */ jsxRuntimeExports.jsx("strong", { children: `预算分项 · 需要 ${formatContextTokens(entry.memoryBudgetDetails.requiredTokens)} Token · 可用 ${formatContextTokens(entry.memoryBudgetDetails.availableTokens)} Token` }),
+          /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "memory-budget-overflow-grid", children: CONTEXT_USAGE_BREAKDOWN_LABELS.map(([label, key]) => /* @__PURE__ */ jsxRuntimeExports.jsxs("span", { children: [label, " ", formatContextTokens(entry.memoryBudgetDetails.breakdown?.[key])] }, key)) })
+        ] }),
         entry.details && /* @__PURE__ */ jsxRuntimeExports.jsxs("details", { className: "error-details", children: [
           /* @__PURE__ */ jsxRuntimeExports.jsx("summary", { children: t("chat.details") }),
           /* @__PURE__ */ jsxRuntimeExports.jsx("pre", { children: entry.details })
@@ -16649,7 +16653,8 @@ const useConversationEntries = () => {
               content: entry.content,
               datetime: new Date(entry.datetime),
               // Ensure Date object
-              details: entry.details
+              details: entry.details,
+              memoryBudgetDetails: entry.memoryBudgetDetails || null
             };
           }
         });
@@ -16702,7 +16707,8 @@ const useConversationEntries = () => {
             content: entry.content,
             datetime: new Date(entry.datetime),
             // Ensure Date object
-            details: entry.details
+            details: entry.details,
+            memoryBudgetDetails: entry.memoryBudgetDetails || null
           };
         }
       });
@@ -16722,6 +16728,86 @@ const useConversationEntries = () => {
     entries,
     sendMessage
   };
+};
+const CONTEXT_USAGE_BREAKDOWN_LABELS = [
+  ["最近记忆", "recent"], ["官方追忆", "official"], ["玩家关系事项簿", "ledger"],
+  ["稳定记忆", "stable"], ["时间记忆", "temporal"], ["第三人记忆", "thirdPerson"]
+];
+const CONTEXT_WINDOW_SOURCE_LABELS = {
+  provider_native: "服务商提供",
+  provider_metadata: "服务商模型信息",
+  provider_native_cap: "受服务商上限限制",
+  user_provided: "用户设置",
+  user_provided_unverified: "用户设置，未经服务商确认",
+  safe_fallback: "保守回退",
+  invalid_configuration_fallback: "配置无效，保守回退"
+};
+const formatContextTokens = (value) => typeof value === "number" && Number.isSafeInteger(value)
+  ? value.toLocaleString("zh-CN") : "未知";
+const useConversationContextUsage = () => {
+  const [snapshot, setSnapshot] = reactExports.useState(null);
+  reactExports.useEffect(() => {
+    let active = true;
+    let latest = null;
+    const accept = (next) => {
+      if (!active || !next || !Array.isArray(next.responders)) return;
+      const epoch = Number(next.conversationEpoch) || 0;
+      const revision = Number(next.revision) || 0;
+      const turnEpoch = Number(next.turnEpoch) || 0;
+      if (latest) {
+        if (epoch < latest.epoch) return;
+        if (epoch === latest.epoch) {
+          if (!latest.conversationId && next.conversationId) return;
+          if (latest.conversationId && next.conversationId && next.conversationId !== latest.conversationId) return;
+          if (next.conversationId === latest.conversationId && revision <= latest.revision) return;
+          if (next.conversationId === latest.conversationId && turnEpoch < latest.turnEpoch) return;
+        }
+      }
+      latest = { conversationId: next.conversationId || null, epoch, revision, turnEpoch };
+      setSnapshot(next);
+    };
+    const cleanup = window.conversationAPI.onContextUsageUpdate?.(accept);
+    Promise.resolve(window.conversationAPI.getContextUsage?.()).then(accept).catch((error) => {
+      console.error("Failed to fetch context usage:", error);
+    });
+    return () => {
+      active = false;
+      cleanup?.();
+    };
+  }, []);
+  return snapshot;
+};
+const ContextUsageIndicator = ({ snapshot }) => {
+  const responders = [...(snapshot?.responders || [])].sort((left, right) =>
+    (Number(right.usageRevision) || 0) - (Number(left.usageRevision) || 0)
+      || (Date.parse(right.updatedAt || "") || 0) - (Date.parse(left.updatedAt || "") || 0)
+  );
+  if (!responders.length) return null;
+  const row = responders[0];
+  const phaseLabels = { request_snapshot: "请求快照", streaming: "生成中", completed: "已完成", cancelled: "已停止", failed: "请求失败" };
+  const inputSource = row.inputTokensSource === "provider_usage" ? "服务商用量" : "估算（含 1.1 系数）";
+  const outputSource = row.outputTokensSource === "provider_usage" ? "服务商用量"
+    : row.outputTokensSource === "provisional_estimate" ? "生成中暂估" : "估算";
+  const totalSource = row.usageSource === "provider_usage" ? "服务商用量"
+    : row.usageSource === "provider_usage_partial_estimate" ? "混合估算" : "估算";
+  const tooltip = [
+    `本次回应者：${row.responderName || "姓名未载入"}`,
+    `Provider：${row.provider || "未知"} · 模型：${row.model || "未知"}`,
+    `当前窗口容量：${formatContextTokens(row.contextWindowTokens)} Token（${CONTEXT_WINDOW_SOURCE_LABELS[row.contextWindowSource] || "来源未知"}）`,
+    `本次请求输入（完整 Prompt）：${inputSource} ${formatContextTokens(row.inputTokens)} Token · 本次输出：${outputSource} ${formatContextTokens(row.outputTokens)} Token`,
+    `窗口原始余量：${formatContextTokens(row.remainingContextTokens)} Token（容量减本次输入与输出）`,
+    `发送前可追加输入估算：${formatContextTokens(row.inputHeadroomBeforeSendTokens)} Token（有效输入预算 ${formatContextTokens(row.effectiveInputBudget)}，已扣输出预留 ${formatContextTokens(row.reservedOutputTokens)}、协议开销 ${formatContextTokens(row.protocolOverheadTokens)}、安全余量 ${formatContextTokens(row.safetyMarginTokens)}）`,
+    "这是最近一次请求的用量快照；下一次请求会重新计算。"
+  ].join("\n");
+  return /* @__PURE__ */ jsxRuntimeExports.jsxs("section", { className: "context-usage-indicator", "aria-label": "上下文用量", children: [
+    /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "context-usage-heading", children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsx("strong", { children: "本场对话上下文" }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx("span", { children: "最近一次实际请求" })
+    ] }),
+    /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "context-usage-row", title: tooltip, children:
+      `${phaseLabels[row.phase] || "请求快照"} · ${totalSource} ${formatContextTokens(row.usedTokens)} / ${formatContextTokens(row.contextWindowTokens)} Token · 窗口剩余 ${formatContextTokens(row.remainingContextTokens)}`
+    }, `${row.responderId}:${row.requestId}`)
+  ] });
 };
 const useWindowEvents = () => {
   const handleChatBoxMouseEnter = reactExports.useCallback(() => {
@@ -16902,6 +16988,7 @@ function Chat({ onToggleConfig }) {
     missingFields: []
   });
   const { entries, sendMessage } = useConversationEntries();
+  const contextUsage = useConversationContextUsage();
   const { handleChatBoxMouseEnter, handleChatBoxMouseLeave, handleLeave } = useWindowEvents();
   const { messagesEndRef, containerRef, scrollToBottom, handleScroll } = useAutoScroll();
   const {
@@ -17217,6 +17304,10 @@ function Chat({ onToggleConfig }) {
                 zIndex: 11
               }
             }
+          ),
+          /* @__PURE__ */ jsxRuntimeExports.jsx(
+            ContextUsageIndicator,
+            { snapshot: contextUsage }
           ),
           /* @__PURE__ */ jsxRuntimeExports.jsx(
             MessageList,
@@ -21178,6 +21269,17 @@ const PairLongTermUiMount = (props) => {
   }, [props.mode, props.ownerId, props.counterpartId, props.refreshToken]);
   return /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "pair-long-term-ui-host", ref: hostRef });
 };
+const CharacterKnowledgeUiMount = (props) => {
+  const hostRef = reactExports.useRef(null);
+  const latestProps = reactExports.useRef(props);
+  latestProps.current = props;
+  reactExports.useEffect(() => {
+    const mount = window.VOTCCharacterKnowledgeUi?.mount;
+    if (!hostRef.current || typeof mount !== "function") return void 0;
+    return mount(hostRef.current, latestProps.current);
+  }, [props.ownerRuntimeId, props.refreshToken]);
+  return /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "character-knowledge-ui-host", ref: hostRef });
+};
 const SummariesManager = () => {
   const { t } = useTranslation();
   const getSummariesDashboardData = useConfigStore((state) => state.getSummariesDashboardData);
@@ -21652,6 +21754,11 @@ const SummariesManager = () => {
               counterpartName: summaryPersonName(metadata.counterpartName || metadata.characterName) })),
             refreshToken: ledgerRefreshRevision,
             onLocateSource: (resolvedSource, item) => handleLocateResolvedSource(resolvedSource, item)
+          }),
+          /* @__PURE__ */ jsxRuntimeExports.jsx(CharacterKnowledgeUiMount, {
+            key: `character-knowledge-${playerId}`,
+            ownerRuntimeId: Number(playerId),
+            refreshToken: ledgerRefreshRevision
           }),
           playerSummaries.map((metadata) => {
           const characterKey = `${metadata.playerId}-${metadata.characterId}`;
@@ -22184,7 +22291,7 @@ const OptimizationView = () => {
     [text("多人视角摘要", "Perspective summaries"), text("按每名在场人物的实际知情范围保存；候场、缺席和未收到的耳语不计入其经历。", "Saved per owner's actual knowledge; waiting, absence, and unheard whispers do not become that character's experiences.")],
     [text("关系上下文", "Relationship context"), text("第三方角色按亲属和年龄解析，不加入发言队列。", "Mentioned third parties are resolved from kinship and age data without joining the speaker queue.")],
     [text("稳定记忆前缀", "Stable memory prefix"), text("同一场对话每轮保持一致；对话结束后的新摘要在下一场读取。", "It stays unchanged throughout one conversation; new final summaries are loaded in the next conversation.")],
-    [text("人物认知与公开标记", "Character knowledge and disclosure"), text("称号默认可见；精确头衔与隐藏特质按每名合法听众逐项保存。公开标记在下一场生效，手动设知与撤销不改变 CK3 事实。", "Nicknames are visible by default; exact titles and hidden traits are recorded per authorized listener. Disclosure applies in the next conversation; manual knowledge does not change CK3 facts.")],
+    [text("人物认知", "Character knowledge"), text("个人摘要中按人物分别管理已知事实与可见特质；来源过期后需重新确认。手动设知或隐藏只影响该人物的认知，不改变 CK3 事实。", "Manage each character's known facts and visible traits from their personal summary. Reconfirm after the source expires. Manual knowledge or hiding applies only to that character and does not change CK3 facts.")],
     [text("Legacy 摘要查看", "Legacy summary browsing"), text("摘要正文可展开全文，并支持按日期筛选、分页和手动编辑。", "Legacy summaries support full-text viewing, date filtering, pagination, and manual editing.")],
     [text("CK3 官方追忆", "CK3 official recollections"), text("官方追忆由 CK3 提供，并显示在人物摘要列表中。", "Official recollections come from CK3 and appear in the character summary list.")],
     [text("摘要读取与可信度", "Summary cache and trust"), text("人物目录按需缓存，写入后精确失效；所有摘要来源 messageId 必须存在于真实对话。", "Character folders are cached on demand and invalidated after writes; every cited messageId must exist in the source conversation.")],
@@ -22199,7 +22306,7 @@ const OptimizationView = () => {
     /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "optimization-header", children: [
       /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
         /* @__PURE__ */ jsxRuntimeExports.jsx("h3", { children: text("系统优化与用量", "System Optimization & Usage") }),
-        /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "muted-text", children: text(`${VOTC_FEATURE_VERSION} · Legacy Summary。Owner 知识会话开始冻结；GLM 前缀布局保留，缓存与长时间运行仍待实机验证。`, `${VOTC_FEATURE_VERSION} · Legacy Summary. Owner knowledge freezes at conversation opening; GLM prefix layout is preserved, while cache telemetry and long-running behavior still require in-game validation.`) })
+        /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "muted-text", children: text(`${VOTC_FEATURE_VERSION} · Legacy Summary。近期摘要在开场冻结，动态摘要成功召回后冻结复用；GLM 前缀布局保留，缓存与长时间运行仍待实机验证。`, `${VOTC_FEATURE_VERSION} · Legacy Summary. Recent summaries freeze at conversation opening, and successful dynamic recalls freeze for reuse. GLM prefix layout is preserved, while cache telemetry and long-running behavior still require in-game validation.`) })
       ] }),
       /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "optimization-header-actions", children: [
         /* @__PURE__ */ jsxRuntimeExports.jsx("button", { type: "button", onClick: loadReport, disabled: isLoading, children: isLoading ? text("读取中…", "Loading…") : text("刷新", "Refresh") }),

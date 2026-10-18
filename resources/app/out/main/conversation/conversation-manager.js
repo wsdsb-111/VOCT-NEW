@@ -5,6 +5,7 @@ function createConversationManager({ events, memorySystem, Conversation, PromptB
     constructor() {
       this.currentConversation = null;
       this.conversationEpoch = 0;
+      this.contextUsageRevision = 0;
       this.eventEmitter = new events.EventEmitter();
       this.finalizationCoordinator = new memorySystem.FinalizationCoordinator({ logger: console });
     }
@@ -16,8 +17,16 @@ function createConversationManager({ events, memorySystem, Conversation, PromptB
     }
     setupConversationListeners() {
       if (this.currentConversation) {
-        this.currentConversation.onConversationUpdate((entries) => {
+        const conversation = this.currentConversation;
+        conversation.onConversationUpdate((entries) => {
+          if (this.currentConversation !== conversation) return;
           this.eventEmitter.emit("conversation-updated", entries);
+        });
+        conversation.onContextUsageUpdate?.((snapshot) => {
+          if (this.currentConversation !== conversation || snapshot?.conversationId !== conversation.id
+            || Number(snapshot?.conversationEpoch) !== Number(this.conversationEpoch)) return;
+          this.contextUsageRevision = Math.max(this.contextUsageRevision || 0, Number(snapshot.revision) || 0);
+          this.eventEmitter.emit("context-usage-updated", snapshot);
         });
       }
     }
@@ -40,6 +49,7 @@ function createConversationManager({ events, memorySystem, Conversation, PromptB
         this.conversationEpoch = nextEpoch;
         this.currentConversation = new Conversation({ conversationEpoch: nextEpoch });
         this.setupConversationListeners();
+        this.emitContextUsageUpdate(this.getContextUsageSnapshot("reset"));
         return this.currentConversation;
       } catch (error) {
         console.error("Failed to create conversation:", error);
@@ -140,7 +150,19 @@ function createConversationManager({ events, memorySystem, Conversation, PromptB
             id: entry.id,
             content: entry.content,
             datetime: entry.datetime,
-            details: entry.details
+            details: entry.details,
+            memoryBudgetDetails: entry.memoryBudgetDetails ? {
+              requiredTokens: entry.memoryBudgetDetails.requiredTokens,
+              availableTokens: entry.memoryBudgetDetails.availableTokens,
+              breakdown: {
+                recent: entry.memoryBudgetDetails.breakdown?.recent,
+                official: entry.memoryBudgetDetails.breakdown?.official,
+                ledger: entry.memoryBudgetDetails.breakdown?.ledger,
+                stable: entry.memoryBudgetDetails.breakdown?.stable,
+                temporal: entry.memoryBudgetDetails.breakdown?.temporal,
+                thirdPerson: entry.memoryBudgetDetails.breakdown?.thirdPerson
+              }
+            } : null
           };
         }
       });
@@ -151,6 +173,11 @@ function createConversationManager({ events, memorySystem, Conversation, PromptB
     endCurrentConversation(options = {}) {
       const conversation = this.currentConversation;
       this.currentConversation = null;
+      if (conversation) {
+        this.contextUsageRevision = Math.max(this.contextUsageRevision || 0, Number(conversation.contextUsageRevision) || 0) + 1;
+        this.emitContextUsageUpdate({ conversationId: null, conversationEpoch: this.conversationEpoch,
+          turnEpoch: 0, sceneRevision: null, revision: this.contextUsageRevision, phase: "reset", responders: [] });
+      }
       if (!conversation) return Promise.resolve(null);
       console.log(`Conversation ${conversation.id} detached; finalization queued`);
       return this.finalizationCoordinator.enqueue(conversation.id, () => conversation.finalizeConversation({
@@ -263,6 +290,21 @@ function createConversationManager({ events, memorySystem, Conversation, PromptB
      */
     offConversationUpdate(callback) {
       this.eventEmitter.off("conversation-updated", callback);
+    }
+    getContextUsageSnapshot(phase = "snapshot") {
+      return this.currentConversation?.getContextUsageSnapshot?.(phase) || {
+        conversationId: null, conversationEpoch: this.conversationEpoch, turnEpoch: 0,
+        sceneRevision: null, revision: this.contextUsageRevision || 0, phase, responders: []
+      };
+    }
+    emitContextUsageUpdate(snapshot) {
+      this.eventEmitter.emit("context-usage-updated", snapshot);
+    }
+    onContextUsageUpdate(callback) {
+      this.eventEmitter.on("context-usage-updated", callback);
+    }
+    offContextUsageUpdate(callback) {
+      this.eventEmitter.off("context-usage-updated", callback);
     }
     /**
      * Get active conversation data

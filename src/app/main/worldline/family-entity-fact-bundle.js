@@ -22,7 +22,7 @@ function buildFamilyEntityFactBundle({ graph = null, responderId = null, relatio
     relationAnchorEntityId: String(relationAnchorId),
     relation: relationResult.relation.type,
     relationLabel: relationResult.relation.label,
-    relationshipKind: relationResult.relation.relationshipKind || "UNSPECIFIED",
+    relationshipKind: relationResult.relation.relationshipKind || (relationResult.relation.type.startsWith("STEP_") ? "STEP" : "UNSPECIFIED"),
     relationPath: relationResult.relation.structuredPath,
     name: character.fullName || character.shortName || character.firstName || `#${targetId}`,
     gender: sex.sex,

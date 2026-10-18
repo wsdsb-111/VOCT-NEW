@@ -15,7 +15,7 @@ const { TokenCounter } = require(main + "provider-service");
 
 const root = fs.mkdtempSync(path.join(os.tmpdir(), "votc-v811-"));
 const autosavePath = path.join(root, "autosave.ck3");
-const snapshot = parseGameState(`date=1150.1.1 played_character=1
+const snapshot = parseGameState(`date=1150.1.1 playthrough_id="v811-current-kinship-fixture" played_character=1
 living={
 1={first_name="宋臣" court_data={employer=10} family_data={father=80}}
 2={first_name="金臣" court_data={employer=20}}

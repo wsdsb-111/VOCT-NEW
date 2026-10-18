@@ -69,6 +69,21 @@ function addRelativeAgeEvidence(sample, entry, field, { ownerId = sample.respond
   return entry;
 }
 
+function makeCurrentDirectParentEvidence(sample, childId, parentId = sample.responder.id) {
+  return {
+    source: "CK3_DIRECT_PARENT",
+    sourceOwnerId: childId,
+    childId,
+    parentId,
+    relationType: "parent",
+    sourceRelation: "parents",
+    publicStatus: "PUBLIC_LEGAL_PARENT",
+    knowledgeStatus: "UNKNOWN",
+    campaignToken: sample.gameData.campaignToken,
+    sourceSnapshotId: `${sample.gameData.date}/${sample.gameData.totalDays}`
+  };
+}
+
 function link(relative, sample, field) {
   const relationType = ({ parents: "parent", children: "child", siblings: "sibling", spouses: "spouse" })[field];
   const age = Number.isInteger(relative.age) && relative.age >= 0 ? relative.age : null;
@@ -78,6 +93,7 @@ function link(relative, sample, field) {
     gender: relative.gender,
     age,
     ageSource: age === null ? null : "CK3_LIVE_RELATIVE_AGE",
+    ...(field === "children" ? { directParentEvidence: makeCurrentDirectParentEvidence(sample, relative.id) } : {}),
     evidence: age === null ? undefined : {
       age: [makeAgeEvidence(sample, age, { relationType, source: `${sample.responder.id}.${field}` })]
     },
@@ -200,7 +216,8 @@ for (const [date, expected] of [["1190年5月1日", 17], ["1190年5月2日", 18]
 // A06: ordinal days without a verified calendar mapping cannot become exact years.
 {
   const sample = fixture();
-  sample.responder.children.push({ id: 2, name: "儿子", gender: "male", birthDateTotalDays: 100000 });
+  sample.responder.children.push({ id: 2, name: "儿子", gender: "male", birthDateTotalDays: 100000,
+    directParentEvidence: makeCurrentDirectParentEvidence(sample, 2) });
   const result = buildPrompt(sample, "你儿子今年多大了？");
   assert.doesNotMatch(familyFacts(result), /\d+岁/);
   assert.match(familyFacts(result), /当前年龄未知/);
@@ -224,7 +241,8 @@ for (const [date, expected] of [["1190年5月1日", 17], ["1190年5月2日", 18]
     assert.match(familyFacts(result), new RegExp(test.expected), test.name);
   }
   const offscreen = fixture();
-  offscreen.responder.children.push({ id: 76, name: "生日已知的场外儿子", gender: "male", birthDate: "1174年5月2日" });
+  offscreen.responder.children.push({ id: 76, name: "生日已知的场外儿子", gender: "male", birthDate: "1174年5月2日",
+    directParentEvidence: makeCurrentDirectParentEvidence(offscreen, 76) });
   const offscreenDateResult = buildPrompt(offscreen, "你儿子今年几岁？");
   assert.doesNotMatch(familyFacts(offscreenDateResult), /\d+岁/);
   assert.strictEqual(ageDiagnostic(offscreenDateResult).ageSource, "UNKNOWN");
@@ -232,7 +250,10 @@ for (const [date, expected] of [["1190年5月1日", 17], ["1190年5月2日", 18]
   assert.strictEqual(ageDiagnostic(offscreenDateResult).sourceConflict, false);
   assert.strictEqual(ageDiagnostic(offscreenDateResult).diagnosticCode, "CALENDAR_AGE_UNVERIFIED");
   offscreen.responder.children = [];
-  offscreen.responder.children.push(addRelativeAgeEvidence(offscreen, { id: 77, name: "场外儿子", gender: "male", age: 16 }, "children"));
+  offscreen.responder.children.push({
+    ...addRelativeAgeEvidence(offscreen, { id: 77, name: "场外儿子", gender: "male", age: 16 }, "children"),
+    directParentEvidence: makeCurrentDirectParentEvidence(offscreen, 77)
+  });
   const offscreenResult = buildPrompt(offscreen, "你儿子今年几岁？");
   assert.match(familyFacts(offscreenResult), /16岁/);
   assert.strictEqual(ageDiagnostic(offscreenResult).ageSource, "CK3_LIVE_RELATIVE_AGE");
@@ -242,7 +263,8 @@ for (const [date, expected] of [["1190年5月1日", 17], ["1190年5月2日", 18]
   assert.match(familyFacts(offscreenSpouseResult), /22岁/);
   assert.strictEqual(ageDiagnostic(offscreenSpouseResult).ageSource, "CK3_LIVE_RELATIVE_AGE");
   const unrelated = fixture();
-  unrelated.responder.children.push({ id: 77, name: "场外儿子", gender: "male" });
+  unrelated.responder.children.push({ id: 77, name: "场外儿子", gender: "male",
+    directParentEvidence: makeCurrentDirectParentEvidence(unrelated, 77) });
   const otherOwner = makeCharacter(8, "另一位亲属", { age: 45 });
   otherOwner.children.push(addRelativeAgeEvidence(unrelated, { id: 77, name: "场外儿子", age: 16 }, "children", { ownerId: otherOwner.id }));
   unrelated.gameData.characters.set(otherOwner.id, otherOwner);
@@ -274,6 +296,7 @@ for (const [date, expected] of [["1190年5月1日", 17], ["1190年5月2日", 18]
   assert.strictEqual(ageDiagnostic(first).calculatedCalendarAge, 24);
   assert.strictEqual(ageDiagnostic(first).sourceConflict, false);
   sample.gameData.date = "1195年5月2日";
+  sample.responder.children[0].directParentEvidence = makeCurrentDirectParentEvidence(sample, 2);
   const later = buildPrompt(sample, "你儿子今年多大了？");
   assert.doesNotMatch(familyFacts(later), /终年\s*\d+\s*岁/);
   assert.match(familyFacts(later), /去世年龄未知/);
@@ -336,8 +359,10 @@ assert.strictEqual(computeAgeAtDate("1160年2月29日", "1180年3月1日"), 20);
 
   const conflict = fixture();
   conflict.responder.children.push(
-    addRelativeAgeEvidence(conflict, { id: 77, name: "场外儿子", gender: "male", age: 16 }, "children"),
-    addRelativeAgeEvidence(conflict, { id: 77, name: "场外儿子", gender: "male", age: 17 }, "children")
+    { ...addRelativeAgeEvidence(conflict, { id: 77, name: "场外儿子", gender: "male", age: 16 }, "children"),
+      directParentEvidence: makeCurrentDirectParentEvidence(conflict, 77) },
+    { ...addRelativeAgeEvidence(conflict, { id: 77, name: "场外儿子", gender: "male", age: 17 }, "children"),
+      directParentEvidence: makeCurrentDirectParentEvidence(conflict, 77) }
   );
   const conflictResult = buildPrompt(conflict, "你儿子今年几岁？");
   assert.match(familyFacts(conflictResult), /年龄来源冲突，当前年龄未知/);
@@ -350,7 +375,8 @@ assert.strictEqual(computeAgeAtDate("1160年2月29日", "1180年3月1日"), 20);
 // A14: partial relative data and unbound age markers cannot invent an age or confirm an ID-less relation.
 {
   const sample = fixture();
-  sample.responder.children.push({ id: 77, name: "残缺儿子", gender: "male", birthDateTotalDays: 100000 });
+  sample.responder.children.push({ id: 77, name: "残缺儿子", gender: "male", birthDateTotalDays: 100000,
+    directParentEvidence: makeCurrentDirectParentEvidence(sample, 77) });
   const result = buildPrompt(sample, "你儿子今年多大了？");
   assert.doesNotMatch(familyFacts(result), /\d+岁/);
   assert.match(familyFacts(result), /当前年龄未知/);

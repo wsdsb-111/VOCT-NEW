@@ -17,13 +17,18 @@ function makeGameData(patch = {}) {
   const otherParent = {
     id: 1, childId: 10, name: "玩家", parentGender: "male", sourceOwnerId: 99,
     relationType: "parent", source: "CK3_OTHER_PARENT", sourceRelation: "kids.otherParent",
-    publicStatus: "PUBLIC_LEGAL_PARENT", campaignToken: CAMPAIGN, sourceSnapshotId: SNAPSHOT, ...patch
+    publicStatus: "PUBLIC_LEGAL_PARENT", knowledgeStatus: "UNKNOWN", campaignToken: CAMPAIGN,
+    sourceSnapshotId: SNAPSHOT, ...patch
   };
   const characters = new Map([
     [1, { id: 1, shortName: "玩家", gender: "male" }],
     [10, { id: 10, shortName: "回应者", gender: "male" }],
     [99, { id: 99, shortName: "来源人物", gender: "female",
-      children: [{ id: 10, name: "回应者", gender: "male", otherParent }] }]
+      children: [{ id: 10, name: "回应者", gender: "male", directParentEvidence: {
+        source: "CK3_DIRECT_PARENT", sourceOwnerId: 10, childId: 10, parentId: 99,
+        relationType: "parent", sourceRelation: "parents", publicStatus: "PUBLIC_LEGAL_PARENT",
+        knowledgeStatus: "UNKNOWN", campaignToken: CAMPAIGN, sourceSnapshotId: SNAPSHOT
+      }, otherParent }] }]
   ]);
   return {
     characters,
@@ -35,7 +40,7 @@ function makeGameData(patch = {}) {
   };
 }
 
-function assertVisible(gameData, expected, label) {
+function assertVisible(gameData, expected, label, directExpected = true) {
   const projected = createTraitProfileView(gameData, gameData.characters.get(10)).gameData;
   assert.equal(!!projected.characters.get(99).children[0]?.otherParent, expected, `${label}: custom template raw parent alias`);
   const graph = getCachedKinshipGraph(gameData);
@@ -47,7 +52,8 @@ function assertVisible(gameData, expected, label) {
     expected ? "父亲" : null, `${label}: stable Prompt profile`);
   assert.equal(getCachedKinshipGraph(gameData, { includeOtherParents: false }).relationBetween(1, 10).relation,
     null, `${label}: no otherParent Memory authorization`);
-  assert.equal(graph.relationBetween(99, 10).relation?.type, "PARENT_OF", `${label}: original direct family remains`);
+  assert.equal(graph.relationBetween(99, 10).relation?.type || null, directExpected ? "PARENT_OF" : null,
+    `${label}: original direct family evidence follows the same current-snapshot gate`);
 }
 
 assertVisible(makeGameData(), true, "fresh public parent");
@@ -73,10 +79,12 @@ assertVisible(cached, false, "public status revoked on the same GameData");
 cached.characters.get(99).children[0].otherParent.publicStatus = "PUBLIC_LEGAL_PARENT";
 assertVisible(cached, true, "fresh public evidence restored");
 cached.totalDays = 124;
+cached.characters.get(99).children[0].directParentEvidence.sourceSnapshotId = "1066.1.1/124";
 assertVisible(cached, false, "snapshot advanced on the same GameData");
 cached.characters.get(99).children[0].otherParent.sourceSnapshotId = "1066.1.1/124";
 assertVisible(cached, true, "new snapshot evidence restored");
 cached.date = "1066.1.2";
+cached.characters.get(99).children[0].directParentEvidence.sourceSnapshotId = "1066.1.2/124";
 assertVisible(cached, false, "date advanced without fresh evidence");
 
 const normalized = makeGameData();
@@ -88,7 +96,7 @@ normalized.characters.get(99).children[0].otherParent.publicStatus = "UNKNOWN";
 assertVisible(normalized, false, "normalized evidence mutation invalidates cache");
 
 for (const patch of [{ campaignToken: "" }, { date: "" }, { totalDays: null }, { totalDays: "" }]) {
-  assertVisible(Object.assign(makeGameData(), patch), false, "missing current source scope");
+  assertVisible(Object.assign(makeGameData(), patch), false, "missing current source scope", false);
 }
 
 for (const normalizedProfiles of [false, true]) {
@@ -160,7 +168,7 @@ for (const normalizedProfiles of [false, true]) {
     legacy.characters = legacy.getMentionableCharacterProfiles();
     delete legacy.getMentionableCharacterProfiles;
   }
-  assert.equal(getCachedKinshipGraph(legacy).relationBetween(1, 10).relation?.type, "PARENT_OF", "legacy explicit parent format stays compatible");
+  assert.equal(getCachedKinshipGraph(legacy).relationBetween(1, 10).relation, null, "unbound legacy parent data cannot establish a current public fact");
 }
 
 const scope = makeGameData();
@@ -177,7 +185,10 @@ for (const level of ["spouse", "child", "parent"]) {
     const spouse = { id: 50, name: "当前继亲", source: "CK3_PARENT_SPOUSE", parentId: 1, sourceOwnerId: 10,
       relationType: "CURRENT_SPOUSE", sourceRelation: "parents.spouses", publicStatus: "PUBLIC_LEGAL_MARRIAGE",
       knowledgeStatus: "UNKNOWN", campaignToken: CAMPAIGN, sourceSnapshotId: SNAPSHOT, children: [child] };
-    data.characters.get(10).parents = [{ id: 1, name: "旧格式明确父亲", spouses: [spouse] }];
+    data.characters.get(10).parents = [{ id: 1, name: "旧格式明确父亲", source: "CK3_DIRECT_PARENT",
+      sourceOwnerId: 10, childId: 10, relationType: "parent", sourceRelation: "parents",
+      publicStatus: "PUBLIC_LEGAL_PARENT", knowledgeStatus: "UNKNOWN", campaignToken: CAMPAIGN,
+      sourceSnapshotId: SNAPSHOT, spouses: [spouse] }];
     if (patch) Object.assign({ spouse, child, parent }[level], patch);
     const view = createTraitProfileView(data, data.characters.get(10), null, { includeStepFamily: true }).gameData;
     const visibleSpouses = view.characters.get(10).parents[0].spouses;

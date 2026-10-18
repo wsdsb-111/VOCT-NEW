@@ -2,7 +2,7 @@
 
 const assert = require("assert");
 const { buildSubjectiveWorldPrompt } = require("../resources/app/out/main/worldline/subjective-prompt-context");
-const { buildKinshipGraph } = require("../resources/app/out/main/worldline/character-kinship-graph");
+const { buildLegacyStructuralKinshipGraph: buildKinshipGraph } = require("../resources/app/out/main/worldline/character-kinship-graph");
 const { getCurrentTruth } = require("../resources/app/out/main/worldline/current-truth-adapter");
 const { parseGameState } = require("../resources/app/out/main/worldline/game-state-adapter");
 const { classifySelectedWorldFacts } = require("../resources/app/out/main/worldline/world-knowledge-classifier");
@@ -69,7 +69,7 @@ assert.equal(snapshot.characters["1"].parents.mother, null);
 assert.deepEqual(snapshot.characters["1"].children, []);
 assert.equal(snapshot.characters["1"].liege, null);
 assert.equal(snapshot.characters["1"].courtEmployer, null);
-assert.equal(snapshot.characters["6"].parents.father, "1", "zero real_father falls through to a valid legacy father field");
+assert.equal(snapshot.characters["6"].parents.father, "1", "the legal father field remains available while real_father is zero");
 const graph = buildKinshipGraph(snapshot.characters);
 assert(!graph.nodes.has("0"), "relation sentinel 0 does not create a phantom person");
 assert(graph.edges.every((edge) => edge.from !== "0" && edge.to !== "0"));

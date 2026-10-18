@@ -143,8 +143,8 @@ const largeContextMemory = resolveMemoryBudget({
   contextWindowTokens: 1048576,
   providerHeadroomTokens: 1048576
 });
-assert.strictEqual(largeContextMemory.policyBudgetTokens, 6400, "1M context does not raise the V9.3.6 4+ person memory cap");
-assert.strictEqual(largeContextMemory.memoryBudgetTokens, 6400);
+assert.strictEqual(largeContextMemory.policyBudgetTokens, 96000, "1M context does not raise the current 4+ person memory cap");
+assert.strictEqual(largeContextMemory.memoryBudgetTokens, 96000);
 
 const settingsStores = new Map();
 class FixtureStore {

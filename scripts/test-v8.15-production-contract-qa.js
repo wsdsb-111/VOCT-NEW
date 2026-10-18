@@ -229,16 +229,28 @@ async function testPartialAndOversizedLegacyReachProvider() {
       ...(longInput.memoryContext.pairMemorySources || [])].map(entry => ({ routeKind: entry.routeKind,
       memoryId: entry.memory.memoryId, contentLength: entry.memory.content.length })) };
   const metrics = longInput.memoryContext.pairMemoryMetrics;
-  assert.equal(selectedLongSource, undefined, "an oversized verified source is omitted whole, never silently excerpted");
-  assert.equal(longInput.text.includes("LONG_MIDDLE_EXCERPT_SENTINEL"), false,
-    "a source that cannot fit is not partially injected into final provider input");
-  assert.equal(metrics.thirdPersonLegacyFallbackStatus, "BUDGET_OMITTED",
-    "the eligible L2 fallback reports budget omission instead of misreporting an index miss; " + JSON.stringify(longSourceDiagnostics));
+  assert(selectedLongSource, "V9.3.8 admits the complete source within its expanded budget; " + JSON.stringify(longSourceDiagnostics));
+  assert.equal(selectedLongSource.memory.content, longRow.content, "the admitted long source is not silently excerpted");
+  assert(longInput.text.includes(longRow.content), "the entire admitted source reaches final provider input");
+  assert.equal(metrics.thirdPersonLegacyFallbackStatus, "LEGACY_SOURCE_FALLBACK");
   assert.equal(metrics.legacySourceResolvedCount, 1, "the L2 fallback records the one exact source it resolved");
-  assert.equal(metrics.legacyBudgetOmittedCount, 1, "the L2 fallback records that source as omitted for budget");
+  assert.equal(metrics.legacyBudgetOmittedCount, 0, "a source that fits is not reported as omitted");
   const persistedRows = JSON.parse(fs.readFileSync(path.join(oversizedHarness.ownerFolder, "与旧友的对话.json"), "utf8"));
-  assert.deepEqual(persistedRows, [longRow], "budget omission leaves the full stored Legacy source unchanged");
+  assert.deepEqual(persistedRows, [longRow], "full-text recall leaves the stored Legacy source unchanged");
   assert(longInput.memoryContext.selectedTokens <= longInput.memoryContext.tokenBudget, "Legacy recall stays within its frozen budget");
+
+  const overflowHarness = createHarness({ directory: path.join(root, "full-text-overflow") });
+  const overflowRow = summaryRow({ subjectIds: [3], content: `${keyFact}\n${filler.repeat(18)}` });
+  const overflowFile = path.join(overflowHarness.ownerFolder, "与旧友的对话.json");
+  writeRows(overflowFile, [overflowRow]);
+  await assert.rejects(providerInput(overflowHarness, detailQuery), error => {
+    assert.equal(error.code, "MEMORY_CONTEXT_OVERFLOW");
+    assert(error.memoryBudgetDetails.requiredTokens > error.memoryBudgetDetails.availableTokens);
+    assert(error.memoryBudgetDetails.breakdown.thirdPerson > 0);
+    return true;
+  }, "a complete source exceeding the current budget must pause instead of disappearing or being excerpted");
+  assert.deepEqual(JSON.parse(fs.readFileSync(overflowFile, "utf8")), [overflowRow],
+    "explicit overflow preserves the full stored source");
 }
 
 async function testLegacyForgetRemainsAbsentFromProvider() {
@@ -277,7 +289,7 @@ async function testLegacyForgetRemainsAbsentFromProvider() {
 async function main() {
   const cases = [
     [testPromptRoutingAndScope, "Legacy ProviderPrompt: out-of-scene target, explicit identity, scope and generic-query privacy"],
-    [testPartialAndOversizedLegacyReachProvider, "Legacy ProviderPrompt: incomplete mapping, exact short source and budget omission"],
+    [testPartialAndOversizedLegacyReachProvider, "Legacy ProviderPrompt: incomplete mapping, full sources and explicit budget overflow"],
     [testLegacyForgetRemainsAbsentFromProvider, "SummariesManager Forget: scoped Legacy deletion survives restart and ProviderPrompt"]
   ];
   const failures = [];

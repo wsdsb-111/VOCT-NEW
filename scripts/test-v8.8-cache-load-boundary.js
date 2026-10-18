@@ -5,13 +5,41 @@ const { HistoricalEntityBindingCache } = require("../resources/app/out/main/worl
 const { getTargetedKinshipGraph } = require("../resources/app/out/main/worldline/kinship-graph-cache");
 const { resolveRelationMention } = require("../resources/app/out/main/worldline/relation-mention-resolver");
 
-const snapshot = (fingerprint, childId) => ({ contentFingerprint: fingerprint, participantRelationRevision: 1, characters: { 1: { id: 1, children: [childId] }, [childId]: { id: childId, gender: "male" } } });
+const campaignToken = "cache-load-boundary-fixture";
+const date = "1175.2.1";
+const totalDays = 430000;
+const sourceSnapshotId = `${date}/${totalDays}`;
+const directParentEvidence = (childId, parentId) => ({
+  id: parentId,
+  name: "父亲",
+  source: "CK3_DIRECT_PARENT",
+  parentId,
+  sourceOwnerId: childId,
+  childId,
+  relationType: "parent",
+  sourceRelation: "parents",
+  publicStatus: "PUBLIC_LEGAL_PARENT",
+  knowledgeStatus: "UNKNOWN",
+  campaignToken,
+  sourceSnapshotId
+});
+const snapshot = (fingerprint, childId) => ({
+  contentFingerprint: fingerprint,
+  participantRelationRevision: 1,
+  campaignToken,
+  date,
+  totalDays,
+  characters: {
+    1: { id: 1, children: [{ id: childId, name: "儿子", gender: "male", directParentEvidence: directParentEvidence(childId, 1) }] },
+    [childId]: { id: childId, gender: "male", parents: [directParentEvidence(childId, 1)] }
+  }
+});
 const firstSnapshot = snapshot("save-a", 2);
 const first = getTargetedKinshipGraph(firstSnapshot, ["1"]);
 assert.strictEqual(getTargetedKinshipGraph(firstSnapshot, ["1"]), first);
 assert.equal(resolveRelationMention({ query: "你的儿子", responderId: 1, graph: first }).targetRuntimeId, "2");
-firstSnapshot.characters[1].children = [3];
-firstSnapshot.characters[3] = { id: 3, gender: "male" };
+firstSnapshot.characters[1].children = [{ id: 3, name: "次子", gender: "male", directParentEvidence: directParentEvidence(3, 1) }];
+firstSnapshot.characters[3] = { id: 3, gender: "male", parents: [directParentEvidence(3, 1)] };
 firstSnapshot.participantRelationRevision++;
 const mutated = getTargetedKinshipGraph(firstSnapshot, ["1"]);
 assert.notStrictEqual(mutated, first);

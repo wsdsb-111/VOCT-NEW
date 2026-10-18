@@ -1160,7 +1160,6 @@ function runC17() {
     fs.writeFileSync(standardPath, original, "utf8");
     refreshOwner(fixture);
   }
-  attachDirectoryObservation("safe-candidate-directory", legacyRaceDirectory);
 }
 
 function runC18() {

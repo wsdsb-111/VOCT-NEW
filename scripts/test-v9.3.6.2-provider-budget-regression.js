@@ -88,8 +88,8 @@ const largeContextMemory = resolveMemoryBudget({
   contextWindowTokens: 1000000,
   providerHeadroomTokens: 1000000
 });
-assert.equal(largeContextMemory.policyBudgetTokens, 6400, "a 1M provider window does not raise the memory policy cap");
-assert.equal(largeContextMemory.memoryBudgetTokens, 6400);
+assert.equal(largeContextMemory.policyBudgetTokens, 96000, "a 1M provider window does not raise the memory policy cap");
+assert.equal(largeContextMemory.memoryBudgetTokens, 96000);
 
 function verifyUsageAnalyticsWhitelist() {
   const bodySentinel = "CONTEXT_BUDGET_PRIVATE_BODY_SENTINEL";

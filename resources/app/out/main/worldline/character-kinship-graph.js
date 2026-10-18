@@ -53,7 +53,8 @@ function createOtherParentEvidence(value, defaults = {}) {
     campaignId: pick("campaignId"),
     campaignToken: pick("campaignToken"),
     sourceSnapshotId: pick("sourceSnapshotId"),
-    checkpointId: pick("checkpointId")
+    checkpointId: pick("checkpointId"),
+    evidenceConflict: value?.evidenceConflict === true
   };
 }
 
@@ -63,6 +64,7 @@ function mergeParentEvidence(edge, incoming) {
   for (const evidence of incoming) {
     const key = JSON.stringify(evidence);
     if (!edge.parentEvidence.some((item) => JSON.stringify(item) === key)) edge.parentEvidence.push(evidence);
+    if (evidence?.evidenceConflict === true) edge.parentEvidenceConflict = true;
   }
   const publicStatuses = new Set(edge.parentEvidence.map((item) => item.publicStatus).filter((status) => status !== "UNKNOWN"));
   if (publicStatuses.size > 1) edge.parentEvidenceConflict = true;
@@ -95,7 +97,7 @@ function createCharacterMap(source) {
   return new Map(Object.entries(characters || {}).map(([key, value]) => [String(key), value]));
 }
 
-function buildKinshipGraph(source = {}, { includeOtherParents = true, otherParentEvidenceFilter = null, directParentEvidenceFilter = null } = {}) {
+function buildKinshipGraphInternal(source = {}, { includeOtherParents = true, otherParentEvidenceFilter = null, directParentEvidenceFilter = null } = {}) {
   const characters = createCharacterMap(source);
   const nodes = new Map(characters);
   const edges = [];
@@ -105,6 +107,68 @@ function buildKinshipGraph(source = {}, { includeOtherParents = true, otherParen
   const incomingEdges = new Map();
   const diagnosticKeys = new Set();
   const diagnostics = [];
+  const rejectedParentPairs = new Map();
+  const parentPairKey = (parentId, childId) => `${String(parentId)}:${String(childId)}`;
+  const rejectParentEvidence = (parentId, childId, sourcePath) => {
+    const normalizedParentId = positiveRuntimeId(parentId);
+    const normalizedChildId = positiveRuntimeId(childId);
+    if (!normalizedParentId || !normalizedChildId || normalizedParentId === normalizedChildId) return;
+    const key = parentPairKey(normalizedParentId, normalizedChildId);
+    if (!rejectedParentPairs.has(key)) rejectedParentPairs.set(key, new Set());
+    rejectedParentPairs.get(key).add(sourcePath || "unknown");
+  };
+  const acceptsParentEvidence = (record, context) => {
+    if (typeof directParentEvidenceFilter !== "function") return true;
+    const accepted = directParentEvidenceFilter(record, context);
+    if (!accepted) rejectParentEvidence(context.parentId, context.childId, context.sourcePath);
+    return accepted;
+  };
+  const directParentProof = (childId, parentId, sourcePath, sourceRecord = null) => {
+    const candidates = [];
+    const candidateKeys = new Set();
+    const addCandidate = (record) => {
+      if (!record || typeof record !== "object") return;
+      const key = JSON.stringify(record);
+      if (candidateKeys.has(key)) return;
+      candidateKeys.add(key);
+      candidates.push(record);
+    };
+    addCandidate(sourceRecord);
+    const child = characters.get(String(childId));
+    const childParents = Array.isArray(child?.parents) ? child.parents
+      : [child?.parents?.father ?? child?.father, child?.parents?.mother ?? child?.mother].filter(Boolean);
+    for (const record of childParents) {
+      if (positiveRuntimeId(record) === Number(parentId) && explicitRelationshipKind(record) !== "STEP") {
+        addCandidate(record?.directParentEvidence || record);
+      }
+    }
+    const parent = characters.get(String(parentId));
+    for (const evidence of parent?.evidence?.relations || []) {
+      if (positiveRuntimeId(evidence?.ownerId) === Number(childId) && evidence?.relationType === "parent") {
+        addCandidate(evidence.directParentEvidence || evidence);
+      }
+    }
+    for (const evidence of child?.evidence?.relations || []) {
+      if (positiveRuntimeId(evidence?.ownerId) === Number(parentId) && evidence?.directParentEvidence) {
+        addCandidate(evidence.directParentEvidence);
+      }
+    }
+    if (typeof directParentEvidenceFilter !== "function") {
+      const hasUnverifiedSourceEvidence = candidates.some((record) => [
+        "source", "sourceRelation", "sourceOwnerId", "childId", "campaignToken", "sourceSnapshotId",
+        "publicStatus", "knowledgeStatus", "evidenceConflict"
+      ].some((field) => Object.hasOwn(record, field)));
+      if (hasUnverifiedSourceEvidence) rejectParentEvidence(parentId, childId, sourcePath);
+      return { accepted: !hasUnverifiedSourceEvidence, conflict: hasUnverifiedSourceEvidence, evidence: [] };
+    }
+    const evidence = [];
+    let conflict = false;
+    for (const record of candidates) {
+      if (acceptsParentEvidence(record, { childId, parentId, sourcePath, direction: "parent" })) evidence.push(record);
+      else conflict = true;
+    }
+    return { accepted: evidence.length > 0 && !conflict, conflict, evidence };
+  };
   const ensureNode = (value) => {
     const key = id(value);
     if (!key) return null;
@@ -146,7 +210,11 @@ function buildKinshipGraph(source = {}, { includeOtherParents = true, otherParen
   };
   const addOtherParent = (value, defaults = {}) => {
     const evidence = createOtherParentEvidence(value, defaults);
-    if (!evidence || otherParentEvidenceFilter && !otherParentEvidenceFilter(evidence, value)) return;
+    if (!evidence || typeof otherParentEvidenceFilter !== "function" || !otherParentEvidenceFilter(evidence, value)) {
+      rejectParentEvidence(value?.parentId ?? value?.otherParentId ?? value?.id ?? defaults.parentId,
+        value?.childId ?? defaults.childId, defaults.sourceRelation);
+      return;
+    }
     const parentId = ensureNode({ id: evidence.parentId, name: evidence.parentName, gender: evidence.parentGender });
     const childId = ensureNode(evidence.childId);
     if (!parentId || !childId) return;
@@ -160,19 +228,32 @@ function buildKinshipGraph(source = {}, { includeOtherParents = true, otherParen
       ? character.parents.map((parent) => ({ parent, branch: null }))
       : [{ parent: character?.parents?.father ?? character?.father, branch: "PATERNAL" }, { parent: character?.parents?.mother ?? character?.mother, branch: "MATERNAL" }];
     for (const { parent, branch } of parentEntries.filter((entry) => entry.parent)) {
-      if (directParentEvidenceFilter && !directParentEvidenceFilter(parent, characterId)) continue;
-      const parentId = ensureNode(parent);
-      if (!parentId) continue;
-      const details = relationshipDetails(parent, { branch });
-      add(parentId, characterId, "PARENT_OF", [parentId, characterId], 1, details);
-      add(characterId, parentId, "CHILD_OF", [characterId, parentId], 1, details);
+      if (explicitRelationshipKind(parent) === "STEP") continue;
+      const expectedParentId = positiveRuntimeId(parent);
+      const childId = sourceOwnerId || positiveRuntimeId(characterId);
+      const proof = directParentProof(childId, expectedParentId, "parents", parent?.directParentEvidence || parent);
+      if (!proof.accepted) continue;
+      const parentNodeId = ensureNode(parent);
+      if (!parentNodeId) continue;
+      const details = relationshipDetails(parent, {
+        branch,
+        ...(directParentEvidenceFilter ? { parentEvidence: proof.evidence.map((item) => ({ ...item,
+          id: item.id ?? parentNodeId, parentId: item.parentId ?? parentNodeId, childId: item.childId ?? childId })) } : {})
+      });
+      add(parentNodeId, characterId, "PARENT_OF", [parentNodeId, characterId], 1, details);
+      add(characterId, parentNodeId, "CHILD_OF", [characterId, parentNodeId], 1, details);
     }
     for (const child of values(character?.children)) {
       const childId = ensureNode(child);
       if (!childId) continue;
-      const details = relationshipDetails(child);
-      add(characterId, childId, "PARENT_OF", [characterId, childId], 1, details);
-      add(childId, characterId, "CHILD_OF", [childId, characterId], 1, details);
+      const proof = child?.directParentEvidence || child?.parentEvidence || null;
+      const directProof = directParentProof(positiveRuntimeId(childId), sourceOwnerId || positiveRuntimeId(characterId), "children", proof);
+      if (directProof.accepted) {
+        const details = relationshipDetails(child, { ...(directParentEvidenceFilter ? { parentEvidence: directProof.evidence.map((item) => ({ ...item,
+          id: item.id ?? sourceOwnerId, parentId: item.parentId ?? sourceOwnerId, childId: item.childId ?? childId })) } : {}) });
+        add(characterId, childId, "PARENT_OF", [characterId, childId], 1, details);
+        add(childId, characterId, "CHILD_OF", [childId, characterId], 1, details);
+      }
       if (includeOtherParents) {
         addOtherParent(child?.otherParent, {
           childId,
@@ -229,12 +310,23 @@ function buildKinshipGraph(source = {}, { includeOtherParents = true, otherParen
       const ownerId = ensureNode(evidence.ownerId);
       if (!ownerId) continue;
       if (evidence.relationType === "parent") {
-        if (directParentEvidenceFilter && !directParentEvidenceFilter(evidence.directParentEvidence || evidence, ownerId)) continue;
-        const details = relationshipDetails(evidence, { source: evidence.source || "SNAPSHOT_DIRECT" });
+        const parentId = positiveRuntimeId(characterId);
+        const childId = positiveRuntimeId(ownerId);
+        const proof = directParentProof(childId, parentId, "evidence.relations.parent", evidence.directParentEvidence || evidence);
+        if (!proof.accepted) continue;
+        const details = relationshipDetails(evidence, { source: evidence.source || "SNAPSHOT_DIRECT",
+          ...(directParentEvidenceFilter ? { parentEvidence: proof.evidence.map((item) => ({ ...item,
+            id: item.id ?? parentId, parentId: item.parentId ?? parentId, childId: item.childId ?? childId })) } : {}) });
         add(characterId, ownerId, "PARENT_OF", [characterId, ownerId], 1, details);
         add(ownerId, characterId, "CHILD_OF", [ownerId, characterId], 1, details);
       } else if (evidence.relationType === "child") {
-        const details = relationshipDetails(evidence, { source: evidence.source || "SNAPSHOT_DIRECT" });
+        const childId = positiveRuntimeId(characterId);
+        const parentId = positiveRuntimeId(ownerId);
+        const proof = directParentProof(childId, parentId, "evidence.relations.child", evidence.directParentEvidence || null);
+        if (!proof.accepted) continue;
+        const details = relationshipDetails(evidence, { source: evidence.source || "SNAPSHOT_DIRECT",
+          ...(directParentEvidenceFilter ? { parentEvidence: proof.evidence.map((item) => ({ ...item,
+            id: item.id ?? parentId, parentId: item.parentId ?? parentId, childId: item.childId ?? childId })) } : {}) });
         add(characterId, ownerId, "CHILD_OF", [characterId, ownerId], 1, details);
         add(ownerId, characterId, "PARENT_OF", [ownerId, characterId], 1, details);
       } else if (evidence.relationType === "sibling") {
@@ -251,19 +343,38 @@ function buildKinshipGraph(source = {}, { includeOtherParents = true, otherParen
         const binding = relationSources[evidence?.sourceRelation];
         const evidenceOwnerId = positiveRuntimeId(evidence?.sourceOwnerId);
         const evidenceChildId = positiveRuntimeId(evidence?.childId);
-        if (!binding || evidenceChildId !== sourceOwnerId || !evidenceOwnerId) continue;
+        const evidenceParentId = positiveRuntimeId(evidence?.parentId ?? evidence?.otherParentId ?? evidence?.id);
+        if (!binding || evidenceChildId !== sourceOwnerId || !evidenceOwnerId) {
+          rejectParentEvidence(evidenceParentId, evidenceChildId, evidence?.sourceRelation);
+          continue;
+        }
         const expectedSource = `${evidenceOwnerId}.${binding.field}`;
         const relationBound = (character?.evidence?.relations || []).some((item) => Number(item?.ownerId) === Number(evidenceOwnerId)
           && item?.relationType === binding.relationType && item?.source === expectedSource);
-        if (!relationBound) continue;
+        if (!relationBound) {
+          rejectParentEvidence(evidenceParentId, evidenceChildId, evidence?.sourceRelation);
+          continue;
+        }
         addOtherParent(evidence, { childId: evidenceChildId, sourceOwnerId: evidenceOwnerId, sourceRelation: evidence.sourceRelation });
       }
     }
   }
 
+  for (const [key, sources] of rejectedParentPairs) {
+    const [parentId, childId] = key.split(":");
+    for (const edge of [
+      edgeByKey.get(`${parentId}:${childId}:PARENT_OF`),
+      edgeByKey.get(`${childId}:${parentId}:CHILD_OF`)
+    ]) {
+      if (!edge) continue;
+      edge.parentEvidenceConflict = true;
+      edge.rejectedParentEvidenceSources = [...sources].sort();
+    }
+  }
+
   const outgoing = (from, type) => (outgoingEdges.get(String(from)) || []).filter((edge) => !type || edge.type === type);
-  const parentsOf = (characterId) => outgoing(characterId, "CHILD_OF").map((edge) => edge.to);
-  const childrenOf = (characterId) => outgoing(characterId, "PARENT_OF").map((edge) => edge.to);
+  const parentsOf = (characterId) => outgoing(characterId, "CHILD_OF").filter(edge => !edge.parentEvidenceConflict).map((edge) => edge.to);
+  const childrenOf = (characterId) => outgoing(characterId, "PARENT_OF").filter(edge => !edge.parentEvidenceConflict).map((edge) => edge.to);
   const allIds = [...nodes.keys()];
   for (const parentId of allIds) {
     const children = childrenOf(parentId);
@@ -316,6 +427,9 @@ function buildKinshipGraph(source = {}, { includeOtherParents = true, otherParen
     const edge = matches[0] || null;
     if (!edge) return { relation: null, diagnostic: null };
     if (edge.branchConflict) return { relation: null, diagnostic: { code: "RELATION_CONFLICT_PATH", from: String(from), to: String(to) } };
+    if (edge.parentEvidenceConflict || edge.relationshipKindConflict) {
+      return { relation: null, diagnostic: { code: edge.parentEvidenceConflict ? "RELATION_CONFLICT_EVIDENCE" : "RELATIONSHIP_KIND_CONFLICT", from: String(from), to: String(to) } };
+    }
     const node = nodes.get(String(from));
     const sex = resolveCharacterSexConsensus({ snapshot: node });
     const seniorityReferenceId = edge.type === "AUNT_UNCLE_OF" ? edge.relationPath[1] : String(to);
@@ -325,14 +439,28 @@ function buildKinshipGraph(source = {}, { includeOtherParents = true, otherParen
       const pathFrom = String(edge.relationPath[index]);
       const pathTo = String(edge.relationPath[index + 1]);
       const direct = outgoing(pathFrom).find((candidate) => candidate.to === pathTo && candidate.source !== "DERIVED_KINSHIP" && candidate.source !== "DERIVED_SHARED_PARENT");
-      const relationshipKind = direct?.relationshipKind || edge.relationshipKind || null;
+      const relationshipKind = direct?.relationshipKind || edge.relationshipKind
+        || (direct?.type?.startsWith("STEP_") || edge.type.startsWith("STEP_") ? "STEP" : null);
       structuredPath.push({ type: direct?.type || edge.type, from: pathFrom, to: pathTo, ...(relationshipKind ? { relationshipKind } : {}) });
     }
-    return { relation: { ...edge, seniority, seniorityReferenceId, relationshipKind: edge.relationshipKind || "UNSPECIFIED", sex: sex.sex, sexSource: sex.source, label: resolveKinshipLabel({ type: edge.type, sex: sex.sex, branch: edge.branch, seniority }), structuredPath }, diagnostic: null };
+    const relationshipKind = edge.relationshipKind || (edge.type.startsWith("STEP_") ? "STEP" : "UNSPECIFIED");
+    return { relation: { ...edge, seniority, seniorityReferenceId, relationshipKind, sex: sex.sex, sexSource: sex.source, label: resolveKinshipLabel({ type: edge.type, sex: sex.sex, branch: edge.branch, seniority, relationshipKind }), structuredPath }, diagnostic: null };
   };
   const relationBetween = (from, to) => resolveRelationBetween(from, to);
   const relationBetweenOfTypes = (from, to, allowedTypes) => resolveRelationBetween(from, to, allowedTypes);
   return { nodes, edges, diagnostics, relationBetween, relationBetweenOfTypes, relationsTo: (characterId) => [...(incomingEdges.get(String(characterId)) || [])] };
 }
 
-module.exports = { buildKinshipGraph, explicitRelationshipKind };
+function buildKinshipGraph(source = {}, options = {}) {
+  const directParentEvidenceFilter = typeof options.directParentEvidenceFilter === "function"
+    ? options.directParentEvidenceFilter : () => false;
+  return buildKinshipGraphInternal(source, { ...options, directParentEvidenceFilter });
+}
+
+function buildLegacyStructuralKinshipGraph(source = {}, options = {}) {
+  // This explicitly named API is for historical structural tests/diagnostics only.
+  // It does not verify freshness or grant current-fact/Memory permission.
+  return buildKinshipGraphInternal(source, options);
+}
+
+module.exports = { buildKinshipGraph, buildLegacyStructuralKinshipGraph, explicitRelationshipKind };

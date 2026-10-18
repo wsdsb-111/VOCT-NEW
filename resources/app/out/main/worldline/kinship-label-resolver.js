@@ -1,8 +1,14 @@
 "use strict";
 
-function resolveKinshipLabel({ type, sex = "unknown", branch = null, seniority = null } = {}) {
+function resolveKinshipLabel({ type, sex = "unknown", branch = null, seniority = null, relationshipKind = null } = {}) {
   const male = sex === "male";
   const female = sex === "female";
+  const step = relationshipKind === "STEP" || type === "STEP_PARENT_OF" || type === "STEP_CHILD_OF" || type === "STEP_SIBLING_OF";
+  if (type === "STEP_PARENT_OF" || type === "PARENT_OF" && step) return male ? "继父" : female ? "继母" : "继父母";
+  if (type === "STEP_CHILD_OF" || type === "CHILD_OF" && step) return male ? "继子" : female ? "继女" : "继子女";
+  if (type === "STEP_SIBLING_OF" || type === "SIBLING_OF" && step) {
+    return male ? seniority > 0 ? "继兄" : "继弟" : female ? seniority > 0 ? "继姐" : "继妹" : "继兄弟姐妹";
+  }
   if (type === "PARENT_OF") return male ? "父亲" : female ? "母亲" : "父母";
   if (type === "CHILD_OF") return male ? "儿子" : female ? "女儿" : "子女";
   if (type === "SIBLING_OF") return male ? "兄弟" : female ? "姐妹" : "兄弟姐妹";

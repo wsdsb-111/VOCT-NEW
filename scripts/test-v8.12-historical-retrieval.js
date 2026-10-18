@@ -26,13 +26,13 @@ const scope = { campaignId, branchId, state: "SAME_BRANCH", token: "fixture-toke
 function save(date, variant) {
   const characterOne = variant === 1150
     ? 'dead_unprunable={1={first_name="岳飞" birth=1100.1.1 dead_data={date=1149.1.1} family_data={real_father=4} landed_data={domain={13} liege=5} court_data={employer=5}}}'
-    : `living={1={first_name="岳飞" birth=1100.1.1 family_data={spouse=${variant === 1145 ? 2 : 0} real_father=4} alive_data={location=${variant === 1145 ? 100 : 200}} landed_data={domain={${variant === 1145 ? 11 : 13}} liege=${variant === 1145 ? 3 : 5}} court_data={employer=${variant === 1145 ? 3 : 5}}}
+    : `living={1={first_name="岳飞" birth=1100.1.1 family_data={spouse=${variant === 1145 ? 2 : 0} father=4} alive_data={location=${variant === 1145 ? 100 : 200}} landed_data={domain={${variant === 1145 ? 11 : 13}} liege=${variant === 1145 ? 3 : 5}} court_data={employer=${variant === 1145 ? 3 : 5}}}
       2={first_name="乙" birth=1101.1.1 alive_data={location=100} court_data={employer=3}}
       3={first_name="宋主" birth=1080.1.1 alive_data={location=100} court_data={employer=3}}
       4={first_name="岳父" birth=1070.1.1 alive_data={location=900} court_data={employer=9}}
       5={first_name="新主" birth=1085.1.1 alive_data={location=200} court_data={employer=5}}
       6={first_name="路人" birth=1090.1.1 alive_data={location=800} court_data={employer=8}}}`;
-  const otherLiving = variant === 1150 ? 'living={2={first_name="乙" birth=1101.1.1 alive_data={location=100} court_data={employer=3}} 3={first_name="宋主" birth=1080.1.1 alive_data={location=100} court_data={employer=3}} 4={first_name="岳父" birth=1070.1.1 alive_data={location=900} court_data={employer=9}} 5={first_name="新主" birth=1085.1.1 alive_data={location=200} court_data={employer=5}} 6={first_name="路人" birth=1090.1.1 alive_data={location=800} court_data={employer=5}}}' : "";
+  const otherLiving = variant === 1150 ? 'living={2={first_name="乙" birth=1101.1.1 alive_data={location=100} court_data={employer=3}} 3={first_name="宋主" birth=1080.1.1 alive_data={location=100} court_data={employer=3}} 4={first_name="岳父" birth=1070.1.1 alive_data={location=900} court_data={employer=9}} 5={first_name="新主" birth=1085.1.1 alive_data={location=200} court_data={employer=5}} 6={first_name="路人" birth=1090.1.1 alive_data={location=800} court_data={employer=5}} 7={first_name="秘密亲子" birth=1110.1.1 family_data={real_father=4} alive_data={location=777} court_data={employer=9}}}' : "";
   const wars = variant === 1145
     ? 'wars={active_wars={10={attacker={character=1} defender={title=12} start_date=1144.1.1 name="宋金之战"} 20={attacker={faction=peasant_revolt title=999} defender={character=3} start_date=1145.1.1 name="民变"}}}'
     : variant === 1147
@@ -92,6 +92,11 @@ function archiveInput(date, variant) {
     assert.equal(projection1145.wars[20].attackerActors[0].type, "FACTION");
     assert(projection1145.wars[20].attackerActors.some(actor => actor.type === "UNKNOWN" && actor.opaqueId === "999"));
     assert.equal(resolveHistoricalKnowledge({ projection: projection1145, responderId: "4", subjectId: "1", field: "LOCATION" }).reason, "HISTORICAL_BLOOD_KINSHIP");
+    const projection1150 = store.read(scope, checkpoints[2].checkpoint.id);
+    assert.equal(projection1150.characters["1"].fatherId, null, "a later dead_unprunable row with real_father only does not become public kinship");
+    assert.equal(projection1150.characters["7"].fatherId, null, "real_father-only records have no historical parent edge");
+    assert.equal(resolveHistoricalKnowledge({ projection: projection1150, responderId: "4", subjectId: "7", field: "LOCATION", value: "777" }).decision, "DENY",
+      "real_father-only evidence does not grant historical whereabouts");
     assert.equal(resolveHistoricalKnowledge({ projection: projection1145, responderId: "3", subjectId: "1", field: "LOCATION" }).decision, "DENY", "same court cannot reveal exact location");
     assert.equal(resolveHistoricalKnowledge({ projection: projection1145, responderId: "3", subjectId: "1", field: "COURT_EMPLOYER" }).reason, "HISTORICAL_COURT");
     assert.equal(resolveHistoricalKnowledge({ projection: projection1145, responderId: "6", subjectId: "1", field: "LOCATION" }).decision, "DENY", "current friendship must never authorize a past private location");

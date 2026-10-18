@@ -9,11 +9,29 @@ const { WorldlineService } = require("../resources/app/out/main/worldline/worldl
 const { buildKinshipGraph } = require("../resources/app/out/main/worldline/character-kinship-graph");
 const { buildDeterministicWorldSummary } = require("../resources/app/out/main/worldline/world-summary");
 
+const campaignToken = "life-status-fixture";
+const gameDate = "1175.2.1";
+const totalDays = 430000;
+const sourceSnapshotId = `${gameDate}/${totalDays}`;
+const directParentEvidence = (childId, parentId, name) => ({
+  id: parentId,
+  name,
+  source: "CK3_DIRECT_PARENT",
+  parentId,
+  sourceOwnerId: childId,
+  childId,
+  relationType: "parent",
+  sourceRelation: "parents",
+  publicStatus: "PUBLIC_LEGAL_PARENT",
+  knowledgeStatus: "UNKNOWN",
+  campaignToken,
+  sourceSnapshotId
+});
 const characters = new Map([
-  [1, { id: 1, fullName: "父亲", gender: "male", alive: true, children: [{ id: 2, name: "儿子", gender: "male", deathDate: "1175年1月1日" }] }],
-  [2, { id: 2, fullName: "儿子", gender: "male", alive: true, age: 20 }]
+  [1, { id: 1, fullName: "父亲", gender: "male", alive: true, children: [{ id: 2, name: "儿子", gender: "male", directParentEvidence: directParentEvidence(2, 1, "父亲") }] }],
+  [2, { id: 2, fullName: "儿子", gender: "male", alive: true, age: 20, parents: [directParentEvidence(2, 1, "父亲")], deathDate: "1175年1月1日" }]
 ]);
-const profiles = createRelationshipResolver({ onDiagnostic: () => false }).buildCanonicalProfiles(characters, 430000, () => "unknown");
+const profiles = createRelationshipResolver({ onDiagnostic: () => false }).buildCanonicalProfiles(characters, totalDays, () => "unknown", { campaignToken, sourceSnapshotId });
 const son = profiles.get(2);
 assert.equal(son.alive, null);
 assert.equal(son.evidence.conflicts.lifeStatus, true);
@@ -28,7 +46,7 @@ assert.equal(lifeConflictAge.rawAge, null);
 assert.equal(lifeConflictAge.calculatedCalendarAge, null);
 assert.equal(lifeConflictAge.asOfGameDate, "1175.2.1");
 assert.equal(lifeConflictAge.diagnosticCode, "LIFE_STATUS_CONFLICT");
-const family = buildFamilyFactBlock(profiles.get(1), { date: "1175.2.1", totalDays: 430000, getMentionableCharacterProfiles: () => profiles }, { query: "你儿子怎么样了" });
+const family = buildFamilyFactBlock(profiles.get(1), { date: gameDate, totalDays, campaignToken, characters: profiles, getMentionableCharacterProfiles: () => profiles }, { query: "你儿子怎么样了" });
 assert(family.includes("生死状态存在冲突"));
 assert(!family.includes("1175年1月1日去世"));
 const unavailableDeathAge = resolveCharacterAge({ alive: false, age: 80 }, { currentGameDate: "1200.1.1" });
@@ -52,10 +70,10 @@ const structured = formatStructuredCharacter(rawConflict, "1175.2.1");
 assert(structured.text.includes("生死状态：存在冲突，未输出结论"));
 assert(!structured.text.includes("在世") && !structured.text.includes("去世"));
 const rawFamily = new Map([
-  [5, { id: 5, fullName: "父亲", children: [4] }],
-  [4, rawConflict]
+  [5, { id: 5, fullName: "父亲", children: [{ id: 4, name: "原始矛盾人物", directParentEvidence: directParentEvidence(4, 5, "父亲") }] }],
+  [4, { ...rawConflict, parents: [directParentEvidence(4, 5, "父亲")] }]
 ]);
-const rawFamilyBlock = buildFamilyFactBlock(rawFamily.get(5), { date: "1175.2.1", getMentionableCharacterProfiles: () => rawFamily }, { query: "你儿子怎么样了" });
+const rawFamilyBlock = buildFamilyFactBlock(rawFamily.get(5), { date: gameDate, totalDays, campaignToken, characters: rawFamily, getMentionableCharacterProfiles: () => rawFamily }, { query: "你儿子怎么样了" });
 assert(rawFamilyBlock.includes("生死状态存在冲突，未输出结论"));
 assert(!rawFamilyBlock.includes("在世") && !rawFamilyBlock.includes("1175年1月1日去世"));
 const checkpoint = (date, character) => ({ id: date, snapshot: { gameDate: date, playthroughId: "campaign", characters: { 9: { id: 9, fullName: "年度人物", ...character } } } });

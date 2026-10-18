@@ -2,10 +2,12 @@
 
 const { normalizeSpouseRecords } = require("./canonical-spouse-record");
 const { resolveLifeStatus } = require("./character-temporal-facts");
+const { isCurrentDirectParentEvidence } = require("./kinship-graph-cache");
 
 const DIRECT_PARENT_SOURCE = "CK3_DIRECT_PARENT";
 const PARENT_SPOUSE_SOURCE = "CK3_PARENT_SPOUSE";
 const PARENT_SPOUSE_CHILD_SOURCE = "CK3_PARENT_SPOUSE_CHILD";
+const HISTORICAL_STEP_SOURCES = new Set(["LEGACY_TYPED_STEP_RELATION"]);
 
 function positiveId(value) {
   const id = Number(value);
@@ -31,24 +33,22 @@ function isFresh(record, gameData) {
 }
 
 function isPublicDirectParent(record, ownerId, gameData) {
-  return positiveId(record?.id) !== null
-    && positiveId(record?.sourceOwnerId) === ownerId
-    && positiveId(record?.childId) === ownerId
-    && record?.relationType === "parent"
-    && record?.source === DIRECT_PARENT_SOURCE
-    && record?.sourceRelation === "parents"
-    && record?.publicStatus === "PUBLIC_LEGAL_PARENT"
-    && record?.knowledgeStatus === "UNKNOWN"
-    && isFresh(record, gameData);
+  const evidence = record?.directParentEvidence || record;
+  return isCurrentDirectParentEvidence(evidence, { childId: ownerId, parentId: record?.id }, gameData);
 }
 
 function getCompleteParents(character, gameData, metrics) {
   const ownerId = positiveId(character?.id);
-  if (!ownerId || !Array.isArray(character?.parents)) return null;
+  if (!ownerId || character?.parentEvidenceConflict || !Array.isArray(character?.parents)) return null;
   const parents = new Map();
+  let invalidParent = false;
   for (const record of character.parents) {
     metrics.nodeVisits += 1;
-    if (record?.evidenceConflict === true || !isPublicDirectParent(record, ownerId, gameData) || !String(record.name || "").trim()) continue;
+    if (record?.relationshipKind === "STEP") continue;
+    if (record?.evidenceConflict === true || !isPublicDirectParent(record, ownerId, gameData) || !String(record.name || "").trim()) {
+      if (positiveId(record?.id)) invalidParent = true;
+      continue;
+    }
     const id = positiveId(record.id);
     const existing = parents.get(id);
     if (!existing) parents.set(id, record);
@@ -56,15 +56,22 @@ function getCompleteParents(character, gameData, metrics) {
       || hasReliableGender(existing) && hasReliableGender(record) && existing.gender !== record.gender) return null;
     else if (!hasReliableGender(existing) && hasReliableGender(record)) parents.set(id, record);
   }
-  return parents.size === 2 ? parents : null;
+  return !invalidParent && parents.size === 2 ? parents : null;
 }
 
 function mergedCharacterView(character, canonical, gameData) {
   const ownerId = positiveId(character?.id);
+  const historicalSteps = value => (value?.historicalStepRelations || [])
+    .filter(record => record?.relationshipKind === "STEP" && record.relationType === "STEP_PARENT"
+      && record.temporalStatus === "HISTORICAL")
+    .map(record => ({ ...record, relationType: "parent" }));
   const records = [...(Array.isArray(character?.parents) ? character.parents : []),
-    ...(canonical !== character && Array.isArray(canonical?.parents) ? canonical.parents : [])];
+    ...historicalSteps(character),
+    ...(canonical !== character && Array.isArray(canonical?.parents) ? canonical.parents : []),
+    ...(canonical !== character ? historicalSteps(canonical) : [])];
   const directParents = new Map();
   const typedSteps = new Map();
+  let invalidParent = false;
   for (const record of records) {
     const id = positiveId(record?.id);
     if (!id) continue;
@@ -74,7 +81,11 @@ function mergedCharacterView(character, canonical, gameData) {
       else if (existing.name !== record.name || existing.source !== record.source) existing.relationshipKindConflict = true;
       continue;
     }
-    if (!isPublicDirectParent(record, ownerId, gameData)) continue;
+    if (!isPublicDirectParent(record, ownerId, gameData)) {
+      invalidParent = true;
+      if (directParents.has(id)) directParents.get(id).evidenceConflict = true;
+      continue;
+    }
     const existing = directParents.get(id);
     if (!existing) {
       directParents.set(id, { ...record, spouses: Array.isArray(record.spouses) ? [...record.spouses] : [] });
@@ -92,15 +103,19 @@ function mergedCharacterView(character, canonical, gameData) {
     if (record.evidenceConflict === true) existing.evidenceConflict = true;
     if (Array.isArray(record.spouses)) existing.spouses.push(...record.spouses);
   }
+  for (const parent of directParents.values()) {
+    if (invalidParent) parent.evidenceConflict = true;
+  }
   return {
     ...(canonical && typeof canonical === "object" ? canonical : {}),
     ...(character && typeof character === "object" ? character : {}),
     id: ownerId,
+    parentEvidenceConflict: invalidParent,
     parents: [...directParents.values(), ...typedSteps.values()]
   };
 }
 
-function getCurrentMarriages(character, parents, gameData, metrics) {
+function getCurrentMarriages(character, parents, gameData, metrics, { includeVerifiedParents = false } = {}) {
   const ownerId = positiveId(character?.id);
   const parentIds = new Set(parents.keys());
   const bySpouseId = new Map();
@@ -114,7 +129,7 @@ function getCurrentMarriages(character, parents, gameData, metrics) {
       const raw = record.raw;
       const spouseId = positiveId(record.runtimeId);
       const spouseStatuses = [raw, gameData?.characters?.get?.(spouseId)].filter(Boolean).map(resolveLifeStatus);
-      if (record.relationType !== "CURRENT_SPOUSE" || !spouseId || parentIds.has(spouseId) || spouseId === ownerId
+      if (record.relationType !== "CURRENT_SPOUSE" || !spouseId || !includeVerifiedParents && parentIds.has(spouseId) || spouseId === ownerId
         || spouseStatuses.some(status => status.conflict || status.alive === false)
         || !raw || Number(raw.parentId) !== Number(parent.id)
         || !hasReliableGender(parent) || !hasReliableGender(raw)
@@ -149,6 +164,7 @@ function isPublicChildParent(record, childId, ownerId, sourceRelation, gameData)
     && record?.sourceRelation === sourceRelation
     && record?.publicStatus === "PUBLIC_LEGAL_PARENT"
     && record?.knowledgeStatus === "UNKNOWN"
+    && record?.evidenceConflict !== true
     && isFresh(record, gameData);
 }
 
@@ -206,13 +222,46 @@ function collectStepSiblings(character, parents, marriages, gameData, metrics) {
   return { candidates: [...candidates.values()], sharedParentCandidates: [...sharedParentCandidates.values()], hasConflict };
 }
 
+function collectStepChildren(character, gameData, metrics) {
+  const ownerId = positiveId(character?.id);
+  const characters = gameData?.characters instanceof Map ? gameData.characters.values()
+    : Object.values(gameData?.characters || {});
+  const candidates = new Map();
+  let hasConflict = false;
+  for (const child of characters) {
+    const childId = positiveId(child?.id);
+    if (!childId || childId === ownerId || !String(child.name || child.fullName || child.shortName || "").trim()) continue;
+    const parents = getCompleteParents(child, gameData, metrics);
+    if (!parents || parents.has(ownerId)) continue;
+    const marriages = getCurrentMarriages(child, parents, gameData, metrics, { includeVerifiedParents: true });
+    const spouseLinks = marriages.filter(marriage => marriage.id === ownerId);
+    if (!spouseLinks.length) continue;
+    if (spouseLinks.some(marriage => marriage.conflict)) {
+      hasConflict = true;
+      continue;
+    }
+    const candidate = {
+      id: childId,
+      name: String(child.name || child.fullName || child.shortName).trim(),
+      gender: child.gender === "male" || child.gender === "female" ? child.gender : "unknown",
+      genderSource: child.genderSource || null
+    };
+    const previous = candidates.get(childId);
+    if (previous && (previous.name !== candidate.name || previous.gender !== candidate.gender)) hasConflict = true;
+    else candidates.set(childId, candidate);
+    metrics.sourceKinds.currentMarriage += spouseLinks.length;
+    metrics.nodeVisits += 1;
+  }
+  return { candidates: [...candidates.values()], hasConflict };
+}
+
 function explicitHistoricalSteps(character, gameData, metrics, directParentIds = new Set()) {
   const ownerId = positiveId(character?.id);
   const result = [];
   for (const record of character?.parents || []) {
     if (record?.relationshipKind !== "STEP" || record?.relationshipKindConflict
       || record?.source === DIRECT_PARENT_SOURCE
-      || typeof record?.source !== "string" || !record.source.trim()
+      || !HISTORICAL_STEP_SOURCES.has(record?.source)
       || positiveId(record.sourceOwnerId) !== ownerId || positiveId(record.childId) !== ownerId
       || record.relationType !== "parent" || record.sourceRelation !== "parents"
       || record.publicStatus !== "PUBLIC_LEGAL_PARENT" || record.knowledgeStatus !== "UNKNOWN"
@@ -260,7 +309,7 @@ function filterByQueryTarget(candidates, query) {
 
 function isStepFamilyQuery(query) {
   const text = String(query || "");
-  return /继父母|继父|继母|继亲|继兄弟姐妹|继兄妹|继姐妹|继兄|继弟|继姐|继妹/u.test(text);
+  return /继父母|继父|继母|继亲|继兄弟姐妹|继兄妹|继姐妹|继兄|继弟|继姐|继妹|继子女|继子|继女|庶子女|(?:父亲|生父|父王|父皇)(?:的)?(?:正妻|妻子|夫人|王妃)|正妻/u.test(text);
 }
 
 function candidatesLine(label, candidates, targetGender, targetName) {
@@ -289,6 +338,7 @@ function buildStepFamilyFactBlock(character, gameData, { query = "" } = {}) {
   const text = String(query || "");
   const parentMention = /继父母|继父|继母|继亲/u.test(text);
   const siblingMention = /继兄弟姐妹|继兄妹|继姐妹|继兄|继弟|继姐|继妹/u.test(text);
+  const wifeMention = /(?:父亲|生父|父王|父皇)(?:的)?(?:正妻|妻子|夫人|王妃)|正妻/u.test(text);
   if (!isStepFamilyQuery(text)) return { handled: false, text: null, metrics: null };
 
   const metrics = {
@@ -305,6 +355,7 @@ function buildStepFamilyFactBlock(character, gameData, { query = "" } = {}) {
   const lines = [];
   let marriages = [];
   if (parents) marriages = getCurrentMarriages(anchor, parents, gameData, metrics);
+  const stepChildMention = /继子女|继子|继女|庶子女/u.test(text);
 
   if (parentMention) {
     const parentGender = queryGender(text, /继父|继父母/u, /继母/u, /继父母/u);
@@ -325,6 +376,51 @@ function buildStepFamilyFactBlock(character, gameData, { query = "" } = {}) {
       const historical = filterByQueryTarget(historyForQuery, text);
       if (historical.length === 1) lines.push(`- 历史来源记载曾有${historical[0].name}为继亲；当前关系未确认。`);
       else if (historical.length > 1) lines.push(`- 历史来源记载有多位继亲候选，未选择具体人物：${historical.slice(0, 3).map(item => item.name).join("、")}。当前关系未确认。`);
+    }
+  }
+
+  if (wifeMention) {
+    const fathers = parents ? [...parents.values()].filter(parent => parent.gender === "male"
+      && parent.genderSource === "CK3_LIVE_RELATIVE") : [];
+    if (!parents) lines.push("- 父亲配偶关系未知：当前双亲来源不完整或未标记为公开合法父母。");
+    else if (fathers.length !== 1) lines.push("- 无法唯一确认父亲：当前公开双亲记录缺少唯一可靠的男性父母身份。");
+    else {
+      const father = fathers[0];
+      const spouses = getCurrentMarriages(anchor, parents, gameData, metrics, { includeVerifiedParents: true })
+        .filter(marriage => marriage.parentId === Number(father.id));
+      if (spouses.some(marriage => marriage.conflict) || spouses.length !== 1
+        || spouses[0]?.gender !== "female" || spouses[0]?.genderSource !== "CK3_LIVE_RELATIVE") {
+        lines.push(spouses.length > 1
+          ? "- 父亲有多个或互相冲突的当前婚姻配偶，无法确认唯一正妻。"
+          : "- 本轮公开资料未确认父亲当前唯一的合法妻子；婚姻身份未知，不得推断正妻或生母。");
+      } else {
+        const spouse = spouses[0];
+        const isVerifiedParent = parents.has(spouse.id);
+        lines.push(isVerifiedParent
+          ? `- 父亲当前唯一记录的公开合法妻子：${spouse.name}；她同时是本人的当前公开双亲记录中的母亲，妻子身份不改变亲子证据。`
+          : `- 父亲当前唯一记录的公开合法妻子（家庭称谓可称“正妻”）：${spouse.name}；证据只确认婚姻身份，不证明她是本人的已验证生母，也不证明本人属于庶子女。`);
+      }
+    }
+  }
+
+  if (stepChildMention) {
+    const requestedGender = queryGender(text, /继子/u, /继女/u, /继子女|庶子女/u);
+    const result = collectStepChildren(anchor, gameData, metrics);
+    let candidates = result.candidates;
+    const unknownGender = Boolean(requestedGender && candidates.some(candidate => candidate.gender === "unknown"
+      || candidate.genderSource !== "CK3_LIVE_RELATIVE"));
+    candidates = candidates.filter(candidate => !requestedGender || candidate.gender === requestedGender
+      && candidate.genderSource === "CK3_LIVE_RELATIVE");
+    candidates = filterByQueryTarget(candidates, text);
+    metrics.candidateCount += candidates.length;
+    if (result.hasConflict) lines.push("- 继子女关系存在互相冲突的公开来源，当前无法唯一确认。");
+    else if (unknownGender) lines.push("- 继子女关系无法唯一确认：候选的性别来源不完整。");
+    else if (!candidates.length) lines.push("- 本轮公开完整双亲与当前婚姻资料未确认继子女；这表示未知，不能回答“没有”，也不能推断庶出身份。");
+    else {
+      const names = candidates.slice(0, 3).map(candidate => candidate.name);
+      const suffix = candidates.length > names.length ? "等多位候选" : "";
+      const label = requestedGender === "male" ? "当前继子" : requestedGender === "female" ? "当前继女" : "当前继子女";
+      lines.push(`- ${label}：${names.join("、")}${suffix}；已验证的双亲和当前公开婚姻只支持继亲称谓，不证明庶出身份。`);
     }
   }
 

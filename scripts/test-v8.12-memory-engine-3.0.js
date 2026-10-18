@@ -215,14 +215,14 @@ async function testNativeSummaryLifecycle() {
     assert.equal(later.directStableText, first.directStableText);
     const { Conversation } = require(path.join(root, "resources/app/out/main/conversation/conversation"));
     Conversation.configure({ memoryEngine: engine });
-    for (const [count, ratio, ceiling] of [[2, 0.16, 4800], [3, 0.18, 5600], [4, 0.20, 6400], [8, 0.20, 6400]]) {
+    for (const [count, ratio, ceiling] of [[2, 0.65, 80000], [3, 0.70, 84000], [4, 0.75, 96000], [8, 0.75, 96000]]) {
       const chat = Object.create(Conversation.prototype);
       const ids = Array.from({ length: count }, (_, i) => i + 1);
       assert.equal(chat.getMemoryTokenBudget(16000, ids), Math.floor(16000 * ratio));
       assert.equal(chat.getMemoryTokenBudget(16000, [1, 2, 3, 4, 5]), Math.floor(16000 * ratio), "mid-session presence must not change the frozen budget");
       assert.equal(Conversation.prototype.getMemoryTokenBudget.call({}, 200000, ids), ceiling);
     }
-    assert.equal(Conversation.prototype.getMemoryTokenBudget.call({}, 4096, [1, 2]), 655, "small contexts must respect the percentage ceiling");
+    assert.equal(Conversation.prototype.getMemoryTokenBudget.call({}, 4096, [1, 2]), 2662, "small contexts must respect the percentage ceiling");
     const chat = Object.create(Conversation.prototype);
     chat.id = "recall-history";
     chat.memoryState = engine.createConversationState(chat.id);

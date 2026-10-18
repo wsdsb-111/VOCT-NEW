@@ -6,15 +6,35 @@ const path = require("path");
 const { HistoricalEntityBindingCache } = require("../resources/app/out/main/worldline/historical-entity-binding");
 const { WorldlineService } = require("../resources/app/out/main/worldline/worldline-service");
 
+const campaignToken = "campaign_luna_fixture";
+const gameDate = "1175.9.2";
+const totalDays = 430000;
+const sourceSnapshotId = `${gameDate}/${totalDays}`;
+const directParentEvidence = (childId, parentId, name) => ({
+  id: parentId,
+  name,
+  source: "CK3_DIRECT_PARENT",
+  parentId,
+  sourceOwnerId: childId,
+  childId,
+  relationType: "parent",
+  sourceRelation: "parents",
+  publicStatus: "PUBLIC_LEGAL_PARENT",
+  knowledgeStatus: "UNKNOWN",
+  campaignToken,
+  sourceSnapshotId
+});
 const snapshot = {
-  playthroughId: "campaign_luna_fixture",
-  gameDate: "1175.9.2",
-  totalDays: 430000,
+  playthroughId: campaignToken,
+  campaignToken,
+  gameDate,
+  date: gameDate,
+  totalDays,
   contentFingerprint: "luna-fixture",
   playerId: "1",
   characters: {
-    "1": { id: 1, firstName: "思昭", fullName: "思昭", alive: true, parents: { father: 2 } },
-    "2": { id: 2, firstName: "中间人", fullName: "中间人", alive: true, parents: { father: 3 } },
+    "1": { id: 1, firstName: "思昭", fullName: "思昭", alive: true, parents: [directParentEvidence(1, 2, "中间人")] },
+    "2": { id: 2, firstName: "中间人", fullName: "中间人", alive: true, parents: [directParentEvidence(2, 3, "岳飞")] },
     "3": { id: 3, firstName: "岳飞", fullName: "岳飞", alive: true, gender: "male" }
   },
   definitionToRuntime: { yue_fei_001: "3" },
@@ -49,9 +69,12 @@ const ambiguousInspector = WorldlineService.prototype.getEntityKinshipInspector.
     snapshot: {
       ...snapshot,
       characters: {
-        "1": { id: 1, fullName: "回应角色", alive: true, children: [2, 3] },
-        "2": { id: 2, fullName: "长子", alive: true, gender: "male" },
-        "3": { id: 3, fullName: "次子", alive: true, gender: "male" }
+        "1": { id: 1, fullName: "回应角色", alive: true, children: [
+          { id: 2, name: "长子", directParentEvidence: directParentEvidence(2, 1, "回应角色") },
+          { id: 3, name: "次子", directParentEvidence: directParentEvidence(3, 1, "回应角色") }
+        ] },
+        "2": { id: 2, fullName: "长子", alive: true, gender: "male", parents: [directParentEvidence(2, 1, "回应角色")] },
+        "3": { id: 3, fullName: "次子", alive: true, gender: "male", parents: [directParentEvidence(3, 1, "回应角色")] }
       },
       definitionToRuntime: {},
       runtimeToDefinitions: {}

@@ -7,7 +7,7 @@ const path = require("path");
 const { Conversation } = require("../resources/app/out/main/conversation/conversation");
 const { extractRequestedActionArgs, settleActionResult } = require("../resources/app/out/main/actions/action-confirmation");
 const { resolveCharacterAge } = require("../resources/app/out/main/worldline/character-age-service");
-const { buildKinshipGraph } = require("../resources/app/out/main/worldline/character-kinship-graph");
+const { buildLegacyStructuralKinshipGraph: buildKinshipGraph } = require("../resources/app/out/main/worldline/character-kinship-graph");
 const opinion = require("../resources/app/default_userdata/actions/standard/z_changeOpinionOf");
 const { createRunFileManager } = require("../resources/app/out/main/actions/run-file-manager");
 const { createActionEffectWriter } = require("../resources/app/out/main/actions/action-effect-writer");
@@ -41,6 +41,51 @@ function familyFixture() {
     [13, person(13, "male", 35)], [14, person(14, "female", 32)],
     [15, person(15, "male", 20)], [16, person(16, "female", 25)]
   ]) };
+}
+
+function currentFamilyFixture() {
+  const data = familyFixture();
+  data.campaignToken = "votc8c-202610180002";
+  data.date = "1186.6.1";
+  data.totalDays = 433000;
+  for (const [characterId, character] of data.characters) {
+    const withParentEvidence = (parent) => {
+      const parentId = Number(parent && typeof parent === "object" ? parent.id : parent);
+      return {
+        ...(parent && typeof parent === "object" ? parent : {}),
+        id: parentId,
+        source: "CK3_DIRECT_PARENT",
+        sourceOwnerId: Number(characterId),
+        childId: Number(characterId),
+        parentId,
+        relationType: "parent",
+        sourceRelation: "parents",
+        publicStatus: "PUBLIC_LEGAL_PARENT",
+        knowledgeStatus: "UNKNOWN",
+        campaignToken: data.campaignToken,
+        sourceSnapshotId: `${data.date}/${data.totalDays}`
+      };
+    };
+    if (Array.isArray(character.parents)) {
+      character.parents = character.parents.map(withParentEvidence);
+    } else if (character.parents && typeof character.parents === "object") {
+      character.parents = Object.fromEntries(Object.entries(character.parents)
+        .map(([branch, parent]) => [branch, withParentEvidence(parent)]));
+    }
+    if (Array.isArray(character.children)) {
+      character.children = character.children.map(child => {
+        const childId = Number(child && typeof child === "object" ? child.id : child);
+        return { ...(child && typeof child === "object" ? child : {}), id: childId,
+          directParentEvidence: {
+            source: "CK3_DIRECT_PARENT", sourceOwnerId: childId, childId, parentId: Number(characterId),
+            relationType: "parent", sourceRelation: "parents", publicStatus: "PUBLIC_LEGAL_PARENT",
+            knowledgeStatus: "UNKNOWN", campaignToken: data.campaignToken,
+            sourceSnapshotId: `${data.date}/${data.totalDays}`
+          } };
+      });
+    }
+  }
+  return data;
 }
 
 async function run() {
@@ -130,7 +175,7 @@ async function run() {
       const script = path.join(dir, "pListMccTest2.js");
       const code = 'module.exports = g => familyLine(g.characters.get(1)); function familyLine(char) { return "old family"; }';
       fs.writeFileSync(script, code);
-      const data = familyFixture();
+      const data = currentFamilyFixture();
       const before = JSON.stringify([...data.characters]);
       const text = PromptScriptSandbox.executeDescription(script, { gameData: data, currentCharacterId: 1 });
       assert.match(text, /older male paternal parallel cousin \(堂哥\); sex: male; age: 35/);
@@ -154,7 +199,7 @@ async function run() {
   await check("complete shipped and legacy English pList both render enhanced families", () => {
     const dir = fs.mkdtempSync(path.join(os.tmpdir(), "votc-v885-plist-"));
     try {
-      const data = familyFixture();
+      const data = currentFamilyFixture();
       data.playerID = 1; data.aiID = 1; data.playerName = "person1"; data.location = "court"; data.scene = "throne_room"; data.locationController = "person1";
       data.characters = new Map([...data.characters].map(([id, person]) => {
         const raw = Array(27).fill("");

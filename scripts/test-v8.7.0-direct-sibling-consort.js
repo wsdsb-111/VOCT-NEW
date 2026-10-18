@@ -1,7 +1,7 @@
 "use strict";
 
 const assert = require("assert");
-const { buildKinshipGraph } = require("../resources/app/out/main/worldline/character-kinship-graph");
+const { buildLegacyStructuralKinshipGraph: buildKinshipGraph } = require("../resources/app/out/main/worldline/character-kinship-graph");
 const { normalizeSpouseRecords } = require("../resources/app/out/main/worldline/canonical-spouse-record");
 
 const directSiblingGraph = buildKinshipGraph(new Map([

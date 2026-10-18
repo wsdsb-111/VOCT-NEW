@@ -75,6 +75,60 @@ function evidenceSourceType(evidence) {
   return ["parents", "children", "siblings", "spouses"].includes(sourceType) ? sourceType : "other";
 }
 
+const AGE_DIAGNOSTIC_STAGES = ["ck3Panel", "rawCharacter", "parsedCharacter", "canonicalProfile", "resolvedAge", "familyFact", "prompt", "modelAnswer"];
+const AGE_DIAGNOSTIC_CODES = {
+  rawCharacter: "RAW_CK3_AGE_MISMATCH",
+  parsedCharacter: "PARSER_AGE_MISMATCH",
+  canonicalProfile: "PROFILE_AGE_MISMATCH",
+  resolvedAge: "AGE_SOURCE_SELECTION_MISMATCH",
+  familyFact: "FAMILY_BUNDLE_AGE_MISMATCH",
+  prompt: "PROMPT_AGE_MISMATCH",
+  modelAnswer: "MODEL_ANSWER_MISMATCH"
+};
+
+function diagnoseAgeLayers(observations) {
+  if (!Array.isArray(observations) || observations.length < 2) {
+    return { status: "INCOMPLETE", diagnosticCode: null, missingStage: AGE_DIAGNOSTIC_STAGES[0] };
+  }
+  let previous = null;
+  for (const observation of observations) {
+    const stage = observation?.stage;
+    const stageIndex = AGE_DIAGNOSTIC_STAGES.indexOf(stage);
+    const ageText = typeof observation?.age === "string" ? observation.age.trim() : null;
+    const age = ageText !== null
+      ? (/^(?:0|[1-9]\d*)$/.test(ageText) ? Number(ageText) : NaN)
+      : observation?.age;
+    if (stageIndex < 0 || !Number.isSafeInteger(age) || age < 0) {
+      return { status: "INCOMPLETE", diagnosticCode: null, missingStage: stage || AGE_DIAGNOSTIC_STAGES[0] };
+    }
+    if (previous) {
+      const previousIndex = AGE_DIAGNOSTIC_STAGES.indexOf(previous.stage);
+      if (stageIndex !== previousIndex + 1) {
+        return { status: "INCOMPLETE", diagnosticCode: null, missingStage: AGE_DIAGNOSTIC_STAGES[previousIndex + 1] || null };
+      }
+      if (age !== previous.age) {
+        return {
+          status: "MISMATCH",
+          diagnosticCode: AGE_DIAGNOSTIC_CODES[stage],
+          previousStage: previous.stage,
+          firstMismatchStage: stage,
+          checkedFromStage: observations[0].stage,
+          checkedThroughStage: stage,
+          previousAge: previous.age,
+          observedAge: age
+        };
+      }
+    }
+    previous = { stage, age };
+  }
+  return {
+    status: "MATCH",
+    diagnosticCode: "AGE_SOURCE_MATCH",
+    checkedFromStage: observations[0].stage,
+    checkedThroughStage: previous.stage
+  };
+}
+
 function resolveCharacterAge(character = {}, current = null) {
   const options = current && typeof current === "object" ? current : { currentGameDate: current };
   const lifeStatus = resolveLifeStatus(character);
@@ -180,4 +234,4 @@ function compareCharacterSeniority(subject = {}, reference = {}) {
   return age !== null && otherAge !== null ? Math.sign(age - otherAge) || null : null;
 }
 
-module.exports = { resolveCharacterAge, nonnegativeNumber, compareCharacterSeniority };
+module.exports = { resolveCharacterAge, nonnegativeNumber, compareCharacterSeniority, diagnoseAgeLayers };

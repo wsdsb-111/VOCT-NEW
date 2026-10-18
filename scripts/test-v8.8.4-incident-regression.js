@@ -45,10 +45,11 @@ async function run() {
     const char = [1, "母亲", "母亲", "", "她", 30, 100, 0, "", "", 0, 0, "", "", "", "", "", 0, "母亲", "", "", 0, 0, "", 0, "", ""];
     fs.writeFileSync(log, [
       "VOTC:IN/;/init/;/1/;/母亲/;/1/;/母亲/;/1186.6.9/;/scene/;/城/;/母亲/;/433050",
+      "VOTC:CAMPAIGN/votc8c-202610180001",
       "VOTC:IN/;/character/;/" + char.join("/;/"),
-      "VOTC:IN/;/kids/;/1/;/11/;/男孩/;/他/;/430000/;/1178.1.1/;/",
+      "VOTC:IN/;/kids/;/1/;/11/;/男孩/;/他/;/430000/;/1178.1.1/;//;/PUBLIC_LEGAL_PARENT",
       "VOTC:IN/;/kid_eob/;/1/;/",
-      "VOTC:IN/;/kids/;/1/;/12/;/女孩/;/她/;/430001/;/1178.1.2/;/",
+      "VOTC:IN/;/kids/;/1/;/12/;/女孩/;/她/;/430001/;/1178.1.2/;//;/PUBLIC_LEGAL_PARENT",
       "VOTC:IN/;/kid_eob/;/1/;/",
       "VOTC:IN/;/opinions/;/1/;/11/;/20/;/",
       "VOTC:IN/;/opinions/;/1/;/11/;/22/;/"

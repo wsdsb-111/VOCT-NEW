@@ -10,12 +10,21 @@ const { buildSubjectiveWorldView } = require("../resources/app/out/main/worldlin
 const { buildHistoricalReferenceReplacement } = require("../resources/app/out/main/worldline/subjective-prompt-context");
 const { classifySelectedWorldFacts } = require("../resources/app/out/main/worldline/world-knowledge-classifier");
 const { createPromptBuilder } = require("../resources/app/out/main/prompts/prompt-builder");
+const { parseGameState } = require("../resources/app/out/main/worldline/game-state-adapter");
 
 const root = fs.mkdtempSync(path.join(os.tmpdir(), "votc-v86-terra-production-"));
 const autosavePath = path.join(root, "autosave.ck3");
 fs.writeFileSync(autosavePath, "fixture");
 const settings = { autosavePath, autoWatchEnabled: false, promptIntegrationEnabled: true, subjectiveWorldMode: "PRODUCTION", lastValidationStatus: "VALID" };
 const checkpointDate = "1170.6.6";
+const snapshot = parseGameState(`date=${checkpointDate} playthrough_id="v86-current-kinship-fixture" played_character=1
+living={
+  1={first_name="甲" court_data={employer=10} landed_data={liege=20} family_data={child=2}}
+  2={first_name="乙" court_data={employer=10} landed_data={liege=20} alive_data={location="临安"} family_data={father=1}}
+  3={first_name="丙" court_data={employer=99} landed_data={liege=99}}
+  4={first_name="丁" court_data={employer=10} landed_data={liege=20}}
+  20={first_name="本国君主"}
+}`);
 const selected = {
   gameTruth: [{
     id: "character:2", category: "GAME_TRUTH", kind: "CHARACTER", sourceTier: "GAME_TRUTH", gameDate: checkpointDate,
@@ -44,15 +53,8 @@ try {
     }
   });
   service.currentCheckpoint = { id: "checkpoint", source: { path: autosavePath }, snapshot: {
-    gameDate: checkpointDate, playerId: "1", diagnostics: { characterCount: 3, activeWarCount: 1 },
-    characters: {
-      "1": { id: "1", firstName: "甲", courtEmployer: "10", liege: "20", children: ["2"] },
-      "2": { id: "2", firstName: "乙", courtEmployer: "10", liege: "20" },
-      "3": { id: "3", firstName: "丙", courtEmployer: "99", liege: "99" },
-      "4": { id: "4", firstName: "丁", courtEmployer: "10", liege: "20" },
-      "20": { id: "20", firstName: "本国君主" }
-    },
-    nameToCharacterIds: {}, definitionToRuntime: {}, runtimeToDefinitions: {}, titles: {}
+    ...snapshot,
+    diagnostics: { ...snapshot.diagnostics, characterCount: 5, activeWarCount: 1 }
   } };
   service.buildState = "ACTIVE";
   service.getLiveState = () => ({ connected: false, gameDate: null, totalDays: null, characters: [] });

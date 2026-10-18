@@ -97,6 +97,13 @@ async function testIpcUsesInjectedPorts() {
   const { registerIpcHandlers } = require("../resources/app/out/main/ipc/register-ipc");
   const handlers = new Map();
   const owners = createFixtureOwners();
+  let contextUsageListener;
+  owners.conversation.getContextUsageSnapshot = function () {
+    return { owner: this, source: "conversation-service-port" };
+  };
+  owners.conversation.onContextUsageUpdate = function (listener) {
+    contextUsageListener = listener;
+  };
   const applicationServices = createApplicationServices(owners);
   const raw = new Proxy({}, { get: (_target, key) => key === "onConversationUpdate" ? () => {} : () => { throw new Error("unmigrated_owner_called"); } });
   const worldlineService = new Proxy({ setStateListener() {} }, { get: (target, key) => target[key] || (() => ({ owner: owners.worldline, methodName: key, args: [] })) });
@@ -106,8 +113,10 @@ async function testIpcUsesInjectedPorts() {
     deleteSummary(...args) { return { methodName: "deleteSummary", args }; }
   };
   const inert = new Proxy({}, { get: () => () => ({}) });
-  registerIpcHandlers({
+  const forwardedContextUsage = [];
+  const runtime = {
     electron: { ipcMain: { handle: (channel, handler) => handlers.set(channel, handler), on() {} }, app: { getVersion: () => "fixture" } },
+    chatWindow: { isDestroyed: () => false, webContents: { send: (channel, snapshot) => forwardedContextUsage.push({ channel, snapshot }) } },
     applicationServices, conversationManager: raw, letterManager: raw, ActionEngine: raw,
     worldlineService, SummariesManager: summariesManager,
     settingsRepository: inert, promptConfigManager: inert, uuid: { v4: () => "fixture" },
@@ -115,7 +124,18 @@ async function testIpcUsesInjectedPorts() {
     runFileManager: inert, llmManager: inert, providerRegistry: inert, usageAnalytics: inert,
     providerDiagnostics: inert, actionRegistry: inert, VOTC_ACTIONS_DIR: "", resolveI18nString: value => value,
     VOTC_SUMMARIES_DIR: "", memoryEngine: inert
-  });
+  };
+  registerIpcHandlers(runtime);
+  const contextUsage = await handlers.get("conversation:getContextUsage")();
+  assert.strictEqual(contextUsage.owner, owners.conversation,
+    "context usage snapshots must use the injected conversation service port");
+  assert.strictEqual(contextUsage.source, "conversation-service-port");
+  assert.equal(typeof contextUsageListener, "function",
+    "context usage updates must subscribe through the injected conversation service port");
+  const updateSnapshot = { conversationId: "fixture-conversation", revision: 4, phase: "streaming" };
+  contextUsageListener(updateSnapshot);
+  assert.deepStrictEqual(forwardedContextUsage, [{ channel: "conversation:contextUsageUpdated", snapshot: updateSnapshot }],
+    "context usage updates must reach the renderer on the established scoped channel");
   const state = await handlers.get("conversation:getState")();
   assert.strictEqual(state.owner, owners.presence);
   assert.deepStrictEqual((await handlers.get("conversation:joinWaitingCharacter")(null, { characterId: 11 })).args, [11]);
@@ -134,6 +154,29 @@ async function testIpcUsesInjectedPorts() {
   assert.deepStrictEqual(updated, { methodName: "updateSummary", args: [2, 1, 0, "Edited Legacy summary"] });
   const deleted = await handlers.get("conversation:deleteSummary")(null, { playerId: 2, characterId: 1, summaryIndex: 0 });
   assert.deepStrictEqual(deleted, { methodName: "deleteSummary", args: [2, 1, 0] });
+
+  const fallbackHandlers = new Map();
+  const fallbackSnapshot = { conversationId: "legacy-fallback" };
+  let fallbackListener;
+  const fallbackConversationManager = {
+    conversationEpoch: 7,
+    onConversationUpdate() {},
+    getContextUsageSnapshot() { return fallbackSnapshot; },
+    onContextUsageUpdate(listener) { fallbackListener = listener; }
+  };
+  registerIpcHandlers({
+    ...runtime,
+    electron: {
+      ...runtime.electron,
+      ipcMain: { handle: (channel, handler) => fallbackHandlers.set(channel, handler), on() {} }
+    },
+    applicationServices: undefined,
+    conversationManager: fallbackConversationManager
+  });
+  assert.strictEqual(await fallbackHandlers.get("conversation:getContextUsage")(), fallbackSnapshot,
+    "context usage IPC keeps its legacy manager fallback when no conversation service is injected");
+  assert.equal(typeof fallbackListener, "function",
+    "context usage updates keep their legacy manager fallback without injected services");
 }
 
 async function run() {

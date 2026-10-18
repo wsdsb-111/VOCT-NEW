@@ -3,7 +3,7 @@
 const APPLICATION_SERVICE_METHODS = Object.freeze({
   conversation: Object.freeze([
     "createConversation", "getCurrentConversation", "sendMessage", "endCurrentConversation",
-    "flushFinalizations", "hasPendingFinalizations"
+    "flushFinalizations", "hasPendingFinalizations", "getContextUsageSnapshot", "onContextUsageUpdate"
   ]),
   // Presence state remains owned by Conversation; these are its existing manager entry points.
   presence: Object.freeze([
@@ -16,6 +16,7 @@ const APPLICATION_SERVICE_METHODS = Object.freeze({
   worldline: Object.freeze([
     "getPromptContext", "getSubjectivePromptContextAsync", "getCheckpointStatus"
   ]),
+  characterKnowledge: Object.freeze(["getDisclosureProfile", "getOwnerView", "getTargetView", "setManualStatus"]),
   action: Object.freeze(["evaluateForCharacter", "runInvocation"]),
   letter: Object.freeze(["processLatestLetter", "clearLettersFile", "getAllLetterStatuses"])
 });
@@ -35,8 +36,8 @@ function bindRequiredMethods(serviceName, owner, methodNames) {
   return Object.freeze(port);
 }
 
-function createApplicationServices({ conversation, presence, memory, worldline, action, letter } = {}) {
-  const owners = { conversation, presence, memory, worldline, action, letter };
+function createApplicationServices({ conversation, presence, memory, worldline, characterKnowledge, action, letter } = {}) {
+  const owners = { conversation, presence, memory, worldline, characterKnowledge, action, letter };
   const services = {};
   for (const [serviceName, methodNames] of Object.entries(APPLICATION_SERVICE_METHODS)) {
     services[serviceName] = bindRequiredMethods(serviceName, owners[serviceName], methodNames);

@@ -96,7 +96,10 @@ check("V1 aliases, ALL categories and unknown Mod traits stay out of observed pr
 });
 check("nested family and custom script receive the same scoped profile", () => {
   const sample = fixture();
-  sample.responder.children = [{ ...sample.player, id: 3, shortName: "Relative", firstName: "Relative", fullName: "Relative" }];
+  sample.responder.children = [{ ...sample.player, id: 3, shortName: "Relative", firstName: "Relative", fullName: "Relative",
+    directParentEvidence: { source: "CK3_DIRECT_PARENT", sourceOwnerId: 3, childId: 3, parentId: 2,
+      relationType: "parent", sourceRelation: "parents", publicStatus: "PUBLIC_LEGAL_PARENT", knowledgeStatus: "UNKNOWN",
+      campaignToken: sample.data.campaignToken, sourceSnapshotId: `${sample.data.date}/${sample.data.totalDays}` } }];
   const view = selector.createTraitProfileView(sample.data, sample.responder);
   assert.equal(Object.getPrototypeOf(view.gameData), GameData.prototype);
   assert.deepEqual(view.character.children[0].traits, [], "off-scene relatives do not inherit the responder's observations");
@@ -144,11 +147,16 @@ check("retired Memory4 Packet evidence is never read or used to restore traits",
   const relationshipOnly = selector.createTraitProfileView(sample.data, sample.responder, { ...memoryContext(), memory4Packet });
   assert.deepEqual(relationshipOnly.gameData.getPlayer().traits, [], "relationship recognition alone does not disclose hidden traits");
 });
-check("only responder-owned current CK3 known secrets restore their exact trait", () => {
+check("raw known secrets require a verified responder disclosure before restoring their exact trait", () => {
   const sample = fixture();
   sample.responder.knownSecrets = [{ type: "secret_bastard", ownerId: 1 }];
   sample.player.knownSecrets = [{ type: "secret_witch", ownerId: 2 }];
-  const view = selector.createTraitProfileView(sample.data, sample.responder);
+  assert.deepEqual(selector.createTraitProfileView(sample.data, sample.responder).gameData.getPlayer().traits, [],
+    "raw knownSecrets cannot bypass the current knowledge service");
+  const verifiedKnowledge = { disclosureProfiles: new Map([[1, [{ campaignToken: sample.data.campaignToken,
+    ownerId: 2, entityId: 1, factType: "TRAIT", factKey: "trait_bastard", status: "AUTO_DISCLOSED",
+    current: true, effectiveKnown: true, firstAcquiredDate: sample.data.date }]]]) };
+  const view = selector.createTraitProfileView(sample.data, sample.responder, verifiedKnowledge);
   assert.deepEqual(view.gameData.getPlayer().traits.map(value => value.name), ["Bastard"]);
   assert.deepEqual(view.gameData.getPlayer().knownSecrets, []);
   sample.data.date = "invalid";

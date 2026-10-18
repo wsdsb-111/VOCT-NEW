@@ -216,12 +216,23 @@ function createRelationshipResolver({ onDiagnostic = null } = {}) {
           record.gender.push({ value: gender, priority: 2, sourceOwnerId: ownerId, relationType, source });
           collectTemporalEvidence(record, entry, 2, ownerId, relationType, source, relativeAgeContext);
           const directParentEvidence = field === "parents" && (entry.source === "CK3_DIRECT_PARENT" || Object.hasOwn(entry, "publicStatus"))
-            ? { source: entry.source, sourceOwnerId: entry.sourceOwnerId, childId: entry.childId,
+            ? { source: entry.source, parentId: entry.id, sourceOwnerId: entry.sourceOwnerId, childId: entry.childId,
               relationType: entry.relationType, sourceRelation: entry.sourceRelation, publicStatus: entry.publicStatus,
               knowledgeStatus: entry.knowledgeStatus, campaignToken: entry.campaignToken,
-              sourceSnapshotId: entry.sourceSnapshotId, evidenceConflict: entry.evidenceConflict } : null;
-          pushUnique(record.relations, { ownerId, relationType, source,
-            ...(directParentEvidence ? { directParentEvidence } : {}) }, (item) => `${item.ownerId}:${item.relationType}`);
+              sourceSnapshotId: entry.sourceSnapshotId, evidenceConflict: entry.evidenceConflict }
+            : field === "children" && (entry.directParentEvidence || entry.parentEvidence)
+              ? { ...(entry.directParentEvidence || entry.parentEvidence) } : null;
+          const relation = record.relations.find((item) => item.ownerId === ownerId && item.relationType === relationType);
+          if (!relation) {
+            record.relations.push({ ownerId, relationType, source,
+              ...(directParentEvidence ? { directParentEvidence } : {}) });
+          } else if (["parent", "child"].includes(relationType) && (relation.directParentEvidence || directParentEvidence)) {
+            const previousEvidence = relation.directParentEvidence;
+            if (!previousEvidence || !directParentEvidence
+              || JSON.stringify(previousEvidence) !== JSON.stringify(directParentEvidence)) {
+              relation.directParentEvidence = { ...(previousEvidence || directParentEvidence), evidenceConflict: true };
+            }
+          }
           if (field === "children") addOtherParentRelation(record, owner, entry, "kids.otherParent");
           else if (field === "siblings") addOtherParentRelation(record, owner, entry, "siblings.otherParent");
         }

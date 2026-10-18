@@ -256,7 +256,8 @@ function parseCharacter(text, id, bucket, record, lookups, identifierDiagnostics
     faith: resolveCharacterFaith(fields, lookups, identifierDiagnostics, id),
     dynastyHouse: scalar(fields.dynasty_house),
     spouse: relationScalar(familyFields.spouse) || relationScalar(familyFields.primary_spouse),
-    parents: { father: relationScalar(familyFields.real_father) || relationScalar(familyFields.father), mother: relationScalar(familyFields.real_mother) || relationScalar(familyFields.mother) },
+    // real_father/real_mother can expose secret parentage; the public kinship graph uses legal family fields only.
+    parents: { father: relationScalar(familyFields.father), mother: relationScalar(familyFields.mother) },
     children: relationList(text, familyFields.child),
     domainTitles: scalarList(text, landedFields.domain),
     liege: relationScalar(landedFields.liege),
@@ -451,16 +452,45 @@ function parseGameState(gamestate) {
   const warParticipantDiagnostics = { rejectedNumericTokens: [], unknownRuntimeIds: [], unresolvedActors: [] };
   const wars = parseWars(text, fields.wars, new Set(Object.keys(characters)), warParticipantDiagnostics, new Set(Object.keys(titles)));
   const characterValues = Object.values(characters);
+  const gameDate = scalar(fields.date);
+  const playthroughId = scalar(fields.playthrough_id);
+  const contentFingerprint = fingerprint(Buffer.isBuffer(gamestate) ? gamestate : Buffer.from(text, "utf8"));
+  if (typeof playthroughId === "string" && playthroughId.trim() && dateValue(gameDate) !== null && /^[a-f0-9]{64}$/.test(contentFingerprint)) {
+    for (const [childId, child] of Object.entries(characters)) {
+      for (const [field, sourceRelation] of [["father", "family_data.father"], ["mother", "family_data.mother"]]) {
+        const parentId = child.parents?.[field];
+        if (!/^\d{1,32}$/.test(childId) || !/^\d{1,32}$/.test(String(parentId || "")) || !characters[String(parentId)]) continue;
+        if (!child.evidence || typeof child.evidence !== "object") child.evidence = {};
+        if (!Array.isArray(child.evidence.relations)) child.evidence.relations = [];
+        const directParentEvidence = {
+          source: "CK3_SAVE_LEGAL_PARENT",
+          sourceSchemaVersion: 1,
+          sourceOwnerId: childId,
+          childId,
+          parentId: String(parentId),
+          relationType: "parent",
+          sourceRelation,
+          publicStatus: "PUBLIC_LEGAL_PARENT",
+          knowledgeStatus: "UNKNOWN",
+          playthroughId: playthroughId.trim(),
+          gameDate,
+          contentFingerprint,
+          sourceSnapshotId: `${playthroughId.trim()}/${gameDate}/${contentFingerprint}`
+        };
+        child.evidence.relations.push({ ownerId: String(parentId), relationType: "child", source: directParentEvidence.source, directParentEvidence });
+      }
+    }
+  }
   const fieldCoverage = Object.fromEntries(["faith", "culture"].map((field) => [field, {
     total: characterValues.length,
     available: characterValues.filter((character) => character[field] !== null && character[field] !== undefined && character[field] !== "").length
   }]));
   return {
     schemaVersion: 1,
-    gameDate: scalar(fields.date),
-    playthroughId: scalar(fields.playthrough_id),
+    gameDate,
+    playthroughId,
     playerId: scalar(playedCharacterFields.character) || scalar(fields.played_character),
-    contentFingerprint: fingerprint(Buffer.isBuffer(gamestate) ? gamestate : Buffer.from(text, "utf8")),
+    contentFingerprint,
     characters,
     nameToCharacterIds,
     dynastyHouses,

@@ -11,7 +11,7 @@ const INTENT_LEVELS = new Set(["L0", "L1", "L2"]);
 const DIRECTORY_STATUSES = new Set(["COMPLETE", "SCOPED_DEGRADED", "STALE", "UNAVAILABLE", "AMBIGUOUS"]);
 const DIRECTORY_REASONS = new Set(["NONE", "REFERENCE_MODE", "OWNER_SNAPSHOT_UNAVAILABLE", "OWNER_SNAPSHOT_STALE",
   "SOURCE_COVERAGE_INCOMPLETE", "SCOPED_LEGACY_SOURCE", "UNSCOPED_LEGACY_SOURCE", "ALIAS_PROFILE_AMBIGUOUS", "DIRECTORY_BUILD_FAILED", "DIRECTORY_INVALID"]);
-const POLICY_REVISIONS = new Set(["v9.3.5", "v9.3.6", "v936-player-centered-1"]);
+const POLICY_REVISIONS = new Set(["v9.3.5", "v9.3.6", "v9.3.8", "v9.3.9", "v936-player-centered-1"]);
 const INVALIDATION_REASONS = new Set([
   "CONTEXT_HEADROOM", "FIRST_PROMPT", "PLAYER_OR_CAMPAIGN_CHANGED", "SOURCE_OR_SCOPE_CHANGED",
   "SOURCE_REVISION_CHANGED", "FORGET_CHANGED"
@@ -23,6 +23,7 @@ const TOKEN_BLOCK_FIELDS = Object.freeze({
   "memory-official-recollection": "officialRecollectionTokens",
   "memory-mentioned-snapshot": "mentionedSnapshotTokens",
   "memory-temporal-extra": "temporalExtraTokens",
+  "memory-dynamic-frozen": "frozenDynamicTokens",
   "memory-session-topic-anchor": "sessionTopicAnchorTokens",
   "memory-topic-patch": "topicPatchTokens",
   "third-party-evidence-patch": "thirdPartyEvidenceTokens"
@@ -36,7 +37,8 @@ const COUNT_FIELDS = Object.freeze([
   "sourceResolveAttemptCount", "totalSourceResolveAttemptCount", "candidatePairCount", "actualIndexReadCount",
   "indexCacheHits", "indexCacheMisses", "ownerPairCount", "scopeRevisionChecks", "legacyScanFallbackCount",
   "trustedCoveredScopeCount", "uncertainScopedScopeCount", "uncertainSourceCount", "unscopedUnknownCount",
-  "candidateVisibleCount", "matchedWindowCount", "budgetOmittedCount"
+  "candidateVisibleCount", "matchedWindowCount", "budgetOmittedCount",
+  "temporalRecallLimit", "thirdPersonRecallLimit", "frozenDynamicCount", "pendingDynamicCount"
 ]);
 const TOKEN_FIELDS = Object.freeze([
   "memoryBudget", "baselineBudgetUsed", "dynamicBudgetUsed", "finalInjectedTokens",
@@ -93,6 +95,7 @@ function projectPairMemoryMetrics(value) {
   projected.playerLedgerCacheHit = safeBoolean(value.playerLedgerCacheHit ?? value.ledgerCacheHit);
   projected.indexCacheHit = safeBoolean(value.indexCacheHit);
   projected.dynamicCacheHit = safeBoolean(value.dynamicCacheHit);
+  projected.dynamicRecallStatus = safeEnum(value.dynamicRecallStatus, new Set(["NEW_SOURCES", "FROZEN_REUSE", "SOURCE_LIMIT", "NOT_REQUESTED"]));
   projected.legacyFallbackUsed = safeBoolean(value.legacyFallbackUsed);
   projected.budgetPolicyRevision = safeEnum(value.budgetPolicyRevision, POLICY_REVISIONS);
   projected.targetResolution = safeEnum(value.targetResolution, new Set(["EXPLICIT_ALIAS", "KINSHIP_UNIQUE", "BOUND_FOLLOWUP", "TARGET_AMBIGUOUS", "TARGET_UNRESOLVED", "NO_HISTORY_TARGET"]));

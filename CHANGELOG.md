@@ -1,5 +1,9 @@
 # VOTC 版本变更入口
 
+V9.3.8.1 开发方案（已并入 V9.3.9）：拟将双人／三人时间摘要上限提升至 5，第三人摘要维持 3；4 人及以上维持 3+3，人数硬上限调整为 80,000／84,000／96,000 Token。成功动态召回将按回应者冻结全文并放入稳定 Prompt 前缀，供本场后续轮次复用。此条目保留原设计合同，实施结果由 V9.3.9 报告承接；详见 [开发方案](docs/current/v9/V9_3_8_1_DEVELOPMENT_SPEC.md)。
+
+V9.3.8 本地候选收口：玩家记忆与上下文合同、单行 UI、290 项 build/stage/deploy/deployed verify、独立 VM QA 和 6 张原生窗口截图通过；完整 release regression session 8943 exit 0，446 release groups PASS。此前 68 组 service-port 接线、102 组旧 8K 省略断言、181 组过期 V9.3.7 前端版本正则失败及修正见实施报告；181 组时应用／renderer 版本已正确。Provider 原生 usage 未实测；真实 CK3、游戏内 Provider 与 Soak 待验收。清单库存 574 tests、446 release groups、127 historical entries。远端 CI 按用户要求暂缓（NOT_RUN）；本地门禁 PASS 不代表 Full Freeze。
+
 V9.3.7 后续收口（2026-10-17）：同步 README／各层 AGENTS，修复稳定资料／自定义模板的亲属来源过滤、稳定年龄及 Windows 队列原子替换短暂占用。本地发布回归 444/444 PASS、290 项构建部署一致、隔离窗口及限定性能复验通过；远端 CI 按用户要求暂缓。当前证据和限制见[后续报告](docs/current/v9/V9_3_7_FOLLOWUP_REPORT.md)，以下保留原候选批次记录。
 
 V9.3.7 修复候选（基线 V9.3.6.3）新增同父异母、同母异父、当前继父母／继兄弟姐妹及有来源的历史继亲 Legacy 事实；不新增 Memory 读取，不由前配偶推导继亲。最终源码已冻结，build/deploy 290 项映射（payload `05871d99e3b52e1442b322129ab17ccc2ea367ec259409b122f7d0f2929709da`）、性能对照、Pair benchmark 与 11 组 Electron smoke 通过；完整 release regression 442/442 PASS（442 release groups、127 archived entries）。合成 Prompt Provider 复核为 PARTIAL；CK3／游戏内 Provider／Soak／远端 CI 尚待验收，不宣称 Full Freeze。详见[施工方案](docs/current/v9/V9_3_7_IMPLEMENTATION_PLAN.md)、[实施报告](docs/current/v9/V9_3_7_IMPLEMENTATION_REPORT.md)、[验证报告](docs/current/v9/V9_3_7_VERIFICATION_REPORT.md)和[实机清单](docs/current/v9/V9_3_7_REAL_GAME_CHECKLIST.md)。

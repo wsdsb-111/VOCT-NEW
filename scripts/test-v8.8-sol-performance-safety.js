@@ -3,8 +3,9 @@
 const assert = require("assert");
 const { spawnSync } = require("child_process");
 const { HistoricalEntityBindingCache } = require("../resources/app/out/main/worldline/historical-entity-binding");
-const { buildKinshipGraph } = require("../resources/app/out/main/worldline/character-kinship-graph");
+const { buildLegacyStructuralKinshipGraph: buildKinshipGraph } = require("../resources/app/out/main/worldline/character-kinship-graph");
 const { WorldlineService } = require("../resources/app/out/main/worldline/worldline-service");
+const { parseGameState } = require("../resources/app/out/main/worldline/game-state-adapter");
 
 if (process.argv.includes("--large-graph")) {
   const characters = {};
@@ -30,7 +31,7 @@ if (process.argv.includes("--large-graph")) {
   snapshot.runtimeToDefinitions[2] = ["figure"];
   assert.equal(cache.resolve(input).status, "AMBIGUOUS", "same-scope mutations must fail closed");
   const service = {
-    currentCheckpoint: { id: "checkpoint", snapshot: { playthroughId: "campaign", gameDate: "1175.1.1", playerId: "1", characters: { 1: { id: 1, fullName: "父亲", children: [2] }, 2: { id: 2, fullName: "独子", gender: "male", alive: true }, 3: { id: 3, fullName: "同名他人", location: "私密地点" } }, definitionToRuntime: {}, runtimeToDefinitions: {} } },
+    currentCheckpoint: { id: "checkpoint", snapshot: parseGameState('date=1175.1.1 playthrough_id=campaign played_character=1 living={ 1={ first_name="父亲" family_data={ child=2 } } 2={ first_name="独子" female=no family_data={ father=1 } } 3={ first_name="同名他人" alive_data={ location={ location="私密地点" } } } }') },
     canon: { branch: () => ({ campaignId: "campaign", branchId: "branch" }) }, historicalDefinitionIndex: null, historicalBindingCache: new HistoricalEntityBindingCache()
   };
   const relationInspector = WorldlineService.prototype.getEntityKinshipInspector.call(service, { responderId: "1", query: "你的儿子近来如何" });

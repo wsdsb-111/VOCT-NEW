@@ -134,8 +134,11 @@ check("negative, opinion-only and unclassified relationship descriptions do not 
 });
 check("runtime blood kinship remains legitimate without memory entries", () => {
   const sample = fixture();
-  sample.npc.parents = [{ id: 1, name: sample.player.fullName, gender: "male" }];
-  sample.player.children = [{ id: 2, name: sample.npc.fullName, gender: "male" }];
+  const directParentEvidence = { source: "CK3_DIRECT_PARENT", sourceOwnerId: 2, childId: 2, parentId: 1,
+    relationType: "parent", sourceRelation: "parents", publicStatus: "PUBLIC_LEGAL_PARENT", knowledgeStatus: "UNKNOWN",
+    campaignToken: sample.data.campaignToken, sourceSnapshotId: `${sample.data.date}/${sample.data.totalDays}` };
+  sample.npc.parents = [{ id: 1, name: sample.player.fullName, gender: "male", ...directParentEvidence }];
+  sample.player.children = [{ id: 2, name: sample.npc.fullName, gender: "male", directParentEvidence }];
   const result = build(sample);
   assert.match(guard(result), /身份识别关系证据：父亲/);
   assert(result.messages.some(message => message.content.includes("父亲：张三")));

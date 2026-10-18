@@ -6,23 +6,23 @@ VOTC 是面向《Crusader Kings III》（CK3）的 Windows Electron 宫廷对话
 
 ## 当前版本与进度
 
-Core／App／UI 当前均为 **V9.3.7 候选**，基线为 V9.3.6.3。Workshop Mod 2.0.5、Official Action 2.0.3、记忆协议 3.0、摘要存储 2.5／schema 2 保持兼容。`VOTC.exe` 复用既有壳，其 Windows 文件属性版本不能代表当前应用资源版本。
+Core／App／UI 为 V9.3.9 代码候选，合并 V9.3.8.1 记忆方案与遗漏的 V9.3.7.1 修复任务。交付范围为代码、自动化回归与 GitHub 上传；真实 CK3、游戏内 Provider、Soak 和正式 Release 由用户后续验收。
 
-V9.3.7 校准 CK3 权威年龄来源，支持有来源绑定的公开双亲、同父异母／同母异父、当前继父母及继兄弟姐妹；保留已授权且有明确来源的历史继亲 Legacy 记录。未验证的日历推算仅作诊断，未知不等于“没有”。新增 `otherParent` 事实不扩大 Memory 权限，不从前配偶推断历史继亲。
+双人／三人的全场动态摘要额度为时间 5 + 第三人 3，记忆硬上限分别为 80,000／84,000 Token；4 人以上保持 3+3，上限为 96,000 Token。成功注入并完成请求后按回应者冻结原文，放在可变对话前复用；失败候选不冻结，来源变化逐项复验。比例仍为 65%／70%／75%，窗口容量由当前配置读取；用户将自行设置 192,000，不硬编码。
 
-2026-10-17 本轮已同步文档，修复稳定资料／自定义模板的亲属来源过滤、稳定年龄与 Windows 队列原子替换短暂占用；**本地完整发布回归 444/444 PASS**，290 项构建部署一致，隔离 Electron 6 组检查和限定范围的性能复验通过。证据与失败批次保留在[后续收口报告](docs/current/v9/V9_3_7_FOLLOWUP_REPORT.md)。
+本版统一亲子来源门禁与继亲标签，恢复独立人物认知 UI／服务并接入 Prompt 权限复核，提供生产 Parser 新旧日志回归和年龄分层诊断 CLI，修复 C17 测试作用域错误。Workshop Mod 2.0.5、Official Action 2.0.3、协议 3.0、存储 2.5／schema 2 保持；新 kids 公开证据字段作为独立补丁交付，不宣称已被当前游戏加载。
 
-原候选报告记录了 290 项映射、442/442 发布组、Pair benchmark 和 11 组隔离 Electron smoke 通过；这些是对应批次的本地证据。当前提交 `9caffe6` 的 [GitHub CI](https://github.com/wsdsb-111/VOCT-NEW/actions/runs/39004062734) 在发布回归步骤失败，不能将旧本地 PASS 当作远端通过。合成 Prompt Provider 复核为 **PARTIAL**；真实 CK3、游戏内 Provider 与 Soak 仍待独立验收，当前不宣称 Full Freeze。远端 CI 已按用户要求暂缓处理。本轮文档与遗留测试收口证据统一记录在[后续收口报告](docs/current/v9/V9_3_7_FOLLOWUP_REPORT.md)。
-
-- [实施报告](docs/current/v9/V9_3_7_IMPLEMENTATION_REPORT.md)、[验证报告](docs/current/v9/V9_3_7_VERIFICATION_REPORT.md)、[实机清单](docs/current/v9/V9_3_7_REAL_GAME_CHECKLIST.md)
-- [文档索引](docs/README.md)、[版本变更及历史阶段](CHANGELOG.md)
-- [源码与构建合同](docs/current/v9/V9_1_SOURCE_BUILD.md)、[Legacy Summary 合同](docs/README_摘要系统.md)
+- [V9.3.9 合并计划](docs/current/v9/V9_3_9_IMPLEMENTATION_PLAN.md)
+- [V9.3.9 实施与交付报告](docs/current/v9/V9_3_9_IMPLEMENTATION_REPORT.md)
+- [V9.3.8 历史实施报告](docs/current/v9/V9_3_8_IMPLEMENTATION_REPORT.md)
+- [文档索引](docs/README.md)、[版本记录](CHANGELOG.md)、[Legacy Summary 合同](docs/README_摘要系统.md)
 
 ## 主要功能与边界
 
 - **角色对话与在场管理**：支持多人、候场、暂离和返回；缺席期间的私聊不自动成为人物知识。
-- **Legacy Summary**：每位回应 NPC 的固定历史只锚定当前玩家，包含最近 1 篇 Legacy、合法官方追忆和预算内的玩家关系事项簿。固定文本首次构造后冻结。
-- **第三人历史检索**：L0 仅提名，不读取历史索引或原文；明确历史关系询问为 L1，每目标至多 16 条事项、零原文；具体历史经过为 L2，共享预算内至多展开 2 篇经来源键和修订号复验的摘要。2／3／4+ 人分别使用 16%／18%／20% 和 4800／5600／6400 Token 上限，并受无记忆 Prompt、输出预留及 Provider 安全余量限制。不新增模型检索或提取请求。
+- **Legacy Summary**：每位回应 NPC 的固定历史只锚定当前玩家，完整纳入最近 2 篇 Legacy、合法官方追忆和完整合法玩家关系事项簿；固定文本首次构造后冻结。若完整来源无法放入预算，系统先压缩较旧对话，仍超出时在发送前暂停并显示预算分项。
+- **第三人历史检索**：L0 仅提名，不读取历史索引或原文；明确玩家历史分句可按本场累计纳入最多 5 篇（2／3 人）或 3 篇（4+ 人）时间摘要及最多 3 篇第三人历史摘要，第三人上限跨所有目标共享。来源键、修订号、Campaign 与 Forget 校验继续有效，不新增模型检索或提取请求。
+- **请求预算与上下文用量**：2／3／4+ 人分别受 65%／70%／75% 配置窗口比例及 80,000／84,000／96,000 Token 上限约束，实际取 Provider 可用余量允许值。玩家界面仅显示一条“本场对话上下文”，提供本场对话当前／最近请求 usage 与 remaining，不逐 NPC 展示或跨 NPC 相加；后端仍隔离对话和回应者。容量来源明确标识，生成中暂估，结束后优先使用原生 input/output 用量并估算缺失项。
 - **事项簿与来源查看**：按真实姓名展示，支持搜索、日期过滤和分页。Pair 回填先预览再明确确认，批量逐 Pair 执行。后端按 source key 和 expected revision 复验原文；未绑定或多 Campaign 歧义保持只读。
 - **Worldline 与家庭事实**：CK3 当前事实优先；Checkpoint、Live 数据和历史 Definition↔Runtime 绑定分别保留来源、新鲜度和身份边界。来源缺失或冲突时拒绝推断。世界知识 Prompt 默认关闭，按设置显式启用。
 - **官方动作与信件**：动作经过确定性门禁、注册检查、结构化输出及本地校验。QUEUED、ACKNOWLEDGED、CONFIRMED 分开；ACK 不等于效果成功。金币／好感度以同命令游戏回读为准，未知效果不得自动重放。信件物理投递和接收后 Legacy 归档分别记账。
@@ -33,7 +33,7 @@ Memory4／Durable、Year/Life 自动生成和后台重建已退役。旧 `archiv
 
 ## 运行与首次配置
 
-使用 Windows 10/11、CK3 与配套 Voices of the Court Workshop Mod（item `3346777360`）。文档记录 descriptor 支持 `1.20.*`，实际兼容性应以已安装 Mod 的 descriptor、配套桥文件及实机验收为准。App 与 Workshop 内容分别发布；V9.3.7 的新增年龄／亲属字段需要加载更新的游戏脚本并重新导出，旧日志缺字段时保持 UNKNOWN。参见[外部运行依赖](docs/EXTERNAL_RUNTIME_DEPENDENCIES.md)及[实机清单](docs/current/v9/V9_3_7_REAL_GAME_CHECKLIST.md)。
+使用 Windows 10/11、CK3 与配套 Voices of the Court Workshop Mod（item `3346777360`）。文档记录 descriptor 支持 `1.20.*`，实际兼容性应以已安装 Mod 的 descriptor、配套桥文件及实机验收为准。App 与 Workshop 内容分别发布；V9.3.9 保持 Workshop 2.0.5、协议 3.0 和存储 2.5 兼容。参见[外部运行依赖](docs/EXTERNAL_RUNTIME_DEPENDENCIES.md)及 [V9.3.9 实施报告](docs/current/v9/V9_3_9_IMPLEMENTATION_REPORT.md)。
 
 1. 下载完整发布包，或克隆仓库后拉取 Git LFS 资源：
 

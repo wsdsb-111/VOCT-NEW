@@ -7,7 +7,7 @@ const target = { id: 1, firstName: "甲", shortName: "明王，甲", fullName: "
   heldCourtAndCouncilPositions: "枢密使", titleRankConcept: "concept_kingdom", nickname: "北地之虎",
   traits: [{ name: "私生子" }, { name: "独眼" }, { name: "九天血统", category: "Body" }] };
 const observer = { id: 2, traits: [] };
-const gameData = { campaignToken: "profile-campaign", date: "1164.5.20", playerID: 1, characters: new Map([[1, target], [2, observer]]) };
+const gameData = { campaignToken: "profile-campaign", date: "1164.5.20", totalDays: 300, playerID: 1, characters: new Map([[1, target], [2, observer]]) };
 const view = createTraitProfileView(gameData, observer).gameData.characters.get(1);
 assert.equal(view.primaryTitle, "", "stranger must not receive exact title");
 assert.equal(view.heldCourtAndCouncilPositions, "", "stranger must not receive court position");
@@ -19,9 +19,12 @@ assert.equal(createTraitProfileView(gameData, target).character.primaryTitle, "�
 assert.deepEqual(createTraitProfileView(gameData, target).character.traits, target.traits);
 assert.equal(target.primaryTitle, "明王", "presentation must not modify CK3 source");
 assert.equal(target.traits.length, 3);
+const parentProof = (childId, parentId) => ({ source: "CK3_DIRECT_PARENT", sourceOwnerId: childId,
+  childId, parentId, relationType: "parent", sourceRelation: "parents", publicStatus: "PUBLIC_LEGAL_PARENT",
+  knowledgeStatus: "UNKNOWN", campaignToken: gameData.campaignToken, sourceSnapshotId: `${gameData.date}/${gameData.totalDays}` });
 const familyGameData = { ...gameData, characters: new Map([[1, { ...target,
-  parents: [{ id: 3, name: "河间公，乙", gender: "male" }],
-  children: [{ id: 4, name: "鲁王，丙", spouses: [{ id: 5, name: "齐公，丁" }] }]
+  parents: [{ id: 3, name: "河间公，乙", gender: "male", ...parentProof(1, 3) }],
+  children: [{ id: 4, name: "鲁王，丙", directParentEvidence: parentProof(4, 1), spouses: [{ id: 5, name: "齐公，丁" }] }]
 }], [2, observer]]) };
 const familyView = createTraitProfileView(familyGameData, observer).gameData.characters.get(1);
 assert.equal(familyView.parents[0].name, "乙", "family name must not expose an undisclosed precise title");

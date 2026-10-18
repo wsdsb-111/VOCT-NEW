@@ -203,6 +203,7 @@ function testAnalyticsPersistence() {
       officialRecollectionTokens: 50,
       mentionedSnapshotTokens: 0,
       temporalExtraTokens: 0,
+      frozenDynamicTokens: 0,
       sessionTopicAnchorTokens: 0,
       topicPatchTokens: 77,
       thirdPartyEvidenceTokens: 0

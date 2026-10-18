@@ -139,14 +139,14 @@ function makeBudgetConversation() {
 function assertContextWindowBudgetTiers() {
   const participantIds = [1, 2, 3, 4];
   for (const [contextWindow, expected] of [
-    [8 * 1024, 1638],
-    [16 * 1024, 3276],
-    [32 * 1024, 6400],
-    [128 * 1024, 6400]
+    [8 * 1024, 6144],
+    [16 * 1024, 12288],
+    [32 * 1024, 24576],
+    [128 * 1024, 96000]
   ]) {
     const conversation = makeBudgetConversation();
     const actual = conversation.getMemoryTokenBudget(contextWindow, participantIds, contextWindow);
-    assert.equal(actual, expected, `${contextWindow / 1024}K must use the V9.3.6 four-participant policy budget`);
+    assert.equal(actual, expected, `${contextWindow / 1024}K must use the current four-participant policy budget`);
     assert.equal(conversation.frozenMemoryBudget.participantCount, 4);
   }
 }
@@ -155,7 +155,7 @@ function assertParticipantCountIsFrozen() {
   const conversation = makeBudgetConversation();
   const firstBudget = conversation.getMemoryTokenBudget(32 * 1024, [1, 2], 32 * 1024);
   const expandedBudget = conversation.getMemoryTokenBudget(32 * 1024, [1, 2, 3, 4, 5], 32 * 1024);
-  assert.equal(firstBudget, 4800, "a two-participant conversation must freeze the two-participant policy cap");
+  assert.equal(firstBudget, Math.floor(32768 * 0.65), "a two-participant conversation freezes its window-limited allocation");
   assert.equal(expandedBudget, firstBudget, "later participants must not expand the frozen memory allocation");
   assert.equal(conversation.frozenMemoryBudget.participantCount, 2,
     "the participant count recorded at the first budget calculation must remain frozen");

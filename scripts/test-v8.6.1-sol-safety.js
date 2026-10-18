@@ -31,6 +31,7 @@ async function pressureFixture(baseTokens, remainingWorldTokens, memoryExpected 
     gameData: { date: "1170.6.6", scene: "court", historicalReferenceInfo: {}, characters: new Map() },
     presentCharacterIds: new Set(), id: "conversation", turnEpoch: 1, memoryState: {},
     getMemoryContextFor: async () => ({ turnRecallText: "memory-turn", turnRecallTokens: 11, worldlineRequest: {} }),
+    getCharacterDisclosureContext: () => ({ disclosureProfiles: new Map(), characterKnowledgeRevision: "fixture" }),
     getPromptHistoryForCharacter: () => [], getPromptSummaryForCharacter: () => "",
     estimateTokenCount: (messages) => messages[0].budgetOnly ? 100 : messages[0].hasTurn ? baseTokens : baseTokens - 11,
     canUseSharedRollingSummary: () => false
@@ -68,6 +69,7 @@ async function pressureFixture(baseTokens, remainingWorldTokens, memoryExpected 
     gameData: { characters: new Map() },
     memoryState: {},
     getMemoryContextFor: async () => ({}),
+    getCharacterDisclosureContext: () => ({ disclosureProfiles: new Map(), characterKnowledgeRevision: "fixture" }),
     getPromptHistoryForCharacter: () => [{ role: "user", content: "older turn" }],
     getPromptSummaryForCharacter: () => "",
     estimateTokenCount: () => 100,

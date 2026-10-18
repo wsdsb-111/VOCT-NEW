@@ -7,8 +7,9 @@ const readline = require("readline");
 const { inferGenderFromPronoun } = require("./character");
 
 function parseRelativeAge(data, index, gameData, sourceOwnerId, relationType, field) {
-  const value = nonnegativeNumber(data[index]);
-  const age = value !== null && Number.isInteger(value) ? value : null;
+  const ageText = String(data[index] ?? "").trim();
+  const parsedAge = /^(?:0|[1-9]\d*)$/.test(ageText) ? Number(ageText) : NaN;
+  const age = Number.isSafeInteger(parsedAge) && parsedAge >= 0 ? parsedAge : null;
   const ageSource = age === null ? null : "CK3_LIVE_RELATIVE_AGE";
   if (age === null) return { age, ageSource };
   const totalDays = nonnegativeNumber(gameData?.totalDays);
@@ -674,6 +675,20 @@ function createLogParser({ GameData, Character, onGameDataParsed = null }) {
               genderSource: "CK3_LIVE_RELATIVE",
               birthDateTotalDays: nonnegativeNumber(data[4]),
               birthDate: data[5],
+              ...(data[7] === "PUBLIC_LEGAL_PARENT" || data[7] === "UNKNOWN" ? {
+                directParentEvidence: {
+                  source: "CK3_DIRECT_PARENT",
+                  sourceOwnerId: Number(data[1]),
+                  childId: Number(data[1]),
+                  parentId: rootID,
+                  relationType: "parent",
+                  sourceRelation: "parents",
+                  publicStatus: data[7],
+                  knowledgeStatus: "UNKNOWN",
+                  campaignToken: gameData.campaignToken || null,
+                  sourceSnapshotId: getSourceSnapshotId()
+                }
+              } : {}),
               ...parseRelativeAge(data, 6, gameData, rootID, "child", "children"),
               traits: [],
               maritalStatus: "unmarried",
@@ -681,6 +696,17 @@ function createLogParser({ GameData, Character, onGameDataParsed = null }) {
               spouses: []
             };
             currentChildOwnerId = rootID;
+            const existingChildren = gameData.characters.get(rootID).children.filter((child) => Number(child?.id) === currentChild.id);
+            if (existingChildren.some((child) => child?.directParentEvidence || currentChild.directParentEvidence)) {
+              for (const child of existingChildren) {
+                const previousEvidence = child.directParentEvidence;
+                const currentEvidence = currentChild.directParentEvidence;
+                if (!previousEvidence || !currentEvidence || JSON.stringify(previousEvidence) !== JSON.stringify(currentEvidence)) {
+                  if (previousEvidence) child.directParentEvidence = { ...previousEvidence, evidenceConflict: true };
+                  if (currentEvidence) currentChild.directParentEvidence = { ...currentEvidence, evidenceConflict: true };
+                }
+              }
+            }
             gameData.characters.get(rootID).children.push(currentChild);
             break;
           case "kid_other_parent":

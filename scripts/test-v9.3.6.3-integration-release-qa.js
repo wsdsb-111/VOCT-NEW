@@ -109,6 +109,30 @@ function normalizeMtimeForPortableRewrite(filePath) {
   return fs.statSync(filePath);
 }
 
+function setCurrentChildren(gameData, childIds) {
+  const owner = gameData.characters.get(OWNER_ID);
+  owner.children = childIds.map(childId => {
+    const child = gameData.characters.get(childId);
+    return {
+      id: childId,
+      name: child?.fullName || child?.shortName || String(childId),
+      gender: child?.gender || "unknown",
+      directParentEvidence: {
+        source: "CK3_DIRECT_PARENT",
+        sourceOwnerId: childId,
+        childId,
+        parentId: OWNER_ID,
+        relationType: "parent",
+        sourceRelation: "parents",
+        publicStatus: "PUBLIC_LEGAL_PARENT",
+        knowledgeStatus: "UNKNOWN",
+        campaignToken: gameData.campaignToken,
+        sourceSnapshotId: `${gameData.date}/${gameData.totalDays}`
+      }
+    };
+  });
+}
+
 function makeGameData(promptRuntime, { children = [TARGET_ID] } = {}) {
   const gameData = promptRuntime.gameData;
   gameData.campaignToken = CAMPAIGN;
@@ -118,12 +142,12 @@ function makeGameData(promptRuntime, { children = [TARGET_ID] } = {}) {
   gameData.location = "合成地点";
   gameData.locationController = null;
   gameData.aiID = OWNER_ID;
-  gameData.characters.get(OWNER_ID).children = children;
   gameData.characters.get(TARGET_ID).gender = "male";
   gameData.characters.get(TARGET_ID).shortName = "玛蒂尔达";
   gameData.characters.get(TARGET_ID).fullName = "玛蒂尔达";
   gameData.characters.set(OTHER_TARGET_ID, { id: OTHER_TARGET_ID, shortName: "丁", fullName: "丁", gender: "male", age: 30,
     traits: [], parents: [], children: [] });
+  setCurrentChildren(gameData, children);
   return gameData;
 }
 
@@ -219,8 +243,13 @@ function makeActualAgeGameData({ children = [], date = "1200年5月2日" } = {})
   const currentTotalDays = normalizeGameDate(date).serial;
   const gameData = new ACTUAL_GAME_DATA_CLASS([PLAYER_ID, "甲", OWNER_ID, "乙", date,
     "___________talk_scene", "合成地点", "", currentTotalDays]);
+  gameData.campaignToken = "qa-v9363-actual-age-campaign";
   const owner = makeActualAgeCharacter(OWNER_ID, "乙", { age: 40 });
-  owner.children = children.map(child => ({ id: child.id, name: child.name, gender: child.gender }));
+  owner.children = children.map(child => ({ id: child.id, name: child.name, gender: child.gender,
+    directParentEvidence: { source: "CK3_DIRECT_PARENT", sourceOwnerId: child.id, childId: child.id,
+      parentId: OWNER_ID, relationType: "parent", sourceRelation: "parents", publicStatus: "PUBLIC_LEGAL_PARENT",
+      knowledgeStatus: "UNKNOWN", campaignToken: gameData.campaignToken,
+      sourceSnapshotId: `${gameData.date}/${gameData.totalDays}` } }));
   const player = makeActualAgeCharacter(PLAYER_ID, "甲", { age: 39 });
   gameData.characters = new Map([[PLAYER_ID, player], [OWNER_ID, owner], ...children.map(child => [child.id, child])]);
   gameData.scene = "合成宫廷场景";
@@ -478,7 +507,7 @@ async function testIdentityCampaignSceneAndLineageIsolation() {
     assert(firstKinship.rendered.text.includes(LAST_YEAR_INDEX));
     assert(!firstKinship.rendered.text.includes("V936_OTHER_TARGET_INDEX"));
 
-    kinshipGameData.characters.get(OWNER_ID).children = [OTHER_TARGET_ID];
+    setCurrentChildren(kinshipGameData, [OTHER_TARGET_ID]);
     clearCalls(calls);
     const changedKinship = retrieveAndRender(test.engine, fixture, promptRuntime, kinshipGameData, kinshipQuery,
       { conversationId: "qa-v9363-lineage-change", sessionRecallCache: lineageCache, turnEpoch: 2, messageId: 9063 });
