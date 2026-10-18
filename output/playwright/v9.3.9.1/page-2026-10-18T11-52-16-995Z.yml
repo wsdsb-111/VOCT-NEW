@@ -1,0 +1,144 @@
+- generic [ref=f1e239]:
+  - banner:
+    - generic [ref=f1e249]:
+      - button [ref=f1e250] [cursor=pointer]:
+        - img "?" [ref=f1e251]
+      - button [ref=f1e253] [cursor=pointer]:
+        - img "Language" [ref=f1e254]
+      - button [ref=f1e255] [cursor=pointer]:
+        - img "Discord" [ref=f1e256]
+      - button [ref=f1e257] [cursor=pointer]:
+        - img "?" [ref=f1e258]
+    - button "Connection" [ref=f1e259]
+    - button "Settings" [ref=f1e260]
+    - button "Actions" [ref=f1e261]
+    - button "Prompts" [ref=f1e262]
+    - button "Summaries" [active] [ref=f1e263]
+    - button "优化" [ref=f1e264]
+    - button "世界书" [ref=f1e265]
+    - button "诊断" [ref=f1e266]
+    - group "界面风格" [ref=f1e267]:
+      - text: 骑士
+      - button "切换为游牧风格" [ref=f1e268]
+      - button "切换为骑士纹章风格" [pressed] [ref=f1e269]
+      - button "切换为水墨画卷风格" [ref=f1e270]
+    - button "✕" [ref=f1e271]
+  - main [ref=f1e272]:
+    - generic [ref=f1e357]:
+      - generic [ref=f1e358]:
+        - generic [ref=f1e359]:
+          - heading "Summary Generation Settings" [level=3] [ref=f1e360]
+          - paragraph [ref=f1e361]: Configure how conversation summaries are generated.
+        - button "Reset all to defaults" [ref=f1e363]
+      - generic [ref=f1e364]:
+        - heading "Provider Override" [level=4] [ref=f1e365]
+        - paragraph [ref=f1e366]: Choose a specific provider for generating conversation summaries. Leave as "Use Active Provider" to use your currently selected provider.
+        - generic [ref=f1e367]:
+          - generic [ref=f1e368]: "Summary Provider:"
+          - combobox "Summary Provider:" [ref=f1e369]:
+            - option "Use Active Provider (deepseek)" [selected]
+            - option "player2"
+            - option "openrouter"
+            - option "openai-compatible"
+            - option "ollama"
+            - option "deepseek"
+            - option "gemini"
+            - option "zhipu"
+      - generic [ref=f1e370]:
+        - heading "最终摘要最大输出 Token" [level=4] [ref=f1e371]
+        - paragraph [ref=f1e372]: 范围 256–16384。该值会作为最终摘要模型请求的 max_tokens；输入完成后离开输入框即可保存。
+        - spinbutton [ref=f1e373]: "4096"
+      - generic [ref=f1e374]:
+        - heading "About Summary Generation" [level=4] [ref=f1e375]
+        - paragraph [ref=f1e376]: "Summaries are automatically generated in two scenarios:"
+        - list [ref=f1e377]:
+          - listitem [ref=f1e378]:
+            - strong [ref=f1e379]: "Rolling Summaries:"
+            - text: Created during long conversations when the context limit is approaching. These help compress older messages while preserving important information.
+          - listitem [ref=f1e380]:
+            - strong [ref=f1e381]: "Final Perspective Summaries:"
+            - text: Saved at conversation end within each owner's actual knowledge. The completed owner narrative is saved as a Legacy summary.
+        - paragraph [ref=f1e382]: The prompts below show the current active prompts. Changes are automatically saved after you stop typing.
+      - generic [ref=f1e383]:
+        - generic [ref=f1e384]:
+          - heading "Rolling Summary Prompt" [level=4] [ref=f1e385]
+          - button "Reset to default" [ref=f1e387]
+        - paragraph [ref=f1e388]: This prompt is used when the conversation gets too long and needs to be compressed. It creates incremental summaries during the conversation.
+        - textbox [ref=f1e389]: 更新之前的摘要，融入新消息的内容。创建一个连贯的摘要，包含之前的事件和新信息。 请按以下结构组织摘要： 1. **对话主题**：本次对话的核心议题 2. **关键事件**：讨论或发生的重要事件（保留具体细节：人名、地点、数字、日期） 3. **决策与承诺**：做出的决定、达成的协议、许下的承诺 4. **情感与关系**：角色之间的情感变化、关系发展 5. **后续计划**：提到的未来行动或计划 保持简洁但务必保留重要细节。使用中文撰写。
+      - generic [ref=f1e390]:
+        - generic [ref=f1e391]:
+          - heading "Final Summary Prompt" [level=4] [ref=f1e392]
+          - button "Reset to default" [ref=f1e394]
+        - paragraph [ref=f1e395]: Used for the final perspective narrative; the final perspective narrative saved to the Legacy summary.
+        - textbox [ref=f1e396]: 为这次对话创建高信息密度的中文最终摘要。 摘要不设置固定字数或段落数量；应根据原始对话的信息量，在当前配置的输出 Token 上限内完整保留细节。请在不遗漏实质内容、人物归属、因果关系和关键细节的前提下尽量精简，删去重复和低信息量措辞，不得为了凑长度虚构内容，也不得任意压缩成几句概述。按实际发生顺序组织连贯内容，并做到： 1. 每项言论、行动、观点、情绪和决定都明确归属于具体人物，不混淆多人视角。 2. 写清对话背景、时间、地点、事件先后及因果关系；保留确切人名、头衔、数字、日期、物件和关键措辞。 3. 记录每个人提出、接受、拒绝、隐瞒或计划的内容，包括请求、条件、承诺、协议、秘密、冲突与未决事项。 4. 描述语气和情绪如何变化，以及这些变化对信任、亲密、敌意、权力关系或后续行动的影响。 5. 只在措辞本身影响含义时保留简短原话；不要大段抄写，也不要重复同一事实。 6. 知情范围发生变化时必须分段；角色睡着、昏迷、离场、独处、自言自语、默想或实施未被他人察觉的行为时，不得把相关内容写成所有在场者共同知情。 不得笼统写成“双方讨论了某事”“关系有所发展”或“交换了意见”；必须说明谁说了什么、为何这样说、对方如何回应，以及最终达成或尚未解决的结果。
+      - generic [ref=f1e397]:
+        - generic [ref=f1e398]:
+          - heading "Letter Summary Prompt" [level=4] [ref=f1e399]
+          - button "Reset to default" [ref=f1e401]
+        - paragraph [ref=f1e402]: Used for correspondence summaries; memory storage and game delivery status remain separate. V8.14.1 letters passed player testing; new recipient-scoped disclosure still requires in-game retesting.
+        - textbox [ref=f1e403]: 简洁总结这封信件的内容。 包括： - 核心话题 - 发信人的态度和语气 - 提出的请求或建议 - 重要的具体细节（数字、日期、地点、人名） 使用中文撰写，保持精炼。
+      - generic [ref=f1e404]:
+        - generic [ref=f1e405]:
+          - generic [ref=f1e406]:
+            - heading "Legacy Summary Manager" [level=4] [ref=f1e407]
+            - paragraph [ref=f1e408]: Browse, read, edit, and delete Legacy summaries and CK3 official recollections.
+          - generic [ref=f1e409]:
+            - button "Refresh" [ref=f1e410]
+            - button "重试失败摘要/信件归档" [disabled] [ref=f1e411]
+            - button "按日期排序" [pressed] [ref=f1e412]: ↓ 按日期排序
+            - button "Open Summaries Folder" [ref=f1e413]
+            - button "Clear All Summaries" [disabled] [ref=f1e414]
+        - generic [ref=f1e416]:
+          - generic [ref=f1e417]:
+            - generic [ref=f1e418]:
+              - heading "人物认知 · 当前对话" [level=5] [ref=f1e419]
+              - paragraph [ref=f1e420]: 认知按“谁知道谁”分别记录。公开披露让实际在场的听众获知；私语只传给指定对象，候场和缺席人物不会获知。
+            - button "刷新本场" [ref=f1e421]
+          - paragraph [ref=f1e422]: 分别选择“谁知道”和“关于谁”。姓名、头衔显示披露记录，称号保持公开可见。外貌／身体白名单及已公开的父母子女、亲兄弟姐妹关系可直接提供特质信息；其他特质可逐人手动设为已知或未知。
+          - generic [ref=f1e423]:
+            - generic [ref=f1e424]: 谁知道
+            - combobox "选择谁知道" [ref=f1e425]:
+              - option "选择人物姓名" [selected]
+              - option "阿甲"
+              - option "阿乙"
+              - option "阿丁"
+          - generic [ref=f1e426]:
+            - generic [ref=f1e427]: 关于谁
+            - combobox "选择关于谁" [disabled] [ref=f1e428]:
+              - option "选择人物姓名" [selected]
+          - paragraph [ref=f1e429]: 请选择一位本场听众，再独立选择披露内容涉及的人物。
+        - group [ref=f1e430]:
+          - generic "记忆召回诊断（最近实际请求）" [ref=f1e431] [cursor=pointer]
+        - group [ref=f1e432]:
+          - generic "摘要恢复诊断" [ref=f1e433] [cursor=pointer]
+        - group [ref=f1e434]:
+          - generic "Provider 缓存诊断" [ref=f1e435] [cursor=pointer]
+        - generic [ref=f1e436]:
+          - generic [ref=f1e437]:
+            - generic [ref=f1e438]:
+              - heading "Legacy Summary · V9.3.9.1" [level=5] [ref=f1e439]
+              - paragraph [ref=f1e440]: 查看、筛选、编辑和删除本地人物摘要；CK3 官方追忆保持只读同步。
+            - generic [ref=f1e441]: 本地摘要
+          - generic [ref=f1e442]:
+            - generic [ref=f1e443]:
+              - strong [ref=f1e444]: "0"
+              - generic [ref=f1e445]: 人物摘要目录
+            - generic [ref=f1e446]:
+              - strong [ref=f1e447]: "0"
+              - generic [ref=f1e448]: 对话摘要文件
+            - generic [ref=f1e449]:
+              - strong [ref=f1e450]: "0"
+              - generic [ref=f1e451]: 摘要记录
+        - generic [ref=f1e452]:
+          - generic: ⌕
+          - searchbox "输入人物姓名：定位本人目录，并列出其他人涉及此人的摘要" [ref=f1e453]
+        - group "摘要日期筛选" [ref=f1e454]:
+          - generic [ref=f1e455]:
+            - text: 开始日期
+            - textbox "开始日期" [ref=f1e456]
+          - generic [ref=f1e457]:
+            - text: 结束日期
+            - textbox "结束日期" [ref=f1e458]
+          - button "清除日期筛选" [disabled] [ref=f1e459]
+        - generic [ref=f1e460]: No character archives yet. Completed valid conversations save perspective summaries; official recollections require CK3 exports.
+  - generic "VOTC App 9.3.9.1" [ref=f1e356]: V9.3.9.1 · Mod v2.0.5

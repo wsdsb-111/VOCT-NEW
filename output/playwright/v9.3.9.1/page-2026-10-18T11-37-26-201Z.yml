@@ -1,0 +1,171 @@
+- generic [ref=f1e3]:
+  - banner:
+    - generic [ref=f1e13]:
+      - button [ref=f1e14] [cursor=pointer]:
+        - img "?" [ref=f1e15]
+      - button [ref=f1e17] [cursor=pointer]:
+        - img "Language" [ref=f1e18]
+      - button [ref=f1e19] [cursor=pointer]:
+        - img "Discord" [ref=f1e20]
+      - button [ref=f1e21] [cursor=pointer]:
+        - img "?" [ref=f1e22]
+    - button "Connection" [ref=f1e23]
+    - button "Settings" [ref=f1e24]
+    - button "Actions" [ref=f1e25]
+    - button "Prompts" [ref=f1e26]
+    - button "Summaries" [ref=f1e27]
+    - button "优化" [ref=f1e28]
+    - button "世界书" [ref=f1e29]
+    - button "诊断" [ref=f1e30]
+    - group "界面风格" [ref=f1e31]:
+      - text: 骑士
+      - button "切换为游牧风格" [ref=f1e32]
+      - button "切换为骑士纹章风格" [pressed] [ref=f1e33]
+      - button "切换为水墨画卷风格" [ref=f1e34]
+    - button "✕" [ref=f1e35]
+  - main [ref=f1e36]:
+    - generic [ref=f1e121]:
+      - generic [ref=f1e122]:
+        - generic [ref=f1e123]:
+          - heading "Summary Generation Settings" [level=3] [ref=f1e124]
+          - paragraph [ref=f1e125]: Configure how conversation summaries are generated.
+        - button "Reset all to defaults" [ref=f1e127]
+      - generic [ref=f1e128]:
+        - heading "Provider Override" [level=4] [ref=f1e129]
+        - paragraph [ref=f1e130]: Choose a specific provider for generating conversation summaries. Leave as "Use Active Provider" to use your currently selected provider.
+        - generic [ref=f1e131]:
+          - generic [ref=f1e132]: "Summary Provider:"
+          - combobox "Summary Provider:" [ref=f1e133]:
+            - option "Use Active Provider (deepseek)" [selected]
+            - option "player2"
+            - option "openrouter"
+            - option "openai-compatible"
+            - option "ollama"
+            - option "deepseek"
+            - option "gemini"
+            - option "zhipu"
+      - generic [ref=f1e134]:
+        - heading "最终摘要最大输出 Token" [level=4] [ref=f1e135]
+        - paragraph [ref=f1e136]: 范围 256–16384。该值会作为最终摘要模型请求的 max_tokens；输入完成后离开输入框即可保存。
+        - spinbutton [ref=f1e137]: "4096"
+      - generic [ref=f1e138]:
+        - heading "About Summary Generation" [level=4] [ref=f1e139]
+        - paragraph [ref=f1e140]: "Summaries are automatically generated in two scenarios:"
+        - list [ref=f1e141]:
+          - listitem [ref=f1e142]:
+            - strong [ref=f1e143]: "Rolling Summaries:"
+            - text: Created during long conversations when the context limit is approaching. These help compress older messages while preserving important information.
+          - listitem [ref=f1e144]:
+            - strong [ref=f1e145]: "Final Perspective Summaries:"
+            - text: Saved at conversation end within each owner's actual knowledge. The completed owner narrative is saved as a Legacy summary.
+        - paragraph [ref=f1e146]: The prompts below show the current active prompts. Changes are automatically saved after you stop typing.
+      - generic [ref=f1e147]:
+        - generic [ref=f1e148]:
+          - heading "Rolling Summary Prompt" [level=4] [ref=f1e149]
+          - button "Reset to default" [ref=f1e151]
+        - paragraph [ref=f1e152]: This prompt is used when the conversation gets too long and needs to be compressed. It creates incremental summaries during the conversation.
+        - textbox [ref=f1e153]: 更新之前的摘要，融入新消息的内容。创建一个连贯的摘要，包含之前的事件和新信息。 请按以下结构组织摘要： 1. **对话主题**：本次对话的核心议题 2. **关键事件**：讨论或发生的重要事件（保留具体细节：人名、地点、数字、日期） 3. **决策与承诺**：做出的决定、达成的协议、许下的承诺 4. **情感与关系**：角色之间的情感变化、关系发展 5. **后续计划**：提到的未来行动或计划 保持简洁但务必保留重要细节。使用中文撰写。
+      - generic [ref=f1e154]:
+        - generic [ref=f1e155]:
+          - heading "Final Summary Prompt" [level=4] [ref=f1e156]
+          - button "Reset to default" [ref=f1e158]
+        - paragraph [ref=f1e159]: Used for the final perspective narrative; the final perspective narrative saved to the Legacy summary.
+        - textbox [ref=f1e160]: 为这次对话创建高信息密度的中文最终摘要。 摘要不设置固定字数或段落数量；应根据原始对话的信息量，在当前配置的输出 Token 上限内完整保留细节。请在不遗漏实质内容、人物归属、因果关系和关键细节的前提下尽量精简，删去重复和低信息量措辞，不得为了凑长度虚构内容，也不得任意压缩成几句概述。按实际发生顺序组织连贯内容，并做到： 1. 每项言论、行动、观点、情绪和决定都明确归属于具体人物，不混淆多人视角。 2. 写清对话背景、时间、地点、事件先后及因果关系；保留确切人名、头衔、数字、日期、物件和关键措辞。 3. 记录每个人提出、接受、拒绝、隐瞒或计划的内容，包括请求、条件、承诺、协议、秘密、冲突与未决事项。 4. 描述语气和情绪如何变化，以及这些变化对信任、亲密、敌意、权力关系或后续行动的影响。 5. 只在措辞本身影响含义时保留简短原话；不要大段抄写，也不要重复同一事实。 6. 知情范围发生变化时必须分段；角色睡着、昏迷、离场、独处、自言自语、默想或实施未被他人察觉的行为时，不得把相关内容写成所有在场者共同知情。 不得笼统写成“双方讨论了某事”“关系有所发展”或“交换了意见”；必须说明谁说了什么、为何这样说、对方如何回应，以及最终达成或尚未解决的结果。
+      - generic [ref=f1e161]:
+        - generic [ref=f1e162]:
+          - heading "Letter Summary Prompt" [level=4] [ref=f1e163]
+          - button "Reset to default" [ref=f1e165]
+        - paragraph [ref=f1e166]: Used for correspondence summaries; memory storage and game delivery status remain separate. V8.14.1 letters passed player testing; new recipient-scoped disclosure still requires in-game retesting.
+        - textbox [ref=f1e167]: 简洁总结这封信件的内容。 包括： - 核心话题 - 发信人的态度和语气 - 提出的请求或建议 - 重要的具体细节（数字、日期、地点、人名） 使用中文撰写，保持精炼。
+      - generic [ref=f1e168]:
+        - generic [ref=f1e169]:
+          - generic [ref=f1e170]:
+            - heading "Legacy Summary Manager" [level=4] [ref=f1e171]
+            - paragraph [ref=f1e172]: Browse, read, edit, and delete Legacy summaries and CK3 official recollections.
+          - generic [ref=f1e173]:
+            - button "Refresh" [ref=f1e174]
+            - button "重试失败摘要/信件归档" [disabled] [ref=f1e175]
+            - button "按日期排序" [pressed] [ref=f1e176]: ↓ 按日期排序
+            - button "Open Summaries Folder" [ref=f1e177]
+            - button "Clear All Summaries" [disabled] [ref=f1e178]
+        - generic [ref=f1e277]:
+          - generic [ref=f1e278]:
+            - generic [ref=f1e279]:
+              - heading "人物认知 · 当前对话" [level=5] [ref=f1e280]
+              - paragraph [ref=f1e281]: 原始对话中的披露按方向记录；A 知道 B，不代表 B 知道 A。候场人物属于本场听众，但不会因此自动获知发言内容。
+            - button "刷新本场" [ref=f1e282]
+          - paragraph [ref=f1e283]: 分别选择“谁知道”和“关于谁”。姓名与头衔只显示已有披露状态；只有特质可以由你手动设为已知或未知。人工设置只影响这一个方向，不会自动扩散给其他人物。
+          - generic [ref=f1e284]:
+            - generic [ref=f1e285]: 谁知道
+            - combobox "选择谁知道" [ref=f1e286]:
+              - option "选择人物姓名"
+              - option "阿甲"
+              - option "阿乙" [selected]
+              - option "阿丁"
+          - generic [ref=f1e287]:
+            - generic [ref=f1e288]: 关于谁
+            - combobox "选择关于谁" [ref=f1e289]:
+              - option "选择人物姓名"
+              - option "阿甲" [selected]
+              - option "阿丁"
+          - paragraph [ref=f1e290]: 已更新“阿乙 → 阿甲”的特质认知；只影响这个方向。
+          - generic [ref=f1e291]:
+            - generic [ref=f1e292]: 对阿乙而言，关于阿甲的披露记录
+            - article [ref=f1e293]:
+              - generic [ref=f1e294]:
+                - strong [ref=f1e295]: 姓名：阿甲
+                - generic [ref=f1e296]: 未确认
+              - generic [ref=f1e297]: 原始对话没有披露记录
+            - article [ref=f1e298]:
+              - generic [ref=f1e299]:
+                - strong [ref=f1e300]: 头衔：公爵
+                - generic [ref=f1e301]: 未确认
+              - generic [ref=f1e302]: 原始对话没有披露记录
+            - article [ref=f1e303]:
+              - generic [ref=f1e304]:
+                - strong [ref=f1e305]: 特质：勇敢
+                - generic [ref=f1e306]: 未确认
+              - generic [ref=f1e307]: 原始对话没有披露记录
+              - button "标记已知" [ref=f1e308]
+            - article [ref=f1e309]:
+              - generic [ref=f1e310]:
+                - strong [ref=f1e311]: 特质：巫师
+                - generic [ref=f1e312]: 人工标记已知
+              - generic [ref=f1e313]: 人工认知设置 · 获知时间：1200.1.1
+              - button "设为未知" [ref=f1e314]
+          - paragraph [ref=f1e315]: 记录截至：1200.1.1
+        - group [ref=f1e194]:
+          - generic "记忆召回诊断（最近实际请求）" [ref=f1e195] [cursor=pointer]
+        - group [ref=f1e196]:
+          - generic "摘要恢复诊断" [ref=f1e197] [cursor=pointer]
+        - group [ref=f1e198]:
+          - generic "Provider 缓存诊断" [ref=f1e199] [cursor=pointer]
+        - generic [ref=f1e200]:
+          - generic [ref=f1e201]:
+            - generic [ref=f1e202]:
+              - heading "Legacy Summary · V9.3.9.1" [level=5] [ref=f1e203]
+              - paragraph [ref=f1e204]: 查看、筛选、编辑和删除本地人物摘要；CK3 官方追忆保持只读同步。
+            - generic [ref=f1e205]: 本地摘要
+          - generic [ref=f1e206]:
+            - generic [ref=f1e207]:
+              - strong [ref=f1e208]: "0"
+              - generic [ref=f1e209]: 人物摘要目录
+            - generic [ref=f1e210]:
+              - strong [ref=f1e211]: "0"
+              - generic [ref=f1e212]: 对话摘要文件
+            - generic [ref=f1e213]:
+              - strong [ref=f1e214]: "0"
+              - generic [ref=f1e215]: 摘要记录
+        - generic [ref=f1e216]:
+          - generic: ⌕
+          - searchbox "输入人物姓名：定位本人目录，并列出其他人涉及此人的摘要" [ref=f1e217]
+        - group "摘要日期筛选" [ref=f1e218]:
+          - generic [ref=f1e219]:
+            - text: 开始日期
+            - textbox "开始日期" [ref=f1e220]
+          - generic [ref=f1e221]:
+            - text: 结束日期
+            - textbox "结束日期" [ref=f1e222]
+          - button "清除日期筛选" [disabled] [ref=f1e223]
+        - generic [ref=f1e224]: No character archives yet. Completed valid conversations save perspective summaries; official recollections require CK3 exports.
+  - generic "VOTC App 9.3.9.1" [ref=f1e120]: V9.3.9.1 · Mod v2.0.5
