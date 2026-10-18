@@ -1,5 +1,7 @@
 # VOTC 版本变更入口
 
+V9.3.9.1 本轮收口：修复 `tangBranches` 上传的冲突标记，保留 V9.3.9 冻结与预算核心；298 项构建部署一致。代码 `a0748aa` 的 [CI 39131470796](https://github.com/wsdsb-111/VOCT-NEW/actions/runs/39131470796) 全部 459 组通过，真实定向认知 UI、Prompt、同 profile 重启及三主题隔离检查通过。源码已上传该分支；真实 CK3／Provider／Soak、原年龄 +1 和 GitHub Release 未签署，详见[实施报告](docs/current/v9/V9_3_9_1_IMPLEMENTATION_REPORT.md)。
+
 V9.3.9.1 本地修复候选：只恢复当前对话人物的定向披露与手动特质认知；公开披露逐一记录给实际在场听众，私语仅指定对象，候场／缺席不追溯获知。姓名、头衔和称号按合法当前对话披露记录，称号公开；沿用外貌／身体白名单，只有当前可靠公开父母子女及亲兄弟姐妹（含公开半亲）可免披露互知特质，继亲和未暴露私生亲属关系不授权。撤下 Worldline 认知生产接线；V9.3.9 摘要召回、冻结、预算及来源合同保持。稳定资料旧年龄已移除，真实“年龄 +1”仍 NOT_CONFIRMED。原停止时“不连接 GitHub／远端 CI”保留为历史；用户本轮已额外授权拉取 GitHub 并修复分支失败 CI，完成状态以实际结果记录。真实 CK3、付费 Provider、Soak、GitHub Release 未执行。详见[修复报告](docs/current/v9/V9_3_9_1_IMPLEMENTATION_REPORT.md)和[交接记录](docs/current/v9/V9_3_9_1_HANDOFF.md)。
 
 V9.3.8.1 开发方案（已并入 V9.3.9）：拟将双人／三人时间摘要上限提升至 5，第三人摘要维持 3；4 人及以上维持 3+3，人数硬上限调整为 80,000／84,000／96,000 Token。成功动态召回将按回应者冻结全文并放入稳定 Prompt 前缀，供本场后续轮次复用。此条目保留原设计合同，实施结果由 V9.3.9 报告承接；详见 [开发方案](docs/current/v9/V9_3_8_1_DEVELOPMENT_SPEC.md)。

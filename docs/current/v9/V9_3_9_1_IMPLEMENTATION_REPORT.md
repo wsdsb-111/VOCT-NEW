@@ -17,13 +17,15 @@
 | Manifest 库存 | 459 个 release groups；这是当前清单库存，不是通过数量。 |
 | 构建／部署／已部署 parity | **PASS**：298 项，payload `d603046db1c7ab918add4679788743cf06fbda801e0a20c7654460a68757ac5c`。用户关闭正式窗口后完成部署；18 个文件经正常部署事务更新。 |
 | 旧专项复验 | 特质路由 12 项、Provider 39 个黄金场景／7 个适配器、GLM 101 个配对场景、前端内容检查均 **PASS**。 |
-| 本地完整发布门禁 | 首轮到第 193 组停止：`v8.14.1-production-pipeline-qa` 的两条旧断言与恢复后的在场白名单／原生 knownSecrets 合同冲突；前 192 组通过。修订断言并增加错 Owner／Target、手动隐藏反例后继续复验。日志 `.build/v9391-release.log`，不把首轮记作全量通过。 |
-| 最终隔离 UI | 验证中；只使用临时 profile 与合成人物，通过真实打包 Main／Preload IPC 读取。 |
-| 修复后远端 CI | 上传后按 `tangBranches` 的具体 SHA／Actions run 签署，不能用上面的旧失败 run 代替本轮结果。 |
+| 本地完整发布门禁 | 首轮到第 193 组停止：`v8.14.1-production-pipeline-qa` 的两条旧断言与恢复后的在场白名单／原生 knownSecrets 合同冲突；前 192 组通过。修订断言并增加错 Owner／Target、手动隐藏反例后，该专项 **10/10 PASS**。日志 `.build/v9391-release.log`，不把本地首轮记作全量通过；全量证据由下方远端 CI 提供。 |
+| 最终隔离 UI | **PASS**：真实摘要页导航、独立面板与空初始选择、候场听众不追溯、加入后姓名／头衔披露及公开称号、可见白名单／公开直亲只读、定向手动隐藏／已知与实际 Prompt、刷新、迟到回包、战役切换、同 profile 重启持久化。游牧／骑士／水墨三主题、1024×768 与 1500×1000 窗口截图已检查。 |
+| 修复后远端 CI | **PASS**：[Run 39131470796](https://github.com/wsdsb-111/VOCT-NEW/actions/runs/39131470796)，job `117687356458`，代码 SHA `a0748aa58b7b3090bbed386df89a64405692444d`。依赖、298 项 build／deploy／parity 和 **459 组完整发布回归全部通过**，payload 与本机一致。旧 run 的失败仍归属原 SHA。 |
 | 真实年龄 +1 | **NOT_CONFIRMED**：仍缺同日期实机截图、原始导出及最终 Prompt 证据。 |
 | 真实 CK3／付费 Provider／Soak／GitHub Release | **NOT_RUN**。 |
 
 本轮构建和部署不代表真实 CK3、Provider 或原年龄 +1 案例验收。原机器停机时的历史验证表及失败记录仍保留在下文。
+
+隔离 UI 使用已部署的 VOTC 9.3.9.1、合成人物与真实 ConversationDisclosureStore／Preload IPC；数据路径限制在 `.build/v9391-electron-ui-smoke/profile-20261018-ui-03/votc_data`，无外网请求。截图与分阶段原始结果保留在本机 `output/playwright/v9.3.9.1/`（不提交）：`01-current-conversation-initial-panel.png`、`02-current-conversation-disclosed-panel.png`、三张 `04-theme-*-1024-panel.png`、`06-restart-persisted-panel.png`；最终重启与主题报告为 `v9391-restart-and-themes-phase-report.json`。测试期间为避免自动化工具夺焦而触发既有悬浮层隐藏，仅在隔离进程内暂停 FocusMonitor 并保持真实可见事件；不改生产焦点逻辑，不据此签署真实 CK3 覆盖层验收。早期 CLI 会话／闭包等待失败记录保留，未作为产品通过证据。
 
 施工依据为用户提供的《VOCT V9.3.9.1 修复施工文档》，并以用户后续纠正为准：原要求包括不连接 GitHub 查旧 UI；用户本轮新增的 GitHub 授权只覆盖拉取与修复分支失败 CI。只管理当前对话玩家／NPC 之间的认知；保留原有底层判定，撤回非预期 Worldline 重构。公开发言让所有实际在场听众各自获知，私语只传给指定人物；外貌／身体沿用已有白名单，当前公开可靠的父母子女、亲兄弟姐妹（含公开半亲）可免披露互知特质，未暴露真实私生亲属关系不适用；称号为公开描述信息。
 

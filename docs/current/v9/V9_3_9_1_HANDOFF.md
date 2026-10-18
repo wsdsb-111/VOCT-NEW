@@ -15,13 +15,15 @@
 | Manifest | 当前库存 459 个 release groups；不是通过数。 |
 | Runtime build／verify | **PASS**：298 项，payload `d603046db1c7ab918add4679788743cf06fbda801e0a20c7654460a68757ac5c`。 |
 | Deploy／deployed parity | **PASS**：用户关闭正式窗口后，经正常事务更新 18 个文件，298 项与源码构建一致。 |
-| 本地完整发布门禁 | 首轮第 193 组因两条旧认知合同断言失败；前 192 组通过。修订后需继续复验，不把库存数当通过数；日志 `.build/v9391-release.log`。 |
-| 最终隔离 UI | 正在使用临时 profile、合成人物、真实 IPC 验证。 |
-| 修复后远端 CI | 上传后按 `tangBranches` 的具体 SHA／Actions run 验证。旧 run 的失败仍归属原 SHA。 |
+| 本地完整发布门禁 | 首轮第 193 组因两条旧认知合同断言失败；前 192 组通过。修订并补隔离／隐藏反例后，该专项 **10/10 PASS**；本地首轮不记为全量通过，日志 `.build/v9391-release.log`。 |
+| 最终隔离 UI | **PASS**：真实页顶入口、候场／加入披露、姓名／头衔／称号、双向独立手动状态与实际 Prompt、迟到回包及战役切换防串、同 profile 重启保存、三主题、1024×768／1500×1000。合成人物与真实 IPC，零外网请求；截图与阶段报告在本机 `output/playwright/v9.3.9.1/`。 |
+| 修复后远端 CI | **PASS**：[Run 39131470796](https://github.com/wsdsb-111/VOCT-NEW/actions/runs/39131470796)，job `117687356458`，代码 SHA `a0748aa58b7b3090bbed386df89a64405692444d`；依赖、298 项构建部署与 parity、**459 组完整发布回归全部通过**。旧失败仍归属原 SHA。 |
 | 真实年龄 +1 | **NOT_CONFIRMED**；缺少同日期实机分层证据。 |
 | 真实 CK3／付费 Provider／Soak／GitHub Release | **NOT_RUN**。 |
 
-详细结果见[实施报告](V9_3_9_1_IMPLEMENTATION_REPORT.md)。下方停止快照不覆盖本轮已完成的构建／部署，459 个清单组仍须以实际执行结果签署。
+详细结果见[实施报告](V9_3_9_1_IMPLEMENTATION_REPORT.md)。下方停止快照不覆盖本轮已完成的构建／部署与上述具体代码 SHA 的远端 CI 结果。
+
+当前代码与离线／隔离窗口收口已完成，已上传 `tangBranches`。后续只需按真实证据继续 CK3、Provider、Soak 与年龄 +1 案例验收；不要把下方旧“尚未部署／未提交／待跑完整门禁”当作当前状态。UI 入口在整个个人摘要管理区顶部、人物目录列表之前，不在每位历史 Owner 的事项簿下面；无活动对话会显示说明。
 
 ## 原机器停止时的历史快照
 

@@ -4,7 +4,7 @@ V9.3.9.1 为当前本地修复候选，范围仅限当前对话的定向人物�
 
 ## 推荐阅读顺序
 
-继续未完成的 V9.3.9.1 工作时，先读 [交接记录](current/v9/V9_3_9_1_HANDOFF.md)：它保留原停止时工作区、构建与验证状态；本轮新增的 GitHub／失败 CI 授权及实际结果另行记录。
+接手 V9.3.9.1 时先读[实施报告](current/v9/V9_3_9_1_IMPLEMENTATION_REPORT.md)的本轮收口结果：代码 `a0748aa` 的 [CI 39131470796](https://github.com/wsdsb-111/VOCT-NEW/actions/runs/39131470796) 已通过 459 组回归；298 项资源已部署一致，最终隔离 UI 与重启／三主题检查通过。[交接记录](current/v9/V9_3_9_1_HANDOFF.md)保留原机器停止快照，真实 CK3／Provider／Soak 和原年龄 +1 仍分别待验收。
 
 1. [V9.3.9.1 修复报告](current/v9/V9_3_9_1_IMPLEMENTATION_REPORT.md)：P0 定向披露、P1 年龄边界、P2 母亲身份证据及验证结果；[V9.3.9 报告](current/v9/V9_3_9_IMPLEMENTATION_REPORT.md)为历史基线。
 2. [源码与构建](current/v9/V9_1_SOURCE_BUILD.md)：先编辑 src/app，再构建和验证生成资源。
