@@ -1,9 +1,11 @@
 "use strict";
 
 const crypto = require("crypto");
+const { inferGenderFromPronoun } = require("../game-data/character");
+const { createRelationshipResolver } = require("../game-data/relationship-resolver");
 const { resolveCharacterAge } = require("./character-age-service");
 const { normalizeSpouseRecords } = require("./canonical-spouse-record");
-const { getCachedKinshipGraph } = require("./kinship-graph-cache");
+const { getCachedKinshipGraph, getTargetedKinshipGraph } = require("./kinship-graph-cache");
 const { formatDeathFact, resolveLifeStatus } = require("./character-temporal-facts");
 const { resolveKinshipLabel } = require("./kinship-label-resolver");
 const { resolveCharacterSexConsensus } = require("./character-demographic-normalizer");
@@ -183,6 +185,152 @@ function buildParentQuery(character, graph, query, metrics, gameData) {
   return `=== 当前结构化家庭事实（本轮 CK3 数据） ===\n- ${line}\n权威规则：本块只提供有公开来源的定向双亲事实，不代表角色知道其他私人经历或秘密；不得补造未知父母，不得由共同子女推断父母彼此为配偶。`;
 }
 
+function currentAgeSnapshotMatches(ageAuthorityGameData, projectedGameData) {
+  if (!ageAuthorityGameData || !projectedGameData) return false;
+  const isValidSnapshot = gameData => Number.isSafeInteger(Number(gameData.totalDays)) && Number(gameData.totalDays) >= 0
+    && typeof gameData.date === "string" && !!gameData.date.trim()
+    && typeof gameData.campaignToken === "string" && !!gameData.campaignToken.trim();
+  return isValidSnapshot(ageAuthorityGameData) && isValidSnapshot(projectedGameData)
+    && ageAuthorityGameData.campaignToken === projectedGameData.campaignToken
+    && ageAuthorityGameData.date === projectedGameData.date
+    && Number(ageAuthorityGameData.totalDays) === Number(projectedGameData.totalDays);
+}
+
+function buildTrustedSeniorityContext(ageAuthorityGameData, projectedGameData, seedIds, projectedGraph) {
+  if (!currentAgeSnapshotMatches(ageAuthorityGameData, projectedGameData)
+    || !Array.isArray(seedIds) || !seedIds.length || !projectedGraph?.nodes || !Array.isArray(projectedGraph.edges)) return null;
+  const currentTotalDays = Number(projectedGameData.totalDays);
+  const rawGraph = getTargetedKinshipGraph(ageAuthorityGameData, [...new Set(seedIds.map(String))], { maxDepth: 3, maxNodes: 4096 });
+  if (rawGraph.scopeTruncated) return null;
+  const projectedEdgeKeys = new Set(projectedGraph.edges.map(edge => `${edge.type}:${edge.from}:${edge.to}`));
+  const hasProjectedEdge = (ownerId, entryId, field) => {
+    const owner = String(ownerId), target = String(entryId);
+    const type = field === "parents" ? "CHILD_OF" : field === "children" ? "PARENT_OF" : "SIBLING_OF";
+    return projectedEdgeKeys.has(`${type}:${owner}:${target}`);
+  };
+  const ageAuthorityNodes = new Map();
+  for (const [id, character] of rawGraph.nodes) {
+    const characterId = String(character?.id ?? id);
+    if (!projectedGraph.nodes.has(characterId)) continue;
+    const ageOnlyCharacter = { ...character };
+    for (const field of ["parents", "children", "siblings"]) {
+      const entries = Array.isArray(character?.[field]) ? character[field] : field === "parents" && character?.parents && typeof character.parents === "object"
+        ? Object.values(character.parents) : [];
+      ageOnlyCharacter[field] = entries.filter(entry => {
+        const entryId = entry && typeof entry === "object" ? entry.id ?? entry.runtimeId ?? entry.characterId : entry;
+        const targetId = entryId === null || entryId === undefined ? "" : String(entryId);
+        return targetId && projectedGraph.nodes.has(targetId) && hasProjectedEdge(characterId, targetId, field);
+      });
+    }
+    ageAuthorityNodes.set(characterId, ageOnlyCharacter);
+  }
+  const profiles = createRelationshipResolver().buildCanonicalProfiles(ageAuthorityNodes, currentTotalDays, inferGenderFromPronoun, {
+    campaignToken: projectedGameData.campaignToken,
+    sourceSnapshotId: `${projectedGameData.date}/${projectedGameData.totalDays}`
+  });
+  const profileFor = id => profiles.get(Number(id)) || profiles.get(String(id)) || null;
+  const ageById = new Map();
+  for (const [id, profile] of profiles) {
+    if (!profile || profile.ageEvidenceConflict === true || profile.evidence?.conflicts?.age === true
+      || profile.evidence?.conflicts?.lifeStatus === true) continue;
+    const life = resolveLifeStatus(profile);
+    if (life.conflict || life.alive === false) continue;
+    const age = resolveCharacterAge(profile, {
+      currentGameDate: projectedGameData.date,
+      currentTotalDays: projectedGameData.totalDays,
+      currentCampaignToken: projectedGameData.campaignToken
+    });
+    if (age.age !== null && !age.sourceConflict && ["CK3_CURRENT_AGE", "CK3_LIVE_RELATIVE_AGE"].includes(age.ageSource)) {
+      ageById.set(String(id), age.age);
+    }
+  }
+  const birthOrdinal = (profile, id) => {
+    if (!profile || profile.evidence?.conflicts?.birthDate === true || profile.evidence?.resolvedBirthSource !== "characters") return null;
+    const evidence = (profile.evidence.birthDate || []).filter(item => item.priority === 1
+      && Number(item.sourceOwnerId) === Number(id) && item.relationType === "canonical" && item.source === "characters");
+    const values = [...new Set(evidence.map(item => Number(item.value))
+      .filter(value => Number.isSafeInteger(value) && value >= 0 && value <= currentTotalDays))];
+    return values.length === 1 ? values[0] : null;
+  };
+  return {
+    compare(subjectId, referenceId) {
+      const subjectAge = ageById.get(String(subjectId));
+      const referenceAge = ageById.get(String(referenceId));
+      if (!Number.isInteger(subjectAge) || !Number.isInteger(referenceAge)) return null;
+      if (subjectAge !== referenceAge) return subjectAge > referenceAge ? 1 : -1;
+      const subject = profileFor(subjectId);
+      const reference = profileFor(referenceId);
+      const subjectBirth = birthOrdinal(subject, subjectId);
+      const referenceBirth = birthOrdinal(reference, referenceId);
+      if (subjectBirth !== null && referenceBirth !== null && subjectBirth !== referenceBirth) return subjectBirth < referenceBirth ? 1 : -1;
+      return null;
+    }
+  };
+}
+
+function resolveAgeBoundAmbiguousRelation(relationResolution, graph, ageAuthorityGameData, projectedGameData) {
+  if (relationResolution?.status !== "RELATION_AMBIGUOUS"
+    || !["older", "younger"].includes(relationResolution.intent?.birthOrder)
+    || !["BIRTH_ORDER_UNAVAILABLE", "ANCHOR_BIRTH_ORDER_UNAVAILABLE", "CANDIDATE_BIRTH_ORDER_UNAVAILABLE"].includes(relationResolution.reason)) return relationResolution;
+  const candidates = relationResolution.candidates || [];
+  if (!candidates.length || relationResolution.candidateTotal !== candidates.length) return relationResolution;
+  const anchorId = relationResolution.relationAnchorRuntimeId;
+  const rows = candidates.map(candidate => {
+    const runtimeId = String(candidate.runtimeId);
+    const result = typeof graph.relationBetweenOfTypes === "function"
+      ? graph.relationBetweenOfTypes(runtimeId, anchorId, relationResolution.intent.relationTypes)
+      : graph.relationBetween(runtimeId, anchorId);
+    const relation = result?.relation;
+    const referenceId = relation?.type === "AUNT_UNCLE_OF"
+      ? relation.seniorityReferenceId ?? relation.relationPath?.[1]
+      : anchorId;
+    return { candidate, relation, referenceId, valid: !result?.diagnostic && !!relation && referenceId != null };
+  });
+  if (rows.some(row => !row.valid)) return relationResolution;
+  const seniority = buildTrustedSeniorityContext(ageAuthorityGameData, projectedGameData,
+    rows.flatMap(row => [row.candidate.runtimeId, row.referenceId]), graph);
+  if (!seniority) return relationResolution;
+  for (const row of rows) {
+    row.order = seniority.compare(row.candidate.runtimeId, row.referenceId);
+    if (row.order === null) return relationResolution;
+  }
+  const matches = rows.filter(row => relationResolution.intent.birthOrder === "older" ? row.order > 0 : row.order < 0);
+  if (!matches.length) return { ...relationResolution, status: "RELATION_UNKNOWN", candidates: [], candidateTotal: 0, reason: "NO_CURRENT_AGE_ORDER_MATCH" };
+  if (matches.length > 1) return { ...relationResolution, candidates: matches.map(row => row.candidate), candidateTotal: matches.length, reason: "MULTIPLE_RELATION_CANDIDATES" };
+  const selected = matches[0];
+  const target = graph.nodes.get(String(selected.candidate.runtimeId)) || { id: selected.candidate.runtimeId };
+  const relation = { ...selected.relation, seniority: selected.order, seniorityReferenceId: String(selected.referenceId) };
+  return {
+    ...relationResolution,
+    status: "RELATION_RESOLVED",
+    targetRuntimeId: String(selected.candidate.runtimeId),
+    target: { runtimeId: String(selected.candidate.runtimeId), name: characterName(target, selected.candidate.runtimeId),
+      sex: resolveCharacterSexConsensus({ snapshot: target }).sex, sexConflict: false },
+    relation,
+    candidates: [selected.candidate],
+    candidateTotal: 1,
+    resolution: { status: "RELATION_RESOLVED", source: relationResolution.anchor?.source, candidateTotal: rows.length }
+  };
+}
+
+function resolveTrustedKinshipLabel(relation, sex, seniority, graph) {
+  const step = relation.relationshipKind === "STEP" || relation.type === "STEP_SIBLING_OF";
+  if (relation.type === "SIBLING_OF" || relation.type === "STEP_SIBLING_OF") {
+    if (step) return sex === "male" ? seniority > 0 ? "继兄" : seniority < 0 ? "继弟" : "继兄弟"
+      : sex === "female" ? seniority > 0 ? "继姐" : seniority < 0 ? "继妹" : "继姐妹" : "继兄弟姐妹";
+    return sex === "male" ? seniority > 0 ? "哥哥" : seniority < 0 ? "弟弟" : "兄弟"
+      : sex === "female" ? seniority > 0 ? "姐姐" : seniority < 0 ? "妹妹" : "姐妹"
+        : seniority > 0 ? "年长手足" : seniority < 0 ? "年幼手足" : "手足";
+  }
+  const label = resolveKinshipLabel({ ...relation, sex, seniority });
+  if (relation.type !== "AUNT_UNCLE_OF" || seniority === null) return label;
+  const reference = relation.seniorityReferenceId ?? relation.relationPath?.[1];
+  const branch = relation.branch;
+  const parentLabel = branch === "PATERNAL" ? "父亲" : branch === "MATERNAL" ? "母亲" : null;
+  if (!parentLabel || reference == null || !graph.nodes.has(String(reference))) return label;
+  return `${label}（比${parentLabel}${seniority > 0 ? "年长" : "年幼"}）`;
+}
+
 function buildFamilyFactBlock(character, gameData, { query = "", recentTargetId = null, currentFactRegistry = null, ageAuthorityGameData = null, ageDiagnostics = null, familyDiagnostics = null } = {}) {
   if (!character?.id || !gameData) return null;
   const started = performance.now();
@@ -207,6 +355,9 @@ function buildFamilyFactBlock(character, gameData, { query = "", recentTargetId 
   let relationResolution = query ? resolveAnchoredRelationMention({ query, responderId: character.id, graph, recentTargetId }) : null;
   // A family inventory is not a request to select one ambiguous person.
   if (relationResolution?.status === "NO_RELATION_INTENT") relationResolution = null;
+  if (relationResolution?.status === "RELATION_AMBIGUOUS") {
+    relationResolution = resolveAgeBoundAmbiguousRelation(relationResolution, graph, ageAuthorityGameData, gameData);
+  }
   if (relationResolution?.intent?.sourcePhrase) {
     console.log(`[VOTC Relation] query=${String(query).replace(/\s+/g, " ").trim()} intent=${relationResolution.intent.relationTypes.join(",") || "NONE"} sex=${relationResolution.intent.sexConstraint || "unknown"} anchorMention=${relationResolution.anchor.mention || "-"} anchorRuntimeId=${relationResolution.relationAnchorRuntimeId || "-"} targetRuntimeId=${relationResolution.targetRuntimeId || "-"} targetName=${relationResolution.target?.name || "-"} resolution=${relationResolution.status}`);
   }
@@ -214,7 +365,8 @@ function buildFamilyFactBlock(character, gameData, { query = "", recentTargetId 
   const selectedTargetId = canUseSourceAge ? String(relationResolution.targetRuntimeId) : null;
   let selectedAge = null;
   if (canUseSourceAge) {
-    const sourceCharacter = sourceBoundFamilyProfile(ageAuthorityGameData, selectedTargetId, relationResolution);
+    const sourceCharacter = currentAgeSnapshotMatches(ageAuthorityGameData, gameData)
+      ? sourceBoundFamilyProfile(ageAuthorityGameData, selectedTargetId, relationResolution) : null;
     selectedAge = resolveCharacterAge(sourceCharacter || {}, {
       currentGameDate: ageAuthorityGameData?.date ?? gameData.date,
       currentTotalDays: ageAuthorityGameData?.totalDays ?? gameData.totalDays,
@@ -250,6 +402,8 @@ function buildFamilyFactBlock(character, gameData, { query = "", recentTargetId 
     && relationResolution.status === "RELATION_RESOLVED"
     ? graph.relationsTo(relationResolution.relationAnchorRuntimeId).filter((edge) => String(edge.from) === String(relationResolution.targetRuntimeId) && relationResolution.intent.relationTypes.includes(edge.type))
     : graph.relationsTo(character.id).filter((edge) => DISPLAY_TYPES.has(edge.type) && (!query || ["PARENT_OF", "CHILD_OF", "SIBLING_OF", "SPOUSE_OF"].includes(edge.type))));
+  const seniorityContext = buildTrustedSeniorityContext(ageAuthorityGameData, gameData,
+    [character.id, relationResolution?.relationAnchorRuntimeId || character.id, ...relations.map(edge => edge.from)], graph);
   const seen = new Set();
   const lines = [];
   for (const edge of relations) {
@@ -266,13 +420,21 @@ function buildFamilyFactBlock(character, gameData, { query = "", recentTargetId 
       ? graph.relationBetweenOfTypes(edge.from, relationAnchorId, relationResolution.intent.relationTypes)
       : graph.relationBetween(edge.from, relationAnchorId);
     if (!resolution.relation) continue;
+    const seniorityReferenceId = resolution.relation.type === "AUNT_UNCLE_OF"
+      ? resolution.relation.seniorityReferenceId ?? resolution.relation.relationPath?.[1]
+      : relationAnchorId;
+    const trustedOrder = seniorityReferenceId == null ? null : seniorityContext?.compare(edge.from, seniorityReferenceId) ?? null;
+    const trustedRelation = { ...resolution.relation, seniority: trustedOrder,
+      ...(seniorityReferenceId == null ? {} : { seniorityReferenceId: String(seniorityReferenceId) }) };
     const bundle = buildFamilyEntityFactBundle({ graph, responderId: character.id, relationAnchorId, targetRuntimeId: edge.from, relationTypes: relationResolution?.intent?.relationTypes || null, temporal });
     if (!bundle) continue;
     const currentFact = resolveRelationshipCurrentTruth({ gameData, subjectRuntimeId: edge.from, anchorRuntimeId: relationAnchorId, registry: currentFactRegistry, kinshipGraph: graph });
     const sex = { sex: currentFact?.currentState?.sex || "unknown", conflict: currentFact?.evidence?.conflicts?.length > 0 };
-    const label = edge.relationshipKind === "STEP" || edge.type.startsWith("STEP_")
-      ? resolveKinshipLabel({ type: edge.type, sex: "unknown", branch: edge.branch, relationshipKind: "STEP" })
-      : currentFact?.relations[String(relationAnchorId)]?.label || resolveKinshipLabel({ type: edge.type, sex: "unknown", branch: edge.branch, relationshipKind: edge.relationshipKind });
+    const label = trustedOrder !== null
+      ? resolveTrustedKinshipLabel(trustedRelation, sex.sex, trustedOrder, graph)
+      : edge.relationshipKind === "STEP" || edge.type.startsWith("STEP_")
+        ? resolveTrustedKinshipLabel(trustedRelation, "unknown", null, graph)
+        : currentFact?.relations[String(relationAnchorId)]?.label || resolveKinshipLabel({ type: edge.type, sex: "unknown", branch: edge.branch, relationshipKind: edge.relationshipKind });
     const death = bundle.death ? { fact: bundle.death, text: formatDeathFact(relative, { ...temporal, characters: graph.nodes })?.text || "已故" } : null;
     const lifeStatus = resolveLifeStatus(relative);
     const age = selectedTargetId === String(edge.from) && selectedAge ? selectedAge : { age: bundle.age, label: bundle.ageLabel };
@@ -293,7 +455,8 @@ function buildFamilyFactBlock(character, gameData, { query = "", recentTargetId 
     if (!death && age.age !== null) details.push(`${age.age}岁`);
     if (relationResolution?.status === "RELATION_RESOLVED") {
       const anchor = graph.nodes.get(String(relationAnchorId)) || {};
-      lines.push(`- 查询关系主体：${characterName(anchor, relationAnchorId)}；查询关系：${relationResolution.intent.label || label}；目标人物：${characterName(relative, edge.from)}（Runtime ID：${edge.from}；性别：${sex.sex === "male" ? "男性" : sex.sex === "female" ? "女性" : "未知"}${details.length ? `；${details.join("；")}` : ""}）`);
+      const useAgeAwareLabel = trustedOrder !== null && ["SIBLING_OF", "STEP_SIBLING_OF", "COUSIN_OF", "AUNT_UNCLE_OF"].includes(resolution.relation.type);
+      lines.push(`- 查询关系主体：${characterName(anchor, relationAnchorId)}；查询关系：${useAgeAwareLabel ? label : relationResolution.intent.label || label}；目标人物：${characterName(relative, edge.from)}（Runtime ID：${edge.from}；性别：${sex.sex === "male" ? "男性" : sex.sex === "female" ? "女性" : "未知"}${details.length ? `；${details.join("；")}` : ""}）`);
     } else {
       lines.push(`- ${label}：${characterName(relative, edge.from)}${details.length ? `（${details.join("；")}）` : ""}`);
     }

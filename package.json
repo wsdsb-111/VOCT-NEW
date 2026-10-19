@@ -1,7 +1,7 @@
 {
   "name": "votc-build-workspace",
   "private": true,
-  "version": "9.3.9.1",
+  "version": "9.3.9.2",
   "engines": { "node": ">=22" },
   "scripts": {
     "build": "node scripts/build-runtime.js",

@@ -60,7 +60,7 @@ function makeFixture({ fatherProofPatch = {}, motherProofPatches = new Map(), se
     traits: [
       { traitId: "scarred", name: "伤疤" },
       { traitId: "witch", name: "巫师" },
-      { traitId: "bastard", name: "私生子" }
+      { traitId: "deceitful", name: "狡诈" }
     ],
     parents: youngerParents
   };
@@ -125,7 +125,7 @@ function testPresenceScopedObservableAccess() {
 function testCurrentPublicCloseFamilyAccess() {
   const { gameData, father, wife, concubine, elder, younger, stranger } = makeFixture();
   assert.deepEqual(getAutomaticTraitAccess(father, younger, gameData), {
-    source: "PUBLIC_CLOSE_FAMILY", traitKeys: ["trait_scarred", "trait_witch", "trait_bastard"]
+    source: "PUBLIC_CLOSE_FAMILY", traitKeys: ["trait_scarred", "trait_witch", "trait_deceitful"]
   }, "a current public parent-child edge supplies intrinsic family knowledge of target traits");
   assert.equal(getAutomaticTraitAccess(wife, elder, gameData).source, "PUBLIC_CLOSE_FAMILY",
     "a current public kids.otherParent row supplies a parent-child edge");
@@ -139,10 +139,10 @@ function testCurrentPublicCloseFamilyAccess() {
   const hidden = new Map([[younger.id, [fact(father.id, younger.id, "trait_witch", "MANUAL_HIDDEN", false)]]]);
   const familyContext = { gameData, campaignToken: CAMPAIGN, currentGameDate: DATE, disclosureProfiles: hidden };
   assert.deepEqual(getTraitsForKnownProfile(father, younger, familyContext).map(trait => trait.traitId),
-    ["scarred", "witch", "bastard"], "public close-family automatic access precedes manual hidden fallback");
-  const noAutomatic = new Map([[younger.id, [fact(wife.id, younger.id, "trait_bastard", "MANUAL_KNOWN")]]]);
+    ["scarred", "witch", "deceitful"], "public close-family automatic access precedes manual hidden fallback");
+  const noAutomatic = new Map([[younger.id, [fact(wife.id, younger.id, "trait_deceitful", "MANUAL_KNOWN")]]]);
   const manualContext = { gameData, campaignToken: CAMPAIGN, currentGameDate: DATE, disclosureProfiles: noAutomatic };
-  assert.deepEqual(getTraitsForKnownProfile(wife, younger, manualContext).map(trait => trait.traitId), ["bastard"],
+  assert.deepEqual(getTraitsForKnownProfile(wife, younger, manualContext).map(trait => trait.traitId), ["deceitful"],
     "a directed manual disclosure remains the fallback without automatic family access");
 }
 

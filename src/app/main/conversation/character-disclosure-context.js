@@ -48,4 +48,35 @@ function buildCharacterDisclosureContext({ service, gameData, responderId, targe
     characterKnowledgeRevision: crypto.createHash("sha256").update(JSON.stringify(manifest)).digest("hex") };
 }
 
-module.exports = { buildCharacterDisclosureContext };
+function formatKnownNameFacts(memoryContext, gameData, responderId) {
+  const ownerId = Number(responderId);
+  const campaignToken = gameData?.campaignToken;
+  const currentDate = normalizeGameDate(gameData?.date);
+  const profiles = memoryContext?.disclosureProfiles;
+  if (!Number.isSafeInteger(ownerId) || ownerId < 1 || typeof campaignToken !== "string" || !campaignToken.trim()
+    || !currentDate || !(profiles instanceof Map) || !/^[a-f0-9]{64}$/.test(memoryContext.characterKnowledgeRevision || "")
+    || !Array.isArray(memoryContext.disclosureTargetIds)) return "";
+  const targetIds = new Set(memoryContext.disclosureTargetIds.map(Number));
+  const namesByTarget = new Map();
+  for (const [rawTargetId, facts] of profiles) {
+    const targetId = Number(rawTargetId);
+    if (!Number.isSafeInteger(targetId) || targetId < 1 || targetId === ownerId || !targetIds.has(targetId) || !Array.isArray(facts)) continue;
+    for (const fact of facts) {
+      const acquiredDate = normalizeGameDate(fact?.firstAcquiredDate);
+      const value = typeof fact?.value === "string" ? fact.value.replace(/[\u0000-\u001f\u007f]/gu, " ").replace(/\s+/gu, " ").trim() : "";
+      if (fact?.factType !== "NAME" || fact.ownerId !== ownerId || fact.entityId !== targetId
+        || fact.campaignToken !== campaignToken || fact.current !== true || fact.effectiveKnown !== true
+        || !["AUTO_DISCLOSED", "MANUAL_KNOWN"].includes(fact.status) || fact.sourceStatus !== "CURRENT"
+        || !/^[a-f0-9]{64}$/.test(fact.sourceSnapshotId || "") || !/^fact:[a-f0-9]{64}$/.test(fact.factSourceSnapshotId || "")
+        || !acquiredDate || acquiredDate.serial > currentDate.serial || !value || value.length > 120) continue;
+      if (!namesByTarget.has(targetId)) namesByTarget.set(targetId, new Set());
+      namesByTarget.get(targetId).add(value);
+    }
+  }
+  if (!namesByTarget.size) return "";
+  const lines = [...namesByTarget].sort(([left], [right]) => left - right)
+    .flatMap(([targetId, names]) => [...names].sort().map(value => `- Target Runtime ID ${targetId}: ${value}`));
+  return `=== 本角色已获知的姓名 ===\n${lines.join("\n")}\n以上事实只表示本角色已获知所列目标的具体姓名；不得声称尚未获知该姓名。仅知道姓名不证明已有交情、认得面孔或其他经历，也不证明头衔、特质或秘密。`;
+}
+
+module.exports = { buildCharacterDisclosureContext, formatKnownNameFacts };

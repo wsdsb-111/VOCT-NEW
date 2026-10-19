@@ -1,0 +1,28 @@
+- generic [ref=e2]:
+  - generic:
+    - generic:
+      - button "-" [ref=e3]
+      - generic [ref=e4]:
+        - generic [ref=e17]:
+          - generic [ref=e18]: System
+          - paragraph [ref=e21]: 我叫阿甲，人称我铁腕，如今是公爵。
+        - generic [ref=e22]:
+          - generic [ref=e23]: 会话人物
+          - generic [ref=e24]:
+            - generic [ref=e25]:
+              - generic [ref=e26]: 阿乙
+              - generic [ref=e27]:
+                - combobox [ref=e28] [cursor=pointer]:
+                  - option "暂时离场…" [disabled] [selected]
+                  - option "昏迷"
+                  - option "睡着"
+                  - option "暂时离开"
+                - button "须保留一人" [disabled] [ref=e29]
+            - generic [ref=e30]:
+              - generic [ref=e31]: 阿丁
+              - button "请入内" [ref=e32] [cursor=pointer]
+        - generic [ref=e33]:
+          - textbox "Write a message..." [ref=e35]
+          - generic [ref=e36]:
+            - button "End Conversation" [ref=e37]
+            - button "⚙️" [ref=e38]

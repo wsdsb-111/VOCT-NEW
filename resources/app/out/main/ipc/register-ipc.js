@@ -847,8 +847,8 @@ function registerIpcHandlers(runtime) {
       if (!conversation) {
         throw new Error("No active conversation");
       }
-      await conversation.regenerateMessage(messageId);
-      return { success: true };
+      const result = await conversation.regenerateMessage(messageId);
+      return result === undefined ? { success: true } : result;
     } catch (error) {
       console.error("IPC: Failed to regenerate message:", error);
       return {
@@ -883,8 +883,8 @@ function registerIpcHandlers(runtime) {
       if (!conversation) {
         throw new Error("No active conversation");
       }
-      await conversationManager.regenerateError(messageId);
-      return { success: true };
+      const result = await conversationManager.regenerateError(messageId);
+      return result === undefined ? { success: true } : result;
     } catch (error) {
       console.error("IPC: Failed to regenerate error:", error);
       return {

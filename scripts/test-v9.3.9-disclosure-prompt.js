@@ -33,7 +33,7 @@ assert(!JSON.stringify(view).includes("witch"), "unmentioned secret traits stay 
 status = "MANUAL_HIDDEN";
 revision++;
 const hidden = build();
-assert.notEqual(hidden.characterKnowledgeRevision, known.characterKnowledgeRevision, "same-checkpoint manual changes invalidate the transport/prefix signature");
+assert.notEqual(hidden.characterKnowledgeRevision, known.characterKnowledgeRevision, "same-checkpoint manual changes invalidate the disclosure transport guard revision");
 const hiddenView = createTraitProfileView(data, owner, hidden).gameData.characters.get(1);
 assert.equal(hiddenView.traits.length, 0);
 assert.equal(hiddenView.primaryTitle, "");

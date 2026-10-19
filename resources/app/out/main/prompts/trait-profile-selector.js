@@ -76,7 +76,8 @@ function directParentCandidates(child, parent, childId, parentId) {
 function hasCurrentPublicParent(gameData, childId, parentId) {
   const child = characterAt(gameData, childId);
   const parent = characterAt(gameData, parentId);
-  if (!child || !parent) return false;
+  // A current CK3 parent row remains proof when that parent is not a speaker.
+  if (!child) return false;
   const candidates = directParentCandidates(child, parent, childId, parentId);
   if (!candidates.length) return false;
   const accepts = currentDirectParentFilter(gameData);
@@ -147,15 +148,29 @@ function publicParentsOf(gameData, character) {
 }
 
 function isPublicCloseFamily(observerId, targetId, gameData) {
-  if (hasCurrentPublicParent(gameData, observerId, targetId)
-    || hasCurrentPublicParent(gameData, targetId, observerId)) return true;
   const observer = characterAt(gameData, observerId);
   const target = characterAt(gameData, targetId);
   if (!observer || !target) return false;
   const observerParents = publicParentsOf(gameData, observer);
   const targetParents = publicParentsOf(gameData, target);
-  if (observerParents.has(targetId) || targetParents.has(observerId)) return true;
+  const isBastard = person => getTraitsForSelfProfile(person).some(trait =>
+    ["bastard", "legitimized_bastard"].includes(normalizeTraitKey(trait)));
+  // The whitelist is not a route for biological-parent disclosure of a bastard.
+  if (observerParents.has(targetId) && !isBastard(observer)
+    || targetParents.has(observerId) && !isBastard(target)) return true;
   for (const parentId of observerParents) if (targetParents.has(parentId)) return true;
+  // The current CK3 siblings row is independent proof even when no parent row
+  // is available. Its parser evidence binds the row to this owner and snapshot.
+  const siblingRows = [[observer, targetId], [target, observerId]].flatMap(([owner, otherId]) =>
+    (Array.isArray(owner.siblings) ? owner.siblings : []).filter(row => runtimeCharacterId(row) === otherId)
+      .map(row => ({ ownerId: runtimeCharacterId(owner), row })));
+  if (siblingRows.length && typeof gameData.campaignToken === "string" && gameData.campaignToken
+    && normalizeGameDate(gameData.date) && Number.isFinite(gameData.totalDays)
+    && siblingRows.every(({ ownerId, row }) => !explicitStepRelationship(row) && !row.evidenceConflict
+      && (row.evidence?.age || []).some(proof => proof.ageSource === "CK3_LIVE_RELATIVE_AGE"
+        && Number(proof.sourceOwnerId) === ownerId && proof.relationType === "sibling"
+        && proof.source === `${ownerId}.siblings` && proof.campaignToken === gameData.campaignToken
+        && proof.sourceSnapshotId === `${gameData.date}/${gameData.totalDays}`))) return true;
   return false;
 }
 
@@ -211,6 +226,7 @@ function scopedDisclosureFacts(observer, target, context) {
 
 function knownTitle(observer, target, value, context) {
   if (!value || /^none(?:\s|$)|^concept_none$/i.test(value)) return "";
+  if (isPublicCloseFamily(runtimeCharacterId(observer), runtimeCharacterId(target), context.gameData)) return value;
   const normalize = text => String(text).normalize("NFKC").trim();
   const facts = scopedDisclosureFacts(observer, target, context).filter(fact => fact.factType === "TITLE"
     && (normalize(fact.value) === normalize(value)
@@ -340,10 +356,12 @@ function createTraitProfileView(gameData, character, memoryContext = null, { inc
               ? String(value[key] || "").split(/[,，、;；\n|]/).map(title => knownTitle(observer, value, title.trim(), knowledge)).filter(Boolean).join("、")
               : knownTitle(observer, value, String(value[key] || ""), knowledge);
           }
-          const personalName = getCharacterPersonalName(gameData?.characters?.get(Number(value.id)) || value, value.name);
-          if ("name" in result) result.name = personalName;
-          result.shortName = personalName;
-          result.fullName = value.nickname ? `${personalName} '${value.nickname}'` : personalName;
+          if (!isPublicCloseFamily(runtimeCharacterId(observer), runtimeCharacterId(value), gameData)) {
+            const personalName = getCharacterPersonalName(gameData?.characters?.get(Number(value.id)) || value, value.name);
+            if ("name" in result) result.name = personalName;
+            result.shortName = personalName;
+            result.fullName = value.nickname ? `${personalName} '${value.nickname}'` : personalName;
+          }
           for (const key of PRIVATE_FIELDS) delete result[key];
           for (const key of ["secrets", "knownSecrets", "memories", "conversationSummaries"]) if (key in result) result[key] = [];
         }
@@ -373,4 +391,4 @@ function createTraitProfileView(gameData, character, memoryContext = null, { inc
 }
 
 module.exports = { NON_OBSERVABLE_TO_OTHERS, OBSERVABLE_TO_OTHERS, normalizeTraitKey, getTraitAliases, resolveTraitVisibility,
-  getTraitsForSelfProfile, getTraitsForObservedProfile, getAutomaticTraitAccess, getTraitsForKnownProfile, createTraitProfileView };
+  getTraitsForSelfProfile, getTraitsForObservedProfile, isPublicCloseFamily, getAutomaticTraitAccess, getTraitsForKnownProfile, createTraitProfileView };

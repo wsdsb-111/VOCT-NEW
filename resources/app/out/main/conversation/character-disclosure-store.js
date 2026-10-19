@@ -7,7 +7,7 @@ const nodePath = require("node:path");
 const crypto = require("node:crypto");
 const { normalizeGameDate } = require("../worldline/character-temporal-facts");
 const { normalizeTraitKey, resolveTraitVisibility } = require("../prompts/trait-visibility-policy");
-const { getAutomaticTraitAccess } = require("../prompts/trait-profile-selector");
+const { getAutomaticTraitAccess, isPublicCloseFamily } = require("../prompts/trait-profile-selector");
 const { sourceParagraphSegments, validateSourceItem } = require("../memory-system/finalization-visibility");
 const { extractCharacterDisclosures, getDisclosureFactCandidates } = require("./character-disclosure-extraction");
 
@@ -139,6 +139,7 @@ class ConversationDisclosureStore {
     const nativeKnown = new Set((owner?.knownSecrets || []).filter(secret => String(secret.ownerId) === targetId)
       .map(secret => SECRET_TRAITS[secret.type]).filter(Boolean));
     const automatic = getAutomaticTraitAccess(owner, target, frame.data, { activeParticipantIds: frame.activeParticipantIds });
+    const closeFamily = isPublicCloseFamily(Number(ownerId), Number(targetId), frame.data);
     return getDisclosureFactCandidates(target).flatMap(candidate => {
       const record = state.records.find(item => identity(item) === identity({ ...candidate, campaignToken: frame.scope.campaignToken,
         ownerRuntimeId: ownerId, targetRuntimeId: targetId }));
@@ -152,7 +153,8 @@ class ConversationDisclosureStore {
         this._evidenceCurrent(frame, item, ownerId, targetId, { ...candidate, factSourceSnapshotId }, state, nextVisited));
       const native = candidate.factType === "TRAIT" && nativeKnown.has(normalizeTraitKey(candidate.canonicalKey || candidate.factKey.slice(6)));
       const publicNickname = candidate.factType === "NICKNAME";
-      const intrinsic = publicNickname || candidate.factType === "TRAIT" && automatic.traitKeys.includes(candidate.factKey);
+      const familyFact = closeFamily && ["NAME", "TITLE", "TRAIT"].includes(candidate.factType);
+      const intrinsic = publicNickname || familyFact || candidate.factType === "TRAIT" && automatic.traitKeys.includes(candidate.factKey);
       const status = intrinsic ? "AUTO_DISCLOSED" : manual?.status || (evidence.length || native ? "AUTO_DISCLOSED" : "UNKNOWN");
       const observable = candidate.factType === "TRAIT" && resolveTraitVisibility(candidate.canonicalKey || candidate.factKey.slice(6)).status === "OBSERVABLE";
       // The player can explicitly disclose their own traits. Other people's
@@ -162,7 +164,7 @@ class ConversationDisclosureStore {
       return [{ ...candidate, status, effectiveKnown: status === "AUTO_DISCLOSED" || status === "MANUAL_KNOWN",
         current: true, currentDirectObservation: intrinsic, hasDisclosureRecord: evidence.length > 0,
         source: intrinsic ? publicNickname ? evidence.length ? "CONVERSATION_DISCLOSURE" : "PUBLIC_NICKNAME"
-          : automatic.source === "OBSERVABLE" ? "IN_PERSON_OBSERVATION" : automatic.source
+          : familyFact ? "PUBLIC_CLOSE_FAMILY" : automatic.source === "OBSERVABLE" ? "IN_PERSON_OBSERVATION" : automatic.source
           : manual ? "MANUAL" : native ? "GAME_DATA_KNOWN_SECRET" : evidence.length ? "CONVERSATION_DISCLOSURE" : "UNDISCLOSED",
         sourceSnapshotId: frame.scope.sourceSnapshotId, factSourceSnapshotId,
         firstAcquiredDate: intrinsic ? evidence[0]?.gameDate || frame.data.date : manual?.acquiredDate || evidence[0]?.gameDate || (native ? frame.data.date : null),

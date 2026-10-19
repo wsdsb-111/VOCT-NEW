@@ -688,7 +688,7 @@ function createGameData({ fs, path, memorySystem, memoryEngine, summariesDir, ge
      * character mentioned in the dialogue. The active pair therefore still saw
      * CK3's ambiguous raw `brother` / `sister` relation in the main prompt.
     */
-    getActiveParticipantRelationshipInfo(activeCharacter, counterpartIds = [], currentFactRegistry = null) {
+    getActiveParticipantRelationshipInfo(activeCharacter, counterpartIds = [], currentFactRegistry = null, preRedactionKinshipLabels = null) {
       if (!activeCharacter) return "";
       const counterpartIdSet = /* @__PURE__ */ new Set([this.playerID, ...counterpartIds]);
       counterpartIdSet.delete(activeCharacter.id);
@@ -706,8 +706,13 @@ function createGameData({ fs, path, memorySystem, memoryEngine, summariesDir, ge
         return "无明确正式关系";
       };
       const getKinship = (subject, other) => {
+        const pairKey = `${Number(subject.id)}:${Number(other.id)}`;
         const fact = resolveRelationshipCurrentTruth({ gameData: this, subjectRuntimeId: subject.id, anchorRuntimeId: other.id, registry: currentFactRegistry });
         const relation = fact?.relations?.[String(other.id)];
+        if (preRedactionKinshipLabels instanceof Map && preRedactionKinshipLabels.has(pairKey)) {
+          const label = preRedactionKinshipLabels.get(pairKey);
+          return label ? `${subject.fullName}是${other.fullName}的${label}` : relation ? "未确认当前亲属关系" : "无";
+        }
         return relation ? `${fact.identity.fullName}是${other.fullName}的${relation.label}` : "无";
       };
       for (const counterpartId of counterpartIdSet) {
@@ -733,7 +738,7 @@ function createGameData({ fs, path, memorySystem, memoryEngine, summariesDir, ge
      * 获取提到的角色的详细信息（用于添加到prompt上下文）
      * @returns {string} - 格式化的角色信息字符串
      */
-    getMentionedCharactersInfo(activeCharacter, { currentFactRegistry = null } = {}) {
+    getMentionedCharactersInfo(activeCharacter, { currentFactRegistry = null, preRedactionKinshipLabels = null } = {}) {
       if (!this.mentionedCharactersInContext || this.mentionedCharactersInContext.size === 0) {
         return '';
       }
@@ -768,13 +773,23 @@ function createGameData({ fs, path, memorySystem, memoryEngine, summariesDir, ge
         // responder: one conversation can generate replies for several NPCs.
         if (player) {
           const relation = fact.relations[String(player.id)];
-          if (relation) info += `- 与${player.fullName}的关系：${relation.label}\n`;
+          const pairKey = `${Number(charId)}:${Number(player.id)}`;
+          if (preRedactionKinshipLabels instanceof Map && preRedactionKinshipLabels.has(pairKey)) {
+            const label = preRedactionKinshipLabels.get(pairKey);
+            if (label) info += `- 与${player.fullName}的关系：${label}\n`;
+            else if (relation) info += `- 与${player.fullName}的关系：未确认当前亲属关系\n`;
+          } else if (relation) info += `- 与${player.fullName}的关系：${relation.label}\n`;
         }
         
         if (dialoguePartner && dialoguePartner.id !== this.playerID) {
           const partnerFact = resolveRelationshipCurrentTruth({ gameData: this, subjectRuntimeId: charId, anchorRuntimeId: dialoguePartner.id, registry: currentFactRegistry });
           const relation = partnerFact?.relations[String(dialoguePartner.id)];
-          if (relation) info += `- 与${dialoguePartner.fullName}的关系：${relation.label}\n`;
+          const pairKey = `${Number(charId)}:${Number(dialoguePartner.id)}`;
+          if (preRedactionKinshipLabels instanceof Map && preRedactionKinshipLabels.has(pairKey)) {
+            const label = preRedactionKinshipLabels.get(pairKey);
+            if (label) info += `- 与${dialoguePartner.fullName}的关系：${label}\n`;
+            else if (relation) info += `- 与${dialoguePartner.fullName}的关系：未确认当前亲属关系\n`;
+          } else if (relation) info += `- 与${dialoguePartner.fullName}的关系：${relation.label}\n`;
         }
         
         // 配偶

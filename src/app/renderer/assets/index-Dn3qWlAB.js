@@ -1,6 +1,6 @@
 import { WorldMemoryEditor } from "../world-memory-editor.js";
 import { getLegacySummaryPage, getSummaryDisplayEntries, getSummaryImportantMatters } from "../summary-date-order.js";
-const VOTC_FEATURE_VERSION = "V9.3.9.1";
+const VOTC_FEATURE_VERSION = "V9.3.9.2";
 const VOTC_WORKSHOP_MOD_VERSION = "2.0.5";
 function getDefaultExportFromCjs(x) {
   return x && x.__esModule && Object.prototype.hasOwnProperty.call(x, "default") ? x["default"] : x;
@@ -15883,18 +15883,22 @@ const MessageItem = ({ entry }) => {
   const handleRegenerate = async () => {
     if (entry.type === "message" && entry.role === "assistant") {
       try {
-        await window.conversationAPI.regenerateMessage(entry.id);
+        const result = await window.conversationAPI.regenerateMessage(entry.id);
+        if (result?.success === false) alert(result.error || "无法重新生成这条回复。");
       } catch (error) {
         console.error("Failed to regenerate message:", error);
+        alert(error?.message || "重新生成回复失败。");
       }
     }
   };
   const handleRegenerateError = async () => {
     if (entry.type === "error") {
       try {
-        await window.conversationAPI.regenerateError(entry.id);
+        const result = await window.conversationAPI.regenerateError(entry.id);
+        if (result?.success === false) alert(result.error || "无法重试这条失败请求。");
       } catch (error) {
         console.error("Failed to regenerate error:", error);
+        alert(error?.message || "重试失败请求时出错。");
       }
     }
   };
@@ -16778,12 +16782,21 @@ const useConversationContextUsage = () => {
   return snapshot;
 };
 const ContextUsageIndicator = ({ snapshot }) => {
-  const responders = [...(snapshot?.responders || [])].sort((left, right) =>
-    (Number(right.usageRevision) || 0) - (Number(left.usageRevision) || 0)
-      || (Date.parse(right.updatedAt || "") || 0) - (Date.parse(left.updatedAt || "") || 0)
-  );
+  const responders = [...(snapshot?.responders || [])].sort((left, right) => {
+    const leftUsed = typeof left.usedTokens === "number" && Number.isSafeInteger(left.usedTokens) ? left.usedTokens : null;
+    const rightUsed = typeof right.usedTokens === "number" && Number.isSafeInteger(right.usedTokens) ? right.usedTokens : null;
+    return (rightUsed ?? -1) - (leftUsed ?? -1)
+      || (Number(right.usageRevision) || 0) - (Number(left.usageRevision) || 0)
+      || (Date.parse(right.updatedAt || "") || 0) - (Date.parse(left.updatedAt || "") || 0);
+  });
   if (!responders.length) return null;
-  const row = responders[0];
+  const sceneCapacityTokens = snapshot?.sceneCapacityTokens ?? responders.find(responder => responder.configuredContextLength != null)?.configuredContextLength
+    ?? responders.find(responder => responder.contextWindowTokens != null)?.contextWindowTokens ?? null;
+  const knownUsageResponders = responders.filter(responder => typeof responder.usedTokens === "number" && Number.isSafeInteger(responder.usedTokens));
+  const row = knownUsageResponders[0] || responders[0];
+  const sceneRemainingTokens = typeof sceneCapacityTokens === "number" && Number.isSafeInteger(row.usedTokens)
+    ? sceneCapacityTokens - row.usedTokens : null;
+  const hasUnknownUsage = responders.some(responder => typeof responder.usedTokens !== "number" || !Number.isSafeInteger(responder.usedTokens));
   const phaseLabels = { request_snapshot: "请求快照", streaming: "生成中", completed: "已完成", cancelled: "已停止", failed: "请求失败" };
   const inputSource = row.inputTokensSource === "provider_usage" ? "服务商用量" : "估算（含 1.1 系数）";
   const outputSource = row.outputTokensSource === "provider_usage" ? "服务商用量"
@@ -16791,21 +16804,25 @@ const ContextUsageIndicator = ({ snapshot }) => {
   const totalSource = row.usageSource === "provider_usage" ? "服务商用量"
     : row.usageSource === "provider_usage_partial_estimate" ? "混合估算" : "估算";
   const tooltip = [
-    `本次回应者：${row.responderName || "姓名未载入"}`,
-    `Provider：${row.provider || "未知"} · 模型：${row.model || "未知"}`,
-    `当前窗口容量：${formatContextTokens(row.contextWindowTokens)} Token（${CONTEXT_WINDOW_SOURCE_LABELS[row.contextWindowSource] || "来源未知"}）`,
+    `本场场景容量：${formatContextTokens(sceneCapacityTokens)} Token（${snapshot?.sceneCapacitySource === "configured" ? "已配置上下文长度" : CONTEXT_WINDOW_SOURCE_LABELS[snapshot?.sceneCapacitySource] || "有效服务商窗口"}）`,
+    `${hasUnknownUsage ? "已知最大占用" : "最大占用"}：${row.responderName || "姓名未载入"} · ${formatContextTokens(row.usedTokens)} Token · ${phaseLabels[row.phase] || "请求快照"}`,
+    `本场配置窗口余量：${formatContextTokens(sceneRemainingTokens)} Token`,
+    `峰值请求 Provider：${row.provider || "未知"} · 模型：${row.model || "未知"}`,
+    `该请求服务商有效窗口：${formatContextTokens(row.contextWindowTokens)} Token（${CONTEXT_WINDOW_SOURCE_LABELS[row.contextWindowSource] || "来源未知"}）`,
     `本次请求输入（完整 Prompt）：${inputSource} ${formatContextTokens(row.inputTokens)} Token · 本次输出：${outputSource} ${formatContextTokens(row.outputTokens)} Token`,
-    `窗口原始余量：${formatContextTokens(row.remainingContextTokens)} Token（容量减本次输入与输出）`,
-    `发送前可追加输入估算：${formatContextTokens(row.inputHeadroomBeforeSendTokens)} Token（有效输入预算 ${formatContextTokens(row.effectiveInputBudget)}，已扣输出预留 ${formatContextTokens(row.reservedOutputTokens)}、协议开销 ${formatContextTokens(row.protocolOverheadTokens)}、安全余量 ${formatContextTokens(row.safetyMarginTokens)}）`,
-    "这是最近一次请求的用量快照；下一次请求会重新计算。"
-  ].join("\n");
+    `该请求 Provider 窗口余量：${formatContextTokens(row.remainingContextTokens)} Token`,
+    `该请求发送前可追加输入估算：${formatContextTokens(row.inputHeadroomBeforeSendTokens)} Token（有效输入预算 ${formatContextTokens(row.effectiveInputBudget)}，已扣输出预留 ${formatContextTokens(row.reservedOutputTokens)}、协议开销 ${formatContextTokens(row.protocolOverheadTokens)}、安全余量 ${formatContextTokens(row.safetyMarginTokens)}）`,
+    `各 NPC 最近请求：${responders.map(responder => `${responder.responderName || "姓名未载入"}：${formatContextTokens(responder.usedTokens)} Token · ${phaseLabels[responder.phase] || "请求快照"} · Provider 窗口 ${formatContextTokens(responder.contextWindowTokens)} Token`).join("\n")}`,
+    "本场占用取各 NPC 最近请求中的最大单次用量，不把不同 NPC 的请求相加。",
+    hasUnknownUsage ? "部分 NPC 的最近请求用量未知，因此峰值只覆盖已知用量。" : null
+  ].filter(Boolean).join("\n");
   return /* @__PURE__ */ jsxRuntimeExports.jsxs("section", { className: "context-usage-indicator", "aria-label": "上下文用量", children: [
     /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "context-usage-heading", children: [
       /* @__PURE__ */ jsxRuntimeExports.jsx("strong", { children: "本场对话上下文" }),
-      /* @__PURE__ */ jsxRuntimeExports.jsx("span", { children: "最近一次实际请求" })
+      /* @__PURE__ */ jsxRuntimeExports.jsx("span", { children: "各 NPC 最近请求的最大占用" })
     ] }),
     /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "context-usage-row", title: tooltip, children:
-      `${phaseLabels[row.phase] || "请求快照"} · ${totalSource} ${formatContextTokens(row.usedTokens)} / ${formatContextTokens(row.contextWindowTokens)} Token · 窗口剩余 ${formatContextTokens(row.remainingContextTokens)}`
+      `${hasUnknownUsage ? "已知最大" : "最大"} · ${totalSource} ${formatContextTokens(row.usedTokens)} / ${formatContextTokens(sceneCapacityTokens)} Token · 场景余量 ${formatContextTokens(sceneRemainingTokens)}`
     }, `${row.responderId}:${row.requestId}`)
   ] });
 };

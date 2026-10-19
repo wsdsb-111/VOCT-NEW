@@ -240,6 +240,21 @@ class MemoryEngine {
     })) throw new Error("SUMMARY_FINALIZATION_RECOVERY_PENDING");
     const episodes = finalizationId ? this.store.listAllEpisodes().filter(episode => String(episode.finalizationId || "") === finalizationId
       && (episode.campaignToken || null) === (summaryRecord.campaignToken || null)) : [];
+    const summaryConversationId = typeof summaryRecord.conversationId === "string" ? summaryRecord.conversationId.trim() : "";
+    const episodeConversationIds = new Set(episodes.map(episode => typeof episode.conversationId === "string"
+      ? episode.conversationId.trim() : "").filter(Boolean));
+    // A finalization has one durable Episode record; duplicate records can mix sources even within one conversation.
+    if (episodes.length > 1
+      || summaryConversationId && [...episodeConversationIds].some(conversationId => conversationId !== summaryConversationId)) {
+      throw new Error("LEGACY_SUMMARY_MEMORY_MAPPING_INCOMPLETE");
+    }
+    const expectedConversationId = summaryConversationId || [...episodeConversationIds][0] || "";
+    // Extraction persists the finalization-to-memory link on the episode, not on each Memory record.
+    const episodeLinkedMemoryIds = new Set(episodes.filter(episode => {
+      const participantIds = uniqueIds((episode.participants || []).map(participant =>
+        participant?.id ?? participant?.characterId ?? participant));
+      return participantIds.includes(numericOwnerId) && participantIds.includes(pairId);
+    }).flatMap(episode => Array.isArray(episode.memoryIds) ? episode.memoryIds : []).map(String));
     let memoryIds = summaryRecord?.perspectiveMemoryIds;
     let sourceLetterId = summaryRecord?.sourceLetterId || null;
     const verifiedLetterMemoryIds = new Set();
@@ -247,6 +262,13 @@ class MemoryEngine {
       && episode.sessionSummary === summaryRecord.content && episode.date === summaryRecord.date
       && uniqueIds((episode.participants || []).map(person => person.id)).sort((a, b) => a - b).join()
         === uniqueIds([numericOwnerId, pairId]).sort((a, b) => a - b).join());
+    for (const episode of verifiedLetterEpisodes) for (const memoryId of episode.memoryIds || []) {
+      const memory = this.store.getMemory(memoryId);
+      if (memory?.provenance?.extractionMode === "letter_summary"
+        && memory.provenance.conversationId === episode.letterId
+        && memory.provenance.campaignToken === episode.campaignToken
+        && memory.content === summaryRecord.content) verifiedLetterMemoryIds.add(String(memoryId));
+    }
     if (sourceLetterId) {
       if (verifiedLetterEpisodes.length === 1) sourceLetterId = verifiedLetterEpisodes[0].letterId;
       else {
@@ -307,12 +329,28 @@ class MemoryEngine {
       }
     }
     memoryIds = [...new Set(memoryIds.map(String).filter(Boolean))];
+    const candidateMemoryConversationIds = new Set(memoryIds.flatMap(memoryId => {
+      if (verifiedLetterMemoryIds.has(memoryId)) return [];
+      const conversationId = this.store.getMemory(memoryId)?.provenance?.conversationId;
+      return typeof conversationId === "string" && conversationId.trim() ? [conversationId.trim()] : [];
+    }));
+    if (candidateMemoryConversationIds.size > 1) throw new Error("LEGACY_SUMMARY_MEMORY_MAPPING_INCOMPLETE");
     for (const memoryId of memoryIds) {
       const memory = this.store.getMemory(memoryId);
       if (!memory) continue;
+      const memoryFinalizationId = memory.provenance?.finalizationId == null
+        ? "" : String(memory.provenance.finalizationId).trim();
+      const memoryConversationId = typeof memory.provenance?.conversationId === "string"
+        ? memory.provenance.conversationId.trim() : "";
+      const finalizationUnverified = finalizationId && (memoryFinalizationId
+        ? memoryFinalizationId !== finalizationId
+        : !verifiedLetterMemoryIds.has(memoryId) && !episodeLinkedMemoryIds.has(memoryId));
+      const conversationUnverified = memoryConversationId && expectedConversationId
+        && memoryConversationId !== expectedConversationId && !verifiedLetterMemoryIds.has(memoryId);
       if (!uniqueIds(memory.knownBy).includes(numericOwnerId)
         || (memory.provenance?.campaignToken || null) !== (summaryRecord.campaignToken || null)
-        || finalizationId && memory.provenance?.finalizationId !== finalizationId && !verifiedLetterMemoryIds.has(memoryId)
+        || finalizationUnverified
+        || conversationUnverified
         || !isMemoryRelevantToPair(memory, numericOwnerId, pairId)) throw new Error("LEGACY_SUMMARY_MEMORY_MAPPING_INCOMPLETE");
     }
     return { numericOwnerId, finalizationId, episodes, sourceLetterId, memoryIds };

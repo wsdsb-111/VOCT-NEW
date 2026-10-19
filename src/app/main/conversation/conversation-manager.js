@@ -270,9 +270,9 @@ function createConversationManager({ events, memorySystem, Conversation, PromptB
         throw new Error("No active conversation");
       }
       try {
-        await this.currentConversation.regenerateError(messageId);
+        const result = await this.currentConversation.regenerateError(messageId);
         this.emitConversationUpdate();
-        return { success: true };
+        return result === undefined ? { success: true } : result;
       } catch (error) {
         console.error("Error in ConversationManager.regenerateError:", error);
         this.emitConversationUpdate();

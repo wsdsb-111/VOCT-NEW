@@ -4,7 +4,7 @@ const assert = require("node:assert/strict");
 const fs = require("node:fs");
 const path = require("node:path");
 const { ConversationDisclosureStore } = require("../src/app/main/conversation/character-disclosure-store");
-const { buildCharacterDisclosureContext } = require("../src/app/main/conversation/character-disclosure-context");
+const { buildCharacterDisclosureContext, formatKnownNameFacts } = require("../src/app/main/conversation/character-disclosure-context");
 const { createTraitProfileView } = require("../src/app/main/prompts/trait-profile-selector");
 
 const root = fs.mkdtempSync(path.resolve(__dirname, "../.build/v9391-disclosure-store-"));
@@ -111,6 +111,35 @@ try {
   for (const factType of ["NAME", "TITLE"]) assert(target(3, 2).facts.some(fact => fact.factType === factType && fact.hasDisclosureRecord),
     `NPC -> NPC ${factType} survives restart`);
   assert.equal(target(2, 3).facts.some(fact => fact.hasDisclosureRecord), false, "disclosure is not automatically reversed");
+  const knownNamePrompt = formatKnownNameFacts(context(2), data, 2);
+  assert(knownNamePrompt.includes("Target Runtime ID 1: 阿甲") && knownNamePrompt.includes("不得声称尚未获知"),
+    "a current pair NAME fact reaches the responder as a durable, topic-independent known-name instruction");
+  assert.equal(knownNamePrompt.includes("公爵"), false, "the known-name block does not grant a title");
+  assert(knownNamePrompt.includes("不证明已有交情、认得面孔") && !knownNamePrompt.includes("不认识"),
+    "knowing the name does not imply acquaintance or facial recognition");
+  assert.equal(formatKnownNameFacts(context(2), data, 3), "", "a different responder cannot reuse another Owner's facts");
+  const originalThirdName = characters.get(3).shortName;
+  characters.get(3).shortName = "阿甲";
+  const sameNamePrompt = formatKnownNameFacts(context(2), data, 2);
+  assert(sameNamePrompt.includes("Target Runtime ID 1: 阿甲") && !sameNamePrompt.includes("Target Runtime ID 3:"),
+    "a disclosed name remains bound to its target when another undisclosed character has the same name");
+  characters.get(3).shortName = originalThirdName;
+  assert.equal(formatKnownNameFacts(context(2), { ...data, date: "1199.1.1" }, 2), "",
+    "a name acquired after the current game date is not included");
+  const staleNameContext = context(2);
+  for (const fact of staleNameContext.disclosureProfiles.get(1) || []) if (fact.factType === "NAME") fact.sourceSnapshotId = "stale";
+  assert.equal(formatKnownNameFacts(staleNameContext, data, 2), "", "a malformed source snapshot cannot authorize a name");
+  for (let turn = 0; turn < 12; turn++) {
+    const speakerId = [1, 2, 3][turn % 3];
+    conversation.messages.push({ id: 12 + turn, role: speakerId === 1 ? "user" : "assistant", speakerCharacterId: speakerId,
+      name: characters.get(speakerId).shortName, content: `第${turn + 1}轮继续讨论边境事务。` });
+  }
+  service.recordConversation({ conversation, context: publicContext() });
+  assert(formatKnownNameFacts(context(2), data, 2).includes("阿甲"),
+    "the disclosed name remains effective after more than ten unrelated turns");
+  conversation.messages[0].content = "今天天气很好。";
+  service.recordConversation({ conversation, context: publicContext() });
+  assert.equal(formatKnownNameFacts(context(2), data, 2), "", "editing the disclosure source revokes the known-name prompt fact");
   // Enumeration traps verify pair reads do not depend on total character count.
   data.characters = new Proxy(characters, { get(map, key) {
     if (["keys", "values", "entries"].includes(key) || key === Symbol.iterator) throw new Error("whole_roster_scan");

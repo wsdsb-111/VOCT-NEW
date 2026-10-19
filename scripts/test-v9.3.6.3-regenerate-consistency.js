@@ -1,6 +1,8 @@
 "use strict";
 
 const assert = require("node:assert/strict");
+const fs = require("node:fs");
+const path = require("node:path");
 const { Conversation } = require("../src/app/main/conversation/conversation");
 const { ConversationTurnManager } = require("../src/app/main/conversation/conversation-turn-manager");
 const { GenerationManager } = require("../src/app/main/conversation/generation-manager");
@@ -71,6 +73,12 @@ function makePlayerMessage(id = 10, speakerCharacterId = PLAYER_ID) {
   return { id, role: "user", speakerCharacterId, content: "你以前和玛蒂尔达具体谈过什么？" };
 }
 
+function assertRejected(result, description) {
+  assert.equal(result?.success, false, description + " must return a visible rejection result");
+  assert.equal(typeof result.error, "string");
+  assert.match(result.error, /[\u4e00-\u9fff]/, description + " must explain the rejection in Chinese");
+}
+
 function trustedRoute(conversation, history = conversation.messages) {
   const turn = conversation.getTurnManager().currentTurn;
   return resolveActiveMemoryPairs({
@@ -92,7 +100,7 @@ async function withoutExpectedRejectionLogs(operation) {
   console.error = () => {};
   console.log = () => {};
   try {
-    await operation();
+    return await operation();
   } finally {
     console.error = oldError;
     console.log = oldLog;
@@ -115,7 +123,8 @@ async function testRegenerationPreservesAnchorAndQueue() {
     getGenerateFollowingMessagesSetting: () => true,
     getPauseOnRegenerationSetting: () => false
   } });
-  await conversation.regenerateMessage(12);
+  const result = await conversation.regenerateMessage(12);
+  assert.deepEqual(result, { success: true }, "a valid regeneration must return success");
 
   let currentTurn = conversation.getTurnManager().currentTurn;
   assert.equal(currentTurn.playerMessageId, oldTurn.playerMessageId, "regeneration must keep the original logical player message");
@@ -192,7 +201,8 @@ async function testStaleAndUntrustedAnchorsAreRejected() {
   });
   const oldIds = oldTurn.messages.map(message => message.id);
   const oldEpoch = oldTurn.turnEpoch;
-  await withoutExpectedRejectionLogs(() => oldTurn.regenerateMessage(11));
+  const oldTurnResult = await withoutExpectedRejectionLogs(() => oldTurn.regenerateMessage(11));
+  assertRejected(oldTurnResult, "a prior user turn");
   assert.deepEqual(oldTurn.messages.map(message => message.id), oldIds, "a prior user turn must not be regenerated under a newer turn");
   assert.equal(oldTurn.turnEpoch, oldEpoch);
 
@@ -201,7 +211,8 @@ async function testStaleAndUntrustedAnchorsAreRejected() {
     { id: 11, role: "assistant", speakerCharacterId: 2, content: "回应" }
   ] });
   const wrongSpeakerIds = wrongSpeaker.messages.map(message => message.id);
-  await withoutExpectedRejectionLogs(() => wrongSpeaker.regenerateMessage(11));
+  const wrongSpeakerResult = await withoutExpectedRejectionLogs(() => wrongSpeaker.regenerateMessage(11));
+  assertRejected(wrongSpeakerResult, "a mismatched player speaker");
   assert.deepEqual(wrongSpeaker.messages.map(message => message.id), wrongSpeakerIds,
     "a user message with a mismatched speaker ID must not authorize regeneration");
 
@@ -212,7 +223,8 @@ async function testStaleAndUntrustedAnchorsAreRejected() {
   const changedSceneIds = changedScene.messages.map(message => message.id);
   const changedSceneEpoch = changedScene.turnEpoch;
   changedScene.gameData.scene = "different-scene";
-  await withoutExpectedRejectionLogs(() => changedScene.regenerateMessage(11));
+  const changedSceneResult = await withoutExpectedRejectionLogs(() => changedScene.regenerateMessage(11));
+  assertRejected(changedSceneResult, "a changed scene");
   assert.deepEqual(changedScene.messages.map(message => message.id), changedSceneIds,
     "a changed scene must not reuse the old attempt authorization");
   assert.equal(changedScene.turnEpoch, changedSceneEpoch);
@@ -223,7 +235,8 @@ async function testStaleAndUntrustedAnchorsAreRejected() {
   ] });
   const changedCampaignIds = changedCampaign.messages.map(message => message.id);
   changedCampaign.gameData.campaignToken = "different-campaign";
-  await withoutExpectedRejectionLogs(() => changedCampaign.regenerateMessage(11));
+  const changedCampaignResult = await withoutExpectedRejectionLogs(() => changedCampaign.regenerateMessage(11));
+  assertRejected(changedCampaignResult, "a changed campaign");
   assert.deepEqual(changedCampaign.messages.map(message => message.id), changedCampaignIds,
     "a changed campaign must not reuse the old attempt authorization");
 
@@ -233,7 +246,8 @@ async function testStaleAndUntrustedAnchorsAreRejected() {
   ] });
   const changedConversationIds = changedConversation.messages.map(message => message.id);
   changedConversation.id = "different-conversation";
-  await withoutExpectedRejectionLogs(() => changedConversation.regenerateMessage(11));
+  const changedConversationResult = await withoutExpectedRejectionLogs(() => changedConversation.regenerateMessage(11));
+  assertRejected(changedConversationResult, "a changed conversation");
   assert.deepEqual(changedConversation.messages.map(message => message.id), changedConversationIds,
     "a changed conversation ID must not reuse the old attempt authorization");
 }
@@ -270,7 +284,8 @@ async function testLiveAttemptIsAbortedAndSideEffectTailIsPreserved() {
   ] });
   const eventIds = withEvent.messages.map(message => message.id);
   const eventEpoch = withEvent.turnEpoch;
-  await withoutExpectedRejectionLogs(() => withEvent.regenerateMessage(11));
+  const sideEffectResult = await withoutExpectedRejectionLogs(() => withEvent.regenerateMessage(11));
+  assertRejected(sideEffectResult, "a tail with an action side effect");
   assert.deepEqual(withEvent.messages.map(message => message.id), eventIds,
     "a regeneration tail containing a side-effect event must be preserved intact");
   assert.equal(withEvent.turnEpoch, eventEpoch);
@@ -288,13 +303,52 @@ async function testProviderErrorRetryRetainsLogicalTurn() {
     hasActionOutcome: false
   });
   const logicalEpoch = conversation.getTurnManager().currentTurn.logicalTurnEpoch;
-  await conversation.regenerateError(11);
+  const result = await conversation.regenerateError(11);
+  assert.deepEqual(result, { success: true }, "a valid provider error retry must return success");
   assert.deepEqual(conversation.messages.map(message => message.id), [10], "retry removes only the safe provider error entry");
   assert.equal(conversation.npcQueue[0].id, 2);
   assert.equal(conversation.getTurnManager().currentTurn.playerMessageId, 10);
   assert.equal(conversation.getTurnManager().currentTurn.logicalTurnEpoch, logicalEpoch);
   assert.equal(conversation.getTurnManager().currentTurn.regenerateOfByResponder[2], 11);
   assert.equal(conversation.resumed, true);
+
+  const staleError = createConversation({ messages: [
+    makePlayerMessage(),
+    { id: 11, type: "error", content: "Failed to get response from 乙", responderCharacterId: 2 }
+  ] });
+  staleError.generationAttemptsByMessageId.set(11, {
+    logicalPlayerMessageId: 999,
+    turnEpoch: staleError.turnEpoch,
+    responderId: 2,
+    hasActionOutcome: false
+  });
+  const staleErrorIds = staleError.messages.map(message => message.id);
+  const staleErrorResult = await withoutExpectedRejectionLogs(() => staleError.regenerateError(11));
+  assertRejected(staleErrorResult, "an error from a stale player turn");
+  assert.deepEqual(staleError.messages.map(message => message.id), staleErrorIds,
+    "a stale provider error must remain untouched after retry is rejected");
+  assert.equal(staleError.resumed, undefined, "a stale provider error must not restart the turn");
+}
+
+function testRegenerationFailureResultsReachRenderer() {
+  const root = path.resolve(__dirname, "..");
+  const manager = fs.readFileSync(path.join(root, "src/app/main/conversation/conversation-manager.js"), "utf8");
+  const ipc = fs.readFileSync(path.join(root, "src/app/main/ipc/register-ipc.js"), "utf8");
+  const renderer = fs.readFileSync(path.join(root, "src/app/renderer/assets/index-Dn3qWlAB.js"), "utf8");
+  assert.match(manager, /const result = await this\.currentConversation\.regenerateError\(messageId\);[\s\S]*?return result === undefined \? \{ success: true \} : result;/,
+    "ConversationManager must preserve an explicit retry rejection while keeping undefined mocks compatible");
+  assert.match(ipc, /conversation:regenerateMessage[\s\S]*?const result = await conversation\.regenerateMessage\(messageId\);[\s\S]*?return result === undefined \? \{ success: true \} : result;/,
+    "the normal regeneration IPC route must forward the Conversation result");
+  assert.match(ipc, /conversation:regenerateError[\s\S]*?const result = await conversationManager\.regenerateError\(messageId\);[\s\S]*?return result === undefined \? \{ success: true \} : result;/,
+    "the provider-error retry IPC route must forward the ConversationManager result");
+  const normalHandler = renderer.match(/const handleRegenerate = async \(\) => \{([\s\S]*?)\n  \};/);
+  const errorHandler = renderer.match(/const handleRegenerateError = async \(\) => \{([\s\S]*?)\n  \};/);
+  assert(normalHandler && /result\?\.success === false/.test(normalHandler[1]) && /alert\(/.test(normalHandler[1])
+    && /catch \(error\)/.test(normalHandler[1]) && /alert\(/.test(normalHandler[1]),
+  "the normal regeneration button must alert on returned rejection and thrown errors");
+  assert(errorHandler && /result\?\.success === false/.test(errorHandler[1]) && /alert\(/.test(errorHandler[1])
+    && /catch \(error\)/.test(errorHandler[1]) && /alert\(/.test(errorHandler[1]),
+  "the provider-error retry button must alert on returned rejection and thrown errors");
 }
 
 function testHistoryFollowupSurvivesPhysicalRegeneration() {
@@ -373,6 +427,7 @@ async function runRegenerateConsistencyChecks() {
   await testStaleAndUntrustedAnchorsAreRejected();
   await testLiveAttemptIsAbortedAndSideEffectTailIsPreserved();
   await testProviderErrorRetryRetainsLogicalTurn();
+  testRegenerationFailureResultsReachRenderer();
   testHistoryFollowupSurvivesPhysicalRegeneration();
   return [
     { id: "REGEN-ANCHOR-QUEUE", status: "PASS" },

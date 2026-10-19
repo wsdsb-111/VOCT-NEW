@@ -1,0 +1,189 @@
+- generic [ref=e2]:
+  - generic:
+    - generic:
+      - button "-" [ref=e111]
+      - generic [ref=e112]:
+        - region "上下文用量" [ref=e122]:
+          - generic [ref=e123]:
+            - strong [ref=e124]: 本场对话上下文
+            - generic [ref=e125]: 各 NPC 最近请求的最大占用
+          - generic "本场场景容量：192,000 Token（有效服务商窗口） 最大占用：阿丁 · 4,470 Token · 请求失败 本场配置窗口余量：187,530 Token 峰值请求 Provider：player2 · 模型：player2-model 该请求服务商有效窗口：192,000 Token（来源未知） 本次请求输入（完整 Prompt）：估算（含 1.1 系数） 4,470 Token · 本次输出：生成中暂估 0 Token 该请求 Provider 窗口余量：187,530 Token 该请求发送前可追加输入估算：148,452 Token（有效输入预算 167,768，已扣输出预留 1,024、协议开销 168、安全余量 23,040） 各 NPC 最近请求：阿丁：4,470 Token · 请求失败 · Provider 窗口 192,000 Token 阿乙：4,467 Token · 已完成 · Provider 窗口 192,000 Token 本场占用取各 NPC 最近请求中的最大单次用量，不把不同 NPC 的请求相加。" [ref=e126]: 最大 · 估算 4,470 / 192,000 Token · 场景余量 187,530
+        - generic [ref=e128]:
+          - generic [ref=e130]:
+            - generic [ref=e131]:
+              - generic [ref=e132]: You
+              - button "✏️" [ref=e134] [cursor=pointer]
+            - paragraph [ref=e136]: 隔离测试：请各位依次回应。
+          - generic [ref=e185]:
+            - generic [ref=e186]:
+              - generic [ref=e187]: 阿乙
+              - generic [ref=e188]:
+                - button "🔄" [ref=e189] [cursor=pointer]
+                - button "✏️" [ref=e190] [cursor=pointer]
+            - paragraph [ref=e192]: 隔离回复-3
+          - generic [ref=e195]:
+            - generic [ref=e196]:
+              - generic [ref=e197]: 阿丁
+              - generic [ref=e198]:
+                - button "🔄" [ref=e199] [cursor=pointer]
+                - button "✏️" [ref=e200] [cursor=pointer]
+            - paragraph [ref=e202]: 隔离回复-4
+          - generic [ref=e204]:
+            - generic [ref=e205]:
+              - generic [ref=e206]: 阿戊
+              - generic [ref=e207]:
+                - button "🔄" [ref=e208] [cursor=pointer]
+                - button "✏️" [ref=e209] [cursor=pointer]
+            - paragraph [ref=e211]: 隔离回复-5
+        - generic [ref=e158]:
+          - generic [ref=e159]: 会话人物
+          - generic [ref=e161]:
+            - generic [ref=e162]:
+              - generic [ref=e163]: 阿乙
+              - generic [ref=e164]:
+                - combobox [ref=e165] [cursor=pointer]:
+                  - option "暂时离场…" [disabled] [selected]
+                  - option "昏迷"
+                  - option "睡着"
+                  - option "暂时离开"
+                - button "请离场" [ref=e166] [cursor=pointer]
+            - generic [ref=e167]:
+              - generic [ref=e168]: 阿丁
+              - generic [ref=e169]:
+                - combobox [ref=e170] [cursor=pointer]:
+                  - option "暂时离场…" [disabled] [selected]
+                  - option "昏迷"
+                  - option "睡着"
+                  - option "暂时离开"
+                - button "请离场" [ref=e171] [cursor=pointer]
+            - generic [ref=e172]:
+              - generic [ref=e173]: 阿戊
+              - generic [ref=e174]:
+                - combobox [ref=e175] [cursor=pointer]:
+                  - option "暂时离场…" [disabled] [selected]
+                  - option "昏迷"
+                  - option "睡着"
+                  - option "暂时离开"
+                - button "请离场" [ref=e176] [cursor=pointer]
+        - generic [ref=e177]:
+          - textbox "Write a message..." [ref=e179]
+          - generic [ref=e180]:
+            - button "End Conversation" [ref=e182]
+            - button "⚙️" [active] [ref=e183]
+    - generic [ref=e212]:
+      - banner:
+        - generic [ref=e222]:
+          - button [ref=e223] [cursor=pointer]:
+            - img "?" [ref=e224]
+          - button [ref=e226] [cursor=pointer]:
+            - img "Language" [ref=e227]
+          - button [ref=e228] [cursor=pointer]:
+            - img "Discord" [ref=e229]
+          - button [ref=e230] [cursor=pointer]:
+            - img "?" [ref=e231]
+        - button "Connection" [ref=e232]
+        - button "Settings" [ref=e233]
+        - button "Actions" [ref=e234]
+        - button "Prompts" [ref=e235]
+        - button "Summaries" [ref=e236]
+        - button "优化" [ref=e237]
+        - button "世界书" [ref=e238]
+        - button "诊断" [ref=e239]
+        - group "界面风格" [ref=e240]:
+          - text: 骑士
+          - button "切换为游牧风格" [ref=e241]
+          - button "切换为骑士纹章风格" [pressed] [ref=e242]
+          - button "切换为水墨画卷风格" [ref=e243]
+        - button "✕" [ref=e244]
+      - main [ref=e245]:
+        - generic [ref=e246]:
+          - generic [ref=e247]:
+            - generic [ref=e248]:
+              - heading "Providers" [level=4] [ref=e249]
+              - list [ref=e250]:
+                - listitem [ref=e251] [cursor=pointer]: Player2
+                - listitem [ref=e252] [cursor=pointer]: Openrouter
+                - listitem [ref=e253] [cursor=pointer]: Openai-compatible
+                - listitem [ref=e254] [cursor=pointer]: Ollama
+                - listitem [ref=e255] [cursor=pointer]: Deepseek
+                - listitem [ref=e256] [cursor=pointer]: Gemini
+                - listitem [ref=e257] [cursor=pointer]: 智谱 GLM
+              - separator [ref=e258]
+              - heading "Presets" [level=4] [ref=e259]
+              - paragraph [ref=e260]: No presets saved yet
+            - generic [ref=e261]:
+              - generic [ref=e262]:
+                - generic [ref=e263]: NPC Messages
+                - generic "player2-model" [ref=e265]: Player2
+              - generic [ref=e267]:
+                - generic [ref=e268]: NPC Actions
+                - combobox [ref=e269] [cursor=pointer]:
+                  - option "Default" [selected]
+                  - option "Player2"
+                  - option "Openrouter"
+                  - option "Openai-compatible"
+                  - option "Ollama"
+                  - option "Deepseek"
+                  - option "Gemini"
+                  - option "智谱 GLM"
+              - generic [ref=e270]:
+                - generic [ref=e271]: NPC Summaries
+                - combobox [ref=e272] [cursor=pointer]:
+                  - option "Default" [selected]
+                  - option "Player2"
+                  - option "Openrouter"
+                  - option "Openai-compatible"
+                  - option "Ollama"
+                  - option "Deepseek"
+                  - option "Gemini"
+                  - option "智谱 GLM"
+          - generic [ref=e273]:
+            - generic [ref=e274]:
+              - generic [ref=e275]:
+                - text: Select CK3 Documents Folder
+                - img "?" [ref=e277]
+              - generic [ref=e279] [cursor=pointer]:
+                - text: e.g. C:\Users\YOUR_USERNAME\Documents\Paradox Interactive\Crusader Kings III
+                - generic [ref=e280]: (click to select)
+            - heading "Player2 Configuration" [level=3] [ref=e281]
+            - generic [ref=e282]:
+              - generic [ref=e283]:
+                - button "Open Player2 App" [ref=e284] [cursor=pointer]
+                - generic [ref=e285]: Click to open the Player2 application. Make sure it is installed and running.
+              - generic [ref=e286]:
+                - generic [ref=e287]:
+                  - generic [ref=e289]: error
+                  - generic [ref=e290]: provider_unknown
+                - button "Refresh" [ref=e291] [cursor=pointer]
+              - generic [ref=e292]:
+                - generic [ref=e293]: "Context Window Mode:"
+                - combobox "Context Window Mode:" [ref=e294]:
+                  - option "Auto (provider native)" [selected]
+                  - option "Custom"
+                - generic [ref=e295]: Provider context is unverified. Auto uses a conservative 8,192-token fallback; this is not the model's native limit.
+                - generic [ref=e296]:
+                  - generic [ref=e297]: "Mode: auto"
+                  - generic [ref=e298]: "Source: safe_fallback"
+                  - generic [ref=e299]: "Configured: Auto (no active Custom value)"
+                  - generic [ref=e300]: "Verified Native: Unknown / Unverified"
+                  - generic [ref=e301]: "Effective: 8,192 tokens"
+                  - generic [ref=e302]: "可用输入（空消息预算估算）: 5,128 tokens"
+                  - generic [ref=e303]: "输出预留: 2,048 tokens"
+                  - generic [ref=e304]: 实际消息仍会由完整请求预算守卫复核。
+              - generic [ref=e305]:
+                - generic [ref=e306]:
+                  - text: Actions Schema Type
+                  - img "?" [ref=e308]
+                - combobox "Actions Schema Type ?" [ref=e309]:
+                  - option "Auto-detect (Recommended)" [selected]
+                  - option "Advanced (Full validation)"
+                  - option "Minimized (For limited models)"
+              - heading "Default Parameters" [level=4] [ref=e310]
+              - generic [ref=e311]:
+                - generic [ref=e312]: "Temperature:"
+                - spinbutton "Temperature:" [ref=e313]: "0.7"
+              - generic [ref=e314]:
+                - generic [ref=e315]: "Max Tokens:"
+                - spinbutton "Max Tokens:" [ref=e316]: "2048"
+              - button "Test Connection" [ref=e318]
+      - generic "VOTC App 9.3.9.2" [ref=e319]: V9.3.9.2 · Mod v2.0.5

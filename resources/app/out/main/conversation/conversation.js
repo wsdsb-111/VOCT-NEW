@@ -213,6 +213,9 @@ class Conversation {
     this.generationAttemptsByMessageId = /* @__PURE__ */ new Map();
     this.memoryAttemptDiagnosticsByOwner = /* @__PURE__ */ new Map();
     this.contextUsageByResponder = /* @__PURE__ */ new Map();
+    this.contextUsageSceneByResponder = /* @__PURE__ */ new Map();
+    this.contextUsageSceneCapacityTokens = null;
+    this.contextUsageSceneCapacitySource = null;
     this.contextUsageRevision = 0;
     this.contextUsageSceneRevision = null;
     this.contextCompactionTurnKey = null;
@@ -233,9 +236,11 @@ class Conversation {
       conversationEpoch: this.conversationEpoch,
       turnEpoch: this.turnEpoch || 0,
       sceneRevision: this.contextUsageSceneRevision,
+      sceneCapacityTokens: this.contextUsageSceneCapacityTokens,
+      sceneCapacitySource: this.contextUsageSceneCapacitySource,
       revision: this.contextUsageRevision || 0,
       phase,
-      responders: [...(this.contextUsageByResponder?.values?.() || [])]
+      responders: [...(this.contextUsageSceneByResponder?.values?.() || this.contextUsageByResponder?.values?.() || [])]
     };
   }
   resetContextUsageScene(turnEpoch = this.turnEpoch || 0) {
@@ -244,6 +249,9 @@ class Conversation {
     if (this.contextUsageSceneRevision === sceneRevision) return false;
     this.contextUsageSceneRevision = sceneRevision;
     this.contextUsageByResponder?.clear?.();
+    this.contextUsageSceneByResponder?.clear?.();
+    this.contextUsageSceneCapacityTokens = null;
+    this.contextUsageSceneCapacitySource = null;
     this.contextUsageRevision = (this.contextUsageRevision || 0) + 1;
     this.eventEmitter?.emit?.("context-usage-updated", {
       ...this.getContextUsageSnapshot("reset"), turnEpoch
@@ -251,6 +259,13 @@ class Conversation {
     return true;
   }
   resetContextUsageTurn() {
+    const sceneResponders = this.contextUsageSceneByResponder;
+    for (const [responderId, row] of this.contextUsageByResponder || []) {
+      if (row.phase !== "request_snapshot" && row.phase !== "streaming") continue;
+      this.contextUsageRevision = (this.contextUsageRevision || 0) + 1;
+      sceneResponders?.set?.(responderId, { ...row, phase: "cancelled", usageRevision: this.contextUsageRevision,
+        updatedAt: new Date().toISOString() });
+    }
     this.contextUsageByResponder?.clear?.();
     this.contextUsageRevision = (this.contextUsageRevision || 0) + 1;
     this.eventEmitter?.emit?.("context-usage-updated", this.getContextUsageSnapshot("reset"));
@@ -268,8 +283,18 @@ class Conversation {
     const terminalForLatestRequest = (row.phase === "cancelled" || row.phase === "failed")
       && previous?.requestId === row.requestId;
     if (responseState && !this.isResponseCurrent(responseState) && !terminalForLatestRequest) return false;
+    this.contextUsageSceneByResponder ||= new Map();
+    if (this.contextUsageSceneCapacityTokens == null) {
+      const configuredCapacity = tokenCountOrNull(row.configuredContextLength);
+      const providerCapacity = tokenCountOrNull(row.contextWindowTokens);
+      this.contextUsageSceneCapacityTokens = configuredCapacity ?? providerCapacity;
+      this.contextUsageSceneCapacitySource = configuredCapacity != null
+        ? "configured" : row.contextWindowSource || "provider_window";
+    }
     this.contextUsageRevision = (this.contextUsageRevision || 0) + 1;
-    this.contextUsageByResponder.set(responderId, { ...row, responderId, usageRevision: this.contextUsageRevision });
+    const publishedRow = { ...row, responderId, usageRevision: this.contextUsageRevision };
+    this.contextUsageByResponder.set(responderId, publishedRow);
+    this.contextUsageSceneByResponder.set(responderId, publishedRow);
     this.eventEmitter.emit("context-usage-updated", this.getContextUsageSnapshot("update"));
     return true;
   }
@@ -1513,6 +1538,7 @@ class Conversation {
           model: contextDiagnostics.model || activeConfig?.defaultModel || null,
           contextWindowTokens,
           contextWindowSource: contextDiagnostics.contextWindowSource || null,
+          configuredContextLength: tokenCountOrNull(contextDiagnostics.configuredContextLength),
           phase,
           estimatedInputTokens: requestBudget.estimatedInputTokens,
           inputTokens,
@@ -2203,23 +2229,23 @@ class Conversation {
     const targetIndex = this.messages.findIndex((msg) => "id" in msg && msg.id === messageId);
     if (targetIndex === -1) {
       console.error("Message not found for regeneration:", messageId);
-      return;
+      return { success: false, error: "找不到要重新生成的回复。" };
     }
     const targetMessage = this.messages[targetIndex];
     if (targetMessage.role !== "assistant") {
       console.error("Can only regenerate assistant messages:", targetMessage.role);
-      return;
+      return { success: false, error: "只能重新生成 NPC 的回复。" };
     }
     const responderId = Number(targetMessage.speakerCharacterId);
     if (!Number.isSafeInteger(responderId) || responderId <= 0 || responderId === Number(this.gameData?.playerID)) {
       console.error("Cannot regenerate assistant without a valid responder ID");
-      return;
+      return { success: false, error: "无法识别这条回复对应的 NPC，无法安全重新生成。" };
     }
     const regenerationContext = this.getValidatedRegenerationContext(targetIndex, targetMessage, responderId);
     const targetCharacter = regenerationContext && this.getNpcList().find((character) => Number(character.id) === responderId);
     if (!targetCharacter) {
       console.error("Cannot safely regenerate a stale turn or unavailable responder");
-      return;
+      return { success: false, error: "这条回复已不属于当前对话或场景，无法安全重新生成。" };
     }
     const tailMessages = this.messages.slice(targetIndex);
     const tailHasUnsafeOutcome = tailMessages.some(message => {
@@ -2230,7 +2256,7 @@ class Conversation {
     });
     if (tailHasUnsafeOutcome) {
       console.error("Cannot regenerate a turn with action outcomes or non-generation events");
-      return;
+      return { success: false, error: "回复后续包含动作或其他事件，无法安全重新生成。" };
     }
 
     const regenerateOfByResponder = {};
@@ -2255,7 +2281,7 @@ class Conversation {
     });
     if (!turnState) {
       console.error("Cannot safely create a regeneration attempt for this turn");
-      return;
+      return { success: false, error: "无法为这条回复创建安全的重试轮次。" };
     }
     const prefixMessages = new Set(this.messages.slice(0, targetIndex));
     for (const message of tailMessages) this.generationAttemptsByMessageId.delete(message.id);
@@ -2276,12 +2302,14 @@ class Conversation {
     } else {
       this.npcQueue = [targetCharacter];
     }
+    this.isPaused = false;
     this.emitUpdate();
     const pauseOnRegeneration = settingsRepository.getPauseOnRegenerationSetting();
     this.processQueue();
     if (pauseOnRegeneration) {
       this.pauseConversation();
     }
+    return { success: true };
   }
   // Regenerate error message and retry the operation
   async regenerateError(messageId) {
@@ -2289,12 +2317,12 @@ class Conversation {
     const targetIndex = this.messages.findIndex((msg) => "id" in msg && msg.id === messageId);
     if (targetIndex === -1) {
       console.error("Error not found for regeneration:", messageId);
-      return;
+      return { success: false, error: "找不到要重试的失败请求。" };
     }
     const targetError = this.messages[targetIndex];
     if (targetError.type !== "error") {
       console.error("Can only regenerate error entries:", targetError.type);
-      return;
+      return { success: false, error: "这条消息不是可重试的失败请求。" };
     }
     if (targetError.content === "Failed to initialize conversation") {
       this.messages.splice(targetIndex, 1);
@@ -2307,7 +2335,7 @@ class Conversation {
       const targetCharacter = regenerationContext && this.getNpcList().find(character => Number(character.id) === responderId);
       if (!targetCharacter) {
         console.error("Cannot safely retry a stale turn or unavailable responder error");
-        return;
+        return { success: false, error: "这条失败请求已不属于当前对话或场景，无法安全重试。" };
       }
       const currentTurn = regenerationContext.currentTurn;
       const remainingQueue = this.npcQueue.filter(character => Number(character.id) !== responderId
@@ -2322,7 +2350,7 @@ class Conversation {
       });
       if (!turnState) {
         console.error("Cannot safely create a retry attempt for this error");
-        return;
+        return { success: false, error: "无法为这条失败请求创建安全的重试轮次。" };
       }
       this.generationAttemptsByMessageId.delete(targetError.id);
       this.messages = this.messages.filter(message => message !== targetError);
@@ -2331,6 +2359,7 @@ class Conversation {
       this.resumeConversation();
     }
     this.emitUpdate();
+    return { success: true };
   }
   // Edit user message and resend
   async editUserMessage(messageId, newContent) {

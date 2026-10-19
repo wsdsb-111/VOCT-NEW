@@ -1,0 +1,117 @@
+- generic [ref=e3]:
+  - banner:
+    - generic [ref=e13]:
+      - button [ref=e14] [cursor=pointer]:
+        - img "?" [ref=e15]
+      - button [ref=e17] [cursor=pointer]:
+        - img "Language" [ref=e18]
+      - button [ref=e19] [cursor=pointer]:
+        - img "Discord" [ref=e20]
+      - button [ref=e21] [cursor=pointer]:
+        - img "?" [ref=e22]
+    - button "Connection" [ref=e23]
+    - button "Settings" [ref=e24]
+    - button "Actions" [ref=e25]
+    - button "Prompts" [ref=e26]
+    - button "Summaries" [ref=e27]
+    - button "优化" [ref=e28]
+    - button "世界书" [ref=e29]
+    - button "诊断" [ref=e30]
+    - group "界面风格" [ref=e31]:
+      - text: 骑士
+      - button "切换为游牧风格" [ref=e32]
+      - button "切换为骑士纹章风格" [pressed] [ref=e33]
+      - button "切换为水墨画卷风格" [ref=e34]
+    - button "✕" [ref=e35]
+  - main [ref=e36]:
+    - generic [ref=e37]:
+      - generic [ref=e38]:
+        - generic [ref=e39]:
+          - heading "Providers" [level=4] [ref=e40]
+          - list [ref=e41]:
+            - listitem [ref=e42] [cursor=pointer]: Player2
+            - listitem [ref=e43] [cursor=pointer]: Openrouter
+            - listitem [ref=e44] [cursor=pointer]: Openai-compatible
+            - listitem [ref=e45] [cursor=pointer]: Ollama
+            - listitem [ref=e46] [cursor=pointer]: Deepseek
+            - listitem [ref=e47] [cursor=pointer]: Gemini
+            - listitem [ref=e48] [cursor=pointer]: 智谱 GLM
+          - separator [ref=e49]
+          - heading "Presets" [level=4] [ref=e50]
+          - paragraph [ref=e51]: No presets saved yet
+        - generic [ref=e52]:
+          - generic [ref=e53]:
+            - generic [ref=e54]: NPC Messages
+            - generic "player2-model" [ref=e56]: Player2
+          - generic [ref=e58]:
+            - generic [ref=e59]: NPC Actions
+            - combobox [ref=e60] [cursor=pointer]:
+              - option "Default" [selected]
+              - option "Player2"
+              - option "Openrouter"
+              - option "Openai-compatible"
+              - option "Ollama"
+              - option "Deepseek"
+              - option "Gemini"
+              - option "智谱 GLM"
+          - generic [ref=e61]:
+            - generic [ref=e62]: NPC Summaries
+            - combobox [ref=e63] [cursor=pointer]:
+              - option "Default" [selected]
+              - option "Player2"
+              - option "Openrouter"
+              - option "Openai-compatible"
+              - option "Ollama"
+              - option "Deepseek"
+              - option "Gemini"
+              - option "智谱 GLM"
+      - generic [ref=e64]:
+        - generic [ref=e65]:
+          - generic [ref=e66]:
+            - text: Select CK3 Documents Folder
+            - img "?" [ref=e68]
+          - generic [ref=e70] [cursor=pointer]:
+            - text: e.g. C:\Users\YOUR_USERNAME\Documents\Paradox Interactive\Crusader Kings III
+            - generic [ref=e71]: (click to select)
+        - heading "Player2 Configuration" [level=3] [ref=e72]
+        - generic [ref=e73]:
+          - generic [ref=e74]:
+            - button "Open Player2 App" [ref=e75] [cursor=pointer]
+            - generic [ref=e76]: Click to open the Player2 application. Make sure it is installed and running.
+          - generic [ref=e77]:
+            - generic [ref=e78]:
+              - generic [ref=e80]: error
+              - generic [ref=e81]: provider_unknown
+            - button "Refresh" [ref=e82] [cursor=pointer]
+          - generic [ref=e83]:
+            - generic [ref=e84]: "Context Window Mode:"
+            - combobox "Context Window Mode:" [ref=e85]:
+              - option "Auto (provider native)" [selected]
+              - option "Custom"
+            - generic [ref=e86]: Provider context is unverified. Auto uses a conservative 8,192-token fallback; this is not the model's native limit.
+            - generic [ref=e87]:
+              - generic [ref=e88]: "Mode: auto"
+              - generic [ref=e89]: "Source: safe_fallback"
+              - generic [ref=e90]: "Configured: Auto (no active Custom value)"
+              - generic [ref=e91]: "Verified Native: Unknown / Unverified"
+              - generic [ref=e92]: "Effective: 8,192 tokens"
+              - generic [ref=e93]: "可用输入（空消息预算估算）: 5,128 tokens"
+              - generic [ref=e94]: "输出预留: 2,048 tokens"
+              - generic [ref=e95]: 实际消息仍会由完整请求预算守卫复核。
+          - generic [ref=e96]:
+            - generic [ref=e97]:
+              - text: Actions Schema Type
+              - img "?" [ref=e99]
+            - combobox "Actions Schema Type ?" [ref=e100]:
+              - option "Auto-detect (Recommended)" [selected]
+              - option "Advanced (Full validation)"
+              - option "Minimized (For limited models)"
+          - heading "Default Parameters" [level=4] [ref=e101]
+          - generic [ref=e102]:
+            - generic [ref=e103]: "Temperature:"
+            - spinbutton "Temperature:" [ref=e104]: "0.7"
+          - generic [ref=e105]:
+            - generic [ref=e106]: "Max Tokens:"
+            - spinbutton "Max Tokens:" [ref=e107]: "2048"
+          - button "Test Connection" [ref=e109]
+  - generic "VOTC App 9.3.9.2" [ref=e110]: V9.3.9.2 · Mod v2.0.5

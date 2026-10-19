@@ -7,9 +7,16 @@ const { buildHistoricalReferenceReplacement } = require("../worldline/subjective
 const { currentRelationship } = require("../memory-system/entity-context");
 const { isMemoryBudgetBlock } = require("../memory-system/memory-budget-policy");
 const { parseRelationIntent } = require("../worldline/relation-intent-parser");
-const { createTraitProfileView } = require("./trait-profile-selector");
+const { createTraitProfileView, isPublicCloseFamily } = require("./trait-profile-selector");
 const { resolveCharacterAge } = require("../worldline/character-age-service");
+const { getTargetedKinshipGraph } = require("../worldline/kinship-graph-cache");
+const { createRelationshipResolver } = require("../game-data/relationship-resolver");
+const { inferGenderFromPronoun } = require("../game-data/character");
+const { resolveCharacterSexConsensus } = require("../worldline/character-demographic-normalizer");
+const { resolveKinshipLabel } = require("../worldline/kinship-label-resolver");
+const { resolveLifeStatus } = require("../worldline/character-temporal-facts");
 const { isStepFamilyQuery } = require("../worldline/step-family-facts");
+const { formatKnownNameFacts } = require("../conversation/character-disclosure-context");
 
 const traitProfileContexts = new WeakSet();
 
@@ -21,6 +28,169 @@ const PROMPT_LIFECYCLE = Object.freeze({
 });
 // Match the marginal per-message protocol overhead used by planRequestBudget.
 const PROMPT_MESSAGE_OVERHEAD_TOKENS = 8;
+
+const KINSHIP_INVERSE_TYPES = Object.freeze({
+  PARENT_OF: "CHILD_OF",
+  CHILD_OF: "PARENT_OF",
+  SIBLING_OF: "SIBLING_OF",
+  GRANDPARENT_OF: "GRANDCHILD_OF",
+  GRANDCHILD_OF: "GRANDPARENT_OF",
+  AUNT_UNCLE_OF: "NIECE_NEPHEW_OF",
+  NIECE_NEPHEW_OF: "AUNT_UNCLE_OF",
+  COUSIN_OF: "COUSIN_OF",
+  SPOUSE_OF: "SPOUSE_OF",
+  FORMER_SPOUSE_OF: "FORMER_SPOUSE_OF",
+  DECEASED_SPOUSE_OF: "DECEASED_SPOUSE_OF"
+});
+
+function numericRuntimeId(value) {
+  const id = Number(value && typeof value === "object" ? value.id ?? value.runtimeId ?? value.characterId : value);
+  return Number.isSafeInteger(id) && id > 0 ? id : null;
+}
+
+function profileName(gameData, characterId, mentionableProfiles = null) {
+  const character = gameData?.characters instanceof Map
+    ? gameData.characters.get(Number(characterId)) || gameData.characters.get(String(characterId))
+    : gameData?.characters?.[characterId];
+  const mentionable = mentionableProfiles instanceof Map
+    ? mentionableProfiles.get(Number(characterId)) || mentionableProfiles.get(String(characterId))
+    : mentionableProfiles?.[characterId];
+  const name = character?.fullName || character?.shortName || character?.firstName
+    || mentionable?.fullName || mentionable?.shortName || mentionable?.firstName;
+  return typeof name === "string" && name.trim() ? name.trim() : "姓名未载入";
+}
+
+function buildCurrentParticipantPairFacts(rawGameData, participantIds, responderId, mentionedIds = []) {
+  const ids = [...new Set((participantIds || []).map(numericRuntimeId).filter(Boolean))];
+  const mentionIds = [...new Set((mentionedIds || []).map(numericRuntimeId).filter(Boolean))];
+  const allSeeds = [...new Set([...ids, ...mentionIds])];
+  if (!rawGameData || allSeeds.length < 2) return { pairs: [], labels: new Map() };
+
+  const graph = getTargetedKinshipGraph(rawGameData, allSeeds, { maxDepth: 3, maxNodes: 4096 });
+  const profiles = createRelationshipResolver().buildCanonicalProfiles(graph.nodes, rawGameData.totalDays, inferGenderFromPronoun, {
+    campaignToken: rawGameData.campaignToken,
+    sourceSnapshotId: `${rawGameData.date}/${rawGameData.totalDays}`
+  });
+  const ageById = new Map();
+  const currentTotalDays = Number(rawGameData.totalDays);
+  for (const [profileId, profile] of profiles) {
+    const id = numericRuntimeId(profileId ?? profile?.id);
+    if (!id) continue;
+    if (!profile || profile.ageEvidenceConflict === true || profile.evidence?.conflicts?.age === true || profile.evidence?.conflicts?.lifeStatus === true) continue;
+    const life = resolveLifeStatus(profile);
+    if (life.conflict || life.alive === false) continue;
+    const age = resolveCharacterAge(profile, {
+      currentGameDate: rawGameData.date,
+      currentTotalDays: rawGameData.totalDays,
+      currentCampaignToken: rawGameData.campaignToken
+    });
+    if (age.age === null || age.sourceConflict || !["CK3_CURRENT_AGE", "CK3_LIVE_RELATIVE_AGE"].includes(age.ageSource)) continue;
+    ageById.set(id, age.age);
+  }
+
+  const labels = new Map();
+  const relationPairs = new Map();
+  const relationFor = (fromId, toId) => {
+    if (graph.scopeTruncated === true) return null;
+    const result = graph.relationBetween(fromId, toId);
+    const relation = result?.diagnostic || !result?.relation ? null : result.relation;
+    return relation || null;
+  };
+  const seniority = (subjectId, otherId) => {
+    const subjectAge = ageById.get(Number(subjectId));
+    const otherAge = ageById.get(Number(otherId));
+    if (!Number.isInteger(subjectAge) || !Number.isInteger(otherAge)) return null;
+    if (subjectAge !== otherAge) return subjectAge > otherAge ? 1 : -1;
+    const subjectProfile = profiles.get(Number(subjectId)) || profiles.get(String(subjectId));
+    const otherProfile = profiles.get(Number(otherId)) || profiles.get(String(otherId));
+    const birthOrdinal = (profile, id) => {
+      if (!profile || profile.evidence?.conflicts?.birthDate === true || profile.evidence?.resolvedBirthSource !== "characters"
+        || typeof rawGameData.date !== "string" || !rawGameData.date.trim() || !Number.isSafeInteger(currentTotalDays) || currentTotalDays < 0) return null;
+      const evidence = (profile.evidence.birthDate || []).filter(item => item.priority === 1 && Number(item.sourceOwnerId) === Number(id)
+        && item.relationType === "canonical" && item.source === "characters");
+      const values = [...new Set(evidence.map(item => Number(item.value)).filter(value => Number.isSafeInteger(value) && value >= 0 && value <= currentTotalDays))];
+      return values.length === 1 ? values[0] : null;
+    };
+    const subjectBirth = birthOrdinal(subjectProfile, subjectId);
+    const otherBirth = birthOrdinal(otherProfile, otherId);
+    if (subjectBirth !== null && otherBirth !== null && subjectBirth !== otherBirth) return subjectBirth < otherBirth ? 1 : -1;
+    return null;
+  };
+  const relationLabel = (relation, subjectId, anchorId) => {
+    const subjectProfile = profiles.get(Number(subjectId)) || profiles.get(String(subjectId));
+    const sex = resolveCharacterSexConsensus({ snapshot: subjectProfile }).sex;
+    const seniorityReferenceId = relation.type === "AUNT_UNCLE_OF"
+      ? relation.seniorityReferenceId ?? relation.relationPath?.[1]
+      : anchorId;
+    const ageSeniority = ["SIBLING_OF", "STEP_SIBLING_OF", "COUSIN_OF", "AUNT_UNCLE_OF"].includes(relation.type)
+      ? seniority(subjectId, seniorityReferenceId)
+      : null;
+    if (relation.type === "SIBLING_OF" || relation.type === "STEP_SIBLING_OF") {
+      const step = relation.relationshipKind === "STEP" || relation.type === "STEP_SIBLING_OF";
+      if (sex === "male") return step ? ageSeniority > 0 ? "继兄" : ageSeniority < 0 ? "继弟" : "继兄弟" : ageSeniority > 0 ? "哥哥" : ageSeniority < 0 ? "弟弟" : "兄弟";
+      if (sex === "female") return step ? ageSeniority > 0 ? "继姐" : ageSeniority < 0 ? "继妹" : "继姐妹" : ageSeniority > 0 ? "姐姐" : ageSeniority < 0 ? "妹妹" : "姐妹";
+      return step ? "继兄弟姐妹" : ageSeniority > 0 ? "年长手足" : ageSeniority < 0 ? "年幼手足" : "手足";
+    }
+    return resolveKinshipLabel({ ...relation, sex, seniority: ageSeniority });
+  };
+  const addPair = (leftId, rightId) => {
+    const key = `${leftId}:${rightId}`;
+    if (relationPairs.has(key)) return;
+    const leftToRight = relationFor(leftId, rightId);
+    const rightToLeft = relationFor(rightId, leftId);
+    const isReciprocal = leftToRight && rightToLeft
+      && KINSHIP_INVERSE_TYPES[leftToRight.type] === rightToLeft.type;
+    const pair = { leftId, rightId, leftToRight: null, rightToLeft: null };
+    if (isReciprocal) {
+      pair.leftToRight = relationLabel(leftToRight, leftId, rightId);
+      pair.rightToLeft = relationLabel(rightToLeft, rightId, leftId);
+    }
+    labels.set(`${leftId}:${rightId}`, pair.leftToRight);
+    labels.set(`${rightId}:${leftId}`, pair.rightToLeft);
+    relationPairs.set(key, pair);
+  };
+
+  const pairs = [];
+  for (let leftIndex = 0; leftIndex < ids.length; leftIndex++) {
+    for (let rightIndex = leftIndex + 1; rightIndex < ids.length; rightIndex++) pairs.push([ids[leftIndex], ids[rightIndex]]);
+  }
+  const mentionedAnchors = [...new Set([numericRuntimeId(rawGameData.playerID), numericRuntimeId(responderId)].filter(Boolean))];
+  for (const targetId of mentionIds) {
+    if (ids.includes(targetId)) continue;
+    for (const anchorId of mentionedAnchors) if (targetId !== anchorId) pairs.push([targetId, anchorId]);
+  }
+  for (const [leftId, rightId] of pairs) addPair(leftId, rightId);
+
+  const pairFacts = [];
+  for (const [leftId, rightId] of pairs) {
+    const order = seniority(leftId, rightId);
+    const pair = relationPairs.get(`${leftId}:${rightId}`);
+    pairFacts.push({ leftId, rightId, order, leftToRight: pair?.leftToRight || null, rightToLeft: pair?.rightToLeft || null });
+  }
+  return { pairs: pairFacts, labels };
+}
+
+function formatCurrentParticipantPairFacts(pairFacts, promptGameData, participantIds = [], mentionedIds = [], responderId = null) {
+  const lines = [];
+  const activeIds = new Set(participantIds.map(Number));
+  const mentionedIdSet = new Set(mentionedIds.map(Number));
+  const anchorIds = new Set([Number(promptGameData?.playerID), Number(responderId)].filter(id => Number.isSafeInteger(id) && id > 0));
+  const visiblePairs = (pairFacts?.pairs || []).filter(pair => activeIds.has(pair.leftId) && activeIds.has(pair.rightId)
+    || mentionedIdSet.has(pair.leftId) && anchorIds.has(pair.rightId)
+    || mentionedIdSet.has(pair.rightId) && anchorIds.has(pair.leftId));
+  for (const pair of visiblePairs) {
+    const leftName = profileName(promptGameData, pair.leftId);
+    const rightName = profileName(promptGameData, pair.rightId);
+    const orderText = pair.order > 0 ? `${leftName}年长于${rightName}`
+      : pair.order < 0 ? `${rightName}年长于${leftName}`
+        : "未能可靠确认，不得推测";
+    lines.push(`- 长幼：${orderText}。`);
+    if (pair.leftToRight && pair.rightToLeft) {
+      lines.push(`- 双向亲属称谓：${leftName}相对${rightName}为${pair.leftToRight}；${rightName}相对${leftName}为${pair.rightToLeft}。`);
+    }
+  }
+  return lines.length ? `\n\n=== 当前人物长幼与双向亲属称谓（遮盖年龄前按当前可信 CK3 来源解析；不包含年龄或出生日期） ===\n${lines.join("\n")}\n权威规则：长幼只按已验证的当前整数年龄或可信当前出生序数区分；年龄未知、冲突或相同且出生序数不可靠均不得猜测。亲属称谓仅来自当前可靠关系图，双向称谓分别适用；未确认关系不得补造。` : "";
+}
 
 function createPromptBuilder({
   TemplateEngine,
@@ -122,9 +292,10 @@ function createPromptBuilder({
         sourcePairIds: pairIds.map(String).sort(),
         budgetPolicyRevision: memoryContext.budgetPolicyRevision,
         conversationId: memoryContext.conversationId,
-        characterKnowledgeRevision: memoryContext.characterKnowledgeRevision || null,
         frozenDynamicFingerprint: memoryContext.frozenDynamicText ? createPromptFingerprint(memoryContext.frozenDynamicText) : null
       };
+      // Per-request disclosure changes are checked before transport and do not
+      // change the frozen historical-memory prefix scope.
       return createPromptFingerprint(this.stableStringify(scope));
     }
     static buildSummaryCacheAnchor() {
@@ -244,7 +415,7 @@ function createPromptBuilder({
      * Character-description scripts can be customized or disabled. Keep exact
      * responder facts close to history so direct factual questions use CK3 data.
      */
-    static buildPlayerIdentityKnowledge(char, gameData) {
+    static buildPlayerIdentityKnowledge(char, gameData, publicCloseFamily = false) {
       const playerId = Number(gameData?.playerID);
       if (!gameData?.characters?.has(playerId) || Number(char?.id) === playerId) return null;
       const formalRelationships = [
@@ -256,22 +427,28 @@ function createPromptBuilder({
         ...formalRelationships,
         ...buildStableKinship(char, gameData).filter(relative => Number(relative.runtimeId) === playerId).map(relative => relative.kinshipType)
       ])];
+      const identityKnowledgeRule = publicCloseFamily
+        ? `  - 当前可靠公开的亲属关系允许双方依本轮可信人物资料白名单互知姓名、头衔与特质，无需重复自我介绍；此例外仅限这些当前字段，不授权秘密、过往记忆或其他人物资料。称号（Nickname）默认可见。`
+        : `  - 人物资料、在场表、场景说明、Runtime ID 和消息说话者前缀里的玩家姓名、全名、家族、头衔与官职都是后台标签，不构成本角色已经知道玩家身份的证据。本边界优先于这些资料和标签。称号（Nickname）默认可见，用于角色扮演，但不授予真名、精确头衔或官职。`;
+      const nameAccessRule = publicCloseFamily
+        ? `  - 仅当前可靠公开的近亲可按本轮白名单知晓玩家姓名、头衔与特质；不得据此读取记忆或秘密，也不得扩展到其他人物资料。`
+        : `  - 只可依据当前 CK3 明确的亲属或正式关系、本角色获准的记忆、获准的公开事实，以及当前对话正文中明确说出的自我介绍或他人介绍识别玩家。只授予来源明确给出的那项姓名或身份，不得据此解锁整包玩家资料；介绍中的化名不等于已得知后台真名。已公开的头衔和特质逐项限定于获知的角色；旧头衔不代表自动知道新头衔，已消失特质不作为当前属性。`;
       return `=== 玩家身份知情边界（本轮高优先级，适用于当前回应角色） ===
-  - 当前 CK3 身份识别关系证据：${relationships.join("、") || "未提供"}。关系证据支持双方相识及相应称谓，不自动授予全部后台身份资料；缺少记录不等于从未相识。
-  - 人物资料、在场表、场景说明、Runtime ID 和消息说话者前缀里的玩家姓名、全名、家族、头衔与官职都是后台标签，不构成本角色已经知道玩家身份的证据。本边界优先于这些资料和标签。称号（Nickname）默认可见，用于角色扮演，但不授予真名、精确头衔或官职。
-  - 只可依据当前 CK3 明确的亲属或正式关系、本角色获准的记忆、获准的公开事实，以及当前对话正文中明确说出的自我介绍或他人介绍识别玩家。只授予来源明确给出的那项姓名或身份，不得据此解锁整包玩家资料；介绍中的化名不等于已得知后台真名。已公开的头衔和特质逐项限定于获知的角色；旧头衔不代表自动知道新头衔，已消失特质不作为当前属性。
+  - 当前 CK3 身份识别关系证据：${relationships.join("、") || "未提供"}。${publicCloseFamily ? "双方是当前可靠公开的近亲，关系证据支持相应称谓。" : "关系证据支持双方相识及相应称谓，不自动授予全部后台身份资料；缺少记录不等于从未相识。"}
+${identityKnowledgeRule}
+${nameAccessRule}
   - 当前回合开始交谈、同场、好感数值、SHARED_SCENE 或本次相遇的直接交谈次数，都不等于已知玩家身份。没有上述具体身份来源时，应按尚未识别的对方自然回应，不得主动叫出后台姓名、家族、头衔或官职，也不得因为系统提供资料而装作早已认识。
   - 私下交谈和信件不会自动变成全世界的传闻。对话记忆中的 public 只表示当场公开说出，不是全球公开；只有该记忆明确授权的知情者可以引用。亲友、同国、同地、身份声望和时间流逝都不是获得他人私聊的证据。
   - 只能引用本请求为当前回应角色提供的获准记忆、来源明确的公开事实或本人已听见的当前对话。没有具体来源时，不得用“听说”“传闻”“有人告诉我”补造玩家过去的谈话、经历、交易或秘密，也不得为后台人物资料编造传播渠道；可以询问，但不能装作已经知道。`;
     }
-    static buildResponderGameFacts(char, gameData = null) {
+    static buildResponderGameFacts(char, gameData = null, publicCloseFamily = false) {
       if (!char) return null;
       const age = resolveCharacterAge(char, { currentGameDate: gameData?.date, currentTotalDays: gameData?.totalDays, currentCampaignToken: gameData?.campaignToken }).age;
       const primaryTitle = typeof char.primaryTitle === "string" ? char.primaryTitle.trim() : "";
       const title = primaryTitle && !["None", "None of", "None von", "None de"].includes(primaryTitle) ? primaryTitle : "无主要头衔";
       const courtPosition = typeof char.heldCourtAndCouncilPositions === "string" && char.heldCourtAndCouncilPositions.trim() ? char.heldCourtAndCouncilPositions.trim() : "无";
       const titleRank = typeof char.titleRankConcept === "string" && char.titleRankConcept !== "concept_none" ? char.titleRankConcept : "无";
-      const playerIdentityKnowledge = this.buildPlayerIdentityKnowledge(char, gameData);
+      const playerIdentityKnowledge = this.buildPlayerIdentityKnowledge(char, gameData, publicCloseFamily);
       return `=== 当前回应角色的权威游戏资料（本轮 CK3 数据） ===
   - 游戏姓名／称号：${char.fullName || char.shortName || "未知"}
   - 姓名：${char.shortName || char.firstName || "未知"}
@@ -362,7 +539,7 @@ function createPromptBuilder({
      * unchanged in meaning, but is emitted immediately before conversation
      * history rather than inside the earlier stable summaries block.
      */
-    static buildMentionedCharactersContext(char, gameData, history = null, currentFactRegistry = null) {
+    static buildMentionedCharactersContext(char, gameData, history = null, currentFactRegistry = null, preRedactionKinshipLabels = null) {
       if (!history || history.length === 0) return null;
       const mentionedCharacterIds = gameData.findMentionedCharacterIdsInHistory(history, char);
       if (!gameData.mentionedCharactersInContext) gameData.mentionedCharactersInContext = /* @__PURE__ */ new Set();
@@ -370,7 +547,7 @@ function createPromptBuilder({
         gameData.mentionedCharactersInContext.add(characterId);
       }
       let context = "";
-      const mentionedCharsInfo = gameData.getMentionedCharactersInfo(char, { currentFactRegistry });
+      const mentionedCharsInfo = gameData.getMentionedCharactersInfo(char, { currentFactRegistry, preRedactionKinshipLabels });
       if (mentionedCharsInfo) context += mentionedCharsInfo;
       return context.trim() ? context : null;
     }
@@ -600,6 +777,14 @@ function createPromptBuilder({
       const memoryMode = options?.memoryMode;
       if (memoryMode === "exclude") memoryContext = this.createMemoryExcludedContext(memoryContext);
       const ageAuthorityGameData = gameData;
+      const activeParticipantIds = new Set((memoryContext?.activeParticipantIds || [...gameData.characters.keys()]).map(Number));
+      activeParticipantIds.add(Number(gameData.playerID));
+      activeParticipantIds.add(Number(char.id));
+      const rawMentionedTargetIds = memoryContext?.subjectiveWorldPolicyActive || typeof gameData.findMentionedCharacterIdsInHistory !== "function"
+        ? []
+        : [...gameData.findMentionedCharacterIdsInHistory(history, char)];
+      const participantPairFacts = buildCurrentParticipantPairFacts(ageAuthorityGameData, [...activeParticipantIds], Number(char.id), rawMentionedTargetIds);
+      const playerIdentityFamilyAccess = isPublicCloseFamily(Number(char.id), Number(gameData.playerID), ageAuthorityGameData);
       const stepFamilyRequested = isStepFamilyQuery([...(history || [])].reverse().find(message => message.role === "user")?.content || "");
       const profileView = createTraitProfileView(gameData, char, memoryContext, { includeStepFamily: stepFamilyRequested });
       gameData = profileView.gameData;
@@ -656,9 +841,8 @@ function createPromptBuilder({
       const workingHistory = Number.isInteger(promptProfile.historyWindow) ? normalizedHistory.slice(-promptProfile.historyWindow) : normalizedHistory;
       const omittedHistory = Number.isInteger(promptProfile.historyWindow) ? normalizedHistory.slice(0, Math.max(0, normalizedHistory.length - promptProfile.historyWindow)) : [];
       const currentFactRegistry = new Map();
-      const activeParticipantIds = new Set((memoryContext?.activeParticipantIds || [...gameData.characters.keys()]).map(Number));
       const activeCounterpartIds = [...activeParticipantIds].filter((id) => Number(id) !== Number(char.id));
-      const activeParticipantRelationshipContext = gameData.getActiveParticipantRelationshipInfo(char, activeCounterpartIds, currentFactRegistry);
+      const rawActiveParticipantRelationshipContext = gameData.getActiveParticipantRelationshipInfo(char, activeCounterpartIds, currentFactRegistry, participantPairFacts.labels);
       const activeParticipantRelationshipBlock = {
         id: "active-participant-relationship",
         type: "participant_relationship",
@@ -667,7 +851,10 @@ function createPromptBuilder({
         role: "system",
         stable: false
       };
-      const responderGameFacts = this.buildResponderGameFacts(char, gameData);
+      const responderGameFacts = [
+        this.buildResponderGameFacts(char, gameData, playerIdentityFamilyAccess),
+        formatKnownNameFacts(memoryContext, ageAuthorityGameData, Number(char.id))
+      ].filter(Boolean).join("\n\n");
       const latestUserQuery = [...workingHistory].reverse().find((message) => message.role === "user")?.content || "";
       const ageDiagnostics = [];
       const familyDiagnostics = [];
@@ -678,7 +865,15 @@ function createPromptBuilder({
         ageDiagnostics,
         familyDiagnostics
       });
-      const mentionedCharactersContext = memoryContext?.subjectiveWorldPolicyActive ? null : this.buildMentionedCharactersContext(char, gameData, workingHistory, currentFactRegistry);
+      const rawMentionedCharactersContext = memoryContext?.subjectiveWorldPolicyActive ? null : this.buildMentionedCharactersContext(char, gameData, workingHistory, currentFactRegistry, participantPairFacts.labels);
+      const mentionedTargetIds = rawMentionedCharactersContext
+        ? [...(gameData.mentionedCharactersInContext || [])]
+        : [];
+      const activeParticipantRelationshipContext = [
+        rawActiveParticipantRelationshipContext,
+        formatCurrentParticipantPairFacts(participantPairFacts, gameData, [...activeParticipantIds], mentionedTargetIds, Number(char.id))
+      ].filter(Boolean).join("\n\n");
+      const mentionedCharactersContext = rawMentionedCharactersContext;
       const responderGameFactsBlock = {
         id: "responder-game-facts",
         type: "responder_game_facts",

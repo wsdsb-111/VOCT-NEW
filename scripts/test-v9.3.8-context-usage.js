@@ -15,6 +15,9 @@ function makeConversation() {
     conversationEpoch: 8,
     turnEpoch: 12,
     contextUsageByResponder: new Map(),
+    contextUsageSceneByResponder: new Map(),
+    contextUsageSceneCapacityTokens: null,
+    contextUsageSceneCapacitySource: null,
     contextUsageRevision: 0,
     contextUsageSceneRevision: null,
     gameData: { scene: "scene-a", location: "court-a", locationController: 4 },
@@ -107,7 +110,9 @@ function testTurnBoundariesClearOldStreamingUsageBeforeCancellation() {
   const turn = turnManager.startUserTurn({ playerMessageId: 41, playerCharacterId: 1, activeParticipantIds: [27],
     conversationId: conversation.id, sceneRevision: "scene-a", campaignToken: null });
   assert.equal(updates.at(-1).turnEpoch, turn.epoch);
-  assert.equal(updates.at(-1).responders.length, 0, "a new player turn clears prior in-flight request rows");
+  assert.equal(updates.at(-1).responders.length, 1, "a new player turn keeps the latest scene row for the responder");
+  assert.equal(updates.at(-1).responders[0].phase, "cancelled", "a superseded in-flight request is retained as stopped");
+  assert.equal(conversation.contextUsageByResponder.size, 0, "the active request map is still cleared at a turn boundary");
   assert.deepEqual(cancellations.at(-1), { reason: "superseded_by_new_user_turn", remainingRows: 0 },
     "the old response is cancelled after stale UI rows are removed");
 
@@ -116,7 +121,9 @@ function testTurnBoundariesClearOldStreamingUsageBeforeCancellation() {
     conversationId: conversation.id, sceneRevision: "scene-a", campaignToken: null });
   assert(regenerated);
   assert.equal(updates.at(-1).turnEpoch, regenerated.epoch);
-  assert.equal(updates.at(-1).responders.length, 0, "a regeneration boundary also clears the superseded stream row");
+  assert.equal(updates.at(-1).responders.length, 1, "a regeneration boundary preserves the latest scene row");
+  assert.equal(updates.at(-1).responders[0].phase, "cancelled");
+  assert.equal(conversation.contextUsageByResponder.size, 0, "regeneration still clears the active request map");
   assert.deepEqual(cancellations.at(-1), { reason: "superseded_by_regeneration", remainingRows: 0 });
 }
 
@@ -185,12 +192,13 @@ function testRendererAndBridgeExposeInlineContextAndOverflow() {
   assert(renderer.includes("inputHeadroomBeforeSendTokens"));
   assert(renderer.includes("memory-budget-overflow-grid"));
   assert(renderer.includes("用户设置，未经服务商确认"));
-  assert(renderer.includes("本场对话上下文") && renderer.includes("本次回应者："));
-  assert(renderer.includes("const row = responders[0]") && renderer.includes("usageRevision"),
-    "the inline UI selects one latest responder request using its monotonic row revision");
+  assert(renderer.includes("本场对话上下文") && renderer.includes("各 NPC 最近请求的最大占用"));
+  assert(renderer.includes("knownUsageResponders[0] || responders[0]") && renderer.includes("usageRevision"),
+    "the inline UI selects the highest known per-responder occupancy, with revisions as stable tie breakers");
   assert(renderer.includes("本次请求输入（完整 Prompt）"),
     "the input count describes the whole outgoing prompt, not only player-entered text");
-  assert(!renderer.includes("按各人物最近一次请求"), "the main UI no longer presents separate NPC context windows");
+  assert(renderer.includes("各 NPC 最近请求中的最大单次用量") && renderer.includes("不把不同 NPC 的请求相加"),
+    "the hover details state that scene occupancy uses a maximum, not a sum");
   assert(css.includes(".context-usage-indicator") && css.includes("max-height: min(18vh, 104px)"),
     "the indicator remains in normal flow with constrained height");
   assert(preload.includes('"conversation:getContextUsage"') && preload.includes('"conversation:contextUsageUpdated"'));

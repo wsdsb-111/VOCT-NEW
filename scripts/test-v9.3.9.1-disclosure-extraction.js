@@ -74,8 +74,12 @@ assert.deepEqual(nameRows[0].sourceIdentity, { conversationId: "conversation-1",
   messageRevision: "a".repeat(64), campaignToken, gameDate, speakerRuntimeId: 2 }, "the caller's source identity is retained");
 for (const text of ["我叫赵太初。", "我名叫赵太初。", "在下赵太初。", "我是赵太初。", "吾名为赵太初。"])
   assert(fact(extract(text), 1, 2, "NAME", "赵太初"), `an exact direct self-name statement is extracted: ${text}`);
+for (const text of ["吾乃赵太初。", "臣名赵太初。", "臣名为赵太初。"])
+  assert(fact(extract(text), 1, 2, "NAME", "赵太初"), `an exact classical self-name statement is extracted: ${text}`);
 for (const text of ["我是不是赵太初？", "我不是赵太初。", "我将改名为赵太初。", "别人说我叫赵太初。"])
   assert.deepEqual(extract(text), [], `question, denial, future or reported name claims are rejected: ${text}`);
+for (const text of ["吾乃赵太初吗？", "吾非赵太初。", "臣名不是赵太初。", "听说，吾乃赵太初。", "听说臣名赵太初。"])
+  assert.deepEqual(extract(text), [], `classical name syntax keeps question, denial and hearsay boundaries: ${text}`);
 
 const audienceRows = extract("我乃皇帝。", { audienceIds: [1, 3, 4, 2] });
 assert.deepEqual([...new Set(audienceRows.map(row => row.ownerRuntimeId))], [1, 3, 4],
@@ -126,6 +130,8 @@ const identityClaim = (text) => extract(text, { gameData: gameData(identityClaim
   audienceIds: [1], candidateTargetIds: [2, 4] });
 for (const text of ["我叫赵太初。", "我的名字是赵太初。", "在下赵太初。", "我是赵太初。"])
   assert(fact(identityClaim(text), 1, 2, "NAME", "赵太初"), `real-field NAME claim is extracted: ${text}`);
+for (const text of ["吾乃赵太初。", "臣名赵太初。", "臣名为赵太初。"])
+  assert(fact(identityClaim(text), 1, 2, "NAME", "赵太初"), `real-field classical NAME claim is extracted: ${text}`);
 for (const text of ["我是公爵。", "我的头衔是公爵。"])
   assert(fact(identityClaim(text), 1, 2, "TITLE", "公爵"), `real-field TITLE claim is extracted: ${text}`);
 assert(fact(identityClaim("我的头衔是奥尔良公爵领。"), 1, 2, "TITLE", "奥尔良公爵领"),

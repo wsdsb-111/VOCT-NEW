@@ -773,7 +773,7 @@ async function testBudgetOmissionAndStaleOrQuotedHistory() {
 }
 
 function createActualConversationRig({ label, responderIds = [OWNER_ID], generateFollowing = false,
-  beforeSendGuardHook = null } = {}) {
+  beforeSendGuardHook = null, providerRequestHook = null } = {}) {
   const fixture = fixtureData();
   const test = createFixtureEngine("v9363-integration-conversation-" + label);
   seedSyntheticFixture(test.engine, fixture);
@@ -838,6 +838,8 @@ function createActualConversationRig({ label, responderIds = [OWNER_ID], generat
   const ledgerCalls = trackPairLedger(test.engine);
   const sourceContexts = [];
   const successfulAttempts = [];
+  const providerCalls = [];
+  const actionEvaluations = [];
   const rejectedGuards = [];
   let observeParticipantsCount = 0;
   const observeParticipants = test.engine.observeParticipants.bind(test.engine);
@@ -908,6 +910,18 @@ function createActualConversationRig({ label, responderIds = [OWNER_ID], generat
         rejectedGuards.push({ responderId: Number(metadata.responderId), name: error?.name || "Error" });
         throw error;
       }
+      const providerCall = {
+        requestIndex: providerCalls.length + 1,
+        responderId: Number(metadata.responderId),
+        assistantMessageId: conversation.activeResponse?.messageId ?? null,
+        turnEpoch: conversation.turnEpoch,
+        logicalTurnEpoch: conversation.getTurnManager().currentTurn?.logicalTurnEpoch ?? null
+      };
+      providerCalls.push(providerCall);
+      const response = typeof providerRequestHook === "function"
+        ? await providerRequestHook({ ...providerCall, messages, metadata })
+        : null;
+      const outcome = response ?? { content: "合成回答-" + String(metadata.responderId), finish_reason: "stop" };
       const text = (messages || []).map(message => String(message.content || "")).join("\n");
       const blocks = (metadata.blocks || []).map(block => ({ id: block.id, fingerprint: block.fingerprint || null,
         tokens: Number.isSafeInteger(block.tokens) && block.tokens >= 0 ? block.tokens : null }));
@@ -925,7 +939,7 @@ function createActualConversationRig({ label, responderIds = [OWNER_ID], generat
         hasPrivateSource: text.includes(PRIVATE_SOURCE),
         hasOwnerFourPrivateSource: text.includes(OWNER4_PRIVATE_SOURCE)
       });
-      return { content: "合成回答-" + String(metadata.responderId), finish_reason: "stop" };
+      return outcome;
     },
     async getProviderCapabilities() { return { contextWindow: 32000, maxOutputTokens: 1024 }; },
     async getCurrentContextLength() { return 32000; }
@@ -936,7 +950,7 @@ function createActualConversationRig({ label, responderIds = [OWNER_ID], generat
     TokenCounter,
     createPromptFingerprint: fingerprint,
     createMessage: fields => ({ ...fields }),
-    createError: fields => ({ ...fields, role: "assistant", type: "error" }),
+    createError: fields => ({ ...fields, type: "error" }),
     settingsRepository: {
       getActiveProviderConfig: () => ({ providerType: "openai-compatible", defaultModel: "qa-model" }),
       getGlobalStreamSetting: () => false,
@@ -946,13 +960,16 @@ function createActualConversationRig({ label, responderIds = [OWNER_ID], generat
       getActionApprovalSettings: () => ({ pauseOnApproval: false })
     },
     llmManager,
-    ActionEngine: { evaluateForCharacter: async () => ({ autoApproved: [], needsApproval: [] }) },
+    ActionEngine: { evaluateForCharacter: async (_conversation, npc) => {
+      actionEvaluations.push(Number(npc.id));
+      return { autoApproved: [], needsApproval: [] };
+    } },
     usageAnalytics: { record() {} },
     logVerboseLLM() {}
   });
   return {
     conversation, fixture, engine: test.engine, gameData, ledgerCalls, sourceContexts,
-    successfulAttempts, rejectedGuards, test, get observeParticipantsCount() { return observeParticipantsCount; },
+    successfulAttempts, providerCalls, actionEvaluations, rejectedGuards, test, get observeParticipantsCount() { return observeParticipantsCount; },
     async waitForQueue() { await conversation.lastProcessPromise; }
   };
 }
@@ -1098,6 +1115,77 @@ async function testActualConversationFiveRegenerationsAndOwnerIsolation() {
   }
 }
 
+async function testActualConversationRegenerateResumesPausedTurn() {
+  const rig = createActualConversationRig({
+    label: "paused-normal-message-regeneration",
+    responderIds: [OWNER_ID, OTHER_TARGET_ID, TARGET_ID],
+    generateFollowing: true,
+    providerRequestHook: async ({ requestIndex }) => {
+      if (requestIndex === 2) throw new Error("synthetic_provider_transport_failure");
+      return { content: "恢复后合成回复-" + requestIndex, finish_reason: "stop" };
+    }
+  });
+  try {
+    const originalScene = sceneRevision(rig.gameData);
+    await rig.conversation.sendMessage("先由前两位回应，第二位失败后重新生成第一位。");
+    await rig.waitForQueue();
+
+    const firstReply = rig.conversation.messages.find(message => message.role === "assistant"
+      && Number(message.speakerCharacterId) === OWNER_ID);
+    const failedError = rig.conversation.messages.find(message => message.type === "error");
+    assert(firstReply && failedError, "the initial successful NPC reply and later Provider error must both be present");
+    assert.equal(rig.conversation.isPaused, true, "a failed NPC with another queued participant must pause the queue");
+    assert.deepEqual(rig.conversation.npcQueue.map(character => Number(character.id)), [TARGET_ID],
+      "the not-yet-processed participant must remain queued after failure");
+    assert.deepEqual(rig.actionEvaluations, [OWNER_ID], "only the completed first reply may reach action evaluation");
+
+    const initialTurn = rig.conversation.getTurnManager().currentTurn;
+    assert.equal(initialTurn.epoch, 1);
+    assert.equal(initialTurn.logicalTurnEpoch, 1);
+    assert.equal(rig.conversation.messages.filter(message => message.role === "user").length, 1);
+
+    await rig.conversation.regenerateMessage(firstReply.id);
+    await rig.waitForQueue();
+
+    const regeneratedTurn = rig.conversation.getTurnManager().currentTurn;
+    assert.equal(rig.providerCalls.length, 5,
+      "regenerating a normal NPC reply must clear the paused state and send all expected new Provider requests");
+    assert.deepEqual(rig.providerCalls.map(call => call.responderId),
+      [OWNER_ID, OTHER_TARGET_ID, OWNER_ID, OTHER_TARGET_ID, TARGET_ID],
+    "normal-message regeneration must restart at its target and continue the same turn queue");
+    assert.deepEqual(rig.providerCalls.map(call => call.turnEpoch), [1, 1, 2, 2, 2],
+      "regeneration must use one new physical attempt epoch for its full queue");
+    assert.deepEqual(rig.providerCalls.map(call => call.logicalTurnEpoch), [1, 1, 1, 1, 1],
+      "regeneration must preserve the original logical turn");
+    assert.equal(regeneratedTurn.playerMessageId, initialTurn.playerMessageId);
+    assert.equal(regeneratedTurn.logicalTurnEpoch, initialTurn.logicalTurnEpoch);
+    assert.equal(regeneratedTurn.regenerateOfByResponder[OWNER_ID], firstReply.id);
+    assert.deepEqual(regeneratedTurn.activeParticipantIds, initialTurn.activeParticipantIds);
+    assert.equal(regeneratedTurn.sceneRevision, initialTurn.sceneRevision);
+    assert.equal(regeneratedTurn.campaignToken, initialTurn.campaignToken);
+    assert.equal(sceneRevision(rig.gameData), originalScene);
+    assert.equal(rig.conversation.messages.filter(message => message.role === "user").length, 1,
+      "regeneration must not duplicate the player's message");
+    assert(!rig.conversation.messages.some(message => message.type === "error"),
+      "the failed response removed with the regenerated tail must not remain as a stale error");
+    assert.deepEqual(rig.conversation.messages.filter(message => message.role === "assistant")
+      .map(message => Number(message.speakerCharacterId)), [OWNER_ID, OTHER_TARGET_ID, TARGET_ID]);
+    assert.deepEqual(rig.actionEvaluations, [OWNER_ID, OWNER_ID, OTHER_TARGET_ID, TARGET_ID],
+      "failed Provider attempts must not enter action evaluation; only completed replies are evaluated");
+    assert.equal(rig.observeParticipantsCount, 1, "regeneration must not create another logical-turn observation window");
+    assert.equal(rig.conversation.isPaused, false, "the retried queue must resume and finish");
+    return {
+      providerCalls: rig.providerCalls.map(call => ({ responderId: call.responderId, turnEpoch: call.turnEpoch,
+        logicalTurnEpoch: call.logicalTurnEpoch })),
+      actionEvaluations: rig.actionEvaluations.length,
+      playerMessages: rig.conversation.messages.filter(message => message.role === "user").length,
+      pausedAfterCompletion: rig.conversation.isPaused
+    };
+  } finally {
+    rig.test.cleanup();
+  }
+}
+
 async function testActualConversationLogicalFollowupBinding() {
   const rig = createActualConversationRig({ label: "conversation-logical-followup", responderIds: [OWNER_ID] });
   try {
@@ -1222,8 +1310,9 @@ async function runRegenerateIntegration() {
     "the integrated suite requires the independent actual-Conversation regeneration check");
   const consistency = await runRegenerateConsistencyChecks();
   const actualPrompt = await testActualConversationFiveRegenerationsAndOwnerIsolation();
+  const pausedRegeneration = await testActualConversationRegenerateResumesPausedTurn();
   const logicalFollowup = await testActualConversationLogicalFollowupBinding();
-  return { consistency, actualPrompt, logicalFollowup };
+  return { consistency, actualPrompt, pausedRegeneration, logicalFollowup };
 }
 
 async function run() {
@@ -1263,4 +1352,4 @@ if (require.main === module) {
 
 module.exports = { run, testPreviousYearAndLevelBoundaries, testKinshipTargetResolutionAndAmbiguity,
   testIdentityCampaignSceneAndLineageIsolation, testActualPromptAgeAuthority, testSourceEditAndForgetRevalidatePrompt,
-  testPairLedgerConfirmRetractionAndCacheInvalidation };
+  testPairLedgerConfirmRetractionAndCacheInvalidation, testActualConversationRegenerateResumesPausedTurn };

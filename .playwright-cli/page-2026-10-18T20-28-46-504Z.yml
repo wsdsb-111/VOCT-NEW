@@ -1,0 +1,33 @@
+- generic [ref=e2]:
+  - generic:
+    - generic:
+      - button "-" [ref=e3]
+      - generic [ref=e4]:
+        - region "上下文用量" [ref=e14]:
+          - generic [ref=e15]:
+            - strong [ref=e16]: 本场对话上下文
+            - generic [ref=e17]: 各 NPC 最近请求的最大占用
+          - generic "本场场景容量：192,000 Token（有效服务商窗口） 最大占用：阿丁 · 4,470 Token · 请求失败 本场配置窗口余量：187,530 Token 峰值请求 Provider：player2 · 模型：player2-model 该请求服务商有效窗口：192,000 Token（来源未知） 本次请求输入（完整 Prompt）：估算（含 1.1 系数） 4,470 Token · 本次输出：生成中暂估 0 Token 该请求 Provider 窗口余量：187,530 Token 该请求发送前可追加输入估算：148,452 Token（有效输入预算 167,768，已扣输出预留 1,024、协议开销 168、安全余量 23,040） 各 NPC 最近请求：阿丁：4,470 Token · 请求失败 · Provider 窗口 192,000 Token 阿乙：4,467 Token · 已完成 · Provider 窗口 192,000 Token 本场占用取各 NPC 最近请求中的最大单次用量，不把不同 NPC 的请求相加。" [ref=e18]: 最大 · 估算 4,470 / 192,000 Token · 场景余量 187,530
+        - generic [ref=e22]:
+          - generic [ref=e23]: System
+          - paragraph [ref=e26]: 我叫阿甲，人称我铁腕，如今是公爵。
+        - generic [ref=e27]:
+          - generic [ref=e28]: 会话人物
+          - generic [ref=e29]:
+            - generic [ref=e30]:
+              - generic [ref=e31]: 阿乙
+              - generic [ref=e32]:
+                - combobox [ref=e33] [cursor=pointer]:
+                  - option "暂时离场…" [disabled] [selected]
+                  - option "昏迷"
+                  - option "睡着"
+                  - option "暂时离开"
+                - button "须保留一人" [disabled] [ref=e34]
+            - generic [ref=e35]:
+              - generic [ref=e36]: 阿丁
+              - button "请入内" [ref=e37] [cursor=pointer]
+        - generic [ref=e38]:
+          - textbox "Write a message..." [ref=e40]
+          - generic [ref=e41]:
+            - button "End Conversation" [ref=e42]
+            - button "⚙️" [ref=e43]
