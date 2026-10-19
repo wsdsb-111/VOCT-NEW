@@ -1,6 +1,6 @@
 # VOTC 版本变更入口
 
-V9.3.9.3追加输入修复：从对话设置的优化页或摘要编辑返回后，恢复对话区的鼠标输入捕获，保留草稿及空白穿透；专项与隔离打包窗口通过。本地全量环境限制及对应提交的远端验收边界见[报告末节](docs/current/v9/V9_3_9_3_IMPLEMENTATION_REPORT.md)。
+V9.3.9.3追加输入修复：从对话设置的优化页或摘要编辑返回后，恢复对话区的鼠标输入捕获，保留草稿及空白穿透；专项与隔离打包窗口通过。代码`291040b`已推main，[CI 39242368694](https://github.com/wsdsb-111/VOCT-NEW/actions/runs/39242368694)在原生Windows Runner通过471组；本地环境限制与人工验收边界见[报告末节](docs/current/v9/V9_3_9_3_IMPLEMENTATION_REPORT.md)。
 
 V9.3.9.3 修复候选：带动作结果的当前 NPC 回复可仅重写台词，原动作、ACK与反馈保留且不重复执行；补齐场外子女的公开父母导出证明，最终年龄使用原始 CK3 GetAge；长幼派生增加当前公开关系与回应者知情校验。修正 Legacy 发布回归中的 conversationId 夹具错配，停止追踪浏览器调试快照。摘要删除和窗口配置保持。完整验证状态及实机边界见[实施报告](docs/current/v9/V9_3_9_3_IMPLEMENTATION_REPORT.md)。
 

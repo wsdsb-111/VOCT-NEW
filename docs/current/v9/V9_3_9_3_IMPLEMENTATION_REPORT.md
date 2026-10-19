@@ -42,7 +42,7 @@
 - 隔离打包窗口：冻结资源真实Preload／IPC／Main／Renderer按钮点击与DOM断言通过；模拟Provider及动作，网络阻断，使用全新profile。截图在忽略目录 `output/playwright/v9.3.9.3/narration-regenerated.png`，DOM与状态证据在 `.build/v9393-ui-dom-final.log` 和 `.build/v9393-ui-narration-status-final.json`。实例已正常退出。
 - 完整发布门禁：最终冻结源码由Node22从头执行 `scripts/test-release.js`，470／470组通过、exit0，证据 `.build/v9393-release-frozen.log`；598份测试文件分类、127项历史归档。前端补充修复前的469组通过仅为历史批次，不替代此最终结果。七项部署入口语法检查、Renderer专项语法及 `git diff --check` 通过。
 - 真实 CK3 新导出／面板对照、原9→10场景、真实 Provider、Soak：NOT_RUN。本轮不消耗付费额度。
-- 远端 CI：首轮V9.3.9.3未推送；后续输入补丁用户已明确授权推送main，远端结果须按对应提交的实际Workflow记录核验，不引用旧版PASS。基线和历史SHA的失败记录保留。
+- 远端 CI：代码`291040b34deadd24b7c8e3c3a5285145cdebebbf`已推送main，[CI 39242368694](https://github.com/wsdsb-111/VOCT-NEW/actions/runs/39242368694)原生Windows Runner的471组完整回归通过；结果归属于该SHA，不引用旧版PASS。基线和历史SHA的失败记录保留。
 
 ## 用户复测
 
@@ -80,3 +80,5 @@ git diff --check
 本补丁仍为App9.3.9.3，298项源码／构建／部署一致，当前payload SHA-256 `ca04e8fa4b174788dff987308237e996f56a48ea834caa7e204282b6feb43566`。新增专项已登记，清单共471组、599份测试文件、127项历史归档；前述470组结果只属于此前冻结资源，不能替代本补丁结果。专项红测和外部空白穿透证据分别在 `.build/config-input-red.log`、`.build/config-input-outside-status.json`；隔离窗口快照留在忽略目录，不进入Git。
 
 本补丁本地完整门禁未签署PASS：最初两次执行因临时目录EPERM中断，原失败集成组独立重试通过；原生探针确认系统TEMP不可写、工作区.build可写。随后仅对测试进程把TEMP/TMP指向.build，保留原脚本与原生文件系统，但 `v9.3.6.2-candidate-directory-qa` 的junction反例失败；单独重试仍失败，独立空目录探针发现创建后 `readlinkSync` 返回EINVAL，当前执行环境无法提供该反例需要的链接语义。未改链接安全断言、Memory生产代码或系统权限。记录在 `.build/config-input-release.log`、`.build/config-input-release-final.log`、`.build/config-input-release-workspace-temp.log`、`.build/config-input-candidate-retry.log`。不把这些中断算作全量通过；远端原生Runner结果须按本补丁提交SHA核验。输入专项、独立源码QA、打包窗口实际焦点／键入／草稿保留／空白穿透与构建部署检查已通过。
+
+远端验收已完成：main代码`291040b34deadd24b7c8e3c3a5285145cdebebbf`，Run `39242368694`、Job `118026000845`（原生windows-latest／Node22），结论SUCCESS。日志明确输出 `VOTC Release Regression: PASS (471 groups)`，清单599份测试、127历史归档，构建／部署298项通过，payload为`ca04e8fa4b174788dff987308237e996f56a48ea834caa7e204282b6feb43566`，与本机一致。链接来源安全断言未放宽；该结果验证了当前源码，不代表真实CK3／Provider／Soak验收完成。

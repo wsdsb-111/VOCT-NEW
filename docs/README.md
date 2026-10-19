@@ -1,6 +1,6 @@
 # VOTC 文档索引
 
-2026-10-19输入补丁见[V9.3.9.3报告末节](current/v9/V9_3_9_3_IMPLEMENTATION_REPORT.md)：优化／摘要编辑返回后输入恢复及草稿保留已通过隔离打包窗口验证；清单471组，本补丁本地全量受TEMP／junction环境限制未签署PASS。下方470组为补丁前冻结资源历史结果，远端CI需按新提交核验。
+2026-10-19输入补丁见[V9.3.9.3报告末节](current/v9/V9_3_9_3_IMPLEMENTATION_REPORT.md)：优化／摘要编辑返回后输入恢复及草稿保留已通过隔离打包窗口验证；main代码`291040b`的[原生Windows CI 39242368694](https://github.com/wsdsb-111/VOCT-NEW/actions/runs/39242368694)通过471组。下方470组为补丁前冻结资源历史结果，本地TEMP／junction限制与真实CK3／Provider验收边界仍分别保留。
 
 V9.3.9.3 为当前修复候选：带动作回复只重写台词、不重放动作；修复正文替换显示、场外子女公开父母导出缺口及长幼知情边界，校正 Legacy 回归夹具。最终470组发布回归通过，298项资源部署一致，隔离 UI 实点与DOM断言通过；见 [V9.3.9.3 实施报告](current/v9/V9_3_9_3_IMPLEMENTATION_REPORT.md)。V9.3.9 摘要配额、预算、全文冻结与来源复验继续有效。原数字年龄 +1、CK3 新导出、真实 Provider 和 Soak 分别验收。
 
