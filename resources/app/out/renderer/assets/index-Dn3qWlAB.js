@@ -1,6 +1,6 @@
 import { WorldMemoryEditor } from "../world-memory-editor.js";
 import { getLegacySummaryPage, getSummaryDisplayEntries, getSummaryImportantMatters } from "../summary-date-order.js";
-const VOTC_FEATURE_VERSION = "V9.3.9.2";
+const VOTC_FEATURE_VERSION = "V9.3.9.3";
 const VOTC_WORKSHOP_MOD_VERSION = "2.0.5";
 function getDefaultExportFromCjs(x) {
   return x && x.__esModule && Object.prototype.hasOwnProperty.call(x, "default") ? x["default"] : x;
@@ -15719,6 +15719,13 @@ const StreamingMarkdown = ({
   const lastContentRef = reactExports.useRef("");
   reactExports.useEffect(() => {
     if (!containerRef.current) return;
+    if (content !== lastContentRef.current && !content.startsWith(lastContentRef.current)
+      || !parserRef.current && lastContentRef.current) {
+      if (parserRef.current) parser_end(parserRef.current);
+      containerRef.current.replaceChildren();
+      parserRef.current = null;
+      lastContentRef.current = "";
+    }
     if (!parserRef.current) {
       const renderer = default_renderer(containerRef.current);
       parserRef.current = parser(renderer);
@@ -16826,12 +16833,16 @@ const ContextUsageIndicator = ({ snapshot }) => {
     }, `${row.responderId}:${row.requestId}`)
   ] });
 };
+function syncOverlayMouseCapture() {
+  const overPanel = document.querySelector(".chat-box:hover, .minimize-button:hover, .config-panel-container:hover");
+  window.electronAPI?.setIgnoreMouseEvents(!overPanel);
+}
 const useWindowEvents = () => {
   const handleChatBoxMouseEnter = reactExports.useCallback(() => {
     window.electronAPI?.setIgnoreMouseEvents(false);
   }, []);
   const handleChatBoxMouseLeave = reactExports.useCallback(() => {
-    window.electronAPI?.setIgnoreMouseEvents(true);
+    requestAnimationFrame(syncOverlayMouseCapture);
   }, []);
   const handleLeave = reactExports.useCallback((resetChat) => {
     window.electronAPI.hideWindow();
@@ -23604,7 +23615,7 @@ function ConfigPanel({ onClose }) {
     window.electronAPI?.setIgnoreMouseEvents(false);
   };
   const handleMouseLeave = () => {
-    window.electronAPI?.setIgnoreMouseEvents(true);
+    requestAnimationFrame(syncOverlayMouseCapture);
   };
   const handleDiscordClick = async () => {
     try {
@@ -23940,6 +23951,10 @@ function App() {
   const loadSettings = useConfigStore((state) => state.loadSettings);
   const appSettings = useAppSettings();
   reactExports.useEffect(() => {
+    const frame = requestAnimationFrame(syncOverlayMouseCapture);
+    return () => cancelAnimationFrame(frame);
+  }, [showChat, showConfig, isOverlayVisible]);
+  reactExports.useEffect(() => {
     const savedTheme = window.localStorage.getItem("votc-ui-theme");
     const initialTheme = ["parchment", "knight", "ink"].includes(savedTheme) ? savedTheme : "knight";
     document.documentElement.setAttribute("data-votc-theme", initialTheme);
@@ -23971,9 +23986,6 @@ function App() {
       console.log("Toggle settings event received");
       setShowConfig((prev) => {
         const newState = !prev;
-        if (!newState) {
-          window.electronAPI?.setIgnoreMouseEvents(true);
-        }
         return newState;
       });
     });
@@ -24018,7 +24030,6 @@ function App() {
       {
         onClose: () => {
           setShowConfig(false);
-          window.electronAPI?.setIgnoreMouseEvents(true);
         }
       }
     )

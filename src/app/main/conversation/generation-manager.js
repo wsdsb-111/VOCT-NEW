@@ -87,7 +87,7 @@ class GenerationManager {
     const conversation = this.conversation;
     const ownsActiveResponse = this.activeResponse === responseState;
     if (!ownsActiveResponse) return false;
-    if (wasCancelled && conversation.npcQueue.length === 0 && conversation.isPaused) conversation.isPaused = false;
+    if (wasCancelled && responseState.narrationRewriteOf == null && conversation.npcQueue.length === 0 && conversation.isPaused) conversation.isPaused = false;
     if (responseState.status === "active") responseState.status = "completed";
     this.activeResponse = null;
     if (this.currentStreamController === responseState.controller) this.currentStreamController = null;

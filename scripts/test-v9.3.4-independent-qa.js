@@ -44,12 +44,13 @@ function summaryPath(sample, ownerId, counterpartName) {
 }
 
 function legacyRecord({ ownerId = 2, counterpartId = 1, campaignToken = campaign,
-  finalizationId = `qa-final-${ownerId}-${counterpartId}`, content = "QA_LEGACY historical conversation." } = {}) {
+  finalizationId = `qa-final-${ownerId}-${counterpartId}`, conversationId = null,
+  content = "QA_LEGACY historical conversation." } = {}) {
   const date = "1164.1.1";
   return { date, totalDays: normalizeGameDate(date).serial, content,
     playerId: ownerId, playerName: `人物${ownerId}`, characterId: counterpartId, characterName: `人物${counterpartId}`,
     perspectiveOwnerId: ownerId, campaignToken, campaignBinding: { status: "bound", source: "qa-fixture" },
-    conversationId: `qa-conversation-${finalizationId}`, finalizationId,
+    conversationId: conversationId || `qa-conversation-${finalizationId}`, finalizationId,
     perspectiveMemoryIds: [], perspectiveSummarySegmentIds: [], sourceMessageIds: [], sourceSegmentIds: [] };
 }
 
@@ -178,7 +179,7 @@ function persistProjectedLegacy(sample) {
     for (const [key, projection] of context.directedSummaries) {
       const [ownerId, counterpartId] = key.split("->").map(Number);
       const row = legacyRecord({ ownerId, counterpartId, campaignToken: context.campaignToken,
-        finalizationId: context.finalizationId, content: projection.content });
+        finalizationId: context.finalizationId, conversationId: context.conversationId, content: projection.content });
       const file = summaryPath(sample, ownerId, `人物${counterpartId}`);
       const rows = sample.engine.store.readJson(file, []);
       rows.push(row);
@@ -373,8 +374,10 @@ async function testSidecarStatesAreInertForLegacy() {
 async function testLegacyEditForgetIsIndependentAndScoped() {
   const sample = fixture("legacy-edit-forget");
   const owner2Pair1 = seedLegacyFile(sample, 2, 1, [
-    legacyRecord({ ownerId: 2, counterpartId: 1, campaignToken: `${campaign}-A`, finalizationId: "qa-shared-finalization", content: "QA_TARGET_CAMPAIGN_A" }),
-    legacyRecord({ ownerId: 2, counterpartId: 1, campaignToken: `${campaign}-B`, finalizationId: "qa-shared-finalization", content: "QA_PRESERVE_CAMPAIGN_B" })
+    legacyRecord({ ownerId: 2, counterpartId: 1, campaignToken: `${campaign}-A`, finalizationId: "qa-shared-finalization",
+      conversationId: "qa-campaign-A-conversation", content: "QA_TARGET_CAMPAIGN_A" }),
+    legacyRecord({ ownerId: 2, counterpartId: 1, campaignToken: `${campaign}-B`, finalizationId: "qa-shared-finalization",
+      conversationId: "qa-campaign-B-conversation", content: "QA_PRESERVE_CAMPAIGN_B" })
   ]);
   const owner3Pair1 = seedLegacyFile(sample, 3, 1, [legacyRecord({ ownerId: 3, counterpartId: 1,
     campaignToken: `${campaign}-A`, finalizationId: "qa-other-owner-A", content: "QA_PRESERVE_OWNER_3" })]);
@@ -388,6 +391,15 @@ async function testLegacyEditForgetIsIndependentAndScoped() {
     finalizationId: "qa-shared-finalization", campaignToken: `${campaign}-A`, participants: [{ id: 1 }, { id: 2 }], memoryIds: [],
     summarySegments: [{ segmentId: "qa-campaign-A-segment", content: "QA_PRESERVE_CAMPAIGN_A_EPISODE",
       participants: [1, 2], knownBy: [1, 2], visibility: "participants" }] });
+  const targetRecord = sample.engine.store.readJson(owner2Pair1, [])[0];
+  const targetEpisode = sample.engine.store.listAllEpisodes().find(episode => episode.episodeId === "qa-target-campaign-shared-finalization");
+  assert.equal(targetRecord.finalizationId, targetEpisode.finalizationId, "the edited Legacy row maps to the Episode finalization");
+  assert.equal(targetRecord.conversationId, targetEpisode.conversationId, "the edited Legacy row maps to the Episode conversation");
+  assert.equal(targetRecord.campaignToken, targetEpisode.campaignToken, "the edited Legacy row maps to the Episode Campaign");
+  assert.equal(targetRecord.perspectiveOwnerId, 2, "the projection Owner is explicit");
+  assert.equal(targetRecord.characterId, 1, "the projection counterpart is explicit");
+  assert.deepEqual(targetEpisode.participants.map(person => person.id).sort((a, b) => a - b), [1, 2],
+    "the mapped Episode contains the Owner and counterpart");
   const oldA = seedLegacySidecar(sample, 2, `${campaign}-A`);
   const oldB = seedLegacySidecar(sample, 2, `${campaign}-B`);
   const oldOwner3 = seedLegacySidecar(sample, 3, `${campaign}-A`);
@@ -454,7 +466,8 @@ async function testLegacyEditForgetIsIndependentAndScoped() {
   assert.equal(access.totalReads, 0, `Legacy edit and Forget never read retired Sidecar or Recovery data: ${JSON.stringify(access.events)}`);
   assert.equal(access.totalWrites, 0, `Legacy edit and Forget never write retired Sidecar or Recovery data: ${JSON.stringify(access.events)}`);
   assert.deepEqual(sample.engine.store.readJson(owner2Pair1, []), [
-    legacyRecord({ ownerId: 2, counterpartId: 1, campaignToken: `${campaign}-B`, finalizationId: "qa-shared-finalization", content: "QA_PRESERVE_CAMPAIGN_B" })
+    legacyRecord({ ownerId: 2, counterpartId: 1, campaignToken: `${campaign}-B`, finalizationId: "qa-shared-finalization",
+      conversationId: "qa-campaign-B-conversation", content: "QA_PRESERVE_CAMPAIGN_B" })
   ], "Forget removes the edited projection from Owner 2 / Campaign A only");
   assert.equal(sample.engine.store.readJson(owner3Pair1, [])[0].content, "QA_PRESERVE_OWNER_3", "another Owner's Legacy remains");
   assert.equal(sample.engine.store.readJson(owner2Pair4, [])[0].content, "QA_PRESERVE_COUNTERPART_4", "another counterpart's Legacy remains");

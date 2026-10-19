@@ -17,6 +17,7 @@ const { resolveKinshipLabel } = require("../worldline/kinship-label-resolver");
 const { resolveLifeStatus } = require("../worldline/character-temporal-facts");
 const { isStepFamilyQuery } = require("../worldline/step-family-facts");
 const { formatKnownNameFacts } = require("../conversation/character-disclosure-context");
+const { normalizeSpouseRecords } = require("../worldline/canonical-spouse-record");
 
 const traitProfileContexts = new WeakSet();
 
@@ -96,6 +97,44 @@ function buildCurrentParticipantPairFacts(rawGameData, participantIds, responder
     const relation = result?.diagnostic || !result?.relation ? null : result.relation;
     return relation || null;
   };
+  const hasCurrentPublicPath = (relation, fromId, toId) => {
+    if (!relation || Number(relation.from) !== Number(fromId) || Number(relation.to) !== Number(toId)
+      || !Array.isArray(relation.relationPath) || relation.relationPath.length < 2) return false;
+    const path = relation.relationPath.map(numericRuntimeId);
+    if (path.some(id => id === null) || path[0] !== Number(fromId) || path[path.length - 1] !== Number(toId)) return false;
+    for (let index = 0; index < path.length - 1; index++) {
+      const from = path[index];
+      const to = path[index + 1];
+      if (isPublicCloseFamily(from, to, rawGameData)) continue;
+      // Current canonical spouse records are public relationship evidence, but
+      // deliberately do not grant the separate close-family trait whitelist.
+      const spouseTypes = { SPOUSE_OF: "CURRENT_SPOUSE", FORMER_SPOUSE_OF: "FORMER_SPOUSE", DECEASED_SPOUSE_OF: "DECEASED_SPOUSE" };
+      const direct = relationFor(from, to);
+      const spouseType = spouseTypes[direct?.type];
+      const owner = rawGameData.characters?.get(from) || rawGameData.characters?.get(String(from));
+      const records = normalizeSpouseRecords(owner).filter(record => Number(record.runtimeId) === to);
+      if (!spouseType || !records.length || records.some(record => record.relationType !== spouseType
+        || record.source === "consort" || record.raw?.evidenceConflict === true
+        || record.raw?.publicStatus === "SECRET" || record.raw?.knowledgeStatus === "SECRET"
+        || record.raw?.campaignToken != null && record.raw.campaignToken !== rawGameData.campaignToken
+        || record.raw?.sourceSnapshotId != null && record.raw.sourceSnapshotId !== `${rawGameData.date}/${rawGameData.totalDays}`)) return false;
+    }
+    return true;
+  };
+  const currentPublicKinshipPair = (leftId, rightId) => {
+    const leftToRight = relationFor(leftId, rightId);
+    const rightToLeft = relationFor(rightId, leftId);
+    if (!leftToRight || !rightToLeft || KINSHIP_INVERSE_TYPES[leftToRight.type] !== rightToLeft.type
+      || !hasCurrentPublicPath(leftToRight, leftId, rightId)
+      || !hasCurrentPublicPath(rightToLeft, rightId, leftId)) return null;
+    return { leftToRight, rightToLeft };
+  };
+  const responderKnowsPair = (leftId, rightId) => Number(responderId) === Number(leftId)
+    || Number(responderId) === Number(rightId)
+    || isPublicCloseFamily(Number(responderId), Number(leftId), rawGameData)
+      && isPublicCloseFamily(Number(responderId), Number(rightId), rawGameData);
+  const canRevealSeniority = (leftId, rightId) => currentPublicKinshipPair(leftId, rightId) !== null
+    && responderKnowsPair(leftId, rightId);
   const seniority = (subjectId, otherId) => {
     const subjectAge = ageById.get(Number(subjectId));
     const otherAge = ageById.get(Number(otherId));
@@ -123,6 +162,8 @@ function buildCurrentParticipantPairFacts(rawGameData, participantIds, responder
       ? relation.seniorityReferenceId ?? relation.relationPath?.[1]
       : anchorId;
     const ageSeniority = ["SIBLING_OF", "STEP_SIBLING_OF", "COUSIN_OF", "AUNT_UNCLE_OF"].includes(relation.type)
+      && canRevealSeniority(subjectId, anchorId)
+      && currentPublicKinshipPair(subjectId, seniorityReferenceId) !== null
       ? seniority(subjectId, seniorityReferenceId)
       : null;
     if (relation.type === "SIBLING_OF" || relation.type === "STEP_SIBLING_OF") {
@@ -141,7 +182,8 @@ function buildCurrentParticipantPairFacts(rawGameData, participantIds, responder
     const isReciprocal = leftToRight && rightToLeft
       && KINSHIP_INVERSE_TYPES[leftToRight.type] === rightToLeft.type;
     const pair = { leftId, rightId, leftToRight: null, rightToLeft: null };
-    if (isReciprocal) {
+    const trustedPair = isReciprocal && currentPublicKinshipPair(leftId, rightId);
+    if (trustedPair) {
       pair.leftToRight = relationLabel(leftToRight, leftId, rightId);
       pair.rightToLeft = relationLabel(rightToLeft, rightId, leftId);
     }
@@ -163,9 +205,12 @@ function buildCurrentParticipantPairFacts(rawGameData, participantIds, responder
 
   const pairFacts = [];
   for (const [leftId, rightId] of pairs) {
-    const order = seniority(leftId, rightId);
+    const trustedPair = currentPublicKinshipPair(leftId, rightId);
+    const orderVisible = !!trustedPair && responderKnowsPair(leftId, rightId);
+    const order = orderVisible ? seniority(leftId, rightId) : null;
     const pair = relationPairs.get(`${leftId}:${rightId}`);
-    pairFacts.push({ leftId, rightId, order, leftToRight: pair?.leftToRight || null, rightToLeft: pair?.rightToLeft || null });
+    pairFacts.push({ leftId, rightId, order, orderVisible,
+      leftToRight: pair?.leftToRight || null, rightToLeft: pair?.rightToLeft || null });
   }
   return { pairs: pairFacts, labels };
 }
@@ -181,15 +226,17 @@ function formatCurrentParticipantPairFacts(pairFacts, promptGameData, participan
   for (const pair of visiblePairs) {
     const leftName = profileName(promptGameData, pair.leftId);
     const rightName = profileName(promptGameData, pair.rightId);
-    const orderText = pair.order > 0 ? `${leftName}年长于${rightName}`
-      : pair.order < 0 ? `${rightName}年长于${leftName}`
-        : "未能可靠确认，不得推测";
-    lines.push(`- 长幼：${orderText}。`);
+    if (pair.orderVisible) {
+      const orderText = pair.order > 0 ? `${leftName}年长于${rightName}`
+        : pair.order < 0 ? `${rightName}年长于${leftName}`
+          : "未能可靠确认，不得推测";
+      lines.push(`- 长幼：${orderText}。`);
+    }
     if (pair.leftToRight && pair.rightToLeft) {
       lines.push(`- 双向亲属称谓：${leftName}相对${rightName}为${pair.leftToRight}；${rightName}相对${leftName}为${pair.rightToLeft}。`);
     }
   }
-  return lines.length ? `\n\n=== 当前人物长幼与双向亲属称谓（遮盖年龄前按当前可信 CK3 来源解析；不包含年龄或出生日期） ===\n${lines.join("\n")}\n权威规则：长幼只按已验证的当前整数年龄或可信当前出生序数区分；年龄未知、冲突或相同且出生序数不可靠均不得猜测。亲属称谓仅来自当前可靠关系图，双向称谓分别适用；未确认关系不得补造。` : "";
+  return lines.length ? `\n\n=== 当前人物长幼与双向亲属称谓（遮盖年龄前按当前可信 CK3 来源解析；不包含年龄或出生日期） ===\n${lines.join("\n")}\n权威规则：仅对本轮当前、公开且本回应者可知的可信亲属关系输出长幼；关系来源必须验证人物 ID、方向、Campaign、快照、来源所有者和冲突状态。长幼只按已验证的当前整数年龄或可信当前出生序数区分；年龄未知、冲突或相同且出生序数不可靠均不得猜测。亲属称谓仅来自当前可靠关系图，双向称谓分别适用；未确认关系不得补造。` : "";
 }
 
 function createPromptBuilder({

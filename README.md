@@ -6,7 +6,9 @@ VOTC 是面向《Crusader Kings III》（CK3）的 Windows Electron 宫廷对话
 
 ## 当前版本与进度
 
-Core／App／UI 当前为 V9.3.9.2 修复候选：脱敏前计算可信两两长幼及双向亲属称谓，公开直亲互知姓名、官职和特质，上下文条显示整场各 NPC 最新请求中的最大占用与最紧余量；本场已披露姓名进入动态事实，修复暂停后的重新生成和 Episode 关联完整的旧摘要删除。按用户要求只运行修复范围内的验证，构建、部署和专项证据见 [V9.3.9.2 报告](docs/current/v9/V9_3_9_2_IMPLEMENTATION_REPORT.md)。真实 CK3、付费 Provider 缓存收益与 Soak 未签署。
+2026-10-19追加修复：从优化／摘要编辑返回聊天后按当前指针位置恢复窗口输入捕获；隔离打包窗口已验证实际键入、焦点、草稿保留及空白穿透。清单现为471组；本补丁本地全量受TEMP／junction执行环境限制未签署PASS，详见[V9.3.9.3报告末节](docs/current/v9/V9_3_9_3_IMPLEMENTATION_REPORT.md)。以下470组为此前冻结资源的历史结果；用户已授权将修复推送main，远端CI按新提交核验。
+
+Core／App／UI 当前为 V9.3.9.3 修复候选：带动作结果的当前回复允许只重写台词，保留原动作／ACK；补齐场外子女的公开父母导出证明，保留原始 CK3 年龄；长幼仅在当前可信公开关系及回应者知情范围内输出。最终470组发布回归通过、298项资源部署一致，隔离打包窗口验证正文实际刷新且动作不重放；证据见 [V9.3.9.3 报告](docs/current/v9/V9_3_9_3_IMPLEMENTATION_REPORT.md)。已实测正常的摘要删除、窗口设置与摘要合同保持。真实 CK3、Provider 与 Soak 单列验收。
 
 V9.3.9.1 历史基线已构建部署 298 项资源。人物认知入口只管理当前对话人物，不扫描全体人物，已撤下 V9.3.9 的 Worldline 认知服务生产接线。其 `a0748aa` 的 [CI 39131470796](https://github.com/wsdsb-111/VOCT-NEW/actions/runs/39131470796) 通过 459 组发布回归；此结果不代表 V9.3.9.2 全量验收。
 
@@ -16,11 +18,12 @@ V9.3.9.1 历史基线已构建部署 298 项资源。人物认知入口只管理
 
 入口为“摘要”页的个人摘要管理区域上方“人物认知 · 当前对话”，独立选择“谁知道／关于谁”，无需展开人物目录或先有历史摘要，也不需要 Worldline 存档；无活动对话时显示说明。
 
-年龄修复仅移除稳定资料中的旧年龄行，当前年龄仍由动态游戏事实提供，不统一减一；缺少同日期实机原始数据，真实“年龄 +1”根因仍 NOT_CONFIRMED。Workshop Mod 2.0.5、Official Action 2.0.3、协议 3.0、存储 2.5／schema 2 保持。摘要配额、召回、冻结及关系来源合同沿用 V9.3.9。
+当前年龄由动态游戏事实提供，不统一减一。V9.3.9.3 已修正活动 Workshop 子女导出缺少公开父母状态的问题；需要重启 CK3 并重新导出。历史“9岁说10岁”缺少同日期面板对照，仍未复现，不能将修正的证据缺口当作原场景已验收。Workshop Mod 2.0.5、Official Action 2.0.3、协议 3.0、存储 2.5／schema 2 保持。摘要配额、召回、冻结及关系来源合同沿用 V9.3.9。
 
 V9.3.9 的亲子来源门禁、继亲标签、Parser 新旧日志回归、年龄分层诊断与 C17 作用域修复保留为历史基线；该版人物认知 UI／服务中的 Worldline 生产接线已由 V9.3.9.1 撤下。独立 `kids` 公开证据字段仍不宣称已被当前游戏加载。详见 [V9.3.9 合并计划](docs/current/v9/V9_3_9_IMPLEMENTATION_PLAN.md) 与 [V9.3.9 实施报告](docs/current/v9/V9_3_9_IMPLEMENTATION_REPORT.md)。
 
-- [V9.3.9.2 修复实施与验证报告](docs/current/v9/V9_3_9_2_IMPLEMENTATION_REPORT.md)
+- [V9.3.9.3 修复实施与验证报告](docs/current/v9/V9_3_9_3_IMPLEMENTATION_REPORT.md)
+- [V9.3.9.2 历史修复报告](docs/current/v9/V9_3_9_2_IMPLEMENTATION_REPORT.md)
 - [V9.3.9.1 历史修复报告](docs/current/v9/V9_3_9_1_IMPLEMENTATION_REPORT.md)
 - [V9.3.9.1 跨电脑交接与剩余任务](docs/current/v9/V9_3_9_1_HANDOFF.md)：保留原停止时的进度与失败记录；本轮恢复授权及后续状态分别记录。
 - [V9.3.9 合并计划](docs/current/v9/V9_3_9_IMPLEMENTATION_PLAN.md)（历史基线）

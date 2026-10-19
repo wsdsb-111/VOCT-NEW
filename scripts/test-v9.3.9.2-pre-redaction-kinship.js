@@ -150,7 +150,10 @@ function testUncleSeniorityUsesPublicFatherAge() {
   const player = makeCharacter(1, "玩家甲", 9);
   const uncle = makeCharacter(2, "叔父乙", 40);
   const father = makeCharacter(3, "父亲丙", 50);
+  const grandparent = makeCharacter(4, "祖父丁", 70);
   addPublicParent(player, father);
+  addPublicParent(father, grandparent);
+  addPublicParent(uncle, grandparent);
   Object.assign(player.parents[0], {
     age: father.age,
     ageSource: father.ageSource,
@@ -158,7 +161,7 @@ function testUncleSeniorityUsesPublicFatherAge() {
   });
   uncle.siblings.push({ id: father.id, name: father.fullName, gender: "male" });
 
-  const prompt = buildPrompt([player, uncle], { activeParticipantIds: [1, 2] });
+  const prompt = buildPrompt([player, uncle, father, grandparent], { activeParticipantIds: [1, 2] });
   assert.match(prompt.relationship, /叔父乙是玩家甲的叔父/u,
     "an uncle is ranked against the public parent on the relation path, not the child");
   assert.doesNotMatch(prompt.relationship, /伯父/u,
@@ -199,6 +202,7 @@ function testSameNameMentionAnchorsUseRuntimeIds() {
   const responderParent = makeCharacter(5, "回应者父母戊", 40);
   addPublicParent(player, playerParent);
   addPublicParent(mentioned, playerParent);
+  addPublicParent(responder, playerParent);
   addPublicParent(responder, responderParent);
   addPublicParent(mentioned, responderParent);
   player.siblings.push({ id: mentioned.id, name: mentioned.fullName, gender: "male" });
@@ -252,14 +256,33 @@ function addPublicParent(child, parent) {
   });
 }
 
+function addCurrentSiblingEvidence(owner, sibling, overrides = {}) {
+  const age = overrides.value ?? sibling.age;
+  const evidence = {
+    value: age,
+    ageSource: "CK3_LIVE_RELATIVE_AGE",
+    sourceOwnerId: owner.id,
+    relationType: "sibling",
+    source: `${owner.id}.siblings`,
+    campaignToken: CAMPAIGN,
+    sourceSnapshotId: SNAPSHOT,
+    ...overrides
+  };
+  owner.siblings.push({ id: sibling.id, name: sibling.fullName, gender: sibling.gender,
+    age, ageSource: "CK3_LIVE_RELATIVE_AGE", evidence: { age: [evidence] } });
+}
+
 function testBidirectionalSiblingAndPrivacy() {
   const player = makeCharacter(1, "玩家甲", 9);
   const brother = makeCharacter(2, "兄长乙", 11);
+  const parent = makeCharacter(3, "共同父母丙", 38);
+  addPublicParent(player, parent);
+  addPublicParent(brother, parent);
   player.siblings.push({ id: brother.id, name: brother.fullName, gender: "male" });
   brother.siblings.push({ id: player.id, name: player.fullName, gender: "male" });
 
-  const prompt = buildPrompt([player, brother]);
-  assert.match(prompt.relationship, /兄长乙年长于玩家甲/u, "all active pairs carry a direction marker without showing numeric ages");
+  const prompt = buildPrompt([player, brother, parent]);
+  assert.match(prompt.relationship, /兄长乙年长于玩家甲/u, "a trusted current sibling pair carries a direction marker without showing numeric ages");
   assert.match(prompt.relationship, /兄长乙是玩家甲的哥哥/u,
     "the older brother receives the correct title");
   assert.match(prompt.relationship, /玩家甲是兄长乙的弟弟/u,
@@ -272,8 +295,11 @@ function testBidirectionalCousins() {
   const cousin = makeCharacter(2, "堂兄乙", 11);
   const playerParent = makeCharacter(3, "父亲丙", null);
   const cousinParent = makeCharacter(4, "叔父丁", null);
+  const grandparent = makeCharacter(5, "祖父戊", 65);
   addPublicParent(player, playerParent);
   addPublicParent(cousin, cousinParent);
+  addPublicParent(playerParent, grandparent);
+  addPublicParent(cousinParent, grandparent);
   player.parents[0].siblings = [{ id: cousinParent.id, name: cousinParent.fullName, gender: "male" }];
   cousin.parents[0].siblings = [{ id: playerParent.id, name: playerParent.fullName, gender: "male" }];
   playerParent.siblings.push({ id: cousinParent.id, name: cousinParent.fullName, gender: "male" });
@@ -426,45 +452,74 @@ function testExtendedKinshipSeniorityUsesTheCorrectParent() {
   }
 }
 
-function testEveryActivePairAndFailClosedAges() {
+function testCurrentKinshipAndResponderKnowledgeGate() {
   const player = makeCharacter(1, "玩家甲", 9);
   const responder = makeCharacter(2, "回应者乙", 11);
   const third = makeCharacter(3, "第三人丙", 15);
-  const matrix = buildPrompt([player, responder, third], { activeParticipantIds: [1, 2, 3] }).relationship;
-  assert.match(matrix, /回应者乙年长于玩家甲/u);
-  assert.match(matrix, /第三人丙年长于玩家甲/u);
-  assert.match(matrix, /第三人丙年长于回应者乙/u, "the matrix evaluates every unordered active-participant pair");
+  const unrelated = buildPrompt([player, responder, third], { activeParticipantIds: [1, 2, 3] }).relationship;
+  assert.doesNotMatch(unrelated, /长幼：|年长于/u,
+    "unrelated active characters do not generate seniority or unknown markers");
+
+  const siblingPlayer = makeCharacter(1, "玩家甲", 9);
+  const sibling = makeCharacter(3, "兄长丙", 15);
+  const sharedParent = makeCharacter(4, "共同父母丁", 38);
+  addPublicParent(siblingPlayer, sharedParent);
+  addPublicParent(sibling, sharedParent);
+  const unrelatedResponder = makeCharacter(2, "无关回应者乙", 11);
+  const thirdParty = buildPrompt([siblingPlayer, unrelatedResponder, sibling, sharedParent], {
+    responderId: unrelatedResponder.id,
+    activeParticipantIds: [1, 2, 3]
+  }).relationship;
+  assert.doesNotMatch(thirdParty, /玩家甲年长于兄长丙|兄长丙年长于玩家甲|长幼：/u,
+    "an unrelated responder does not learn a public sibling pair's relative age from co-presence");
+
+  const parentResponder = makeCharacter(5, "父亲戊", 40);
+  addPublicParent(siblingPlayer, parentResponder);
+  addPublicParent(sibling, parentResponder);
+  const informedThirdParty = buildPrompt([siblingPlayer, parentResponder, sibling, sharedParent], {
+    responderId: parentResponder.id,
+    activeParticipantIds: [1, 5, 3]
+  }).relationship;
+  assert.match(informedThirdParty, /兄长丙年长于玩家甲/u,
+    "a responder with current public close-family knowledge may receive the pair order");
 
   const unknown = makeCharacter(2, "回应者乙", 11);
   unknown.ageSource = "UNVERIFIED";
-  const unknownPrompt = buildPrompt([player, unknown]).relationship;
+  const unknownParent = makeCharacter(4, "共同父母丁", 38);
+  addPublicParent(player, unknownParent);
+  addPublicParent(unknown, unknownParent);
+  const unknownPrompt = buildPrompt([player, unknown, unknownParent]).relationship;
   assert.match(unknownPrompt, /长幼：未能可靠确认，不得推测/u, "untrusted age does not create a seniority marker");
   assert.doesNotMatch(unknownPrompt, /回应者乙年长于玩家甲/u);
 
-  const conflict = makeCharacter(2, "回应者乙", 11);
-  player.siblings.push({
-    id: conflict.id,
-    name: conflict.fullName,
-    gender: "male",
-    age: 12,
-    ageSource: "CK3_LIVE_RELATIVE_AGE",
-    evidence: { age: [{
-      value: 12,
-      ageSource: "CK3_LIVE_RELATIVE_AGE",
-      sourceOwnerId: player.id,
-      relationType: "sibling",
-      source: `${player.id}.siblings`,
-      campaignToken: CAMPAIGN,
-      sourceSnapshotId: SNAPSHOT
-    }] }
-  });
-  const conflictPrompt = buildPrompt([player, conflict]).relationship;
+  const conflict = makeCharacter(2, "回应者乙", null);
+  const ageReporter = makeCharacter(5, "年龄来源戊", null);
+  addCurrentSiblingEvidence(player, conflict, { value: 12 });
+  addCurrentSiblingEvidence(ageReporter, conflict, { value: 10 });
+  const conflictPrompt = buildPrompt([player, conflict, unknownParent, ageReporter]).relationship;
   assert.match(conflictPrompt, /长幼：未能可靠确认，不得推测/u, "conflicting age evidence fails closed");
   assert.doesNotMatch(conflictPrompt, /回应者乙年长于玩家甲/u);
 
   const sameAge = makeCharacter(2, "回应者乙", 9);
-  const sameAgePrompt = buildPrompt([player, sameAge]).relationship;
+  addPublicParent(sameAge, unknownParent);
+  const sameAgePrompt = buildPrompt([player, sameAge, unknownParent]).relationship;
   assert.match(sameAgePrompt, /长幼：未能可靠确认，不得推测/u, "equal integer ages do not guess a birthday order");
+}
+
+function testUntrustedSiblingRowsDoNotAuthorizeSeniority() {
+  const invalidProofs = [
+    ["stale snapshot", { sourceSnapshotId: "old-snapshot" }],
+    ["wrong campaign", { campaignToken: "another-campaign" }],
+    ["wrong owner", { sourceOwnerId: 2 }]
+  ];
+  for (const [label, overrides] of invalidProofs) {
+    const player = makeCharacter(1, "玩家甲", 9);
+    const brother = makeCharacter(2, "兄长乙", 11);
+    addCurrentSiblingEvidence(player, brother, overrides);
+    const prompt = buildPrompt([player, brother]).relationship;
+    assert.doesNotMatch(prompt, /长幼：|年长于/u,
+      `${label} sibling evidence cannot authorize relative age, even though the graph contains a reciprocal edge`);
+  }
 }
 
 function testSecretParentDoesNotCreateKinship() {
@@ -498,6 +553,7 @@ function testMentionedTargetPairAndFrozenPrefixScope() {
   const mentioned = makeCharacter(3, "提及人物丙", 13);
   const sharedParent = makeCharacter(4, "公开父母丁", 38);
   addPublicParent(player, sharedParent);
+  addPublicParent(responder, sharedParent);
   addPublicParent(mentioned, sharedParent);
   mentioned.siblings.push({ id: player.id, name: player.fullName, gender: "male" });
   player.siblings.push({ id: mentioned.id, name: mentioned.fullName, gender: "male" });
@@ -532,10 +588,11 @@ testSeniorityRequiresMatchingProjectionSnapshotAndPath();
 testExtendedKinshipSeniorityUsesTheCorrectParent();
 testUncleSeniorityUsesPublicFatherAge();
 testVerifiedBirthOrdinalBreaksEqualAgeTieOnly();
-testEveryActivePairAndFailClosedAges();
+testCurrentKinshipAndResponderKnowledgeGate();
+testUntrustedSiblingRowsDoNotAuthorizeSeniority();
 testSameNameMentionAnchorsUseRuntimeIds();
 testSecretParentDoesNotCreateKinship();
 testCloseFamilyIdentityRuleIsNarrowAndCurrent();
 testMentionedTargetPairAndFrozenPrefixScope();
 
-console.log("V9.3.9.2 pre-redaction kinship Prompt: PASS (sibling/cousin direction, off-scene family query, snapshot/path-bound ages, paternal/maternal relative order, active pair matrix, unknown/conflict/equal ages, secret parent, mentioned target and frozen prefix scope)");
+console.log("V9.3.9.2 pre-redaction kinship Prompt: PASS (current public kinship path, responder knowledge scope, stale/campaign/owner sibling proof rejection, bidirectional sibling/cousin titles, redaction, query scope and frozen prefix)");

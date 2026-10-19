@@ -1414,7 +1414,7 @@ class Conversation {
     return this.getGenerationManager().cancel(reason);
   }
   // Handle response for a single NPC
-  async respondAs(npc, turnEpoch = this.turnEpoch) {
+  async respondAs(npc, turnEpoch = this.turnEpoch, { narrationRewriteOf = null } = {}) {
     if (this.isV813PrefixEnabled?.()) npc = this.gameData.characters.get(Number(npc?.id)) || npc;
     if (turnEpoch !== this.turnEpoch || !this.isCharacterAvailableForConversation(npc)) {
       console.log(`[Conversation] Skipping unavailable NPC response: ${npc?.shortName || npc?.id || "unknown"}`);
@@ -1431,6 +1431,12 @@ class Conversation {
     if (this.gameData.mentionedCharactersInContext) {
       this.gameData.mentionedCharactersInContext.clear();
     }
+    const narrationTarget = narrationRewriteOf == null ? null
+      : this.messages.find(message => message.id === narrationRewriteOf && message.role === "assistant"
+        && Number(message.speakerCharacterId) === Number(npc.id));
+    if (narrationRewriteOf != null && !narrationTarget) return { success: false, error: "原回复已不存在，未修改台词。" };
+    const originalNarration = narrationTarget?.content;
+    let narrationCommitted = false;
     
     const msgId = this.nextId++;
     const placeholder = createMessage({
@@ -1445,12 +1451,14 @@ class Conversation {
       streamStatus: "thinking"
     });
     const responseState = this.getGenerationManager().start({ turnEpoch, messageId: msgId, npcId: npc.id });
+    if (narrationTarget) responseState.narrationRewriteOf = narrationRewriteOf;
     const currentTurn = this.getTurnManager().currentTurn;
     this.generationAttemptsByMessageId.set(msgId, {
       logicalPlayerMessageId: currentTurn?.playerMessageId ?? null,
       turnEpoch,
       responderId: Number(npc.id),
-      hasActionOutcome: false
+      hasActionOutcome: false,
+      ...(narrationTarget ? { narrationRewriteOf } : {})
     });
     const controller = responseState.controller;
     this.messages.push(placeholder);
@@ -1472,7 +1480,10 @@ class Conversation {
         activeConfig
       ));
       const promptBuildMs = Date.now() - promptBuildStartedAt;
-      const llmMessages = promptBuild.messages;
+      const llmMessages = narrationTarget ? [...promptBuild.messages, {
+        role: "user",
+        content: "请只重新表达你在本轮的最后一条台词，不要续写新一轮，也不要重新回应其后的发言。已经发生的游戏动作及其结果保持不变；不得撤销、重复或新增动作，只输出替换台词。"
+      }] : promptBuild.messages;
       const promptBlockMetadata = Conversation.buildPromptBlockMetadata(promptBuild);
       const promptBlockTokens = (id) => promptBlockMetadata.blocks.filter((block) => block.id === id).reduce((total, block) => total + (Number(block.tokens) || 0), 0);
       const mentionedSnapshotTokens = promptBlockTokens("memory-mentioned-snapshot");
@@ -1590,6 +1601,11 @@ class Conversation {
             if (requestPhase === "streaming" && event.usage?.native) publishContextUsage("streaming");
           },
           beforeSendGuard: () => {
+            if (narrationTarget && (!this.messages.includes(narrationTarget) || narrationTarget.content !== originalNarration)) {
+              const error = new Error("Original narration changed before send");
+              error.name = "AbortError";
+              throw error;
+            }
             if (!this.isResponseCurrent(responseState, npc)) {
               const error = new Error("Responder or turn changed before send");
               error.name = "AbortError";
@@ -1643,7 +1659,7 @@ class Conversation {
                     promptBuild,
                     logicalPlayerMessageId,
                     attemptEpoch: responseState.turnEpoch,
-                    regenerateOf: attemptTurn?.regenerateOfByResponder?.[Number(npc.id)] ?? null,
+                    regenerateOf: narrationRewriteOf ?? attemptTurn?.regenerateOfByResponder?.[Number(npc.id)] ?? null,
                     previous: logicalPlayerMessageId == null
                       ? null : this.memoryAttemptDiagnosticsByOwner.get(Number(npc.id)) || null
                   });
@@ -1807,7 +1823,7 @@ class Conversation {
         if (!this.isResponseCurrent(responseState, npc)) throw new Error("AbortError: Message cancelled");
         placeholder.isStreaming = false;
         delete placeholder.streamStatus;
-        if (streamCompleted && !wasCancelled) {
+        if (streamCompleted && !wasCancelled && !narrationTarget) {
           this.getGenerationManager().markPhase(responseState, "evaluating_actions");
           await this.evaluateCompletedActions(npc, msgId, placeholder, responseState);
         }
@@ -1830,14 +1846,25 @@ class Conversation {
         placeholder.isStreaming = false;
         delete placeholder.streamStatus;
         streamCompleted = true;
-        this.getGenerationManager().markPhase(responseState, "evaluating_actions");
-        await this.evaluateCompletedActions(npc, msgId, placeholder, responseState);
+        if (!narrationTarget) {
+          this.getGenerationManager().markPhase(responseState, "evaluating_actions");
+          await this.evaluateCompletedActions(npc, msgId, placeholder, responseState);
+        }
       } else {
         throw new Error("Bad LLM response format");
       }
-      if (this.isResponseCurrent(responseState, npc)) this.retainDynamicSummaryRecall(npc.id, msgId, promptBuild, turnEpoch);
-      if (streamCompleted && !wasCancelled && this.isResponseCurrent(responseState, npc)) this.recordCharacterDisclosures();
+      if (this.isResponseCurrent(responseState, npc)) this.retainDynamicSummaryRecall(npc.id,
+        narrationTarget ? narrationRewriteOf : msgId, promptBuild, turnEpoch);
       if (chatCachedTokens != null) memoryEngine.trace.record("provider_cache_usage", { characterId: npc.id, conversationId: this.id, cachedTokens: chatCachedTokens });
+      if (narrationTarget) {
+        if (!this.isResponseCurrent(responseState, npc) || !this.messages.includes(narrationTarget)
+          || narrationTarget.content !== originalNarration) throw new Error("AbortError: Message cancelled");
+        narrationTarget.content = placeholder.content;
+        this.messages = this.messages.filter(message => message !== placeholder);
+        this.generationAttemptsByMessageId.delete(msgId);
+        narrationCommitted = true;
+      }
+      if (streamCompleted && !wasCancelled && this.isResponseCurrent(responseState, npc)) this.recordCharacterDisclosures();
     } catch (error) {
       require("../memory-system/dynamic-summary-freeze").discardPendingSources(this.memoryState?.responderRecallCache, npc.id, turnEpoch);
       const staleResponse = responseState.stale || controller.signal.aborted || !this.isResponseCurrent(responseState, npc) || error instanceof Error && error.message === "AbortError: Message cancelled";
@@ -1875,6 +1902,8 @@ class Conversation {
         finishTraceSpan(conversationTurnSpan, { result: conversationTurnResult, errorCode: conversationTurnResult === "ERROR" ? "provider_error" : undefined });
       }
     }
+    if (narrationTarget) return narrationCommitted ? { success: true, mode: "NARRATION_ONLY" }
+      : { success: false, error: "台词重新生成未完成，原回复与动作结果已保留。" };
   }
   async evaluateCompletedActions(npc, npcMessageId, npcMessage, responseState) {
     if (!this.isResponseCurrent(responseState, npc)) {
@@ -2152,7 +2181,7 @@ class Conversation {
   async processQueue(turnEpoch = this.turnEpoch) {
     return this.getTurnManager().processQueue(turnEpoch);
   }
-  getValidatedRegenerationContext(targetIndex, targetMessage, responderId) {
+  getValidatedRegenerationContext(targetIndex, targetMessage, responderId, { allowActionOutcome = false } = {}) {
     const currentTurn = this.getTurnManager().currentTurn;
     const playerId = Number(this.gameData?.playerID);
     const sceneRevision = JSON.stringify([this.gameData?.scene || null, this.gameData?.location || null,
@@ -2179,7 +2208,7 @@ class Conversation {
     if (!attempt || attempt.logicalPlayerMessageId !== playerMessage.id
       || attempt.responderId !== Number(responderId) || !Number.isSafeInteger(attempt.turnEpoch)
       || attempt.turnEpoch < 0 || attempt.turnEpoch > currentTurn.epoch
-      || attempt.actionEvaluationPending === true || attempt.hasActionOutcome === true) return null;
+      || attempt.actionEvaluationPending === true || !allowActionOutcome && attempt.hasActionOutcome === true) return null;
     return { currentTurn, playerMessage, playerMessageIndex, sceneRevision, campaignToken, playerId };
   }
   // Send a user message and trigger responses from all NPCs
@@ -2241,13 +2270,36 @@ class Conversation {
       console.error("Cannot regenerate assistant without a valid responder ID");
       return { success: false, error: "无法识别这条回复对应的 NPC，无法安全重新生成。" };
     }
-    const regenerationContext = this.getValidatedRegenerationContext(targetIndex, targetMessage, responderId);
+    if (this.generationAttemptsByMessageId.get(messageId)?.actionEvaluationPending === true) {
+      return { success: false, error: "仍在处理这条回复的动作，请完成后再重新生成台词。" };
+    }
+    const regenerationContext = this.getValidatedRegenerationContext(targetIndex, targetMessage, responderId, { allowActionOutcome: true });
     const targetCharacter = regenerationContext && this.getNpcList().find((character) => Number(character.id) === responderId);
     if (!targetCharacter) {
       console.error("Cannot safely regenerate a stale turn or unavailable responder");
       return { success: false, error: "这条回复已不属于当前对话或场景，无法安全重新生成。" };
     }
     const tailMessages = this.messages.slice(targetIndex);
+    const hasActionOutcome = tailMessages.some(message => this.generationAttemptsByMessageId.get(message.id)?.hasActionOutcome === true
+      || message.type === "action-approval" || message.type === "action-feedback");
+    if (hasActionOutcome) {
+      if (this.activeResponse || this.pendingActionApprovals?.size
+        || tailMessages.some(message => this.generationAttemptsByMessageId.get(message.id)?.actionEvaluationPending === true)) {
+        return { success: false, error: "仍在生成回复或处理动作，请完成后再重新生成台词。" };
+      }
+      if (tailMessages.some(message => message.role !== "assistant"
+        && !["error", "action-approval", "action-feedback"].includes(message.type))
+        || tailMessages.some(message => ["action-approval", "action-feedback"].includes(message.type)
+          && (!this.messages.some(entry => entry.role === "assistant" && entry.id === message.associatedMessageId)
+            || this.generationAttemptsByMessageId.get(message.associatedMessageId)?.hasActionOutcome !== true))) {
+        return { success: false, error: "回复后续包含无法确认来源的事件，未修改台词或动作。" };
+      }
+      this.messages = this.messages.filter(message => this.generationAttemptsByMessageId.get(message.id)?.narrationRewriteOf !== messageId);
+      for (const [id, attempt] of this.generationAttemptsByMessageId) {
+        if (attempt.narrationRewriteOf === messageId) this.generationAttemptsByMessageId.delete(id);
+      }
+      return this.respondAs(targetCharacter, this.turnEpoch, { narrationRewriteOf: messageId });
+    }
     const tailHasUnsafeOutcome = tailMessages.some(message => {
       const attempt = this.generationAttemptsByMessageId.get(message.id);
       return attempt?.hasActionOutcome === true || attempt?.actionEvaluationPending === true
@@ -2324,6 +2376,8 @@ class Conversation {
       console.error("Can only regenerate error entries:", targetError.type);
       return { success: false, error: "这条消息不是可重试的失败请求。" };
     }
+    const failedAttempt = this.generationAttemptsByMessageId.get(targetError.id);
+    if (failedAttempt?.narrationRewriteOf != null) return this.regenerateMessage(failedAttempt.narrationRewriteOf);
     if (targetError.content === "Failed to initialize conversation") {
       this.messages.splice(targetIndex, 1);
       await this.initializeGameData();

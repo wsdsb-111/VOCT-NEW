@@ -187,9 +187,12 @@ function testLifeStatusConflictCannotBeBypassedByBirthOrdinal() {
 function testActualPromptPairUsesCurrentAgeInBothDirections() {
   const older = makeCharacter(1, "年长者甲", 11, "male", { birthDateTotalDays: 10000 });
   const younger = makeCharacter(2, "年幼者乙", 9, "male", { birthDateTotalDays: 9000 });
+  const parent = makeCharacter(3, "公开父亲丙", 40);
+  addPublicParent(older, parent);
+  addPublicParent(younger, parent);
   older.siblings.push({ id: younger.id, name: younger.fullName, gender: "male" });
   younger.siblings.push({ id: older.id, name: older.fullName, gender: "male" });
-  const prompt = buildPrompt([older, younger], { activeParticipantIds: [1, 2] }).relationship;
+  const prompt = buildPrompt([older, younger, parent], { activeParticipantIds: [1, 2] }).relationship;
   assert.match(prompt, /年长者甲年长于年幼者乙/u,
     "the actual Prompt pair matrix uses the trusted current age ahead of opposite birth ordinal order");
   assert.match(prompt, /年长者甲是年幼者乙的哥哥/u,

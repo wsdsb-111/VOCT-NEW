@@ -66,18 +66,23 @@ const context = () => ({ activeParticipantIds: [1, 2], stableDescriptionCache: n
 const build = (sample, history = [{ role: "user", name: sample.player.fullName, content: "阁下好。" }], memory = context()) =>
   PromptBuilder.buildMessagesWithTokenCount(history, sample.npc, sample.data, "", memory,
     layout === "glm_cache_v2" ? { providerType: "zhipu", defaultModel: "glm-5.3-flash" } : { providerType: "deepseek", defaultModel: "deepseek-v4-flash" });
-function guard(result) {
+function guard(result, { publicCloseFamily = false } = {}) {
   const entry = result.blocks.find(item => item.block.id === "responder-game-facts");
   assert(entry?.content.includes("玩家身份知情边界"), "the actual final provider input must contain the identity guard");
   assert.strictEqual(entry.block.stable, false, "recognition authorization belongs after the frozen cache boundary");
   assert(result.blocks.indexOf(entry) > result.blocks.findIndex(item => item.block.type === "cache_anchor"));
   assert(result.messages.some(message => message.role === "system" && message.content === entry.content));
   if (["v813", "glm_cache_v2"].includes(layout)) assert.strictEqual(entry.block.lifecycle, "DYNAMIC");
-  assert.match(entry.content, /后台标签，不构成本角色已经知道玩家身份的证据/);
+  if (publicCloseFamily) {
+    assert.match(entry.content, /当前可靠公开的亲属关系允许双方.*互知姓名、头衔与特质/);
+    assert.match(entry.content, /不授权秘密、过往记忆或其他人物资料/);
+  } else {
+    assert.match(entry.content, /后台标签，不构成本角色已经知道玩家身份的证据/);
+    assert.match(entry.content, /只授予来源明确给出的那项姓名或身份/);
+    assert.match(entry.content, /称号（Nickname）默认可见.*不授予真名、精确头衔或官职/);
+    assert.match(entry.content, /不得据此解锁整包玩家资料/);
+  }
   assert.match(entry.content, /当前回合开始交谈、同场、好感数值/);
-  assert.match(entry.content, /只授予来源明确给出的那项姓名或身份/);
-  assert.match(entry.content, /称号（Nickname）默认可见.*不授予真名、精确头衔或官职/);
-  assert.match(entry.content, /不得据此解锁整包玩家资料/);
   assert.match(entry.content, /私下交谈和信件不会自动变成全世界的传闻/);
   assert.match(entry.content, /public.*当场公开.*不是全球公开/);
   assert.match(entry.content, /不得用.*听说.*传闻.*补造/);
@@ -140,9 +145,16 @@ check("runtime blood kinship remains legitimate without memory entries", () => {
   sample.npc.parents = [{ id: 1, name: sample.player.fullName, gender: "male", ...directParentEvidence }];
   sample.player.children = [{ id: 2, name: sample.npc.fullName, gender: "male", directParentEvidence }];
   const result = build(sample);
-  assert.match(guard(result), /身份识别关系证据：父亲/);
+  assert.match(guard(result, { publicCloseFamily: true }), /身份识别关系证据：父亲/);
   assert(result.messages.some(message => message.content.includes("父亲：张三")));
-  assert(!result.messages.some(message => message.content.includes("父亲：河间公张三")), "kinship must not automatically disclose an exact title");
+  assert(result.messages.some(message => message.content.includes("父亲：河间公张三")),
+    "current public close family may know the exact title under the V9.3.9.2 whitelist");
+  sample.npc.parents[0].campaignToken = "wrong-campaign";
+  sample.player.children[0].directParentEvidence = { ...directParentEvidence, campaignToken: "wrong-campaign" };
+  const invalid = build(sample);
+  guard(invalid);
+  assert(!invalid.messages.some(message => message.content.includes("父亲：河间公张三")),
+    "invalid current parent evidence must not receive the close-family title exception");
 });
 check("authorized prior memory and public identity remain available without blanket stranger claims", () => {
   const sample = fixture();
