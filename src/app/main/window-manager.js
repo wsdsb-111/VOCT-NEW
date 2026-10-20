@@ -17,6 +17,7 @@ function createChatWindow({ electron, preloadPath, rendererPath, rendererUrl = n
     resizable: false,
     roundedCorners: false,
     webPreferences: {
+      backgroundThrottling: false,
       partition: "persist:chat",
       preload: preloadPath,
       nodeIntegration: false,

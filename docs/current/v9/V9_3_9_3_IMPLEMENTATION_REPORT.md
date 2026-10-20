@@ -82,3 +82,25 @@ git diff --check
 本补丁本地完整门禁未签署PASS：最初两次执行因临时目录EPERM中断，原失败集成组独立重试通过；原生探针确认系统TEMP不可写、工作区.build可写。随后仅对测试进程把TEMP/TMP指向.build，保留原脚本与原生文件系统，但 `v9.3.6.2-candidate-directory-qa` 的junction反例失败；单独重试仍失败，独立空目录探针发现创建后 `readlinkSync` 返回EINVAL，当前执行环境无法提供该反例需要的链接语义。未改链接安全断言、Memory生产代码或系统权限。记录在 `.build/config-input-release.log`、`.build/config-input-release-final.log`、`.build/config-input-release-workspace-temp.log`、`.build/config-input-candidate-retry.log`。不把这些中断算作全量通过；远端原生Runner结果须按本补丁提交SHA核验。输入专项、独立源码QA、打包窗口实际焦点／键入／草稿保留／空白穿透与构建部署检查已通过。
 
 远端验收已完成：main代码`291040b34deadd24b7c8e3c3a5285145cdebebbf`，Run `39242368694`、Job `118026000845`（原生windows-latest／Node22），结论SUCCESS。日志明确输出 `VOTC Release Regression: PASS (471 groups)`，清单599份测试、127历史归档，构建／部署298项通过，payload为`ca04e8fa4b174788dff987308237e996f56a48ea834caa7e204282b6feb43566`，与本机一致。链接来源安全断言未放宽；该结果验证了当前源码，不代表真实CK3／Provider／Soak验收完成。
+
+## 2026-10-20 本机启动与整屏鼠标拦截修复
+
+本次保持App9.3.9.3，处理外部维护后出现的三项本机故障：原安装目录启动失败、便携副本界面退出和透明覆盖层拦截整个屏幕。此前的远端CI结果不代表本轮修改已验收。
+
+- 原安装目录的 `VOTC.exe`、`ffmpeg.dll` 原先继承Low完整性标签。仅恢复EXE为Medium后主进程可运行，但Renderer仍在延迟加载 `ffmpeg.dll` 时收到Win32错误5；调试断点读取的DLL名称和错误码保存在 `.build/renderer-token-failure.log`。再仅恢复该DLL为Medium后，同样的隔离冷启动完成，真实Renderer稳定存活。独立QA只读查询到Renderer的镜像加载策略为0x3，含禁止Low标签镜像的限制；未关闭该策略或沙箱。原标签证据保存在 `.build/desktop-repair-20261020/original-exe-acl.txt` 与 `original-ffmpeg-acl.txt`。壳代码段、媒体库、ICU、V8快照和resources.pak已与官方Electron35.1.5对应文件核对，未替换程序字节。
+- 原目录还为程序壳和只读资源补充Users读取／执行权限，原ACL另存。范围为程序文件、resources及locales；未修改APPDATA、摘要、设置、Local State或凭据的权限与内容，也未做全盘权限重置。
+- 便携副本 `C:\VOTC\locales` 为空；界面初次加载后在Blink数字输入的空语言路径发生访问异常。补齐原包同版本55项语言文件并逐文件校验后，Renderer稳定存活；该副本298项管理资源也与原目录逐字节一致。
+- 外部代码在进入overlay时无条件调用 `setIgnoreMouseEvents(false)`，导致透明整窗捕获点击。恢复源码一致的主进程逻辑，由Renderer按面板实际悬停决定捕获；`backgroundThrottling:false` 从临时生成资源修补纳入源码并正常构建部署。未改摘要、认知、动作、窗口Token配置或Provider行为。
+- 桌面与开始菜单快捷方式已备份，均统一指向原安装目录 `VOTC.exe`，设置显式应用ICO和正确工作目录，参数为空。便携副本的同一鼠标补丁也已修正。未删除旧副本、数据或外部留下的 `np-test.exe`。
+
+专项扩展先复现生成主进程的整屏捕获红测，修复后通过；独立QA确认源码／生成资源一致、设置关闭后的静止悬停与空白穿透、隐藏及快速切换仍通过。原目录使用独立空白profile和合成对话完成真实Preload／IPC及打包窗口测试：优化页返回后实际点击聚焦、草稿保留、继续键入成功；指针移到透明空白后原生ignore=true；空白处模拟overlay关闭再启用，主进程没有全屏捕获，ignore仍为true。网络阻断，记录的外部请求尝试为0；测试实例已正常退出。证据位于 `.build/configinput-electron-ui-smoke/` 和忽略的Playwright快照目录。
+
+298项构建／部署一致，payload SHA-256 `24df55d959b6e4445c8ed5483b0872fbdd6a5ecb637a40854720a3fd475ccf24`；输入专项、主题专项、官方动作一致性、入口语法检查通过。首次完整回归用系统Node24在明确要求Node22的组停止，未计为PASS；随后将仓库自带Node22测试运行器的异常Low标签恢复Medium，以该版本从头重跑，最终471／471组通过、exit0（599份测试文件、127项历史归档），日志 `.build/desktop-repair-20261020-release-node22.log`；未修改测试门禁或断言。真实CK3、付费Provider与Soak本轮未执行；未推送远端，本机环境权限修复也不属于Git提交可携带的内容。
+
+### 桌面入口二次修正
+
+用户复测快捷方式仍显示空白文件图标，另把EXE单独复制到了桌面。桌面EXE与原安装文件哈希相同，但旁边没有ffmpeg.dll、locales和resources，不能作为独立便携包运行。已将该重复EXE及原快捷方式保存在 `.build/desktop-shortcut-repair-20261020/`，桌面保留一个重新创建的VOTC快捷方式，目标及工作目录均为完整原安装目录；开始菜单同步。图标复制到独立稳定位置 `%LOCALAPPDATA%\VOTC-shortcuts\VOTC-desktop.ico`，重建快捷方式并通知Shell刷新。通过Windows `SHGetFileInfo`实际解析桌面链接，渲染出的图标已目视核验为VOTC标志及快捷方式箭头，证据 `shell-shortcut-icon.png`；目标与相邻运行依赖存在。未改运行源码或用户数据，本次没有重新执行全量回归。
+
+用户随后仍见桌面空白，前一项32像素解析不能替代桌面大图标缓存验证。本次发现原ICO只有两张256像素图：一张32位彩色标志、一张1位无标志单色图；保留彩色标志，重新封装16／24／32／48／64／128／256像素的32位图标到 `%LOCALAPPDATA%\VOTC-shortcuts\VOTC-multisize.ico`，桌面和开始菜单链接使用新文件，并运行 `ie4uinit -show` 刷新图标缓存。通过 `SHGetImageList` 实际读取系统32／48／256像素图标缓存并目视确认均为VOTC标志，证据为同一备份目录内 `shell-cache-size-0.png`、`shell-cache-size-2.png`、`shell-cache-size-4.png`。原图案、程序目标和工作目录保持。
+
+后续用户的“更改图标”窗口明确报告找不到 `%USERPROFILE%\AppData\Local\VOTC-shortcuts\VOTC-multisize.ico`。检查LNK实际字节发现WScript保存了IconEnvironmentDataBlock及HasExpIcon标志，尽管同一环境中的COM读取可展开为存在的路径。为消除此依赖，将图标保留到 `C:\VOTC\VOTC-desktop.ico`，通过官方 `IShellLinkDataList.RemoveDataBlock` 清除图标环境变量块并清除HasExpIcon，再用IPersistFile保存；没有直接改写LNK二进制格式。两处链接实际字节均验证为完整图标路径且HasExpIcon清除，图标文件存在，系统三种尺寸缓存核验通过。原先打开的属性窗口需取消关闭，避免将其旧值重新保存覆盖。

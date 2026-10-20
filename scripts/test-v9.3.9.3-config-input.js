@@ -90,4 +90,38 @@ rapid.render();
 rapid.flush();
 assert.equal(rapid.state[1], true);
 assert.equal(rapid.captures.at(-1), false, "deferred updates must reflect the current panel after rapid toggles");
-console.log("V9.3.9.3 config return input: PASS (actual App close/shortcut/gear, stationary pointer, click-through, hidden overlay and rapid toggles)");
+for (const file of ["src/app/main/main.js", "resources/app/out/main/main.js"]) {
+  const main = fs.readFileSync(path.join(__dirname, "..", file), "utf8").replace(/\r\n/g, "\n");
+  const start = main.indexOf("const setupFocusMonitoring = (window) => {");
+  const end = main.indexOf('\nelectron.app.on("ready"', start);
+  assert(start >= 0 && end > start);
+  const listeners = new Map();
+  const calls = [];
+  const window = { isDestroyed: () => false, webContents: { send() {} },
+    setAlwaysOnTop() {}, setIgnoreMouseEvents: (...args) => calls.push(args), on() {} };
+  const monitor = { on: (event, callback) => listeners.set(event, callback), start() {} };
+  vm.runInNewContext(`${main.slice(start, end)}\nsetupFocusMonitoring(window);`, { window, focusMonitor: monitor });
+  listeners.get("overlay-state-changed")(true);
+  assert.equal(calls.length, 0, `${file}: activating a full-screen transparent window must not capture the entire desktop`);
+  listeners.get("overlay-state-changed")(false);
+  assert.equal(calls.at(-1)[0], true);
+  listeners.get("overlay-state-changed")(true);
+  assert.equal(calls.length, 1, `${file}: returning from another app must leave panel hit-testing to the renderer`);
+}
+for (const file of ["../src/app/main/window-manager", "../resources/app/out/main/window-manager"]) {
+  const windowManager = require(file);
+  let windowOptions;
+  class FakeWindow {
+    constructor(options) { windowOptions = options; }
+    setIgnoreMouseEvents() {}
+    loadFile() {}
+  }
+  windowManager.createChatWindow({ electron: {
+    screen: { getPrimaryDisplay: () => ({ workArea: { x: 0, y: 0, width: 1600, height: 900 } }) },
+    BrowserWindow: FakeWindow, ipcMain: { on() {} }
+  }, preloadPath: "preload.js", rendererPath: "index.html" });
+  assert.equal(windowOptions.webPreferences.backgroundThrottling, false, `${file}: an unfocused game overlay must keep processing panel input updates`);
+  assert.equal(windowOptions.webPreferences.contextIsolation, true);
+  assert.equal(windowOptions.webPreferences.nodeIntegration, false);
+}
+console.log("V9.3.9.3 config return input: PASS (close/shortcut/gear, stationary pointer, blank-space click-through, focus changes and background overlay)");
