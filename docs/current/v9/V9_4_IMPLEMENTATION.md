@@ -33,3 +33,5 @@
 新源文件均加入 `build/runtime-inputs.json`，共 306 项映射。先编辑 src/app，再构建、部署及逐项哈希核验。`VOTC_PROMPT_PLAN_MODE=legacy|shadow|v9` 是进程级排查入口，默认 v9，不迁移玩家设置或历史存储。动作／信件载体、ACK 与旧未知效果均不重放；不恢复 Memory4、Durable、Year／Life。多 Mod 兼容工程保持独立。
 
 `np-test.exe` 已确认为本地 Microsoft Notepad 调试副本，从 Git 索引移出并添加精确忽略；本机文件保留，不属于 VOTC 发布入口。
+
+当前生产 payload 在 `56979af` 上另经智谱 GLM-5.3-Flash 的 6 次串行真实请求验证：Chat Plan、流式缓存用量、Action 测试 schema、Summary 和 Letter 路由均 COMPLETE。测试未修改生产 Runtime；合成授权与真实 CK3／动作／投递边界、费用及原生证据见[付费实测报告](V9_4_LIVE_PROVIDER_VERIFICATION.md)。

@@ -2,7 +2,9 @@
 
 日期：2026-10-21。状态：**自动化门禁 PASS／外部验收未完成，保留候选**。本记录区分静态、离线模拟、真实 Windows 启动与外部实测；设计和历史版本 PASS 不作为当前候选 PASS。
 
-最新已签署自动化证据：[Windows CI 39562096181](https://github.com/wsdsb-111/VOCT-NEW/actions/runs/39562096181)，准确 SHA `0a42161f352c72739a58719bbc59975d89450311`。依赖核验、306 项构建／部署、**486 组完整发布回归、完整 EXE 冷启动与重启、界面／Preload／版本 IPC、实际媒体解码与分发目录 DLL 加载、正常退出均 PASS**。payload `759019e100cc0689868a0e0c540611e4eef75048ad73e4e57820c178dccbfc14` 与本机一致。以下前五轮失败保留原 SHA 历史归属，不改写为 PASS。
+首个完整签署的自动化证据：[Windows CI 39562096181](https://github.com/wsdsb-111/VOCT-NEW/actions/runs/39562096181)，准确 SHA `0a42161f352c72739a58719bbc59975d89450311`。依赖核验、306 项构建／部署、**486 组完整发布回归、完整 EXE 冷启动与重启、界面／Preload／版本 IPC、实际媒体解码与分发目录 DLL 加载、正常退出均 PASS**。payload `759019e100cc0689868a0e0c540611e4eef75048ad73e4e57820c178dccbfc14` 与本机一致。以下前五轮失败保留原 SHA 历史归属，不改写为 PASS。
+
+后续仅文档提交 `56979afd4b174ee9fec198f9c7cd8255a6436c22` 的 [Windows CI 39563713574](https://github.com/wsdsb-111/VOCT-NEW/actions/runs/39563713574) 亦全部通过。本轮用户追加 1 美元付费授权后，当前智谱 GLM-5.3-Flash 的 6 次真实请求全部通过，原生费用估算 ¥0.0042528，两次流式各命中 2880 Token；具体方法、原生计数及合成授权范围见[付费实测报告](V9_4_LIVE_PROVIDER_VERIFICATION.md)。不将此单 Provider 结果扩展为全部端点或真实 CK3 通过。
 
 ## 本机资源限制与重启恢复
 
@@ -59,10 +61,10 @@ Node 22.23.3 x64 来自官方发行包，临时放在忽略的 `.build`；未全
 |---|---|
 | V9.4 离线专项 | 上述 14 个新增专项串行通过，后续三组历史回归／语法／主题合同通过；静态 package smoke 未在重启后重跑 |
 | 完整本机发布回归 | FAIL／中断，非完整 PASS |
-| 准确 SHA 的 Windows CI | 0a42161／39562096181：486 组完整回归 PASS；前五轮 FAILED 历史保留 |
+| 准确 SHA 的 Windows CI | 0a42161／39562096181 及仅文档 56979af／39563713574：完整回归与 EXE 冒烟 PASS；前五轮 FAILED 历史保留 |
 | Windows EXE 冷启动／重启 | 0a42161 隔离 Windows Runner 完整启动、媒体加载与正常退出 PASS；本机先前 FAIL 保留、重启后未重测 |
 | 实际桌面键入／焦点／穿透 | NOT_RUN |
-| 真实付费 Provider | NOT_AUTHORIZED；没有调用 |
+| 真实付费 Provider | 智谱 GLM-5.3-Flash：6/6 COMPLETE；原生缓存命中与流式用量已观察；其他 Provider／真实游戏权限仍待验收，详见付费报告 |
 | 真实 CK3／ACK／长时间 Soak | NOT_RUN |
 
 不得发布正式 V9.4 或宣称 Full Freeze，直至必需门禁分别签署。

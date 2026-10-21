@@ -4,7 +4,7 @@
 
 - 引入 PromptPlan 语义块、显式消息映射和静态／冻结优先排序；保留时间及第三人摘要成功后冻结复用、配额与来源权限。
 - 最终 Provider 有效请求增加预算／完整性复核；缓存诊断 V2 区分原生、派生和本地估计，不伪造服务端断点。
-- 代码与自动化验收完成：[0a42161 的 Windows CI](https://github.com/wsdsb-111/VOCT-NEW/actions/runs/39562096181) 通过486组完整回归、306项构建部署及 EXE 冷启动／重启／媒体加载。真实 CK3／Provider／桌面输入／Soak 待验收，保留候选，尚未正式发布。详见 [V9.4 验证](docs/current/v9/V9_4_VERIFICATION.md)。
+- 代码与自动化验收完成：[0a42161 的 Windows CI](https://github.com/wsdsb-111/VOCT-NEW/actions/runs/39562096181) 通过486组完整回归、306项构建部署及 EXE 冷启动／重启／媒体加载。当前智谱 GLM-5.3-Flash 的[付费实测](docs/current/v9/V9_4_LIVE_PROVIDER_VERIFICATION.md) 6/6 COMPLETE，原生缓存命中 5760 Token，费用估算 ¥0.0042528。其他 Provider、真实 CK3／桌面输入／Soak 待验收，保留候选，尚未正式发布。详见 [V9.4 验证](docs/current/v9/V9_4_VERIFICATION.md)。
 
 V9.3.9.3追加输入修复：从对话设置的优化页或摘要编辑返回后，恢复对话区的鼠标输入捕获，保留草稿及空白穿透；专项与隔离打包窗口通过。代码`291040b`已推main，[CI 39242368694](https://github.com/wsdsb-111/VOCT-NEW/actions/runs/39242368694)在原生Windows Runner通过471组；本地环境限制与人工验收边界见[报告末节](docs/current/v9/V9_3_9_3_IMPLEMENTATION_REPORT.md)。
 
