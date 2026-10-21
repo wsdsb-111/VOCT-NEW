@@ -400,7 +400,7 @@ function makePromptRuntime() {
     defaultChatInstruction: "FR_QA_INSTRUCTION"
   });
   const history = [{ role: "user", content: "甲询问当前宫廷安排。" }];
-  const build = (layout, memoryContext, characterId = 2) => {
+  const build = (layout, memoryContext, characterId = 2, promptPlanMode) => {
     state.v813 = layout === "v813";
     const provider = layout === "glm"
       ? { providerType: "zhipu", defaultModel: "glm-5.3-flash" }
@@ -414,7 +414,7 @@ function makePromptRuntime() {
       stableProfileCache: new Map(),
       stableDescriptionCache: new Map(),
       freezePromptPrefix: true
-    }, provider);
+    }, provider, { ...(promptPlanMode ? { promptPlanMode } : {}) });
   };
   return { build, builder, gameData };
 }

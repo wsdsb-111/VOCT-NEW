@@ -453,13 +453,25 @@ async function inspectOneLaunch(appDir, profileDir, expectedVersion, passNumber,
 
     const ipcVersion = await renderer.evaluate("electronAPI.getAppVersion()");
     if (ipcVersion !== expectedVersion) throw new Error(`Read-only app:getVersion IPC returned ${String(ipcVersion)}`);
+    // Decode a local silent PCM sample without playback or network access. Media DLLs may load lazily.
+    const mediaDecode = await renderer.evaluate(`(async () => {
+      const wav = new ArrayBuffer(108);
+      const view = new DataView(wav);
+      const label = (offset, text) => [...text].forEach((letter, index) => view.setUint8(offset + index, letter.charCodeAt(0)));
+      label(0, "RIFF"); view.setUint32(4, 100, true); label(8, "WAVE");
+      label(12, "fmt "); view.setUint32(16, 16, true); view.setUint16(20, 1, true);
+      view.setUint16(22, 1, true); view.setUint32(24, 8000, true); view.setUint32(28, 16000, true);
+      view.setUint16(32, 2, true); view.setUint16(34, 16, true); label(36, "data"); view.setUint32(40, 64, true);
+      const context = new OfflineAudioContext(1, 32, 8000);
+      const decoded = await context.decodeAudioData(wav);
+      return { samples: decoded.length, sampleRate: decoded.sampleRate, channels: decoded.numberOfChannels };
+    })()`);
+    if (mediaDecode?.samples !== 32 || mediaDecode.sampleRate !== 8000 || mediaDecode.channels !== 1) throw new Error("Packaged media decoder did not decode the synthetic PCM sample");
     await delay(2000);
     if (settledExit) throw new Error(`VOTC.exe exited during the cold-start stability window (${JSON.stringify(settledExit)})`);
     if (errors.length) throw new Error(`Electron reported ${errors.length} unhandled runtime exception(s) during startup`);
-    const ffmpeg = await inspectLoadedFfmpeg(
-      [mainInfo.pid, ...mainInfo.windows.map(window => window.pid)],
-      path.join(appDir, "ffmpeg.dll")
-    );
+    const appProcessIds = await main.evaluate("[process.pid, ...process.mainModule.require('electron').app.getAppMetrics().map(metric => metric.pid)]");
+    const ffmpeg = await inspectLoadedFfmpeg(appProcessIds, path.join(appDir, "ffmpeg.dll"));
     const appLocale = mainInfo.appLocale;
     const localeCandidate = appLocale && path.join(appDir, "locales", `${appLocale}.pak`);
     const localePak = localeCandidate && fs.existsSync(localeCandidate)
@@ -488,7 +500,7 @@ async function inspectOneLaunch(appDir, profileDir, expectedVersion, passNumber,
       renderer: { url: rendererInfo.url, readyState: rendererInfo.readyState, bodyTextLength: rendererInfo.bodyTextLength },
       preload: { bridge: "electronAPI.getAppVersion", present: true },
       ipc: { invocation: "electronAPI.getAppVersion() -> app:getVersion", returnedVersion: ipcVersion },
-      runtimeResources: { ffmpeg, appLocale, localePak },
+      runtimeResources: { ffmpeg, mediaDecode, appLocale, localePak },
       shutdown: { method: "Electron app.quit()", exit: settledExit },
       removedCredentialVariableNames,
       runtimeExceptionCount: errors.length,

@@ -25,13 +25,17 @@ Node 22.23.3 x64 来自官方发行包，临时放在忽略的 `.build`；未全
 
 依赖核验已通过 5,981 文件／264 包。重启后最终 build、verify、deploy、verify --deployed 均通过，306 项源码／构建／部署哈希一致，App 9.4.0，payload SHA256 为 `c2ebf5d768a155c2a54359a58344d11a046128809a065532711c1507317e3647`。receipt 在 `.build/runtime-deploy-state/receipt.json`，本次部署只替换 3 项相对前次有变化的资源；部署备份目录末段为 `8f6262a9-2fd6-427a-9346-82ea9c74d3b8`。
 
-全量 `test-release.js` 此前停止于来源路径回归；诊断性 remainder 运行亦被重启打断。它不构成完整发布 PASS。后续全量应优先在隔离 Windows CI 上串行执行并绑定准确 SHA；本轮本机不再启动大型测试。远端 CI 尚无本候选通过证据。
+全量 `test-release.js` 此前停止于来源路径回归；诊断性 remainder 运行亦被重启打断。它不构成完整发布 PASS。本轮本机不再启动大型测试，完整门禁转隔离 Windows Runner。
+
+首轮 [Windows CI 39543056777](https://github.com/wsdsb-111/VOCT-NEW/actions/runs/39543056777)，准确 SHA `0f5d2fe8132db17b8bb37d5adf00437f7754026a`：依赖、构建、部署通过；发布回归 **FAILED** 于 `v9.3.9-independent-qa`。原因是该测试依赖的 `makePromptRuntime.build` 夹具未向 PromptBuilder 转发显式 legacy 模式。已补齐第四个可选参数，并在隔离 TEMP 中串行重跑该组通过；默认调用行为不变。后续准确 SHA 全量结果单列，不能将此轮失败覆盖为成功。
 
 ## Windows EXE
 
 重启前真实冷启动已执行，完整分发复制核验通过（6,359 文件、340,434,704 字节），但原安装目录和隔离副本均在主进程／Renderer 调试端点建立前退出，代码 `2147483651`／`0x80000003`。去除调试参数仍复现；stderr 无可用错误。故启动门禁为 **FAIL**，不是静态 PASS，也不能用旧 V9.3.9.3 的 UI 验证代替。
 
 证据保存在忽略的 `.build/v9.4-construction/windows-smoke*.log`、`no-inspector-diagnostic.json` 及 smoke-temp 内 evidence.json。事件日志访问受限，尚未定位故障模块。未修改 ACL、Defender 或系统安全策略；用户重启后尚未重新验证 EXE，不假定重启已修复。
+
+上述首轮远端 CI 中，完整复制、真实 main／renderer／preload／版本 IPC 及正常退出已通过，但整个启动门禁仍 **FAILED**：未观察到 ffmpeg.dll 加载。为明确媒体库的延后加载条件，后续 smoke 增加不播放、不联网的合成 PCM 解码，并查询 Electron 自有各进程的模块；继续要求实际从完整分发目录加载 ffmpeg，不能仅用静态文件存在代替。该修订尚待新一轮 CI 实测。
 
 ## 性能与外部验证
 
@@ -41,8 +45,8 @@ Node 22.23.3 x64 来自官方发行包，临时放在忽略的 `.build`；未全
 |---|---|
 | V9.4 离线专项 | 上述 14 个新增专项串行通过，后续三组历史回归／语法／主题合同通过；静态 package smoke 未在重启后重跑 |
 | 完整本机发布回归 | FAIL／中断，非完整 PASS |
-| 准确 SHA 的 Windows CI | NOT_RUN |
-| Windows EXE 冷启动 | FAIL；重启后未重跑 |
+| 准确 SHA 的 Windows CI | 首轮 0f5d2fe／39543056777 FAILED；修订后待重跑 |
+| Windows EXE 冷启动 | 本机 FAIL；远端界面启动通过但媒体库证据不足，整体仍 FAIL |
 | 实际桌面键入／焦点／穿透 | NOT_RUN |
 | 真实付费 Provider | NOT_AUTHORIZED；没有调用 |
 | 真实 CK3／ACK／长时间 Soak | NOT_RUN |
