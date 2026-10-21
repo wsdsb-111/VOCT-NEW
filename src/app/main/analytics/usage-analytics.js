@@ -134,6 +134,7 @@ function createUsageAnalytics({ fs, dataDir, analyticsFile, retention, createPro
         model: metadata?.model || "unknown",
         character: metadata?.character || null,
         characterId: Number.isFinite(Number(metadata?.characterId)) ? Number(metadata.characterId) : null,
+        conversationId: typeof metadata?.conversationId === "string" ? metadata.conversationId : null,
         actionTrigger: metadata?.actionTrigger || null,
         actionOutcome: metadata?.actionOutcome || null,
         actionCandidateReasons: Array.isArray(metadata?.actionCandidateReasons) ? metadata.actionCandidateReasons : [],
@@ -523,7 +524,7 @@ function createUsageAnalytics({ fs, dataDir, analyticsFile, retention, createPro
           lastDurableScopeByRequest.set(baseKey, durableScopeKey);
         } else {
           const responderKey = entry.characterId ?? entry.character ?? "";
-          previousKey = `${entry.requestType} | ${entry.providerType} | ${entry.model} | ${responderKey}`;
+          previousKey = JSON.stringify([entry.requestType, entry.providerType, entry.model, responderKey, entry.conversationId || ""]);
           previousEntry = previousByRequest.get(previousKey);
           previousByRequest.set(previousKey, entry);
         }

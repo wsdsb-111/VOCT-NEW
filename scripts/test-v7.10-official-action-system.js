@@ -167,7 +167,9 @@ assert(conversationSource.includes("const visibleHistory = this.getHistoryForCha
 const actionProviderMethod = providerSource.slice(providerSource.indexOf("async sendActionsRequest"), providerSource.indexOf("async sendSummaryRequest"));
 assert(actionProviderMethod.includes("...config.defaultParameters"), "action requests must preserve provider defaults");
 assert(!actionProviderMethod.includes("temperature: 0.1") && !actionProviderMethod.includes("max_tokens: 512") && !actionProviderMethod.includes('thinking: { type: "disabled" }'), "LLMManager must not impose action-provider overrides");
-assert(engineSource.includes('sendActionsRequest(messages, "votc_actions", jsonSchema, signal)'));
+assert(engineSource.includes('sendActionsRequest(messages, "votc_actions", jsonSchema, signal, {'));
+assert(engineSource.includes('characterId: npc.id'));
+assert(engineSource.includes('conversationId: conv.id || null'));
 assert(!mainSource.includes('require("./action-system")'));
 assert(!mainSource.includes("actionSystemMode"));
 assert(!analyticsSource.includes("actionSystemMode"));

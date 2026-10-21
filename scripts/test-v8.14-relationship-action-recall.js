@@ -12,9 +12,10 @@ const player = { id: 1, fullName: "Player", shortName: "Player", relationsToChar
 const npc = { id: 2, fullName: "NPC", shortName: "NPC", relationsToCharacters: [] };
 const history = Array.from({ length: 10 }, (_, index) => ({ role: index % 2 ? "assistant" : "user",
   name: index % 2 ? "NPC" : "Player", content: index === 4 ? "I love you" : index === 5 ? "I love you too" : `line ${index}` }));
-const conversation = { gameData: { playerID: 1, playerName: "Player", characters: new Map([[1, player], [2, npc]]) },
+const conversation = { id: "action-cache-test", gameData: { playerID: 1, playerName: "Player", characters: new Map([[1, player], [2, npc]]) },
   messages: history, getHistory: () => history };
 let sentMessages;
+let sentActionMetadata;
 const Engine = createActionEngine({
   actionRegistry: { getAllActions: () => [{ id: "becomeSoulmatesWith", definition: {
     check: () => ({ canExecute: true, validTargetCharacterIds: [1] }),
@@ -22,7 +23,11 @@ const Engine = createActionEngine({
   } }], getById: (id) => ({ validation: { valid: true }, filePath: path.join(__dirname,
     `../resources/app/default_userdata/actions/standard/z_${id}.js`) }) },
   settingsRepository: { getLanguage: () => "en", getActionsProviderConfig: () => ({}) },
-  llmManager: { sendActionsRequest: async (messages) => { sentMessages = messages; return { content: '{"actions":[]}' }; } },
+  llmManager: { sendActionsRequest: async (messages, _schemaName, _jsonSchema, _signal, metadata) => {
+    sentMessages = messages;
+    sentActionMetadata = metadata;
+    return { content: '{"actions":[]}' };
+  } },
   ActionPromptBuilder,
   ActionSandbox,
   ActionEffectWriter: { writeEffect: () => ({ commandId: "test-command", status: "queued", hasCommandEnvelope: true }) },
@@ -36,6 +41,10 @@ const Engine = createActionEngine({
 (async () => {
   const result = await Engine.evaluateForCharacter(conversation, npc);
   assert.deepStrictEqual(result, { autoApproved: [], needsApproval: [] });
+  assert.strictEqual(sentActionMetadata.characterId, npc.id, "Action requests must carry the real responder ID for scoped cache comparison");
+  assert.strictEqual(sentActionMetadata.responderId, npc.id);
+  assert.strictEqual(sentActionMetadata.conversationId, conversation.id);
+  assert(sentActionMetadata.trustedActionIntroSuffix.includes("RELATIONSHIP STATE CHANGES"));
   assert(sentMessages[0].content.includes("I love you"), "reciprocal romantic confession guidance must reach all providers");
   assert(sentMessages[0].content.includes("becomeSoulmatesWith"));
   assert(sentMessages[0].content.includes("becomeFriendsWith"));
@@ -47,7 +56,8 @@ const Engine = createActionEngine({
   assert(sentMessages[0].content.includes("questions"), "questions must not trigger relationship effects");
   assert(sentMessages[0].content.includes("unaccepted proposals"));
   assert(sentMessages[1].content.includes("I love you\nNPC: I love you too"), "two-person action context must keep the reciprocal exchange");
-  const prepared = prepareActionMessages(sentMessages, { overlayEnabled: true, stablePrefixEnabled: true });
+  const prepared = prepareActionMessages(sentMessages, { overlayEnabled: true, stablePrefixEnabled: true,
+    trustedIntroSuffix: sentActionMetadata.trustedActionIntroSuffix });
   assert.strictEqual(prepared.stablePrefixApplied, true, "DeepSeek stable-prefix block contract must survive");
   assert.strictEqual(prepared.overlayApplied, true);
   const relationshipIds = ["becomeSoulmatesWith", "becomeFriendsWith", "becomeRivalsWith", "becomeBloodBrothersWith",

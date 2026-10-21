@@ -1,5 +1,7 @@
 # VOTC 文档索引
 
+当前入口为 **V9.4.2 缓存排查及 Action 前缀修复候选**：[实施](current/v9/V9_4_2_IMPLEMENTATION.md)、[验证](current/v9/V9_4_2_VERIFICATION.md)。聊天冻结指纹与服务商命中分开判断；Action 固定规则／示例在前、身份和当前可用动作在后。本机小型测试串行，完整门禁与 EXE 转隔离 Windows CI；无新增付费请求。下方 V9.4.1 为历史批次。
+
 当前入口为 **V9.4.1 定点修复候选**：[实施](current/v9/V9_4_1_IMPLEMENTATION.md)、[验证](current/v9/V9_4_1_VERIFICATION.md)。修复 V813 可信静态分类，补充只读来源映射及 UNKNOWN 边界；现有授权、来源／Forget、冻结／配额与旧模式合同保持。本机只串行专项，全量及 EXE 转隔离 Windows CI，本版不新增付费请求。
 
 [V9.4.1 CI 39579976545](https://github.com/wsdsb-111/VOCT-NEW/actions/runs/39579976545)（准确代码 SHA `d1479db`）已通过 **488 组完整发布回归、306 项构建部署和完整 EXE 冷启动／重启／媒体加载**，与本机部署哈希一致。真实 CK3、本机输入及 Soak 仍未验收，本轮无新增付费请求。

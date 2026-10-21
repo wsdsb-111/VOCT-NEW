@@ -99,7 +99,12 @@ function createActionEngine({ actionRegistry, settingsRepository, usageAnalytics
         console.log(`[DEBUG] ActionEngine: Using minimized schema: ${useMinimizedSchema}`);
         const jsonSchema = buildStructuredResponseJsonSchema({ availableActions: available }, useMinimizedSchema);
         const zodSchema = buildStructuredResponseSchema({ availableActions: available });
-        const output = await llmManager.sendActionsRequest(messages, "votc_actions", jsonSchema, signal);
+        const output = await llmManager.sendActionsRequest(messages, "votc_actions", jsonSchema, signal, {
+          characterId: npc.id,
+          responderId: npc.id,
+          conversationId: conv.id || null,
+          trustedActionIntroSuffix: RELATIONSHIP_RECALL_GUIDANCE
+        });
         if (signal?.aborted) return { autoApproved: [], needsApproval: [] };
         const result = await output;
         const outcome = validateGenerationOutcome(result, { providerType: actionsConfig?.providerType });

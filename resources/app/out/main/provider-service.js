@@ -4,7 +4,7 @@ const crypto = require("crypto");
 const { estimateTokens } = require("./token-estimator");
 const { resolveContextMode, resolveProviderCapabilities, planRequestBudget, validateContextConfiguration } = require("./providers/request-budget");
 const { isMemoryBudgetBlock } = require("./memory-system/memory-budget-policy");
-const { OVERLAY_BLOCK_ID, OVERLAY_VERSION, prepareActionMessages } = require("./actions/action-prompt-compatibility-overlay");
+const { OVERLAY_BLOCK_ID, ACTION_TURN_IDENTITY_BLOCK_ID, OVERLAY_VERSION, prepareActionMessages } = require("./actions/action-prompt-compatibility-overlay");
 const { buildProviderCapabilities, capabilityCacheKey } = require("./providers/provider-capabilities");
 const { createRequestControl, awaitWithSignal, assertActive, managedIterator } = require("./providers/provider-cancellation");
 const { preflightEffectiveRequestBudget } = require("./providers/effective-request");
@@ -494,6 +494,9 @@ class LLMManager {
    */
   async sendActionsRequest(messages, schemaName, jsonSchemaObject, signal, metadata = {}) {
     rejectRetiredDurableOutbound(metadata.requestType);
+    const trustedIntroSuffix = metadata.trustedActionIntroSuffix === undefined ? "" : metadata.trustedActionIntroSuffix;
+    const requestMetadata = { ...metadata };
+    delete requestMetadata.trustedActionIntroSuffix;
     const selectedConfig = this.settingsRepository.getActionsProviderConfig();
     const config = selectedConfig && JSON.parse(JSON.stringify(selectedConfig));
     if (!config) {
@@ -511,7 +514,8 @@ class LLMManager {
     const stablePrefixRequested = isDeepseekAction && config.deepseekActionStablePrefixOptimization === true;
     const preparedActionPrompt = isDeepseekAction ? prepareActionMessages(messages, {
       overlayEnabled,
-      stablePrefixEnabled: stablePrefixRequested
+      stablePrefixEnabled: stablePrefixRequested,
+      trustedIntroSuffix
     }) : {
       messages,
       blockMessages: messages,
@@ -543,14 +547,17 @@ class LLMManager {
     const deepseekSchemaInjection = isDeepseekAction;
     const providerInjectsSchema = (isDeepseekAction || isOpenAICompatibleAction) && actionSchemaDeliveryMode !== "optimized_local_validation";
     const schemaCacheRole = actionSchemaDeliveryMode === "optimized_local_validation" ? "local_validation_only" : isDeepseekAction ? "provider_injected_system_message" : "response_format";
-    const providerSerializedOrder = preparedActionPrompt.stablePrefixApplied ? preparedActionPrompt.overlayApplied ? "deepseek_intro_state_transition_rules_actions_examples_roster_recent_actions_recent_messages_final" : "deepseek_intro_actions_examples_roster_recent_actions_recent_messages_final" : preparedActionPrompt.overlayApplied ? "deepseek_official_order_with_state_transition_overlay" : stablePrefixRequested && preparedActionPrompt.failureReason ? "messages_official_fail_open" : isOpenAICompatibleAction ? actionSchemaDeliveryMode === "optimized_local_validation" ? "messages_then_json_object_local_validation" : "messages_then_response_format_json_schema" : providerInjectsSchema ? "messages_then_provider_injected_schema_then_response_format" : "messages_then_response_format";
-    const actionPromptBlocks = schemaName === "votc_actions" && (!Array.isArray(metadata.blocks) || metadata.blocks.length === 0) ? this.buildActionPromptBlocks(preparedActionPrompt.blockMessages, serializedSchema, providerInjectsSchema) : Array.isArray(metadata.blocks) ? metadata.blocks : [];
-    const rosterPosition = preparedActionPrompt.stablePrefixApplied ? actionPromptBlocks.findIndex((block) => block.id === "action_roster") : -1;
-    const stablePrefixEndPosition = rosterPosition >= 0 ? rosterPosition : null;
-    const stablePrefixTokens = rosterPosition >= 0 ? actionPromptBlocks.slice(0, rosterPosition).reduce((sum, block) => sum + (Number(block.tokens) || 0), 0) : 0;
+    const stableActionOrder = "deepseek_intro" + (preparedActionPrompt.overlayApplied ? "_state_transition_rules" : "")
+      + "_examples_turn_identity_v1_actions" + (providerInjectsSchema ? "_provider_schema" : "")
+      + "_roster_recent_actions_recent_messages_final";
+    const providerSerializedOrder = preparedActionPrompt.stablePrefixApplied ? stableActionOrder : preparedActionPrompt.overlayApplied ? "deepseek_official_order_with_state_transition_overlay" : stablePrefixRequested && preparedActionPrompt.failureReason ? "messages_official_fail_open" : isOpenAICompatibleAction ? actionSchemaDeliveryMode === "optimized_local_validation" ? "messages_then_json_object_local_validation" : "messages_then_response_format_json_schema" : providerInjectsSchema ? "messages_then_provider_injected_schema_then_response_format" : "messages_then_response_format";
+    const actionPromptBlocks = schemaName === "votc_actions" && (!Array.isArray(requestMetadata.blocks) || requestMetadata.blocks.length === 0) ? this.buildActionPromptBlocks(preparedActionPrompt.blockMessages, serializedSchema, providerInjectsSchema, preparedActionPrompt.stablePrefixApplied) : Array.isArray(requestMetadata.blocks) ? requestMetadata.blocks : [];
+    const firstDynamicPosition = preparedActionPrompt.stablePrefixApplied ? actionPromptBlocks.findIndex((block) => block.stable !== true) : -1;
+    const stablePrefixEndPosition = preparedActionPrompt.stablePrefixApplied ? firstDynamicPosition < 0 ? actionPromptBlocks.length : firstDynamicPosition : null;
+    const stablePrefixTokens = stablePrefixEndPosition !== null ? actionPromptBlocks.slice(0, stablePrefixEndPosition).reduce((sum, block) => sum + (Number(block.tokens) || 0), 0) : 0;
     const overlayBlock = actionPromptBlocks.find((block) => block.id === OVERLAY_BLOCK_ID);
     console.log(`[LLMManager] Action request: provider=${config.providerType}, model=${config.defaultModel}, messages=${preparedActionPrompt.messages.length}, schema=${schemaName}, estimatedPromptTokens=${estimatedPromptTokens}`);
-    const control = this.createControl(config, "ACTION", signal, metadata);
+    const control = this.createControl(config, "ACTION", signal, requestMetadata);
     let capabilities;
     try { capabilities = await this.getProviderCapabilities("ACTION", null, control, config); }
     catch (error) { control.dispose(); throw toProviderError(error); }
@@ -559,10 +566,10 @@ class LLMManager {
       countTokens: items => this.TokenCounter.calculateTotalTokens(items) + (providerInjectsSchema ? schemaTokenEstimate : 0) });
     if (!budget.safe) { control.dispose(); throw new Error("action_request_budget_exceeded"); }
     const cacheDiagnosticsObserverToken = this.createCacheDiagnosticsObserver(
-      config.providerType, config.defaultModel, "action", null, { ...metadata, blocks: actionPromptBlocks });
-    this.wireEffectiveRequestObserver(control, cacheDiagnosticsObserverToken, metadata);
+      config.providerType, config.defaultModel, "action", null, { ...requestMetadata, blocks: actionPromptBlocks });
+    this.wireEffectiveRequestObserver(control, cacheDiagnosticsObserverToken, requestMetadata);
     return await this.trackUsage(this.generate(provider, request, config, capabilities, control, estimatedPromptTokens), {
-      ...metadata,
+      ...requestMetadata,
       requestControl: control,
       requestBudget: budget,
       cacheDiagnosticsObserverToken,
@@ -594,10 +601,11 @@ class LLMManager {
       estimatedSerializedPromptTokens: estimatedPromptTokens + (providerInjectsSchema ? schemaTokenEstimate : 0)
     });
   }
-  buildActionPromptBlocks(messages, serializedSchema, providerInjectsSchema = true) {
+  buildActionPromptBlocks(messages, serializedSchema, providerInjectsSchema = true, stablePrefixApplied = false) {
     const definitions = new Map([
-      ["action_system_intro", ["Action system introduction", "action_prompt", true]],
+      ["action_system_intro", ["Action system introduction", "action_prompt", stablePrefixApplied]],
       [OVERLAY_BLOCK_ID, ["State transition recall rules", "action_prompt", true]],
+      [ACTION_TURN_IDENTITY_BLOCK_ID, ["Current action turn identity", "action_prompt", false]],
       ["action_recent_messages", ["Recent messages", "action_prompt", false]],
       ["action_recent_actions", ["Recent actions", "action_prompt", false]],
       ["action_roster", ["Character roster", "action_prompt", false]],
@@ -644,8 +652,11 @@ class LLMManager {
       });
       return blocks.map((block, position) => ({ ...block, position }));
     }
-    const fallbackDefinitions = [...definitions.entries()].map(([id, [label, type, stable]]) => [id, label, type, stable]);
-    fallbackDefinitions.splice(6, 0, ["action_provider_schema", "Provider schema", "action_provider_schema", false]);
+    const fallbackDefinitions = [...definitions.entries()]
+      .filter(([id]) => id !== ACTION_TURN_IDENTITY_BLOCK_ID || messages.some((message) => message?.blockId === id))
+      .map(([id, [label, type, stable]]) => [id, label, type, stable]);
+    const fallbackSchemaPosition = Math.max(0, fallbackDefinitions.findIndex(([id]) => id === "action_available_actions") + 1);
+    fallbackDefinitions.splice(fallbackSchemaPosition, 0, ["action_provider_schema", "Provider schema", "action_provider_schema", false]);
     const contents = new Map(fallbackDefinitions.map(([id]) => [id, ""]));
     for (const message of messages) {
       const content = typeof message?.content === "string" ? message.content : "";
@@ -674,7 +685,9 @@ class LLMManager {
     });
   }
   reorderActionPromptBlocks(blocks) {
-    const order = ["action_system_intro", OVERLAY_BLOCK_ID, "action_available_actions", "action_provider_schema", "action_examples", "action_roster", "action_recent_actions", "action_recent_messages", "action_final_instruction"];
+    const order = ["action_system_intro", OVERLAY_BLOCK_ID, "action_examples", ACTION_TURN_IDENTITY_BLOCK_ID,
+      "action_available_actions", "action_provider_schema", "action_roster", "action_recent_actions",
+      "action_recent_messages", "action_final_instruction"];
     const positions = new Map(order.map((id, index) => [id, index]));
     return [...blocks].sort((left, right) => (positions.get(left.id) ?? order.length) - (positions.get(right.id) ?? order.length)).map((block, position) => ({ ...block, position }));
   }
