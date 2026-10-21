@@ -32,7 +32,9 @@ function finalizePromptBuild(legacyBuild, inputs) {
   const sourceById = new Map(legacyBuild.blocks.map(entry => [entry.block.id, entry]));
   const outputBlocks = promptPlan.blocks.map(block => ({ ...(sourceById.get(block.legacyBlockId) || {}),
     block: { ...(sourceById.get(block.legacyBlockId)?.block || {}), id: block.id, type: block.legacyType,
-      stable: block.cache.stableCandidate, lifecycle: block.kind, semanticKind: block.kind },
+      stable: block.cache.stableCandidate,
+      lifecycle: ["GLOBAL_STATIC", "CONVERSATION_FROZEN", "RESPONDER_FROZEN"].includes(block.kind) ? block.kind : "DYNAMIC",
+      semanticKind: block.kind },
     content: block.content, tokens: block.tokens.estimated,
     messageSpan: { start: serialized.messageSpans.find(span => span.blockId === block.id).start,
       end: serialized.messageSpans.find(span => span.blockId === block.id).end } }));

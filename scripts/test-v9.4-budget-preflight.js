@@ -4,6 +4,7 @@ const assert = require("node:assert/strict");
 const { LLMManager } = require("../src/app/main/provider-service");
 const { createEffectiveRequestSnapshot, extractEffectivePromptMessages, preflightEffectiveRequestBudget, fingerprintMessages } = require("../src/app/main/providers/effective-request");
 const { createRequestControl } = require("../src/app/main/providers/provider-cancellation");
+const { resolveMemoryBudget } = require("../src/app/main/memory-system/memory-budget-policy");
 
 const inputMessages = [
   { role: "system", content: "Stable fixture instructions." },
@@ -308,6 +309,31 @@ async function testLegacySnapshotDefaults() {
   assert.equal(snapshot.adapterInputMessagesFingerprint, fingerprintMessages(inputMessages));
 }
 
+async function testConfiguredLargeWindowMemoryBudgets() {
+  for (const contextWindow of [128000, 192000]) {
+    for (const [participantCount, ratio, cap] of [[2, 0.65, 80000], [3, 0.70, 84000], [4, 0.75, 96000]]) {
+      const memory = resolveMemoryBudget({ participantCount, contextWindowTokens: contextWindow, providerHeadroomTokens: contextWindow });
+      assert.equal(memory.ratio, ratio);
+      assert.equal(memory.memoryBudgetTokens, cap, "large configured windows retain the existing participant cap");
+      const narrative = "F".repeat(cap * 4);
+      const create = currentTurn => createEffectiveRequestSnapshot({
+        requestType: "chat", providerType: "openai-compatible", protocol: "openai_chat_completions",
+        endpoint: "https://provider.fixture.invalid/v1/chat/completions",
+        payload: { model: "fixture", max_tokens: 1024, messages: [
+          { role: "system", content: narrative }, { role: "user", content: currentTurn }
+        ] }
+      });
+      const safe = create("Current fictional turn.");
+      assert.equal(preflightEffectiveRequestBudget(safe, { capabilities: capabilities(contextWindow), countTokens }).safe, true);
+      assert.equal(safe.payload.messages[0].content, narrative, "the complete legal narrative survives final preflight");
+      const crowded = create("D".repeat(contextWindow * 4));
+      assert.throws(() => preflightEffectiveRequestBudget(crowded, { capabilities: capabilities(contextWindow), countTokens }), error =>
+        error.code === "provider_effective_request_budget_exceeded" && error.budget.estimatedInputTokens > error.budget.effectiveInputBudget);
+      assert.equal(crowded.payload.messages[0].content, narrative, "over-budget final requests are blocked, never repaired by truncating memory");
+    }
+  }
+}
+
 async function run() {
   await testProtocolOutputReservations();
   await testProviderServiceWiresBudgetAndOpaqueProof();
@@ -317,6 +343,7 @@ async function run() {
   await testInvalidTokenCountersFailClosed();
   await testFinalOutputAboveCapabilityFailsClosed();
   await testLegacySnapshotDefaults();
+  await testConfiguredLargeWindowMemoryBudgets();
   process.stdout.write("V9.4 budget preflight: PASS (OpenAI/Ollama/Gemini final mappings, all request types, proof provenance, fail-closed budget).\n");
 }
 

@@ -10,6 +10,7 @@ const {
   makeCandidateRequest
 } = require("./test-v9.3.6-independent-qa");
 const { createFixture, createPromptRuntime } = require("./fixtures/v9.4/legacy-layout-fixtures");
+const { Conversation } = require("../src/app/main/conversation/conversation");
 
 const REPO_ROOT = path.resolve(__dirname, "..");
 const MAIN_DIR = path.join(REPO_ROOT, "src", "app", "main");
@@ -211,12 +212,23 @@ function run() {
       memoryContext: selected, pendingMarkers, frozenMarkers: [] });
 
     const injectedIds = selected.extra.map(entry => String(entry.memory.memoryId));
-    const injected = harness.engine.commitDynamicSummaryRecall(RESPONDER_ID, cache, 1, {
-      providerSucceeded: true,
-      injectedBlockIds: ["memory-dynamic-frozen"],
-      injectedMemoryIds: injectedIds,
-      injectedTokens: selected.selectedTokens
-    });
+    Conversation.configure({ memoryEngine: harness.engine, TokenCounter: runtime.TokenCounter });
+    const conversation = Object.create(Conversation.prototype);
+    conversation.memoryState = { responderRecallCache: cache };
+    const commit = harness.engine.commitDynamicSummaryRecall.bind(harness.engine);
+    let injected = null;
+    let injectionEvidence = null;
+    harness.engine.commitDynamicSummaryRecall = (...args) => {
+      injectionEvidence = args[3];
+      injected = commit(...args);
+      return injected;
+    };
+    conversation.retainDynamicSummaryRecall(RESPONDER_ID, 101, { ...pendingBuild,
+      blocks: pendingBuild.blocks.filter(entry => entry.block.id !== "memory-dynamic-pending") }, 1);
+    assert.equal(injected, null, "a pending source omitted from the actual Prompt must not commit");
+    conversation.retainDynamicSummaryRecall(RESPONDER_ID, 101, pendingBuild, 1);
+    assert(injected, "the actual Conversation success callback must recognize the emitted pending block");
+    assert.deepEqual(injectionEvidence.injectedBlockIds, ["memory-dynamic-pending"]);
     assert.equal(injected.committedCount, injectedIds.length,
       "only successfully injected time/third-party sources become frozen projections");
     const sourceCountAfterCommit = sourceResolveCount;
@@ -232,6 +244,8 @@ function run() {
       .filter(Boolean);
     const committedBuild = assertPlanProjection({ runtime, fixture: promptFixture, history: promptFixture.history,
       memoryContext: reused, pendingMarkers: [], frozenMarkers: committedMarkers });
+    conversation.retainDynamicSummaryRecall(RESPONDER_ID, 102, committedBuild, 2);
+    assert.equal(injected.committedCount, 0, "a later successful reuse cannot consume the recall quota again");
     const repeatedBuild = assertPlanProjection({ runtime, fixture: promptFixture, history: promptFixture.history,
       memoryContext: reused, pendingMarkers: [], frozenMarkers: committedMarkers });
     assert.deepEqual(repeatedBuild.serialized.messages, committedBuild.serialized.messages,
@@ -250,6 +264,26 @@ function run() {
     const committedBlockTexts = mixedBuild.promptPlan.blocks.filter(block => block.kind === "RESPONDER_FROZEN").map(planText).join("\n");
     assert(!committedBlockTexts.includes(pendingSentinel),
       "the compatibility aggregate frozenDynamicText must never promote a pending source into the frozen prefix");
+    const state = cache.get(RESPONDER_ID);
+    const unsent = { ...state.frozenDynamicSources[0], frozenText: pendingSentinel,
+      memory: { ...state.frozenDynamicSources[0].memory, memoryId: "V94_UNSENT_PENDING_SOURCE" } };
+    const previousPending = state.pendingDynamicSources;
+    const previousExtra = state.dynamicExtra;
+    state.pendingDynamicSources = [unsent];
+    state.dynamicExtra = [...state.frozenDynamicSources, unsent];
+    harness.engine.commitDynamicSummaryRecall = (_owner, _cache, _turn, evidence) => {
+      injectionEvidence = evidence;
+      return { committedCount: 0 };
+    };
+    conversation.retainDynamicSummaryRecall(RESPONDER_ID, 103, committedBuild, 2);
+    assert(!injectionEvidence.injectedMemoryIds.includes(unsent.memory.memoryId),
+      "reusing only the committed block must not mark an unsent pending source as injected");
+    conversation.retainDynamicSummaryRecall(RESPONDER_ID, 103, mixedBuild, 2);
+    assert.deepEqual(injectionEvidence.injectedMemoryIds, [unsent.memory.memoryId],
+      "a mixed request commits only its emitted pending source IDs");
+    state.pendingDynamicSources = previousPending;
+    state.dynamicExtra = previousExtra;
+    harness.engine.commitDynamicSummaryRecall = commit;
 
     const nextConversationCache = new Map();
     const fresh = harness.engine.retrieveForResponder(buildRequest(fixture, nextConversationCache, 1, `${CONVERSATION_ID}-next`));

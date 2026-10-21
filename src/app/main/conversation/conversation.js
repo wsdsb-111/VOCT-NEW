@@ -1188,12 +1188,15 @@ class Conversation {
       ? [{ role: "system", content: recalls.get(message.id).text }, message] : [message]);
   }
   retainDynamicSummaryRecall(characterId, messageId, promptBuild, turnEpoch) {
-    const block = promptBuild.blocks?.find(entry => entry.block?.id === "memory-dynamic-frozen")
+    const block = promptBuild.blocks?.find(entry => entry.block?.id === "memory-dynamic-pending")
+      || promptBuild.blocks?.find(entry => entry.block?.id === "memory-dynamic-frozen")
       || promptBuild.blocks?.find(entry => entry.block?.id === "memory-temporal-extra");
     const text = block?.content;
     const cache = this.memoryState?.responderRecallCache?.get(Number(characterId));
     if (!text || cache?.dynamicTurn !== turnEpoch) return;
-    const injectedEntries = cache.dynamicExtra || [];
+    const injectedEntries = block.block.id === "memory-dynamic-pending" ? cache.pendingDynamicSources || []
+      : promptBuild.promptPlanMode === "v9" && block.block.id === "memory-dynamic-frozen" ? cache.frozenDynamicSources || []
+      : cache.dynamicExtra || [];
     const committed = memoryEngine.commitDynamicSummaryRecall(characterId, this.memoryState.responderRecallCache, turnEpoch, {
       providerSucceeded: true, injectedBlockIds: [block.block.id],
       injectedMemoryIds: injectedEntries.map(entry => entry.memory.memoryId),

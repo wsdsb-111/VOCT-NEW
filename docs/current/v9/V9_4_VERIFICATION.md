@@ -23,7 +23,7 @@ Node 22.23.3 x64 来自官方发行包，临时放在忽略的 `.build`；未全
 
 ## 构建与完整门禁
 
-依赖核验已通过 5,981 文件／264 包。重启后最终 build、verify、deploy、verify --deployed 均通过，306 项源码／构建／部署哈希一致，App 9.4.0，payload SHA256 为 `c2ebf5d768a155c2a54359a58344d11a046128809a065532711c1507317e3647`。receipt 在 `.build/runtime-deploy-state/receipt.json`，本次部署只替换 3 项相对前次有变化的资源；部署备份目录末段为 `8f6262a9-2fd6-427a-9346-82ea9c74d3b8`。
+依赖核验已通过 5,981 文件／264 包。重启后 build、verify、deploy、verify --deployed 均通过，306 项源码／构建／部署哈希一致，App 9.4.0。初始构建 payload 为 `c2ebf5d768a155c2a54359a58344d11a046128809a065532711c1507317e3647`；补齐真实冻结回调及旧 lifecycle 枚举后，最终 payload 为 `01e6336ff3aa215a05ecac32493963d51f3d1fb758503a693b772699b5444444`。receipt 在 `.build/runtime-deploy-state/receipt.json`，最后一次部署备份目录末段为 `f46cf9f2-2a9e-41bc-9bfa-ccdc9bf689e2`。最终部署后串行重跑旧 World Facts、21 组静态排序／枚举、真实冻结回调、Conversation 主链与六组大窗口预算均通过。
 
 全量 `test-release.js` 此前停止于来源路径回归；诊断性 remainder 运行亦被重启打断。它不构成完整发布 PASS。本轮本机不再启动大型测试，完整门禁转隔离 Windows Runner。
 
@@ -32,6 +32,10 @@ Node 22.23.3 x64 来自官方发行包，临时放在忽略的 `.build`；未全
 第二轮 [Windows CI 39543612831](https://github.com/wsdsb-111/VOCT-NEW/actions/runs/39543612831)，准确 SHA `b292c453d092160a730d0f197acc4503d9209390`：构建／部署通过；完整应用两次冷启动、界面／IPC、合成解码、分发目录 ffmpeg.dll 加载及正常退出 **PASS**。发布回归 **FAILED** 于 `v9.3.5-pair-ledger` 的路径别名拒绝。后续工作流将 TEMP／TMP 隔离到项目 `.build/ci-temp` 长路径，保持来源 junction 负向断言不变。当前路径守卫对无法证明为同一字面目录的短名别名采取拒绝；不增加 Win32 原生扩展来放宽此边界。
 
 第三轮 [Windows CI 39544193023](https://github.com/wsdsb-111/VOCT-NEW/actions/runs/39544193023)，准确 SHA `08bcb16f57f1ecd61b0b8940c5e16df22afe7808`：已确认 Runner 原 TEMP 为 `C:\Users\RUNNER~1\AppData\Local\Temp`；隔离后越过该问题。构建 payload 与本机完全一致，完整应用两次启动／媒体加载通过。发布回归 **FAILED** 于 `v9.3.4-independent-qa`：旧 fs 访问监视包装器丢失了 `realpathSync.native` 属性。已让包装器保留并同样监视 native 调用，未绕过旧存储访问断言；本机仅串行重跑该小型组，5/5 通过。
+
+第四轮 [Windows CI 39544727775](https://github.com/wsdsb-111/VOCT-NEW/actions/runs/39544727775)，准确 SHA `8544cb4358627fd7c41d8b60238eb70d6c8df837`：完整应用两次启动及媒体加载通过；发布回归 **FAILED** 于 `v8.11-world-facts`，暴露 V9 把新的语义 kind 错放进旧 `block.lifecycle` 公开字段。修复保留原四种 lifecycle 枚举，新 kind 独立保存在 `semanticKind`，不改变 IR 的状态。新增 21 组默认 V9 输出枚举兼容断言；旧世界事实断言不修改。
+
+补查真实成功回调时，新增测试先复现首次 V9 pending 来源未提交冻结的问题：此前生命周期测试直接调用 Engine 提交，遗漏了 Conversation 的块识别。已改为真实调用 `retainDynamicSummaryRecall`，修复 pending ID 接线及 committed-only 请求的来源声明；串行验证未发来源不提交、成功后冻结、次轮不重复召回／扣配额、混合请求只声明实际 pending。另补 128K／192K × 2／3／4 人的六组最终请求预算边界：完整合法记忆保留，额外动态数据超限时拒绝，禁止截记忆补救。均为纯离线夹具，没有真实 Provider 调用。
 
 ## Windows EXE
 
@@ -43,13 +47,13 @@ Node 22.23.3 x64 来自官方发行包，临时放在忽略的 `.build`；未全
 
 ## 性能与外部验证
 
-重启后以单进程重新执行离线双人七组测量：每组预热 10 次、配对采样 100 次，旧版到当前候选 build P50 增加约 0.541–0.721ms，P95 增加约 0.588–1.553ms。当前 Plan 源指纹为 `ecc21b2bdcdf6b2ae5258dc1fe0065c05f70517987c3ed454bab2ed3654fb653`，详细数据在忽略的 `.build/v9.4-construction/performance.json`。增加了本地组装成本，尚未签署性能验收阈值；不代表端到端提速、真实磁盘来源成本或 Provider 缓存收益。128K／192K、多人数性能和真实网络延迟尚未测量。
+最终源码以单进程重新执行离线双人七组测量：每组预热 10 次、配对采样 100 次，旧版到当前候选 build P50 增加约 0.444–0.626ms，P95 增加约 0.782–1.170ms。当前 Plan 源指纹为 `6c80cb33ff98b7df09f03a7b2e3741377baeb04d8e284e6f7309b602748de815`，详细数据在忽略的 `.build/v9.4-construction/performance.json`。增加了本地组装成本，尚未签署性能验收阈值；不代表端到端提速、真实磁盘来源成本或 Provider 缓存收益。128K／192K、多人数性能和真实网络延迟尚未测量；前述六组测试属于预算边界验证，不是性能测量。
 
 | Gate | 当前状态 |
 |---|---|
 | V9.4 离线专项 | 上述 14 个新增专项串行通过，后续三组历史回归／语法／主题合同通过；静态 package smoke 未在重启后重跑 |
 | 完整本机发布回归 | FAIL／中断，非完整 PASS |
-| 准确 SHA 的 Windows CI | 0f5d2fe／39543056777、b292c45／39543612831、08bcb16／39544193023 均 FAILED；监视夹具修订后待重跑 |
+| 准确 SHA 的 Windows CI | 前四轮 FAILED，具体 SHA／run／修复见上文；真实冻结回调及枚举兼容修订后待重跑 |
 | Windows EXE 冷启动 | 本机 FAIL 历史保留；第二轮隔离 Windows Runner 两次完整启动及媒体加载 PASS |
 | 实际桌面键入／焦点／穿透 | NOT_RUN |
 | 真实付费 Provider | NOT_AUTHORIZED；没有调用 |

@@ -23,6 +23,10 @@ for (const definition of CASES) {
     assert.deepEqual(multiset(current.messages), multiset(legacy.messages), `${definition.id}/${memory}: authorized role/content multiset changed`);
     assert.deepEqual(current.messages[0], legacy.messages[0], "cache anchor bytes and role remain unchanged");
     assert.equal(current.totalTokens, legacy.totalTokens, "reordering never reduces the legal narrative budget by dropping text");
+    for (const entry of current.blocks) {
+      assert(["GLOBAL_STATIC", "CONVERSATION_FROZEN", "RESPONDER_FROZEN", "DYNAMIC"].includes(entry.block.lifecycle), "public legacy lifecycle fields keep their existing enum");
+      assert.equal(entry.block.semanticKind, current.promptPlan.blocks.find(block => block.id === entry.block.id).kind);
+    }
     for (const [field, kind] of Object.entries({ globalStaticTokens: "GLOBAL_STATIC", conversationFrozenTokens: "CONVERSATION_FROZEN", responderFrozenTokens: "RESPONDER_FROZEN" })) {
       assert.equal(current[field], current.promptPlan.blocks.filter(block => block.kind === kind).reduce((sum, block) => sum + block.tokens.estimated, 0), `${field} follows the actual Plan lifecycle`);
     }

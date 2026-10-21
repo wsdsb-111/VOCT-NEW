@@ -16,6 +16,8 @@
 
 `memory-system/player-centered-memory.js` 只增加 committed／pending 来源的只读投影，不改原有召回、配额或提交机制。修复 GLM 延后 main 的纯计账占位被误认为实际输出的问题；真实 main 保留且只注入一次。V9 生命周期 Token 分项按最终 Plan 求和，待冻结摘要也进入记忆诊断总额。
 
+真实成功回调也同步接入新 pending 块：Conversation 优先从已发出的 pending 块提交当前 pending 来源；V9 仅复用 committed 块时只声明已冻结来源，不能顺带提交未发出的 pending。保留 legacy 回调行为及原成功／轮次门控。旧公开 `block.lifecycle` 继续使用原四种枚举，新语义种类另放 `semanticKind`，IR 与 V2 的 lifecycle state 维持独立。
+
 `providers/effective-request.js` 及既有 Provider／Service 在每次真实 transport 前观察最终协议映射后的有效请求，重新核验预算、完整消息元数据、模型／端点、来源及取消状态。保留 SDK 零隐式重试、既有有界显式重试和未知送达不透明重发原则。Chat、续写、Action、Summary、Letter 共用此边界；无 Chat Plan 的路径明确为 LEGACY_OBSERVED，不伪造 Owner 证明。最终请求正文只保存在内存，不持久化。
 
 `analytics/cache-usage-reconciliation.js`、`provider-diagnostics.js`、IPC／Preload 与既有 Renderer 诊断区增加 V2。原生 zero／missing／invalid、派生 miss、本地前缀估计和变化块分开；真实服务端缓存断点始终 UNKNOWN。仅合法完成且原生字段有效的样本进入分组加权率。Zhipu 保留旧 V1 raw_usage 形状，新增固定白名单的未强制转换原生证据，防止 null 被计成原生零。

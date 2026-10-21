@@ -60,7 +60,7 @@ function makeConversation({ scenario = "rewrite", initialOutcome = null, mutateB
 
   let knowledgeRevision = memoryContext.characterKnowledgeRevision;
   const counts = { requestCalls: 0, transportCalls: 0, requests: [], initialSerializedMessages: null,
-    initialSourceRefs: null, continuationExtra: null };
+    initialSourceRefs: null, continuationExtra: null, retained: [] };
   conversation.emitUpdate = () => {};
   conversation.isCharacterAvailableForConversation = () => true;
   conversation.getNpcList = () => [npc];
@@ -69,7 +69,7 @@ function makeConversation({ scenario = "rewrite", initialOutcome = null, mutateB
   conversation.checkAndSummarizeIfNeeded = async () => memoryContext;
   conversation.estimateTokenCount = messages => runtime.TokenCounter.calculateTotalTokens(messages);
   conversation.getCharacterDisclosureContext = () => ({ characterKnowledgeRevision: knowledgeRevision });
-  conversation.retainDynamicSummaryRecall = () => {};
+  conversation.retainDynamicSummaryRecall = (...args) => { counts.retained.push(args); };
   conversation.recordCharacterDisclosures = () => {};
   conversation.publishContextUsage = () => {};
   conversation.resetContextUsageScene = () => {};
@@ -172,6 +172,8 @@ async function runRewriteCase() {
   assert.equal(state.original.content, "重写后的台词。");
   assert.equal(state.counts.requestCalls, 1);
   assert.equal(state.counts.transportCalls, 1);
+  assert.equal(state.counts.retained.length, 1, "a complete response reaches the memory success callback exactly once");
+  assert.equal(state.counts.retained[0][2].promptPlanMode, "v9");
 }
 
 async function runContinuationCase() {
@@ -182,6 +184,7 @@ async function runContinuationCase() {
   assert.equal(state.original.content, "截断片段 fixture。补充完成。");
   assert.equal(state.counts.requestCalls, 2);
   assert.equal(state.counts.transportCalls, 2);
+  assert.equal(state.counts.retained.length, 1, "partial continuation attempts do not commit their own memory receipts");
 }
 
 async function runRevocationCase(kind) {
@@ -196,6 +199,7 @@ async function runRevocationCase(kind) {
   assert.equal(state.original.content, "最初的台词。", `${kind}: no stale rewrite may commit`);
   assert.equal(state.counts.requestCalls, 1, `${kind}: no fallback request may be attempted`);
   assert.equal(state.counts.transportCalls, 0, `${kind}: pre-send source revocation must prevent outbound transport`);
+  assert.equal(state.counts.retained.length, 0, `${kind}: failed requests cannot invoke the memory success callback`);
 }
 
 (async () => {
