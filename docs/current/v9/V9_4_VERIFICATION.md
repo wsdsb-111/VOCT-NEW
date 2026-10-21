@@ -37,6 +37,10 @@ Node 22.23.3 x64 来自官方发行包，临时放在忽略的 `.build`；未全
 
 补查真实成功回调时，新增测试先复现首次 V9 pending 来源未提交冻结的问题：此前生命周期测试直接调用 Engine 提交，遗漏了 Conversation 的块识别。已改为真实调用 `retainDynamicSummaryRecall`，修复 pending ID 接线及 committed-only 请求的来源声明；串行验证未发来源不提交、成功后冻结、次轮不重复召回／扣配额、混合请求只声明实际 pending。另补 128K／192K × 2／3／4 人的六组最终请求预算边界：完整合法记忆保留，额外动态数据超限时拒绝，禁止截记忆补救。均为纯离线夹具，没有真实 Provider 调用。
 
+第五轮 [Windows CI 39546566951](https://github.com/wsdsb-111/VOCT-NEW/actions/runs/39546566951)，准确 SHA `d8287f17b122d649af3eb4c830dcec6c8f75cc0d`：新版真实冻结回调及枚举兼容回归通过，完整应用两次启动／媒体加载通过。发布回归运行至第 220 组，**FAILED** 于 `v8.14.1-frontend-content` 的窗口标题和三主题预览版本文字。已从源文件补齐 9.4.0，重新构建部署后该原始测试通过，未修改断言。
+
+窗口标题补齐后的最新 payload 为 `759019e100cc0689868a0e0c540611e4eef75048ad73e4e57820c178dccbfc14`，306 项构建／部署再次核验一致；本次只替换 Renderer index.html，备份目录末段为 `a837afb2-f582-44b8-96f3-a37f1ba8361c`。01e 为此前冻结回调修复的历史构建。
+
 ## Windows EXE
 
 重启前真实冷启动已执行，完整分发复制核验通过（6,359 文件、340,434,704 字节），但原安装目录和隔离副本均在主进程／Renderer 调试端点建立前退出，代码 `2147483651`／`0x80000003`。去除调试参数仍复现；stderr 无可用错误。故启动门禁为 **FAIL**，不是静态 PASS，也不能用旧 V9.3.9.3 的 UI 验证代替。
@@ -53,7 +57,7 @@ Node 22.23.3 x64 来自官方发行包，临时放在忽略的 `.build`；未全
 |---|---|
 | V9.4 离线专项 | 上述 14 个新增专项串行通过，后续三组历史回归／语法／主题合同通过；静态 package smoke 未在重启后重跑 |
 | 完整本机发布回归 | FAIL／中断，非完整 PASS |
-| 准确 SHA 的 Windows CI | 前四轮 FAILED，具体 SHA／run／修复见上文；真实冻结回调及枚举兼容修订后待重跑 |
+| 准确 SHA 的 Windows CI | 前五轮 FAILED，具体 SHA／run／修复见上文；版本文字修订后待重跑 |
 | Windows EXE 冷启动 | 本机 FAIL 历史保留；第二轮隔离 Windows Runner 两次完整启动及媒体加载 PASS |
 | 实际桌面键入／焦点／穿透 | NOT_RUN |
 | 真实付费 Provider | NOT_AUTHORIZED；没有调用 |
