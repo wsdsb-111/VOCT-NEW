@@ -29,13 +29,15 @@ Node 22.23.3 x64 来自官方发行包，临时放在忽略的 `.build`；未全
 
 首轮 [Windows CI 39543056777](https://github.com/wsdsb-111/VOCT-NEW/actions/runs/39543056777)，准确 SHA `0f5d2fe8132db17b8bb37d5adf00437f7754026a`：依赖、构建、部署通过；发布回归 **FAILED** 于 `v9.3.9-independent-qa`。原因是该测试依赖的 `makePromptRuntime.build` 夹具未向 PromptBuilder 转发显式 legacy 模式。已补齐第四个可选参数，并在隔离 TEMP 中串行重跑该组通过；默认调用行为不变。后续准确 SHA 全量结果单列，不能将此轮失败覆盖为成功。
 
+第二轮 [Windows CI 39543612831](https://github.com/wsdsb-111/VOCT-NEW/actions/runs/39543612831)，准确 SHA `b292c453d092160a730d0f197acc4503d9209390`：构建／部署通过；完整应用两次冷启动、界面／IPC、合成解码、分发目录 ffmpeg.dll 加载及正常退出 **PASS**。发布回归 **FAILED** 于 `v9.3.5-pair-ledger` 的路径别名拒绝。后续工作流将 TEMP／TMP 隔离到项目 `.build/ci-temp` 长路径，保持来源 junction 负向断言不变。当前路径守卫对无法证明为同一字面目录的短名别名采取拒绝；不增加 Win32 原生扩展来放宽此边界。
+
 ## Windows EXE
 
 重启前真实冷启动已执行，完整分发复制核验通过（6,359 文件、340,434,704 字节），但原安装目录和隔离副本均在主进程／Renderer 调试端点建立前退出，代码 `2147483651`／`0x80000003`。去除调试参数仍复现；stderr 无可用错误。故启动门禁为 **FAIL**，不是静态 PASS，也不能用旧 V9.3.9.3 的 UI 验证代替。
 
 证据保存在忽略的 `.build/v9.4-construction/windows-smoke*.log`、`no-inspector-diagnostic.json` 及 smoke-temp 内 evidence.json。事件日志访问受限，尚未定位故障模块。未修改 ACL、Defender 或系统安全策略；用户重启后尚未重新验证 EXE，不假定重启已修复。
 
-上述首轮远端 CI 中，完整复制、真实 main／renderer／preload／版本 IPC 及正常退出已通过，但整个启动门禁仍 **FAILED**：未观察到 ffmpeg.dll 加载。为明确媒体库的延后加载条件，后续 smoke 增加不播放、不联网的合成 PCM 解码，并查询 Electron 自有各进程的模块；继续要求实际从完整分发目录加载 ffmpeg，不能仅用静态文件存在代替。该修订尚待新一轮 CI 实测。
+上述首轮远端 CI 中，完整复制、真实 main／renderer／preload／版本 IPC 及正常退出已通过，但整个启动门禁仍 **FAILED**：未观察到 ffmpeg.dll 加载。修订 smoke 后增加不播放、不联网的合成 PCM 解码，并查询 Electron 自有各进程的模块；继续要求实际从完整分发目录加载 ffmpeg，不能仅用静态文件存在代替。第二轮远端已通过两次实际启动及媒体加载。模块证据证明检查时应用进程加载了分发目录 DLL，不单独断言 PCM 解码是该 DLL 加载的原因。
 
 ## 性能与外部验证
 
@@ -45,8 +47,8 @@ Node 22.23.3 x64 来自官方发行包，临时放在忽略的 `.build`；未全
 |---|---|
 | V9.4 离线专项 | 上述 14 个新增专项串行通过，后续三组历史回归／语法／主题合同通过；静态 package smoke 未在重启后重跑 |
 | 完整本机发布回归 | FAIL／中断，非完整 PASS |
-| 准确 SHA 的 Windows CI | 首轮 0f5d2fe／39543056777 FAILED；修订后待重跑 |
-| Windows EXE 冷启动 | 本机 FAIL；远端界面启动通过但媒体库证据不足，整体仍 FAIL |
+| 准确 SHA 的 Windows CI | 首轮 0f5d2fe／39543056777 与第二轮 b292c45／39543612831 FAILED；修订环境后待重跑 |
+| Windows EXE 冷启动 | 本机 FAIL 历史保留；第二轮隔离 Windows Runner 两次完整启动及媒体加载 PASS |
 | 实际桌面键入／焦点／穿透 | NOT_RUN |
 | 真实付费 Provider | NOT_AUTHORIZED；没有调用 |
 | 真实 CK3／ACK／长时间 Soak | NOT_RUN |

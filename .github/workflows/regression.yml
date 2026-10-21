@@ -24,6 +24,14 @@ jobs:
         uses: actions/setup-node@v5
         with:
           node-version: 22
+      - name: Isolate test temporary directory
+        run: |
+          Write-Output ("Previous TEMP: " + $env:TEMP)
+          $votcCiTemp = Join-Path (Get-Location).Path '.build\ci-temp'
+          New-Item -ItemType Directory -Force -Path $votcCiTemp | Out-Null
+          Add-Content -LiteralPath $env:GITHUB_ENV -Value ("TEMP=" + $votcCiTemp)
+          Add-Content -LiteralPath $env:GITHUB_ENV -Value ("TMP=" + $votcCiTemp)
+          Write-Output ("Isolated test TEMP: " + $votcCiTemp)
       - name: Verify locked runtime dependencies
         run: node scripts/runtime-dependencies.js
       - name: Build runtime from source
