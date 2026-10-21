@@ -3,7 +3,21 @@
 const { SCHEMA_VERSION, fingerprint, planSeal } = require("./prompt-plan-contract");
 const { requirePlan } = require("./prompt-plan-errors");
 const { orderPlanBlocks, COMPAT_REVISION, STATIC_FIRST_REVISION } = require("./prompt-plan-layouts");
+const { getPlanSourceBinding } = require("../memory-system/dynamic-summary-freeze");
 const writesByMessages = new WeakMap();
+const trustedMainSegments = new WeakMap();
+const sourceBindingsByBlock = new WeakMap();
+const snapshotMemoryTypes = new Set(["memory_direct_frozen", "memory_player_ledger_frozen", "memory_official_recollection", "memory_stable"]);
+
+function getPlanSourceBindings(plan, blockId) {
+  return sourceBindingsByBlock.get(plan.blocks.find(block => block.id === blockId)) || Object.freeze([]);
+}
+
+function markTrustedMainSegment(definition) {
+  requirePlan(definition.type === "main_segment" && ["GLOBAL_STATIC", "DYNAMIC_WORLDLINE"].includes(definition.semanticKind), "PLAN_BLOCK_KIND_INVALID");
+  trustedMainSegments.set(definition, definition.semanticKind);
+  return definition;
+}
 
 function trackMessages(messages) {
   if (writesByMessages.has(messages)) return writesByMessages.get(messages);
@@ -67,7 +81,7 @@ function classifyBlock(definition, memoryContext) {
   const type = definition.type;
   if (type === "history") return "APPEND_ONLY_HISTORY";
   if (["current_user", "instruction", "action_confirmed_context"].includes(type) || definition.id === "suffix") return "CURRENT_TURN";
-  if (definition.semanticKind && ["main_segment", "memory_dynamic_frozen"].includes(type)) return definition.semanticKind;
+  if (type === "main_segment" && trustedMainSegments.has(definition)) return trustedMainSegments.get(definition);
   if (["description", "examples", "custom", "main_segment", "main"].includes(type)) return "DYNAMIC_WORLDLINE";
   if (type === "cache_anchor" || definition.lifecycle === "GLOBAL_STATIC") return "GLOBAL_STATIC";
   if (definition.lifecycle === "CONVERSATION_FROZEN") return "CONVERSATION_FROZEN";
@@ -110,31 +124,48 @@ function buildPromptPlanV9({ authorizedInputs, requestType = "chat", layoutId, p
         const content = sources.map(source => source.frozenText).filter(Boolean).join("\n\n");
         if (content) expanded.push({ entry: { ...entry, content, tokens: estimateTokens(content),
           block: { ...definition, id, semanticKind: kind } }, ownedMessages: [{ role: "system", content }],
-          sourceRefs: sources.map(source => fingerprint(source.key)) });
+          kind, sources, sourceRefs: sources.map((source, index) => fingerprint(source.key ?? ["UNKNOWN", index, normalizedScope.sourceSnapshotId])) });
       }
     } else expanded.push({ entry, ownedMessages });
   }
   requirePlan(originalCursor === messages.length, "PLAN_MESSAGE_SPAN_UNCOVERED");
-  const blocks = expanded.map(({ entry, ownedMessages, sourceRefs }) => {
+  const blocks = expanded.map(({ entry, ownedMessages, sourceRefs, sources, kind: projectedKind }) => {
     const definition = entry.block;
-    const kind = classifyBlock(definition, memoryContext);
+    const kind = projectedKind || classifyBlock(definition, memoryContext);
     const stableCandidate = ["GLOBAL_STATIC", "CONVERSATION_FROZEN", "RESPONDER_FROZEN"].includes(kind);
     const sourceKind = ["custom", "examples", "description", "main", "main_segment"].includes(definition.type)
       ? "CUSTOM_LEGACY" : kind === "GLOBAL_STATIC" ? "TEMPLATE" : "AUTHORIZED_INPUT_SNAPSHOT";
     const revision = kind === "GLOBAL_STATIC" ? inputRevisions.promptSettings : inputRevisions.source;
-    return { id: definition.id, legacyBlockId: definition.id, legacyType: definition.type, label: definition.label,
+    const bindings = (sources || []).map(getPlanSourceBinding);
+    for (const binding of bindings.filter(Boolean)) requirePlan(binding.ownerId === normalizedScope.ownerId
+      && normalizedScope.ownerId === normalizedScope.responderId && binding.campaignToken === normalizedScope.campaignToken
+      && binding.conversationId === normalizedScope.conversationId && binding.playerId === normalizedScope.playerId, "PLAN_SOURCE_SCOPE_MISMATCH");
+    const sourceBound = bindings.length > 0 && bindings.every(Boolean);
+    const evidenceLevel = sourceBound ? "SOURCE_BOUND" : sources ? "UNKNOWN" : kind === "GLOBAL_STATIC" ? "TEMPLATE_STATIC"
+      : sourceKind === "CUSTOM_LEGACY" ? "LEGACY_OBSERVED" : snapshotMemoryTypes.has(definition.type)
+        && normalizedScope.sourceSnapshotId != null ? "SNAPSHOT_DERIVED" : "UNKNOWN";
+    const diagnosticIds = sourceRefs?.length ? sourceRefs : [fingerprint([sourceKind, definition.id, revision, normalizedScope.sourceSnapshotId])];
+    const block = { id: definition.id, legacyBlockId: definition.id, legacyType: definition.type, label: definition.label,
       kind, role: ownedMessages[0]?.role || definition.role || "system", content: String(entry.content ?? ""), order: 0,
       messages: ownedMessages,
       permission: { status: "AUTHORIZED", sourceKind, ownerId: normalizedScope.ownerId, campaignToken: normalizedScope.campaignToken,
-        sourceRefs: sourceRefs?.length ? sourceRefs : [fingerprint([sourceKind, definition.id, revision, normalizedScope.sourceSnapshotId])],
+        sourceRefs: diagnosticIds,
         authorizedAtRevision: revision, visibility: kind === "GLOBAL_STATIC" ? "GLOBAL" : "RESPONDER_ONLY" },
       lifecycle: { state: kind === "GLOBAL_STATIC" ? "STATIC" : stableCandidate ? "FROZEN" : kind === "APPEND_ONLY_HISTORY" ? "APPEND_ONLY" : "DYNAMIC",
         freezeScope: kind === "GLOBAL_STATIC" ? "NONE" : kind === "CONVERSATION_FROZEN" ? "CONVERSATION" : kind === "RESPONDER_FROZEN" ? "RESPONDER_IN_CONVERSATION" : "NONE",
         invalidationRevision: revision },
       cache: { stableCandidate, contentFingerprint: fingerprint([String(entry.content ?? ""), ownedMessages]), prefixEligible: stableCandidate },
-      tokens: { estimated: Math.max(0, Number(entry.tokens) || 0), source: "LOCAL_ESTIMATE" } };
+      tokens: { estimated: Math.max(0, Number(entry.tokens) || 0), source: "LOCAL_ESTIMATE" },
+      provenance: Object.freeze({ evidenceLevel, sourceCount: sourceBound ? bindings.length : 0,
+        diagnosticIds: Object.freeze(diagnosticIds), authority: "LEGACY_VERIFIER" }) };
+    if (sourceBound) sourceBindingsByBlock.set(block, Object.freeze(bindings));
+    return block;
   });
-  const ordered = orderPlanBlocks(blocks, { layoutId, mode }).map((block, order) => ({ ...block, order }));
+  const ordered = orderPlanBlocks(blocks, { layoutId, mode }).map((block, order) => {
+    const orderedBlock = { ...block, order };
+    if (sourceBindingsByBlock.has(block)) sourceBindingsByBlock.set(orderedBlock, sourceBindingsByBlock.get(block));
+    return orderedBlock;
+  });
   const messageGroups = ordered.flatMap(block => block.messages.map((message, index) => ({ parts: [{ blockId: block.id, index }], separator: "" })));
   const plan = { schemaVersion: SCHEMA_VERSION, planId: fingerprint([normalizedScope, inputRevisions, requestType]), requestType,
     layoutId, promptProfileId, layoutRevision: mode === "v9" ? STATIC_FIRST_REVISION : COMPAT_REVISION,
@@ -149,4 +180,4 @@ function buildPromptPlanV9({ authorizedInputs, requestType = "chat", layoutId, p
   return plan;
 }
 
-module.exports = { buildPromptPlanV9, createPromptAssembly, captureBlockSpans };
+module.exports = { buildPromptPlanV9, createPromptAssembly, captureBlockSpans, markTrustedMainSegment, getPlanSourceBindings };

@@ -19,6 +19,7 @@ const CACHE_DIAGNOSTIC_LAYOUTS = new Set(["v5", "v6", "v7", "v813", "deepseek_v8
 const CACHE_DIAGNOSTIC_FALLBACK_REASONS = new Set(["CUSTOM_LEGACY_MESSAGE_UNREPRESENTABLE"]);
 const CACHE_DIAGNOSTIC_PLAN_EVIDENCE = new Set(["PLAN_OBSERVED", "LEGACY_OBSERVED", "UNKNOWN"]);
 const CACHE_DIAGNOSTIC_OWNER_EVIDENCE = new Set(["VERIFIED", "UNKNOWN", "NOT_REQUIRED"]);
+const SOURCE_EVIDENCE_LEVELS = ["SOURCE_BOUND", "SNAPSHOT_DERIVED", "TEMPLATE_STATIC", "LEGACY_OBSERVED", "UNKNOWN"];
 const EFFECTIVE_PARAMETER_FIELDS = Object.freeze({
   openai_chat_completions: ["temperature", "max_tokens", "top_p", "presence_penalty", "frequency_penalty", "response_format", "reasoning", "reasoning_effort", "thinking", "stream_options"],
   ollama_api_chat: ["options"],
@@ -266,6 +267,12 @@ function projectCacheDiagnosticsV2({ requestKey, providerType, model, requestTyp
   const firstChangedBlockIdHashes = spanBlockHashes.length ? spanBlockHashes : fallbackBlockHash ? [fallbackBlockHash] : [];
   return {
     schemaVersion: CACHE_DIAGNOSTICS_V2_VERSION,
+    provenance: {
+      authority: "LEGACY_VERIFIER",
+      evidenceCounts: Object.fromEntries(SOURCE_EVIDENCE_LEVELS.map(level =>
+        [level, (Array.isArray(requestMeta.blocks) ? requestMeta.blocks : []).filter(block =>
+          (SOURCE_EVIDENCE_LEVELS.includes(block?.provenance?.evidenceLevel) ? block.provenance.evidenceLevel : "UNKNOWN") === level).length]))
+    },
     requestKey: /^[a-f0-9]{32,64}$/iu.test(requestKey || "") ? requestKey.toLowerCase() : crypto.randomBytes(16).toString("hex"),
     route,
     plan: {

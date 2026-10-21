@@ -1,5 +1,31 @@
 "use strict";
 
+const planSourceBindings = new WeakMap();
+const { createHmac, randomBytes } = require("node:crypto");
+const planSourceDiagnosticKey = randomBytes(32);
+
+// Read-only projection of sources already selected by the existing memory verifier.
+function projectPlanSource(entry, scope) {
+  const projection = { frozenText: entry.frozenText };
+  Object.defineProperty(projection, "key", { value: createHmac("sha256", planSourceDiagnosticKey)
+    .update(JSON.stringify([sourceKey(entry), scope.ownerId, scope.campaignToken, scope.conversationId, scope.playerId])).digest("hex") });
+  Object.freeze(projection);
+  const ownerId = Number(entry.memory?.provenance?.folderOwnerId);
+  const campaignToken = entry.memory?.provenance?.campaignToken;
+  const revision = entry.sourceRevision;
+  if (ownerId === scope.ownerId && campaignToken === scope.campaignToken
+    && typeof entry.sourceSummaryKey === "string" && entry.sourceSummaryKey.length > 0 && !entry.sourceSummaryKey.startsWith("pair-summary:legacy:")
+    && (typeof revision === "string" && revision.length > 0 || Number.isSafeInteger(revision) && revision >= 0)) {
+    planSourceBindings.set(projection, Object.freeze({ sourceKey: entry.sourceSummaryKey, sourceRevision: revision,
+      ownerId, campaignToken, conversationId: scope.conversationId, playerId: scope.playerId }));
+  }
+  return projection;
+}
+
+function getPlanSourceBinding(projection) {
+  return planSourceBindings.get(projection) || null;
+}
+
 function usesFrozenDynamicPolicy(options) {
   return options?.budgetPolicyRevision === "v9.3.9";
 }
@@ -75,4 +101,4 @@ function discardPendingSources(cache, ownerId, turnEpoch) {
 }
 
 module.exports = { usesFrozenDynamicPolicy, prepareScope, sourceKey, category,
-  getQuota, commitFrozenSources, discardPendingSources };
+  getQuota, commitFrozenSources, discardPendingSources, projectPlanSource, getPlanSourceBinding };

@@ -176,6 +176,8 @@ const archivedChecks = [
 ];
 
 const releaseChecks = [
+  { group: "v9.4.1-v813-static-classification", script: "test-v9.4.1-v813-static-classification.js" },
+  { group: "v9.4.1-source-provenance", script: "test-v9.4.1-source-provenance.js" },
   { group: "v9.4-deferred-main-span-source", script: "test-v9.4-deferred-main-span-source.js" },
   { group: "v9.4-static-first-order", script: "test-v9.4-static-first-order.js" },
   { group: "v9.4-source-path-boundary", script: "test-v9.4-source-path-boundary.js" },

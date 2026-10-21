@@ -6,9 +6,11 @@ VOTC 是面向《Crusader Kings III》（CK3）的 Windows Electron 宫廷对话
 
 ## 当前版本与进度
 
-2026-10-21 当前源码为 **V9.4／9.4.0 PromptPlan 与缓存诊断施工候选**，尚未完成发布验收。静态及已冻结内容排在动态内容之前；时间／第三人召回全文成功使用后继续在当前对话内按回应者冻结复用，不重复召回。已接入最终 Adapter 请求预算及来源复核、匿名缓存诊断 V2。详见 [实施记录](docs/current/v9/V9_4_IMPLEMENTATION.md)、[验证记录](docs/current/v9/V9_4_VERIFICATION.md)和[交接](docs/current/v9/V9_4_HANDOFF.md)。
+2026-10-21 当前源码为 **V9.4.1／9.4.1 PromptPlan 与缓存诊断修复候选**，尚未完成发布验收。静态及已冻结内容排在动态内容之前；时间／第三人召回全文成功使用后继续在当前对话内按回应者冻结复用，不重复召回。已接入最终 Adapter 请求预算及来源复核、匿名缓存诊断 V2。详见 [实施记录](docs/current/v9/V9_4_IMPLEMENTATION.md)、[验证记录](docs/current/v9/V9_4_VERIFICATION.md)和[交接](docs/current/v9/V9_4_HANDOFF.md)。
 
-本轮代码与自动化验收已完成：[0a42161 的 Windows CI 39562096181](https://github.com/wsdsb-111/VOCT-NEW/actions/runs/39562096181) 通过 **486 组完整发布回归、306 项构建部署，以及完整 EXE 冷启动／重启／实际媒体加载**，payload 与本机一致。当前智谱 GLM-5.3-Flash 已按 1 美元授权完成 6 次串行真实请求，全部 COMPLETE，原生费用估算 ¥0.0042528、缓存命中 5760 Token，详见[付费实测](docs/current/v9/V9_4_LIVE_PROVIDER_VERIFICATION.md)。其他 Provider、真实 CK3／桌面输入／Soak 待验收，保留候选。用户本机因此前并发测试死机，重启后一次仅运行一个测试进程，大型回归转隔离环境；本机原 `0x80000003` 失败仍作历史证据，重启后未重测，不用远端结果冒充本机通过。
+前版 V9.4 代码与自动化验收已完成：[0a42161 的 Windows CI 39562096181](https://github.com/wsdsb-111/VOCT-NEW/actions/runs/39562096181) 通过 **486 组完整发布回归、306 项构建部署，以及完整 EXE 冷启动／重启／实际媒体加载**，payload 与本机一致。当前智谱 GLM-5.3-Flash 已按 1 美元授权完成 6 次串行真实请求，全部 COMPLETE，原生费用估算 ¥0.0042528、缓存命中 5760 Token，详见[付费实测](docs/current/v9/V9_4_LIVE_PROVIDER_VERIFICATION.md)。其他 Provider、真实 CK3／桌面输入／Soak 待验收，保留候选。用户本机因此前并发测试死机，重启后一次仅运行一个测试进程，大型回归转隔离环境；本机原 `0x80000003` 失败仍作历史证据，重启后未重测，不用远端结果冒充本机通过。
+
+本轮修复 V813 可信静态片段分类，并增加只读来源证据等级：原始来源键只在进程内，未知来源如实标记，不替代现有授权。详见 [V9.4.1 实施](docs/current/v9/V9_4_1_IMPLEMENTATION.md)与[本版验证](docs/current/v9/V9_4_1_VERIFICATION.md)。完整 CI 与实机状态以本版报告为准。
 
 ### V9.3.9.3 及更早版本的历史证据
 

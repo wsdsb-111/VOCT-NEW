@@ -49,6 +49,14 @@ function validatePromptPlan(plan, { phase = "BUILD", proofVerifier } = {}) {
       && block.permission.sourceRefs.length > 0, "PLAN_SOURCE_UNAUTHORIZED");
     requirePlan(block.permission.ownerId === plan.scope.ownerId
       && block.permission.campaignToken === plan.scope.campaignToken, "PLAN_SCOPE_MISMATCH");
+    if (block.provenance != null) {
+      const source = block.provenance;
+      requirePlan(["SOURCE_BOUND", "SNAPSHOT_DERIVED", "TEMPLATE_STATIC", "LEGACY_OBSERVED", "UNKNOWN"].includes(source.evidenceLevel)
+        && source.authority === "LEGACY_VERIFIER" && Number.isSafeInteger(source.sourceCount) && source.sourceCount >= 0
+        && (source.evidenceLevel === "SOURCE_BOUND" ? source.sourceCount > 0 : source.sourceCount === 0)
+        && Array.isArray(source.diagnosticIds) && source.diagnosticIds.every(id => typeof id === "string" && /^[a-f0-9]{64}$/.test(id))
+        && Object.keys(source).every(key => ["evidenceLevel", "sourceCount", "diagnosticIds", "authority"].includes(key)), "PLAN_PROVENANCE_INVALID");
+    }
     requirePlan(STATES.includes(block.lifecycle?.state), "PLAN_LIFECYCLE_INVALID");
     const expectedState = block.kind === "GLOBAL_STATIC" ? "STATIC"
       : ["CONVERSATION_FROZEN", "RESPONDER_FROZEN"].includes(block.kind) ? "FROZEN"

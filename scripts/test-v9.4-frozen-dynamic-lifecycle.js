@@ -3,6 +3,8 @@
 const assert = require("node:assert/strict");
 const fs = require("node:fs");
 const path = require("node:path");
+const { getPlanSourceBinding } = require("../src/app/main/memory-system/dynamic-summary-freeze");
+const { getPlanSourceBindings } = require("../src/app/main/prompts/prompt-plan-builder");
 const { normalizeGameDate } = require("../src/app/main/worldline/character-temporal-facts");
 const {
   createAdversarialFixtureData,
@@ -130,6 +132,11 @@ function assertPlanProjection({ runtime, fixture, history, memoryContext, pendin
     const matchingBlocks = planBlocks.filter(block => planText(block).includes(marker));
     assert.equal(matchingBlocks.length, 1, `${marker}: projected memory source must map to one semantic block`);
     assert.equal(matchingBlocks[0].kind, kind, `${marker}: source must retain its committed/pending lifecycle kind`);
+    const projectedSources = kind === "RESPONDER_FROZEN" ? context.committedDynamicPlanSources : context.pendingDynamicPlanSources;
+    if (projectedSources?.length && projectedSources.every(entry => getPlanSourceBinding(entry))) {
+      assert.equal(matchingBlocks[0].provenance.evidenceLevel, "SOURCE_BOUND");
+      assert.equal(getPlanSourceBindings(built.promptPlan, matchingBlocks[0].id).length, projectedSources.length);
+    }
     assert.equal(occurrenceCount(built.serialized.messages, marker), 1,
       `${marker}: source must occur once in the final serialized messages`);
     const span = messageSpans.find(item => item.blockId === matchingBlocks[0].id);
@@ -174,12 +181,23 @@ function run() {
       "first-time query sources are not promoted before provider success");
     assert(selected.pendingDynamicPlanSources?.length > 0,
       "retrieved query sources are projected as pending Plan inputs before provider success");
+    assert(selected.pendingDynamicPlanSources.some(entry => getPlanSourceBinding(entry)),
+      "actual verified memory retrieval must retain at least one source binding in the private sidecar");
     const pendingText = projectedText(selected.pendingDynamicPlanSources);
     assert(pendingText.includes("V94_TIME_") && pendingText.includes("V94_THIRD_"),
       "pending projection preserves both time and third-party source text");
     for (const entry of selected.pendingDynamicPlanSources) {
       assert.equal(typeof entry.key, "string", "pending projection carries an opaque source key");
       assert.equal(typeof entry.frozenText, "string");
+      const binding = getPlanSourceBinding(entry);
+      if (binding) {
+        assert.equal(binding.ownerId, RESPONDER_ID);
+        assert.equal(binding.campaignToken, selected.sourceCampaignToken);
+        assert.equal(binding.conversationId, selected.conversationId);
+        assert(/^[a-f0-9]{64}$/.test(entry.key), "projection exposes only an opaque diagnostic identity");
+        assert.equal(typeof binding.sourceKey, "string");
+        assert(binding.sourceRevision != null);
+      }
     }
 
     const promptFixture = createFixture("v813-query-dynamic");

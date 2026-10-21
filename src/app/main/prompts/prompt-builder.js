@@ -19,7 +19,7 @@ const { isStepFamilyQuery } = require("../worldline/step-family-facts");
 const { formatKnownNameFacts } = require("../conversation/character-disclosure-context");
 const { normalizeSpouseRecords } = require("../worldline/canonical-spouse-record");
 
-const { createPromptAssembly, captureBlockSpans } = require("./prompt-plan-builder");
+const { createPromptAssembly, captureBlockSpans, markTrustedMainSegment } = require("./prompt-plan-builder");
 const { finalizePromptBuild } = require("./prompt-plan-compat");
 const { fingerprint: planFingerprint } = require("./prompt-plan-contract");
 
@@ -1022,7 +1022,7 @@ ${nameAccessRule}
             if (nameOnlyRules) sharedHistoryUsesRolePlaceholder = true;
             llmMessages.push({ role: block.role || "system", content });
             blocksWithTokens.push({
-              block: { ...block, id: `${block.id || "main"}-${segment.id}`, type: "main_segment", label: segment.label, stable: true, lifecycle: PROMPT_LIFECYCLE.GLOBAL_STATIC },
+              block: markTrustedMainSegment({ ...block, id: `${block.id || "main"}-${segment.id}`, type: "main_segment", label: segment.label, semanticKind: "GLOBAL_STATIC", stable: true, lifecycle: PROMPT_LIFECYCLE.GLOBAL_STATIC }),
               content,
               tokens: TokenCounter.estimateTokens(content)
             });
@@ -1413,17 +1413,17 @@ ${nameAccessRule}
           for (const segment of nonEmptySegments) {
             const message = { role: block.role || "system", content: segment.content };
             const tokenBlock = {
-              block: {
+              block: markTrustedMainSegment({
                 ...block,
                 id: `${block.id || "main"}-${segment.id}`,
                 type: "main_segment",
-                semanticKind: ["stable_global", "stable_history_rp"].includes(segment.id) && !segment.template.includes("{{") ? "GLOBAL_STATIC" : "DYNAMIC_WORLDLINE",
+                semanticKind: (!block.role || block.role === "system") && ["stable_global", "stable_history_rp"].includes(segment.id) && !segment.template.includes("{{") ? "GLOBAL_STATIC" : "DYNAMIC_WORLDLINE",
                 label: segment.label,
                 stable: ["stable_global", "stable_history_rp", "character_base"].includes(segment.id),
                 lifecycle: options.glmCacheV2 && ["stable_global", "stable_history_rp"].includes(segment.id)
                   ? PROMPT_LIFECYCLE.GLOBAL_STATIC
                   : options.glmCacheV2 ? PROMPT_LIFECYCLE.DYNAMIC : null
-              },
+              }),
               content: segment.content,
               tokens: TokenCounter.estimateTokens(segment.content)
             };
